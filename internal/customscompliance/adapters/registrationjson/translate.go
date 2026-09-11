@@ -506,6 +506,188 @@ func DeclarationPathFromJSON(raw []byte) (application.RegisterDeclarationPathCom
 	}, nil
 }
 
+type regulatoryCredentialDocument struct {
+	TenantID     string    `json:"tenantId"`
+	CredentialID string    `json:"credentialId"`
+	IssuerRef    string    `json:"issuerRef"`
+	HolderRef    string    `json:"holderRef"`
+	ProcedureRef string    `json:"procedureRef"`
+	ValidFrom    time.Time `json:"validFrom"`
+	ValidTo      time.Time `json:"validTo"`
+	Uses         int       `json:"uses"`
+}
+
+// RegulatoryCredentialFromJSON 译装一版监管凭证登记（票 sa-cc/07）。有效期两端与额度的
+// 门在领域（期限有序、额度非负），原样递过去不代判；uses 缺席与 0 同义——领域把零约定为
+// 「来源未提供次数额度」并经 Uses 的第二个返回值显式交出，所以这一格不用指针分「没给」
+// 与「给了 0」：两者在领域上就是同一格。
+func RegulatoryCredentialFromJSON(raw []byte) (application.RegisterCredentialCommand, error) {
+	none := application.RegisterCredentialCommand{}
+	var document regulatoryCredentialDocument
+	if err := decodeStrict(raw, &document); err != nil {
+		return none, fmt.Errorf("凭证登记输入不是本入口的形状：%w", err)
+	}
+	tenant, err := domain.NewTenantID(document.TenantID)
+	if err != nil {
+		return none, err
+	}
+	id, err := domain.NewCredentialID(document.CredentialID)
+	if err != nil {
+		return none, err
+	}
+	issuer, err := domain.NewRegulatoryAuthorityReference(document.IssuerRef)
+	if err != nil {
+		return none, err
+	}
+	holder, err := domain.NewCredentialHolderReference(document.HolderRef)
+	if err != nil {
+		return none, err
+	}
+	procedure, err := domain.NewCustomsProcedureReference(document.ProcedureRef)
+	if err != nil {
+		return none, err
+	}
+	return application.RegisterCredentialCommand{
+		TenantID:  tenant,
+		ID:        id,
+		Issuer:    issuer,
+		Holder:    holder,
+		Procedure: procedure,
+		ValidFrom: document.ValidFrom,
+		ValidTo:   document.ValidTo,
+		Uses:      document.Uses,
+	}, nil
+}
+
+type dutyCollaborationDocument struct {
+	TenantID       string `json:"tenantId"`
+	Kind           string `json:"kind"`
+	DutyRef        string `json:"dutyRef"`
+	NoPayBasis     string `json:"noPayBasis"`
+	ScopeRef       string `json:"scopeRef"`
+	ObligorRef     string `json:"obligorRef"`
+	RequirementRef string `json:"requirementRef"`
+	TargetRef      string `json:"targetRef"`
+}
+
+// DutyCollaborationFromJSON 译装一次税费付款协作事项形成（票 sa-cc/07）。义务依据两格
+// 的形状（核定格带税费引用不带无需付款依据、无需付款格反之）由领域 FormDutyCollaboration
+// 把门，这里不复述；形成时间不是输入，取编排的时钟。
+//
+// kind 缺席刻意放行而不当用法错误拒：两格都没有是「既无核定税费也无明确无需付款依据」
+// ——UC-CC-009 步 4 的第四个结果`未决`，编排答 DUTY_OBLIGATION_BASIS_ABSENT 让登记方等税费
+// 结果；在这里拒掉它，那一格就从 CLI 上消失了，等于入口替编排改判。打错的词另论：词表外
+// 的取值就是用法错误，在这里指名拒。
+func DutyCollaborationFromJSON(raw []byte) (application.FormDutyCollaborationCommand, error) {
+	none := application.FormDutyCollaborationCommand{}
+	var document dutyCollaborationDocument
+	if err := decodeStrict(raw, &document); err != nil {
+		return none, fmt.Errorf("协作事项登记输入不是本入口的形状：%w", err)
+	}
+	tenant, err := domain.NewTenantID(document.TenantID)
+	if err != nil {
+		return none, err
+	}
+	kind, err := dutyObligationKindFrom(document.Kind)
+	if err != nil {
+		return none, err
+	}
+	// 无需付款格的税费引用在键上就是空（0016 自注）：那一格要的是零值引用，不是一个
+	// 「空串」引用——后者构造期就拒，而空缺本身是这一格的正当形状。
+	var duty domain.AssessedDutyReference
+	if document.DutyRef != "" {
+		if duty, err = domain.NewAssessedDutyReference(document.DutyRef); err != nil {
+			return none, err
+		}
+	}
+	scope, err := domain.NewDecisionScopeReference(document.ScopeRef)
+	if err != nil {
+		return none, err
+	}
+	obligor, err := domain.NewLegalObligorReference(document.ObligorRef)
+	if err != nil {
+		return none, err
+	}
+	requirement, err := domain.NewPaymentRequirementSource(document.RequirementRef)
+	if err != nil {
+		return none, err
+	}
+	target, err := domain.NewResponsibilityTargetReference(document.TargetRef)
+	if err != nil {
+		return none, err
+	}
+	return application.FormDutyCollaborationCommand{
+		TenantID:    tenant,
+		Kind:        kind,
+		Duty:        duty,
+		NoPayBasis:  document.NoPayBasis,
+		Scope:       scope,
+		Obligor:     obligor,
+		Requirement: requirement,
+		Target:      target,
+	}, nil
+}
+
+type dutyPaymentVerificationDocument struct {
+	TenantID string `json:"tenantId"`
+	DutyRef  string `json:"dutyRef"`
+	FundsRef string `json:"fundsRef"`
+	ScopeRef string `json:"scopeRef"`
+	Coverage string `json:"coverage"`
+	Delta    string `json:"delta"`
+	Validity string `json:"validity"`
+	Basis    string `json:"basis"`
+}
+
+// DutyPaymentVerificationFromJSON 译装一次税费付款核对（票 sa-cc/07）。三轴与关联依据由
+// 登记方交进来——真实程序的关联规则属实例半边，入口不从金额相等推任何一轴；basis 空白
+// 原样递给编排，那是它的`待关联`格（无权威依据不关联），不是译装该拒的缺格。
+func DutyPaymentVerificationFromJSON(raw []byte) (application.VerifyDutyPaymentCommand, error) {
+	none := application.VerifyDutyPaymentCommand{}
+	var document dutyPaymentVerificationDocument
+	if err := decodeStrict(raw, &document); err != nil {
+		return none, fmt.Errorf("付款核对登记输入不是本入口的形状：%w", err)
+	}
+	tenant, err := domain.NewTenantID(document.TenantID)
+	if err != nil {
+		return none, err
+	}
+	duty, err := domain.NewAssessedDutyReference(document.DutyRef)
+	if err != nil {
+		return none, err
+	}
+	funds, err := domain.NewExternalFundsFactReference(document.FundsRef)
+	if err != nil {
+		return none, err
+	}
+	scope, err := domain.NewDecisionScopeReference(document.ScopeRef)
+	if err != nil {
+		return none, err
+	}
+	coverage, err := dutyCoverageFrom(document.Coverage)
+	if err != nil {
+		return none, err
+	}
+	delta, err := dutyDeltaFrom(document.Delta)
+	if err != nil {
+		return none, err
+	}
+	validity, err := dutyFactValidityFrom(document.Validity)
+	if err != nil {
+		return none, err
+	}
+	return application.VerifyDutyPaymentCommand{
+		TenantID: tenant,
+		Duty:     duty,
+		Funds:    funds,
+		Scope:    scope,
+		Coverage: coverage,
+		Delta:    delta,
+		Validity: validity,
+		Basis:    document.Basis,
+	}, nil
+}
+
 // gateKeyFrom 译装门禁两命令共用的判断身份三维加租户。门禁判断绑定动作与边界
 // （CONTEXT 硬句 216），键上四件缺一不可。
 func gateKeyFrom(tenantID, scopeRef, actionText, boundaryRef string) (
@@ -538,7 +720,7 @@ func gateKeyFrom(tenantID, scopeRef, actionText, boundaryRef string) (
 	return tenant, scope, action, boundary, nil
 }
 
-// 下面四个解析器把封闭词表译回领域常量。词表与领域 String()/迁移 CHECK 同字——
+// 下面的解析器把封闭词表译回领域常量。词表与领域 String()/迁移 CHECK 同字——
 // 本包与写口适配器各持一份私有映射是既有格局（适配器侧同为私有），真库垂直用例
 // 把两份钉在同一词表上。
 
@@ -617,6 +799,68 @@ func preconditionStateFrom(raw string) (domain.PreconditionState, error) {
 	default:
 		return domain.PreconditionStateInvalid, fmt.Errorf(
 			"state=%q 不在封闭三值（MET / UNMET / CONFLICTING）", raw)
+	}
+}
+
+// dutyObligationKindFrom 与其余解析器有一处不同：空串放行成领域的无效格而不拒——见
+// DutyCollaborationFromJSON 头注，那是编排要答的业务未决，不是打错的词。
+func dutyObligationKindFrom(raw string) (domain.DutyObligationKind, error) {
+	switch raw {
+	case "":
+		return domain.DutyObligationKindInvalid, nil
+	case "ASSESSED_DUTY":
+		return domain.ObligationFromAssessedDuty, nil
+	case "EXPLICITLY_NOT_REQUIRED":
+		return domain.ObligationExplicitlyNotRequired, nil
+	default:
+		return domain.DutyObligationKindInvalid, fmt.Errorf(
+			"kind=%q 不在封闭二值（ASSESSED_DUTY / EXPLICITLY_NOT_REQUIRED；缺席即义务依据未到）", raw)
+	}
+}
+
+func dutyCoverageFrom(raw string) (domain.DutyCoverage, error) {
+	switch raw {
+	case "NONE":
+		return domain.CoverageNone, nil
+	case "PARTIAL":
+		return domain.CoveragePartial, nil
+	case "COVERED":
+		return domain.CoverageFull, nil
+	default:
+		return domain.DutyCoverageInvalid, fmt.Errorf(
+			"coverage=%q 不在封闭三值（NONE / PARTIAL / COVERED）", raw)
+	}
+}
+
+func dutyDeltaFrom(raw string) (domain.DutyDelta, error) {
+	switch raw {
+	case "NO_DELTA":
+		return domain.DeltaNone, nil
+	case "SHORT":
+		return domain.DeltaShort, nil
+	case "EXCESS":
+		return domain.DeltaExcess, nil
+	case "PENDING":
+		return domain.DeltaPending, nil
+	default:
+		return domain.DutyDeltaInvalid, fmt.Errorf(
+			"delta=%q 不在封闭四值（NO_DELTA / SHORT / EXCESS / PENDING）", raw)
+	}
+}
+
+func dutyFactValidityFrom(raw string) (domain.DutyFactValidity, error) {
+	switch raw {
+	case "VALID":
+		return domain.FundsFactValid, nil
+	case "INVALIDATED":
+		return domain.FundsFactInvalidated, nil
+	case "CONFLICTING":
+		return domain.FundsFactConflicting, nil
+	case "PENDING":
+		return domain.FundsFactPending, nil
+	default:
+		return domain.DutyFactValidityInvalid, fmt.Errorf(
+			"validity=%q 不在封闭四值（VALID / INVALIDATED / CONFLICTING / PENDING）", raw)
 	}
 }
 
