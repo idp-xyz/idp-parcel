@@ -245,13 +245,19 @@ type GateVerificationKey struct {
 
 // FindingsDigest 是逐项判断的稳定指纹：按前置条件引用排序后连状态拼接。
 func FindingsDigest(findings []domain.PreconditionFinding) string {
+	digest := sha256.Sum256([]byte(strings.Join(findingDigestLines(findings), "\x00")))
+	return hex.EncodeToString(digest[:])
+}
+
+// findingDigestLines 是逐项判断在指纹里的行：「引用=状态」按引用排序。状态仍以枚举整数入行——这是本册
+// 既有指纹的形，改词形会让已入库的门禁版本全部换指纹；要改与 CredentialGateDigest 同步另起一票。
+func findingDigestLines(findings []domain.PreconditionFinding) []string {
 	lines := make([]string, 0, len(findings))
 	for _, finding := range findings {
 		lines = append(lines, finding.Precondition.String()+"="+strconv.Itoa(int(finding.State)))
 	}
 	sort.Strings(lines)
-	digest := sha256.Sum256([]byte(strings.Join(lines, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return lines
 }
 
 type GateVerificationSaveOutcome uint8
@@ -295,12 +301,7 @@ func GateVersionDigest(findings []domain.PreconditionFinding, reading domain.Dut
 	if !applied {
 		return FindingsDigest(findings)
 	}
-	lines := make([]string, 0, len(findings)+1)
-	for _, finding := range findings {
-		lines = append(lines, finding.Precondition.String()+"="+strconv.Itoa(int(finding.State)))
-	}
-	sort.Strings(lines)
-	lines = append(lines,
+	lines := append(findingDigestLines(findings),
 		"duty-payment="+reading.Coverage.String()+"/"+reading.Delta.String()+"/"+reading.Validity.String()+
 			"@"+reading.Verification.Duty.String()+"/"+reading.Verification.Funds.String()+"/"+reading.Verification.Version)
 	digest := sha256.Sum256([]byte(strings.Join(lines, "\x00")))

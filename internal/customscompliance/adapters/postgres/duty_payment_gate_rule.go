@@ -75,31 +75,45 @@ func dutyRuleSetsJSON(rule domain.DutyPaymentGateRule) ([]byte, []byte, []byte, 
 	if !rule.NotAPrecondition() && (len(coverage) == 0 || len(delta) == 0 || len(validity) == 0) {
 		return nil, nil, nil, errors.New("the rule is zero-valued")
 	}
-	coverageWords := make([]string, 0, len(coverage))
-	for _, member := range coverage {
-		coverageWords = append(coverageWords, member.String())
-	}
-	deltaWords := make([]string, 0, len(delta))
-	for _, member := range delta {
-		deltaWords = append(deltaWords, member.String())
-	}
-	validityWords := make([]string, 0, len(validity))
-	for _, member := range validity {
-		validityWords = append(validityWords, member.String())
-	}
-	coverageJSON, err := json.Marshal(coverageWords)
+	coverageJSON, err := json.Marshal(closedWords(coverage))
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	deltaJSON, err := json.Marshal(deltaWords)
+	deltaJSON, err := json.Marshal(closedWords(delta))
 	if err != nil {
 		return nil, nil, nil, err
 	}
-	validityJSON, err := json.Marshal(validityWords)
+	validityJSON, err := json.Marshal(closedWords(validity))
 	if err != nil {
 		return nil, nil, nil, err
 	}
 	return coverageJSON, deltaJSON, validityJSON, nil
+}
+
+// closedWords 把一个封闭集的取值写成库列的词形；空切片写成空数组而不是 null，CHECK 靠数组长度分两形。
+func closedWords[T fmt.Stringer](members []T) []string {
+	words := make([]string, 0, len(members))
+	for _, member := range members {
+		words = append(words, member.String())
+	}
+	return words
+}
+
+// closedSet 把库里一列 jsonb 数组译回封闭集的取值；集外词即库被旁路改过，作错误抛出。
+func closedSet[T fmt.Stringer](raw []byte, members ...T) ([]T, error) {
+	var words []string
+	if err := json.Unmarshal(raw, &words); err != nil {
+		return nil, err
+	}
+	set := make([]T, 0, len(words))
+	for _, word := range words {
+		member, err := closedWord(word, members...)
+		if err != nil {
+			return nil, err
+		}
+		set = append(set, member)
+	}
+	return set, nil
 }
 
 // LoadDutyPaymentGateRule 按门禁三维键取回规则行。found=false 即这一道尚未登规则——门禁编排答「规则未
@@ -153,39 +167,18 @@ func rebuildDutyPaymentGateRule(
 	if notAPrecondition {
 		return domain.DutyPaymentNotAPrecondition(), nil
 	}
-	var coverageWords, deltaWords, validityWords []string
-	if err := json.Unmarshal(coverageJSON, &coverageWords); err != nil {
+	coverage, err := closedSet(coverageJSON, domain.CoverageNone, domain.CoveragePartial, domain.CoverageFull)
+	if err != nil {
 		return domain.DutyPaymentGateRule{}, err
 	}
-	if err := json.Unmarshal(deltaJSON, &deltaWords); err != nil {
+	// 差额的 PENDING 与有效性的 CONFLICTING / PENDING 不在可接受的词里：库上 CHECK 已拦，这里的集合是第二道。
+	delta, err := closedSet(deltaJSON, domain.DeltaNone, domain.DeltaShort, domain.DeltaExcess)
+	if err != nil {
 		return domain.DutyPaymentGateRule{}, err
 	}
-	if err := json.Unmarshal(validityJSON, &validityWords); err != nil {
+	validity, err := closedSet(validityJSON, domain.FundsFactValid, domain.FundsFactInvalidated)
+	if err != nil {
 		return domain.DutyPaymentGateRule{}, err
-	}
-	coverage := make([]domain.DutyCoverage, 0, len(coverageWords))
-	for _, word := range coverageWords {
-		member, err := closedWord(word, domain.CoverageNone, domain.CoveragePartial, domain.CoverageFull)
-		if err != nil {
-			return domain.DutyPaymentGateRule{}, err
-		}
-		coverage = append(coverage, member)
-	}
-	delta := make([]domain.DutyDelta, 0, len(deltaWords))
-	for _, word := range deltaWords {
-		member, err := closedWord(word, domain.DeltaNone, domain.DeltaShort, domain.DeltaExcess)
-		if err != nil {
-			return domain.DutyPaymentGateRule{}, err
-		}
-		delta = append(delta, member)
-	}
-	validity := make([]domain.DutyFactValidity, 0, len(validityWords))
-	for _, word := range validityWords {
-		member, err := closedWord(word, domain.FundsFactValid, domain.FundsFactInvalidated)
-		if err != nil {
-			return domain.DutyPaymentGateRule{}, err
-		}
-		validity = append(validity, member)
 	}
 	return domain.AcceptDutyPaymentWhen(coverage, delta, validity)
 }

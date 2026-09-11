@@ -507,8 +507,8 @@ func (repository *GateVerifications) FindByKey(
 	return gate, true, nil
 }
 
-// dutyReadingColumns 是门禁记录上「税费付款」那一道读数的七列（0019 加列，票 sa-cc/06），同生同灭。
-// 没挂读数的版本七列皆 NULL——不构成前置条件那一形，或加列之前的旧版。
+// dutyReadingColumns 是门禁记录上「税费付款」那一道读数的各列（0019 加列，票 sa-cc/06），同生同灭。
+// 没挂读数的版本各列皆 NULL——不构成前置条件那一形，或加列之前的旧版。
 type dutyReadingColumns struct {
 	state, coverage, delta, validity *string
 	duty, funds, version             *string
@@ -557,7 +557,7 @@ func (columns dutyReadingColumns) attachTo(gate domain.ReleaseGateVerification) 
 	})
 }
 
-// dutyReadingArgs 把判断上的读数展成七个 INSERT 参数；没挂读数即七个 NULL。
+// dutyReadingArgs 把判断上的读数逐列展成 INSERT 参数；没挂读数即全 NULL。
 func dutyReadingArgs(gate domain.ReleaseGateVerification) []any {
 	reading, has := gate.DutyPayment()
 	if !has {

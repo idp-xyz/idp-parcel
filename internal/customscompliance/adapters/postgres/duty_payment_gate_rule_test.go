@@ -14,7 +14,7 @@ import (
 )
 
 // 「税费付款」那一道的三件真库往返（0019，票 sa-cc/06）：规则行写读、付款核对「当前版」读口、门禁记录
-// 带读数七列。做法承 case_config_registry_test.go 头注：断言穿读口取回、写入一律进环境事务；新表与新列
+// 带读数各列。做法承 case_config_registry_test.go 头注：断言穿读口取回、写入一律进环境事务；新表与新列
 // 的约束和 SQL 是新写的，先例的绿证不了它们，逐格钉。
 
 func synGateKey(t *testing.T) (domain.TenantID, domain.DecisionScopeReference, domain.CustomsProcedureReference) {
@@ -214,8 +214,8 @@ func synGateWithReading(t *testing.T, version string) (domain.ReleaseGateVerific
 	}
 }
 
-// Covers: 票 sa-cc/06 判据 3「门禁记录往返带引用列」——读数七列（判断、三态原值、税费引用、资金事实引用、
-// 版本指纹）逐格如实读回；核对换版指纹变即另一行（引用指向新版，旧版原样在册）；没挂读数的版本七列
+// Covers: 票 sa-cc/06 判据 3「门禁记录往返带引用列」——读数各列（判断、三态原值、税费引用、资金事实引用、
+// 版本指纹）逐格如实读回；核对换版指纹变即另一行（引用指向新版，旧版原样在册）；没挂读数的版本各列
 // 皆空、读口答「无」。
 func TestAGateVerificationRoundTripsItsDutyPaymentReadingByReference(t *testing.T) {
 	fixture := newCRGFixture(t)
@@ -286,7 +286,7 @@ func TestAGateVerificationRoundTripsItsDutyPaymentReadingByReference(t *testing.
 	}
 }
 
-// Covers: 库内再守一遍——读数七列同生同灭（只填一半拒）、`待确认` / `冲突` 进不了门禁记录（那一格是未决、
+// Covers: 库内再守一遍——读数各列同生同灭（只填一半拒）、`待确认` / `冲突` 进不了门禁记录（那一格是未决、
 // 不入册）。
 func TestTheGateVerificationTableRejectsHalfReadingsAndPendingAxes(t *testing.T) {
 	fixture := newCRGFixture(t)
