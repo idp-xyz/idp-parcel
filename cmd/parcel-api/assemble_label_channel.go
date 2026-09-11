@@ -143,7 +143,9 @@ func buildLabelChannelOrchestrationWith(db *bentopg.DB, seams labelChannelSeams)
 		translator = seams.Translator
 	}
 
-	// 06 编排：仓储、判断意图口（lc/26；NewLabelTransactionHandler 不校验依赖，装配点断言非 nil）、时钟。
+	// 06 编排：仓储、判断意图口（lc/26；构造器不校验它，装配点断言非 nil）、继续尝试登记册与当前有效终局的只读半边
+	// （lc/32；构造器构造期拒 nil）、时钟。两个只读口接的是与 `/continued-attempt-closures` 写面和终局采用路径同一只
+	// 适配器的读半边——`Establish` 前核的就是那两处写下的关闭与终局，另读一处就看不见它们。
 	transactions, err := pspostgres.NewLabelTransactions(db)
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: label transactions: %w", err)
@@ -159,11 +161,24 @@ func buildLabelChannelOrchestrationWith(db *bentopg.DB, seams labelChannelSeams)
 	if transactions == nil || judgments == nil {
 		return none, fmt.Errorf("parcel-api: label transaction handler dependencies are nil")
 	}
-	handler := shipmentapp.NewLabelTransactionHandler(shipmentapp.LabelTransactionDeps{
+	registers, err := pspostgres.NewContinuedAttemptRegisters(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: continued attempt registers: %w", err)
+	}
+	finals, err := pspostgres.NewFinalOutcomes(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: final outcomes: %w", err)
+	}
+	handler, err := shipmentapp.NewLabelTransactionHandler(shipmentapp.LabelTransactionDeps{
 		Transactions: transactions,
 		Judgments:    judgments,
+		Registers:    registers,
+		Finals:       finals,
 		Clock:        clock,
 	})
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: label transaction handler: %w", err)
+	}
 	steps := transactionalLabelTransactions{transactor: transactor, inner: handler}
 
 	flow := shipmentapp.NewEstablishSelectedLabelTransactionHandler(shipmentapp.EstablishSelectedLabelTransactionDeps{

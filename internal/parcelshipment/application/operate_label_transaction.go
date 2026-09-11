@@ -38,6 +38,11 @@ const (
 	LabelTransactionNotAccepted
 	// LabelTransactionWriteConflict：预期版本对不上，别人先写了一笔。重读再重放。
 	LabelTransactionWriteConflict
+	// LabelTransactionParcelNotOpen：覆盖包裹里至少一件的`包裹级继续尝试判断`不是`开放`——仍有生效的受控关闭，
+	// 或当前有效终局在场（CONTEXT「关闭生效后只拒绝把该包裹纳入边界后的新重试、替代或换单交易」）。恢复动作是
+	// 去掉该包裹另建、为它申请重开、或把新服务需求进关联的新委托，与`输入未受理`的「改输入重来」不是同一个动作，
+	// 也不并进`状态不允许`——那一格说的是**这笔交易**此刻的状态，这里交易还不存在。哪几件从 ClosedParcels 读。
+	LabelTransactionParcelNotOpen
 )
 
 func (outcome LabelTransactionOutcome) String() string {
@@ -54,6 +59,8 @@ func (outcome LabelTransactionOutcome) String() string {
 		return "INPUT_NOT_ACCEPTED"
 	case LabelTransactionWriteConflict:
 		return "REVISION_CONFLICT"
+	case LabelTransactionParcelNotOpen:
+		return "PARCEL_CONTINUED_ATTEMPT_CLOSED"
 	default:
 		return ""
 	}
@@ -62,9 +69,10 @@ func (outcome LabelTransactionOutcome) String() string {
 // LabelTransactionResult 交回本步之后交易停在哪里。它带回聚合本体而不只是状态：调用方下一步
 // 多半要接着操作同一笔交易，让它按标识再读一次会在两次读之间开一个窗口。
 type LabelTransactionResult struct {
-	outcome     LabelTransactionOutcome
-	transaction domain.LabelTransaction
-	hasValue    bool
+	outcome       LabelTransactionOutcome
+	transaction   domain.LabelTransaction
+	hasValue      bool
+	closedParcels []domain.DeclaredParcelID
 }
 
 func (result LabelTransactionResult) Outcome() LabelTransactionOutcome {
@@ -77,12 +85,25 @@ func (result LabelTransactionResult) Transaction() (domain.LabelTransaction, boo
 	return result.transaction, result.hasValue
 }
 
+// ClosedParcels 交回建立被`包裹未开放`拒掉时判为`受控关闭`的那几件覆盖包裹（按覆盖顺序），其余结果为空。
+// 恢复动作要知道是哪几件——去掉哪件另建、为哪件申请重开——只给一格判断不够指；交易本体照旧缺席，理由同
+// labelTransactionRefused 那一句：建立被拒时手上根本没有交易可交。
+func (result LabelTransactionResult) ClosedParcels() []domain.DeclaredParcelID {
+	parcels := make([]domain.DeclaredParcelID, len(result.closedParcels))
+	copy(parcels, result.closedParcels)
+	return parcels
+}
+
 func labelTransactionApplied(transaction domain.LabelTransaction) LabelTransactionResult {
 	return LabelTransactionResult{outcome: LabelTransactionApplied, transaction: transaction, hasValue: true}
 }
 
 func labelTransactionAlreadyApplied(transaction domain.LabelTransaction) LabelTransactionResult {
 	return LabelTransactionResult{outcome: LabelTransactionAlreadyApplied, transaction: transaction, hasValue: true}
+}
+
+func labelTransactionParcelNotOpen(closed []domain.DeclaredParcelID) LabelTransactionResult {
+	return LabelTransactionResult{outcome: LabelTransactionParcelNotOpen, closedParcels: closed}
 }
 
 // labelTransactionRefused 交回一次拒绝。transaction 为 nil 表示手上根本没有交易可交——
@@ -152,7 +173,7 @@ type AppendLabelFollowUpActionCommand struct {
 	OccurredAt    time.Time
 }
 
-// LabelTransactionDeps 是仓储、判断意图口与时钟三项。
+// LabelTransactionDeps 收拢 06 编排的依赖：仓储、判断意图口、继续尝试登记册与当前有效终局的只读半边、时钟。
 //
 // 时钟只铸**本仓自己动作**的时间——建立与提交渠道是我方的动作。渠道结果时间与后续动作时间
 // 一律随命令进来，不在这里铸：那两个是渠道那边的业务事实，代铸会让「渠道什么时候作废的」
@@ -162,9 +183,17 @@ type AppendLabelFollowUpActionCommand struct {
 // `Save` 成功后，按覆盖包裹逐件交一份「值得判一次终局」的指针式意图，判断由下一拍的消费者形成，
 // 本编排不知道终局判断存在。它与 `Save` 同一事务——两者都从 ctx 取同一个事务执行器，事务由
 // 组合根的事务壳开；本编排刻意不持 Transactor，不在事务里调用会在 `Save` 处响亮失败。
+//
+// Registers 与 Finals **只在 Establish 用、只读**，不是第二处口径：建立前逐覆盖包裹取
+// `register.Judge(currentFinalPresent)`，那是`包裹级继续尝试判断`的单一权威——本编排不看决定种类、不比时间。
+// `Establish` 之后四步一律不核册：CONTEXT「关闭生效后只拒绝把该包裹纳入边界后的新重试、替代或换单交易，
+// 不阻断既有交易的查询、确认、重打、渠道作废、渠道退款、对账和定案」。Finals 与终局采用路径接同一个适配器
+// （FinalOutcomeStore 的读半边）：两种服务形态的终局只认那一处，另读一处就看不见面单服务自己判出的终局。
 type LabelTransactionDeps struct {
 	Transactions ports.LabelTransactionRepository
 	Judgments    ports.LabelTransactionJudgmentHandoff
+	Registers    ports.ContinuedAttemptRegisterView
+	Finals       ports.CurrentFinalView
 	Clock        ports.Clock
 }
 
@@ -183,25 +212,68 @@ type LabelTransactionHandler struct {
 	deps LabelTransactionDeps
 }
 
-func NewLabelTransactionHandler(deps LabelTransactionDeps) *LabelTransactionHandler {
-	return &LabelTransactionHandler{deps: deps}
+// NewLabelTransactionHandler 构造期拒掉缺席的两个只读口。它们只在建立那一步用，漏装要到第一次建立才 panic，
+// 而建立是整条写链的第一拍——没有它们的门等于没有门。其余几口不在这里拒：`Judgments` 由后两步在 `Save` 之后
+// 运行期响亮拒（judgmentBeat，lc/26 定的取法，本票不改口）；仓储与时钟缺了在第一步就 panic，没有静默放行的失效形态。
+func NewLabelTransactionHandler(deps LabelTransactionDeps) (*LabelTransactionHandler, error) {
+	if deps.Registers == nil {
+		return nil, errors.New("label transaction handler: continued attempt register view is nil")
+	}
+	if deps.Finals == nil {
+		return nil, errors.New("label transaction handler: current final view is nil")
+	}
+	return &LabelTransactionHandler{deps: deps}, nil
 }
 
 // Establish 建立一笔面单交易。
 //
-// 撞键即重放：同一标识再建一次读回既有那一笔，**不覆盖**。建立时固定的覆盖与依据此后改不了
+// 同标识即重放：再建一次读回既有那一笔，**不覆盖**。建立时固定的覆盖与依据此后改不了
 // （ADR-0084），所以「同标识不同内容」不是一次更正而是一次说不清的写入，让它读回既有，由
-// 调用方比对后决定是不是该另起一笔带替代关系的新交易。
+// 调用方比对后决定是不是该另起一笔带替代关系的新交易。重放**先于核册**：先按标识读一次，命中就走重放分支——
+// 一笔边界前建立的交易被重放时，册上可能已经有了关闭，硬句「权威业务截断边界前已经形成交易建立决定……仍属于
+// 既有交易」要它照旧交回，而不是被报成「关闭中」；多读一次换这条硬句。`Insert` 撞键那一支仍留着，兜两次同标识
+// 建立恰好在这一读与 `Insert` 之间并发的那一格。
+//
+// 关系立好之后、聚合构造之前核继续尝试登记册（lc/32）：对覆盖包裹逐件现算`包裹级继续尝试判断`，任一件为
+// `受控关闭`就拒掉整笔建立、不 Insert——CONTEXT「关闭生效后只拒绝把该包裹纳入边界后的新重试、替代或换单交易」，
+// 建立是本编排唯一一处「把包裹纳入新交易」，所以核册只在这一步；后四步作用于既有交易，硬句明写不阻断它们的
+// 处理与定案。用 Judge 而不只看 StandingClosure，是因为「开放」的定义本就含「当前不存在有效终局」（CONTEXT
+// 「当前有效终局服务结果存在时……后续新服务需求进入关联的新委托」），Judge 是那一格的单一权威，只看关闭那一支
+// 就是在本编排里复述一半口径。
+//
+// 并发窄格如实记、不在这里关：本步读册与关闭决定的 Save 各在自己的事务里，读到「无关闭」之后关闭才提交的那一格
+// 本门拦不住；CONTEXT 为它另备了一次事后判断（「关闭期间若仍发现已经实际提交的边界后交易，PS 必须形成违反截断
+// 边界的业务判断并保留该交易」），那需要建立决定与关闭决定之间的稳定领域顺序，归另一张票。本步不加行锁，也不给
+// 交易加「观察到的册版本」出生属性——ADR-0084 决定二固定的清单不动。
 func (handler *LabelTransactionHandler) Establish(
 	ctx context.Context,
 	command EstablishLabelTransactionCommand,
 ) (LabelTransactionResult, error) {
+	existing, found, err := handler.deps.Transactions.FindByID(ctx, command.Tenant, command.TransactionID)
+	if err != nil {
+		return LabelTransactionResult{}, fmt.Errorf("establish label transaction: %w", err)
+	}
+	if found {
+		return labelTransactionAlreadyApplied(existing), nil
+	}
+
 	link, refusal, err := handler.priorLink(ctx, command)
 	if err != nil {
 		return LabelTransactionResult{}, err
 	}
 	if refusal != LabelTransactionOutcomeInvalid {
 		return LabelTransactionResult{outcome: refusal}, nil
+	}
+
+	closed, refusal, err := handler.closedParcels(ctx, command.Tenant, command.CoveredParcels)
+	if err != nil {
+		return LabelTransactionResult{}, err
+	}
+	if refusal != LabelTransactionOutcomeInvalid {
+		return LabelTransactionResult{outcome: refusal}, nil
+	}
+	if len(closed) != 0 {
+		return labelTransactionParcelNotOpen(closed), nil
 	}
 
 	transaction, err := domain.EstablishLabelTransaction(domain.EstablishLabelTransactionSpec{
@@ -270,6 +342,44 @@ func (handler *LabelTransactionHandler) priorLink(
 		return domain.PriorLabelTransactionLink{}, LabelTransactionNotAccepted, nil
 	}
 	return link, LabelTransactionOutcomeInvalid, nil
+}
+
+// closedParcels 对覆盖包裹逐件现算`包裹级继续尝试判断`，交回判为`受控关闭`的那几件（按覆盖顺序）。
+//
+// 两个读口读不回都原样上抛，不译成「开放」放行、也不译成「关闭」拒绝：fail-closed 是拒绝建立这一步本身（返错），
+// 不是猜一格——猜「开放」会让一道坏掉的读口放走边界后的交易，猜「关闭」会把库故障报成一条业务决定。未开册与
+// 空册是同一格（照 JudgeLabelServiceFinalHandler.Handle：无生效关闭且无当前有效终局即开放）；开不出空册只因
+// 租户或包裹标识立不住，那是输入的错，落`输入未受理`。`currentFinalPresent` 照 FormContinuedAttemptDecisionHandler
+// 的取法：找到且已定案。
+func (handler *LabelTransactionHandler) closedParcels(
+	ctx context.Context,
+	tenant domain.TenantID,
+	parcels []domain.DeclaredParcelID,
+) ([]domain.DeclaredParcelID, LabelTransactionOutcome, error) {
+	var closed []domain.DeclaredParcelID
+	for _, parcel := range parcels {
+		current, found, err := handler.deps.Finals.FindCurrentFinal(ctx, tenant, parcel)
+		if err != nil {
+			return nil, LabelTransactionOutcomeInvalid,
+				fmt.Errorf("establish label transaction: 读包裹 %s 当前有效终局：%w", parcel, err)
+		}
+		currentFinalPresent := found && current.Finalized
+
+		register, found, err := handler.deps.Registers.FindByParcel(ctx, tenant, parcel)
+		if err != nil {
+			return nil, LabelTransactionOutcomeInvalid,
+				fmt.Errorf("establish label transaction: 读包裹 %s 继续尝试登记册：%w", parcel, err)
+		}
+		if !found {
+			if register, err = domain.OpenContinuedAttemptRegister(tenant, parcel); err != nil {
+				return nil, LabelTransactionNotAccepted, nil
+			}
+		}
+		if register.Judge(currentFinalPresent) == domain.ContinuedAttemptControlledClosed {
+			closed = append(closed, parcel)
+		}
+	}
+	return closed, LabelTransactionOutcomeInvalid, nil
 }
 
 // SubmitToChannel 把交易推到`已提交渠道`并落库。提交时间由本层铸——发出请求是我方的动作。

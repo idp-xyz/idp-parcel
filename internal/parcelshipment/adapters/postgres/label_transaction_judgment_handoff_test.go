@@ -40,6 +40,38 @@ func newLabelTransactionJudgmentHandoffFixture(t *testing.T) (*adapter.OutboxLab
 	return handoff, db, pool
 }
 
+// newLabelTransactionHandlerWithRealViews 装 06 编排，继续尝试登记册与当前有效终局两个只读口接同一只库上的真适配器
+// （lc/32 起构造期必填）。本文件的用例从建立之后一步起走，两口不会被读到；接真的而不养一对替身，是因为这里证的
+// 本来就是真适配器接在一起的形状。
+func newLabelTransactionHandlerWithRealViews(
+	t *testing.T,
+	db *bentopg.DB,
+	repository *adapter.LabelTransactions,
+	judgments ports.LabelTransactionJudgmentHandoff,
+	clock ports.Clock,
+) *psapplication.LabelTransactionHandler {
+	t.Helper()
+	registers, err := adapter.NewContinuedAttemptRegisters(db)
+	if err != nil {
+		t.Fatalf("构造继续尝试登记册仓储：%v", err)
+	}
+	finals, err := adapter.NewFinalOutcomes(db)
+	if err != nil {
+		t.Fatalf("构造终局仓储：%v", err)
+	}
+	handler, err := psapplication.NewLabelTransactionHandler(psapplication.LabelTransactionDeps{
+		Transactions: repository,
+		Judgments:    judgments,
+		Registers:    registers,
+		Finals:       finals,
+		Clock:        clock,
+	})
+	if err != nil {
+		t.Fatalf("构造面单交易编排：%v", err)
+	}
+	return handler
+}
+
 func labelTransactionJudgmentIntent(
 	t *testing.T,
 	transaction, parcel string,
@@ -72,11 +104,7 @@ func TestTheWriteSideEnqueuesEachBeatInTheSameTransactionAsItsSave(t *testing.T)
 		t.Fatalf("构造面单交易仓储：%v", err)
 	}
 	clock := handoffClock{at: time.Date(2026, 9, 10, 18, 0, 0, 0, time.UTC)}
-	handler := psapplication.NewLabelTransactionHandler(psapplication.LabelTransactionDeps{
-		Transactions: repository,
-		Judgments:    handoff,
-		Clock:        clock,
-	})
+	handler := newLabelTransactionHandlerWithRealViews(t, db, repository, handoff, clock)
 	ctx := t.Context()
 	transactor := db.Transactor()
 	tenant := mustBuild(t, domain.NewTenantID, "tenant-a")
@@ -178,14 +206,15 @@ func TestTheWriteSideEnqueuesEachBeatInTheSameTransactionAsItsSave(t *testing.T)
 // 壳回滚后结果行也不在——不留「结果已落、意图未交」的中间态。用一只失败替身代替 outbox，理由是
 // 真 outbox 在健康的库上失败不了。
 func TestAFailedJudgmentHandoffRollsTheSaveBack(t *testing.T) {
-	repository, _, transactor := newLabelTransactions(t)
+	_, db, _ := newLabelTransactionJudgmentHandoffFixture(t)
+	repository, err := adapter.NewLabelTransactions(db)
+	if err != nil {
+		t.Fatalf("构造面单交易仓储：%v", err)
+	}
+	transactor := db.Transactor()
 	failing := errors.New("outbox unavailable")
 	clock := handoffClock{at: time.Date(2026, 9, 10, 18, 0, 0, 0, time.UTC)}
-	handler := psapplication.NewLabelTransactionHandler(psapplication.LabelTransactionDeps{
-		Transactions: repository,
-		Judgments:    failingJudgmentHandoff{err: failing},
-		Clock:        clock,
-	})
+	handler := newLabelTransactionHandlerWithRealViews(t, db, repository, failingJudgmentHandoff{err: failing}, clock)
 	ctx := t.Context()
 	tenant := mustBuild(t, domain.NewTenantID, "tenant-a")
 	transactionID := mustBuild(t, domain.NewLabelTransactionID, "LT-fail")
@@ -199,7 +228,7 @@ func TestAFailedJudgmentHandoffRollsTheSaveBack(t *testing.T) {
 		return err
 	})
 
-	err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+	err = transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
 		_, err := handler.RecordChannelResult(txCtx, psapplication.RecordLabelChannelResultCommand{
 			Tenant:        tenant,
 			TransactionID: transactionID,

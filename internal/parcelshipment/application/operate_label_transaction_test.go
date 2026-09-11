@@ -499,8 +499,10 @@ func TestAFailedJudgmentHandoffFailsTheWholeBeat(t *testing.T) {
 func TestTheLastTwoBeatsRefuseToLandWithoutAJudgmentHandoff(t *testing.T) {
 	repository := newLabelTransactionRepositoryDouble()
 	fixture := newLabelTransactionFixture(t)
-	fixture.handler = application.NewLabelTransactionHandler(application.LabelTransactionDeps{
+	fixture.handler = mustNewLabelTransactionHandler(t, application.LabelTransactionDeps{
 		Transactions: repository,
+		Registers:    fixture.registers,
+		Finals:       fixture.finals,
 		Clock:        fixedClock{at: handlerClockAt},
 	})
 	fixture.repository = repository
@@ -513,12 +515,212 @@ func TestTheLastTwoBeatsRefuseToLandWithoutAJudgmentHandoff(t *testing.T) {
 	}
 }
 
+// Covers: 票 lc/32 判据 1 前两句——CONTEXT「关闭生效后只拒绝把该包裹纳入边界后的新重试、替代或换单交易」与
+// 「多包裹交易中，目标包裹关闭不关闭其他包裹或整笔交易」的建立侧落点：两件覆盖包裹里只一件有生效关闭，整笔
+// 建立仍被拒（关闭的那件不得被纳入新交易），拒在自己的一格 `PARCEL_CONTINUED_ATTEMPT_CLOSED`、不 Insert、
+// 不交回交易本体（它根本没形成），被拒清单只含关闭的那一件——恢复动作是去掉它另建或为它申请重开，得知道是哪件。
+func TestEstablishingOverAParcelUnderControlledClosureIsRefusedNamingOnlyThatParcel(t *testing.T) {
+	fixture := newLabelTransactionFixture(t)
+	fixture.closeParcel(t, fixture.parcels[1])
+
+	result, err := fixture.handler.Establish(context.Background(), fixture.establishCommand(t, "LT-1"))
+	if err != nil {
+		t.Fatalf("establish: %v", err)
+	}
+
+	if result.Outcome() != application.LabelTransactionParcelNotOpen {
+		t.Fatalf("outcome = %q, want PARCEL_CONTINUED_ATTEMPT_CLOSED", result.Outcome())
+	}
+	if result.Outcome().String() != "PARCEL_CONTINUED_ATTEMPT_CLOSED" {
+		t.Fatalf("outcome string = %q", result.Outcome().String())
+	}
+	if _, present := result.Transaction(); present {
+		t.Fatal("被拒的建立交回了一笔交易——它根本没有形成")
+	}
+	if fixture.repository.inserted != nil {
+		t.Fatal("关闭中的包裹仍被纳入了一笔新交易并落库")
+	}
+	closed := result.ClosedParcels()
+	if len(closed) != 1 || closed[0] != fixture.parcels[1] {
+		t.Fatalf("被拒清单 = %v，want 只含关闭的那一件 %s", closed, fixture.parcels[1])
+	}
+}
+
+// Covers: 票 lc/32 判据 3 / 做法 4——CONTEXT「权威业务截断边界前已经形成交易建立决定或已经提交的交易……仍属于
+// 既有交易」：边界前建立的那一笔被同标识重放建立时，册上此刻已有关闭，重放仍走既有分支读回那一笔，**不**被报成
+// 「关闭中」，也不再插一笔。重放要先于核册，否则「重放」与「边界后新建」在核册那一步长同一张脸。
+func TestReplayingATransactionEstablishedBeforeTheClosureIsNotRefusedByIt(t *testing.T) {
+	fixture := newLabelTransactionFixture(t)
+	first := fixture.mustEstablish(t, "LT-1")
+	fixture.closeParcel(t, fixture.parcels[0])
+	fixture.repository.inserted = nil
+
+	result, err := fixture.handler.Establish(context.Background(), fixture.establishCommand(t, "LT-1"))
+	if err != nil {
+		t.Fatalf("establish again: %v", err)
+	}
+
+	if result.Outcome() != application.LabelTransactionAlreadyApplied {
+		t.Fatalf("outcome = %q, want ALREADY_APPLIED——边界前建立的交易被重放时不得被册上后来的关闭拒掉", result.Outcome())
+	}
+	existing, present := result.Transaction()
+	if !present || existing.ID() != first.ID() {
+		t.Fatalf("重放交回的不是既有那一笔：%#v", existing)
+	}
+	if fixture.repository.inserted != nil {
+		t.Fatal("重放又插了一笔")
+	}
+	if len(result.ClosedParcels()) != 0 {
+		t.Fatalf("重放的结果带了被拒清单 %v", result.ClosedParcels())
+	}
+}
+
+// Covers: 票 lc/32 判据 1 第三句——CONTEXT 生命周期「受控关闭 → 开放：适用授权追加重开决定」之后，边界后的新尝试
+// 又能建立。册上有过关闭不等于关着：编排问的是 Judge 现算的那一格，不是「有没有关过」。
+func TestAReopenedParcelAdmitsANewTransactionAgain(t *testing.T) {
+	fixture := newLabelTransactionFixture(t)
+	closureID := fixture.closeParcel(t, fixture.parcels[0])
+	fixture.reopenParcel(t, fixture.parcels[0], closureID)
+
+	result, err := fixture.handler.Establish(context.Background(), fixture.establishCommand(t, "LT-1"))
+	if err != nil {
+		t.Fatalf("establish: %v", err)
+	}
+
+	if result.Outcome() != application.LabelTransactionApplied {
+		t.Fatalf("outcome = %q, want APPLIED——重开之后新尝试不再被拒", result.Outcome())
+	}
+	if fixture.repository.inserted == nil {
+		t.Fatal("重开后的建立没有落库")
+	}
+}
+
+// Covers: 票 lc/32 判据 1 末句——CONTEXT「当前有效终局服务结果存在时……后续新服务需求进入关联的新委托」：
+// 册上一条决定都没有、但包裹已有当前有效终局，`开放`的定义（当前无有效终局且没有生效关闭）不成立，新交易
+// 同样被拒在同一格。这正是用 Judge(currentFinalPresent) 而不只看 StandingClosure 的理由。
+func TestAParcelWithACurrentFinalIsRefusedEvenWithoutAClosureOnRecord(t *testing.T) {
+	fixture := newLabelTransactionFixture(t)
+	fixture.finals.finals[fixture.parcels[0]] = ports.FinalOutcomeRecord{Finalized: true}
+
+	result, err := fixture.handler.Establish(context.Background(), fixture.establishCommand(t, "LT-1"))
+	if err != nil {
+		t.Fatalf("establish: %v", err)
+	}
+
+	if result.Outcome() != application.LabelTransactionParcelNotOpen {
+		t.Fatalf("outcome = %q, want PARCEL_CONTINUED_ATTEMPT_CLOSED——有当前有效终局的包裹不开放新尝试", result.Outcome())
+	}
+	if closed := result.ClosedParcels(); len(closed) != 1 || closed[0] != fixture.parcels[0] {
+		t.Fatalf("被拒清单 = %v，want 只含有终局的那一件", closed)
+	}
+	if fixture.repository.inserted != nil {
+		t.Fatal("有当前有效终局的包裹仍被纳入了新交易")
+	}
+}
+
+// Covers: 票 lc/32 判据 2 后句 / 红线——两个读口读不回都 error 上抛、不 Insert；不译成「开放」放行（一道坏掉的读口
+// 会放走边界后的交易），也不译成「关闭」拒绝（把库故障报成一条业务决定）。fail-closed 是拒绝建立这一步本身。
+func TestAnUnreadableRegisterOrFinalViewFailsTheEstablishmentWithoutInserting(t *testing.T) {
+	t.Run("register view", func(t *testing.T) {
+		fixture := newLabelTransactionFixture(t)
+		fixture.registers.failWith = errors.New("register store unavailable")
+
+		result, err := fixture.handler.Establish(context.Background(), fixture.establishCommand(t, "LT-1"))
+		if !errors.Is(err, fixture.registers.failWith) {
+			t.Fatalf("err = %v, want 登记册读口的错误原样上抛", err)
+		}
+		if result.Outcome() != application.LabelTransactionOutcomeInvalid {
+			t.Fatalf("读口读不回仍交回了业务答案 %q", result.Outcome())
+		}
+		if fixture.repository.inserted != nil {
+			t.Fatal("登记册读不回仍落了库")
+		}
+	})
+	t.Run("current final view", func(t *testing.T) {
+		fixture := newLabelTransactionFixture(t)
+		fixture.finals.failWith = errors.New("final outcome store unavailable")
+
+		result, err := fixture.handler.Establish(context.Background(), fixture.establishCommand(t, "LT-1"))
+		if !errors.Is(err, fixture.finals.failWith) {
+			t.Fatalf("err = %v, want 终局读口的错误原样上抛", err)
+		}
+		if result.Outcome() != application.LabelTransactionOutcomeInvalid {
+			t.Fatalf("读口读不回仍交回了业务答案 %q", result.Outcome())
+		}
+		if fixture.repository.inserted != nil {
+			t.Fatal("终局读不回仍落了库")
+		}
+	})
+}
+
+// Covers: 票 lc/32 判据 4 / 红线——CONTEXT「关闭生效后只拒绝……新重试、替代或换单交易，不阻断既有交易的查询、确认、
+// 重打、渠道作废、渠道退款、对账和定案」：交易建立在边界前，其覆盖包裹随后被受控关闭，记录渠道结果与追加后续动作
+// 两步照旧落下——后四步不核册。
+func TestTheLaterBeatsStillLandForAParcelUnderControlledClosure(t *testing.T) {
+	fixture := newLabelTransactionFixture(t)
+	fixture.mustEstablish(t, "LT-1")
+	fixture.mustSubmit(t, "LT-1")
+	fixture.closeParcel(t, fixture.parcels[0])
+
+	recorded, err := fixture.handler.RecordChannelResult(context.Background(), fixture.recordResultCommand(t, "LT-1"))
+	if err != nil {
+		t.Fatalf("record result: %v", err)
+	}
+	if recorded.Outcome() != application.LabelTransactionApplied {
+		t.Fatalf("记录结果 outcome = %q, want APPLIED——关闭不阻断既有交易的定案", recorded.Outcome())
+	}
+
+	appended, err := fixture.handler.AppendFollowUpAction(context.Background(), application.AppendLabelFollowUpActionCommand{
+		Tenant:        fixture.tenant,
+		TransactionID: mustValue(t, domain.NewLabelTransactionID, "LT-1"),
+		Kind:          domain.ChannelVoidAction,
+		Parcels:       fixture.parcels[:1],
+		Reason:        mustValue(t, domain.NewChannelResultReasonReference, "CUSTOMER_CANCELLED"),
+		OccurredAt:    handlerClockAt.Add(3 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("append follow-up: %v", err)
+	}
+	if appended.Outcome() != application.LabelTransactionApplied {
+		t.Fatalf("追加后续动作 outcome = %q, want APPLIED——关闭不阻断既有交易的渠道作废", appended.Outcome())
+	}
+}
+
+// Covers: 构造期拒掉缺席的两个只读口——它们只在建立那一步用，漏装到第一次建立才 panic，而建立是整条写链的第一拍，
+// 没有它们的门等于没有门。
+func TestTheHandlerRefusesToBeBuiltWithoutTheRegisterOrFinalViews(t *testing.T) {
+	fixture := newLabelTransactionFixture(t)
+	complete := application.LabelTransactionDeps{
+		Transactions: fixture.repository,
+		Judgments:    fixture.judgments,
+		Registers:    fixture.registers,
+		Finals:       fixture.finals,
+		Clock:        fixedClock{at: handlerClockAt},
+	}
+
+	withoutRegisters := complete
+	withoutRegisters.Registers = nil
+	if _, err := application.NewLabelTransactionHandler(withoutRegisters); err == nil {
+		t.Fatal("没有登记册读口仍构造出了 handler")
+	}
+	withoutFinals := complete
+	withoutFinals.Finals = nil
+	if _, err := application.NewLabelTransactionHandler(withoutFinals); err == nil {
+		t.Fatal("没有当前有效终局读口仍构造出了 handler")
+	}
+	if _, err := application.NewLabelTransactionHandler(complete); err != nil {
+		t.Fatalf("两口齐备仍拒绝构造：%v", err)
+	}
+}
+
 // ---- 夹具 ----
 
 type labelTransactionFixture struct {
 	handler    *application.LabelTransactionHandler
 	repository *labelTransactionRepositoryDouble
 	judgments  *judgmentHandoffDouble
+	registers  *continuedAttemptRegisterViewDouble
+	finals     *currentFinalViewDouble
 	tenant     domain.TenantID
 	parcels    []domain.DeclaredParcelID
 }
@@ -527,14 +729,20 @@ func newLabelTransactionFixture(t *testing.T) *labelTransactionFixture {
 	t.Helper()
 	repository := newLabelTransactionRepositoryDouble()
 	judgments := &judgmentHandoffDouble{}
+	registers := newContinuedAttemptRegisterViewDouble()
+	finals := newCurrentFinalViewDouble()
 	return &labelTransactionFixture{
-		handler: application.NewLabelTransactionHandler(application.LabelTransactionDeps{
+		handler: mustNewLabelTransactionHandler(t, application.LabelTransactionDeps{
 			Transactions: repository,
 			Judgments:    judgments,
+			Registers:    registers,
+			Finals:       finals,
 			Clock:        fixedClock{at: handlerClockAt},
 		}),
 		repository: repository,
 		judgments:  judgments,
+		registers:  registers,
+		finals:     finals,
 		tenant:     mustValue(t, domain.NewTenantID, "tenant-1"),
 		parcels: []domain.DeclaredParcelID{
 			mustValue(t, domain.NewDeclaredParcelID, "PARCEL-1"),
@@ -542,6 +750,126 @@ func newLabelTransactionFixture(t *testing.T) *labelTransactionFixture {
 		},
 	}
 }
+
+func mustNewLabelTransactionHandler(t *testing.T, deps application.LabelTransactionDeps) *application.LabelTransactionHandler {
+	t.Helper()
+	handler, err := application.NewLabelTransactionHandler(deps)
+	if err != nil {
+		t.Fatalf("构造面单交易编排：%v", err)
+	}
+	return handler
+}
+
+// closeParcel 往该包裹的登记册上放一份生效的受控关闭（没册就开一册）。决定的各项取值全为合成串，与
+// closedLabelServiceRegister 同一套；关闭生效在编排时钟之前——本用例组证的是「生效关闭在场」这一格，不证时间比较，
+// 编排也不比时间（Judge 是唯一口径）。
+func (fixture *labelTransactionFixture) closeParcel(t *testing.T, parcel domain.DeclaredParcelID) domain.ContinuedAttemptDecisionID {
+	t.Helper()
+	register, found := fixture.registers.registers[parcel]
+	if !found {
+		opened, err := domain.OpenContinuedAttemptRegister(fixture.tenant, parcel)
+		if err != nil {
+			t.Fatalf("开册 %s：%v", parcel, err)
+		}
+		register = opened
+	}
+	closureID := mustValue(t, domain.NewContinuedAttemptDecisionID, "CLOSURE-"+parcel.String())
+	closed, err := register.Append(domain.ContinuedAttemptDecisionSpec{
+		ID:                closureID,
+		Kind:              domain.ControlledClosureDecision,
+		Decider:           mustValue(t, domain.NewDeciderReference, "OPS-MANAGER-1"),
+		AuthorityRole:     mustValue(t, domain.NewContinuedAttemptAuthorityRoleReference, "PC-CLOSURE-ROLE-1"),
+		AuthoritySnapshot: mustValue(t, domain.NewContinuedAttemptAuthoritySnapshot, "PC-AUTH-SNAPSHOT-1"),
+		Reason:            mustValue(t, domain.NewContinuedAttemptReasonReference, "CHANNEL_SUSPENDED"),
+		EffectiveAt:       handlerClockAt.Add(-time.Hour),
+		CutoffBoundary:    mustValue(t, domain.NewAuthoritativeCutoffBoundary, closureID.String()),
+		ClosureResponsibilitySource: mustValue(t,
+			domain.NewClosureResponsibilitySourceReference, "PC-CHANNEL-ACCOUNT-SUSPENSION-1"),
+	}, false)
+	if err != nil {
+		t.Fatalf("追加关闭 %s：%v", parcel, err)
+	}
+	fixture.registers.registers[parcel] = closed
+	return closureID
+}
+
+// reopenParcel 在该包裹册上那份生效关闭之后追加一条重开，生效时间晚于关闭（聚合要求）。
+func (fixture *labelTransactionFixture) reopenParcel(
+	t *testing.T,
+	parcel domain.DeclaredParcelID,
+	closureID domain.ContinuedAttemptDecisionID,
+) {
+	t.Helper()
+	register, found := fixture.registers.registers[parcel]
+	if !found {
+		t.Fatalf("重开 %s：册上没有关闭可重开", parcel)
+	}
+	reopened, err := register.Append(domain.ContinuedAttemptDecisionSpec{
+		ID:                  mustValue(t, domain.NewContinuedAttemptDecisionID, "REOPEN-"+parcel.String()),
+		Kind:                domain.ReopeningDecision,
+		Decider:             mustValue(t, domain.NewDeciderReference, "OPS-MANAGER-1"),
+		AuthorityRole:       mustValue(t, domain.NewContinuedAttemptAuthorityRoleReference, "PC-REOPEN-ROLE-1"),
+		AuthoritySnapshot:   mustValue(t, domain.NewContinuedAttemptAuthoritySnapshot, "PC-AUTH-SNAPSHOT-2"),
+		Reason:              mustValue(t, domain.NewContinuedAttemptReasonReference, "RESTRICTION_LIFTED"),
+		EffectiveAt:         handlerClockAt.Add(-30 * time.Minute),
+		RelatedPriorClosure: closureID,
+	}, false)
+	if err != nil {
+		t.Fatalf("追加重开 %s：%v", parcel, err)
+	}
+	fixture.registers.registers[parcel] = reopened
+}
+
+// continuedAttemptRegisterViewDouble 是登记册只读口的内存替身，按包裹交回；failWith 非空时模拟读口读不回。
+type continuedAttemptRegisterViewDouble struct {
+	registers map[domain.DeclaredParcelID]domain.ContinuedAttemptRegister
+	failWith  error
+}
+
+func newContinuedAttemptRegisterViewDouble() *continuedAttemptRegisterViewDouble {
+	return &continuedAttemptRegisterViewDouble{registers: map[domain.DeclaredParcelID]domain.ContinuedAttemptRegister{}}
+}
+
+func (double *continuedAttemptRegisterViewDouble) FindByParcel(
+	_ context.Context,
+	tenant domain.TenantID,
+	parcel domain.DeclaredParcelID,
+) (domain.ContinuedAttemptRegister, bool, error) {
+	if double.failWith != nil {
+		return domain.ContinuedAttemptRegister{}, false, double.failWith
+	}
+	register, found := double.registers[parcel]
+	if !found || register.Tenant() != tenant {
+		return domain.ContinuedAttemptRegister{}, false, nil
+	}
+	return register, true, nil
+}
+
+var _ ports.ContinuedAttemptRegisterView = (*continuedAttemptRegisterViewDouble)(nil)
+
+// currentFinalViewDouble 是当前有效终局只读口的内存替身，按包裹答在不在；failWith 非空时模拟读口读不回。
+type currentFinalViewDouble struct {
+	finals   map[domain.DeclaredParcelID]ports.FinalOutcomeRecord
+	failWith error
+}
+
+func newCurrentFinalViewDouble() *currentFinalViewDouble {
+	return &currentFinalViewDouble{finals: map[domain.DeclaredParcelID]ports.FinalOutcomeRecord{}}
+}
+
+func (double *currentFinalViewDouble) FindCurrentFinal(
+	_ context.Context,
+	_ domain.TenantID,
+	parcel domain.DeclaredParcelID,
+) (ports.FinalOutcomeRecord, bool, error) {
+	if double.failWith != nil {
+		return ports.FinalOutcomeRecord{}, false, double.failWith
+	}
+	record, found := double.finals[parcel]
+	return record, found, nil
+}
+
+var _ ports.CurrentFinalView = (*currentFinalViewDouble)(nil)
 
 // establishCommand 造一条建立命令。七类依据不再逐格给：建立一步只收一份「择优结果」对象（票 label-channel/28
 // 判据 1 的形状约束），谁产出它编排不问——这里由夹具直接造，与系统择优或日后人工择优产出的是同一个对象。
