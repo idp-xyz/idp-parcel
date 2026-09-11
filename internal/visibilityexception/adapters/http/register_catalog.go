@@ -12,8 +12,8 @@ import (
 // 结果。与查阅面的 ErrMalformedRequest、索赔提交面的 ErrMalformedClaim 分设，判据同后者
 // ——各端点族的翻译各自演化，共享一个哨兵会让一边的收紧误伤另一边。
 //
-// 六类登记共用这一个而不再细分：它们消费同一份登记快照翻译（registrationjson），也交回
-// 同一套答案代数，收紧必然同时发生在六处。
+// 各类登记共用这一个而不再细分：它们消费同一份登记快照翻译（registrationjson），也交回
+// 同一套答案代数，收紧必然同时发生在每一处。
 var ErrMalformedRegistration = errors.New("visibility exception http: malformed catalog registration")
 
 // codeUnnamedRefusalReason 与 codeUnnamedOutcome 同属「应用层交回的答案没有名字」这一类
@@ -79,6 +79,24 @@ type DisclosurePolicyRegistrationIntake interface {
 	) (application.RegisterDisclosurePolicyCommand, error)
 }
 
+// ExceptionDisclosureRulesRegistrationIntake 同上，翻译异常披露规则登记（0023；票
+// ve-disclosure-policy-view/02 步二）。与 DisclosurePolicyRegistrationIntake 是相邻两册各自
+// 的口，不共用：两册的命令类型不同，共用一个口就得先认册再定形状。
+type ExceptionDisclosureRulesRegistrationIntake interface {
+	IntakeExceptionDisclosureRulesRegistration(
+		ctx context.Context,
+		request *http.Request,
+	) (application.RegisterExceptionDisclosureRulesCommand, error)
+}
+
+// ConflictSignalRuleRegistrationIntake 同上，翻译冲突信号规则登记（0025）。
+type ConflictSignalRuleRegistrationIntake interface {
+	IntakeConflictSignalRuleRegistration(
+		ctx context.Context,
+		request *http.Request,
+	) (application.RegisterConflictSignalRuleCommand, error)
+}
+
 // MilestoneMappingRegistrar 是本端点转交的登记编排。事务边界在编排侧给出（目录写口无
 // 环境事务即拒，先例同登记 CLI 的 execute），适配器只转交与映射，不判断任何业务结果。
 type MilestoneMappingRegistrar interface {
@@ -125,6 +143,22 @@ type DisclosurePolicyRegistrar interface {
 	Handle(
 		ctx context.Context,
 		command application.RegisterDisclosurePolicyCommand,
+	) (application.RegisterCatalogResult, error)
+}
+
+// ExceptionDisclosureRulesRegistrar 同上，转交异常披露规则登记编排。
+type ExceptionDisclosureRulesRegistrar interface {
+	Handle(
+		ctx context.Context,
+		command application.RegisterExceptionDisclosureRulesCommand,
+	) (application.RegisterCatalogResult, error)
+}
+
+// ConflictSignalRuleRegistrar 同上，转交冲突信号规则登记编排。
+type ConflictSignalRuleRegistrar interface {
+	Handle(
+		ctx context.Context,
+		command application.RegisterConflictSignalRuleCommand,
 	) (application.RegisterCatalogResult, error)
 }
 
@@ -193,10 +227,32 @@ func NewRegisterDisclosurePolicyEndpoint(
 	return newCatalogRegistrationEndpoint(intake.IntakeDisclosurePolicyRegistration, registrar.Handle)
 }
 
-// newCatalogRegistrationEndpoint 是六类共用的端点体。
+// NewRegisterExceptionDisclosureRulesEndpoint 交回异常披露规则登记的 HTTP 入口（票
+// ve-disclosure-policy-view/02 步二，口径「同族一致」：同族目录册已全进端点表）。它改的是
+// 「这个租户对哪个客户的哪类异常信号在哪种可信度下披露与否、能否自动发布、内容从哪来」，
+// 属运营配置册；与披露策略登记是相邻两册各自的入口，路径与命令名里「规则」「策略」两词
+// 不互换。
+func NewRegisterExceptionDisclosureRulesEndpoint(
+	intake ExceptionDisclosureRulesRegistrationIntake,
+	registrar ExceptionDisclosureRulesRegistrar,
+) http.Handler {
+	return newCatalogRegistrationEndpoint(intake.IntakeExceptionDisclosureRulesRegistration, registrar.Handle)
+}
+
+// NewRegisterConflictSignalRuleEndpoint 交回冲突信号规则登记的 HTTP 入口。它改的是「这个
+// 租户无法按业务时间裁决的替代链分叉形成哪一类异常信号、依据哪版识别规则、记什么可信度」，
+// 属配置；一租户一条，撞既有行由用例译成版本不可覆盖，本端点照其余登记端点逐名转写。
+func NewRegisterConflictSignalRuleEndpoint(
+	intake ConflictSignalRuleRegistrationIntake,
+	registrar ConflictSignalRuleRegistrar,
+) http.Handler {
+	return newCatalogRegistrationEndpoint(intake.IntakeConflictSignalRuleRegistration, registrar.Handle)
+}
+
+// newCatalogRegistrationEndpoint 是各类登记共用的端点体。
 //
-// 共用一份而不是各抄一遍：六类交回的是同一个 RegisterCatalogResult，方法门、Intake 分流、
-// 答案转写因而逐字相同，抄六遍等于把同一条转写规则摊到六处，收紧时改一处漏五处。类型仍
+// 共用一份而不是各抄一遍：各类交回的是同一个 RegisterCatalogResult，方法门、Intake 分流、
+// 答案转写因而逐字相同，逐类抄写等于把同一条转写规则摊到多处，收紧时改一处漏其余。类型仍
 // 逐类分开——泛型按命令类型实例化后互不相容，把一类的编排接到另一类的端点上编译期就红，
 // 价卡与序列两个包装不合并所要守的正是这一格。
 func newCatalogRegistrationEndpoint[Command any](
@@ -227,7 +283,7 @@ func newCatalogRegistrationEndpoint[Command any](
 	})
 }
 
-// catalogRegistrationResponse 是六个登记端点的封闭响应形状。`outcome` 与 `refusalReason`
+// catalogRegistrationResponse 是各登记端点的封闭响应形状。`outcome` 与 `refusalReason`
 // 都取应用结果枚举原名——与登记 CLI 的答案代数同源：版本不可覆盖与区间重叠是治理答案不是
 // 失败，传输层不合并、不改名，也没有「其他」这一格。
 type catalogRegistrationResponse struct {

@@ -194,6 +194,10 @@ func catalogRegistrationEndpoints(t *testing.T) map[string]http.Handler {
 			unconfigured, unreachableRegistrar[application.RegisterClaimAuthorizationCommand]{t: t}),
 		"disclosure policy": visibilityhttp.NewRegisterDisclosurePolicyEndpoint(
 			unconfigured, unreachableRegistrar[application.RegisterDisclosurePolicyCommand]{t: t}),
+		"exception disclosure rules": visibilityhttp.NewRegisterExceptionDisclosureRulesEndpoint(
+			unconfigured, unreachableRegistrar[application.RegisterExceptionDisclosureRulesCommand]{t: t}),
+		"conflict signal rule": visibilityhttp.NewRegisterConflictSignalRuleEndpoint(
+			unconfigured, unreachableRegistrar[application.RegisterConflictSignalRuleCommand]{t: t}),
 	}
 }
 
@@ -375,6 +379,8 @@ func TestOnlineRegistrationTakesTheSameSnapshotShapeAsTheCLI(t *testing.T) {
 	sameSnapshotShape(intake.IntakeClaimEligibilityRegistration, registrationjson.ClaimEligibilityFromJSON)
 	sameSnapshotShape(intake.IntakeClaimAuthorizationRegistration, registrationjson.ClaimAuthorizationFromJSON)
 	sameSnapshotShape(intake.IntakeDisclosurePolicyRegistration, registrationjson.DisclosurePolicyFromJSON)
+	sameSnapshotShape(intake.IntakeExceptionDisclosureRulesRegistration, registrationjson.ExceptionDisclosureRulesFromJSON)
+	sameSnapshotShape(intake.IntakeConflictSignalRuleRegistration, registrationjson.ConflictSignalRuleFromJSON)
 }
 
 // sameSnapshotShape 两个参数都不使用：它表达的是类型相等，不是一次调用。
@@ -423,5 +429,188 @@ func TestIsolatedReadIntakeCannotServeCatalogRegistration(t *testing.T) {
 	}
 	if _, ok := intake.(visibilityhttp.DisclosurePolicyRegistrationIntake); ok {
 		t.Fatal("隔离读 Intake 不该装得进披露策略登记口")
+	}
+	if _, ok := intake.(visibilityhttp.ExceptionDisclosureRulesRegistrationIntake); ok {
+		t.Fatal("隔离读 Intake 不该装得进异常披露规则登记口")
+	}
+	if _, ok := intake.(visibilityhttp.ConflictSignalRuleRegistrationIntake); ok {
+		t.Fatal("隔离读 Intake 不该装得进冲突信号规则登记口")
+	}
+}
+
+// 两册规则登记端点（票 ve-disclosure-policy-view/02 步二）的三态转写：端点体虽与其余登记
+// 端点共用，两个构造函数各自把哪个 Intake 方法接到哪个编排上是逐类写的，接错那一格只有走
+// 真用例才看得见——这里用 registrationjson 译出的真命令穿过真用例，写入口替身给三格代数。
+
+type exceptionDisclosureRulesIntakeDouble struct {
+	command application.RegisterExceptionDisclosureRulesCommand
+}
+
+func (double exceptionDisclosureRulesIntakeDouble) IntakeExceptionDisclosureRulesRegistration(
+	context.Context,
+	*http.Request,
+) (application.RegisterExceptionDisclosureRulesCommand, error) {
+	return double.command, nil
+}
+
+type exceptionDisclosureRulesUseCase struct{ service *application.CatalogRegistration }
+
+func (useCase exceptionDisclosureRulesUseCase) Handle(
+	ctx context.Context,
+	command application.RegisterExceptionDisclosureRulesCommand,
+) (application.RegisterCatalogResult, error) {
+	return useCase.service.RegisterExceptionDisclosureRules(ctx, command)
+}
+
+type conflictSignalRuleIntakeDouble struct {
+	command application.RegisterConflictSignalRuleCommand
+}
+
+func (double conflictSignalRuleIntakeDouble) IntakeConflictSignalRuleRegistration(
+	context.Context,
+	*http.Request,
+) (application.RegisterConflictSignalRuleCommand, error) {
+	return double.command, nil
+}
+
+type conflictSignalRuleUseCase struct{ service *application.CatalogRegistration }
+
+func (useCase conflictSignalRuleUseCase) Handle(
+	ctx context.Context,
+	command application.RegisterConflictSignalRuleCommand,
+) (application.RegisterCatalogResult, error) {
+	return useCase.service.RegisterConflictSignalRule(ctx, command)
+}
+
+// 快照身份全取 SYN- 前缀，隔离合成只记 `S`；两份快照都过得了翻译，缺件那一格由用例答。
+const exceptionDisclosureRulesSnapshot = `{
+	"tenantId": "SYN-TEN-VE02",
+	"version": "SYN-EDR-V1",
+	"approvedBy": "SYN-approver-1",
+	"effectiveFrom": "2026-09-01T00:00:00Z",
+	"entries": [
+		{"customer": "SYN-CUSTOMER-1", "signalKind": "SYN-SIGNAL-STALL", "confidence": "SYN-CONF-HIGH",
+		 "disclosable": true, "autoRelease": false, "content": "SYN-CONTENT-STALL"}
+	]
+}`
+
+const conflictSignalRuleSnapshot = `{
+	"tenantId": "SYN-TEN-VE02",
+	"signalKind": "SYN-SIGNAL-FACT-CONFLICT",
+	"version": "SYN-RULE-V1",
+	"confidence": "SYN-CONF-MEDIUM",
+	"approvedBy": "SYN-approver-1"
+}`
+
+// conflictSignalRuleSnapshotWithoutApproval 缺批准责任：翻译放行（缺件判据在用例），用例答
+// APPROVAL_MISSING——用它证用例的拒绝原名走到线上。
+const conflictSignalRuleSnapshotWithoutApproval = `{
+	"tenantId": "SYN-TEN-VE02",
+	"signalKind": "SYN-SIGNAL-FACT-CONFLICT",
+	"version": "SYN-RULE-V1",
+	"confidence": "SYN-CONF-MEDIUM",
+	"approvedBy": " "
+}`
+
+func TestRuleRegistrationEndpointsTranscribeTheUseCaseAnswersVerbatim(t *testing.T) {
+	buildEndpoint := func(t *testing.T, name, snapshot string, outcome ports.CatalogRegistrationOutcome) http.Handler {
+		t.Helper()
+		service, err := application.NewCatalogRegistration(stubCatalogRegistry{outcome: outcome})
+		if err != nil {
+			t.Fatalf("构造登记用例：%v", err)
+		}
+		switch name {
+		case "exception disclosure rules":
+			command, err := registrationjson.ExceptionDisclosureRulesFromJSON([]byte(snapshot))
+			if err != nil {
+				t.Fatalf("译异常披露规则快照：%v", err)
+			}
+			return visibilityhttp.NewRegisterExceptionDisclosureRulesEndpoint(
+				exceptionDisclosureRulesIntakeDouble{command: command},
+				exceptionDisclosureRulesUseCase{service: service},
+			)
+		default:
+			command, err := registrationjson.ConflictSignalRuleFromJSON([]byte(snapshot))
+			if err != nil {
+				t.Fatalf("译冲突信号规则快照：%v", err)
+			}
+			return visibilityhttp.NewRegisterConflictSignalRuleEndpoint(
+				conflictSignalRuleIntakeDouble{command: command},
+				conflictSignalRuleUseCase{service: service},
+			)
+		}
+	}
+
+	cases := []struct {
+		name       string
+		endpoint   string
+		snapshot   string
+		outcome    ports.CatalogRegistrationOutcome
+		wantStatus int
+		wantAnswer string
+		wantReason string
+	}{
+		{
+			name:       "异常披露规则已登记",
+			endpoint:   "exception disclosure rules",
+			snapshot:   exceptionDisclosureRulesSnapshot,
+			outcome:    ports.CatalogVersionRegistered,
+			wantStatus: http.StatusCreated,
+			wantAnswer: "REGISTERED",
+		},
+		{
+			name:       "异常披露规则区间重叠是治理答案",
+			endpoint:   "exception disclosure rules",
+			snapshot:   exceptionDisclosureRulesSnapshot,
+			outcome:    ports.CatalogVersionOverlapsExisting,
+			wantStatus: http.StatusOK,
+			wantAnswer: "REFUSED",
+			wantReason: "VERSION_OVERLAPS_EXISTING",
+		},
+		{
+			name:       "冲突信号规则已登记",
+			endpoint:   "conflict signal rule",
+			snapshot:   conflictSignalRuleSnapshot,
+			outcome:    ports.CatalogVersionRegistered,
+			wantStatus: http.StatusCreated,
+			wantAnswer: "REGISTERED",
+		},
+		{
+			// 一租户一条（0025）：撞既有行是这册唯一的治理答案，原行不被顶替。
+			name:       "冲突信号规则撞既有行是治理答案",
+			endpoint:   "conflict signal rule",
+			snapshot:   conflictSignalRuleSnapshot,
+			outcome:    ports.CatalogVersionAlreadyRegistered,
+			wantStatus: http.StatusOK,
+			wantAnswer: "REFUSED",
+			wantReason: "VERSION_NOT_OVERWRITABLE",
+		},
+		{
+			name:       "冲突信号规则缺件拒绝指名缺的是哪一件",
+			endpoint:   "conflict signal rule",
+			snapshot:   conflictSignalRuleSnapshotWithoutApproval,
+			outcome:    ports.CatalogVersionRegistered,
+			wantStatus: http.StatusOK,
+			wantAnswer: "REFUSED",
+			wantReason: "APPROVAL_MISSING",
+		},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			endpoint := buildEndpoint(t, testCase.endpoint, testCase.snapshot, testCase.outcome)
+			recorder := httptest.NewRecorder()
+			endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/probe", nil))
+
+			if recorder.Code != testCase.wantStatus {
+				t.Fatalf("答 %d, want %d（body %s）", recorder.Code, testCase.wantStatus, recorder.Body)
+			}
+			body := registrationAnswer(t, recorder)
+			if body.Outcome != testCase.wantAnswer {
+				t.Fatalf("outcome = %q, want %q", body.Outcome, testCase.wantAnswer)
+			}
+			if body.RefusalReason != testCase.wantReason {
+				t.Fatalf("refusalReason = %q, want %q", body.RefusalReason, testCase.wantReason)
+			}
+		})
 	}
 }

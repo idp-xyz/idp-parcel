@@ -88,6 +88,20 @@ func unconfiguredVisibilityEndpoints(t *testing.T) map[string]unconfiguredCase {
 			method: http.MethodPost,
 			path:   "/visibility-disclosure-policy-registrations",
 		},
+		"exception disclosure rules registration": {
+			endpoint: visibilityhttp.NewRegisterExceptionDisclosureRulesEndpoint(
+				unconfigured, unreachableRegistrar[application.RegisterExceptionDisclosureRulesCommand]{t: t},
+			),
+			method: http.MethodPost,
+			path:   "/visibility-catalogue-exception-disclosure-rule-registrations",
+		},
+		"conflict signal rule registration": {
+			endpoint: visibilityhttp.NewRegisterConflictSignalRuleEndpoint(
+				unconfigured, unreachableRegistrar[application.RegisterConflictSignalRuleCommand]{t: t},
+			),
+			method: http.MethodPost,
+			path:   "/visibility-catalogue-conflict-signal-rule-registrations",
+		},
 	}
 }
 

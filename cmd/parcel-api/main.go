@@ -496,6 +496,8 @@ func run(logger *slog.Logger) error {
 			veRegistration.claimEligibility,
 			veRegistration.claimAuthorization,
 			veRegistration.disclosurePolicy,
+			veRegistration.exceptionDisclosureRules,
+			veRegistration.conflictSignalRule,
 			caseReview,
 			caseReview,
 			caseReview,

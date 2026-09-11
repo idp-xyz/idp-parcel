@@ -58,18 +58,20 @@ func (UnconfiguredIntake) IntakeOperationsQuery(context.Context, *http.Request) 
 	return OperationsTrackingQuery{}, ErrAccessChannelNotConfigured
 }
 
-// 六类配置登记命令口的未配置实现（ADR-0085）：与查阅口同一分界——不读业务内容、不采信
-// 自报身份、不构造命令。隔离读放行（ADR-0078）不实现这六个接口，写行换不了。
+// 配置登记命令口的未配置实现（ADR-0085）：与查阅口同一分界——不读业务内容、不采信
+// 自报身份、不构造命令。隔离读放行（ADR-0078）不实现这些接口，写行换不了。
 var (
-	_ MilestoneMappingRegistrationIntake   = UnconfiguredIntake{}
-	_ TriageRulesRegistrationIntake        = UnconfiguredIntake{}
-	_ NotificationPolicyRegistrationIntake = UnconfiguredIntake{}
-	_ ClaimEligibilityRegistrationIntake   = UnconfiguredIntake{}
-	_ ClaimAuthorizationRegistrationIntake = UnconfiguredIntake{}
-	_ DisclosurePolicyRegistrationIntake   = UnconfiguredIntake{}
+	_ MilestoneMappingRegistrationIntake         = UnconfiguredIntake{}
+	_ TriageRulesRegistrationIntake              = UnconfiguredIntake{}
+	_ NotificationPolicyRegistrationIntake       = UnconfiguredIntake{}
+	_ ClaimEligibilityRegistrationIntake         = UnconfiguredIntake{}
+	_ ClaimAuthorizationRegistrationIntake       = UnconfiguredIntake{}
+	_ DisclosurePolicyRegistrationIntake         = UnconfiguredIntake{}
+	_ ExceptionDisclosureRulesRegistrationIntake = UnconfiguredIntake{}
+	_ ConflictSignalRuleRegistrationIntake       = UnconfiguredIntake{}
 )
 
-// IntakeMilestoneMappingRegistration 不读请求，判据同上。以下五个同此。
+// IntakeMilestoneMappingRegistration 不读请求，判据同上。以下各登记口同此。
 func (UnconfiguredIntake) IntakeMilestoneMappingRegistration(
 	context.Context,
 	*http.Request,
@@ -110,4 +112,18 @@ func (UnconfiguredIntake) IntakeDisclosurePolicyRegistration(
 	*http.Request,
 ) (application.RegisterDisclosurePolicyCommand, error) {
 	return application.RegisterDisclosurePolicyCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeExceptionDisclosureRulesRegistration(
+	context.Context,
+	*http.Request,
+) (application.RegisterExceptionDisclosureRulesCommand, error) {
+	return application.RegisterExceptionDisclosureRulesCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeConflictSignalRuleRegistration(
+	context.Context,
+	*http.Request,
+) (application.RegisterConflictSignalRuleCommand, error) {
+	return application.RegisterConflictSignalRuleCommand{}, ErrAccessChannelNotConfigured
 }

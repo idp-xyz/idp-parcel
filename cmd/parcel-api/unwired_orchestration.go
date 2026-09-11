@@ -912,6 +912,26 @@ func (unwiredDisclosurePolicyRegistration) Handle(
 	return visibilityapp.RegisterCatalogResult{}, errOrchestrationNotWired
 }
 
+// 异常披露规则与冲突信号规则两册写面的命令占位（票 ve-disclosure-policy-view/02 步二），
+// 形随上面各类目录登记的占位。
+type unwiredExceptionDisclosureRulesRegistration struct{}
+
+func (unwiredExceptionDisclosureRulesRegistration) Handle(
+	context.Context,
+	visibilityapp.RegisterExceptionDisclosureRulesCommand,
+) (visibilityapp.RegisterCatalogResult, error) {
+	return visibilityapp.RegisterCatalogResult{}, errOrchestrationNotWired
+}
+
+type unwiredConflictSignalRuleRegistration struct{}
+
+func (unwiredConflictSignalRuleRegistration) Handle(
+	context.Context,
+	visibilityapp.RegisterConflictSignalRuleCommand,
+) (visibilityapp.RegisterCatalogResult, error) {
+	return visibilityapp.RegisterCatalogResult{}, errOrchestrationNotWired
+}
+
 // 商业八类配置写面的命令占位（票 admin-write-faces/02 切片 02c）。按族分三个类型，随
 // 生产侧的三个事务包装：同族的方法各自具名，一个类型装得下全族。
 type unwiredCommercialPublication struct{}
