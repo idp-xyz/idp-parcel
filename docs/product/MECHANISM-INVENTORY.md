@@ -9,7 +9,7 @@
 | accessidentity | 5 | 1 | 0 | 0 | 0 | 0 |
 | architecture（非业务） | 0 | 13 | 0 | 0 | 0 | 0 |
 | collectionremittance | 22 | 10 | 4 | 6 | 0 | 3 |
-| customscompliance | 83 | 83 | 16 | 37 | 9 | 11 |
+| customscompliance | 84 | 84 | 16 | 38 | 10 | 11 |
 | networkrouting | 55 | 50 | 6 | 14 | 2 | 5 |
 | nodeoperations | 30 | 25 | 3 | 10 | 4 | 5 |
 | parcelpricing | 88 | 86 | 9 | 13 | 1 | 16 |
@@ -20,7 +20,7 @@
 | settlementaccounting | 83 | 64 | 12 | 40 | 8 | 7 |
 | transportfulfillment | 140 | 128 | 25 | 36 | 11 | 24 |
 | visibilityexception | 98 | 92 | 11 | 30 | 8 | 10 |
-| **合计** | 940 | 893 | 118 | 257 | 55 | 129 |
+| **合计** | 941 | 894 | 118 | 258 | 56 | 129 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 60、测试 83。
 
@@ -107,7 +107,7 @@
 | visibilityexception | 8 |
 | **合计** | 20 |
 
-## 端口：声明 390 个；基线口径缺 14，精确口径缺 7
+## 端口：声明 391 个；基线口径缺 14，精确口径缺 7
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
