@@ -151,6 +151,14 @@ func TestCatalogueListRejectsNonPositiveLimit(t *testing.T) {
 			_, err := catalogue.ListDisclosurePolicies(ctx, tenant, limit)
 			return err
 		},
+		"异常披露规则": func(ctx context.Context, limit int) error {
+			_, err := catalogue.ListExceptionDisclosureRules(ctx, tenant, limit)
+			return err
+		},
+		"冲突信号规则": func(ctx context.Context, limit int) error {
+			_, err := catalogue.ListConflictSignalRules(ctx, tenant, limit)
+			return err
+		},
 	}
 	for name, list := range attempts {
 		for _, limit := range []int{0, -1} {
@@ -396,6 +404,190 @@ func TestListDisclosurePoliciesCarriesFourDimensionCells(t *testing.T) {
 	}
 	if entry.Note.State != "SHOWN" || entry.Note.Content != "note/plain" {
 		t.Fatalf("说明维应 SHOWN 带内容，实得 %+v", entry.Note)
+	}
+}
+
+// 以下两册的登记素材（票 ve-disclosure-policy-view/03）同样在事务闭包外构造。
+
+func exceptionDisclosureRuleRegistration(
+	t *testing.T, version string, from time.Time,
+) ports.ExceptionDisclosureRuleRegistration {
+	t.Helper()
+	return ports.ExceptionDisclosureRuleRegistration{
+		Header: ports.CatalogVersionHeader{
+			Version: version, ApprovedBy: "tracking-ops", EffectiveFrom: from,
+		},
+		Entries: []ports.ExceptionDisclosureRuleEntry{
+			{
+				Customer:    build(t, domain.NewCustomerAccountReference, "CUST-02"),
+				Kind:        build(t, domain.NewExceptionSignalKindReference, "DELIVERY_FAILED"),
+				Confidence:  build(t, domain.NewConfidenceReference, "CARRIER_CONFIRMED"),
+				Disclosable: true,
+				AutoRelease: true,
+				Content:     build(t, domain.NewDisclosureContentReference, "delivery-failed/plain"),
+			},
+			{
+				Customer:    build(t, domain.NewCustomerAccountReference, "CUST-01"),
+				Kind:        build(t, domain.NewExceptionSignalKindReference, "ADDRESS_UNKNOWN"),
+				Confidence:  build(t, domain.NewConfidenceReference, "HEURISTIC"),
+				Disclosable: false,
+				AutoRelease: false,
+			},
+		},
+	}
+}
+
+func conflictSignalRuleRegistration(t *testing.T, version string) ports.ConflictSignalRuleRegistration {
+	t.Helper()
+	return ports.ConflictSignalRuleRegistration{
+		Kind:       build(t, domain.NewExceptionSignalKindReference, "FACT_CONFLICT_PENDING"),
+		Rule:       build(t, domain.NewSignalRuleVersionReference, version),
+		Confidence: build(t, domain.NewConfidenceReference, "ALTERNATIVE_CHAIN_FORK"),
+		ApprovedBy: "tracking-ops",
+	}
+}
+
+// Covers: 异常披露规则（0023）的上列形状——新版在前、整版条目随版本到齐、接续闭合后前版带
+// 显式终点；条目三列布尔与内容照登转写：披露带内容来处、不披露必不带（0023 成对约束的读侧
+// 镜像），自动发布不越过披露。
+func TestListExceptionDisclosureRulesReturnsVersionsWithEntriesNewestFirst(t *testing.T) {
+	fixture := newRegistrarFixture(t)
+	catalogue := listCatalogue(t, fixture)
+	tenant := listTenant(t, "tenant-a")
+	switchAt := listBaseAt.Add(48 * time.Hour)
+	first := exceptionDisclosureRuleRegistration(t, "disclose-rule/v1", listBaseAt)
+	second := exceptionDisclosureRuleRegistration(t, "disclose-rule/v2", switchAt)
+	second.Entries = second.Entries[:1]
+
+	registerWithin(t, fixture, func(txCtx context.Context) (ports.CatalogRegistrationOutcome, error) {
+		return fixture.registrar.RegisterExceptionDisclosureRules(txCtx, tenant, first)
+	})
+	registerWithin(t, fixture, func(txCtx context.Context) (ports.CatalogRegistrationOutcome, error) {
+		return fixture.registrar.RegisterExceptionDisclosureRules(txCtx, tenant, second)
+	})
+
+	rows, err := catalogue.ListExceptionDisclosureRules(t.Context(), tenant, 10)
+	if err != nil {
+		t.Fatalf("上列异常披露规则册：%v", err)
+	}
+	if len(rows) != 2 || rows[0].Version != "disclose-rule/v2" || rows[1].Version != "disclose-rule/v1" {
+		t.Fatalf("应新版在前得 [disclose-rule/v2 disclose-rule/v1]，实得 %+v", rows)
+	}
+	if rows[0].HasEffectiveTo || rows[0].ApprovedBy != "tracking-ops" {
+		t.Fatalf("当前版不该有终点：%+v", rows[0])
+	}
+	if !rows[1].HasEffectiveTo || !rows[1].EffectiveTo.Equal(switchAt) || !rows[1].EffectiveFrom.Equal(listBaseAt) {
+		t.Fatalf("前版应被接续闭合于 %s，实得 %+v", switchAt, rows[1])
+	}
+	if len(rows[0].Entries) != 1 || len(rows[1].Entries) != 2 {
+		t.Fatalf("整版条目应随版本到齐，实得 v2=%d 条 v1=%d 条",
+			len(rows[0].Entries), len(rows[1].Entries))
+	}
+	// 条目按（客户账户 + 信号类型 + 可信度）排序：CUST-01 < CUST-02。
+	withheld, disclosed := rows[1].Entries[0], rows[1].Entries[1]
+	if withheld.Customer != "CUST-01" || withheld.SignalKind != "ADDRESS_UNKNOWN" ||
+		withheld.Confidence != "HEURISTIC" || withheld.Disclosable || withheld.AutoRelease ||
+		withheld.Content != "" {
+		t.Fatalf("不披露条目应不带内容、不可自动发布，实得 %+v", withheld)
+	}
+	if disclosed.Customer != "CUST-02" || disclosed.SignalKind != "DELIVERY_FAILED" ||
+		disclosed.Confidence != "CARRIER_CONFIRMED" || !disclosed.Disclosable || !disclosed.AutoRelease ||
+		disclosed.Content != "delivery-failed/plain" {
+		t.Fatalf("披露条目应带内容来处并可自动发布，实得 %+v", disclosed)
+	}
+}
+
+// Covers: 空的异常披露规则册如实答空——空册本身就是内容（ADR-0077 Decision 四），与装载口
+// ExceptionDisclosureRuleView 对同一份空册答「未配置」不冲突：两口答的不是同一个问题。
+func TestEmptyExceptionDisclosureRuleCatalogueListsAsEmpty(t *testing.T) {
+	fixture := newRegistrarFixture(t)
+	catalogue := listCatalogue(t, fixture)
+
+	rows, err := catalogue.ListExceptionDisclosureRules(t.Context(), listTenant(t, "tenant-a"), 10)
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("空异常披露规则册：rows=%v err=%v", rows, err)
+	}
+}
+
+// Covers: 异常披露规则册的租户隔离——两租户各登一版，租户 A 只见自己那版。
+func TestExceptionDisclosureRuleListIsTenantScoped(t *testing.T) {
+	fixture := newRegistrarFixture(t)
+	catalogue := listCatalogue(t, fixture)
+	tenantA := listTenant(t, "tenant-a")
+	tenantB := listTenant(t, "tenant-b")
+	forA := exceptionDisclosureRuleRegistration(t, "disclose-rule/a", listBaseAt)
+	forB := exceptionDisclosureRuleRegistration(t, "disclose-rule/b", listBaseAt)
+
+	registerWithin(t, fixture, func(txCtx context.Context) (ports.CatalogRegistrationOutcome, error) {
+		return fixture.registrar.RegisterExceptionDisclosureRules(txCtx, tenantA, forA)
+	})
+	registerWithin(t, fixture, func(txCtx context.Context) (ports.CatalogRegistrationOutcome, error) {
+		return fixture.registrar.RegisterExceptionDisclosureRules(txCtx, tenantB, forB)
+	})
+
+	rows, err := catalogue.ListExceptionDisclosureRules(t.Context(), tenantA, 10)
+	if err != nil || len(rows) != 1 || rows[0].Version != "disclose-rule/a" {
+		t.Fatalf("租户 A 的异常披露规则册应只有 disclose-rule/a：rows=%+v err=%v", rows, err)
+	}
+}
+
+// Covers: 冲突信号规则（0025）一租户一条，五列照登转写——信号类型、规则版本、可信度依据、
+// 批准人与登记时刻；登记时刻是库默认 now()，只核它在场且不早于登记前的取时。
+func TestListConflictSignalRulesTranscribesTheSingleRow(t *testing.T) {
+	fixture := newRegistrarFixture(t)
+	catalogue := listCatalogue(t, fixture)
+	tenant := listTenant(t, "tenant-a")
+	registration := conflictSignalRuleRegistration(t, "conflict/v1")
+	before := time.Now().Add(-time.Minute)
+
+	registerWithin(t, fixture, func(txCtx context.Context) (ports.CatalogRegistrationOutcome, error) {
+		return fixture.registrar.RegisterConflictSignalRule(txCtx, tenant, registration)
+	})
+
+	rows, err := catalogue.ListConflictSignalRules(t.Context(), tenant, 10)
+	if err != nil || len(rows) != 1 {
+		t.Fatalf("上列冲突信号规则册：rows=%d err=%v", len(rows), err)
+	}
+	row := rows[0]
+	if row.SignalKind != "FACT_CONFLICT_PENDING" || row.Version != "conflict/v1" ||
+		row.Confidence != "ALTERNATIVE_CHAIN_FORK" || row.ApprovedBy != "tracking-ops" {
+		t.Fatalf("冲突信号规则转写不符：%+v", row)
+	}
+	if row.RegisteredAt.IsZero() || row.RegisteredAt.Before(before) {
+		t.Fatalf("登记时刻应由库落下且不早于 %s，实得 %s", before, row.RegisteredAt)
+	}
+}
+
+// Covers: 空的冲突信号规则册如实答空，不折成「未配置」——理由同异常披露规则册。
+func TestEmptyConflictSignalRuleCatalogueListsAsEmpty(t *testing.T) {
+	fixture := newRegistrarFixture(t)
+	catalogue := listCatalogue(t, fixture)
+
+	rows, err := catalogue.ListConflictSignalRules(t.Context(), listTenant(t, "tenant-a"), 10)
+	if err != nil || len(rows) != 0 {
+		t.Fatalf("空冲突信号规则册：rows=%v err=%v", rows, err)
+	}
+}
+
+// Covers: 冲突信号规则册的租户隔离——两租户各登一条，租户 A 只见自己那条。
+func TestConflictSignalRuleListIsTenantScoped(t *testing.T) {
+	fixture := newRegistrarFixture(t)
+	catalogue := listCatalogue(t, fixture)
+	tenantA := listTenant(t, "tenant-a")
+	tenantB := listTenant(t, "tenant-b")
+	forA := conflictSignalRuleRegistration(t, "conflict/a")
+	forB := conflictSignalRuleRegistration(t, "conflict/b")
+
+	registerWithin(t, fixture, func(txCtx context.Context) (ports.CatalogRegistrationOutcome, error) {
+		return fixture.registrar.RegisterConflictSignalRule(txCtx, tenantA, forA)
+	})
+	registerWithin(t, fixture, func(txCtx context.Context) (ports.CatalogRegistrationOutcome, error) {
+		return fixture.registrar.RegisterConflictSignalRule(txCtx, tenantB, forB)
+	})
+
+	rows, err := catalogue.ListConflictSignalRules(t.Context(), tenantA, 10)
+	if err != nil || len(rows) != 1 || rows[0].Version != "conflict/a" {
+		t.Fatalf("租户 A 的冲突信号规则册应只有 conflict/a：rows=%+v err=%v", rows, err)
 	}
 }
 

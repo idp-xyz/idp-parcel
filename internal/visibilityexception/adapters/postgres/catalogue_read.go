@@ -12,10 +12,11 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
-// OperationsCatalogue 实现 ports.CatalogueListRead：VE 六类目录的列表读面（票
-// admin-web-page-wiring-frontier/02）。命名循 parcelpricing / partycommercial 的同名
+// OperationsCatalogue 实现 ports.CatalogueListRead：VE 规则与策略目录的列表读面（票
+// admin-web-page-wiring-frontier/02；异常披露规则与冲突信号规则两册随票
+// ve-disclosure-policy-view/03 加入）。命名循 parcelpricing / partycommercial 的同名
 // 适配器：同一上下文的目录查阅端点共享这一只读适配器，读的仍是 CatalogRegistrar
-// 写口背后的那七张表。
+// 写口背后的那些表。
 //
 // 租户随每次调用到达（端口签名如此）——本读面给多租户装配（`cmd/parcel-api`）消费，
 // 与本包五个装载视图「租户钉在装配期」的形状刻意不同：装载视图伺候单租户编排的判断
@@ -437,4 +438,149 @@ func (catalogue *OperationsCatalogue) ListDisclosurePolicies(
 		return nil, fmt.Errorf("list disclosure policies: %w", err)
 	}
 	return policyRows, nil
+}
+
+// exceptionDisclosureRuleEntryDocument 是异常披露规则条目在 json_agg 里的临时词形。content
+// 用指针收 NULL：不披露条目的内容列是 NULL（0023 的成对约束），译回空串——端口注释记明
+// 「Content 只在 Disclosable 时非空」。
+type exceptionDisclosureRuleEntryDocument struct {
+	Customer    string  `json:"customer"`
+	SignalKind  string  `json:"signalKind"`
+	Confidence  string  `json:"confidence"`
+	Disclosable bool    `json:"disclosable"`
+	AutoRelease bool    `json:"autoRelease"`
+	Content     *string `json:"content"`
+}
+
+// ListExceptionDisclosureRules 上列异常披露规则版本连同整版条目（`PAR-VIS-07` 的披露与
+// 自动发布范围半边，0023；票 ve-disclosure-policy-view/03）。新版在前，条目按（客户 +
+// 信号类型 + 可信度）——与登记键同序。
+func (catalogue *OperationsCatalogue) ListExceptionDisclosureRules(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.ExceptionDisclosureRuleCatalogueRow, error) {
+	if err := requirePositiveLimit("list exception disclosure rules", limit); err != nil {
+		return nil, err
+	}
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list exception disclosure rules: %w", err)
+	}
+
+	rows, err := querier.Query(ctx,
+		`SELECT version.rule_version, version.effective_from, version.effective_to,
+		        version.approved_by,
+		        (SELECT COALESCE(
+		                    json_agg(
+		                        json_build_object(
+		                            'customer',    entry.customer_account_ref,
+		                            'signalKind',  entry.signal_kind,
+		                            'confidence',  entry.confidence_ref,
+		                            'disclosable', entry.disclosable,
+		                            'autoRelease', entry.auto_release,
+		                            'content',     entry.content_ref
+		                        )
+		                        ORDER BY entry.customer_account_ref, entry.signal_kind, entry.confidence_ref
+		                    ),
+		                    '[]'::json
+		                )
+		           FROM visibility_exception.exception_disclosure_rule_entry AS entry
+		          WHERE entry.tenant_id    = version.tenant_id
+		            AND entry.rule_version = version.rule_version)
+		   FROM visibility_exception.exception_disclosure_rule_version AS version
+		  WHERE version.tenant_id = $1
+		  ORDER BY version.effective_from DESC, version.rule_version
+		  LIMIT $2`,
+		tenant.String(), limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list exception disclosure rules: %w", err)
+	}
+	defer rows.Close()
+
+	ruleRows := make([]ports.ExceptionDisclosureRuleCatalogueRow, 0, limit)
+	for rows.Next() {
+		var row ports.ExceptionDisclosureRuleCatalogueRow
+		var effectiveTo *time.Time
+		var entriesJSON []byte
+		if err := rows.Scan(
+			&row.Version, &row.EffectiveFrom, &effectiveTo, &row.ApprovedBy, &entriesJSON,
+		); err != nil {
+			return nil, fmt.Errorf("list exception disclosure rules: %w", err)
+		}
+		if effectiveTo != nil {
+			row.EffectiveTo = *effectiveTo
+			row.HasEffectiveTo = true
+		}
+		var documents []exceptionDisclosureRuleEntryDocument
+		if err := json.Unmarshal(entriesJSON, &documents); err != nil {
+			return nil, fmt.Errorf("list exception disclosure rules: 条目集解码：%w", err)
+		}
+		row.Entries = make([]ports.ExceptionDisclosureRuleEntryRow, 0, len(documents))
+		for _, document := range documents {
+			entry := ports.ExceptionDisclosureRuleEntryRow{
+				Customer:    document.Customer,
+				SignalKind:  document.SignalKind,
+				Confidence:  document.Confidence,
+				Disclosable: document.Disclosable,
+				AutoRelease: document.AutoRelease,
+			}
+			if document.Content != nil {
+				entry.Content = *document.Content
+			}
+			row.Entries = append(row.Entries, entry)
+		}
+		ruleRows = append(ruleRows, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list exception disclosure rules: %w", err)
+	}
+	return ruleRows, nil
+}
+
+// ListConflictSignalRules 上列冲突信号规则（`PAR-VIS-04` 事实冲突那一类，0025；票
+// ve-disclosure-policy-view/03）。一租户至多一行，仍走同族的租户条件 + LIMIT 形状；序取
+// 信号类型——单行时序无所谓，写成稳定序是为了这一族八法对「稳定序」不留例外。
+func (catalogue *OperationsCatalogue) ListConflictSignalRules(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.ConflictSignalRuleCatalogueRow, error) {
+	if err := requirePositiveLimit("list conflict signal rules", limit); err != nil {
+		return nil, err
+	}
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list conflict signal rules: %w", err)
+	}
+
+	rows, err := querier.Query(ctx,
+		`SELECT rule.signal_kind, rule.rule_version, rule.confidence_ref, rule.approved_by,
+		        rule.registered_at
+		   FROM visibility_exception.conflict_signal_rule AS rule
+		  WHERE rule.tenant_id = $1
+		  ORDER BY rule.signal_kind
+		  LIMIT $2`,
+		tenant.String(), limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list conflict signal rules: %w", err)
+	}
+	defer rows.Close()
+
+	ruleRows := make([]ports.ConflictSignalRuleCatalogueRow, 0, limit)
+	for rows.Next() {
+		var row ports.ConflictSignalRuleCatalogueRow
+		if err := rows.Scan(
+			&row.SignalKind, &row.Version, &row.Confidence, &row.ApprovedBy, &row.RegisteredAt,
+		); err != nil {
+			return nil, fmt.Errorf("list conflict signal rules: %w", err)
+		}
+		ruleRows = append(ruleRows, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list conflict signal rules: %w", err)
+	}
+	return ruleRows, nil
 }

@@ -7,10 +7,12 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 )
 
-// 本文件是 VE 六类规则与策略目录的伴生列表读端口（ADR-0077，票
-// admin-web-page-wiring-frontier/02）：管理台三张目录查阅页的供数面。它与写入口
-// CatalogRegistry 成镜像——那边六个 Register 方法，这边六个 List 方法，封闭集同一份；
-// 与既有的五个装载口（MilestoneMappingView 等）不是一回事：装载口按查询键取一条、
+// 本文件是 VE 规则与策略目录的伴生列表读端口（ADR-0077，票
+// admin-web-page-wiring-frontier/02；异常披露规则与冲突信号规则两册随票
+// ve-disclosure-policy-view/03 加入）：管理台三张目录查阅页的供数面。它与写入口成
+// 镜像——CatalogRegistry 的六个 Register 方法加两个单立登记口，这边逐一各有一个 List
+// 方法，封闭集同一份；
+// 与既有的装载口（MilestoneMappingView 等）不是一回事：装载口按查询键取一条、
 // 交回领域判断的输入，本口上列整册、不重建领域对象、不形成判断。**不拓宽任何一边**：
 // 扩装载口会拆全部编排侧测试替身（理由与来历见 parcelpricing/ports/catalogue_read.go
 // 的文件注释），扩写口同理。
@@ -128,10 +130,53 @@ type DisclosurePolicyCatalogueRow struct {
 	Entries        []DisclosurePolicyEntryRow
 }
 
-// CatalogueListRead 是六类目录的伴生列表读端口。六个方法一口装下而不按页面分组拆
+// ExceptionDisclosureRuleEntryRow 是一条异常披露规则条目的检索列面（0023）：对某货主客户
+// 账户的某类信号在某可信度依据下，披露条件成不成立、批准范围允不允许自动发布、内容从哪来。
+// Content 只在 Disclosable 时非空——披露必带内容来处、不披露必不带（0023 的成对约束），所以
+// 空串在这里不歧义；AutoRelease 不会在 Disclosable 为假时为真（同表第二条约束）。三个布尔
+// / 内容列照登转写，读口不重演 ExceptionDisclosureRuleView 那一道成对复核。
+type ExceptionDisclosureRuleEntryRow struct {
+	Customer    string
+	SignalKind  string
+	Confidence  string
+	Disclosable bool
+	AutoRelease bool
+	Content     string
+}
+
+// ExceptionDisclosureRuleCatalogueRow 是一版异常披露规则连同整版条目（`PAR-VIS-07` 的
+// 「披露和自动发布范围」半边；渠道半边是 NotificationPolicyCatalogueRow）。它与披露策略
+// （DisclosurePolicyCatalogueRow，0012）是相邻的两本册：那边按客户答客户视图四维各展示
+// 什么，这边按客户 × 信号 × 可信度答异常要不要对外说——版本引用同为决定带着走的披露策略
+// 引用，但册不同、行形状不同，读面不把两者并成一格。
+type ExceptionDisclosureRuleCatalogueRow struct {
+	Version        string
+	EffectiveFrom  time.Time
+	EffectiveTo    time.Time
+	HasEffectiveTo bool
+	ApprovedBy     string
+	Entries        []ExceptionDisclosureRuleEntryRow
+}
+
+// ConflictSignalRuleCatalogueRow 是冲突信号规则的检索列面（0025）：无法按业务时间裁决的
+// 替代链分叉形成异常信号时，用哪个信号类型、哪一版识别规则、记什么可信度依据。这份目录
+// 一租户至多一行（键只有租户）且没有生效区间——换版是一次治理动作而不是接续闭合（0025
+// 头注），所以行上没有 HasEffectiveTo；RegisteredAt 是库落下的登记时刻，照实转写。仍以
+// 列表交回而不是单值加布尔：与同族七法同形，空册同样如实答空列表。
+type ConflictSignalRuleCatalogueRow struct {
+	SignalKind   string
+	Version      string
+	Confidence   string
+	ApprovedBy   string
+	RegisteredAt time.Time
+}
+
+// CatalogueListRead 是 VE 目录的伴生列表读端口。八个方法一口装下而不按页面分组拆
 // 三个接口：分组（判断规则/披露口径/索赔前置）是页面层的呈现裁决，端口的封闭集要
-// 与写入口 CatalogRegistry 的六个方法逐一对上——「本上下文支持哪几类目录查阅」从
-// 这一个接口就读得出来，页面重新分组不改端口。
+// 与写入口逐一对上——前六法对 CatalogRegistry 的六个方法，后两法对单立的
+// ExceptionDisclosureRuleRegistry / ConflictSignalRuleRegistry（票
+// ve-disclosure-policy-view/03）——「本上下文支持哪几类目录查阅」从这一个接口就
+// 读得出来，页面重新分组不改端口。
 //
 // 拼写从读面家族（Catalogue，同 parcelpricing / partycommercial 的目录读口），不随
 // 本包写侧的 Catalog：读口的消费方是跨上下文的装配层与管理台，两边词形一致比包内
@@ -167,4 +212,14 @@ type CatalogueListRead interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]DisclosurePolicyCatalogueRow, error)
+	ListExceptionDisclosureRules(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ExceptionDisclosureRuleCatalogueRow, error)
+	ListConflictSignalRules(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ConflictSignalRuleCatalogueRow, error)
 }
