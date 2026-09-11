@@ -29,7 +29,7 @@ Status: in-progress——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff
 
 | 票 | 一件机制 | 上下文 | Blocked by |
 |---|---|---|---|
-| [01](issues/01-buy-evaluation-to-sa-inbox-consumer.md) | `parcel-pricing.evaluation.recorded` → SA inbox 消费者 → `FormSupplierExpectedCostHandler` | SA | 无（另有一格要裁，见票） |
+| [01](issues/01-buy-evaluation-to-sa-inbox-consumer.md) | `parcel-pricing.evaluation.recorded` → SA inbox 消费者 → 处理方按引用取评价、非 BUY 不处理、命令缺三件引用 → 未决指名等 08——**resolved（作者完工 2026-09-11 22:0x，等非作者评审 → 重放进 main）**（分支 `mcp5-sacc01` 基 `02e1dfc4`；(c) 范围「信封到未决」；判据 1 随裁决改口——`FormSupplierExpectedCostHandler` 由形成路后继票装，Blocked by 08 回指 / 11；带 DSN 四包 PASS 123 / 0 FAIL） | SA | 无（(c) 范围）；形成路后继票 Blocked by [11](issues/11-pp-inbox-consumer-receives-evaluation-request-envelope.md) |
 | [02](issues/02-sa-external-funds-fact-adoption-hands-off-an-envelope.md) | SA 外部资金事实采用同事务经 Outbox 发信封——**resolved，2026-09-10 19:4x 进 main**（分支 `mcp5-sacc02`，代码 tip `1af6a226`，main 重放 tip `cdd6504c`；非作者评审 ← 通道 6 两轴 0 阻断） | SA | 无 |
 | [03](issues/03-cc-inbox-consumer-receives-external-funds-fact.md) | CC inbox 消费者收那封信封 → `ReceiveFundsFact`——**resolved，2026-09-10 21:3x 进 main**（分支 `mcp5-sacc03`，代码 tip `f96169d2`，main 重放 tip `343b997b`、与 lc/28 同批推出；非作者评审 ← 通道 6 两轴 0 阻断；实施中新裁付款人维 A、可缺席，CC 放宽另立 12） | CC | 无 |
 | [04](issues/04-cc-credential-gate-persists-in-readiness-assessment.md) | UC-CC-003 步 7「记录凭证门禁」的持久化——**resolved，2026-09-11 16:3x 进 main**（分支 `mcp4-sacc04`，基 `7c37253f`，代码 tip `d69e18c7`；main 上代码 `a32c80eb`、批清点 `dcb74785`（与 08 同批）；非作者评审 ← 通道 6 两轴 0 阻断，非阻断四条随票记，指纹用 `String()` 归 06 顺手；独立「凭证门禁判断」登记册 + 迁移 0018 + `RecordCredentialGateHandler`，`RegisterReadiness` 的形不动；装配点今天无、如实记在票面判据 1） | CC | 无 |

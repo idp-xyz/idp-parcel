@@ -17,6 +17,9 @@ import (
 	ccports "go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 	nrinbox "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/inbox"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
+	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
+	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	ppports "go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/finalconsume"
 	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
 	psnodeops "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/nodeoperations"
@@ -473,6 +476,187 @@ func TestAFormedDutyPaymentVerificationReachesTheSettlementInputThroughTheRouteT
 
 // saTestValue 构造一个值对象，失败即用例失败。只给上面那条用例用，别处各有自己的同形助手。
 func saTestValue[T any](t *testing.T, construct func(string) (T, error), raw string) T {
+	t.Helper()
+	value, err := construct(raw)
+	if err != nil {
+		t.Fatalf("构造 %q：%v", raw, err)
+	}
+	return value
+}
+
+// Covers: 路由表的 PP 评价已记录一条（sa-cc/01，裁决 (c)「信封到未决」）与完成判据 3「真库装配用例一正一反」——
+// 在生产依赖图上：
+// 正：PP 落一份 BUY·SUPPLIER_COST 评价 → 用 PP 的真 Outbox 适配器把信封入队（事件类型由提供方写，路由表按消费方
+// 自写的常量认——两串相等在这里被真库钉住）→ SA 消费者按引用回查 PP 评价库 → 形成命令还缺三件来源引用 → 停在
+// dispatch.consumer_undecided：inbox 无账、supplier_expected_cost 零行，等评价请求记录接上后重投；
+// 反：同一种信封指着一份 SELL·CUSTOMER_CHARGE 评价 → 不是本消费者的信封，入账定稿、SA 零写入；另一封指着 PP
+// 还没有的评价 → 可见性滞后同样是未决，不毒丸、不定稿。
+func TestARecordedBuyEvaluationStopsUndecidedAtTheExpectedCostSeamThroughTheRouteTable(t *testing.T) {
+	beat, db, store := wiredBeat(t)
+	evaluations, err := pppostgres.NewEvaluations(db)
+	if err != nil {
+		t.Fatalf("PP 评价库：%v", err)
+	}
+	handoff, err := pppostgres.NewOutboxEvaluationHandoff(db, store, systemClock{})
+	if err != nil {
+		t.Fatalf("PP 评价交接：%v", err)
+	}
+	buy := syntheticPricingEvaluation(t, "SYN-EVAL-BUY-01", ppdomain.PricingDirectionBuy, ppdomain.PricingPurposeSupplierCost)
+	sell := syntheticPricingEvaluation(t, "SYN-EVAL-SELL-01", ppdomain.PricingDirectionSell, ppdomain.PricingPurposeCustomerCharge)
+	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		for _, evaluation := range []ppdomain.PricingEvaluation{buy, sell} {
+			if _, err := evaluations.Save(txCtx, evaluation); err != nil {
+				return err
+			}
+			if err := handoff.HandOffEvaluation(txCtx, ppports.EvaluationHandoffIntent{Evaluation: evaluation}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("PP 侧落评价并入队：%v", err)
+	}
+	// 反例二：信封指着 PP 还没有的评价。
+	enqueueForBeat(t, db, store, "SYN-EVAL-MISSING", sainbox.BuyEvaluationRecordedEventType,
+		`{"tenantId":"tenant-a","evaluationId":"SYN-EVAL-MISSING"}`)
+
+	published, err := beat.DispatchOnce(t.Context())
+	if err != nil {
+		t.Fatalf("一拍：%v", err)
+	}
+	if published != 1 {
+		t.Fatalf("published = %d, want 1（正：BUY 未决；反：SELL 入账定稿、缺席评价未决）；失败码 BUY = %q",
+			published, recordedFailureCode(t, db, "SYN-EVAL-BUY-01"))
+	}
+	if got := recordedFailureCode(t, db, "SYN-EVAL-BUY-01"); got != "dispatch.consumer_undecided" {
+		t.Fatalf("BUY 评价：failure_code = %q, want dispatch.consumer_undecided（等评价请求记录）", got)
+	}
+	if got := recordedFailureCode(t, db, "SYN-EVAL-MISSING"); got != "dispatch.consumer_undecided" {
+		t.Fatalf("PP 还没有的评价：failure_code = %q, want dispatch.consumer_undecided", got)
+	}
+
+	querier, err := db.ReadExecutor(t.Context())
+	if err != nil {
+		t.Fatalf("取读执行器：%v", err)
+	}
+	var costRows int
+	if err := querier.QueryRow(t.Context(),
+		`SELECT count(*) FROM settlement_accounting.supplier_expected_cost WHERE tenant_id = $1`, "tenant-a",
+	).Scan(&costRows); err != nil {
+		t.Fatalf("数预期成本行：%v", err)
+	}
+	if costRows != 0 {
+		t.Fatalf("命令没凑齐却形成了预期成本：supplier_expected_cost 有 %d 行", costRows)
+	}
+	inboxRows := func(eventID string) int {
+		var count int
+		if err := querier.QueryRow(t.Context(),
+			`SELECT count(*) FROM `+migrate.SchemaBento+`.inbox WHERE consumer = $1 AND event_id = $2`,
+			"settlement-accounting/form-supplier-expected-cost", eventID,
+		).Scan(&count); err != nil {
+			t.Fatalf("数 inbox：%v", err)
+		}
+		return count
+	}
+	if n := inboxRows("SYN-EVAL-BUY-01"); n != 0 {
+		t.Fatalf("BUY 未决必须回滚：inbox 行数 = %d, want 0", n)
+	}
+	if n := inboxRows("SYN-EVAL-SELL-01"); n != 1 {
+		t.Fatalf("SELL 不是本消费者的信封，要入账不重投：inbox 行数 = %d, want 1", n)
+	}
+}
+
+// syntheticPricingEvaluation 造一份 PP 评价：一张 SYN 卡（USD 价表 12.5，合计 HALF_UP 到 0.01——声明了取整策略，
+// SA 读口才不会以 AMOUNT_PRECISION_UNDECLARED 拒）对一份 5 kg / Z1 的包裹输入评价。方向与目的由调用方给：
+// 同一张卡的形状换个方向就是 SELL 评价，正是提供方对两个方向发同一种信封的那个事实。
+func syntheticPricingEvaluation(
+	t *testing.T, id string, direction ppdomain.PricingDirection, purpose ppdomain.PricingPurpose,
+) ppdomain.PricingEvaluation {
+	t.Helper()
+	decimal := func(raw string) ppdomain.Decimal { return ppTestValue(t, ppdomain.ParseDecimal, raw) }
+	kilograms := func(raw string) ppdomain.Weight {
+		weight, err := ppdomain.NewWeight(decimal(raw), ppdomain.WeightUnitKilogram)
+		if err != nil {
+			t.Fatalf("重量 %q：%v", raw, err)
+		}
+		return weight
+	}
+	reference := func(kind ppdomain.ArtifactKind, id, version string) ppdomain.VersionReference {
+		value, err := ppdomain.NewVersionReferenceIdentity(kind, id, version)
+		if err != nil {
+			t.Fatalf("版本引用 %s/%s：%v", id, version, err)
+		}
+		return value
+	}
+	usd := ppTestValue(t, ppdomain.NewCurrency, "USD")
+	amount, err := ppdomain.NewMoney(decimal("12.5"), usd)
+	if err != nil {
+		t.Fatalf("金额：%v", err)
+	}
+	entry, err := ppdomain.NewRateEntry(ppTestValue(t, ppdomain.NewRateEntryID, "entry"), "Z1", kilograms("0"), kilograms("10"), amount)
+	if err != nil {
+		t.Fatalf("价表行：%v", err)
+	}
+	period, err := ppdomain.NewEffectivePeriod(
+		time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("有效期：%v", err)
+	}
+	table, err := ppdomain.NewRateTableVersion(reference(ppdomain.ArtifactRateTable, "SYN-TABLE", "v1"),
+		ppdomain.RateTableFamilyWeightZone, usd, ppdomain.WeightUnitKilogram, period, []ppdomain.RateEntry{entry})
+	if err != nil {
+		t.Fatalf("价表：%v", err)
+	}
+	weightRounding, err := ppdomain.NewWeightRoundingPolicy(ppdomain.RoundingNone, kilograms("1"))
+	if err != nil {
+		t.Fatalf("重量取整：%v", err)
+	}
+	weightPolicy, err := ppdomain.NewPricingWeightPolicy(reference(ppdomain.ArtifactWeightPolicy, "SYN-WEIGHT", "v1"),
+		ppdomain.PricingWeightActualOnly, weightRounding, nil)
+	if err != nil {
+		t.Fatalf("计价重量策略：%v", err)
+	}
+	increment, err := ppdomain.NewMoney(decimal("0.01"), usd)
+	if err != nil {
+		t.Fatalf("进位单位：%v", err)
+	}
+	amountRounding, err := ppdomain.NewAmountRoundingPolicy(ppdomain.RoundingHalfUp, increment,
+		[]ppdomain.AmountRoundingPoint{ppdomain.AmountRoundingTotal})
+	if err != nil {
+		t.Fatalf("金额取整策略：%v", err)
+	}
+	structures, err := ppdomain.PricingPlanStructures{}.WithAmountRounding(amountRounding)
+	if err != nil {
+		t.Fatalf("结构：%v", err)
+	}
+	scope := ppTestValue(t, ppdomain.NewPricingScopeID, "SYN-SCOPE-01")
+	plan, err := ppdomain.NewPricingPlanVersion(reference(ppdomain.ArtifactPricingPlan, "SYN-CARD-"+string(direction), "v1"),
+		scope, direction, purpose, ppTestValue(t, ppdomain.NewChargeCode, "BASE_FREIGHT"), period, table, weightPolicy, nil, structures)
+	if err != nil {
+		t.Fatalf("价卡：%v", err)
+	}
+	subject, err := ppdomain.NewAcceptedPackageSubject(ppTestValue(t, ppdomain.NewPackageID, "SYN-PKG-01"))
+	if err != nil {
+		t.Fatalf("评价主体：%v", err)
+	}
+	input, err := ppdomain.NewPricingInputSnapshot(ppTestValue(t, ppdomain.NewTenantID, "tenant-a"), scope, subject, "Z1",
+		kilograms("5"), nil, time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC))
+	if err != nil {
+		t.Fatalf("计价输入：%v", err)
+	}
+	request, err := ppdomain.NewEvaluationRequest(ppTestValue(t, ppdomain.NewEvaluationID, id), plan, input, ppdomain.EvidenceSynthetic)
+	if err != nil {
+		t.Fatalf("评价请求：%v", err)
+	}
+	evaluation := ppdomain.EvaluatePricing(request)
+	if evaluation.Status() != ppdomain.EvaluationCompleted {
+		t.Fatalf("夹具评价没完成：%s %#v", evaluation.Status(), evaluation.Issues())
+	}
+	return evaluation
+}
+
+// ppTestValue 与 saTestValue 同形，给上面的 PP 夹具用。
+func ppTestValue[T any](t *testing.T, construct func(string) (T, error), raw string) T {
 	t.Helper()
 	value, err := construct(raw)
 	if err != nil {

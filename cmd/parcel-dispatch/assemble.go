@@ -25,6 +25,7 @@ import (
 	nrapplication "go.idp.xyz/idp-parcel/internal/networkrouting/application"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
+	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	psidentity "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity"
 	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/labelfinal"
@@ -42,6 +43,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	sacustoms "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/customscompliance"
 	sainbox "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/inbox"
+	sapricing "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/parcelpricing"
 	sapartycommercial "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/partycommercial"
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	saapplication "go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
@@ -501,6 +503,27 @@ var dutyPaymentVerificationUndecidedSentinels = []error{
 	sacustoms.ErrAdoptionUndecided,
 }
 
+// buyEvaluationRecordedUndecidedSentinels 是 PP 评价已记录信封 → SA 供应商预期成本形成这条线（sa-cc/01，
+// 裁决 (c)「信封到未决」）登记的未决哨兵：
+//   - sapricing.ErrEvaluationNotVisible——信封所指的评价在提供方还读不回（评价与信封同事务落库，读不回只剩
+//     可见性滞后），或读口自己答不出；续办，重投会改变结果。
+//   - sapricing.ErrSourceReferencesUnrecorded——评价取回了，但形成命令还缺发生项 / 费用项目 / 供应商协议三件
+//     引用：它们记在评价请求登记册（票 sa-cc/08），而评价回指评价请求标识归 PP 侧（票 11），今天两头没接上。
+//     按「未确认规则保持显式未决」停在这一格：不为缺引用发明来源、不反查 TF 登记册（裁决对 (b) 的否决）、
+//     零写入；恢复动作是等 08 的回指 / 11 与形成路后继票接上——接上之后这一格随之消失。
+//
+// 不在名单里的几格，恢复动作各不相同：
+//   - 不是 BUY·SUPPLIER_COST 的评价不是错误——处理方答 nil，消费门入账不重投（做法 2「不处理不报错」）：提供方
+//     对两个方向发同一种信封，SELL 那一半只能在这里安静地走掉。
+//   - sapricing.ErrUntranslatableAnswer——提供方交出词汇表之外的内容，形状变了，重投不自愈。
+//   - sapricing.ErrAmountPrecisionUndeclared——价卡没声明金额取整策略（ADR-0107），这份评价按现卡永远采用不了，
+//     要改的是卡、再评价一份新的，不是重投这一封。
+//   - sapricing.ErrUntranslatableReference——引用坏了，编程错误。
+var buyEvaluationRecordedUndecidedSentinels = []error{
+	sapricing.ErrEvaluationNotVisible,
+	sapricing.ErrSourceReferencesUnrecorded,
+}
+
 // wireDispatcher 接依赖图。它与读环境分开，是为了让组合根能对着真库整体验一遍——
 // 一个只能靠进程起停验证的装配点，等于没有验证。
 //
@@ -525,7 +548,9 @@ var dutyPaymentVerificationUndecidedSentinels = []error{
 // 只投 VE 投影（不 FanOut：同为多成员信封，成员维进引用、提交版本走版本维，
 // ADR-0066）、VE 投影派生 → 客户视图
 // （UC-VE-008 内部半边：账户维经 PS 按包裹反查填上，ADR-0060 三格）、SA 资金事实采用 → CC 入向
-// 登记（sa-cc/03）、CC 付款核对形成 → SA 结算输入采用（sa-cc/09；同一条缝的反方向，各记各的 inbox 账）。
+// 登记（sa-cc/03）、CC 付款核对形成 → SA 结算输入采用（sa-cc/09；同一条缝的反方向，各记各的 inbox 账）、
+// PP 评价已记录 → SA 供应商预期成本形成（sa-cc/01；裁决 (c) 范围只到「命令凑不齐 → 未决」，形成路等 08 的
+// 回指 / 11 接上后由后继票补）。
 // 「PS 有效网络收寄采用结果」那一路单投 network-routing；各类 FanOut 同一 EventType
 // 各投两个独立消费者，顺序一律先 VE 后 PS/NR，避免把投影或补派生堵在资格墙、终局
 // 规则墙或路由证据墙上。
@@ -749,6 +774,15 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 		return nil, fmt.Errorf("parcel-dispatch: duty payment verification undecided translation: %w", err)
 	}
 
+	buyEvaluations, err := formSupplierExpectedCostOnBuyEvaluationConsumer(db, inboxStore)
+	if err != nil {
+		return nil, err
+	}
+	routedBuyEvaluations, err := dispatch.WithUndecidedSentinels(buyEvaluations, buyEvaluationRecordedUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: buy evaluation recorded undecided translation: %w", err)
+	}
+
 	veHandover, err := deriveHandoverConsumer(db, inboxStore, projectionDerive)
 	if err != nil {
 		return nil, err
@@ -842,6 +876,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 			psinbox.CarrierFirstEffectivePickupRegisteredEventType: routedPickupJudgments,
 			ccinbox.ExternalFundsFactAdoptedEventType:              routedFundsFacts,
 			sainbox.DutyPaymentVerificationFormedEventType:         routedVerifications,
+			sainbox.BuyEvaluationRecordedEventType:                 routedBuyEvaluations,
 			veinbox.TransportHandoverRegisteredEventType:           veHandoverRouted,
 			veinbox.ExternalCarrierTrackingJudgedEventType:         veExternalTrackingRouted,
 			veinbox.FinalOutcomeFormedEventType:                    veFinalOutcomeRouted,
@@ -2262,6 +2297,39 @@ func adoptDutyPaymentVerificationConsumer(
 	consumer, err := sainbox.NewDutyPaymentVerificationConsumer(db.Transactor(), inboxStore, processing)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: duty payment verification consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// formSupplierExpectedCostOnBuyEvaluationConsumer 接 sa-cc/01 那条线：parcel-pricing 记下一份评价后交出的
+// `parcel-pricing.evaluation.recorded` 引用式信封 → SA 消费门 → 按（租户 + 评价标识）经 SA 的消费侧适配器读
+// PP 评价库（mech/06 SA-c 缝，ADR-0025）→ 分辨是不是 BUY·SUPPLIER_COST → 核形成命令齐不齐。跨上下文翻译只在
+// SA 的 `adapters/parcelpricing`；SA application 不 import PP。
+//
+// 裁决 (c) 把本票的范围钉在「信封到未决」：命令除评价外还要发生项 / 费用项目 / 供应商协议三件引用，它们记在
+// 评价请求登记册（sa-cc/08）而评价回指评价请求标识归 PP 侧（票 11），今天两头没接上，处理方对每一封 BUY 信封
+// 都答 ErrSourceReferencesUnrecorded。所以这里**不装** `saapplication.NewFormSupplierExpectedCostHandler`：命令
+// 凑不齐时到不了它，接进来就是在组合根里装一只没人调的编排；用一个永远答「不在」的来源口顶上则是把替身放进
+// 生产装配。形成路接上那天，后继票在这里补预期成本登记面与那只编排，消费者与路由行不变。
+func formSupplierExpectedCostOnBuyEvaluationConsumer(
+	db *bentopg.DB,
+	inboxStore *inbox.Store,
+) (dispatch.Consumer, error) {
+	evaluations, err := pppostgres.NewEvaluations(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pricing evaluation store: %w", err)
+	}
+	view, err := sapricing.NewBuyEvaluationAdapter(evaluations)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: buy evaluation view: %w", err)
+	}
+	processing, err := sapricing.NewFormOnBuyEvaluationRecordedAdapter(view)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: form on buy evaluation recorded: %w", err)
+	}
+	consumer, err := sainbox.NewBuyEvaluationRecordedConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: buy evaluation recorded consumer: %w", err)
 	}
 	return consumer, nil
 }
