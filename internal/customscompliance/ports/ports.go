@@ -969,6 +969,54 @@ type CredentialView interface {
 	) (domain.RegulatoryCredential, bool, error)
 }
 
+// CredentialGateKey 是凭证门禁判断的幂等键：判断身份三维（租户、申报单元、凭证身份）加内容
+// 指纹（票 sa-cc/04，ADR-0137 决定一）。同键同内容重放不出第二版；程序、持有人、截至时点、
+// 结论、依据或责任角色任一变了自然换指纹追加新版，不覆盖——与税费付款核对的键同形。就绪判断
+// 要绑定的「对门禁记录版本的不可变引用」就是这把键：门禁记录版本不可变，引用它就是保存它。
+type CredentialGateKey struct {
+	TenantID   domain.TenantID
+	Unit       domain.DeclarationUnitID
+	Credential domain.CredentialID
+	Digest     string
+}
+
+// CredentialGateDigest 是一条凭证门禁判断的内容指纹：程序、持有人、截至时点、结论、依据引用、
+// 责任角色。判断时刻不进指纹——重放时时钟已经走了，而重放比的是内容不是时刻（判据同
+// sameCollaboration 不比形成时间）；身份三维在键上，也不进。
+func CredentialGateDigest(judgment domain.CredentialGateJudgment) string {
+	digest := sha256.Sum256([]byte(strings.Join([]string{
+		judgment.Procedure().String(),
+		judgment.Holder().String(),
+		judgment.AsOf().UTC().Format(time.RFC3339Nano),
+		strconv.Itoa(int(judgment.Conclusion())),
+		judgment.Basis().String(),
+		judgment.Role().String(),
+	}, "\x00")))
+	return hex.EncodeToString(digest[:])
+}
+
+// CredentialGateRecord 是一条凭证门禁判断越过提交边界留下的东西：幂等键加领域判断对象。键上的
+// 三维与指纹必须与对象说的是同一件事，由写口核（判据同 SaveVerification）。
+type CredentialGateRecord struct {
+	Key      CredentialGateKey
+	Judgment domain.CredentialGateJudgment
+}
+
+// CredentialGateRegistry 是凭证门禁判断登记册的写口半边。判断由评估请求驱动、算一次登一次
+// （ADR-0137 决定二），写口不 UPSERT、没有 UPDATE 路径：来源变化让既有判断失效是就绪判断那一层
+// 的事（`不再就绪`），不改门禁记录。写入代数与其余登记册同（ADR-0031）：同键已在册交回`已登记`
+// ——键含指纹，撞键即同内容，编排不必再读回比。
+type CredentialGateRegistry interface {
+	RegisterCredentialGate(ctx context.Context, record CredentialGateRecord) (CaseConfigurationSaveOutcome, error)
+}
+
+// CredentialGateView 按幂等键取回一版门禁判断。就绪判断的编排（UC-CC-003 步 10–11，后继票）按
+// 引用回读它绑定的那一版；found=false 即那一版不存在——引用指空是调用方编程错误还是记录尚未
+// 落地，由调用方按自己的上下文判，读口不替它选。
+type CredentialGateView interface {
+	LoadCredentialGate(ctx context.Context, key CredentialGateKey) (CredentialGateRecord, bool, error)
+}
+
 // DutyCollaborationStore 保存税费付款协作事项并按（范围，税费引用）取回（UC-CC-009 步 4–5，
 // 票 mechanism-executor-triage/07 CC-c）。一个范围对一份税费义务依据至多一份协作事项：核定
 // 税费格按税费引用立键，明确无需付款格的税费引用为空——两格是两行，税费更正换税费引用
