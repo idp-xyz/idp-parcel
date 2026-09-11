@@ -15,7 +15,7 @@ func TestCommandForRejectsUnknownCommand(t *testing.T) {
 	}
 }
 
-// TestCommandForRejectsUnknownFields 证十二个命令全部拒未知字段：打错的键静默丢弃
+// TestCommandForRejectsUnknownFields 证命令表上每一条都拒未知字段：打错的键静默丢弃
 // 会让操作员以为登进去的比实际多。
 func TestCommandForRejectsUnknownFields(t *testing.T) {
 	for _, command := range allCommands {
@@ -54,6 +54,21 @@ func TestCommandForRejectsBlankIdentifiers(t *testing.T) {
 			"tenantId": "SYN-T1", "pathRef": "SYN-PATH-01", "portRef": "SYN-PORT-01",
 			"direction": "IMPORT", "declarationMode": " ",
 			"appliesFrom": "2026-08-24T01:00:00Z"
+		}`,
+		commandRegulatoryCredential: `{
+			"tenantId": "SYN-T1", "credentialId": " ", "issuerRef": "SYN-AUTHORITY-01",
+			"holderRef": "SYN-HOLDER-01", "procedureRef": "SYN-PROC-01",
+			"validFrom": "2026-09-01T00:00:00Z", "validTo": "2027-09-01T00:00:00Z"
+		}`,
+		commandDutyCollaboration: `{
+			"tenantId": "SYN-T1", "kind": "ASSESSED_DUTY", "dutyRef": "SYN-DUTY-01/v1",
+			"scopeRef": "", "obligorRef": "SYN-OBLIGOR-01",
+			"requirementRef": "SYN-ASSESSMENT-01", "targetRef": "SYN-DUTY-DESK"
+		}`,
+		commandDutyPaymentVerification: `{
+			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "  ",
+			"scopeRef": "SYN-UNIT-01", "coverage": "PARTIAL", "delta": "SHORT",
+			"validity": "PENDING", "basis": "SYN-RULE-01"
 		}`,
 	}
 	for command, raw := range cases {
@@ -96,6 +111,28 @@ func TestCommandForRejectsVocabularyOutsideTheClosedSets(t *testing.T) {
 			"direction": "TRANSIT", "declarationMode": "SYN-MODE-GENERAL",
 			"appliesFrom": "2026-08-24T01:00:00Z"
 		}`, "direction"},
+		// 义务依据二值：打错的词是用法错误；缺席（空串）不在此表——那是「税费结果还没到」，
+		// 由用例答业务未决，译装放行（见 duty_registers_test 义务依据缺席那例）。
+		{commandDutyCollaboration, `{
+			"tenantId": "SYN-T1", "kind": "MAYBE", "dutyRef": "SYN-DUTY-01/v1",
+			"scopeRef": "SYN-UNIT-01", "obligorRef": "SYN-OBLIGOR-01",
+			"requirementRef": "SYN-ASSESSMENT-01", "targetRef": "SYN-DUTY-DESK"
+		}`, "kind"},
+		{commandDutyPaymentVerification, `{
+			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "SYN-FUNDS-01",
+			"scopeRef": "SYN-UNIT-01", "coverage": "ALL", "delta": "SHORT",
+			"validity": "PENDING", "basis": "SYN-RULE-01"
+		}`, "coverage"},
+		{commandDutyPaymentVerification, `{
+			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "SYN-FUNDS-01",
+			"scopeRef": "SYN-UNIT-01", "coverage": "PARTIAL", "delta": "MISSING",
+			"validity": "PENDING", "basis": "SYN-RULE-01"
+		}`, "delta"},
+		{commandDutyPaymentVerification, `{
+			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "SYN-FUNDS-01",
+			"scopeRef": "SYN-UNIT-01", "coverage": "PARTIAL", "delta": "SHORT",
+			"validity": "", "basis": "SYN-RULE-01"
+		}`, "validity"},
 	}
 	for _, spec := range cases {
 		_, err := commandFor(spec.command, []byte(spec.raw))
