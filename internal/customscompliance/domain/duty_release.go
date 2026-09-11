@@ -390,6 +390,10 @@ type ReleaseGateVerification struct {
 	preconditions []PreconditionReference
 	conclusion    GateConclusion
 	verifiedAt    time.Time
+	// 「税费付款」那一道按登记规则判出的读数（票 sa-cc/06）：三态原值 + 核对版本引用；出口与
+	// 挂法在 duty_payment_gate_rule.go。
+	dutyPayment    DutyPaymentGateReading
+	hasDutyPayment bool
 }
 
 func VerifyReleaseGate(

@@ -287,6 +287,40 @@ type GateVerificationHandoff interface {
 	HandOffGate(ctx context.Context, intent GateVerificationHandoffIntent) error
 }
 
+// GateVersionDigest 是门禁核对内容的稳定指纹：逐项判断（FindingsDigest 的行）加「税费付款」那一道的
+// 读数——三态原值与核对版本引用各成一行（票 sa-cc/06）。读数进指纹的理由：同一版核对折出的判断不变
+// 而核对换了版（比如迟到事实追加新版仍算已覆盖），门禁记录带的引用就该指向新版——那是另一版门禁
+// 判断，不是重放。没挂读数时与 FindingsDigest 逐字节相同，本册加读数之前的旧行照旧能撞上。
+func GateVersionDigest(findings []domain.PreconditionFinding, reading domain.DutyPaymentGateReading, applied bool) string {
+	if !applied {
+		return FindingsDigest(findings)
+	}
+	lines := make([]string, 0, len(findings)+1)
+	for _, finding := range findings {
+		lines = append(lines, finding.Precondition.String()+"="+strconv.Itoa(int(finding.State)))
+	}
+	sort.Strings(lines)
+	lines = append(lines,
+		"duty-payment="+reading.Coverage.String()+"/"+reading.Delta.String()+"/"+reading.Validity.String()+
+			"@"+reading.Verification.Duty.String()+"/"+reading.Verification.Funds.String()+"/"+reading.Verification.Version)
+	digest := sha256.Sum256([]byte(strings.Join(lines, "\x00")))
+	return hex.EncodeToString(digest[:])
+}
+
+// DutyPaymentGateRuleView 按门禁三维键取回「税费付款」那一道的登记规则（ADR-0137 决定三）。found=false
+// 即目录里没有这一道的规则行——门禁编排答「规则未配置」诚实停点，不取任何默认折法；它与目录未登记
+// （LoadPreconditionFindings 的 configured=false）是两个停点：目录在而规则缺，等的是登记方给这一道
+// 登规则，不是登目录。
+type DutyPaymentGateRuleView interface {
+	LoadDutyPaymentGateRule(
+		ctx context.Context,
+		tenant domain.TenantID,
+		scope domain.DecisionScopeReference,
+		action domain.GuardedAction,
+		boundary domain.CustomsProcedureReference,
+	) (domain.DutyPaymentGateRule, bool, error)
+}
+
 // FollowUpTargetKey 是后续申报动作目标的幂等键：同一触发依据对同一提交版本的同类
 // 动作只立一个目标——触发依据换了（新监管要求）或版本换了自然换键。
 type FollowUpTargetKey struct {
@@ -701,6 +735,22 @@ type GateConditionRegistry interface {
 	) (CaseConfigurationSaveOutcome, error)
 }
 
+// DutyPaymentGateRuleRegistry 是门禁目录里「税费付款」那一道规则行的写口（票 sa-cc/06，ADR-0137 决定三）。
+// 它挂在门禁目录既有登记册上、与目录行同键——规则与认定是同一道门的两种登法，再开一册是同一把键的
+// 第二张表；一个目录行至多一条规则（规则换了走复核，不覆盖）。写入代数与其余登记册同（ADR-0031，
+// 不 UPSERT）：同键已在册交回`已登记`，内容是否同一份由编排读回自己比。规则的取值属实例半边，本口
+// 不写任何默认。
+type DutyPaymentGateRuleRegistry interface {
+	RegisterDutyPaymentGateRule(
+		ctx context.Context,
+		tenant domain.TenantID,
+		scope domain.DecisionScopeReference,
+		action domain.GuardedAction,
+		boundary domain.CustomsProcedureReference,
+		rule domain.DutyPaymentGateRule,
+	) (CaseConfigurationSaveOutcome, error)
+}
+
 // DeclarationVersionFactory 签发提交版本标识。
 type DeclarationVersionFactory interface {
 	NextSubmissionVersion(ctx context.Context) (domain.SubmissionVersionID, error)
@@ -819,6 +869,10 @@ type GateConditionCatalogueEntry struct {
 	Boundary     domain.CustomsProcedureReference
 	RegisteredAt time.Time
 	Findings     []domain.PreconditionFinding
+	// DutyPaymentRule 是「税费付款」那一道登的规则（ADR-0137 决定三：目录行正文从「认定」扩成
+	// 「认定或规则」，既有认定行一字不变）；nil 即这一道尚未登规则——门禁编排在那一格答「规则
+	// 未配置」，上列如实透出空位而不替它填。
+	DutyPaymentRule *domain.DutyPaymentGateRule
 }
 
 // GateConditionCatalogueRead 是门禁条件登记册的伴生列表读口（ADR-0077 Decision
@@ -1119,6 +1173,20 @@ type DutyVerificationRecord struct {
 type DutyVerificationStore interface {
 	FindVerification(ctx context.Context, key DutyVerificationKey) (DutyVerificationRecord, bool, error)
 	SaveVerification(ctx context.Context, record DutyVerificationRecord) (CaseConfigurationSaveOutcome, error)
+}
+
+// CurrentDutyVerificationView 按（租户、申报范围）取回**当前**那一版付款核对，伺候放行门禁核对里
+// 「税费付款」那一道（票 sa-cc/06）。「当前」= 核对时刻（VerifiedAt）最新的那一版，不按到达顺序、
+// 不按版本指纹——同范围多版并存是常态（迟到事实、税费更正各成一版），门禁读的是核对权威此刻最新
+// 的说法；同一时刻并存的两版按指纹字典序取定，让「当前」在同一份数据上只有一个答案。监管程序不是
+// 核对的维度（核对身份是税费版本 / 资金事实 / 范围三维），所以这里不按边界过滤——门禁的边界在门禁
+// 自己的键上。found=false 即该范围没有任何一版核对——门禁在那一格答未决并指名等核对，不是未满足。
+type CurrentDutyVerificationView interface {
+	LoadCurrentDutyVerification(
+		ctx context.Context,
+		tenant domain.TenantID,
+		scope domain.DecisionScopeReference,
+	) (DutyVerificationRecord, bool, error)
 }
 
 // DutyPaymentVerificationHandoffIntent 把一版已形成的税费付款核对交给 `settlement-accounting`

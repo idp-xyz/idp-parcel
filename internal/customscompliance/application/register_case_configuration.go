@@ -76,6 +76,11 @@ type RegisterCaseConfigurationDeps struct {
 
 	Gates    ports.GateConditionRegistry
 	GateView ports.GateConditionView
+
+	// 门禁目录里「税费付款」那一道的规则行（票 sa-cc/06，ADR-0137 决定三）：与目录同键、同一册的
+	// 第二张表；写读两半同其余登记册的理由——冲突判定靠读回。
+	DutyRules    ports.DutyPaymentGateRuleRegistry
+	DutyRuleView ports.DutyPaymentGateRuleView
 }
 
 type RegisterCaseConfigurationHandler struct {
@@ -402,15 +407,18 @@ func (handler *RegisterCaseConfigurationHandler) RegisterGateCatalog(
 	return ConfigurationExisting, nil
 }
 
-// RegisterGateFinding 登记一项前置条件判断。同键异判断是冲突：门禁判断绑定动作与
-// 边界（CONTEXT 硬句 216），改判断要走复核而不是把原判断顶掉。
+// RegisterGateFinding 登记一项前置条件判断。同键异判断是冲突：门禁判断绑定动作与边界（CONTEXT
+// 「门禁满足不生成放行，也不能复用于其他动作或监管边界」），改判断要走复核而不是把原判断顶掉。
+// 「税费付款」那一道不收认定：它登的是规则、由门禁编排拿当前付款核对折出判断（ADR-0137 决定三），
+// 人登一条结论性认定进来等于替规则答了题，受理门直接拒。
 func (handler *RegisterCaseConfigurationHandler) RegisterGateFinding(
 	ctx context.Context,
 	command RegisterGateFindingCommand,
 ) (CaseConfigurationOutcome, error) {
 	if blankTenant(command.TenantID) || command.Action.String() == "" ||
 		command.Scope.String() == "" || command.Boundary.String() == "" ||
-		command.Finding.Precondition.String() == "" {
+		command.Finding.Precondition.String() == "" ||
+		command.Finding.Precondition == domain.DutyPaymentPrecondition {
 		return ConfigurationNotAccepted, nil
 	}
 
@@ -438,6 +446,90 @@ func (handler *RegisterCaseConfigurationHandler) RegisterGateFinding(
 		return ConfigurationExisting, nil
 	}
 	return ConfigurationUndecided, nil
+}
+
+// RegisterDutyPaymentGateRuleCommand 携带门禁目录里「税费付款」那一道的规则登记（票 sa-cc/06）：
+// 门禁三维键加规则正文两形之一——NotAPrecondition 为真即「税费付款不构成本动作在本边界的前置
+// 条件」，否则三个接受集合各非空。规则的取值属实例半边 `PAR-CUS-0x`，命令不带任何默认。
+type RegisterDutyPaymentGateRuleCommand struct {
+	TenantID         domain.TenantID
+	Scope            domain.DecisionScopeReference
+	Action           domain.GuardedAction
+	Boundary         domain.CustomsProcedureReference
+	NotAPrecondition bool
+	AcceptCoverage   []domain.DutyCoverage
+	AcceptDelta      []domain.DutyDelta
+	AcceptValidity   []domain.DutyFactValidity
+}
+
+// RegisterDutyPaymentGateRule 登记「税费付款」那一道的规则。领域构造把门（两形各自的形状、`待确认` /
+// `冲突` 不可登记为接受）；同键同规则重放`已存在`，同键换规则`内容冲突`——改规则走复核，不顶替：
+// 已按旧规则折出的门禁记录引用的是那条规则说过的话。
+func (handler *RegisterCaseConfigurationHandler) RegisterDutyPaymentGateRule(
+	ctx context.Context,
+	command RegisterDutyPaymentGateRuleCommand,
+) (CaseConfigurationOutcome, error) {
+	if blankTenant(command.TenantID) || command.Action.String() == "" ||
+		command.Scope.String() == "" || command.Boundary.String() == "" {
+		return ConfigurationNotAccepted, nil
+	}
+	var rule domain.DutyPaymentGateRule
+	if command.NotAPrecondition {
+		if len(command.AcceptCoverage)+len(command.AcceptDelta)+len(command.AcceptValidity) != 0 {
+			// 两形互斥：说「不构成前置条件」又带接受集合，说的是两件事。
+			return ConfigurationNotAccepted, nil
+		}
+		rule = domain.DutyPaymentNotAPrecondition()
+	} else {
+		built, err := domain.AcceptDutyPaymentWhen(command.AcceptCoverage, command.AcceptDelta, command.AcceptValidity)
+		if err != nil {
+			return ConfigurationNotAccepted, nil
+		}
+		rule = built
+	}
+
+	saved, err := handler.deps.DutyRules.RegisterDutyPaymentGateRule(
+		ctx, command.TenantID, command.Scope, command.Action, command.Boundary, rule)
+	if err != nil {
+		return ConfigurationUndecided, nil
+	}
+	if saved == ports.CaseConfigurationRegistered {
+		return ConfigurationRegistered, nil
+	}
+
+	existing, found, err := handler.deps.DutyRuleView.LoadDutyPaymentGateRule(
+		ctx, command.TenantID, command.Scope, command.Action, command.Boundary)
+	if err != nil || !found {
+		return ConfigurationUndecided, nil
+	}
+	if !sameDutyPaymentGateRule(existing, rule) {
+		return ConfigurationContentConflict, nil
+	}
+	return ConfigurationExisting, nil
+}
+
+// sameDutyPaymentGateRule 逐格比两条规则。接受集合在领域构造期已去重排序，按位比即按集合比。
+func sameDutyPaymentGateRule(existing, requested domain.DutyPaymentGateRule) bool {
+	if existing.NotAPrecondition() != requested.NotAPrecondition() {
+		return false
+	}
+	existingCoverage, existingDelta, existingValidity := existing.Accepts()
+	requestedCoverage, requestedDelta, requestedValidity := requested.Accepts()
+	return sameMembers(existingCoverage, requestedCoverage) &&
+		sameMembers(existingDelta, requestedDelta) &&
+		sameMembers(existingValidity, requestedValidity)
+}
+
+func sameMembers[T comparable](left, right []T) bool {
+	if len(left) != len(right) {
+		return false
+	}
+	for index := range left {
+		if left[index] != right[index] {
+			return false
+		}
+	}
+	return true
 }
 
 func blankTenant(tenant domain.TenantID) bool {
