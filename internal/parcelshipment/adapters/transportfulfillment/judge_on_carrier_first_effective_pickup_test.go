@@ -18,9 +18,10 @@ import (
 
 // 本文件证收寄那一路的处理方（lc/25 做法 2–3）：按信封所指的（租户 + 事实 + 版本）取回 TF 首次有效收寄
 // **指名那一代**、核键与本体一致、把（事实、版本、业务发生时间）折成 CarrierFirstEffectivePickupSpec 交
-// 三路共用的处理方核；可见性滞后 / 不变量破坏 / 失效版本 / 译不出各自可识别。核与判断编排都是真的
-// （labelfinal.ParcelJudgmentCore + psapplication.JudgeLabelServiceFinalHandler），四个读口与采用路径用替身
-// ——五值要由真编排从夹具里判出来，替身直接吐结果就成了对着自己写的翻译表打勾。
+// 与面单交易那一路（lc/26）、关闭 / 重开那一路（lc/27）共用的处理方核；可见性滞后 / 不变量破坏 / 失效版本 /
+// 译不出各自可识别。核与判断编排都是真的（labelfinal.ParcelJudgmentCore + psapplication.JudgeLabelServiceFinalHandler），
+// 读口（TF 收寄登记册、包裹反查、面单交易册、继续尝试登记册、取消视图）与采用路径用替身——五值要由真编排从
+// 夹具里判出来，替身直接吐结果就成了对着自己写的翻译表打勾。
 
 var (
 	firstPickupAt   = time.Date(2026, 9, 11, 9, 30, 0, 0, time.UTC)
