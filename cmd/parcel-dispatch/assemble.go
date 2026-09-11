@@ -2128,12 +2128,12 @@ func receiveExternalFundsFactConsumer(
 //
 // 消费者只译不判（票面红线）：采用一格不形成实际代垫判断、不形成回收、不交任何回收意图。处理方是同一只
 // `AssessAdvanceRecoveryHandler`（判据 1「NewAssessAdvanceRecoveryHandler 在 cmd/ 有非测试调用点」），
-// 其余五口在这条线上不被调用，但都接真：评估 / 回收 / 调整三库与回收交接是本上下文自己的 postgres 适配器；
+// 其余各口在这条线上不被调用，但都接真：评估 / 回收 / 调整各库与回收交接是本上下文自己的 postgres 适配器；
 // 合同责任目录属实例半边（`PAR-SET-08`），接显式未配置口——FormRecovery 走到那一步答 `CONTRACT_UNCONFIGURED`
 // 未决，而 nil 在那里是 panic，两者的恢复动作完全不同。生产装配里不放任何替身。
 //
-// CC 只读半边接 `ccpostgres.DutyPaymentReconciliation`：它同时实现三口，这里经 `sacustoms.DutyVerificationReader`
-// 窄接口只拿 FindVerification 一口——写口在类型上就不进本上下文的依赖图。
+// CC 只读半边接 `ccpostgres.DutyPaymentReconciliation`：它还带着写口与别的册子的口，这里经
+// `sacustoms.DutyVerificationReader` 窄接口只拿 FindVerification 一口——写口在类型上就不进本上下文的依赖图。
 func adoptDutyPaymentVerificationConsumer(
 	db *bentopg.DB,
 	outboxStore *outbox.Store,

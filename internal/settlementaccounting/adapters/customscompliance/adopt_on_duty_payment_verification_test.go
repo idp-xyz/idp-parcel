@@ -184,7 +184,7 @@ func (fixture *fixture) makeVisible(t *testing.T, formed sainbox.FormedDutyPayme
 }
 
 // Covers: 完成判据 2——一封 → 结算输入版本采用付款核对一格；重投 → `已存在`、登记条数仍 1；全程一次都没碰
-// 评估 / 回收 / 调整 / 合同 / 交接五口（unreached 替身守着），即「其余输入缺 → 待判断」而不是错误。
+// 评估 / 回收 / 调整 / 合同 / 交接各口（unreached 替身守着），即「其余输入缺 → 待判断」而不是错误。
 func TestAFormedVerificationIsAdoptedOnceAndReplayStillSettles(t *testing.T) {
 	fixture := newFixture(t)
 	fixture.makeVisible(t, formed())

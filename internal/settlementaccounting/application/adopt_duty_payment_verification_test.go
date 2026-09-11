@@ -60,7 +60,7 @@ type inputFixture struct {
 	inputs *adoptionStoreDouble
 }
 
-// newInputFixture 在 advanceFixture 之上接采用登记册。其余四口沿用同一批替身：本用例要证的正是采用
+// newInputFixture 在 advanceFixture 之上接采用登记册。其余各口沿用同一批替身：本用例要证的正是采用
 // 一格不碰它们。
 func newInputFixture(t *testing.T) *inputFixture {
 	t.Helper()
