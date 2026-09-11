@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -40,10 +41,25 @@ var (
 
 // Save 登记一份评价请求。撞主键或撞自然键唯一约束都交回`已存在`而不是错误：那是业务答案，编排据以按
 // 自然键读回先到者、交回原 ID。
+//
+// 写之前先核键与对象说的是同一件事（照 CC SaveVerification 的形）：主键列来自 record.Key、内容列来自
+// record.Request，两者之间库上没有约束能拦——键指 A、对象是 B 的一份会落成「按 A 查出来内容是 B」的行，
+// 读口按内容列重建时交回的 Key 与调用方当初给的键就对不上。零值对象的 ID 与零值键相等，单比相等拦不住
+// 它，所以键的两维先各核非空。
 func (registry *EvaluationRequests) Save(
 	ctx context.Context,
 	record ports.EvaluationRequestRecord,
 ) (ports.EvaluationRequestSaveOutcome, error) {
+	if strings.TrimSpace(record.Key.TenantID.String()) == "" || strings.TrimSpace(record.Key.Request.String()) == "" {
+		return ports.EvaluationRequestSaveOutcomeInvalid,
+			fmt.Errorf("save evaluation request: the tenant or the request ID in the key is blank")
+	}
+	if record.Key.Request != record.Request.ID() {
+		return ports.EvaluationRequestSaveOutcomeInvalid,
+			fmt.Errorf("save evaluation request: key %q disagrees with the request %q it claims to index",
+				record.Key.Request.String(), record.Request.ID().String())
+	}
+
 	executor, err := registry.db.RequireExecutor(ctx)
 	if err != nil {
 		return ports.EvaluationRequestSaveOutcomeInvalid, fmt.Errorf("save evaluation request: %w", err)
@@ -165,6 +181,11 @@ func (registry *EvaluationRequests) findOne(
 }
 
 // evaluationRequestColumns 是一行评价请求的原样取值。列全部非空，没有指针列。
+//
+// 表上的 inserted_at 不在这里，也不在 Save 的列清单里：它是库侧审计列（这一行何时物理落库，DEFAULT now()
+// 由库填），是本仓迁移的通形、一律不进领域。它与 recorded_at 不同义——recorded_at 是编排时钟给的登记
+// 时刻、随记录往返、进 ports.EvaluationRequestRecord；两者相等是巧合不是规则。留着它不是为日后读回，
+// 是让这张表与其余各表在库侧对得上号（票 sa-cc/16 做法 3 取 (b)）。
 type evaluationRequestColumns struct {
 	requestID         string
 	scope             string

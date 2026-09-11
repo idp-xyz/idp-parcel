@@ -189,6 +189,42 @@ func TestSavingAnEvaluationRequestRequiresATransaction(t *testing.T) {
 	}
 }
 
+// Covers: 票 sa-cc/16 做法 2——键与对象说的不是同一件事（键指 EVREQ-SYN-1、对象的 ID 是 EVREQ-SYN-2）→
+// 拒存并报错，不发 INSERT：两个 ID 都不该有行。零值键同一道门。库上没有约束能拦这一格，只能在写口拦。
+func TestSavingAnEvaluationRequestWhoseKeyDisagreesWithItsRequestIsRefused(t *testing.T) {
+	registry, transactor := newEvaluationRequestRegistry(t)
+	claimed := evaluationRequestRecord(t, "tenant-a", "EVREQ-SYN-1", "syn-fee-1")
+	mismatched := evaluationRequestRecord(t, "tenant-a", "EVREQ-SYN-2", "syn-fee-1")
+	mismatched.Key = claimed.Key
+
+	var outcome ports.EvaluationRequestSaveOutcome
+	var saveErr error
+	saWithin(t, transactor, t.Context(), func(txCtx context.Context) error {
+		outcome, saveErr = registry.Save(txCtx, mismatched)
+		return nil
+	})
+	if saveErr == nil || outcome != ports.EvaluationRequestSaveOutcomeInvalid {
+		t.Fatalf("键指 %s、对象是 %s 的记录被存下了：outcome=%q err=%v",
+			claimed.Key.Request.String(), mismatched.Request.ID().String(), outcome, saveErr)
+	}
+	for _, id := range []string{"EVREQ-SYN-1", "EVREQ-SYN-2"} {
+		key := ports.EvaluationRequestKey{TenantID: saTenant(t, "tenant-a"), Request: saValue(t, domain.NewEvaluationRequestID, id)}
+		if _, found, err := registry.FindByID(t.Context(), key); err != nil || found {
+			t.Fatalf("%s 落了行：found=%v err=%v", id, found, err)
+		}
+	}
+
+	blank := evaluationRequestRecord(t, "tenant-a", "EVREQ-SYN-1", "syn-fee-1")
+	blank.Key = ports.EvaluationRequestKey{}
+	saWithin(t, transactor, t.Context(), func(txCtx context.Context) error {
+		outcome, saveErr = registry.Save(txCtx, blank)
+		return nil
+	})
+	if saveErr == nil || outcome != ports.EvaluationRequestSaveOutcomeInvalid {
+		t.Fatalf("零值键被存下了：outcome=%q err=%v", outcome, saveErr)
+	}
+}
+
 func assertEvaluationRequestEquals(t *testing.T, got, want ports.EvaluationRequestRecord) {
 	t.Helper()
 	if got.Key != want.Key {
