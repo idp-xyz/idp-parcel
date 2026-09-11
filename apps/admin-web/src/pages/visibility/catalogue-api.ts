@@ -13,14 +13,30 @@ import type { RegistrationResponseBody } from '../../components/registration';
 
 export type { ApiResult } from '../catalogue-api';
 
-/** 目录种类封闭集，与传输层 ?kind= 分派同词（种类命名册子，与登记写口同词根）。 */
+/**
+ * 目录种类封闭集，与传输层 ?kind= 分派同词（种类命名册子，与登记写口同词根）。
+ * 异常披露规则（0023）与冲突信号规则（0025）两册随票 ve-disclosure-policy-view/03 加入：
+ * 前者与披露策略（0012）是相邻的两本册，词里的「规则」与「策略」就是分册的记号。
+ */
 export type VisibilityCatalogueKind =
   | 'MILESTONE_MAPPING'
   | 'TRIAGE_RULE'
   | 'NOTIFICATION_POLICY'
   | 'CLAIM_ELIGIBILITY'
   | 'CLAIM_AUTHORIZATION'
-  | 'DISCLOSURE_POLICY';
+  | 'DISCLOSURE_POLICY'
+  | 'EXCEPTION_DISCLOSURE_RULE'
+  | 'CONFLICT_SIGNAL_RULE';
+
+/**
+ * 今天有在线登记写面的那六册（ADR-0085，票 admin-write-faces/02 切片 02d）。异常披露规则与
+ * 冲突信号规则两册只有读签：写签跟着读签走（伞票纪律），归票 ve-disclosure-policy-view/02
+ * 步二在 03 进 main 之后铺——本文件不替它发明登记端点。
+ */
+export type VisibilityRegistrableCatalogueKind = Exclude<
+  VisibilityCatalogueKind,
+  'EXCEPTION_DISCLOSURE_RULE' | 'CONFLICT_SIGNAL_RULE'
+>;
 
 export interface MilestoneMappingEntryRecord {
   /** 源上下文，传输层封闭五元；词表在 presentation.ts 的 sourceContextLabels。 */
@@ -112,6 +128,46 @@ export interface DisclosurePolicyCatalogueRecord {
   entries: DisclosurePolicyEntryRecord[];
 }
 
+/**
+ * 一条异常披露规则条目（0023）：对某客户账户的某类信号在某可信度依据下，披露条件成不成立、
+ * 批准范围允不允许自动发布、内容从哪来。content 只在 disclosable 时在场（0023 成对约束）；
+ * autoRelease 不会在 disclosable 为假时为真。三格照登转写，页面不做第二道 shape 校验。
+ */
+export interface ExceptionDisclosureRuleEntryRecord {
+  customer: string;
+  /** 异常信号类型，开放引用集，原词转写。 */
+  signalKind: string;
+  /** 可信度判断依据，开放引用，原词转写。 */
+  confidence: string;
+  disclosable: boolean;
+  autoRelease: boolean;
+  content?: string;
+}
+
+/**
+ * 一版异常披露规则连同整版条目。与 DisclosurePolicyCatalogueRecord 抬头同形、条目不同形：
+ * 那册按客户答四维内容,这册按客户 × 信号 × 可信度答异常要不要对外说——相邻两册各自成形。
+ */
+export interface ExceptionDisclosureRuleCatalogueRecord {
+  version: string;
+  effectiveFrom: string;
+  effectiveTo?: string;
+  approvedBy: string;
+  entries: ExceptionDisclosureRuleEntryRecord[];
+}
+
+/**
+ * 冲突信号规则（0025）：一租户至多一行，没有生效区间——换版是一次治理动作而不是接续闭合，
+ * 行上只有库落下的登记时刻。仍以数组到场：空册是 []，与其余各册同形。
+ */
+export interface ConflictSignalRuleRecord {
+  signalKind: string;
+  version: string;
+  confidence: string;
+  approvedBy: string;
+  registeredAt: string;
+}
+
 // 响应体按 kind 判别：唯一业务成格 VISIBILITY_CATALOGUES_LISTED，空册也是这一格
 // （ADR-0077 Decision 四，空册本身就是内容，不折成未配置）。
 export type VisibilityCatalogueListResponseBody =
@@ -120,7 +176,9 @@ export type VisibilityCatalogueListResponseBody =
   | { outcome: 'VISIBILITY_CATALOGUES_LISTED'; kind: 'NOTIFICATION_POLICY'; catalogues: NotificationPolicyRecord[] }
   | { outcome: 'VISIBILITY_CATALOGUES_LISTED'; kind: 'CLAIM_ELIGIBILITY'; catalogues: ClaimEligibilityRecord[] }
   | { outcome: 'VISIBILITY_CATALOGUES_LISTED'; kind: 'CLAIM_AUTHORIZATION'; catalogues: ClaimAuthorizationRecord[] }
-  | { outcome: 'VISIBILITY_CATALOGUES_LISTED'; kind: 'DISCLOSURE_POLICY'; catalogues: DisclosurePolicyCatalogueRecord[] };
+  | { outcome: 'VISIBILITY_CATALOGUES_LISTED'; kind: 'DISCLOSURE_POLICY'; catalogues: DisclosurePolicyCatalogueRecord[] }
+  | { outcome: 'VISIBILITY_CATALOGUES_LISTED'; kind: 'EXCEPTION_DISCLOSURE_RULE'; catalogues: ExceptionDisclosureRuleCatalogueRecord[] }
+  | { outcome: 'VISIBILITY_CATALOGUES_LISTED'; kind: 'CONFLICT_SIGNAL_RULE'; catalogues: ConflictSignalRuleRecord[] };
 
 /**
  * 返回类型按请求的 kind 收窄：服务端回显的 kind 与请求同值（传输层封闭集校验后
@@ -152,7 +210,7 @@ export function listVisibilityCatalogues<Kind extends VisibilityCatalogueKind>(
  * 各入口的拼写惯例变形（查阅用大写下划线，路径与命令用小写连字符）；分诊那册的册名
  * 在 CLI 是复数 `triage-rules`，路径与读口都用单数，取各自入口已发布的原词，不统一。
  */
-export const visibilityRegistrationEndpoints: Record<VisibilityCatalogueKind, string> = {
+export const visibilityRegistrationEndpoints: Record<VisibilityRegistrableCatalogueKind, string> = {
   MILESTONE_MAPPING: '/visibility-catalogue-milestone-mapping-registrations',
   TRIAGE_RULE: '/visibility-catalogue-triage-rule-registrations',
   NOTIFICATION_POLICY: '/visibility-catalogue-notification-policy-registrations',
@@ -170,7 +228,7 @@ export const visibilityRegistrationEndpoints: Record<VisibilityCatalogueKind, st
  * 种类是封闭集里的一个参数。
  */
 export function registerVisibilityCatalogue(
-  kind: VisibilityCatalogueKind,
+  kind: VisibilityRegistrableCatalogueKind,
   snapshot: unknown,
 ): Promise<ApiResult<RegistrationResponseBody>> {
   return postMasterData<RegistrationResponseBody>(visibilityRegistrationEndpoints[kind], snapshot);

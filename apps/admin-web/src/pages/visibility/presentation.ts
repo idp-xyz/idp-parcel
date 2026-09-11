@@ -5,7 +5,7 @@
 // 里程碑」),本页翻译任何一个都是替租户造第二套口径。同理,分诊规则的信号类型与
 // 可信度、通知策略的渠道与义务判据、索赔前置的种类与申请人都是开放引用,原词转写。
 
-import type { VisibilityCatalogueKind } from './catalogue-api';
+import type { VisibilityCatalogueKind, VisibilityRegistrableCatalogueKind } from './catalogue-api';
 
 /**
  * 源上下文的中文词,取 CONTEXT「全程追踪投影」定义句自己数的五源:
@@ -43,7 +43,11 @@ export function problemNote(code: string): string {
 
 // ---- 六类目录查阅（/visibility-catalogues,票 admin-web-page-wiring-frontier/02）----
 
-/** 目录种类的页签词。种类命名册子(与登记写口同词根),中文取 CONTEXT 原词。 */
+/**
+ * 目录种类的页签词。种类命名册子(与登记写口同词根),中文取 CONTEXT 原词。
+ * 「异常披露规则」与「披露策略」是相邻两册(0023 / 0012),签词里的「规则」「策略」就是分册
+ * 记号,不缩成同一个词。
+ */
 export const visibilityCatalogueKindLabels: Record<VisibilityCatalogueKind, string> = {
   MILESTONE_MAPPING: '里程碑映射',
   TRIAGE_RULE: '分诊规则',
@@ -51,7 +55,21 @@ export const visibilityCatalogueKindLabels: Record<VisibilityCatalogueKind, stri
   CLAIM_ELIGIBILITY: '索赔资格',
   CLAIM_AUTHORIZATION: '索赔授权',
   DISCLOSURE_POLICY: '披露策略',
+  EXCEPTION_DISCLOSURE_RULE: '异常披露规则',
+  CONFLICT_SIGNAL_RULE: '冲突信号规则',
 };
+
+/**
+ * 异常披露规则条目两个布尔列的词(0023 头注原话):disclosable 是「披露条件成不成立」,
+ * auto_release 是「批准范围允不允许自动发布」。是布尔就只有两词,不是词表没收录的开放码。
+ */
+export function disclosableLabel(value: boolean): string {
+  return value ? '成立' : '不成立';
+}
+
+export function autoReleaseLabel(value: boolean): string {
+  return value ? '允许' : '不允许';
+}
 
 /**
  * 分诊结果封闭四格(domain TriageOutcome)。中文取 CONTEXT 语言:「自动建立或关联
@@ -78,8 +96,11 @@ export function labelOf(table: Record<string, string>, code: string): string {
 
 // ---- 六类目录登记写面的词表（ADR-0085,票 admin-write-faces/02 切片 02d）----
 
+// 以下三张表只覆盖今天有在线登记写面的六册(VisibilityRegistrableCatalogueKind):异常披露规则与
+// 冲突信号规则的写签归票 ve-disclosure-policy-view/02 步二,这里不先替它拟命令名或提示句。
+
 /** 登记签的标题。册名取读签同一个词;有无版本抬头照各册实情说,不给通知策略补一个。 */
-export const registrationTitles: Record<VisibilityCatalogueKind, string> = {
+export const registrationTitles: Record<VisibilityRegistrableCatalogueKind, string> = {
   MILESTONE_MAPPING: '登记里程碑映射版本',
   TRIAGE_RULE: '登记分诊规则版本',
   NOTIFICATION_POLICY: '登记通知策略',
@@ -89,7 +110,7 @@ export const registrationTitles: Record<VisibilityCatalogueKind, string> = {
 };
 
 /** 受控登记口的命令名,逐册一个;词取 cmd/parcel-ve-register 已发布的原词。 */
-const registrationCommands: Record<VisibilityCatalogueKind, string> = {
+const registrationCommands: Record<VisibilityRegistrableCatalogueKind, string> = {
   MILESTONE_MAPPING: 'milestone-mapping',
   TRIAGE_RULE: 'triage-rules',
   NOTIFICATION_POLICY: 'notification-policy',
@@ -100,7 +121,7 @@ const registrationCommands: Record<VisibilityCatalogueKind, string> = {
 
 // 登记快照形状的提示句。六册只差命令名一词,所以由一处拼出:抄六遍会让「不逐字段建
 // 表单」这条理由在其中一遍被改动时悄悄分叉。
-function snapshotHint(kind: VisibilityCatalogueKind, particulars?: string): string {
+function snapshotHint(kind: VisibilityRegistrableCatalogueKind, particulars?: string): string {
   return (
     `登记快照 JSON 的形状与受控登记口 parcel-ve-register ${registrationCommands[kind]} -input <file> 吃的同一份` +
     '(两口共用同一份译装,不是两份碰巧同形);本页不逐字段建表单,因为「渠道原始载荷 → 登记快照」' +
@@ -113,7 +134,7 @@ function snapshotHint(kind: VisibilityCatalogueKind, particulars?: string): stri
  * 各册登记快照的形状提示。带封闭集或带反直觉判据的册把话说出来:那几件打错之后,受理门
  * 给的是一句指名拒绝,而从册名上看不出来自己错在哪。
  */
-export const registrationSnapshotHints: Record<VisibilityCatalogueKind, string> = {
+export const registrationSnapshotHints: Record<VisibilityRegistrableCatalogueKind, string> = {
   MILESTONE_MAPPING: snapshotHint(
     'MILESTONE_MAPPING',
     '源上下文取封闭五词 PARCEL_SHIPMENT / NETWORK_ROUTING / NODE_OPERATIONS / TRANSPORT_FULFILLMENT / CUSTOMS_COMPLIANCE;' +
