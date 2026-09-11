@@ -2,7 +2,7 @@
 
 Category: bug
 Status: ready-for-agent——2026-09-11 23:3x 通道 1 推送方立票并直接转 ready（机制半边：加一格枚举与一道迁移，不涉任何租户实例）；取证锚 main `262e8c0a`；「要裁的」一条归 PS owner，不阻机制半边
-Blocked by: 无（硬）。**软阻**：[ve-claims/04](../../ve-claims-read-seams/issues/04-rule-resolution-key-source-needs-a-registration-face.md) 正在 `internal/visibilityexception/adapters/partycommercial/` 与 `cmd/parcel-api/assemble_claims*.go` 动手（通道 3，基 `262e8c0a`），本票地盘与它零重叠，可并行；但本票进 main 后 ve-claims/04 那条「已登记」态的装配用例可以改回真走 PS 登记面，归其后继
+Blocked by: 无（硬）。~~软阻：ve-claims/04 正在动手~~ **ve-claims/04 已 23:5x 进 main（通道 1 推送方记），软阻解除，可派**；它那条「已登记」态装配用例的负断言由本票做法 4 翻回真走 PS 登记面
 
 ## 缺口（取证于 `262e8c0a`，逐符号名）
 
@@ -18,7 +18,8 @@ Blocked by: 无（硬）。**软阻**：[ve-claims/04](../../ve-claims-read-seam
 1. **迁移**：新迁移 `migrations/parcel_shipment/00NN_resolution_key_bases_accept_customer_service_rule.sql`（序号取当时 PS 最大 + 1，派单时钉），`DROP CONSTRAINT` + `ADD CONSTRAINT commercial_resolution_key_registration_bases_closed` 把 `CUSTOMER_SERVICE_RULE` 加进白名单——照 0008 改 0007 的形，**不改已施加的 0007 / 0008 一字**（业务迁移 checksum 按文件内容算）。
 2. **名集**：`commercialKindFrom` 加 `CustomerServiceRuleObject` 一格，与 PC `pcdomain.CommercialObjectKind` 的 `String()` 对齐；反向 `String()`/译回若有同表一并补。
 3. **用例**：PS `adapters/postgres` 真库一例——登一行必需依据含 `CUSTOMER_SERVICE_RULE` 与 `CUSTOMER_CONTRACT`，读回逐字同；PS `adapters/partycommercial` 一例——`FormResolutionKey` 对该行形成的键 `RequiredBases` 含 `CustomerServiceRuleObject`。`parcel-commercial` CLI 登记路径若有白名单 / 提示词封闭集（`registrationjson` 一族），同步加一格并把提示句原词对上。
-4. **不做**：不改「必登」——见要裁的。
+4. **翻 ve-claims/04 的绊线**：`cmd/parcel-api/assemble_claims_test.go` `TestTheWiredClaimsReadTheRuleAdoptedAtAcceptanceThroughParcelShipment` 里对真登记面钉的负断言「含 `CUSTOMER_SERVICE_RULE` 的一行登不进去」在本票开闸后会红——那是有意的（通道 1 23:4x 裁留）：本票同笔把「已登记」态的两份闭包改为**经 PS 登记面登含 CSR + 合同的键、走接受形成回指与闭包**，删掉重建门造的那两份与负断言；用例头注里「PS 登记面收下客户服务规则那天…」那段随之改口。这是本票地盘的一部分，不算越界。
+5. **不做**：不改「必登」——见要裁的。
 
 ## 红线
 
@@ -36,7 +37,7 @@ Blocked by: 无（硬）。**软阻**：[ve-claims/04](../../ve-claims-read-seam
 
 ## 地盘
 
-`migrations/parcel_shipment/`（新文件一个）、`internal/parcelshipment/adapters/partycommercial/commercial_resolution_keys.go` 及其测试、PS `adapters/postgres` 解析键登记册测试一例、`cmd/parcel-commercial` 登记路径若有封闭集则一处。**不动** `0007` / `0008`、`internal/partycommercial/**`、`internal/visibilityexception/**`、`cmd/parcel-api/**`。
+`migrations/parcel_shipment/`（新文件一个）、`internal/parcelshipment/adapters/partycommercial/commercial_resolution_keys.go` 及其测试、PS `adapters/postgres` 解析键登记册测试一例、`cmd/parcel-commercial` 登记路径若有封闭集则一处、**`cmd/parcel-api/assemble_claims_test.go` 一条用例的夹具与负断言（做法 4，共享接线测试文件，动前占号）**。**不动** `0007` / `0008`、`internal/partycommercial/**`、`internal/visibilityexception/**`、`cmd/parcel-api/assemble_claims.go`。
 
 ## 要裁的
 
