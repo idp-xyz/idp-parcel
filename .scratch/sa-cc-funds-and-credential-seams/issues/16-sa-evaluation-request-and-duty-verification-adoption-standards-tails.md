@@ -1,0 +1,79 @@
+# sa-cc/08 / 09 两份非作者评审 Standards 非阻断收口：`NewRequestBuyEvaluationHandler` 拒 nil 包 `ErrNilDependency`、`EvaluationRequests.Save` 核键与对象一致、`inserted_at` 从不读回的处置、`AdoptDutyPaymentVerification` 空租户先拒、`ErrUntranslatableReference` 上抛路径核
+
+Category: chore
+Status: in-progress——2026-09-11 21:2x 通道 6 按通道 1 派单 task-63bd3adc 自立自做（08 作者收自己票的评审尾巴，awf/26 先例；09 两条是通道 5 的票，它在 sa-cc/01 上，代收），分支 `mcp6-sacc16` 基远端 main `02e1dfc4`，隔离树 `D:/tops/idp-parcel-mcp6-sacc16`。五条全是两位评审者与推送方认可的 A 类；要裁的见下（一条，不阻本票、本票不改它）
+Blocked by: 无（[08](08-sa-evaluation-request-orchestration-records-source-references.md) 与 [09](09-sa-consumes-duty-payment-verification-envelope-into-advance-recovery.md) 均已进 main）
+
+## 缺口（取证于 `02e1dfc4`，逐符号名）
+
+**一、`NewRequestBuyEvaluationHandler` 拒了 nil 但调用方 `errors.Is` 认不出（08 评审 Standards ①）。**
+
+- `internal/settlementaccounting/application/request_buy_evaluation.go` 的 `NewRequestBuyEvaluationHandler` 对 `RequestBuyEvaluationDeps` 每一口分别用裸 `fmt.Errorf` 拒 nil；同包 `apply_pre_acceptance_control.go` 的 `NewApplyPreAcceptanceControlHandler` 是表驱动、`fmt.Errorf("%w: %s", ErrNilDependency, name)`，头注写它是「构造门对缺件的唯一答复」。两只构造器在同一个包里各说各话，装配方要按 `errors.Is(err, application.ErrNilDependency)` 分「装配漏了」与「别的构造错误」时，前者认不出。
+- 既有用例 `TestTheHandlerRefusesANilDependencyAtConstruction` 只断言 `err == nil` 为失败，不断言哨兵。
+
+**二、`EvaluationRequests.Save` 不核键与对象说的是不是同一件事（08 评审 Standards ②）。**
+
+- `internal/settlementaccounting/adapters/postgres/evaluation_request.go` 的 `Save` 把 `record.Key.TenantID` / `record.Key.Request` 写主键列、把 `record.Request` 的成分写内容列，两者之间没有一致性核。键指 A、对象是 B 的一份记录会落成「按 A 查出来内容是 B」的行，读口 `findOne` 重建时用的是内容列里的 `request_id`，`Key.Request` 会与调用方当初给的键对不上。
+- 先例：CC `internal/customscompliance/adapters/postgres/duty_payment_reconciliation.go` 的 `SaveVerification` 先核键三维与对象三维相等、再核指纹与依据非空白，不符即 `SaveOutcomeInvalid` + 错误，不写。
+
+**三、`0019_evaluation_request.sql` 的 `inserted_at DEFAULT now()` 从不读回（08 评审 Standards ③）。**
+
+- 评审原话「Speculative Generality，SA 既有表若无此形可去」。核过：`inserted_at timestamptz NOT NULL DEFAULT now()` 是本仓迁移的通形——SA 从 `0003_customer_charge_advance.sql` 到 `0020_duty_payment_verification_adoption.sql` 每张表都有，TF / VE / PG / NO 与 CC `0001_external_result.sql` 同样有，CC 0001 还拿它建了索引。评审的前提（SA 既有表无此形）不成立：去掉 0019 这一列会让它成为 SA 唯一没有库侧审计列的表。
+- `0019` 已施加，业务迁移的 checksum 由 Parcel 对文件内容算（`internal/platform/migrate` 的 `PBC-06` 证据），一字不能改；表头注那半因此无处可写。
+
+**四、`AdoptDutyPaymentVerification` 不核 `command.TenantID` 零值（09 评审 Standards (1)）。**
+
+- `internal/settlementaccounting/application/adopt_duty_payment_verification.go` 的 `AdoptDutyPaymentVerification` 经 `verificationReferenceFrom` 把四维引用拒成 `SOURCE_NOT_ACCEPTED`，但租户零值不核：空租户会走到 `FindByKey`（不命中）→ `Save` 撞 `0020` 的 `refs_not_blank` CHECK → 译成 `INPUT_STORE_UNAVAILABLE` 未决而被重投，重投不自愈。
+- 生产上不可达（`AdoptOnDutyPaymentVerificationAdapter` 先过 `sadomain.NewTenantID`），但它是导出方法；同包 `RequestBuyEvaluationHandler.Handle` 对租户空白先答`未受理`，本方法与它不一致。既有用例 `TestAVerificationReferenceMissingADimensionIsNotAccepted` 四例无租户一例。
+
+**五、`HandleFormedDutyPaymentVerification` 把读口的一切错误包成可见性滞后（09 评审 Standards (2)）——只核不改。**
+
+- `internal/settlementaccounting/adapters/customscompliance/adopt_on_duty_payment_verification.go` 的 `HandleFormedDutyPaymentVerification`：`view.DutyPaymentVerificationExists` 的任何 err 都以 `%v` 折进 `ErrVerificationNotVisible`（重投哨兵），链上不再带原因；而同包 `duty_payment_verification_view.go` 的 `customsVerificationKey` 译不出时交回的是 `ErrUntranslatableReference`（编程错误、不该重投）。`cmd/parcel-dispatch/assemble.go` 的 `dutyPaymentVerificationUndecidedSentinels` 头注写「`sacustoms.ErrUntranslatableReference` 也不在——两侧词汇分歧是编程错误，重投不自愈」。
+- 今天不可达：SA 侧 `verificationReference` 与 CC 侧 `customsVerificationKey` 两边的构造门同为非空白校验，SA 侧构造得出的引用 CC 侧必构造得出；读口里那条 `ErrUntranslatableReference` 分支在生产上走不到。所以 `assemble.go` 那句对**本适配器自己译出的** `ErrUntranslatableReference`（租户、`verificationReference`）写实——它们原样上抛、不在名单、落 `publish_failed`；对读口内部那条，是被 `ErrVerificationNotVisible` 盖住、靠不可达成立，不是靠分格成立。
+
+## 语言从哪里来
+
+- 08 评审 ← 通道 4 Standards ①②③ 原话与推送方处置「归 SA owner 一笔小票或随下一张 SA 票收；③ `inserted_at` 归同笔」；09 评审 ← 通道 3 Standards (1)(2) 原话与推送方处置「与 08 评审 S①②③ 合成一张 SA 小票」。
+- [14](14-adopt-digest-header-and-duty-reconciliation-handler-rejects-nil.md) 的形：评审尾巴一张小票包几处，Status 直起 in-progress，要裁的为零（本票多出一条，见下）。
+- AGENTS.md「写代码注释」：注释只写代码讲不出的东西；引迁移用文件名 / 符号，不写行号不写计数。
+
+## 做法
+
+1. **`NewRequestBuyEvaluationHandler` 改表驱动 + 包 `ErrNilDependency`**（形照 `NewApplyPreAcceptanceControlHandler`）。`ErrNilDependency` 沿用同包既有那一枚，不另铸第二枚——它的头注已说「构造门对缺件的唯一答复」，再铸一枚就是两个唯一。错误文本仍逐口点名。`TestTheHandlerRefusesANilDependencyAtConstruction` 改为断言 `errors.Is(err, application.ErrNilDependency)` 且错误文本含那一口名、交出的 handler 为 nil；口齐全不拒。
+2. **`EvaluationRequests.Save` 加两道门**：键的租户或请求 ID 为零值 → 拒；`record.Key.Request != record.Request.ID()` → 拒。都交 `EvaluationRequestSaveOutcomeInvalid` + 错误，不发 INSERT。真库用例一条：键指 `EVREQ-SYN-1`、对象的 ID 是 `EVREQ-SYN-2` → 拒存且两个 ID 都查不到行。
+3. **`inserted_at` 取 (b) 保留**：只在 `evaluation_request.go` 的 Go 读口头注写明它是库侧审计列（行何时物理落库，`DEFAULT now()` 由库填）、不进领域、与 `recorded_at`（编排时钟给的登记时刻，随记录往返）不同义、本仓各表通形。不动 `0019`；不加迁移。
+4. **`AdoptDutyPaymentVerification` 构造门前核租户**：`strings.TrimSpace(command.TenantID.String()) == ""` → `SettlementInputNotAccepted`，与 `RequestBuyEvaluationHandler.Handle` 同形。`TestAVerificationReferenceMissingADimensionIsNotAccepted` 加「缺租户」一例：未受理、零写。
+5. **第五条只核**：核 `assemble.go` 头注写实与否（见「缺口」五）、在 `HandleFormedDutyPaymentVerification` 包装读口错误处补一句注释讲清为什么今天这样包不会吞掉词汇分歧；语义零改。改不改分格写进「要裁的」。
+
+## 红线
+
+- 除做法 1 / 2 / 4 的防律与其用例外零业务语义改动；做法 3 / 5 只注释。
+- 不动 `internal/settlementaccounting/adapters/inbox/**`（通道 5 在 sa-cc/01 加文件）、不动 `cmd/**`（同一撞点）。
+- 不改已施加迁移、不加迁移。
+- 注释中文、不写行号不写计数；新增拒 nil 用例照 `errors.Is`。
+
+## 完成判据
+
+1. `NewRequestBuyEvaluationHandler` 每口各缺一 → `errors.Is(err, application.ErrNilDependency)` 且文本含口名；`go test -count=1 ./internal/settlementaccounting/application/` 绿。
+2. `EvaluationRequests.Save` 键与对象不符 → `EvaluationRequestSaveOutcomeInvalid` + 错误、库上零行；真库用例一条绿（带 DSN）。
+3. `evaluation_request.go` 读口头注含「审计列」与「recorded_at」两个词；`0019` 零 diff；`migrations/` 零新文件。
+4. `AdoptDutyPaymentVerification` 空租户 → `SOURCE_NOT_ACCEPTED`、登记册零写；用例一例。
+5. 第五条：`HandleFormedDutyPaymentVerification` 语义零改（diff 只有注释行）；`assemble.go` 零 diff；判断写进「要裁的」。
+6. `gofmt -l` 空、`go build ./...` / `go vet ./...` 退 0；`go test -count=1` SA application + SA adapters/postgres（带 DSN）+ SA adapters/customscompliance + `./internal/architecture/...` 绿；机制清点零差。
+7. 完成记录随最后一笔代码同笔提交（通道 1 21:2x 新纪律），逐笔 SHA、五条各对应哪笔、③ 选了哪边与为什么。
+
+## 地盘
+
+`internal/settlementaccounting/application/request_buy_evaluation.go` 及其测试、`internal/settlementaccounting/application/adopt_duty_payment_verification.go` 及其测试、`internal/settlementaccounting/adapters/postgres/evaluation_request.go` 及其测试、`internal/settlementaccounting/adapters/customscompliance/adopt_on_duty_payment_verification.go`（只注释）、本票面、sa-cc spec.md 一行。**不动** `adapters/inbox/**`、`cmd/**`、迁移、`ports`、`domain`。
+
+## 要裁的
+
+1. **`HandleFormedDutyPaymentVerification` 包装读口错误时要不要让 `ErrUntranslatableReference` 原样穿过**（09 评审 Standards (2) 的处方）。本票作者的判断：**该穿**——包装前一句 `errors.Is(err, ErrUntranslatableReference)` 原样上抛，代价一行，换来 `assemble.go` 头注「`ErrUntranslatableReference` 不在名单」对读口内部那条也成立，而不是靠两侧构造门恰好同形。今天不可达、不阻任何票；按派单「不自己改」，落这里等推送方 / SA owner 一句，裁「改」即随下一张 SA 票一行收。
+
+## 参照
+
+[08](08-sa-evaluation-request-orchestration-records-source-references.md) Comments「评审 ← 通道 4」Standards ①②③ 与「进 main 记录」推送方处置；[09](09-sa-consumes-duty-payment-verification-envelope-into-advance-recovery.md) Comments「评审 ← 通道 3」Standards (1)(2) 与「进 main 记录」推送方处置；[14](14-adopt-digest-header-and-duty-reconciliation-handler-rejects-nil.md)（同形小票先例）；`internal/settlementaccounting/application/apply_pre_acceptance_control.go`（`ErrNilDependency` / `NewApplyPreAcceptanceControlHandler`）；`internal/customscompliance/adapters/postgres/duty_payment_reconciliation.go`（`SaveVerification` 键与对象一致的形）；`migrations/settlement_accounting/0019_evaluation_request.sql`、`0020_duty_payment_verification_adoption.sql`（`refs_not_blank`）；`cmd/parcel-dispatch/assemble.go`（`dutyPaymentVerificationUndecidedSentinels` 头注，只读）；`internal/platform/migrate`（业务迁移 checksum 纪律）。
+
+## Comments
+
+- 2026-09-11 21:2x · 通道 6（task-63bd3adc，基远端 main `02e1dfc4`）：立票，Status 直接 in-progress，本笔只票面 + spec 16 行，未动代码。能力边界：读过五处目标符号全文、`NewApplyPreAcceptanceControlHandler` 拒 nil 表、CC `SaveVerification` 前两道门、全仓迁移里 `inserted_at` 的分布、`pgtest` 的 DSN 跳过纪律、08 / 09 两份评审原话与推送方处置；**没读** `assemble.go` 除 `dutyPaymentVerificationUndecidedSentinels` 头注以外的部分（本票不动它）。
