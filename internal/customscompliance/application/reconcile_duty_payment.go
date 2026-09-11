@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"strconv"
 	"strings"
 
@@ -171,8 +172,27 @@ type DutyPaymentReconciliationHandler struct {
 	deps DutyPaymentReconciliationDeps
 }
 
-func NewDutyPaymentReconciliationHandler(deps DutyPaymentReconciliationDeps) *DutyPaymentReconciliationHandler {
-	return &DutyPaymentReconciliationHandler{deps: deps}
+// ErrNilDependency 是构造门对缺件的唯一答复；哪一口缺在包装信息里点名。它必须是构造期的错误而不是
+// 运行期的 panic：装配疏漏要在进程启动那一刻炸出来，而不是等第一封资金事实信封到达、编排解引用
+// 那一口时才发现——那时它与「登记册暂不可用」折出的`未决`在消费门那侧长得一样，重投也救不回来。
+// 与 settlementaccounting/application 的 NewApplyPreAcceptanceControlHandler 同一纪律（票 sa-cc/14）。
+var ErrNilDependency = errors.New("customs compliance: duty payment reconciliation dependency is nil")
+
+func NewDutyPaymentReconciliationHandler(deps DutyPaymentReconciliationDeps) (*DutyPaymentReconciliationHandler, error) {
+	for _, dependency := range []struct {
+		name    string
+		missing bool
+	}{
+		{"duty collaboration store", deps.Collaborations == nil},
+		{"external funds fact register", deps.Funds == nil},
+		{"duty verification store", deps.Verifications == nil},
+		{"clock", deps.Clock == nil},
+	} {
+		if dependency.missing {
+			return nil, fmt.Errorf("%w: %s", ErrNilDependency, dependency.name)
+		}
+	}
+	return &DutyPaymentReconciliationHandler{deps: deps}, nil
 }
 
 // FormCollaboration 形成协作事项（步 4–5）。领域两格的形状（核定格必带税费引用不带无需

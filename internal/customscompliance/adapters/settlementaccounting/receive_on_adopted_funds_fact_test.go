@@ -58,6 +58,42 @@ type dutyClock struct{ at time.Time }
 
 func (clock dutyClock) Now() time.Time { return clock.at }
 
+// unreachedDutyStores 补齐编排构造期要求的另两口（协作事项库、核对库）。本适配器只走 ReceiveFundsFact，
+// 这两口不该被碰到；碰到即测试失败——替身守的是票面红线「消费者不关联、不核对」，不是给它们内存实现。
+type unreachedDutyStores struct{ t *testing.T }
+
+func (double unreachedDutyStores) FindCollaboration(
+	context.Context, ccdomain.TenantID, ccdomain.DecisionScopeReference, ccdomain.AssessedDutyReference,
+) (ccdomain.DutyPaymentCollaboration, bool, error) {
+	double.t.Helper()
+	double.t.Fatal("消费适配器不该读协作事项")
+	return ccdomain.DutyPaymentCollaboration{}, false, nil
+}
+
+func (double unreachedDutyStores) SaveCollaboration(
+	context.Context, ccdomain.TenantID, ccdomain.DutyPaymentCollaboration,
+) (ccports.CaseConfigurationSaveOutcome, error) {
+	double.t.Helper()
+	double.t.Fatal("消费适配器不该形成协作事项")
+	return ccports.CaseConfigurationSaveOutcomeInvalid, nil
+}
+
+func (double unreachedDutyStores) FindVerification(
+	context.Context, ccports.DutyVerificationKey,
+) (ccports.DutyVerificationRecord, bool, error) {
+	double.t.Helper()
+	double.t.Fatal("消费适配器不该读核对")
+	return ccports.DutyVerificationRecord{}, false, nil
+}
+
+func (double unreachedDutyStores) SaveVerification(
+	context.Context, ccports.DutyVerificationRecord,
+) (ccports.CaseConfigurationSaveOutcome, error) {
+	double.t.Helper()
+	double.t.Fatal("消费适配器不该形成核对")
+	return ccports.CaseConfigurationSaveOutcomeInvalid, nil
+}
+
 // adoptedSourceDouble 是本上下文读提供方那口的替身：按（租户|事实|版本）给内容。
 type adoptedSourceDouble struct {
 	facts map[string]ccports.AdoptedFundsFact
@@ -84,10 +120,15 @@ func newFixture(t *testing.T) *fixture {
 	t.Helper()
 	source := &adoptedSourceDouble{facts: map[string]ccports.AdoptedFundsFact{}}
 	register := newFundsFactRegister()
-	receiver := ccapplication.NewDutyPaymentReconciliationHandler(ccapplication.DutyPaymentReconciliationDeps{
-		Funds: register,
-		Clock: dutyClock{at: fundsOccurredAt.Add(time.Hour)},
+	receiver, err := ccapplication.NewDutyPaymentReconciliationHandler(ccapplication.DutyPaymentReconciliationDeps{
+		Collaborations: unreachedDutyStores{t: t},
+		Funds:          register,
+		Verifications:  unreachedDutyStores{t: t},
+		Clock:          dutyClock{at: fundsOccurredAt.Add(time.Hour)},
 	})
+	if err != nil {
+		t.Fatalf("构造编排：%v", err)
+	}
 	handler, err := adapter.NewReceiveOnAdoptedFundsFactAdapter(source, receiver)
 	if err != nil {
 		t.Fatalf("构造处理方：%v", err)

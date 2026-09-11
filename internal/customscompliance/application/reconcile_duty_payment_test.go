@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -130,13 +131,54 @@ type dutyClock struct{ at time.Time }
 
 func (clock dutyClock) Now() time.Time { return clock.at }
 
-func newDutyHandler(store *dutyStoreDouble) *application.DutyPaymentReconciliationHandler {
-	return application.NewDutyPaymentReconciliationHandler(application.DutyPaymentReconciliationDeps{
+func newDutyHandler(t *testing.T, store *dutyStoreDouble) *application.DutyPaymentReconciliationHandler {
+	t.Helper()
+	handler, err := application.NewDutyPaymentReconciliationHandler(fullDutyDeps(store))
+	if err != nil {
+		t.Fatalf("构造编排：%v", err)
+	}
+	return handler
+}
+
+func fullDutyDeps(store *dutyStoreDouble) application.DutyPaymentReconciliationDeps {
+	return application.DutyPaymentReconciliationDeps{
 		Collaborations: store,
 		Funds:          store,
 		Verifications:  store,
 		Clock:          dutyClock{at: dutyBaseAt},
-	})
+	}
+}
+
+// 构造门：四口各缺一，构造期就以具名错误停下，不等到 FormCollaboration / ReceiveFundsFact /
+// VerifyPayment 解引用时才 panic（票 sa-cc/14；形照 SA NewApplyPreAcceptanceControlHandler）。
+func TestTheReconciliationHandlerNamesWhichDependencyIsMissing(t *testing.T) {
+	store := newDutyStore()
+	cases := []struct {
+		name   string
+		mutate func(*application.DutyPaymentReconciliationDeps)
+	}{
+		{"duty collaboration store", func(deps *application.DutyPaymentReconciliationDeps) { deps.Collaborations = nil }},
+		{"external funds fact register", func(deps *application.DutyPaymentReconciliationDeps) { deps.Funds = nil }},
+		{"duty verification store", func(deps *application.DutyPaymentReconciliationDeps) { deps.Verifications = nil }},
+		{"clock", func(deps *application.DutyPaymentReconciliationDeps) { deps.Clock = nil }},
+	}
+	for _, testCase := range cases {
+		deps := fullDutyDeps(store)
+		testCase.mutate(&deps)
+		handler, err := application.NewDutyPaymentReconciliationHandler(deps)
+		if !errors.Is(err, application.ErrNilDependency) {
+			t.Fatalf("缺 %s：err = %v, want ErrNilDependency", testCase.name, err)
+		}
+		if !strings.Contains(err.Error(), testCase.name) {
+			t.Fatalf("缺 %s：错误没点名那一口：%v", testCase.name, err)
+		}
+		if handler != nil {
+			t.Fatalf("缺 %s：拒了还交出编排", testCase.name)
+		}
+	}
+	if _, err := application.NewDutyPaymentReconciliationHandler(fullDutyDeps(store)); err != nil {
+		t.Fatalf("四口齐全却被拒：%v", err)
+	}
 }
 
 func assessedCollaborationCommand(t *testing.T) application.FormDutyCollaborationCommand {
@@ -194,7 +236,7 @@ func verifyDutyCommand(t *testing.T) application.VerifyDutyPaymentCommand {
 // 范围化核对入口。
 func TestBothCollaborationKindsAreFormed(t *testing.T) {
 	store := newDutyStore()
-	handler := newDutyHandler(store)
+	handler := newDutyHandler(t, store)
 
 	result, err := handler.FormCollaboration(t.Context(), assessedCollaborationCommand(t))
 	if err != nil || result.Outcome() != application.CollaborationFormed {
@@ -222,7 +264,7 @@ func TestAMissingDutyResultKeepsTheCollaborationUndecided(t *testing.T) {
 	command.Kind = domain.DutyObligationKindInvalid
 	command.Duty = domain.AssessedDutyReference{}
 
-	result, err := newDutyHandler(store).FormCollaboration(t.Context(), command)
+	result, err := newDutyHandler(t, store).FormCollaboration(t.Context(), command)
 	if err != nil || result.Outcome() != application.DutyReconciliationUndecided ||
 		result.UndecidedReason() != application.DutyObligationBasisAbsent {
 		t.Fatalf("缺税费结果该未决且指名依据缺席：err=%v outcome=%v reason=%v", err, result.Outcome(), result.UndecidedReason())
@@ -236,7 +278,7 @@ func TestAMissingDutyResultKeepsTheCollaborationUndecided(t *testing.T) {
 // 领域拒的矛盾形状，翻成`未受理`且不落。
 func TestCollaborationRefusesContradictoryShapes(t *testing.T) {
 	store := newDutyStore()
-	handler := newDutyHandler(store)
+	handler := newDutyHandler(t, store)
 
 	blankTenant := assessedCollaborationCommand(t)
 	blankTenant.TenantID = domain.TenantID{}
@@ -263,7 +305,7 @@ func TestCollaborationRefusesContradictoryShapes(t *testing.T) {
 // 同（范围，税费引用）重放是`已存在`；换责任交接目标是`内容冲突`——在册那份纹丝不动。
 func TestReFormingACollaborationSplitsReplayFromConflict(t *testing.T) {
 	store := newDutyStore()
-	handler := newDutyHandler(store)
+	handler := newDutyHandler(t, store)
 
 	if result, err := handler.FormCollaboration(t.Context(), assessedCollaborationCommand(t)); err != nil ||
 		result.Outcome() != application.CollaborationFormed {
@@ -285,7 +327,7 @@ func TestReFormingACollaborationSplitsReplayFromConflict(t *testing.T) {
 // ——资金事实的更正在来源那头是新事实回指原事实，不是同一引用改数。
 func TestExternalFundsFactsAreReceivedByReference(t *testing.T) {
 	store := newDutyStore()
-	handler := newDutyHandler(store)
+	handler := newDutyHandler(t, store)
 
 	if result, err := handler.ReceiveFundsFact(t.Context(), fundsFactCommand(t)); err != nil ||
 		result.Outcome() != application.FundsFactReceived {
@@ -314,7 +356,7 @@ func TestExternalFundsFactsAreReceivedByReference(t *testing.T) {
 // 依据随记录留下。
 func TestAVerificationIsFormedOnAReceivedFactAgainstAFormedCollaboration(t *testing.T) {
 	store := newDutyStore()
-	handler := newDutyHandler(store)
+	handler := newDutyHandler(t, store)
 	if _, err := handler.FormCollaboration(t.Context(), assessedCollaborationCommand(t)); err != nil {
 		t.Fatalf("协作事项：%v", err)
 	}
@@ -345,7 +387,7 @@ func TestAVerificationIsFormedOnAReceivedFactAgainstAFormedCollaboration(t *test
 // 迟到事实改判：同三维、三轴不同是新版本追加（不覆盖前版），两版都在。
 func TestAChangedVerificationAppendsANewVersion(t *testing.T) {
 	store := newDutyStore()
-	handler := newDutyHandler(store)
+	handler := newDutyHandler(t, store)
 	if _, err := handler.FormCollaboration(t.Context(), assessedCollaborationCommand(t)); err != nil {
 		t.Fatalf("协作事项：%v", err)
 	}
@@ -372,7 +414,7 @@ func TestAChangedVerificationAppendsANewVersion(t *testing.T) {
 // 无权威关联依据时保持外部资金事实待关联——金额相等、同一范围都不单独构成关联；不形成核对。
 func TestAVerificationWithoutABasisKeepsTheFactPendingAssociation(t *testing.T) {
 	store := newDutyStore()
-	handler := newDutyHandler(store)
+	handler := newDutyHandler(t, store)
 	if _, err := handler.FormCollaboration(t.Context(), assessedCollaborationCommand(t)); err != nil {
 		t.Fatalf("协作事项：%v", err)
 	}
@@ -395,7 +437,7 @@ func TestAVerificationWithoutABasisKeepsTheFactPendingAssociation(t *testing.T) 
 // 形成是`协作事项未形成`——两者都不是核对结论，续办动作不同。
 func TestAVerificationNamesWhichPrerequisiteIsMissing(t *testing.T) {
 	store := newDutyStore()
-	handler := newDutyHandler(store)
+	handler := newDutyHandler(t, store)
 
 	noFact, err := handler.VerifyPayment(t.Context(), verifyDutyCommand(t))
 	if err != nil || noFact.Outcome() != application.FundsFactNotReceived {
@@ -413,7 +455,7 @@ func TestAVerificationNamesWhichPrerequisiteIsMissing(t *testing.T) {
 // 三轴集外与租户缺席不受理；依赖故障各折未决并指名哪一口。
 func TestDutyReconciliationRefusalsAndDependencyFailures(t *testing.T) {
 	store := newDutyStore()
-	handler := newDutyHandler(store)
+	handler := newDutyHandler(t, store)
 	if _, err := handler.FormCollaboration(t.Context(), assessedCollaborationCommand(t)); err != nil {
 		t.Fatalf("协作事项：%v", err)
 	}

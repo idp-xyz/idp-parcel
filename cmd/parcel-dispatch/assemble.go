@@ -2009,12 +2009,15 @@ func receiveExternalFundsFactConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: duty payment reconciliation store: %w", err)
 	}
-	receiver := ccapplication.NewDutyPaymentReconciliationHandler(ccapplication.DutyPaymentReconciliationDeps{
+	receiver, err := ccapplication.NewDutyPaymentReconciliationHandler(ccapplication.DutyPaymentReconciliationDeps{
 		Collaborations: reconciliation,
 		Funds:          reconciliation,
 		Verifications:  reconciliation,
 		Clock:          clock,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: duty payment reconciliation handler: %w", err)
+	}
 	processing, err := ccsettlement.NewReceiveOnAdoptedFundsFactAdapter(source, receiver)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: receive on adopted funds fact: %w", err)
