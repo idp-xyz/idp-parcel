@@ -187,8 +187,8 @@ type AppendLabelFollowUpActionCommand struct {
 // Registers 与 Finals **只在 Establish 用、只读**，不是第二处口径：建立前逐覆盖包裹取
 // `register.Judge(currentFinalPresent)`，那是`包裹级继续尝试判断`的单一权威——本编排不看决定种类、不比时间。
 // `Establish` 之后四步一律不核册：CONTEXT「关闭生效后只拒绝把该包裹纳入边界后的新重试、替代或换单交易，
-// 不阻断既有交易的查询、确认、重打、渠道作废、渠道退款、对账和定案」。Finals 与终局采用路径接同一个适配器
-// （FinalOutcomeStore 的读半边）：两种服务形态的终局只认那一处，另读一处就看不见面单服务自己判出的终局。
+// 不阻断既有交易的查询、确认、重打、渠道作废、渠道退款、对账和定案」。Finals 与终局采用路径接同款适配器
+// （FinalOutcomeStore 的读半边，同一张表）：两种服务形态的终局只认那一处，另读一处就看不见面单服务自己判出的终局。
 type LabelTransactionDeps struct {
 	Transactions ports.LabelTransactionRepository
 	Judgments    ports.LabelTransactionJudgmentHandoff
@@ -214,7 +214,7 @@ type LabelTransactionHandler struct {
 
 // NewLabelTransactionHandler 构造期拒掉缺席的两个只读口。它们只在建立那一步用，漏装要到第一次建立才 panic，
 // 而建立是整条写链的第一拍——没有它们的门等于没有门。其余几口不在这里拒：`Judgments` 由后两步在 `Save` 之后
-// 运行期响亮拒（judgmentBeat，lc/26 定的取法，本票不改口）；仓储与时钟缺了在第一步就 panic，没有静默放行的失效形态。
+// 运行期响亮拒（judgmentBeat，lc/26 的取法）；仓储与时钟缺了在第一步就 panic，没有静默放行的失效形态。
 func NewLabelTransactionHandler(deps LabelTransactionDeps) (*LabelTransactionHandler, error) {
 	if deps.Registers == nil {
 		return nil, errors.New("label transaction handler: continued attempt register view is nil")
@@ -242,8 +242,8 @@ func NewLabelTransactionHandler(deps LabelTransactionDeps) (*LabelTransactionHan
 // 就是在本编排里复述一半口径。
 //
 // 并发窄格如实记、不在这里关：本步读册与关闭决定的 Save 各在自己的事务里，读到「无关闭」之后关闭才提交的那一格
-// 本门拦不住；CONTEXT 为它另备了一次事后判断（「关闭期间若仍发现已经实际提交的边界后交易，PS 必须形成违反截断
-// 边界的业务判断并保留该交易」），那需要建立决定与关闭决定之间的稳定领域顺序，归另一张票。本步不加行锁，也不给
+// 本门拦不住；CONTEXT 为它另备了一次事后判断（「关闭期间若仍发现已经实际提交的边界后交易，`parcel-shipment` 必须
+// 形成违反截断边界的业务判断并保留该交易」），那需要建立决定与关闭决定之间的稳定领域顺序，归另一张票。本步不加行锁，也不给
 // 交易加「观察到的册版本」出生属性——ADR-0084 决定二固定的清单不动。
 func (handler *LabelTransactionHandler) Establish(
 	ctx context.Context,

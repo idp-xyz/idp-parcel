@@ -653,6 +653,30 @@ func TestAnUnreadableRegisterOrFinalViewFailsTheEstablishmentWithoutInserting(t 
 	})
 }
 
+// Covers: closedParcels 里「开不出空册」那一支——覆盖里有一件标识立不住的包裹，两个读口对它都答「无」，空册开不出来：
+// 那是输入的错，落`输入未受理`（照 JudgeLabelServiceFinalHandler.Handle 的先例），不是读口读不回（不上抛 error），
+// 也不是`包裹未开放`；不落库。
+func TestAnUnidentifiableCoveredParcelIsRefusedAsBadInputNotAsClosed(t *testing.T) {
+	fixture := newLabelTransactionFixture(t)
+	command := fixture.establishCommand(t, "LT-1")
+	command.CoveredParcels = []domain.DeclaredParcelID{fixture.parcels[0], {}}
+
+	result, err := fixture.handler.Establish(context.Background(), command)
+	if err != nil {
+		t.Fatalf("establish: %v", err)
+	}
+
+	if result.Outcome() != application.LabelTransactionNotAccepted {
+		t.Fatalf("outcome = %q, want INPUT_NOT_ACCEPTED——标识立不住是输入的错", result.Outcome())
+	}
+	if len(result.ClosedParcels()) != 0 {
+		t.Fatalf("输入错被报成了被拒清单 %v", result.ClosedParcels())
+	}
+	if fixture.repository.inserted != nil {
+		t.Fatal("标识立不住的覆盖仍落了库")
+	}
+}
+
 // Covers: 票 lc/32 判据 4 / 红线——CONTEXT「关闭生效后只拒绝……新重试、替代或换单交易，不阻断既有交易的查询、确认、
 // 重打、渠道作废、渠道退款、对账和定案」：交易建立在边界前，其覆盖包裹随后被受控关闭，记录渠道结果与追加后续动作
 // 两步照旧落下——后四步不核册。
