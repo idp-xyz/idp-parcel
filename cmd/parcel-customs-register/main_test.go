@@ -737,8 +737,8 @@ func TestExecuteTranslationRejectionIsUsageAndTouchesNothing(t *testing.T) {
 	}
 }
 
-// TestConfigurationAnswerCoversEveryOutcome 证退出码翻译对应用结果的封闭八格逐格
-// 成立，未知格折未决。
+// TestConfigurationAnswerCoversEveryOutcome 证退出码翻译逐格对着 `application` 的案件
+// 配置族枚举表成立，未知格折未决。
 func TestConfigurationAnswerCoversEveryOutcome(t *testing.T) {
 	cases := []struct {
 		outcome application.CaseConfigurationOutcome

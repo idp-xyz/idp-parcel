@@ -14,7 +14,7 @@ import (
 
 // 本文件证凭证 / 税费付款协作事项 / 税费付款核对三册子命令（票 sa-cc/07 步一）接对了
 // 各自的编排：译装出的领域值原样到册，用例的答案代数原样到退出码——协作与核对那族的
-// 十三格与案件配置八格不是一张表，退出码只按恢复动作归格，不把一族的格翻成另一族的。
+// 格与案件配置族的格不是一张表，退出码只按恢复动作归格，不把一族的格翻成另一族的。
 
 // fixedClock 让协作事项与核对的形成时间可断言：那两个时刻不是输入，取时钟。
 type fixedClock struct{ now time.Time }
@@ -551,8 +551,8 @@ func TestExecuteDutyPaymentVerificationStoreFailureIsUndecided(t *testing.T) {
 	}
 }
 
-// TestDutyReconciliationAnswerCoversEveryOutcome 证退出码翻译对协作 / 核对族封闭十三格
-// 逐格成立、未知格折未决。资金事实三格本口没有命令能交回，仍在表上：一族一张表，同一格
+// TestDutyReconciliationAnswerCoversEveryOutcome 证退出码翻译逐格对着 `application` 的
+// 协作 / 核对族枚举表成立、未知格折未决。资金事实那族格本口没有命令能交回，仍在表上：一族一张表，同一格
 // 不因来自哪条命令而换退出码。
 func TestDutyReconciliationAnswerCoversEveryOutcome(t *testing.T) {
 	cases := []struct {

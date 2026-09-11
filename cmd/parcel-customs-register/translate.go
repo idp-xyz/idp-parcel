@@ -58,7 +58,7 @@ var allCommands = []string{
 }
 
 // answer 是一个登记用例交回的封闭结果在本入口的译法。两族用例各有自己的结果代数
-// （案件配置族的八格、税费付款协作与核对族的十三格），各自成一型实现本接口——退出码
+// （案件配置族的格、税费付款协作与核对族的格），各自成一型实现本接口——退出码
 // 把它们按恢复动作归进同一张四格表，但格与格之间不互译：一族的「已存在」不借另一族
 // 的常量，一族多出来的格（待关联、前置未齐）也不折进另一族已有的格里。
 type answer interface {
@@ -71,7 +71,7 @@ type dispatchFunc func(
 ) (answer, error)
 
 // configurationCall 是案件配置族用例的一次调用（案件配置、建案要求规则、口岸路径、
-// 凭证四个 handler 都交回同一套八格），由 configured 包成 dispatchFunc。
+// 凭证等各 handler 都交回同一套案件配置族的格），由 configured 包成 dispatchFunc。
 type configurationCall func(ctx context.Context, registrar registrar) (application.CaseConfigurationOutcome, error)
 
 func configured(call configurationCall) dispatchFunc {

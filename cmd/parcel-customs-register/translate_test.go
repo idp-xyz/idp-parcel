@@ -154,7 +154,7 @@ func TestCommandForRejectsHandedToMismatch(t *testing.T) {
 		"appliesFrom": "2026-08-24T01:00:00Z"
 	}`
 	if _, err := commandFor(commandObligationItem, []byte(handedOverWithoutReceiver)); err == nil {
-		t.Fatalf("承接项缺接收责任方要拒（CONTEXT 硬句 219）")
+		t.Fatalf("承接项缺接收责任方要拒（CONTEXT「来源责任方、接收责任方、接受决定及权限」）")
 	}
 	concludedWithReceiver := `{
 		"tenantId": "SYN-T1", "caseRef": "case-1", "obligation": "duty-1",

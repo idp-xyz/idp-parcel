@@ -304,7 +304,7 @@ func execute(ctx context.Context, command string, raw []byte, registrar registra
 }
 
 // configurationResult 是案件配置族的答案（含凭证册——RegisterCredentialHandler 交回同一
-// 套八格）。
+// 套案件配置族的格）。
 type configurationResult struct {
 	outcome application.CaseConfigurationOutcome
 }
@@ -322,7 +322,7 @@ func (result dutyReconciliationResult) exit(command string) (string, int) {
 	return dutyReconciliationAnswer(command, result.result.Outcome(), result.result.UndecidedReason())
 }
 
-// configurationAnswer 把用例的封闭八格译成退出码，不增不减：
+// configurationAnswer 把用例（案件配置族）的封闭各格译成退出码，不增不减：
 //   - 登记/重放/撤销落地/已撤销 → 0。已撤销归 0 而不归 2：撤销的意图是使失效，已失效
 //     即达成；写口纪律「谁先撤销成功谁算」，册面原因归首撤者，未决重跑落在这一格时
 //     不该再劳人工。
@@ -348,8 +348,8 @@ func configurationAnswer(command string, outcome application.CaseConfigurationOu
 	}
 }
 
-// dutyReconciliationAnswer 把税费付款协作与核对族的封闭十三格译成退出码，不增不减。
-// 一族一张表：资金事实三格本口没有命令能交回，仍在表上——同一格不因来自哪条命令而换
+// dutyReconciliationAnswer 把税费付款协作与核对族的封闭各格译成退出码，不增不减。
+// 一族一张表：资金事实那族格本口没有命令能交回，仍在表上——同一格不因来自哪条命令而换
 // 退出码。归格只看恢复动作：
 //   - 形成/重放（协作事项、资金事实、核对各自的两格）→ 0。核对没有「内容冲突」格：同三维
 //     换内容是新版本追加（迟到事实按新版本进、不按到达顺序覆盖），答的仍是形成。

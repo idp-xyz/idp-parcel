@@ -157,7 +157,7 @@ func TestCustomsRegisterVerticalOnRealPostgres(t *testing.T) {
 	}`
 	mustExecute(commandObligationItem, orphanItem, exitUndecided, "")
 
-	// 门禁：目录先行，判断绑定动作与边界；同键异判断是冲突（CONTEXT 硬句 216）。
+	// 门禁：目录先行，判断绑定动作与边界；同键异判断是冲突（CONTEXT「不能复用于其他动作或监管边界」）。
 	gateCatalog := `{
 		"tenantId": "SYN-T1", "scopeRef": "SYN-SCOPE-1", "action": "OUTBOUND_RELEASE",
 		"boundaryRef": "SYN-PROC-EXPORT", "registeredAt": "2026-08-24T01:00:00Z"
