@@ -1885,3 +1885,12 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - **拆树**：`mcp4-lc34` / `mcp5-sacc14` 改 `merged/`、远端删；`D:/tops/idp-parcel-mcp4-lc34`（通道 4 已在 lc27 树）与 `D:/tops/idp-parcel-mcp5-sacc14`（通道 5 报不在其中写）比内容后拆；`%TEMP%\idp-review-lc34`、`%TEMP%\idp-replay-w4a` 推完拆；`idp-review-sacc14` 通道 2 自拆。均不加 `--force`。
 - **推送方自己的差错**：本节多条占号 / 释号广播把时刻估成「12:1x / 12:2x」，实为 11:2x–11:4x，已广播更正；此后每条前先 `Get-Date`。通道 2 / 5 也各有一次估错并自纠。
 - **在途**：lc/32（3，代码笔 `f7a1e1be` 已推、自审中）、lc/27（4，笔 2 `7bcbacc7` 已推、路由表在做）、sa-cc/07 步一（2，等 14 进 main 后 rebase）、ve-disc/03 评审（5）。
+
+### 11:5x–12:0x 同一会话：ve-disc/03 进 main；lc/32 / lc/27 完工并派评审
+
+- **已推（上小节那批）**：11:53 `push a1b19433:main` 成，**远端 main = `a1b19433`**；`mcp4-lc34` / `mcp5-sacc14` → `merged/`、远端删；四棵树拆（通道 5 直信确认不在 sacc14 树里；它自拆了 `idp-review-vedisc03`）。
+- **完工到**：lc/32 ← 通道 3（11:50 机时，`mcp3-lc32@683da565`，代码 `5dd8db59`；作者自报票面时刻估错后补一笔纯簿记更正为 git 时间戳）；lc/27 ← 通道 4（11:5x，`mcp4-lc27@745b7dd8`，代码 `868725ca`，清点 `70d77d91`：PS 生产 174→176 / 测试 167→169、消费适配 28→29、直投路由 19→20；路由表 gofmt 重排 map 对齐，作者已广播提醒后续加行者）。
+- **评审到 · ve-disc/03 ← 通道 5（11:50，钉 `51c6b79d`）**：Standards 0 阻断 / 2 非阻断（最重：新注释延续「八法 / 七法」跨文件计数；② 票 02 步一 CLI 命令名要对齐 03 落下的 `kind` 原词）· Spec 0 阻断 / 0 非阻断（真库与 tsc 评审侧未验，推送方全量闭合）。全文代落票 03。
+- **派评审**：lc/32 → 通道 4（task-3af3e0c9，钉 `683da565`；4 是 lc/28 组合根作者、不是 32 作者）；lc/27 → 通道 5（task-914031d5，钉 `745b7dd8`）；各 12:20 前。07 步一等通道 2 rebase 重推后再派（候选 3 或 6）。
+- **ve-disc/03 进 main**：`%TEMP%\idp-replay-vedisc03` detached `a1b19433`，`cherry-pick 2c7326ef..mcp6-vedisc03` 五笔零冲突（唯一重叠 `unwired_orchestration.go`：lc/34 头注块 vs 本票占位两法块，不同块）；本票文件对分支 tip 只差那两行头注；清点零差、无清点笔；`gofmt -l` 空、build / vet 0；11:58 占号，带 DSN 全量 **107 ok / 0 FAIL / 15 无测试 / 0 cached**（11:58:51→12:01:00，129 s）；VE postgres + http 探针 PASS 16 / SKIP 0；admin-web `tsc` 0、220 / 220；12:01 释号。簿记一笔在其上（票 03 Status + 评审 + 进 main 记录、票 02 Blocked by 句 → 「03 已进 main」+ 命令名对齐一句、本节）；`ls-remote` 核 `a1b19433` 未动 → ff → `push <sha>:main`。**远端 main = 本笔 tip**。SHA 对照：`b939c1d3→063744d6` / `c9f9bf78→4fa83d08` / `0b786fa6→38492882` / `f0bcb66f→6ec6df6c` / `51c6b79d→53370bb6`。`mcp6-vedisc03` → `merged/`、远端删；`D:/tops/idp-parcel-mcp6-vedisc03`（作者报干净、junction 已 rmdir）与 `%TEMP%\idp-replay-vedisc03` 拆。
+- **在途**：lc/32 评审（4）、lc/27 评审（5）、sa-cc/07 步一 rebase（2）。**归用户**（累计不变）+ 新增：VE 注释计数一族（旧「六法」+ 新「八法 / 七法」）归 VE owner 一笔改口。
