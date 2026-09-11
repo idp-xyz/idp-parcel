@@ -164,6 +164,22 @@ func (kind ClosureResponsibilitySourceKind) String() string {
 
 const closureResponsibilitySourceSeparator = "/"
 
+// closureResponsibilitySourceOf 把种类与主体合成落册的`关闭责任来源`引用（`<种类>/<主体>`），是下面
+// closureResponsibilitySourceKindOf 的对偶：合成与解析收在相邻一对（票 label-channel/30 裁决 ②），谁改了分隔符或
+// 种类词都得在同一屏改两边。种类没有名字或主体空白就拒——那份引用落册后解析不回种类，重开那道门就核不了
+// 「原关闭是不是货主指令形成的」；主体两端空白去掉再拼，落册的与解析回来的是同一个串。
+func closureResponsibilitySourceOf(
+	kind ClosureResponsibilitySourceKind,
+	subject string,
+) (domain.ClosureResponsibilitySourceReference, error) {
+	trimmed := strings.TrimSpace(subject)
+	if kind.String() == "" || trimmed == "" {
+		return domain.ClosureResponsibilitySourceReference{}, fmt.Errorf(
+			"closure responsibility source: kind %d or subject %q cannot be written down", kind, subject)
+	}
+	return domain.NewClosureResponsibilitySourceReference(kind.String() + closureResponsibilitySourceSeparator + trimmed)
+}
+
 // closureResponsibilitySourceKindOf 从已落册的关闭上读回种类段。读不出（旧格式、被人手改）按「认不出」处理，
 // 由调用处决定那意味着什么——这里不猜。
 func closureResponsibilitySourceKindOf(source domain.ClosureResponsibilitySourceReference) ClosureResponsibilitySourceKind {
@@ -293,11 +309,7 @@ func (handler *FormContinuedAttemptDecisionHandler) FormControlledClosure(
 	ctx context.Context,
 	command FormControlledClosureCommand,
 ) (ContinuedAttemptDecisionResult, error) {
-	if command.ResponsibilitySourceKind.String() == "" || strings.TrimSpace(command.ResponsibilitySourceSubject) == "" {
-		return continuedAttemptNotAccepted(ContinuedAttemptResponsibilitySourceUnknown), nil
-	}
-	source, err := domain.NewClosureResponsibilitySourceReference(
-		command.ResponsibilitySourceKind.String() + closureResponsibilitySourceSeparator + strings.TrimSpace(command.ResponsibilitySourceSubject))
+	source, err := closureResponsibilitySourceOf(command.ResponsibilitySourceKind, command.ResponsibilitySourceSubject)
 	if err != nil {
 		return continuedAttemptNotAccepted(ContinuedAttemptResponsibilitySourceUnknown), nil
 	}
