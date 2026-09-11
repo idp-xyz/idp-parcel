@@ -453,7 +453,9 @@ func (double exceptionDisclosureRulesIntakeDouble) IntakeExceptionDisclosureRule
 	return double.command, nil
 }
 
-type exceptionDisclosureRulesUseCase struct{ service *application.CatalogRegistration }
+type exceptionDisclosureRulesUseCase struct {
+	service *application.CatalogRegistration
+}
 
 func (useCase exceptionDisclosureRulesUseCase) Handle(
 	ctx context.Context,
@@ -473,7 +475,9 @@ func (double conflictSignalRuleIntakeDouble) IntakeConflictSignalRuleRegistratio
 	return double.command, nil
 }
 
-type conflictSignalRuleUseCase struct{ service *application.CatalogRegistration }
+type conflictSignalRuleUseCase struct {
+	service *application.CatalogRegistration
+}
 
 func (useCase conflictSignalRuleUseCase) Handle(
 	ctx context.Context,
