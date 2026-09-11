@@ -126,18 +126,22 @@ type RequestBuyEvaluationHandler struct {
 
 // NewRequestBuyEvaluationHandler 构造期拒 nil：漏装一口在这里就报出来，而不是等第一次请求时在
 // 解引用处 panic——那种 panic 被路由层兜成没有稳定 code 的 500，读的人分不出是进程坏了还是装配漏了。
+//
+// 缺件一律包 ErrNilDependency（同包 NewApplyPreAcceptanceControlHandler 那张表的形），哪一口缺在文本里
+// 点名：装配方按 errors.Is 就能把「装配漏了」与别的构造错误分开，裸 fmt.Errorf 做不到这一点。
 func NewRequestBuyEvaluationHandler(deps RequestBuyEvaluationDeps) (*RequestBuyEvaluationHandler, error) {
-	if deps.Registry == nil {
-		return nil, fmt.Errorf("settlement accounting: request buy evaluation: registry is nil")
-	}
-	if deps.Identity == nil {
-		return nil, fmt.Errorf("settlement accounting: request buy evaluation: identity factory is nil")
-	}
-	if deps.Downstream == nil {
-		return nil, fmt.Errorf("settlement accounting: request buy evaluation: downstream handoff is nil")
-	}
-	if deps.Clock == nil {
-		return nil, fmt.Errorf("settlement accounting: request buy evaluation: clock is nil")
+	for _, dependency := range []struct {
+		name    string
+		missing bool
+	}{
+		{"evaluation request registry", deps.Registry == nil},
+		{"evaluation request identity factory", deps.Identity == nil},
+		{"evaluation request downstream handoff", deps.Downstream == nil},
+		{"clock", deps.Clock == nil},
+	} {
+		if dependency.missing {
+			return nil, fmt.Errorf("%w: %s", ErrNilDependency, dependency.name)
+		}
 	}
 	return &RequestBuyEvaluationHandler{deps: deps}, nil
 }

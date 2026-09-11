@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
 
@@ -399,17 +400,30 @@ func TestTheHandlerRefusesANilDependencyAtConstruction(t *testing.T) {
 		Downstream: newEvaluationRequestHandoff(),
 		Clock:      evaluationRequestClock{at: time.Now()},
 	}
-	mutations := map[string]func(*application.RequestBuyEvaluationDeps){
-		"缺登记面": func(deps *application.RequestBuyEvaluationDeps) { deps.Registry = nil },
-		"缺铸造口": func(deps *application.RequestBuyEvaluationDeps) { deps.Identity = nil },
-		"缺交接口": func(deps *application.RequestBuyEvaluationDeps) { deps.Downstream = nil },
-		"缺时钟":  func(deps *application.RequestBuyEvaluationDeps) { deps.Clock = nil },
+	if _, err := application.NewRequestBuyEvaluationHandler(complete); err != nil {
+		t.Fatalf("口齐全却被拒：%v", err)
 	}
-	for name, mutate := range mutations {
+	mutations := map[string]struct {
+		mutate func(*application.RequestBuyEvaluationDeps)
+		named  string
+	}{
+		"缺登记面": {func(deps *application.RequestBuyEvaluationDeps) { deps.Registry = nil }, "registry"},
+		"缺铸造口": {func(deps *application.RequestBuyEvaluationDeps) { deps.Identity = nil }, "identity factory"},
+		"缺交接口": {func(deps *application.RequestBuyEvaluationDeps) { deps.Downstream = nil }, "downstream handoff"},
+		"缺时钟":  {func(deps *application.RequestBuyEvaluationDeps) { deps.Clock = nil }, "clock"},
+	}
+	for name, test := range mutations {
 		deps := complete
-		mutate(&deps)
-		if _, err := application.NewRequestBuyEvaluationHandler(deps); err == nil {
-			t.Fatalf("%s 却构造成功了", name)
+		test.mutate(&deps)
+		handler, err := application.NewRequestBuyEvaluationHandler(deps)
+		if !errors.Is(err, application.ErrNilDependency) {
+			t.Fatalf("%s：err = %v, want ErrNilDependency——装配方按 errors.Is 认不出这是装配漏了", name, err)
+		}
+		if !strings.Contains(err.Error(), test.named) {
+			t.Fatalf("%s：错误文本 %q 没点名缺的是 %q", name, err.Error(), test.named)
+		}
+		if handler != nil {
+			t.Fatalf("%s 却交出了一只会在运行期 panic 的编排", name)
 		}
 	}
 }
