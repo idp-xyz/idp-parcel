@@ -51,12 +51,13 @@ const disclosureKinds: DisclosureKind[] = [
   'EXCEPTION_DISCLOSURE_RULE',
 ];
 
-// 登记签只铺今天有写面的两册。异常披露规则的写签跟着本页这枚读签走,归票
-// ve-disclosure-policy-view/02 步二在 03 进 main 后铺——读签先落、写签后到,不在这里
-// 先替它拟一个端点。
+// 登记签铺本页读签里的每一册。异常披露规则的写签跟着本页这枚读签走(票
+// ve-disclosure-policy-view/02 步二,03 的读签先落、写签后到):同一本册在哪页读就在哪页登,
+// 登进去的结果切回读签就看得见。
 const disclosureRegistrableKinds: Extract<DisclosureKind, VisibilityRegistrableCatalogueKind>[] = [
   'NOTIFICATION_POLICY',
   'DISCLOSURE_POLICY',
+  'EXCEPTION_DISCLOSURE_RULE',
 ];
 
 // 三册各自的「来源提示句」:空册与描述里说清这一签读的是哪本册,规则与策略分开写。
@@ -263,8 +264,7 @@ function DisclosurePoliciesTable() {
   );
 }
 
-// 登记签装本页读签里有写面的两册,判据同判断规则页;异常披露规则的写签见
-// disclosureRegistrableKinds 注。
+// 登记签装本页读签里的每一册,判据同判断规则页:在哪页读就在哪页登。
 const registrationTargets: RegistrationTarget[] = disclosureRegistrableKinds.map((candidate) => ({
   id: candidate,
   label: visibilityCatalogueKindLabels[candidate],
@@ -277,12 +277,13 @@ const registrationTargets: RegistrationTarget[] = disclosureRegistrableKinds.map
 }));
 
 /**
- * 对外披露口径三册:逐册查阅,外加两册的登记签(ADR-0085,票 admin-write-faces/02 切片 02d)。
+ * 对外披露口径三册:逐册查阅,外加逐册的登记签(ADR-0085,票 admin-write-faces/02 切片 02d;
+ * 异常披露规则的读签见票 ve-disclosure-policy-view/03,写签见票 02 步二)。
  *
- * 两册换版的走法不同,登记签照实呈现而不抹平:披露策略按版本抬头翻旧插新;通知策略没有
- * 版本抬头,版本化由披露策略引用本身承担,换版即换引用、新旧两行并存。两者都没有覆盖或
- * 删除动作,所以这里也只有登记一个动作。异常披露规则今天只有读签(票 ve-disclosure-policy-view/03),
- * 写签随票 02 步二到。
+ * 各册换版的走法不同,登记签照实呈现而不抹平:披露策略与异常披露规则按版本抬头翻旧插新
+ * (两册相邻不相同,登记签的标题与提示句里「规则」「策略」两字不互换);通知策略没有版本
+ * 抬头,版本化由披露策略引用本身承担,换版即换引用、新旧两行并存。哪一册都没有覆盖或删除
+ * 动作,所以这里也只有登记一个动作。
  */
 export function DisclosurePoliciesPage() {
   return (

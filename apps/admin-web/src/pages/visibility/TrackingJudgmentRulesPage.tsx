@@ -43,11 +43,12 @@ type JudgmentKind = 'MILESTONE_MAPPING' | 'TRIAGE_RULE' | 'CONFLICT_SIGNAL_RULE'
 
 const judgmentKinds: JudgmentKind[] = ['MILESTONE_MAPPING', 'TRIAGE_RULE', 'CONFLICT_SIGNAL_RULE'];
 
-// 登记签只铺今天有写面的两册。冲突信号规则的写签跟着本页这枚读签走,归票
-// ve-disclosure-policy-view/02 步二在 03 进 main 后铺。
+// 登记签铺本页读签里的每一册。冲突信号规则的写签跟着本页这枚读签走(票
+// ve-disclosure-policy-view/02 步二,03 的读签先落、写签后到):在哪页读就在哪页登。
 const judgmentRegistrableKinds: Extract<JudgmentKind, VisibilityRegistrableCatalogueKind>[] = [
   'MILESTONE_MAPPING',
   'TRIAGE_RULE',
+  'CONFLICT_SIGNAL_RULE',
 ];
 
 type JudgmentListBody = Extract<
@@ -226,8 +227,8 @@ function TrackingJudgmentRulesTable() {
   );
 }
 
-// 登记签装本页读签里有写面的两册,不多铺:多铺一册会让同一本册在两处都能登,而其中一处的
-// 页面上根本看不到登进去的结果。冲突信号规则的写签见 judgmentRegistrableKinds 注。
+// 登记签装本页读签里的每一册,不多铺别页的册:多铺一册会让同一本册在两处都能登,而其中一处的
+// 页面上根本看不到登进去的结果。
 const registrationTargets: RegistrationTarget[] = judgmentRegistrableKinds.map((candidate) => ({
   id: candidate,
   label: visibilityCatalogueKindLabels[candidate],
@@ -240,13 +241,13 @@ const registrationTargets: RegistrationTarget[] = judgmentRegistrableKinds.map((
 }));
 
 /**
- * 判断规则三册:逐册查阅版本原文,外加两册的登记签(ADR-0085,票 admin-write-faces/02 切片 02d;
- * 冲突信号规则今天只有读签,票 ve-disclosure-policy-view/03)。
+ * 判断规则三册:逐册查阅版本原文,外加逐册的登记签(ADR-0085,票 admin-write-faces/02 切片 02d;
+ * 冲突信号规则的读签见票 ve-disclosure-policy-view/03,写签见票 02 步二)。
  *
  * 登记签不是「新建一版」的表单:目录修订按笔推进,新版翻旧插新、不覆盖行,同版本号再登
- * 一律答版本不可覆盖——所以这里只有登记一个动作,没有行级编辑或删除面。墙降之前它必然
- * 答 403「接入渠道未配置」,那是诚实答案;墙降当天在装配点换真 Intake 即点亮,本页一行
- * 不用改。
+ * 一律答版本不可覆盖——冲突信号规则一租户一条,租户已有一行时再登答的也是这一格,换版是
+ * 治理动作。所以这里只有登记一个动作,没有行级编辑或删除面。墙降之前它必然答 403「接入
+ * 渠道未配置」,那是诚实答案;墙降当天在装配点换真 Intake 即点亮,本页一行不用改。
  */
 export function TrackingJudgmentRulesPage() {
   return (

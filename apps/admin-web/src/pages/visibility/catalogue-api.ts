@@ -1,11 +1,11 @@
-// VE 六类规则与策略目录的读面（GET /visibility-catalogues?kind=，票
+// VE 各类规则与策略目录的读面（GET /visibility-catalogues?kind=，票
 // admin-web-page-wiring-frontier/02）。与本目录 api.ts 分文件：那边是运营追踪投影
 // 查阅（ADR-0076，派生态，自带前缀注入），这边是主数据目录查阅（登记态），传输与
 // 五格判读收敛在共享 catalogue-api，本文件只保留本上下文的类型与查询函数——与
 // party/api.ts、customs/api.ts 同款分工。
 //
 // 形状以 internal/visibilityexception/adapters/http/query_visibility_catalogues.go
-// 为准，此处只做镜像不虚构：六种册子的行形状互不相同，kind 由服务端随响应回显，
+// 为准，此处只做镜像不虚构：各种册子的行形状互不相同，kind 由服务端随响应回显，
 // 调用方按 kind 择形状。
 
 import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue-api';
@@ -29,14 +29,12 @@ export type VisibilityCatalogueKind =
   | 'CONFLICT_SIGNAL_RULE';
 
 /**
- * 今天有在线登记写面的那六册（ADR-0085，票 admin-write-faces/02 切片 02d）。异常披露规则与
- * 冲突信号规则两册只有读签：写签跟着读签走（伞票纪律），归票 ve-disclosure-policy-view/02
- * 步二在 03 进 main 之后铺——本文件不替它发明登记端点。
+ * 有在线登记写面的册（ADR-0085，票 admin-write-faces/02 切片 02d）。异常披露规则与冲突信号
+ * 规则两册的写签随票 ve-disclosure-policy-view/02 步二铺齐（写签跟着读签走，03 的读签先落），
+ * 至此每一册都登得了——名字仍单立而不并成一个别名，是为了让「哪些册有写面」这一问在类型
+ * 上留着落点：下一册只有读面时，收窄回 Exclude 一处即可，各页的 Extract 不必改。
  */
-export type VisibilityRegistrableCatalogueKind = Exclude<
-  VisibilityCatalogueKind,
-  'EXCEPTION_DISCLOSURE_RULE' | 'CONFLICT_SIGNAL_RULE'
->;
+export type VisibilityRegistrableCatalogueKind = VisibilityCatalogueKind;
 
 export interface MilestoneMappingEntryRecord {
   /** 源上下文，传输层封闭五元；词表在 presentation.ts 的 sourceContextLabels。 */
@@ -192,7 +190,8 @@ export function listVisibilityCatalogues<Kind extends VisibilityCatalogueKind>(
   );
 }
 
-// ---- 六类目录登记写面（ADR-0085，票 admin-write-faces/02 切片 02d）----
+// ---- 各类目录登记写面（ADR-0085，票 admin-write-faces/02 切片 02d；两册规则登记随票
+// ve-disclosure-policy-view/02 步二加入）----
 //
 // 登记端点与其余命令面同挂字面量 `UnconfiguredIntake{}`：写准入不另立形，隔离读准入
 // （ADR-0078）换得了读行换不了写行。因此**墙降之前提交必然答 403
@@ -209,6 +208,7 @@ export function listVisibilityCatalogues<Kind extends VisibilityCatalogueKind>(
  * 逐种类登记端点。同一本册在读口 `?kind=`、写口路径与 CLI 命令名下是同一个词，只随
  * 各入口的拼写惯例变形（查阅用大写下划线，路径与命令用小写连字符）；分诊那册的册名
  * 在 CLI 是复数 `triage-rules`，路径与读口都用单数，取各自入口已发布的原词，不统一。
+ * 异常披露规则同此：CLI 是复数 `exception-disclosure-rules`，路径随读口 kind 用单数。
  */
 export const visibilityRegistrationEndpoints: Record<VisibilityRegistrableCatalogueKind, string> = {
   MILESTONE_MAPPING: '/visibility-catalogue-milestone-mapping-registrations',
@@ -217,10 +217,12 @@ export const visibilityRegistrationEndpoints: Record<VisibilityRegistrableCatalo
   CLAIM_ELIGIBILITY: '/visibility-catalogue-claim-eligibility-registrations',
   CLAIM_AUTHORIZATION: '/visibility-catalogue-claim-authorization-registrations',
   DISCLOSURE_POLICY: '/visibility-catalogue-disclosure-policy-registrations',
+  EXCEPTION_DISCLOSURE_RULE: '/visibility-catalogue-exception-disclosure-rule-registrations',
+  CONFLICT_SIGNAL_RULE: '/visibility-catalogue-conflict-signal-rule-registrations',
 };
 
 /**
- * 一种类一个端点，本函数按种类取路径而不是裂成六个同形包装。
+ * 一种类一个端点，本函数按种类取路径而不是裂成逐类同形的包装。
  *
  * 传输层那边逐类各立一个 Intake 接口与一个端点构造函数，为的是让「把一类的译装接到
  * 另一类的端点上」在编译期就红；那条保护在这里没有落点——快照本体在前端是未翻译的

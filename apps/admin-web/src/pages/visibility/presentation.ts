@@ -41,7 +41,7 @@ export function problemNote(code: string): string {
   return problemCodeNotes[code] ?? '未知错误码。请携带关联标识查询服务端记录。';
 }
 
-// ---- 六类目录查阅（/visibility-catalogues,票 admin-web-page-wiring-frontier/02）----
+// ---- 各类目录查阅（/visibility-catalogues,票 admin-web-page-wiring-frontier/02）----
 
 /**
  * 目录种类的页签词。种类命名册子(与登记写口同词根),中文取 CONTEXT 原词。
@@ -94,12 +94,16 @@ export function labelOf(table: Record<string, string>, code: string): string {
   return table[code] ?? code;
 }
 
-// ---- 六类目录登记写面的词表（ADR-0085,票 admin-write-faces/02 切片 02d）----
+// ---- 各类目录登记写面的词表（ADR-0085,票 admin-write-faces/02 切片 02d;异常披露规则与
+// 冲突信号规则两册随票 ve-disclosure-policy-view/02 步二加入）----
 
-// 以下三张表只覆盖今天有在线登记写面的六册(VisibilityRegistrableCatalogueKind):异常披露规则与
-// 冲突信号规则的写签归票 ve-disclosure-policy-view/02 步二,这里不先替它拟命令名或提示句。
+// 以下三张表覆盖有在线登记写面的每一册(VisibilityRegistrableCatalogueKind)。
 
-/** 登记签的标题。册名取读签同一个词;有无版本抬头照各册实情说,不给通知策略补一个。 */
+/**
+ * 登记签的标题。册名取读签同一个词;有无版本抬头照各册实情说,不给通知策略补一个,也不给
+ * 冲突信号规则补一个——那册一租户一条,version 是识别规则版本引用而不是目录版本抬头。
+ * 异常披露规则那册标题带「规则」,与「登记披露策略版本」并列时两字就是分册记号。
+ */
 export const registrationTitles: Record<VisibilityRegistrableCatalogueKind, string> = {
   MILESTONE_MAPPING: '登记里程碑映射版本',
   TRIAGE_RULE: '登记分诊规则版本',
@@ -107,9 +111,14 @@ export const registrationTitles: Record<VisibilityRegistrableCatalogueKind, stri
   CLAIM_ELIGIBILITY: '登记索赔资格声明',
   CLAIM_AUTHORIZATION: '登记申请人授权名单',
   DISCLOSURE_POLICY: '登记披露策略版本',
+  EXCEPTION_DISCLOSURE_RULE: '登记异常披露规则版本',
+  CONFLICT_SIGNAL_RULE: '登记冲突信号规则',
 };
 
-/** 受控登记口的命令名,逐册一个;词取 cmd/parcel-ve-register 已发布的原词。 */
+/**
+ * 受控登记口的命令名,逐册一个;词取 cmd/parcel-ve-register 已发布的原词。分诊与异常披露
+ * 规则两册在 CLI 是复数,读口 kind 与端点路径用单数,各取各入口已发布的写法。
+ */
 const registrationCommands: Record<VisibilityRegistrableCatalogueKind, string> = {
   MILESTONE_MAPPING: 'milestone-mapping',
   TRIAGE_RULE: 'triage-rules',
@@ -117,9 +126,11 @@ const registrationCommands: Record<VisibilityRegistrableCatalogueKind, string> =
   CLAIM_ELIGIBILITY: 'claim-eligibility',
   CLAIM_AUTHORIZATION: 'claim-authorization',
   DISCLOSURE_POLICY: 'disclosure-policy',
+  EXCEPTION_DISCLOSURE_RULE: 'exception-disclosure-rules',
+  CONFLICT_SIGNAL_RULE: 'conflict-signal-rule',
 };
 
-// 登记快照形状的提示句。六册只差命令名一词,所以由一处拼出:抄六遍会让「不逐字段建
+// 登记快照形状的提示句。各册只差命令名一词,所以由一处拼出:逐册抄写会让「不逐字段建
 // 表单」这条理由在其中一遍被改动时悄悄分叉。
 function snapshotHint(kind: VisibilityRegistrableCatalogueKind, particulars?: string): string {
   return (
@@ -164,6 +175,17 @@ export const registrationSnapshotHints: Record<VisibilityRegistrableCatalogueKin
     'DISCLOSURE_POLICY',
     '四维各取封闭三态 SHOWN / PENDING_CONFIRMATION / NOT_DISCLOSED;内容只在 SHOWN 时在场,' +
       '另两态带了内容即矛盾输入,登记口拒收而不是替登记方丢掉那半句声明。',
+  ),
+  EXCEPTION_DISCLOSURE_RULE: snapshotHint(
+    'EXCEPTION_DISCLOSURE_RULE',
+    '这册与披露策略是相邻两册,条目键是客户 × 信号类型 × 可信度三维(0023 主键),同一版里同键两条即撞键;' +
+      '两条成对纪律在受理门就拒:disclosable 为真必带 content、为假必不带,autoRelease 只在 disclosable 为真时才可为真' +
+      '——违背任一条答 ENTRY_INCOMPLETE,不会落到库上的 CHECK 变成依赖故障。',
+  ),
+  CONFLICT_SIGNAL_RULE: snapshotHint(
+    'CONFLICT_SIGNAL_RULE',
+    '这册一租户一条、没有版本抬头与生效区间:version 是识别规则版本引用,signalKind / version / confidence 三件任缺答 ENTRY_INCOMPLETE,' +
+      '缺 approvedBy 答 APPROVAL_MISSING;租户已有一行时再登答 VERSION_NOT_OVERWRITABLE——换版是治理动作,原行不被顶替。',
   ),
 };
 
