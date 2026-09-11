@@ -1,7 +1,7 @@
 # 异常披露规则与冲突信号规则两册的目录读面：`/visibility-catalogues` 加两个 `kind`、`CatalogueListRead` 加两法、管理台 `pages/visibility/` 各显一签——[02](./02-exception-disclosure-and-conflict-signal-rule-registries-have-no-cli-or-online-entry.md) 步二的写签要跟着这两个读签走
 
 Category: enhancement
-Status: ready-for-agent——2026-09-10 通道 4 按通道 1 派单 task-d6660969 立票（推送方裁 02 要裁的 2「读面另立」），要裁的为零；取证锚 `062f5228`；只写票面未动代码
+Status: in-progress——2026-09-11 11:3x 通道 6 认领（task-7491f646，通道 1 派单；分支 `mcp6-vedisc03` 基远端 main `2c7326ef`，隔离树 `D:/tops/idp-parcel-mcp6-vedisc03`；昨晚同票派通道 6 未开工即 crash，origin 无分支、无半成品，从零开）。此前 ready-for-agent——2026-09-10 通道 4 按通道 1 派单 task-d6660969 立票（推送方裁 02 要裁的 2「读面另立」），要裁的为零；取证锚 `062f5228`；只写票面未动代码
 Blocked by: 无（两册的 postgres 写口与读口都已在 main，mech/08；本票只加目录上列与页面）
 
 ## 为什么立
