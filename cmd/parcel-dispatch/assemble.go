@@ -1966,12 +1966,12 @@ func adoptEffectiveDeliveryConsumer(
 	return consumer, nil
 }
 
-// labelFinalJudgmentCore 装配面单渠道服务终局判断三路触发共用的处理方核（ADR-0134 决定二）：按包裹反查
+// labelFinalJudgmentCore 装配面单渠道服务终局判断各路触发共用的处理方核（ADR-0134 决定二）：按包裹反查
 // 当前已接受委托 → 终局判断编排 → 五值译成消费结论 → 判出终局的格交既有终局采用路径。面单交易那一路
 // （lc/26）与关闭 / 重开决定那一路（lc/27）各自的消费者都接它——核只装一次的形，两路各装一只实例是因为
 // 两扇消费门各持自己的处理方，实例之间不共享状态。
 //
-// 判断编排的六口：交易册与继续尝试登记册各用同一只 postgres 适配器的只读半边；取消视图与终局采用路径
+// 判断编排的各口：交易册与继续尝试登记册各用同一只 postgres 适配器的只读半边；取消视图与终局采用路径
 // 与交付那一路**同一条链**（parcelFinalAdoptionChain）——两种服务形态的产物都叫「终局服务结果」，只认
 // FinalOutcomeStore 里那一处当前有效终局，采用路径不另建。`Validity` 接 ps-port-remainder/01 的
 // DeclaredLabelValidityRule：它按接受时固定的规则包版本读有效期那一格，声明缺席答未配置、不推算失效，
@@ -2041,7 +2041,7 @@ func judgeLabelFinalOnContinuedAttemptDecisionConsumer(
 }
 
 // judgeLabelFinalOnLabelTransactionConsumer 接 lc/26 那条线（ADR-0134）：面单交易写侧在定案与后续动作
-// 两拍 `Save` 成功后交出的 `label-transaction.judgment-due` 指针式信封 → 消费门 → 三路共用的处理方核
+// 两拍 `Save` 成功后交出的 `label-transaction.judgment-due` 指针式信封 → 消费门 → 各路共用的处理方核
 // （labelFinalJudgmentCore）→ 判出终局的格交既有终局采用路径。
 //
 // 写入侧（06 编排把意图入队那一半）不在这里：`LabelTransactionDeps` 的生产装配与事务壳归 lc/28 的
