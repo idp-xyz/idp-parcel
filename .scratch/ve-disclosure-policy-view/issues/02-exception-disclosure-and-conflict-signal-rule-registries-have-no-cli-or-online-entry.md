@@ -1,7 +1,7 @@
 # 异常披露规则与冲突信号规则两册有写入口无入口：`ExceptionDisclosureRuleRegistry` / `ConflictSignalRuleRegistry` 只有 postgres 写口与读口，`parcel-ve-register` 与 `parcel-api` 都登不进去，两条编排在生产上只能读到空册
 
 Category: enhancement
-Status: ready-for-agent——2026-09-10 通道 4 按通道 1 派单 task-d6660969 把推送方三条裁决写进票面（见「裁决」）：取 B（CLI + 端点 + 管理台）、读面另立 [03](./03-exception-disclosure-and-conflict-signal-rule-catalogue-read-face.md)、两册并回 `CatalogRegistration`；**步一（CLI）可即开工，步二（端点 + 管理台写签）等 03 进 main**。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
+Status: in-progress——2026-09-11 通道 3 按通道 1 派单 task-a2cb7477 接单，分支 `mcp3-vedisc02` 基 `51ca1270`，步一 + 步二一起做（03 已进 main）。此前 ready-for-agent——2026-09-10 通道 4 按通道 1 派单 task-d6660969 把推送方三条裁决写进票面（见「裁决」）：取 B（CLI + 端点 + 管理台）、读面另立 [03](./03-exception-disclosure-and-conflict-signal-rule-catalogue-read-face.md)、两册并回 `CatalogRegistration`；**步一（CLI）可即开工，步二（端点 + 管理台写签）等 03 进 main**。此前 draft——2026-09-10 通道 4 立票（task-9880bbc9），只写票面未动代码；取证锚 `3f485e97`
 Blocked by: 步一无；步二 [03](./03-exception-disclosure-and-conflict-signal-rule-catalogue-read-face.md)（两册读面——写签跟读签走，读面不在就不铺写签；**03 已进 main（2026-09-11 12:0x，重放 tip `53370bb6`，见票 03「进 main 记录」）**，步二不再被它阻；步一命令名对齐 03 落下的 `kind` 原词 `EXCEPTION_DISCLOSURE_RULE` / `CONFLICT_SIGNAL_RULE`（按 `DISCLOSURE_POLICY` ↔ `disclosure-policy` 的既有变形），是 03 评审 Standards ② 的提醒，2026-09-11 通道 1 推送方记）
 
 ## 为什么立在这个目录
