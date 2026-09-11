@@ -1,7 +1,7 @@
 # 34 lc/28 组合根的触发面：`buildLabelChannelOrchestration` 无生产调用方，`parcel-api` 从不构造这条链，构造期错误不在启动时暴露
 
 Category: enhancement
-Status: in-progress——2026-09-11 11:2x 通道 4 认领（task-c7390f8a，通道 1 派单；分支 `mcp4-lc34` 基远端 main `2c7326ef`，隔离树 `D:/tops/idp-parcel-mcp4-lc34`）。此前 ready-for-agent——2026-09-10 22:0x 通道 4 立票（按通道 1 派单 task-d00c5556；lc/28 非作者评审 Spec 非阻断 ② / 判断题 (b) 的后继）。要裁的为零：本票只做「`main` 启动时装配、构造期错误 fail-fast」这一步；谁在什么业务时点发起一笔面单交易的建立（运营端点 / 进程内触发）是产品题，不在本票。只写票面未动代码；取证锚 main `9ddbafcf`
+Status: resolved——2026-09-11 11:3x（作者自标）通道 4 落地（task-c7390f8a；分支 `mcp4-lc34` 基远端 main `2c7326ef`，代码 tip `38f2322c`）：`run` 启动时装配 `buildLabelChannelOrchestration` 构造即丢 + 四处头注改口；完成判据 1–5 逐项见 Comments 末条；进 main 的 SHA 由推送方重放后另记。此前 in-progress——2026-09-11 11:2x 通道 4 认领（task-c7390f8a，通道 1 派单；隔离树 `D:/tops/idp-parcel-mcp4-lc34`）。此前 ready-for-agent——2026-09-10 22:0x 通道 4 立票（按通道 1 派单 task-d00c5556；lc/28 非作者评审 Spec 非阻断 ② / 判断题 (b) 的后继）。要裁的为零：本票只做「`main` 启动时装配、构造期错误 fail-fast」这一步；谁在什么业务时点发起一笔面单交易的建立（运营端点 / 进程内触发）是产品题，不在本票。只写票面未动代码；取证锚 main `9ddbafcf`
 Blocked by: 无（[`28`](./28-channel-selection-composition-root-and-call-entry.md) 已进 main `784ad076`）
 
 ## 缺口（取证于 `9ddbafcf`，逐符号名）
@@ -46,3 +46,16 @@ Blocked by: 无（[`28`](./28-channel-selection-composition-root-and-call-entry.
 ## Comments
 
 - 2026-09-10 22:0x · 通道 4（task-d00c5556，取证锚 main `9ddbafcf`）：立票，Status 直接 ready-for-agent（要裁的为零）。**只写票面，未动代码**；同笔把票 `28` 进 main 记录里「票号待立」回填为本票号（只改那一句）。能力边界：读过 `assemble_label_channel.go` 全文、`main.go` `run` 的开池段与全部 `build*` 调用、`unwired_orchestration.go` 的 `unwiredLabelTransactions` 头注、`channel_selection_decisions.go` 头注首句、架构棘轮头注、lc/28 全文、`cmd/parcel-api` 测试文件清单（无 `main_test.go`）；**没读** `endpoints.go` 那只装配结构体的形——做法 1 第二种落法（挂到结构体上）能不能不碰邻行未核，作者开工时看。「顺带量到」的 `channel_selection_decisions.go` 那句陈旧头注是本票新量到的，lc/28 评审没提。
+- 2026-09-11 11:3x · 通道 4（task-c7390f8a；分支 `mcp4-lc34` 基远端 main `2c7326ef`）：**完成记录，转 resolved。** 逐笔（分支 SHA 只作此刻取证）：`6cf854a9` docs Status → in-progress；`38f2322c` feat `run` 启动时装配 + 四处头注改口（做法 1、2）；本笔票面 + lc spec 34 行。代码 tip `38f2322c`。
+  **落法**：做法 1 两种落法取**构造即丢**——`if _, err := buildLabelChannelOrchestration(db); err != nil { return err }`，位置在 `buildChannelSelectionDecisionRead` 之后、`buildCancellationOrchestration` 之前（票面原句「两张读面之后」）。不挂到端点装配结构体：那要碰 `endpoints.go` 那只结构体的邻行（不在地盘、sa-cc/07 同期要动），且今天没有任何消费者会读那一格，多一个永不被读的字段只会让人以为有人在用。头注写明「只为 fail-fast、触发面另票」。
+  **完成判据逐项**：
+  1. ✓ `git grep -n buildLabelChannelOrchestration -- cmd/parcel-api/main.go` 恰一处（`main.go` `run`）；构造失败即 `return err`，与同函数其余 `build*` 同形，进程带原因退出。未新造 `main_test.go` / 启动夹具；证据是 `go build ./...` 退 0 + `assemble_label_channel_test.go` 既有真库两例（`TestTheProductionLabelChannelChainStopsHonestlyAtTheUnconfiguredSources` / `TestTheLabelChannelChainWalksToTheOutboundSeamOnceTheSeamsAreConfigured`）带 DSN `-v` PASS 2 / SKIP 0——它们走的正是同一只装配函数。
+  2. ✓ 四处头注改口（票面说三处，`assemble_label_channel.go` 文件头「若随之改口」也改了，共四处）：`assemble_label_channel.go`「生产可达」→「已装配、未触发」+ 启动时装配只为 fail-fast；`unwired_orchestration.go` `unwiredLabelTransactions` 与 `assemble_channel_selection_decisions.go`「组合根已在、没有触发面」→「启动时已装配、没有触发面」；PS postgres `channel_selection_decisions.go` 删「尚无组合根（票 12 收口）」句、改指 `buildLabelChannelOrchestration`。`git grep -n '尚无组合根' -- internal/parcelshipment/adapters/postgres/channel_selection_decisions.go` 零命中。
+  3. ✓ `git diff --stat 2c7326ef -- cmd/parcel-api/endpoints.go cmd/parcel-api/endpoints_test.go cmd/parcel-api/isolated_read_test.go internal/architecture/` 零行；`internal/architecture` 两道棘轮在带 DSN 的包测里过。
+  4. ✓ `gofmt -l` 空；`go build ./...` / `go vet ./...` 退 0；带 DSN `go test -count=1 ./cmd/parcel-api/ ./internal/architecture/...` 两包 ok（11:26:44→11:26:50，占号 / 释号已广播）。未跑全量（派单原句）。机制清点不增删文件，预期不变、未重生成。
+  5. ✓ 本条逐笔 SHA。票 `28`「进 main 记录」的票号已在立票笔回填，本次未动 28。
+  **零行为变化**：不新增端点，启动后没有任何请求能到 `Flow`；六个实例半边缝仍全部显式未配置，未种任何行。`buildLabelChannelOrchestration` 内部会再构造一次 `NewChannelSelectionDecisions` / `NewLabelTransactions` / `outbox.NewStore`——与 `buildChannelSelectionDecisionRead` / 其余 `build*` 各自构造自己的适配器同一纹样，构造函数只校验依赖、不开连接，不算重复装配。
+  **评审**：按派单「不自评代替评审」，`/code-review` 双轴评审留给非作者；作者只对着基线看过 diff（五文件、代码 7 行加、余为注释）。
+  **不做的**：运营端点（甲）；进程内触发；07 真适配器；三取数口的真实取数。
+  **地盘外零改动**：`cmd/parcel-api/endpoints.go` / `endpoints_test.go` / `isolated_read_test.go`、`internal/parcelshipment/application/**`、`internal/architecture/*_baseline.txt`。共享接线 `main.go` 只加自己那 7 行、不动邻行；`assemble_label_channel.go`（lc/32 同期）与 `unwired_orchestration.go`（ve-disc/03 同期）只改头注行，与它们的块不重叠，已随释号广播提醒。
+  **能力边界**：本票无新行为可 red，`/tdd` 不适用（判据 1 原句「不为本票新造夹具」）；`run` 的 fail-fast 分支未在测试里实跑（没有启动夹具，且票面明令不造），只以 `go build` + 同形的既有 `build*` 调用为据。
