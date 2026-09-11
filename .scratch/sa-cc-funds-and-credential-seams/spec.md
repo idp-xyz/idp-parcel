@@ -42,7 +42,7 @@ Status: in-progress——2026-09-10 17:3x 通道 5 按通道 1 派单 task-9a2ff
 | [11](issues/11-pp-inbox-consumer-receives-evaluation-request-envelope.md) | PP inbox 消费评价请求信封 → 形成计价输入快照与评价并回指请求（08 裁「走信封」时因 PP 无 inbox 先例另立） | PP | 08 的发信封半边（要裁一条 PP 入口形状，见票） |
 | [12](issues/12-cc-funds-fact-payer-may-be-explicitly-unprovided.md) | CC 入向登记放宽付款人可缺席（03 裁决 2 取 A 时「CC 放宽另立 draft」）；要裁一条「真实程序要求付款人」是实例半边还是登记规则，归 CC owner | CC | 无（draft） |
 | [13](issues/13-cc-correction-version-inbound-registration-and-rereconciliation.md) | CC 入向登记加版本维——SA 更正版本今天到 CC 落成 `内容冲突`、只留 inbox 痕、到不了 UC-CC-009 重新核对（03 非作者评审 Spec ①；与 12 同根异题）；要裁「CC 登记要不要版本维」+ 一条范围题，归 CC owner | CC | 无（draft） |
-| [14](issues/14-adopt-digest-header-and-duty-reconciliation-handler-rejects-nil.md) | 03 非作者评审 Standards ① ② 两处小改：SA `adoptDigest` 头注补「0018 起含付款人、存量零不回算」；CC `NewDutyPaymentReconciliationHandler` 构造期逐口拒 nil（形照 SA `NewApplyPreAcceptanceControlHandler`，调用点三处、`assemble.go` 一块占号）。要裁的为零 | SA 一句注释 + CC | 无（ready-for-agent） |
+| [14](issues/14-adopt-digest-header-and-duty-reconciliation-handler-rejects-nil.md) | 03 非作者评审 Standards ① ② 两处小改：SA `adoptDigest` 头注补「0018 起含付款人、存量零不回算」；CC `NewDutyPaymentReconciliationHandler` 构造期逐口拒 nil（形照 SA `NewApplyPreAcceptanceControlHandler`，调用点三处、`assemble.go` 一块占号）。要裁的为零——**in-progress，2026-09-11 11:3x 通道 5 认领**（分支 `mcp5-sacc14` 基 `2c7326ef`） | SA 一句注释 + CC | 无 |
 
 **留空位、不立票的一件**：放行层的代码映射 `PAR-CUS-01/02`（`receive_external_result.go` 注释「真实代码映射属实例半边，没有它接入侧拆不出种类」）——登记册待提供，到位后接入侧译装出 `ReleaseContent`，编排不改。它在这里只占一行，不成票。
 

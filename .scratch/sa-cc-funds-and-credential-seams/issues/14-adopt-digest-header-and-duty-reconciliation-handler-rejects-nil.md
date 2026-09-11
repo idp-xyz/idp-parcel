@@ -1,7 +1,7 @@
 # sa-cc/03 评审留下的两处小改：SA `adoptDigest` 头注补「0018 起含付款人、存量零不回算」；CC `NewDutyPaymentReconciliationHandler` 构造期拒 nil
 
 Category: chore
-Status: ready-for-agent——2026-09-10 22:0x 通道 4 立票（按通道 1 派单 task-d00c5556；sa-cc/03 非作者评审 Standards 非阻断 ① ② 的后继，一张小票包两处）。要裁的为零。只写票面未动代码；取证锚 main `9ddbafcf`
+Status: in-progress——2026-09-11 11:3x 通道 5 按通道 1 派单 task-f955ead7 认领，分支 `mcp5-sacc14` 基远端 main `2c7326ef`；此前 ready-for-agent——2026-09-10 22:0x 通道 4 立票（按通道 1 派单 task-d00c5556；sa-cc/03 非作者评审 Standards 非阻断 ① ② 的后继，一张小票包两处）。要裁的为零。只写票面未动代码；取证锚 main `9ddbafcf`
 Blocked by: 无（[03](03-cc-inbox-consumer-receives-external-funds-fact.md) 已进 main）
 
 ## 缺口（取证于 `9ddbafcf`，逐符号名）
