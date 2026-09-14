@@ -1,7 +1,7 @@
 # lc/40 评审 Standards 一条非阻断收口：`ErrChannelBasisTranslationStopped` 头注「三个实例半边源」跨包计数换点名
 
 Category: chore
-Status: resolved——**完工待进 main，2026-09-14 20:5x 通道 1**（推送方自立自做：点名无人应答、除通道 1 外全部 crash；分支 `mcp1-tails4` 基远端 main `eca6dba1`，树 `%TEMP%\idp-parcel-mcp1-tails4`；与 [sa-cc/24](../../sa-cc-funds-and-credential-seams/issues/24-pp-sacc11-review-standards-tails-sentinel-comment-and-evidence-closed-set.md) 同笔；评审门：单通道无非作者可派，推送方自审，票面如实写）。此前 in-progress——2026-09-14 20:4x 通道 1 自立；要裁的为零
+Status: 已进 main——2026-09-14 21:0x 通道 1 推送方：`mcp1-tails4@5eb3caee` 基 `eca6dba1` = 当时 main tip，共享 main **直接快进**（SHA 不换：代码 `5eb3caee`，本簿记笔在其上）；`5eb3caee` 带 DSN 全仓 113 ok / 0 FAIL；清点零差；评审门单通道自审，见 sa-cc/24 Comments 末条。此前 resolved——**完工待进 main，2026-09-14 20:5x 通道 1**（推送方自立自做：点名无人应答、除通道 1 外全部 crash；分支 `mcp1-tails4` 基远端 main `eca6dba1`，树 `%TEMP%\idp-parcel-mcp1-tails4`；与 [sa-cc/24](../../sa-cc-funds-and-credential-seams/issues/24-pp-sacc11-review-standards-tails-sentinel-comment-and-evidence-closed-set.md) 同笔；评审门：单通道无非作者可派，推送方自审，票面如实写）。此前 in-progress——2026-09-14 20:4x 通道 1 自立；要裁的为零
 Blocked by: 无（[40](40-lc35-review-standards-tails-test-header-counts-and-transaction-shell-sentence.md) 已进 main `f1be6687`，出处在其 Comments「评审 ← 通道 6」Standards ①）。撞点：在途分支零，无人共写
 
 ## 缺口（出处指到评审原话；取证于 `eca6dba1`）
