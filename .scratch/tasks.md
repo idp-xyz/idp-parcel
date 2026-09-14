@@ -2158,4 +2158,13 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 
 - **评审 ← 通道 2**（09:03，钉 `9fa2ddc6`，只读不带 DSN，约 8 分）：Standards 0 阻断 / 1 非阻断（`commercialKindFrom` 头注「名集与白名单是同一集合的两份镜像」被代码反证——名集含 `PriceRuleObject`、0022 白名单无 `PRICE_RULE`，那格由 `validate` 与 CHECK 另拦）· Spec 0 / 1（两客户共用一份 `RegisterClaimEligibility` 与生产同形，接受）。全文落票 09 Comments；Status 首句改口为「非作者评审已后补」，「进 main 记录」后继 ① 划掉；ps-port-remainder spec 状态行同步。**证据层级**：psr/09 自此是「非作者评审 0 阻断」，昨夜「作者自评」那一格补齐。
 - **处置**：Standards ① 是 PS 地盘纯注释 → 不另开票，`send_to_session` 追加为 lc/38 第 7 条（通道 4 正在 `internal/parcelshipment/**` 上，同一分支顺手收）；Spec ① 接受不改。
-- **在途**：通道 3 task-0962cb6b（VE 五条）、通道 4 task-65ce5275（PS / SA / PP 六条 + 追加 1）均 working；通道 2 空闲——两份完工报到手后各派对方评审（3 ↔ 4 互评会撞「作者评自己」，用通道 2 评一份、另一份推送方直读或等通道 2 评完再评第二份）。
+- **在途**：通道 3 task-0962cb6b（VE 五条）、通道 4 task-65ce5275（PS / SA / PP 六条 + 追加 1）均 working；通道 2 空闲——两份完工报到手后各派对方评审。（上一稿这里写「3 ↔ 4 互评会撞『作者评自己』」是错话：各评对方的票就是非作者，不撞；留痕改口。）
+
+### 09:1x–09:4x 通道 2 交活后 crash → 通道 3 做完未成笔即 crash → 封存 → 推送方直读两轴 → 重放进 main
+
+- **通道 2**（用户 09:1x 报「做完然后 crash」）：评审全文 09:03 已到手并落票进 main（`3ee64735`），只读检出 `%TEMP%\idp-review-psr09-0855` 已自拆，`git worktree list` 无残留；零损失。
+- **通道 3**（用户 09:3x 报「做完了，然后 crash」）——**不信自报，查 git**：`mcp3-vetails@66c6168c` = origin，五笔（立票 + 条 1–4）已推；树上 **2 件已修改未提交**（条 5 ADR-0136 补记 + 票面 Status → resolved）、0 件未跟踪、mtime 09:25:32 / 09:27:33 在最后一笔 09:24:15 之后、完成记录节仍「待填」、task-0962cb6b 仍 working、无完工报。**与 09-11 晚 sa-cc/01 同一种丢法**（代码到手、完成记录没成笔）。封存：`chore(salvage)` **`b9fbd0dd`** 原样入库一字不改（提交信写证据），推 origin。
+- **非作者评审 ← 通道 1 直读**（通道 2 crash、通道 4 在做自己的票；钉 `b9fbd0dd`）：Standards 0 阻断 / 2 非阻断（`TestAnETADemandsItsSevenParts` 用例名带「Seven」——标识符不在条 1「只许注释行」红线内，作者不动是对的；`NewCatalogRegistration` 拒 nil 文本「catalog registry is required」没随 `CatalogRegistries` 改口）· Spec 0 / 2（完成记录缺席由推送方代写、判据 5「只有追加行」按行数不成立但原句是新行逐字节前缀）。脚本核：判据 1–4 零命中 / 同数 / PASS；`-U0` 非注释差 0；`ports.CatalogRegistry` 引用 3 = 3；`production_wiring_baseline.txt` 零差。全文落票 05 Comments。
+- **重放**：`merge-base = cdf17834`，main 已前进两笔纯 .md → `%TEMP%\idp-replay-vetails-0933` detached `3ee64735`，`cherry-pick cdf17834..mcp3-vetails` 六笔零冲突 → tip **`a34f439c`**；`gofmt -l` 空、build / vet 0；09:35 占号，带 DSN 全量 **110 ok / 0 FAIL / 15 无测试 / 0 cached**（09:37→09:39，133 s）；探针 PASS 四子例；清点 `tools/mechanism-inventory`（自带 go.mod，要在它目录里 `go run . -dir ../..`——仓根 `go run ./tools/...` 报「main module does not contain package」）干净检出重生成 porcelain 空；09:4x 释号。**完成记录由推送方代写**（lc/25 先例）：只写 git 与脚本能证的，作者判断项只取提交信与 Comments 里作者写过的。簿记一笔在其上（票 05 Status / 完成记录 / 评审 / 进 main 记录；psr/09 后继 ③ 划掉；本节）→ `ls-remote` 核 `3ee64735` 未动 → ff → `push <sha>:main`。SHA 对照见票 05「进 main 记录」。`mcp3-vetails` → `merged/`、远端删；作者树与重放树比内容后拆。
+- **候选后继（归 VE owner）**：`TestAnETADemandsItsSevenParts` 改名 + `NewCatalogRegistration` 拒 nil 文本随名改口，两处一笔。**归用户（新增）**：通道 2、3 今早各 crash 一次（均在交活之后 / 最后一笔之后），会话重置累计 3。
+- **本节五数**（09:1x–09:4x）：CI 未起跑（计费）· 集成时延 ve-disc/05 09:27（树上最后一次写入）→09:4x **约 20 分**（1 票）· 重放笔数 **6**（推送方封存 1 含在内）· 重复开发 0 · 会话重置 **2**（通道 2、通道 3）· 非作者评审缺席 0（推送方直读，非作者）· **作者完成记录缺席 1**（推送方代写）

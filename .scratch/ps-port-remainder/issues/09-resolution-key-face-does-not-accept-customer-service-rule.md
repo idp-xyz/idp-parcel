@@ -77,7 +77,7 @@ ADR-0136 决定三 / 越权风险点 2；[ve-claims/04](../../ve-claims-read-sea
 - **重放**：`merge-base(main, mcp3-psr09) = main` → 纯 ff 不换号。`%TEMP%\idp-replay-psr09` detached `9fa2ddc6`，清点在其上重生成 `590282b0`（PS 测试 172→173、合计 919→920；迁移 parcel_shipment 21→22、合计 167→168；生产 / 端口 / 消费缝 / 路由表零差）。
 - **验证钉 `590282b0`**：`gofmt -l` 空；`go build ./...` / `go vet ./...` 退 0；00:18 占号，带 DSN `go test -p 1 -count=1 ./...` **110 ok / 0 FAIL / 15 无测试 / 0 cached**（00:19:22→00:21:30），00:21 释号。
 - **进 main**：本簿记笔（票 09 Status + 本节；ve-claims/04「裁决」5 后继句改口；tasks.md 节）在 `590282b0` 之上；`ls-remote` 核 `1b06bb18` 未动 → 共享树 `merge --ff-only` → `push <sha>:main`。SHA 见推送后 tasks.md。
-- **后继**：① ~~非作者评审后补（task-50cd7049 留在通道 2 队列，钉 `9fa2ddc6`，已进 main；评审结论回落本节）~~ **已落**——2026-09-14 09:03 通道 2 交，两轴 0 阻断，全文见 Comments；Standards 非阻断 1（`commercialKindFrom` 头注「两份镜像」被 PRICE_RULE 那一格反证）追加为 lc/38 第 7 条（`label-channel-service-first-release/issues/38-*`，通道 4 task-65ce5275 立票中）；② 「必登」归 PS owner（「要裁的」1）；③ ADR-0136 越权风险点 2 补 `262e8c0a` 实测一句——已派通道 3（task-0962cb6b，ve-disc/05 第 5 条）。
+- **后继**：① ~~非作者评审后补（task-50cd7049 留在通道 2 队列，钉 `9fa2ddc6`，已进 main；评审结论回落本节）~~ **已落**——2026-09-14 09:03 通道 2 交，两轴 0 阻断，全文见 Comments；Standards 非阻断 1（`commercialKindFrom` 头注「两份镜像」被 PRICE_RULE 那一格反证）追加为 lc/38 第 7 条（`label-channel-service-first-release/issues/38-*`，通道 4 task-65ce5275 立票中）；② 「必登」归 PS owner（「要裁的」1）；③ ~~ADR-0136 越权风险点 2 补 `262e8c0a` 实测一句~~ **已落**——ve-disc/05 条 5，2026-09-14 09:4x 进 main（补记追加在该风险点末尾，原句一字未改；见 [ve-disc/05](../../ve-disclosure-policy-view/issues/05-ve-review-tails-counts-rename-nil-sentinel-and-adr-0136-addendum.md)）。
 
 ## Comments
 
