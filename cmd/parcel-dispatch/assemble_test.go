@@ -1303,7 +1303,7 @@ func recordedFailureCode(t *testing.T, db *bentopg.DB, eventID string) string {
 	return *code
 }
 
-// Covers: ADR-0049 第三条——没有订阅者的类型显式失败并入账，不静默丢弃。它此刻会
+// Covers: ADR-0049 决定三「没有订阅者的事件类型显式失败并入账，不静默丢弃」。它此刻会
 // 阻塞自己那个分区直到失败预算耗尽，那是记录里认下的代价，不是缺陷。
 func TestAnUnroutedEnvelopeIsNotSilentlyDropped(t *testing.T) {
 	beat, db, store := wiredBeat(t)

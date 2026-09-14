@@ -84,8 +84,8 @@ func TestDirectDeliverySucceedsOnlyAfterTheConsumerAccepts(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0049 第三条——路由表是显式清单，没有订阅者的类型显式失败并入账，
-// 不静默丢弃也不「未知类型即放行」。
+// Covers: ADR-0049 决定三「没有订阅者的事件类型显式失败并入账」——原句前半「路由表是显式清单」，
+// 后半「不静默丢弃，也不得回退成「未知类型即放行」」。
 func TestAnEnvelopeWithNoSubscriberFailsLoudly(t *testing.T) {
 	consumer := &consumerDouble{}
 	publisher, err := dispatch.NewDirectPublisher(
@@ -140,7 +140,7 @@ func TestAConsumerFailureIsDefiniteNotUncertain(t *testing.T) {
 	}
 }
 
-// Covers: 基线重盘那条硬约束与 ADR-0049 第三条合起来的推论——空路由表上线会让
+// Covers: 基线重盘那条硬约束与 ADR-0049 决定三「没有订阅者的事件类型显式失败并入账」合起来的推论——空路由表上线会让
 // 每一类事件都撞无订阅者、逐个阻塞分区。它是装配错误，构造期就该立不起来，而不是
 // 等第一份事件在生产上卡住才发现。
 func TestAnEmptyRouteTableCannotBeAssembled(t *testing.T) {

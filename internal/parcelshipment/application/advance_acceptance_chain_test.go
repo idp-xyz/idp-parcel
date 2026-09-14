@@ -166,7 +166,7 @@ func TestAnOrchestrationErrorIsRaisedRatherThanFoldedIntoUndecided(t *testing.T)
 	}
 }
 
-// Covers: ADR-0049 第三条的同一条理由在装配面上的落法 — 少接一个编排响亮报错，不当作
+// Covers: ADR-0049 决定三「没有订阅者的事件类型显式失败并入账」的同一条理由在装配面上的落法 — 少接一个编排响亮报错，不当作
 // 未决。未决等的是一个会回来的依赖，而少接一步等多久都不会长出来；压成未决，消费门会
 // 一路重投到失败预算耗尽，现场看到的是「一直在等」而不是「接线漏了」。
 func TestAnUnassembledChainFailsLoudlyInsteadOfWaiting(t *testing.T) {

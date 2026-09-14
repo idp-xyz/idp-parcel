@@ -321,7 +321,7 @@ var veFinalOutcomeUndecidedSentinels = []error{
 
 // veInitialRouteUndecidedSentinels 只给 VE 初始路由投影这一路。本路不 FanOut：按消费
 // 清点该信封的应消费方还有 NO/TF，但两侧消费者今天不存在——登记接不住的比不登记更糟
-// （ADR-0049 第三条），照交接路的先例只投 VE。
+// （ADR-0049 决定三「没有订阅者的事件类型显式失败并入账」），照交接路的先例只投 VE。
 //
 // 不在名单里：ErrInitialRouteRecordInconsistent、ErrInitialRouteUntranslatableAnswer、
 // ErrInitialRouteProjectionHandoffPending、veconsume.ErrUnexpectedProjectionOutcome。
@@ -332,7 +332,7 @@ var veInitialRouteUndecidedSentinels = []error{
 
 // veExceptionJourneyUndecidedSentinels 只给 VE 异常旅程投影这一路。本路不 FanOut：
 // 旅程启动是 TF 自家过程事实，PS 侧今天没有它的消费者——登记接不住的比不登记更糟
-// （ADR-0049 第三条），照交接路先例只投 VE。
+// （ADR-0049 决定三「没有订阅者的事件类型显式失败并入账」），照交接路先例只投 VE。
 //
 // 不在名单里：ErrExceptionJourneyRecordInconsistent（仓储不变量已破，含成员为空）、
 // ErrExceptionJourneyUntranslatableAnswer（词汇表外，编程错误）、
@@ -345,7 +345,7 @@ var veExceptionJourneyUndecidedSentinels = []error{
 
 // veCustomsCaseUndecidedSentinels 只给 VE 关务案件投影这一路。本路不 FanOut：案件
 // 建立是 CC 自家责任容器事实，PS 侧今天没有它的消费者——登记接不住的比不登记更糟
-// （ADR-0049 第三条），照旅程路先例只投 VE。
+// （ADR-0049 决定三「没有订阅者的事件类型显式失败并入账」），照旅程路先例只投 VE。
 //
 // 不在名单里：ErrCustomsCaseRecordInconsistent（仓储不变量已破，含成员关联为空）、
 // ErrCustomsCaseUntranslatableAnswer（词汇表外，编程错误）、
@@ -357,7 +357,7 @@ var veCustomsCaseUndecidedSentinels = []error{
 
 // veDeclarationSubmissionUndecidedSentinels 只给 VE 申报提交投影这一路。本路不
 // FanOut：提交版本是 CC 自家申报链事实，PS 侧今天没有它的消费者——登记接不住的比
-// 不登记更糟（ADR-0049 第三条），照案件路先例只投 VE。
+// 不登记更糟（ADR-0049 决定三「没有订阅者的事件类型显式失败并入账」），照案件路先例只投 VE。
 //
 // 不在名单里：ErrDeclarationSubmissionRecordInconsistent（仓储不变量已破，含版本
 // 身份与载荷宣告不符、成员快照为空）、ErrDeclarationSubmissionUntranslatableAnswer
@@ -564,9 +564,9 @@ var buyEvaluationRecordedUndecidedSentinels = []error{
 // 之后同时错位两位），而 build、vet 与全仓 test 对此零信号。
 // `visibility-exception.tracking-projection.derived` 已登记（UC-VE-008）：早先不登记
 // 的理由是 Customer 那一维填不上；ADR-0060 的按包裹反查把账户随来源身份一并交回之后
-// 本进程真接得住它了——接得住才登记，正是 ADR-0049 第三条的判据。
-// 登记的仍然只有本进程真接得住的类型——按 ADR-0049 第三条，登记一个接不住的比不登记
-// 更糟。其余已发布但无消费者的类型照旧撞 `dispatch.no_subscriber`。
+// 本进程真接得住它了——接得住才登记，正是 ADR-0049 决定三的判据。
+// 登记的仍然只有本进程真接得住的类型——按 ADR-0049 决定三「没有订阅者的事件类型显式失败并入账」，
+// 登记一个接不住的比不登记更糟。其余已发布但无消费者的类型照旧撞 `dispatch.no_subscriber`。
 // options 用变参收：多数调用点（含各真库装配用例）不需要观察口，变参让它们一个都不必改，
 // 与 dispatch.NewDispatcher 那一处同一手法（ADR-0095 Decision 四）。
 func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispatch.Option) (Beat, error) {
@@ -1582,7 +1582,7 @@ func deriveFinalOutcomeConsumer(
 
 // deriveInitialRouteConsumer 接 NR 包裹级初始路由判断 → VE 投影。本路只投 VE 不
 // FanOut：按消费清点该信封的应消费方还有 NO/TF，但两侧消费者今天不存在——登记一个
-// 接不住的比不登记更糟（ADR-0049 第三条），照交接路先例办。
+// 接不住的比不登记更糟（ADR-0049 决定三「没有订阅者的事件类型显式失败并入账」），照交接路先例办。
 //
 // 信封只带完整判断键（含 customerAccountId），判断本体由处理适配器按键重取——权威
 // 事实留在 network-routing，计划段链与候选依据都不进载荷。
@@ -1608,7 +1608,7 @@ func deriveInitialRouteConsumer(
 
 // deriveExceptionJourneyConsumer 接 TF 替代/退运旅程启动 → VE 投影。本路只投 VE 不
 // FanOut：旅程启动是 TF 自家过程事实，PS 侧今天没有它的消费者——登记接不住的比不
-// 登记更糟（ADR-0049 第三条），照交接路先例办。
+// 登记更糟（ADR-0049 决定三「没有订阅者的事件类型显式失败并入账」），照交接路先例办。
 //
 // 信封只带旅程幂等键四维，本体（含成员清单）由处理适配器按键重取——权威事实留在
 // transport-fulfillment。一个信封型对两个事实类型（目的分格 alternate/return 进
@@ -1635,7 +1635,7 @@ func deriveExceptionJourneyConsumer(
 
 // deriveCustomsCaseConsumer 接 CC 关务案件建立 → VE 投影。本路只投 VE 不 FanOut：
 // 案件建立是 CC 自家责任容器事实，PS 侧今天没有它的消费者——登记接不住的比不登记
-// 更糟（ADR-0049 第三条），照旅程路先例办。
+// 更糟（ADR-0049 决定三「没有订阅者的事件类型显式失败并入账」），照旅程路先例办。
 //
 // 信封只带案件身份键五维，本体（含成员关联与客户归属）由处理适配器按键重取——权威
 // 事实留在 customs-compliance。成员维与案件维一并进事实引用（ADR-0066）；建立是一件
@@ -1662,7 +1662,7 @@ func deriveCustomsCaseConsumer(
 
 // deriveDeclarationSubmissionConsumer 接 CC 申报提交版本形成 → VE 投影。本路只投
 // VE 不 FanOut：提交版本是 CC 自家申报链事实，PS 侧今天没有它的消费者——登记接不
-// 住的比不登记更糟（ADR-0049 第三条），照案件路先例办。
+// 住的比不登记更糟（ADR-0049 决定三「没有订阅者的事件类型显式失败并入账」），照案件路先例办。
 //
 // 信封只带提交幂等键三维加提交版本维，本体（含成员快照）由处理适配器按键重取——
 // 权威事实留在 customs-compliance。成员维进事实引用、提交版本进版本维（ADR-0066；
