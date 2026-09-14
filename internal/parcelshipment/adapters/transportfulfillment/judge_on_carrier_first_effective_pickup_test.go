@@ -261,8 +261,8 @@ func TestARegisteredCarrierPickupIsFetchedAtTheEnvelopeVersionAndJudgedAsFinal(t
 		t.Fatalf("命令折错了：%#v", command)
 	}
 	want := psdomain.CarrierFirstEffectivePickupSpec{
-		Fact:        value(t, psdomain.NewCarrierTrackingFactReference, "CFEP-1"),
-		Version:     value(t, psdomain.NewCarrierTrackingFactVersion, "CFEV-1"),
+		Fact:        value(t, psdomain.NewCarrierFirstEffectivePickupFactReference, "CFEP-1"),
+		Version:     value(t, psdomain.NewCarrierFirstEffectivePickupFactVersion, "CFEV-1"),
 		EffectiveAt: firstPickupAt,
 	}
 	if command.FirstEffectivePickup != want {
@@ -319,8 +319,8 @@ func TestASupersedingCarrierPickupVersionIsJudgedAtItsOwnOccurrenceTime(t *testi
 		t.Fatalf("判断次数 = %d, want 1", len(f.judge.commands))
 	}
 	want := psdomain.CarrierFirstEffectivePickupSpec{
-		Fact:        value(t, psdomain.NewCarrierTrackingFactReference, "CFEP-1"),
-		Version:     value(t, psdomain.NewCarrierTrackingFactVersion, "CFEV-2"),
+		Fact:        value(t, psdomain.NewCarrierFirstEffectivePickupFactReference, "CFEP-1"),
+		Version:     value(t, psdomain.NewCarrierFirstEffectivePickupFactVersion, "CFEV-2"),
 		EffectiveAt: pickupCorrected,
 	}
 	if got := f.judge.commands[0].FirstEffectivePickup; got != want {

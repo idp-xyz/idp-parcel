@@ -157,11 +157,11 @@ func firstEffectivePickupSpecFor(
 	occurredAt time.Time,
 ) (psdomain.CarrierFirstEffectivePickupSpec, error) {
 	none := psdomain.CarrierFirstEffectivePickupSpec{}
-	fact, err := psdomain.NewCarrierTrackingFactReference(key.Fact.String())
+	fact, err := psdomain.NewCarrierFirstEffectivePickupFactReference(key.Fact.String())
 	if err != nil {
 		return none, fmt.Errorf("%w: carrier pickup fact: %v", ErrUntranslatableAnswer, err)
 	}
-	version, err := psdomain.NewCarrierTrackingFactVersion(key.Version.String())
+	version, err := psdomain.NewCarrierFirstEffectivePickupFactVersion(key.Version.String())
 	if err != nil {
 		return none, fmt.Errorf("%w: carrier pickup version: %v", ErrUntranslatableAnswer, err)
 	}

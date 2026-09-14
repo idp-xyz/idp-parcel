@@ -78,8 +78,8 @@ func closedRegister(t *testing.T) domain.ContinuedAttemptRegister {
 func firstPickup(t *testing.T) domain.CarrierFirstEffectivePickup {
 	t.Helper()
 	pickup, err := domain.ReferenceCarrierFirstEffectivePickup(domain.CarrierFirstEffectivePickupSpec{
-		Fact:        mustValue(t, domain.NewCarrierTrackingFactReference, "TF-TRACK-FACT-7"),
-		Version:     mustValue(t, domain.NewCarrierTrackingFactVersion, "TF-TRACK-FACT-7/v1"),
+		Fact:        mustValue(t, domain.NewCarrierFirstEffectivePickupFactReference, "TF-TRACK-FACT-7"),
+		Version:     mustValue(t, domain.NewCarrierFirstEffectivePickupFactVersion, "TF-TRACK-FACT-7/v1"),
 		EffectiveAt: labelServicePickupAt,
 	})
 	if err != nil {

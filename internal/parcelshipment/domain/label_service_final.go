@@ -17,31 +17,34 @@ import (
 // 别的包裹的登记册。判断不替编排猜它想问哪件包裹。
 var ErrInvalidLabelServiceFinalInput = errors.New("parcel shipment: invalid label service final input")
 
-// CarrierTrackingFactReference 指名 transport-fulfillment 拥有的一条实际承运商首次有效收寄事实（ADR-0135；
-// 类型名沿用立票时的叫法，是否改名归另笔）。只引用：事实的依据、承运主体、业务发生时间与版本规则都在那边，
-// 这里连一列都不复制。
-type CarrierTrackingFactReference struct{ requiredValue }
+// CarrierFirstEffectivePickupFactReference 指名 transport-fulfillment 拥有的一条实际承运商首次有效收寄事实
+// （ADR-0135）。只引用：事实的依据、承运主体、业务发生时间与版本规则都在那边，这里连一列都不复制。
+//
+// 名字里说的是「收寄事实」而不是「轨迹事实」：外部承运轨迹事实按 TF CONTEXT 本身不构成收寄，那是另一类
+// 事实、本上下文不消费它；这里引用的是 TF 判过并登记的收寄，与 TF 侧的 CarrierFirstEffectivePickupReference
+// 指同一条记录，多出的「Fact」只为与本文件的 CarrierFirstEffectivePickup（事实 + 版本 + 有效时间的只读引用）分开。
+type CarrierFirstEffectivePickupFactReference struct{ requiredValue }
 
-func NewCarrierTrackingFactReference(value string) (CarrierTrackingFactReference, error) {
-	required, err := newRequiredValue("carrier tracking fact reference", value)
-	return CarrierTrackingFactReference{required}, err
+func NewCarrierFirstEffectivePickupFactReference(value string) (CarrierFirstEffectivePickupFactReference, error) {
+	required, err := newRequiredValue("carrier first effective pickup fact reference", value)
+	return CarrierFirstEffectivePickupFactReference{required}, err
 }
 
-// CarrierTrackingFactVersion 是那条事实的版本：源声明更正与有效时间判断在那边都换版本，终局
+// CarrierFirstEffectivePickupFactVersion 是那条事实的版本：源声明更正与有效时间判断在那边都换版本，终局
 // 采用按它幂等（同一版本重放返原，新版本走重派生）。
-type CarrierTrackingFactVersion struct{ requiredValue }
+type CarrierFirstEffectivePickupFactVersion struct{ requiredValue }
 
-func NewCarrierTrackingFactVersion(value string) (CarrierTrackingFactVersion, error) {
-	required, err := newRequiredValue("carrier tracking fact version", value)
-	return CarrierTrackingFactVersion{required}, err
+func NewCarrierFirstEffectivePickupFactVersion(value string) (CarrierFirstEffectivePickupFactVersion, error) {
+	required, err := newRequiredValue("carrier first effective pickup fact version", value)
+	return CarrierFirstEffectivePickupFactVersion{required}, err
 }
 
 // CarrierFirstEffectivePickup 是「实际承运商首次有效收寄」在本上下文里的只读引用：事实引用、
 // 版本与那边判出的有效时间。有效时间是终局的生效时间——那是收寄发生的业务时间，不是本上下文
 // 读到它的时间。
 type CarrierFirstEffectivePickup struct {
-	fact        CarrierTrackingFactReference
-	version     CarrierTrackingFactVersion
+	fact        CarrierFirstEffectivePickupFactReference
+	version     CarrierFirstEffectivePickupFactVersion
 	effectiveAt time.Time
 }
 
@@ -49,8 +52,8 @@ type CarrierFirstEffectivePickup struct {
 // ResponsibilityOutcomeSpec 的先例）：引用本体在编排里经 ReferenceCarrierFirstEffectivePickup
 // 立起来，调用方递不进一个绕过校验的引用。
 type CarrierFirstEffectivePickupSpec struct {
-	Fact        CarrierTrackingFactReference
-	Version     CarrierTrackingFactVersion
+	Fact        CarrierFirstEffectivePickupFactReference
+	Version     CarrierFirstEffectivePickupFactVersion
 	EffectiveAt time.Time
 }
 
@@ -63,11 +66,11 @@ func ReferenceCarrierFirstEffectivePickup(spec CarrierFirstEffectivePickupSpec) 
 	return CarrierFirstEffectivePickup{fact: spec.Fact, version: spec.Version, effectiveAt: spec.EffectiveAt.UTC()}, nil
 }
 
-func (pickup CarrierFirstEffectivePickup) Fact() CarrierTrackingFactReference {
+func (pickup CarrierFirstEffectivePickup) Fact() CarrierFirstEffectivePickupFactReference {
 	return pickup.fact
 }
 
-func (pickup CarrierFirstEffectivePickup) Version() CarrierTrackingFactVersion {
+func (pickup CarrierFirstEffectivePickup) Version() CarrierFirstEffectivePickupFactVersion {
 	return pickup.version
 }
 
