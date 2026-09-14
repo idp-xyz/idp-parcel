@@ -45,13 +45,11 @@ func inEvaluationTx(t *testing.T, transactor bentoapp.Transactor, ctx context.Co
 	}
 }
 
+// evaluationValue 是本包用例的统一失败出口，体只转调 pptest.Value——同一件事不写第二份（票 sa-cc/18）；
+// 保留本地名是因为同包十余份用例都在叫它。
 func evaluationValue[T any](t *testing.T, construct func(string) (T, error), raw string) T {
 	t.Helper()
-	built, err := construct(raw)
-	if err != nil {
-		t.Fatalf("构造 %q：%v", raw, err)
-	}
-	return built
+	return pptest.Value(t, construct, raw)
 }
 
 // syntheticPlan 造一张最小可评价的合成价卡（S 级证据）：单分区重量段费率表+实重策略，三条引用都带指纹、不声明
