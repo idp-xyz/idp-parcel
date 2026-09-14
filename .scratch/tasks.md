@@ -2201,3 +2201,12 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - **重放**：`%TEMP%\idp-replay-tails2-1035` detached `1ca125a5`，`cherry-pick 6bbf2bf0..mcp4-tails2` 五笔零冲突（sa-cc spec.md 我的状态行改动与它新增的 18 行不同 hunk，自动合）→ tip **`cb440073`**；`gofmt -l` 空、build / vet 0；10:3x 先排队列再占号，带 DSN 全量 **110 ok / 0 FAIL / 16 无测试 / 0 cached**（132 s）；探针两例 PASS；清点重生成 porcelain 空；10:4x 释号。簿记一笔在其上（两票 Status / 评审 / 进 main 记录；本节）→ `ls-remote` 核 `1ca125a5` 未动 → ff → `push <sha>:main`。SHA 对照五笔在 ve-disc/06「进 main 记录」。`mcp4-tails2` → `merged/`、远端删；两树比内容后拆。
 - **前沿**：ready 四张（lc/35、lc/39、sa-cc/11、sa-cc/13）；在途 sa-cc/12（通道 4）。今早自 08:4x 起进 main 的票：psr/09 评审后补、ve-disc/05、lc/38、sa-cc/17、ve-disc/06、sa-cc/18 六张 + 六条裁决簿记。
 - **本节五数**（10:2x–10:4x）：CI 未起跑（计费）· 集成时延 tails2 10:20（`a4da9748`）→10:4x **约 25 分**（2 票，同分支；其中约 10 分在写六条裁决）· 重放笔数 **5** · 重复开发 0 · 会话重置 0 · 非作者评审缺席 0 · **推送方派单取证错数 1 处**（条 1 处数）
+
+### 12:0x–12:1x 用户问 sa-cc/12 能否重放 → 三门未过；随后报通道 4 crash → 现场封存 `7f5db322`、接管单预派通道 4
+
+- **11:5x 用户问「`idp-parcel-mcp4-sacc12` 可以 replay 了吗」**：不能。树上五份未提交（+85/−31：`reconcile_duty_payment.go`、`registrationjson/translate.go`、三处 `cmd/*` 装配各一行）；tip `97ba925a` 题头自标「之一」；票面 `in-progress`、无完工报、无非作者评审。顺手核：分支 = origin；merge-base `1ca125a5` 以来 main 前进 7 笔（ve-disc/06、sa-cc/18 + 簿记），main 侧 `.go`/`.sql` 全在 SA / PP / VE，与分支 13 份 CC 文件零重叠，未提交五份亦零重叠——到时可直接重放，不必作者重验。
+- **12:0x 用户报通道 4 crash**。量现场：五份 mtime 停在 10:52:06–10:53:23（tip 提于 10:50:04），自此未动；`go build ./...` 0；`application` 十例红同一因（夹具未装 `PayerRules`，构造门拒「payer requirement rule view」）、`domain` 绿。封存内容是「之二」：`VerifyDutyPaymentCommand` 加 `Procedure`、deps 加 `PayerRules ports.PayerRequirementRuleView` 进构造门、`VerifyPayment` 两道前置后读规则出三停格（未决 `PayerRequirementNotConfigured` / `PayerRequiredNotProvided` / `PayerRequirementViewUnavailable`）、`procedureRef` 必填入 JSON 译装、三处装配接 `PayerRules`——**已按 `32ec44bd` 改口落**（未决 + reason，不加新 outcome）。
+- **推送方代封存** `chore(salvage)` **`7f5db322`**（原样入库一字不改；提交信写 mtime 与用户报时，不写「已死」）并推 origin；树干净、= origin。`task-d6d4f149` 结 failed「承接方换人（crash）」；**接管单 `task-8d2df3e3`** 预派通道 4（high）：第 1 步读封存 diff 报 ≤10 行接不接受其形；接受则 `reset --soft` 拆回随测试成正式笔、封存笔留 `salvage/` 指针不进 main；剩余七项列明（夹具 → 三停格 + 读口故障各一例 → `procedureRef` 译装例 → 真库 0020 往返 + 规则册三格 → cmd 装配测试 → 判据 1–3 → 完工报）。用户重启通道 4 即接；改指别的通道我改派。
+- **原单一处与实做不符、接受**：派单写「不碰 `assemble.go`」，但构造门对每一口一视同仁，三处装配各一行 `PayerRules: reconciliation` 是必需。
+- **在途**：sa-cc/12（接管单待通道 4 上线）。前沿 ready 四张不变（lc/35、lc/39、sa-cc/11、sa-cc/13）；sa-cc/13 与 12 同 CC 地盘，迁移序号待 12 落后再钉、串行派。
+- **本节五数**（12:0x–12:1x）：CI 未起跑（计费）· 集成时延 —（无票进 main）· 重放笔数 0 · 重复开发 0 · **会话重置 1**（用户报通道 4 crash）· 封存 1 笔
