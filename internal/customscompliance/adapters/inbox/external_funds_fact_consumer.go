@@ -27,7 +27,9 @@ const externalFundsFactConsumerName = "customs-compliance/receive-external-funds
 // 事实后交出的信封（票 sa-cc/02）。消费方自己写出这个字符串，不导入提供方 outbox 适配器的未导出常量。
 //
 // 更正 / 撤销在提供方是回指原事实的新版本、同一事件类型再发一封（票 sa-cc/02 裁决 2）——本消费者
-// 对首版与更正版一视同仁地交给处理方，重新核对是 UC-CC-009 的事，不在这里分路。
+// 对首版与更正版一视同仁地交给处理方；处理方按（引用 + 版本）把更正版本登成入向登记册的新一行、回指前版
+// （票 sa-cc/13，`ExternalFundsFactRegister.ListFundsFactVersions` 列得出全部版本）。「新版本到达 → 形成新核对
+// 版本」的触发归核对那一族的后继票，今天在登记册上看得见、还没有编排接着做。
 const ExternalFundsFactAdoptedEventType eventing.EventType = "settlement-accounting.external-funds-fact.adopted"
 
 // AdoptedExternalFundsFact 是译码后的引用——只有引用，事实内容由处理方按（租户 + 事实 + 版本）
