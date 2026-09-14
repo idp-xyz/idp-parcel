@@ -285,6 +285,13 @@ func (purpose PricingPurpose) pairedDirection() PricingDirection {
 	}
 }
 
+// PairsWithDirection 报出本计算目的是否与该价格方向成对声明——方案构造门用的就是这一张配对表。导出它是让
+// 收（方向、目的）成对输入的入口（按评价请求形成评价）在解析价卡之前就拒掉配错的一对：配错的一对若进了
+// 解析口会零命中，被读成「未配置」，让人去登记一张本就不该存在的卡。
+func (purpose PricingPurpose) PairsWithDirection(direction PricingDirection) bool {
+	return purpose.valid() && purpose.pairedDirection() == direction
+}
+
 func (purpose PricingPurpose) String() string {
 	return string(purpose)
 }
