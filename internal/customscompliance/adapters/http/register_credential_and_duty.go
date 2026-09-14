@@ -163,15 +163,16 @@ type dutyReconciliationRegistrationResponse struct {
 // 该改内容的请求当成该改请求形状的请求丢掉（ADR-0022 否决的正是 409 / 422 那条路）。
 //
 // 本族的「未决」分两半，这是它与配置族转写唯一的分界：
-//   - 义务依据缺席（DUTY_OBLIGATION_BASIS_ABSENT）是 UC-CC-009 步 4 的业务答案——编排
-//     形成了答案，答的是「等核定税费或明确无需付款依据」，走 200 带 undecidedReason；
-//     折成 5xx 会让客户端按退避重发一条内容不变就不会变的请求，且把一个形成了的答案
-//     报成没形成。
-//   - 其余未决是存储不可用，编排把依赖故障折成这一格值而不是 error，可它说的正是
+//   - 业务未决是编排形成了的答案，走 200 带 undecidedReason：义务依据缺席（UC-CC-009 步 4，
+//     等核定税费或明确无需付款依据）、程序要求付款人而来源未提供（等来源补事实）、付款人规则
+//     未配置（等登记方补规则）——后两格是票 sa-cc/12 裁决 2 的停格，CC CONTEXT「规则要求但缺失
+//     时保持未决」。三格各等一个不同的人补一样不同的东西，折成 5xx 会让客户端按退避重发一条
+//     内容不变就不会变的请求，且把一个形成了的答案报成没形成。
+//   - 其余未决是存储或读口不可用，编排把依赖故障折成这一格值而不是 error，可它说的正是
 //     「登记与否未知」，与编排交回 error 同格：500 NO_ANSWER_FORMED 且不带 outcome。
 //
-// 业务未决那一格逐名点出而不是反过来点依赖故障：用例日后多一格未决原因，默认落进
-// 「没形成答案」一侧——ADR-0022 点名判错的方向是把依赖不可用报成客户端不再重试的那类，
+// 业务未决那几格逐名点出（businessUndecided）而不是反过来点依赖故障：用例日后多一格未决原因，
+// 默认落进「没形成答案」一侧——ADR-0022 点名判错的方向是把依赖不可用报成客户端不再重试的那类，
 // 一格业务答案被多重试几次比一条该重试的请求被丢掉便宜。
 //
 // 201 只给这两口走得到的两个形成格。资金事实那族格在同一个枚举上，但没有任何在线口能
@@ -186,8 +187,7 @@ func writeDutyReconciliationAnswer(
 		writeProblem(response, http.StatusInternalServerError, codeUnnamedOutcome)
 		return
 	}
-	if result.Outcome() == application.DutyReconciliationUndecided &&
-		result.UndecidedReason() != application.DutyObligationBasisAbsent {
+	if result.Outcome() == application.DutyReconciliationUndecided && !businessUndecided(result.UndecidedReason()) {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
@@ -201,4 +201,17 @@ func writeDutyReconciliationAnswer(
 		body.UndecidedReason = reason
 	}
 	writeJSON(response, status, body)
+}
+
+// businessUndecided 点名本族里「形成了答案」的未决原因——重发同一份不会变、要等别人补一样东西的那几格；
+// 表外的未决一律按依赖故障处理（writeDutyReconciliationAnswer 头注）。
+func businessUndecided(reason application.DutyReconciliationReason) bool {
+	switch reason {
+	case application.DutyObligationBasisAbsent,
+		application.PayerRequiredNotProvided,
+		application.PayerRequirementNotConfigured:
+		return true
+	default:
+		return false
+	}
 }

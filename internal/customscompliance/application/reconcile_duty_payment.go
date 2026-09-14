@@ -85,16 +85,23 @@ func (outcome DutyReconciliationOutcome) String() string {
 	}
 }
 
-// DutyReconciliationReason 指名未决停在哪一步等谁。DutyObligationBasisAbsent 是业务上的未决
-// （UC-CC-009 步 4 的第四个结果「未决」）：既无核定税费也无明确无需付款依据——UC-CC-009「没有税费结果不能被解释为无需付款」，
-// 编排不形成支付指令也不替它选一格。其余三格是依赖故障。
+// DutyReconciliationReason 指名未决停在哪一步等谁，按恢复动作分格（ADR-0029）。DutyObligationBasisAbsent
+// 是业务上的未决（UC-CC-009 步 4 的第四个结果「未决」）：既无核定税费也无明确无需付款依据——UC-CC-009
+// 「没有税费结果不能被解释为无需付款」，编排不形成支付指令也不替它选一格。付款人那两格（票 sa-cc/12
+// 裁决 2，CC CONTEXT「规则要求但缺失时保持未决」）：PayerRequiredNotProvided 等的是**来源补事实**——真实
+// 程序要求付款人而这条事实的来源没给；PayerRequirementNotConfigured 等的是**登记方补规则**——这个程序
+// 还没登「要不要付款人」，核对不进行、不取任何默认。两格恢复动作不同，所以是两个词。其余几格是依赖故障，
+// 按哪一口不可用点名（规则读口自己答不出与「规则未配置」也是两格：前者重投会变，后者不会）。
 type DutyReconciliationReason uint8
 
 const (
 	DutyReconciliationReasonNone DutyReconciliationReason = iota
 	DutyObligationBasisAbsent
+	PayerRequiredNotProvided
+	PayerRequirementNotConfigured
 	CollaborationStoreUnavailable
 	FundsFactRegisterUnavailable
+	PayerRequirementViewUnavailable
 	DutyVerificationStoreUnavailable
 )
 
@@ -102,10 +109,16 @@ func (reason DutyReconciliationReason) String() string {
 	switch reason {
 	case DutyObligationBasisAbsent:
 		return "DUTY_OBLIGATION_BASIS_ABSENT"
+	case PayerRequiredNotProvided:
+		return "PAYER_REQUIRED_NOT_PROVIDED"
+	case PayerRequirementNotConfigured:
+		return "PAYER_REQUIREMENT_NOT_CONFIGURED"
 	case CollaborationStoreUnavailable:
 		return "COLLABORATION_STORE_UNAVAILABLE"
 	case FundsFactRegisterUnavailable:
 		return "FUNDS_FACT_REGISTER_UNAVAILABLE"
+	case PayerRequirementViewUnavailable:
+		return "PAYER_REQUIREMENT_VIEW_UNAVAILABLE"
 	case DutyVerificationStoreUnavailable:
 		return "DUTY_VERIFICATION_STORE_UNAVAILABLE"
 	default:
@@ -160,23 +173,30 @@ type ReceiveExternalFundsFactCommand struct {
 }
 
 // VerifyDutyPaymentCommand 携带一次税费付款核对：核对身份三维（税费版本、资金事实、范围）、
-// 三轴判断与关联依据。Basis 是「凭什么把这笔资金关联到这版税费」的证据引用（真实规则或来源
-// 提供的关联依据）——空即无权威依据，编排保持资金事实待关联而不形成核对。
+// 三轴判断与关联依据，以及这次核对在哪个监管程序下判。Basis 是「凭什么把这笔资金关联到这版税费」
+// 的证据引用（真实规则或来源提供的关联依据）——空即无权威依据，编排保持资金事实待关联而不形成
+// 核对。Procedure 是付款人那一维的规则要按哪个真实程序读（票 sa-cc/12 裁决 1）：范围与程序不是一对一
+// （门禁键里范围与边界并列就是这个意思），所以像三轴一样由调用方交进来、编排不从范围推；调用方给的
+// 程序与案件实际程序不核一致——与范围那一维同病，是票面记下的越权风险点，归 CC owner。
 type VerifyDutyPaymentCommand struct {
-	TenantID domain.TenantID
-	Duty     domain.AssessedDutyReference
-	Funds    domain.ExternalFundsFactReference
-	Scope    domain.DecisionScopeReference
-	Coverage domain.DutyCoverage
-	Delta    domain.DutyDelta
-	Validity domain.DutyFactValidity
-	Basis    string
+	TenantID  domain.TenantID
+	Duty      domain.AssessedDutyReference
+	Funds     domain.ExternalFundsFactReference
+	Scope     domain.DecisionScopeReference
+	Procedure domain.CustomsProcedureReference
+	Coverage  domain.DutyCoverage
+	Delta     domain.DutyDelta
+	Validity  domain.DutyFactValidity
+	Basis     string
 }
 
 type DutyPaymentReconciliationDeps struct {
 	Collaborations ports.DutyCollaborationStore
 	Funds          ports.ExternalFundsFactRegister
 	Verifications  ports.DutyVerificationStore
+	// PayerRules 是「真实程序要不要求付款人」的规则读口，只被 VerifyPayment 读（票 sa-cc/12 裁决 2 的三停格）。
+	// 与 Handoff 同一条理由：只走 ReceiveFundsFact 的装配点也得接真口。
+	PayerRules ports.PayerRequirementRuleView
 	// Handoff 是步 8 的结算交接口，只被 VerifyPayment 在核对形成那一格调用。只走 FormCollaboration
 	// 或 ReceiveFundsFact 的装配点也得接真口——构造门对每一口一视同仁，漏装要在启动那一刻炸出来。
 	Handoff ports.DutyPaymentVerificationHandoff
@@ -201,6 +221,7 @@ func NewDutyPaymentReconciliationHandler(deps DutyPaymentReconciliationDeps) (*D
 		{"duty collaboration store", deps.Collaborations == nil},
 		{"external funds fact register", deps.Funds == nil},
 		{"duty verification store", deps.Verifications == nil},
+		{"payer requirement rule view", deps.PayerRules == nil},
 		{"duty payment verification handoff", deps.Handoff == nil},
 		{"clock", deps.Clock == nil},
 	} {
@@ -318,6 +339,12 @@ func (handler *DutyPaymentReconciliationHandler) ReceiveFundsFact(
 // 未形成），无关联依据保持待关联；三轴集外由领域构造拒。同三维同内容是重放，同三维换内容
 // 是新版本追加——迟到事实按新版本进，不按到达顺序覆盖。
 //
+// 付款人那一维在两道前置之后、形成之前判（票 sa-cc/12 裁决 2，三停格）：按命令所指的监管程序读
+// 「要不要求付款人」——没登 → 未决 PayerRequirementNotConfigured，核对不进行、不取任何默认（等登记方
+// 补规则）；登了要求而这条事实的来源没给 → 未决 PayerRequiredNotProvided（等来源补事实，CC CONTEXT
+// 「规则要求但缺失时保持未决」——不是「不适用」，不适用是「这条维度与本程序无关」，与「该有而没有」
+// 是两格）；不要求 → 付款人「未提供」原样带着，核对照常。
+//
 // 形成那一格同事务交结算意图（步 8）。`已存在`不重发，与本上下文其余编排「重放重发同一份」
 // 不同形，理由在事务边界上：信封与核对版本由同一笔事务落下，库侧入队失败会让整笔事务连核对
 // 一起中止，重跑仍走`形成`那一格并再铸同一封——重放时没有「版本在、信封不在」要补的那一格；
@@ -331,6 +358,7 @@ func (handler *DutyPaymentReconciliationHandler) VerifyPayment(
 		strings.TrimSpace(command.Duty.String()) == "" ||
 		strings.TrimSpace(command.Funds.String()) == "" ||
 		strings.TrimSpace(command.Scope.String()) == "" ||
+		strings.TrimSpace(command.Procedure.String()) == "" ||
 		command.Coverage.String() == "" ||
 		command.Delta.String() == "" ||
 		command.Validity.String() == "" {
@@ -342,7 +370,8 @@ func (handler *DutyPaymentReconciliationHandler) VerifyPayment(
 		return DutyReconciliationResult{outcome: FundsFactPendingAssociation}, nil
 	}
 
-	if _, found, err := handler.deps.Funds.LoadFundsFact(ctx, command.TenantID, command.Funds); err != nil {
+	fact, found, err := handler.deps.Funds.LoadFundsFact(ctx, command.TenantID, command.Funds)
+	if err != nil {
 		return dutyUndecided(FundsFactRegisterUnavailable), nil
 	} else if !found {
 		return DutyReconciliationResult{outcome: FundsFactNotReceived}, nil
@@ -352,6 +381,20 @@ func (handler *DutyPaymentReconciliationHandler) VerifyPayment(
 		return dutyUndecided(CollaborationStoreUnavailable), nil
 	} else if !found {
 		return DutyReconciliationResult{outcome: CollaborationNotFormed}, nil
+	}
+
+	requirement, configured, err := handler.deps.PayerRules.LoadPayerRequirement(ctx, command.TenantID, command.Procedure)
+	if err != nil {
+		return dutyUndecided(PayerRequirementViewUnavailable), nil
+	} else if !configured {
+		return dutyUndecided(PayerRequirementNotConfigured), nil
+	}
+	switch err := requirement.Admit(fact.Payer); {
+	case errors.Is(err, domain.ErrFundsPayerRequired):
+		return dutyUndecided(PayerRequiredNotProvided), nil
+	case err != nil:
+		// 登记册里读回的规则或付款人立不起来是库被旁路改过，不是任何一格业务答案。
+		return DutyReconciliationResult{}, fmt.Errorf("verify duty payment: payer dimension: %w", err)
 	}
 
 	verification, err := domain.VerifyDutyPayment(

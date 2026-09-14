@@ -19,25 +19,47 @@ import (
 
 var dutyBaseAt = time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC)
 
-// dutyStoreDouble 同一本替身充当三口登记册加交接口。交接半边记下每一份意图与调用次数——
+// dutyStoreDouble 同一本替身充当三口登记册、付款人规则读口加交接口。交接半边记下每一份意图与调用次数——
 // 「`已存在`不重发」要能从调用次数上读出来，不能只靠认领键吞重去证。
 type dutyStoreDouble struct {
 	collaborations   map[string]domain.DutyPaymentCollaboration
 	funds            map[string]ports.ExternalFundsFactRegistration
 	verifications    map[string]ports.DutyVerificationRecord
+	payerRules       map[string]domain.PayerRequirement
 	handoffs         []ports.DutyPaymentVerificationHandoffIntent
 	collaborationErr error
 	fundsErr         error
 	verificationErr  error
+	payerRuleErr     error
 	handoffErr       error
 }
 
+// newDutyStore 交回的替身册上已登默认监管程序「要求付款人」那一条规则：核对族其余用例证的是三轴、依据、
+// 版本与交接，它们的事实都带付款人，规则那一维对它们只该是「要求且提供 → 放行」的背景；三停格各自的
+// 用例按格改写或清掉它。真库上没有这一行——那是实例半边，登记方一条条登进来。
 func newDutyStore() *dutyStoreDouble {
 	return &dutyStoreDouble{
 		collaborations: map[string]domain.DutyPaymentCollaboration{},
 		funds:          map[string]ports.ExternalFundsFactRegistration{},
 		verifications:  map[string]ports.DutyVerificationRecord{},
+		payerRules:     map[string]domain.PayerRequirement{"tenant-a|SYN-PROC-01": domain.PayerRequired},
 	}
+}
+
+func payerRuleKey(tenant domain.TenantID, procedure domain.CustomsProcedureReference) string {
+	return tenant.String() + "|" + procedure.String()
+}
+
+func (double *dutyStoreDouble) LoadPayerRequirement(
+	_ context.Context,
+	tenant domain.TenantID,
+	procedure domain.CustomsProcedureReference,
+) (domain.PayerRequirement, bool, error) {
+	if double.payerRuleErr != nil {
+		return domain.PayerRequirementInvalid, false, double.payerRuleErr
+	}
+	requirement, ok := double.payerRules[payerRuleKey(tenant, procedure)]
+	return requirement, ok, nil
 }
 
 func collaborationKey(tenant domain.TenantID, scope domain.DecisionScopeReference, duty domain.AssessedDutyReference) string {
@@ -161,6 +183,7 @@ func fullDutyDeps(store *dutyStoreDouble) application.DutyPaymentReconciliationD
 		Collaborations: store,
 		Funds:          store,
 		Verifications:  store,
+		PayerRules:     store,
 		Handoff:        store,
 		Clock:          dutyClock{at: dutyBaseAt},
 	}
@@ -178,6 +201,7 @@ func TestTheReconciliationHandlerNamesWhichDependencyIsMissing(t *testing.T) {
 		{"duty collaboration store", func(deps *application.DutyPaymentReconciliationDeps) { deps.Collaborations = nil }},
 		{"external funds fact register", func(deps *application.DutyPaymentReconciliationDeps) { deps.Funds = nil }},
 		{"duty verification store", func(deps *application.DutyPaymentReconciliationDeps) { deps.Verifications = nil }},
+		{"payer requirement rule view", func(deps *application.DutyPaymentReconciliationDeps) { deps.PayerRules = nil }},
 		{"duty payment verification handoff", func(deps *application.DutyPaymentReconciliationDeps) { deps.Handoff = nil }},
 		{"clock", func(deps *application.DutyPaymentReconciliationDeps) { deps.Clock = nil }},
 	}
@@ -240,15 +264,38 @@ func fundsFactCommand(t *testing.T) application.ReceiveExternalFundsFactCommand 
 func verifyDutyCommand(t *testing.T) application.VerifyDutyPaymentCommand {
 	t.Helper()
 	return application.VerifyDutyPaymentCommand{
-		TenantID: configValue(t, domain.NewTenantID, "tenant-a"),
-		Duty:     configValue(t, domain.NewAssessedDutyReference, "SYN-DUTY-01/v1"),
-		Funds:    configValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-01"),
-		Scope:    configValue(t, domain.NewDecisionScopeReference, "SYN-UNIT-01"),
-		Coverage: domain.CoverageFull,
-		Delta:    domain.DeltaNone,
-		Validity: domain.FundsFactValid,
-		Basis:    "SYN-RULE-01: assessment reference quoted on the remittance",
+		TenantID:  configValue(t, domain.NewTenantID, "tenant-a"),
+		Duty:      configValue(t, domain.NewAssessedDutyReference, "SYN-DUTY-01/v1"),
+		Funds:     configValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-01"),
+		Scope:     configValue(t, domain.NewDecisionScopeReference, "SYN-UNIT-01"),
+		Procedure: configValue(t, domain.NewCustomsProcedureReference, "SYN-PROC-01"),
+		Coverage:  domain.CoverageFull,
+		Delta:     domain.DeltaNone,
+		Validity:  domain.FundsFactValid,
+		Basis:     "SYN-RULE-01: assessment reference quoted on the remittance",
 	}
+}
+
+// unprovidedPayerFactCommand 是一条来源显式未提供付款人的资金事实——付款人三停格里唯一会让答案分岔的形。
+func unprovidedPayerFactCommand(t *testing.T) application.ReceiveExternalFundsFactCommand {
+	t.Helper()
+	command := fundsFactCommand(t)
+	command.Registration.Payer = domain.FundsPayerNotProvided()
+	return command
+}
+
+// formedOverUnprovidedPayer 铺好核对的两道前置：协作事项已形成、一条未提供付款人的事实已接收。
+func formedOverUnprovidedPayer(t *testing.T, store *dutyStoreDouble) *application.DutyPaymentReconciliationHandler {
+	t.Helper()
+	handler := newDutyHandler(t, store)
+	if _, err := handler.FormCollaboration(t.Context(), assessedCollaborationCommand(t)); err != nil {
+		t.Fatalf("协作事项：%v", err)
+	}
+	if result, err := handler.ReceiveFundsFact(t.Context(), unprovidedPayerFactCommand(t)); err != nil ||
+		result.Outcome() != application.FundsFactReceived {
+		t.Fatalf("未提供付款人的事实该`已接收`：err=%v outcome=%v", err, result.Outcome())
+	}
+	return handler
 }
 
 // 步 4–5：核定税费格与明确无需付款格各成一份协作事项，两格都不创建支付交易——形成的只是
@@ -676,5 +723,103 @@ func TestDutyReconciliationRefusalsAndDependencyFailures(t *testing.T) {
 		result.Outcome() != application.DutyReconciliationUndecided ||
 		result.UndecidedReason() != application.CollaborationStoreUnavailable {
 		t.Fatalf("协作库故障该未决：err=%v outcome=%v reason=%v", err, result.Outcome(), result.UndecidedReason())
+	}
+}
+
+// Covers: 票 sa-cc/12 完成判据 1 的核对半边——裁决 2 的三停格（CC CONTEXT「未提供或不适用必须明确记录，
+// 规则要求但缺失时保持未决」）。付款人那一维按命令所指监管程序的登记规则判：
+//   - 程序要求而来源未提供 → 未决 PayerRequiredNotProvided，等的是来源补事实；
+//   - 程序不要求而来源未提供 → 照常形成，「未提供」原样带着——不是「不适用」，也不替它补任何值；
+//   - 程序没登要不要 → 未决 PayerRequirementNotConfigured，等的是登记方补规则，不取任何默认。
+//
+// 前一格与后一格恢复动作不同，所以是两个词（ADR-0029）；两格都不落核对、不交信封。
+func TestThePayerDimensionIsJudgedByTheProcedureRule(t *testing.T) {
+	t.Run("程序要求而来源未提供", func(t *testing.T) {
+		store := newDutyStore()
+		handler := formedOverUnprovidedPayer(t, store)
+
+		result, err := handler.VerifyPayment(t.Context(), verifyDutyCommand(t))
+		if err != nil || result.Outcome() != application.DutyReconciliationUndecided ||
+			result.UndecidedReason() != application.PayerRequiredNotProvided {
+			t.Fatalf("该未决且点名缺付款人：err=%v outcome=%v reason=%v", err, result.Outcome(), result.UndecidedReason())
+		}
+		if len(store.verifications) != 0 || len(store.handoffs) != 0 {
+			t.Fatalf("未决却落了核对 %d 行、交了 %d 封", len(store.verifications), len(store.handoffs))
+		}
+	})
+
+	t.Run("程序不要求而来源未提供", func(t *testing.T) {
+		store := newDutyStore()
+		store.payerRules["tenant-a|SYN-PROC-01"] = domain.PayerNotRequired
+		handler := formedOverUnprovidedPayer(t, store)
+
+		result, err := handler.VerifyPayment(t.Context(), verifyDutyCommand(t))
+		if err != nil || result.Outcome() != application.DutyVerificationFormed {
+			t.Fatalf("不要求付款人该照常形成：err=%v outcome=%v reason=%v", err, result.Outcome(), result.UndecidedReason())
+		}
+		if len(store.verifications) != 1 || len(store.handoffs) != 1 {
+			t.Fatalf("形成该落一行、交一封：%d 行 %d 封", len(store.verifications), len(store.handoffs))
+		}
+		registered, _, _ := store.LoadFundsFact(t.Context(), verifyDutyCommand(t).TenantID, verifyDutyCommand(t).Funds)
+		if registered.Payer.Provided() || !registered.Payer.Valid() {
+			t.Fatalf("核对不得替事实补付款人：%#v", registered.Payer)
+		}
+	})
+
+	t.Run("程序没登要不要", func(t *testing.T) {
+		store := newDutyStore()
+		delete(store.payerRules, "tenant-a|SYN-PROC-01")
+		handler := formedOverUnprovidedPayer(t, store)
+
+		result, err := handler.VerifyPayment(t.Context(), verifyDutyCommand(t))
+		if err != nil || result.Outcome() != application.DutyReconciliationUndecided ||
+			result.UndecidedReason() != application.PayerRequirementNotConfigured {
+			t.Fatalf("该未决且点名缺规则：err=%v outcome=%v reason=%v", err, result.Outcome(), result.UndecidedReason())
+		}
+		if len(store.verifications) != 0 || len(store.handoffs) != 0 {
+			t.Fatalf("未决却落了核对 %d 行、交了 %d 封", len(store.verifications), len(store.handoffs))
+		}
+	})
+}
+
+// 规则那一维的边：读口故障是依赖故障（重投会变），与「规则未配置」（重投不会变）分格指名；命令不带监管程序
+// 是形状缺格，`未受理`，不是任何一格业务答案；规则在两道前置之后才读——事实未接收时即便规则没登也答前置未齐，
+// 缺规则不该盖住缺事实，操作员先补哪一样得从原词读得出来。
+func TestThePayerRuleIsReadAfterBothPrerequisitesAndNamesItsOwnFailure(t *testing.T) {
+	store := newDutyStore()
+	delete(store.payerRules, "tenant-a|SYN-PROC-01")
+	handler := newDutyHandler(t, store)
+
+	if result, err := handler.VerifyPayment(t.Context(), verifyDutyCommand(t)); err != nil ||
+		result.Outcome() != application.FundsFactNotReceived {
+		t.Fatalf("事实未接收该先于规则未配置：err=%v outcome=%v reason=%v", err, result.Outcome(), result.UndecidedReason())
+	}
+	if _, err := handler.ReceiveFundsFact(t.Context(), unprovidedPayerFactCommand(t)); err != nil {
+		t.Fatalf("资金事实：%v", err)
+	}
+	if result, err := handler.VerifyPayment(t.Context(), verifyDutyCommand(t)); err != nil ||
+		result.Outcome() != application.CollaborationNotFormed {
+		t.Fatalf("协作事项未形成该先于规则未配置：err=%v outcome=%v reason=%v", err, result.Outcome(), result.UndecidedReason())
+	}
+	if _, err := handler.FormCollaboration(t.Context(), assessedCollaborationCommand(t)); err != nil {
+		t.Fatalf("协作事项：%v", err)
+	}
+
+	store.payerRuleErr = errors.New("payer rule view down")
+	if result, err := handler.VerifyPayment(t.Context(), verifyDutyCommand(t)); err != nil ||
+		result.Outcome() != application.DutyReconciliationUndecided ||
+		result.UndecidedReason() != application.PayerRequirementViewUnavailable {
+		t.Fatalf("读口故障该未决且指名读口：err=%v outcome=%v reason=%v", err, result.Outcome(), result.UndecidedReason())
+	}
+	store.payerRuleErr = nil
+
+	blankProcedure := verifyDutyCommand(t)
+	blankProcedure.Procedure = domain.CustomsProcedureReference{}
+	if result, err := handler.VerifyPayment(t.Context(), blankProcedure); err != nil ||
+		result.Outcome() != application.DutyReconciliationNotAccepted {
+		t.Fatalf("不带监管程序该`未受理`：err=%v outcome=%v", err, result.Outcome())
+	}
+	if len(store.verifications) != 0 {
+		t.Fatal("没有一格该落核对")
 	}
 }

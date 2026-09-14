@@ -346,6 +346,7 @@ func buildCustomsRegistrationOrchestration(db *bentopg.DB) (customsRegistrationO
 			Collaborations: dutyReconciliation,
 			Funds:          dutyReconciliation,
 			Verifications:  dutyReconciliation,
+			PayerRules:     dutyReconciliation,
 			Handoff:        verificationHandoff,
 			Clock:          systemClock{},
 		})

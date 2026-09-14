@@ -58,13 +58,14 @@ func (book *fakeCredentialBook) LoadCredential(
 	return credential, found, nil
 }
 
-// fakeDutyBook 一本替身充当协作事项、资金事实引用、付款核对三口——与真库适配器
-// DutyPaymentReconciliation 三口一体同形；三张表各自的键互不相干。核对形成那一格向 SA 交
+// fakeDutyBook 一本替身充当协作事项、资金事实引用、付款核对三口与付款人规则读口——与真库适配器
+// DutyPaymentReconciliation 几口一体同形；各张表的键互不相干。核对形成那一格向 SA 交
 // 信封的交接口（票 sa-cc/05）也挂在这本上，记下每一份意图，本口证的是子命令把它接通了。
 type fakeDutyBook struct {
 	collaborations   map[string]domain.DutyPaymentCollaboration
 	funds            map[string]ports.ExternalFundsFactRegistration
 	verifications    map[string]ports.DutyVerificationRecord
+	payerRules       map[string]domain.PayerRequirement
 	handoffs         []ports.DutyPaymentVerificationHandoffIntent
 	collaborationErr error
 	verificationErr  error
@@ -75,7 +76,17 @@ func newFakeDutyBook() *fakeDutyBook {
 		collaborations: map[string]domain.DutyPaymentCollaboration{},
 		funds:          map[string]ports.ExternalFundsFactRegistration{},
 		verifications:  map[string]ports.DutyVerificationRecord{},
+		payerRules:     map[string]domain.PayerRequirement{},
 	}
+}
+
+func (book *fakeDutyBook) LoadPayerRequirement(
+	_ context.Context,
+	tenant domain.TenantID,
+	procedure domain.CustomsProcedureReference,
+) (domain.PayerRequirement, bool, error) {
+	requirement, found := book.payerRules[tenant.String()+"/"+procedure.String()]
+	return requirement, found, nil
 }
 
 func collaborationKey(tenant domain.TenantID, scope domain.DecisionScopeReference, duty domain.AssessedDutyReference) string {
@@ -186,6 +197,7 @@ func newDutyFixture(t *testing.T) *dutyFixture {
 			Collaborations: duties,
 			Funds:          duties,
 			Verifications:  duties,
+			PayerRules:     duties,
 			Handoff:        duties,
 			Clock:          fixedClock{now: registerClockNow},
 		})
@@ -212,6 +224,22 @@ func seedFundsFact(t *testing.T, book *fakeDutyBook, tenant, fact string) {
 		Fact: reference, Source: "SYN-BANK-01", Payer: payer, Currency: "XTS",
 		AmountMinor: 12500, OccurredAt: registerClockNow.Add(-time.Hour),
 	}
+}
+
+// seedFundsFactWithoutPayer 铺一条来源显式未提供付款人的事实——付款人三停格（票 sa-cc/12 裁决 2）唯一会让
+// 答案分岔的形。
+func seedFundsFactWithoutPayer(t *testing.T, book *fakeDutyBook, tenant, fact string) {
+	t.Helper()
+	seedFundsFact(t, book, tenant, fact)
+	registration := book.funds[tenant+"/"+fact]
+	registration.Payer = domain.FundsPayerNotProvided()
+	book.funds[tenant+"/"+fact] = registration
+}
+
+// seedPayerRule 直接把「这个程序要不要付款人」放进替身册：本 CLI 今天没有登这一格的子命令（登记面在
+// RegisterCaseConfigurationHandler，同 0019 那一格），核对读的这一维只能这样铺。
+func seedPayerRule(book *fakeDutyBook, tenant, procedure string, requirement domain.PayerRequirement) {
+	book.payerRules[tenant+"/"+procedure] = requirement
 }
 
 func credentialInput(validTo string, uses string) []byte {
@@ -433,6 +461,7 @@ func verificationInput(coverage, basis string) []byte {
 		"dutyRef": "SYN-DUTY-01/v1",
 		"fundsRef": "SYN-FUNDS-01",
 		"scopeRef": "SYN-UNIT-01",
+		"procedureRef": "SYN-PROC-01",
 		"coverage": "` + coverage + `",
 		"delta": "SHORT",
 		"validity": "PENDING",
@@ -459,6 +488,7 @@ func TestExecuteDutyPaymentVerificationLandsReplaysAndAppendsVersions(t *testing
 	ctx := context.Background()
 	seedFundsFact(t, fixture.duties, "SYN-T1", "SYN-FUNDS-01")
 	seedCollaboration(t, fixture)
+	seedPayerRule(fixture.duties, "SYN-T1", "SYN-PROC-01", domain.PayerRequired)
 
 	message, code := execute(ctx, commandDutyPaymentVerification,
 		verificationInput("PARTIAL", "SYN-RULE-01: remittance quotes assessment"), fixture.registrar)
@@ -545,6 +575,7 @@ func TestExecuteDutyPaymentVerificationStoreFailureIsUndecided(t *testing.T) {
 	fixture := newDutyFixture(t)
 	seedFundsFact(t, fixture.duties, "SYN-T1", "SYN-FUNDS-01")
 	seedCollaboration(t, fixture)
+	seedPayerRule(fixture.duties, "SYN-T1", "SYN-PROC-01", domain.PayerRequired)
 	fixture.duties.verificationErr = errors.New("verification store unavailable")
 
 	message, code := execute(context.Background(), commandDutyPaymentVerification,
@@ -552,6 +583,48 @@ func TestExecuteDutyPaymentVerificationStoreFailureIsUndecided(t *testing.T) {
 	if code != exitUndecided || !strings.Contains(message, "UNDECIDED") ||
 		!strings.Contains(message, "DUTY_VERIFICATION_STORE_UNAVAILABLE") {
 		t.Fatalf("写口故障 = %d（%s），要 %d 且含 UNDECIDED 与 DUTY_VERIFICATION_STORE_UNAVAILABLE", code, message, exitUndecided)
+	}
+}
+
+// TestExecuteDutyPaymentVerificationPayerGridsKeepTheirExitCodes 证付款人三停格（票 sa-cc/12 裁决 2）
+// 经子命令各归各格：程序没登要不要 → 3 且点名 PAYER_REQUIREMENT_NOT_CONFIGURED（等登记方补规则）；
+// 程序要求而来源未提供 → 3 且点名 PAYER_REQUIRED_NOT_PROVIDED（等来源补事实）；程序不要求 → 0 照常形成，
+// 「未提供」原样带着。两格未决同一退出码、原词分得开在等谁——与义务依据缺席那格同款。
+func TestExecuteDutyPaymentVerificationPayerGridsKeepTheirExitCodes(t *testing.T) {
+	fixture := newDutyFixture(t)
+	ctx := context.Background()
+	seedFundsFactWithoutPayer(t, fixture.duties, "SYN-T1", "SYN-FUNDS-01")
+	seedCollaboration(t, fixture)
+
+	message, code := execute(ctx, commandDutyPaymentVerification,
+		verificationInput("PARTIAL", "SYN-RULE-01"), fixture.registrar)
+	if code != exitUndecided || !strings.Contains(message, "UNDECIDED") ||
+		!strings.Contains(message, "PAYER_REQUIREMENT_NOT_CONFIGURED") {
+		t.Fatalf("规则未配置 = %d（%s），要 %d 且含 UNDECIDED 与 PAYER_REQUIREMENT_NOT_CONFIGURED", code, message, exitUndecided)
+	}
+
+	seedPayerRule(fixture.duties, "SYN-T1", "SYN-PROC-01", domain.PayerRequired)
+	message, code = execute(ctx, commandDutyPaymentVerification,
+		verificationInput("PARTIAL", "SYN-RULE-01"), fixture.registrar)
+	if code != exitUndecided || !strings.Contains(message, "UNDECIDED") ||
+		!strings.Contains(message, "PAYER_REQUIRED_NOT_PROVIDED") {
+		t.Fatalf("要求而未提供 = %d（%s），要 %d 且含 UNDECIDED 与 PAYER_REQUIRED_NOT_PROVIDED", code, message, exitUndecided)
+	}
+	if len(fixture.duties.verifications) != 0 || len(fixture.duties.handoffs) != 0 {
+		t.Fatalf("两格未决都不得落册、不得交信封：%d 行 %d 封", len(fixture.duties.verifications), len(fixture.duties.handoffs))
+	}
+
+	seedPayerRule(fixture.duties, "SYN-T1", "SYN-PROC-01", domain.PayerNotRequired)
+	message, code = execute(ctx, commandDutyPaymentVerification,
+		verificationInput("PARTIAL", "SYN-RULE-01"), fixture.registrar)
+	if code != exitRegistered || !strings.Contains(message, "DUTY_VERIFICATION_FORMED") {
+		t.Fatalf("不要求付款人 = %d（%s），要 %d 且含 DUTY_VERIFICATION_FORMED", code, message, exitRegistered)
+	}
+	if len(fixture.duties.verifications) != 1 || len(fixture.duties.handoffs) != 1 {
+		t.Fatalf("形成该落一行、交一封：%d 行 %d 封", len(fixture.duties.verifications), len(fixture.duties.handoffs))
+	}
+	if registration := fixture.duties.funds["SYN-T1/SYN-FUNDS-01"]; registration.Payer.Provided() || !registration.Payer.Valid() {
+		t.Fatalf("核对不得替事实补付款人：%#v", registration.Payer)
 	}
 }
 

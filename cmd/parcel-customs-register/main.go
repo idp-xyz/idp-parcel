@@ -262,6 +262,7 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 			Collaborations: dutyReconciliation,
 			Funds:          dutyReconciliation,
 			Verifications:  dutyReconciliation,
+			PayerRules:     dutyReconciliation,
 			Handoff:        verificationHandoff,
 			Clock:          systemClock{},
 		})

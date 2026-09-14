@@ -2215,6 +2215,7 @@ func receiveExternalFundsFactConsumer(
 		Collaborations: reconciliation,
 		Funds:          reconciliation,
 		Verifications:  reconciliation,
+		PayerRules:     reconciliation,
 		Handoff:        verificationHandoff,
 		Clock:          clock,
 	})

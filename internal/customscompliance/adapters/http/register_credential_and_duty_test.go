@@ -250,9 +250,10 @@ func TestCredentialRegistrationSharesTheConfigurationTranscription(t *testing.T)
 // register_configuration_test 的 candidatePortUseCase）。只有「零值答案」与「编排返错」
 // 两格用替身，那两格用例本就造不出。
 
-// dutyStoreStub 是存储三口加结算交接口一体的替身：每口的写入代数与读回按格给定。交接口
+// dutyStoreStub 是存储三口、付款人规则读口加结算交接口一体的替身：每口的写入代数与读回按格给定。交接口
 // （票 sa-cc/05）默认成功；它失败不翻核对、只留续办引用，本文件的转写断言不碰那一格——答复
-// 面透不透续办引用归 sa-cc/15 与 CLI 一并裁。
+// 面透不透续办引用归 sa-cc/15 与 CLI 一并裁。付款人规则（票 sa-cc/12）零值即「登了、不要求」：核对族
+// 既有各格的转写与这一维无关，只有付款人三格自己把它拨到别处。
 type dutyStoreStub struct {
 	saveOutcome ports.CaseConfigurationSaveOutcome
 	saveErr     error
@@ -264,7 +265,26 @@ type dutyStoreStub struct {
 	fundsFound bool
 	fundsErr   error
 
+	payerRule             domain.PayerRequirement
+	payerRuleUnconfigured bool
+	payerRuleErr          error
+
 	handoffErr error
+}
+
+func (stub dutyStoreStub) LoadPayerRequirement(
+	context.Context, domain.TenantID, domain.CustomsProcedureReference,
+) (domain.PayerRequirement, bool, error) {
+	if stub.payerRuleErr != nil {
+		return domain.PayerRequirementInvalid, false, stub.payerRuleErr
+	}
+	if stub.payerRuleUnconfigured {
+		return domain.PayerRequirementInvalid, false, nil
+	}
+	if stub.payerRule == domain.PayerRequirementInvalid {
+		return domain.PayerNotRequired, true, nil
+	}
+	return stub.payerRule, true, nil
 }
 
 func (stub dutyStoreStub) HandOffDutyPaymentVerification(
@@ -291,10 +311,12 @@ func (stub dutyStoreStub) RegisterFundsFact(
 	return stub.saveOutcome, stub.saveErr
 }
 
+// LoadFundsFact 交回的那条事实付款人取「来源未提供」：它是付款人三格里唯一会让答案分岔的形，
+// 其余格对这一维无感；零值付款人两格都不是，编排会当编程错误抛出，替身不交它。
 func (stub dutyStoreStub) LoadFundsFact(
 	context.Context, domain.TenantID, domain.ExternalFundsFactReference,
 ) (ports.ExternalFundsFactRegistration, bool, error) {
-	return ports.ExternalFundsFactRegistration{}, stub.fundsFound, stub.fundsErr
+	return ports.ExternalFundsFactRegistration{Payer: domain.FundsPayerNotProvided()}, stub.fundsFound, stub.fundsErr
 }
 
 func (stub dutyStoreStub) FindVerification(
@@ -357,14 +379,15 @@ func collaborationOnRegister(t *testing.T, command application.FormDutyCollabora
 func verificationCommand(t *testing.T, basis string) application.VerifyDutyPaymentCommand {
 	t.Helper()
 	return application.VerifyDutyPaymentCommand{
-		TenantID: dutyValue(t, domain.NewTenantID, "SYN-TEN-CC07"),
-		Duty:     dutyValue(t, domain.NewAssessedDutyReference, "SYN-DUTY-01/v1"),
-		Funds:    dutyValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-01"),
-		Scope:    dutyValue(t, domain.NewDecisionScopeReference, "SYN-UNIT-01"),
-		Coverage: domain.CoveragePartial,
-		Delta:    domain.DeltaShort,
-		Validity: domain.FundsFactPending,
-		Basis:    basis,
+		TenantID:  dutyValue(t, domain.NewTenantID, "SYN-TEN-CC07"),
+		Duty:      dutyValue(t, domain.NewAssessedDutyReference, "SYN-DUTY-01/v1"),
+		Funds:     dutyValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-01"),
+		Scope:     dutyValue(t, domain.NewDecisionScopeReference, "SYN-UNIT-01"),
+		Procedure: dutyValue(t, domain.NewCustomsProcedureReference, "SYN-PROC-01"),
+		Coverage:  domain.CoveragePartial,
+		Delta:     domain.DeltaShort,
+		Validity:  domain.FundsFactPending,
+		Basis:     basis,
 	}
 }
 
@@ -372,7 +395,7 @@ func verificationCommand(t *testing.T, basis string) application.VerifyDutyPayme
 func dutyHandlerOver(t *testing.T, stub dutyStoreStub) *application.DutyPaymentReconciliationHandler {
 	t.Helper()
 	handler, err := application.NewDutyPaymentReconciliationHandler(application.DutyPaymentReconciliationDeps{
-		Collaborations: stub, Funds: stub, Verifications: stub, Handoff: stub, Clock: dutyTestClock{},
+		Collaborations: stub, Funds: stub, Verifications: stub, PayerRules: stub, Handoff: stub, Clock: dutyTestClock{},
 	})
 	if err != nil {
 		t.Fatalf("构造编排：%v", err)
@@ -451,7 +474,8 @@ func TestDutyCollaborationRegistrationTranscribesTheAnswerAlgebra(t *testing.T) 
 // TestDutyPaymentVerificationRegistrationTranscribesTheAnswerAlgebra 证核对端点逐名过线：
 // 形成 201；已存在 / 待关联 / 前置未齐两格 / 未受理 200 原名——待关联与前置未齐是核对对
 // 这次登记作出的判断（无权威依据不关联；资金事实未接收、协作事项未形成），不是失败；
-// 三种存储不可用 5xx。
+// 付款人两格业务未决（程序要求而来源未提供、规则未配置，票 sa-cc/12 裁决 2）200 带 undecidedReason；
+// 三种存储不可用与付款人规则读口不可用 5xx。
 func TestDutyPaymentVerificationRegistrationTranscribesTheAnswerAlgebra(t *testing.T) {
 	command := verificationCommand(t, "SYN-RULE-01: remittance quotes assessment")
 	blankTenant := command
@@ -471,6 +495,10 @@ func TestDutyPaymentVerificationRegistrationTranscribesTheAnswerAlgebra(t *testi
 		{dutyAnswerCase{"资金事实未接收", http.StatusOK, "FUNDS_FACT_NOT_RECEIVED", ""}, command, dutyStoreStub{collaborationFound: true}},
 		{dutyAnswerCase{"协作事项未形成", http.StatusOK, "COLLABORATION_NOT_FORMED", ""}, command, dutyStoreStub{fundsFound: true}},
 		{dutyAnswerCase{"未受理", http.StatusOK, "NOT_ACCEPTED", ""}, blankTenant, ready},
+		{dutyAnswerCase{"程序要求付款人而来源未提供", http.StatusOK, "UNDECIDED", "PAYER_REQUIRED_NOT_PROVIDED"}, command,
+			dutyStoreStub{fundsFound: true, collaborationFound: true, payerRule: domain.PayerRequired}},
+		{dutyAnswerCase{"付款人规则未配置", http.StatusOK, "UNDECIDED", "PAYER_REQUIREMENT_NOT_CONFIGURED"}, command,
+			dutyStoreStub{fundsFound: true, collaborationFound: true, payerRuleUnconfigured: true}},
 	}
 	for _, spec := range cases {
 		t.Run(spec.name, func(t *testing.T) {
@@ -482,9 +510,10 @@ func TestDutyPaymentVerificationRegistrationTranscribesTheAnswerAlgebra(t *testi
 
 	unavailable := errors.New("store unavailable")
 	for name, stub := range map[string]dutyStoreStub{
-		"资金事实册不可用": {fundsErr: unavailable},
-		"协作事项库不可用": {fundsFound: true, findErr: unavailable},
-		"核对库不可用":   {fundsFound: true, collaborationFound: true, saveErr: unavailable},
+		"资金事实册不可用":   {fundsErr: unavailable},
+		"协作事项库不可用":   {fundsFound: true, findErr: unavailable},
+		"核对库不可用":     {fundsFound: true, collaborationFound: true, saveErr: unavailable},
+		"付款人规则读口不可用": {fundsFound: true, collaborationFound: true, payerRuleErr: unavailable},
 	} {
 		t.Run(name, func(t *testing.T) {
 			endpoint := customshttp.NewRegisterDutyPaymentVerificationEndpoint(

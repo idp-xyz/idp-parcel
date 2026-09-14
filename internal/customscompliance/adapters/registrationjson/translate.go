@@ -629,19 +629,22 @@ func DutyCollaborationFromJSON(raw []byte) (application.FormDutyCollaborationCom
 }
 
 type dutyPaymentVerificationDocument struct {
-	TenantID string `json:"tenantId"`
-	DutyRef  string `json:"dutyRef"`
-	FundsRef string `json:"fundsRef"`
-	ScopeRef string `json:"scopeRef"`
-	Coverage string `json:"coverage"`
-	Delta    string `json:"delta"`
-	Validity string `json:"validity"`
-	Basis    string `json:"basis"`
+	TenantID     string `json:"tenantId"`
+	DutyRef      string `json:"dutyRef"`
+	FundsRef     string `json:"fundsRef"`
+	ScopeRef     string `json:"scopeRef"`
+	ProcedureRef string `json:"procedureRef"`
+	Coverage     string `json:"coverage"`
+	Delta        string `json:"delta"`
+	Validity     string `json:"validity"`
+	Basis        string `json:"basis"`
 }
 
 // DutyPaymentVerificationFromJSON 译装一次税费付款核对（票 sa-cc/07）。三轴与关联依据由
 // 登记方交进来——真实程序的关联规则属实例半边，入口不从金额相等推任何一轴；basis 空白
-// 原样递给编排，那是它的`待关联`格（无权威依据不关联），不是译装该拒的缺格。
+// 原样递给编排，那是它的`待关联`格（无权威依据不关联），不是译装该拒的缺格。procedureRef 必填
+// （票 sa-cc/12）：付款人那一维的规则按它读，与三轴同一种形——由登记方说这次核对在哪个监管程序下判，
+// 入口不从范围推。
 func DutyPaymentVerificationFromJSON(raw []byte) (application.VerifyDutyPaymentCommand, error) {
 	none := application.VerifyDutyPaymentCommand{}
 	var document dutyPaymentVerificationDocument
@@ -664,6 +667,10 @@ func DutyPaymentVerificationFromJSON(raw []byte) (application.VerifyDutyPaymentC
 	if err != nil {
 		return none, err
 	}
+	procedure, err := domain.NewCustomsProcedureReference(document.ProcedureRef)
+	if err != nil {
+		return none, err
+	}
 	coverage, err := dutyCoverageFrom(document.Coverage)
 	if err != nil {
 		return none, err
@@ -677,14 +684,15 @@ func DutyPaymentVerificationFromJSON(raw []byte) (application.VerifyDutyPaymentC
 		return none, err
 	}
 	return application.VerifyDutyPaymentCommand{
-		TenantID: tenant,
-		Duty:     duty,
-		Funds:    funds,
-		Scope:    scope,
-		Coverage: coverage,
-		Delta:    delta,
-		Validity: validity,
-		Basis:    document.Basis,
+		TenantID:  tenant,
+		Duty:      duty,
+		Funds:     funds,
+		Scope:     scope,
+		Procedure: procedure,
+		Coverage:  coverage,
+		Delta:     delta,
+		Validity:  validity,
+		Basis:     document.Basis,
 	}, nil
 }
 

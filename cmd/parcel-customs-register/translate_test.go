@@ -67,13 +67,35 @@ func TestCommandForRejectsBlankIdentifiers(t *testing.T) {
 		}`,
 		commandDutyPaymentVerification: `{
 			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "  ",
-			"scopeRef": "SYN-UNIT-01", "coverage": "PARTIAL", "delta": "SHORT",
+			"scopeRef": "SYN-UNIT-01", "procedureRef": "SYN-PROC-01", "coverage": "PARTIAL", "delta": "SHORT",
 			"validity": "PENDING", "basis": "SYN-RULE-01"
 		}`,
 	}
 	for command, raw := range cases {
 		if _, err := commandFor(command, []byte(raw)); err == nil {
 			t.Fatalf("%s 未拒空白标识", command)
+		}
+	}
+}
+
+// TestCommandForRequiresTheProcedureOnAVerification 证核对输入的监管程序在译装处必填（票 sa-cc/12 裁决 1）：
+// 付款人那一维的规则按它读，与三轴同一种形——由登记方说这次核对在哪个程序下判，入口不从范围推；
+// 缺席与空白都是用法错误，不是任何一格业务答案。
+func TestCommandForRequiresTheProcedureOnAVerification(t *testing.T) {
+	for name, raw := range map[string]string{
+		"缺席": `{
+			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "SYN-FUNDS-01",
+			"scopeRef": "SYN-UNIT-01", "coverage": "PARTIAL", "delta": "SHORT",
+			"validity": "PENDING", "basis": "SYN-RULE-01"
+		}`,
+		"空白": `{
+			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "SYN-FUNDS-01",
+			"scopeRef": "SYN-UNIT-01", "procedureRef": "  ", "coverage": "PARTIAL", "delta": "SHORT",
+			"validity": "PENDING", "basis": "SYN-RULE-01"
+		}`,
+	} {
+		if _, err := commandFor(commandDutyPaymentVerification, []byte(raw)); err == nil {
+			t.Fatalf("监管程序%s未在译装处被拒", name)
 		}
 	}
 }
@@ -120,17 +142,17 @@ func TestCommandForRejectsVocabularyOutsideTheClosedSets(t *testing.T) {
 		}`, "kind"},
 		{commandDutyPaymentVerification, `{
 			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "SYN-FUNDS-01",
-			"scopeRef": "SYN-UNIT-01", "coverage": "ALL", "delta": "SHORT",
+			"scopeRef": "SYN-UNIT-01", "procedureRef": "SYN-PROC-01", "coverage": "ALL", "delta": "SHORT",
 			"validity": "PENDING", "basis": "SYN-RULE-01"
 		}`, "coverage"},
 		{commandDutyPaymentVerification, `{
 			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "SYN-FUNDS-01",
-			"scopeRef": "SYN-UNIT-01", "coverage": "PARTIAL", "delta": "MISSING",
+			"scopeRef": "SYN-UNIT-01", "procedureRef": "SYN-PROC-01", "coverage": "PARTIAL", "delta": "MISSING",
 			"validity": "PENDING", "basis": "SYN-RULE-01"
 		}`, "delta"},
 		{commandDutyPaymentVerification, `{
 			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "SYN-FUNDS-01",
-			"scopeRef": "SYN-UNIT-01", "coverage": "PARTIAL", "delta": "SHORT",
+			"scopeRef": "SYN-UNIT-01", "procedureRef": "SYN-PROC-01", "coverage": "PARTIAL", "delta": "SHORT",
 			"validity": "", "basis": "SYN-RULE-01"
 		}`, "validity"},
 	}

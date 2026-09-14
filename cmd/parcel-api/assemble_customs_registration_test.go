@@ -122,7 +122,7 @@ func TestTheWiredCredentialAndDutyRegistrationsRecordAgainstARealDatabase(t *tes
 	t.Run("核对：资金事实未接收答前置未齐、核对册无行", func(t *testing.T) {
 		command, err := ccregistrationjson.DutyPaymentVerificationFromJSON([]byte(
 			`{"tenantId":"SYN-TENANT-API-CC07","dutyRef":"SYN-API-DUTY-1/v1","fundsRef":"SYN-API-FUNDS-NEVER",` +
-				`"scopeRef":"SYN-API-UNIT-1","coverage":"COVERED","delta":"NO_DELTA","validity":"VALID",` +
+				`"scopeRef":"SYN-API-UNIT-1","procedureRef":"SYN-API-PROC-1","coverage":"COVERED","delta":"NO_DELTA","validity":"VALID",` +
 				`"basis":"SYN-API-RULE-1: remittance quotes assessment"}`))
 		if err != nil {
 			t.Fatalf("译装付款核对：%v", err)
