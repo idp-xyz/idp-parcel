@@ -17,6 +17,12 @@ var (
 	// 而不是查传输。
 	ErrAdoptedFactNotVisible = errors.New(
 		"customs compliance settlementaccounting adapter: adopted funds fact is not yet visible")
+	// ErrAdoptedFactVersionInconsistent 表示按信封所指版本回查，交回的事实本体却自称另一版——提供方视图答非所问，
+	// 是装配 / 视图缺陷，不是等谁：重投不会把视图答对。它与 ErrAdoptedFactNotVisible 分开正是为了别把永久损坏
+	// 登成可续办（ADR-0029）；生产装配不得把它进 WithUndecidedSentinels。不核对这一格，别版内容会登在信封那一版
+	// 名下（票 sa-cc/13 补评审 Standards 2）。
+	ErrAdoptedFactVersionInconsistent = errors.New(
+		"customs compliance settlementaccounting adapter: adopted funds fact disagrees with the version the envelope names")
 	// ErrFundsFactReceiveUndecided 表示入向登记编排停在自己的未决上（登记册不可用）。同样是续办，
 	// 同样进 WithUndecidedSentinels。
 	ErrFundsFactReceiveUndecided = errors.New(
@@ -92,9 +98,13 @@ func (adapter *ReceiveOnAdoptedFundsFactAdapter) HandleAdoptedExternalFundsFact(
 	if !found {
 		return fmt.Errorf("%w: fact %q version %q", ErrAdoptedFactNotVisible, adopted.Fact, adopted.Version)
 	}
+	if content.Version != version {
+		return fmt.Errorf("%w: envelope names %q, source answered %q",
+			ErrAdoptedFactVersionInconsistent, adopted.Version, content.Version)
+	}
 
-	// 版本取信封所指的那一版、回指取回查到的事实本体（票 sa-cc/13 做法 2）：读口按版本取，两者同源；
-	// 回指是事实本体的一维，信封载荷里那份可缺席的 corrects 不进译码（消费者头注）。
+	// 版本取信封所指的那一版、回指取回查到的事实本体（票 sa-cc/13 做法 2）：读口按版本取，两者本该同源，上面那句
+	// 相等校验把「本该」钉成「必须」；回指是事实本体的一维，信封载荷里那份可缺席的 corrects 不进译码（消费者头注）。
 	result, err := adapter.receiver.ReceiveFundsFact(ctx, ccapplication.ReceiveExternalFundsFactCommand{
 		TenantID: tenant,
 		Registration: ccports.ExternalFundsFactRegistration{

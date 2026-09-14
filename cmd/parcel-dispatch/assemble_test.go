@@ -310,7 +310,9 @@ func TestTheCarrierPickupConsumerAndTheTFHandoffAgreeOnTheEventType(t *testing.T
 
 // Covers: 路由表的 SA 资金事实采用一条（sa-cc/03）与完成判据 3「真库装配用例一正一反」——在生产依赖图上：
 // 正：SA 采用过的事实（带来源提供的付款人）经 `external-funds-fact.adopted` 引用式信封到 CC 消费者，按
-// （租户 + 事实 + 版本）回查 SA 只读视图、译成入向登记，CC 的 external_funds_fact 落一行；
+// （租户 + 事实 + 版本）回查 SA 只读视图、译成入向登记，CC 入向登记册按引用读回信封那一版且来源 / 付款人 / 币种 /
+// 金额 / 版本照 SA 转述（`customs_compliance/0021` 起落的是身份行 + 版本子表各一行）；正例第二格（更正版本 v2
+// 落第二行、回指 v1）见函数内注释；
 // 反：信封所指的版本 SA 还没有 → 可见性滞后是未决，不定稿、不毒丸，失败码落 dispatch.consumer_undecided。
 func TestAnAdoptedExternalFundsFactReachesTheCustomsRegisterThroughTheRouteTable(t *testing.T) {
 	beat, db, store := wiredBeat(t)

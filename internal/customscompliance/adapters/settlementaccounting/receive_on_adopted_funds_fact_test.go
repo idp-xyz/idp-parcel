@@ -333,6 +333,25 @@ func TestAnInvisibleVersionIsAContinuationNotAPoisonEnvelope(t *testing.T) {
 	}
 }
 
+// Covers: 票 sa-cc/23 条 1——回查按信封所指的版本取，交回的事实本体却自称另一版（提供方视图答非所问）：
+// 不登记、交回 ErrAdoptedFactVersionInconsistent。它与 ErrAdoptedFactNotVisible 分开：重投不会把视图答对，
+// 是装配 / 视图缺陷不是可见性滞后，消费门不重投；不核对时别版内容会登在信封那一版名下。
+func TestASourceAnsweringAnotherVersionIsRefusedBeforeRegistering(t *testing.T) {
+	fixture := newFixture(t)
+	fixture.source.facts["tenant-a|bank-fact-1|bank-fact/v2"] = adoptedContent("bank-fact/v1", "", "payer-customer-7")
+
+	err := fixture.handler.HandleAdoptedExternalFundsFact(context.Background(), adoptedEnvelopeRef("bank-fact/v2"))
+	if !errors.Is(err, adapter.ErrAdoptedFactVersionInconsistent) {
+		t.Fatalf("err = %v, want ErrAdoptedFactVersionInconsistent", err)
+	}
+	if errors.Is(err, adapter.ErrAdoptedFactNotVisible) {
+		t.Fatal("答非所问不是可见性滞后，不得落进重投那一格")
+	}
+	if len(fixture.register.rows) != 0 {
+		t.Fatalf("别版内容不得登在信封那一版名下：%d 行", len(fixture.register.rows))
+	}
+}
+
 // Covers: 票 sa-cc/12 做法 1 / 4——提供方那一版没有付款人，消费侧读口译成「来源未提供」那一格、本适配器原样
 // 转述、编排`已接收`，登记里付款人显式记为「未提供」（CONTEXT「未提供或不适用必须明确记录」）；本适配器
 // 只译不判，要不要付款人是核对时对着真实程序的规则问的。sa-cc/03 时这一格是`未受理`的诚实停点，本票放宽。

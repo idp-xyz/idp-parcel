@@ -488,7 +488,9 @@ var carrierFirstEffectivePickupJudgmentUndecidedSentinels = append(
 
 // externalFundsFactUndecidedSentinels 是 SA 资金事实采用信封 → CC 入向登记这条线（sa-cc/03）登记的未决
 // 哨兵：信封所指那一版在提供方还看不见（可见性滞后）、登记编排停在登记册不可用。编排的 `未受理`
-// 与 `内容冲突` 不在名单里——它们是编排给出的答案、入账不重投（ReceiveOnAdoptedFundsFactAdapter 头注）。
+// 与 `内容冲突` 不在名单里——它们是编排给出的答案、入账不重投（ReceiveOnAdoptedFundsFactAdapter 头注）；
+// ccsettlement.ErrAdoptedFactVersionInconsistent 也不在——按信封所指版本回查却交回别版本体，是提供方视图答非所问的
+// 装配 / 视图缺陷，重投不自愈，保持 publish_failed（与 pstf.ErrCarrierPickupRecordInconsistent 同一条理由）。
 var externalFundsFactUndecidedSentinels = []error{
 	ccsettlement.ErrAdoptedFactNotVisible,
 	ccsettlement.ErrFundsFactReceiveUndecided,

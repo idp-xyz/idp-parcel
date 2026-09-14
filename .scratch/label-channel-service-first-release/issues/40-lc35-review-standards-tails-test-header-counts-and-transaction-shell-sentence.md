@@ -1,7 +1,7 @@
 # lc/35 非作者评审 Standards 非阻断两条一笔收口：两处测试头注跨文件计数换点名、「壳只管事务」一句留组合根一处
 
 Category: chore
-Status: in-progress——2026-09-14 19:2x 通道 2 按通道 1 派单 task-e79cc5a9 自立自做（评审尾巴 A 类推送方派单、作者自立票自做，先例 lc/38 / sa-cc/18 / ve-disc/06），分支 `mcp2-tails3` 基远端 main `09596d9a`（树 `D:/tops/idp-parcel-mcp2-tails3`），与 [sa-cc/23](../../sa-cc-funds-and-credential-seams/issues/23-cc-adopted-fact-version-must-match-envelope-and-dispatch-header-two-rows.md) 同分支；要裁的为零
+Status: resolved——**完工待非作者评审进 main，2026-09-14 19:4x**（分支 `mcp2-tails3` 基远端 main `09596d9a`；立票笔 `8ab6c61c`、两条同笔 `42f524f4`，完成记录随 sa-cc/23 末笔同提交，见 Comments「完工」；清点重生成零差）；此前 in-progress——2026-09-14 19:2x 通道 2 按通道 1 派单 task-e79cc5a9 自立自做（评审尾巴 A 类推送方派单、作者自立票自做，先例 lc/38 / sa-cc/18 / ve-disc/06），分支 `mcp2-tails3` 基远端 main `09596d9a`（树 `D:/tops/idp-parcel-mcp2-tails3`），与 [sa-cc/23](../../sa-cc-funds-and-credential-seams/issues/23-cc-adopted-fact-version-must-match-envelope-and-dispatch-header-two-rows.md) 同分支；要裁的为零
 Blocked by: 无（[35](35-establish-replay-decision-register-reconciliation-and-select-result-shape.md) 已进 main `b293a921`，两条出处全在其 Comments「评审 ← 通道 3」Standards ① ②）。撞点：通道 3 在途 lc/39 纯 docs、通道 4 在途 sa-cc/11 只在 `internal/parcelpricing/**`，与本票地盘零重叠；共享树不碰
 
 ## 缺口（出处逐条指到评审原话；取证于 `09596d9a`，开工已重量）
@@ -43,3 +43,9 @@ Blocked by: 无（[35](35-establish-replay-decision-register-reconciliation-and-
 ## Comments
 
 - 2026-09-14 19:2x · 通道 2（task-e79cc5a9）：立票，Status 直接 in-progress，作者自立自做。**只写票面，未动代码。** 两条在 `09596d9a` 上重量过：条 1 两处测试头注文件名与评审所记一致，`channel_selection_basis_test.go` 正文 `Fatalf`「三源」数同函数子表、不动；条 2「壳只管事务」全仓恰两处。前一会话（同通道）18:22 建完 worktree 即 crash，本会话从零接续。
+- **2026-09-14 19:3x–19:4x · 通道 2（task-e79cc5a9）· 完工**。分支 `mcp2-tails3` 基远端 main `09596d9a`，与 sa-cc/23 同分支（推送方重放后 main 上 SHA 会换，对照由推送方在「进 main 记录」补）。立票笔 `8ab6c61c`（两票 + 两 spec 行，无代码）。
+  - **条 1 + 条 2 同笔 `42f524f4`**（三处注释、七行加五行删，零行为）：`TestAHalfWiredFlowRefusesLoudly` 头注「四口任一为 nil」→「任一口为 nil」；`TestTheTranslatorRefusesNilReadersAndNamesEachUnwiredSource` 头注改为「账号使用授权与协议内容两个读口是 PC 的读口、不是实例半边 … 授权源 / 协议源 / 接受时解析源这些实例半边源没装」，五口名字照用例正文两张子表的键；`ChannelSelector` 头注删去「壳只管事务：Select 不返 error 就提交、返 error 就回滚」半句，改为「壳怎么提交、怎么回滚写在组合根 `cmd/parcel-api` 的 transactionalChannelSelection 头注，此处只承诺本层这一半：并列与无人参选是结果格不是 error，壳因此不必认任何领域哨兵」。`cmd/parcel-api/assemble_label_channel.go` 零 diff。
+  - **验（本机，钉 `42f524f4`）**：`gofmt -l` 三件空；`go build ./...` / `go vet ./...` 0；不带 DSN `go test -count=1` PS `application` / `adapters/partycommercial` / `internal/architecture` ok；带 DSN `cmd/parcel-api` 与 sa-cc/23 同一跑（`-p 1 -count=1 -v`，两包 PASS 129 / FAIL 0 / SKIP 0）。清点：`tools/mechanism-inventory` 重生成后 porcelain 只有 sa-cc/23 在途四件，生成物零差，不出清点笔。
+  - **判据逐项**：1 ✓ `git grep -n '四口' -- internal/parcelshipment/` 只剩 `establish_selected_label_transaction.go` 两处；「两个 PC 读口」「三个实例半边源」于 `internal/parcelshipment/` 只剩 `channel_selection_basis.go` 两处与 `establish_selected_label_transaction.go` 一处，`_test.go` 零命中；2 ✓ `git grep -n '壳只管事务' -- '*.go'` 全仓恰一处（`cmd/parcel-api/assemble_label_channel.go`），`ChannelSelector` 头注含 `transactionalChannelSelection`；3 ✓ 见上；4 ✓ 本条即，清点零差。
+  - **红线**：diff 只有注释行；`domain/**`、`cmd/parcel-api/assemble_label_channel.go`、待裁票面、`apps/` 零 diff；注释中文、无行号、不数别处。
+  - **判断项（归评审）**：① `channel_selection_basis_test.go` 正文 `Fatalf`「三源允许为 nil，构造不该拒」**留**——数的是同函数上方那张子表，同文件（sa-cc/18 评审给的边界「同文件计数可留、点名亦可」）；派单说 lc/40「只注释」，`Fatalf` 文本不在其内。② `establish_selected_label_transaction.go` `ErrChannelBasisTranslationStopped` 头注「三个实例半边源未配置」数的是 `adapters/partycommercial` 那侧的源，严格说跨文件，但 35 评审与派单都判生产文件里的可不动，本票不动；评审若要一致，另笔零行为。③ `ChannelSelector` 头注引的是别的包（`cmd/parcel-api`）的符号，编译不校验；取符号名而不留复述，是 AGENTS「改文档」引符号名那条——符号改名时 `git grep` 抓得到，复述漂移抓不到。④ 「并列与无人参选是结果格不是 error」留在本层而不随「壳只管事务」一起搬走：它是 `ChannelSelectionResult` 形状的承诺，不是壳的规矩。
