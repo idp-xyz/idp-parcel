@@ -146,10 +146,23 @@ func newFixture(t *testing.T) *fixture {
 	return &fixture{source: source, register: register, handler: handler}
 }
 
+// payerOf 把夹具里的一个串折成付款人一格：空串即「来源未提供」——夹具的写法沿用 SA 侧「空即缺席」的习惯，
+// 译成本上下文的显式格是本文件在钉的事。
+func payerOf(payer string) ccdomain.FundsPayer {
+	if payer == "" {
+		return ccdomain.FundsPayerNotProvided()
+	}
+	provided, err := ccdomain.ProvidedFundsPayer(payer)
+	if err != nil {
+		panic(err)
+	}
+	return provided
+}
+
 func adoptedContent(payer string) ccports.AdoptedFundsFact {
 	return ccports.AdoptedFundsFact{
 		Source:      "source-bank-feed-1",
-		Payer:       payer,
+		Payer:       payerOf(payer),
 		Currency:    "USD",
 		AmountMinor: 8000,
 		OccurredAt:  fundsOccurredAt,
@@ -178,7 +191,7 @@ func TestAnAdoptedFundsFactIsRegisteredOnceAndReplayOrConflictStillSettles(t *te
 	want := ccports.ExternalFundsFactRegistration{
 		Fact:        row.Fact,
 		Source:      "source-bank-feed-1",
-		Payer:       "payer-customer-7",
+		Payer:       payerOf("payer-customer-7"),
 		Currency:    "USD",
 		AmountMinor: 8000,
 		OccurredAt:  fundsOccurredAt,
@@ -227,18 +240,22 @@ func TestAnInvisibleVersionIsAContinuationNotAPoisonEnvelope(t *testing.T) {
 	}
 }
 
-// Covers: 裁决「付款人在 SA 可缺席而 CC 入向登记要非空」两侧有意不对称——提供方那一版没有付款人，
-// 消费者如实交空，编排答 `未受理`；那是本上下文的诚实停点，照交付消费者对 REQUEST_NOT_ACCEPTED 的
-// 处置入账不重投（重投不会长出付款人）。CC 侧要不要放宽归另一张票。
-func TestAFactWithoutAPayerIsRefusedByTheOrchestrationAndSettles(t *testing.T) {
+// Covers: 票 sa-cc/12 做法 1 / 4——提供方那一版没有付款人，消费侧读口译成「来源未提供」那一格、本适配器原样
+// 转述、编排`已接收`，登记里付款人显式记为「未提供」（CONTEXT「未提供或不适用必须明确记录」）；本适配器
+// 只译不判，要不要付款人是核对时对着真实程序的规则问的。sa-cc/03 时这一格是`未受理`的诚实停点，本票放宽。
+func TestAFactWithoutAPayerIsReceivedWithThePayerRecordedAsNotProvided(t *testing.T) {
 	fixture := newFixture(t)
 	fixture.source.facts["tenant-a|bank-fact-1|bank-fact/v1"] = adoptedContent("")
 
 	if err := fixture.handler.HandleAdoptedExternalFundsFact(context.Background(), adoptedEnvelopeRef("bank-fact/v1")); err != nil {
-		t.Fatalf("未受理是编排的答案，消费者入账不重投：%v", err)
+		t.Fatalf("来源未提供付款人的事实该被接收：%v", err)
 	}
-	if len(fixture.register.rows) != 0 {
-		t.Fatal("没有付款人的事实不得被登记")
+	row, found := fixture.register.rows["tenant-a|bank-fact-1"]
+	if !found {
+		t.Fatal("来源未提供付款人的事实该落一条登记")
+	}
+	if row.Payer.Provided() || !row.Payer.Valid() {
+		t.Fatalf("登记里付款人该显式为「未提供」，实得 %#v", row.Payer)
 	}
 }
 
@@ -305,7 +322,8 @@ func saAdoptedFact(t *testing.T, payer string) sadomain.ExternalFundsFact {
 }
 
 // Covers: 做法 2「读 SA 用消费侧适配器」——翻译只在这里：提供方事实本体译成本上下文最少要读的几维；
-// 付款人在提供方显式缺席就译成空；提供方答没有原样交回 false；空白版本构造不出提供方的键。
+// 付款人在提供方显式缺席就译成「来源未提供」那一格（票 sa-cc/12 裁决 3：`(value, bool)` 到格的译在消费侧）；
+// 提供方答没有原样交回 false；空白版本构造不出提供方的键。
 func TestTheSettlementSourceTranslatesTheProvidersFactIntoOurDimensions(t *testing.T) {
 	view := &adoptedViewDouble{facts: map[string]sadomain.ExternalFundsFact{
 		"tenant-a|bank-fact-1|bank-fact/v1": saAdoptedFact(t, "payer-customer-7"),
@@ -331,8 +349,8 @@ func TestTheSettlementSourceTranslatesTheProvidersFactIntoOurDimensions(t *testi
 	}
 
 	got, found, err = source.LoadAdoptedFundsFact(context.Background(), tenantB, fact, "bank-fact/v1")
-	if err != nil || !found || got.Payer != "" {
-		t.Fatalf("提供方显式缺席的付款人应译成空：found = %v err = %v payer = %q", found, err, got.Payer)
+	if err != nil || !found || got.Payer.Provided() || !got.Payer.Valid() {
+		t.Fatalf("提供方显式缺席的付款人应译成「来源未提供」那一格：found = %v err = %v payer = %#v", found, err, got.Payer)
 	}
 
 	if _, found, err := source.LoadAdoptedFundsFact(context.Background(), tenantA, fact, "bank-fact/v9"); err != nil || found {

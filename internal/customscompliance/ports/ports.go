@@ -1092,11 +1092,12 @@ type DutyCollaborationStore interface {
 // CC 半边）：稳定来源引用连同来源身份、付款人、金额、币种与业务时间。真实付款归银行/支付
 // 系统拥有，这里登的是**引用与其最低业务语义**，供步 7 关联核对读——不是资金所有权的
 // 副本，没有任何一列会被本上下文改写或推导。AmountMinor 按币种最小单位计，与 SA 侧
-// AdoptFundsFactCommand 同约定。
+// AdoptFundsFactCommand 同约定。Payer 是领域上的一格：来源提供了引用，或来源显式未提供——
+// CONTEXT「未提供或不适用必须明确记录」，「未提供」进登记册也进核对（票 sa-cc/12 做法 1）。
 type ExternalFundsFactRegistration struct {
 	Fact        domain.ExternalFundsFactReference
 	Source      string
-	Payer       string
+	Payer       domain.FundsPayer
 	Currency    string
 	AmountMinor int64
 	OccurredAt  time.Time
@@ -1105,11 +1106,12 @@ type ExternalFundsFactRegistration struct {
 // AdoptedFundsFact 是按 `settlement-accounting` 采用信封所带的引用回查到的一条已采用事实的
 // 内容——入向登记（ExternalFundsFactRegistration）最少要读的几维：来源身份、付款人、金额、
 // 币种、业务时间。本上下文只读它来登引用，不把它复制成第二处权威：金额与币种的权威仍在
-// `settlement-accounting`，这里登的是核对所需维度（票 sa-cc/03 红线）。Payer 为空即来源未提供
-// ——提供方那一侧显式缺席，本上下文照样读回，要不要收由 ReceiveFundsFact 自己答。
+// `settlement-accounting`，这里登的是核对所需维度（票 sa-cc/03 红线）。Payer 由消费侧适配器
+// 从提供方的 `(value, bool)` 译成本上下文的一格（票 sa-cc/12 裁决 3）：提供方显式缺席即
+// FundsPayerNotProvided，本上下文照样收下——要不要付款人是核对时对着真实程序的规则问的事。
 type AdoptedFundsFact struct {
 	Source      string
-	Payer       string
+	Payer       domain.FundsPayer
 	Currency    string
 	AmountMinor int64
 	OccurredAt  time.Time
@@ -1144,6 +1146,31 @@ type ExternalFundsFactRegister interface {
 		tenant domain.TenantID,
 		fact domain.ExternalFundsFactReference,
 	) (ExternalFundsFactRegistration, bool, error)
+}
+
+// PayerRequirementRuleRegistry 是「真实程序要不要求付款人」规则册的写口（票 sa-cc/12 裁决 1，形照
+// ADR-0137 决定三的规则型目录行）：按（租户、监管程序）一行至多一条规则。它不挂在门禁目录那一族上——
+// 那族按（范围、动作、边界）每份申报一行，而「某程序核对时要不要付款人」是程序的属性、与哪份申报无关，
+// 挂上去等于让每份申报各登一遍同一句话。写入代数同其余登记册（ADR-0031，不 UPSERT）：同键已在册交回
+// `已登记`，内容是否同一份由编排读回自己比；改规则走复核另登。规则的取值属实例半边，本口不写任何默认。
+type PayerRequirementRuleRegistry interface {
+	RegisterPayerRequirement(
+		ctx context.Context,
+		tenant domain.TenantID,
+		procedure domain.CustomsProcedureReference,
+		requirement domain.PayerRequirement,
+	) (CaseConfigurationSaveOutcome, error)
+}
+
+// PayerRequirementRuleView 按（租户、监管程序）取回「要不要求付款人」的规则。found=false 即这个程序还没
+// 登这一条——核对编排答「规则未配置」诚实停点，不取任何默认（AGENTS 红线）；它与「程序要求而来源未提供」
+// 是两格：这一格等的是登记方补规则，那一格等的是来源补事实（ADR-0029 按恢复动作分格）。
+type PayerRequirementRuleView interface {
+	LoadPayerRequirement(
+		ctx context.Context,
+		tenant domain.TenantID,
+		procedure domain.CustomsProcedureReference,
+	) (domain.PayerRequirement, bool, error)
 }
 
 // DutyVerificationKey 是税费付款核对的幂等键：核对身份三维（税费版本、资金事实、范围）加

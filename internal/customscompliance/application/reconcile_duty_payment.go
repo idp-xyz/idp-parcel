@@ -274,9 +274,11 @@ func sameCollaboration(existing, requested domain.DutyPaymentCollaboration) bool
 		existing.Target() == requested.Target()
 }
 
-// ReceiveFundsFact 登记一条外部资金事实引用（步 6 的 CC 半边）。来源身份、付款人、币种、
-// 业务时间必备——来源未提供且程序不要求的维度要「明确记录」，而这四件是关联核对最少要读
-// 的；金额允许为零（付款失败、撤销这类来源事实本就没有正向金额），为负是矛盾输入。
+// ReceiveFundsFact 登记一条外部资金事实引用（步 6 的 CC 半边）。来源身份、币种、业务时间必备；
+// 付款人是「来源提供或真实程序要求的」维度（CONTEXT「税费付款核对」）——来源未提供不拒收，
+// 登记里显式记「未提供」（CONTEXT「未提供或不适用必须明确记录」），要不要它是核对时对着真实程序
+// 的规则问的事（VerifyPayment 的三停格，票 sa-cc/12 裁决 2）；两格都不是的零值付款人是矛盾输入。
+// 金额允许为零（付款失败、撤销这类来源事实本就没有正向金额），为负是矛盾输入。
 func (handler *DutyPaymentReconciliationHandler) ReceiveFundsFact(
 	ctx context.Context,
 	command ReceiveExternalFundsFactCommand,
@@ -285,7 +287,7 @@ func (handler *DutyPaymentReconciliationHandler) ReceiveFundsFact(
 	if blankTenant(command.TenantID) ||
 		strings.TrimSpace(registration.Fact.String()) == "" ||
 		strings.TrimSpace(registration.Source) == "" ||
-		strings.TrimSpace(registration.Payer) == "" ||
+		!registration.Payer.Valid() ||
 		strings.TrimSpace(registration.Currency) == "" ||
 		registration.AmountMinor < 0 ||
 		registration.OccurredAt.IsZero() {

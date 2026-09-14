@@ -57,11 +57,16 @@ func synFundsFact(t *testing.T, amount int64) ports.ExternalFundsFactRegistratio
 	return ports.ExternalFundsFactRegistration{
 		Fact:        viewValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-01"),
 		Source:      "SYN-BANK-01",
-		Payer:       "SYN-PAYER-01",
+		Payer:       viewValue(t, domain.ProvidedFundsPayer, "SYN-PAYER-01"),
 		Currency:    "XTS",
 		AmountMinor: amount,
 		OccurredAt:  dutyRegistryBaseAt.Add(-time.Hour),
 	}
+}
+
+func synProcedure(t *testing.T, value string) domain.CustomsProcedureReference {
+	t.Helper()
+	return viewValue(t, domain.NewCustomsProcedureReference, value)
 }
 
 func synVerificationRecord(t *testing.T, coverage domain.DutyCoverage, digest string) ports.DutyVerificationRecord {
@@ -167,7 +172,7 @@ func TestExternalFundsFactsRoundTripByReference(t *testing.T) {
 	if err != nil || !found {
 		t.Fatalf("读不回：err=%v found=%v", err, found)
 	}
-	if loaded.Fact != registration.Fact || loaded.Source != "SYN-BANK-01" || loaded.Payer != "SYN-PAYER-01" ||
+	if loaded.Fact != registration.Fact || loaded.Source != "SYN-BANK-01" || loaded.Payer != registration.Payer ||
 		loaded.Currency != "XTS" || loaded.AmountMinor != 12500 || !loaded.OccurredAt.Equal(registration.OccurredAt) {
 		t.Fatalf("资金事实行走样：%+v", loaded)
 	}
@@ -184,6 +189,106 @@ func TestExternalFundsFactsRoundTripByReference(t *testing.T) {
 	if _, found, err := store.LoadFundsFact(t.Context(), tenantA(t),
 		viewValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-NOBODY")); err != nil || found {
 		t.Fatalf("未登记该 found=false：err=%v found=%v", err, found)
+	}
+}
+
+// Covers: 票 sa-cc/12 完成判据 2「放宽后的往返」——付款人「来源未提供」落成 payer_ref 为 NULL、读回仍是那一格
+// （不是空串、不是零值）；同引用重登`已登记`不顶替；「提供了」的行照旧读回引用本身。
+func TestAFundsFactWithoutAPayerRoundTripsAsExplicitlyNotProvided(t *testing.T) {
+	store, fixture := newDutyReconciliation(t)
+	registration := synFundsFact(t, 12500)
+	registration.Payer = domain.FundsPayerNotProvided()
+
+	outcome, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
+		return store.RegisterFundsFact(ctx, tenantA(t), registration)
+	})
+	if err != nil || outcome != ports.CaseConfigurationRegistered {
+		t.Fatalf("来源未提供付款人的事实该登得进：err=%v outcome=%v", err, outcome)
+	}
+	loaded, found, err := store.LoadFundsFact(t.Context(), tenantA(t), registration.Fact)
+	if err != nil || !found {
+		t.Fatalf("读不回：err=%v found=%v", err, found)
+	}
+	if loaded.Payer.Provided() || !loaded.Payer.Valid() || loaded.Payer != domain.FundsPayerNotProvided() {
+		t.Fatalf("付款人该读回「来源未提供」那一格，实得 %#v", loaded.Payer)
+	}
+	if loaded.Source != "SYN-BANK-01" || loaded.Currency != "XTS" || loaded.AmountMinor != 12500 {
+		t.Fatalf("其余维度走样：%+v", loaded)
+	}
+
+	var payerColumn *string
+	if err := fixture.pool.QueryRow(t.Context(),
+		`SELECT payer_ref FROM customs_compliance.external_funds_fact WHERE tenant_id = $1 AND fact_ref = $2`,
+		"tenant-a", registration.Fact.String()).Scan(&payerColumn); err != nil {
+		t.Fatalf("直读 payer_ref：%v", err)
+	}
+	if payerColumn != nil {
+		t.Fatalf("「来源未提供」在库上该是 NULL，实得 %q", *payerColumn)
+	}
+
+	replay, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
+		return store.RegisterFundsFact(ctx, tenantA(t), synFundsFact(t, 12500))
+	})
+	if err != nil || replay != ports.CaseConfigurationAlreadyRegistered {
+		t.Fatalf("同引用重登该交回`已登记`：err=%v outcome=%v", err, replay)
+	}
+	if again, _, _ := store.LoadFundsFact(t.Context(), tenantA(t), registration.Fact); again.Payer.Provided() {
+		t.Fatal("首版「未提供」被「提供了」顶替")
+	}
+
+	zero := synFundsFact(t, 1)
+	zero.Fact = viewValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-02")
+	zero.Payer = domain.FundsPayer{}
+	if _, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
+		return store.RegisterFundsFact(ctx, tenantA(t), zero)
+	}); err == nil {
+		t.Fatal("零值付款人被登进去了——两格都不是不该落库")
+	}
+}
+
+// Covers: 票 sa-cc/12 裁决 1——「真实程序要不要求付款人」按（租户、监管程序）一行一条：两形各自往返、同键重登
+// `已登记`不顶替（改规则走复核另登）、未登记 found=false（核对编排据此答「规则未配置」，不取默认）。
+func TestPayerRequirementRulesRoundTripPerProcedure(t *testing.T) {
+	store, fixture := newDutyReconciliation(t)
+	requiring := synProcedure(t, "SYN-PROC-REQUIRES-PAYER")
+	waiving := synProcedure(t, "SYN-PROC-NO-PAYER")
+
+	for procedure, requirement := range map[domain.CustomsProcedureReference]domain.PayerRequirement{
+		requiring: domain.PayerRequired,
+		waiving:   domain.PayerNotRequired,
+	} {
+		outcome, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
+			return store.RegisterPayerRequirement(ctx, tenantA(t), procedure, requirement)
+		})
+		if err != nil || outcome != ports.CaseConfigurationRegistered {
+			t.Fatalf("登记 %s=%s：err=%v outcome=%v", procedure, requirement, err, outcome)
+		}
+		loaded, found, err := store.LoadPayerRequirement(t.Context(), tenantA(t), procedure)
+		if err != nil || !found || loaded != requirement {
+			t.Fatalf("%s 读回 = %v found=%v err=%v, want %v", procedure, loaded, found, err, requirement)
+		}
+	}
+
+	replay, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
+		return store.RegisterPayerRequirement(ctx, tenantA(t), requiring, domain.PayerNotRequired)
+	})
+	if err != nil || replay != ports.CaseConfigurationAlreadyRegistered {
+		t.Fatalf("同键重登该交回`已登记`：err=%v outcome=%v", err, replay)
+	}
+	if again, _, _ := store.LoadPayerRequirement(t.Context(), tenantA(t), requiring); again != domain.PayerRequired {
+		t.Fatalf("首登被顶替：%v", again)
+	}
+
+	if _, found, err := store.LoadPayerRequirement(t.Context(), tenantA(t), synProcedure(t, "SYN-PROC-UNREGISTERED")); err != nil || found {
+		t.Fatalf("未登记该 found=false：err=%v found=%v", err, found)
+	}
+	if _, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
+		return store.RegisterPayerRequirement(ctx, tenantA(t), synProcedure(t, "SYN-PROC-ZERO"), domain.PayerRequirementInvalid)
+	}); err == nil {
+		t.Fatal("零值规则被登进去了")
+	}
+	if _, err := store.RegisterPayerRequirement(t.Context(), tenantA(t), requiring, domain.PayerRequired); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记规则应返回 ErrTransactionRequired，实得：%v", err)
 	}
 }
 
@@ -258,6 +363,15 @@ func TestTheReconciliationTablesRejectWhatTheDomainRejects(t *testing.T) {
 		"tenant-a", "SYN-FUNDS-X", "SYN-BANK-01", "SYN-PAYER-01", "XTS", -1, dutyRegistryBaseAt, dutyRegistryBaseAt)
 	fixture.rejects(t, "币种空白", funds,
 		"tenant-a", "SYN-FUNDS-X", "SYN-BANK-01", "SYN-PAYER-01", " ", 1, dutyRegistryBaseAt, dutyRegistryBaseAt)
+	// 0020 放宽后：付款人可以是 NULL（来源未提供），但空白串仍不是任何一格。
+	fixture.rejects(t, "付款人空白串", funds,
+		"tenant-a", "SYN-FUNDS-X", "SYN-BANK-01", "  ", "XTS", 1, dutyRegistryBaseAt, dutyRegistryBaseAt)
+
+	payerRule := `INSERT INTO customs_compliance.duty_payment_payer_rule
+		(tenant_id, procedure_ref, payer_requirement, registered_at)
+		VALUES ($1, $2, $3, $4)`
+	fixture.rejects(t, "付款人规则词形集外", payerRule, "tenant-a", "SYN-PROC-X", "MAYBE", dutyRegistryBaseAt)
+	fixture.rejects(t, "付款人规则程序空白", payerRule, "tenant-a", "  ", "REQUIRED", dutyRegistryBaseAt)
 
 	verification := `INSERT INTO customs_compliance.duty_payment_verification
 		(tenant_id, duty_ref, funds_ref, scope_ref, version_digest, coverage, delta, validity, basis, verified_at)

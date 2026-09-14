@@ -229,7 +229,7 @@ func fundsFactCommand(t *testing.T) application.ReceiveExternalFundsFactCommand 
 		Registration: ports.ExternalFundsFactRegistration{
 			Fact:        configValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-01"),
 			Source:      "SYN-BANK-01",
-			Payer:       "SYN-PAYER-01",
+			Payer:       configValue(t, domain.ProvidedFundsPayer, "SYN-PAYER-01"),
 			Currency:    "XTS",
 			AmountMinor: 12500,
 			OccurredAt:  dutyBaseAt.Add(-time.Hour),
@@ -368,6 +368,47 @@ func TestExternalFundsFactsAreReceivedByReference(t *testing.T) {
 	if result, err := handler.ReceiveFundsFact(t.Context(), blank); err != nil ||
 		result.Outcome() != application.DutyReconciliationNotAccepted {
 		t.Fatalf("币种缺席该不受理：err=%v outcome=%v", err, result.Outcome())
+	}
+}
+
+// Covers: 票 sa-cc/12 完成判据 1 的登记半边——来源未提供付款人的事实`已接收`，登记里付款人显式「未提供」
+// （CONTEXT「未提供或不适用必须明确记录」）；同引用重放`已存在`；同引用换成「提供了」是`内容冲突`（付款人
+// 是登记内容的一维，不是可补的空位）；两格都不是的零值付款人是矛盾输入，`未受理`且不落。
+func TestAFundsFactWithoutAPayerIsReceivedWithThePayerRecordedAsNotProvided(t *testing.T) {
+	store := newDutyStore()
+	handler := newDutyHandler(t, store)
+
+	unprovided := fundsFactCommand(t)
+	unprovided.Registration.Payer = domain.FundsPayerNotProvided()
+	if result, err := handler.ReceiveFundsFact(t.Context(), unprovided); err != nil ||
+		result.Outcome() != application.FundsFactReceived {
+		t.Fatalf("来源未提供付款人该`已接收`：err=%v outcome=%v", err, result.Outcome())
+	}
+	registered, found, err := store.LoadFundsFact(t.Context(), unprovided.TenantID, unprovided.Registration.Fact)
+	if err != nil || !found || registered.Payer.Provided() || !registered.Payer.Valid() {
+		t.Fatalf("登记里付款人该显式为「未提供」：found=%v err=%v payer=%#v", found, err, registered.Payer)
+	}
+
+	if result, err := handler.ReceiveFundsFact(t.Context(), unprovided); err != nil ||
+		result.Outcome() != application.FundsFactExisting {
+		t.Fatalf("重放该是`已存在`：err=%v outcome=%v", err, result.Outcome())
+	}
+
+	nowProvided := fundsFactCommand(t)
+	if result, err := handler.ReceiveFundsFact(t.Context(), nowProvided); err != nil ||
+		result.Outcome() != application.FundsFactContentConflict {
+		t.Fatalf("同引用从「未提供」换成「提供了」该是`内容冲突`：err=%v outcome=%v", err, result.Outcome())
+	}
+
+	zero := fundsFactCommand(t)
+	zero.Registration.Fact = configValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-02")
+	zero.Registration.Payer = domain.FundsPayer{}
+	if result, err := handler.ReceiveFundsFact(t.Context(), zero); err != nil ||
+		result.Outcome() != application.DutyReconciliationNotAccepted {
+		t.Fatalf("零值付款人该`未受理`：err=%v outcome=%v", err, result.Outcome())
+	}
+	if _, found, _ := store.LoadFundsFact(t.Context(), zero.TenantID, zero.Registration.Fact); found {
+		t.Fatal("零值付款人的事实落了册")
 	}
 }
 

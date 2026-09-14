@@ -204,8 +204,12 @@ func seedFundsFact(t *testing.T, book *fakeDutyBook, tenant, fact string) {
 	if err != nil {
 		t.Fatalf("构造资金事实引用：%v", err)
 	}
+	payer, err := domain.ProvidedFundsPayer("SYN-PAYER-01")
+	if err != nil {
+		t.Fatalf("构造付款人：%v", err)
+	}
 	book.funds[tenant+"/"+fact] = ports.ExternalFundsFactRegistration{
-		Fact: reference, Source: "SYN-BANK-01", Payer: "SYN-PAYER-01", Currency: "XTS",
+		Fact: reference, Source: "SYN-BANK-01", Payer: payer, Currency: "XTS",
 		AmountMinor: 12500, OccurredAt: registerClockNow.Add(-time.Hour),
 	}
 }

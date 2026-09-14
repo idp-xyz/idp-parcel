@@ -370,7 +370,7 @@ func TestAnAdoptedExternalFundsFactReachesTheCustomsRegisterThroughTheRouteTable
 	if err != nil || !found {
 		t.Fatalf("CC 入向登记：found = %v err = %v——信封到了消费者却没落登记", found, err)
 	}
-	if registration.Source != "source-bank-feed-1" || registration.Payer != "payer-customer-7" ||
+	if registration.Source != "source-bank-feed-1" || !registration.Payer.Provided() || registration.Payer.Reference() != "payer-customer-7" ||
 		registration.Currency != "USD" || registration.AmountMinor != 8000 {
 		t.Fatalf("登记 = %+v，want 来源 / 付款人 / 币种 / 金额照 SA 那一版转述", registration)
 	}
@@ -408,7 +408,7 @@ func TestAFormedDutyPaymentVerificationReachesTheSettlementInputThroughTheRouteT
 	}
 	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
 		if _, err := register.RegisterFundsFact(txCtx, tenant, ccports.ExternalFundsFactRegistration{
-			Fact: funds, Source: "SYN-BANK-01", Payer: "SYN-PAYER-01", Currency: "XTS", AmountMinor: 12500,
+			Fact: funds, Source: "SYN-BANK-01", Payer: saTestValue(t, ccdomain.ProvidedFundsPayer, "SYN-PAYER-01"), Currency: "XTS", AmountMinor: 12500,
 			OccurredAt: verificationAt.Add(-time.Hour),
 		}); err != nil {
 			return err

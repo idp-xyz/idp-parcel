@@ -118,7 +118,9 @@ func (store *DutyPaymentReconciliation) SaveCollaboration(
 }
 
 // RegisterFundsFact 登记一条外部资金事实引用。received_at 取事务内库时钟——它是本上下文
-// 接收这一动作的时间，与来源的业务时间 occurred_at 是两列。
+// 接收这一动作的时间，与来源的业务时间 occurred_at 是两列。付款人「来源未提供」那一格落成
+// payer_ref 为 NULL（0020 放宽；空串仍被 CHECK 拒）——NULL 在这一列的唯一含义就是 CONTEXT 要
+// 「明确记录」的那个「未提供」，不是缺省；零值付款人（两格都不是）是调用方编程错误，写前拒。
 func (store *DutyPaymentReconciliation) RegisterFundsFact(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -127,6 +129,10 @@ func (store *DutyPaymentReconciliation) RegisterFundsFact(
 	if strings.TrimSpace(registration.Fact.String()) == "" || registration.OccurredAt.IsZero() {
 		return ports.CaseConfigurationSaveOutcomeInvalid,
 			fmt.Errorf("register funds fact: the fact reference or its business instant is blank")
+	}
+	if !registration.Payer.Valid() {
+		return ports.CaseConfigurationSaveOutcomeInvalid,
+			fmt.Errorf("register funds fact: the payer is neither provided nor explicitly not provided")
 	}
 	executor, err := store.db.RequireExecutor(ctx)
 	if err != nil {
@@ -139,7 +145,7 @@ func (store *DutyPaymentReconciliation) RegisterFundsFact(
 		 VALUES ($1, $2, $3, $4, $5, $6, $7, now())
 		 ON CONFLICT DO NOTHING`,
 		tenant.String(), registration.Fact.String(),
-		registration.Source, registration.Payer, registration.Currency, registration.AmountMinor,
+		registration.Source, payerColumn(registration.Payer), registration.Currency, registration.AmountMinor,
 		registration.OccurredAt.UTC(),
 	)
 	if err != nil {
@@ -166,12 +172,13 @@ func (store *DutyPaymentReconciliation) LoadFundsFact(
 	}
 
 	registration := ports.ExternalFundsFactRegistration{Fact: fact}
+	var payer *string
 	err = querier.QueryRow(ctx,
 		`SELECT source_ref, payer_ref, currency, amount_minor, occurred_at
 		   FROM customs_compliance.external_funds_fact
 		  WHERE tenant_id = $1 AND fact_ref = $2`,
 		tenant.String(), fact.String(),
-	).Scan(&registration.Source, &registration.Payer, &registration.Currency,
+	).Scan(&registration.Source, &payer, &registration.Currency,
 		&registration.AmountMinor, &registration.OccurredAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return none, false, nil
@@ -179,8 +186,29 @@ func (store *DutyPaymentReconciliation) LoadFundsFact(
 	if err != nil {
 		return none, false, fmt.Errorf("load funds fact: %w", err)
 	}
+	if registration.Payer, err = payerFromColumn(payer); err != nil {
+		return none, false, fmt.Errorf("rebuild funds fact: %w", err)
+	}
 	registration.OccurredAt = registration.OccurredAt.UTC()
 	return registration, true, nil
+}
+
+// payerColumn 把付款人一格折成 payer_ref 列：「来源提供」是引用本身，「来源未提供」是 NULL。
+func payerColumn(payer domain.FundsPayer) *string {
+	if !payer.Provided() {
+		return nil
+	}
+	reference := payer.Reference()
+	return &reference
+}
+
+// payerFromColumn 把 payer_ref 列译回一格：NULL 即「来源未提供」；非空即「来源提供」。空白串到不了这里
+// （0016 / 0020 的 CHECK 拦），真到了是库被旁路改过，经领域构造响亮拒。
+func payerFromColumn(column *string) (domain.FundsPayer, error) {
+	if column == nil {
+		return domain.FundsPayerNotProvided(), nil
+	}
+	return domain.ProvidedFundsPayer(*column)
 }
 
 func (store *DutyPaymentReconciliation) FindVerification(

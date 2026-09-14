@@ -22,8 +22,9 @@ var ErrUntranslatableReference = errors.New(
 // SettlementAdoptedFundsFactSource 实现 ccports.AdoptedFundsFactSource：把本上下文的（租户、事实引用、
 // 版本）译成提供方的键，问 SA 的只读视图，再把事实本体译成本上下文最少要读的几维。
 //
-// 只译不判：付款人在提供方显式缺席就译成空——要不要收是 ReceiveFundsFact 的事；金额与币种只是
-// 转述给入向登记，权威留在提供方（票面红线）。
+// 只译不判：付款人在提供方是 `(value, bool)` 一对，这里译成本上下文的一格——提供方显式缺席即
+// FundsPayerNotProvided（票 sa-cc/12 裁决 3：两边不要求同形，译在消费侧）；要不要付款人是核对时对着
+// 真实程序的规则问的事，不在这里判。金额与币种只是转述给入向登记，权威留在提供方（票面红线）。
 type SettlementAdoptedFundsFactSource struct {
 	view saports.AdoptedFundsFactView
 }
@@ -69,12 +70,15 @@ func (source *SettlementAdoptedFundsFactSource) LoadAdoptedFundsFact(
 	currency, amount := adopted.Amount()
 	translated := ccports.AdoptedFundsFact{
 		Source:      adopted.Source().String(),
+		Payer:       ccdomain.FundsPayerNotProvided(),
 		Currency:    currency.String(),
 		AmountMinor: amount,
 		OccurredAt:  adopted.OccurredAt(),
 	}
 	if payer, provided := adopted.Payer(); provided {
-		translated.Payer = payer.String()
+		if translated.Payer, err = ccdomain.ProvidedFundsPayer(payer.String()); err != nil {
+			return ccports.AdoptedFundsFact{}, false, fmt.Errorf("%w: payer: %v", ErrUntranslatableReference, err)
+		}
 	}
 	return translated, true, nil
 }
