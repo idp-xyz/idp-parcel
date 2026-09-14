@@ -138,7 +138,7 @@ func buildClaimsOrchestration(db *bentopg.DB) (transactionalClaims, error) {
 // 一次有依据的解析。实例半边落在 PS 的解析键登记面（那一行的必需依据要含客户服务规则与客户合同，
 // ADR-0136 决定三 / 四），VE 侧没有键登记面。机制接上而登记面尚未让闭包形成时，PS 那一头对每个
 // 对象都答「没有」、两维停在未登记——与本票之前键来源留 nil 的可观察行为一字不变（ADR-0136
-// Consequences）。四个协作方缺一即装配失败（ADR-0079 决定八），没有可选的一半。
+// Consequences）。协作方缺一即装配失败（ADR-0079 决定八），没有可选的一半。
 func buildClaimEligibilityRules(db *bentopg.DB) (veports.EligibilityRuleView, error) {
 	own, err := vepostgres.NewMultiTenantClaimEligibilityRules(db)
 	if err != nil {
