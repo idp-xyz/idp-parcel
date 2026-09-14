@@ -1,0 +1,45 @@
+# lc/37 非作者评审 Standards 非阻断与 lc/25 裁决末条一笔收口：`ADR-0049 第三条` 统一为带引文的「决定三」、收寄路测试文件头「五值」计数换点名、`CarrierTrackingFactReference` 改名判
+
+Category: chore
+Status: in-progress——2026-09-14 08:5x 通道 4 按通道 1 派单 task-65ce5275 自立自做（先例 sa-cc/16、lc/37、psr/08：评审尾巴 A 类推送方派单、作者自立票自做），分支 `mcp4-tails` 基远端 main `cdf17834`（树 `D:/tops/idp-parcel-mcp4-tails`），与 [sa-cc/17](../../sa-cc-funds-and-credential-seams/issues/17-sa-nil-dependency-text-sa01-count-comments-and-pp-synthetic-evaluation-fixture.md) 同分支——两票都撞 `cmd/parcel-dispatch/assemble.go`，合派一个通道；要裁的为零
+Blocked by: 无（lc/37 与 lc/25 均已进 main；三条出处全在两票 Comments）。撞点：通道 3 同期动 `internal/visibilityexception/**`、`cmd/parcel-api/assemble_claims.go`、ADR-0136，与本票零重叠；共享树不碰
+
+## 缺口（出处逐条指到评审原话；取证于 `cdf17834`，开工先重量，与派单不符处如实记）
+
+1. **`ADR-0049 第三条` 写法统一**（[lc/37](37-lc25-review-follow-ups-superseding-version-case-header-counts-and-exported-event-type.md) 评审 ← 通道 1 Standards ①、lc/37 作者判断项 ①、lc/37「进 main 记录」候选后继）。lc/37 条 3 只改了 lc/25 那一句，自此同文件对 ADR-0049 并存「第三条」与带引文的「决定三」两种写法；评审裁「留『决定三』不退回，目标写法是带引文的那种」，其余统一归 PS owner。**重量**：派单写「`assemble.go` 两处 + `direct_publisher_test.go` 两处，`assemble_test.go` 零命中」；`git grep -n -E 'ADR-0049 第三条' -- cmd/ internal/` 于 `cdf17834` 实得 **十四处、四个文件**——`cmd/parcel-dispatch/assemble.go` 十处（四条只投 VE 的路由头注、`wireDispatcher` 体内两句、四只装配函数头注）、`cmd/parcel-dispatch/assemble_test.go` 一处 `Covers:`、`internal/parcelshipment/application/advance_acceptance_chain_test.go` 一处 `Covers:`、`internal/platform/dispatch/direct_publisher_test.go` 两处 `Covers:`。派单的「两处 / 零命中」与实况不符，成因不查（多半是中文模式经 PowerShell 管道的解码坑，workflow.md 本机环境点名过），按实况全收：四处同一句、只改注释，`internal/platform/dispatch` 与 PS `application` 测试不是本票地盘但一并收，完成记录点名。目标写法照 lc/37 条 3 那一句：「ADR-0049 决定三」+ 原句引文「没有订阅者的事件类型显式失败并入账」——`git grep -c` 于 ADR-0049 单行命中 1，已核。
+2. **收寄路测试文件头「五值」**（lc/37 评审 ← 通道 1 Standards ②）。`internal/parcelshipment/adapters/transportfulfillment/judge_on_carrier_first_effective_pickup_test.go` 文件头「五值要由真编排从夹具里判出来」的「五值」数的是 PS `application` 的 `LabelServiceFinalOutcome` 结果代数（派单写在 `domain`，以代码现名为准：`LabelServiceFinalAdopted` / `LabelServiceNotFinalOutcome` / `LabelServiceCancellationStandsOutcome` / `LabelServiceJudgmentNotAccepted` / `LabelServiceJudgmentUndecided`），另一文件的东西，第六格长出来这句无声变错（AGENTS.md「计数与行号同构」）。**重量**：`git grep -n '五值' -- internal/parcelshipment/adapters/transportfulfillment/` 于 `cdf17834` 实得三处——测试文件头那句、同文件 `TestNotFinalIsStructurallyUnreachableOnThePickupRoute` 头注「五值翻译表里那一格」（数的是 `labelfinal` 的翻译表，同样是别处的）、生产文件 `judge_on_carrier_first_effective_pickup.go` `ParcelLabelFinalJudge` 头注「五值译成消费结论」（同一个代数）。三处同一个数、同一个包、都只是注释，一并收；派单「同文件其他『五值』若是数本文件自己的用例不算」——三处没有一处数的是本文件的用例。
+3. **`CarrierTrackingFactReference` 改名判**（[lc/25](25-external-carrier-first-pickup-triggers-label-final-judgment.md)「裁决」末条：头注已随 lc/25 改口为「指名 transport-fulfillment 拥有的一条实际承运商首次有效收寄事实（ADR-0135）」，「类型名是否随之改（如 `CarrierFirstEffectivePickupFactReference`）归实施时判」；lc/37「不在本票」；ADR-0135 决定七末句同一句话）。裁决权在票面交给实施者，本票判。**重量**：`git grep -n CarrierTrackingFactReference -- internal/ cmd/ docs/` 于 `cdf17834`——PS `domain/label_service_final.go`（类型、构造器、`CarrierFirstEffectivePickup` 的字段与 `Fact()`、`CarrierFirstEffectivePickupSpec.Fact`）、`domain/label_service_final_test.go`、`application/judge_label_service_final_test.go`、`adapters/transportfulfillment/judge_on_carrier_first_effective_pickup.go` 与其测试，全在 PS；`docs/` 只有 ADR-0135 两处（Status 行的能力边界清单、决定七那句「归实施时判」）；UC-PS-004 与 `production_wiring_baseline.txt` 零命中。同文件还有一枚同名族的 `CarrierTrackingFactVersion`，头注「是那条事实的版本」——指的是同一条事实，改名理由一字不差地对它也成立。
+
+**不在本票**：lc/25「要裁的」2 失效版本重派生（`ErrVoidedCarrierPickupRederivationUndecided` 等 PS owner 裁）；psr/09「必登」（PS owner）；`JudgeOnCarrierFirstEffectivePickupAdapter` 与 `AdoptOnEffectiveDeliveryAdapter` 同形三段抽 helper（lc/37「只记不抽」，照旧）；任何 CONTEXT / UC / ADR 正文改动——ADR-0135 里那两处旧名是已接受 ADR 的历史与它自己说「归实施时判」的那句，不改写（AGENTS.md「改文档」：不改写已接受 ADR 历史）。
+
+## 做法
+
+1. 十四处「ADR-0049 第三条」逐处改成「ADR-0049 决定三」，其中不带引文的补引文「没有订阅者的事件类型显式失败并入账」；已带 ADR-0049 原句片段的 `Covers:` 行（`direct_publisher_test.go`、`assemble_test.go`）只换「第三条」→「决定三」并把引文对齐到原句。一笔。
+2. 三处「五值」：测试文件头改为逐名点五格；`TestNotFinalIsStructurallyUnreachableOnThePickupRoute` 头注「五值翻译表」→「结果代数翻译表」；生产头注「五值译成消费结论」→「把 `LabelServiceFinalOutcome` 译成消费结论」。一笔。
+3. 判改名。理由见 Comments 完成记录；落法：`CarrierTrackingFactReference` → `CarrierFirstEffectivePickupFactReference`、`CarrierTrackingFactVersion` → `CarrierFirstEffectivePickupFactVersion`，构造器随之（`NewCarrierFirstEffectivePickupFactReference` / `NewCarrierFirstEffectivePickupFactVersion`），`newRequiredValue` 的口名串随之（`carrier first effective pickup fact reference` / `... version`——那两串只出现在拒空值的错误文本里，全仓无断言）；头注去掉「类型名沿用立票时的叫法，是否改名归另笔」那半句；全仓调用点跟上；夹具里 `TF-TRACK-FACT-7` 这类合成串是值不是名，不动。纯改名零行为，独立成笔、放最后。
+
+## 红线
+
+- 条 1 / 2 只许注释行；条 3 只许标识符与两串口名文本，判断分支、结果代数、`ReferenceCarrierFirstEffectivePickup` 的校验一字不动。
+- 不动 `internal/transportfulfillment/**`、路由表行、任何 VE / CC / `cmd/parcel-api` 文件、`apps/`。
+- 注释中文；引 ADR 用决定号 + 单行可搜的引文；不写行号、不数别处的东西。
+
+## 完成判据
+
+1. `git grep -n -E 'ADR-0049 第三条' -- cmd/ internal/` 零；`git grep -c '没有订阅者的事件类型显式失败并入账' -- docs/adr/0049*` 仍为 1（引文对得上原句）。
+2. `git grep -n '五值' -- internal/parcelshipment/adapters/transportfulfillment/` 零；文件头那句逐名列出五格且与 `judge_label_service_final.go` 的常量名逐字相同。
+3. `git grep -n -E 'CarrierTrackingFact(Reference|Version)' -- internal/ cmd/` 零；`git grep -n -i 'carrier tracking fact' -- internal/parcelshipment/` 零；ADR-0135 零 diff。
+4. `gofmt -l` 空、`go build ./...` / `go vet ./...` 退 0；`go test -count=1` PS 全部包 + `internal/platform/dispatch` + `cmd/parcel-dispatch` + `internal/architecture`（PS `adapters/postgres` 与 `cmd/parcel-dispatch` 的真库用例带不带 DSN 如实记——本票三条都不碰持久化，DSN 由 sa-cc/17 条 6 那一跑顺带覆盖 `cmd/parcel-dispatch`）。
+5. 完成记录随条 3 那一笔同提交（Status → resolved、逐笔 SHA、判据逐项、条 3 的判与理由、判断项）；清点预报零差（不增删文件、不加端口）。
+
+## 地盘
+
+`cmd/parcel-dispatch/assemble.go`（只注释）、`cmd/parcel-dispatch/assemble_test.go`（一句 `Covers:`）、`internal/parcelshipment/application/advance_acceptance_chain_test.go`（一句 `Covers:`）、`internal/platform/dispatch/direct_publisher_test.go`（两句 `Covers:`）、`internal/parcelshipment/adapters/transportfulfillment/judge_on_carrier_first_effective_pickup{,_test}.go`、`internal/parcelshipment/domain/label_service_final{,_test}.go`、`internal/parcelshipment/application/judge_label_service_final_test.go`、本票面、lc spec 一行。
+
+## 参照
+
+[lc/37](37-lc25-review-follow-ups-superseding-version-case-header-counts-and-exported-event-type.md) Comments「评审 ← 通道 1」Standards ① ②、判断项 ①、「进 main 记录」候选后继；[lc/25](25-external-carrier-first-pickup-triggers-label-final-judgment.md)「裁决」末条；[ADR-0135](../../../docs/adr/0135-carrier-first-effective-pickup-is-a-judged-control-fact-with-its-own-registry-and-enters-the-segment.md) 决定七；[ADR-0049](../../../docs/adr/0049-publish-channel-is-in-process-delivery-until-load-evidence.md) Decision；`internal/transportfulfillment/domain/carrier_first_effective_pickup.go`（TF 侧 `CarrierFirstEffectivePickupReference` / `CarrierFirstEffectivePickupVersion`，条 3 判改名的对照）；AGENTS.md「写代码注释」「改文档」。
+
+## Comments
+
+- 2026-09-14 08:5x · 通道 4（task-65ce5275）：立票，Status 直接 in-progress，作者自立自做。**只写票面，未动代码。** 三条出处抄自 lc/37 两份评审原话与 lc/25 裁决末条；三条都在 `cdf17834` 上重量过，与派单不符处（条 1 十四处非四处、条 2 三处非一处、条 3 多出一枚同族 `CarrierTrackingFactVersion`）已写进「缺口」。
