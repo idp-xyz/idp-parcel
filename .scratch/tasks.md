@@ -2315,3 +2315,14 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - **进 main**：main 自 `eca6dba1` 未动 → 簿记一笔在 `5eb3caee` 之上（两票 Status「已进 main」+ 进 main 记录；两 spec 行；本节）→ `ls-remote` 核 → **直接快进、不重放、SHA 不换** → `push <sha>:main`。**评审门**：单通道无非作者可派、子代理鉴权错，零行为注释 + 等价重构按「推送方自审」处置，两票票面如实写。`mcp1-tails4` → `merged/`、远端删、树拆。
 - **② 进行中**：三张输入读口后继票立在新目录 `.scratch/pp-pricing-input-seams/`（TF 发生项成员对象只读视图 / NO 实测 + PS 申报的实重尺寸读口 / PS 起讫邮编路线读口），纯票面 draft，各有「要裁的」归 TF / NO·PS / PS owner——见下节。
 - **本节五数**（20:4x–21:0x）：CI 未起跑（计费）· 集成时延 自做无完工报，立票 20:4x → 推出 21:0x **约 20 分**（2 票同笔）· 重放笔数 **0**（快进）· 重复开发 0 · **会话重置 1**（用户报通道 4 crash）· 非作者评审缺席 **1**（单通道自审，如实计）
+
+## 2026-09-14 20:5x 通道 1 新会话（用户经队列指 `%TEMP%\idp-parcel-mcp1-tails4\.scratch\tasks.md`「现在各通道已经恢复了」；接手时 `main = origin/main = db480695`）
+
+### 20:5x–21:0x：量 → tails4 收尾 → 点名（今天首次五通道齐答）→ 派 24 / 41 补评审（通道 2）+ PP 三张输入读口票（通道 3）
+
+- **量**（无在途记忆，全按 git，不读自报）：`fetch` 后 main = origin = `db480695`——上一任 21:0x 的簿记笔已推出（用户截图里 `5eb3caee..db480695 mcp1-tails4 -> mcp1-tails4` 那一推是分支，main 亦已 ff）；`mcp1-tails4@db480695` 领先 0、树干净；`branch-state.ps1` 在途分支只此一条；共享树 76 行未提交经 `git diff --ignore-cr-at-eol --stat` 量得全是 CRLF 幻影、无真改动，未跟踪六件归用户；`query_tasks` pending / working 皆空。**上一任断在**「`mcp1-tails4` → `merged/`、远端删、树拆」与「② 立三张票」之前——`.scratch/pp-pricing-input-seams/` 两棵树上都不存在，上节末句「见下节」所指的那一节从未写下。
+- **tails4 收尾**：先比内容（七份代码文件 `git diff 5eb3caee origin/main` 空；四份 .md 只差 `db480695` 追的「进 main 记录」，属预期）、`status --short` 与 `--untracked-files=all` 零行 → `git branch -m mcp1-tails4 merged/mcp1-tails4`、`push origin --delete mcp1-tails4`、`worktree remove`（不加 `--force`）；核三样：树里 `.git` 链接无、`worktree list` 无、目录无，指针 `merged/mcp1-tails4` = `db480695` 在。
+- **点名**（20:53 广播 2–6，截止 20:57；7–11 `list_sessions` offline 不发免留过期点名）：**5 个应答**（2 / 3 / 4 / 5 / 6 全报空闲、地盘无、余量充足，全部在截止前到）——今天自 08:4x 起第一次五个通道同轮齐答。`list_sessions` 那一格这次与应答一致，但仍按点名不按它。
+- **派单两件**（20:57–20:58）：**通道 2 ← task-293ce358**（high）sa-cc/24 + lc/41 补评审——钉 `5eb3caee` 基线 `eca6dba1`，推送方预建检出 `%TEMP%\idp-review-tails4`，只读 20 分、21:20 前交；作者是通道 1，任一通道都非作者；派单点了五处要专看（`EvidenceKind.Declared()` 导出会不会外泄封闭集语义、三处 switch 是否逐格等价、`assemble.go` 新头注与真库装配例那一格是否一致、lc/41 点字段名不点接口名、有无越票面）。**通道 3 ← task-620bc8e7**（normal）立 PP 三张输入读口后继票——新目录 `.scratch/pp-pricing-input-seams/`：spec + 01 TF 发生项成员对象只读视图 / 02 NO 实测 + PS 申报的实重尺寸读口 / 03 PS 起讫邮编路线读口，纯 .md draft、各带「要裁的」归 TF / NO·PS / PS owner、不裁；出处 sa-cc/11 裁决 4 + 判据 4 的量（`01974923`）；分支 `mcp3-pp-seams` 基 `db480695`，隔离树；估 45–60 分，21:45 报位置。4 / 5 / 6 一条收口广播、留作后手。
+- **前沿**：在途 task-293ce358（通道 2，到 21:20）、task-620bc8e7（通道 3，到 21:45 报位置）；ready 0；draft sa-cc 19 / 20 / 21 / 22（要裁的归 CC / SA owner——上节用户在 ①②③ 里没选 ③「授权代裁」，本会话不越）；lc 20 / 22 等第一家真源。**归用户**：sa-cc 19–22 是否授权代裁（授了就有四张可派、五通道用得上）；sa-cc/11 Spec ① ②（归 PP owner：`WithInput` 顺带保住序列说明的解释语义变化要不要补一条单元例、形成前停格在 PP CONTEXT 要不要一句话）。
+- **本节五数**（20:5x–21:0x，本节未收口，收口时更正）：CI 未起跑（计费）· 集成时延 —（本节尚无票进 main）· 重放笔数 0 · 重复开发 0 · **会话重置 1**（通道 1 本会话新起、无在途记忆；2–6 是上节已计过的那几次 crash 之后的恢复，不重计）· 非作者评审缺席 0（24 / 41 欠的那笔已派出）· 派单 2
