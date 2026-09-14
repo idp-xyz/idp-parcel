@@ -170,11 +170,13 @@ type RegisterConflictSignalRuleCommand struct {
 	ApprovedBy string
 }
 
-// CatalogRegistry 是本用例对写入口的全部要求：目录册写口（ports.CatalogRegistry）加异常
-// 披露规则与冲突信号规则两册的写口。ports 里各写口分立是 mech/08 当时为了不拆替身；用例只有
+// CatalogRegistries 是 CatalogRegistration 收拢的各写口合成、本用例对写入口的全部要求：目录册
+// 写口（ports.CatalogRegistry）加异常披露规则与冲突信号规则两册的写口。复数名标明它是几只端口
+// 合成的一面，不是与 ports.CatalogRegistry 同名的第二只目录册写口——按名认的工具（接线基线、
+// 枚举门禁）分不开两包同名不同型的接口。ports 里各写口分立是 mech/08 当时为了不拆替身；用例只有
 // 一个、受控入口只有一个、留痕只有一处，所以在这里合成一口——生产写入方
 // postgres.CatalogRegistrar 各写口本就齐备，代价只落在测试替身补齐那两册的写法。
-type CatalogRegistry interface {
+type CatalogRegistries interface {
 	ports.CatalogRegistry
 	ports.ExceptionDisclosureRuleRegistry
 	ports.ConflictSignalRuleRegistry
@@ -194,10 +196,10 @@ type CatalogRegistry interface {
 // 事务边界不归本用例：一版抬头与它的整版条目必须同一提交，而事务由进程级入口开启
 // （与本上下文其余写路一致）。
 type CatalogRegistration struct {
-	registry CatalogRegistry
+	registry CatalogRegistries
 }
 
-func NewCatalogRegistration(registry CatalogRegistry) (*CatalogRegistration, error) {
+func NewCatalogRegistration(registry CatalogRegistries) (*CatalogRegistration, error) {
 	if registry == nil {
 		return nil, fmt.Errorf("visibility exception application: catalog registry is required")
 	}

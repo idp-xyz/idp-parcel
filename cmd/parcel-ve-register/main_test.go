@@ -107,9 +107,9 @@ func (registry *cliCatalogRegistry) RegisterConflictSignalRule(
 	return registry.record(commandConflictSignalRule, tenant)
 }
 
-var _ application.CatalogRegistry = (*cliCatalogRegistry)(nil)
+var _ application.CatalogRegistries = (*cliCatalogRegistry)(nil)
 
-func newTestRegistrars(t *testing.T, registry application.CatalogRegistry, tracer executionTracer) registrars {
+func newTestRegistrars(t *testing.T, registry application.CatalogRegistries, tracer executionTracer) registrars {
 	t.Helper()
 	catalogs, err := application.NewCatalogRegistration(registry)
 	if err != nil {

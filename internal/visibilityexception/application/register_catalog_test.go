@@ -99,7 +99,7 @@ func (registry *recordingRegistry) RegisterConflictSignalRule(
 	return registry.answer()
 }
 
-func newRegistration(t *testing.T, registry application.CatalogRegistry) *application.CatalogRegistration {
+func newRegistration(t *testing.T, registry application.CatalogRegistries) *application.CatalogRegistration {
 	t.Helper()
 	service, err := application.NewCatalogRegistration(registry)
 	if err != nil {
