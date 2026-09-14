@@ -319,6 +319,13 @@ func (stub dutyStoreStub) LoadFundsFact(
 	return ports.ExternalFundsFactRegistration{Payer: domain.FundsPayerNotProvided()}, stub.fundsFound, stub.fundsErr
 }
 
+// ListFundsFactVersions 只被 ReceiveFundsFact 在同键重登时读；本文件的两口端点都不收资金事实，交空即可。
+func (stub dutyStoreStub) ListFundsFactVersions(
+	context.Context, domain.TenantID, domain.ExternalFundsFactReference,
+) ([]ports.ExternalFundsFactRegistration, error) {
+	return nil, stub.fundsErr
+}
+
 func (stub dutyStoreStub) FindVerification(
 	context.Context, ports.DutyVerificationKey,
 ) (ports.DutyVerificationRecord, bool, error) {

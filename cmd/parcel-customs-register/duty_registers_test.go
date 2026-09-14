@@ -120,6 +120,7 @@ func (book *fakeDutyBook) SaveCollaboration(
 	return ports.CaseConfigurationRegistered, nil
 }
 
+// 资金事实在本口没有子命令，替身册按引用存一版就够核对读前置；版本维（票 sa-cc/13）在这里只需满足端口。
 func (book *fakeDutyBook) RegisterFundsFact(
 	_ context.Context,
 	tenant domain.TenantID,
@@ -140,6 +141,18 @@ func (book *fakeDutyBook) LoadFundsFact(
 ) (ports.ExternalFundsFactRegistration, bool, error) {
 	registration, found := book.funds[tenant.String()+"/"+fact.String()]
 	return registration, found, nil
+}
+
+func (book *fakeDutyBook) ListFundsFactVersions(
+	_ context.Context,
+	tenant domain.TenantID,
+	fact domain.ExternalFundsFactReference,
+) ([]ports.ExternalFundsFactRegistration, error) {
+	registration, found := book.funds[tenant.String()+"/"+fact.String()]
+	if !found {
+		return nil, nil
+	}
+	return []ports.ExternalFundsFactRegistration{registration}, nil
 }
 
 func verificationKey(key ports.DutyVerificationKey) string {
@@ -220,8 +233,12 @@ func seedFundsFact(t *testing.T, book *fakeDutyBook, tenant, fact string) {
 	if err != nil {
 		t.Fatalf("构造付款人：%v", err)
 	}
+	version, err := domain.NewFundsFactVersion(fact + "/v1")
+	if err != nil {
+		t.Fatalf("构造版本：%v", err)
+	}
 	book.funds[tenant+"/"+fact] = ports.ExternalFundsFactRegistration{
-		Fact: reference, Source: "SYN-BANK-01", Payer: payer, Currency: "XTS",
+		Fact: reference, Version: version, Source: "SYN-BANK-01", Payer: payer, Currency: "XTS",
 		AmountMinor: 12500, OccurredAt: registerClockNow.Add(-time.Hour),
 	}
 }

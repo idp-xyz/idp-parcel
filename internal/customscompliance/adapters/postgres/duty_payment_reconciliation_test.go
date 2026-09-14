@@ -56,6 +56,7 @@ func synFundsFact(t *testing.T, amount int64) ports.ExternalFundsFactRegistratio
 	t.Helper()
 	return ports.ExternalFundsFactRegistration{
 		Fact:        viewValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-01"),
+		Version:     viewValue(t, domain.NewFundsFactVersion, "SYN-FUNDS-01/v1"),
 		Source:      "SYN-BANK-01",
 		Payer:       viewValue(t, domain.ProvidedFundsPayer, "SYN-PAYER-01"),
 		Currency:    "XTS",
@@ -157,7 +158,7 @@ func TestSameCollaborationKeyNeverReplacesTheFirstVersion(t *testing.T) {
 	}
 }
 
-// Covers: 资金事实引用往返——六件如实读回；同引用重登`已登记`不顶替；未登记 found=false。
+// Covers: 资金事实引用往返——各维如实读回；同（引用 + 版本）重登`已登记`不顶替；未登记 found=false。
 func TestExternalFundsFactsRoundTripByReference(t *testing.T) {
 	store, fixture := newDutyReconciliation(t)
 	registration := synFundsFact(t, 12500)
@@ -190,6 +191,88 @@ func TestExternalFundsFactsRoundTripByReference(t *testing.T) {
 		viewValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-NOBODY")); err != nil || found {
 		t.Fatalf("未登记该 found=false：err=%v found=%v", err, found)
 	}
+	if versions, err := store.ListFundsFactVersions(t.Context(), tenantA(t),
+		viewValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-NOBODY")); err != nil || len(versions) != 0 {
+		t.Fatalf("未登记该列空：err=%v n=%d", err, len(versions))
+	}
+}
+
+// Covers: 票 sa-cc/13 完成判据 2「新迁移往返」——同一事实的更正版本 v2（回指 v1、金额变）落版本子表第二行，
+// 身份行仍只一行；ListFundsFactVersions 按接收先后列两版、v2 回指 v1、v1 一字不动；LoadFundsFact 读回最近接收
+// 的那一版；同版本重登`已登记`不顶替；先到 v2 后到 v1 也各占一行（不按到达顺序覆盖）。直读库面：身份表 0021 起
+// 只剩身份列，内容与版本都在子表。
+func TestFundsFactVersionsAccrueAsRowsThatPointBack(t *testing.T) {
+	store, fixture := newDutyReconciliation(t)
+	first := synFundsFact(t, 12500)
+	second := synFundsFact(t, 9000)
+	second.Version = viewValue(t, domain.NewFundsFactVersion, "SYN-FUNDS-01/v2")
+	second.Corrects = first.Version
+
+	for name, registration := range map[string]ports.ExternalFundsFactRegistration{"v1": first, "v2": second} {
+		outcome, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
+			return store.RegisterFundsFact(ctx, tenantA(t), registration)
+		})
+		if err != nil || outcome != ports.CaseConfigurationRegistered {
+			t.Fatalf("%s：err=%v outcome=%v", name, err, outcome)
+		}
+	}
+	versions, err := store.ListFundsFactVersions(t.Context(), tenantA(t), first.Fact)
+	if err != nil || len(versions) != 2 {
+		t.Fatalf("该列两版：err=%v n=%d", err, len(versions))
+	}
+	if versions[0].Version != first.Version || versions[0].Corrects != (domain.FundsFactVersion{}) || versions[0].AmountMinor != 12500 {
+		t.Fatalf("v1 走样：%+v", versions[0])
+	}
+	if versions[1].Version != second.Version || versions[1].Corrects != first.Version || versions[1].AmountMinor != 9000 ||
+		versions[1].Payer != second.Payer || !versions[1].OccurredAt.Equal(second.OccurredAt) {
+		t.Fatalf("v2 走样：%+v", versions[1])
+	}
+	current, found, err := store.LoadFundsFact(t.Context(), tenantA(t), first.Fact)
+	if err != nil || !found || current.Version != second.Version {
+		t.Fatalf("按引用读该是最近接收的 v2：err=%v found=%v version=%s", err, found, current.Version)
+	}
+
+	var identityRows, versionRows int
+	if err := fixture.pool.QueryRow(t.Context(),
+		`SELECT (SELECT count(*) FROM customs_compliance.external_funds_fact WHERE tenant_id = $1 AND fact_ref = $2),
+		        (SELECT count(*) FROM customs_compliance.external_funds_fact_version WHERE tenant_id = $1 AND fact_ref = $2)`,
+		"tenant-a", first.Fact.String()).Scan(&identityRows, &versionRows); err != nil {
+		t.Fatalf("直读行数：%v", err)
+	}
+	if identityRows != 1 || versionRows != 2 {
+		t.Fatalf("身份行 %d / 版本行 %d，要 1 / 2", identityRows, versionRows)
+	}
+
+	replay, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
+		changed := second
+		changed.AmountMinor = 1
+		return store.RegisterFundsFact(ctx, tenantA(t), changed)
+	})
+	if err != nil || replay != ports.CaseConfigurationAlreadyRegistered {
+		t.Fatalf("同版本重登该`已登记`：err=%v outcome=%v", err, replay)
+	}
+	if again, _ := store.ListFundsFactVersions(t.Context(), tenantA(t), first.Fact); again[1].AmountMinor != 9000 {
+		t.Fatalf("同版本重登顶替了内容：%d", again[1].AmountMinor)
+	}
+
+	late := synFundsFact(t, 500)
+	late.Fact = viewValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-02")
+	late.Version = viewValue(t, domain.NewFundsFactVersion, "SYN-FUNDS-02/v2")
+	late.Corrects = viewValue(t, domain.NewFundsFactVersion, "SYN-FUNDS-02/v1")
+	earlier := synFundsFact(t, 400)
+	earlier.Fact = late.Fact
+	earlier.Version = late.Corrects
+	for name, registration := range []ports.ExternalFundsFactRegistration{late, earlier} {
+		if outcome, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
+			return store.RegisterFundsFact(ctx, tenantA(t), registration)
+		}); err != nil || outcome != ports.CaseConfigurationRegistered {
+			t.Fatalf("乱序第 %d 版：err=%v outcome=%v", name, err, outcome)
+		}
+	}
+	if versions, _ := store.ListFundsFactVersions(t.Context(), tenantA(t), late.Fact); len(versions) != 2 ||
+		versions[0].Version != late.Version || versions[1].Version != earlier.Version {
+		t.Fatalf("迟到的前版该按自己的版本进、按接收先后列：%+v", versions)
+	}
 }
 
 // Covers: 票 sa-cc/12 完成判据 2「放宽后的往返」——付款人「来源未提供」落成 payer_ref 为 NULL、读回仍是那一格
@@ -218,8 +301,8 @@ func TestAFundsFactWithoutAPayerRoundTripsAsExplicitlyNotProvided(t *testing.T) 
 
 	var payerColumn *string
 	if err := fixture.pool.QueryRow(t.Context(),
-		`SELECT payer_ref FROM customs_compliance.external_funds_fact WHERE tenant_id = $1 AND fact_ref = $2`,
-		"tenant-a", registration.Fact.String()).Scan(&payerColumn); err != nil {
+		`SELECT payer_ref FROM customs_compliance.external_funds_fact_version WHERE tenant_id = $1 AND fact_ref = $2 AND version = $3`,
+		"tenant-a", registration.Fact.String(), registration.Version.String()).Scan(&payerColumn); err != nil {
 		t.Fatalf("直读 payer_ref：%v", err)
 	}
 	if payerColumn != nil {
@@ -356,16 +439,27 @@ func TestTheReconciliationTablesRejectWhatTheDomainRejects(t *testing.T) {
 	fixture.rejects(t, "种类集外", collaboration,
 		"tenant-a", "SYN-UNIT-X", "SYN-DUTY-X", "MAYBE", "", "o", "r", "t", dutyRegistryBaseAt)
 
-	funds := `INSERT INTO customs_compliance.external_funds_fact
-		(tenant_id, fact_ref, source_ref, payer_ref, currency, amount_minor, occurred_at, received_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`
+	// 0021 起内容在版本子表；身份行先落，子表外键钉「版本属于某条已登记的事实」。
+	identity := `INSERT INTO customs_compliance.external_funds_fact (tenant_id, fact_ref, received_at) VALUES ($1, $2, $3)`
+	fixture.seed(t, identity, "tenant-a", "SYN-FUNDS-X", dutyRegistryBaseAt)
+	funds := `INSERT INTO customs_compliance.external_funds_fact_version
+		(tenant_id, fact_ref, version, corrects_version, source_ref, payer_ref, currency, amount_minor, occurred_at, received_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
 	fixture.rejects(t, "负金额", funds,
-		"tenant-a", "SYN-FUNDS-X", "SYN-BANK-01", "SYN-PAYER-01", "XTS", -1, dutyRegistryBaseAt, dutyRegistryBaseAt)
+		"tenant-a", "SYN-FUNDS-X", "v1", nil, "SYN-BANK-01", "SYN-PAYER-01", "XTS", -1, dutyRegistryBaseAt, dutyRegistryBaseAt)
 	fixture.rejects(t, "币种空白", funds,
-		"tenant-a", "SYN-FUNDS-X", "SYN-BANK-01", "SYN-PAYER-01", " ", 1, dutyRegistryBaseAt, dutyRegistryBaseAt)
-	// 0020 放宽后：付款人可以是 NULL（来源未提供），但空白串仍不是任何一格。
+		"tenant-a", "SYN-FUNDS-X", "v1", nil, "SYN-BANK-01", "SYN-PAYER-01", " ", 1, dutyRegistryBaseAt, dutyRegistryBaseAt)
+	// 0020 起：付款人可以是 NULL（来源未提供），但空白串仍不是任何一格。
 	fixture.rejects(t, "付款人空白串", funds,
-		"tenant-a", "SYN-FUNDS-X", "SYN-BANK-01", "  ", "XTS", 1, dutyRegistryBaseAt, dutyRegistryBaseAt)
+		"tenant-a", "SYN-FUNDS-X", "v1", nil, "SYN-BANK-01", "  ", "XTS", 1, dutyRegistryBaseAt, dutyRegistryBaseAt)
+	fixture.rejects(t, "版本空白", funds,
+		"tenant-a", "SYN-FUNDS-X", "  ", nil, "SYN-BANK-01", "SYN-PAYER-01", "XTS", 1, dutyRegistryBaseAt, dutyRegistryBaseAt)
+	fixture.rejects(t, "回指自己", funds,
+		"tenant-a", "SYN-FUNDS-X", "v1", "v1", "SYN-BANK-01", "SYN-PAYER-01", "XTS", 1, dutyRegistryBaseAt, dutyRegistryBaseAt)
+	fixture.rejects(t, "回指空白", funds,
+		"tenant-a", "SYN-FUNDS-X", "v1", "  ", "SYN-BANK-01", "SYN-PAYER-01", "XTS", 1, dutyRegistryBaseAt, dutyRegistryBaseAt)
+	fixture.rejects(t, "版本不属于已登记的事实", funds,
+		"tenant-a", "SYN-FUNDS-NOBODY", "v1", nil, "SYN-BANK-01", "SYN-PAYER-01", "XTS", 1, dutyRegistryBaseAt, dutyRegistryBaseAt)
 
 	payerRule := `INSERT INTO customs_compliance.duty_payment_payer_rule
 		(tenant_id, procedure_ref, payer_requirement, registered_at)
@@ -379,7 +473,7 @@ func TestTheReconciliationTablesRejectWhatTheDomainRejects(t *testing.T) {
 	fixture.rejects(t, "没有资金事实的核对", verification,
 		"tenant-a", "SYN-DUTY-X", "SYN-FUNDS-NOBODY", "SYN-UNIT-X", "d", "COVERED", "NO_DELTA", "VALID", "basis", dutyRegistryBaseAt)
 	fixture.seed(t, funds,
-		"tenant-a", "SYN-FUNDS-X", "SYN-BANK-01", "SYN-PAYER-01", "XTS", 1, dutyRegistryBaseAt, dutyRegistryBaseAt)
+		"tenant-a", "SYN-FUNDS-X", "v1", nil, "SYN-BANK-01", "SYN-PAYER-01", "XTS", 1, dutyRegistryBaseAt, dutyRegistryBaseAt)
 	fixture.rejects(t, "无依据的核对", verification,
 		"tenant-a", "SYN-DUTY-X", "SYN-FUNDS-X", "SYN-UNIT-X", "d", "COVERED", "NO_DELTA", "VALID", "  ", dutyRegistryBaseAt)
 	fixture.rejects(t, "覆盖轴集外", verification,

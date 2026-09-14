@@ -117,10 +117,13 @@ func (store *DutyPaymentReconciliation) SaveCollaboration(
 	return ports.CaseConfigurationRegistered, nil
 }
 
-// RegisterFundsFact 登记一条外部资金事实引用。received_at 取事务内库时钟——它是本上下文
-// 接收这一动作的时间，与来源的业务时间 occurred_at 是两列。付款人「来源未提供」那一格落成
-// payer_ref 为 NULL（0020 放宽；空串仍被 CHECK 拒）——NULL 在这一列的唯一含义就是 CONTEXT 要
-// 「明确记录」的那个「未提供」，不是缺省；零值付款人（两格都不是）是调用方编程错误，写前拒。
+// RegisterFundsFact 登记一条外部资金事实的一个版本：身份行（0016 的 external_funds_fact，0021 起只留身份）先
+// DO NOTHING 落一次，再落版本子表一行（0021 的 external_funds_fact_version，键（租户、事实、版本））；同键由
+// DO NOTHING 折成`已登记`交回，内容是否同一份由编排读回自己比。两处 received_at 都取事务内库时钟——它是本上下文
+// 接收这一动作的时间，与来源的业务时间 occurred_at 是两列；身份行上的那一个是首次接收。付款人「来源未提供」
+// 那一格落成 payer_ref 为 NULL（0020 起；空串仍被 CHECK 拒）——NULL 在这一列的唯一含义就是 CONTEXT 要「明确记录」
+// 的那个「未提供」，不是缺省；零值付款人（两格都不是）、版本空白、回指自己都是调用方编程错误，写前拒。
+// 回指的前版是否已到不校验：版本链的权威在提供方，迟到的前版按自己的版本进（票 sa-cc/13 裁决 1）。
 func (store *DutyPaymentReconciliation) RegisterFundsFact(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -129,6 +132,12 @@ func (store *DutyPaymentReconciliation) RegisterFundsFact(
 	if strings.TrimSpace(registration.Fact.String()) == "" || registration.OccurredAt.IsZero() {
 		return ports.CaseConfigurationSaveOutcomeInvalid,
 			fmt.Errorf("register funds fact: the fact reference or its business instant is blank")
+	}
+	if strings.TrimSpace(registration.Version.String()) == "" {
+		return ports.CaseConfigurationSaveOutcomeInvalid, fmt.Errorf("register funds fact: the version is blank")
+	}
+	if registration.Corrects == registration.Version {
+		return ports.CaseConfigurationSaveOutcomeInvalid, fmt.Errorf("register funds fact: a version cannot correct itself")
 	}
 	if !registration.Payer.Valid() {
 		return ports.CaseConfigurationSaveOutcomeInvalid,
@@ -139,12 +148,21 @@ func (store *DutyPaymentReconciliation) RegisterFundsFact(
 		return ports.CaseConfigurationSaveOutcomeInvalid, fmt.Errorf("register funds fact: %w", err)
 	}
 
-	tag, err := executor.Exec(ctx,
-		`INSERT INTO customs_compliance.external_funds_fact
-			(tenant_id, fact_ref, source_ref, payer_ref, currency, amount_minor, occurred_at, received_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, now())
+	if _, err := executor.Exec(ctx,
+		`INSERT INTO customs_compliance.external_funds_fact (tenant_id, fact_ref, received_at)
+		 VALUES ($1, $2, now())
 		 ON CONFLICT DO NOTHING`,
 		tenant.String(), registration.Fact.String(),
+	); err != nil {
+		return ports.CaseConfigurationSaveOutcomeInvalid, fmt.Errorf("register funds fact: %w", err)
+	}
+	tag, err := executor.Exec(ctx,
+		`INSERT INTO customs_compliance.external_funds_fact_version
+			(tenant_id, fact_ref, version, corrects_version,
+			 source_ref, payer_ref, currency, amount_minor, occurred_at, received_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, now())
+		 ON CONFLICT DO NOTHING`,
+		tenant.String(), registration.Fact.String(), registration.Version.String(), correctsColumn(registration.Corrects),
 		registration.Source, payerColumn(registration.Payer), registration.Currency, registration.AmountMinor,
 		registration.OccurredAt.UTC(),
 	)
@@ -157,6 +175,12 @@ func (store *DutyPaymentReconciliation) RegisterFundsFact(
 	return ports.CaseConfigurationRegistered, nil
 }
 
+// fundsFactVersionColumns 是版本子表读回一版所需的列，两个读口共用一份、同一只扫描器译回。
+const fundsFactVersionColumns = `version, corrects_version, source_ref, payer_ref, currency, amount_minor, occurred_at`
+
+// LoadFundsFact 交回本上下文最近接收的那一版（端口头注：核对今天按引用读前置与付款人维，命令上没有版本）。
+// 同一事务内到达的两版 received_at 相同，再按版本字面定序只为确定性，不是版本大小的判断——版本链的权威在
+// 提供方，本上下文不比版本谁新。
 func (store *DutyPaymentReconciliation) LoadFundsFact(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -171,26 +195,102 @@ func (store *DutyPaymentReconciliation) LoadFundsFact(
 		return none, false, fmt.Errorf("load funds fact: %w", err)
 	}
 
-	registration := ports.ExternalFundsFactRegistration{Fact: fact}
-	var payer *string
-	err = querier.QueryRow(ctx,
-		`SELECT source_ref, payer_ref, currency, amount_minor, occurred_at
-		   FROM customs_compliance.external_funds_fact
-		  WHERE tenant_id = $1 AND fact_ref = $2`,
+	rows, err := querier.Query(ctx,
+		`SELECT `+fundsFactVersionColumns+`
+		   FROM customs_compliance.external_funds_fact_version
+		  WHERE tenant_id = $1 AND fact_ref = $2
+		  ORDER BY received_at DESC, version DESC
+		  LIMIT 1`,
 		tenant.String(), fact.String(),
-	).Scan(&registration.Source, &payer, &registration.Currency,
-		&registration.AmountMinor, &registration.OccurredAt)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return none, false, nil
-	}
+	)
 	if err != nil {
 		return none, false, fmt.Errorf("load funds fact: %w", err)
 	}
-	if registration.Payer, err = payerFromColumn(payer); err != nil {
-		return none, false, fmt.Errorf("rebuild funds fact: %w", err)
+	versions, err := scanFundsFactVersions(rows, fact)
+	if err != nil {
+		return none, false, fmt.Errorf("load funds fact: %w", err)
 	}
-	registration.OccurredAt = registration.OccurredAt.UTC()
-	return registration, true, nil
+	if len(versions) == 0 {
+		return none, false, nil
+	}
+	return versions[0], true, nil
+}
+
+// ListFundsFactVersions 按接收先后列一条事实的全部版本、每版带回指前版——「登记册看得见新版本与回指」
+// （票 sa-cc/13 裁决 2）就是这一问。
+func (store *DutyPaymentReconciliation) ListFundsFactVersions(
+	ctx context.Context,
+	tenant domain.TenantID,
+	fact domain.ExternalFundsFactReference,
+) ([]ports.ExternalFundsFactRegistration, error) {
+	if strings.TrimSpace(fact.String()) == "" {
+		return nil, fmt.Errorf("list funds fact versions: the fact reference is blank")
+	}
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list funds fact versions: %w", err)
+	}
+
+	rows, err := querier.Query(ctx,
+		`SELECT `+fundsFactVersionColumns+`
+		   FROM customs_compliance.external_funds_fact_version
+		  WHERE tenant_id = $1 AND fact_ref = $2
+		  ORDER BY received_at ASC, version ASC`,
+		tenant.String(), fact.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list funds fact versions: %w", err)
+	}
+	versions, err := scanFundsFactVersions(rows, fact)
+	if err != nil {
+		return nil, fmt.Errorf("list funds fact versions: %w", err)
+	}
+	return versions, nil
+}
+
+// scanFundsFactVersions 把版本子表的行译回登记：版本与回指经领域构造回来（空白到不了这里，CHECK 拦；真到了
+// 是库被旁路改过，响亮拒），付款人 NULL 译「来源未提供」。
+func scanFundsFactVersions(rows pgx.Rows, fact domain.ExternalFundsFactReference) ([]ports.ExternalFundsFactRegistration, error) {
+	defer rows.Close()
+	var versions []ports.ExternalFundsFactRegistration
+	for rows.Next() {
+		var (
+			versionRaw      string
+			corrects, payer *string
+		)
+		registration := ports.ExternalFundsFactRegistration{Fact: fact}
+		if err := rows.Scan(&versionRaw, &corrects, &registration.Source, &payer, &registration.Currency,
+			&registration.AmountMinor, &registration.OccurredAt); err != nil {
+			return nil, err
+		}
+		var err error
+		if registration.Version, err = domain.NewFundsFactVersion(versionRaw); err != nil {
+			return nil, fmt.Errorf("rebuild funds fact version: %w", err)
+		}
+		if corrects != nil {
+			if registration.Corrects, err = domain.NewFundsFactVersion(*corrects); err != nil {
+				return nil, fmt.Errorf("rebuild funds fact version: corrects: %w", err)
+			}
+		}
+		if registration.Payer, err = payerFromColumn(payer); err != nil {
+			return nil, fmt.Errorf("rebuild funds fact version: %w", err)
+		}
+		registration.OccurredAt = registration.OccurredAt.UTC()
+		versions = append(versions, registration)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return versions, nil
+}
+
+// correctsColumn 把回指前版折成 corrects_version 列：首版是 NULL。
+func correctsColumn(corrects domain.FundsFactVersion) *string {
+	if corrects.String() == "" {
+		return nil
+	}
+	value := corrects.String()
+	return &value
 }
 
 // payerColumn 把付款人一格折成 payer_ref 列：「来源提供」是引用本身，「来源未提供」是 NULL。

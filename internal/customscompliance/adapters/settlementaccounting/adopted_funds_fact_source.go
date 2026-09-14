@@ -24,7 +24,9 @@ var ErrUntranslatableReference = errors.New(
 //
 // 只译不判：付款人在提供方是 `(value, bool)` 一对，这里译成本上下文的一格——提供方显式缺席即
 // FundsPayerNotProvided（票 sa-cc/12 裁决 3：两边不要求同形，译在消费侧）；要不要付款人是核对时对着
-// 真实程序的规则问的事，不在这里判。金额与币种只是转述给入向登记，权威留在提供方（票面红线）。
+// 真实程序的规则问的事，不在这里判。版本与回指前版照提供方那一版的字面译出（票 sa-cc/13 做法 2）——
+// 这是更正还是冲突不在这里判，编排按（引用 + 版本）自己答。金额与币种只是转述给入向登记，权威留在
+// 提供方（票面红线）。
 type SettlementAdoptedFundsFactSource struct {
 	view saports.AdoptedFundsFactView
 }
@@ -74,6 +76,14 @@ func (source *SettlementAdoptedFundsFactSource) LoadAdoptedFundsFact(
 		Currency:    currency.String(),
 		AmountMinor: amount,
 		OccurredAt:  adopted.OccurredAt(),
+	}
+	if translated.Version, err = ccdomain.NewFundsFactVersion(adopted.Version().String()); err != nil {
+		return ccports.AdoptedFundsFact{}, false, fmt.Errorf("%w: version: %v", ErrUntranslatableReference, err)
+	}
+	if corrects, corrected := adopted.Corrects(); corrected {
+		if translated.Corrects, err = ccdomain.NewFundsFactVersion(corrects.String()); err != nil {
+			return ccports.AdoptedFundsFact{}, false, fmt.Errorf("%w: corrects: %v", ErrUntranslatableReference, err)
+		}
 	}
 	if payer, provided := adopted.Payer(); provided {
 		if translated.Payer, err = ccdomain.ProvidedFundsPayer(payer.String()); err != nil {

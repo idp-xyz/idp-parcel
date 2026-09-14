@@ -3,6 +3,7 @@ package settlementaccounting_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -16,18 +17,20 @@ import (
 
 var fundsOccurredAt = time.Date(2026, 9, 10, 8, 0, 0, 0, time.UTC)
 
-// fundsFactRegisterDouble 是 CC 入向登记册的内存替身（按引用幂等，同引用重登答已登记）。
+// fundsFactRegisterDouble 是 CC 入向登记册的内存替身（按（引用 + 版本）幂等，同键重登答已登记；order 记接收
+// 先后，替真库的 received_at）。
 type fundsFactRegisterDouble struct {
-	rows map[string]ccports.ExternalFundsFactRegistration
-	err  error
+	rows  map[string]ccports.ExternalFundsFactRegistration
+	order []string
+	err   error
 }
 
 func newFundsFactRegister() *fundsFactRegisterDouble {
 	return &fundsFactRegisterDouble{rows: map[string]ccports.ExternalFundsFactRegistration{}}
 }
 
-func registerKey(tenant ccdomain.TenantID, fact ccdomain.ExternalFundsFactReference) string {
-	return tenant.String() + "|" + fact.String()
+func registerKey(tenant ccdomain.TenantID, fact ccdomain.ExternalFundsFactReference, version ccdomain.FundsFactVersion) string {
+	return tenant.String() + "|" + fact.String() + "|" + version.String()
 }
 
 func (double *fundsFactRegisterDouble) RegisterFundsFact(
@@ -36,22 +39,39 @@ func (double *fundsFactRegisterDouble) RegisterFundsFact(
 	if double.err != nil {
 		return ccports.CaseConfigurationSaveOutcomeInvalid, double.err
 	}
-	key := registerKey(tenant, registration.Fact)
+	key := registerKey(tenant, registration.Fact, registration.Version)
 	if _, exists := double.rows[key]; exists {
 		return ccports.CaseConfigurationAlreadyRegistered, nil
 	}
 	double.rows[key] = registration
+	double.order = append(double.order, key)
 	return ccports.CaseConfigurationRegistered, nil
 }
 
-func (double *fundsFactRegisterDouble) LoadFundsFact(
+func (double *fundsFactRegisterDouble) ListFundsFactVersions(
 	_ context.Context, tenant ccdomain.TenantID, fact ccdomain.ExternalFundsFactReference,
-) (ccports.ExternalFundsFactRegistration, bool, error) {
+) ([]ccports.ExternalFundsFactRegistration, error) {
 	if double.err != nil {
-		return ccports.ExternalFundsFactRegistration{}, false, double.err
+		return nil, double.err
 	}
-	row, found := double.rows[registerKey(tenant, fact)]
-	return row, found, nil
+	prefix := tenant.String() + "|" + fact.String() + "|"
+	var versions []ccports.ExternalFundsFactRegistration
+	for _, key := range double.order {
+		if strings.HasPrefix(key, prefix) {
+			versions = append(versions, double.rows[key])
+		}
+	}
+	return versions, nil
+}
+
+func (double *fundsFactRegisterDouble) LoadFundsFact(
+	ctx context.Context, tenant ccdomain.TenantID, fact ccdomain.ExternalFundsFactReference,
+) (ccports.ExternalFundsFactRegistration, bool, error) {
+	versions, err := double.ListFundsFactVersions(ctx, tenant, fact)
+	if err != nil || len(versions) == 0 {
+		return ccports.ExternalFundsFactRegistration{}, false, err
+	}
+	return versions[len(versions)-1], true, nil
 }
 
 type dutyClock struct{ at time.Time }
@@ -168,8 +188,23 @@ func payerOf(payer string) ccdomain.FundsPayer {
 	return provided
 }
 
-func adoptedContent(payer string) ccports.AdoptedFundsFact {
+// versionOf 把夹具里的版本字面折成领域值；空串即零值（回指缺席 = 首版）。
+func versionOf(version string) ccdomain.FundsFactVersion {
+	if version == "" {
+		return ccdomain.FundsFactVersion{}
+	}
+	value, err := ccdomain.NewFundsFactVersion(version)
+	if err != nil {
+		panic(err)
+	}
+	return value
+}
+
+// adoptedContent 是提供方那一版的内容：版本与回指前版随事实本体带出（票 sa-cc/13 做法 2）。
+func adoptedContent(version, corrects, payer string) ccports.AdoptedFundsFact {
 	return ccports.AdoptedFundsFact{
+		Version:     versionOf(version),
+		Corrects:    versionOf(corrects),
 		Source:      "source-bank-feed-1",
 		Payer:       payerOf(payer),
 		Currency:    "USD",
@@ -184,21 +219,23 @@ func adoptedEnvelopeRef(version string) ccinbox.AdoptedExternalFundsFact {
 
 // Covers: sa-cc/03 完成判据 2「一封 → 一条登记；重投 → 已存在；换内容 → 内容冲突」——处理方按信封
 // 引用回查提供方、译成入向登记交 ReceiveFundsFact；三种编排答案都入账（交回 nil），不重投。
-// 消费者不关联不核对：登记里只有引用 + 核对所需维度，来源仍是提供方（票面红线）。
+// 消费者不关联不核对：登记里只有引用 + 核对所需维度，来源仍是提供方（票面红线）。「内容冲突」自
+// 票 sa-cc/13 起是同一版本两个来源各说一套；更正版本另见下一条用例。
 func TestAnAdoptedFundsFactIsRegisteredOnceAndReplayOrConflictStillSettles(t *testing.T) {
 	fixture := newFixture(t)
-	fixture.source.facts["tenant-a|bank-fact-1|bank-fact/v1"] = adoptedContent("payer-customer-7")
+	fixture.source.facts["tenant-a|bank-fact-1|bank-fact/v1"] = adoptedContent("bank-fact/v1", "", "payer-customer-7")
 	ref := adoptedEnvelopeRef("bank-fact/v1")
 
 	if err := fixture.handler.HandleAdoptedExternalFundsFact(context.Background(), ref); err != nil {
 		t.Fatalf("首封：%v", err)
 	}
-	row, found := fixture.register.rows["tenant-a|bank-fact-1"]
+	row, found := fixture.register.rows["tenant-a|bank-fact-1|bank-fact/v1"]
 	if !found {
 		t.Fatal("一封信封该落一条登记")
 	}
 	want := ccports.ExternalFundsFactRegistration{
 		Fact:        row.Fact,
+		Version:     versionOf("bank-fact/v1"),
 		Source:      "source-bank-feed-1",
 		Payer:       payerOf("payer-customer-7"),
 		Currency:    "USD",
@@ -216,23 +253,70 @@ func TestAnAdoptedFundsFactIsRegisteredOnceAndReplayOrConflictStillSettles(t *te
 		t.Fatalf("登记条数 = %d, want 1", len(fixture.register.rows))
 	}
 
-	// 同引用、提供方那一版换了内容（模拟更正版本 v2 同引用到达）：编排答内容冲突，消费者照单入账。
-	changed := adoptedContent("payer-customer-7")
+	// 同一版本、提供方换了内容（真冲突：同一版本两个来源各说一套）：编排答内容冲突，消费者照单入账，册上那版不动。
+	changed := adoptedContent("bank-fact/v1", "", "payer-customer-7")
 	changed.AmountMinor = 9000
-	fixture.source.facts["tenant-a|bank-fact-1|bank-fact/v2"] = changed
-	if err := fixture.handler.HandleAdoptedExternalFundsFact(context.Background(), adoptedEnvelopeRef("bank-fact/v2")); err != nil {
+	fixture.source.facts["tenant-a|bank-fact-1|bank-fact/v1"] = changed
+	if err := fixture.handler.HandleAdoptedExternalFundsFact(context.Background(), ref); err != nil {
 		t.Fatalf("内容冲突是编排的答案，消费者不重投：%v", err)
 	}
-	if got := fixture.register.rows["tenant-a|bank-fact-1"].AmountMinor; got != 8000 {
-		t.Fatalf("冲突不得顶替已登记内容，实得金额 %d", got)
+	if got := fixture.register.rows["tenant-a|bank-fact-1|bank-fact/v1"].AmountMinor; got != 8000 || len(fixture.register.rows) != 1 {
+		t.Fatalf("冲突不得顶替已登记内容，实得金额 %d、%d 行", got, len(fixture.register.rows))
 	}
+}
+
+// Covers: 票 sa-cc/13 做法 2 + 完成判据 1 的消费侧——提供方的更正版本 v2（回指 v1、金额变）经同一事件类型再发的
+// 一封到本适配器：版本取信封所指、回指取回查到的事实本体，编排`已接收`成新一行；两版并存、v1 一字不动、
+// v2 回指 v1。本适配器不判「这是更正还是冲突」，只译（做法 3）。
+func TestACorrectionVersionLandsAsASecondRowPointingBackToTheFirst(t *testing.T) {
+	fixture := newFixture(t)
+	fixture.source.facts["tenant-a|bank-fact-1|bank-fact/v1"] = adoptedContent("bank-fact/v1", "", "payer-customer-7")
+	corrected := adoptedContent("bank-fact/v2", "bank-fact/v1", "payer-customer-7")
+	corrected.AmountMinor = 9000
+	fixture.source.facts["tenant-a|bank-fact-1|bank-fact/v2"] = corrected
+
+	if err := fixture.handler.HandleAdoptedExternalFundsFact(context.Background(), adoptedEnvelopeRef("bank-fact/v1")); err != nil {
+		t.Fatalf("首版：%v", err)
+	}
+	if err := fixture.handler.HandleAdoptedExternalFundsFact(context.Background(), adoptedEnvelopeRef("bank-fact/v2")); err != nil {
+		t.Fatalf("更正版本：%v", err)
+	}
+	versions, err := fixture.register.ListFundsFactVersions(context.Background(),
+		payerFixtureTenant(t), payerFixtureFact(t))
+	if err != nil || len(versions) != 2 {
+		t.Fatalf("两版该并存：err=%v n=%d", err, len(versions))
+	}
+	if versions[0].Version != versionOf("bank-fact/v1") || versions[0].Corrects != versionOf("") || versions[0].AmountMinor != 8000 {
+		t.Fatalf("v1 该一字不动：%+v", versions[0])
+	}
+	if versions[1].Version != versionOf("bank-fact/v2") || versions[1].Corrects != versionOf("bank-fact/v1") || versions[1].AmountMinor != 9000 {
+		t.Fatalf("v2 该回指 v1 且带自己的金额：%+v", versions[1])
+	}
+}
+
+func payerFixtureTenant(t *testing.T) ccdomain.TenantID {
+	t.Helper()
+	tenant, err := ccdomain.NewTenantID("tenant-a")
+	if err != nil {
+		t.Fatalf("租户：%v", err)
+	}
+	return tenant
+}
+
+func payerFixtureFact(t *testing.T) ccdomain.ExternalFundsFactReference {
+	t.Helper()
+	fact, err := ccdomain.NewExternalFundsFactReference("bank-fact-1")
+	if err != nil {
+		t.Fatalf("事实引用：%v", err)
+	}
+	return fact
 }
 
 // Covers: 裁决「取信封所指的那一版，不取 latest」的消费侧——提供方还没有那一版就是可见性滞后，
 // 交回 ErrAdoptedFactNotVisible 让消费门回滚重投；不落毒丸，也不拿别的版本顶替。
 func TestAnInvisibleVersionIsAContinuationNotAPoisonEnvelope(t *testing.T) {
 	fixture := newFixture(t)
-	fixture.source.facts["tenant-a|bank-fact-1|bank-fact/v1"] = adoptedContent("payer-customer-7")
+	fixture.source.facts["tenant-a|bank-fact-1|bank-fact/v1"] = adoptedContent("bank-fact/v1", "", "payer-customer-7")
 
 	err := fixture.handler.HandleAdoptedExternalFundsFact(context.Background(), adoptedEnvelopeRef("bank-fact/v2"))
 	if !errors.Is(err, adapter.ErrAdoptedFactNotVisible) {
@@ -254,12 +338,12 @@ func TestAnInvisibleVersionIsAContinuationNotAPoisonEnvelope(t *testing.T) {
 // 只译不判，要不要付款人是核对时对着真实程序的规则问的。sa-cc/03 时这一格是`未受理`的诚实停点，本票放宽。
 func TestAFactWithoutAPayerIsReceivedWithThePayerRecordedAsNotProvided(t *testing.T) {
 	fixture := newFixture(t)
-	fixture.source.facts["tenant-a|bank-fact-1|bank-fact/v1"] = adoptedContent("")
+	fixture.source.facts["tenant-a|bank-fact-1|bank-fact/v1"] = adoptedContent("bank-fact/v1", "", "")
 
 	if err := fixture.handler.HandleAdoptedExternalFundsFact(context.Background(), adoptedEnvelopeRef("bank-fact/v1")); err != nil {
 		t.Fatalf("来源未提供付款人的事实该被接收：%v", err)
 	}
-	row, found := fixture.register.rows["tenant-a|bank-fact-1"]
+	row, found := fixture.register.rows["tenant-a|bank-fact-1|bank-fact/v1"]
 	if !found {
 		t.Fatal("来源未提供付款人的事实该落一条登记")
 	}
@@ -271,7 +355,7 @@ func TestAFactWithoutAPayerIsReceivedWithThePayerRecordedAsNotProvided(t *testin
 // Covers: 编排未决（登记册不可用）是等依赖，交回 ErrFundsFactReceiveUndecided 让消费门重投。
 func TestAnUndecidedOrchestrationIsRetried(t *testing.T) {
 	fixture := newFixture(t)
-	fixture.source.facts["tenant-a|bank-fact-1|bank-fact/v1"] = adoptedContent("payer-customer-7")
+	fixture.source.facts["tenant-a|bank-fact-1|bank-fact/v1"] = adoptedContent("bank-fact/v1", "", "payer-customer-7")
 	fixture.register.err = errors.New("register unavailable")
 
 	err := fixture.handler.HandleAdoptedExternalFundsFact(context.Background(), adoptedEnvelopeRef("bank-fact/v1"))
@@ -332,10 +416,21 @@ func saAdoptedFact(t *testing.T, payer string) sadomain.ExternalFundsFact {
 
 // Covers: 做法 2「读 SA 用消费侧适配器」——翻译只在这里：提供方事实本体译成本上下文最少要读的几维；
 // 付款人在提供方显式缺席就译成「来源未提供」那一格（票 sa-cc/12 裁决 3：`(value, bool)` 到格的译在消费侧）；
+// 版本与回指前版随事实本体译出，首版回指为零值、更正版回指前版（票 sa-cc/13 做法 2）；
 // 提供方答没有原样交回 false；空白版本构造不出提供方的键。
 func TestTheSettlementSourceTranslatesTheProvidersFactIntoOurDimensions(t *testing.T) {
+	first := saAdoptedFact(t, "payer-customer-7")
+	secondVersion, err := sadomain.NewFundsFactVersion("bank-fact/v2")
+	if err != nil {
+		t.Fatal(err)
+	}
+	corrected, err := first.CorrectAmount(9000, secondVersion, fundsOccurredAt.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("提供方更正版本：%v", err)
+	}
 	view := &adoptedViewDouble{facts: map[string]sadomain.ExternalFundsFact{
-		"tenant-a|bank-fact-1|bank-fact/v1": saAdoptedFact(t, "payer-customer-7"),
+		"tenant-a|bank-fact-1|bank-fact/v1": first,
+		"tenant-a|bank-fact-1|bank-fact/v2": corrected,
 		"tenant-b|bank-fact-1|bank-fact/v1": saAdoptedFact(t, ""),
 	}}
 	source, err := adapter.NewSettlementAdoptedFundsFactSource(view)
@@ -353,8 +448,15 @@ func TestTheSettlementSourceTranslatesTheProvidersFactIntoOurDimensions(t *testi
 	if err != nil || !found {
 		t.Fatalf("found = %v err = %v", found, err)
 	}
-	if got != adoptedContent("payer-customer-7") {
-		t.Fatalf("译出 = %+v, want %+v", got, adoptedContent("payer-customer-7"))
+	if want := adoptedContent("bank-fact/v1", "", "payer-customer-7"); got != want {
+		t.Fatalf("译出 = %+v, want %+v", got, want)
+	}
+	got, found, err = source.LoadAdoptedFundsFact(context.Background(), tenantA, fact, "bank-fact/v2")
+	if err != nil || !found {
+		t.Fatalf("更正版本 found = %v err = %v", found, err)
+	}
+	if got.Version != versionOf("bank-fact/v2") || got.Corrects != versionOf("bank-fact/v1") || got.AmountMinor != 9000 {
+		t.Fatalf("更正版本该带自己的版本、回指 v1 与更正后金额：%+v", got)
 	}
 
 	got, found, err = source.LoadAdoptedFundsFact(context.Background(), tenantB, fact, "bank-fact/v1")

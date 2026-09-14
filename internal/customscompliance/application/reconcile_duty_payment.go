@@ -295,11 +295,17 @@ func sameCollaboration(existing, requested domain.DutyPaymentCollaboration) bool
 		existing.Target() == requested.Target()
 }
 
-// ReceiveFundsFact 登记一条外部资金事实引用（步 6 的 CC 半边）。来源身份、币种、业务时间必备；
-// 付款人是「来源提供或真实程序要求的」维度（CONTEXT「税费付款核对」）——来源未提供不拒收，
+// ReceiveFundsFact 登记一条外部资金事实的一个版本（步 6 的 CC 半边）。引用、版本、来源身份、币种、业务
+// 时间必备；付款人是「来源提供或真实程序要求的」维度（CONTEXT「税费付款核对」）——来源未提供不拒收，
 // 登记里显式记「未提供」（CONTEXT「未提供或不适用必须明确记录」），要不要它是核对时对着真实程序
 // 的规则问的事（VerifyPayment 的三停格，票 sa-cc/12 裁决 2）；两格都不是的零值付款人是矛盾输入。
 // 金额允许为零（付款失败、撤销这类来源事实本就没有正向金额），为负是矛盾输入。
+//
+// 幂等键是（引用 + 版本）（票 sa-cc/13 裁决 1）：更正 / 撤销在提供方是同一事实的新版本回指前版，到这里是
+// 新一行——原版本一字不动（UC-CC-009「不删除原付款、不按最后到达覆盖」）；同版本同内容是重放`已存在`，
+// 同版本换内容才是`内容冲突`（同一版本两个来源各说一套）。回指是提供方给的字面，照登不校验前版是否已到
+// （版本链的权威在提供方）；回指自己是形状矛盾，`未受理`。「新版本到达 → 形成新核对版本」不在这里触发，
+// 归核对那一族的后继票——本口只保证登记册看得见它。
 func (handler *DutyPaymentReconciliationHandler) ReceiveFundsFact(
 	ctx context.Context,
 	command ReceiveExternalFundsFactCommand,
@@ -307,6 +313,8 @@ func (handler *DutyPaymentReconciliationHandler) ReceiveFundsFact(
 	registration := command.Registration
 	if blankTenant(command.TenantID) ||
 		strings.TrimSpace(registration.Fact.String()) == "" ||
+		strings.TrimSpace(registration.Version.String()) == "" ||
+		registration.Corrects == registration.Version ||
 		strings.TrimSpace(registration.Source) == "" ||
 		!registration.Payer.Valid() ||
 		strings.TrimSpace(registration.Currency) == "" ||
@@ -323,16 +331,32 @@ func (handler *DutyPaymentReconciliationHandler) ReceiveFundsFact(
 		return DutyReconciliationResult{outcome: FundsFactReceived}, nil
 	}
 
-	existing, found, err := handler.deps.Funds.LoadFundsFact(ctx, command.TenantID, registration.Fact)
-	if err != nil || !found {
+	versions, err := handler.deps.Funds.ListFundsFactVersions(ctx, command.TenantID, registration.Fact)
+	if err != nil {
 		return dutyUndecided(FundsFactRegisterUnavailable), nil
 	}
-	if existing.Source != registration.Source || existing.Payer != registration.Payer ||
-		existing.Currency != registration.Currency || existing.AmountMinor != registration.AmountMinor ||
-		!existing.OccurredAt.Equal(registration.OccurredAt) {
-		return DutyReconciliationResult{outcome: FundsFactContentConflict}, nil
+	for _, existing := range versions {
+		if existing.Version != registration.Version {
+			continue
+		}
+		if !sameFundsFactVersion(existing, registration) {
+			return DutyReconciliationResult{outcome: FundsFactContentConflict}, nil
+		}
+		return DutyReconciliationResult{outcome: FundsFactExisting}, nil
 	}
-	return DutyReconciliationResult{outcome: FundsFactExisting}, nil
+	// 写口说`已登记`、读口却列不出那一版：登记册自相矛盾，是依赖故障不是业务答案。
+	return dutyUndecided(FundsFactRegisterUnavailable), nil
+}
+
+// sameFundsFactVersion 逐字段比同一版本的两份登记：回指也是内容的一维——同版本换回指说的是两条不同的
+// 更正链，与换金额同为真冲突。
+func sameFundsFactVersion(existing, requested ports.ExternalFundsFactRegistration) bool {
+	return existing.Corrects == requested.Corrects &&
+		existing.Source == requested.Source &&
+		existing.Payer == requested.Payer &&
+		existing.Currency == requested.Currency &&
+		existing.AmountMinor == requested.AmountMinor &&
+		existing.OccurredAt.Equal(requested.OccurredAt)
 }
 
 // VerifyPayment 形成税费付款核对（步 7）。两道前置各有自己的格（资金事实未接收 / 协作事项

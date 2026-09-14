@@ -40,7 +40,8 @@ type FundsFactReceiver interface {
 // 提供方回查事实内容，译成入向登记交 ReceiveFundsFact。
 //
 // 只译不判（票 sa-cc/03 红线）：不关联、不核对——关联依据与三轴由 VerifyPayment 的调用方交；
-// 同引用重放答 `已存在`、同引用换内容答 `内容冲突` 都是编排已有的答案，这里照单入账。
+// 同版本重放答 `已存在`、同版本换内容答 `内容冲突`、新版本答 `已接收` 都是编排按（引用 + 版本）
+// 给出的答案，这里照单入账——更正还是冲突不在这里分路（票 sa-cc/13 做法 2 / 3）。
 type ReceiveOnAdoptedFundsFactAdapter struct {
 	source   ccports.AdoptedFundsFactSource
 	receiver FundsFactReceiver
@@ -63,9 +64,9 @@ var _ ccinbox.AdoptedExternalFundsFactHandler = (*ReceiveOnAdoptedFundsFactAdapt
 
 // HandleAdoptedExternalFundsFact 回查 → 译 → 交编排 → 把编排结果落成消费两格。
 //
-// 编排答 `未受理`（例如提供方那一版没有付款人，而本上下文的入向登记要付款人非空）同样入账、不重投：
-// 重投同样内容不会长出付款人来，它是本上下文的诚实停点，不是传输故障——与交付消费者对
-// `REQUEST_NOT_ACCEPTED` 的处置同形（finalconsume.Consumption）。
+// 编排答 `未受理`（形状矛盾——例如提供方那一版回指了自己）同样入账、不重投：重投同样内容不会把形状
+// 改对，它是本上下文的诚实停点，不是传输故障——与交付消费者对 `REQUEST_NOT_ACCEPTED` 的处置同形
+// （finalconsume.Consumption）。付款人缺席自票 sa-cc/12 起不再是这一格：登记照单记「未提供」。
 func (adapter *ReceiveOnAdoptedFundsFactAdapter) HandleAdoptedExternalFundsFact(
 	ctx context.Context,
 	adopted ccinbox.AdoptedExternalFundsFact,
@@ -79,6 +80,11 @@ func (adapter *ReceiveOnAdoptedFundsFactAdapter) HandleAdoptedExternalFundsFact(
 		return fmt.Errorf("%w: fact: %v", ErrUntranslatableReference, err)
 	}
 
+	version, err := ccdomain.NewFundsFactVersion(adopted.Version)
+	if err != nil {
+		return fmt.Errorf("%w: version: %v", ErrUntranslatableReference, err)
+	}
+
 	content, found, err := adapter.source.LoadAdoptedFundsFact(ctx, tenant, fact, adopted.Version)
 	if err != nil {
 		return fmt.Errorf("%w: %v", ErrAdoptedFactNotVisible, err)
@@ -87,10 +93,14 @@ func (adapter *ReceiveOnAdoptedFundsFactAdapter) HandleAdoptedExternalFundsFact(
 		return fmt.Errorf("%w: fact %q version %q", ErrAdoptedFactNotVisible, adopted.Fact, adopted.Version)
 	}
 
+	// 版本取信封所指的那一版、回指取回查到的事实本体（票 sa-cc/13 做法 2）：读口按版本取，两者同源；
+	// 回指是事实本体的一维，信封载荷里那份可缺席的 corrects 不进译码（消费者头注）。
 	result, err := adapter.receiver.ReceiveFundsFact(ctx, ccapplication.ReceiveExternalFundsFactCommand{
 		TenantID: tenant,
 		Registration: ccports.ExternalFundsFactRegistration{
 			Fact:        fact,
+			Version:     version,
+			Corrects:    content.Corrects,
 			Source:      content.Source,
 			Payer:       content.Payer,
 			Currency:    content.Currency,

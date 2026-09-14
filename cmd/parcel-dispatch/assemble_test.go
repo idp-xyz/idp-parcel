@@ -408,7 +408,8 @@ func TestAFormedDutyPaymentVerificationReachesTheSettlementInputThroughTheRouteT
 	}
 	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
 		if _, err := register.RegisterFundsFact(txCtx, tenant, ccports.ExternalFundsFactRegistration{
-			Fact: funds, Source: "SYN-BANK-01", Payer: saTestValue(t, ccdomain.ProvidedFundsPayer, "SYN-PAYER-01"), Currency: "XTS", AmountMinor: 12500,
+			Fact: funds, Version: saTestValue(t, ccdomain.NewFundsFactVersion, "SYN-FUNDS-01/v1"),
+			Source: "SYN-BANK-01", Payer: saTestValue(t, ccdomain.ProvidedFundsPayer, "SYN-PAYER-01"), Currency: "XTS", AmountMinor: 12500,
 			OccurredAt: verificationAt.Add(-time.Hour),
 		}); err != nil {
 			return err

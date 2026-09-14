@@ -1094,8 +1094,15 @@ type DutyCollaborationStore interface {
 // 副本，没有任何一列会被本上下文改写或推导。AmountMinor 按币种最小单位计，与 SA 侧
 // AdoptFundsFactCommand 同约定。Payer 是领域上的一格：来源提供了引用，或来源显式未提供——
 // CONTEXT「未提供或不适用必须明确记录」，「未提供」进登记册也进核对（票 sa-cc/12 做法 1）。
+//
+// 一事实多版本、一版本一行（票 sa-cc/13 裁决 1）：Version 是提供方那一版的字面，与信封所指同源；幂等键是
+// （引用 + 版本）——同版本同内容是重放，同版本换内容是真冲突（同一版本两个来源各说一套），新版本是新一行。
+// Corrects 是提供方给的「本版更正前一版」回指，零值即首版；本上下文照登不校验前版是否已到——版本链的
+// 权威在提供方，迟到的前版按它自己的版本进、不按到达顺序覆盖（UC-CC-009「保留全部版本和原事实」）。
 type ExternalFundsFactRegistration struct {
 	Fact        domain.ExternalFundsFactReference
+	Version     domain.FundsFactVersion
+	Corrects    domain.FundsFactVersion
 	Source      string
 	Payer       domain.FundsPayer
 	Currency    string
@@ -1109,7 +1116,11 @@ type ExternalFundsFactRegistration struct {
 // `settlement-accounting`，这里登的是核对所需维度（票 sa-cc/03 红线）。Payer 由消费侧适配器
 // 从提供方的 `(value, bool)` 译成本上下文的一格（票 sa-cc/12 裁决 3）：提供方显式缺席即
 // FundsPayerNotProvided，本上下文照样收下——要不要付款人是核对时对着真实程序的规则问的事。
+// Version 与 Corrects 是提供方那一版的版本字面与回指前版（票 sa-cc/13 做法 2）：更正 / 撤销在提供方
+// 是回指原事实的新版本，本上下文要把它登成新一行才进得来，所以读口把两维一并带出；Corrects 零值即首版。
 type AdoptedFundsFact struct {
+	Version     domain.FundsFactVersion
+	Corrects    domain.FundsFactVersion
 	Source      string
 	Payer       domain.FundsPayer
 	Currency    string
@@ -1130,11 +1141,16 @@ type AdoptedFundsFactSource interface {
 	) (AdoptedFundsFact, bool, error)
 }
 
-// ExternalFundsFactRegister 是外部资金事实入向登记册的两半。事实按引用幂等（同引用重登
-// 交回`已登记`，内容由编排读回比）；「待关联」不是列而是派生——没有任何核对引用它的
+// ExternalFundsFactRegister 是外部资金事实入向登记册的两半。事实按（引用 + 版本）幂等（同键重登
+// 交回`已登记`，内容由编排读回比；票 sa-cc/13 裁决 1）；「待关联」不是列而是派生——没有任何核对引用它的
 // 事实就是待关联，所以这里没有状态推进的写口。这条缝的另一半（SA 在事实采用时发信封、
 // CC 以 inbox 消费者接进本口）由票 sa-cc/02（SA 采用发信封）与 sa-cc/03（本上下文的
 // `adapters/inbox` 消费者 → AdoptedFundsFactSource 回查 → ReceiveFundsFact）接上。
+//
+// 两个读口分工：LoadFundsFact 交回本上下文**最近接收**的那一版——核对（VerifyPayment）今天按引用读前置与
+// 付款人维、命令上没有版本，它读的就是这一版；「新版本到达 → 形成新核对版本」的编排归后继票，那张票落地时
+// 核对该按版本读。ListFundsFactVersions 按接收先后列全部版本、每版带回指前版——「登记册看得见新版本与回指」
+// （裁决 2）就是这一口；空切片即一版都没接收。
 type ExternalFundsFactRegister interface {
 	RegisterFundsFact(
 		ctx context.Context,
@@ -1146,6 +1162,11 @@ type ExternalFundsFactRegister interface {
 		tenant domain.TenantID,
 		fact domain.ExternalFundsFactReference,
 	) (ExternalFundsFactRegistration, bool, error)
+	ListFundsFactVersions(
+		ctx context.Context,
+		tenant domain.TenantID,
+		fact domain.ExternalFundsFactReference,
+	) ([]ExternalFundsFactRegistration, error)
 }
 
 // PayerRequirementRuleRegistry 是「真实程序要不要求付款人」规则册的写口（票 sa-cc/12 裁决 1，形照

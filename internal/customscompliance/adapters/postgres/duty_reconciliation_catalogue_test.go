@@ -50,13 +50,17 @@ func listVerifications(
 }
 
 // seedFundsFact 播一条资金事实引用：核对表外键钉「没有接收的资金事实就没有核对」，核对
-// 行播种前它必须在场（0016 自注）。
+// 行播种前它必须在场（0016 自注）。0021 起身份行只剩身份列，内容在版本子表；核对外键钉的是身份行，
+// 这里两张都播一行让库面完整。
 func seedFundsFact(t *testing.T, fixture *viewFixture, tenant, fact string) {
 	t.Helper()
 	fixture.seed(t,
-		`INSERT INTO customs_compliance.external_funds_fact
-			(tenant_id, fact_ref, source_ref, payer_ref, currency, amount_minor, occurred_at, received_at)
-		 VALUES ($1, $2, 'SYN-BANK-01', 'SYN-PAYER-01', 'XTS', 12500, $3, $3)`,
+		`INSERT INTO customs_compliance.external_funds_fact (tenant_id, fact_ref, received_at) VALUES ($1, $2, $3)`,
+		tenant, fact, viewBaseAt)
+	fixture.seed(t,
+		`INSERT INTO customs_compliance.external_funds_fact_version
+			(tenant_id, fact_ref, version, corrects_version, source_ref, payer_ref, currency, amount_minor, occurred_at, received_at)
+		 VALUES ($1, $2, $2 || '/v1', NULL, 'SYN-BANK-01', 'SYN-PAYER-01', 'XTS', 12500, $3, $3)`,
 		tenant, fact, viewBaseAt)
 }
 

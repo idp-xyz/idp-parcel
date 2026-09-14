@@ -22,8 +22,10 @@ var dutyBaseAt = time.Date(2026, 9, 2, 10, 0, 0, 0, time.UTC)
 // dutyStoreDouble 同一本替身充当三口登记册、付款人规则读口加交接口。交接半边记下每一份意图与调用次数——
 // 「`已存在`不重发」要能从调用次数上读出来，不能只靠认领键吞重去证。
 type dutyStoreDouble struct {
-	collaborations   map[string]domain.DutyPaymentCollaboration
+	collaborations map[string]domain.DutyPaymentCollaboration
+	// funds 按（租户 | 引用 | 版本）一版本一行，fundsOrder 记接收先后——真库上 received_at 说的那件事，替身用顺序说。
 	funds            map[string]ports.ExternalFundsFactRegistration
+	fundsOrder       []string
 	verifications    map[string]ports.DutyVerificationRecord
 	payerRules       map[string]domain.PayerRequirement
 	handoffs         []ports.DutyPaymentVerificationHandoffIntent
@@ -96,6 +98,10 @@ func (double *dutyStoreDouble) SaveCollaboration(
 	return ports.CaseConfigurationRegistered, nil
 }
 
+func fundsVersionKey(tenant domain.TenantID, fact domain.ExternalFundsFactReference, version domain.FundsFactVersion) string {
+	return tenant.String() + "|" + fact.String() + "|" + version.String()
+}
+
 func (double *dutyStoreDouble) RegisterFundsFact(
 	_ context.Context,
 	tenant domain.TenantID,
@@ -104,24 +110,44 @@ func (double *dutyStoreDouble) RegisterFundsFact(
 	if double.fundsErr != nil {
 		return ports.CaseConfigurationSaveOutcomeInvalid, double.fundsErr
 	}
-	key := tenant.String() + "|" + registration.Fact.String()
+	key := fundsVersionKey(tenant, registration.Fact, registration.Version)
 	if _, exists := double.funds[key]; exists {
 		return ports.CaseConfigurationAlreadyRegistered, nil
 	}
 	double.funds[key] = registration
+	double.fundsOrder = append(double.fundsOrder, key)
 	return ports.CaseConfigurationRegistered, nil
 }
 
-func (double *dutyStoreDouble) LoadFundsFact(
+func (double *dutyStoreDouble) ListFundsFactVersions(
 	_ context.Context,
 	tenant domain.TenantID,
 	fact domain.ExternalFundsFactReference,
-) (ports.ExternalFundsFactRegistration, bool, error) {
+) ([]ports.ExternalFundsFactRegistration, error) {
 	if double.fundsErr != nil {
-		return ports.ExternalFundsFactRegistration{}, false, double.fundsErr
+		return nil, double.fundsErr
 	}
-	found, ok := double.funds[tenant.String()+"|"+fact.String()]
-	return found, ok, nil
+	prefix := tenant.String() + "|" + fact.String() + "|"
+	var versions []ports.ExternalFundsFactRegistration
+	for _, key := range double.fundsOrder {
+		if strings.HasPrefix(key, prefix) {
+			versions = append(versions, double.funds[key])
+		}
+	}
+	return versions, nil
+}
+
+// LoadFundsFact 照真库口径交回最近接收的那一版。
+func (double *dutyStoreDouble) LoadFundsFact(
+	ctx context.Context,
+	tenant domain.TenantID,
+	fact domain.ExternalFundsFactReference,
+) (ports.ExternalFundsFactRegistration, bool, error) {
+	versions, err := double.ListFundsFactVersions(ctx, tenant, fact)
+	if err != nil || len(versions) == 0 {
+		return ports.ExternalFundsFactRegistration{}, false, err
+	}
+	return versions[len(versions)-1], true, nil
 }
 
 func verificationKey(key ports.DutyVerificationKey) string {
@@ -252,6 +278,7 @@ func fundsFactCommand(t *testing.T) application.ReceiveExternalFundsFactCommand 
 		TenantID: configValue(t, domain.NewTenantID, "tenant-a"),
 		Registration: ports.ExternalFundsFactRegistration{
 			Fact:        configValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-01"),
+			Version:     configValue(t, domain.NewFundsFactVersion, "SYN-FUNDS-01/v1"),
 			Source:      "SYN-BANK-01",
 			Payer:       configValue(t, domain.ProvidedFundsPayer, "SYN-PAYER-01"),
 			Currency:    "XTS",
@@ -389,8 +416,8 @@ func TestReFormingACollaborationSplitsReplayFromConflict(t *testing.T) {
 	}
 }
 
-// 步 6 的 CC 半边：外部资金事实按引用入向登记；同引用重放`已存在`，同引用换金额是`内容冲突`
-// ——资金事实的更正在来源那头是新事实回指原事实，不是同一引用改数。
+// 步 6 的 CC 半边：外部资金事实按（引用 + 版本）入向登记；同键重放`已存在`，同键换金额是`内容冲突`
+// ——资金事实的更正在来源那头是同一事实的新版本回指前版（见下一条用例），不是同一版本改数。
 func TestExternalFundsFactsAreReceivedByReference(t *testing.T) {
 	store := newDutyStore()
 	handler := newDutyHandler(t, store)
@@ -415,6 +442,107 @@ func TestExternalFundsFactsAreReceivedByReference(t *testing.T) {
 	if result, err := handler.ReceiveFundsFact(t.Context(), blank); err != nil ||
 		result.Outcome() != application.DutyReconciliationNotAccepted {
 		t.Fatalf("币种缺席该不受理：err=%v outcome=%v", err, result.Outcome())
+	}
+}
+
+// correctionOf 造同一事实的更正版本：新版本字面、回指被更正的那一版、金额改了。
+func correctionOf(t *testing.T, previous application.ReceiveExternalFundsFactCommand, version string, amountMinor int64) application.ReceiveExternalFundsFactCommand {
+	t.Helper()
+	command := previous
+	command.Registration.Version = configValue(t, domain.NewFundsFactVersion, version)
+	command.Registration.Corrects = previous.Registration.Version
+	command.Registration.AmountMinor = amountMinor
+	return command
+}
+
+// Covers: 票 sa-cc/13 完成判据 1——v1 已登记，v2 同引用、回指 v1、金额变 → `已接收`落新一行；按引用列出两版且
+// v2 回指 v1，v1 一字不动（UC-CC-009「不删除原付款、不按最后到达覆盖」）；同版本重投 → `已存在`；同版本换内容
+// （金额或回指）→ `内容冲突`——那才是真冲突：同一版本两个来源各说一套（裁决 1）。核对今天按引用读的是最近
+// 接收的那一版（读口头注）。
+func TestACorrectionVersionIsReceivedAsANewRowThatPointsBackToTheVersionItCorrects(t *testing.T) {
+	store := newDutyStore()
+	handler := newDutyHandler(t, store)
+	first := fundsFactCommand(t)
+	if _, err := handler.ReceiveFundsFact(t.Context(), first); err != nil {
+		t.Fatalf("首版：%v", err)
+	}
+
+	second := correctionOf(t, first, "SYN-FUNDS-01/v2", 9000)
+	if result, err := handler.ReceiveFundsFact(t.Context(), second); err != nil ||
+		result.Outcome() != application.FundsFactReceived {
+		t.Fatalf("更正版本该`已接收`成新一行：err=%v outcome=%v", err, result.Outcome())
+	}
+	versions, err := store.ListFundsFactVersions(t.Context(), first.TenantID, first.Registration.Fact)
+	if err != nil || len(versions) != 2 {
+		t.Fatalf("按引用该列出两版：err=%v n=%d", err, len(versions))
+	}
+	if versions[0] != first.Registration {
+		t.Fatalf("原版本被动过：%+v", versions[0])
+	}
+	if versions[1].Version != second.Registration.Version || versions[1].Corrects != first.Registration.Version ||
+		versions[1].AmountMinor != 9000 {
+		t.Fatalf("新版本该回指 v1 且带自己的内容：%+v", versions[1])
+	}
+	if current, found, _ := store.LoadFundsFact(t.Context(), first.TenantID, first.Registration.Fact); !found ||
+		current.Version != second.Registration.Version {
+		t.Fatalf("按引用读该是最近接收的那一版：found=%v version=%s", found, current.Version)
+	}
+
+	if result, err := handler.ReceiveFundsFact(t.Context(), second); err != nil ||
+		result.Outcome() != application.FundsFactExisting {
+		t.Fatalf("同版本重投该`已存在`：err=%v outcome=%v", err, result.Outcome())
+	}
+	changedAmount := second
+	changedAmount.Registration.AmountMinor = 9001
+	if result, err := handler.ReceiveFundsFact(t.Context(), changedAmount); err != nil ||
+		result.Outcome() != application.FundsFactContentConflict {
+		t.Fatalf("同版本换金额该`内容冲突`：err=%v outcome=%v", err, result.Outcome())
+	}
+	changedCorrects := second
+	changedCorrects.Registration.Corrects = domain.FundsFactVersion{}
+	if result, err := handler.ReceiveFundsFact(t.Context(), changedCorrects); err != nil ||
+		result.Outcome() != application.FundsFactContentConflict {
+		t.Fatalf("同版本换回指该`内容冲突`：err=%v outcome=%v", err, result.Outcome())
+	}
+	if versions, _ := store.ListFundsFactVersions(t.Context(), first.TenantID, first.Registration.Fact); len(versions) != 2 ||
+		versions[1].AmountMinor != 9000 {
+		t.Fatalf("冲突不得顶替已登记的版本：%+v", versions)
+	}
+}
+
+// 版本是键维，缺了就登不成键：版本空白`未受理`；回指自己也是形状矛盾，`未受理`；两格都不落。迟到的前版按
+// 自己的版本进（先到 v2 再到 v1 各占一行），不因为「更旧」被拒、也不覆盖谁。
+func TestFundsFactVersionsKeepTheirOwnRowsRegardlessOfArrivalOrder(t *testing.T) {
+	store := newDutyStore()
+	handler := newDutyHandler(t, store)
+	first := fundsFactCommand(t)
+
+	blankVersion := first
+	blankVersion.Registration.Version = domain.FundsFactVersion{}
+	if result, err := handler.ReceiveFundsFact(t.Context(), blankVersion); err != nil ||
+		result.Outcome() != application.DutyReconciliationNotAccepted {
+		t.Fatalf("版本空白该`未受理`：err=%v outcome=%v", err, result.Outcome())
+	}
+	selfCorrecting := first
+	selfCorrecting.Registration.Corrects = first.Registration.Version
+	if result, err := handler.ReceiveFundsFact(t.Context(), selfCorrecting); err != nil ||
+		result.Outcome() != application.DutyReconciliationNotAccepted {
+		t.Fatalf("回指自己该`未受理`：err=%v outcome=%v", err, result.Outcome())
+	}
+	if len(store.funds) != 0 {
+		t.Fatalf("被拒的登记落了册：%d", len(store.funds))
+	}
+
+	second := correctionOf(t, first, "SYN-FUNDS-01/v2", 9000)
+	if result, err := handler.ReceiveFundsFact(t.Context(), second); err != nil || result.Outcome() != application.FundsFactReceived {
+		t.Fatalf("先到的 v2：err=%v outcome=%v", err, result.Outcome())
+	}
+	if result, err := handler.ReceiveFundsFact(t.Context(), first); err != nil || result.Outcome() != application.FundsFactReceived {
+		t.Fatalf("迟到的 v1 该按自己的版本进：err=%v outcome=%v", err, result.Outcome())
+	}
+	versions, _ := store.ListFundsFactVersions(t.Context(), first.TenantID, first.Registration.Fact)
+	if len(versions) != 2 || versions[0].Version != second.Registration.Version || versions[1].Version != first.Registration.Version {
+		t.Fatalf("两版该各占一行、按接收先后列：%+v", versions)
 	}
 }
 
