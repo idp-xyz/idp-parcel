@@ -1,7 +1,7 @@
 # 39 失效版本到达后，已据前版收寄形成的非取消终局怎么重派生——先立 ADR，再谈代码
 
 Category: enhancement
-Status: ready-for-agent——2026-09-14 10:2x 通道 1 推送方按用户 10:1x「授权代裁」立票：lc/25「要裁的」2 是设计题不是一句话能裁的（ADR-0135 越权风险点 4 明写「归 PS owner，随 lc/25 实施时判」，lc/25 实施时按红线落了显式未决哨兵），本票的产物是**一份 ADR 草案**（`Proposed`），不是代码；ADR 被接受后实现另立票。取证锚 main `6bbf2bf0`。只写票面，未动代码、未动 `docs/**`。
+Status: in-progress——2026-09-14 16:1x 通道 3 按通道 1 派单 task-ea9c8da8 认领（`/domain-modeling`，PS owner 口径；分支 `mcp3-lc39` 基远端 main `f04ad816`，树 `D:/tops/idp-parcel-mcp3-lc39`；ADR 序号按 `docs/adr` 目录重取为 `0138`）。此前 ready-for-agent——2026-09-14 10:2x 通道 1 推送方按用户 10:1x「授权代裁」立票：lc/25「要裁的」2 是设计题不是一句话能裁的（ADR-0135 越权风险点 4 明写「归 PS owner，随 lc/25 实施时判」，lc/25 实施时按红线落了显式未决哨兵），本票的产物是**一份 ADR 草案**（`Proposed`），不是代码；ADR 被接受后实现另立票。取证锚 main `6bbf2bf0`。只写票面，未动代码、未动 `docs/**`。
 Blocked by: 无（lc/25 与 lc/31 均已进 main；TF 半边失效版本的入队与 PS 按版本取回都在）
 Type: grilling → ADR 草案（走 `/domain-modeling`，PS owner 口径；实现不在本票）
 
