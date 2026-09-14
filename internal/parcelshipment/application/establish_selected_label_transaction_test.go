@@ -17,14 +17,46 @@ import (
 // 建立归 LabelTransactionHandler，各有各的测试。编排自己的风险是**在段与段之间掉东西**或**停下了还往下走**。
 
 type selectorDouble struct {
-	selected domain.SelectedChannelCandidate
+	result application.ChannelSelectionResult
+	err    error
+	calls  int
+}
+
+func (double *selectorDouble) Select(context.Context, ports.ChannelSelectionQuery) (application.ChannelSelectionResult, error) {
+	double.calls++
+	return double.result, double.err
+}
+
+// lookupDouble 是建立前那一问的替身：交易在不在、读口通不通。
+type lookupDouble struct {
+	existing domain.LabelTransaction
+	found    bool
 	err      error
 	calls    int
 }
 
-func (double *selectorDouble) Select(context.Context, ports.ChannelSelectionQuery) (domain.SelectedChannelCandidate, error) {
+func (double *lookupDouble) FindByID(context.Context, domain.TenantID, domain.LabelTransactionID) (domain.LabelTransaction, bool, error) {
 	double.calls++
-	return double.selected, double.err
+	return double.existing, double.found, double.err
+}
+
+// selectionResultOf 借真的择优编排造出三格结果：结果类型的字段不导出，只能从真编排的答复里取——这也保证
+// 替身交出的对象与择优编排真交出的一字不差（形照 appliedEstablishment）。
+func selectionResultOf(t *testing.T, costs ...domain.ChannelCandidateCost) application.ChannelSelectionResult {
+	t.Helper()
+	candidates := make([]domain.ChannelCandidateID, 0, len(costs))
+	for _, cost := range costs {
+		candidates = append(candidates, cost.Candidate())
+	}
+	handler := application.NewSelectChannelCandidateHandler(application.SelectChannelCandidateDeps{
+		Assembly: stubAssembly{candidates: candidates},
+		Costs:    stubCosts{costs: costs},
+	})
+	result, err := handler.Select(context.Background(), selectionQuery(t))
+	if err != nil {
+		t.Fatalf("造择优结果：%v", err)
+	}
+	return result
 }
 
 type translatorDouble struct {
@@ -62,6 +94,7 @@ func (double *establisherDouble) Establish(
 
 type selectedFlowFixture struct {
 	handler     *application.EstablishSelectedLabelTransactionHandler
+	lookup      *lookupDouble
 	selector    *selectorDouble
 	translator  *translatorDouble
 	establisher *establisherDouble
@@ -69,21 +102,28 @@ type selectedFlowFixture struct {
 
 func newSelectedFlowFixture(t *testing.T) *selectedFlowFixture {
 	t.Helper()
-	selected, err := domain.NewSelectedChannelCandidate(mustValue(t, domain.NewChannelCandidateID, "CAND-1"))
-	if err != nil {
-		t.Fatalf("造选中候选：%v", err)
-	}
 	fixture := &selectedFlowFixture{
-		selector:    &selectorDouble{selected: selected},
+		lookup:      &lookupDouble{},
+		selector:    &selectorDouble{result: selectionResultOf(t, selectionPricedCost(t, "CAND-1", "10.00"))},
 		translator:  &translatorDouble{basis: selectedBasisFixture(t)},
 		establisher: &establisherDouble{},
 	}
 	fixture.handler = application.NewEstablishSelectedLabelTransactionHandler(application.EstablishSelectedLabelTransactionDeps{
+		Lookup:       fixture.lookup,
 		Selector:     fixture.selector,
 		Translator:   fixture.translator,
 		Transactions: fixture.establisher,
 	})
 	return fixture
+}
+
+func (fixture *selectedFlowFixture) selectedCandidate(t *testing.T) domain.SelectedChannelCandidate {
+	t.Helper()
+	selected, present := fixture.selector.result.Selected()
+	if !present {
+		t.Fatal("夹具的择优结果没有选中候选")
+	}
+	return selected
 }
 
 func selectedFlowCommand(t *testing.T) application.EstablishSelectedLabelTransactionCommand {
@@ -114,10 +154,10 @@ func TestASelectedCandidateIsTranslatedAndHandedToEstablish(t *testing.T) {
 	if result.Outcome() != application.SelectedLabelTransactionEstablished {
 		t.Fatalf("outcome = %q, want ESTABLISHED", result.Outcome())
 	}
-	if fixture.selector.calls != 1 || fixture.translator.calls != 1 || fixture.establisher.calls != 1 {
-		t.Fatalf("calls = %d/%d/%d, want 1/1/1", fixture.selector.calls, fixture.translator.calls, fixture.establisher.calls)
+	if fixture.lookup.calls != 1 || fixture.selector.calls != 1 || fixture.translator.calls != 1 || fixture.establisher.calls != 1 {
+		t.Fatalf("calls = %d/%d/%d/%d, want 1/1/1/1", fixture.lookup.calls, fixture.selector.calls, fixture.translator.calls, fixture.establisher.calls)
 	}
-	if fixture.translator.received.Candidate() != fixture.selector.selected.Candidate() {
+	if fixture.translator.received.Candidate() != fixture.selectedCandidate(t).Candidate() {
 		t.Fatal("翻译收到的不是择优交回的那个候选")
 	}
 	received := fixture.establisher.received
@@ -136,19 +176,25 @@ func TestASelectedCandidateIsTranslatedAndHandedToEstablish(t *testing.T) {
 }
 
 // Covers: 判据 2「择优交回冲突……不建立交易，停点各自可分辨」——并列冲突与无人参选是择优步已记决定的两个
-// 业务答案，各成一格；翻译与建立一步都不走。
+// 业务答案，以结果格交回（票 35 做法二），本层各映一格；翻译与建立一步都不走。
 func TestATiedOrEmptySelectionStopsBeforeTranslationAndEstablishment(t *testing.T) {
 	cases := map[string]struct {
-		err  error
-		want application.SelectedLabelTransactionOutcome
+		selection application.ChannelSelectionResult
+		want      application.SelectedLabelTransactionOutcome
 	}{
-		"tied":         {domain.ErrChannelCandidateCostTied, application.ChannelSelectionTied},
-		"no qualified": {domain.ErrNoQualifiedChannelCandidate, application.NoQualifiedChannelCandidate},
+		"tied": {
+			selectionResultOf(t, selectionPricedCost(t, "CAND-A", "10.00"), selectionPricedCost(t, "CAND-B", "10.00")),
+			application.ChannelSelectionTied,
+		},
+		"no qualified": {
+			selectionResultOf(t, selectionUnpriceableCost(t, "CAND-A", domain.ChannelCostPendingEvidence)),
+			application.NoQualifiedChannelCandidate,
+		},
 	}
 	for name, testCase := range cases {
 		t.Run(name, func(t *testing.T) {
 			fixture := newSelectedFlowFixture(t)
-			fixture.selector.err = testCase.err
+			fixture.selector.result = testCase.selection
 
 			result, err := fixture.handler.Establish(context.Background(), selectedFlowCommand(t))
 			if err != nil {
@@ -227,11 +273,64 @@ func TestEstablishmentAnswersPassThroughUnchanged(t *testing.T) {
 	}
 }
 
-// Covers: 装配缺件响亮失败——三口任一为 nil 不得静默走到别的段。
+// Covers: 装配缺件响亮失败——四口任一为 nil 不得静默走到别的段。
 func TestAHalfWiredFlowRefusesLoudly(t *testing.T) {
 	handler := application.NewEstablishSelectedLabelTransactionHandler(application.EstablishSelectedLabelTransactionDeps{})
 	if _, err := handler.Establish(context.Background(), selectedFlowCommand(t)); !errors.Is(err, application.ErrSelectedLabelTransactionFlowMisconfigured) {
 		t.Fatalf("error = %v, want ErrSelectedLabelTransactionFlowMisconfigured", err)
+	}
+	full := newSelectedFlowFixture(t)
+	withoutLookup := application.NewEstablishSelectedLabelTransactionHandler(application.EstablishSelectedLabelTransactionDeps{
+		Selector: full.selector, Translator: full.translator, Transactions: full.establisher,
+	})
+	if _, err := withoutLookup.Establish(context.Background(), selectedFlowCommand(t)); !errors.Is(err, application.ErrSelectedLabelTransactionFlowMisconfigured) {
+		t.Fatalf("缺建立前那一问的口：error = %v, want ErrSelectedLabelTransactionFlowMisconfigured", err)
+	}
+	if full.selector.calls != 0 {
+		t.Fatal("缺口时不得择优")
+	}
+}
+
+// Covers: 票 35 完成判据 2（裁决 1 取甲）——同 TransactionID 再调一次：交易已在即直接答重放（建立结果为
+// `ALREADY_APPLIED`、既有交易原样带回），**不择优、不翻译、不记决定**；选中候选与择优结果缺席——这一次没有择优。
+// 读口故障是依赖故障，原样上抛，同样不择优。
+func TestAnExistingTransactionIsReplayedWithoutSelectingAgain(t *testing.T) {
+	fixture := newSelectedFlowFixture(t)
+	established := appliedEstablishment(t)
+	existing, _ := established.Transaction()
+	fixture.lookup.existing, fixture.lookup.found = existing, true
+
+	result, err := fixture.handler.Establish(context.Background(), selectedFlowCommand(t))
+	if err != nil {
+		t.Fatalf("重放：%v", err)
+	}
+	if result.Outcome() != application.SelectedLabelTransactionEstablished {
+		t.Fatalf("outcome = %q, want ESTABLISHED（建立步的现名，不新造格）", result.Outcome())
+	}
+	establishment, present := result.Establishment()
+	if !present || establishment.Outcome() != application.LabelTransactionAlreadyApplied {
+		t.Fatalf("建立结果 = %v/%v, want ALREADY_APPLIED", establishment.Outcome(), present)
+	}
+	if replayed, ok := establishment.Transaction(); !ok || replayed.ID() != existing.ID() {
+		t.Fatal("重放没带回既有那一笔")
+	}
+	if fixture.selector.calls != 0 || fixture.translator.calls != 0 || fixture.establisher.calls != 0 {
+		t.Fatalf("重放还择优 / 翻译 / 建立了：%d/%d/%d", fixture.selector.calls, fixture.translator.calls, fixture.establisher.calls)
+	}
+	if _, present := result.Selected(); present {
+		t.Fatal("重放时没有这一次的择优，选中候选该缺席")
+	}
+	if _, present := result.Basis(); present {
+		t.Fatal("重放时没有这一次的翻译，择优结果该缺席")
+	}
+
+	down := errors.New("synthetic: repository down")
+	fixture.lookup.err = down
+	if _, err := fixture.handler.Establish(context.Background(), selectedFlowCommand(t)); !errors.Is(err, down) {
+		t.Fatalf("读口故障该原样上抛：%v", err)
+	}
+	if fixture.selector.calls != 0 {
+		t.Fatal("读口故障还择优了")
 	}
 }
 

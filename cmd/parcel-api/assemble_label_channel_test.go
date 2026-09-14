@@ -143,6 +143,44 @@ func TestTheLabelChannelChainWalksToTheOutboundSeamOnceTheSeamsAreConfigured(t *
 		}
 	})
 
+	// Covers: 票 35 完成判据 2（裁决 1 取甲）——同 TransactionID 调两次 Flow.Establish：第二次交易已在，直接答重放
+	// （建立结果 ALREADY_APPLIED、既有交易带回、这一次没有择优所以选中候选缺席），决定册仍只一条 SELECTED；
+	// 真库钉的是「一笔交易一条 SELECTED」，那正是 lc/28 评审 ③ 点名对不上账的那一格。
+	t.Run("a replay of the same transaction leaves a single SELECTED decision", func(t *testing.T) {
+		chain, err := buildLabelChannelOrchestrationWith(db, labelChannelSeams{
+			Assembly:   labelChannelAssemblyDouble{candidates: []shipmentdomain.ChannelCandidateID{winner.Candidate(), runnerUp.Candidate()}},
+			Costs:      labelChannelCostsDouble{costs: []shipmentdomain.ChannelCandidateCost{winner, runnerUp}},
+			Translator: labelChannelTranslatorDouble{basis: basis},
+		})
+		if err != nil {
+			t.Fatalf("装配：%v", err)
+		}
+		command := labelChannelCommand(t, tenant+"-REPLAY", "SYN-LT-LC35-REPLAY")
+
+		first, err := chain.Flow.Establish(t.Context(), command)
+		if err != nil || first.Outcome() != shipmentapp.SelectedLabelTransactionEstablished {
+			t.Fatalf("首次 = %q / %v，want ESTABLISHED", first.Outcome(), err)
+		}
+		replay, err := chain.Flow.Establish(t.Context(), command)
+		if err != nil || replay.Outcome() != shipmentapp.SelectedLabelTransactionEstablished {
+			t.Fatalf("重放 = %q / %v，want ESTABLISHED（建立步的现名）", replay.Outcome(), err)
+		}
+		establishment, present := replay.Establishment()
+		if !present || establishment.Outcome() != shipmentapp.LabelTransactionAlreadyApplied {
+			t.Fatalf("重放的建立结果 = %v/%v，want ALREADY_APPLIED", establishment.Outcome(), present)
+		}
+		if replayed, ok := establishment.Transaction(); !ok || replayed.ID() != command.TransactionID {
+			t.Fatal("重放没带回既有那一笔")
+		}
+		if _, present := replay.Selected(); present {
+			t.Fatal("重放时没有这一次的择优，选中候选该缺席")
+		}
+		decisions := decisionsFor(t, db, command)
+		if len(decisions) != 1 || decisions[0].Conclusion() != shipmentdomain.ChannelSelectionConcludedSelected {
+			t.Fatalf("重放后决定记录 = %d 条 / %v，want 仍是一条 SELECTED", len(decisions), conclusionsOf(decisions))
+		}
+	})
+
 	t.Run("a translation stop keeps the decision and establishes nothing", func(t *testing.T) {
 		refused := errors.New("synthetic: acceptance resolution source not configured")
 		chain, err := buildLabelChannelOrchestrationWith(db, labelChannelSeams{

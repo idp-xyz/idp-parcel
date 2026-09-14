@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
@@ -182,6 +181,8 @@ func buildLabelChannelOrchestrationWith(db *bentopg.DB, seams labelChannelSeams)
 	steps := transactionalLabelTransactions{transactor: transactor, inner: handler}
 
 	flow := shipmentapp.NewEstablishSelectedLabelTransactionHandler(shipmentapp.EstablishSelectedLabelTransactionDeps{
+		// 建立前那一问接交易仓储的读半边（票 35 裁决 1 取甲）：与建立步写的是同一张表，另接一处就看不见刚建的那笔。
+		Lookup:       transactions,
 		Selector:     transactionalChannelSelection{transactor: transactor, inner: selection},
 		Translator:   translator,
 		Transactions: steps,
@@ -195,7 +196,8 @@ func buildLabelChannelOrchestrationWith(db *bentopg.DB, seams labelChannelSeams)
 
 // transactionalChannelSelection 把择优那一段包进一笔事务：决定记录经登记册写口落库，按框架合同无事务即拒，
 // 事务边界归装配点（ADR-0134 决定三的同一条纪律）。它与建立那一段分开成两笔：翻译停下时决定记录仍在——
-// 择优留痕在择优那一步已写完（翻译适配器头注原句），不随翻译或建立的失败回滚。
+// 择优留痕在择优那一步已写完（翻译适配器头注原句），不随翻译或建立的失败回滚。壳只管事务：Select 不返 error
+// 就提交、返 error 就回滚——并列与无人参选是编排的结果格（票 35 做法二），随事务一起提交，壳不认任何领域哨兵。
 type transactionalChannelSelection struct {
 	transactor bentoapp.Transactor
 	inner      *shipmentapp.SelectChannelCandidateHandler
@@ -206,32 +208,20 @@ var _ shipmentapp.ChannelSelector = transactionalChannelSelection{}
 func (selection transactionalChannelSelection) Select(
 	ctx context.Context,
 	query shipmentports.ChannelSelectionQuery,
-) (shipmentdomain.SelectedChannelCandidate, error) {
-	var selected shipmentdomain.SelectedChannelCandidate
-	var answered error
+) (shipmentapp.ChannelSelectionResult, error) {
+	var result shipmentapp.ChannelSelectionResult
 	err := selection.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		result, selectErr := selection.inner.Select(txCtx, query)
-		// 并列冲突与无人参选是择优编排**先记下决定再**以具名错误交回的两个业务答案（其 Select 头注「决定已记、
-		// 交回的候选为零值、错误具名」）。壳若把它们当失败回滚，刚记下的 TIED / 无人参选决定就随事务消失，
-		// 而那条记录正是票 23 读面上「交人工裁决」的唯一来源。所以这两格提交、错误带出；其余错误照旧回滚。
-		if errors.Is(selectErr, shipmentdomain.ErrChannelCandidateCostTied) ||
-			errors.Is(selectErr, shipmentdomain.ErrNoQualifiedChannelCandidate) {
-			answered = selectErr
-			return nil
-		}
+		selected, selectErr := selection.inner.Select(txCtx, query)
 		if selectErr != nil {
 			return selectErr
 		}
-		selected = result
+		result = selected
 		return nil
 	})
 	if err != nil {
-		return shipmentdomain.SelectedChannelCandidate{}, err
+		return shipmentapp.ChannelSelectionResult{}, err
 	}
-	if answered != nil {
-		return shipmentdomain.SelectedChannelCandidate{}, answered
-	}
-	return selected, nil
+	return result, nil
 }
 
 // transactionalLabelTransactions 是 06 五步的事务壳：每步各一笔。后两步的判断意图入队与 Save 同笔（ADR-0134

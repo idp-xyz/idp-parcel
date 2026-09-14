@@ -94,9 +94,13 @@ func TestASelectionRecordsTheDecisionItReturned(t *testing.T) {
 	)
 	query := selectionQuery(t)
 
-	selected, err := application.NewSelectChannelCandidateHandler(deps).Handle(context.Background(), query)
+	result, err := application.NewSelectChannelCandidateHandler(deps).Select(context.Background(), query)
 	if err != nil {
 		t.Fatalf("择优：%v", err)
+	}
+	selected, present := result.Selected()
+	if result.Outcome() != application.ChannelSelectionSelected || !present {
+		t.Fatalf("outcome = %q / present = %v，want SELECTED 且带选中候选", result.Outcome(), present)
 	}
 
 	if len(registry.appended) != 1 {
@@ -104,8 +108,8 @@ func TestASelectionRecordsTheDecisionItReturned(t *testing.T) {
 	}
 	decision := registry.appended[0]
 	recorded, chosen := decision.Selected()
-	if !chosen || recorded != selected {
-		t.Fatalf("记录里的选中者 %v/%v 与交回的 %v 不是同一个", recorded, chosen, selected)
+	if !chosen || recorded != selected.Candidate() {
+		t.Fatalf("记录里的选中者 %v/%v 与交回的 %v 不是同一个", recorded, chosen, selected.Candidate())
 	}
 	if decision.ID().String() != "decision-1" || decision.Tenant() != query.Tenant ||
 		decision.Subject().Scope() != query.Scope || decision.Subject().Mapping() != query.Mapping ||
@@ -117,14 +121,14 @@ func TestASelectionRecordsTheDecisionItReturned(t *testing.T) {
 	}
 }
 
-// Covers: 裁决「冲突也是一次决定的结果，同样留痕」与「全部出局」——两种不选中的结局各成一条
-// 记录，编排仍把比较器的哨兵原样交回。
+// Covers: 裁决「冲突也是一次决定的结果，同样留痕」与「全部出局」——两种不选中的结局各成一条记录，编排以
+// **结果格**交回（票 35 做法二：它们是业务答案，不是错误），选中候选缺席，`error` 为 nil。
 func TestTheTwoNonSelectingOutcomesAreRecordedToo(t *testing.T) {
 	t.Parallel()
 
 	cases := map[string]struct {
 		costs      []domain.ChannelCandidateCost
-		wantErr    error
+		want       application.ChannelSelectionOutcome
 		conclusion domain.ChannelSelectionConclusion
 	}{
 		"最低价并列": {
@@ -132,7 +136,7 @@ func TestTheTwoNonSelectingOutcomesAreRecordedToo(t *testing.T) {
 				selectionPricedCost(t, "cand-a", "10.00"),
 				selectionPricedCost(t, "cand-b", "10.00"),
 			},
-			wantErr:    domain.ErrChannelCandidateCostTied,
+			want:       application.ChannelSelectionCostTied,
 			conclusion: domain.ChannelSelectionConcludedTied,
 		},
 		"无人参选": {
@@ -140,7 +144,7 @@ func TestTheTwoNonSelectingOutcomesAreRecordedToo(t *testing.T) {
 				selectionUnpriceableCost(t, "cand-a", domain.ChannelCostPendingEvidence),
 				selectionUnpriceableCost(t, "cand-b", domain.ChannelCostConflict),
 			},
-			wantErr:    domain.ErrNoQualifiedChannelCandidate,
+			want:       application.ChannelSelectionNoQualifiedCandidate,
 			conclusion: domain.ChannelSelectionConcludedNoneQualified,
 		},
 	}
@@ -149,9 +153,12 @@ func TestTheTwoNonSelectingOutcomesAreRecordedToo(t *testing.T) {
 			t.Parallel()
 			deps, registry := recordingDeps(t, test.costs...)
 
-			_, err := application.NewSelectChannelCandidateHandler(deps).Handle(context.Background(), selectionQuery(t))
-			if !errors.Is(err, test.wantErr) {
-				t.Fatalf("err = %v，want %v", err, test.wantErr)
+			result, err := application.NewSelectChannelCandidateHandler(deps).Select(context.Background(), selectionQuery(t))
+			if err != nil || result.Outcome() != test.want {
+				t.Fatalf("outcome = %q err = %v，want %q 且无 error", result.Outcome(), err, test.want)
+			}
+			if _, present := result.Selected(); present {
+				t.Fatal("没选出却带了选中候选")
 			}
 			if len(registry.appended) != 1 || registry.appended[0].Conclusion() != test.conclusion {
 				t.Fatalf("决定记录 = %d 条 / %v，want 1 条 %s", len(registry.appended), registry.appended, test.conclusion)
@@ -172,7 +179,7 @@ func TestNoDecisionIsRecordedWhenNoComparisonHappened(t *testing.T) {
 			selectionCandidate(t, "cand-a"), selectionCandidate(t, "cand-b"),
 		}}
 
-		_, err := application.NewSelectChannelCandidateHandler(deps).Handle(context.Background(), selectionQuery(t))
+		_, err := application.NewSelectChannelCandidateHandler(deps).Select(context.Background(), selectionQuery(t))
 		if !errors.Is(err, application.ErrChannelCostsIncomplete) || len(registry.appended) != 0 {
 			t.Fatalf("err = %v，记录 %d 条；want ErrChannelCostsIncomplete 且零记录", err, len(registry.appended))
 		}
@@ -189,7 +196,7 @@ func TestNoDecisionIsRecordedWhenNoComparisonHappened(t *testing.T) {
 		}
 		deps, registry := recordingDeps(t, selectionPricedCost(t, "cand-a", "10.00"), other)
 
-		_, err = application.NewSelectChannelCandidateHandler(deps).Handle(context.Background(), selectionQuery(t))
+		_, err = application.NewSelectChannelCandidateHandler(deps).Select(context.Background(), selectionQuery(t))
 		if !errors.Is(err, domain.ErrChannelCostCurrencyMismatch) || len(registry.appended) != 0 {
 			t.Fatalf("err = %v，记录 %d 条；want ErrChannelCostCurrencyMismatch 且零记录", err, len(registry.appended))
 		}
@@ -204,7 +211,7 @@ func TestASelectionFailsWhenItsDecisionCannotBeRecorded(t *testing.T) {
 	deps, registry := recordingDeps(t, selectionPricedCost(t, "cand-a", "10.00"))
 	registry.err = errors.New("registry unavailable")
 
-	_, err := application.NewSelectChannelCandidateHandler(deps).Handle(context.Background(), selectionQuery(t))
+	_, err := application.NewSelectChannelCandidateHandler(deps).Select(context.Background(), selectionQuery(t))
 	if err == nil || !errors.Is(err, registry.err) {
 		t.Fatalf("err = %v，want 包住 %v", err, registry.err)
 	}
@@ -218,7 +225,7 @@ func TestAHalfConfiguredDecisionRegistryIsAnAssemblyDefect(t *testing.T) {
 	deps, _ := recordingDeps(t, selectionPricedCost(t, "cand-a", "10.00"))
 	deps.Clock = nil
 
-	_, err := application.NewSelectChannelCandidateHandler(deps).Handle(context.Background(), selectionQuery(t))
+	_, err := application.NewSelectChannelCandidateHandler(deps).Select(context.Background(), selectionQuery(t))
 	if !errors.Is(err, application.ErrChannelSelectionRecordingMisconfigured) {
 		t.Fatalf("err = %v，want %v", err, application.ErrChannelSelectionRecordingMisconfigured)
 	}
@@ -232,8 +239,9 @@ func TestSelectionWithoutADecisionRegistryBehavesAsBefore(t *testing.T) {
 	deps, _ := recordingDeps(t, selectionPricedCost(t, "cand-a", "10.00"), selectionPricedCost(t, "cand-b", "12.00"))
 	deps.Decisions, deps.DecisionIDs, deps.Clock = nil, nil, nil
 
-	selected, err := application.NewSelectChannelCandidateHandler(deps).Handle(context.Background(), selectionQuery(t))
-	if err != nil || selected.String() != "cand-a" {
-		t.Fatalf("选中 = %v err = %v，want cand-a", selected, err)
+	result, err := application.NewSelectChannelCandidateHandler(deps).Select(context.Background(), selectionQuery(t))
+	selected, present := result.Selected()
+	if err != nil || !present || selected.Candidate().String() != "cand-a" {
+		t.Fatalf("选中 = %v/%v err = %v，want cand-a", selected, present, err)
 	}
 }

@@ -108,23 +108,22 @@ func TestASelectionHandsOverTheWinnersEvaluationAndRate(t *testing.T) {
 		}},
 	})
 
-	selected, err := handler.Select(context.Background(), selectionQuery(t))
+	result, err := handler.Select(context.Background(), selectionQuery(t))
 	if err != nil {
 		t.Fatalf("择优：%v", err)
 	}
-	if selected.Candidate() != selectionCandidate(t, "cand-a") {
-		t.Fatalf("选中 = %s，want cand-a", selected.Candidate().String())
+	if result.Outcome() != application.ChannelSelectionSelected {
+		t.Fatalf("outcome = %q，want SELECTED", result.Outcome())
+	}
+	selected, present := result.Selected()
+	if !present || selected.Candidate() != selectionCandidate(t, "cand-a") {
+		t.Fatalf("选中 = %s/%v，want cand-a", selected.Candidate().String(), present)
 	}
 	if got, present := selected.Evaluation(); !present || got != evaluation {
 		t.Fatalf("评价痕迹 = %v/%v，want %v", got, present, evaluation)
 	}
 	if got, present := selected.Rate(); !present || got != rate {
 		t.Fatalf("费率 = %v/%v，want %v", got, present, rate)
-	}
-
-	plain, err := handler.Handle(context.Background(), selectionQuery(t))
-	if err != nil || plain != selected.Candidate() {
-		t.Fatalf("Handle = %s/%v，want 与 Select 同一个候选", plain.String(), err)
 	}
 }
 
@@ -149,7 +148,7 @@ func TestASelectionStopsWhenTheCostsDoNotCoverEveryAssembledCandidate(t *testing
 		}},
 	})
 
-	_, err := handler.Handle(context.Background(), selectionQuery(t))
+	_, err := handler.Select(context.Background(), selectionQuery(t))
 	if !errors.Is(err, application.ErrChannelCostsIncomplete) {
 		t.Fatalf("择优 err = %v，want %v", err, application.ErrChannelCostsIncomplete)
 	}

@@ -20,12 +20,13 @@ import (
 // 已写完」，所以生产装配给两段各开一个壳，翻译停下时决定记录仍在；本编排对此不知情，也不该知情。
 
 var (
-	// ErrSelectedLabelTransactionFlowMisconfigured 说三口有一口没装。响亮失败而不是跳过那一段：跳过择优就是让调用方
-	// 自己决定渠道，跳过翻译就是拿候选标识顶七类依据，两者都是本票要拆掉的形状。
+	// ErrSelectedLabelTransactionFlowMisconfigured 说四口有一口没装。响亮失败而不是跳过那一段：跳过择优就是让调用方
+	// 自己决定渠道，跳过翻译就是拿候选标识顶七类依据，跳过重放那一问就是让每次重试在决定册多留一条 SELECTED——
+	// 三者都是本票族要拆掉的形状。
 	ErrSelectedLabelTransactionFlowMisconfigured = errors.New("parcel shipment: selected label transaction flow is not fully wired")
 	// ErrChannelSelectionStopped 标明停在**择优那一段**：取数口未配置、成本表不全、留痕半配、依赖故障……具体哪一格
 	// 由择优编排与其适配器具名（成因原样包在里面），本层认不出适配器的错误值，只加段标不改写。并列冲突与无人参选
-	// 不走这里——那两格是择优步已记决定的业务答案，各自成结果格。
+	// 不走这里——那两格是择优步已记决定的业务答案，择优编排以结果格交回，本层原样映射。
 	ErrChannelSelectionStopped = errors.New("parcel shipment: channel selection stopped before a candidate was selected")
 	// ErrChannelBasisTranslationStopped 标明停在**翻译那一段**：三个实例半边源未配置、授权 / 协议对不上或不在有效期、
 	// 费率缺席……同样由翻译适配器具名，本层只加段标。翻译停下不建立交易、也不再写任何决定记录。
@@ -63,6 +64,8 @@ func (outcome SelectedLabelTransactionOutcome) String() string {
 
 // SelectedLabelTransactionResult 交回前置步停在哪里，连同一路带出来的对象：选中候选（择优落定即有）、择优结果
 // （翻译走完即有）、建立结果（建立答过即有）。调用方接着做的事——发起渠道调用——要交易本体，它在建立结果里。
+// 重放那一格（交易已在、择优没发生）只有建立结果：选中候选与择优结果都缺席，它们是**这一次**择优的产物，
+// 而这一次没有择优；交易本体在建立结果里，七类依据在交易上。
 type SelectedLabelTransactionResult struct {
 	outcome        SelectedLabelTransactionOutcome
 	selected       domain.SelectedChannelCandidate
@@ -106,9 +109,10 @@ type EstablishSelectedLabelTransactionCommand struct {
 }
 
 // ChannelSelector 是择优那一段的窄面：SelectChannelCandidateHandler.Select 就是它。收接口而不是那个具体类型，
-// 是为了让组合根在它外面套事务壳（决定记录要在事务里写）而编排不必知道壳的存在。
+// 是为了让组合根在它外面套事务壳（决定记录要在事务里写）而编排不必知道壳的存在。壳只管事务：Select 不返 error
+// 就提交、返 error 就回滚——并列与无人参选是结果格不是 error，壳不必认任何领域哨兵（票 35 做法二）。
 type ChannelSelector interface {
-	Select(ctx context.Context, query ports.ChannelSelectionQuery) (domain.SelectedChannelCandidate, error)
+	Select(ctx context.Context, query ports.ChannelSelectionQuery) (ChannelSelectionResult, error)
 }
 
 // LabelTransactionEstablisher 是建立那一段的窄面：LabelTransactionHandler.Establish 就是它。理由同上——
@@ -117,8 +121,16 @@ type LabelTransactionEstablisher interface {
 	Establish(ctx context.Context, command EstablishLabelTransactionCommand) (LabelTransactionResult, error)
 }
 
-// EstablishSelectedLabelTransactionDeps 收拢三段。三口都必填——缺一口不是「这一段不做」，是装配缺件。
+// LabelTransactionLookup 是建立前那一问的只读窄面：ports.LabelTransactionRepository 的 FindByID 就是它（票 35 裁决 1 取甲）。
+// 单列一口而不扩 LabelTransactionEstablisher，是因为那一问不在建立的事务壳里、也不该在——它只是一次读，
+// 读到「已在」就不择优、不记决定；读是不是要在事务里由组合根接哪个实现决定，本层不知情。
+type LabelTransactionLookup interface {
+	FindByID(ctx context.Context, tenant domain.TenantID, transactionID domain.LabelTransactionID) (domain.LabelTransaction, bool, error)
+}
+
+// EstablishSelectedLabelTransactionDeps 收拢三段加建立前那一问。四口都必填——缺一口不是「这一段不做」，是装配缺件。
 type EstablishSelectedLabelTransactionDeps struct {
+	Lookup       LabelTransactionLookup
 	Selector     ChannelSelector
 	Translator   ports.ChannelSelectionBasisTranslator
 	Transactions LabelTransactionEstablisher
@@ -133,27 +145,54 @@ func NewEstablishSelectedLabelTransactionHandler(deps EstablishSelectedLabelTran
 	return &EstablishSelectedLabelTransactionHandler{deps: deps}
 }
 
-// Establish 先择优、再翻译、再建立。
+// Establish 先问交易在不在，不在才择优、再翻译、再建立。
 //
-// 三种停法分三种形状：并列冲突与无人参选是结果格（择优步已答、已记）；择优或翻译没走完是带段标的错误（成因由
+// 建立前那一问（票 35 裁决 1 取甲）：同 TransactionID 已在即直接答重放——建立那一步本就按标识重放（06 的
+// `LabelTransactionAlreadyApplied`），但它在择优之后，而择优每次比较都在决定册追加一条 SELECTED；不先问一次，
+// 任何一次重试都会让交易只有一笔、决定却多一条，且两者之间没有引用可对账。多一次读换「一笔交易一条 SELECTED」
+// （裁决 3 认下这个代价）。这一问与建立步自己的重放分支并存：兜两次同标识建立恰好在这一读与 Insert 之间并发的那一格。
+//
+// 其余停法分三种形状：并列冲突与无人参选是结果格（择优步已答、已记）；择优或翻译没走完是带段标的错误（成因由
 // 适配器具名，本层只说停在哪一段）；建立一步的答复不论落在它代数的哪一格都原样透传——它已经按恢复动作分过了。
 func (handler *EstablishSelectedLabelTransactionHandler) Establish(
 	ctx context.Context,
 	command EstablishSelectedLabelTransactionCommand,
 ) (SelectedLabelTransactionResult, error) {
 	deps := handler.deps
-	if deps.Selector == nil || deps.Translator == nil || deps.Transactions == nil {
+	if deps.Lookup == nil || deps.Selector == nil || deps.Translator == nil || deps.Transactions == nil {
 		return SelectedLabelTransactionResult{}, ErrSelectedLabelTransactionFlowMisconfigured
 	}
 
-	selected, err := deps.Selector.Select(ctx, command.Selection)
-	switch {
-	case errors.Is(err, domain.ErrChannelCandidateCostTied):
-		return SelectedLabelTransactionResult{outcome: ChannelSelectionTied}, nil
-	case errors.Is(err, domain.ErrNoQualifiedChannelCandidate):
-		return SelectedLabelTransactionResult{outcome: NoQualifiedChannelCandidate}, nil
-	case err != nil:
+	existing, found, err := deps.Lookup.FindByID(ctx, command.Tenant, command.TransactionID)
+	if err != nil {
+		return SelectedLabelTransactionResult{}, fmt.Errorf("establish selected label transaction: look up transaction: %w", err)
+	}
+	if found {
+		return SelectedLabelTransactionResult{
+			outcome:        SelectedLabelTransactionEstablished,
+			establishment:  labelTransactionAlreadyApplied(existing),
+			hasEstablished: true,
+		}, nil
+	}
+
+	selection, err := deps.Selector.Select(ctx, command.Selection)
+	if err != nil {
 		return SelectedLabelTransactionResult{}, fmt.Errorf("%w: %w", ErrChannelSelectionStopped, err)
+	}
+	var selected domain.SelectedChannelCandidate
+	switch selection.Outcome() {
+	case ChannelSelectionCostTied:
+		return SelectedLabelTransactionResult{outcome: ChannelSelectionTied}, nil
+	case ChannelSelectionNoQualifiedCandidate:
+		return SelectedLabelTransactionResult{outcome: NoQualifiedChannelCandidate}, nil
+	case ChannelSelectionSelected:
+		var present bool
+		if selected, present = selection.Selected(); !present {
+			return SelectedLabelTransactionResult{}, fmt.Errorf("%w: selected outcome without a candidate", ErrChannelSelectionStopped)
+		}
+	default:
+		// 择优编排交回它自己都不认识的格是实现坏了，不是业务答案。
+		return SelectedLabelTransactionResult{}, fmt.Errorf("%w: unnamed selection outcome %d", ErrChannelSelectionStopped, selection.Outcome())
 	}
 
 	basis, err := deps.Translator.TranslateSelectedCandidate(ctx, command.Selection, selected)
