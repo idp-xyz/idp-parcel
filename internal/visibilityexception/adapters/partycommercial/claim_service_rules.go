@@ -45,6 +45,10 @@ var (
 	// 客户合同版本」说它恒在，缺了是接受流的装配缺陷（ADR-0136 决定三；判据同 ADR-0133 决定二、ADR-0062
 	// 决定三）。
 	ErrCustomerContractNotAdopted = errors.New("visibility exception partycommercial adapter: the commercial closure did not adopt a customer contract version")
+	// ErrNilDependency 是构造门对缺件的唯一答复；哪一口缺在包装信息里点名。它必须是构造期的错误而不是运行期
+	// 的 panic：装配方按 errors.Is 认出「这是装配漏了」而不是「提供方坏了」，两者的恢复动作不同（ADR-0079 决定八）。
+	// 形照 settlementaccounting / parcelshipment 应用层同名哨兵。
+	ErrNilDependency = errors.New("visibility exception partycommercial adapter: claim service rules dependency is nil")
 )
 
 // CommercialResolutionReferenceSource 是本适配器向 parcel-shipment 取商业解析回指的窄口（ADR-0136 决定四）。
@@ -89,19 +93,20 @@ type ClaimServiceRules struct {
 
 // NewClaimServiceRules 装配。四个协作方一个都不许缺（ADR-0079 决定八：nil 半边在装配期拒）：本适配器
 // 一旦装上就是要真去问两个提供方的，缺一半而静默答未登记会让一次装配疏漏与租户没登记长得一样；
-// 「答不出」在读口上会长成 error，日后有人会把它读成提供方坏了。
+// 「答不出」在读口上会长成 error，日后有人会把它读成提供方坏了。缺件一律包 ErrNilDependency，哪一口缺
+// 在文本里点名。
 func NewClaimServiceRules(deps ClaimServiceRulesDeps) (*ClaimServiceRules, error) {
 	if deps.Rules == nil {
-		return nil, fmt.Errorf("visibility exception partycommercial adapter: own eligibility rule view is nil")
+		return nil, fmt.Errorf("%w: own eligibility rule view", ErrNilDependency)
 	}
 	if deps.References == nil {
-		return nil, fmt.Errorf("visibility exception partycommercial adapter: commercial resolution reference source is nil")
+		return nil, fmt.Errorf("%w: commercial resolution reference source", ErrNilDependency)
 	}
 	if deps.Closures == nil {
-		return nil, fmt.Errorf("visibility exception partycommercial adapter: commercial resolution view is nil")
+		return nil, fmt.Errorf("%w: commercial resolution view", ErrNilDependency)
 	}
 	if deps.Contents == nil {
-		return nil, fmt.Errorf("visibility exception partycommercial adapter: customer service rule content view is nil")
+		return nil, fmt.Errorf("%w: customer service rule content view", ErrNilDependency)
 	}
 	return &ClaimServiceRules{
 		rules:      deps.Rules,

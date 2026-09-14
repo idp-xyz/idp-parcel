@@ -3,6 +3,7 @@ package partycommercial_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -643,26 +644,37 @@ func TestClaimServiceRulesReportErrorsInsteadOfFoldingThemIntoUnregistered(t *te
 	}
 }
 
-// Covers: 装配缺陷在构造期就拒（ADR-0079 决定八）——四个协作方缺一即 error，没有可选的一半：本适配器一旦装上
-// 就是要真去问两个提供方的，缺一半而静默答未登记会让装配疏漏与租户没登记长得一样。
+// Covers: 装配缺陷在构造期就拒（ADR-0079 决定八）——协作方缺一即 ErrNilDependency，没有可选的一半：本适配器
+// 一旦装上就是要真去问两个提供方的，缺一半而静默答未登记会让装配疏漏与租户没登记长得一样。装配方按 errors.Is
+// 认哨兵、按文本认缺的是哪一口；错误值为哨兵时不交出一只会在运行期 panic 的适配器。
 func TestClaimServiceRulesRefuseToBeBuiltWithoutTheirCollaborators(t *testing.T) {
 	fixture := newFixture(t)
-	cases := map[string]func(deps *adapter.ClaimServiceRulesDeps){
-		"缺 VE 自己的册":  func(deps *adapter.ClaimServiceRulesDeps) { deps.Rules = nil },
-		"缺 PS 回指读口":  func(deps *adapter.ClaimServiceRulesDeps) { deps.References = nil },
-		"缺 PC 闭包读口":  func(deps *adapter.ClaimServiceRulesDeps) { deps.Closures = nil },
-		"缺 PC 正文点读口": func(deps *adapter.ClaimServiceRulesDeps) { deps.Contents = nil },
+	cases := map[string]struct {
+		drop  func(deps *adapter.ClaimServiceRulesDeps)
+		named string
+	}{
+		"缺 VE 自己的册":  {func(deps *adapter.ClaimServiceRulesDeps) { deps.Rules = nil }, "eligibility rule view"},
+		"缺 PS 回指读口":  {func(deps *adapter.ClaimServiceRulesDeps) { deps.References = nil }, "commercial resolution reference source"},
+		"缺 PC 闭包读口":  {func(deps *adapter.ClaimServiceRulesDeps) { deps.Closures = nil }, "commercial resolution view"},
+		"缺 PC 正文点读口": {func(deps *adapter.ClaimServiceRulesDeps) { deps.Contents = nil }, "customer service rule content view"},
 	}
-	for name, drop := range cases {
+	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
 			deps := fixture.deps()
-			drop(&deps)
-			if _, err := adapter.NewClaimServiceRules(deps); err == nil {
-				t.Fatal("缺协作方却装配成功")
+			tc.drop(&deps)
+			rules, err := adapter.NewClaimServiceRules(deps)
+			if !errors.Is(err, adapter.ErrNilDependency) {
+				t.Fatalf("err = %v, want ErrNilDependency——装配方按 errors.Is 认不出这是装配漏了", err)
+			}
+			if !strings.Contains(err.Error(), tc.named) {
+				t.Fatalf("错误文本 %q 没点名缺的是 %q", err.Error(), tc.named)
+			}
+			if rules != nil {
+				t.Fatal("缺协作方却交出了一只会在运行期 panic 的适配器")
 			}
 		})
 	}
 	if _, err := adapter.NewClaimServiceRules(fixture.deps()); err != nil {
-		t.Fatalf("四个协作方齐全却拒绝装配：%v", err)
+		t.Fatalf("协作方齐全却拒绝装配：%v", err)
 	}
 }
