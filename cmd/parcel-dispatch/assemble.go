@@ -507,7 +507,7 @@ var dutyPaymentVerificationUndecidedSentinels = []error{
 // 裁决 (c)「信封到未决」）登记的未决哨兵：
 //   - sapricing.ErrEvaluationNotVisible——信封所指的评价在提供方还读不回（评价与信封同事务落库，读不回只剩
 //     可见性滞后），或读口自己答不出；续办，重投会改变结果。
-//   - sapricing.ErrSourceReferencesUnrecorded——评价取回了，但形成命令还缺发生项 / 费用项目 / 供应商协议三件
+//   - sapricing.ErrSourceReferencesUnrecorded——评价取回了，但形成命令还缺发生项 / 费用项目 / 供应商协议的
 //     引用：它们记在评价请求登记册（票 sa-cc/08），而评价回指评价请求标识归 PP 侧（票 11），今天两头没接上。
 //     按「未确认规则保持显式未决」停在这一格：不为缺引用发明来源、不反查 TF 登记册（裁决对 (b) 的否决）、
 //     零写入；恢复动作是等 08 的回指 / 11 与形成路后继票接上——接上之后这一格随之消失。
@@ -2306,7 +2306,7 @@ func adoptDutyPaymentVerificationConsumer(
 // PP 评价库（mech/06 SA-c 缝，ADR-0025）→ 分辨是不是 BUY·SUPPLIER_COST → 核形成命令齐不齐。跨上下文翻译只在
 // SA 的 `adapters/parcelpricing`；SA application 不 import PP。
 //
-// 裁决 (c) 把本票的范围钉在「信封到未决」：命令除评价外还要发生项 / 费用项目 / 供应商协议三件引用，它们记在
+// 裁决 (c) 把本票的范围钉在「信封到未决」：命令除评价外还要发生项 / 费用项目 / 供应商协议的引用，它们记在
 // 评价请求登记册（sa-cc/08）而评价回指评价请求标识归 PP 侧（票 11），今天两头没接上，处理方对每一封 BUY 信封
 // 都答 ErrSourceReferencesUnrecorded。所以这里**不装** `saapplication.NewFormSupplierExpectedCostHandler`：命令
 // 凑不齐时到不了它，接进来就是在组合根里装一只没人调的编排；用一个永远答「不在」的来源口顶上则是把替身放进

@@ -14,7 +14,7 @@ import (
 
 // 本文件证 sainbox.BuyEvaluationRecordedConsumer 的处理方（票 sa-cc/01，裁决 (c)「信封到未决」）：按信封
 // 引用向 BuyEvaluationView 取评价 → 不是 BUY·SUPPLIER_COST 的信封不处理不报错 → 读不回是可见性滞后的未决
-// → 命令还缺三件来源引用，答未决并指名等评价请求记录（票 08 / 回指归 11）。处理方不判评价结果、不形成、
+// → 命令还缺发生项 / 费用项目 / 供应商协议的来源引用，答未决并指名等评价请求记录（票 08 / 回指归 11）。处理方不判评价结果、不形成、
 // 不读 08 的登记册——那是后继票的事。
 
 type buyEvaluationViewDouble struct {
@@ -41,8 +41,8 @@ func newFormOnRecorded(t *testing.T, view *buyEvaluationViewDouble) *adapter.For
 }
 
 // Covers: 做法 3 / 判据 2——BUY 信封按引用取回评价后，命令里的发生项 / 费用项目 / 供应商协议引用没有来源，
-// 答未决并指名等评价请求记录；不造引用、不落任何一行。评价的五种结果一视同仁：结果分格是形成编排的事，
-// 命令凑不齐时到不了它。
+// 答未决并指名等评价请求记录；不造引用、不落任何一行。saports.BuyEvaluationOutcome 的每一格一视同仁：结果分格
+// 是形成编排的事，命令凑不齐时到不了它。
 func TestABuyEvaluationStopsUndecidedWaitingForTheEvaluationRequestRecord(t *testing.T) {
 	for name, outcome := range map[string]saports.BuyEvaluationOutcome{
 		"已完成":  saports.BuyEvaluationCompleted,

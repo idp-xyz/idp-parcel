@@ -148,7 +148,8 @@ func (adapter *BuyEvaluationAdapter) LoadBuyEvaluation(
 	return adoption, true, nil
 }
 
-// outcomeOf 把提供方的五种结果逐格译成 SA 的五格（UC-SA-002 各有自己的结束格，不合并）。
+// outcomeOf 把提供方的 EvaluationStatus 逐格译成 SA 的 BuyEvaluationOutcome，一格对一格（UC-SA-002 各有自己的
+// 结束格，不合并）。
 func outcomeOf(status ppdomain.EvaluationStatus) saports.BuyEvaluationOutcome {
 	switch status {
 	case ppdomain.EvaluationCompleted:

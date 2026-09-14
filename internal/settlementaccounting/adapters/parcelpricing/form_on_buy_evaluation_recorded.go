@@ -21,7 +21,7 @@ var (
 	ErrEvaluationNotVisible = errors.New(
 		"settlement accounting parcelpricing adapter: buy evaluation is not yet visible")
 	// ErrSourceReferencesUnrecorded 是裁决 (c) 那一格：形成预期成本的命令除评价外还要发生项、费用项目与供应商
-	// 协议三件引用（FormSupplierExpectedCostCommand 头注），它们在 SA 请求评价那一步记进评价请求登记册
+	// 协议的引用（FormSupplierExpectedCostCommand 头注），它们在 SA 请求评价那一步记进评价请求登记册
 	// （票 sa-cc/08），而评价回指评价请求标识是 PP 侧的事（票 11）；两者接上之前，本处理方对「命令齐不齐」
 	// 只能答未决并指名等评价请求记录——不为缺引用发明来源，不反查 TF 登记册（裁决对 (b) 的否决）。
 	// 生产装配同样把它登进 WithUndecidedSentinels：它等的是后继票，不是传输。
@@ -33,10 +33,10 @@ var (
 // 取评价，分辨是不是本消费者的评价，再看形成命令凑不凑得齐。
 //
 // 只译不判（票 sa-cc/01 红线）：金额、币种、换算步骤与规则版本整组出自评价，这里一个数字都不碰（ADR-0107）；
-// 评价的五种结果怎么分格是 FormSupplierExpectedCostHandler 的事——命令凑不齐时到不了它，所以今天这里没有
-// 那只编排的依赖：接一个永不被调用的口，与接一个「永远答不在」的来源替身，都是在生产装配里说假话。08 的
-// 登记册读口与 11 的回指接上之后，后继票在这里补「按回指取三件引用 → 命令 → 形成」那一段，消费者与本适配器
-// 的错误分格不变。
+// 评价的每一种结果（saports.BuyEvaluationOutcome）怎么分格是 FormSupplierExpectedCostHandler 的事——命令凑不齐时
+// 到不了它，所以今天这里没有那只编排的依赖：接一个永不被调用的口，与接一个「永远答不在」的来源替身，都是在
+// 生产装配里说假话。08 的登记册读口与 11 的回指接上之后，后继票在这里补「按回指取来源引用 → 命令 → 形成」那一段，
+// 消费者与本适配器的错误分格不变。
 type FormOnBuyEvaluationRecordedAdapter struct {
 	evaluations saports.BuyEvaluationView
 }
