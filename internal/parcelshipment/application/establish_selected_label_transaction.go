@@ -28,8 +28,9 @@ var (
 	// 由择优编排与其适配器具名（成因原样包在里面），本层认不出适配器的错误值，只加段标不改写。并列冲突与无人参选
 	// 不走这里——那两格是择优步已记决定的业务答案，择优编排以结果格交回，本层原样映射。
 	ErrChannelSelectionStopped = errors.New("parcel shipment: channel selection stopped before a candidate was selected")
-	// ErrChannelBasisTranslationStopped 标明停在**翻译那一段**：三个实例半边源未配置、授权 / 协议对不上或不在有效期、
-	// 费率缺席……同样由翻译适配器具名，本层只加段标。翻译停下不建立交易、也不再写任何决定记录。
+	// ErrChannelBasisTranslationStopped 标明停在**翻译那一段**：实例半边源（ChannelSelectionBasisTranslatorDeps 的
+	// Accounts / Agreements / Resolutions）未配置、授权 / 协议对不上或不在有效期、费率缺席……同样由翻译适配器具名，
+	// 本层只加段标。翻译停下不建立交易、也不再写任何决定记录。
 	ErrChannelBasisTranslationStopped = errors.New("parcel shipment: channel selection result could not be translated into a label transaction basis")
 )
 

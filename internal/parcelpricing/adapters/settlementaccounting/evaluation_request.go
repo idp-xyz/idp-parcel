@@ -49,7 +49,7 @@ func TranslateEvaluationRequest(
 	evidence ppdomain.EvidenceKind,
 ) (ppapplication.FormEvaluationFromRequestCommand, error) {
 	none := ppapplication.FormEvaluationFromRequestCommand{}
-	if !declaredEvidence(evidence) {
+	if !evidence.Declared() {
 		return none, fmt.Errorf("%w: evidence kind %q is not one of S / R / P", ErrUntranslatableAnswer, evidence)
 	}
 	tenant, err := ppdomain.NewTenantID(record.Key.TenantID.String())
@@ -95,14 +95,5 @@ func translatePurpose(purpose sadomain.CalculationPurpose) (ppdomain.PricingDire
 		return ppdomain.PricingDirectionBuy, ppdomain.PricingPurposeSupplierCost, nil
 	default:
 		return "", "", fmt.Errorf("%w: calculation purpose %q", ErrUntranslatableAnswer, purpose.String())
-	}
-}
-
-func declaredEvidence(evidence ppdomain.EvidenceKind) bool {
-	switch evidence {
-	case ppdomain.EvidenceSynthetic, ppdomain.EvidenceReplay, ppdomain.EvidenceProduction:
-		return true
-	default:
-		return false
 	}
 }

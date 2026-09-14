@@ -66,7 +66,7 @@ func NewFormOnEvaluationRequestSubmittedAdapter(
 	if former == nil {
 		return nil, fmt.Errorf("parcel pricing settlementaccounting adapter: evaluation former is nil")
 	}
-	if !declaredEvidence(evidence) {
+	if !evidence.Declared() {
 		return nil, fmt.Errorf("parcel pricing settlementaccounting adapter: evidence kind %q is not one of S / R / P", evidence)
 	}
 	return &FormOnEvaluationRequestSubmittedAdapter{requests: requests, former: former, evidence: evidence}, nil

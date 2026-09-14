@@ -159,9 +159,7 @@ func (payload EvaluationReplayPayload) Command(tenant domain.TenantID) (applicat
 		return application.ReplayPricingEvaluationCommand{}, fmt.Errorf("%w: replayEvaluationId: %v", ErrMalformedRequest, err)
 	}
 	evidence := domain.EvidenceKind(payload.Evidence)
-	switch evidence {
-	case domain.EvidenceSynthetic, domain.EvidenceReplay, domain.EvidenceProduction:
-	default:
+	if !evidence.Declared() {
 		return application.ReplayPricingEvaluationCommand{}, fmt.Errorf("%w: evidence %q is not one of S / R / P", ErrMalformedRequest, payload.Evidence)
 	}
 	return application.ReplayPricingEvaluationCommand{

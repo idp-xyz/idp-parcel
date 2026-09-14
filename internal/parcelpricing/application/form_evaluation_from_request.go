@@ -302,12 +302,7 @@ func (command FormEvaluationFromRequestCommand) accepted() bool {
 	if !command.Purpose.PairsWithDirection(command.Direction) {
 		return false
 	}
-	switch command.Evidence {
-	case domain.EvidenceSynthetic, domain.EvidenceReplay, domain.EvidenceProduction:
-		return true
-	default:
-		return false
-	}
+	return command.Evidence.Declared()
 }
 
 func undecidedFormation(reason FormEvaluationFromRequestUndecidedReason) FormEvaluationFromRequestResult {
