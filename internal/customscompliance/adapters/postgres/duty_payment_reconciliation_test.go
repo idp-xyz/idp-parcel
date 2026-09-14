@@ -199,8 +199,11 @@ func TestExternalFundsFactsRoundTripByReference(t *testing.T) {
 
 // Covers: 票 sa-cc/13 完成判据 2「新迁移往返」——同一事实的更正版本 v2（回指 v1、金额变）落版本子表第二行，
 // 身份行仍只一行；ListFundsFactVersions 按接收先后列两版、v2 回指 v1、v1 一字不动；LoadFundsFact 读回最近接收
-// 的那一版；同版本重登`已登记`不顶替；先到 v2 后到 v1 也各占一行（不按到达顺序覆盖）。直读库面：身份表 0021 起
-// 只剩身份列，内容与版本都在子表。
+// 的那一版；同版本重登`已登记`不顶替。直读库面：身份表 0021 起只剩身份列，内容与版本都在子表。
+//
+// 登记顺序显式先 v1 后 v2：两版各自一笔事务、received_at 各取事务时钟，登记顺序就是接收顺序，「按接收先后列」
+// 的断言只在这个顺序确定时成立——交给 map 迭代一类的随机源，断言会随机翻面（sa-cc/26）。反着到的那一格在
+// TestFundsFactVersionsArrivingOutOfOrderListByReceiptAndLoadTheLatestReceived 里另钉。
 func TestFundsFactVersionsAccrueAsRowsThatPointBack(t *testing.T) {
 	store, fixture := newDutyReconciliation(t)
 	first := synFundsFact(t, 12500)
@@ -208,12 +211,15 @@ func TestFundsFactVersionsAccrueAsRowsThatPointBack(t *testing.T) {
 	second.Version = viewValue(t, domain.NewFundsFactVersion, "SYN-FUNDS-01/v2")
 	second.Corrects = first.Version
 
-	for name, registration := range map[string]ports.ExternalFundsFactRegistration{"v1": first, "v2": second} {
+	for _, step := range []struct {
+		name         string
+		registration ports.ExternalFundsFactRegistration
+	}{{"v1", first}, {"v2", second}} {
 		outcome, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
-			return store.RegisterFundsFact(ctx, tenantA(t), registration)
+			return store.RegisterFundsFact(ctx, tenantA(t), step.registration)
 		})
 		if err != nil || outcome != ports.CaseConfigurationRegistered {
-			t.Fatalf("%s：err=%v outcome=%v", name, err, outcome)
+			t.Fatalf("%s：err=%v outcome=%v", step.name, err, outcome)
 		}
 	}
 	versions, err := store.ListFundsFactVersions(t.Context(), tenantA(t), first.Fact)
@@ -254,7 +260,14 @@ func TestFundsFactVersionsAccrueAsRowsThatPointBack(t *testing.T) {
 	if again, _ := store.ListFundsFactVersions(t.Context(), tenantA(t), first.Fact); again[1].AmountMinor != 9000 {
 		t.Fatalf("同版本重登顶替了内容：%d", again[1].AmountMinor)
 	}
+}
 
+// Covers: 同一事实的两版反着到——先到 v2（回指 v1）后到 v1——各占一行（UC-CC-009「不按最后到达覆盖」、票 sa-cc/13
+// 裁决 1「迟到的前版按自己的版本进」）；ListFundsFactVersions 按接收先后列为 [v2, v1]，如实反映到达顺序、不按版本
+// 字面重排；LoadFundsFact 交回**最近接收**的 v1，不是版本链上最新的 v2（端口头注「最近接收的那一版」）。它与
+// TestFundsFactVersionsAccrueAsRowsThatPointBack 是同一条规则的两个到达顺序，各钉一格，顺序都在用例里显式写死。
+func TestFundsFactVersionsArrivingOutOfOrderListByReceiptAndLoadTheLatestReceived(t *testing.T) {
+	store, fixture := newDutyReconciliation(t)
 	late := synFundsFact(t, 500)
 	late.Fact = viewValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-02")
 	late.Version = viewValue(t, domain.NewFundsFactVersion, "SYN-FUNDS-02/v2")
@@ -262,16 +275,27 @@ func TestFundsFactVersionsAccrueAsRowsThatPointBack(t *testing.T) {
 	earlier := synFundsFact(t, 400)
 	earlier.Fact = late.Fact
 	earlier.Version = late.Corrects
-	for name, registration := range []ports.ExternalFundsFactRegistration{late, earlier} {
+
+	for index, registration := range []ports.ExternalFundsFactRegistration{late, earlier} {
 		if outcome, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
 			return store.RegisterFundsFact(ctx, tenantA(t), registration)
 		}); err != nil || outcome != ports.CaseConfigurationRegistered {
-			t.Fatalf("乱序第 %d 版：err=%v outcome=%v", name, err, outcome)
+			t.Fatalf("乱序第 %d 版：err=%v outcome=%v", index+1, err, outcome)
 		}
 	}
-	if versions, _ := store.ListFundsFactVersions(t.Context(), tenantA(t), late.Fact); len(versions) != 2 ||
-		versions[0].Version != late.Version || versions[1].Version != earlier.Version {
-		t.Fatalf("迟到的前版该按自己的版本进、按接收先后列：%+v", versions)
+	versions, err := store.ListFundsFactVersions(t.Context(), tenantA(t), late.Fact)
+	if err != nil || len(versions) != 2 {
+		t.Fatalf("该列两版：err=%v n=%d", err, len(versions))
+	}
+	if versions[0].Version != late.Version || versions[0].Corrects != earlier.Version || versions[0].AmountMinor != 500 {
+		t.Fatalf("先到的 v2 该列在前、回指 v1：%+v", versions[0])
+	}
+	if versions[1].Version != earlier.Version || versions[1].Corrects != (domain.FundsFactVersion{}) || versions[1].AmountMinor != 400 {
+		t.Fatalf("迟到的前版 v1 该按自己的版本进、列在后：%+v", versions[1])
+	}
+	current, found, err := store.LoadFundsFact(t.Context(), tenantA(t), late.Fact)
+	if err != nil || !found || current.Version != earlier.Version {
+		t.Fatalf("按引用读该是最近接收的 v1，不是版本链上最新的 v2：err=%v found=%v version=%s", err, found, current.Version)
 	}
 }
 
