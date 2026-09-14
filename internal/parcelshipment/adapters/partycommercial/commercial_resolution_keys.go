@@ -287,8 +287,8 @@ func (adapter *CommercialResolutionKeys) FormResolutionKey(
 	for _, name := range row.RequiredBases {
 		kind, err := commercialKindFrom(name)
 		if err != nil {
-			// 库内 CHECK 与领域封闭集是同一集合的两份镜像，出现集外取值说明两份已经
-			// 分叉，那要人来看，不能就地当成没登记。
+			// 库内 CHECK 放行的名字都在领域封闭集里（它只比封闭集少 PRICE_RULE，见 commercialKindFrom
+			// 头注），读到一个译不回去的名字说明库与领域已经分叉，那要人来看，不能就地当成没登记。
 			return none, false, fmt.Errorf("form resolution key: %w", err)
 		}
 		key.RequiredBases = append(key.RequiredBases, kind)
@@ -348,9 +348,12 @@ func creditSelectorFromRow(row ResolutionKeyRow) (pcdomain.CreditSelector, error
 	return selector, nil
 }
 
-// commercialKindFrom 把登记行上的名字译回 party-commercial 的类别。名集与库内 `..._bases_closed` 白名单是
-// 同一集合的两份镜像；客户服务规则那一格随 ADR-0136 决定三进来（迁移 0022 同笔）——索赔资格两维要按接受时
-// 闭包采用的客户服务规则版本选用，租户把它列进必需依据时，这里得译得回去，接受流才成得了键。
+// commercialKindFrom 把登记行上的名字译回 party-commercial 的类别。名集是 pcdomain.CommercialObjectKind.String()
+// 的反向，全集都译；库内 `..._bases_closed` 白名单比它少 PRICE_RULE——价格方向那一维本登记面不承载（迁移 0008
+// 头注的理由），那格由 ResolutionKeyRegistration.validate「需要键携带额外选择维度，本登记面不承载」与库内 CHECK
+// 拦在写入之前，不靠这里的名集；所以两边不是镜像，读口译得回 PRICE_RULE 不等于登记面收它。客户服务规则那一格
+// 随 ADR-0136 决定三进来（迁移 0022 同笔）——索赔资格两维要按接受时闭包采用的客户服务规则版本选用，租户把它
+// 列进必需依据时，这里得译得回去，接受流才成得了键。
 func commercialKindFrom(name string) (pcdomain.CommercialObjectKind, error) {
 	for _, kind := range []pcdomain.CommercialObjectKind{
 		pcdomain.ServiceProductObject,
