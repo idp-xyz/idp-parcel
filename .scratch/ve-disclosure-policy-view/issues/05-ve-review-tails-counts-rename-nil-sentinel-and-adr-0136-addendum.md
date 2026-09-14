@@ -1,7 +1,7 @@
 # VE 评审尾巴 A 类合票：四处跨文件计数换点名、`application.CatalogRegistry` 跨包同名改名、`assemble_claims.go`「四个协作方」去数、`NewClaimServiceRules` 拒 nil 包哨兵、ADR-0136 越权风险点 2 补一句实测
 
 Category: chore
-Status: in-progress——2026-09-14 09:0x 通道 3 按通道 1 派单 task-0962cb6b 自立自做（先例 sa-cc/16、lc/37、psr/08：已进 main 的票在非作者评审里点出、评审者与推送方认可的 A 类，推送方派单、作者自立票自做；用户 08:5x 经队列裁「派吧」）；隔离树 `D:/tops/idp-parcel-mcp3-vetails`，分支 `mcp3-vetails` 基远端 main `cdf17834`；取证锚同
+Status: resolved——2026-09-14 09:3x 通道 3 作者完工（task-0962cb6b；分支 `mcp3-vetails` 基远端 main `cdf17834`，认领 `80564f02`，五条五笔 `fa9d76bd` / `b59d8f74` / `ecff1f67` / `66c6168c` / 条 5 与本完成记录同笔，SHA 见完工报）：条 1 票面四处 6 行 + 同症补收 13 行全部注释、零行为；条 2 `application.CatalogRegistry` → `CatalogRegistries`，清点与接线基线零差；条 3 一行注释；条 4 铸 `ErrNilDependency` + 用例 `errors.Is`，先红后绿；条 5 ADR-0136 越权风险点 2 纯追加。判据 1–6 全过，真库未跑（无 DSN，368 例 SKIP 全是 `IDP_PARCEL_POSTGRES_DSN` 门禁）。等非作者评审 → 推送方重放进 main。此前 in-progress——2026-09-14 09:0x 通道 3 按通道 1 派单 task-0962cb6b 自立自做（先例 sa-cc/16、lc/37、psr/08：已进 main 的票在非作者评审里点出、评审者与推送方认可的 A 类，推送方派单、作者自立票自做；用户 08:5x 经队列裁「派吧」）；隔离树 `D:/tops/idp-parcel-mcp3-vetails`，分支 `mcp3-vetails` 基远端 main `cdf17834`；取证锚同
 Blocked by: 无
 
 五条全是**已进 main 的票在非作者评审里点出、评审者与推送方都认可、要裁的为零**的尾巴；本票只收尾巴，不重开任何一张原票的题。
