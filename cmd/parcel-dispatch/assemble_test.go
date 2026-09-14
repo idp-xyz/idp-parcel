@@ -20,6 +20,7 @@ import (
 	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	ppports "go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
+	"go.idp.xyz/idp-parcel/internal/parcelpricing/pptest"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/finalconsume"
 	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
 	psnodeops "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/nodeoperations"
@@ -569,100 +570,50 @@ func TestARecordedBuyEvaluationStopsUndecidedAtTheExpectedCostSeamThroughTheRout
 // syntheticPricingEvaluation 造一份 PP 评价：一张 SYN 卡（USD 价表 12.5，合计 HALF_UP 到 0.01——声明了取整策略，
 // SA 读口才不会以 AMOUNT_PRECISION_UNDECLARED 拒）对一份 5 kg / Z1 的包裹输入评价。方向与目的由调用方给：
 // 同一张卡的形状换个方向就是 SELL 评价，正是提供方对两个方向发同一种信封的那个事实。
+// 构造走 PP 的测试专属夹具 pptest，值全部在这里显式给出（票 sa-cc/17）。
 func syntheticPricingEvaluation(
 	t *testing.T, id string, direction ppdomain.PricingDirection, purpose ppdomain.PricingPurpose,
 ) ppdomain.PricingEvaluation {
 	t.Helper()
-	decimal := func(raw string) ppdomain.Decimal { return ppTestValue(t, ppdomain.ParseDecimal, raw) }
-	kilograms := func(raw string) ppdomain.Weight {
-		weight, err := ppdomain.NewWeight(decimal(raw), ppdomain.WeightUnitKilogram)
-		if err != nil {
-			t.Fatalf("重量 %q：%v", raw, err)
-		}
-		return weight
-	}
-	reference := func(kind ppdomain.ArtifactKind, id, version string) ppdomain.VersionReference {
-		value, err := ppdomain.NewVersionReferenceIdentity(kind, id, version)
-		if err != nil {
-			t.Fatalf("版本引用 %s/%s：%v", id, version, err)
-		}
-		return value
-	}
-	usd := ppTestValue(t, ppdomain.NewCurrency, "USD")
-	amount, err := ppdomain.NewMoney(decimal("12.5"), usd)
-	if err != nil {
-		t.Fatalf("金额：%v", err)
-	}
-	entry, err := ppdomain.NewRateEntry(ppTestValue(t, ppdomain.NewRateEntryID, "entry"), "Z1", kilograms("0"), kilograms("10"), amount)
-	if err != nil {
-		t.Fatalf("价表行：%v", err)
-	}
-	period, err := ppdomain.NewEffectivePeriod(
-		time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC))
-	if err != nil {
-		t.Fatalf("有效期：%v", err)
-	}
-	table, err := ppdomain.NewRateTableVersion(reference(ppdomain.ArtifactRateTable, "SYN-TABLE", "v1"),
-		ppdomain.RateTableFamilyWeightZone, usd, ppdomain.WeightUnitKilogram, period, []ppdomain.RateEntry{entry})
-	if err != nil {
-		t.Fatalf("价表：%v", err)
-	}
-	weightRounding, err := ppdomain.NewWeightRoundingPolicy(ppdomain.RoundingNone, kilograms("1"))
-	if err != nil {
-		t.Fatalf("重量取整：%v", err)
-	}
-	weightPolicy, err := ppdomain.NewPricingWeightPolicy(reference(ppdomain.ArtifactWeightPolicy, "SYN-WEIGHT", "v1"),
-		ppdomain.PricingWeightActualOnly, weightRounding, nil)
-	if err != nil {
-		t.Fatalf("计价重量策略：%v", err)
-	}
-	increment, err := ppdomain.NewMoney(decimal("0.01"), usd)
-	if err != nil {
-		t.Fatalf("进位单位：%v", err)
-	}
-	amountRounding, err := ppdomain.NewAmountRoundingPolicy(ppdomain.RoundingHalfUp, increment,
-		[]ppdomain.AmountRoundingPoint{ppdomain.AmountRoundingTotal})
-	if err != nil {
-		t.Fatalf("金额取整策略：%v", err)
-	}
-	structures, err := ppdomain.PricingPlanStructures{}.WithAmountRounding(amountRounding)
-	if err != nil {
-		t.Fatalf("结构：%v", err)
-	}
-	scope := ppTestValue(t, ppdomain.NewPricingScopeID, "SYN-SCOPE-01")
-	plan, err := ppdomain.NewPricingPlanVersion(reference(ppdomain.ArtifactPricingPlan, "SYN-CARD-"+string(direction), "v1"),
-		scope, direction, purpose, ppTestValue(t, ppdomain.NewChargeCode, "BASE_FREIGHT"), period, table, weightPolicy, nil, structures)
-	if err != nil {
-		t.Fatalf("价卡：%v", err)
-	}
-	subject, err := ppdomain.NewAcceptedPackageSubject(ppTestValue(t, ppdomain.NewPackageID, "SYN-PKG-01"))
-	if err != nil {
-		t.Fatalf("评价主体：%v", err)
-	}
-	input, err := ppdomain.NewPricingInputSnapshot(ppTestValue(t, ppdomain.NewTenantID, "tenant-a"), scope, subject, "Z1",
-		kilograms("5"), nil, time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC))
-	if err != nil {
-		t.Fatalf("计价输入：%v", err)
-	}
-	request, err := ppdomain.NewEvaluationRequest(ppTestValue(t, ppdomain.NewEvaluationID, id), plan, input, ppdomain.EvidenceSynthetic)
-	if err != nil {
-		t.Fatalf("评价请求：%v", err)
-	}
-	evaluation := ppdomain.EvaluatePricing(request)
+	plan := pptest.Plan(t, pptest.PlanSpec{
+		Reference:             pptest.IdentityReference(t, ppdomain.ArtifactPricingPlan, "SYN-CARD-"+string(direction), "v1"),
+		TableReference:        pptest.IdentityReference(t, ppdomain.ArtifactRateTable, "SYN-TABLE", "v1"),
+		WeightPolicyReference: pptest.IdentityReference(t, ppdomain.ArtifactWeightPolicy, "SYN-WEIGHT", "v1"),
+		Scope:                 "SYN-SCOPE-01",
+		Direction:             direction,
+		Purpose:               purpose,
+		BaseChargeCode:        "BASE_FREIGHT",
+		Currency:              "USD",
+		Period: pptest.Period{
+			StartsAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+			EndsAt:   time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC),
+		},
+		RateEntryID:         "entry",
+		RateZone:            "Z1",
+		MinimumKilograms:    "0",
+		MaximumKilograms:    "10",
+		RateAmount:          "12.5",
+		WeightRounding:      ppdomain.RoundingNone,
+		WeightStepKilograms: "1",
+		AmountRounding: &pptest.AmountRoundingSpec{
+			Mode:      ppdomain.RoundingHalfUp,
+			Increment: "0.01",
+			Points:    []ppdomain.AmountRoundingPoint{ppdomain.AmountRoundingTotal},
+		},
+	})
+	input := pptest.Input(t, pptest.InputSpec{
+		Tenant:     "tenant-a",
+		Scope:      "SYN-SCOPE-01",
+		PackageID:  "SYN-PKG-01",
+		Zone:       "Z1",
+		Kilograms:  "5",
+		BusinessAt: time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC),
+	})
+	evaluation := pptest.Evaluate(t, id, plan, input)
 	if evaluation.Status() != ppdomain.EvaluationCompleted {
 		t.Fatalf("夹具评价没完成：%s %#v", evaluation.Status(), evaluation.Issues())
 	}
 	return evaluation
-}
-
-// ppTestValue 与 saTestValue 同形，给上面的 PP 夹具用。
-func ppTestValue[T any](t *testing.T, construct func(string) (T, error), raw string) T {
-	t.Helper()
-	value, err := construct(raw)
-	if err != nil {
-		t.Fatalf("构造 %q：%v", raw, err)
-	}
-	return value
 }
 
 // Covers: 路由表第六条——TF 权威交接登记只投 VE 投影，不 FanOut 给 PS。手法同前五条：

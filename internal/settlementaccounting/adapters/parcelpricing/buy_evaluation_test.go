@@ -7,6 +7,7 @@ import (
 	"time"
 
 	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelpricing/pptest"
 	adapter "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/parcelpricing"
 	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	saports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
@@ -44,10 +45,6 @@ func kilograms(t *testing.T, raw string) ppdomain.Weight {
 	return must[ppdomain.Weight](t)(ppdomain.NewWeight(decimal(t, raw), ppdomain.WeightUnitKilogram))
 }
 
-func reference(t *testing.T, kind ppdomain.ArtifactKind, id, version string) ppdomain.VersionReference {
-	return must[ppdomain.VersionReference](t)(ppdomain.NewVersionReferenceIdentity(kind, id, version))
-}
-
 func scope(t *testing.T) ppdomain.PricingScopeID {
 	return must[ppdomain.PricingScopeID](t)(ppdomain.NewPricingScopeID("scope-1"))
 }
@@ -63,39 +60,56 @@ func packageID(t *testing.T, id string) ppdomain.PackageID {
 var basisAt = time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC)
 
 // buyPlan 造一张 BUY·SUPPLIER_COST 的 SYN 卡：USD 价表 12.5，可选的金额取整策略（合计 HALF_UP 到 0.01）。
+// 构造走 PP 的测试专属夹具 pptest，值全部在这里显式给出（票 sa-cc/17）。
 func buyPlan(t *testing.T, direction ppdomain.PricingDirection, purpose ppdomain.PricingPurpose, rounded bool) ppdomain.PricingPlanVersion {
 	t.Helper()
-	usd := must[ppdomain.Currency](t)(ppdomain.NewCurrency("USD"))
-	entryID := must[ppdomain.RateEntryID](t)(ppdomain.NewRateEntryID("entry"))
-	amount := must[ppdomain.Money](t)(ppdomain.NewMoney(decimal(t, "12.5"), usd))
-	entry := must[ppdomain.RateEntry](t)(ppdomain.NewRateEntry(entryID, "Z1", kilograms(t, "0"), kilograms(t, "10"), amount))
-	period := must[ppdomain.EffectivePeriod](t)(ppdomain.NewEffectivePeriod(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC)))
-	table := must[ppdomain.RateTableVersion](t)(ppdomain.NewRateTableVersion(reference(t, ppdomain.ArtifactRateTable, "table", "v1"),
-		ppdomain.RateTableFamilyWeightZone, usd, ppdomain.WeightUnitKilogram, period, []ppdomain.RateEntry{entry}))
-	rounding := must[ppdomain.WeightRoundingPolicy](t)(ppdomain.NewWeightRoundingPolicy(ppdomain.RoundingNone, kilograms(t, "1")))
-	weightPolicy := must[ppdomain.PricingWeightPolicy](t)(ppdomain.NewPricingWeightPolicy(reference(t, ppdomain.ArtifactWeightPolicy, "weight", "v1"), ppdomain.PricingWeightActualOnly, rounding, nil))
-	structures := ppdomain.PricingPlanStructures{}
+	var amountRounding *pptest.AmountRoundingSpec
 	if rounded {
-		increment := must[ppdomain.Money](t)(ppdomain.NewMoney(decimal(t, "0.01"), usd))
-		policy := must[ppdomain.AmountRoundingPolicy](t)(ppdomain.NewAmountRoundingPolicy(ppdomain.RoundingHalfUp, increment, []ppdomain.AmountRoundingPoint{ppdomain.AmountRoundingTotal}))
-		structures = must[ppdomain.PricingPlanStructures](t)(structures.WithAmountRounding(policy))
+		amountRounding = &pptest.AmountRoundingSpec{
+			Mode:      ppdomain.RoundingHalfUp,
+			Increment: "0.01",
+			Points:    []ppdomain.AmountRoundingPoint{ppdomain.AmountRoundingTotal},
+		}
 	}
-	baseCode := must[ppdomain.ChargeCode](t)(ppdomain.NewChargeCode("BASE_FREIGHT"))
-	return must[ppdomain.PricingPlanVersion](t)(ppdomain.NewPricingPlanVersion(reference(t, ppdomain.ArtifactPricingPlan, "SYN-BUY-CARD", "v2"),
-		scope(t), direction, purpose, baseCode, period, table, weightPolicy, nil, structures))
+	return pptest.Plan(t, pptest.PlanSpec{
+		Reference:             pptest.IdentityReference(t, ppdomain.ArtifactPricingPlan, "SYN-BUY-CARD", "v2"),
+		TableReference:        pptest.IdentityReference(t, ppdomain.ArtifactRateTable, "table", "v1"),
+		WeightPolicyReference: pptest.IdentityReference(t, ppdomain.ArtifactWeightPolicy, "weight", "v1"),
+		Scope:                 "scope-1",
+		Direction:             direction,
+		Purpose:               purpose,
+		BaseChargeCode:        "BASE_FREIGHT",
+		Currency:              "USD",
+		Period: pptest.Period{
+			StartsAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+			EndsAt:   time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC),
+		},
+		RateEntryID:         "entry",
+		RateZone:            "Z1",
+		MinimumKilograms:    "0",
+		MaximumKilograms:    "10",
+		RateAmount:          "12.5",
+		WeightRounding:      ppdomain.RoundingNone,
+		WeightStepKilograms: "1",
+		AmountRounding:      amountRounding,
+	})
 }
 
 func packageInput(t *testing.T, tenant, zone string) ppdomain.PricingInputSnapshot {
 	t.Helper()
-	subject := must[ppdomain.EvaluationSubject](t)(ppdomain.NewAcceptedPackageSubject(packageID(t, "pkg-1")))
-	return must[ppdomain.PricingInputSnapshot](t)(ppdomain.NewPricingInputSnapshot(ppTenant(t, tenant), scope(t), subject, zone, kilograms(t, "5"), nil, basisAt))
+	return pptest.Input(t, pptest.InputSpec{
+		Tenant:     tenant,
+		Scope:      "scope-1",
+		PackageID:  "pkg-1",
+		Zone:       zone,
+		Kilograms:  "5",
+		BusinessAt: basisAt,
+	})
 }
 
 func evaluate(t *testing.T, id string, plan ppdomain.PricingPlanVersion, input ppdomain.PricingInputSnapshot) ppdomain.PricingEvaluation {
 	t.Helper()
-	evaluationID := must[ppdomain.EvaluationID](t)(ppdomain.NewEvaluationID(id))
-	request := must[ppdomain.EvaluationRequest](t)(ppdomain.NewEvaluationRequest(evaluationID, plan, input, ppdomain.EvidenceSynthetic))
-	return ppdomain.EvaluatePricing(request)
+	return pptest.Evaluate(t, id, plan, input)
 }
 
 func newAdapter(t *testing.T, evaluations ...ppdomain.PricingEvaluation) *adapter.BuyEvaluationAdapter {

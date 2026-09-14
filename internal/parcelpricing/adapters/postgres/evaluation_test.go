@@ -11,6 +11,7 @@ import (
 	adapter "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
+	"go.idp.xyz/idp-parcel/internal/parcelpricing/pptest"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
@@ -53,120 +54,50 @@ func evaluationValue[T any](t *testing.T, construct func(string) (T, error), raw
 	return built
 }
 
-// syntheticPlan 造一张最小可评价的合成价卡（S 级证据）：单分区重量段费率表+实重策略。
+// syntheticPlan 造一张最小可评价的合成价卡（S 级证据）：单分区重量段费率表+实重策略，三条引用都带指纹、不声明
+// 金额取整策略。构造走本上下文的测试专属夹具 pptest，值全部在这里显式给出（票 sa-cc/17）。
 func syntheticPlan(t *testing.T) domain.PricingPlanVersion {
 	t.Helper()
-	currency := evaluationValue(t, domain.NewCurrency, "USD")
-	amount, err := domain.NewMoneyFromString("10", currency)
-	if err != nil {
-		t.Fatalf("构造金额：%v", err)
-	}
-	zeroWeight, err := domain.NewWeight(evaluationValue(t, domain.ParseDecimal, "0"), domain.WeightUnitKilogram)
-	if err != nil {
-		t.Fatalf("构造零重量：%v", err)
-	}
-	capWeight, err := domain.NewWeight(evaluationValue(t, domain.ParseDecimal, "10"), domain.WeightUnitKilogram)
-	if err != nil {
-		t.Fatalf("构造上限重量：%v", err)
-	}
-	entry, err := domain.NewRateEntry(
-		evaluationValue(t, domain.NewRateEntryID, "entry-1"), "Z1", zeroWeight, capWeight, amount)
-	if err != nil {
-		t.Fatalf("构造费率段：%v", err)
-	}
-	period, err := domain.NewEffectivePeriod(
-		time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
-		time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC),
-	)
-	if err != nil {
-		t.Fatalf("构造有效期：%v", err)
-	}
-	tableRef, err := domain.NewVersionReference(domain.ArtifactRateTable, "table-1", "v1", "sha256:syn-table")
-	if err != nil {
-		t.Fatalf("构造表引用：%v", err)
-	}
-	table, err := domain.NewRateTableVersion(
-		tableRef, domain.RateTableFamilyWeightZone, currency, domain.WeightUnitKilogram,
-		period, []domain.RateEntry{entry})
-	if err != nil {
-		t.Fatalf("构造费率表：%v", err)
-	}
-	stepWeight, err := domain.NewWeight(evaluationValue(t, domain.ParseDecimal, "0.5"), domain.WeightUnitKilogram)
-	if err != nil {
-		t.Fatalf("构造步进重量：%v", err)
-	}
-	rounding, err := domain.NewWeightRoundingPolicy(domain.RoundingCeiling, stepWeight)
-	if err != nil {
-		t.Fatalf("构造取整策略：%v", err)
-	}
-	weightRef, err := domain.NewVersionReference(domain.ArtifactWeightPolicy, "weight-1", "v1", "sha256:syn-weight")
-	if err != nil {
-		t.Fatalf("构造计费重引用：%v", err)
-	}
-	weightPolicy, err := domain.NewPricingWeightPolicy(weightRef, domain.PricingWeightActualOnly, rounding, nil)
-	if err != nil {
-		t.Fatalf("构造计费重策略：%v", err)
-	}
-	planRef, err := domain.NewVersionReference(domain.ArtifactPricingPlan, "plan-1", "v1", "sha256:syn-plan")
-	if err != nil {
-		t.Fatalf("构造方案引用：%v", err)
-	}
-	plan, err := domain.NewPricingPlanVersion(
-		planRef,
-		evaluationValue(t, domain.NewPricingScopeID, "scope-1"),
-		domain.PricingDirectionSell,
-		domain.PricingPurposeCustomerCharge,
-		evaluationValue(t, domain.NewChargeCode, "BASE_FREIGHT"),
-		period,
-		table,
-		weightPolicy,
-		nil,
-		domain.PricingPlanStructures{},
-	)
-	if err != nil {
-		t.Fatalf("构造价卡：%v", err)
-	}
-	return plan
+	return pptest.Plan(t, pptest.PlanSpec{
+		Reference:             pptest.FingerprintReference(t, domain.ArtifactPricingPlan, "plan-1", "v1", "sha256:syn-plan"),
+		TableReference:        pptest.FingerprintReference(t, domain.ArtifactRateTable, "table-1", "v1", "sha256:syn-table"),
+		WeightPolicyReference: pptest.FingerprintReference(t, domain.ArtifactWeightPolicy, "weight-1", "v1", "sha256:syn-weight"),
+		Scope:                 "scope-1",
+		Direction:             domain.PricingDirectionSell,
+		Purpose:               domain.PricingPurposeCustomerCharge,
+		BaseChargeCode:        "BASE_FREIGHT",
+		Currency:              "USD",
+		Period: pptest.Period{
+			StartsAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+			EndsAt:   time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC),
+		},
+		RateEntryID:         "entry-1",
+		RateZone:            "Z1",
+		MinimumKilograms:    "0",
+		MaximumKilograms:    "10",
+		RateAmount:          "10",
+		WeightRounding:      domain.RoundingCeiling,
+		WeightStepKilograms: "0.5",
+		AmountRounding:      nil,
+	})
 }
 
 func syntheticInput(t *testing.T, tenant, zone string) domain.PricingInputSnapshot {
 	t.Helper()
-	subject, err := domain.NewAcceptedPackageSubject(evaluationValue(t, domain.NewPackageID, "package-1"))
-	if err != nil {
-		t.Fatalf("构造对象：%v", err)
-	}
-	actual, err := domain.NewWeight(evaluationValue(t, domain.ParseDecimal, "5"), domain.WeightUnitKilogram)
-	if err != nil {
-		t.Fatalf("构造实重：%v", err)
-	}
-	input, err := domain.NewPricingInputSnapshot(
-		evaluationValue(t, domain.NewTenantID, tenant),
-		evaluationValue(t, domain.NewPricingScopeID, "scope-1"),
-		subject,
-		zone,
-		actual,
-		nil,
-		time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC),
-	)
-	if err != nil {
-		t.Fatalf("构造输入快照：%v", err)
-	}
-	return input
+	return pptest.Input(t, pptest.InputSpec{
+		Tenant:     tenant,
+		Scope:      "scope-1",
+		PackageID:  "package-1",
+		Zone:       zone,
+		Kilograms:  "5",
+		BusinessAt: time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC),
+	})
 }
 
 // evaluatedFixture 真算一份评价：zone=Z1 命中费率得 COMPLETED，Z9 落空得失败形态。
 func evaluatedFixture(t *testing.T, id, tenant, zone string) domain.PricingEvaluation {
 	t.Helper()
-	request, err := domain.NewEvaluationRequest(
-		evaluationValue(t, domain.NewEvaluationID, id),
-		syntheticPlan(t),
-		syntheticInput(t, tenant, zone),
-		domain.EvidenceSynthetic,
-	)
-	if err != nil {
-		t.Fatalf("构造评价请求：%v", err)
-	}
-	return domain.EvaluatePricing(request)
+	return pptest.Evaluate(t, id, syntheticPlan(t), syntheticInput(t, tenant, zone))
 }
 
 func snapshotOf(t *testing.T, evaluation domain.PricingEvaluation) string {
