@@ -25,7 +25,12 @@ import (
 	nrapplication "go.idp.xyz/idp-parcel/internal/networkrouting/application"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
+	ppidentity "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/identity"
+	ppinbox "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/inbox"
 	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
+	ppsettlement "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/settlementaccounting"
+	ppapplication "go.idp.xyz/idp-parcel/internal/parcelpricing/application"
+	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	psidentity "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity"
 	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/labelfinal"
@@ -526,6 +531,31 @@ var buyEvaluationRecordedUndecidedSentinels = []error{
 	sapricing.ErrSourceReferencesUnrecorded,
 }
 
+// evaluationRequestSubmittedUndecidedSentinels 是 SA 评价请求已提交信封 → PP「按评价请求形成评价」这条线
+// （sa-cc/11 裁决 5）登记的未决哨兵，每一枚是入口停在的一格「等谁」，恢复动作各不相同，所以分开列：
+//   - ppsettlement.ErrEvaluationRequestNotVisible——信封所指的请求在 SA 还读不回（请求与信封同事务落库，读不回
+//     只剩可见性滞后），或读口自己答不出；续办，重投会改变结果。
+//   - ppsettlement.ErrPriceCardNotConfigured——（租户、范围、方向、目的、时点）下没有价卡。缺的是价卡，实例半边
+//     （PAR-SET-03）；等租户登记一张，本组合根不替它配、不种默认卡。
+//   - ppsettlement.ErrPriceCardApplicabilityConflict——多于一版价卡同时适用，交人裁；不挑最新、不挑先登记的。
+//   - ppsettlement.ErrPricingInputUnavailable——造不出计价输入快照（裁决 4）：包裹主体 / 分区 / 计费重量三样各归
+//     一只本上下文今天没有的读口（TF 发生项成员对象、NO / PS 实重尺寸、PS 邮编路线），入口点名之后停在这里。
+//     按「未确认规则保持显式未决」：不猜不填不拿默认重量顶、零写入；恢复动作是等提供方那一侧的只读口接上
+//     ——后继票，不是传输。今天每一封 BUY 请求信封都停在前三格之一。
+//   - ppsettlement.ErrEvaluationFormationUndecided——依赖故障（回指读口 / 铸造口 / 评价库），形成与否未知；
+//     含同租户同回指第二份撞迁移 0010 唯一索引那一格，重投按回指命中`已存在`定稿。
+//
+// 不在名单里、落 publish_failed 的：ppsettlement.ErrUntranslatableReference（引用坏了，编程错误）、
+// ppsettlement.ErrUntranslatableAnswer（SA 记录译不成 PP 命令 / 译出的命令被入口答未受理——两侧词汇表分歧，
+// 重投不会变好）、入口上抛的结构性错误（封闭集之外的结果、替身装错）。
+var evaluationRequestSubmittedUndecidedSentinels = []error{
+	ppsettlement.ErrEvaluationRequestNotVisible,
+	ppsettlement.ErrPriceCardNotConfigured,
+	ppsettlement.ErrPriceCardApplicabilityConflict,
+	ppsettlement.ErrPricingInputUnavailable,
+	ppsettlement.ErrEvaluationFormationUndecided,
+}
+
 // wireDispatcher 接依赖图。它与读环境分开，是为了让组合根能对着真库整体验一遍——
 // 一个只能靠进程起停验证的装配点，等于没有验证。
 //
@@ -785,6 +815,16 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 		return nil, fmt.Errorf("parcel-dispatch: buy evaluation recorded undecided translation: %w", err)
 	}
 
+	evaluationRequests, err := formEvaluationOnEvaluationRequestConsumer(db, outboxStore, inboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	routedEvaluationRequests, err := dispatch.WithUndecidedSentinels(
+		evaluationRequests, evaluationRequestSubmittedUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: evaluation request submitted undecided translation: %w", err)
+	}
+
 	veHandover, err := deriveHandoverConsumer(db, inboxStore, projectionDerive)
 	if err != nil {
 		return nil, err
@@ -879,6 +919,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 			ccinbox.ExternalFundsFactAdoptedEventType:              routedFundsFacts,
 			sainbox.DutyPaymentVerificationFormedEventType:         routedVerifications,
 			sainbox.BuyEvaluationRecordedEventType:                 routedBuyEvaluations,
+			ppinbox.EvaluationRequestSubmittedEventType:            routedEvaluationRequests,
 			veinbox.TransportHandoverRegisteredEventType:           veHandoverRouted,
 			veinbox.ExternalCarrierTrackingJudgedEventType:         veExternalTrackingRouted,
 			veinbox.FinalOutcomeFormedEventType:                    veFinalOutcomeRouted,
@@ -2333,6 +2374,98 @@ func formSupplierExpectedCostOnBuyEvaluationConsumer(
 	consumer, err := sainbox.NewBuyEvaluationRecordedConsumer(db.Transactor(), inboxStore, processing)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: buy evaluation recorded consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// evaluationRequestFormationEvidence 是这条线今天形成的每一份评价的证据层级。取 S 不是默认值，是现状的如实
+// 陈述：本仓尚无租户，价卡登记册里只有合成实例（`SYN-`），从它们形成的评价只能是隔离合成 S（AGENTS「证据层级
+// 诚实」）。某租户实例进入生产、这条线要形成 P 级评价，是 PN-08 `Go` 对那一个租户实例的裁决，本组合根作不了
+// ——那天要改的不是把这个常量翻成 P（那会把仍在跑的合成实例一并抬成生产证据），而是让证据层级按租户实例从
+// 登记册取。适配器构造期拒空值：这一格必须由装配方说出来。
+const evaluationRequestFormationEvidence = ppdomain.EvidenceSynthetic
+
+// formEvaluationOnEvaluationRequestConsumer 接 sa-cc/11 那条线（裁决 5）：SA 登记一份评价请求后同事务交出的
+// `settlement-accounting.evaluation-request.submitted` 引用式信封 → PP 消费门 → 按（租户 + 请求 ID）经 PP 的消费侧
+// 适配器读 SA 评价请求登记册的只读半边（ADR-0025；口径照 sa-cc/03 裁决：只读口、信封所指那一份）→ 译成命令交
+// 「按评价请求形成评价」入口 → 入口三步：解析在用价卡 → 造快照 → 交既有 EvaluatePricingHandler。跨上下文翻译只在
+// PP 的 `adapters/settlementaccounting`；PP application 不 import SA。这是 PP 第一条生产形成路：EvaluatePricingHandler
+// 此前在组合根里零调用。
+//
+// 入口的 Inputs 读口**不装**（裁决 4 的量）：包裹主体 / 分区 / 计费重量三样各归 TF / NO / PS 一只本上下文今天没有的
+// 读口，接一个永远答「不在」的替身等于把替身放进生产装配；入口对缺席答「输入不可得」并点名那三只，消费者据以
+// 停在 evaluationRequestSubmittedUndecidedSentinels 那一格。读口接上那天，后继票在这里补 Inputs 一行，消费者、
+// 入口与路由行不变。
+//
+// EvaluatePricingHandler 的序列 / 目录两对在用解析成对装齐（ADR-0099 决定四、ADR-0109 Decision 三）：卡绑了序列或
+// 目录时评价前按在用版本补齐取值，解析不到留说明落待判断；只装一半构造期就拒。
+func formEvaluationOnEvaluationRequestConsumer(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	inboxStore *inbox.Store,
+	clock systemClock,
+) (dispatch.Consumer, error) {
+	evaluations, err := pppostgres.NewEvaluations(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pricing evaluation store: %w", err)
+	}
+	handoff, err := pppostgres.NewOutboxEvaluationHandoff(db, outboxStore, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pricing evaluation handoff: %w", err)
+	}
+	seriesVersions, err := pppostgres.NewReferenceSeriesVersions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: reference series register: %w", err)
+	}
+	seriesReviews, err := pppostgres.NewReferenceSeriesReviews(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: reference series in-force resolver: %w", err)
+	}
+	catalogueVersions, err := pppostgres.NewReferenceCatalogueVersions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: reference catalogue register: %w", err)
+	}
+	catalogueReviews, err := pppostgres.NewReferenceCatalogueReviews(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: reference catalogue in-force resolver: %w", err)
+	}
+	evaluate := ppapplication.NewEvaluatePricingHandler(ppapplication.EvaluatePricingDeps{
+		Store:            evaluations,
+		Downstream:       handoff,
+		Clock:            clock,
+		InForce:          seriesReviews,
+		SeriesVersions:   seriesVersions,
+		CatalogueInForce: catalogueReviews,
+		Catalogues:       catalogueVersions,
+	})
+	cards, err := pppostgres.NewPriceCards(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: price card in-force resolver: %w", err)
+	}
+	identities, err := ppidentity.NewEvaluationIdentities()
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pricing evaluation identities: %w", err)
+	}
+	form, err := ppapplication.NewFormEvaluationFromRequestHandler(ppapplication.FormEvaluationFromRequestDeps{
+		Evaluations: evaluations,
+		PriceCards:  cards,
+		Identity:    identities,
+		Evaluate:    evaluate,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: form evaluation from request: %w", err)
+	}
+	requests, err := sapostgres.NewEvaluationRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: settlement evaluation request view: %w", err)
+	}
+	processing, err := ppsettlement.NewFormOnEvaluationRequestSubmittedAdapter(requests, form, evaluationRequestFormationEvidence)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: form on evaluation request submitted: %w", err)
+	}
+	consumer, err := ppinbox.NewEvaluationRequestSubmittedConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: evaluation request submitted consumer: %w", err)
 	}
 	return consumer, nil
 }

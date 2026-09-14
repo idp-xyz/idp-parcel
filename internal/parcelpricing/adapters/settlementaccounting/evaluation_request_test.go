@@ -11,7 +11,7 @@ import (
 )
 
 // 本文件证 SA 评价请求记录 → PP「按评价请求形成评价」命令的翻译（票 sa-cc/11 做法 1「取主要范围、计算目的、合格
-// 来源引用三件」+ 裁决 1 收的六样）。只译不判：一个数字都不出现，SA 的内容一格都不复制进评价——命令里的
+// 来源引用三件」+ 裁决 1 让入口收的那几样）。只译不判：一个数字都不出现，SA 的内容一格都不复制进评价——命令里的
 // 来源引用是钥匙，评价上留的只有回指。
 
 var occurredAt = time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC)
@@ -62,7 +62,7 @@ func synRecord(t *testing.T) saports.EvaluationRequestRecord {
 	}
 }
 
-// Covers: 六样逐格译——租户 / 回指取键、范围按字面、BUY_SUPPLIER_COST 译成 BUY + SUPPLIER_COST 一对、计价基准时点取
+// Covers: 命令逐格译——租户 / 回指取键、范围按字面、BUY_SUPPLIER_COST 译成 BUY + SUPPLIER_COST 一对、计价基准时点取
 // 发生项业务时间（不是 RequestedAt 也不是 RecordedAt）、三件来源引用按字面带钥匙、证据层级照装配方声明。
 func TestAnEvaluationRequestRecordTranslatesIntoAFormationCommand(t *testing.T) {
 	command, err := adapter.TranslateEvaluationRequest(synRecord(t), ppdomain.EvidenceSynthetic)

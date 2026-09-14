@@ -34,7 +34,7 @@ type EvaluationRequestSource interface {
 	FindByID(ctx context.Context, key saports.EvaluationRequestKey) (saports.EvaluationRequestRecord, bool, error)
 }
 
-// TranslateEvaluationRequest 把 SA 的一份评价请求记录译成本上下文的形成命令（裁决 1 收的六样）。
+// TranslateEvaluationRequest 把 SA 的一份评价请求记录译成本上下文的形成命令（裁决 1 让入口收的那几样）。
 //
 //   - 租户与回指取登记册的键：回指是 SA 铸造的请求 ID 的字面，不派生、不改写。
 //   - 主要范围按字面译成 PricingScopeID——SA 的 PrimaryScopeReference 与 PP 的计价范围是否同一标识空间归两侧 owner

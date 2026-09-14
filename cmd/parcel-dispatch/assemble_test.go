@@ -17,7 +17,9 @@ import (
 	ccports "go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 	nrinbox "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/inbox"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
+	ppinbox "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/inbox"
 	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
+	ppsettlement "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/settlementaccounting"
 	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	ppports "go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/pptest"
@@ -689,6 +691,205 @@ func syntheticPricingEvaluation(
 		t.Fatalf("夹具评价没完成：%s %#v", evaluation.Status(), evaluation.Issues())
 	}
 	return evaluation
+}
+
+// Covers: 路由表的 SA 评价请求已提交一条（sa-cc/11 裁决 5）与完成判据 3「真库装配用例一正一反」——在生产依赖图上：
+// 正：SA 用真登记册落一份 BUY 评价请求、用真 Outbox 适配器把信封入队（事件类型由提供方写，路由表按消费方自写的常量
+// 认——两串相等在这里被真库钉住）；PP 册上有一张适用的 SYN BUY 卡 → PP 消费者按引用回查 SA 登记册 → 入口解析到卡 →
+// 造快照停在「输入不可得」并点名三只读口（裁决 4）→ dispatch.consumer_undecided：inbox 无账、parcel_pricing.evaluation
+// 零行，等读口接上后重投。今天生产图上形成不了任何一份评价，这条正例证的就是「诚实地停在那一格」。
+// 反：另一份请求的范围下没有卡 → 未配置同样未决、零写入，观察口交出的原文说的是缺价卡不是缺输入；信封指着 SA 还
+// 没有的请求 → 可见性滞后未决；载荷缺请求 ID → 毒丸入账定稿。
+//
+// 「重投不翻倍」不在这里假装：形成路今天到不了入册，重投同一封在应用层按回指命中`已存在`
+// （application 用例 TestFormEvaluationFromRequestAnswersExistingByBackReference），库上由迁移 0010 的部分唯一索引守
+// （pppostgres 用例 evaluation_by_request_test.go），inbox 认领由 ppinbox 的真库用例守。
+func TestASubmittedEvaluationRequestStopsHonestlyAtThePricingInputSeamThroughTheRouteTable(t *testing.T) {
+	observed := map[string]error{}
+	beat, db, store := wiredBeat(t, dispatch.WithDeliveryFailureObserver(
+		func(delivery eventing.Delivery, _ eventing.FailureCode, err error) {
+			observed[string(delivery.Envelope.ID)] = err
+		}))
+
+	// PP 册上一张适用的 SYN BUY 卡：范围 SYN-SCOPE-11，期内覆盖发生项业务时点。
+	cards, err := pppostgres.NewPriceCards(db)
+	if err != nil {
+		t.Fatalf("PP 价卡登记册：%v", err)
+	}
+	plan := pptest.Plan(t, pptest.PlanSpec{
+		Reference:             pptest.IdentityReference(t, ppdomain.ArtifactPricingPlan, "SYN-BUY-CARD-11", "v1"),
+		TableReference:        pptest.IdentityReference(t, ppdomain.ArtifactRateTable, "SYN-BUY-TABLE-11", "v1"),
+		WeightPolicyReference: pptest.IdentityReference(t, ppdomain.ArtifactWeightPolicy, "SYN-BUY-WEIGHT-11", "v1"),
+		Scope:                 "SYN-SCOPE-11",
+		Direction:             ppdomain.PricingDirectionBuy,
+		Purpose:               ppdomain.PricingPurposeSupplierCost,
+		BaseChargeCode:        "BASE_FREIGHT",
+		Currency:              "USD",
+		Period: pptest.Period{
+			StartsAt: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+			EndsAt:   time.Date(2027, 1, 1, 0, 0, 0, 0, time.UTC),
+		},
+		RateEntryID:         "entry",
+		RateZone:            "Z1",
+		MinimumKilograms:    "0",
+		MaximumKilograms:    "10",
+		RateAmount:          "12",
+		WeightRounding:      ppdomain.RoundingCeiling,
+		WeightStepKilograms: "0.5",
+	})
+	source, err := ppdomain.NewSourceFileIdentity("SYN-PRC-CARD-11.xlsx",
+		"0000000000000000000000000000000000000000000000000000000000000011")
+	if err != nil {
+		t.Fatalf("源文件身份：%v", err)
+	}
+	grant, err := ppdomain.NewVersionReference(ppdomain.ArtifactCommercialAuthorization, "SYN-PRC-GRANT-11", "v1", "sha256:syn-grant-11")
+	if err != nil {
+		t.Fatalf("授权引用：%v", err)
+	}
+	tenant, err := ppdomain.NewTenantID("tenant-a")
+	if err != nil {
+		t.Fatalf("租户：%v", err)
+	}
+	registration, err := ppdomain.NewPriceCardRegistration(tenant, plan, source, grant, "SYN-PRC-GOVERNANCE")
+	if err != nil {
+		t.Fatalf("价卡登记：%v", err)
+	}
+	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		_, err := cards.Register(txCtx, registration)
+		return err
+	}); err != nil {
+		t.Fatalf("登记 SYN BUY 卡：%v", err)
+	}
+
+	// SA 侧：两份 BUY 评价请求经真登记册 + 真 Outbox 适配器落库入队——有卡的范围一份、没卡的范围一份。
+	requests, err := sapostgres.NewEvaluationRequests(db)
+	if err != nil {
+		t.Fatalf("SA 评价请求登记册：%v", err)
+	}
+	requestHandoff, err := sapostgres.NewOutboxEvaluationRequestHandoff(db, store, systemClock{})
+	if err != nil {
+		t.Fatalf("SA 评价请求交接：%v", err)
+	}
+	occurredAt := time.Date(2026, 8, 7, 10, 0, 0, 0, time.UTC)
+	submit := func(requestID, scope string) saports.EvaluationRequestRecord {
+		occurrence, err := sadomain.NewTransportChargeOccurrence(
+			saValue(t, sadomain.NewChargeOccurrenceID, "SYN-OCC-"+requestID),
+			saValue(t, sadomain.NewOccurrenceReasonReference, "SYN-REASON-BOOKING"),
+			saValue(t, sadomain.NewOccurrenceVersion, "v1"),
+			occurredAt,
+		)
+		if err != nil {
+			t.Fatalf("发生项引用：%v", err)
+		}
+		request, err := sadomain.SubmitEvaluationRequest(sadomain.EvaluationRequestSpec{
+			ID:      saValue(t, sadomain.NewEvaluationRequestID, requestID),
+			Scope:   saValue(t, sadomain.NewPrimaryScopeReference, scope),
+			Purpose: sadomain.BuySupplierCost,
+			Sources: sadomain.EligibleSourceReferences{
+				Occurrence: occurrence,
+				FeeItem:    saValue(t, sadomain.NewFeeItemReference, "SYN-FEE-11"),
+				Agreement:  saValue(t, sadomain.NewSupplierAgreementReference, "SYN-AGR-11@v1"),
+			},
+			RequestedAt: occurredAt.Add(time.Hour),
+			RequestedBy: saValue(t, sadomain.NewRequesterReference, "SYN-SETTLEMENT-JOB"),
+		})
+		if err != nil {
+			t.Fatalf("SA 评价请求：%v", err)
+		}
+		return saports.EvaluationRequestRecord{
+			Key:        saports.EvaluationRequestKey{TenantID: saValue(t, sadomain.NewTenantID, "tenant-a"), Request: request.ID()},
+			Request:    request,
+			RecordedAt: beatInstant(),
+		}
+	}
+	carded := submit("EVREQ-SYN-CARDED", "SYN-SCOPE-11")
+	uncarded := submit("EVREQ-SYN-NOCARD", "SYN-SCOPE-NOCARD")
+	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		for _, record := range []saports.EvaluationRequestRecord{carded, uncarded} {
+			if _, err := requests.Save(txCtx, record); err != nil {
+				return err
+			}
+			if err := requestHandoff.HandOffEvaluationRequest(txCtx, saports.EvaluationRequestIntent{Record: record}); err != nil {
+				return err
+			}
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("SA 侧落请求并入队：%v", err)
+	}
+	// 反例二：信封指着 SA 还没有的请求。反例三：载荷缺请求 ID——毒丸。
+	enqueueForBeat(t, db, store, "EVREQ-SYN-MISSING", ppinbox.EvaluationRequestSubmittedEventType,
+		`{"tenantId":"tenant-a","evaluationRequestId":"EVREQ-SYN-MISSING"}`)
+	enqueueForBeat(t, db, store, "EVREQ-SYN-POISON", ppinbox.EvaluationRequestSubmittedEventType,
+		`{"tenantId":"tenant-a"}`)
+
+	published, err := beat.DispatchOnce(t.Context())
+	if err != nil {
+		t.Fatalf("一拍：%v", err)
+	}
+	cardedID := "tenant-a/evaluation-request/EVREQ-SYN-CARDED/submitted"
+	uncardedID := "tenant-a/evaluation-request/EVREQ-SYN-NOCARD/submitted"
+	if published != 1 {
+		t.Fatalf("published = %d, want 1（正：有卡的停在输入不可得；反：没卡的未配置、缺席请求未决、毒丸入账）；有卡的失败码 = %q 原文 = %v",
+			published, recordedFailureCode(t, db, cardedID), observed[cardedID])
+	}
+	for _, eventID := range []string{cardedID, uncardedID, "EVREQ-SYN-MISSING"} {
+		if got := recordedFailureCode(t, db, eventID); got != "dispatch.consumer_undecided" {
+			t.Fatalf("%s：failure_code = %q, want dispatch.consumer_undecided；原文 = %v", eventID, got, observed[eventID])
+		}
+	}
+	// 三封未决各停在哪一格，观察口交出的原文要分得开——失败码按恢复动作取值，本来答不出这一层。
+	if err := observed[cardedID]; !errors.Is(err, ppsettlement.ErrPricingInputUnavailable) || !strings.Contains(err.Error(), "transport-fulfillment") {
+		t.Fatalf("有卡的请求没停在「输入不可得」或没点名读口：%v", err)
+	}
+	if err := observed[uncardedID]; !errors.Is(err, ppsettlement.ErrPriceCardNotConfigured) {
+		t.Fatalf("没卡的请求没停在「未配置」：%v", err)
+	}
+	if err := observed["EVREQ-SYN-MISSING"]; !errors.Is(err, ppsettlement.ErrEvaluationRequestNotVisible) {
+		t.Fatalf("SA 还没有的请求没停在「还看不见」：%v", err)
+	}
+
+	querier, err := db.ReadExecutor(t.Context())
+	if err != nil {
+		t.Fatalf("取读执行器：%v", err)
+	}
+	var evaluationRows int
+	if err := querier.QueryRow(t.Context(),
+		`SELECT count(*) FROM parcel_pricing.evaluation WHERE tenant_id = $1`, "tenant-a",
+	).Scan(&evaluationRows); err != nil {
+		t.Fatalf("数评价行：%v", err)
+	}
+	if evaluationRows != 0 {
+		t.Fatalf("输入不可得却形成了评价：parcel_pricing.evaluation 有 %d 行", evaluationRows)
+	}
+	inboxRows := func(eventID string) int {
+		var count int
+		if err := querier.QueryRow(t.Context(),
+			`SELECT count(*) FROM `+migrate.SchemaBento+`.inbox WHERE consumer = $1 AND event_id = $2`,
+			"parcel-pricing/form-evaluation-from-request", eventID,
+		).Scan(&count); err != nil {
+			t.Fatalf("数 inbox：%v", err)
+		}
+		return count
+	}
+	for _, eventID := range []string{cardedID, uncardedID, "EVREQ-SYN-MISSING"} {
+		if n := inboxRows(eventID); n != 0 {
+			t.Fatalf("%s 未决必须回滚：inbox 行数 = %d, want 0", eventID, n)
+		}
+	}
+	if n := inboxRows("EVREQ-SYN-POISON"); n != 1 {
+		t.Fatalf("毒丸要拒收入账不重投：inbox 行数 = %d, want 1", n)
+	}
+}
+
+// saValue 是 SA 值对象构造器的测试速记：构造失败即用例失败。
+func saValue[T any](t *testing.T, construct func(string) (T, error), raw string) T {
+	t.Helper()
+	built, err := construct(raw)
+	if err != nil {
+		t.Fatalf("construct %q: %v", raw, err)
+	}
+	return built
 }
 
 // Covers: 路由表第六条——TF 权威交接登记只投 VE 投影，不 FanOut 给 PS。手法同前五条：
