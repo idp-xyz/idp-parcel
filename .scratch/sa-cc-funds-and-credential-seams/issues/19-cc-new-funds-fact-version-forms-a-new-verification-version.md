@@ -51,3 +51,4 @@ Blocked by: 无（[13](13-cc-correction-version-inbound-registration-and-rerecon
 ## Comments
 
 - 2026-09-14 14:0x · 通道 1：立票（推送方按 13 裁决 2 立）。只写票面，未动代码。
+- 2026-09-14 16:0x · 通道 1（接管会话）：sa-cc/13 补评审 ← 通道 4 Spec 非阻断 2 给本票的一句——`VerifyPayment` 在生产有调用方（`cmd/parcel-api/assemble_customs_registration.go` `transactionalDutyPaymentVerificationRegistration.VerifyPayment`、`cmd/parcel-customs-register/translate.go`）；13 之后同一事实 ≥ 2 版时付款人维读的是最近接收那一版，而 `duty_payment_verification` 键（租户、税费、资金事实、范围、指纹）里没有资金版本——v2 到达后调用方以同三轴同依据重核落`已存在`，形成不出「新核对版本」。**本票立字时把「核对身份缺资金版本」写成完成判据**（做法 3 已接，判据里点名）。同一张键的另一维（程序）在 [22](22-cc-duty-verification-procedure-is-caller-asserted-and-not-recorded.md)，两票若同期在途改键合一笔。
