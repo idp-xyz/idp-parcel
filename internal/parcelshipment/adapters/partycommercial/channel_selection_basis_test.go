@@ -268,8 +268,9 @@ func (fixture selectionFixture) deps() adapter.ChannelSelectionBasisTranslatorDe
 	}
 }
 
-// Covers: 票 lc/35 收 lc/29 评审 Standards 那条与 Spec 那条——两个 PC 读口不是实例半边，nil 在构造期拒（不是到
-// LoadLatest 那一步 panic）；三个实例半边源**没装**（nil）与源答「未配置」是同一格，各停在自己具名的那一处。
+// Covers: 票 lc/35 收 lc/29 评审 Standards 那条与 Spec 那条——账号使用授权与协议内容两个读口是 PC 的读口、不是
+// 实例半边，nil 在构造期拒（不是到 LoadLatest 那一步 panic）；授权源 / 协议源 / 接受时解析源这些实例半边源
+// **没装**（nil）与源答「未配置」是同一格，各停在自己具名的那一处。
 func TestTheTranslatorRefusesNilReadersAndNamesEachUnwiredSource(t *testing.T) {
 	t.Parallel()
 

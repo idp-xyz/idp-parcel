@@ -109,8 +109,9 @@ type EstablishSelectedLabelTransactionCommand struct {
 }
 
 // ChannelSelector 是择优那一段的窄面：SelectChannelCandidateHandler.Select 就是它。收接口而不是那个具体类型，
-// 是为了让组合根在它外面套事务壳（决定记录要在事务里写）而编排不必知道壳的存在。壳只管事务：Select 不返 error
-// 就提交、返 error 就回滚——并列与无人参选是结果格不是 error，壳不必认任何领域哨兵（票 35 做法二）。
+// 是为了让组合根在它外面套事务壳（决定记录要在事务里写）而编排不必知道壳的存在。壳怎么提交、怎么回滚写在组合根
+// `cmd/parcel-api` 的 transactionalChannelSelection 头注，此处只承诺本层这一半：并列与无人参选是结果格不是 error，
+// 壳因此不必认任何领域哨兵（票 35 做法二）。
 type ChannelSelector interface {
 	Select(ctx context.Context, query ports.ChannelSelectionQuery) (ChannelSelectionResult, error)
 }

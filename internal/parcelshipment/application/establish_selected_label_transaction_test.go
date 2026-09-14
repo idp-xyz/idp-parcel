@@ -273,7 +273,7 @@ func TestEstablishmentAnswersPassThroughUnchanged(t *testing.T) {
 	}
 }
 
-// Covers: 装配缺件响亮失败——四口任一为 nil 不得静默走到别的段。
+// Covers: 装配缺件响亮失败——任一口为 nil 不得静默走到别的段。
 func TestAHalfWiredFlowRefusesLoudly(t *testing.T) {
 	handler := application.NewEstablishSelectedLabelTransactionHandler(application.EstablishSelectedLabelTransactionDeps{})
 	if _, err := handler.Establish(context.Background(), selectedFlowCommand(t)); !errors.Is(err, application.ErrSelectedLabelTransactionFlowMisconfigured) {
