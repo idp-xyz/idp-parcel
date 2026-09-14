@@ -201,7 +201,7 @@ type CatalogRegistration struct {
 
 func NewCatalogRegistration(registry CatalogRegistries) (*CatalogRegistration, error) {
 	if registry == nil {
-		return nil, fmt.Errorf("visibility exception application: catalog registry is required")
+		return nil, fmt.Errorf("visibility exception application: catalog registries are required")
 	}
 	return &CatalogRegistration{registry: registry}, nil
 }

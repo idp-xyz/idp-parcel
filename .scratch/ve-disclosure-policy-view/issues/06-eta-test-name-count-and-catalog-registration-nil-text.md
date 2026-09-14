@@ -1,7 +1,7 @@
 # ve-disc/05 非作者评审 Standards 非阻断两条一笔收口：`TestAnETADemandsItsSevenParts` 改名去数、`NewCatalogRegistration` 拒 nil 文本随 `CatalogRegistries` 改口
 
 Category: chore
-Status: in-progress——2026-09-14 10:1x 通道 4 按通道 1 派单 task-c0000fd2 自立自做（评审尾巴 A 类推送方派单、作者自立票自做，先例 lc/38 / sa-cc/17 / ve-disc/05），分支 `mcp4-tails2` 基远端 main `6bbf2bf0`（树 `D:/tops/idp-parcel-mcp4-tails2`），与 [sa-cc/18](../../sa-cc-funds-and-credential-seams/issues/18-sa08-count-comments-and-pp-value-helpers-unified.md) 同分支；要裁的为零；本目录无 `spec.md`，不为一张尾巴票新造（ve-disc/05 判断项 ① 同一裁法）
+Status: resolved——完工待非作者评审进 main，2026-09-14 10:2x（分支 `mcp4-tails2` 基远端 main `6bbf2bf0`；条 1 `1735f723`、条 2 本笔，完成记录随条 2 同提交，见 Comments「完工」；清点预报零差）；此前 in-progress——2026-09-14 10:1x 通道 4 按通道 1 派单 task-c0000fd2 自立自做（评审尾巴 A 类推送方派单、作者自立票自做，先例 lc/38 / sa-cc/17 / ve-disc/05），分支 `mcp4-tails2` 基远端 main `6bbf2bf0`（树 `D:/tops/idp-parcel-mcp4-tails2`），与 [sa-cc/18](../../sa-cc-funds-and-credential-seams/issues/18-sa08-count-comments-and-pp-value-helpers-unified.md) 同分支；要裁的为零；本目录无 `spec.md`，不为一张尾巴票新造（ve-disc/05 判断项 ① 同一裁法）
 Blocked by: 无（[05](05-ve-review-tails-counts-rename-nil-sentinel-and-adr-0136-addendum.md) 已进 main `a34f439c`，两条出处全在其 Comments「评审 ← 通道 1」）。撞点：推送方同期只改 `.scratch/` 待裁票面、ADR-0136 一句补记、tasks.md，与本票零重叠；共享树不碰
 
 ## 缺口（出处逐条指到评审原话；取证于 `6bbf2bf0`，开工先重量）
@@ -40,3 +40,10 @@ Blocked by: 无（[05](05-ve-review-tails-counts-rename-nil-sentinel-and-adr-013
 ## Comments
 
 - 2026-09-14 10:1x · 通道 4（task-c0000fd2）：立票，Status 直接 in-progress，作者自立自做。**只写票面，未动代码。** 两条在 `6bbf2bf0` 上重量过：条 1 只一处声明、无引用；条 2 另有 NR 同文本一处，形参名相符、不动。
+- **2026-09-14 10:1x–10:2x · 通道 4（task-c0000fd2）· 完工**。分支 `mcp4-tails2` 基远端 main `6bbf2bf0`，与 sa-cc/18 同分支（推送方重放后 main 上 SHA 会换，对照由推送方在「进 main 记录」补）。立票笔 `2a61e0d0`（两票 + sa-cc spec 行，无代码）。
+  - **条 1 `1735f723`**：`TestAnETADemandsItsSevenParts` → `TestAnETADemandsItsFullShape`，用例正文与 `Covers:` 头注不动；`-run` PASS。
+  - **条 2 本笔**：`NewCatalogRegistration` 拒 nil 文本 →「visibility exception application: catalog registries are required」，与形参 `registry CatalogRegistries` 对齐；其余零改。NR `NewNetworkCatalogRegistration` 的「catalog registry is required」形参类型就叫 `NetworkCatalogRegistry`，文本与名相符，不动。
+  - **验（本机，钉本笔）**：`gofmt -l`（暂存 blob）空；`go build ./...` / `go vet ./...` 0；不带 DSN `go test -count=1` VE 全部包 + `internal/architecture` ok（两条都不碰持久化）。未跑全量。
+  - **判据逐项**：1 ✓ `git grep -n 'SevenParts' -- internal/` 零、`TestAnETADemandsItsFullShape` 一处、`-run` PASS；2 ✓ `git grep -n 'catalog registry is required' -- internal/visibilityexception/` 零、`catalog registries are required` 一处、VE `application` ok；3 ✓ 见上；4 ✓ 本条即，清点零差（不增删文件）。
+  - **红线**：diff 只有一个标识符（条 1）与一串文本（条 2）；VE 其余文件、`cmd/parcel-api/assemble_claims.go`、ADR-0136、`apps/` 零 diff。
+  - **判断项（归评审）**：① 名字取 `TestAnETADemandsItsFullShape`（派单举的那个、同包先例的形）；② NR 同文本那处按「文本与形参名相符」判不动——若评审认为两处该同一措辞，另笔零行为。
