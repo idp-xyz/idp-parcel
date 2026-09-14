@@ -660,8 +660,7 @@ func TestDutyReconciliationAnswerCoversEveryOutcome(t *testing.T) {
 }
 
 // TestDutyReconciliationAnswerNamesTheUndecidedReason 证未决答复带上编排指名的「等谁」：
-// 业务未决（义务依据缺席）与三种依赖故障是四个不同的续办动作，折成一个 UNDECIDED 就得
-// 让操作员去猜。
+// 业务未决各格与各依赖故障的续办动作互不相同，折成一个 UNDECIDED 就得让操作员去猜。
 func TestDutyReconciliationAnswerNamesTheUndecidedReason(t *testing.T) {
 	message, code := dutyReconciliationAnswer(commandDutyCollaboration,
 		application.DutyReconciliationUndecided, application.DutyObligationBasisAbsent)
