@@ -289,7 +289,10 @@ type ApplyPreAcceptanceControlDeps struct {
 // ErrNilDependency 是构造门对缺件的唯一答复；哪一件缺在包装信息里点名。它必须是构造期的错误而不是
 // 运行期的 panic 或静默降级：装配疏漏要在进程启动那一刻炸出来，而不是等某个租户第一笔账期委托到达
 // 时才发现额度无处可取——那时它与「租户没登记信用政策」在结果上长得一模一样。
-var ErrNilDependency = errors.New("settlement accounting: pre-acceptance control dependency is nil")
+//
+// 它是本包所有编排构造门共用的一枚（NewRequestBuyEvaluationHandler 同样包它），文本因此不带任何一条编排的
+// 名字——哪条编排缺件由调用方的包装信息说，哨兵只说「缺件」这一件事。
+var ErrNilDependency = errors.New("settlement accounting: dependency is nil")
 
 func NewApplyPreAcceptanceControlHandler(deps ApplyPreAcceptanceControlDeps) (*ApplyPreAcceptanceControlHandler, error) {
 	for _, dependency := range []struct {
