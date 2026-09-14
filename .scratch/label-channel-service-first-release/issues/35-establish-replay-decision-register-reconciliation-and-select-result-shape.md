@@ -1,7 +1,7 @@
 # 35 择优决定册与面单交易对不上账：建立重放在决定册留下第二条 SELECTED；`Select` 把并列 / 无人参选当错误交回，三处各分类一遍
 
 Category: enhancement
-Status: draft——2026-09-10 22:0x 通道 4 立票（按通道 1 派单 task-d00c5556；lc/28 非作者评审 Spec 非阻断 ③ / 判断题 (c)(d) 与 Standards 非阻断 ① 的后继，顺带收 lc/26 / lc/29 两票评审里仍未修的非阻断）。要裁的一条（重放对账二选一）归 PS owner。只写票面未动代码；取证锚 main `9ddbafcf`
+Status: ready-for-agent——2026-09-14 10:2x 通道 1 按用户 10:1x「授权代裁」（PS owner 口径）裁「要裁的」1：**取甲**（建立重放先查交易已存在则跳择优），乙不做、留作候选后继；做法二「先做」与三的五条「归本票」照旧；裁决全文见文末「裁决」。取证锚仍是票面的 `9ddbafcf`——作者开工先在 main 重量「缺口」两段点名的文件是否被 lc/36 / lc/37 / lc/38 改过（lc/38 只改了 `assemble.go` 注释与 PS 收寄路，与本票地盘无交集，但要核）。此前 draft——2026-09-10 22:0x 通道 4 立票（按通道 1 派单 task-d00c5556；lc/28 非作者评审 Spec 非阻断 ③ / 判断题 (c)(d) 与 Standards 非阻断 ① 的后继，顺带收 lc/26 / lc/29 两票评审里仍未修的非阻断）。要裁的一条（重放对账二选一）归 PS owner。只写票面未动代码；取证锚 main `9ddbafcf`
 Blocked by: 无（[`28`](./28-channel-selection-composition-root-and-call-entry.md) / [`29`](./29-channel-selection-result-to-label-transaction-basis-translation.md) 已进 main）
 
 ## 缺口（取证于 `9ddbafcf`，逐符号名）
@@ -74,7 +74,14 @@ Blocked by: 无（[`28`](./28-channel-selection-composition-root-and-call-entry.
 
 ## 要裁的
 
-1. **重放对账取甲（建立重放先查交易已存在则跳择优）还是乙（决定记录带交易引用），或两条都要**——归 PS owner。本票倾向**先甲**：不加列、不改对象形状、当场堵住第二条 SELECTED；乙的「决定写下时交易还没落」那格要先想清读面怎么说。若 owner 取乙，「引用放在决定上 / 择优结果上 / 交易上」三处择一也在这一裁里定。
+1. **（已裁，见「裁决」）** 重放对账取甲（建立重放先查交易已存在则跳择优）还是乙（决定记录带交易引用），或两条都要——归 PS owner。本票倾向**先甲**：不加列、不改对象形状、当场堵住第二条 SELECTED；乙的「决定写下时交易还没落」那格要先想清读面怎么说。若 owner 取乙，「引用放在决定上 / 择优结果上 / 交易上」三处择一也在这一裁里定。
+
+## 裁决（2026-09-14 10:2x，通道 1 推送方按用户「授权代裁」以 PS owner 口径裁）
+
+1. **取甲，不做乙。** `EstablishSelectedLabelTransactionHandler.Establish` 先按 `TransactionID` 问交易册，已在即直接答重放（结果格用既有那格的现名，不新造）、不择优、不记决定；不在才走择优 → 建立。只读那一问的落点作者定——给 `Flow` 一只只读口，或让 `LabelTransactionEstablisher` 窄面多一问——判据是**不扩 `LabelTransactionRepository` 的写面、不给组合根加规则**；那一问与随后的建立在 `transactionalChannelSelection` 同一事务内，事务边界照旧。
+2. **为什么甲不乙**：乙的「决定写下时交易还没落」不是实现细节而是读面语义题——决定册那条引用会指向一笔可能永远不存在的交易，票 23 读面要先说清它对运营意味着什么，那是 `/domain-modeling` 的活，不在尾巴票里顺手定；甲当场堵住第二条 SELECTED，不加列、不改 `ChannelSelectionDecisionSpec` / `SelectedChannelBasis` / `LabelTransaction` 任一形状、不动票 14 / 23「只追加」的语义。**从决定册反查交易**这半留作候选后继（归 PS owner），等票 23 读面有了真实消费者、知道它要按什么查时再裁乙——到那时若要加引用，「放在决定上 / 择优结果上 / 交易上」三处择一一并定。
+3. **越权风险点**：多一次读（每次建立多一问交易册）——今天没有量化过这条路的读写比，本记录认下这个代价；若将来有证据说它是热点，乙路的引用可以反过来省掉这一问，届时另议。
+4. **不改的**：并列 / 无人参选的业务语义（票 01 裁决）、领域比较器、决定记录只追加——与票面「红线」同。
 
 ## 参照
 
