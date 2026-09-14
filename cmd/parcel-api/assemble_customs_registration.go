@@ -332,6 +332,10 @@ func buildCustomsRegistrationOrchestration(db *bentopg.DB) (customsRegistrationO
 		// 没有收这一格的口，接上只为让组合根不留 nil、后继登记面来接时一处可核。
 		DutyRules:    gates,
 		DutyRuleView: gateView,
+		// 「要不要求付款人」那一格规则的写读两半与核对同一对适配器（票 sa-cc/12）；同上一格，端点今天
+		// 没有收它的口。
+		PayerRules:    dutyReconciliation,
+		PayerRuleView: dutyReconciliation,
 	})
 	portsPathsHandler := customsapp.NewRegisterPortsPathsHandler(
 		customsapp.RegisterPortsPathsDeps{Registry: portsPaths, View: portsPathsView})

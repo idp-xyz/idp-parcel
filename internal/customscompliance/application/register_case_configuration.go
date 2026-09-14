@@ -81,6 +81,12 @@ type RegisterCaseConfigurationDeps struct {
 	// 第二张表；写读两半同其余登记册的理由——冲突判定靠读回。
 	DutyRules    ports.DutyPaymentGateRuleRegistry
 	DutyRuleView ports.DutyPaymentGateRuleView
+
+	// 「真实程序核对税费付款时要不要求付款人」那一格规则（票 sa-cc/12 裁决 1，形照上一格）：键是（租户、
+	// 监管程序），不挂门禁目录——它是程序的属性，与哪份申报无关——所以写读两半落在税费付款核对那一对
+	// 适配器上；冲突判定同样靠读回。
+	PayerRules    ports.PayerRequirementRuleRegistry
+	PayerRuleView ports.PayerRequirementRuleView
 }
 
 type RegisterCaseConfigurationHandler struct {
@@ -503,6 +509,43 @@ func (handler *RegisterCaseConfigurationHandler) RegisterDutyPaymentGateRule(
 		return ConfigurationUndecided, nil
 	}
 	if !sameDutyPaymentGateRule(existing, rule) {
+		return ConfigurationContentConflict, nil
+	}
+	return ConfigurationExisting, nil
+}
+
+// RegisterPayerRequirementCommand 携带一条「这个监管程序核对税费付款时要不要求付款人」的规则登记
+// （票 sa-cc/12 裁决 1）。取值是封闭二值，哪个程序要、哪个不要属实例半边——由登记方一条条登进来，
+// 命令不带默认，零值即形状缺格。
+type RegisterPayerRequirementCommand struct {
+	TenantID    domain.TenantID
+	Procedure   domain.CustomsProcedureReference
+	Requirement domain.PayerRequirement
+}
+
+// RegisterPayerRequirement 登记「要不要求付款人」。同键同值重放`已存在`，同键换值`内容冲突`——改规则
+// 走复核，不顶替：已按旧规则停在未决或形成了的核对，引用的是那条规则说过的话。
+func (handler *RegisterCaseConfigurationHandler) RegisterPayerRequirement(
+	ctx context.Context,
+	command RegisterPayerRequirementCommand,
+) (CaseConfigurationOutcome, error) {
+	if blankTenant(command.TenantID) || command.Procedure.String() == "" || command.Requirement.String() == "" {
+		return ConfigurationNotAccepted, nil
+	}
+
+	saved, err := handler.deps.PayerRules.RegisterPayerRequirement(ctx, command.TenantID, command.Procedure, command.Requirement)
+	if err != nil {
+		return ConfigurationUndecided, nil
+	}
+	if saved == ports.CaseConfigurationRegistered {
+		return ConfigurationRegistered, nil
+	}
+
+	existing, found, err := handler.deps.PayerRuleView.LoadPayerRequirement(ctx, command.TenantID, command.Procedure)
+	if err != nil || !found {
+		return ConfigurationUndecided, nil
+	}
+	if existing != command.Requirement {
 		return ConfigurationContentConflict, nil
 	}
 	return ConfigurationExisting, nil
