@@ -483,7 +483,7 @@ func (kind EvidenceKind) valid() bool {
 }
 
 // Declared 报出证据层级是否是 S / R / P 封闭集里的一格。导出它是让收「装配方声明的证据层级」的入口与适配器
-// 只问领域这一处，而不各自再写一份同样的 switch——封闭集多一格时只有这里要改（sa-cc/11 评审 Standards ②）。
+// 只问领域这一处，而不各自再写一份同样的 switch——封闭集多一格时校验只有这里要改（sa-cc/11 评审 Standards ②）。
 func (kind EvidenceKind) Declared() bool {
 	return kind.valid()
 }

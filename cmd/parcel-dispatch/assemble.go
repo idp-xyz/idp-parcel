@@ -541,8 +541,9 @@ var buyEvaluationRecordedUndecidedSentinels = []error{
 //   - ppsettlement.ErrPricingInputUnavailable——造不出计价输入快照（裁决 4）：包裹主体 / 分区 / 计费重量三样各归
 //     一只本上下文今天没有的读口（TF 发生项成员对象、NO / PS 实重尺寸、PS 邮编路线），入口点名之后停在这里。
 //     按「未确认规则保持显式未决」：不猜不填不拿默认重量顶、零写入；恢复动作是等提供方那一侧的只读口接上
-//     ——后继票，不是传输。今天每一封 BUY 请求信封都停在形成之前：范围下没卡停 ErrPriceCardNotConfigured、
-//     多卡停 ErrPriceCardApplicabilityConflict、有恰一张卡的停在这一格——真库装配例证的正例就是这一格。
+//     ——后继票，不是传输。今天每一封 BUY 请求信封都停在形成之前；到得了价卡解析的那些，范围下没卡停
+//     ErrPriceCardNotConfigured、多卡停 ErrPriceCardApplicabilityConflict、有恰一张卡的停在
+//     ErrPricingInputUnavailable——真库装配例证的正例断的正是 ErrPricingInputUnavailable。
 //   - ppsettlement.ErrEvaluationFormationUndecided——依赖故障（回指读口 / 铸造口 / 评价库），形成与否未知；
 //     含同租户同回指第二份撞迁移 0010 唯一索引那一格，重投按回指命中`已存在`定稿。
 //
