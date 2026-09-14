@@ -57,7 +57,7 @@ Date: 2026-09-14
 
 - PS CONTEXT Lifecycles「包裹身份与服务」一节加一条转换：「面单渠道服务非取消终局结果 → 终局失效：其依据的实际承运商首次有效收寄事实被源更正为失效版本；包裹回到当前无有效终局，同一拍依剩余有效决定历史与交易定案重新判断；原终局历史不改」；GLOSSARY 是否补「终局失效」归推送方核。**随实现票同笔落，本记录不动 `docs/domain/**`**（票 lc/39 红线）。
 - 实现票（PS owner 立，形见票 lc/39 完成记录）：`domain` 的 `FinalOutcomeRecord` 第三种记录与失效锚值对象、`LabelServiceFinalOutcome` 第六格；`application` 的 `form_parcel_final.go` 加「终局失效」命令与「以证据为锚查失效记录」的采用前门、`judge_label_service_final.go` 加「失效 → 重判」入口；`ports.FinalOutcomeStore` 加按（租户，包裹，证据）查失效记录的读口；`adapters/postgres` 的 `final_outcome` 第三种行形（`final_outcome_result_shape` 与 `final_outcome_rederivation_coherent` 两条 CHECK 各加一支，PS 迁移序号实施时重取）与 `Save` 的翻旧插新对失效记录的处置；`adapters/labelfinal` 的处理方核多一个入口与消费翻译表一行；`adapters/transportfulfillment/judge_on_carrier_first_effective_pickup.go` 的 `CarrierPickupVoided` 分支接上、哨兵删；`cmd/parcel-dispatch/assemble.go` 名单一行；VE `derive_on_final_outcome.go` 第三格（VE 地盘，占号或另立票）。
-- 代价：`final_outcome` 一张表上第三种行形，`FindCurrentFinal` 的各调用方语义不变——它们只问 `is_current`，失效记录永不为 current；`FindByKey` 的调用方要认第三种记录。
+- 代价：`final_outcome` 一张表上第三种行形，`FindCurrentFinal` 的各调用方（`FormParcelFinalHandler` 的重派生分派与 `deriveCompletion`、`LabelTransactionHandler.closedParcels`、`FormContinuedAttemptDecisionHandler.form`、`AmendCustomerSourceDataHandler.stageEvidence`）语义不变——它们只问 `is_current`，失效记录永不为 current；`FindByKey` 的调用方要认第三种记录。
 - 不在本记录内：TF 半边（ADR-0135 已裁，失效版本入队、PS 按版本取回）；VE 里程碑对「终局失效」怎么投影（VE owner）；`LabelServiceOutcome` 与 `LabelServiceFailure` 是否同源（越权风险点 2）；网络服务那四格责任结果的来源事实失效（有效交付被更正为无效等）是否同形——本记录只裁面单渠道服务收寄这一路，同形可循但不在此裁（越权风险点 4）。
 
 ## Alternatives considered
