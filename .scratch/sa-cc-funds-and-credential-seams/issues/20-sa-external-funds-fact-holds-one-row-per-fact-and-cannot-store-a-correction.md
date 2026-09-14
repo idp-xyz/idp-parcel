@@ -1,8 +1,8 @@
 # SA 的外部资金事实一事实一行：更正版本在提供方自己就存不下，sa-cc/02 裁决 2「更正再发一封」没有落地路径
 
 Category: bug
-Status: draft——2026-09-14 14:0x 通道 1 立票（sa-cc/13 完成记录判断项 ① 的发现；归 SA owner）。只写票面未动代码；取证锚 main `0bd86d42`
-Blocked by: 无（要裁的归 SA owner）
+Status: ready-for-agent——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（SA owner 口径），两条「要裁的」写入下方「裁决」节**：形取**版本子表**（身份行不动、版本各占一行，照 CC `0021`）；入口是**既有采用用例加一格「更正」**（`MapExternalFundsHandler` 新命令调 `CorrectAmount`、复用同一交接口再发一封），**不开新的在线面**——首版今天也没有生产入口，「SA 采用与更正的登记面」另立 draft 归 SA。此前 draft——2026-09-14 14:0x 通道 1 立票（sa-cc/13 完成记录判断项 ① 的发现；归 SA owner）。只写票面未动代码；取证锚 main `0bd86d42`
+Blocked by: 无（要裁的已裁，见「裁决」）
 
 ## 缺口（取证于 `0bd86d42`，逐符号名）
 
@@ -42,6 +42,14 @@ Blocked by: 无（要裁的归 SA owner）
 
 1. 主键加版本还是版本子表——归 SA owner（SA 侧 `duty_payment_verification_adoption` 等表若外键到 `external_funds_fact (tenant_id, fact_id)`，取舍同 CC 0021 头注那段）。
 2. 「采用更正版本」的入口长在哪（CLI / HTTP / 只有 inbox 消费者）——归 SA owner。
+
+## 裁决（2026-09-14 22:1x 通道 1 代裁，SA owner 口径；依据是通道 5 21:15 取证条，钉 `bccb60a1`）
+
+1. **形——版本子表，照 CC `0021`。** 取证量得 SA 没有任何外键钉在 `external_funds_fact`，所以 CC 选子表的那条理由（保外键）在 SA 不成立——但另两条成立：(i) `funds_mapping.fact_id` / `settlement_application.fact_id` 引用的是**事实身份**——映射与核销是对一条事实做的，新版本到达后「差额与核销的重算随新有效版本另行进行」（AT-SA-114、`CorrectAmount` 头注）是另一步，身份行让这两张表的引用继续指到一个确定的东西；主键加版本后 `fact_id` 单独指不到行，`FundsApplicationCatalogue.ListExternalFundsFacts` 按 `f.fact_id` 关联的聚合会逐版本重复。(ii) 与 CC 同形：同一条事实两侧都是「身份一行、版本多行」，信封 `<租户>/funds-fact/<事实>/<版本>` 两头读法一致，接手的人只记一种形。**落法**：新迁移 `settlement_accounting/00NN`（序号作者取下一个）建 `external_funds_fact_version (tenant_id, fact_id, version)` 外键到身份行，内容列（`source_ref / payer_ref / kind / currency / amount_minor / occurred_at / corrects / corrected_at / content_digest / recorded_at`）搬进子表、身份表只留身份 + 首次采用时刻（照 `0021` `DROP COLUMN` + 存量非零 `RAISE` 交人；存量为零见 `0018` 头注）；`0004` / `0018` 不改。`ExternalFundsFacts.Save` 变两步 DO NOTHING（身份行 + 版本行），`FundsFactAlreadyAdopted` 的语义落在**版本行**已在（身份已在、版本新 → 可插入，这正是本票要开的口）；`FindByKey(租户, 事实)` 交回**链头**（无后继的那一版 = 最近采用的那一版；SA 是铸造方，采用按序发生、更正必须指向当前链头——裁决 2——所以链头唯一、不需要「谁是当前」的标记）；新增 `FindVersion(租户, 事实, 版本)`；`AdoptedFundsFactView.LoadAdoptedFundsFact` 签名不变、FROM 改子表（WHERE 已带版本）；`Map` / `Apply` 照旧按 `FindByKey` 读链头（守恒对着当前有效版本算，AT-SA-114 的重算是后继题不在本票）；`ListExternalFundsFacts` 一事实一行（链头内容）+ 版本数与回指列可加、映射 / 核销聚合不因版本行重复。
+2. **入口——既有采用用例加「更正」格，不开新面。** ADR-0137 决定四原句「人工核实与更正也先登在 SA、再经采用信封到 CC」、UC-SA-001「更正必须形成新来源版本」——更正是采用的一种，走 `MapExternalFundsHandler`：新命令 `CorrectFundsFactCommand{TenantID, Fact, Corrects, Version, AmountMinor, CorrectedAt}`（名字作者定），前置：事实已采用（否则`未受理`）、`Corrects` **等于当前链头版本**（指向非链头 → `未受理`——SA 是铸造方，纠正一个不是当前的版本是调用方编程错误，与 CC 作为接收方容忍乱序不同，理由写进头注）、新版本字面不等于任何已采用版本（同（事实、版本）重放 → 同摘要`已采用` / 异摘要`冲突`，照 `AdoptFact` 四格）、`amountMinor > 0`；形成走 `domain.CorrectAmount`（它由此有了生产调用方），写版本行，`handOffFact` 复用 `OutboxExternalFundsFactHandoff.HandOffExternalFundsFact`（版本与 `corrects` 从 `Record.Fact` 取，02 判断题 ⑥ 预告的正是这一格）。**不做**：CLI / HTTP / inbox 任一新面——取证量得**首版今天也没有生产入口**（`NewMapExternalFundsHandler` 零生产装配、SA http 全 query、SA inbox 无资金来源事件、`cmd/` 无 settlement 二进制），更正面与首版面是同一张「SA 采用登记面」的题：本票作者顺手立一张 draft（本目录下一个号）「SA 外部资金事实采用与更正的登记面」，要裁的（长在哪只二进制 / 端点、ADR-0085 决定四怎么读、`FactHandoff` 漏装即 panic 的装配纪律）归 SA owner；真实财务系统来源仍 `No-Go / 待参数化`（UC-SA-005、`PAR-INT-05`），不在任何一票。
+3. **做法写实**（对照上面「待裁后写实」）：做法 1 → 裁决 1 的落法；做法 2 → 裁决 2 的命令与用例；做法 3 不变。
+4. **完成判据写实**：(1) 应用层：v1 已采用 → 更正 v2（回指 v1）→ 版本行 +1、身份行不变、再发一封（信封 ID 带 v2、载荷 `corrects` = v1）；同 v2 重放`已采用`；回指非链头`未受理`；`FindByKey` 交回 v2、`FindVersion(v1)` 仍原样。(2) 真库：新迁移往返；`0004` / `0018` 零 diff；`ListExternalFundsFacts` 一事实一行、聚合不重复。(3) `cmd/parcel-dispatch` 正例改回同一事实两版都在 SA（经 `AdoptFact` + 更正命令或两次 `Save`，作者定）、v1 不再经 CC 写口预铺——sa-cc/13 那格「另用一条事实」的绕法退役，用例内那段注释随之删。(4) `internal/customscompliance/**` 零 diff。(5) 后继 draft 一张已立。
+5. **能力边界**：裁的是结构（子表 vs 主键、入口归既有用例、链头口径）；`Save` 两步的事务边界、`ListExternalFundsFacts` 的列形、迁移搬列的细节归作者。读过：本票全文、通道 5 取证条、ADR-0137 决定四与越权风险点 6（经取证引文）、CC `0021` 头注（经引文）；**没读**：`map_external_funds.go` / `external_funds_fact.go` / `funds_application_catalogue.go` 正文、ADR-0085、UC-SA-005 正文。作者量到与代码不符，以代码为准并写进判断项。
 
 ## 参照
 

@@ -1,7 +1,7 @@
 # 税费付款核对的监管程序由调用方断言、编排不核它与案件一致、核对记录不带程序：错报 `procedureRef` 可绕过「规则要求而缺失保持未决」，事后也看不出付款人维按哪个程序判
 
 Category: enhancement
-Status: draft——2026-09-14 16:0x 通道 1（接管会话）立票（sa-cc/12 补评审 ← 通道 3 Standards 非阻断 ② + Spec 非阻断 ①，评审建议「合一张」；与 12 完成记录判断项 ① ④ 同根；归 CC owner）。只写票面未动代码；取证锚 main `01974923`
+Status: ready-for-agent——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（CC owner 口径），两条「要裁的」写入下方「裁决」节**：程序仍由调用方交、编排不核一致（范围→程序这条边在 CC 库上不存在，造它是新领域事实，越权）、但**进核对记录与指纹**；核对身份带程序的方式是**折进 `verificationDigest`、不加主键列**（五处键形不变、SA 零改动）。与 [19](19-cc-new-funds-fact-version-forms-a-new-verification-version.md) 同一张键两维，**本票先做、19 在其上**，同一作者同一分支两笔。此前 draft——2026-09-14 16:0x 通道 1（接管会话）立票（sa-cc/12 补评审 ← 通道 3 Standards 非阻断 ② + Spec 非阻断 ①，评审建议「合一张」；与 12 完成记录判断项 ① ④ 同根；归 CC owner）。只写票面未动代码；取证锚 main `01974923`
 Blocked by: 无（12 已进 main；要裁的两条归 CC owner）
 
 ## 缺口（取证于 `01974923`，逐符号名）
@@ -45,6 +45,14 @@ Blocked by: 无（12 已进 main；要裁的两条归 CC owner）
 
 1. **程序从哪来**——归 CC owner：a) 编排经读口从案件 / 范围取当前有效程序（CC 拥有案件，`CustomsCase.Procedure` 在；要新立「范围 → 案件 → 程序」读口，且一范围多案件时怎么办要一并裁）；b) 调用方交 + 编排核一致（读口同样要有，只是命令仍带程序）。裁前 12 的形不动。
 2. **核对身份要不要带程序**——归 CC owner：进 `DutyVerificationKey`（同三轴同依据但程序不同算两份核对，主键改）还是只作记录列（同键不同程序 → `已存在`）。与 [19](19-cc-new-funds-fact-version-forms-a-new-verification-version.md)「核对身份缺资金版本」是同一张键的两维，若两票同期在途，改键合一笔、迁移序号各自重取。
+
+## 裁决（2026-09-14 22:1x 通道 1 代裁，CC owner 口径；依据是通道 4 21:2x 取证条，钉 `bccb60a1`）
+
+1. **程序从哪来——b′：调用方交、编排不核一致、程序进记录。** 取证量得：`customs_case` 无 `scope_ref`、`CustomsCaseStore` 无按范围的方法、`DecisionScopeReference` 与 `ObligationScopeReference` 是两个类型无转换、门禁规则表里程序与范围**并列成键**——CC 今天的语言里「范围」不决定「程序」，「范围 → 当前有效程序」这条边不存在。a) 路与 b) 路的一致性核都要先造这条边，造它是新的领域事实（一范围多案件时按谁、程序变更时旧核对怎么算），不是本票能顺手立的，越权；也不是评审量到的风险的对症药——错报 `procedureRef` 可绕过的前提是登记方本就断言全部维度，信任模型没变（12 评审自己的判断）。**所以**：`VerifyDutyPaymentCommand.Procedure` 照旧必填、`registrationjson` / CLI 口径不变、HTTP 端点仍是 `UnconfiguredIntake{}`（那是 07 步二的遗留，不在本票）；本票把程序**记下来**——`domain.VerifyDutyPayment` 加 `procedure CustomsProcedureReference` 入参（构造期必填，与其余七参同待遇）、`DutyPaymentVerification` 加 `Procedure()` 读口、`ports.DutyVerificationRecord` 随之、`duty_payment_verification` 表加 `procedure_ref` 列（新迁移 `customs_compliance/0022`，`0016` 不改；存量非零 `RAISE` 交人，照 `0021` 之形）、`FindVerification` / `LoadCurrentDutyVerification` / `ListDutyVerifications` / `query_duty_verifications.go` JSON 读回带程序。ADR-0137 决定一「记录带依据引用」由此对付款人维成立。`CurrentDutyVerificationView` 头注「监管程序不是核对的维度」改口为「程序是核对**记录的依据维**，不是『按范围取当前』的过滤维」——按范围取当前一版的语义不变。`apps/admin-web/src/pages/customs/presentation.ts` 键名清单补 `procedureRef`（12 判断项 ② 收口，做法 4）。**不做**：一致性核、新 reason、范围→程序读口——若 CC 将来要「案件决定程序」，先在 CONTEXT 长出那条边再另票。
+2. **核对身份带程序的方式——折进指纹、不加主键列。** `application.verificationDigest` 的输入从「三轴整数 + Basis」改为「三轴整数 + Basis + Procedure」（`\x00` 拼接顺序写死在函数头注，19 在其后再追 `FundsVersion`）；`DutyVerificationKey` 五维形状、`0016` 主键、`0019` `gate_verification` 三列、SA `0020` 采用表主键、信封载荷与信封 ID **五处一字不动**，SA 零改动（票面红线「不改 SA」由此成立）。语义：同三轴同依据但按不同程序的规则判付款人维，是两份不同的判断 → 指纹不同 → 两行并存；`VerifyPayment` 头注「撞键即同内容」在程序进指纹后仍为真。不选「进主键列」：取证量得五处各存一份五维字串、彼此无外键，加列会让 `gate_verification` 四维与 SA 主键五维不再唯一指到一行，波及 SA 两处迁移与译码；不选「只作记录列不进指纹」：同键不同程序会撞 `DO NOTHING` 答`已存在`，把一份不同的判断吞成重放。
+3. **与 19 的顺序**：本票先落（指纹加程序、记录加程序列），[19](19-cc-new-funds-fact-version-forms-a-new-verification-version.md) 在其上加 `FundsVersion`（同样折进指纹 + 记录列）。同一作者、同一分支、两笔各自完成记录，迁移序号本票 `0022`、19 `0023`。
+4. **完成判据写实**（替换上面「待裁后写实」两处）：(1) 应用层：同三轴同依据、程序不同的两次 `VerifyPayment` 形成两行，程序相同的第二次答`已存在`；程序空白仍`未受理`。(2) 核对记录读回带程序（`FindVerification` / 当前一版 / 上列 / HTTP JSON 四处），真库往返；`0016` / `0020` 零 diff；`0022` 对存量非零 `RAISE`。(3) `registrationjson` / CLI 零行为 diff（程序本就必填）；`presentation.ts` 键名清单含 `procedureRef`；SA 目录零 diff；`gate_verification` 与信封形状零 diff（`git diff --stat -- internal/settlementaccounting migrations/settlement_accounting` 空）。(4) 完成记录同笔，清点在干净检出重生成（迁移 +1）。
+5. **能力边界**：裁的是结构（程序记在哪、进不进键、与 19 的先后），不是具体不变式。读过：本票与 19 全文、通道 4 两份取证、12 裁决与 15:47 补评审、`pricing_input.go` 无关；**没读**：`duty_release.go` / `reconcile_duty_payment.go` / `ports.go` / 五份迁移的正文（全部经取证转述）、SA 采用编排本体、`establish_customs_case.go`。作者开工若量到取证与代码不符，以代码为准并写进判断项，不回头等我。
 
 ## 参照
 

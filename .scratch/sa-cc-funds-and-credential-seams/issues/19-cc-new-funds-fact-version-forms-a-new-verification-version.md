@@ -1,8 +1,8 @@
 # 资金事实新版本到达后没有编排接着做：登记册看得见 v2 回指 v1，UC-CC-009「形成新核对版本并保留原覆盖判断」在 CC 侧仍无入口
 
 Category: enhancement
-Status: draft——2026-09-14 14:0x 通道 1 立票（按 sa-cc/13 裁决 2「触发重核对不在本票……推送方据此立票」，形取 13 完成记录「后继票的形」）。只写票面未动代码；取证锚 main `0bd86d42`（sa-cc/13 重放 tip）
-Blocked by: 无（[13](13-cc-correction-version-inbound-registration-and-rereconciliation.md) 已进 main：`ExternalFundsFactRegister.ListFundsFactVersions` 列得出全部版本与回指）；**要裁的 1 归 CC owner，裁前不动代码**
+Status: ready-for-agent——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（CC owner 口径），两条「要裁的」写入下方「裁决」节**：(a′) 形成新核对版本——覆盖轴按 UC-CC-009 原句「保留原覆盖判断」承前版、差额与有效性两轴显式 `PENDING`、依据与程序承前版、资金版本取新到的那一版；触发条件是「该事实已有既往核对版本」、与 `corrects` 在不在无关；资金版本**折进指纹 + 记录列**（照 [22](22-cc-duty-verification-procedure-is-caller-asserted-and-not-recorded.md) 裁决 2 之形）。**Blocked by 22（同一作者同一分支，22 先落）**。此前 draft——2026-09-14 14:0x 通道 1 立票（按 sa-cc/13 裁决 2「触发重核对不在本票……推送方据此立票」，形取 13 完成记录「后继票的形」）。只写票面未动代码；取证锚 main `0bd86d42`（sa-cc/13 重放 tip）
+Blocked by: [22](22-cc-duty-verification-procedure-is-caller-asserted-and-not-recorded.md)（指纹与记录先加程序维，本票在其上加资金版本维；同一作者同一分支两笔即可，不必等 22 进 main）。此前：无（[13](13-cc-correction-version-inbound-registration-and-rereconciliation.md) 已进 main：`ExternalFundsFactRegister.ListFundsFactVersions` 列得出全部版本与回指）；要裁的已裁，见「裁决」
 
 ## 缺口（取证于 `0bd86d42`，逐符号名）
 
@@ -43,6 +43,14 @@ Blocked by: 无（[13](13-cc-correction-version-inbound-registration-and-rerecon
 
 1. **新核对版本的三轴与关联依据从哪来**——归 CC owner。(a) 复用前版三轴与依据、有效性轴标 `PENDING`，形成一版「待人判」的核对；(b) 不形成核对，只登一条「待重核对」事项（新表或核对表一格）交人 / 交规则。两条路都不让编排猜三轴；差别在「形成了一版核对」还是「登了一条待办」。
 2. 触发要不要区分 `corrects` 在不在（首版到达从不触发；有回指才可能有既往核对）——可由做法 1「已有既往核对版本」一条覆盖，裁时确认。
+
+## 裁决（2026-09-14 22:1x 通道 1 代裁，CC owner 口径；依据是通道 4 21:2x 取证条，钉 `bccb60a1`）
+
+1. **要裁的 1——(a′) 形成新核对版本，轴按「承前 / 显式待判」分开取，不猜。** 新版本的七样：**覆盖轴承前版**（UC-CC-009 原句「形成新核对版本并保留原覆盖判断」——那句里被保留的正是覆盖判断，不是编排猜的）；**差额轴 `PENDING`**（金额可能变了，`DeltaPending` 是既有格）；**有效性轴 `PENDING`**（`FundsFactPending` 是既有格：前版核对所依的事实已被新版本取代，有效性待人重判）；**依据 `Basis` 承前版**（「凭什么把这笔资金关联到这版税费」说的是事实身份与税费的关联，事实换版本不换身份，关联不变）；**程序承前版**（22 落地后是记录列）；**资金版本取新到的那一版**（本票加的维）；`verifiedAt` 取库时钟。指纹因差额 / 有效性 / 资金版本变而不同 → 新行；前版一字不动（UC「不删除原付款、不按最后到达覆盖」）。**为什么不选 (b)**：(b) 让前版继续当「当前」，放行门禁会在一份**对着已被取代的事实**做出的核对上放行——与 CONTEXT 生命周期「资金退回、付款撤销或外部资金事实更正只作为**重新核对**的来源事实」和 UC「形成新核对版本」字面相抵；且 (b) 要在 `duty_payment_collaboration` 造第三种 `kind`、改 CHECK 与键，动的是另一个词条。**取证量到的后果照单接受**：`PENDING` 版成为 `CurrentDutyVerificationView` 的当前一版后，`VerifyReleaseGate` 那一道答**未决**（`gateUndecided(DutyVerificationPending)`）而不是未满足——这正是要的效果：事实变了、人没重核之前门禁不该放也不该判失败；人重核走既有 `VerifyPayment`（带新资金版本、断言三轴）再成一版，门禁随之。**红线「三轴不由编排猜」守住**：承前的那一轴是 UC 明令保留的，另两轴写的是「未判」不是「判了」。
+2. **要裁的 2——触发条件只看「该事实已有既往核对版本」，不看 `corrects`。** 取证量得两者互不蕴含（不带回指的新版本可以在既往核对之后落地；带回指的首版也可能在任何核对之前到）。所以：`ReceiveFundsFact` 对一个**新**版本答 `FundsFactReceived` 之后（同版重放答`已登记`不触发），编排问新读口「这条事实有没有既往核对版本」，有 → 对**每一条**既往核对谱系（按（税费、范围、程序）分组，取各组最近一版）各形成一版 (a′)，无 → 什么都不做、不报错（完成判据 1 第二句）。`corrects` 照登、不校验前版已到（13 判断项 ③ 不变）。
+3. **做法写实**（对照上面「待裁后写实」四条）：(1) 触发落点照做法 1——消费侧适配器 `ReceiveOnAdoptedFundsFactAdapter` 仍只译不判；它在 `ReceiveFundsFact` 答`已接收`后调一只**新的应用层编排**（名字作者定，如 `RederiveDutyVerificationsOnFundsFactVersion`），与接收**同一事务**（版本行、新核对版本、交接意图三者同生同灭）。(2) 读口：`ExternalFundsFactRegister` 加 `LoadFundsFactVersion(ctx, tenant, fact, version)`（按版本读，供 `VerifyPayment` 与编排用）；`DutyVerificationStore` 加「按（租户、资金事实）列全部核对版本」；`DutyCollaborationStore.FindCollaboration` 与 `PayerRequirementRuleView` 照 12 三停格读（付款人维按新版本的付款人 + 前版程序的规则重判：要求而新版本未提供 → 该谱系**不形成新版本、登一条未决 reason 交人**——这是 (a′) 唯一不形成的分支，完成记录写明）。(3) `VerifyDutyPaymentCommand` 加 `FundsVersion`（必填；`LoadFundsFactVersion` 找不到 → `未受理`）；`duty_payment_verification` 加 `funds_version` 列（新迁移 `customs_compliance/0023`，`0016` / `0021` / `0022` 不改；新增一条外键到 `external_funds_fact_version (tenant_id, fact_ref, version)`，既有那条到身份表的外键不动）；`verificationDigest` 在 22 的顺序之后追 `FundsVersion`；`LoadFundsFact`「最近接收」口径退役——端口方法删或改名为按版本读，13 端口头注那句与 26 反序格最后一条断言随之改口（22:0x Comments 已预告）。(4) 交接不变：每一新版本走 [05](05-cc-duty-reconciliation-hands-off-to-settlement-accounting.md) 的 `DutyPaymentVerificationHandoff`（信封 ID 含指纹，自然一版一封）；SA 侧 sa-cc/09 采用照收（`AdoptDutyPaymentVerification` 只存引用，不读三轴），SA 零改动。
+4. **完成判据写实**：(1) 应用层：v1 已核对（谱系 A），v2 到达 → 谱系 A 形成新版本（覆盖承前、差额 / 有效性 `PENDING`、依据 / 程序承前、资金版本 = v2），前版内容零 diff、`FindVerification(前版键)` 仍命中；两条谱系各成一版；无既往核对的事实新版本到达 → 不形成、不报错；同版本重放 → 不触发；付款人维要求而 v2 未提供 → 该谱系不形成、未决 reason 点名。(2) 真库：`0023` 往返；`0016` / `0021` / `0022` 零 diff；`cmd/parcel-dispatch` 真库装配用例在 13 那一格之后扩一格（v2 到达 → 新核对版本一行 + 交接意图一封）。(3) `LoadFundsFact`「最近接收」退役：`git grep -n '最近接收' -- internal/customscompliance/` 只剩历史注释或零命中；26 反序格断言改为按版本读。(4) 放行门禁：`VerifyReleaseGate` 对 `PENDING` 当前版答未决——既有用例若断言别的，以本裁决改口并写进判断项。(5) SA 目录零 diff。
+5. **能力边界**：裁的是结构（形成 vs 登待办、各轴从哪取、触发看什么、版本维怎么进键）；具体不变式（`DutyPaymentVerification` 构造门对 `PENDING` 组合的接受、`CurrentDutyVerificationView` 排序在同秒两版时的取舍、`handOffVerification` 的事务边界）归作者按代码定并写进判断项。读过：本票与 22 全文、通道 4 两份取证、13 完成记录「后继票的形」、UC-CC-009 两句与 CONTEXT 四句（经取证引文）；**没读**：`duty_release.go` / `reconcile_duty_payment.go` / `verify_release_gate.go` / `duty_payment_gate_rule.go` 正文、SA 采用编排本体、任何测试断言。作者量到与代码不符，以代码为准并写进判断项，不回头等我。
 
 ## 参照
 

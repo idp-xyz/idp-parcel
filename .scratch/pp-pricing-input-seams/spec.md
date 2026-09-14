@@ -1,7 +1,7 @@
 # `parcel-pricing` 造计价输入快照要的三只输入读口：TF 发生项成员对象 / NO·PS 实重尺寸 / PS 邮编路线——三张提供方侧机制票
 
 Category: chore
-Status: in-progress——2026-09-14 21:1x 通道 3 按通道 1 派单 task-620bc8e7 立目录与三张子票（全部 draft，各带「要裁的」归提供方 owner；裁前不动代码）；子票全 resolved 本 spec 才 resolved。只写票面未动代码；取证锚 main `db480695`
+Status: in-progress——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁三票「要裁的」（各以 TF / NO·PS / PS owner 口径写入各票「裁决」节）并转 ready-for-agent**：01 裸引用窄口按键精确到版本、不展开集运单元；02 拆成 PS 申报口（本票）+ NO 实际测量登记册与只读口（新票 04，NO 半边作者自立）、两源规则归 PP 消费侧票写进 PP CONTEXT；03 邮编成 PS「地址要素」一格、一口两段、起点先答寄件人、不过作用域。此前——2026-09-14 21:1x 通道 3 按通道 1 派单 task-620bc8e7 立目录与三张子票（全部 draft，各带「要裁的」归提供方 owner；裁前不动代码）；子票全 resolved 本 spec 才 resolved。只写票面未动代码；取证锚 main `db480695`
 
 ## 从哪里分出来
 
@@ -40,6 +40,7 @@ sa-cc/11「进 main 记录」（2026-09-14 20:4x）后继一句「三只输入�
 | [01](issues/01-tf-charge-occurrence-member-object-read-view.md) | 运输收费发生项的成员对象只读视图——按发生项键答成员载运对象与业务时点，能分清成员是正式包裹身份（PS）还是集运单元（NO）；不是 `FindByKey` 写侧口的再导出 | TF | 无；要裁的归 TF owner |
 | [02](issues/02-billable-weight-actual-measurement-and-declared-dimensions-read-port.md) | 实重 / 尺寸读口——NO 实际测量（今天连登记册都没有）+ PS 申报重量 / 尺寸（今天只在授权作用域的查阅面上）两源 | NO·PS | 无；要裁的归 NO·PS owner |
 | [03](issues/03-ps-origin-destination-postal-route-read-port.md) | 起讫邮编 / 路线读口——PS 今天没有结构化邮编字段，收件地点引用只交引用不交地址本体；分区解析归 PP（ADR-0109），不归 NR | PS | 无；要裁的归 PS owner |
+| [04](issues/04-no-actual-measurement-registry-and-valid-measurements-read-port.md) | NO 实际测量登记册（追加不覆盖）+「仍有效的实际测量」只读口——从 02 裁决 1 拆出：NO 今天连登记册都没有；只读口交原始量清单、**不派生**「当前有效实测」（派生规则属实例半边）；测量怎么进登记册（登记入口）留后继 | NO | 无（02 裁决 1 拆出；票面由 NO 半边作者按 02 裁决 1 自立） |
 
 三票互不阻：02 / 03 的读口按（租户，包裹身份）键，不必等 01 先到；01 只是让 PP 消费侧知道该拿哪个包裹身份去问 02 / 03。PP 消费侧适配器（不在本目录）Blocked by 三票全部进 main。
 
@@ -59,6 +60,9 @@ sa-cc/11「进 main 记录」（2026-09-14 20:4x）后继一句「三只输入�
 
 - **PP 消费侧适配器**：实现 `PricingInputResolver`，落 `internal/parcelpricing/adapters/<provider>/`（三只口各一只消费侧适配器，或一只编排三口），`docs/domain/CONTEXT-MAP.md` 加 PP→TF / PP→NO / PP→PS 三条消费边，`cmd/parcel-dispatch/assemble.go` `formEvaluationOnEvaluationRequestConsumer` 补 `Inputs` 一行——三只口进 main 后另立，归 PP。单位对表（PS `MeasurementUnitReference` 自由串 → PP `WeightUnit` / `LengthUnit` 封闭集）、成员对象 → `EvaluationSubject` 映射、两源并存时按谁，都是那张票的事。
 - **PP 评价对象要不要加「集运单元」一种**（ADR-0111 四种里没有）——归 PP owner，01「要裁的」2 会碰到它，本目录只记不裁。
+- **两源并存按谁**（02 裁决 2）：机制规则「实重与尺寸优先取仍有效的实际测量；无实测取申报并在快照事实引用里标来源；实测在时申报不得顶替；某一计算目的是否拒用申报保持可配置或显式未决」——写进 PP `CONTEXT.md`「计价输入快照」，随 PP 消费侧适配器票落，不在提供方四票。
+- **起点为节点邮编时的读口**（03 裁决 3）：承运商分区表按注入 / 收寄节点分始发区时，起点邮编的提供方是 NR（节点身份）/ NO（节点收寄），不是 PS——等首份真实分区表声明始发维度（ADR-0109 决定二）再立，归 NR / NO。
+- **NO 实际测量的登记入口**（04 不做）：测量怎么进登记册（节点作业事件 / 设备 / 人工）——04 只立登记册与只读口，入口另票归 NO。
 - **不重开 sa-cc/11 已裁的任何一格**：入口形（`FormEvaluationFromRequestHandler` 七格）、回指一格、在用价卡解析口三格、`PRICING_INPUT_UNAVAILABLE` 不是领域`待判断`、消费者与消费侧读口的落点。三票只在提供方一侧开口。
 - 计费重量的财务采用（SA）、计价重量的派生（PP 评价内）——两个词的归属 GLOSSARY 已定，本目录不碰。
 

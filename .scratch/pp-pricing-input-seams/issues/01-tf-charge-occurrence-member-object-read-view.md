@@ -1,7 +1,7 @@
 # `transport-fulfillment` 运输收费发生项的成员对象没有只读视图：`ChargeOccurrenceRegistry.FindByKey` 是带 `Save` 的写侧登记册口，成员 `CarriedObjectReference` 字面分不出正式包裹身份还是集运单元，`parcel-pricing` 造快照的「包裹主体」一格指不到
 
 Category: enhancement
-Status: draft——2026-09-14 21:1x 通道 3 立票（sa-cc/11 裁决 4 量「包裹主体指不到」的提供方半边；task-620bc8e7，通道 1 派单）。只写票面未动代码；取证锚 main `db480695`
+Status: ready-for-agent——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（TF owner 口径），三条「要裁的」写入下方「裁决」节**：候选 1 窄只读口、成员**裸引用原样交**（不带种类、不按前缀猜）；**不展开**集运单元；键按 `ChargeOccurrenceKey` **精确到有效性版本**。此前 draft——2026-09-14 21:1x 通道 3 立票（sa-cc/11 裁决 4 量「包裹主体指不到」的提供方半边；task-620bc8e7，通道 1 派单）。只写票面未动代码；取证锚 main `db480695`
 Blocked by: 无（sa-cc/11 已进 main 2026-09-14 20:4x：`PricingInputResolver` 与 `EligibleSourceReferences.Occurrence` / `OccurrenceVersion` 钥匙已在，本票是它点名的第一只读口）；**要裁的三条归 TF owner，裁前不动代码**
 
 ## 缺口（取证于 `db480695`，逐符号名）
@@ -50,6 +50,15 @@ Blocked by: 无（sa-cc/11 已进 main 2026-09-14 20:4x：`PricingInputResolver`
 1. **成员对象的形：引用带种类，还是裸引用**——归 TF owner。TF 今天存的是裸引用（`object_ref text`），「正式包裹身份还是集运单元」在登记里没有声明过。三条路：让登记方声明种类（写侧改形，候选 2）；只读口按引用形状 / 前缀推断（TF 不铸这两种身份，推断等于替 PS / NO 解释它们的标识空间，红线已拒）；只交裸引用、由持引用方自己去 PS / NO 两边问（候选 1，PP 消费侧多两次试问）。这是 TF 领域语言题——「载运对象」词条要不要长出「种类」一格——TF owner 裁；裁前 `CarriedObjectReference` 一字不动。
 2. **成员是集运单元时展开到成员包裹归谁**——归 TF owner，NO owner 复核。PP 的评价对象里没有集运单元一种（ADR-0111 四种），成员是集运单元时要么按成员包裹逐件 / 按票评价，要么等 PP 另立评价对象种类（那半归 PP owner，见 spec「不在本目录」）。展开要读 NO 的「封装成员快照」（NO `CONTEXT.md`：「集运单元封装时冻结的成员关系版本」），TF 只引用集运单元身份、不拥有成员关系。本票的只读口是**不展开**、只交集运单元引用（展开归 PP 消费侧再去问 NO），还是 TF 经消费侧适配器读 NO 后代展开（TF 多一条 TF→NO 消费边，且展开用哪一版快照——发生项业务时点那一版还是当前版——要一并定）。
 3. **只读口的键**——归 TF owner。按 `ChargeOccurrenceKey` 精确到有效性版本（PP 的 `EligibleSourceReferences` 带 `OccurrenceVersion`，钥匙齐，与 sa-cc/11 受理门「发生项引用身份 + 版本非空」对上），还是按发生项身份答「当前有效版本」（`ChargeOccurrenceKey` 头注写过「不需要任何『哪个是当前』的标记——那种标记会与 corrects_version 形成两个都能回答同一问题的口径」，答当前版本得另立口径，与 TF 既有取舍相抵）。
+
+## 裁决（2026-09-14 22:1x 通道 1 代裁，TF owner 口径；依据是本票取证，钉 `db480695`）
+
+1. **成员对象的形——候选 1：裸引用原样交，不带种类。** TF 不铸那两种身份，登记方今天也没被要求申报种类；让「载运对象」词条长出「种类」一格是 TF 语言的扩张，而今天唯一的需求方 PP 连「集运单元」这种评价对象都还没有（ADR-0111 四种），为一个还不存在的用法改写侧、加迁移、改登记入口不值。持引用方怎么分：PP 消费侧拿成员引用去 PS 的 [02](02-billable-weight-actual-measurement-and-declared-dimensions-read-port.md) / [03](03-ps-origin-destination-postal-route-read-port.md) 口按（租户，包裹身份）问，found=false 即「不是本上下文认的包裹」——一次探问，不是两次；是不是集运单元由 PP 消费侧再决定要不要问 NO（今天不问，停「输入不可得」并点名）。**红线照旧**：TF 不按引用前缀 / 形状猜种类。将来 PP 真要按种类分派时，种类由**登记方声明**（候选 2）再另票，不在读侧推。
+2. **成员是集运单元时——不展开。** 本票只读口交集运单元引用原样；展开要读 NO「封装成员快照」、要定用哪一版（发生项业务时点那一版还是当前版），两者都是 NO / PP 的题：TF 不拥有成员关系（CONTEXT Boundaries 首条），TF 代展开等于替 NO 解释它的成员关系。归 PP 消费侧票（spec「不在本目录」第一条）与 PP owner 的评价对象题（spec 第二条）。
+3. **只读口的键——按 `ChargeOccurrenceKey` 精确到有效性版本。** PP 的钥匙齐（`EligibleSourceReferences.Occurrence` + `OccurrenceVersion`，sa-cc/11 受理门要它非空），且与 TF 既有取舍一致：`ChargeOccurrenceKey` 头注「不需要任何『哪个是当前』的标记——那种标记会与 corrects_version 形成两个都能回答同一问题的口径」；答「当前版本」要另立一套口径，与之相抵。键不存在 → found=false，不答「最近一版」。
+4. **口的形（作者按此落，名字作者定）**：`internal/transportfulfillment/ports/` 新文件一只只读接口（形照 `FailedAttemptSource`：一口一问、不带 `Save`、不交整条 `ChargeOccurrenceRecord`），按 `ChargeOccurrenceKey` 答「成员载运对象清单（原样 `CarriedObjectReference` 切片）+ 业务时点 + 主要业务范围 + found」；`adapters/postgres.ChargeOccurrences` 加一个方法满足它（同一结构体实现两口），不新建表、不新迁移；`internal/architecture` 端口清点 +1。PP 一侧零 diff（消费侧适配器归后继票）。
+5. **完成判据写实**：照上面判据 1 / 2 / 4 / 5（判据 3「候选 2 的迁移」**不适用**，删）。补一条：`git grep -n 'CarriedObjectReference' -- internal/transportfulfillment/domain/offsite_pickup.go` 零 diff（词条不动）。
+6. **能力边界**：裁的是口的宽窄与键；`ChargeOccurrences` 现有 SQL 能不能一次 JOIN 出成员清单归作者。读过本票全文与 spec；**没读** `charge_occurrence.go` / `transport_charge_occurrence.go` / `0007` 正文（经取证引文）、TF 发生项登记入口。作者量到与代码不符，以代码为准并写进判断项。
 
 ## 参照
 
