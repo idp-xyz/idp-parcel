@@ -1,7 +1,7 @@
 # CC 入向登记没有版本维：SA 合法的更正版本到 CC 侧落成「内容冲突」，只留 inbox 痕，到不了 UC-CC-009 的重新核对
 
 Category: enhancement
-Status: ready-for-agent——2026-09-14 10:2x 通道 1 按用户 10:1x「授权代裁」（CC owner 口径）裁「要裁的」1 / 2：**要版本维**（一版本一行，形由作者定）；**触发重核对不在本票**，本票只到「登记册看得见新版本与回指」，触发归核对那一族另立票；全文见文末「裁决」。「做法」与「完成判据」按裁决写实，取证锚仍是票面的 `9ddbafcf`，作者开工先在 main 重量。此前 draft——2026-09-10 22:0x 通道 4 立票（按通道 1 派单 task-d00c5556；sa-cc/03 非作者评审 Spec 非阻断 ① 的后继）。只写票面未动代码；取证锚 main `9ddbafcf`
+Status: in-progress——2026-09-14 13:2x 通道 1 自办（用户「请你自决」两次；无在线通道可派；`/implement` › `/tdd`；分支 `mcp1-sacc13` 基远端 main `ace35ac3`（sa-cc/12 刚进 main，`0020` 已在），树 `D:/tops/idp-parcel-mcp1-sacc13`；迁移序号钉 `customs_compliance/0021`；形取**版本子表**——`duty_payment_verification` 外键钉在 `external_funds_fact (tenant_id, fact_ref)` 上，主键加版本会拆掉它，子表让事实身份行不动、版本各占一行）；此前 ready-for-agent——2026-09-14 10:2x 通道 1 按用户 10:1x「授权代裁」（CC owner 口径）裁「要裁的」1 / 2：**要版本维**（一版本一行，形由作者定）；**触发重核对不在本票**，本票只到「登记册看得见新版本与回指」，触发归核对那一族另立票；全文见文末「裁决」。「做法」与「完成判据」按裁决写实，取证锚仍是票面的 `9ddbafcf`，作者开工先在 main 重量。此前 draft——2026-09-10 22:0x 通道 4 立票（按通道 1 派单 task-d00c5556；sa-cc/03 非作者评审 Spec 非阻断 ① 的后继）。只写票面未动代码；取证锚 main `9ddbafcf`
 Blocked by: 无（[03](03-cc-inbox-consumer-receives-external-funds-fact.md) 已进 main；本票要裁的归 CC owner；与 [12](12-cc-funds-fact-payer-may-be-explicitly-unprovided.md) 并列、互不阻塞）
 
 ## 缺口（取证于 `9ddbafcf`，逐符号名）
