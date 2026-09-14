@@ -2137,3 +2137,19 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - **拆树**：`mcp3-psr09` → `merged/`（指针留本地、远端删）；作者树 `D:/tops/idp-parcel-mcp3-psr09`（干净）与 `%TEMP%\idp-replay-psr09` 比内容后拆。
 - **后继**：① task-50cd7049 留在通道 2 队列——后补非作者评审（钉 `9fa2ddc6`，已进 main；若有发现按回修票走）；② PS owner：09「要裁的」1「必登」；③ ADR-0136 owner：越权风险点 2 补 `262e8c0a` 实测一句（可登 → 不可登，09 已开闸）；④ 昨夜候选后继表原样（tasks.md 23:1x–23:5x 节）。
 - **本节五数**（00:1x–00:2x）：CI 未起跑（计费）· 集成时延 ps-port-remainder/09 00:09→00:2x **约 15 分**（1 票）· 重放笔数 **0**（纯 ff；推送方清点 1 另计）· 重复开发 0 · 会话重置 **1**（通道 1 crash，由通道 3 会话接管）· **非作者评审缺席 1 次**（用户裁，后补）
+
+## 2026-09-14 08:4x 通道 1 新会话（用户要一次自带 `ask_question` → 监听 idp-mcp-1 →「ready-for-agent 为零，下一步还剩下什么」→「派吧」；接手时 `main = origin/main = cdf17834`，2026-09-12 00:27 之后零提交，在途分支零；状态全按 git + `.scratch` 全量 `Status:` 扫描实测）
+
+### 08:4x–08:5x 盘点：ready-for-agent = 0 之后剩什么
+
+- **`.scratch` 全量 `Status:` 分布**（`Select-String` 逐文件首个 `Status:`，UTF-8）：resolved 330 · in-progress 7（四个 spec + tenant-implementation-01 三件）· done 7 · superseded 6 · **draft 6**（lc/20、lc/22、lc/35、sa-cc/11、12、13）· **needs-info 4**（nr-route-evidence-views/01、ps-external-mark-relations/01、syn-wall-door-audit/01、ve-008/04）· **blocked 2**（auto-reroute/02、first-tenant-runway/03）· open 1（ve-ops-tracking/03 的旧状态行残留，首行已 resolved，不算）。**ready-for-agent 0。**
+- **四类**：① 六张 draft 各差 owner 一句裁决（sa-cc/11 PP 入口形；sa-cc/12 付款人是规则格还是 `PAR-CUS-*`；sa-cc/13 版本维 + 触发重核对；lc/35 重放对账甲/乙；lc/20、22 等第一家真源）；② 已进 main 的尾巴（psr/09 非作者评审欠着；psr/09「必登」与 lc/25 要裁的 2 归 PS owner；ADR-0136 越权风险点 2 补实测；昨夜候选后继表的 A 类）；③ 纯簿记（ps-port-remainder spec 九子票全 resolved 未关）；④ 六张 needs-info / blocked 全是实例半边（`PAR-NET-14` / `PAR-INT-01` / 真实租户接入），等租户不等工程。
+- **过期任务记录**：`query_tasks all` 里五条 pending / working 全是 09-11 晚 crash 会话留下、工作已进 main 的单（task-f72d6362 ve-claims/04 重派、task-55995e48 lc/37 评审、task-ad449e18 ve-disc/04 重派、task-35caf74b sa-cc/01、task-0a43458e ve-claims/04 首派）——**推送方逐条 `report_task done` 代关**，result 写进 main 的 SHA 与「不要再接」；不关的话新会话上线一读队列就会把 ve-disc/04 / ve-claims/04 再做一遍（09-07 pc-gaps/09 那种孤儿）。task-50cd7049（psr/09 非作者评审 → 通道 2）仍 pending，是真的。
+- **归用户（沿昨夜）**：CI 计费红；六件 untracked（`d_tasks.txt` / `handoff.md` 空、`docs/api/` 一件、三个 logo svg）；共享树 76 行 CRLF 幻影（`--ignore-cr-at-eol` 真改动 0，本会话复核）。
+
+### 08:5x 用户裁「派吧」→ 点名 → 三件派出 → 收口 ps-port-remainder spec
+
+- **点名**（08:52 广播、截止 08:55）：`list_sessions` 通道 2 / 3 / 4 running-idle，5–11 offline；**3 个应答**（2 / 3 / 4，全「空闲 · 地盘无 · 余量充足」，均在截止前到）。`branch-state.ps1`：在途分支零、只有共享树 76 行幻影。
+- **派单三件**（分法按地盘不撞）：**通道 2 ← psr/09 非作者两轴评审**（沿用 task-50cd7049 不另开单，`send_to_session` 刷新指针：分支已改名 `merged/mcp3-psr09`、diff = `1b06bb18..9fa2ddc6`、只读不带 DSN、截止 09:20；作者是原通道 3 会话，通道 2 非作者）。**通道 3 ← task-0962cb6b VE 尾巴合票自立自做**（`ve-disclosure-policy-view/05`，分支 `mcp3-vetails` 基 `cdf17834`；五条：ve-disc/04 判断项 1 四处跨文件计数、ve-disc/02 S② `application.CatalogRegistry` 改名、`assemble_claims.go`「四个协作方」计数、`NewClaimServiceRules` 拒 nil 包哨兵、ADR-0136 越权风险点 2 追加补记不改写）。**通道 4 ← task-65ce5275 PS / SA / PP 尾巴两票一分支**（lc/38 + sa-cc/17，分支 `mcp4-tails`；六条：`ADR-0049 第三条`→带引文「决定三」四处（推送方 `git grep` 实测 `cmd/parcel-dispatch/assemble.go` 两处 + `internal/platform/dispatch/direct_publisher_test.go` 两处，`assemble_test.go` 零）、`judge_on_carrier_first_effective_pickup_test.go`「五值」、`CarrierTrackingFactReference` 改名判（lc/25 裁决已把判权交实施者）、`ErrNilDependency` 文本去限定、sa-cc/01「三件引用 / 五种结果」、PP `syntheticPricingEvaluation` 第三份抽成导出合成夹具）。PS + SA + PP 合派一个通道的理由：三家都撞 `cmd/parcel-dispatch/assemble.go` / `assemble_test.go`。**明写不在本批**：sa-cc/01 处置 ③「形成路后继票」（设计题）、lc/25 要裁的 2、psr/09「必登」、lc/37「只记不抽」的 helper。
+- **收口 ps-port-remainder spec**（本笔）：九子票 `Status:` 逐文件核全 resolved → spec `Status: resolved`，子票表补 08 / 09 两行（此前只列到 07）；只关状态不改票面正文；owner 尾巴（09 必登、09 评审后补、02 消费适配器段票面自记 Blocked by PC）留在票里。
+- **本节五数**（08:4x–08:5x）：CI 未起跑（计费）· 集成时延 —（本节无票进 main）· 重放笔数 0 · 重复开发 0（五条过期任务代关，堵的就是这一格）· 会话重置 **1**（通道 1 本会话新起；原会话 09-12 00:2x 后结束）· 非作者评审缺席 —（psr/09 后补已派）
