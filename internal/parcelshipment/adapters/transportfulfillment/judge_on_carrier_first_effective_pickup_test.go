@@ -20,8 +20,10 @@ import (
 // **指名那一代**、核键与本体一致、把（事实、版本、业务发生时间）折成 CarrierFirstEffectivePickupSpec 交
 // 与面单交易那一路（lc/26）、关闭 / 重开那一路（lc/27）共用的处理方核；可见性滞后 / 不变量破坏 / 失效版本 /
 // 译不出各自可识别。核与判断编排都是真的（labelfinal.ParcelJudgmentCore + psapplication.JudgeLabelServiceFinalHandler），
-// 读口（TF 收寄登记册、包裹反查、面单交易册、继续尝试登记册、取消视图）与采用路径用替身——五值要由真编排从
-// 夹具里判出来，替身直接吐结果就成了对着自己写的翻译表打勾。
+// 读口（TF 收寄登记册、包裹反查、面单交易册、继续尝试登记册、取消视图）与采用路径用替身——LabelServiceFinalOutcome
+// 的每一格（LabelServiceFinalAdopted / LabelServiceNotFinalOutcome / LabelServiceCancellationStandsOutcome /
+// LabelServiceJudgmentNotAccepted / LabelServiceJudgmentUndecided）要由真编排从夹具里判出来，替身直接吐结果就成了
+// 对着自己写的翻译表打勾。
 
 var (
 	firstPickupAt   = time.Date(2026, 9, 11, 9, 30, 0, 0, time.UTC)
@@ -378,7 +380,7 @@ func TestAStandingCancellationOutranksTheFirstPickup(t *testing.T) {
 // Covers: LABEL_SERVICE_NOT_FINAL 在本路**结构上到不了**：夹具是面单交易那一路判 NOT_FINAL 的输入（没开过册、
 // 无交易），而本路的命令总带一份已形成的收寄，PS CONTEXT「实际承运商首次有效收寄即形成终局」先于
 // 「否则，只有在当前受控关闭已经生效且未被重开」那条关闭路径成立。这条用例钉的是这一点，
-// 五值翻译表里那一格的译法由 labelfinal 自己的用例守。
+// LabelServiceNotFinalOutcome 那一格在翻译表里的译法由 labelfinal 自己的用例守。
 func TestNotFinalIsStructurallyUnreachableOnThePickupRoute(t *testing.T) {
 	f := newCarrierPickupFixture(t)
 	f.put(recordOf(t, formedCarrierPickup(t, "parcel-1")))

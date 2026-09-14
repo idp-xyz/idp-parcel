@@ -44,7 +44,7 @@ type CarrierFirstEffectivePickupFinder interface {
 }
 
 // ParcelLabelFinalJudge 是面单渠道服务终局判断各路共用的处理方核的口（ADR-0134 决定二）：按（租户 + 包裹）反查
-// 目标委托、折命令、判断、五值译成消费结论。生产装配接 labelfinal.ParcelJudgmentCore；本包只多出「取回 TF 事实、
+// 目标委托、折命令、判断、把 LabelServiceFinalOutcome 译成消费结论。生产装配接 labelfinal.ParcelJudgmentCore；本包只多出「取回 TF 事实、
 // 核有效时间、折引用」那一段，核与翻译表不另写第二份。
 type ParcelLabelFinalJudge interface {
 	JudgeParcel(
