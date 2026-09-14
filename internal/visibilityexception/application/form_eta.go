@@ -72,7 +72,7 @@ func (reason FormETAUndecidedReason) String() string {
 }
 
 // FormETACommand 携带一次预测的全部业务事实（版本标识由编排签发，预测时间取时钟）。
-// 七件缺一在门口即未受理——只有计划时间凑不齐输入与模型，领域构造器与这道门共同保证
+// 各件缺一在门口即未受理——只有计划时间凑不齐输入与模型，领域构造器与这道门共同保证
 // 「不用计划填充」。租户显式随命令到达（ADR-0003）：包裹引用只在租户内唯一。
 type FormETACommand struct {
 	TenantID   domain.TenantID
@@ -148,7 +148,7 @@ func NewFormETAHandler(deps FormETADeps) *FormETAHandler {
 	return &FormETAHandler{deps: deps}
 }
 
-// FormETA 把一组预测事实推进到版本化 ETA：受理（七件缺一即未受理）→ 幂等按（包裹+
+// FormETA 把一组预测事实推进到版本化 ETA：受理（各件缺一即未受理）→ 幂等按（包裹+
 // 里程碑+输入版本），同输入不重形成只重发同一份意图 → 输入变化经 Refresh 换版指回
 // 前版，历史预测不覆盖 → 意图交客户视图链（ETA 新版本是视图重派生的触发之一）。
 // 预测不是承诺——领域类型上没有承诺、路由计划或实际时间的字段，这里也不碰它们。

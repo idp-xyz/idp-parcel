@@ -173,7 +173,7 @@ func dispositionCommand(t *testing.T) application.SendDispositionRequestCommand 
 
 // Covers: CONTEXT「处置请求必须明确目标对象、请求动作、原因、证据、请求方、接收上下文
 // 和期望时限」与生命周期「案件形成请求 → 待源上下文处理：固定目标、动作、范围、原因、
-// 证据和时限」——活案件下七件齐即发送，意图由请求标识认领。点名 `AT-VE-079`「处置
+// 证据和时限」——活案件下各件齐即发送，意图由请求标识认领。点名 `AT-VE-079`「处置
 // 请求发送→只形成发送结果，不声称目标动作完成」。
 func TestAnActiveCaseSendsARequestWithItsEssentials(t *testing.T) {
 	fixture := newDispositionFixture(t)
@@ -534,7 +534,7 @@ func TestAFailedDispositionHandoffLeavesAResumableReference(t *testing.T) {
 	}
 }
 
-// Covers: 受理半边——七件缺一即未受理，不读任何依赖。
+// Covers: 受理半边——各件缺一即未受理，不读任何依赖。
 func TestACommandMissingAnEssentialIsNotAccepted(t *testing.T) {
 	fixture := newDispositionFixture(t)
 

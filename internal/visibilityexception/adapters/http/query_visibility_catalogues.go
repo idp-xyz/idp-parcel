@@ -63,7 +63,7 @@ var _ VisibilityCatalogueReader = ports.CatalogueListRead(nil)
 const outcomeVisibilityCataloguesListed = "VISIBILITY_CATALOGUES_LISTED"
 
 // 目录种类的封闭集（?kind= 分派，形状循 /commercial-policies）。前六格与写入口
-// CatalogRegistry 的六个 Register 方法逐一对上，后两格对单立的两个登记口——种类命名
+// CatalogRegistry 的各 Register 方法逐一对上，后两格对单立的登记口——种类命名
 // 册子，与端口方法同词根。异常披露规则（EXCEPTION_DISCLOSURE_RULE，0023）与披露策略
 // （DISCLOSURE_POLICY，0012）是相邻的两本册，词里的「规则」与「策略」就是分册的记号，
 // 不得互相顶替。

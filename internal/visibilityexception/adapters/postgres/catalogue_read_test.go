@@ -172,7 +172,7 @@ func TestCatalogueListRejectsNonPositiveLimit(t *testing.T) {
 
 // Covers: 完成标准「空册如实答空不折成未配置」。各方法对零登记的租户都交回空列表
 // 而不是错误——空册本身就是内容（ADR-0077 Decision 四），续办是登记责任方去
-// parcel-ve-register 登记；这与五个装载口对同一份空册答「未配置」不冲突，两口答的
+// parcel-ve-register 登记；这与只读装载口对同一份空册答「未配置」不冲突，两口答的
 // 不是同一个问题。
 func TestEmptyCataloguesListAsEmptyNotAsError(t *testing.T) {
 	fixture := newRegistrarFixture(t)

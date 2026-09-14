@@ -32,7 +32,7 @@ func sentRequest(t *testing.T, id string, version int) *domain.DispositionReques
 
 // Covers: VE CONTEXT「处置请求必须明确目标对象、请求动作、原因、证据、请求方、接收
 // 上下文和期望时限」与「请求发送、源上下文接受……分别记录；结果只表达请求判断，不
-// 证明实际执行」——七件缺一立不起；判断四走向封闭且不判第二次；类型上没有执行结果
+// 证明实际执行」——各件缺一立不起；判断四走向封闭且不判第二次；类型上没有执行结果
 // 字段（推定完成无处落脚）。
 func TestARequestDemandsItsShapeAndJudgesOnce(t *testing.T) {
 	request := sentRequest(t, "request-1", 1)

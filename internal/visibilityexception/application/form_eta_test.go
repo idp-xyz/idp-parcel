@@ -289,7 +289,7 @@ func TestTheSameInputsVersionDoesNotReformButResendsTheSameIntent(t *testing.T) 
 	}
 }
 
-// Covers: 受理半边与 `AT-VE-050` 的七件缺一半边「只有计划时间→ETA 未形成，不用计划
+// Covers: 受理半边与 `AT-VE-050` 的缺件半边「只有计划时间→ETA 未形成，不用计划
 // 填充」——缺输入或模型的请求构不成预测，门口即未受理，不读依赖也不补默认。
 func TestACommandMissingAnEssentialIsNotAcceptedAsAnETA(t *testing.T) {
 	fixture := newETAFixture(t)

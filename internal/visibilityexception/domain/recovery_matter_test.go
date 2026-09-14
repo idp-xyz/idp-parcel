@@ -30,7 +30,7 @@ func openMatter(t *testing.T) domain.RecoveryMatter {
 }
 
 // Covers: VE CONTEXT「相应通知或主张条件成立时即可独立发起」「无需等待客户提出索赔」
-// 「按责任相对方和责任依据分别固定」——七件缺一
+// 「按责任相对方和责任依据分别固定」——各件缺一
 // 立不起；类型上没有客户索赔前置字段（独立发起是结构性的）。
 func TestARecoveryMatterOpensIndependentlyWithItsFullShape(t *testing.T) {
 	matter := openMatter(t)

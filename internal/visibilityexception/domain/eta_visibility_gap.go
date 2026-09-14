@@ -60,7 +60,7 @@ func NewPredictionInputsReference(value string) (PredictionInputsReference, erro
 	return PredictionInputsReference{required}, err
 }
 
-// ETAPredictionSpec 是形成一次预测所需的全部输入（CONTEXT「必须明确预测对象、目标里程碑、预测时点」那一句的七件）。
+// ETAPredictionSpec 是形成一次预测所需的全部输入（CONTEXT「必须明确预测对象、目标里程碑、预测时点」那一句列出的各件）。
 type ETAPredictionSpec struct {
 	Version     ETAVersionID
 	Parcel      TrackedParcelReference
@@ -75,7 +75,7 @@ type ETAPredictionSpec struct {
 }
 
 // ETAPrediction 是版本化时间预测：不是客户承诺、路由计划或实际时间——类型上没有
-// 那些字段，也没有任何东西能把计划时间填进来充当预测（七件缺一立不起，信息不足
+// 那些字段，也没有任何东西能把计划时间填进来充当预测（各件缺一立不起，信息不足
 // 允许不形成）。
 type ETAPrediction struct {
 	version      ETAVersionID

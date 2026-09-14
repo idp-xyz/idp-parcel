@@ -79,7 +79,7 @@ func (reason DispositionUndecidedReason) String() string {
 	}
 }
 
-// SendDispositionRequestCommand 携带一份拟发送的处置请求。七件里除受理有效期外缺一
+// SendDispositionRequestCommand 携带一份拟发送的处置请求。各件里除受理有效期外缺一
 // 即未受理（领域构造器已钉，编排在门口先答）。Supersedes 可缺席：给出时表示以本请求
 // 替代那份既有请求的未来意图——已发出的不召回。租户显式随命令到达（ADR-0003）。
 type SendDispositionRequestCommand struct {
@@ -152,7 +152,7 @@ func NewSendDispositionRequestHandler(deps SendDispositionRequestDeps) *SendDisp
 	return &SendDispositionRequestHandler{deps: deps}
 }
 
-// Handle 发送或替代一份处置请求：受理（七件与活案件——请求只能挂在活案件下）→ 幂等按
+// Handle 发送或替代一份处置请求：受理（要件与活案件——请求只能挂在活案件下）→ 幂等按
 // （案件+动作+范围），同一请求不重发只重发同一份意图 → 替代走 SupersedeWith，只改未来
 // 意图、被替代者与后继同一提交 → 发送意图（真实目标上下文的受理在对方，这里只记发送）。
 func (handler *SendDispositionRequestHandler) Handle(
@@ -305,7 +305,7 @@ func (handler *SendDispositionRequestHandler) send(
 		AcceptanceWindow: command.AcceptanceWindow,
 	})
 	if err != nil {
-		// 七件在门口验过，走到这里还构不成只剩时限先于发送时刻这类坏输入——上抛不吞。
+		// 要件在门口验过，走到这里还构不成只剩时限先于发送时刻这类坏输入——上抛不吞。
 		return nil, fmt.Errorf("send disposition request: %w", err)
 	}
 	return request, nil
