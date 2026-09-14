@@ -464,21 +464,21 @@ func (handler *LabelTransactionHandler) AppendFollowUpAction(
 
 // judgmentBeat 交回「`Save` 成功之后按覆盖包裹逐件入队一份判断意图」的写后动作。
 //
-// 版本取 `Save` 成功那一代：仓储按预期版本加一写回，而聚合本体上仍是读出时那一代（转移不动它），
-// 所以这里是 Revision()+1；两拍先后写回，版本相邻，各自入队。入队失败原样上抛——整步随事务回滚，
-// 调用方重放这一步（渠道答案在它手上，不需要重发渠道调用）；不照终局采用那一路「失败不翻结果、
-// 留续办引用」的形，那一形留的正是「结果已落、意图未交」的中间态。
+// 版本取 `Save` 答复里落成的那一代（票 lc/35 收 lc/26 评审那条）：聚合本体上仍是读出时那一代（转移不动它），
+// 落成哪一代只有仓储说得出，本层不拿「+1」复述仓储的写回约定；两拍先后写回，版本相邻，各自入队。入队失败原样
+// 上抛——整步随事务回滚，调用方重放这一步（渠道答案在它手上，不需要重发渠道调用）；不照终局采用那一路「失败不翻
+// 结果、留续办引用」的形，那一形留的正是「结果已落、意图未交」的中间态。
 func (handler *LabelTransactionHandler) judgmentBeat(
 	beat ports.LabelTransactionBeat,
 	occurredAt time.Time,
-) func(context.Context, domain.LabelTransaction) error {
-	return func(ctx context.Context, saved domain.LabelTransaction) error {
+) func(context.Context, domain.LabelTransaction, int64) error {
+	return func(ctx context.Context, saved domain.LabelTransaction, revision int64) error {
 		for _, parcel := range saved.CoveredParcels() {
 			if err := handler.deps.Judgments.HandOffLabelTransactionJudgment(ctx, ports.LabelTransactionJudgmentIntent{
 				Tenant:        saved.Tenant(),
 				TransactionID: saved.ID(),
 				Parcel:        parcel,
-				Revision:      saved.Revision() + 1,
+				Revision:      revision,
 				Beat:          beat,
 				OccurredAt:    occurredAt,
 			}); err != nil {
@@ -493,14 +493,15 @@ func (handler *LabelTransactionHandler) judgmentBeat(
 //
 // 抽出来而不是各写一遍，是因为这四步在**恢复动作**上完全同形——读不回怎么答、状态不允许怎么
 // 答、版本冲突怎么答，四处一字不差。各写一遍就有了四份会各自漂移的口径，而漂移在编译期
-// 不报。真正各不相同的两格（哪个转移、写后做什么）是参数；afterSave 为 nil 即这一步写后无事。
+// 不报。真正各不相同的两格（哪个转移、写后做什么）是参数；afterSave 为 nil 即这一步写后无事，它收到的版本是
+// 仓储答复里落成的那一代。
 func (handler *LabelTransactionHandler) advance(
 	ctx context.Context,
 	step string,
 	tenant domain.TenantID,
 	transactionID domain.LabelTransactionID,
 	transition func(domain.LabelTransaction) (domain.LabelTransaction, error),
-	afterSave func(context.Context, domain.LabelTransaction) error,
+	afterSave func(context.Context, domain.LabelTransaction, int64) error,
 ) (LabelTransactionResult, error) {
 	transaction, found, err := handler.deps.Transactions.FindByID(ctx, tenant, transactionID)
 	if err != nil {
@@ -523,14 +524,14 @@ func (handler *LabelTransactionHandler) advance(
 	if err != nil {
 		return LabelTransactionResult{}, fmt.Errorf("%s: %w", step, err)
 	}
-	if saved != ports.LabelTransactionSaved {
+	if saved.Outcome != ports.LabelTransactionSaved {
 		// 版本冲突是业务答案（ADR-0031），不是错误：抢先那一方可能是另一次结果记录或一条
 		// 后续动作。调用方重读再重放，本层不代猜库里此刻是什么，因此也不交回手上这份陈旧的。
 		return LabelTransactionResult{outcome: LabelTransactionWriteConflict}, nil
 	}
 	if afterSave != nil {
 		// 只在 `Save` 成功之后：状态门拒绝与版本冲突都没落库，一封指着未落库结果的信不该出去。
-		if err := afterSave(ctx, advanced); err != nil {
+		if err := afterSave(ctx, advanced, saved.Revision); err != nil {
 			return LabelTransactionResult{}, fmt.Errorf("%s: %w", step, err)
 		}
 	}

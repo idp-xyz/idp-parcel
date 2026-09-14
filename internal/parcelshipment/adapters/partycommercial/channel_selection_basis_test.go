@@ -251,13 +251,61 @@ func happySelectionFixture(t testing.TB) selectionFixture {
 }
 
 func (fixture selectionFixture) translator() *adapter.ChannelSelectionBasisTranslator {
-	return adapter.NewChannelSelectionBasisTranslator(adapter.ChannelSelectionBasisTranslatorDeps{
+	translator, err := adapter.NewChannelSelectionBasisTranslator(fixture.deps())
+	if err != nil {
+		panic(err)
+	}
+	return translator
+}
+
+func (fixture selectionFixture) deps() adapter.ChannelSelectionBasisTranslatorDeps {
+	return adapter.ChannelSelectionBasisTranslatorDeps{
 		Accounts:       fixture.accounts,
 		Agreements:     fixture.agreements,
 		Resolutions:    fixture.resolutions,
 		Authorizations: fixture.registry,
 		Contents:       fixture.contents,
-	})
+	}
+}
+
+// Covers: 票 lc/35 收 lc/29 评审 Standards 那条与 Spec 那条——两个 PC 读口不是实例半边，nil 在构造期拒（不是到
+// LoadLatest 那一步 panic）；三个实例半边源**没装**（nil）与源答「未配置」是同一格，各停在自己具名的那一处。
+func TestTheTranslatorRefusesNilReadersAndNamesEachUnwiredSource(t *testing.T) {
+	t.Parallel()
+
+	for name, mutate := range map[string]func(*adapter.ChannelSelectionBasisTranslatorDeps){
+		"账号使用授权读口": func(deps *adapter.ChannelSelectionBasisTranslatorDeps) { deps.Authorizations = nil },
+		"协议内容读口":   func(deps *adapter.ChannelSelectionBasisTranslatorDeps) { deps.Contents = nil },
+	} {
+		deps := happySelectionFixture(t).deps()
+		mutate(&deps)
+		if translator, err := adapter.NewChannelSelectionBasisTranslator(deps); err == nil || translator != nil {
+			t.Fatalf("%s为 nil 该在构造期拒：translator=%v err=%v", name, translator, err)
+		}
+	}
+
+	for name, spec := range map[string]struct {
+		mutate func(*adapter.ChannelSelectionBasisTranslatorDeps)
+		want   error
+	}{
+		"授权源没装":    {func(deps *adapter.ChannelSelectionBasisTranslatorDeps) { deps.Accounts = nil }, adapter.ErrChannelAccountUseNotConfigured},
+		"协议源没装":    {func(deps *adapter.ChannelSelectionBasisTranslatorDeps) { deps.Agreements = nil }, adapter.ErrSupplierAgreementNotConfigured},
+		"接受时解析源没装": {func(deps *adapter.ChannelSelectionBasisTranslatorDeps) { deps.Resolutions = nil }, adapter.ErrAcceptanceResolutionNotConfigured},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			deps := happySelectionFixture(t).deps()
+			spec.mutate(&deps)
+			translator, err := adapter.NewChannelSelectionBasisTranslator(deps)
+			if err != nil {
+				t.Fatalf("三源允许为 nil，构造不该拒：%v", err)
+			}
+			_, err = translator.TranslateSelectedCandidate(context.Background(), selectionBasisQuery(t), pricedSelection(t))
+			if !errors.Is(err, spec.want) {
+				t.Fatalf("err = %v，want %v", err, spec.want)
+			}
+		})
+	}
 }
 
 // Covers: 票 29 判据 3 正路——三源配上、授权与协议在册且盖住时点，七格齐：账号 / 持有人取自授权，服务方与

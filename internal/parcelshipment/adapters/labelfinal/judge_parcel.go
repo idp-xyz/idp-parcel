@@ -27,7 +27,7 @@ var (
 	// 同一格：不猜委托、如实报；生产装配把它登进未决名单（委托可能尚未接受或尚未可见，重投会改变结果）。
 	ErrParcelTargetNotFound = errors.New(
 		"parcel shipment label final: no current accepted shipment request covers the parcel")
-	// ErrJudgmentUndecided 表示判断编排停在自己的未决上——四个读口之一答不出。重投会改变结果，
+	// ErrJudgmentUndecided 表示判断编排停在自己的未决上——读口之一答不出。重投会改变结果，
 	// 是未决哨兵，不是毒丸也不是缺陷。
 	ErrJudgmentUndecided = errors.New(
 		"parcel shipment label final: label service final judgment is undecided")
@@ -117,7 +117,7 @@ func (core *ParcelJudgmentCore) JudgeParcel(
 //
 //   - LABEL_SERVICE_FINAL_ADOPTED → 判出终局并交了采用路径，采用各格由 finalconsume 一处回答；
 //   - LABEL_SERVICE_NOT_FINAL / CANCELLATION_STANDS → 判断到了、不形成，无事可续，入账；
-//   - JUDGMENT_UNDECIDED → 四个读口之一答不出，重投会改变结果，回滚待重投；
+//   - JUDGMENT_UNDECIDED → 读口之一答不出，重投会改变结果，回滚待重投；
 //   - REQUEST_NOT_ACCEPTED → 命令立不起，是适配器缺陷，响亮报错不吸收；
 //   - 集合外 → 静默入账等于替编排作判断，不留 default 兜底。
 func Consumption(result psapplication.LabelServiceFinalResult) error {

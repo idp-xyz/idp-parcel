@@ -291,14 +291,18 @@ func TestAStaleLabelTransactionSaveAnswersRevisionConflict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("提交渠道：%v", err)
 	}
-	var first ports.LabelTransactionSaveOutcome
+	var first ports.LabelTransactionSaveResult
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
 		var err error
 		first, err = repository.Save(txCtx, submitted)
 		return err
 	})
-	if first != ports.LabelTransactionSaved {
-		t.Fatalf("首次保存 = %s，want SAVED", first)
+	if first.Outcome != ports.LabelTransactionSaved {
+		t.Fatalf("首次保存 = %s，want SAVED", first.Outcome)
+	}
+	// 落成的版本由答复带回（票 lc/35 收 lc/26 评审那条）：与读出时那一代相邻，且与库里此刻的一致。
+	if first.Revision != submitted.Revision()+1 {
+		t.Fatalf("答复里的版本 = %d，want 读出那一代 %d 加一", first.Revision, submitted.Revision())
 	}
 
 	// loaded 仍停在读出时的版本：同一份再保存一次就是「抢先那一方已经落库」的形态。
@@ -306,14 +310,14 @@ func TestAStaleLabelTransactionSaveAnswersRevisionConflict(t *testing.T) {
 	if err != nil {
 		t.Fatalf("过期聚合上的转移：%v", err)
 	}
-	var second ports.LabelTransactionSaveOutcome
+	var second ports.LabelTransactionSaveResult
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
 		var err error
 		second, err = repository.Save(txCtx, stale)
 		return err
 	})
-	if second != ports.LabelTransactionRevisionConflict {
-		t.Fatalf("过期保存 = %s，want REVISION_CONFLICT", second)
+	if second.Outcome != ports.LabelTransactionRevisionConflict {
+		t.Fatalf("过期保存 = %s，want REVISION_CONFLICT", second.Outcome)
 	}
 
 	found, _, err := repository.FindByID(ctx,
@@ -325,6 +329,9 @@ func TestAStaleLabelTransactionSaveAnswersRevisionConflict(t *testing.T) {
 	if found.Revision() != 2 || !found.SubmittedAt().Equal(labelEstablishedAt.Add(time.Minute)) {
 		t.Fatalf("过期保存把抢先那一方的写入盖掉了：revision = %d, submittedAt = %s",
 			found.Revision(), found.SubmittedAt())
+	}
+	if found.Revision() != first.Revision {
+		t.Fatalf("库里的版本 %d 与首次保存答复里的 %d 不是同一代", found.Revision(), first.Revision)
 	}
 }
 

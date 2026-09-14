@@ -122,7 +122,7 @@ func buildLabelChannelOrchestrationWith(db *bentopg.DB, seams labelChannelSeams)
 		Clock:       clock,
 	})
 
-	// 票 29 的翻译器：两个 PC 读口必装（lc/29 评审非阻断：构造期不拒 nil，所以这里真装上），三个源按缝。
+	// 票 29 的翻译器：两个 PC 读口必装（构造期拒 nil，票 lc/35 收 lc/29 评审那条），三个源按缝。
 	authorizations, err := pcpostgres.NewChannelAccountUseAuthorizations(db)
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: channel account use authorizations: %w", err)
@@ -131,13 +131,17 @@ func buildLabelChannelOrchestrationWith(db *bentopg.DB, seams labelChannelSeams)
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: supplier agreement contents: %w", err)
 	}
-	var translator shipmentports.ChannelSelectionBasisTranslator = pscommercial.NewChannelSelectionBasisTranslator(pscommercial.ChannelSelectionBasisTranslatorDeps{
+	basisTranslator, err := pscommercial.NewChannelSelectionBasisTranslator(pscommercial.ChannelSelectionBasisTranslatorDeps{
 		Accounts:       sources.Accounts,
 		Agreements:     sources.Agreements,
 		Resolutions:    sources.Resolutions,
 		Authorizations: authorizations,
 		Contents:       agreements,
 	})
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: channel selection basis translator: %w", err)
+	}
+	var translator shipmentports.ChannelSelectionBasisTranslator = basisTranslator
 	if seams.Translator != nil {
 		translator = seams.Translator
 	}

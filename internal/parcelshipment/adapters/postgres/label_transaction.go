@@ -189,24 +189,27 @@ func (repository *LabelTransactions) Insert(
 }
 
 // Save 在既有交易上推进。预期版本由聚合自己携带（转移一律不动它），UPDATE 的 WHERE 带上它
-// 并加一：零行命中即`版本冲突`——抢先那一方已经落库，本方要重读再重放。
+// 并加一：零行命中即`版本冲突`——抢先那一方已经落库，本方要重读再重放。落成的版本经 RETURNING 带回答复
+// （票 lc/35 收 lc/26 评审那条）：写后动作引用的是它，不由应用层复述「加一」。
 //
 // established_at 不在 SET 里：它是出生属性，聚合上没有任何改写它的路径，写进 UPDATE 只会给
 // 「改一改出生时间」留一道适配器侧的门。
 func (repository *LabelTransactions) Save(
 	ctx context.Context,
 	transaction domain.LabelTransaction,
-) (ports.LabelTransactionSaveOutcome, error) {
+) (ports.LabelTransactionSaveResult, error) {
+	none := ports.LabelTransactionSaveResult{Outcome: ports.LabelTransactionSaveOutcomeInvalid}
 	executor, err := repository.db.RequireExecutor(ctx)
 	if err != nil {
-		return ports.LabelTransactionSaveOutcomeInvalid, fmt.Errorf("save label transaction: %w", err)
+		return none, fmt.Errorf("save label transaction: %w", err)
 	}
 
 	raw, err := json.Marshal(labelTransactionDocumentOf(transaction))
 	if err != nil {
-		return ports.LabelTransactionSaveOutcomeInvalid, fmt.Errorf("save label transaction: %w", err)
+		return none, fmt.Errorf("save label transaction: %w", err)
 	}
-	tag, err := executor.Exec(ctx,
+	var revision int64
+	err = executor.QueryRow(ctx,
 		`UPDATE parcel_shipment.label_transaction
 		    SET revision = $3 + 1,
 		        state = $4,
@@ -214,20 +217,21 @@ func (repository *LabelTransactions) Save(
 		        saved_at = now()
 		  WHERE tenant_id = $1
 		    AND label_transaction_id = $2
-		    AND revision = $3`,
+		    AND revision = $3
+		 RETURNING revision`,
 		transaction.Tenant().String(),
 		transaction.ID().String(),
 		transaction.Revision(),
 		uint8(transaction.State()),
 		raw,
-	)
+	).Scan(&revision)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.LabelTransactionSaveResult{Outcome: ports.LabelTransactionRevisionConflict}, nil
+	}
 	if err != nil {
-		return ports.LabelTransactionSaveOutcomeInvalid, fmt.Errorf("save label transaction: %w", err)
+		return none, fmt.Errorf("save label transaction: %w", err)
 	}
-	if tag.RowsAffected() == 0 {
-		return ports.LabelTransactionRevisionConflict, nil
-	}
-	return ports.LabelTransactionSaved, nil
+	return ports.LabelTransactionSaveResult{Outcome: ports.LabelTransactionSaved, Revision: revision}, nil
 }
 
 // labelTransactionDocument 是快照列里的文档形状——RehydrateLabelTransactionSpec 的 JSON

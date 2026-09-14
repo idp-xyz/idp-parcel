@@ -27,14 +27,14 @@ func mustSaveLabelTransaction(
 ) {
 	t.Helper()
 
-	var outcome ports.LabelTransactionSaveOutcome
+	var saved ports.LabelTransactionSaveResult
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
 		var err error
-		outcome, err = repository.Save(txCtx, transaction)
+		saved, err = repository.Save(txCtx, transaction)
 		return err
 	})
-	if outcome != ports.LabelTransactionSaved {
-		t.Fatalf("保存结果 = %s，want SAVED", outcome)
+	if saved.Outcome != ports.LabelTransactionSaved {
+		t.Fatalf("保存结果 = %s，want SAVED", saved.Outcome)
 	}
 }
 

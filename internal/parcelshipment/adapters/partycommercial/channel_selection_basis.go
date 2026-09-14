@@ -118,9 +118,17 @@ type ChannelSelectionBasisTranslator struct {
 }
 
 // NewChannelSelectionBasisTranslator 装配翻译器。三个源允许为 nil：那是「显式未配置」的诚实表达，届时翻译停在
-// 各自具名的那一格——那正是首发要停下的地方，不是要绕过的地方。
-func NewChannelSelectionBasisTranslator(deps ChannelSelectionBasisTranslatorDeps) *ChannelSelectionBasisTranslator {
-	return &ChannelSelectionBasisTranslator{deps: deps}
+// 各自具名的那一格——那正是首发要停下的地方，不是要绕过的地方。两个 PC 读口不是实例半边、没有「未配置」可停
+// （lc/29 评审 Standards 那条，票 lc/35 收）：nil 到了 authorizationOf / agreementOf 那一步就是 panic 而不是具名停，
+// 所以构造期拒——形照同包 NewCommercialResolutionKeys，装配错在启动那一刻露出来。
+func NewChannelSelectionBasisTranslator(deps ChannelSelectionBasisTranslatorDeps) (*ChannelSelectionBasisTranslator, error) {
+	if deps.Authorizations == nil {
+		return nil, fmt.Errorf("parcel shipment party commercial: channel account use reader is nil")
+	}
+	if deps.Contents == nil {
+		return nil, fmt.Errorf("parcel shipment party commercial: supplier agreement content view is nil")
+	}
+	return &ChannelSelectionBasisTranslator{deps: deps}, nil
 }
 
 var _ psports.ChannelSelectionBasisTranslator = (*ChannelSelectionBasisTranslator)(nil)

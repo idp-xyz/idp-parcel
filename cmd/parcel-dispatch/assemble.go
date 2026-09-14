@@ -442,7 +442,7 @@ var effectiveDeliveryUndecidedSentinels = []error{
 }
 
 // labelTransactionJudgmentUndecidedSentinels 是面单交易判断意图这条链（lc/26，ADR-0134）登记的未决
-// 哨兵：目标委托尚未接受或不可见、判断编排的四个读口之一答不出、终局采用停在自己的未决——都是
+// 哨兵：目标委托尚未接受或不可见、判断编排的读口之一答不出、终局采用停在自己的未决——都是
 // 「等一个依赖」，重投会改变结果。
 //
 // 不在名单里的几格，恢复动作各不相同：
@@ -2344,9 +2344,9 @@ type parcelFinalAdoption struct {
 	declared      *pspartycommercial.DeclaredStageContent
 }
 
-// parcelFinalAdoptionChain 装终局采用编排（UC-PS-004 的采用路径）。有效交付与面单交易判断两条链共用它：
-// 两种服务形态的终局只认 FinalOutcomeStore 里那一处当前有效终局（judge_label_service_final.go 头注），
-// 各建一份 handler 会让委托完成派生、取消前核验与继续尝试判断看见两处。
+// parcelFinalAdoptionChain 装终局采用编排（UC-PS-004 的采用路径）。有效交付与面单交易判断两条链各调一次它、
+// 各得一份 handler；两条链**共用的是 FinalOutcomeStore 那一处当前有效终局**（judge_label_service_final.go 头注），
+// 不是 handler 本体——委托完成派生、取消前核验与继续尝试判断读的都是那一张表，handler 有几份不影响它们看见几处。
 func parcelFinalAdoptionChain(
 	db *bentopg.DB,
 	outboxStore *outbox.Store,

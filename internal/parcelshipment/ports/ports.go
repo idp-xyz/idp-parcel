@@ -1675,11 +1675,21 @@ func (outcome LabelTransactionSaveOutcome) String() string {
 	}
 }
 
+// LabelTransactionSaveResult 是 Save 的答复：结果格连同**落库后的版本**（票 lc/35 收 lc/26 评审 Standards 那条）。
+// 聚合本体上的版本是读出时那一代，转移不动它；写回落成哪一代由仓储在写那一刻定——写后动作（判断意图入队）
+// 要引用的正是落成的那一代，所以由仓储说出来，不让应用层拿「+1」复述一条只在仓储头注里承诺过的约定。
+// Revision 只在 LabelTransactionSaved 那一格有意义；版本冲突时手上那份已经陈旧，没有落成的版本可交。
+type LabelTransactionSaveResult struct {
+	Outcome  LabelTransactionSaveOutcome
+	Revision int64
+}
+
 // LabelTransactionRepository 以（租户 + 面单交易标识）为键存储面单交易聚合。
 //
 // 键不含来源身份，也不含委托：覆盖包裹可以跨委托（ADR-0084 决定一），拿委托的来源身份作键
 // 会让一笔跨委托交易无处安放。Insert 与 Save 分开的理由同委托仓储：建立只发生一次，结果与
-// 后续动作是在既有交易上推进。Save 的预期版本由聚合自己携带（`transaction.Revision()`）。
+// 后续动作是在既有交易上推进。Save 的预期版本由聚合自己携带（`transaction.Revision()`），落成的版本由
+// Save 的答复带回（LabelTransactionSaveResult）。
 //
 // **本口今天没有生产写入方，这是设计而不是欠账**：写入方是渠道适配器，而首发基线明写「独立
 // 面单渠道服务不进入首发生产」。机制先立起来，墙降那天写编排对着的不是一张裸表。
@@ -1690,7 +1700,7 @@ type LabelTransactionRepository interface {
 		transactionID domain.LabelTransactionID,
 	) (domain.LabelTransaction, bool, error)
 	Insert(ctx context.Context, transaction domain.LabelTransaction) (LabelTransactionInsertOutcome, error)
-	Save(ctx context.Context, transaction domain.LabelTransaction) (LabelTransactionSaveOutcome, error)
+	Save(ctx context.Context, transaction domain.LabelTransaction) (LabelTransactionSaveResult, error)
 }
 
 // LabelTransactionsByParcelView 按包裹取回其**全部**相关面单交易——首笔、重试、替代、换单，以及

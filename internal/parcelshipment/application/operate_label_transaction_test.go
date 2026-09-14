@@ -1081,15 +1081,16 @@ func (double *labelTransactionRepositoryDouble) Insert(
 	return ports.LabelTransactionInserted, nil
 }
 
+// Save 照真库的写回约定答落成的版本：预期版本加一。替身把这条约定放在自己这一侧，正是为了让编排不必知道它。
 func (double *labelTransactionRepositoryDouble) Save(
 	_ context.Context,
 	transaction domain.LabelTransaction,
-) (ports.LabelTransactionSaveOutcome, error) {
+) (ports.LabelTransactionSaveResult, error) {
 	if double.saveOutcome != ports.LabelTransactionSaved {
-		return double.saveOutcome, nil
+		return ports.LabelTransactionSaveResult{Outcome: double.saveOutcome}, nil
 	}
 	double.stored[transaction.ID()] = transaction
-	return ports.LabelTransactionSaved, nil
+	return ports.LabelTransactionSaveResult{Outcome: ports.LabelTransactionSaved, Revision: transaction.Revision() + 1}, nil
 }
 
 var _ ports.LabelTransactionRepository = (*labelTransactionRepositoryDouble)(nil)
