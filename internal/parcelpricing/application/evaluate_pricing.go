@@ -223,8 +223,9 @@ func missingSeriesBindings(request domain.EvaluationRequest) []domain.ReferenceS
 	return missing
 }
 
-// withSeriesReadings 把补齐的取值装回请求。评价请求的其余部分（标识、方案、证据层级）
-// 原样保留；输入快照按领域的 WithReferenceSeries 重立，缺一个都装不进去。
+// withSeriesReadings 把补齐的取值装回请求。评价请求的其余部分（标识、方案、证据层级、回指）
+// 原样保留——经领域的 WithInput 只换输入一格，不重新构造；输入快照按领域的 WithReferenceSeries
+// 重立，缺一个都装不进去。
 func withSeriesReadings(request domain.EvaluationRequest, readings []domain.ReferenceSeriesValue) (domain.EvaluationRequest, error) {
 	if len(readings) == 0 {
 		return request, nil
@@ -234,7 +235,7 @@ func withSeriesReadings(request domain.EvaluationRequest, readings []domain.Refe
 	if err != nil {
 		return domain.EvaluationRequest{}, err
 	}
-	return domain.NewEvaluationRequest(request.ID(), request.Plan(), input, request.Evidence())
+	return request.WithInput(input)
 }
 
 // borrowSeriesReadings 从原评价冻结的输入里借出请求缺的那几期取值，供重放比对。
@@ -404,7 +405,8 @@ func (handler *EvaluatePricingHandler) completeCatalogueReadings(
 		if err != nil {
 			return domain.EvaluationRequest{}, nil, fmt.Errorf("attach resolved catalogue readings: %w", err)
 		}
-		completed, err = domain.NewEvaluationRequest(request.ID(), request.Plan(), input, request.Evidence())
+		// 与 withSeriesReadings 同一手法：只换输入一格，回指与序列那一步留下的说明都原样保留。
+		completed, err = request.WithInput(input)
 		if err != nil {
 			return domain.EvaluationRequest{}, nil, fmt.Errorf("attach resolved catalogue readings: %w", err)
 		}

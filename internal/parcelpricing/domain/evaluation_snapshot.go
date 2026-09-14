@@ -202,8 +202,10 @@ func amountRoundingStepFrom(snapshot amountRoundingStepSnapshot) AmountRoundingS
 }
 
 type evaluationSnapshot struct {
-	ID                   string                       `json:"id"`
-	ReplayOf             *string                      `json:"replayOf,omitempty"`
+	ID       string  `json:"id"`
+	ReplayOf *string `json:"replayOf,omitempty"`
+	// RequestReference 是回指（票 sa-cc/11 裁决 2）：只进快照不进规范化文档，旧快照没有这一格照样读回、回指为空。
+	RequestReference     *string                      `json:"requestReference,omitempty"`
 	Status               string                       `json:"status"`
 	Evidence             string                       `json:"evidence"`
 	Direction            string                       `json:"direction"`
@@ -253,6 +255,10 @@ func MarshalEvaluationSnapshot(evaluation PricingEvaluation) ([]byte, error) {
 	if evaluation.replayOf != nil {
 		replayOf := evaluation.replayOf.String()
 		document.ReplayOf = &replayOf
+	}
+	if evaluation.requestReference != nil {
+		requestReference := evaluation.requestReference.String()
+		document.RequestReference = &requestReference
 	}
 	for _, reference := range evaluation.manifest.references {
 		document.Manifest = append(document.Manifest, versionReferenceOf(reference))
@@ -316,6 +322,10 @@ func RehydrateEvaluationSnapshot(raw []byte) (PricingEvaluation, error) {
 	if document.ReplayOf != nil {
 		replayOf := EvaluationID{identifier{value: *document.ReplayOf}}
 		evaluation.replayOf = &replayOf
+	}
+	if document.RequestReference != nil {
+		requestReference := EvaluationRequestReference{identifier{value: *document.RequestReference}}
+		evaluation.requestReference = &requestReference
 	}
 	references := make([]VersionReference, 0, len(document.Manifest))
 	for _, reference := range document.Manifest {

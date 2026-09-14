@@ -180,6 +180,42 @@ type EvaluationRequest struct {
 	expectedContentDigest    string
 	expectedCanonicalization string
 	seriesNotes              []string
+	// requestReference 是这份评价为哪一份 SA 评价请求而形成（票 sa-cc/11 裁决 2），可缺席：PP 内部或测试路径
+	// 形成的评价没有它。它不是计算输入，与 replayOf 同一族——随评价入册、供读口按它取，不进任何摘要。
+	requestReference *EvaluationRequestReference
+}
+
+// WithRequestReference 带上回指。回指随评价入册、读口可按它取；它**不是计算输入**：不进 semanticDigest 也不进
+// planContentDigest——重放按原输入重算，带不带回指都判成同一结果；两份只差回指的评价语义摘要逐字相同。
+func (request EvaluationRequest) WithRequestReference(reference EvaluationRequestReference) (EvaluationRequest, error) {
+	if !request.valid() || !reference.valid() {
+		return EvaluationRequest{}, ErrEvaluationRequestInvalid
+	}
+	copyOfRequest := request
+	declared := reference
+	copyOfRequest.requestReference = &declared
+	return copyOfRequest, nil
+}
+
+// RequestReference 交回回指；PP 内部形成的评价第二个返回值为假。
+func (request EvaluationRequest) RequestReference() (EvaluationRequestReference, bool) {
+	if request.requestReference == nil {
+		return EvaluationRequestReference{}, false
+	}
+	return *request.requestReference, true
+}
+
+// WithInput 换掉输入快照，其余原样保留：标识、方案、证据层级、重放期望、回指、解析说明。编排补齐序列取值 /
+// 目录读数时要重立请求，此前按四参重新 NewEvaluationRequest——凡不在四参里的东西都会在那一步丢掉，回指一格
+// 就是第一件会丢的。换输入不改这份请求「是谁、为谁」，所以这里是就地换一格而不是重新构造。
+func (request EvaluationRequest) WithInput(input PricingInputSnapshot) (EvaluationRequest, error) {
+	if !request.valid() || !input.valid() {
+		return EvaluationRequest{}, ErrEvaluationRequestInvalid
+	}
+	copyOfRequest := request
+	copyOfRequest.input = copyInputSnapshot(input)
+	copyOfRequest.seriesNotes = append([]string(nil), request.seriesNotes...)
+	return copyOfRequest, nil
 }
 
 // WithSeriesResolutionNotes 带上编排层在解析在用序列版本时留下的说明（无已登记版本 /
@@ -257,8 +293,10 @@ func (request EvaluationRequest) valid() bool {
 }
 
 type PricingEvaluation struct {
-	id                   EvaluationID
-	replayOf             *EvaluationID
+	id       EvaluationID
+	replayOf *EvaluationID
+	// requestReference 见 EvaluationRequest 上的同名字段：为哪一份 SA 评价请求形成，可缺席，不进摘要。
+	requestReference     *EvaluationRequestReference
 	status               EvaluationStatus
 	evidence             EvidenceKind
 	input                PricingInputSnapshot
@@ -727,6 +765,15 @@ func (evaluation PricingEvaluation) ReplayOf() (EvaluationID, bool) {
 	return *evaluation.replayOf, true
 }
 
+// RequestReference 交回这份评价为哪一份 SA 评价请求而形成；PP 内部或测试路径形成的评价第二个返回值为假。
+// 采用评价的消费者按它回查 SA 登记册取合格来源引用（票 sa-cc/08 判据 4、sa-cc/01「形成」路）。
+func (evaluation PricingEvaluation) RequestReference() (EvaluationRequestReference, bool) {
+	if evaluation.requestReference == nil {
+		return EvaluationRequestReference{}, false
+	}
+	return *evaluation.requestReference, true
+}
+
 func (evaluation PricingEvaluation) PricingWeight() (PricingWeightResult, bool) {
 	if evaluation.pricingWeight == nil {
 		return PricingWeightResult{}, false
@@ -774,6 +821,9 @@ func (evaluation PricingEvaluation) valid() bool {
 		return false
 	}
 	if evaluation.replayOf != nil && (!evaluation.replayOf.valid() || *evaluation.replayOf == evaluation.id) {
+		return false
+	}
+	if evaluation.requestReference != nil && !evaluation.requestReference.valid() {
 		return false
 	}
 	if !manifestContains(evaluation.manifest, evaluation.planReference) {
@@ -927,9 +977,16 @@ func baseEvaluation(request EvaluationRequest) PricingEvaluation {
 		copy := *request.replayOf
 		replayOf = &copy
 	}
+	// 回指与 replayOf 同一种搬法：随请求进评价，只是元数据，不参与下面任何一步计算。
+	var requestReference *EvaluationRequestReference
+	if request.requestReference != nil {
+		copy := *request.requestReference
+		requestReference = &copy
+	}
 	return PricingEvaluation{
 		id:                   request.id,
 		replayOf:             replayOf,
+		requestReference:     requestReference,
 		evidence:             request.evidence,
 		input:                copyInputSnapshot(request.input),
 		direction:            request.plan.direction,

@@ -93,6 +93,17 @@ func NewEvaluationID(value string) (EvaluationID, error) {
 	return EvaluationID{identifier: identifier}, err
 }
 
+// EvaluationRequestReference 回指 settlement-accounting 的评价请求——UC-SA-002 步 2「请求评价」留在那一侧的
+// 登记（票 sa-cc/11 裁决 2）。只引用它的铸造标识，不复制它的任何内容：主要范围、计算目的、合格来源引用只有
+// SA 登记册一处权威。它与本包的 EvaluationRequest 不是一回事：那是 PP 内部「已成形、可交纯函数」的评价请求，
+// 这是它为谁而形成的那份外部请求。
+type EvaluationRequestReference struct{ identifier }
+
+func NewEvaluationRequestReference(value string) (EvaluationRequestReference, error) {
+	identifier, err := newIdentifier("evaluation request reference", value)
+	return EvaluationRequestReference{identifier: identifier}, err
+}
+
 type Currency struct {
 	code string
 }
