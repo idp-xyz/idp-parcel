@@ -2192,3 +2192,12 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - **证据层级**：六条全是「用户授权、推送方以 owner 口径代裁」，各票「裁决」小节首行都写了这一句；不是 owner 亲裁。sa-cc spec 状态行同步。
 - **前沿 ready**（五张）：lc/35（PS）、lc/39（PS，ADR 草案）、sa-cc/11（PP，大）、sa-cc/12（CC）、sa-cc/13（CC）。在途：通道 4 task-c0000fd2。**下一轮派单**：通道 4 交活后点名；只有它在线时按「小 → 大」派：sa-cc/12 → sa-cc/13（同 CC 地盘、迁移序号要错开，串行为宜）→ lc/35 → lc/39 → sa-cc/11；若用户开新通道，CC 两张与 PS 两张可并行（地盘不撞），sa-cc/11 单独一人。
 - **本节五数**（10:1x–10:2x）：CI 未起跑（计费）· 集成时延 —（本节无票进 main，只有簿记）· 重放笔数 0 · 重复开发 0 · 会话重置 0 · **代裁 6 条**（其中 1 条改为立 ADR 票不裁）
+
+### 10:2x–10:4x 通道 4 交 tails2（ve-disc/06 + sa-cc/18）→ 直读两轴 → 五笔重放进 main；同时派 sa-cc/12
+
+- **完工报**（10:2x，task-c0000fd2 done）：五笔 = origin，树干净，两票完成记录各随该票最后一笔代码同 commit（上一张的那一格这次守住了）。条 1（SA 08 那批计数）重量实得十三句七文件——派单写六处，又多两处同族（推送方取证第四次错数，同一种病：取证时刻的观察被当成清单）。`saTestValue` 判留（十七处全喂 SA / CC 类型，`pptest` 不该当跨上下文通用工具）。
+- **先派再评**（10:3x，task-d6d4f149 → 通道 4）：sa-cc/12（CC，裁决已写实；分支 `mcp4-sacc12` 基 `1ca125a5`，迁移序号钉 `customs_compliance/0020`，规则目录形照 0019 那一族；真库必跑，占号前先排队列）。地盘查过 `branch-state.ps1 -Path internal/customscompliance`：在途零。
+- **非作者评审 ← 通道 1 直读**（钉 `a4da9748`）：ve-disc/06 两轴 0 / 0；sa-cc/18 Standards 0 / 0 · Spec 0 / 1（`request_buy_evaluation.go` 头注数同文件字段却改了，与 `domain/evaluation_request.go`「不动」不一致——接受，边界写进票面）。作者四条判断项全接受。
+- **重放**：`%TEMP%\idp-replay-tails2-1035` detached `1ca125a5`，`cherry-pick 6bbf2bf0..mcp4-tails2` 五笔零冲突（sa-cc spec.md 我的状态行改动与它新增的 18 行不同 hunk，自动合）→ tip **`cb440073`**；`gofmt -l` 空、build / vet 0；10:3x 先排队列再占号，带 DSN 全量 **110 ok / 0 FAIL / 16 无测试 / 0 cached**（132 s）；探针两例 PASS；清点重生成 porcelain 空；10:4x 释号。簿记一笔在其上（两票 Status / 评审 / 进 main 记录；本节）→ `ls-remote` 核 `1ca125a5` 未动 → ff → `push <sha>:main`。SHA 对照五笔在 ve-disc/06「进 main 记录」。`mcp4-tails2` → `merged/`、远端删；两树比内容后拆。
+- **前沿**：ready 四张（lc/35、lc/39、sa-cc/11、sa-cc/13）；在途 sa-cc/12（通道 4）。今早自 08:4x 起进 main 的票：psr/09 评审后补、ve-disc/05、lc/38、sa-cc/17、ve-disc/06、sa-cc/18 六张 + 六条裁决簿记。
+- **本节五数**（10:2x–10:4x）：CI 未起跑（计费）· 集成时延 tails2 10:20（`a4da9748`）→10:4x **约 25 分**（2 票，同分支；其中约 10 分在写六条裁决）· 重放笔数 **5** · 重复开发 0 · 会话重置 0 · 非作者评审缺席 0 · **推送方派单取证错数 1 处**（条 1 处数）
