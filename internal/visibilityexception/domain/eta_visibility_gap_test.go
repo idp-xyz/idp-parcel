@@ -29,7 +29,7 @@ func etaSpec(t *testing.T, version string) domain.ETAPredictionSpec {
 // Covers: VE CONTEXT「必须明确预测对象、目标里程碑、预测时点」「不得以计划时间或客户承诺填充」
 // ——各件缺一立不起（缺模型版本即拒，没有可填充的旁路）；
 // 区间倒置拒；来源口径封闭二值。
-func TestAnETADemandsItsSevenParts(t *testing.T) {
+func TestAnETADemandsItsFullShape(t *testing.T) {
 	eta, err := domain.FormETAPrediction(etaSpec(t, "eta-1/v1"))
 	if err != nil {
 		t.Fatalf("form ETA prediction: %v", err)
