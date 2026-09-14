@@ -187,7 +187,7 @@ func TestRequestingABuyEvaluationRegistersOnceAndHandsOffOneEnvelope(t *testing.
 	}
 	if record.Request.Sources().FeeItem != command.FeeItem || record.Request.Sources().Agreement != command.Agreement ||
 		record.Request.Sources().Occurrence != command.Occurrence {
-		t.Fatalf("三件引用没照命令登记：%+v", record.Request.Sources())
+		t.Fatalf("来源引用没照命令登记：%+v", record.Request.Sources())
 	}
 	if requested.EvaluationRequestHandoffReference() != "" {
 		t.Fatalf("交接成功不该留续办引用，实得 %q", requested.EvaluationRequestHandoffReference())

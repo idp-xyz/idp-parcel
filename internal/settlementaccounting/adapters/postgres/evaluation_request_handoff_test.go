@@ -19,7 +19,7 @@ import (
 
 // 钉票 sa-cc/08 完成判据 3 的 Outbox 半边：事件类型 settlement-accounting.evaluation-request.submitted；
 // 分区主体「租户/评价请求」（裁决 1 与 ADR-0069 决定二：ID 管幂等、分区键管顺序）；载荷只带
-// {tenantId, evaluationRequestId}——三件来源引用由消费方按 ID 读登记册，信封里不抄第二份；同一份意图
+// {tenantId, evaluationRequestId}——来源引用由消费方按 ID 读登记册，信封里不抄第二份；同一份意图
 // 重交由 EnqueueOnce 认领吞掉、不翻倍；意图复现样板四条（首发一行 / 回滚无痕 / 重发同一份 / 无事务拒）。
 
 func newEvaluationRequestHandoffFixture(t *testing.T) (*adapter.OutboxEvaluationRequestHandoff, *bentopg.DB, *pgxpool.Pool) {
@@ -105,7 +105,7 @@ func TestASubmittedEvaluationRequestEnqueuesOneReferenceOnlyEnvelope(t *testing.
 		t.Fatalf("载荷引用 = %+v", payload)
 	}
 	if payload.Scope != "" || payload.FeeItem != "" || payload.Agreement != "" || payload.Occurrence != "" || payload.Digest != "" {
-		t.Fatalf("载荷不得带主要范围、三件引用或摘要（消费方按 ID 读登记册），实得 %+v", payload)
+		t.Fatalf("载荷不得带主要范围、来源引用或摘要（消费方按 ID 读登记册），实得 %+v", payload)
 	}
 }
 

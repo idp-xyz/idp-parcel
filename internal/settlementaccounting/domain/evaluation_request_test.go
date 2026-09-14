@@ -9,7 +9,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 )
 
-// 钉票 sa-cc/08 的领域半边：自然键由（主要范围 + 计算目的 + 三件引用的排序后摘要）算出、摘要带规范化
+// 钉票 sa-cc/08 的领域半边：自然键由（主要范围 + 计算目的 + 来源引用的排序后摘要）算出、摘要带规范化
 // 版本前缀（ADR-0014）；发生项的原因与业务时间不进自然键；成分任一不同就是另一份请求；缺件的请求
 // 形成不了；计算目的词表封闭。夹具全是合成串（真实供应商协议与费用项目属实例半边 PAR-SET-03）。
 
@@ -162,7 +162,7 @@ func TestSubmittingAnEvaluationRequestKeepsWhatWasAsked(t *testing.T) {
 		t.Fatalf("身份 / 范围 / 目的没按规格带出：%+v", request)
 	}
 	if request.Sources() != sources {
-		t.Fatalf("三件引用没按规格带出：%+v", request.Sources())
+		t.Fatalf("来源引用没按规格带出：%+v", request.Sources())
 	}
 	if request.RequestedBy() != spec.RequestedBy || !request.RequestedAt().Equal(spec.RequestedAt) {
 		t.Fatalf("请求方 / 请求时刻没按规格带出：%+v", request)

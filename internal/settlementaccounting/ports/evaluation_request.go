@@ -52,7 +52,7 @@ type EvaluationRequestRegistry interface {
 }
 
 // EvaluationRequestView 是登记册的只读半边：按铸造 ID 取回一份请求。评价形成后回指 evaluationRequestId，
-// 采用评价的消费者按它取三件引用去凑 FormSupplierExpectedCostCommand——走这里，拿不到 Save。
+// 采用评价的消费者按它取发生项 / 费用项目 / 供应商协议引用去凑 FormSupplierExpectedCostCommand——走这里，拿不到 Save。
 // 与登记面同一个适配器实现，行模型只有一份。
 type EvaluationRequestView interface {
 	FindByID(ctx context.Context, key EvaluationRequestKey) (EvaluationRequestRecord, bool, error)
@@ -64,7 +64,7 @@ type EvaluationRequestIdentityFactory interface {
 }
 
 // EvaluationRequestIntent 把一份已登记的评价请求交给 parcel-pricing（裁决 1：信封，不同步调用）。载荷
-// 只带引用 {tenantId, evaluationRequestId}，三件来源引用由消费方按 ID 读 EvaluationRequestView——请求
+// 只带引用 {tenantId, evaluationRequestId}，来源引用由消费方按 ID 读 EvaluationRequestView——请求
 // 内容只有登记册一处权威。重放重发同一份（ADR-0043）。
 type EvaluationRequestIntent struct {
 	Record EvaluationRequestRecord

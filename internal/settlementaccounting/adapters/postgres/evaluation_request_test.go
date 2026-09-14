@@ -91,8 +91,8 @@ func saveEvaluationRequest(
 	return outcome
 }
 
-// Covers: 判据 1「评价请求登记册真库往返」——两口读回的是同一份：铸造 ID、主要范围、计算目的、三件引用
-// （发生项连原因 / 版本 / 业务时间）、请求方、请求时刻与登记时刻一个都不变形。
+// Covers: 判据 1「评价请求登记册真库往返」——两口读回的是同一份：铸造 ID、主要范围、计算目的、来源引用
+// （发生项连原因 / 版本 / 业务时间、费用项目、供应商协议）、请求方、请求时刻与登记时刻一个都不变形。
 func TestAnEvaluationRequestRoundTripsByIDAndByNaturalKey(t *testing.T) {
 	registry, transactor := newEvaluationRequestRegistry(t)
 	record := evaluationRequestRecord(t, "tenant-a", "EVREQ-SYN-1", "syn-fee-1")
@@ -243,7 +243,7 @@ func assertEvaluationRequestEquals(t *testing.T, got, want ports.EvaluationReque
 		gotSources.Occurrence.Reason() != wantSources.Occurrence.Reason() ||
 		gotSources.Occurrence.Version() != wantSources.Occurrence.Version() ||
 		!gotSources.Occurrence.OccurredAt().Equal(wantSources.Occurrence.OccurredAt()) {
-		t.Fatalf("三件引用变形：got %+v, want %+v", gotSources, wantSources)
+		t.Fatalf("来源引用变形：got %+v, want %+v", gotSources, wantSources)
 	}
 	if !got.Request.RequestedAt().Equal(want.Request.RequestedAt()) || !got.RecordedAt.Equal(want.RecordedAt) {
 		t.Fatalf("时刻变形：requestedAt %v / recordedAt %v", got.Request.RequestedAt(), got.RecordedAt)

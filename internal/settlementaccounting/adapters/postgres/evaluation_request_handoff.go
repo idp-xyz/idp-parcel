@@ -44,8 +44,8 @@ func NewOutboxEvaluationRequestHandoff(
 
 var _ ports.EvaluationRequestHandoff = (*OutboxEvaluationRequestHandoff)(nil)
 
-// evaluationRequestPayload 只带下游按键读回所需的引用：租户与铸造的请求 ID。主要范围、计算目的与三件来源
-// 引用一个都不带——请求内容只有登记册一处权威，消费方按 ID 读 ports.EvaluationRequestView；信封里再抄
+// evaluationRequestPayload 只带下游按键读回所需的引用：租户与铸造的请求 ID。主要范围、计算目的与来源引用
+// （发生项 / 费用项目 / 供应商协议）一个都不带——请求内容只有登记册一处权威，消费方按 ID 读 ports.EvaluationRequestView；信封里再抄
 // 一份就是第二处权威（票面做法 2）。
 type evaluationRequestPayload struct {
 	TenantID            string `json:"tenantId"`

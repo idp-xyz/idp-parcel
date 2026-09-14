@@ -66,7 +66,7 @@ func (reason EvaluationRequestUndecidedReason) String() string {
 	}
 }
 
-// RequestBuyEvaluationCommand 携带一次 BUY 评价请求。三件引用由调用方（结算作业或上游编排）交进来，
+// RequestBuyEvaluationCommand 携带一次 BUY 评价请求。发生项 / 费用项目 / 供应商协议引用由调用方（结算作业或上游编排）交进来，
 // 本编排不替它从 TF 登记册推——推导出来的匹配不是「合格来源引用」（票面红线）。计算目的不在命令上：
 // 本编排请求的只有 BUY 供应商成本这一格，词表由领域封闭。金额、币种、换算一格都没有——它们整组
 // 出自评价（ADR-0107 / ADR-0013），命令带得了它们就有了第二套数字。
