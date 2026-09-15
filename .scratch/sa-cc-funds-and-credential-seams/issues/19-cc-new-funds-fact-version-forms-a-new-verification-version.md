@@ -1,7 +1,7 @@
 # 资金事实新版本到达后没有编排接着做：登记册看得见 v2 回指 v1，UC-CC-009「形成新核对版本并保留原覆盖判断」在 CC 侧仍无入口
 
 Category: enhancement
-Status: ready-for-agent——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（CC owner 口径），两条「要裁的」写入下方「裁决」节**：(a′) 形成新核对版本——覆盖轴按 UC-CC-009 原句「保留原覆盖判断」承前版、差额与有效性两轴显式 `PENDING`、依据与程序承前版、资金版本取新到的那一版；触发条件是「该事实已有既往核对版本」、与 `corrects` 在不在无关；资金版本**折进指纹 + 记录列**（照 [22](22-cc-duty-verification-procedure-is-caller-asserted-and-not-recorded.md) 裁决 2 之形）。**Blocked by 22（同一作者同一分支，22 先落）**。此前 draft——2026-09-14 14:0x 通道 1 立票（按 sa-cc/13 裁决 2「触发重核对不在本票……推送方据此立票」，形取 13 完成记录「后继票的形」）。只写票面未动代码；取证锚 main `0bd86d42`（sa-cc/13 重放 tip）
+Status: in-progress——**2026-09-15 10:2x 通道 2 认领**（与 [22](22-cc-duty-verification-procedure-is-caller-asserted-and-not-recorded.md) 同一 task `f3329ba3`、同一作者、同一分支 `mcp2-sacc22-19` 基 `3a21dab7`；22 先落、本票在其上，不等 22 进 main；迁移序号本票 `0023`）；此前 ready-for-agent——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（CC owner 口径），两条「要裁的」写入下方「裁决」节**：(a′) 形成新核对版本——覆盖轴按 UC-CC-009 原句「保留原覆盖判断」承前版、差额与有效性两轴显式 `PENDING`、依据与程序承前版、资金版本取新到的那一版；触发条件是「该事实已有既往核对版本」、与 `corrects` 在不在无关；资金版本**折进指纹 + 记录列**（照 [22](22-cc-duty-verification-procedure-is-caller-asserted-and-not-recorded.md) 裁决 2 之形）。**Blocked by 22（同一作者同一分支，22 先落）**。此前 draft——2026-09-14 14:0x 通道 1 立票（按 sa-cc/13 裁决 2「触发重核对不在本票……推送方据此立票」，形取 13 完成记录「后继票的形」）。只写票面未动代码；取证锚 main `0bd86d42`（sa-cc/13 重放 tip）
 Blocked by: [22](22-cc-duty-verification-procedure-is-caller-asserted-and-not-recorded.md)（指纹与记录先加程序维，本票在其上加资金版本维；同一作者同一分支两笔即可，不必等 22 进 main）。此前：无（[13](13-cc-correction-version-inbound-registration-and-rereconciliation.md) 已进 main：`ExternalFundsFactRegister.ListFundsFactVersions` 列得出全部版本与回指）；要裁的已裁，见「裁决」
 
 ## 缺口（取证于 `0bd86d42`，逐符号名）

@@ -1,7 +1,7 @@
 # 税费付款核对的监管程序由调用方断言、编排不核它与案件一致、核对记录不带程序：错报 `procedureRef` 可绕过「规则要求而缺失保持未决」，事后也看不出付款人维按哪个程序判
 
 Category: enhancement
-Status: ready-for-agent——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（CC owner 口径），两条「要裁的」写入下方「裁决」节**：程序仍由调用方交、编排不核一致（范围→程序这条边在 CC 库上不存在，造它是新领域事实，越权）、但**进核对记录与指纹**；核对身份带程序的方式是**折进 `verificationDigest`、不加主键列**（五处键形不变、SA 零改动）。与 [19](19-cc-new-funds-fact-version-forms-a-new-verification-version.md) 同一张键两维，**本票先做、19 在其上**，同一作者同一分支两笔。此前 draft——2026-09-14 16:0x 通道 1（接管会话）立票（sa-cc/12 补评审 ← 通道 3 Standards 非阻断 ② + Spec 非阻断 ①，评审建议「合一张」；与 12 完成记录判断项 ① ④ 同根；归 CC owner）。只写票面未动代码；取证锚 main `01974923`
+Status: in-progress——**2026-09-15 10:2x 通道 2 认领**（task `f3329ba3`，推送方通道 1 10:1x 派；`/implement` › `/tdd`；分支 `mcp2-sacc22-19` 基 `3a21dab7`（= 派单时 main tip），树 `%TEMP%\idp-parcel-mcp2-sacc22-19`；本票先落、[19](19-cc-new-funds-fact-version-forms-a-new-verification-version.md) 同分支在其上；迁移序号本票 `0022`）；此前 ready-for-agent——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（CC owner 口径），两条「要裁的」写入下方「裁决」节**：程序仍由调用方交、编排不核一致（范围→程序这条边在 CC 库上不存在，造它是新领域事实，越权）、但**进核对记录与指纹**；核对身份带程序的方式是**折进 `verificationDigest`、不加主键列**（五处键形不变、SA 零改动）。与 [19](19-cc-new-funds-fact-version-forms-a-new-verification-version.md) 同一张键两维，**本票先做、19 在其上**，同一作者同一分支两笔。此前 draft——2026-09-14 16:0x 通道 1（接管会话）立票（sa-cc/12 补评审 ← 通道 3 Standards 非阻断 ② + Spec 非阻断 ①，评审建议「合一张」；与 12 完成记录判断项 ① ④ 同根；归 CC owner）。只写票面未动代码；取证锚 main `01974923`
 Blocked by: 无（12 已进 main；要裁的两条归 CC owner）
 
 ## 缺口（取证于 `01974923`，逐符号名）
