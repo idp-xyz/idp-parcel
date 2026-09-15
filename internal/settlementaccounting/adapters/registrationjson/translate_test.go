@@ -24,7 +24,7 @@ const adoptDocument = `{
 	"occurredAt": "2026-09-01T08:00:00Z"
 }`
 
-// Covers: 判据 (4) 正例——首版载荷九格逐格到 AdoptFundsFactCommand；kind 按封闭词表译回领域常量；付款人原样带过去
+// Covers: 判据 (4) 正例——首版载荷逐格到 AdoptFundsFactCommand；kind 按封闭词表译回领域常量；付款人原样带过去
 // （本上下文只保留不判断，是不是空白由用例 factFrom 那一格决定）。
 func TestExternalFundsFactFromJSONCarriesEveryFieldWithFidelity(t *testing.T) {
 	command, err := registrationjson.ExternalFundsFactFromJSON([]byte(adoptDocument))
@@ -100,7 +100,7 @@ const correctionDocument = `{
 	"correctedAt": "2026-09-02T08:00:00Z"
 }`
 
-// Covers: 判据 (4) 正例——更正载荷六格逐格到 CorrectFundsFactCommand；来源 / 付款人 / 种类 / 币种 / 发生时刻不在载荷上
+// Covers: 判据 (4) 正例——更正载荷逐格到 CorrectFundsFactCommand；来源 / 付款人 / 种类 / 币种 / 发生时刻不在载荷上
 // （用例从链头照抄，命令上不接——CorrectFundsFactCommand 头注），载荷若带它们按未知字段拒（下一例）。
 func TestExternalFundsFactCorrectionFromJSONCarriesEveryFieldWithFidelity(t *testing.T) {
 	command, err := registrationjson.ExternalFundsFactCorrectionFromJSON([]byte(correctionDocument))

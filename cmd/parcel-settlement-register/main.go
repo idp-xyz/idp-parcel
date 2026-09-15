@@ -135,10 +135,10 @@ func knownCommand(command string) bool {
 	return false
 }
 
-// buildRegistrar 装配真实采用链（裁决 3）：六口全接真，一只都不留 nil、不放替身。映射 / 核销 / 已结视图交接三口
-// 不在采用 / 更正路径上也接真——「生产装配里不放任何替身」是 SA 装配处的既有纪律，且构造门（裁决 4）拒 nil，半装
-// 根本装不进去。资金事实交接口与登记册同一只 db、同一只 Outbox Store：事务壳给的环境事务因此同时罩住版本行与
-// 向 CC 交的采用信封——两者同生共死，形照 parcel-customs-register 的 buildRegistrar。
+// buildRegistrar 装配真实采用链（裁决 3）：编排的每一口都接真，一只都不留 nil、不放替身。映射写口、核销写口与
+// 已结视图交接口不在采用 / 更正路径上也接真——「生产装配里不放任何替身」是 SA 装配处的既有纪律，且构造门
+// （裁决 4）拒 nil，半装根本装不进去。资金事实交接口与登记册同一只 db、同一只 Outbox Store：事务壳给的环境事务
+// 因此同时罩住版本行与向 CC 交的采用信封——两者同生共死，形照 parcel-customs-register 的 buildRegistrar。
 func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	none := registrar{}
 	facts, err := sapostgres.NewExternalFundsFacts(db)
@@ -188,7 +188,7 @@ func execute(ctx context.Context, command string, raw []byte, registrar registra
 		return fmt.Sprintf("%s: 译装被拒：%v", command, err), exitUsage
 	}
 
-	var handled answer
+	var handled application.FundsResult
 	err = registrar.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
 		result, err := dispatch(txCtx, registrar)
 		handled = result
@@ -197,21 +197,10 @@ func execute(ctx context.Context, command string, raw []byte, registrar registra
 	if err != nil {
 		return fmt.Sprintf("%s: 未决：%v", command, err), exitUndecided
 	}
-	if handled == nil {
-		// 事务成功却没有答案是实现坏了，不是业务答案。
-		return fmt.Sprintf("%s: 用例未交回任何结果", command), exitUndecided
-	}
-	return handled.exit(command)
-}
-
-// fundsResult 是采用编排交回的封闭结果在本入口的译法。
-type fundsResult struct {
-	result application.FundsResult
-}
-
-func (result fundsResult) exit(command string) (string, int) {
-	return fundsAnswer(command, result.result.Outcome(), result.result.UndecidedReason(),
-		result.result.FundsHandoffReference(), subjectOf(result.result))
+	// 事务成功却交回零值结果（Outcome 是无效格）时，fundsAnswer 的默认分支会把它折成「未知应用结果」——
+	// 那是实现坏了，不是业务答案。
+	return fundsAnswer(command, handled.Outcome(), handled.UndecidedReason(),
+		handled.FundsHandoffReference(), subjectOf(handled))
 }
 
 // subjectOf 取已采用 / 已存在那一版的事实与版本字面，打进答复：操作员看的是「哪条事实的哪一版落了」，不是一个词。
@@ -227,9 +216,9 @@ func subjectOf(result application.FundsResult) string {
 // 命令能交回，仍在表上——同一格不因来自哪条命令而换退出码（parcel-customs-register 的 dutyReconciliationAnswer
 // 同一条纪律）。归格只看恢复动作（裁决 5）：
 //   - 已采用 / 已存在 / 已映射 / 已核销 / 已撤销 / 重放各格 → 0。重放不是错误，无恢复动作。
-//   - `未受理` 与三个业务负向格（不可映射的失败付款、分配失衡、跨币种无换算）→ 1：内容改对了才该重来，重跑同一份
+//   - `未受理` 与业务负向各格（不可映射的失败付款、分配失衡、跨币种无换算）→ 1：内容改对了才该重来，重跑同一份
 //     没有意义。回指非链头、更正一条未采用的事实、构造门拒都落在`未受理`。
-//   - 内容冲突三格 → 2：同键异内容绝不覆盖，要人核对既有登记再决定续办。
+//   - 内容冲突各格 → 2：同键异内容绝不覆盖，要人核对既有登记再决定续办。
 //   - 未决 → 3，带编排指名的原因（今天与采用相关的只有资金事实库不可用）。
 //   - 行已落、信封未出（续办引用非空）→ 3 并把续办引用打出：事实已采用是真的，但 CC 等的那封没出去，重跑同一命令
 //     会重发同一份（Outbox 按认领键吞重）；它需要人动手，不能与已登记同格。
