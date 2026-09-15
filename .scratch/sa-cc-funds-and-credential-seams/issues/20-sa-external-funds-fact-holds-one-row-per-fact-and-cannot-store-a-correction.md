@@ -1,7 +1,7 @@
 # SA 的外部资金事实一事实一行：更正版本在提供方自己就存不下，sa-cc/02 裁决 2「更正再发一封」没有落地路径
 
 Category: bug
-Status: in-progress——**2026-09-15 10:1x 通道 6 认领**（task-173daa46；分支 `mcp6-sacc20` 基 main `3a21dab7`，隔离树 `%TEMP%\idp-parcel-mcp6-sacc20`；开工先对 `3a21dab7` 重量三条取证，结果写「完成记录」判断项）。此前 ready-for-agent——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（SA owner 口径），两条「要裁的」写入下方「裁决」节**：形取**版本子表**（身份行不动、版本各占一行，照 CC `0021`）；入口是**既有采用用例加一格「更正」**（`MapExternalFundsHandler` 新命令调 `CorrectAmount`、复用同一交接口再发一封），**不开新的在线面**——首版今天也没有生产入口，「SA 采用与更正的登记面」另立 draft 归 SA。此前 draft——2026-09-14 14:0x 通道 1 立票（sa-cc/13 完成记录判断项 ① 的发现；归 SA owner）。只写票面未动代码；取证锚 main `0bd86d42`
+Status: resolved——**2026-09-15 10:4x 通道 6 完工，待非作者评审进 main**（task-173daa46；分支 `mcp6-sacc20` 基 main `3a21dab7`，代码四笔 `fe496cf8` / `c8ead2d0` / `33116348` / `63333f4d`，完成记录与后继 draft 27 随末笔；完成判据 (1)–(5) 逐条见「完成记录」）。此前 in-progress——**2026-09-15 10:1x 通道 6 认领**（隔离树 `%TEMP%\idp-parcel-mcp6-sacc20`；开工先对 `3a21dab7` 重量三条取证，结果写「完成记录」判断项）。此前 ready-for-agent——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（SA owner 口径），两条「要裁的」写入下方「裁决」节**：形取**版本子表**（身份行不动、版本各占一行，照 CC `0021`）；入口是**既有采用用例加一格「更正」**（`MapExternalFundsHandler` 新命令调 `CorrectAmount`、复用同一交接口再发一封），**不开新的在线面**——首版今天也没有生产入口，「SA 采用与更正的登记面」另立 draft 归 SA。此前 draft——2026-09-14 14:0x 通道 1 立票（sa-cc/13 完成记录判断项 ① 的发现；归 SA owner）。只写票面未动代码；取证锚 main `0bd86d42`
 Blocked by: 无（要裁的已裁，见「裁决」）
 
 ## 缺口（取证于 `0bd86d42`，逐符号名）
@@ -54,6 +54,49 @@ Blocked by: 无（要裁的已裁，见「裁决」）
 ## 参照
 
 [02](02-sa-external-funds-fact-adoption-hands-off-an-envelope.md) 裁决 2；[03](03-cc-inbox-consumer-receives-external-funds-fact.md)；[13](13-cc-correction-version-inbound-registration-and-rereconciliation.md) 完成记录判断项 ①；`migrations/customs_compliance/0021_external_funds_fact_versions.sql` 头注（CC 侧取版本子表的理由）。
+
+## 完成记录
+
+（通道 6 · task-173daa46 · 2026-09-15 10:0x–10:4x · 隔离树 `%TEMP%\idp-parcel-mcp6-sacc20`，分支 `mcp6-sacc20` 基远端 main `3a21dab7`；认领笔 `94688ce4`，代码四笔 `fe496cf8`（裁决 1：迁移 + 端口 + 适配器 + 领域一句）/ `c8ead2d0`（裁决 2：更正格）/ `33116348`（判据 (3)：dispatch 正例）/ `63333f4d`（自评两轴各一条：AdoptFact 幂等按版本、注释去跨文件计数），本完成记录 + 后继 draft 27 + spec 两行随末笔。每笔提交后即推 `origin/mcp6-sacc20`。）
+
+**开工重量三条取证（`3a21dab7`）**：`git grep -n -E 'REFERENCES|FOREIGN KEY' -- migrations/settlement_accounting/` 零命中；`git grep -n 'CorrectAmount(' -- internal/settlementaccounting ':!*_test.go'` 只命中定义；`git grep -n -E 'NewMapExternalFundsHandler|MapExternalFundsDeps' -- cmd/ internal/ ':!*_test.go'` 除定义处零命中——三条与通道 5 取证条一致，无不符。
+
+**`/tdd`**：领域一句（`CorrectAmount` 拒更正时刻早于业务发生时刻）先红后绿；更正格（`map_external_funds_correction_test.go` 五个用例）先红（`undefined: application.CorrectFundsFactCommand`）后绿，其中「新版本等于回指」一格首轮答`冲突`而不是`未受理`，把命令自身的形提前到碰库之前才绿。**如实记**：第一片（迁移 + 适配器）的红只是编译期的 `undefined: FindVersion` 与直写 SQL 因表形变化必红，没有在旧表形上单独跑一遍新真库用例看它红——迁移与适配器改动是一体的，拆不出一个「旧库新用例」的中间态。
+
+**逐条对完成判据**：
+
+1. ✓ **应用层**——`TestCorrectingTheChainHeadAdoptsANewVersionThatPointsBackAndHandsOffASecondEnvelope`：v1 采用 → `CorrectFact` v2（回指 v1）→ 替身里版本 +1、身份键不变、意图 2 封且第二封键带 v2、`Record.Fact.Corrects()` = v1（真库那封的 ID 与载荷形由 sa-cc/02 的 `TestACorrectionVersionEnqueuesItsOwnEnvelopeInTheSamePartition` 钉着，本票复用同一交接口未改它）；`FindByKey` 交回 v2、`FindVersion(v1)` 金额原样无回指。`TestReplayingACorrectionAnswersExistingAndADifferentAmountUnderTheSameVersionIsAConflict`：同 v2 重放`已采用`、异金额`冲突`。`TestCorrectingANonHeadVersionOrAnUnadoptedFactIsNotAccepted`：回指非链头`未受理`且 v3 不落、更正未采用事实`未受理`。另有坏命令八格`未受理`、库错`未决`、交接失败留续办引用并重放补交。
+2. ✓ **真库**——`TestAFundsFactCorrectionVersionAccruesAsASecondRowAndFindByKeyAnswersTheChainHead`：新迁移往返，身份 1 行 / 版本 2 行直读，`FindByKey` 交 v2、`FindVersion(v1)` 原样、同 v2 重放`已采用`不顶替、`AdoptedFundsFactView` 两版各答各的；`TestExternalFundsFactCatalogueListsOneRowPerFactWithTheChainHead`：两版一行、内容是链头、映射 / 核销聚合只算一遍、余额按链头金额。`git diff --stat 3a21dab7 -- migrations/settlement_accounting/0004_external_funds.sql migrations/settlement_accounting/0018_external_funds_fact_payer.sql` 空。
+3. ✓ **dispatch 正例**——`TestAnAdoptedExternalFundsFactReachesTheCustomsRegisterThroughTheRouteTable` 第二格：bank-fact-2 的 v1 / v2 同一事务两次 `facts.Save` 落 SA，两封分两拍经消费者落 CC，`ListFundsFactVersions` 两版断言不变；`register.RegisterFundsFact` 预铺段与「另用一条事实」注释删。带 DSN 该用例 PASS 非 SKIP。
+4. ✓ `git diff --stat 3a21dab7 -- internal/customscompliance migrations/customs_compliance` 空。
+5. ✓ 后继 draft [27](27-sa-external-funds-fact-adoption-and-correction-registration-face.md) 已立（Status draft，「要裁的」三条归 SA owner，Blocked by 20 进 main）；spec 子票表加 27 一行、20 一行改口。
+
+**逐条对裁决**：
+
+- 裁决 1（形 = 版本子表）：`migrations/settlement_accounting/0021_external_funds_fact_versions.sql` 建 `external_funds_fact_version (tenant_id, fact_id, version)` 外键到身份行，内容列十项照裁决搬进子表、CHECK 与 0004 / 0018 逐条同；身份表 DROP 五道 CHECK 与十列，只留身份 + `recorded_at`（首次采用时刻）+ `inserted_at`，重建只含身份两列的 `scope_not_blank`；存量非零 `RAISE` 交人。`Save` 两步 DO NOTHING、`FundsFactAlreadyAdopted` 落在版本行已在；`FindByKey` 交链头（`NOT EXISTS` 后继）；新增 `FindVersion`；`LoadAdoptedFundsFact` 签名不变、FROM 经共用的 `externalFundsFactSelect` 改子表；`Map` / `Apply` 未动、照旧按 `FindByKey` 读链头；`ListExternalFundsFacts` 一事实一行（链头）、聚合不重复。
+- 裁决 2（入口 = 既有用例加更正格）：`CorrectFundsFactCommand{TenantID, Fact, Corrects, Version, AmountMinor, CorrectedAt}`（名字照票面）→ `MapExternalFundsHandler.CorrectFact`；四条前置全在（事实已采用 / `Corrects` 等于链头 / 同（事实、版本）四格 / `amountMinor > 0`），头注写了铸造方与 CC 接收方纪律不同；形成走 `domain.CorrectAmount`；`handOffFact` 复用 `OutboxExternalFundsFactHandoff`，版本与回指从 `Record.Fact` 取。**不做**：CLI / HTTP / inbox 零新面。
+- 裁决 3（做法写实）：做法 1 → 0021 + 适配器；做法 2 → `CorrectFact`；做法 3 → 视图只改头注一句（「将来」已到）与 WHERE 列加别名限定，语义不变。
+- 裁决 4（判据写实）：见上。
+
+**判断项**（取证与代码不符处、归作者的三格、以及超出票面字面的取舍——每条都可撤回）：
+
+1. **链形三道库约束是本票加的、CC 0021 没有**：回指外键到本表、`UNIQUE (tenant_id, fact_id, corrects)`、`corrects IS NULL` 部分唯一索引。理由写在 0021 头注：本上下文是铸造方（ADR-0137 决定四），链必须线性，裁决 1「链头唯一、不需要标记」这句话在库上要有东西守；CC 作为接收方容忍乱序不校验链（CC 0021 头注），两侧纪律不同、形同理不同。**代价**：直接 `Save` 一个回指不存在版本的记录会撞外键报错——`TestAnExternalFundsFactRoundTripsAndSecondAdoptKeepsTheWinner` 原来那段「bank-fact-2 直接存一条回指 `bank-fact/v1` 的 v2」正是这种写法，已拆去、并入新用例（先 v1 后 v2）。评审若认为三道该只留外键到身份行、与 CC 完全同形，去掉三道约束 + `Save` 头注两句 + `TestTheDatabaseKeepsAFundsFactVersionChainLinear` 一个用例即可，其余零改。
+2. **`Save` 两步的事务边界**（裁决 5 归作者）：`RequireExecutor` 没有事务就拒，两步都在调用方事务里，第二步失败第一步随之回滚——没有「身份落了、版本没落」的中间态可见。身份行 `recorded_at` 只在首版落下时写一次（DO NOTHING），就是「首次采用时刻」。
+3. **版本行 `ON CONFLICT DO NOTHING` 不写冲突目标**：主键撞、第二个首版、同一前版第二次更正三样都折成`已采用`，编排读回链头作答——与 `AdoptFact` 输掉竞态那一格同形（`TestALostAdoptionRaceHandsOffTheAdoptedVersionOnceNotTheLosers` 在新表形上照旧绿，靠的就是这一条：输家的另一个版本字面撞的是部分唯一索引而不是主键）。顺序到达的同类写入在编排里被「回指必须等于链头」挡下，到不了库。应用层替身 `fundsFactStoreDouble.Save` 同样守这两道，否则那条竞态用例在替身上答`已采用`而在真库上答`已采用`的理由就对不上。
+4. **`ListExternalFundsFacts` 的列形**（裁决 5 归作者）：没加版本数列。链头行的 `Version / Corrects / CorrectedAt` 三列已表达它在链上的位置；加列要同笔动 `ports.ExternalFundsFactCatalogueRow` → HTTP 转写 → 管理台类型，读面今天没有页面消费它，留给要它的那张票。前版内容不在列表上，按版本读走 `AdoptedFundsFactView`（头注写明）。
+5. **`domain.CorrectAmount` 加了一条前置**：更正时刻不得早于业务发生时刻。`RehydrateExternalFundsFact` 与 0004 / 0021 的 `correction_coupled` CHECK 都已这么要求，形成门放过去的版本会在落库那一步才被拒、编排只能答`未决`；补到形成门后编排答`未受理`。领域改动一行，既有用例全绿（它们用的都是 +1h）。
+6. **更正成功复用 `FundsFactAdopted`**，不新增 outcome：更正是采用的一种（裁决 2 原话），调用方从 `Fact().Fact.Corrects()` 分辨这是首版还是更正版；ADR-0029 按恢复动作分格，两者恢复动作同为「无」。
+7. **`correctDigest` 只算回指 / 新版本 / 金额 / 更正时刻**，与 `adoptDigest` 元素刻意不同：同一（事实、版本）若先经 `AdoptFact` 作首版落下、再有人拿它当更正版本提，两份摘要必不相等，答`冲突`而不是把首版当成更正的重放。
+8. **`CorrectFact` 先 `FindVersion` 再 `FindByKey`**：重放同一次更正时链头已经是新版本本身，先查链头会把正当重放判成「回指非链头」——头注写了。
+9. **dispatch 正例用两次 `facts.Save` 而不是 `AdoptFact` + `CorrectFact`**（票面「作者定」）：该用例钉的是路由表与 CC 消费者那一侧，SA 是夹具；装 handler 要连带装 Mappings / Applications / Downstream 三个它用不到的口。**由此留一格**：handler × 真库 × 真 Outbox 的组合今天没有一条真库用例（应用层用替身，适配器各自真库）——它属 27 的「真库装配用例一正一反」，随装配点一起立。
+10. **`migrations.go` / `plan.go` 零改**：`all:settlement_accounting` 目录已嵌入、`SettlementAccounting()` 读目录全部文件、`plan.go` 按模块函数接线——四件同笔在这里只剩 SQL 一件。
+11. **`AdoptedFundsFactView` 头注改口**：原句「库里将来一事实多行……这一句照样只答被问的那一版」的「将来」已到，改成「0021 起」。WHERE 三列加 `v.` 限定是因为共用 SELECT 段带了别名，语义零变。
+12. **清点预报**（推送方在 tip 上重生成兑底）：迁移 +1（`settlement_accounting/0021`）、端口接口方法 +1（`ExternalFundsFactStore.FindVersion`）、生产 `.go` 文件 +0（`external_funds_fact.go` 加方法、`map_external_funds.go` 加命令与方法）、测试文件 +1（`map_external_funds_correction_test.go`）、`.md` +1（票 27）。
+13. **`AdoptFact` 的幂等查法随之改为先按（事实、版本）`FindVersion`、再按身份 `FindByKey`**（第四笔）：自评 Spec 轴量到——更正 v2 落下之后链头是 v2，首版 v1 的采用命令重放若照旧拿 `FindByKey` 的链头摘要去比，会答一个不存在的`冲突`；裁决 2 写的幂等单位是（事实、版本），首版也该照它。事实已有链而命令的版本字面不在链上 → `冲突`（一条事实一个首版），既有四格语义不变；`TestReplayingTheFirstVersionAfterACorrectionStillAnswersExisting` 先红后绿，既有 `AdoptFact` 三条用例照旧绿。
+
+**自评两轴**（`/implement` Step 3 的 `/code-review`：两只隔离子代理都以「Authentication error」死在第一步——与通道 1 此前撞到的同一格；改由作者串行自跑两轴，**不代替非作者评审**）：**Standards**——发现 1 条已修：`external_funds_fact.go` `FindByKey` / `Save` 头注、`ports.go` `FundsFactAlreadyAdopted` 注、应用层替身两处注释数了 0021 里的约束（「三道」「两道」），按 AGENTS「改文档」换成点名，不留数；其余无发现（注释全中文、引用全符号名、夹具全合成、`0004` / `0018` / CC 零 diff、新 SQL `i/lf`）。**Spec**——发现 1 条已修（判断项 13）；裁决 1 / 2 与判据 (1)–(5) 逐条对过，无缺项；范围外的东西只有判断项 1 / 5 两处，各自写了理由与撤法。
+
+**验证**（隔离树，Windows 本机，DSN 指 55432；占 / 释各广播两轮）：`gofmt -l ./internal ./cmd ./migrations ./tools` 空；`go build ./...` / `go vet ./...` 全仓 0；带 DSN `-p 1 -count=1 -v`（钉 `33116348`）：`cmd/parcel-dispatch` + `cmd/parcel-api` + `./internal/architecture/...` + `./internal/settlementaccounting/...` + `./migrations/` → **1071 PASS / 0 FAIL / 0 SKIP**（24 s）；其中 SA `adapters/postgres` 单包 145 PASS / 0 SKIP。第四笔 `63333f4d` 只改应用层与注释，其上 SA application / domain 不带 DSN ok、全仓 build / vet 0；真库那批未重跑（它不经 handler）。`git ls-files --eol` 新 SQL `i/lf w/lf`，`migrations` 行尾门 ok。**没跑**：全仓（推送方重放时带 DSN 跑一次，parallel-sessions「唯一一跑」）；`-race`（本机无 cgo）。
 
 ## Comments
 
