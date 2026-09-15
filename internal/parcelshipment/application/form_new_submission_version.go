@@ -68,6 +68,9 @@ type FormNewSubmissionVersionCommand struct {
 	DeclaredParcelIDs  []domain.DeclaredParcelID
 	// DeclaredProfiles 随新版本重报的成员声明画像（ADR-0048），允许缺席或部分覆盖。
 	DeclaredProfiles []domain.DeclaredParcelProfile
+	// DeclaredElements 随新版本重报的寄 / 收两段地址要素（pp-seams/05），同画像纪律不从旧版本继承：接受基线可以
+	// 落在这一版上，读口从它自己的子段读值。与 PayloadDigest 同出接单入口的一次 CanonicalizeSubmission。
+	DeclaredElements domain.DeclaredAddressElements
 }
 
 type FormNewSubmissionVersionResult struct {
@@ -193,6 +196,7 @@ func (handler *FormNewSubmissionVersionHandler) Handle(
 		SourceSubmission:  incoming,
 		DeclaredParcelIDs: command.DeclaredParcelIDs,
 		Profiles:          command.DeclaredProfiles,
+		Elements:          command.DeclaredElements,
 		EstablishedAt:     handler.deps.Clock.Now(),
 	})
 	if err != nil {

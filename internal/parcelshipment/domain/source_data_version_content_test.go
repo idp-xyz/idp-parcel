@@ -300,11 +300,11 @@ func TestASourceDataVersionOnlyCarriesTheContentShapeOfItsOwnGroup(t *testing.T)
 		"开放范围带要素内容": {consigneeScope(t), domain.SupplementIntent, deliveryElementsContent(t, "10115"), domain.ErrInvalidCustomerSourceDataVersion},
 		"显式清空带要素内容": {deliveryPlaceScope(t, "request-1"), domain.ExplicitClearIntent, deliveryElementsContent(t, "10115"), domain.ErrInvalidCustomerSourceDataVersion},
 		"显式清空带测量内容": {measurementScope(t, "request-1", "parcel-1"), domain.ExplicitClearIntent, measurementContent(t, "1.00"), domain.ErrInvalidCustomerSourceDataVersion},
-		"收件范围带要素内容":  {deliveryPlaceScope(t, "request-1"), domain.SupplementIntent, deliveryElementsContent(t, "10115"), nil},
-		"测量范围带测量内容":  {measurementScope(t, "request-1", "parcel-1"), domain.SupplementIntent, measurementContent(t, "1.00"), nil},
-		"收件范围不带内容":   {deliveryPlaceScope(t, "request-1"), domain.SupplementIntent, domain.SourceDataVersionContent{}, nil},
-		"开放范围不带内容":   {consigneeScope(t), domain.SupplementIntent, domain.SourceDataVersionContent{}, nil},
-		"显式清空不带内容":   {deliveryPlaceScope(t, "request-1"), domain.ExplicitClearIntent, domain.SourceDataVersionContent{}, nil},
+		"收件范围带要素内容": {deliveryPlaceScope(t, "request-1"), domain.SupplementIntent, deliveryElementsContent(t, "10115"), nil},
+		"测量范围带测量内容": {measurementScope(t, "request-1", "parcel-1"), domain.SupplementIntent, measurementContent(t, "1.00"), nil},
+		"收件范围不带内容":  {deliveryPlaceScope(t, "request-1"), domain.SupplementIntent, domain.SourceDataVersionContent{}, nil},
+		"开放范围不带内容":  {consigneeScope(t), domain.SupplementIntent, domain.SourceDataVersionContent{}, nil},
+		"显式清空不带内容":  {deliveryPlaceScope(t, "request-1"), domain.ExplicitClearIntent, domain.SourceDataVersionContent{}, nil},
 	}
 	for name, item := range cases {
 		t.Run(name, func(t *testing.T) {

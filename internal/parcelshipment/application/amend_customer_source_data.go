@@ -64,6 +64,10 @@ type AmendCustomerSourceDataCommand struct {
 	// EffectiveAt 是客户声明的资料适用时间，可以缺失。缺失时保持零值，绝不用 occurredAt
 	// 或 receivedAt 顶替——`UC-PS-002` 明禁那种补齐。
 	EffectiveAt time.Time
+	// Content 是这一版在 Scope 那个资料范围上留下的封闭要素内容（pp-seams/05 裁决 3）：按范围只有一种形——申报测量范围
+	// 一份 DeclaredMeasurement、寄 / 收范围一份 AddressElements——可缺席；Intent 为显式清空时必须缺席。它与 PayloadDigest
+	// 出自接单入口对同一份规范化输入的同一次调用，本编排不重算、不核对、不改值，原样进版本。
+	Content domain.SourceDataVersionContent
 }
 
 type AmendCustomerSourceDataResult struct {
@@ -162,6 +166,13 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 	// （AT-PS-020），意图立不起来，授权与规则的答案都无从成立。这是调用方的错，不是业务
 	// 未决——续办补不出一个没声明的意图。请求到达过这件事已由上面的来源保全留痕。
 	if !command.Intent.Declared() {
+		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", domain.ErrInvalidCustomerSourceDataVersion)
+	}
+	// 内容的形要配范围与意图（pp-seams/05 裁决 3）：一份落在收件范围上的测量、或一份带着邮编的「显式清空」，与意图
+	// 没声明同一格——调用方的错，续办补不出来。在这里先问而不是等 FormCustomerSourceDataVersion 拒：那一步在授权、
+	// 阶段、矩阵与签发版本号之后，一条注定不成立的命令不该跑到那里才被拒。判断只有一处（domain 那道构造门），这里
+	// 只是早问。
+	if !command.Content.FitsAmendment(command.Scope, command.Intent) {
 		return AmendCustomerSourceDataResult{}, fmt.Errorf("amend customer source data: %w", domain.ErrInvalidCustomerSourceDataVersion)
 	}
 
@@ -274,6 +285,7 @@ func (handler *AmendCustomerSourceDataHandler) Handle(
 		Authority:   authorization.Authority,
 		EffectiveAt: command.EffectiveAt,
 		FormedAt:    handler.deps.Clock.Now(),
+		Content:     command.Content,
 	})
 	if err != nil {
 		return AmendCustomerSourceDataResult{}, fmt.Errorf("form customer source data version: %w", err)
