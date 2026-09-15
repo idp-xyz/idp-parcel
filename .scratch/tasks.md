@@ -2430,3 +2430,11 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - **簿记**：三票 Status 转 ready、两份 spec 三行、本节；纯 .md 共享 main 一笔、`ls-remote` 核 `e1ab9fb5` 未动后 push。
 - **派单**：点名后派 05 / 27 / 29 给空闲通道（2 在做 30）。撞点：29 碰 `receive_on_adopted_funds_fact.go`（生产）与 `assemble_test.go`，30 碰同目录 `receive_on_adopted_funds_fact_test.go` 与 `duty_registers_test.go`——29 的作者不动 `rederiveStores` 替身、新增用例另起或等 30 进 main 后 rebase；05 在 PS、27 在 SA + 新 `cmd/`，与 29 / 30 零重叠。
 - **前沿**：ready 0（三张转 ready 即派）；在途 sa-cc/30（2）+ 三票；draft 0；lc 20 / 22 等真源；needs-info / blocked 六张阻断在外。**归用户**：CI 计费；六件 untracked。
+
+### 13:0x–13:1x：时刻校正 → 点名派三票 → 第五批 sa-cc/30 进 main
+
+- **时刻校正**（`bb7268f0`）：本会话前几笔簿记的 HH:Mx 是估的、比提交时间晚 10–30 分（19 进 main 写 12:3x 实为 12:22，第四批写 12:5x 实为 12:35，立票写 13:0x 实为 12:43，代裁写 13:1x / 13:2x 实为 12:57）；按 `git log --date` 逐条改回，两条集成时延随之改小。教训：写时刻先 `Get-Date`，不估。
+- **点名**（13:00 广播、截止 13:03）：3 / 5 / 6 / 4 / 2 五个应答全在截止前、全空闲。派三单：**task-6dbb178b → 通道 5** pp-seams/05（02 / 03 作者，自己立的 draft；分支 `mcp5-ppseams05` 基 `bb7268f0`）；**task-43a6ae28 → 通道 3** sa-cc/27 第一步（`mcp3-sacc27`；同笔立后继票 31 第二步端点 + 管理台）；**task-2cc18a20 → 通道 6** sa-cc/29（19 的评审人、非作者；`mcp6-sacc29`）。撞点写进单：29 动 `receive_on_adopted_funds_fact_test.go` 前先 rebase 到含 30 的 main、不改替身排序。2 / 4 留作评审人。
+- **第五批 sa-cc/30**（通道 2 12:5x 交活 `mcp2-sacc30@c9c9b8f5`，单笔三文件 +100 −11、零生产改动、做法 2 做了并 red / green）：评审门推送方自审（只测试文件，逐 hunk 读，判断项四条接受）。`%TEMP%\idp-replay-wave5` @ `bb7268f0`，`cherry-pick c9c9b8f5` 撞票 30 .md（main 侧时刻校正 vs 分支侧 Status → resolved）→ 按意图解取分支 Status、立票时刻取 main → `3dc8f94c`，测试文件与作者 tip 零 diff；清点零差。**验证（推送方全量一次，`3dc8f94c`）**：`gofmt` 空、build / vet 0；占 55432 → 带 DSN `-p 1 -count=1 ./...` **113 ok / 0 FAIL / 16 无测试 / 0 cached**（134 s）、探针新格 PASS → 释。簿记同笔（票 30 Status「已进 main」+ 自审 + 进 main 记录、sa-cc spec 30 行、本节）→ 共享 main `ff` → `ls-remote` 核 `bb7268f0` → push。分支 `mcp2-sacc30` → `merged/`、远端删；作者树由通道 2 比内容后拆。
+- **前沿**：在途 pp-seams/05（5）、sa-cc/27（3）、sa-cc/29（6）；2 / 4 空闲留评审；ready 0；draft 0；lc 20 / 22 等真源；needs-info / blocked 六张阻断在外。**归用户**：CI 计费；六件 untracked。
+- **本节五数**（13:0x–13:1x）：CI 未起跑（计费）· 集成时延——30 完工报 12:5x → 进 main 13:1x **约 15 分** · 重放笔数 **1** · 重复开发 0 · 会话重置 0 · 非作者评审缺席 0（30 只测试文件自审如实计）

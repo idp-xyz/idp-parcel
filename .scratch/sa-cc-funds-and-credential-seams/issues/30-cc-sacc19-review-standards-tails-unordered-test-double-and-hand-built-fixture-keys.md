@@ -1,7 +1,7 @@
 # sa-cc/19 评审 Standards 尾巴：适配器测试替身 `rederiveStores.ListVerificationsByFundsFact` 遍历 map 交回、不守端口口径「核对时刻升序、同刻按指纹字典序」；`duty_registers_test.go` 两处 seed 手拼 `tenant + "/" + fact + "/" + version` 不走同文件的 `fundsVersionKey`
 
 Category: chore
-Status: resolved——**2026-09-15 12:5x 通道 2**（task-38d5d3a7-b21b-46f4-9d4b-2841bd138581；分支 `mcp2-sacc30` 基 `e1ab9fb5`，代码 tip 即本笔——两份测试文件与完成记录同一提交，SHA 见交付消息；做法 2 已做，先 red 后 green；全文见「完成记录」）。此前 ready-for-agent——2026-09-15 12:4x 通道 1 立票（sa-cc/19 非作者评审 ← 通道 6 Standards 非阻断 ① ②，推送方处置「合一张 A 类零行为尾巴」）。只测试文件，零生产改动
+Status: resolved——**已进 main，2026-09-15 13:1x 通道 1 推送方**（第五批，重放 `c9c9b8f5→3dc8f94c`；评审门推送方自审（只测试文件、零生产改动）；`3dc8f94c` 带 DSN 全仓 113 ok / 0 FAIL；见 Comments「进 main 记录」）。此前——**2026-09-15 12:5x 通道 2**（task-38d5d3a7-b21b-46f4-9d4b-2841bd138581；分支 `mcp2-sacc30` 基 `e1ab9fb5`，代码 tip 即本笔——两份测试文件与完成记录同一提交，SHA 见交付消息；做法 2 已做，先 red 后 green；全文见「完成记录」）。此前 ready-for-agent——2026-09-15 12:4x 通道 1 立票（sa-cc/19 非作者评审 ← 通道 6 Standards 非阻断 ① ②，推送方处置「合一张 A 类零行为尾巴」）。只测试文件，零生产改动
 Blocked by: 无（sa-cc/19 已进 main `49ffc96c`）
 
 ## 缺口（评审钉 `a0cb6fef`，进 main 后在 `07341b8b` 同形）
@@ -68,3 +68,4 @@ Blocked by: 无（sa-cc/19 已进 main `49ffc96c`）
 ## Comments
 
 - 2026-09-15 12:4x · 通道 1：立票（评审尾巴，推送方处置时点名）。只写票面，未动代码。
+- **2026-09-15 13:1x · 进 main 记录 · 通道 1 推送方**：**评审门推送方自审**（只两份测试文件、零生产改动，照 [28](28-sa-sacc20-review-standards-tail-save-header-states-ordered-versus-concurrent-answers.md) 先例）：`git diff --stat e1ab9fb5 c9c9b8f5 -- ':!*_test.go' ':!.scratch'` 空；逐 hunk 读——`rederiveStores.ListVerificationsByFundsFact` 的 `sort.Slice` 比较函数与端口头注同口（时刻升序、同刻按 `Key.Digest`），头注补句只讲为什么替身必须排；新格 `TestSameInstantVersionsHandTheirLineageToTheLexicographicallySmallerDigest` 用 `verifiedFixture` 固定时钟造同刻两版、当场比指纹不写死哈希，断的正是 19 判断项 ②；两只 seed 改走 `fundsVersionKey` 并交回键，`seedFundsFactWithoutPayer` 与用例末尾字面键都取返回值（作者判断项 3 顺手消第三处，接受——同一缺陷）；注释全中文、符号名、无行号无计数。判断项四条接受。**重放**：隔离检出 `%TEMP%\idp-replay-wave5` @ `bb7268f0`，`cherry-pick c9c9b8f5` 撞本票 .md 一处——main 侧 `bb7268f0` 把立票时刻 `13:0x` 校正成 `12:4x`、分支侧把 Status 改 resolved 并接旧 Status 在「此前」后——按意图解：取分支的 Status 行、「此前」里的立票时刻取 main 的 `12:4x` → `3dc8f94c`；`git diff c9c9b8f5 3dc8f94c -- cmd internal` 空。清点在 `3dc8f94c` 重生成零差（不增删文件）。**验证（推送方全量一次，`3dc8f94c`）**：`gofmt -l` 空、`go build ./...` / `go vet ./...` 0；占 55432 → 带 DSN `go test -p 1 -count=1 ./...` **113 ok / 0 FAIL / 16 无测试 / 0 cached**（134 s）；探针新格 `-v` PASS → 释。本簿记笔在 `3dc8f94c` 之上 → 共享 main `merge --ff-only` → `ls-remote` 核 `bb7268f0` 未动 → `push <sha>:main`。分支 `mcp2-sacc30` → `merged/`、远端删；作者树由通道 2 比内容后拆。29 的作者（通道 6）已被告知：动 `receive_on_adopted_funds_fact_test.go` 前 rebase 到含本笔的 main、不改替身排序。
