@@ -1,7 +1,7 @@
 # SA 外部资金事实采用与更正的登记面：`MapExternalFundsHandler` 零生产装配，首版采用与 sa-cc/20 新开的「更正」格今天都只有测试直写能到
 
 Category: enhancement
-Status: ready-for-agent——**2026-09-15 12:5x 通道 1 按用户「代裁」代裁（SA owner 口径），三条「要裁的」写入下方「裁决」节**：入口分两步、本票只做第一步——新二进制 `cmd/parcel-settlement-register`（形照 `parcel-customs-register`）+ 载荷译装放 `internal/settlementaccounting/adapters/registrationjson` 让第二步端点同源；ADR-0085 读作「算」——SA 采用 / 更正是登记事实写面、与 CC 协作 / 核对同族，端点 + 管理台写签拆后继票；`NewMapExternalFundsHandler` 单只改成构造期拒 nil（照 sa-cc/16 形），六口装配处全接真。此前 draft——2026-09-15 10:3x 通道 6 立票（sa-cc/20 裁决 2「更正面与首版面是同一张『SA 采用登记面』的题……本票作者顺手立一张 draft」；归 SA owner）。只写票面未动代码；取证锚 main `3a21dab7` 与分支 `mcp6-sacc20`
+Status: resolved——**2026-09-15 13:5x 通道 3**（task-43a6ae28；分支 `mcp3-sacc27` 基 `bb7268f0`，代码 tip `aa48912e`（五笔：`e1525530` 构造器拒 nil → `e941eaff` `registrationjson` → `cde667ea` 新二进制 → `f92c22b3` 真库垂直 → `aa48912e` 自审修复），本完成记录与后继票 [31](31-sa-external-funds-fact-registration-endpoints-and-admin-write-face.md) 紧随一笔；判据 (1)–(7) 逐条、裁决 2–5 逐条、判断项、验证与能力边界见下方「完成记录」）。此前 in-progress——2026-09-15 13:1x 通道 3 认领，按「裁决」1–8 落。此前 ready-for-agent——**2026-09-15 12:5x 通道 1 按用户「代裁」代裁（SA owner 口径），三条「要裁的」写入下方「裁决」节**：入口分两步、本票只做第一步——新二进制 `cmd/parcel-settlement-register`（形照 `parcel-customs-register`）+ 载荷译装放 `internal/settlementaccounting/adapters/registrationjson` 让第二步端点同源；ADR-0085 读作「算」——SA 采用 / 更正是登记事实写面、与 CC 协作 / 核对同族，端点 + 管理台写签拆后继票；`NewMapExternalFundsHandler` 单只改成构造期拒 nil（照 sa-cc/16 形），六口装配处全接真。此前 draft——2026-09-15 10:3x 通道 6 立票（sa-cc/20 裁决 2「更正面与首版面是同一张『SA 采用登记面』的题……本票作者顺手立一张 draft」；归 SA owner）。只写票面未动代码；取证锚 main `3a21dab7` 与分支 `mcp6-sacc20`
 Blocked by: 无（20 已进 main `1e74aaaf`；取证 ← 通道 5 已落 Comments，钉 `7160fe67`）
 
 ## 缺口（取证于 `3a21dab7`，逐符号名；sa-cc/20 通道 5 取证条与通道 6 认领笔各量过一遍）
