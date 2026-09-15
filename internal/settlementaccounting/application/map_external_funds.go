@@ -236,8 +236,9 @@ func NewMapExternalFundsHandler(deps MapExternalFundsDeps) *MapExternalFundsHand
 	return &MapExternalFundsHandler{deps: deps}
 }
 
-// AdoptFact 采用一条外部资金事实：只读引用（无余额/已结清字段，领域已钉），幂等按
-// （租户+事实引用）分重放/冲突。
+// AdoptFact 采用一条外部资金事实的首版：只读引用（无余额/已结清字段，领域已钉），幂等按
+// （租户+事实引用+版本）分重放/冲突——先按命令的版本字面查，链头被更正版本占着时重放首版仍答
+// `已采用`（0021 起一事实多版，票 sa-cc/20）；同一事实换一个首版字面则是`冲突`。
 func (handler *MapExternalFundsHandler) AdoptFact(
 	ctx context.Context,
 	command AdoptFundsFactCommand,
@@ -249,17 +250,24 @@ func (handler *MapExternalFundsHandler) AdoptFact(
 
 	key := ports.FundsFactKey{TenantID: command.TenantID, Fact: fact.Fact()}
 	digest := adoptDigest(command)
-	existing, found, err := handler.deps.Facts.FindByKey(ctx, key)
+	existing, found, err := handler.deps.Facts.FindVersion(ctx, key, fact.Version())
 	if err != nil {
 		return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
 	}
 	if found {
 		if existing.ContentDigest != digest {
-			// 同一事实引用携带不同金额或时间：冲突保留原引用——外部更正走版本链，
+			// 同一版本字面携带不同金额或时间：冲突保留原引用——外部更正走版本链，
 			// 不在采用处顶替。冲突的那一份没有被采用，无物可交。
 			return FundsResult{outcome: FundsFactConflict}, nil
 		}
 		return handler.existingFact(ctx, existing), nil
+	}
+	if _, adopted, err := handler.deps.Facts.FindByKey(ctx, key); err != nil {
+		return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
+	} else if adopted {
+		// 事实已有版本链、而这个版本字面不在链上：一条事实只有一个首版，第二个首版是冲突不是采用；
+		// 更正走 CorrectFact 回指链头。
+		return FundsResult{outcome: FundsFactConflict}, nil
 	}
 
 	record := ports.FundsFactRecord{Key: key, ContentDigest: digest, Fact: fact, RecordedAt: handler.deps.Clock.Now()}

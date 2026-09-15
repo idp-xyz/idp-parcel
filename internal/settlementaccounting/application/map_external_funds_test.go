@@ -19,7 +19,7 @@ var (
 )
 
 // fundsFactStoreDouble 照 0021 起的形：一条记录一个版本，键（租户、事实、版本）；FindByKey 交回链头——
-// 没有任何一版回指它的那一版（真库靠三道链形约束保证它唯一，替身只在同一事实的记录里找）。
+// 没有任何一版回指它的那一版（真库靠 0021 的链形约束保证它唯一，替身只在同一事实的记录里找）。
 type fundsFactStoreDouble struct {
 	records map[string]ports.FundsFactRecord
 	findErr error
@@ -88,8 +88,8 @@ func (double *fundsFactStoreDouble) Save(
 	if _, exists := double.records[fundsFactVersionKey(record.Key, record.Fact.Version())]; exists {
 		return ports.FundsFactAlreadyAdopted, nil
 	}
-	// 0021 守链形的两道唯一约束在替身里也要在：第二个首版、同一前版的第二次更正都折成`已采用`——
-	// 输掉竞态的一方就是从这里拿到 AlreadyAdopted、再读回赢家那一版的。
+	// 0021 守链形的唯一约束（一个首版、一个前版只被更正一次）在替身里也要在：第二个首版、同一前版的
+	// 第二次更正都折成`已采用`——输掉竞态的一方就是从这里拿到 AlreadyAdopted、再读回赢家那一版的。
 	predecessor, corrected := record.Fact.Corrects()
 	for _, existing := range double.records {
 		if existing.Key != record.Key {

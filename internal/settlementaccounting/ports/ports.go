@@ -785,7 +785,7 @@ const (
 	FundsFactSaveOutcomeInvalid FundsFactSaveOutcome = iota
 	FundsFactSaved
 	// FundsFactAlreadyAdopted 落在（身份、版本）已在——身份已在而版本是新的，正是更正版本该走进去的口。
-	// 库上守链形的两道唯一约束（一条事实一个首版、一个前版只被更正一次）撞上时也答它：这一版没有落，
+	// 库上守链形的唯一约束（一条事实一个首版、一个前版只被更正一次）撞上时也答它：这一版没有落，
 	// 占着那个位置的是先到的那一版，编排读回链头作答。
 	FundsFactAlreadyAdopted
 )

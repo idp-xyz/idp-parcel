@@ -159,6 +159,40 @@ func TestReplayingACorrectionAnswersExistingAndADifferentAmountUnderTheSameVersi
 	}
 }
 
+// Covers: 幂等的单位是（事实、版本）——更正 v2 落下之后，首版 v1 的采用命令重放仍答`已采用`并交回 v1 那一份
+// （不是拿链头 v2 的摘要去比、答一个不存在的冲突）；同一事实换一个首版字面才是`冲突`。
+func TestReplayingTheFirstVersionAfterACorrectionStillAnswersExisting(t *testing.T) {
+	fixture := newFundsFixture(t)
+	first := adoptFirstVersion(t, fixture)
+	if corrected, err := fixture.handler.CorrectFact(context.Background(), correctCommand(t)); err != nil || corrected.Outcome() != application.FundsFactAdopted {
+		t.Fatalf("更正：outcome = %q err = %v", corrected.Outcome(), err)
+	}
+
+	replay, err := fixture.handler.AdoptFact(context.Background(), first)
+	if err != nil {
+		t.Fatalf("replay v1: %v", err)
+	}
+	if replay.Outcome() != application.FundsFactExisting {
+		t.Fatalf("v2 在链头时重放 v1 的采用：outcome = %q, want EXISTING_FUNDS_FACT", replay.Outcome())
+	}
+	if record, ok := replay.Fact(); !ok || record.Fact.Version().String() != first.Version {
+		t.Fatalf("重放该交回 v1 那一份：%v %q", ok, record.Fact.Version())
+	}
+	if got := len(fixture.factHandoff.intents); got != 2 {
+		t.Fatalf("重放后意图数 = %d, want 2（v1 那封由认领键吞掉）", got)
+	}
+
+	anotherFirst := first
+	anotherFirst.Version = "bank-receipt-1/v1-bis"
+	conflict, err := fixture.handler.AdoptFact(context.Background(), anotherFirst)
+	if err != nil {
+		t.Fatalf("another first version: %v", err)
+	}
+	if conflict.Outcome() != application.FundsFactConflict {
+		t.Fatalf("同一事实换一个首版字面：outcome = %q, want FUNDS_FACT_CONFLICT", conflict.Outcome())
+	}
+}
+
 // Covers: sa-cc/20 裁决 2「Corrects 等于当前链头版本（指向非链头 → `未受理`）」与「事实已采用（否则`未受理`）」。
 // 本上下文是铸造方：纠正一个不是当前的版本是调用方编程错误，与 CC 作为接收方容忍乱序不同。
 func TestCorrectingANonHeadVersionOrAnUnadoptedFactIsNotAccepted(t *testing.T) {

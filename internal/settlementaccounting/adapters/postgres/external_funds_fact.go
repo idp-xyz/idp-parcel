@@ -27,9 +27,9 @@ func NewExternalFundsFacts(db *bentopg.DB) (*ExternalFundsFacts, error) {
 	return &ExternalFundsFacts{db: db}, nil
 }
 
-// FindByKey 按（租户+事实）交回链头——没有任何一版回指它的那一版。0021 用三道约束把链钉成线性（一个首版、
-// 一个前版只被更正一次、回指必须指向已有版本），所以「无后继」恰好一行，不需要按时刻排序挑「最新」，也不需要
-// 标记列。否定结果只回 false。读回经重建门复验更正两半。
+// FindByKey 按（租户+事实）交回链头——没有任何一版回指它的那一版。0021 把链钉成线性——一个首版、一个前版
+// 只被更正一次、回指必须指向已有版本——所以「无后继」恰好一行，不需要按时刻排序挑「最新」，也不需要标记列。
+// 否定结果只回 false。读回经重建门复验更正两半。
 func (repository *ExternalFundsFacts) FindByKey(
 	ctx context.Context,
 	key ports.FundsFactKey,
@@ -164,7 +164,7 @@ func scanExternalFundsFact(row pgx.Row, key ports.FundsFactKey) (ports.FundsFact
 // 失败时第一步随事务回滚）：身份行 DO NOTHING（首版落下它、后续版本撞见它），版本行 DO NOTHING——同一
 // （租户、事实、版本）已在答`已采用`、不覆盖先到者；身份已在而版本是新的则落进去，这正是更正版本的口。
 //
-// 版本行的 DO NOTHING 不写冲突目标：0021 的「一个首版」「一个前版只被更正一次」两道唯一约束撞上时同样折成
+// 版本行的 DO NOTHING 不写冲突目标：0021 守「一个首版」「一个前版只被更正一次」的唯一约束撞上时同样折成
 // `已采用`，让编排像 AdoptFact 输掉竞态那样读回链头作答（谁先落谁是当前，输家拿到赢家那一版）；顺序到达的
 // 同类写入在编排里就被「回指必须等于链头」挡下，到不了这里。回指一个不存在的版本是外键错，响亮报错不折。
 func (repository *ExternalFundsFacts) Save(
