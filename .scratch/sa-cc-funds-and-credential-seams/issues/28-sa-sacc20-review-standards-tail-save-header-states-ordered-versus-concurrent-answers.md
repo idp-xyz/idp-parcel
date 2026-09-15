@@ -1,7 +1,7 @@
 # sa-cc/20 评审 Standards 尾巴：`Save` 头注与 `FundsFactAlreadyAdopted` 注只写「两种都按当前链头作答」，没写出「顺序到达`未受理` / 并发到达`已采用`」这条不对称——同一业务事实两张脸，读注释的人分不出
 
 Category: chore
-Status: resolved——**2026-09-15 12:1x 通道 4**（task-1b28ece5-bebc-4a16-8221-a2f2a7e0295f；分支 `mcp4-sacc28` 基 `7160fe67`，代码 tip `d6b1f773`，本完成记录紧随一笔；`git diff` 每一改行均 `//`、不带 DSN SA 全部包 ok、清点在 tip 上重生成零差；见「完成记录」）。此前 ready-for-agent——2026-09-15 11:2x 通道 1 立票（sa-cc/20 非作者评审 ← 通道 3 Standards 非阻断 ①，推送方处置「合一张 A 类零行为尾巴」）。零行为，只注释
+Status: resolved——**已进 main，2026-09-15 12:5x 通道 1 推送方**（第四批，重放 `d6b1f773→981a6f15` / `88ca0a2e→ee3ec953`，批 tip `676cc09b`（含 pp-seams/06 与 sa-cc/27 取证）；评审门推送方自审——纯注释，`git diff -U0 7160fe67 d6b1f773 -- internal/` 滤掉 `^[+-]\s*//` 后为空；批 tip 带 DSN 全仓 113 ok / 0 FAIL；见 Comments「进 main 记录」）。此前——**2026-09-15 12:1x 通道 4**（task-1b28ece5-bebc-4a16-8221-a2f2a7e0295f；分支 `mcp4-sacc28` 基 `7160fe67`，代码 tip `d6b1f773`，本完成记录紧随一笔；`git diff` 每一改行均 `//`、不带 DSN SA 全部包 ok、清点在 tip 上重生成零差；见「完成记录」）。此前 ready-for-agent——2026-09-15 11:2x 通道 1 立票（sa-cc/20 非作者评审 ← 通道 3 Standards 非阻断 ①，推送方处置「合一张 A 类零行为尾巴」）。零行为，只注释
 Blocked by: 无（sa-cc/20 已进 main `1e74aaaf`）
 
 ## 缺口（评审钉 `63333f4d`，进 main 后在 `14d86a61` 同形）
@@ -58,3 +58,4 @@ Blocked by: 无（sa-cc/20 已进 main `1e74aaaf`）
 
 - 2026-09-15 11:2x · 通道 1：立票（评审尾巴，推送方处置时点名）。只写票面，未动代码。
 - 2026-09-15 12:1x · 通道 4：认领即完工（task `1b28ece5`；分支 `mcp4-sacc28` 基 `7160fe67`，代码 tip `d6b1f773`）。完成记录见上；树不拆，留推送方重放。
+- **2026-09-15 12:5x · 进 main 记录 · 通道 1 推送方**：**评审门推送方自审**（纯注释零行为，照 [25](25-pp-sacc24-review-standards-tails-declared-comment-scope-and-sentinel-sentence-qualifier.md) 先例）：`git diff -U0 7160fe67 d6b1f773 -- internal/` 取全部 `^[+-]` 行、去文件头、滤掉 `^[+-]\s*//` 后为空——三文件九增两删全是注释行；逐句对票面做法 1–3：`ExternalFundsFacts.Save` 头注那句插在「到不了这里」之后（判断项 ①，接受——那句正接着「顺序到达……到不了这里」讲两答为何不同，段末反而离题）；`ports.FundsFactAlreadyAdopted` 短版「撞约束才答它」（判断项 ④，接受）；`CorrectFact` 分支半句只引 `ExternalFundsFacts.Save` 符号名（判断项 ③，接受）；「分得出是输掉竞态而非重放」替票面「分得出后者」（判断项 ②，接受——`已采用`自身分重放 / 输竞态两格，版本字面分的正是这两格）。注释全中文、无行号无计数。**重放**：隔离检出 `%TEMP%\idp-replay-wave4` @ `49ffc96c`，`cherry-pick d6b1f773 88ca0a2e` 零冲突 → `981a6f15` / `ee3ec953`，`git diff 88ca0a2e ee3ec953 -- internal/settlementaccounting` 与本票 .md 均空；同树再叠 pp-seams/06 `69189208→4ca2ccac`、sa-cc/27 取证 `af2b59db→676cc09b`，批 tip `676cc09b`；清点在 `4ca2ccac` 重生成零差（本票零增删，作者预报同）。**验证（推送方全量一次，`4ca2ccac`——之后只叠一笔纯 .md）**：`gofmt -l` 空、`go build ./...` / `go vet ./...` 0；占 55432 → 带 DSN `go test -p 1 -count=1 ./...` **113 ok / 0 FAIL / 16 无测试 / 0 cached**（134 s）→ 释。本簿记笔在 `676cc09b` 之上 → 共享 main `merge --ff-only` → `ls-remote` 核 `49ffc96c` 未动 → `push <sha>:main`。分支 `mcp4-sacc28` → `merged/`、远端删；作者树由通道 4 比内容后拆。
