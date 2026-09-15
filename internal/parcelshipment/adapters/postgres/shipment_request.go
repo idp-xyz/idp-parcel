@@ -288,7 +288,23 @@ type versionDocument struct {
 	Source            sourceDocument    `json:"source"`
 	DeclaredParcelIDs []string          `json:"declaredParcelIds"`
 	Profiles          []profileDocument `json:"profiles,omitempty"`
-	EstablishedAt     time.Time         `json:"establishedAt"`
+	// Elements 是随本版本申报的寄 / 收两段地址要素子段（pp-seams/05 裁决 2），落法照 Profiles：缺席即 omitempty 整段不写，
+	// 早于本票的快照没有这一段，读回即零值、读口如实答「要素缺席」。零迁移。
+	Elements      *elementsDocument `json:"elements,omitempty"`
+	EstablishedAt time.Time         `json:"establishedAt"`
+}
+
+// elementsDocument 按资料范围分两段；哪一段缺席就不写哪一段。
+type elementsDocument struct {
+	Sender   *addressElementsDocument `json:"sender,omitempty"`
+	Delivery *addressElementsDocument `json:"delivery,omitempty"`
+}
+
+// addressElementsDocument 是一个资料范围上的地址要素取值，键取要素名的驼峰；值原样落（不去空白），缺席的要素不写键——
+// 与 domain.AddressElementsOf 的读法对得上：在场的要素值恒非空串，读回时按要素名重新读一遍即得同一份在场标志。
+type addressElementsDocument struct {
+	PostalCode  string `json:"postalCode,omitempty"`
+	CountryCode string `json:"countryCode,omitempty"`
 }
 
 type sourceDocument struct {
@@ -414,25 +430,80 @@ func versionDocumentOf(version domain.SubmissionVersion) versionDocument {
 		document.DeclaredParcelIDs = append(document.DeclaredParcelIDs, parcel.String())
 	}
 	for _, profile := range version.DeclaredProfiles() {
-		measurement := profile.Measurement()
-		profileDoc := profileDocument{
-			Parcel: profile.Parcel().String(),
-			Weight: measurementDocument{
-				Value: measurement.Weight().Value().String(),
-				Unit:  measurement.Weight().Unit().String(),
-			},
-		}
-		if dimensions, declared := measurement.Dimensions(); declared {
-			profileDoc.Dimensions = &dimensionsDocument{
-				Length: dimensions.Length().String(),
-				Width:  dimensions.Width().String(),
-				Height: dimensions.Height().String(),
-				Unit:   dimensions.Unit().String(),
-			}
-		}
-		document.Profiles = append(document.Profiles, profileDoc)
+		weight, dimensions := measurementDocumentsOf(profile.Measurement())
+		document.Profiles = append(document.Profiles, profileDocument{
+			Parcel:     profile.Parcel().String(),
+			Weight:     weight,
+			Dimensions: dimensions,
+		})
+	}
+	document.Elements = elementsDocumentOf(version.DeclaredElements())
+	return document
+}
+
+// elementsDocumentOf 把地址要素子段摊成文档；整段缺席交回 nil，让 omitempty 把键整个省掉。
+func elementsDocumentOf(elements domain.DeclaredAddressElements) *elementsDocument {
+	if elements.Empty() {
+		return nil
+	}
+	return &elementsDocument{
+		Sender:   addressElementsDocumentOf(elements.InGroup(domain.SenderPlaceDataGroup())),
+		Delivery: addressElementsDocumentOf(elements.InGroup(domain.DeliveryPlaceDataGroup())),
+	}
+}
+
+// addressElementsDocumentOf 摊一个范围上的取值；两格都缺交回 nil。
+func addressElementsDocumentOf(elements domain.AddressElements) *addressElementsDocument {
+	if elements.Empty() {
+		return nil
+	}
+	document := &addressElementsDocument{}
+	if postal, declared := elements.PostalCode(); declared {
+		document.PostalCode = postal
+	}
+	if country, declared := elements.CountryCode(); declared {
+		document.CountryCode = country
 	}
 	return document
+}
+
+// addressElements 把一个范围的文档读回成 domain.AddressElements：拼成按封闭要素名命名的条目再经 AddressElementsOf 读——
+// 在场与缺席的判法只有领域那一处，这里不另写一遍。文档缺席交回零值。
+func (document *addressElementsDocument) addressElements(group domain.SourceDataGroupReference) (domain.AddressElements, error) {
+	if document == nil {
+		return domain.AddressElements{}, nil
+	}
+	entries := make([]domain.CanonicalContentEntry, 0, 2)
+	for element, value := range map[domain.AddressElementName]string{
+		domain.PostalCodeElement:  document.PostalCode,
+		domain.CountryCodeElement: document.CountryCode,
+	} {
+		if value == "" {
+			continue
+		}
+		entry, err := domain.NewCanonicalContentEntry(domain.AddressElementEntryName(group, element), value)
+		if err != nil {
+			return domain.AddressElements{}, err
+		}
+		entries = append(entries, entry)
+	}
+	return domain.AddressElementsOf(group, entries), nil
+}
+
+// declaredElements 读回整段子段；缺席即零值。
+func (document *elementsDocument) declaredElements() (domain.DeclaredAddressElements, error) {
+	if document == nil {
+		return domain.DeclaredAddressElements{}, nil
+	}
+	sender, err := document.Sender.addressElements(domain.SenderPlaceDataGroup())
+	if err != nil {
+		return domain.DeclaredAddressElements{}, err
+	}
+	delivery, err := document.Delivery.addressElements(domain.DeliveryPlaceDataGroup())
+	if err != nil {
+		return domain.DeclaredAddressElements{}, err
+	}
+	return domain.NewDeclaredAddressElements(sender, delivery), nil
 }
 
 func taskDocumentOf(task domain.AcceptanceDecisionTask) taskDocument {
@@ -602,6 +673,11 @@ func (document versionDocument) spec() (domain.RehydrateSubmissionVersionSpec, e
 		}
 		spec.Profiles = append(spec.Profiles, profile)
 	}
+	elements, err := document.Elements.declaredElements()
+	if err != nil {
+		return domain.RehydrateSubmissionVersionSpec{}, err
+	}
+	spec.Elements = elements
 	return spec, nil
 }
 
@@ -638,45 +714,68 @@ func (document profileDocument) profile() (domain.DeclaredParcelProfile, error) 
 	if err != nil {
 		return domain.DeclaredParcelProfile{}, err
 	}
-	weightValue, err := domain.NewMeasurementValue(document.Weight.Value)
-	if err != nil {
-		return domain.DeclaredParcelProfile{}, err
-	}
-	weightUnit, err := domain.NewMeasurementUnitReference(document.Weight.Unit)
-	if err != nil {
-		return domain.DeclaredParcelProfile{}, err
-	}
-	weight, err := domain.NewDeclaredWeight(weightValue, weightUnit)
-	if err != nil {
-		return domain.DeclaredParcelProfile{}, err
-	}
-	dimensions := domain.DeclaredDimensions{}
-	if document.Dimensions != nil {
-		length, err := domain.NewMeasurementValue(document.Dimensions.Length)
-		if err != nil {
-			return domain.DeclaredParcelProfile{}, err
-		}
-		width, err := domain.NewMeasurementValue(document.Dimensions.Width)
-		if err != nil {
-			return domain.DeclaredParcelProfile{}, err
-		}
-		height, err := domain.NewMeasurementValue(document.Dimensions.Height)
-		if err != nil {
-			return domain.DeclaredParcelProfile{}, err
-		}
-		unit, err := domain.NewMeasurementUnitReference(document.Dimensions.Unit)
-		if err != nil {
-			return domain.DeclaredParcelProfile{}, err
-		}
-		if dimensions, err = domain.NewDeclaredDimensions(length, width, height, unit); err != nil {
-			return domain.DeclaredParcelProfile{}, err
-		}
-	}
-	measurement, err := domain.NewDeclaredMeasurement(weight, dimensions)
+	measurement, err := declaredMeasurementFrom(document.Weight, document.Dimensions)
 	if err != nil {
 		return domain.DeclaredParcelProfile{}, err
 	}
 	return domain.NewDeclaredParcelProfile(parcel, measurement)
+}
+
+// measurementDocumentsOf 把一份申报测量摊成重量与外廓两段文档——画像与资料版本内容共用这一形（pp-seams/05 裁决 2
+// 「测量范围带 profileDocument 同形的测量」），外廓缺席交回 nil。
+func measurementDocumentsOf(measurement domain.DeclaredMeasurement) (measurementDocument, *dimensionsDocument) {
+	weight := measurementDocument{
+		Value: measurement.Weight().Value().String(),
+		Unit:  measurement.Weight().Unit().String(),
+	}
+	if dimensions, declared := measurement.Dimensions(); declared {
+		return weight, &dimensionsDocument{
+			Length: dimensions.Length().String(),
+			Width:  dimensions.Width().String(),
+			Height: dimensions.Height().String(),
+			Unit:   dimensions.Unit().String(),
+		}
+	}
+	return weight, nil
+}
+
+// declaredMeasurementFrom 从重量与外廓两段文档重建申报测量，逐字段过领域构造函数；外廓文档缺席即测量无外廓。
+func declaredMeasurementFrom(weightDoc measurementDocument, dimensionsDoc *dimensionsDocument) (domain.DeclaredMeasurement, error) {
+	weightValue, err := domain.NewMeasurementValue(weightDoc.Value)
+	if err != nil {
+		return domain.DeclaredMeasurement{}, err
+	}
+	weightUnit, err := domain.NewMeasurementUnitReference(weightDoc.Unit)
+	if err != nil {
+		return domain.DeclaredMeasurement{}, err
+	}
+	weight, err := domain.NewDeclaredWeight(weightValue, weightUnit)
+	if err != nil {
+		return domain.DeclaredMeasurement{}, err
+	}
+	dimensions := domain.DeclaredDimensions{}
+	if dimensionsDoc != nil {
+		length, err := domain.NewMeasurementValue(dimensionsDoc.Length)
+		if err != nil {
+			return domain.DeclaredMeasurement{}, err
+		}
+		width, err := domain.NewMeasurementValue(dimensionsDoc.Width)
+		if err != nil {
+			return domain.DeclaredMeasurement{}, err
+		}
+		height, err := domain.NewMeasurementValue(dimensionsDoc.Height)
+		if err != nil {
+			return domain.DeclaredMeasurement{}, err
+		}
+		unit, err := domain.NewMeasurementUnitReference(dimensionsDoc.Unit)
+		if err != nil {
+			return domain.DeclaredMeasurement{}, err
+		}
+		if dimensions, err = domain.NewDeclaredDimensions(length, width, height, unit); err != nil {
+			return domain.DeclaredMeasurement{}, err
+		}
+	}
+	return domain.NewDeclaredMeasurement(weight, dimensions)
 }
 
 func (document taskDocument) spec() (domain.RehydrateAcceptanceTaskSpec, error) {

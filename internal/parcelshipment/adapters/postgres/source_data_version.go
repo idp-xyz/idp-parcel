@@ -144,6 +144,53 @@ type sourceDataVersionDocument struct {
 	Authority         string         `json:"authority"`
 	EffectiveAt       *time.Time     `json:"effectiveAt,omitempty"`
 	FormedAt          time.Time      `json:"formedAt"`
+	// Content 是这一版在其资料范围上留下的封闭要素内容（pp-seams/05 裁决 2）：按 DataGroup 只带一种——测量范围带与
+	// profileDocument 同形的测量、寄 / 收范围带要素 name/value；缺席即 omitempty 整段不写，早于本票的快照读回即零值。
+	Content *sourceDataContentDocument `json:"content,omitempty"`
+}
+
+// sourceDataContentDocument 两段互斥：哪一形在场写哪一段，由 domain.SourceDataVersionContent 的构造器保证不会两段都有。
+type sourceDataContentDocument struct {
+	Measurement *measurementContentDocument `json:"measurement,omitempty"`
+	Elements    *addressElementsDocument    `json:"elements,omitempty"`
+}
+
+// measurementContentDocument 是 profileDocument 去掉成员那一格的形：成员已在版本的范围里指名，内容不再重复它。
+type measurementContentDocument struct {
+	Weight     measurementDocument `json:"weight"`
+	Dimensions *dimensionsDocument `json:"dimensions,omitempty"`
+}
+
+// sourceDataContentDocumentOf 把内容摊成文档；缺席交回 nil。
+func sourceDataContentDocumentOf(content domain.SourceDataVersionContent) *sourceDataContentDocument {
+	if measurement, measured := content.Measurement(); measured {
+		weight, dimensions := measurementDocumentsOf(measurement)
+		return &sourceDataContentDocument{Measurement: &measurementContentDocument{Weight: weight, Dimensions: dimensions}}
+	}
+	if elements, present := content.AddressElements(); present {
+		return &sourceDataContentDocument{Elements: addressElementsDocumentOf(elements)}
+	}
+	return nil
+}
+
+// content 把文档读回成内容，逐字段过领域构造函数；缺席即零值。要素那一段按版本自己的范围读——条目名带范围原词，
+// 读法与提交版本的子段同一处（addressElementsDocument.addressElements）。
+func (document *sourceDataContentDocument) content(group domain.SourceDataGroupReference) (domain.SourceDataVersionContent, error) {
+	if document == nil {
+		return domain.SourceDataVersionContent{}, nil
+	}
+	if document.Measurement != nil {
+		measurement, err := declaredMeasurementFrom(document.Measurement.Weight, document.Measurement.Dimensions)
+		if err != nil {
+			return domain.SourceDataVersionContent{}, err
+		}
+		return domain.NewMeasurementContent(measurement)
+	}
+	elements, err := document.Elements.addressElements(group)
+	if err != nil {
+		return domain.SourceDataVersionContent{}, err
+	}
+	return domain.NewAddressElementsContent(elements), nil
 }
 
 func sourceDataVersionDocumentOf(version domain.CustomerSourceDataVersion) sourceDataVersionDocument {
@@ -180,6 +227,7 @@ func sourceDataVersionDocumentOf(version domain.CustomerSourceDataVersion) sourc
 		at := version.EffectiveAt().UTC()
 		document.EffectiveAt = &at
 	}
+	document.Content = sourceDataContentDocumentOf(version.Content())
 	return document
 }
 
@@ -255,6 +303,9 @@ func (document sourceDataVersionDocument) version() (domain.CustomerSourceDataVe
 	}
 	if document.EffectiveAt != nil {
 		spec.EffectiveAt = *document.EffectiveAt
+	}
+	if spec.Content, err = document.Content.content(dataGroup); err != nil {
+		return domain.CustomerSourceDataVersion{}, err
 	}
 	return domain.FormCustomerSourceDataVersion(spec)
 }

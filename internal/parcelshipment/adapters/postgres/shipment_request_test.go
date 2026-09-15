@@ -628,6 +628,16 @@ func processingAttempt(t *testing.T) domain.ProcessingAttempt {
 // 测试的同名夹具同款配方，画像多带一张以证测量往返。
 func submittedShipmentRequest(t *testing.T, key, requestID string) domain.ShipmentRequest {
 	t.Helper()
+	request, err := domain.SubmitShipmentRequest(submittedShipmentRequestSpec(t, key, requestID))
+	if err != nil {
+		t.Fatalf("建单：%v", err)
+	}
+	return request
+}
+
+// submittedShipmentRequestSpec 是上面那份委托的建单输入，单独交出让别的夹具在同一配方上多带一段（如地址要素子段）。
+func submittedShipmentRequestSpec(t *testing.T, key, requestID string) domain.SubmitShipmentRequestSpec {
+	t.Helper()
 
 	scope, err := domain.NewAdmissionScope(
 		mustBuild(t, domain.NewAdmissionScopeReference, "scope-ref-1"),
@@ -700,16 +710,12 @@ func submittedShipmentRequest(t *testing.T, key, requestID string) domain.Shipme
 		t.Fatalf("成员画像：%v", err)
 	}
 
-	request, err := domain.SubmitShipmentRequest(domain.SubmitShipmentRequestSpec{
+	return domain.SubmitShipmentRequestSpec{
 		Candidate:   candidate,
 		Gate:        gate,
 		VersionID:   mustBuild(t, domain.NewSubmissionVersionID, "version-1"),
 		TaskID:      mustBuild(t, domain.NewAcceptanceDecisionTaskID, "task-1"),
 		SubmittedAt: submittedAtFixture,
 		Profiles:    []domain.DeclaredParcelProfile{profile},
-	})
-	if err != nil {
-		t.Fatalf("建单：%v", err)
 	}
-	return request
 }
