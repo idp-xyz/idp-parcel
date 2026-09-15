@@ -2388,3 +2388,20 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - **通道 2 在途**（11:1x 广播）：sa-cc/19 除 `assemble_test.go` 那一格外已验绿（五包 484 PASS），占了 `assemble.go` 两处注释 / 哨兵；等 20 进 main 后 rebase 再写那一格——20 已在 `1e74aaaf`，可以开始。
 - **前沿**：在途 sa-cc/19（2）；3 / 4 / 5 / 6 空闲；ready 0；draft sa-cc/27、pp-seams/04 / 05；lc 20 / 22 等真源。**归用户**：同上节。
 - **本节五数**（11:0x–11:2x）：CI 未起跑（计费）· 集成时延——首波四票完工报 10:41 / 10:44 / 10:54（20 / 01 / 02+22）→ 推出 11:1x **约 25–35 分**（含上一任 crash 空档约 15 分）；03 完工报 10:54 → 推出 11:2x **约 30 分**——中位数约 30 分（5 票 2 批）· 重放笔数 **17**（首波 15 + 第二波 2）· 重复开发 0 · **会话重置 1**（通道 1 本会话由通道 6 改绑）· 非作者评审缺席 0（02 推送方自评如实计）
+
+## 2026-09-15 11:4x 通道 1 又一次新会话（无上一任在途记忆；通道 2 同刻也报「新会话、无 sa-cc/19 上下文」——今天通道 1 第三次重置、通道 2 第一次）
+
+### 11:4x–12:0x：接尾巴——mcp5 分支收尾 · 答「现在可以回放了吗」
+
+- **量**（全按 git）：main = origin/main = `7160fe67`。通道 5 报拆树（`%TEMP%\idp-parcel-mcp5-ppseams02-03` 已不在、porcelain 干净），留分支给通道 1 收尾：自核 `mcp5-ppseams02-03@3209c4b3` 自 merge-base `3a21dab7` 改过的 25 件里，`internal/parcelshipment` / `docs/domain/parcel-shipment/CONTEXT.md` / 接线基线 / issues/05 对 main **零 diff**，只差 issues/02 / 03 Status 行 + 追加记录、spec 子票表、清点重生成——全簿记 → `git branch -m` 为 `merged/mcp5-ppseams02-03`（指针留、`--unset-upstream`）、`push origin --delete mcp5-ppseams02-03`。
+- **用户问「现在可以回放了吗」**（两棵树 mcp5 / mcp2）：mcp5 无可回放之物；`mcp2-sacc22-19@a0cb6fef` 两笔 sa-cc/19 树干净、已推、与 main 自 `1e74aaaf` 以来的 21 件改动**零文件重叠**、cherry-pick 预期零冲突——但缺两道门：作者完成记录未写（分支没碰票 19 .md，原通道 2 会话已换）、非作者评审未做。答：可以起链，不能直接 ff；用户「全部你自决」。
+
+### 12:0x–12:3x：第三波 sa-cc/19 进 main（点名 → 双派 → 隔离重放 → 全量 → ff → push）
+
+- **点名**（11:59 广播、截止 12:03）：2 / 3 / 4 / 5 / 6 五个应答全在截止前、全报空闲 · 地盘无 · 余量充足。派两单：**task-3b395d37 → 通道 6** sa-cc/19 两轴评审（只读，钉 `a0cb6fef` 基线 `1e74aaaf`，隔离检出 `%TEMP%\idp-review-sacc19`，不占 55432）；**task-d230f095 → 通道 2** 接手作者半边——只写完成记录 + 带 DSN 六包验证、不改代码、只碰票 19 .md（spec / tasks / 清点留给推送方，避免撞）。两单并行、互不等。
+- **并行本侧**：`%TEMP%\idp-replay-wave3` @ `7160fe67`，`cherry-pick 6ab8e41c a0cb6fef` 零冲突 → `e0201ca6` / `07341b8b`，CC 地盘与作者 tip 零 diff；`gofmt` 空、build / vet 0。
+- **两路回报**（12:1x–12:2x）：通道 2 占 55432 六包 `-p 1 -count=1 -v` **1698 PASS / 0 FAIL / 0 SKIP** 释号；通道 6 评审两轴 0 阻断 / Standards 2 非阻断（适配器替身无序、夹具手拼键）/ Spec 3 非阻断（找不到版本答 `FundsFactNotReceived` 非`未受理`、重派路续办引用无读者、`verifiedAt` 编排时钟），三条不变式逐条读代码写出，结论可进 main；通道 2 完成记录笔 `dbff7f5f`（只票 19 .md，+64 −1，判断项五条含信封 ID 128 字节）。
+- **推送方**：清点重生成 `b6e7bd34`（CC 生产 93→94 / 测试 93→94 / 适配器 17→18；迁移 173→174，customs_compliance 22→23）→ 占 55432 → `b6e7bd34` 带 DSN `go test -p 1 -count=1 ./...` **113 ok / 0 FAIL / 16 无测试 / 0 cached**（133 s）、探针 `TestVerificationsRoundTripTheFundsFactVersionTheyJudgedAndListByFundsFact` PASS 非 SKIP → 释。`cherry-pick dbff7f5f` → `1f3ed3d4`（票面与作者 tip 零 diff）。簿记同笔（票 19 Status「已进 main」+ 评审代落 + 进 main 记录含推送方补判断项 ⑥、sa-cc spec 19 行、本节）→ 共享 main `merge --ff-only` → `ls-remote` 核 `7160fe67` 未动 → `push <sha>:main`。分支 `mcp2-sacc22-19` → `merged/`、远端删；作者树由通道 2 比内容后拆。
+- **同时派出的三单**（用户 12:1x「mcp-3/4/5 空闲了，还有任务吗」；按票面 Status 量前沿：ready-for-agent 两张、draft 三张、needs-info / blocked 六张不派）：**task-93aa833b → 通道 3** pp-seams/06（A 类尾巴：TF 去「三件」+ 成员顺序进契约；PS 地址要素空白值三处同口 + 口头注收窄；分支 `mcp3-ppseams06` 基 `7160fe67`）；**task-1b28ece5 → 通道 4** sa-cc/28（零行为，SA 三处注释；`mcp4-sacc28`）；**task-4e80c3bb → 通道 5** sa-cc/27 裁决前只读取证（不裁不提方案不动代码；`mcp5-sacc27-evidence`）。三单都被告知不占 55432。
+- **前沿**：在途 pp-seams/06（3）、sa-cc/28（4）、sa-cc/27 取证（5）；2 / 6 空闲；ready 0；draft pp-seams/05（PS owner 四条要裁的，可授权代裁）、sa-cc/27（取证中）；**待立票**（CC owner）：05 信封 ID 128 字节 + 重派路续办引用无读者 + 19 评审 Standards 两条尾巴；lc 20 / 22 等真源。**归用户**：CI 计费；六件 untracked（`d_tasks.txt` / `docs/api/` / `handoff.md` / 三份 logo）；会话中断成因（今天通道 1 三次、2 一次、4 一次）。
+- **本节五数**（11:4x–12:3x）：CI 未起跑（计费）· 集成时延——19 代码完工（作者 `a0cb6fef` 11:22 推出）→ 进 main 12:3x **约 70 分**（其中约 25 分是原作者会话消失、完成记录无人写的空档；点名到两路回报约 20 分）· 重放笔数 **3**（代码 2 + 完成记录 1）· 重复开发 0 · **会话重置 2**（通道 1、通道 2）· 非作者评审缺席 0
