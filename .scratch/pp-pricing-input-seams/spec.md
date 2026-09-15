@@ -37,7 +37,7 @@ sa-cc/11「进 main 记录」（2026-09-14 20:4x）后继一句「三只输入�
 
 | 票 | 一只读口 | 提供方上下文 | Blocked by |
 |---|---|---|---|
-| [01](issues/01-tf-charge-occurrence-member-object-read-view.md) | 运输收费发生项的成员对象只读视图——按发生项键答成员载运对象与业务时点，能分清成员是正式包裹身份（PS）还是集运单元（NO）；不是 `FindByKey` 写侧口的再导出 | TF | 无；要裁的归 TF owner |
+| [01](issues/01-tf-charge-occurrence-member-object-read-view.md) | 运输收费发生项的成员对象只读视图——按发生项键答成员载运对象与业务时点，能分清成员是正式包裹身份（PS）还是集运单元（NO）；不是 `FindByKey` 写侧口的再导出——22:1x 裁：裸引用原样不带种类、不展开、键精确到有效性版本；**resolved，2026-09-15 11:0x 通道 3 完工待评审进 main**（接手链：通道 4 认领 → crash → 推送方封存 `mcp4-ppseams01@3b91cb5a` → 通道 3 续做 `mcp3-ppseams01` 基 `3b91cb5a`：新口 `ports.ChargeOccurrenceMemberView.LoadMembers` + `ChargeOccurrences.LoadMembers` 一条 LEFT JOIN 在封存笔，接手方先写 red 再读、两条并入 `71dd8313`；带 DSN TF postgres + architecture + parcel-api + parcel-dispatch 677 PASS / 0 FAIL / 0 SKIP；清点预报 TF 生产 +1 / 测试 +1、端口声明 408→409、两口径缺数不变；PP 零 diff；判断项五条见票面） | TF | 无 |
 | [02](issues/02-billable-weight-actual-measurement-and-declared-dimensions-read-port.md) | 实重 / 尺寸读口——**PS 半边 resolved**（2026-09-15 通道 5，`mcp5-ppseams02-03@1a30aac5`）：`ports.DeclaredMeasurementView` 按（租户，包裹身份）答 `DeclaredMeasurement` + 资料版本锚，封闭五格；已采用版本锚那一格只交锚不交测量（客户原始资料版本今天只留痕不留内容，见票内判断项 ①）。NO 半边在 04 | NO·PS | 无；要裁的归 NO·PS owner |
 | [03](issues/03-ps-origin-destination-postal-route-read-port.md) | 起讫邮编 / 路线读口——PS 今天没有结构化邮编字段，收件地点引用只交引用不交地址本体；分区解析归 PP（ADR-0109），不归 NR | PS | 无；要裁的归 PS owner |
 | [04](issues/04-no-actual-measurement-registry-and-valid-measurements-read-port.md) | NO 实际测量登记册（追加不覆盖）+「仍有效的实际测量」只读口——从 02 裁决 1 拆出：NO 今天连登记册都没有；只读口交原始量清单、**不派生**「当前有效实测」（派生规则属实例半边）；测量怎么进登记册（登记入口）留后继 | NO | 无（02 裁决 1 拆出；票面由 NO 半边作者按 02 裁决 1 自立） |

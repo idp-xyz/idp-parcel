@@ -1,7 +1,7 @@
 # `transport-fulfillment` 运输收费发生项的成员对象没有只读视图：`ChargeOccurrenceRegistry.FindByKey` 是带 `Save` 的写侧登记册口，成员 `CarriedObjectReference` 字面分不出正式包裹身份还是集运单元，`parcel-pricing` 造快照的「包裹主体」一格指不到
 
 Category: enhancement
-Status: in-progress——**2026-09-15 10:2x 通道 4 认领（task-aadedbce），分支 `mcp4-ppseams01` 基 `3a21dab7`，按下方「裁决」节落**。此前 ready-for-agent——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（TF owner 口径），三条「要裁的」写入下方「裁决」节**：候选 1 窄只读口、成员**裸引用原样交**（不带种类、不按前缀猜）；**不展开**集运单元；键按 `ChargeOccurrenceKey` **精确到有效性版本**。此前 draft——2026-09-14 21:1x 通道 3 立票（sa-cc/11 裁决 4 量「包裹主体指不到」的提供方半边；task-620bc8e7，通道 1 派单）。只写票面未动代码；取证锚 main `db480695`
+Status: resolved——**2026-09-15 11:0x 通道 3 完工待评审进 main**。接手链：通道 4 认领（task-aadedbce，`mcp4-ppseams01` 基 `3a21dab7`）→ 做到「带 DSN 4 包 675 PASS，转入评审与提交」时 crash（一笔未提交、一笔未推）→ 推送方 10:2x 把四件未提交现场原样封存 `mcp4-ppseams01@3b91cb5a`（`chore(salvage)`，非集成候选、一字未改）→ 用户裁「改派通道 3 续做」（task-5c5e6165）→ 通道 3 从封存笔接着做：分支 `mcp3-ppseams01` 基 `3b91cb5a`，接手方先写自己的 red 再读对方代码（parallel-sessions「镜像测试与真测试同形」），两条并入对方用例文件 `71dd8313`，验证与逐条判据见「完成记录」。此前 in-progress——**2026-09-15 10:2x 通道 4 认领（task-aadedbce），分支 `mcp4-ppseams01` 基 `3a21dab7`，按下方「裁决」节落**。此前 ready-for-agent——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（TF owner 口径），三条「要裁的」写入下方「裁决」节**：候选 1 窄只读口、成员**裸引用原样交**（不带种类、不按前缀猜）；**不展开**集运单元；键按 `ChargeOccurrenceKey` **精确到有效性版本**。此前 draft——2026-09-14 21:1x 通道 3 立票（sa-cc/11 裁决 4 量「包裹主体指不到」的提供方半边；task-620bc8e7，通道 1 派单）。只写票面未动代码；取证锚 main `db480695`
 Blocked by: 无（sa-cc/11 已进 main 2026-09-14 20:4x：`PricingInputResolver` 与 `EligibleSourceReferences.Occurrence` / `OccurrenceVersion` 钥匙已在，本票是它点名的第一只读口）；**要裁的三条归 TF owner，裁前不动代码**
 
 ## 缺口（取证于 `db480695`，逐符号名）
@@ -64,6 +64,34 @@ Blocked by: 无（sa-cc/11 已进 main 2026-09-14 20:4x：`PricingInputResolver`
 
 sa-cc/11 [`11-pp-inbox-consumer-receives-evaluation-request-envelope.md`](../../sa-cc-funds-and-credential-seams/issues/11-pp-inbox-consumer-receives-evaluation-request-envelope.md) 裁决 4、完成记录「逐条对裁决」4、「进 main 记录」后继一句；[spec](../spec.md)「不在本目录」（PP 评价对象加集运单元一种归 PP owner）；`internal/parcelpricing/ports/pricing_input.go`（`PricingInputResolver` 头注、`EligibleSourceReferences.OccurrenceReferenced`）；`internal/parcelpricing/application/form_evaluation_from_request.go`（`missingInputReadPorts`）；`internal/transportfulfillment/ports/charge_occurrence.go`（`ChargeOccurrenceRegistry`、`ChargeOccurrenceKey` 头注、`FailedAttemptSource` 头注——窄只读口的先例与理由）；`internal/transportfulfillment/domain/offsite_pickup.go`（`CarriedObjectReference`）、`transport_charge_occurrence.go`（`TransportChargeOccurrence.Members`）；`migrations/transport_fulfillment/0007_transport_charge_occurrence.sql`（成员表）；TF `CONTEXT.md`「载运对象」「运输收费发生项」；NO `CONTEXT.md`「封装成员快照」「集运成员关系」；ADR-0098（发生项登记册）、ADR-0111（评价对象四种）、ADR-0025（消费侧适配器）。
 
+## 完成记录
+
+分支 `mcp3-ppseams01`，基封存笔 `3b91cb5a`（其父 `3a21dab7` = 派单时 main；隔离树 `$env:TEMP\idp-parcel-mcp3-ppseams01`，`fetch` 后 `worktree add`，干净）：
+
+| SHA | 作者 | 内容 |
+|---|---|---|
+| `3b91cb5a` | 通道 4 现场 · 推送方封存 | `chore(salvage)`：`ports/charge_occurrence_member_view.go`（+37：`ChargeOccurrenceMembers{Members, OccurredAt, Scope}` + `ChargeOccurrenceMemberView.LoadMembers(ctx, ChargeOccurrenceKey) (ChargeOccurrenceMembers, bool, error)`）、`adapters/postgres/charge_occurrence_registry.go`（+70：`ChargeOccurrences.LoadMembers` 一条 LEFT JOIN + 编译期断言 `var _ ports.ChargeOccurrenceMemberView = (*ChargeOccurrences)(nil)`）、`adapters/postgres/charge_occurrence_member_view_test.go`（+132，五条真库用例）、本票 Status 一行 |
+| `71dd8313` | 通道 3 | 接手方 red 两条并入对方用例文件：`TestChargeOccurrenceMemberViewIsANarrowProjectionOfTheRegisteredRow`、`TestChargeOccurrenceMemberViewDoesNotInterpretReferenceShapes`；对方 `…AnswersNotFoundForAnUnknownKey` 补一格 `Scope` 零值断言。端口文件与适配器方法零改动 |
+| （本笔） | 通道 3 | 本票 Status → resolved + 本完成记录；pp-seams `spec.md` 01 行 |
+
+**接手纪律（先写 red 再读对方）**：读票面「裁决」与 spec 后、未打开对方三件之前，接手方在独立文件写了三条真库用例并对真库跑 **PASS 非 SKIP**（`-run TestTheMemberView -count=1 -v`）：(a) 同发生项另一有效性版本的键 found=false、不存在的键零值（含 `Scope`）、v1 / v2 各与 `FindByKey` 同版本逐项相等；(b) 三条形状各异的裸引用原样交回、不多不少；(c) 他租同键 found=false。然后才读对方的口、方法与用例，**对判据不对条数**：对方五条钉的是——按键取成员 / 时点 / 范围（判据 2）、未知键 found=false 不造默认（判据 2）、键精确到版本、修订后两版各答各的（裁决 3）、他租不可见、本体在册而成员表空 → 响亮报错（对方实现头注自陈的库面不一致格）。对上：(a) 的版本半边与对方第三条同判据，(c) 与对方第四条同判据同切法——**弃 (c)**；(a) 的「与登记册整条读回逐项相等」与 (b) 的「形状各异原样交」对方没有那一切法——**并入**为两条；对方 NotFound 一条只断了成员与时点两件，接手方补 `Scope` 第三件。**对不上的地方：无**——两人从裁决 1 / 3 与判据 2 切出的断言彼此印证，没有暴露谁想错了；这是交叉验证的「印证」一格，不是「找到分歧」一格。
+
+**逐条对完成判据（裁决 5，钉 `71dd8313`）**：**(1)** `git grep -n -E 'type \w*Occurrence\w* interface' -- internal/transportfulfillment/ports/` 命中 `ChargeOccurrenceRegistry`（既有）与 `ChargeOccurrenceMemberView`（新）；`git grep -n 'Save' -- internal/transportfulfillment/ports/charge_occurrence_member_view.go` **零命中**（头注写「首登方法」而不提名，刻意）。**(2)** 编译期断言在适配器（`charge_occurrence_registry.go`）与用例文件各一处；真库：按键取到成员清单 + 业务时点 + 主要业务范围（对方第一条 + 接手方投影条）；键不存在 found=false、零值不造默认成员（对方第二条 + 接手方补的 `Scope` 格）；版本不同 found=false、不答最近一版（对方第三条 + 接手方投影条的 v1 / v2 各答各的）。**(3)** `tools/mechanism-inventory` 在提交后的干净树重生成到 `%TEMP%`（不落仓）与 main 上那份 diff：TF 生产 140→**141**、测试 128→**129**、合计 978→979 / 930→931；**端口声明 408→409**；基线口径缺 14 / 精确口径缺 7 **不变**（新口已被 `ChargeOccurrences` 实现，两口径都不缺）——预报数，推送方在 tip 兑底。**(4)** `internal/architecture` 带 DSN **ok**；`git diff --stat 3a21dab7 -- internal/parcelpricing/` **空**。**(5)** `git diff --stat 3a21dab7 -- internal/transportfulfillment/domain/offsite_pickup.go` **空**（`CarriedObjectReference` 一字未动）。
+
+**逐条对裁决 1–4**：**1** 裸引用原样、不带种类——`ChargeOccurrenceMembers.Members` 是 `[]domain.CarriedObjectReference`，SQL 只 `SELECT member.object_ref` 不派生任何列，头注写明不按前缀 / 形状猜；接手方 `DoesNotInterpretReferenceShapes` 钉之 ✓。**2** 不展开集运单元——口上没有任何 NO 读口、无第二次查询，头注写「展开归持引用方的消费侧」✓。**3** 键精确到有效性版本——`WHERE tenant_id = $1 AND occurrence_ref = $2 AND validity_version = $3`，零行即 found=false；对方第三条 + 接手方投影条钉之 ✓。**4** 口的形——新文件、一口一问、不含 `Save`、不交整条 `ChargeOccurrenceRecord`（只交成员 / 时点 / 范围三件，头注写「读成员的一方不该看见协议、数量与修订三件」）；`ChargeOccurrences` 同一结构体满足两口；不新建表、不新迁移；PP 零 diff ✓。
+
+**判断项（归 TF owner / 推送方）**：
+① **现有 SQL 一次 JOIN 出成员清单——成立**（裁决 6 留给作者的题）：`LoadMembers` 一条 `LEFT JOIN` 同时取本体两列与成员逐行，不经 `FindByKey` 再投影（那条路要把整条发生项过重建门），`ORDER BY member.object_ref` 与 `FindByKey` 的 `loadMembers` 同序——接手方投影条按序逐项比对通过，两口读同一行的顺序一致。
+② **LEFT JOIN 带来一个新格**：本体在册而成员表为空 → 报错而不是 found=true 空清单。这是库面不一致（领域构造门拒空成员、`Save` 两表同笔落），对方选「响亮报错」并钉了用例；接手方认可——把空清单当答案交出去会让 PP 把「没有成员」当成事实。它不在票面裁决里，是实现层的诚实格，写在此供 owner 知悉。
+③ **对方第一条用例断言了 `ORDER BY object_ref` 的字面顺序**（`SYN-PARCEL-1, SYN-PARCEL-2, SYN-UNIT-7`）：这钉的是实现细节，不是票面规则——排序变了它会碎而行为没错。接手方未改（对判据不对条数；改对方断言不在接手纪律内），投影条改用「与 `FindByKey` 同序」来表达同一件事，不依赖具体排序。owner 若要收窄，删那一条的顺序断言即可。
+④ **夹具前缀**：对方用例复用 `charge_occurrence_registry_test.go` 的 `occurrenceRecord`（租户 `tenant-1`、旅程 `journey-1` 等既有非 `SYN-` 前缀夹具），发生项与成员引用用了 `SYN-`；接手方并入时沿用同一套，未另立 `SYN-` 租户夹具（独立文件里那套随弃）。全部为合成登记，无真实发生项。
+⑤ **消费侧仍缺**：`parcelpricing.PricingInputResolver` 在清点里仍是「精确口径缺」，本票不动 PP（裁决 4「PP 一侧零 diff」）；PP 消费侧适配器归后继票（spec「不在本目录」）。
+
+**验证（隔离树 `$env:TEMP\idp-parcel-mcp3-ppseams01`，`71dd8313`）**：`gofmt -l .` 空、`go build ./...` 0、`go vet ./...` 0；反查 `go list -deps ./cmd/...` 含 `internal/transportfulfillment/adapters/postgres` 的只有 `cmd/parcel-api` 与 `cmd/parcel-dispatch`（与通道 4 所报一致，接手方自己反查一次）；**带 DSN** `-p 1 -count=1 -v` `internal/transportfulfillment/adapters/postgres` + `./internal/architecture/...` + `cmd/parcel-api` + `cmd/parcel-dispatch` → **677 PASS / 0 FAIL / 0 SKIP**（对方报的 675 + 接手方两条；对方那 675 不作本记录的证据）；占 / 释 55432 均已广播。
+
+**接手方能力边界**：只读 `3b91cb5a` 隔离树；对方三件按接手纪律在 red 之后读，逐字读了口文件、适配器 +70 行 diff 与用例全文；`0007` 迁移正文未重读（经票面取证引文与 SQL 列名）；`internal/transportfulfillment/application` 发生项登记入口未读（本票不动它）；未跑全仓带 DSN（只跑派单点名的四包），全量由推送方在重放 tip 上兑；`tools/mechanism-inventory` 只跑了一次、输出落 `%TEMP%` 未入仓。
+
 ## Comments
 
 - 2026-09-14 21:1x · 通道 3（task-620bc8e7）：立票，未动代码。能力边界：核过 `ChargeOccurrenceRegistry` 方法集、TF 九只只读口无一含 `Occurrence`、`CarriedObjectReference` 无种类、`0007` 成员表无种类列、PP 评价对象四种无集运单元；**没读** TF 发生项登记入口（`internal/transportfulfillment/application`）今天由谁调、登记方手里有没有种类信息——「要裁的」1 候选 2 的代价那半靠 TF owner 与作者开工时量。
+- 2026-09-15 11:0x · 通道 3（task-5c5e6165，接手通道 4 封存现场 `3b91cb5a`）：接手方 red 先写后读、两条并入 `71dd8313`；判据 (1)–(5) 逐条、裁决 1–4 逐条、判断项五条、验证与能力边界见「完成记录」；Status resolved，评审从 2 / 5 / 6 里挑先交活的（接手方与通道 4 同为作者不评）。
