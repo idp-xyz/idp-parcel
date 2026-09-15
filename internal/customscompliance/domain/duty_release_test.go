@@ -16,6 +16,7 @@ func TestDutyVerificationKeepsItsThreeAxesApart(t *testing.T) {
 	verification, err := domain.VerifyDutyPayment(
 		mustValue(t, domain.NewAssessedDutyReference, "assessed-duty/v1"),
 		mustValue(t, domain.NewExternalFundsFactReference, "bank-fact/77"),
+		mustValue(t, domain.NewFundsFactVersion, "bank-fact/77/v1"),
 		mustValue(t, domain.NewDecisionScopeReference, "declaration-unit-1"),
 		mustValue(t, domain.NewCustomsProcedureReference, "SYN-PROC-IMPORT"),
 		domain.CoveragePartial,
@@ -36,6 +37,7 @@ func TestDutyVerificationKeepsItsThreeAxesApart(t *testing.T) {
 	if _, err := domain.VerifyDutyPayment(
 		mustValue(t, domain.NewAssessedDutyReference, "assessed-duty/v1"),
 		mustValue(t, domain.NewExternalFundsFactReference, "bank-fact/77"),
+		mustValue(t, domain.NewFundsFactVersion, "bank-fact/77/v1"),
 		mustValue(t, domain.NewDecisionScopeReference, "declaration-unit-1"),
 		mustValue(t, domain.NewCustomsProcedureReference, "SYN-PROC-IMPORT"),
 		domain.DutyCoverageInvalid,
@@ -55,6 +57,7 @@ func TestDutyVerificationRecordsTheProcedureItWasJudgedUnder(t *testing.T) {
 	verification, err := domain.VerifyDutyPayment(
 		mustValue(t, domain.NewAssessedDutyReference, "assessed-duty/v1"),
 		mustValue(t, domain.NewExternalFundsFactReference, "bank-fact/77"),
+		mustValue(t, domain.NewFundsFactVersion, "bank-fact/77/v1"),
 		mustValue(t, domain.NewDecisionScopeReference, "declaration-unit-1"),
 		procedure,
 		domain.CoverageFull,
@@ -72,6 +75,7 @@ func TestDutyVerificationRecordsTheProcedureItWasJudgedUnder(t *testing.T) {
 	if _, err := domain.VerifyDutyPayment(
 		mustValue(t, domain.NewAssessedDutyReference, "assessed-duty/v1"),
 		mustValue(t, domain.NewExternalFundsFactReference, "bank-fact/77"),
+		mustValue(t, domain.NewFundsFactVersion, "bank-fact/77/v1"),
 		mustValue(t, domain.NewDecisionScopeReference, "declaration-unit-1"),
 		domain.CustomsProcedureReference{},
 		domain.CoverageFull,
@@ -80,6 +84,45 @@ func TestDutyVerificationRecordsTheProcedureItWasJudgedUnder(t *testing.T) {
 		verifiedAt,
 	); !errors.Is(err, domain.ErrInvalidDutyVerification) {
 		t.Fatalf("err = %v; 不说按哪个程序判的核对被收下了", err)
+	}
+}
+
+// Covers: 票 sa-cc/19 裁决 3 (3)——核对引用的是资金事实的**哪一版**，不只是事实身份（CC CONTEXT「税费付款核对」：
+// 「版本化比较判断」；UC-CC-009「外部资金事实迟到、更正……形成新核对版本」——新版本换的是被比较的那一版事实）。
+// 资金版本是构造期必填的一维：读口原样交回，空白立不起核对——不说按哪一版事实判的核对，新版本到了无从知道它
+// 判的是不是已被取代的那一版。
+func TestDutyVerificationRecordsWhichFundsFactVersionItJudged(t *testing.T) {
+	version := mustValue(t, domain.NewFundsFactVersion, "bank-fact/77/v2")
+	verification, err := domain.VerifyDutyPayment(
+		mustValue(t, domain.NewAssessedDutyReference, "assessed-duty/v1"),
+		mustValue(t, domain.NewExternalFundsFactReference, "bank-fact/77"),
+		version,
+		mustValue(t, domain.NewDecisionScopeReference, "declaration-unit-1"),
+		mustValue(t, domain.NewCustomsProcedureReference, "SYN-PROC-IMPORT"),
+		domain.CoverageFull,
+		domain.DeltaPending,
+		domain.FundsFactPending,
+		verifiedAt,
+	)
+	if err != nil {
+		t.Fatalf("verify duty payment: %v", err)
+	}
+	if verification.FundsVersion() != version {
+		t.Fatalf("funds version = %q; 核对没带上它判的是事实的哪一版", verification.FundsVersion())
+	}
+
+	if _, err := domain.VerifyDutyPayment(
+		mustValue(t, domain.NewAssessedDutyReference, "assessed-duty/v1"),
+		mustValue(t, domain.NewExternalFundsFactReference, "bank-fact/77"),
+		domain.FundsFactVersion{},
+		mustValue(t, domain.NewDecisionScopeReference, "declaration-unit-1"),
+		mustValue(t, domain.NewCustomsProcedureReference, "SYN-PROC-IMPORT"),
+		domain.CoverageFull,
+		domain.DeltaNone,
+		domain.FundsFactValid,
+		verifiedAt,
+	); !errors.Is(err, domain.ErrInvalidDutyVerification) {
+		t.Fatalf("err = %v; 不说判的是哪一版事实的核对被收下了", err)
 	}
 }
 

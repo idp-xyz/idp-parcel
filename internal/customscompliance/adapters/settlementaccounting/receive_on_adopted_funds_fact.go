@@ -27,27 +27,40 @@ var (
 	// 同样进 WithUndecidedSentinels。
 	ErrFundsFactReceiveUndecided = errors.New(
 		"customs compliance settlementaccounting adapter: receiving the funds fact is undecided")
+	// ErrDutyVerificationRederivationUndecided 表示新版本已接收、接着形成新核对版本的编排停在依赖故障上（哪一口
+	// 不可用，票 sa-cc/19）。同样是续办、同样进 WithUndecidedSentinels；与 ErrFundsFactReceiveUndecided 分开命名，
+	// 运维从错误上读得出停在接收还是停在重派。接收与重派同一事务，重投从接收重来。
+	ErrDutyVerificationRederivationUndecided = errors.New(
+		"customs compliance settlementaccounting adapter: rederiving duty verifications on the new funds fact version is undecided")
 	// ErrUnexpectedReceiveOutcome 表示编排交回了封闭集合以外的结果。静默入账等于替编排作判断，
 	// 因此不留 default 兜底。
 	ErrUnexpectedReceiveOutcome = errors.New(
 		"customs compliance settlementaccounting adapter: unexpected receive outcome")
 )
 
-// FundsFactReceiver 是入向登记编排的那一口（UC-CC-009 步 6 的 CC 半边）。真实装配接
-// ccapplication.DutyPaymentReconciliationHandler。
+// FundsFactReceiver 是入向登记编排的那一口（UC-CC-009 步 6 的 CC 半边）连同接在它之后的「资金事实新版本到达 →
+// 形成新核对版本」编排（UC-CC-009 一致性节，票 sa-cc/19）。两口同一只编排实现（真实装配接
+// ccapplication.DutyPaymentReconciliationHandler），本适配器先调前者、答`已接收`才调后者。
 type FundsFactReceiver interface {
 	ReceiveFundsFact(
 		ctx context.Context,
 		command ccapplication.ReceiveExternalFundsFactCommand,
 	) (ccapplication.DutyReconciliationResult, error)
+	RederiveDutyVerificationsOnFundsFactVersion(
+		ctx context.Context,
+		command ccapplication.RederiveDutyVerificationsCommand,
+	) (ccapplication.DutyVerificationRederivationResult, error)
 }
 
 // ReceiveOnAdoptedFundsFactAdapter 是 ccinbox.ExternalFundsFactConsumer 的真实处理方：按信封引用向
-// 提供方回查事实内容，译成入向登记交 ReceiveFundsFact。
+// 提供方回查事实内容，译成入向登记交 ReceiveFundsFact；答`已接收`（新版本）时再把「这条事实换了版本」交
+// RederiveDutyVerificationsOnFundsFactVersion（票 sa-cc/19 做法 1：触发在消费侧适配器之后一格另起一只编排，
+// 不塞进 ReceiveFundsFact）。
 //
-// 只译不判（票 sa-cc/03 红线）：不关联、不核对——关联依据与三轴由 VerifyPayment 的调用方交；
-// 同版本重放答 `已存在`、同版本换内容答 `内容冲突`、新版本答 `已接收` 都是编排按（引用 + 版本）
-// 给出的答案，这里照单入账——更正还是冲突不在这里分路（票 sa-cc/13 做法 2 / 3）。
+// 只译不判（票 sa-cc/03 红线）：不关联、不核对——三轴从哪来、要不要形成、形成几版全在编排里判，这里
+// 只把「新版本到了」这件事转交；同版本重放答 `已存在`、同版本换内容答 `内容冲突`、新版本答 `已接收`
+// 都是编排按（引用 + 版本）给出的答案，这里照单入账——更正还是冲突不在这里分路（票 sa-cc/13 做法 2 / 3），
+// 重放与冲突也不触发重派（只有新版本才可能让既往核对过时）。
 type ReceiveOnAdoptedFundsFactAdapter struct {
 	source   ccports.AdoptedFundsFactSource
 	receiver FundsFactReceiver
@@ -121,7 +134,22 @@ func (adapter *ReceiveOnAdoptedFundsFactAdapter) HandleAdoptedExternalFundsFact(
 	if err != nil {
 		return err
 	}
-	return receiveConsumption(result)
+	if err := receiveConsumption(result); err != nil {
+		return err
+	}
+	if result.Outcome() != ccapplication.FundsFactReceived {
+		return nil
+	}
+	// 新版本才可能让既往核对过时：`已存在`是同版重放、`内容冲突`是同版两说、`未受理`是形状矛盾，都没有新版本。
+	rederived, err := adapter.receiver.RederiveDutyVerificationsOnFundsFactVersion(ctx, ccapplication.RederiveDutyVerificationsCommand{
+		TenantID: tenant,
+		Funds:    fact,
+		Version:  version,
+	})
+	if err != nil {
+		return err
+	}
+	return rederivationConsumption(rederived)
 }
 
 // receiveConsumption 把编排结果落成消费两格：成功、已存在、内容冲突、未受理都是编排给出的答案，
@@ -137,5 +165,19 @@ func receiveConsumption(result ccapplication.DutyReconciliationResult) error {
 		return fmt.Errorf("%w: %s", ErrFundsFactReceiveUndecided, result.UndecidedReason())
 	default:
 		return fmt.Errorf("%w: %q", ErrUnexpectedReceiveOutcome, result.Outcome())
+	}
+}
+
+// rederivationConsumption 把重派结果落成消费两格：`已重派`入账——每条谱系的业务答案（形成 / 已存在 / 点名等来源或
+// 登记方）都在结果上、重投不会变；`未决`是哪一口不可用，重投；`未受理`是本适配器递了缺格命令，编程错误，响亮
+// 报错、不重投。封闭集之外同样响亮。
+func rederivationConsumption(result ccapplication.DutyVerificationRederivationResult) error {
+	switch result.Outcome() {
+	case ccapplication.DutyVerificationsRederived:
+		return nil
+	case ccapplication.DutyVerificationRederivationUndecided:
+		return fmt.Errorf("%w: %s", ErrDutyVerificationRederivationUndecided, result.UndecidedReason())
+	default:
+		return fmt.Errorf("%w: rederivation %q", ErrUnexpectedReceiveOutcome, result.Outcome())
 	}
 }

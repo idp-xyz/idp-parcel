@@ -123,20 +123,26 @@ func NewExternalFundsFactReference(value string) (ExternalFundsFactReference, er
 // 记在核对上，事后才复核得出（ADR-0137 决定一「记录带依据引用」对付款人维由此成立）。它不是核对身份
 // 的维度——身份仍是税费版本 / 资金事实 / 范围三维；同三轴同依据但按不同程序判，是两份不同的判断，
 // 那一层区分在应用层折进版本指纹，不在这里。
+//
+// fundsVersion 是被比较的那一版资金事实（票 sa-cc/19 裁决 3）：核对是「版本化比较判断」（CONTEXT「税费付款
+// 核对」），比的是事实的某一版而不是事实身份——新版本到达要形成新核对版本（UC-CC-009），前提是记录说得出
+// 自己判的是哪一版。与程序同一待遇：记录的依据维、不是身份维，区分同样折进指纹。
 type DutyPaymentVerification struct {
-	duty       AssessedDutyReference
-	funds      ExternalFundsFactReference
-	scope      DecisionScopeReference
-	procedure  CustomsProcedureReference
-	coverage   DutyCoverage
-	delta      DutyDelta
-	validity   DutyFactValidity
-	verifiedAt time.Time
+	duty         AssessedDutyReference
+	funds        ExternalFundsFactReference
+	fundsVersion FundsFactVersion
+	scope        DecisionScopeReference
+	procedure    CustomsProcedureReference
+	coverage     DutyCoverage
+	delta        DutyDelta
+	validity     DutyFactValidity
+	verifiedAt   time.Time
 }
 
 func VerifyDutyPayment(
 	duty AssessedDutyReference,
 	funds ExternalFundsFactReference,
+	fundsVersion FundsFactVersion,
 	scope DecisionScopeReference,
 	procedure CustomsProcedureReference,
 	coverage DutyCoverage,
@@ -144,20 +150,21 @@ func VerifyDutyPayment(
 	validity DutyFactValidity,
 	verifiedAt time.Time,
 ) (DutyPaymentVerification, error) {
-	if !duty.valid() || !funds.valid() || !scope.valid() || !procedure.valid() ||
+	if !duty.valid() || !funds.valid() || !fundsVersion.valid() || !scope.valid() || !procedure.valid() ||
 		!coverage.valid() || !delta.valid() || !validity.valid() ||
 		verifiedAt.IsZero() {
 		return DutyPaymentVerification{}, ErrInvalidDutyVerification
 	}
 	return DutyPaymentVerification{
-		duty:       duty,
-		funds:      funds,
-		scope:      scope,
-		procedure:  procedure,
-		coverage:   coverage,
-		delta:      delta,
-		validity:   validity,
-		verifiedAt: verifiedAt.UTC(),
+		duty:         duty,
+		funds:        funds,
+		fundsVersion: fundsVersion,
+		scope:        scope,
+		procedure:    procedure,
+		coverage:     coverage,
+		delta:        delta,
+		validity:     validity,
+		verifiedAt:   verifiedAt.UTC(),
 	}, nil
 }
 
@@ -167,6 +174,11 @@ func (verification DutyPaymentVerification) Duty() AssessedDutyReference {
 
 func (verification DutyPaymentVerification) Funds() ExternalFundsFactReference {
 	return verification.funds
+}
+
+// FundsVersion 是这版核对比的是资金事实的哪一版——记录的依据维，不是身份维（见类型头注）。
+func (verification DutyPaymentVerification) FundsVersion() FundsFactVersion {
+	return verification.fundsVersion
 }
 
 // Scope 是持久化重建的必需读口（判据同 ExternalResult 那三个读口）。

@@ -314,11 +314,13 @@ export function listDutyCollaborations(): Promise<ApiResult<DutyCollaborationLis
  * CONTEXT 明禁形状(ADR-0137 决定三),本行没有、页面也不得折出一个「付款状态」。version
  * 是幂等键上的内容指纹:同键多版本各自成行,迟到事实按新版本追加不覆盖,哪版是当前由
  * 读者按 verifiedAt 判读。basis 是「凭什么把这笔资金关联到这版税费」的证据引用。procedure 是
- * 付款人维按其规则判的真实程序——核对记录的依据维,不是身份维(票 sa-cc/22)。
+ * 付款人维按其规则判的真实程序,fundsVersion 是这版核对比的是资金事实的哪一版——两者都是核对记录
+ * 的依据维,不是身份维(票 sa-cc/22 / sa-cc/19)。
  */
 export interface DutyVerificationRecord {
   duty: string;
   funds: string;
+  fundsVersion: string;
   scope: string;
   procedure: string;
   version: string;

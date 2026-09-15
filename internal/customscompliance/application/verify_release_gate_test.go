@@ -182,8 +182,9 @@ func synVerificationRecord(
 	duty := mustValue(t, domain.NewAssessedDutyReference, "SYN-DUTY-01/v1")
 	funds := mustValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-01")
 	scope := mustValue(t, domain.NewDecisionScopeReference, "declaration-unit-1")
+	fundsVersion := mustValue(t, domain.NewFundsFactVersion, "SYN-FUNDS-01/v1")
 	procedure := mustValue(t, domain.NewCustomsProcedureReference, "SYN-PROC-IMPORT")
-	verification, err := domain.VerifyDutyPayment(duty, funds, scope, procedure, coverage, delta, validity, gateAt.Add(-time.Hour))
+	verification, err := domain.VerifyDutyPayment(duty, funds, fundsVersion, scope, procedure, coverage, delta, validity, gateAt.Add(-time.Hour))
 	if err != nil {
 		t.Fatalf("构造合成核对：%v", err)
 	}
@@ -422,6 +423,13 @@ func TestTheDutyPaymentGateStopsHonestlyInsteadOfAnsweringUnmet(t *testing.T) {
 		{"有效性冲突", func(f *gateFixture) {
 			f.dutyRules.rule = acceptFullNoDeltaValid(t)
 			f.verifications.record = synVerificationRecord(t, domain.CoverageFull, domain.DeltaNone, domain.FundsFactConflicting, "SYN-DIGEST-V1")
+			f.verifications.found = true
+		}, application.DutyVerificationPending},
+		// 资金事实新版本到达后编排形成的 (a′) 版（覆盖承前、差额 / 有效性都待确认，票 sa-cc/19 裁决 1）成为当前一版：
+		// 事实变了、人没重核之前门禁答未决，不放也不判失败（完成判据 (4)）。
+		{"新版本到达后待重核的那一版", func(f *gateFixture) {
+			f.dutyRules.rule = acceptFullNoDeltaValid(t)
+			f.verifications.record = synVerificationRecord(t, domain.CoverageFull, domain.DeltaPending, domain.FundsFactPending, "SYN-DIGEST-V2")
 			f.verifications.found = true
 		}, application.DutyVerificationPending},
 		{"认定与规则并存", func(f *gateFixture) {

@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -137,17 +138,18 @@ func (double *dutyStoreDouble) ListFundsFactVersions(
 	return versions, nil
 }
 
-// LoadFundsFact 照真库口径交回最近接收的那一版。
-func (double *dutyStoreDouble) LoadFundsFact(
-	ctx context.Context,
+// LoadFundsFactVersion 按（租户、事实、版本）点读一版——真库口径。
+func (double *dutyStoreDouble) LoadFundsFactVersion(
+	_ context.Context,
 	tenant domain.TenantID,
 	fact domain.ExternalFundsFactReference,
+	version domain.FundsFactVersion,
 ) (ports.ExternalFundsFactRegistration, bool, error) {
-	versions, err := double.ListFundsFactVersions(ctx, tenant, fact)
-	if err != nil || len(versions) == 0 {
-		return ports.ExternalFundsFactRegistration{}, false, err
+	if double.fundsErr != nil {
+		return ports.ExternalFundsFactRegistration{}, false, double.fundsErr
 	}
-	return versions[len(versions)-1], true, nil
+	registration, ok := double.funds[fundsVersionKey(tenant, fact, version)]
+	return registration, ok, nil
 }
 
 func verificationKey(key ports.DutyVerificationKey) string {
@@ -163,6 +165,31 @@ func (double *dutyStoreDouble) FindVerification(
 	}
 	found, ok := double.verifications[verificationKey(key)]
 	return found, ok, nil
+}
+
+// ListVerificationsByFundsFact 照真库口径按核对时刻升序、同一时刻按指纹字典序列一条事实的全部核对版本。
+func (double *dutyStoreDouble) ListVerificationsByFundsFact(
+	_ context.Context,
+	tenant domain.TenantID,
+	funds domain.ExternalFundsFactReference,
+) ([]ports.DutyVerificationRecord, error) {
+	if double.verificationErr != nil {
+		return nil, double.verificationErr
+	}
+	var records []ports.DutyVerificationRecord
+	for _, record := range double.verifications {
+		if record.Key.TenantID == tenant && record.Key.Funds == funds {
+			records = append(records, record)
+		}
+	}
+	sort.Slice(records, func(i, j int) bool {
+		left, right := records[i].Verification.VerifiedAt(), records[j].Verification.VerifiedAt()
+		if !left.Equal(right) {
+			return left.Before(right)
+		}
+		return records[i].Key.Digest < records[j].Key.Digest
+	})
+	return records, nil
 }
 
 func (double *dutyStoreDouble) SaveVerification(
@@ -291,15 +318,16 @@ func fundsFactCommand(t *testing.T) application.ReceiveExternalFundsFactCommand 
 func verifyDutyCommand(t *testing.T) application.VerifyDutyPaymentCommand {
 	t.Helper()
 	return application.VerifyDutyPaymentCommand{
-		TenantID:  configValue(t, domain.NewTenantID, "tenant-a"),
-		Duty:      configValue(t, domain.NewAssessedDutyReference, "SYN-DUTY-01/v1"),
-		Funds:     configValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-01"),
-		Scope:     configValue(t, domain.NewDecisionScopeReference, "SYN-UNIT-01"),
-		Procedure: configValue(t, domain.NewCustomsProcedureReference, "SYN-PROC-01"),
-		Coverage:  domain.CoverageFull,
-		Delta:     domain.DeltaNone,
-		Validity:  domain.FundsFactValid,
-		Basis:     "SYN-RULE-01: assessment reference quoted on the remittance",
+		TenantID:     configValue(t, domain.NewTenantID, "tenant-a"),
+		Duty:         configValue(t, domain.NewAssessedDutyReference, "SYN-DUTY-01/v1"),
+		Funds:        configValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-01"),
+		FundsVersion: configValue(t, domain.NewFundsFactVersion, "SYN-FUNDS-01/v1"),
+		Scope:        configValue(t, domain.NewDecisionScopeReference, "SYN-UNIT-01"),
+		Procedure:    configValue(t, domain.NewCustomsProcedureReference, "SYN-PROC-01"),
+		Coverage:     domain.CoverageFull,
+		Delta:        domain.DeltaNone,
+		Validity:     domain.FundsFactValid,
+		Basis:        "SYN-RULE-01: assessment reference quoted on the remittance",
 	}
 }
 
@@ -457,8 +485,8 @@ func correctionOf(t *testing.T, previous application.ReceiveExternalFundsFactCom
 
 // Covers: 票 sa-cc/13 完成判据 1——v1 已登记，v2 同引用、回指 v1、金额变 → `已接收`落新一行；按引用列出两版且
 // v2 回指 v1，v1 一字不动（UC-CC-009「不删除原付款、不按最后到达覆盖」）；同版本重投 → `已存在`；同版本换内容
-// （金额或回指）→ `内容冲突`——那才是真冲突：同一版本两个来源各说一套（裁决 1）。核对今天按引用读的是最近
-// 接收的那一版（读口头注）。
+// （金额或回指）→ `内容冲突`——那才是真冲突：同一版本两个来源各说一套（裁决 1）。两版各自按版本点读得回
+// （票 sa-cc/19 起「最近接收」读口退役）。
 func TestACorrectionVersionIsReceivedAsANewRowThatPointsBackToTheVersionItCorrects(t *testing.T) {
 	store := newDutyStore()
 	handler := newDutyHandler(t, store)
@@ -483,9 +511,11 @@ func TestACorrectionVersionIsReceivedAsANewRowThatPointsBackToTheVersionItCorrec
 		versions[1].AmountMinor != 9000 {
 		t.Fatalf("新版本该回指 v1 且带自己的内容：%+v", versions[1])
 	}
-	if current, found, _ := store.LoadFundsFact(t.Context(), first.TenantID, first.Registration.Fact); !found ||
-		current.Version != second.Registration.Version {
-		t.Fatalf("按引用读该是最近接收的那一版：found=%v version=%s", found, current.Version)
+	for _, want := range []application.ReceiveExternalFundsFactCommand{first, second} {
+		if got, found, _ := store.LoadFundsFactVersion(t.Context(), want.TenantID, want.Registration.Fact, want.Registration.Version); !found ||
+			got != want.Registration {
+			t.Fatalf("按版本点读 %s 该原样交回：found=%v got=%+v", want.Registration.Version, found, got)
+		}
 	}
 
 	if result, err := handler.ReceiveFundsFact(t.Context(), second); err != nil ||
@@ -559,7 +589,7 @@ func TestAFundsFactWithoutAPayerIsReceivedWithThePayerRecordedAsNotProvided(t *t
 		result.Outcome() != application.FundsFactReceived {
 		t.Fatalf("来源未提供付款人该`已接收`：err=%v outcome=%v", err, result.Outcome())
 	}
-	registered, found, err := store.LoadFundsFact(t.Context(), unprovided.TenantID, unprovided.Registration.Fact)
+	registered, found, err := store.LoadFundsFactVersion(t.Context(), unprovided.TenantID, unprovided.Registration.Fact, unprovided.Registration.Version)
 	if err != nil || !found || registered.Payer.Provided() || !registered.Payer.Valid() {
 		t.Fatalf("登记里付款人该显式为「未提供」：found=%v err=%v payer=%#v", found, err, registered.Payer)
 	}
@@ -582,7 +612,7 @@ func TestAFundsFactWithoutAPayerIsReceivedWithThePayerRecordedAsNotProvided(t *t
 		result.Outcome() != application.DutyReconciliationNotAccepted {
 		t.Fatalf("零值付款人该`未受理`：err=%v outcome=%v", err, result.Outcome())
 	}
-	if _, found, _ := store.LoadFundsFact(t.Context(), zero.TenantID, zero.Registration.Fact); found {
+	if _, found, _ := store.LoadFundsFactVersion(t.Context(), zero.TenantID, zero.Registration.Fact, zero.Registration.Version); found {
 		t.Fatal("零值付款人的事实落了册")
 	}
 }
@@ -696,6 +726,64 @@ func TestVerificationsUnderDifferentProceduresAreDifferentVersions(t *testing.T)
 	}
 	if len(store.verifications) != 2 || len(store.handoffs) != 2 {
 		t.Fatalf("重放不得再落行、再交封：%d 行 %d 封", len(store.verifications), len(store.handoffs))
+	}
+}
+
+// Covers: 票 sa-cc/19 做法 3——核对按版本读：`FundsVersion` 必填（空白`未受理`）；前置按命令所指那一版读——v1 在册、
+// 命令指 v9 → `资金事实未接收`，别的版本在册不顶替；v2 到册后以同三轴同依据同程序、只换资金版本再核 → 另一版
+// （资金版本折进指纹，裁决 3 (3)），落册对象各带自己比的那一版；同版本重核`已存在`。
+func TestAVerificationReadsThePrerequisiteByTheVersionItNames(t *testing.T) {
+	store := newDutyStore()
+	handler := newDutyHandler(t, store)
+	if _, err := handler.FormCollaboration(t.Context(), assessedCollaborationCommand(t)); err != nil {
+		t.Fatalf("协作事项：%v", err)
+	}
+	first := fundsFactCommand(t)
+	if _, err := handler.ReceiveFundsFact(t.Context(), first); err != nil {
+		t.Fatalf("资金事实 v1：%v", err)
+	}
+
+	blankVersion := verifyDutyCommand(t)
+	blankVersion.FundsVersion = domain.FundsFactVersion{}
+	if result, err := handler.VerifyPayment(t.Context(), blankVersion); err != nil ||
+		result.Outcome() != application.DutyReconciliationNotAccepted {
+		t.Fatalf("不说比的是哪一版该`未受理`：err=%v outcome=%v", err, result.Outcome())
+	}
+	unreceived := verifyDutyCommand(t)
+	unreceived.FundsVersion = configValue(t, domain.NewFundsFactVersion, "SYN-FUNDS-01/v9")
+	if result, err := handler.VerifyPayment(t.Context(), unreceived); err != nil ||
+		result.Outcome() != application.FundsFactNotReceived {
+		t.Fatalf("命令所指那一版没接收，别的版本在册不顶替：err=%v outcome=%v", err, result.Outcome())
+	}
+
+	onFirst := verifyDutyCommand(t)
+	if result, err := handler.VerifyPayment(t.Context(), onFirst); err != nil ||
+		result.Outcome() != application.DutyVerificationFormed {
+		t.Fatalf("按 v1 核对：err=%v outcome=%v", err, result.Outcome())
+	}
+	second := correctionOf(t, first, "SYN-FUNDS-01/v2", 9000)
+	if _, err := handler.ReceiveFundsFact(t.Context(), second); err != nil {
+		t.Fatalf("资金事实 v2：%v", err)
+	}
+	onSecond := verifyDutyCommand(t)
+	onSecond.FundsVersion = second.Registration.Version
+	if result, err := handler.VerifyPayment(t.Context(), onSecond); err != nil ||
+		result.Outcome() != application.DutyVerificationFormed {
+		t.Fatalf("同三轴同依据同程序、只换资金版本该是另一版：err=%v outcome=%v", err, result.Outcome())
+	}
+	if len(store.verifications) != 2 || len(store.handoffs) != 2 || store.handoffs[0].Key.Digest == store.handoffs[1].Key.Digest {
+		t.Fatalf("两版该各成一行、各交一封、指纹不同：%d 行 %d 封", len(store.verifications), len(store.handoffs))
+	}
+	versions := map[domain.FundsFactVersion]bool{}
+	for _, record := range store.verifications {
+		versions[record.Verification.FundsVersion()] = true
+	}
+	if !versions[first.Registration.Version] || !versions[second.Registration.Version] {
+		t.Fatalf("落册的核对该各自带着比的是哪一版：%v", versions)
+	}
+	if result, err := handler.VerifyPayment(t.Context(), onSecond); err != nil ||
+		result.Outcome() != application.DutyVerificationExisting {
+		t.Fatalf("同版本重核该`已存在`：err=%v outcome=%v", err, result.Outcome())
 	}
 }
 
@@ -941,7 +1029,8 @@ func TestThePayerDimensionIsJudgedByTheProcedureRule(t *testing.T) {
 		if len(store.verifications) != 1 || len(store.handoffs) != 1 {
 			t.Fatalf("形成该落一行、交一封：%d 行 %d 封", len(store.verifications), len(store.handoffs))
 		}
-		registered, _, _ := store.LoadFundsFact(t.Context(), verifyDutyCommand(t).TenantID, verifyDutyCommand(t).Funds)
+		command := verifyDutyCommand(t)
+		registered, _, _ := store.LoadFundsFactVersion(t.Context(), command.TenantID, command.Funds, command.FundsVersion)
 		if registered.Payer.Provided() || !registered.Payer.Valid() {
 			t.Fatalf("核对不得替事实补付款人：%#v", registered.Payer)
 		}

@@ -64,14 +64,14 @@ func (double *fundsFactRegisterDouble) ListFundsFactVersions(
 	return versions, nil
 }
 
-func (double *fundsFactRegisterDouble) LoadFundsFact(
-	ctx context.Context, tenant ccdomain.TenantID, fact ccdomain.ExternalFundsFactReference,
+func (double *fundsFactRegisterDouble) LoadFundsFactVersion(
+	_ context.Context, tenant ccdomain.TenantID, fact ccdomain.ExternalFundsFactReference, version ccdomain.FundsFactVersion,
 ) (ccports.ExternalFundsFactRegistration, bool, error) {
-	versions, err := double.ListFundsFactVersions(ctx, tenant, fact)
-	if err != nil || len(versions) == 0 {
-		return ccports.ExternalFundsFactRegistration{}, false, err
+	if double.err != nil {
+		return ccports.ExternalFundsFactRegistration{}, false, double.err
 	}
-	return versions[len(versions)-1], true, nil
+	registration, found := double.rows[registerKey(tenant, fact, version)]
+	return registration, found, nil
 }
 
 type dutyClock struct{ at time.Time }
@@ -105,6 +105,15 @@ func (double unreachedDutyStores) FindVerification(
 	double.t.Helper()
 	double.t.Fatal("消费适配器不该读核对")
 	return ccports.DutyVerificationRecord{}, false, nil
+}
+
+// ListVerificationsByFundsFact 是新版本到达后编排问「这条事实有没有既往核对版本」的那一口（票 sa-cc/19 裁决 2）
+// ——它是消费这条线上唯一该被碰到的核对读口；这本替身代表「从没核对过」，答空、不判。有既往核对的那一格在
+// rederiveStores 上钉。
+func (double unreachedDutyStores) ListVerificationsByFundsFact(
+	context.Context, ccdomain.TenantID, ccdomain.ExternalFundsFactReference,
+) ([]ccports.DutyVerificationRecord, error) {
+	return nil, nil
 }
 
 func (double unreachedDutyStores) SaveVerification(
@@ -386,6 +395,210 @@ func TestAnUndecidedOrchestrationIsRetried(t *testing.T) {
 func TestTheReceiveAdapterRefusesNilDependencies(t *testing.T) {
 	if _, err := adapter.NewReceiveOnAdoptedFundsFactAdapter(nil, nil); err == nil {
 		t.Fatal("nil 依赖被收下了")
+	}
+}
+
+// rederiveStores 是「已有既往核对」那一格要的几口：协作事项、核对册、付款人规则、交接——内存替身照真库代数（同键
+// `已登记`不顶替）。与 unreachedDutyStores 分开：那本代表「消费这条线不该碰到」，这本代表「新版本到达后编排要
+// 读写」，两本各守一件事。
+type rederiveStores struct {
+	collaborations  map[string]ccdomain.DutyPaymentCollaboration
+	verifications   map[string]ccports.DutyVerificationRecord
+	payerRules      map[string]ccdomain.PayerRequirement
+	handoffs        []ccports.DutyPaymentVerificationHandoffIntent
+	verificationErr error
+}
+
+func newRederiveStores() *rederiveStores {
+	return &rederiveStores{
+		collaborations: map[string]ccdomain.DutyPaymentCollaboration{},
+		verifications:  map[string]ccports.DutyVerificationRecord{},
+		payerRules:     map[string]ccdomain.PayerRequirement{},
+	}
+}
+
+func (stores *rederiveStores) FindCollaboration(
+	_ context.Context, tenant ccdomain.TenantID, scope ccdomain.DecisionScopeReference, duty ccdomain.AssessedDutyReference,
+) (ccdomain.DutyPaymentCollaboration, bool, error) {
+	collaboration, found := stores.collaborations[tenant.String()+"|"+scope.String()+"|"+duty.String()]
+	return collaboration, found, nil
+}
+
+func (stores *rederiveStores) SaveCollaboration(
+	_ context.Context, tenant ccdomain.TenantID, collaboration ccdomain.DutyPaymentCollaboration,
+) (ccports.CaseConfigurationSaveOutcome, error) {
+	duty, _ := collaboration.Duty()
+	stores.collaborations[tenant.String()+"|"+collaboration.Scope().String()+"|"+duty.String()] = collaboration
+	return ccports.CaseConfigurationRegistered, nil
+}
+
+func verificationKeyOf(key ccports.DutyVerificationKey) string {
+	return key.TenantID.String() + "|" + key.Duty.String() + "|" + key.Funds.String() + "|" + key.Scope.String() + "|" + key.Digest
+}
+
+func (stores *rederiveStores) FindVerification(
+	_ context.Context, key ccports.DutyVerificationKey,
+) (ccports.DutyVerificationRecord, bool, error) {
+	record, found := stores.verifications[verificationKeyOf(key)]
+	return record, found, nil
+}
+
+func (stores *rederiveStores) ListVerificationsByFundsFact(
+	_ context.Context, tenant ccdomain.TenantID, funds ccdomain.ExternalFundsFactReference,
+) ([]ccports.DutyVerificationRecord, error) {
+	if stores.verificationErr != nil {
+		return nil, stores.verificationErr
+	}
+	var records []ccports.DutyVerificationRecord
+	for _, record := range stores.verifications {
+		if record.Key.TenantID == tenant && record.Key.Funds == funds {
+			records = append(records, record)
+		}
+	}
+	return records, nil
+}
+
+func (stores *rederiveStores) SaveVerification(
+	_ context.Context, record ccports.DutyVerificationRecord,
+) (ccports.CaseConfigurationSaveOutcome, error) {
+	if stores.verificationErr != nil {
+		return ccports.CaseConfigurationSaveOutcomeInvalid, stores.verificationErr
+	}
+	key := verificationKeyOf(record.Key)
+	if _, exists := stores.verifications[key]; exists {
+		return ccports.CaseConfigurationAlreadyRegistered, nil
+	}
+	stores.verifications[key] = record
+	return ccports.CaseConfigurationRegistered, nil
+}
+
+func (stores *rederiveStores) LoadPayerRequirement(
+	_ context.Context, tenant ccdomain.TenantID, procedure ccdomain.CustomsProcedureReference,
+) (ccdomain.PayerRequirement, bool, error) {
+	requirement, found := stores.payerRules[tenant.String()+"|"+procedure.String()]
+	return requirement, found, nil
+}
+
+func (stores *rederiveStores) HandOffDutyPaymentVerification(
+	_ context.Context, intent ccports.DutyPaymentVerificationHandoffIntent,
+) error {
+	stores.handoffs = append(stores.handoffs, intent)
+	return nil
+}
+
+// verifiedFixture 铺好「v1 已接收且已核对（谱系 A：SYN-DUTY-01/v1 × declaration-unit-1 × SYN-PROC-IMPORT）」：
+// 协作事项、付款人规则「要求」、v1 经本适配器落册、按 v1 走 VerifyPayment 成一版。交回适配器与几口替身。
+func verifiedFixture(t *testing.T) (*fixture, *rederiveStores, *ccapplication.DutyPaymentReconciliationHandler) {
+	t.Helper()
+	source := &adoptedSourceDouble{facts: map[string]ccports.AdoptedFundsFact{}}
+	register := newFundsFactRegister()
+	stores := newRederiveStores()
+	receiver, err := ccapplication.NewDutyPaymentReconciliationHandler(ccapplication.DutyPaymentReconciliationDeps{
+		Collaborations: stores,
+		Funds:          register,
+		Verifications:  stores,
+		PayerRules:     stores,
+		Handoff:        stores,
+		Clock:          dutyClock{at: fundsOccurredAt.Add(time.Hour)},
+	})
+	if err != nil {
+		t.Fatalf("构造编排：%v", err)
+	}
+	handler, err := adapter.NewReceiveOnAdoptedFundsFactAdapter(source, receiver)
+	if err != nil {
+		t.Fatalf("构造处理方：%v", err)
+	}
+	fixture := &fixture{source: source, register: register, handler: handler}
+
+	tenant := payerFixtureTenant(t)
+	duty, _ := ccdomain.NewAssessedDutyReference("SYN-DUTY-01/v1")
+	scope, _ := ccdomain.NewDecisionScopeReference("declaration-unit-1")
+	procedure, _ := ccdomain.NewCustomsProcedureReference("SYN-PROC-IMPORT")
+	obligor, _ := ccdomain.NewLegalObligorReference("SYN-OBLIGOR-01")
+	requirement, _ := ccdomain.NewPaymentRequirementSource("SYN-ASSESSMENT-01")
+	target, _ := ccdomain.NewResponsibilityTargetReference("SYN-DUTY-DESK")
+	collaboration, err := ccdomain.FormDutyCollaboration(ccdomain.DutyCollaborationSpec{
+		Kind: ccdomain.ObligationFromAssessedDuty, Duty: duty, Scope: scope,
+		Obligor: obligor, Requirement: requirement, Target: target, FormedAt: fundsOccurredAt,
+	})
+	if err != nil {
+		t.Fatalf("构造协作事项：%v", err)
+	}
+	if _, err := stores.SaveCollaboration(context.Background(), tenant, collaboration); err != nil {
+		t.Fatalf("铺协作事项：%v", err)
+	}
+	stores.payerRules[tenant.String()+"|"+procedure.String()] = ccdomain.PayerRequired
+
+	source.facts["tenant-a|bank-fact-1|bank-fact/v1"] = adoptedContent("bank-fact/v1", "", "payer-customer-7")
+	if err := fixture.handler.HandleAdoptedExternalFundsFact(context.Background(), adoptedEnvelopeRef("bank-fact/v1")); err != nil {
+		t.Fatalf("v1：%v", err)
+	}
+	result, err := receiver.VerifyPayment(context.Background(), ccapplication.VerifyDutyPaymentCommand{
+		TenantID: tenant, Duty: duty, Funds: payerFixtureFact(t), FundsVersion: versionOf("bank-fact/v1"),
+		Scope: scope, Procedure: procedure,
+		Coverage: ccdomain.CoverageFull, Delta: ccdomain.DeltaNone, Validity: ccdomain.FundsFactValid,
+		Basis: "SYN-RULE-01: remittance quotes assessment",
+	})
+	if err != nil || result.Outcome() != ccapplication.DutyVerificationFormed {
+		t.Fatalf("按 v1 核对：err=%v outcome=%v reason=%v", err, result.Outcome(), result.UndecidedReason())
+	}
+	return fixture, stores, receiver
+}
+
+// Covers: 票 sa-cc/19 裁决 3 (1)——触发落点在本适配器：`ReceiveFundsFact` 答`已接收`之后、同一次处理里调重派编排；
+// v1 已核对，v2 经信封到达 → 谱系 A 多一版（资金版本 v2、差额 / 有效性 PENDING、覆盖承前）、多一封交接；同一封 v2
+// 重投（编排答`已存在`）不再触发——册上行数、信封数都不变；本适配器仍只译不判：三轴从哪来是编排的事，这里没有一行
+// 在算。
+func TestANewVersionArrivingThroughTheAdapterRederivesTheLineageOnceAndReplayDoesNot(t *testing.T) {
+	fixture, stores, _ := verifiedFixture(t)
+	if len(stores.verifications) != 1 || len(stores.handoffs) != 1 {
+		t.Fatalf("夹具该只有 v1 那一版：%d 行 %d 封", len(stores.verifications), len(stores.handoffs))
+	}
+	corrected := adoptedContent("bank-fact/v2", "bank-fact/v1", "payer-customer-7")
+	corrected.AmountMinor = 9000
+	fixture.source.facts["tenant-a|bank-fact-1|bank-fact/v2"] = corrected
+
+	if err := fixture.handler.HandleAdoptedExternalFundsFact(context.Background(), adoptedEnvelopeRef("bank-fact/v2")); err != nil {
+		t.Fatalf("v2：%v", err)
+	}
+	if len(stores.verifications) != 2 || len(stores.handoffs) != 2 {
+		t.Fatalf("新版本到达该多一版核对、多一封：%d 行 %d 封", len(stores.verifications), len(stores.handoffs))
+	}
+	formed := stores.verifications[verificationKeyOf(stores.handoffs[1].Key)]
+	if formed.Verification.FundsVersion() != versionOf("bank-fact/v2") || formed.Verification.Delta() != ccdomain.DeltaPending ||
+		formed.Verification.Validity() != ccdomain.FundsFactPending || formed.Verification.Coverage() != ccdomain.CoverageFull {
+		t.Fatalf("新版本该是 (a′)：%+v", formed.Verification)
+	}
+
+	if err := fixture.handler.HandleAdoptedExternalFundsFact(context.Background(), adoptedEnvelopeRef("bank-fact/v2")); err != nil {
+		t.Fatalf("重投 v2：%v", err)
+	}
+	if len(stores.verifications) != 2 || len(stores.handoffs) != 2 {
+		t.Fatalf("同版本重投不触发：%d 行 %d 封", len(stores.verifications), len(stores.handoffs))
+	}
+}
+
+// Covers: 重派里的两种未决分开落（ADR-0029）：谱系的业务未决（程序要求付款人而 v2 没给）是编排的答案——入账、
+// 不重投、册上不动；依赖故障（核对册不可用）交回 ErrDutyVerificationRederivationUndecided 让消费门连同接收一起回滚
+// 重投——它与 ErrFundsFactReceiveUndecided 分开命名，运维从错误上读得出停在接收还是停在重派。
+func TestRederivationUndecidedSplitsBusinessPendingFromDependencyFailure(t *testing.T) {
+	fixture, stores, _ := verifiedFixture(t)
+	fixture.source.facts["tenant-a|bank-fact-1|bank-fact/v2"] = adoptedContent("bank-fact/v2", "bank-fact/v1", "")
+	if err := fixture.handler.HandleAdoptedExternalFundsFact(context.Background(), adoptedEnvelopeRef("bank-fact/v2")); err != nil {
+		t.Fatalf("程序要求付款人而 v2 没给是编排的答案，该入账：%v", err)
+	}
+	if len(stores.verifications) != 1 || len(stores.handoffs) != 1 {
+		t.Fatalf("那条谱系不该形成：%d 行 %d 封", len(stores.verifications), len(stores.handoffs))
+	}
+
+	fixture.source.facts["tenant-a|bank-fact-1|bank-fact/v3"] = adoptedContent("bank-fact/v3", "bank-fact/v2", "payer-customer-7")
+	stores.verificationErr = errors.New("verification store down")
+	err := fixture.handler.HandleAdoptedExternalFundsFact(context.Background(), adoptedEnvelopeRef("bank-fact/v3"))
+	if !errors.Is(err, adapter.ErrDutyVerificationRederivationUndecided) {
+		t.Fatalf("err = %v, want ErrDutyVerificationRederivationUndecided", err)
+	}
+	if errors.Is(err, adapter.ErrFundsFactReceiveUndecided) {
+		t.Fatal("停在重派不是停在接收，两个哨兵不得混")
 	}
 }
 

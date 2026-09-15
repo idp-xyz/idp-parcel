@@ -66,7 +66,7 @@ func TestCommandForRejectsBlankIdentifiers(t *testing.T) {
 			"requirementRef": "SYN-ASSESSMENT-01", "targetRef": "SYN-DUTY-DESK"
 		}`,
 		commandDutyPaymentVerification: `{
-			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "  ",
+			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "  ", "fundsVersion": "SYN-FUNDS-01/v1",
 			"scopeRef": "SYN-UNIT-01", "procedureRef": "SYN-PROC-01", "coverage": "PARTIAL", "delta": "SHORT",
 			"validity": "PENDING", "basis": "SYN-RULE-01"
 		}`,
@@ -84,18 +84,40 @@ func TestCommandForRejectsBlankIdentifiers(t *testing.T) {
 func TestCommandForRequiresTheProcedureOnAVerification(t *testing.T) {
 	for name, raw := range map[string]string{
 		"缺席": `{
-			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "SYN-FUNDS-01",
+			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "SYN-FUNDS-01", "fundsVersion": "SYN-FUNDS-01/v1",
 			"scopeRef": "SYN-UNIT-01", "coverage": "PARTIAL", "delta": "SHORT",
 			"validity": "PENDING", "basis": "SYN-RULE-01"
 		}`,
 		"空白": `{
-			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "SYN-FUNDS-01",
+			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "SYN-FUNDS-01", "fundsVersion": "SYN-FUNDS-01/v1",
 			"scopeRef": "SYN-UNIT-01", "procedureRef": "  ", "coverage": "PARTIAL", "delta": "SHORT",
 			"validity": "PENDING", "basis": "SYN-RULE-01"
 		}`,
 	} {
 		if _, err := commandFor(commandDutyPaymentVerification, []byte(raw)); err == nil {
 			t.Fatalf("监管程序%s未在译装处被拒", name)
+		}
+	}
+}
+
+// TestCommandForRequiresTheFundsVersionOnAVerification 证核对输入「比的是资金事实的哪一版」在译装处必填（票
+// sa-cc/19 做法 3）：同一事实两版并存时「最近接收」答的是到达顺序，不是核对所指，入口不替登记方选；缺席与空白
+// 都是用法错误，不是任何一格业务答案。
+func TestCommandForRequiresTheFundsVersionOnAVerification(t *testing.T) {
+	for name, raw := range map[string]string{
+		"缺席": `{
+			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "SYN-FUNDS-01",
+			"scopeRef": "SYN-UNIT-01", "procedureRef": "SYN-PROC-01", "coverage": "PARTIAL", "delta": "SHORT",
+			"validity": "PENDING", "basis": "SYN-RULE-01"
+		}`,
+		"空白": `{
+			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "SYN-FUNDS-01", "fundsVersion": "  ",
+			"scopeRef": "SYN-UNIT-01", "procedureRef": "SYN-PROC-01", "coverage": "PARTIAL", "delta": "SHORT",
+			"validity": "PENDING", "basis": "SYN-RULE-01"
+		}`,
+	} {
+		if _, err := commandFor(commandDutyPaymentVerification, []byte(raw)); err == nil {
+			t.Fatalf("资金事实版本%s未在译装处被拒", name)
 		}
 	}
 }
@@ -141,17 +163,17 @@ func TestCommandForRejectsVocabularyOutsideTheClosedSets(t *testing.T) {
 			"requirementRef": "SYN-ASSESSMENT-01", "targetRef": "SYN-DUTY-DESK"
 		}`, "kind"},
 		{commandDutyPaymentVerification, `{
-			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "SYN-FUNDS-01",
+			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "SYN-FUNDS-01", "fundsVersion": "SYN-FUNDS-01/v1",
 			"scopeRef": "SYN-UNIT-01", "procedureRef": "SYN-PROC-01", "coverage": "ALL", "delta": "SHORT",
 			"validity": "PENDING", "basis": "SYN-RULE-01"
 		}`, "coverage"},
 		{commandDutyPaymentVerification, `{
-			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "SYN-FUNDS-01",
+			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "SYN-FUNDS-01", "fundsVersion": "SYN-FUNDS-01/v1",
 			"scopeRef": "SYN-UNIT-01", "procedureRef": "SYN-PROC-01", "coverage": "PARTIAL", "delta": "MISSING",
 			"validity": "PENDING", "basis": "SYN-RULE-01"
 		}`, "delta"},
 		{commandDutyPaymentVerification, `{
-			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "SYN-FUNDS-01",
+			"tenantId": "SYN-T1", "dutyRef": "SYN-DUTY-01/v1", "fundsRef": "SYN-FUNDS-01", "fundsVersion": "SYN-FUNDS-01/v1",
 			"scopeRef": "SYN-UNIT-01", "procedureRef": "SYN-PROC-01", "coverage": "PARTIAL", "delta": "SHORT",
 			"validity": "", "basis": "SYN-RULE-01"
 		}`, "validity"},

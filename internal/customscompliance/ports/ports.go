@@ -1147,20 +1147,23 @@ type AdoptedFundsFactSource interface {
 // CC 以 inbox 消费者接进本口）由票 sa-cc/02（SA 采用发信封）与 sa-cc/03（本上下文的
 // `adapters/inbox` 消费者 → AdoptedFundsFactSource 回查 → ReceiveFundsFact）接上。
 //
-// 两个读口分工：LoadFundsFact 交回本上下文**最近接收**的那一版——核对（VerifyPayment）今天按引用读前置与
-// 付款人维、命令上没有版本，它读的就是这一版；「新版本到达 → 形成新核对版本」的编排归后继票，那张票落地时
-// 核对该按版本读。ListFundsFactVersions 按接收先后列全部版本、每版带回指前版——「登记册看得见新版本与回指」
-// （裁决 2）就是这一口；空切片即一版都没接收。
+// 两个读口分工：LoadFundsFactVersion 按（租户、事实、版本）点读一版——核对（VerifyPayment）按命令所指的
+// 那一版读前置与付款人维，新版本到达形成新核对版本的编排（RederiveDutyVerificationsOnFundsFactVersion）读新到
+// 的那一版；found=false 即那一版没接收过。「最近接收的那一版」这个读口自票 sa-cc/19 起退役：核对引用的是事实
+// 的哪一版而不是事实身份，「最近接收」在两版并存时答的是到达顺序，不是任何一版核对所指（UC-CC-009「不按到达
+// 顺序覆盖」）。ListFundsFactVersions 按接收先后列全部版本、每版带回指前版——「登记册看得见新版本与回指」
+// （票 sa-cc/13 裁决 2）就是这一口；空切片即一版都没接收。
 type ExternalFundsFactRegister interface {
 	RegisterFundsFact(
 		ctx context.Context,
 		tenant domain.TenantID,
 		registration ExternalFundsFactRegistration,
 	) (CaseConfigurationSaveOutcome, error)
-	LoadFundsFact(
+	LoadFundsFactVersion(
 		ctx context.Context,
 		tenant domain.TenantID,
 		fact domain.ExternalFundsFactReference,
+		version domain.FundsFactVersion,
 	) (ExternalFundsFactRegistration, bool, error)
 	ListFundsFactVersions(
 		ctx context.Context,
@@ -1195,10 +1198,10 @@ type PayerRequirementRuleView interface {
 }
 
 // DutyVerificationKey 是税费付款核对的幂等键：核对身份三维（税费版本、资金事实、范围）加
-// 内容指纹——三轴、关联依据或监管程序变了自然换指纹换版（迟到事实按新版本追加，不按到达顺序
-// 覆盖，UC-CC-009 核对规则那句），同一内容重复核对不出第二版。程序折进指纹而不加一维（票
-// sa-cc/22 裁决 2）：这份键形在 0016 主键、0019 门禁读数、SA 采用表、信封载荷与信封 ID 上各存一份，
-// 加维每一处都得跟着改；指纹算法只在应用层 verificationDigest 一处。
+// 内容指纹——三轴、关联依据、监管程序或资金事实版本变了自然换指纹换版（迟到事实按新版本追加，
+// 不按到达顺序覆盖，UC-CC-009 核对规则那句），同一内容重复核对不出第二版。程序与资金版本折进
+// 指纹而不加一维（票 sa-cc/22 裁决 2、sa-cc/19 裁决 3）：这份键形在 0016 主键、0019 门禁读数、SA 采用表、
+// 信封载荷与信封 ID 上各存一份，加维每一处都得跟着改；指纹算法只在应用层 verificationDigest 一处。
 type DutyVerificationKey struct {
 	TenantID domain.TenantID
 	Duty     domain.AssessedDutyReference
@@ -1210,8 +1213,8 @@ type DutyVerificationKey struct {
 // DutyVerificationRecord 是一次核对越过提交边界留下的东西：领域核对对象加关联依据——依据
 // 不在领域对象里（它是「凭什么把这笔资金关联到这版税费」的证据引用，不是核对的三轴），
 // 却是 UC-CC-009「金额相等不能单独作为关联；无权威依据时待关联」那句要审计的东西。付款人维
-// 按哪个真实程序的规则判，在领域对象上（DutyPaymentVerification.Procedure，票 sa-cc/22），
-// 随对象一起越过边界、落成 0022 的 `procedure_ref`。
+// 按哪个真实程序的规则判、比的是资金事实的哪一版，都在领域对象上（DutyPaymentVerification.Procedure /
+// FundsVersion，票 sa-cc/22 / sa-cc/19），随对象一起越过边界、落成 0022 的 `procedure_ref` 与 0023 的 `funds_version`。
 type DutyVerificationRecord struct {
 	Key          DutyVerificationKey
 	Verification domain.DutyPaymentVerification
@@ -1219,8 +1222,18 @@ type DutyVerificationRecord struct {
 }
 
 // DutyVerificationStore 按幂等键找回并保存核对（写入代数同 ADR-0031）。
+//
+// ListVerificationsByFundsFact 按（租户、资金事实）列这条事实的全部核对版本、按核对时刻升序（同一时刻按指纹
+// 字典序）——「资金事实新版本到达 → 该事实有没有既往核对版本、各谱系最近一版是哪版」（票 sa-cc/19 裁决 2）
+// 这一问就是它答的；空切片即这条事实从没被核对过。它不按范围、不按税费过滤：一条事实可以被关联到多个
+// （税费、范围、程序）谱系，谱系怎么分是编排的事。
 type DutyVerificationStore interface {
 	FindVerification(ctx context.Context, key DutyVerificationKey) (DutyVerificationRecord, bool, error)
+	ListVerificationsByFundsFact(
+		ctx context.Context,
+		tenant domain.TenantID,
+		funds domain.ExternalFundsFactReference,
+	) ([]DutyVerificationRecord, error)
 	SaveVerification(ctx context.Context, record DutyVerificationRecord) (CaseConfigurationSaveOutcome, error)
 }
 

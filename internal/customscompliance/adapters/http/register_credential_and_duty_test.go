@@ -311,10 +311,10 @@ func (stub dutyStoreStub) RegisterFundsFact(
 	return stub.saveOutcome, stub.saveErr
 }
 
-// LoadFundsFact 交回的那条事实付款人取「来源未提供」：它是付款人三格里唯一会让答案分岔的形，
+// LoadFundsFactVersion 交回的那条事实付款人取「来源未提供」：它是付款人三格里唯一会让答案分岔的形，
 // 其余格对这一维无感；零值付款人两格都不是，编排会当编程错误抛出，替身不交它。
-func (stub dutyStoreStub) LoadFundsFact(
-	context.Context, domain.TenantID, domain.ExternalFundsFactReference,
+func (stub dutyStoreStub) LoadFundsFactVersion(
+	context.Context, domain.TenantID, domain.ExternalFundsFactReference, domain.FundsFactVersion,
 ) (ports.ExternalFundsFactRegistration, bool, error) {
 	return ports.ExternalFundsFactRegistration{Payer: domain.FundsPayerNotProvided()}, stub.fundsFound, stub.fundsErr
 }
@@ -330,6 +330,13 @@ func (stub dutyStoreStub) FindVerification(
 	context.Context, ports.DutyVerificationKey,
 ) (ports.DutyVerificationRecord, bool, error) {
 	return ports.DutyVerificationRecord{}, false, nil
+}
+
+// ListVerificationsByFundsFact 只被「资金事实新版本到达」的编排读；本文件的两口端点不走那一路，交空即可。
+func (stub dutyStoreStub) ListVerificationsByFundsFact(
+	context.Context, domain.TenantID, domain.ExternalFundsFactReference,
+) ([]ports.DutyVerificationRecord, error) {
+	return nil, nil
 }
 
 func (stub dutyStoreStub) SaveVerification(
@@ -386,15 +393,16 @@ func collaborationOnRegister(t *testing.T, command application.FormDutyCollabora
 func verificationCommand(t *testing.T, basis string) application.VerifyDutyPaymentCommand {
 	t.Helper()
 	return application.VerifyDutyPaymentCommand{
-		TenantID:  dutyValue(t, domain.NewTenantID, "SYN-TEN-CC07"),
-		Duty:      dutyValue(t, domain.NewAssessedDutyReference, "SYN-DUTY-01/v1"),
-		Funds:     dutyValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-01"),
-		Scope:     dutyValue(t, domain.NewDecisionScopeReference, "SYN-UNIT-01"),
-		Procedure: dutyValue(t, domain.NewCustomsProcedureReference, "SYN-PROC-01"),
-		Coverage:  domain.CoveragePartial,
-		Delta:     domain.DeltaShort,
-		Validity:  domain.FundsFactPending,
-		Basis:     basis,
+		TenantID:     dutyValue(t, domain.NewTenantID, "SYN-TEN-CC07"),
+		Duty:         dutyValue(t, domain.NewAssessedDutyReference, "SYN-DUTY-01/v1"),
+		Funds:        dutyValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-01"),
+		FundsVersion: dutyValue(t, domain.NewFundsFactVersion, "SYN-FUNDS-01/v1"),
+		Scope:        dutyValue(t, domain.NewDecisionScopeReference, "SYN-UNIT-01"),
+		Procedure:    dutyValue(t, domain.NewCustomsProcedureReference, "SYN-PROC-01"),
+		Coverage:     domain.CoveragePartial,
+		Delta:        domain.DeltaShort,
+		Validity:     domain.FundsFactPending,
+		Basis:        basis,
 	}
 }
 

@@ -219,11 +219,12 @@ export const dutyRegistrationSnapshotHints: Record<DutyRegistrationKind, string>
   ),
   'duty-payment-verification': snapshotHint(
     'duty-payment-verification',
-    '键为 tenantId / dutyRef / fundsRef / scopeRef / procedureRef / coverage / delta / validity / basis;' +
+    '键为 tenantId / dutyRef / fundsRef / fundsVersion / scopeRef / procedureRef / coverage / delta / validity / basis;' +
       '三轴各取封闭词:coverage NONE / PARTIAL / COVERED,delta NO_DELTA / SHORT / EXCESS / PENDING,' +
       'validity VALID / INVALIDATED / CONFLICTING / PENDING——三轴分别给出,本口不从金额相等推任何一轴。' +
+      'fundsVersion 必填,是这次核对比的是资金事实的哪一版(那一版须已接收),本口不取「最近接收」顶替;' +
       'procedureRef 必填,是付款人那一维「要不要求」按哪个真实程序的规则判,随核对记下、不从范围推;' +
       'basis 是「凭什么把这笔资金关联到这版税费」的权威依据引用,空白答待关联、不关联。' +
-      '同三维换内容(含换程序)是新版本追加,不是冲突;资金事实与协作事项两道前置未齐时原名答回,等前置落册后重发同一份。',
+      '同三维换内容(含换程序、换资金版本)是新版本追加,不是冲突;资金事实与协作事项两道前置未齐时原名答回,等前置落册后重发同一份。',
   ),
 };

@@ -368,9 +368,10 @@ func TestAnAdoptedExternalFundsFactReachesTheCustomsRegisterThroughTheRouteTable
 	if err != nil {
 		t.Fatalf("CC 登记册：%v", err)
 	}
-	registration, found, err := register.LoadFundsFact(t.Context(),
+	registration, found, err := register.LoadFundsFactVersion(t.Context(),
 		saTestValue(t, ccdomain.NewTenantID, "tenant-a"),
-		saTestValue(t, ccdomain.NewExternalFundsFactReference, "bank-fact-1"))
+		saTestValue(t, ccdomain.NewExternalFundsFactReference, "bank-fact-1"),
+		saTestValue(t, ccdomain.NewFundsFactVersion, "bank-fact/v1"))
 	if err != nil || !found {
 		t.Fatalf("CC 入向登记：found = %v err = %v——信封到了消费者却没落登记", found, err)
 	}
@@ -474,7 +475,8 @@ func TestAFormedDutyPaymentVerificationReachesTheSettlementInputThroughTheRouteT
 	duty := saTestValue(t, ccdomain.NewAssessedDutyReference, "SYN-DUTY-01/v1")
 	funds := saTestValue(t, ccdomain.NewExternalFundsFactReference, "SYN-FUNDS-01")
 	scope := saTestValue(t, ccdomain.NewDecisionScopeReference, "SYN-UNIT-01")
-	verification, err := ccdomain.VerifyDutyPayment(duty, funds, scope,
+	verification, err := ccdomain.VerifyDutyPayment(duty, funds,
+		saTestValue(t, ccdomain.NewFundsFactVersion, "SYN-FUNDS-01/v1"), scope,
 		saTestValue(t, ccdomain.NewCustomsProcedureReference, "SYN-PROC-IMPORT"),
 		ccdomain.CoverageFull, ccdomain.DeltaNone, ccdomain.FundsFactValid, verificationAt)
 	if err != nil {

@@ -74,8 +74,9 @@ func synVerificationRecord(t *testing.T, coverage domain.DutyCoverage, digest st
 	t.Helper()
 	duty := viewValue(t, domain.NewAssessedDutyReference, "SYN-DUTY-01/v1")
 	funds := viewValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-01")
+	fundsVersion := viewValue(t, domain.NewFundsFactVersion, "SYN-FUNDS-01/v1")
 	scope := viewValue(t, domain.NewDecisionScopeReference, "SYN-UNIT-01")
-	verification, err := domain.VerifyDutyPayment(duty, funds, scope, synProcedure(t, "SYN-PROC-IMPORT"),
+	verification, err := domain.VerifyDutyPayment(duty, funds, fundsVersion, scope, synProcedure(t, "SYN-PROC-IMPORT"),
 		coverage, domain.DeltaNone, domain.FundsFactValid, dutyRegistryBaseAt)
 	if err != nil {
 		t.Fatalf("构造核对：%v", err)
@@ -158,7 +159,8 @@ func TestSameCollaborationKeyNeverReplacesTheFirstVersion(t *testing.T) {
 	}
 }
 
-// Covers: 资金事实引用往返——各维如实读回；同（引用 + 版本）重登`已登记`不顶替；未登记 found=false。
+// Covers: 资金事实引用往返——各维如实读回；同（引用 + 版本）重登`已登记`不顶替；未登记 found=false（按版本点读，
+// 事实在册而版本不在也是 found=false——票 sa-cc/19 起核对按版本读前置）。
 func TestExternalFundsFactsRoundTripByReference(t *testing.T) {
 	store, fixture := newDutyReconciliation(t)
 	registration := synFundsFact(t, 12500)
@@ -169,7 +171,7 @@ func TestExternalFundsFactsRoundTripByReference(t *testing.T) {
 	if err != nil || outcome != ports.CaseConfigurationRegistered {
 		t.Fatalf("首登：err=%v outcome=%v", err, outcome)
 	}
-	loaded, found, err := store.LoadFundsFact(t.Context(), tenantA(t), registration.Fact)
+	loaded, found, err := store.LoadFundsFactVersion(t.Context(), tenantA(t), registration.Fact, registration.Version)
 	if err != nil || !found {
 		t.Fatalf("读不回：err=%v found=%v", err, found)
 	}
@@ -184,12 +186,19 @@ func TestExternalFundsFactsRoundTripByReference(t *testing.T) {
 	if err != nil || replay != ports.CaseConfigurationAlreadyRegistered {
 		t.Fatalf("同引用重登该交回`已登记`：err=%v outcome=%v", err, replay)
 	}
-	if again, _, _ := store.LoadFundsFact(t.Context(), tenantA(t), registration.Fact); again.AmountMinor != 12500 {
+	if again, _, _ := store.LoadFundsFactVersion(t.Context(), tenantA(t), registration.Fact, registration.Version); again.AmountMinor != 12500 {
 		t.Fatalf("首版金额被顶替：%d", again.AmountMinor)
 	}
-	if _, found, err := store.LoadFundsFact(t.Context(), tenantA(t),
-		viewValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-NOBODY")); err != nil || found {
+	if _, found, err := store.LoadFundsFactVersion(t.Context(), tenantA(t),
+		viewValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-NOBODY"), registration.Version); err != nil || found {
 		t.Fatalf("未登记该 found=false：err=%v found=%v", err, found)
+	}
+	if _, found, err := store.LoadFundsFactVersion(t.Context(), tenantA(t), registration.Fact,
+		viewValue(t, domain.NewFundsFactVersion, "SYN-FUNDS-01/v9")); err != nil || found {
+		t.Fatalf("事实在册而版本不在该 found=false：err=%v found=%v", err, found)
+	}
+	if _, _, err := store.LoadFundsFactVersion(t.Context(), tenantA(t), registration.Fact, domain.FundsFactVersion{}); err == nil {
+		t.Fatal("空白版本被当成正常查询")
 	}
 	if versions, err := store.ListFundsFactVersions(t.Context(), tenantA(t),
 		viewValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-NOBODY")); err != nil || len(versions) != 0 {
@@ -198,8 +207,8 @@ func TestExternalFundsFactsRoundTripByReference(t *testing.T) {
 }
 
 // Covers: 票 sa-cc/13 完成判据 2「新迁移往返」——同一事实的更正版本 v2（回指 v1、金额变）落版本子表第二行，
-// 身份行仍只一行；ListFundsFactVersions 按接收先后列两版、v2 回指 v1、v1 一字不动；LoadFundsFact 读回最近接收
-// 的那一版；同版本重登`已登记`不顶替。直读库面：身份表 0021 起只剩身份列，内容与版本都在子表。
+// 身份行仍只一行；ListFundsFactVersions 按接收先后列两版、v2 回指 v1、v1 一字不动；两版各自按版本点读得回；
+// 同版本重登`已登记`不顶替。直读库面：身份表 0021 起只剩身份列，内容与版本都在子表。
 //
 // 登记顺序显式先 v1 后 v2：两版各自一笔事务、received_at 各取事务时钟，登记顺序就是接收顺序，「按接收先后列」
 // 的断言只在这个顺序确定时成立——交给 map 迭代一类的随机源，断言会随机翻面（sa-cc/26）。反着到的那一格在
@@ -233,9 +242,11 @@ func TestFundsFactVersionsAccrueAsRowsThatPointBack(t *testing.T) {
 		versions[1].Payer != second.Payer || !versions[1].OccurredAt.Equal(second.OccurredAt) {
 		t.Fatalf("v2 走样：%+v", versions[1])
 	}
-	current, found, err := store.LoadFundsFact(t.Context(), tenantA(t), first.Fact)
-	if err != nil || !found || current.Version != second.Version {
-		t.Fatalf("按引用读该是最近接收的 v2：err=%v found=%v version=%s", err, found, current.Version)
+	for _, want := range []ports.ExternalFundsFactRegistration{first, second} {
+		got, found, err := store.LoadFundsFactVersion(t.Context(), tenantA(t), first.Fact, want.Version)
+		if err != nil || !found || got != want {
+			t.Fatalf("按版本点读 %s 该原样交回：err=%v found=%v got=%+v", want.Version, err, found, got)
+		}
 	}
 
 	var identityRows, versionRows int
@@ -264,9 +275,10 @@ func TestFundsFactVersionsAccrueAsRowsThatPointBack(t *testing.T) {
 
 // Covers: 同一事实的两版反着到——先到 v2（回指 v1）后到 v1——各占一行（UC-CC-009「不按最后到达覆盖」、票 sa-cc/13
 // 裁决 1「迟到的前版按自己的版本进」）；ListFundsFactVersions 按接收先后列为 [v2, v1]，如实反映到达顺序、不按版本
-// 字面重排；LoadFundsFact 交回**最近接收**的 v1，不是版本链上最新的 v2（端口头注「最近接收的那一版」）。它与
-// TestFundsFactVersionsAccrueAsRowsThatPointBack 是同一条规则的两个到达顺序，各钉一格，顺序都在用例里显式写死。
-func TestFundsFactVersionsArrivingOutOfOrderListByReceiptAndLoadTheLatestReceived(t *testing.T) {
+// 字面重排；按版本点读各得各的——到达顺序不决定谁被读到（票 sa-cc/19 起「最近接收」读口退役，26 那一格的最后一条
+// 断言随之改口）。它与 TestFundsFactVersionsAccrueAsRowsThatPointBack 是同一条规则的两个到达顺序，各钉一格，顺序
+// 都在用例里显式写死。
+func TestFundsFactVersionsArrivingOutOfOrderListByReceiptAndLoadByVersion(t *testing.T) {
 	store, fixture := newDutyReconciliation(t)
 	late := synFundsFact(t, 500)
 	late.Fact = viewValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-02")
@@ -293,9 +305,11 @@ func TestFundsFactVersionsArrivingOutOfOrderListByReceiptAndLoadTheLatestReceive
 	if versions[1].Version != earlier.Version || versions[1].Corrects != (domain.FundsFactVersion{}) || versions[1].AmountMinor != 400 {
 		t.Fatalf("迟到的前版 v1 该按自己的版本进、列在后：%+v", versions[1])
 	}
-	current, found, err := store.LoadFundsFact(t.Context(), tenantA(t), late.Fact)
-	if err != nil || !found || current.Version != earlier.Version {
-		t.Fatalf("按引用读该是最近接收的 v1，不是版本链上最新的 v2：err=%v found=%v version=%s", err, found, current.Version)
+	for _, want := range []ports.ExternalFundsFactRegistration{late, earlier} {
+		got, found, err := store.LoadFundsFactVersion(t.Context(), tenantA(t), late.Fact, want.Version)
+		if err != nil || !found || got != want {
+			t.Fatalf("按版本点读 %s 不受到达顺序影响：err=%v found=%v got=%+v", want.Version, err, found, got)
+		}
 	}
 }
 
@@ -312,7 +326,7 @@ func TestAFundsFactWithoutAPayerRoundTripsAsExplicitlyNotProvided(t *testing.T) 
 	if err != nil || outcome != ports.CaseConfigurationRegistered {
 		t.Fatalf("来源未提供付款人的事实该登得进：err=%v outcome=%v", err, outcome)
 	}
-	loaded, found, err := store.LoadFundsFact(t.Context(), tenantA(t), registration.Fact)
+	loaded, found, err := store.LoadFundsFactVersion(t.Context(), tenantA(t), registration.Fact, registration.Version)
 	if err != nil || !found {
 		t.Fatalf("读不回：err=%v found=%v", err, found)
 	}
@@ -339,7 +353,7 @@ func TestAFundsFactWithoutAPayerRoundTripsAsExplicitlyNotProvided(t *testing.T) 
 	if err != nil || replay != ports.CaseConfigurationAlreadyRegistered {
 		t.Fatalf("同引用重登该交回`已登记`：err=%v outcome=%v", err, replay)
 	}
-	if again, _, _ := store.LoadFundsFact(t.Context(), tenantA(t), registration.Fact); again.Payer.Provided() {
+	if again, _, _ := store.LoadFundsFactVersion(t.Context(), tenantA(t), registration.Fact, registration.Version); again.Payer.Provided() {
 		t.Fatal("首版「未提供」被「提供了」顶替")
 	}
 
@@ -465,7 +479,8 @@ func TestVerificationsRoundTripTheProcedureTheyWereJudgedUnder(t *testing.T) {
 	underImport := synVerificationRecord(t, domain.CoverageFull, "digest-under-import")
 	underExport := synVerificationRecord(t, domain.CoverageFull, "digest-under-export")
 	exportVerification, err := domain.VerifyDutyPayment(
-		underExport.Key.Duty, underExport.Key.Funds, underExport.Key.Scope, synProcedure(t, "SYN-PROC-EXPORT"),
+		underExport.Key.Duty, underExport.Key.Funds, underExport.Verification.FundsVersion(), underExport.Key.Scope,
+		synProcedure(t, "SYN-PROC-EXPORT"),
 		domain.CoverageFull, domain.DeltaNone, domain.FundsFactValid, dutyRegistryBaseAt.Add(time.Hour))
 	if err != nil {
 		t.Fatalf("构造按出口程序判的核对：%v", err)
@@ -505,10 +520,92 @@ func TestVerificationsRoundTripTheProcedureTheyWereJudgedUnder(t *testing.T) {
 	}
 
 	verification := `INSERT INTO customs_compliance.duty_payment_verification
-		(tenant_id, duty_ref, funds_ref, scope_ref, version_digest, procedure_ref, coverage, delta, validity, basis, verified_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
+		(tenant_id, duty_ref, funds_ref, scope_ref, version_digest, funds_version, procedure_ref, coverage, delta, validity, basis, verified_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
 	fixture.rejects(t, "程序空白", verification,
-		"tenant-a", "SYN-DUTY-01/v1", "SYN-FUNDS-01", "SYN-UNIT-01", "digest-blank-procedure", "  ",
+		"tenant-a", "SYN-DUTY-01/v1", "SYN-FUNDS-01", "SYN-UNIT-01", "digest-blank-procedure", "SYN-FUNDS-01/v1", "  ",
+		"COVERED", "NO_DELTA", "VALID", "basis", dutyRegistryBaseAt)
+}
+
+// Covers: 票 sa-cc/19 完成判据 (2)「0023 往返」——核对记录带「比的是资金事实的哪一版」：写口落 `funds_version`、点读
+// 读回同一版；ListVerificationsByFundsFact 按（租户、资金事实）列全部核对版本、核对时刻升序、同一时刻按指纹字典序，
+// 别的事实的核对与别的租户不可见、没核对过的事实答空；库内 0023 的外键把「引用没接收过的那一版」挡在门外、CHECK 拒
+// 空白版本（旁路写入用显式 SQL）。
+func TestVerificationsRoundTripTheFundsFactVersionTheyJudgedAndListByFundsFact(t *testing.T) {
+	store, fixture := newDutyReconciliation(t)
+	first := synFundsFact(t, 12500)
+	second := synFundsFact(t, 9000)
+	second.Version = viewValue(t, domain.NewFundsFactVersion, "SYN-FUNDS-01/v2")
+	second.Corrects = first.Version
+	other := synFundsFact(t, 1)
+	other.Fact = viewValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-02")
+	other.Version = viewValue(t, domain.NewFundsFactVersion, "SYN-FUNDS-02/v1")
+	for _, registration := range []ports.ExternalFundsFactRegistration{first, second, other} {
+		if _, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
+			return store.RegisterFundsFact(ctx, tenantA(t), registration)
+		}); err != nil {
+			t.Fatalf("资金事实 %s：%v", registration.Version, err)
+		}
+	}
+
+	onFirst := synVerificationRecord(t, domain.CoverageFull, "digest-on-v1")
+	onSecond := synVerificationRecord(t, domain.CoverageFull, "digest-on-v2")
+	onSecondVerification, err := domain.VerifyDutyPayment(
+		onSecond.Key.Duty, onSecond.Key.Funds, second.Version, onSecond.Key.Scope, synProcedure(t, "SYN-PROC-IMPORT"),
+		domain.CoverageFull, domain.DeltaPending, domain.FundsFactPending, dutyRegistryBaseAt.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("构造按 v2 判的核对：%v", err)
+	}
+	onSecond.Verification = onSecondVerification
+	sameInstant := synVerificationRecord(t, domain.CoverageNone, "digest-aaa-same-instant")
+	onOther := synVerificationRecord(t, domain.CoverageFull, "digest-on-other")
+	onOther.Key.Funds = other.Fact
+	onOtherVerification, err := domain.VerifyDutyPayment(
+		onOther.Key.Duty, other.Fact, other.Version, onOther.Key.Scope, synProcedure(t, "SYN-PROC-IMPORT"),
+		domain.CoverageFull, domain.DeltaNone, domain.FundsFactValid, dutyRegistryBaseAt)
+	if err != nil {
+		t.Fatalf("构造另一条事实的核对：%v", err)
+	}
+	onOther.Verification = onOtherVerification
+	for _, record := range []ports.DutyVerificationRecord{onSecond, onFirst, sameInstant, onOther} {
+		if outcome, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
+			return store.SaveVerification(ctx, record)
+		}); err != nil || outcome != ports.CaseConfigurationRegistered {
+			t.Fatalf("登记 %s：err=%v outcome=%v", record.Key.Digest, err, outcome)
+		}
+	}
+
+	loaded, found, err := store.FindVerification(t.Context(), onSecond.Key)
+	if err != nil || !found || loaded.Verification.FundsVersion() != second.Version {
+		t.Fatalf("点读该带回比的是哪一版：err=%v found=%v version=%q", err, found, loaded.Verification.FundsVersion())
+	}
+	listed, err := store.ListVerificationsByFundsFact(t.Context(), tenantA(t), first.Fact)
+	if err != nil || len(listed) != 3 {
+		t.Fatalf("SYN-FUNDS-01 该列三版（另一条事实的不算）：err=%v n=%d", err, len(listed))
+	}
+	if listed[0].Key.Digest != "digest-aaa-same-instant" || listed[1].Key.Digest != "digest-on-v1" || listed[2].Key.Digest != "digest-on-v2" {
+		t.Fatalf("该按核对时刻升序、同一时刻按指纹字典序：%q / %q / %q", listed[0].Key.Digest, listed[1].Key.Digest, listed[2].Key.Digest)
+	}
+	if listed[1].Verification.FundsVersion() != first.Version || listed[2].Verification.FundsVersion() != second.Version ||
+		listed[2].Verification.Delta() != domain.DeltaPending || listed[2].Basis != onSecond.Basis {
+		t.Fatalf("上列每行该带自己的资金版本与内容：%+v", listed)
+	}
+	if none, err := store.ListVerificationsByFundsFact(t.Context(), tenantA(t),
+		viewValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-NOBODY")); err != nil || len(none) != 0 {
+		t.Fatalf("没核对过的事实该答空：err=%v n=%d", err, len(none))
+	}
+	if _, err := store.ListVerificationsByFundsFact(t.Context(), tenantA(t), domain.ExternalFundsFactReference{}); err == nil {
+		t.Fatal("空事实引用被当成正常查询")
+	}
+
+	verification := `INSERT INTO customs_compliance.duty_payment_verification
+		(tenant_id, duty_ref, funds_ref, scope_ref, version_digest, funds_version, procedure_ref, coverage, delta, validity, basis, verified_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
+	fixture.rejects(t, "引用没接收过的那一版", verification,
+		"tenant-a", "SYN-DUTY-01/v1", "SYN-FUNDS-01", "SYN-UNIT-01", "digest-on-v9", "SYN-FUNDS-01/v9", "SYN-PROC-IMPORT",
+		"COVERED", "NO_DELTA", "VALID", "basis", dutyRegistryBaseAt)
+	fixture.rejects(t, "资金版本空白", verification,
+		"tenant-a", "SYN-DUTY-01/v1", "SYN-FUNDS-01", "SYN-UNIT-01", "digest-blank-version", "  ", "SYN-PROC-IMPORT",
 		"COVERED", "NO_DELTA", "VALID", "basis", dutyRegistryBaseAt)
 }
 
@@ -558,18 +655,18 @@ func TestTheReconciliationTablesRejectWhatTheDomainRejects(t *testing.T) {
 	fixture.rejects(t, "付款人规则程序空白", payerRule, "tenant-a", "  ", "REQUIRED", dutyRegistryBaseAt)
 
 	verification := `INSERT INTO customs_compliance.duty_payment_verification
-		(tenant_id, duty_ref, funds_ref, scope_ref, version_digest, coverage, delta, validity, basis, verified_at)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`
+		(tenant_id, duty_ref, funds_ref, scope_ref, version_digest, funds_version, procedure_ref, coverage, delta, validity, basis, verified_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`
 	fixture.rejects(t, "没有资金事实的核对", verification,
-		"tenant-a", "SYN-DUTY-X", "SYN-FUNDS-NOBODY", "SYN-UNIT-X", "d", "COVERED", "NO_DELTA", "VALID", "basis", dutyRegistryBaseAt)
+		"tenant-a", "SYN-DUTY-X", "SYN-FUNDS-NOBODY", "SYN-UNIT-X", "d", "v1", "SYN-PROC-X", "COVERED", "NO_DELTA", "VALID", "basis", dutyRegistryBaseAt)
 	fixture.seed(t, funds,
 		"tenant-a", "SYN-FUNDS-X", "v1", nil, "SYN-BANK-01", "SYN-PAYER-01", "XTS", 1, dutyRegistryBaseAt, dutyRegistryBaseAt)
 	fixture.rejects(t, "无依据的核对", verification,
-		"tenant-a", "SYN-DUTY-X", "SYN-FUNDS-X", "SYN-UNIT-X", "d", "COVERED", "NO_DELTA", "VALID", "  ", dutyRegistryBaseAt)
+		"tenant-a", "SYN-DUTY-X", "SYN-FUNDS-X", "SYN-UNIT-X", "d", "v1", "SYN-PROC-X", "COVERED", "NO_DELTA", "VALID", "  ", dutyRegistryBaseAt)
 	fixture.rejects(t, "覆盖轴集外", verification,
-		"tenant-a", "SYN-DUTY-X", "SYN-FUNDS-X", "SYN-UNIT-X", "d", "MAYBE", "NO_DELTA", "VALID", "basis", dutyRegistryBaseAt)
+		"tenant-a", "SYN-DUTY-X", "SYN-FUNDS-X", "SYN-UNIT-X", "d", "v1", "SYN-PROC-X", "MAYBE", "NO_DELTA", "VALID", "basis", dutyRegistryBaseAt)
 	fixture.rejects(t, "有效性轴集外", verification,
-		"tenant-a", "SYN-DUTY-X", "SYN-FUNDS-X", "SYN-UNIT-X", "d", "COVERED", "NO_DELTA", "MAYBE", "basis", dutyRegistryBaseAt)
+		"tenant-a", "SYN-DUTY-X", "SYN-FUNDS-X", "SYN-UNIT-X", "d", "v1", "SYN-PROC-X", "COVERED", "NO_DELTA", "MAYBE", "basis", dutyRegistryBaseAt)
 }
 
 // Covers: 三个写方法在无事务上下文一律被 RequireExecutor 拒绝（ErrTransactionRequired）。

@@ -20,6 +20,7 @@ func synDutyVerification(
 	verification, err := domain.VerifyDutyPayment(
 		mustValue(t, domain.NewAssessedDutyReference, "SYN-DUTY-01/v1"),
 		mustValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-01"),
+		mustValue(t, domain.NewFundsFactVersion, "SYN-FUNDS-01/v1"),
 		mustValue(t, domain.NewDecisionScopeReference, "SYN-UNIT-01"),
 		mustValue(t, domain.NewCustomsProcedureReference, "SYN-PROC-IMPORT"),
 		coverage, delta, validity, dutyGateVerifiedAt)

@@ -178,37 +178,35 @@ func (store *DutyPaymentReconciliation) RegisterFundsFact(
 // fundsFactVersionColumns 是版本子表读回一版所需的列，两个读口共用一份、同一只扫描器译回。
 const fundsFactVersionColumns = `version, corrects_version, source_ref, payer_ref, currency, amount_minor, occurred_at`
 
-// LoadFundsFact 交回本上下文最近接收的那一版（端口头注：核对今天按引用读前置与付款人维，命令上没有版本）。
-// 同一事务内到达的两版 received_at 相同，再按版本字面定序只为确定性，不是版本大小的判断——版本链的权威在
-// 提供方，本上下文不比版本谁新。
-func (store *DutyPaymentReconciliation) LoadFundsFact(
+// LoadFundsFactVersion 按（租户、事实、版本）点读一版（端口头注：核对按命令所指的那一版读前置与付款人维，
+// 「最近接收」读口自票 sa-cc/19 起退役）。版本只是键的一维，不比大小——版本链的权威在提供方。
+func (store *DutyPaymentReconciliation) LoadFundsFactVersion(
 	ctx context.Context,
 	tenant domain.TenantID,
 	fact domain.ExternalFundsFactReference,
+	version domain.FundsFactVersion,
 ) (ports.ExternalFundsFactRegistration, bool, error) {
 	none := ports.ExternalFundsFactRegistration{}
-	if strings.TrimSpace(fact.String()) == "" {
-		return none, false, fmt.Errorf("load funds fact: the fact reference is blank")
+	if strings.TrimSpace(fact.String()) == "" || strings.TrimSpace(version.String()) == "" {
+		return none, false, fmt.Errorf("load funds fact version: the fact reference or the version is blank")
 	}
 	querier, err := store.db.ReadExecutor(ctx)
 	if err != nil {
-		return none, false, fmt.Errorf("load funds fact: %w", err)
+		return none, false, fmt.Errorf("load funds fact version: %w", err)
 	}
 
 	rows, err := querier.Query(ctx,
 		`SELECT `+fundsFactVersionColumns+`
 		   FROM customs_compliance.external_funds_fact_version
-		  WHERE tenant_id = $1 AND fact_ref = $2
-		  ORDER BY received_at DESC, version DESC
-		  LIMIT 1`,
-		tenant.String(), fact.String(),
+		  WHERE tenant_id = $1 AND fact_ref = $2 AND version = $3`,
+		tenant.String(), fact.String(), version.String(),
 	)
 	if err != nil {
-		return none, false, fmt.Errorf("load funds fact: %w", err)
+		return none, false, fmt.Errorf("load funds fact version: %w", err)
 	}
 	versions, err := scanFundsFactVersions(rows, fact)
 	if err != nil {
-		return none, false, fmt.Errorf("load funds fact: %w", err)
+		return none, false, fmt.Errorf("load funds fact version: %w", err)
 	}
 	if len(versions) == 0 {
 		return none, false, nil
@@ -325,15 +323,15 @@ func (store *DutyPaymentReconciliation) FindVerification(
 	}
 
 	var (
-		procedure, coverage, delta, validity, basis string
-		verifiedAt                                  time.Time
+		fundsVersion, procedure, coverage, delta, validity, basis string
+		verifiedAt                                                time.Time
 	)
 	err = querier.QueryRow(ctx,
-		`SELECT procedure_ref, coverage, delta, validity, basis, verified_at
+		`SELECT funds_version, procedure_ref, coverage, delta, validity, basis, verified_at
 		   FROM customs_compliance.duty_payment_verification
 		  WHERE tenant_id = $1 AND duty_ref = $2 AND funds_ref = $3 AND scope_ref = $4 AND version_digest = $5`,
 		key.TenantID.String(), key.Duty.String(), key.Funds.String(), key.Scope.String(), key.Digest,
-	).Scan(&procedure, &coverage, &delta, &validity, &basis, &verifiedAt)
+	).Scan(&fundsVersion, &procedure, &coverage, &delta, &validity, &basis, &verifiedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return none, false, nil
 	}
@@ -341,16 +339,76 @@ func (store *DutyPaymentReconciliation) FindVerification(
 		return none, false, fmt.Errorf("find duty verification: %w", err)
 	}
 
-	verification, err := rebuildVerification(key, procedure, coverage, delta, validity, verifiedAt)
+	verification, err := rebuildVerification(key, fundsVersion, procedure, coverage, delta, validity, verifiedAt)
 	if err != nil {
 		return none, false, fmt.Errorf("rebuild duty verification: %w", err)
 	}
 	return ports.DutyVerificationRecord{Key: key, Verification: verification, Basis: basis}, true, nil
 }
 
+// ListVerificationsByFundsFact 按（租户、资金事实）列全部核对版本，核对时刻升序、同一时刻按指纹字典序（端口
+// 头注的口径；与 LoadCurrentDutyVerification 取「当前」的序同一把尺，编排按它取各谱系最近一版时两口答案一致）。
+// 读回经 rebuildVerification 整门重验。
+func (store *DutyPaymentReconciliation) ListVerificationsByFundsFact(
+	ctx context.Context,
+	tenant domain.TenantID,
+	funds domain.ExternalFundsFactReference,
+) ([]ports.DutyVerificationRecord, error) {
+	if strings.TrimSpace(funds.String()) == "" {
+		return nil, fmt.Errorf("list duty verifications by funds fact: the fact reference is blank")
+	}
+	querier, err := store.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list duty verifications by funds fact: %w", err)
+	}
+
+	rows, err := querier.Query(ctx,
+		`SELECT duty_ref, scope_ref, version_digest,
+		        funds_version, procedure_ref, coverage, delta, validity, basis, verified_at
+		   FROM customs_compliance.duty_payment_verification
+		  WHERE tenant_id = $1 AND funds_ref = $2
+		  ORDER BY verified_at ASC, version_digest ASC`,
+		tenant.String(), funds.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list duty verifications by funds fact: %w", err)
+	}
+	defer rows.Close()
+
+	var records []ports.DutyVerificationRecord
+	for rows.Next() {
+		var (
+			dutyRaw, scopeRaw, digest                                 string
+			fundsVersion, procedure, coverage, delta, validity, basis string
+			verifiedAt                                                time.Time
+		)
+		if err := rows.Scan(&dutyRaw, &scopeRaw, &digest,
+			&fundsVersion, &procedure, &coverage, &delta, &validity, &basis, &verifiedAt); err != nil {
+			return nil, fmt.Errorf("list duty verifications by funds fact: %w", err)
+		}
+		key := ports.DutyVerificationKey{TenantID: tenant, Funds: funds, Digest: digest}
+		if key.Duty, err = domain.NewAssessedDutyReference(dutyRaw); err != nil {
+			return nil, fmt.Errorf("rebuild duty verification: %w", err)
+		}
+		if key.Scope, err = domain.NewDecisionScopeReference(scopeRaw); err != nil {
+			return nil, fmt.Errorf("rebuild duty verification: %w", err)
+		}
+		verification, err := rebuildVerification(key, fundsVersion, procedure, coverage, delta, validity, verifiedAt)
+		if err != nil {
+			return nil, fmt.Errorf("rebuild duty verification: %w", err)
+		}
+		records = append(records, ports.DutyVerificationRecord{Key: key, Verification: verification, Basis: basis})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list duty verifications by funds fact: %w", err)
+	}
+	return records, nil
+}
+
 // SaveVerification 登记一版核对。键与核对对象说的必须是同一件事——键上的三维若与对象不符，
-// 库里就会有一行按 A 查、内容却是 B 的核对，这是调用方编程错误，响亮拒。程序随核对对象落成
-// `procedure_ref`（0022），它不在键上、只在指纹里，所以这里不与键比。
+// 库里就会有一行按 A 查、内容却是 B 的核对，这是调用方编程错误，响亮拒。程序与资金版本随核对对象
+// 落成 `procedure_ref`（0022）/ `funds_version`（0023），都不在键上、只在指纹里，所以这里不与键比；
+// 资金版本对不上已接收的版本由 0023 的外键拦。
 func (store *DutyPaymentReconciliation) SaveVerification(
 	ctx context.Context,
 	record ports.DutyVerificationRecord,
@@ -378,12 +436,13 @@ func (store *DutyPaymentReconciliation) SaveVerification(
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO customs_compliance.duty_payment_verification
 			(tenant_id, duty_ref, funds_ref, scope_ref, version_digest,
-			 procedure_ref, coverage, delta, validity, basis, verified_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			 funds_version, procedure_ref, coverage, delta, validity, basis, verified_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(), record.Key.Duty.String(), record.Key.Funds.String(),
 		record.Key.Scope.String(), record.Key.Digest,
-		verification.Procedure().String(), coverage, delta, validity, record.Basis, verification.VerifiedAt().UTC(),
+		verification.FundsVersion().String(), verification.Procedure().String(),
+		coverage, delta, validity, record.Basis, verification.VerifiedAt().UTC(),
 	)
 	if err != nil {
 		return ports.CaseConfigurationSaveOutcomeInvalid, fmt.Errorf("save duty verification: %w", err)
@@ -429,13 +488,17 @@ func rebuildCollaboration(
 	return domain.FormDutyCollaboration(spec)
 }
 
-// rebuildVerification 把一行译回核对对象、整门重验：程序经领域构造回来（空白到不了这里，0022 的 CHECK 拦；
-// 真到了是库被旁路改过，响亮拒），三轴按封闭词译回。
+// rebuildVerification 把一行译回核对对象、整门重验：资金版本与程序经领域构造回来（空白到不了这里，0023 / 0022
+// 的 CHECK 拦；真到了是库被旁路改过，响亮拒），三轴按封闭词译回。
 func rebuildVerification(
 	key ports.DutyVerificationKey,
-	procedure, coverage, delta, validity string,
+	fundsVersion, procedure, coverage, delta, validity string,
 	verifiedAt time.Time,
 ) (domain.DutyPaymentVerification, error) {
+	version, err := domain.NewFundsFactVersion(fundsVersion)
+	if err != nil {
+		return domain.DutyPaymentVerification{}, err
+	}
 	procedureRef, err := domain.NewCustomsProcedureReference(procedure)
 	if err != nil {
 		return domain.DutyPaymentVerification{}, err
@@ -453,7 +516,7 @@ func rebuildVerification(
 	if err != nil {
 		return domain.DutyPaymentVerification{}, err
 	}
-	return domain.VerifyDutyPayment(key.Duty, key.Funds, key.Scope, procedureRef, coverageAxis, deltaAxis, validityAxis, verifiedAt.UTC())
+	return domain.VerifyDutyPayment(key.Duty, key.Funds, version, key.Scope, procedureRef, coverageAxis, deltaAxis, validityAxis, verifiedAt.UTC())
 }
 
 // closedWord 把库列的词形译回封闭集里的那一格；集外即库被旁路改过，作错误抛出。

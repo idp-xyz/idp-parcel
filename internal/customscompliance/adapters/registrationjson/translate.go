@@ -632,6 +632,7 @@ type dutyPaymentVerificationDocument struct {
 	TenantID     string `json:"tenantId"`
 	DutyRef      string `json:"dutyRef"`
 	FundsRef     string `json:"fundsRef"`
+	FundsVersion string `json:"fundsVersion"`
 	ScopeRef     string `json:"scopeRef"`
 	ProcedureRef string `json:"procedureRef"`
 	Coverage     string `json:"coverage"`
@@ -644,7 +645,8 @@ type dutyPaymentVerificationDocument struct {
 // 登记方交进来——真实程序的关联规则属实例半边，入口不从金额相等推任何一轴；basis 空白
 // 原样递给编排，那是它的`待关联`格（无权威依据不关联），不是译装该拒的缺格。procedureRef 必填
 // （票 sa-cc/12）：付款人那一维的规则按它读，与三轴同一种形——由登记方说这次核对在哪个监管程序下判，
-// 入口不从范围推。
+// 入口不从范围推。fundsVersion 必填（票 sa-cc/19）：核对比的是资金事实的哪一版由登记方说，入口不取
+// 「最近接收」顶替——同一事实两版并存时那个答案是到达顺序，不是核对所指。
 func DutyPaymentVerificationFromJSON(raw []byte) (application.VerifyDutyPaymentCommand, error) {
 	none := application.VerifyDutyPaymentCommand{}
 	var document dutyPaymentVerificationDocument
@@ -660,6 +662,10 @@ func DutyPaymentVerificationFromJSON(raw []byte) (application.VerifyDutyPaymentC
 		return none, err
 	}
 	funds, err := domain.NewExternalFundsFactReference(document.FundsRef)
+	if err != nil {
+		return none, err
+	}
+	fundsVersion, err := domain.NewFundsFactVersion(document.FundsVersion)
 	if err != nil {
 		return none, err
 	}
@@ -684,15 +690,16 @@ func DutyPaymentVerificationFromJSON(raw []byte) (application.VerifyDutyPaymentC
 		return none, err
 	}
 	return application.VerifyDutyPaymentCommand{
-		TenantID:  tenant,
-		Duty:      duty,
-		Funds:     funds,
-		Scope:     scope,
-		Procedure: procedure,
-		Coverage:  coverage,
-		Delta:     delta,
-		Validity:  validity,
-		Basis:     document.Basis,
+		TenantID:     tenant,
+		Duty:         duty,
+		Funds:        funds,
+		FundsVersion: fundsVersion,
+		Scope:        scope,
+		Procedure:    procedure,
+		Coverage:     coverage,
+		Delta:        delta,
+		Validity:     validity,
+		Basis:        document.Basis,
 	}, nil
 }
 

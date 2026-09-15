@@ -492,13 +492,16 @@ var carrierFirstEffectivePickupJudgmentUndecidedSentinels = append(
 )
 
 // externalFundsFactUndecidedSentinels 是 SA 资金事实采用信封 → CC 入向登记这条线（sa-cc/03）登记的未决
-// 哨兵：信封所指那一版在提供方还看不见（可见性滞后）、登记编排停在登记册不可用。编排的 `未受理`
-// 与 `内容冲突` 不在名单里——它们是编排给出的答案、入账不重投（ReceiveOnAdoptedFundsFactAdapter 头注）；
-// ccsettlement.ErrAdoptedFactVersionInconsistent 也不在——按信封所指版本回查却交回别版本体，是提供方视图答非所问的
-// 装配 / 视图缺陷，重投不自愈，保持 publish_failed（与 pstf.ErrCarrierPickupRecordInconsistent 同一条理由）。
+// 哨兵：信封所指那一版在提供方还看不见（可见性滞后）、登记编排停在登记册不可用、新版本落册后接着形成新核对
+// 版本的编排停在哪一口不可用（sa-cc/19；与接收同一事务，重投从接收重来）。编排的 `未受理` 与 `内容冲突`
+// 不在名单里——它们是编排给出的答案、入账不重投（ReceiveOnAdoptedFundsFactAdapter 头注）；重派里某条谱系的业务
+// 未决（程序要求付款人而新版本没给）同理是答案、不在名单里；ccsettlement.ErrAdoptedFactVersionInconsistent 也不在
+// ——按信封所指版本回查却交回别版本体，是提供方视图答非所问的装配 / 视图缺陷，重投不自愈，保持 publish_failed
+// （与 pstf.ErrCarrierPickupRecordInconsistent 同一条理由）。
 var externalFundsFactUndecidedSentinels = []error{
 	ccsettlement.ErrAdoptedFactNotVisible,
 	ccsettlement.ErrFundsFactReceiveUndecided,
+	ccsettlement.ErrDutyVerificationRederivationUndecided,
 }
 
 // dutyPaymentVerificationUndecidedSentinels 是 CC 付款核对形成信封 → SA 结算输入采用这条线（sa-cc/09）登记的
@@ -2230,10 +2233,10 @@ func judgeLabelFinalOnCarrierFirstEffectivePickupConsumer(
 // 向 SA 只读视图回查事实本体（取信封所指那一版，不取 latest）→ 译成入向登记交 UC-CC-009 步 6 的
 // `ReceiveFundsFact`。跨上下文翻译只在 CC 的 `adapters/settlementaccounting`；CC application 不 import SA。
 //
-// 消费者不关联、不核对（票面红线）：`VerifyPayment` 的调用方今天不在本进程，这里只让事实进得来。
-// 登记编排只用到 `Funds` 一口；协作事项与核对两口在这条线上不被调用，装配不为它们造无用的适配器。
-// 核对形成那一格向 SA 交信封的 `Handoff` 口（票 sa-cc/05）同理在这条线上不被调用，但构造门逐口拒
-// nil，所以接的是真 Outbox 适配器而不是替身——生产装配里不放任何替身。
+// 消费者不关联、不核对（票面红线）：三轴由谁交、要不要形成都在编排里判，这里只让事实进得来。新版本落册后
+// 编排接着对该事实每条既往核对谱系各形成一版待人重判的核对（sa-cc/19，`RederiveDutyVerificationsOnFundsFactVersion`，
+// 与接收同一事务），所以这条线上协作事项、核对、付款人规则与向 SA 交信封的 `Handoff`（票 sa-cc/05）几口都会被
+// 真的读写——接的全是真登记册与真 Outbox 适配器，生产装配里不放任何替身。
 func receiveExternalFundsFactConsumer(
 	db *bentopg.DB,
 	outboxStore *outbox.Store,

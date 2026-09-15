@@ -105,6 +105,21 @@ const (
 	DutyVerificationStoreUnavailable
 )
 
+// dependencyFailure 把未决按恢复动作分成两半（ADR-0029）：真——哪一口不可用，重投会变，消费门该重投；假——业务未决
+// （等来源补事实 / 等登记方补规则 / 等税费结果），重投同样内容不会变，该入账交人。资金事实新版本到达的重派编排按它
+// 决定「整笔重投」还是「这一条谱系点名交人」。集外的零值答假：它不是任何一格未决。
+func (reason DutyReconciliationReason) dependencyFailure() bool {
+	switch reason {
+	case CollaborationStoreUnavailable,
+		FundsFactRegisterUnavailable,
+		PayerRequirementViewUnavailable,
+		DutyVerificationStoreUnavailable:
+		return true
+	default:
+		return false
+	}
+}
+
 func (reason DutyReconciliationReason) String() string {
 	switch reason {
 	case DutyObligationBasisAbsent:
@@ -179,17 +194,19 @@ type ReceiveExternalFundsFactCommand struct {
 // （门禁键里范围与边界并列就是这个意思），所以像三轴一样由调用方交进来、编排不从范围推；调用方给的
 // 程序与案件实际程序不核一致（票 sa-cc/22 裁决 1：「范围 → 当前有效程序」这条边在 CC 的语言里今天不存在，
 // 造它是新的领域事实，不在核对编排里顺手立）。程序随核对记下并折进版本指纹——事后看得出付款人维是按哪个
-// 程序的规则判的，错报的程序也留在记录上。
+// 程序的规则判的，错报的程序也留在记录上。FundsVersion 是这次核对比的是资金事实的哪一版（票 sa-cc/19 裁决 3）：
+// 必填，前置与付款人维都按这一版读——同一事实两版并存时「最近接收」答不出核对所指，命令自己说。
 type VerifyDutyPaymentCommand struct {
-	TenantID  domain.TenantID
-	Duty      domain.AssessedDutyReference
-	Funds     domain.ExternalFundsFactReference
-	Scope     domain.DecisionScopeReference
-	Procedure domain.CustomsProcedureReference
-	Coverage  domain.DutyCoverage
-	Delta     domain.DutyDelta
-	Validity  domain.DutyFactValidity
-	Basis     string
+	TenantID     domain.TenantID
+	Duty         domain.AssessedDutyReference
+	Funds        domain.ExternalFundsFactReference
+	FundsVersion domain.FundsFactVersion
+	Scope        domain.DecisionScopeReference
+	Procedure    domain.CustomsProcedureReference
+	Coverage     domain.DutyCoverage
+	Delta        domain.DutyDelta
+	Validity     domain.DutyFactValidity
+	Basis        string
 }
 
 type DutyPaymentReconciliationDeps struct {
@@ -306,8 +323,9 @@ func sameCollaboration(existing, requested domain.DutyPaymentCollaboration) bool
 // 幂等键是（引用 + 版本）（票 sa-cc/13 裁决 1）：更正 / 撤销在提供方是同一事实的新版本回指前版，到这里是
 // 新一行——原版本一字不动（UC-CC-009「不删除原付款、不按最后到达覆盖」）；同版本同内容是重放`已存在`，
 // 同版本换内容才是`内容冲突`（同一版本两个来源各说一套）。回指是提供方给的字面，照登不校验前版是否已到
-// （版本链的权威在提供方）；回指自己是形状矛盾，`未受理`。「新版本到达 → 形成新核对版本」不在这里触发，
-// 归核对那一族的后继票——本口只保证登记册看得见它。
+// （版本链的权威在提供方）；回指自己是形状矛盾，`未受理`。「新版本到达 → 形成新核对版本」不在这里触发——本口
+// 只保证登记册看得见它；接着做的是 RederiveDutyVerificationsOnFundsFactVersion，由调用方在本口答`已接收`之后、
+// 同一事务里调（票 sa-cc/19 做法 1：触发另起一只编排，不塞进登记）。
 func (handler *DutyPaymentReconciliationHandler) ReceiveFundsFact(
 	ctx context.Context,
 	command ReceiveExternalFundsFactCommand,
@@ -383,6 +401,7 @@ func (handler *DutyPaymentReconciliationHandler) VerifyPayment(
 	if blankTenant(command.TenantID) ||
 		strings.TrimSpace(command.Duty.String()) == "" ||
 		strings.TrimSpace(command.Funds.String()) == "" ||
+		strings.TrimSpace(command.FundsVersion.String()) == "" ||
 		strings.TrimSpace(command.Scope.String()) == "" ||
 		strings.TrimSpace(command.Procedure.String()) == "" ||
 		command.Coverage.String() == "" ||
@@ -396,7 +415,8 @@ func (handler *DutyPaymentReconciliationHandler) VerifyPayment(
 		return DutyReconciliationResult{outcome: FundsFactPendingAssociation}, nil
 	}
 
-	fact, found, err := handler.deps.Funds.LoadFundsFact(ctx, command.TenantID, command.Funds)
+	// 前置按命令所指的那一版读：别的版本在册不算这一版已接收——核对比的就是这一版（票 sa-cc/19 做法 3）。
+	fact, found, err := handler.deps.Funds.LoadFundsFactVersion(ctx, command.TenantID, command.Funds, command.FundsVersion)
 	if err != nil {
 		return dutyUndecided(FundsFactRegisterUnavailable), nil
 	} else if !found {
@@ -424,7 +444,7 @@ func (handler *DutyPaymentReconciliationHandler) VerifyPayment(
 	}
 
 	verification, err := domain.VerifyDutyPayment(
-		command.Duty, command.Funds, command.Scope, command.Procedure,
+		command.Duty, command.Funds, command.FundsVersion, command.Scope, command.Procedure,
 		command.Coverage, command.Delta, command.Validity, handler.deps.Clock.Now())
 	if err != nil {
 		return DutyReconciliationResult{outcome: DutyReconciliationNotAccepted}, nil
@@ -449,7 +469,7 @@ func (handler *DutyPaymentReconciliationHandler) VerifyPayment(
 		result.handoffRef = handler.handOffVerification(ctx, record.Key, verification)
 		return result, nil
 	}
-	// 指纹里已含三轴、依据与程序：撞键即同内容，不必再读回比。
+	// 指纹里已含三轴、依据、程序与资金版本：撞键即同内容，不必再读回比。
 	return DutyReconciliationResult{outcome: DutyVerificationExisting}, nil
 }
 
@@ -468,14 +488,14 @@ func (handler *DutyPaymentReconciliationHandler) handOffVerification(
 	return "CONT-DUTY-VERIFICATION/" + key.Scope.String() + "/" + key.Digest[:8]
 }
 
-// verificationDigest 是核对内容的稳定指纹：三轴、关联依据、监管程序。三维身份在键上，不进指纹。
+// verificationDigest 是核对内容的稳定指纹：三轴、关联依据、监管程序、资金事实版本。三维身份在键上，不进指纹。
 //
-// 拼接顺序写死为 Coverage、Delta、Validity、Basis、Procedure，以 \x00 分隔后 sha256。它是持久化主键的一列
-// （0016 `version_digest`）与信封 ID 的一段：任何改动都让已入册的版本对不上自己的指纹，所以只在存量为零
-// 时加维、加在末尾、不换序——程序追在依据之后（票 sa-cc/22 裁决 2，存量由 0022 的守卫保证为零），后继再加
-// 维度接着往后追。程序进指纹而不进键（裁决 2「折进指纹、不加主键列」）：同三轴同依据但按不同程序的规则判
-// 付款人维，是两份不同的判断，各成一行；存着这份键形的几处（0016 主键、0019 门禁读数、SA 采用表、信封）
-// 因此一字不动。
+// 拼接顺序写死为 Coverage、Delta、Validity、Basis、Procedure、FundsVersion，以 \x00 分隔后 sha256。它是持久化
+// 主键的一列（0016 `version_digest`）与信封 ID 的一段：任何改动都让已入册的版本对不上自己的指纹，所以只在存量
+// 为零时加维、加在末尾、不换序——程序追在依据之后（票 sa-cc/22 裁决 2，存量由 0022 的守卫保证为零），资金版本
+// 追在程序之后（票 sa-cc/19 裁决 3，存量由 0023 的守卫保证为零），后继再加维度接着往后追。两维进指纹而不进键
+// （裁决「折进指纹、不加主键列」）：同三轴同依据但按不同程序的规则判付款人维、或比的是事实的另一版，都是另一份
+// 判断，各成一行；存着这份键形的几处（0016 主键、0019 门禁读数、SA 采用表、信封）因此一字不动。
 func verificationDigest(command VerifyDutyPaymentCommand) string {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
 		strconv.Itoa(int(command.Coverage)),
@@ -483,6 +503,7 @@ func verificationDigest(command VerifyDutyPaymentCommand) string {
 		strconv.Itoa(int(command.Validity)),
 		strings.TrimSpace(command.Basis),
 		strings.TrimSpace(command.Procedure.String()),
+		strings.TrimSpace(command.FundsVersion.String()),
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])
 }

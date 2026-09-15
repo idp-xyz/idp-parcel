@@ -133,11 +133,11 @@ func TestDutyVerificationCatalogueListsEveryVersionWithItsThreeAxes(t *testing.T
 	later := viewBaseAt.Add(2 * time.Hour)
 	fixture.seed(t,
 		`INSERT INTO customs_compliance.duty_payment_verification
-			(tenant_id, duty_ref, funds_ref, scope_ref, version_digest, procedure_ref, coverage, delta, validity, basis, verified_at)
+			(tenant_id, duty_ref, funds_ref, scope_ref, version_digest, funds_version, procedure_ref, coverage, delta, validity, basis, verified_at)
 		 VALUES
-			('tenant-a', 'SYN-DUTY-01/v1', 'SYN-FUNDS-01', 'SYN-UNIT-01', 'digest-v2', 'SYN-PROC-IMPORT', 'COVERED', 'NO_DELTA', 'VALID',   'SYN-RULE-01: remittance quotes assessment', $2),
-			('tenant-a', 'SYN-DUTY-01/v1', 'SYN-FUNDS-01', 'SYN-UNIT-01', 'digest-v1', 'SYN-PROC-IMPORT', 'PARTIAL', 'SHORT',    'PENDING', 'SYN-RULE-01: remittance quotes assessment', $1),
-			('tenant-b', 'SYN-DUTY-09/v1', 'SYN-FUNDS-09', 'SYN-UNIT-09', 'digest-x',  'SYN-PROC-IMPORT', 'NONE',    'PENDING',  'CONFLICTING', 'SYN-RULE-09', $1)`,
+			('tenant-a', 'SYN-DUTY-01/v1', 'SYN-FUNDS-01', 'SYN-UNIT-01', 'digest-v2', 'SYN-FUNDS-01/v1', 'SYN-PROC-IMPORT', 'COVERED', 'NO_DELTA', 'VALID',   'SYN-RULE-01: remittance quotes assessment', $2),
+			('tenant-a', 'SYN-DUTY-01/v1', 'SYN-FUNDS-01', 'SYN-UNIT-01', 'digest-v1', 'SYN-FUNDS-01/v1', 'SYN-PROC-IMPORT', 'PARTIAL', 'SHORT',    'PENDING', 'SYN-RULE-01: remittance quotes assessment', $1),
+			('tenant-b', 'SYN-DUTY-09/v1', 'SYN-FUNDS-09', 'SYN-UNIT-09', 'digest-x',  'SYN-FUNDS-09/v1', 'SYN-PROC-IMPORT', 'NONE',    'PENDING',  'CONFLICTING', 'SYN-RULE-09', $1)`,
 		viewBaseAt, later)
 
 	records := listVerifications(t, catalogue, "tenant-a", 10)
@@ -198,11 +198,11 @@ func TestDutyRegisterCataloguesGuardTheirLimits(t *testing.T) {
 	seedFundsFact(t, fixture, "tenant-a", "SYN-FUNDS-01")
 	fixture.seed(t,
 		`INSERT INTO customs_compliance.duty_payment_verification
-			(tenant_id, duty_ref, funds_ref, scope_ref, version_digest, procedure_ref, coverage, delta, validity, basis, verified_at)
+			(tenant_id, duty_ref, funds_ref, scope_ref, version_digest, funds_version, procedure_ref, coverage, delta, validity, basis, verified_at)
 		 VALUES
-			('tenant-a', 'SYN-DUTY-01/v1', 'SYN-FUNDS-01', 'SYN-UNIT-01', 'digest-1', 'SYN-PROC-IMPORT', 'NONE', 'PENDING', 'PENDING', 'SYN-RULE-01', $1),
-			('tenant-a', 'SYN-DUTY-01/v1', 'SYN-FUNDS-01', 'SYN-UNIT-01', 'digest-2', 'SYN-PROC-IMPORT', 'NONE', 'PENDING', 'PENDING', 'SYN-RULE-01', $1),
-			('tenant-a', 'SYN-DUTY-01/v1', 'SYN-FUNDS-01', 'SYN-UNIT-01', 'digest-3', 'SYN-PROC-IMPORT', 'NONE', 'PENDING', 'PENDING', 'SYN-RULE-01', $1)`,
+			('tenant-a', 'SYN-DUTY-01/v1', 'SYN-FUNDS-01', 'SYN-UNIT-01', 'digest-1', 'SYN-FUNDS-01/v1', 'SYN-PROC-IMPORT', 'NONE', 'PENDING', 'PENDING', 'SYN-RULE-01', $1),
+			('tenant-a', 'SYN-DUTY-01/v1', 'SYN-FUNDS-01', 'SYN-UNIT-01', 'digest-2', 'SYN-FUNDS-01/v1', 'SYN-PROC-IMPORT', 'NONE', 'PENDING', 'PENDING', 'SYN-RULE-01', $1),
+			('tenant-a', 'SYN-DUTY-01/v1', 'SYN-FUNDS-01', 'SYN-UNIT-01', 'digest-3', 'SYN-FUNDS-01/v1', 'SYN-PROC-IMPORT', 'NONE', 'PENDING', 'PENDING', 'SYN-RULE-01', $1)`,
 		viewBaseAt)
 	if records := listVerifications(t, catalogue, "tenant-a", 2); len(records) != 2 {
 		t.Fatalf("limit=2 却上列了 %d 版核对", len(records))

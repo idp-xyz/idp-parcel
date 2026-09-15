@@ -55,9 +55,10 @@ func verificationRecordOf(
 	t.Helper()
 	duty := endpointValue(t, domain.NewAssessedDutyReference, "SYN-DUTY-01/v1")
 	funds := endpointValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-01")
+	fundsVersion := endpointValue(t, domain.NewFundsFactVersion, "SYN-FUNDS-01/v1")
 	scope := endpointValue(t, domain.NewDecisionScopeReference, "SYN-UNIT-01")
 	procedure := endpointValue(t, domain.NewCustomsProcedureReference, "SYN-PROC-IMPORT")
-	verification, err := domain.VerifyDutyPayment(duty, funds, scope, procedure, coverage, delta, validity, verifiedAt)
+	verification, err := domain.VerifyDutyPayment(duty, funds, fundsVersion, scope, procedure, coverage, delta, validity, verifiedAt)
 	if err != nil {
 		t.Fatalf("构造核对：%v", err)
 	}
@@ -135,7 +136,8 @@ func TestAnEmptyDutyVerificationRegisterAnswersAnEmptyArray(t *testing.T) {
 
 // Covers: ADR-0137 决定三 / CONTEXT「不能实现为一组互斥总状态」 — 三轴逐键原值、没有任何合成总状态列；同键
 // 多版本各自成行、版本指纹与关联依据原样透出；付款人维按哪个程序的规则判随行透出（票 sa-cc/22 完成判据 (2)
-// 「四处读回带程序」里的 HTTP JSON 那一处）。响应形封闭：键集就是这些，多一个「status」
+// 「四处读回带程序」里的 HTTP JSON 那一处）；比的是资金事实的哪一版随行透出（票 sa-cc/19：记录列 `funds_version`
+// 在读面上可见，读者才分得出哪版核对判的是已被取代的那一版事实）。响应形封闭：键集就是这些，多一个「status」
 // 都是把三轴折回互斥总状态。
 func TestDutyVerificationListTranscribesThreeAxesVerbatimWithoutFolding(t *testing.T) {
 	later := catalogueBaseAt.Add(2 * time.Hour)
@@ -165,7 +167,7 @@ func TestDutyVerificationListTranscribesThreeAxesVerbatimWithoutFolding(t *testi
 		t.Fatalf("响应走样：%s", response.Body.String())
 	}
 	want := map[string]string{
-		"duty": "SYN-DUTY-01/v1", "funds": "SYN-FUNDS-01", "scope": "SYN-UNIT-01", "procedure": "SYN-PROC-IMPORT",
+		"duty": "SYN-DUTY-01/v1", "funds": "SYN-FUNDS-01", "fundsVersion": "SYN-FUNDS-01/v1", "scope": "SYN-UNIT-01", "procedure": "SYN-PROC-IMPORT",
 		"version": "digest-v1", "coverage": "PARTIAL", "delta": "SHORT", "validity": "PENDING",
 		"basis": "SYN-RULE-01: remittance quotes assessment", "verifiedAt": catalogueBaseAt.Format(time.RFC3339Nano),
 	}

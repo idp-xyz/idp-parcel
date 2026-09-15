@@ -200,17 +200,17 @@ func (store *DutyPaymentReconciliation) LoadCurrentDutyVerification(
 	}
 
 	var (
-		dutyRaw, fundsRaw, digest, procedure, coverage, delta, validity, basis string
-		verifiedAt                                                             time.Time
+		dutyRaw, fundsRaw, digest, fundsVersion, procedure, coverage, delta, validity, basis string
+		verifiedAt                                                                           time.Time
 	)
 	err = querier.QueryRow(ctx,
-		`SELECT duty_ref, funds_ref, version_digest, procedure_ref, coverage, delta, validity, basis, verified_at
+		`SELECT duty_ref, funds_ref, version_digest, funds_version, procedure_ref, coverage, delta, validity, basis, verified_at
 		   FROM customs_compliance.duty_payment_verification
 		  WHERE tenant_id = $1 AND scope_ref = $2
 		  ORDER BY verified_at DESC, version_digest ASC
 		  LIMIT 1`,
 		tenant.String(), scope.String(),
-	).Scan(&dutyRaw, &fundsRaw, &digest, &procedure, &coverage, &delta, &validity, &basis, &verifiedAt)
+	).Scan(&dutyRaw, &fundsRaw, &digest, &fundsVersion, &procedure, &coverage, &delta, &validity, &basis, &verifiedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return none, false, nil
 	}
@@ -225,7 +225,7 @@ func (store *DutyPaymentReconciliation) LoadCurrentDutyVerification(
 	if key.Funds, err = domain.NewExternalFundsFactReference(fundsRaw); err != nil {
 		return none, false, fmt.Errorf("rebuild duty verification: %w", err)
 	}
-	verification, err := rebuildVerification(key, procedure, coverage, delta, validity, verifiedAt)
+	verification, err := rebuildVerification(key, fundsVersion, procedure, coverage, delta, validity, verifiedAt)
 	if err != nil {
 		return none, false, fmt.Errorf("rebuild duty verification: %w", err)
 	}

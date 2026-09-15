@@ -120,13 +120,17 @@ func (book *fakeDutyBook) SaveCollaboration(
 	return ports.CaseConfigurationRegistered, nil
 }
 
-// 资金事实在本口没有子命令，替身册按引用存一版就够核对读前置；版本维（票 sa-cc/13）在这里只需满足端口。
+// 资金事实在本口没有子命令，替身册按（引用 + 版本）存就够核对按版本读前置（票 sa-cc/13 / 19）。
+func fundsVersionKey(tenant domain.TenantID, fact domain.ExternalFundsFactReference, version domain.FundsFactVersion) string {
+	return tenant.String() + "/" + fact.String() + "/" + version.String()
+}
+
 func (book *fakeDutyBook) RegisterFundsFact(
 	_ context.Context,
 	tenant domain.TenantID,
 	registration ports.ExternalFundsFactRegistration,
 ) (ports.CaseConfigurationSaveOutcome, error) {
-	key := tenant.String() + "/" + registration.Fact.String()
+	key := fundsVersionKey(tenant, registration.Fact, registration.Version)
 	if _, exists := book.funds[key]; exists {
 		return ports.CaseConfigurationAlreadyRegistered, nil
 	}
@@ -134,12 +138,13 @@ func (book *fakeDutyBook) RegisterFundsFact(
 	return ports.CaseConfigurationRegistered, nil
 }
 
-func (book *fakeDutyBook) LoadFundsFact(
+func (book *fakeDutyBook) LoadFundsFactVersion(
 	_ context.Context,
 	tenant domain.TenantID,
 	fact domain.ExternalFundsFactReference,
+	version domain.FundsFactVersion,
 ) (ports.ExternalFundsFactRegistration, bool, error) {
-	registration, found := book.funds[tenant.String()+"/"+fact.String()]
+	registration, found := book.funds[fundsVersionKey(tenant, fact, version)]
 	return registration, found, nil
 }
 
@@ -148,11 +153,14 @@ func (book *fakeDutyBook) ListFundsFactVersions(
 	tenant domain.TenantID,
 	fact domain.ExternalFundsFactReference,
 ) ([]ports.ExternalFundsFactRegistration, error) {
-	registration, found := book.funds[tenant.String()+"/"+fact.String()]
-	if !found {
-		return nil, nil
+	prefix := tenant.String() + "/" + fact.String() + "/"
+	var versions []ports.ExternalFundsFactRegistration
+	for key, registration := range book.funds {
+		if strings.HasPrefix(key, prefix) {
+			versions = append(versions, registration)
+		}
 	}
-	return []ports.ExternalFundsFactRegistration{registration}, nil
+	return versions, nil
 }
 
 func verificationKey(key ports.DutyVerificationKey) string {
@@ -167,6 +175,21 @@ func (book *fakeDutyBook) FindVerification(
 ) (ports.DutyVerificationRecord, bool, error) {
 	record, found := book.verifications[verificationKey(key)]
 	return record, found, nil
+}
+
+// ListVerificationsByFundsFact 只被「资金事实新版本到达」的编排读；CLI 不收资金事实，本口只需满足端口。
+func (book *fakeDutyBook) ListVerificationsByFundsFact(
+	_ context.Context,
+	tenant domain.TenantID,
+	funds domain.ExternalFundsFactReference,
+) ([]ports.DutyVerificationRecord, error) {
+	var records []ports.DutyVerificationRecord
+	for _, record := range book.verifications {
+		if record.Key.TenantID == tenant && record.Key.Funds == funds {
+			records = append(records, record)
+		}
+	}
+	return records, nil
 }
 
 func (book *fakeDutyBook) SaveVerification(
@@ -237,7 +260,7 @@ func seedFundsFact(t *testing.T, book *fakeDutyBook, tenant, fact string) {
 	if err != nil {
 		t.Fatalf("构造版本：%v", err)
 	}
-	book.funds[tenant+"/"+fact] = ports.ExternalFundsFactRegistration{
+	book.funds[tenant+"/"+fact+"/"+version.String()] = ports.ExternalFundsFactRegistration{
 		Fact: reference, Version: version, Source: "SYN-BANK-01", Payer: payer, Currency: "XTS",
 		AmountMinor: 12500, OccurredAt: registerClockNow.Add(-time.Hour),
 	}
@@ -248,9 +271,10 @@ func seedFundsFact(t *testing.T, book *fakeDutyBook, tenant, fact string) {
 func seedFundsFactWithoutPayer(t *testing.T, book *fakeDutyBook, tenant, fact string) {
 	t.Helper()
 	seedFundsFact(t, book, tenant, fact)
-	registration := book.funds[tenant+"/"+fact]
+	key := tenant + "/" + fact + "/" + fact + "/v1"
+	registration := book.funds[key]
 	registration.Payer = domain.FundsPayerNotProvided()
-	book.funds[tenant+"/"+fact] = registration
+	book.funds[key] = registration
 }
 
 // seedPayerRule 直接把「这个程序要不要付款人」放进替身册：本 CLI 今天没有登这一格的子命令（登记面在
@@ -477,6 +501,7 @@ func verificationInput(coverage, basis string) []byte {
 		"tenantId": "SYN-T1",
 		"dutyRef": "SYN-DUTY-01/v1",
 		"fundsRef": "SYN-FUNDS-01",
+		"fundsVersion": "SYN-FUNDS-01/v1",
 		"scopeRef": "SYN-UNIT-01",
 		"procedureRef": "SYN-PROC-01",
 		"coverage": "` + coverage + `",
@@ -640,7 +665,7 @@ func TestExecuteDutyPaymentVerificationPayerGridsKeepTheirExitCodes(t *testing.T
 	if len(fixture.duties.verifications) != 1 || len(fixture.duties.handoffs) != 1 {
 		t.Fatalf("形成该落一行、交一封：%d 行 %d 封", len(fixture.duties.verifications), len(fixture.duties.handoffs))
 	}
-	if registration := fixture.duties.funds["SYN-T1/SYN-FUNDS-01"]; registration.Payer.Provided() || !registration.Payer.Valid() {
+	if registration := fixture.duties.funds["SYN-T1/SYN-FUNDS-01/SYN-FUNDS-01/v1"]; registration.Payer.Provided() || !registration.Payer.Valid() {
 		t.Fatalf("核对不得替事实补付款人：%#v", registration.Payer)
 	}
 }
