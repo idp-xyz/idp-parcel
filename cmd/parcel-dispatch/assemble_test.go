@@ -380,27 +380,13 @@ func TestAnAdoptedExternalFundsFactReachesTheCustomsRegisterThroughTheRouteTable
 		t.Fatalf("登记 = %+v，want 来源 / 付款人 / 币种 / 金额 / 版本照 SA 那一版转述", registration)
 	}
 
-	// 正例再扩一格（票 sa-cc/13 完成判据 2）：同一事实的更正版本 v2（回指 v1、金额变）经同一事件类型的信封到 CC，
-	// 落入向登记册的第二行、回指 v1，v1 一字不动。SA 今天一事实一行（settlement_accounting 0004 的主键是
-	// (tenant_id, fact_id)），同一库上留不下 v1 与 v2 两行，所以这里另用一条事实：v1 直接经 CC 写口预铺，SA 只存
-	// v2 那一版——CC 这一侧走的仍是生产依赖图（信封 → 消费者 → SA 只读视图 → 入向登记）。SA 侧存不下第二版是
-	// 本票完成记录点名的后继（归 SA owner），不在本用例里绕。
+	// 正例再扩一格（票 sa-cc/13 完成判据 2；sa-cc/20 完成判据 3 把它改回同一事实两版都在 SA）：同一事实的 v1 与
+	// 更正版本 v2（回指 v1、金额变）都落在 SA（settlement_accounting 0021 起身份行一行 + 版本子表两行），各发一封同一
+	// 事件类型的信封、先后经消费者落 CC 入向登记册两行——v2 回指 v1，v1 一字不动。两版走的都是生产依赖图（SA 版本行
+	// → 信封 → 消费者 → SA 只读视图 → 入向登记），CC 那头不再预铺任何一版。两封分两拍投：同一拍里两个分区谁先
+	// 落定没有保证，而 CC 按接收先后列版本。
 	tenant := saTestValue(t, ccdomain.NewTenantID, "tenant-a")
 	correctedFact := saTestValue(t, ccdomain.NewExternalFundsFactReference, "bank-fact-2")
-	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
-		_, err := register.RegisterFundsFact(txCtx, tenant, ccports.ExternalFundsFactRegistration{
-			Fact:        correctedFact,
-			Version:     saTestValue(t, ccdomain.NewFundsFactVersion, "bank-fact-2/v1"),
-			Source:      "source-bank-feed-1",
-			Payer:       saTestValue(t, ccdomain.ProvidedFundsPayer, "payer-customer-7"),
-			Currency:    "USD",
-			AmountMinor: 8000,
-			OccurredAt:  beatInstant().Add(-time.Hour),
-		})
-		return err
-	}); err != nil {
-		t.Fatalf("预铺 CC 的 v1：%v", err)
-	}
 	original, err := sadomain.AdoptExternalFundsFact(sadomain.ExternalFundsFactSpec{
 		Fact:        saTestValue(t, sadomain.NewFundsFactReference, "bank-fact-2"),
 		Source:      saTestValue(t, sadomain.NewFundsSourceRegistrationReference, "source-bank-feed-1"),
@@ -419,25 +405,45 @@ func TestAnAdoptedExternalFundsFactReachesTheCustomsRegisterThroughTheRouteTable
 		t.Fatalf("SA 更正版本：%v", err)
 	}
 	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		key := saports.FundsFactKey{TenantID: saTestValue(t, sadomain.NewTenantID, "tenant-a"), Fact: original.Fact()}
+		if _, err := facts.Save(txCtx, saports.FundsFactRecord{
+			Key:           key,
+			ContentDigest: "digest-bank-fact-2-v1",
+			Fact:          original,
+			RecordedAt:    beatInstant().Add(-time.Hour),
+		}); err != nil {
+			return err
+		}
 		_, err := facts.Save(txCtx, saports.FundsFactRecord{
-			Key:           saports.FundsFactKey{TenantID: saTestValue(t, sadomain.NewTenantID, "tenant-a"), Fact: corrected.Fact()},
+			Key:           key,
 			ContentDigest: "digest-bank-fact-2-v2",
 			Fact:          corrected,
 			RecordedAt:    beatInstant(),
 		})
 		return err
 	}); err != nil {
-		t.Fatalf("写 SA 更正版本：%v", err)
+		t.Fatalf("写 SA 的 v1 与更正版本 v2：%v", err)
 	}
 	enqueueForBeat(t, db, store, "funds-fact-3", ccinbox.ExternalFundsFactAdoptedEventType,
-		`{"tenantId":"tenant-a","fact":"bank-fact-2","version":"bank-fact-2/v2","corrects":"bank-fact-2/v1"}`)
+		`{"tenantId":"tenant-a","fact":"bank-fact-2","version":"bank-fact-2/v1"}`)
 
 	published, err = beat.DispatchOnce(t.Context())
 	if err != nil {
 		t.Fatalf("第二拍：%v", err)
 	}
 	if published != 1 {
-		t.Fatalf("第二拍 published = %d, want 1（v2 定稿；v9 仍未决）；失败码 v2 = %q", published, recordedFailureCode(t, db, "funds-fact-3"))
+		t.Fatalf("第二拍 published = %d, want 1（bank-fact-2 v1 定稿；v9 仍未决）；失败码 v1 = %q", published, recordedFailureCode(t, db, "funds-fact-3"))
+	}
+
+	enqueueForBeat(t, db, store, "funds-fact-4", ccinbox.ExternalFundsFactAdoptedEventType,
+		`{"tenantId":"tenant-a","fact":"bank-fact-2","version":"bank-fact-2/v2","corrects":"bank-fact-2/v1"}`)
+
+	published, err = beat.DispatchOnce(t.Context())
+	if err != nil {
+		t.Fatalf("第三拍：%v", err)
+	}
+	if published != 1 {
+		t.Fatalf("第三拍 published = %d, want 1（v2 定稿；v9 仍未决）；失败码 v2 = %q", published, recordedFailureCode(t, db, "funds-fact-4"))
 	}
 	versions, err := register.ListFundsFactVersions(t.Context(), tenant, correctedFact)
 	if err != nil || len(versions) != 2 {
