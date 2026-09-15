@@ -148,6 +148,8 @@ func assembleBusinessEndpoints(
 	settlementStatements settlementhttp.StatementCatalogueReader,
 	settlementFundsApplications settlementhttp.FundsApplicationCatalogueReader,
 	settlementOperatingResults settlementhttp.OperatingCatalogueReader,
+	externalFundsFactRegistration settlementhttp.ExternalFundsFactRegistrar,
+	externalFundsFactCorrectionRegistration settlementhttp.ExternalFundsFactCorrectionRegistrar,
 	governanceRegisters governancehttp.GovernanceRegistryReader,
 	isolatedRead *isolatedReadIntakes,
 	isolatedSubmission shipmenthttp.SubmissionIntake,
@@ -518,6 +520,14 @@ func assembleBusinessEndpoints(
 		{Pattern: "/settlement-statements", Handler: settlementhttp.NewQuerySettlementStatementsEndpoint(settlementCatalogueIntake, settlementStatements)},
 		{Pattern: "/settlement-funds-applications", Handler: settlementhttp.NewQuerySettlementFundsApplicationsEndpoint(settlementCatalogueIntake, settlementFundsApplications)},
 		{Pattern: "/settlement-operating-results", Handler: settlementhttp.NewQuerySettlementOperatingResultsEndpoint(settlementCatalogueIntake, settlementOperatingResults)},
+		// 外部资金事实采用 / 更正两口的在线登记口（ADR-0085 决定一，票 sa-cc/31；27 裁决 2 第二步）：
+		// 本上下文第一份命令面。写准入不另立形，同挂字面量 UnconfiguredIntake{}，隔离读放行换不了
+		// 这两行（编译期）。路径的事物词取登记 CLI parcel-settlement-register 的命令名（external-funds-fact /
+		// external-funds-fact-correction），同一本册在 CLI 与端点两处不换词；前缀随本上下文读口的 /settlement-。
+		// 两口在生产上是同一只编排的两个方法，端点表仍各收一参：装配测试才盖得住「采用口接了更正编排」。
+		// 外部资金事实进产品只经这一口（ADR-0137 决定四）：CC 那侧没有、也不会有资金事实的在线口。
+		{Pattern: "/settlement-external-funds-fact-registrations", Handler: settlementhttp.NewRegisterExternalFundsFactEndpoint(settlementhttp.UnconfiguredIntake{}, externalFundsFactRegistration)},
+		{Pattern: "/settlement-external-funds-fact-correction-registrations", Handler: settlementhttp.NewRegisterExternalFundsFactCorrectionEndpoint(settlementhttp.UnconfiguredIntake{}, externalFundsFactCorrectionRegistration)},
 		// 治理登记册三册一口（票 admin-skeleton-closure-batch/02）：治理无租户维是
 		// 设计不是缺列（ADR-0083），Intake 因此是本上下文自己的一种准入形——隔离读
 		// 启用与 SYN- 门禁同走一个开关，但开关值里的合成租户不进治理作用域。

@@ -145,6 +145,8 @@ var businessEndpointProbes = map[string]businessEndpointProbe{
 	"/settlement-statements":                                                   {method: http.MethodGet, target: "/settlement-statements?registry=customer-statement"},
 	"/settlement-funds-applications":                                           {method: http.MethodGet, target: "/settlement-funds-applications"},
 	"/settlement-operating-results":                                            {method: http.MethodGet, target: "/settlement-operating-results?registry=operating-result"},
+	"/settlement-external-funds-fact-registrations":                            {method: http.MethodPost, target: "/settlement-external-funds-fact-registrations"},
+	"/settlement-external-funds-fact-correction-registrations":                 {method: http.MethodPost, target: "/settlement-external-funds-fact-correction-registrations"},
 }
 
 // Covers: ADR-0055 第一、二、三条 — 端点已装配、未配置自成一格、状态码取 403。
@@ -341,6 +343,8 @@ func assembleUnwiredBusinessEndpointsWith(
 		unwiredSettlementStatements{},
 		unwiredSettlementFundsApplications{},
 		unwiredSettlementOperatingResults{},
+		unwiredExternalFundsFactRegistration{},
+		unwiredExternalFundsFactCorrectionRegistration{},
 		unwiredGovernanceRegisters{},
 		isolatedRead,
 		isolatedSubmission,

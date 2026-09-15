@@ -26,6 +26,7 @@ import (
 	commercialdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	commercialports "go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 	govports "go.idp.xyz/idp-parcel/internal/pilotgovernance/ports"
+	settlementapp "go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
 	settlementdomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	settlementports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 	tfapp "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
@@ -1612,6 +1613,26 @@ func (unwiredSettlementOperatingResults) ListCostAllocations(
 	int,
 ) ([]settlementports.CostAllocationCatalogueRow, error) {
 	return nil, errOrchestrationNotWired
+}
+
+// 外部资金事实采用 / 更正两口的命令占位（票 sa-cc/31）。两个类型而不是一个：生产上两口是同一只编排的两个方法，
+// 端点表仍各收一参，占位并成一个会让装配测试盖不住「采用口接了更正编排」这一格。
+type unwiredExternalFundsFactRegistration struct{}
+
+func (unwiredExternalFundsFactRegistration) AdoptFact(
+	context.Context,
+	settlementapp.AdoptFundsFactCommand,
+) (settlementapp.FundsResult, error) {
+	return settlementapp.FundsResult{}, errOrchestrationNotWired
+}
+
+type unwiredExternalFundsFactCorrectionRegistration struct{}
+
+func (unwiredExternalFundsFactCorrectionRegistration) CorrectFact(
+	context.Context,
+	settlementapp.CorrectFundsFactCommand,
+) (settlementapp.FundsResult, error) {
+	return settlementapp.FundsResult{}, errOrchestrationNotWired
 }
 
 type unwiredCancellation struct{}

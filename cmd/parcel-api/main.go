@@ -370,6 +370,12 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 外部资金事实采用 / 更正在线登记面编排（票 sa-cc/31，27 裁决 2 第二步）：接真不等操作者
+	// Intake——未配置 Intake 拒在编排之前，换真那笔工作在装配点换的只是 Intake；判据同关务登记写面。
+	settlementRegistration, err := buildSettlementRegistrationOrchestration(db)
+	if err != nil {
+		return err
+	}
 	// 治理登记册读面（票 admin-skeleton-closure-batch/02）：读口无租户参是设计
 	// （ADR-0083），适配器读的就是治理登记 CLI 写入的那三张表。
 	governanceRegisters, err := govpg.NewGovernanceRegisters(db)
@@ -506,6 +512,8 @@ func run(logger *slog.Logger) error {
 			settlementStatements,
 			settlementFundsApplications,
 			settlementOperatingResults,
+			settlementRegistration.externalFundsFact,
+			settlementRegistration.externalFundsFactCorrection,
 			governanceRegisters,
 			isolatedRead,
 			isolatedSubmissionIntake,
