@@ -51,8 +51,12 @@ type verificationPayload struct {
 	Digest     string `json:"digest"`
 }
 
+// verificationEventIDPort 是本口在信封 ID 上的口名前缀。
+const verificationEventIDPort = "disposition-verification"
+
+// verificationEventID 把核对幂等键三维折成 fingerprintEventID 的定长形（票 sa-cc/29 裁决 1：三只核对口同改）。
 func verificationEventID(key ports.VerificationKey) string {
-	return key.TenantID.String() + "/" + key.Decision.String() + "/" + key.Digest
+	return fingerprintEventID(verificationEventIDPort, key.TenantID.String(), key.Decision.String(), key.Digest)
 }
 
 // verificationPartitionKey 取（租户+决定），不取整个核对键。

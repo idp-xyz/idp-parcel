@@ -2,13 +2,17 @@ package postgres_test
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
+	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
@@ -21,7 +25,16 @@ import (
 
 // 本文件对真实 PostgreSQL 16 证税费付款核对的结算意图（票 sa-cc/05 完成判据 2）：与核对行同一
 // 提交、回滚一并消失、重发同一份不翻倍、两版同区不同 ID、无事务拒、缺键响亮报错、载荷只带引用。
-// 信封 ID 由核对幂等键（三维 + 指纹）认领，分区键到「租户 / 申报范围」带口名段。入队走 EnqueueOnce。
+// 信封 ID 由核对幂等键（三维 + 指纹）认领、折成定长指纹形（票 sa-cc/29 裁决 1），分区键到「租户 / 申报范围」
+// 带口名段。入队走 EnqueueOnce。
+
+// fingerprintedEventID 按生产同一公式重算信封 ID：口名前缀 + "/" + 各维以 \x00 拼接后的 sha256 十六进制。三只核对口的
+// 用例都拿它算 ID 去库里找行——断言的是「可重算、定长、在 eventing.MaxEventIDLength 内」，不再断言字面串接
+// （票 sa-cc/29 裁决 1 做法 (5)）。公式在这里复述一遍而不是调生产那只未导出函数：生产改了公式、这里就红。
+func fingerprintedEventID(portName string, dimensions ...string) string {
+	digest := sha256.Sum256([]byte(strings.Join(dimensions, "\x00")))
+	return portName + "/" + hex.EncodeToString(digest[:])
+}
 
 const dutyVerificationEventType = "customs-compliance.duty-payment-verification.formed"
 
@@ -87,11 +100,57 @@ func dutyVerificationIntent(t *testing.T, coverage domain.DutyCoverage, digest s
 }
 
 func dutyVerificationEventID(key ports.DutyVerificationKey) string {
-	return dutyVerificationPartitionKey(key) + "/" + key.Duty.String() + "/" + key.Funds.String() + "/" + key.Digest
+	return fingerprintedEventID("duty-payment-verification",
+		key.TenantID.String(), key.Scope.String(), key.Duty.String(), key.Funds.String(), key.Digest)
 }
 
 func dutyVerificationPartitionKey(key ports.DutyVerificationKey) string {
 	return key.TenantID.String() + "/duty-payment-verification/" + key.Scope.String()
+}
+
+// TestOverlongReferencesStillProduceAnEnvelopeIDWithinTheFrameworkLimit 钉票 sa-cc/29 完成判据 (1)：租户 / 范围 /
+// 税费 / 资金四个引用取到旧串接形必然超过 eventing.MaxEventIDLength 的长度（引用多长归实例半边，本仓给不出上界），
+// 信封仍入队成功；ID 定长且在上限内；同一核对两次算出同一个 ID（第二次交被 EnqueueOnce 当同一份吞掉，行数仍一）。
+func TestOverlongReferencesStillProduceAnEnvelopeIDWithinTheFrameworkLimit(t *testing.T) {
+	fixture := newDutyHandoffFixture(t)
+	ctx := t.Context()
+	long := func(prefix string) string { return prefix + "-" + strings.Repeat("x", 60) }
+	duty := viewValue(t, domain.NewAssessedDutyReference, long("SYN-DUTY"))
+	funds := viewValue(t, domain.NewExternalFundsFactReference, long("SYN-FUNDS"))
+	scope := viewValue(t, domain.NewDecisionScopeReference, long("SYN-UNIT"))
+	verification, err := domain.VerifyDutyPayment(duty, funds,
+		viewValue(t, domain.NewFundsFactVersion, long("SYN-FUNDS")+"/v1"), scope, synProcedure(t, "SYN-PROC-IMPORT"),
+		domain.CoverageFull, domain.DeltaNone, domain.FundsFactValid, dutyRegistryBaseAt)
+	if err != nil {
+		t.Fatalf("构造核对：%v", err)
+	}
+	digest := sha256.Sum256([]byte("SYN-CONTENT"))
+	key := ports.DutyVerificationKey{
+		TenantID: tenantA(t), Duty: duty, Funds: funds, Scope: scope, Digest: hex.EncodeToString(digest[:]),
+	}
+	concatenated := dutyVerificationPartitionKey(key) + "/" + duty.String() + "/" + funds.String() + "/" + key.Digest
+	if len(concatenated) <= eventing.MaxEventIDLength {
+		t.Fatalf("夹具没造出超长：串接形 %d 字节没超过上限 %d，本格证不了东西", len(concatenated), eventing.MaxEventIDLength)
+	}
+	intent := ports.DutyPaymentVerificationHandoffIntent{Key: key, Verification: verification}
+
+	fixture.inTx(t, ctx, func(txCtx context.Context) error {
+		return fixture.handoff.HandOffDutyPaymentVerification(txCtx, intent)
+	})
+	fixture.inTx(t, ctx, func(txCtx context.Context) error {
+		return fixture.handoff.HandOffDutyPaymentVerification(txCtx, intent)
+	})
+
+	eventID := dutyVerificationEventID(key)
+	if len(eventID) > eventing.MaxEventIDLength || len(eventID) != len("duty-payment-verification/")+hex.EncodedLen(sha256.Size) {
+		t.Fatalf("ID = %q（%d 字节）；该是口名前缀加六十四位十六进制、在上限 %d 内", eventID, len(eventID), eventing.MaxEventIDLength)
+	}
+	if count := countDutyVerificationIntents(t, fixture.pool, eventID); count != 1 {
+		t.Fatalf("超长引用下 outbox 行数 = %d，want 1——信封没入队，或两次算出了两个 ID", count)
+	}
+	if got := partitionKeyOf(t, fixture.pool, eventID); got != dutyVerificationPartitionKey(key) {
+		t.Fatalf("分区键 = %q；ID 改指纹形不该动分区键的可读形", got)
+	}
 }
 
 // TestDutyVerificationIntentCommitsAtomicallyWithTheRecord 证意图与核对行同一提交，且事件类型是本口的。

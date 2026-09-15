@@ -81,8 +81,9 @@ func verificationIntent(t *testing.T) ports.VerificationHandoffIntent {
 	}
 }
 
+// verificationHandoffEventID 按生产同一公式重算处置执行核对信封 ID（fingerprintedEventID 头注）。
 func verificationHandoffEventID(key ports.VerificationKey) string {
-	return key.TenantID.String() + "/" + key.Decision.String() + "/" + key.Digest
+	return fingerprintedEventID("disposition-verification", key.TenantID.String(), key.Decision.String(), key.Digest)
 }
 
 func TestVerificationIntentCommitsAtomicallyWithTheRecord(t *testing.T) {

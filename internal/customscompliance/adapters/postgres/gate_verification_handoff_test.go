@@ -72,9 +72,10 @@ func gateIntent(t *testing.T) ports.GateVerificationHandoffIntent {
 	return ports.GateVerificationHandoffIntent{Key: key, Gate: gate}
 }
 
+// gateEventID 按生产同一公式重算门禁核对信封 ID（fingerprintedEventID 头注）。
 func gateEventID(key ports.GateVerificationKey) string {
-	return key.TenantID.String() + "/" + key.Scope.String() + "/" +
-		key.Action.String() + "/" + key.Boundary.String() + "/" + key.Digest
+	return fingerprintedEventID("gate-verification",
+		key.TenantID.String(), key.Scope.String(), key.Action.String(), key.Boundary.String(), key.Digest)
 }
 
 // TestTwoGateVerificationsOfTheSameGateShareOnePartition 钉住两个字段的分工。

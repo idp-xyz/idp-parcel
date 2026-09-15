@@ -73,10 +73,15 @@ func dutyPaymentVerificationPartitionKey(key ports.DutyVerificationKey) string {
 	return key.TenantID.String() + "/duty-payment-verification/" + key.Scope.String()
 }
 
-// dutyPaymentVerificationEventID 取分区键再接三维里余下的两维与版本指纹：同一范围的每一版核对
-// 各自一封，第二版不被 outboxintent.EnqueueOnce 的先查后插当成首版的重放静默吞掉。
+// dutyPaymentVerificationEventIDPort 是本口在信封 ID 上的口名前缀，与分区键里的口名段同词。
+const dutyPaymentVerificationEventIDPort = "duty-payment-verification"
+
+// dutyPaymentVerificationEventID 把幂等键五维（租户、范围、税费、资金、版本指纹）折成 fingerprintEventID 的定长形：
+// 同一范围的每一版核对各自一封，第二版不被 outboxintent.EnqueueOnce 的先查后插当成首版的重放静默吞掉；五维全进
+// 哈希，少一维就有两版同 ID。
 func dutyPaymentVerificationEventID(key ports.DutyVerificationKey) string {
-	return dutyPaymentVerificationPartitionKey(key) + "/" + key.Duty.String() + "/" + key.Funds.String() + "/" + key.Digest
+	return fingerprintEventID(dutyPaymentVerificationEventIDPort,
+		key.TenantID.String(), key.Scope.String(), key.Duty.String(), key.Funds.String(), key.Digest)
 }
 
 // HandOffDutyPaymentVerification 把一份意图入队。幂等键任一维空白、核对时刻缺席是装配缺陷，

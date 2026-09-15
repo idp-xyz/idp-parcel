@@ -53,9 +53,13 @@ type gateVerificationPayload struct {
 	Digest   string `json:"digest"`
 }
 
+// gateVerificationEventIDPort 是本口在信封 ID 上的口名前缀。
+const gateVerificationEventIDPort = "gate-verification"
+
+// gateVerificationEventID 把门禁幂等键五维折成 fingerprintEventID 的定长形（票 sa-cc/29 裁决 1：三只核对口同改）。
 func gateVerificationEventID(key ports.GateVerificationKey) string {
-	return key.TenantID.String() + "/" + key.Scope.String() + "/" +
-		key.Action.String() + "/" + key.Boundary.String() + "/" + key.Digest
+	return fingerprintEventID(gateVerificationEventIDPort,
+		key.TenantID.String(), key.Scope.String(), key.Action.String(), key.Boundary.String(), key.Digest)
 }
 
 // gateVerificationPartitionKey 取（租户+范围+动作+边界），不取整个幂等键。
