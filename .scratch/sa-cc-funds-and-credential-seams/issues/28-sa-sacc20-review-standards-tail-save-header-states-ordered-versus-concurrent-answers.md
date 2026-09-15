@@ -1,7 +1,7 @@
 # sa-cc/20 评审 Standards 尾巴：`Save` 头注与 `FundsFactAlreadyAdopted` 注只写「两种都按当前链头作答」，没写出「顺序到达`未受理` / 并发到达`已采用`」这条不对称——同一业务事实两张脸，读注释的人分不出
 
 Category: chore
-Status: ready-for-agent——2026-09-15 11:2x 通道 1 立票（sa-cc/20 非作者评审 ← 通道 3 Standards 非阻断 ①，推送方处置「合一张 A 类零行为尾巴」）。零行为，只注释
+Status: resolved——**2026-09-15 12:1x 通道 4**（task-1b28ece5-bebc-4a16-8221-a2f2a7e0295f；分支 `mcp4-sacc28` 基 `7160fe67`，代码 tip `d6b1f773`，本完成记录紧随一笔；`git diff` 每一改行均 `//`、不带 DSN SA 全部包 ok、清点在 tip 上重生成零差；见「完成记录」）。此前 ready-for-agent——2026-09-15 11:2x 通道 1 立票（sa-cc/20 非作者评审 ← 通道 3 Standards 非阻断 ①，推送方处置「合一张 A 类零行为尾巴」）。零行为，只注释
 Blocked by: 无（sa-cc/20 已进 main `1e74aaaf`）
 
 ## 缺口（评审钉 `63333f4d`，进 main 后在 `14d86a61` 同形）
@@ -37,6 +37,24 @@ Blocked by: 无（sa-cc/20 已进 main `1e74aaaf`）
 
 [20](20-sa-external-funds-fact-holds-one-row-per-fact-and-cannot-store-a-correction.md) Comments「评审 ← 通道 3」Standards ① ② 与「进 main 记录」处置句；`docs/agents/parallel-sessions.md`「不同的『绿』在输出上长着同一张脸」；AGENTS「写代码注释」「改文档」。
 
+## 完成记录
+
+分支 `mcp4-sacc28`，基 `7160fe67`（派单时 main tip），树 `%TEMP%\idp-parcel-mcp4-sacc28`：
+
+| SHA | 内容 |
+|---|---|
+| `d6b1f773` | docs(sa)：三处注释各补「顺序到达答`未受理` / 并发到达答`已采用`」不对称一句——`ExternalFundsFacts.Save` 头注第二段、`ports.FundsFactAlreadyAdopted` 注、`MapExternalFundsHandler.CorrectFact` 的 `FundsFactAlreadyAdopted` 分支 |
+| （本笔） | docs(scratch)：本完成记录 + Status → resolved |
+
+**逐条对完成判据**：**(1)** 三处各有那半句——`Save` 头注：「于是同一个『回指的不是当前链头』，顺序到达在 CorrectFact 里答`未受理`（提交矛盾），并发到达在这里折成`已采用`、编排交回赢家那一版——两答不同是有意的：前者是调用方编程错误，后者是谁先落谁是当前；调用方拿到`已采用`时，从交回记录的版本字面 ≠ 命令版本分得出是输掉竞态而非重放」；`FundsFactAlreadyAdopted` 注：同句短版（「并发到达撞约束才答它、交回赢家那一版」）；`CorrectFact` 分支：「同一个『回指的不是当前链头』顺序到达时在上面答的是`未受理`，两答有意不同，理由见 ExternalFundsFacts.Save 头注」。**每改行均 `//`**，自核方法：`git diff --stat 7160fe67 d6b1f773 -- internal/` = 3 文件 / 9 insertions / 2 deletions（两处 deletion 是被续写的原注释行本身）；`git diff -U0 7160fe67 d6b1f773 -- internal/` 取全部 `^[+-]` 行、去掉 `+++` / `---` 文件头、再滤掉 `^[+-]\s*//` 后为**空**。**(2)** `gofmt -l ./internal/settlementaccounting/` 空；`go vet ./internal/settlementaccounting/...` 退出 0；不带 DSN（shell 内无任何名含 `DSN` / `DATABASE` / `PG` 的环境变量）`go test -count=1 ./internal/settlementaccounting/...` 九包 ok、`ports` 无测试文件、0 FAIL（`adapters/postgres` 0.017s 答 ok，真库用例未运行）。**(3)** 本完成记录紧随代码笔、同分支；**清点**：在 `d6b1f773` 干净检出上按 CI 同一命令行 `go run . -dir <root> -out <root>/docs/product/MECHANISM-INVENTORY.md` 重生成，`git status --porcelain -- docs/product/MECHANISM-INVENTORY.md` 空——零差，未提清点笔。
+
+**判断项**（措辞上偏离票面「大意」之处，归 owner 复核）：① `Save` 头注那一句**插在「到不了这里」之后、「回指一个不存在的版本是外键错」之前**，不在段落最末——它解释的正是「顺序到达……到不了这里」那一句，紧跟着读才顺；外键那句原本就是段尾旁注，仍留段尾。② 票面「调用方从交回记录的版本字面 ≠ 命令版本分得出后者」的「后者」我写成「分得出是输掉竞态而非重放」：并发`已采用`自身又分两格（同一新版本先落 = 重放，版本相等；链头先被别的版本更正 = 输掉竞态，版本不等），调用方靠版本字面分开的是这两格，不是「并发 vs 顺序」——那一对已由`已采用` / `未受理`两个不同结果分开。三处同口。③ `CorrectFact` 分支的「理由见 Save 头注」写成 `ExternalFundsFacts.Save 头注`：应用层只认 `ports.ExternalFundsFactStore`，裸写 `Save` 会让人往端口接口上找；被引的是 postgres 适配器那份头注，按符号名点全。④ `ports.go` 短版里「并发到达撞约束才答它」——注释挂在 `FundsFactAlreadyAdopted` 常量上，「它」就是这个值，不在端口层再复述一次编排口径的「折成`已采用`」。⑤ 顺带条（`0021` SQL 头注「三道约束」计数）照票面**不做**。⑥ 提交类型取 `docs(sa)`：只动 Go 注释、无行为，不冒 `fix` / `refactor`。
+
+**验证**（12:0x–12:1x）：见判据 (2) 与 (3)；**未占 55432**、未广播占号。
+
+**能力边界**：只读了三处地盘所在的三个文件、票面与 sa-cc/22 完成记录样式；未跑带 DSN 用例（票面不要求，零行为）；非作者评审由推送方另派，本条不冒充。
+
 ## Comments
 
 - 2026-09-15 11:2x · 通道 1：立票（评审尾巴，推送方处置时点名）。只写票面，未动代码。
+- 2026-09-15 12:1x · 通道 4：认领即完工（task `1b28ece5`；分支 `mcp4-sacc28` 基 `7160fe67`，代码 tip `d6b1f773`）。完成记录见上；树不拆，留推送方重放。
