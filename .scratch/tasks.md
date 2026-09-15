@@ -2359,3 +2359,12 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
   - **撕点写进相关单**：`cmd/parcel-dispatch/assemble_test.go` `TestAnAdoptedExternalFundsFactReachesTheCustomsRegisterThroughTheRouteTable` 通道 2（19 判据 (2) 扩一格）与通道 6（20 判据 (3) 第二格改回两版都在 SA）都要改——动前排队列 + 占号写明用例与段、后进 main 的一方 rebase、建议单独成笔；`migrations/migrations.go` / `plan.go` 通道 6 新迁移接线、动前占号；CC CONTEXT 通道 3 独占、通道 2 要加句先问 3；两份 spec 子票表各改自己一行、重放时我合。
 - **接下来**：21（3）约 10:50 交 → 自审 → 进 main；01（4）约 11:00 交 → 派 3 评 → 重放 → 全量 → ff；22 首笔到可先评；20 / 19 / 02+03 陆续交 → 评审位从已交活的通道里挑非作者。pp-seams/04（NO：登记册 + 迁移 `node_operations/0005` + 仍有效实测只读口，先自立票面照 02 裁决 1）等 3 或 4 空出后派。**归用户**（不变）：CI 计费；六件 untracked；会话中断成因（昨 22:2x 全体 crash 一次、通道 1 今天新起）；四篇 ADR 越权风险点事后复核（`scripts/owner-review-queue.ps1`）。
 - **本节五数**（09:5x–10:1x）：CI 未起跑（计费）· 集成时延 —（本小节无票进 main）· 重放笔数 0 · 重复开发 0 · **会话重置 6**（通道 1 本会话新起 + 2 / 3 / 4 / 5 / 6 均无在途记忆；昨晚 22:2x 全体 crash 记 1 次事件）· 非作者评审缺席 0 · 派单 **5**（代码 4、docs 1；覆盖七张 ready）
+
+### 10:1x–10:2x 同一会话：接单确认 → sa-cc/21 完工 → 推送方自审 → 进 main
+
+- **接单确认**（10:1x）：通道 2（task-f3329ba3 working；报「建 worktree」——已提醒树与分支已在、不要重建）、通道 4（task-aadedbce working）。簿记 `4bbe0a9c` 推出后广播「远端 main = 4bbe0a9c，只动 tasks.md，各分支基 3a21dab7 不必动」。
+- **sa-cc/21 完工报 10:1x**（通道 3，task-7d92552e done，派后约 10 分）：`mcp3-sacc21@efd6549f` = origin，三笔（认领 `97b05cf8` / 之一 `08eb6d59` / 完成记录 `efd6549f`），五件 +47 −3 全在 `docs/` 与 `.scratch/`；判据 (1) grep 1→2、(2) `internal/ migrations/ apps/` 零 diff、(3) UC-CC-009 三格 + `CC-RULE` 指向、(4) 票 12 两句；13 处引用逐条 Read 核过零改动清单；判断项四条（落点未挪 / UC 指向用既有引用键 / UC-CC-008 对称句归 CC owner / 票 12 判定与取证一致）。
+- **评审门**：纯 .md → 推送方自审，读全部五件 diff：**Standards 0 阻断 / 0 非阻断 · Spec 0 阻断 / 0 非阻断**（CONTEXT 新句与裁决 1 逐字同、落第 ② 条后；UC 句指向用既有 `CC-RULE` 键，认可；13 处清单与取证条逐处对上）。全文落票 21 Comments。
+- **重放**：`%TEMP%\idp-replay-sacc21` @ `4bbe0a9c`，`cherry-pick 3a21dab7..efd6549f` 零冲突 → `c4932992` / `ac39f9a5` / **`b62bab28`**；`git diff efd6549f b62bab28 -- docs .scratch/sa-cc-*` 空。纯 docs 不跑 go、清点不重生成。共享 main `merge --ff-only b62bab28` → 簿记一笔在其上（票 21 Status「已进 main」+ 进 main 记录；spec 21 行；本条）→ `ls-remote` 核 `4bbe0a9c` 未动 → `push <sha>:main`。`mcp3-sacc21` → `merged/`、远端删；重放树拆；作者树由通道 3 比内容后拆。
+- **前沿**：在途 22+19（2）/ 20（6）/ 01（4）/ 02+03（5）；通道 3 空闲 → **评审位**（等 pp-seams/01 约 11:00）。ready 0；draft lc 20 / 22（等真源）。
+- **本节五数**（10:1x–10:2x）：CI 未起跑（计费）· 集成时延 sa-cc/21 完工报 10:1x → 推出 10:2x **约 10 分**（1 票，自审）· 重放笔数 **3** · 重复开发 0 · 会话重置 0 · 非作者评审缺席 0（纯 .md 自审如实计）
