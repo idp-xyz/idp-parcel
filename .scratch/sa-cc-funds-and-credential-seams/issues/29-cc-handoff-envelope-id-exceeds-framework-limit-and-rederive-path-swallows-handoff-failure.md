@@ -1,7 +1,7 @@
 # CC 三只交接信封的 ID 是「租户 / 类型 / 范围 / 税费 / 资金 / 64 位指纹」串接，真长度引用下超过框架信封 ID 上限、`EnqueueOnce` 拒收；而 `handOffVerification` 把交接失败折成续办引用、核对不翻，重派路上那个续办引用无人读——核对行提交、信封没发、消费入账成功、无人知道
 
 Category: bug
-Status: ready-for-agent——**2026-09-15 12:5x 通道 1 按用户「代裁」代裁（CC owner 口径），四条「要裁的」写入下方「裁决」节**：三只 `*EventID` 一次同改成定长指纹形（固定口名前缀 + `sha256` 十六进制，必在 `eventing.MaxEventIDLength` 内），载荷五维全量照旧；重派路上交接失败不再折成续办引用——依赖不可用归未决重投、信封不合法归硬失败，两格都整笔回滚；人重核路 05 的兜底本票不动；SA 侧靠采用登记册五维主键守幂等、真库用例钉住。上限已量实：`go.idp.xyz/idp-bento-go/eventing` `MaxEventIDLength = 128`，`Envelope.Validate` 对 `id` 查非空 / UTF-8 / 无控制符 / ≤ 128 字节。此前 draft——2026-09-15 12:4x 通道 1 立票（sa-cc/19 评审 ← 通道 6 Spec ② + 19 完成记录判断项 ③ ④ 转记；原作者会话 11:1x 广播量到 138 字节被拒是第一手）。只写票面未动代码；取证锚 main `36fb5437`
+Status: resolved——**2026-09-15 14:2x 通道 4（二次改派）**（task-7d4346c0-75d0-4379-b69c-4e7d8a527019；分支 `mcp4-sacc29` 基 `cbffc269`，代码三笔 `976966ee`（裁决 1）/ `e8d73f09`（裁决 2）/ `b2229462`（装配 + 判据 (2)(4) 真库），代码 tip `b2229462`；本完成记录 + 05 一句紧随一笔；通道 6 / 2 先后 crash 未开工。逐条判据、裁决、判断项、验证与能力边界见下方「完成记录」）。此前 ready-for-agent——**2026-09-15 12:5x 通道 1 按用户「代裁」代裁（CC owner 口径），四条「要裁的」写入下方「裁决」节**：三只 `*EventID` 一次同改成定长指纹形（固定口名前缀 + `sha256` 十六进制，必在 `eventing.MaxEventIDLength` 内），载荷五维全量照旧；重派路上交接失败不再折成续办引用——依赖不可用归未决重投、信封不合法归硬失败，两格都整笔回滚；人重核路 05 的兜底本票不动；SA 侧靠采用登记册五维主键守幂等、真库用例钉住。上限已量实：`go.idp.xyz/idp-bento-go/eventing` `MaxEventIDLength = 128`，`Envelope.Validate` 对 `id` 查非空 / UTF-8 / 无控制符 / ≤ 128 字节。此前 draft——2026-09-15 12:4x 通道 1 立票（sa-cc/19 评审 ← 通道 6 Spec ② + 19 完成记录判断项 ③ ④ 转记；原作者会话 11:1x 广播量到 138 字节被拒是第一手）。只写票面未动代码；取证锚 main `36fb5437`
 Blocked by: 无（[19](19-cc-new-funds-fact-version-forms-a-new-verification-version.md) 已进 main `49ffc96c`；本票是它量出来的、不归它重裁的那一件）
 
 ## 缺口（取证于 `36fb5437`，逐符号名）
@@ -65,6 +65,61 @@ CC `CONTEXT.md` 集成规则：核对形成后交 `settlement-accounting` 采用
 5. **做法写实**：(1) `adapters/postgres`：新 helper（口名前缀 + `sha256` 十六进制）替三只 `*EventID` 的拼接体；载荷不动；`Subject` / `PartitionKey` 按裁决 1 量后定。(2) `application/reconcile_duty_payment.go`：`handOffVerification` 把交接错误随结果交出（形归作者），`VerifyPayment` 对外结果不变。(3) `application/rederive_duty_verifications.go`：按裁决 2 分两格，新硬失败哨兵；`adapters/settlementaccounting/receive_on_adopted_funds_fact.go` `rederivationConsumption` 与 `cmd/parcel-dispatch/assemble.go` 的未决哨兵集合**不**收新哨兵。(4) `cmd/parcel-dispatch/assemble_test.go` 第三格：`SYN-D9` / `SYN-U9` 取短的理由句删掉、引用改回该文件常规长度、`HandoffReference() == ""` 断言保留（它现在是「交接成功」的证据而非绕开）。(5) 三只 ID 的既有用例改断言形（定长、可重算），不断言字面串接。**不动**：迁移；SA 目录（除判据 (4) 的真库用例可放 SA adapters/customscompliance 测试）；05 的响应格。
 6. **完成判据写实**（替换上方「待裁后写实」四条）：(1) 三只 ID 定长且 ≤ `eventing.MaxEventIDLength`，用例用**超长合成引用**（拼接形下 > 128 字节）构造信封仍入队成功；同一核对两次算 ID 相等。(2) 重派路：Outbox 存储替身答不可用 → `ErrDutyVerificationRederivationUndecided`、零核对行落库；信封校验错替身 → 硬失败哨兵、零核对行、不在未决集合（`errors.Is` 反断言）。(3) 装配第三格改回常规长度引用、`published == 1`、SA `FindByKey` 命中；19 那句取短理由不在。(4) 真库：同一核对以两个不同信封 ID 各投一封到 SA 消费者 → 采用登记册一行、第二封答幂等不报错。(5) `git grep -n 'SYN-D9\|SYN-U9' -- cmd/parcel-dispatch/assemble_test.go` 零命中（或作者留下并写明不再是绕开）；`0016` / `0019` / `0021` / `0022` / `0023` 零 diff；`gofmt -l` 空、`go vet` 0；带 DSN CC postgres + `cmd/parcel-dispatch` + SA adapters/customscompliance PASS 非 SKIP。(6) 05 票面 Comments 一句「ID 形已由 29 改为指纹形，兜底形不动」。
 7. **能力边界**：裁的是 ID 形、失败分格、兜底归属、幂等靠谁；具体不变式（helper 的前缀字面与分隔、硬失败哨兵名、`handOffVerification` 交错的形、`Subject` / `PartitionKey` 能否超 512）归作者按代码定并写进判断项。读过：本票全文、19 评审 Spec ② 与判断项 ③ ④、`eventing/types.go` 常量表与 `envelope.go` `Validate` 校验段、`inboxconsume/consume.go` 包头（三态：重复跳过 / 毒丸 / 处理失败整体回滚）、`dispatcher.go` 失败码头注、`duty_payment_verification_handoff.go` 的 ID / Subject / PartitionKey 赋值行；**没读**：`EnqueueOnce` 正文、SA `duty_payment_verification_consumer.go` 处理方本体与 `AdoptOnDutyPaymentVerificationAdapter`、派发器对消费方硬失败的落账路径、三只 handoff 文件正文。作者量到与代码不符，以代码为准并写进判断项，不回头等我。
+
+## 完成记录（2026-09-15 14:2x 通道 4 二次改派会话，钉 `b2229462`）
+
+代码三笔由通道 4 上一会话写成并逐笔推 origin：`976966ee`（裁决 1）/ `e8d73f09`（裁决 2 + 3）/ `b2229462`（装配第三格、判据 (2) 集合半边、判据 (4) 与 (2′) 真库）；该会话跑完带 DSN 测试、广播释号后结束，完成记录没落。本节由通道 4 新会话（无在途记忆）按 `git diff cbffc269 b2229462`（16 件全 M、无增删）与代码逐条对判据代写，**不改代码**；点名到符号名与用例名，判断项写代码实际怎么做的。
+
+### 逐条对裁决 6「完成判据写实」(1)–(6)
+
+**(1) 三只 ID 定长、在上限内、可重算** → `internal/customscompliance/adapters/postgres/duty_payment_verification_handoff_test.go` `TestOverlongReferencesStillProduceAnEnvelopeIDWithinTheFrameworkLimit`：税费 / 资金 / 范围各取「前缀 + 六十个 x」的合成串，夹具先自检旧串接形 > `eventing.MaxEventIDLength`（造不出超长就 `Fatal`，本格不许空证）；同一意图交两次 → outbox 行数 1（第二次被 `EnqueueOnce` 当同一份）；ID 长度 == `len("duty-payment-verification/") + hex.EncodedLen(sha256.Size)` 且 ≤ 上限；分区键仍是可读形「租户 / duty-payment-verification / 范围」。`gate_verification_handoff_test.go` `gateEventID` 与 `verification_handoff_test.go` `verificationHandoffEventID` 改为按同公式重算（测试侧 `fingerprintedEventID`），既有用例拿它去库里找行——断言形从「字面串接」换成「可重算」（裁决 5 (5)）。
+
+**(2) 重派路两格、都不报成功**：
+
+- 依赖不可用 → `internal/customscompliance/application/rederive_duty_verifications_test.go` `TestARederivationTreatsAnUnavailableHandoffAsUndecided`：交接替身答普通错误 → 整笔 `DutyVerificationRederivationUndecided`、点名新 reason `DutyVerificationHandoffUnavailable`、`Lineages()` 空。
+- 信封被拒 → 同文件 `TestARederivationFailsLoudlyWhenTheHandoffEnvelopeIsRejected`：替身答包着 `ports.ErrHandoffEnvelopeRejected` 的错误 → 返回错误 `errors.Is` `application.ErrDutyVerificationHandoffRejected` 且 `Is` `ports.ErrHandoffEnvelopeRejected`，结果是零值（`DutyVerificationRederivationOutcomeInvalid`、零谱系）。
+- 消费侧 → `internal/customscompliance/adapters/settlementaccounting/receive_on_adopted_funds_fact_test.go` `TestARejectedHandoffEnvelopeOnTheRederivationPathIsAHardFailureNotAnUndecided`：前者折成 `ErrDutyVerificationRederivationUndecided`；后者折成新哨兵 `ccsettlement.ErrDutyVerificationHandoffRejected`（带原因），与 `ErrDutyVerificationRederivationUndecided` / `ErrFundsFactReceiveUndecided` 互不 `errors.Is`（反断言）。
+- 集合半边 → `cmd/parcel-dispatch/assemble_test.go` `TestARejectedDutyVerificationHandoffIsNotRegisteredAsUndecided`：遍历 `externalFundsFactUndecidedSentinels` **本身**（不在测试里重列一份），硬失败哨兵双向不 `Is` 任一项；重派未决哨兵仍在名单。
+- 「零核对行落库」在替身层只证到「零谱系报出」（替身无事务，见判断项 ⑦）；行级回滚由下一格证。
+- (2′) 真库回滚 → `cmd/parcel-dispatch/assemble_test.go` `TestARederivedVerificationWhoseEnvelopeIsRejectedRollsBackLoudlyInsteadOfCommittingHalf`：范围引用取 `"SYN-UNIT-LONG-" + MaxSubjectLength 个 x` 让 Subject 必超 `eventing.MaxSubjectLength`；v1 先经人重核路形成核对（断言 05 之形：`DutyVerificationFormed` + 续办引用非空 + `HandoffError()` `Is` `ErrHandoffEnvelopeRejected`，裁决 3 不动）；v2 信封到达那一拍 `published == 0`、`failure_code == "dispatch.publish_failed"`，`ListFundsFactVersions` 仍只有 v1、`ListVerificationsByFundsFact` 仍只有一版且 `Delta == DeltaNone`——版本行、(a′) 核对行、信封三者一起没落。
+
+**(3) 装配第三格改回常规长度**：`TestAnAdoptedExternalFundsFactReachesTheCustomsRegisterThroughTheRouteTable` 的 `lineageDuty` / `lineageScope` 由 `SYN-D9` / `SYN-U9` 改回 `SYN-DUTY-RD/v1` / `SYN-UNIT-RD`——正是 19 原作者拼出 138 字节被拒的那一对，本格因此成了原始报告的回归格；取短理由段删掉、换成一句「自 29 起定长指纹形，引用多长都装得下」；`HandoffReference()` 为空、该拍 `published == 1`、SA `FindByKey` 命中三条断言未动（diff 不含那几行），语义由「绕开」变「正路证据」。
+
+**(4) 真库 SA 幂等靠五维主键**：`TestAFormedDutyPaymentVerificationReachesTheSettlementInputThroughTheRouteTable` 末尾追一段——同一份五维载荷以另一个信封 ID `duty-verification-second-id-for-digest-v1` 再投一封 → 该拍 `published == 1`、`failure_code` 空、`settlement_accounting.duty_payment_verification_adoption` 按（租户、范围、税费、资金、指纹）数行仍为 1：Inbox 门只挡同一 ID，第二封放行到采用编排、撞五维主键答幂等不报错。SA 目录零 diff（`git diff --stat cbffc269 b2229462 -- internal/settlementaccounting` 空）。
+
+**(5) 可 grep 的几条**（本会话在 `mcp4-sacc29` 工作树实测，树 = `b2229462` + 本票与 05 两份 .md）：`git grep -n -e 'SYN-D9' -e 'SYN-U9' b2229462 -- cmd/parcel-dispatch/assemble_test.go` 零命中（退 1）；`git diff --stat main..b2229462 -- migrations/` 空（`0016` / `0019` / `0021` / `0022` / `0023` 一并零 diff）；`gofmt -l ./internal/ ./cmd/` 空；`go vet ./...` 退 0。带 DSN 测试**本会话未重跑**（55432 已释、通道 1 按 `b2229462` 派评审），取上一会话释号广播的数（通道 1 14:1x 确认收到）：`go test -p 1 -count=1 -v ./internal/customscompliance/... ./cmd/parcel-dispatch/... ./internal/settlementaccounting/adapters/customscompliance/... ./internal/architecture/...` → `--- PASS` 886 / `--- FAIL` 0 / `--- SKIP` 0、退 0（22 s）；本节点名的用例在该广播里全 `PASS` 非 `SKIP`。
+
+**(6) 05 票面一句**：[05](05-cc-duty-reconciliation-hands-off-to-settlement-accounting.md) Comments 追「ID 形已由 29 改为指纹形，兜底形不动」一条，与本节同一笔提交。
+
+### 逐条对裁决 1–4
+
+**裁决 1——helper 与三只口**：`internal/customscompliance/adapters/postgres/external_result_handoff.go` `fingerprintEventID(portName, dimensions...)` = `portName + "/" + hex(sha256(strings.Join(dimensions, "\x00")))`，与 `ccEventSource` 同文件。三只口各自一个口名常量：`dutyPaymentVerificationEventIDPort = "duty-payment-verification"`（五维：租户、范围、税费、资金、指纹）、`gateVerificationEventIDPort = "gate-verification"`（五维：租户、范围、动作、边界、指纹）、`verificationEventIDPort = "disposition-verification"`（三维：租户、决定、指纹）。ID 长度是常量 `len(前缀) + 1 + 64`——90 / 82 / 89 字节，与任一维多长无关。载荷结构体、`Subject`、`PartitionKey` 三处 diff 未碰（`PartitionKey` 只在 (1) 用例里被断言仍是可读形）。
+
+**裁决 2——分格落在四层**：(a) `adapters/postgres` `OutboxDutyPaymentVerificationHandoff.HandOffDutyPaymentVerification` 对 `EnqueueOnce` 的错误 `errors.Is(err, eventing.ErrInvalidEnvelope)` 才包 `ports.ErrHandoffEnvelopeRejected`（新哨兵，头注写明「确定性 vs 重投会变」两格），其余原样返回；(b) `application/reconcile_duty_payment.go` `handOffVerification` 改返回 `(string, error)`，`DutyReconciliationResult` 加 `handoffErr` 与读口 `HandoffError()`（与 `HandoffReference` 同在场同缺席）；(c) `application/rederive_duty_verifications.go` 谱系循环里在既有 `dependencyFailure()` 判之后、`Formed / Existing` 记谱系之前插一格：`HandoffError() != nil` 且 `Is ErrHandoffEnvelopeRejected` → 返回零值结果 + `fmt.Errorf("%w: %w", ErrDutyVerificationHandoffRejected, handoffErr)`；否则 → `rederivationUndecided(DutyVerificationHandoffUnavailable)`（新 reason 进 `dependencyFailure()` 真集，`String()` 为 `DUTY_VERIFICATION_HANDOFF_UNAVAILABLE`）；(d) `adapters/settlementaccounting/receive_on_adopted_funds_fact.go` `HandleAdoptedExternalFundsFact` 对重派返回的错误 `Is ccapplication.ErrDutyVerificationHandoffRejected` → 包成 `ccsettlement.ErrDutyVerificationHandoffRejected` 交出；未决半边走既有 `rederivationConsumption` → `ErrDutyVerificationRederivationUndecided`。`cmd/parcel-dispatch/assemble.go` `externalFundsFactUndecidedSentinels` **名单本体一行未改**，diff 只有头注补「为什么新哨兵不在」。
+
+**裁决 3——人重核路不动**：`handOffVerification` 仍吞错、仍返回 `"CONT-DUTY-VERIFICATION/" + 范围 + "/" + 指纹前八位`，`VerifyPayment` 的 outcome 仍 `DutyVerificationFormed`；既有 `reconcile_duty_payment_test.go` `TestAFailedHandoffLeavesTheVerificationFormedWithAContinuationReference` 只多一条 `HandoffError()` `Is` 替身错误的断言。(2′) 真库格顺手把同一条超长范围在人重核路上「形成 + 续办引用 + 原始错误可见」断了出来。
+
+**裁决 4——见 (4)**：SA 采用编排、`duty_payment_verification_consumer.go`、迁移零 diff；幂等由 `duty_payment_verification_adoption` 既有五维主键承担，真库格钉住。
+
+### 判断项（读代码写它实际怎么做的）
+
+1. **维间分隔取 `\x00` 而不是 `/`**：引用本身含 `/`（`SYN-DUTY-RD/v1`），用 `/` 拼维会让「a/b + c」与「a + b/c」哈希前同串；`\x00` 不会出现在任何合法引用里（`Envelope.Validate` 拒控制符是对 ID 说的，这里是哈希输入不是 ID）。代码头注没写这一句，这是接手方的读法。测试侧 `fingerprintedEventID` 有意复述公式而不调生产那只未导出函数（头注原话：生产改了公式、这里就红）。
+2. **口名前缀与分区键口名段的关系**：duty-payment 的前缀与 `dutyPaymentVerificationPartitionKey` 的口名段同词；gate 与 disposition 两只的分区键本来不带口名段，前缀是新词。三个前缀互异，`EnqueueOnce` 按（source, event_id）查重、三只口共用 `ccEventSource`，前缀让三只的 ID 空间不相交。
+3. **`Subject` / `PartitionKey` 没改、也能超上限——裁决 1 让量的那一格**：上一会话没哈希、也没留理由句；(2′) 真库格经 `NewDecisionScopeReference` 造出 `"SYN-UNIT-LONG-" + 512 个 x` 且用例 PASS（构造门没把它挡在 512 以内），并拿到真实的 `ErrInvalidEnvelope`，所以 **Subject（范围 / 税费）今天确实能超 `MaxSubjectLength`**，同一条范围也会让 PartitionKey（租户 / 口名段 / 范围）超 `MaxPartitionKeyLength`。后果按裁决 2：人重核路折成续办引用（有读者）、重派路整笔硬失败 `publish_failed`（人动手），**不再静默**——但对引用长到那个程度的租户实例，交接会确定性失败直到有人改引用或改形。要不要把两者也哈希（分区键哈希不改「同范围同分区」）归 CC owner 一句或另票；这里只把「能超」量实。
+4. **`ErrHandoffEnvelopeRejected` 的包裹只加在 duty-payment 一口**：`gate_verification_handoff.go` / `verification_handoff.go` 的 `EnqueueOnce` 错误仍原样返回，因为它们不在重派路上、今天没有调用方按它分格；日后哪条编排要分格，得在那一口补同一行 `errors.Is(err, eventing.ErrInvalidEnvelope)`。
+5. **分格判据是「`Is ErrHandoffEnvelopeRejected`」，不是「是否确定性」**：重派路上凡不是它的交接错误一律归 `DutyVerificationHandoffUnavailable` 重投——包括 `HandOffDutyPaymentVerification` 对键维空白 / 核对时刻缺席那类装配缺陷错误（同样是确定性的）。实际到不了：重派路的键由编排从核对记录组、核对时刻由 `VerifyPayment` 取时钟；写下来是让下一个往交接口加确定性校验的人知道要顺手包一层。
+6. **硬失败的结果形是零值 + 错误**：`RederiveDutyVerificationsOnFundsFactVersion` 返回 `DutyVerificationRederivationResult{}`（`Outcome()` 为 `DutyVerificationRederivationOutcomeInvalid`）与非 nil 错误，调用方先看错误；格的次序（`dependencyFailure` → `HandoffError` → 记谱系）保证带交接错误的 `Formed` 谱系不进 `Lineages()`——与头注「已形成的谱系会随之回滚，不把它们当成功报出去」一致；`Existing` 谱系从不带 `handoffErr`（`handOffVerification` 只在 `saved == CaseConfigurationRegistered` 时调）。
+7. **替身层证不到「零核对行」**：`rederiveStores` / `newDutyStore` 没有事务，交接失败后核对行留在替身里，用例只断言 `Lineages()` 空；消费侧那格第二幕因此换 v3 到达（v2 已在替身登记册里、再投答 `已存在` 不触发重派——用例注释原话）。行级「同生同灭」只在 (2′) 真库格成立，那里 `inboxconsume` 的事务包着接收 + 重派 + 交接。
+8. **硬失败到「人动手」之间只证了第一拍**：(2′) 断言 `published == 0` 与 `failure_code == dispatch.publish_failed`；失败预算耗尽、落账、告警那一段归派发器既有行为（`dispatcher.go` 头注），本票没加用例。
+9. **与裁决字面不符、以代码为准**：裁决 2「结果对象加一格或另一返回值」→ 两样各做了一半：对外是结果对象加 `HandoffError()`，对内 `handOffVerification` 改成 `(string, error)`；裁决 1「`Subject` / `PartitionKey` 能超则同法取哈希」→ 能超（判断项 ③）但没哈希，改由裁决 2 (b) 兜成响亮硬失败。
+
+### 验证
+
+见 (5)：`gofmt` / `go vet` / grep / 迁移零 diff 为本会话实测于 `mcp4-sacc29` 工作树（代码 = `b2229462`）；带 DSN 测试取上一会话释号广播的数（PASS 886 / FAIL 0 / SKIP 0，退 0），本会话未重跑。**清点预报**：本会话在 `mcp4-sacc29` 工作树对 `b2229462` 跑 `tools/mechanism-inventory`（`-out` 到 `%TEMP%`，不落树）与已提交的 `docs/product/MECHANISM-INVENTORY.md` **零差**——三笔无增删文件、无迁移、端口与端点声明数不变，推送方在 tip 重生成预期同样零差。
+
+### 能力边界
+
+读了：本票全文含裁决 0–7；`git diff cbffc269 b2229462` 全部 16 件逐 hunk；19 完成记录（格式与判断项 ③ ④ 的出处）。**没读**：`eventing/envelope.go` `Validate` 正文与 `ErrInvalidEnvelope` 的定义（`errors.Is` 能接上由 (2′) 真库格证，不是读出来的）；`outboxintent.EnqueueOnce` 正文；`inboxconsume/consume.go`；SA `duty_payment_verification_consumer.go` 与采用编排本体；`dispatcher.go` 预算耗尽路径；`0016`–`0023` 正文（零 diff 只按 `--stat` 认）。没写代码、没改测试、没重跑带 DSN 测试、没改 `spec.md` / `tasks.md`。
 
 ## 参照
 
