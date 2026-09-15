@@ -1,7 +1,7 @@
 # pp-seams/05 评审 Standards 尾巴：四份 PS 内容用例的收件夹具用真实邮编 `10115` / `20095` / `20097` / `20099` 与国家码 `DE`，寄件格已是 `SYN-200000` 而收件格没跟；03 落 main 的两份地址要素用例同款
 
 Category: chore
-Status: resolved——**2026-09-15 15:0x 通道 5**（task-f70d20a8；分支 `mcp5-ppseams07` 基 main `93840328`，代码 tip 即本笔；六份测试文件只换字面，零行为）。此前 ready-for-agent——**2026-09-15 14:4x 通道 1 立票**（pp-seams/05 评审 ← 通道 3 Standards ①，推送方处置「另立 chore、归 PS owner」）。只测试夹具字面，零行为改动
+Status: resolved——**已进 main，2026-09-15 15:1x 通道 1 推送方**（第七批，重放 `0b3e5de9→e1840144`，批 tip `c84e81bd`；评审门推送方自审（零行为：生产零 diff、六份测试每一加行都带 `SYN-`、`-w` grep 真码零命中）；`c84e81bd` 带 DSN 全仓 115 ok / 0 FAIL，PS content / elements 真库格 PASS 非 SKIP；见 Comments「进 main 记录」）。此前 resolved——**2026-09-15 15:0x 通道 5**（task-f70d20a8；分支 `mcp5-ppseams07` 基 main `93840328`，代码 tip 即本笔；六份测试文件只换字面，零行为）。此前 ready-for-agent——**2026-09-15 14:4x 通道 1 立票**（pp-seams/05 评审 ← 通道 3 Standards ①，推送方处置「另立 chore、归 PS owner」）。只测试夹具字面，零行为改动
 Blocked by: 无（05 已进 main，第六批 tip `de822820`）
 
 ## 缺口（评审钉 `a893999a`，进 main 后在 `de822820` 同形）
@@ -64,3 +64,4 @@ Blocked by: 无（05 已进 main，第六批 tip `de822820`）
 
 - 2026-09-15 15:0x · 通道 5（task-f70d20a8）：完成记录见上，单笔。与票面不符一处：`address_element_test.go` 里另有 `10117` / `200001` / `CN` 三处真值，票面与判据 1 的模式没点名，按「六份文件里的真实邮编」字面一并换了（判断项 ④）。真库那份用例未在真库跑（55432 按派单留给 sa-cc/31），推送方全量兑底。
 - 2026-09-15 14:4x · 通道 1：立票（05 评审尾巴）。只写票面，未动代码。**能力边界**：文件名与字面取自评审原文；推送方**未读**这四份用例正文与 `AddressElements` 的格式门。
+- **2026-09-15 15:1x · 进 main 记录 · 通道 1 推送方**：**评审门推送方自审**（只测试夹具字面、零行为，照 [06](06-tf-ps-ppseams01-03-review-tails-member-order-contract-count-words-and-blank-value-reading.md) 先例）：`git diff --stat 93840328 0b3e5de9 -- ':!*_test.go' ':!.scratch'` 空；六份测试 `-U0` 的每一条加行都含 `SYN-`（`Select-String` 反滤零命中）；`git grep -n -w -E 'DE|CN|10115|10117|20095|20097|20099' 0b3e5de9 -- <六份>` 零命中。作者判断项 ①–⑥ 接受——④ 票面漏列的 `10117` / `200001` / `CN` 按「六份文件里的真实邮编」字面一并换，在地盘内、同一缺陷；⑥ CONTEXT 词条未改与票面默认一致。作者提醒采纳：票面判据 1 那条 grep 的 `"DE"` 在 PowerShell 里会被剥成裸 `DE` 匹到 `UNDETERMINED`，核国家码用 `-w`。**重放**：`%TEMP%\idp-replay-wave7` @ `93840328`，`cherry-pick 0b3e5de9` → `e1840144` 零冲突，`internal/parcelshipment` 对作者 tip 零 diff；同批 sa-cc/33（`60721f60→3e0f1230`）与 sa-cc/32 取证笔（`d2af6ba1→c84e81bd`），零文件重叠。清点在 tip 重生成零差。**验证（推送方全量一次，`c84e81bd`）**：`gofmt -l` 空；`go build` / `go vet` 0；15:06 占号 → 带 DSN `go test -p 1 -count=1 ./...` **115 ok / 0 FAIL / 16 无测试 / 0 cached**（136 s）；`-v` 探针 PS `adapters/postgres` + `domain` 的 `Content|Elements|OldShapeSnapshot` 各格 PASS 非 SKIP（真库那份字面改动由此兑底）→ 15:09 释号。簿记一笔在其上，纯 .md 自审；`ls-remote` 核 `93840328` 未动 → `merge --ff-only` → `push <sha>:main`。分支 `mcp5-ppseams07@0b3e5de9` 作封存出处、改名 `merged/`、远端删；作者树由通道 5 比内容后拆。

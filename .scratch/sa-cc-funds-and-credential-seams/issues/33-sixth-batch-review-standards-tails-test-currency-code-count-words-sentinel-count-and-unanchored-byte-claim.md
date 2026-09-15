@@ -1,7 +1,7 @@
 # 第六批评审 Standards 尾巴（27 + 29）：`parcel-settlement-register` 与 `registrationjson` 夹具币种用真 ISO 码 `EUR` 而非测试码 `XTS`；`registrationjson` 头注「采用四格」跨包计数；`assemble_test.go` 一处头注把三只未决哨兵数成两只；`fingerprintEventID` 头注引 19 的「138 字节」作论点却没锚 SHA
 
 Category: chore
-Status: resolved——**2026-09-15 15:0x 通道 4**（task-c3f6cfd9-1a6f-4235-9e3b-9f9c71783355；分支 `mcp4-sacc33` 基 `93840328`，代码 tip 即本笔；六件全是夹具字面与注释，零行为，见下方「完成记录」）。此前 ready-for-agent——**2026-09-15 14:4x 通道 1 立票**（sa-cc/27 评审 ← 通道 2 Standards ① ② + Spec ②、sa-cc/29 评审 ← 通道 6 Standards ① ②，推送方处置「合一张 A 类零行为尾巴」）。只测试夹具字面与注释，零行为改动
+Status: resolved——**已进 main，2026-09-15 15:1x 通道 1 推送方**（第七批，重放 `60721f60→3e0f1230`，批 tip `c84e81bd`；评审门推送方自审（零行为：生产两文件滤 `//` 后空、测试只 `EUR`→`XTS` 字面 + 一句头注）；`c84e81bd` 带 DSN 全仓 115 ok / 0 FAIL；见 Comments「进 main 记录」）。此前 resolved——**2026-09-15 15:0x 通道 4**（task-c3f6cfd9-1a6f-4235-9e3b-9f9c71783355；分支 `mcp4-sacc33` 基 `93840328`，代码 tip 即本笔；六件全是夹具字面与注释，零行为，见下方「完成记录」）。此前 ready-for-agent——**2026-09-15 14:4x 通道 1 立票**（sa-cc/27 评审 ← 通道 2 Standards ① ② + Spec ②、sa-cc/29 评审 ← 通道 6 Standards ① ②，推送方处置「合一张 A 类零行为尾巴」）。只测试夹具字面与注释，零行为改动
 Blocked by: 无（27 / 29 已进 main，第六批 tip `de822820`）
 
 ## 缺口（评审各钉 `aa48912e` / `b2229462`，进 main 后在 `de822820` 同形）
@@ -72,3 +72,4 @@ Blocked by: 无（27 / 29 已进 main，第六批 tip `de822820`）
 ## Comments
 
 - 2026-09-15 14:4x · 通道 1：立票（第六批两票评审 Standards 尾巴合收）。只写票面，未动代码。
+- **2026-09-15 15:1x · 进 main 记录 · 通道 1 推送方**：**评审门推送方自审**（照 [28](28-sa-sacc20-review-standards-tail-save-header-states-ordered-versus-concurrent-answers.md) / [30](30-cc-sacc19-review-standards-tails-unordered-test-double-and-hand-built-fixture-keys.md) 先例）：`git diff --stat 93840328 60721f60 -- ':!*_test.go' ':!.scratch'` 只 `translate.go` / `external_result_handoff.go`，`-U0` 滤 `^[+-]\s*//` 后为空；测试 hunk 逐行读——七处 `"EUR"`→`"XTS"`（含比对同一字面的断言与 `strings.Replace` 匹配串）+ `assemble_test.go` 一句头注改引切片名；`fingerprintEventID` 头注 138 字节锚 `a0cb6fef` 并把四个引用字面写进去（作者判断项 ① 重算 138 与原作者同）；`translate.go` 头注改引 `AdoptFact` / `CorrectFact` + ADR-0137 决定四、测试头注多一句「`XTS` 是 ISO 4217 测试码」（判断项 ②，接受——防下一人改回真码）。判断项 ①–④ 接受。**重放**：`%TEMP%\idp-replay-wave7` @ `93840328`，`cherry-pick 60721f60` → `3e0f1230` 零冲突，六件对作者 tip 零 diff；同批 pp-seams/07（`0b3e5de9→e1840144`）与 sa-cc/32 取证笔（`d2af6ba1→c84e81bd`），零文件重叠。清点在 tip 重生成零差。**验证（推送方全量一次，`c84e81bd`）**：`gofmt -l` 空；`go build` / `go vet` 0；15:06 占号 → 带 DSN `go test -p 1 -count=1 ./...` **115 ok / 0 FAIL / 16 无测试 / 0 cached**（136 s）；`-v` 探针 `cmd/parcel-settlement-register` + `registrationjson` PASS 非 SKIP → 15:09 释号。簿记一笔在其上（本票 + 07 Status / 记录、sa-cc spec 32 / 33 行、pp-seams spec 07 行、tasks.md），纯 .md 自审；`ls-remote` 核 `93840328` 未动 → `merge --ff-only` → `push <sha>:main`。分支 `mcp4-sacc33@60721f60` 作封存出处、改名 `merged/`、远端删；作者树由通道 4 比内容后拆。
