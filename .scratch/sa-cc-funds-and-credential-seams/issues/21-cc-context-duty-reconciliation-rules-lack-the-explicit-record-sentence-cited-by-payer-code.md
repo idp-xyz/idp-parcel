@@ -1,7 +1,7 @@
 # CC CONTEXT「税费付款核对」没有「未提供必须明确记录、规则要求而缺失保持未决」那句：付款人一格的代码注释、`0020` 头注与 sa-cc/12 裁决 2 引的都是「监管处置决定」词条——补句并改正引文归属
 
 Category: chore
-Status: in-progress——**2026-09-15 10:0x 通道 3 按通道 1 派单 task-7d92552e 认领**（`/implement`，纯 docs 零代码 diff；分支 `mcp3-sacc21` 基 main `3a21dab7`，隔离树 `$env:TEMP\idp-parcel-mcp3-sacc21`）。此前 ready-for-agent——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（CC owner 口径），「要裁的」写入下方「裁决」节**：候选 A-1——与监管处置决定**同形复用**那句、落 Rules「税费、放行与案件闭环」段、主语是「付款人、金额、币种、业务时间等由来源提供或真实程序要求的维度」，并补第三格「程序尚未登记是否要求时核对不进行」；13 处引用**零改动**（取证量得 A-1 下引文与归属全部变准确）。纯 `docs/**` + 两票面一句，不动代码。此前 draft——2026-09-14 16:0x 通道 1（接管会话）立票（sa-cc/12 补评审 ← 通道 3 Standards 非阻断 ①；归 CC owner）。只写票面未动代码、未动 `docs/**`；取证锚 main `01974923`
+Status: resolved——**2026-09-15 10:1x 通道 3 完工待进 main**（分支 `mcp3-sacc21` 基 main `3a21dab7`：认领 `97b05cf8`、之一 `08eb6d59`（CONTEXT 一句 + UC-CC-009 一句 + 票 12 两句）、本笔完成记录；纯 docs，`internal/` `migrations/` `apps/` 零 diff；评审门按派单「纯 .md → 推送方自审」，作者两轴自查见「完成记录」）。此前 in-progress——**2026-09-15 10:0x 通道 3 按通道 1 派单 task-7d92552e 认领**（`/implement`，纯 docs 零代码 diff；分支 `mcp3-sacc21` 基 main `3a21dab7`，隔离树 `$env:TEMP\idp-parcel-mcp3-sacc21`）。此前 ready-for-agent——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（CC owner 口径），「要裁的」写入下方「裁决」节**：候选 A-1——与监管处置决定**同形复用**那句、落 Rules「税费、放行与案件闭环」段、主语是「付款人、金额、币种、业务时间等由来源提供或真实程序要求的维度」，并补第三格「程序尚未登记是否要求时核对不进行」；13 处引用**零改动**（取证量得 A-1 下引文与归属全部变准确）。纯 `docs/**` + 两票面一句，不动代码。此前 draft——2026-09-14 16:0x 通道 1（接管会话）立票（sa-cc/12 补评审 ← 通道 3 Standards 非阻断 ①；归 CC owner）。只写票面未动代码、未动 `docs/**`；取证锚 main `01974923`
 Blocked by: 无（12 已进 main；要裁的已裁，见「裁决」）
 
 ## 缺口（取证于 `01974923`，逐符号名）
@@ -54,6 +54,46 @@ Blocked by: 无（12 已进 main；要裁的已裁，见「裁决」）
 
 [12](12-cc-funds-fact-payer-may-be-explicitly-unprovided.md)（裁决 2、完成记录、15:47 补评审 Standards ①）；CC `CONTEXT.md` 税费付款核对与监管处置决定两词条；AGENTS.md「改文档」第一条与「单一权威」红线。
 
+## 完成记录
+
+分支 `mcp3-sacc21`，基 main `3a21dab7`（= origin；`fetch` 后 `worktree add` 于隔离树 `$env:TEMP\idp-parcel-mcp3-sacc21`，`git status` 干净）：
+
+| SHA | 内容 |
+|---|---|
+| `97b05cf8` | 认领：本票 Status → in-progress |
+| `08eb6d59` | 之一：CC `CONTEXT.md` Rules「税费、放行与案件闭环」段第 ② 条（「外部资金事实只有在……不能实现为一组互斥总状态」）之后新增一条，句子照裁决 1 逐字；UC-CC-009「启动条件」那句改为三格 + 指向 CONTEXT（裁决 2）；票 12 Comments 追两句「归属见 sa-cc/21 裁决 3」（裁决 3）。GLOSSARY 不改（裁决 4） |
+| （本笔） | 本票 Status → resolved + 本完成记录；`spec.md` 21 那一行 |
+
+**逐条对完成判据（裁决 5）**：**(1)** `git grep -c '未提供或不适用必须明确记录，规则要求但缺失时保持未决' -- docs/domain/customs-compliance/CONTEXT.md` 于 `3a21dab7` = 1、于 `08eb6d59` = **2**；新句位于 Rules「税费、放行与案件闭环」段「外部资金事实只有在……」那条之后、「当前范围是否需要付款……」那条之前（Read 工具核字）。**(2)** `git diff --stat 3a21dab7 -- internal/ migrations/ apps/` **空**。**(3)** UC-CC-009「启动条件」现为「来源未提供且程序不要求的维度明确记录为未提供；程序要求而来源未提供时核对保持未决；程序尚未登记是否要求时核对不进行——见 CONTEXT Rules「税费、放行与案件闭环」段（`CC-RULE`）」——三格齐全，指向用该 UC「权威依据」表既有的 `CC-RULE` 引用键（解析到 CONTEXT Rules），不另造链接。**(4)** 票 12 Comments 两句已追（「语言从哪里来」第二条出处是 UC-CC-009、「裁决」2 改口的归属在本票落地后成立），原文一字未改；本票 Status → resolved 同笔；`spec.md` 21 行同笔。
+
+**13 处引用逐条核过、零改动**（A-1 下引文与归属全部准确；引文类型 (a) 全句 / (b) 后半「规则要求但缺失时保持未决」/ (c) 前半「未提供或不适用必须明确记录」/ (d) 只引「明确记录」；全部用 Read 工具逐字读于 `3a21dab7`）：
+
+| # | 文件 · 符号 | 引文类型 | A-1 下为何准确 |
+|---|---|---|---|
+| 1 | `internal/customscompliance/domain/funds_fact_payer.go` · 包头注 | (a) + 自称「Rules 一句」 | 全句现于 Rules「税费、放行与案件闭环」段逐字可寻；「Rules」归属成立；头注「规则要求而来源没给，核对保持未决而不是拒收、也不是『不适用』」与新句第一、二格同义 |
+| 2 | 同文件 · `FundsPayerNotProvided` 函数注 | (d) | 新句主语含付款人维、含「明确记录」 |
+| 3 | `internal/customscompliance/domain/funds_fact_payer_test.go` · 文件头注 | (a) + 「Rules」 | 同 1 |
+| 4 | `internal/customscompliance/application/reconcile_duty_payment.go` · `DutyReconciliationReason` 类型头注 | (b) | 后半逐字可寻；头注「还没登『要不要付款人』，核对不进行、不取任何默认」对上新句第三格 |
+| 5 | 同文件 · `ReceiveFundsFact` 方法头注 | (c) + CONTEXT「税费付款核对」 | 前半逐字可寻；「税费付款核对」词条引文本就准确 |
+| 6 | 同文件 · `VerifyPayment` 方法头注 | (b) | 三停格与新句三格逐格对上 |
+| 7 | `internal/customscompliance/application/reconcile_duty_payment_test.go` · `TestAFundsFactWithoutAPayerIsReceivedWithThePayerRecordedAsNotProvided` 头注 | (c) | 前半逐字可寻 |
+| 8 | 同文件 · `TestThePayerDimensionIsJudgedByTheProcedureRule` 头注 | (a) | 全句逐字可寻；列出的三格（要求而未提供 → 未决 / 不要求 → 照常 / 没登 → 未决不取默认）与新句同 |
+| 9 | `internal/customscompliance/adapters/http/register_credential_and_duty.go` · `writeDutyReconciliationAnswer` 头注 | (b) | 后半逐字可寻 |
+| 10 | `internal/customscompliance/adapters/postgres/duty_payment_reconciliation.go` · `RegisterFundsFact` 方法头注 | (d) | 同 2 |
+| 11 | `internal/customscompliance/adapters/settlementaccounting/receive_on_adopted_funds_fact_test.go` · `TestAFactWithoutAPayerIsReceivedWithThePayerRecordedAsNotProvided` 头注 | (c) | 前半逐字可寻 |
+| 12 | `internal/customscompliance/ports/ports.go` · `ExternalFundsFactRegistration` 类型头注 | (c) | 前半逐字可寻 |
+| 13 | `migrations/customs_compliance/0020_funds_fact_payer_may_be_unprovided_and_payer_rule.sql` · 文件头注 | (a) + 「Rules 一句」 | 同 1（SQL 注释把全句折成两行，逐字仍同） |
+
+`git grep -n '明确记录\|保持未决\|规则要求但缺失\|规则要求而缺失' -- internal/customscompliance/ migrations/customs_compliance/` 于 `3a21dab7` 与通道 6 取证于 `bccb60a1` 同为 24 行 / 15 文件；上表 13 处之外的 8 处引的是处置 / 凭证 / 协作事项自己的句子（取证条已逐处归属），不在本票缺口内，未动。
+
+**作者两轴自查（评审门按派单为「纯 .md → 推送方自审」）**：Standards——新句、UC 句、两条 Comments 全中文；跨文件引用用小节名 / 词条名 / 引用键 / 符号名，无行号；票面计数只有「13 处」「24 行 / 15 文件」，均为取证论点且钉 SHA；引号内串与裁决 1 逐字同（Read 核字，未经 PowerShell 管道）；未用 `Set-Content`。Spec——裁决 1 位置与措辞 ✓；裁决 2 三格 + 指向 ✓；裁决 3 两句追加、原文不动 ✓；裁决 4 GLOSSARY / `internal/` / `migrations/` / `apps/` 零 diff ✓；裁决 5 (1)–(4) 如上 ✓；红线「只补语言不改规则」——新句的三格与 12 裁决 2 逐格同义、无新 outcome / reason 词 ✓。
+
+**判断项（归 CC owner / 推送方）**：
+① **落点保持裁决 1 所定（第 ② 条之后），未挪**：该段只有第 ② 条讲外部资金事实怎样进入税费付款核对，新句限定的正是进入核对的那组维度；其后「当前范围是否需要付款……」起主语转为付款义务与门禁，再往后是门禁与所有权——放在 ② 与 ③ 之间段内逻辑最顺。
+② **UC-CC-009 的「指向 CONTEXT」用了该 UC 既有的 `CC-RULE` 引用键**（「权威依据」表解析到 CONTEXT Rules），而不是新造一条指向中文标题锚点的链接——中文标题含「、」时各渲染器的锚点生成不一致，引用键是这份 UC 自己的指向惯例；若 owner 要直链可后补，不影响判据 (3)。
+③ **UC-CC-008「启动条件」的平行句**（「来源未提供且规则不要求的数量、期限、条件或证据字段明确记录为未提供/不适用；规则要求但缺失时进入未决……」）没有内联指向 CONTEXT——本票只按裁决 2 给 UC-CC-009 加指向，未替 UC-CC-008 补对称的一句；要不要对称归 CC owner，不在本票。
+④ **票 12 第二条 Comment 里「Rules『监管凭证、限制与处置』段监管处置决定条」的判定**：后半「规则要求但缺失时保持未决」在落地前只在 Rules 那一条（Language 监管处置决定词条只有前半），与取证 1 的 grep 一致。
+
 ## Comments
 
 - 2026-09-14 16:0x · 通道 1（接管会话）：立票（sa-cc/12 补评审 ← 通道 3 Standards 非阻断 ①：「建议 CC owner 在 CONTEXT 税费付款核对 Rules 补一句再被引（另立文档票，不改代码）」）。只写票面，未动代码与 `docs/**`。能力边界：`git grep` 核过那句在 CONTEXT 只命中监管处置决定一处、在代码命中 `funds_fact_payer.go` / `reconcile_duty_payment.go` / 其测试三处；`0020` 头注与 HTTP 头注两处按评审原文列入，未逐字重读。
@@ -95,3 +135,4 @@ Blocked by: 无（12 已进 main；要裁的已裁，见「裁决」）
     - **候选 B · 付款人专句**（以票面「要裁的」示例句「付款人由来源提供或按真实程序登记的规则要求；来源未提供时明确记录为未提供，规则要求而未提供时核对保持未决，规则未登记时核对不进行」为量尺；措辞归 owner，字串一变下列命中随之变）：引「规则要求但缺失时保持未决」的 4、6、9 与引全句的 1、3、8、13 共 **7 处要改引文**（示例句里没有「规则要求但缺失」四字连排；不改则 `git grep '规则要求但缺失' -- internal/ migrations/` 继续命中这 7 处而 CONTEXT 里能对上的仍只有监管处置决定条）；引前半「未提供或不适用必须明确记录」的 5、7、11、12 **4 处**：该字串在 CONTEXT 仍逐字存在但落在监管处置决定——要指向付款人专句得改引文，要保留原引文得把归属改成监管处置决定并说明是借句；只引「明确记录」两字的 2、10 **2 处**：示例句含「明确记录为未提供」，引文不必动，归属补词条名即可。票 12 裁决 2 改口那句在 B 下仍是错归属，票面做法 2 已定不改写、追一句。B 另带一个 A 没有的事实：示例句把第三格「规则未登记时核对不进行」一并写进 CONTEXT，而今天 CONTEXT 里「未登记 → 规则未配置 / 保持未决」只在 Rules 放行门禁那一条与 Lifecycles 协作事项条出现，付款人维这一格今天只活在代码 `PayerRequirementNotConfigured` 与票 12 裁决 2。
     - 两候选共有的事实：UC-CC-009「启动条件」那句「来源未提供且程序不要求的维度明确记录，不猜测补齐」已用付款人族的语气写了第二格（不要求 → 记「未提供」），没写第一、第三格；票面完成判据 3「UC-CC-009 若引到这一维，同步指向 CONTEXT 新句」对应的就是这一句所在小节。
   - **能力边界**：全部取证只读 `bccb60a1` 隔离检出，未跑 `go build` / `go test`、未占 55432；引文由 Read 工具逐字取出（本机 PowerShell 管道把 UTF-8 打成乱码，`git grep` 的定位与计数不受影响，但引文一律以 Read 结果为准）；`apps/admin-web` 只 grep 了派单指定的 `src/pages/customs/`，其它目录未查；GLOSSARY 只查了「付款人」「税费付款核对」「外部资金事实」三词与「明确记录」「保持未决」，未通读；未核 ADR-0137 正文对付款人维的措辞；票 03 票面原文未读（只读了 `.scratch/tasks.md` 里的裁决摘录）。不改 Status，不动票面其它字。
+- 2026-09-15 10:1x · 通道 3（task `7d92552e`，`/implement` 无 TDD 纯文档）：认领 `97b05cf8` → 之一 `08eb6d59` → 本笔完成记录；Status resolved，等推送方自审进 main。判据 (1)–(4) 与 13 处清单见「完成记录」。能力边界：只读 `3a21dab7` 隔离树；未跑 `go build` / `go test`（`internal/` `migrations/` 零 diff，无可跑之物）；13 处引文全部 Read 逐字读，8 处非付款人维只以 grep 兑平行数、未重读其归属（沿用取证条）；UC-CC-008、ADR-0137 正文未读。
