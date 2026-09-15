@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
+
+	"go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
 )
 
 // ErrAccessChannelNotConfigured 表示当前没有任何已启用的接入渠道：运营查阅接入面的
@@ -26,10 +28,12 @@ const codeAccessChannelNotConfigured = "ACCESS_CHANNEL_NOT_CONFIGURED"
 //
 // 它不是被禁的「开发用」采信实现——那条红线禁的是采信报文自称的租户号（穿透 ADR-0003
 // 的隔离边界）；本类型恰是其反面，分界同 ADR-0052：「读一个空登记册并如实答未配置
-// 不是默认实现，恰恰是它想保护的东西」，这里的空登记册就是装配点本身。本包只有查阅
-// 端点、没有命令面，故本类型也只实现 CatalogueQueryIntake；将来长出命令 Intake 时
-// 本类型刻意不实现，未配置装不进命令端点由编译期决定。真通道 Intake 就位时在装配点
-// 替换，本类型随之退场，路由层与四个处理器不动（ADR-0055）。
+// 不是默认实现，恰恰是它想保护的东西」，这里的空登记册就是装配点本身。查阅端点与
+// 命令端点的未配置实现都在本类型上：写准入不另立形（ADR-0085 决定二），命令端点在
+// 装配表里同挂字面量 UnconfiguredIntake{} 起步；隔离读放行 IsolatedOperationsReadIntake
+// 刻意不实现命令 Intake，放行装不进命令端点由编译期决定（ADR-0078 隔离读准入不扩到
+// 写行）。真通道 Intake 就位时在装配点替换，本类型随之退场，路由层与各处理器不动
+// （ADR-0055）。
 type UnconfiguredIntake struct{}
 
 var _ CatalogueQueryIntake = UnconfiguredIntake{}
@@ -38,4 +42,26 @@ var _ CatalogueQueryIntake = UnconfiguredIntake{}
 // 只答未配置。未登记前不铸造任何作用域（ADR-0077 Decision 三）。
 func (UnconfiguredIntake) IntakeCatalogueQuery(context.Context, *http.Request) (CatalogueQuery, error) {
 	return CatalogueQuery{}, ErrAccessChannelNotConfigured
+}
+
+// 外部资金事实采用与更正两口的未配置实现（票 sa-cc/31）：与查阅口同一分界——不读业务内容、
+// 不采信自报身份、不构造命令。载荷里的 tenantId 是这一面最危险的自报身份，本类型连解析都不做。
+var (
+	_ ExternalFundsFactRegistrationIntake           = UnconfiguredIntake{}
+	_ ExternalFundsFactCorrectionRegistrationIntake = UnconfiguredIntake{}
+)
+
+// IntakeExternalFundsFactRegistration 不读请求，判据同 IntakeCatalogueQuery。下一个同此。
+func (UnconfiguredIntake) IntakeExternalFundsFactRegistration(
+	context.Context,
+	*http.Request,
+) (application.AdoptFundsFactCommand, error) {
+	return application.AdoptFundsFactCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeExternalFundsFactCorrectionRegistration(
+	context.Context,
+	*http.Request,
+) (application.CorrectFundsFactCommand, error) {
+	return application.CorrectFundsFactCommand{}, ErrAccessChannelNotConfigured
 }

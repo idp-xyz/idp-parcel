@@ -1,7 +1,7 @@
 # SA 外部资金事实采用与更正的在线登记面：`parcel-api` 端点两行 + `settlementhttp` 第一份命令文件 + `UnconfiguredIntake` 长出命令 Intake + 管理台写签两阶段（sa-cc/27 裁决 2 第二步）
 
 Category: enhancement
-Status: ready-for-agent——**2026-09-15 13:3x 通道 3 随 sa-cc/27 完成记录同笔立（27 裁决 7 (7)）**。族别与形已由 27 裁决 1 / 2 定（ADR-0085 读作「算」；入口两者都要、分两步），本票是第二步，没有再要裁的；只写票面未动代码；取证锚分支 `mcp3-sacc27@aa48912e`（基 `bb7268f0`）与 27 取证条（钉 `7160fe67`）
+Status: in-progress——**2026-09-15 15:06 通道 3 认领**（task-cbea007d；分支 `mcp3-sacc31` 基 main `93840328`，隔离树 `%TEMP%\idp-parcel-mcp3-sacc31`；按 /implement 走，判据 3 各格状态码与判据 4 真库先写 red；每个可编译点一笔并推）。此前 ready-for-agent——**2026-09-15 13:3x 通道 3 随 sa-cc/27 完成记录同笔立（27 裁决 7 (7)）**。族别与形已由 27 裁决 1 / 2 定（ADR-0085 读作「算」；入口两者都要、分两步），本票是第二步，没有再要裁的；只写票面未动代码；取证锚分支 `mcp3-sacc27@aa48912e`（基 `bb7268f0`）与 27 取证条（钉 `7160fe67`）
 Blocked by: 无——**27 已进 main（第六批，批 tip `de822820`，2026-09-15 14:4x），本票可派**。此前：27（本笔同时把 27 转 resolved；**开工要等 27 进 main**——端点消费的译装 `adapters/registrationjson`、拒 nil 的 `NewMapExternalFundsHandler` 与真库垂直用例都是 27 落的，在它进 main 前开工会在两条分支上各长一份）
 
 ## 缺口（27 取证条钉 `7160fe67`，本票立票时在 `aa48912e` 复量同形）
