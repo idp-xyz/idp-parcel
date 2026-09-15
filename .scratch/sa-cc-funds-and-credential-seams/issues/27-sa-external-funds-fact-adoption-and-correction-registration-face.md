@@ -1,7 +1,7 @@
 # SA 外部资金事实采用与更正的登记面：`MapExternalFundsHandler` 零生产装配，首版采用与 sa-cc/20 新开的「更正」格今天都只有测试直写能到
 
 Category: enhancement
-Status: ready-for-agent——**2026-09-15 13:2x 通道 1 按用户「代裁」代裁（SA owner 口径），三条「要裁的」写入下方「裁决」节**：入口分两步、本票只做第一步——新二进制 `cmd/parcel-settlement-register`（形照 `parcel-customs-register`）+ 载荷译装放 `internal/settlementaccounting/adapters/registrationjson` 让第二步端点同源；ADR-0085 读作「算」——SA 采用 / 更正是登记事实写面、与 CC 协作 / 核对同族，端点 + 管理台写签拆后继票；`NewMapExternalFundsHandler` 单只改成构造期拒 nil（照 sa-cc/16 形），六口装配处全接真。此前 draft——2026-09-15 10:3x 通道 6 立票（sa-cc/20 裁决 2「更正面与首版面是同一张『SA 采用登记面』的题……本票作者顺手立一张 draft」；归 SA owner）。只写票面未动代码；取证锚 main `3a21dab7` 与分支 `mcp6-sacc20`
+Status: ready-for-agent——**2026-09-15 12:5x 通道 1 按用户「代裁」代裁（SA owner 口径），三条「要裁的」写入下方「裁决」节**：入口分两步、本票只做第一步——新二进制 `cmd/parcel-settlement-register`（形照 `parcel-customs-register`）+ 载荷译装放 `internal/settlementaccounting/adapters/registrationjson` 让第二步端点同源；ADR-0085 读作「算」——SA 采用 / 更正是登记事实写面、与 CC 协作 / 核对同族，端点 + 管理台写签拆后继票；`NewMapExternalFundsHandler` 单只改成构造期拒 nil（照 sa-cc/16 形），六口装配处全接真。此前 draft——2026-09-15 10:3x 通道 6 立票（sa-cc/20 裁决 2「更正面与首版面是同一张『SA 采用登记面』的题……本票作者顺手立一张 draft」；归 SA owner）。只写票面未动代码；取证锚 main `3a21dab7` 与分支 `mcp6-sacc20`
 Blocked by: 无（20 已进 main `1e74aaaf`；取证 ← 通道 5 已落 Comments，钉 `7160fe67`）
 
 ## 缺口（取证于 `3a21dab7`，逐符号名；sa-cc/20 通道 5 取证条与通道 6 认领笔各量过一遍）
@@ -49,7 +49,7 @@ Blocked by: 无（20 已进 main `1e74aaaf`；取证 ← 通道 5 已落 Comment
 2. ADR-0085 决定四怎么读：SA 的采用与更正算不算「登记册配置写面」这一族（它登的是外部事实的引用，不是配置）；若不算，写面的准入与管理台归属另裁——归 SA owner。
 3. `FactHandoff` 漏装即 panic 的装配纪律：构造期拒 nil 是不是 SA 全部 handler 的统一形（16 已给 `NewRequestBuyEvaluationHandler` 做过一处）——归 SA owner。
 
-## 裁决（2026-09-15 13:2x 通道 1 按用户「代裁」代裁，SA owner 口径；依据是通道 5 12:2x 取证条，钉 `7160fe67`；本票代码取证锚 main `e1ab9fb5`）
+## 裁决（2026-09-15 12:5x 通道 1 按用户「代裁」代裁，SA owner 口径；依据是通道 5 12:2x 取证条，钉 `7160fe67`；本票代码取证锚 main `e1ab9fb5`）
 
 1. **要裁的 2 先裁——ADR-0085 读作「算」：SA 的采用与更正是登记事实写面，与 CC 协作事项 / 付款核对同族。** 判据不是「配置 vs 事实」这条 ADR 自己没画的边，而是 ADR-0085 Context 治的那个病：「尚未接线」与「已接线但登记册为空 / 渠道未配置」长同一张脸——SA 采用口今天正是这张脸（ADR-0137 决定四把它定为唯一入口，而它零生产装配）。先例已把决定一用到了非配置的登记事实上（CC `register_credential_and_duty.go` 头注引 Decision 一，sa-cc/07 步二）；UC-SA-005 的操作者是「结算运营、财务集成责任方」、触发含「人工复核请求」——租户的人，不是能进数据库网络的工程师，正落在 ADR-0085 Alternatives 否决「写面长期只走 CLI」的理由上。读作「不算」要另写一句准入与管理台归属的裁决或 ADR，而两种读法依赖的是同一句 UC 文本，不值得为此开第二套口径。
 2. **要裁的 1——入口两者都要，分两步；本票只做第一步：CLI + 共同的底 + 同源译装。** 第一步：新建 `cmd/parcel-settlement-register/`（形照 `cmd/parcel-customs-register/{main.go, translate.go}`：`run(ctx, args, getenv, out, errOut) int`、子命令名作第一参数、唯一 flag `-input <file>`、未知字段一律拒绝、DSN 只从 `IDP_PARCEL_POSTGRES_DSN` 取、退出码按 ADR-0029 恢复动作四格、`buildRegistrar(db)`、`systemClock{}`），命令表两条——`external-funds-fact`（首版，`application.AdoptFundsFactCommand`）与 `external-funds-fact-correction`（更正，`application.CorrectFundsFactCommand`）；两条是两个类型两条方法，不共享入口（代码事实照收）。载荷 → 命令的译装放 `internal/settlementaccounting/adapters/registrationjson`（照 CC 分家理由：第二步端点收同源载荷）。**第二步拆后继票**（SA owner 口径，与 CC 07 步二同形）：`internal/settlementaccounting/adapters/http` 第一份命令文件（两 Intake + 两 Registrar + `MethodPost` 端点体 + 封闭响应）、`cmd/parcel-api/assemble_settlement_registration.go`、`endpoints.go` 两行 `UnconfiguredIntake{}` 起步、`UnconfiguredIntake` 加两方法并改写头注「将来长出命令 Intake 时本类型刻意不实现」那句（`IsolatedOperationsReadIntake` 的同句原样成立、编译期排除保持）、`apps/admin-web` 写签两阶段（ADR-0085 决定三三态）。**为什么分两步**：第二步碰共享接线文件与管理台，地盘三倍于第一步，而两步共用的东西（命令、`FundsOutcome` 代数、译装、事务壳、真库用例）全在第一步；先把「唯一入口零装配」这张脸撕掉，再长在线面。**不是**「长期只走 CLI」——后继票随本票完成记录立 ready，不立 draft。

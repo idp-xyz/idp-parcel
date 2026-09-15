@@ -1,7 +1,7 @@
 # CC 三只交接信封的 ID 是「租户 / 类型 / 范围 / 税费 / 资金 / 64 位指纹」串接，真长度引用下超过框架信封 ID 上限、`EnqueueOnce` 拒收；而 `handOffVerification` 把交接失败折成续办引用、核对不翻，重派路上那个续办引用无人读——核对行提交、信封没发、消费入账成功、无人知道
 
 Category: bug
-Status: ready-for-agent——**2026-09-15 13:2x 通道 1 按用户「代裁」代裁（CC owner 口径），四条「要裁的」写入下方「裁决」节**：三只 `*EventID` 一次同改成定长指纹形（固定口名前缀 + `sha256` 十六进制，必在 `eventing.MaxEventIDLength` 内），载荷五维全量照旧；重派路上交接失败不再折成续办引用——依赖不可用归未决重投、信封不合法归硬失败，两格都整笔回滚；人重核路 05 的兜底本票不动；SA 侧靠采用登记册五维主键守幂等、真库用例钉住。上限已量实：`go.idp.xyz/idp-bento-go/eventing` `MaxEventIDLength = 128`，`Envelope.Validate` 对 `id` 查非空 / UTF-8 / 无控制符 / ≤ 128 字节。此前 draft——2026-09-15 13:0x 通道 1 立票（sa-cc/19 评审 ← 通道 6 Spec ② + 19 完成记录判断项 ③ ④ 转记；原作者会话 11:1x 广播量到 138 字节被拒是第一手）。只写票面未动代码；取证锚 main `36fb5437`
+Status: ready-for-agent——**2026-09-15 12:5x 通道 1 按用户「代裁」代裁（CC owner 口径），四条「要裁的」写入下方「裁决」节**：三只 `*EventID` 一次同改成定长指纹形（固定口名前缀 + `sha256` 十六进制，必在 `eventing.MaxEventIDLength` 内），载荷五维全量照旧；重派路上交接失败不再折成续办引用——依赖不可用归未决重投、信封不合法归硬失败，两格都整笔回滚；人重核路 05 的兜底本票不动；SA 侧靠采用登记册五维主键守幂等、真库用例钉住。上限已量实：`go.idp.xyz/idp-bento-go/eventing` `MaxEventIDLength = 128`，`Envelope.Validate` 对 `id` 查非空 / UTF-8 / 无控制符 / ≤ 128 字节。此前 draft——2026-09-15 12:4x 通道 1 立票（sa-cc/19 评审 ← 通道 6 Spec ② + 19 完成记录判断项 ③ ④ 转记；原作者会话 11:1x 广播量到 138 字节被拒是第一手）。只写票面未动代码；取证锚 main `36fb5437`
 Blocked by: 无（[19](19-cc-new-funds-fact-version-forms-a-new-verification-version.md) 已进 main `49ffc96c`；本票是它量出来的、不归它重裁的那一件）
 
 ## 缺口（取证于 `36fb5437`，逐符号名）
@@ -55,7 +55,7 @@ CC `CONTEXT.md` 集成规则：核对形成后交 `settlement-accounting` 采用
 3. **人重核路的既有兜底**（`handOffVerification` 吞错留续办引用）是否随 2 同改——它是 05 定的形，改它要在 05 票面留一句。
 4. **SA 消费门去重**若依赖信封 ID，换形对「同一核对在换形前后各发一封」怎么处置。
 
-## 裁决（2026-09-15 13:2x 通道 1 按用户「代裁」代裁，CC owner 口径；依据是 19 评审 Spec ②、19 完成记录判断项 ③ ④、本票缺口节，外加本次量实的框架上限，钉 `e1ab9fb5`）
+## 裁决（2026-09-15 12:5x 通道 1 按用户「代裁」代裁，CC owner 口径；依据是 19 评审 Spec ②、19 完成记录判断项 ③ ④、本票缺口节，外加本次量实的框架上限，钉 `e1ab9fb5`）
 
 0. **上限量实**（补缺口节「没读」那一格）：`go.idp.xyz/idp-bento-go@v0.1.0-rc.2` `eventing/types.go` `MaxEventIDLength = 128`（同表 `MaxSubjectLength` / `MaxPartitionKeyLength` = 512、`MaxFailureCodeLength` = 128）；`eventing/envelope.go` `Envelope.Validate` 对 `id` 走 `validateString`：非空、合法 UTF-8、无控制符、`len(value) > max` → `invalidEnvelope("id exceeds 128 bytes")`。校验在信封构造 / 入队时发生，是**确定性**失败——同一份输入重投永远同一个结果。
 1. **要裁的 1——指纹化，三只一次同改。** ID = 固定口名前缀 + `sha256(租户 / 范围 / 税费 / 资金 / 指纹)` 的十六进制（前缀由本仓写死、哈希定长，总长必在 128 内——这是唯一一条不依赖实例半边长度就能保证的路）；三只 `dutyPaymentVerificationEventID` / `gateVerificationEventID` / `verificationEventID` 抽成一个 helper 同形同改——留两只带同一个潜伏缺口等于让「同一张脸」再长两回。**为什么不缩短、不前移校验**：缩短的「够短」取决于租户与范围引用的真长度，那是实例半边，只能给上界不能给保证；前移校验把框架限制变成 CC 的业务结果格、对已落库的核对无效，且治的仍是「够短」而非「必短」。载荷 `dutyPaymentVerificationPayload` 五维全量照旧——运维从 ID 反查走载荷，`Subject`（今天 `范围 / 税费`）与 `PartitionKey`（`租户 / 口名段 / 范围`）保留可读形不新增字段；两者上限 512，作者按 `TenantID` / `DecisionScopeReference` 构造门的限长量「能不能超」，能则同法取哈希（分区键哈希不改「同范围同分区」的顺序语义），不能则写进判断项。
@@ -72,4 +72,4 @@ CC `CONTEXT.md` 集成规则：核对形成后交 `settlement-accounting` 采用
 
 ## Comments
 
-- 2026-09-15 13:0x · 通道 1：立票（19 评审 Spec ② 与判断项 ③ ④ 转记，推送方处置时点名「归 CC owner 立票」）。只写票面，未动代码。**能力边界**：读了 `dutyPaymentVerificationEventID` / `handOffVerification` 的续办引用一行、`dispatcher.go` 失败码头注、19 评审与完成记录；**没读**框架 eventing 的 ID 长度校验源码（上限值与符号名以 19 原作者实测转记，作者开工第一步先量）、SA 消费门去重实现、三只 handoff 文件正文。
+- 2026-09-15 12:4x · 通道 1：立票（19 评审 Spec ② 与判断项 ③ ④ 转记，推送方处置时点名「归 CC owner 立票」）。只写票面，未动代码。**能力边界**：读了 `dutyPaymentVerificationEventID` / `handOffVerification` 的续办引用一行、`dispatcher.go` 失败码头注、19 评审与完成记录；**没读**框架 eventing 的 ID 长度校验源码（上限值与符号名以 19 原作者实测转记，作者开工第一步先量）、SA 消费门去重实现、三只 handoff 文件正文。

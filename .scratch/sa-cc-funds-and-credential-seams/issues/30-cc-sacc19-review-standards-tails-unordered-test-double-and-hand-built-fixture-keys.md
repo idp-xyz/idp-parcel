@@ -1,7 +1,7 @@
 # sa-cc/19 评审 Standards 尾巴：适配器测试替身 `rederiveStores.ListVerificationsByFundsFact` 遍历 map 交回、不守端口口径「核对时刻升序、同刻按指纹字典序」；`duty_registers_test.go` 两处 seed 手拼 `tenant + "/" + fact + "/" + version` 不走同文件的 `fundsVersionKey`
 
 Category: chore
-Status: ready-for-agent——2026-09-15 13:0x 通道 1 立票（sa-cc/19 非作者评审 ← 通道 6 Standards 非阻断 ① ②，推送方处置「合一张 A 类零行为尾巴」）。只测试文件，零生产改动
+Status: ready-for-agent——2026-09-15 12:4x 通道 1 立票（sa-cc/19 非作者评审 ← 通道 6 Standards 非阻断 ① ②，推送方处置「合一张 A 类零行为尾巴」）。只测试文件，零生产改动
 Blocked by: 无（sa-cc/19 已进 main `49ffc96c`）
 
 ## 缺口（评审钉 `a0cb6fef`，进 main 后在 `07341b8b` 同形）
@@ -38,4 +38,4 @@ Blocked by: 无（sa-cc/19 已进 main `49ffc96c`）
 
 ## Comments
 
-- 2026-09-15 13:0x · 通道 1：立票（评审尾巴，推送方处置时点名）。只写票面，未动代码。
+- 2026-09-15 12:4x · 通道 1：立票（评审尾巴，推送方处置时点名）。只写票面，未动代码。
