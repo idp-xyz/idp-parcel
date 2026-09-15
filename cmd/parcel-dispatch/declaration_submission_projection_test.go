@@ -18,8 +18,9 @@ import (
 // 本文件证 CONS-PROJ-DECL-B：CC 申报提交版本形成只投 VE 投影，不 FanOut 给 PS。
 // 一封信带全体成员，消费侧按成员循环拆分（ADR-0066）；映射目录未配置必须未归类
 // 入账，整封仍定稿。成员维进事实引用（引用跨版本稳定）、提交版本进版本维——这是
-// 本消费面第一个真版本维。形成无语义分支，单一事实类型。不种 PAR-VIS-01，不登记
-// tracking-projection.derived。
+// 本消费面第一个真版本维。形成无语义分支，单一事实类型。不种 PAR-VIS-01；派生信封
+// tracking-projection.derived 由生产 wireDispatcher 登记进客户视图链（WIRE-CUSTOMER-VIEW），
+// 本文件不为测试另装订阅者——它们在下一拍定稿，数拍内 published 时要把它们算进去。
 
 const (
 	deriveDeclarationSubmissionConsumerName = "visibility-exception/derive-projection-from-declaration-submission"
@@ -53,6 +54,47 @@ func TestAFormedDeclarationSubmissionDerivesAProjectionPerMemberAndPublishes(t *
 	if n := fixture.countInbox(t, deriveDeclarationSubmissionConsumerName, eventID); n != 1 {
 		t.Fatalf("VE inbox 行数 = %d, want 1", n)
 	}
+}
+
+// Covers: 票 sa-cc/34 裁决 5 / 判据 (4)——同一提交版本事实以两个不同的信封 ID 各投一封（指纹形与 `760332c7` 上的
+// 四维串接形），Inbox 门按 ID 放行第二封，VE 幂等靠 ports.FactKey + 内容摘要：两封各自 PUBLISHED、两行 inbox、成员
+// 投影仍各一条、派生信封仍只有首封那两封。「两封都定稿、派生信封不增」即第二封在 DeriveProjectionHandler 里答了
+// FactExistingResult（理由与两拍各定稿什么见案件那格）。
+func TestTheSameDeclarationSubmissionUnderTwoEnvelopeIDsDerivesOnce(t *testing.T) {
+	fixture := newSYNVerticalFixture(t)
+	ctx := t.Context()
+
+	fingerprintID := recordFormedDeclarationSubmission(t, fixture)
+	concatenatedID := fixture.identity.TenantID().String() + "/" + declarationSubmissionUnit + "/" +
+		declarationSubmissionProcedure + "/" + declarationSubmissionVersion
+	reissueUnderAnotherEnvelopeID(t, fixture, fingerprintID, concatenatedID)
+
+	// 两封同分区、分区一次只放一个头，所以要两拍；第 2 拍定稿的是重发那封加第 1 拍入队的两封派生信封，拍内 published
+	// 因此只弱断，定稿与否按两封各自的 status 断。
+	for beat := 1; beat <= 2; beat++ {
+		published, err := fixture.beat.DispatchOnce(ctx)
+		if err != nil {
+			t.Fatalf("第 %d 拍：%v", beat, err)
+		}
+		if published < 1 {
+			t.Fatalf("第 %d 拍一封都没定稿；失败码 = %q / %q", beat,
+				recordedFailureCode(t, fixture.db, fingerprintID), recordedFailureCode(t, fixture.db, concatenatedID))
+		}
+	}
+	for _, id := range []string{fingerprintID, concatenatedID} {
+		if status := outboxStatus(t, fixture.db, id); status != "PUBLISHED" {
+			t.Fatalf("两封都该定稿：%s 的 status = %q, want PUBLISHED；失败码 = %q",
+				id, status, recordedFailureCode(t, fixture.db, id))
+		}
+		if n := fixture.countInbox(t, deriveDeclarationSubmissionConsumerName, id); n != 1 {
+			t.Fatalf("Inbox 门该按 ID 放行每一封：%s 的 inbox 行数 = %d, want 1", id, n)
+		}
+	}
+	if n := fixture.countOutboxOfType(t, trackingProjectionDerivedType); n != 2 {
+		t.Fatalf("派生信封 = %d, want 2（首封每成员一封；第二封同键同摘要不得再派生）", n)
+	}
+	assertUnclassifiedSubmissionProjection(t, fixture, declarationSubmissionMemberOne)
+	assertUnclassifiedSubmissionProjection(t, fixture, declarationSubmissionMemberTwo)
 }
 
 // recordFormedDeclarationSubmission 站在 CC 侧经领域真路径固定一份双成员提交版本并把

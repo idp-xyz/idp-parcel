@@ -5,11 +5,14 @@ import (
 	"testing"
 	"time"
 
+	"go.idp.xyz/idp-bento-go/eventing"
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	ccdomain "go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	ccports "go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	vepostgres "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
 	vedomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
@@ -18,7 +21,8 @@ import (
 // 本文件证 CONS-PROJ-CC-CASE-B：CC 关务案件建立只投 VE 投影，不 FanOut 给 PS。
 // 一封信带全体成员关联，消费侧按成员循环拆分（ADR-0066）；映射目录未配置必须未归类
 // 入账，整封仍定稿。成员维与案件维一并进事实引用；建立无语义分支，单一事实类型。
-// 不种 PAR-VIS-01，不登记 tracking-projection.derived。
+// 不种 PAR-VIS-01；派生信封 tracking-projection.derived 由生产 wireDispatcher 登记进客户视图链
+// （WIRE-CUSTOMER-VIEW），本文件不为测试另装订阅者——它们在下一拍定稿，数拍内 published 时要把它们算进去。
 
 const (
 	deriveCustomsCaseConsumerName = "visibility-exception/derive-projection-from-customs-case"
@@ -52,6 +56,104 @@ func TestAnEstablishedCustomsCaseDerivesAProjectionPerParcelAndPublishes(t *test
 	if n := fixture.countInbox(t, deriveCustomsCaseConsumerName, eventID); n != 1 {
 		t.Fatalf("VE inbox 行数 = %d, want 1", n)
 	}
+}
+
+// Covers: 票 sa-cc/34 裁决 5 / 判据 (4)——同一案件事实以两个不同的信封 ID 各投一封（换形前后各一份：指纹形与
+// `760332c7` 上的五维串接形），Inbox 门按 ID 放行第二封，VE 的幂等靠 ports.FactKey + 内容摘要而不靠信封 ID：
+// 两封各自 PUBLISHED、两行 inbox，成员投影仍各一条，派生信封仍只有首封那两封。第二封在 DeriveProjectionHandler 里
+// 只剩 FactExistingResult 一条路——派生了会多一条 entry 并多入队一封派生信封，同键异摘要才是冲突而两封内容同源，
+// 未接受与首封矛盾——所以「两封都定稿、派生信封不增」就是它的可观测证据。
+func TestTheSameCustomsCaseUnderTwoEnvelopeIDsDerivesOnce(t *testing.T) {
+	fixture := newSYNVerticalFixture(t)
+	ctx := t.Context()
+
+	fingerprintID := recordEstablishedCustomsCase(t, fixture)
+	tenant := fixture.identity.TenantID().String()
+	concatenatedID := tenant + "/" + customsCaseJurisdiction + "/" +
+		ccdomain.ImportManifest.String() + "/" + customsCaseProcedure + "/" + customsCaseObligation
+	reissueUnderAnotherEnvelopeID(t, fixture, fingerprintID, concatenatedID)
+
+	// 两封同分区、分区一次只放一个头，所以要两拍。第 1 拍定稿指纹形那封，VE 派生两条成员投影并各入队一封派生
+	// 信封；第 2 拍定稿的是重发的串接形那封加那两封派生信封（客户视图链接住它们，WIRE-CUSTOMER-VIEW）。所以拍内
+	// published 不是本票的判据——它把派生信封与要证的两封混在一起数；每拍只弱断「定稿了东西」，定稿与否按两封各自的
+	// status 断。
+	for beat := 1; beat <= 2; beat++ {
+		published, err := fixture.beat.DispatchOnce(ctx)
+		if err != nil {
+			t.Fatalf("第 %d 拍：%v", beat, err)
+		}
+		if published < 1 {
+			t.Fatalf("第 %d 拍一封都没定稿；失败码 = %q / %q", beat,
+				recordedFailureCode(t, fixture.db, fingerprintID), recordedFailureCode(t, fixture.db, concatenatedID))
+		}
+	}
+	for _, id := range []string{fingerprintID, concatenatedID} {
+		if status := outboxStatus(t, fixture.db, id); status != "PUBLISHED" {
+			t.Fatalf("两封都该定稿：%s 的 status = %q, want PUBLISHED；失败码 = %q",
+				id, status, recordedFailureCode(t, fixture.db, id))
+		}
+		if n := fixture.countInbox(t, deriveCustomsCaseConsumerName, id); n != 1 {
+			t.Fatalf("Inbox 门该按 ID 放行每一封：%s 的 inbox 行数 = %d, want 1", id, n)
+		}
+	}
+	// 派生信封只有首封每成员一封：第二封若没答 FactExistingResult 而重新派生，这里会多出两封。
+	if n := fixture.countOutboxOfType(t, trackingProjectionDerivedType); n != 2 {
+		t.Fatalf("派生信封 = %d, want 2（首封每成员一封；第二封同键同摘要不得再派生）", n)
+	}
+	assertUnclassifiedCaseProjection(t, fixture, customsCaseMemberOne)
+	assertUnclassifiedCaseProjection(t, fixture, customsCaseMemberTwo)
+}
+
+// outboxStatus 读回一封信在 outbox 里的定稿状态。本票的两封与它们引出的派生信封同拍定稿，拍内 published 数不出
+// 「哪一封」，只有按 event_id 查 status 才分得开——与 recordedFailureCode 同一读法，一个看成、一个看败。
+func outboxStatus(t *testing.T, db *bentopg.DB, eventID string) string {
+	t.Helper()
+	querier, err := db.ReadExecutor(t.Context())
+	if err != nil {
+		t.Fatalf("取读执行器：%v", err)
+	}
+	var status string
+	if err := querier.QueryRow(t.Context(),
+		`SELECT status FROM `+migrate.SchemaBento+`.outbox WHERE event_id = $1`, eventID,
+	).Scan(&status); err != nil {
+		t.Fatalf("读回 %s 的 status：%v", eventID, err)
+	}
+	return status
+}
+
+// reissueUnderAnotherEnvelopeID 把 outbox 里某封信原样再入队一份、只换信封 ID——模拟换形前后同一事实各发一封。
+// 从库里读回而不在测试里重拼载荷：证的是「同一份内容」，拼一份第二形的载荷只会证测试自己。
+func reissueUnderAnotherEnvelopeID(t *testing.T, fixture *synVerticalFixture, eventID, otherID string) {
+	t.Helper()
+	querier, err := fixture.db.ReadExecutor(t.Context())
+	if err != nil {
+		t.Fatalf("取读执行器：%v", err)
+	}
+	envelope := eventing.Envelope{ID: eventing.EventID(otherID)}
+	var (
+		eventType string
+		version   int64
+		payload   []byte
+	)
+	if err := querier.QueryRow(t.Context(),
+		`SELECT source, spec_version, event_type, event_version, scope, subject, partition_key,
+		        occurred_at, recorded_at, content_type, payload
+		   FROM `+migrate.SchemaBento+`.outbox WHERE event_id = $1`, eventID,
+	).Scan(&envelope.Source, &envelope.SpecVersion, &eventType, &version, &envelope.Scope, &envelope.Subject,
+		&envelope.PartitionKey, &envelope.OccurredAt, &envelope.RecordedAt, &envelope.ContentType, &payload,
+	); err != nil {
+		t.Fatalf("读回信封 %s：%v", eventID, err)
+	}
+	envelope.Type = eventing.EventType(eventType)
+	envelope.Version = eventing.EventVersion(version)
+	envelope.Payload = payload
+	store, err := outbox.NewStore(fixture.db)
+	if err != nil {
+		t.Fatalf("构造 Outbox Store：%v", err)
+	}
+	mustWithinTX(t, fixture.transactor, t.Context(), func(txCtx context.Context) error {
+		return store.Enqueue(txCtx, envelope)
+	})
 }
 
 // recordEstablishedCustomsCase 站在 CC 侧建一份双包裹案件并把意图入队——信封只带
