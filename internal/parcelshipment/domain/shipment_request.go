@@ -318,6 +318,20 @@ func (request ShipmentRequest) CurrentSubmissionVersion() SubmissionVersion {
 	return request.currentVersion
 }
 
+// submissionVersionByID 在当前版本与历史版本里找某一版提交版本——接受基线所指的那一版就这么取。找不到是读面坏了：
+// 基线只在本委托自己的版本上固定。
+func (request ShipmentRequest) submissionVersionByID(versionID SubmissionVersionID) (SubmissionVersion, bool) {
+	if request.currentVersion.versionID == versionID {
+		return request.currentVersion, true
+	}
+	for _, prior := range request.priorVersions {
+		if prior.versionID == versionID {
+			return prior, true
+		}
+	}
+	return SubmissionVersion{}, false
+}
+
 func (request ShipmentRequest) AcceptanceDecisionTask() AcceptanceDecisionTask {
 	return request.acceptanceTask
 }

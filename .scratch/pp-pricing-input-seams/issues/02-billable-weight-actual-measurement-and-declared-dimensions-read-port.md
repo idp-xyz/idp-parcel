@@ -1,7 +1,7 @@
 # 计价重量要的实重 / 尺寸两源都没有读口：`node-operations` 今天没有实际测量的领域对象、登记册与迁移，`parcel-shipment` 的申报重量 / 尺寸只在授权作用域的查阅面上——`parcel-pricing` 造快照的「实重 + 尺寸」一格指不到
 
 Category: enhancement
-Status: ready-for-agent（**PS 半边**）——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（NO·PS owner 口径），四条「要裁的」写入下方「裁决」节**：**拆两半**——本票收成 PS「申报重量 / 尺寸只读口」（事实已在库上，锚法照收件地点引用）；NO 半边（实际测量登记册 + 仍有效实测只读口，今天连登记册都没有）拆成本目录新票 [04](04-no-actual-measurement-registry-and-valid-measurements-read-port.md)，由 NO 半边作者自立；两源并存按谁是**机制规则**写进 PP CONTEXT、落在 PP 消费侧票，不在提供方两票。此前 draft——2026-09-14 21:1x 通道 3 立票（sa-cc/11 裁决 4 量「计费重量指不到」的提供方半边；task-620bc8e7，通道 1 派单）。只写票面未动代码；取证锚 main `db480695`
+Status: in-progress（**PS 半边**）——**2026-09-15 10:2x 通道 5 认领**（task-9cc0b1a6；分支 `mcp5-ppseams02-03` 基 main `3a21dab7`，与 [03](03-ps-origin-destination-postal-route-read-port.md) 同分支两笔、02 先落）。此前 ready-for-agent（PS 半边）——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（NO·PS owner 口径），四条「要裁的」写入下方「裁决」节**：**拆两半**——本票收成 PS「申报重量 / 尺寸只读口」（事实已在库上，锚法照收件地点引用）；NO 半边（实际测量登记册 + 仍有效实测只读口，今天连登记册都没有）拆成本目录新票 [04](04-no-actual-measurement-registry-and-valid-measurements-read-port.md)，由 NO 半边作者自立；两源并存按谁是**机制规则**写进 PP CONTEXT、落在 PP 消费侧票，不在提供方两票。此前 draft——2026-09-14 21:1x 通道 3 立票（sa-cc/11 裁决 4 量「计费重量指不到」的提供方半边；task-620bc8e7，通道 1 派单）。只写票面未动代码；取证锚 main `db480695`
 Blocked by: 无（sa-cc/11 已进 main 2026-09-14 20:4x；本票是它点名的第二只读口的 PS 半边；NO 半边在 04，两半互不阻）
 
 **用词**：派单与 sa-cc/11 写「计费重量」。GLOSSARY「计费重量」两词条（客户 / 供应商）归 `settlement-accounting` 的财务采用，「计价重量」归 `parcel-pricing`（评价内从实重与体积重派生），「当前有效实测」归 `node-operations`。快照要的是**原始量**——实重与尺寸——本票只写「实重 / 尺寸」，两侧提供方也只给原始量。这一条不是要裁的，GLOSSARY 已定。

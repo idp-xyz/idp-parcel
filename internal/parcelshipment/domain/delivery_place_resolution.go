@@ -1,6 +1,9 @@
 package domain
 
-import "fmt"
+import (
+	"errors"
+	"fmt"
+)
 
 // DeliveryPlaceOutcome 是「收件地点引用」读口的封闭四格（ADR-0130 决定二；PS CONTEXT Rules「收件地点引用
 // 按（租户，包裹身份）答」那条）。前两格带引用，后两格不带。
@@ -102,25 +105,21 @@ func (request ShipmentRequest) DeliveryPlaceReferenceFor(parcel DeclaredParcelID
 		return DeliveryPlaceResolution{}, fmt.Errorf("delivery place reference: %w", err)
 	}
 
-	anchor := NewAcceptanceBaselineAnchor()
-	if judgment, derived := request.CurrentSourceDataAdoption(scope); derived {
-		switch judgment.Outcome() {
-		case SourceDataAdopted:
-			adopted, _ := judgment.AdoptedVersion()
-			if anchor, err = NewSourceDataVersionAnchor(adopted); err != nil {
-				return DeliveryPlaceResolution{}, fmt.Errorf("delivery place reference: %w", err)
-			}
-		case SourceDataAwaitingReview:
-			return DeliveryPlaceUndeterminedResolution(), nil
-		default:
-			// 采用判断长出本方法不认识的取值时不猜一格：CONTEXT 的封闭集合还有三项没有产生规则，
-			// 它们落地那天要在这里各配一格，而不是被默认成基线锚。
-			return DeliveryPlaceResolution{}, fmt.Errorf("%w: 采用判断 %q 没有对应的收件地点答法", ErrInvalidDeliveryPlaceReference, judgment.Outcome())
+	// 锚由共用内部步骤解析（resolveSourceDataAnchor）；采用判断长出不认识的取值时它不猜一格，本方法把那一错
+	// 仍归在 ErrInvalidDeliveryPlaceReference 名下——四格的错误面对持引用方不变。
+	resolved, err := request.resolveSourceDataAnchor(scope)
+	if err != nil {
+		if errors.Is(err, ErrUnanchoredSourceDataAdoption) {
+			return DeliveryPlaceResolution{}, fmt.Errorf("%w: %v 没有对应的收件地点答法", ErrInvalidDeliveryPlaceReference, err)
 		}
+		return DeliveryPlaceResolution{}, fmt.Errorf("delivery place reference: %w", err)
+	}
+	if resolved.undetermined {
+		return DeliveryPlaceUndeterminedResolution(), nil
 	}
 
 	tenant := request.currentVersion.SourceSubmission().Identity().TenantID()
-	reference, err := NewDeliveryPlaceReference(tenant, scope, anchor)
+	reference, err := NewDeliveryPlaceReference(tenant, scope, resolved.anchor)
 	if err != nil {
 		return DeliveryPlaceResolution{}, fmt.Errorf("delivery place reference: %w", err)
 	}
