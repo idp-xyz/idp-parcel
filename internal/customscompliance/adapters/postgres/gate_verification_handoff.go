@@ -56,9 +56,9 @@ type gateVerificationPayload struct {
 // gateVerificationEventIDPort 是本口在信封 ID 上的口名前缀。
 const gateVerificationEventIDPort = "gate-verification"
 
-// gateVerificationEventID 把门禁幂等键五维折成 fingerprintEventID 的定长形（票 sa-cc/29 裁决 1：三只核对口同改）。
-func gateVerificationEventID(key ports.GateVerificationKey) string {
-	return fingerprintEventID(gateVerificationEventIDPort,
+// gateVerificationEventID 把门禁幂等键五维折成 outboxintent.FingerprintEventID 的定长形（票 sa-cc/29 裁决 1：三只核对口同改）。
+func gateVerificationEventID(key ports.GateVerificationKey) eventing.EventID {
+	return outboxintent.FingerprintEventID(gateVerificationEventIDPort,
 		key.TenantID.String(), key.Scope.String(), key.Action.String(), key.Boundary.String(), key.Digest)
 }
 
@@ -102,7 +102,7 @@ func (handoff *OutboxGateVerificationHandoff) HandOffGate(
 	eventID := gateVerificationEventID(key)
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(eventID),
+		ID:           eventID,
 		Source:       ccEventSource,
 		Type:         gateVerificationEventType,
 		Version:      1,

@@ -77,11 +77,11 @@ func dutyPaymentVerificationPartitionKey(key ports.DutyVerificationKey) string {
 // dutyPaymentVerificationEventIDPort 是本口在信封 ID 上的口名前缀，与分区键里的口名段同词。
 const dutyPaymentVerificationEventIDPort = "duty-payment-verification"
 
-// dutyPaymentVerificationEventID 把幂等键五维（租户、范围、税费、资金、版本指纹）折成 fingerprintEventID 的定长形：
-// 同一范围的每一版核对各自一封，第二版不被 outboxintent.EnqueueOnce 的先查后插当成首版的重放静默吞掉；五维全进
-// 哈希，少一维就有两版同 ID。
-func dutyPaymentVerificationEventID(key ports.DutyVerificationKey) string {
-	return fingerprintEventID(dutyPaymentVerificationEventIDPort,
+// dutyPaymentVerificationEventID 把幂等键五维（租户、范围、税费、资金、版本指纹）折成 outboxintent.FingerprintEventID
+// 的定长形：同一范围的每一版核对各自一封，第二版不被 outboxintent.EnqueueOnce 的先查后插当成首版的重放静默吞掉；
+// 五维全进哈希，少一维就有两版同 ID。
+func dutyPaymentVerificationEventID(key ports.DutyVerificationKey) eventing.EventID {
+	return outboxintent.FingerprintEventID(dutyPaymentVerificationEventIDPort,
 		key.TenantID.String(), key.Scope.String(), key.Duty.String(), key.Funds.String(), key.Digest)
 }
 
@@ -118,7 +118,7 @@ func (handoff *OutboxDutyPaymentVerificationHandoff) HandOffDutyPaymentVerificat
 	partitionKey := dutyPaymentVerificationPartitionKey(key)
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(eventID),
+		ID:           eventID,
 		Source:       ccEventSource,
 		Type:         dutyPaymentVerificationEventType,
 		Version:      1,
