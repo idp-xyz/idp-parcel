@@ -1,13 +1,15 @@
 // 本文件是 settlement-accounting 上下文的 fetch 出口：费用与计费、对账单、收付款核销、
-// 经营核算四页共四个查阅端点（票 admin-skeleton-closure-batch/04）。形状以
-// internal/settlementaccounting/adapters/http 下四个 query_settlement_* 为准，此处只做
-// 镜像不虚构。传输与五格判读收敛在共享 catalogue-api，本文件只保留本上下文的类型与查询函数。
+// 经营核算四页共四个查阅端点（票 admin-skeleton-closure-batch/04），加收付款核销页登记签
+// 的两个登记端点（票 sa-cc/31）。形状以 internal/settlementaccounting/adapters/http 下四个
+// query_settlement_* 与 register_external_funds_fact 为准，此处只做镜像不虚构。传输与五格判读
+// 收敛在共享 catalogue-api，本文件只保留本上下文的类型与查询 / 登记函数。
 //
-// 四个端点合在这一个文件而不按页面分四份：四页同属一个上下文、镜像的是同一个 Go 包，
+// 各端点合在这一个文件而不按页面分份：四页同属一个上下文、镜像的是同一个 Go 包，
 // 拆开就会有几处各自维护同一批字段，而 Go 那侧改一个键时只会有一处跟上。对账单与收付款
 // 核销两页曾落在 pages/governance/ 时也是从此处引入的，归位本目录后这条理由不变。
 
-import { exchangeMasterData, type ApiResult } from '../catalogue-api';
+import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue-api';
+import type { RegistrationResponseBody } from '../../components/registration';
 
 export type { ApiResult } from '../catalogue-api';
 
@@ -378,3 +380,53 @@ export function listSettlementOperatingResults<Registry extends OperatingRegistr
     `/settlement-operating-results?registry=${encodeURIComponent(registry)}`,
   );
 }
+
+// —— 收付款核销页的登记签：外部资金事实采用 / 更正两口（ADR-0085，票 sa-cc/31；27 裁决 2 第二步）——
+// 形状以 internal/settlementaccounting/adapters/http/register_external_funds_fact.go 为准。
+//
+// 登记端点与其余命令面同挂字面量 UnconfiguredIntake{}：写准入不另立形，隔离读准入（ADR-0078）
+// 换得了读行换不了写行。因此墙降之前提交必然答 403 ACCESS_CHANNEL_NOT_CONFIGURED，那是诚实答案
+// 不是接线缺陷；登记参数（PAR-INT-01，实例半边）到位后由装配点换真 Intake 即点亮，本文件一行不用改。
+// 此前采用与更正仍走受控登记 CLI parcel-settlement-register——两口消费同一登记用例、答案代数一致。
+//
+// 请求体形状此刻没有契约。页面收的是登记输入 JSON 本体，与受控 CLI <命令> -input 吃的同一份形状
+// （译装在服务端只有 registrationjson 那一份），原样作请求体送出；不逐字段建表单，理由同各登记签。
+
+/** 采用 / 更正两口封闭二格，词与端点路径、受控 CLI 子命令逐字同一个。 */
+export type FundsRegistrationKind = 'external-funds-fact' | 'external-funds-fact-correction';
+
+export const fundsRegistrationEndpoints: Record<FundsRegistrationKind, string> = {
+  'external-funds-fact': '/settlement-external-funds-fact-registrations',
+  'external-funds-fact-correction': '/settlement-external-funds-fact-correction-registrations',
+};
+
+export function registerExternalFundsFact(
+  kind: FundsRegistrationKind,
+  snapshot: unknown,
+): Promise<ApiResult<RegistrationResponseBody>> {
+  return postMasterData<RegistrationResponseBody>(fundsRegistrationEndpoints[kind], snapshot);
+}
+
+/**
+ * 采用 / 更正两口的登记答案代数（application.FundsOutcome 原名），逐格中文。两口共一张表：同一个枚举、
+ * 同一格不因来自哪一口而换说法（判据同受控 CLI 的 fundsAnswer 一族一张表）。
+ *
+ * 映射与核销那族格（FUNDS_MAPPED / SETTLEMENT_APPLIED / APPLICATION_REVERSED……）不在表上：没有任何在线口
+ * 能交回它们，列出来就是给一格走不到的答案配中文。
+ *
+ * 没有 FUNDS_UNDECIDED 一格：本族的未决今天全是资金事实库不可用——依赖故障，传输层按 ADR-0022 写成
+ * 「没形成答案」的 5xx，它到不了这张表；「行已落、信封未出」同样折成 5xx（HANDOFF_NOT_SENT），说法在
+ * presentation 的错误码表里。真落进来会被登记签当成治理答案示出，而两者的续办动作相反。
+ *
+ * 负向两格逐格分开说而不折成一句「提交失败」：原行都不被顶替，但续办动作不同——冲突要人工核对既有登记
+ * （外部更正走更正口回指链头，不在采用口顶替），受理门拒绝要改内容，重放则什么都不用做。
+ */
+export const fundsRegistrationOutcomeLabels: Record<string, string> = {
+  FUNDS_FACT_ADOPTED:
+    '已采用——形成引用与待匹配入口，不直接成为已核销；向 customs-compliance 交的采用信封已随同一笔落下',
+  EXISTING_FUNDS_FACT: '已存在——同事实同版本同内容的重放，原行不动；上次未出的信封会随重放补发',
+  FUNDS_FACT_CONFLICT:
+    '内容冲突——同版本字面异内容、或同事实第二个首版，绝不覆盖；先核对既有登记，外部更正走更正口回指当前链头',
+  SOURCE_NOT_ACCEPTED:
+    '受理门拒绝——引用立不住、金额非正、回指自己、回指非链头或更正一条未采用的事实；改内容再登，重发同一份没有意义',
+};

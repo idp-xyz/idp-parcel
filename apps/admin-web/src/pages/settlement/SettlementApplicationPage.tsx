@@ -1,15 +1,26 @@
 import { useEffect, useState } from 'react';
-import { Button } from '@idpxyz/ui-primitives';
+import { Button, Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import { MultiRegistrationPanel, type RegistrationTarget } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
+  fundsRegistrationEndpoints,
+  fundsRegistrationOutcomeLabels,
   listSettlementFundsApplications,
+  registerExternalFundsFact,
   type ExternalFundsFactListResponseBody,
   type ExternalFundsFactRecord,
+  type FundsRegistrationKind,
 } from './api';
-import { fundsFactKindLabels, labelOf } from './presentation';
+import {
+  fundsFactKindLabels,
+  fundsRegistrationSnapshotHints,
+  fundsRegistrationTitles,
+  labelOf,
+  problemNote,
+} from './presentation';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['settlement-application'];
@@ -132,8 +143,52 @@ const columns: ListColumn<ExternalFundsFactRecord>[] = [
  * 真实收付映射与核销分配片段（目标金额身份、借贷方向、带方向金额、匹配／抵销依据）与核销
  * 撤销届时按 DetailPageTemplate 另立详情，不在本列表展开——映射不是核销，事实接收、金额
  * 责任确认、真实到账与核销是不同结果。
+ *
+ * 登记签（票 sa-cc/31）排在读签之后，读写各占各的签（与关务两页同一处置）：登的是外部资金事实
+ * 的采用与更正——本册的写口只此一处（ADR-0137 决定四：资金事实进产品只经 settlement-accounting 采用），
+ * 映射与核销不在本签，它们不是登记而是另两个显式判断。
  */
 export function SettlementApplicationPage() {
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      <Tabs defaultValue="facts" className="flex-1 flex flex-col overflow-hidden gap-0">
+        <TabsList className="px-4 shrink-0">
+          <TabsTrigger value="facts">资金事实</TabsTrigger>
+          <TabsTrigger value="register">采用资金事实</TabsTrigger>
+        </TabsList>
+        <TabsContent value="facts" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          <ExternalFundsFactsTable />
+        </TabsContent>
+        <TabsContent value="register" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          {/* 两口两张表单经选册切换而不是一张带模式的表单：采用与更正的登记输入形状互不相容（更正只带
+              回指与金额，其余键按未知字段拒），换册即换草稿那条纪律在 MultiRegistrationPanel 只有一处。
+              选册词取端点路径与 CLI 子命令原词。 */}
+          <MultiRegistrationPanel
+            moduleId="settlement-application"
+            targets={fundsRegistrationTargets}
+            problemNote={problemNote}
+          />
+        </TabsContent>
+      </Tabs>
+    </div>
+  );
+}
+
+// 两本册的登记面配置，逐项取 api / presentation 里的同一份词，不在此处另造。
+const fundsRegistrationTargets: RegistrationTarget[] = (
+  ['external-funds-fact', 'external-funds-fact-correction'] as FundsRegistrationKind[]
+).map((kind) => ({
+  id: kind,
+  label: fundsRegistrationTitles[kind],
+  title: fundsRegistrationTitles[kind],
+  endpoint: `POST ${fundsRegistrationEndpoints[kind]}`,
+  snapshotHint: fundsRegistrationSnapshotHints[kind],
+  submit: (snapshot: unknown) => registerExternalFundsFact(kind, snapshot),
+  outcomeLabels: fundsRegistrationOutcomeLabels,
+}));
+
+// ExternalFundsFactsTable 是本页原有的读签：接 GET /settlement-funds-applications 的资金事实册列表。
+function ExternalFundsFactsTable() {
   const [search, setSearch] = useState('');
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<ExternalFundsFactListResponseBody> | null>(null);

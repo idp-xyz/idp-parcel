@@ -1,7 +1,13 @@
-// 结算与核算四页的查阅词表。中文一律取 settlement-accounting 领域枚举与用例文档的原词，
-// 不自造译法；集外取值由 labelOf 原样回显——坏数据该露出来，不该被译成一句像样的话。
+// 结算与核算四页的查阅词表，加收付款核销页登记签的页面口径（票 sa-cc/31）。中文一律取
+// settlement-accounting 领域枚举与用例文档的原词，不自造译法；集外取值由 labelOf 原样回显——
+// 坏数据该露出来，不该被译成一句像样的话。
 
-import type { ChargeRegistry, OperatingRegistry, StatementRegistry } from './api';
+import type {
+  ChargeRegistry,
+  FundsRegistrationKind,
+  OperatingRegistry,
+  StatementRegistry,
+} from './api';
 
 // 三个端点的册名，与各自 ?registry= 分派同词。
 export const chargeRegistryLabels: Record<ChargeRegistry, string> = {
@@ -103,3 +109,74 @@ export function labelOf(table: Record<string, string>, code: string): string {
  * 那一行的登记。册级缺席（整册不记这件事）不走这里，那种栏直接不设。
  */
 export const unregistered = '未登记';
+
+// ——以下为登记签的页面口径（ADR-0085，票 sa-cc/31）。
+
+/**
+ * problem+json 错误码的中文说明，与 settlementhttp 的传输层错误码同字。业务判别走 outcome，这几个码
+ * 只说明为什么没有 outcome。
+ *
+ * HANDOFF_NOT_SENT 是本上下文登记口独有的一格：事实的版本行已落，但向 customs-compliance 交的采用信封
+ * 没出去。它折成 5xx 而不与已采用同格（判据与受控 CLI 的 fundsAnswer 同一条）：CC 的税费付款核对等的正是
+ * 那封，答 2xx 会让操作者把一封永远不会到的信当成已出。续办是重发同一份——Outbox 按认领键吞重，重放交的是
+ * 同一封，不会重复采用。
+ */
+export const problemCodeNotes: Record<string, string> = {
+  METHOD_NOT_ALLOWED: '请求方法不被该端点允许。这是调用方式问题，不是业务答案。',
+  MALFORMED_REQUEST: '请求构造不出命令（登记输入形状不合），重发同样的内容不会改变结果。',
+  INTAKE_FAILED: '接入解析未能完成，本次没有形成任何业务答案，可稍后重试。',
+  NO_ANSWER_FORMED:
+    '服务端处理未能完成（资金事实库不可用或事务回滚），本次没有形成任何业务答案，登记与否未知，可稍后重试。',
+  UNNAMED_OUTCOME: '用例交回了一个没有名字的答案——实现坏了，不是业务答案；请携带关联标识查询服务端记录。',
+  HANDOFF_NOT_SENT:
+    '事实已采用（版本行已落），但向 customs-compliance 交的采用信封未出——重发同一份即补发同一封，不会重复采用。',
+};
+
+export function problemNote(code: string): string {
+  return problemCodeNotes[code] ?? '未知错误码。请携带关联标识查询服务端记录。';
+}
+
+/**
+ * 两口登记签的标题。动词取用例原词（采用）而不叫「登记」：外部资金事实由外部系统拥有，本上下文对它只形成
+ * 引用与待匹配入口（UC-SA-005「采用」），采用时刻取服务端时钟、不是登记输入；更正是采用的一种（同一事实
+ * 回指链头的新版本），标题照实说。
+ */
+export const fundsRegistrationTitles: Record<FundsRegistrationKind, string> = {
+  'external-funds-fact': '采用外部资金事实（首版）',
+  'external-funds-fact-correction': '采用外部资金事实更正（回指链头）',
+};
+
+/**
+ * 登记输入形状的提示句。两类只差子命令一词（与端点路径、CLI 子命令同字），所以由一处拼出：逐类抄一遍会让
+ * 「不逐字段建表单」这条理由在其中一遍被改动时悄悄分叉。
+ */
+function snapshotHint(kind: FundsRegistrationKind, fields: string): string {
+  return (
+    `登记输入 JSON 的形状与受控登记口 parcel-settlement-register ${kind} -input 吃的同一份；` +
+    '本页不逐字段建表单，因为「渠道原始载荷 → 登记输入」的翻译属渠道接入契约，随 PAR-INT-01 提供。' +
+    fields
+  );
+}
+
+/**
+ * 各类登记输入的形状提示。逐类把键名与封闭集词列出来：未知键一律被译装拒绝（打错的键静默丢弃会让操作员以为
+ * 登进去的比实际多），而封闭集里的词打错在族名上看不出来。金额与时刻原样递给领域：非正金额、零时刻、回指自己、
+ * 回指非链头都在服务端答`未受理`，页面不代判。来源、账户、币种属实例半边，页面不预填任何真实值。
+ */
+export const fundsRegistrationSnapshotHints: Record<FundsRegistrationKind, string> = {
+  'external-funds-fact': snapshotHint(
+    'external-funds-fact',
+    '键为 tenantId / factRef / sourceRef / payerRef / kind / currency / amountMinor / version / occurredAt；' +
+      '种类取封闭三词 RECEIPT_CONFIRMED / PAYMENT_FAILED / FUNDS_RETURNED，缺席同样拒；' +
+      'payerRef 可缺席（来源未提供付款人是事实的一个诚实状态），给了却全是空白则拒；' +
+      'amountMinor 是最小单位整数；occurredAt 是外部事实的业务发生时刻，不是登记时刻。' +
+      '同事实同版本同内容重发答已存在；同版本换内容、同事实第二个首版都是内容冲突，更正走另一签。',
+  ),
+  'external-funds-fact-correction': snapshotHint(
+    'external-funds-fact-correction',
+    '键为 tenantId / factRef / corrects / version / amountMinor / correctedAt；' +
+      'corrects 必须等于该事实当前链头的版本，version 是这次更正形成的新版本，只有金额变——' +
+      '来源、付款人、种类、币种与发生时刻从链头照抄，载荷带了它们按未知字段拒（其余若也变了那是另一条事实）。' +
+      '回指自己、回指非链头、更正一条未采用的事实都答`未受理`；原版本保留，更正形成新有效版本。',
+  ),
+};
