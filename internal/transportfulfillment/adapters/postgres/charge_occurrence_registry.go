@@ -31,6 +31,9 @@ func NewChargeOccurrences(db *bentopg.DB) (*ChargeOccurrences, error) {
 
 var _ ports.ChargeOccurrenceRegistry = (*ChargeOccurrences)(nil)
 
+// 同一结构体满足只读口：它读的是同两张表，只是契约窄——见 ports.ChargeOccurrenceMemberView 头注。
+var _ ports.ChargeOccurrenceMemberView = (*ChargeOccurrences)(nil)
+
 // FindByKey 按（租户+发生项+有效性版本）取回整条。读回过重建门复验。
 func (repository *ChargeOccurrences) FindByKey(
 	ctx context.Context,
@@ -151,6 +154,73 @@ func (repository *ChargeOccurrences) loadMembers(
 		return nil, fmt.Errorf("find charge occurrence members: %w", err)
 	}
 	return members, nil
+}
+
+// LoadMembers 按（租户+发生项+有效性版本）答成员切面。一条 LEFT JOIN 把本体两列与成员逐行
+// 一次取回：零行即键不在册（found=false，不退到别的版本）；本体在册而成员列为空是库面不一致
+// ——领域构造门拒空成员、Save 又把两表落在同一笔里——这里响亮报错，不把空清单当答案交出去。
+// 不经 FindByKey 再投影：那条路要把整条发生项过一遍重建门，读成员的一方不需要也不该为
+// 协议、数量与修订三件的合法性买单。
+func (repository *ChargeOccurrences) LoadMembers(
+	ctx context.Context,
+	key ports.ChargeOccurrenceKey,
+) (ports.ChargeOccurrenceMembers, bool, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.ChargeOccurrenceMembers{}, false, fmt.Errorf("load charge occurrence members: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT occurrence.occurred_at, occurrence.scope_ref, member.object_ref
+		   FROM transport_fulfillment.transport_charge_occurrence AS occurrence
+		   LEFT JOIN transport_fulfillment.transport_charge_occurrence_member AS member
+		     ON member.tenant_id = occurrence.tenant_id
+		    AND member.occurrence_ref = occurrence.occurrence_ref
+		    AND member.validity_version = occurrence.validity_version
+		  WHERE occurrence.tenant_id = $1
+		    AND occurrence.occurrence_ref = $2
+		    AND occurrence.validity_version = $3
+		  ORDER BY member.object_ref`,
+		key.TenantID.String(), key.Occurrence.String(), key.Validity.String(),
+	)
+	if err != nil {
+		return ports.ChargeOccurrenceMembers{}, false, fmt.Errorf("load charge occurrence members: %w", err)
+	}
+	defer rows.Close()
+
+	var members ports.ChargeOccurrenceMembers
+	found := false
+	for rows.Next() {
+		var occurredAt time.Time
+		var scope string
+		var objectRef *string
+		if err := rows.Scan(&occurredAt, &scope, &objectRef); err != nil {
+			return ports.ChargeOccurrenceMembers{}, false, fmt.Errorf("load charge occurrence members: %w", err)
+		}
+		if objectRef == nil {
+			return ports.ChargeOccurrenceMembers{}, false, fmt.Errorf(
+				"load charge occurrence members: occurrence %s/%s/%s is registered without members",
+				key.TenantID.String(), key.Occurrence.String(), key.Validity.String())
+		}
+		if !found {
+			members.OccurredAt = occurredAt.UTC()
+			if members.Scope, err = domain.NewOccurrenceScopeReference(scope); err != nil {
+				return ports.ChargeOccurrenceMembers{}, false, fmt.Errorf("load charge occurrence members: %w", err)
+			}
+			found = true
+		}
+		member, err := domain.NewCarriedObjectReference(*objectRef)
+		if err != nil {
+			return ports.ChargeOccurrenceMembers{}, false, fmt.Errorf("load charge occurrence members: %w", err)
+		}
+		members.Members = append(members.Members, member)
+	}
+	if err := rows.Err(); err != nil {
+		return ports.ChargeOccurrenceMembers{}, false, fmt.Errorf("load charge occurrence members: %w", err)
+	}
+	if !found {
+		return ports.ChargeOccurrenceMembers{}, false, nil
+	}
+	return members, true, nil
 }
 
 // applyOccurrenceRevision 把库面四列装回规格。四件的成对判定留给重建门——这里只负责

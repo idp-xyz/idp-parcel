@@ -1,7 +1,7 @@
 # `transport-fulfillment` 运输收费发生项的成员对象没有只读视图：`ChargeOccurrenceRegistry.FindByKey` 是带 `Save` 的写侧登记册口，成员 `CarriedObjectReference` 字面分不出正式包裹身份还是集运单元，`parcel-pricing` 造快照的「包裹主体」一格指不到
 
 Category: enhancement
-Status: ready-for-agent——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（TF owner 口径），三条「要裁的」写入下方「裁决」节**：候选 1 窄只读口、成员**裸引用原样交**（不带种类、不按前缀猜）；**不展开**集运单元；键按 `ChargeOccurrenceKey` **精确到有效性版本**。此前 draft——2026-09-14 21:1x 通道 3 立票（sa-cc/11 裁决 4 量「包裹主体指不到」的提供方半边；task-620bc8e7，通道 1 派单）。只写票面未动代码；取证锚 main `db480695`
+Status: in-progress——**2026-09-15 10:2x 通道 4 认领（task-aadedbce），分支 `mcp4-ppseams01` 基 `3a21dab7`，按下方「裁决」节落**。此前 ready-for-agent——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（TF owner 口径），三条「要裁的」写入下方「裁决」节**：候选 1 窄只读口、成员**裸引用原样交**（不带种类、不按前缀猜）；**不展开**集运单元；键按 `ChargeOccurrenceKey` **精确到有效性版本**。此前 draft——2026-09-14 21:1x 通道 3 立票（sa-cc/11 裁决 4 量「包裹主体指不到」的提供方半边；task-620bc8e7，通道 1 派单）。只写票面未动代码；取证锚 main `db480695`
 Blocked by: 无（sa-cc/11 已进 main 2026-09-14 20:4x：`PricingInputResolver` 与 `EligibleSourceReferences.Occurrence` / `OccurrenceVersion` 钥匙已在，本票是它点名的第一只读口）；**要裁的三条归 TF owner，裁前不动代码**
 
 ## 缺口（取证于 `db480695`，逐符号名）
