@@ -21,7 +21,7 @@ import (
 
 // Covers: `/settlement-external-funds-fact-registrations` 与 `/settlement-external-funds-fact-correction-registrations`
 // 的第二参是真编排（票 sa-cc/31 判据 4）——buildSettlementRegistrationOrchestration 在真实 PostgreSQL 上装得起来
-// （六口全接真、构造门一口不漏），且两个事务壳**确实提交**并把版本行与向 CC 交的采用信封罩在同一笔里：
+// （每一口都接真、构造门一口不漏），且两个事务壳**确实提交**并把版本行与向 CC 交的采用信封罩在同一笔里：
 // 经端点体 + 真 Registrar 采用一条 → 版本行 + 一封 `settlement-accounting.external-funds-fact.adopted`；重放同载荷
 // → 已存在、无第二封；更正回指链头 → 第二行第二封。判据与 cmd/parcel-settlement-register 的 vertical_test 同一条、
 // 不同入口（ADR-0085 决定一：CLI 与端点消费同一登记用例）。

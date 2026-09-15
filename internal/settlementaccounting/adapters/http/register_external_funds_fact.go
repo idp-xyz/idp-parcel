@@ -125,7 +125,7 @@ type fundsRegistrationResponse struct {
 // 把一条该改内容的请求当成该改请求形状的请求丢掉。201 只给两口走得到的形成格 FUNDS_FACT_ADOPTED；映射与核销
 // 那几格在同一个枚举上，但没有任何在线口能交回它们，不列分派——其余具名格原名过线，用例多一格对新格仍然诚实。
 //
-// 本族的「未决」今天只有一种来路：FundsUndecidedReason 的三格全是存储不可用——依赖故障，编排把它折成一格值而
+// 本族的「未决」今天只有一种来路：FundsUndecidedReason 的每一格都是存储不可用——依赖故障，编排把它折成一格值而
 // 不是 error，可它说的正是「登记与否未知」，与编排交回 error 同格：500 NO_ANSWER_FORMED 且不带 outcome。
 // businessUndecidedFunds 逐名点出业务未决而不是反过来点依赖故障（判据同 customshttp 的 businessUndecided）：用例
 // 日后多一格未决原因，默认落进「没形成答案」一侧——ADR-0022 点名判错的方向是把依赖不可用报成客户端不再重试
