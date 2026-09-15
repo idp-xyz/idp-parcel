@@ -2484,4 +2484,10 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 
 - **取证 ← 通道 6**（`mcp6-sacc34-evidence@aec424a6`，纯 .md，推送方直接 `cherry-pick` 到共享 main → `760332c7`）。最要紧：五只里**只有 `externalResultEventID` 有生产装配**（`/customs/external-results`）且其事件类型零消费者；五只都不分格、全折续办、都不在重派路；两只把 ID 直接当分区键；有消费者的两只 → VE 有 `FactKey` + 摘要幂等；grep 漏两只（follow-up 四维串接第六只、restriction 单引用无上界）。
 - **裁**：范围扩到**七只**一次同改（单引用与零装配的也改——「留一只等于留一张脸」）；`FingerprintEventID` 提炼到 `outboxintent` 导出**由本票做**、29 三只改引删私有，32（Blocked by 31、晚于本票）只引——32 票面已改注；ID 与分区键解耦：两只 `PartitionKey: eventID` 的改取原可读串接一字不变（分区是顺序语义，`partition_subject_registry_test` 登的就是它），其余五只分区键本来另算；确定性拒分格**只做外部结果口**那一路（照 32 裁决 2，`ErrHandoffEnvelopeRejected` 返错回滚 → 4xx），其余六只入口未接不动、残差记 spec；VE 幂等真库钉两只有消费者的。完成判据七条写实。
-- 纯 .md 两笔（取证 cherry-pick + 代裁）共享 main 直接落，`ls-remote` 核 `2f698d2b` 未动后 push。三棵尾巴树（2 / 4 / 5）已拆。**前沿**：在途 31（3，端点表两行已推 `9c065fb0`）；ready 2——sa-cc/34（即派）、sa-cc/32（Blocked by 31）。
+- 纯 .md 两笔（取证 cherry-pick + 代裁）共享 main 直接落，`ls-remote` 核 `2f698d2b` 未动后 push（`760332c7` / `0b3f0831`）。三棵尾巴树（2 / 4 / 5）已拆。**派单**：task-78fa0373 → 通道 6 sa-cc/34 实现（取证人即作者，未另点名、按 15:0x 自报空闲）。**前沿**：在途 31（3）、34（6）；ready 1——sa-cc/32（Blocked by 31）。
+
+### 15:2x–15:4x：31 交活 → 派评审 → 立 35（main 上 admin-web `tsc` 既有红）
+
+- **31 交活**（通道 3 15:2x）：`mcp3-sacc31` 六笔，代码 tip `08e82a88`、票面 tip `17067468`；带 DSN `cmd/parcel-api` + SA http / postgres + architecture **474 PASS / 0 / 0**；清点预报 SA 生产 99→100 / 测试 80→81、cmd 63→64 / 88→89、端点 122→124；判断项 8 条——续办引用格折 **500 `HANDOFF_NOT_SENT`** 不进 2xx、`FUNDS_UNDECIDED` → 500、`ADOPTED` 201 其余 200；做法 3 实际动四件（占号一笔 `9c065fb0`）；**(7b) `tsc --noEmit` 仓级在基线已红**。**派评审 task-d159b7a2 → 通道 2**（评过 27、取证过 32；按 15:1x 自报空闲，未另点名），要它顺带在基线检出上复跑 `tsc` 证 (7b) 既有。
+- **(7b) 推送方复现**：`0b3f0831` 上 `apps/admin-web` `tsc --noEmit` 退 2，唯一报错 `register-rows.test.ts` `verification()` 缺 `fundsVersion`；`git log -S fundsVersion` 指 19 的代码笔 `e0201ca6`（12:22 进 main）；`ci.yml` 无 admin-web 类型检查步 → 三个多小时无人看见。**立 sa-cc/35**（ready，A 类：夹具加 `fundsVersion`，不改类型）；「CI 加不加 `tsc` 步」归用户（计费）。
+- **前沿**：在途 31 评审（2）、34（6）；ready 2——sa-cc/35（即派）、sa-cc/32（Blocked by 31）。
