@@ -182,7 +182,8 @@ func synVerificationRecord(
 	duty := mustValue(t, domain.NewAssessedDutyReference, "SYN-DUTY-01/v1")
 	funds := mustValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-01")
 	scope := mustValue(t, domain.NewDecisionScopeReference, "declaration-unit-1")
-	verification, err := domain.VerifyDutyPayment(duty, funds, scope, coverage, delta, validity, gateAt.Add(-time.Hour))
+	procedure := mustValue(t, domain.NewCustomsProcedureReference, "SYN-PROC-IMPORT")
+	verification, err := domain.VerifyDutyPayment(duty, funds, scope, procedure, coverage, delta, validity, gateAt.Add(-time.Hour))
 	if err != nil {
 		t.Fatalf("构造合成核对：%v", err)
 	}

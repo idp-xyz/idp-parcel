@@ -1195,8 +1195,10 @@ type PayerRequirementRuleView interface {
 }
 
 // DutyVerificationKey 是税费付款核对的幂等键：核对身份三维（税费版本、资金事实、范围）加
-// 内容指纹——三轴或关联依据变了自然换指纹换版（迟到事实按新版本追加，不按到达顺序覆盖，
-// UC-CC-009 核对规则那句），同一内容重复核对不出第二版。
+// 内容指纹——三轴、关联依据或监管程序变了自然换指纹换版（迟到事实按新版本追加，不按到达顺序
+// 覆盖，UC-CC-009 核对规则那句），同一内容重复核对不出第二版。程序折进指纹而不加一维（票
+// sa-cc/22 裁决 2）：五维形状在 0016 主键、0019 门禁读数、SA 采用表、信封载荷与信封 ID 各存一份，
+// 加维要五处同改；指纹算法只在应用层一处。
 type DutyVerificationKey struct {
 	TenantID domain.TenantID
 	Duty     domain.AssessedDutyReference
@@ -1207,7 +1209,9 @@ type DutyVerificationKey struct {
 
 // DutyVerificationRecord 是一次核对越过提交边界留下的东西：领域核对对象加关联依据——依据
 // 不在领域对象里（它是「凭什么把这笔资金关联到这版税费」的证据引用，不是核对的三轴），
-// 却是 UC-CC-009「金额相等不能单独作为关联；无权威依据时待关联」那句要审计的东西。
+// 却是 UC-CC-009「金额相等不能单独作为关联；无权威依据时待关联」那句要审计的东西。付款人维
+// 按哪个真实程序的规则判，在领域对象上（DutyPaymentVerification.Procedure，票 sa-cc/22），
+// 随对象一起越过边界、落成 0022 的 `procedure_ref`。
 type DutyVerificationRecord struct {
 	Key          DutyVerificationKey
 	Verification domain.DutyPaymentVerification
@@ -1223,9 +1227,10 @@ type DutyVerificationStore interface {
 // CurrentDutyVerificationView 按（租户、申报范围）取回**当前**那一版付款核对，伺候放行门禁核对里
 // 「税费付款」那一道（票 sa-cc/06）。「当前」= 核对时刻（VerifiedAt）最新的那一版，不按到达顺序、
 // 不按版本指纹——同范围多版并存是常态（迟到事实、税费更正各成一版），门禁读的是核对权威此刻最新
-// 的说法；同一时刻并存的两版按指纹字典序取定，让「当前」在同一份数据上只有一个答案。监管程序不是
-// 核对的维度（核对身份是税费版本 / 资金事实 / 范围三维），所以这里不按边界过滤——门禁的边界在门禁
-// 自己的键上。found=false 即该范围没有任何一版核对——门禁在那一格答未决并指名等核对，不是未满足。
+// 的说法；同一时刻并存的两版按指纹字典序取定，让「当前」在同一份数据上只有一个答案。监管程序是
+// 核对**记录的依据维**（付款人维按哪个程序的规则判，票 sa-cc/22），不是「按范围取当前」的过滤维——
+// 核对身份仍是税费版本 / 资金事实 / 范围三维，所以这里不按边界过滤；门禁的边界在门禁自己的键上。
+// found=false 即该范围没有任何一版核对——门禁在那一格答未决并指名等核对，不是未满足。
 type CurrentDutyVerificationView interface {
 	LoadCurrentDutyVerification(
 		ctx context.Context,

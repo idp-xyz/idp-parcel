@@ -157,7 +157,7 @@ func TestTheCurrentDutyVerificationIsTheLatestByVerifiedAtNotByArrival(t *testin
 	later := synVerificationRecord(t, domain.CoverageFull, "SYN-DIGEST-LATER")
 	earlier := synVerificationRecord(t, domain.CoveragePartial, "SYN-DIGEST-EARLIER")
 	earlierVerification, err := domain.VerifyDutyPayment(
-		earlier.Key.Duty, earlier.Key.Funds, earlier.Key.Scope,
+		earlier.Key.Duty, earlier.Key.Funds, earlier.Key.Scope, earlier.Verification.Procedure(),
 		domain.CoveragePartial, domain.DeltaShort, domain.FundsFactValid, dutyRegistryBaseAt.Add(-2*time.Hour))
 	if err != nil {
 		t.Fatalf("构造早一版核对：%v", err)

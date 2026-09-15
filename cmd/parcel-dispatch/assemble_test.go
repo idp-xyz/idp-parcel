@@ -469,6 +469,7 @@ func TestAFormedDutyPaymentVerificationReachesTheSettlementInputThroughTheRouteT
 	funds := saTestValue(t, ccdomain.NewExternalFundsFactReference, "SYN-FUNDS-01")
 	scope := saTestValue(t, ccdomain.NewDecisionScopeReference, "SYN-UNIT-01")
 	verification, err := ccdomain.VerifyDutyPayment(duty, funds, scope,
+		saTestValue(t, ccdomain.NewCustomsProcedureReference, "SYN-PROC-IMPORT"),
 		ccdomain.CoverageFull, ccdomain.DeltaNone, ccdomain.FundsFactValid, verificationAt)
 	if err != nil {
 		t.Fatalf("CC 核对：%v", err)

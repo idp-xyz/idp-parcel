@@ -65,6 +65,7 @@ func NewQueryDutyVerificationsEndpoint(
 				Duty:       record.Key.Duty.String(),
 				Funds:      record.Key.Funds.String(),
 				Scope:      record.Key.Scope.String(),
+				Procedure:  verification.Procedure().String(),
 				Version:    record.Key.Digest,
 				Coverage:   verification.Coverage().String(),
 				Delta:      verification.Delta().String(),
@@ -86,14 +87,16 @@ type dutyVerificationListResponse struct {
 }
 
 // dutyVerificationBody 逐字段透出一版核对。version 是幂等键上的内容指纹（同三维同内容
-// 重放不出第二版，改判换指纹追加新版）；coverage / delta / validity 三轴各自封闭
-// （NONE / PARTIAL / COVERED、NO_DELTA / SHORT / EXCESS / PENDING、VALID / INVALIDATED /
-// CONFLICTING / PENDING），集外词形在读口重建处就上抛，传输层不折第四格；basis 是「凭什么
-// 把这笔资金关联到这版税费」的证据引用——金额相等不能单独作为关联（UC-CC-009）。
+// 重放不出第二版，改判换指纹追加新版）；procedure 是付款人维按其规则判的真实程序——核对记录
+// 的依据维，不是身份维（票 sa-cc/22 裁决 1），同三轴同依据换程序即换指纹另成一行；coverage /
+// delta / validity 三轴各自封闭（NONE / PARTIAL / COVERED、NO_DELTA / SHORT / EXCESS / PENDING、
+// VALID / INVALIDATED / CONFLICTING / PENDING），集外词形在读口重建处就上抛，传输层不折第四格；
+// basis 是「凭什么把这笔资金关联到这版税费」的证据引用——金额相等不能单独作为关联（UC-CC-009）。
 type dutyVerificationBody struct {
 	Duty       string `json:"duty"`
 	Funds      string `json:"funds"`
 	Scope      string `json:"scope"`
+	Procedure  string `json:"procedure"`
 	Version    string `json:"version"`
 	Coverage   string `json:"coverage"`
 	Delta      string `json:"delta"`

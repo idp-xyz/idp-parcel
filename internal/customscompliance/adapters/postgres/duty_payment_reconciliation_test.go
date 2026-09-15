@@ -75,7 +75,7 @@ func synVerificationRecord(t *testing.T, coverage domain.DutyCoverage, digest st
 	duty := viewValue(t, domain.NewAssessedDutyReference, "SYN-DUTY-01/v1")
 	funds := viewValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-01")
 	scope := viewValue(t, domain.NewDecisionScopeReference, "SYN-UNIT-01")
-	verification, err := domain.VerifyDutyPayment(duty, funds, scope,
+	verification, err := domain.VerifyDutyPayment(duty, funds, scope, synProcedure(t, "SYN-PROC-IMPORT"),
 		coverage, domain.DeltaNone, domain.FundsFactValid, dutyRegistryBaseAt)
 	if err != nil {
 		t.Fatalf("构造核对：%v", err)
@@ -424,6 +424,7 @@ func TestVerificationsRoundTripAndVersionsAccrue(t *testing.T) {
 		loaded.Verification.Validity() != domain.FundsFactValid || loaded.Basis != first.Basis ||
 		loaded.Verification.Duty() != first.Verification.Duty() || loaded.Verification.Funds() != first.Verification.Funds() ||
 		loaded.Verification.Scope() != first.Verification.Scope() ||
+		loaded.Verification.Procedure() != first.Verification.Procedure() ||
 		!loaded.Verification.VerifiedAt().Equal(dutyRegistryBaseAt) {
 		t.Fatalf("核对走样：%+v", loaded)
 	}
@@ -444,6 +445,71 @@ func TestVerificationsRoundTripAndVersionsAccrue(t *testing.T) {
 	if v1, found, _ := store.FindVerification(t.Context(), first.Key); !found || v1.Verification.Coverage() != domain.CoverageFull {
 		t.Fatalf("新版本覆盖了前版：found=%v", found)
 	}
+}
+
+// Covers: 票 sa-cc/22 完成判据 (2)——核对记录带程序、真库往返：`0022` 加的 `procedure_ref` 经点读、当前一版、上列
+// 三条读路各自读回同一个程序（裁决 1 点名的四处读回里库侧的三处；HTTP JSON 在 adapters/http 自己钉）；同键
+// 不同程序的两行并存、各自带着自己的程序（程序进指纹不进主键，裁决 2——这里指纹由用例给，两行只靠指纹分开）；
+// 库内 CHECK 把空白程序挡在门外（旁路写入用显式 SQL）。
+func TestVerificationsRoundTripTheProcedureTheyWereJudgedUnder(t *testing.T) {
+	store, fixture := newDutyReconciliation(t)
+	catalogue, err := adapter.NewDutyReconciliationCatalogue(fixture.db)
+	if err != nil {
+		t.Fatalf("构造核对目录：%v", err)
+	}
+	if _, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
+		return store.RegisterFundsFact(ctx, tenantA(t), synFundsFact(t, 12500))
+	}); err != nil {
+		t.Fatalf("资金事实：%v", err)
+	}
+	underImport := synVerificationRecord(t, domain.CoverageFull, "digest-under-import")
+	underExport := synVerificationRecord(t, domain.CoverageFull, "digest-under-export")
+	exportVerification, err := domain.VerifyDutyPayment(
+		underExport.Key.Duty, underExport.Key.Funds, underExport.Key.Scope, synProcedure(t, "SYN-PROC-EXPORT"),
+		domain.CoverageFull, domain.DeltaNone, domain.FundsFactValid, dutyRegistryBaseAt.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("构造按出口程序判的核对：%v", err)
+	}
+	underExport.Verification = exportVerification
+	for _, record := range []ports.DutyVerificationRecord{underImport, underExport} {
+		if outcome, err := register(t, fixture, func(ctx context.Context) (ports.CaseConfigurationSaveOutcome, error) {
+			return store.SaveVerification(ctx, record)
+		}); err != nil || outcome != ports.CaseConfigurationRegistered {
+			t.Fatalf("登记 %s：err=%v outcome=%v", record.Key.Digest, err, outcome)
+		}
+	}
+
+	for _, record := range []ports.DutyVerificationRecord{underImport, underExport} {
+		loaded, found, err := store.FindVerification(t.Context(), record.Key)
+		if err != nil || !found || loaded.Verification.Procedure() != record.Verification.Procedure() {
+			t.Fatalf("点读 %s 该带回它按哪个程序判：err=%v found=%v procedure=%q",
+				record.Key.Digest, err, found, loaded.Verification.Procedure())
+		}
+	}
+	current, found, err := store.LoadCurrentDutyVerification(t.Context(), tenantA(t), underExport.Key.Scope)
+	if err != nil || !found || current.Key.Digest != "digest-under-export" ||
+		current.Verification.Procedure() != underExport.Verification.Procedure() {
+		t.Fatalf("当前一版该是核对时刻更晚的出口那版并带程序：err=%v found=%v %+v", err, found, current)
+	}
+	listed, err := catalogue.ListDutyVerifications(t.Context(), tenantA(t), 10)
+	if err != nil || len(listed) != 2 {
+		t.Fatalf("上列该两版：err=%v n=%d", err, len(listed))
+	}
+	byDigest := map[string]domain.CustomsProcedureReference{}
+	for _, record := range listed {
+		byDigest[record.Key.Digest] = record.Verification.Procedure()
+	}
+	if byDigest["digest-under-import"] != underImport.Verification.Procedure() ||
+		byDigest["digest-under-export"] != underExport.Verification.Procedure() {
+		t.Fatalf("上列没有逐行带回各自的程序：%v", byDigest)
+	}
+
+	verification := `INSERT INTO customs_compliance.duty_payment_verification
+		(tenant_id, duty_ref, funds_ref, scope_ref, version_digest, procedure_ref, coverage, delta, validity, basis, verified_at)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`
+	fixture.rejects(t, "程序空白", verification,
+		"tenant-a", "SYN-DUTY-01/v1", "SYN-FUNDS-01", "SYN-UNIT-01", "digest-blank-procedure", "  ",
+		"COVERED", "NO_DELTA", "VALID", "basis", dutyRegistryBaseAt)
 }
 
 // Covers: 库内再守一遍形状——协作两格的矛盾形状、种类集外、负金额、无依据的核对、没有资金

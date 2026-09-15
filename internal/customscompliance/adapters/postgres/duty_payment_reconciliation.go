@@ -325,15 +325,15 @@ func (store *DutyPaymentReconciliation) FindVerification(
 	}
 
 	var (
-		coverage, delta, validity, basis string
-		verifiedAt                       time.Time
+		procedure, coverage, delta, validity, basis string
+		verifiedAt                                  time.Time
 	)
 	err = querier.QueryRow(ctx,
-		`SELECT coverage, delta, validity, basis, verified_at
+		`SELECT procedure_ref, coverage, delta, validity, basis, verified_at
 		   FROM customs_compliance.duty_payment_verification
 		  WHERE tenant_id = $1 AND duty_ref = $2 AND funds_ref = $3 AND scope_ref = $4 AND version_digest = $5`,
 		key.TenantID.String(), key.Duty.String(), key.Funds.String(), key.Scope.String(), key.Digest,
-	).Scan(&coverage, &delta, &validity, &basis, &verifiedAt)
+	).Scan(&procedure, &coverage, &delta, &validity, &basis, &verifiedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return none, false, nil
 	}
@@ -341,7 +341,7 @@ func (store *DutyPaymentReconciliation) FindVerification(
 		return none, false, fmt.Errorf("find duty verification: %w", err)
 	}
 
-	verification, err := rebuildVerification(key, coverage, delta, validity, verifiedAt)
+	verification, err := rebuildVerification(key, procedure, coverage, delta, validity, verifiedAt)
 	if err != nil {
 		return none, false, fmt.Errorf("rebuild duty verification: %w", err)
 	}
@@ -349,7 +349,8 @@ func (store *DutyPaymentReconciliation) FindVerification(
 }
 
 // SaveVerification 登记一版核对。键与核对对象说的必须是同一件事——键上的三维若与对象不符，
-// 库里就会有一行按 A 查、内容却是 B 的核对，这是调用方编程错误，响亮拒。
+// 库里就会有一行按 A 查、内容却是 B 的核对，这是调用方编程错误，响亮拒。程序随核对对象落成
+// `procedure_ref`（0022），它不在键上、只在指纹里，所以这里不与键比。
 func (store *DutyPaymentReconciliation) SaveVerification(
 	ctx context.Context,
 	record ports.DutyVerificationRecord,
@@ -377,12 +378,12 @@ func (store *DutyPaymentReconciliation) SaveVerification(
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO customs_compliance.duty_payment_verification
 			(tenant_id, duty_ref, funds_ref, scope_ref, version_digest,
-			 coverage, delta, validity, basis, verified_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
+			 procedure_ref, coverage, delta, validity, basis, verified_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(), record.Key.Duty.String(), record.Key.Funds.String(),
 		record.Key.Scope.String(), record.Key.Digest,
-		coverage, delta, validity, record.Basis, verification.VerifiedAt().UTC(),
+		verification.Procedure().String(), coverage, delta, validity, record.Basis, verification.VerifiedAt().UTC(),
 	)
 	if err != nil {
 		return ports.CaseConfigurationSaveOutcomeInvalid, fmt.Errorf("save duty verification: %w", err)
@@ -428,11 +429,17 @@ func rebuildCollaboration(
 	return domain.FormDutyCollaboration(spec)
 }
 
+// rebuildVerification 把一行译回核对对象、整门重验：程序经领域构造回来（空白到不了这里，0022 的 CHECK 拦；
+// 真到了是库被旁路改过，响亮拒），三轴按封闭词译回。
 func rebuildVerification(
 	key ports.DutyVerificationKey,
-	coverage, delta, validity string,
+	procedure, coverage, delta, validity string,
 	verifiedAt time.Time,
 ) (domain.DutyPaymentVerification, error) {
+	procedureRef, err := domain.NewCustomsProcedureReference(procedure)
+	if err != nil {
+		return domain.DutyPaymentVerification{}, err
+	}
 	coverageAxis, err := closedWord(coverage, domain.CoverageNone, domain.CoveragePartial, domain.CoverageFull)
 	if err != nil {
 		return domain.DutyPaymentVerification{}, err
@@ -446,7 +453,7 @@ func rebuildVerification(
 	if err != nil {
 		return domain.DutyPaymentVerification{}, err
 	}
-	return domain.VerifyDutyPayment(key.Duty, key.Funds, key.Scope, coverageAxis, deltaAxis, validityAxis, verifiedAt.UTC())
+	return domain.VerifyDutyPayment(key.Duty, key.Funds, key.Scope, procedureRef, coverageAxis, deltaAxis, validityAxis, verifiedAt.UTC())
 }
 
 // closedWord 把库列的词形译回封闭集里的那一格；集外即库被旁路改过，作错误抛出。

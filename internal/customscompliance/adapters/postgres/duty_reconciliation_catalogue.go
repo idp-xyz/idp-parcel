@@ -118,7 +118,7 @@ func (catalogue *DutyReconciliationCatalogue) ListDutyVerifications(
 
 	rows, err := querier.Query(ctx,
 		`SELECT duty_ref, funds_ref, scope_ref, version_digest,
-		        coverage, delta, validity, basis, verified_at
+		        procedure_ref, coverage, delta, validity, basis, verified_at
 		   FROM customs_compliance.duty_payment_verification
 		  WHERE tenant_id = $1
 		  ORDER BY duty_ref, funds_ref, scope_ref, verified_at, version_digest
@@ -133,12 +133,12 @@ func (catalogue *DutyReconciliationCatalogue) ListDutyVerifications(
 	records := make([]ports.DutyVerificationRecord, 0, limit)
 	for rows.Next() {
 		var (
-			dutyRaw, fundsRaw, scopeRaw, digest string
-			coverage, delta, validity, basis    string
-			verifiedAt                          time.Time
+			dutyRaw, fundsRaw, scopeRaw, digest         string
+			procedure, coverage, delta, validity, basis string
+			verifiedAt                                  time.Time
 		)
 		if err := rows.Scan(&dutyRaw, &fundsRaw, &scopeRaw, &digest,
-			&coverage, &delta, &validity, &basis, &verifiedAt); err != nil {
+			&procedure, &coverage, &delta, &validity, &basis, &verifiedAt); err != nil {
 			return nil, fmt.Errorf("list duty verifications: %w", err)
 		}
 		key := ports.DutyVerificationKey{TenantID: tenant, Digest: digest}
@@ -151,7 +151,7 @@ func (catalogue *DutyReconciliationCatalogue) ListDutyVerifications(
 		if key.Scope, err = domain.NewDecisionScopeReference(scopeRaw); err != nil {
 			return nil, fmt.Errorf("rebuild duty verification catalogue: %w", err)
 		}
-		verification, err := rebuildVerification(key, coverage, delta, validity, verifiedAt)
+		verification, err := rebuildVerification(key, procedure, coverage, delta, validity, verifiedAt)
 		if err != nil {
 			return nil, fmt.Errorf("rebuild duty verification catalogue: %w", err)
 		}

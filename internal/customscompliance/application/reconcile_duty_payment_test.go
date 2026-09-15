@@ -646,6 +646,59 @@ func TestAChangedVerificationAppendsANewVersion(t *testing.T) {
 	}
 }
 
+// Covers: 票 sa-cc/22 完成判据 (1)——程序是核对记录的依据维并折进版本指纹（裁决 1 / 2）：同三轴同依据、按不同
+// 程序的规则判付款人维，是两份不同的判断 → 两行并存、两封信封、指纹不同；同程序第二次是重放`已存在`；落册的
+// 核对对象自己带着它按哪个程序判。程序空白仍`未受理`（既有形，钉在
+// TestThePayerRuleIsReadAfterBothPrerequisitesAndNamesItsOwnFailure）。键上三维身份不变——身份不带程序，
+// 是指纹带（裁决 2「折进指纹、不加主键列」）。
+func TestVerificationsUnderDifferentProceduresAreDifferentVersions(t *testing.T) {
+	store := newDutyStore()
+	store.payerRules["tenant-a|SYN-PROC-02"] = domain.PayerRequired
+	handler := newDutyHandler(t, store)
+	if _, err := handler.FormCollaboration(t.Context(), assessedCollaborationCommand(t)); err != nil {
+		t.Fatalf("协作事项：%v", err)
+	}
+	if _, err := handler.ReceiveFundsFact(t.Context(), fundsFactCommand(t)); err != nil {
+		t.Fatalf("资金事实：%v", err)
+	}
+
+	underFirst := verifyDutyCommand(t)
+	if result, err := handler.VerifyPayment(t.Context(), underFirst); err != nil ||
+		result.Outcome() != application.DutyVerificationFormed {
+		t.Fatalf("按 SYN-PROC-01 判：err=%v outcome=%v", err, result.Outcome())
+	}
+	underSecond := verifyDutyCommand(t)
+	underSecond.Procedure = configValue(t, domain.NewCustomsProcedureReference, "SYN-PROC-02")
+	if result, err := handler.VerifyPayment(t.Context(), underSecond); err != nil ||
+		result.Outcome() != application.DutyVerificationFormed {
+		t.Fatalf("同三轴同依据、按 SYN-PROC-02 判该是另一版：err=%v outcome=%v", err, result.Outcome())
+	}
+	if len(store.verifications) != 2 || len(store.handoffs) != 2 {
+		t.Fatalf("两个程序该各成一版、各交一封：%d 行 %d 封", len(store.verifications), len(store.handoffs))
+	}
+	if store.handoffs[0].Key.Digest == store.handoffs[1].Key.Digest {
+		t.Fatal("换程序没换指纹——程序没折进版本指纹")
+	}
+	procedures := map[domain.CustomsProcedureReference]bool{}
+	for _, record := range store.verifications {
+		if record.Key.Duty != underFirst.Duty || record.Key.Funds != underFirst.Funds || record.Key.Scope != underFirst.Scope {
+			t.Fatalf("键上三维身份该原样：%+v", record.Key)
+		}
+		procedures[record.Verification.Procedure()] = true
+	}
+	if !procedures[underFirst.Procedure] || !procedures[underSecond.Procedure] {
+		t.Fatalf("落册的核对该各自带着按哪个程序判：%v", procedures)
+	}
+
+	if result, err := handler.VerifyPayment(t.Context(), underSecond); err != nil ||
+		result.Outcome() != application.DutyVerificationExisting {
+		t.Fatalf("同程序重核该是`已存在`：err=%v outcome=%v", err, result.Outcome())
+	}
+	if len(store.verifications) != 2 || len(store.handoffs) != 2 {
+		t.Fatalf("重放不得再落行、再交封：%d 行 %d 封", len(store.verifications), len(store.handoffs))
+	}
+}
+
 // 步 8 的结算交接（票 sa-cc/05 完成判据 1）：核对形成那一格交一封，意图由核对幂等键认领、
 // 携带的就是刚落册那一版的三维键与指纹；同内容重核是`已存在`，**不再调交接口**——信封随形成
 // 那一版同事务入队，重放没有可补的那一格；改判是新版本，再交一封、键上指纹不同。

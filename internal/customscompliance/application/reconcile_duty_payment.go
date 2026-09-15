@@ -177,7 +177,9 @@ type ReceiveExternalFundsFactCommand struct {
 // 的证据引用（真实规则或来源提供的关联依据）——空即无权威依据，编排保持资金事实待关联而不形成
 // 核对。Procedure 是付款人那一维的规则要按哪个真实程序读（票 sa-cc/12 裁决 1）：范围与程序不是一对一
 // （门禁键里范围与边界并列就是这个意思），所以像三轴一样由调用方交进来、编排不从范围推；调用方给的
-// 程序与案件实际程序不核一致——与范围那一维同病，是票面记下的越权风险点，归 CC owner。
+// 程序与案件实际程序不核一致（票 sa-cc/22 裁决 1：「范围 → 当前有效程序」这条边在 CC 的语言里今天不存在，
+// 造它是新的领域事实，不在核对编排里顺手立）。程序随核对记下并折进版本指纹——事后看得出付款人维是按哪个
+// 程序的规则判的，错报的程序也留在记录上。
 type VerifyDutyPaymentCommand struct {
 	TenantID  domain.TenantID
 	Duty      domain.AssessedDutyReference
@@ -422,7 +424,7 @@ func (handler *DutyPaymentReconciliationHandler) VerifyPayment(
 	}
 
 	verification, err := domain.VerifyDutyPayment(
-		command.Duty, command.Funds, command.Scope,
+		command.Duty, command.Funds, command.Scope, command.Procedure,
 		command.Coverage, command.Delta, command.Validity, handler.deps.Clock.Now())
 	if err != nil {
 		return DutyReconciliationResult{outcome: DutyReconciliationNotAccepted}, nil
@@ -447,7 +449,7 @@ func (handler *DutyPaymentReconciliationHandler) VerifyPayment(
 		result.handoffRef = handler.handOffVerification(ctx, record.Key, verification)
 		return result, nil
 	}
-	// 指纹里已含三轴与依据：撞键即同内容，不必再读回比。
+	// 指纹里已含三轴、依据与程序：撞键即同内容，不必再读回比。
 	return DutyReconciliationResult{outcome: DutyVerificationExisting}, nil
 }
 
@@ -466,13 +468,21 @@ func (handler *DutyPaymentReconciliationHandler) handOffVerification(
 	return "CONT-DUTY-VERIFICATION/" + key.Scope.String() + "/" + key.Digest[:8]
 }
 
-// verificationDigest 是核对内容的稳定指纹：三轴加关联依据。三维身份在键上，不进指纹。
+// verificationDigest 是核对内容的稳定指纹：三轴、关联依据、监管程序。三维身份在键上，不进指纹。
+//
+// 拼接顺序写死为 Coverage、Delta、Validity、Basis、Procedure，以 \x00 分隔后 sha256。它是持久化主键的一列
+// （0016 `version_digest`）与信封 ID 的一段：任何改动都让已入册的版本对不上自己的指纹，所以只在存量为零
+// 时加维、加在末尾、不换序——程序追在依据之后（票 sa-cc/22 裁决 2，存量由 0022 的守卫保证为零），后继再加
+// 维度接着往后追。程序进指纹而不进键（裁决 2「折进指纹、不加主键列」）：同三轴同依据但按不同程序的规则判
+// 付款人维，是两份不同的判断，各成一行；存着这份键形的几处（0016 主键、0019 门禁读数、SA 采用表、信封）
+// 因此一字不动。
 func verificationDigest(command VerifyDutyPaymentCommand) string {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
 		strconv.Itoa(int(command.Coverage)),
 		strconv.Itoa(int(command.Delta)),
 		strconv.Itoa(int(command.Validity)),
 		strings.TrimSpace(command.Basis),
+		strings.TrimSpace(command.Procedure.String()),
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])
 }

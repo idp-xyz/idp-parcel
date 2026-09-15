@@ -21,6 +21,7 @@ func synDutyVerification(
 		mustValue(t, domain.NewAssessedDutyReference, "SYN-DUTY-01/v1"),
 		mustValue(t, domain.NewExternalFundsFactReference, "SYN-FUNDS-01"),
 		mustValue(t, domain.NewDecisionScopeReference, "SYN-UNIT-01"),
+		mustValue(t, domain.NewCustomsProcedureReference, "SYN-PROC-IMPORT"),
 		coverage, delta, validity, dutyGateVerifiedAt)
 	if err != nil {
 		t.Fatalf("构造合成核对：%v", err)

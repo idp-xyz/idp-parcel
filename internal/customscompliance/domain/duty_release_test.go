@@ -17,6 +17,7 @@ func TestDutyVerificationKeepsItsThreeAxesApart(t *testing.T) {
 		mustValue(t, domain.NewAssessedDutyReference, "assessed-duty/v1"),
 		mustValue(t, domain.NewExternalFundsFactReference, "bank-fact/77"),
 		mustValue(t, domain.NewDecisionScopeReference, "declaration-unit-1"),
+		mustValue(t, domain.NewCustomsProcedureReference, "SYN-PROC-IMPORT"),
 		domain.CoveragePartial,
 		domain.DeltaShort,
 		domain.FundsFactValid,
@@ -36,12 +37,49 @@ func TestDutyVerificationKeepsItsThreeAxesApart(t *testing.T) {
 		mustValue(t, domain.NewAssessedDutyReference, "assessed-duty/v1"),
 		mustValue(t, domain.NewExternalFundsFactReference, "bank-fact/77"),
 		mustValue(t, domain.NewDecisionScopeReference, "declaration-unit-1"),
+		mustValue(t, domain.NewCustomsProcedureReference, "SYN-PROC-IMPORT"),
 		domain.DutyCoverageInvalid,
 		domain.DeltaNone,
 		domain.FundsFactValid,
 		verifiedAt,
 	); !errors.Is(err, domain.ErrInvalidDutyVerification) {
 		t.Fatalf("err = %v; 缺覆盖轴的核对被收下了", err)
+	}
+}
+
+// Covers: 票 sa-cc/22 裁决 1——核对记录带「付款人维是按哪个真实程序的规则判的」（CC CONTEXT「税费付款核对」
+// 词条：付款人是「来源提供或真实程序要求的」维度；ADR-0137 决定一：记录带依据引用）。程序是构造期必填的一维，
+// 与其余入参同待遇：读口原样交回，空白立不起核对——一份不说自己按哪个程序判的核对，事后无从复核那一维。
+func TestDutyVerificationRecordsTheProcedureItWasJudgedUnder(t *testing.T) {
+	procedure := mustValue(t, domain.NewCustomsProcedureReference, "SYN-PROC-IMPORT")
+	verification, err := domain.VerifyDutyPayment(
+		mustValue(t, domain.NewAssessedDutyReference, "assessed-duty/v1"),
+		mustValue(t, domain.NewExternalFundsFactReference, "bank-fact/77"),
+		mustValue(t, domain.NewDecisionScopeReference, "declaration-unit-1"),
+		procedure,
+		domain.CoverageFull,
+		domain.DeltaNone,
+		domain.FundsFactValid,
+		verifiedAt,
+	)
+	if err != nil {
+		t.Fatalf("verify duty payment: %v", err)
+	}
+	if verification.Procedure() != procedure {
+		t.Fatalf("procedure = %q; 核对没带上它按哪个程序判", verification.Procedure())
+	}
+
+	if _, err := domain.VerifyDutyPayment(
+		mustValue(t, domain.NewAssessedDutyReference, "assessed-duty/v1"),
+		mustValue(t, domain.NewExternalFundsFactReference, "bank-fact/77"),
+		mustValue(t, domain.NewDecisionScopeReference, "declaration-unit-1"),
+		domain.CustomsProcedureReference{},
+		domain.CoverageFull,
+		domain.DeltaNone,
+		domain.FundsFactValid,
+		verifiedAt,
+	); !errors.Is(err, domain.ErrInvalidDutyVerification) {
+		t.Fatalf("err = %v; 不说按哪个程序判的核对被收下了", err)
 	}
 }
 
