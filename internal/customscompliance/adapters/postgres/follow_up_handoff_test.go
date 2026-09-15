@@ -3,11 +3,13 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
+	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
@@ -88,6 +90,39 @@ func followUpHandoffEventID(key ports.FollowUpTargetKey, beat string) string {
 func followUpHandoffPartitionKey(key ports.FollowUpTargetKey) string {
 	return key.TenantID.String() + "/" + key.Trigger.String() + "/" +
 		key.Version.String() + "/" + key.Kind.String()
+}
+
+// Covers: 票 sa-cc/34 判据 (1)——触发引用与提交版本两个引用维取到旧串接形（`760332c7` 上 followUpPartitionKey 四维直接作 ID）
+// 必然超过 eventing.MaxEventIDLength 的长度（引用多长归实例半边，本仓给不出上界），信封仍入队成功、ID 定长在上限内、
+// 重发同一份仍一行。分区键仍是四维可读串接、本格仍在 eventing.MaxPartitionKeyLength 内——证的是 ID 那一维。
+func TestOverlongFollowUpReferencesStillProduceAnEnvelopeIDWithinTheFrameworkLimit(t *testing.T) {
+	fixture := newFollowUpHandoffFixture(t)
+	ctx := t.Context()
+	long := func(prefix string) string { return prefix + "-" + strings.Repeat("x", 60) }
+	key := ports.FollowUpTargetKey{
+		TenantID: fmcValue(t, domain.NewTenantID, "tenant-a"),
+		Trigger:  fmcValue(t, domain.NewFollowUpTriggerReference, long("regulatory-request")),
+		Version:  fmcValue(t, domain.NewSubmissionVersionID, long("submission")),
+		Kind:     domain.ResubmissionReplacement,
+	}
+	if concatenated := followUpHandoffPartitionKey(key); len(concatenated) <= eventing.MaxEventIDLength {
+		t.Fatalf("夹具没造出超长：串接形 %d 字节没超过上限 %d", len(concatenated), eventing.MaxEventIDLength)
+	}
+	intent := ports.FollowUpHandoffIntent{Key: key, Target: formedTarget(t)}
+
+	fixture.inTx(t, ctx, func(txCtx context.Context) error { return fixture.handoff.HandOffFollowUp(txCtx, intent) })
+	fixture.inTx(t, ctx, func(txCtx context.Context) error { return fixture.handoff.HandOffFollowUp(txCtx, intent) })
+
+	eventID := followUpHandoffEventID(key, "recorded")
+	if len(eventID) > eventing.MaxEventIDLength || len(eventID) != len("follow-up/")+64 {
+		t.Fatalf("ID = %q（%d 字节）；该是口名前缀加六十四位十六进制、在上限 %d 内", eventID, len(eventID), eventing.MaxEventIDLength)
+	}
+	if count := countFollowUpIntents(t, fixture.pool, eventID); count != 1 {
+		t.Fatalf("超长引用下 outbox 行数 = %d，want 1", count)
+	}
+	if got := partitionKeyOf(t, fixture.pool, eventID); got != followUpHandoffPartitionKey(key) {
+		t.Fatalf("分区键 = %q，want 四维可读串接 %q", got, followUpHandoffPartitionKey(key))
+	}
 }
 
 // TestEachFollowUpBeatEnqueuesItsOwnEnvelopeInTheSamePartition 钉住两个字段的分工。

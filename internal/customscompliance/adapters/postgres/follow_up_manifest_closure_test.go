@@ -119,7 +119,13 @@ func acceptedManifest(t *testing.T) domain.ExternalManifestReference {
 
 func closedCase(t *testing.T) *domain.CustomsCaseClosure {
 	t.Helper()
-	verification, err := domain.VerifyClosure(fmcValue(t, domain.NewCustomsCaseID, "case-1"),
+	return closedCaseWithRef(t, "case-1")
+}
+
+// closedCaseWithRef 走 VerifyClosure → CloseCase 真路径关一份指定引用的案件；两项义务一结一移交，够立起一份关闭。
+func closedCaseWithRef(t *testing.T, caseRef string) *domain.CustomsCaseClosure {
+	t.Helper()
+	verification, err := domain.VerifyClosure(fmcValue(t, domain.NewCustomsCaseID, caseRef),
 		fmcBaseAt, []domain.ClosureObligationItem{
 			{
 				Obligation: "declaration-submitted",

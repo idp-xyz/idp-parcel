@@ -4,11 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
+	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
@@ -84,6 +86,32 @@ func declarationIntent(t *testing.T, tenant, unit, procedure, version string) po
 // declarationEventID 按生产同一公式重算信封 ID（票 sa-cc/34 裁决 3：口名 + 目标键三维 + 版本全进哈希）。
 func declarationEventID(tenant, unit, procedure, version string) string {
 	return string(outboxintent.FingerprintEventID("declaration-submission", tenant, unit, procedure, version))
+}
+
+// Covers: 票 sa-cc/34 判据 (1)——单元、程序与版本三个引用维取到旧串接形必然超过 eventing.MaxEventIDLength 的长度
+// （引用多长归实例半边，本仓给不出上界），信封仍入队成功、ID 定长在上限内、重发同一份仍一行。分区键取目标三维、
+// 不含版本，本格三维之和仍在 eventing.MaxPartitionKeyLength 内——证的是 ID 那一维。
+func TestOverlongDeclarationReferencesStillProduceAnEnvelopeIDWithinTheFrameworkLimit(t *testing.T) {
+	fixture := newDeclarationHandoffFixture(t)
+	ctx := t.Context()
+	long := func(prefix string) string { return prefix + "-" + strings.Repeat("x", 60) }
+	unit, procedure, version := long("unit"), long("procedure"), long("version")
+	concatenated := "tenant-a/" + unit + "/" + procedure + "/" + version
+	if len(concatenated) <= eventing.MaxEventIDLength {
+		t.Fatalf("夹具没造出超长：串接形 %d 字节没超过上限 %d", len(concatenated), eventing.MaxEventIDLength)
+	}
+	intent := declarationIntent(t, "tenant-a", unit, procedure, version)
+
+	fixture.inTx(t, ctx, func(txCtx context.Context) error { return fixture.handoff.HandOffDeclarationSubmission(txCtx, intent) })
+	fixture.inTx(t, ctx, func(txCtx context.Context) error { return fixture.handoff.HandOffDeclarationSubmission(txCtx, intent) })
+
+	eventID := declarationEventID("tenant-a", unit, procedure, version)
+	if len(eventID) > eventing.MaxEventIDLength || len(eventID) != len("declaration-submission/")+64 {
+		t.Fatalf("ID = %q（%d 字节）；该是口名前缀加六十四位十六进制、在上限 %d 内", eventID, len(eventID), eventing.MaxEventIDLength)
+	}
+	if count := countDeclarationIntents(t, fixture.pool, eventID); count != 1 {
+		t.Fatalf("超长引用下 outbox 行数 = %d，want 1", count)
+	}
 }
 
 func TestDeclarationSubmissionIntentCommitsAtomicallyWithTheRecord(t *testing.T) {

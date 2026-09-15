@@ -10,6 +10,7 @@ import (
 	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	ccdomain "go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	ccports "go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	vepostgres "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
 	vedomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 )
@@ -115,9 +116,10 @@ func recordEstablishedCustomsCase(t *testing.T, fixture *synVerticalFixture) str
 	if outcome != ccports.CustomsCaseSaved {
 		t.Fatalf("save outcome = %v, want 已写入", outcome)
 	}
-	// 信封 ID 取案件身份键五维，与 OutboxCustomsCaseHandoff 的 ADR-0043 认领一致。
-	return tenant.String() + "/" + customsCaseJurisdiction + "/" +
-		ccdomain.ImportManifest.String() + "/" + customsCaseProcedure + "/" + customsCaseObligation
+	// 信封 ID 由案件身份键五维按生产同一公式重算（票 sa-cc/34 裁决 3：口名 + 五维全进哈希），与
+	// OutboxCustomsCaseHandoff 的 ADR-0043 认领一致；这里不再写字面串接——那串如今只是分区键。
+	return string(outboxintent.FingerprintEventID("customs-case",
+		tenant.String(), customsCaseJurisdiction, ccdomain.ImportManifest.String(), customsCaseProcedure, customsCaseObligation))
 }
 
 func assertUnclassifiedCaseProjection(t *testing.T, fixture *synVerticalFixture, member string) {

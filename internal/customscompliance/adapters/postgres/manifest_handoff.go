@@ -50,7 +50,9 @@ type manifestPayload struct {
 	ManifestID string `json:"manifestId"`
 }
 
-// manifestEventIDPort 是本口在信封 ID 上的口名前缀，与分区主体登记的口名段同词。
+// manifestEventIDPort 是本口在信封 ID 上的口名前缀。取「承运商舱单」的英文形而不取事件类型里的 manifest 段：
+// 前缀的唯一职责是让七只口在同一组维度上算出互不相交的 ID，只要在七只之间互异且稳定就够——它不参与路由、
+// 不进分区主体登记（登的是分区键与 Subject 的形），改它只会让已入 Inbox 的旧 ID 与新 ID 对不上。
 const manifestEventIDPort = "carrier-manifest"
 
 // manifestEventID 把租户、舱单身份**再加来源版本**折成 outboxintent.FingerprintEventID 的定长形（票 sa-cc/34 裁决 3）。

@@ -10,6 +10,7 @@ import (
 	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	ccdomain "go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	ccports "go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	vepostgres "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
 	vedomain "go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
 )
@@ -148,11 +149,11 @@ func recordFormedDeclarationSubmission(t *testing.T, fixture *synVerticalFixture
 	if outcome != ccports.DeclarationSubmissionSaved {
 		t.Fatalf("save outcome = %v, want 已写入", outcome)
 	}
-	// 信封 ID 取提交幂等键三维加版本维（原案内更正在同一目标下换版出第二封，ID 按
-	// 版本认领才不被 EnqueueOnce 吞掉），与 OutboxDeclarationSubmissionHandoff 的
-	// ADR-0043 认领一致。
-	return tenant.String() + "/" + declarationSubmissionUnit + "/" +
-		declarationSubmissionProcedure + "/" + declarationSubmissionVersion
+	// 信封 ID 由提交幂等键三维加版本维按生产同一公式重算（票 sa-cc/34 裁决 3：口名 + 四维全进哈希；原案内更正
+	// 在同一目标下换版出第二封，版本维进 ID 才不被 EnqueueOnce 吞掉），与 OutboxDeclarationSubmissionHandoff 的
+	// ADR-0043 认领一致；这里不再写字面串接。
+	return string(outboxintent.FingerprintEventID("declaration-submission",
+		tenant.String(), declarationSubmissionUnit, declarationSubmissionProcedure, declarationSubmissionVersion))
 }
 
 func assertUnclassifiedSubmissionProjection(t *testing.T, fixture *synVerticalFixture, member string) {

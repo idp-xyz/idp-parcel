@@ -4,11 +4,13 @@ import (
 	"context"
 	"errors"
 	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
+	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
@@ -86,6 +88,33 @@ func closureEventID(tenant string, caseRef domain.CustomsCaseID, closureCycle in
 
 func closurePartitionKey(tenant string, caseRef domain.CustomsCaseID) string {
 	return tenant + "/" + caseRef.String()
+}
+
+// Covers: 票 sa-cc/34 判据 (1)——案件引用取到旧串接形必然超过 eventing.MaxEventIDLength 的长度（引用多长归实例半边，
+// 本仓给不出上界），信封仍入队成功、ID 定长在上限内、重发同一份仍一行。分区键只到案件、仍在 eventing.MaxPartitionKeyLength
+// 内——证的是 ID 那一维。
+func TestAnOverlongCaseReferenceStillProducesAClosureEnvelopeIDWithinTheFrameworkLimit(t *testing.T) {
+	fixture := newClosureHandoffFixture(t)
+	ctx := t.Context()
+	caseRef := "case-" + strings.Repeat("x", eventing.MaxEventIDLength)
+	if concatenated := "tenant-a/" + caseRef + "/1"; len(concatenated) <= eventing.MaxEventIDLength {
+		t.Fatalf("夹具没造出超长：串接形 %d 字节没超过上限 %d", len(concatenated), eventing.MaxEventIDLength)
+	}
+	intent := ports.CaseClosureHandoffIntent{
+		TenantID: fmcValue(t, domain.NewTenantID, "tenant-a"),
+		Closure:  closedCaseWithRef(t, caseRef),
+	}
+
+	fixture.inTx(t, ctx, func(txCtx context.Context) error { return fixture.handoff.HandOffClosure(txCtx, intent) })
+	fixture.inTx(t, ctx, func(txCtx context.Context) error { return fixture.handoff.HandOffClosure(txCtx, intent) })
+
+	eventID := closureEventID("tenant-a", intent.Closure.CaseRef(), 1)
+	if len(eventID) > eventing.MaxEventIDLength || len(eventID) != len("case-closure/")+64 {
+		t.Fatalf("ID = %q（%d 字节）；该是口名前缀加六十四位十六进制、在上限 %d 内", eventID, len(eventID), eventing.MaxEventIDLength)
+	}
+	if count := countClosureIntents(t, fixture.pool, eventID); count != 1 {
+		t.Fatalf("超长引用下 outbox 行数 = %d，want 1", count)
+	}
 }
 
 func TestCaseClosureIntentCommitsAtomicallyWithTheRecord(t *testing.T) {
