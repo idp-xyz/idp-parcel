@@ -2,7 +2,7 @@
 
 Category: bug
 Status: ready-for-agent——**2026-09-15 15:2x 通道 1 按用户「自决」代裁（SA owner 口径），三条「要裁的」写入下方「裁决」节**：ID 指纹化、helper 提炼到 `internal/platform/outboxintent` 导出、CC 三只改引（零行为）；`handOffFact` 只对确定性拒（`eventing.ErrInvalidEnvelope`）分出一格——返错、整笔回滚、CLI 用法格并点名原因，其余错误照旧折续办（在事务入口下今天到不了，判断项写实）；CC 消费门幂等靠 0021 主键 + `已存在`，真库钉住；**Blocked by 31 进 main**（CLI 与端点两口的错误映射一次做齐）。依据是通道 2 15:05 取证条（钉 `93840328`）。此前 draft——**2026-09-15 14:4x 通道 1 立票**（sa-cc/27 评审 ← 通道 2 Spec ① 转记；推送方处置时点名「另立 SA 票」）。与 [29](29-cc-handoff-envelope-id-exceeds-framework-limit-and-rederive-path-swallows-handoff-failure.md) 同一张脸、另一只手：29 只改 CC 三只 `*EventID`，SA 这一只不在其内。只写票面未动代码；取证锚第六批 tip `de822820`
-Blocked by: [31](31-sa-external-funds-fact-registration-endpoints-and-admin-write-face.md) 进 main（裁决 2 的错误映射要在 CLI 与端点两口一次做齐；31 在途，通道 3）。此前无（[27](27-sa-external-funds-fact-adoption-and-correction-registration-face.md) 已进 main——本票缺口是它让「从生产到达」第一次成立的；[20](20-sa-external-funds-fact-holds-one-row-per-fact-and-cannot-store-a-correction.md) 已进 main）
+Blocked by: 无——**31 已进 main（第八批，批 tip `0943f7da`，2026-09-15 16:2x），本票可派**；31 评审 ← 通道 2 Spec 非阻断 ①（admin-web 词条「重发同一份即补发」在唯一可达因下为假）归本票随裁决 2 一并改口。此前：[31](31-sa-external-funds-fact-registration-endpoints-and-admin-write-face.md) 进 main（裁决 2 的错误映射要在 CLI 与端点两口一次做齐；31 在途，通道 3）。此前无（[27](27-sa-external-funds-fact-adoption-and-correction-registration-face.md) 已进 main——本票缺口是它让「从生产到达」第一次成立的；[20](20-sa-external-funds-fact-holds-one-row-per-fact-and-cannot-store-a-correction.md) 已进 main）
 
 ## 缺口（评审 ← 通道 2 钉 `aa48912e`，逐符号名；推送方未复量，作者开工先复）
 
