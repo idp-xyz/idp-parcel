@@ -15,6 +15,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
@@ -76,7 +77,15 @@ func followUpIntent(t *testing.T, tenant string) ports.FollowUpHandoffIntent {
 	}
 }
 
-func followUpHandoffEventID(key ports.FollowUpTargetKey) string {
+// followUpHandoffEventID 按生产同一公式重算某一拍的信封 ID（票 sa-cc/34 裁决 3：口名 + 目标键四维 + 状态段全进哈希）。
+// 状态段与各拍事件类型的尾词同词：recorded / replacement-proposed / replacement-effective。
+func followUpHandoffEventID(key ports.FollowUpTargetKey, beat string) string {
+	return string(outboxintent.FingerprintEventID("follow-up",
+		key.TenantID.String(), key.Trigger.String(), key.Version.String(), key.Kind.String(), beat))
+}
+
+// followUpHandoffPartitionKey 是目标键四维的可读串接——分区键不随 ID 换形。
+func followUpHandoffPartitionKey(key ports.FollowUpTargetKey) string {
 	return key.TenantID.String() + "/" + key.Trigger.String() + "/" +
 		key.Version.String() + "/" + key.Kind.String()
 }
@@ -118,22 +127,26 @@ func TestEachFollowUpBeatEnqueuesItsOwnEnvelopeInTheSamePartition(t *testing.T) 
 		return fixture.handoff.HandOffFollowUp(txCtx, took)
 	})
 
-	base := followUpHandoffEventID(key)
-	proposedID := base + "/replacement-proposed"
-	effectiveID := base + "/replacement-effective"
+	recordedID := followUpHandoffEventID(key, "recorded")
+	proposedID := followUpHandoffEventID(key, "replacement-proposed")
+	effectiveID := followUpHandoffEventID(key, "replacement-effective")
+	if recordedID == proposedID || proposedID == effectiveID || recordedID == effectiveID {
+		t.Fatal("三拍算出了相同的 ID——状态段没进哈希，后两拍会被 EnqueueOnce 吞掉（票 sa-cc/34 判据 (1)）")
+	}
+	partitionKey := followUpHandoffPartitionKey(key)
 
 	for _, row := range []struct {
 		id, eventType string
 	}{
-		{base, "customs-compliance.follow-up.recorded"},
+		{recordedID, "customs-compliance.follow-up.recorded"},
 		{proposedID, "customs-compliance.follow-up.replacement-proposed"},
 		{effectiveID, "customs-compliance.follow-up.replacement-effective"},
 	} {
 		if got := followUpIntentType(t, fixture.pool, row.id); got != row.eventType {
 			t.Fatalf("%s 的事件类型 = %q, want %q——后两拍不入队或类型没换都算失败", row.id, got, row.eventType)
 		}
-		if got := partitionKeyOf(t, fixture.pool, row.id); got != base {
-			t.Fatalf("%s 的分区键 = %q, want %q；三拍不同分区就没有先后可言", row.id, got, base)
+		if got := partitionKeyOf(t, fixture.pool, row.id); got != partitionKey {
+			t.Fatalf("%s 的分区键 = %q, want %q；三拍不同分区就没有先后可言", row.id, got, partitionKey)
 		}
 	}
 }
@@ -142,7 +155,7 @@ func TestFollowUpIntentCommitsAtomicallyWithTheTarget(t *testing.T) {
 	fixture := newFollowUpHandoffFixture(t)
 	ctx := t.Context()
 	intent := followUpIntent(t, "tenant-a")
-	eventID := followUpHandoffEventID(intent.Key)
+	eventID := followUpHandoffEventID(intent.Key, "recorded")
 
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
 		if _, err := fixture.followUps.SaveTarget(txCtx, intent.Key, intent.Target); err != nil {
@@ -166,7 +179,7 @@ func TestFollowUpIntentRollbackDropsBoth(t *testing.T) {
 	fixture := newFollowUpHandoffFixture(t)
 	ctx := t.Context()
 	intent := followUpIntent(t, "tenant-a")
-	eventID := followUpHandoffEventID(intent.Key)
+	eventID := followUpHandoffEventID(intent.Key, "recorded")
 	rollback := errors.New("回滚")
 
 	if err := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
@@ -203,7 +216,7 @@ func TestResendingTheSameFollowUpIntentIsIdempotent(t *testing.T) {
 	fixture := newFollowUpHandoffFixture(t)
 	ctx := t.Context()
 	intent := followUpIntent(t, "tenant-a")
-	eventID := followUpHandoffEventID(intent.Key)
+	eventID := followUpHandoffEventID(intent.Key, "recorded")
 
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
 		return fixture.handoff.HandOffFollowUp(txCtx, intent)
@@ -219,7 +232,7 @@ func TestResendingTheSameFollowUpIntentIsIdempotent(t *testing.T) {
 func TestFollowUpIntentRefusesToRunOutsideATransaction(t *testing.T) {
 	fixture := newFollowUpHandoffFixture(t)
 	intent := followUpIntent(t, "tenant-a")
-	eventID := followUpHandoffEventID(intent.Key)
+	eventID := followUpHandoffEventID(intent.Key, "recorded")
 	if err := fixture.handoff.HandOffFollowUp(t.Context(), intent); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("无事务入队应返回 ErrTransactionRequired，实得：%v", err)
 	}

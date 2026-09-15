@@ -16,6 +16,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
@@ -80,8 +81,9 @@ func declarationIntent(t *testing.T, tenant, unit, procedure, version string) po
 
 // declarationEventID 与被测拼法同构：目标三维加版本维——原案内更正在同一目标下换版
 // 出第二封，ID 不带版本维时第二封会被 EnqueueOnce 静默吞掉。
+// declarationEventID 按生产同一公式重算信封 ID（票 sa-cc/34 裁决 3：口名 + 目标键三维 + 版本全进哈希）。
 func declarationEventID(tenant, unit, procedure, version string) string {
-	return tenant + "/" + unit + "/" + procedure + "/" + version
+	return string(outboxintent.FingerprintEventID("declaration-submission", tenant, unit, procedure, version))
 }
 
 func TestDeclarationSubmissionIntentCommitsAtomicallyWithTheRecord(t *testing.T) {

@@ -3,11 +3,13 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
+	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
@@ -15,11 +17,13 @@ import (
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
 // 本文件对真实 PostgreSQL 16 证关务案件建立意图：与业务行同一提交、回滚一并消失、重发
-// 同一份、无事务拒、缺案件键响亮报错。信封 ID 由案件键认领。入队走 EnqueueOnce。
+// 同一份、无事务拒、缺案件键响亮报错。信封 ID 由案件键认领、折成定长指纹形（票 sa-cc/34 裁决 3），
+// 分区键保留案件键的可读串接。入队走 EnqueueOnce。
 
 type customsCaseHandoffClock struct{ at time.Time }
 
@@ -72,9 +76,59 @@ func customsCaseIntent(t *testing.T, tenant string) ports.CustomsCaseHandoffInte
 	}
 }
 
+// customsCaseHandoffEventID 按生产同一公式重算信封 ID（票 sa-cc/34 裁决 3：口名 + 案件键五维全进哈希）。
 func customsCaseHandoffEventID(key ports.CustomsCaseKey) string {
-	return key.TenantID.String() + "/" + key.Jurisdiction.String() + "/" +
+	return string(outboxintent.FingerprintEventID("customs-case",
+		key.TenantID.String(), key.Jurisdiction.String(), key.Direction.String(), key.Procedure.String(), key.Obligation.String()))
+}
+
+// Covers: 票 sa-cc/34 判据 (1) / (2)——案件键四个引用维取到旧串接形必然超过 eventing.MaxEventIDLength 的长度，信封仍
+// 入队成功、ID 定长在上限内、同输入同 ID；分区键仍是那串可读五维（顺序语义：同案件同分区），ID 已不是那串。
+func TestOverlongCaseReferencesStillProduceAnEnvelopeIDWithinTheFrameworkLimit(t *testing.T) {
+	fixture := newCustomsCaseHandoffFixture(t)
+	ctx := t.Context()
+	long := func(prefix string) string { return prefix + "-" + strings.Repeat("x", eventing.MaxEventIDLength) }
+	key := ports.CustomsCaseKey{
+		TenantID:     crgValue(t, domain.NewTenantID, "tenant-a"),
+		Jurisdiction: crgValue(t, domain.NewRegulatoryJurisdictionReference, long("jurisdiction")),
+		Direction:    domain.ImportManifest,
+		Procedure:    crgValue(t, domain.NewCustomsProcedureReference, long("procedure")),
+		Obligation:   crgValue(t, domain.NewObligationScopeReference, long("obligation")),
+	}
+	concatenated := key.TenantID.String() + "/" + key.Jurisdiction.String() + "/" +
 		key.Direction.String() + "/" + key.Procedure.String() + "/" + key.Obligation.String()
+	if len(concatenated) <= eventing.MaxEventIDLength {
+		t.Fatalf("夹具没造出超长：串接形 %d 字节没超过上限 %d", len(concatenated), eventing.MaxEventIDLength)
+	}
+	intent := ports.CustomsCaseHandoffIntent{Key: key, Case: establishedCase(t, key, "case-long", nil)}
+
+	fixture.inTx(t, ctx, func(txCtx context.Context) error { return fixture.handoff.HandOffCase(txCtx, intent) })
+	fixture.inTx(t, ctx, func(txCtx context.Context) error { return fixture.handoff.HandOffCase(txCtx, intent) })
+
+	eventID := customsCaseHandoffEventID(key)
+	if len(eventID) > eventing.MaxEventIDLength || len(eventID) != len("customs-case/")+64 {
+		t.Fatalf("ID = %q（%d 字节）；该是口名前缀加六十四位十六进制、在上限 %d 内", eventID, len(eventID), eventing.MaxEventIDLength)
+	}
+	if count := countCustomsCaseIntents(t, fixture.pool, eventID); count != 1 {
+		t.Fatalf("超长引用下 outbox 行数 = %d，want 1", count)
+	}
+}
+
+// Covers: 票 sa-cc/34 裁决 3 / 判据 (2)——本口在 `760332c7` 上把 ID 直接当分区键；解耦后分区键取那一串可读五维一字不变
+// （字面断言，不用生产函数重算），ID 换成指纹形。分区键是顺序语义，改它会让换形前后同一案件落两个分区。
+func TestTheCustomsCasePartitionKeyKeepsTheReadableConcatenationWhileTheIDIsFingerprinted(t *testing.T) {
+	fixture := newCustomsCaseHandoffFixture(t)
+	intent := customsCaseIntent(t, "tenant-a")
+	fixture.inTx(t, t.Context(), func(txCtx context.Context) error { return fixture.handoff.HandOffCase(txCtx, intent) })
+
+	eventID := customsCaseHandoffEventID(intent.Key)
+	const wantPartitionKey = "tenant-a/jurisdiction/US/IMPORT/IMPORT_STANDARD/obligation/full"
+	if got := partitionKeyOf(t, fixture.pool, eventID); got != wantPartitionKey {
+		t.Fatalf("分区键 = %q，want %q——可读形一字不能变", got, wantPartitionKey)
+	}
+	if eventID == wantPartitionKey {
+		t.Fatal("ID 仍是那串可读串接——没有换成指纹形")
+	}
 }
 
 func TestCustomsCaseIntentCommitsAtomicallyWithTheCase(t *testing.T) {

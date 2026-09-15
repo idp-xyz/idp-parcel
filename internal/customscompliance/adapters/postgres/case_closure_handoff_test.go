@@ -16,6 +16,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
@@ -78,8 +79,9 @@ func closureIntent(t *testing.T, tenant string) ports.CaseClosureHandoffIntent {
 	}
 }
 
+// closureEventID 按生产同一公式重算信封 ID（票 sa-cc/34 裁决 3：口名 + 租户 / 案件引用 / 周期序数十进制字面全进哈希）。
 func closureEventID(tenant string, caseRef domain.CustomsCaseID, closureCycle int) string {
-	return tenant + "/" + caseRef.String() + "/" + strconv.Itoa(closureCycle)
+	return string(outboxintent.FingerprintEventID("case-closure", tenant, caseRef.String(), strconv.Itoa(closureCycle)))
 }
 
 func closurePartitionKey(tenant string, caseRef domain.CustomsCaseID) string {

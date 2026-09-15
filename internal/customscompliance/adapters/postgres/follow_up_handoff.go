@@ -69,22 +69,38 @@ func followUpPartitionKey(key ports.FollowUpTargetKey) string {
 		key.Version.String() + "/" + key.Kind.String()
 }
 
+// followUpEventIDPort 是本口在信封 ID 上的口名前缀。
+const followUpEventIDPort = "follow-up"
+
+// 三拍在信封 ID 上的状态段：与各拍事件类型的尾词同词。
+const (
+	followUpBeatRecorded             = "recorded"
+	followUpBeatReplacementProposed  = "replacement-proposed"
+	followUpBeatReplacementEffective = "replacement-effective"
+)
+
+// followUpEventID 把目标键四维加状态段折成 outboxintent.FingerprintEventID 的定长形（票 sa-cc/34 裁决 3）。状态段
+// 必须作一维进哈希：少了它三拍就算出同一个 ID，后两拍被 outboxintent.EnqueueOnce 当成首拍的重放静默吞掉。
+func followUpEventID(key ports.FollowUpTargetKey, beat string) eventing.EventID {
+	return outboxintent.FingerprintEventID(followUpEventIDPort,
+		key.TenantID.String(), key.Trigger.String(), key.Version.String(), key.Kind.String(), beat)
+}
+
 // followUpHandoffShape 是一拍的信封身份：哪一份（ID）、哪一类（类型）、何时发生。
 type followUpHandoffShape struct {
-	eventID    string
+	eventID    eventing.EventID
 	eventType  eventing.EventType
 	occurredAt time.Time
 }
 
 // followUpHandoffIdentity 按意图携带的状态选拍。ADR-0043 说意图由结果标识认领，而
-// 这一口的结果是「目标处在哪一拍」：ID 少了状态段，三拍就算出同一个字符串，而
+// 这一口的结果是「目标处在哪一拍」：ID 少了状态段，三拍就算出同一份，而
 // outboxintent.EnqueueOnce 先查后插——后两拍静默不入队，编排却收到「交接成功」。
 func followUpHandoffIdentity(intent ports.FollowUpHandoffIntent) followUpHandoffShape {
-	base := followUpPartitionKey(intent.Key)
 	switch {
 	case intent.Relation == nil:
 		return followUpHandoffShape{
-			eventID:    base,
+			eventID:    followUpEventID(intent.Key, followUpBeatRecorded),
 			eventType:  followUpEventType,
 			occurredAt: intent.Target.FormedAt().UTC(),
 		}
@@ -92,14 +108,14 @@ func followUpHandoffIdentity(intent ports.FollowUpHandoffIntent) followUpHandoff
 		// 拟替代在领域上没有自己的时刻（ProposeReplacement 不收时间），取目标形成
 		// 时刻——顺序由分区序列守，不靠这个时间戳。
 		return followUpHandoffShape{
-			eventID:    base + "/replacement-proposed",
+			eventID:    followUpEventID(intent.Key, followUpBeatReplacementProposed),
 			eventType:  followUpProposedEventType,
 			occurredAt: intent.Target.FormedAt().UTC(),
 		}
 	default:
 		at, _ := intent.Relation.EffectiveAt()
 		return followUpHandoffShape{
-			eventID:    base + "/replacement-effective",
+			eventID:    followUpEventID(intent.Key, followUpBeatReplacementEffective),
 			eventType:  followUpEffectiveEventType,
 			occurredAt: at.UTC(),
 		}
@@ -135,7 +151,7 @@ func (handoff *OutboxFollowUpHandoff) HandOffFollowUp(
 	shape := followUpHandoffIdentity(intent)
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(shape.eventID),
+		ID:           shape.eventID,
 		Source:       ccEventSource,
 		Type:         shape.eventType,
 		Version:      1,

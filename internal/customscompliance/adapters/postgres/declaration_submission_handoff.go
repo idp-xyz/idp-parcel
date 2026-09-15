@@ -54,13 +54,17 @@ type declarationSubmissionPayload struct {
 	CaseID    string `json:"caseId"`
 }
 
-// declarationSubmissionEventID 按（逻辑申报目标+提交版本）四维认领信封。版本维必须
-// 在 ID 上：原案内更正在同一逻辑申报目标下形成第二版（CONTEXT「原提交及其结果永久保留」），EnqueueOnce
-// 按（来源+事件 ID）先查后插、查到即静默成功——ID 不带版本维，第二版意图必然被首版
+// declarationSubmissionEventIDPort 是本口在信封 ID 上的口名前缀。
+const declarationSubmissionEventIDPort = "declaration-submission"
+
+// declarationSubmissionEventID 按（逻辑申报目标+提交版本）四维认领信封，折成 outboxintent.FingerprintEventID 的定长形
+// （票 sa-cc/34 裁决 3）。版本维必须在 ID 上：原案内更正在同一逻辑申报目标下形成第二版（CONTEXT「原提交及其结果永久
+// 保留」），EnqueueOnce 按（来源+事件 ID）先查后插、查到即静默成功——ID 不带版本维，第二版意图必然被首版
 // 信封吞掉且无任何一环报错（declaration-envelope-version-dedup/01 坐实的机制坑）。
 // 重放同一版本仍重发同一份，ADR-0043 的幂等语义不变。
-func declarationSubmissionEventID(key ports.DeclarationSubmissionKey, version string) string {
-	return declarationSubmissionPartitionKey(key) + "/" + version
+func declarationSubmissionEventID(key ports.DeclarationSubmissionKey, version string) eventing.EventID {
+	return outboxintent.FingerprintEventID(declarationSubmissionEventIDPort,
+		key.TenantID.String(), key.Unit.String(), key.Procedure.String(), version)
 }
 
 // declarationSubmissionPartitionKey 是同一逻辑申报目标的分区锚：版本演进必须保序
@@ -105,7 +109,7 @@ func (handoff *OutboxDeclarationSubmissionHandoff) HandOffDeclarationSubmission(
 	eventID := declarationSubmissionEventID(key, intent.Record.Version.ID().String())
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(eventID),
+		ID:           eventID,
 		Source:       ccEventSource,
 		Type:         declarationSubmissionEventType,
 		Version:      1,

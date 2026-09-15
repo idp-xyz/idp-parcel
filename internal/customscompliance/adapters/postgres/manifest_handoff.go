@@ -50,14 +50,17 @@ type manifestPayload struct {
 	ManifestID string `json:"manifestId"`
 }
 
-// manifestEventID 取舱单身份**再加来源版本**。
+// manifestEventIDPort 是本口在信封 ID 上的口名前缀，与分区主体登记的口名段同词。
+const manifestEventIDPort = "carrier-manifest"
+
+// manifestEventID 把租户、舱单身份**再加来源版本**折成 outboxintent.FingerprintEventID 的定长形（票 sa-cc/34 裁决 3）。
 //
 // 版本必须在里面。ADR-0043 说意图由结果标识认领，而一份舱单引用的结果标识是它的来源
 // 版本不是舱单身份：承运商更正推进版本走的是同一个舱单（Revise 换版本、指回前身），
-// ID 少了版本两版就算出同一个字符串，而 outboxintent.EnqueueOnce 先查后插——修订版
+// ID 少了版本两版就算出同一份，而 outboxintent.EnqueueOnce 先查后插——修订版
 // 于是静默不入队，编排却收到「交接成功」。
-func manifestEventID(tenant, manifest, version string) string {
-	return tenant + "/" + manifest + "/" + version
+func manifestEventID(tenant, manifest, version string) eventing.EventID {
+	return outboxintent.FingerprintEventID(manifestEventIDPort, tenant, manifest, version)
 }
 
 // manifestPartitionKey 取（租户+舱单），不取版本。
@@ -101,7 +104,7 @@ func (handoff *OutboxManifestHandoff) HandOffManifest(
 	)
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(eventID),
+		ID:           eventID,
 		Source:       ccEventSource,
 		Type:         manifestEventType,
 		Version:      1,

@@ -3,22 +3,26 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
+	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	adapter "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
 // 本文件对真实 PostgreSQL 16 证外部结果接收意图：与业务行同一提交、回滚一并消失、
-// 重发同一份、无事务拒、归属不上的记录响亮报错。入队走 EnqueueOnce。
+// 重发同一份、无事务拒、归属不上的记录响亮报错。信封 ID 折成定长指纹形、分区键保留
+// 「租户 / 来源标识」可读串接（票 sa-cc/34 裁决 3）。入队走 EnqueueOnce。
 
 type resultHandoffClock struct{ at time.Time }
 
@@ -72,8 +76,51 @@ func resultIntent(t *testing.T, tenant, sourceID, version string) ports.External
 	return ports.ExternalResultHandoffIntent{Record: attributedRecord(t, tenant, sourceID, version)}
 }
 
+// resultEventID 按生产同一公式重算信封 ID（票 sa-cc/34 裁决 3：口名 + 接收幂等键两维全进哈希）。
 func resultEventID(tenant, sourceID string) string {
-	return tenant + "/" + sourceID
+	return string(outboxintent.FingerprintEventID("external-result", tenant, sourceID))
+}
+
+// Covers: 票 sa-cc/34 判据 (1)——SourceID 是裸字符串、没有构造门，取到旧串接形必然超过 eventing.MaxEventIDLength 的
+// 长度，信封仍入队成功、ID 定长在上限内、重发同一份仍一行。分区键仍取「租户 / 来源标识」可读串接、不随 ID 换形，
+// 所以这里的 SourceID 只顶过 ID 上限、不顶过 eventing.MaxPartitionKeyLength——顶过后者的响法归 /customs/external-results
+// 那一路的用例。
+func TestOverlongSourceIDsStillProduceAnEnvelopeIDWithinTheFrameworkLimit(t *testing.T) {
+	fixture := newResultHandoffFixture(t)
+	ctx := t.Context()
+	sourceID := "resp-" + strings.Repeat("x", eventing.MaxEventIDLength)
+	if concatenated := "tenant-a/" + sourceID; len(concatenated) <= eventing.MaxEventIDLength {
+		t.Fatalf("夹具没造出超长：串接形 %d 字节没超过上限 %d", len(concatenated), eventing.MaxEventIDLength)
+	}
+	intent := resultIntent(t, "tenant-a", sourceID, "submission-1")
+
+	fixture.inTx(t, ctx, func(txCtx context.Context) error { return fixture.handoff.HandOffExternalResult(txCtx, intent) })
+	fixture.inTx(t, ctx, func(txCtx context.Context) error { return fixture.handoff.HandOffExternalResult(txCtx, intent) })
+
+	eventID := resultEventID("tenant-a", sourceID)
+	if len(eventID) > eventing.MaxEventIDLength || len(eventID) != len("external-result/")+64 {
+		t.Fatalf("ID = %q（%d 字节）；该是口名前缀加六十四位十六进制、在上限 %d 内", eventID, len(eventID), eventing.MaxEventIDLength)
+	}
+	if count := countResultIntents(t, fixture.pool, eventID); count != 1 {
+		t.Fatalf("超长来源标识下 outbox 行数 = %d，want 1", count)
+	}
+}
+
+// Covers: 票 sa-cc/34 裁决 3 / 判据 (2)——本口在 `760332c7` 上把 ID 直接当分区键；解耦后分区键取「租户 / 来源标识」
+// 一字不变（字面断言），ID 换成指纹形。
+func TestTheExternalResultPartitionKeyKeepsTheReadableConcatenationWhileTheIDIsFingerprinted(t *testing.T) {
+	fixture := newResultHandoffFixture(t)
+	intent := resultIntent(t, "tenant-a", "resp-1", "submission-1")
+	fixture.inTx(t, t.Context(), func(txCtx context.Context) error { return fixture.handoff.HandOffExternalResult(txCtx, intent) })
+
+	eventID := resultEventID("tenant-a", "resp-1")
+	const wantPartitionKey = "tenant-a/resp-1"
+	if got := partitionKeyOf(t, fixture.pool, eventID); got != wantPartitionKey {
+		t.Fatalf("分区键 = %q，want %q——可读形一字不能变", got, wantPartitionKey)
+	}
+	if eventID == wantPartitionKey {
+		t.Fatal("ID 仍是那串可读串接——没有换成指纹形")
+	}
 }
 
 func TestExternalResultIntentCommitsAtomicallyWithTheRecord(t *testing.T) {

@@ -51,14 +51,18 @@ type caseClosurePayload struct {
 	CaseRef  string `json:"caseRef"`
 }
 
-// caseClosureEventID 取（租户+案件引用+关闭周期序数）。
+// caseClosureEventIDPort 是本口在信封 ID 上的口名前缀。
+const caseClosureEventIDPort = "case-closure"
+
+// caseClosureEventID 把（租户+案件引用+关闭周期序数）折成 outboxintent.FingerprintEventID 的定长形（票 sa-cc/34 裁决 3）；
+// 序数以十进制字面作一维进哈希。
 //
 // 周期序数必须在里面。UC-CC-010 要求重开后再次关闭形成新的关闭决定周期、历史周期永久
-// 保留，而 ID 少了这一维，第二个周期与第一个算出同一个字符串，outboxintent.EnqueueOnce
+// 保留，而 ID 少了这一维，第二个周期与第一个算出同一份，outboxintent.EnqueueOnce
 // 先查后插——C2 于是静默不入队，编排却收到「交接成功」。今天应用层没有重开入口，序数
 // 恒为 1，本公式无行为差异；它拆的是多周期落地那天的引信（ADR-0069）。
-func caseClosureEventID(tenant, caseRef string, closureCycle int) string {
-	return tenant + "/" + caseRef + "/" + strconv.Itoa(closureCycle)
+func caseClosureEventID(tenant, caseRef string, closureCycle int) eventing.EventID {
+	return outboxintent.FingerprintEventID(caseClosureEventIDPort, tenant, caseRef, strconv.Itoa(closureCycle))
 }
 
 // caseClosureCycle 给出当次关闭是本案第几个关闭周期：首次为 1，每次受控重开后再次关闭
@@ -108,7 +112,7 @@ func (handoff *OutboxCaseClosureHandoff) HandOffClosure(
 	)
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(eventID),
+		ID:           eventID,
 		Source:       ccEventSource,
 		Type:         caseClosureEventType,
 		Version:      1,

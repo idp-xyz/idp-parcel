@@ -3,11 +3,13 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
+	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
@@ -15,12 +17,13 @@ import (
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
 // 本文件对真实 PostgreSQL 16 证舱单引用意图：与业务行同一提交、回滚一并消失、重发
-// 同一份、无事务拒、缺舱单标识响亮报错。信封 ID 由舱单身份加来源版本认领，分区键只到
-// 舱单身份。入队走 EnqueueOnce。
+// 同一份、无事务拒、缺舱单标识响亮报错。信封 ID 由舱单身份加来源版本认领、折成定长
+// 指纹形（票 sa-cc/34 裁决 3），分区键只到舱单身份。入队走 EnqueueOnce。
 
 type manifestHandoffClock struct{ at time.Time }
 
@@ -77,9 +80,46 @@ func manifestIntent(t *testing.T, tenant string) ports.ManifestHandoffIntent {
 	}
 }
 
+// manifestHandoffEventID 按生产同一公式重算信封 ID（票 sa-cc/34 裁决 3：口名 + 租户 / 舱单身份 / 来源版本全进哈希）。
 func manifestHandoffEventID(tenant string, intent ports.ManifestHandoffIntent) string {
-	return tenant + "/" + intent.Reference.Manifest().String() +
-		"/" + intent.Reference.Version().String()
+	return string(outboxintent.FingerprintEventID("carrier-manifest",
+		tenant, intent.Reference.Manifest().String(), intent.Reference.Version().String()))
+}
+
+// Covers: 票 sa-cc/34 判据 (1)——舱单身份与来源版本取到旧串接形必然超过 eventing.MaxEventIDLength 的长度，
+// 信封仍入队成功、ID 定长在上限内、重发同一份仍一行。
+func TestOverlongManifestReferencesStillProduceAnEnvelopeIDWithinTheFrameworkLimit(t *testing.T) {
+	fixture := newManifestHandoffFixture(t)
+	ctx := t.Context()
+	long := func(prefix string) string { return prefix + "-" + strings.Repeat("x", eventing.MaxEventIDLength) }
+	reference, err := domain.AcceptManifestReference(domain.ExternalManifestReferenceSpec{
+		Manifest:   fmcValue(t, domain.NewExternalManifestID, long("carrier-manifest")),
+		Version:    fmcValue(t, domain.NewManifestSourceVersion, long("manifest")),
+		Carrier:    fmcValue(t, domain.NewCarrierResponsibilityReference, "carrier-1/regulatory-manifest"),
+		Procedure:  fmcValue(t, domain.NewCustomsProcedureReference, "US-IMPORT/TYPE-86"),
+		Direction:  domain.ImportManifest,
+		Scope:      fmcValue(t, domain.NewDecisionScopeReference, "manifest-scope-1"),
+		SourceFact: "carrier-report/long",
+		AcceptedAt: fmcBaseAt,
+	})
+	if err != nil {
+		t.Fatalf("接受超长舱单引用：%v", err)
+	}
+	intent := ports.ManifestHandoffIntent{TenantID: fmcValue(t, domain.NewTenantID, "tenant-a"), Reference: reference}
+	if concatenated := "tenant-a/" + reference.Manifest().String() + "/" + reference.Version().String(); len(concatenated) <= eventing.MaxEventIDLength {
+		t.Fatalf("夹具没造出超长：串接形 %d 字节没超过上限 %d", len(concatenated), eventing.MaxEventIDLength)
+	}
+
+	fixture.inTx(t, ctx, func(txCtx context.Context) error { return fixture.handoff.HandOffManifest(txCtx, intent) })
+	fixture.inTx(t, ctx, func(txCtx context.Context) error { return fixture.handoff.HandOffManifest(txCtx, intent) })
+
+	eventID := manifestHandoffEventID("tenant-a", intent)
+	if len(eventID) > eventing.MaxEventIDLength || len(eventID) != len("carrier-manifest/")+64 {
+		t.Fatalf("ID = %q（%d 字节）；该是口名前缀加六十四位十六进制、在上限 %d 内", eventID, len(eventID), eventing.MaxEventIDLength)
+	}
+	if count := countManifestIntents(t, fixture.pool, eventID); count != 1 {
+		t.Fatalf("超长引用下 outbox 行数 = %d，want 1", count)
+	}
 }
 
 // TestARevisedManifestEnqueuesItsOwnEnvelopeInTheSamePartition 钉住两个字段的分工。
@@ -110,8 +150,12 @@ func TestARevisedManifestEnqueuesItsOwnEnvelopeInTheSamePartition(t *testing.T) 
 		return fixture.handoff.HandOffManifest(txCtx, second)
 	})
 
-	firstID := "tenant-a/carrier-manifest/MAWB-123/manifest/v1"
-	revisedID := "tenant-a/carrier-manifest/MAWB-123/manifest/v2"
+	// ID 已是指纹形、按生产公式重算（票 sa-cc/34 做法 (5)）；下面分区键的字面断言保留——它证的正是分区键不随 ID 换形。
+	firstID := manifestHandoffEventID("tenant-a", first)
+	revisedID := manifestHandoffEventID("tenant-a", second)
+	if firstID == revisedID {
+		t.Fatal("首版与修订版算出同一个 ID——来源版本没进哈希")
+	}
 	if count := countManifestIntents(t, fixture.pool, firstID); count != 1 {
 		t.Fatalf("首版行数 = %d, want 1", count)
 	}
