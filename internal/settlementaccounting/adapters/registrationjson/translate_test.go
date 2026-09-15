@@ -10,7 +10,8 @@ import (
 )
 
 // 本文件证译装两半：正——载荷每一格原样到命令（保真，不规范化、不补默认）；反——形状坏、词表外、
-// 有构造门的标识空白，一律在入库前拒并指名差哪格。采用四格与更正的链头判断在应用层已证，这里不碰库。
+// 有构造门的标识空白，一律在入库前拒并指名差哪格。`AdoptFact` 的答案格与更正的链头判断在应用层已证（ADR-0137
+// 决定四），这里不碰库。夹具币种取 ISO 4217 测试码 `XTS`，不用任何流通币的真码。
 
 const adoptDocument = `{
 	"tenantId": "SYN-T1",
@@ -18,7 +19,7 @@ const adoptDocument = `{
 	"sourceRef": "SYN-SOURCE-BANK-1",
 	"payerRef": "SYN-PAYER-1",
 	"kind": "RECEIPT_CONFIRMED",
-	"currency": "EUR",
+	"currency": "XTS",
 	"amountMinor": 8000,
 	"version": "SYN-FACT-1/v1",
 	"occurredAt": "2026-09-01T08:00:00Z"
@@ -40,7 +41,7 @@ func TestExternalFundsFactFromJSONCarriesEveryFieldWithFidelity(t *testing.T) {
 	if command.Kind != domain.FundsReceiptConfirmed {
 		t.Fatalf("kind = %v，要 RECEIPT_CONFIRMED 译回的领域常量", command.Kind)
 	}
-	if command.Currency != "EUR" || command.AmountMinor != 8000 || command.Version != "SYN-FACT-1/v1" {
+	if command.Currency != "XTS" || command.AmountMinor != 8000 || command.Version != "SYN-FACT-1/v1" {
 		t.Fatalf("内容失真：currency=%q amount=%d version=%q", command.Currency, command.AmountMinor, command.Version)
 	}
 	if want := time.Date(2026, 9, 1, 8, 0, 0, 0, time.UTC); !command.OccurredAt.Equal(want) {
@@ -52,7 +53,7 @@ func TestExternalFundsFactFromJSONCarriesEveryFieldWithFidelity(t *testing.T) {
 func TestExternalFundsFactFromJSONLetsThePayerBeAbsent(t *testing.T) {
 	command, err := registrationjson.ExternalFundsFactFromJSON([]byte(`{
 		"tenantId": "SYN-T1", "factRef": "SYN-FACT-1", "sourceRef": "SYN-SOURCE-BANK-1",
-		"kind": "PAYMENT_FAILED", "currency": "EUR", "amountMinor": 8000,
+		"kind": "PAYMENT_FAILED", "currency": "XTS", "amountMinor": 8000,
 		"version": "SYN-FACT-1/v1", "occurredAt": "2026-09-01T08:00:00Z"
 	}`))
 	if err != nil {
@@ -77,7 +78,7 @@ func TestExternalFundsFactFromJSONRejectsBadShapeVocabularyAndBlankIdentifiers(t
 		"事实引用空白":   {strings.Replace(adoptDocument, `"factRef": "SYN-FACT-1"`, `"factRef": ""`, 1), "fact"},
 		"来源引用空白":   {strings.Replace(adoptDocument, `"SYN-SOURCE-BANK-1"`, `" "`, 1), "source"},
 		"版本空白":     {strings.Replace(adoptDocument, `"version": "SYN-FACT-1/v1"`, `"version": ""`, 1), "version"},
-		"币种空白":     {strings.Replace(adoptDocument, `"EUR"`, `""`, 1), "currency"},
+		"币种空白":     {strings.Replace(adoptDocument, `"XTS"`, `""`, 1), "currency"},
 		"付款人给了但空白": {strings.Replace(adoptDocument, `"SYN-PAYER-1"`, `"  "`, 1), "payer"},
 	}
 	for name, test := range cases {
@@ -126,7 +127,7 @@ func TestExternalFundsFactCorrectionFromJSONRejectsForeignFieldsAndBlankVersions
 		names string
 	}{
 		"带来源引用":  {strings.Replace(correctionDocument, `"corrects"`, `"sourceRef": "SYN-SOURCE-BANK-1", "corrects"`, 1), "sourceref"},
-		"带币种":    {strings.Replace(correctionDocument, `"corrects"`, `"currency": "EUR", "corrects"`, 1), "currency"},
+		"带币种":    {strings.Replace(correctionDocument, `"corrects"`, `"currency": "XTS", "corrects"`, 1), "currency"},
 		"回指空白":   {strings.Replace(correctionDocument, `"corrects": "SYN-FACT-1/v1"`, `"corrects": " "`, 1), "corrects"},
 		"新版本空白":  {strings.Replace(correctionDocument, `"version": "SYN-FACT-1/v2"`, `"version": ""`, 1), "version"},
 		"事实引用空白": {strings.Replace(correctionDocument, `"factRef": "SYN-FACT-1"`, `"factRef": ""`, 1), "fact"},

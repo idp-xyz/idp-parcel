@@ -22,8 +22,9 @@ const ccEventSource = "idp-parcel/customs-compliance"
 // fingerprintEventID 铸定长的信封 ID：口名前缀 + "/" + 各维以 \x00 拼接后的 sha256 十六进制（票 sa-cc/29 裁决 1）。
 //
 // 信封 ID 的上限是 eventing.MaxEventIDLength，而租户、范围、税费这类引用多长归实例半边、本仓给不出上界；把它们原样
-// 拼进 ID 就是把上限押在别人的长度上——票 sa-cc/19 用四个短合成引用加一段六十四位指纹就拼出 138 字节，被
-// Envelope.Validate 确定性拒收。哈希把长度钉死在「前缀 + 六十四」，与任何一维多长无关；口名前缀让几只口在同一个
+// 拼进 ID 就是把上限押在别人的长度上——旧串接形（钉 `a0cb6fef`，票 sa-cc/19 作者 tip）下，`tenant-a` / `SYN-UNIT-RD` /
+// `SYN-DUTY-RD/v1` / `bank-fact-2` 四个短合成引用加一段六十四位指纹就拼出 138 字节，被 Envelope.Validate 确定性
+// 拒收。哈希把长度钉死在「前缀 + 六十四」，与任何一维多长无关；口名前缀让几只口在同一个
 // ccEventSource 下的 ID 空间互不相交（outboxintent.EnqueueOnce 按（source, event_id）查重）。代价是 ID 不再可读，
 // 运维从 ID 反查走载荷——载荷照旧全量带引用。
 func fingerprintEventID(portName string, dimensions ...string) string {

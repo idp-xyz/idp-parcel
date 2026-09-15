@@ -836,7 +836,7 @@ func TestARederivedVerificationWhoseEnvelopeIsRejectedRollsBackLoudlyInsteadOfCo
 }
 
 // Covers: 票 sa-cc/29 完成判据 (2) 的集合半边——重派路上信封被确定性拒收的硬失败哨兵**不在**这条线的未决名单里，
-// 与两只未决哨兵也互不 errors.Is。名单取 externalFundsFactUndecidedSentinels 本身：测试里重列一份会让误登记的哨兵在
+// 与 externalFundsFactUndecidedSentinels 名单里每一只互不 errors.Is。名单取该切片本身：测试里重列一份会让误登记的哨兵在
 // 测试里也一起消失。
 func TestARejectedDutyVerificationHandoffIsNotRegisteredAsUndecided(t *testing.T) {
 	for _, sentinel := range externalFundsFactUndecidedSentinels {

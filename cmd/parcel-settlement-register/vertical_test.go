@@ -26,7 +26,7 @@ const fundsFactPartition = "SYN-T1/funds-fact/SYN-FACT-1"
 func adoptDocumentFor(version string, amountMinor string) string {
 	return `{
 		"tenantId": "SYN-T1", "factRef": "SYN-FACT-1", "sourceRef": "SYN-SOURCE-BANK-1",
-		"payerRef": "SYN-PAYER-1", "kind": "RECEIPT_CONFIRMED", "currency": "EUR",
+		"payerRef": "SYN-PAYER-1", "kind": "RECEIPT_CONFIRMED", "currency": "XTS",
 		"amountMinor": ` + amountMinor + `, "version": "` + version + `",
 		"occurredAt": "2026-09-01T08:00:00Z"
 	}`

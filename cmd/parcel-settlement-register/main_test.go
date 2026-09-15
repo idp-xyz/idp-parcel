@@ -33,7 +33,7 @@ func (transactor failingTransactor) WithinTransaction(context.Context, bentoapp.
 
 const adoptInput = `{
 	"tenantId": "SYN-T1", "factRef": "SYN-FACT-1", "sourceRef": "SYN-SOURCE-BANK-1",
-	"kind": "RECEIPT_CONFIRMED", "currency": "EUR", "amountMinor": 8000,
+	"kind": "RECEIPT_CONFIRMED", "currency": "XTS", "amountMinor": 8000,
 	"version": "SYN-FACT-1/v1", "occurredAt": "2026-09-01T08:00:00Z"
 }`
 

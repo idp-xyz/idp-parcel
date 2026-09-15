@@ -8,7 +8,8 @@
 // 本包不认证、不采信任何自报身份：`tenantId` 在这里只是载荷的一个字段，它是不是调用方有权写的那个租户由调用侧
 // 回答——CLI 靠「能进数据库网络」这道运维边界，在线口靠真渠道 Intake（`PAR-INT-01` 待提供）。
 //
-// 本包也不采用：采用四格与更正的链头判断全在 `application.MapExternalFundsHandler`，这里连库都不碰。UC-SA-005
+// 本包也不采用：`AdoptFact` 的答案格与 `CorrectFact` 的链头判断全在 `application.MapExternalFundsHandler`（ADR-0137
+// 决定四「SA 采用是事实进产品的唯一入口」），这里连库都不碰。UC-SA-005
 // 「不因接收回调自动采用」——本包收的是人工 / 受控批量交进来的载荷，不是任何来源系统的回调形。
 package registrationjson
 
