@@ -50,8 +50,8 @@ func TestChargeOccurrenceMemberViewAnswersNotFoundForAnUnknownKey(t *testing.T) 
 	if err != nil || found {
 		t.Fatalf("不存在的键：err=%v found=%v", err, found)
 	}
-	if len(members.Members) != 0 || !members.OccurredAt.IsZero() {
-		t.Fatalf("不存在的键长出了默认成员或时点：%+v", members)
+	if len(members.Members) != 0 || !members.OccurredAt.IsZero() || members.Scope != (domain.OccurrenceScopeReference{}) {
+		t.Fatalf("不存在的键长出了默认成员、时点或范围：%+v", members)
 	}
 }
 
@@ -128,5 +128,94 @@ func TestChargeOccurrenceMemberViewRefusesAnOccurrenceRegisteredWithoutMembers(t
 	}
 	if found || len(members.Members) != 0 {
 		t.Fatalf("报错的同时还交了内容：found=%v %+v", found, members)
+	}
+}
+
+// —— 以下两条是接手方（通道 3）在读本文件之前先写的 red（parallel-sessions「镜像测试与真测试同形」），
+// 与上面各条对的是同几条判据、切法不同，故并入本文件而不另立：——
+
+// TestChargeOccurrenceMemberViewIsANarrowProjectionOfTheRegisteredRow 证判据 2 的另一面：只读口答的成员
+// （同序同值）、业务时点与主要业务范围，与登记册 `FindByKey` 整条读回的**同一版本**逐项相等——两口读的
+// 是同两张表的同一行，不是两套口径；修订落成 v2 后，v1 / v2 各与自己那一版对得上，谁也不替谁答。
+func TestChargeOccurrenceMemberViewIsANarrowProjectionOfTheRegisteredRow(t *testing.T) {
+	repository, transactor, _ := newChargeOccurrences(t)
+	ctx := t.Context()
+	var view ports.ChargeOccurrenceMemberView = repository
+
+	first := occurrenceRecord(t, "SYN-OCC-0105", "v1", "SYN-PARCEL-A", "SYN-CONSOL-B")
+	mustSaveOccurrence(t, transactor, ctx, repository, first)
+	revised, err := first.Occurrence.ReviseValidity(
+		domain.OccurrenceSuperseded,
+		occurrenceRef(t, domain.NewOccurrenceValidityVersion, "v2"),
+		occurrenceRef(t, domain.NewOccurrenceBasisReference, "CORRECTION/SYN-SRC-2"),
+		occurredAtFixture.Add(time.Hour),
+	)
+	if err != nil {
+		t.Fatalf("形成修订：%v", err)
+	}
+	second := ports.ChargeOccurrenceRecord{
+		Key:        occurrenceKey(t, "tenant-1", "SYN-OCC-0105", "v2"),
+		Occurrence: revised,
+		RecordedAt: occurredAtFixture,
+	}
+	mustSaveOccurrence(t, transactor, ctx, repository, second)
+
+	for _, key := range []ports.ChargeOccurrenceKey{first.Key, second.Key} {
+		got, found, err := view.LoadMembers(ctx, key)
+		if err != nil || !found {
+			t.Fatalf("版本 %s 取不回：found=%v err=%v", key.Validity, found, err)
+		}
+		registered, exists, err := repository.FindByKey(ctx, key)
+		if err != nil || !exists {
+			t.Fatalf("登记册读回版本 %s：exists=%v err=%v", key.Validity, exists, err)
+		}
+		want := registered.Occurrence.Members()
+		if len(got.Members) != len(want) {
+			t.Fatalf("版本 %s 成员数与登记册不一致：got %v want %v", key.Validity, got.Members, want)
+		}
+		for index := range want {
+			if got.Members[index] != want[index] {
+				t.Fatalf("版本 %s 成员第 %d 项与登记册不一致：got %q want %q", key.Validity, index, got.Members[index], want[index])
+			}
+		}
+		if !got.OccurredAt.Equal(registered.Occurrence.OccurredAt()) {
+			t.Fatalf("版本 %s 业务时点与登记册不一致：got %v want %v", key.Validity, got.OccurredAt, registered.Occurrence.OccurredAt())
+		}
+		if got.Scope != registered.Occurrence.Scope() {
+			t.Fatalf("版本 %s 主要业务范围与登记册不一致：got %q want %q", key.Validity, got.Scope, registered.Occurrence.Scope())
+		}
+	}
+}
+
+// TestChargeOccurrenceMemberViewDoesNotInterpretReferenceShapes 证裁决 1 的读侧红线：看着像集运单元、
+// 像包裹、带分隔符或不知何物的引用，一律原样交回——不多不少、一字不改；TF 不按前缀或形状猜种类，
+// 也不因猜不出而漏掉谁。
+func TestChargeOccurrenceMemberViewDoesNotInterpretReferenceShapes(t *testing.T) {
+	repository, transactor, _ := newChargeOccurrences(t)
+	ctx := t.Context()
+	var view ports.ChargeOccurrenceMemberView = repository
+
+	raw := []string{"SYN-CONSOL-UNIT-7", "SYN-PARCEL-0001", "SYN-UNKNOWN-KIND/9"}
+	record := occurrenceRecord(t, "SYN-OCC-0106", "v1", raw...)
+	mustSaveOccurrence(t, transactor, ctx, repository, record)
+
+	got, found, err := view.LoadMembers(ctx, record.Key)
+	if err != nil || !found {
+		t.Fatalf("取回成员：found=%v err=%v", found, err)
+	}
+	if len(got.Members) != len(raw) {
+		t.Fatalf("成员数不对：got %d want %d（%v）", len(got.Members), len(raw), got.Members)
+	}
+	seen := make(map[string]struct{}, len(got.Members))
+	for _, member := range got.Members {
+		seen[member.String()] = struct{}{}
+	}
+	for _, want := range raw {
+		if _, ok := seen[want]; !ok {
+			t.Fatalf("成员 %q 被改写或丢失：%v", want, got.Members)
+		}
+	}
+	if !got.OccurredAt.Equal(record.Occurrence.OccurredAt()) || got.Scope != record.Occurrence.Scope() {
+		t.Fatalf("业务时点或主要业务范围变形：%+v", got)
 	}
 }
