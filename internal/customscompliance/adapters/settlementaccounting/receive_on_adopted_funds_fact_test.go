@@ -3,6 +3,7 @@ package settlementaccounting_test
 import (
 	"context"
 	"errors"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -400,7 +401,8 @@ func TestTheReceiveAdapterRefusesNilDependencies(t *testing.T) {
 
 // rederiveStores 是「已有既往核对」那一格要的几口：协作事项、核对册、付款人规则、交接——内存替身照真库代数（同键
 // `已登记`不顶替）。与 unreachedDutyStores 分开：那本代表「消费这条线不该碰到」，这本代表「新版本到达后编排要
-// 读写」，两本各守一件事。
+// 读写」，两本各守一件事。ListVerificationsByFundsFact 与端口口径同序（核对时刻升序、同刻按指纹字典序），同刻两版
+// 靠它分先后——编排取各谱系最近一版时只在严格更晚时换人，替身不排序，同刻那一格就随 map 迭代序翻面。
 type rederiveStores struct {
 	collaborations  map[string]ccdomain.DutyPaymentCollaboration
 	verifications   map[string]ccports.DutyVerificationRecord
@@ -455,6 +457,13 @@ func (stores *rederiveStores) ListVerificationsByFundsFact(
 			records = append(records, record)
 		}
 	}
+	sort.Slice(records, func(i, j int) bool {
+		left, right := records[i].Verification.VerifiedAt(), records[j].Verification.VerifiedAt()
+		if !left.Equal(right) {
+			return left.Before(right)
+		}
+		return records[i].Key.Digest < records[j].Key.Digest
+	})
 	return records, nil
 }
 
@@ -599,6 +608,50 @@ func TestRederivationUndecidedSplitsBusinessPendingFromDependencyFailure(t *test
 	}
 	if errors.Is(err, adapter.ErrFundsFactReceiveUndecided) {
 		t.Fatal("停在重派不是停在接收，两个哨兵不得混")
+	}
+}
+
+// Covers: 票 sa-cc/19 判断项 ②「同刻两版取指纹字典序小的那版承前」写成断言（票 sa-cc/30 做法 2）。verifiedFixture 的
+// 编排时钟固定，同一谱系在 v1 上再核一版（覆盖改 PARTIAL）就与首版同刻并存、只差指纹；v2 到达 → 编排在替身交回的序上
+// 只在严格更晚时换人，同刻留先出现的那版——所以替身必须按端口口径排（核对时刻升序、同刻按指纹字典序），否则这一格
+// 随 map 迭代序翻面。谁的指纹小由内容定，用例不写死、当场比。
+func TestSameInstantVersionsHandTheirLineageToTheLexicographicallySmallerDigest(t *testing.T) {
+	fixture, stores, receiver := verifiedFixture(t)
+	duty, _ := ccdomain.NewAssessedDutyReference("SYN-DUTY-01/v1")
+	scope, _ := ccdomain.NewDecisionScopeReference("declaration-unit-1")
+	procedure, _ := ccdomain.NewCustomsProcedureReference("SYN-PROC-IMPORT")
+	result, err := receiver.VerifyPayment(context.Background(), ccapplication.VerifyDutyPaymentCommand{
+		TenantID: payerFixtureTenant(t), Duty: duty, Funds: payerFixtureFact(t), FundsVersion: versionOf("bank-fact/v1"),
+		Scope: scope, Procedure: procedure,
+		Coverage: ccdomain.CoveragePartial, Delta: ccdomain.DeltaShort, Validity: ccdomain.FundsFactValid,
+		Basis: "SYN-RULE-01: remittance quotes assessment",
+	})
+	if err != nil || result.Outcome() != ccapplication.DutyVerificationFormed {
+		t.Fatalf("同刻再核一版：err=%v outcome=%v", err, result.Outcome())
+	}
+	first := stores.verifications[verificationKeyOf(stores.handoffs[0].Key)]
+	second := stores.verifications[verificationKeyOf(stores.handoffs[1].Key)]
+	if !first.Verification.VerifiedAt().Equal(second.Verification.VerifiedAt()) || first.Key.Digest == second.Key.Digest ||
+		first.Verification.Coverage() == second.Verification.Coverage() {
+		t.Fatalf("夹具该是同刻两版、指纹与覆盖都不同：%+v / %+v", first.Key, second.Key)
+	}
+	expected := first
+	if second.Key.Digest < first.Key.Digest {
+		expected = second
+	}
+
+	fixture.source.facts["tenant-a|bank-fact-1|bank-fact/v2"] = adoptedContent("bank-fact/v2", "bank-fact/v1", "payer-customer-7")
+	if err := fixture.handler.HandleAdoptedExternalFundsFact(context.Background(), adoptedEnvelopeRef("bank-fact/v2")); err != nil {
+		t.Fatalf("v2：%v", err)
+	}
+	if len(stores.verifications) != 3 || len(stores.handoffs) != 3 {
+		t.Fatalf("同一谱系该只多一版、多一封：%d 行 %d 封", len(stores.verifications), len(stores.handoffs))
+	}
+	rederived := stores.verifications[verificationKeyOf(stores.handoffs[2].Key)]
+	if rederived.Verification.FundsVersion() != versionOf("bank-fact/v2") ||
+		rederived.Verification.Coverage() != expected.Verification.Coverage() {
+		t.Fatalf("(a′) 该承同刻两版里指纹字典序小的那版（%s，覆盖 %s）：%+v",
+			expected.Key.Digest, expected.Verification.Coverage(), rederived.Verification)
 	}
 }
 

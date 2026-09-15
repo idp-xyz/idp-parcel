@@ -245,9 +245,14 @@ func newDutyFixture(t *testing.T) *dutyFixture {
 }
 
 // seedFundsFact 直接把一条资金事实引用放进替身册：本 CLI 没有它的入口（ADR-0137 决定四，
-// 资金事实进 CC 只经 settlement-accounting 的采用信封），核对的前置只能这样铺。
-func seedFundsFact(t *testing.T, book *fakeDutyBook, tenant, fact string) {
+// 资金事实进 CC 只经 settlement-accounting 的采用信封），核对的前置只能这样铺。交回的是它在册上的键——键只在
+// fundsVersionKey 一处拼（票 sa-cc/30），要再摸这一行的用例拿返回值，不自己拼第二份。
+func seedFundsFact(t *testing.T, book *fakeDutyBook, tenant, fact string) string {
 	t.Helper()
+	tenantID, err := domain.NewTenantID(tenant)
+	if err != nil {
+		t.Fatalf("构造租户标识：%v", err)
+	}
 	reference, err := domain.NewExternalFundsFactReference(fact)
 	if err != nil {
 		t.Fatalf("构造资金事实引用：%v", err)
@@ -260,21 +265,23 @@ func seedFundsFact(t *testing.T, book *fakeDutyBook, tenant, fact string) {
 	if err != nil {
 		t.Fatalf("构造版本：%v", err)
 	}
-	book.funds[tenant+"/"+fact+"/"+version.String()] = ports.ExternalFundsFactRegistration{
+	key := fundsVersionKey(tenantID, reference, version)
+	book.funds[key] = ports.ExternalFundsFactRegistration{
 		Fact: reference, Version: version, Source: "SYN-BANK-01", Payer: payer, Currency: "XTS",
 		AmountMinor: 12500, OccurredAt: registerClockNow.Add(-time.Hour),
 	}
+	return key
 }
 
 // seedFundsFactWithoutPayer 铺一条来源显式未提供付款人的事实——付款人三停格（票 sa-cc/12 裁决 2）唯一会让
-// 答案分岔的形。
-func seedFundsFactWithoutPayer(t *testing.T, book *fakeDutyBook, tenant, fact string) {
+// 答案分岔的形。键取 seedFundsFact 交回的那一个，版本字面只在那里出现一次。
+func seedFundsFactWithoutPayer(t *testing.T, book *fakeDutyBook, tenant, fact string) string {
 	t.Helper()
-	seedFundsFact(t, book, tenant, fact)
-	key := tenant + "/" + fact + "/" + fact + "/v1"
+	key := seedFundsFact(t, book, tenant, fact)
 	registration := book.funds[key]
 	registration.Payer = domain.FundsPayerNotProvided()
 	book.funds[key] = registration
+	return key
 }
 
 // seedPayerRule 直接把「这个程序要不要付款人」放进替身册：本 CLI 今天没有登这一格的子命令（登记面在
@@ -635,7 +642,7 @@ func TestExecuteDutyPaymentVerificationStoreFailureIsUndecided(t *testing.T) {
 func TestExecuteDutyPaymentVerificationPayerGridsKeepTheirExitCodes(t *testing.T) {
 	fixture := newDutyFixture(t)
 	ctx := context.Background()
-	seedFundsFactWithoutPayer(t, fixture.duties, "SYN-T1", "SYN-FUNDS-01")
+	unprovided := seedFundsFactWithoutPayer(t, fixture.duties, "SYN-T1", "SYN-FUNDS-01")
 	seedCollaboration(t, fixture)
 
 	message, code := execute(ctx, commandDutyPaymentVerification,
@@ -665,7 +672,7 @@ func TestExecuteDutyPaymentVerificationPayerGridsKeepTheirExitCodes(t *testing.T
 	if len(fixture.duties.verifications) != 1 || len(fixture.duties.handoffs) != 1 {
 		t.Fatalf("形成该落一行、交一封：%d 行 %d 封", len(fixture.duties.verifications), len(fixture.duties.handoffs))
 	}
-	if registration := fixture.duties.funds["SYN-T1/SYN-FUNDS-01/SYN-FUNDS-01/v1"]; registration.Payer.Provided() || !registration.Payer.Valid() {
+	if registration := fixture.duties.funds[unprovided]; registration.Payer.Provided() || !registration.Payer.Valid() {
 		t.Fatalf("核对不得替事实补付款人：%#v", registration.Payer)
 	}
 }
