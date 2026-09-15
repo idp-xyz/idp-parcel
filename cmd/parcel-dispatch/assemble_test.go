@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -13,6 +14,7 @@ import (
 
 	ccinbox "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/inbox"
 	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
+	ccapplication "go.idp.xyz/idp-parcel/internal/customscompliance/application"
 	ccdomain "go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	ccports "go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 	nrinbox "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/inbox"
@@ -314,7 +316,7 @@ func TestTheCarrierPickupConsumerAndTheTFHandoffAgreeOnTheEventType(t *testing.T
 // 正：SA 采用过的事实（带来源提供的付款人）经 `external-funds-fact.adopted` 引用式信封到 CC 消费者，按
 // （租户 + 事实 + 版本）回查 SA 只读视图、译成入向登记，CC 入向登记册按引用读回信封那一版且来源 / 付款人 / 币种 /
 // 金额 / 版本照 SA 转述（`customs_compliance/0021` 起落的是身份行 + 版本子表各一行）；正例第二格（更正版本 v2
-// 落第二行、回指 v1）见函数内注释；
+// 落第二行、回指 v1）与第三格（v2 到达 → 既往核对谱系形成一版 (a′) 并经交接到 SA 采用，票 sa-cc/19）见函数内注释；
 // 反：信封所指的版本 SA 还没有 → 可见性滞后是未决，不定稿、不毒丸，失败码落 dispatch.consumer_undecided。
 func TestAnAdoptedExternalFundsFactReachesTheCustomsRegisterThroughTheRouteTable(t *testing.T) {
 	beat, db, store := wiredBeat(t)
@@ -436,6 +438,74 @@ func TestAnAdoptedExternalFundsFactReachesTheCustomsRegisterThroughTheRouteTable
 		t.Fatalf("第二拍 published = %d, want 1（bank-fact-2 v1 定稿；v9 仍未决）；失败码 v1 = %q", published, recordedFailureCode(t, db, "funds-fact-3"))
 	}
 
+	// 正例第三格的前置（票 sa-cc/19 完成判据 (2)）：v1 已在 CC、v2 未到之际，按 v1 形成一版核对——经 CC 自己的编排
+	// `VerifyPayment`（协作事项与付款人规则先经真登记册铺好），走的是生产那条形成路（真核对册 + 真 Outbox 交接）。
+	//
+	// 税费与范围两个合成引用刻意取短：05 的交接把六十四位十六进制指纹连同租户 / 范围 / 税费 / 资金四个引用拼成信封
+	// ID，而 eventing 的信封 ID 上限 128 字节——引用稍长 EnqueueOnce 就拒收、VerifyPayment 把它折成续办引用、信封
+	// 根本发不出去。那是 05 信封 ID 形状的问题，归 CC owner 另票（票 sa-cc/19 判断项）；本格只证 19 的一路走得通，
+	// 所以引用短到装得下，并在下面把「交接成功」断言出来，不让续办引用无声滑过。
+	verificationHandoff, err := ccpostgres.NewOutboxDutyPaymentVerificationHandoff(db, store, systemClock{})
+	if err != nil {
+		t.Fatalf("CC 核对交接：%v", err)
+	}
+	reconciliation, err := ccapplication.NewDutyPaymentReconciliationHandler(ccapplication.DutyPaymentReconciliationDeps{
+		Collaborations: register, Funds: register, Verifications: register, PayerRules: register,
+		Handoff: verificationHandoff, Clock: systemClock{},
+	})
+	if err != nil {
+		t.Fatalf("CC 核对编排：%v", err)
+	}
+	lineageDuty := saTestValue(t, ccdomain.NewAssessedDutyReference, "SYN-D9")
+	lineageScope := saTestValue(t, ccdomain.NewDecisionScopeReference, "SYN-U9")
+	lineageProcedure := saTestValue(t, ccdomain.NewCustomsProcedureReference, "SYN-PROC-RD")
+	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		collaboration, err := ccdomain.FormDutyCollaboration(ccdomain.DutyCollaborationSpec{
+			Kind:        ccdomain.ObligationFromAssessedDuty,
+			Duty:        lineageDuty,
+			Scope:       lineageScope,
+			Obligor:     saTestValue(t, ccdomain.NewLegalObligorReference, "SYN-OBLIGOR-RD"),
+			Requirement: saTestValue(t, ccdomain.NewPaymentRequirementSource, "SYN-ASSESSMENT-RD"),
+			Target:      saTestValue(t, ccdomain.NewResponsibilityTargetReference, "SYN-DUTY-DESK"),
+			FormedAt:    beatInstant(),
+		})
+		if err != nil {
+			return err
+		}
+		if _, err := register.SaveCollaboration(txCtx, tenant, collaboration); err != nil {
+			return err
+		}
+		if _, err := register.RegisterPayerRequirement(txCtx, tenant, lineageProcedure, ccdomain.PayerRequired); err != nil {
+			return err
+		}
+		result, err := reconciliation.VerifyPayment(txCtx, ccapplication.VerifyDutyPaymentCommand{
+			TenantID:     tenant,
+			Duty:         lineageDuty,
+			Funds:        correctedFact,
+			FundsVersion: saTestValue(t, ccdomain.NewFundsFactVersion, "bank-fact-2/v1"),
+			Scope:        lineageScope,
+			Procedure:    lineageProcedure,
+			Coverage:     ccdomain.CoverageFull,
+			Delta:        ccdomain.DeltaNone,
+			Validity:     ccdomain.FundsFactValid,
+			Basis:        "SYN-RULE-RD: assessment reference quoted on the remittance",
+		})
+		if err != nil {
+			return err
+		}
+		if result.Outcome() != ccapplication.DutyVerificationFormed || result.HandoffReference() != "" {
+			return fmt.Errorf("按 v1 核对 outcome = %s（reason %s，续办 %q），want DUTY_VERIFICATION_FORMED 且交接成功",
+				result.Outcome(), result.UndecidedReason(), result.HandoffReference())
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("CC 侧按 v1 形成核对：%v", err)
+	}
+	// 按 v1 形成的那一版自己交了一封（05）；先把它发出去，第三拍的计数才只剩 v2 那一封。
+	if published, err = beat.DispatchOnce(t.Context()); err != nil || published != 1 {
+		t.Fatalf("发出按 v1 形成的核对信封：published = %d err = %v, want 1", published, err)
+	}
+
 	enqueueForBeat(t, db, store, "funds-fact-4", ccinbox.ExternalFundsFactAdoptedEventType,
 		`{"tenantId":"tenant-a","fact":"bank-fact-2","version":"bank-fact-2/v2","corrects":"bank-fact-2/v1"}`)
 
@@ -456,6 +526,50 @@ func TestAnAdoptedExternalFundsFactReachesTheCustomsRegisterThroughTheRouteTable
 	if versions[1].Version != saTestValue(t, ccdomain.NewFundsFactVersion, "bank-fact-2/v2") ||
 		versions[1].Corrects != versions[0].Version || versions[1].AmountMinor != 9000 {
 		t.Fatalf("v2 该回指 v1 且带更正后金额：%+v", versions[1])
+	}
+
+	// 正例第三格（票 sa-cc/19 完成判据 (2)）：v2 到达 → 同一拍、同一事务里编排对 bank-fact-2 既往那条核对谱系形成
+	// 一版 (a′)——覆盖承前（COVERED）、差额 / 有效性 PENDING、依据 / 程序承前、资金版本 = v2；前版一字不动；新版本
+	// 经 05 的交接一版一封，下一拍发出去、SA 按引用回读并采用它（sa-cc/09 那族照收，SA 零改动）。
+	lineage, err := register.ListVerificationsByFundsFact(t.Context(), tenant, correctedFact)
+	if err != nil || len(lineage) != 2 {
+		t.Fatalf("v2 到达后该谱系该有两版核对：err=%v n=%d", err, len(lineage))
+	}
+	previous, rederived := lineage[0], lineage[1]
+	if previous.Verification.FundsVersion() != versions[0].Version || previous.Verification.Delta() != ccdomain.DeltaNone ||
+		previous.Verification.Validity() != ccdomain.FundsFactValid {
+		t.Fatalf("按 v1 那一版该一字不动：%+v", previous.Verification)
+	}
+	if rederived.Verification.FundsVersion() != versions[1].Version ||
+		rederived.Verification.Coverage() != ccdomain.CoverageFull ||
+		rederived.Verification.Delta() != ccdomain.DeltaPending ||
+		rederived.Verification.Validity() != ccdomain.FundsFactPending ||
+		rederived.Verification.Procedure() != lineageProcedure ||
+		rederived.Basis != previous.Basis ||
+		rederived.Key.Duty != lineageDuty || rederived.Key.Scope != lineageScope || rederived.Key.Digest == previous.Key.Digest {
+		t.Fatalf("新版本该是 (a′)：%+v", rederived)
+	}
+
+	if published, err = beat.DispatchOnce(t.Context()); err != nil || published != 1 {
+		t.Fatalf("第四拍该发出新核对版本那一封：published = %d err = %v, want 1", published, err)
+	}
+	adoptions, err := sapostgres.NewDutyPaymentVerificationAdoptions(db)
+	if err != nil {
+		t.Fatalf("SA 采用册：%v", err)
+	}
+	rederivedReference, err := sadomain.NewDutyPaymentVerificationReference(
+		saTestValue(t, sadomain.NewDeclarationScopeReference, lineageScope.String()),
+		saTestValue(t, sadomain.NewTaxObligationReference, lineageDuty.String()),
+		saTestValue(t, sadomain.NewFundsFactReference, correctedFact.String()),
+		saTestValue(t, sadomain.NewDutyVerificationVersion, rederived.Key.Digest),
+	)
+	if err != nil {
+		t.Fatalf("SA 引用：%v", err)
+	}
+	if _, found, err := adoptions.FindByKey(t.Context(), saports.DutyPaymentVerificationAdoptionKey{
+		TenantID: saTestValue(t, sadomain.NewTenantID, "tenant-a"), Verification: rederivedReference,
+	}); err != nil || !found {
+		t.Fatalf("新核对版本的信封该到 SA 并被采用：found = %v err = %v", found, err)
 	}
 }
 
