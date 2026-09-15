@@ -25,7 +25,10 @@ type NewSubmissionVersionSpec struct {
 	DeclaredParcelIDs []DeclaredParcelID
 	// Profiles 是随新版本申报的成员声明画像（ADR-0048）：普通资料纠错可以更正测量，
 	// 画像随本版本重报，不从旧版本静默继承——继承会把「客户改了话」与「客户没说」混掉。
-	Profiles      []DeclaredParcelProfile
+	Profiles []DeclaredParcelProfile
+	// Elements 是随新版本申报的寄 / 收两段地址要素（pp-seams/05），同画像纪律随本版本重报、不继承：
+	// 接受基线可以落在任何一代提交版本上，读口从基线所指那一版自己的子段读值。
+	Elements      DeclaredAddressElements
 	EstablishedAt time.Time
 }
 
@@ -97,6 +100,7 @@ func (request ShipmentRequest) FormNewSubmissionVersion(spec NewSubmissionVersio
 		sourceSubmission:  spec.SourceSubmission,
 		declaredParcelIDs: members,
 		profiles:          profiles,
+		elements:          spec.Elements,
 		establishedAt:     spec.EstablishedAt,
 	}
 	request.acceptanceTask = AcceptanceDecisionTask{

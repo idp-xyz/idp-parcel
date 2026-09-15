@@ -11,9 +11,8 @@ var ErrInvalidAddressElementsResolution = errors.New("parcel shipment: invalid a
 // DeclaredMeasurementOutcome：DeliveryPlaceOutcome 那几格答的是引用（总能派生），本口答的是内容，内容可以如实缺席，
 // 「要素缺席」得自己占一格——它不是「无」（对象不是委托成员）也不是「未定」（两条修订分叉）。
 //
-// **今天这一格同时覆盖「条目未落库」**：提交版本今天不携带地址要素（寄收件 name/value 条目只进 PayloadDigest，不进
-// 快照），所以对今天全部快照口都答 NOT_PROVIDED；「租户没报」与「本上下文没留」在代码上分不开，不预拟分不开的格。
-// 内容落库归 pp-seams/05，那票落地后基线格开始带值、本格只剩「租户没报」，格名不变。
+// 「要素缺席」答的是**租户没报**：提交版本自 pp-seams/05 起携带按封闭要素名挑出的子段，基线格从那一段读值；子段
+// 在场与否本身就是客户有没有报——早于那票落下的旧形快照没有子段，同样如实答缺，不回填。
 //
 // 没有`不知道`格，理由同 DeliveryPlaceOutcome：走到答案要翻的册子全是本上下文自己的，答不出就是读面坏了，上抛 error。
 type AddressElementsOutcome uint8
@@ -23,9 +22,9 @@ const (
 	// AddressElementsAnchoredOnBaseline：该范围上尚无修订版本，答接受基线那一版上的要素（至少一格在场、另一格可缺如实），
 	// 带接受基线锚。
 	AddressElementsAnchoredOnBaseline
-	// AddressElementsAnchoredOnAdoptedVersion：该范围上的当前采用判断为`已采用`，答那一版的锚——**只交锚不交要素**：
-	// 客户原始资料版本今天只留痕不留内容（CustomerSourceDataVersion 是请求指纹 + 留痕清单），本上下文说不出那一版报了
-	// 什么；交基线值等于把一份已被客户更正的地址当现行地址送出去。消费方拿到这一格该停在「输入不可得」。
+	// AddressElementsAnchoredOnAdoptedVersion：该范围上的当前采用判断为`已采用`，答那一版的锚与**那一版自己的要素**
+	// （pp-seams/05：客户原始资料版本携带封闭要素内容）。那一版上要素缺席（显式清空，或修订改的是本上下文没有词条的
+	// 条目）时只交锚不交值——绝不回退到基线值：交基线值等于把一份已被客户更正的地址当现行地址送出去。
 	AddressElementsAnchoredOnAdoptedVersion
 	// AddressElementsUndetermined：当前采用判断为`待复核`，本上下文此刻说不出该按哪一版，不给锚也不给值。
 	AddressElementsUndetermined
@@ -52,8 +51,8 @@ func (outcome AddressElementsOutcome) String() string {
 	}
 }
 
-// AddressElementsResolution 是读口一段（寄件或收件资料范围）的答复：五格之一；基线格附要素与基线锚，已采用版本格只附锚，
-// 其余三格两样都不附。
+// AddressElementsResolution 是读口一段（寄件或收件资料范围）的答复：五格之一；基线格附要素与基线锚，已采用版本格附锚与
+// 那一版自己的要素（可缺席），其余三格两样都不附。
 type AddressElementsResolution struct {
 	outcome  AddressElementsOutcome
 	elements AddressElements
@@ -73,12 +72,14 @@ func AddressElementsOnBaseline(elements AddressElements) (AddressElementsResolut
 	}, nil
 }
 
-// AddressElementsOnAdoptedVersion 是已采用版本锚那一格：只收指着某一版的锚，基线锚在这里不合法——那是另一格。
-func AddressElementsOnAdoptedVersion(anchor SourceDataVersionAnchor) (AddressElementsResolution, error) {
+// AddressElementsOnAdoptedVersion 是已采用版本锚那一格：只收指着某一版的锚，基线锚在这里不合法——那是另一格。要素是
+// 那一版自己的内容，允许缺席（清空版本被采用后这一格带锚不带值），与基线格「两格都缺即不是本格」的纪律不同：缺席在
+// 这里是那一版说的话，不是另一格。
+func AddressElementsOnAdoptedVersion(anchor SourceDataVersionAnchor, elements AddressElements) (AddressElementsResolution, error) {
 	if _, adopted := anchor.AdoptedVersion(); !adopted {
 		return AddressElementsResolution{}, ErrInvalidAddressElementsResolution
 	}
-	return AddressElementsResolution{outcome: AddressElementsAnchoredOnAdoptedVersion, anchor: anchor}, nil
+	return AddressElementsResolution{outcome: AddressElementsAnchoredOnAdoptedVersion, elements: elements, anchor: anchor}, nil
 }
 
 // AddressElementsUndeterminedResolution 是「未定」那一格。
@@ -100,9 +101,10 @@ func (resolution AddressElementsResolution) Outcome() AddressElementsOutcome {
 	return resolution.outcome
 }
 
-// Elements 只在基线格在场；其余四格第二个返回值为假，不是「要素读不到」。在场的那一组里仍可能有一格缺席，逐格问它自己。
+// Elements 在基线格恒在场，在已采用版本格随那一版的内容在场或缺席；其余三格第二个返回值为假，不是「要素读不到」。在场的
+// 那一组里仍可能有一格缺席，逐格问它自己。
 func (resolution AddressElementsResolution) Elements() (AddressElements, bool) {
-	return resolution.elements, resolution.outcome == AddressElementsAnchoredOnBaseline
+	return resolution.elements, !resolution.elements.Empty()
 }
 
 // Anchor 在基线格与已采用版本格在场；其余三格第二个返回值为假。
@@ -175,8 +177,14 @@ func (request ShipmentRequest) addressElementsInGroup(
 	if resolved.undetermined {
 		return AddressElementsUndeterminedResolution(), nil
 	}
-	if _, adopted := resolved.anchor.AdoptedVersion(); adopted {
-		return AddressElementsOnAdoptedVersion(resolved.anchor)
+	if adoptedID, adopted := resolved.anchor.AdoptedVersion(); adopted {
+		version, found := request.sourceDataVersionByID(adoptedID)
+		if !found {
+			return AddressElementsResolution{}, fmt.Errorf("%w: 已采用版本锚指向的资料版本 %q 不在本委托上",
+				ErrInvalidAddressElementsResolution, adoptedID)
+		}
+		elements, _ := version.Content().AddressElements()
+		return AddressElementsOnAdoptedVersion(resolved.anchor, elements)
 	}
 	elements := baselineVersion.addressElements(group)
 	if elements.Empty() {
@@ -185,9 +193,8 @@ func (request ShipmentRequest) addressElementsInGroup(
 	return AddressElementsOnBaseline(elements)
 }
 
-// addressElements 交回本提交版本上某个资料范围的地址要素。**今天恒为缺席**：提交版本不携带寄收件条目（它们只进
-// PayloadDigest），本方法是 pp-seams/05「提交版本留内容」落地时接内容的那一处——那票让版本带上按封闭要素名挑出的子段后，
-// 这里改成从子段读，读口与答格不动。
-func (version SubmissionVersion) addressElements(SourceDataGroupReference) AddressElements {
-	return AddressElements{}
+// addressElements 交回本提交版本上某个资料范围的地址要素：从版本自己携带的子段读（pp-seams/05 裁决 2），不回头翻
+// 条目——条目只进 PayloadDigest，版本上留的就是按封闭要素名挑出的这一段。旧形快照没有子段，读回即零值、如实答缺。
+func (version SubmissionVersion) addressElements(group SourceDataGroupReference) AddressElements {
+	return version.elements.InGroup(group)
 }

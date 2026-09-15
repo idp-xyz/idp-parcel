@@ -99,3 +99,37 @@ func (elements AddressElements) without(element AddressElementName) AddressEleme
 	}
 	return elements
 }
+
+// DeclaredAddressElements 是随一版提交版本申报的地址要素子段（pp-seams/05 裁决 1 / 2）：寄件与收件两个委托级资料范围
+// 各一段 AddressElements，缺席如实。它是「内容随提交版本进快照」的第二种——画像（DeclaredParcelProfile）按成员，
+// 要素按资料范围；与画像同一口径，允许整体缺席或只报一段。
+//
+// 只有这两段而不是按 SourceDataGroupReference 开放成一张表：地址要素只在寄 / 收两个范围上有词条（PS CONTEXT「地址
+// 要素」），开放的键会让「别的范围上的同名要素」有地方落，而 AddressElementsOf 头注刻意不认它们。
+type DeclaredAddressElements struct {
+	sender   AddressElements
+	delivery AddressElements
+}
+
+// NewDeclaredAddressElements 把寄件、收件两段包成一份子段；任一段可为零值（该范围上要素缺席）。
+func NewDeclaredAddressElements(sender, delivery AddressElements) DeclaredAddressElements {
+	return DeclaredAddressElements{sender: sender, delivery: delivery}
+}
+
+// InGroup 交回某个资料范围那一段：寄件与收件之外的范围没有地址要素，答零值——那是「本范围上没有这类要素」，
+// 不是读不到。
+func (elements DeclaredAddressElements) InGroup(group SourceDataGroupReference) AddressElements {
+	switch group {
+	case SenderPlaceDataGroup():
+		return elements.sender
+	case DeliveryPlaceDataGroup():
+		return elements.delivery
+	default:
+		return AddressElements{}
+	}
+}
+
+// Empty 报告两段都缺席——提交版本上整个子段缺席的判据，落库时据此省掉整段。
+func (elements DeclaredAddressElements) Empty() bool {
+	return elements.sender.Empty() && elements.delivery.Empty()
+}

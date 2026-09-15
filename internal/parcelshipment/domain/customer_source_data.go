@@ -199,6 +199,9 @@ type CustomerSourceDataVersionSpec struct {
 	// 资料何时起适用是常态。缺失时保持零值，绝不用 occurredAt 或 receivedAt 顶替。
 	EffectiveAt time.Time
 	FormedAt    time.Time
+	// Content 是这一版在其资料范围上留下的封闭要素内容（pp-seams/05 裁决 1 / 3）：按范围只有一种形，可缺席；显式清空
+	// 必缺席。它与 Request 里的摘要出自接单入口的同一次规范化，本构造器不重算摘要去核对——要核就得拿到整份载荷。
+	Content SourceDataVersionContent
 }
 
 // CustomerSourceDataVersion 是一份不可覆盖的客户来源版本。它保存的是客户声明，不是节点实测、
@@ -215,6 +218,7 @@ type CustomerSourceDataVersion struct {
 	authority   AmendmentAuthoritySnapshot
 	effectiveAt time.Time
 	formedAt    time.Time
+	content     SourceDataVersionContent
 }
 
 // FormCustomerSourceDataVersion 形成一份客户原始资料版本。
@@ -236,8 +240,14 @@ func FormCustomerSourceDataVersion(spec CustomerSourceDataVersionSpec) (Customer
 		authority:   spec.Authority,
 		effectiveAt: spec.EffectiveAt,
 		formedAt:    spec.FormedAt,
+		content:     spec.Content,
 	}
 	if !version.valid() {
+		return CustomerSourceDataVersion{}, ErrInvalidCustomerSourceDataVersion
+	}
+	// 内容的形要配范围与意图（SourceDataVersionContent.FitsAmendment 头注）：一份落在收件范围上的测量、或一份带着
+	// 邮编的「显式清空」，都是版本声称一件它没做的事——版本不可覆盖，留下就永远解释不清，与下面意图对基准那一道同理。
+	if !spec.Content.FitsAmendment(spec.Scope, spec.Intent) {
 		return CustomerSourceDataVersion{}, ErrInvalidCustomerSourceDataVersion
 	}
 	// 意图与基准必须对得上号：补充是「基线上没有这项」，只能以接受基线为基准；更正改的是
@@ -305,6 +315,11 @@ func (version CustomerSourceDataVersion) FormedAt() time.Time {
 	return version.formedAt
 }
 
+// Content 是这一版在其资料范围上留下的封闭要素内容，缺席如实。持锚方按锚解析到那一版内容读的就是它。
+func (version CustomerSourceDataVersion) Content() SourceDataVersionContent {
+	return version.content
+}
+
 // AmendCustomerSourceData 把一份客户原始资料版本追加到已接受委托上。
 //
 // 只对`已接受`开放：决定前的纠错按 CONTEXT 形成新的提交版本并重新判断，已拒绝或已撤回后的
@@ -359,6 +374,17 @@ func (request ShipmentRequest) SourceDataScopeOutsideAcceptanceBaseline(scope So
 // CustomerSourceDataVersions 按形成顺序交回全部版本。
 func (request ShipmentRequest) CustomerSourceDataVersions() []CustomerSourceDataVersion {
 	return append([]CustomerSourceDataVersion(nil), request.sourceDataVersions...)
+}
+
+// sourceDataVersionByID 在本委托的资料版本里找某一版——已采用版本锚所指的那一版就这么取。找不到是读面坏了：采用判断
+// 只在本委托自己的版本上派生。
+func (request ShipmentRequest) sourceDataVersionByID(versionID SourceDataVersionID) (CustomerSourceDataVersion, bool) {
+	for _, version := range request.sourceDataVersions {
+		if version.versionID == versionID {
+			return version, true
+		}
+	}
+	return CustomerSourceDataVersion{}, false
 }
 
 // SourceDataAdoptionOutcome 是某个资料范围上当前采用判断的结论。

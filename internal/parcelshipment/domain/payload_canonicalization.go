@@ -155,6 +155,41 @@ func CanonicalizeSubmissionPayload(spec SubmissionPayloadSpec) (PayloadDigest, e
 	return NewPayloadDigest(payloadCanonicalizationVersion + ":" + hex.EncodeToString(sum[:]))
 }
 
+// CanonicalSubmission 是一次规范化的成对产出：摘要与从同一份输入挑出的封闭要素内容（pp-seams/05 裁决 3）。两样
+// 一起交出、一起进命令，接单入口不必再为内容多调一次——内容与摘要各说各话的口子在结构上就不存在。测量那一半
+// 不在这里：画像（Profiles）本就是 SubmissionPayloadSpec 的强类型段，命令原样带走。
+type CanonicalSubmission struct {
+	digest   PayloadDigest
+	elements DeclaredAddressElements
+}
+
+// Digest 是与 CanonicalizeSubmissionPayload 对同一份输入算出的同一个摘要。
+func (canonical CanonicalSubmission) Digest() PayloadDigest {
+	return canonical.digest
+}
+
+// DeclaredElements 是从 Scope 条目里按封闭要素名挑出的寄 / 收两段地址要素，随提交版本进快照。
+func (canonical CanonicalSubmission) DeclaredElements() DeclaredAddressElements {
+	return canonical.elements
+}
+
+// CanonicalizeSubmission 一次调用交回摘要 + 内容。摘要走既有的 CanonicalizeSubmissionPayload（算法与产出零改，
+// 既有摘要用例照旧钉它）；要素由 AddressElementsOf 从同一份 Scope 条目按寄 / 收两范围各挑一次，其余条目只进摘要、
+// 不留原文（pp-seams/05 裁决 1）。接单入口只调这一个：摘要算不出来时内容也不交，两样出自同一道门。
+func CanonicalizeSubmission(spec SubmissionPayloadSpec) (CanonicalSubmission, error) {
+	digest, err := CanonicalizeSubmissionPayload(spec)
+	if err != nil {
+		return CanonicalSubmission{}, err
+	}
+	return CanonicalSubmission{
+		digest: digest,
+		elements: NewDeclaredAddressElements(
+			AddressElementsOf(SenderPlaceDataGroup(), spec.Scope),
+			AddressElementsOf(DeliveryPlaceDataGroup(), spec.Scope),
+		),
+	}, nil
+}
+
 // canonicalSubmissionDocument 是 PSC-1 的封闭编码形状。所有段常在场、缺席以显式空值
 // 表达，不用 omitempty——那是给「老摘要要保持可比」的形状演进用的（见计价侧先例），
 // 全新版本用不上，省掉它换取「读形状即读全集」。

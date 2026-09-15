@@ -57,7 +57,10 @@ type SubmissionVersion struct {
 	declaredParcelIDs []DeclaredParcelID
 	// profiles 是成员声明画像（ADR-0048）：随本版本申报的测量快照。允许部分成员无画像
 	// ——测量必填与否由真实产品定，机制不写死。
-	profiles      []DeclaredParcelProfile
+	profiles []DeclaredParcelProfile
+	// elements 是随本版本申报的寄 / 收两段地址要素子段（pp-seams/05 裁决 2）：由 CanonicalizeSubmission 与摘要一次
+	// 产出、随版本进快照；其余寄收件条目只进 PayloadDigest。整段缺席合法——客户没报邮编是常态，读口如实答缺。
+	elements      DeclaredAddressElements
 	establishedAt time.Time
 }
 
@@ -76,6 +79,11 @@ func (version SubmissionVersion) DeclaredParcelIDs() []DeclaredParcelID {
 // DeclaredProfiles 交回本版本的成员声明画像拷贝。
 func (version SubmissionVersion) DeclaredProfiles() []DeclaredParcelProfile {
 	return append([]DeclaredParcelProfile(nil), version.profiles...)
+}
+
+// DeclaredElements 交回本版本的地址要素子段（寄 / 收两段，缺席如实）。它是值，拷贝即语义。
+func (version SubmissionVersion) DeclaredElements() DeclaredAddressElements {
+	return version.elements
 }
 
 // ProfileFor 按成员取声明画像。缺席是真话：这个成员没申报测量，读取方（估价装配等）
@@ -208,6 +216,9 @@ type SubmitShipmentRequestSpec struct {
 	Link PriorRequestLink
 	// Profiles 是随首个提交版本申报的成员声明画像（ADR-0048），允许缺席或部分覆盖。
 	Profiles []DeclaredParcelProfile
+	// Elements 是随首个提交版本申报的寄 / 收两段地址要素（pp-seams/05），同画像口径允许缺席或只报一段；
+	// 它与 Candidate 的来源指纹里的摘要出自同一次 CanonicalizeSubmission，本构造器不重算也不核对。
+	Elements DeclaredAddressElements
 }
 
 type ShipmentRequest struct {
@@ -283,6 +294,7 @@ func SubmitShipmentRequest(spec SubmitShipmentRequestSpec) (ShipmentRequest, err
 			sourceSubmission:  spec.Candidate.SourceSubmission(),
 			declaredParcelIDs: spec.Candidate.DeclaredParcelIDs(),
 			profiles:          profiles,
+			elements:          spec.Elements,
 			establishedAt:     spec.SubmittedAt,
 		},
 		acceptanceTask: AcceptanceDecisionTask{

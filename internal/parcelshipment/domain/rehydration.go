@@ -103,7 +103,10 @@ type RehydrateSubmissionVersionSpec struct {
 	// Profiles 收成品类型，不另造 Rehydrate*Spec：画像有公开构造函数、字段未导出，
 	// 包外造不出半截的一张——理由与 ProcessingAttempts 一字不差。有画像而不带回，
 	// 一份申报过测量的版本重建后看起来像没申报过，估价装配从此永远停在缺输入。
-	Profiles      []DeclaredParcelProfile
+	Profiles []DeclaredParcelProfile
+	// Elements 同理收成品（pp-seams/05）：子段是值、字段未导出，包外只能经 AddressElementsOf 或零值造它；旧形快照
+	// 没有这一段，读回即零值，读口如实答「要素缺席」——不回填、不猜。
+	Elements      DeclaredAddressElements
 	EstablishedAt time.Time
 }
 
@@ -144,6 +147,7 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 			sourceSubmission:  prior.SourceSubmission,
 			declaredParcelIDs: append([]DeclaredParcelID(nil), prior.DeclaredParcelIDs...),
 			profiles:          append([]DeclaredParcelProfile(nil), prior.Profiles...),
+			elements:          prior.Elements,
 			establishedAt:     prior.EstablishedAt,
 		})
 	}
@@ -171,6 +175,7 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 			sourceSubmission:  snapshot.CurrentVersion.SourceSubmission,
 			declaredParcelIDs: append([]DeclaredParcelID(nil), snapshot.CurrentVersion.DeclaredParcelIDs...),
 			profiles:          append([]DeclaredParcelProfile(nil), snapshot.CurrentVersion.Profiles...),
+			elements:          snapshot.CurrentVersion.Elements,
 			establishedAt:     snapshot.CurrentVersion.EstablishedAt,
 		},
 		acceptanceTask: AcceptanceDecisionTask{

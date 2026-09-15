@@ -68,9 +68,9 @@ func resolveAddressElements(t *testing.T, request domain.ShipmentRequest, parcel
 	return answer
 }
 
-// Covers: 裁决 7（追裁取 A）——提交版本今天不携带地址要素，口对全部快照如实答「要素缺席」：两段都是 NOT_PROVIDED，
-// 不带值也不带锚；同一委托的两个成员答一样（寄收件资料按委托级范围形成）。
-func TestAMemberOfAnAcceptedRequestAnswersNotProvidedOnBothEndsToday(t *testing.T) {
+// Covers: 裁决 7（追裁取 A）与 pp-seams/05 判据 (1)「接单不带 → NOT_PROVIDED」——提交版本没带任何地址要素时口如实答
+// 「要素缺席」：两段都是 NOT_PROVIDED，不带值也不带锚；同一委托的两个成员答一样（寄收件资料按委托级范围形成）。
+func TestAMemberOfAnAcceptedRequestWithoutElementsAnswersNotProvidedOnBothEnds(t *testing.T) {
 	request := acceptedWithAddressVersions(t)
 
 	for _, parcel := range []string{"parcel-1", "parcel-2"} {
@@ -92,7 +92,7 @@ func TestAMemberOfAnAcceptedRequestAnswersNotProvidedOnBothEndsToday(t *testing.
 }
 
 // Covers: 裁决 2「一口两段，各段独立成格（一段有一段无是常态）」与「已采用版本 → 已采用版本锚」——收件范围上的修订被
-// 采用后目的段换锚（只带锚不带值，理由同 02：客户原始资料版本今天只留痕不留内容），起点段不动。
+// 采用后目的段换锚；这两版都不带内容（修订改的是本上下文没有词条的条目），所以只带锚不带值、也不回退到基线值；起点段不动。
 func TestAnAdoptedDeliveryPlaceAmendmentMovesOnlyTheDestinationAnchor(t *testing.T) {
 	request := acceptedWithAddressVersions(t,
 		[3]string{"delivery", "dp-v1", ""},
@@ -110,7 +110,7 @@ func TestAnAdoptedDeliveryPlaceAmendmentMovesOnlyTheDestinationAnchor(t *testing
 		t.Fatalf("destination anchor = %q, want dp-v2（链尾那一版）", adopted)
 	}
 	if _, present := destination.Elements(); present {
-		t.Fatal("已采用版本锚那一格交出了要素——那一版的内容本上下文没有")
+		t.Fatal("已采用版本锚那一格交出了要素——那一版没带内容，交出来的只能是基线值")
 	}
 	if origin := answer.Origin(); origin.Outcome() != domain.AddressElementsNotProvided {
 		t.Fatalf("origin outcome = %q, want NOT_PROVIDED（收件范围的修订动不到寄件段）", origin.Outcome())
@@ -173,12 +173,24 @@ func TestAddressElementsResolutionCellsAreBuiltByTheirOwnConstructors(t *testing
 		t.Fatal("两个要素都缺的基线格被造出来了")
 	}
 
-	if _, err := domain.AddressElementsOnAdoptedVersion(domain.NewAcceptanceBaselineAnchor()); err == nil {
+	if _, err := domain.AddressElementsOnAdoptedVersion(domain.NewAcceptanceBaselineAnchor(), elements); err == nil {
 		t.Fatal("基线锚被包成了已采用版本格")
 	}
-	adopted, err := domain.AddressElementsOnAdoptedVersion(versionAnchor(t, "dp-v1"))
+	adopted, err := domain.AddressElementsOnAdoptedVersion(versionAnchor(t, "dp-v1"), domain.AddressElements{})
 	if err != nil || adopted.Outcome() != domain.AddressElementsAnchoredOnAdoptedVersion {
 		t.Fatalf("adopted = %#v err = %v", adopted, err)
+	}
+	if _, present := adopted.Elements(); present {
+		t.Fatal("不带内容的已采用版本格报告了要素在场")
+	}
+	withValue, err := domain.AddressElementsOnAdoptedVersion(versionAnchor(t, "dp-v1"), elements)
+	if err != nil {
+		t.Fatalf("on adopted version with elements: %v", err)
+	}
+	if got, present := withValue.Elements(); !present {
+		t.Fatal("带内容的已采用版本格没交出要素")
+	} else if postal, _ := got.PostalCode(); postal != "10115" {
+		t.Fatalf("postal = %q, want 10115", postal)
 	}
 
 	names := map[domain.AddressElementsOutcome]string{

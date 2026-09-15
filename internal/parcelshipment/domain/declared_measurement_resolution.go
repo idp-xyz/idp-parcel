@@ -29,10 +29,9 @@ const (
 	// DeclaredMeasurementAnchoredOnBaseline：该包裹的申报测量范围上尚无修订版本，答接受基线那一版提交版本上的成员画像，
 	// 带接受基线锚。这是今天唯一带测量的一格。
 	DeclaredMeasurementAnchoredOnBaseline
-	// DeclaredMeasurementAnchoredOnAdoptedVersion：该范围上的当前采用判断为`已采用`，答那一版的锚——**只交锚不交测量**。
-	// 客户原始资料版本今天只留痕不留内容（CustomerSourceDataVersion 是请求指纹 + 留痕清单，修订的载荷只进摘要），本上下文
-	// 说不出那一版报了多少；交基线值等于把一份已被客户更正的申报当现行申报送出去。消费方拿到这一格该停在「输入不可得」，
-	// 而不是回头用基线值。版本留内容那天，这一格补上测量，格名不变。
+	// DeclaredMeasurementAnchoredOnAdoptedVersion：该范围上的当前采用判断为`已采用`，答那一版的锚与**那一版自己的测量**
+	// （pp-seams/05：客户原始资料版本携带封闭要素内容）。那一版上测量缺席（显式清空）时只交锚不交值——绝不回退到基线值：
+	// 交基线值等于把一份已被客户更正的申报当现行申报送出去。消费方拿到不带值的这一格该停在「输入不可得」。
 	DeclaredMeasurementAnchoredOnAdoptedVersion
 	// DeclaredMeasurementUndetermined：当前采用判断为`待复核`，本上下文此刻说不出该按哪一版，不给锚也不给值。
 	DeclaredMeasurementUndetermined
@@ -62,7 +61,7 @@ func (outcome DeclaredMeasurementOutcome) String() string {
 }
 
 // DeclaredMeasurementResolution 是读口对一次（租户，包裹身份）之问的答复：五格之一；基线格附测量与基线锚，已采用版本格
-// 只附锚，其余三格两样都不附。
+// 附锚与那一版自己的测量（可缺席），其余三格两样都不附。
 type DeclaredMeasurementResolution struct {
 	outcome     DeclaredMeasurementOutcome
 	measurement DeclaredMeasurement
@@ -82,12 +81,14 @@ func DeclaredMeasurementOnBaseline(measurement DeclaredMeasurement) (DeclaredMea
 	}, nil
 }
 
-// DeclaredMeasurementOnAdoptedVersion 是已采用版本锚那一格：只收指着某一版的锚，基线锚在这里不合法——那是另一格。
-func DeclaredMeasurementOnAdoptedVersion(anchor SourceDataVersionAnchor) (DeclaredMeasurementResolution, error) {
+// DeclaredMeasurementOnAdoptedVersion 是已采用版本锚那一格：只收指着某一版的锚，基线锚在这里不合法——那是另一格。测量是
+// 那一版自己的内容，允许为零值（清空版本被采用后这一格带锚不带值）；基线格「没测量即不是本格」的纪律在这里不适用，缺席
+// 是那一版说的话。
+func DeclaredMeasurementOnAdoptedVersion(anchor SourceDataVersionAnchor, measurement DeclaredMeasurement) (DeclaredMeasurementResolution, error) {
 	if _, adopted := anchor.AdoptedVersion(); !adopted {
 		return DeclaredMeasurementResolution{}, ErrInvalidDeclaredMeasurementResolution
 	}
-	return DeclaredMeasurementResolution{outcome: DeclaredMeasurementAnchoredOnAdoptedVersion, anchor: anchor}, nil
+	return DeclaredMeasurementResolution{outcome: DeclaredMeasurementAnchoredOnAdoptedVersion, measurement: measurement, anchor: anchor}, nil
 }
 
 // DeclaredMeasurementUndeterminedResolution 是「未定」那一格。
@@ -109,7 +110,7 @@ func (resolution DeclaredMeasurementResolution) Outcome() DeclaredMeasurementOut
 	return resolution.outcome
 }
 
-// Measurement 只在基线格在场；其余四格第二个返回值为假，不是「测量读不到」。
+// Measurement 在基线格恒在场，在已采用版本格随那一版的内容在场或缺席；其余三格第二个返回值为假，不是「测量读不到」。
 func (resolution DeclaredMeasurementResolution) Measurement() (DeclaredMeasurement, bool) {
 	return resolution.measurement, resolution.measurement.declared()
 }
@@ -142,8 +143,14 @@ func (request ShipmentRequest) DeclaredMeasurementFor(parcel DeclaredParcelID) (
 	if resolved.undetermined {
 		return DeclaredMeasurementUndeterminedResolution(), nil
 	}
-	if _, adopted := resolved.anchor.AdoptedVersion(); adopted {
-		return DeclaredMeasurementOnAdoptedVersion(resolved.anchor)
+	if adoptedID, adopted := resolved.anchor.AdoptedVersion(); adopted {
+		version, found := request.sourceDataVersionByID(adoptedID)
+		if !found {
+			return DeclaredMeasurementResolution{}, fmt.Errorf("%w: 已采用版本锚指向的资料版本 %q 不在本委托上",
+				ErrInvalidDeclaredMeasurementResolution, adoptedID)
+		}
+		measurement, _ := version.Content().Measurement()
+		return DeclaredMeasurementOnAdoptedVersion(resolved.anchor, measurement)
 	}
 
 	baselineVersion, found := request.submissionVersionByID(request.baseline.SubmissionVersionID())

@@ -110,9 +110,9 @@ func TestAMemberWithoutABaselineProfileAnswersNotDeclared(t *testing.T) {
 	}
 }
 
-// Covers: 裁决 3「当前采用的客户原始资料版本 → 已采用版本锚」。锚是链尾那一版；**这一格只交锚不交测量**：客户原始
-// 资料版本今天只留痕（指纹 + 留痕清单）不留内容，本上下文说不出那一版报了多少——交基线值等于把一份已被客户更正的
-// 申报当现行申报送出去。
+// Covers: 裁决 3「当前采用的客户原始资料版本 → 已采用版本锚」。锚是链尾那一版；这两版都不带内容，所以这一格只交锚
+// 不交测量——**绝不回退到基线值**：交基线值等于把一份已被客户更正的申报当现行申报送出去。带内容的那一路见
+// TestAnAdoptedMeasurementCorrectionAnswersItsOwnMeasurementOnTheAdoptedVersion。
 func TestAnAdoptedAmendmentMovesTheMeasurementAnchorAndWithholdsTheBaselineValue(t *testing.T) {
 	request := acceptedWithMeasurementVersions(t,
 		[2]string{"measure-v1", ""},
