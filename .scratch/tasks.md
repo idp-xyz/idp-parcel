@@ -2419,3 +2419,14 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - 三棵作者树 13:0x 前全拆（3 / 4 / 5 各报对 `origin/main` 零 diff；`worktree list` 只剩 main、`prune` 无残留）。
 - **立票**（推送方处置时点名「归 CC owner 立票」那一件 + 19 评审 Standards 两条尾巴）：**sa-cc/29** draft「CC 三只交接信封 ID 超框架上限被 `EnqueueOnce` 拒收 + `handOffVerification` 吞错留续办引用、重派路上无读者」——缺口逐符号、做法候选 ID 形状三条 × 响法三条只列不选、四条要裁的归 CC owner，能力边界写明框架上限源码未读；**sa-cc/30** ready-for-agent「`rederiveStores` 替身无序 + `duty_registers_test.go` 手拼键」只测试文件零生产改动。两份 spec 行随笔。纯 .md，共享 main 直接一笔、`ls-remote` 核 `36fb5437` 未动后 push。
 - **前沿**：ready **1**（sa-cc/30，可派任一空闲通道）；draft 三张——pp-seams/05（PS owner 四条）、sa-cc/27（SA owner 三条，取证已落）、sa-cc/29（CC owner 四条）——**要动它们只差 owner 裁决或用户授权代裁**；PS 残差两处随 05；lc 20 / 22 等真源；needs-info / blocked 六张阻断在外。**归用户**：CI 计费；六件 untracked；三张 draft 是否授权代裁。
+- sa-cc/30 → **task-38d5d3a7 → 通道 2**（12:4x 拆树时自报空闲即派）。
+
+### 13:1x–13:2x：用户「代裁」→ 三张 draft 转 ready
+
+- **授权**：用户经队列一句「代裁」，对应上节归用户那一格；三张各按其 owner 口径代裁，裁决节都写明依据与能力边界，作者量到与代码不符以代码为准写判断项。
+- **pp-seams/05（PS owner 口径）**：只留封闭要素不留原文；做法 1（两份既有 jsonb 快照各加可缺席内容子段，零迁移，旧快照如实答缺；重开条件写明）；内容与摘要由 `CanonicalizeSubmissionPayload` 一次调用成对产出、两条命令一起带、应用层不重算、不设领域构造门（结构上只留一条产出路径）；CONTEXT「保留原始请求」仍指指纹、词条末加一句留封闭要素内容；06 评审两条 PS 残差顺带收进；完成判据五条写实。
+- **sa-cc/27（SA owner 口径）**：先裁要裁的 2——ADR-0085 读作「算」，判据是它治的那张脸（「尚未接线」与「未配置」同脸）而非 ADR 没画的「配置 / 事实」边，先例 CC 协作 / 核对；入口两者都要分两步、本票只做第一步 `cmd/parcel-settlement-register` + `adapters/registrationjson` + 事务壳 Outbox 同 db + 六口全接真，第二步端点 + 管理台随完成记录立 ready；`NewMapExternalFundsHandler` 单只改拒 nil，十只统一形不立法（取证量得 2 / 10 并存、有生产装配的四只两拒两不拒——没有可照的形）；退出码归格原则五条；完成判据七条写实。
+- **sa-cc/29（CC owner 口径）**：先量实上限——`idp-bento-go@v0.1.0-rc.2` `eventing/types.go` `MaxEventIDLength = 128`、`Envelope.Validate` 确定性拒（补票面「没读」那一格）；三只 `*EventID` 一次同改成「口名前缀 + `sha256` 十六进制」定长形（唯一不依赖实例半边长度就能保证的路），载荷五维照旧，`Subject` / `PartitionKey`（上限 512）作者量能否超；重派路交接失败分两格整笔回滚——依赖不可用归未决重投、信封不合法归硬失败（新哨兵不进未决集合，`dispatcher.go`「硬失败人动手」那格），不登续办（登要改词条 / 日志不是结构）；人重核路 05 兜底不动；SA 靠采用登记册五维主键守幂等、真库用例钉住；完成判据六条写实。
+- **簿记**：三票 Status 转 ready、两份 spec 三行、本节；纯 .md 共享 main 一笔、`ls-remote` 核 `e1ab9fb5` 未动后 push。
+- **派单**：点名后派 05 / 27 / 29 给空闲通道（2 在做 30）。撞点：29 碰 `receive_on_adopted_funds_fact.go`（生产）与 `assemble_test.go`，30 碰同目录 `receive_on_adopted_funds_fact_test.go` 与 `duty_registers_test.go`——29 的作者不动 `rederiveStores` 替身、新增用例另起或等 30 进 main 后 rebase；05 在 PS、27 在 SA + 新 `cmd/`，与 29 / 30 零重叠。
+- **前沿**：ready 0（三张转 ready 即派）；在途 sa-cc/30（2）+ 三票；draft 0；lc 20 / 22 等真源；needs-info / blocked 六张阻断在外。**归用户**：CI 计费；六件 untracked。
