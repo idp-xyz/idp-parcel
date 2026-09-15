@@ -1197,8 +1197,8 @@ type PayerRequirementRuleView interface {
 // DutyVerificationKey 是税费付款核对的幂等键：核对身份三维（税费版本、资金事实、范围）加
 // 内容指纹——三轴、关联依据或监管程序变了自然换指纹换版（迟到事实按新版本追加，不按到达顺序
 // 覆盖，UC-CC-009 核对规则那句），同一内容重复核对不出第二版。程序折进指纹而不加一维（票
-// sa-cc/22 裁决 2）：五维形状在 0016 主键、0019 门禁读数、SA 采用表、信封载荷与信封 ID 各存一份，
-// 加维要五处同改；指纹算法只在应用层一处。
+// sa-cc/22 裁决 2）：这份键形在 0016 主键、0019 门禁读数、SA 采用表、信封载荷与信封 ID 上各存一份，
+// 加维每一处都得跟着改；指纹算法只在应用层 verificationDigest 一处。
 type DutyVerificationKey struct {
 	TenantID domain.TenantID
 	Duty     domain.AssessedDutyReference

@@ -1,7 +1,7 @@
 # 税费付款核对的监管程序由调用方断言、编排不核它与案件一致、核对记录不带程序：错报 `procedureRef` 可绕过「规则要求而缺失保持未决」，事后也看不出付款人维按哪个程序判
 
 Category: enhancement
-Status: in-progress——**2026-09-15 10:2x 通道 2 认领**（task `f3329ba3`，推送方通道 1 10:1x 派；`/implement` › `/tdd`；分支 `mcp2-sacc22-19` 基 `3a21dab7`（= 派单时 main tip），树 `%TEMP%\idp-parcel-mcp2-sacc22-19`；本票先落、[19](19-cc-new-funds-fact-version-forms-a-new-verification-version.md) 同分支在其上；迁移序号本票 `0022`）；此前 ready-for-agent——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（CC owner 口径），两条「要裁的」写入下方「裁决」节**：程序仍由调用方交、编排不核一致（范围→程序这条边在 CC 库上不存在，造它是新领域事实，越权）、但**进核对记录与指纹**；核对身份带程序的方式是**折进 `verificationDigest`、不加主键列**（五处键形不变、SA 零改动）。与 [19](19-cc-new-funds-fact-version-forms-a-new-verification-version.md) 同一张键两维，**本票先做、19 在其上**，同一作者同一分支两笔。此前 draft——2026-09-14 16:0x 通道 1（接管会话）立票（sa-cc/12 补评审 ← 通道 3 Standards 非阻断 ② + Spec 非阻断 ①，评审建议「合一张」；与 12 完成记录判断项 ① ④ 同根；归 CC owner）。只写票面未动代码；取证锚 main `01974923`
+Status: resolved——**2026-09-15 11:0x 通道 2 完工，待非作者评审进 main**（分支 `mcp2-sacc22-19` 基 `3a21dab7`：认领 `bea83b9e`、代码 `b8969de4`、本笔完成记录 + 评审修两处注释、下一笔清点；完成判据 (1)–(4) 全部落地，验证、判断项见「完成记录」；`/code-review` 子代理鉴权错，作者串行自跑两轴，非作者评审由推送方另派；[19](19-cc-new-funds-fact-version-forms-a-new-verification-version.md) 接着在同分支上做，进 main 的 SHA 由推送方重放后另记）；此前 in-progress——**2026-09-15 10:2x 通道 2 认领**（task `f3329ba3`，推送方通道 1 10:1x 派；`/implement` › `/tdd`；分支 `mcp2-sacc22-19` 基 `3a21dab7`（= 派单时 main tip），树 `%TEMP%\idp-parcel-mcp2-sacc22-19`；本票先落、19 同分支在其上；迁移序号本票 `0022`）；此前 ready-for-agent——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（CC owner 口径），两条「要裁的」写入下方「裁决」节**：程序仍由调用方交、编排不核一致（范围→程序这条边在 CC 库上不存在，造它是新领域事实，越权）、但**进核对记录与指纹**；核对身份带程序的方式是**折进 `verificationDigest`、不加主键列**（五处键形不变、SA 零改动）。与 [19](19-cc-new-funds-fact-version-forms-a-new-verification-version.md) 同一张键两维，**本票先做、19 在其上**，同一作者同一分支两笔。此前 draft——2026-09-14 16:0x 通道 1（接管会话）立票（sa-cc/12 补评审 ← 通道 3 Standards 非阻断 ② + Spec 非阻断 ①，评审建议「合一张」；与 12 完成记录判断项 ① ④ 同根；归 CC owner）。只写票面未动代码；取证锚 main `01974923`
 Blocked by: 无（12 已进 main；要裁的两条归 CC owner）
 
 ## 缺口（取证于 `01974923`，逐符号名）
@@ -57,6 +57,27 @@ Blocked by: 无（12 已进 main；要裁的两条归 CC owner）
 ## 参照
 
 [12](12-cc-funds-fact-payer-may-be-explicitly-unprovided.md)（裁决 1 / 2、完成记录判断项 ① ② ④、15:47 补评审 Standards ② + Spec ①）；[19](19-cc-new-funds-fact-version-forms-a-new-verification-version.md)（同一张键的另一维）；ADR-0137 决定一；ADR-0029；`internal/customscompliance/application/reconcile_duty_payment.go` `VerifyDutyPaymentCommand` 头注；`internal/customscompliance/domain/duty_release.go` `VerifyDutyPayment` / `DutyVerificationKey`；`internal/customscompliance/domain/customs_case.go` `CustomsCase.Procedure`；`migrations/customs_compliance/0016_duty_payment_reconciliation.sql`、`0019_duty_payment_gate_rule_and_reading.sql`。
+
+## 完成记录
+
+分支 `mcp2-sacc22-19`，基 `3a21dab7`（派单时 main tip；sa-cc/21 随后进 main `bd919b72` 只动 CONTEXT / UC / 票面，与本票零重叠，分支不动）：
+
+| SHA | 内容 |
+|---|---|
+| `bea83b9e` | docs：两票认领（22 / 19 同分支） |
+| `b8969de4` | feat：领域 `VerifyDutyPayment` 加 `procedure` 构造期必填入参 + `DutyPaymentVerification.Procedure()`；应用 `VerifyPayment` 递程序、`verificationDigest` 在 Basis 后追 `Procedure`（顺序写进函数头注）；迁移 `0022_duty_payment_verification_procedure.sql`（`procedure_ref` NOT NULL + `procedure_not_blank` CHECK，存量非零 `RAISE`）；postgres `SaveVerification` 写列、`FindVerification` / `LoadCurrentDutyVerification` / `ListDutyVerifications` 读列、`rebuildVerification` 经 `NewCustomsProcedureReference` 重验；HTTP `dutyVerificationBody.Procedure`（键 `procedure`）；`ports.go` 三处头注改口；`presentation.ts` 键名清单补 `procedureRef`、`api.ts` 读面镜像补 `procedure`；用例随形（含 `duty_reconciliation_catalogue_test.go` 两处 SQL 播种补列、`cmd/parcel-dispatch/assemble_test.go` 构造一句） |
+| （本笔） | docs：本完成记录 + Status → resolved + spec 22 行；顺手评审修两处注释去「五处 / 三列」计数（`DutyVerificationKey` 头注、`0022` 头注） |
+| （下一笔） | docs：机制清点在本笔干净检出重生成（迁移 +1） |
+
+**逐条对完成判据**：**(1)** 应用层——`TestVerificationsUnderDifferentProceduresAreDifferentVersions`：同三轴同依据、`SYN-PROC-01` / `SYN-PROC-02` 两次 `VerifyPayment` 各答`已形成`、册上两行、两封信封指纹不同、键上三维身份原样、落册对象各带自己的程序；同程序第二次答`已存在`且不再落行 / 交封（先红：不折指纹时第二程序答`已存在`，实测）；程序空白仍`未受理`钉在既有 `TestThePayerRuleIsReadAfterBothPrerequisitesAndNamesItsOwnFailure`。**(2)** 真库——`TestVerificationsRoundTripTheProcedureTheyWereJudgedUnder`：点读 / 当前一版 / 上列三路各自读回程序，同键不同程序两行并存，旁路 `INSERT` 空白程序被 `duty_payment_verification_procedure_not_blank` 拒；HTTP 那一处在 `TestDutyVerificationListTranscribesThreeAxesVerbatimWithoutFolding` 键集封闭断言里加 `procedure`（先红：键数不符，实测）；`0022` 在全套迁移计划上施加（`internal/platform/migrate` ok）；**`0016` / `0020` 零 diff**（`git diff 3a21dab7 --stat -- migrations/` 只有 `0022`）；`0022` 对存量非零 `RAISE`（`DO $$ … RAISE EXCEPTION`，照 `0021`；未另写用例——当前存量零，与 `0021` 同待遇）。**(3)** `registrationjson` / CLI 零 diff（程序本就必填）；`presentation.ts` 键名清单含 `procedureRef`；SA 目录零 diff（`git diff 3a21dab7 --stat -- internal/settlementaccounting migrations/settlement_accounting` 空）；`gate_verification`（`0019`）与信封（`duty_payment_verification_handoff.go`）零 diff。**(4)** 本完成记录同笔；清点下一笔。
+
+**裁决逐条**：**1** ✓ 程序仍调用方交、编排不核一致（`VerifyPayment` 无新分支、无新 reason、无范围→程序读口）；进记录（领域字段 + `0022` 列）；四处读回带程序；`CurrentDutyVerificationView` 头注改为「记录的依据维，不是『按范围取当前』的过滤维」；`presentation.ts` 补键。**2** ✓ 折进指纹（`verificationDigest` 末尾追 `Procedure`，头注写死顺序）；`DutyVerificationKey` 五维、`0016` 主键、`0019` `gate_verification`、SA `0020`、信封五处零 diff（`git diff 3a21dab7 --stat -- internal/customscompliance/adapters/postgres/duty_payment_verification_handoff.go migrations/customs_compliance/0019* migrations/settlement_accounting internal/settlementaccounting` 空）；「撞键即同内容」那句改为「三轴、依据与程序」仍为真。**3** ✓ 本票先落、19 在其上（同分支下一笔）。**4** ✓ 见上。**5** 作者量到与取证不符处见判断项。
+
+**判断项（归 owner）**：① **`api.ts` 读面镜像补了 `procedure` 一字段**——裁决 1 只点名 `presentation.ts`；`api.ts` 头注自称「形状以 `query_duty_verifications.go` 为准，此处只做镜像不虚构」，JSON 加键后不补即镜像失真，故补一行 + 头注一句；`CustomsRestrictionsPage` 未加列渲染它（读面页怎么摆归 admin-web 那侧，不在本票）。② HTTP 键名取 `procedure`（与同包 `query_credentials.go` / `query_compliance_rules.go` 的 `json:"procedure"` 同形），不取登记文档的 `procedureRef`——读面与登记面本就两套键名（`duty` vs `dutyRef`）。③ 指纹加维改变了同一命令内容的指纹值：对存量为零的库无影响（`0022` 守卫保证），但**任何已发出的信封 / SA 采用行若在 `0022` 之前存在，其 `digest` 将对不上重算值**——今天无租户、无此存量；日后再加维（19 的 `FundsVersion`）同一条件。④ `rebuildVerification` 对 `procedure_ref` 空白响亮拒（`NewCustomsProcedureReference`），与三轴集外同待遇——列上有 CHECK，真到这里是库被旁路改过。⑤ 取证与代码一致，未量到不符：`VerifyDutyPayment` 七参、`verificationDigest` 四段、`FindVerification` 五列 WHERE、`LoadCurrentDutyVerification` `ORDER BY verified_at DESC, version_digest ASC`、`presentation.ts` 键名清单无 `procedureRef`——与通道 4 取证逐条相符。⑥ `duty_reconciliation_catalogue_test.go` 两处旁路 `INSERT` 播种缺新列先红（带 DSN 首轮 2 FAIL），补 `procedure_ref` 后绿——属列随形，非行为改动。
+
+**验证**（树 `%TEMP%\idp-parcel-mcp2-sacc22-19`，10:3x–11:0x）：`gofmt -l` 空；`go build ./...` / `go vet ./...` 0；不带 DSN `go test -count=1 ./internal/customscompliance/... ./internal/architecture/... ./migrations/... ./cmd/parcel-customs-register/ ./cmd/parcel-api/ ./cmd/parcel-dispatch/` 全 ok；**带 DSN** `-p 1 -count=1 -v`：CC `adapters/postgres` **256 PASS / 0 FAIL / 0 SKIP**（含 `TestVerificationsRoundTripTheProcedureTheyWereJudgedUnder`）、`internal/platform/migrate` ok、`cmd/parcel-dispatch` / `cmd/parcel-api` / `cmd/parcel-customs-register` ok（同轮 480 PASS 含首轮 2 FAIL 为目录用例播种缺列，补后单包重跑如上）。占 / 释 55432 各广播一次。全量与清点兑底由推送方在重放 tip 上做。
+
+**评审门**：`/code-review` 隔离子代理仍「Authentication error」（与 12 / 13 / 24 同），作者按 skill 串行自跑两轴——Standards：新注释全中文；新增行 grep 无行号 / 「第 N 行」；自查量到两处跨文件计数（「五处同改」「三列」）当场改掉；SA 零 diff；夹具全 `SYN-`；无默认无预填。Spec：判据 / 裁决逐条如上；scope 之外只有判断项 ① 一字段。**非作者评审**由推送方另派，本条不冒充。
 
 ## Comments
 
