@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -247,7 +248,7 @@ func newFundsFixture(t *testing.T) *fundsFixture {
 		handoff:      &settlementHandoffDouble{},
 		factHandoff:  newFundsFactHandoff(),
 	}
-	fixture.handler = application.NewMapExternalFundsHandler(application.MapExternalFundsDeps{
+	handler, err := application.NewMapExternalFundsHandler(application.MapExternalFundsDeps{
 		Facts:        fixture.facts,
 		Mappings:     fixture.mappings,
 		Applications: fixture.applications,
@@ -255,7 +256,53 @@ func newFundsFixture(t *testing.T) *fundsFixture {
 		FactHandoff:  fixture.factHandoff,
 		Clock:        fundsClock{at: fundsNowAt},
 	})
+	if err != nil {
+		t.Fatalf("六口全接替身仍被构造门拒：%v", err)
+	}
+	fixture.handler = handler
 	return fixture
+}
+
+// Covers: 票 sa-cc/27 裁决 4——构造期逐口拒 nil、包 ErrNilDependency（同包 NewRequestBuyEvaluationHandler 那张表的形，
+// 同包同名用例已被它占，故名字带 Funds）。FactHandoff 那一口单独点名：漏装它的 panic 落在 Facts.Save 已落行之后
+// （行已落、信封没出、结果没返回），这是本票把这只 handler 第一次装进生产时要在构造那一刻就拦住的那一格。
+func TestTheFundsHandlerRefusesANilDependencyAtConstruction(t *testing.T) {
+	complete := func() application.MapExternalFundsDeps {
+		return application.MapExternalFundsDeps{
+			Facts:        newFundsFactStore(),
+			Mappings:     newFundsMappingStore(),
+			Applications: newApplicationStore(),
+			Downstream:   &settlementHandoffDouble{},
+			FactHandoff:  newFundsFactHandoff(),
+			Clock:        fundsClock{at: fundsNowAt},
+		}
+	}
+	if _, err := application.NewMapExternalFundsHandler(complete()); err != nil {
+		t.Fatalf("六口齐全被拒：%v", err)
+	}
+
+	missing := map[string]func(*application.MapExternalFundsDeps){
+		"external funds fact store":         func(deps *application.MapExternalFundsDeps) { deps.Facts = nil },
+		"funds mapping store":               func(deps *application.MapExternalFundsDeps) { deps.Mappings = nil },
+		"settlement application store":      func(deps *application.MapExternalFundsDeps) { deps.Applications = nil },
+		"settlement application downstream": func(deps *application.MapExternalFundsDeps) { deps.Downstream = nil },
+		"external funds fact handoff":       func(deps *application.MapExternalFundsDeps) { deps.FactHandoff = nil },
+		"clock":                             func(deps *application.MapExternalFundsDeps) { deps.Clock = nil },
+	}
+	for name, remove := range missing {
+		deps := complete()
+		remove(&deps)
+		handler, err := application.NewMapExternalFundsHandler(deps)
+		if !errors.Is(err, application.ErrNilDependency) {
+			t.Fatalf("缺 %s：err = %v，要包 ErrNilDependency", name, err)
+		}
+		if !strings.Contains(err.Error(), name) {
+			t.Fatalf("缺 %s：错误文本 %q 没点名缺的是哪一口", name, err.Error())
+		}
+		if handler != nil {
+			t.Fatalf("缺 %s 仍交回了 handler", name)
+		}
+	}
 }
 
 func adoptCommand(t *testing.T, kind domain.FundsFactKind) application.AdoptFundsFactCommand {

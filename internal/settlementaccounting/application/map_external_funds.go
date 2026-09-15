@@ -232,8 +232,28 @@ type MapExternalFundsHandler struct {
 	deps MapExternalFundsDeps
 }
 
-func NewMapExternalFundsHandler(deps MapExternalFundsDeps) *MapExternalFundsHandler {
-	return &MapExternalFundsHandler{deps: deps}
+// NewMapExternalFundsHandler 构造期逐口拒 nil、缺件包 ErrNilDependency（同包 NewRequestBuyEvaluationHandler 那张表的形；
+// 票 sa-cc/27 裁决 4）。这只 handler 自那票起第一次被装进生产，装进去的那一刻就该拒：FactHandoff 漏装时 panic 落在
+// Facts.Save 已落行之后——行已落、信封没出、结果没返回——比一次普通的空指针更坏；Clock 漏装 panic 在 Save 之前。
+// Mappings / Applications / Downstream 不在采用 / 更正路径上也一并拒：六口在同一个 Deps 上，半装的 handler 会让走不到的
+// 方法在被调那天才崩，那不是一条守得住的边界（「生产装配里不放任何替身」的同一条纪律）。
+func NewMapExternalFundsHandler(deps MapExternalFundsDeps) (*MapExternalFundsHandler, error) {
+	for _, dependency := range []struct {
+		name    string
+		missing bool
+	}{
+		{"external funds fact store", deps.Facts == nil},
+		{"funds mapping store", deps.Mappings == nil},
+		{"settlement application store", deps.Applications == nil},
+		{"settlement application downstream", deps.Downstream == nil},
+		{"external funds fact handoff", deps.FactHandoff == nil},
+		{"clock", deps.Clock == nil},
+	} {
+		if dependency.missing {
+			return nil, fmt.Errorf("%w: %s", ErrNilDependency, dependency.name)
+		}
+	}
+	return &MapExternalFundsHandler{deps: deps}, nil
 }
 
 // AdoptFact 采用一条外部资金事实的首版：只读引用（无余额/已结清字段，领域已钉），幂等按
