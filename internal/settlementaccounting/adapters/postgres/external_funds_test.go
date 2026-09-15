@@ -47,44 +47,6 @@ func TestAnExternalFundsFactRoundTripsAndSecondAdoptKeepsTheWinner(t *testing.T)
 		t.Fatal("资金事实往返变形")
 	}
 
-	corrected, err := domain.RehydrateExternalFundsFact(domain.RehydrateExternalFundsFactSpec{
-		Fact:        saValue(t, domain.NewFundsFactReference, "bank-fact-2"),
-		Source:      saValue(t, domain.NewFundsSourceRegistrationReference, "source-bank-feed-1"),
-		Kind:        domain.FundsReceiptConfirmed,
-		Currency:    saValue(t, domain.NewCurrencyCode, "USD"),
-		AmountMinor: 7500,
-		Version:     saValue(t, domain.NewFundsFactVersion, "bank-fact/v2"),
-		OccurredAt:  fundsOccurredAt,
-		Corrects:    saValue(t, domain.NewFundsFactVersion, "bank-fact/v1"),
-		CorrectedAt: fundsOccurredAt.Add(time.Hour),
-	})
-	if err != nil {
-		t.Fatalf("rehydrate corrected: %v", err)
-	}
-	correctedRecord := ports.FundsFactRecord{
-		Key:           ports.FundsFactKey{TenantID: saTenant(t, "tenant-a"), Fact: corrected.Fact()},
-		ContentDigest: "digest-corrected",
-		Fact:          corrected,
-		RecordedAt:    fundsOccurredAt.Add(time.Hour),
-	}
-	var savedCorrected ports.FundsFactSaveOutcome
-	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
-		var err error
-		savedCorrected, err = facts.Save(txCtx, correctedRecord)
-		return err
-	})
-	if savedCorrected != ports.FundsFactSaved {
-		t.Fatalf("corrected save = %d", savedCorrected)
-	}
-	foundCorrected, exists, err := facts.FindByKey(ctx, correctedRecord.Key)
-	if err != nil || !exists {
-		t.Fatalf("更正读回失败：exists=%v err=%v", exists, err)
-	}
-	predecessor, present := foundCorrected.Fact.Corrects()
-	if !present || predecessor.String() != "bank-fact/v1" {
-		t.Fatal("更正回指没有往返")
-	}
-
 	second := record
 	second.ContentDigest = "digest-other"
 	var outcome ports.FundsFactSaveOutcome
@@ -104,6 +66,211 @@ func TestAnExternalFundsFactRoundTripsAndSecondAdoptKeepsTheWinner(t *testing.T)
 	if outcome != ports.FundsFactAlreadyAdopted {
 		t.Fatalf("第二份写入结果 = %d", outcome)
 	}
+}
+
+// Covers: 票 sa-cc/20 裁决 1「版本子表」与完成判据 (1)(2)——更正版本 v2（回指 v1）落第二行、身份行不变；
+// FindByKey 交回链头 v2；FindVersion(v1) 仍原样、FindVersion(v2) 带回指；同 v2 重放答 FundsFactAlreadyAdopted
+// 且不顶替先到者；AdoptedFundsFactView 两版各答各的。
+func TestAFundsFactCorrectionVersionAccruesAsASecondRowAndFindByKeyAnswersTheChainHead(t *testing.T) {
+	facts, _, _, transactor, pool := newFundsStores(t)
+	ctx := t.Context()
+
+	original := adoptedFactRecord(t, "tenant-a", "bank-fact-1", domain.FundsReceiptConfirmed, 8000)
+	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
+		_, err := facts.Save(txCtx, original)
+		return err
+	})
+
+	correctedFact, err := original.Fact.CorrectAmount(7500,
+		saValue(t, domain.NewFundsFactVersion, "bank-fact/v2"), fundsOccurredAt.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("形成更正版本：%v", err)
+	}
+	corrected := ports.FundsFactRecord{
+		Key:           original.Key,
+		ContentDigest: "digest-bank-fact-1-v2",
+		Fact:          correctedFact,
+		RecordedAt:    fundsOccurredAt.Add(time.Hour),
+	}
+	var savedCorrected ports.FundsFactSaveOutcome
+	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
+		var err error
+		savedCorrected, err = facts.Save(txCtx, corrected)
+		return err
+	})
+	if savedCorrected != ports.FundsFactSaved {
+		t.Fatalf("更正版本 save = %d, want FundsFactSaved——身份已在、版本是新的，这正是要开的口", savedCorrected)
+	}
+
+	var identityRows, versionRows int
+	if err := pool.QueryRow(ctx,
+		`SELECT (SELECT count(*) FROM settlement_accounting.external_funds_fact WHERE tenant_id = $1 AND fact_id = $2),
+		        (SELECT count(*) FROM settlement_accounting.external_funds_fact_version WHERE tenant_id = $1 AND fact_id = $2)`,
+		"tenant-a", "bank-fact-1").Scan(&identityRows, &versionRows); err != nil {
+		t.Fatalf("直读两表：%v", err)
+	}
+	if identityRows != 1 || versionRows != 2 {
+		t.Fatalf("身份行 = %d 版本行 = %d, want 1 / 2", identityRows, versionRows)
+	}
+
+	head, found, err := facts.FindByKey(ctx, original.Key)
+	if err != nil || !found {
+		t.Fatalf("读链头：found=%v err=%v", found, err)
+	}
+	if head.Fact.Version().String() != "bank-fact/v2" || head.ContentDigest != corrected.ContentDigest {
+		t.Fatalf("链头 = %q（摘要 %q），want v2", head.Fact.Version(), head.ContentDigest)
+	}
+	if predecessor, present := head.Fact.Corrects(); !present || predecessor != original.Fact.Version() {
+		t.Fatalf("链头回指 = (%q, %v), want v1", predecessor, present)
+	}
+	if _, amount := head.Fact.Amount(); amount != 7500 {
+		t.Fatalf("链头金额 = %d, want 7500", amount)
+	}
+
+	first, found, err := facts.FindVersion(ctx, original.Key, original.Fact.Version())
+	if err != nil || !found {
+		t.Fatalf("按版本读 v1：found=%v err=%v", found, err)
+	}
+	if first.Fact != original.Fact || first.ContentDigest != original.ContentDigest {
+		t.Fatalf("v1 读回 = %#v, want 与采用时同值——更正不改写前版", first.Fact)
+	}
+	if _, found, err := facts.FindVersion(ctx, original.Key, saValue(t, domain.NewFundsFactVersion, "bank-fact/v3")); err != nil || found {
+		t.Fatalf("从未采用的版本：found=%v err=%v, want false", found, err)
+	}
+
+	replay := corrected
+	replay.ContentDigest = "digest-other"
+	var replayed ports.FundsFactSaveOutcome
+	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
+		var err error
+		replayed, err = facts.Save(txCtx, replay)
+		return err
+	})
+	if replayed != ports.FundsFactAlreadyAdopted {
+		t.Fatalf("同版本重放 save = %d, want FundsFactAlreadyAdopted", replayed)
+	}
+	if winner, _, _ := facts.FindVersion(ctx, original.Key, correctedFact.Version()); winner.ContentDigest != corrected.ContentDigest {
+		t.Fatalf("重放顶替了先到的 v2：摘要 = %q", winner.ContentDigest)
+	}
+
+	view, err := adapter.NewAdoptedFundsFactView(mustDB(t, pool))
+	if err != nil {
+		t.Fatalf("构造只读视图：%v", err)
+	}
+	if loaded, found, err := view.LoadAdoptedFundsFact(ctx, original.Key.TenantID, original.Key.Fact, original.Fact.Version()); err != nil || !found || loaded != original.Fact {
+		t.Fatalf("视图读 v1：found=%v err=%v loaded=%#v", found, err, loaded)
+	}
+	if loaded, found, err := view.LoadAdoptedFundsFact(ctx, original.Key.TenantID, original.Key.Fact, correctedFact.Version()); err != nil || !found || loaded != correctedFact {
+		t.Fatalf("视图读 v2：found=%v err=%v loaded=%#v", found, err, loaded)
+	}
+}
+
+// Covers: 0021 头注「校验版本链的形」——本上下文是铸造方，链必须线性：第二个首版与同一前版的第二次更正
+// 都落不进去、折成 FundsFactAlreadyAdopted（编排照竞态输家那样读回链头）；回指一个不存在的版本是外键错。
+// 三样之后链头仍唯一且仍是 v2，FindByKey 因此不需要标记列。
+func TestTheDatabaseKeepsAFundsFactVersionChainLinear(t *testing.T) {
+	facts, _, _, transactor, pool := newFundsStores(t)
+	ctx := t.Context()
+
+	original := adoptedFactRecord(t, "tenant-a", "bank-fact-1", domain.FundsReceiptConfirmed, 8000)
+	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
+		_, err := facts.Save(txCtx, original)
+		return err
+	})
+
+	secondFirstVersion := original
+	secondFirstVersion.ContentDigest = "digest-v1-bis"
+	secondFirstVersion.Fact = correctedFactFrom(t, original.Fact, 8000, "bank-fact/v1-bis", true)
+	var secondFirstOutcome ports.FundsFactSaveOutcome
+	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
+		var err error
+		secondFirstOutcome, err = facts.Save(txCtx, secondFirstVersion)
+		return err
+	})
+	if secondFirstOutcome != ports.FundsFactAlreadyAdopted {
+		t.Fatalf("同一事实的第二个首版 save = %d, want FundsFactAlreadyAdopted（首版已采用）", secondFirstOutcome)
+	}
+
+	corrected := original
+	corrected.ContentDigest = "digest-v2"
+	corrected.Fact = correctedFactFrom(t, original.Fact, 7500, "bank-fact/v2", false)
+	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
+		_, err := facts.Save(txCtx, corrected)
+		return err
+	})
+	fork := original
+	fork.ContentDigest = "digest-v2-fork"
+	fork.Fact = correctedFactFrom(t, original.Fact, 7000, "bank-fact/v2-fork", false)
+	var forkOutcome ports.FundsFactSaveOutcome
+	saWithin(t, transactor, ctx, func(txCtx context.Context) error {
+		var err error
+		forkOutcome, err = facts.Save(txCtx, fork)
+		return err
+	})
+	if forkOutcome != ports.FundsFactAlreadyAdopted {
+		t.Fatalf("同一前版的第二次更正 save = %d, want FundsFactAlreadyAdopted（那一版的更正已采用）", forkOutcome)
+	}
+
+	dangling := original
+	dangling.ContentDigest = "digest-v10"
+	dangling.Fact = correctedFactFrom(t, corrected.Fact, 7000, "bank-fact/v9", false)
+	dangling.Fact = correctedFactFrom(t, dangling.Fact, 6000, "bank-fact/v10", false)
+	if err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		_, err := facts.Save(txCtx, dangling)
+		return err
+	}); err == nil {
+		t.Fatal("回指一个从未采用的版本的更正溜进了版本表")
+	}
+
+	var versionRows int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM settlement_accounting.external_funds_fact_version WHERE tenant_id = $1 AND fact_id = $2`,
+		"tenant-a", "bank-fact-1").Scan(&versionRows); err != nil {
+		t.Fatalf("直读版本表：%v", err)
+	}
+	if versionRows != 2 {
+		t.Fatalf("版本行 = %d, want 2——三样被拒的一行都不该落", versionRows)
+	}
+	head, found, err := facts.FindByKey(ctx, original.Key)
+	if err != nil || !found || head.Fact.Version().String() != "bank-fact/v2" {
+		t.Fatalf("三次被拒之后链头该仍是 v2：found=%v err=%v got=%q", found, err, head.Fact.Version())
+	}
+}
+
+// correctedFactFrom 从 base 形成一个新版本；asFirstVersion 为 true 时把它重铸成没有回指的首版（借 Rehydrate 走
+// 读回门），用来造「第二个首版」这种只在库门口才该被拒的形。
+func correctedFactFrom(t *testing.T, base domain.ExternalFundsFact, amount int64, version string, asFirstVersion bool) domain.ExternalFundsFact {
+	t.Helper()
+	if asFirstVersion {
+		currency, _ := base.Amount()
+		fact, err := domain.RehydrateExternalFundsFact(domain.RehydrateExternalFundsFactSpec{
+			Fact:        base.Fact(),
+			Source:      base.Source(),
+			Kind:        base.Kind(),
+			Currency:    currency,
+			AmountMinor: amount,
+			Version:     saValue(t, domain.NewFundsFactVersion, version),
+			OccurredAt:  base.OccurredAt(),
+		})
+		if err != nil {
+			t.Fatalf("重铸首版：%v", err)
+		}
+		return fact
+	}
+	fact, err := base.CorrectAmount(amount, saValue(t, domain.NewFundsFactVersion, version), base.OccurredAt().Add(time.Hour))
+	if err != nil {
+		t.Fatalf("形成更正版本：%v", err)
+	}
+	return fact
+}
+
+func mustDB(t *testing.T, pool *pgxpool.Pool) *bentopg.DB {
+	t.Helper()
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	return db
 }
 
 func TestAMappingAndApplicationRoundTripAndReplaceOnlyWritesReversal(t *testing.T) {
@@ -297,8 +464,14 @@ func TestFundsCheckConstraintsRejectImpossibleRows(t *testing.T) {
 	_, _, _, _, pool := newFundsStores(t)
 	ctx := t.Context()
 
+	// 身份行先落（0021 起内容在版本子表），下面两行坏的是版本行自己的形，不是缺身份。
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO settlement_accounting.external_funds_fact
+		`INSERT INTO settlement_accounting.external_funds_fact (tenant_id, fact_id, recorded_at)
+		 VALUES ('tenant-a', 'f-bad-1', now()), ('tenant-a', 'f-bad-2', now())`); err != nil {
+		t.Fatalf("预铺身份行：%v", err)
+	}
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO settlement_accounting.external_funds_fact_version
 			(tenant_id, fact_id, source_ref, kind, currency, amount_minor, version,
 			 occurred_at, corrects, corrected_at, content_digest, recorded_at)
 		 VALUES ('tenant-a', 'f-bad-1', 'src', 'RECEIPT_CONFIRMED', 'USD', 100, 'v1',
@@ -307,12 +480,21 @@ func TestFundsCheckConstraintsRejectImpossibleRows(t *testing.T) {
 	}
 
 	if _, err := pool.Exec(ctx,
-		`INSERT INTO settlement_accounting.external_funds_fact
+		`INSERT INTO settlement_accounting.external_funds_fact_version
 			(tenant_id, fact_id, source_ref, kind, currency, amount_minor, version,
 			 occurred_at, corrects, content_digest, recorded_at)
 		 VALUES ('tenant-a', 'f-bad-2', 'src', 'RECEIPT_CONFIRMED', 'USD', 100, 'v2',
 		         now(), 'v1', 'd', now())`); err == nil {
 		t.Fatal("一行「更正却没有时刻」溜进了事实库")
+	}
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO settlement_accounting.external_funds_fact_version
+			(tenant_id, fact_id, source_ref, kind, currency, amount_minor, version,
+			 occurred_at, content_digest, recorded_at)
+		 VALUES ('tenant-a', 'f-orphan', 'src', 'RECEIPT_CONFIRMED', 'USD', 100, 'v1',
+		         now(), 'd', now())`); err == nil {
+		t.Fatal("一行没有身份行的版本溜进了版本表")
 	}
 
 	if _, err := pool.Exec(ctx,

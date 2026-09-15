@@ -191,7 +191,9 @@ func (fact ExternalFundsFact) CorrectedAt() (time.Time, bool) {
 }
 
 // CorrectAmount 依据外部更正形成新版本引用：保留原版本（值语义），新版本回指前身；
-// 差额与核销的重算随新有效版本另行进行（AT-SA-114）。
+// 差额与核销的重算随新有效版本另行进行（AT-SA-114）。更正时刻不得早于业务发生时刻——
+// 读回门（RehydrateExternalFundsFact）与库 CHECK 都这么要求，形成门放过去的版本会在
+// 落库那一步才被拒，编排就只能答`未决`而不是`未受理`。
 func (fact ExternalFundsFact) CorrectAmount(
 	amountMinor int64,
 	version FundsFactVersion,
@@ -200,7 +202,7 @@ func (fact ExternalFundsFact) CorrectAmount(
 	if !fact.version.valid() {
 		return ExternalFundsFact{}, ErrInvalidFundsFact
 	}
-	if amountMinor <= 0 || !version.valid() || correctedAt.IsZero() {
+	if amountMinor <= 0 || !version.valid() || correctedAt.IsZero() || correctedAt.Before(fact.occurredAt) {
 		return ExternalFundsFact{}, ErrInvalidFundsFact
 	}
 	if version == fact.version {

@@ -97,6 +97,11 @@ func TestAnAdoptedFundsFactIsAReferenceNotABalance(t *testing.T) {
 		if _, err := fact.CorrectAmount(7500, fact.Version(), fundsOccurredAt.Add(time.Hour)); !errors.Is(err, domain.ErrInvalidFundsFact) {
 			t.Fatalf("error = %v; 沿用原版本号就是覆盖", err)
 		}
+		if _, err := fact.CorrectAmount(7500,
+			settlementValue(t, domain.NewFundsFactVersion, "bank-fact/v2"),
+			fundsOccurredAt.Add(-time.Minute)); !errors.Is(err, domain.ErrInvalidFundsFact) {
+			t.Fatalf("error = %v; 更正时刻早于业务发生时刻——读回门与库 CHECK 都拒它，形成门不能放", err)
+		}
 	})
 
 	t.Run("the fact kind set is closed", func(t *testing.T) {

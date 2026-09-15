@@ -14,7 +14,12 @@ import (
 
 // FundsApplicationCatalogue 实现 ports.FundsApplicationCatalogueRead：已采用外部资金
 // 事实册的列表读面，映射与核销挂在事实行上（ADR-0077，票
-// admin-skeleton-closure-batch/04）。读的就是 0004 的三张本表。
+// admin-skeleton-closure-batch/04）。读的是 0004 的映射与核销两表加 0021 的版本子表。
+//
+// **一事实一行，行上是链头那一版的内容。** 0021 起一事实多版各占一行（票 sa-cc/20），而映射与核销挂
+// 在事实身份上，不挂在某一版上——按事实身份关联的聚合若逐版本行各出一遍，两笔求和与两个挂册就会
+// 按版本数翻倍；所以事实面只取没有后继的那一版，Version / Corrects / CorrectedAt 三列就是它在链上的
+// 位置。前版的内容不在这张列表上：它是历史，按版本读走 AdoptedFundsFactView。
 //
 // 事实面、两笔核销求和与两个挂册**一条语句取回**：ReadExecutor 不保证两条语句同一
 // 快照，分次取会拼出从未同时存在的账面状态——与核销并发登记时尤甚（判据同
@@ -110,7 +115,7 @@ func (catalogue *FundsApplicationCatalogue) ListExternalFundsFacts(
 		           FROM settlement_accounting.settlement_application AS a
 		          WHERE a.tenant_id = f.tenant_id
 		            AND a.fact_id = f.fact_id)
-		   FROM settlement_accounting.external_funds_fact AS f
+		   FROM settlement_accounting.external_funds_fact_version AS f
 		   LEFT JOIN LATERAL (
 		        SELECT
 		            COALESCE(SUM(a.applied_minor) FILTER (WHERE a.reversed_at IS NULL),
@@ -123,6 +128,12 @@ func (catalogue *FundsApplicationCatalogue) ListExternalFundsFacts(
 		           AND a.fact_id = f.fact_id
 		   ) AS applied ON true
 		  WHERE f.tenant_id = $1
+		    AND NOT EXISTS (
+		        SELECT 1
+		          FROM settlement_accounting.external_funds_fact_version AS successor
+		         WHERE successor.tenant_id = f.tenant_id
+		           AND successor.fact_id = f.fact_id
+		           AND successor.corrects = f.version)
 		  ORDER BY f.fact_id
 		  LIMIT $2`,
 		tenant.String(), limit,

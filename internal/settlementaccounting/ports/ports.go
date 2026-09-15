@@ -763,14 +763,15 @@ type StatementHandoff interface {
 	HandOffStatement(ctx context.Context, intent StatementIntent) error
 }
 
-// FundsFactKey 是外部资金事实采用的幂等键：事实归银行/支付系统拥有，同一事实引用只
-// 采用一次。
+// FundsFactKey 是外部资金事实的**身份**键：事实归银行/支付系统拥有，同一事实引用只有一条身份、
+// 首版只采用一次；更正是同一身份下回指前版的新版本（UC-SA-001「更正必须形成新来源版本」），
+// 版本在记录的 Fact 上、不在键上——映射与核销引用的也是身份，不是某一版（票 sa-cc/20 裁决 1）。
 type FundsFactKey struct {
 	TenantID domain.TenantID
 	Fact     domain.FundsFactReference
 }
 
-// FundsFactRecord 是一次资金事实采用越过提交边界留下的东西。
+// FundsFactRecord 是一次资金事实采用越过提交边界留下的东西：一条记录就是一个版本。
 type FundsFactRecord struct {
 	Key           FundsFactKey
 	ContentDigest string
@@ -783,12 +784,20 @@ type FundsFactSaveOutcome uint8
 const (
 	FundsFactSaveOutcomeInvalid FundsFactSaveOutcome = iota
 	FundsFactSaved
+	// FundsFactAlreadyAdopted 落在（身份、版本）已在——身份已在而版本是新的，正是更正版本该走进去的口。
+	// 库上守链形的两道唯一约束（一条事实一个首版、一个前版只被更正一次）撞上时也答它：这一版没有落，
+	// 占着那个位置的是先到的那一版，编排读回链头作答。
 	FundsFactAlreadyAdopted
 )
 
-// ExternalFundsFactStore 按幂等键找回并保存资金事实引用（写入代数同 ADR-0031）。
+// ExternalFundsFactStore 按身份键找回并保存资金事实引用（写入代数同 ADR-0031）。
+//
+// FindByKey 交回**链头**——无后继的那一版，也就是最近采用的那一版：本上下文是铸造方，更正必须回指当前
+// 链头（票 sa-cc/20 裁决 2），链因此线性、链头唯一，不需要「谁是当前」的标记。Map / Apply 按它读当前
+// 有效版本；FindVersion 按版本字面读某一版，给「同版本重放 / 冲突」的判定与回指核对用。
 type ExternalFundsFactStore interface {
 	FindByKey(ctx context.Context, key FundsFactKey) (FundsFactRecord, bool, error)
+	FindVersion(ctx context.Context, key FundsFactKey, version domain.FundsFactVersion) (FundsFactRecord, bool, error)
 	Save(ctx context.Context, record FundsFactRecord) (FundsFactSaveOutcome, error)
 }
 

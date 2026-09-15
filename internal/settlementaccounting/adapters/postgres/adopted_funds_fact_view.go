@@ -12,7 +12,8 @@ import (
 
 // AdoptedFundsFactView 实现 ports.AdoptedFundsFactView：按（租户、事实引用、采用版本）取一条已采用
 // 事实的本体，给下游按信封引用回查用（票 sa-cc/03）。与 ExternalFundsFacts 分型：读方拿不到 Save。
-// 版本进 WHERE 而不是读回再比——库里将来一事实多行（更正版本各成一行）时，这一句照样只答被问的那一版。
+// 版本进 WHERE 而不是读回再比——0021 起一事实多行（更正版本各成一行，票 sa-cc/20），这一句只答被问的
+// 那一版，链头是哪一版与它无关。
 type AdoptedFundsFactView struct {
 	db *bentopg.DB
 }
@@ -41,9 +42,9 @@ func (view *AdoptedFundsFactView) LoadAdoptedFundsFact(
 	key := ports.FundsFactKey{TenantID: tenant, Fact: fact}
 	record, found, err := scanExternalFundsFact(querier.QueryRow(ctx,
 		externalFundsFactSelect+`
-		  WHERE tenant_id = $1
-		    AND fact_id = $2
-		    AND version = $3`,
+		  WHERE v.tenant_id = $1
+		    AND v.fact_id = $2
+		    AND v.version = $3`,
 		tenant.String(),
 		fact.String(),
 		version.String(),

@@ -18,6 +18,8 @@ var (
 	fundsNowAt      = time.Date(2026, 9, 2, 11, 0, 0, 0, time.UTC)
 )
 
+// fundsFactStoreDouble 照 0021 起的形：一条记录一个版本，键（租户、事实、版本）；FindByKey 交回链头——
+// 没有任何一版回指它的那一版（真库靠三道链形约束保证它唯一，替身只在同一事实的记录里找）。
 type fundsFactStoreDouble struct {
 	records map[string]ports.FundsFactRecord
 	findErr error
@@ -34,6 +36,10 @@ func fundsFactKey(key ports.FundsFactKey) string {
 	return key.TenantID.String() + "|" + key.Fact.String()
 }
 
+func fundsFactVersionKey(key ports.FundsFactKey, version domain.FundsFactVersion) string {
+	return fundsFactKey(key) + "|" + version.String()
+}
+
 func (double *fundsFactStoreDouble) FindByKey(
 	_ context.Context,
 	key ports.FundsFactKey,
@@ -41,7 +47,32 @@ func (double *fundsFactStoreDouble) FindByKey(
 	if double.findErr != nil {
 		return ports.FundsFactRecord{}, false, double.findErr
 	}
-	record, found := double.records[fundsFactKey(key)]
+	corrected := map[domain.FundsFactVersion]bool{}
+	for _, record := range double.records {
+		if record.Key != key {
+			continue
+		}
+		if predecessor, present := record.Fact.Corrects(); present {
+			corrected[predecessor] = true
+		}
+	}
+	for _, record := range double.records {
+		if record.Key == key && !corrected[record.Fact.Version()] {
+			return record, true, nil
+		}
+	}
+	return ports.FundsFactRecord{}, false, nil
+}
+
+func (double *fundsFactStoreDouble) FindVersion(
+	_ context.Context,
+	key ports.FundsFactKey,
+	version domain.FundsFactVersion,
+) (ports.FundsFactRecord, bool, error) {
+	if double.findErr != nil {
+		return ports.FundsFactRecord{}, false, double.findErr
+	}
+	record, found := double.records[fundsFactVersionKey(key, version)]
 	return record, found, nil
 }
 
@@ -54,10 +85,22 @@ func (double *fundsFactStoreDouble) Save(
 		double.beforeSave = nil
 		hook()
 	}
-	if _, exists := double.records[fundsFactKey(record.Key)]; exists {
+	if _, exists := double.records[fundsFactVersionKey(record.Key, record.Fact.Version())]; exists {
 		return ports.FundsFactAlreadyAdopted, nil
 	}
-	double.records[fundsFactKey(record.Key)] = record
+	// 0021 守链形的两道唯一约束在替身里也要在：第二个首版、同一前版的第二次更正都折成`已采用`——
+	// 输掉竞态的一方就是从这里拿到 AlreadyAdopted、再读回赢家那一版的。
+	predecessor, corrected := record.Fact.Corrects()
+	for _, existing := range double.records {
+		if existing.Key != record.Key {
+			continue
+		}
+		existingPredecessor, existingCorrected := existing.Fact.Corrects()
+		if corrected == existingCorrected && (!corrected || predecessor == existingPredecessor) {
+			return ports.FundsFactAlreadyAdopted, nil
+		}
+	}
+	double.records[fundsFactVersionKey(record.Key, record.Fact.Version())] = record
 	return ports.FundsFactSaved, nil
 }
 

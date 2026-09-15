@@ -559,13 +559,7 @@ func TestSupplierBillReceptionCatalogueTranscribesCountsAndAuthority(t *testing.
 func TestExternalFundsFactCatalogueSplitsAppliedFromReversed(t *testing.T) {
 	fixture := newCatalogueFixture(t)
 
-	fixture.seed(t,
-		`INSERT INTO settlement_accounting.external_funds_fact
-			(tenant_id, fact_id, source_ref, kind, currency, amount_minor, version,
-			 occurred_at, content_digest, recorded_at)
-		 VALUES ($1, 'SYN-FACT-01', 'SYN-SRC-01', 'RECEIPT_CONFIRMED', 'SYN-CUR-01',
-		         100000, 'V1', $2, 'SYN-DIGEST-F1', $2)`,
-		catalogueTenant, catalogueBaseAt)
+	seedExternalFundsFactVersion(t, fixture, "SYN-FACT-01", "RECEIPT_CONFIRMED", 100000, "V1", "", catalogueBaseAt)
 
 	fixture.seed(t,
 		`INSERT INTO settlement_accounting.funds_mapping
@@ -636,13 +630,7 @@ func TestExternalFundsFactCatalogueSplitsAppliedFromReversed(t *testing.T) {
 // 用例）是两个相反的答案，不共用一格。
 func TestExternalFundsFactCatalogueKeepsNeverAppliedFactsDistinct(t *testing.T) {
 	fixture := newCatalogueFixture(t)
-	fixture.seed(t,
-		`INSERT INTO settlement_accounting.external_funds_fact
-			(tenant_id, fact_id, source_ref, kind, currency, amount_minor, version,
-			 occurred_at, content_digest, recorded_at)
-		 VALUES ($1, 'SYN-FACT-01', 'SYN-SRC-01', 'FUNDS_RETURNED', 'SYN-CUR-01',
-		         100000, 'V1', $2, 'SYN-DIGEST-F1', $2)`,
-		catalogueTenant, catalogueBaseAt)
+	seedExternalFundsFactVersion(t, fixture, "SYN-FACT-01", "FUNDS_RETURNED", 100000, "V1", "", catalogueBaseAt)
 
 	rows, err := fixture.funds.ListExternalFundsFacts(
 		t.Context(), catalogueTenantID(t, catalogueTenant), 10)
@@ -657,6 +645,84 @@ func TestExternalFundsFactCatalogueKeepsNeverAppliedFactsDistinct(t *testing.T) 
 	if len(row.Mappings) != 0 || len(row.Applications) != 0 {
 		t.Fatalf("从未核销的事实不该带挂册：%+v", row)
 	}
+}
+
+// Covers: 票 sa-cc/20 完成判据 (2)「ListExternalFundsFacts 一事实一行、聚合不重复」——同一事实两版
+// （V2 回指 V1、金额变）在库上两行，列表只出一行、内容是链头 V2 的、带回指；挂在事实身份上的映射与
+// 核销只算一遍，未核销余额按链头金额算。另一条只有首版的事实照旧一行，排序仍按事实。
+func TestExternalFundsFactCatalogueListsOneRowPerFactWithTheChainHead(t *testing.T) {
+	fixture := newCatalogueFixture(t)
+	correctedAt := catalogueBaseAt.Add(24 * time.Hour)
+	seedExternalFundsFactVersion(t, fixture, "SYN-FACT-01", "RECEIPT_CONFIRMED", 100000, "V1", "", catalogueBaseAt)
+	seedExternalFundsFactVersion(t, fixture, "SYN-FACT-01", "RECEIPT_CONFIRMED", 90000, "V2", "V1", correctedAt)
+	seedExternalFundsFactVersion(t, fixture, "SYN-FACT-02", "RECEIPT_CONFIRMED", 5000, "V1", "", catalogueBaseAt)
+
+	fixture.seed(t,
+		`INSERT INTO settlement_accounting.funds_mapping
+			(tenant_id, mapping_id, fact_id, target_kind, target_ref, basis,
+			 mapped_at, content_digest, recorded_at)
+		 VALUES ($1, 'SYN-MAP-01', 'SYN-FACT-01', 'STATEMENT', 'SYN-STMT-01',
+		         'SYN-MBASIS-01', $2, 'SYN-DIGEST-M1', $2)`,
+		catalogueTenant, catalogueBaseAt)
+	fixture.seed(t,
+		`INSERT INTO settlement_accounting.settlement_application
+			(tenant_id, application_id, fact_id, currency, fact_minor, applied_minor,
+			 allocations, basis, applied_at, content_digest, recorded_at)
+		 VALUES ($1, 'SYN-APP-01', 'SYN-FACT-01', 'SYN-CUR-01', 100000, 30000,
+			 '[{"mapping":"SYN-MAP-01","targetKind":"STATEMENT","target":"SYN-STMT-01",
+			    "direction":"CREDIT","amountMinor":30000}]'::jsonb,
+			 'SYN-ABASIS-01', $2, 'SYN-DIGEST-A1', $2)`,
+		catalogueTenant, catalogueBaseAt)
+
+	rows, err := fixture.funds.ListExternalFundsFacts(
+		t.Context(), catalogueTenantID(t, catalogueTenant), 10)
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("两条事实、其一两版，该列两行：err=%v rows=%+v", err, rows)
+	}
+	head := rows[0]
+	if head.Fact != "SYN-FACT-01" || head.Version != "V2" || head.Corrects != "V1" ||
+		head.CorrectedAt == nil || !head.CorrectedAt.Equal(correctedAt) || head.AmountMinor != 90000 {
+		t.Fatalf("事实行该是链头 V2 的内容并回指 V1：%+v", head)
+	}
+	if head.AppliedMinor != 30000 || head.ReversedMinor != 0 ||
+		head.UnappliedMinor != 60000 || head.ApplicationCount != 1 ||
+		len(head.Mappings) != 1 || len(head.Applications) != 1 {
+		t.Fatalf("挂在事实身份上的映射与核销只该算一遍、余额按链头金额：%+v", head)
+	}
+	if rows[1].Fact != "SYN-FACT-02" || rows[1].Version != "V1" || rows[1].Corrects != "" {
+		t.Fatalf("只有首版的事实走样：%+v", rows[1])
+	}
+}
+
+// seedExternalFundsFactVersion 直写 0021 起的两张表：身份行 DO NOTHING（同一事实的第二版撞见它），版本行
+// 一版一行；corrects 为空即首版。付款人留 NULL（来源未提供），列表用例不看它。
+func seedExternalFundsFactVersion(
+	t *testing.T,
+	fixture *catalogueFixture,
+	fact, kind string,
+	amountMinor int64,
+	version, corrects string,
+	recordedAt time.Time,
+) {
+	t.Helper()
+	fixture.seed(t,
+		`INSERT INTO settlement_accounting.external_funds_fact (tenant_id, fact_id, recorded_at)
+		 VALUES ($1, $2, $3)
+		 ON CONFLICT (tenant_id, fact_id) DO NOTHING`,
+		catalogueTenant, fact, recordedAt)
+	var correctsColumn *string
+	var correctedAt *time.Time
+	if corrects != "" {
+		correctsColumn = &corrects
+		correctedAt = &recordedAt
+	}
+	fixture.seed(t,
+		`INSERT INTO settlement_accounting.external_funds_fact_version
+			(tenant_id, fact_id, version, source_ref, kind, currency, amount_minor,
+			 occurred_at, corrects, corrected_at, content_digest, recorded_at)
+		 VALUES ($1, $2, $3, 'SYN-SRC-01', $4, 'SYN-CUR-01', $5, $6, $7, $8, $9, $6)`,
+		catalogueTenant, fact, version, kind, amountMinor, catalogueBaseAt, correctsColumn, correctedAt,
+		"SYN-DIGEST-"+fact+"-"+version)
 }
 
 // Covers: 经营结果组成逐项上列（审核应付与贷项按各自借贷方向各计一次，不净额）；
