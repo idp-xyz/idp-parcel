@@ -2478,4 +2478,10 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 
 - **依据**：通道 2 取证 (1)–(6)（钉 `93840328`）。最要紧的一条：单事务入口下「行已落、信封未出、续办引用非空」只由 Go 侧确定性错误到达（`Store.Enqueue` 先 `Validate` 再 SQL；依赖故障把事务打进中止态 → CLI 未决 3 且版本行不落），所以 27 的「重跑补发」在它今天唯一能到的因下恒假。
 - **裁**：ID 指纹化（口名前缀 `funds-fact` + `sha256(租户 / 事实 / 版本)`），helper 按 `outboxintent` 头注的 rule-of-three 提炼为导出 `FingerprintEventID`、CC 三只改引删私有（零行为，34 五只同引）；`Subject` / `PartitionKey` 不哈希（照 29 判断项 ③）；`handOffFact` 只对 `ErrInvalidEnvelope` 分格——包 `ports.ErrFundsFactHandoffRejected` 返错整笔回滚、CLI 用法格 1 点名原因（不归未决 3：什么都没登记、要改的是输入，重跑到预算耗尽正是 29 的反例）、端点 4xx；其余错误照旧折续办（对依赖故障那句是真的，事务入口下到不了→判断项写实，不删 `FundsResult` 那一格）；CC 消费门幂等靠 0021 主键 + `已存在`，真库钉。**为什么 Blocked by 31**：CLI 与端点两口对同一哨兵的映射一次做齐，不让端点先以 500 把确定性拒折成「不知道」。完成判据七条写实。
-- 纯 .md，共享 main 直接一笔、`ls-remote` 核 `d02fd926` 未动后 push。**前沿**：在途 31（3）、34 取证（6）；ready 1——sa-cc/32（Blocked by 31）；待代裁 34（等取证）。
+- 纯 .md，共享 main 直接一笔、`ls-remote` 核 `d02fd926` 未动后 push（`2f698d2b`）。**前沿**：在途 31（3）、34 取证（6）；ready 1——sa-cc/32（Blocked by 31）；待代裁 34（等取证）。
+
+### 15:3x：34 取证进 main → 代裁 sa-cc/34（CC owner 口径）→ ready 即派
+
+- **取证 ← 通道 6**（`mcp6-sacc34-evidence@aec424a6`，纯 .md，推送方直接 `cherry-pick` 到共享 main → `760332c7`）。最要紧：五只里**只有 `externalResultEventID` 有生产装配**（`/customs/external-results`）且其事件类型零消费者；五只都不分格、全折续办、都不在重派路；两只把 ID 直接当分区键；有消费者的两只 → VE 有 `FactKey` + 摘要幂等；grep 漏两只（follow-up 四维串接第六只、restriction 单引用无上界）。
+- **裁**：范围扩到**七只**一次同改（单引用与零装配的也改——「留一只等于留一张脸」）；`FingerprintEventID` 提炼到 `outboxintent` 导出**由本票做**、29 三只改引删私有，32（Blocked by 31、晚于本票）只引——32 票面已改注；ID 与分区键解耦：两只 `PartitionKey: eventID` 的改取原可读串接一字不变（分区是顺序语义，`partition_subject_registry_test` 登的就是它），其余五只分区键本来另算；确定性拒分格**只做外部结果口**那一路（照 32 裁决 2，`ErrHandoffEnvelopeRejected` 返错回滚 → 4xx），其余六只入口未接不动、残差记 spec；VE 幂等真库钉两只有消费者的。完成判据七条写实。
+- 纯 .md 两笔（取证 cherry-pick + 代裁）共享 main 直接落，`ls-remote` 核 `2f698d2b` 未动后 push。三棵尾巴树（2 / 4 / 5）已拆。**前沿**：在途 31（3，端点表两行已推 `9c065fb0`）；ready 2——sa-cc/34（即派）、sa-cc/32（Blocked by 31）。
