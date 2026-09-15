@@ -166,7 +166,10 @@ func scanExternalFundsFact(row pgx.Row, key ports.FundsFactKey) (ports.FundsFact
 //
 // 版本行的 DO NOTHING 不写冲突目标：0021 守「一个首版」「一个前版只被更正一次」的唯一约束撞上时同样折成
 // `已采用`，让编排像 AdoptFact 输掉竞态那样读回链头作答（谁先落谁是当前，输家拿到赢家那一版）；顺序到达的
-// 同类写入在编排里就被「回指必须等于链头」挡下，到不了这里。回指一个不存在的版本是外键错，响亮报错不折。
+// 同类写入在编排里就被「回指必须等于链头」挡下，到不了这里。于是同一个「回指的不是当前链头」，顺序到达在
+// CorrectFact 里答`未受理`（提交矛盾），并发到达在这里折成`已采用`、编排交回赢家那一版——两答不同是有意的：
+// 前者是调用方编程错误，后者是谁先落谁是当前；调用方拿到`已采用`时，从交回记录的版本字面 ≠ 命令版本分得出
+// 是输掉竞态而非重放。回指一个不存在的版本是外键错，响亮报错不折。
 func (repository *ExternalFundsFacts) Save(
 	ctx context.Context,
 	record ports.FundsFactRecord,
