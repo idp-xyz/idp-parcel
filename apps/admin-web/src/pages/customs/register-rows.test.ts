@@ -86,7 +86,9 @@ function verification(over: Partial<DutyVerificationRecord>): DutyVerificationRe
   return {
     duty: 'SYN-DUTY-01/v1',
     funds: 'SYN-FUNDS-01',
+    fundsVersion: 'SYN-FUNDS-01/v1',
     scope: 'SYN-UNIT-01',
+    procedure: 'SYN-PROC-01',
     version: 'digest-v1',
     coverage: 'PARTIAL',
     delta: 'SHORT',
