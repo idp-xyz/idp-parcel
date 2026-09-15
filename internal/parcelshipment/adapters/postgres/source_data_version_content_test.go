@@ -316,17 +316,16 @@ func TestASourceDataVersionRegistryRoundTripsTheContent(t *testing.T) {
 		t.Fatalf("形成资料版本：%v", err)
 	}
 	identity := requestIdentity(t, "req-key-1")
+	var outcome ports.SourceDataVersionAppendOutcome
 	if err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		outcome, err := registry.Append(txCtx, identity, version)
-		if err != nil {
-			return err
-		}
-		if outcome != ports.SourceDataVersionAppended {
-			t.Fatalf("append outcome = %v, want APPENDED", outcome)
-		}
-		return nil
+		var err error
+		outcome, err = registry.Append(txCtx, identity, version)
+		return err
 	}); err != nil {
 		t.Fatalf("追加：%v", err)
+	}
+	if outcome != ports.SourceDataVersionAppended {
+		t.Fatalf("append outcome = %v, want APPENDED", outcome)
 	}
 
 	found, present, err := registry.FindVersion(ctx, identity, version.VersionID())

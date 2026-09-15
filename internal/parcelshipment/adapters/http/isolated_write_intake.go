@@ -22,9 +22,10 @@ import (
 //   - **来源信封**：租户、货主客户账户、来源三样整组注入，请求里写什么都不看（ADR-0003
 //     的最高隔离边界在隔离形态下同样不许被自报穿透）。来源请求键是唯一从请求内容派生的
 //     一格，见下面 sourceRequestKey 的注释。
-//   - **载荷摘要**：把管理台草案译成 `SubmissionPayloadSpec` 再走领域侧的
-//     `CanonicalizeSubmissionPayload`（ADR-0014）。摘要只吃客户声明的引用，不吃本包现签的
-//     内部标识——否则同一份内容重发两次会得到两个摘要，重放就被判成`接入冲突`。
+//   - **载荷摘要与要素子段**：把管理台草案译成 `SubmissionPayloadSpec` 再走领域侧的
+//     `CanonicalizeSubmission`（ADR-0014；pp-seams/05 裁决 3——摘要与寄 / 收地址要素一次产出、一起
+//     进命令）。摘要只吃客户声明的引用，不吃本包现签的内部标识——否则同一份内容重发两次会得到
+//     两个摘要，重放就被判成`接入冲突`。
 //   - **期望规则修订**：向归属权威预取。`UC-PS-001` 步骤 3B 把「准入范围与期望规则修订」
 //     判给试点准入控制装配，本包据此照办；编排随后在提交时点重判一次，因此门禁仍拦得住
 //     预取与提交之间登记册发生的变化，只是拦不住「调用方揣着上周的修订」——隔离形态里
@@ -135,15 +136,22 @@ func NewIsolatedSubmissionIntake(deps IsolatedSubmissionIntakeDeps) (*IsolatedSu
 // submissionDraft 是管理台提交页送上来的形状（`apps/admin-web` 的 `ShipmentRequestDraft`）。
 // 它是本仓自己那张页面的草案形状，不是已发布的渠道 Schema——页面注释与本注释同此一句。
 type submissionDraft struct {
-	CustomerShipmentReference string                `json:"customerShipmentReference"`
-	RequestedServiceProduct   string                `json:"requestedServiceProduct"`
-	RequestEffectiveAt        *string               `json:"requestEffectiveAt"`
-	SenderRelation            string                `json:"senderRelation"`
-	SenderAddress             string                `json:"senderAddress"`
-	RecipientRelation         string                `json:"recipientRelation"`
-	RecipientAddress          string                `json:"recipientAddress"`
-	DestinationServiceScope   string                `json:"destinationServiceScope"`
-	Parcels                   []declaredParcelDraft `json:"parcels"`
+	CustomerShipmentReference string  `json:"customerShipmentReference"`
+	RequestedServiceProduct   string  `json:"requestedServiceProduct"`
+	RequestEffectiveAt        *string `json:"requestEffectiveAt"`
+	SenderRelation            string  `json:"senderRelation"`
+	SenderAddress             string  `json:"senderAddress"`
+	// SenderPostalCode / SenderCountryCode 与收件那一对是寄 / 收两范围的地址要素（PS CONTEXT「地址要素」；pp-seams/05）：
+	// 译成按封闭要素名命名的范围条目，随同一次规范化既进摘要又挑成要素子段进命令。四格都可缺席——缺席即那一格没报。
+	// 它们是本仓自己那张页面的草案字段，不是任何租户的渠道字段名。
+	SenderPostalCode        string                `json:"senderPostalCode"`
+	SenderCountryCode       string                `json:"senderCountryCode"`
+	RecipientRelation       string                `json:"recipientRelation"`
+	RecipientAddress        string                `json:"recipientAddress"`
+	RecipientPostalCode     string                `json:"recipientPostalCode"`
+	RecipientCountryCode    string                `json:"recipientCountryCode"`
+	DestinationServiceScope string                `json:"destinationServiceScope"`
+	Parcels                 []declaredParcelDraft `json:"parcels"`
 }
 
 type declaredParcelDraft struct {
@@ -191,7 +199,9 @@ func (intake *IsolatedSubmissionIntake) IntakeSubmission(
 	if err != nil {
 		return application.SubmitShipmentRequestCommand{}, err
 	}
-	digest, err := domain.CanonicalizeSubmissionPayload(domain.SubmissionPayloadSpec{
+	// 只调这一次：摘要与要素子段由同一份规范化输入一次产出、一起进命令（pp-seams/05 裁决 3）。再为要素单独算一遍，
+	// 内容与摘要就有了各说各话的口子——结构上不给它留位置。
+	canonical, err := domain.CanonicalizeSubmission(domain.SubmissionPayloadSpec{
 		RequestReference:  customerReference,
 		EffectiveAt:       effectiveAt,
 		DeclaredParcelIDs: customerParcels,
@@ -216,7 +226,7 @@ func (intake *IsolatedSubmissionIntake) IntakeSubmission(
 	now := intake.clock.Now().UTC()
 	return application.SubmitShipmentRequestCommand{
 		Identity:          identity,
-		PayloadDigest:     digest,
+		PayloadDigest:     canonical.Digest(),
 		OccurredAt:        now,
 		ReceivedAt:        now,
 		BatchID:           internalBatch,
@@ -224,6 +234,7 @@ func (intake *IsolatedSubmissionIntake) IntakeSubmission(
 		DeclaredParcelIDs: internalParcels,
 		AdmissionScope:    intake.admissionScope,
 		ExpectedRevision:  decision.Revision(),
+		DeclaredElements:  canonical.DeclaredElements(),
 	}, nil
 }
 
@@ -330,13 +341,21 @@ func (intake *IsolatedSubmissionIntake) mintInternalIdentities(
 // scopeEntries 与 serviceEntries 是本形状的规范化词表：哪个草案字段进摘要的哪一段。
 // 缺席的字段整条不进——`CanonicalContentEntry` 把「显式清空」与「条目缺席」定为两种内容，
 // 给缺席字段补一条空值条目会把前者的语义安在后者头上。
+//
+// 邮编与国家 / 地区码四格不用本文件自造的点号名，而取 domain.AddressElementEntryName 拼出的封闭名字：
+// 那是 AddressElementsOf 唯一认的名字，本形状用别的名字它们就只进摘要、进不了要素子段。
 func scopeEntries(draft submissionDraft) []domain.CanonicalContentEntry {
+	sender, delivery := domain.SenderPlaceDataGroup(), domain.DeliveryPlaceDataGroup()
 	return canonicalEntries(map[string]string{
 		"sender.relation":          draft.SenderRelation,
 		"sender.address":           draft.SenderAddress,
 		"recipient.relation":       draft.RecipientRelation,
 		"recipient.address":        draft.RecipientAddress,
 		"destination.serviceScope": draft.DestinationServiceScope,
+		domain.AddressElementEntryName(sender, domain.PostalCodeElement):    draft.SenderPostalCode,
+		domain.AddressElementEntryName(sender, domain.CountryCodeElement):   draft.SenderCountryCode,
+		domain.AddressElementEntryName(delivery, domain.PostalCodeElement):  draft.RecipientPostalCode,
+		domain.AddressElementEntryName(delivery, domain.CountryCodeElement): draft.RecipientCountryCode,
 	})
 }
 

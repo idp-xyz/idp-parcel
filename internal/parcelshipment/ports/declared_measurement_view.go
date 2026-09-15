@@ -18,7 +18,8 @@ import (
 // DeliveryPlaceReferenceView / CommercialResolutionReferenceView 分开、一口一问**（ADR-0133 头注的先例）：这些口
 // 内部走同一条包裹 → 委托的路、同一个「按范围解析资料版本锚」的内部步骤，对外各答各的。
 //
-// 答法是 domain.DeclaredMeasurementResolution 的封闭五格：基线锚带测量 / 已采用版本锚只带锚 / 未定 / 未申报 / 无。
+// 答法是 domain.DeclaredMeasurementResolution 的封闭五格：基线锚带测量 / 已采用版本锚带锚与那一版自己的测量（可缺席）/
+// 未定 / 未申报 / 无。
 // 五格里没有一格是「不知道」：走到答案要翻的册子——接受基线的成员集合、基线所指那一版上的画像、该包裹申报测量范围
 // 上的资料版本——全是本上下文自己的，答不出就是读面坏了，上抛 error；同一件包裹被多于一份已接受委托同时声明同为
 // 读面坏了（ADR-0060 的歧义），不挑一份作答。
@@ -26,8 +27,9 @@ import (
 // 值原样交：数字是客户申报的字面串（"2.50" 不规范化），单位是 PS 的 MeasurementUnitReference 自由串——对到 PP
 // WeightUnit / LengthUnit 封闭集归 PP 消费侧。缺尺寸如实答缺，不填默认。
 //
-// **已采用版本锚那一格只交锚不交测量**（domain.DeclaredMeasurementAnchoredOnAdoptedVersion 头注写了为什么）：
-// 客户原始资料版本今天只留痕不留内容，本上下文说不出那一版报了多少。持口方拿到它该停在「输入不可得」。
+// **已采用版本锚那一格交锚与那一版自己的测量**（pp-seams/05：客户原始资料版本携带封闭要素内容；
+// domain.DeclaredMeasurementAnchoredOnAdoptedVersion 头注）：那一版上测量缺席（显式清空）时只交锚不交值、绝不回退到
+// 基线值。持口方拿到不带值的这一格该停在「输入不可得」。
 //
 // **谱系未建模的今日形状**：包裹 → 委托只经接受基线的声明成员走，拆分 / 合并后的新包裹落「无」，与
 // DeliveryPlaceReferenceView / CommercialResolutionReferenceView 同一处置；集运单元同落「无」（02 裁决 4：PS 口按

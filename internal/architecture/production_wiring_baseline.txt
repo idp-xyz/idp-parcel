@@ -337,14 +337,11 @@
 # NoDeliveryPlaceResolution 由同包 ShipmentRequest.DeliveryPlaceReferenceFor 调用（包内裸标识符算引用），不在名单上。
 internal/parcelshipment/domain ParseDeliveryPlaceReference
 #
-# 地址要素的「按要素名读值」（PS CONTEXT「地址要素」；票 pp-seams/03 裁决 1 与裁决 7 追裁取 A）：从一段范围
-# name/value 条目里只认 AddressElementEntryName 拼出的封闭名字，值原样交、缺席如实。它该有的调用方是把地址要素子段
-# 落进提交版本的那一步——而提交版本今天不携带寄收件条目（它们只进 PayloadDigest），那一步归 pp-seams/05「提交版本与
-# 客户原始资料版本留内容」；那票落地、SubmissionVersion.addressElements 开始从子段读的那天，这一行出名单。今天读口
-# ports.AddressElementsView 对全部快照答「要素缺席」，不经过它；单元例钉住的是值格的读法（只认封闭名、显式清空与
-# 同名多条读作缺席）。同票的 SenderPlaceDataGroup / AddressElementEntryName 与五格构造器由同包 AddressElementsFor
-# 调用或按名字被跳过，不在名单上。
-internal/parcelshipment/domain AddressElementsOf
+# 2026-09-15 随 pp-seams/05 剪掉 AddressElementsOf——加它时写的「SubmissionVersion.addressElements 开始从子段读的那天
+# 出名单」兑现：生产调用方是同包 CanonicalizeSubmission（接单入口一次产出摘要 + 要素子段）与 adapters/postgres 读回
+# 子段那一处。成因三分先分过：全仓该名字只有一处声明（domain/payload_canonicalization.go），是第二种。量在隔离
+# worktree `%TEMP%\idp-parcel-mcp5-ppseams05` 上：动手前 `git status -- internal/architecture/` 为空，父提交 `2c124b8e`
+# 未碰本文件；**剪前实测 2、剪后实测 1**（UTF-8 逐行滤非空非注释），两个数只对该检出成立。
 
 
 # —— visibility-exception ——

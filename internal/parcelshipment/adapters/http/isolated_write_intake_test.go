@@ -146,6 +146,64 @@ func TestIsolatedSubmissionIntakeDoesNotDressADependencyFailureAsAMalformedReque
 	}
 }
 
+// Covers: pp-seams/05 裁决 3 与完成判据 (3)「接单入口用例断言摘要与内容出自同一次调用」——草案的寄 / 收邮编与国家 / 地区码
+// 字段译成按封闭要素名命名的范围条目，随同一次 CanonicalizeSubmission 既进摘要又挑成要素子段进命令：带了邮编摘要就变
+// （它是内容），要素子段里就有同一个值（它是内容的那一半）；不带则子段缺席、摘要与从前一字不差——新字段留空不改任何
+// 既有草案的摘要。
+func TestIsolatedSubmissionIntakeCarriesTheClosedElementsWithTheDigestFromOneCanonicalization(t *testing.T) {
+	intake := newIsolatedIntake(t, &permittingOwnershipDouble{revision: "SYN-REV-1"})
+
+	plain, err := intake.IntakeSubmission(context.Background(), draftRequest(isolatedDraft))
+	if err != nil {
+		t.Fatalf("接入不带要素的草案：%v", err)
+	}
+	if !plain.DeclaredElements.Empty() {
+		t.Fatalf("没报邮编的草案带出了要素 %#v", plain.DeclaredElements)
+	}
+	blank := strings.Replace(isolatedDraft, `"recipientAddress"`,
+		`"recipientPostalCode": "", "senderPostalCode": "   ", "recipientAddress"`, 1)
+	blanked, err := intake.IntakeSubmission(context.Background(), draftRequest(blank))
+	if err != nil {
+		t.Fatalf("接入新字段留空的草案：%v", err)
+	}
+	if blanked.PayloadDigest != plain.PayloadDigest || !blanked.DeclaredElements.Empty() {
+		t.Fatal("新字段留空改了摘要或长出了要素——缺席的字段整条不进（canonicalEntries 头注）")
+	}
+
+	declared := strings.Replace(isolatedDraft, `"recipientAddress"`,
+		`"recipientPostalCode": "10115", "recipientCountryCode": "DE", "senderPostalCode": "SYN-200000", "recipientAddress"`, 1)
+	command, err := intake.IntakeSubmission(context.Background(), draftRequest(declared))
+	if err != nil {
+		t.Fatalf("接入带要素的草案：%v", err)
+	}
+	if command.PayloadDigest == plain.PayloadDigest {
+		t.Fatal("报了邮编摘要没变——要素是内容，不进摘要就检不出同键异容")
+	}
+	destination := command.DeclaredElements.InGroup(domain.DeliveryPlaceDataGroup())
+	if postal, present := destination.PostalCode(); !present || postal != "10115" {
+		t.Fatalf("收件邮编 = %q present = %v, want 10115", postal, present)
+	}
+	if country, present := destination.CountryCode(); !present || country != "DE" {
+		t.Fatalf("收件国家 / 地区码 = %q present = %v, want DE", country, present)
+	}
+	origin := command.DeclaredElements.InGroup(domain.SenderPlaceDataGroup())
+	if postal, present := origin.PostalCode(); !present || postal != "SYN-200000" {
+		t.Fatalf("寄件邮编 = %q present = %v", postal, present)
+	}
+	if _, present := origin.CountryCode(); present {
+		t.Fatal("寄件范围没报国家 / 地区码却在场")
+	}
+
+	// 同一份草案重发，摘要与要素都一样：两样出自同一次规范化，不因现签标识而变。
+	replay, err := intake.IntakeSubmission(context.Background(), draftRequest(declared))
+	if err != nil {
+		t.Fatalf("重发带要素的草案：%v", err)
+	}
+	if replay.PayloadDigest != command.PayloadDigest || replay.DeclaredElements != command.DeclaredElements {
+		t.Fatal("同一份草案两次接入得到的摘要或要素不同")
+	}
+}
+
 // Covers: 形状级失败一律 4xx。三种缺失各测一次——它们缺的是不同的东西，而每一种都不该
 // 让编排收到一条立不起来的命令。
 func TestIsolatedSubmissionIntakeRefusesDraftsThatCannotFormACommand(t *testing.T) {
