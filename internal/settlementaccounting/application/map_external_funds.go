@@ -120,6 +120,21 @@ type AdoptFundsFactCommand struct {
 	OccurredAt  time.Time
 }
 
+// CorrectFundsFactCommand 携带一次外部更正的采用：同一事实的新版本回指当前链头，只有金额变
+// （UC-SA-001「更正必须形成新来源版本」；AT-SA-114 保留原版本、按新有效版本重算）。更正是采用
+// 的一种，走同一个用例（票 sa-cc/20 裁决 2）；来源、付款人、种类、币种与业务发生时刻从链头照抄，
+// 命令上不再接——外部更正改的是金额，其余若也变了那是另一条事实，不是更正。
+type CorrectFundsFactCommand struct {
+	TenantID domain.TenantID
+	Fact     string
+	// Corrects 是被更正的版本，必须等于当前链头。本上下文是铸造方：链由这里按序铸出，纠正一个不是
+	// 当前的版本是调用方编程错误（`未受理`），与 CC 作为接收方容忍乱序到达是两侧各自的纪律。
+	Corrects    string
+	Version     string
+	AmountMinor int64
+	CorrectedAt time.Time
+}
+
 // MapFundsCommand 携带一次资金映射：显式依据必备——金额相同、同一客户或同一时间都
 // 不单独证明映射。
 type MapFundsCommand struct {
@@ -258,6 +273,84 @@ func (handler *MapExternalFundsHandler) AdoptFact(
 		result.handoff = handler.handOffFact(ctx, record)
 		return result, nil
 	case ports.FundsFactAlreadyAdopted:
+		winner, found, err := handler.deps.Facts.FindByKey(ctx, key)
+		if err != nil || !found {
+			return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
+		}
+		return handler.existingFact(ctx, winner), nil
+	default:
+		return FundsResult{}, fmt.Errorf("%w: %d", ErrUnexpectedFundsSave, saved)
+	}
+}
+
+// CorrectFact 采用一条外部更正：从当前链头经 domain.CorrectAmount 形成回指它的新版本、落版本行、
+// 复用同一交接口再发一封（信封 ID 带新版本、载荷回指前版——票 sa-cc/02 裁决 2 预告的那一格）。
+// 幂等按（租户+事实+新版本）分重放 / 冲突，照 AdoptFact 四格；回指非链头与更正未采用的事实都是`未受理`。
+//
+// 先按新版本查、再查链头，顺序不能反：重放同一次更正时链头已经是新版本本身，先查链头会把一次正当
+// 的重放判成「回指非链头」。
+func (handler *MapExternalFundsHandler) CorrectFact(
+	ctx context.Context,
+	command CorrectFundsFactCommand,
+) (FundsResult, error) {
+	factRef, err := domain.NewFundsFactReference(command.Fact)
+	if err != nil {
+		return FundsResult{outcome: FundsNotAccepted}, nil
+	}
+	corrects, err := domain.NewFundsFactVersion(command.Corrects)
+	if err != nil {
+		return FundsResult{outcome: FundsNotAccepted}, nil
+	}
+	version, err := domain.NewFundsFactVersion(command.Version)
+	if err != nil {
+		return FundsResult{outcome: FundsNotAccepted}, nil
+	}
+	// 命令自己的形先判、不碰库：回指自己不是版本链，非正金额与缺席的更正时刻 CorrectAmount 也会拒，
+	// 提前到这里是让「同版本重放」的查询不必为一条坏命令跑一趟。
+	if version == corrects || command.AmountMinor <= 0 || command.CorrectedAt.IsZero() {
+		return FundsResult{outcome: FundsNotAccepted}, nil
+	}
+
+	key := ports.FundsFactKey{TenantID: command.TenantID, Fact: factRef}
+	digest := correctDigest(command)
+	existing, found, err := handler.deps.Facts.FindVersion(ctx, key, version)
+	if err != nil {
+		return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
+	}
+	if found {
+		if existing.ContentDigest != digest {
+			// 同一新版本字面携带不同金额或回指：冲突保留先到的那一版，不顶替。
+			return FundsResult{outcome: FundsFactConflict}, nil
+		}
+		return handler.existingFact(ctx, existing), nil
+	}
+
+	head, found, err := handler.deps.Facts.FindByKey(ctx, key)
+	if err != nil {
+		return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
+	}
+	if !found || head.Fact.Version() != corrects {
+		// 更正一个未采用的事实，或回指的不是当前链头：提交矛盾，不是库的事。
+		return FundsResult{outcome: FundsNotAccepted}, nil
+	}
+	corrected, err := head.Fact.CorrectAmount(command.AmountMinor, version, command.CorrectedAt)
+	if err != nil {
+		return FundsResult{outcome: FundsNotAccepted}, nil
+	}
+
+	record := ports.FundsFactRecord{Key: key, ContentDigest: digest, Fact: corrected, RecordedAt: handler.deps.Clock.Now()}
+	saved, err := handler.deps.Facts.Save(ctx, record)
+	if err != nil {
+		return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
+	}
+	switch saved {
+	case ports.FundsFactSaved:
+		result := FundsResult{outcome: FundsFactAdopted, fact: record, hasRecord: true}
+		result.handoff = handler.handOffFact(ctx, record)
+		return result, nil
+	case ports.FundsFactAlreadyAdopted:
+		// 两步之间另一位写入方赢了：要么同一新版本先落了，要么链头先被别的版本更正了（库上守链形的
+		// 唯一约束把后者也折成`已采用`）。两种都按当前链头作答——它就是此刻被采用的那一版。
 		winner, found, err := handler.deps.Facts.FindByKey(ctx, key)
 		if err != nil || !found {
 			return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
@@ -631,6 +724,20 @@ func adoptDigest(command AdoptFundsFactCommand) string {
 		fmt.Sprintf("%d", command.AmountMinor),
 		command.Version,
 		command.OccurredAt.UTC().Format(time.RFC3339Nano),
+	}, "\x00")))
+	return hex.EncodeToString(digest[:])
+}
+
+// correctDigest 只算命令自己带的四样：回指、新版本、金额、更正时刻。来源 / 付款人 / 种类 / 币种 / 发生时刻
+// 从链头照抄，不在命令上，也就不进摘要——同一新版本字面换一个金额或换一个回指是另一份内容（冲突），
+// 不是重放。与 adoptDigest 元素不同是有意的：同一（事实、版本）若先经 AdoptFact 作首版落下、再有人拿它
+// 当更正版本来提，两份摘要必不相等，答`冲突`而不是把首版当成更正的重放。
+func correctDigest(command CorrectFundsFactCommand) string {
+	digest := sha256.Sum256([]byte(strings.Join([]string{
+		command.Corrects,
+		command.Version,
+		fmt.Sprintf("%d", command.AmountMinor),
+		command.CorrectedAt.UTC().Format(time.RFC3339Nano),
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])
 }
