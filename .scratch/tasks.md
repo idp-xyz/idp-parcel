@@ -2368,3 +2368,16 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - **重放**：`%TEMP%\idp-replay-sacc21` @ `4bbe0a9c`，`cherry-pick 3a21dab7..efd6549f` 零冲突 → `c4932992` / `ac39f9a5` / **`b62bab28`**；`git diff efd6549f b62bab28 -- docs .scratch/sa-cc-*` 空。纯 docs 不跑 go、清点不重生成。共享 main `merge --ff-only b62bab28` → 簿记一笔在其上（票 21 Status「已进 main」+ 进 main 记录；spec 21 行；本条）→ `ls-remote` 核 `4bbe0a9c` 未动 → `push <sha>:main`。`mcp3-sacc21` → `merged/`、远端删；重放树拆；作者树由通道 3 比内容后拆。
 - **前沿**：在途 22+19（2）/ 20（6）/ 01（4）/ 02+03（5）；通道 3 空闲 → **评审位**（等 pp-seams/01 约 11:00）。ready 0；draft lc 20 / 22（等真源）。
 - **本节五数**（10:1x–10:2x）：CI 未起跑（计费）· 集成时延 sa-cc/21 完工报 10:1x → 推出 10:2x **约 10 分**（1 票，自审）· 重放笔数 **3** · 重复开发 0 · 会话重置 0 · 非作者评审缺席 0（纯 .md 自审如实计）
+
+### 10:2x–11:0x 上一任通道 1（未写台账即 crash，本节按 git 与任务台账反推）：首波四票评审到齐 → 隔离重放 → 全量 113 ok → 本地 ff → **未推、未提交簿记** → crash
+
+- **反推依据**（不读自报）：`query_tasks` 里 10:31–10:57 五单——task-5c5e6165（通道 3 接手 pp-seams/01 封存现场 `3b91cb5a`，10:44 done）、task-ccd57329（评 sa-cc/22 → 通道 6，10:45 done，0 阻断）、task-a9e4e4d8（评 sa-cc/20 → 通道 3，10:51 done，0 阻断 / Standards 2 非阻断 / Spec 3 非阻断）、task-e2d98535（评 pp-seams/01 → 通道 6，10:56 done，0 阻断）、task-eaefa42a（评 pp-seams/03 → 通道 6，11:01 done，0 阻断）；pp-seams/02 推送方自评（票面 Comments 11:1x 条）。隔离树 `%TEMP%\idp-replay-wave1` @ `c657a5e7` = 首波批 tip（pp-seams/02 两笔 → sa-cc/22 三笔 → pp-seams/01 三笔含封存笔 → sa-cc/20 六笔 → 清点 `c657a5e7`，共 15 笔在 `bd919b72` 之上，`merge-base --is-ancestor` 成立）；10:48 广播「`c657a5e7` 带 DSN `-p 1 -count=1 ./...` 113 ok / 0 FAIL / 16 无测试 / 0 cached（131 s）」——本任（当时通道 6）亲收。共享 `main` 已 `ff` 到 `c657a5e7`；远端仍 `bd919b72`（11:04 `ls-remote`）。六件簿记（票 20 / 22 / pp 01 / 02 的 Status「已进 main」+ 评审代落 + 进 main 记录、两份 spec 行）已写在共享树、**未提交**——`git diff --ignore-cr-at-eol --stat` 量得只此六件是真改动，其余 76 行 ` M` 仍是 CRLF 幻影；逐件读末行确认写完整、无半句。
+
+## 2026-09-15 11:0x 通道 1 再次新会话（用户经队列「mcp-1 crash」把本窗口从通道 6 改绑通道 1；接手时 main 本地 `c657a5e7`、远端 `bd919b72`）
+
+### 11:0x–11:1x：接上一任断点——七件簿记同笔 → 推首波
+
+- **角色重叠如实记**：本任原是通道 6——sa-cc/20 的**作者**、sa-cc/22 / pp-seams/01 / pp-seams/03 的**评审人**。首波四票的评审门都由非作者完成（02 推送方自评并如实写、22 ← 6、01 ← 6、20 ← 3），门在接手前已过；本任只做推送方那半（簿记、`ls-remote`、push、改名分支），不改任何票的评审结论。
+- **处置**：不重跑全量——`c657a5e7` 是不动的对象，10:48 那一跑就是它的证据；本笔只加 `.md`（上一任写好的六件 + 本节），纯簿记不跑 go。七件 `git commit --trailer "Co-authored-by: Cursor <cursoragent@cursor.com>" -- <路径>` 同笔在 `c657a5e7` 之上 → `ls-remote` 核 `bd919b72` 未动 → `push <sha>:main` → 广播远端 main。分支：`mcp6-sacc20` / `mcp3-ppseams01` / `mcp4-ppseams01` → `merged/`、远端删；`mcp2-sacc22-19`（19 在做）与 `mcp5-ppseams02-03`（03 待第二波）不改名不删。树：`idp-replay-wave1` 与五棵 `idp-review-*` 由本任比内容后拆；`mcp6-sacc20` 作者树是本任自己的，比内容后拆；`mcp3-ppseams01` / `mcp4-ppseams01` 两棵作者树（3 / 4 都 crash 过）由本任比内容后拆。
+- **第二波待办**：pp-seams/03 两笔 `2a637107` / `3209c4b3`（`mcp5-ppseams02-03`，评审 ← 通道 6 两轴 0 阻断 / 各 1 非阻断，评审全文待代落票 03 Comments）→ 重放到新 tip → 清点重生成 → 带 DSN 全量一次 → ff → push。
+- **前沿**：在途 sa-cc/19（通道 2，`mcp2-sacc22-19`，22 已进 main、19 在其上）；2 以外各通道空闲；ready 0；draft sa-cc/27（SA 登记面，归 SA owner）、pp-seams/04（NO 登记册，归 NO）、pp-seams/05（PS 留内容，归 PS owner）；lc 20 / 22 等真源。**归用户**：CI 计费；六件 untracked（`d_tasks.txt` / `docs/api/` / `handoff.md` / 三份 logo）；会话中断成因（今天通道 1 已重置两次、4 一次）；四篇 ADR 越权风险点复核。
