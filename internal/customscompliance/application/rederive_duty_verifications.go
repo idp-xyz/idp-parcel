@@ -2,11 +2,22 @@ package application
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 )
+
+// ErrDutyVerificationHandoffRejected 是重派路上的硬失败：某条谱系的新核对版本已形成，交结算意图时信封被框架的
+// **确定性**校验拒收（ports.ErrHandoffEnvelopeRejected）。重投同一份永远同一个结果，折成未决只会以未决之名耗尽失败
+// 预算（platform/dispatch 派发器失败码头注点名的反例），所以响亮报错、整笔回滚、不给结果——消费门不得把它登进
+// WithUndecidedSentinels，让派发器落成 publish_failed 那一格，人动手（票 sa-cc/29 裁决 2 (b)）。裁决 1 把 ID 改成
+// 定长指纹形之后，今天能到这一格的只剩 Subject / PartitionKey 超上限之类的形状错；留它是不让「核对行提交、信封没发、
+// 无人知道」那条路重新长出来。
+var ErrDutyVerificationHandoffRejected = errors.New(
+	"customs compliance: duty verification handoff envelope rejected on the rederivation path")
 
 // UC-CC-009 一致性节「外部资金事实迟到、更正、资金退回或付款撤销时，形成新核对版本并保留原覆盖判断；不删除原
 // 付款、不按最后到达覆盖」在 CC 侧的入口（票 sa-cc/19 裁决 1 / 2）。它接在 ReceiveFundsFact 答`已接收`之后，由消费侧
@@ -30,6 +41,11 @@ import (
 // PayerRequiredNotProvided 交人（等来源补事实，不是依赖故障、不重投）——这是 (a′) 唯一不形成的分支；程序没登规则
 // 同理点名 PayerRequirementNotConfigured。依赖故障（哪一口不可用）是整笔的未决：停下、指名、交消费门重投——同一事务里
 // 已形成的谱系也会随之回滚，所以不把它们当成功报出去。
+//
+// 交接失败在这条路上**不接受**续办引用（票 sa-cc/29 裁决 2）：人重核路上调用方拿得到 HandoffReference、有人读；这里
+// 没有人读它，接受它就是「核对行提交、信封没发、消费入账成功、无人知道」。所以拿 HandoffError 分两格——依赖不可用
+// 归整笔未决（DutyVerificationHandoffUnavailable，重投自愈），信封被框架确定性拒收归硬失败
+// （ErrDutyVerificationHandoffRejected，人动手）；两格都让消费门回滚，版本行、新核对版本、交接意图三者同生同灭。
 //
 // 新版本成为 CurrentDutyVerificationView 的当前一版后，放行门禁那一道对 PENDING 答未决（gateUndecided(DutyVerificationPending)）
 // 而不是未满足——事实变了、人没重核之前门禁不该放也不该判失败（裁决 1「取证量到的后果照单接受」）；人重核走 VerifyPayment
@@ -137,6 +153,12 @@ func (handler *DutyPaymentReconciliationHandler) RederiveDutyVerificationsOnFund
 		}
 		if lineage.Result.Outcome() == DutyReconciliationUndecided && lineage.Result.UndecidedReason().dependencyFailure() {
 			return rederivationUndecided(lineage.Result.UndecidedReason()), nil
+		}
+		if handoffErr := lineage.Result.HandoffError(); handoffErr != nil {
+			if errors.Is(handoffErr, ports.ErrHandoffEnvelopeRejected) {
+				return DutyVerificationRederivationResult{}, fmt.Errorf("%w: %w", ErrDutyVerificationHandoffRejected, handoffErr)
+			}
+			return rederivationUndecided(DutyVerificationHandoffUnavailable), nil
 		}
 		if lineage.Result.Outcome() == DutyVerificationFormed || lineage.Result.Outcome() == DutyVerificationExisting {
 			lineage.Key = ports.DutyVerificationKey{

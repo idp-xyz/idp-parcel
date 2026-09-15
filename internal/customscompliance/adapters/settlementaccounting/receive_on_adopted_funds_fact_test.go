@@ -3,6 +3,7 @@ package settlementaccounting_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sort"
 	"strings"
 	"testing"
@@ -409,6 +410,7 @@ type rederiveStores struct {
 	payerRules      map[string]ccdomain.PayerRequirement
 	handoffs        []ccports.DutyPaymentVerificationHandoffIntent
 	verificationErr error
+	handoffErr      error
 }
 
 func newRederiveStores() *rederiveStores {
@@ -491,6 +493,9 @@ func (stores *rederiveStores) LoadPayerRequirement(
 func (stores *rederiveStores) HandOffDutyPaymentVerification(
 	_ context.Context, intent ccports.DutyPaymentVerificationHandoffIntent,
 ) error {
+	if stores.handoffErr != nil {
+		return stores.handoffErr
+	}
 	stores.handoffs = append(stores.handoffs, intent)
 	return nil
 }
@@ -608,6 +613,31 @@ func TestRederivationUndecidedSplitsBusinessPendingFromDependencyFailure(t *test
 	}
 	if errors.Is(err, adapter.ErrFundsFactReceiveUndecided) {
 		t.Fatal("停在重派不是停在接收，两个哨兵不得混")
+	}
+}
+
+// Covers: 票 sa-cc/29 裁决 2——重派路上交接失败分两格、都让消费门回滚，不再折成无人读的续办引用：Outbox 存储不可用
+// 是未决（ErrDutyVerificationRederivationUndecided，重投自愈）；信封被框架确定性拒收是硬失败
+// （ErrDutyVerificationHandoffRejected，不进未决集合、不与未决哨兵混，派发器落 publish_failed 人动手）。
+func TestARejectedHandoffEnvelopeOnTheRederivationPathIsAHardFailureNotAnUndecided(t *testing.T) {
+	fixture, stores, _ := verifiedFixture(t)
+	fixture.source.facts["tenant-a|bank-fact-1|bank-fact/v2"] = adoptedContent("bank-fact/v2", "bank-fact/v1", "payer-customer-7")
+
+	stores.handoffErr = errors.New("outbox store down")
+	err := fixture.handler.HandleAdoptedExternalFundsFact(context.Background(), adoptedEnvelopeRef("bank-fact/v2"))
+	if !errors.Is(err, adapter.ErrDutyVerificationRederivationUndecided) {
+		t.Fatalf("Outbox 存储不可用该是未决重投：err = %v", err)
+	}
+
+	// 替身没有事务：v2 已在登记册替身里，再投 v2 会答`已存在`而不触发重派，所以第二格换 v3 到达。
+	fixture.source.facts["tenant-a|bank-fact-1|bank-fact/v3"] = adoptedContent("bank-fact/v3", "bank-fact/v2", "payer-customer-7")
+	stores.handoffErr = fmt.Errorf("%w: subject exceeds 512 bytes", ccports.ErrHandoffEnvelopeRejected)
+	err = fixture.handler.HandleAdoptedExternalFundsFact(context.Background(), adoptedEnvelopeRef("bank-fact/v3"))
+	if !errors.Is(err, adapter.ErrDutyVerificationHandoffRejected) || !errors.Is(err, ccports.ErrHandoffEnvelopeRejected) {
+		t.Fatalf("信封被拒该是硬失败且带原因：err = %v", err)
+	}
+	if errors.Is(err, adapter.ErrDutyVerificationRederivationUndecided) || errors.Is(err, adapter.ErrFundsFactReceiveUndecided) {
+		t.Fatal("硬失败不得与任一未决哨兵混——混了就会以未决之名耗尽失败预算")
 	}
 }
 

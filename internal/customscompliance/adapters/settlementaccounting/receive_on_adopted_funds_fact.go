@@ -28,10 +28,18 @@ var (
 	ErrFundsFactReceiveUndecided = errors.New(
 		"customs compliance settlementaccounting adapter: receiving the funds fact is undecided")
 	// ErrDutyVerificationRederivationUndecided 表示新版本已接收、接着形成新核对版本的编排停在依赖故障上（哪一口
-	// 不可用，票 sa-cc/19）。同样是续办、同样进 WithUndecidedSentinels；与 ErrFundsFactReceiveUndecided 分开命名，
-	// 运维从错误上读得出停在接收还是停在重派。接收与重派同一事务，重投从接收重来。
+	// 不可用，票 sa-cc/19；自票 sa-cc/29 起含交结算意图时 Outbox 存储不可用）。同样是续办、同样进
+	// WithUndecidedSentinels；与 ErrFundsFactReceiveUndecided 分开命名，运维从错误上读得出停在接收还是停在重派。
+	// 接收与重派同一事务，重投从接收重来。
 	ErrDutyVerificationRederivationUndecided = errors.New(
 		"customs compliance settlementaccounting adapter: rederiving duty verifications on the new funds fact version is undecided")
+	// ErrDutyVerificationHandoffRejected 表示重派形成的新核对版本交结算意图时，信封被框架的确定性校验拒收
+	// （ccapplication.ErrDutyVerificationHandoffRejected，票 sa-cc/29 裁决 2 (b)）。重投同一份永远同一个结果，
+	// 是硬失败不是续办：生产装配**不得**把它进 WithUndecidedSentinels——留在集外让派发器落成 publish_failed、人动手；
+	// 与 ErrAdoptedFactVersionInconsistent 同一条理由，别把永久损坏登成可续办（ADR-0029）。它仍让消费门回滚：
+	// 版本行、新核对版本、交接意图同生同灭，不留「核对行提交、信封没发」的半截。
+	ErrDutyVerificationHandoffRejected = errors.New(
+		"customs compliance settlementaccounting adapter: the rederived duty verification handoff envelope was rejected")
 	// ErrUnexpectedReceiveOutcome 表示编排交回了封闭集合以外的结果。静默入账等于替编排作判断，
 	// 因此不留 default 兜底。
 	ErrUnexpectedReceiveOutcome = errors.New(
@@ -146,6 +154,9 @@ func (adapter *ReceiveOnAdoptedFundsFactAdapter) HandleAdoptedExternalFundsFact(
 		Funds:    fact,
 		Version:  version,
 	})
+	if errors.Is(err, ccapplication.ErrDutyVerificationHandoffRejected) {
+		return fmt.Errorf("%w: %w", ErrDutyVerificationHandoffRejected, err)
+	}
 	if err != nil {
 		return err
 	}
@@ -169,8 +180,9 @@ func receiveConsumption(result ccapplication.DutyReconciliationResult) error {
 }
 
 // rederivationConsumption 把重派结果落成消费两格：`已重派`入账——每条谱系的业务答案（形成 / 已存在 / 点名等来源或
-// 登记方）都在结果上、重投不会变；`未决`是哪一口不可用，重投；`未受理`是本适配器递了缺格命令，编程错误，响亮
-// 报错、不重投。封闭集之外同样响亮。
+// 登记方）都在结果上、重投不会变；`未决`是哪一口不可用（含交结算意图的 Outbox 存储），重投；`未受理`是本适配器递了
+// 缺格命令，编程错误，响亮报错、不重投。封闭集之外同样响亮。信封被确定性拒收不在结果上、是编排的错误返回，
+// 在 HandleAdoptedExternalFundsFact 里折成 ErrDutyVerificationHandoffRejected。
 func rederivationConsumption(result ccapplication.DutyVerificationRederivationResult) error {
 	switch result.Outcome() {
 	case ccapplication.DutyVerificationsRederived:

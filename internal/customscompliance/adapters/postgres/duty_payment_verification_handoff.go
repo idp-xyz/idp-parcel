@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 
@@ -131,6 +132,12 @@ func (handoff *OutboxDutyPaymentVerificationHandoff) HandOffDutyPaymentVerificat
 	}
 
 	if err := outboxintent.EnqueueOnce(ctx, handoff.db, handoff.store, envelope); err != nil {
+		// 框架 Envelope.Validate 的拒收是确定性的（同一份输入重投永远同一个结果），与存储不可用分两格交出去
+		// （ports.ErrHandoffEnvelopeRejected 头注）；ID 已改指纹形，今天能走到这里的是 Subject / PartitionKey
+		// 超上限之类的形状错，留这一格是不让「静默提交」那条路重新长出来（票 sa-cc/29 裁决 2）。
+		if errors.Is(err, eventing.ErrInvalidEnvelope) {
+			return fmt.Errorf("hand off duty payment verification: %w: %w", ports.ErrHandoffEnvelopeRejected, err)
+		}
 		return fmt.Errorf("hand off duty payment verification: %w", err)
 	}
 	return nil

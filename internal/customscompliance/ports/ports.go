@@ -6,6 +6,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"sort"
 	"strconv"
 	"strings"
@@ -1266,9 +1267,16 @@ type DutyPaymentVerificationHandoffIntent struct {
 	Verification domain.DutyPaymentVerification
 }
 
+// ErrHandoffEnvelopeRejected 表示交接口铸出的信封被框架的**确定性**校验拒收（形状、长度、字符集）：同一份输入
+// 重投永远同一个结果，与「Outbox 存储不可用」那类重投会变的失败是两格（票 sa-cc/29 裁决 2）。交接口用它包住
+// 框架的拒收错误交出来，编排据此把前者当硬失败人动手、后者当未决重投——不分格就会以未决之名耗尽失败预算
+// （platform/dispatch 派发器失败码头注点名的反例）。
+var ErrHandoffEnvelopeRejected = errors.New("customs compliance: handoff envelope rejected by envelope validation")
+
 // DutyPaymentVerificationHandoff 把核对版本写入 Outbox（`OutboxDutyPaymentVerificationHandoff`）。
-// 信封 ID 由核对幂等键认领，分区主体是「租户 / 申报范围」——同一范围的核对版本链排一条队
-// （ADR-0069 决定二的口径：ID 管幂等、分区键管顺序），入队由 outboxintent.EnqueueOnce 承担。
+// 信封 ID 由核对幂等键认领（折成定长指纹形，票 sa-cc/29 裁决 1），分区主体是「租户 / 申报范围」——同一范围的
+// 核对版本链排一条队（ADR-0069 决定二的口径：ID 管幂等、分区键管顺序），入队由 outboxintent.EnqueueOnce 承担。
+// 信封被框架确定性校验拒收时交回的错误 errors.Is ErrHandoffEnvelopeRejected；别的失败都是依赖不可用。
 type DutyPaymentVerificationHandoff interface {
 	HandOffDutyPaymentVerification(ctx context.Context, intent DutyPaymentVerificationHandoffIntent) error
 }

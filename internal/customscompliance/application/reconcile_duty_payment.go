@@ -103,6 +103,9 @@ const (
 	FundsFactRegisterUnavailable
 	PayerRequirementViewUnavailable
 	DutyVerificationStoreUnavailable
+	// DutyVerificationHandoffUnavailable 只由重派编排给出（票 sa-cc/29 裁决 2 (a)）：核对已形成、交结算意图时 Outbox
+	// 存储或事务不可用。人重核路上同一件事仍折成续办引用交调用方（裁决 3），不走这一格。
+	DutyVerificationHandoffUnavailable
 )
 
 // dependencyFailure 把未决按恢复动作分成两半（ADR-0029）：真——哪一口不可用，重投会变，消费门该重投；假——业务未决
@@ -113,7 +116,8 @@ func (reason DutyReconciliationReason) dependencyFailure() bool {
 	case CollaborationStoreUnavailable,
 		FundsFactRegisterUnavailable,
 		PayerRequirementViewUnavailable,
-		DutyVerificationStoreUnavailable:
+		DutyVerificationStoreUnavailable,
+		DutyVerificationHandoffUnavailable:
 		return true
 	default:
 		return false
@@ -136,6 +140,8 @@ func (reason DutyReconciliationReason) String() string {
 		return "PAYER_REQUIREMENT_VIEW_UNAVAILABLE"
 	case DutyVerificationStoreUnavailable:
 		return "DUTY_VERIFICATION_STORE_UNAVAILABLE"
+	case DutyVerificationHandoffUnavailable:
+		return "DUTY_VERIFICATION_HANDOFF_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -145,6 +151,7 @@ type DutyReconciliationResult struct {
 	outcome    DutyReconciliationOutcome
 	reason     DutyReconciliationReason
 	handoffRef string
+	handoffErr error
 }
 
 func (result DutyReconciliationResult) Outcome() DutyReconciliationOutcome {
@@ -161,6 +168,13 @@ func (result DutyReconciliationResult) UndecidedReason() DutyReconciliationReaso
 // 注释里的理由），续办引用因此是给运维看的坐标，不是给下一次调用的重投指令。
 func (result DutyReconciliationResult) HandoffReference() string {
 	return result.handoffRef
+}
+
+// HandoffError 是续办引用背后的原始交接错误，与 HandoffReference 同时在场、同时缺席。人重核路只看引用（票 sa-cc/05
+// 的形，裁决 3 不动）；重派编排要的是错误本身——它得分「依赖不可用」与「信封被框架确定性拒收」两格，引用分不出
+// （票 sa-cc/29 裁决 2）。
+func (result DutyReconciliationResult) HandoffError() error {
+	return result.handoffErr
 }
 
 func dutyUndecided(reason DutyReconciliationReason) DutyReconciliationResult {
@@ -466,26 +480,27 @@ func (handler *DutyPaymentReconciliationHandler) VerifyPayment(
 	}
 	if saved == ports.CaseConfigurationRegistered {
 		result := DutyReconciliationResult{outcome: DutyVerificationFormed}
-		result.handoffRef = handler.handOffVerification(ctx, record.Key, verification)
+		result.handoffRef, result.handoffErr = handler.handOffVerification(ctx, record.Key, verification)
 		return result, nil
 	}
 	// 指纹里已含三轴、依据、程序与资金版本：撞键即同内容，不必再读回比。
 	return DutyReconciliationResult{outcome: DutyVerificationExisting}, nil
 }
 
-// handOffVerification 交结算意图。失败不翻核对，留续办引用指名哪一版没交出去。
+// handOffVerification 交结算意图。失败不翻核对，留续办引用指名哪一版没交出去，原始错误一并交出（HandoffError 头注）。
 func (handler *DutyPaymentReconciliationHandler) handOffVerification(
 	ctx context.Context,
 	key ports.DutyVerificationKey,
 	verification domain.DutyPaymentVerification,
-) string {
-	if err := handler.deps.Handoff.HandOffDutyPaymentVerification(ctx, ports.DutyPaymentVerificationHandoffIntent{
+) (string, error) {
+	err := handler.deps.Handoff.HandOffDutyPaymentVerification(ctx, ports.DutyPaymentVerificationHandoffIntent{
 		Key:          key,
 		Verification: verification,
-	}); err == nil {
-		return ""
+	})
+	if err == nil {
+		return "", nil
 	}
-	return "CONT-DUTY-VERIFICATION/" + key.Scope.String() + "/" + key.Digest[:8]
+	return "CONT-DUTY-VERIFICATION/" + key.Scope.String() + "/" + key.Digest[:8], err
 }
 
 // verificationDigest 是核对内容的稳定指纹：三轴、关联依据、监管程序、资金事实版本。三维身份在键上，不进指纹。

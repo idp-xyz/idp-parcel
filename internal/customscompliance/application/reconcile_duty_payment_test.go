@@ -907,6 +907,10 @@ func TestAFailedHandoffLeavesTheVerificationFormedWithAContinuationReference(t *
 	if result.HandoffReference() == "" {
 		t.Fatal("交接失败必须留续办引用")
 	}
+	// 票 sa-cc/29 裁决 2：原始错误随结果交出，重派编排靠它分「依赖不可用」与「信封被拒」两格；人重核路照旧只看引用。
+	if !errors.Is(result.HandoffError(), store.handoffErr) {
+		t.Fatalf("交接的原始错误该随结果交出：%v", result.HandoffError())
+	}
 	if len(store.verifications) != 1 {
 		t.Fatalf("核对行数 = %d，want 1", len(store.verifications))
 	}

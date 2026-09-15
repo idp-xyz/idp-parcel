@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -237,5 +238,48 @@ func TestARederivationStopsOnDependencyFailureAndRefusesBlankCommands(t *testing
 	if result, err := handler.RederiveDutyVerificationsOnFundsFactVersion(t.Context(), blank); err != nil ||
 		result.Outcome() != application.DutyVerificationRederivationNotAccepted {
 		t.Fatalf("不说新到哪一版该`未受理`：err=%v outcome=%v", err, result.Outcome())
+	}
+}
+
+// Covers: 票 sa-cc/29 裁决 2 (a)——重派路上交接口答「依赖不可用」（Outbox 存储错、事务错）不再折成无人读的续办引用：
+// 整笔`未决`、点名 DutyVerificationHandoffUnavailable，与其余几口不可用同格，消费门连同接收一起回滚重投。
+// 谱系答案不报出去：同一事务里已落的核对行会随之回滚，报成功就是撒谎。
+func TestARederivationTreatsAnUnavailableHandoffAsUndecided(t *testing.T) {
+	store := newDutyStore()
+	handler, first, _ := verifiedLineage(t, store)
+	second := correctionOf(t, first, "SYN-FUNDS-01/v2", 9000)
+	if _, err := handler.ReceiveFundsFact(t.Context(), second); err != nil {
+		t.Fatalf("资金事实 v2：%v", err)
+	}
+
+	store.handoffErr = errors.New("outbox unavailable")
+	result, err := handler.RederiveDutyVerificationsOnFundsFactVersion(t.Context(), rederiveCommand(t, second))
+	if err != nil || result.Outcome() != application.DutyVerificationRederivationUndecided ||
+		result.UndecidedReason() != application.DutyVerificationHandoffUnavailable {
+		t.Fatalf("交接口不可用该整笔未决并点名：err=%v outcome=%v reason=%v", err, result.Outcome(), result.UndecidedReason())
+	}
+	if len(result.Lineages()) != 0 {
+		t.Fatalf("未决不得把谱系当成功报出去：%+v", result.Lineages())
+	}
+}
+
+// Covers: 票 sa-cc/29 裁决 2 (b)——交接口把信封被框架确定性校验拒收（ports.ErrHandoffEnvelopeRejected）交出来时，
+// 重投同一份永远同一个结果，未决之名只会耗尽失败预算；编排以 ErrDutyVerificationHandoffRejected 响亮报错、整笔回滚，
+// 不给结果、不给续办引用，留给人动手。
+func TestARederivationFailsLoudlyWhenTheHandoffEnvelopeIsRejected(t *testing.T) {
+	store := newDutyStore()
+	handler, first, _ := verifiedLineage(t, store)
+	second := correctionOf(t, first, "SYN-FUNDS-01/v2", 9000)
+	if _, err := handler.ReceiveFundsFact(t.Context(), second); err != nil {
+		t.Fatalf("资金事实 v2：%v", err)
+	}
+
+	store.handoffErr = fmt.Errorf("%w: id exceeds 128 bytes", ports.ErrHandoffEnvelopeRejected)
+	result, err := handler.RederiveDutyVerificationsOnFundsFactVersion(t.Context(), rederiveCommand(t, second))
+	if !errors.Is(err, application.ErrDutyVerificationHandoffRejected) || !errors.Is(err, ports.ErrHandoffEnvelopeRejected) {
+		t.Fatalf("信封被拒该是硬失败且带着原因：err=%v", err)
+	}
+	if result.Outcome() != application.DutyVerificationRederivationOutcomeInvalid || len(result.Lineages()) != 0 {
+		t.Fatalf("硬失败不该交回任何结果：%+v", result)
 	}
 }
