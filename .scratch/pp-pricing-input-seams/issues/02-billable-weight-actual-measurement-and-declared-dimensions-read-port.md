@@ -1,7 +1,7 @@
 # 计价重量要的实重 / 尺寸两源都没有读口：`node-operations` 今天没有实际测量的领域对象、登记册与迁移，`parcel-shipment` 的申报重量 / 尺寸只在授权作用域的查阅面上——`parcel-pricing` 造快照的「实重 + 尺寸」一格指不到
 
 Category: enhancement
-Status: in-progress（**PS 半边**）——**2026-09-15 10:2x 通道 5 认领**（task-9cc0b1a6；分支 `mcp5-ppseams02-03` 基 main `3a21dab7`，与 [03](03-ps-origin-destination-postal-route-read-port.md) 同分支两笔、02 先落）。此前 ready-for-agent（PS 半边）——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（NO·PS owner 口径），四条「要裁的」写入下方「裁决」节**：**拆两半**——本票收成 PS「申报重量 / 尺寸只读口」（事实已在库上，锚法照收件地点引用）；NO 半边（实际测量登记册 + 仍有效实测只读口，今天连登记册都没有）拆成本目录新票 [04](04-no-actual-measurement-registry-and-valid-measurements-read-port.md)，由 NO 半边作者自立；两源并存按谁是**机制规则**写进 PP CONTEXT、落在 PP 消费侧票，不在提供方两票。此前 draft——2026-09-14 21:1x 通道 3 立票（sa-cc/11 裁决 4 量「计费重量指不到」的提供方半边；task-620bc8e7，通道 1 派单）。只写票面未动代码；取证锚 main `db480695`
+Status: resolved（**PS 半边**）——**2026-09-15 11:0x 通道 5**（task-9cc0b1a6；分支 `mcp5-ppseams02-03` 基 main `3a21dab7`，代码 tip `1a30aac5`，本笔完成记录在其上；全文见「完成记录」，含两处以代码为准的判断项：已采用版本锚那一格只交锚不交测量、五格多出「未申报」）。NO 半边在 [04](04-no-actual-measurement-registry-and-valid-measurements-read-port.md)，不由本票 resolved 带过。此前 in-progress——2026-09-15 10:2x 通道 5 认领（与 [03](03-ps-origin-destination-postal-route-read-port.md) 同分支两笔、02 先落）。此前 ready-for-agent（PS 半边）——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（NO·PS owner 口径），四条「要裁的」写入下方「裁决」节**：**拆两半**——本票收成 PS「申报重量 / 尺寸只读口」（事实已在库上，锚法照收件地点引用）；NO 半边（实际测量登记册 + 仍有效实测只读口，今天连登记册都没有）拆成本目录新票 [04](04-no-actual-measurement-registry-and-valid-measurements-read-port.md)，由 NO 半边作者自立；两源并存按谁是**机制规则**写进 PP CONTEXT、落在 PP 消费侧票，不在提供方两票。此前 draft——2026-09-14 21:1x 通道 3 立票（sa-cc/11 裁决 4 量「计费重量指不到」的提供方半边；task-620bc8e7，通道 1 派单）。只写票面未动代码；取证锚 main `db480695`
 Blocked by: 无（sa-cc/11 已进 main 2026-09-14 20:4x；本票是它点名的第二只读口的 PS 半边；NO 半边在 04，两半互不阻）
 
 **用词**：派单与 sa-cc/11 写「计费重量」。GLOSSARY「计费重量」两词条（客户 / 供应商）归 `settlement-accounting` 的财务采用，「计价重量」归 `parcel-pricing`（评价内从实重与体积重派生），「当前有效实测」归 `node-operations`。快照要的是**原始量**——实重与尺寸——本票只写「实重 / 尺寸」，两侧提供方也只给原始量。这一条不是要裁的，GLOSSARY 已定。
@@ -77,6 +77,36 @@ Blocked by: 无（sa-cc/11 已进 main 2026-09-14 20:4x；本票是它点名的�
 5. **本票（PS 半边）的形**：`internal/parcelshipment/ports/` 新文件一只只读接口（形照 `DeliveryPlaceReferenceView` / `CommercialResolutionReferenceView`——一口一问、不带 `Save`、不过授权查询作用域，理由同 03 裁决 4），按（租户，正式包裹身份）答 `DeclaredMeasurement`（毛重必备、尺寸可缺如实）+ 资料版本锚 + 封闭答格；`adapters/postgres` 实现，从委托 `snapshot` 读回（`measurementDocument` 已在，不加列、不加迁移——若作者量到锚法要读 `customer_source_data_version` 才能定，照读，仍不加列）；单位保持 PS 的 `MeasurementUnitReference` 自由串，对表归 PP 消费侧。
 6. **完成判据写实**：上面判据 1（NO）**移到 04**；判据 2（PS 口 + 锚 + 尺寸缺席如实 + 真库一正一缺）照做并加「`待复核` 答未定、非委托对象答无」两格；判据 3 / 4 照做（清点 PS 端口 +1）。
 7. **能力边界**：裁的是拆分、锚法、口的宽窄与两源规则的归属；`snapshot` 里申报测量能否按资料范围版本对应上锚、`DeclaredMeasurement` 三型怎么带出，归作者。读过本票全文、spec、01 / 03；**没读** `declared_measurement.go` / `shipment_request.go` / `delivery_place_reference_view.go` 正文（经取证引文）、NO 四份迁移。作者量到与代码不符，以代码为准并写进判断项。
+
+## 完成记录（PS 半边；2026-09-15 通道 5，task-9cc0b1a6，分支 `mcp5-ppseams02-03` 基 `3a21dab7`）
+
+| 笔 | 内容 |
+|---|---|
+| `1a30aac5` | **代码 tip。** `internal/parcelshipment/domain/declared_measurement_resolution.go`（`DeclaredMeasurementDataGroup` 原词 `DECLARED_MEASUREMENT`、`DeclaredMeasurementOutcome` 五格、`DeclaredMeasurementResolution` 与五个各造各格的构造器、`ShipmentRequest.DeclaredMeasurementFor`）+ `_test.go`；`domain/source_data_anchor.go`（共用内部步骤 `resolveSourceDataAnchor` + `ErrUnanchoredSourceDataAdoption`）；`domain/shipment_request.go` 加 `submissionVersionByID`；`domain/delivery_place_resolution.go` 的 `DeliveryPlaceReferenceFor` 改走共用步骤（四格与 `ErrInvalidDeliveryPlaceReference` 错误面不动，既有用例全绿）；`ports/declared_measurement_view.go`（`DeclaredMeasurementView`）；`adapters/postgres/declared_measurement_view.go`（`ShipmentRequests` 兼实现）+ `_test.go` 真库九条；`adapters/postgres/accepted_request_by_parcel.go` 头注加本口、去掉数读口；`docs/product/MECHANISM-INVENTORY.md` 干净检出重生成；本票 Status 认领 |
+| 本笔（tip） | 本完成记录；Status → resolved；`spec.md` 子票表 02 行 |
+
+**逐条对判据**（判据 1 为 NO，在 04）：
+- **判据 2 ✓** `git grep -n -E 'type \w+ interface' -- internal/parcelshipment/ports/` 多出 `DeclaredMeasurementView`，按（租户，`DeclaredParcelID`）答 `domain.DeclaredMeasurementResolution`：`Measurement()` 交 `DeclaredMeasurement`（毛重 + 可缺外廓，`Dimensions()` 第二返回值如实），`Anchor()` 交 `SourceDataVersionAnchor`。真库一正一缺：`TestAMemberWithABaselineProfileAnswersItsDeclaredMeasurementFromTheSnapshot`（parcel-1，2.5 kg / 30×20×10 cm 原样、基线锚）与 `TestAMemberWithoutABaselineProfileAnswersNotDeclaredFromTheSnapshot`（同委托 parcel-2 无画像 → `NOT_DECLARED`）；尺寸缺席如实：领域例 `TestAMemberWithABaselineProfileAnswersItsMeasurementAnchoredOnTheBaseline`（只报重量的画像 `Dimensions()` 答缺）。裁决 6 加的两格：`待复核` → `TestAForkedMeasurementAmendmentChainAnswersUndeterminedWithoutAValue`（`UNDETERMINED`，无锚无值）；非委托对象 → `TestAnObjectOutsideEveryAcceptedBaselineHasNoDeclaredMeasurementInTheStore`（从未声明的包裹 / 他租户问本租户成员，皆 `NO_DECLARED_MEASUREMENT`）+ `TestAMemberOfAMerelySubmittedRequestHasNoDeclaredMeasurement`（仅`已提交`无基线 → 无）。
+- **判据 3 ✓** `DeclaredMeasurementView` 方法集只有 `LoadDeclaredMeasurement`，无 `Save`；`go test -count=1 ./internal/architecture/...` ok；`git status` / `git diff 3a21dab7 --stat -- internal/parcelpricing` 零 diff。
+- **判据 4 ✓** `tools/mechanism-inventory` 在本 worktree 干净检出重生成：端口声明 `408 → 409`（PS +1），`parcelshipment` 行 生产文件 178 → 182 / 测试文件 173 → 175 / 适配器 32 → 33。
+
+**逐条对裁决**：
+- **裁决 1（拆）** 本票只做 PS 半边；`internal/nodeoperations/**`、`migrations/node_operations/` 一字未动。
+- **裁决 2（两源规则归 PP）** 本口不知道 NO 口存在，不含任何「实测优先 / 申报兜底」的判断；`ports/declared_measurement_view.go` 头注写明两源并存按谁在 PP 消费侧。
+- **裁决 3（锚法照收件地点引用）** `resolveSourceDataAnchor` 一处解析：范围上无版本 → `NewAcceptanceBaselineAnchor()`；`SourceDataAdopted` → `NewSourceDataVersionAnchor(adopted)`；`SourceDataAwaitingReview` → 未定；采用判断长出不认识的取值 → `ErrUnanchoredSourceDataAdoption`，不猜一格。范围按包裹指名：`NewParcelScopedSourceData(委托, 包裹, DeclaredMeasurementDataGroup())`。**共用内部步骤已抽**，`DeliveryPlaceReferenceFor` 与 `DeclaredMeasurementFor` 同走它，对外仍一口一问；03 开口时照用。
+- **裁决 4（集运单元 found=false）** 集运单元身份不在 `declared_parcel_ids` 里，走 `findAcceptedRequestCoveringParcel` 零行 → `NoDeclaredMeasurementResolution()`；与谱系包裹、他租户、不可见对象同一格（统一不可见结果）。
+- **裁决 5（口的形）** 新文件一只接口，形照 `DeliveryPlaceReferenceView`；不过授权查询作用域；`adapters/postgres` 从 `shipment_request.snapshot` 的 `versionDocument.Profiles` 经重建门读回，**零迁移零新列**（`git ls-files migrations/parcel_shipment` 仍止于 `0022`）；单位 `MeasurementUnitReference` 自由串原样交（真库例断言 `"kg"` / `"cm"` 原样）。
+- **裁决 6（判据写实）** 见上。
+- **裁决 7（以代码为准）** 见判断项 ① ②。
+
+**判断项**（裁决 7 让作者量的两问 + 量到与裁决不符的两处）：
+- **① 「`snapshot` 里申报测量能否按资料范围版本对应上锚」——基线锚对得上，已采用版本锚对不上。** 测量随委托 `snapshot` 的 `versionDocument.Profiles` 落库，接受基线 `SubmissionVersionID()` 指向哪一版提交版本就从哪一版取画像（`submissionVersionByID`），基线锚那一格值与锚同源。但 `CustomerSourceDataVersion`（`customer_source_data_version.snapshot` 与聚合 `sourceDataVersions`）**只留痕不留内容**：`CustomerSourceDataVersionSpec` 收的是 `Request SourceSubmissionFingerprint`（身份 + `PayloadDigest` + 两时），`AmendCustomerSourceDataCommand` 也只带 `PayloadDigest`——修订的载荷只进摘要，库里任何一处都没有那一版报了多少。因此**已采用版本锚那一格只交锚不交测量**（`DeclaredMeasurementAnchoredOnAdoptedVersion` 头注写了为什么；领域例 `TestAnAdoptedAmendmentMovesTheMeasurementAnchorAndWithholdsTheBaselineValue` 与真库例钉住「不交基线值」）：交基线值等于把一份已被客户更正的申报当现行申报送出去，PP 拿到这一格该停「输入不可得」。**这是 PS 的既有缺口不是本票造的**：CONTEXT「收件地点引用」词条许诺「旧锚永远解析到那一版内容」，而版本今天没有内容可解析——归 PS owner 另立票「客户原始资料版本留内容」（它同时是 [03](03-ps-origin-destination-postal-route-read-port.md) 已采用版本格能答值的前置）；那票落地后本格补上测量，格名与消费方契约不变。
+- **② 五格而非四格——多出「未申报」。** 裁决 5 写「毛重必备」说的是 `DeclaredMeasurement` 自己的不变量；而 `SubmissionVersion.profiles` 允许成员无画像（ADR-0048「测量必填与否由真实产品定」），一个在接受基线里、基线那一版上却没有画像的成员既不是「无」（它是委托成员）也不是「未定」（没有分叉），按红线「缺席如实答缺、不填默认」只能自己占一格：`DeclaredMeasurementNotDeclared`。夹具 `submittedShipmentRequest` 的 parcel-2 正是这一格，「真库一正一缺」的「缺」由它承担。
+- **③ 范围只按包裹指名。** 测量逐成员申报，作用于整份委托的「测量」修订今天没有产生规则，本口不问委托级范围；矩阵登记侧（`PAR-COM-13`）用什么词映到 `DECLARED_MEASUREMENT` 是实例半边，与 `DELIVERY_PLACE` 同一处置。
+- **④ `DeliveryPlaceResolution` 四格能否直接复用为答格——不能整型复用，复用的是形与锚法。** 那四格答的是引用（总能派生），本口答内容（可缺席），多一格「未申报」；所以另立 `DeclaredMeasurementOutcome` / `DeclaredMeasurementResolution` 同形五格，锚步骤共用。共用锚步骤的形：`resolveSourceDataAnchor(scope) (sourceDataAnchorResolution{anchor, undetermined}, error)`，各读口再译成自己的封闭答格。
+- **⑤ 越票面字面一处：`domain/shipment_request.go` +1 方法 `submissionVersionByID`**（非导出，取接受基线所指那一版），属裁决 5「`DeclaredMeasurement` 三型怎么带出」归作者的那半。
+
+**验证**（隔离 worktree `mcp5-ppseams02-03`，10:3x–11:0x，Windows 本机）：`gofmt -l ./internal/parcelshipment/` 空；`go vet ./internal/parcelshipment/...` 退 0；新写六份 `.go` 与重生成的清点逐个量 CR=0 / BOM=false。带 DSN `go test -p 1 -count=1 -v`：`./internal/parcelshipment/adapters/postgres/ ./internal/parcelshipment/application/ ./internal/architecture/... ./cmd/parcel-api ./cmd/parcel-commercial ./cmd/parcel-dispatch`（`cmd/*` 由 `go list -f '{{.ImportPath}} {{.Deps}}' ./cmd/...` 反查 `parcelshipment/ports` 所得）**PASS 1060 / FAIL 0 / SKIP 0，6 包 ok**，含新口真库九条 PASS 非 SKIP；`./internal/parcelshipment/domain/` 不带 DSN ok（含新增领域八条与既有收件地点引用例）。55432 占 / 释均先 `check_messages(waitMs 0)` 再广播。`-race` 本机无 cgo 未跑。两轴评审：隔离子代理鉴权错未起跑，作者按 `/code-review` 串行自跑两轴——Standards 修了三处（端口头注「三口」计数、共用步骤头注「三只」计数与预点名尚不存在的地址要素口、票号 `06 / 07` 未带目录名）+ 把 `submissionVersionByID` 从 `source_data_anchor.go` 挪到 `shipment_request.go`（Divergent Change）；Spec 0 阻断，判断项 ①② 即两处「与裁决字面不符、按裁决 7 以代码为准」。非作者评审由推送方安排。
 
 ## 参照
 
