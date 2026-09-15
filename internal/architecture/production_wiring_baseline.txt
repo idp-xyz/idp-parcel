@@ -336,6 +336,15 @@
 # （`New` 前缀）；DeliveryPlaceDataGroup / DeliveryPlaceReferenced / DeliveryPlaceUndeterminedResolution /
 # NoDeliveryPlaceResolution 由同包 ShipmentRequest.DeliveryPlaceReferenceFor 调用（包内裸标识符算引用），不在名单上。
 internal/parcelshipment/domain ParseDeliveryPlaceReference
+#
+# 地址要素的「按要素名读值」（PS CONTEXT「地址要素」；票 pp-seams/03 裁决 1 与裁决 7 追裁取 A）：从一段范围
+# name/value 条目里只认 AddressElementEntryName 拼出的封闭名字，值原样交、缺席如实。它该有的调用方是把地址要素子段
+# 落进提交版本的那一步——而提交版本今天不携带寄收件条目（它们只进 PayloadDigest），那一步归 pp-seams/05「提交版本与
+# 客户原始资料版本留内容」；那票落地、SubmissionVersion.addressElements 开始从子段读的那天，这一行出名单。今天读口
+# ports.AddressElementsView 对全部快照答「要素缺席」，不经过它；单元例钉住的是值格的读法（只认封闭名、显式清空与
+# 同名多条读作缺席）。同票的 SenderPlaceDataGroup / AddressElementEntryName 与五格构造器由同包 AddressElementsFor
+# 调用或按名字被跳过，不在名单上。
+internal/parcelshipment/domain AddressElementsOf
 
 
 # —— visibility-exception ——

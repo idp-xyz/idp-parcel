@@ -9,7 +9,8 @@ import (
 )
 
 // findAcceptedRequestCoveringParcel 是按（租户，包裹）答问的各读口（DeliveryPlaceReferenceView、
-// CommercialResolutionReferenceView、DeclaredMeasurementView）共用的那一段路：走 `declared_parcel_ids` 上的部分 GIN（迁移 0006，只认已接受）
+// CommercialResolutionReferenceView、DeclaredMeasurementView、AddressElementsView）共用的那一段路：走
+// `declared_parcel_ids` 上的部分 GIN（迁移 0006，只认已接受）
 // 找到那一行，整份读回过重建门（ADR-0028）。**它只是找到那一行的路，不是成员集合的权威**——成员归属由聚合上的接受
 // 基线自己回答，各读口在读回的聚合上各问各的；端口那一侧仍是一口一问（ADR-0130 / 0133：读口不预设按委托或按引用
 // 反查），共用的只有取行。

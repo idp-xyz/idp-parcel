@@ -1,7 +1,7 @@
 # 分区要的起讫邮编没有读口：`parcel-shipment` 非测试代码与迁移里没有任何结构化邮编字段，`DeliveryPlaceReferenceView` 只交收件地点引用不交地址本体——`parcel-pricing` 造快照的「邮编路线」一格指不到；分区解析归 PP（ADR-0109），不归 NR
 
 Category: enhancement
-Status: ready-for-agent——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（PS owner 口径，第 3 条兼 PP owner 口径），四条「要裁的」写入下方「裁决」节**：邮编成为 PS 领域语言里客户原始资料的一格「地址要素」（PS 定要素名的封闭集，条目列表不重构、既有快照缺格如实答缺）；**一口两段**（目的 + 起点各带资料版本锚，锚法照收件地点引用，不新造「寄件地点引用」词）；起点先答**寄件人邮编**，节点邮编另票归 NR / NO；**不过授权查询作用域**。此前 draft——2026-09-14 21:1x 通道 3 立票（sa-cc/11 裁决 4 量「分区指不到」的提供方半边；task-620bc8e7，通道 1 派单）。只写票面未动代码；取证锚 main `db480695`
+Status: in-progress——**2026-09-15 11:1x 通道 5 认领**（task-9cc0b1a6；分支 `mcp5-ppseams02-03` 基 main `3a21dab7`，接在 [02](02-billable-weight-actual-measurement-and-declared-dimensions-read-port.md) 两笔 `1a30aac5` / `23a147c4` 之后）。开工量到与裁决 1 字面不符（寄收件 name/value 条目今天只进 `PayloadDigest`，不在任何库表或快照里），落法 A / B 已报通道 1 待裁，先做两法共同的那半。此前 ready-for-agent——**2026-09-14 22:1x 通道 1 按用户「你是业务和系统专家，自决」代裁（PS owner 口径，第 3 条兼 PP owner 口径），四条「要裁的」写入下方「裁决」节**：邮编成为 PS 领域语言里客户原始资料的一格「地址要素」（PS 定要素名的封闭集，条目列表不重构、既有快照缺格如实答缺）；**一口两段**（目的 + 起点各带资料版本锚，锚法照收件地点引用，不新造「寄件地点引用」词）；起点先答**寄件人邮编**，节点邮编另票归 NR / NO；**不过授权查询作用域**。此前 draft——2026-09-14 21:1x 通道 3 立票（sa-cc/11 裁决 4 量「分区指不到」的提供方半边；task-620bc8e7，通道 1 派单）。只写票面未动代码；取证锚 main `db480695`
 Blocked by: 无（sa-cc/11 已进 main 2026-09-14 20:4x；本票是它点名的第三只读口；要裁的已裁，见「裁决」）
 
 ## 缺口（取证于 `db480695`，逐符号名）
@@ -37,13 +37,13 @@ Blocked by: 无（sa-cc/11 已进 main 2026-09-14 20:4x；本票是它点名的�
 ## 完成判据（待裁后写实；可 grep）
 
 1. `git grep -n -E 'type \w+ interface' -- internal/parcelshipment/ports/` 多出邮编只读口（名作者定），方法集不含 `Save`；答案带资料版本锚（裁决 2 取锚法时）。
-2. 若裁决 1 取结构化：PS 领域客户原始资料长出邮编一格（寄件 / 收件两范围），`migrations/parcel_shipment/` 新序号（`0003` 不改），既有快照读回兼容、缺席如实。
+2. （裁决 5 改写，裁决 7 再改写）PS CONTEXT 客户原始资料词条下长出「地址要素」（两要素名封闭集）；领域封闭要素名集与寄件资料范围原词；`payload_canonicalization.go` 只加按要素名读值的纯函数（单元例钉值格：只认封闭名、显式清空与同名多条读作缺席、值原样）；口对今天全部快照如实答「要素缺席」；**不动** `application` / `adapters/http` / `PayloadDigest` / 列 / 迁移（`git ls-files migrations/parcel_shipment` 仍止于既有序号）。
 3. 真库用例：有邮编答之；无邮编 / 资料范围`待复核` / 对象不属任何已接受委托，各按 `DeliveryPlaceResolution` 同族的封闭答法如实答缺，不造默认邮编。
 4. `internal/architecture` 门禁绿；`internal/parcelpricing/**`、`internal/networkrouting/**` 零 diff；`docs/product/MECHANISM-INVENTORY.md` 重生成 PS 端口 +1。
 
 ## 地盘
 
-`internal/parcelshipment/{domain,ports,adapters/postgres}`、`migrations/parcel_shipment/`（新序号）；`docs/domain/parcel-shipment/CONTEXT.md` 若裁决 1 让邮编成词（先改 CONTEXT 再改代码，AGENTS「改文档」）。不动 `internal/parcelpricing/**`、`internal/networkrouting/**`、`internal/transportfulfillment/**`。
+`internal/parcelshipment/{domain,ports,adapters/postgres}`；`docs/domain/parcel-shipment/CONTEXT.md`（裁决 1 让邮编成词——先改 CONTEXT 再改代码，AGENTS「改文档」）；`internal/architecture/production_wiring_baseline.txt`（裁决 7 取 A 后读值纯函数今天无生产调用方，按接线棘轮的规矩登名单并写明等 05）。**不动** `migrations/parcel_shipment/`（裁决 7：不加列不加迁移）、`internal/parcelshipment/application/**`、`internal/parcelshipment/adapters/http/**`、`internal/parcelpricing/**`、`internal/networkrouting/**`、`internal/transportfulfillment/**`。
 
 ## 要裁的
 
@@ -60,6 +60,7 @@ Blocked by: 无（sa-cc/11 已进 main 2026-09-14 20:4x；本票是它点名的�
 4. **要不要过授权查询作用域——不过，与 `DeliveryPlaceReferenceView` 同一待遇。** PP 消费侧适配器是进程内另一个限界上下文、不是客户端；PS CONTEXT「查询只消费……授权查询作用域」说的是对外查询面；`DeliveryPlaceReferenceView` 头注「按（租户，包裹身份）问，不要求消费方持有委托、接受基线或提交版本」是同一类消费方的既有先例。红线不变：只交邮编与国家 / 地区码两格值 + 版本锚，**不交地址文本**、不交其他要素。`DeliveryPlaceReferenceView` 头注「按锚解析回地址内容是第二个消费方……届时另立」——本口就是那个「届时」，头注那句改口指向本口。
 5. **完成判据写实**：判据 1 照做（口名作者定，方法集不含 `Save`，两段各带锚）；判据 2 改为「PS CONTEXT 客户原始资料词条长出『地址要素』（两要素名封闭集）；`payload_canonicalization.go` 只加按要素名读值，不改文档形、不加列、不加迁移（若作者量到必须落列才能按锚读，写进判断项、迁移序号重取，`0003` 不改）；既有快照缺要素如实答缺」；判据 3 照做，加「`待复核` 答未定、非委托对象答无、要素缺席答缺」四格；判据 4 照做（PS 端口 +1）。
 6. **能力边界**：裁的是要素成词、一口两段、起点归属、作用域待遇；`snapshot` 里 name/value 条目能否按资料范围版本对应上锚、`DeliveryPlaceResolution` 四格能否直接复用为答格，归作者。读过本票全文、spec、01 / 02；**没读** `payload_canonicalization.go` / `delivery_place_reference_view.go` / `0003` 正文（经取证引文）、ADR-0130 / 0133 正文。作者量到与代码不符，以代码为准并写进判断项。
+7. **（2026-09-15 10:4x 通道 1 追裁 ← 通道 5 量得条目只进摘要）裁决 1 的前提不成立，取 A：口成形、内容落库归 [05](05-ps-submission-and-source-data-versions-carry-content.md)。** 作者开工对 `3a21dab7` 量到：寄收件 name/value 条目（`SubmissionPayloadSpec.Scope`）今天**只进 `PayloadDigest`**，不在 `shipment_request.snapshot`（`versionDocument` 只有成员、画像与来源指纹）、不在 `source_submission`（只存摘要）、不在 `customer_source_data_version.snapshot`（只存指纹 + 留痕清单），应用层 `SubmitShipmentRequestCommand` 也不收它们——裁决 1「既有快照缺这两个要素即未提供」隐含的「新快照能有」今天不成立，「按要素名读值」在基线锚上也无物可读。两法：A（字面守裁决 1「不动接单入口」——口成形、对全部快照如实答缺、内容落库另立前置票）/ B（本单顺带让 `SubmissionVersion` 携带封闭要素子段进 snapshot 并动 `application` / `adapters/http`）。**取 A**，理由：「提交版本 / 客户原始资料版本留不留内容」是 PS 一道领域题，基线与修订两半要一次定（[02](02-billable-weight-actual-measurement-and-declared-dimensions-read-port.md) 判断项 ① 量到的是同一题的另一半——`CustomerSourceDataVersion` 只留痕不留内容），从一只读口里只开基线那半会让它在两处各定一次（AGENTS「单一权威」）；且两口今天都无生产消费方。**本票因此 =** CONTEXT「地址要素」成词 + 领域封闭要素名集（`POSTAL_CODE` / `COUNTRY_CODE`）+ 寄件资料范围原词 + `payload_canonicalization.go` 按要素名读值的纯函数（单元例钉值格）+ 一口两段口形 + postgres 实现（共用锚步骤）；口对今天全部快照如实答「要素缺席」，锚 / 未定 / 无三格真库能真答；**不动** `application` / `adapters/http` / `PayloadDigest` / 列 / 迁移。答格里「要素缺席」与「内容未落库」今天在代码上分不开（都是快照无该子段），只留一格「要素缺席」并在头注写明它今天同时覆盖「条目未落库」，等 05 落地后再分——不预拟分不开的格。已采用版本锚那一格照 02：只带锚不带值。**越权风险点**：地址要素成词但今天无数据，归 PS owner 复核是否接受。
 
 **不是要裁的、记在此防重开**：「分区是 PP 算还是 NR 算」——PP `CONTEXT.md`「计价参考目录」与 ADR-0109 Decision 四已定 PP 从绑定的目录解析，NR `CONTEXT.md` 无「分区」一词、「服务区域」是路由解析节点用的；派单让核 NR 分区归属，核过，无需裁。
 

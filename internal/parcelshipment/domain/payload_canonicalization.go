@@ -56,6 +56,34 @@ func (entry CanonicalContentEntry) valid() bool {
 	return entry.name.valid()
 }
 
+// AddressElementsOf 从一段范围条目里按封闭要素名读某个资料范围上的地址要素（PS CONTEXT「地址要素」；pp-seams/03
+// 裁决 1「读口按要素名取值」）。它只认 AddressElementEntryName 拼出的那几个名字：租户约定的条目名（`recipient.address`
+// 一类）与别的范围上的同名要素一律不认——认了前者就是把租户 schema 写死进代码，认了后者就是拿寄件的邮编顶收件。
+//
+// 这是读值不是规范化：条目列表的形、排序、去重与 PayloadDigest 的算法一字不动，既有载荷的摘要因此不变；条目缺席
+// 即「未提供」。值为空的条目（CanonicalContentEntry 定义的「显式清空」）对地址要素读作缺席——空串不是一个邮编，交
+// 出去无处可用；同名多条互相矛盾时两条都不认，读口不替客户挑。
+func AddressElementsOf(group SourceDataGroupReference, entries []CanonicalContentEntry) AddressElements {
+	var elements AddressElements
+	for _, element := range []AddressElementName{PostalCodeElement, CountryCodeElement} {
+		wanted := AddressElementEntryName(group, element)
+		matched := 0
+		for _, entry := range entries {
+			if entry.Name() != wanted {
+				continue
+			}
+			matched++
+			if strings.TrimSpace(entry.Value()) != "" {
+				elements = elements.with(element, entry.Value())
+			}
+		}
+		if matched > 1 {
+			elements = elements.without(element)
+		}
+	}
+	return elements
+}
+
 // SubmissionPayloadSpec 是一次客户提交的规范化业务内容，段位对应 CONTEXT 摘要定义的
 // 五类：成员（DeclaredParcelIDs + Profiles）、范围（Scope）、基础版本（BasisVersion）、
 // 服务要求（Service，含客户委托参考之外的服务请求内容）、requestEffectiveAt。
