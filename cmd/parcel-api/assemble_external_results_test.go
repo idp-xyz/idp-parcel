@@ -2,15 +2,24 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	customsapp "go.idp.xyz/idp-parcel/internal/customscompliance/application"
 	customsdomain "go.idp.xyz/idp-parcel/internal/customscompliance/domain"
+	ccports "go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
@@ -84,6 +93,114 @@ func TestTheWiredExternalResultsAnswerHonestlyAgainstARealDatabase(t *testing.T)
 	if _, has := undecided.Record(); has {
 		t.Fatal("未决不该留任何记录——规则未配置时半份解释落库就是猜了口径")
 	}
+}
+
+// Covers: 票 sa-cc/34 判据 (5)——`/customs/external-results` 的真装配上，来源标识长到把交接信封的分区键
+// （「租户 / 来源标识」可读串接）顶过 eventing.MaxPartitionKeyLength：交接口分格交出 ports.ErrHandoffEnvelopeRejected、
+// 编排以 ErrExternalResultHandoffRejected 响亮报错，transactionalResults 随之回滚——结果行零、信封零；端点映成
+// 400 HANDOFF_ENVELOPE_REJECTED 出队交给人。先用正常长度的来源标识在同一条链上走到「已记录 + 信封一行」，证明夹具
+// 确实到得了交接那一步，超长那一格的空才是回滚证出来的。用替身 intake 只为绕过生产上尚未配置的通道认证
+// （UnconfiguredIntake 答 403 在编排之前），编排与事务壳都是生产装配那一份。
+func TestAnOverlongSourceIDRollsBackTheRecordAndTheEnvelopeAndAnswersFourHundred(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	results, err := buildExternalResultsOrchestration(db)
+	if err != nil {
+		t.Fatalf("装配外部结果编排：%v", err)
+	}
+	const tenant = "SYN-TENANT-1"
+	seedExternalResultChain(t, pool, tenant, "SYN-CC-UNIT-1", "SYN-CC-CASE-1", "SYN-CC-VERSION-1")
+	seedInterpretationRule(t, pool, tenant, customsdomain.ProcessDecisionLayer, "SYN-JURISDICTION-1", externalResultOccurredAt.Add(-48*time.Hour))
+
+	recorded, err := results.Handle(t.Context(), externalResultCommand(t, "SYN-RESULT-SHORT-1", "SYN-CC-VERSION-1"))
+	if err != nil || recorded.Outcome() != customsapp.ResultRecorded || recorded.ResultHandoffReference() != "" {
+		t.Fatalf("对照格没走到「已记录且意图已交」：err=%v outcome=%v handoff=%q", err, recorded.Outcome(), recorded.ResultHandoffReference())
+	}
+	if got := countOutboxRows(t, pool, string(outboxintent.FingerprintEventID("external-result", tenant, "SYN-RESULT-SHORT-1"))); got != 1 {
+		t.Fatalf("对照格 outbox 行数 = %d，want 1", got)
+	}
+
+	overlong := strings.Repeat("x", eventing.MaxPartitionKeyLength-len(tenant+"/")+1)
+	if partitionKey := tenant + "/" + overlong; len(partitionKey) <= eventing.MaxPartitionKeyLength || len(overlong) > eventing.MaxSubjectLength {
+		t.Fatalf("夹具没造对：分区键 %d 字节（上限 %d）、主体 %d 字节（上限 %d）",
+			len(partitionKey), eventing.MaxPartitionKeyLength, len(overlong), eventing.MaxSubjectLength)
+	}
+	command := externalResultCommand(t, overlong, "SYN-CC-VERSION-1")
+
+	_, err = results.Handle(t.Context(), command)
+	if !errors.Is(err, customsapp.ErrExternalResultHandoffRejected) || !errors.Is(err, ccports.ErrHandoffEnvelopeRejected) {
+		t.Fatalf("超长来源标识该以确定性拒收响亮报错、带原因：err = %v", err)
+	}
+	if got := countExternalResultRows(t, pool, tenant, overlong); got != 0 {
+		t.Fatalf("回滚后结果行数 = %d，want 0——记录与信封该同生同灭", got)
+	}
+	if got := countOutboxRows(t, pool, string(outboxintent.FingerprintEventID("external-result", tenant, overlong))); got != 0 {
+		t.Fatalf("回滚后 outbox 行数 = %d，want 0", got)
+	}
+
+	endpoint := customshttp.NewReceiveExternalResultEndpoint(commandIntake{command: command}, results)
+	response := httptest.NewRecorder()
+	endpoint.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/customs/external-results", nil))
+	if response.Code != http.StatusBadRequest {
+		t.Fatalf("端点状态 = %d，want %d：确定性拒收是调用方的错，留队重发只会再拒一次", response.Code, http.StatusBadRequest)
+	}
+	var problem struct {
+		Error struct {
+			Code string `json:"code"`
+		} `json:"error"`
+	}
+	if err := json.NewDecoder(response.Body).Decode(&problem); err != nil || problem.Error.Code != "HANDOFF_ENVELOPE_REJECTED" {
+		t.Fatalf("问题体 = %+v（err=%v），want code HANDOFF_ENVELOPE_REJECTED", problem, err)
+	}
+}
+
+// commandIntake 把一条既定命令当作通道请求的翻译结果交出，只为让端点用例绕过生产上尚未配置的通道认证。
+type commandIntake struct {
+	command customsapp.ReceiveExternalResultCommand
+}
+
+func (intake commandIntake) IntakeResult(context.Context, *http.Request) (customsapp.ReceiveExternalResultCommand, error) {
+	return intake.command, nil
+}
+
+// seedInterpretationRule 直插一版解释规则，让真读口对该（租户, 层, 辖区, 时点）答已配置；规则引用是合成字面，
+// 编排只把它记进结果、不解读它。
+func seedInterpretationRule(t *testing.T, pool *pgxpool.Pool, tenant string, layer customsdomain.ResultLayer, jurisdiction string, appliesFrom time.Time) {
+	t.Helper()
+	if _, err := pool.Exec(context.Background(),
+		`INSERT INTO customs_compliance.interpretation_rule
+			(tenant_id, result_layer, jurisdiction_ref, applies_from, rule_ref)
+		 VALUES ($1, $2, $3, $4, 'SYN-INTERPRET/process/v1')`,
+		tenant, layer.String(), jurisdiction, appliesFrom,
+	); err != nil {
+		t.Fatalf("植入解释规则：%v", err)
+	}
+}
+
+func countExternalResultRows(t *testing.T, pool *pgxpool.Pool, tenant, sourceID string) int {
+	t.Helper()
+	var count int
+	if err := pool.QueryRow(t.Context(),
+		`SELECT count(*) FROM customs_compliance.external_result WHERE tenant_id = $1 AND source_id = $2`,
+		tenant, sourceID,
+	).Scan(&count); err != nil {
+		t.Fatalf("统计结果行：%v", err)
+	}
+	return count
+}
+
+func countOutboxRows(t *testing.T, pool *pgxpool.Pool, eventID string) int {
+	t.Helper()
+	var count int
+	if err := pool.QueryRow(t.Context(),
+		`SELECT count(*) FROM `+migrate.SchemaBento+`.outbox WHERE event_id = $1`, eventID,
+	).Scan(&count); err != nil {
+		t.Fatalf("统计 outbox 行：%v", err)
+	}
+	return count
 }
 
 func externalResultCommand(t *testing.T, sourceID, claimedVersion string) customsapp.ReceiveExternalResultCommand {

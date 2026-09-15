@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"go.idp.xyz/idp-bento-go/eventing"
@@ -107,6 +108,13 @@ func (handoff *OutboxExternalResultHandoff) HandOffExternalResult(
 	}
 
 	if err := outboxintent.EnqueueOnce(ctx, handoff.db, handoff.store, envelope); err != nil {
+		// 框架 Envelope.Validate 的拒收是确定性的（同一份输入重投永远同一个结果），与存储不可用分两格交出去
+		// （ports.ErrHandoffEnvelopeRejected 头注）。ID 已改指纹形，今天能走到这里的是 Subject / PartitionKey
+		// 取到超长 SourceID——SourceID 连构造门都没有，长度归实例半边；折成续办引用只会让通道方按 handoffReference
+		// 重试到死，所以要让编排看得见这一格并整笔不作答（票 sa-cc/34 裁决 4）。
+		if errors.Is(err, eventing.ErrInvalidEnvelope) {
+			return fmt.Errorf("hand off external result: %w: %w", ports.ErrHandoffEnvelopeRejected, err)
+		}
 		return fmt.Errorf("hand off external result: %w", err)
 	}
 	return nil

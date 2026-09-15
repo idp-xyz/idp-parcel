@@ -181,13 +181,36 @@ func (caseStoreDouble) Save(
 	return ports.CustomsCaseSaved, nil
 }
 
-type resultDownstreamDouble struct{}
+type resultDownstreamDouble struct{ err error }
 
 func (double *resultDownstreamDouble) HandOffExternalResult(
 	_ context.Context,
 	_ ports.ExternalResultHandoffIntent,
 ) error {
-	return nil
+	return double.err
+}
+
+// Covers: 票 sa-cc/34 裁决 4 的端点半边——交接信封被框架确定性拒收时编排返 ErrExternalResultHandoffRejected，端点映成
+// 4xx（400 HANDOFF_ENVELOPE_REJECTED）出队交给人：重发同样的内容不会改变结果，与 MALFORMED_REQUEST 同一条分流纪律、
+// 同一个状态码——ADR-0022 否决了「按语义贴近码（409 / 422）」那条逐例裁量口，差别只进响应体的 code；
+// 不再是 5xx NO_ANSWER_FORMED 留队重发，也不再 201 带 handoffReference 让通道方重试到死。
+func TestARejectedHandoffEnvelopeIsAFourHundredNotARetry(t *testing.T) {
+	handler := application.NewReceiveExternalResultHandler(application.ReceiveExternalResultDeps{
+		Results:     &resultStoreDouble{byKey: map[ports.ExternalResultKey]ports.ExternalResultRecord{}},
+		Submissions: &submissionIndexDouble{found: true},
+		Rules:       &interpretationRuleDouble{configured: true},
+		Units:       unitStoreDouble{},
+		Cases:       caseStoreDouble{},
+		Downstream:  &resultDownstreamDouble{err: fmt.Errorf("%w: partition key exceeds 512 bytes", ports.ErrHandoffEnvelopeRejected)},
+		Clock:       endpointClock{},
+	})
+	rejected := postResult(t, &resultIntakeDouble{command: resultCommand(t)}, handler, http.MethodPost)
+	if rejected.Code != http.StatusBadRequest {
+		t.Fatalf("rejected handoff status = %d, want %d", rejected.Code, http.StatusBadRequest)
+	}
+	if body := decodeResult(t, rejected); body.Error == nil || body.Error.Code != "HANDOFF_ENVELOPE_REJECTED" {
+		t.Fatalf("error body = %+v", body.Error)
+	}
 }
 
 type endpointClock struct{}

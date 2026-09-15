@@ -41,6 +41,10 @@ const (
 	codeIntakeFailed     = "INTAKE_FAILED"
 	codeNoAnswerFormed   = "NO_ANSWER_FORMED"
 	codeUnnamedOutcome   = "UNNAMED_OUTCOME"
+	// codeHandoffEnvelopeRejected：记录能落、交发布意图时信封被框架确定性拒收（来源标识长到把分区键顶过上限之类）。
+	// 与 MALFORMED_REQUEST 同一句判据——重发同样的内容不会改变结果——所以同是 400 出队交给人，不另开 422：
+	// ADR-0022 否决的正是「按语义贴近码」那条逐例裁量口，差别只进 code（票 sa-cc/34 裁决 4）。
+	codeHandoffEnvelopeRejected = "HANDOFF_ENVELOPE_REJECTED"
 )
 
 // NewReceiveExternalResultEndpoint 交回 `UC-CC-006` 外部结果接收编排的 HTTP 入口。
@@ -68,6 +72,11 @@ func NewReceiveExternalResultEndpoint(intake ResultIntake, handler ResultHandler
 
 		result, err := handler.Handle(request.Context(), command)
 		if err != nil {
+			// 编排返 error 就是没形成答案；只有信封被确定性拒收这一格是调用方的错，留队重发只会把同一份再拒一次。
+			if errors.Is(err, application.ErrExternalResultHandoffRejected) {
+				writeProblem(response, http.StatusBadRequest, codeHandoffEnvelopeRejected)
+				return
+			}
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}

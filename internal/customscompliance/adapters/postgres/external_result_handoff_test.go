@@ -106,6 +106,31 @@ func TestOverlongSourceIDsStillProduceAnEnvelopeIDWithinTheFrameworkLimit(t *tes
 	}
 }
 
+// Covers: 票 sa-cc/34 裁决 4 首句——分区键保留可读串接，所以 SourceID 长到把「租户 / 来源标识」顶过
+// eventing.MaxPartitionKeyLength 时框架 Envelope.Validate 确定性拒收；本口把它与存储不可用分两格交出
+// （ports.ErrHandoffEnvelopeRejected 包住原因），编排才有东西可判、才谈得上整笔不作答。夹具只顶过分区键上限、
+// 不顶过 eventing.MaxSubjectLength，证的正是分区键那一维。
+func TestAPartitionKeyOverTheFrameworkLimitIsRejectedAsAHandoffEnvelopeRejection(t *testing.T) {
+	fixture := newResultHandoffFixture(t)
+	const tenant = "tenant-a"
+	sourceID := strings.Repeat("x", eventing.MaxPartitionKeyLength-len(tenant+"/")+1)
+	if partitionKey := tenant + "/" + sourceID; len(partitionKey) <= eventing.MaxPartitionKeyLength || len(sourceID) > eventing.MaxSubjectLength {
+		t.Fatalf("夹具没造对：分区键 %d 字节（上限 %d）、主体 %d 字节（上限 %d）",
+			len(partitionKey), eventing.MaxPartitionKeyLength, len(sourceID), eventing.MaxSubjectLength)
+	}
+	intent := resultIntent(t, tenant, sourceID, "submission-1")
+
+	err := fixture.transactor.WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		return fixture.handoff.HandOffExternalResult(txCtx, intent)
+	})
+	if !errors.Is(err, ports.ErrHandoffEnvelopeRejected) || !errors.Is(err, eventing.ErrInvalidEnvelope) {
+		t.Fatalf("确定性拒收该分格交出、带原因：err = %v", err)
+	}
+	if count := countResultIntents(t, fixture.pool, resultEventID(tenant, sourceID)); count != 0 {
+		t.Fatalf("被拒的信封落库了：%d 行", count)
+	}
+}
+
 // Covers: 票 sa-cc/34 裁决 3 / 判据 (2)——本口在 `760332c7` 上把 ID 直接当分区键；解耦后分区键取「租户 / 来源标识」
 // 一字不变（字面断言），ID 换成指纹形。
 func TestTheExternalResultPartitionKeyKeepsTheReadableConcatenationWhileTheIDIsFingerprinted(t *testing.T) {

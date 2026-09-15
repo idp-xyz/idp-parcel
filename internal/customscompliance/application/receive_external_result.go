@@ -210,7 +210,7 @@ func (handler *ReceiveExternalResultHandler) Handle(
 			// 同一来源响应身份携带不同语义或范围：冲突保留原结果，不按最后到达覆盖。
 			return ReceiveExternalResultResult{outcome: ResultSourceConflict}, nil
 		}
-		return handler.existingResult(ctx, existing), nil
+		return handler.existingResult(ctx, existing)
 	}
 
 	version, err := domain.NewSubmissionVersionID(command.ClaimedVersion)
@@ -370,14 +370,18 @@ func (handler *ReceiveExternalResultHandler) commit(
 	switch saved {
 	case ports.ExternalResultSaved:
 		result := ReceiveExternalResultResult{outcome: outcome, record: record, hasRecord: true}
-		result.handoff = handler.handOff(ctx, record)
+		handoff, err := handler.handOff(ctx, record)
+		if err != nil {
+			return ReceiveExternalResultResult{}, err
+		}
+		result.handoff = handoff
 		return result, nil
 	case ports.ExternalResultAlreadyRecorded:
 		winner, found, err := handler.deps.Results.FindByKey(ctx, record.Key)
 		if err != nil || !found {
 			return resultStoreUndecided(record.Key.SourceID), nil
 		}
-		return handler.existingResult(ctx, winner), nil
+		return handler.existingResult(ctx, winner)
 	default:
 		return ReceiveExternalResultResult{}, fmt.Errorf("%w: %d", ErrUnexpectedResultSave, saved)
 	}
@@ -387,28 +391,43 @@ func (handler *ReceiveExternalResultHandler) commit(
 func (handler *ReceiveExternalResultHandler) existingResult(
 	ctx context.Context,
 	record ports.ExternalResultRecord,
-) ReceiveExternalResultResult {
+) (ReceiveExternalResultResult, error) {
+	handoff, err := handler.handOff(ctx, record)
+	if err != nil {
+		return ReceiveExternalResultResult{}, err
+	}
 	return ReceiveExternalResultResult{
 		outcome:   ResultExistingResult,
 		record:    record,
 		hasRecord: true,
-		handoff:   handler.handOff(ctx, record),
-	}
+		handoff:   handoff,
+	}, nil
 }
 
-// handOff 交发布意图。归属不上的留存记录没有可供判断消费的监管事实，不交；投递失败
-// 不翻结果，留续办引用重放时重发同一份。
+// ErrExternalResultHandoffRejected 是外部结果接收路上的硬失败：记录已落、交发布意图时信封被框架的**确定性**校验
+// 拒收（ports.ErrHandoffEnvelopeRejected）。重投同一份永远同一个结果，折成续办引用只会让通道方按 handoffReference
+// 重试到死，所以响亮报错、不给结果——装配处的事务壳随之回滚，结果行与信封同生同灭；端点把它映成 4xx 出队交给人
+// （票 sa-cc/34 裁决 4）。这条路是 HTTP 单次调用，没有派发器与重投预算，不进任何未决哨兵名单。
+var ErrExternalResultHandoffRejected = errors.New(
+	"customs compliance: external result handoff envelope rejected by envelope validation")
+
+// handOff 交发布意图。归属不上的留存记录没有可供判断消费的监管事实，不交。投递失败分两格（票 sa-cc/34 裁决 4）：
+// 依赖不可用不翻结果、留续办引用重放时重发同一份；信封被确定性拒收则返错，由调用方整笔不作答。
 func (handler *ReceiveExternalResultHandler) handOff(
 	ctx context.Context,
 	record ports.ExternalResultRecord,
-) string {
+) (string, error) {
 	if record.Unattributable {
-		return ""
+		return "", nil
 	}
-	if err := handler.deps.Downstream.HandOffExternalResult(ctx, ports.ExternalResultHandoffIntent{Record: record}); err == nil {
-		return ""
+	err := handler.deps.Downstream.HandOffExternalResult(ctx, ports.ExternalResultHandoffIntent{Record: record})
+	if err == nil {
+		return "", nil
 	}
-	return resultContinuation("EXTERNAL_RESULT_HANDOFF", record.Key.TenantID.String(), record.Key.SourceID)
+	if errors.Is(err, ports.ErrHandoffEnvelopeRejected) {
+		return "", fmt.Errorf("%w: %w", ErrExternalResultHandoffRejected, err)
+	}
+	return resultContinuation("EXTERNAL_RESULT_HANDOFF", record.Key.TenantID.String(), record.Key.SourceID), nil
 }
 
 func resultContinuation(parts ...string) string {

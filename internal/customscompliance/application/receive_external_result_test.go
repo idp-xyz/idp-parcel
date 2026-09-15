@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -534,6 +535,22 @@ func TestRuleSelectionInputsAreResolvedOrUndecided(t *testing.T) {
 			t.Fatalf("reason = %q", result.UndecidedReason())
 		}
 	})
+}
+
+// Covers: 票 sa-cc/34 裁决 4——交接口把信封被框架确定性校验拒收（ports.ErrHandoffEnvelopeRejected）交出来时，重投同一份
+// 永远同一个结果，折成续办引用只会让通道方重试到死；编排以 ErrExternalResultHandoffRejected 响亮报错、不给结果，
+// 装配处的事务壳随之回滚，结果行与信封同生同灭。依赖不可用那一格照旧折续办（上一条用例守着）。
+func TestARejectedHandoffEnvelopeFailsTheReceiptLoudlyInsteadOfFoldingIntoAContinuation(t *testing.T) {
+	fixture := newResultFixture(t)
+	fixture.handoff.err = fmt.Errorf("%w: partition key exceeds 512 bytes", ports.ErrHandoffEnvelopeRejected)
+
+	result, err := fixture.handler.Handle(context.Background(), resultCommand(t, "source-long"))
+	if !errors.Is(err, application.ErrExternalResultHandoffRejected) || !errors.Is(err, ports.ErrHandoffEnvelopeRejected) {
+		t.Fatalf("信封被拒该响亮报错且带原因：err = %v", err)
+	}
+	if result.Outcome() != application.ExternalResultOutcomeInvalid || result.ResultHandoffReference() != "" {
+		t.Fatalf("硬失败不该交回任何结果或续办引用：outcome = %q handoff = %q", result.Outcome(), result.ResultHandoffReference())
+	}
 }
 
 // 幂等/冲突按内容指纹分界；投递失败不翻结果、重放重发同一份；未受理与并发落败各守其格。
