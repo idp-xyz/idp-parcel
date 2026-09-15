@@ -55,7 +55,7 @@ func TestAnAmendmentCarryingContentFormsAVersionThatKeepsIt(t *testing.T) {
 	fixture := newAmendmentFixture(t)
 	command := fixture.command(t)
 	command.Scope = deliveryPlaceDataScope(t)
-	command.Content = deliveryPostalCodeContent(t, "20095")
+	command.Content = deliveryPostalCodeContent(t, "SYN-200095")
 
 	result, err := fixture.handler.Handle(context.Background(), command)
 	if err != nil {
@@ -79,8 +79,8 @@ func TestAnAmendmentCarryingContentFormsAVersionThatKeepsIt(t *testing.T) {
 		t.Fatalf("destination outcome = %q, want ANCHORED_ON_ADOPTED_VERSION", destination.Destination().Outcome())
 	}
 	elements, present := destination.Destination().Elements()
-	if postal, declared := elements.PostalCode(); !present || !declared || postal != "20095" {
-		t.Fatalf("postal = %q present = %v declared = %v, want 20095", postal, present, declared)
+	if postal, declared := elements.PostalCode(); !present || !declared || postal != "SYN-200095" {
+		t.Fatalf("postal = %q present = %v declared = %v, want SYN-200095", postal, present, declared)
 	}
 }
 
@@ -94,12 +94,12 @@ func TestAmendmentContentThatDoesNotFitTheScopeOrIntentIsRefusedBeforeAuthorizat
 			command.Content = weightOnlyContent(t, "1.00")
 		},
 		"开放范围带要素内容": func(t *testing.T, command *application.AmendCustomerSourceDataCommand) {
-			command.Content = deliveryPostalCodeContent(t, "20095")
+			command.Content = deliveryPostalCodeContent(t, "SYN-200095")
 		},
 		"显式清空带要素内容": func(t *testing.T, command *application.AmendCustomerSourceDataCommand) {
 			command.Scope = deliveryPlaceDataScope(t)
 			command.Intent = domain.ExplicitClearIntent
-			command.Content = deliveryPostalCodeContent(t, "20095")
+			command.Content = deliveryPostalCodeContent(t, "SYN-200095")
 		},
 	}
 	for name, mutate := range cases {

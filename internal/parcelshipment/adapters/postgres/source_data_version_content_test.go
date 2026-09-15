@@ -26,12 +26,12 @@ func deliveryPostalEntry(t *testing.T, postal string) domain.CanonicalContentEnt
 	return entry
 }
 
-// submittedRequestWithElements 在 submittedShipmentRequest 的配方上给首个提交版本带上地址要素子段：收件范围报邮编 10115 与
-// 国家 / 地区码 DE，寄件范围只报邮编。
+// submittedRequestWithElements 在 submittedShipmentRequest 的配方上给首个提交版本带上地址要素子段：收件范围报邮编 SYN-100115 与
+// 国家 / 地区码 SYN-CC，寄件范围只报邮编。
 func submittedRequestWithElements(t *testing.T, key, requestID string) domain.ShipmentRequest {
 	t.Helper()
 	country, err := domain.NewCanonicalContentEntry(
-		domain.AddressElementEntryName(domain.DeliveryPlaceDataGroup(), domain.CountryCodeElement), "DE")
+		domain.AddressElementEntryName(domain.DeliveryPlaceDataGroup(), domain.CountryCodeElement), "SYN-CC")
 	if err != nil {
 		t.Fatalf("收件国家条目：%v", err)
 	}
@@ -40,7 +40,7 @@ func submittedRequestWithElements(t *testing.T, key, requestID string) domain.Sh
 	if err != nil {
 		t.Fatalf("寄件邮编条目：%v", err)
 	}
-	entries := []domain.CanonicalContentEntry{deliveryPostalEntry(t, "10115"), country, senderPostal}
+	entries := []domain.CanonicalContentEntry{deliveryPostalEntry(t, "SYN-100115"), country, senderPostal}
 	// 要素经 CanonicalizeSubmission 从条目挑出——与接单入口同一条路，而不是在夹具里手拼 AddressElements。
 	canonical, err := domain.CanonicalizeSubmission(domain.SubmissionPayloadSpec{
 		RequestReference:  mustBuild(t, domain.NewShipmentRequestID, requestID),
@@ -134,10 +134,10 @@ func TestAMemberOfARequestAcceptedWithElementsAnswersThemFromTheSnapshot(t *test
 		t.Fatalf("destination outcome = %q, want ANCHORED_ON_BASELINE", destination.Outcome())
 	}
 	elements, present := destination.Elements()
-	if postal, declared := elements.PostalCode(); !present || !declared || postal != "10115" {
+	if postal, declared := elements.PostalCode(); !present || !declared || postal != "SYN-100115" {
 		t.Fatalf("destination postal = %q present = %v declared = %v", postal, present, declared)
 	}
-	if country, declared := elements.CountryCode(); !declared || country != "DE" {
+	if country, declared := elements.CountryCode(); !declared || country != "SYN-CC" {
 		t.Fatalf("destination country = %q declared = %v", country, declared)
 	}
 	origin := answer.Origin()
@@ -175,12 +175,12 @@ func TestAnOldShapeSnapshotWithoutTheElementsSegmentAnswersNotProvided(t *testin
 	}
 }
 
-// 判据 (2)：收件范围上带内容的修订被采用后，已采用格第二返回值为真且值是那一版的（不是基线的 10115，也不是首版的）。
+// 判据 (2)：收件范围上带内容的修订被采用后，已采用格第二返回值为真且值是那一版的（不是基线的 SYN-100115，也不是首版的）。
 func TestAnAdoptedDeliveryPlaceCorrectionAnswersItsOwnElementsFromTheSnapshot(t *testing.T) {
 	repository, transactor, _ := newShipmentRequests(t)
 	acceptedWithElementsChain(t, repository, transactor, "req-key-1", "request-1",
-		storedContentLink{"dp-v1", "", domain.SupplementIntent, "20095"},
-		storedContentLink{"dp-v2", "dp-v1", domain.CorrectionIntent, "20097"},
+		storedContentLink{"dp-v1", "", domain.SupplementIntent, "SYN-200095"},
+		storedContentLink{"dp-v2", "dp-v1", domain.CorrectionIntent, "SYN-200097"},
 	)
 
 	destination := loadAddressElements(t, repository, "tenant-1", "parcel-1").Destination()
@@ -188,11 +188,11 @@ func TestAnAdoptedDeliveryPlaceCorrectionAnswersItsOwnElementsFromTheSnapshot(t 
 		t.Fatalf("destination outcome = %q, want ANCHORED_ON_ADOPTED_VERSION", destination.Outcome())
 	}
 	elements, present := destination.Elements()
-	if postal, declared := elements.PostalCode(); !present || !declared || postal != "20097" {
-		t.Fatalf("postal = %q present = %v declared = %v, want 20097", postal, present, declared)
+	if postal, declared := elements.PostalCode(); !present || !declared || postal != "SYN-200097" {
+		t.Fatalf("postal = %q present = %v declared = %v, want SYN-200097", postal, present, declared)
 	}
 	if _, declared := elements.CountryCode(); declared {
-		t.Fatal("修订版本没报国家 / 地区码，基线的 DE 却被顶了上来")
+		t.Fatal("修订版本没报国家 / 地区码，基线的 SYN-CC 却被顶了上来")
 	}
 	anchor, anchored := destination.Anchor()
 	if adopted, onVersion := anchor.AdoptedVersion(); !anchored || !onVersion || adopted.String() != "dp-v2" {
@@ -204,7 +204,7 @@ func TestAnAdoptedDeliveryPlaceCorrectionAnswersItsOwnElementsFromTheSnapshot(t 
 func TestAnAdoptedExplicitClearAnswersTheAdoptedAnchorWithoutAValueFromTheSnapshot(t *testing.T) {
 	repository, transactor, _ := newShipmentRequests(t)
 	acceptedWithElementsChain(t, repository, transactor, "req-key-1", "request-1",
-		storedContentLink{"dp-v1", "", domain.SupplementIntent, "20095"},
+		storedContentLink{"dp-v1", "", domain.SupplementIntent, "SYN-200095"},
 		storedContentLink{"dp-v2", "dp-v1", domain.ExplicitClearIntent, ""},
 	)
 
@@ -310,7 +310,7 @@ func TestASourceDataVersionRegistryRoundTripsTheContent(t *testing.T) {
 		Authority: mustBuild(t, domain.NewAmendmentAuthoritySnapshot, "AUTH-SNAP-1"),
 		FormedAt:  submittedAtFixture.Add(2 * time.Hour),
 		Content: domain.NewAddressElementsContent(domain.AddressElementsOf(domain.DeliveryPlaceDataGroup(),
-			[]domain.CanonicalContentEntry{deliveryPostalEntry(t, "20095")})),
+			[]domain.CanonicalContentEntry{deliveryPostalEntry(t, "SYN-200095")})),
 	})
 	if err != nil {
 		t.Fatalf("形成资料版本：%v", err)

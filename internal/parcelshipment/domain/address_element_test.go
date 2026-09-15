@@ -33,15 +33,15 @@ func TestAddressElementEntryNamesAreScopedByDataGroup(t *testing.T) {
 func TestAddressElementsAreReadByClosedEntryNameOnly(t *testing.T) {
 	entries := []domain.CanonicalContentEntry{
 		contentEntry(t, "recipient.address", "1 Example Street, Berlin"),
-		contentEntry(t, "DELIVERY_PLACE.POSTAL_CODE", " 10115 "),
-		contentEntry(t, "SENDER_PLACE.POSTAL_CODE", "200001"),
-		contentEntry(t, "SENDER_PLACE.COUNTRY_CODE", "CN"),
+		contentEntry(t, "DELIVERY_PLACE.POSTAL_CODE", " SYN-100115 "),
+		contentEntry(t, "SENDER_PLACE.POSTAL_CODE", "SYN-200001"),
+		contentEntry(t, "SENDER_PLACE.COUNTRY_CODE", "SYN-CC2"),
 		contentEntry(t, "postal_code", "99999"),
 	}
 
 	destination := domain.AddressElementsOf(domain.DeliveryPlaceDataGroup(), entries)
 	postal, declared := destination.PostalCode()
-	if !declared || postal != " 10115 " {
+	if !declared || postal != " SYN-100115 " {
 		t.Fatalf("destination postal = %q declared = %v; 值要原样，不去空白不规范化", postal, declared)
 	}
 	if country, declared := destination.CountryCode(); declared || country != "" {
@@ -49,10 +49,10 @@ func TestAddressElementsAreReadByClosedEntryNameOnly(t *testing.T) {
 	}
 
 	origin := domain.AddressElementsOf(domain.SenderPlaceDataGroup(), entries)
-	if postal, declared := origin.PostalCode(); !declared || postal != "200001" {
+	if postal, declared := origin.PostalCode(); !declared || postal != "SYN-200001" {
 		t.Fatalf("origin postal = %q declared = %v", postal, declared)
 	}
-	if country, declared := origin.CountryCode(); !declared || country != "CN" {
+	if country, declared := origin.CountryCode(); !declared || country != "SYN-CC2" {
 		t.Fatalf("origin country = %q declared = %v", country, declared)
 	}
 
@@ -80,8 +80,8 @@ func TestAnExplicitlyClearedOrDuplicatedAddressElementReadsAsAbsent(t *testing.T
 	}
 
 	duplicated := domain.AddressElementsOf(domain.DeliveryPlaceDataGroup(), []domain.CanonicalContentEntry{
-		contentEntry(t, "DELIVERY_PLACE.POSTAL_CODE", "10115"),
-		contentEntry(t, "DELIVERY_PLACE.POSTAL_CODE", "10117"),
+		contentEntry(t, "DELIVERY_PLACE.POSTAL_CODE", "SYN-100115"),
+		contentEntry(t, "DELIVERY_PLACE.POSTAL_CODE", "SYN-100117"),
 	})
 	if postal, declared := duplicated.PostalCode(); declared {
 		t.Fatalf("同名两条矛盾的邮编被挑了一条 %q", postal)

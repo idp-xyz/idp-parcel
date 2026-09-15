@@ -171,7 +171,7 @@ func TestIsolatedSubmissionIntakeCarriesTheClosedElementsWithTheDigestFromOneCan
 	}
 
 	declared := strings.Replace(isolatedDraft, `"recipientAddress"`,
-		`"recipientPostalCode": "10115", "recipientCountryCode": "DE", "senderPostalCode": "SYN-200000", "recipientAddress"`, 1)
+		`"recipientPostalCode": "SYN-100115", "recipientCountryCode": "SYN-CC", "senderPostalCode": "SYN-200000", "recipientAddress"`, 1)
 	command, err := intake.IntakeSubmission(context.Background(), draftRequest(declared))
 	if err != nil {
 		t.Fatalf("接入带要素的草案：%v", err)
@@ -180,11 +180,11 @@ func TestIsolatedSubmissionIntakeCarriesTheClosedElementsWithTheDigestFromOneCan
 		t.Fatal("报了邮编摘要没变——要素是内容，不进摘要就检不出同键异容")
 	}
 	destination := command.DeclaredElements.InGroup(domain.DeliveryPlaceDataGroup())
-	if postal, present := destination.PostalCode(); !present || postal != "10115" {
-		t.Fatalf("收件邮编 = %q present = %v, want 10115", postal, present)
+	if postal, present := destination.PostalCode(); !present || postal != "SYN-100115" {
+		t.Fatalf("收件邮编 = %q present = %v, want SYN-100115", postal, present)
 	}
-	if country, present := destination.CountryCode(); !present || country != "DE" {
-		t.Fatalf("收件国家 / 地区码 = %q present = %v, want DE", country, present)
+	if country, present := destination.CountryCode(); !present || country != "SYN-CC" {
+		t.Fatalf("收件国家 / 地区码 = %q present = %v, want SYN-CC", country, present)
 	}
 	origin := command.DeclaredElements.InGroup(domain.SenderPlaceDataGroup())
 	if postal, present := origin.PostalCode(); !present || postal != "SYN-200000" {

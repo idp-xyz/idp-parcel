@@ -153,7 +153,7 @@ func TestAnObjectOutsideEveryAcceptedBaselineHasNoAddressElements(t *testing.T) 
 // 只收指着某一版的锚；零值没有名字。
 func TestAddressElementsResolutionCellsAreBuiltByTheirOwnConstructors(t *testing.T) {
 	elements := domain.AddressElementsOf(domain.DeliveryPlaceDataGroup(), []domain.CanonicalContentEntry{
-		contentEntry(t, "DELIVERY_PLACE.POSTAL_CODE", "10115"),
+		contentEntry(t, "DELIVERY_PLACE.POSTAL_CODE", "SYN-100115"),
 	})
 	onBaseline, err := domain.AddressElementsOnBaseline(elements)
 	if err != nil {
@@ -163,7 +163,7 @@ func TestAddressElementsResolutionCellsAreBuiltByTheirOwnConstructors(t *testing
 		t.Fatalf("outcome = %q, want ANCHORED_ON_BASELINE", onBaseline.Outcome())
 	}
 	got, present := onBaseline.Elements()
-	if postal, declared := got.PostalCode(); !present || !declared || postal != "10115" {
+	if postal, declared := got.PostalCode(); !present || !declared || postal != "SYN-100115" {
 		t.Fatalf("elements = %#v present = %v", got, present)
 	}
 	if anchor, anchored := onBaseline.Anchor(); !anchored || !anchor.OnAcceptanceBaseline() {
@@ -189,8 +189,8 @@ func TestAddressElementsResolutionCellsAreBuiltByTheirOwnConstructors(t *testing
 	}
 	if got, present := withValue.Elements(); !present {
 		t.Fatal("带内容的已采用版本格没交出要素")
-	} else if postal, _ := got.PostalCode(); postal != "10115" {
-		t.Fatalf("postal = %q, want 10115", postal)
+	} else if postal, _ := got.PostalCode(); postal != "SYN-100115" {
+		t.Fatalf("postal = %q, want SYN-100115", postal)
 	}
 
 	names := map[domain.AddressElementsOutcome]string{

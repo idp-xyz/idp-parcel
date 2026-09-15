@@ -18,8 +18,8 @@ func addressEntry(t *testing.T, group domain.SourceDataGroupReference, element d
 func TestCanonicalizingASubmissionYieldsTheDigestAndTheClosedElementsTogether(t *testing.T) {
 	spec := payloadSpec(t)
 	spec.Scope = append(spec.Scope,
-		addressEntry(t, domain.DeliveryPlaceDataGroup(), domain.PostalCodeElement, "10115"),
-		addressEntry(t, domain.DeliveryPlaceDataGroup(), domain.CountryCodeElement, "DE"),
+		addressEntry(t, domain.DeliveryPlaceDataGroup(), domain.PostalCodeElement, "SYN-100115"),
+		addressEntry(t, domain.DeliveryPlaceDataGroup(), domain.CountryCodeElement, "SYN-CC"),
 		addressEntry(t, domain.SenderPlaceDataGroup(), domain.PostalCodeElement, "SYN-200000"),
 	)
 
@@ -33,11 +33,11 @@ func TestCanonicalizingASubmissionYieldsTheDigestAndTheClosedElementsTogether(t 
 
 	elements := canonical.DeclaredElements()
 	destination := elements.InGroup(domain.DeliveryPlaceDataGroup())
-	if postal, declared := destination.PostalCode(); !declared || postal != "10115" {
-		t.Fatalf("destination postal code = %q declared = %v, want 10115", postal, declared)
+	if postal, declared := destination.PostalCode(); !declared || postal != "SYN-100115" {
+		t.Fatalf("destination postal code = %q declared = %v, want SYN-100115", postal, declared)
 	}
-	if country, declared := destination.CountryCode(); !declared || country != "DE" {
-		t.Fatalf("destination country code = %q declared = %v, want DE", country, declared)
+	if country, declared := destination.CountryCode(); !declared || country != "SYN-CC" {
+		t.Fatalf("destination country code = %q declared = %v, want SYN-CC", country, declared)
 	}
 	origin := elements.InGroup(domain.SenderPlaceDataGroup())
 	if postal, declared := origin.PostalCode(); !declared || postal != "SYN-200000" {
@@ -75,8 +75,8 @@ func acceptedWithElements(t *testing.T) domain.ShipmentRequest {
 			addressEntry(t, domain.SenderPlaceDataGroup(), domain.PostalCodeElement, "SYN-200000"),
 		}),
 		domain.AddressElementsOf(domain.DeliveryPlaceDataGroup(), []domain.CanonicalContentEntry{
-			addressEntry(t, domain.DeliveryPlaceDataGroup(), domain.PostalCodeElement, "10115"),
-			addressEntry(t, domain.DeliveryPlaceDataGroup(), domain.CountryCodeElement, "DE"),
+			addressEntry(t, domain.DeliveryPlaceDataGroup(), domain.PostalCodeElement, "SYN-100115"),
+			addressEntry(t, domain.DeliveryPlaceDataGroup(), domain.CountryCodeElement, "SYN-CC"),
 		}),
 	)
 	request, err := domain.SubmitShipmentRequest(spec)
@@ -101,10 +101,10 @@ func TestAMemberOfARequestAcceptedWithElementsAnswersThemAnchoredOnTheBaseline(t
 			t.Fatalf("%s destination outcome = %q, want ANCHORED_ON_BASELINE", parcel, destination.Outcome())
 		}
 		elements, present := destination.Elements()
-		if postal, declared := elements.PostalCode(); !present || !declared || postal != "10115" {
+		if postal, declared := elements.PostalCode(); !present || !declared || postal != "SYN-100115" {
 			t.Fatalf("%s destination postal = %q present = %v declared = %v", parcel, postal, present, declared)
 		}
-		if country, declared := elements.CountryCode(); !declared || country != "DE" {
+		if country, declared := elements.CountryCode(); !declared || country != "SYN-CC" {
 			t.Fatalf("%s destination country = %q declared = %v", parcel, country, declared)
 		}
 		if anchor, anchored := destination.Anchor(); !anchored || !anchor.OnAcceptanceBaseline() {
@@ -193,8 +193,8 @@ func amendedWithContent(t *testing.T, request domain.ShipmentRequest, scope doma
 // 不是基线值也不是首版；锚仍是已采用版本锚，格名不变。
 func TestAnAdoptedDeliveryPlaceCorrectionAnswersItsOwnElementsOnTheAdoptedVersion(t *testing.T) {
 	request := amendedWithContent(t, acceptedWithElements(t), deliveryPlaceScope(t, "request-1"),
-		contentLink{"dp-v1", "", "supplement", "20095"},
-		contentLink{"dp-v2", "dp-v1", "correction", "20097"},
+		contentLink{"dp-v1", "", "supplement", "SYN-200095"},
+		contentLink{"dp-v2", "dp-v1", "correction", "SYN-200097"},
 	)
 
 	destination := resolveAddressElements(t, request, "parcel-1").Destination()
@@ -202,11 +202,11 @@ func TestAnAdoptedDeliveryPlaceCorrectionAnswersItsOwnElementsOnTheAdoptedVersio
 		t.Fatalf("destination outcome = %q, want ANCHORED_ON_ADOPTED_VERSION", destination.Outcome())
 	}
 	elements, present := destination.Elements()
-	if postal, declared := elements.PostalCode(); !present || !declared || postal != "20097" {
-		t.Fatalf("postal = %q present = %v declared = %v, want 20097（链尾那一版的值，不是基线的 10115 也不是首版的 20095）", postal, present, declared)
+	if postal, declared := elements.PostalCode(); !present || !declared || postal != "SYN-200097" {
+		t.Fatalf("postal = %q present = %v declared = %v, want SYN-200097（链尾那一版的值，不是基线的 SYN-100115 也不是首版的 SYN-200095）", postal, present, declared)
 	}
 	if _, declared := elements.CountryCode(); declared {
-		t.Fatal("修订版本没报国家 / 地区码，基线的 DE 却被顶了上来")
+		t.Fatal("修订版本没报国家 / 地区码，基线的 SYN-CC 却被顶了上来")
 	}
 	if anchor, anchored := destination.Anchor(); !anchored {
 		t.Fatal("已采用版本格没带锚")
@@ -239,7 +239,7 @@ func TestAnAdoptedMeasurementCorrectionAnswersItsOwnMeasurementOnTheAdoptedVersi
 // （带锚），值缺席；不回退到基线值。
 func TestAnAdoptedExplicitClearLeavesTheAdoptedCellWithoutAValue(t *testing.T) {
 	request := amendedWithContent(t, acceptedWithElements(t), deliveryPlaceScope(t, "request-1"),
-		contentLink{"dp-v1", "", "supplement", "20095"},
+		contentLink{"dp-v1", "", "supplement", "SYN-200095"},
 		contentLink{"dp-v2", "dp-v1", "clear", ""},
 	)
 
@@ -271,9 +271,9 @@ func TestAnAdoptedExplicitClearLeavesTheAdoptedCellWithoutAValue(t *testing.T) {
 // Covers: 判据 (2)「`待复核`仍不给值」——带内容的两条修订分叉，读口既不给锚也不给值，不替客户挑一版。
 func TestAForkedChainWithContentStillWithholdsBothAnchorAndValue(t *testing.T) {
 	request := amendedWithContent(t, acceptedWithElements(t), deliveryPlaceScope(t, "request-1"),
-		contentLink{"dp-v1", "", "supplement", "20095"},
-		contentLink{"dp-v2", "dp-v1", "correction", "20097"},
-		contentLink{"dp-v3", "dp-v1", "correction", "20099"},
+		contentLink{"dp-v1", "", "supplement", "SYN-200095"},
+		contentLink{"dp-v2", "dp-v1", "correction", "SYN-200097"},
+		contentLink{"dp-v3", "dp-v1", "correction", "SYN-200099"},
 	)
 
 	destination := resolveAddressElements(t, request, "parcel-1").Destination()
@@ -296,11 +296,11 @@ func TestASourceDataVersionOnlyCarriesTheContentShapeOfItsOwnGroup(t *testing.T)
 		want    error
 	}{
 		"收件范围带测量内容": {deliveryPlaceScope(t, "request-1"), domain.SupplementIntent, measurementContent(t, "1.00"), domain.ErrInvalidCustomerSourceDataVersion},
-		"测量范围带要素内容": {measurementScope(t, "request-1", "parcel-1"), domain.SupplementIntent, deliveryElementsContent(t, "10115"), domain.ErrInvalidCustomerSourceDataVersion},
-		"开放范围带要素内容": {consigneeScope(t), domain.SupplementIntent, deliveryElementsContent(t, "10115"), domain.ErrInvalidCustomerSourceDataVersion},
-		"显式清空带要素内容": {deliveryPlaceScope(t, "request-1"), domain.ExplicitClearIntent, deliveryElementsContent(t, "10115"), domain.ErrInvalidCustomerSourceDataVersion},
+		"测量范围带要素内容": {measurementScope(t, "request-1", "parcel-1"), domain.SupplementIntent, deliveryElementsContent(t, "SYN-100115"), domain.ErrInvalidCustomerSourceDataVersion},
+		"开放范围带要素内容": {consigneeScope(t), domain.SupplementIntent, deliveryElementsContent(t, "SYN-100115"), domain.ErrInvalidCustomerSourceDataVersion},
+		"显式清空带要素内容": {deliveryPlaceScope(t, "request-1"), domain.ExplicitClearIntent, deliveryElementsContent(t, "SYN-100115"), domain.ErrInvalidCustomerSourceDataVersion},
 		"显式清空带测量内容": {measurementScope(t, "request-1", "parcel-1"), domain.ExplicitClearIntent, measurementContent(t, "1.00"), domain.ErrInvalidCustomerSourceDataVersion},
-		"收件范围带要素内容": {deliveryPlaceScope(t, "request-1"), domain.SupplementIntent, deliveryElementsContent(t, "10115"), nil},
+		"收件范围带要素内容": {deliveryPlaceScope(t, "request-1"), domain.SupplementIntent, deliveryElementsContent(t, "SYN-100115"), nil},
 		"测量范围带测量内容": {measurementScope(t, "request-1", "parcel-1"), domain.SupplementIntent, measurementContent(t, "1.00"), nil},
 		"收件范围不带内容":  {deliveryPlaceScope(t, "request-1"), domain.SupplementIntent, domain.SourceDataVersionContent{}, nil},
 		"开放范围不带内容":  {consigneeScope(t), domain.SupplementIntent, domain.SourceDataVersionContent{}, nil},
@@ -344,10 +344,10 @@ func TestSourceDataVersionContentIsOneShapeOrAbsent(t *testing.T) {
 	if domain.NewAddressElementsContent(domain.AddressElements{}) != (domain.SourceDataVersionContent{}) {
 		t.Fatal("两格都缺的要素内容不是零值")
 	}
-	elements := deliveryElementsContent(t, "10115")
+	elements := deliveryElementsContent(t, "SYN-100115")
 	if got, present := elements.AddressElements(); !present {
 		t.Fatal("要素内容没报告在场")
-	} else if postal, declared := got.PostalCode(); !declared || postal != "10115" {
+	} else if postal, declared := got.PostalCode(); !declared || postal != "SYN-100115" {
 		t.Fatalf("postal = %q declared = %v", postal, declared)
 	}
 	if _, present := elements.Measurement(); present {
@@ -361,7 +361,7 @@ func TestARequestDeclaringOnlyTheDestinationLeavesTheOriginNotProvided(t *testin
 	spec := submitSpec(t, "parcel-1")
 	spec.Elements = domain.NewDeclaredAddressElements(domain.AddressElements{},
 		domain.AddressElementsOf(domain.DeliveryPlaceDataGroup(), []domain.CanonicalContentEntry{
-			addressEntry(t, domain.DeliveryPlaceDataGroup(), domain.PostalCodeElement, "10115"),
+			addressEntry(t, domain.DeliveryPlaceDataGroup(), domain.PostalCodeElement, "SYN-100115"),
 		}))
 	request, err := domain.SubmitShipmentRequest(spec)
 	if err != nil {
