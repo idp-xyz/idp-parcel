@@ -61,8 +61,10 @@ func (entry CanonicalContentEntry) valid() bool {
 // 一类）与别的范围上的同名要素一律不认——认了前者就是把租户 schema 写死进代码，认了后者就是拿寄件的邮编顶收件。
 //
 // 这是读值不是规范化：条目列表的形、排序、去重与 PayloadDigest 的算法一字不动，既有载荷的摘要因此不变；条目缺席
-// 即「未提供」。值为空的条目（CanonicalContentEntry 定义的「显式清空」）对地址要素读作缺席——空串不是一个邮编，交
-// 出去无处可用；同名多条互相矛盾时两条都不认，读口不替客户挑。
+// 即「未提供」。值为空串的条目（CanonicalContentEntry 定义的「显式清空」）对地址要素读作缺席——空串不是一个邮编，交
+// 出去无处可用；在场与否只看值是不是空串，**不先去空白**：全是空白的值不是空串，原样在场——PS CONTEXT「地址要素」
+// 词条只让本上下文保存客户给的串、不校验不规范化，为判在场而 trim 也是一次规范化，且会让它与「没报」分不开
+// （AddressElements 头注那一句）。同名多条互相矛盾时两条都不认，读口不替客户挑。
 func AddressElementsOf(group SourceDataGroupReference, entries []CanonicalContentEntry) AddressElements {
 	var elements AddressElements
 	for _, element := range []AddressElementName{PostalCodeElement, CountryCodeElement} {
@@ -73,7 +75,7 @@ func AddressElementsOf(group SourceDataGroupReference, entries []CanonicalConten
 				continue
 			}
 			matched++
-			if strings.TrimSpace(entry.Value()) != "" {
+			if entry.Value() != "" {
 				elements = elements.with(element, entry.Value())
 			}
 		}

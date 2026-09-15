@@ -59,6 +59,14 @@ func TestAddressElementsAreReadByClosedEntryNameOnly(t *testing.T) {
 	if !domain.AddressElementsOf(domain.DeliveryPlaceDataGroup(), nil).Empty() {
 		t.Fatal("没有任何条目却报告有要素")
 	}
+
+	// 全是空白的值不是空串：它不是 CanonicalContentEntry 定义的「显式清空」，原样在场——为判在场先去空白也是一次规范化。
+	blank := domain.AddressElementsOf(domain.DeliveryPlaceDataGroup(), []domain.CanonicalContentEntry{
+		contentEntry(t, "DELIVERY_PLACE.COUNTRY_CODE", "   "),
+	})
+	if country, declared := blank.CountryCode(); !declared || country != "   " {
+		t.Fatalf("blank country = %q declared = %v; 全空白的值要原样在场，与「没报」分得开", country, declared)
+	}
 }
 
 // Covers: CanonicalContentEntry 把「显式清空」定为一条值为空的条目——对地址要素而言清空后的值不是一个邮编，读口按

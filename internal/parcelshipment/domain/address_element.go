@@ -53,7 +53,9 @@ func AddressElementEntryName(group SourceDataGroupReference, element AddressElem
 // AddressElements 是一个资料范围（寄件或收件）上的地址要素取值：每个要素至多一格，缺席如实。值原样保全——邮编的格式
 // 与前缀粒度属实例半边（ADR-0109「随首份真实分区表定」），本上下文不校验、不规范化、不去空白。
 //
-// 两格各带一个在场标志而不是用空串表缺席：客户给的串本上下文不去空白，一个全是空白的值与「没报」得分得开。
+// 两格各带一个在场标志而不是用空串表缺席：客户给的串本上下文不去空白，一个全是空白的值与「没报」得分得开。「没报」
+// 含显式清空，而显式清空按 CanonicalContentEntry 的定义就是一条值为空串的条目——AddressElementsOf 读在场只认这一种缺席，
+// 空白串不是空串，原样在场。
 type AddressElements struct {
 	postalCode          string
 	postalCodeDeclared  bool
