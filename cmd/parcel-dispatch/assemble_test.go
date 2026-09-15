@@ -14,6 +14,7 @@ import (
 
 	ccinbox "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/inbox"
 	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
+	ccsettlement "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/settlementaccounting"
 	ccapplication "go.idp.xyz/idp-parcel/internal/customscompliance/application"
 	ccdomain "go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	ccports "go.idp.xyz/idp-parcel/internal/customscompliance/ports"
@@ -440,11 +441,9 @@ func TestAnAdoptedExternalFundsFactReachesTheCustomsRegisterThroughTheRouteTable
 
 	// 正例第三格的前置（票 sa-cc/19 完成判据 (2)）：v1 已在 CC、v2 未到之际，按 v1 形成一版核对——经 CC 自己的编排
 	// `VerifyPayment`（协作事项与付款人规则先经真登记册铺好），走的是生产那条形成路（真核对册 + 真 Outbox 交接）。
-	//
-	// 税费与范围两个合成引用刻意取短：05 的交接把六十四位十六进制指纹连同租户 / 范围 / 税费 / 资金四个引用拼成信封
-	// ID，而 eventing 的信封 ID 上限 128 字节——引用稍长 EnqueueOnce 就拒收、VerifyPayment 把它折成续办引用、信封
-	// 根本发不出去。那是 05 信封 ID 形状的问题，归 CC owner 另票（票 sa-cc/19 判断项）；本格只证 19 的一路走得通，
-	// 所以引用短到装得下，并在下面把「交接成功」断言出来，不让续办引用无声滑过。
+	// 税费与范围两个合成引用取本文件的常规长度：这一对在 05 的旧串接形 ID 下曾超过 eventing 的信封 ID 上限、让交接
+	// 折成续办引用（票 sa-cc/19 判断项 ④），自票 sa-cc/29 起 ID 是定长指纹形，引用多长都装得下；下面对
+	// 「交接成功」的断言因此是正路的证据，不再是绕开。
 	verificationHandoff, err := ccpostgres.NewOutboxDutyPaymentVerificationHandoff(db, store, systemClock{})
 	if err != nil {
 		t.Fatalf("CC 核对交接：%v", err)
@@ -456,8 +455,8 @@ func TestAnAdoptedExternalFundsFactReachesTheCustomsRegisterThroughTheRouteTable
 	if err != nil {
 		t.Fatalf("CC 核对编排：%v", err)
 	}
-	lineageDuty := saTestValue(t, ccdomain.NewAssessedDutyReference, "SYN-D9")
-	lineageScope := saTestValue(t, ccdomain.NewDecisionScopeReference, "SYN-U9")
+	lineageDuty := saTestValue(t, ccdomain.NewAssessedDutyReference, "SYN-DUTY-RD/v1")
+	lineageScope := saTestValue(t, ccdomain.NewDecisionScopeReference, "SYN-UNIT-RD")
 	lineageProcedure := saTestValue(t, ccdomain.NewCustomsProcedureReference, "SYN-PROC-RD")
 	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
 		collaboration, err := ccdomain.FormDutyCollaboration(ccdomain.DutyCollaborationSpec{
@@ -672,6 +671,187 @@ func TestAFormedDutyPaymentVerificationReachesTheSettlementInputThroughTheRouteT
 	}
 	if assessmentRows != 0 {
 		t.Fatalf("采用付款核对不得形成实际代垫判断：advance_assessment 有 %d 行", assessmentRows)
+	}
+
+	// 票 sa-cc/29 裁决 4 / 完成判据 (4)：SA 侧的幂等靠采用登记册照抄 CC 核对键的五维主键，不靠信封 ID。同一版核对以
+	// **另一个**信封 ID 再投一封（CC 换 ID 形之后重投、或任何两封同内容不同 ID 的信封）：Inbox 门只挡同一 ID，这一封
+	// 放行到采用编排，编排撞五维主键答幂等——采用册仍一行、消费入账不报错、不形成第二次采用。
+	enqueueForBeat(t, db, store, "duty-verification-second-id-for-digest-v1", sainbox.DutyPaymentVerificationFormedEventType,
+		`{"tenantId":"tenant-a","scope":"SYN-UNIT-01","duty":"SYN-DUTY-01/v1","funds":"SYN-FUNDS-01","digest":"digest-v1"}`)
+	if published, err := beat.DispatchOnce(t.Context()); err != nil || published != 1 {
+		t.Fatalf("同一核对换 ID 再投：published = %d err = %v, want 1；失败码 = %q",
+			published, err, recordedFailureCode(t, db, "duty-verification-second-id-for-digest-v1"))
+	}
+	if got := recordedFailureCode(t, db, "duty-verification-second-id-for-digest-v1"); got != "" {
+		t.Fatalf("同一核对换 ID 再投不该失败：failure_code = %q", got)
+	}
+	var adoptionRows int
+	if err := querier.QueryRow(t.Context(),
+		`SELECT count(*) FROM settlement_accounting.duty_payment_verification_adoption
+		  WHERE tenant_id = $1 AND scope_ref = $2 AND duty_ref = $3 AND funds_ref = $4 AND version_digest = $5`,
+		"tenant-a", "SYN-UNIT-01", "SYN-DUTY-01/v1", "SYN-FUNDS-01", "digest-v1",
+	).Scan(&adoptionRows); err != nil {
+		t.Fatalf("数采用行：%v", err)
+	}
+	if adoptionRows != 1 {
+		t.Fatalf("同一版核对两个信封 ID 各投一封后采用册该仍是一行，实得 %d 行", adoptionRows)
+	}
+}
+
+// Covers: 票 sa-cc/29 裁决 2 (b) 在生产依赖图上：重派形成的新核对版本交结算意图时信封被框架确定性拒收 → 整笔硬失败、
+// 整笔回滚——CC 既不留 v2 的版本行也不留 (a′) 核对行、信封没发、失败码落 dispatch.publish_failed 人动手；没有
+// 「核对行提交、信封没发、无人知道」那个半截（sa-cc/19 评审 Spec ② 点名的缺口）。触发用的是 Subject 超
+// eventing.MaxSubjectLength：ID 已是定长指纹形，Subject / PartitionKey 仍取可读形、引用多长归实例半边，本格同时
+// 证这一格今天确实还到得了、且到了是响亮的。同一条超长范围在人重核路上仍按 05 的形折成续办引用（裁决 3 不动），
+// 前置那一步顺手把它断出来。
+func TestARederivedVerificationWhoseEnvelopeIsRejectedRollsBackLoudlyInsteadOfCommittingHalf(t *testing.T) {
+	beat, db, store := wiredBeat(t)
+	facts, err := sapostgres.NewExternalFundsFacts(db)
+	if err != nil {
+		t.Fatalf("SA 资金事实库：%v", err)
+	}
+	original, err := sadomain.AdoptExternalFundsFact(sadomain.ExternalFundsFactSpec{
+		Fact:        saTestValue(t, sadomain.NewFundsFactReference, "bank-fact-3"),
+		Source:      saTestValue(t, sadomain.NewFundsSourceRegistrationReference, "source-bank-feed-1"),
+		Payer:       saTestValue(t, sadomain.NewFundsPayerReference, "payer-customer-7"),
+		Kind:        sadomain.FundsReceiptConfirmed,
+		Currency:    saTestValue(t, sadomain.NewCurrencyCode, "USD"),
+		AmountMinor: 8000,
+		Version:     saTestValue(t, sadomain.NewFundsFactVersion, "bank-fact-3/v1"),
+		OccurredAt:  beatInstant().Add(-time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("SA 原版事实：%v", err)
+	}
+	corrected, err := original.CorrectAmount(9000, saTestValue(t, sadomain.NewFundsFactVersion, "bank-fact-3/v2"), beatInstant())
+	if err != nil {
+		t.Fatalf("SA 更正版本：%v", err)
+	}
+	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		key := saports.FundsFactKey{TenantID: saTestValue(t, sadomain.NewTenantID, "tenant-a"), Fact: original.Fact()}
+		if _, err := facts.Save(txCtx, saports.FundsFactRecord{
+			Key: key, ContentDigest: "digest-bank-fact-3-v1", Fact: original, RecordedAt: beatInstant().Add(-time.Hour),
+		}); err != nil {
+			return err
+		}
+		_, err := facts.Save(txCtx, saports.FundsFactRecord{
+			Key: key, ContentDigest: "digest-bank-fact-3-v2", Fact: corrected, RecordedAt: beatInstant(),
+		})
+		return err
+	}); err != nil {
+		t.Fatalf("写 SA 的 v1 与更正版本 v2：%v", err)
+	}
+	enqueueForBeat(t, db, store, "funds-fact-long-1", ccinbox.ExternalFundsFactAdoptedEventType,
+		`{"tenantId":"tenant-a","fact":"bank-fact-3","version":"bank-fact-3/v1"}`)
+	if published, err := beat.DispatchOnce(t.Context()); err != nil || published != 1 {
+		t.Fatalf("v1 到 CC：published = %d err = %v, want 1", published, err)
+	}
+
+	register, err := ccpostgres.NewDutyPaymentReconciliation(db)
+	if err != nil {
+		t.Fatalf("CC 登记册：%v", err)
+	}
+	verificationHandoff, err := ccpostgres.NewOutboxDutyPaymentVerificationHandoff(db, store, systemClock{})
+	if err != nil {
+		t.Fatalf("CC 核对交接：%v", err)
+	}
+	reconciliation, err := ccapplication.NewDutyPaymentReconciliationHandler(ccapplication.DutyPaymentReconciliationDeps{
+		Collaborations: register, Funds: register, Verifications: register, PayerRules: register,
+		Handoff: verificationHandoff, Clock: systemClock{},
+	})
+	if err != nil {
+		t.Fatalf("CC 核对编排：%v", err)
+	}
+	tenant := saTestValue(t, ccdomain.NewTenantID, "tenant-a")
+	fact := saTestValue(t, ccdomain.NewExternalFundsFactReference, "bank-fact-3")
+	lineageDuty := saTestValue(t, ccdomain.NewAssessedDutyReference, "SYN-DUTY-LONG/v1")
+	// 范围引用长到 Subject（范围 / 税费）必然超过 eventing.MaxSubjectLength——合成串，不假定任何租户的引用多长。
+	lineageScope := saTestValue(t, ccdomain.NewDecisionScopeReference, "SYN-UNIT-LONG-"+strings.Repeat("x", eventing.MaxSubjectLength))
+	lineageProcedure := saTestValue(t, ccdomain.NewCustomsProcedureReference, "SYN-PROC-RD")
+	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		collaboration, err := ccdomain.FormDutyCollaboration(ccdomain.DutyCollaborationSpec{
+			Kind:        ccdomain.ObligationFromAssessedDuty,
+			Duty:        lineageDuty,
+			Scope:       lineageScope,
+			Obligor:     saTestValue(t, ccdomain.NewLegalObligorReference, "SYN-OBLIGOR-RD"),
+			Requirement: saTestValue(t, ccdomain.NewPaymentRequirementSource, "SYN-ASSESSMENT-RD"),
+			Target:      saTestValue(t, ccdomain.NewResponsibilityTargetReference, "SYN-DUTY-DESK"),
+			FormedAt:    beatInstant(),
+		})
+		if err != nil {
+			return err
+		}
+		if _, err := register.SaveCollaboration(txCtx, tenant, collaboration); err != nil {
+			return err
+		}
+		if _, err := register.RegisterPayerRequirement(txCtx, tenant, lineageProcedure, ccdomain.PayerRequired); err != nil {
+			return err
+		}
+		result, err := reconciliation.VerifyPayment(txCtx, ccapplication.VerifyDutyPaymentCommand{
+			TenantID:     tenant,
+			Duty:         lineageDuty,
+			Funds:        fact,
+			FundsVersion: saTestValue(t, ccdomain.NewFundsFactVersion, "bank-fact-3/v1"),
+			Scope:        lineageScope,
+			Procedure:    lineageProcedure,
+			Coverage:     ccdomain.CoverageFull,
+			Delta:        ccdomain.DeltaNone,
+			Validity:     ccdomain.FundsFactValid,
+			Basis:        "SYN-RULE-RD: assessment reference quoted on the remittance",
+		})
+		if err != nil {
+			return err
+		}
+		// 人重核路：05 的兜底原样——核对形成、信封被拒折成续办引用、原始错误随结果可见（裁决 3 不动这一格）。
+		if result.Outcome() != ccapplication.DutyVerificationFormed || result.HandoffReference() == "" ||
+			!errors.Is(result.HandoffError(), ccports.ErrHandoffEnvelopeRejected) {
+			return fmt.Errorf("人重核路按 v1 核对 outcome = %s 续办 %q err = %v，want 形成 + 续办引用 + 信封被拒",
+				result.Outcome(), result.HandoffReference(), result.HandoffError())
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("CC 侧按 v1 形成核对：%v", err)
+	}
+
+	enqueueForBeat(t, db, store, "funds-fact-long-2", ccinbox.ExternalFundsFactAdoptedEventType,
+		`{"tenantId":"tenant-a","fact":"bank-fact-3","version":"bank-fact-3/v2","corrects":"bank-fact-3/v1"}`)
+	published, err := beat.DispatchOnce(t.Context())
+	if err != nil {
+		t.Fatalf("v2 那一拍：%v", err)
+	}
+	if published != 0 {
+		t.Fatalf("v2 到达该整笔硬失败：published = %d, want 0", published)
+	}
+	if got := recordedFailureCode(t, db, "funds-fact-long-2"); got != "dispatch.publish_failed" {
+		t.Fatalf("信封被确定性拒收该落硬失败码：failure_code = %q, want dispatch.publish_failed", got)
+	}
+	versions, err := register.ListFundsFactVersions(t.Context(), tenant, fact)
+	if err != nil || len(versions) != 1 {
+		t.Fatalf("整笔回滚后 CC 只该有 v1 的版本行：err=%v n=%d", err, len(versions))
+	}
+	lineage, err := register.ListVerificationsByFundsFact(t.Context(), tenant, fact)
+	if err != nil || len(lineage) != 1 || lineage[0].Verification.Delta() != ccdomain.DeltaNone {
+		t.Fatalf("整笔回滚后不得留下 (a′) 核对行：err=%v n=%d", err, len(lineage))
+	}
+}
+
+// Covers: 票 sa-cc/29 完成判据 (2) 的集合半边——重派路上信封被确定性拒收的硬失败哨兵**不在**这条线的未决名单里，
+// 与两只未决哨兵也互不 errors.Is。名单取 externalFundsFactUndecidedSentinels 本身：测试里重列一份会让误登记的哨兵在
+// 测试里也一起消失。
+func TestARejectedDutyVerificationHandoffIsNotRegisteredAsUndecided(t *testing.T) {
+	for _, sentinel := range externalFundsFactUndecidedSentinels {
+		if errors.Is(sentinel, ccsettlement.ErrDutyVerificationHandoffRejected) ||
+			errors.Is(ccsettlement.ErrDutyVerificationHandoffRejected, sentinel) {
+			t.Fatalf("硬失败哨兵被登成了未决：%v——重投同一份永远同一个结果，登进名单只会以未决之名耗尽失败预算", sentinel)
+		}
+	}
+	undecided := fmt.Errorf("%w: %w", ccsettlement.ErrDutyVerificationRederivationUndecided, errors.New("outbox down"))
+	registered := false
+	for _, sentinel := range externalFundsFactUndecidedSentinels {
+		registered = registered || errors.Is(undecided, sentinel)
+	}
+	if !registered {
+		t.Fatal("重派未决哨兵该仍在名单里——本格只把硬失败拦在外面，不动未决那一半")
 	}
 }
 

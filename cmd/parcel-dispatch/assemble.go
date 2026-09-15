@@ -493,11 +493,13 @@ var carrierFirstEffectivePickupJudgmentUndecidedSentinels = append(
 
 // externalFundsFactUndecidedSentinels 是 SA 资金事实采用信封 → CC 入向登记这条线（sa-cc/03）登记的未决
 // 哨兵：信封所指那一版在提供方还看不见（可见性滞后）、登记编排停在登记册不可用、新版本落册后接着形成新核对
-// 版本的编排停在哪一口不可用（sa-cc/19；与接收同一事务，重投从接收重来）。编排的 `未受理` 与 `内容冲突`
-// 不在名单里——它们是编排给出的答案、入账不重投（ReceiveOnAdoptedFundsFactAdapter 头注）；重派里某条谱系的业务
-// 未决（程序要求付款人而新版本没给）同理是答案、不在名单里；ccsettlement.ErrAdoptedFactVersionInconsistent 也不在
-// ——按信封所指版本回查却交回别版本体，是提供方视图答非所问的装配 / 视图缺陷，重投不自愈，保持 publish_failed
-// （与 pstf.ErrCarrierPickupRecordInconsistent 同一条理由）。
+// 版本的编排停在哪一口不可用（sa-cc/19；与接收同一事务，重投从接收重来；自 sa-cc/29 起含交结算意图时 Outbox
+// 存储不可用）。编排的 `未受理` 与 `内容冲突` 不在名单里——它们是编排给出的答案、入账不重投
+// （ReceiveOnAdoptedFundsFactAdapter 头注）；重派里某条谱系的业务未决（程序要求付款人而新版本没给）同理是答案、
+// 不在名单里；ccsettlement.ErrAdoptedFactVersionInconsistent 也不在——按信封所指版本回查却交回别版本体，是提供方
+// 视图答非所问的装配 / 视图缺陷，重投不自愈，保持 publish_failed（与 pstf.ErrCarrierPickupRecordInconsistent 同一条
+// 理由）；ccsettlement.ErrDutyVerificationHandoffRejected 同样不在——重派形成的新核对版本交结算意图时信封被框架
+// 确定性校验拒收，重投同一份永远同一个结果，登进名单只会以未决之名耗尽失败预算（sa-cc/29 裁决 2 (b)）。
 var externalFundsFactUndecidedSentinels = []error{
 	ccsettlement.ErrAdoptedFactNotVisible,
 	ccsettlement.ErrFundsFactReceiveUndecided,
