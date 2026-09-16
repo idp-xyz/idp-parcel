@@ -1,15 +1,12 @@
-import { useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
-import { RegistrationAnswerNote, type RegistrationPanelState } from '../../components/registration';
-import { currentDisplayTimeZone } from '../moment';
+import { RegistrationAnswerNote } from '../../components/registration';
 import {
   commercialRegistrationEndpoints,
   listBusinessParties,
   listCustomerAccounts,
   listGroupLegalEntities,
   partyIdentityOutcomeLabels,
-  registerCommercial,
   type BusinessPartyListResponseBody,
   type BusinessPartyRecord,
   type CustomerAccountListResponseBody,
@@ -24,6 +21,7 @@ import {
   businessPartyPickerOptions,
   customerAccountPickerOptions,
   legalEntityPickerOptions,
+  useRegistrationForm,
 } from './party-registration-fields';
 import {
   deactivationTargetsOf,
@@ -33,12 +31,13 @@ import {
   identityKindOptions,
   suggestedDeactivationRevision,
   type IdentityDeactivationDraft,
+  type IdentityRegisters,
 } from './identity-deactivation-form';
 
 /**
  * 身份停用的逐字段表单（票 admin-web-group-legal-entities/10 第 3 条）。停用口一个命令带种类，法人与客户账户的停用
  * 也走本签（页面上登记签那段头注说明为什么它摆在本页）；结果分别显示在集团与法人页、客户与合同页的
- * 「客户账户」签，本页读得见的是参与方身份那一册。
+ * 「客户账户」签，本页读得见的是参与方身份那一册。壳在 useRegistrationForm，这里只摆本册的格。
  *
  * **本组件不算摘要、不裁任何门、不判领域规则**（伞票 admin-write-faces/07 硬句）：身份在不在册、已否停用、修订是否
  * 错位，一律送上去让服务端答；本地只拦编码层（修订号、停用时刻），纯函数在 identity-deactivation-form.ts。
@@ -67,41 +66,29 @@ const pickerNotes = {
 } as const;
 
 export function IdentityDeactivationForm({ knownParties, partiesVersion, onDeactivated }: IdentityDeactivationFormProps) {
-  const [draft, setDraft] = useState<IdentityDeactivationDraft>(emptyIdentityDeactivationDraft());
-  const [revisionEdited, setRevisionEdited] = useState(false);
-  const [state, setState] = useState<RegistrationPanelState>({ kind: 'idle' });
   const legalEntities = useLoaded(listGroupLegalEntities);
   const accounts = useLoaded(listCustomerAccounts);
-
-  const timeZone = currentDisplayTimeZone();
-  const targets = deactivationTargetsOf(draft.kind, {
+  const registers: IdentityRegisters = {
     parties: knownParties,
     legalEntities: legalEntities?.kind === 'outcome' ? legalEntities.body.entities : null,
     accounts: accounts?.kind === 'outcome' ? accounts.body.accounts : null,
-  });
-  const suggestion = suggestedDeactivationRevision(targets, draft.id);
-  const effectiveDraft: IdentityDeactivationDraft = revisionEdited ? draft : { ...draft, revision: String(suggestion) };
-  const problems = identityDeactivationLocalProblems(effectiveDraft, timeZone);
-  const locked = state.kind === 'submitting';
-  const patch = (change: Partial<IdentityDeactivationDraft>) => setDraft((current) => ({ ...current, ...change }));
-
-  // 答 `DEACTIVATED`（PartyRegistryOutcome 里 PartyIdentityDeactivated 的线上名）才重取；`册上没有这一个身份`与
-  // 修订错位都没写进去。JSON 镜像那条路上分不出种类（快照是未译的 JSON），一律重取参与方列表：多取一次是一个 GET，
-  // 为分种类去解一份 unknown 不值。
-  const submit = (snapshot: unknown) =>
-    registerCommercial(kind, snapshot).then((answer) => {
-      if (answer.kind === 'outcome' && answer.body.outcome === 'DEACTIVATED') onDeactivated();
-      return answer;
-    });
-
-  const send = () => {
-    if (Object.keys(problems).length > 0) return;
-    setState({ kind: 'submitting' });
-    void submit(identityDeactivationPayloadOf(effectiveDraft, timeZone)).then((answer) =>
-      setState({ kind: 'answered', answer }),
-    );
   };
 
+  const form = useRegistrationForm<IdentityDeactivationDraft>({
+    kind,
+    empty: emptyIdentityDeactivationDraft,
+    suggestion: (draft) => suggestedDeactivationRevision(deactivationTargetsOf(draft.kind, registers), draft.id),
+    localProblems: identityDeactivationLocalProblems,
+    payloadOf: identityDeactivationPayloadOf,
+    // 答 `DEACTIVATED`（PartyRegistryOutcome 里 PartyIdentityDeactivated 的线上名）才重取；`册上没有这一个身份`与
+    // 修订错位都没写进去。JSON 镜像那条路上分不出种类（快照是未译的 JSON），一律重取参与方列表：多取一次是一个 GET，
+    // 为分种类去解一份 unknown 不值。
+    landedOutcome: 'DEACTIVATED',
+    onLanded: () => onDeactivated(),
+  });
+  const { draft, patch, problems, locked, timeZone } = form;
+
+  const targets = deactivationTargetsOf(draft.kind, registers);
   const known = targets?.find((row) => row.id === draft.id);
   const pickerProps = {
     label: '身份标识 *',
@@ -186,15 +173,7 @@ export function IdentityDeactivationForm({ knownParties, partiesVersion, onDeact
             <RevisionField
               path="deactivations[0].revision"
               problems={problems}
-              value={effectiveDraft.revision}
-              suggestion={suggestion}
-              edited={revisionEdited}
-              locked={locked}
-              onChange={(revision) => {
-                setRevisionEdited(true);
-                patch({ revision });
-              }}
-              onUseSuggestion={() => setRevisionEdited(false)}
+              {...form.revisionField}
               note={
                 known
                   ? `对应册里该身份最新修订 r${known.revision}，建议停用落点 r${known.revision + 1}；册面可能已陈旧，错位由服务端判。`
@@ -224,11 +203,11 @@ export function IdentityDeactivationForm({ knownParties, partiesVersion, onDeact
           </div>
 
           <div className="flex items-start gap-3">
-            <Button onClick={send} disabled={locked || Object.keys(problems).length > 0}>
+            <Button onClick={form.send} disabled={locked || !form.canSend}>
               {locked ? '提交中…' : '提交停用'}
             </Button>
             <RegistrationAnswerNote
-              state={state}
+              state={form.state}
               owner={info.owner}
               outcomeLabels={partyIdentityOutcomeLabels}
               problemNote={problemNote}
@@ -237,7 +216,7 @@ export function IdentityDeactivationForm({ knownParties, partiesVersion, onDeact
         </CardContent>
       </Card>
 
-      <SnapshotJsonDetails kind={kind} submit={submit} />
+      <SnapshotJsonDetails kind={kind} submit={form.submit} />
     </div>
   );
 }
