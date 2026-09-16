@@ -10,7 +10,6 @@ import {
   TabsContent,
   Timeline,
 } from '@idpxyz/ui-primitives';
-import { useToast } from '@idpxyz/ui-theme-runtime';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { StatusBadgeFor, domainStatusTones, type DomainStatus } from '../../domain/status';
@@ -26,6 +25,7 @@ import {
 import { identityStatusLabels, labelOf, legalEntityKindLabels, problemNote } from './presentation';
 import { LegalEntityRegistrationForm } from './LegalEntityRegistrationForm';
 import { legalEntityRevisionTimeline, revisionHistoryNote } from './legal-entity-revisions';
+import { DetailRow, Instant, filterSelectClass, useCopyToClipboard } from './detail-primitives';
 import {
   filterLegalEntities,
   legalEntityCountSummary,
@@ -40,17 +40,7 @@ import {
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['group-legal-entities'];
 
-/**
- * 时刻格：显本地墙钟带显式偏移（moment.ts 按装配点配置的区算），原 ISO 串放进 dateTime 与 title——
- * 跨 CN/SG 两地对同一事件时悬停给的是线格式那一份，两边比对不必各自换算（票 01 裁决 3）。
- */
-function Instant({ value }: { value: string }) {
-  return (
-    <time dateTime={value} title={value}>
-      {formatInstant(value)}
-    </time>
-  );
-}
+// 时刻格 Instant、过滤条下拉样式、复制与抽屉行自票 09 起住在 detail-primitives.tsx，与业务参与方页共用一份。
 
 // 身份状态词表词按共享词表着色；词表没收录的码（服务端新增一格时）原样示码、不猜色调——
 // 归进某个既有中文说法会让一种新答案冒充另一种。断言只桥接类型边界，词同源于 CONTEXT 原词。
@@ -127,57 +117,6 @@ const columns: ListColumn<GroupLegalEntityRecord>[] = [
     render: (row) => <Instant value={row.registeredAt} />,
   },
 ];
-
-// 过滤条里的下拉比表单里的格矮一号（py-1 / 12px），与同栏的搜索框齐高；表单那份 selectClass 不借来用。
-const filterSelectClass =
-  'rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1 text-[12px] ' +
-  'text-idpxyz-text focus:outline-none focus:border-idpxyz-accent';
-
-/** 复制到剪贴板，成败都以 toast 反馈；不支持 clipboard 的上下文（非 https）如实说，不静默。 */
-function useCopyToClipboard() {
-  const { addToast } = useToast();
-  return (label: string, value: string) => {
-    if (typeof navigator === 'undefined' || !navigator.clipboard) {
-      addToast({ type: 'warning', title: '无法复制', message: '当前页面上下文不支持剪贴板（需 https 或 localhost）。' });
-      return;
-    }
-    void navigator.clipboard.writeText(value).then(
-      () => addToast({ type: 'success', title: '已复制', message: `${label}：${value}` }),
-      (error: unknown) =>
-        addToast({
-          type: 'error',
-          title: '复制失败',
-          message: error instanceof Error ? error.message : String(error),
-        }),
-    );
-  };
-}
-
-function DetailRow({
-  label,
-  children,
-  mono = false,
-  onCopy,
-}: {
-  label: string;
-  children: ReactNode;
-  mono?: boolean;
-  onCopy?: () => void;
-}) {
-  return (
-    <div className="flex flex-col gap-0.5 py-2 border-b border-idpxyz-border last:border-b-0">
-      <dt className="text-[11px] text-idpxyz-textMuted">{label}</dt>
-      <dd className={`flex items-start justify-between gap-2 text-[13px] text-idpxyz-text ${mono ? 'font-mono' : ''}`}>
-        <span className="break-all">{children}</span>
-        {onCopy ? (
-          <Button variant="ghost" size="sm" className="shrink-0" onClick={onCopy}>
-            复制
-          </Button>
-        ) : null}
-      </dd>
-    </div>
-  );
-}
 
 /**
  * 抽屉「修订历史」区（票 03 第 5 条）：按法人取整条修订链，纵向时间线；判读在 legal-entity-revisions.ts，

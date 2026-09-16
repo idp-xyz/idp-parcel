@@ -1,10 +1,19 @@
-import { useEffect, useState } from 'react';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
+import { useEffect, useState, type ReactNode } from 'react';
+import {
+  Drawer,
+  DrawerBody,
+  DrawerHeader,
+  Tabs,
+  TabsList,
+  TabsTrigger,
+  TabsContent,
+} from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { MultiRegistrationPanel, type RegistrationTarget } from '../../components/registration';
+import { StatusBadgeFor, domainStatusTones, type DomainStatus } from '../../domain/status';
 import type { ApiResult } from '../catalogue-api';
-import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
+import { catalogueViewState } from '../catalogue-view';
 import {
   commercialRegistrationEndpoints,
   listBusinessParties,
@@ -25,9 +34,41 @@ import {
   registrationTitles,
   relationshipStatusLabels,
 } from './presentation';
+import { DetailRow, Instant, InstantRange, filterSelectClass, useCopyToClipboard } from './detail-primitives';
+import {
+  businessPartyCountSummary,
+  businessPartyNoMatchNote,
+  businessPartySortOptions,
+  businessPartyStatusFilterOptions,
+  filterBusinessParties,
+  sortBusinessParties,
+  type BusinessPartySortKey,
+  type BusinessPartyStatusFilter,
+} from './business-party-list';
+import {
+  filterPartyRelationships,
+  partyRelationshipCountSummary,
+  partyRelationshipNoMatchNote,
+  partyRelationshipRoleFilterOptions,
+  partyRelationshipSortOptions,
+  partyRelationshipStatusFilterOptions,
+  sortPartyRelationships,
+  type PartyRelationshipRoleFilter,
+  type PartyRelationshipSortKey,
+  type PartyRelationshipStatusFilter,
+} from './party-relationship-list';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['business-parties'];
+
+// 词表词按共享词表着色；词表没收录的码（服务端新增一格时）原样示码、不猜色调——归进某个既有中文说法会让
+// 一种新答案冒充另一种。身份三词与关系五词各取各的词表（两册状态代数不同，见页组件头注），色调同源于 domain/status。
+function statusBadge(table: Record<string, string>, code: string): ReactNode {
+  const word = labelOf(table, code);
+  return word in domainStatusTones ? <StatusBadgeFor status={word as DomainStatus} /> : word;
+}
+
+const unknownName = <span className="text-idpxyz-textMuted">参与方册查无此身份</span>;
 
 // 参与方格：标识必列，名称从参与方册转写；nameKnown 为假是写入门失败才会出现的
 // 悬空引用，如实标出，不补占位文本。
@@ -89,7 +130,7 @@ const columns: ListColumn<PartyRelationshipRecord>[] = [
     id: 'validity',
     header: '有效区间',
     className: 'min-w-64 font-mono text-xs',
-    render: (row) => formatRange(row.effectiveStartsAt, row.effectiveEndsAt),
+    render: (row) => <InstantRange from={row.effectiveStartsAt} to={row.effectiveEndsAt} />,
   },
   {
     id: 'status',
@@ -98,26 +139,23 @@ const columns: ListColumn<PartyRelationshipRecord>[] = [
     // 撤销/替代的时点、依据与后继是这格状态的内容：撤销或到期只影响生效边界后
     // 的新决定，看这格的人需要知道边界在哪、依据是什么、被谁替代。
     render: (row) => (
-      <div>
-        <p>{labelOf(relationshipStatusLabels, row.status)}</p>
+      <div className="flex flex-col items-center gap-0.5">
+        {statusBadge(relationshipStatusLabels, row.status)}
         {row.endedAt ? (
-          <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">
-            自 {formatInstant(row.endedAt)}
+          <p className="font-mono text-xs text-idpxyz-textMuted">
+            自 <Instant value={row.endedAt} />
           </p>
         ) : null}
-        {row.endBasis ? (
-          <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">{row.endBasis}</p>
-        ) : null}
-        {row.successorId ? (
-          <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">→ {row.successorId}</p>
-        ) : null}
+        {row.endBasis ? <p className="font-mono text-xs text-idpxyz-textMuted">{row.endBasis}</p> : null}
+        {row.successorId ? <p className="font-mono text-xs text-idpxyz-textMuted">→ {row.successorId}</p> : null}
       </div>
     ),
   },
 ];
 
 // 身份本体册的列。停用两件（时点 + 依据）与状态同格呈现：看这格的人要知道自何时起
-// 停用、依据是什么；只显示一个「已停用」说不出这两样。
+// 停用、依据是什么；只显示一个「已停用」说不出这两样。登记时间上列是因为默认排序按它排（裁决 1）——
+// 排的键看不见，操作者判不出「为什么这一条在最上面」。
 const identityColumns: ListColumn<BusinessPartyRecord>[] = [
   {
     id: 'party',
@@ -131,6 +169,24 @@ const identityColumns: ListColumn<BusinessPartyRecord>[] = [
   },
   { id: 'name', header: '名称', render: (row) => row.partyName },
   {
+    id: 'status',
+    header: '状态',
+    align: 'center',
+    render: (row) => (
+      <div className="flex flex-col items-center gap-0.5">
+        {statusBadge(identityStatusLabels, row.status)}
+        {row.deactivatedAt ? (
+          <p className="font-mono text-xs text-idpxyz-textMuted">
+            自 <Instant value={row.deactivatedAt} />
+          </p>
+        ) : null}
+        {row.deactivationBasis ? (
+          <p className="font-mono text-xs text-idpxyz-textMuted">{row.deactivationBasis}</p>
+        ) : null}
+      </div>
+    ),
+  },
+  {
     id: 'basis',
     header: '依据',
     className: 'font-mono text-xs',
@@ -139,28 +195,143 @@ const identityColumns: ListColumn<BusinessPartyRecord>[] = [
   {
     id: 'effective-from',
     header: '生效时点',
-    className: 'font-mono text-xs',
-    render: (row) => formatInstant(row.effectiveFrom),
+    className: 'min-w-44 font-mono text-xs',
+    render: (row) => <Instant value={row.effectiveFrom} />,
   },
   {
-    id: 'status',
-    header: '状态',
-    align: 'center',
-    render: (row) => (
-      <div>
-        <p>{labelOf(identityStatusLabels, row.status)}</p>
-        {row.deactivatedAt ? (
-          <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">
-            自 {formatInstant(row.deactivatedAt)}
-          </p>
-        ) : null}
-        {row.deactivationBasis ? (
-          <p className="mt-0.5 font-mono text-xs text-idpxyz-textMuted">{row.deactivationBasis}</p>
-        ) : null}
-      </div>
-    ),
+    id: 'registered-at',
+    header: '登记时间',
+    className: 'min-w-44 font-mono text-xs',
+    render: (row) => <Instant value={row.registeredAt} />,
   },
 ];
+
+/**
+ * 身份行详情抽屉（票 09 第 4 条）：列全字段，含表上没有的租户。「修订历史」区今天如实写读口尚未建立——参与方身份
+ * 没有法人那样的修订读口（票 03 只建了法人的），建口归票 12；这里不拿列表行的当前修订冒充一段历史。
+ */
+function BusinessPartyDrawer({ row, onClose }: { row: BusinessPartyRecord | null; onClose: () => void }) {
+  const copy = useCopyToClipboard();
+  return (
+    <Drawer open={row !== null} onOpenChange={(open) => (open ? undefined : onClose())} aria-label="参与方身份详情">
+      {row ? (
+        <>
+          <DrawerHeader>
+            <div className="flex items-center gap-2">
+              <span className="font-mono font-medium text-idpxyz-text">{row.partyId}</span>
+              <span className="font-mono text-xs text-idpxyz-textMuted">r{row.revision}</span>
+              {statusBadge(identityStatusLabels, row.status)}
+            </div>
+          </DrawerHeader>
+          <DrawerBody>
+            <dl>
+              <DetailRow label="参与方标识" mono onCopy={() => copy('参与方标识', row.partyId)}>
+                {row.partyId}
+              </DetailRow>
+              <DetailRow label="修订" mono>
+                r{row.revision}
+              </DetailRow>
+              <DetailRow label="名称">{row.partyName}</DetailRow>
+              <DetailRow label="状态">{statusBadge(identityStatusLabels, row.status)}</DetailRow>
+              <DetailRow label="依据" mono onCopy={() => copy('依据', row.basis)}>
+                {row.basis}
+              </DetailRow>
+              <DetailRow label="生效时点" mono>
+                <Instant value={row.effectiveFrom} />
+              </DetailRow>
+              <DetailRow label="停用时点" mono>
+                {row.deactivatedAt ? <Instant value={row.deactivatedAt} /> : <span className="text-idpxyz-textMuted">未停用</span>}
+              </DetailRow>
+              <DetailRow label="停用依据" mono>
+                {row.deactivationBasis ?? <span className="text-idpxyz-textMuted">—</span>}
+              </DetailRow>
+              <DetailRow label="登记时间" mono>
+                <Instant value={row.registeredAt} />
+              </DetailRow>
+              <DetailRow label="租户" mono>
+                {row.tenantId}
+              </DetailRow>
+            </dl>
+            <section className="mt-4">
+              <h3 className="text-[12px] font-medium text-idpxyz-text">修订历史</h3>
+              <p className="mt-1 text-[12px] text-idpxyz-textMuted">
+                读口尚未建立：参与方身份今天没有按标识取整条修订链的读面（法人的那一口是票 03 建的，只覆盖法人册），
+                建口归票 admin-web-group-legal-entities/12。这里不拿当前修订 r{row.revision} 冒充历史。
+              </p>
+            </section>
+          </DrawerBody>
+        </>
+      ) : null}
+    </Drawer>
+  );
+}
+
+/**
+ * 关系行详情抽屉（票 09 第 4 条）：列全字段。撤销 / 到期 / 替代的时点、依据、后继各占一格——它们是「边界之后的新决定
+ * 不再依据这段关系」的内容，不折进状态词里。
+ */
+function PartyRelationshipDrawer({ row, onClose }: { row: PartyRelationshipRecord | null; onClose: () => void }) {
+  const copy = useCopyToClipboard();
+  return (
+    <Drawer open={row !== null} onOpenChange={(open) => (open ? undefined : onClose())} aria-label="参与方关系详情">
+      {row ? (
+        <>
+          <DrawerHeader>
+            <div className="flex items-center gap-2">
+              <span className="font-mono font-medium text-idpxyz-text">{row.relationshipId}</span>
+              <span className="font-mono text-xs text-idpxyz-textMuted">r{row.revision}</span>
+              {statusBadge(relationshipStatusLabels, row.status)}
+            </div>
+          </DrawerHeader>
+          <DrawerBody>
+            <dl>
+              <DetailRow label="关系标识" mono onCopy={() => copy('关系标识', row.relationshipId)}>
+                {row.relationshipId}
+              </DetailRow>
+              <DetailRow label="修订" mono>
+                r{row.revision}
+              </DetailRow>
+              <DetailRow label="持有方" mono onCopy={() => copy('持有方', row.holderId)}>
+                {row.holderId}
+              </DetailRow>
+              <DetailRow label="持有方名称">{row.holderNameKnown ? row.holderName : unknownName}</DetailRow>
+              <DetailRow label="相对方" mono onCopy={() => copy('相对方', row.counterpartyId)}>
+                {row.counterpartyId}
+              </DetailRow>
+              <DetailRow label="相对方名称">{row.counterpartyNameKnown ? row.counterpartyName : unknownName}</DetailRow>
+              <DetailRow label="角色">{labelOf(partyRoleLabels, row.role)}</DetailRow>
+              <DetailRow label="适用范围" mono>
+                {row.scope}
+              </DetailRow>
+              <DetailRow label="依据" mono onCopy={() => copy('依据', row.basis)}>
+                {row.basis}
+              </DetailRow>
+              <DetailRow label="有效区间" mono>
+                <InstantRange from={row.effectiveStartsAt} to={row.effectiveEndsAt} />
+              </DetailRow>
+              <DetailRow label="状态">{statusBadge(relationshipStatusLabels, row.status)}</DetailRow>
+              <DetailRow label="终止时点" mono>
+                {row.endedAt ? <Instant value={row.endedAt} /> : <span className="text-idpxyz-textMuted">未终止</span>}
+              </DetailRow>
+              <DetailRow label="终止依据" mono>
+                {row.endBasis ?? <span className="text-idpxyz-textMuted">—</span>}
+              </DetailRow>
+              <DetailRow label="后继" mono>
+                {row.successorId ?? <span className="text-idpxyz-textMuted">—</span>}
+              </DetailRow>
+              <DetailRow label="登记时间" mono>
+                <Instant value={row.registeredAt} />
+              </DetailRow>
+              <DetailRow label="租户" mono>
+                {row.tenantId}
+              </DetailRow>
+            </dl>
+          </DrawerBody>
+        </>
+      ) : null}
+    </Drawer>
+  );
+}
 
 /**
  * 参与方身份本体册。它与关系册同页分签，而不是并进关系表：一个参与方既可以不是法人、
@@ -169,6 +340,9 @@ const identityColumns: ListColumn<BusinessPartyRecord>[] = [
  */
 function BusinessPartyIdentitiesTable() {
   const [search, setSearch] = useState('');
+  const [status, setStatus] = useState<BusinessPartyStatusFilter>('ALL');
+  const [sort, setSort] = useState<BusinessPartySortKey>('registered-desc');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<BusinessPartyListResponseBody> | null>(null);
 
@@ -184,39 +358,70 @@ function BusinessPartyIdentitiesTable() {
   }, [reloadKey]);
 
   const parties = answer?.kind === 'outcome' ? answer.body.parties : [];
-  const needle = search.trim().toLowerCase();
-  const visibleParties = needle
-    ? parties.filter((row) =>
-        [row.partyId, row.partyName, row.status].some((value) =>
-          value.toLowerCase().includes(needle),
-        ),
-      )
-    : parties;
+  // 筛选与排序只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约（归票 04）。
+  const visibleParties = sortBusinessParties(filterBusinessParties(parties, { search, status }), sort);
+  // 抽屉按标识重找行而不是存整行：列表重取后行内容以新答案为准，行没了抽屉随之关。
+  const selected = selectedId === null ? null : parties.find((row) => row.partyId === selectedId) ?? null;
   const retry = () => setReloadKey((value) => value + 1);
 
   return (
-    <ListPageTemplate<BusinessPartyRecord>
-      title={info.title}
-      description={`${info.owner}——行对象是角色中立的参与方身份本体的最新登记修订，状态按装载时点导出`}
-      search={{
-        value: search,
-        onChange: setSearch,
-        placeholder: '搜索参与方标识、名称或状态',
-      }}
-      filterSummary={
-        answer?.kind === 'outcome' ? `当前返回 ${parties.length} 个参与方身份` : undefined
-      }
-      columns={identityColumns}
-      rows={visibleParties}
-      rowKey={(row) => row.partyId}
-      viewState={catalogueViewState(answer, parties.length, retry, {
-        module: info,
-        endpoint: 'GET /commercial-business-parties',
-        emptyTitle: '当前租户尚无参与方身份登记',
-        emptyDescription:
-          '读取入口已配置，但登记册为空；页面不会预置参与方。登记可走本页「登记」签，或受控 CLI parcel-commercial register-parties。',
-      })}
-    />
+    <>
+      <ListPageTemplate<BusinessPartyRecord>
+        title={info.title}
+        description="业务参与方是与本网络发生商业往来的对象——货主、承运商、代理、转售商；一个参与方可以同时是法人，也可以不在任何关系里。每次登记形成新修订，历史不可覆盖"
+        search={{
+          value: search,
+          onChange: setSearch,
+          placeholder: '搜索参与方标识、名称或状态',
+        }}
+        filters={
+          <>
+            <select
+              className={filterSelectClass}
+              value={status}
+              aria-label="状态"
+              onChange={(event) => setStatus(event.target.value as BusinessPartyStatusFilter)}
+            >
+              {businessPartyStatusFilterOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <select
+              className={filterSelectClass}
+              value={sort}
+              aria-label="排序"
+              onChange={(event) => setSort(event.target.value as BusinessPartySortKey)}
+            >
+              {businessPartySortOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </>
+        }
+        filterSummary={
+          // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 个」会与状态区「这不是目录为空」直接矛盾
+          // （README 列表页上列通则第六条）。总数与当前显示数分开报（票 01 裁决 1）。
+          answer?.kind === 'outcome' ? businessPartyCountSummary(parties.length, visibleParties.length) : undefined
+        }
+        columns={identityColumns}
+        rows={visibleParties}
+        rowKey={(row) => row.partyId}
+        onRowClick={(row) => setSelectedId(row.partyId)}
+        // 筛出为空不是空态（票 01 裁决 1）：viewState 按总数判，表格区另显一行。
+        emptyRowsNote={businessPartyNoMatchNote}
+        viewState={catalogueViewState(answer, parties.length, retry, {
+          module: info,
+          endpoint: 'GET /commercial-business-parties',
+          emptyTitle: '当前租户尚无参与方身份登记',
+          emptyDescription: '读取入口已配置，但登记册为空；页面不会预置参与方。在「登记」签登记第一个。',
+        })}
+      />
+      <BusinessPartyDrawer row={selected} onClose={() => setSelectedId(null)} />
+    </>
   );
 }
 
@@ -230,6 +435,10 @@ function BusinessPartyIdentitiesTable() {
  */
 function PartyRelationshipsTable() {
   const [search, setSearch] = useState('');
+  const [role, setRole] = useState<PartyRelationshipRoleFilter>('ALL');
+  const [status, setStatus] = useState<PartyRelationshipStatusFilter>('ALL');
+  const [sort, setSort] = useState<PartyRelationshipSortKey>('effective-start-desc');
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<PartyRelationshipListResponseBody> | null>(null);
 
@@ -245,48 +454,87 @@ function PartyRelationshipsTable() {
   }, [reloadKey]);
 
   const relationships = answer?.kind === 'outcome' ? answer.body.relationships : [];
-  const needle = search.trim().toLowerCase();
-  // 过滤只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约。
-  const visibleRelationships = needle
-    ? relationships.filter((row) =>
-        [
-          row.relationshipId,
-          row.holderId,
-          row.holderName ?? '',
-          row.counterpartyId,
-          row.counterpartyName ?? '',
-          row.role,
-          row.status,
-        ].some((value) => value.toLowerCase().includes(needle)),
-      )
-    : relationships;
+  // 筛选与排序只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约（归票 04）。
+  const visibleRelationships = sortPartyRelationships(
+    filterPartyRelationships(relationships, { search, role, status }),
+    sort,
+  );
+  const selected =
+    selectedId === null ? null : relationships.find((row) => row.relationshipId === selectedId) ?? null;
   const retry = () => setReloadKey((value) => value + 1);
 
   return (
-    <ListPageTemplate<PartyRelationshipRecord>
-      title={info.title}
-      description={`${info.owner}——行对象是参与方关系的最新登记修订，双方名称从参与方册转写`}
-      search={{
-        value: search,
-        onChange: setSearch,
-        placeholder: '搜索关系、参与方或角色',
-      }}
-      filterSummary={
-        // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 段」会与状态区
-        // 「这不是目录为空」直接矛盾（README 列表页上列通则第六条）。
-        answer?.kind === 'outcome' ? `当前返回 ${relationships.length} 段参与方关系` : undefined
-      }
-      columns={columns}
-      rows={visibleRelationships}
-      rowKey={(row) => row.relationshipId}
-      viewState={catalogueViewState(answer, relationships.length, retry, {
-        module: info,
-        endpoint: 'GET /commercial-party-relationships',
-        emptyTitle: '当前租户尚无参与方关系登记',
-        emptyDescription:
-          '读取入口已配置，但登记册为空；页面不会预置参与方或关系。登记可走本页「登记」签，或受控 CLI parcel-commercial register-parties。',
-      })}
-    />
+    <>
+      <ListPageTemplate<PartyRelationshipRecord>
+        title={info.title}
+        description="参与方关系记谁对谁持有什么角色、在什么范围、多久；撤销、到期与替代只影响边界之后的新决定"
+        search={{
+          value: search,
+          onChange: setSearch,
+          placeholder: '搜索关系、参与方或角色',
+        }}
+        filters={
+          <>
+            <select
+              className={filterSelectClass}
+              value={role}
+              aria-label="角色"
+              onChange={(event) => setRole(event.target.value)}
+            >
+              {partyRelationshipRoleFilterOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <select
+              className={filterSelectClass}
+              value={status}
+              aria-label="状态"
+              onChange={(event) => setStatus(event.target.value)}
+            >
+              {partyRelationshipStatusFilterOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+            <select
+              className={filterSelectClass}
+              value={sort}
+              aria-label="排序"
+              onChange={(event) => setSort(event.target.value as PartyRelationshipSortKey)}
+            >
+              {partyRelationshipSortOptions.map((option) => (
+                <option key={option.value} value={option.value}>
+                  {option.label}
+                </option>
+              ))}
+            </select>
+          </>
+        }
+        filterSummary={
+          // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 段」会与状态区
+          // 「这不是目录为空」直接矛盾（README 列表页上列通则第六条）。总数与当前显示数分开报（票 01 裁决 1）。
+          answer?.kind === 'outcome'
+            ? partyRelationshipCountSummary(relationships.length, visibleRelationships.length)
+            : undefined
+        }
+        columns={columns}
+        rows={visibleRelationships}
+        rowKey={(row) => row.relationshipId}
+        onRowClick={(row) => setSelectedId(row.relationshipId)}
+        // 筛出为空不是空态（票 01 裁决 1）：筛「候选关系」筛没了显这一行，不显「0 段」的空态。
+        emptyRowsNote={partyRelationshipNoMatchNote}
+        viewState={catalogueViewState(answer, relationships.length, retry, {
+          module: info,
+          endpoint: 'GET /commercial-party-relationships',
+          emptyTitle: '当前租户尚无参与方关系登记',
+          emptyDescription: '读取入口已配置，但登记册为空；页面不会预置参与方或关系。在「登记」签登记第一个。',
+        })}
+      />
+      <PartyRelationshipDrawer row={selected} onClose={() => setSelectedId(null)} />
+    </>
   );
 }
 
