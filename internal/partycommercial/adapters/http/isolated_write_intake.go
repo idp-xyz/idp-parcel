@@ -30,9 +30,10 @@ type IsolatedPartyIdentityIntake struct {
 
 // 已成笔的口。每放一口在这里多一行断言、多一个方法，装配点多换一行。
 var (
-	_ LegalEntityRegistrationIntake     = (*IsolatedPartyIdentityIntake)(nil)
-	_ BusinessPartyRegistrationIntake   = (*IsolatedPartyIdentityIntake)(nil)
-	_ CustomerAccountRegistrationIntake = (*IsolatedPartyIdentityIntake)(nil)
+	_ LegalEntityRegistrationIntake       = (*IsolatedPartyIdentityIntake)(nil)
+	_ BusinessPartyRegistrationIntake     = (*IsolatedPartyIdentityIntake)(nil)
+	_ CustomerAccountRegistrationIntake   = (*IsolatedPartyIdentityIntake)(nil)
+	_ PartyRelationshipRegistrationIntake = (*IsolatedPartyIdentityIntake)(nil)
 )
 
 // NewIsolatedPartyIdentityIntake 由装配点以显式合成值构造。立不起来的租户在这里拒：装配错误要在启动时暴露，
@@ -51,16 +52,18 @@ func NewIsolatedPartyIdentityIntake(tenant string) (*IsolatedPartyIdentityIntake
 // 登记方读不出这是一条规则而不是一次拼写错误；且日后有人把租户格加回文档结构时，未知字段那道门会静默放开。这一格用
 // json.RawMessage 而不是 *string：`"tenantId": null` 也是自报（键在场），要一并拒。
 type partyIdentityBatchDocument struct {
-	TenantID         json.RawMessage           `json:"tenantId"`
-	BusinessParties  []businessPartyDocument   `json:"businessParties"`
-	LegalEntities    []legalEntityDocument     `json:"legalEntities"`
-	CustomerAccounts []customerAccountDocument `json:"customerAccounts"`
+	TenantID         json.RawMessage             `json:"tenantId"`
+	BusinessParties  []businessPartyDocument     `json:"businessParties"`
+	LegalEntities    []legalEntityDocument       `json:"legalEntities"`
+	CustomerAccounts []customerAccountDocument   `json:"customerAccounts"`
+	Relationships    []partyRelationshipDocument `json:"relationships"`
 }
 
 // itemCount 数外壳里全部口的项。一口只收本口的项：别的口的数组在这份外壳里解得开，解得开不等于可以忽略——
 // 一份同时带着两口项的载荷投到其中一口，另一口那项会被无声丢掉，登记方以为两样都登了。
 func (document partyIdentityBatchDocument) itemCount() int {
-	return len(document.BusinessParties) + len(document.LegalEntities) + len(document.CustomerAccounts)
+	return len(document.BusinessParties) + len(document.LegalEntities) +
+		len(document.CustomerAccounts) + len(document.Relationships)
 }
 
 // exactlyOne 是五口共用的形状门：本口恰一项、整份外壳也恰一项（即没有别的口的项）。一次一笔——本端点一次只收
@@ -100,6 +103,114 @@ type customerAccountDocument struct {
 	Revision        int       `json:"revision"`
 	Basis           string    `json:"basis"`
 	EffectiveFrom   time.Time `json:"effectiveFrom"`
+}
+
+// partyRelationshipDocument 的两个可缺格用指针表达缺席：区间终点缺席即开区间，批准事实缺席即登为候选关系、批准另行
+// 形成新修订（application.RelationshipApproval 注释）。缺席不能用零值顶——零时刻在 NewEffectiveInterval 里恰是「无终点」，
+// 而一个显式给出的坏时刻也会解成零值，两者就分不开了；所以键在场解不出时刻是形状错，由 json 解码直接拒。
+type partyRelationshipDocument struct {
+	RelationshipID    string                        `json:"relationshipId"`
+	Revision          int                           `json:"revision"`
+	Holder            string                        `json:"holder"`
+	Counterparty      string                        `json:"counterparty"`
+	Role              string                        `json:"role"`
+	Scope             string                        `json:"scope"`
+	Basis             string                        `json:"basis"`
+	EffectiveStartsAt time.Time                     `json:"effectiveStartsAt"`
+	EffectiveEndsAt   *time.Time                    `json:"effectiveEndsAt"`
+	Approval          *relationshipApprovalDocument `json:"approval"`
+}
+
+type relationshipApprovalDocument struct {
+	Reference  string    `json:"reference"`
+	ApprovedAt time.Time `json:"approvedAt"`
+}
+
+// partyRoleFromName 是 domain.PartyRole 封闭集的名称镜像；集合外取值拒收不吸收。与受控 CLI 和 postgres 适配器里的
+// 同名镜像各自独立——三处译的是同一个封闭集在各自边界上的外部名，领域包不导出解析函数是刻意的：名字属边界，不属模型。
+func partyRoleFromName(raw string) (domain.PartyRole, error) {
+	for _, role := range []domain.PartyRole{
+		domain.CustomerRole, domain.SupplierRole, domain.CarrierAgentRole,
+		domain.ResellerRole, domain.AccountHolderRole,
+	} {
+		if role.String() == raw {
+			return role, nil
+		}
+	}
+	return domain.PartyRoleInvalid, fmt.Errorf("unknown party role %q", raw)
+}
+
+// IntakePartyRelationshipRegistration 把一次管理台登记译成参与方关系修订登记命令。正文沿 domain.PartyRelationshipSpec，
+// 不在这里抄第二份字段清单；带批准事实的登记在用例侧走真转换（候选 → 批准），本 Intake 不构造任何领域对象之外的判断。
+func (intake *IsolatedPartyIdentityIntake) IntakePartyRelationshipRegistration(
+	_ context.Context,
+	request *http.Request,
+) (application.RegisterPartyRelationshipCommand, error) {
+	none := application.RegisterPartyRelationshipCommand{}
+	document, err := intake.decodeBatch(request)
+	if err != nil {
+		return none, err
+	}
+	if err := document.exactlyOne("relationships", len(document.Relationships)); err != nil {
+		return none, err
+	}
+	item := document.Relationships[0]
+	id, err := domain.NewRelationshipID(item.RelationshipID)
+	if err != nil {
+		return none, fmt.Errorf("%w: relationships[0].relationshipId: %v", ErrMalformedRequest, err)
+	}
+	holder, err := domain.NewPartyID(item.Holder)
+	if err != nil {
+		return none, fmt.Errorf("%w: relationships[0].holder: %v", ErrMalformedRequest, err)
+	}
+	counterparty, err := domain.NewPartyID(item.Counterparty)
+	if err != nil {
+		return none, fmt.Errorf("%w: relationships[0].counterparty: %v", ErrMalformedRequest, err)
+	}
+	role, err := partyRoleFromName(item.Role)
+	if err != nil {
+		return none, fmt.Errorf("%w: relationships[0].role: %v", ErrMalformedRequest, err)
+	}
+	scope, err := domain.NewCommercialScopeReference(item.Scope)
+	if err != nil {
+		return none, fmt.Errorf("%w: relationships[0].scope: %v", ErrMalformedRequest, err)
+	}
+	basis, err := domain.NewRelationshipBasisReference(item.Basis)
+	if err != nil {
+		return none, fmt.Errorf("%w: relationships[0].basis: %v", ErrMalformedRequest, err)
+	}
+	endsAt := time.Time{}
+	if item.EffectiveEndsAt != nil {
+		endsAt = *item.EffectiveEndsAt
+	}
+	interval, err := domain.NewEffectiveInterval(item.EffectiveStartsAt, endsAt)
+	if err != nil {
+		return none, fmt.Errorf("%w: relationships[0].effectiveStartsAt/effectiveEndsAt: %v", ErrMalformedRequest, err)
+	}
+	command := application.RegisterPartyRelationshipCommand{
+		Tenant:   intake.tenant,
+		ID:       id,
+		Revision: item.Revision,
+		Spec: domain.PartyRelationshipSpec{
+			Holder:       holder,
+			Counterparty: counterparty,
+			Role:         role,
+			Scope:        scope,
+			Basis:        basis,
+			Effective:    interval,
+		},
+	}
+	if item.Approval != nil {
+		reference, err := domain.NewApprovalReference(item.Approval.Reference)
+		if err != nil {
+			return none, fmt.Errorf("%w: relationships[0].approval.reference: %v", ErrMalformedRequest, err)
+		}
+		command.Approval = &application.RelationshipApproval{
+			Reference:  reference,
+			ApprovedAt: item.Approval.ApprovedAt,
+		}
+	}
+	return command, nil
 }
 
 // IntakeCustomerAccountRegistration 把一次管理台登记译成货主客户账户修订登记命令。跨租户绑定由领域构造门在用例侧

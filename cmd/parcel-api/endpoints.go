@@ -207,10 +207,12 @@ func assembleBusinessEndpoints(
 	legalEntityRegistrationIntake := commercialhttp.LegalEntityRegistrationIntake(commercialhttp.UnconfiguredIntake{})
 	businessPartyRegistrationIntake := commercialhttp.BusinessPartyRegistrationIntake(commercialhttp.UnconfiguredIntake{})
 	customerAccountRegistrationIntake := commercialhttp.CustomerAccountRegistrationIntake(commercialhttp.UnconfiguredIntake{})
+	partyRelationshipRegistrationIntake := commercialhttp.PartyRelationshipRegistrationIntake(commercialhttp.UnconfiguredIntake{})
 	if isolatedPartyIdentity != nil {
 		legalEntityRegistrationIntake = isolatedPartyIdentity
 		businessPartyRegistrationIntake = isolatedPartyIdentity
 		customerAccountRegistrationIntake = isolatedPartyIdentity
+		partyRelationshipRegistrationIntake = isolatedPartyIdentity
 	}
 
 	return []httpapi.BusinessEndpoint{
@@ -492,7 +494,7 @@ func assembleBusinessEndpoints(
 		{Pattern: "/commercial-business-party-registrations", Handler: commercialhttp.NewRegisterBusinessPartyEndpoint(businessPartyRegistrationIntake, partyIdentityRegistration)},
 		{Pattern: "/commercial-legal-entity-registrations", Handler: commercialhttp.NewRegisterLegalEntityEndpoint(legalEntityRegistrationIntake, partyIdentityRegistration)},
 		{Pattern: "/commercial-customer-account-registrations", Handler: commercialhttp.NewRegisterCustomerAccountEndpoint(customerAccountRegistrationIntake, partyIdentityRegistration)},
-		{Pattern: "/commercial-party-relationship-registrations", Handler: commercialhttp.NewRegisterPartyRelationshipEndpoint(commercialhttp.UnconfiguredIntake{}, partyIdentityRegistration)},
+		{Pattern: "/commercial-party-relationship-registrations", Handler: commercialhttp.NewRegisterPartyRelationshipEndpoint(partyRelationshipRegistrationIntake, partyIdentityRegistration)},
 		{Pattern: "/commercial-party-identity-deactivations", Handler: commercialhttp.NewDeactivatePartyIdentityEndpoint(commercialhttp.UnconfiguredIntake{}, partyIdentityRegistration)},
 		{Pattern: "/commercial-service-product-form-registrations", Handler: commercialhttp.NewRegisterServiceProductFormEndpoint(commercialhttp.UnconfiguredIntake{}, productChannelRegistration)},
 		{Pattern: "/commercial-product-channel-mapping-registrations", Handler: commercialhttp.NewRegisterProductChannelMappingEndpoint(commercialhttp.UnconfiguredIntake{}, productChannelRegistration)},

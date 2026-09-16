@@ -194,6 +194,102 @@ func TestIsolatedPartyIdentityIntakeTranslatesCustomerAccountRegistrationWithInj
 	}
 }
 
+// Covers: 第四口 party-relationship——`relationships[0]` 正文沿 domain.PartyRelationshipSpec 逐格来自载荷，租户格来自
+// 注入；批准事实与区间终点两格可缺席：缺席即候选关系 / 开区间，不造假值顶上（CLI 同形）。角色是封闭集的名称镜像，
+// 集合外取值拒收不吸收。
+func TestIsolatedPartyIdentityIntakeTranslatesPartyRelationshipRegistrationWithInjectedTenant(t *testing.T) {
+	intake := isolatedIdentityIntakeForTest(t)
+	relationshipRequest := func(body string) *http.Request {
+		request := httptest.NewRequest(http.MethodPost, "/commercial-party-relationship-registrations", strings.NewReader(body))
+		request.Header.Set("X-Reported-Tenant", "TENANT-9")
+		return request
+	}
+
+	approved, err := intake.IntakePartyRelationshipRegistration(context.Background(), relationshipRequest(`{"relationships":[{
+		"relationshipId":"SYN-REL-02",
+		"revision":1,
+		"holder":"SYN-PARTY-02",
+		"counterparty":"SYN-PARTY-03",
+		"role":"CUSTOMER",
+		"scope":"SYN-SCOPE/rel-02",
+		"basis":"SYN-BASIS/rel-02",
+		"effectiveStartsAt":"2026-09-01T00:00:00Z",
+		"effectiveEndsAt":"2027-09-01T00:00:00Z",
+		"approval":{"reference":"SYN-APPROVAL/rel-02","approvedAt":"2026-08-30T00:00:00Z"}
+	}]}`))
+	if err != nil {
+		t.Fatalf("intake（已批准）：%v", err)
+	}
+	if got := approved.Tenant.String(); got != isolatedIdentityTenant {
+		t.Fatalf("Tenant = %q, want %q（注入值）", got, isolatedIdentityTenant)
+	}
+	if got := approved.ID.String(); got != "SYN-REL-02" {
+		t.Fatalf("ID = %q, want SYN-REL-02", got)
+	}
+	if approved.Revision != 1 {
+		t.Fatalf("Revision = %d, want 1", approved.Revision)
+	}
+	if got := approved.Spec.Holder.String(); got != "SYN-PARTY-02" {
+		t.Fatalf("Holder = %q, want SYN-PARTY-02", got)
+	}
+	if got := approved.Spec.Counterparty.String(); got != "SYN-PARTY-03" {
+		t.Fatalf("Counterparty = %q, want SYN-PARTY-03", got)
+	}
+	if got := approved.Spec.Role.String(); got != "CUSTOMER" {
+		t.Fatalf("Role = %q, want CUSTOMER", got)
+	}
+	if got := approved.Spec.Scope.String(); got != "SYN-SCOPE/rel-02" {
+		t.Fatalf("Scope = %q, want SYN-SCOPE/rel-02", got)
+	}
+	if got := approved.Spec.Basis.String(); got != "SYN-BASIS/rel-02" {
+		t.Fatalf("Basis = %q, want SYN-BASIS/rel-02", got)
+	}
+	if want := time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC); !approved.Spec.Effective.StartsAt().Equal(want) {
+		t.Fatalf("Effective.StartsAt = %s, want %s", approved.Spec.Effective.StartsAt(), want)
+	}
+	endsAt, bounded := approved.Spec.Effective.EndsAt()
+	if want := time.Date(2027, 9, 1, 0, 0, 0, 0, time.UTC); !bounded || !endsAt.Equal(want) {
+		t.Fatalf("Effective.EndsAt = %s/%v, want %s", endsAt, bounded, want)
+	}
+	if approved.Approval == nil {
+		t.Fatal("Approval = nil，载荷带了批准事实")
+	}
+	if got := approved.Approval.Reference.String(); got != "SYN-APPROVAL/rel-02" {
+		t.Fatalf("Approval.Reference = %q, want SYN-APPROVAL/rel-02", got)
+	}
+	if want := time.Date(2026, 8, 30, 0, 0, 0, 0, time.UTC); !approved.Approval.ApprovedAt.Equal(want) {
+		t.Fatalf("Approval.ApprovedAt = %s, want %s", approved.Approval.ApprovedAt, want)
+	}
+
+	candidate, err := intake.IntakePartyRelationshipRegistration(context.Background(), relationshipRequest(`{"relationships":[{
+		"relationshipId":"SYN-REL-03",
+		"revision":1,
+		"holder":"SYN-PARTY-02",
+		"counterparty":"SYN-PARTY-03",
+		"role":"SUPPLIER",
+		"scope":"SYN-SCOPE/rel-03",
+		"basis":"SYN-BASIS/rel-03",
+		"effectiveStartsAt":"2026-09-01T00:00:00Z"
+	}]}`))
+	if err != nil {
+		t.Fatalf("intake（候选）：%v", err)
+	}
+	if candidate.Approval != nil {
+		t.Fatalf("Approval = %+v，载荷没带批准事实，该登为候选", candidate.Approval)
+	}
+	if _, bounded := candidate.Spec.Effective.EndsAt(); bounded {
+		t.Fatal("Effective.EndsAt 有界，载荷没给终点，该是开区间")
+	}
+
+	_, err = intake.IntakePartyRelationshipRegistration(context.Background(), relationshipRequest(`{"relationships":[{
+		"relationshipId":"SYN-REL-04","revision":1,"holder":"SYN-PARTY-02","counterparty":"SYN-PARTY-03",
+		"role":"OWNER","scope":"s","basis":"b","effectiveStartsAt":"2026-09-01T00:00:00Z"
+	}]}`))
+	if !errors.Is(err, commercialhttp.ErrMalformedRequest) {
+		t.Fatalf("集合外角色：err = %v, want ErrMalformedRequest", err)
+	}
+}
+
 // Covers: 一口只收本口的项。载荷外壳镜像 CLI 的整份文档，因此别的口的数组在这里**解得开**；解得开不等于
 // 可以忽略——一份同时带着法人项与参与方项的载荷投到法人口，参与方那一项会被无声丢掉，登记方以为两样都登了。
 // 五口共用同一份外壳，这条对每一口都成立，这里各口投一次别人的项。
@@ -235,8 +331,8 @@ func TestIsolatedPartyIdentityIntakeServesOnlyAdmittedLines(t *testing.T) {
 	if _, ok := intake.(commercialhttp.CustomerAccountRegistrationIntake); !ok {
 		t.Fatal("货主客户账户登记口该已放行")
 	}
-	if _, ok := intake.(commercialhttp.PartyRelationshipRegistrationIntake); ok {
-		t.Fatal("参与方关系登记口尚未成笔，不该装得进")
+	if _, ok := intake.(commercialhttp.PartyRelationshipRegistrationIntake); !ok {
+		t.Fatal("参与方关系登记口该已放行")
 	}
 	if _, ok := intake.(commercialhttp.PartyIdentityDeactivationIntake); ok {
 		t.Fatal("身份停用口尚未成笔，不该装得进")
