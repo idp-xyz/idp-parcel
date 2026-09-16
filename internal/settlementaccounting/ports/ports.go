@@ -4,6 +4,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
@@ -899,7 +900,15 @@ type ExternalFundsFactIntent struct {
 	Record FundsFactRecord
 }
 
-// ExternalFundsFactHandoff 把资金事实采用写入 Outbox（`OutboxExternalFundsFactHandoff`）。
+// ErrFundsFactHandoffRejected 表示交接口铸出的采用信封被框架的**确定性**校验拒收（形状、长度、字符集）：同一份输入
+// 重投永远同一个结果，与「Outbox 存储不可用」那类重投会变的失败是两格（票 sa-cc/32 裁决 2，形照 customs-compliance
+// 的 ErrHandoffEnvelopeRejected）。交接口用它包住框架的拒收错误交出来，编排据此整笔不作答、让事务壳回滚——折成续办
+// 引用会让「重跑同一命令补发同一封」在这一格恒假：版本行已提交、信封永不出，人照做只会一直退未决。
+var ErrFundsFactHandoffRejected = errors.New("settlement accounting: funds fact handoff envelope rejected by envelope validation")
+
+// ExternalFundsFactHandoff 把资金事实采用写入 Outbox（`OutboxExternalFundsFactHandoff`）。信封 ID 由（租户 / 事实 /
+// 版本）折成定长指纹形（票 sa-cc/32 裁决 1），分区主体仍是可读的「租户 / 资金事实」。信封被框架确定性校验拒收时交回
+// 的错误 errors.Is ErrFundsFactHandoffRejected；别的失败都是依赖不可用。
 type ExternalFundsFactHandoff interface {
 	HandOffExternalFundsFact(ctx context.Context, intent ExternalFundsFactIntent) error
 }

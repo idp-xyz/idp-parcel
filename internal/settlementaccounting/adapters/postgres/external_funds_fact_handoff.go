@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 
 	"go.idp.xyz/idp-bento-go/eventing"
@@ -18,6 +19,10 @@ import (
 // 三者一视同仁地重新核对（CC CONTEXT「只作为重新核对的来源事实」）——票 sa-cc/02 裁决 2。核销
 // applied / reversed 两型是两个生命周期态而非同一事实的新版本，不是这里的先例。
 const externalFundsFactEventType eventing.EventType = "settlement-accounting.external-funds-fact.adopted"
+
+// externalFundsFactEventIDPort 是信封 ID 指纹的口名前缀，与分区键里的口名段同词。它只求本来源名下几只口的 ID 空间
+// 互不相交（EnqueueOnce 按（来源, 事件 ID）查重），不参与路由，也不是分区主体登记表里的名字。
+const externalFundsFactEventIDPort = "funds-fact"
 
 // OutboxExternalFundsFactHandoff 把资金事实采用写入 Outbox，实现 ports.ExternalFundsFactHandoff。
 // 入队一步由 outboxintent.EnqueueOnce 承担。
@@ -67,7 +72,14 @@ func externalFundsFactPartitionKey(key ports.FundsFactKey) string {
 	return key.TenantID.String() + "/funds-fact/" + key.Fact.String()
 }
 
-// HandOffExternalFundsFact 把一份意图入队。信封 ID 取（租户+事实+版本）：同一事实的每个版本各自
+// externalFundsFactEventID 取（租户 / 事实 / 版本）的定长指纹（票 sa-cc/32 裁决 1）：同一事实的每个版本各自成一封、
+// 同一版本重算必得同一个 ID。三个引用多长归实例半边，本仓给不出上界，可读串接形会把 eventing.MaxEventIDLength 押在
+// 别人的长度上——理由与公式都在 outboxintent.FingerprintEventID 头注，这里不复述。分区键与 Subject 保留可读形。
+func externalFundsFactEventID(key ports.FundsFactKey, version string) eventing.EventID {
+	return outboxintent.FingerprintEventID(externalFundsFactEventIDPort, key.TenantID.String(), key.Fact.String(), version)
+}
+
+// HandOffExternalFundsFact 把一份意图入队。信封 ID 由（租户+事实+版本）认领：同一事实的每个版本各自
 // 入队、一个都不丢，重放同一版本被 EnqueueOnce 认领吞掉（ADR-0043）。键缺席是装配缺陷，响亮
 // 报错不入队。
 func (handoff *OutboxExternalFundsFactHandoff) HandOffExternalFundsFact(
@@ -96,7 +108,7 @@ func (handoff *OutboxExternalFundsFactHandoff) HandOffExternalFundsFact(
 	partitionKey := externalFundsFactPartitionKey(key)
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(partitionKey + "/" + version),
+		ID:           externalFundsFactEventID(key, version),
 		Source:       saEventSource,
 		Type:         externalFundsFactEventType,
 		Version:      1,
@@ -110,6 +122,13 @@ func (handoff *OutboxExternalFundsFactHandoff) HandOffExternalFundsFact(
 	}
 
 	if err := outboxintent.EnqueueOnce(ctx, handoff.db, handoff.store, envelope); err != nil {
+		// 框架 Envelope.Validate 的拒收是确定性的（同一份输入重投永远同一个结果），与存储不可用分两格交出去
+		// （ports.ErrFundsFactHandoffRejected 头注）。ID 已是定长指纹形，今天能走到这里的是 Subject / PartitionKey
+		// 取到超长的事实引用——引用多长归实例半边、构造门只查非空；折成续办引用会让 CLI 那句「重跑补发」恒假，
+		// 所以要让编排看得见这一格并整笔不作答（票 sa-cc/32 裁决 2）。
+		if errors.Is(err, eventing.ErrInvalidEnvelope) {
+			return fmt.Errorf("hand off external funds fact: %w: %w", ports.ErrFundsFactHandoffRejected, err)
+		}
 		return fmt.Errorf("hand off external funds fact: %w", err)
 	}
 	return nil
