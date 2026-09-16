@@ -425,6 +425,31 @@ export interface BusinessPartyListResponseBody {
   parties: BusinessPartyRecord[];
 }
 
+// 业务参与方修订链上的一笔（票 admin-web-group-legal-entities/12；后端 businessPartyRevisionBody）。与目录行
+// BusinessPartyRecord 同源不同物：没有 status，理由同 LegalEntityRevisionRecord。**有 partyName**——这是本册比
+// 法人修订行多出的一格：名称登在参与方册自己的行上、随修订走，「名称从哪份换到哪份」正是两笔之间改了什么的
+// 一部分；法人修订行不带名称是因为名称不在法人册上，两者是表形的差别不是口径分歧。停用两件只在已停用那一笔
+// 在场——页面看键在不在，不拿空串推。读口不做 diff，两笔之间改了什么由页面并排显。
+export interface BusinessPartyRevisionRecord {
+  tenantId: string;
+  partyId: string;
+  partyName: string;
+  revision: number;
+  basis: string;
+  effectiveFrom: string;
+  deactivatedAt?: string;
+  deactivationBasis?: string;
+  registeredAt: string;
+}
+
+// 顶层回显 partyId，revisions 按修订号升序，参与方不在册答 200 + []——三条与 LegalEntityRevisionListResponseBody
+// 同裁决（票 12 沿票 03 按 ADR-0022）。
+export interface BusinessPartyRevisionListResponseBody {
+  outcome: 'BUSINESS_PARTY_REVISIONS_LISTED';
+  partyId: string;
+  revisions: BusinessPartyRevisionRecord[];
+}
+
 // 货主客户账户册（票 admin-write-faces/04）——ADR-0003 三级边界的第三级。账户面向一个货主
 // 客户建立、必须显式关联其客户参与方（PC CONTEXT），所以它与法人册同形而不与身份本体册
 // 同形：名称不在本册行上，从参与方册左连接转写，customerPartyNameKnown 为假是写入门失败
@@ -518,6 +543,15 @@ export function listPartyRelationships(): Promise<ApiResult<PartyRelationshipLis
 
 export function listBusinessParties(): Promise<ApiResult<BusinessPartyListResponseBody>> {
   return exchangeMasterData<BusinessPartyListResponseBody>('/commercial-business-parties');
+}
+
+// 修订历史按参与方取，参与方标识在路径上而不在查询串，与目录口共用同一个 Intake——判据同 listLegalEntityRevisions。
+export function listBusinessPartyRevisions(
+  partyId: string,
+): Promise<ApiResult<BusinessPartyRevisionListResponseBody>> {
+  return exchangeMasterData<BusinessPartyRevisionListResponseBody>(
+    `/commercial-business-parties/${encodeURIComponent(partyId)}/revisions`,
+  );
 }
 
 // 客户账户册与客户合同同页分签却各走自己的入口：合同上列的是商业版本壳（草稿→发布→
