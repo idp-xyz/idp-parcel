@@ -201,6 +201,15 @@ export const legalEntityKindLabels: Record<string, string> = {
   RESPONSIBLE_LEGAL_ENTITY: '责任法人',
 };
 
+// 可停用的身份种类封闭三格（application.PartyIdentityKind 的名称镜像 identityKindFromName），中文取 CONTEXT 原词。
+// 关系不在内：关系的终止走撤销 / 到期 / 替代，不叫停用（DeactivatePartyIdentityCommand 注释）。停用表单的种类
+// 下拉只从这里派生，不另抄一份封闭集。
+export const identityKindLabels: Record<string, string> = {
+  BUSINESS_PARTY: '业务参与方',
+  LEGAL_ENTITY: '责任法人',
+  CUSTOMER_ACCOUNT: '货主客户账户',
+};
+
 export const problemCodeNotes: Record<string, string> = {
   METHOD_NOT_ALLOWED: '请求方法不被该端点允许。这是调用方式问题,不是业务答案。',
   // 一句覆盖读写两侧:problemNote 的签名只有 code,今天分不出这个 400 来自目录读口(kind)还是登记口
