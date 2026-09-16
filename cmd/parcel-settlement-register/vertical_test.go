@@ -6,9 +6,11 @@ import (
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.idp.xyz/idp-bento-go/eventing"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
@@ -19,9 +21,14 @@ import (
 // 贯通「译装 → 用例 → 真库 → 真 Outbox」，且版本行与向 CC 交的采用信封在同一笔里同生同灭——首版一行一封、
 // 重放不翻倍、同版本异内容冲突不覆盖、更正回指链头第二行第二封且载荷回指前版、回指非链头顺序到达零行零封
 // （28 写进 Save 头注的那条「顺序未受理 / 并发已采用」不对称，在这里成断言）。sa-cc/20 评审记的「CorrectFact ×
-// 真库 × 真 Outbox 零用例」由此收口。
+// 真库 × 真 Outbox 零用例」由此收口。信封被框架确定性拒收那一格（票 sa-cc/32）另起一条用例在下面。
 
 const fundsFactPartition = "SYN-T1/funds-fact/SYN-FACT-1"
+
+// fundsFactEventID 按生产同一公式重算采用信封 ID（票 sa-cc/32 裁决 1：口名 funds-fact + 租户 / 事实 / 版本的定长指纹）。
+func fundsFactEventID(fact, version string) string {
+	return string(outboxintent.FingerprintEventID("funds-fact", "SYN-T1", fact, version))
+}
 
 func adoptDocumentFor(version string, amountMinor string) string {
 	return `{
@@ -87,7 +94,7 @@ func TestSettlementRegisterVerticalOnRealPostgres(t *testing.T) {
 			`SELECT count(*) FROM `+migrate.SchemaBento+`.outbox WHERE partition_key = $1`, fundsFactPartition)
 	}
 
-	// 正：首版采用 → 身份行 + 版本行 + 一封，事件类型与分区主体是 sa-cc/02 钉的那个形，信封 ID 带版本维。
+	// 正：首版采用 → 身份行 + 版本行 + 一封，事件类型与分区主体是 sa-cc/02 钉的那个形，信封 ID 是带版本维的定长指纹。
 	message := mustExecute(commandExternalFundsFact, adoptDocumentFor("SYN-FACT-1/v1", "8000"), exitRegistered, "FUNDS_FACT_ADOPTED")
 	if !strings.Contains(message, "SYN-FACT-1/v1") {
 		t.Fatalf("已采用答复 %q 没带版本字面", message)
@@ -101,9 +108,9 @@ func TestSettlementRegisterVerticalOnRealPostgres(t *testing.T) {
 	var eventType string
 	if err := pool.QueryRow(ctx,
 		`SELECT event_type FROM `+migrate.SchemaBento+`.outbox WHERE event_id = $1`,
-		fundsFactPartition+"/SYN-FACT-1/v1",
+		fundsFactEventID("SYN-FACT-1", "SYN-FACT-1/v1"),
 	).Scan(&eventType); err != nil {
-		t.Fatalf("按带版本维的信封 ID 读不到那一封：%v", err)
+		t.Fatalf("按带版本维重算的信封 ID 读不到那一封：%v", err)
 	}
 	if eventType != "settlement-accounting.external-funds-fact.adopted" {
 		t.Fatalf("事件类型 = %q", eventType)
@@ -131,7 +138,7 @@ func TestSettlementRegisterVerticalOnRealPostgres(t *testing.T) {
 	var rawPayload []byte
 	if err := pool.QueryRow(ctx,
 		`SELECT payload FROM `+migrate.SchemaBento+`.outbox WHERE event_id = $1`,
-		fundsFactPartition+"/SYN-FACT-1/v2",
+		fundsFactEventID("SYN-FACT-1", "SYN-FACT-1/v2"),
 	).Scan(&rawPayload); err != nil {
 		t.Fatalf("读更正版信封载荷：%v", err)
 	}
@@ -184,5 +191,51 @@ func TestSettlementRegisterVerticalOnRealPostgres(t *testing.T) {
 		strings.Replace(adoptDocumentFor("SYN-FACT-1/v9", "100"), `"RECEIPT_CONFIRMED"`, `"RECEIVED"`, 1), exitUsage, "译装被拒")
 	if identityRows() != 1 || versionRows() != 2 {
 		t.Fatalf("被拒的输入动了库面：身份行 = %d、版本行 = %d", identityRows(), versionRows())
+	}
+}
+
+// Covers: 票 sa-cc/32 完成判据 (2)——采用信封被框架确定性拒收（事实引用长到 Subject 超 eventing.MaxSubjectLength；
+// ID 已是定长指纹形，今天能到这一格的正是 Subject / PartitionKey）→ 整笔回滚：身份行零、版本行零、信封零；CLI 退用法格
+// 1 并点名原因，答复里没有「重跑」——按 ADR-0029 恢复动作判据，什么都没登记、要改的是输入（引用长度）或形，重跑
+// 同一份永远同一个结果。重放同一份同样退 1、同样零行：它不该答`已存在`。合成引用只保证「超上限」这一件，不假定任何
+// 租户的引用多长。
+func TestARejectedHandoffEnvelopeRollsBackTheAdoptionAndExitsAsUsage(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	registrar, err := buildRegistrar(db)
+	if err != nil {
+		t.Fatalf("装配登记口：%v", err)
+	}
+	overlongFact := "SYN-FACT-LONG-" + strings.Repeat("x", eventing.MaxSubjectLength)
+	document := strings.Replace(adoptDocumentFor(overlongFact+"/v1", "8000"), `"factRef": "SYN-FACT-1"`, `"factRef": "`+overlongFact+`"`, 1)
+	if !strings.Contains(document, `"factRef": "`+overlongFact+`"`) {
+		t.Fatal("夹具没把超长事实引用换进登记输入")
+	}
+	rowsFor := func(table string) int {
+		return countRows(t, pool,
+			`SELECT count(*) FROM settlement_accounting.`+table+` WHERE tenant_id = $1 AND fact_id = $2`, "SYN-T1", overlongFact)
+	}
+
+	for _, attempt := range []string{"首次", "重放同一份"} {
+		message, code := execute(t.Context(), commandExternalFundsFact, []byte(document), registrar)
+		if code != exitUsage {
+			t.Fatalf("%s退出码 = %d（%s），要用法格 %d", attempt, code, message, exitUsage)
+		}
+		if !strings.Contains(message, "拒收") || !strings.Contains(message, "exceeds") {
+			t.Fatalf("%s答复 %q 没点名信封被确定性拒收的原因", attempt, message)
+		}
+		if strings.Contains(message, "重跑") {
+			t.Fatalf("%s答复 %q 叫人重跑——这一格重跑永远同一个结果", attempt, message)
+		}
+		if rowsFor("external_funds_fact") != 0 || rowsFor("external_funds_fact_version") != 0 {
+			t.Fatalf("%s后身份行 = %d、版本行 = %d，要整笔回滚为零", attempt, rowsFor("external_funds_fact"), rowsFor("external_funds_fact_version"))
+		}
+		if envelopes := countRows(t, pool,
+			`SELECT count(*) FROM `+migrate.SchemaBento+`.outbox WHERE partition_key = $1`, "SYN-T1/funds-fact/"+overlongFact); envelopes != 0 {
+			t.Fatalf("%s后被拒的信封落了 %d 封", attempt, envelopes)
+		}
 	}
 }

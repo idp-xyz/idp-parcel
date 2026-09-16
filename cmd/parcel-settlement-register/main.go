@@ -19,13 +19,15 @@
 // （Outbox 意图与登记同生同灭），写口无环境事务即拒。
 //
 // 退出码按恢复动作分四格（ADR-0029 判据；归格见 fundsAnswer）：0 = 已采用 / 幂等重放（重放不是错误，无恢复
-// 动作）；1 = 用法或输入不合法（含用例的`未受理`——回指非链头、更正未采用的事实、构造门拒——改请求，不是重试）；
+// 动作）；1 = 用法或输入不合法（含用例的`未受理`——回指非链头、更正未采用的事实、构造门拒——改请求，不是重试；
+// 也含采用信封被框架确定性校验拒收那一格——什么都没登记、要改的是引用的长度或形，见 execute）；
 // 2 = 内容冲突（同版本字面异内容、同事实第二个首版：绝不覆盖，人工核对既有登记再续办）；3 = 未决（依赖故障，
 // 登记与否未知；也含「行已落、信封未出」那一格——它需要人重跑同一命令补发同一封，不能与已登记同格）。
 package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -43,6 +45,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
+	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
 const envDatabaseDSN = "IDP_PARCEL_POSTGRES_DSN"
@@ -194,6 +197,12 @@ func execute(ctx context.Context, command string, raw []byte, registrar registra
 		handled = result
 		return err
 	})
+	if errors.Is(err, ports.ErrFundsFactHandoffRejected) {
+		// 采用信封被框架确定性校验拒收（票 sa-cc/32 裁决 2）：事务已回滚，版本行与信封一样都没落。归用法格而不是
+		// 未决，按 ADR-0029 的恢复动作判：同一份输入重投永远同一个结果，要改的是引用的长度或形，不是重试——归 3
+		// 会让人按未决那句「重跑补发」重跑到预算耗尽。答复点名框架给的原因，操作者据此改输入。
+		return fmt.Sprintf("%s: 未登记——采用信封被框架确定性拒收，要改的是输入引用的长度或形，同一份再交仍会被拒：%v", command, err), exitUsage
+	}
 	if err != nil {
 		return fmt.Sprintf("%s: 未决：%v", command, err), exitUndecided
 	}
@@ -221,7 +230,9 @@ func subjectOf(result application.FundsResult) string {
 //   - 内容冲突各格 → 2：同键异内容绝不覆盖，要人核对既有登记再决定续办。
 //   - 未决 → 3，带编排指名的原因（今天与采用相关的只有资金事实库不可用）。
 //   - 行已落、信封未出（续办引用非空）→ 3 并把续办引用打出：事实已采用是真的，但 CC 等的那封没出去，重跑同一命令
-//     会重发同一份（Outbox 按认领键吞重）；它需要人动手，不能与已登记同格。
+//     会重发同一份（Outbox 按认领键吞重）；它需要人动手，不能与已登记同格。自票 sa-cc/32 起这一格只对依赖故障
+//     成立——信封被确定性拒收的那一格编排返 error、在 execute 归用法格，到不了这里；「重跑补发」因此只对还能补发的
+//     因说话。
 func fundsAnswer(
 	command string,
 	outcome application.FundsOutcome,
