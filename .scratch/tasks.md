@@ -2722,3 +2722,11 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - **10 评审**：`task-9e976583` → 通道 5（23:1x 派，至 23:40；通道 2 当时在评 12）。推送方并行：`%TEMP%\idp-land10` detached `44c4ebe2`，八笔 cherry-pick 零冲突、patch-id 逐笔同、13 件对作者 tip 零 diff、与 12 (a)(b) 文件零重叠；gofmt / build / vet 0、清点零差、admin-web tsc 0 / **run-tests 279**（254 + 12 的 3 + 10 的 22）/ vite 0；tip `c5717960` 等评审无阻断后带 DSN 全量一次再推。
 - **簿记本笔**（纯 .md 自审，在 `44c4ebe2` 之上）：票 12 Comments 追评审代落 + (a)(b) 进 main 记录（Status 仍 in-progress）；spec 12 行 → in-progress（(a)(b) 进 main）、10 行 → in-progress（评审中）；本节。
 - **前沿**：在途 10（评审中，tip 预叠 `c5717960`）/ 12 (c)（等 10 进 main）；ready 0。**归用户**同上。
+
+### 23:1x–23:2x 同一会话：10 评审 ← 通道 5 → `b1efbfdf` 进 main → 解 12 (c)
+
+- **簿记 `7b699398`** 先进 main（23:16；12 (a)(b) 票面 + spec + 上节）→ 10 的预叠树 `rebase --onto 7b699398 44c4ebe2`，零冲突、patch-id 逐笔仍同、tsc 0 / 279 / vite 0。
+- **10 评审**：`task-9e976583` → 通道 5（23:1x 派，报 23:36 为其时钟；本机 23:20 收到）：**Standards 0 / 5 · Spec 0 / 2，七条皆判断项**（最重：三表单壳 Duplicated Code；停用非参与方种类后表单内册面不重读）；`run-tests` 276 复现、真红核（`effectiveEndsAt` 写 null → 275 / 1 fail）。代落票 10 Comments；七条 + 09 的三条合成 **`pages/party` 收口票清单**（写在票 10 处置），12 (c) 进 main 后立票。
+- **10 进 main**：tip `b1efbfdf`（= `7b699398` + 八笔）23:21 占号 → 带 DSN 全量 **115 ok / 0 FAIL / 16 无测试 / 0 cached**（23:21:09→23:23:29）、`cmd/parcel-api` 真库探针 PASS → `ls-remote` 核 `7b699398` 未动 → 23:23 `push b1efbfdf:main` 成，**远端 main = `b1efbfdf`** → 共享树 ff → 23:24 广播（释号、SHA 对照、**「10 进 main = b1efbfdf」解 12 (c)**、通道 6 拆树比法、票 12 面末两节位置）。
+- **簿记本笔**（纯 .md 自审，在 `b1efbfdf` 之上）：票 10 进 main 记录 + 评审代落 + 处置（收口清单八条）；spec 10 行 → resolved；本节。
+- **前沿**：在途 12 (c)（通道 4，接抽屉）；ready 0；收口票待立（12 (c) 进 main 后）。**归用户**同上。
