@@ -291,7 +291,7 @@ func TestIsolatedPartyIdentityIntakeTranslatesPartyRelationshipRegistrationWithI
 }
 
 // Covers: 第五口 identity-deactivation——`deactivations[0]` 五格逐字来自载荷，租户格来自注入。停用是往修订链上插一笔
-// 新修订，Revision 是操作者声明自己看到的册面（= 最新修订 + 1），错位由用例拒；身份种类是封闭三值的名称镜像，关系不在
+// 新修订，Revision 是操作者声明自己看到的册面（= 最新修订 + 1），错位由用例拒；身份种类是封闭集的名称镜像，关系不在
 // 内（关系的终止走撤销/到期/替代，不叫停用）。外壳镜像 CLI `deactivate-party-identity` 的文档、去掉整批的 tenantId。
 func TestIsolatedPartyIdentityIntakeTranslatesDeactivationWithInjectedTenant(t *testing.T) {
 	intake := isolatedIdentityIntakeForTest(t)

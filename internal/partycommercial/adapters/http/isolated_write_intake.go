@@ -128,7 +128,7 @@ type relationshipApprovalDocument struct {
 }
 
 // partyRoleFromName 是 domain.PartyRole 封闭集的名称镜像；集合外取值拒收不吸收。与受控 CLI 和 postgres 适配器里的
-// 同名镜像各自独立——三处译的是同一个封闭集在各自边界上的外部名，领域包不导出解析函数是刻意的：名字属边界，不属模型。
+// 同名镜像各自独立——各边界各自译同一个封闭集在自己边界上的外部名，领域包不导出解析函数是刻意的：名字属边界，不属模型。
 func partyRoleFromName(raw string) (domain.PartyRole, error) {
 	for _, role := range []domain.PartyRole{
 		domain.CustomerRole, domain.SupplierRole, domain.CarrierAgentRole,
@@ -381,7 +381,7 @@ type deactivationDocument struct {
 	At       time.Time `json:"at"`
 }
 
-// identityKindFromName 是 application.PartyIdentityKind 封闭三值的名称镜像；关系不在内——关系的终止走撤销/到期/替代，
+// identityKindFromName 是 application.PartyIdentityKind 封闭集的名称镜像；关系不在内——关系的终止走撤销/到期/替代，
 // 不叫停用（DeactivatePartyIdentityCommand 注释）。判据同 partyRoleFromName。
 func identityKindFromName(raw string) (application.PartyIdentityKind, error) {
 	for _, kind := range []application.PartyIdentityKind{
