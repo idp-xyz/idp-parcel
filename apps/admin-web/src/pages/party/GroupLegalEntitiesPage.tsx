@@ -26,6 +26,7 @@ import { identityStatusLabels, labelOf, legalEntityKindLabels, problemNote } fro
 import { LegalEntityRegistrationForm } from './LegalEntityRegistrationForm';
 import { legalEntityRevisionTimeline, revisionHistoryNote } from './legal-entity-revisions';
 import { DetailRow, Instant, filterSelectClass, useCopyToClipboard } from './detail-primitives';
+import { useRegisterList } from './register-list';
 import {
   filterLegalEntities,
   legalEntityCountSummary,
@@ -366,21 +367,7 @@ function GroupLegalEntitiesTable({
  * 降为表单里的折叠区。
  */
 export function GroupLegalEntitiesPage() {
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<GroupLegalEntityListResponseBody> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listGroupLegalEntities().then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
-  const retry = () => setReloadKey((value) => value + 1);
+  const { answer, retry } = useRegisterList(listGroupLegalEntities);
   // 列表没取到（加载中 / 未配置 / 出错）传 null：表单那边建议修订号一律为 1，不拿空数组冒充「册上没有」。
   const knownEntities = answer?.kind === 'outcome' ? answer.body.entities : null;
 
