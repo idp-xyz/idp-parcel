@@ -1,0 +1,277 @@
+import { useState } from 'react';
+import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
+import { moduleInfoById } from '../../navigation';
+import { RegistrationAnswerNote, type RegistrationPanelState } from '../../components/registration';
+import { currentDisplayTimeZone } from '../moment';
+import {
+  commercialRegistrationEndpoints,
+  listBusinessParties,
+  partyIdentityOutcomeLabels,
+  registerCommercial,
+  type BusinessPartyListResponseBody,
+  type PartyRelationshipRecord,
+} from './api';
+import { problemNote, registrationTitles } from './presentation';
+import { Field, ReferencePicker, selectClass } from './PublicationFormFields';
+import {
+  RevisionField,
+  SnapshotJsonDetails,
+  WallTimeField,
+  businessPartyPickerOptions,
+} from './party-registration-fields';
+import {
+  emptyPartyRelationshipDraft,
+  partyRelationshipLocalProblems,
+  partyRelationshipPayloadOf,
+  partyRoleOptions,
+  suggestedPartyRelationshipRevision,
+  type PartyRelationshipDraft,
+} from './party-relationship-form';
+
+/**
+ * 参与方关系登记的逐字段表单（票 admin-web-group-legal-entities/10 第 2 条）。三册里它价值最大：十格里有封闭五词与两个
+ * 从册上选的引用，粘 JSON 时打错一个词只得到一个说不清的 400。
+ *
+ * **本组件不算摘要、不裁任何门、不判领域规则**（伞票 admin-write-faces/07 硬句）：双方在不在册、角色与双方是否匹配、
+ * 区间是否倒置、修订连不连续，一律送上去让服务端答；本地只拦编码层（修订号、三个时刻），纯函数在
+ * party-relationship-form.ts。**两个可缺键缺席而不是零值**——终点留空即开区间、不勾「已批准」即候选关系，理由在
+ * 那个文件头上。
+ *
+ * 双方用 ReferencePicker 从参与方册选：候选显名称 · 标识 · 状态，不按状态过滤，读面不可用退回手填。Picker 读一次只读
+ * 一次，所以页面在参与方列表重取后换 `partiesVersion` 让它重挂重读——刚在「参与方身份」册登进去的那一个，才能立刻
+ * 出现在这里的候选里。
+ */
+export interface PartyRelationshipRegistrationFormProps {
+  /** 页面已取回的关系列表（给修订号建议用）；没取到传 null，建议一律为 1。 */
+  knownRelationships: readonly PartyRelationshipRecord[] | null;
+  /** 参与方列表的重取序号：每变一次，双方的候选重读一次。 */
+  partiesVersion: number;
+  /** 登记册答 `REGISTERED` 时回调，页面借它重取关系列表。 */
+  onRegistered: () => void;
+}
+
+const info = moduleInfoById['business-parties'];
+const kind = 'party-relationship';
+const endpoint = `POST ${commercialRegistrationEndpoints[kind]}`;
+const roleOptions = partyRoleOptions();
+
+export function PartyRelationshipRegistrationForm({
+  knownRelationships,
+  partiesVersion,
+  onRegistered,
+}: PartyRelationshipRegistrationFormProps) {
+  const [draft, setDraft] = useState<PartyRelationshipDraft>(emptyPartyRelationshipDraft());
+  const [revisionEdited, setRevisionEdited] = useState(false);
+  const [state, setState] = useState<RegistrationPanelState>({ kind: 'idle' });
+
+  const timeZone = currentDisplayTimeZone();
+  const suggestion = suggestedPartyRelationshipRevision(knownRelationships, draft.relationshipId);
+  const effectiveDraft: PartyRelationshipDraft = revisionEdited ? draft : { ...draft, revision: String(suggestion) };
+  const problems = partyRelationshipLocalProblems(effectiveDraft, timeZone);
+  const locked = state.kind === 'submitting';
+  const patch = (change: Partial<PartyRelationshipDraft>) => setDraft((current) => ({ ...current, ...change }));
+
+  const submit = (snapshot: unknown) =>
+    registerCommercial(kind, snapshot).then((answer) => {
+      if (answer.kind === 'outcome' && answer.body.outcome === 'REGISTERED') onRegistered();
+      return answer;
+    });
+
+  const send = () => {
+    if (Object.keys(problems).length > 0) return;
+    setState({ kind: 'submitting' });
+    void submit(partyRelationshipPayloadOf(effectiveDraft, timeZone)).then((answer) =>
+      setState({ kind: 'answered', answer }),
+    );
+  };
+
+  const known = knownRelationships?.find((row) => row.relationshipId === draft.relationshipId);
+
+  return (
+    <div className="flex-1 overflow-auto p-4 flex flex-col gap-4">
+      <Card>
+        <CardHeader>
+          <CardTitle>{registrationTitles[kind]}</CardTitle>
+        </CardHeader>
+        <CardContent className="flex flex-col gap-4">
+          <p className="text-xs text-idpxyz-textMuted">
+            关系记谁对谁持有什么角色、在什么范围、多久。一笔登记一个修订，首笔从 1 起、此后连续；双方必须已在参与方册、
+            角色是否与双方匹配、区间是否合法，都由服务端按册面判。不带批准事实即登为候选关系，批准另行形成新修订。
+            提交打到 <span className="font-mono">{endpoint}</span>；租户不在表单上，由接入渠道的认证结果填入。
+          </p>
+
+          <div className="grid grid-cols-2 gap-3">
+            <Field label="关系标识 *" path="relationships[0].relationshipId" problems={problems}>
+              <Input
+                value={draft.relationshipId}
+                readOnly={locked}
+                className="font-mono text-[13px]"
+                placeholder="如 SYN-REL-AGENT-07"
+                onChange={(event) => patch({ relationshipId: event.target.value })}
+              />
+              <span className="block text-[11px] text-idpxyz-textMuted mt-1">
+                {known
+                  ? `已取回关系册里有这一关系，最新修订 r${known.revision}；本次登记是它的新修订。`
+                  : '已取回关系册里没有这一标识；本次登记是首笔修订（列表可能已陈旧，连续性仍由服务端判）。'}
+              </span>
+            </Field>
+
+            <RevisionField
+              path="relationships[0].revision"
+              problems={problems}
+              value={effectiveDraft.revision}
+              suggestion={suggestion}
+              edited={revisionEdited}
+              locked={locked}
+              onChange={(revision) => {
+                setRevisionEdited(true);
+                patch({ revision });
+              }}
+              onUseSuggestion={() => setRevisionEdited(false)}
+              note="建议值取已取回关系册里该关系的最新修订 + 1（不在册为 1）；只是省一次翻册，连续性仍由服务端按册面判。"
+            />
+
+            <ReferencePicker<BusinessPartyListResponseBody>
+              key={`holder-${partiesVersion}`}
+              label="持有方 *"
+              path="relationships[0].holder"
+              problems={problems}
+              value={draft.holder}
+              locked={locked}
+              onChange={(holder) => patch({ holder })}
+              load={listBusinessParties}
+              optionsOf={businessPartyPickerOptions}
+              emptyNote="参与方册今天为空；先在「参与方身份」册登记双方，或手填标识由服务端判。"
+              readFace="参与方册"
+              optionsNote="持有该角色的一方。候选不按状态过滤：双方届时是否已生效由服务端判。"
+            />
+
+            <ReferencePicker<BusinessPartyListResponseBody>
+              key={`counterparty-${partiesVersion}`}
+              label="相对方 *"
+              path="relationships[0].counterparty"
+              problems={problems}
+              value={draft.counterparty}
+              locked={locked}
+              onChange={(counterparty) => patch({ counterparty })}
+              load={listBusinessParties}
+              optionsOf={businessPartyPickerOptions}
+              emptyNote="参与方册今天为空；先在「参与方身份」册登记双方，或手填标识由服务端判。"
+              readFace="参与方册"
+              optionsNote="被持有该角色的一方。方向由持有方 → 相对方表达，不另设方向格。"
+            />
+
+            <Field label="角色 *" path="relationships[0].role" problems={problems}>
+              <select
+                className={selectClass}
+                value={draft.role}
+                disabled={locked}
+                onChange={(event) => patch({ role: event.target.value })}
+              >
+                <option value="">未选</option>
+                {roleOptions.map((option) => (
+                  <option key={option.value} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+              <span className="block text-[11px] text-idpxyz-textMuted mt-1">
+                封闭五词；未选照送空串，由服务端点名。角色与双方是否匹配不在这里判。
+              </span>
+            </Field>
+
+            <Field label="适用范围 *" path="relationships[0].scope" problems={problems}>
+              <Input
+                value={draft.scope}
+                readOnly={locked}
+                className="font-mono text-[13px]"
+                placeholder="商业范围引用"
+                onChange={(event) => patch({ scope: event.target.value })}
+              />
+            </Field>
+
+            <Field label="依据 *" path="relationships[0].basis" problems={problems}>
+              <Input
+                value={draft.basis}
+                readOnly={locked}
+                className="font-mono text-[13px]"
+                placeholder="关系依据引用"
+                onChange={(event) => patch({ basis: event.target.value })}
+              />
+            </Field>
+
+            <WallTimeField
+              label="生效起点 *"
+              path="relationships[0].effectiveStartsAt"
+              problems={problems}
+              value={draft.effectiveStartsAt}
+              locked={locked}
+              timeZone={timeZone}
+              onChange={(effectiveStartsAt) => patch({ effectiveStartsAt })}
+            />
+
+            <WallTimeField
+              label="生效终点（留空即开区间）"
+              path="relationships[0].effectiveEndsAt"
+              problems={problems}
+              value={draft.effectiveEndsAt}
+              locked={locked}
+              timeZone={timeZone}
+              onChange={(effectiveEndsAt) => patch({ effectiveEndsAt })}
+              note="留空则该键缺席，关系一直适用到被撤销 / 到期 / 替代。"
+            />
+          </div>
+
+          {/* 批准是一件事实而不是两格文本：勾选框才是「有没有批准」的声明，不勾时两格不进载荷、残字也不进。 */}
+          <div className="flex flex-col gap-3 rounded border border-idpxyz-border p-3">
+            <label className="flex items-center gap-2 text-[13px] text-idpxyz-text">
+              <input
+                type="checkbox"
+                checked={draft.approved}
+                disabled={locked}
+                onChange={(event) => patch({ approved: event.target.checked })}
+              />
+              已批准（带批准事实登记；不勾即登为候选关系，approval 键缺席）
+            </label>
+            {draft.approved ? (
+              <div className="grid grid-cols-2 gap-3">
+                <Field label="批准引用 *" path="relationships[0].approval.reference" problems={problems}>
+                  <Input
+                    value={draft.approvalReference}
+                    readOnly={locked}
+                    className="font-mono text-[13px]"
+                    placeholder="批准依据引用"
+                    onChange={(event) => patch({ approvalReference: event.target.value })}
+                  />
+                </Field>
+                <WallTimeField
+                  label="批准时刻 *"
+                  path="relationships[0].approval.approvedAt"
+                  problems={problems}
+                  value={draft.approvedAt}
+                  locked={locked}
+                  timeZone={timeZone}
+                  onChange={(approvedAt) => patch({ approvedAt })}
+                />
+              </div>
+            ) : null}
+          </div>
+
+          <div className="flex items-start gap-3">
+            <Button onClick={send} disabled={locked || Object.keys(problems).length > 0}>
+              {locked ? '提交中…' : '提交登记'}
+            </Button>
+            <RegistrationAnswerNote
+              state={state}
+              owner={info.owner}
+              outcomeLabels={partyIdentityOutcomeLabels}
+              problemNote={problemNote}
+            />
+          </div>
+        </CardContent>
+      </Card>
+
+      <SnapshotJsonDetails kind={kind} submit={submit} />
+    </div>
+  );
+}
