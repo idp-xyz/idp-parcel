@@ -42,7 +42,7 @@ parcel-api 的实探（GET 两读口 200、五个 POST 空载荷 400），浏览
 ## 范围
 
 - **做**：票 01、02 由通道 6 本会话在隔离 worktree `D:/tops/idp-parcel-mcp6-adminweb`（分支 `mcp6-admin-web-legal-entities`，基 `a608536d`）上做，纯 `.ts/.tsx/.md`。
-- **第二轮（08–12）**：由通道 1 点名后派给应答的通道，各在自己的隔离 worktree 上做；08 / 09 / 11 可并行，10 与 12 等 09 进 main。
+- **第二轮（08–12）**：由通道 1 点名后派给应答的通道，各在自己的隔离 worktree 上做；08 / 09 / 11 可并行，10 与 12 等 09 进 main。**五票已全部进 main**（2026-09-16 23:35，远端 main `29e5117b`）；各票评审的判断项归收口票 13。
 - **只出票不动手**：票 03（Go 读口 + 前端历史区）、04（契约决策）、05（CONTEXT 建模）、06（ADR-0091 放口）。
 - **不做**：不改两签结构为「列表 + 主按钮 + 抽屉」——二十余张册页同用两签，一页独改只添不一致；若要换形态另立票全站一起换。不加导出。
 
@@ -69,4 +69,5 @@ parcel-api 的实探（GET 两读口 200、五个 POST 空载荷 400），浏览
 | [09](./issues/09-business-parties-read-face-polish.md) | 业务参与方页读面打磨：徽章、时间悬停原串、筛选排序、行详情抽屉、复制、操作者文案（与票 01 同形） | resolved（通道 6；三笔重放进 main，远端 main = `1f569998`，评审 ← 通道 2 无阻断；`pages/party` 三处收口项记在票面处置；见票面完成记录） |
 | [10](./issues/10-business-party-relationship-deactivation-field-forms.md) | 参与方身份 / 关系 / 身份停用三册逐字段表单（ADR-0101 决定八），JSON 签降为折叠区 | resolved（通道 6；八笔重放进 main，远端 main = `b1efbfdf`，评审 ← 通道 5 无阻断——七条判断项并入 `pages/party` 收口票清单，见票面处置） |
 | [11](./issues/11-write-refusal-carries-detail.md) | 写口 400 带 `detail`：Go `writeProblem` 加格、TS `callerProblem` 带 detail、`RegistrationAnswerNote` 显出 | resolved（通道 4 → 4 新会话收尾；四笔重放 + 推送方 N1 文案笔进 main，远端 main = `958e6c57`，评审 ← 通道 2 无阻断；**与 ADR-0140 草案 Decision 三相反，归 owner**，见票面判断项 1） |
-| [12](./issues/12-business-party-revision-history-read-face.md) | 业务参与方修订历史读口 + 抽屉「修订历史」区（按票 03 形态） | in-progress（通道 4；(a) Go 读口 + (b) TS 判读七笔进 main，远端 main = `44c4ebe2`，评审 ← 通道 2 无阻断；(c) 抽屉接线等 10 进 main） |
+| [12](./issues/12-business-party-revision-history-read-face.md) | 业务参与方修订历史读口 + 抽屉「修订历史」区（按票 03 形态） | resolved（通道 4；(a)(b) 七笔进 main `44c4ebe2`、(c) 两笔进 main `29e5117b`，两段评审 ← 通道 2 皆无阻断；见票面） |
+| [13](./issues/13-pages-party-consolidation.md) | `pages/party` 收口：09 / 10 / 12 评审判断项里的同形副本、重复 switch 与陈旧读面归一（九条，可分人） | ready-for-agent |

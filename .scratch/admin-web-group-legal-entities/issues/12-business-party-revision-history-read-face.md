@@ -1,7 +1,7 @@
 # 12 业务参与方修订历史读口 + 抽屉「修订历史」区（按票 03 形态）
 
 Category: enhancement
-Status: in-progress
+Status: resolved
 Blocked by: 09（抽屉归 09 建，前端半边落在它上面；Go 半边不依赖 09，同一张票内先后做——派票时若 09 未落，先做 Go 半边）
 地盘：`internal/partycommercial/ports/`（`BusinessPartyRevisionHistoryRead`，紧邻 `LegalEntityRevisionHistoryRead`）、
 `internal/partycommercial/adapters/postgres/`（`OperationsCatalogue.ListBusinessPartyRevisions`）、`internal/partycommercial/adapters/http/`
@@ -124,3 +124,15 @@ TabsContent 隐藏时不卸载——操作者开着抽屉去登记签给同一�
 
 **推法**：rebase 后分支基改写，`git push --force-with-lease`（远端在预期 tip 才覆盖）；rebase 把已进 main 的七笔识为上游已有而跳过，
 分支上只剩 (c) 这一笔 + 本票面笔。
+
+### 评审 ← 通道 2 · (c) · 钉 `5ee87a88`（票面 `c280ea0f`）· 基线 `b1efbfdf` · 23:34
+
+（`task-2510f5fc`；隔离树 `%TEMP%\idp-review-12c`，评完已拆；实跑 `tsc` 0 / `run-tests` 279 / `vite build` 0；diff 只落 `BusinessPartiesPage.tsx` + 票面。全文随 `report_task`，此处按其一行汇总代落。）
+
+- **Standards（阻断 0 / 非阻断 1，判断项）**：**N1** 组件 `key` 带修订号那条注释的理由在今天的 `useRegisterList` 下不成立——列表重取时答案置空、抽屉随之卸载重挂，`key` 属冗余但无害的保险；代码不必改。无发现：组件与 `LegalEntityRevisionHistory` 逐态同形（未配置 / 无历史 / 加载中 / 出错、取消与陈旧答案丢弃、回显 partyId 核对）；判读只经 `businessPartyRevisionTimeline`；注释中文、符号名、无计数。
+- **Spec（阻断 0 / 非阻断 0）**：要做的 5 全部字面到位；演示形态未验如实记、判读层由 `business-party-revisions.test.ts` 同数据钉住；S1 归因改口两处到位。
+- **一行**：Standards 0 / 1（判断项）· Spec 0 / 0。无阻断，可推。
+
+### 进 main 记录 · (c)（推送方 = 通道 1 · 23:35）
+
+隔离树 `%TEMP%\idp-land12c` detached 于 `e86ecfea`（= 当时远端 main），cherry-pick 两笔零冲突 `5ee87a88→c7afefda` / `c280ea0f→29e5117b`（patch-id 同；两件对作者 tip 零 diff）；tip `29e5117b` 上 `gofmt -l` 空、`go build ./...` / `go vet ./...` 0、清点重生成 porcelain 空；admin-web `tsc -b --noEmit` 0 / `run-tests` 279 / `vite build` 0；带 DSN `go test -p 1 -count=1 ./...` **115 ok / 0 FAIL / 16 无测试 / 0 cached**（23:32:10→23:34:30；本笔不动 Go）、`cmd/parcel-api` 真库探针 PASS 非 SKIP → 评审无阻断（上）→ `ls-remote` 核 `e86ecfea` 未动 → 23:35 `push 29e5117b:main` 成，**远端 main = `29e5117b`**；共享树 ff 同 SHA。**票 12 全部落地**：Status → resolved（本簿记笔）。N1 与作者判断项里「`GroupLegalEntitiesPage` 是否同病未核」一并记入 `pages/party` 收口票（票 10 处置清单之后追加为第 ⑨ 条：核两页历史区依赖键与 `useRegisterList` 重取的交互，同一做法两页取齐）。
