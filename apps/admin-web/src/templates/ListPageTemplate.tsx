@@ -61,6 +61,12 @@ export interface ListPageTemplateProps<Row> {
   rows: Row[];
   rowKey: (row: Row) => string;
   onRowClick?: (row: Row) => void;
+  /**
+   * ready 态下 rows 为空时表格区显的一行（如「当前筛选条件下没有匹配」）。它与 viewState 的空态是两个事实：
+   * 空态说的是数据源为空，这一行说的是调用方在已取回数据上筛没了——调用方仍报 ready，模板不从 rows.length
+   * 推断任何一态。不传则空表体照旧只显表头。
+   */
+  emptyRowsNote?: ReactNode;
   /** 不传则不渲染分页条（如队列页一次拉全量）。 */
   pagination?: ListPaginationProps;
   /**
@@ -84,6 +90,7 @@ export function ListPageTemplate<Row>({
   rows,
   rowKey,
   onRowClick,
+  emptyRowsNote,
   pagination,
   viewState,
   stateOverride,
@@ -132,6 +139,13 @@ export function ListPageTemplate<Row>({
                 </TableRow>
               </TableHeader>
               <TableBody>
+                {rows.length === 0 && emptyRowsNote !== undefined ? (
+                  <TableRow>
+                    <TableCell colSpan={columns.length} className="text-center text-idpxyz-textMuted">
+                      {emptyRowsNote}
+                    </TableCell>
+                  </TableRow>
+                ) : null}
                 {rows.map((row) => (
                   <TableRow
                     key={rowKey(row)}

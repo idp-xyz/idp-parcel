@@ -3,6 +3,8 @@ import { deepEqual, equal } from 'node:assert/strict';
 import type { GroupLegalEntityRecord } from './api';
 import {
   filterLegalEntities,
+  legalEntityCountSummary,
+  legalEntityNoMatchNote,
   legalEntitySortOptions,
   legalEntityStatusFilterOptions,
   sortLegalEntities,
@@ -69,6 +71,14 @@ test('三种排序各按其键，且不改原数组', () => {
   deepEqual(ids(sortLegalEntities(rows, 'id-asc')), ['SYN-LE-01', 'SYN-LE-02', 'SYN-LE-03', 'SYN-LE-04']);
   deepEqual(ids(sortLegalEntities(rows, 'effective-asc')), ['SYN-LE-03', 'SYN-LE-01', 'SYN-LE-04', 'SYN-LE-02']);
   deepEqual(ids(rows), before);
+});
+
+// Covers: 裁决 1——筛出为空不是空态。计数摘要总数与当前显示数分开报，筛空时照显「共 N 个，当前显示 0 个」，
+// 表格区那一行说的是「当前条件下无匹配」而不是「登记册为空」（两者续办不同：前者改条件，后者去登记）。
+test('计数摘要分报总数与当前显示数，筛空提示不冒充空态', () => {
+  equal(legalEntityCountSummary(4, 4), '共 4 个责任法人，当前显示 4 个');
+  equal(legalEntityCountSummary(4, 0), '共 4 个责任法人，当前显示 0 个');
+  equal(legalEntityNoMatchNote, '当前筛选条件下没有匹配的法人');
 });
 
 // Covers: 下拉选项与封闭词一一对应、默认项在首位——页面直接渲染这两张表，不另抄一份。

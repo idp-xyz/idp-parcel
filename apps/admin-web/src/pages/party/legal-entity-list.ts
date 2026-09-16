@@ -55,6 +55,18 @@ export function filterLegalEntities(
   });
 }
 
+/**
+ * 过滤条右端的计数摘要（票 01 裁决 1）：总数与当前显示数分开报。四态里的空态说的是「登记册为空」，
+ * 筛选筛没了是「当前条件下无匹配」，两者续办不同（前者去登记，后者改条件）——所以筛空时这里照显
+ * 「共 N 个，当前显示 0 个」，表格区另显 legalEntityNoMatchNote，不把页面切成空态。
+ */
+export function legalEntityCountSummary(total: number, visible: number): string {
+  return `共 ${total} 个责任法人，当前显示 ${visible} 个`;
+}
+
+/** 筛出为空时表格区那一行的话；措辞点明是「筛选条件」，与空态「尚无登记」分得开。 */
+export const legalEntityNoMatchNote = '当前筛选条件下没有匹配的法人';
+
 // 时刻按字符串比：端点给的是 RFC 3339 UTC，同一格式下字典序即时间序，不必解析；解析失败的
 // 值会静默排到一头去，而字符串比至少是稳定且可预期的。
 const byString = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0);
