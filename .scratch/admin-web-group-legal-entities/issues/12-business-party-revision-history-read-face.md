@@ -1,7 +1,7 @@
 # 12 业务参与方修订历史读口 + 抽屉「修订历史」区（按票 03 形态）
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress
 Blocked by: 09（抽屉归 09 建，前端半边落在它上面；Go 半边不依赖 09，同一张票内先后做——派票时若 09 未落，先做 Go 半边）
 地盘：`internal/partycommercial/ports/`（`BusinessPartyRevisionHistoryRead`，紧邻 `LegalEntityRevisionHistoryRead`）、
 `internal/partycommercial/adapters/postgres/`（`OperationsCatalogue.ListBusinessPartyRevisions`）、`internal/partycommercial/adapters/http/`
