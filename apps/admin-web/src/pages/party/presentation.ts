@@ -203,8 +203,14 @@ export const legalEntityKindLabels: Record<string, string> = {
 
 export const problemCodeNotes: Record<string, string> = {
   METHOD_NOT_ALLOWED: '请求方法不被该端点允许。这是调用方式问题,不是业务答案。',
+  // 一句覆盖读写两侧:problemNote 的签名只有 code,今天分不出这个 400 来自目录读口(kind)还是登记口
+  // (载荷形状),只写读口那半会让登记被拒的人读到一条与真相无关的原因。写口那半的成因清单对照
+  // isolated_write_intake.go 里包 ErrMalformedRequest 的那几道门;服务端带 detail 归票
+  // admin-web-group-legal-entities/11,落地后这一句只需收短,不必再猜。
   MALFORMED_REQUEST:
-    '请求构造不出查询(kind 缺席或不在封闭集),重发同样的内容不会改变结果。',
+    '请求形状不合,重发同样的内容不会改变结果。目录读口:kind 缺席或不在封闭集。' +
+    '登记口:载荷带了 tenantId(含 null)、多出未知键、不恰一项(零项、多项或混入别的口的项)、' +
+    '修订号不是整数、时刻不是 RFC 3339、封闭集词不在集内、标识或依据为空,或尾随第二个 JSON 值。',
   INTAKE_FAILED: '接入解析未能完成,本次没有形成任何业务答案,可稍后重试。',
   NO_ANSWER_FORMED: '服务端处理未能完成,本次没有形成任何业务答案,可稍后重试。',
   // 只可能来自登记写面：服务端交回了一个没有名字的答案，那是实现坏了，不是一种新的
@@ -251,10 +257,26 @@ export const registrationTitles: Record<CommercialRegistrationKind, string> = {
 // 主路径；各册的逐字段表单由实施票逐册裁形另建。此前这里写的理由（「渠道原始载荷 →
 // 登记快照」的翻译属渠道接入契约、随 PAR-INT-01 提供）被 ADR-0101 收窄为只适用客户渠道
 // 载荷，对操作者面不成立，故不再这样说。
-function snapshotHint(subcommand: string, fields: string): string {
+//
+// 「不带 tenantId」那句同理只写在这里一处，且只给在线口已放行的那几签：身份族的隔离
+// Intake（`refuseSelfReportedTenant`）对载荷里的 tenantId 键在场即拒、含 null——租户格由
+// 接入渠道填入，不采信自报（`register_party_identity.go` 包注释；ADR-0100 决定二）。此前
+// 身份族各句把整批的 tenantId 也列进键里，那是受控 CLI 批文的形状，照它填在线口答的是
+// 400，而 400 到页面只剩 code（票 admin-web-group-legal-entities/08）。发布口与产品渠道族
+// 两口今天仍挂 UnconfiguredIntake 答 403，它们的提示句照批文形状说，等那几口放行时随其票
+// 改——现在改了也验不了，一句验不了的否定与一句验不了的肯定同样不可信。
+const tenantGridFilledByChannel =
+  '载荷里**不带 tenantId**——在线口的租户格由接入渠道填入,带了(含 null)即 400。';
+
+function snapshotHint(
+  subcommand: string,
+  fields: string,
+  options?: { tenantGridFilledByChannel: true },
+): string {
   return (
     `登记快照 JSON 的键与受控登记口 parcel-commercial ${subcommand} -input 吃的同一份;` +
     '在线口收的是其中**一项**,不是整批——批不是聚合,逐项各起事务,在线口把一项作为一次请求。' +
+    (options?.tenantGridFilledByChannel ? tenantGridFilledByChannel : '') +
     '本签是受控批量口的在线镜像(ADR-0101),不是运营配置员的主路径;逐字段表单按各册实施票另建。' +
     fields
   );
@@ -287,36 +309,40 @@ export const registrationSnapshotHints: Record<CommercialRegistrationKind, strin
   ),
   'business-party': snapshotHint(
     'register-parties',
-    'businessParties 数组里一项的键为 partyId / name / revision / basis / effectiveFrom,' +
-      '外加整批的 tenantId。首笔修订必须是 1,此后必须连续——跳号说明你看到的册面已陈旧,' +
-      '会被受理门拒绝而不是替你猜。',
+    'businessParties 数组里一项的键为 partyId / name / revision / basis / effectiveFrom。' +
+      '首笔修订必须是 1,此后必须连续——跳号说明你看到的册面已陈旧,会被受理门拒绝而不是替你猜。',
+    { tenantGridFilledByChannel: true },
   ),
   'legal-entity': snapshotHint(
     'register-parties',
-    'legalEntities 数组里一项的键为 legalEntityId / partyId / revision / basis / effectiveFrom,' +
-      '外加整批的 tenantId。参与方必须已登记且在法人生效时点已生效——法人不钉悬空身份。',
+    'legalEntities 数组里一项的键为 legalEntityId / partyId / revision / basis / effectiveFrom。' +
+      '参与方必须已登记且在法人生效时点已生效——法人不钉悬空身份。',
+    { tenantGridFilledByChannel: true },
   ),
   'customer-account': snapshotHint(
     'register-parties',
     'customerAccounts 数组里一项的键为 accountId / customerPartyId / revision / basis / ' +
-      'effectiveFrom,外加整批的 tenantId。引用判据同法人登记;跨租户绑定由领域构造门拒绝。' +
+      'effectiveFrom。引用判据同法人登记;跨租户绑定由领域构造门拒绝。' +
       '结果显示在本页「客户账户」签(客户与合同页)。',
+    { tenantGridFilledByChannel: true },
   ),
   'party-relationship': snapshotHint(
     'register-parties',
     'relationships 数组里一项的键为 relationshipId / revision / holder / counterparty / role / ' +
-      'scope / basis / effectiveStartsAt,可选 effectiveEndsAt 与 approval{reference,approvedAt};' +
-      '外加整批的 tenantId。角色取封闭五词 CUSTOMER / SUPPLIER / CARRIER_AGENT / RESELLER / ' +
-      'ACCOUNT_HOLDER。缺 approval 即登记为候选关系,批准另行形成新修订。',
+      'scope / basis / effectiveStartsAt,可选 effectiveEndsAt 与 approval{reference,approvedAt}。' +
+      '角色取封闭五词 CUSTOMER / SUPPLIER / CARRIER_AGENT / RESELLER / ACCOUNT_HOLDER。' +
+      '缺 approval 即登记为候选关系,批准另行形成新修订。',
+    { tenantGridFilledByChannel: true },
   ),
   'identity-deactivation': snapshotHint(
     'deactivate-party-identity',
-    'deactivations 数组里一项的键为 kind / id / revision / basis / at,外加整批的 tenantId。' +
+    'deactivations 数组里一项的键为 kind / id / revision / basis / at。' +
       '身份种类取封闭三词 BUSINESS_PARTY / LEGAL_ENTITY / CUSTOMER_ACCOUNT——关系不在内,' +
       '关系的终止走撤销/到期/替代,不叫停用。revision 是停用落点的修订号(册上最新 + 1):' +
       '你声明自己看到的册面,错位说明册面已被并发推进或意图已陈旧。' +
       '**法人与客户账户的停用也走本签**(一个命令带种类),结果分别显示在集团与法人页、以及' +
       '客户与合同页的「客户账户」签上。',
+    { tenantGridFilledByChannel: true },
   ),
   'service-product-form': snapshotHint(
     'register-products',

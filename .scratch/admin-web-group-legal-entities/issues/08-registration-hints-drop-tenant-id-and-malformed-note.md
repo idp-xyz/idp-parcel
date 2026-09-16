@@ -1,7 +1,7 @@
 # 08 登记签提示句去「外加整批的 tenantId」+ party `problemNote` 的 `MALFORMED_REQUEST` 措辞改成读口 / 写口都成立
 
 Category: bug
-Status: ready-for-agent
+Status: in-progress
 Blocked by: 无
 地盘：`apps/admin-web/src/pages/party/presentation.ts`（`snapshotHint` 前半、`registrationSnapshotHints` 身份族五句、`problemCodeNotes.MALFORMED_REQUEST` 一格）。不动 `catalogue-api.ts`、不动 Go、不动逐字段表单。
 出处：通道 1 评估「业务参与方」页（钉 main `dbe989cc`，2026-09-16 20:2x），spec「第二轮」表第一档。
