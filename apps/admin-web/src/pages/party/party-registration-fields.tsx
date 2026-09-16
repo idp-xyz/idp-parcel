@@ -8,7 +8,14 @@ import {
   type CustomerAccountListResponseBody,
   type GroupLegalEntityListResponseBody,
 } from './api';
-import { identityStatusLabels, labelOf, problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
+import {
+  identityStatusLabels,
+  labelOf,
+  partyNameUnknownNote,
+  problemNote,
+  registrationSnapshotHints,
+  registrationTitles,
+} from './presentation';
 import { Field, type PickerOption } from './PublicationFormFields';
 
 /**
@@ -105,7 +112,7 @@ export function WallTimeField({
 }
 
 // 各册的候选转写：显名称 · 标识 · 状态，不按状态过滤——表单不裁，届时是否已生效由服务端判；状态摆出来只是让人看。
-// 法人与客户账户的「名称」在参与方册上转写而来，转不到（悬空引用）时如实写出、不补占位。
+// 法人与客户账户的「名称」在参与方册上转写而来，转不到（悬空引用）时如实写出、不补占位（partyNameUnknownNote）。
 
 export function businessPartyPickerOptions(body: BusinessPartyListResponseBody): PickerOption[] {
   return body.parties.map((party) => ({
@@ -118,7 +125,7 @@ export function legalEntityPickerOptions(body: GroupLegalEntityListResponseBody)
   return body.entities.map((entity) => ({
     value: entity.legalEntityId,
     label:
-      `${entity.partyNameKnown ? entity.partyName : '参与方册查无此身份'} · ${entity.legalEntityId} · ` +
+      `${entity.partyNameKnown ? entity.partyName : partyNameUnknownNote} · ${entity.legalEntityId} · ` +
       labelOf(identityStatusLabels, entity.status),
   }));
 }
@@ -127,7 +134,7 @@ export function customerAccountPickerOptions(body: CustomerAccountListResponseBo
   return body.accounts.map((account) => ({
     value: account.accountId,
     label:
-      `${account.customerPartyNameKnown ? account.customerPartyName : '参与方册查无此身份'} · ${account.accountId} · ` +
+      `${account.customerPartyNameKnown ? account.customerPartyName : partyNameUnknownNote} · ${account.accountId} · ` +
       labelOf(identityStatusLabels, account.status),
   }));
 }

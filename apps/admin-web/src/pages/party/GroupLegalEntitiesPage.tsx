@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Button,
   Drawer,
@@ -12,7 +12,6 @@ import {
 } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
-import { StatusBadgeFor, domainStatusTones, type DomainStatus } from '../../domain/status';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
@@ -25,7 +24,14 @@ import {
 import { identityStatusLabels, labelOf, legalEntityKindLabels, problemNote } from './presentation';
 import { LegalEntityRegistrationForm } from './LegalEntityRegistrationForm';
 import { legalEntityRevisionTimeline, revisionHistoryNote } from './legal-entity-revisions';
-import { DetailRow, Instant, filterSelectClass, useCopyToClipboard } from './detail-primitives';
+import {
+  DetailRow,
+  Instant,
+  UnknownPartyName,
+  filterSelectClass,
+  statusBadge,
+  useCopyToClipboard,
+} from './detail-primitives';
 import { useRegisterList } from './register-list';
 import {
   filterLegalEntities,
@@ -40,13 +46,6 @@ import {
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['group-legal-entities'];
-
-// 身份状态词表词按共享词表着色；词表没收录的码（服务端新增一格时）原样示码、不猜色调——
-// 归进某个既有中文说法会让一种新答案冒充另一种。断言只桥接类型边界，词同源于 CONTEXT 原词。
-function statusBadge(status: string): ReactNode {
-  const word = labelOf(identityStatusLabels, status);
-  return word in domainStatusTones ? <StatusBadgeFor status={word as DomainStatus} /> : word;
-}
 
 // 骨架期这里列过「运营集团租户」——ADR-0003 里那一级是配置与隔离边界本身，读面本来就在单租户
 // 作用域内取数，整列同值没有信息，接线时按 live 页惯例撤下。「对象类型」列同一判据撤下（票 01 第 3 条）：
@@ -65,14 +64,8 @@ const columns: ListColumn<GroupLegalEntityRecord>[] = [
   {
     id: 'name',
     header: '名称',
-    // 名称在参与方册上（法人不抄第二份）；partyNameKnown 为假是写入门失败才会出现
-    // 的悬空引用，如实标出让人去查写侧，不补占位文本冒充名称。
-    render: (row) =>
-      row.partyNameKnown ? (
-        row.partyName
-      ) : (
-        <span className="text-idpxyz-textMuted">参与方册查无此身份</span>
-      ),
+    // 名称在参与方册上（法人不抄第二份）；转写不到那一格的话与判据在 presentation.ts 的 partyNameUnknownNote。
+    render: (row) => (row.partyNameKnown ? row.partyName : <UnknownPartyName />),
   },
   {
     id: 'party-identity',
@@ -88,7 +81,7 @@ const columns: ListColumn<GroupLegalEntityRecord>[] = [
     // 状态的内容而不是装饰。
     render: (row) => (
       <div className="flex flex-col items-center gap-0.5">
-        {statusBadge(row.status)}
+        {statusBadge(identityStatusLabels, row.status)}
         {row.deactivatedAt ? (
           <p className="font-mono text-xs text-idpxyz-textMuted">
             自 <Instant value={row.deactivatedAt} />
@@ -212,7 +205,7 @@ function LegalEntityDrawer({
             <div className="flex items-center gap-2">
               <span className="font-mono font-medium text-idpxyz-text">{row.legalEntityId}</span>
               <span className="font-mono text-xs text-idpxyz-textMuted">r{row.revision}</span>
-              {statusBadge(row.status)}
+              {statusBadge(identityStatusLabels, row.status)}
             </div>
           </DrawerHeader>
           <DrawerBody>
@@ -227,10 +220,8 @@ function LegalEntityDrawer({
               <DetailRow label="业务参与方身份" mono onCopy={() => copy('业务参与方身份', row.partyId)}>
                 {row.partyId}
               </DetailRow>
-              <DetailRow label="参与方名称">
-                {row.partyNameKnown ? row.partyName : <span className="text-idpxyz-textMuted">参与方册查无此身份</span>}
-              </DetailRow>
-              <DetailRow label="身份状态">{statusBadge(row.status)}</DetailRow>
+              <DetailRow label="参与方名称">{row.partyNameKnown ? row.partyName : <UnknownPartyName />}</DetailRow>
+              <DetailRow label="身份状态">{statusBadge(identityStatusLabels, row.status)}</DetailRow>
               <DetailRow label="登记依据" mono onCopy={() => copy('登记依据', row.basis)}>
                 {row.basis}
               </DetailRow>

@@ -6,11 +6,11 @@
 // 不是对册排；分页下推之前这条限制如实存在，页面不假装成全量。
 
 import type { BusinessPartyRecord } from './api';
-import { identityStatusLabels, labelOf } from './presentation';
-import { byInstant, byString, matchesSearch, type SelectOption } from './list-order';
+import { identityStatusLabels, type IdentityStatusCode } from './presentation';
+import { byInstant, byString, codeFilterOptions, matchesSearch, type CodeFilter, type SelectOption } from './list-order';
 
-/** 身份状态封闭三格（domain IdentityStatus 原名）加「全部」。 */
-export type BusinessPartyStatusFilter = 'ALL' | 'REGISTERED' | 'EFFECTIVE' | 'DEACTIVATED';
+/** 身份状态封闭三格（domain IdentityStatus 原名，从 identityStatusLabels 的键派生）加「全部」。 */
+export type BusinessPartyStatusFilter = CodeFilter<IdentityStatusCode>;
 
 export interface BusinessPartyFilter {
   search: string;
@@ -23,15 +23,8 @@ export interface BusinessPartyFilter {
  */
 export type BusinessPartySortKey = 'registered-desc' | 'id-asc' | 'effective-asc';
 
-// 选项表由页面直接渲染，词从 identityStatusLabels 派生——那份词表是 CONTEXT 原词在前端的唯一一处，
-// 这里再抄一份就会在改词时漏一处。
-export const businessPartyStatusFilterOptions: readonly SelectOption<BusinessPartyStatusFilter>[] = [
-  { value: 'ALL', label: '全部状态' },
-  ...(['REGISTERED', 'EFFECTIVE', 'DEACTIVATED'] as const).map((value) => ({
-    value,
-    label: labelOf(identityStatusLabels, value),
-  })),
-];
+// 选项表由页面直接渲染，码与词都从 identityStatusLabels 派生——那份词表是 CONTEXT 原词在前端的唯一一处。
+export const businessPartyStatusFilterOptions = codeFilterOptions(identityStatusLabels, '全部状态');
 
 export const businessPartySortOptions: readonly SelectOption<BusinessPartySortKey>[] = [
   { value: 'registered-desc', label: '登记时间 新→旧' },
