@@ -34,6 +34,7 @@ import {
 } from './presentation';
 import { businessPartyRevisionHistoryNote, businessPartyRevisionTimeline } from './business-party-revisions';
 import { DetailRow, Instant, InstantRange, filterSelectClass, useCopyToClipboard } from './detail-primitives';
+import { useRegisterList } from './register-list';
 import { BusinessPartyRegistrationForm } from './BusinessPartyRegistrationForm';
 import { PartyRelationshipRegistrationForm } from './PartyRelationshipRegistrationForm';
 import { IdentityDeactivationForm } from './IdentityDeactivationForm';
@@ -686,25 +687,6 @@ function RegistrationTab({
  * 页面持有两张读签的列表状态（票 10 第 5 条）：登记签从这份答案取修订号建议，登记册答 REGISTERED / DEACTIVATED 时
  * 触发对应读签重取。两册各自一份重取序号——登一段关系不必重取参与方册，反过来也一样。
  */
-function useRegisterList<Body>(load: () => Promise<ApiResult<Body>>) {
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<Body> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void load().then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [load, reloadKey]);
-
-  const retry = () => setReloadKey((value) => value + 1);
-  return { answer, retry, version: reloadKey };
-}
-
 export function BusinessPartiesPage() {
   const parties = useRegisterList(listBusinessParties);
   const relationships = useRegisterList(listPartyRelationships);
