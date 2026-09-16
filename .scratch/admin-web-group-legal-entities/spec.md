@@ -65,8 +65,8 @@ parcel-api 的实探（GET 两读口 200、五个 POST 空载荷 400），浏览
 | [05](./issues/05-legal-entity-business-attributes.md) | 责任法人业务属性建模（税号、注册国家、开票主体、结算币种、联系人） | needs-info（归 owner） |
 | [06](./issues/06-isolated-write-admission-for-commercial-identity-family.md) | ADR-0091 逐口放行：`/commercial-*` 身份族在隔离形态下放行 | resolved（通道 4 → 4 新会话收尾，rebase 后以原 SHA ff 进 main，清点 `f6569f51`；见票面完成记录） |
 | [07](./issues/07-isolated-write-intake-decode-strict-and-comment-counts.md) | A 类尾巴：隔离身份 Intake 外壳解码改调 `decodeStrict`（尾随内容拒）+ 注释去计数（实做四处；06 评审 N1 / N3，可选 N2 未做） | resolved（通道 4，三笔原 SHA ff 进 main，远端 main = `19047d51`，评审 ← 通道 2 无阻断；见票面完成记录） |
-| [08](./issues/08-registration-hints-drop-tenant-id-and-malformed-note.md) | 登记签提示句去「外加整批的 tenantId」+ `problemNote` 的 `MALFORMED_REQUEST` 措辞改成读口 / 写口都成立（纯 .ts 文案） | ready-for-agent |
-| [09](./issues/09-business-parties-read-face-polish.md) | 业务参与方页读面打磨：徽章、时间悬停原串、筛选排序、行详情抽屉、复制、操作者文案（与票 01 同形） | ready-for-agent |
-| [10](./issues/10-business-party-relationship-deactivation-field-forms.md) | 参与方身份 / 关系 / 身份停用三册逐字段表单（ADR-0101 决定八），JSON 签降为折叠区 | ready-for-agent（Blocked by 09） |
-| [11](./issues/11-write-refusal-carries-detail.md) | 写口 400 带 `detail`：Go `writeProblem` 加格、TS `callerProblem` 带 detail、`RegistrationAnswerNote` 显出 | ready-for-agent |
-| [12](./issues/12-business-party-revision-history-read-face.md) | 业务参与方修订历史读口 + 抽屉「修订历史」区（按票 03 形态） | ready-for-agent（Blocked by 09，Go 半边可先做） |
+| [08](./issues/08-registration-hints-drop-tenant-id-and-malformed-note.md) | 登记签提示句去「外加整批的 tenantId」+ `problemNote` 的 `MALFORMED_REQUEST` 措辞改成读口 / 写口都成立（纯 .ts 文案） | resolved（通道 5 → 5 新会话收尾；与 09 同批重放进 main，远端 main = `1f569998`，评审 ← 通道 6 无阻断；见票面完成记录） |
+| [09](./issues/09-business-parties-read-face-polish.md) | 业务参与方页读面打磨：徽章、时间悬停原串、筛选排序、行详情抽屉、复制、操作者文案（与票 01 同形） | resolved（通道 6；三笔重放进 main，远端 main = `1f569998`，评审 ← 通道 2 无阻断；`pages/party` 三处收口项记在票面处置；见票面完成记录） |
+| [10](./issues/10-business-party-relationship-deactivation-field-forms.md) | 参与方身份 / 关系 / 身份停用三册逐字段表单（ADR-0101 决定八），JSON 签降为折叠区 | ready-for-agent（Blocked by 09 已解：09 进 main `1f569998`） |
+| [11](./issues/11-write-refusal-carries-detail.md) | 写口 400 带 `detail`：Go `writeProblem` 加格、TS `callerProblem` 带 detail、`RegistrationAnswerNote` 显出 | in-progress（通道 4 完工 21:23，分支 `mcp4-adminweb11@a78d465c` 已推；原派通道 5 的评审无人认领，22:1x 改派通道 2，无阻断后单独重放） |
+| [12](./issues/12-business-party-revision-history-read-face.md) | 业务参与方修订历史读口 + 抽屉「修订历史」区（按票 03 形态） | ready-for-agent（Blocked by 09 已解：09 进 main `1f569998`） |
