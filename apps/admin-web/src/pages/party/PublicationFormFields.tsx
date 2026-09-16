@@ -140,37 +140,14 @@ export interface PickerOption {
   label: string;
 }
 
-/**
- * 从读面选一条引用。读面答了业务答案就给选单（不按状态过滤——表单不裁，状态显在选项里由人看）；读面在
- * 未配置那堵墙前或读不到时退回手填并说明原因。选出来的只是引用串，在不在册、立不立得住仍由服务端判。
- * 手填时若当前值不在候选里，选单照样保留它作一项，免得读面刷新把人填好的东西静默清掉。
- *
- * 三处可选的整句顶替（`manualPlaceholder` / `optionsNote` / `unknownNote`）只为价卡目录那一格：它的引用串有固定形状
- * （`planId@planVersion`）、候选非空时还要提醒「照目录行上的方向填」、把读面叫「目录」——都是措辞不是形状，抬共享层
- * 不改一字显示文案，所以给句子留口而不另留一份 Picker。
- */
-export function ReferencePicker<Body>({
-  label,
-  path,
-  problems,
-  value,
-  locked,
-  onChange,
-  load,
-  optionsOf,
-  emptyNote,
-  readFace,
-  manualPlaceholder = '引用串（读面不可用时手填）',
-  optionsNote,
-  unknownNote = '手填，不在读面上',
-}: {
+/** ReferencePicker 两种取数方式共有的那半：格、候选转写与各句措辞。 */
+export interface ReferencePickerFaceProps<Body> {
   label: string;
   path: string;
   problems: Record<string, string[]>;
   value: string;
   locked: boolean;
   onChange: (value: string) => void;
-  load: () => Promise<ApiResult<Body>>;
   optionsOf: (body: Body) => PickerOption[];
   emptyNote: string;
   readFace: string;
@@ -180,9 +157,47 @@ export function ReferencePicker<Body>({
   optionsNote?: string;
   /** 当前值不在候选里时那一项的括注。 */
   unknownNote?: string;
-}) {
-  const answer = useLoaded(load);
+}
 
+/**
+ * 从读面选一条引用。读面答了业务答案就给选单（不按状态过滤——表单不裁，状态显在选项里由人看）；读面在
+ * 未配置那堵墙前或读不到时退回手填并说明原因。选出来的只是引用串，在不在册、立不立得住仍由服务端判。
+ * 手填时若当前值不在候选里，选单照样保留它作一项，免得读面刷新把人填好的东西静默清掉。
+ *
+ * 三处可选的整句顶替（`manualPlaceholder` / `optionsNote` / `unknownNote`）只为价卡目录那一格：它的引用串有固定形状
+ * （`planId@planVersion`）、候选非空时还要提醒「照目录行上的方向填」、把读面叫「目录」——都是措辞不是形状，抬共享层
+ * 不改一字显示文案，所以给句子留口而不另留一份 Picker。
+ *
+ * 这一份自己读（`load`，读一次只读一次）；调用方手上已经有那份读面答案时用 ReferencePickerFor 把答案交进来，
+ * 免得同一册在一张表单里被读两三遍（票 admin-web-group-legal-entities/13 第 5 条）。
+ */
+export function ReferencePicker<Body>({
+  load,
+  ...face
+}: ReferencePickerFaceProps<Body> & { load: () => Promise<ApiResult<Body>> }) {
+  const answer = useLoaded(load);
+  return <ReferencePickerFor answer={answer} {...face} />;
+}
+
+/**
+ * 收一份已取回的读面答案的 ReferencePicker：候选、手填退路与各句措辞同上，只是不自己读。`answer` 为 null 即
+ * 「还在读」——页面持有的列表答案首取回来之前就是它，措辞与自己读那份同一句。
+ */
+export function ReferencePickerFor<Body>({
+  answer,
+  label,
+  path,
+  problems,
+  value,
+  locked,
+  onChange,
+  optionsOf,
+  emptyNote,
+  readFace,
+  manualPlaceholder = '引用串（读面不可用时手填）',
+  optionsNote,
+  unknownNote = '手填，不在读面上',
+}: ReferencePickerFaceProps<Body> & { answer: ApiResult<Body> | null }) {
   if (answer?.kind === 'outcome') {
     const options = optionsOf(answer.body);
     const known = options.some((option) => option.value === value);

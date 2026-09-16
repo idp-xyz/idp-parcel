@@ -1,15 +1,15 @@
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { RegistrationAnswerNote } from '../../components/registration';
+import type { ApiResult } from '../catalogue-api';
 import {
   commercialRegistrationEndpoints,
-  listBusinessParties,
   partyIdentityOutcomeLabels,
   type BusinessPartyListResponseBody,
   type PartyRelationshipRecord,
 } from './api';
 import { problemNote, registrationTitles } from './presentation';
-import { Field, ReferencePicker, selectClass } from './PublicationFormFields';
+import { Field, ReferencePickerFor, selectClass } from './PublicationFormFields';
 import {
   RevisionField,
   SnapshotJsonDetails,
@@ -35,15 +35,15 @@ import {
  * party-relationship-form.ts。**可缺键缺席而不是零值**——终点留空即开区间、不勾「已批准」即候选关系，理由在那个
  * 文件头上。
  *
- * 双方用 ReferencePicker 从参与方册选：候选显名称 · 标识 · 状态，不按状态过滤，读面不可用退回手填。Picker 读一次只读
- * 一次，所以页面在参与方列表重取后换 `partiesVersion` 让它重挂重读——刚在「参与方身份」册登进去的那一个，才能立刻
- * 出现在这里的候选里。
+ * 双方用 ReferencePickerFor 从参与方册选：候选显名称 · 标识 · 状态，不按状态过滤，读面不可用退回手填。候选取的是
+ * 页面持有的那份参与方列表答案，不另读——页面在登记册答 REGISTERED 后重取，刚在「参与方身份」册登进去的那一个随
+ * 新答案立刻出现在这里的候选里，两只 Picker 不再各自重读一遍（票 10 评审 N5）。
  */
 export interface PartyRelationshipRegistrationFormProps {
   /** 页面已取回的关系列表（给修订号建议用）；没取到传 null，建议一律为 1。 */
   knownRelationships: readonly PartyRelationshipRecord[] | null;
-  /** 参与方列表的重取序号：每变一次，双方的候选重读一次。 */
-  partiesVersion: number;
+  /** 页面持有的参与方列表答案（给双方候选用）；首取回来之前为 null。 */
+  parties: ApiResult<BusinessPartyListResponseBody> | null;
   /** 登记册答 `REGISTERED` 时回调，页面借它重取关系列表。 */
   onRegistered: () => void;
 }
@@ -55,7 +55,7 @@ const roleOptions = partyRoleOptions();
 
 export function PartyRelationshipRegistrationForm({
   knownRelationships,
-  partiesVersion,
+  parties,
   onRegistered,
 }: PartyRelationshipRegistrationFormProps) {
   const form = useRegistrationForm<PartyRelationshipDraft>({
@@ -107,30 +107,28 @@ export function PartyRelationshipRegistrationForm({
               note="建议值取已取回关系册里该关系的最新修订 + 1（不在册为 1）；只是省一次翻册，连续性仍由服务端按册面判。"
             />
 
-            <ReferencePicker<BusinessPartyListResponseBody>
-              key={`holder-${partiesVersion}`}
+            <ReferencePickerFor<BusinessPartyListResponseBody>
               label="持有方 *"
               path="relationships[0].holder"
               problems={problems}
               value={draft.holder}
               locked={locked}
               onChange={(holder) => patch({ holder })}
-              load={listBusinessParties}
+              answer={parties}
               optionsOf={businessPartyPickerOptions}
               emptyNote="参与方册今天为空；先在「参与方身份」册登记双方，或手填标识由服务端判。"
               readFace="参与方册"
               optionsNote="持有该角色的一方。候选不按状态过滤：双方届时是否已生效由服务端判。"
             />
 
-            <ReferencePicker<BusinessPartyListResponseBody>
-              key={`counterparty-${partiesVersion}`}
+            <ReferencePickerFor<BusinessPartyListResponseBody>
               label="相对方 *"
               path="relationships[0].counterparty"
               problems={problems}
               value={draft.counterparty}
               locked={locked}
               onChange={(counterparty) => patch({ counterparty })}
-              load={listBusinessParties}
+              answer={parties}
               optionsOf={businessPartyPickerOptions}
               emptyNote="参与方册今天为空；先在「参与方身份」册登记双方，或手填标识由服务端判。"
               readFace="参与方册"

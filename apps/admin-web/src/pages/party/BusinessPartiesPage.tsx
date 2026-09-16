@@ -638,15 +638,16 @@ const chipClass = (active: boolean) =>
   }`;
 
 function RegistrationTab({
+  parties,
   knownParties,
   knownRelationships,
-  partiesVersion,
   onPartiesChanged,
   onRelationshipsChanged,
 }: {
+  /** 页面持有的参与方列表答案：关系表单双方候选与停用表单参与方那一册都取它，不各自再读（票 13 第 5 条）。 */
+  parties: ApiResult<BusinessPartyListResponseBody> | null;
   knownParties: readonly BusinessPartyRecord[] | null;
   knownRelationships: readonly PartyRelationshipRecord[] | null;
-  partiesVersion: number;
   onPartiesChanged: () => void;
   onRelationshipsChanged: () => void;
 }) {
@@ -670,15 +671,11 @@ function RegistrationTab({
       ) : selected === 'party-relationship' ? (
         <PartyRelationshipRegistrationForm
           knownRelationships={knownRelationships}
-          partiesVersion={partiesVersion}
+          parties={parties}
           onRegistered={onRelationshipsChanged}
         />
       ) : (
-        <IdentityDeactivationForm
-          knownParties={knownParties}
-          partiesVersion={partiesVersion}
-          onDeactivated={onPartiesChanged}
-        />
+        <IdentityDeactivationForm parties={parties} onDeactivated={onPartiesChanged} />
       )}
     </div>
   );
@@ -721,9 +718,9 @@ export function BusinessPartiesPage() {
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
           <RegistrationTab
+            parties={parties.answer}
             knownParties={knownParties}
             knownRelationships={knownRelationships}
-            partiesVersion={parties.version}
             onPartiesChanged={parties.retry}
             onRelationshipsChanged={relationships.retry}
           />

@@ -9,6 +9,8 @@ import {
   identityDeactivationLocalProblems,
   identityDeactivationPayloadOf,
   identityKindOptions,
+  identityTargetOf,
+  isIdentityKind,
   suggestedDeactivationRevision,
   type IdentityDeactivationDraft,
   type IdentityRegisters,
@@ -145,6 +147,19 @@ test('建议修订号取该身份最新修订加一，不在册或册未取到�
   equal(suggestedDeactivationRevision(targets, 'SYN-PARTY-99'), 1);
   equal(suggestedDeactivationRevision(targets, ''), 1);
   equal(suggestedDeactivationRevision(null, 'SYN-PARTY-01'), 1);
+});
+
+// Covers: 票 13 第 2 条——按种类分派的表键在 identityKindLabels 这个封闭集上：词表每一格都在表里（投影与词表一起长，
+// 漏一格在这里显）；集外的串与空串不是「另一种」，一律判不在集内。
+test('分派表与种类词表同键，集外不认', () => {
+  for (const code of Object.keys(identityKindLabels)) {
+    equal(isIdentityKind(code), true);
+    equal(code in identityTargetOf, true);
+  }
+  equal(isIdentityKind(''), false);
+  equal(isIdentityKind('RELATIONSHIP'), false);
+  equal(isIdentityKind('business_party'), false);
+  deepEqual(Object.keys(identityTargetOf).sort(), Object.keys(identityKindLabels).sort());
 });
 
 // Covers: 认领的路径表与 deactivationDocument 的键一一对应。
