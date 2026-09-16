@@ -15,6 +15,7 @@
 
 import type { BusinessPartyRecord } from './api';
 import { wallTimeToRfc3339 } from '../moment';
+import { revisionOf } from './registration-form';
 
 export interface BusinessPartyDraft {
   partyId: string;
@@ -53,14 +54,6 @@ export const businessPartyFieldPaths = [
 ] as const;
 
 export type BusinessPartyFieldPath = (typeof businessPartyFieldPaths)[number];
-
-const positiveInteger = /^[1-9]\d*$/;
-
-/** 修订号编成正整数；编不出交回 undefined。各表单的这一格同判，抬成一处。 */
-export function revisionOf(raw: string): number | undefined {
-  const trimmed = raw.trim();
-  return positiveInteger.test(trimmed) ? Number(trimmed) : undefined;
-}
 
 /**
  * 草稿 → 载荷。身份串原样带（含首尾空白与空串——空串是服务端要点名的格）；修订号编不进正整数与生效时刻

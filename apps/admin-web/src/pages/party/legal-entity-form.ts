@@ -12,6 +12,7 @@
 
 import type { GroupLegalEntityRecord } from './api';
 import { wallTimeToRfc3339 } from '../moment';
+import { revisionOf } from './registration-form';
 
 export interface LegalEntityDraft {
   legalEntityId: string;
@@ -49,13 +50,6 @@ export const legalEntityFieldPaths = [
 ] as const;
 
 export type LegalEntityFieldPath = (typeof legalEntityFieldPaths)[number];
-
-const positiveInteger = /^[1-9]\d*$/;
-
-function revisionOf(raw: string): number | undefined {
-  const trimmed = raw.trim();
-  return positiveInteger.test(trimmed) ? Number(trimmed) : undefined;
-}
 
 /**
  * 草稿 → 载荷。各格去首尾空白后原样带（空串照送，那是服务端要点名的格）；修订号编不进正整数

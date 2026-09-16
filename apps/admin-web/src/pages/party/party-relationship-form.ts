@@ -15,7 +15,7 @@
 import type { PartyRelationshipRecord } from './api';
 import { wallTimeToRfc3339 } from '../moment';
 import { partyRoleLabels } from './presentation';
-import { revisionOf } from './business-party-form';
+import { revisionOf } from './registration-form';
 import type { PickerOption } from './PublicationFormFields';
 
 export interface PartyRelationshipDraft {
