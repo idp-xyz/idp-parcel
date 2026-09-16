@@ -60,10 +60,24 @@ type problemResponse struct {
 
 type problemDetail struct {
 	Code string `json:"code"`
+	// Detail 是散文不是代数（纪律同 registrationAnswer.Cause）：前端原样示出、不查表、不据此分支。它把 Intake 已经写在
+	// 错误里的拒绝理由交到线的这一头——同一个 MALFORMED_REQUEST 底下是自报租户、未知键还是多出一项，只交 code 时六种
+	// 错在线上长一张脸，操作者只能挨个试。要可判别的理由代数得在用例侧立封闭枚举（先例 CatalogRefusalReason），不在
+	// 传输层按字符串拼；调用侧一旦对着这些句子分支，措辞改一个字就会拆掉它。
+	//
+	// 只随 4xx 在场。5xx 的成因是依赖故障的内部原文，不外泄。
+	Detail string `json:"detail,omitempty"`
 }
 
 func writeProblem(response http.ResponseWriter, status int, code string) {
 	writeJSON(response, status, problemResponse{Error: problemDetail{Code: code}})
+}
+
+// writeProblemWithDetail 是 writeProblem 带理由散文的兄弟。单立一个函数而不是给 writeProblem 加变参：交不交 detail 在
+// 调用点要一眼读得出来——5xx（INTAKE_FAILED / NO_ANSWER_FORMED）照旧走 writeProblem 只交 code，那是依赖故障的内部原文，
+// 不外泄；只有「改载荷才会好」的 4xx 才有理由让登记方看见。detail 为空时那一格缺席，不写空串。
+func writeProblemWithDetail(response http.ResponseWriter, status int, code string, detail string) {
+	writeJSON(response, status, problemResponse{Error: problemDetail{Code: code, Detail: detail}})
 }
 
 func writeJSON(response http.ResponseWriter, status int, value any) {

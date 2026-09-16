@@ -390,6 +390,81 @@ func TestIsolatedPartyIdentityIntakeRefusesTrailingContentAfterThePayload(t *tes
 	}
 }
 
+// Covers: 票 admin-web-group-legal-entities/11 要做的第 1 条——形状拒绝的 400 把 Intake 已经写在错误里的理由交到线上：
+// `error.detail` 在场、非空、点得出是哪一种错。六种形状错只交 code 时在线上长一张脸，页面只能显一句通用说明，操作者要
+// 靶着六种可能挨个试。判据同 `cause`：detail 是散文，这里只钉「非空且含关键字」，不钉全文——全文属 encoding/json
+// 与本包的措辞自由，改一个字不该让这条变红。哨兵自己的英文原句不该重复进 detail：登记方要读的是哨兵之后那半。
+func TestMalformedRegistrationRefusalCarriesTheReasonAsDetail(t *testing.T) {
+	intake := isolatedIdentityIntakeForTest(t)
+	item := `{"legalEntityId":"SYN-LE-02","partyId":"SYN-PARTY-02","revision":1,"basis":"b","effectiveFrom":"2026-09-16T00:00:00Z"}`
+	for name, testCase := range map[string]struct {
+		body    string
+		keyword string
+	}{
+		"带 tenantId": {
+			body:    `{"tenantId":"` + isolatedIdentityTenant + `","legalEntities":[` + item + `]}`,
+			keyword: "tenantId",
+		},
+		"未知键": {
+			body:    `{"legalEntities":[{"legalEntityId":"SYN-LE-02","partyId":"SYN-PARTY-02","revision":1,"basis":"b","effectiveFrom":"2026-09-16T00:00:00Z","name":"x"}]}`,
+			keyword: "unknown field",
+		},
+		"两项": {
+			body:    `{"legalEntities":[` + item + `,` + item + `]}`,
+			keyword: "exactly one",
+		},
+		"尾随内容": {
+			body:    `{"legalEntities":[` + item + `]} {"x":1}`,
+			keyword: "trailing",
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			registrar := &scriptedPartyRegistrar{}
+			recorder := httptest.NewRecorder()
+			commercialhttp.NewRegisterLegalEntityEndpoint(intake, registrar).ServeHTTP(recorder,
+				httptest.NewRequest(http.MethodPost, "/probe", strings.NewReader(testCase.body)))
+
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("答 %d %s，want 400", recorder.Code, recorder.Body.String())
+			}
+			if code := errorCode(t, recorder); code != "MALFORMED_REQUEST" {
+				t.Fatalf("错误码 = %q，want MALFORMED_REQUEST", code)
+			}
+			detail, present := problemDetailOf(t, recorder)
+			if !present || detail == "" {
+				t.Fatalf("400 没带 detail，六种形状错在线上长一张脸：%s", recorder.Body.String())
+			}
+			if !strings.Contains(detail, testCase.keyword) {
+				t.Fatalf("detail = %q，没点出 %q 这件事", detail, testCase.keyword)
+			}
+			if strings.Contains(detail, commercialhttp.ErrMalformedRequest.Error()) {
+				t.Fatalf("detail 把哨兵自己的英文原句重复了一遍：%q", detail)
+			}
+			assertNoRegistrationOutcome(t, recorder)
+			if registrar.called {
+				t.Fatal("形状错没拦在 Intake，编排被调到了")
+			}
+		})
+	}
+}
+
+// problemDetailOf 取问题体里的 `detail` 一格并报它在不在场。分开报「在场」与「值」：5xx 那几条要证的正是这一格
+// 不在场，而 map 取值把「缺席」与「空串」折成同一个空串。
+func problemDetailOf(t *testing.T, recorder *httptest.ResponseRecorder) (string, bool) {
+	t.Helper()
+	body := decodeBody(t, recorder)
+	problem, ok := body["error"].(map[string]any)
+	if !ok {
+		t.Fatalf("响应没有 error 体：%s", recorder.Body.String())
+	}
+	raw, present := problem["detail"]
+	if !present {
+		return "", false
+	}
+	detail, _ := raw.(string)
+	return detail, true
+}
+
 // Covers: 一口只收本口的项。载荷外壳镜像 CLI 的整份文档，因此别的口的数组在这里**解得开**；解得开不等于
 // 可以忽略——一份同时带着法人项与参与方项的载荷投到法人口，参与方那一项会被无声丢掉，登记方以为两样都登了。
 // 五口共用同一份外壳，这条对每一口都成立，这里各口投一次别人的项。

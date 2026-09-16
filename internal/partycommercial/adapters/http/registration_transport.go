@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 )
 
 // codeUnnamedOutcome 同命令面先例：应用层交回没有名字的结果是编程错误，不是业务
@@ -68,10 +69,27 @@ func writeRegistrationIntakeProblem(response http.ResponseWriter, err error) {
 		return
 	}
 	if errors.Is(err, ErrMalformedRequest) {
-		writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
+		// 形状错的理由 Intake 已经写在错误里（自报租户、未知键、不恰一项、别的口的项、尾随内容……），只交 code 是把服务端
+		// 知道的事丢在线的这一头；交 detail 与 `cause` 同一条理由：登记方拿一个没有指名的拒绝什么也补不了。
+		writeProblemWithDetail(response, http.StatusBadRequest, codeMalformedRequest, malformedRequestDetail(err))
 		return
 	}
 	writeProblem(response, http.StatusInternalServerError, codeIntakeFailed)
+}
+
+// malformedRequestDetail 从 ErrMalformedRequest 的包装散文里剪出哨兵之后那半。
+//
+// 按哨兵文本剪而不是 errors.Unwrap：`fmt.Errorf("%w: …", ErrMalformedRequest)` 解包得到的是哨兵本身，理由散文在
+// 外层的 Error() 里、哨兵之后。哨兵自己那句英文原句不重复进 detail——它说的就是 code 已经说了的那件事。哨兵不在
+// 文本里（自带措辞、经 Is 认哨兵的错误类型）时整句就是散文；剪完为空（错误只有哨兵、没带理由）时那一格缺席。
+func malformedRequestDetail(err error) string {
+	message := err.Error()
+	sentinel := ErrMalformedRequest.Error()
+	index := strings.Index(message, sentinel)
+	if index < 0 {
+		return message
+	}
+	return strings.TrimSpace(strings.TrimPrefix(message[index+len(sentinel):], ":"))
 }
 
 type problemWithFieldsResponse struct {

@@ -398,6 +398,11 @@ func TestCommercialRegistrationMapsOtherIntakeFailureToIntakeFailed(t *testing.T
 	if code := errorCode(t, recorder); code != "INTAKE_FAILED" {
 		t.Fatalf("错误码 = %q", code)
 	}
+	// 票 admin-web-group-legal-entities/11：detail 只随 4xx。Intake 故障的原文（「认证后端寄了」）是依赖故障的内部
+	// 措辞，不外泄——钉的是键不在场，不是值为空。
+	if detail, present := problemDetailOf(t, recorder); present {
+		t.Fatalf("5xx 带了 detail %q：%s", detail, recorder.Body)
+	}
 	if registrar.called {
 		t.Fatal("Intake 没交出命令，编排不该被调到")
 	}
@@ -426,6 +431,10 @@ func TestCommercialRegistrationAnswersServerErrorWhenTheOrchestrationFails(t *te
 			}
 			if code := errorCode(t, recorder); code != "NO_ANSWER_FORMED" {
 				t.Fatalf("错误码 = %q", code)
+			}
+			// 同 INTAKE_FAILED 那条：「库连不上」是依赖故障的内部原文，5xx 不带 detail。
+			if detail, present := problemDetailOf(t, recorder); present {
+				t.Fatalf("5xx 带了 detail %q：%s", detail, recorder.Body)
 			}
 			assertNoRegistrationOutcome(t, recorder)
 		})
