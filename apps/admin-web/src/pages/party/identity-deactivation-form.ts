@@ -5,8 +5,8 @@
 // 是否错位，一律送上去让服务端答（停用口的 revision 是操作者声明自己看到的册面，错位由用例拒——
 // isolated_write_intake.go 停用口注释）。这里只做编码层：修订号编成整数、停用时刻换成 RFC 3339、留空缺席。
 //
-// 停用口一个命令带种类（kind），法人与客户账户的停用也走它。种类三词只从 identityKindLabels 派生；修订建议按
-// 种类去对应的册上数，三本册的行类型各不相同，先投成「标识 + 修订」再数——不把参与方册的修订拿去建议法人的。
+// 停用口一个命令带种类（kind），法人与客户账户的停用也走它。种类词只从 identityKindLabels 派生；修订建议按
+// 种类去对应的册上数，各册的行类型各不相同，先投成「标识 + 修订」再数——不把参与方册的修订拿去建议法人的。
 //
 // 各格不裁首尾空白、载荷不带租户格，理由同 business-party-form.ts。
 
@@ -17,7 +17,7 @@ import { revisionOf } from './business-party-form';
 import type { PickerOption } from './PublicationFormFields';
 
 export interface IdentityDeactivationDraft {
-  /** 封闭三词之一；空串是「未选」，照送让服务端点名，表单不预选。 */
+  /** identityKindLabels 的键之一；空串是「未选」，照送让服务端点名，表单不预选。 */
   kind: string;
   id: string;
   /** 文本框原值；编成整数在组载荷时做。 */
@@ -93,13 +93,13 @@ export function identityDeactivationLocalProblems(
   return problems;
 }
 
-/** 三本册的行投成的同一形状：停用建议只需要这两格。 */
+/** 各册的行投成的同一形状：停用建议只需要这两格。 */
 export interface RevisionedIdentity {
   id: string;
   revision: number;
 }
 
-/** 三本册各自「已取回的列表」；没取到（未配置 / 出错 / 加载中）为 null，与空数组分开——空数组是册上确实没有。 */
+/** 各册各自「已取回的列表」；没取到（未配置 / 出错 / 加载中）为 null，与空数组分开——空数组是册上确实没有。 */
 export interface IdentityRegisters {
   parties: readonly BusinessPartyRecord[] | null;
   legalEntities: readonly GroupLegalEntityRecord[] | null;
@@ -107,7 +107,7 @@ export interface IdentityRegisters {
 }
 
 /**
- * 按种类把对应册投成「标识 + 修订」。种类未选或不在三词内 → null；对应册没取到 → null——两种都让建议退回 1，
+ * 按种类把对应册投成「标识 + 修订」。种类未选或不在词表内 → null；对应册没取到 → null——两种情形都让建议退回 1，
  * 不拿别的册冒充。
  */
 export function deactivationTargetsOf(kind: string, registers: IdentityRegisters): readonly RevisionedIdentity[] | null {

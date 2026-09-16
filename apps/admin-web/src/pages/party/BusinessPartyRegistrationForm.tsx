@@ -21,12 +21,12 @@ import {
 } from './business-party-form';
 
 /**
- * 业务参与方身份登记的逐字段表单（票 admin-web-group-legal-entities/10 第 1 条；ADR-0101 决定八自裁：五格、低频、
+ * 业务参与方身份登记的逐字段表单（票 admin-web-group-legal-entities/10 第 1 条；ADR-0101 决定八自裁：格少、低频、
  * 无矩阵，直接逐字段表单，做法照票 02 的法人表单）。
  *
  * **本组件不算摘要、不裁任何门、不判领域规则**（伞票 admin-write-faces/07 硬句）：标识与名称是否为空、修订号连不
- * 连续，一律原样送上去让服务端逐格答；本地只拦编码层的两件（修订号编不进正整数、生效时刻换不成 RFC 3339），纯函数
- * 在 business-party-form.ts。**不带租户格**、**不裁首尾空白**，理由在那个文件头上。
+ * 连续，一律原样送上去让服务端逐格答；本地只拦编码层（修订号编不进正整数、生效时刻换不成 RFC 3339），纯函数在
+ * business-party-form.ts。**不带租户格**、**不裁首尾空白**，理由在那个文件头上。
  */
 export interface BusinessPartyRegistrationFormProps {
   /** 页面已取回的参与方列表（给修订号建议用）；列表没取到传 null，建议一律为 1。 */

@@ -14,7 +14,7 @@ import {
   type IdentityRegisters,
 } from './identity-deactivation-form';
 
-// 本文件钉的是停用表单只做编码层的事：修订号编成整数、停用时刻换成 RFC 3339、留空缺席；种类三词只从
+// 本文件钉的是停用表单只做编码层的事：修订号编成整数、停用时刻换成 RFC 3339、留空缺席；种类词只从
 // identityKindLabels 派生；修订建议按种类去对应册上数。载荷镜像 deactivationDocument 且不带 tenantId、不裁空白。
 
 function draft(over: Partial<IdentityDeactivationDraft>): IdentityDeactivationDraft {
@@ -67,7 +67,7 @@ const account = (accountId: string, revision: number): CustomerAccountRecord => 
   registeredAt: '2026-01-02T00:00:00Z',
 });
 
-// Covers: 五格齐 → deactivations 一项；revision 是 JSON 整数；at 按时区换成 UTC；顶层没有 tenantId。
+// Covers: 各格齐 → deactivations 一项；revision 是 JSON 整数；at 按时区换成 UTC；顶层没有 tenantId。
 test('草稿组成载荷：一项、整数修订、UTC 时刻、无租户格', () => {
   const payload = identityDeactivationPayloadOf(draft({}), 'Asia/Shanghai');
   deepEqual(payload, {
@@ -119,7 +119,7 @@ test('种类选项从 identityKindLabels 派生', () => {
 });
 
 // Covers: 按种类把对应册投成「标识 + 修订」——参与方册按 partyId、法人册按 legalEntityId、客户账户册按 accountId；
-// 种类未选或不在三词内 → null；对应册没取到 → null（不拿别的册冒充）。
+// 种类未选或不在词表内 → null；对应册没取到 → null（不拿别的册冒充）。
 test('按种类投影对应册', () => {
   const registers: IdentityRegisters = {
     parties: [party('SYN-PARTY-01', 3)],

@@ -26,7 +26,7 @@ function draft(over: Partial<BusinessPartyDraft>): BusinessPartyDraft {
   };
 }
 
-// Covers: 五格齐 → businessParties 一项；revision 是 JSON 整数；effectiveFrom 按时区换成 UTC；顶层没有 tenantId。
+// Covers: 各格齐 → businessParties 一项；revision 是 JSON 整数；effectiveFrom 按时区换成 UTC；顶层没有 tenantId。
 test('草稿组成载荷：一项、整数修订、UTC 时刻、无租户格', () => {
   const payload = businessPartyPayloadOf(draft({}), 'Asia/Shanghai');
   deepEqual(payload, {

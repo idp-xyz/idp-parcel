@@ -29,13 +29,13 @@ import {
 } from './party-relationship-form';
 
 /**
- * 参与方关系登记的逐字段表单（票 admin-web-group-legal-entities/10 第 2 条）。三册里它价值最大：十格里有封闭五词与两个
+ * 参与方关系登记的逐字段表单（票 admin-web-group-legal-entities/10 第 2 条）。本页几册里它价值最大：格里有封闭词与
  * 从册上选的引用，粘 JSON 时打错一个词只得到一个说不清的 400。
  *
  * **本组件不算摘要、不裁任何门、不判领域规则**（伞票 admin-write-faces/07 硬句）：双方在不在册、角色与双方是否匹配、
- * 区间是否倒置、修订连不连续，一律送上去让服务端答；本地只拦编码层（修订号、三个时刻），纯函数在
- * party-relationship-form.ts。**两个可缺键缺席而不是零值**——终点留空即开区间、不勾「已批准」即候选关系，理由在
- * 那个文件头上。
+ * 区间是否倒置、修订连不连续，一律送上去让服务端答；本地只拦编码层（修订号与各时刻），纯函数在
+ * party-relationship-form.ts。**可缺键缺席而不是零值**——终点留空即开区间、不勾「已批准」即候选关系，理由在那个
+ * 文件头上。
  *
  * 双方用 ReferencePicker 从参与方册选：候选显名称 · 标识 · 状态，不按状态过滤，读面不可用退回手填。Picker 读一次只读
  * 一次，所以页面在参与方列表重取后换 `partiesVersion` 让它重挂重读——刚在「参与方身份」册登进去的那一个，才能立刻
@@ -176,7 +176,7 @@ export function PartyRelationshipRegistrationForm({
                 ))}
               </select>
               <span className="block text-[11px] text-idpxyz-textMuted mt-1">
-                封闭五词；未选照送空串，由服务端点名。角色与双方是否匹配不在这里判。
+                封闭集；未选照送空串，由服务端点名。角色与双方是否匹配不在这里判。
               </span>
             </Field>
 
@@ -222,7 +222,7 @@ export function PartyRelationshipRegistrationForm({
             />
           </div>
 
-          {/* 批准是一件事实而不是两格文本：勾选框才是「有没有批准」的声明，不勾时两格不进载荷、残字也不进。 */}
+          {/* 批准是一件事实而不是几格文本：勾选框才是「有没有批准」的声明，不勾时批准那几格不进载荷、残字也不进。 */}
           <div className="flex flex-col gap-3 rounded border border-idpxyz-border p-3">
             <label className="flex items-center gap-2 text-[13px] text-idpxyz-text">
               <input

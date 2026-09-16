@@ -12,9 +12,9 @@ import { identityStatusLabels, labelOf, problemNote, registrationSnapshotHints, 
 import { Field, type PickerOption } from './PublicationFormFields';
 
 /**
- * 业务参与方页三份登记表单（票 admin-web-group-legal-entities/10）共用的几格。三份表单同一票里落地，各留一份同形
+ * 业务参与方页各登记表单（票 admin-web-group-legal-entities/10）共用的几格。各表单同一票里落地，各留一份同形
  * 副本就是票 09 评审点过的那条 Duplicated Code，所以这里各只有一份：修订号格（建议值 + 「用建议值」复位）、墙钟
- * 时刻格（datetime-local + 时区说明）、三本册的候选转写、以及折起来的 JSON 快照镜像区。
+ * 时刻格（datetime-local + 时区说明）、各册的候选转写、以及折起来的 JSON 快照镜像区。
  *
  * **本文件不算摘要、不裁任何门**：修订号格只显建议、不拦手填；时刻格只收墙钟原值，换 RFC 3339 在各表单的纯逻辑里。
  * 票 02 的法人表单早于本层写成，仍各留一份同形的格与候选转写；把它切过来归收口票，本票不碰那个文件。
@@ -104,7 +104,7 @@ export function WallTimeField({
   );
 }
 
-// 三本册的候选转写：显名称 · 标识 · 状态，不按状态过滤——表单不裁，届时是否已生效由服务端判；状态摆出来只是让人看。
+// 各册的候选转写：显名称 · 标识 · 状态，不按状态过滤——表单不裁，届时是否已生效由服务端判；状态摆出来只是让人看。
 // 法人与客户账户的「名称」在参与方册上转写而来，转不到（悬空引用）时如实写出、不补占位。
 
 export function businessPartyPickerOptions(body: BusinessPartyListResponseBody): PickerOption[] {

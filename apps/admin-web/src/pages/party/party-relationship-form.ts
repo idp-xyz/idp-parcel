@@ -2,8 +2,8 @@
 // 组件 PartyRelationshipRegistrationForm.tsx 只负责摆。
 //
 // **本文件不算摘要、不裁任何门、不判领域规则**（伞票 admin-write-faces/07 硬句）：双方是否在册、角色与双方是否
-// 匹配、区间是否倒置、修订是否连续，一律送上去让服务端答。这里只做编码层：修订号编成整数、三个墙钟时刻换成
-// RFC 3339、**两个可缺键缺席而不是零值**。
+// 匹配、区间是否倒置、修订是否连续，一律送上去让服务端答。这里只做编码层：修订号编成整数、各墙钟时刻换成
+// RFC 3339、**可缺键缺席而不是零值**。
 //
 // 缺席为什么不能用零值顶：partyRelationshipDocument 用指针表达 effectiveEndsAt 与 approval 的缺席——缺终点即开
 // 区间、缺批准即登为候选关系；零时刻在 NewEffectiveInterval 里恰是「无终点」，一个显式给出的坏时刻也会解成零值，
@@ -24,7 +24,7 @@ export interface PartyRelationshipDraft {
   revision: string;
   holder: string;
   counterparty: string;
-  /** 封闭五词之一；空串是「未选」，照送让服务端点名，表单不预选。 */
+  /** partyRoleLabels 的键之一；空串是「未选」，照送让服务端点名，表单不预选。 */
   role: string;
   scope: string;
   basis: string;
@@ -32,7 +32,7 @@ export interface PartyRelationshipDraft {
   effectiveStartsAt: string;
   /** 留空即开区间——键缺席。 */
   effectiveEndsAt: string;
-  /** 「已批准」勾选框：不勾即候选关系，批准两格不进载荷，残字也不进。 */
+  /** 「已批准」勾选框：不勾即候选关系，批准引用与批准时刻不进载荷，残字也不进。 */
   approved: boolean;
   approvalReference: string;
   approvedAt: string;
@@ -79,7 +79,7 @@ export function emptyPartyRelationshipDraft(): PartyRelationshipDraft {
   };
 }
 
-/** 表单认领的 JSON 路径；一项一批，下标固定 0；批准两格带嵌套路径。 */
+/** 表单认领的 JSON 路径；一项一批，下标固定 0；批准那几格带嵌套路径。 */
 export const partyRelationshipFieldPaths = [
   'relationships[0].relationshipId',
   'relationships[0].revision',
@@ -108,7 +108,7 @@ function momentOf(wallTime: string, timeZone: string): string | undefined {
 }
 
 /**
- * 草稿 → 载荷。身份串与引用串原样带；修订号与三个时刻编不出时**该键缺席**；终点留空与不勾已批准也缺席——
+ * 草稿 → 载荷。身份串与引用串原样带；修订号与各时刻编不出时**该键缺席**；终点留空与不勾已批准也缺席——
  * 前者是编码失败、后者是操作者的声明，落到载荷上同为缺键，由 partyRelationshipLocalProblems 把前者拦在送之前。
  */
 export function partyRelationshipPayloadOf(
@@ -139,7 +139,7 @@ export function partyRelationshipPayloadOf(
 }
 
 /**
- * 本地能判的**编码层**问题，按 JSON 路径归组；空对象即可送。修订号编不进正整数、三个时刻填了却换不成 RFC 3339；
+ * 本地能判的**编码层**问题，按 JSON 路径归组；空对象即可送。修订号编不进正整数、各时刻填了却换不成 RFC 3339；
  * 批准时刻只在勾了已批准时才看——不勾时那一格根本不进载荷。角色未选、双方为空、区间倒置都是服务端的话。
  */
 export function partyRelationshipLocalProblems(

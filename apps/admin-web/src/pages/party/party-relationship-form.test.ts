@@ -12,7 +12,7 @@ import {
   type PartyRelationshipDraft,
 } from './party-relationship-form';
 
-// 本文件钉的是关系表单只做编码层的事：修订号编成整数、三个墙钟时刻换成 RFC 3339、**两个可缺键缺席而不是零值**——
+// 本文件钉的是关系表单只做编码层的事：修订号编成整数、各墙钟时刻换成 RFC 3339、**可缺键缺席而不是零值**——
 // partyRelationshipDocument 用指针表达 effectiveEndsAt 与 approval 的缺席（缺终点即开区间、缺批准即候选关系），
 // 空串或零时刻顶上去在服务端就是另一个意思。载荷不带 tenantId、各格不裁首尾空白，同 business-party-form。
 
@@ -35,8 +35,8 @@ function draft(over: Partial<PartyRelationshipDraft>): PartyRelationshipDraft {
   };
 }
 
-// Covers: 全格齐（含终点与批准）→ relationships 一项；三个时刻各按时区换 UTC；approval 是嵌套对象；顶层无 tenantId。
-test('全格草稿组成载荷：终点与批准都在、三个时刻换 UTC、无租户格', () => {
+// Covers: 全格齐（含终点与批准）→ relationships 一项；各时刻按时区换 UTC；approval 是嵌套对象；顶层无 tenantId。
+test('全格草稿组成载荷：终点与批准都在、各时刻换 UTC、无租户格', () => {
   const payload = partyRelationshipPayloadOf(
     draft({
       effectiveEndsAt: '2026-12-31T08:00',
@@ -65,7 +65,7 @@ test('全格草稿组成载荷：终点与批准都在、三个时刻换 UTC、�
   equal('tenantId' in payload, false);
 });
 
-// Covers: 终点留空 → effectiveEndsAt 键缺席（开区间）；不勾「已批准」→ approval 键缺席（候选关系），即便批准两格里
+// Covers: 终点留空 → effectiveEndsAt 键缺席（开区间）；不勾「已批准」→ approval 键缺席（候选关系），即便批准那几格里
 // 残留着字——勾选框才是「有没有批准事实」的声明，残字不是。
 test('可缺键缺席：终点留空即开区间、不勾已批准即候选关系', () => {
   const item = partyRelationshipPayloadOf(
@@ -110,7 +110,7 @@ test('空白原样带、空串照送、角色未选照送空串', () => {
   equal(item.basis, '');
 });
 
-// Covers: 本地只报编码层——修订号、三个时刻各自换不出来时报在各自路径上；批准时刻只在勾了已批准时才判；
+// Covers: 本地只报编码层——修订号、各时刻换不出来时报在各自路径上；批准时刻只在勾了已批准时才判；
 // 角色未选、双方为空、区间倒置都不是本地的话。
 test('本地只报编码层问题', () => {
   deepEqual(partyRelationshipLocalProblems(draft({}), 'UTC'), {});
@@ -175,7 +175,7 @@ test('角色选项从 partyRoleLabels 派生', () => {
   deepEqual(options[0], { value: 'CUSTOMER', label: '客户 · CUSTOMER' });
 });
 
-// Covers: 认领的路径表与 partyRelationshipDocument 的键（含嵌套的 approval 两格）一一对应。
+// Covers: 认领的路径表与 partyRelationshipDocument 的键（含嵌套的 approval 各格）一一对应。
 test('认领的路径表', () => {
   deepEqual([...partyRelationshipFieldPaths], [
     'relationships[0].relationshipId',

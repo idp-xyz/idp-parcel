@@ -201,7 +201,7 @@ export const legalEntityKindLabels: Record<string, string> = {
   RESPONSIBLE_LEGAL_ENTITY: '责任法人',
 };
 
-// 可停用的身份种类封闭三格（application.PartyIdentityKind 的名称镜像 identityKindFromName），中文取 CONTEXT 原词。
+// 可停用的身份种类封闭集（application.PartyIdentityKind 的名称镜像 identityKindFromName），中文取 CONTEXT 原词。
 // 关系不在内：关系的终止走撤销 / 到期 / 替代，不叫停用（DeactivatePartyIdentityCommand 注释）。停用表单的种类
 // 下拉只从这里派生，不另抄一份封闭集。
 export const identityKindLabels: Record<string, string> = {

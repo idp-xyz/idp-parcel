@@ -1,4 +1,4 @@
-// 业务参与方身份登记表单的纯逻辑（票 admin-web-group-legal-entities/10；ADR-0101 决定八自裁：五格、低频、
+// 业务参与方身份登记表单的纯逻辑（票 admin-web-group-legal-entities/10；ADR-0101 决定八自裁：格少、低频、
 // 无矩阵——直接逐字段表单，形状照票 02 的 legal-entity-form.ts）。全部是纯函数，node:test 钉着；组件
 // BusinessPartyRegistrationForm.tsx 只负责摆。
 //
@@ -56,7 +56,7 @@ export type BusinessPartyFieldPath = (typeof businessPartyFieldPaths)[number];
 
 const positiveInteger = /^[1-9]\d*$/;
 
-/** 修订号编成正整数；编不出交回 undefined。三份表单各自的这一格同判，抬成一处。 */
+/** 修订号编成正整数；编不出交回 undefined。各表单的这一格同判，抬成一处。 */
 export function revisionOf(raw: string): number | undefined {
   const trimmed = raw.trim();
   return positiveInteger.test(trimmed) ? Number(trimmed) : undefined;
@@ -82,7 +82,7 @@ export function businessPartyPayloadOf(draft: BusinessPartyDraft, timeZone: stri
 }
 
 /**
- * 本地能判的**编码层**问题，按 JSON 路径归组；空对象即可送。只有两种：修订号编不进正整数、生效时刻换不成
+ * 本地能判的**编码层**问题，按 JSON 路径归组；空对象即可送。只有编码层的：修订号编不进正整数、生效时刻换不成
  * RFC 3339。空格、标识是否已在册、修订是否连续都不在这里判，那是服务端的话。
  */
 export function businessPartyLocalProblems(draft: BusinessPartyDraft, timeZone: string): Record<string, string[]> {
