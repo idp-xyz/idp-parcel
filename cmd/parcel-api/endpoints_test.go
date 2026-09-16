@@ -38,6 +38,7 @@ var businessEndpointProbes = map[string]businessEndpointProbe{
 	"/acceptance-review-queue":                                                 {method: http.MethodGet, target: "/acceptance-review-queue"},
 	"/authorized-disposition-queue":                                            {method: http.MethodGet, target: "/authorized-disposition-queue"},
 	"/commercial-business-parties":                                             {method: http.MethodGet, target: "/commercial-business-parties"},
+	"/commercial-business-parties/{partyId}/revisions":                         {method: http.MethodGet, target: "/commercial-business-parties/SYN-PARTY-01/revisions"},
 	"/label-transactions":                                                      {method: http.MethodGet, target: "/label-transactions"},
 	"/channel-selection-decisions":                                             {method: http.MethodGet, target: "/channel-selection-decisions?view=tied"},
 	"/node-operations/receptions":                                              {method: http.MethodPost, target: "/node-operations/receptions"},

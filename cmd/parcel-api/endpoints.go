@@ -448,6 +448,10 @@ func assembleBusinessEndpoints(
 		// 如此；不给它自己的入口，身份生命周期的`已登记`与`已停用`两格在管理台就没有实例
 		// 可显，而那正是本票标题那个生命周期。三口共用同一个读口参数与同一个 Intake 变量。
 		{Pattern: "/commercial-business-parties", Handler: commercialhttp.NewQueryBusinessPartiesEndpoint(commercialCatalogueIntake, partyIdentities)},
+		// 业务参与方修订历史（票 admin-web-group-legal-entities/12）：参与方册那一页详情抽屉的供数面，按路径里的参与方展开
+		// 整条修订链。同读口参数、同 Intake 变量，裁决与下面法人册那一行一字不改（在 ports.BusinessPartyRevisionHistoryRead）；
+		// {partyId} 由 chi 填进 PathValue，端点按同名取。
+		{Pattern: "/commercial-business-parties/{partyId}/revisions", Handler: commercialhttp.NewQueryBusinessPartyRevisionsEndpoint(commercialCatalogueIntake, partyIdentities)},
 		{Pattern: "/commercial-group-legal-entities", Handler: commercialhttp.NewQueryGroupLegalEntitiesEndpoint(commercialCatalogueIntake, partyIdentities)},
 		// 责任法人修订历史（票 admin-web-group-legal-entities/03）：法人册那一页详情抽屉的供数面，按路径里的法人展开
 		// 整条修订链。同读口参数、同 Intake 变量（读同一张表、同一租户作用域、供同一页——裁决在 ports.LegalEntityRevisionHistoryRead）；

@@ -147,6 +147,11 @@ var isolatedReadAdmittedPatterns = map[string]bool{
 	// DISTINCT ON）、零持久化、作用域来自运营侧授权结果——法人标识在路径上、租户仍只从注入作用域取。本用例经真
 	// 路由打到它并期待 500 而不是 400，顺带钉住 chi 把 {legalEntityId} 填进了 PathValue。单列在表尾的理由同上。
 	"/commercial-group-legal-entities/{legalEntityId}/revisions": true,
+	// 业务参与方修订历史（票 admin-web-group-legal-entities/12）与商业目录查阅共用同一个 Intake 变量，启用态必然随
+	// 它一起放行。三条判据逐条满足：消费本上下文自己的存储读面（同一张 business_party_registration 表，只是不取
+	// DISTINCT ON）、零持久化、作用域来自运营侧授权结果——参与方标识在路径上、租户仍只从注入作用域取。本用例经真
+	// 路由打到它并期待 500 而不是 400，顺带钉住 chi 把 {partyId} 填进了 PathValue。单列在表尾的理由同上。
+	"/commercial-business-parties/{partyId}/revisions": true,
 }
 
 // Covers: ADR-0078 Decision 一、二 — 启用态只放运营查阅行。unwired* 读口交回稳定
