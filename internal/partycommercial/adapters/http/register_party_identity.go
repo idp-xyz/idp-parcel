@@ -60,7 +60,7 @@ type PartyRelationshipRegistrationIntake interface {
 	) (application.RegisterPartyRelationshipCommand, error)
 }
 
-// PartyIdentityDeactivationIntake 同上，翻译身份停用。命令自带身份种类（封闭集的名称镜像，
+// PartyIdentityDeactivationIntake 同上，翻译身份停用。命令自带身份种类（一个封闭集，
 // 关系不在内——关系的终止走撤销/到期/替代，不叫停用），因此各册共一个口。
 type PartyIdentityDeactivationIntake interface {
 	IntakePartyIdentityDeactivation(
