@@ -345,6 +345,51 @@ func TestIsolatedPartyIdentityIntakeTranslatesDeactivationWithInjectedTenant(t *
 	}
 }
 
+// Covers: 票 admin-web-group-legal-entities/07 要做的第 1 条——一份载荷只许一个文档。尾随的第二个 JSON 值不是本载荷
+// 的一部分，放过它就是无声丢掉一段输入：与下面 exactlyOne 对「无声丢掉」的立场相反，也与同包发布口对同一形状的答复
+// 相反。两份外壳（登记 / 停用）各投一次：它们各走一遍解码，一处改了另一处未必跟着改。在 HTTP 缝上证，钉的是登记方
+// 看得见的三样：400、MALFORMED_REQUEST、无 outcome；编排一次也不该被调到。
+func TestIsolatedPartyIdentityIntakeRefusesTrailingContentAfterThePayload(t *testing.T) {
+	intake := isolatedIdentityIntakeForTest(t)
+	legalEntity := `{"legalEntities":[{"legalEntityId":"SYN-LE-02","partyId":"SYN-PARTY-02","revision":1,"basis":"b","effectiveFrom":"2026-09-16T00:00:00Z"}]}`
+	deactivation := `{"deactivations":[{"kind":"LEGAL_ENTITY","id":"SYN-LE-02","revision":2,"basis":"b","at":"2026-09-17T00:00:00Z"}]}`
+	for name, testCase := range map[string]struct {
+		endpoint func(commercialhttp.PartyIdentityRegistrar) http.Handler
+		body     string
+	}{
+		"登记口": {
+			endpoint: func(registrar commercialhttp.PartyIdentityRegistrar) http.Handler {
+				return commercialhttp.NewRegisterLegalEntityEndpoint(intake, registrar)
+			},
+			body: legalEntity + ` {"x":1}`,
+		},
+		"停用口": {
+			endpoint: func(registrar commercialhttp.PartyIdentityRegistrar) http.Handler {
+				return commercialhttp.NewDeactivatePartyIdentityEndpoint(intake, registrar)
+			},
+			body: deactivation + ` {"x":1}`,
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			registrar := &scriptedPartyRegistrar{}
+			recorder := httptest.NewRecorder()
+			testCase.endpoint(registrar).ServeHTTP(recorder,
+				httptest.NewRequest(http.MethodPost, "/probe", strings.NewReader(testCase.body)))
+
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("带尾随内容的载荷答 %d %s，want 400", recorder.Code, recorder.Body.String())
+			}
+			if code := errorCode(t, recorder); code != "MALFORMED_REQUEST" {
+				t.Fatalf("错误码 = %q，want MALFORMED_REQUEST", code)
+			}
+			assertNoRegistrationOutcome(t, recorder)
+			if registrar.called {
+				t.Fatal("尾随内容没拦在 Intake，编排被调到了")
+			}
+		})
+	}
+}
+
 // Covers: 一口只收本口的项。载荷外壳镜像 CLI 的整份文档，因此别的口的数组在这里**解得开**；解得开不等于
 // 可以忽略——一份同时带着法人项与参与方项的载荷投到法人口，参与方那一项会被无声丢掉，登记方以为两样都登了。
 // 五口共用同一份外壳，这条对每一口都成立，这里各口投一次别人的项。

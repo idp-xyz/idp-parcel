@@ -342,13 +342,13 @@ func (intake *IsolatedPartyIdentityIntake) decodeBatch(request *http.Request) (p
 	return document, nil
 }
 
-// decodeClosedDocument 以封闭形状解载荷。DisallowUnknownFields：这一口的形状是封闭的，多出来的键不是可以忽略的
-// 噪声——它多半是登记方把 CLI 文档的别的格（或别的口的项）误投到了这里。
+// decodeClosedDocument 以封闭形状解载荷，判据与同包发布口共用 decodeStrict：未知键拒——这一口的形状是封闭的，
+// 多出来的键不是可以忽略的噪声，多半是登记方把 CLI 文档的别的格（或别的口的项）误投到了这里；尾随的第二个 JSON
+// 值也拒——一份载荷只许一个文档，放过它就是无声丢掉一段输入，与 exactlyOne 反对的是同一件事。两道助手若各写一份，
+// 同一个包会对同一形状给出两种答复（票 admin-web-group-legal-entities/07 收的就是这道分叉）。
 func decodeClosedDocument[Document any](request *http.Request) (Document, error) {
 	var document Document
-	decoder := json.NewDecoder(request.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&document); err != nil {
+	if err := decodeStrict(request.Body, &document); err != nil {
 		var none Document
 		return none, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
 	}
