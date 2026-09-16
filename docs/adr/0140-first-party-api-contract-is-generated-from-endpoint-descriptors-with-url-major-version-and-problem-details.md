@@ -49,6 +49,7 @@ Date: 2026-09-16
 - 新增 `tools/api-contract`（生成器）与 `docs/api/generated/`（首方与操作者两份契约 JSON）；CI 增「契约生成物一致」一步，与机制半边清点那一步并列。`docs/api/Go_Chi_Scalar_API_Documentation_Final_V1.0.md` 在 [docs/README](../README.md) 的身份仍是参考——本记录收了它的版本三分法、不可变基线、破坏性变更门禁、文档会话与凭证分离、自托管不引 CDN 五处；否决了它的生成路线、双 Router 双端口作为结构前提、契约校验中间件三处。
 - 各处理器的 `writeProblem` 收进 `internal/platform/httpapi`，问题体媒体类型改为 `application/problem+json`、成员按 Decision 三；既有传输层测试里断言问题体形状的那些随之改写。这是对**尚未对外发布**的形状的改动，没有集成方要迁移；发布之后再改它就是破坏性变更。
 - 首方渠道 Intake 接上时（ADR-0139 Decision 四），客户面端点在装配点加 `/v1` 前缀；`cmd/parcel-api` 的装配测试对首方族端点断言前缀、对操作者族端点断言无前缀。
+- `parcel-api` 增 `/docs`（自托管 Scalar 页，版本锁定、随镜像打包、不引浮动 CDN）与 `/openapi/v1.json`（首方契约 JSON）两个只读入口（Decision 七）；它们不是业务端点，不入 `assembleBusinessEndpoints` 的端点表、不带 Intake，装配测试断言两点在、且文档登录态换不到任何 API 的调用凭证。操作者契约 JSON 随 `apps/admin-web` 构建产物发布，`parcel-api` 不供。阅读策略（匿名还是登录）归 owner，实施票在 owner 裁前不得替它选。
 - 首次对外发布前要过三道：锁定工具链版本并验证 OpenAPI 3.1 生成物在 Scalar、`oasdiff` 的锁定版本上可读（风险点 1）；显式标记首个基线；参数登记册增「首方 API 弃用窗口」一行（未登记即不得弃用）。
 - ADR-0022 一字不改；ADR-0139 Decision 五留白的那一格由本记录填，ADR-0139 正文不改。
 
