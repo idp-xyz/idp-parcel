@@ -12,26 +12,16 @@ import {
 import { useToast } from '@idpxyz/ui-theme-runtime';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
-import { RegistrationPanel } from '../../components/registration';
 import { StatusBadgeFor, domainStatusTones, type DomainStatus } from '../../domain/status';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
-  commercialRegistrationEndpoints,
   listGroupLegalEntities,
-  partyIdentityOutcomeLabels,
-  registerCommercial,
   type GroupLegalEntityListResponseBody,
   type GroupLegalEntityRecord,
 } from './api';
-import {
-  identityStatusLabels,
-  labelOf,
-  legalEntityKindLabels,
-  problemNote,
-  registrationSnapshotHints,
-  registrationTitles,
-} from './presentation';
+import { identityStatusLabels, labelOf, legalEntityKindLabels } from './presentation';
+import { LegalEntityRegistrationForm } from './LegalEntityRegistrationForm';
 import {
   filterLegalEntities,
   legalEntityCountSummary,
@@ -360,6 +350,9 @@ function GroupLegalEntitiesTable({
  * 也没有行级编辑或删除面：身份登记按修订版本化不可覆盖，更正占下一个修订号翻旧插新，
  * 停用形成新修订，所以本签只有登记一个动作。墙降之前它必然答 403「接入渠道未配置」，
  * 那是诚实答案；墙降当天在装配点换真 Intake 即点亮，本页一行不用改。
+ *
+ * 登记签自票 admin-web-group-legal-entities/02 起是逐字段表单（ADR-0101 决定八自裁），JSON 快照签
+ * 降为表单里的折叠区。
  */
 export function GroupLegalEntitiesPage() {
   const [reloadKey, setReloadKey] = useState(0);
@@ -377,6 +370,8 @@ export function GroupLegalEntitiesPage() {
   }, [reloadKey]);
 
   const retry = () => setReloadKey((value) => value + 1);
+  // 列表没取到（加载中 / 未配置 / 出错）传 null：表单那边建议修订号一律为 1，不拿空数组冒充「册上没有」。
+  const knownEntities = answer?.kind === 'outcome' ? answer.body.entities : null;
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
@@ -395,15 +390,7 @@ export function GroupLegalEntitiesPage() {
           value="register"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
-          <RegistrationPanel
-            moduleId="group-legal-entities"
-            title={registrationTitles['legal-entity']}
-            endpoint={`POST ${commercialRegistrationEndpoints['legal-entity']}`}
-            snapshotHint={registrationSnapshotHints['legal-entity']}
-            submit={(snapshot) => registerCommercial('legal-entity', snapshot)}
-            outcomeLabels={partyIdentityOutcomeLabels}
-            problemNote={problemNote}
-          />
+          <LegalEntityRegistrationForm knownEntities={knownEntities} onRegistered={retry} />
         </TabsContent>
       </Tabs>
     </div>
