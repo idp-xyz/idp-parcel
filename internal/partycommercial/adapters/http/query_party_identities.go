@@ -8,8 +8,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 )
 
-// PartyIdentityCatalogueReader 是参与方身份目录三个端点消费的读口。它嵌入修订历史那一口
-// （票 admin-web-group-legal-entities/03）：四个端点共用装配点上同一个读口参数，判据在
+// PartyIdentityCatalogueReader 是参与方身份目录各端点消费的读口。它嵌入修订历史那一口
+// （票 admin-web-group-legal-entities/03）：这些端点在装配点上共用同一个读口参数，判据在
 // ports.PartyIdentityCatalogueRead——读同一张表、同一租户作用域、供同一页。
 type PartyIdentityCatalogueReader interface {
 	LegalEntityRevisionHistoryReader

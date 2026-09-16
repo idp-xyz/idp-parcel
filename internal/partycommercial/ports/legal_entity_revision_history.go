@@ -15,8 +15,9 @@ import (
 // 早已被后继修订顶替的那几笔也各自显出一格状态，读的人分不清那是历史事实还是此刻判断；
 // 名称在参与方册上、不随法人修订走，抄进每一笔等于给同一个名称造 N 份副本。
 //
-// PartyID 在场：法人钉着哪个业务参与方身份是这一笔修订的内容（内容更正翻旧插新，
-// CONTEXT「身份生命周期」），两笔之间改了什么由前端并排显，读口只交事实、不做 diff。
+// PartyID 在场：法人钉着哪个业务参与方身份是这一笔修订的内容（内容更正翻旧插新，CONTEXT
+// Lifecycles 下「参与方身份（业务参与方、责任法人、货主客户账户）」），两笔之间改了什么由前端
+// 并排显，读口只交事实、不做 diff。
 // 停用两件只在 HasDeactivation 为真时有意义，判据同 GroupLegalEntityRow。
 type LegalEntityRevisionRow struct {
 	TenantID          string
@@ -35,7 +36,7 @@ type LegalEntityRevisionRow struct {
 // entities/03）：按单个法人展开其登记册上的全部修订，按修订号升序，是集团与法人页详情抽屉
 // 「修订历史」区的供数面。
 //
-// 它单立而不并进 PartyIdentityCatalogueRead 的三个方法：那三个上列的是目录行（每身份一行、
+// 它单立而不并进 PartyIdentityCatalogueRead 的目录方法：那些上列的是目录行（每身份一行、
 // 最新修订），这里展开的是登记册的证据面（一身份多行、全部修订），行形状不同、也没有页大小
 // ——一个法人的修订链就是要全部交出，截断的历史不是历史。但它经 PartyIdentityCatalogueRead
 // 嵌入随同一个读口参数装配：读的是同一张表、同一租户作用域，供数的是同一页，读口参数跟着

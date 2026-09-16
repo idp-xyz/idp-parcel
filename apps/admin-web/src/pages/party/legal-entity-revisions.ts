@@ -17,7 +17,8 @@ export interface RevisionTimelineItem {
 }
 
 /**
- * 一笔修订一项。停用那一笔标题带`已停用`（CONTEXT「身份生命周期」原词）、色调 warning；
+ * 一笔修订一项。停用那一笔标题带`已停用`（CONTEXT Lifecycles 下「参与方身份（业务参与方、责任法人、
+ * 货主客户账户）」原词）、色调 warning；
  * 其余笔只显修订号——读口没给每一笔算状态（理由在 api.ts 的 LegalEntityRevisionRecord 注释），
  * 这里也不替它算：历史上被顶替的那几笔算出来的「状态」不是任何时刻的事实。
  *
