@@ -10,31 +10,22 @@ import {
 } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
-import { MultiRegistrationPanel, type RegistrationTarget } from '../../components/registration';
 import { StatusBadgeFor, domainStatusTones, type DomainStatus } from '../../domain/status';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState } from '../catalogue-view';
 import {
-  commercialRegistrationEndpoints,
   listBusinessParties,
   listPartyRelationships,
-  partyIdentityOutcomeLabels,
-  registerCommercial,
   type BusinessPartyListResponseBody,
   type BusinessPartyRecord,
   type PartyRelationshipListResponseBody,
   type PartyRelationshipRecord,
 } from './api';
-import {
-  identityStatusLabels,
-  labelOf,
-  partyRoleLabels,
-  problemNote,
-  registrationSnapshotHints,
-  registrationTitles,
-  relationshipStatusLabels,
-} from './presentation';
+import { identityStatusLabels, labelOf, partyRoleLabels, relationshipStatusLabels } from './presentation';
 import { DetailRow, Instant, InstantRange, filterSelectClass, useCopyToClipboard } from './detail-primitives';
+import { BusinessPartyRegistrationForm } from './BusinessPartyRegistrationForm';
+import { PartyRelationshipRegistrationForm } from './PartyRelationshipRegistrationForm';
+import { IdentityDeactivationForm } from './IdentityDeactivationForm';
 import {
   businessPartyCountSummary,
   businessPartyNoMatchNote,
@@ -337,32 +328,27 @@ function PartyRelationshipDrawer({ row, onClose }: { row: PartyRelationshipRecor
  * 参与方身份本体册。它与关系册同页分签，而不是并进关系表：一个参与方既可以不是法人、
  * 也可以不在任何关系里，被停用的那种恰恰如此——身份生命周期的「已登记」与「已停用」
  * 两格只有在这一册上才有实例可显（票 admin-remainder-mechanism-batch/01 的补格裁定）。
+ *
+ * 列表状态由页面持有再传进来（票 10 第 5 条，GroupLegalEntitiesPage 的做法）：登记签要读已取回的列表给修订号建议、
+ * 登记成功后要触发重取，两签共享同一份答案而不各取一次。
  */
-function BusinessPartyIdentitiesTable() {
+function BusinessPartyIdentitiesTable({
+  answer,
+  retry,
+}: {
+  answer: ApiResult<BusinessPartyListResponseBody> | null;
+  retry: () => void;
+}) {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<BusinessPartyStatusFilter>('ALL');
   const [sort, setSort] = useState<BusinessPartySortKey>('registered-desc');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<BusinessPartyListResponseBody> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listBusinessParties().then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
 
   const parties = answer?.kind === 'outcome' ? answer.body.parties : [];
   // 筛选与排序只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约（归票 04）。
   const visibleParties = sortBusinessParties(filterBusinessParties(parties, { search, status }), sort);
   // 抽屉按标识重找行而不是存整行：列表重取后行内容以新答案为准，行没了抽屉随之关。
   const selected = selectedId === null ? null : parties.find((row) => row.partyId === selectedId) ?? null;
-  const retry = () => setReloadKey((value) => value + 1);
 
   return (
     <>
@@ -431,27 +417,20 @@ function BusinessPartyIdentitiesTable() {
  * 关系行对象是参与方关系的最新登记修订：承运商、承运商代理商、转售商、聚合平台与渠道
  * 账号持有人都以「双方 + 角色 + 有效区间」的时态关系表达，代理关系不自动合并交易角色；
  * 关系登记按修订版本化不可覆盖。两册的状态代数不同——身份状态按时点导出、关系状态是
- * 登记进来的事实，所以分签而不是并表。
+ * 登记进来的事实，所以分签而不是并表。列表状态由页面持有再传进来，理由同身份册那张表。
  */
-function PartyRelationshipsTable() {
+function PartyRelationshipsTable({
+  answer,
+  retry,
+}: {
+  answer: ApiResult<PartyRelationshipListResponseBody> | null;
+  retry: () => void;
+}) {
   const [search, setSearch] = useState('');
   const [role, setRole] = useState<PartyRelationshipRoleFilter>('ALL');
   const [status, setStatus] = useState<PartyRelationshipStatusFilter>('ALL');
   const [sort, setSort] = useState<PartyRelationshipSortKey>('effective-start-desc');
   const [selectedId, setSelectedId] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<PartyRelationshipListResponseBody> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listPartyRelationships().then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
 
   const relationships = answer?.kind === 'outcome' ? answer.body.relationships : [];
   // 筛选与排序只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约（归票 04）。
@@ -461,7 +440,6 @@ function PartyRelationshipsTable() {
   );
   const selected =
     selectedId === null ? null : relationships.find((row) => row.relationshipId === selectedId) ?? null;
-  const retry = () => setReloadKey((value) => value + 1);
 
   return (
     <>
@@ -539,41 +517,116 @@ function PartyRelationshipsTable() {
 }
 
 /**
- * 登记签装的三本册（ADR-0085，票 admin-write-faces/02 切片 02c）。前两本与本页两张读签
- * 一一对应，选册按钮的词取读签自己的词，不为登记签另造说法。
+ * 登记签装的三本册（ADR-0085，票 admin-write-faces/02 切片 02c；自票 admin-web-group-legal-entities/10 起三册都是
+ * 逐字段表单，ADR-0101 决定八自裁，JSON 快照签降为各表单底部的折叠区）。前两本与本页两张读签一一对应，选册按钮
+ * 的词取读签自己的词，不为登记签另造说法。
  *
- * 第三本停用摆在本页，理由是本页读得见它刚写进去的那两件：停用快照每项必填 basis，而三个
- * 身份读面里只有身份本体册把停用时点与停用依据都渲染出来——法人册那格只有时点。登在哪里
- * 看得见结果就摆哪里，这是「写签跟着读签走」在本册上的落法。
+ * 第三本停用摆在本页，理由是本页读得见它刚写进去的那两件：停用每项必填 basis，而三个身份读面里只有身份本体册把
+ * 停用时点与停用依据都渲染出来——法人册那格只有时点。登在哪里看得见结果就摆哪里，这是「写签跟着读签走」在本册
+ * 上的落法。
  *
- * **不按 kind 切成两签**：快照收的是 deactivations 数组，kind 在每一项上、tenantId 在整批
- * 上，一次提交本来就可以同时停一个参与方与一个法人。切签就得让每页拒收非本页那种 kind，
- * 那是管理台编一条服务端没有的约束——页面不教一条不真的规则。
+ * **不按 kind 切成两签**：停用口一个命令带种类，法人与客户账户的停用也走它。切签就得让每页拒收非本页那种 kind，
+ * 那是管理台编一条服务端没有的约束——页面不教一条不真的规则。停用表单里种类是一格下拉，另两处结果的去处由格下
+ * 那句说出。
  *
- * 「登记签不比读签多铺一册」那条没有被触发：它禁的是同一册在两处都能登、其中一处看不见
- * 结果，而这里是一册一处登、读面分三处。另两处的去处由停用那条 snapshotHint 末句说出，
- * 披露义务已在词表里尽过，不在这里补第二遍。
+ * 换册即换表单：各册草稿是各自表单的内部状态，切走再切回从空白起——三册的格互不相容，留着上一册的草稿没有可以
+ * 「带过去」的东西，与 MultiRegistrationPanel 换册清草稿是同一条纪律。
  */
-const registrationTargets: RegistrationTarget[] = (
-  [
-    ['business-party', '参与方身份'],
-    ['party-relationship', '参与方关系'],
-    // 「停用」取身份状态格里的封闭词（已停用），不为登记签另造一个动词。
-    ['identity-deactivation', '身份停用'],
-  ] as const
-).map(([kind, label]) => ({
-  id: kind,
-  label,
-  title: registrationTitles[kind],
-  endpoint: `POST ${commercialRegistrationEndpoints[kind]}`,
-  snapshotHint: registrationSnapshotHints[kind],
-  submit: (snapshot: unknown) => registerCommercial(kind, snapshot),
-  // 三册共用一份答案代数（服务端交回同一个 PartyRegistryOutcome），所以这一格在这里给一次
-  // 而不是逐册各抄；其中`已停用`与`册上没有这一个身份`两格只可能来自停用那一册。
-  outcomeLabels: partyIdentityOutcomeLabels,
-}));
+type RegisterId = 'business-party' | 'party-relationship' | 'identity-deactivation';
+
+const registers: { id: RegisterId; label: string }[] = [
+  { id: 'business-party', label: '参与方身份' },
+  { id: 'party-relationship', label: '参与方关系' },
+  // 「停用」取身份状态格里的封闭词（已停用），不为登记签另造一个动词。
+  { id: 'identity-deactivation', label: '身份停用' },
+];
+
+// 与 MultiRegistrationPanel 的选册 chip 同形；那一份未导出，抬成共享件归收口票。
+const chipClass = (active: boolean) =>
+  `px-2.5 py-1 text-[12px] rounded border ${
+    active
+      ? 'border-idpxyz-accent text-idpxyz-accent'
+      : 'border-idpxyz-border text-idpxyz-textMuted hover:bg-idpxyz-hover'
+  }`;
+
+function RegistrationTab({
+  knownParties,
+  knownRelationships,
+  partiesVersion,
+  onPartiesChanged,
+  onRelationshipsChanged,
+}: {
+  knownParties: readonly BusinessPartyRecord[] | null;
+  knownRelationships: readonly PartyRelationshipRecord[] | null;
+  partiesVersion: number;
+  onPartiesChanged: () => void;
+  onRelationshipsChanged: () => void;
+}) {
+  const [selected, setSelected] = useState<RegisterId>('business-party');
+  return (
+    <div className="flex-1 flex flex-col overflow-hidden">
+      <div className="flex flex-wrap items-center gap-2 px-4 pt-4">
+        {registers.map((register) => (
+          <button
+            key={register.id}
+            type="button"
+            className={chipClass(register.id === selected)}
+            onClick={() => setSelected(register.id)}
+          >
+            {register.label}
+          </button>
+        ))}
+      </div>
+      {selected === 'business-party' ? (
+        <BusinessPartyRegistrationForm knownParties={knownParties} onRegistered={onPartiesChanged} />
+      ) : selected === 'party-relationship' ? (
+        <PartyRelationshipRegistrationForm
+          knownRelationships={knownRelationships}
+          partiesVersion={partiesVersion}
+          onRegistered={onRelationshipsChanged}
+        />
+      ) : (
+        <IdentityDeactivationForm
+          knownParties={knownParties}
+          partiesVersion={partiesVersion}
+          onDeactivated={onPartiesChanged}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * 页面持有两张读签的列表状态（票 10 第 5 条）：登记签从这份答案取修订号建议，登记册答 REGISTERED / DEACTIVATED 时
+ * 触发对应读签重取。两册各自一份重取序号——登一段关系不必重取参与方册，反过来也一样。
+ */
+function useRegisterList<Body>(load: () => Promise<ApiResult<Body>>) {
+  const [reloadKey, setReloadKey] = useState(0);
+  const [answer, setAnswer] = useState<ApiResult<Body> | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setAnswer(null);
+    void load().then((next) => {
+      if (!cancelled) setAnswer(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [load, reloadKey]);
+
+  const retry = () => setReloadKey((value) => value + 1);
+  return { answer, retry, version: reloadKey };
+}
 
 export function BusinessPartiesPage() {
+  const parties = useRegisterList(listBusinessParties);
+  const relationships = useRegisterList(listPartyRelationships);
+  // 列表没取到（加载中 / 未配置 / 出错）传 null：表单那边建议修订号一律为 1，不拿空数组冒充「册上没有」。
+  const knownParties = parties.answer?.kind === 'outcome' ? parties.answer.body.parties : null;
+  const knownRelationships =
+    relationships.answer?.kind === 'outcome' ? relationships.answer.body.relationships : null;
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <Tabs defaultValue="identities" className="flex-1 flex flex-col overflow-hidden gap-0">
@@ -586,22 +639,24 @@ export function BusinessPartiesPage() {
           value="identities"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
-          <BusinessPartyIdentitiesTable />
+          <BusinessPartyIdentitiesTable answer={parties.answer} retry={parties.retry} />
         </TabsContent>
         <TabsContent
           value="relationships"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
-          <PartyRelationshipsTable />
+          <PartyRelationshipsTable answer={relationships.answer} retry={relationships.retry} />
         </TabsContent>
         <TabsContent
           value="register"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
-          <MultiRegistrationPanel
-            moduleId="business-parties"
-            targets={registrationTargets}
-            problemNote={problemNote}
+          <RegistrationTab
+            knownParties={knownParties}
+            knownRelationships={knownRelationships}
+            partiesVersion={parties.version}
+            onPartiesChanged={parties.retry}
+            onRelationshipsChanged={relationships.retry}
           />
         </TabsContent>
       </Tabs>
