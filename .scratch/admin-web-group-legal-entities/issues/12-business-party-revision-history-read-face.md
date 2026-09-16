@@ -129,7 +129,7 @@ TabsContent 隐藏时不卸载——操作者开着抽屉去登记签给同一�
 
 （`task-2510f5fc`；隔离树 `%TEMP%\idp-review-12c`，评完已拆；实跑 `tsc` 0 / `run-tests` 279 / `vite build` 0；diff 只落 `BusinessPartiesPage.tsx` + 票面。全文随 `report_task`，此处按其一行汇总代落。）
 
-- **Standards（阻断 0 / 非阻断 1，判断项）**：**N1** 组件 `key` 带修订号那条注释的理由在今天的 `useRegisterList` 下不成立——列表重取时答案置空、抽屉随之卸载重挂，`key` 属冗余但无害的保险；代码不必改。无发现：组件与 `LegalEntityRevisionHistory` 逐态同形（未配置 / 无历史 / 加载中 / 出错、取消与陈旧答案丢弃、回显 partyId 核对）；判读只经 `businessPartyRevisionTimeline`；注释中文、符号名、无计数。
+- **Standards（阻断 0 / 非阻断 1，判断项）**：**N1** 组件 `key` 带修订号那条注释的理由在今天的 `useRegisterList` 下不成立——重取时 `setAnswer(null)` → `parties=[]` → 按 `selectedId` 重找行得 null → Drawer 关、历史区卸载，新答案到后全新挂载重取；所以没有 `key` 也不会「继续显上一条链」，`key` 在现行代码下冗余、但无害且是对「列表钩子将来改为重取期间保留旧答案」那条路径的保险（正是收口票第 6 条要改的做法）。建议注释补半句点明；代码不必改。「闪」是 10 的 `useRegisterList` 既有行为，非 (c) 引入。无发现：组件与 `LegalEntityRevisionHistory` 逐行同形（加载中 / 未配置句点出「不是没有历史——今天没有问到」/ callerProblem / noAnswer + transport 带重试 / 回显 partyId 核不上丢弃 + 重试 / 200 按 note + Timeline；取消标志、依赖 `[partyId, reloadKey]`）；判读只经 `businessPartyRevisionTimeline` 与 `businessPartyRevisionHistoryNote`；注释中文、符号名、无行号、「两句」为同句内枚举；diff 限于 import / 新组件 / 抽屉头注一句 / 占位段→组件，10 的登记签段与 `useRegisterList` 零改动。Smell 基线（不可行动判断）：两页各持一份结构相同的历史区组件，票面裁「照 03」；将来可抽成收 fetch / 标识 / 判读为 props 的共用区。评审实跑：隔离树以 junction 借主仓 `node_modules`，`tsc` 0 / `run-tests` 279 / `vite build` 0，跑完 status 空、junction 摘除。
 - **Spec（阻断 0 / 非阻断 0）**：要做的 5 全部字面到位；演示形态未验如实记、判读层由 `business-party-revisions.test.ts` 同数据钉住；S1 归因改口两处到位。
 - **一行**：Standards 0 / 1（判断项）· Spec 0 / 0。无阻断，可推。
 

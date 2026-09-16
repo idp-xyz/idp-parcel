@@ -33,6 +33,8 @@ MultiRegistrationPanel.tsx`（若抬 `chipClass`）；`ReferencePicker`（`Publi
    （09 N3 / N4 / S3）。
 9. 两页历史区（`LegalEntityRevisionHistory` / `BusinessPartyRevisionHistory`）的依赖键与 `useRegisterList` 重取的交互取齐：12 (c) 用
    `key` 带修订号，评审判在今天的重取做法下冗余无害；第 6 条改了重取做法后再判两页要不要 key，同一做法两页取齐（12 (c) N1 + 作者判断项）。
+   顺手判两页各持一份结构相同的历史区组件要不要抽成收 fetch / 标识 / 判读为 props 的共用区（12 (c) 评审 Smell 基线，不可行动判断——
+   这里只判，判「抽」就做进本条，判「不抽」写明理由）。
 
 ## 不做
 
