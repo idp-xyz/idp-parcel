@@ -18,9 +18,31 @@ Status: in-progress
 | 登记面形态（ADR-0101 决定八已放行） | 「登记法人」签是粘 JSON——ADR-0101 决定一已把「不逐字段建」的理由收窄到客户渠道载荷，决定八让各册自裁；法人身份登记五格、低频、结构简单，是决定八点名「可以直接逐字段表单」的那一类。JSON 快照签保留为受控批量口的在线镜像，不再是主路径 | 票 02 |
 | 契约与建模（要后端或 owner 裁） | 修订历史没有读口（行对象是最新修订，`r1` 点不进去）；目录读口一次拉全量（`isolatedReadLimit = 200`）、无分页排序筛选参数；责任法人没有业务属性（税号/注册国家/开票主体/结算币种/联系人）；`/commercial-*` 身份族在隔离形态下仍答 403（ADR-0091 逐口放行首批只有 `/shipment-requests`） | 票 03、04、05、06 |
 
+## 第二轮：业务参与方页评估（钉 main `dbe989cc`，通道 1，2026-09-16 20:2x）
+
+出处：06 / 07 落 main 并重建 parcel-api 后，用户经 IDP 队列问「集团与法人不能手动添加吗 → 如何登参与方身份 → 能修改的吗 → 请你评估这个页面 →
+按你的建议开始吧」。评估对象换成同模块的「业务参与方」页（`apps/admin-web/src/pages/party/BusinessPartiesPage.tsx`），判据来自代码 + 对本机
+parcel-api 的实探（GET 两读口 200、五个 POST 空载荷 400），浏览器未验。
+
+**做对的**：三签分法（身份本体册 / 关系册 / 登记签）有道理——两册状态代数不同，分签不并表；停用摆本页的理由成立；领域模型忠实（最新登记修订、
+停用两件与状态同格、关系撤销 / 到期 / 替代带时点依据后继、悬空引用如实标出、「方向」列撤下由次序表达）；四态如实、计数只在业务答案后显示；
+换册即清草稿；答案三态不折成「提交失败」。
+
+**缺口**，四档：
+
+| 档 | 缺口 | 归属 |
+|---|---|---|
+| 今天最伤（06 落地后才暴露） | 登记签五句提示仍写「外加整批的 tenantId」，而在线隔离口 `refuseSelfReportedTenant` 键在场即拒；400 到页面只剩 code，`problemNote('MALFORMED_REQUEST')` 显的是读口 `?kind=` 的说明——照提示填 → 被拒 → 读到的原因与真相无关 | 票 08（文案）、票 11（根治） |
+| 页面机制（与票 01 同类，01 只修了法人页） | 状态纯文字无徽章；时间无悬停原串；无筛选排序；行点不进去、无复制；描述是工程师口吻、空态提 CLI | 票 09 |
+| 登记面形态（ADR-0101 决定八） | 三册全是粘 JSON；参与方身份五格与法人同一判据该逐字段；停用有封闭三词与从册上选的目标；关系十格里有封闭五词与两个引用，打错词只得到说不清的 400；JSON 签不给修订号建议 | 票 10 |
+| 契约与建模 | 参与方身份无修订历史读口（法人有 03）；写口 400 无 detail；目录读口无分页排序筛选（票 04）；参与方无业务属性（票 05 同族） | 票 12、票 11；04 / 05 照旧归 owner |
+
+阻塞边：10 与 12（前端半边）都落在 09 改过的 `BusinessPartiesPage.tsx` 上，先后做；08 / 09 / 11 互不阻塞、地盘不交。
+
 ## 范围
 
 - **做**：票 01、02 由通道 6 本会话在隔离 worktree `D:/tops/idp-parcel-mcp6-adminweb`（分支 `mcp6-admin-web-legal-entities`，基 `a608536d`）上做，纯 `.ts/.tsx/.md`。
+- **第二轮（08–12）**：由通道 1 点名后派给应答的通道，各在自己的隔离 worktree 上做；08 / 09 / 11 可并行，10 与 12 等 09 进 main。
 - **只出票不动手**：票 03（Go 读口 + 前端历史区）、04（契约决策）、05（CONTEXT 建模）、06（ADR-0091 放口）。
 - **不做**：不改两签结构为「列表 + 主按钮 + 抽屉」——二十余张册页同用两签，一页独改只添不一致；若要换形态另立票全站一起换。不加导出。
 
@@ -43,3 +65,8 @@ Status: in-progress
 | [05](./issues/05-legal-entity-business-attributes.md) | 责任法人业务属性建模（税号、注册国家、开票主体、结算币种、联系人） | needs-info（归 owner） |
 | [06](./issues/06-isolated-write-admission-for-commercial-identity-family.md) | ADR-0091 逐口放行：`/commercial-*` 身份族在隔离形态下放行 | resolved（通道 4 → 4 新会话收尾，rebase 后以原 SHA ff 进 main，清点 `f6569f51`；见票面完成记录） |
 | [07](./issues/07-isolated-write-intake-decode-strict-and-comment-counts.md) | A 类尾巴：隔离身份 Intake 外壳解码改调 `decodeStrict`（尾随内容拒）+ 注释去计数（实做四处；06 评审 N1 / N3，可选 N2 未做） | resolved（通道 4，三笔原 SHA ff 进 main，远端 main = `19047d51`，评审 ← 通道 2 无阻断；见票面完成记录） |
+| [08](./issues/08-registration-hints-drop-tenant-id-and-malformed-note.md) | 登记签提示句去「外加整批的 tenantId」+ `problemNote` 的 `MALFORMED_REQUEST` 措辞改成读口 / 写口都成立（纯 .ts 文案） | ready-for-agent |
+| [09](./issues/09-business-parties-read-face-polish.md) | 业务参与方页读面打磨：徽章、时间悬停原串、筛选排序、行详情抽屉、复制、操作者文案（与票 01 同形） | ready-for-agent |
+| [10](./issues/10-business-party-relationship-deactivation-field-forms.md) | 参与方身份 / 关系 / 身份停用三册逐字段表单（ADR-0101 决定八），JSON 签降为折叠区 | ready-for-agent（Blocked by 09） |
+| [11](./issues/11-write-refusal-carries-detail.md) | 写口 400 带 `detail`：Go `writeProblem` 加格、TS `callerProblem` 带 detail、`RegistrationAnswerNote` 显出 | ready-for-agent |
+| [12](./issues/12-business-party-revision-history-read-face.md) | 业务参与方修订历史读口 + 抽屉「修订历史」区（按票 03 形态） | ready-for-agent（Blocked by 09，Go 半边可先做） |
