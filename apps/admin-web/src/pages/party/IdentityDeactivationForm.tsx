@@ -1,6 +1,8 @@
+import { useEffect, useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { RegistrationAnswerNote } from '../../components/registration';
+import type { ApiResult } from '../catalogue-api';
 import {
   commercialRegistrationEndpoints,
   listBusinessParties,
@@ -8,12 +10,11 @@ import {
   listGroupLegalEntities,
   partyIdentityOutcomeLabels,
   type BusinessPartyListResponseBody,
-  type BusinessPartyRecord,
   type CustomerAccountListResponseBody,
   type GroupLegalEntityListResponseBody,
 } from './api';
-import { problemNote, registrationTitles } from './presentation';
-import { Field, ReferencePicker, selectClass, useLoaded } from './PublicationFormFields';
+import { problemNote, registrationTitles, type IdentityKind } from './presentation';
+import { Field, ReferencePickerFor, selectClass, type PickerOption } from './PublicationFormFields';
 import {
   RevisionField,
   SnapshotJsonDetails,
@@ -24,14 +25,15 @@ import {
   useRegistrationForm,
 } from './party-registration-fields';
 import {
-  deactivationTargetsOf,
   emptyIdentityDeactivationDraft,
   identityDeactivationLocalProblems,
   identityDeactivationPayloadOf,
   identityKindOptions,
+  identityTargetOf,
+  isIdentityKind,
   suggestedDeactivationRevision,
   type IdentityDeactivationDraft,
-  type IdentityRegisters,
+  type RevisionedIdentity,
 } from './identity-deactivation-form';
 
 /**
@@ -42,15 +44,14 @@ import {
  * **本组件不算摘要、不裁任何门、不判领域规则**（伞票 admin-write-faces/07 硬句）：身份在不在册、已否停用、修订是否
  * 错位，一律送上去让服务端答；本地只拦编码层（修订号、停用时刻），纯函数在 identity-deactivation-form.ts。
  *
- * 标识按种类从对应的册上选：换种类即换 Picker（key 带种类），上一册的候选不留在下拉里。修订建议也按种类去对应册
- * 上数——参与方册由页面持有传进来，法人册与客户账户册在这里各读一次（Picker 自己另读一次：共享 Picker 不交出行、
- * 只交出候选，而建议要的是修订号；改它归收口票，本票不碰共享件）。
+ * 标识按种类从对应的册上选，候选与修订建议取的是**同一份答案**（票 13 第 5 条）：参与方册用页面持有的那份，不另读；
+ * 法人册与客户账户册在选中那一种类时才读、读一次，Picker 收这份答案（ReferencePickerFor）而不自己再读——此前一挂
+ * 即读两册、Picker 又各自读一遍，同一册在一张表单里被读两三遍。种类 → 读口 / 候选 / 读面名 / 投影合成一张按
+ * IdentityKind 键的表（第 2 条），三分支 JSX 与 switch 收掉；词表多一格，表编不过。
  */
 export interface IdentityDeactivationFormProps {
-  /** 页面已取回的参与方列表（种类为业务参与方时给修订号建议用）；没取到传 null。 */
-  knownParties: readonly BusinessPartyRecord[] | null;
-  /** 参与方列表的重取序号：每变一次，参与方那一册的候选重读一次。 */
-  partiesVersion: number;
+  /** 页面持有的参与方列表答案（种类为业务参与方时给候选与修订号建议用）；首取回来之前为 null。 */
+  parties: ApiResult<BusinessPartyListResponseBody> | null;
   /** 登记册答 `DEACTIVATED` 时回调，页面借它重取参与方列表让「已停用」+ 时点 + 依据立刻可见。 */
   onDeactivated: () => void;
 }
@@ -65,19 +66,64 @@ const pickerNotes = {
   optionsNote: '候选不按状态过滤：已停用的再停一次由服务端答，表单不拦。',
 } as const;
 
-export function IdentityDeactivationForm({ knownParties, partiesVersion, onDeactivated }: IdentityDeactivationFormProps) {
-  const legalEntities = useLoaded(listGroupLegalEntities);
-  const accounts = useLoaded(listCustomerAccounts);
-  const registers: IdentityRegisters = {
-    parties: knownParties,
-    legalEntities: legalEntities?.kind === 'outcome' ? legalEntities.body.entities : null,
-    accounts: accounts?.kind === 'outcome' ? accounts.body.accounts : null,
+/**
+ * 一种身份对应的那一册：读口、候选转写、读面名、投成「标识 + 修订」。答案体的形状只有本行知道，表外一律按
+ * unknown 传——三册体形各异，表要键在同一个 IdentityKind 上就得在这里擦掉。
+ */
+interface KindRegister {
+  readFace: string;
+  load(): Promise<ApiResult<unknown>>;
+  optionsOf(body: unknown): PickerOption[];
+  targetsOf(body: unknown): readonly RevisionedIdentity[];
+}
+
+function kindRegister<Body>(entry: {
+  readFace: string;
+  load(): Promise<ApiResult<Body>>;
+  optionsOf(body: Body): PickerOption[];
+  targetsOf(body: Body): readonly RevisionedIdentity[];
+}): KindRegister {
+  return entry;
+}
+
+/** 参与方册那一行的 load 不会被调到：页面已持有那份答案传进来（props.parties），再读一次就是第 5 条要收的那次。 */
+const kindRegisters: Record<IdentityKind, KindRegister> = {
+  BUSINESS_PARTY: kindRegister<BusinessPartyListResponseBody>({
+    readFace: '参与方册',
+    load: listBusinessParties,
+    optionsOf: businessPartyPickerOptions,
+    targetsOf: (body) => body.parties.map(identityTargetOf.BUSINESS_PARTY),
+  }),
+  LEGAL_ENTITY: kindRegister<GroupLegalEntityListResponseBody>({
+    readFace: '法人册',
+    load: listGroupLegalEntities,
+    optionsOf: legalEntityPickerOptions,
+    targetsOf: (body) => body.entities.map(identityTargetOf.LEGAL_ENTITY),
+  }),
+  CUSTOMER_ACCOUNT: kindRegister<CustomerAccountListResponseBody>({
+    readFace: '客户账户册',
+    load: listCustomerAccounts,
+    optionsOf: customerAccountPickerOptions,
+    targetsOf: (body) => body.accounts.map(identityTargetOf.CUSTOMER_ACCOUNT),
+  }),
+};
+
+export function IdentityDeactivationForm({ parties, onDeactivated }: IdentityDeactivationFormProps) {
+  // 当前选中种类那一册的答案（参与方册除外——它从页面来）。换种类即换册，上一册的答案不留：与「换种类连标识一起清」
+  // 同一条纪律，上一册的候选留在下拉里会被送到另一册去查。
+  const [loaded, setLoaded] = useState<ApiResult<unknown> | null>(null);
+  const answerFor = (selected: IdentityKind): ApiResult<unknown> | null =>
+    selected === 'BUSINESS_PARTY' ? parties : loaded;
+  const targetsFor = (selected: string): readonly RevisionedIdentity[] | null => {
+    if (!isIdentityKind(selected)) return null;
+    const answer = answerFor(selected);
+    return answer?.kind === 'outcome' ? kindRegisters[selected].targetsOf(answer.body) : null;
   };
 
   const form = useRegistrationForm<IdentityDeactivationDraft>({
     kind,
     empty: emptyIdentityDeactivationDraft,
-    suggestion: (draft) => suggestedDeactivationRevision(deactivationTargetsOf(draft.kind, registers), draft.id),
+    suggestion: (draft) => suggestedDeactivationRevision(targetsFor(draft.kind), draft.id),
     localProblems: identityDeactivationLocalProblems,
     payloadOf: identityDeactivationPayloadOf,
     // 答 `DEACTIVATED`（PartyRegistryOutcome 里 PartyIdentityDeactivated 的线上名）才重取；`册上没有这一个身份`与
@@ -87,9 +133,22 @@ export function IdentityDeactivationForm({ knownParties, partiesVersion, onDeact
     onLanded: () => onDeactivated(),
   });
   const { draft, patch, problems, locked, timeZone } = form;
+  const selectedKind = isIdentityKind(draft.kind) ? draft.kind : null;
 
-  const targets = deactivationTargetsOf(draft.kind, registers);
-  const known = targets?.find((row) => row.id === draft.id);
+  useEffect(() => {
+    // 参与方册不在这里读：页面持有的那份答案就是它。其余两册在选中时读一次；未回的旧请求按 cancelled 丢。
+    setLoaded(null);
+    if (selectedKind === null || selectedKind === 'BUSINESS_PARTY') return;
+    let cancelled = false;
+    void kindRegisters[selectedKind].load().then((next) => {
+      if (!cancelled) setLoaded(next);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [selectedKind]);
+
+  const known = targetsFor(draft.kind)?.find((row) => row.id === draft.id);
   const pickerProps = {
     label: '身份标识 *',
     path: 'deactivations[0].id',
@@ -134,29 +193,14 @@ export function IdentityDeactivationForm({ knownParties, partiesVersion, onDeact
               </span>
             </Field>
 
-            {draft.kind === 'BUSINESS_PARTY' ? (
-              <ReferencePicker<BusinessPartyListResponseBody>
-                key={`party-${partiesVersion}`}
+            {selectedKind !== null ? (
+              // key 带种类：换种类即换 Picker，上一册的候选与「不在读面上」那一项不留在下拉里。
+              <ReferencePickerFor<unknown>
+                key={selectedKind}
                 {...pickerProps}
-                load={listBusinessParties}
-                optionsOf={businessPartyPickerOptions}
-                readFace="参与方册"
-              />
-            ) : draft.kind === 'LEGAL_ENTITY' ? (
-              <ReferencePicker<GroupLegalEntityListResponseBody>
-                key="legal-entity"
-                {...pickerProps}
-                load={listGroupLegalEntities}
-                optionsOf={legalEntityPickerOptions}
-                readFace="法人册"
-              />
-            ) : draft.kind === 'CUSTOMER_ACCOUNT' ? (
-              <ReferencePicker<CustomerAccountListResponseBody>
-                key="customer-account"
-                {...pickerProps}
-                load={listCustomerAccounts}
-                optionsOf={customerAccountPickerOptions}
-                readFace="客户账户册"
+                answer={answerFor(selectedKind)}
+                optionsOf={kindRegisters[selectedKind].optionsOf}
+                readFace={kindRegisters[selectedKind].readFace}
               />
             ) : (
               <Field label="身份标识 *" path="deactivations[0].id" problems={problems}>
