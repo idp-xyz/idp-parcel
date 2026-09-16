@@ -43,3 +43,48 @@ Blocked by: 09（抽屉归 09 建，前端半边落在它上面；Go 半边不�
 - 清点随笔重生成，porcelain 空。
 
 ## Comments
+
+### 完成记录（通道 4 · 2026-09-16 22:4x–23:0x · 分支 `mcp4-adminweb12` 基 main `f6010739`）
+
+**(a)(b) 齐；(c) 抽屉接线待票 10 进 main。** 票 10 与本票共享 `BusinessPartiesPage.tsx`，派单裁本票在 10 进 main 之前不碰该文件；
+Go 半边与 TS 纯逻辑不依赖 10，先落。10 进 main 后 `git fetch` + rebase，把抽屉「修订历史」区改取真数据另作一笔、再报一次。
+
+**要做的逐条**
+
+1. 读口 ✅ `ports.BusinessPartyRevisionHistoryRead` + `BusinessPartyRevisionRow`（`business_party_revision_history.go`），嵌进
+   `PartyIdentityCatalogueRead` 与 `LegalEntityRevisionHistoryRead` 同位。行带 PartyName 不带 Status，理由在行类型注释。不做 diff。
+2. 适配器 ✅ `OperationsCatalogue.ListBusinessPartyRevisions`，`WHERE tenant_id=$1 AND party_id=$2 ORDER BY revision`；pgtest 用例
+   `TestBusinessPartyRevisionHistoryListsAllRevisionsByRevisionNumber`（先落 r2 后 r1，钉序按修订号；名称随每一笔；停用两件只在停用笔；
+   同租户另一参与方不混入）与 `TestBusinessPartyRevisionHistoryAnswersUnknownAndForeignAsEmpty`（不在册非 nil 空切片；跨租户零行）。
+3. 端点 ✅ `NewQueryBusinessPartyRevisionsEndpoint`，`GET /commercial-business-parties/{partyId}/revisions`，Intake 同
+   `CommercialCatalogueIntake`；未配置 403、不在册 200 + []、顶层回显 partyId、线上名 `BUSINESS_PARTY_REVISIONS_LISTED`；405 / 400 / 500
+   三门同 03。`PartyIdentityCatalogueReader` 嵌入 `BusinessPartyRevisionHistoryReader`。
+4. 装配 ✅ `assembleBusinessEndpoints` 一行；`businessEndpointProbes` 一格；`isolatedReadAdmittedPatterns` 一格（注释逐条对 ADR-0091 决定一
+   三条判据，经真路由期待 500 而非 400，钉住 chi 填 `{partyId}`）；`unwiredCommercialCatalogue` 占位方法。清点随笔重生成（f435e8d9）。
+5. 前端 ◑ TS 纯逻辑已落：`api.ts` 加 `BusinessPartyRevisionRecord` / `BusinessPartyRevisionListResponseBody` / `listBusinessPartyRevisions`；
+   时间线判读**泛化一份共用**——新 `revision-timeline.ts`（`identityRevisionTimeline(revisions, format, content)` /
+   `identityRevisionHistoryNote(count, subject)`），`legal-entity-revisions.ts` 改成薄适配且导出名不动，新 `business-party-revisions.ts`
+   薄适配 + node:test 三条。**抽屉接线未做**（等 10）。
+
+**完成判据逐条**
+
+- Go ✅（取证于 `f435e8d9`）`gofmt -l .` / `go build ./...` / `go vet ./...` 零输出。`go list` 反查 ports / pcpostgres / commercialhttp 的
+  全部反向依赖包（`cmd/parcel-api`、`parcel-commercial`、`parcel-dispatch`、PS/PC postgres 等）+ `./internal/architecture/...` 带 DSN
+  `go test -count=1 -p 1`：全 ok，`--- PASS` 1608 / SKIP 0 / FAIL 0；`-v` 探针新 pg 用例两条 PASS 非 SKIP。
+- 端点用例四条 ✅ 未配置 403 / 在册多笔按序（含名称换了一次）/ 不在册 200 空数组 / 跨租户不可见，另加 405+400+500 三门一条。
+- 前端三道门 ✅ `tsc -b --noEmit` 0 / `run-tests` 257（main 254 + 3）/ `vite build` 0。演示形态（`SYN-PARTY-RETIRED-01` 抽屉显 2 笔、第 2 笔标
+  `已停用`）**未验**——抽屉接线待 10，浏览器验收随 (c) 那一笔。
+- 清点 ✅ 随笔重生成（partycommercial 生产 +3 / 测试 +2、端点 +1、端口 +1），porcelain 空。
+
+**判断项**
+
+- 泛化取舍：两册修订行在修订号 / 依据 / 生效 / 停用两件 / 登记时间上同形（同一个 `IdentityLifecycle`），各册多出的一格（法人册 partyId、
+  参与方册 partyName）是这一笔的**内容**，以 `content` 回调交进共用判读，放在描述里同一位置（「依据 · 生效自 · <内容> · 停用于」），两张抽屉
+  版式一致。不改 03 已验收的描述次序。
+- `legal-entity-revisions.ts` 保住导出名（`legalEntityRevisionTimeline` / `revisionHistoryNote`）：`GroupLegalEntitiesPage` 与既有用例零改动
+  仍绿，是泛化保住行为的证据；改名属评审期重构，不在本票。
+- 注释句主语随册走（`identityRevisionHistoryNote(count, subject)`）：判读能共用，句子里点名的册不能共用；node:test 钉参与方那句不含「法人」。
+- 描述位置：名称放在「生效自」之后而不是最前——与法人册版式对齐优先于「名称是主内容」的直觉；03 已验收的版式不动。
+
+**笔** `ee8481b0`（票面 in-progress）→ `d0cb97d0`（ports + pcpostgres）→ `fa459894`（端点 + 嵌入）→ `90a8ee57`（装配）→ `67e24804`（TS）→
+`f435e8d9`（清点）。每片先红后绿：pg 方法缺失编译红、端点构造函数缺失编译红、装配两方向红（「没进装配」/ 404 want 500）。
