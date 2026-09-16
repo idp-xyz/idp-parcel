@@ -40,8 +40,6 @@ import {
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['group-legal-entities'];
 
-// 时刻格 Instant、过滤条下拉样式、复制与抽屉行自票 09 起住在 detail-primitives.tsx，与业务参与方页共用一份。
-
 // 身份状态词表词按共享词表着色；词表没收录的码（服务端新增一格时）原样示码、不猜色调——
 // 归进某个既有中文说法会让一种新答案冒充另一种。断言只桥接类型边界，词同源于 CONTEXT 原词。
 function statusBadge(status: string): ReactNode {

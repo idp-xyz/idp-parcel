@@ -263,7 +263,7 @@ export const registrationTitles: Record<CommercialRegistrationKind, string> = {
 // 接入渠道填入，不采信自报（`register_party_identity.go` 包注释；ADR-0100 决定二）。此前
 // 身份族各句把整批的 tenantId 也列进键里，那是受控 CLI 批文的形状，照它填在线口答的是
 // 400，而 400 到页面只剩 code（票 admin-web-group-legal-entities/08）。发布口与产品渠道族
-// 两口今天仍挂 UnconfiguredIntake 答 403，它们的提示句照批文形状说，等那几口放行时随其票
+// 那几口今天仍挂 UnconfiguredIntake 答 403，它们的提示句照批文形状说，等那几口放行时随其票
 // 改——现在改了也验不了，一句验不了的否定与一句验不了的肯定同样不可信。
 const tenantGridFilledByChannel =
   '载荷里**不带 tenantId**——在线口的租户格由接入渠道填入,带了(含 null)即 400。';

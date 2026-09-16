@@ -62,7 +62,7 @@ import {
 const info = moduleInfoById['business-parties'];
 
 // 词表词按共享词表着色；词表没收录的码（服务端新增一格时）原样示码、不猜色调——归进某个既有中文说法会让
-// 一种新答案冒充另一种。身份三词与关系五词各取各的词表（两册状态代数不同，见页组件头注），色调同源于 domain/status。
+// 一种新答案冒充另一种。身份与关系各取各的词表（两册状态代数不同，见页组件头注），色调同源于 domain/status。
 function statusBadge(table: Record<string, string>, code: string): ReactNode {
   const word = labelOf(table, code);
   return word in domainStatusTones ? <StatusBadgeFor status={word as DomainStatus} /> : word;
