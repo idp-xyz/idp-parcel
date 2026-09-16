@@ -26,7 +26,7 @@ Status: in-progress
 
 ## 红线
 
-- 状态徽章只用 CONTEXT 原词（`已登记`/`已生效`/`已停用`，出处 party-commercial CONTEXT「身份生命周期」），不自造译法。
+- 状态徽章只用 CONTEXT 原词（`已登记`/`已生效`/`已停用`，出处 party-commercial CONTEXT Lifecycles 下「参与方身份（业务参与方、责任法人、货主客户账户）」），不自造译法。
 - 表单**不算摘要、不裁任何门、不判领域规则**（伞票 admin-write-faces/07 硬句）：修订连续、参与方在册且届时已生效、时刻格式，一律送上去让服务端答。表单只做编码层的事（修订号编成整数、可缺键缺席、本地时刻换成 RFC 3339）。
 - 表单**不带租户格**：在线 Intake 要把认证结果填进租户格、只从载荷取行内容（`register_party_identity.go` 包注释；ADR-0100 决定二后端不采信自报身份）。载荷镜像受控 CLI `register-parties` 的 `legalEntities` 一项，去掉整批的 `tenantId`。
 - 过滤与排序只在已取回的数据上做，不下推成查询参数（README 列表页上列通则）；下推归票 04。
@@ -36,8 +36,8 @@ Status: in-progress
 
 | 票 | 标题 | 状态 |
 |---|---|---|
-| [01](./issues/01-list-face-polish.md) | 集团与法人读面打磨：徽章、时间本地化、撤同值列、筛选排序、行详情抽屉、复制、操作者文案 | in-progress（通道 6） |
-| [02](./issues/02-legal-entity-field-form.md) | 登记法人改逐字段表单（ADR-0101 决定八自裁），JSON 快照签降为受控批量口镜像 | in-progress（通道 6） |
+| [01](./issues/01-list-face-polish.md) | 集团与法人读面打磨：徽章、时间本地化、撤同值列、筛选排序、行详情抽屉、复制、操作者文案 | resolved（通道 6 → 4 → 1，分支 tip 见票面完成记录） |
+| [02](./issues/02-legal-entity-field-form.md) | 登记法人改逐字段表单（ADR-0101 决定八自裁），JSON 快照签降为受控批量口镜像 | resolved（同上） |
 | [03](./issues/03-legal-entity-revision-history-read-face.md) | 责任法人修订历史读口 + 详情抽屉「修订历史」区 | ready-for-agent |
 | [04](./issues/04-catalogue-read-pagination-sort-filter-contract.md) | 目录读口分页 / 排序 / 筛选下推的契约决策 | needs-info（归 owner） |
 | [05](./issues/05-legal-entity-business-attributes.md) | 责任法人业务属性建模（税号、注册国家、开票主体、结算币种、联系人） | needs-info（归 owner） |
