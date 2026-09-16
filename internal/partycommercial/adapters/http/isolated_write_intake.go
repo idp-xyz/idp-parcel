@@ -28,7 +28,11 @@ type IsolatedPartyIdentityIntake struct {
 	tenant domain.TenantID
 }
 
-var _ LegalEntityRegistrationIntake = (*IsolatedPartyIdentityIntake)(nil)
+// 已成笔的口。每放一口在这里多一行断言、多一个方法，装配点多换一行。
+var (
+	_ LegalEntityRegistrationIntake   = (*IsolatedPartyIdentityIntake)(nil)
+	_ BusinessPartyRegistrationIntake = (*IsolatedPartyIdentityIntake)(nil)
+)
 
 // NewIsolatedPartyIdentityIntake 由装配点以显式合成值构造。立不起来的租户在这里拒：装配错误要在启动时暴露，
 // 不该等到第一个请求。
@@ -46,13 +50,40 @@ func NewIsolatedPartyIdentityIntake(tenant string) (*IsolatedPartyIdentityIntake
 // 登记方读不出这是一条规则而不是一次拼写错误；且日后有人把租户格加回文档结构时，未知字段那道门会静默放开。这一格用
 // json.RawMessage 而不是 *string：`"tenantId": null` 也是自报（键在场），要一并拒。
 type partyIdentityBatchDocument struct {
-	TenantID      json.RawMessage       `json:"tenantId"`
-	LegalEntities []legalEntityDocument `json:"legalEntities"`
+	TenantID        json.RawMessage         `json:"tenantId"`
+	BusinessParties []businessPartyDocument `json:"businessParties"`
+	LegalEntities   []legalEntityDocument   `json:"legalEntities"`
 }
 
-// legalEntityDocument 与受控 CLI 的一项逐字同形（票 02 表单载荷即镜像它）：两口对同一项译出同一条命令。
+// itemCount 数外壳里全部口的项。一口只收本口的项：别的口的数组在这份外壳里解得开，解得开不等于可以忽略——
+// 一份同时带着两口项的载荷投到其中一口，另一口那项会被无声丢掉，登记方以为两样都登了。
+func (document partyIdentityBatchDocument) itemCount() int {
+	return len(document.BusinessParties) + len(document.LegalEntities)
+}
+
+// exactlyOne 是五口共用的形状门：本口恰一项、整份外壳也恰一项（即没有别的口的项）。一次一笔——本端点一次只收
+// 一项，批走受控 CLI，零项与多项都不是这一口的形状。
+func (document partyIdentityBatchDocument) exactlyOne(line string, own int) error {
+	if own != 1 {
+		return fmt.Errorf("%w: %s must carry exactly one item, got %d", ErrMalformedRequest, line, own)
+	}
+	if document.itemCount() != 1 {
+		return fmt.Errorf("%w: this endpoint only takes %s; items for other lines must be posted to their own endpoints", ErrMalformedRequest, line)
+	}
+	return nil
+}
+
+// 各口的一项与受控 CLI 的一项逐字同形（票 02 表单载荷即镜像它）：两口对同一项译出同一条命令。
 // 字段不做首尾空白裁切，与 CLI 一致——裁切是表单那一层已经做过的编码层动作，服务端再做一遍会让 " X" 与 "X" 在
 // 这一口成为同一身份、在受控 CLI 却是两个。
+type businessPartyDocument struct {
+	PartyID       string    `json:"partyId"`
+	Name          string    `json:"name"`
+	Revision      int       `json:"revision"`
+	Basis         string    `json:"basis"`
+	EffectiveFrom time.Time `json:"effectiveFrom"`
+}
+
 type legalEntityDocument struct {
 	LegalEntityID string    `json:"legalEntityId"`
 	PartyID       string    `json:"partyId"`
@@ -61,12 +92,50 @@ type legalEntityDocument struct {
 	EffectiveFrom time.Time `json:"effectiveFrom"`
 }
 
+// IntakeBusinessPartyRegistration 把一次管理台登记译成业务参与方身份修订登记命令。参与方本体（租户 + 标识 + 名称）
+// 在这里由领域构造函数立起来，租户格取注入值；判据同法人口。
+func (intake *IsolatedPartyIdentityIntake) IntakeBusinessPartyRegistration(
+	_ context.Context,
+	request *http.Request,
+) (application.RegisterBusinessPartyCommand, error) {
+	none := application.RegisterBusinessPartyCommand{}
+	document, err := intake.decodeBatch(request)
+	if err != nil {
+		return none, err
+	}
+	if err := document.exactlyOne("businessParties", len(document.BusinessParties)); err != nil {
+		return none, err
+	}
+	item := document.BusinessParties[0]
+	partyID, err := domain.NewPartyID(item.PartyID)
+	if err != nil {
+		return none, fmt.Errorf("%w: businessParties[0].partyId: %v", ErrMalformedRequest, err)
+	}
+	name, err := domain.NewPartyName(item.Name)
+	if err != nil {
+		return none, fmt.Errorf("%w: businessParties[0].name: %v", ErrMalformedRequest, err)
+	}
+	party, err := domain.NewBusinessParty(intake.tenant, partyID, name)
+	if err != nil {
+		return none, fmt.Errorf("%w: businessParties[0]: %v", ErrMalformedRequest, err)
+	}
+	basis, err := domain.NewIdentityBasisReference(item.Basis)
+	if err != nil {
+		return none, fmt.Errorf("%w: businessParties[0].basis: %v", ErrMalformedRequest, err)
+	}
+	return application.RegisterBusinessPartyCommand{
+		Party:         party,
+		Revision:      item.Revision,
+		Basis:         basis,
+		EffectiveFrom: item.EffectiveFrom,
+	}, nil
+}
+
 // IntakeLegalEntityRegistration 把一次管理台登记译成责任法人身份修订登记命令。
 //
-// 一次一笔：本端点一次只收一项，批走受控 CLI——零项与多项都不是这一口的形状。形状级失败包 ErrMalformedRequest
-// （4xx，重发同样内容不会好，判据同 ADR-0029）；修订是否连续、参与方是否在册且届时已生效，一律送进用例让它答
-// `未受理`——那是登记册对这次登记的判断，不是请求的形状问题（票 02 红线「表单不裁任何门」，服务端这一层同样不在
-// Intake 里预判）。
+// 形状级失败包 ErrMalformedRequest（4xx，重发同样内容不会好，判据同 ADR-0029）；修订是否连续、参与方是否在册且
+// 届时已生效，一律送进用例让它答`未受理`——那是登记册对这次登记的判断，不是请求的形状问题（票 02 红线「表单不裁
+// 任何门」，服务端这一层同样不在 Intake 里预判）。
 func (intake *IsolatedPartyIdentityIntake) IntakeLegalEntityRegistration(
 	_ context.Context,
 	request *http.Request,
@@ -76,8 +145,8 @@ func (intake *IsolatedPartyIdentityIntake) IntakeLegalEntityRegistration(
 	if err != nil {
 		return none, err
 	}
-	if len(document.LegalEntities) != 1 {
-		return none, fmt.Errorf("%w: legalEntities must carry exactly one item, got %d", ErrMalformedRequest, len(document.LegalEntities))
+	if err := document.exactlyOne("legalEntities", len(document.LegalEntities)); err != nil {
+		return none, err
 	}
 	item := document.LegalEntities[0]
 	entity, err := domain.NewLegalEntityReference(item.LegalEntityID)

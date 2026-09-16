@@ -205,8 +205,10 @@ func assembleBusinessEndpoints(
 	// **具体类型**而不是某个 Intake 接口：五口的接口互不相同，而放行是一口一笔——这个类型此刻实现了哪几口，
 	// 下面就只换得了哪几行，多换一行编译期就红。一口一个变量、不并进上面任何一个 if：理由同提交口那段。
 	legalEntityRegistrationIntake := commercialhttp.LegalEntityRegistrationIntake(commercialhttp.UnconfiguredIntake{})
+	businessPartyRegistrationIntake := commercialhttp.BusinessPartyRegistrationIntake(commercialhttp.UnconfiguredIntake{})
 	if isolatedPartyIdentity != nil {
 		legalEntityRegistrationIntake = isolatedPartyIdentity
+		businessPartyRegistrationIntake = isolatedPartyIdentity
 	}
 
 	return []httpapi.BusinessEndpoint{
@@ -483,9 +485,9 @@ func assembleBusinessEndpoints(
 		// ——挂到 commercialCatalogueIntake 上会让 TestIsolatedReadAdmissionSwitchesOnlyOperationsReadLines 的二分
 		// （放行 → 500 / 不放 → 403）多出一种 200 的形态，要加第三桶并改 ADR-0078 判据措辞，那是另一张票。
 		{Pattern: "/commercial-publication-vocabularies", Handler: commercialhttp.NewQueryPublicationVocabularyEndpoint(commercialhttp.UnconfiguredIntake{})},
-		{Pattern: "/commercial-business-party-registrations", Handler: commercialhttp.NewRegisterBusinessPartyEndpoint(commercialhttp.UnconfiguredIntake{}, partyIdentityRegistration)},
-		// 责任法人登记是身份族里第一口走 Intake 变量的（ADR-0091 逐口放行，票 admin-web-group-legal-entities/06）；
-		// 上一段「一律挂字面量」自此对这一行不再成立，其余四口仍是字面量、各自成笔时再换。
+		// 身份族走 Intake 变量的口（ADR-0091 逐口放行，票 admin-web-group-legal-entities/06，法人首放、参与方次之）；
+		// 上一段「一律挂字面量」自此对这几行不再成立，其余口仍是字面量、各自成笔时再换。
+		{Pattern: "/commercial-business-party-registrations", Handler: commercialhttp.NewRegisterBusinessPartyEndpoint(businessPartyRegistrationIntake, partyIdentityRegistration)},
 		{Pattern: "/commercial-legal-entity-registrations", Handler: commercialhttp.NewRegisterLegalEntityEndpoint(legalEntityRegistrationIntake, partyIdentityRegistration)},
 		{Pattern: "/commercial-customer-account-registrations", Handler: commercialhttp.NewRegisterCustomerAccountEndpoint(commercialhttp.UnconfiguredIntake{}, partyIdentityRegistration)},
 		{Pattern: "/commercial-party-relationship-registrations", Handler: commercialhttp.NewRegisterPartyRelationshipEndpoint(commercialhttp.UnconfiguredIntake{}, partyIdentityRegistration)},

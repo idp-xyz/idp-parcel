@@ -120,6 +120,63 @@ func TestIsolatedPartyIdentityIntakeRefusesMalformedLegalEntityPayloads(t *testi
 	}
 }
 
+// Covers: 第二口 business-party（票 06 要做的第 2 条）——`businessParties[0]` 四格 + 生效时刻逐字来自载荷，
+// 租户格来自注入；参与方本体（BusinessParty）由领域构造函数在 Intake 里立起来，用例侧不再重构。
+func TestIsolatedPartyIdentityIntakeTranslatesBusinessPartyRegistrationWithInjectedTenant(t *testing.T) {
+	intake := isolatedIdentityIntakeForTest(t)
+	request := httptest.NewRequest(http.MethodPost, "/commercial-business-party-registrations", strings.NewReader(`{"businessParties":[{
+		"partyId":"SYN-PARTY-02",
+		"name":"SYN 合成参与方二号",
+		"revision":2,
+		"basis":"SYN-BASIS/party-02-r2",
+		"effectiveFrom":"2026-09-16T00:00:00Z"
+	}]}`))
+	request.Header.Set("X-Reported-Tenant", "TENANT-9")
+
+	command, err := intake.IntakeBusinessPartyRegistration(context.Background(), request)
+	if err != nil {
+		t.Fatalf("intake：%v", err)
+	}
+	if got := command.Party.Tenant().String(); got != isolatedIdentityTenant {
+		t.Fatalf("Party.Tenant = %q, want %q（注入值）", got, isolatedIdentityTenant)
+	}
+	if got := command.Party.ID().String(); got != "SYN-PARTY-02" {
+		t.Fatalf("Party.ID = %q, want SYN-PARTY-02", got)
+	}
+	if got := command.Party.Name().String(); got != "SYN 合成参与方二号" {
+		t.Fatalf("Party.Name = %q, want SYN 合成参与方二号", got)
+	}
+	if command.Revision != 2 {
+		t.Fatalf("Revision = %d, want 2", command.Revision)
+	}
+	if got := command.Basis.String(); got != "SYN-BASIS/party-02-r2" {
+		t.Fatalf("Basis = %q, want SYN-BASIS/party-02-r2", got)
+	}
+	if want := time.Date(2026, 9, 16, 0, 0, 0, 0, time.UTC); !command.EffectiveFrom.Equal(want) {
+		t.Fatalf("EffectiveFrom = %s, want %s", command.EffectiveFrom, want)
+	}
+}
+
+// Covers: 一口只收本口的项。载荷外壳镜像 CLI 的整份文档，因此别的口的数组在这里**解得开**；解得开不等于
+// 可以忽略——一份同时带着法人项与参与方项的载荷投到法人口，参与方那一项会被无声丢掉，登记方以为两样都登了。
+// 五口共用同一份外壳，这条对每一口都成立，这里各口投一次别人的项。
+func TestIsolatedPartyIdentityIntakeRefusesItemsMeantForAnotherLine(t *testing.T) {
+	intake := isolatedIdentityIntakeForTest(t)
+	legalEntity := `{"legalEntityId":"SYN-LE-02","partyId":"SYN-PARTY-02","revision":1,"basis":"b","effectiveFrom":"2026-09-16T00:00:00Z"}`
+	businessParty := `{"partyId":"SYN-PARTY-02","name":"n","revision":1,"basis":"b","effectiveFrom":"2026-09-16T00:00:00Z"}`
+
+	_, err := intake.IntakeLegalEntityRegistration(context.Background(),
+		legalEntityRequest(`{"legalEntities":[`+legalEntity+`],"businessParties":[`+businessParty+`]}`))
+	if !errors.Is(err, commercialhttp.ErrMalformedRequest) {
+		t.Fatalf("法人口收了参与方项：err = %v, want ErrMalformedRequest", err)
+	}
+	_, err = intake.IntakeBusinessPartyRegistration(context.Background(),
+		legalEntityRequest(`{"legalEntities":[`+legalEntity+`]}`))
+	if !errors.Is(err, commercialhttp.ErrMalformedRequest) {
+		t.Fatalf("参与方口收了法人项：err = %v, want ErrMalformedRequest", err)
+	}
+}
+
 // Covers: 立不起来的注入在构造时拒，不等第一个请求（同隔离读 Intake 的纪律）。
 func TestNewIsolatedPartyIdentityIntakeRejectsBlankTenant(t *testing.T) {
 	if _, err := commercialhttp.NewIsolatedPartyIdentityIntake("   "); err == nil {
@@ -135,8 +192,8 @@ func TestIsolatedPartyIdentityIntakeServesOnlyAdmittedLines(t *testing.T) {
 	if _, ok := intake.(commercialhttp.LegalEntityRegistrationIntake); !ok {
 		t.Fatal("责任法人登记口该已放行")
 	}
-	if _, ok := intake.(commercialhttp.BusinessPartyRegistrationIntake); ok {
-		t.Fatal("业务参与方登记口尚未成笔，不该装得进")
+	if _, ok := intake.(commercialhttp.BusinessPartyRegistrationIntake); !ok {
+		t.Fatal("业务参与方登记口该已放行")
 	}
 	if _, ok := intake.(commercialhttp.CustomerAccountRegistrationIntake); ok {
 		t.Fatal("货主客户账户登记口尚未成笔，不该装得进")

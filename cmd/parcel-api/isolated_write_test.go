@@ -96,8 +96,9 @@ func TestBuildIsolatedWriteAdmissionGrantsThePartyIdentityIntake(t *testing.T) {
 // expectedWriteAdmittedLines 是 ADR-0091 逐口放行到此刻为止已换上隔离 Intake 的命令面。每放一口
 // 在这里加一行（票 06 各口各自成笔），下面两个用例据此二分：名单内 400、名单外 403。
 var expectedWriteAdmittedLines = map[string]bool{
-	"/shipment-requests":                     true,
-	"/commercial-legal-entity-registrations": true,
+	"/shipment-requests":                       true,
+	"/commercial-legal-entity-registrations":   true,
+	"/commercial-business-party-registrations": true,
 }
 
 // Covers: ADR-0091 Consequences「命令面按端点逐口放行，不是一次全开」 — 写面放行只及名单里那几行，其余命令面
