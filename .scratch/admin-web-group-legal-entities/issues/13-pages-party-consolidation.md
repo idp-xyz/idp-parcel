@@ -1,7 +1,7 @@
 # 13 `pages/party` 收口：09 / 10 / 12 三张票评审判断项里的同形副本、重复 switch 与陈旧读面归一
 
 Category: chore
-Status: ready-for-agent
+Status: in-progress
 Blocked by: 无（09 / 10 / 12 皆已进 main，远端 main `29e5117b`）
 地盘：`apps/admin-web/src/pages/party/`（`BusinessPartiesPage.tsx`、`GroupLegalEntitiesPage.tsx`、三份 `*RegistrationForm.tsx` 与 02 的
 `LegalEntityRegistrationForm.tsx`、`party-registration-fields.tsx`、各 `*-form.ts`、`legal-entity-list.ts` / `list-order.ts`、
