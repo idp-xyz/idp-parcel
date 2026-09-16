@@ -13,6 +13,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/registrationjson"
@@ -116,7 +117,8 @@ func TestTheWiredExternalFundsFactRegistrationsRecordAgainstARealDatabase(t *tes
 			`SELECT count(*) FROM `+migrate.SchemaBento+`.outbox WHERE partition_key = $1`, apiFundsFactPartition)
 	}
 
-	// 正：首版采用 → 201 已采用、版本行 + 一封；事件类型是 sa-cc/02 钉的那个形，信封 ID 带版本维。
+	// 正：首版采用 → 201 已采用、版本行 + 一封；事件类型是 sa-cc/02 钉的那个形，信封 ID 是带版本维的定长指纹
+	// （票 sa-cc/32 裁决 1），按生产同一公式重算来查。
 	post(adopt, apiAdoptDocument("SYN-API-FACT-1/v1", "8000"), http.StatusCreated, "FUNDS_FACT_ADOPTED")
 	if versionRows() != 1 || envelopes() != 1 {
 		t.Fatalf("首版后版本行 = %d、信封 = %d，各要 1——读不到行或封说明事务壳没提交", versionRows(), envelopes())
@@ -124,9 +126,9 @@ func TestTheWiredExternalFundsFactRegistrationsRecordAgainstARealDatabase(t *tes
 	var eventType string
 	if err := pool.QueryRow(ctx,
 		`SELECT event_type FROM `+migrate.SchemaBento+`.outbox WHERE event_id = $1`,
-		apiFundsFactPartition+"/SYN-API-FACT-1/v1",
+		string(outboxintent.FingerprintEventID("funds-fact", "SYN-TENANT-API-SA31", "SYN-API-FACT-1", "SYN-API-FACT-1/v1")),
 	).Scan(&eventType); err != nil {
-		t.Fatalf("按带版本维的信封 ID 读不到那一封：%v", err)
+		t.Fatalf("按带版本维重算的信封 ID 读不到那一封：%v", err)
 	}
 	if eventType != "settlement-accounting.external-funds-fact.adopted" {
 		t.Fatalf("事件类型 = %q", eventType)
