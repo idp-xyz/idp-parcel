@@ -1,7 +1,7 @@
 # 11 写口 400 带 `detail`：Go `writeProblem` 加格、TS `callerProblem` 带 detail、`RegistrationAnswerNote` 显出
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress
 Blocked by: 无
 地盘：`internal/partycommercial/adapters/http/catalogue_intake.go`（`problemDetail` / `writeProblem`）、`registration_transport.go`
 （`ErrMalformedRequest` → 400 那一支）与同包 `_test.go`；`apps/admin-web/src/pages/catalogue-api.ts`（`ApiResult.callerProblem`）、
