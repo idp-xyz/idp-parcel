@@ -23,7 +23,7 @@ Blocked by: 09（抽屉归 09 建，前端半边落在它上面；Go 半边不�
    真库用例走 `pgtest`：多笔按序（先落 r2 后 r1，钉按修订号不按落库时刻）、不在册非 nil 空切片、跨租户不可见。
 3. **端点**：`GET /commercial-business-parties/{partyId}/revisions`，Intake 同 `commercialCatalogueIntake`；未配置 403；不在册 **200 + 空数组**
    （ADR-0022，同 03 裁）；顶层回显 `partyId`；线上名 `BUSINESS_PARTY_REVISIONS_LISTED`。405 / 400 / 500 三门同 03。
-4. **装配**：`assembleBusinessEndpoints` 一行 + `isolatedReadAdmittedPatterns` 一行（注释逐条对 ADR-0091 决定一的三条判据，同 03）；
+4. **装配**：`assembleBusinessEndpoints` 一行 + `isolatedReadAdmittedPatterns` 一行（注释逐条对 ADR-0078 Decision 二 / 表内既有三条口径，同 03）；
    机制清点随笔重生成（新文件必有差）。
 5. **前端**：09 建的身份抽屉「修订历史」区改取真数据，`Timeline` 每笔显修订号、名称、依据、生效时点、登记时间，停用笔标出；墙前显未配置
    （「没问到」与「没有历史」两句分开，03 的 `revisionHistoryNote`）。时间线判读若与 `legal-entity-revisions.ts` 字段同形，**泛化一份共用**
@@ -59,8 +59,9 @@ Go 半边与 TS 纯逻辑不依赖 10，先落。10 进 main 后 `git fetch` + r
 3. 端点 ✅ `NewQueryBusinessPartyRevisionsEndpoint`，`GET /commercial-business-parties/{partyId}/revisions`，Intake 同
    `CommercialCatalogueIntake`；未配置 403、不在册 200 + []、顶层回显 partyId、线上名 `BUSINESS_PARTY_REVISIONS_LISTED`；405 / 400 / 500
    三门同 03。`PartyIdentityCatalogueReader` 嵌入 `BusinessPartyRevisionHistoryReader`。
-4. 装配 ✅ `assembleBusinessEndpoints` 一行；`businessEndpointProbes` 一格；`isolatedReadAdmittedPatterns` 一格（注释逐条对 ADR-0091 决定一
-   三条判据，经真路由期待 500 而非 400，钉住 chi 填 `{partyId}`）；`unwiredCommercialCatalogue` 占位方法。清点随笔重生成（f435e8d9）。
+4. 装配 ✅ `assembleBusinessEndpoints` 一行；`businessEndpointProbes` 一格；`isolatedReadAdmittedPatterns` 一格（注释逐条对 ADR-0078
+   Decision 二 / 表内既有三条口径——消费本上下文自己的存储读面、零持久化、作用域来自运营侧授权结果，经真路由期待 500 而非 400，
+   钉住 chi 填 `{partyId}`；归因原写 ADR-0091 决定一，评审 S1 指出那三条是隔离准入的另一组判据，此处按评审改）；`unwiredCommercialCatalogue` 占位方法。清点随笔重生成（f435e8d9）。
 5. 前端 ◑ TS 纯逻辑已落：`api.ts` 加 `BusinessPartyRevisionRecord` / `BusinessPartyRevisionListResponseBody` / `listBusinessPartyRevisions`；
    时间线判读**泛化一份共用**——新 `revision-timeline.ts`（`identityRevisionTimeline(revisions, format, content)` /
    `identityRevisionHistoryNote(count, subject)`），`legal-entity-revisions.ts` 改成薄适配且导出名不动，新 `business-party-revisions.ts`
@@ -100,3 +101,26 @@ Go 半边与 TS 纯逻辑不依赖 10，先落。10 进 main 后 `git fetch` + r
 ### 进 main 记录 · (a)(b)（推送方 = 通道 1 · 23:14）
 
 隔离树 `%TEMP%\idp-land12` detached 于 `44b6f41b`（= 当时远端 main），cherry-pick 七笔零冲突 `ee8481b0→5d9fdcdb` / `d0cb97d0→98fea43b` / `fa459894→cddd793a` / `90a8ee57→5694f07b` / `67e24804→00b08df5` / `f435e8d9→9cb67009` / `0f4ff6c8→44c4ebe2`（patch-id 逐笔同；19 件对作者 tip `0f4ff6c8` 零 diff）；tip `44c4ebe2` 上 `gofmt -l` 空、`go build ./...` / `go vet ./...` 0、清点在 tip 重生成 porcelain 空（作者随笔那份在新基上仍准）；admin-web 全新 `pnpm install --frozen-lockfile` 后 `tsc -b --noEmit` 0 / `run-tests` **257 pass** / `vite build` 0；带 DSN `go test -p 1 -count=1 ./...` **115 ok / 0 FAIL / 16 无测试 / 0 cached**，退出码 0（23:05:05→23:07:23）；`-v` 探针 `TestBusinessPartyRevisionHistoryListsAllRevisionsByRevisionNumber` / `…AnswersUnknownAndForeignAsEmpty` PASS、`cmd/parcel-api` `TestIsolatedLegalEntityRegistrationLandsAgainstARealDatabase` PASS 非 SKIP → 评审无阻断（上）→ `ls-remote` 核 `44b6f41b` 未动 → 23:13 `push 44c4ebe2:main` 成，**远端 main = `44c4ebe2`**；共享树 ff 同 SHA。Status 仍 in-progress——(c) 抽屉接线等 10 进 main 后由作者另作一笔、另评、另进 main；评审 S1 的票面归因由 (c) 那笔顺手改。
+
+### 完成记录 · (c) 抽屉接线（通道 4 · 2026-09-16 23:2x · 分支 `mcp4-adminweb12` rebase 到 main `b1efbfdf` 后一笔 `5ee87a88`）
+
+**要做的第 5 条补齐 ✅**：`BusinessPartiesPage.tsx` 新 `BusinessPartyRevisionHistory`，照 `GroupLegalEntitiesPage` 的 `LegalEntityRevisionHistory`
+一册——按 partyId 经 `listBusinessPartyRevisions` 取整条修订链，`Timeline` 摆 `businessPartyRevisionTimeline` 的判读（每笔修订号 / 名称 /
+依据 / 生效自 / 登记时间，停用笔标`已停用`、色调 warning）；未配置（403，「今天没有问到」）与无历史（200 + []，
+`businessPartyRevisionHistoryNote(0)`「登记册上没有这个参与方的修订」）两句分开；换行重取、旧请求按 cancelled 丢、答案回显 partyId
+核不上即丢弃并给重试。`BusinessPartyDrawer` 的占位段换成该组件。
+
+**判断项**：组件 `key` 带上列表行的最新修订号（`${partyId}#r${revision}`）。本页自票 10 起登记签与身份签同页共存、抽屉状态在
+TabsContent 隐藏时不卸载——操作者开着抽屉去登记签给同一参与方登下一笔或停用，列表重取后行的 revision 变了，历史区随之重挂重取；
+只按 partyId 记依赖会继续显上一条链。`GroupLegalEntitiesPage` 的 `LegalEntityRevisionHistory` 只按 legalEntityId 记依赖、同页也有登记签，
+是否同病未在本票核，不动法人册那一页（票面「不做」）——留给评审或后续票判。
+
+**完成判据**：前端三道门 ✅ `tsc -b --noEmit` 0 / `run-tests` 279（= 10 进 main 后的 main）/ `vite build` 0。演示形态
+（`SYN-PARTY-RETIRED-01` 抽屉显 2 笔、第 2 笔标`已停用`）**未验**——本机无浏览器验收路径，如票面完成判据所允许如实记「未验」；
+判读那一层由 `business-party-revisions.test.ts` 以同一演示数据钉着（r1 / r2 · 已停用，warning）。Go 侧本笔零改动，不重跑。
+
+**票面归因改口**（评审 S1）：要做的 4 与 (a)(b) 完成记录里「ADR-0091 决定一的三条判据」改为「ADR-0078 Decision 二 / 表内既有三条口径」；
+代码注释本就未引 ADR-0091，不动。
+
+**推法**：rebase 后分支基改写，`git push --force-with-lease`（远端在预期 tip 才覆盖）；rebase 把已进 main 的七笔识为上游已有而跳过，
+分支上只剩 (c) 这一笔 + 本票面笔。
