@@ -1,13 +1,10 @@
-import { useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
-import { RegistrationAnswerNote, type RegistrationPanelState } from '../../components/registration';
-import { currentDisplayTimeZone } from '../moment';
+import { RegistrationAnswerNote } from '../../components/registration';
 import {
   commercialRegistrationEndpoints,
   listBusinessParties,
   partyIdentityOutcomeLabels,
-  registerCommercial,
   type BusinessPartyListResponseBody,
   type PartyRelationshipRecord,
 } from './api';
@@ -18,6 +15,7 @@ import {
   SnapshotJsonDetails,
   WallTimeField,
   businessPartyPickerOptions,
+  useRegistrationForm,
 } from './party-registration-fields';
 import {
   emptyPartyRelationshipDraft,
@@ -30,7 +28,7 @@ import {
 
 /**
  * 参与方关系登记的逐字段表单（票 admin-web-group-legal-entities/10 第 2 条）。本页几册里它价值最大：格里有封闭词与
- * 从册上选的引用，粘 JSON 时打错一个词只得到一个说不清的 400。
+ * 从册上选的引用，粘 JSON 时打错一个词只得到一个说不清的 400。壳在 useRegistrationForm，这里只摆本册的格。
  *
  * **本组件不算摘要、不裁任何门、不判领域规则**（伞票 admin-write-faces/07 硬句）：双方在不在册、角色与双方是否匹配、
  * 区间是否倒置、修订连不连续，一律送上去让服务端答；本地只拦编码层（修订号与各时刻），纯函数在
@@ -60,30 +58,16 @@ export function PartyRelationshipRegistrationForm({
   partiesVersion,
   onRegistered,
 }: PartyRelationshipRegistrationFormProps) {
-  const [draft, setDraft] = useState<PartyRelationshipDraft>(emptyPartyRelationshipDraft());
-  const [revisionEdited, setRevisionEdited] = useState(false);
-  const [state, setState] = useState<RegistrationPanelState>({ kind: 'idle' });
-
-  const timeZone = currentDisplayTimeZone();
-  const suggestion = suggestedPartyRelationshipRevision(knownRelationships, draft.relationshipId);
-  const effectiveDraft: PartyRelationshipDraft = revisionEdited ? draft : { ...draft, revision: String(suggestion) };
-  const problems = partyRelationshipLocalProblems(effectiveDraft, timeZone);
-  const locked = state.kind === 'submitting';
-  const patch = (change: Partial<PartyRelationshipDraft>) => setDraft((current) => ({ ...current, ...change }));
-
-  const submit = (snapshot: unknown) =>
-    registerCommercial(kind, snapshot).then((answer) => {
-      if (answer.kind === 'outcome' && answer.body.outcome === 'REGISTERED') onRegistered();
-      return answer;
-    });
-
-  const send = () => {
-    if (Object.keys(problems).length > 0) return;
-    setState({ kind: 'submitting' });
-    void submit(partyRelationshipPayloadOf(effectiveDraft, timeZone)).then((answer) =>
-      setState({ kind: 'answered', answer }),
-    );
-  };
+  const form = useRegistrationForm<PartyRelationshipDraft>({
+    kind,
+    empty: emptyPartyRelationshipDraft,
+    suggestion: (draft) => suggestedPartyRelationshipRevision(knownRelationships, draft.relationshipId),
+    localProblems: partyRelationshipLocalProblems,
+    payloadOf: partyRelationshipPayloadOf,
+    landedOutcome: 'REGISTERED',
+    onLanded: onRegistered,
+  });
+  const { draft, patch, problems, locked, timeZone } = form;
 
   const known = knownRelationships?.find((row) => row.relationshipId === draft.relationshipId);
 
@@ -119,15 +103,7 @@ export function PartyRelationshipRegistrationForm({
             <RevisionField
               path="relationships[0].revision"
               problems={problems}
-              value={effectiveDraft.revision}
-              suggestion={suggestion}
-              edited={revisionEdited}
-              locked={locked}
-              onChange={(revision) => {
-                setRevisionEdited(true);
-                patch({ revision });
-              }}
-              onUseSuggestion={() => setRevisionEdited(false)}
+              {...form.revisionField}
               note="建议值取已取回关系册里该关系的最新修订 + 1（不在册为 1）；只是省一次翻册，连续性仍由服务端按册面判。"
             />
 
@@ -258,11 +234,11 @@ export function PartyRelationshipRegistrationForm({
           </div>
 
           <div className="flex items-start gap-3">
-            <Button onClick={send} disabled={locked || Object.keys(problems).length > 0}>
+            <Button onClick={form.send} disabled={locked || !form.canSend}>
               {locked ? '提交中…' : '提交登记'}
             </Button>
             <RegistrationAnswerNote
-              state={state}
+              state={form.state}
               owner={info.owner}
               outcomeLabels={partyIdentityOutcomeLabels}
               problemNote={problemNote}
@@ -271,7 +247,7 @@ export function PartyRelationshipRegistrationForm({
         </CardContent>
       </Card>
 
-      <SnapshotJsonDetails kind={kind} submit={submit} />
+      <SnapshotJsonDetails kind={kind} submit={form.submit} />
     </div>
   );
 }

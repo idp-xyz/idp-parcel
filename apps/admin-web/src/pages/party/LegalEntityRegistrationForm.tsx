@@ -1,28 +1,21 @@
-import { useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
-import {
-  RegistrationAnswerNote,
-  RegistrationPanel,
-  type RegistrationPanelState,
-} from '../../components/registration';
-import { currentDisplayTimeZone } from '../moment';
+import { RegistrationAnswerNote, RegistrationPanel } from '../../components/registration';
 import {
   commercialRegistrationEndpoints,
   listBusinessParties,
   partyIdentityOutcomeLabels,
-  registerCommercial,
   type BusinessPartyListResponseBody,
   type GroupLegalEntityRecord,
 } from './api';
+import { problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
+import { Field, ReferencePicker } from './PublicationFormFields';
 import {
-  identityStatusLabels,
-  labelOf,
-  problemNote,
-  registrationSnapshotHints,
-  registrationTitles,
-} from './presentation';
-import { Field, ReferencePicker, type PickerOption } from './PublicationFormFields';
+  RevisionField,
+  WallTimeField,
+  businessPartyPickerOptions,
+  useRegistrationForm,
+} from './party-registration-fields';
 import {
   emptyLegalEntityDraft,
   legalEntityLocalProblems,
@@ -33,7 +26,8 @@ import {
 
 /**
  * 责任法人身份登记的逐字段表单（票 admin-web-group-legal-entities/02；ADR-0101 决定八自裁：五格、低频、无矩阵，
- * 直接逐字段表单，不走「模板导入 → 草稿 → 批准 → 发布」那条为上百格矩阵设计的路）。
+ * 直接逐字段表单，不走「模板导入 → 草稿 → 批准 → 发布」那条为上百格矩阵设计的路）。壳与共用格在
+ * party-registration-fields.tsx（与业务参与方页三份表单同一份），这里只摆本册的格。
  *
  * **本组件不算摘要、不裁任何门、不判领域规则**（伞票 admin-write-faces/07 硬句）：参与方在不在册、届时是否已生效、
  * 修订号连不连续、依据是否为空，一律原样送上去让服务端逐格答。本地只拦编码层的两件（修订号编不进正整数、
@@ -53,50 +47,30 @@ export interface LegalEntityRegistrationFormProps {
 }
 
 const info = moduleInfoById['group-legal-entities'];
-const endpoint = `POST ${commercialRegistrationEndpoints['legal-entity']}`;
-
-// 候选显名称 + 标识 + 状态、不按状态过滤——表单不裁，届时是否已生效由服务端判；状态摆出来只是让人看。
-function partyOptionsOf(body: BusinessPartyListResponseBody): PickerOption[] {
-  return body.parties.map((party) => ({
-    value: party.partyId,
-    label: `${party.partyName} · ${party.partyId} · ${labelOf(identityStatusLabels, party.status)}`,
-  }));
-}
+const kind = 'legal-entity';
+const endpoint = `POST ${commercialRegistrationEndpoints[kind]}`;
 
 export function LegalEntityRegistrationForm({ knownEntities, onRegistered }: LegalEntityRegistrationFormProps) {
-  const [draft, setDraft] = useState<LegalEntityDraft>(emptyLegalEntityDraft());
-  // 修订号建议随法人标识变；操作者一改过就不再跟着建议走，直到点「用建议值」复位。
-  const [revisionEdited, setRevisionEdited] = useState(false);
-  const [state, setState] = useState<RegistrationPanelState>({ kind: 'idle' });
+  const form = useRegistrationForm<LegalEntityDraft>({
+    kind,
+    empty: emptyLegalEntityDraft,
+    suggestion: (draft) => suggestedRevision(knownEntities, draft.legalEntityId),
+    localProblems: legalEntityLocalProblems,
+    payloadOf: legalEntityPayloadOf,
+    // 答 `REGISTERED`（PartyRegistryOutcome 里 PartyIdentityRegistered 的线上名）才重取列表。
+    landedOutcome: 'REGISTERED',
+    onLanded: onRegistered,
+  });
+  const { draft, patch, problems, locked, timeZone } = form;
 
-  const timeZone = currentDisplayTimeZone();
-  const suggestion = suggestedRevision(knownEntities, draft.legalEntityId);
-  const effectiveDraft: LegalEntityDraft = revisionEdited ? draft : { ...draft, revision: String(suggestion) };
-  const problems = legalEntityLocalProblems(effectiveDraft, timeZone);
-  const locked = state.kind === 'submitting';
-  const patch = (change: Partial<LegalEntityDraft>) => setDraft((current) => ({ ...current, ...change }));
-
-  // 两条路（逐字段 / JSON 镜像）共用同一次提交：答 `REGISTERED`（PartyRegistryOutcome 里 PartyIdentityRegistered 的
-  // 线上名）才重取列表；重放、冲突、未受理都没写进去，重取只会让人以为写进去了。
-  const submit = (snapshot: unknown) =>
-    registerCommercial('legal-entity', snapshot).then((answer) => {
-      if (answer.kind === 'outcome' && answer.body.outcome === 'REGISTERED') onRegistered();
-      return answer;
-    });
-
-  const send = () => {
-    if (Object.keys(problems).length > 0) return;
-    setState({ kind: 'submitting' });
-    void submit(legalEntityPayloadOf(effectiveDraft, timeZone)).then((answer) => setState({ kind: 'answered', answer }));
-  };
-
+  // 本册的载荷裁空白（legalEntityPayloadOf），在册提示按裁过的标识找，与送出的是同一个对象。
   const known = knownEntities?.find((row) => row.legalEntityId === draft.legalEntityId.trim());
 
   return (
     <div className="flex-1 overflow-auto p-4 flex flex-col gap-4">
       <Card>
         <CardHeader>
-          <CardTitle>{registrationTitles['legal-entity']}</CardTitle>
+          <CardTitle>{registrationTitles[kind]}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-4">
           <p className="text-xs text-idpxyz-textMuted">
@@ -121,28 +95,12 @@ export function LegalEntityRegistrationForm({ knownEntities, onRegistered }: Leg
               </span>
             </Field>
 
-            <Field label="修订号 *" path="legalEntities[0].revision" problems={problems}>
-              <div className="flex items-center gap-2">
-                <Input
-                  value={effectiveDraft.revision}
-                  readOnly={locked}
-                  inputMode="numeric"
-                  className="font-mono text-[13px]"
-                  onChange={(event) => {
-                    setRevisionEdited(true);
-                    patch({ revision: event.target.value });
-                  }}
-                />
-                {revisionEdited ? (
-                  <Button variant="outline" size="sm" disabled={locked} onClick={() => setRevisionEdited(false)}>
-                    用建议值 {suggestion}
-                  </Button>
-                ) : null}
-              </div>
-              <span className="block text-[11px] text-idpxyz-textMuted mt-1">
-                建议值取已取回列表里该法人的最新修订 + 1（不在册为 1）；只是省一次翻册，连续性仍由服务端按册面判。
-              </span>
-            </Field>
+            <RevisionField
+              path="legalEntities[0].revision"
+              problems={problems}
+              {...form.revisionField}
+              note="建议值取已取回列表里该法人的最新修订 + 1（不在册为 1）；只是省一次翻册，连续性仍由服务端按册面判。"
+            />
 
             <ReferencePicker<BusinessPartyListResponseBody>
               label="业务参与方身份 *"
@@ -152,7 +110,7 @@ export function LegalEntityRegistrationForm({ knownEntities, onRegistered }: Leg
               locked={locked}
               onChange={(partyId) => patch({ partyId })}
               load={listBusinessParties}
-              optionsOf={partyOptionsOf}
+              optionsOf={businessPartyPickerOptions}
               emptyNote="参与方册今天为空；先在「业务参与方」页登记参与方身份，或手填标识由服务端判。"
               readFace="参与方册"
               optionsNote="候选不按状态过滤：法人生效时点上参与方是否已生效由服务端判。"
@@ -168,27 +126,23 @@ export function LegalEntityRegistrationForm({ knownEntities, onRegistered }: Leg
               />
             </Field>
 
-            <Field label="生效自（留空由服务端点名）" path="legalEntities[0].effectiveFrom" problems={problems}>
-              <Input
-                type="datetime-local"
-                step={1}
-                value={draft.effectiveFrom}
-                readOnly={locked}
-                className="font-mono text-[13px]"
-                onChange={(event) => patch({ effectiveFrom: event.target.value })}
-              />
-              <span className="block text-[11px] text-idpxyz-textMuted mt-1">
-                按操作者本地时刻（{timeZone}）填，送出时换成 RFC 3339 UTC。
-              </span>
-            </Field>
+            <WallTimeField
+              label="生效自（留空由服务端点名）"
+              path="legalEntities[0].effectiveFrom"
+              problems={problems}
+              value={draft.effectiveFrom}
+              locked={locked}
+              timeZone={timeZone}
+              onChange={(effectiveFrom) => patch({ effectiveFrom })}
+            />
           </div>
 
           <div className="flex items-start gap-3">
-            <Button onClick={send} disabled={locked || Object.keys(problems).length > 0}>
+            <Button onClick={form.send} disabled={locked || !form.canSend}>
               {locked ? '提交中…' : '提交登记'}
             </Button>
             <RegistrationAnswerNote
-              state={state}
+              state={form.state}
               owner={info.owner}
               outcomeLabels={partyIdentityOutcomeLabels}
               problemNote={problemNote}
@@ -204,10 +158,10 @@ export function LegalEntityRegistrationForm({ knownEntities, onRegistered }: Leg
         </summary>
         <RegistrationPanel
           moduleId="group-legal-entities"
-          title={registrationTitles['legal-entity']}
+          title={registrationTitles[kind]}
           endpoint={endpoint}
-          snapshotHint={registrationSnapshotHints['legal-entity']}
-          submit={submit}
+          snapshotHint={registrationSnapshotHints[kind]}
+          submit={form.submit}
           outcomeLabels={partyIdentityOutcomeLabels}
           problemNote={problemNote}
         />

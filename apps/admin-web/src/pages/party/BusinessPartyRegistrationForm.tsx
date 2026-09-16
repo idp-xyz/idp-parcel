@@ -1,17 +1,10 @@
-import { useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
-import { RegistrationAnswerNote, type RegistrationPanelState } from '../../components/registration';
-import { currentDisplayTimeZone } from '../moment';
-import {
-  commercialRegistrationEndpoints,
-  partyIdentityOutcomeLabels,
-  registerCommercial,
-  type BusinessPartyRecord,
-} from './api';
+import { RegistrationAnswerNote } from '../../components/registration';
+import { commercialRegistrationEndpoints, partyIdentityOutcomeLabels, type BusinessPartyRecord } from './api';
 import { problemNote, registrationTitles } from './presentation';
 import { Field } from './PublicationFormFields';
-import { RevisionField, SnapshotJsonDetails, WallTimeField } from './party-registration-fields';
+import { RevisionField, SnapshotJsonDetails, WallTimeField, useRegistrationForm } from './party-registration-fields';
 import {
   businessPartyLocalProblems,
   businessPartyPayloadOf,
@@ -22,7 +15,7 @@ import {
 
 /**
  * 业务参与方身份登记的逐字段表单（票 admin-web-group-legal-entities/10 第 1 条；ADR-0101 决定八自裁：格少、低频、
- * 无矩阵，直接逐字段表单，做法照票 02 的法人表单）。
+ * 无矩阵，直接逐字段表单，做法照票 02 的法人表单）。壳在 useRegistrationForm，这里只摆本册的格。
  *
  * **本组件不算摘要、不裁任何门、不判领域规则**（伞票 admin-write-faces/07 硬句）：标识与名称是否为空、修订号连不
  * 连续，一律原样送上去让服务端逐格答；本地只拦编码层（修订号编不进正整数、生效时刻换不成 RFC 3339），纯函数在
@@ -40,31 +33,17 @@ const kind = 'business-party';
 const endpoint = `POST ${commercialRegistrationEndpoints[kind]}`;
 
 export function BusinessPartyRegistrationForm({ knownParties, onRegistered }: BusinessPartyRegistrationFormProps) {
-  const [draft, setDraft] = useState<BusinessPartyDraft>(emptyBusinessPartyDraft());
-  // 修订号建议随参与方标识变；操作者一改过就不再跟着建议走，直到点「用建议值」复位。
-  const [revisionEdited, setRevisionEdited] = useState(false);
-  const [state, setState] = useState<RegistrationPanelState>({ kind: 'idle' });
-
-  const timeZone = currentDisplayTimeZone();
-  const suggestion = suggestedBusinessPartyRevision(knownParties, draft.partyId);
-  const effectiveDraft: BusinessPartyDraft = revisionEdited ? draft : { ...draft, revision: String(suggestion) };
-  const problems = businessPartyLocalProblems(effectiveDraft, timeZone);
-  const locked = state.kind === 'submitting';
-  const patch = (change: Partial<BusinessPartyDraft>) => setDraft((current) => ({ ...current, ...change }));
-
-  // 两条路（逐字段 / JSON 镜像）共用同一次提交：答 `REGISTERED` 才重取列表；重放、冲突、未受理都没写进去，
-  // 重取只会让人以为写进去了。
-  const submit = (snapshot: unknown) =>
-    registerCommercial(kind, snapshot).then((answer) => {
-      if (answer.kind === 'outcome' && answer.body.outcome === 'REGISTERED') onRegistered();
-      return answer;
-    });
-
-  const send = () => {
-    if (Object.keys(problems).length > 0) return;
-    setState({ kind: 'submitting' });
-    void submit(businessPartyPayloadOf(effectiveDraft, timeZone)).then((answer) => setState({ kind: 'answered', answer }));
-  };
+  const form = useRegistrationForm<BusinessPartyDraft>({
+    kind,
+    empty: emptyBusinessPartyDraft,
+    suggestion: (draft) => suggestedBusinessPartyRevision(knownParties, draft.partyId),
+    localProblems: businessPartyLocalProblems,
+    payloadOf: businessPartyPayloadOf,
+    // 答 `REGISTERED`（PartyRegistryOutcome 里 PartyIdentityRegistered 的线上名）才重取列表。
+    landedOutcome: 'REGISTERED',
+    onLanded: onRegistered,
+  });
+  const { draft, patch, problems, locked, timeZone } = form;
 
   // 按原串找而不裁空白：载荷也不裁，" X" 送上去就是另一个身份，这里若裁了就会把它说成「已在册」。
   const known = knownParties?.find((row) => row.partyId === draft.partyId);
@@ -101,15 +80,7 @@ export function BusinessPartyRegistrationForm({ knownParties, onRegistered }: Bu
             <RevisionField
               path="businessParties[0].revision"
               problems={problems}
-              value={effectiveDraft.revision}
-              suggestion={suggestion}
-              edited={revisionEdited}
-              locked={locked}
-              onChange={(revision) => {
-                setRevisionEdited(true);
-                patch({ revision });
-              }}
-              onUseSuggestion={() => setRevisionEdited(false)}
+              {...form.revisionField}
               note="建议值取已取回列表里该参与方的最新修订 + 1（不在册为 1）；只是省一次翻册，连续性仍由服务端按册面判。"
             />
 
@@ -145,11 +116,11 @@ export function BusinessPartyRegistrationForm({ knownParties, onRegistered }: Bu
           </div>
 
           <div className="flex items-start gap-3">
-            <Button onClick={send} disabled={locked || Object.keys(problems).length > 0}>
+            <Button onClick={form.send} disabled={locked || !form.canSend}>
               {locked ? '提交中…' : '提交登记'}
             </Button>
             <RegistrationAnswerNote
-              state={state}
+              state={form.state}
               owner={info.owner}
               outcomeLabels={partyIdentityOutcomeLabels}
               problemNote={problemNote}
@@ -158,7 +129,7 @@ export function BusinessPartyRegistrationForm({ knownParties, onRegistered }: Bu
         </CardContent>
       </Card>
 
-      <SnapshotJsonDetails kind={kind} submit={submit} />
+      <SnapshotJsonDetails kind={kind} submit={form.submit} />
     </div>
   );
 }
