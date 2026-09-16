@@ -1,0 +1,1808 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>IDP Parcel（idp-parcel）项目现状、业务说明与全流程图集 · 2026-09-16</title>
+<style>
+  :root{
+    --ink:#1f2933;--muted:#5b6b7a;--line:#dde3ea;--bg:#f7f9fb;--card:#ffffff;
+    --accent:#0b6e99;--accent-2:#0f7b6c;--warn:#b7791f;--bad:#b23a48;--ok:#2f855a;
+    --tag:#eef3f7;
+  }
+  *{box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{margin:0;font-family:-apple-system,"Segoe UI","PingFang SC","Microsoft YaHei","Noto Sans CJK SC",sans-serif;color:var(--ink);background:var(--bg);line-height:1.65;font-size:15px}
+  header{background:linear-gradient(135deg,#0b3d5c,#0b6e99);color:#fff;padding:36px 24px 28px}
+  header .wrap{max-width:1180px;margin:0 auto}
+  header h1{margin:0 0 8px;font-size:28px;font-weight:650;letter-spacing:.2px}
+  header p{margin:4px 0;opacity:.92}
+  header .meta{display:flex;flex-wrap:wrap;gap:10px 18px;margin-top:14px;font-size:13px;opacity:.9}
+  header code{background:rgba(255,255,255,.15);padding:1px 6px;border-radius:4px;color:#fff}
+  main{max-width:1180px;margin:0 auto;padding:24px}
+  nav.toc{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 18px;margin-bottom:24px}
+  nav.toc ol{margin:6px 0 0;padding-left:20px;columns:2;column-gap:32px}
+  nav.toc li{margin:2px 0}
+  nav.toc a{color:var(--accent);text-decoration:none}
+  nav.toc .figs{margin-top:10px;border-top:1px dashed var(--line);padding-top:8px;font-size:13px}
+  nav.toc .figs ol{columns:3}
+  section{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:22px 24px;margin-bottom:24px}
+  h2{margin:0 0 12px;font-size:21px;font-weight:650;color:#0b3d5c;border-left:4px solid var(--accent);padding-left:10px}
+  h3{margin:20px 0 8px;font-size:16.5px;font-weight:650;color:#22313f}
+  h4{margin:14px 0 6px;font-size:14.5px;font-weight:650;color:#22313f}
+  p{margin:8px 0}
+  ul,ol{margin:8px 0;padding-left:22px}
+  li{margin:3px 0}
+  table{width:100%;border-collapse:collapse;margin:10px 0 6px;font-size:14px}
+  th,td{border:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}
+  th{background:#eef3f7;font-weight:650}
+  tbody tr:nth-child(even){background:#fafcfd}
+  code,kbd{font-family:Consolas,"SFMono-Regular",Menlo,monospace;font-size:.92em;background:var(--tag);padding:1px 5px;border-radius:4px}
+  .tag{display:inline-block;font-size:12px;padding:1px 8px;border-radius:999px;background:var(--tag);color:#334;border:1px solid var(--line);margin-right:4px;white-space:nowrap}
+  .tag.ok{background:#e6f4ec;color:var(--ok);border-color:#bfe3cd}
+  .tag.warn{background:#fdf3e1;color:var(--warn);border-color:#f2dcae}
+  .tag.bad{background:#fbe9ec;color:var(--bad);border-color:#f1c2c9}
+  .tag.info{background:#e6f0f7;color:var(--accent);border-color:#bcd6e6}
+  .callout{border-left:4px solid var(--accent-2);background:#f0faf7;padding:10px 14px;border-radius:6px;margin:12px 0}
+  .callout.warn{border-left-color:var(--warn);background:#fdf8ee}
+  .callout.bad{border-left-color:var(--bad);background:#fdf1f3}
+  .grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(215px,1fr));gap:12px;margin:12px 0}
+  .card{border:1px solid var(--line);border-radius:8px;padding:12px 14px;background:#fbfcfd}
+  .card .num{font-size:26px;font-weight:700;color:#0b3d5c;line-height:1.1}
+  .card .lab{font-size:13px;color:var(--muted);margin-top:4px}
+  .card .sub{font-size:12px;color:var(--muted);margin-top:6px}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+  .three{display:grid;grid-template-columns:1fr 1fr 1fr;gap:14px}
+  @media (max-width:900px){.two,.three{grid-template-columns:1fr}nav.toc ol{columns:1}nav.toc .figs ol{columns:1}}
+  .kv{display:grid;grid-template-columns:150px 1fr;gap:6px 14px;font-size:14px}
+  .kv dt{color:var(--muted)}
+  .kv dd{margin:0}
+  .timeline{list-style:none;padding-left:0;margin:10px 0}
+  .timeline li{position:relative;padding-left:120px;margin:8px 0}
+  .timeline li time{position:absolute;left:0;top:0;width:106px;color:var(--accent);font-weight:650;font-variant-numeric:tabular-nums}
+  footer{max-width:1180px;margin:0 auto;padding:10px 24px 40px;color:var(--muted);font-size:13px}
+  .muted{color:var(--muted)}
+  .small{font-size:13px}
+  /* 图 */
+  figure.fig{margin:16px 0 20px;border:1px solid var(--line);border-radius:10px;background:#fff;overflow:hidden}
+  figure.fig .fig-head{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:8px 14px;background:#f2f6f9;border-bottom:1px solid var(--line);font-size:13.5px}
+  figure.fig .fig-head b{color:#0b3d5c}
+  figure.fig .fig-head .src{color:var(--muted);font-size:12px;white-space:nowrap}
+  figure.fig .fig-body{padding:12px 10px;overflow-x:auto}
+  figure.fig figcaption{padding:8px 14px 10px;font-size:13px;color:var(--muted);border-top:1px dashed var(--line)}
+  pre.mermaid{margin:0;text-align:center;font-size:13px}
+  pre.mermaid svg{height:auto;display:inline-block;max-width:none}
+  figure.fig .fig-body.fit pre.mermaid svg{max-width:100%}
+  figure.fig .fig-head .fit-toggle{margin-left:auto;font-size:11.5px;padding:2px 8px;border:1px solid #bcd6e6;border-radius:999px;background:#fff;color:var(--accent);cursor:pointer;white-space:nowrap}
+  figure.fig .fig-head .fit-toggle:hover{background:#e6f0f7}
+  figure.fig .fig-head .src{margin-left:auto}
+  figure.fig .fig-head .src + .fit-toggle{margin-left:0}
+  @media print{figure.fig .fig-head .fit-toggle{display:none}figure.fig .fig-body pre.mermaid svg{max-width:100%}}
+  figure.fig .fig-body.is-wide::after{content:"← 宽图可横向滚动 →";display:block;text-align:right;font-size:11px;color:#9aa8b4;margin-top:4px}
+  .mermaid-failed pre.mermaid{text-align:left;font-family:Consolas,Menlo,monospace;font-size:12px;white-space:pre;background:#f7f9fb;padding:10px;border-radius:6px;color:#334}
+  .fig-notice{display:none;background:#fdf8ee;border:1px solid #f2dcae;color:#7a5410;padding:8px 14px;border-radius:8px;margin-bottom:16px;font-size:13px}
+  .mermaid-failed .fig-notice{display:block}
+  .legend{display:flex;flex-wrap:wrap;gap:8px 16px;font-size:12.5px;color:var(--muted);margin:6px 0 0}
+  .legend span::before{content:"";display:inline-block;width:12px;height:12px;border-radius:3px;margin-right:5px;vertical-align:-2px;border:1px solid #999}
+  .legend .l-ctx::before{background:#eef6fb;border-color:#0b6e99}
+  .legend .l-ok::before{background:#e6f4ec;border-color:#2f855a}
+  .legend .l-warn::before{background:#fdf3e1;border-color:#b7791f}
+  .legend .l-bad::before{background:#fbe9ec;border-color:#b23a48}
+  .legend .l-ext::before{background:#f3f4f6;border-color:#6b7280;border-style:dashed}
+  @media print{
+    body{background:#fff;font-size:12px}
+    header{background:#0b3d5c;-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    section,figure.fig{break-inside:avoid;box-shadow:none}
+    nav.toc{display:none}
+    a{color:inherit;text-decoration:none}
+  }
+</style>
+</head>
+<body>
+<header>
+  <div class="wrap">
+    <h1>IDP Parcel（<code>idp-parcel</code>）项目现状、业务说明与全流程图集</h1>
+    <p>面向经营跨境出口小包网络的物流企业的运营软件产品——当前站在哪里、业务上做的是什么、每条主链怎么走、能演示什么、卡在什么上。</p>
+    <div class="meta">
+      <span>快照日期：2026-09-16（周三）· 第 2 版（补全流程图集 26 幅）</span>
+      <span>远端 <code>main</code> = <code>f6569f51</code></span>
+      <span>仓库自 2026-07-31 首笔起 2701 笔提交</span>
+      <span>取证：<code>docs/product/*</code>、<code>docs/domain/CONTEXT-MAP.md</code> 与各 <code>CONTEXT.md</code> 的 Lifecycles、<code>docs/application/UC-*</code>、<code>docs/design/*</code>、ADR、<code>cmd/parcel-dispatch/assemble.go</code>、<code>.github/workflows/ci.yml</code>、<code>docs/product/MECHANISM-INVENTORY.md</code>（生成物）、git 日志</span>
+    </div>
+  </div>
+</header>
+
+<main>
+
+<div class="fig-notice">流程图使用 Mermaid 渲染，需要能访问 <code>cdn.jsdelivr.net</code>。当前环境未能加载渲染库，下面各图以 Mermaid 源码形式显示，可粘贴到任何 Mermaid 渲染器（如 mermaid.live）查看。</div>
+
+<nav class="toc">
+  <b>目录</b>
+  <ol>
+    <li><a href="#s0">一页读懂</a></li>
+    <li><a href="#s1">产品定位与目标客户</a></li>
+    <li><a href="#s2">客户的痛与产品的答法</a></li>
+    <li><a href="#s3">端到端业务全景（十四阶段主链）</a></li>
+    <li><a href="#s4">十个限界上下文与上下文地图</a></li>
+    <li><a href="#s5">接单主线：UC-PS-001 全流程</a></li>
+    <li><a href="#s6">履约主线：收寄 → 节点 → 运输 → 交付 → 终局</a></li>
+    <li><a href="#s7">关务合规控制域</a></li>
+    <li><a href="#s8">追踪、异常与客户披露</a></li>
+    <li><a href="#s9">计价与运营结算</a></li>
+    <li><a href="#s10">技术架构与运行时</a></li>
+    <li><a href="#s11">首发范围：做什么、明确不做什么</a></li>
+    <li><a href="#s12">两个就绪、两个半边：进度怎么读</a></li>
+    <li><a href="#s13">进度快照（数字）</a></li>
+    <li><a href="#s14">今天能演示什么，停在哪</a></li>
+    <li><a href="#s15">试点治理与上线阶段（PN-08）</a></li>
+    <li><a href="#s16">关键里程碑时间线</a></li>
+    <li><a href="#s17">当前在途与前沿</a></li>
+    <li><a href="#s18">风险与待决（业务视角）</a></li>
+    <li><a href="#s19">产品自身收费模型（形态，无价位）</a></li>
+    <li><a href="#s20">术语速查与图例</a></li>
+  </ol>
+  <div class="figs">
+    <b>图目录</b>
+    <ol>
+      <li><a href="#fig1">目标客户与两种服务形态</a></li>
+      <li><a href="#fig2">十四阶段端到端主链</a></li>
+      <li><a href="#fig3">四条并行业务线</a></li>
+      <li><a href="#fig4">限界上下文地图</a></li>
+      <li><a href="#fig5">UC-PS-001 提交与接受判断流程</a></li>
+      <li><a href="#fig6">委托生命周期状态机</a></li>
+      <li><a href="#fig7">接受判断任务等待态</a></li>
+      <li><a href="#fig8">提交 → 接受链时序图</a></li>
+      <li><a href="#fig9">履约主线跨上下文流程</a></li>
+      <li><a href="#fig10">权威运输交接与控制</a></li>
+      <li><a href="#fig11">集运单元实例生命周期</a></li>
+      <li><a href="#fig12">路由计划适用性</a></li>
+      <li><a href="#fig13">关务案件全流程</a></li>
+      <li><a href="#fig14">关务案件状态机</a></li>
+      <li><a href="#fig15">追踪投影与异常闭环</a></li>
+      <li><a href="#fig16">异常案件 / 处置请求状态</a></li>
+      <li><a href="#fig17">计价与结算链</a></li>
+      <li><a href="#fig18">费用明细 / 对账单 / 评价结果</a></li>
+      <li><a href="#fig19">技术分层架构</a></li>
+      <li><a href="#fig20">Outbox → 派发 → Inbox</a></li>
+      <li><a href="#fig21">CI 流水线</a></li>
+      <li><a href="#fig22">端点准入分级决策树</a></li>
+      <li><a href="#fig23">管理台四态</a></li>
+      <li><a href="#fig24">两轨制与闸门判定</a></li>
+      <li><a href="#fig25">合成演示动线与三堵墙</a></li>
+      <li><a href="#fig26">试点阶段与治理决定</a></li>
+    </ol>
+  </div>
+</nav>
+
+<section id="s0">
+  <h2>0. 一页读懂</h2>
+  <ul>
+    <li><b>是什么。</b>卖给<b>经营跨境出口小包网络的物流企业</b>（租户）的多租户运营软件，把「客户委托 → 网络收寄 → 路由 → 运输履约 → 关务合规 → 追踪异常 → 计价 → 运营结算」全链数字化成<b>可解释、可回放、可审计</b>的系统。开发方是软件公司，<b>不是运营企业</b>；文档里的「运营企业」一律指购买产品的租户，锚点货主客户是租户的客户。</li>
+    <li><b>到哪了。</b>产品能力（<b>机制半边</b>）于 2026-08-28 经受托认可宣告<b>「产品就绪」</b>：八个首发切片 PN-01…PN-08 全部达标、十个业务上下文都有生产代码与应用编排、跨上下文接线与持久化全部换真。此后三周一直在收尾：管理台接线、端口余量、评审残差、CI 修复。真实租户参数（<b>实例半边</b>）为空——当前尚无租户，这是既定红线下的正常状态，不是欠账。</li>
+    <li><b>能演示什么。</b>管理台登记 41 页，其中 40 页对 <code>parcel-api</code> 真实端点接线；用隔离合成 <code>S</code> 数据可以从「建产品 → 配价 → 建网 → 过关规则 → 提交委托」走到委托<b>已提交</b>，随后<b>如实停在三堵墙</b>前（详见 §14 与图 25）。</li>
+    <li><b>今天的转折。</b>ADR-0139 草案把「产品自有的客户接入 API（首方 API）」归入机制半边——不再等某个租户的渠道证据 <code>PAR-INT-01</code>；配套 ADR-0140/0141/0142（契约生成、集成方沙箱、首方 webhook）同日起草，均为 <span class="tag warn">Proposed</span>，接受与否归用户。</li>
+    <li><b>归用户的决定。</b>ADR-0139 是否接受；<code>docs/ux/commercial-party.md</code>（共享树上新出现的未跟踪文件）归属；收费模型采用哪几层（§19）。</li>
+  </ul>
+  <div class="callout">
+    <b>本版新增。</b>第 2 版把业务与技术流程补成 26 幅图：主链、上下文地图、接单/履约/关务/追踪/结算五条线各自的流程与状态机、运行时与派发、准入分级、演示动线与试点阶段。每幅图右上角标注取证来源；图只组织既有权威文档，不另立规则。
+  </div>
+</section>
+
+<section id="s1">
+  <h2>1. 产品定位与目标客户</h2>
+  <p><b>定位（产品基线）。</b><code>idp-parcel</code> 面向自己经营国际小包网络的物流企业，支撑其面向货主客户提供国际小包服务并组织实际网络履约。它<b>不是</b>货主运输管理系统（TMS）的「国际运输功能包」，而是拥有独立产品责任、独立领域模型、独立业务数据库与发布边界的国际小包网络运营系统。</p>
+  <p><b>首发对客服务形态</b>是两种形态的明确组合（ADR-0088）：</p>
+  <ul>
+    <li><b>网络服务</b>：运营企业向货主客户承担从<b>有效网络收寄</b>到约定终局的端到端责任，自己组织集货、节点、干线、关务与尾程闭环，具体履约段可自营或外包。</li>
+    <li><b>面单渠道服务</b>：运营企业为货主客户提供渠道下单、取面单、查询、渠道作废/退款协助；责任来源于面单交易绑定的渠道账号与合同，<b>不虚构运营企业收寄</b>，运输观察从实际承运商收寄事实开始。</li>
+  </ul>
+
+  <figure class="fig" id="fig1">
+    <div class="fig-head"><b>图 1 · 目标客户三层、两种服务形态与责任起点</b><span class="src">来源：PRODUCT-BASELINE · ADR-0088 · 开发主线「目标客户群」</span></div>
+    <div class="fig-body">
+<pre class="mermaid">
+flowchart LR
+  classDef ctx fill:#eef6fb,stroke:#0b6e99,color:#1f2933
+  classDef ok fill:#e6f4ec,stroke:#2f855a,color:#1f2933
+  classDef ext fill:#f3f4f6,stroke:#6b7280,stroke-dasharray:4 3,color:#1f2933
+  classDef bad fill:#fbe9ec,stroke:#b23a48,color:#1f2933
+  subgraph T["目标客户群（租户）· 首发以中国出口为起运侧"]
+    direction TB
+    T1["物流产品设计者与整合者<br/>组合多家渠道形成可销售产品；逐票按成本择优；纯面单转售是核心形态"]:::ctx
+    T2["小包专线与货代<br/>一条或数条成熟主线路；头程自营/半自营、尾程交末端渠道"]:::ctx
+    T3["3PL 与集运干线运营商<br/>多货主并存；集运单元装入/拆出/重组；两头分别成账"]:::ctx
+  end
+  subgraph F["首发对客服务形态（ADR-0088）"]
+    direction TB
+    F1["网络服务<br/>责任起点 = 有效网络收寄<br/>责任终点 = 约定终局（交付/退运/其他合同结果）"]:::ok
+    F2["面单渠道服务<br/>责任来源 = 面单交易绑定的渠道账号与合同<br/>运输观察自实际承运商收寄开始；不虚构运营企业收寄"]:::ok
+  end
+  subgraph X["明确不在内"]
+    X1["跨境卖家（货主）"]:::bad
+    X2["电商 ERP / SaaS 平台（服务货主）"]:::bad
+  end
+  T1 --> F1
+  T1 --> F2
+  T2 --> F1
+  T2 --> F2
+  T3 --> F1
+  C["货主客户（租户的客户）<br/>经租户已登记渠道提交委托"]:::ext --> F1
+  C --> F2
+</pre>
+    </div>
+    <figcaption>两种形态可以在同一租户、同一票上并存，但责任起点不同：网络服务从有效网络收寄起算；面单渠道服务不因面单成功而虚构收寄。把货主或电商平台引进目标客户群会让「常规形态」同时指向两种互不相容的日常，因此明确排除。</figcaption>
+  </figure>
+
+  <h3>目标客户群三层（判「常规还是边缘」的输入）</h3>
+  <table>
+    <thead><tr><th style="width:22%">层</th><th style="width:30%">是谁</th><th>常规业务形态</th></tr></thead>
+    <tbody>
+      <tr><td>物流产品设计者与整合者</td><td>不一定持有干线运力或场站，靠组合多家供应商渠道形成可销售物流产品</td><td>同一目的国并行接多家渠道、逐票按成本择优；按客户分层配产品与价格政策；供应商涨价/爆仓时改产品—渠道映射与规则包版本并要求可追溯；纯面单渠道转售是核心形态；每票要算得出真实成本与毛利</td></tr>
+      <tr><td>小包专线与货代</td><td>经营一条或数条成熟主线路，头程自营/半自营、尾程交末端渠道</td><td>揽收、集运、报关、干线、尾程的完整链路；场站扫描、点验、测量、封签与集运单元处理；旺季物理上限与商业软容量分开管；尾程大量走末端渠道面单，可单独对客销售</td></tr>
+      <tr><td>3PL 与集运干线运营商</td><td>以仓配或集运为主业，跨境干线是其中一段</td><td>多货主并存，商业条件、可见范围与费用必须相互隔离；集运单元装入/拆出/重组；跨法人履约各自留证；结算按客户与按供应商两头分别成账</td></tr>
+    </tbody>
+  </table>
+  <div class="callout">
+    <b>商业形态兼容声明。</b>首发按软件产品卖给物流企业（租户）。若将来转向聚合平台形态（平台方自己作为运营者聚合渠道与货主），变的只是「租户是谁」，各上下文、租户隔离与证据纪律一个不改。
+  </div>
+</section>
+
+<section id="s2">
+  <h2>2. 客户的痛与产品的答法</h2>
+  <p class="small muted">每条痛用客户的话说，答法指向本产品真实存在的机制（摘自《产品故事》）。</p>
+  <table>
+    <thead><tr><th style="width:34%">客户的痛</th><th>产品的答法（机制）</th></tr></thead>
+    <tbody>
+      <tr><td><b>渠道与规则碎片化</b>：每家渠道一套计费、一套轨迹、一套异常口径，靠 Excel 与老师傅经验管产品</td><td>版本化登记册：服务产品、客户合同、供应商协议、价卡、计价参考序列（燃油/汇率）、网络目录全部按<b>不可覆盖版本</b>受控发布；统一领域语言贯穿十个上下文</td></tr>
+      <tr><td><b>一票赚不赚钱，月底才知道</b>：报价与成本两本账靠人拉表</td><td>纯计价评价：<code>BUY</code>/<code>SELL</code> 方向隔离、逐候选评价、版本清单可复算可回放；运输收费发生项 → 供应商预期成本 → 账单匹配 → 核销的结算链（图 17）</td></tr>
+      <tr><td><b>轨迹不统一，客户问不出所以然</b>：每家承运商一套状态码</td><td>里程碑映射版本化登记；内部投影与客户视图分层；披露按客户合同分级；映射不到的事实如实标「未归类」，不硬凑时间线（图 15）</td></tr>
+      <tr><td><b>异常靠人盯</b>：延误、丢件、卡关靠客服翻邮件</td><td>信号 → 发作期 → 分诊 → 案件 → 处置请求 → 披露/通知的机制链；分诊规则版本化，自动建案只来自规则命中</td></tr>
+      <tr><td><b>对账靠人肉</b>：供应商账单、客户账单两头对，差异说不清归属</td><td>供应商账单「到达不等于应付」、匹配与审核分步；客户对账单按截单快照发布密封；真实收付显式映射后才核销</td></tr>
+      <tr><td><b>多客户数据不敢开放查询</b></td><td>租户是最高数据隔离边界（ADR-0003）；客户查询按账户授权作用域隔离；运营查阅与客户披露分开授权；外部单号只定位候选，不是访问凭证</td></tr>
+    </tbody>
+  </table>
+  <h3>凭什么赢</h3>
+  <ul>
+    <li><b>每个判断可解释、可回放</b>：评价带版本清单、投影带版本链、决定带依据引用；重放用原版本，不读当前值。</li>
+    <li><b>没有假默认值</b>：未配置的参数如实答「未配置」（ADR-0055）；演示数据只以合成 <code>S</code> 层级出现并如实标注。</li>
+    <li><b>机制与实例分两半</b>：产品能力先行，租户的真实参数后填；换一个租户不改代码，填参数登记册（ADR-0016 两轨制，图 24）。</li>
+    <li><b>边界清晰、长期可演进</b>：各上下文拥有自己的语言与数据所有权；加真实渠道对接、加 AI、换商业形态，动的都是边缘。AI 路线立场：<b>不预建 AI 机制</b>——登记册、评价回放、执行记录就是将来 Agent 消费的接口。</li>
+  </ul>
+</section>
+
+<section id="s3">
+  <h2>3. 端到端业务全景（十四阶段主链）</h2>
+  <p>主链从商业与网络准备开始，经委托接入、生产归属、接受判断、路由、收寄、节点作业、运输、交付到终局；关务、追踪异常与金额链<b>并行</b>于物理主链。<b>阶段不是单一全局状态机</b>：每个上下文拥有自己的生命周期，端到端摘要只能由各自有效结果派生，不能人工改写。关务是<b>控制域</b>——可以阻断特定动作，但不产生全程统一状态。</p>
+
+  <figure class="fig" id="fig2">
+    <div class="fig-head"><b>图 2 · 十四阶段端到端主链（含并行控制域、可见性线与金额线）</b><span class="src">来源：业务全景说明书 §4.1/§5.1 · CONTEXT-MAP</span></div>
+    <div class="fig-body">
+<pre class="mermaid">
+flowchart TB
+  classDef pc fill:#eef6fb,stroke:#0b6e99,color:#1f2933
+  classDef ps fill:#e6f0f7,stroke:#0b3d5c,color:#1f2933
+  classDef nr fill:#eaf4ee,stroke:#2f855a,color:#1f2933
+  classDef no fill:#f2f7e8,stroke:#5a7d1e,color:#1f2933
+  classDef tf fill:#fff4e5,stroke:#b7791f,color:#1f2933
+  classDef cc fill:#fbe9ec,stroke:#b23a48,color:#1f2933
+  classDef ve fill:#f1ecfa,stroke:#6b46c1,color:#1f2933
+  classDef sa fill:#e8f4f3,stroke:#0f7b6c,color:#1f2933
+  classDef gov fill:#f3f4f6,stroke:#6b7280,color:#1f2933
+  subgraph PREP["准备（版本化登记册）"]
+    direction LR
+    S1["① 商业准备<br/>参与方·法人·客户账户·服务产品<br/>合同·协议·规则包·政策<br/><b>party-commercial</b>"]:::pc
+    S2["② 网络与规则准备<br/>网络目录·服务区域·价卡·参考序列<br/>合规规则·追踪规则<br/><b>NR · PP · CC · VE</b>"]:::nr
+  end
+  subgraph INTAKE["接单（客户责任线起点）"]
+    direction LR
+    S3["③ 委托接入 · 来源保全<br/>来源身份·内容摘要·重放/冲突<br/><b>parcel-shipment</b>"]:::ps
+    S4["④ 生产归属<br/>本产品 / 其他权威 / 未决<br/>OPEN / PAUSED<br/><b>pilotgovernance ↔ PS</b>"]:::gov
+    S5["⑤ 接受前判断<br/>两阶段商业解析·逐项 asOf·资料<br/>逐包裹可达性·财务控制·人工复核<br/><b>PS 编排；PC / NR / SA 提供判断</b>"]:::ps
+    S6["⑥ 接受基线 · 预计承诺<br/>初始路由：路由计划 或 无当前有效路由<br/><b>PS · NR</b>"]:::ps
+  end
+  subgraph EXEC["履约（计划与执行线）"]
+    direction LR
+    S7["⑦ 收寄与节点作业<br/>节点收寄 / 场外揽收 → 有效网络收寄<br/>→ 正式承诺；实测·分拣·集运·封签<br/><b>NO · TF · PS</b>"]:::no
+    S9["⑨ 运输准备<br/>班次·多维容量·运输委托<br/>订舱·承运接受·装载分配<br/><b>transport-fulfillment</b>"]:::tf
+    S10["⑩ 权威交接与实际履约<br/>逐对象已交接 → 控制转移<br/>→ 实际履约段·实际承运商<br/><b>transport-fulfillment</b>"]:::tf
+    S11["⑪ 派送 · POD · 终局<br/>逐次尝试·有效交付<br/>逐包裹终局 → 委托完成<br/><b>TF · PS</b>"]:::tf
+  end
+  S8["⑧ 关务处理（并行控制域）<br/>建案·申报单元·正式资料·就绪·授权<br/>提交·外部结果·限制·放行门禁<br/><b>customs-compliance</b>"]:::cc
+  subgraph DERIVED["并行派生线"]
+    direction LR
+    S12["⑫ 追踪与异常<br/>投影·里程碑·ETA·客户视图<br/>信号→案件→处置请求→披露/通知<br/><b>visibility-exception</b>"]:::ve
+    S13["⑬ 计价与费用<br/>SELL / BUY 纯评价<br/>→ 计费重量采用 → 费用·预期成本<br/><b>PP · SA</b>"]:::sa
+    S14["⑭ 对账 · 核销 · 经营结果<br/>客户对账单·供应商账单·资金映射<br/>核销·分摊·毛利<br/><b>settlement-accounting</b>"]:::sa
+  end
+  S1 --> S2
+  S2 --> S3
+  S3 --> S4 --> S5 --> S6
+  S6 --> S7
+  S7 --> S9 --> S10 --> S11
+  S6 -.-> S8
+  S7 -.-> S8
+  S8 -. "门禁：出库 / 装载出发 / 跨区域移动 / 交付" .-> S10
+  S8 -. "门禁" .-> S11
+  INTAKE --> S12
+  EXEC --> S12
+  S8 --> S12
+  S5 -. "接受前估价 / 冻结 / 信用" .-> S13
+  EXEC --> S13
+  S8 -. "税费 / 代垫" .-> S13
+  S13 --> S14
+</pre>
+    </div>
+    <figcaption>实线为主链推进；虚线为关务门禁与金额输入。关务结果<b>不是</b>运输准备的统一前置：运输准备可以先行，只有明确受门禁约束的出库、装载出发、跨区域移动或交付动作才受对应门禁控制。计价与结算可在接受前、履约中和履约后分别形成结果。</figcaption>
+  </figure>
+
+  <h3>阶段总表</h3>
+  <table>
+    <thead><tr><th style="width:15%">阶段</th><th style="width:20%">业务目标</th><th>主要产品动作</th><th style="width:18%">主责模块</th><th style="width:18%">主要结果</th></tr></thead>
+    <tbody>
+      <tr><td>1. 商业准备</td><td>建立可销售、可采购、可授权的商业基础</td><td>发布参与方关系、服务产品、合同、协议、规则包和政策</td><td><code>party-commercial</code></td><td>不可覆盖商业版本及适用关系</td></tr>
+      <tr><td>2. 网络与规则准备</td><td>建立可判断的网络、价卡、关务和追踪规则</td><td>登记网络目录、服务区域、价卡、参考序列、合规与追踪规则</td><td>NR、PP、CC、VE</td><td>版本化业务目录</td></tr>
+      <tr><td>3. 委托接入</td><td>保全客户原始请求</td><td>认证渠道、规范化载荷、形成来源身份和摘要</td><td><code>parcel-shipment</code></td><td>来源已保全、重放或来源冲突</td></tr>
+      <tr><td>4. 生产归属</td><td>判断完整范围是否由本产品生产处理</td><td>评估准入范围和唯一生产权威</td><td><code>pilotgovernance</code> 协作、PS 落委托</td><td>归属本产品、归属其他权威或未决</td></tr>
+      <tr><td>5. 接受前判断</td><td>判断商业、资料、逻辑可达性和财务控制</td><td>两阶段商业解析、逐包裹可达性、财务控制、人工复核</td><td>PS 编排，PC/NR/SA 提供判断</td><td>接受、拒绝、撤回或保持已提交</td></tr>
+      <tr><td>6. 接受与初始路由</td><td>冻结客户责任范围并形成执行意图</td><td>形成接受基线、预计承诺、包裹级初始路由</td><td>PS、NR</td><td>已接受委托、预计承诺、路由计划/无当前有效路由</td></tr>
+      <tr><td>7. 收寄与节点作业</td><td>取得实物控制并组织网络作业</td><td>客户送站或场外揽收、身份核对、实测、分拣、集运和封签</td><td>NO、TF、PS</td><td>有效网络收寄、正式承诺、节点事实</td></tr>
+      <tr><td>8. 关务处理</td><td>满足适用监管程序和动作门禁</td><td>建案、申报单元、正式资料、就绪、授权、提交和结果接收</td><td><code>customs-compliance</code></td><td>监管事实、限制、处置协作和放行门禁</td></tr>
+      <tr><td>9. 运输准备</td><td>把计划段转成可执行运输机会</td><td>班次、容量、运输委托、订舱、承运接受、装载分配</td><td><code>transport-fulfillment</code></td><td>执行准备结果，不等于实际履约</td></tr>
+      <tr><td>10. 交接与实际履约</td><td>建立运输控制并记录真实移动</td><td>逐对象权威交接、实际履约段、出发/到达和后续交接</td><td><code>transport-fulfillment</code></td><td>控制转移、履约参与和实际事实</td></tr>
+      <tr><td>11. 派送与终局</td><td>完成约定服务责任</td><td>派送任务/尝试、POD、有效交付、终局判断</td><td>TF、PS</td><td>有效交付或其他责任结果、包裹终局</td></tr>
+      <tr><td>12. 追踪与异常</td><td>向内外部解释当前进展并闭环问题</td><td>事实映射、投影、ETA、信号、案件、处置请求和披露</td><td><code>visibility-exception</code></td><td>内部投影、客户视图、异常闭环</td></tr>
+      <tr><td>13. 计价与费用</td><td>解释客户收入和供应商成本来源</td><td><code>SELL</code>/<code>BUY</code> 评价、重量采用、费用确认和调整</td><td>PP、SA</td><td>客户费用、预期成本和金额依据</td></tr>
+      <tr><td>14. 对账与经营</td><td>完成账期、资金和经营结果闭环</td><td>客户对账、供应商账单、真实资金映射、核销、分摊</td><td><code>settlement-accounting</code></td><td>对账单、审核应付、核销与经营结果</td></tr>
+    </tbody>
+  </table>
+
+  <figure class="fig" id="fig3">
+    <div class="fig-head"><b>图 3 · 一票包裹必须并行保留的四条业务线</b><span class="src">来源：业务全景说明书 §4.3 · ADR-0005（来源事实 / 有效事件 / 派生状态）</span></div>
+    <div class="fig-body">
+<pre class="mermaid">
+flowchart TB
+  classDef ps fill:#e6f0f7,stroke:#0b3d5c,color:#1f2933
+  classDef nr fill:#eaf4ee,stroke:#2f855a,color:#1f2933
+  classDef cc fill:#fbe9ec,stroke:#b23a48,color:#1f2933
+  classDef sa fill:#e8f4f3,stroke:#0f7b6c,color:#1f2933
+  subgraph L1["① 客户责任线 · parcel-shipment"]
+    direction TB
+    A1["委托"]:::ps --> A2["接受基线"]:::ps --> A3["预计承诺"]:::ps --> A4["正式承诺"]:::ps --> A5["取消 / 收寄后处置"]:::ps --> A6["终局服务结果"]:::ps
+  end
+  subgraph L2["② 计划与执行线 · NR · NO · TF"]
+    direction TB
+    B1["可达性"]:::nr --> B2["路由计划"]:::nr --> B3["节点作业"]:::nr --> B4["班次 · 容量"]:::nr --> B5["权威交接"]:::nr --> B6["实际履约 · 交付"]:::nr
+  end
+  subgraph L3["③ 合规与可见性线 · CC · VE"]
+    direction TB
+    C1["关务案件"]:::cc --> C2["申报 · 提交版本"]:::cc --> C3["限制 · 监管结果"]:::cc --> C4["追踪投影"]:::cc --> C5["异常案件"]:::cc --> C6["客户披露"]:::cc
+  end
+  subgraph L4["④ 金额与经营线 · PP · SA"]
+    direction TB
+    D1["纯计价评价"]:::sa --> D2["客户费用"]:::sa --> D3["供应商成本"]:::sa --> D4["账单 · 对账单"]:::sa --> D5["真实资金 · 核销"]:::sa --> D6["经营结果"]:::sa
+  end
+  R["规则：任一线的变化<br/>不得静默覆盖其他线<br/><br/>改路不改客户承诺<br/>POD 更正不删原证据<br/>对账调整不回写计价输入<br/>重放用原版本，不读当前值"]
+  L4 -.-> R
+</pre>
+    </div>
+    <figcaption>计划、承诺、已发生事实与派生状态分层管理（ADR-0005）。任一层变化都以新版本追加，原版本与因果关系保留，重放用原版本。</figcaption>
+  </figure>
+</section>
+
+<section id="s4">
+  <h2>4. 十个限界上下文与上下文地图</h2>
+  <p>限界上下文表达<b>语言、规则、生命周期与数据所有权</b>边界，不等于微服务或库表；任何实现都不得直接修改其他上下文拥有的数据。代码规模三列取自 <code>MECHANISM-INVENTORY.md</code>（生成物，钉 <code>f6569f51</code>），只有数、不定级。</p>
+
+  <figure class="fig" id="fig4">
+    <div class="fig-head"><b>图 4 · 限界上下文地图（主要上下游关系）</b><span class="src">来源：docs/domain/CONTEXT-MAP.md「上下文关系」</span></div>
+    <div class="fig-body">
+<pre class="mermaid">
+flowchart TB
+  classDef pc fill:#eef6fb,stroke:#0b6e99,color:#1f2933
+  classDef ps fill:#e6f0f7,stroke:#0b3d5c,color:#1f2933
+  classDef nr fill:#eaf4ee,stroke:#2f855a,color:#1f2933
+  classDef no fill:#f2f7e8,stroke:#5a7d1e,color:#1f2933
+  classDef tf fill:#fff4e5,stroke:#b7791f,color:#1f2933
+  classDef cc fill:#fbe9ec,stroke:#b23a48,color:#1f2933
+  classDef ve fill:#f1ecfa,stroke:#6b46c1,color:#1f2933
+  classDef sa fill:#e8f4f3,stroke:#0f7b6c,color:#1f2933
+  classDef gov fill:#f3f4f6,stroke:#6b7280,stroke-dasharray:4 3,color:#1f2933
+  subgraph UP["上游权威 · 横切能力"]
+    direction TB
+    PC["<b>party-commercial</b><br/>参与方与商业<br/>版本化商业权威 · 两阶段唯一解析"]:::pc
+    PP["<b>parcel-pricing</b><br/>小包计价<br/>纯 PricingEvaluation · 参考序列"]:::pc
+    GOV["pilotgovernance<br/>治理记录能力<br/>生产权威区间 · Go/No-Go"]:::gov
+    AI["accessidentity<br/>共享接入身份能力<br/>来源信封 · 渠道登记册"]:::gov
+  end
+  subgraph CORE["客户责任线 · 计划与执行线"]
+    direction TB
+    PS["<b>parcel-shipment</b><br/>小包托运<br/>委托 · 包裹永久身份 · 面单交易 · 终局"]:::ps
+    NR["<b>network-routing</b><br/>网络与路由<br/>网络定义 · 可达性 · 路由计划 · 择优"]:::nr
+    NO["<b>node-operations</b><br/>节点作业<br/>节点收寄 · 实测 · 集运单元 · 封签"]:::no
+    TF["<b>transport-fulfillment</b><br/>运输履约<br/>揽收 · 班次容量 · 权威交接 · 交付 POD"]:::tf
+  end
+  subgraph CTRL["控制域"]
+    CC["<b>customs-compliance</b><br/>关务与贸易合规<br/>案件 · 申报版本 · 监管结果 · 限制 · 门禁"]:::cc
+  end
+  subgraph DER["派生线 · 金额线"]
+    direction TB
+    VE["<b>visibility-exception</b><br/>全程追踪与异常<br/>投影 · 客户视图 · 案件 · 披露 · 索赔"]:::ve
+    SA["<b>settlement-accounting</b><br/>结算与经营核算<br/>费用 · 应收应付 · 对账 · 核销 · 毛利"]:::sa
+    CR["<b>collection-remittance</b><br/>代收与清分（首发不含 COD）"]:::sa
+  end
+  JPC(("已发布商业版本<br/>客户 · 法人 · 产品 · 合同<br/>协议 · 规则包 · 政策 · 授权"))
+  JF(("已接受事实<br/>身份 · 路由 · 作业<br/>履约 · 关务"))
+  JR(("处置请求<br/>改路 · 重作业 · 重履约 · 重申报<br/>不改写源事实"))
+  PC ==> JPC
+  JPC --> PS
+  JPC --> NR
+  JPC --> TF
+  JPC --> CC
+  JPC --> VE
+  JPC --> PP
+  JPC --> SA
+  PP -->|"不可变评价 · 版本清单"| SA
+  PP -->|"候选 BUY 评价"| NR
+  GOV -. "生产归属 · 阶段决定" .-> PS
+  AI -. "来源信封 · 作用域" .-> PS
+  PS <-->|"包裹 · asOf ⇄ 可达性 · 路由"| NR
+  PS <-->|"包裹身份 ⇄ 节点收寄 · 实测"| NO
+  PS <-->|"载运对象 ⇄ 揽收 · 交付"| TF
+  PS <-->|"原始资料 ⇄ 阶段事实 · 限制"| CC
+  PS <-->|"控制请求 ⇄ 估价 · 冻结"| SA
+  NR -->|"路由指令"| NO
+  NR -->|"计划履约段"| TF
+  NO <-->|"交接证据 ⇄ 权威交接结果"| TF
+  NO -->|"实测 · 控制"| NR
+  TF -->|"容量 · 实际移动"| NR
+  NO -->|"实测 · 执行事实"| CC
+  TF -->|"总单 · 舱单依据"| CC
+  CC <-->|"合规口岸 ⇄ 改路复核"| NR
+  CC -. "范围化门禁" .-> NO
+  CC -. "范围化门禁" .-> TF
+  PS --> JF
+  NR --> JF
+  NO --> JF
+  TF --> JF
+  CC --> JF
+  JF ==> VE
+  VE -.-> JR
+  JR -.-> NR
+  JR -.-> NO
+  JR -.-> TF
+  JR -.-> CC
+  VE -->|"责任 · 追偿依据"| SA
+  NO -->|"作业成本依据"| SA
+  TF -->|"收费发生项"| SA
+  CC <-->|"税费核对 ⇄ 资金事实采用"| SA
+  TF -->|"代收证据"| CR
+  SA <-->|"COD 服务费 ⇄ 清分结果"| CR
+</pre>
+    </div>
+    <div class="legend"><span class="l-ctx">上下文（按线着色）</span><span class="l-ext">非限界上下文的机制能力</span> 实线 = 提供事实/依据；虚线 = 门禁、请求或治理，不取得对象所有权</div>
+    <figcaption>关系约束要点：<code>party-commercial</code> 只提供已发布版本，下游保存采用快照且不得回写；<code>network-routing</code> 不建立读取地址本体的端口，客户地址以请求期地理投影过界；<code>visibility-exception</code> 只消费已接受事实、只提出处置请求；外部资金事实进入本产品<b>只有</b> <code>settlement-accounting</code> 一个采用口（ADR-0137）。完整 40 余条关系与约束以 CONTEXT-MAP 为准。</figcaption>
+  </figure>
+
+  <table>
+    <thead><tr><th style="width:17%">上下文</th><th>业务上拥有什么（一句话）</th><th style="width:22%">明确不拥有</th><th style="width:7%">生产文件</th><th style="width:6%">编排</th><th style="width:6%">端点</th></tr></thead>
+    <tbody>
+      <tr><td><code>party-commercial</code><br><span class="muted small">参与方与商业</span></td><td>运营集团租户及其法人、货主客户账户、承运商/代理/渠道账号关系、服务产品与版本、客户合同与供应商协议、接单规则包、财务控制/信用/价格/结算政策、角色权限等级与授权——全部按不可覆盖版本发布并<b>两阶段唯一解析</b></td><td>委托、包裹、面单交易、履约事实、运营应收/应付、结算余额</td><td>127</td><td>9</td><td>25</td></tr>
+      <tr><td><code>parcel-shipment</code><br><span class="muted small">小包托运</span></td><td>提交批次、客户委托、接受判断任务、接受/拒绝/撤回决定、接受基线、<b>包裹永久内部标识与谱系</b>、外部标识版本、面单交易两级结果、渠道选择与锁定、有效网络收寄解释、逐包裹取消/收寄后处置、包裹终局</td><td>合同/产品版本、集运成员、关务申报、路由、班次、追踪投影、结算</td><td>187</td><td>20</td><td>15</td></tr>
+      <tr><td><code>network-routing</code><br><span class="muted small">网络与路由</span></td><td>节点网络身份、版本化服务区域、连接与线路、日历/截单/临时可用性调整、路由策略、接受前逻辑可达性三值判断、包裹路由计划与受控改路、<b>多份供应商价卡按成本单维择优</b></td><td>客户地址本体、节点实作业、班次/容量/交付、关务合法性</td><td>55</td><td>6</td><td>9</td></tr>
+      <tr><td><code>node-operations</code><br><span class="muted small">节点作业</span></td><td>客户送站的节点收寄、待识别实物、实物控制、作业任务/扫描/测量/状况观察、分拣、集运单元实例与封签、节点侧交接证据、监管协作承接与执行事实</td><td>包裹正式身份、权威交接结果、班次/装载、放行决定、<b>商品库存 WMS</b></td><td>30</td><td>3</td><td>2</td></tr>
+      <tr><td><code>transport-fulfillment</code><br><span class="muted small">运输履约</span></td><td>场外揽收、班次与多维容量池、运输委托/订舱/承运接受/装载分配、<b>权威运输交接</b>、实际履约段、揽派尝试、有效交付与 POD、实际承运商、总单/舱单版本、运输收费发生项（无金额）、外部轨迹认领</td><td>包裹身份、商业协议与价格、集运成员、关务申报、投影、审核应付</td><td>141</td><td>25</td><td>24</td></tr>
+      <tr><td><code>customs-compliance</code><br><span class="muted small">关务与贸易合规</span></td><td>按监管程序建立的稳定关务案件、申报单元、角色与资格快照、字段级可追溯正式申报资料、不可覆盖提交版本与尝试、承运商外部舱单引用、规则化合规判断、内部限制与解除、查验/扣留/处置协作、税费核定与付款核对、放行门禁、已接收外部监管事实</td><td>监管机构的决定权、舱单形成/提交、物理执行、真实付款、代垫成立判断</td><td>94</td><td>18</td><td>16</td></tr>
+      <tr><td><code>visibility-exception</code><br><span class="muted small">全程追踪与异常</span></td><td>由已接受源事实派生的追踪投影、标准里程碑、版本化 ETA、可见性缺口、客户隔离视图；异常信号发作期、分诊、案件（待响应→处理中→已关闭）、处置请求；客户披露决定与通知节点；证据、客户索赔三类期限、追偿事项</td><td>源业务事实、包裹身份、其他上下文的动作与解除、最终金额与收付</td><td>98</td><td>11</td><td>15</td></tr>
+      <tr><td><code>parcel-pricing</code><br><span class="muted small">小包计价</span></td><td>定价方案、价表、计价规则工件（特征判定、附加费、分区分档、最低计费重量、依赖与排除集）、价格方向隔离、版本清单、纯 <code>PricingEvaluation</code> 与解释/回放、<b>计价参考序列</b>（燃油、汇率）的登记与解析、「不可计价」终态</td><td>合同/协议/绑定与授权、原始测量与路由、费用采用、应收应付与核销、参考序列的数值本身</td><td>99</td><td>10</td><td>11</td></tr>
+      <tr><td><code>settlement-accounting</code><br><span class="muted small">结算与经营核算</span></td><td>接受前估价/冻结/信用暴露、费用项目与客户/供应商计费重量采用、客户运营应收、供应商预期成本与账单匹配/审核应付、结算账户、截单快照与对账单、真实收付映射与核销、成本分摊（守恒）、多币种与汇兑差额、代垫成立与回收、赔付/追偿金额、法人间内部应收应付、经营毛利/损失指标</td><td>商业协议与政策版本、原始事实、<b>银行/税务/总账/法定报表</b>、代收本金</td><td>100</td><td>14</td><td>6</td></tr>
+      <tr><td><code>collection-remittance</code><br><span class="muted small">代收与清分</span></td><td>代收资金义务、代收分户账（应收/已收/在途/待清分/应付客户/短款/溢款/汇付）、代收本金按客户/法人/币种/渠道隔离与对账——<b>代收本金与运营结算余额是两个口径</b></td><td>客户合同、履约侧原始收款证据、运费、COD 服务费、银行与总账</td><td>22</td><td>4</td><td>1</td></tr>
+    </tbody>
+  </table>
+  <p class="small muted">另有两段非限界上下文的机制代码：<code>pilotgovernance</code>（PN-01/PN-08 的治理记录能力：候选版本组、阶段评审决定、生产权威区间、暂停/恢复/接管/在途盘点；生产 20 / 编排 3 / 端点 1）与 <code>accessidentity</code>（来源信封铸造机制，ADR-0072；生产 5）。<code>collection-remittance</code> 按 <code>PA-CR-01</code>（中东/东南亚 COD 常规形态）准入，首发生产范围明确<b>不含 COD</b>，其机制半边先建、实例（汇率、回汇周期、手续费）一律等真实协议。</p>
+
+  <h3>跨上下文交接矩阵（提供方 → 消费方）</h3>
+  <table>
+    <thead><tr><th style="width:15%">提供方</th><th style="width:15%">消费方</th><th>交接内容</th><th style="width:22%">消费方可以做什么</th><th style="width:20%">明确禁止</th></tr></thead>
+    <tbody>
+      <tr><td><code>party-commercial</code></td><td><code>parcel-shipment</code></td><td>客户、法人、产品、合同、规则包、授权和策略版本</td><td>形成接单判断和采用快照</td><td>修改商业版本或默认选候选</td></tr>
+      <tr><td><code>parcel-shipment</code></td><td><code>network-routing</code></td><td>提交/接受基线、包裹引用、服务要求和最小地理投影</td><td>形成可达性和路线</td><td>保存地址本体或修改客户承诺</td></tr>
+      <tr><td><code>network-routing</code></td><td><code>parcel-shipment</code></td><td>可达性、路线、无当前有效路由及依据</td><td>参与接受或展示执行意图</td><td>把路线当承诺或实际履约</td></tr>
+      <tr><td><code>parcel-shipment</code></td><td><code>node-operations</code></td><td>正式包裹身份、接受基线和作业要求</td><td>识别实物并执行节点作业</td><td>修改包裹身份或客户资料</td></tr>
+      <tr><td><code>node-operations</code></td><td><code>parcel-shipment</code></td><td>节点收寄、测量、拆分/合并来源事实</td><td>采用收寄、维护正式身份谱系</td><td>把扫描直接当收寄或交接</td></tr>
+      <tr><td><code>network-routing</code></td><td>NO / TF</td><td>路由计划、计划段、窗口和指令</td><td>组织节点/运输执行</td><td>把计划写成实际事实</td></tr>
+      <tr><td><code>node-operations</code></td><td><code>transport-fulfillment</code></td><td>点验、装卸和节点侧交接证据</td><td>形成逐对象权威交接</td><td>用节点扫描自动转移控制</td></tr>
+      <tr><td><code>transport-fulfillment</code></td><td><code>node-operations</code></td><td>已交接、已拒收或待确认结果及其证据范围</td><td>已交接时记录控制转移；其余保持原控制或记待确认/冲突</td><td>用车辆位置推断交接</td></tr>
+      <tr><td><code>parcel-shipment</code></td><td><code>customs-compliance</code></td><td>包裹身份、接受基线和客户原始资料版本</td><td>形成正式申报资料</td><td>覆盖客户原始资料</td></tr>
+      <tr><td><code>customs-compliance</code></td><td>NR / NO / TF</td><td>适用性、限制、协作事项、逐动作门禁和已接收外部监管结果引用</td><td>限缩候选或执行明确动作</td><td>把内部完成当监管放行</td></tr>
+      <tr><td>PS / NR / NO / TF / CC</td><td><code>visibility-exception</code></td><td>已接受事实及源上下文提供的更正/替代关系</td><td>登记/引用来源关系，形成投影、信号和案件</td><td>反向修改来源事实，或自行裁决替代关系</td></tr>
+      <tr><td><code>visibility-exception</code></td><td>业务上下文</td><td>带范围和依据的处置请求</td><td>由对象所有者决定是否接受和执行</td><td>直接改路、解除限制或执行作业</td></tr>
+      <tr><td><code>parcel-pricing</code></td><td>NR / SA</td><td>不可变评价、费用行、版本清单和解释</td><td>路由择优或财务采用</td><td>改写评价或直接当应收应付</td></tr>
+      <tr><td><code>visibility-exception</code></td><td><code>settlement-accounting</code></td><td>索赔/追偿责任与证据依据</td><td>形成赔付和追偿金额</td><td>把金额回写成异常责任</td></tr>
+      <tr><td>外部财务/资金系统</td><td><code>settlement-accounting</code></td><td>真实收付款和税务映射事实</td><td>形成运营映射与核销</td><td>冒充银行、总账或法定报表</td></tr>
+      <tr><td>各业务切片</td><td><code>pilotgovernance</code></td><td>同版本候选和证据</td><td>形成阶段与权威决定</td><td>修改业务事实或自动批准生产</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s5">
+  <h2>5. 接单主线：UC-PS-001 全流程</h2>
+  <p><code>UC-PS-001</code>「客户提交国际小包请求并取得生产归属或接单结果」是本仓默认主刀用例。它从原始提交到达接入边界开始，先保全来源、判重放/冲突，再对完整拟受理范围形成生产归属，只有本产品取得权威后才建立<b>已提交</b>委托；接受判断链由「委托已提交」信封驱动（ADR-0081），逐项取得商业解析、逐包裹可达性与财务控制结果，最终形成接受、拒绝或保持未决。</p>
+
+  <figure class="fig" id="fig5">
+    <div class="fig-head"><b>图 5 · UC-PS-001 提交与接受判断流程（含全部失败边界）</b><span class="src">来源：UC-PS-001「应用流程」「结果语义契约」「接受条件」· ADR-0081 · ADR-0132</span></div>
+    <div class="fig-body">
+<pre class="mermaid">
+flowchart TD
+  classDef ps fill:#e6f0f7,stroke:#0b3d5c,color:#1f2933
+  classDef ok fill:#e6f4ec,stroke:#2f855a,color:#1f2933
+  classDef warn fill:#fdf3e1,stroke:#b7791f,color:#1f2933
+  classDef bad fill:#fbe9ec,stroke:#b23a48,color:#1f2933
+  classDef ext fill:#f3f4f6,stroke:#6b7280,stroke-dasharray:4 3,color:#1f2933
+  classDef dec fill:#fffbea,stroke:#b7791f,color:#1f2933
+  RJ["<b>已拒绝</b><br/>结构化原因 · 规则与证据版本 · 失败范围<br/>不删除原始提交<br/>不把技术故障或试点排除写成拒绝"]:::bad
+  UN["<b>尚未决定</b>（应用结果，不是终局状态）<br/>委托保持已提交<br/>接受判断任务进入对应等待态（图 7）"]:::warn
+  A["客户经当前有效接入渠道确认提交"]:::ext --> B["步骤 1 · 接入适配器<br/>认证来源，先保全原始提交<br/>来源信封 = 租户 · 客户账户 · 来源 · 来源请求键<br/>occurredAt · receivedAt · 原始内容引用<br/>PayloadDigest 只覆盖规范化业务内容"]:::ps
+  B --> C{"步骤 2<br/>同一逻辑请求身份？"}:::dec
+  C -->|"同键同摘要"| C1["已有结果（重放）<br/>返回原接入 / 原归属 / 原委托结果<br/>只追加观察，不建第二份"]:::ok
+  C -->|"同键异摘要"| C2["接入冲突<br/>保留原内容 · 受控纠正<br/>不覆盖 · 不再建单"]:::bad
+  C -->|"首次"| D{"步骤 3A<br/>能确定客户范围 · 委托边界<br/>· 最小成员身份？"}:::dec
+  D -->|"否"| D1["输入未受理<br/>只留可追溯接入处理结果<br/>不创建占位委托"]:::bad
+  D -->|"是"| E{"步骤 3B · 试点准入控制<br/>完整拟受理范围的版本化生产归属<br/>权威身份 × 准入控制（OPEN / PAUSED）"}:::dec
+  E -->|"其他当前唯一权威"| E1["非本产品生产归属<br/>安全交接 · 渠道中立关联<br/>不建立接受/拒绝"]:::ext
+  E -->|"权威或交接无法确定 / PAUSED"| E2["生产归属未决<br/>保留已评估范围 · 缺口<br/>处理尝试与续办引用"]:::warn
+  E -->|"本产品 · OPEN · 范围/修订/有效期匹配"| F["步骤 3C · parcel-shipment 建单<br/>提交批次 · 委托 · 当前提交版本<br/>声明包裹 · 接受判断任务<br/>状态 = <b>已提交</b><br/>同一事务入队「委托已提交」信封<br/>（每份委托独立事务）"]:::ps
+  F --> F1["HTTP 答复停在「已提交 / 尚未决定」<br/>+ 稳定查询关联<br/>接受链由 parcel-dispatch 驱动（ADR-0081）"]:::ext
+  F --> G["步骤 4A · UC-PC-002 两阶段商业解析<br/>独立商业选择锚点 → 唯一解析<br/>客户 · 责任法人 · 服务产品版本 · 客户合同版本<br/>接单规则包 · 映射 · 账号授权"]:::ps
+  G --> G0{"解析结果"}:::dec
+  G0 -->|"无适用依据"| RJ
+  G0 -->|"适用冲突 / 读取失败 / 参数未登记"| UN
+  G0 -->|"已解析"| H["步骤 4B · 规则包为各下游判断<br/>逐项声明 asOf 语义与值<br/>权威提供方校验并回显<br/>不让规则包决定自身选择时间"]:::ps
+  H --> I{"步骤 5<br/>寄收件 · 货物 · 申报原始资料<br/>服务要求（含保价）· 完整成员基线"}:::dec
+  I -->|"确定性不通过<br/>（不支持成员级部分接受）"| RJ
+  I -->|"无法判断"| UN
+  I -->|"通过"| J{"步骤 6 · UC-NR-002<br/>标准网络服务逐包裹可达性"}:::dec
+  J -->|"任一包裹明确不可达<br/>（产品未允许待路由）"| RJ
+  J -->|"资料不足<br/>（不映射为不可达）"| UN
+  J -->|"全部可达 / 允许待路由<br/>/ 不适用（带商业不适用依据）"| K{"步骤 7 · 接受前财务控制<br/>策略来自 PC；SA 执行估价 · 冻结 · 信用<br/>明确无控制时保存不适用依据"}:::dec
+  K -->|"任一受限项登记 REJECT"| RJ
+  K -->|"全部受限项登记<br/>AUTHORIZED_DISPOSITION"| K1["等待授权处置（ADR-0132）<br/>授权角色只在「拒绝」与<br/>「交客户补充」中选去向；从不放行"]:::warn
+  K -->|"控制项未形成"| UN
+  K -->|"共同通过条件成立"| L{"步骤 8<br/>适用规则显式要求人工复核？"}:::dec
+  L -->|"是"| L1["等待人工复核<br/>规则授权角色按证据完成<br/>复核完成 ≠ 决定"]:::warn
+  L1 --> M
+  L -->|"否"| M["形成决定<br/>硬规则全部通过 → 自动接受<br/>授权角色可依结构化原因主动拒绝<br/>人工不得覆盖硬规则"]:::ps
+  M --> N["步骤 9A · <b>已接受</b><br/>接受基线（成员 · 客户 · 法人 · 合同 · 产品<br/>· 资料 · 服务要求 · 商业依据快照）<br/>+ 预计承诺 + 事件发布意图<br/>= 同一个最小业务提交结果"]:::ok
+  M -->|"主动拒绝"| RJ
+  N --> O["后续用例<br/>UC-NR-001 初始路由 · UC-CC-001 建案<br/>VE 投影 · 客户回执<br/>投递失败只重试同一发布意图，不回退决定"]:::ext
+  W["UC-PS-005<br/>客户在决定提交前撤回整份委托"]:::ext -. "接受 / 拒绝 / 撤回<br/>竞争同一不可覆盖决定边界" .-> M
+  X["提交前关键依据失效（新版本 / 限制）<br/>→ 重判；暂时无法重判 → 保持未决"]:::warn -.-> J
+  X -.-> K
+</pre>
+    </div>
+    <figcaption>十种结果语义各有禁止行为：重放不得要求都有委托标识；未决不得写成拒绝或伪造可达/商业依据；归属未决不得默认归入任一系统。接受基线覆盖当前提交版本的<b>完整</b>声明成员——任一成员确定性不满足则整份版本不能接受；普通资料问题形成同一委托的新提交版本，成员重组建立关联新委托。</figcaption>
+  </figure>
+
+  <div class="two">
+    <figure class="fig" id="fig6">
+      <div class="fig-head"><b>图 6 · 委托生命周期状态机</b><span class="src">来源：parcel-shipment/CONTEXT.md Lifecycles「委托」</span></div>
+      <div class="fig-body">
+<pre class="mermaid">
+stateDiagram-v2
+  state "草稿" as draft
+  state "已提交" as submitted
+  state "已接受" as accepted
+  state "已拒绝" as rejected
+  state "已撤回" as withdrawn
+  state "已取消" as cancelled
+  state "已完成" as completed
+  [*] --> draft
+  draft --> submitted : 客户确认提交（不代表接受）
+  submitted --> submitted : 新提交版本（同一委托边界内纠错/补充）
+  submitted --> accepted : 全部适用规则通过 + 所需人工复核完成<br/>固定接受基线 · 形成预计承诺
+  submitted --> rejected : 规则确定不成立 / 授权角色结构化拒绝
+  submitted --> withdrawn : 客户在决定提交前撤回整份
+  accepted --> cancelled : 全部当前有效包裹在取消边界前形成终局取消
+  accepted --> completed : 全部当前有效包裹形成终局服务结果
+  rejected --> [*]
+  withdrawn --> [*]
+  cancelled --> [*]
+  completed --> [*]
+  note right of rejected : 不得原地重开；修正建立关联新委托
+  note right of withdrawn : 不得原地恢复；后续需求形成关联新委托
+  note right of accepted : 资料更正走 UC-PS-002（新资料版本）<br/>包裹取消/处置走 UC-PS-006<br/>部分收寄/取消/完成是包裹结果的汇总，不是独立状态
+</pre>
+      </div>
+      <figcaption>已接受后的资料更正、服务变更、成员取消或新增服务件分别进入受控更正、取消或关联新委托路径，不覆盖原决定或接受基线。</figcaption>
+    </figure>
+    <figure class="fig" id="fig7">
+      <div class="fig-head"><b>图 7 · 接受判断任务的五个等待态</b><span class="src">来源：parcel-shipment/CONTEXT.md「接受判断任务」· ADR-0132</span></div>
+      <div class="fig-body">
+<pre class="mermaid">
+stateDiagram-v2
+  state "判断中" as judging
+  state "等待受控补充<br/>（客户补资料 → 新提交版本 / 关联新委托）" as waitCustomer
+  state "等待内部续办<br/>（依赖失败·并发冲突·权威一时答不出 → 重试）" as waitInternal
+  state "等待人工复核<br/>（权威结果齐 · 规则要求人工）" as waitReview
+  state "等待运营登记<br/>（该范围一条参数都没登记 → 运营企业补登）" as waitRegistration
+  state "等待授权处置<br/>（财务控制不成立 → 拒绝 或 交客户补充；从不放行）" as waitDisposition
+  state "已完成（接受或拒绝已越过提交边界）" as done
+  state "已停止（撤回成立）" as stopped
+  [*] --> judging : 委托进入已提交，建立当前提交版本的任务
+  judging --> waitCustomer : 客户可补充缺口
+  judging --> waitInternal : 会自行恢复的一类故障
+  judging --> waitReview : 全部权威结果通过但规则要求复核
+  judging --> waitRegistration : 查询与重试永远产不出一次登记
+  judging --> waitDisposition : 全部受限项登记 AUTHORIZED_DISPOSITION
+  waitCustomer --> judging : 新提交版本形成（SubmissionVersionFormed）
+  waitInternal --> judging : 续办 / 重投
+  waitReview --> judging : 复核完成（ManualReviewCompleted）
+  waitRegistration --> judging : 登记完成（OperatorRegistrationCompleted）
+  waitDisposition --> done : 选「拒绝」→ 授权角色拒绝决定
+  waitDisposition --> waitCustomer : 选「交客户补充」
+  judging --> done : 接受 / 拒绝决定成立
+  judging --> stopped : 撤回决定成立
+  waitCustomer --> stopped
+  waitInternal --> stopped
+  waitReview --> stopped
+  waitRegistration --> stopped
+  done --> [*]
+  stopped --> [*]
+</pre>
+      </div>
+      <figcaption>五个等待态分开的理由是续办方不同：客户、系统自身、第三方角色、运营企业配置、处置授权角色。任务超时、通知或升级本身不形成业务决定。四类恢复信封（提交版本形成 / 复核完成 / 运营登记完成 / 委托已提交）在派发路由表里各占一条（图 20）。</figcaption>
+    </figure>
+  </div>
+
+  <figure class="fig" id="fig8">
+    <div class="fig-head"><b>图 8 · 从 HTTP 提交到接受链的时序（生产装配形态）</b><span class="src">来源：ADR-0081 决定二/三/四 · 首个消费者切片简报「事务边界」· cmd/parcel-dispatch/assemble.go</span></div>
+    <div class="fig-body">
+<pre class="mermaid">
+sequenceDiagram
+  autonumber
+  participant CU as 客户渠道
+  participant API as parcel-api<br/>接入适配器 / Intake
+  participant PS as PS 提交编排<br/>SubmitShipmentRequestHandler
+  participant GOV as 试点准入<br/>pilotgovernance
+  participant DB as PostgreSQL<br/>parcel_shipment + bento.outbox
+  participant DSP as parcel-dispatch
+  participant CH as PS 接受链消费者<br/>(Inbox)
+  participant PC as party-commercial
+  participant NR as network-routing
+  participant SA as settlement-accounting
+  participant VE as visibility-exception
+  CU->>API: POST /shipment-requests
+  alt 渠道 Intake 未配置（生产默认）
+    API-->>CU: 403 ACCESS_CHANNEL_NOT_CONFIGURED（不读载荷、不采信自报租户）
+  else Intake 已配置 / 隔离写开关（ADR-0091）
+    API->>API: 铸造来源信封（租户·客户账户·来源·来源请求键·PayloadDigest）
+    API->>PS: SubmitShipmentRequest 命令
+    PS->>DB: 事务 A · 来源保全（逐笔独立提交，不随后续回滚）
+    DB-->>PS: 首次 / 重放 / 冲突
+    alt 重放 或 冲突 或 输入未受理
+      PS-->>API: 已有结果 / 接入冲突 / 输入未受理
+    else 首次且最小身份成立
+      PS->>GOV: 完整拟受理范围的生产归属？
+      GOV-->>PS: 本产品·OPEN / 其他权威 / 未决（OWNERSHIP_UNRESOLVED）
+      alt 本产品取得权威
+        PS->>DB: 事务 B · 建单（批次·委托·提交版本·声明包裹·接受判断任务）+ Enqueue「委托已提交」信封（原子）
+        PS-->>API: 已提交 / 尚未决定 + 稳定关联
+      else 其他权威 / 未决
+        PS-->>API: 非本产品归属（安全交接） / 归属未决
+      end
+    end
+    API-->>CU: 业务回答（状态码只表达「答案已形成」，ADR-0022）
+  end
+  loop 每 DISPATCH_INTERVAL
+    DSP->>DB: 认领待投信封（租约 LEASE · 上限 LIMIT）
+    DSP->>CH: 进程内直投 shipment-request.submitted
+    CH->>PC: UC-PC-002 两阶段解析 + 逐项 asOf
+    PC-->>CH: 已解析 / 无依据 / 冲突 / 未决
+    CH->>NR: UC-NR-002 逐包裹可达性（携地理投影）
+    NR-->>CH: 可达 / 不可达 / 资料不足 / 不适用
+    CH->>SA: 接受前财务控制（按 PC 策略）
+    SA-->>CH: 估价·冻结·信用暴露 / 不适用依据 / 未配置
+    alt 全部通过
+      CH->>DB: 接受决定 + 接受基线 + 预计承诺 + 「已接受」意图（同一提交边界）
+      CH-->>DSP: 消费者事务已提交 = 投递成功
+      DSP->>NR: FanOut · 已接受 → UC-NR-001 初始路由
+      DSP->>VE: FanOut · 已接受 → 投影
+    else 任一步未决
+      CH-->>DSP: ErrAcceptanceChainUndecided → consumer_undecided（整笔回滚）
+      DSP->>DB: RETRY_AFTER 后重投；attempts ≥ MAX_ATTEMPTS → ABANDONED（委托仍是已提交）
+    else 确定性拒绝
+      CH->>DB: 拒绝决定 + 原因 + 证据版本
+    end
+  end
+</pre>
+    </div>
+    <figcaption>两段事务是 ADR-0081 决定四钉死的形状：来源保全一经提交就不随后续步骤回滚（UC-PS-001 步骤 2 明写「后续解析或依赖失败不能删除该记录」）；建单与信封同事务成立或一起消失。接受链<b>只有一处驱动</b>——不为中间结果另立第二条推进路径。生产形态下时点取值源、可达性闭包、结算账户目录、控制金额源均留 nil，链在相应格如实停「未配置」。</figcaption>
+  </figure>
+</section>
+
+<section id="s6">
+  <h2>6. 履约主线：收寄 → 节点 → 运输 → 交付 → 终局</h2>
+  <p>接受后，路由表达<b>未来意图</b>，节点与运输分别记录<b>实际执行</b>；三层不得互相覆盖。网络服务责任起点是<b>有效网络收寄</b>——由客户送站（节点收寄）或场外揽收两类来源统一解释；运输控制的转移只来自逐对象成立的<b>权威运输交接</b>「已交接」结果，扫描、位置、签字或装卸都不足以转移控制。</p>
+
+  <figure class="fig" id="fig9">
+    <div class="fig-head"><b>图 9 · 履约主线跨上下文流程（NR · PS · NO · TF 泳道）</b><span class="src">来源：UC-PS-003/004/006 · UC-NR-001/003 · UC-NO-002/003 · UC-TF-002~007 · 业务全景说明书 §5.7~5.12</span></div>
+    <div class="fig-body">
+<pre class="mermaid">
+flowchart TB
+  classDef ps fill:#e6f0f7,stroke:#0b3d5c,color:#1f2933
+  classDef nr fill:#eaf4ee,stroke:#2f855a,color:#1f2933
+  classDef no fill:#f2f7e8,stroke:#5a7d1e,color:#1f2933
+  classDef tf fill:#fff4e5,stroke:#b7791f,color:#1f2933
+  classDef dec fill:#fffbea,stroke:#b7791f,color:#1f2933
+  classDef ok fill:#e6f4ec,stroke:#2f855a,color:#1f2933
+  classDef bad fill:#fbe9ec,stroke:#b23a48,color:#1f2933
+  subgraph NR["network-routing · 计划意图"]
+    direction LR
+    R1["UC-NR-001 初始路由计划<br/>或 无当前有效路由"]:::nr --> R2["UC-NR-003<br/>按实际接货位置复核"]:::nr --> R3["按实际节点 · 实测 · 截单 · 限制复核<br/>→ 继续 / 替代 / 待决 / 无路由"]:::nr --> R4["受控改路<br/>保留原计划 · 已执行前缀 · 触发依据<br/>改口岸须重取关务判断"]:::nr
+  end
+  subgraph PS["parcel-shipment · 客户责任线"]
+    direction LR
+    P1["已接受包裹<br/>接受基线 · 预计承诺"]:::ps
+    P2["UC-PS-003 有效网络收寄<br/>统一解释两类来源"]:::ps --> P3["正式承诺（逐包裹）"]:::ps
+    P5["UC-PS-006<br/>取消边界前：包裹取消<br/>边界后：继续/拦截/改送/退运/终止"]:::ps
+    P6["UC-PS-004<br/>逐包裹终局服务结果"]:::ps --> P7["委托完成<br/>（由包裹结果派生）"]:::ps
+  end
+  subgraph NO["node-operations · 节点事实"]
+    direction LR
+    N1["UC-NO-002 客户送站<br/>待识别实物永久建档<br/>识别 · 点验 · 测量"]:::no --> N2["节点收寄<br/>节点控制成立"]:::no
+    N2 --> N3{"当前有效路由 + 方向性指令<br/>+ 成员级集运兼容成立？"}:::dec
+    N3 -->|"是"| N4["UC-NO-003 方向性分拣<br/>集运单元装入 · 封装封签<br/>装卸 · 在场核对"]:::no
+    N3 -->|"否"| N5["只做安全作业<br/>接收 · 隔离 · 测量 · 核对<br/>不面向下一跳分拣/集包/装载/交出"]:::no
+    N4 --> N6["备货 · 点验<br/>节点侧交出证据"]:::no
+  end
+  subgraph TF["transport-fulfillment · 实际执行"]
+    direction LR
+    T0["UC-TF-002 场外揽收<br/>任务 → 每次到场一个尝试<br/>→ 逐对象结果"]:::tf
+    T1["UC-TF-003 运输机会<br/>具体班次 · 资源 · 多维容量池<br/>申请/接受/预占/分配/实用分开"]:::tf --> T2["UC-TF-004 运输委托 · 订舱<br/>承运接受 · 装载分配<br/>总单/舱单版本"]:::tf
+    T3{"UC-TF-005 权威交接裁决<br/>（逐载运对象）"}:::dec
+    T3 -->|"已交接"| T4["控制转移 → 实际履约段成立<br/>履约参与 · 实际承运商判断"]:::ok
+    T3 -->|"已拒收 / 待确认"| T5["控制不转移<br/>占有已变但来源不明<br/>→ 控制待确认/冲突"]:::bad
+    T4 --> T6["出发 · 移动 · 中断 · 到达<br/>下一次交接<br/>（班次开始后不可取消）"]:::tf
+    T6 --> T7["UC-TF-006 派送任务<br/>每次到场一个独立尝试"]:::tf --> T8{"POD 符合产品/合同<br/>交付方式/证据规则？"}:::dec
+    T8 -->|"是"| T9["有效交付（逐包裹）"]:::ok
+    T8 -->|"否"| T10["失败 / 拒收<br/>新尝试或转处置<br/>不自动结束任务或创建退运"]:::bad
+    T10 -.-> T11["UC-TF-007 替代伙伴 / 退运<br/>关联但独立的新计划与实际旅程<br/>原旅程事实与收费来源保留"]:::tf
+  end
+  P1 --> R1
+  R1 -.->|"路由指令 · 计划段"| N3
+  R1 -.->|"计划履约段 · 时间窗口"| T1
+  N2 -->|"节点收寄事实"| P2
+  T0 -->|"场外揽收事实"| P2
+  T0 --> T4
+  N6 --> T3
+  T2 --> T3
+  T6 -->|"到达 · 权威交接结果"| N2
+  N2 -->|"实际接货位置 · 实测"| R2
+  T6 -->|"容量信号 · 实际移动"| R3
+  T9 --> P6
+  T11 -.-> P6
+  P5 -.->|"处置请求 → 各对象所有者承接"| T6
+</pre>
+    </div>
+    <figcaption>接单接受 ≠ 收寄，扫描或预约 ≠ 收寄；订舱、承运接受、装载分配、物理装载均 ≠ 实际运输；POD 是证据集合而非可编辑的「已签收」。已开始的实际履约不能取消回「未开始」，故障、折返或替代如实追加；POD 后来被证明无效时，原证据与原判断保留，下游按当前有效事实<b>重派生</b>。</figcaption>
+  </figure>
+
+  <div class="three">
+    <figure class="fig" id="fig10">
+      <div class="fig-head"><b>图 10 · 权威运输交接与节点控制</b><span class="src">TF/NO CONTEXT Lifecycles</span></div>
+      <div class="fig-body">
+<pre class="mermaid">
+stateDiagram-v2
+  state "节点控制（节点收寄 或 已交接转入）" as nodeCtl
+  state "交接判断：待确认" as pending
+  state "已拒收" as refused
+  state "已交接" as handed
+  state "运输控制 · 实际履约段" as tfCtl
+  state "控制待确认 / 冲突" as conflict
+  [*] --> nodeCtl : 客户送站有效节点收寄
+  nodeCtl --> pending : 收集节点·运输方·收件方证据
+  pending --> handed : 新证据满足当时有效规则
+  pending --> refused : 明确拒收
+  refused --> nodeCtl : 只结束本次尝试；控制不转移
+  pending --> conflict : 占有已变但身份/合法来源不明
+  handed --> tfCtl : 控制转移；实际承运商判断首版（已识别 / 待确认）
+  tfCtl --> pending : 到达下一节点 → 新一轮逐对象交接
+  handed --> handed : 后续更正以新判断版本使原结果失效/替代（不删除）
+  note right of pending : 此前控制方在结果成立前继续保持控制<br/>扫描 · 车辆离场 · 签名 · 物理装卸均不足以形成交接
+</pre>
+      </div>
+    </figure>
+    <figure class="fig" id="fig11">
+      <div class="fig-head"><b>图 11 · 集运单元实例生命周期</b><span class="src">node-operations/CONTEXT.md</span></div>
+      <div class="fig-body">
+<pre class="mermaid">
+stateDiagram-v2
+  state "开放装入" as open
+  state "已封装（成员快照 + 封签记录）" as sealed
+  state "授权开封（原封签状态保留）" as unsealed
+  state "重新封装（新快照 + 新封签）" as resealed
+  state "终局关闭" as closed
+  [*] --> open : 创建实例（可关联可复用载具）
+  open --> sealed : 冻结成员快照 · 形成封签
+  sealed --> unsealed : 当前有效且范围明确的授权（逐次引用）
+  unsealed --> resealed : 逐件核对 / 成员变化后
+  resealed --> unsealed : 再次授权开封
+  sealed --> closed : 成员全部移出或剩余成员已有明确处置
+  resealed --> closed
+  closed --> [*]
+  note right of closed : 关闭后不得恢复开放或接受新成员<br/>载具再次使用需新建实例
+  note right of sealed : 封签异常只改变证明力并触发隔离/开封/核对<br/>不自动关闭实例，也不把原快照当到站清单
+</pre>
+      </div>
+    </figure>
+    <figure class="fig" id="fig12">
+      <div class="fig-head"><b>图 12 · 路由计划适用性</b><span class="src">network-routing/CONTEXT.md</span></div>
+      <div class="fig-body">
+<pre class="mermaid">
+stateDiagram-v2
+  state "候选评估" as cand
+  state "当前有效路由计划" as active
+  state "无当前有效路由" as none
+  state "已被替代" as superseded
+  state "已失效" as invalid
+  state "已结束" as ended
+  [*] --> cand : 委托已接受（接受基线）
+  cand --> active : 候选被策略选中并达生效边界
+  cand --> none : 产品允许待路由且无可行候选（不建占位）
+  none --> active : 复核后出现候选 → 首个当前有效版本
+  active --> superseded : 新路由版本生效（改路决定）
+  active --> invalid : 原计划不可执行
+  invalid --> none : 尚无新计划
+  invalid --> active : 重评形成新版本
+  superseded --> ended
+  active --> ended : 计划责任结束 / 包裹被拆分合并替代
+  ended --> [*]
+  note right of superseded : 旧计划 · 已执行前缀 · 选择依据保留<br/>不得原地恢复为当前有效
+  note right of none : 不自动取消委托或宣告服务失败<br/>节点只能继续安全作业
+</pre>
+      </div>
+    </figure>
+  </div>
+</section>
+
+<section id="s7">
+  <h2>7. 关务合规控制域</h2>
+  <p><code>customs-compliance</code> 按监管辖区、方向、程序与法定义务范围建立<b>稳定关务案件</b>；申报单元是案件内独立监管对象，不能用包裹、集运单元、总单或舱单替代。首发出口/进口监管舱单由责任承运商在外部形成并提交，本产品只接收引用（UC-CC-012）；每次提交由授权业务角色<b>逐次确认</b>，不启用生产自动申报。技术成功、付款成功、内部限制解除都不等于监管放行。</p>
+
+  <figure class="fig" id="fig13">
+    <div class="fig-head"><b>图 13 · 关务案件全流程（UC-CC-001 ~ 012）</b><span class="src">来源：customs-compliance/CONTEXT.md Lifecycles · UC-CC-* · ADR-0137</span></div>
+    <div class="fig-body">
+<pre class="mermaid">
+flowchart TD
+  classDef cc fill:#fbe9ec,stroke:#b23a48,color:#1f2933
+  classDef dec fill:#fffbea,stroke:#b7791f,color:#1f2933
+  classDef warn fill:#fdf3e1,stroke:#b7791f,color:#1f2933
+  classDef ok fill:#e6f4ec,stroke:#2f855a,color:#1f2933
+  classDef ext fill:#f3f4f6,stroke:#6b7280,stroke-dasharray:4 3,color:#1f2933
+  A["UC-CC-001 建立关务案件<br/>固定：监管辖区 · 进出口方向 · 程序 · 法定义务范围；角色与资格快照（来自 PC）"]:::cc
+  B["UC-CC-002 申报单元 + 正式申报资料<br/>字段级溯源：PS 客户原始资料版本 · NO 当前有效实测 · 合规判断 · 商业角色依据"]:::cc
+  C{"UC-CC-003 申报就绪？<br/>资料 · 角色资格 · 合报资格 · 凭证 · 口岸/渠道 · 限制"}:::dec
+  C1["待决 / 人工复核<br/>缺失与冲突不进入提交"]:::warn
+  D{"UC-CC-004 提交授权<br/>授权角色逐次确认此次具体提交"}:::dec
+  D1["不提交<br/>就绪 ≠ 授权；授权不由登录身份推导"]:::warn
+  E["UC-CC-005 冻结不可覆盖提交版本 → 发起提交尝试<br/>只有就绪与授权在首次实际发送时均有效才形成"]:::cc
+  F{"技术结果"}:::dec
+  F1["原提交结果仍待确认 → 查询原提交<br/>安全再次发送判断成立后才可对同版本新尝试"]:::warn
+  G["UC-CC-006 分层接收外部监管结果（各自成立，不虚构缺失层）<br/>技术回执 → 监管接收 → 业务受理 → 查验/扣留 → 监管核定税费 → 放行（全部/部分/附条件）/ 监管处置"]:::cc
+  H{"UC-CC-007 后续要求？"}:::dec
+  H1["原案内补充 / 更正<br/>新资料快照与提交版本 → 重新就绪 · 授权 · 提交"]:::cc
+  H2["撤销<br/>独立监管动作，走新的就绪/授权/提交/结果"]:::cc
+  H3["重报替代<br/>拟替代关系 → 外部权威结果成立后记为有效替代；原对象不回退"]:::cc
+  I["UC-CC-008 查验 / 扣留 / 监管处置协作事项（范围化）<br/>NO 经 UC-NO-001 承接执行 · TF 经 UC-TF-001 承接移动 → 关务执行核对"]:::cc
+  J["UC-CC-009 税费付款协作 → 付款核对（覆盖 / 差额 / 有效性三态）<br/>放行门禁 = 绑定拟执行动作与监管边界的范围化核对"]:::cc
+  K["UC-CC-011 内部合规限制<br/>形成覆盖 → 有效阻断 → 仅原来源方解除 → 重新派生适用性"]:::cc
+  L["UC-CC-012 承运商外部监管舱单引用<br/>接受引用 → 逐范围唯一匹配 → 关联 / 待关联 / 冲突；不形成或提交舱单"]:::cc
+  GATE["NO / TF 受门禁约束的方向性动作<br/>出库 · 装载出发 · 跨关务区域移动 · 交付"]:::ext
+  SAX["settlement-accounting<br/>外部资金事实唯一采用口（ADR-0137）→ Outbox 采用信封 → CC 登为入向资金事实引用<br/>实际代垫成立判断在 SA（UC-SA-001）"]:::ext
+  M["UC-CC-010 关闭案件<br/>全部适用义务已终结 或 已被有权接收方有效承接并形成续办引用"]:::ok
+  M1["受控重开（同案件身份 · 同程序的迟到事实）"]:::cc
+  M2["关联后续案件（补税 · 稽核 · 申诉等独立义务）"]:::cc
+  A --> B --> C
+  C -->|"缺失 / 冲突 / 高风险"| C1 --> B
+  C -->|"已就绪（绑定依据与适用时间）"| D
+  D -->|"未授权"| D1
+  D -->|"已授权 且 就绪仍有效"| E --> F
+  F -->|"超时 / 结果缺失"| F1 -.-> E
+  F -->|"成功 / 失败（只表达技术层）"| G
+  G --> H
+  H -->|"补充 / 更正"| H1 --> C
+  H -->|"撤销"| H2 --> C
+  H -->|"重报"| H3 --> B
+  G --> I
+  G --> J
+  L --> G
+  SAX --> J
+  J -. "门禁满足只允许进入监管结果等待或放行复核，不形成放行" .-> GATE
+  K -. "有效阻断" .-> GATE
+  I -. "处置执行核对" .-> GATE
+  H -->|"全部义务终结 / 有效承接"| M
+  M -->|"迟到监管事实"| M1 --> M
+  M -->|"独立新义务"| M2
+</pre>
+    </div>
+    <figcaption>关务只阻断明确受门禁约束的动作：未放行<b>不阻止</b>接收、隔离、测量、查验协作与有依据的处置执行；外部监管放行也不自动解除仍有效的内部限制——各限制来源分别解除后，相应动作才可继续。案件身份要素（辖区/方向/程序/义务范围）变化必须建新案件，不得通过重开吸收。</figcaption>
+  </figure>
+
+  <figure class="fig" id="fig14">
+    <div class="fig-head"><b>图 14 · 关务案件与提交版本状态</b><span class="src">customs-compliance/CONTEXT.md「关务案件」「申报单元、就绪与提交」</span></div>
+    <div class="fig-body">
+<pre class="mermaid">
+stateDiagram-v2
+  state "案件 · 进行中" as open {
+    state "资料准备中" as preparing
+    state "已就绪" as ready
+    state "不再就绪" as notReady
+    state "提交版本 v_n 已冻结 · 尝试中" as submitted
+    state "外部结果分层接收" as results
+    [*] --> preparing
+    preparing --> ready : 必要资料·资格·凭证·口岸/渠道·限制全部满足
+    ready --> notReady : 提交前适用变化（原判断保留）
+    notReady --> preparing
+    ready --> submitted : 授权有效 + 就绪有效 → 首次实际发送
+    submitted --> results : 技术成功/失败/待确认 → 分层外部事实
+    results --> preparing : 补充 / 更正 / 撤销 / 重报 → 新版本（v_n 不变）
+  }
+  state "已关闭" as closed
+  state "重新打开" as reopened
+  state "关联后续案件" as followUp
+  [*] --> open : 建立案件（身份要素固定）
+  open --> closed : 关闭核对覆盖全部适用义务，由有权责任角色决定
+  closed --> reopened : 迟到事实属原案件身份与同一程序 → 受控重开决定
+  reopened --> closed : 重新盘点全部义务 → 新的关闭决定
+  closed --> followUp : 迟到事实形成独立义务（原案保持关闭）
+  followUp --> [*]
+  closed --> [*]
+</pre>
+    </div>
+    <figcaption>已提交版本不可修改：补充/更正形成新的资料快照与提交版本；撤销是独立动作；重报仅在真实程序要求时形成拟替代关系。关闭期间事实与原关闭记录在重开后继续保留。</figcaption>
+  </figure>
+</section>
+
+<section id="s8">
+  <h2>8. 追踪、异常与客户披露</h2>
+  <p><code>visibility-exception</code> 只消费各源上下文<b>已接受</b>的事实，按版本化映射形成标准里程碑、内部投影、ETA 与按货主客户账户隔离的客户视图；异常按「信号 → 发作期 → 分诊 → 案件 → 处置请求 → 来源决定/执行 → 披露与通知」推进，异常模块只能<b>提出请求</b>，不改写任何源对象。</p>
+
+  <figure class="fig" id="fig15">
+    <div class="fig-head"><b>图 15 · 追踪投影与异常闭环（UC-VE-001 ~ 008）</b><span class="src">来源：visibility-exception/CONTEXT.md Lifecycles · 业务全景说明书 §5.13</span></div>
+    <div class="fig-body">
+<pre class="mermaid">
+flowchart LR
+  classDef ve fill:#f1ecfa,stroke:#6b46c1,color:#1f2933
+  classDef dec fill:#fffbea,stroke:#b7791f,color:#1f2933
+  classDef ok fill:#e6f4ec,stroke:#2f855a,color:#1f2933
+  classDef warn fill:#fdf3e1,stroke:#b7791f,color:#1f2933
+  classDef ext fill:#f3f4f6,stroke:#6b7280,stroke-dasharray:4 3,color:#1f2933
+  subgraph SRC["源上下文 · 已接受事实（含源方给出的更正/替代关系）"]
+    direction TB
+    S1["PS：包裹身份谱系 · 客户承诺 · 终局 · 客户归属"]:::ext
+    S2["NR：路由版本 · 无当前有效路由 · 偏离"]:::ext
+    S3["NO：节点收寄 · 扫描 · 实测"]:::ext
+    S4["TF：揽收 · 权威交接 · 移动 · 交付 · 认领的外部承运轨迹"]:::ext
+    S5["CC：案件 · 提交 · 监管结果 · 限制"]:::ext
+  end
+  M["UC-VE-002 版本化来源映射 → 标准追踪里程碑<br/>保留原文 · 来源代码 · 业务时间 · 接收时间 · 映射版本<br/>映射不到 → 未归类；冲突无法裁决 → 信息待确认 + 信号（不择一）"]:::ve
+  P["追踪投影版本（只增；按版本可读回）"]:::ve
+  E["UC-VE-003 ETA（输入 · 规则/模型版本 · 范围 · 可信度）<br/>可见性缺口：预期观察超窗口才形成；≠ 延误 ≠ 遗失"]:::ve
+  V["UC-VE-008 客户全程追踪视图<br/>按货主客户账户隔离；客户归属确立后才成视图；外部单号只定位不授权"]:::ok
+  G["UC-VE-004 异常信号 → 发作期 → 分诊<br/>可信度 · 影响 · 严重度 · 优先级；同一发作期不重复建"]:::ve
+  Gd{"分诊规则命中？"}:::dec
+  G1["只记信号与发作期，不建案"]:::warn
+  C["异常案件<br/>待响应 → 处理中 → 已关闭；受控归并 / 重开"]:::ve
+  R["UC-VE-005 处置请求<br/>改路 · 拦截 · 重作业 · 重新履约 · 重新申报<br/>待处理 → 接受/部分/拒绝/要求补充 → 等待实际结果 → 关闭 / 到期 / 取消"]:::ve
+  D["UC-VE-006 披露决定 → 通知决定与内容快照 → 渠道提交 → 接受 → 送达 → 客户确认<br/>每一步各自成立，前一步不推导后一步"]:::ve
+  CL["UC-VE-007 证据 · 客户索赔项（收到 → 资格 → 责任 → 复核）· 追偿事项（供应商 / 承运商 / 保险，独立期限）"]:::ve
+  CUX["UC-VE-001 关务异常协调<br/>只消费 CC 已接受事实；不把监管消息/客户意见反写为关务事实"]:::ve
+  SA["→ UC-SA-007 客户赔付 · 应追偿 · 追偿认可金额<br/>→ UC-SA-005 真实到账映射与核销（VE 不算金额、不记到账）"]:::ext
+  SRC --> M --> P --> V
+  P --> E --> V
+  M --> G --> Gd
+  Gd -->|"是"| C
+  Gd -->|"否"| G1
+  S5 --> CUX --> C
+  C --> R
+  R -. "请求；是否生效与执行事实由对象所有者决定" .-> SRC
+  C --> D
+  C --> CL --> SA
+  D -.->|"客户可见异常按账户与法人隔离"| V
+</pre>
+    </div>
+    <figcaption>跨客户共同事故可以建一个内部案件，但披露、通知、索赔与责任必须按客户账户与法人隔离；案件关闭不取消仍在执行的处置请求；无响应不自动等于拒绝或接受。</figcaption>
+  </figure>
+
+  <figure class="fig" id="fig16">
+    <div class="fig-head"><b>图 16 · 异常案件与处置请求状态</b><span class="src">visibility-exception/CONTEXT.md「异常案件」「处置请求」</span></div>
+    <div class="fig-body">
+<pre class="mermaid">
+stateDiagram-v2
+  state "异常案件" as caseBox {
+    state "待响应" as toRespond
+    state "处理中" as inProgress
+    state "已关闭" as closed
+    state "已关闭（已归并到主案件）" as merged
+    [*] --> toRespond : 建案：根对象 · 影响范围 · 责任团队 · 优先级 · 响应策略
+    toRespond --> inProgress : 责任团队/处理人明确接单（首次响应时间形成）
+    inProgress --> closed : 必需动作完成 · 恢复 / 确认无法恢复 / 不成立 / 明确移交
+    closed --> inProgress : 同一因果链新事实 → 受控重开 · 新响应周期
+    closed --> toRespond : 受控重开
+    toRespond --> merged : 发现重复案件 → 指定主案件并核对范围/证据/通知/请求
+    inProgress --> merged
+    closed --> [*]
+    merged --> [*]
+  }
+  state "处置请求" as reqBox {
+    state "待源上下文处理" as pending
+    state "已接受 / 部分接受 · 等待实际结果" as accepted
+    state "拒绝 / 要求补充" as rejected
+    state "已到期" as expired
+    state "已关闭（已完成范围）" as done
+    state "取消已接受 / 部分取消 / 无法取消" as cancelled
+    [*] --> pending : 案件形成请求：目标 · 动作 · 范围 · 原因 · 证据 · 时限
+    pending --> accepted
+    pending --> rejected
+    pending --> expired : 到达受理有效期
+    accepted --> done : 实际结果返回
+    accepted --> cancelled : 提出取消/替代意图 → 目标上下文处理
+    pending --> cancelled
+    rejected --> [*]
+    expired --> [*]
+    done --> [*]
+    cancelled --> [*]
+  }
+</pre>
+    </div>
+    <figcaption>原因、责任或处置范围分离时建立关联新案件，不得通过修改原案件历史制造从未共同处置的假象；已到期请求不得再被新接受，继续需要该动作时形成关联新请求。</figcaption>
+  </figure>
+</section>
+
+<section id="s9">
+  <h2>9. 计价与运营结算</h2>
+  <p><code>parcel-pricing</code> 在固定输入与版本清单上形成<b>纯</b> <code>PricingEvaluation</code>，<code>SELL</code>/<code>BUY</code>/<code>INTERNAL</code> 方向隔离，同输入同版本清单必须复算出同结果；<code>settlement-accounting</code> 消费评价，但评价金额<b>不自动成为金额责任</b>——结算按合同责任、发生项、确认条件与主要计费范围分别形成费用、应收、预期成本、账单、核销与经营结果。真实收付款由外部财务系统拥有，本产品只做可追溯映射。</p>
+
+  <figure class="fig" id="fig17">
+    <div class="fig-head"><b>图 17 · 计价与结算链（PP · SA · NR 择优 · 外部资金）</b><span class="src">来源：parcel-pricing / settlement-accounting CONTEXT.md · UC-SA-001~007 · CONTEXT-MAP「settlement-accounting → parcel-pricing」</span></div>
+    <div class="fig-body">
+<pre class="mermaid">
+flowchart TB
+  classDef pc fill:#eef6fb,stroke:#0b6e99,color:#1f2933
+  classDef pp fill:#eef6fb,stroke:#0b6e99,color:#1f2933
+  classDef sa fill:#e8f4f3,stroke:#0f7b6c,color:#1f2933
+  classDef nr fill:#eaf4ee,stroke:#2f855a,color:#1f2933
+  classDef dec fill:#fffbea,stroke:#b7791f,color:#1f2933
+  classDef ok fill:#e6f4ec,stroke:#2f855a,color:#1f2933
+  classDef warn fill:#fdf3e1,stroke:#b7791f,color:#1f2933
+  classDef ext fill:#f3f4f6,stroke:#6b7280,stroke-dasharray:4 3,color:#1f2933
+  subgraph IN["来源事实（只读引用，不得回写）"]
+    direction TB
+    I1["NO 当前有效实测"]:::ext
+    I2["TF 运输收费发生项<br/>原因 · 范围 · 数量 · 时点；无金额"]:::ext
+    I3["PS 包裹 · 服务要求<br/>客户声明快照"]:::ext
+    I4["CC 监管核定税费<br/>税费付款核对"]:::ext
+    I5["VE 责任结论<br/>索赔 / 追偿证据"]:::ext
+  end
+  C1["<b>party-commercial</b><br/>价格政策 · 方向授权 · 方案绑定<br/>结算政策 · 信用政策 · 调整授权"]:::pc
+  subgraph PP["parcel-pricing · 纯评价"]
+    direction TB
+    P0["评价请求<br/>SA 登记范围 · 目的 · 来源引用<br/>→ Outbox 信封"]:::pp
+    P1{"按租户 · 范围 · 方向<br/>· 目的 · 时点解析在用价卡"}:::dec
+    P3["未配置（零命中）"]:::warn
+    P4["适用冲突（多版）"]:::warn
+    P2["纯 PricingEvaluation<br/>输入快照 · 价卡与规则版本<br/>参考序列解析 · 命中原因<br/>换算 · 取整 · 费用行 · 解释"]:::pp
+    S1["计价参考序列<br/>燃油费率 · 汇率<br/>按计价基准时点解析"]:::pp
+    P5{"评价结果"}:::dec
+    P6["已完成<br/>不可变；回放用原版本清单"]:::ok
+    P7["待判断 / 冲突<br/>不可计价（无金额、不重试）<br/>未形成（技术）"]:::warn
+  end
+  R1["<b>network-routing</b><br/>逐候选 BUY 评价<br/>→ 按成本单维择优<br/>不改写评价；未选中留痕"]:::nr
+  subgraph SA["settlement-accounting · 金额责任"]
+    direction TB
+    A0["接受前估价 · 冻结 · 信用暴露<br/>（结果回 PS 接受判断）"]:::sa
+    A1["UC-SA-002 计费重量采用<br/>→ 费用明细<br/>预估 → 暂估 → 确认 → 调整"]:::sa
+    A2["客户预估费用<br/>→ 客户运营应收"]:::sa
+    A3["UC-SA-003 截单快照<br/>→ 对账单（发布即密封）"]:::sa
+    A4["供应商预期成本"]:::sa
+    A5["UC-SA-004 供应商账单主张<br/>→ 逐范围匹配<br/>→ 审核应付 / 争议 / 拒绝"]:::sa
+    A6["UC-SA-005 外部资金映射<br/>未分配 / 部分 / 完整核销 / 撤销"]:::sa
+    A7["UC-SA-006 成本分摊（守恒）<br/>→ 经营毛利 / 损失"]:::sa
+    A8["UC-SA-001 实际代垫成立<br/>→ 客户代垫回收"]:::sa
+    A9["UC-SA-007 客户赔付<br/>应追偿 · 追偿认可金额"]:::sa
+  end
+  FIN["财务 · 银行 · 支付系统<br/>真实收付款 · 清算 · 税额 · 总账<br/>（外部拥有）"]:::ext
+  I1 --> P0
+  I2 --> P0
+  I3 --> P0
+  P0 --> P1
+  P1 -->|"唯一命中"| P2
+  P1 -->|"零命中"| P3
+  P1 -->|"多于一版"| P4
+  C1 --> P2
+  S1 --> P2
+  P2 --> P5
+  P5 --> P6
+  P5 --> P7
+  P6 -->|"不可变评价 · 版本清单"| A1
+  P6 -->|"候选 BUY 评价"| R1
+  C1 --> A0
+  C1 --> A1
+  A1 --> A2 --> A3
+  A1 --> A4 --> A5
+  A3 --> A6
+  A5 --> A6
+  FIN -->|"真实资金事实（唯一采用口）"| A6
+  A6 -. "采用信封（只带引用）" .-> I4
+  I4 --> A8 --> A2
+  I5 --> A9 --> A6
+  A2 --> A7
+  A4 --> A7
+  A9 --> A7
+</pre>
+    </div>
+    <figcaption>「不可计价」不得用零金额替代，也不被当作可补齐缺口反复重试；供应商主张 ≠ 应付；对方认可 ≠ 到账 ≠ 核销；核销只改变未结关系，不改变原金额成立历史。运营分户账不是银行、总账或法定会计。</figcaption>
+  </figure>
+
+  <figure class="fig" id="fig18">
+    <div class="fig-head"><b>图 18 · 费用明细 · 对账单 · 价格评价的生命周期</b><span class="src">settlement-accounting / parcel-pricing CONTEXT.md Lifecycles</span></div>
+    <div class="fig-body">
+<pre class="mermaid">
+stateDiagram-v2
+  state "费用明细（UC-SA-002）" as fee {
+    state "预估" as est
+    state "暂估" as prov
+    state "确认" as conf
+    state "追加调整 / 新版本" as adj
+    [*] --> est : 当前已知输入 + 适用价格规则
+    est --> prov : 服务已发生但缺最终确认依据
+    est --> conf : 确认条件满足
+    prov --> conf : 固定责任范围 · 结算账户 · 金额 · 依据
+    conf --> adj : 迟到事实 · 差错 · 退款 / 贷项（原确认费用保留）
+  }
+  state "对账单（UC-SA-003）" as stmt {
+    state "草稿" as draft
+    state "已发布（密封）" as published
+    state "已作废" as voided
+    state "已替代（新单关联原单）" as replaced
+    [*] --> draft : 按截单范围生成
+    draft --> published : 固定单号 · 账户 · 周期 · 快照 · 金额
+    published --> voided : 整单不应继续有效
+    voided --> replaced : 重新出具
+    replaced --> [*]
+  }
+  state "价格评价" as evalBox {
+    state "待形成" as pend
+    state "已完成（不可变）" as done
+    state "待判断" as undecided
+    state "冲突" as conflict
+    state "不可计价（终态 · 无金额）" as unpriceable
+    state "未形成（技术/结构失败）" as failed
+    [*] --> pend
+    pend --> done
+    pend --> undecided : 事实/依据/规则不足，补齐后重评
+    pend --> conflict : 互斥规则/区间/版本 → 治理裁决
+    pend --> unpriceable : 规则明确排除；只随新规则版本改变
+    pend --> failed
+    done --> [*]
+  }
+</pre>
+    </div>
+    <figcaption>对账的「待确认 / 部分确认 / 已确认 / 争议」与结清的「未结清 / 部分 / 已结清」是两条独立维度，都不改变单据生命周期。评价的四个非完成结果互不冒充：待判断可补齐重评，不可计价不能。</figcaption>
+  </figure>
+</section>
+
+<section id="s10">
+  <h2>10. 技术架构与运行时</h2>
+  <p>Go 模块化单体（单 <code>go.mod</code>、<code>go.idp.xyz/idp-parcel</code>、Go 1.26.5），HTTP 用 <code>chi/v5</code>，PostgreSQL 16 + <code>pgx/v5</code> 显式 SQL，跨上下文交接走 Outbox/Inbox，持久化技术合同来自 <code>idp-bento-go v0.1.0-rc.2</code>（不可变候选，checksum 进公共透明日志）。目录 <code>internal/&lt;context&gt;/</code> 是<b>所有权边界</b>，不部署为微服务；领域包不依赖 HTTP 或 <code>pgx</code>。</p>
+
+  <figure class="fig" id="fig19">
+    <div class="fig-head"><b>图 19 · 技术分层架构与进程入口</b><span class="src">来源：Go 首个消费者切片决策简报「代码与模块边界」· cmd/ · internal/ · ADR-0009/0021/0025</span></div>
+    <div class="fig-body">
+<pre class="mermaid">
+flowchart TB
+  classDef app fill:#eef6fb,stroke:#0b6e99,color:#1f2933
+  classDef proc fill:#e6f0f7,stroke:#0b3d5c,color:#1f2933
+  classDef layer fill:#fbfcfd,stroke:#5b6b7a,color:#1f2933
+  classDef plat fill:#f2f7e8,stroke:#5a7d1e,color:#1f2933
+  classDef db fill:#fff4e5,stroke:#b7791f,color:#1f2933
+  classDef ext fill:#f3f4f6,stroke:#6b7280,stroke-dasharray:4 3,color:#1f2933
+  subgraph APPS["面向人的端 · apps/（与后端同仓同版本发布，ADR-0018/0021）"]
+    W["apps/admin-web · React + Vite + pnpm<br/>41 页登记 / 40 页接线（liveIds）· 四态组件 · 240 单测"]:::app
+    FL["一线作业客户端（弱网/离线铸造事实身份；尚未落地）"]:::ext
+  end
+  subgraph CMD["进程入口 · cmd/"]
+    API["parcel-api · chi/v5<br/>业务 HTTP 端点 125 · Intake 分级（图 22）· 只读 schema 检查"]:::proc
+    DSP["parcel-dispatch<br/>Outbox 认领 → 进程内直投 24 条路由 → Inbox（图 20）"]:::proc
+    CLI["受控登记 / 导入 CLI × 10<br/>commercial · network-register · pricing-register · pricing-feed<br/>customs-register · governance-register · settlement-register<br/>ve-register · collection-register · frontline-import"]:::proc
+  end
+  subgraph CTX["internal/&lt;context&gt;/ × 10 + pilotgovernance（所有权边界，非微服务）"]
+    direction TB
+    H["adapters/http<br/>chi 请求/响应映射 · 状态码只表达「答案已形成」（ADR-0022）"]:::layer
+    APP["application<br/>命令 · 结果 · 用例编排（UC-* 触点 123 文件）· Transactor 边界"]:::layer
+    DOM["domain<br/>聚合 · 值对象 · 不变量 · 领域事件；只依赖标准库与 Bento domain 合同"]:::layer
+    PORTS["ports<br/>语义化 Repository（强类型复合键）· 邻接上下文端口（412 接口声明）"]:::layer
+    PG["adapters/postgres<br/>显式 SQL · 每写口 RequireExecutor（PBC-08）· Outbox 同事务（268 文件，Outbox 57）"]:::layer
+    ACL["adapters/&lt;邻接上下文&gt;<br/>消费侧防腐层（ADR-0025）25 组 · 消费门 Inbox 33 文件"]:::layer
+    H --> APP --> DOM
+    APP --> PORTS
+    PORTS --> PG
+    PORTS --> ACL
+  end
+  subgraph PLAT["横切能力"]
+    B["internal/platform<br/>bootstrap · postgres（Bento DB）· observability（slog/OTel）· migrate（174 迁移 / 11 模块，同事务施加+记录）"]:::plat
+    AI["internal/accessidentity<br/>来源信封铸造；ChannelRegistry / CredentialVerifier 待 ADR-0139"]:::plat
+    AR["internal/architecture<br/>常驻门禁测试：依赖方向 · testkit 不进生产 · 无业务包碰 pgx.Tx · PBC-08 行为面 · 棘轮基线"]:::plat
+    GOV["internal/pilotgovernance<br/>候选版本组 · 阶段决定 · 生产权威区间 · 暂停/恢复/接管"]:::plat
+  end
+  DB[("PostgreSQL 16.14<br/>每模块自有 schema（parcel_shipment … pilot_governance）+ bento schema（outbox / inbox / 迁移历史）")]:::db
+  BENTO["go.idp.xyz/idp-bento-go v0.1.0-rc.2<br/>domain · application · repository · eventing · postgres（testkit 仅测试）"]:::ext
+  W -->|"HTTP（vite 代理 PARCEL_API_TARGET）"| API
+  API --> H
+  CLI --> APP
+  DSP --> ACL
+  DSP --> APP
+  PG --> DB
+  DSP --> DB
+  B --> DB
+  PG -. 合同 .-> BENTO
+  B -. 合同 .-> BENTO
+  AI -.-> H
+  GOV -.-> APP
+</pre>
+    </div>
+    <figcaption>三条硬约束：模块不能直接读其他模块拥有的表；同进程调用也必须经应用端口或已确认事件语义；写 Repository 缺事务立即失败，不静默回退连接池。生产 API 与派发账号不持有 DDL 权限，迁移由独立命令显式执行。</figcaption>
+  </figure>
+
+  <div class="two">
+    <figure class="fig" id="fig20">
+      <div class="fig-head"><b>图 20 · Outbox → 派发 → Inbox 的投递与失败分格</b><span class="src">ADR-0049/0081 · cmd/parcel-dispatch/assemble.go 路由表</span></div>
+      <div class="fig-body">
+<pre class="mermaid">
+flowchart TD
+  classDef ok fill:#e6f4ec,stroke:#2f855a,color:#1f2933
+  classDef warn fill:#fdf3e1,stroke:#b7791f,color:#1f2933
+  classDef bad fill:#fbe9ec,stroke:#b23a48,color:#1f2933
+  classDef dec fill:#fffbea,stroke:#b7791f,color:#1f2933
+  classDef n fill:#eef6fb,stroke:#0b6e99,color:#1f2933
+  A["业务写入 + Outbox 信封 Enqueue<br/>同一 Transactor 事务（P-10）；EventID 首次生成并随结果保存"]:::n --> B[("bento.outbox")]:::n
+  B --> C["parcel-dispatch 每 DISPATCH_INTERVAL 认领<br/>租约 DISPATCH_LEASE · 批量 DISPATCH_LIMIT · 同分区键顺序"]:::n
+  C --> D{"进程内直投路由表<br/>EventType → Consumer（24 条；FanOut 可并投）"}:::dec
+  D -->|"无订阅者 / 封闭集合外 / 装配缺件 / 空成员"| F["publish_failed（响亮，不自愈）"]:::bad
+  D -->|"命中"| E["消费门 Inbox<br/>已处理去重 · 占用冲突回滚 · 消费者隔离"]:::n
+  E --> G{"消费者事务结果（超时 DISPATCH_DELIVERY_TIMEOUT）"}:::dec
+  G -->|"提交"| H["投递成功 = 消费者事务已提交<br/>下游意图已随之入队"]:::ok
+  G -->|"未决哨兵（如 ErrAcceptanceChainUndecided）"| I["consumer_undecided → 整笔回滚"]:::warn
+  I --> J{"attempts &lt; DISPATCH_MAX_ATTEMPTS？"}:::dec
+  J -->|"是"| K["DISPATCH_RETRY_AFTER 后重投"]:::warn --> C
+  J -->|"否"| L["ABANDONED（失败码留库；进程日志静默——已知缺口）"]:::bad
+  subgraph RT["路由表主要条目（EventType → 消费者）"]
+    direction LR
+    R1["PS 委托已提交 / 复核完成 / 运营登记完成 / 提交版本形成 → 接受链（4 条）"]
+    R2["NR 已接受决定 → FanOut：NR 初始路由 + VE 投影<br/>NR 有效网络收寄采用 → 路由复核（UC-NR-003）"]
+    R3["PS 节点收寄 / 场外揽收 / 有效交付 → FanOut：PS 采用 + VE 投影（3 条）"]
+    R4["PS 面单交易 / 继续尝试 / 承运商首次收寄判断（3 条）"]
+    R5["CC 外部资金事实采用 · SA 付款核对形成 · SA BUY 评价记录 · PP 评价请求提交"]
+    R6["VE：交接 · 外部轨迹 · 终局 · 初始路由 · 异常旅程 · 关务建案 · 申报提交 · 投影派生 → 客户视图（8 条）"]
+  end
+  D -.-> RT
+</pre>
+      </div>
+      <figcaption>当前是无负载证据阶段的进程内直投，不是跨进程消息总线；慢消费者占用投递超时，漏装配事件响亮失败。每个新发布方向必须同时明确消费者、未决翻译与运维恢复方式。</figcaption>
+    </figure>
+    <figure class="fig" id="fig21">
+      <div class="fig-head"><b>图 21 · CI 流水线（.github/workflows/ci.yml）</b><span class="src">push main / pull_request · 2026-09-16 起连续绿</span></div>
+      <div class="fig-body">
+<pre class="mermaid">
+flowchart LR
+  classDef job fill:#eef6fb,stroke:#0b6e99,color:#1f2933
+  classDef ok fill:#e6f4ec,stroke:#2f855a,color:#1f2933
+  classDef db fill:#fff4e5,stroke:#b7791f,color:#1f2933
+  T["push main（不互相取消）/ pull_request（取消旧 head）"] --> S["static · ≤10 min<br/>gofmt · go vet · go build<br/>清点工具 vet/test<br/>MECHANISM-INVENTORY 重生成 = 提交版（git status 比对）<br/>分片并集 = go list ./...（scripts/ci/test-shards.sh check）"]:::job
+  T --> AW["admin-web · ≤10 min<br/>Node 22 · pnpm 10.32.1 --frozen-lockfile<br/>tsc -b --noEmit · run-tests.mjs · vite build<br/>@idpxyz/ui-* 七个 tarball 随仓 vendor，无需凭据"]:::job
+  T --> SH["shards · 枚举片名（脚本单一来源）"]:::job
+  SH --> M["test（matrix，fail-fast=false）· ≤15 min/片<br/>go test -race -count=1 -p 1<br/>IDP_PARCEL_POSTGRES_DSN 必设：缺则整片 Fatal，不静默跳过"]:::job
+  M --> P[("postgres:16.14 service<br/>tmpfs /var/lib/postgresql/data 2g<br/>与本机 compose.yaml 同补丁号")]:::db
+  M --> M1["main-chain"]:::ok
+  M --> M2["network-visibility"]:::ok
+  M --> M3["customs-transport"]:::ok
+  M --> M4["rest（全部 − 显式片，新包天然落入）"]:::ok
+</pre>
+      </div>
+      <figcaption>两道「与提交版比对」的门：<code>gofmt -l</code> 与清点报告重生成——清点报告不可能落后于代码。<code>-count=1</code> 防止测试结果缓存把证明记到别的 run 名下；<code>-p 1</code> 让一片内的真库包串行，避免同一实例上 DROP DATABASE 的 checkpoint 互等。</figcaption>
+    </figure>
+  </div>
+
+  <div class="two">
+    <figure class="fig" id="fig22">
+      <div class="fig-head"><b>图 22 · 业务端点准入分级决策树</b><span class="src">ADR-0055 · ADR-0078 · ADR-0091 · ADR-0139（草案）</span></div>
+      <div class="fig-body">
+<pre class="mermaid">
+flowchart TD
+  classDef ok fill:#e6f4ec,stroke:#2f855a,color:#1f2933
+  classDef bad fill:#fbe9ec,stroke:#b23a48,color:#1f2933
+  classDef dec fill:#fffbea,stroke:#b7791f,color:#1f2933
+  classDef ext fill:#f3f4f6,stroke:#6b7280,stroke-dasharray:4 3,color:#1f2933
+  ST["进程启动"] --> SV{"开关取值合法？<br/>必须 SYN- 前缀；读写开关同值"}:::dec
+  SV -->|"否"| SX["启动即拒（退出码 1，点名开关）<br/>不静默回落"]:::bad
+  SV -->|"是"| A["请求到达业务端点"]
+  A --> B{"端点类型"}:::dec
+  B -->|"运营查阅端点（8 条 + 目录读面）"| C{"IDP_PARCEL_ISOLATED_READ_TENANT 已设？"}:::dec
+  C -->|"否"| X["403 ACCESS_CHANNEL_NOT_CONFIGURED<br/>未配置态：不读载荷、不采信自报租户"]:::bad
+  C -->|"是（ADR-0078，启动日志出声）"| D["注入合成运营作用域 → 200<br/>空册 = 空态：LISTED + []"]:::ok
+  B -->|"POST /shipment-requests"| E{"IDP_PARCEL_ISOLATED_WRITE_TENANT 已设且与读开关同值？"}:::dec
+  E -->|"否（读开关换不了写行）"| X
+  E -->|"是（ADR-0091 分级开关）"| F["IsolatedIntake → 进入提交编排（图 8）"]:::ok
+  B -->|"商业身份族五口（法人/参与方/客户账户/关系/停用）"| E2{"写开关已设？"}:::dec
+  E2 -->|"是"| F2["IsolatedPartyIdentityIntake → 编排（票 06，本日进 main）"]:::ok
+  E2 -->|"否"| X
+  B -->|"其余命令面 · /customer-tracking-view"| G["UnconfiguredIntake{} 字面量 → 403<br/>不经任何变量"]:::bad
+  B -->|"生产形态（未来）"| J["首方 API 渠道族（ADR-0139 草案）<br/>ChannelRegistry + CredentialVerifier → 来源信封 → 编排<br/>租户既有渠道适配仍等 PAR-INT-01"]:::ext
+</pre>
+      </div>
+      <figcaption>三态对照只动一个环境变量即可当场复现「这个 403 不是写死的」：不设读开关 → 全部 403；设读开关 → 查阅 200、提交口仍 403；再设写开关 → 提交口进编排、其余命令面仍 403。</figcaption>
+    </figure>
+    <figure class="fig" id="fig23">
+      <div class="fig-head"><b>图 23 · 管理台四态组件（state-slot）</b><span class="src">apps/admin-web/src/templates/state-slot.tsx · ADR-0077 · 演示脚本第 5 步</span></div>
+      <div class="fig-body">
+<pre class="mermaid">
+flowchart LR
+  classDef ok fill:#e6f4ec,stroke:#2f855a,color:#1f2933
+  classDef warn fill:#fdf3e1,stroke:#b7791f,color:#1f2933
+  classDef bad fill:#fbe9ec,stroke:#b23a48,color:#1f2933
+  classDef dec fill:#fffbea,stroke:#b7791f,color:#1f2933
+  L["加载中"] --> R{"parcel-api 响应"}:::dec
+  R -->|"403 ACCESS_CHANNEL_NOT_CONFIGURED"| U["<b>未配置态</b><br/>「这一格没人配过，配它要先满足什么」<br/>不得显示「0 条」"]:::warn
+  R -->|"200 + outcome + 空列表"| E["<b>空态</b><br/>「共 0 个 · 空列表是正常业务答案（LISTED）」"]:::ok
+  R -->|"200 + 数据"| D["<b>数据态</b><br/>列表 / 详情；骨架有、读面无的列不上列（如服务区域地理覆盖 PAR-NET-14）"]:::ok
+  R -->|"网络错误 / 5xx / 未决"| X["<b>错误态</b><br/>按恢复动作分格（ADR-0029）"]:::bad
+</pre>
+      </div>
+      <figcaption>空态与未配置态是两件事：前者是「册里没有」，后者是「渠道没人配过」。把未配置显示成「0 条」会把缺实例误导为目录为空，与状态区的说明自相矛盾。</figcaption>
+    </figure>
+  </div>
+</section>
+
+<section id="s11">
+  <h2>11. 首发范围：做什么、明确不做什么</h2>
+  <p class="small muted">《首发试点范围》是<b>租户上线流程模板</b>——由开发方维护但不由开发方执行。「一个锚点客户、一条线路」指的是<b>某个租户的</b>客户与线路；开发方要做的是让产品具备这些能力。</p>
+  <div class="two">
+    <div>
+      <h3>已确认的范围约束</h3>
+      <ul>
+        <li>网络服务只选<b>一条真实成熟主力线路</b>：单一起运区域、单一出口路径、单一进口路径、单一目的服务区域；面单渠道服务以登记的渠道产品与产品—渠道映射为界，不以线路表达。</li>
+        <li>生产只验<b>一个真实锚点货主客户</b>；另建一个受控测试账户用脱敏/合成数据验客户隔离与跨客户集运，不形成第二份真实合同或应收。</li>
+        <li>履约<b>混合组织</b>：至少一个自营集货/分拣节点 + 至少一个外部伙伴执行的干线、关务或尾程环节；外包不改变运营企业对客户的端到端责任。</li>
+        <li>允许<b>多份供应商价卡并存</b>，逐候选形成 <code>BUY</code> 评价后<b>只按成本单维择优</b>（时效/稳定性等维度等真实数据）；这是内部成本决策，不对客户形成价格承诺。</li>
+        <li>关务申报由系统校验就绪，<b>每次提交由授权业务角色逐次确认</b>，不启用生产自动申报；出口/进口监管舱单由责任承运商在外部形成并提交，本产品只接收引用（<code>UC-CC-012</code>）。</li>
+        <li>只启用锚点客户当前主用的<b>一种</b>生产委托接入渠道；每个伙伴每类事实一种主要数据源；一个财务系统集成边界；每个主合作伙伴一种账单接入方式并验一个真实账期。</li>
+        <li>上线走「历史回放 → 影子运行 → 限量生产 → 正式验收」，阶段升级由租户责任法人指定的试点业务责任角色作 <code>Go/No-Go</code>；限量生产同一范围只有一个权威写入方；暂停/恢复/接管是治理决定，不实现为包裹全局状态（图 26）。</li>
+      </ul>
+    </div>
+    <div>
+      <h3>明确不包含</h3>
+      <ul>
+        <li>不同时实施多条试点线路。</li>
+        <li>不建设完整 WMS（场站只管暂存位置、作业批次与实物控制，不管商品库存）。</li>
+        <li>不建设银行账、支付清算、法定税务、总账或财务 ERP；只维护物流运营结算分户账并引用外部已确认财务事实。</li>
+        <li>首发不实现 COD 代收资金账本（上下文已建，生产范围不纳入）。</li>
+        <li>不建设采购过程：不向承运商询价、竞价、招标；系统从供应商最终价卡开始。</li>
+        <li>不对客户形成价格承诺：报价有效期、锁价、报价接受不进首发；要让客户看到金额用「客户预估费用」，它明确不是运营应收。</li>
+        <li>关闭/重开不强制双人审批、不写死岗位名称或原因码；授权用版本化业务角色与权限等级表达。</li>
+        <li>不因未来可能进入的国家、客户或渠道预先实现未经确认的差异化功能。</li>
+      </ul>
+    </div>
+  </div>
+</section>
+
+<section id="s12">
+  <h2>12. 两个就绪、两个半边：进度怎么读</h2>
+  <div class="two">
+    <div class="card">
+      <b>产品就绪</b> <span class="tag ok">已成立 · 2026-08-28</span>
+      <p class="small">能力覆盖足以承接目标客户群的常规业务形态，可以演示、可以进入商务洽谈。验收对象是<b>能力覆盖</b>。判据 = 八个切片的<b>机制半边</b>全部达标。</p>
+    </div>
+    <div class="card">
+      <b>试点就绪</b> <span class="tag">不在开发方路线图内</span>
+      <p class="small">某个租户有真实锚点客户、线路和参数，按验收矩阵形成 <code>P</code> 级证据并由 PN-08 作正式 <code>Go/No-Go</code>。验收对象是<b>真实业务证据</b>；决定由租户责任法人指定的角色作出，开发方作不了。</p>
+    </div>
+  </div>
+  <p>每个 <code>PN-*</code> 切片都含两半：<b>机制半边</b>是产品必须具备的能力（规则、判断、版本化、门禁与记录形态）；<b>实例半边</b>是把某个租户的真实客户、线路、伙伴、参数与阶段决定填进去。当前尚无租户，实例半边不是「还没拿到」，是<b>尚无产生它们的关系</b>——因此它不构成机制半边的完成障碍，也不得反过来当作推迟机制实现的理由。</p>
+
+  <figure class="fig" id="fig24">
+    <div class="fig-head"><b>图 24 · 两轨制与实现闸门判定（ADR-0016 / ADR-0017 / ADR-0026）</b><span class="src">开发主线「机制半边三条判据」· Go 首个消费者切片简报「实现准入检查」</span></div>
+    <div class="fig-body">
+<pre class="mermaid">
+flowchart TD
+  classDef ok fill:#e6f4ec,stroke:#2f855a,color:#1f2933
+  classDef warn fill:#fdf3e1,stroke:#b7791f,color:#1f2933
+  classDef dec fill:#fffbea,stroke:#b7791f,color:#1f2933
+  classDef ext fill:#f3f4f6,stroke:#6b7280,stroke-dasharray:4 3,color:#1f2933
+  classDef n fill:#eef6fb,stroke:#0b6e99,color:#1f2933
+  A["一项实现被「等真实参数」阻断"]:::n --> B{"阻断理由的性质？（ADR-0017：按阻断理由分别裁决，不联判）"}:::dec
+  B -->|"缺机制：规则 / 判断 / 版本化 / 门禁 / 记录形态未写"| C["<b>机制半边 · 现在就做</b><br/>确定性内存替身 + 合成 S 验证；生产代码不写任何业务阈值 / 金额 / 费率常量"]:::ok
+  B -->|"缺实例：某租户的真实客户 / 线路 / 伙伴 / 参数 / 阶段决定"| D["<b>实例半边 · 留空并拒绝默认值</b><br/>参数登记册 PAR-* 只登脱敏标识与证据索引；代码答「未配置」"]:::warn
+  B -->|"缺持久化技术闸门证据（Bento）"| E["ADR-0026：为产出消费者证明 PBC-01~09 而写的实现先放行<br/>登记 B-06 候选基线仍在闸门后；Parcel 半边自 ccbf79e 就绪"]:::n
+  C --> F{"机制半边三条判据"}:::dec
+  F --> F1["骨架完整<br/>搜不到 TODO / FIXME / not implemented / panic(；零调用点导出工厂计入差量（09-02 裁决）"]:::n
+  F --> F2["受控案例可复算<br/>本机 + CI 真库 -race 全绿；MECHANISM-INVENTORY 由工具生成并比对"]:::n
+  F --> F3["参数显式未配置<br/>实例位置留空、拒绝默认值；计价阈值一律由价卡版本携带"]:::n
+  F1 & F2 & F3 --> G["切片机制半边 <b>达标</b>（可带「显式留待已认可」）<br/>八切片全达标 = <b>产品就绪</b>（2026-08-28 受托认可）"]:::ok
+  D --> H["未来租户填满实例半边 → 历史回放 → 影子运行 → 限量生产 → 正式验收<br/>PN-08 Go = <b>试点就绪</b>（租户责任角色决定，开发方作不了）"]:::ext
+  G -. "产品就绪 ≠ 任何租户可上生产" .-> H
+</pre>
+    </div>
+    <figcaption>两道闸门相互独立：业务语义的机制半边放行不解锁任何持久化技术；Bento 候选存在也不解锁实例半边。隔离合成 <code>S</code> 只记为 <code>S</code>；某租户实例进入生产只来自登记册证据 + PN-08 <code>Go</code>。</figcaption>
+  </figure>
+
+  <h3>机制半边的三条判据 · 现状</h3>
+  <table>
+    <thead><tr><th style="width:18%">判据</th><th>含义</th><th style="width:38%">现状（开发主线自记）</th></tr></thead>
+    <tbody>
+      <tr><td>骨架完整</td><td>该切片的规则与判断都有执行器，不靠「尚未实现」分支蒙混</td><td>生产代码搜不到 <code>TODO</code>/<code>FIXME</code>/<code>not implemented</code>/<code>panic(</code>；<b>2026-09-02 裁决</b>：棘轮基线里「零生产调用点的导出领域工厂」不再豁免、计入差量（当时 32 条，09-03 重数 25 条，TF 7 条已随后接通）</td></tr>
+      <tr><td>受控案例可复算</td><td>有受控案例集，结果可重放且与声明一致</td><td>已满足并有本机复算证据；CI 在 <code>main</code> 与每个 PR 上跑 <code>gofmt</code>/<code>vet</code>/<code>test -race</code>/<code>build</code> 并起 <code>postgres:16.14</code> 真库；远端 CI 曾在 08-20 至 09-16 之间空窗，<b>2026-09-16 起重新连续全绿</b></td></tr>
+      <tr><td>参数显式未配置</td><td>实例位置留空并拒绝默认值，不写死任何取值</td><td>满足且刻意维持：生产代码无任何业务阈值、金额、费率或系数常量；计价阈值一律由价卡版本携带</td></tr>
+    </tbody>
+  </table>
+
+  <h3>八个首发切片的机制半边定级</h3>
+  <table>
+    <thead><tr><th style="width:9%">切片</th><th style="width:26%">业务内容</th><th style="width:20%">主要上下文</th><th style="width:12%">状态</th><th>一句话余量</th></tr></thead>
+    <tbody>
+      <tr><td>PN-01</td><td>范围、责任与治理基础</td><td>治理（<code>pilotgovernance</code>）</td><td><span class="tag ok">达标</span></td><td>候选版本组、阶段评审决定、权威区间冲突检测、暂停/恢复/接管/在途盘点全有代码；真实 <code>PAR-GOV-*</code> 属实例半边</td></tr>
+      <tr><td>PN-02</td><td>商业权威、生产归属、接受前可达性、委托与包裹身份</td><td>PC、PS、NR</td><td><span class="tag ok">达标</span><br><span class="tag info">显式留待已认可</span></td><td>三上下文生产代码齐；<code>UC-PS-001</code> 走完接受/拒绝/未决；撤回、资料版本、两阶段解析、提交前重解、SA 财务控制缝均接通；余量为登记面形状等实例证据</td></tr>
+      <tr><td>PN-03</td><td>接受后路由、有效网络收寄与节点作业</td><td>NR、NO、TF、PS</td><td><span class="tag ok">达标</span><br><span class="tag info">显式留待已认可</span></td><td>初始路由/复核、节点收寄编排、实物控制、集运单元、收寄采用与正式承诺、跨上下文适配器端到端有测试；余量为外部标识关系子域（判归 PS、等排期）</td></tr>
+      <tr><td>PN-04</td><td>取消/处置、运输履约、交付与包裹终局</td><td>TF、PS</td><td><span class="tag ok">达标</span></td><td>TF 领域骨架收口，编排八例对应七个 UC；PS 取消与终局编排；TF 端口两口径 0 缺</td></tr>
+      <tr><td>PN-05</td><td>关务合规控制</td><td>CC</td><td><span class="tag ok">达标</span></td><td>十二个 UC 全部有机制触点，编排 12 份，端口 0 缺</td></tr>
+      <tr><td>PN-06</td><td>普通追踪、异常与客户披露</td><td>VE</td><td><span class="tag ok">达标</span><br><span class="tag info">显式留待已认可</span></td><td>八个 UC 全触；唯一余量是通知网关等真实渠道凭证（实例半边）</td></tr>
+      <tr><td>PN-07</td><td>计价、账单与运营结算</td><td>PP、SA</td><td><span class="tag ok">达标</span><br><span class="tag info">显式留待已认可</span></td><td>计价规则七步全部有执行器；SA 全链领域面就位、编排九例对应七个 UC；余量为 SA 三口登记面视图等实例证据</td></tr>
+      <tr><td>PN-08</td><td>端到端试点与阶段准入</td><td>治理编排</td><td><span class="tag ok">达标</span></td><td>记录能力与编排同 PN-01；真实候选、证据包与阶段决定属实例半边</td></tr>
+    </tbody>
+  </table>
+  <div class="callout warn">
+    <b>读这张表要带的两条注。</b>（1）定级是人的决定，2026-09-02 的裁决更正的是「差量为无」那一句，不改定级列；处置路径（逐条认可为显式留待 / 下调定级 / 改「骨架完整」的判据口径）见 <code>.scratch/mechanism-executor-triage/</code>，尚未走完。（2）<code>collection-remittance</code> 与 <code>accessidentity</code> 是 08-28 之后才出现生产代码的两段，前者归入哪个切片、按哪条判据定级留待受托裁断，开发主线不替它发明一行。
+  </div>
+</section>
+
+<section id="s13">
+  <h2>13. 进度快照（数字）</h2>
+  <p class="small muted">除特别标注外，均钉 <code>main = f6569f51</code>（2026-09-16 19:08）。可由代码算出的数一律以 <code>MECHANISM-INVENTORY.md</code> 为准（CI 每次重新生成并比对，不一致即失败）。</p>
+  <div class="grid">
+    <div class="card"><div class="num">2701</div><div class="lab">提交数（自 2026-07-31 首笔）</div><div class="sub">约 48 天，日均 ~56 笔</div></div>
+    <div class="card"><div class="num">996 / 947</div><div class="lab">生产 / 测试 Go 文件（<code>internal/</code>）</div><div class="sub">另 <code>cmd/</code> 生产 64、测试 90</div></div>
+    <div class="card"><div class="num">123</div><div class="lab">应用编排文件</div><div class="sub">十个业务上下文全部有编排</div></div>
+    <div class="card"><div class="num">268</div><div class="lab">PostgreSQL 适配器</div><div class="sub">其中 Outbox 投递 57</div></div>
+    <div class="card"><div class="num">125</div><div class="lab">业务 HTTP 接入面端点</div><div class="sub">http 适配器文件 133；未配置时一律 403 <code>ACCESS_CHANNEL_NOT_CONFIGURED</code></div></div>
+    <div class="card"><div class="num">174</div><div class="lab">SQL 迁移（11 个模块）</div><div class="sub">经 <code>internal/platform/migrate</code> 统一计划</div></div>
+    <div class="card"><div class="num">412</div><div class="lab">端口接口声明</div><div class="sub">精确口径无实现 7（基线口径 14，其中 7 为虚低）</div></div>
+    <div class="card"><div class="num">25 组</div><div class="lab">跨上下文消费缝（防腐层）</div><div class="sub">74 个生产文件；消费门 33 文件；直投路由表 24 条</div></div>
+    <div class="card"><div class="num">141</div><div class="lab">架构决策记录（ADR）</div><div class="sub">Accepted 131 · Proposed 6 · Superseded 4；编号至 0142</div></div>
+    <div class="card"><div class="num">48</div><div class="lab">应用用例（UC）</div><div class="sub">基线自记 48/48 均有编排触点（文件级清点两道确认）</div></div>
+    <div class="card"><div class="num">41 / 40</div><div class="lab">管理台页面 登记 / 已接线</div><div class="sub"><code>liveIds</code> 是接线事实唯一登记处；另 1 页合成演示</div></div>
+    <div class="card"><div class="num">115 ok</div><div class="lab">带真库 DSN 全量 <code>go test ./...</code></div><div class="sub">0 FAIL · 16 无测试 · 0 cached（19:08→19:10，130 s）</div></div>
+    <div class="card"><div class="num">240 / 240</div><div class="lab">admin-web 单元测试</div><div class="sub"><code>tsc -b --noEmit</code> 0 · <code>vite build</code> 0</div></div>
+    <div class="card"><div class="num">连续绿</div><div class="lab">远端 CI（<code>main</code>）</div><div class="sub"><code>aca52b5d → 01f11736 → f961a30a → 24ee60dd → ef7086f0</code> 全绿；<code>f6569f51</code> 的 run 刚起</div></div>
+    <div class="card"><div class="num">78</div><div class="lab"><code>.scratch/</code> 特性目录（本地 issue tracker）</div><div class="sub">10:1x 盘点：346 张实施票，终态 335；非终态 11</div></div>
+    <div class="card"><div class="num">3 + 3</div><div class="lab">主要依赖</div><div class="sub"><code>chi</code>、<code>pgx</code>、<code>idp-bento-go</code>；前端 <code>@idpxyz/ui-*</code> 七个 tarball 随仓 vendor</div></div>
+  </div>
+
+  <h3>管理台（<code>apps/admin-web</code>）已接线的 40 页按业务族</h3>
+  <table>
+    <thead><tr><th style="width:20%">族</th><th>页面</th></tr></thead>
+    <tbody>
+      <tr><td>委托主链</td><td>提交委托、委托查阅、取消包裹、面单交易、渠道选择决定、接受复核、授权处置、有效时点判断</td></tr>
+      <tr><td>主数据目录（商业）</td><td>集团与法人、业务参与方、客户合同、供应商协议、服务产品与渠道、渠道产品目录、商业规则与策略</td></tr>
+      <tr><td>计价 / 网络 / 关务</td><td>价卡目录、计价参考序列、计价评价；网络目录、服务区域与覆盖、路由计划；关务案件、关务限制、口岸与申报路径、合规规则库</td></tr>
+      <tr><td>运营查阅</td><td>节点作业复核、运输履约复核、追踪投影、异常分诊、异常案件、追踪判断规则、披露策略、索赔前提、索赔与追偿</td></tr>
+      <tr><td>结算与治理</td><td>费用与账单、对账、结算申请、经营指标、代收分户账、阶段准入</td></tr>
+    </tbody>
+  </table>
+  <p class="small muted">「已接线」= 页面对 <code>parcel-api</code> 真实端点发请求；数据态展示候合成种子与隔离环境读面准入；页面浏览器验收在多张票里如实记「未验」。</p>
+
+  <h3>当前业务 API 入口对照（<code>cmd/parcel-api/endpoints.go</code> 快照）</h3>
+  <table>
+    <thead><tr><th style="width:30%">入口</th><th style="width:8%">类型</th><th style="width:18%">所属上下文</th><th>对应能力</th><th style="width:22%">当前行为</th></tr></thead>
+    <tbody>
+      <tr><td><code>/shipment-requests</code></td><td>命令</td><td><code>parcel-shipment</code></td><td>提交委托、来源保全、生产归属和接单判断</td><td>真实渠道未配置时拒绝；隔离写开关放行</td></tr>
+      <tr><td><code>/shipment-requests/withdrawals</code></td><td>命令</td><td><code>parcel-shipment</code></td><td>决定前撤回</td><td>真实渠道未配置时拒绝</td></tr>
+      <tr><td><code>/shipment-requests/parcel-cancellations</code></td><td>命令</td><td><code>parcel-shipment</code></td><td>逐包裹取消/收寄后处置</td><td>真实渠道未配置时拒绝</td></tr>
+      <tr><td><code>/shipment-request-views</code></td><td>查阅</td><td><code>parcel-shipment</code></td><td>委托列表与详情</td><td>仅显式隔离读准入时可读</td></tr>
+      <tr><td><code>/node-operations/receptions</code></td><td>命令</td><td><code>node-operations</code></td><td>节点收寄</td><td>真实渠道未配置时拒绝</td></tr>
+      <tr><td><code>/transport-fulfillment/deliveries</code> · <code>/delivery-proof-corrections</code></td><td>命令</td><td><code>transport-fulfillment</code></td><td>有效交付登记 · POD 更正</td><td>真实渠道未配置时拒绝</td></tr>
+      <tr><td><code>/customer-tracking-view</code></td><td>查阅</td><td><code>visibility-exception</code></td><td>客户授权全程追踪</td><td>真实客户查询渠道未配置时拒绝</td></tr>
+      <tr><td><code>/tracking-projections</code></td><td>查阅</td><td><code>visibility-exception</code></td><td>运营追踪投影</td><td>仅显式隔离读准入时可读</td></tr>
+      <tr><td><code>/claims</code></td><td>命令</td><td><code>visibility-exception</code></td><td>接收客户索赔</td><td>真实渠道未配置时拒绝</td></tr>
+      <tr><td><code>/customs/external-results</code></td><td>命令</td><td><code>customs-compliance</code></td><td>接收外部监管结果</td><td>真实渠道未配置时拒绝</td></tr>
+      <tr><td><code>/pricing-price-cards</code> · <code>/pricing-reference-series</code></td><td>查阅</td><td><code>parcel-pricing</code></td><td>价卡目录 · 计价参考序列</td><td>仅显式隔离读准入时可读</td></tr>
+      <tr><td><code>/network-catalog</code></td><td>查阅</td><td><code>network-routing</code></td><td>网络目录与服务区域（六族）</td><td>仅显式隔离读准入时可读</td></tr>
+      <tr><td><code>/customs-compliance-rules</code> · <code>/customs-case-registers</code></td><td>查阅</td><td><code>customs-compliance</code></td><td>合规规则目录 · 案件配置目录</td><td>仅显式隔离读准入时可读</td></tr>
+      <tr><td><code>/commercial-service-products</code> · <code>/commercial-policies</code> · <code>/commercial-customer-contracts</code> · <code>/commercial-supplier-agreements</code></td><td>查阅</td><td><code>party-commercial</code></td><td>服务产品 · 商业政策 · 客户合同 · 供应商协议目录</td><td>仅显式隔离读准入时可读</td></tr>
+      <tr><td><code>/visibility-catalogues</code></td><td>查阅</td><td><code>visibility-exception</code></td><td>追踪、披露、索赔规则目录</td><td>仅显式隔离读准入时可读</td></tr>
+    </tbody>
+  </table>
+  <p class="small muted">「仅在显式隔离读准入时可读」指开发/演示环境中注入带 <code>SYN</code> 前缀的合成运营作用域；它不代表真实认证已完成。<code>/healthz</code> 与 <code>/version</code> 是进程级技术入口。路径随版本演进，外部集成不得只凭本表建立长期契约。</p>
+</section>
+
+<section id="s14">
+  <h2>14. 今天能演示什么，停在哪</h2>
+  <p>合成 <code>S</code> 演示动线（<code>docs/design/synthetic-demo-journey-script.md</code>）：角色是<b>租户的物流产品经理</b>，全程在管理台里看，数据经登记 CLI 灌入本机隔离库（<code>SYN-</code> 前缀），任何一步都不得指向生产库。</p>
+
+  <figure class="fig" id="fig25">
+    <div class="fig-head"><b>图 25 · 合成演示动线与三堵墙（隔离形态 vs 生产形态）</b><span class="src">synthetic-demo-journey-script.md · ADR-0091 · ADR-0068 · .scratch/syn-wall-door-audit</span></div>
+    <div class="fig-body">
+<pre class="mermaid">
+flowchart TB
+  classDef step fill:#eef6fb,stroke:#0b6e99,color:#1f2933
+  classDef ok fill:#e6f4ec,stroke:#2f855a,color:#1f2933
+  classDef warn fill:#fdf3e1,stroke:#b7791f,color:#1f2933
+  classDef bad fill:#fbe9ec,stroke:#b23a48,color:#1f2933
+  classDef dec fill:#fffbea,stroke:#b7791f,color:#1f2933
+  classDef ext fill:#f3f4f6,stroke:#6b7280,stroke-dasharray:4 3,color:#1f2933
+  subgraph SEED["主数据动线（管理台可看，全部 200）"]
+    direction LR
+    S0["seed.sh --reset<br/>四条登记 CLI 灌 SYN- 主数据<br/>→ 隔离库 :55432"]:::ext --> S1["第 1 步 · 建产品（PC）<br/>SYN-PROD-CN-SG-EXPRESS 携待路由许可<br/>SYN-RULEPKG-01 四维适用 · 时点锚策略<br/>价格/结算政策 = 有答案的空册"]:::step
+    S1 --> S2["第 2 步 · 配价（PP）<br/>售价卡 SYN-PLAN-CN-SG-01 与成本卡成对<br/>燃油/汇率序列<br/>canonicalization + contentDigest"]:::step
+    S2 --> S3["第 3 步 · 一单会走的网（NR）<br/>上海枢纽 → 深圳口岸 → 新加坡枢纽 → 末端<br/>四节点三连接成 SYN-LINE-CN-SG-01<br/>节点 v1→v2 版本轴 · 台风停运（已解除）"]:::step
+    S3 --> S4["第 4 步 · 过关的规则（CC）<br/>放行解释规则 v1→v2<br/>CN 出口要求建案 · SG 进口显式不要求"]:::step
+  end
+  S4 --> S5["第 5 步 · 一单委托<br/>委托查阅 / 追踪投影 = 空态（200）<br/>取消包裹 = 未配置态（403）<br/>POST /shipment-requests ↓"]:::step
+  S5 --> W1{"墙一 · 委托侧入库通道"}:::dec
+  W1 -->|"只设读开关"| W1a["403 ACCESS_CHANNEL_NOT_CONFIGURED<br/>生产重启条件：PAR-INT-01<br/>或 ADR-0139 首方 API（草案）"]:::bad
+  W1 -->|"读 + 写开关同值（ADR-0091）"| W2{"墙二 · 生产归属"}:::dec
+  W2 -->|"Directory / SelfAuthority 缺席<br/>或删掉种子权威区间"| W2a["OWNERSHIP_UNRESOLVED<br/>生产重启条件：租户登记<br/>真实权威区间 PAR-GOV-*"]:::bad
+  W2 -->|"装配注入合成坐标 + 种子权威区间在册<br/>（仍真的读登记册）"| S6["委托 = <b>已提交</b>"]:::ok
+  S6 --> D0["起 parcel-dispatch 驱动接受链<br/>（七个变量缺一即拒）"]:::ext
+  D0 -->|"商业主数据齐"| S7["已接受 → UC-NR-001 初始路由"]:::ok
+  D0 -->|"只灌治理区间 · 不灌商业主数据"| S7a["链如实答未决 → 重投烧完预算<br/>→ ABANDONED + consumer_undecided<br/>委托停在已提交<br/>（已知缺口 first-tenant-runway/07、08）"]:::warn
+  S7 --> W3{"墙三 · 路由证据"}:::dec
+  W3 -->|"network_definition 零生产写入方<br/>（目录表是另一套）"| W3a["RouteEvidenceNotConfigured<br/>没有路由就没有下游费用<br/>重启条件：解析层「目录 → 逐候选事实」<br/>被 PAR-NET-14 阻断（ADR-0068 已接受此期）"]:::bad
+</pre>
+    </div>
+    <figcaption>三堵墙各自独立，任一堵单独就足以拦住；前两堵已按 ADR-0091 在隔离形态下拆掉，第三堵仍在。隔离形态的 Intake 翻译的是本仓自己的管理台草案形状，不是任何租户的渠道契约，<b>不能当成 <code>PAR-INT-01</code> 已有答案</b>。</figcaption>
+  </figure>
+
+  <div class="callout">
+    <b>为什么「停住」也值得演示。</b>按 ADR-0017/0029 的口径，<code>未配置</code> 不是缺陷而是产品的诚实：实例半边留空、拒绝默认值是红线。一条走到墙前能说清「这不是目录为空，是这一格根本没人配过，配它要先满足什么」的动线，演示的正是机制半边已经做完；为了好看往库里塞假委托，破的恰是它要证明的那件事。<b>空态与未配置态是两件事</b>，管理台的四态组件（图 23）就是为这个分的；三态对照（图 22）只动一个环境变量即可当场复现「这个 403 不是写死的」。
+  </div>
+  <table>
+    <thead><tr><th style="width:18%">三堵墙</th><th>业务含义</th><th style="width:22%">隔离形态</th><th style="width:26%">生产形态的重启条件</th></tr></thead>
+    <tbody>
+      <tr><td><b>墙一</b> · 委托侧入库通道</td><td>各写端点默认挂 <code>UnconfiguredIntake</code>：客户的委托从哪条渠道、以什么凭据进来，今天没人配过</td><td><span class="tag ok">已开</span> ADR-0091 分级开关，只放 <code>/shipment-requests</code> 一行（商业身份族五口本日随票 06 加入）</td><td>原为等 <code>PAR-INT-01</code>（该租户渠道的现行流程）；<b>ADR-0139 草案</b>提出产品自带首方 API 属机制半边、现在就立，租户既有渠道的适配才等证据</td></tr>
+      <tr><td><b>墙二</b> · 生产归属</td><td>「这份委托由本产品还是旧系统承接」——目录与自身权威坐标是实例半边，不代拟</td><td><span class="tag ok">已开</span> 装配注入合成值，但归属<b>仍真的读治理登记册</b>（删掉那条权威区间就退回 <code>OWNERSHIP_UNRESOLVED</code>）</td><td>租户登记真实生产权威区间（<code>PAR-GOV-*</code>）</td></tr>
+      <tr><td><b>墙三</b> · 路由拿不到证据</td><td>就算委托已接受，初始路由停在 <code>RouteEvidenceNotConfigured</code>：证据视图只读 <code>network_definition</code>，而目录表还没有人把它折成逐候选事实。没有路由就没有下游费用</td><td><span class="tag bad">仍在</span></td><td>解析层「目录 → 逐候选事实」，被 <code>PAR-NET-14</code> 阻断；ADR-0068 已接受这段「目录可写可读、尚无人读它产出事实」的时期</td></tr>
+    </tbody>
+  </table>
+  <p class="small muted">另一处演示前要先读的已知缺口：<code>cmd/parcel-dispatch</code> 对逐条投递失败全程静默；只灌治理区间不灌商业主数据时，链如实答未决、烧完预算落 <code>ABANDONED</code>，委托停在已提交（<code>.scratch/first-tenant-runway/issues/07</code>、<code>08</code>）。</p>
+</section>
+
+<section id="s15">
+  <h2>15. 试点治理与上线阶段（PN-08）</h2>
+  <p>《首发试点范围》确认的上线方式是「历史数据回放 → 影子运行比对 → 限量生产」三个执行阶段，以「正式验收」作为对限量生产证据的最终评审里程碑。阶段<b>不按日期自动升级</b>，每次评审形成独立 <code>Go/No-Go</code> 决定；限量生产同一范围、能力与事实类型只有<b>一个</b>权威写入方；暂停只阻止新准入，恢复与接管必须显式决定。</p>
+
+  <figure class="fig" id="fig26">
+    <div class="fig-head"><b>图 26 · 从隔离合成到正式验收的阶段与治理决定</b><span class="src">PILOT-SCOPE · 业务全景说明书 §12.3/12.4 · pilotgovernance · UC-PS-001「首发试点叠加条件」</span></div>
+    <div class="fig-body">
+<pre class="mermaid">
+flowchart TB
+  classDef stage fill:#eef6fb,stroke:#0b6e99,color:#1f2933
+  classDef dec fill:#fffbea,stroke:#b7791f,color:#1f2933
+  classDef ok fill:#e6f4ec,stroke:#2f855a,color:#1f2933
+  classDef warn fill:#fdf3e1,stroke:#b7791f,color:#1f2933
+  classDef bad fill:#fbe9ec,stroke:#b23a48,color:#1f2933
+  classDef ext fill:#f3f4f6,stroke:#6b7280,stroke-dasharray:4 3,color:#1f2933
+  subgraph STAGES["执行阶段（每次升级都是独立决定，不按日期自动升级）"]
+    direction TB
+    P0["0 · 隔离合成与机制演示<br/>SYN-* 数据；不发真实外部指令；不形成真实金额<br/>证据层级 S（<b>今天在这里</b>）"]:::ok
+    G1{"Go / No-Go<br/>试点业务责任角色"}:::dec
+    P1["1 · 历史回放<br/>获准脱敏历史数据跑同版本候选 · 比较结果<br/>证据层级 R；不成为生产权威"]:::stage
+    G2{"Go / No-Go"}:::dec
+    P2["2 · 影子运行<br/>消费真实输入只读比对<br/>外部指令与金额输出隔离"]:::stage
+    G3{"Go / No-Go"}:::dec
+    P3["3 · 限量生产<br/>明确客户 · 产品 · 线路 · 时间 · 容量范围内<br/>成为唯一生产写入方；旧系统不得双写<br/>接受前按版本化准入规则整单纳入/排除"]:::stage
+    G4{"正式验收决定"}:::dec
+    DONE["正式生产<br/>在途委托仍由 idp-parcel 持续处理到真实终局"]:::ok
+    P0 -. "租户提供锚点客户 · 线路 · 合同<br/>伙伴 · 渠道 · 参数（实例半边）" .-> G1
+    G1 -->|"Go"| P1 --> G2
+    G2 -->|"Go"| P2 --> G3
+    G3 -->|"Go"| P3 --> G4
+    G4 -->|"通过（可带受控风险接受的非关键偏差）<br/>真实完成样本 + 真实账期 + 在途逐项盘点 + 非功能证据"| DONE
+  end
+  NG["No-Go / 待参数化<br/>实例参数为空时生产必须保持此态<br/>开发方作不了 Go；硬风险不得豁免"]:::warn
+  G1 -->|"No-Go"| NG
+  G2 -->|"No-Go"| NG
+  G3 -->|"No-Go"| NG
+  G4 -->|"硬风险 / 阻断性问题"| NG
+  subgraph GOVX["限量生产期间的治理决定（pilotgovernance 记录能力）"]
+    direction TB
+    H1["硬风险出现 → <b>暂停</b>新准入（PAUSED）<br/>记录触发来源 · 依据 · 证据 · 范围 · 决定方 · 生效时间<br/>不取消 / 迁移 / 回退已纳入在途委托"]:::warn
+    H2["<b>恢复</b><br/>原因解除 + 一致性核对 + 在途盘点<br/>→ 授权角色明确决定<br/>指标恢复或规则不再命中都不自动恢复"]:::ok
+    H3["<b>接管</b>（仅当确实无法继续履行某明确范围）<br/>盘点已发外部指令 · 未决结果 · 物理控制 · 关务责任 · 金额责任<br/>原权威停止新写入 → 安全边界对象级接管<br/>不双写 · 不改写交接前历史"]:::bad
+    R["发布版本回滚 ≠ 业务权威切换<br/>试点回退优先停新准入，在途原则上继续完成"]:::ext
+    H1 --> H2
+    H1 --> H3
+    R -.-> H1
+  end
+  P3 -.-> GOVX
+</pre>
+    </div>
+    <figcaption>生产归属同时记录「权威身份」（本产品 / 其他权威 / 未决）与「准入控制」（OPEN / PAUSED）两个正交维度：<code>OPEN</code> 只表示没有生效暂停，不表示最终允许建单，最终门禁还要校验本产品权威、范围摘要、规则修订与有效区间。真实候选、证据包与阶段决定全属实例半边；今天没有租户，因此没有任何 <code>Go</code>。</figcaption>
+  </figure>
+</section>
+
+<section id="s16">
+  <h2>16. 关键里程碑时间线</h2>
+  <ul class="timeline">
+    <li><time>2026-07-31</time>仓库首笔提交；此前领域发现问答与产品基线、十个上下文 <code>CONTEXT.md</code>、PN-02…PN-08 交接文档陆续成形。</li>
+    <li><time>2026-08-11</time>Bento 候选 <code>v0.1.0-rc.2</code> 锁定，checksum 进 <code>sum.golang.org</code> 公共透明日志（记录号 58659836）；空缓存下载取证。</li>
+    <li><time>2026-08-20</time>开发计划立（M4 目标）；同日起远端 CI 因账户账务停摆进入空窗。</li>
+    <li><time>2026-08-21</time>生产接线棘轮门禁（<code>production_wiring_baseline.txt</code>）建立。</li>
+    <li><time>2026-08-25</time>受托裁定 Parcel 半边自 <code>ccbf79e</code> 起就绪（PBC-01~09 九项含真库复验）；<code>B-06</code> 绑定等双消费者证明。</li>
+    <li><time>2026-08-27</time>第二十七轮手工机制重盘（<code>f6f0029</code>），手工重盘就此停止，改由 <code>tools/mechanism-inventory</code> 生成并 CI 比对。</li>
+    <li><time>2026-08-28</time><b>产品就绪里程碑成立</b>：八切片全数达标（四个带「显式留待已认可」），经受托裁断逐项认可、无一翻案；<code>collection-remittance</code> 按 <code>PA-CR-01</code> 裁定准入。</li>
+    <li><time>2026-09-02</time>裁决：棘轮基线 32 条零调用点导出工厂计入机制差量，「可派机制工作清零」不再成立；目标客户群三层与能力范围新判据落文。</li>
+    <li><time>2026-09-03</time>TF 七条接通（<code>tf-unwired-seven</code>），名单重数 25；ADR-0100 裁定管理台操作者身份属产品自有接入渠道族。</li>
+    <li><time>2026-09-04</time>管理台余量机制批收口：<code>collection-remittance</code> 首次出现生产代码、PC 参与方身份生命周期、产品—渠道映射目录、CC 口岸与申报路径目录；完成度评估（224 票关 199）。</li>
+    <li><time>2026-09-07</time>CI 拆片：四片并行、<code>-p 1</code>、tmpfs 库，单 run 压到十分钟上下。</li>
+    <li><time>2026-09-08</time>管理台写面批（admin-write-faces）多票并行进 main；多会话协作规矩（占号、验绿即 push、簿记后补）在实践中成形。</li>
+    <li><time>2026-09-14→16</time>CI 账务恢复后每 run 红在 <code>go vet</code>（<code>_windows</code> 文件名被当 GOOS 约束）；09-16 <code>aca52b5d</code> 改名修掉，<code>main</code> 自 09-07 后首个绿 run；同日 admin-web CI job 首跑成功。</li>
+    <li><time>2026-09-16</time>上午：sa-cc/32 收掉、三项待办清零，用户一度令「close 项目」。下午：ADR-0139 草案（首方 API 属机制半边）+ 0140/0141/0142 三草案进 main；集团与法人页票 01/02/03/06 陆续进 main（<code>f6569f51</code>）。</li>
+  </ul>
+</section>
+
+<section id="s17">
+  <h2>17. 当前在途与前沿（2026-09-16 19:1x）</h2>
+  <div class="two">
+    <div>
+      <h3>票况</h3>
+      <ul>
+        <li><span class="tag ok">进 main</span> <code>admin-web-group-legal-entities/06</code>：ADR-0091 逐口放行，商业身份族五口（法人/参与方/客户账户/关系/停用登记）在隔离形态换上 <code>IsolatedPartyIdentityIntake</code>；评审两轴 0 阻断。</li>
+        <li><span class="tag info">ready</span> <code>admin-web-group-legal-entities/07</code>：06 的 A 类尾巴（<code>decodeClosedDocument</code> 改调 <code>decodeStrict</code> 补尾随内容拒 + 三处注释去计数）。</li>
+        <li><span class="tag warn">needs-info</span> 同批 04 / 05，归 owner。</li>
+        <li><span class="tag warn">draft</span> <code>pp-pricing-input-seams/04</code>（NO owner，待裁四条）；<code>first-party-api</code> 三张机制票（scope 与 1:N 绑定 / 按 client 限流 429 / 按 client 可观测性）等 ADR-0139 接受。</li>
+        <li><span class="tag">等真源</span> <code>label-channel-service-first-release/20</code>、<code>/22</code>；needs-info / blocked 六张阻断在外。</li>
+      </ul>
+    </div>
+    <div>
+      <h3>归用户的决定</h3>
+      <ul>
+        <li><b>ADR-0139 → Accepted 与否。</b>接受即把「客户业务面一口也进不来」的原因从「等客户」改成「产品自己立信任锚、凭据形态、渠道登记册与契约」；不接受则维持 ADR-0072 Decision 二的原句。0140/0141/0142 随之。</li>
+        <li><b><code>docs/ux/commercial-party.md</code> 归属</b>：共享树上 18:38 新出现的未跟踪文件，无人认领。</li>
+        <li><b>收费模型采用哪几层</b>（§19）：四层要计量的层今天一个计量事实都不存在，选定后按能力范围判据单独立票。</li>
+        <li>远端旧名分支未删（只是指针，不动）。</li>
+      </ul>
+      <h3>协作形态</h3>
+      <p class="small">六个 Cursor 会话通道并行写同一工作树：作者通道出票、非作者通道两轴评审、推送方在隔离树重放并带真库全量后 push。今天可证的会话重置十余次，「验绿之后、push 之前断」出现多例，规矩已改为<b>验绿即 push、簿记后补</b>。</p>
+    </div>
+  </div>
+</section>
+
+<section id="s18">
+  <h2>18. 风险与待决（业务视角）</h2>
+  <table>
+    <thead><tr><th style="width:24%">事项</th><th>为什么重要</th><th style="width:30%">现状 / 下一步</th></tr></thead>
+    <tbody>
+      <tr><td><b>无租户 → 实例半边全空</b></td><td>「产品就绪」不等于任何租户可以上生产；纵向闭环阻在实例半边的哨兵上，不是阻在接线上。没有产品就绪谈不下租户，没有租户取不到真实参数——两轨制就是为了不让三步互相等待</td><td>产品就绪已成立、可演示；下一步是商务洽谈（《产品故事》+《收费模型》已备口径）。<code>.scratch/tenant-implementation-01</code> 已有候选租户的实例登记草案与证据 E-02（客户现行渠道是 API）</td></tr>
+      <tr><td><b>首方 API 的归属（ADR-0139）</b></td><td>决定演示能否走通真实客户提交、集成测试能否对上自己的契约、卖出去之后是否要替每个租户各写一套接入</td><td>草案已修订、评审无阻断；接受与否归用户。接受后首批工作是 <code>internal/accessidentity</code> 的 <code>ChannelRegistry</code>/<code>CredentialVerifier</code> 生产实现、契约生成与沙箱</td></tr>
+      <tr><td><b>路由证据解析层（墙三）</b></td><td>没有路由就没有下游费用，端到端演示闭不上</td><td>被 <code>PAR-NET-14</code>（服务区域地理覆盖形态）阻断；机制票在 <code>syn-wall-door-audit/issues/04</code></td></tr>
+      <tr><td><b>机制差量的处置路径未定</b></td><td>09-02 裁决后「差量为无」不再成立，但三条处置路（逐条认可留待 / 下调定级 / 改判据口径）尚未选</td><td>见 <code>.scratch/mechanism-executor-triage/issues/01</code>；选第三条路要改开发主线的判据正文</td></tr>
+      <tr><td><b>计量事实不存在</b></td><td>交易计量、API 用量、物流产品费、优化收益四层收费都要计量，今天一个记录形态都没有；「未配置即拒」的 403 算不算一次调用是本产品特有问题</td><td>先决定采用哪层，再按能力范围判据立票；不顺手加计数器</td></tr>
+      <tr><td><b>派发进程逐条失败静默</b></td><td>演示与运维都只能查 <code>bento.outbox</code> 的 <code>status</code>/<code>failure_code</code> 才知道链停在哪；停在哪一站、未决原因是什么在真进程上取不到</td><td>已知缺口记在 <code>first-tenant-runway/issues/07</code>、<code>08</code>；生产化前需要业务端点结果分格、Outbox 积压与失败码的可观测面</td></tr>
+      <tr><td><b>浏览器层验收长期「未验」</b></td><td>管理台 40 页接线以 tsc / 单测 / 端点三态对照为证，多张票的浏览器验收如实记未验</td><td>无头 DOM 取证曾做过一轮（十页）；下一轮演示前宜再走一遍动线脚本</td></tr>
+      <tr><td><b>一线作业客户端未落地</b></td><td>节点高频扫描、设备身份、弱网离线队列不能由管理台骨架替代（ADR-0021）</td><td>等第一个真实端落地时才建目录；复用同一业务端点与领域语义，不立第二套节点事实模型</td></tr>
+      <tr><td><b>多会话协作的过程风险</b></td><td>会话频繁重置导致集成时延中位数 ~1–2 小时、多次「重放做好簿记前断」</td><td>规矩已改（验绿即 push）；子代理鉴权错记为本机环境问题，评审门在无空闲通道时退自审并如实记</td></tr>
+    </tbody>
+  </table>
+</section>
+
+<section id="s19">
+  <h2>19. 产品自身收费模型（形态，无价位）</h2>
+  <p>回答的是<b>开发方向租户按什么计量收钱</b>——与 <code>settlement-accounting</code> 管的「租户对其客户与供应商的钱」是两件事，隔着两级。软件订阅费、调用费、平台费<b>不是包裹业务事实，不进那本账</b>。全文不含任何价位；第一个租户的报价由商务与该租户谈定，不回写文档。</p>
+  <table>
+    <thead><tr><th style="width:14%">收费层</th><th style="width:22%">计量单位</th><th style="width:18%">主要面向</th><th>价值逻辑</th><th style="width:22%">计量事实今天在哪</th></tr></thead>
+    <tbody>
+      <tr><td>平台订阅</td><td>租户、场站、席位，按周期</td><td>三层都适用，是底座</td><td>「有这套系统可用」本身</td><td>不需要产品内计量</td></tr>
+      <tr><td>交易计量</td><td>委托、包裹、面单交易、履约执行</td><td>三层都适用</td><td>随租户业务规模增长</td><td><b>有事实基础</b>：包裹永久内部标识不因换单/改号变更；面单交易是独立聚合，重打/作废不重复计</td></tr>
+      <tr><td>API 用量</td><td>取价、轨迹、地址与资格校验等调用</td><td>要把能力嵌进自有系统的租户</td><td>基础设施计量</td><td><b>不存在</b>：无按租户/端点/成败的调用计量</td></tr>
+      <tr><td>物流产品费</td><td>服务产品版本数、渠道数、网络定义与规则包数</td><td>物流产品设计者与整合者</td><td>产品管理复杂度</td><td>在版本化登记册里可数；但按版本数计费会把「维护得勤」变成罚款，要小心数的是什么</td></tr>
+      <tr><td>优化收益</td><td>择优节省额、毛利改善</td><td>有规模的租户</td><td>直接绑定经营结果</td><td>形状具备（逐候选评价与择优记录），量不具备——节省额需要租户接入前的历史成本基准，那在租户手里</td></tr>
+      <tr><td>企业合同</td><td>年度合同</td><td>大型物流集团与平台型租户</td><td>SLA、私有化、治理与合规</td><td>不需要产品内计量</td></tr>
+    </tbody>
+  </table>
+  <p class="small"><b>明确不依赖的收入</b>：运费价差（开发方不是运营企业，要挣它得自己持有采购关系，那是换一个生意）；只按账号/席位收费（与物流业务价值脱节，促使租户压席位）；只卖 Agent 席位（本产品不预建 AI 机制）。</p>
+</section>
+
+<section id="s20">
+  <h2>20. 术语速查与图例</h2>
+  <dl class="kv">
+    <dt>租户 / 责任法人 / 货主客户账户</dt><dd>运营集团租户是产品使用与数据隔离的最高边界；责任法人承担合同、应收与账务责任；货主客户账户是客户业务隔离与可见性边界（ADR-0003 三级）。</dd>
+    <dt>机制半边 / 实例半边</dt><dd>产品必须具备的能力 vs. 某个租户的真实客户、线路、伙伴、参数与阶段决定。前者现在就做，后者等租户（图 24）。</dd>
+    <dt>产品就绪 / 试点就绪</dt><dd>能力覆盖可演示可洽谈 vs. 某租户填满实例半边并走完 PN-08 的 <code>Go/No-Go</code>（图 26）。</dd>
+    <dt>PN-01…PN-08</dt><dd>首发八个纵向产品切片（不是微服务拆分）；PN-05 关务是控制域专项旁路，PN-08 是产品级试点治理编排。</dd>
+    <dt>UC-XX-nnn</dt><dd>应用用例，把已确认领域规则组织成输入/结果/编排/失败边界/验收条件；如 <code>UC-PS-001</code> 提交委托（图 5）。</dd>
+    <dt>P / R / S / N/A</dt><dd>验收证据层级：真实生产 / 历史回放 / 受控模拟（合成）/ 本期不适用。合成数据一律标 <code>S</code>，不冒充生产。</dd>
+    <dt>未配置态 / 空态</dt><dd>「这条渠道没人配过」（403 <code>ACCESS_CHANNEL_NOT_CONFIGURED</code>）vs.「册里没有」（200 + 空列表）。两态在页面上分开呈现，未配置态不得显示「0 条」（图 23）。</dd>
+    <dt>PAR-*</dt><dd>参数登记册条目（如 <code>PAR-INT-01</code> 客户委托接入渠道、<code>PAR-NET-14</code> 服务区域地理覆盖形态、<code>PAR-GOV-*</code> 治理参数）：只登真实实例状态，不定义规则。</dd>
+    <dt>BD-*</dt><dd>未确认的业务决策项，保持可配置或显式未决，不写死为生产默认；<code>BD-PS-001…008</code> 八项接单机制已确认，真实参数仍待登记。</dd>
+    <dt>生产归属</dt><dd>某范围在某时段由哪个系统作为唯一生产写入方；权威身份（本产品/其他/未决）× 准入控制（OPEN/PAUSED）两个正交维度。</dd>
+    <dt>有效网络收寄</dt><dd>网络服务下运营企业控制责任的起点；客户送站与场外揽收两类来源统一解释为对象级同义结果（图 9）。</dd>
+    <dt>正式承诺 / 预计承诺</dt><dd>接受时形成预计承诺；有效网络收寄并完成资格校验后形成正式承诺，后续只以带原因的新版本调整。</dd>
+    <dt>权威运输交接</dt><dd>逐对象形成的运输控制转移结果：待确认 / 已拒收 / 已交接；只有已交接转移控制（图 10）。</dd>
+    <dt>运输收费发生项</dt><dd>运输履约按供应商协议发生条件形成的「发生了什么」记录，<b>不含金额</b>；金额由计价评价与结算采用分别形成（图 17）。</dd>
+    <dt>Outbox / Inbox / 直投</dt><dd>跨上下文交接：发布意图与业务结果同一事务落库（Outbox），派发器按进程内路由表直投消费门（Inbox），至少一次、幂等、毒丸显式拒收（图 20）。</dd>
+    <dt>棘轮门禁</dt><dd><code>internal/architecture</code> 下冻着基线的门禁：导出领域工厂的零生产调用点名单只能缩不能长。</dd>
+  </dl>
+  <h3>图例与阅读约定</h3>
+  <div class="legend"><span class="l-ctx">上下文 / 步骤</span><span class="l-ok">正向结果 · 已放行</span><span class="l-warn">未决 · 等待态 · 治理决定</span><span class="l-bad">拒绝 · 阻断 · 未配置</span><span class="l-ext">外部方 · 非本上下文所有 · 未来</span></div>
+  <ul class="small">
+    <li>菱形 = 判断点；实线 = 主链推进或提供事实；虚线 = 门禁、请求、治理或引用，<b>不取得对象所有权</b>。</li>
+    <li>状态机里的状态名取自各 <code>CONTEXT.md</code> 的 Lifecycles 原词；图上未画的转换以文档为准，不在图上「补全」。</li>
+    <li>每幅图右上角是取证来源；图只组织既有权威文档，与文档不符时以文档为准，与代码不符时以代码为准。</li>
+  </ul>
+</section>
+
+</main>
+
+<footer>
+  <p>本文是 2026-09-16 的<b>快照</b>，不是权威文档：产品与领域规则以 <code>docs/product/*</code>、<code>docs/domain/*</code>、各 <code>CONTEXT.md</code>、<code>UC-*</code> 与 ADR 为准；可由代码算出的数以 <code>docs/product/MECHANISM-INVENTORY.md</code> 为准；管理台接线态以 <code>apps/admin-web/src/page-registry.tsx</code> 的 <code>liveIds</code> 为准；派发路由以 <code>cmd/parcel-dispatch/assemble.go</code> 为准；票况以 <code>.scratch/*/issues/*.md</code> 的 <code>Status:</code> 行与 <code>.scratch/tasks.md</code> 为准。读到与代码不符时以代码为准。</p>
+  <p>存放位置：<code>.scratch/project-overview-2026-09-16/project-overview.html</code>（由通道 6 会话生成；第 2 版补全 26 幅流程图）。流程图以 Mermaid 源码内嵌，渲染库经 jsdelivr CDN 加载；离线时以源码显示。</p>
+</footer>
+
+<script type="module">
+  try {
+    const { default: mermaid } = await import('https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs');
+    mermaid.initialize({
+      startOnLoad: false,
+      theme: 'base',
+      securityLevel: 'loose',
+      deterministicIds: true,
+      fontFamily: '-apple-system, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif',
+      themeVariables: {
+        primaryColor: '#eef6fb', primaryBorderColor: '#0b6e99', primaryTextColor: '#1f2933',
+        secondaryColor: '#f2f6f9', tertiaryColor: '#fbfcfd',
+        lineColor: '#5b6b7a', textColor: '#1f2933', fontSize: '13px',
+        clusterBkg: '#f7f9fb', clusterBorder: '#c5cfd8',
+        edgeLabelBackground: '#ffffff',
+        actorBkg: '#eef6fb', actorBorder: '#0b6e99', actorTextColor: '#1f2933',
+        signalColor: '#1f2933', signalTextColor: '#1f2933',
+        labelBoxBkgColor: '#fdf8ee', labelBoxBorderColor: '#b7791f',
+        noteBkgColor: '#fffbea', noteBorderColor: '#b7791f',
+        altSectionBkgColor: '#f7f9fb'
+      },
+      flowchart: { htmlLabels: true, curve: 'basis', nodeSpacing: 26, rankSpacing: 40, padding: 10, useMaxWidth: false },
+      sequence: { actorMargin: 18, messageMargin: 30, mirrorActors: false, useMaxWidth: false, wrap: true, width: 170 },
+      state: { useMaxWidth: false },
+      timeline: { useMaxWidth: false }
+    });
+    await mermaid.run({ querySelector: 'pre.mermaid' });
+    // 自然尺寸不超过容器 1.8 倍的图默认「适应宽度」（缩放不低于约 55%，仍可读）；
+    // 更宽的图保持原始尺寸横向滚动，避免缩成一团。每幅图头部有按钮可手动切换。
+    const naturalWidth = (svg) => parseFloat(svg.getAttribute('width')) || svg.getBoundingClientRect().width;
+    const markWide = () => {
+      for (const body of document.querySelectorAll('figure.fig .fig-body')) {
+        body.classList.toggle('is-wide', !body.classList.contains('fit') && body.scrollWidth > body.clientWidth + 8);
+      }
+    };
+    for (const fig of document.querySelectorAll('figure.fig')) {
+      const body = fig.querySelector('.fig-body');
+      const svg = body && body.querySelector('svg');
+      const head = fig.querySelector('.fig-head');
+      if (!body || !svg || !head) continue;
+      const ratio = naturalWidth(svg) / Math.max(body.clientWidth, 1);
+      if (ratio > 1 && ratio <= 1.8) body.classList.add('fit');
+      const btn = document.createElement('button');
+      btn.type = 'button';
+      btn.className = 'fit-toggle';
+      const label = () => { btn.textContent = body.classList.contains('fit') ? '原始尺寸' : '适应宽度'; };
+      label();
+      btn.addEventListener('click', () => { body.classList.toggle('fit'); label(); markWide(); });
+      head.appendChild(btn);
+    }
+    markWide();
+    window.addEventListener('resize', markWide);
+    document.body.classList.add('mermaid-ready');
+  } catch (e) {
+    document.body.classList.add('mermaid-failed');
+    console.error('mermaid load/render failed', e);
+  }
+</script>
+</body>
+</html>
