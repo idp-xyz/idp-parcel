@@ -117,9 +117,10 @@ export const unregistered = '未登记';
  * 只说明为什么没有 outcome。
  *
  * HANDOFF_NOT_SENT 是本上下文登记口独有的一格：事实的版本行已落，但向 customs-compliance 交的采用信封
- * 没出去。它折成 5xx 而不与已采用同格（判据与受控 CLI 的 fundsAnswer 同一条）：CC 的税费付款核对等的正是
- * 那封，答 2xx 会让操作者把一封永远不会到的信当成已出。续办是重发同一份——Outbox 按认领键吞重，重放交的是
- * 同一封，不会重复采用。
+ * 因依赖故障没出去。它折成 5xx 而不与已采用同格（判据与受控 CLI 的 fundsAnswer 同一条）：CC 的税费付款核对等的
+ * 正是那封，答 2xx 会让操作者把一封永远不会到的信当成已出。续办是重发同一份——Outbox 按认领键吞重，重放交的是
+ * 同一封，不会重复采用。这句只对依赖故障成立：信封被框架确定性拒收（引用太长把信封顶过上限）是另一格
+ * HANDOFF_ENVELOPE_REJECTED，服务端整笔回滚、什么都没登记，重发同一份永远同一个结果（票 sa-cc/32）。
  */
 export const problemCodeNotes: Record<string, string> = {
   METHOD_NOT_ALLOWED: '请求方法不被该端点允许。这是调用方式问题，不是业务答案。',
@@ -129,7 +130,9 @@ export const problemCodeNotes: Record<string, string> = {
     '服务端处理未能完成（资金事实库不可用或事务回滚），本次没有形成任何业务答案，登记与否未知，可稍后重试。',
   UNNAMED_OUTCOME: '用例交回了一个没有名字的答案——实现坏了，不是业务答案；请携带关联标识查询服务端记录。',
   HANDOFF_NOT_SENT:
-    '事实已采用（版本行已落），但向 customs-compliance 交的采用信封未出——重发同一份即补发同一封，不会重复采用。',
+    '事实已采用（版本行已落），但向 customs-compliance 交的采用信封因依赖故障未出——重发同一份即补发同一封，不会重复采用。',
+  HANDOFF_ENVELOPE_REJECTED:
+    '采用信封被框架确定性拒收（引用太长把信封顶过上限），本次什么都没登记；要改的是引用的长度或形，重发同一份永远同一个结果。',
 };
 
 export function problemNote(code: string): string {

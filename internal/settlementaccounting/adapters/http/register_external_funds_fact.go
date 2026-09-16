@@ -2,9 +2,11 @@ package settlementhttp
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
+	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
 // 外部资金事实采用与更正的在线登记口（票 sa-cc/31，27 裁决 2 第二步；ADR-0085 决定一：在线口与登记 CLI
@@ -95,7 +97,12 @@ func newFundsRegistrationEndpoint[Command any](
 
 		result, err := register(request.Context(), command)
 		if err != nil {
-			// 编排交回 error 即没形成答案（ADR-0022）：事务壳已回滚，行没落、信封没出。
+			// 编排交回 error 即没形成答案（ADR-0022）：事务壳已回滚，行没落、信封没出。只有采用信封被框架确定性
+			// 拒收这一格是调用方的错（票 sa-cc/32 裁决 2 / 3）：同一份再交永远同一个结果，答 500 会叫人稍后重试。
+			if errors.Is(err, ports.ErrFundsFactHandoffRejected) {
+				writeProblem(response, http.StatusBadRequest, codeHandoffEnvelopeRejected)
+				return
+			}
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
@@ -110,6 +117,10 @@ const (
 	// codeHandoffNotSent：记录已落、向 CC 交的采用信封未出（FundsResult.FundsHandoffReference 非空）。
 	// 判据见 writeFundsAnswer 头注。
 	codeHandoffNotSent = "HANDOFF_NOT_SENT"
+	// codeHandoffEnvelopeRejected：采用信封被框架确定性校验拒收（ports.ErrFundsFactHandoffRejected），事务已回滚、什么都
+	// 没登记；要改的是引用的长度或形，与 MALFORMED_REQUEST 同一条分流纪律（4xx 出队交给人）。与 customs-compliance 外部
+	// 结果口的同名码同族——同一种失败在两个上下文的接入面上叫同一个名字。
+	codeHandoffEnvelopeRejected = "HANDOFF_ENVELOPE_REJECTED"
 )
 
 // fundsRegistrationResponse 是采用与更正两口的封闭响应形状。`outcome` 取 application.FundsOutcome 原名；
@@ -136,6 +147,8 @@ type fundsRegistrationResponse struct {
 // 「重发同一份」正是 5xx 的恢复动作，所以折成 500 并带专名 HANDOFF_NOT_SENT、不带 outcome——答 2xx 带原名会让
 // 一个只看状态与 outcome 的调用方（管理台的登记签正是这样读的）把 CC 永远等不到的那封当成已出。续办引用本身
 // 不进响应：它由租户、事实引用与版本拼成，调用方手里的正是这三样；专名错误码已经把「该做什么」说清了。
+// 自票 sa-cc/32 起这一格只对依赖故障成立：信封被框架确定性拒收的那一格编排返 error、在端点体映成 400
+// HANDOFF_ENVELOPE_REJECTED，到不了这里——「重发同一份」因此只对还能补发的因说话。
 func writeFundsAnswer(response http.ResponseWriter, result application.FundsResult) {
 	name := result.Outcome().String()
 	if name == "" {

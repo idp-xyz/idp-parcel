@@ -440,6 +440,35 @@ func TestAnAdoptedFactWhoseHandoffDidNotLeaveIsNotReportedAsAdopted(t *testing.T
 	}
 }
 
+// Covers: 票 sa-cc/32 裁决 2 / 3 的端点半边——采用信封被框架确定性拒收时编排返 ports.ErrFundsFactHandoffRejected
+// （事务壳回滚，行没落、信封没出），两口都映成 400 HANDOFF_ENVELOPE_REJECTED、不带 outcome：与 CLI 归用法格同一判据
+// （ADR-0029：重发同样的内容不会改变结果，要改的是引用的长度或形），与 CC 外部结果口的同名码同族；不落 500
+// NO_ANSWER_FORMED——那一格叫人稍后重试，而这一格重试永远同一个结果。
+func TestARejectedHandoffEnvelopeIsTheCallersProblemNotAMissingAnswer(t *testing.T) {
+	rejected := fmt.Errorf("hand off external funds fact: %w: subject exceeds 512 bytes", ports.ErrFundsFactHandoffRejected)
+	endpoints := map[string]http.Handler{
+		"采用": settlementhttp.NewRegisterExternalFundsFactEndpoint(
+			fundsIntakeDouble{adopt: adoptCommand(t)},
+			fundsHandlerOver(t, &fundsStoreStub{saveOutcome: ports.FundsFactSaved, handoffErr: rejected})),
+		"更正": settlementhttp.NewRegisterExternalFundsFactCorrectionEndpoint(
+			fundsIntakeDouble{correction: correctionCommand(t)},
+			fundsHandlerOver(t, &fundsStoreStub{head: headRecord(t), headFound: true, saveOutcome: ports.FundsFactSaved, handoffErr: rejected})),
+	}
+	for name, endpoint := range endpoints {
+		t.Run(name, func(t *testing.T) {
+			recorder := httptest.NewRecorder()
+			endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/probe", nil))
+			if recorder.Code != http.StatusBadRequest {
+				t.Fatalf("信封被确定性拒收答 %d（%s）, want 400", recorder.Code, recorder.Body.String())
+			}
+			if code := problemCode(t, recorder); code != "HANDOFF_ENVELOPE_REJECTED" {
+				t.Fatalf("错误码 = %q, want HANDOFF_ENVELOPE_REJECTED", code)
+			}
+			assertNoOutcome(t, recorder)
+		})
+	}
+}
+
 // Covers: 判据 3——更正端点逐名过线：回指链头的更正 201 已采用；回指自己 / 回指非链头 / 更正未采用的事实都是
 // `未受理` 200 原名（提交矛盾，改内容再来，不是重试）；库不可用 5xx。
 func TestExternalFundsFactCorrectionRegistrationTranscribesTheAnswerAlgebra(t *testing.T) {
