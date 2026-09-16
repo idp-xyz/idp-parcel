@@ -8,11 +8,12 @@ import (
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 )
 
-// PartyIdentityCatalogueReader 是参与方身份目录各端点消费的读口。它嵌入修订历史那一口
-// （票 admin-web-group-legal-entities/03）：这些端点在装配点上共用同一个读口参数，判据在
-// ports.PartyIdentityCatalogueRead——读同一张表、同一租户作用域、供同一页。
+// PartyIdentityCatalogueReader 是参与方身份目录各端点消费的读口。它嵌入两册的修订历史读口
+// （法人册票 admin-web-group-legal-entities/03，参与方册票 12）：这些端点在装配点上共用同一个读口参数，
+// 判据在 ports.PartyIdentityCatalogueRead——读同一张表、同一租户作用域、供同一页。
 type PartyIdentityCatalogueReader interface {
 	LegalEntityRevisionHistoryReader
+	BusinessPartyRevisionHistoryReader
 	ListBusinessParties(
 		ctx context.Context,
 		tenant domain.TenantID,

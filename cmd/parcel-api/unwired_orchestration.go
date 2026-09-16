@@ -1389,13 +1389,21 @@ func (unwiredCommercialCatalogue) ListGroupLegalEntities(
 	return nil, errOrchestrationNotWired
 }
 
-// 责任法人修订历史（票 admin-web-group-legal-entities/03）随 PartyIdentityCatalogueReader 嵌入进来，
-// 生产装配交入的仍是同一只商业目录适配器，占位因此也挂在本类型上。
+// 两册的修订历史（法人册票 admin-web-group-legal-entities/03，参与方册票 12）随 PartyIdentityCatalogueReader
+// 嵌入进来，生产装配交入的仍是同一只商业目录适配器，占位因此也挂在本类型上。
 func (unwiredCommercialCatalogue) ListLegalEntityRevisions(
 	context.Context,
 	commercialdomain.TenantID,
 	commercialdomain.LegalEntityReference,
 ) ([]commercialports.LegalEntityRevisionRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredCommercialCatalogue) ListBusinessPartyRevisions(
+	context.Context,
+	commercialdomain.TenantID,
+	commercialdomain.PartyID,
+) ([]commercialports.BusinessPartyRevisionRow, error) {
 	return nil, errOrchestrationNotWired
 }
 

@@ -1001,11 +1001,13 @@ type PartyRelationshipRow struct {
 // 修订史是登记册的证据面，不是目录的行。租户在签名上、Limit 非正拒、空册答空列表，
 // 判据同 ServiceProductCatalogueRead。
 //
-// 证据面另有出口：嵌入的 LegalEntityRevisionHistoryRead 按单个法人展开全部修订，供同一页
-// 的详情抽屉。它嵌在这里而不另立读口参数，因为读的是同一张表、同一租户作用域、供的是同一页
-// （读口参数跟着页走）；行形状不同、也没有页大小，所以它是另一个接口而不是这里的第四个方法。
+// 证据面另有出口：嵌入的 LegalEntityRevisionHistoryRead 与 BusinessPartyRevisionHistoryRead 各按单个
+// 法人 / 参与方展开全部修订，供同一页的详情抽屉。它们嵌在这里而不另立读口参数，因为读的是同一张表、
+// 同一租户作用域、供的是同一页（读口参数跟着页走）；行形状不同、也没有页大小，所以各是另一个接口而不是
+// 这里多出的方法。
 type PartyIdentityCatalogueRead interface {
 	LegalEntityRevisionHistoryRead
+	BusinessPartyRevisionHistoryRead
 	ListBusinessParties(
 		ctx context.Context,
 		tenant domain.TenantID,
