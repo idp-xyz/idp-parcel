@@ -1,7 +1,7 @@
 # 10 参与方身份 / 参与方关系 / 身份停用三册逐字段表单（ADR-0101 决定八自裁），JSON 快照签降为折叠区
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress
 Blocked by: 09（同一文件 `BusinessPartiesPage.tsx`——09 改两张读签与抽屉、本票改登记签并把列表状态抬到页面持有；两票同时写一个文件就是
 parallel-sessions「共享接线文件」那一格，先后做）
 地盘：`apps/admin-web/src/pages/party/BusinessPartiesPage.tsx`（登记签那段 + 列表状态抬到页面）、新 `BusinessPartyRegistrationForm.tsx` /
