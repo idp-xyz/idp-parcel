@@ -59,8 +59,8 @@ export const domainStatusTones = {
   '已生效': 'positive',
   '已退役': 'neutral',
 
-  // —— 参与方身份生命周期 · 出处：docs/domain/party-commercial/CONTEXT.md「身份生命周期」
-  // （已登记 → 已生效 → 已停用）——
+  // —— 参与方身份生命周期 · 出处：docs/domain/party-commercial/CONTEXT.md Lifecycles 下
+  // 「参与方身份（业务参与方、责任法人、货主客户账户）」（已登记 → 已生效 → 已停用）——
   // 已登记是登记已落册、生效时点未到：CONTEXT 原句「生效时点未到的登记不支持新的商业决定」，
   // 是推进中的确定阶段、无需有人行动，与`已发布`同档。已停用是携显式依据与时点的合法终局，
   // 身份及其历史登记保留、既有引用继续有效，不靠着色报警，与`已退役`同档。`已生效`共用上面那格。

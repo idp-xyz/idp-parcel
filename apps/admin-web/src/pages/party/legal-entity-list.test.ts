@@ -73,6 +73,21 @@ test('三种排序各按其键，且不改原数组', () => {
   deepEqual(ids(rows), before);
 });
 
+// Covers: 时刻比按解析值不按字典序——端点用 RFC3339Nano 剪尾零，同一秒内小数位数不定，字典序会把
+// `55Z` 排到 `55.939Z` 之后、`55.9Z` 排到 `55.93Z` 之后（评审 ← 通道 3 · 钉 71c7d5a3 · Standards 1）。
+// 解析不了的值退回字符串比，不抛、不丢行。
+test('同一秒内小数位数不定的时刻按真实先后排', () => {
+  const sameSecond = [
+    record({ legalEntityId: 'A', registeredAt: '2026-09-16T04:27:55.9Z' }),
+    record({ legalEntityId: 'B', registeredAt: '2026-09-16T04:27:55Z' }),
+    record({ legalEntityId: 'C', registeredAt: '2026-09-16T04:27:55.939Z' }),
+    record({ legalEntityId: 'D', registeredAt: '2026-09-16T04:27:55.93Z' }),
+  ];
+  deepEqual(ids(sortLegalEntities(sameSecond, 'registered-desc')), ['C', 'D', 'A', 'B']);
+  const unparsable = [record({ legalEntityId: 'X', registeredAt: 'not-a-time' }), record({ legalEntityId: 'Y' })];
+  deepEqual(ids(sortLegalEntities(unparsable, 'registered-desc')), ['X', 'Y']);
+});
+
 // Covers: 裁决 1——筛出为空不是空态。计数摘要总数与当前显示数分开报，筛空时照显「共 N 个，当前显示 0 个」，
 // 表格区那一行说的是「当前条件下无匹配」而不是「登记册为空」（两者续办不同：前者改条件，后者去登记）。
 test('计数摘要分报总数与当前显示数，筛空提示不冒充空态', () => {
@@ -87,5 +102,10 @@ test('筛选与排序选项表', () => {
   deepEqual(
     legalEntityStatusFilterOptions.map((option) => option.value),
     ['ALL', 'REGISTERED', 'EFFECTIVE', 'DEACTIVATED'],
+  );
+  // 词从 identityStatusLabels 派生：三格 CONTEXT 原词（已登记 / 已生效 / 已停用）不在本文件另抄。
+  deepEqual(
+    legalEntityStatusFilterOptions.map((option) => option.label),
+    ['全部状态', '已登记', '已生效', '已停用'],
   );
 });

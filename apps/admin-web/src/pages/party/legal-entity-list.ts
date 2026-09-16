@@ -6,6 +6,7 @@
 // 不是对册排；分页下推之前这条限制如实存在，页面不假装成全量。
 
 import type { GroupLegalEntityRecord } from './api';
+import { identityStatusLabels, labelOf } from './presentation';
 
 /** 身份状态封闭三格（domain IdentityStatus 原名）加「全部」。 */
 export type LegalEntityStatusFilter = 'ALL' | 'REGISTERED' | 'EFFECTIVE' | 'DEACTIVATED';
@@ -26,12 +27,14 @@ export interface SelectOption<Value extends string> {
   label: string;
 }
 
-// 选项表由页面直接渲染，词取 identityStatusLabels 那三格的 CONTEXT 原词，不另抄一份中文。
+// 选项表由页面直接渲染，词从 identityStatusLabels 派生——那份词表是 CONTEXT 原词在前端的唯一一处，
+// 这里再抄一份就会在改词时漏一处。
 export const legalEntityStatusFilterOptions: readonly SelectOption<LegalEntityStatusFilter>[] = [
   { value: 'ALL', label: '全部状态' },
-  { value: 'REGISTERED', label: '已登记' },
-  { value: 'EFFECTIVE', label: '已生效' },
-  { value: 'DEACTIVATED', label: '已停用' },
+  ...(['REGISTERED', 'EFFECTIVE', 'DEACTIVATED'] as const).map((value) => ({
+    value,
+    label: labelOf(identityStatusLabels, value),
+  })),
 ];
 
 export const legalEntitySortOptions: readonly SelectOption<LegalEntitySortKey>[] = [
@@ -67,9 +70,17 @@ export function legalEntityCountSummary(total: number, visible: number): string 
 /** 筛出为空时表格区那一行的话；措辞点明是「筛选条件」，与空态「尚无登记」分得开。 */
 export const legalEntityNoMatchNote = '当前筛选条件下没有匹配的法人';
 
-// 时刻按字符串比：端点给的是 RFC 3339 UTC，同一格式下字典序即时间序，不必解析；解析失败的
-// 值会静默排到一头去，而字符串比至少是稳定且可预期的。
 const byString = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0);
+
+// 时刻按解析后的毫秒比，不按字符串比：端点经 catalogue_intake.go 的 rfc3339() 用 RFC3339Nano 格式化，
+// 尾零被剪、小数位数不定（`…55Z` / `…55.9Z` / `…55.939Z` 并存），字典序会把 `55Z` 排到 `55.939Z` 之后——
+// 受控 CLI 批量灌入的行落在同一秒，正是默认排序要排的那批。解析不了的值退回字符串比，稳定且可预期。
+const byInstant = (left: string, right: string) => {
+  const leftMillis = Date.parse(left);
+  const rightMillis = Date.parse(right);
+  if (Number.isNaN(leftMillis) || Number.isNaN(rightMillis)) return byString(left, right);
+  return leftMillis - rightMillis;
+};
 
 /** 排序交回新数组，不改输入。 */
 export function sortLegalEntities(
@@ -79,13 +90,13 @@ export function sortLegalEntities(
   const sorted = [...rows];
   switch (key) {
     case 'registered-desc':
-      sorted.sort((left, right) => byString(right.registeredAt, left.registeredAt));
+      sorted.sort((left, right) => byInstant(right.registeredAt, left.registeredAt));
       break;
     case 'id-asc':
       sorted.sort((left, right) => byString(left.legalEntityId, right.legalEntityId));
       break;
     case 'effective-asc':
-      sorted.sort((left, right) => byString(left.effectiveFrom, right.effectiveFrom));
+      sorted.sort((left, right) => byInstant(left.effectiveFrom, right.effectiveFrom));
       break;
   }
   return sorted;
