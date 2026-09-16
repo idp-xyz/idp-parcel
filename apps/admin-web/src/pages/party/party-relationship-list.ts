@@ -5,15 +5,20 @@
 // 端点今天答的是每段关系的最新修订、上限 isolatedReadLimit 一页，这里的排序是对这一页排，不是对册排。
 
 import type { PartyRelationshipRecord } from './api';
-import { labelOf, partyRoleLabels, relationshipStatusLabels } from './presentation';
-import { byInstant, byString, matchesSearch, type SelectOption } from './list-order';
+import {
+  partyRoleLabels,
+  relationshipStatusLabels,
+  type PartyRoleCode,
+  type RelationshipStatusCode,
+} from './presentation';
+import { byInstant, byString, codeFilterOptions, matchesSearch, type CodeFilter, type SelectOption } from './list-order';
 
 /**
  * 角色与状态两个筛选各取「全部」或词表里的一个码。码的封闭集由 presentation.ts 的两张词表拥有（CONTEXT 原词在
- * 前端的唯一一处），这里不再抄一份联合类型——抄了就会在词表扩格时漏一处；类型上只钉「ALL 或一个码」。
+ * 前端的唯一一处），类型从它们的键派生，这里不抄一份联合。
  */
-export type PartyRelationshipRoleFilter = 'ALL' | (string & {});
-export type PartyRelationshipStatusFilter = 'ALL' | (string & {});
+export type PartyRelationshipRoleFilter = CodeFilter<PartyRoleCode>;
+export type PartyRelationshipStatusFilter = CodeFilter<RelationshipStatusCode>;
 
 export interface PartyRelationshipFilter {
   search: string;
@@ -27,20 +32,9 @@ export interface PartyRelationshipFilter {
  */
 export type PartyRelationshipSortKey = 'effective-start-desc' | 'id-asc';
 
-// 两张选项表的码与词都从词表派生：Object.keys 沿词表登记顺序，那顺序就是 CONTEXT 里列举的顺序。
-function optionsFrom(table: Record<string, string>, allLabel: string): readonly SelectOption<string>[] {
-  return [{ value: 'ALL', label: allLabel }, ...Object.keys(table).map((value) => ({ value, label: labelOf(table, value) }))];
-}
-
-export const partyRelationshipRoleFilterOptions: readonly SelectOption<PartyRelationshipRoleFilter>[] = optionsFrom(
-  partyRoleLabels,
-  '全部角色',
-);
-
-export const partyRelationshipStatusFilterOptions: readonly SelectOption<PartyRelationshipStatusFilter>[] = optionsFrom(
-  relationshipStatusLabels,
-  '全部状态',
-);
+// 两张选项表的码与词都从词表派生，页面直接渲染。
+export const partyRelationshipRoleFilterOptions = codeFilterOptions(partyRoleLabels, '全部角色');
+export const partyRelationshipStatusFilterOptions = codeFilterOptions(relationshipStatusLabels, '全部状态');
 
 export const partyRelationshipSortOptions: readonly SelectOption<PartyRelationshipSortKey>[] = [
   { value: 'effective-start-desc', label: '生效起 新→旧' },

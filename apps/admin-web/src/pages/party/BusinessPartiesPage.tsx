@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Button,
   Drawer,
@@ -12,7 +12,6 @@ import {
 } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
-import { StatusBadgeFor, domainStatusTones, type DomainStatus } from '../../domain/status';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
@@ -28,12 +27,21 @@ import {
 import {
   identityStatusLabels,
   labelOf,
+  partyNameUnknownNote,
   partyRoleLabels,
   problemNote,
   relationshipStatusLabels,
 } from './presentation';
 import { businessPartyRevisionHistoryNote, businessPartyRevisionTimeline } from './business-party-revisions';
-import { DetailRow, Instant, InstantRange, filterSelectClass, useCopyToClipboard } from './detail-primitives';
+import {
+  DetailRow,
+  Instant,
+  InstantRange,
+  UnknownPartyName,
+  filterSelectClass,
+  statusBadge,
+  useCopyToClipboard,
+} from './detail-primitives';
 import { useRegisterList } from './register-list';
 import { BusinessPartyRegistrationForm } from './BusinessPartyRegistrationForm';
 import { PartyRelationshipRegistrationForm } from './PartyRelationshipRegistrationForm';
@@ -64,15 +72,6 @@ import {
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['business-parties'];
 
-// 词表词按共享词表着色；词表没收录的码（服务端新增一格时）原样示码、不猜色调——归进某个既有中文说法会让
-// 一种新答案冒充另一种。身份与关系各取各的词表（两册状态代数不同，见页组件头注），色调同源于 domain/status。
-function statusBadge(table: Record<string, string>, code: string): ReactNode {
-  const word = labelOf(table, code);
-  return word in domainStatusTones ? <StatusBadgeFor status={word as DomainStatus} /> : word;
-}
-
-const unknownName = <span className="text-idpxyz-textMuted">参与方册查无此身份</span>;
-
 // 参与方格：标识必列，名称从参与方册转写；nameKnown 为假是写入门失败才会出现的
 // 悬空引用，如实标出，不补占位文本。
 function partyCell(id: string, name: string | undefined, nameKnown: boolean) {
@@ -82,7 +81,7 @@ function partyCell(id: string, name: string | undefined, nameKnown: boolean) {
       {nameKnown ? (
         <p className="mt-0.5 font-medium text-idpxyz-text">{name}</p>
       ) : (
-        <p className="mt-0.5 text-xs text-idpxyz-textMuted">参与方册查无此身份</p>
+        <p className="mt-0.5 text-xs text-idpxyz-textMuted">{partyNameUnknownNote}</p>
       )}
     </div>
   );
@@ -372,11 +371,13 @@ function PartyRelationshipDrawer({ row, onClose }: { row: PartyRelationshipRecor
               <DetailRow label="持有方" mono onCopy={() => copy('持有方', row.holderId)}>
                 {row.holderId}
               </DetailRow>
-              <DetailRow label="持有方名称">{row.holderNameKnown ? row.holderName : unknownName}</DetailRow>
+              <DetailRow label="持有方名称">{row.holderNameKnown ? row.holderName : <UnknownPartyName />}</DetailRow>
               <DetailRow label="相对方" mono onCopy={() => copy('相对方', row.counterpartyId)}>
                 {row.counterpartyId}
               </DetailRow>
-              <DetailRow label="相对方名称">{row.counterpartyNameKnown ? row.counterpartyName : unknownName}</DetailRow>
+              <DetailRow label="相对方名称">
+                {row.counterpartyNameKnown ? row.counterpartyName : <UnknownPartyName />}
+              </DetailRow>
               <DetailRow label="角色">{labelOf(partyRoleLabels, row.role)}</DetailRow>
               <DetailRow label="适用范围" mono>
                 {row.scope}
@@ -544,7 +545,7 @@ function PartyRelationshipsTable({
               className={filterSelectClass}
               value={role}
               aria-label="角色"
-              onChange={(event) => setRole(event.target.value)}
+              onChange={(event) => setRole(event.target.value as PartyRelationshipRoleFilter)}
             >
               {partyRelationshipRoleFilterOptions.map((option) => (
                 <option key={option.value} value={option.value}>
@@ -556,7 +557,7 @@ function PartyRelationshipsTable({
               className={filterSelectClass}
               value={status}
               aria-label="状态"
-              onChange={(event) => setStatus(event.target.value)}
+              onChange={(event) => setStatus(event.target.value as PartyRelationshipStatusFilter)}
             >
               {partyRelationshipStatusFilterOptions.map((option) => (
                 <option key={option.value} value={option.value}>

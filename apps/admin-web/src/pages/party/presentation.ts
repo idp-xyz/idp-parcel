@@ -168,32 +168,42 @@ export const cancellationPartyLabels: Record<string, string> = {
   OPERATIONS: '运营',
 };
 
+// 下面四张身份族词表的键在类型上是封闭的（`as const` + `keyof typeof`，与 domain/status.tsx 的 domainStatusTones
+// 同一写法）：列表模块的筛选码类型、停用表单的种类类型都从键派生，不在别处再抄一份联合——词表扩一格，派生处
+// 自动跟上（票 admin-web-group-legal-entities/09 评审 N4）。仍可当 Record<string, string> 传给 labelOf。
+
 // 参与方身份生命周期封闭三格(domain IdentityStatus)。与 commercialStatusLabels 分表:
 // 身份状态按时点导出,商业对象状态是发布生命周期,同词 EFFECTIVE 在两套代数里含义
 // 不同,并表会让一套的封闭性替另一套背书。
-export const identityStatusLabels: Record<string, string> = {
+export const identityStatusLabels = {
   REGISTERED: '已登记',
   EFFECTIVE: '已生效',
   DEACTIVATED: '已停用',
-};
+} as const satisfies Record<string, string>;
+
+export type IdentityStatusCode = keyof typeof identityStatusLabels;
 
 // 参与方关系生命周期封闭五格(domain RelationshipStatus),中文取 CONTEXT 原词。
-export const relationshipStatusLabels: Record<string, string> = {
+export const relationshipStatusLabels = {
   CANDIDATE: '候选关系',
   EFFECTIVE: '已生效',
   EXPIRED: '已到期',
   REVOKED: '已撤销',
   SUPERSEDED: '已替代',
-};
+} as const satisfies Record<string, string>;
+
+export type RelationshipStatusCode = keyof typeof relationshipStatusLabels;
 
 // 参与方角色封闭五格(domain PartyRole),中文取 CONTEXT 原词。
-export const partyRoleLabels: Record<string, string> = {
+export const partyRoleLabels = {
   CUSTOMER: '客户',
   SUPPLIER: '供应商',
   CARRIER_AGENT: '承运商代理',
   RESELLER: '转售',
   ACCOUNT_HOLDER: '渠道账号持有',
-};
+} as const satisfies Record<string, string>;
+
+export type PartyRoleCode = keyof typeof partyRoleLabels;
 
 // 法人册对象类型今天只有一格(传输层 kindResponsibleLegalEntity):经营组织没有
 // 登记面,如实不上列,不预开空格。
@@ -204,11 +214,17 @@ export const legalEntityKindLabels: Record<string, string> = {
 // 可停用的身份种类封闭集（application.PartyIdentityKind 的名称镜像 identityKindFromName），中文取 CONTEXT 原词。
 // 关系不在内：关系的终止走撤销 / 到期 / 替代，不叫停用（DeactivatePartyIdentityCommand 注释）。停用表单的种类
 // 下拉只从这里派生，不另抄一份封闭集。
-export const identityKindLabels: Record<string, string> = {
+export const identityKindLabels = {
   BUSINESS_PARTY: '业务参与方',
   LEGAL_ENTITY: '责任法人',
   CUSTOMER_ACCOUNT: '货主客户账户',
-};
+} as const satisfies Record<string, string>;
+
+export type IdentityKind = keyof typeof identityKindLabels;
+
+// 法人与客户账户的「名称」在参与方册上转写而来；转不到是写入门失败才会出现的悬空引用，如实标出让人去查写侧，
+// 不补占位文本冒充名称。两页的列、抽屉与三册候选转写说的是同一件事，同一句话只在这里一处。
+export const partyNameUnknownNote = '参与方册查无此身份';
 
 export const problemCodeNotes: Record<string, string> = {
   METHOD_NOT_ALLOWED: '请求方法不被该端点允许。这是调用方式问题,不是业务答案。',

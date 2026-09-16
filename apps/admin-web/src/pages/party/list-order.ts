@@ -1,10 +1,29 @@
-// 参与方模块各册页列表的排序比较器与下拉选项形状（票 admin-web-group-legal-entities/09）。纯函数，
-// 供 business-party-list.ts 与 party-relationship-list.ts 共用；legal-entity-list.ts（票 01）里同形的
-// 私有副本先留着不动——那是另一张票的地盘，切到这里是收口时顺手的一笔，不在本票范围内。
+// 参与方模块各册页列表的排序比较器、搜索匹配与筛选下拉的形状（票 admin-web-group-legal-entities/09 立，票 13 第 8 条
+// 把法人页那份私有副本切过来并统一筛选码的类型）。纯函数，legal-entity-list.ts / business-party-list.ts /
+// party-relationship-list.ts 三份共用。
 
 export interface SelectOption<Value extends string> {
   value: Value;
   label: string;
+}
+
+/**
+ * 筛选下拉的值：「全部」或词表里的一个码。码的封闭集由 presentation.ts 的词表拥有（CONTEXT 原词在前端的唯一一处），
+ * `Code` 从它的键派生——任何列表模块不再抄一份联合类型，抄了就会在词表扩格时漏一处。
+ */
+export type CodeFilter<Code extends string> = 'ALL' | Code;
+
+/**
+ * 筛选选项表：「全部」在首位，其后是词表的每个码沿登记顺序各一项（那顺序就是 CONTEXT 里列举的顺序），词就是
+ * 词表里的词。页面直接渲染这张表，不另抄。
+ */
+export function codeFilterOptions<Code extends string>(
+  table: Record<Code, string>,
+  allLabel: string,
+): readonly SelectOption<CodeFilter<Code>>[] {
+  // Object.keys 交回 string[]；键的封闭集已由 Record<Code, string> 在类型上钉住，这一步只是把它说回去。
+  const codes = Object.keys(table) as Code[];
+  return [{ value: 'ALL', label: allLabel }, ...codes.map((value) => ({ value, label: table[value] }))];
 }
 
 /** 字典序，稳定且不依赖 locale——标识是机器串，不按语言排。 */

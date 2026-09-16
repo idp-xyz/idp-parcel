@@ -6,10 +6,11 @@
 // 不是对册排；分页下推之前这条限制如实存在，页面不假装成全量。
 
 import type { GroupLegalEntityRecord } from './api';
-import { identityStatusLabels, labelOf } from './presentation';
+import { identityStatusLabels, type IdentityStatusCode } from './presentation';
+import { byInstant, byString, codeFilterOptions, matchesSearch, type CodeFilter, type SelectOption } from './list-order';
 
-/** 身份状态封闭三格（domain IdentityStatus 原名）加「全部」。 */
-export type LegalEntityStatusFilter = 'ALL' | 'REGISTERED' | 'EFFECTIVE' | 'DEACTIVATED';
+/** 身份状态封闭三格（domain IdentityStatus 原名，从 identityStatusLabels 的键派生）加「全部」。 */
+export type LegalEntityStatusFilter = CodeFilter<IdentityStatusCode>;
 
 export interface LegalEntityFilter {
   search: string;
@@ -22,20 +23,8 @@ export interface LegalEntityFilter {
  */
 export type LegalEntitySortKey = 'registered-desc' | 'id-asc' | 'effective-asc';
 
-export interface SelectOption<Value extends string> {
-  value: Value;
-  label: string;
-}
-
-// 选项表由页面直接渲染，词从 identityStatusLabels 派生——那份词表是 CONTEXT 原词在前端的唯一一处，
-// 这里再抄一份就会在改词时漏一处。
-export const legalEntityStatusFilterOptions: readonly SelectOption<LegalEntityStatusFilter>[] = [
-  { value: 'ALL', label: '全部状态' },
-  ...(['REGISTERED', 'EFFECTIVE', 'DEACTIVATED'] as const).map((value) => ({
-    value,
-    label: labelOf(identityStatusLabels, value),
-  })),
-];
+// 选项表由页面直接渲染，码与词都从 identityStatusLabels 派生——那份词表是 CONTEXT 原词在前端的唯一一处。
+export const legalEntityStatusFilterOptions = codeFilterOptions(identityStatusLabels, '全部状态');
 
 export const legalEntitySortOptions: readonly SelectOption<LegalEntitySortKey>[] = [
   { value: 'registered-desc', label: '登记时间 新→旧' },
@@ -48,13 +37,9 @@ export function filterLegalEntities(
   rows: readonly GroupLegalEntityRecord[],
   filter: LegalEntityFilter,
 ): GroupLegalEntityRecord[] {
-  const needle = filter.search.trim().toLowerCase();
   return rows.filter((row) => {
     if (filter.status !== 'ALL' && row.status !== filter.status) return false;
-    if (needle === '') return true;
-    return [row.legalEntityId, row.partyId, row.partyName ?? '', row.status].some((value) =>
-      value.toLowerCase().includes(needle),
-    );
+    return matchesSearch(filter.search, [row.legalEntityId, row.partyId, row.partyName, row.status]);
   });
 }
 
@@ -69,18 +54,6 @@ export function legalEntityCountSummary(total: number, visible: number): string 
 
 /** 筛出为空时表格区那一行的话；措辞点明是「筛选条件」，与空态「尚无登记」分得开。 */
 export const legalEntityNoMatchNote = '当前筛选条件下没有匹配的法人';
-
-const byString = (left: string, right: string) => (left < right ? -1 : left > right ? 1 : 0);
-
-// 时刻按解析后的毫秒比，不按字符串比：端点经 catalogue_intake.go 的 rfc3339() 用 RFC3339Nano 格式化，
-// 尾零被剪、小数位数不定（`…55Z` / `…55.9Z` / `…55.939Z` 并存），字典序会把 `55Z` 排到 `55.939Z` 之后——
-// 受控 CLI 批量灌入的行落在同一秒，正是默认排序要排的那批。解析不了的值退回字符串比，稳定且可预期。
-const byInstant = (left: string, right: string) => {
-  const leftMillis = Date.parse(left);
-  const rightMillis = Date.parse(right);
-  if (Number.isNaN(leftMillis) || Number.isNaN(rightMillis)) return byString(left, right);
-  return leftMillis - rightMillis;
-};
 
 /** 排序交回新数组，不改输入。 */
 export function sortLegalEntities(
