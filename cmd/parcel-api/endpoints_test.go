@@ -110,6 +110,7 @@ var businessEndpointProbes = map[string]businessEndpointProbe{
 	"/commercial-customer-contracts":                                           {method: http.MethodGet, target: "/commercial-customer-contracts"},
 	"/commercial-supplier-agreements":                                          {method: http.MethodGet, target: "/commercial-supplier-agreements"},
 	"/commercial-group-legal-entities":                                         {method: http.MethodGet, target: "/commercial-group-legal-entities"},
+	"/commercial-group-legal-entities/{legalEntityId}/revisions":               {method: http.MethodGet, target: "/commercial-group-legal-entities/SYN-LE-01/revisions"},
 	"/commercial-party-relationships":                                          {method: http.MethodGet, target: "/commercial-party-relationships"},
 	"/commercial-customer-accounts":                                            {method: http.MethodGet, target: "/commercial-customer-accounts"},
 	"/commercial-product-channel-mappings":                                     {method: http.MethodGet, target: "/commercial-product-channel-mappings"},

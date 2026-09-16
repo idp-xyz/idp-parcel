@@ -1,7 +1,7 @@
 # 03 责任法人修订历史读口 + 详情抽屉「修订历史」区
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress
 Blocked by: 无（前端那半要等本票 Go 侧落地，同一张票内先后做）
 地盘：`internal/partycommercial/ports/`（读口接口）、`internal/partycommercial/adapters/postgres/`（读适配器）、
 `internal/partycommercial/adapters/http/`（端点）、`cmd/parcel-api/`（装配表一行 + 隔离读面 Intake 一格）、

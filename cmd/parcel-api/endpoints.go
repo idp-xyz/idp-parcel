@@ -431,6 +431,10 @@ func assembleBusinessEndpoints(
 		// 可显，而那正是本票标题那个生命周期。三口共用同一个读口参数与同一个 Intake 变量。
 		{Pattern: "/commercial-business-parties", Handler: commercialhttp.NewQueryBusinessPartiesEndpoint(commercialCatalogueIntake, partyIdentities)},
 		{Pattern: "/commercial-group-legal-entities", Handler: commercialhttp.NewQueryGroupLegalEntitiesEndpoint(commercialCatalogueIntake, partyIdentities)},
+		// 责任法人修订历史（票 admin-web-group-legal-entities/03）：法人册那一页详情抽屉的供数面，按路径里的法人展开
+		// 整条修订链。同读口参数、同 Intake 变量（读同一张表、同一租户作用域、供同一页——裁决在 ports.LegalEntityRevisionHistoryRead）；
+		// 隔离读准入启用时随 commercialCatalogue 一格一起换值，不另加开关。{legalEntityId} 由 chi 填进 PathValue，端点按同名取。
+		{Pattern: "/commercial-group-legal-entities/{legalEntityId}/revisions", Handler: commercialhttp.NewQueryLegalEntityRevisionsEndpoint(commercialCatalogueIntake, partyIdentities)},
 		{Pattern: "/commercial-party-relationships", Handler: commercialhttp.NewQueryPartyRelationshipsEndpoint(commercialCatalogueIntake, partyIdentities)},
 		// 货主客户账户册（票 admin-write-faces/04）——身份三级里的第三级，独立入口且独立读口
 		// 参数：它按 CONTEXT 落在客户与合同页而不是上面两册所在的页（一页一入口），读口跟着

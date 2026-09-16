@@ -62,6 +62,14 @@ func (double *partyIdentityReaderDouble) ListPartyRelationships(
 	return double.relationships, nil
 }
 
+// 修订历史那一口随 PartyIdentityCatalogueReader 嵌入进来；本文件的用例不经它，替身只补形状。
+// 它自己的替身与用例在 query_legal_entity_revisions_test.go。
+func (double *partyIdentityReaderDouble) ListLegalEntityRevisions(
+	context.Context, domain.TenantID, domain.LegalEntityReference,
+) ([]ports.LegalEntityRevisionRow, error) {
+	return nil, double.err
+}
+
 var identityListedAt = time.Date(2026, 8, 28, 9, 0, 0, 0, time.UTC)
 
 // Covers: 票 admin-remainder-mechanism-batch/01 的补格裁定——身份本体这一口要能把生命

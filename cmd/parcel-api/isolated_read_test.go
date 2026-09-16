@@ -142,6 +142,11 @@ var isolatedReadAdmittedPatterns = map[string]bool{
 	// 满足：消费本上下文自己的存储读面、零持久化、作用域来自运营侧授权结果——列并列冲突不触发任何判断，人工裁决
 	// 不在这一口。单列在表尾的理由同上两行。
 	"/channel-selection-decisions": true,
+	// 责任法人修订历史（票 admin-web-group-legal-entities/03）与商业目录查阅共用同一个 Intake 变量，启用态必然随
+	// 它一起放行。三条判据逐条满足：消费本上下文自己的存储读面（同一张 legal_entity_registration 表，只是不取
+	// DISTINCT ON）、零持久化、作用域来自运营侧授权结果——法人标识在路径上、租户仍只从注入作用域取。本用例经真
+	// 路由打到它并期待 500 而不是 400，顺带钉住 chi 把 {legalEntityId} 填进了 PathValue。单列在表尾的理由同上。
+	"/commercial-group-legal-entities/{legalEntityId}/revisions": true,
 }
 
 // Covers: ADR-0078 Decision 一、二 — 启用态只放运营查阅行。unwired* 读口交回稳定
