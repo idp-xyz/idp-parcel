@@ -1,3 +1,7 @@
+// 本文件不能顺着类型名叫 delivery_windows.go：Go 把文件名末尾的 `_windows` 读成 GOOS 约束，linux 上整包一个
+// 文件都不剩，`cmd/parcel-api` 一导入就断，而本机 Windows 上一切正常、看不出来。`_linux` / `_amd64` 一类后缀同理。
+// 名字与同级的 parcelshipment/delivery_place_source.go、partycommercial/delivery_condition_source.go 看齐。
+
 // Package networkrouting 是 transport-fulfillment 对 network-routing 计划履约段窗口读口的消费侧适配器
 // （ADR-0025：只有本包可以同时导入两个上下文；只翻译不判断，翻译必须是全函数）。
 //
