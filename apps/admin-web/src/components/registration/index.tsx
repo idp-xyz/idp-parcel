@@ -2,7 +2,10 @@
 // 按名导入，改名或收紧必填都会拆到消费方（纪律同 components/states）。
 export {
   RegistrationPanel,
+  RegistrationAnswerNote,
+  type RegistrationAnswerNoteProps,
   type RegistrationPanelProps,
+  type RegistrationPanelState,
   type RegistrationResponseBody,
 } from './RegistrationPanel';
 export {

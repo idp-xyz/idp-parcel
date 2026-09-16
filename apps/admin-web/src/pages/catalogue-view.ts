@@ -78,12 +78,5 @@ function problemNote(code: string): string {
   }
 }
 
-export function formatInstant(value: string): string {
-  const parsed = new Date(value);
-  if (Number.isNaN(parsed.getTime())) return value;
-  return parsed.toISOString().replace('T', ' ').replace('.000Z', ' UTC');
-}
-
-export function formatRange(from: string, to?: string): string {
-  return `${formatInstant(from)} → ${to ? formatInstant(to) : '持续有效'}`;
-}
+// 时刻呈现搬到 moment.ts（呈现时区由装配点配置）；这里保留同名出口，各册页的既有导入不动。
+export { formatInstant, formatRange } from './moment';

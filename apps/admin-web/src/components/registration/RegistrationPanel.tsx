@@ -169,7 +169,7 @@ export function RegistrationPanel({
             <Button onClick={send} disabled={state.kind === 'submitting' || draft.trim() === ''}>
               {state.kind === 'submitting' ? '提交中…' : '提交登记'}
             </Button>
-            <AnswerNote
+            <RegistrationAnswerNote
               state={state}
               owner={info.owner}
               outcomeLabels={outcomeLabels}
@@ -185,15 +185,10 @@ export function RegistrationPanel({
   );
 }
 
-function AnswerNote({
-  state,
-  owner,
-  outcomeLabels,
-  refusalReasonLabels,
-  undecidedReasonLabels,
-  declarationLandingLabels,
-  problemNote,
-}: {
+/** 登记面提交后的状态，供逐字段表单与 JSON 签共用同一份答案呈现。 */
+export type RegistrationPanelState = PanelState;
+
+export interface RegistrationAnswerNoteProps {
   state: PanelState;
   owner: string;
   outcomeLabels: Record<string, string>;
@@ -201,7 +196,22 @@ function AnswerNote({
   undecidedReasonLabels?: Record<string, string>;
   declarationLandingLabels?: Record<string, string>;
   problemNote: (code: string) => string;
-}) {
+}
+
+/**
+ * 登记答案的三态呈现，抬成导出件（票 admin-web-group-legal-entities/02）：ADR-0101 决定八让各册自裁
+ * 逐字段表单，而答案代数与 403 未配置那整段说明不随表单形态变——表单与 JSON 签消费同一份呈现，
+ * 才不会长出两套「未配置」措辞。
+ */
+export function RegistrationAnswerNote({
+  state,
+  owner,
+  outcomeLabels,
+  refusalReasonLabels,
+  undecidedReasonLabels,
+  declarationLandingLabels,
+  problemNote,
+}: RegistrationAnswerNoteProps) {
   if (state.kind === 'idle' || state.kind === 'submitting') return null;
   if (state.kind === 'malformed') {
     return <p className="text-xs text-idpxyz-danger">不是合法 JSON，未提交：{state.message}</p>;
