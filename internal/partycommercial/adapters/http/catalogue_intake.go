@@ -61,7 +61,7 @@ type problemResponse struct {
 type problemDetail struct {
 	Code string `json:"code"`
 	// Detail 是散文不是代数（纪律同 registrationAnswer.Cause）：前端原样示出、不查表、不据此分支。它把 Intake 已经写在
-	// 错误里的拒绝理由交到线的这一头——同一个 MALFORMED_REQUEST 底下是自报租户、未知键还是多出一项，只交 code 时六种
+	// 错误里的拒绝理由交到线的这一头——同一个 MALFORMED_REQUEST 底下是自报租户、未知键还是多出一项，只交 code 时多种
 	// 错在线上长一张脸，操作者只能挨个试。要可判别的理由代数得在用例侧立封闭枚举（先例 CatalogRefusalReason），不在
 	// 传输层按字符串拼；调用侧一旦对着这些句子分支，措辞改一个字就会拆掉它。
 	//

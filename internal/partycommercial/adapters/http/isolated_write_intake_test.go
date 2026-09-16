@@ -391,8 +391,8 @@ func TestIsolatedPartyIdentityIntakeRefusesTrailingContentAfterThePayload(t *tes
 }
 
 // Covers: 票 admin-web-group-legal-entities/11 要做的第 1 条——形状拒绝的 400 把 Intake 已经写在错误里的理由交到线上：
-// `error.detail` 在场、非空、点得出是哪一种错。六种形状错只交 code 时在线上长一张脸，页面只能显一句通用说明，操作者要
-// 靶着六种可能挨个试。判据同 `cause`：detail 是散文，这里只钉「非空且含关键字」，不钉全文——全文属 encoding/json
+// `error.detail` 在场、非空、点得出是哪一种错。多种形状错只交 code 时在线上长一张脸，页面只能显一句通用说明，操作者要
+// 靶着每一种可能挨个试。判据同 `cause`：detail 是散文，这里只钉「非空且含关键字」，不钉全文——全文属 encoding/json
 // 与本包的措辞自由，改一个字不该让这条变红。哨兵自己的英文原句不该重复进 detail：登记方要读的是哨兵之后那半。
 func TestMalformedRegistrationRefusalCarriesTheReasonAsDetail(t *testing.T) {
 	intake := isolatedIdentityIntakeForTest(t)
@@ -432,7 +432,7 @@ func TestMalformedRegistrationRefusalCarriesTheReasonAsDetail(t *testing.T) {
 			}
 			detail, present := problemDetailOf(t, recorder)
 			if !present || detail == "" {
-				t.Fatalf("400 没带 detail，六种形状错在线上长一张脸：%s", recorder.Body.String())
+				t.Fatalf("400 没带 detail，多种形状错在线上长一张脸：%s", recorder.Body.String())
 			}
 			if !strings.Contains(detail, testCase.keyword) {
 				t.Fatalf("detail = %q，没点出 %q 这件事", detail, testCase.keyword)
