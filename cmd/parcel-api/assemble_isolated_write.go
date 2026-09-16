@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	pspilot "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/pilotgovernance"
+	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 )
 
 // isolatedWriteTenantEnv 是隔离写路径准入（ADR-0091）的显式输入。它与隔离读面的开关
@@ -40,17 +41,43 @@ const (
 	isolatedSubmissionCustomerAcct = isolatedReadCustomerAccount
 )
 
-// isolatedWriteAdmission 携带 ADR-0091 放行的写路径两格。nil 表示未启用——各装配函数
+// isolatedWriteAdmission 携带 ADR-0091 放行的写路径几格。nil 表示未启用——各装配函数
 // 对 nil 的处理与本记录之前逐字节同形。
 //
-// 命令面 Intake（墙一）不在本结构里：它是同一记录裁的另一格，按 Consequences 分批
-// 落地。设了写开关而命令面仍答 403 是那个分批的中间态，不是配置没生效。
+// 提交口的命令面 Intake（墙一）不在本结构里：它要先经库装归属权威，由 buildIsolatedSubmissionIntake
+// 在开池之后构造。身份族的 Intake 在本结构里，因为它只收租户、不碰库，与目录、自身权威串同在这道门里
+// 就位。命令面按端点逐口放行（Consequences）：设了写开关而某一口仍答 403，是那个分批的中间态，不是配置
+// 没生效——哪几口已放行由 admittedCommandLines 说，启动日志照它出声。
 type isolatedWriteAdmission struct {
 	governanceDirectory pspilot.GovernanceScopeDirectory
 	selfAuthority       string
 	// tenant 是开关的值本身。归属那一格用不到它（治理登记册无租户维），提交口用得到：
 	// 来源信封的租户维就是它。
 	tenant string
+	// partyIdentity 是 `/commercial-*` 身份族登记口的隔离 Intake（票 admin-web-group-legal-entities/06）。
+	// 租户格填开关值，行内容只从载荷取；它实现了哪几口的 Intake 接口，装配点就换得了哪几行——编译期锁住。
+	partyIdentity *commercialhttp.IsolatedPartyIdentityIntake
+}
+
+// isolatedWriteAdmittedCommandLines 是写开关到此刻为止换上隔离 Intake 的命令面，供启动日志出声
+// （ADR-0078 决定三、ADR-0091 决定四「放行必须出声」）。每放一口在这里加一行，与 assembleBusinessEndpoints
+// 里换的那几行同步——两处对不上由装配测试拦（isolated_write_test.go 的二分表）。
+var isolatedWriteAdmittedCommandLines = []string{
+	"/shipment-requests",
+	"/commercial-legal-entity-registrations",
+}
+
+// admittedCommandLines 交回放行名单的副本：日志与测试都不该改得动那份表。
+func (admission *isolatedWriteAdmission) admittedCommandLines() []string {
+	return append([]string(nil), isolatedWriteAdmittedCommandLines...)
+}
+
+// partyIdentityIntake 对 nil 接收者交回 nil：装配点那几行随之挂字面量未配置即拒，与启用前逐字节同形。
+func (admission *isolatedWriteAdmission) partyIdentityIntake() *commercialhttp.IsolatedPartyIdentityIntake {
+	if admission == nil {
+		return nil
+	}
+	return admission.partyIdentity
 }
 
 // buildIsolatedWriteAdmission 解析隔离写路径准入的显式输入（ADR-0091 决定四）。
@@ -86,9 +113,14 @@ func buildIsolatedWriteAdmission(getenv func(string) string) (*isolatedWriteAdmi
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: isolated governance scope: %w", err)
 	}
+	partyIdentity, err := commercialhttp.NewIsolatedPartyIdentityIntake(tenant)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: isolated party identity intake: %w", err)
+	}
 	return &isolatedWriteAdmission{
 		governanceDirectory: directory,
 		selfAuthority:       isolatedSelfAuthority,
 		tenant:              tenant,
+		partyIdentity:       partyIdentity,
 	}, nil
 }

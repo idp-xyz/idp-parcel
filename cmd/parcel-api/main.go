@@ -64,9 +64,12 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	if isolatedWrite != nil {
-		logger.Info("Isolated write admission enabled (ADR-0091): production ownership resolves against the governance register with injected synthetic coordinates",
+		// 放行了哪几口也要出声（ADR-0078 决定三、ADR-0091 决定四）：命令面是逐口换的，只报「已启用」
+		// 说不出此刻哪几口真的会读请求、哪几口仍答 403，而两者在配置上看不出差别。
+		logger.Info("Isolated write admission enabled (ADR-0091): production ownership resolves against the governance register with injected synthetic coordinates; command lines admitted per endpoint",
 			"tenant", os.Getenv(isolatedWriteTenantEnv),
-			"selfAuthority", isolatedWrite.selfAuthority)
+			"selfAuthority", isolatedWrite.selfAuthority,
+			"admittedCommandLines", isolatedWrite.admittedCommandLines())
 	}
 
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -517,6 +520,7 @@ func run(logger *slog.Logger) error {
 			governanceRegisters,
 			isolatedRead,
 			isolatedSubmissionIntake,
+			isolatedWrite.partyIdentityIntake(),
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,

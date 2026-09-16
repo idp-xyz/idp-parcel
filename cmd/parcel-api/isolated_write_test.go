@@ -8,6 +8,7 @@ import (
 	"time"
 
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
+	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/platform/buildinfo"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
@@ -78,21 +79,42 @@ func TestBuildIsolatedWriteAdmissionRefusesTenantMismatch(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0091 决定二 — 写面放行只及 `/shipment-requests` 一行，其余命令面照旧
-// `403` + `ACCESS_CHANNEL_NOT_CONFIGURED`。
+// Covers: 票 admin-web-group-legal-entities/06 要做的第 3 条 — 合成租户合规时身份族 Intake 一格随两格一起就位。
+// 它不需要库（只收租户），因此与目录、自身权威串同在这道门里构造；缺了它装配点那几行只能挂字面量未配置。
+func TestBuildIsolatedWriteAdmissionGrantsThePartyIdentityIntake(t *testing.T) {
+	admission, err := buildIsolatedWriteAdmission(fakeGetenv(map[string]string{
+		isolatedWriteTenantEnv: "SYN-TENANT-01",
+	}))
+	if err != nil {
+		t.Fatalf("synthetic tenant refused: %v", err)
+	}
+	if admission.partyIdentity == nil {
+		t.Fatal("身份族 Intake 为空——`/commercial-legal-entity-registrations` 会照旧答 403，与「开关没设」不可分辨")
+	}
+}
+
+// expectedWriteAdmittedLines 是 ADR-0091 逐口放行到此刻为止已换上隔离 Intake 的命令面。每放一口
+// 在这里加一行（票 06 各口各自成笔），下面两个用例据此二分：名单内 400、名单外 403。
+var expectedWriteAdmittedLines = map[string]bool{
+	"/shipment-requests":                     true,
+	"/commercial-legal-entity-registrations": true,
+}
+
+// Covers: ADR-0091 Consequences「命令面按端点逐口放行，不是一次全开」 — 写面放行只及名单里那几行，其余命令面
+// 照旧 `403` + `ACCESS_CHANNEL_NOT_CONFIGURED`。
 //
-// 放行后的提交口签名取 `400` + `MALFORMED_REQUEST`：探针请求没有报文体，而隔离 Intake
-// 真的去读了它。这一格比 `500` 更能说明问题——`403` 意味着「压根没读」，`400` 意味着
-// 「读了，读不出命令」，两者的可观察签名不同，正是本用例要钉的分界。
-func TestIsolatedWriteAdmissionSwitchesOnlyTheSubmissionLine(t *testing.T) {
+// 放行后的口签名取 `400` + `MALFORMED_REQUEST`：探针请求没有报文体，而隔离 Intake真的去读了它。这一格比 `500`
+// 更能说明问题——`403` 意味着「压根没读」，`400` 意味着「读了，读不出命令」，两者的可观察签名不同，正是本用例
+// 要钉的分界。
+func TestIsolatedWriteAdmissionSwitchesOnlyTheAdmittedCommandLines(t *testing.T) {
 	router := httpapi.NewWithEndpoints(buildinfo.Info{},
-		assembleUnwiredBusinessEndpointsWith(nil, isolatedSubmissionIntakeForTest(t)))
+		assembleUnwiredBusinessEndpointsWith(nil, isolatedSubmissionIntakeForTest(t), isolatedPartyIdentityIntakeForTest(t)))
 
 	for pattern, probe := range businessEndpointProbes {
 		response := httptest.NewRecorder()
 		router.ServeHTTP(response, httptest.NewRequest(probe.method, probe.target, nil))
 
-		if pattern == "/shipment-requests" {
+		if expectedWriteAdmittedLines[pattern] {
 			if response.Code != http.StatusBadRequest {
 				t.Fatalf("%s: status = %d, want %d——放行后 Intake 该真的读请求",
 					pattern, response.Code, http.StatusBadRequest)
@@ -104,7 +126,7 @@ func TestIsolatedWriteAdmissionSwitchesOnlyTheSubmissionLine(t *testing.T) {
 		}
 
 		if response.Code != http.StatusForbidden {
-			t.Fatalf("%s: status = %d, want %d——写面放行只及提交一行",
+			t.Fatalf("%s: status = %d, want %d——写面放行只及名单里那几行",
 				pattern, response.Code, http.StatusForbidden)
 		}
 		if got := problemCode(t, response); got != "ACCESS_CHANNEL_NOT_CONFIGURED" {
@@ -113,9 +135,29 @@ func TestIsolatedWriteAdmissionSwitchesOnlyTheSubmissionLine(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0091 决定四 — **读开关换不了写行**。只给隔离读入参时，提交口仍答 403；
+// Covers: ADR-0078 决定三 / ADR-0091 决定四「放行必须出声」 — 启动日志要说得出放行了哪几口，且说的与装配点换的
+// 是同一份名单。日志里的名单与上面那张二分表对不上，就是有人换了一行没出声、或出了声没换行。
+func TestIsolatedWriteAdmissionNamesTheAdmittedCommandLines(t *testing.T) {
+	admission, err := buildIsolatedWriteAdmission(fakeGetenv(map[string]string{
+		isolatedWriteTenantEnv: "SYN-TENANT-01",
+	}))
+	if err != nil {
+		t.Fatalf("synthetic tenant refused: %v", err)
+	}
+	named := admission.admittedCommandLines()
+	if len(named) != len(expectedWriteAdmittedLines) {
+		t.Fatalf("日志名单 %v 与放行二分表 %v 条数不同", named, expectedWriteAdmittedLines)
+	}
+	for _, pattern := range named {
+		if !expectedWriteAdmittedLines[pattern] {
+			t.Fatalf("日志名单点了 %s，装配点没换这一行", pattern)
+		}
+	}
+}
+
+// Covers: ADR-0091 决定四 — **读开关换不了写行**。只给隔离读入参时，已放行的命令口仍答 403；
 // 这一条与上面那个用例互为对照，两个开关分设的全部意义就在这一格上。
-func TestIsolatedReadAdmissionCannotOpenTheSubmissionLine(t *testing.T) {
+func TestIsolatedReadAdmissionCannotOpenTheAdmittedCommandLines(t *testing.T) {
 	intakes, err := buildIsolatedReadIntakes(fakeGetenv(map[string]string{
 		isolatedReadTenantEnv: "SYN-TENANT-01",
 	}))
@@ -124,13 +166,28 @@ func TestIsolatedReadAdmissionCannotOpenTheSubmissionLine(t *testing.T) {
 	}
 	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpoints(intakes))
 
-	response := httptest.NewRecorder()
-	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/shipment-requests", nil))
+	for pattern := range expectedWriteAdmittedLines {
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, pattern, nil))
 
-	if response.Code != http.StatusForbidden {
-		t.Fatalf("status = %d, want %d——读开关开了写行，两个开关就白分了",
-			response.Code, http.StatusForbidden)
+		if response.Code != http.StatusForbidden {
+			t.Fatalf("%s: status = %d, want %d——读开关开了写行，两个开关就白分了",
+				pattern, response.Code, http.StatusForbidden)
+		}
 	}
+}
+
+// isolatedPartyIdentityIntakeForTest 走进程自己那道门构造身份族 Intake：本用例问的是路由与准入形状，
+// 门禁三态另有上面那组用例。
+func isolatedPartyIdentityIntakeForTest(t *testing.T) *commercialhttp.IsolatedPartyIdentityIntake {
+	t.Helper()
+	admission, err := buildIsolatedWriteAdmission(fakeGetenv(map[string]string{
+		isolatedWriteTenantEnv: "SYN-TENANT-01",
+	}))
+	if err != nil {
+		t.Fatalf("构造隔离写准入：%v", err)
+	}
+	return admission.partyIdentity
 }
 
 // isolatedSubmissionIntakeForTest 用装配点自己的合成常量构造提交 Intake，归属那一侧换

@@ -153,14 +153,16 @@ func assembleBusinessEndpoints(
 	governanceRegisters governancehttp.GovernanceRegistryReader,
 	isolatedRead *isolatedReadIntakes,
 	isolatedSubmission shipmenthttp.SubmissionIntake,
+	isolatedPartyIdentity *commercialhttp.IsolatedPartyIdentityIntake,
 ) []httpapi.BusinessEndpoint {
-	// 缺省朝拦：两个隔离入参都为 nil 时，下面这组变量全取未配置即拒，整份装配与
+	// 缺省朝拦：各隔离入参都为 nil 时，下面这组变量全取未配置即拒，整份装配与
 	// ADR-0078/0091 之前逐字节同形。
 	//
-	// **两个入参各换各的行，互不顶替**（ADR-0091 决定四把开关也分成了两个）：isolatedRead
-	// 换查阅行，isolatedSubmission 只换 `/shipment-requests` 一行。其余命令面仍挂字面量
-	// `UnconfiguredIntake{}`，不经由任何变量——读这段代码就能看出它们两个开关都换不了。
-	// 这句从前说的是「命令面全都换不了」，ADR-0091 让提交那一行成了例外，因此改成现在
+	// **读写入参各换各的行，互不顶替**（ADR-0091 决定四把开关也分成了两个）：isolatedRead
+	// 换查阅行，isolatedSubmission 只换 `/shipment-requests` 一行，isolatedPartyIdentity 只换
+	// `/commercial-*` 身份族里已成笔的那几行。其余命令面仍挂字面量 `UnconfiguredIntake{}`，
+	// 不经由任何变量——读这段代码就能看出它们两个开关都换不了。这句从前说的是「命令面全都
+	// 换不了」，ADR-0091 让提交那一行成了例外，票 06 又让身份族逐口成为例外，因此改成现在
 	// 这句；剩下那几行的字面量纪律一字未松。
 	shipmentViewsIntake := shipmenthttp.ShipmentRequestViewsIntake(shipmenthttp.UnconfiguredIntake{})
 	labelTransactionIntake := shipmenthttp.LabelTransactionQueryIntake(shipmenthttp.UnconfiguredIntake{})
@@ -197,6 +199,14 @@ func assembleBusinessEndpoints(
 	submissionIntake := shipmenthttp.SubmissionIntake(shipmenthttp.UnconfiguredIntake{})
 	if isolatedSubmission != nil {
 		submissionIntake = isolatedSubmission
+	}
+
+	// `/commercial-*` 身份族是 ADR-0091 逐口放行的第二批（票 admin-web-group-legal-entities/06），入参收的是
+	// **具体类型**而不是某个 Intake 接口：五口的接口互不相同，而放行是一口一笔——这个类型此刻实现了哪几口，
+	// 下面就只换得了哪几行，多换一行编译期就红。一口一个变量、不并进上面任何一个 if：理由同提交口那段。
+	legalEntityRegistrationIntake := commercialhttp.LegalEntityRegistrationIntake(commercialhttp.UnconfiguredIntake{})
+	if isolatedPartyIdentity != nil {
+		legalEntityRegistrationIntake = isolatedPartyIdentity
 	}
 
 	return []httpapi.BusinessEndpoint{
@@ -474,7 +484,9 @@ func assembleBusinessEndpoints(
 		// （放行 → 500 / 不放 → 403）多出一种 200 的形态，要加第三桶并改 ADR-0078 判据措辞，那是另一张票。
 		{Pattern: "/commercial-publication-vocabularies", Handler: commercialhttp.NewQueryPublicationVocabularyEndpoint(commercialhttp.UnconfiguredIntake{})},
 		{Pattern: "/commercial-business-party-registrations", Handler: commercialhttp.NewRegisterBusinessPartyEndpoint(commercialhttp.UnconfiguredIntake{}, partyIdentityRegistration)},
-		{Pattern: "/commercial-legal-entity-registrations", Handler: commercialhttp.NewRegisterLegalEntityEndpoint(commercialhttp.UnconfiguredIntake{}, partyIdentityRegistration)},
+		// 责任法人登记是身份族里第一口走 Intake 变量的（ADR-0091 逐口放行，票 admin-web-group-legal-entities/06）；
+		// 上一段「一律挂字面量」自此对这一行不再成立，其余四口仍是字面量、各自成笔时再换。
+		{Pattern: "/commercial-legal-entity-registrations", Handler: commercialhttp.NewRegisterLegalEntityEndpoint(legalEntityRegistrationIntake, partyIdentityRegistration)},
 		{Pattern: "/commercial-customer-account-registrations", Handler: commercialhttp.NewRegisterCustomerAccountEndpoint(commercialhttp.UnconfiguredIntake{}, partyIdentityRegistration)},
 		{Pattern: "/commercial-party-relationship-registrations", Handler: commercialhttp.NewRegisterPartyRelationshipEndpoint(commercialhttp.UnconfiguredIntake{}, partyIdentityRegistration)},
 		{Pattern: "/commercial-party-identity-deactivations", Handler: commercialhttp.NewDeactivatePartyIdentityEndpoint(commercialhttp.UnconfiguredIntake{}, partyIdentityRegistration)},

@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
+	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/platform/buildinfo"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
@@ -233,16 +234,17 @@ func assembleUnconfiguredBusinessEndpoints() []httpapi.BusinessEndpoint {
 // assembleUnwiredBusinessEndpoints 以 unwired* 占位读口与编排装配全部端点，隔离读面
 // 输入由调用方给：nil 钉「未配置面」，非 nil 钉「放行只及运营查阅行」（isolated_read_test.go）。
 //
-// 提交口的隔离 Intake 恒为 nil：**读开关换不了写行**是 ADR-0091 决定四的形状，而这个
-// 辅助函数正是隔离读那组用例的入口——它若把两个入参并成一个，那组用例就再也证不了这件事。
-// 写行放行的三态另有 isolated_write_test.go 的 assembleWriteAdmittedBusinessEndpoints。
+// 写行的两个隔离 Intake 恒为 nil：**读开关换不了写行**是 ADR-0091 决定四的形状，而这个
+// 辅助函数正是隔离读那组用例的入口——它若把读写入参并成一个，那组用例就再也证不了这件事。
+// 写行放行的三态另有 isolated_write_test.go。
 func assembleUnwiredBusinessEndpoints(isolatedRead *isolatedReadIntakes) []httpapi.BusinessEndpoint {
-	return assembleUnwiredBusinessEndpointsWith(isolatedRead, nil)
+	return assembleUnwiredBusinessEndpointsWith(isolatedRead, nil, nil)
 }
 
 func assembleUnwiredBusinessEndpointsWith(
 	isolatedRead *isolatedReadIntakes,
 	isolatedSubmission shipmenthttp.SubmissionIntake,
+	isolatedPartyIdentity *commercialhttp.IsolatedPartyIdentityIntake,
 ) []httpapi.BusinessEndpoint {
 	return assembleBusinessEndpoints(
 		unwiredSubmission{},
@@ -349,6 +351,7 @@ func assembleUnwiredBusinessEndpointsWith(
 		unwiredGovernanceRegisters{},
 		isolatedRead,
 		isolatedSubmission,
+		isolatedPartyIdentity,
 	)
 }
 
