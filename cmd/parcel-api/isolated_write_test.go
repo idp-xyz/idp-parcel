@@ -101,6 +101,7 @@ var expectedWriteAdmittedLines = map[string]bool{
 	"/commercial-business-party-registrations":     true,
 	"/commercial-customer-account-registrations":   true,
 	"/commercial-party-relationship-registrations": true,
+	"/commercial-party-identity-deactivations":     true,
 }
 
 // Covers: ADR-0091 Consequences「命令面按端点逐口放行，不是一次全开」 — 写面放行只及名单里那几行，其余命令面

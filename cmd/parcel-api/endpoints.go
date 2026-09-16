@@ -208,11 +208,13 @@ func assembleBusinessEndpoints(
 	businessPartyRegistrationIntake := commercialhttp.BusinessPartyRegistrationIntake(commercialhttp.UnconfiguredIntake{})
 	customerAccountRegistrationIntake := commercialhttp.CustomerAccountRegistrationIntake(commercialhttp.UnconfiguredIntake{})
 	partyRelationshipRegistrationIntake := commercialhttp.PartyRelationshipRegistrationIntake(commercialhttp.UnconfiguredIntake{})
+	partyIdentityDeactivationIntake := commercialhttp.PartyIdentityDeactivationIntake(commercialhttp.UnconfiguredIntake{})
 	if isolatedPartyIdentity != nil {
 		legalEntityRegistrationIntake = isolatedPartyIdentity
 		businessPartyRegistrationIntake = isolatedPartyIdentity
 		customerAccountRegistrationIntake = isolatedPartyIdentity
 		partyRelationshipRegistrationIntake = isolatedPartyIdentity
+		partyIdentityDeactivationIntake = isolatedPartyIdentity
 	}
 
 	return []httpapi.BusinessEndpoint{
@@ -489,13 +491,14 @@ func assembleBusinessEndpoints(
 		// ——挂到 commercialCatalogueIntake 上会让 TestIsolatedReadAdmissionSwitchesOnlyOperationsReadLines 的二分
 		// （放行 → 500 / 不放 → 403）多出一种 200 的形态，要加第三桶并改 ADR-0078 判据措辞，那是另一张票。
 		{Pattern: "/commercial-publication-vocabularies", Handler: commercialhttp.NewQueryPublicationVocabularyEndpoint(commercialhttp.UnconfiguredIntake{})},
-		// 身份族走 Intake 变量的口（ADR-0091 逐口放行，票 admin-web-group-legal-entities/06，法人首放、参与方次之）；
-		// 上一段「一律挂字面量」自此对这几行不再成立，其余口仍是字面量、各自成笔时再换。
+		// 身份族五口走各自的 Intake 变量（ADR-0091 逐口放行，票 admin-web-group-legal-entities/06，法人首放、其余四口各自成笔）；
+		// 上一段「一律挂字面量」自此对这五行不再成立。发布口与产品渠道口不在其内——它们有自己的治理（审批职责规则、
+		// ADR-0126 载体路径），仍挂字面量，另票。
 		{Pattern: "/commercial-business-party-registrations", Handler: commercialhttp.NewRegisterBusinessPartyEndpoint(businessPartyRegistrationIntake, partyIdentityRegistration)},
 		{Pattern: "/commercial-legal-entity-registrations", Handler: commercialhttp.NewRegisterLegalEntityEndpoint(legalEntityRegistrationIntake, partyIdentityRegistration)},
 		{Pattern: "/commercial-customer-account-registrations", Handler: commercialhttp.NewRegisterCustomerAccountEndpoint(customerAccountRegistrationIntake, partyIdentityRegistration)},
 		{Pattern: "/commercial-party-relationship-registrations", Handler: commercialhttp.NewRegisterPartyRelationshipEndpoint(partyRelationshipRegistrationIntake, partyIdentityRegistration)},
-		{Pattern: "/commercial-party-identity-deactivations", Handler: commercialhttp.NewDeactivatePartyIdentityEndpoint(commercialhttp.UnconfiguredIntake{}, partyIdentityRegistration)},
+		{Pattern: "/commercial-party-identity-deactivations", Handler: commercialhttp.NewDeactivatePartyIdentityEndpoint(partyIdentityDeactivationIntake, partyIdentityRegistration)},
 		{Pattern: "/commercial-service-product-form-registrations", Handler: commercialhttp.NewRegisterServiceProductFormEndpoint(commercialhttp.UnconfiguredIntake{}, productChannelRegistration)},
 		{Pattern: "/commercial-product-channel-mapping-registrations", Handler: commercialhttp.NewRegisterProductChannelMappingEndpoint(commercialhttp.UnconfiguredIntake{}, productChannelRegistration)},
 		// 渠道账号使用授权两口（ADR-0093）。撤销不叫 `-deactivations` 也不走 DELETE：它是往

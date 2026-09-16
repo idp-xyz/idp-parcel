@@ -34,6 +34,7 @@ var (
 	_ BusinessPartyRegistrationIntake     = (*IsolatedPartyIdentityIntake)(nil)
 	_ CustomerAccountRegistrationIntake   = (*IsolatedPartyIdentityIntake)(nil)
 	_ PartyRelationshipRegistrationIntake = (*IsolatedPartyIdentityIntake)(nil)
+	_ PartyIdentityDeactivationIntake     = (*IsolatedPartyIdentityIntake)(nil)
 )
 
 // NewIsolatedPartyIdentityIntake 由装配点以显式合成值构造。立不起来的租户在这里拒：装配错误要在启动时暴露，
@@ -329,20 +330,105 @@ func (intake *IsolatedPartyIdentityIntake) IntakeLegalEntityRegistration(
 	}, nil
 }
 
-// decodeBatch 解外壳并执行自报租户那道拒。DisallowUnknownFields：这一口的形状是封闭的，多出来的键不是可以忽略的
-// 噪声——它多半是登记方把 CLI 文档的别的格（或别的口的项）误投到了这里。
+// decodeBatch 解登记外壳并执行自报租户那道拒。
 func (intake *IsolatedPartyIdentityIntake) decodeBatch(request *http.Request) (partyIdentityBatchDocument, error) {
-	var document partyIdentityBatchDocument
+	document, err := decodeClosedDocument[partyIdentityBatchDocument](request)
+	if err != nil {
+		return partyIdentityBatchDocument{}, err
+	}
+	if err := refuseSelfReportedTenant(document.TenantID); err != nil {
+		return partyIdentityBatchDocument{}, err
+	}
+	return document, nil
+}
+
+// decodeClosedDocument 以封闭形状解载荷。DisallowUnknownFields：这一口的形状是封闭的，多出来的键不是可以忽略的
+// 噪声——它多半是登记方把 CLI 文档的别的格（或别的口的项）误投到了这里。
+func decodeClosedDocument[Document any](request *http.Request) (Document, error) {
+	var document Document
 	decoder := json.NewDecoder(request.Body)
 	decoder.DisallowUnknownFields()
 	if err := decoder.Decode(&document); err != nil {
-		return partyIdentityBatchDocument{}, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
-	}
-	if len(document.TenantID) != 0 {
-		return partyIdentityBatchDocument{}, fmt.Errorf(
-			"%w: tenantId must not be carried in the payload; the tenant grid is filled by the access channel, not by the request",
-			ErrMalformedRequest,
-		)
+		var none Document
+		return none, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
 	}
 	return document, nil
+}
+
+// refuseSelfReportedTenant 是两份外壳共用的那道拒：键在场即拒，不看值（理由在 partyIdentityBatchDocument.TenantID）。
+func refuseSelfReportedTenant(raw json.RawMessage) error {
+	if len(raw) == 0 {
+		return nil
+	}
+	return fmt.Errorf(
+		"%w: tenantId must not be carried in the payload; the tenant grid is filled by the access channel, not by the request",
+		ErrMalformedRequest,
+	)
+}
+
+// deactivationBatchDocument 是停用口的外壳，与登记外壳分开：镜像受控 CLI `deactivate-party-identity` 自己那份文档
+// （去掉整批的 tenantId）。合成一份外壳会让登记项与停用项躺在同一个文档里，而两者在册上是不同方向的修订。
+type deactivationBatchDocument struct {
+	TenantID      json.RawMessage        `json:"tenantId"`
+	Deactivations []deactivationDocument `json:"deactivations"`
+}
+
+type deactivationDocument struct {
+	Kind     string    `json:"kind"`
+	ID       string    `json:"id"`
+	Revision int       `json:"revision"`
+	Basis    string    `json:"basis"`
+	At       time.Time `json:"at"`
+}
+
+// identityKindFromName 是 application.PartyIdentityKind 封闭三值的名称镜像；关系不在内——关系的终止走撤销/到期/替代，
+// 不叫停用（DeactivatePartyIdentityCommand 注释）。判据同 partyRoleFromName。
+func identityKindFromName(raw string) (application.PartyIdentityKind, error) {
+	for _, kind := range []application.PartyIdentityKind{
+		application.BusinessPartyIdentity,
+		application.LegalEntityIdentity,
+		application.CustomerAccountIdentity,
+	} {
+		if kind.String() == raw {
+			return kind, nil
+		}
+	}
+	return application.PartyIdentityKindInvalid, fmt.Errorf("unknown party identity kind %q", raw)
+}
+
+// IntakePartyIdentityDeactivation 把一次管理台停用译成身份停用命令。Revision 是操作者声明自己看到的册面（= 最新修订 + 1），
+// 错位说明册面已被并发推进或意图已陈旧，由用例拒而不是替操作者猜；这里只译。身份标识照原样过线（命令的 ID 是字符串，
+// 由用例按 Kind 分派到对应册的值对象）。
+func (intake *IsolatedPartyIdentityIntake) IntakePartyIdentityDeactivation(
+	_ context.Context,
+	request *http.Request,
+) (application.DeactivatePartyIdentityCommand, error) {
+	none := application.DeactivatePartyIdentityCommand{}
+	document, err := decodeClosedDocument[deactivationBatchDocument](request)
+	if err != nil {
+		return none, err
+	}
+	if err := refuseSelfReportedTenant(document.TenantID); err != nil {
+		return none, err
+	}
+	if len(document.Deactivations) != 1 {
+		return none, fmt.Errorf("%w: deactivations must carry exactly one item, got %d", ErrMalformedRequest, len(document.Deactivations))
+	}
+	item := document.Deactivations[0]
+	kind, err := identityKindFromName(item.Kind)
+	if err != nil {
+		return none, fmt.Errorf("%w: deactivations[0].kind: %v", ErrMalformedRequest, err)
+	}
+	basis, err := domain.NewIdentityBasisReference(item.Basis)
+	if err != nil {
+		return none, fmt.Errorf("%w: deactivations[0].basis: %v", ErrMalformedRequest, err)
+	}
+	return application.DeactivatePartyIdentityCommand{
+		Tenant:   intake.tenant,
+		Kind:     kind,
+		ID:       item.ID,
+		Revision: item.Revision,
+		Basis:    basis,
+		At:       item.At,
+	}, nil
 }

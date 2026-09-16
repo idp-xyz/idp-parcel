@@ -68,6 +68,7 @@ var isolatedWriteAdmittedCommandLines = []string{
 	"/commercial-business-party-registrations",
 	"/commercial-customer-account-registrations",
 	"/commercial-party-relationship-registrations",
+	"/commercial-party-identity-deactivations",
 }
 
 // admittedCommandLines 交回放行名单的副本：日志与测试都不该改得动那份表。

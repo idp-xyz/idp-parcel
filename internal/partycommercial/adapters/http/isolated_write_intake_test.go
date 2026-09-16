@@ -290,6 +290,61 @@ func TestIsolatedPartyIdentityIntakeTranslatesPartyRelationshipRegistrationWithI
 	}
 }
 
+// Covers: 第五口 identity-deactivation——`deactivations[0]` 五格逐字来自载荷，租户格来自注入。停用是往修订链上插一笔
+// 新修订，Revision 是操作者声明自己看到的册面（= 最新修订 + 1），错位由用例拒；身份种类是封闭三值的名称镜像，关系不在
+// 内（关系的终止走撤销/到期/替代，不叫停用）。外壳镜像 CLI `deactivate-party-identity` 的文档、去掉整批的 tenantId。
+func TestIsolatedPartyIdentityIntakeTranslatesDeactivationWithInjectedTenant(t *testing.T) {
+	intake := isolatedIdentityIntakeForTest(t)
+	deactivationRequest := func(body string) *http.Request {
+		request := httptest.NewRequest(http.MethodPost, "/commercial-party-identity-deactivations", strings.NewReader(body))
+		request.Header.Set("X-Reported-Tenant", "TENANT-9")
+		return request
+	}
+
+	command, err := intake.IntakePartyIdentityDeactivation(context.Background(), deactivationRequest(`{"deactivations":[{
+		"kind":"LEGAL_ENTITY",
+		"id":"SYN-LE-02",
+		"revision":2,
+		"basis":"SYN-BASIS/le-02-deactivate",
+		"at":"2026-09-17T00:00:00Z"
+	}]}`))
+	if err != nil {
+		t.Fatalf("intake：%v", err)
+	}
+	if got := command.Tenant.String(); got != isolatedIdentityTenant {
+		t.Fatalf("Tenant = %q, want %q（注入值）", got, isolatedIdentityTenant)
+	}
+	if got := command.Kind.String(); got != "LEGAL_ENTITY" {
+		t.Fatalf("Kind = %q, want LEGAL_ENTITY", got)
+	}
+	if command.ID != "SYN-LE-02" {
+		t.Fatalf("ID = %q, want SYN-LE-02", command.ID)
+	}
+	if command.Revision != 2 {
+		t.Fatalf("Revision = %d, want 2", command.Revision)
+	}
+	if got := command.Basis.String(); got != "SYN-BASIS/le-02-deactivate" {
+		t.Fatalf("Basis = %q, want SYN-BASIS/le-02-deactivate", got)
+	}
+	if want := time.Date(2026, 9, 17, 0, 0, 0, 0, time.UTC); !command.At.Equal(want) {
+		t.Fatalf("At = %s, want %s", command.At, want)
+	}
+
+	for name, body := range map[string]string{
+		"自报租户":   `{"tenantId":"` + isolatedIdentityTenant + `","deactivations":[{"kind":"LEGAL_ENTITY","id":"SYN-LE-02","revision":2,"basis":"b","at":"2026-09-17T00:00:00Z"}]}`,
+		"关系不叫停用": `{"deactivations":[{"kind":"PARTY_RELATIONSHIP","id":"SYN-REL-02","revision":2,"basis":"b","at":"2026-09-17T00:00:00Z"}]}`,
+		"两项":     `{"deactivations":[{"kind":"LEGAL_ENTITY","id":"SYN-LE-02","revision":2,"basis":"b","at":"2026-09-17T00:00:00Z"},{"kind":"LEGAL_ENTITY","id":"SYN-LE-03","revision":2,"basis":"b","at":"2026-09-17T00:00:00Z"}]}`,
+		"投了登记项":  `{"legalEntities":[{"legalEntityId":"SYN-LE-02","partyId":"SYN-PARTY-02","revision":1,"basis":"b","effectiveFrom":"2026-09-16T00:00:00Z"}]}`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := intake.IntakePartyIdentityDeactivation(context.Background(), deactivationRequest(body))
+			if !errors.Is(err, commercialhttp.ErrMalformedRequest) {
+				t.Fatalf("err = %v, want ErrMalformedRequest", err)
+			}
+		})
+	}
+}
+
 // Covers: 一口只收本口的项。载荷外壳镜像 CLI 的整份文档，因此别的口的数组在这里**解得开**；解得开不等于
 // 可以忽略——一份同时带着法人项与参与方项的载荷投到法人口，参与方那一项会被无声丢掉，登记方以为两样都登了。
 // 五口共用同一份外壳，这条对每一口都成立，这里各口投一次别人的项。
@@ -334,8 +389,8 @@ func TestIsolatedPartyIdentityIntakeServesOnlyAdmittedLines(t *testing.T) {
 	if _, ok := intake.(commercialhttp.PartyRelationshipRegistrationIntake); !ok {
 		t.Fatal("参与方关系登记口该已放行")
 	}
-	if _, ok := intake.(commercialhttp.PartyIdentityDeactivationIntake); ok {
-		t.Fatal("身份停用口尚未成笔，不该装得进")
+	if _, ok := intake.(commercialhttp.PartyIdentityDeactivationIntake); !ok {
+		t.Fatal("身份停用口该已放行")
 	}
 	if _, ok := intake.(commercialhttp.CommercialPublicationIntake); ok {
 		t.Fatal("发布口不在本票，隔离身份 Intake 不该装得进")
