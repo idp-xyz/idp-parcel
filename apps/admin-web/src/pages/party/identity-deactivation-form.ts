@@ -13,7 +13,7 @@
 import type { BusinessPartyRecord, CustomerAccountRecord, GroupLegalEntityRecord } from './api';
 import { wallTimeToRfc3339 } from '../moment';
 import { identityKindLabels } from './presentation';
-import { revisionOf } from './business-party-form';
+import { revisionOf } from './registration-form';
 import type { PickerOption } from './PublicationFormFields';
 
 export interface IdentityDeactivationDraft {
