@@ -1,7 +1,7 @@
 # 09 业务参与方页读面打磨：徽章、时间悬停原串、筛选排序、行详情抽屉、复制、操作者文案（与票 01 同形）
 
 Category: enhancement
-Status: ready-for-agent
+Status: resolved
 Blocked by: 无
 地盘：`apps/admin-web/src/pages/party/BusinessPartiesPage.tsx`（**两张读签 + 抽屉；不动登记签那段，归票 10**）、
 `apps/admin-web/src/pages/party/business-party-list.ts` 与 `party-relationship-list.ts`（新，纯逻辑 + node:test）、
@@ -52,5 +52,34 @@ Blocked by: 无
 1. 排序默认登记时间新→旧，判据同 01 裁决 2（刚登进去的那条）。
 2. 「已撤销」用 warning 而不是 neutral：到期是时间到了、替代有后继接着，两者都不需要人注意；撤销是有依据的主动终止，在边界之后
    仍拿这段关系做决定就是错，色调要把这一格点出来。
+
+## 完成记录（2026-09-16，分支 `mcp6-adminweb09` 基 main `cadd2d46`，通道 6）
+
+作者：`55d2d81d`（纯逻辑层 + node:test）与 `d5396299`（页面接线 + 共享件 + 词表）均为通道 6 所作；票面本笔另提。
+
+对完成判据：
+
+- 三道门：`tsc -b --noEmit` 0、`run-tests` 252/252（本票新增 12 例）、`vite build` 0（均在隔离树 `d5396299` 实测）。不动 Go、不占 55432。
+- `business-party-list.test.ts`：搜索三格包含匹配 / 状态精确匹配（含筛空交回空数组）/ 三种排序不改原数组 / 同秒不定小数位按解析值排 /
+  计数摘要与筛空提示 / 选项表从 `identityStatusLabels` 派生。`party-relationship-list.test.ts`：搜索七格 / 角色 × 状态叠加筛（含筛
+  「候选关系」无候选行时交回空）/ 两种排序 / 同秒排序 / 计数摘要（单位「段」）与筛空提示 / 两张选项表从 `partyRoleLabels`、
+  `relationshipStatusLabels` 派生（含 CONTEXT 原词「候选关系」）。
+- 演示形态浏览器验收：**未验**。隔离树起 vite（`:5209` → `127.0.0.1:8090`）后无头 Edge 取到的是 `AuthGate` 登录页（要 gk.idp.xyz 会话），
+  无会话进不到页面；对 `:8090` 两读口直接实探记数据事实——`SYN-PARTY-RETIRED-01` 为 `DEACTIVATED` r2、`deactivatedAt`
+  `2026-02-01T00:00:00Z`、`deactivationBasis` `SYN-DEREG-BASIS-PARTY-RETIRED-01`（徽章 + 自 + 依据三件的数据都在）；关系册 2 段里
+  `SYN-REL-AGENT-01` 是 `CANDIDATE`，所以今天筛「候选关系」得 1 段，筛「已到期」才走筛空文案那一格（纯函数已钉）。
+
+六条逐条：① 身份签三词与关系签五词均经 `StatusBadgeFor`；词表补 `候选关系`（info），`已撤销` neutral → warning（裁决 2；
+`transport-fulfillment` 总单适用状态同词同判据，注释写明）。② 两签全部时刻格用 `Instant`，有效区间用 `InstantRange` 两端各给原串；
+`Instant` / `InstantRange` / `filterSelectClass` / `useCopyToClipboard` / `DetailRow` 抬到 `pages/party/detail-primitives.tsx`，法人页只改为
+引用（`DetailRow` 与 `filterSelectClass` 一并抬走：抽屉与过滤条要同一形状，只抬两件会让另两件在参与方页多一份副本）。③ 身份签「状态」
+「排序」下拉，关系签「角色」「状态」「排序」下拉；比较器抽到 `list-order.ts` 共用（`legal-entity-list.ts` 的私有副本不动，那是票 01 的
+地盘）。④ `BusinessPartyDrawer` 十格 + 「修订历史」如实写读口尚未建立指向票 12；`PartyRelationshipDrawer` 十五格（比票面多「登记时间」
+一格——行上有这个字段，抽屉列全字段就不该漏它）。⑤ 身份：参与方标识 / 依据；关系：关系标识 / 持有方 / 相对方 / 依据可复制。⑥ 两签描述
+按票面原句；空态改「在「登记」签登记第一个」，不写 CLI；未配置那句由 `catalogueViewState` 照旧出。另：身份签补「登记时间」列——
+默认排序按它排（裁决 1），排的键看不见时操作者判不出「为什么这一条在最上面」。登记签那段一行未动。
+
+清点预报：`apps/admin-web` 新增 `.ts` 5 件（`list-order.ts`、两份列表逻辑、两份 `.test.ts`）+ `.tsx` 1 件（`detail-primitives.tsx`），
+MECHANISM-INVENTORY 的 admin-web 文件数会随之变，重生成归推送方。
 
 ## Comments
