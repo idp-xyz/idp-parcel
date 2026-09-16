@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
@@ -12,7 +13,61 @@ import (
 
 // 钉票 sa-cc/02 的编排半边：采用成功交一封（载荷只带引用，由消费方按引用回查——SA CONTEXT
 // 「银行、支付或财务系统拥有实际付款……」，SA 只采用、只发引用）；重放不翻倍；冲突不交；
-// 交接失败不翻结果、留续办引用（SA 各编排的既有形：版本已落、意图未入队）。
+// 交接失败按错误种类分两格（票 sa-cc/32 裁决 2）：依赖不可用不翻结果、留续办引用（SA 各编排的既有形：
+// 版本已落、意图未入队，重放补发）；信封被框架确定性拒收则整笔返 error 不给结果，让事务壳回滚。
+
+// Covers: 票 sa-cc/32 裁决 2 (a) / 完成判据 (2)——交接口交回 ports.ErrFundsFactHandoffRejected 时，三条到 handOffFact 的
+// 路（首版采用、更正采用、`已存在`重放）都返 error 不给结果：重投同一份永远同一个结果，折成续办引用只会让人按
+// 「重跑补发」重跑到死；哨兵原样可判（errors.Is），事务壳据此回滚版本行。依赖故障那一格不动，见上一条用例。
+func TestARejectedHandoffEnvelopeFailsTheAdoptionInsteadOfLeavingAContinuation(t *testing.T) {
+	rejected := fmt.Errorf("hand off external funds fact: %w: subject exceeds 512 bytes", ports.ErrFundsFactHandoffRejected)
+
+	t.Run("首版采用", func(t *testing.T) {
+		fixture := newFundsFixture(t)
+		fixture.factHandoff.err = rejected
+
+		result, err := fixture.handler.AdoptFact(context.Background(), adoptCommand(t, domain.FundsReceiptConfirmed))
+		if !errors.Is(err, ports.ErrFundsFactHandoffRejected) {
+			t.Fatalf("err = %v, want errors.Is ports.ErrFundsFactHandoffRejected", err)
+		}
+		if result.Outcome() != application.FundsOutcomeInvalid || result.FundsHandoffReference() != "" {
+			t.Fatalf("返错时不该同时给出结果或续办引用：outcome = %q, handoff = %q", result.Outcome(), result.FundsHandoffReference())
+		}
+	})
+
+	t.Run("已存在重放", func(t *testing.T) {
+		fixture := newFundsFixture(t)
+		command := adoptCommand(t, domain.FundsReceiptConfirmed)
+		if adopted, err := fixture.handler.AdoptFact(context.Background(), command); err != nil || adopted.Outcome() != application.FundsFactAdopted {
+			t.Fatalf("首版采用：outcome = %q err = %v", adopted.Outcome(), err)
+		}
+
+		fixture.factHandoff.err = rejected
+		result, err := fixture.handler.AdoptFact(context.Background(), command)
+		if !errors.Is(err, ports.ErrFundsFactHandoffRejected) {
+			t.Fatalf("重放同一超长引用该同样返错（永远同一个结果，不该答`已存在`）：err = %v", err)
+		}
+		if result.Outcome() != application.FundsOutcomeInvalid {
+			t.Fatalf("返错时不该同时给出结果：outcome = %q", result.Outcome())
+		}
+	})
+
+	t.Run("更正采用", func(t *testing.T) {
+		fixture := newFundsFixture(t)
+		if adopted, err := fixture.handler.AdoptFact(context.Background(), adoptCommand(t, domain.FundsReceiptConfirmed)); err != nil || adopted.Outcome() != application.FundsFactAdopted {
+			t.Fatalf("首版采用：outcome = %q err = %v", adopted.Outcome(), err)
+		}
+
+		fixture.factHandoff.err = rejected
+		result, err := fixture.handler.CorrectFact(context.Background(), correctCommand(t))
+		if !errors.Is(err, ports.ErrFundsFactHandoffRejected) {
+			t.Fatalf("err = %v, want errors.Is ports.ErrFundsFactHandoffRejected", err)
+		}
+		if result.Outcome() != application.FundsOutcomeInvalid {
+			t.Fatalf("返错时不该同时给出结果：outcome = %q", result.Outcome())
+		}
+	})
+}
 
 // Covers: sa-cc/02 完成判据 1「采用成功交意图一封；重放不交；冲突不交」。
 func TestAdoptingAFundsFactHandsOffOneEnvelopeAndReplayDoesNotDouble(t *testing.T) {

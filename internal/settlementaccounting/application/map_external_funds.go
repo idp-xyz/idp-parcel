@@ -280,7 +280,7 @@ func (handler *MapExternalFundsHandler) AdoptFact(
 			// 不在采用处顶替。冲突的那一份没有被采用，无物可交。
 			return FundsResult{outcome: FundsFactConflict}, nil
 		}
-		return handler.existingFact(ctx, existing), nil
+		return handler.existingFact(ctx, existing)
 	}
 	if _, adopted, err := handler.deps.Facts.FindByKey(ctx, key); err != nil {
 		return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
@@ -297,15 +297,13 @@ func (handler *MapExternalFundsHandler) AdoptFact(
 	}
 	switch saved {
 	case ports.FundsFactSaved:
-		result := FundsResult{outcome: FundsFactAdopted, fact: record, hasRecord: true}
-		result.handoff = handler.handOffFact(ctx, record)
-		return result, nil
+		return handler.adoptedFact(ctx, record)
 	case ports.FundsFactAlreadyAdopted:
 		winner, found, err := handler.deps.Facts.FindByKey(ctx, key)
 		if err != nil || !found {
 			return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
 		}
-		return handler.existingFact(ctx, winner), nil
+		return handler.existingFact(ctx, winner)
 	default:
 		return FundsResult{}, fmt.Errorf("%w: %d", ErrUnexpectedFundsSave, saved)
 	}
@@ -350,7 +348,7 @@ func (handler *MapExternalFundsHandler) CorrectFact(
 			// 同一新版本字面携带不同金额或回指：冲突保留先到的那一版，不顶替。
 			return FundsResult{outcome: FundsFactConflict}, nil
 		}
-		return handler.existingFact(ctx, existing), nil
+		return handler.existingFact(ctx, existing)
 	}
 
 	head, found, err := handler.deps.Facts.FindByKey(ctx, key)
@@ -373,9 +371,7 @@ func (handler *MapExternalFundsHandler) CorrectFact(
 	}
 	switch saved {
 	case ports.FundsFactSaved:
-		result := FundsResult{outcome: FundsFactAdopted, fact: record, hasRecord: true}
-		result.handoff = handler.handOffFact(ctx, record)
-		return result, nil
+		return handler.adoptedFact(ctx, record)
 	case ports.FundsFactAlreadyAdopted:
 		// 两步之间另一位写入方赢了：要么同一新版本先落了，要么链头先被别的版本更正了（库上守链形的
 		// 唯一约束把后者也折成`已采用`）。两种都按当前链头作答——它就是此刻被采用的那一版。
@@ -385,38 +381,61 @@ func (handler *MapExternalFundsHandler) CorrectFact(
 		if err != nil || !found {
 			return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
 		}
-		return handler.existingFact(ctx, winner), nil
+		return handler.existingFact(ctx, winner)
 	default:
 		return FundsResult{}, fmt.Errorf("%w: %d", ErrUnexpectedFundsSave, saved)
 	}
 }
 
+// adoptedFact 按刚落下的那一版作答并交出意图。交接被确定性拒收时不给结果（handOffFact 头注）。
+func (handler *MapExternalFundsHandler) adoptedFact(
+	ctx context.Context,
+	record ports.FundsFactRecord,
+) (FundsResult, error) {
+	handoff, err := handler.handOffFact(ctx, record)
+	if err != nil {
+		return FundsResult{}, err
+	}
+	return FundsResult{outcome: FundsFactAdopted, fact: record, hasRecord: true, handoff: handoff}, nil
+}
+
 // existingFact 按已采用的事实作答并再交一次同一份意图：重放交的是同一封（同租户、同事实、
 // 同版本），Outbox 按认领键吞掉第二次——「重放不交」在真库上就是这样成立的；不在这里跳过
 // 交接，是为了让上一次交接失败留下的那封在重放时补上（与 existingApplication 同形）。
+// 重放同一份被确定性拒收的信封同样返 error 不答`已存在`：那一格永远同一个结果，答`已存在`就是把
+// 「CC 永远收不到那一版」说成幂等成功。
 func (handler *MapExternalFundsHandler) existingFact(
 	ctx context.Context,
 	record ports.FundsFactRecord,
-) FundsResult {
-	return FundsResult{
-		outcome:   FundsFactExisting,
-		fact:      record,
-		hasRecord: true,
-		handoff:   handler.handOffFact(ctx, record),
+) (FundsResult, error) {
+	handoff, err := handler.handOffFact(ctx, record)
+	if err != nil {
+		return FundsResult{}, err
 	}
+	return FundsResult{outcome: FundsFactExisting, fact: record, hasRecord: true, handoff: handoff}, nil
 }
 
-// handOffFact 把采用成功的资金事实交给下游（票 sa-cc/02）。投递失败不翻结果——事实已采用是
-// 真的，只是那封信还没出去——留续办引用，重放时重发同一份。
+// handOffFact 把采用成功的资金事实交给下游（票 sa-cc/02），失败按种类分两格（票 sa-cc/32 裁决 2）：
+//
+//   - 信封被框架确定性校验拒收（ports.ErrFundsFactHandoffRejected）→ 原样返 error。同一份输入重投永远同一个
+//     结果，折成续办引用只会让操作者按「重跑补发」重跑到死；返 error 让事务壳把版本行一起回滚——版本行、信封、
+//     结果三者同生同灭。
+//   - 其余失败（依赖不可用等）→ 不翻结果、留续办引用：事实已采用是真的，只是那封信还没出去，重放时重发同一份。
+//     单事务入口下 Outbox 的 SQL 错会先把事务打进中止态、由事务壳返错，这一格今天实际到不了；留着它是因为它
+//     对依赖故障说的话是真的，删它要动 FundsResult 的形与两个入口的答案格，是另一张票的量。
 func (handler *MapExternalFundsHandler) handOffFact(
 	ctx context.Context,
 	record ports.FundsFactRecord,
-) string {
-	if err := handler.deps.FactHandoff.HandOffExternalFundsFact(ctx, ports.ExternalFundsFactIntent{Record: record}); err == nil {
-		return ""
+) (string, error) {
+	err := handler.deps.FactHandoff.HandOffExternalFundsFact(ctx, ports.ExternalFundsFactIntent{Record: record})
+	if err == nil {
+		return "", nil
+	}
+	if errors.Is(err, ports.ErrFundsFactHandoffRejected) {
+		return "", err
 	}
 	return fundsContinuation("EXTERNAL_FUNDS_FACT_HANDOFF",
-		record.Key.TenantID.String(), record.Key.Fact.String(), record.Fact.Version().String())
+		record.Key.TenantID.String(), record.Key.Fact.String(), record.Fact.Version().String()), nil
 }
 
 // Map 建立一条资金映射：显式依据由 MapFundsToTarget 把门（巧合不证明映射）；失败
