@@ -5,36 +5,36 @@ settings:
   excludeLinksFromLockfile: false
 
 overrides:
-  '@idpxyz/ui-icons': file:/home/tops/idp-ui-tgz/idpxyz-ui-icons-0.1.23.tgz
-  '@idpxyz/ui-patterns': file:/home/tops/idp-ui-tgz/idpxyz-ui-patterns-0.1.23.tgz
-  '@idpxyz/ui-primitives': file:/home/tops/idp-ui-tgz/idpxyz-ui-primitives-0.1.25.tgz
-  '@idpxyz/ui-theme-runtime': file:/home/tops/idp-ui-tgz/idpxyz-ui-theme-runtime-0.1.23.tgz
-  '@idpxyz/ui-tokens': file:/home/tops/idp-ui-tgz/idpxyz-ui-tokens-0.1.23.tgz
-  '@idpxyz/ui-utils': file:/home/tops/idp-ui-tgz/idpxyz-ui-utils-0.1.23.tgz
-  '@idpxyz/ui-workspace': file:/home/tops/idp-ui-tgz/idpxyz-ui-workspace-0.1.25.tgz
+  '@idpxyz/ui-icons': file:vendor/idpxyz-ui/idpxyz-ui-icons-0.1.23.tgz
+  '@idpxyz/ui-patterns': file:vendor/idpxyz-ui/idpxyz-ui-patterns-0.1.23.tgz
+  '@idpxyz/ui-primitives': file:vendor/idpxyz-ui/idpxyz-ui-primitives-0.1.25.tgz
+  '@idpxyz/ui-theme-runtime': file:vendor/idpxyz-ui/idpxyz-ui-theme-runtime-0.1.23.tgz
+  '@idpxyz/ui-tokens': file:vendor/idpxyz-ui/idpxyz-ui-tokens-0.1.23.tgz
+  '@idpxyz/ui-utils': file:vendor/idpxyz-ui/idpxyz-ui-utils-0.1.23.tgz
+  '@idpxyz/ui-workspace': file:vendor/idpxyz-ui/idpxyz-ui-workspace-0.1.25.tgz
 
 importers:
 
   .:
     dependencies:
       '@idpxyz/ui-patterns':
-        specifier: file:/home/tops/idp-ui-tgz/idpxyz-ui-patterns-0.1.23.tgz
-        version: file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-patterns-0.1.23.tgz(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: file:vendor/idpxyz-ui/idpxyz-ui-patterns-0.1.23.tgz
+        version: file:vendor/idpxyz-ui/idpxyz-ui-patterns-0.1.23.tgz(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@idpxyz/ui-primitives':
-        specifier: file:/home/tops/idp-ui-tgz/idpxyz-ui-primitives-0.1.25.tgz
-        version: file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-primitives-0.1.25.tgz(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: file:vendor/idpxyz-ui/idpxyz-ui-primitives-0.1.25.tgz
+        version: file:vendor/idpxyz-ui/idpxyz-ui-primitives-0.1.25.tgz(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@idpxyz/ui-theme-runtime':
-        specifier: file:/home/tops/idp-ui-tgz/idpxyz-ui-theme-runtime-0.1.23.tgz
-        version: file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-theme-runtime-0.1.23.tgz(lucide-react@0.468.0(react@19.2.8))(react@19.2.8)
+        specifier: file:vendor/idpxyz-ui/idpxyz-ui-theme-runtime-0.1.23.tgz
+        version: file:vendor/idpxyz-ui/idpxyz-ui-theme-runtime-0.1.23.tgz(lucide-react@0.468.0(react@19.2.8))(react@19.2.8)
       '@idpxyz/ui-tokens':
-        specifier: file:/home/tops/idp-ui-tgz/idpxyz-ui-tokens-0.1.23.tgz
-        version: file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-tokens-0.1.23.tgz
+        specifier: file:vendor/idpxyz-ui/idpxyz-ui-tokens-0.1.23.tgz
+        version: file:vendor/idpxyz-ui/idpxyz-ui-tokens-0.1.23.tgz
       '@idpxyz/ui-utils':
-        specifier: file:/home/tops/idp-ui-tgz/idpxyz-ui-utils-0.1.23.tgz
-        version: file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-utils-0.1.23.tgz
+        specifier: file:vendor/idpxyz-ui/idpxyz-ui-utils-0.1.23.tgz
+        version: file:vendor/idpxyz-ui/idpxyz-ui-utils-0.1.23.tgz
       '@idpxyz/ui-workspace':
-        specifier: file:/home/tops/idp-ui-tgz/idpxyz-ui-workspace-0.1.25.tgz
-        version: file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-workspace-0.1.25.tgz(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+        specifier: file:vendor/idpxyz-ui/idpxyz-ui-workspace-0.1.25.tgz
+        version: file:vendor/idpxyz-ui/idpxyz-ui-workspace-0.1.25.tgz(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       lucide-react:
         specifier: ^0.468.0
         version: 0.468.0(react@19.2.8)
@@ -342,37 +342,37 @@ packages:
   '@floating-ui/utils@0.2.12':
     resolution: {integrity: sha512-HpCo8tmWzLVad5s2d19EhAz5zqrrQ6s69qd6moPMQvkOuSwDT1YgRfWSVuc4ennqrgv3OHppiOGMQ7oC13yIww==}
 
-  '@idpxyz/ui-patterns@file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-patterns-0.1.23.tgz':
-    resolution: {integrity: sha512-X2imZ/KPic9FNIbiqVvR6/P7Glyr1tckJ2nfwmg5DJdYDtEyg5RJeVi1041QRp7u7O8tZkeu5hGdLrx4ksb8vw==, tarball: file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-patterns-0.1.23.tgz}
+  '@idpxyz/ui-patterns@file:vendor/idpxyz-ui/idpxyz-ui-patterns-0.1.23.tgz':
+    resolution: {integrity: sha512-X2imZ/KPic9FNIbiqVvR6/P7Glyr1tckJ2nfwmg5DJdYDtEyg5RJeVi1041QRp7u7O8tZkeu5hGdLrx4ksb8vw==, tarball: file:vendor/idpxyz-ui/idpxyz-ui-patterns-0.1.23.tgz}
     version: 0.1.23
     peerDependencies:
       lucide-react: '>=0.400.0'
       react: ^18.0.0 || ^19.0.0
 
-  '@idpxyz/ui-primitives@file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-primitives-0.1.25.tgz':
-    resolution: {integrity: sha512-jDExBOeRKN7TtHekpvbSZxJI8VK78r+y9+w4x95IKEnneZDNaNnW2ocKFlsnVhupNKNfOG7OadXF/jKTisn7XQ==, tarball: file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-primitives-0.1.25.tgz}
+  '@idpxyz/ui-primitives@file:vendor/idpxyz-ui/idpxyz-ui-primitives-0.1.25.tgz':
+    resolution: {integrity: sha512-jDExBOeRKN7TtHekpvbSZxJI8VK78r+y9+w4x95IKEnneZDNaNnW2ocKFlsnVhupNKNfOG7OadXF/jKTisn7XQ==, tarball: file:vendor/idpxyz-ui/idpxyz-ui-primitives-0.1.25.tgz}
     version: 0.1.25
     peerDependencies:
       lucide-react: '>=0.400.0'
       react: ^18.0.0 || ^19.0.0
 
-  '@idpxyz/ui-theme-runtime@file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-theme-runtime-0.1.23.tgz':
-    resolution: {integrity: sha512-iVH8ivkK97f5lq6Ed1exV03jsx+n9sv/a4FG6t4oa0KB90356GVQ3GJc+A5yz2vNOTPO0Q/tsLVEeL6EOowFeA==, tarball: file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-theme-runtime-0.1.23.tgz}
+  '@idpxyz/ui-theme-runtime@file:vendor/idpxyz-ui/idpxyz-ui-theme-runtime-0.1.23.tgz':
+    resolution: {integrity: sha512-iVH8ivkK97f5lq6Ed1exV03jsx+n9sv/a4FG6t4oa0KB90356GVQ3GJc+A5yz2vNOTPO0Q/tsLVEeL6EOowFeA==, tarball: file:vendor/idpxyz-ui/idpxyz-ui-theme-runtime-0.1.23.tgz}
     version: 0.1.23
     peerDependencies:
       lucide-react: '>=0.400.0'
       react: ^18.0.0 || ^19.0.0
 
-  '@idpxyz/ui-tokens@file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-tokens-0.1.23.tgz':
-    resolution: {integrity: sha512-b/HcWwmpUfg30l+3XKGl8rjQuxs3KL4/kVs6ttsqDb7mMiSwJZCb91+gv21QB4stNGlrv0Dxu51dXr12rZYSPQ==, tarball: file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-tokens-0.1.23.tgz}
+  '@idpxyz/ui-tokens@file:vendor/idpxyz-ui/idpxyz-ui-tokens-0.1.23.tgz':
+    resolution: {integrity: sha512-b/HcWwmpUfg30l+3XKGl8rjQuxs3KL4/kVs6ttsqDb7mMiSwJZCb91+gv21QB4stNGlrv0Dxu51dXr12rZYSPQ==, tarball: file:vendor/idpxyz-ui/idpxyz-ui-tokens-0.1.23.tgz}
     version: 0.1.23
 
-  '@idpxyz/ui-utils@file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-utils-0.1.23.tgz':
-    resolution: {integrity: sha512-rXv424vgRYEm1T4Rp4NofVCSjWCJVICLPFEggI1kAstyPVhLaHjbL1twTFuzXRtfoJujQGsYzWkVWbO9orOS9g==, tarball: file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-utils-0.1.23.tgz}
+  '@idpxyz/ui-utils@file:vendor/idpxyz-ui/idpxyz-ui-utils-0.1.23.tgz':
+    resolution: {integrity: sha512-rXv424vgRYEm1T4Rp4NofVCSjWCJVICLPFEggI1kAstyPVhLaHjbL1twTFuzXRtfoJujQGsYzWkVWbO9orOS9g==, tarball: file:vendor/idpxyz-ui/idpxyz-ui-utils-0.1.23.tgz}
     version: 0.1.23
 
-  '@idpxyz/ui-workspace@file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-workspace-0.1.25.tgz':
-    resolution: {integrity: sha512-GZDGTAGHl3ZRRTfe/dIra8GRt1FLJ17o6OrItfeI7MCRnJZnnHpTsB3FBK3fs0WdK42yHrnguEHBZQua7L7+vw==, tarball: file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-workspace-0.1.25.tgz}
+  '@idpxyz/ui-workspace@file:vendor/idpxyz-ui/idpxyz-ui-workspace-0.1.25.tgz':
+    resolution: {integrity: sha512-GZDGTAGHl3ZRRTfe/dIra8GRt1FLJ17o6OrItfeI7MCRnJZnnHpTsB3FBK3fs0WdK42yHrnguEHBZQua7L7+vw==, tarball: file:vendor/idpxyz-ui/idpxyz-ui-workspace-0.1.25.tgz}
     version: 0.1.25
     peerDependencies:
       lucide-react: '>=0.400.0'
@@ -1731,10 +1731,10 @@ snapshots:
 
   '@floating-ui/utils@0.2.12': {}
 
-  '@idpxyz/ui-patterns@file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-patterns-0.1.23.tgz(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@idpxyz/ui-patterns@file:vendor/idpxyz-ui/idpxyz-ui-patterns-0.1.23.tgz(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
-      '@idpxyz/ui-primitives': file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-primitives-0.1.25.tgz(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@idpxyz/ui-utils': file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-utils-0.1.23.tgz
+      '@idpxyz/ui-primitives': file:vendor/idpxyz-ui/idpxyz-ui-primitives-0.1.25.tgz(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@idpxyz/ui-utils': file:vendor/idpxyz-ui/idpxyz-ui-utils-0.1.23.tgz
       class-variance-authority: 0.7.1
       lucide-react: 0.468.0(react@19.2.8)
       react: 19.2.8
@@ -1744,11 +1744,11 @@ snapshots:
       - emoji-mart
       - react-dom
 
-  '@idpxyz/ui-primitives@file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-primitives-0.1.25.tgz(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@idpxyz/ui-primitives@file:vendor/idpxyz-ui/idpxyz-ui-primitives-0.1.25.tgz(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
       '@emoji-mart/data': 1.2.1
       '@emoji-mart/react': 1.1.1(emoji-mart@5.6.0)(react@19.2.8)
-      '@idpxyz/ui-utils': file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-utils-0.1.23.tgz
+      '@idpxyz/ui-utils': file:vendor/idpxyz-ui/idpxyz-ui-utils-0.1.23.tgz
       '@radix-ui/react-checkbox': 1.3.11(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@radix-ui/react-dialog': 1.1.23(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
       '@radix-ui/react-dropdown-menu': 2.1.24(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
@@ -1772,25 +1772,25 @@ snapshots:
       - emoji-mart
       - react-dom
 
-  '@idpxyz/ui-theme-runtime@file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-theme-runtime-0.1.23.tgz(lucide-react@0.468.0(react@19.2.8))(react@19.2.8)':
+  '@idpxyz/ui-theme-runtime@file:vendor/idpxyz-ui/idpxyz-ui-theme-runtime-0.1.23.tgz(lucide-react@0.468.0(react@19.2.8))(react@19.2.8)':
     dependencies:
-      '@idpxyz/ui-tokens': file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-tokens-0.1.23.tgz
+      '@idpxyz/ui-tokens': file:vendor/idpxyz-ui/idpxyz-ui-tokens-0.1.23.tgz
       lucide-react: 0.468.0(react@19.2.8)
       react: 19.2.8
 
-  '@idpxyz/ui-tokens@file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-tokens-0.1.23.tgz': {}
+  '@idpxyz/ui-tokens@file:vendor/idpxyz-ui/idpxyz-ui-tokens-0.1.23.tgz': {}
 
-  '@idpxyz/ui-utils@file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-utils-0.1.23.tgz':
+  '@idpxyz/ui-utils@file:vendor/idpxyz-ui/idpxyz-ui-utils-0.1.23.tgz':
     dependencies:
       clsx: 2.1.1
       tailwind-merge: 2.6.1
 
-  '@idpxyz/ui-workspace@file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-workspace-0.1.25.tgz(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
+  '@idpxyz/ui-workspace@file:vendor/idpxyz-ui/idpxyz-ui-workspace-0.1.25.tgz(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)':
     dependencies:
-      '@idpxyz/ui-patterns': file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-patterns-0.1.23.tgz(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@idpxyz/ui-primitives': file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-primitives-0.1.25.tgz(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
-      '@idpxyz/ui-theme-runtime': file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-theme-runtime-0.1.23.tgz(lucide-react@0.468.0(react@19.2.8))(react@19.2.8)
-      '@idpxyz/ui-utils': file:../../../../../../home/tops/idp-ui-tgz/idpxyz-ui-utils-0.1.23.tgz
+      '@idpxyz/ui-patterns': file:vendor/idpxyz-ui/idpxyz-ui-patterns-0.1.23.tgz(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@idpxyz/ui-primitives': file:vendor/idpxyz-ui/idpxyz-ui-primitives-0.1.25.tgz(@types/react-dom@19.2.5(@types/react@19.2.18))(@types/react@19.2.18)(emoji-mart@5.6.0)(lucide-react@0.468.0(react@19.2.8))(react-dom@19.2.8(react@19.2.8))(react@19.2.8)
+      '@idpxyz/ui-theme-runtime': file:vendor/idpxyz-ui/idpxyz-ui-theme-runtime-0.1.23.tgz(lucide-react@0.468.0(react@19.2.8))(react@19.2.8)
+      '@idpxyz/ui-utils': file:vendor/idpxyz-ui/idpxyz-ui-utils-0.1.23.tgz
       lucide-react: 0.468.0(react@19.2.8)
       react: 19.2.8
     transitivePeerDependencies:

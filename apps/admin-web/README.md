@@ -31,26 +31,21 @@
 
 ## 技术栈
 
-Vite + React 19 + TypeScript + Tailwind CSS 3，UI 组件来自 [`idpxyz/idp-ui`](https://github.com/idpxyz/idp-ui) 的 `@idpxyz/*` 包（GitHub Packages，TypeScript 源码形态发布，消费方自行编译——因此 `tailwind.config.js` 要扫描 `node_modules/@idpxyz/*/src`）。外壳形态参考 loms-web 的传统控制台（品牌头 + 左侧导航 + 单页区）。
+Vite + React 19 + TypeScript + Tailwind CSS 3，UI 组件来自 [`idpxyz/idp-ui`](https://github.com/idpxyz/idp-ui) 的 `@idpxyz/*` 包（TypeScript 源码形态发布，消费方自行编译——因此 `tailwind.config.js` 要扫描 `node_modules/@idpxyz/*/src`）。外壳形态参考 loms-web 的传统控制台（品牌头 + 左侧导航 + 单页区）。
+
+`@idpxyz/*` 七个包**不从注册表装**：tarball 随仓放在 `vendor/idpxyz-ui/`（idp-ui `master` 构建，0.1.23 / 0.1.25），`package.json` 的 `pnpm.overrides` 把每个包——包括只作传递依赖出现的 `ui-icons`——钉到对应文件。这样任何一次全新检出都能 `pnpm install --frozen-lockfile`，不需要读包凭据；`.npmrc` 里那行 scope 注册表只标明上游发布在哪，overrides 之下不会被访问。换版本的动作是三件一起：替换 tarball、改 overrides 那几行、不带 `--frozen-lockfile` 重装一次让 lockfile 跟上。
 
 ## 前置与安装
 
-- Node 20+、pnpm 10+
-- 从注册表安装 `@idpxyz/*` 需要带 `read:packages` 的 GitHub PAT（本目录 `.npmrc` 已指定 scope 注册表，凭据放用户级 `~/.npmrc`，不要提交）：
-
-```
-//npm.pkg.github.com/:_authToken=<PAT>
-```
+- Node 20+、pnpm 10（`package.json` 的 `packageManager` 钉 `10.32.1`，pnpm 10 默认会自行切到该版本）
 
 ```bash
 cd apps/admin-web
-pnpm install
+pnpm install --frozen-lockfile
 pnpm dev        # 开发服务器
 pnpm build      # tsc 类型检查 + vite 构建
+pnpm test       # scripts/run-tests.mjs
 ```
-
-本机当前的 `node_modules` 是用 idp-ui `master` 构建的本地 tarball 装的（当时无 PAT），
-与注册表工件同源同形（dist + d.ts）；配好 PAT 后重跑 `pnpm install` 即切回注册表来源并生成锁文件。
 
 ## 与后端联调
 
@@ -62,10 +57,8 @@ pnpm build      # tsc 类型检查 + vite 构建
 
 ## 版本与验证口径
 
-`@idpxyz/*` 版本对齐 idp-ui `master` 当前包版本（0.1.23 / 0.1.25）。本骨架的构建验证是在 idp-ui workspace 内以同一份源码完成的（本机无 `read:packages` 凭据，装不了注册表包）；首次从注册表真实安装时如遇版本缺失，按注册表实际版本调整。
+`@idpxyz/*` 版本以 `vendor/idpxyz-ui/` 里的 tarball 为准（对齐 idp-ui `master` 当时的包版本 0.1.23 / 0.1.25）。门禁三道：`node node_modules/typescript/bin/tsc -b --noEmit`、`node scripts/run-tests.mjs`、`pnpm exec vite build`；CI 的 `admin-web` job（`.github/workflows/ci.yml`）在全新检出上按同一顺序跑，本机验证口径与它一致。走 TypeScript 入口文件而不是 `npx tsc`，是因为后者在缺包时会落到同名占位包上、退 0 却什么都没编。
 
 ## 已知跟进
-
-- CI：按 ADR-0018 的后果，第一个端落地后 CI 需新增非 Go 的独立 job；该 job 需要能读 GitHub Packages 的凭据（org secret 或包访问授权），尚未接。
 - 产品色：`ui-tokens` 的 `productAccent` 尚未登记 parcel，`App.tsx` 暂用默认色；登记属上游 idp-ui 仓的改动。
 - 产物体积：vendor 块约 1.17MB（gzip 约 239KB），构成是 framer-motion/radix/d3/highlight 等 `@idpxyz` 传递依赖——本应用只用到部分组件，但上游桶导出与缺 `sideEffects` 声明让未用的重依赖摇不掉。已按变更频率拆 `react-vendor`/`ui-kit`/`vendor` 三块保缓存（业务改动只失效 app 块）；根治（`sideEffects: false` 与子路径导出）属上游 idp-ui 仓。

@@ -71,6 +71,51 @@ jobs:
       - name: Test shards cover every package
         run: bash scripts/ci/test-shards.sh check
 
+  # 产品内客户端与后端同仓同版本发布（ADR-0018），所以它的门禁也在同一条流水线里，
+  # 只是不装 Go、不起库，与 static 并行。`@idpxyz/ui-*` 七个私有包不从注册表取：
+  # tarball 随仓 vendor 在 apps/admin-web/vendor/idpxyz-ui/，pnpm.overrides 把每个包
+  # 都钉到那份文件——因此这个 job 不需要任何读包凭据，`.npmrc` 里那行 scope 注册表
+  # 在 overrides 之下不会被访问。
+  admin-web:
+    name: admin-web typecheck, tests, build
+    runs-on: ubuntu-24.04
+    # 本机全新安装 3s、tsc 2s、用例 2s、vite build 4s；上限只防挂死。
+    timeout-minutes: 10
+    defaults:
+      run:
+        working-directory: apps/admin-web
+    steps:
+      - name: Checkout
+        uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+
+      - name: Set up Node
+        uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6.5.0
+        with:
+          node-version: 22
+
+      # 版本与 package.json 的 packageManager 字段同值；不同值时 pnpm 会自行切到字段
+      # 所指版本，这里写同一个数只是不让它多下载一次。
+      - name: Set up pnpm
+        run: npm install -g pnpm@10.32.1
+
+      # --frozen-lockfile：lockfile 与 package.json（含 overrides）对不上就红，而不是
+      # 悄悄重写 lockfile 再装——重写那一下正是「换掉私有包来源」的那种全仓派生态命令，
+      # 不该由 CI 替人做。
+      - name: Install
+        run: pnpm install --frozen-lockfile
+
+      # 走 TypeScript 的入口文件而不是 `npx tsc` / `.bin/tsc`：前者在缺包时会落到一个
+      # 同名占位包上、退 0 却什么都没编，后者的垫片在某些安装下会缺失。
+      - name: Typecheck
+        run: node node_modules/typescript/bin/tsc -b --noEmit
+
+      - name: Test
+        run: node scripts/run-tests.mjs
+
+      # Typecheck 那一步已经跑过 tsc -b，这里只做 vite 那一半，不用 `pnpm build` 重跑一遍。
+      - name: Build
+        run: pnpm exec vite build
+
   shards:
     name: Enumerate test shards
     runs-on: ubuntu-24.04

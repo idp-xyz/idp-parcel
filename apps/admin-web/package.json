@@ -30,9 +30,19 @@
     "typescript": "~5.6.2",
     "vite": "^6.0.5"
   },
+  "packageManager": "pnpm@10.32.1",
   "pnpm": {
     "onlyBuiltDependencies": [
       "esbuild"
-    ]
+    ],
+    "overrides": {
+      "@idpxyz/ui-icons": "file:vendor/idpxyz-ui/idpxyz-ui-icons-0.1.23.tgz",
+      "@idpxyz/ui-patterns": "file:vendor/idpxyz-ui/idpxyz-ui-patterns-0.1.23.tgz",
+      "@idpxyz/ui-primitives": "file:vendor/idpxyz-ui/idpxyz-ui-primitives-0.1.25.tgz",
+      "@idpxyz/ui-theme-runtime": "file:vendor/idpxyz-ui/idpxyz-ui-theme-runtime-0.1.23.tgz",
+      "@idpxyz/ui-tokens": "file:vendor/idpxyz-ui/idpxyz-ui-tokens-0.1.23.tgz",
+      "@idpxyz/ui-utils": "file:vendor/idpxyz-ui/idpxyz-ui-utils-0.1.23.tgz",
+      "@idpxyz/ui-workspace": "file:vendor/idpxyz-ui/idpxyz-ui-workspace-0.1.25.tgz"
+    }
   }
 }
