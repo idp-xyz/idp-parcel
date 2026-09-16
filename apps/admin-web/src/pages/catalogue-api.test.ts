@@ -68,6 +68,25 @@ test('4xx 是调用方式问题，带回服务端问题码', async () => {
   deepEqual(result, { kind: 'callerProblem', status: 400, code: 'MALFORMED_REQUEST' });
 });
 
+// 票 admin-web-group-legal-entities/11：写口的形状拒绝把理由散文放在 `error.detail`。它是散文不是代数——原样交回、
+// 不译不裁、不据此分支；缺席即无此格（上一条已钉：不多出一个值为 undefined 的键，deepEqual 才对得上）。
+test('4xx 带 detail 时 callerProblem 原样带回那句散文', async () => {
+  const detail = 'tenantId must not be carried in the payload; the tenant grid is filled by the access channel, not by the request';
+  stubFetch(() => jsonResponse(400, { error: { code: 'MALFORMED_REQUEST', detail } }));
+
+  const result = await postMasterData('/commercial-legal-entity-registrations', {});
+
+  deepEqual(result, { kind: 'callerProblem', status: 400, code: 'MALFORMED_REQUEST', detail });
+});
+
+test('detail 不是字符串时当缺席，不把别的形状冒充散文', async () => {
+  stubFetch(() => jsonResponse(400, { error: { code: 'MALFORMED_REQUEST', detail: { field: 'x' } } }));
+
+  const result = await postMasterData('/commercial-legal-entity-registrations', {});
+
+  deepEqual(result, { kind: 'callerProblem', status: 400, code: 'MALFORMED_REQUEST' });
+});
+
 test('5xx 是没形成答案，可重试，与业务答案分格', async () => {
   stubFetch(() => jsonResponse(500, { error: { code: 'NO_ANSWER_FORMED' } }));
 

@@ -1,7 +1,10 @@
 export type ApiResult<Body> =
   | { kind: 'outcome'; status: number; body: Body }
   | { kind: 'unconfigured' }
-  | { kind: 'callerProblem'; status: number; code: string }
+  // `detail` 是服务端随 4xx 交回的理由散文（票 admin-web-group-legal-entities/11；首例是 party-commercial 写口的
+  // 形状拒绝）。散文不是代数：原样示出、不查表、不据此分支——纪律同登记答案的 `cause`。缺席即服务端没给，
+  // 不是漏字段；5xx 不带它，那是依赖故障的内部原文。
+  | { kind: 'callerProblem'; status: number; code: string; detail?: string }
   | { kind: 'noAnswer'; status: number; code: string }
   | { kind: 'transport'; message: string };
 
@@ -90,13 +93,18 @@ function classifyMasterDataResponse<Body>(
     return { kind: 'outcome', status: response.status, body: payload as Body };
   }
 
-  const code =
-    (payload as { error?: { code?: string } } | null)?.error?.code ?? 'UNKNOWN';
+  const problem = (payload as { error?: { code?: string; detail?: unknown } } | null)?.error;
+  const code = problem?.code ?? 'UNKNOWN';
   if (response.status === 403 && code === 'ACCESS_CHANNEL_NOT_CONFIGURED') {
     return { kind: 'unconfigured' };
   }
   if (response.status >= 500) {
     return { kind: 'noAnswer', status: response.status, code };
   }
-  return { kind: 'callerProblem', status: response.status, code };
+  // 只在服务端真给了一句字符串时才带上这一格：别的形状不是散文，不冒充；缺席时不多出一个值为 undefined 的键，
+  // 调用侧按「有没有这一格」判，不必再判值。
+  const detail = typeof problem?.detail === 'string' ? problem.detail : undefined;
+  return detail === undefined
+    ? { kind: 'callerProblem', status: response.status, code }
+    : { kind: 'callerProblem', status: response.status, code, detail };
 }

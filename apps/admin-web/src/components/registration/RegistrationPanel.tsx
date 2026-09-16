@@ -279,9 +279,15 @@ export function RegistrationAnswerNote({
       );
     case 'callerProblem':
       return (
-        <p className="text-xs text-idpxyz-danger">
-          调用方式问题（HTTP {answer.status}）：{problemNote(answer.code)}
-        </p>
+        <div className="text-xs text-idpxyz-danger">
+          <p>
+            调用方式问题（HTTP {answer.status}）：{problemNote(answer.code)}
+          </p>
+          {/* 服务端随 4xx 交回的理由散文（票 admin-web-group-legal-entities/11）：原样示出、不查表、不截断——
+              「tenantId must not be carried…」那半句正是操作者要去掉的那一格。缺席不显：没给就是没给，不
+              替服务端补一句。逐字段表单与 JSON 签共用这一处呈现，两边同时得到。 */}
+          {answer.detail ? <p className="mt-1">原因：{answer.detail}</p> : null}
+        </div>
       );
     case 'noAnswer':
       return (
