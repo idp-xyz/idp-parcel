@@ -32,7 +32,8 @@ Blocked by: 无
 ## 完成判据
 
 - `go build ./...`、`go vet ./...`；`internal/partycommercial/adapters/http` 与 `cmd/parcel-api`（带 DSN）`go test -count=1`。
-- 开关未设：五口照旧 403。开关设 `SYN-TENANT-01`：`legal-entity` 一口对合规载荷答 201 `PARTY_IDENTITY_REGISTERED`，
+- 开关未设：五口照旧 403。开关设 `SYN-TENANT-01`：`legal-entity` 一口对合规载荷答 201、outcome `REGISTERED`
+  （线上名取 `PartyIdentityRegistered.String()`；原写的 `PARTY_IDENTITY_REGISTERED` 是 Go 常量名，按评审 S1 改），
   对带 `tenantId` 的载荷答 400；其余四口在各自那笔落地前仍 403。
 - 演示形态下从票 02 的表单登一个 `SYN-LE-02`，列表重取后可见。
 
@@ -66,6 +67,14 @@ Blocked by: 无
 
 清点预报（在 `835690b8` 干净树上跑 `tools/mechanism-inventory -out` 至临时路径，与已提交文件 `--numstat` 3/3）：`partycommercial` 生产 126→127 / 测试 140→141 / http 适配器 28→29，合计随之；`cmd/` 测试 89→90。按现行流程由推送方在重放 tip 重生成、单独成笔，本笔不含。
 
-**进 main 记录**：待推送方重放后补；评审另派非作者通道。
+**进 main 记录**：作者已 rebase 到 main `a7bdd666`，五笔代码 `b6f99b6e` / `0a95ba6f` / `89771bc1` / `515b7c14` / `835690b8` 与完成记录 `da0b72cd` 以原 SHA ff 进 main（零重放）；清点由推送方在落地 tip 重生成 `f6569f51`。验证在 `f6569f51`：`gofmt -l` 空、`go build ./...` / `go vet ./...` 0、清点 porcelain 空；带 DSN `go test -p 1 -count=1 ./...` 115 ok / 0 FAIL / 16 无测试 / 0 cached（19:08:33→19:10:43，130 s）；`-v` 探针 `TestIsolatedLegalEntityRegistrationLandsAgainstARealDatabase` / `TestEveryAssembledEndpointAnswersUnconfigured` PASS。19:11 `push f6569f51:main`，远端 main = `f6569f51`。评审非阻断 N1 / N3（与 N2 可选项）立 [07](./07-isolated-write-intake-decode-strict-and-comment-counts.md) 收；S1 本笔改票面。
 
 ## Comments
+
+**评审 ← 通道 2（非作者）· 钉 `835690b8` · 基线 `a7bdd666` · 19:06 / 19:06（全文 19:07）。** Standards 阻断 0 / 非阻断 3；Spec 阻断 0 / 非阻断 1。全文在任务 `task-ec977434` 的 report_task。
+
+- 无发现（Standards ①–⑤⑦）：`IsolatedPartyIdentityIntake` 唯一构造点在 `buildIsolatedWriteAdmission`、位于 `SYN-` 前缀门与读写开关同值门之后，五口皆拒 `tenantId`（键在场即拒，含 `null` 与同值）；逐笔核 `endpoints.go` 各只换一行，`expectedWriteAdmittedLines` 逐笔加一；开关未设五口 403 由 `TestEveryAssembledEndpointAnswersUnconfigured` 守、只设读开关由 `TestIsolatedReadAdmissionCannotOpenTheAdmittedCommandLines` 对六口各钉；新入参为具体指针非接口，nil 时五个局部变量停在 `UnconfiguredIntake{}`；`main.go` 日志名单经 `TestIsolatedWriteAdmissionNamesTheAdmittedCommandLines` 钉到二分表、二分表再钉到路由行为；`PartyIdentityRegistered.String()` = `REGISTERED`，测试断的是 `.String()`；注释全中文、无行号，对 `register_party_identity.go` 包注释的引用为引文且原句一致。
+- 无发现（Spec）：要做的 1–4 逐条落地；完成判据三条各有用例；「不做」两条未碰（发布口 / 服务形态 / 渠道映射口仍字面量 `UnconfiguredIntake{}` 且类型上装不进；`isolatedRead` 一字未动）；超票面四项（`exactlyOne` 拒别口的项、`DisallowUnknownFields`、`tenantId:null` 亦拒、关系口用指针表缺席）皆合理、不扩权限面；`da0b72cd` 判断项 11 条与代码核对无失真。
+- 已在进 main 后一笔改票面：**S1** 完成判据「201 `PARTY_IDENTITY_REGISTERED`」与线上名 `REGISTERED` 不符（错在票不在码）。
+- 立票 [07](./07-isolated-write-intake-decode-strict-and-comment-counts.md) 收：**N1**（Duplicated Code + 行为分叉）`isolated_write_intake.go` 的 `decodeClosedDocument` 与同包 `decodeStrict`（`publication_draft_payload.go`）同形，但少了尾随内容拒——`{"legalEntities":[…]} {"x":1}` 在身份口静默放过、在发布口 400，与作者自己在 `exactlyOne` 注释里反对「无声丢掉」相矛盾；改调 `decodeStrict`（接 `io.Reader`，传 `request.Body`）。**N3** `identityKindFromName` 注释「封闭三值」、`partyRoleFromName` 注释「三处译的是同一个封闭集」数的是别包的东西（AGENTS「不用计数」；同包旧注释 `PartyIdentityDeactivationIntake` 已用「封闭三值」属沿用，一并收）。
+- 留票面记、随 07 可选：**N2** Fowler 判断题——不是五份同形（外壳解码、拒自报租户、恰一项已共用；逐字段译装因命令类型互不相同属本质差异），可收的是 `fmt.Errorf("%w: X[0].f: %v", ErrMalformedRequest, err)` 约二十处同形包装成一个 `malformed(field, err)` 助手；`partyRoleFromName` / `identityKindFromName` 与 CLI、postgres 适配器的镜像属 Repeated Switches，注释已给理由（名字属边界不属模型），接受。
