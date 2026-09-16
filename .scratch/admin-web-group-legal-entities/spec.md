@@ -42,4 +42,4 @@ Status: in-progress
 | [04](./issues/04-catalogue-read-pagination-sort-filter-contract.md) | 目录读口分页 / 排序 / 筛选下推的契约决策 | needs-info（归 owner） |
 | [05](./issues/05-legal-entity-business-attributes.md) | 责任法人业务属性建模（税号、注册国家、开票主体、结算币种、联系人） | needs-info（归 owner） |
 | [06](./issues/06-isolated-write-admission-for-commercial-identity-family.md) | ADR-0091 逐口放行：`/commercial-*` 身份族在隔离形态下放行 | resolved（通道 4 → 4 新会话收尾，rebase 后以原 SHA ff 进 main，清点 `f6569f51`；见票面完成记录） |
-| [07](./issues/07-isolated-write-intake-decode-strict-and-comment-counts.md) | A 类尾巴：隔离身份 Intake 外壳解码改调 `decodeStrict`（尾随内容拒）+ 两处注释去计数（06 评审 N1 / N3，可选 N2） | ready-for-agent |
+| [07](./issues/07-isolated-write-intake-decode-strict-and-comment-counts.md) | A 类尾巴：隔离身份 Intake 外壳解码改调 `decodeStrict`（尾随内容拒）+ 注释去计数（实做四处；06 评审 N1 / N3，可选 N2 未做） | resolved（通道 4，三笔原 SHA ff 进 main，远端 main = `19047d51`，评审 ← 通道 2 无阻断；见票面完成记录） |

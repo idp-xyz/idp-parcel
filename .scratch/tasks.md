@@ -2649,3 +2649,23 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - **收尾**：作者树 `idp-parcel-mcp4-pc-identity-write` 归通道 4 比内容后拆（已在释号广播里写明比法），拆完推送方把 `mcp4-pc-identity-isolated-write` → `merged/`、远端删。`idp-land06` 推完拆。
 - **前沿**：ready 1——admin-web-group-legal-entities/07（即派通道 4，作者收自己的尾巴；评审派通道 2）；在途 0；needs-info 04 / 05（归 owner）；draft pp-seams/04；first-party-api 三票等 ADR-0139。`docs/ux/commercial-party.md` 仍 untracked、无人认领、未动。**归用户**：ADR-0139 → Accepted 与否；`docs/ux/` 归属。
 - **本节五数**（18:5x–19:1x）：CI main 绿/总 未量（`f6569f51` run 刚起）· 集成时延——06 代码推齐 18:08（`ee4fb886`）→ 进 main 19:11 **约 63 分**（其中 18:08→18:5x 约 45 分是作者会话断、无人接手的空档；接手单到 push 约 20 分）· 重放笔数 **0**（ff）· 重复开发 0 · 会话重置 **1**（通道 4，18:5x 自报新会话）· 非作者评审缺席 0
+
+### 19:1x–19:2x 同一会话（本节由下一任按台账与队列回显补记，无自报可读）
+
+- **派 07**：`task-17ba8eed` → 通道 4（19:16，作者收自己的尾巴；隔离树 `D:/tops/idp-parcel-mcp4-adminweb07`，分支 `mcp4-adminweb07` 基 `2e8183d6`）。作者 19:24 `report_task done`：`23f3582e`（要做的 1 红→绿）/ `5dff14d7`（要做的 2 纯注释四处）/ `19047d51`（票面 Status resolved），三笔全推 origin；本包 182 PASS / 0 SKIP，`cmd/parcel-api` 带 DSN 探针 PASS，清点预报零差；可选 N2 未做已写理由。
+- **派评审**：`task-8d992f9a` → 通道 2（19:25，钉 `5dff14d7`，15 分限）。通道 2 当时那个会话 19:25:31 检出 `%TEMP%\idp-review-07@5dff14d7` 后无下文（台账停在 pending、无分轴消息）。
+- **占号广播**（19:2x）：「07 作者完工、评审已派通道 2、推送方并行在 `%TEMP%\idp-land07` 带 DSN 全量一次，勿占 55432」——`idp-land07` 确已 detached 到 `19047d51`，**但那一跑没起**（下一任 19:3x 查：无 go 进程、`idp-land07` 无日志文件、terminals 无对应命令）。广播之后会话断。教训归「开窗通知与完工报成对，做不成也要报」那一格：占号说了要跑，跑没起也没人知道，55432 在别人眼里空占了十几分钟。
+
+## 2026-09-16 19:3x 通道 1 新会话（用户先用自带 `ask_question` 验通道，再令「调 idp-mcp-1 的 check_messages 开始监听」；队列里三条：通道 4 的 07 完工报、前任的占号广播回显、一页项目概览的摘要）
+
+### 19:3x–19:5x：接 07 完工报 → 补跑全量 → 催评审 → `19047d51` ff 进 main → 簿记
+
+- **量现场**（只按 git 与台账，不读自报）：`ls-remote` main = `2e8183d6` = 本地 = origin/main；`mcp4-adminweb07` 本地 = 远端 = `19047d51`，基 `2e8183d6`，可 ff，对 main 四件 +77/−11；worktree 四棵——共享树、`idp-land07@19047d51`（干净）、`idp-review-07@5dff14d7`（干净）、作者树；`query_tasks`：07 作者单 done、评审单 pending。前任广播的「全量在跑」不成立（无进程、无日志），按过期断言处置、不沿用。
+- **补跑（钉 `19047d51`）**：`idp-land07` 干净检出上清点重生成 porcelain 空（零差，无单独清点笔）、`gofmt -l` 空、`go build ./...` / `go vet ./...` 0；19:37 带 DSN `go test -p 1 -count=1 ./...` **115 ok / 0 FAIL / 16 无测试 / 0 cached**，退出码 0（19:37:45→19:39:38，113 s）；`-v` 探针 `TestIsolatedLegalEntityRegistrationLandsAgainstARealDatabase` PASS 非 SKIP；新用例 `…RefusesTrailingContentAfterThePayload` 登记口 / 停用口两子测试 PASS。19:40 释号广播（写明前任那一跑没起、此为补跑）。admin-web 未跑：本票只 Go + .md。
+- **评审**：19:40 台账仍 pending、15 分限到 → 催通道 2（19:47 硬限，到时自跑隔离 /code-review）。19:41 通道 2 **新会话**认领（自报「队列里只到两条广播、从 `query_tasks` 才看到此单」——派单消息本身没送达那个新会话，靠台账兜住），硬限改 19:56；提醒它复用已存在的 `idp-review-07`。19:49 两轴到：**Standards 0 阻断 / 1 非阻断（N1 `PartyIdentityDeactivationIntake` 头注「名称镜像」放在命令上不精确）· Spec 0 阻断 / 2 非阻断（S1 判断项 2 对 `encoding/json` 的断言不成立——本机探针 `{"a":1} garbage` 第一次 Decode err=nil；S2 完成记录补「500 为替身零值答复，生产上 201 + 第二文档无声消失」半句）**；红已本机复现（换回 `2e8183d6` 版两口皆 FAIL 500）。全文代落票 07 Comments。
+- **进 main**（零重放）：`ls-remote` 核 `2e8183d6` 未动 → 19:49:10 `push 19047d51:main` 成，**远端 main = `19047d51`**，CI run 35092371232 起；共享树 `merge --ff-only` 同 SHA（树上只有两块 untracked：`.scratch/project-overview-2026-09-16/`、`docs/ux/`，零重叠）→ 广播「远端 main = 19047d51」+ 通道 4 拆树比法。
+- **簿记两笔**（在 `19047d51` 之上，推送方自审）：(1) 纯注释 **`1a2ceef9`**——N1 一词（`register_party_identity.go` 头注「封闭集的名称镜像」→「一个封闭集」）；`git diff -U0` 滤注释行后空、无 CR，gofmt 空、build / vet 0、http 包 ok。(2) 纯 .md——票 07 进 main 记录 + 评审代落三格 + S1 理由改写 + S2 补句 + 标题对齐（零量级项）；spec 07 行 → resolved；本节与上节补记。→ `ls-remote` 核未动 → push → 共享树 ff。
+- **上节未量的 CI 补记**：`f6569f51` run 35088959569 **success**、`2e8183d6` run 35089328754 **success**。
+- **收尾**：作者树 `idp-parcel-mcp4-adminweb07` 归通道 4 按广播里的比法拆，拆完推送方把 `mcp4-adminweb07` → `merged/`、远端删；`idp-land07` 簿记推完拆（不加 `--force`）；`idp-review-07` 通道 2 已自拆。
+- **前沿**：ready 0；在途 0；needs-info 04 / 05（归 owner）；draft pp-seams/04；first-party-api 三票等 ADR-0139。共享树两块 untracked 都不是通道 1 的活：`.scratch/project-overview-2026-09-16/`（一页项目概览，摘要经队列到达，作者未署通道号；是否入库归用户）、`docs/ux/commercial-party.md`（18:38 起 untracked、无人认领、未动）。**归用户**：ADR-0139 → Accepted 与否；`docs/ux/` 归属；概览页是否入库。
+- **本节五数**（19:1x–19:5x，含补记段）：CI main 绿/总 **2/2 已完 + 1 在跑**（`f6569f51`、`2e8183d6` success；`19047d51` run 35092371232 未完）· 集成时延——07 完工报 19:24 → 进 main 19:49 **约 25 分**（其中 19:2x→19:3x 约 10 分是推送方会话断的空档、19:25→19:41 约 16 分是评审侧会话断的空档，两段有重叠；1 票）· 重放笔数 **0**（ff）· 重复开发 0 · 会话重置 **2**（推送方 19:2x→19:3x 一次；通道 2 19:41 自报新会话一次）· 非作者评审缺席 0
