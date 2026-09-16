@@ -112,6 +112,9 @@ export function IdentityDeactivationForm({ parties, onDeactivated }: IdentityDea
   // 当前选中种类那一册的答案（参与方册除外——它从页面来）。换种类即换册，上一册的答案不留：与「换种类连标识一起清」
   // 同一条纪律，上一册的候选留在下拉里会被送到另一册去查。
   const [loaded, setLoaded] = useState<ApiResult<unknown> | null>(null);
+  // 本表单自读那一册的重取序号（票 13 第 7 条）：停用法人 / 客户账户落册后按种类重读对应册，同册再停一个时候选与建议
+  // 按新册面算，不按停用前那份。参与方册的重取仍由页面做（onDeactivated）。
+  const [reloadKey, setReloadKey] = useState(0);
   const answerFor = (selected: IdentityKind): ApiResult<unknown> | null =>
     selected === 'BUSINESS_PARTY' ? parties : loaded;
   const targetsFor = (selected: string): readonly RevisionedIdentity[] | null => {
@@ -127,16 +130,20 @@ export function IdentityDeactivationForm({ parties, onDeactivated }: IdentityDea
     localProblems: identityDeactivationLocalProblems,
     payloadOf: identityDeactivationPayloadOf,
     // 答 `DEACTIVATED`（PartyRegistryOutcome 里 PartyIdentityDeactivated 的线上名）才重取；`册上没有这一个身份`与
-    // 修订错位都没写进去。JSON 镜像那条路上分不出种类（快照是未译的 JSON），一律重取参与方列表：多取一次是一个 GET，
-    // 为分种类去解一份 unknown 不值。
+    // 修订错位都没写进去。按送出的种类重读对应册（第 7 条）：参与方册由页面重取，法人册 / 客户账户册本表单自己重读。
+    // JSON 镜像那条路交回 null（快照是未译的 JSON，壳不解它，分不出种类）——两边都重取：各是一个 GET，为分种类去解一份
+    // unknown 不值。
     landedOutcome: 'DEACTIVATED',
-    onLanded: () => onDeactivated(),
+    onLanded: (sent) => {
+      if (sent === null || sent.kind === 'BUSINESS_PARTY') onDeactivated();
+      if (sent === null || sent.kind !== 'BUSINESS_PARTY') setReloadKey((value) => value + 1);
+    },
   });
   const { draft, patch, problems, locked, timeZone } = form;
   const selectedKind = isIdentityKind(draft.kind) ? draft.kind : null;
 
   useEffect(() => {
-    // 参与方册不在这里读：页面持有的那份答案就是它。其余两册在选中时读一次；未回的旧请求按 cancelled 丢。
+    // 参与方册不在这里读：页面持有的那份答案就是它。其余两册在选中时读一次、落册后重读一次；未回的旧请求按 cancelled 丢。
     setLoaded(null);
     if (selectedKind === null || selectedKind === 'BUSINESS_PARTY') return;
     let cancelled = false;
@@ -146,7 +153,7 @@ export function IdentityDeactivationForm({ parties, onDeactivated }: IdentityDea
     return () => {
       cancelled = true;
     };
-  }, [selectedKind]);
+  }, [selectedKind, reloadKey]);
 
   const known = targetsFor(draft.kind)?.find((row) => row.id === draft.id);
   const pickerProps = {
