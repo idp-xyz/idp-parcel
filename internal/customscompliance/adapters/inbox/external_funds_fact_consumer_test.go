@@ -54,6 +54,9 @@ func newExternalFundsFactFixture(t *testing.T) (*ccinbox.ExternalFundsFactConsum
 	return consumer, handler
 }
 
+// externalFundsFactEnvelope 造一封采用信封。调用方传的 eventID 字面沿用早先 SA 的可读串接形——它自票 sa-cc/32 起
+// **不再是生产形**（生产 ID 是（租户 / 事实 / 版本）的定长指纹，见 outboxintent.FingerprintEventID）；这里留可读形
+// 不改，因为消费者不解析 ID、只按（消费者名 + 来源 + 事件 ID）认领，用例断的正是「ID 只作认领键」。
 func externalFundsFactEnvelope(t *testing.T, eventID string) eventing.Envelope {
 	t.Helper()
 	payload, err := json.Marshal(map[string]string{

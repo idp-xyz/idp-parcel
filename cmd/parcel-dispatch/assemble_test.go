@@ -855,6 +855,99 @@ func TestARejectedDutyVerificationHandoffIsNotRegisteredAsUndecided(t *testing.T
 	}
 }
 
+// Covers: 票 sa-cc/32 裁决 4 / 完成判据 (3)——CC 消费门的幂等不靠信封 ID，真库钉住：同一（租户 / 事实 / 版本）以两个
+// **不同**信封 ID 各投一封（SA 那侧换 ID 形之后重投、或任何两封同内容不同 ID 的信封）。Inbox 键（消费者名 + 来源 +
+// 事件 ID）只挡同 ID 重投，第二封放行到消费门；`ReceiveFundsFact` 经 `customs_compliance/0021` 主键（租户, 事实, 版本）
+// 与 sameFundsFactVersion 答`已存在`——版本表仍一行、第二封消费入账不报错、既没形成第二版也没触发重派（谱系零版、CC
+// 核对信封零封）。已消费的旧 ID 不重算、不迁移。
+func TestTheSameFundsFactVersionUnderTwoEnvelopeIDsLandsOnceInTheCustomsRegister(t *testing.T) {
+	beat, db, store := wiredBeat(t)
+	facts, err := sapostgres.NewExternalFundsFacts(db)
+	if err != nil {
+		t.Fatalf("SA 资金事实库：%v", err)
+	}
+	adopted, err := sadomain.AdoptExternalFundsFact(sadomain.ExternalFundsFactSpec{
+		Fact:        saTestValue(t, sadomain.NewFundsFactReference, "bank-fact-two-ids"),
+		Source:      saTestValue(t, sadomain.NewFundsSourceRegistrationReference, "source-bank-feed-1"),
+		Payer:       saTestValue(t, sadomain.NewFundsPayerReference, "payer-customer-7"),
+		Kind:        sadomain.FundsReceiptConfirmed,
+		Currency:    saTestValue(t, sadomain.NewCurrencyCode, "USD"),
+		AmountMinor: 8000,
+		Version:     saTestValue(t, sadomain.NewFundsFactVersion, "bank-fact-two-ids/v1"),
+		OccurredAt:  beatInstant().Add(-time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("SA 采用事实：%v", err)
+	}
+	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		_, err := facts.Save(txCtx, saports.FundsFactRecord{
+			Key:           saports.FundsFactKey{TenantID: saTestValue(t, sadomain.NewTenantID, "tenant-a"), Fact: adopted.Fact()},
+			ContentDigest: "digest-bank-fact-two-ids",
+			Fact:          adopted,
+			RecordedAt:    beatInstant(),
+		})
+		return err
+	}); err != nil {
+		t.Fatalf("写 SA 事实：%v", err)
+	}
+
+	payload := `{"tenantId":"tenant-a","fact":"bank-fact-two-ids","version":"bank-fact-two-ids/v1"}`
+	firstID, secondID := "funds-fact-two-ids-first", "funds-fact-two-ids-second"
+	enqueueForBeat(t, db, store, firstID, ccinbox.ExternalFundsFactAdoptedEventType, payload)
+	if published, err := beat.DispatchOnce(t.Context()); err != nil || published != 1 {
+		t.Fatalf("第一封：published = %d err = %v, want 1；失败码 = %q", published, err, recordedFailureCode(t, db, firstID))
+	}
+	enqueueForBeat(t, db, store, secondID, ccinbox.ExternalFundsFactAdoptedEventType, payload)
+	if published, err := beat.DispatchOnce(t.Context()); err != nil || published != 1 {
+		t.Fatalf("同一版本换 ID 的第二封：published = %d err = %v, want 1（消费入账不报错）；失败码 = %q",
+			published, err, recordedFailureCode(t, db, secondID))
+	}
+	if got := recordedFailureCode(t, db, secondID); got != "" {
+		t.Fatalf("第二封不该失败：failure_code = %q", got)
+	}
+
+	register, err := ccpostgres.NewDutyPaymentReconciliation(db)
+	if err != nil {
+		t.Fatalf("CC 登记册：%v", err)
+	}
+	tenant := saTestValue(t, ccdomain.NewTenantID, "tenant-a")
+	fact := saTestValue(t, ccdomain.NewExternalFundsFactReference, "bank-fact-two-ids")
+	versions, err := register.ListFundsFactVersions(t.Context(), tenant, fact)
+	if err != nil || len(versions) != 1 {
+		t.Fatalf("两封同版本后 CC 版本表该仍是一行：err=%v n=%d", err, len(versions))
+	}
+	if versions[0].Version != saTestValue(t, ccdomain.NewFundsFactVersion, "bank-fact-two-ids/v1") || versions[0].AmountMinor != 8000 {
+		t.Fatalf("那一行该是首封落的 v1：%+v", versions[0])
+	}
+	lineage, err := register.ListVerificationsByFundsFact(t.Context(), tenant, fact)
+	if err != nil || len(lineage) != 0 {
+		t.Fatalf("`已存在`不触发重派，谱系该仍是零版：err=%v n=%d", err, len(lineage))
+	}
+	querier, err := db.ReadExecutor(t.Context())
+	if err != nil {
+		t.Fatalf("取读执行器：%v", err)
+	}
+	var inboxRows, verificationEnvelopes int
+	if err := querier.QueryRow(t.Context(),
+		`SELECT count(*) FROM `+migrate.SchemaBento+`.inbox WHERE consumer = $1 AND event_id IN ($2, $3)`,
+		"customs-compliance/receive-external-funds-fact", firstID, secondID,
+	).Scan(&inboxRows); err != nil {
+		t.Fatalf("数 inbox：%v", err)
+	}
+	if inboxRows != 2 {
+		t.Fatalf("两封各自入账：inbox 行数 = %d, want 2——Inbox 只挡同 ID，第二封是放行后由登记册主键挡住的", inboxRows)
+	}
+	if err := querier.QueryRow(t.Context(),
+		`SELECT count(*) FROM `+migrate.SchemaBento+`.outbox WHERE event_type = $1`,
+		string(sainbox.DutyPaymentVerificationFormedEventType),
+	).Scan(&verificationEnvelopes); err != nil {
+		t.Fatalf("数核对信封：%v", err)
+	}
+	if verificationEnvelopes != 0 {
+		t.Fatalf("`已存在`不触发重派，CC 不该交出任何核对信封，实得 %d 封", verificationEnvelopes)
+	}
+}
+
 // saTestValue 构造一个值对象，失败即用例失败。只给上面那条用例用，别处各有自己的同形助手。
 func saTestValue[T any](t *testing.T, construct func(string) (T, error), raw string) T {
 	t.Helper()
