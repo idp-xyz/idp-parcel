@@ -206,9 +206,11 @@ func assembleBusinessEndpoints(
 	// 下面就只换得了哪几行，多换一行编译期就红。一口一个变量、不并进上面任何一个 if：理由同提交口那段。
 	legalEntityRegistrationIntake := commercialhttp.LegalEntityRegistrationIntake(commercialhttp.UnconfiguredIntake{})
 	businessPartyRegistrationIntake := commercialhttp.BusinessPartyRegistrationIntake(commercialhttp.UnconfiguredIntake{})
+	customerAccountRegistrationIntake := commercialhttp.CustomerAccountRegistrationIntake(commercialhttp.UnconfiguredIntake{})
 	if isolatedPartyIdentity != nil {
 		legalEntityRegistrationIntake = isolatedPartyIdentity
 		businessPartyRegistrationIntake = isolatedPartyIdentity
+		customerAccountRegistrationIntake = isolatedPartyIdentity
 	}
 
 	return []httpapi.BusinessEndpoint{
@@ -489,7 +491,7 @@ func assembleBusinessEndpoints(
 		// 上一段「一律挂字面量」自此对这几行不再成立，其余口仍是字面量、各自成笔时再换。
 		{Pattern: "/commercial-business-party-registrations", Handler: commercialhttp.NewRegisterBusinessPartyEndpoint(businessPartyRegistrationIntake, partyIdentityRegistration)},
 		{Pattern: "/commercial-legal-entity-registrations", Handler: commercialhttp.NewRegisterLegalEntityEndpoint(legalEntityRegistrationIntake, partyIdentityRegistration)},
-		{Pattern: "/commercial-customer-account-registrations", Handler: commercialhttp.NewRegisterCustomerAccountEndpoint(commercialhttp.UnconfiguredIntake{}, partyIdentityRegistration)},
+		{Pattern: "/commercial-customer-account-registrations", Handler: commercialhttp.NewRegisterCustomerAccountEndpoint(customerAccountRegistrationIntake, partyIdentityRegistration)},
 		{Pattern: "/commercial-party-relationship-registrations", Handler: commercialhttp.NewRegisterPartyRelationshipEndpoint(commercialhttp.UnconfiguredIntake{}, partyIdentityRegistration)},
 		{Pattern: "/commercial-party-identity-deactivations", Handler: commercialhttp.NewDeactivatePartyIdentityEndpoint(commercialhttp.UnconfiguredIntake{}, partyIdentityRegistration)},
 		{Pattern: "/commercial-service-product-form-registrations", Handler: commercialhttp.NewRegisterServiceProductFormEndpoint(commercialhttp.UnconfiguredIntake{}, productChannelRegistration)},

@@ -157,6 +157,43 @@ func TestIsolatedPartyIdentityIntakeTranslatesBusinessPartyRegistrationWithInjec
 	}
 }
 
+// Covers: 第三口 customer-account——`customerAccounts[0]` 五格逐字来自载荷，租户格来自注入；跨租户绑定由领域构造门
+// 在用例侧拒（ADR-0041），Intake 不预判。
+func TestIsolatedPartyIdentityIntakeTranslatesCustomerAccountRegistrationWithInjectedTenant(t *testing.T) {
+	intake := isolatedIdentityIntakeForTest(t)
+	request := httptest.NewRequest(http.MethodPost, "/commercial-customer-account-registrations", strings.NewReader(`{"customerAccounts":[{
+		"accountId":"SYN-ACCT-02",
+		"customerPartyId":"SYN-PARTY-02",
+		"revision":1,
+		"basis":"SYN-BASIS/acct-02",
+		"effectiveFrom":"2026-09-16T00:00:00Z"
+	}]}`))
+	request.Header.Set("X-Reported-Tenant", "TENANT-9")
+
+	command, err := intake.IntakeCustomerAccountRegistration(context.Background(), request)
+	if err != nil {
+		t.Fatalf("intake：%v", err)
+	}
+	if got := command.Tenant.String(); got != isolatedIdentityTenant {
+		t.Fatalf("Tenant = %q, want %q（注入值）", got, isolatedIdentityTenant)
+	}
+	if got := command.Account.String(); got != "SYN-ACCT-02" {
+		t.Fatalf("Account = %q, want SYN-ACCT-02", got)
+	}
+	if got := command.CustomerParty.String(); got != "SYN-PARTY-02" {
+		t.Fatalf("CustomerParty = %q, want SYN-PARTY-02", got)
+	}
+	if command.Revision != 1 {
+		t.Fatalf("Revision = %d, want 1", command.Revision)
+	}
+	if got := command.Basis.String(); got != "SYN-BASIS/acct-02" {
+		t.Fatalf("Basis = %q, want SYN-BASIS/acct-02", got)
+	}
+	if want := time.Date(2026, 9, 16, 0, 0, 0, 0, time.UTC); !command.EffectiveFrom.Equal(want) {
+		t.Fatalf("EffectiveFrom = %s, want %s", command.EffectiveFrom, want)
+	}
+}
+
 // Covers: 一口只收本口的项。载荷外壳镜像 CLI 的整份文档，因此别的口的数组在这里**解得开**；解得开不等于
 // 可以忽略——一份同时带着法人项与参与方项的载荷投到法人口，参与方那一项会被无声丢掉，登记方以为两样都登了。
 // 五口共用同一份外壳，这条对每一口都成立，这里各口投一次别人的项。
@@ -195,8 +232,8 @@ func TestIsolatedPartyIdentityIntakeServesOnlyAdmittedLines(t *testing.T) {
 	if _, ok := intake.(commercialhttp.BusinessPartyRegistrationIntake); !ok {
 		t.Fatal("业务参与方登记口该已放行")
 	}
-	if _, ok := intake.(commercialhttp.CustomerAccountRegistrationIntake); ok {
-		t.Fatal("货主客户账户登记口尚未成笔，不该装得进")
+	if _, ok := intake.(commercialhttp.CustomerAccountRegistrationIntake); !ok {
+		t.Fatal("货主客户账户登记口该已放行")
 	}
 	if _, ok := intake.(commercialhttp.PartyRelationshipRegistrationIntake); ok {
 		t.Fatal("参与方关系登记口尚未成笔，不该装得进")

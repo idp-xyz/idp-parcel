@@ -30,8 +30,9 @@ type IsolatedPartyIdentityIntake struct {
 
 // 已成笔的口。每放一口在这里多一行断言、多一个方法，装配点多换一行。
 var (
-	_ LegalEntityRegistrationIntake   = (*IsolatedPartyIdentityIntake)(nil)
-	_ BusinessPartyRegistrationIntake = (*IsolatedPartyIdentityIntake)(nil)
+	_ LegalEntityRegistrationIntake     = (*IsolatedPartyIdentityIntake)(nil)
+	_ BusinessPartyRegistrationIntake   = (*IsolatedPartyIdentityIntake)(nil)
+	_ CustomerAccountRegistrationIntake = (*IsolatedPartyIdentityIntake)(nil)
 )
 
 // NewIsolatedPartyIdentityIntake 由装配点以显式合成值构造。立不起来的租户在这里拒：装配错误要在启动时暴露，
@@ -50,15 +51,16 @@ func NewIsolatedPartyIdentityIntake(tenant string) (*IsolatedPartyIdentityIntake
 // 登记方读不出这是一条规则而不是一次拼写错误；且日后有人把租户格加回文档结构时，未知字段那道门会静默放开。这一格用
 // json.RawMessage 而不是 *string：`"tenantId": null` 也是自报（键在场），要一并拒。
 type partyIdentityBatchDocument struct {
-	TenantID        json.RawMessage         `json:"tenantId"`
-	BusinessParties []businessPartyDocument `json:"businessParties"`
-	LegalEntities   []legalEntityDocument   `json:"legalEntities"`
+	TenantID         json.RawMessage           `json:"tenantId"`
+	BusinessParties  []businessPartyDocument   `json:"businessParties"`
+	LegalEntities    []legalEntityDocument     `json:"legalEntities"`
+	CustomerAccounts []customerAccountDocument `json:"customerAccounts"`
 }
 
 // itemCount 数外壳里全部口的项。一口只收本口的项：别的口的数组在这份外壳里解得开，解得开不等于可以忽略——
 // 一份同时带着两口项的载荷投到其中一口，另一口那项会被无声丢掉，登记方以为两样都登了。
 func (document partyIdentityBatchDocument) itemCount() int {
-	return len(document.BusinessParties) + len(document.LegalEntities)
+	return len(document.BusinessParties) + len(document.LegalEntities) + len(document.CustomerAccounts)
 }
 
 // exactlyOne 是五口共用的形状门：本口恰一项、整份外壳也恰一项（即没有别的口的项）。一次一笔——本端点一次只收
@@ -90,6 +92,51 @@ type legalEntityDocument struct {
 	Revision      int       `json:"revision"`
 	Basis         string    `json:"basis"`
 	EffectiveFrom time.Time `json:"effectiveFrom"`
+}
+
+type customerAccountDocument struct {
+	AccountID       string    `json:"accountId"`
+	CustomerPartyID string    `json:"customerPartyId"`
+	Revision        int       `json:"revision"`
+	Basis           string    `json:"basis"`
+	EffectiveFrom   time.Time `json:"effectiveFrom"`
+}
+
+// IntakeCustomerAccountRegistration 把一次管理台登记译成货主客户账户修订登记命令。跨租户绑定由领域构造门在用例侧
+// 拒（ADR-0041），这里只译不判；判据同法人口。
+func (intake *IsolatedPartyIdentityIntake) IntakeCustomerAccountRegistration(
+	_ context.Context,
+	request *http.Request,
+) (application.RegisterCustomerAccountCommand, error) {
+	none := application.RegisterCustomerAccountCommand{}
+	document, err := intake.decodeBatch(request)
+	if err != nil {
+		return none, err
+	}
+	if err := document.exactlyOne("customerAccounts", len(document.CustomerAccounts)); err != nil {
+		return none, err
+	}
+	item := document.CustomerAccounts[0]
+	account, err := domain.NewCustomerAccountID(item.AccountID)
+	if err != nil {
+		return none, fmt.Errorf("%w: customerAccounts[0].accountId: %v", ErrMalformedRequest, err)
+	}
+	party, err := domain.NewPartyID(item.CustomerPartyID)
+	if err != nil {
+		return none, fmt.Errorf("%w: customerAccounts[0].customerPartyId: %v", ErrMalformedRequest, err)
+	}
+	basis, err := domain.NewIdentityBasisReference(item.Basis)
+	if err != nil {
+		return none, fmt.Errorf("%w: customerAccounts[0].basis: %v", ErrMalformedRequest, err)
+	}
+	return application.RegisterCustomerAccountCommand{
+		Tenant:        intake.tenant,
+		Account:       account,
+		CustomerParty: party,
+		Revision:      item.Revision,
+		Basis:         basis,
+		EffectiveFrom: item.EffectiveFrom,
+	}, nil
 }
 
 // IntakeBusinessPartyRegistration 把一次管理台登记译成业务参与方身份修订登记命令。参与方本体（租户 + 标识 + 名称）
