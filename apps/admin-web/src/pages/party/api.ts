@@ -345,6 +345,32 @@ export interface GroupLegalEntityListResponseBody {
   entities: GroupLegalEntityRecord[];
 }
 
+// 责任法人修订链上的一笔（票 admin-web-group-legal-entities/03；后端 legalEntityRevisionBody）。与目录行
+// GroupLegalEntityRecord 同源不同物：没有 status（每一笔各有自己的生效与停用时点，给历史上的每一笔算
+// 「此刻的状态」会让被顶替的旧笔各自显出一格状态）、没有 partyName（名称在参与方册上不随法人修订走）。
+// 停用两件只在已停用那一笔在场——页面看键在不在，不拿空串推。partyId 每笔都在：法人钉着哪个参与方身份
+// 是这一笔修订的内容，两笔之间改了什么由页面并排显，读口不做 diff。
+export interface LegalEntityRevisionRecord {
+  tenantId: string;
+  legalEntityId: string;
+  partyId: string;
+  revision: number;
+  basis: string;
+  effectiveFrom: string;
+  deactivatedAt?: string;
+  deactivationBasis?: string;
+  registeredAt: string;
+}
+
+// 顶层回显 legalEntityId：抽屉切换行时上一问的答案可能后到，页面据此核对答的是不是此刻问的那个法人，
+// 不拿数组首笔去推（空数组没有首笔）。revisions 按修订号升序；法人不在册答 200 + []（票 03 按 ADR-0022 裁：
+// 能力在、册在、只是没有这一个身份），不是 404。
+export interface LegalEntityRevisionListResponseBody {
+  outcome: 'LEGAL_ENTITY_REVISIONS_LISTED';
+  legalEntityId: string;
+  revisions: LegalEntityRevisionRecord[];
+}
+
 // 方向由持有方→相对方的字段次序表达（CONTEXT：方向由「哪一方对哪一方持有该角色」
 // 表达，不另设标志位）。status 是登记进来的关系状态事实（CANDIDATE/EFFECTIVE/
 // EXPIRED/REVOKED/SUPERSEDED），不随装载时钟走。
@@ -474,6 +500,16 @@ export function listSupplierAgreements(): Promise<ApiResult<SupplierAgreementLis
 // 折进一个带 kind 的入口会让两种状态在同一响应形状里相互冒充。
 export function listGroupLegalEntities(): Promise<ApiResult<GroupLegalEntityListResponseBody>> {
   return exchangeMasterData<GroupLegalEntityListResponseBody>('/commercial-group-legal-entities');
+}
+
+// 修订历史按法人取，法人标识在路径上而不在查询串：它定位的是资源本身（这个法人的历史），不是在一份列表上
+// 挑格；与目录口共用同一个 Intake（隔离读准入随 commercialCatalogue 一格换值），墙前照旧答 403。
+export function listLegalEntityRevisions(
+  legalEntityId: string,
+): Promise<ApiResult<LegalEntityRevisionListResponseBody>> {
+  return exchangeMasterData<LegalEntityRevisionListResponseBody>(
+    `/commercial-group-legal-entities/${encodeURIComponent(legalEntityId)}/revisions`,
+  );
 }
 
 export function listPartyRelationships(): Promise<ApiResult<PartyRelationshipListResponseBody>> {
