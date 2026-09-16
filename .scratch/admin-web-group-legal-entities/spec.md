@@ -38,7 +38,7 @@ Status: in-progress
 |---|---|---|
 | [01](./issues/01-list-face-polish.md) | 集团与法人读面打磨：徽章、时间本地化、撤同值列、筛选排序、行详情抽屉、复制、操作者文案 | resolved（通道 6 → 4 → 1，分支 tip 见票面完成记录） |
 | [02](./issues/02-legal-entity-field-form.md) | 登记法人改逐字段表单（ADR-0101 决定八自裁），JSON 快照签降为受控批量口镜像 | resolved（同上） |
-| [03](./issues/03-legal-entity-revision-history-read-face.md) | 责任法人修订历史读口 + 详情抽屉「修订历史」区 | ready-for-agent |
+| [03](./issues/03-legal-entity-revision-history-read-face.md) | 责任法人修订历史读口 + 详情抽屉「修订历史」区 | resolved（通道 5 → 1 封存 → 1 重放，`ef7086f0` 进 main，见票面完成记录） |
 | [04](./issues/04-catalogue-read-pagination-sort-filter-contract.md) | 目录读口分页 / 排序 / 筛选下推的契约决策 | needs-info（归 owner） |
 | [05](./issues/05-legal-entity-business-attributes.md) | 责任法人业务属性建模（税号、注册国家、开票主体、结算币种、联系人） | needs-info（归 owner） |
 | [06](./issues/06-isolated-write-admission-for-commercial-identity-family.md) | ADR-0091 逐口放行：`/commercial-*` 身份族在隔离形态下放行 | ready-for-agent |

@@ -2597,3 +2597,44 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
   - 验证：清点重生成零 diff；`test-shards.sh check` 131 包通过；ci.yml PyYAML 解析 4 job / admin-web 7 步；暂存五个文本 blob 无 BOM 无 CR。`ls-remote` 核 `01f11736` 未动 → `push f961a30a:main` 成（12:13）→ **CI run 35054768775：`admin-web` job 首跑 success，29 s**（04:13:34→04:14:03Z）；整 run **全绿**——Static checks 1m12s、四片 Test（customs-transport 1m44s / network-visibility 2m00s / main-chain 2m57s / rest 4m01s）全 success，run 总时 4m12s（04:13:31→04:17:43Z）。main 上连续第三个绿 run（`aca52b5d` → `01f11736` → `f961a30a`）。
 - **前沿**：三项待办清零；在途 0；ready 0；draft 1（pp-seams/04，NO owner）。**归用户**只剩：Cursor 登出重登（子代理鉴权，仓外）；远端旧名分支未删（不动）。项目按用户令 close。
 - **本节五数**（11:5x–12:2x）：CI **main 绿/总 1/1**（run 35054768775，含首个 admin-web job）· 集成时延——来令 11:5x → 进 main 12:13 **约 20 分**（取证 + vendor + 全新安装三道门 + ci.yml + 两处 .md，无评审等待）· 重放笔数 **0**（ff）· 重复开发 **1 次撤回**（方案稿 / logo 搬动与通道 2 撞，见其落地即撤，未成笔）· 会话重置 0 · 非作者评审缺席 **1**（构建配置与 .md 一笔，推送方自审；子代理仍鉴权错）
+## 2026-09-16 15:3x 通道 1 新会话（用户先用自带 `ask_question` 验通道，再经队列问「这个现在到什么程度了：`idp-parcel-mcp6-adminweb` / `idp-parcel-mcp1-api-adrs`」→ 答两棵树状态 → 用户「你能够派发给相关的通道来完成吗」）
+
+### 15:3x–15:4x：盘两棵树 → 点名 → 派单
+
+- **取证**（读 git，不读自报）：两棵 worktree 都在 `a608536d`（= main = origin）零提交，全部工作躺在工作区未提交；文件 mtime 全在 13:27–13:36，之后两小时没动；`list_sessions` 通道 2–6 `running` 但 lastActivity 同在 13:3x；`query_tasks` 的 5 pending / 3 working 全是 09-14~15 旧记录（对应分支已 `merged/`）。
+  - `idp-parcel-mcp1-api-adrs`（`mcp1-api-adrs-0140-0142`）：ADR-0140 / 0141 / 0142 三草案（Proposed，Context / Decision / Consequences / Alternatives / 风险点 / Links 齐全）+ README +3 行 + `.scratch/first-party-api` spec（draft）+ 三票（draft，阻塞边指 ADR-0139 接受）。文稿成形、只差 commit。
+  - `idp-parcel-mcp6-adminweb`（`mcp6-admin-web-legal-entities`）：spec in-progress + 6 票（01/02 in-progress，03/06 ready-for-agent，04/05 needs-info）；逻辑层已落（`moment.ts`、`legal-entity-list.ts`、`legal-entity-form.ts` 各带 test，`status.tsx` 补 `已登记` / `已停用`，`RegistrationAnswerNote` 抬成导出件）；实测 `tsc -b --noEmit` 绿、`run-tests` 235/235；`GroupLegalEntitiesPage.tsx` 一字未动、`LegalEntityRegistrationForm.tsx` 不存在——页面半为零。
+- **点名** 15:40（截止 15:43）→ 15:41 前 **5 个应答**（通道 2 / 3 / 4 / 5 / 6 皆「空闲 · 地盘无 · 余量充足」——通道 6 自报地盘无，即它不记得自己那棵树，派单里因此写明从哪接）。
+- **派单**：
+  - `task-a7bd108e` → 通道 6：admin-web 01+02 页面接线，写明「从 `mcp6-admin-web-legal-entities`@a608536d 工作区（未提交）接着做，不另起」，第一笔先原样 commit 逻辑层；完工报 SHA、不推 main。
+  - mcp1 那棵是通道 1 自己的地盘 → 本会话 `git add -A` 原样收入成 **`21b20938`**（八份文件 CR=0 无 BOM，正文一字未改；提交消息 `-F` 单引号 here-string，标题反引号保住）。
+  - `task-b3ade6d7` → 通道 2：ADR 三草案两轴非作者评审，钉 `21b20938` 基线 `a608536d`，时限 20 分（至 16:05），report_task + 单发通道 1；作者分支不动。
+- **前沿**：在途 2（mcp6 01+02 · 通道 6；ADR-0140/0141/0142 评审 · 通道 2）；评审无阻断则 ff `21b20938` 进 main 推远端。ADR-0139 → Accepted 与 first-party-api 三票激活归用户。
+### 15:4x–15:5x 同一会话：通道 2 / 3 / 6 crash → 收通道 6 半成品 → 重新点名 → 改派 4 / 5
+
+- **来报**（用户 15:4x，附两张截图）：「mcp-2/3/6 crash，mcp-6 做到如图 crash」。读 git 不读截图：通道 6 已按派单第一笔把逻辑层 commit 成 `bad2cea8`，接着 /tdd 写票 01 裁决 1（`legalEntityCountSummary` / `legalEntityNoMatchNote` + 测试、`ListPageTemplate` 加 `emptyRowsNote` 可选槽），15:48:54 最后落盘后死在「Thought for 57s」；三文件未提交。通道 3 空等时也 crash——crash 是 Cursor 侧的，不由任务触发。
+- **收半成品**：三文件实测 `tsc` 0、`run-tests` 236/236，是完整一片 green → 派发方原样收入 **`8314b7d8`**（消息写明作者通道 6、通道 1 只收不改）。通道 2 的评审单无产出。
+- **重新点名** 15:5x（截止 15:56）→ 15:54 前 **2 个应答**（通道 4 / 5）；2 / 3 / 6 未应答（记「截至 15:56 未应答」）。原单 `task-a7bd108e`（→6）、`task-b3ade6d7`（→2）作废，工具无取消口、留作记录。
+- **改派**：`task-86714afe` → 通道 4：01+02 页面接线从 `8314b7d8` 接，**每片 green 即 commit**；`task-96162690` → 通道 5：ADR 三草案两轴评审钉 `21b20938`，**评完一轴先报一轴**，时限至 16:15。
+- **前沿**：在途 2（同上，换了人）；会话重置本节 **3**（通道 2 / 3 / 6）。
+
+### 15:5x–18:2x 补记（16:0x–18:2x 之间的推送方会话未及写入 tasks.md；按 git 提交时间、任务台账 context / result 与队列补，时刻取 git / 台账，不取任何人的自报）
+
+- **01+02 进 main**：通道 4 按 `task-86714afe` 从 `8314b7d8` 接，`e8d31b46`（16:03，票 01 页面接线）、`71c7d5a3`（16:06，票 02 逐字段表单）两笔推分支；台账始终 pending（未 report）。17:32 点名（截止 17:36）5 应答 → **`task-825d2d6b` → 通道 3** 两轴评审（17:39 派、17:48 交）：0 阻断 / Standards 4 非阻断 / Spec 3 非阻断（最重：`sortLegalEntities` 字符串比在 RFC3339Nano 剪尾零的同秒内错序）。推送方代作者（4 / 6 会话已换）在同分支修 Standards 1 / 2 / 4 / 附 + Spec 2 → `4306a34c`（17:57）→ **`task-eb56aa94` → 通道 3** 只重跑 Standards 轴（18:00 派、18:03 交：已消、新发现 0）→ 簿记 `3c299854`（17:59，票 01 / 02 完成记录 + 评审三格 + Status resolved）→ 分支基 `a608536d` = 当时 main，直接 ff，零重放。
+- **ADR-0140 / 0141 / 0142 进 main**：`task-96162690`（→5，15:56）无产出；17:37 改派 **`task-54cee2f9` → 通道 2**（17:48 交）：阻断 1（0141 引 0140 Consequences 里不存在的「契约集成测试」）+ 非阻断若干 → 作者（推送方自己）同分支修 `6425deb9`（17:53）→ **`task-db69ad20` → 通道 2** 复评（17:54 派、17:57 交：阻断 1 已消、新发现 0）→ 重放到 `3c299854` 之上：`21b20938→8a7ec41b`、`6425deb9→24ee60dd`（18:01 进 main，CI run 35082937398 success）。
+- **派 03 / 06**：17:42 **`task-b16e54a9` → 通道 4** 票 06（ADR-0091 逐口放行身份族五口；分支 `mcp4-pc-identity-isolated-write`）；17:44 **`task-7f3eeaff` → 通道 5** 票 03（读口 + 抽屉历史区；分支 `mcp5-legal-entity-revisions` 基 `71c7d5a3`）。
+- **03 作者半途断、推送方重放后亦断**：通道 5 `028c0d8a`（18:04，Go 半边）推分支；前端半边已 stage 未提交时会话断 → 推送方按「未提交现场」原样封存 `284c49d3`（18:11，`chore(salvage)`）。18:11 点名（截止 18:14）应答 2 / 6 → **`task-2ad8c9f0` → 通道 2** 两轴评审（18:15 派；派单里写「通道 1 现由通道 3 会话接管」，即这一任推送方是开在通道 3 窗口里的会话）。同时在 `%TEMP%\idp-land`（detached `24ee60dd`）重放 `028c0d8a→53238188`、`284c49d3→9a297b2c`，清点重生成 `ef7086f0`（18:17；partycommercial 生产 123→126 / 测试 138→140、端口声明 411→412、端点 124→125），树内 `pnpm install`（真目录，18:18）跑前端三道门，带 DSN 全量起跑——**之后无任何动作**：数未留、未 push、未簿记（评审派单里「带 DSN 的一轮正在跑，结果由通道 1 自记」那句没有下文）。今天第五例「重放做好、簿记之前断」。
+- **06 在途**：通道 4 `7900ab12`（17:57）/ `ab6e7a48`（18:00）/ `d0814692`（18:02）/ `52e1cd93` / `ee4fb886`（18:08）五口五笔全推 origin，树干净；台账 pending 未 report，队列里无完工报。
+
+## 2026-09-16 18:3x 通道 1 新会话（用户先用自带 `ask_question` 验通道，再令「调 idp-mcp-1 的 check_messages 开始监听」；首条消息即通道 2 的 03 评审汇总）
+
+### 18:3x–18:5x：03 评审到（两轴 0 阻断）→ 重验 idp-land → `ef7086f0` 进 main → 注释修正 + 簿记
+
+- **评审 ← 通道 2**（18:27 / 18:29 分轴、18:31 汇总，`task-2ad8c9f0` done）：Standards 0 阻断 / 4 非阻断（三处 CONTEXT 旧节名「身份生命周期」；两处计数引用；两条 Fowler 判断题可接受）；Spec 0 阻断 / 2 非阻断（清点未随笔——推送方已在 tip 重生成；票面「ADR-0078 决定四只此一维」已被 ADR-0091 决定一停用——票面改一句）。全文代落票 03 Comments。
+- **量**（只按 git，不读自报）：`ls-remote` main = `24ee60dd` = 本地 = origin/main；`idp-land@ef7086f0` 干净、merge-base = main、`main..` 三笔 = 03 两笔重放 + 清点，03 的 17 件对作者 tip `284c49d3` 零 diff；作者树 `mcp5-le-revisions@284c49d3` 干净、= origin；台账 `query_tasks` 补齐上节。
+- **验证（本会话重跑，不沿用前任的数；钉 `ef7086f0`）**：`gofmt -l` 空、`go build ./...` / `go vet ./...` 0；清点在 tip 重生成 porcelain 空、生成器 vet / test ok；18:36 占号广播 → 带 DSN `go test -p 1 -count=1 ./...` **115 ok / 0 FAIL / 16 无测试 / 0 cached**，退出码 0（18:38:45→18:40:44，119 s）；`-v` 探针 `TestLegalEntityRevisionHistoryListsAllRevisionsByRevisionNumber` / `…AnswersUnknownAndForeignAsEmpty` PASS 非 SKIP；admin-web `tsc -b --noEmit` 0、`run-tests` 240/240、`vite build` 0。
+- **push**：`ls-remote` 再核 `24ee60dd` 未动 → 18:42 `push ef7086f0:main` 成，**远端 main = `ef7086f0`**，CI run 35086324656 **success**；共享树 `merge --ff-only` 同 SHA（tasks.md 未提交 20 行与本批 18 件零重叠）→ 释号广播。**先 push 再簿记**照 15:2x 节的规矩，这次 push 到簿记之间没有空档可断。
+- **簿记两笔**（在 `ef7086f0` 之上，推送方自审）：(1) 纯注释——评审 Standards ①② 五处：`ports/legal_entity_revision_history.go`、`http/query_legal_entity_revisions.go`、`legal-entity-revisions.ts` 三处 CONTEXT 节名改为 Lifecycles「参与方身份（业务参与方、责任法人、货主客户账户）」，`query_party_identities.go` / `legal_entity_revision_history.go` 两处去计数；`git diff -U0` 滤 `//` / `*` 行后空、diff 无 CR，gofmt / build / vet 0、http 包 ok、tsc 0。(2) 纯 .md——票 03 Status resolved + 完成记录（推送方按 `git diff 71c7d5a3 284c49d3` 代写，作者会话已无；浏览器验收如实记未验）+ 评审代落 + 进 main 记录 + 第 3 条改句；spec 03 行；本节与上节补记。→ `ls-remote` 核 `ef7086f0` 未动 → push → 共享树 ff。
+- **收尾**：分支 `mcp5-legal-entity-revisions`（17 件对 main 零 diff）/ `mcp1-api-adrs-0140-0142`（`6425deb9` 与 `24ee60dd` patch-id 同、分支改过的每件对 main 零 diff）/ `mcp6-admin-web-legal-entities`（`3c299854` 是 main 祖先）→ `merged/`、远端删；树 `idp-land`（先删 `node_modules` 真目录再 `remove`，不加 `--force`）/ `idp-parcel-mcp5-le-revisions`（作者会话已无、`status` 空，代拆）/ `idp-parcel-mcp1-api-adrs`（自己的）/ `idp-parcel-mcp6-adminweb`（4 / 6 会话已换、`status` 空，代拆）四棵拆；`idp-parcel-mcp4-pc-identity-write` 在途不动。
+- **前沿**：在途 admin-web-group-legal-entities/06（通道 4，`mcp4-pc-identity-isolated-write@ee4fb886` 五口五笔已推、无完工报，`task-b16e54a9` pending——等完工报或下一轮点名问一句）；ready 0；needs-info 04 / 05（归 owner）；draft pp-seams/04；first-party-api 三票 draft 等 ADR-0139 接受。共享树 18:38 新出现 untracked `docs/ux/commercial-party.md`（29 KB，18:4x 仍在改），不是通道 1 的，已广播问认领、未动。**归用户**：ADR-0139 → Accepted 与否；`docs/ux/` 归属。
+- **本节五数**（15:5x–18:5x，含补记段）：CI **main 绿/总 2/2**（`24ee60dd` run 35082937398、`ef7086f0` run 35086324656；01+02 四笔随 `24ee60dd` 同批推出，无单独 run）· 集成时延——01+02 代码推齐 16:06 → 进 main 18:01 **约 115 分**（其中约 85 分是 16:0x–17:3x 推送方空档、评审 + 修 + 复评约 30 分）；ADR 三草案 `21b20938` 15:43 → 18:01 约 135 分；03 代码推齐 18:04 / 封存 18:11 → 进 main 18:42 **约 35 分**（其中 18:2x–18:3x 约 15 分是推送方会话断的空档）；中位数约 115 分（3 票）· 重放笔数 **4**（ADR 两笔 + 03 两笔，不含清点与簿记）· 重复开发 0 · **会话重置（可证的）4**（推送方两次：16:0x–17:3x 空档那一次 + 18:2x 那一次；通道 5 一次 18:0x——03 前端半边 stage 后断；通道 4 / 6 至少一次——17:5x 派单写「4 / 6 已换会话」）· 非作者评审缺席 0（三张代码票各有非作者评审；两笔簿记按「不评什么」自审如实计）
