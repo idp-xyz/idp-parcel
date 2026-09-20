@@ -2900,3 +2900,25 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - **用户问的三棵树至此全部收口**：03 / 04 / 01 都进 main，六票里 01 / 03 / 04 / 05 / 06 resolved · 已进 main，只余 **02**（ready、阻塞已解、未派——派不派归用户）。2 / 3 / 4 / 5 / 6 全部空闲。
 - **本节五数**（17:3x–18:1x）：CI main 绿/总 **2 / 2**（`3fbf2ec2` 与 `bd067052` 各 success；`4a19ed33` / `94bd39fd` / `ed7ef224` 三个 run 未量）· 集成时延——04 第 6 条完工报 17:3x → 进 main 17:54 **约 20 分**、
   01 完工报 17:51（裁后定 tip 17:57）→ 进 main 18:08 **约 17 分**，中位约 18 分（2 票）· 重放笔数 **9**（01 九；04 第 6 条纯 ff 三笔不算重放；不含推送方两笔与簿记）· 重复开发 0 · 会话重置 0 · 非作者评审缺席 0
+
+### 18:1x–18:4x 补记（`1c04c773` 推完之后的前任推送方会话未写入；按任务台账 createdAt、git 提交时间、工作副本 mtime 与用户 19:2x 附的待办截图补，不取自报）
+
+- 用户 18:2x「你自决」→ 前任派 **02 → 通道 4**（18:24，`task-fe0d5bc2`，`mcp4-ux02` 基 `origin/main` `1c04c773`，估 90 分；派单写明不碰 `templates/*`、不推 main、不跑全仓）。
+- 通道 4 作者侧：`85beb1aa` 认领（18:25，票面 Status → in-progress）/ `a543a289` 第 2 / 3 / 5 条纯逻辑（18:32，`pages/my-work/recent-objects.ts` / `saved-views.ts` + node:test 19 条），两笔全推 origin；
+  随后 18:33–18:46 在树上写下笔 A 六件（`navigation.ts` / `page-registry.tsx` 改，`pages/my-work/RecentObjectsPage.tsx` / `SavedViewsPage.tsx` / `shared.tsx` / `index.ts` 新）**未过门、未提交**，18:46 之后再无动静。
+  用户 19:2x 附的待办截图六项只走到第一项「笔 A」在做。
+- 前任推送方会话 18:24 派单之后无 tasks.md 写入可查；`task-fe0d5bc2` 至 19:3x 仍 pending、无 report。
+
+## 2026-09-20 19:2x 通道 1 新会话（用户先用自带 `ask_question` 验通道，再令「调 idp-mcp-1 的 check_messages 开始监听」；首条消息「`D:\tops\idp-parcel-mcp4-ux02`，没有做完请你分配任务继续全面完成」+ 待办截图；19:37「这个目录可以 replay 了吗」）
+
+### 19:2x–19:3x：量现场 → 答「不能 replay」→ 点名 → 派 02 续做 → 通道 4
+
+- **量**（钉 `1c04c773`，只读 git / 台账 / `list_sessions` / heartbeat，不读自报）：`ls-remote` main = 本地 = origin/main = `1c04c773`；`branch-state.ps1 -Path apps/admin-web`：在途一支 `mcp4-ux02@a543a289`（领先 2，= origin，main 上从未有过的代码文件 4 件），
+  树上 **6 件未提交**（mtime 18:33–18:46，距查看 46 分）；共享树只 `?? docs/ux/`。`list_sessions`：2–6 running / idle，heartbeat 19:32 五通道皆 waiting；4 是新会话（应答自报，且分支上 18:46 后无笔）。
+- **答「可以 replay 了吗」**：不能。已提交的只有认领 + 纯逻辑两笔；笔 A 六件未过门未提交；笔 B（`Layout.tsx` 钩子 + 认 `?view=`、`Workbench.tsx` 两卡 + 已接线释义、`liveIds` 登记）未动——`liveIds` 不登记则 `readinessOf` 判两页为 skeleton，
+  与票面「计入已接线」相反；无完成记录、无评审。半张票不重放。
+- **点名** 19:33（截止 19:37，广播 2–6）→ 仅 **4** 应答（19:34，「空闲 · 地盘无 · 余量充足 · 新会话」）；2 / 3 / 5 / 6 截至 19:37 未应答（heartbeat 19:35 仍 waiting=true——在线但未答，按未应答记）。
+- **派 02 续做 → 通道 4**（19:38，`task-002c3bd6`；原单 `task-fe0d5bc2` 作废）：第 0 步把六件未提交现场**原样入库一字不改**（提交信写 mtime 与「截至 19:37 未响应」证据），入库后再过四道门、红了另起一笔；
+  再笔 B 三处（`moduleIdFromHash` 剥 `?`、hashchange + 首帧 `recordRecentObject`、`liveIds` + 两处「已接线」释义改口、Workbench 两卡各前 8 + 查看全部）；完成记录 + Status resolved；报 tip 与 run-tests 数（基线 343 = 324 + 19）。
+  不推 main、不占 55432、不跑全仓。估 60 分。
+- **评审**：4 是作者（换会话同人），评审只能派 2 / 3 / 5 / 6——本轮未应答，02 完工时重点名再派；无人应答则推送方 `/code-review` 隔离子代理自跑，票面写明。
