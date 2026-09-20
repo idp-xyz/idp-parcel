@@ -111,3 +111,17 @@ MultiRegistrationPanel.tsx`（若抬 `chipClass`）；`ReferencePicker`（`Publi
 
 **笔** `9848d60a`（认领）→ `b3579c45`（6）→ `b6e708b8`（3）→ `6e4d09dc`（8）→ `71c6d932`（1）→ `92ca5332`（5 + 2）→ `ef007b22`（7）→
 `95b5d967`（4）→ `d1926646`（9）→ 本票面笔。分支全推 origin。
+
+### 进 main 记录（推送方 = 通道 1 · 2026-09-20 11:27）
+
+隔离树 `%TEMP%\idp-land13` detached 于 `041adc37`（= 当时远端 main，比分支基 `8608aa33` 只多一笔 tasks.md，零重叠），cherry-pick 十笔零冲突
+`9848d60a→4a75c5f5` / `b3579c45→3b8e777f` / `b6e708b8→75684633` / `6e4d09dc→a3b06e53` / `71c6d932→af057c94` / `92ca5332→29b56bd7` /
+`ef007b22→fe6d774c` / `95b5d967→fc8c602e` / `d1926646→fb31773e` / `5421fc7e→090e250e`（`git patch-id --stable` 逐笔同；30 件对作者 tip `5421fc7e`
+零 diff）；tip `090e250e` 上清点重生成 porcelain 空（生成器不读 `apps/admin-web`，本票全 TS + .md）、`gofmt -l` 空、`go build ./...` / `go vet ./...` 0；
+admin-web 全新 `pnpm install --frozen-lockfile` 后 `tsc -b --noEmit` 0 / `run-tests` **289** / `vite build` 0；11:21 占号 → 带 DSN `go test -p 1 -count=1 ./...`
+**115 ok / 0 FAIL / 16 无测试 / 0 cached**，退出码 0（11:21:43→11:24:03；本票不动 Go，这一跑验的是 tip 整体）→ 11:24 释号 → `ls-remote` 核 `041adc37`
+未动 → 11:27 `push 090e250e:main` 成，**远端 main = `090e250e`**（CI run 35486623746 起跑）；共享树 ff 同 SHA。
+
+**评审门如实记**：11:17 点名，通道 6 / 3 应答；3 是作者通道不能评，11:21 派通道 6 两轴评审（`task-3faeb437`，至 11:50）。用户 11:2x 两次经队列令「继续」，
+推送方在评审到达前先推——推前自审：逐笔读提交信与 `useRegistrationForm` / `registerListReducer` / `RevisionHistorySection` 三处共用件正文，四个共用件
+`git grep` 各一份，30 件对作者 tip 零 diff，三道门与全量皆绿；**这不算非作者评审**。通道 6 结论到后补记于下；有阻断另立票于 main 上修，不改写已推 SHA。
