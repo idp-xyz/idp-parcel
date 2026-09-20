@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Package } from 'lucide-react';
 import { Sidebar, useResize } from '@idpxyz/ui-workspace';
+import { useDensity } from '@idpxyz/ui-theme-runtime';
 import { navigationSections, sidebarIconMap, pageTitleById } from './navigation';
 import { pageById } from './page-registry';
 import { Workbench } from './pages/Workbench';
@@ -44,6 +45,7 @@ export function Layout() {
     minSize: 170,
     maxSize: 500,
   });
+  const { density } = useDensity();
 
   const renderActive = () => {
     if (active === 'workbench') return <Workbench onNavigate={setActive} />;
@@ -71,8 +73,9 @@ export function Layout() {
           iconMap={sidebarIconMap}
         />
         <div className="resize-handle-h" onMouseDown={sidebarResize.handleMouseDown} />
-        {/* main 地标：读屏用户跳过导航直达页面内容的锚点。 */}
-        <main className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+        {/* main 地标：读屏用户跳过导航直达页面内容的锚点。data-density 是密度两档在 DOM 上的落点，
+            模板层（票 03）按它选行高与间距，不必各自再读 useDensity。 */}
+        <main className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor" data-density={density}>
           {renderActive()}
         </main>
       </div>
