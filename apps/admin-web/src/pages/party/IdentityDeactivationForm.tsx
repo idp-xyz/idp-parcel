@@ -14,7 +14,13 @@ import {
   type GroupLegalEntityListResponseBody,
 } from './api';
 import { problemNote, registrationTitles, type IdentityKind } from './presentation';
-import { Field, ReferencePickerFor, selectClass, type PickerOption } from './PublicationFormFields';
+import {
+  Field,
+  ReferencePickerFor,
+  selectClass,
+  type PickerOption,
+  type ReferencePickerFaceProps,
+} from './PublicationFormFields';
 import {
   RevisionField,
   SnapshotJsonDetails,
@@ -47,7 +53,8 @@ import {
  * 标识按种类从对应的册上选，候选与修订建议取的是**同一份答案**（票 13 第 5 条）：参与方册用页面持有的那份，不另读；
  * 法人册与客户账户册在选中那一种类时才读、读一次，Picker 收这份答案（ReferencePickerFor）而不自己再读——此前一挂
  * 即读两册、Picker 又各自读一遍，同一册在一张表单里被读两三遍。种类 → 读口 / 候选 / 读面名 / 投影合成一张按
- * IdentityKind 键的表（第 2 条），三分支 JSX 与 switch 收掉；词表多一格，表编不过。
+ * IdentityKind 键的表（第 2 条），三分支 JSX 与 switch 收掉；词表多一格，表编不过。答案与取出它的那一册结成对走
+ * （票 14 第 4 条，KindRegister 头注）。
  */
 export interface IdentityDeactivationFormProps {
   /** 页面持有的参与方列表答案（种类为业务参与方时给候选与修订号建议用）；首取回来之前为 null。 */
@@ -66,41 +73,76 @@ const pickerNotes = {
   optionsNote: '候选不按状态过滤：已停用的再停一次由服务端答，表单不拦。',
 } as const;
 
-/**
- * 一种身份对应的那一册：读口、候选转写、读面名、投成「标识 + 修订」。答案体的形状只有本行知道，表外一律按
- * unknown 传——三册体形各异，表要键在同一个 IdentityKind 上就得在这里擦掉。
- */
-interface KindRegister {
-  readFace: string;
-  load(): Promise<ApiResult<unknown>>;
-  optionsOf(body: unknown): PickerOption[];
-  targetsOf(body: unknown): readonly RevisionedIdentity[];
+/** 种类 → 该册答案体的形状。三册体形各异（parties / entities / accounts），一个种类只在这里说一次它的体是什么。 */
+interface RegisterBodyOf {
+  BUSINESS_PARTY: BusinessPartyListResponseBody;
+  LEGAL_ENTITY: GroupLegalEntityListResponseBody;
+  CUSTOMER_ACCOUNT: CustomerAccountListResponseBody;
 }
 
-function kindRegister<Body>(entry: {
+/**
+ * 一种身份对应的那一册：读口、候选转写、读面名、投成「标识 + 修订」，按种类 K 收窄，体形从 RegisterBodyOf 取。
+ *
+ * 答案不单独在表外流动：读回来或从页面接过来的答案，一律由**取出它的那一册**结成 RegisterAnswer 一起走（票 14 第 4 条）。
+ * 此前 Body 在表外擦成 unknown、答案与册各按 selectedKind 取——配对没人守，而且真的错过：换种类那一帧，`patch({ kind })`
+ * 触发的渲染先于 effect 的 `setLoaded(null)`，loaded 还是上一册的答案，配到新册的投影上会在 `body.accounts.map` 一类
+ * 取键处抛。结成对之后种类对不上就当没取到，类型与那一帧一起守住。
+ */
+interface KindRegister<K extends IdentityKind> {
+  kind: K;
   readFace: string;
-  load(): Promise<ApiResult<Body>>;
-  optionsOf(body: Body): PickerOption[];
-  targetsOf(body: Body): readonly RevisionedIdentity[];
-}): KindRegister {
-  return entry;
+  optionsOf(body: RegisterBodyOf[K]): PickerOption[];
+  targetsOf(body: RegisterBodyOf[K]): readonly RevisionedIdentity[];
+  /** 读这一册，答案连同本册交回。 */
+  load(): Promise<RegisterAnswer<K>>;
+  /** 答案已在手上（参与方册由页面持有）或还没有（null）时，与本册结成对。 */
+  withAnswer(answer: ApiResult<RegisterBodyOf[K]> | null): RegisterAnswer<K>;
+}
+
+/** 一册与它的答案，体形同一个 K；只由 KindRegister 自己结成——拆开各自传，就回到擦型那条路。 */
+interface RegisterAnswer<K extends IdentityKind> {
+  register: KindRegister<K>;
+  answer: ApiResult<RegisterBodyOf[K]> | null;
+}
+
+/** 任一册的配对：状态里放的是它，哪一册由 register.kind 说。 */
+type AnyRegisterAnswer = { [K in IdentityKind]: RegisterAnswer<K> }[IdentityKind];
+
+function kindRegister<K extends IdentityKind>(
+  kind: K,
+  entry: {
+    readFace: string;
+    load(): Promise<ApiResult<RegisterBodyOf[K]>>;
+    optionsOf(body: RegisterBodyOf[K]): PickerOption[];
+    targetsOf(body: RegisterBodyOf[K]): readonly RevisionedIdentity[];
+  },
+): KindRegister<K> {
+  const self: KindRegister<K> = {
+    kind,
+    readFace: entry.readFace,
+    optionsOf: entry.optionsOf,
+    targetsOf: entry.targetsOf,
+    load: () => entry.load().then((answer) => self.withAnswer(answer)),
+    withAnswer: (answer) => ({ register: self, answer }),
+  };
+  return self;
 }
 
 /** 参与方册那一行的 load 不会被调到：页面已持有那份答案传进来（props.parties），再读一次就是第 5 条要收的那次。 */
-const kindRegisters: Record<IdentityKind, KindRegister> = {
-  BUSINESS_PARTY: kindRegister<BusinessPartyListResponseBody>({
+const kindRegisters: { [K in IdentityKind]: KindRegister<K> } = {
+  BUSINESS_PARTY: kindRegister('BUSINESS_PARTY', {
     readFace: '参与方册',
     load: listBusinessParties,
     optionsOf: businessPartyPickerOptions,
     targetsOf: (body) => body.parties.map(identityTargetOf.BUSINESS_PARTY),
   }),
-  LEGAL_ENTITY: kindRegister<GroupLegalEntityListResponseBody>({
+  LEGAL_ENTITY: kindRegister('LEGAL_ENTITY', {
     readFace: '法人册',
     load: listGroupLegalEntities,
     optionsOf: legalEntityPickerOptions,
     targetsOf: (body) => body.entities.map(identityTargetOf.LEGAL_ENTITY),
   }),
-  CUSTOMER_ACCOUNT: kindRegister<CustomerAccountListResponseBody>({
+  CUSTOMER_ACCOUNT: kindRegister('CUSTOMER_ACCOUNT', {
     readFace: '客户账户册',
     load: listCustomerAccounts,
     optionsOf: customerAccountPickerOptions,
@@ -108,19 +150,46 @@ const kindRegisters: Record<IdentityKind, KindRegister> = {
   }),
 };
 
+/** 配对里的答案投成「标识 + 修订」：没取到 / 不是业务答案 → null，建议退回 1。 */
+function targetsOf<K extends IdentityKind>({ register, answer }: RegisterAnswer<K>): readonly RevisionedIdentity[] | null {
+  return answer?.kind === 'outcome' ? register.targetsOf(answer.body) : null;
+}
+
+/**
+ * 配对里那一册的候选：候选转写与读面名都取自配对里的册，不再按种类另查一遍。面上那几格（标签、路径、问题表、措辞）
+ * 与体形无关，Omit 掉带 Body 的 optionsOf 之后 ReferencePickerFaceProps 的类型参数填什么都一样。
+ */
+function RegisterPicker<K extends IdentityKind>({
+  paired,
+  ...face
+}: { paired: RegisterAnswer<K> } & Omit<ReferencePickerFaceProps<unknown>, 'optionsOf' | 'readFace'>) {
+  return (
+    <ReferencePickerFor<RegisterBodyOf[K]>
+      {...face}
+      answer={paired.answer}
+      optionsOf={paired.register.optionsOf}
+      readFace={paired.register.readFace}
+    />
+  );
+}
+
 export function IdentityDeactivationForm({ parties, onDeactivated }: IdentityDeactivationFormProps) {
-  // 当前选中种类那一册的答案（参与方册除外——它从页面来）。换种类即换册，上一册的答案不留：与「换种类连标识一起清」
-  // 同一条纪律，上一册的候选留在下拉里会被送到另一册去查。
-  const [loaded, setLoaded] = useState<ApiResult<unknown> | null>(null);
+  // 本表单自读那一册的答案，连同是哪一册（参与方册除外——它从页面来）。换种类即换册，上一册的答案不留：与「换种类连
+  // 标识一起清」同一条纪律，上一册的候选留在下拉里会被送到另一册去查。
+  const [loaded, setLoaded] = useState<AnyRegisterAnswer | null>(null);
   // 本表单自读那一册的重取序号（票 13 第 7 条）：停用法人 / 客户账户落册后按种类重读对应册，同册再停一个时候选与建议
   // 按新册面算，不按停用前那份。参与方册的重取仍由页面做（onDeactivated）。
   const [reloadKey, setReloadKey] = useState(0);
-  const answerFor = (selected: IdentityKind): ApiResult<unknown> | null =>
-    selected === 'BUSINESS_PARTY' ? parties : loaded;
-  const targetsFor = (selected: string): readonly RevisionedIdentity[] | null => {
-    if (!isIdentityKind(selected)) return null;
-    const answer = answerFor(selected);
-    return answer?.kind === 'outcome' ? kindRegisters[selected].targetsOf(answer.body) : null;
+  // 选中种类那一册与它的答案。换种类之后、effect 重读回来之前那一帧 loaded 还是上一册的：种类对不上就当这一册还没取到，
+  // 不拿上一册的答案配这一册的投影（KindRegister 头注说的那次抛就在这一帧）。
+  const selectedRegisterFor = (kind: string): AnyRegisterAnswer | null => {
+    if (!isIdentityKind(kind)) return null;
+    if (kind === 'BUSINESS_PARTY') return kindRegisters.BUSINESS_PARTY.withAnswer(parties);
+    return loaded?.register.kind === kind ? loaded : kindRegisters[kind].withAnswer(null);
+  };
+  const targetsFor = (kind: string): readonly RevisionedIdentity[] | null => {
+    const paired = selectedRegisterFor(kind);
+    return paired === null ? null : targetsOf(paired);
   };
 
   const form = useRegistrationForm<IdentityDeactivationDraft>({
@@ -147,7 +216,8 @@ export function IdentityDeactivationForm({ parties, onDeactivated }: IdentityDea
     setLoaded(null);
     if (selectedKind === null || selectedKind === 'BUSINESS_PARTY') return;
     let cancelled = false;
-    void kindRegisters[selectedKind].load().then((next) => {
+    const loading: Promise<AnyRegisterAnswer> = kindRegisters[selectedKind].load();
+    void loading.then((next) => {
       if (!cancelled) setLoaded(next);
     });
     return () => {
@@ -155,6 +225,7 @@ export function IdentityDeactivationForm({ parties, onDeactivated }: IdentityDea
     };
   }, [selectedKind, reloadKey]);
 
+  const selected = selectedRegisterFor(draft.kind);
   const known = targetsFor(draft.kind)?.find((row) => row.id === draft.id);
   const pickerProps = {
     label: '身份标识 *',
@@ -200,15 +271,9 @@ export function IdentityDeactivationForm({ parties, onDeactivated }: IdentityDea
               </span>
             </Field>
 
-            {selectedKind !== null ? (
+            {selected !== null ? (
               // key 带种类：换种类即换 Picker，上一册的候选与「不在读面上」那一项不留在下拉里。
-              <ReferencePickerFor<unknown>
-                key={selectedKind}
-                {...pickerProps}
-                answer={answerFor(selectedKind)}
-                optionsOf={kindRegisters[selectedKind].optionsOf}
-                readFace={kindRegisters[selectedKind].readFace}
-              />
+              <RegisterPicker key={selected.register.kind} paired={selected} {...pickerProps} />
             ) : (
               <Field label="身份标识 *" path="deactivations[0].id" problems={problems}>
                 <Input
