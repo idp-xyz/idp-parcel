@@ -3,55 +3,15 @@
 @tailwind utilities;
 
 /* 外壳主题变量沿用 idp-ui loms-web 的取值：@idpxyz/ui-workspace 的组件按
-   --idpxyz-* 这套 CSS 变量取色，这里是它们在本应用的唯一定义处。 */
+   --idpxyz-* 这套 CSS 变量取色，这里是它们在本应用的唯一定义处。
+   两组值逐一与 loms-web 的 index.css 相同，只有归组不同：手册「主题策略」要企业
+   工作台默认 Light，所以 :root 挂亮色那组，.dark 只在 ThemeProvider 给 <html>
+   加上该 class 时生效（同特异性靠先后压过 :root，故 .dark 必须写在后面）。
+   ThemeProvider 挂载后会按令牌表把 --idpxyz-* 内联覆盖到 <html> 上；这里管的是
+   首屏与 color-scheme，覆盖不到的那几个变量也以此为准。 */
 
-/* 暗色主题（默认） */
+/* 亮色主题（默认） */
 :root,
-.dark {
-  color-scheme: dark;
-  --idpxyz-native-color-scheme: dark;
-  --idpxyz-bg: #1a1b1e;
-  --idpxyz-sidebar: #25262b;
-  --idpxyz-activityBar: #1e1f24;
-  --idpxyz-editor: #1a1b1e;
-  --idpxyz-tab: #2a2b31;
-  --idpxyz-tabActive: #1a1b1e;
-  --idpxyz-tabBorder: #2a2b31;
-  --idpxyz-statusBar: #2563eb;
-  --idpxyz-titleBar: #2c2d32;
-  --idpxyz-border: #3f4048;
-  --idpxyz-text: #cccccc;
-  --idpxyz-textMuted: #858585;
-  --idpxyz-textBright: #ffffff;
-  --idpxyz-accent: #007acc;
-  --idpxyz-lineNumber: #858585;
-  --idpxyz-lineNumberActive: #c6c6c6;
-  --idpxyz-selection: #264f78;
-  --idpxyz-keyword: #569cd6;
-  --idpxyz-string: #ce9178;
-  --idpxyz-number: #b5cea8;
-  --idpxyz-comment: #6a9955;
-  --idpxyz-function: #dcdcaa;
-  --idpxyz-variable: #9cdcfe;
-  --idpxyz-type: #4ec9b0;
-  --idpxyz-operator: #d4d4d4;
-  --idpxyz-tag: #569cd6;
-  --idpxyz-attribute: #9cdcfe;
-  --idpxyz-punctuation: #d4d4d4;
-  --idpxyz-minimap: #1e1e1e;
-  --idpxyz-scrollbar: #424242;
-  --idpxyz-panelBg: #1e1e1e;
-  --idpxyz-panelBorder: #3c3c3c;
-  --idpxyz-breadcrumb: #a9a9a9;
-  --idpxyz-findMatch: #515c6a;
-  --idpxyz-hover: #32333a;
-  --idpxyz-activeItem: #3d3e47;
-  --idpxyz-inputBg: #3c3c3c;
-  --idpxyz-statusHover: #1f8ad2;
-  --idpxyz-activeLine: #282828;
-}
-
-/* 亮色主题 */
 .light {
   color-scheme: light;
   --idpxyz-native-color-scheme: light;
@@ -94,6 +54,51 @@
   --idpxyz-inputBg: #ffffff;
   --idpxyz-statusHover: #1f8ad2;
   --idpxyz-activeLine: #f5f5f5;
+}
+
+/* 暗色主题 */
+.dark {
+  color-scheme: dark;
+  --idpxyz-native-color-scheme: dark;
+  --idpxyz-bg: #1a1b1e;
+  --idpxyz-sidebar: #25262b;
+  --idpxyz-activityBar: #1e1f24;
+  --idpxyz-editor: #1a1b1e;
+  --idpxyz-tab: #2a2b31;
+  --idpxyz-tabActive: #1a1b1e;
+  --idpxyz-tabBorder: #2a2b31;
+  --idpxyz-statusBar: #2563eb;
+  --idpxyz-titleBar: #2c2d32;
+  --idpxyz-border: #3f4048;
+  --idpxyz-text: #cccccc;
+  --idpxyz-textMuted: #858585;
+  --idpxyz-textBright: #ffffff;
+  --idpxyz-accent: #007acc;
+  --idpxyz-lineNumber: #858585;
+  --idpxyz-lineNumberActive: #c6c6c6;
+  --idpxyz-selection: #264f78;
+  --idpxyz-keyword: #569cd6;
+  --idpxyz-string: #ce9178;
+  --idpxyz-number: #b5cea8;
+  --idpxyz-comment: #6a9955;
+  --idpxyz-function: #dcdcaa;
+  --idpxyz-variable: #9cdcfe;
+  --idpxyz-type: #4ec9b0;
+  --idpxyz-operator: #d4d4d4;
+  --idpxyz-tag: #569cd6;
+  --idpxyz-attribute: #9cdcfe;
+  --idpxyz-punctuation: #d4d4d4;
+  --idpxyz-minimap: #1e1e1e;
+  --idpxyz-scrollbar: #424242;
+  --idpxyz-panelBg: #1e1e1e;
+  --idpxyz-panelBorder: #3c3c3c;
+  --idpxyz-breadcrumb: #a9a9a9;
+  --idpxyz-findMatch: #515c6a;
+  --idpxyz-hover: #32333a;
+  --idpxyz-activeItem: #3d3e47;
+  --idpxyz-inputBg: #3c3c3c;
+  --idpxyz-statusHover: #1f8ad2;
+  --idpxyz-activeLine: #282828;
 }
 
 * {
