@@ -1,7 +1,7 @@
 # 05 状态 badge 五层分家：`domainStatusTones` 加「层」轴，`StatusBadgeFor` 按层取形，词一个不改
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress
 Blocked by: 无
 地盘：`apps/admin-web/src/domain/status.tsx`（+ 新 `domain/status.test.ts`）；用 `StatusBadgeFor` 的页面**只在渲染形状随层自动变时被动受影响，不逐页改**
 （`shipment-request/*`、`visibility/ExceptionCasesPage`、`operations/TransportFulfillmentReviewPage`、`party/detail-primitives` 等，按 `git grep StatusBadgeFor` 为准）。
@@ -51,3 +51,8 @@ Blocked by: 无
 2. **留层不留词**：四层空着比塞「示例词」诚实；渲染路径的正确性由合成 S 演示词在测试里走一遍来保证，演示词不进 `domainStatusTones`。
 
 ## Comments
+
+### 认领（2026-09-20 12:5x）
+
+通道 8 认领后 crash、树上零提交（用户 12:5x 报）；推送方通道 1 拆其空树后自接，分支 `mcp1-ux05` 基 main `86a96ab7`，地盘 `domain/`。作者 = 推送方 = 本会话，
+评审需另派。
