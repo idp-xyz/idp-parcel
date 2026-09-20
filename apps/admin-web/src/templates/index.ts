@@ -29,7 +29,16 @@ export {
   type DetailSection,
   type DetailMeta,
   type DetailSummaryStat,
+  type DetailWorkspaceTab,
 } from './DetailPageTemplate';
+export {
+  resolveWorkspaceTabs,
+  workspaceTabLabels,
+  workspaceTabOrder,
+  type ResolvedWorkspaceTab,
+  type WorkspaceTabId,
+  type WorkspaceTabInput,
+} from './workspace-tabs';
 
 export {
   ReviewFlowTemplate,

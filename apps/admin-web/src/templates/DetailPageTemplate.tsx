@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
+import { Fragment, useEffect, useState, type ReactNode } from 'react';
 import { Check, Copy } from 'lucide-react';
 import {
   PageHeader,
@@ -13,10 +13,20 @@ import {
   CardTitle,
   CardDescription,
   CardContent,
+  Tabs,
+  TabsContent,
+  TabsList,
+  TabsTrigger,
   Timeline,
 } from '@idpxyz/ui-primitives';
 import { StateSlot, type TemplateViewState, type StateSlotProps } from './state-slot';
 import type { DetailField, AuditEntry } from './types';
+import {
+  resolveWorkspaceTabs,
+  type ResolvedWorkspaceTab,
+  type WorkspaceTabId,
+  type WorkspaceTabInput,
+} from './workspace-tabs';
 
 /** 业务区块：一个区块渲染成一个 Panel（Card），内容由调用方组装。 */
 export interface DetailSection {
@@ -46,6 +56,9 @@ export interface DetailSummaryStat {
   value: ReactNode;
 }
 
+/** 调用方给的一签：id 只能是六个稳定命名之一，词与顺序由 workspace-tabs 的固定表钉住。 */
+export type DetailWorkspaceTab = WorkspaceTabInput<ReactNode>;
+
 export interface DetailPageTemplateProps {
   /** 页面标题（如「托运申报单」）。 */
   title: string;
@@ -72,6 +85,12 @@ export interface DetailPageTemplateProps {
   auditTrail?: AuditEntry[];
   /** 审计区标题，默认「审计留痕」。 */
   auditTitle?: string;
+  /**
+   * 对象工作区的签。传了（哪怕是空数组）内容区就按签分：基本信息进「概要」顶部、区块跟在其后、
+   * 审计留痕进「审计」，调用方同 id 的内容接在模板内容之后；没有内容的签不出（票面裁决 1）。
+   * 不传仍叠 Card——另两张详情页不改，母版与旧形态并存到它们各自的票再换（票面裁决 3）。
+   */
+  tabs?: DetailWorkspaceTab[];
   viewState: TemplateViewState;
   stateOverride?: StateSlotProps['override'];
 }
@@ -92,12 +111,61 @@ export function DetailPageTemplate({
   sections,
   auditTrail,
   auditTitle = '审计留痕',
+  tabs,
   viewState,
   stateOverride,
 }: DetailPageTemplateProps) {
-  // 手册「对象工作区」的 Object Header 只在调用方要了它的格时启用；旧形态那一支的 JSX
+  // 手册「对象工作区」的 Object Header 随 meta 或 tabs 任一启用；旧形态那一支的 JSX
   // 原样保留而不抽成共用片段，是为了让「不传新 prop 时渲染逐字节同」能对着代码读出来。
-  const objectHeader = meta !== undefined;
+  const objectHeader = meta !== undefined || tabs !== undefined;
+
+  // 三类模板内容各造一次，叠 Card 与分签两种形态共用同一份元素——两边渲染的是同一个东西，
+  // 差别只在装进哪个容器。
+  const basicCard = (
+    <Card>
+      <CardHeader>
+        <CardTitle>{basicTitle}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        <dl className="grid grid-cols-1 gap-x-8 gap-y-2.5 sm:grid-cols-2">
+          {basicFields.map((field) => (
+            <div key={field.label} className="flex gap-3 text-[12px] leading-5">
+              <dt className="w-[96px] shrink-0 text-idpxyz-textMuted">{field.label}</dt>
+              <dd className="min-w-0 flex-1 break-words text-idpxyz-text">
+                {field.value}
+              </dd>
+            </div>
+          ))}
+        </dl>
+      </CardContent>
+    </Card>
+  );
+  const sectionCards = sections?.map((section) => (
+    <Card key={section.id}>
+      <CardHeader>
+        <CardTitle>{section.title}</CardTitle>
+        {section.description && (
+          <CardDescription>{section.description}</CardDescription>
+        )}
+      </CardHeader>
+      <CardContent>{section.content}</CardContent>
+    </Card>
+  ));
+  const auditCard = auditTrail && (
+    <Card>
+      <CardHeader>
+        <CardTitle>{auditTitle}</CardTitle>
+      </CardHeader>
+      <CardContent>
+        {auditTrail.length === 0 ? (
+          <p className="text-[12px] text-idpxyz-textMuted">暂无审计记录。</p>
+        ) : (
+          <Timeline items={auditTrail} />
+        )}
+      </CardContent>
+    </Card>
+  );
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       {objectHeader ? (
@@ -116,7 +184,7 @@ export function DetailPageTemplate({
               {status}
               {description && <PageHeaderDescription>{description}</PageHeaderDescription>}
             </div>
-            {meta.length > 0 && (
+            {meta !== undefined && meta.length > 0 && (
               <dl className="flex flex-wrap gap-x-4 gap-y-0.5 text-[11px] leading-4">
                 {meta.map((item) => (
                   <div key={item.label} className="flex gap-1">
@@ -148,60 +216,78 @@ export function DetailPageTemplate({
       )}
 
       {viewState.kind === 'ready' ? (
-        <div className="flex-1 overflow-auto">
-          <div className="mx-auto flex max-w-[960px] flex-col gap-4 p-4">
-            <Card>
-              <CardHeader>
-                <CardTitle>{basicTitle}</CardTitle>
-              </CardHeader>
-              <CardContent>
-                <dl className="grid grid-cols-1 gap-x-8 gap-y-2.5 sm:grid-cols-2">
-                  {basicFields.map((field) => (
-                    <div key={field.label} className="flex gap-3 text-[12px] leading-5">
-                      <dt className="w-[96px] shrink-0 text-idpxyz-textMuted">{field.label}</dt>
-                      <dd className="min-w-0 flex-1 break-words text-idpxyz-text">
-                        {field.value}
-                      </dd>
-                    </div>
-                  ))}
-                </dl>
-              </CardContent>
-            </Card>
-
-            {sections?.map((section) => (
-              <Card key={section.id}>
-                <CardHeader>
-                  <CardTitle>{section.title}</CardTitle>
-                  {section.description && (
-                    <CardDescription>{section.description}</CardDescription>
-                  )}
-                </CardHeader>
-                <CardContent>{section.content}</CardContent>
-              </Card>
-            ))}
-
-            {auditTrail && (
-              <Card>
-                <CardHeader>
-                  <CardTitle>{auditTitle}</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  {auditTrail.length === 0 ? (
-                    <p className="text-[12px] text-idpxyz-textMuted">暂无审计记录。</p>
-                  ) : (
-                    <Timeline items={auditTrail} />
-                  )}
-                </CardContent>
-              </Card>
+        tabs !== undefined ? (
+          <WorkspaceTabs
+            tabs={resolveWorkspaceTabs<ReactNode>(
+              {
+                // 基本信息是必传 prop，空数组分不出「不适用」与「暂无」，只能按有没有字段判有没有内容；
+                // 审计留痕沿旧语义：传了空数组仍是「有区但暂无记录」，那句话本身是内容。
+                summary: [...(basicFields.length > 0 ? [basicCard] : []), ...(sectionCards ?? [])],
+                audit: auditTrail ? [auditCard] : [],
+              },
+              tabs.filter((tab) => hasRenderableContent(tab.content)),
             )}
+          />
+        ) : (
+          <div className="flex-1 overflow-auto">
+            <div className="mx-auto flex max-w-[960px] flex-col gap-4 p-4">
+              {basicCard}
+
+              {sectionCards}
+
+              {auditCard}
+            </div>
           </div>
-        </div>
+        )
       ) : (
         <div className="flex-1 flex items-center justify-center overflow-auto">
           <StateSlot state={viewState} override={stateOverride} />
         </div>
       )}
     </div>
+  );
+}
+
+// React 会把 null / undefined / 布尔 / 空串渲染成空，调用方给了这样一签等于没给——
+// 归并前先剔掉，免得出一个点进去空白的签（票面裁决 1）。
+function hasRenderableContent(node: ReactNode): boolean {
+  return node !== null && node !== undefined && typeof node !== 'boolean' && node !== '';
+}
+
+// 分签内容区。签的词与顺序来自 workspace-tabs 的固定表，这里只管装容器。
+// 受控而不用 defaultValue：签随内容有无出没，当前签消失时退回第一签，不留一个选中了却没内容的空区。
+function WorkspaceTabs({ tabs }: { tabs: ResolvedWorkspaceTab<ReactNode>[] }) {
+  const [active, setActive] = useState<WorkspaceTabId | undefined>(undefined);
+  if (tabs.length === 0) return <div className="flex-1 overflow-auto" />;
+  const value = active !== undefined && tabs.some((tab) => tab.id === active) ? active : tabs[0].id;
+  return (
+    <Tabs
+      value={value}
+      onValueChange={(next) => setActive(next as WorkspaceTabId)}
+      className="flex-1 flex flex-col overflow-hidden gap-0"
+    >
+      <TabsList className="px-4 shrink-0">
+        {tabs.map((tab) => (
+          <TabsTrigger key={tab.id} value={tab.id}>
+            {tab.label}
+            {tab.count !== undefined && (
+              <span className="text-[11px] font-normal text-idpxyz-textMuted">{tab.count}</span>
+            )}
+          </TabsTrigger>
+        ))}
+      </TabsList>
+      <div className="flex-1 overflow-auto">
+        <div className="mx-auto flex max-w-[960px] flex-col gap-4 p-4">
+          {tabs.map((tab) => (
+            <TabsContent key={tab.id} value={tab.id} className="flex flex-col gap-4">
+              {tab.contents.map((content, index) => (
+                <Fragment key={index}>{content}</Fragment>
+              ))}
+            </TabsContent>
+          ))}
+        </div>
+      </div>
+    </Tabs>
   );
 }
 
