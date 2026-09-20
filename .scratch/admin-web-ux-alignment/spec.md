@@ -1,7 +1,7 @@
 # 管理台 UI/UX 对齐 IDP 产品族规范：以 idp-ui `apps/loms-web` 为参照
 
 Category: enhancement
-Status: in-progress
+Status: resolved——六票 01–06 全部 resolved · 已进 main（末票 02 于 2026-09-20 20:13 `5b032504`）；第二轮见 `.scratch/admin-web-workspace-form/spec.md`
 出处：用户 2026-09-16 23:5x 经 IDP 队列「https://github.com/idpxyz/idp-ui/tree/master/apps/loms-web, 参考这个调整我们的 ui/ux」。
 参照物钉在 `idpxyz/idp-ui@53df1666`（tarball 取证于 23:5x，私有仓，`gh` 可读）：`apps/loms-web`（console 形态 + 二十余张演示页，数据全为硬编码样例）
 与三份规范文档——`docs/idp_product_ux_ui_design_system_handbook_v_1.md`（产品族 UX/UI 手册，下称**手册**）、
@@ -76,7 +76,7 @@ Status: in-progress
 | 票 | 标题 | 状态 |
 |---|---|---|
 | [01](./issues/01-shell-top-bar-theme-density.md) | 壳层：Top Bar 四件（归属信息 / 全局搜索位 / 作用域位 / 用户菜单位）、Light 默认 + 主题切换、密度两档 | resolved · 已进 main `ed7ef224`（通道 4 两任；评审 ← 通道 2 两轴 0 阻断；搜索位 Button 外壳与删 `SessionBadge` 两条为推送方裁决，见票面判断项 2 / 6） |
-| [02](./issues/02-my-work-recent-objects-saved-views.md) | 左导航「我的工作」：最近对象（hash 历史）+ 保存视图（本地筛选态）两页与记录钩子；Watchlists / My Queues 归 owner | ready-for-agent（原 Blocked by 01，01 于 18:08 进 main `ed7ef224` 后阻塞解除；未派） |
+| [02](./issues/02-my-work-recent-objects-saved-views.md) | 左导航「我的工作」：最近对象（hash 历史）+ 保存视图（本地筛选态）两页与记录钩子；Watchlists / My Queues 归 owner | resolved · 已进 main `5b032504`（通道 4 两任——前任现场原样封存后接续；评审 ← 通道 2 两轴 0 阻断；保存视图空态文案改口为推送方代落，见票面处置） |
 | [03](./issues/03-list-template-monitor-golden.md) | `ListPageTemplate` 对齐 Monitor 黄金母版：面包屑、Filter Bar 完整结构位、密度、单击预览 / 双击开对象、surface 容器 | resolved · 已进 main `3fbf2ec2`（通道 3；评审 ← 通道 2 两轴 0 阻断；默认形态按 Rule 2 改了哪几样与密度默认档归 01，见票面裁决 3） |
 | [04](./issues/04-object-workspace-template.md) | `DetailPageTemplate` 对齐对象工作区母版：Object Header + Summary Strip + 稳定命名的 Tabs；委托查阅详情页首用 | resolved · 已进 main（第 1–5 条 `3fbf2ec2`、第 6 条 `4a19ed33` 纯 ff；通道 5；评审 ← 通道 6 两轮皆 0 阻断） |
 | [05](./issues/05-status-badge-layering.md) | 状态 badge 五层分家：`domainStatusTones` 拆生命周期 / SLA / 风险 / 严重度 / 标记，`StatusBadgeFor` 按层取形 | resolved · 已进 main `f6f843c8`（通道 1 自接；评审 ← 通道 2 两轴 0 阻断；sla / flag 两形无色与 `TagVariant` 派生留给首批词进表那票） |

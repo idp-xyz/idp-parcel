@@ -2922,3 +2922,32 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
   再笔 B 三处（`moduleIdFromHash` 剥 `?`、hashchange + 首帧 `recordRecentObject`、`liveIds` + 两处「已接线」释义改口、Workbench 两卡各前 8 + 查看全部）；完成记录 + Status resolved；报 tip 与 run-tests 数（基线 343 = 324 + 19）。
   不推 main、不占 55432、不跑全仓。估 60 分。
 - **评审**：4 是作者（换会话同人），评审只能派 2 / 3 / 5 / 6——本轮未应答，02 完工时重点名再派；无人应答则推送方 `/code-review` 隔离子代理自跑，票面写明。
+- 簿记笔 `5a272da6`（本节至此 + 18:1x–18:4x 补记）推 main（19:4x `ls-remote` 核 `1c04c773` 未动）；重放树 `%TEMP%\idp-land-ux02` 建在 `5a272da6`，`pnpm install --offline` 4.5 s。
+
+### 19:4x–20:0x 同一会话：用户第二道令「参考 idp-ui `apps/myshop-web`（ssh idp-110-dev）做 UX 优化」→ 评估 → 第二轮 spec + 五票入库 `11e6111a`
+
+- **取证**：`ssh idp-110-dev` 上 `idp-ui@6751fb2`（2026-08-31）`apps/myshop-web`（34 源文件 + `docs/oms_ui_ux_blueprint_v_1.md`）`scp` 到 `%TEMP%\myshop-web-ref`（不入库）。壳是完整 IDE 工作区形：`TitleBar` + `ActivityBar` + `Sidebar` + `EditorGroup`
+  多标签 + `BottomPanel` + `RightSidebar` 检查器 + `StatusBar` + `CommandPalette`，`useWorkspaceState` 整份存 localStorage；页面数据全为 `data/oms.ts` 硬编码，快捷操作 `addToast('操作成功')` 全是假反馈。
+  本仓 vendor `@idpxyz/ui-workspace@0.1.25` 已导出全部所需件（从 `dist/index.d.ts` 对读），不必升级。
+- **评估**（钉 `5a272da6`，代码对读）：第一轮六票已覆盖顶栏 / 列表母版 / 对象母版 / 状态分层 / 骨架错误 / 我的工作；蓝图领域无关的那半里还缺五样——多标签壳（第一轮明写「不做」，前提已变）、
+  右侧检查器、命令面板、列表多选 + 批量动作栏、写动作反馈与高风险确认一致性。不做：`BottomPanel`（无事件 / 日志 / 备注读口）、`ActivityBar`（只有一种侧栏内容）、控制塔 KPI（红线）、角色化落地页（无角色声明）。
+- **spec + 五票** `.scratch/admin-web-workspace-form/`：01 多标签工作区（**draft，形态取舍归用户**：多标签 / 分栏 / ActivityBar 三判断项）、02 右侧检查器（draft，模板段可先派、壳层段 Blocked by 01）、
+  03 命令面板（ready，Blocked by ux-alignment/02）、04 多选 + 批量动作栏（ready）、05 反馈一致性（ready）。`11e6111a` 推 main（20:0x `ls-remote` 核 `5a272da6` 未动）。
+
+### 20:0x–20:1x 同一会话：02 完工 → 点名四应答 → 派评审 + 三票 → 通道 2 评审无阻断 → 推送方一笔代落 → 全量绿 → `5b032504` 进 main
+
+- 通道 4 20:0x 过半报 + 完工报（`task-002c3bd6` done）：`mcp4-ux02` 码 tip `1deb5d38`（`89065856` 前任六件原样封存、入库后四道门绿无补修笔；`1deb5d38` 笔 B）、票面 tip `86d718d8`；tsc 0 / run-tests 343 / vite 0 / architecture ok；探针 21/21；未动 `templates/`。
+- **点名** 20:00（截止 20:03，广播 2 / 3 / 5 / 6）→ 3 20:01、5 20:01、6 20:02、2 20:02 **四应答**皆「空闲 · 地盘无 · 余量充足」。
+- **派单**（20:05–20:08）：**02 评审 → 通道 2**（`task-103cb9c4`，钉 `86d718d8`，至 20:28）；**wsform/04 → 通道 3**（`task-b3f07954`，`mcp3-wsform04` 基 `11e6111a`，约 75 分）；**wsform/05 → 通道 5**（`task-be84d247`，`mcp5-wsform05` 基 `11e6111a`，
+  审计段先报，约 90 分）；**wsform/03 → 通道 6**（`task-9c302082`，`mcp6-wsform03` 基 `11e6111a`，两段：纯逻辑 + host + TopBar 先做、Layout 接线等 02 进 main 后 rebase 再做）。三票写明地盘互斥与 `templates/index.ts` 只追加。
+- **预叠**：`idp-land-ux02` 换到 `11e6111a`，cherry-pick `1c04c773..86d718d8` 五笔零冲突 → `2ddaea5d`（对照见票面进 main 记录），与作者分支两目录零 diff；tsc 0 / 343 / vite 0 / gofmt 空 / build vet 0 / architecture ok / 清点零差。
+- **评审 ← 通道 2**（20:10，派后 5 分交）：**Standards 0 / 3 · Spec 0 / 2**——① 保存视图空态与页描述指引了一条今天不存在的路径（saved-view 位全页 `enabled: false`）；② `navigation.ts` 头注「四项里的」计数；③ 三条烟味；Spec ① 页头无图标未在完成记录点明；
+  ② 记录守门放过所有导航 id（仅手改地址触发）。原文代落票面。
+- **处置**：① / ② 推送方代落 `5b032504`（三句文案 + 一句注释）；③ 记不改；Spec ① 代补一句；Spec ② 记判断项。20:0x 占号 → `5b032504` 上 tsc 0 / 343 / vite 0（dist 含新文案）、探针 PASS、带 DSN 全量 20:10:31→20:12:50 **115 ok / 0 FAIL / 16 无测试 / 0 cached**。
+- 20:13:02 `ls-remote` 核 `11e6111a` 未动 → `push 5b032504:main` 成，**远端 main = `5b032504`**（六笔：02 五 + 推送方一；其下无他人提交）；共享树 ff 同 SHA；释号广播（SHA 对照、门禁数字、6 可开第二段、3 / 5 不必 rebase、4 的树由推送方代拆）。**先 push 再簿记。**
+- **簿记本笔**（纯 .md 自审，在 `5b032504` 之上）：票 02 Status → resolved · 已进 main + 代补一句 + 评审原文代落 + 处置 + 进 main 记录；ux-alignment spec Status → resolved（六票全进 main）、子票表 02；workspace-form spec 子票表 03 / 04 / 05 → in-progress；本节与上两节。
+- **收尾**：`mcp4-ux02` → `merged/`、远端删；`idp-parcel-mcp4-ux02` 比内容后拆（作者已报空闲）；`idp-land-ux02` 留到本簿记推完再拆（先删 `node_modules` 真目录）。
+- **前沿**：在途 wsform/03（6）/ 04（3）/ 05（5）；draft wsform/01（等用户答三判断项）/ 02（模板段可派，等 04 落了再派免撞 `ListPageTemplate`）。2 / 4 空闲留评审（04 / 05 / 03 完工评审派 2 或 4，都非作者）。
+  **归用户**：wsform 判断项 1–3（多标签 / 分栏 / ActivityBar）；ADR-0139 → Accepted 与否；票 11 `detail` 格 vs ADR-0140 Decision 三；`docs/ux/commercial-party.md` 仍 untracked、无人认领、未动。
+- **本节五数**（19:2x–20:1x）：CI main 绿/总 未量（`5a272da6` / `11e6111a` / `5b032504` 三个 run 刚起）· 集成时延——02 完工报 20:0x → 进 main 20:13 **约 10 分**（1 票；评审 5 分 + 代落 + 全量 139 s）· 重放笔数 **5**（02 五；不含推送方一笔与簿记）· 重复开发 0 ·
+  会话重置 **1**（18:4x 通道 4 前任无响应、19:2x 通道 1 本会话起；4 的接续会话自报「新会话」计入）· 非作者评审缺席 0

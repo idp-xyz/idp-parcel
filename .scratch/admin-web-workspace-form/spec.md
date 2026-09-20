@@ -76,6 +76,6 @@ Status: in-progress
 |---|---|---|
 | [01](./issues/01-shell-editor-group-tabs-status-bar.md) | 壳层升级为多标签工作区：`EditorGroup` + `StatusBar`、工作区状态本地持久化、hash ↔ 标签互为镜像、`Ctrl+W` / `Ctrl+Shift+T` | draft（等用户答判断项 1–3；Blocked by ux-alignment/02 进 main） |
 | [02](./issues/02-right-inspector-list-preview.md) | 右侧检查器：壳层右栏位 + `InspectorContent` 契约（五节）+ `ListPageTemplate` 单击进检查器 + 两张首用页渲染器 | draft（模板段可先做；壳层段 Blocked by 01） |
-| [03](./issues/03-command-palette.md) | 命令面板 `Ctrl+K`：导航 + 最近对象 + 壳层开关；TopBar 全局搜索位改为面板入口 | ready-for-agent（Blocked by ux-alignment/02 进 main） |
-| [04](./issues/04-list-selection-bulk-action-bar.md) | `ListPageTemplate` 多选 + 批量动作栏：选择模型、表头全选、「已选 N 项」栏、默认动作「导出所选 CSV」、页面级动作槽 | ready-for-agent |
-| [05](./issues/05-action-feedback-confirmation-sweep.md) | 写动作反馈与高风险确认一致性：先审计全部写面调用点成对照表，再补 `useToast` / `ConfirmDialog` / 进行中态 | ready-for-agent |
+| [03](./issues/03-command-palette.md) | 命令面板 `Ctrl+K`：导航 + 最近对象 + 壳层开关；TopBar 全局搜索位改为面板入口 | in-progress（通道 6，20:08 派 `task-9c302082`，分支 `mcp6-wsform03` 基 `11e6111a`，两段；阻塞 ux-alignment/02 已于 20:13 进 main `5b032504` 解除） |
+| [04](./issues/04-list-selection-bulk-action-bar.md) | `ListPageTemplate` 多选 + 批量动作栏：选择模型、表头全选、「已选 N 项」栏、默认动作「导出所选 CSV」、页面级动作槽 | in-progress（通道 3，20:06 派 `task-b3f07954`，分支 `mcp3-wsform04` 基 `11e6111a`） |
+| [05](./issues/05-action-feedback-confirmation-sweep.md) | 写动作反馈与高风险确认一致性：先审计全部写面调用点成对照表，再补 `useToast` / `ConfirmDialog` / 进行中态 | in-progress（通道 5，20:07 派 `task-be84d247`，分支 `mcp5-wsform05` 基 `11e6111a`） |

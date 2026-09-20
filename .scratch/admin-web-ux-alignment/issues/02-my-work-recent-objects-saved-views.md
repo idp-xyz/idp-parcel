@@ -1,7 +1,7 @@
 # 02 左导航「我的工作」：最近对象（hash 历史）+ 保存视图（本地筛选态）两页与记录钩子；Watchlists / My Queues 归 owner
 
 Category: enhancement
-Status: resolved——2026-09-20 19:5x 通道 4 交活（task-002c3bd6 接续；分支 `mcp4-ux02` 基 `origin/main` `1c04c773`，隔离树 `D:\tops\idp-parcel-mcp4-ux02`；码三笔 tip `1deb5d38`、票面笔在其上；均已推 origin，**未进 main**——重放、评审派单、进 main 归通道 1）。此前 in-progress（18:2x 通道 4 认领 task-fe0d5bc2，该会话 18:4x 后无响应、六件未提交现场由接续会话 19:4x 原样入库 `89065856`）；更早 ready-for-agent
+Status: resolved · **已进 main `5b032504`**（2026-09-20 20:13 通道 1 推；码在 main 上为 `1001d3b1` / `1bf4d305` / `7d974131`，推送方文案注释笔 `5b032504`；评审 ← 通道 2 两轴 0 阻断，见 Comments）。此前 19:5x 通道 4 交活（task-002c3bd6 接续；分支 `mcp4-ux02` 基 `origin/main` `1c04c773`，隔离树 `D:\tops\idp-parcel-mcp4-ux02`；码三笔 tip `1deb5d38`、票面笔在其上；均已推 origin）。此前 in-progress（18:2x 通道 4 认领 task-fe0d5bc2，该会话 18:4x 后无响应、六件未提交现场由接续会话 19:4x 原样入库 `89065856`）；更早 ready-for-agent
 Blocked by: 无（原 01——同动 `Layout.tsx`，记录钩子挂在 01 定下的壳层结构上；01 已于 2026-09-20 18:08 进 main `ed7ef224`，从 `origin/main` 起做即可）
 地盘：`apps/admin-web/src/navigation.ts`（加「我的工作」分区两条目）、`Layout.tsx`（挂记录钩子；01 之后）、`page-registry.tsx`（登记两页）、
 新 `apps/admin-web/src/pages/my-work/`（`RecentObjectsPage.tsx`、`SavedViewsPage.tsx`、`recent-objects.ts` / `saved-views.ts` 纯逻辑 + test）、
@@ -82,4 +82,27 @@ CONTEXT 与 ADR 里都没有，本仓红线不虚构，归 owner 裁要不要进
 
 **评审 / 推送方要看的**：`git diff 1c04c773..1deb5d38 -- apps/admin-web`（12 文件：`Layout.tsx`、`navigation.ts`、`page-registry.tsx`、`pages/Workbench.tsx`、`pages/my-work/` 下八件）；只跑 `apps/admin-web` 三道门 + `./internal/architecture/`，不需 DSN。未动 `templates/*`。
 
+**推送方代补（评审 Spec ①）**：第 2 条票面写的页头「图标 + 标题 + 一句说明 + 清空历史」，`RecentObjectsPage` 落地时**没有图标位**——`ListPageTemplate` 的 `title` 收 `string`，加图标位要改模板、属 03 地盘且本票「不做」明写不改模板；图标只在左导航条目上（`sidebarIconMap` 的 History），页头不重复。这是有意缺省，不是漏做。
+
 ## Comments
+
+**评审 ← 通道 2 · 钉 `86d718d8`（码 tip `1deb5d38`，基 `1c04c773`）· 20:10**（原文代落，推送方处置见后）
+
+门（隔离树 `$TEMP\idp-review-ux02`，看完已拆）：tsc 0 / run-tests 343 pass 0 fail / vite build ok（chunk 警告为既有）/ go test ./internal/architecture/ ok。
+
+*Standards* — **阻断**：无。**非阻断**：
+① `pages/Workbench.tsx` 保存视图卡 `emptyNote` 与 `SavedViewsPage.tsx` 空态 `description` / 页描述，指引用户「在列表页过滤条上按『保存当前视图』」「行点回到列表页并带上视图」；但 `templates/list-page-structure.ts` 里 saved-view 位在所有生产页 `enabled: false`（'本页尚未接入保存视图'），`?view=` 今天也无任何页读取（票面判断项 2 自认）——说明词描述了一条今天不存在的路径。spec.md 红线「留位只允许禁用态 + 说明」要求说明本身为真。建议改口「保存视图位接通后（03 消费）…」。
+② `navigation.ts` 「我的工作」分区注释「四项里的 Watchlists / My Queues」数的是上游黄金标准 Rule 6 条目（AGENTS.md「不用计数」）；spec.md 已钉 idp-ui@53df1666，低风险，可写「Rule 6 列的」。
+③ 烟味（判断）：`RecentObjectsStorage`/`SavedViewsStorage` 同形接口、`filterRecentObjects`/`filterSavedViews`、`recentModuleIds`/`savedViewModuleIds` 及两份 test 的 `storageOf` 逐一重复（Duplicated Code，头注以「零依赖」自辩但同目录一份零依赖公共件即可）；`MyWorkCard` `icon: typeof History` 用具体图标给类型，`LucideIcon`/`ElementType`（`sidebarIconMap` 用法）更直说；`<h2>` 内嵌「查看全部」Button，标题被读成动作。
+**无发现**：注释全中文、无行号引用，「第 N 条 / Rule N」写法与全仓同例；隐私边界两头成立——`removeItem` 仅 `clearRecentObjects`/`removeSavedView` 两处调用，`Layout` 只经 `recordRecentObject` 写，`Workbench` 只读，键前缀同 `shell/preferences.ts`；`liveIds` 头注与 `readinessMeta.live.explain` 同口径改口，票面第 1 条本就规定归「已接线」，另三档确实套不上，理由站得住（代价「已接线」总数含两条非 parcel-api，判断项 1 已写）。
+
+*Spec* — **阻断**：无。**非阻断**：
+① 第 2 条「头（图标 + 标题 + 一句说明 + 清空历史）」：`RecentObjectsPage` 页头无图标，页内注释以「模板 title 收 string、改模板属 03」自辩，与「不做」一致，但完成记录未点明此缺省——请推送方代补一句。
+② 首帧 / hashchange 记录：`Layout.tsx` `recordRecentObjectFromHash` 以 `pageTitleById` 守门（该表由 `moduleInfoById` 派生 + workbench/shipment-request/template-preview 三条手写），不在词表的 moduleId **不会**被记 ✓；但守门放过所有导航 id，手改 `#/workbench/x`、`#/recent-objects/x`、`#/template-preview/x` 会记成「工作台 · x」等非对象条目。树内唯一对象地址写方是 `ShipmentRequestListPage`（`#/shipment-request-inquiry/<id>`），仅手改地址可触发；可收紧为 `pageById` 内且排除本目录两页（票面无此要求，记为判断）。
+**无发现**：五条逐条——「我的工作」为 `navigationSections` 首项、在「总览」前；`recordRecentObject` 去重置顶 / `RECENT_OBJECTS_LIMIT` 50 / `recentObjectTitle` 只拼字；`SavedView.state: unknown` 不解释、`setDefaultSavedView` 同模块唯一不越模块、`savedViewHash` = `#/<moduleId>?view=<id>`；两卡 `MY_WORK_PREVIEW_LIMIT` 8 + 「查看全部」经 `onNavigate`；`sections`/`totals` 由 `navigationSections × readinessOf` 派生，四档不失真。完成判据：两份 test 用 `Map` 顶替 Storage、时钟与 id 注入，去重/上限/清空/默认唯一/按模块各有正向 + 边界。`moduleIdFromHash` 在 `decodeURIComponent` 前剥 `?`：`#/saved-views?view=abc` 落保存视图页、`#/no-such?view=abc` 落工作台、`#/m/obj?x=y` 认 m 且 `recentObjectFromHash` 得净 objectId；各模块页自读第二段是否剥 `?` 未动（判断项 2 已记）。「不做」守住：diff 12 文件无 `templates/*`、无业务页。票面 86d718d8 与码对得上：三 SHA 与 log 一致、19 = 10 + 9 条 test、343 pass 复现、`liveIds` 仅追加、h1 不动、两卡在四档之前。
+
+**结论**：Standards 阻断 0 / 非阻断 3；Spec 阻断 0 / 非阻断 2。两轴最重皆为①（说明词 / 记录缺省），均可合入后补。
+
+**处置（通道 1，20:1x）**：Standards ① / ② 推送方代落一笔 `5b032504`（`Workbench.tsx` `emptyNote`、`SavedViewsPage.tsx` 页描述与空态 `description` 三句改成「『保存当前视图』位今天还未接通；接通后…」；`navigation.ts` 头注「四项里的」→「Rule 6 列的」；只改文案与注释，`git diff -U0` 四行）。Standards ③ 三条记不改：两份纯逻辑的同形接口与过滤 / 模块列举是**有意各写一份**（头注已辩），抽公共件等第三个同形消费者出现再做；`icon: typeof History` 与 `<h2>` 内嵌按钮两处归下一张碰 `Workbench.tsx` 的票顺手。Spec ① 已代补一句（上方「推送方代补」）。Spec ② 记为判断项 11：守门收紧到 `pageById` 内且排除「我的工作」两页——今天只有手改地址才触发，等第二个对象地址写方出现时一并收；不在本票改。
+
+**进 main 记录**：隔离树 `%TEMP%\idp-land-ux02` 在 `11e6111a` 上 cherry-pick `1c04c773..86d718d8` 五笔零冲突（`85beb1aa→01a09eec` / `a543a289→1001d3b1` / `89065856→1bf4d305` / `1deb5d38→7d974131` / `86d718d8→2ddaea5d`），`git diff origin/mcp4-ux02 2ddaea5d -- apps/admin-web .scratch/admin-web-ux-alignment` 为空；推送方代落 `5b032504`。在 `5b032504` 上实跑：tsc 0 / run-tests 343 / vite 0（dist 含新文案）/ `gofmt -l` 空 / build 0 / vet 0 / 清点重生成零差 / `go test ./internal/architecture/` ok / 带 DSN 全量 `-p 1 -count=1` 20:10:31→20:12:50 **115 ok / 0 FAIL / 16 无测试 / 0 cached**，探针 `TestFreezeScopesAreInvisibleToEachOther -v` PASS。20:13:02 `ls-remote` 核 `11e6111a` 未动 → `push 5b032504:main` 成，远端 main = `5b032504`（六笔：02 五 + 推送方一；其下无他人提交）；共享树 `merge --ff-only` 同 SHA。
