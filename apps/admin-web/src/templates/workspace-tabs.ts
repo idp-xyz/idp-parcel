@@ -2,12 +2,9 @@
 // 好让 run-tests 的 CommonJS 发射能直接加载它——渲染归 DetailPageTemplate，这里只管「有哪几个签、叫什么、谁在谁前」。
 
 /**
- * 手册「对象工作区（Workspace）统一规范」Main Content Tabs 的稳定命名：换产品不换签名。
- * 调用方只能给这六个 id 之一，给不了新签。
+ * 手册「对象工作区（Workspace）统一规范」Main Content Tabs 的稳定命名，渲染顺序即此序；调用方传进来的顺序不算数。
+ * 六个 id 只在这里写一遍——WorkspaceTabId 从它派生，多一个少一个都不会出现「类型有、表里没有」的缝。
  */
-export type WorkspaceTabId = 'summary' | 'timeline' | 'related' | 'exceptions' | 'documents' | 'audit';
-
-/** 渲染顺序即此序；调用方传进来的顺序不算数。 */
 export const workspaceTabOrder = [
   'summary',
   'timeline',
@@ -15,7 +12,10 @@ export const workspaceTabOrder = [
   'exceptions',
   'documents',
   'audit',
-] as const satisfies readonly WorkspaceTabId[];
+] as const;
+
+/** 换产品不换签名：调用方只能给这六个 id 之一，给不了新签。 */
+export type WorkspaceTabId = (typeof workspaceTabOrder)[number];
 
 /** id → 签上的词。词由这里钉住，调用方改不了。 */
 export const workspaceTabLabels: Record<WorkspaceTabId, string> = {
