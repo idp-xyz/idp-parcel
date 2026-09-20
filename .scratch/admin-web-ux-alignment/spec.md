@@ -75,9 +75,9 @@ Status: in-progress
 
 | 票 | 标题 | 状态 |
 |---|---|---|
-| [01](./issues/01-shell-top-bar-theme-density.md) | 壳层：Top Bar 四件（归属信息 / 全局搜索位 / 作用域位 / 用户菜单位）、Light 默认 + 主题切换、密度两档 | ready-for-agent |
+| [01](./issues/01-shell-top-bar-theme-density.md) | 壳层：Top Bar 四件（归属信息 / 全局搜索位 / 作用域位 / 用户菜单位）、Light 默认 + 主题切换、密度两档 | in-progress（通道 4，`mcp4-ux01`；09-20 15:25 重派） |
 | [02](./issues/02-my-work-recent-objects-saved-views.md) | 左导航「我的工作」：最近对象（hash 历史）+ 保存视图（本地筛选态）两页与记录钩子；Watchlists / My Queues 归 owner | ready-for-agent（Blocked by 01） |
-| [03](./issues/03-list-template-monitor-golden.md) | `ListPageTemplate` 对齐 Monitor 黄金母版：面包屑、Filter Bar 完整结构位、密度、单击预览 / 双击开对象、surface 容器 | ready-for-agent |
-| [04](./issues/04-object-workspace-template.md) | `DetailPageTemplate` 对齐对象工作区母版：Object Header + Summary Strip + 稳定命名的 Tabs；委托查阅详情页首用 | ready-for-agent（演示页那一笔 Blocked by 03） |
-| [05](./issues/05-status-badge-layering.md) | 状态 badge 五层分家：`domainStatusTones` 拆生命周期 / SLA / 风险 / 严重度 / 标记，`StatusBadgeFor` 按层取形 | ready-for-agent |
-| [06](./issues/06-loading-skeleton-error-layering.md) | Loading 用 skeleton、错误按页 / 区块 / 动作分层、空态换 ui-primitives 三件 | ready-for-agent |
+| [03](./issues/03-list-template-monitor-golden.md) | `ListPageTemplate` 对齐 Monitor 黄金母版：面包屑、Filter Bar 完整结构位、密度、单击预览 / 双击开对象、surface 容器 | in-progress（通道 3，`mcp3-ux03`；第 1–3 条已成，第 4–6 条 09-20 15:25 续派） |
+| [04](./issues/04-object-workspace-template.md) | `DetailPageTemplate` 对齐对象工作区母版：Object Header + Summary Strip + 稳定命名的 Tabs；委托查阅详情页首用 | in-progress（通道 5，`mcp5-ux04`；第 1–5 条先做，演示页那一笔 Blocked by 03） |
+| [05](./issues/05-status-badge-layering.md) | 状态 badge 五层分家：`domainStatusTones` 拆生命周期 / SLA / 风险 / 严重度 / 标记，`StatusBadgeFor` 按层取形 | resolved · 已进 main `f6f843c8`（通道 1 自接；评审 ← 通道 2 两轴 0 阻断；sla / flag 两形无色与 `TagVariant` 派生留给首批词进表那票） |
+| [06](./issues/06-loading-skeleton-error-layering.md) | Loading 用 skeleton、错误按页 / 区块 / 动作分层、空态换 ui-primitives 三件 | resolved · 已进 main `f6f843c8`（通道 5；评审 ← 通道 6 两轴 0 阻断；`SectionErrorState` / `UnavailableState` 文案写死故自绘 / 不换，票面改口；骨架 `self-start` 等三处小改归模板层收口） |

@@ -2789,3 +2789,47 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - **点名** 12:40（截止 12:44，广播 2–6）→ 4 / 3 应答充足、5 应答**将满**（自报走完 14 五笔，接长票有换线程风险，评审较稳）；12:4x 用户报 **2 / 6 已 crash，在线 1 / 3 / 4 / 5 / 8**——8 不在点名名单里，补单发点名（截止 12:52）。
 - **派单**（12:44）：**03 → 通道 3**（`task-5fa57288`，`mcp3-ux03` 基 `3245faed`，约 120 分）；**01 → 通道 4**（`task-0056f33b`，`mcp4-ux01`，约 90 分）；**5 留评审**；05 / 06 待派（8 若应答给一支，否则等 3 / 4 完工接着做）；02 Blocked by 01、04 演示页 Blocked by 03。派单里写明四处「不碰」（01 ↔ 03/04/05/06 地盘）与「余量将满时先 push 再报做到哪」。
 - **本节五数**（11:5x–12:3x）：CI main 绿/总 **2/2 已完 + 1 在跑**（`e16497de` run 35487229654、`c0b29402` run 35487718075 success；`3164b7d1` run 35489081750 未完）· 集成时延——14b 完工 12:0x → 进 main 12:24 **约 20 分**（等 14a 与评审）；14a 完工 12:1x → 进 main 12:24 **约 12 分**（评审与重放并行，评审到 → 全量 140 s → 推）；中位约 16 分（2 支）· 重放笔数 **6**（14b 一 + 14a 五；不含推送方 N1/N3 笔与本簿记）· 重复开发 0 · 会话重置 0（本会话 10:5x 起一任到底；2–6 全程在线）· 非作者评审缺席 0（通道 6 两轴到后才推）
+
+### 12:4x–13:0x 补记（前任推送方会话 13:0x 消失、未写入；按任务台账 createdAt、git 提交时间、队列回显与会话存档补，不取自报）
+
+- **8 补点名应答 → 05 → 通道 8**（`task-33299a69`，12:47，`mcp8-ux05` 基 `86a96ab7`）；**06 → 通道 5**（`task-d183253b`，12:51，`mcp5-ux06` 基 `86a96ab7`；5 自报「将满」，用户令派）。
+- **8 crash 零提交**（用户 12:5x 报，附其待办截图：六项只走完「读 spec / 票面」一项）→ 推送方拆其空树**自接 05**：`mcp1-ux05` 基 `86a96ab7`，`7daeacb0` 认领 / `5f7c89c6` 五条一笔（`domain/status-layers.ts` 新、`status.tsx` 改、`status.test.ts` 新）/ `fab181fc` 票面 Status resolved（13:01），三笔全推 origin；票面写明「作者 = 推送方，评审需另派」。13:1x 广播组件层实测结论给 3 / 4 / 5（`.test.ts` 不能 require 引了 `@idpxyz/*` 的模块——两包 `exports` 只 `types` + `import`；一次性 esbuild 束做 renderToStaticMarkup 证据）。
+- **05 评审门**：起两只 `/code-review` 子代理（Standards / Spec，后台）——会话随后消失，产出无；`idp-land-ux05` detached `86a96ab7` 重放 05 三笔 → `32ce4652`（patch-id 逐笔同），清点零差、build / vet 0、tsc 0 / run-tests 293 / vite 0，13:2x 占号带 DSN 全量起跑——日志 `%TEMP%\idp-land-ux05-gotest.txt` 13:07 写完 **115 ok / 0 FAIL**，但无 push、无释号、无簿记：全部会话存档在 13:03–13:07 之间同时止（用户侧整体重启），今天又一例「重放做好、簿记之前断」。
+- **06 作者侧**（通道 5）：`8b175662` 认领（12:52）/ `547e1072` 第 1 / `e0d5e642` 第 2 / `e655c020` 第 3 / `5924fed6` 票面 Status resolved（13:05），五笔全推 origin；tsc 0 / run-tests 295 / vite 0；`task-d183253b` 未 report（会话同止）。
+- **03 作者侧**（通道 3）：`b9cd0a24` 认领（12:52）/ `c6b4777d` 第 1 面包屑 / `fb147357` 第 2 Filter Bar 五位 / `e7f17306` 第 3 密度（13:04），四笔全推 origin；第 4 / 5 / 6 与完成记录未做。
+- **01 作者侧**（通道 4）：`mcp4-ux01` 与树 12:44 建后**零提交**，树干净。
+- **会话重置**：13:0x 全部通道同止（1 / 3 / 4 / 5 与 8）；15:07 通道 1 一任读到用户「这个没有做完，请你重新 dispatch」后 15:11 再止（存档 10 行，只量了现场未派单）；15:15 用户重开 1–6。
+
+## 2026-09-20 15:1x 通道 1 新会话（用户先用自带 `ask_question` 验通道，再令「调 idp-mcp-1 的 check_messages 开始监听」；首条消息「这个没有做完，请你重新 dispatch」——「这个」= 通道 8 的 05 待办截图；15:21「你再广播一次」）
+
+### 15:1x–15:2x：量现场 → 答「05 已由通道 1 做完、缺的是评审 + 进 main」→ 点名 → 派五单 → 预叠 05 + 06
+
+- **量**（只读 git / 台账 / 会话存档，不读自报）：`ls-remote` main = `86a96ab7` = 本地 = origin/main；`branch-state.ps1`：在途四支——`mcp1-ux05@fab181fc`（领先 3，= origin）/ `mcp5-ux06@5924fed6`（领先 5，= origin）/ `mcp3-ux03@e7f17306`（领先 4，= origin，基 `3245faed`）/ `mcp4-ux01@3245faed`（领先 0，未推）；五棵树全干净；`idp-land-ux05@32ce4652` 干净。`list_sessions`：2–6 running（15:15 新会话）、8 offline。台账：四张派单 pending（03 / 01 / 05→8 / 06→5），无一 report。
+- **点名** 15:20（截止 15:24，广播 2–6）→ 5 / 3 / 4 应答；用户 15:21「你再广播一次」→ 15:22 重发（截止 15:25）→ 2 15:22、6 15:23 应答。**五应答**皆「空闲 · 地盘无 · 余量充足」。派单第 0 步：`branch-state.ps1` 已量到 03 半成品在 `mcp3-ux03@e7f17306`、01 零提交——派单里各写明「从 … 接着做」/「零提交、reset 到 main tip 另起」。
+- **派单**（15:24–15:25）：**05 评审 → 通道 2**（`task-495e1ca3`，钉 `fab181fc`，20 分至 15:45）；**06 评审 → 通道 6**（`task-d044d351`，钉 `5924fed6`，至 15:45；5 是作者不能评）；**03 续做 → 通道 3**（`task-35767117`，从 `mcp3-ux03@e7f17306` 接第 4–6 条 + 完成记录；原单 `task-5fa57288` 作废）；**01 重派 → 通道 4**（`task-2fa9c998`，`mcp4-ux01` reset 到 `86a96ab7`；原单 `task-0056f33b` 作废）；**04 → 通道 5**（`task-685d0b51`，`mcp5-ux04` 基 `86a96ab7`，第 1–5 条先做、第 6 条演示页等 03 进 main）。三票写明 `templates/types.ts` / `index.ts` 只追加不改既有行（03 / 04 同时追加，撞了推送方并）；组件层实测结论三票照抄不再试。02 Blocked by 01 待下一轮。
+- **预叠**：`idp-land-ux05@32ce4652` 上 cherry-pick 06 五笔零冲突 → tip **`fc3c14be`**（05 `7daeacb0→2e180c13` / `5f7c89c6→3d1b2238` / `fab181fc→32ce4652`；06 `8b175662→45df616a` / `547e1072→d6205c6d` / `e0d5e642→e4335ccc` / `e655c020→fae9e250` / `5924fed6→fc3c14be`），patch-id 逐笔同、两票 15 件对各作者 tip 零 diff、两票文件零重叠；`gofmt -l` 空、build / vet 0、清点重生成零差、tsc 0 / **run-tests 298**（290 + 3 + 5）/ vite 0；dist grep 复现作者所报：`No records yet` / `There is no data available` / `Create First Record` 各 1、其余 0。带 DSN 全量等评审无阻断后在最终 tip 跑一次再推。
+
+### 15:2x–15:4x 同一会话：两份评审到（皆无阻断）→ 推送方两笔代落 → 全量红一格再绿 → `f6f843c8` 进 main → 簿记
+
+- **评审 ← 通道 6（06）**：Standards 15:2x、Spec 15:3x，**0 阻断 / 3 + 3 非阻断**；两条交评审判断项都裁成立（自绘 / 不换 → 票面改口；build grep 三句不可达 → 接受、判据措辞改口）；
+  首用文案逐字在、默认行为不抵。**评审 ← 通道 2（05）**：Standards 15:3x、Spec 15:3x，**0 阻断 / 5 + 3 非阻断**（`tag-mono` / `tag-pill` 不吃 tone 而头注写「色随词」；两句变更说明 / 跨文件状态注释；
+  `TagVariant` 手抄；re-export 零消费者；注释未用符号名；完成判据 ✅ 应标 ◑；sla / flag 两形弱区分且无色）。派后 12–14 分交齐，全文各代落票面。
+- **推送方代落两笔**（在预叠树上）：`ccdeb33e`——05 的 N1 / N2 / N4 / N5（作者即通道 1）：头注如实写两形不着色与出路、删变更说明句、删 re-export 块、注释改引 `badgeStatusByTone`；
+  `git diff -U0` 滤注释行后只剩 re-export 删除，tsc 0 / 298 / vite 0。
+- **全量红一格**：15:33 占号 → `ccdeb33e` 带 DSN 全量 **114 ok / 1 FAIL**——`internal/architecture` `TestEveryAdminWebPathIsOnTheParcelAPIEndpointTable`：06 新建的 `catalogue-view.test.ts` 夹具
+  `endpoint: 'GET /preview'`，门禁扫 `apps/admin-web/src` 下所有 .ts/.tsx（含测试）、`/preview` 不在端点表。**成因在派单**：三张 UX 派单写「不跑 Go」，作者三道门看不见这一格；
+  parallel-sessions「作者跑受影响范围」那条本就要求带 `./internal/architecture/...`。推送方代落 `f6f843c8`（夹具改写端点表实有的 `GET /shipment-request-views`，照同目录既有夹具写法），
+  门禁单测 ok、tsc 0 / 298；15:37:50→15:39:50 再跑全量 **115 ok / 0 FAIL / 16 无测试 / 0 cached**，`cmd/parcel-api` 真库探针 PASS。教训随释号广播补发 3 / 4 / 5：每笔加
+  `go test ./internal/architecture/ -count=1`（不需 DSN）。
+- **push**：`ls-remote` 核 `86a96ab7` 未动 → 15:40 `push f6f843c8:main` 成（`$full` 在 `ls-remote` 之前取、不读 HEAD），**远端 main = `f6f843c8`**；共享树 `merge --ff-only` 同 SHA
+  （树上 tasks.md 未提交与本批 15 件零重叠）→ 释号广播（SHA 对照、门禁教训、06 动了 `templates/index.ts` / `state-slot.tsx` 提醒 03 / 04 可选 rebase）+ 单发通道 5（06 已进 main、
+  夹具代改、树由推送方代拆）。**先 push 再簿记**。
+- **簿记本笔**（纯 .md 自审，在 `f6f843c8` 之上）：票 05 Status 加「已进 main」+ 完成判据 ◑ 改标 + 评审代落 + 处置 + 进 main 记录；票 06 同 + 第 2 / 3 条括注改口 + 完成判据改口；
+  spec 子票表 05 / 06 → resolved · 已进 main、01 / 03 / 04 → in-progress；本节与上两节。
+- **收尾**：分支 `mcp1-ux05` / `mcp5-ux06` → `merged/`、远端删；树 `idp-parcel-mcp1-ux05`（自己的）/ `idp-parcel-mcp5-ux06`（作者会话已换、在做 04）比内容后拆；`idp-land-ux05` 簿记推完拆
+  （先删 `node_modules` 真目录再 `remove`，不加 `--force`）。
+- **前沿**：在途 03（3，第 4–6 条）/ 01（4）/ 04（5，第 1–5 条）；ready 02（Blocked by 01）；04 第 6 条等 03 进 main。2 / 6 空闲留评审。**归用户**：ADR-0139 → Accepted 与否；
+  票 11 `detail` 格 vs ADR-0140 Decision 三；`docs/ux/commercial-party.md` 仍 untracked、无人认领、未动。
+- **本节五数**（15:1x–15:4x）：CI main 绿/总 未量（`f6f843c8` run 刚起）· 集成时延——05 代码齐 13:01（`fab181fc`）→ 进 main 15:40 **约 160 分**（其中 13:0x→15:15 约 130 分是全部会话同止的空档；
+  15:15 起点名 + 评审 + 两笔代落 + 全量两跑约 25 分）；06 完工 13:05 → 15:40 约 155 分（同一空档）；中位约 158 分（2 票）· 重放笔数 **8**（05 三 + 06 五；不含推送方两笔与本簿记）· 重复开发 0 ·
+  会话重置 **2**（13:0x 全通道同止一次、15:07 通道 1 一任 15:11 再止一次；15:15 起本会话一任到底）· 非作者评审缺席 0（两票各有非作者评审、到后才推）
