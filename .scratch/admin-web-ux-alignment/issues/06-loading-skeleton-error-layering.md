@@ -1,7 +1,7 @@
 # 06 Loading 按内容形状出骨架、错误按页 / 区块 / 动作分层、空态换 ui-primitives 三件
 
 Category: enhancement
-Status: in-progress
+Status: resolved
 Blocked by: 无（03 / 04 改 `templates/ListPageTemplate.tsx` / `DetailPageTemplate.tsx`，本票**不碰这两个文件**；形状经 `TemplateViewState` 传进 `StateSlot`）
 地盘：`apps/admin-web/src/templates/state-slot.tsx`、`components/states/index.tsx`（+ 新 test）、`pages/catalogue-view.ts`（+ 既有 test）。**不逐页改 36 张列表页**：
 形状默认值由 `catalogueViewState` 给，页面零改动。
@@ -61,3 +61,54 @@ background refresh 五层，局部隔离、不整页红）、「状态与反馈�
 ### 认领（2026-09-20 12:5x）
 
 通道 5，分支 `mcp5-ux06` 基 main `86a96ab7`；地盘 `templates/state-slot.tsx`、`components/states/`、`pages/catalogue-view.ts`（+ test）、首用 `pages/party/RevisionHistorySection.tsx`。
+
+### 完成记录（通道 5 · 2026-09-20 12:5x–13:2x · 分支 `mcp5-ux06` 基 main `86a96ab7` · tip `e655c020`）
+
+**笔** `8b175662`（认领）→ `547e1072`（1）→ `e0d5e642`（2）→ `e655c020`（3）→ 本票面笔。每笔 push origin；不推 main、不占 55432、不跑 Go。
+未碰 `ListPageTemplate.tsx` / `DetailPageTemplate.tsx` / `Layout` / `App` / `index.css` / `domain/status.tsx`，36 张页零改动。
+
+**要做的逐条**
+
+1. ✅ `TemplateViewState.loading` 加 `shape?: LoadingShape` / `cols?` / `rows?`；`StateSlot` 交 `LoadingSkeleton` 按形状摆——`table` → `SkeletonTable`
+   （它自身是 tbody，套在 `table` 里）、`list` → `SkeletonEventList`、`detail` → 头区一行 + 两块 `SkeletonCard`、`block` / 不传 → 今天的 `LoadingState`。
+   形状 → 件的映射是纯 `templates/loading-shape.ts` 的 `skeletonOf`（理由见第 4 条）。`catalogueViewState` 的 `loading` 默认 `shape: 'table'`，`cols` 不传用
+   骨架件默认。`LoadingShape` 从 `templates` 桶导出。`547e1072`。
+2. ✅ 页级 `ErrorState` 不动。区块级：`components/states/section-error.tsx` 的 `SectionError({ title, description?, onRetry? })`，`role="alert"` 窄区块、危险色
+   左侧色条 + 标题、说明一行、给 `onRetry` 才出「重试」；从 `components/states` 桶导出。**不包 `SectionErrorState`**：其标题「Section failed to load」与按钮
+   「Retry」写死、只开放 `message`，包一层即漏英文缺省句——文案归本仓（spec 红线；与裁决 2 同一条理由），照其形自绘，原语开放文案后可换成包它。
+   首用 `RevisionHistorySection` 的 `noAnswer` / `transport` 两态：字逐字保住——「服务端未形成答案（HTTP n）」/「无法连接主数据读取服务」作标题、
+   `problemNote` / `message` 作说明，原句中间那个「：」变成标题 / 说明两行的结构；重试照旧；与 `catalogueViewState` 的错误口径一致。动作级
+   （`RegistrationPanel` `answered` 态）与后台刷新（`useRegisterList` 保留旧答案）**已对齐**，只在 `components/states/index.tsx` 头注记层次。`e0d5e642`。
+3. ✅ `EmptyState` 形取 `TrulyEmptyState`，标题 / 说明总是传（本仓缺省），`action` 不映 `onCreate`（那颗按钮的字「Create First Record」写死），仍收 ReactNode 摆在
+   卡片下。`ErrorState` **判不换** `UnavailableState`：标题 / 说明 / 按钮全写死英文、只收 `onRetry`，且调用方今天把传输失败与服务端未形成答案都送到这一态只靠
+   `title` 区分，原语没有传这句话的口；形保持今天的。`FilteredEmptyState` 不换（裁决 2）。`e655c020`。
+4. ✅ 新 test 三份：`templates/loading-shape.test.ts`（四形状全覆盖、不传 = block）、`pages/catalogue-view.test.ts`（loading 默认表；**该文件此前不存在**，票面
+   「既有」有误，新建）、`components/states/section-error.test.ts`（`renderToStaticMarkup`：有 `onRetry` 才出一个重试按钮、标题说明逐字在、`role=alert`）。
+
+**组件层断言实测（spec「验收口径」要首个做到的票记，后面的票照抄）**
+
+- `.test.ts` 引 `.tsx`：tsc 按 `tsconfig.test.json` 连带发成 CJS **没问题**；`react` / `react-dom/server` / `lucide-react` 都有 CJS 入口，`renderToStaticMarkup`
+  能跑——`section-error.test.ts` 就是这样钉到的。
+- 引 `@idpxyz/ui-patterns` / `ui-primitives` 的组件**钉不到**：两包 `exports` 只有 `types` + `import` 条件、无 `require` / `default`，CJS 一 `require` 即
+  `ERR_PACKAGE_PATH_NOT_EXPORTED`；Node 22 的 `require(esm)` 过不了 `exports` 这一关。出路二选一，都不在本票：上游包补 `default` 条件（归用户 / idp-ui），或
+  `run-tests.mjs` 改发 ESM（要解决无扩展名 import 的解析）。本票按票面兜底把形状映射抬进纯 `.ts` 钉；`StateSlot` 真渲染出 table / 事件列表这一层**未钉**；
+  `SectionError` 单独成文件正为绕开 `index.tsx` 对 ui-primitives 的引用。
+
+**完成判据**
+
+- 三道门 ✅ 每笔提交信带数字；tip `e655c020`：`tsc -b --noEmit` 0 / `run-tests` **295**（main `86a96ab7` 290 + 5）/ `vite build` 0。既有用例零改动：
+  `git diff 86a96ab7..e655c020 -- '*.test.ts'` 三文件全为新增。
+- 新 test ✅ 映射全覆盖 / 默认 `table` / `SectionError` 重试按钮，见第 4 条。
+- build 产物 grep ⚠️ **判断项**（钉 `e655c020`，`dist/**/*.js` 按原语源码实有的十句查）：`No matching results` / `Permission required` /
+  `Data temporarily unavailable` / `Retry in a moment` / `Section failed to load` / `Loading workspace` / `Clear Filters` 七句 **0**（未引的原语全被 tree-shake 掉；
+  基线 `86a96ab7` 十句皆 0）；`No records yet` / `There is no data available` / `Create First Record` **各 1**——是 `TrulyEmptyState` 函数体内的兜底分支，本仓总传
+  `title` / `description`、从不传 `onCreate`，三句**不可达**。字面判据「产物无英文缺省句」不成立、语义判据「无英文缺省句漏出页面」成立；要连字节都不进产物只能
+  不引原语、照形自绘 `EmptyState`——那样第 3 条就一件不换了，交评审裁。
+- 浏览器验收**未验**（本机无 AuthGate 会话路径）。
+
+**判断项 / 交评审**
+
+- 三件原语里两件（`SectionErrorState` / `UnavailableState`）文案写死不可盖，票面「文案由调用方给」「传本仓文案盖住」对它们做不到；本票按红线自绘 / 不换。
+  若评审判「形态优先、英文可接受」，把 `SectionError` 改成包 `SectionErrorState`、`ErrorState` 包 `UnavailableState` 各是一笔小改。
+- `EmptyState` 换成 `TrulyEmptyState` 后是带边框与 `bg-idpxyz-editor` 的卡片，`ErrorState` / `UnconfiguredState` 仍是居中文字块——三态形不再同一族；要齐要么
+  后两者也照 `StateShell` 的形自绘，要么等原语开放文案。归后续票。
