@@ -1,7 +1,7 @@
 # 05 状态 badge 五层分家：`domainStatusTones` 加「层」轴，`StatusBadgeFor` 按层取形，词一个不改
 
 Category: enhancement
-Status: in-progress
+Status: resolved
 Blocked by: 无
 地盘：`apps/admin-web/src/domain/status.tsx`（+ 新 `domain/status.test.ts`）；用 `StatusBadgeFor` 的页面**只在渲染形状随层自动变时被动受影响，不逐页改**
 （`shipment-request/*`、`visibility/ExceptionCasesPage`、`operations/TransportFulfillmentReviewPage`、`party/detail-primitives` 等，按 `git grep StatusBadgeFor` 为准）。
@@ -56,3 +56,40 @@ Blocked by: 无
 
 通道 8 认领后 crash、树上零提交（用户 12:5x 报）；推送方通道 1 拆其空树后自接，分支 `mcp1-ux05` 基 main `86a96ab7`，地盘 `domain/`。作者 = 推送方 = 本会话，
 评审需另派。
+
+### 完成记录（通道 1 · 2026-09-20 12:5x–13:1x · 分支 `mcp1-ux05` 基 main `86a96ab7` · 码 tip `5f7c89c6`）
+
+**笔** `7daeacb0`（认领）→ `5f7c89c6`（全部五条一笔：层表 + 渲染件 + 测试，三样拆不开——层表没有渲染件是死数据，渲染件没有测试没法交）→ 本票面笔。
+
+**要做的逐条**
+
+1. ✅ 层轴在新纯模块 `domain/status-layers.ts`（只 `import type`，不引原语）：`statusLayers` 五层按黄金标准顺序、`StatusLayer`；`domainStatusLayers`
+   `as const satisfies Record<DomainStatus, StatusLayer>`——词表多一词或少一词这里都编不过。五十个词全部 `lifecycle`，分组注释沿 `domainStatusTones` 的分组；
+   其余四层零词。
+2. ✅ `LayeredStatusBadge({ layer, tone, children })`：按 `statusLayerShapes[layer]` 取形——`badge`（lifecycle，今天的 `StatusBadge`，`icon` / `hideIcon` 照传）/
+   `tag-mono`（sla：`Tag` outline + 等宽）/ `tag-square`（risk：`Tag` 实底、`tagVariantByTone` 取色、方角）/ `badge-plain`（severity：`StatusBadge` 无图标 + 字重加档）/
+   `tag-pill`（flag：`Tag` outline 药丸）。`StatusBadgeFor` 改为查 `domainStatusLayers` 与 `domainStatusTones` 后调它，对外签名不变。
+3. ✅ `badgeStatusByTone` 与 `StatusTone` 五档原样；`domainStatusTones` 键集零改动——`git diff -U0 86a96ab7 5f7c89c6 -- apps/admin-web/src/domain/status.tsx |
+   grep "^[-+]  '"` 为空。
+4. ◑ 演示：**不建演示文件**。测试链引不到组件（见完成判据第一条），建了没人渲染就是死码；四个空层的渲染路径由 `Record<StatusLayer, StatusShape>` 完备性
+   （tsc）守，五形各异由下面那次一次性 esbuild 束实测。
+5. ✅ `party/detail-primitives.tsx` 的 `statusBadge(table, code)` 未改，tsc 过、行为同（它只经 `StatusBadgeFor`）。
+
+**完成判据逐条**
+
+- 三道门 ✅ `tsc -b --noEmit` 0 / `run-tests` **293**（main 290 + 3）/ `vite build` 0；既有用例零改动（`git diff 86a96ab7 5f7c89c6 -- '*.test.ts'` 只有新文件）。
+- `domain/status.test.ts` ✅ 三条：词归五层之一且五层各有一形、形各不同；今天词表里的词全在 lifecycle（别的层进词时这条会红，逼改的人回答「凭什么不是所在
+  对象的状态」）；色调 → Tag 变体五档齐全。**组件层未钉**：spec「验收口径」的前提**实测不成**——`@idpxyz/ui-patterns` / `ui-primitives` 的 `package.json`
+  `exports["."]` 只有 `types` + `import`，测试链按 CommonJS 发射后 `require` 报 `ERR_PACKAGE_PATH_NOT_EXPORTED`（Node 22.22 的 require(esm) 也救不了：
+  没有 `require` / `default` 条件就无路径可解）。**后面的票照抄这条结论**：`.test.ts` 不能引任何 `import` 了 `@idpxyz/*` 的模块；要钉的逻辑抬进纯 `.ts`。
+- lifecycle 输出逐字节同 ✅ 用一次性 esbuild 束（`node_modules/.pnpm/esbuild@*/…/bin/esbuild --bundle --platform=node --format=cjs --jsx=automatic`，源与产物不入库）
+  把 `86a96ab7` 版 `StatusBadgeFor` 与新版并排渲染五十个词（带 `className`），`renderToStaticMarkup` **50 同 / 0 异**；五层合成词 `SYN-*` 五形标记各异。
+  这条路子能给 03 / 04 / 06 用来做「模板默认渲染不变」的证据，写在这里省他们再找。
+- 浏览器验收未验（本机无 gk.idp.xyz 会话）。
+
+**判断项**
+
+- 形的具体选择（等宽 / 方角 / 药丸 / 字重）是没有词时的设计系统层预设，第一批 sla / severity 词进表时可以改——改形只动 `statusLayerShapes` 与
+  `LayeredStatusBadge` 的一个分支，不动词表、不动页面。
+- `Tag` 的 `twMerge` 会让 `rounded-sm` 顶掉自带的 `rounded-full`（risk 形靠它成方角）——这是 ui-primitives 的既有行为，本票只是用到；若上游改掉，risk 形退成圆角，
+  由「五形各不同」那一把束实测发现，不由 node:test 发现（见组件层未钉）。
