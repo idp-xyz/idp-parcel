@@ -1,4 +1,18 @@
+import type { HTMLAttributes, ReactNode } from 'react';
 import { StatusBadge, type StatusBadgeProps } from '@idpxyz/ui-patterns';
+import { Tag } from '@idpxyz/ui-primitives';
+import { domainStatusLayers, statusLayerShapes, tagVariantByTone, type StatusLayer } from './status-layers';
+
+export {
+  domainStatusLayers,
+  statusLayers,
+  statusLayerShapes,
+  statusShapes,
+  tagVariantByTone,
+  type StatusLayer,
+  type StatusShape,
+  type TagVariant,
+} from './status-layers';
 
 // 租户管理台的领域状态词表：状态词 → 呈现色调的唯一映射。
 //
@@ -140,16 +154,70 @@ const badgeStatusByTone: Record<StatusTone, NonNullable<StatusBadgeProps['status
   positive: 'success',
 };
 
+export interface LayeredStatusBadgeProps extends Omit<StatusBadgeProps, 'status' | 'children'> {
+  /** 哪一层（票 admin-web-ux-alignment/05）：决定形；词表词由 StatusBadgeFor 按 domainStatusLayers 查，非词表的合成演示才直接给。 */
+  layer: StatusLayer;
+  /** 色调：决定色；词表词由 StatusBadgeFor 按 domainStatusTones 查。 */
+  tone: StatusTone;
+  children: ReactNode;
+}
+
+/**
+ * 形随层、色随词的渲染件——层 → 形在 status-layers.ts 的 statusLayerShapes 一处定义，这里只按形取组件。
+ * lifecycle 一层仍是今天的 StatusBadge，输出与加层轴之前逐字节同；其余四层今天词表里没有词，形先定下（黄金标准要五层在设计系统层
+ * 预先分开），词进表那天不必再动渲染。`icon` / `hideIcon` 只有 StatusBadge 认，其它形只收 className 与 HTML 属性。
+ */
+export function LayeredStatusBadge({ layer, tone, children, icon, hideIcon, className, ...rest }: LayeredStatusBadgeProps) {
+  const htmlProps = rest as HTMLAttributes<HTMLSpanElement>;
+  switch (statusLayerShapes[layer]) {
+    case 'badge':
+      return (
+        <StatusBadge status={badgeStatusByTone[tone]} icon={icon} hideIcon={hideIcon} className={className} {...htmlProps}>
+          {children}
+        </StatusBadge>
+      );
+    case 'badge-plain':
+      return (
+        <StatusBadge status={badgeStatusByTone[tone]} hideIcon className={joinClasses('font-semibold', className)} {...htmlProps}>
+          {children}
+        </StatusBadge>
+      );
+    case 'tag-mono':
+      return (
+        <Tag variant="outline" size="sm" className={joinClasses('font-mono', className)} {...htmlProps}>
+          {children}
+        </Tag>
+      );
+    case 'tag-square':
+      return (
+        <Tag variant={tagVariantByTone[tone]} size="sm" className={joinClasses('rounded-sm', className)} {...htmlProps}>
+          {children}
+        </Tag>
+      );
+    case 'tag-pill':
+      return (
+        <Tag variant="outline" size="sm" className={joinClasses('rounded-full', className)} {...htmlProps}>
+          {children}
+        </Tag>
+      );
+  }
+}
+
+function joinClasses(...parts: (string | undefined)[]): string | undefined {
+  const joined = parts.filter(Boolean).join(' ');
+  return joined === '' ? undefined : joined;
+}
+
 export interface StatusBadgeForProps extends Omit<StatusBadgeProps, 'status' | 'children'> {
   /** 要呈现的状态词。徽章文案就是词本身，不接受另写文案——另写等于自造译法。 */
   status: DomainStatus;
 }
 
-/** 按词表色调渲染一个状态词徽章。 */
+/** 按词表查层与色调渲染一个状态词徽章：层定形、词定色。 */
 export function StatusBadgeFor({ status, ...rest }: StatusBadgeForProps) {
   return (
-    <StatusBadge status={badgeStatusByTone[domainStatusTones[status]]} {...rest}>
+    <LayeredStatusBadge layer={domainStatusLayers[status]} tone={domainStatusTones[status]} {...rest}>
       {status}
-    </StatusBadge>
+    </LayeredStatusBadge>
   );
 }
