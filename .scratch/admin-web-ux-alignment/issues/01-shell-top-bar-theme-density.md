@@ -1,7 +1,7 @@
 # 01 壳层：Top Bar 四件（归属信息 / 全局搜索位 / 作用域位 / 用户菜单位）、Light 默认 + 主题切换、密度两档
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——2026-09-20 15:57 通道 4 认领（task-2fa9c998；分支 `mcp4-ux01` 基 main `7d29af39`；09-20 15:25 重派，前任 12:44 建树后零提交）。此前 ready-for-agent
 Blocked by: 无
 地盘：`apps/admin-web/src/App.tsx`、`Layout.tsx`、`index.css`、新 `apps/admin-web/src/shell/`（TopBar 及其子件）。不动 `navigation.ts`（票 02 的地盘）、不动 `pages/`。
 出处：spec「缺口」表第一档；手册「顶栏规范」「Top Bar 归属信息规范」「主题策略」「栅格与密度」；黄金标准「Top Bar 黄金标准」「Light Theme 黄金标准」；
