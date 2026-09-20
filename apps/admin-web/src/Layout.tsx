@@ -8,6 +8,7 @@ import { UnwiredModule } from './pages/UnwiredModule';
 import { TopBar } from './shell/TopBar';
 import { useSessionPrincipal } from './shell/session';
 import { logout } from './auth/oidc';
+import { recentObjectFromHash, recentObjectTitle, recordRecentObject } from './pages/my-work/recent-objects';
 
 // 传统控制台外壳：顶栏 + 左侧导航 + 单页区，参考 idp-ui
 // apps/loms-web 的 console/Layout；不引入标签页与底部/右侧面板，
@@ -18,24 +19,48 @@ import { logout } from './auth/oidc';
 // 导航条目先于页面出现时，缺的是页面不是路由。工作台是外壳首页，
 // 不入登记，由这里直接渲染并注入跳转能力。
 //
-// 导航位置的唯一权威是地址栏 hash（#/<模块id>[/<页内子路径>]）：刷新回到原页、
+// 导航位置的唯一权威是地址栏 hash（#/<模块id>[/<页内子路径>][?<查询串>]）：刷新回到原页、
 // 浏览器前进后退可用、模块页可收藏转发。外壳只认第一段并校验其在导航词表内；
-// 后段归各页面自取（如委托查阅用第二段承载详情钻取），外壳不代管页内状态。
+// 后段归各页面自取（如委托查阅用第二段承载详情钻取），查询串也归页面（保存视图跳转的 `?view=`
+// 由模块页的保存视图位读，外壳剥掉不认），外壳不代管页内状态。
 // 点击导航写 hash，状态经 hashchange 事件回流——单一来源，不双写。
+// 外壳代管的唯一一件「页内」事是记最近对象：落到带第二段的对象地址就记一条本机历史
+// （pages/my-work/recent-objects.ts）——记的是地址不是状态，且只有外壳站在每次 hash 变化的必经之路上。
 
 function moduleIdFromHash(): string {
-  const first = window.location.hash.replace(/^#\/?/, '').split('/')[0];
+  // 先剥查询串再取段：`?view=` 挂在第一段上，不剥的话 `#/<moduleId>?view=<id>` 会被当成一个未知 id 落回工作台。
+  const first = window.location.hash.replace(/^#\/?/, '').split('?')[0].split('/')[0];
   if (!first) return 'workbench';
   const id = decodeURIComponent(first);
   // 未知 id（手改地址、旧链接）落回工作台，不给 UnwiredModule 一个查无出处的 id。
   return pageTitleById[id] !== undefined ? id : 'workbench';
 }
 
+// 模块 id 必须在导航词表内才记：未知 id 的地址上面已落回工作台，历史里若留下它，就成了一条查无出处的模块。
+// 标题只从模块名与对象标识拼，不发请求取名——对象名称属业务数据，列表页打开时自己知道、进详情页再显。
+function recordRecentObjectFromHash(): void {
+  const hit = recentObjectFromHash(window.location.hash);
+  if (!hit) return;
+  const moduleTitle = pageTitleById[hit.moduleId];
+  if (moduleTitle === undefined) return;
+  recordRecentObject(window.localStorage, {
+    moduleId: hit.moduleId,
+    objectId: hit.objectId,
+    title: recentObjectTitle(moduleTitle, hit.moduleId, hit.objectId),
+    at: new Date().toISOString(),
+  });
+}
+
 export function Layout() {
   const [active, setActiveState] = useState<string>(moduleIdFromHash);
 
   useEffect(() => {
-    const onHashChange = () => setActiveState(moduleIdFromHash());
+    // 首帧也记一次：刷新回到详情页、从收藏直接打开，都是「打开过」；同一对象去重置顶，重复记不会多出一条。
+    recordRecentObjectFromHash();
+    const onHashChange = () => {
+      setActiveState(moduleIdFromHash());
+      recordRecentObjectFromHash();
+    };
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);

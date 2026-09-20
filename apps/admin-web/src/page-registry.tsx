@@ -108,7 +108,10 @@ export const pageById: Record<string, ComponentType> = {
 };
 
 /**
- * 已接线模块：页面对 parcel-api 真实端点发请求（不含演示）。
+ * 已接线模块：页面已接到真实数据来源，数据区不再是未配置态或合成 S（不含演示）。
+ * 来源有两种：业务模块页对 parcel-api 真实端点发请求；「我的工作」两页（recent-objects / saved-views）
+ * 读的是本机浏览器的 localStorage——打开过的对象地址、存下的筛选态都是本机事实，页面已接到它唯一的真实来源，
+ * 不计入已接线就会被判成骨架，而它们没有「未配置」可呈现。
  * 这是接线事实的登记处：某页从骨架转接线时在此登记，工作台总览随之变档，
  * 不在页面里另写第二份状态。
  */
@@ -153,6 +156,9 @@ export const liveIds: ReadonlySet<string> = new Set([
   'authorized-disposition',
   'label-transactions',
   'channel-selection-decisions',
+  // 「我的工作」：来源是本机 localStorage 而非 parcel-api，理由见上方头注。
+  'recent-objects',
+  'saved-views',
 ]);
 
 /**
