@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { ConfirmDialog } from '@idpxyz/ui-primitives';
+import { pendingText } from '../../components/action-feedback';
 import {
   withdrawShipmentRequest,
   type ApiResult,
@@ -61,22 +63,41 @@ function buildDraft(form: WithdrawalFormState): WithdrawalDraft {
   };
 }
 
+// 确认弹层的正文（票 admin-web-workspace-form/05 第 3 条，蓝图 21.2）：写明撤的是哪份委托、影响什么、以谁的名义,
+// 不写「确定吗」。边界句取 UC-PS-005 的口径：撤回终止整份尚未决定的委托,不删除原始提交与判断历史。
+function withdrawalConfirmText(form: WithdrawalFormState): string {
+  const draft = buildDraft(form);
+  const version = draft.submissionVersionId ? `,提交版本 ${draft.submissionVersionId}` : '';
+  return (
+    `将撤回委托 ${draft.shipmentRequestId}(来源请求 ${draft.originalRequestKey}${version})整份:` +
+    `它不再等待接受或拒绝决定;原始提交与判断历史不删除,撤回本身记录在案。` +
+    `以请求方 ${draft.requesterReference} 的名义,原因 ${draft.reasonReference}。`
+  );
+}
+
 export function WithdrawShipmentRequestPage() {
   const [form, setForm] = useState<WithdrawalFormState>(emptyForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [result, setResult] = useState<ApiResult<WithdrawalResponseBody> | null>(null);
 
   const setField = (field: keyof WithdrawalFormState) => (value: string) =>
     setForm((current) => ({ ...current, [field]: value }));
 
-  async function handleWithdraw() {
+  // 先校验再开确认:确认层问的是「要不要撤」,不是「填全了没」——两问挤在一层,没填全会被读成撤回被拒。
+  function requestWithdraw() {
     const found = validate(form);
     setErrors(found);
     if (Object.keys(found).length > 0) {
       setResult(null);
       return;
     }
+    setConfirming(true);
+  }
+
+  async function handleWithdraw() {
+    setConfirming(false);
     setPending(true);
     try {
       setResult(await withdrawShipmentRequest(buildDraft(form)));
@@ -170,10 +191,10 @@ export function WithdrawShipmentRequestPage() {
           <button
             type="button"
             disabled={pending}
-            onClick={handleWithdraw}
+            onClick={requestWithdraw}
             className="rounded border border-idpxyz-accent px-4 py-2 text-[13px] font-bold text-idpxyz-accent hover:bg-idpxyz-hover disabled:opacity-50"
           >
-            确认撤回整份委托
+            {pending ? pendingText('撤回') : '撤回整份委托'}
           </button>
           {Object.keys(errors).length > 0 ? (
             <span className="text-[12px] text-idpxyz-textBright">
@@ -188,6 +209,18 @@ export function WithdrawShipmentRequestPage() {
           renderOutcome={(body, status) => (
             <WithdrawalOutcomeCard body={body} status={status} />
           )}
+        />
+
+        {/* 撤回是高风险动作(终止整份委托),按下之后再拦一道;确认即发请求,进行中与结果仍由上面的按钮与 ResultPanel 呈现。 */}
+        <ConfirmDialog
+          open={confirming}
+          tone="danger"
+          title="撤回整份委托"
+          message={withdrawalConfirmText(form)}
+          confirmLabel="撤回整份委托"
+          cancelLabel="不撤回"
+          onConfirm={handleWithdraw}
+          onCancel={() => setConfirming(false)}
         />
       </div>
     </div>

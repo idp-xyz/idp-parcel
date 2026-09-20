@@ -1,4 +1,6 @@
 import { useState } from 'react';
+import { ConfirmDialog } from '@idpxyz/ui-primitives';
+import { pendingText } from '../../components/action-feedback';
 import {
   cancelParcel,
   type ApiResult,
@@ -90,22 +92,40 @@ function buildDraft(form: CancellationFormState, parcelId: string): Cancellation
   };
 }
 
+// 确认弹层的正文（票 admin-web-workspace-form/05 第 3 条，蓝图 21.2）：逐件列出要取消的包裹标识、影响什么、以谁的名义,
+// 不写「确定吗」。边界句取 UC-PS-006 的口径：逐件裁决允许部分成功;越过取消边界的不回退为「已取消」,转收寄后服务处置。
+function cancellationConfirmText(form: CancellationFormState): string {
+  const parcels = parcelIdsOf(form);
+  return (
+    `将对委托 ${form.shipmentRequestId.trim()}(来源请求 ${form.originalRequestKey.trim()})中的 ${parcels.length} 件包裹逐件请求取消:` +
+    `${parcels.join('、')}。每件独立裁决,允许部分成功;已越过取消边界的包裹不回退为「已取消」,转收寄后服务处置。` +
+    `以请求方 ${form.requesterReference.trim()} 的名义,原因 ${form.reasonReference.trim()}。`
+  );
+}
+
 export function CancelParcelPage() {
   const [form, setForm] = useState<CancellationFormState>(emptyForm);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [pending, setPending] = useState(false);
+  const [confirming, setConfirming] = useState(false);
   const [entries, setEntries] = useState<ParcelCancellationEntry[] | null>(null);
 
   const setField = (field: keyof CancellationFormState) => (value: string) =>
     setForm((current) => ({ ...current, [field]: value }));
 
-  async function handleCancel() {
+  // 先校验再开确认:确认层问的是「要不要取消这几件」,不是「填全了没」——两问挤在一层,没填全会被读成取消被拒。
+  function requestCancel() {
     const found = validate(form);
     setErrors(found);
     if (Object.keys(found).length > 0) {
       setEntries(null);
       return;
     }
+    setConfirming(true);
+  }
+
+  async function handleCancel() {
+    setConfirming(false);
     const parcels = parcelIdsOf(form);
     setPending(true);
     setEntries([]);
@@ -232,10 +252,10 @@ export function CancelParcelPage() {
           <button
             type="button"
             disabled={pending}
-            onClick={handleCancel}
+            onClick={requestCancel}
             className="rounded border border-idpxyz-accent px-4 py-2 text-[13px] font-bold text-idpxyz-accent hover:bg-idpxyz-hover disabled:opacity-50"
           >
-            逐件请求取消列出的包裹
+            {pending ? pendingText('取消') : '逐件请求取消列出的包裹'}
           </button>
           {Object.keys(errors).length > 0 ? (
             <span className="text-[12px] text-idpxyz-textBright">
@@ -267,6 +287,18 @@ export function CancelParcelPage() {
             ) : null}
           </div>
         ) : null}
+
+        {/* 取消包裹是高风险动作,按下之后再拦一道;确认即逐件发请求,进行中与逐件结果仍由上面的按钮与逐件卡呈现。 */}
+        <ConfirmDialog
+          open={confirming}
+          tone="danger"
+          title="逐件请求取消列出的包裹"
+          message={cancellationConfirmText(form)}
+          confirmLabel="逐件请求取消"
+          cancelLabel="不取消"
+          onConfirm={handleCancel}
+          onCancel={() => setConfirming(false)}
+        />
       </div>
     </div>
   );

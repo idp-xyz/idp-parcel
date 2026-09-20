@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { pendingText } from '../../components/action-feedback';
 import {
   submitShipmentRequest,
   type ApiResult,
@@ -349,7 +350,7 @@ export function SubmitShipmentRequestPage() {
             onClick={handleSubmit}
             className="rounded border border-idpxyz-accent px-4 py-2 text-[13px] font-bold text-idpxyz-accent hover:bg-idpxyz-hover disabled:opacity-50"
           >
-            确认提交服务请求
+            {pending ? pendingText('提交') : '确认提交服务请求'}
           </button>
           {errorCount > 0 ? (
             <span className="text-[12px] text-idpxyz-textBright">
