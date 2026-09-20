@@ -6,11 +6,14 @@ import { pageById } from './page-registry';
 import { Workbench } from './pages/Workbench';
 import { UnwiredModule } from './pages/UnwiredModule';
 import { TopBar } from './shell/TopBar';
+import { useSessionPrincipal } from './shell/session';
+import { logout } from './auth/oidc';
 
 // 传统控制台外壳：顶栏 + 左侧导航 + 单页区，参考 idp-ui
 // apps/loms-web 的 console/Layout；不引入标签页与底部/右侧面板，
 // 等首个真实页面出现后再按实际交互决定是否升级形态。
-// 顶栏是 shell/TopBar 自己的件（手册「顶栏规范」的全局位），这里只喂它当前页名。
+// 顶栏是 shell/TopBar 自己的件（手册「顶栏规范」的全局位），这里只喂它当前页名、会话主体名与登出动作；
+// 登出仍是 auth/oidc.ts 那一个，外壳不另起一套会话处置。
 // 页面映射在 page-registry：没登记的 id 落 UnwiredModule 诚实占位——
 // 导航条目先于页面出现时，缺的是页面不是路由。工作台是外壳首页，
 // 不入登记，由这里直接渲染并注入跳转能力。
@@ -47,6 +50,7 @@ export function Layout() {
     maxSize: 500,
   });
   const { density } = useDensity();
+  const principal = useSessionPrincipal();
 
   const renderActive = () => {
     if (active === 'workbench') return <Workbench onNavigate={setActive} />;
@@ -56,7 +60,7 @@ export function Layout() {
 
   return (
     <div className="h-screen w-screen flex flex-col bg-idpxyz-bg text-idpxyz-text overflow-hidden">
-      <TopBar moduleTitle={pageTitleById[active] || active} />
+      <TopBar moduleTitle={pageTitleById[active] || active} principal={principal} onSignOut={logout} />
 
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
