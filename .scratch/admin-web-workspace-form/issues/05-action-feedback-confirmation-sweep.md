@@ -1,7 +1,7 @@
 # 05 写动作反馈与高风险确认一致性：先审计全部写面调用点成对照表，再补 `useToast` / `ConfirmDialog` / 进行中态
 
 Category: enhancement
-Status: in-progress
+Status: resolved——码三笔 tip `fef2958c`（分支 `mcp5-wsform05`，基 `11e6111a`；通道 5 20:26 推完最后一笔后会话未再响应，完成记录由推送方按 git 与票面对照表代落，见下）；进 main 记录见 Comments。此前 in-progress
 认领：通道 5 · 2026-09-20 20:1x · 分支 `mcp5-wsform05` · 基 `origin/main` `11e6111a` · worktree `D:\tops\idp-parcel-mcp5-wsform05`
 Blocked by: 无
 地盘：审计段只读全仓 `apps/admin-web/src/pages/**`；改动段落 `apps/admin-web/src/components/`（新 `components/action-feedback.ts` 纯逻辑 + 可能的 `components/ActionButton.tsx`）与
@@ -71,12 +71,12 @@ spec 把它当 toast 基线是误读，但它仍是「反馈完整」的基线�
 | 1 | `visibility/TrackingJudgmentRulesPage` · `registerVisibilityCatalogue(candidate, snapshot)` | R 行内 | R 行内 | R 禁用+文案 | 否 | 不需要 | — |
 | 2 | `visibility/DisclosurePoliciesPage` · `registerVisibilityCatalogue(candidate, snapshot)` | R 行内 | R 行内 | R 禁用+文案 | 否 | 不需要 | — |
 | 3 | `visibility/ClaimPrerequisitesPage` · `registerVisibilityCatalogue(candidate, snapshot)` | R 行内 | R 行内 | R 禁用+文案 | 否 | 不需要 | — |
-| 4 | `shipment-request/WithdrawShipmentRequestPage` · `withdrawShipmentRequest(buildDraft(form))` | S 行内 `WithdrawalOutcomeCard` | S 行内 | ◑ 禁用，文案不换（S 另显等待块） | **是**（撤回终止整份委托） | **无** | 补 `ConfirmDialog` + 进行中文案 |
-| 5 | `shipment-request/SubmitShipmentRequestPage` · `submitShipmentRequest(buildDraft(head, parcels))` | S 行内 `SubmitOutcomeCard` | S 行内 | ◑ 禁用，文案不换 | 否 | 不需要 | 补进行中文案 |
-| 6 | `shipment-request/CancelParcelPage` · `cancelParcel(buildDraft(form, parcelId))`（逐件） | S 行内逐件 `CancellationOutcomeCard` | S 行内逐件 | ◑ 禁用，文案不换（另显「正在逐件请求」） | **是**（取消包裹） | **无** | 补 `ConfirmDialog` + 进行中文案 |
-| 7 | `shipment-request/AuthorizedDispositionPage` · `disposeShipmentRequest({…choice…})` | 行内 `commandNote`（`dispositionCommandNoteOf`） | 行内 `commandNote` | T 禁用+文案 | **是**（`REJECT`「拒绝」；`CUSTOMER_SUPPLEMENT` 否） | **无**（理由必填，非确认） | `REJECT` 补 `ConfirmDialog` |
+| 4 | `shipment-request/WithdrawShipmentRequestPage` · `withdrawShipmentRequest(buildDraft(form))` | S 行内 `WithdrawalOutcomeCard` | S 行内 | ◑ 禁用，文案不换（S 另显等待块） | **是**（撤回终止整份委托） | **无** | 补 `ConfirmDialog` + 进行中文案——已补 `caed9588` |
+| 5 | `shipment-request/SubmitShipmentRequestPage` · `submitShipmentRequest(buildDraft(head, parcels))` | S 行内 `SubmitOutcomeCard` | S 行内 | ◑ 禁用，文案不换 | 否 | 不需要 | 补进行中文案——已补 `caed9588` |
+| 6 | `shipment-request/CancelParcelPage` · `cancelParcel(buildDraft(form, parcelId))`（逐件） | S 行内逐件 `CancellationOutcomeCard` | S 行内逐件 | ◑ 禁用，文案不换（另显「正在逐件请求」） | **是**（取消包裹） | **无** | 补 `ConfirmDialog` + 进行中文案——已补 `caed9588` |
+| 7 | `shipment-request/AuthorizedDispositionPage` · `disposeShipmentRequest({…choice…})` | 行内 `commandNote`（`dispositionCommandNoteOf`） | 行内 `commandNote` | T 禁用+文案 | **是**（`REJECT`「拒绝」；`CUSTOMER_SUPPLEMENT` 否） | **无**（理由必填，非确认） | `REJECT` 补 `ConfirmDialog`——已补 `fef2958c` |
 | 8 | `shipment-request/AcceptanceReviewPage` · `completeManualReview({ shipmentRequestId, reason })` | 行内 `commandNote`（`commandNoteOf`） | 行内 `commandNote` | T 禁用+文案 | 否（只落留痕，决定由下一轮形成） | 不需要 | — |
-| 9 | `shipment-request/AcceptanceReviewPage` · `rejectShipmentRequest({ shipmentRequestId, reason })` | 行内 `commandNote` | 行内 `commandNote` | T 禁用+文案 | **是**（「主动拒绝委托」） | **无**（理由必填，非确认） | 补 `ConfirmDialog` |
+| 9 | `shipment-request/AcceptanceReviewPage` · `rejectShipmentRequest({ shipmentRequestId, reason })` | 行内 `commandNote` | 行内 `commandNote` | T 禁用+文案 | **是**（「主动拒绝委托」） | **无**（理由必填，非确认） | 补 `ConfirmDialog`——已补 `fef2958c` |
 | 10 | `settlement/SettlementApplicationPage` · `registerExternalFundsFact(kind, snapshot)` | R 行内 | R 行内 | R 禁用+文案 | 否 | 不需要 | — |
 | 11 | `pricing/SeriesReviewPanel` · `reviewReferenceSeries({…decision, basis})` | 行内 `ReviewAnswerNote` | 行内（`callerProblem` 不显 `detail`） | 禁用+「提交中…」 | 否（复核是版本之旁的独立事实；`RETURNED` 可再登记） | 不需要 | — |
 | 12 | `pricing/SeriesRegistrationForm` · `previewReferenceSeries(payload)` | 行内 `PreviewNote`（不写库） | 行内（`callerProblem` 不显 `detail`） | 禁用+「预览中…」 | 否 | 不需要 | — |
@@ -105,4 +105,55 @@ spec 把它当 toast 基线是误读，但它仍是「反馈完整」的基线�
 `RegistrationAnswerNote` 已经渲它（票 admin-web-group-legal-entities/11），这几处面板各有自己的 `AnswerNote` 没跟上。它属「失败反馈有、少半句」，不是「无反馈」，
 不在本票三类处置里；`feedbackFor` 的失败文案正是 `detail` 优先，后续谁把这几处换成消费 `feedbackFor` 就顺手补齐了。
 
+## 完成记录（推送方代落，2026-09-20 20:5x；作者通道 5，码 tip `fef2958c`，基 `11e6111a`）
+
+作者五笔推完（末笔 20:26）后会话未再响应、票面未写完成记录；下表按 `git diff 11e6111a..fef2958c` 与上面的对照表「处置」列代落，不取记忆。
+
+| 笔 | 条 | 落点 |
+|---|---|---|
+| `ef39faf7` | 认领 | Status → in-progress |
+| `9f136811` | 第 1 条 | 审计对照表 32 行五格（量法、四格判据、共享路径 R / F / T / S、先说结论），实测于 `11e6111a` |
+| `fdb64b91` | 第 2 条 | 新 `components/action-feedback.ts`：`pendingText(verb)` = 「<动词>中…」；`feedbackFor(result, verb)` 把 `ApiResult`（取 `pages/catalogue-api` 那份，与 `RegistrationPanel` 同一处）映到三态——`null` → pending、`outcome` → answered「已<动词>」（头注写明它只说「已送达并得到答复」，负向答案照样是 answered，业务答案归页面词表）、`callerProblem` → failed（`detail` 原文，空白 detail 视同缺席退 `code（HTTP status）`）、`noAnswer` → failed（`code（HTTP status）`）、`transport` → failed（`message` 原文，空退「请求未到达 parcel-api」）、`unconfigured` → failed（403 那一句）。`action-feedback.test.ts` node:test 7 条 |
+| `caed9588` | 第 3 条 · 对照表第 4 / 5 / 6 行 | `WithdrawShipmentRequestPage`：`requestWithdraw` 先校验再开 `ConfirmDialog`（tone danger；`withdrawalConfirmText` 写明委托 / 来源请求 / 提交版本、影响（不再等待决定；原始提交与判断历史不删）、以谁的名义、原因，边界句取 UC-PS-005），确认才 `handleWithdraw`；按钮在途 `pendingText('撤回')`，静态文案「确认撤回整份委托」→「撤回整份委托」（确认已挪进弹层）。`SubmitShipmentRequestPage`：按钮在途 `pendingText('提交')`。`CancelParcelPage`：`requestCancel` 校验 → `ConfirmDialog`（`cancellationConfirmText` 逐件列包裹标识，边界句取 UC-PS-006：逐件裁决允许部分成功、越过取消边界的不回退），确认才 `handleCancel`；在途 `pendingText('取消')` |
+| `fef2958c` | 第 3 条 · 对照表第 7 / 9 行 | `AcceptanceReviewPage`：`onDecide` 拦 `reject` → `PendingRejection`（模板交出理由时已 `setReason('')`，故连理由一起攥住）→ `ConfirmDialog`「主动拒绝委托」（`rejectionConfirmText` 引 ADR-0086：当场形成决定、不交下一轮、不会变成接受），确认才 `decide`；取消时 `commandNote`（tone problem）说明理由已清空需重填；「记录复核完成」不拦。`AuthorizedDispositionPage`：拦 `REJECT` → `ConfirmDialog`「按策略拒绝委托」（引 ADR-0132 决定一：去向决定不是对受限控制的表决），「交客户补充」不拦 |
+
+第 4 条：未换壳——五页只加 `ConfirmDialog` 与在途文案，表单位、结果渲染（`ResultPanel` / `commandNote` / 逐件卡）原样。
+
+**完成判据逐条**
+
+- ✅ 对照表 32 行 = `rg` 实测（实测于 `11e6111a`），四格填满；「无确认」7 行里 4 / 6 / 7 / 9 标「已补 `<sha>`」（本次代落），16 / 23 「不补 + 理由」（`pages/party/**` 基线不动，另立票），21 有流程级确认；「进行中无文案」3 行（4 / 5 / 6）已补 `caed9588`。
+- ✅ `action-feedback.test.ts` 7 条：在途 / 已答（含负向答案照样 answered）/ detail 原文 / 无 detail 与空白 detail 退码 / noAnswer / transport 原文与空 message / unconfigured——三态 + 边界。
+- ✅ 四道门：作者未报（会话中断）；推送方在重放 tip `f8d37cf6`（main `d2f11618` + 04 + 05）上实跑 tsc 0 / run-tests **359**（343 + 04 的 9 + 本票 7）/ vite build 0 / `go test ./internal/architecture/ -count=1` ok。产物含「撤回整份委托」「逐件请求取消」「主动拒绝委托」「按策略拒绝委托」各 1 处；「撤回中…」「取消中…」在产物里为 0 处是因为它们由 `pendingText` 运行期拼出，不是漏。
+- ◑ 一次性 esbuild 束「失败结果渲染出 `problem.detail` 原文」：**推送方代跑、一次性实测、组件层未钉**（照第一轮 01 那套束，`renderToStaticMarkup`）——`RegistrationAnswerNote` 收 `callerProblem{detail}` 时 detail 原文在 DOM、`problemNote(code)` 同在、无 detail 时不渲「原因：」空行；`feedbackFor` 对同一结果给出的失败文案与页面渲的是同一串。4 / 4。源与产物不入库。
+- ❌ 浏览器**未验**：五个 `ConfirmDialog` 的弹出 / 确认 / 取消（Radix Portal，静态渲染不出）、在途按钮换字、取消确认后 `commandNote` 的提示。
+
+**判断项**（推送方按代码与头注代写）
+
+1. **`feedbackFor` 今天没有页面消费**：审计发现 32 行全部已行内渲结果代数，票面第 3 条「无反馈的接 useToast」一行都没有，第 2 条要的一处算的三态文案就只被 `pendingText` 那半用上；`feedbackFor` 按票面第 2 条建好、node:test 钉住，等第 11 / 12 / 13 / 25 行那几处各自的 `AnswerNote` 换成消费它时补齐 detail（对照表末段）。
+2. **确认正文不写「确定吗」**：五处都写明对象标识、影响、名义 / 理由，边界句引 UC-PS-005 / UC-PS-006 / ADR-0086 / ADR-0132 的口径。
+3. **先校验再开确认**（撤回 / 取消两页）：确认层只问「要不要」，表单没填全在它之前就拦下，免得被读成「撤回被拒」。
+4. **复核 / 处置两页的确认放在 `onDecide` 之后**：`ReviewFlowTemplate` 交出理由的同时清空输入框，所以待确认的理由要连同目标行一起攥住；取消确认时说一声理由需重填，不让人以为它还在。
+
 ## Comments
+
+### 评审 ← 通道 4 · 钉 `fef2958c`（基 `11e6111a`）· 20:4x（推送方接任后自评——本仓当下仅此一个会话在工作，评审者与作者非同一会话，但门在重放 tip 上跑、非隔离检出；读的是作者树 `D:\tops\idp-parcel-mcp5-wsform05`，只读）
+
+门：见完成记录（重放 tip `f8d37cf6` 上 tsc 0 / run-tests 359 / vite 0 / architecture ok；05 七份文件与作者 tip 逐 blob 同）。
+
+**Standards** — 阻断：无。非阻断：
+1. `pages/shipment-request/AuthorizedDispositionPage.tsx`：新插的 `PendingRejection` 接口与 `rejectionConfirmText` 落在 `restrictedItemsBlock` 的 JSDoc 与函数体之间——那段「队列行上的受限项，逐条原词直显……」头注现在挂在 `PendingRejection` 上，说的却是 `restrictedItemsBlock`（AGENTS「写代码注释」：注释讲它所在的那段代码；判断项，挪一下位置即可）。
+2. `CancelParcelPage.tsx` / `WithdrawShipmentRequestPage.tsx` 的确认正文与其上注释混用半角标点（`(` `)` `:` `;` `,`），同文件与同票另两页（复核 / 处置）用的是全角；用户可见的弹层正文里「(来源请求 …)中的 N 件包裹逐件请求取消:」尤其显眼（判断项，一致性；仓内无成文标点规矩）。
+3. `AcceptanceReviewPage.tsx` 与 `AuthorizedDispositionPage.tsx` 各自一份 `PendingRejection` / `onDecide` 拦截 / `confirmRejection` / `cancelRejection` / `<ConfirmDialog>` 五件同形（可能 Duplicated Code，判断项——两页的 entry 类型与决定 id 不同，票面第 4 条又明写不统一成弹层，抬一个小 hook 是可选项不是义务）。
+无发现（实核）：注释全中文、引 UC / ADR 用符号名与决定名，无行号无计数；`components/action-feedback.ts` 从 `pages/catalogue-api` 取 `ApiResult` 与既有 `components/registration/RegistrationPanel` 同一方向，不是新引入的反向依赖；不碰 `templates/*` / `shell/*` / `Layout.tsx` / `pages/party/**`（文件清单实核）；未改 `ApiResult`、任何 `api.ts`、`problem` 分类。
+
+**Spec** — 阻断：无。非阻断：
+1. `feedbackFor` 建了、钉了、无人消费（票面第 2 条要它存在，第 3 条的消费点因审计为零而不存在）——不是缺陷，但票面「一处算、各页消费」那半今天只成立 `pendingText`；记在完成记录判断项 1。
+2. 完成判据「esbuild 束断言失败结果渲出 detail」作者未做，推送方代跑 4 / 4（见完成记录 ◑）。
+无发现（实核）：第 1 条 32 行表在票面、四格满、有取证 SHA；第 2 条三态 + 边界 7 条 node:test；第 3 条对照表「处置」列 4 / 5 / 6 / 7 / 9 全部落码、16 / 23 不补 + 理由；第 4 条未换壳；「不做」两态未加、结果代数与 `api.ts` 未动、`pages/party/**` 未动；确认正文写对象 / 影响 / 名义，无「确定吗」；`WithdrawShipmentRequestPage` 按钮静态文案去「确认」二字属确认挪进弹层的必然，不计文案蔓延。
+
+**Standards 0 / 3 · Spec 0 / 2** → 无阻断，可重放。
+
+### 处置（推送方 · 通道 4 接任 · 20:5x）
+
+- Standards 1（头注挂错符号）→ 只动注释位置，推送方代落一笔（见进 main 记录）。
+- Standards 2 / 3、Spec 1 / 2 → 记，不挡合入；标点一致性与两页同形五件留作者或下一张触及这两页的票顺手。

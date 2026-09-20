@@ -70,3 +70,27 @@ Blocked by: 无
 5. **选中行记忆放 `ref` 不放 state**：只在导出那一刻被读，不驱动渲染；翻走的行模板手里已没有，可见时记下来，「已选 N 项」的 N 仍按选中集报——两个数不同时以选中集为准，不补假行。
 
 ## Comments
+
+### 评审 ← 通道 4 · 钉 `59c51d25`（基 `11e6111a`，隔离检出 `$TEMP\idp-review-wsform04`，只读）· 20:33（推送方自任务台 `task-192dd9f1` 代落原文）
+
+门（评审者本机实跑）：`tsc -b --noEmit` 0 / `run-tests` 333 pass 0 fail / `vite build` 0（`dist/assets/index-*.js` 含「导出所选」1 处、「选择本页全部」1 处）/ `go test ./internal/architecture/ -count=1` ok。diff 6 文件（admin-web）+ 票面认领笔；工作树干净。与作者自报一致。
+
+**Standards** — 阻断：无。非阻断：
+1. `pages/shipment-request/ShipmentRequestListPage.tsx` `csvCellText` 按列 id 字串 switch，与 `columns` 是两份并行清单，改 id 一处静默失配——`rowsToCsv` 对整列 undefined 是整列跳过、不报错（判断项：字串耦合；可把取字放列定义旁）。
+2. `templates/ListPageTemplate.tsx` 行复选 `aria-label={`选择 ${key}`}` 读出 rowKey 内部标识（异常案件页为「case:…」；判断项，读屏体验）。
+3. `templates/index.ts` 追加导出 `retainSelectedRows` / `selectedRows` / `CsvColumn` 等仅模板内用、无页面引（可能 Speculative Generality；判断项，不违「只追加」）。
+无发现（实核）：注释全中文，引符号名 / 节号 + SHA（idp-ui@6751fb2 10.5 / 10.7），无行号无计数；「与 party/* checkbox 同控件」实核为原生 input（`PartyRelationshipRegistrationForm` / `AcceptanceRulePackagePublicationForm`）；`selection` / `bulkActions` 皆可选，不传时 `pageKeys=[]`、无复选列、`colSpan` 不变、effect 早退，向后兼容成立；`index.ts` 只追加；`toggleSelected` 等返回新集合不改入参（测试钉）。
+
+**Spec** — 阻断：无。非阻断：
+1. 行记忆 `selectedRowMemory` 是模板 ref，选中集是页面 state，寿命不同：`ShipmentRequestListPage` 进详情（`selectedId !== null`）整区换渲 `ShipmentRequestDetailPage`，模板卸载、记忆清零；回来若检索词仍在，被筛掉的已选行不进 CSV 而「已选 N 项」照计（票面第 5 条筛选不清 + 第 2 条导出所选；`retainSelectedRows` 头注已承认「少行、N 不补」，但页面注释「本组件不卸载」对模板不成立）。修法：记忆抬到页面或按页面全量 rows 查行。
+2. 复选格 `TableCell onClick={stopRowEvent}` 截的是整格：点格内空白不勾也不开行（蓝图 10.5 满足，但格是死区；可让格点击等于勾选）。
+3. 判据「esbuild 束断言 checkbox 0 / 已选 2 项」源不入库，自报 21/21 未复核；「票面判断项」由推送方代落（作者会话 crash）。
+无发现（实核）：第 1 条五函数 + `rowsToCsv`（header 文本 / 调用方取字 / 整列无文本跳过 / RFC 4180 引号 逗号 换行 CRLF / BOM）皆在，node:test 9 条各含正向与边界；第 2 条 `selection && selectedCount > 0` 才渲栏、位于 FilterBar / moreFilters 之后、ready 表之前，`csv` 有才出按钮、`extra` 与「取消选择」在，栏高 `cellPadding = densityRowPadding(density)`；表头三态经 `indeterminate` effect；第 3 条走「另写并注明」分支（`list-selection.ts` 头注）；第 4 条两页只加 state + `csv`、无 `extra`，`cellText` 取字面量（异常案件 `values[column.id] ?? ''`；委托导出 `row.state` 状态码而非徽章词，注释给了理由）；第 5 条生命周期写在 `ListSelectionProps` 与 `list-selection.ts` 头注；「不做」：`toggleAllOnPage` 只本页，未碰 Detail / ReviewFlow / state-slot / Layout / shell；`retainSelectedRows` / `downloadTextFile` 超出第 1 条清单但服务「翻页保留 + 导出」，不计蔓延。
+
+**Standards 0 / 3 · Spec 0 / 3** → 无阻断，可重放。
+
+### 处置（推送方 · 通道 4 接任 · 20:4x）
+
+- Standards 1 / 2 / 3、Spec 2 / 3 → 记，不挡合入；均为形态与可读性上的判断项，改法都要动模板或首用页的行为，不由推送方代落。
+- Spec 1 → 记为已知边界：记忆在模板 ref、选中集在页面 state，`ShipmentRequestListPage` 进详情回来后被筛掉的已选行不进 CSV 而 N 照计。修法（记忆抬到页面，或模板收页面全量 `rows` 供查行）动模板 prop 形状，另立票；本票头注对「少行、N 不补」已如实。
+- 作者会话 crash，三条非阻断没有作者回应，原文照录。
