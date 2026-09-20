@@ -4,8 +4,11 @@ import { Button, DropdownMenu, MenuItem, MenuLabel, MenuSeparator, Tag, Tooltip 
 import { useDensity, useTheme } from '@idpxyz/ui-theme-runtime';
 import {
   ATTRIBUTION_SEPARATOR,
-  GLOBAL_SEARCH_LABEL,
-  GLOBAL_SEARCH_UNAVAILABLE_REASON,
+  COMMAND_PALETTE_ARIA_KEYSHORTCUTS,
+  COMMAND_PALETTE_HINT,
+  COMMAND_PALETTE_SHORTCUT_KEYS,
+  COMMAND_PALETTE_TRIGGER_LABEL,
+  COMMAND_PALETTE_UNWIRED_REASON,
   PRODUCT_ATTRIBUTION,
   SCOPE_CHIP_HINT,
   SIGN_OUT_LABEL,
@@ -24,7 +27,9 @@ import {
 //
 // 右侧四个位从左到右：全局搜索、作用域、主题 + 密度切换、用户菜单。手册「顶栏规范」里的「Alerts / Notifications」
 // 故意没有：没有面向 UI 的通知读口，一只永远为 0 的铃铛是假位，spec「红线」只允许禁用态 + 说明、不允许假动作假计数。
-// 全局搜索与作用域今天都是「留位」——黄金标准要功能未完整时也保留视觉占位与结构位置，位留下了，动作没有编。
+// 全局搜索位是命令面板的入口（票 admin-web-workspace-form/03）：点它或按 Ctrl/⌘+K 开面板，面板搜的是本机已知的事实
+// ——导航词表、本机打开过的最近对象、壳层开关——一条动作都不发请求；跨对象搜索仍无读口，悬停说明里写着。
+// 作用域今天仍是「留位」——黄金标准要功能未完整时也保留视觉占位与结构位置，位留下了，动作没有编。
 //
 // 主题与密度直接读上游两个 Provider 的 hook，不经 props：它们是壳层自己的全局开关，Layout 不该替它转手。默认值与持久化
 // 归 shell/preference-sync，这里只切。
@@ -41,9 +46,14 @@ export interface TopBarProps {
   tenantName?: string;
   /** 「退出」走 auth/oidc.ts 既有的 logout，这里不自己清会话。 */
   onSignOut: () => void;
+  /**
+   * 打开命令面板。面板的 open 态由 Layout 持有（理由见 shell/CommandPaletteHost 文件头），顶栏只报「有人点了」。
+   * 可选是为了让 Layout 在接线前也能编译；没接时这一位退回留位（aria-disabled + 说明），不做一个点了没反应的按钮。
+   */
+  onOpenCommandPalette?: () => void;
 }
 
-export function TopBar({ moduleTitle, principal, tenantName, onSignOut }: TopBarProps) {
+export function TopBar({ moduleTitle, principal, tenantName, onSignOut, onOpenCommandPalette }: TopBarProps) {
   return (
     <header className="h-12 flex items-center gap-2 px-4 border-b border-idpxyz-border bg-idpxyz-titleBar shrink-0">
       <Package className="h-5 w-5 shrink-0 text-idpxyz-accent" aria-hidden="true" />
@@ -57,7 +67,7 @@ export function TopBar({ moduleTitle, principal, tenantName, onSignOut }: TopBar
       </div>
 
       <div className="ml-auto flex shrink-0 items-center gap-2">
-        <GlobalSearchSlot />
+        <GlobalSearchSlot onOpen={onOpenCommandPalette} />
         <ScopeChip tenantName={tenantName} />
         <ThemeToggle />
         <DensityToggle />
@@ -68,22 +78,47 @@ export function TopBar({ moduleTitle, principal, tenantName, onSignOut }: TopBar
 }
 
 /**
- * 全局搜索位。上游 ui-workspace 的 TitleBar 里这一位也是一个按钮形的外壳（点了才弹 CommandPalette），这里照那个形：
- * 一个不做事的按钮 + 说明。用 aria-disabled 而不用原生 disabled——原生 disabled 的按钮不发指针与焦点事件，Tooltip 永远
- * 弹不出来，「为什么不能用」就没人看得到；aria-disabled 让读屏念出「不可用」，鼠标与键盘都还能停上去看说明。
+ * 全局搜索位 = 命令面板入口。上游 ui-workspace 的 TitleBar 里这一位也是一个按钮形的外壳（点了才弹 CommandPalette），
+ * 这里照那个形。可访问名就是可见文案「搜索或跳转…」（WCAG「标签在名称中」），键帽 aria-hidden 免得念成
+ * 「搜索或跳转 Ctrl K」；快捷键按 ARIA 的法子挂在 aria-keyshortcuts 上。悬停说明写面板能搜什么与仍缺什么。
+ *
+ * 没接线（Layout 未传 onOpen）时退回第一轮 01 的留位形：aria-disabled + 说明。用 aria-disabled 而不用原生 disabled——
+ * 原生 disabled 的按钮不发指针与焦点事件，Tooltip 永远弹不出来，「为什么不能用」就没人看得到。
  */
-function GlobalSearchSlot() {
+function GlobalSearchSlot({ onOpen }: { onOpen?: () => void }) {
+  if (!onOpen) {
+    return (
+      <Tooltip content={COMMAND_PALETTE_UNWIRED_REASON} side="bottom">
+        <Button
+          type="button"
+          variant="outline"
+          aria-disabled="true"
+          className="w-[240px] cursor-not-allowed justify-start gap-1.5 font-normal opacity-70 hover:bg-transparent hover:text-idpxyz-textMuted"
+        >
+          <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+          <span className="truncate">{COMMAND_PALETTE_TRIGGER_LABEL}</span>
+        </Button>
+      </Tooltip>
+    );
+  }
   return (
-    <Tooltip content={GLOBAL_SEARCH_UNAVAILABLE_REASON} side="bottom">
+    <Tooltip content={COMMAND_PALETTE_HINT} side="bottom">
       <Button
         type="button"
         variant="outline"
-        aria-label={GLOBAL_SEARCH_LABEL}
-        aria-disabled="true"
-        className="w-[240px] cursor-not-allowed justify-start gap-1.5 font-normal opacity-70 hover:bg-transparent hover:text-idpxyz-textMuted"
+        aria-keyshortcuts={COMMAND_PALETTE_ARIA_KEYSHORTCUTS}
+        onClick={onOpen}
+        className="w-[240px] justify-start gap-1.5 font-normal text-idpxyz-textMuted"
       >
         <Search className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
-        <span className="truncate">{GLOBAL_SEARCH_LABEL}</span>
+        <span className="truncate">{COMMAND_PALETTE_TRIGGER_LABEL}</span>
+        {/* 键帽的形沿 vendor CommandPalette 面板右上角那枚 ESC 的样式，两处一个长相。 */}
+        <kbd
+          aria-hidden="true"
+          className="ml-auto shrink-0 rounded bg-idpxyz-hover px-1.5 py-0.5 font-sans text-[10px] text-idpxyz-textMuted"
+        >
+          {COMMAND_PALETTE_SHORTCUT_KEYS.join(' ')}
+        </kbd>
       </Button>
     </Tooltip>
   );

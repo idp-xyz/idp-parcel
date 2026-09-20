@@ -21,9 +21,30 @@ export function attributionText(moduleTitle: string): string {
   return `${PRODUCT_ATTRIBUTION} ${ATTRIBUTION_SEPARATOR} ${moduleTitle}`;
 }
 
-/** 全局搜索位的可访问名；禁用态的说明写明缺的是什么，不写「即将上线」这类许诺。 */
-export const GLOBAL_SEARCH_LABEL = '全局搜索';
-export const GLOBAL_SEARCH_UNAVAILABLE_REASON = '尚无跨对象搜索读口';
+/**
+ * 全局搜索位（票 admin-web-workspace-form/03 第 3 条）：它是命令面板的入口，不是搜索框。可见文案说的是它能做的两件事
+ * ——搜（导航词表、最近对象）与跳转——省略号沿 myshop-web / 上游 TitleBar 搜索位的形，表示「点开还有下一步」。
+ */
+export const COMMAND_PALETTE_TRIGGER_LABEL = '搜索或跳转…';
+
+/**
+ * 键帽上显的两段与 aria-keyshortcuts 的值分开写：键帽给眼睛看、按 Windows 惯例写 Ctrl；aria-keyshortcuts 按 ARIA 的
+ * 写法用 Control / Meta，两套都列出来是因为监听两个都认（见 command-actions 的 isOpenCommandPaletteShortcut）。
+ */
+export const COMMAND_PALETTE_SHORTCUT_KEYS: readonly string[] = ['Ctrl', 'K'];
+export const COMMAND_PALETTE_ARIA_KEYSHORTCUTS = 'Control+K Meta+K';
+
+/**
+ * 悬停说明写面板能搜什么与仍缺什么，两半都写：只写前一半会让人以为它是全局搜索，只写后一半又回到留位。
+ * 「等读口」是事实不是许诺——没有跨对象搜索的读口，不写「即将上线」。
+ */
+export const COMMAND_PALETTE_HINT = '搜索导航与最近对象；跨对象搜索等读口';
+
+/**
+ * Layout 还没把开面板的动作接进来时，这一位退回留位（aria-disabled + 说明），不做一个点了没反应的按钮——
+ * spec「红线」只允许禁用态 + 说明，不允许假动作。
+ */
+export const COMMAND_PALETTE_UNWIRED_REASON = '命令面板未接线';
 
 /**
  * 作用域 chip：本产品一会话一租户（ADR-0100——操作者主体绑定唯一租户，绑定登在服务端的操作者册，不在 id_token 里），
