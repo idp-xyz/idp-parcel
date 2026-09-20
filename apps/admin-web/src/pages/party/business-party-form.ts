@@ -15,7 +15,7 @@
 
 import type { BusinessPartyRecord } from './api';
 import { wallTimeToRfc3339 } from '../moment';
-import { revisionOf } from './registration-form';
+import { revisionOf, suggestedNextRevision } from './registration-form';
 
 export interface BusinessPartyDraft {
   partyId: string;
@@ -90,12 +90,9 @@ export function businessPartyLocalProblems(draft: BusinessPartyDraft, timeZone: 
 }
 
 /**
- * 修订号建议值：标识在已取回列表里 → 最新修订 + 1；不在（或列表没取到）→ 1。**只是建议**：列表答的是最新修订、
- * 且取回那一刻起就可能过期，连续性仍由服务端按册面判。查找按原串比而不裁空白，与载荷同判——载荷里 " X" 就是
- * 另一个身份，建议也得按它是新标识算，否则建议与送上去的东西说的不是同一个对象。
+ * 修订号建议值（规则在 suggestedNextRevision，这里只交本册取键的字段）。查找按原串比而不裁空白，与载荷同判——载荷里
+ * " X" 就是另一个身份，建议也得按它是新标识算，否则建议与送上去的东西说的不是同一个对象。
  */
 export function suggestedBusinessPartyRevision(rows: readonly BusinessPartyRecord[] | null, partyId: string): number {
-  if (partyId === '' || rows === null) return 1;
-  const latest = rows.find((row) => row.partyId === partyId);
-  return latest ? latest.revision + 1 : 1;
+  return suggestedNextRevision(rows, partyId, (row) => row.partyId);
 }

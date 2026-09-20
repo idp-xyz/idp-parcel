@@ -226,8 +226,10 @@ export function IdentityDeactivationForm({ parties, onDeactivated }: IdentityDea
               problems={problems}
               {...form.revisionField}
               note={
+                // 落点显的就是建议值本身（同一份 rows、同一个标识算出来的），不在这里再加一次——「最新修订加一」只在
+                // suggestedNextRevision 一处。
                 known
-                  ? `对应册里该身份最新修订 r${known.revision}，建议停用落点 r${known.revision + 1}；册面可能已陈旧，错位由服务端判。`
+                  ? `对应册里该身份最新修订 r${known.revision}，建议停用落点 r${form.revisionField.suggestion}；册面可能已陈旧，错位由服务端判。`
                   : '对应册里没有这一标识（或册没取到），建议为 1；停用一个不在册的身份会被服务端答「册上没有这一个身份」。'
               }
             />

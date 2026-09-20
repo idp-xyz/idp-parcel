@@ -15,7 +15,7 @@
 import type { PartyRelationshipRecord } from './api';
 import { wallTimeToRfc3339 } from '../moment';
 import { partyRoleLabels } from './presentation';
-import { revisionOf } from './registration-form';
+import { revisionOf, suggestedNextRevision } from './registration-form';
 import type { PickerOption } from './PublicationFormFields';
 
 export interface PartyRelationshipDraft {
@@ -164,14 +164,12 @@ export function partyRelationshipLocalProblems(
 }
 
 /**
- * 修订号建议值：关系标识在已取回关系册里 → 最新修订 + 1；不在（或列表没取到）→ 1。只是建议，连续性由服务端判；
- * 按原串比不裁空白，理由同 suggestedBusinessPartyRevision。
+ * 修订号建议值（规则在 suggestedNextRevision，这里只交本册取键的字段）；按原串比不裁空白，理由同
+ * suggestedBusinessPartyRevision。
  */
 export function suggestedPartyRelationshipRevision(
   rows: readonly PartyRelationshipRecord[] | null,
   relationshipId: string,
 ): number {
-  if (relationshipId === '' || rows === null) return 1;
-  const latest = rows.find((row) => row.relationshipId === relationshipId);
-  return latest ? latest.revision + 1 : 1;
+  return suggestedNextRevision(rows, relationshipId, (row) => row.relationshipId);
 }

@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
 import type { ApiResult } from '../catalogue-api';
 import type { RegistrationResponseBody } from '../../components/registration';
-import { effectiveDraftOf, registrationLanded, revisionOf } from './registration-form';
+import { effectiveDraftOf, registrationLanded, revisionOf, suggestedNextRevision } from './registration-form';
 
 // 本文件钉的是参与方模块各登记表单共用的规则（票 admin-web-group-legal-entities/13 第 1 / 3 条抬出）：修订号格的编码
 // 层判据、建议值何时顶进草稿、登记册答什么才算落地。各份表单（法人 / 参与方 / 关系 / 停用……）同一判，不各留一份。
@@ -24,6 +24,28 @@ test('修订号允许首尾空白', () => {
   equal(revisionOf(' 3 '), 3);
   equal(revisionOf('\t7\n'), 7);
   equal(revisionOf('   '), undefined);
+});
+
+// Covers: 「最新修订加一」只此一份（票 14 第 2 条）：标识在已取回的册里 → 该行 revision + 1；不在册 / 册没取到（null）/
+// 标识空 → 1；空数组是「册上确实没有」，也是 1。键按 keyOf 从行里取、与 id 逐字比——裁不裁空白是各册包装的事，共用体不替
+// 它裁，所以 "A " 找不到 "A"；行的形状只要求有 revision，取键字段各册自定。
+test('建议修订号取该标识最新修订加一，键由调用方取', () => {
+  interface Row {
+    code: string;
+    revision: number;
+  }
+  const rows: Row[] = [
+    { code: 'A', revision: 3 },
+    { code: 'B', revision: 7 },
+  ];
+  const codeOf = (row: Row) => row.code;
+  equal(suggestedNextRevision(rows, 'A', codeOf), 4);
+  equal(suggestedNextRevision(rows, 'B', codeOf), 8);
+  equal(suggestedNextRevision(rows, 'A ', codeOf), 1);
+  equal(suggestedNextRevision(rows, 'C', codeOf), 1);
+  equal(suggestedNextRevision(rows, '', codeOf), 1);
+  equal(suggestedNextRevision([], 'A', codeOf), 1);
+  equal(suggestedNextRevision(null, 'A', codeOf), 1);
 });
 
 // Covers: 操作者没改过修订号时建议值顶进草稿（其余格不动）；改过就用草稿原值，建议再变也不覆盖——「用建议值」复位

@@ -12,7 +12,7 @@
 
 import type { GroupLegalEntityRecord } from './api';
 import { wallTimeToRfc3339 } from '../moment';
-import { revisionOf } from './registration-form';
+import { revisionOf, suggestedNextRevision } from './registration-form';
 
 export interface LegalEntityDraft {
   legalEntityId: string;
@@ -86,13 +86,11 @@ export function legalEntityLocalProblems(draft: LegalEntityDraft, timeZone: stri
 }
 
 /**
- * 修订号建议值：标识在已取回列表里 → 最新修订 + 1；不在（或列表没取到）→ 1。**只是建议**：
- * 列表答的是最新修订、且取回那一刻起就可能过期，连续性仍由服务端按册面判；这一格省的是
- * 操作者翻一次册，不替服务端作数。
+ * 修订号建议值（规则在 suggestedNextRevision，这里只交本册取键的字段）。标识先裁首尾空白再找：本册的载荷裁空白
+ * （legalEntityPayloadOf，票 02 验收过、legal-entity-form.test.ts 钉着），建议得与送上去的串说同一个对象。裁在这一层
+ * 而不进共用体——其余各册不裁，是服务端各口判据的差别，不是共用体该替谁定的；要统一先改票 02 的判据与用例（票 13 第 3 条
+ * 那半不做的理由）。
  */
 export function suggestedRevision(rows: readonly GroupLegalEntityRecord[] | null, legalEntityId: string): number {
-  const wanted = legalEntityId.trim();
-  if (wanted === '' || rows === null) return 1;
-  const latest = rows.find((row) => row.legalEntityId === wanted);
-  return latest ? latest.revision + 1 : 1;
+  return suggestedNextRevision(rows, legalEntityId.trim(), (row) => row.legalEntityId);
 }

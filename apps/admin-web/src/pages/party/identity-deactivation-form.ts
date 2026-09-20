@@ -13,7 +13,7 @@
 import type { BusinessPartyRecord, CustomerAccountRecord, GroupLegalEntityRecord } from './api';
 import { wallTimeToRfc3339 } from '../moment';
 import { identityKindLabels, type IdentityKind } from './presentation';
-import { revisionOf } from './registration-form';
+import { revisionOf, suggestedNextRevision } from './registration-form';
 import type { PickerOption } from './PublicationFormFields';
 
 export interface IdentityDeactivationDraft {
@@ -119,11 +119,9 @@ export const identityTargetOf = {
 } as const satisfies Record<IdentityKind, (row: never) => RevisionedIdentity>;
 
 /**
- * 修订号建议值：该身份在已取回的对应册里 → 最新修订 + 1（停用落点的修订号）；不在（或册没取到）→ 1。只是建议，
- * 错位由服务端判；按原串比不裁空白，理由同 suggestedBusinessPartyRevision。
+ * 修订号建议值（规则在 suggestedNextRevision，这里只交投影后的取键）：建议的是停用落点的修订号，错位由服务端判；
+ * 按原串比不裁空白，理由同 suggestedBusinessPartyRevision。
  */
 export function suggestedDeactivationRevision(rows: readonly RevisionedIdentity[] | null, id: string): number {
-  if (id === '' || rows === null) return 1;
-  const latest = rows.find((row) => row.id === id);
-  return latest ? latest.revision + 1 : 1;
+  return suggestedNextRevision(rows, id, (row) => row.id);
 }
