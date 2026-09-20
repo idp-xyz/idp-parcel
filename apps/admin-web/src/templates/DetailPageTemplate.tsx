@@ -91,6 +91,12 @@ export interface DetailPageTemplateProps {
    * 不传仍叠 Card——另两张详情页不改，母版与旧形态并存到它们各自的票再换（票面裁决 3）。
    */
   tabs?: DetailWorkspaceTab[];
+  /**
+   * 可选右侧上下文（手册「可选右侧上下文」）：关联对象、说明一类由调用方组装的内容，宽 280px，
+   * 只在 xl 及以上显示——窄屏上它会把主列挤没，藏起来比挤着好。不传不占位。
+   * 放进来的东西在窄屏上看不见，所以只放「看不见也不缺」的辅助内容，正文归签。
+   */
+  aside?: ReactNode;
   viewState: TemplateViewState;
   stateOverride?: StateSlotProps['override'];
 }
@@ -112,6 +118,7 @@ export function DetailPageTemplate({
   auditTrail,
   auditTitle = '审计留痕',
   tabs,
+  aside,
   viewState,
   stateOverride,
 }: DetailPageTemplateProps) {
@@ -227,16 +234,17 @@ export function DetailPageTemplate({
               },
               tabs.filter((tab) => hasRenderableContent(tab.content)),
             )}
+            aside={aside}
           />
         ) : (
           <div className="flex-1 overflow-auto">
-            <div className="mx-auto flex max-w-[960px] flex-col gap-4 p-4">
+            <ContentColumns aside={aside}>
               {basicCard}
 
               {sectionCards}
 
               {auditCard}
-            </div>
+            </ContentColumns>
           </div>
         )
       ) : (
@@ -254,9 +262,29 @@ function hasRenderableContent(node: ReactNode): boolean {
   return node !== null && node !== undefined && typeof node !== 'boolean' && node !== '';
 }
 
+// 内容列：不传 aside 时就是今天那一列（960px 居中），传了才在 xl 及以上多出右侧 280px 一列，
+// 主列宽度不变、容器随之放宽。两种形态（叠 Card / 分签）都从这里过，右栏只在一处定义。
+function ContentColumns({ aside, children }: { aside: ReactNode; children: ReactNode }) {
+  if (!hasRenderableContent(aside)) {
+    return <div className="mx-auto flex max-w-[960px] flex-col gap-4 p-4">{children}</div>;
+  }
+  return (
+    <div className="mx-auto flex max-w-[960px] gap-4 p-4 xl:max-w-[1256px]">
+      <div className="flex min-w-0 flex-1 flex-col gap-4">{children}</div>
+      <aside className="hidden w-[280px] shrink-0 flex-col gap-4 xl:flex">{aside}</aside>
+    </div>
+  );
+}
+
 // 分签内容区。签的词与顺序来自 workspace-tabs 的固定表，这里只管装容器。
 // 受控而不用 defaultValue：签随内容有无出没，当前签消失时退回第一签，不留一个选中了却没内容的空区。
-function WorkspaceTabs({ tabs }: { tabs: ResolvedWorkspaceTab<ReactNode>[] }) {
+function WorkspaceTabs({
+  tabs,
+  aside,
+}: {
+  tabs: ResolvedWorkspaceTab<ReactNode>[];
+  aside: ReactNode;
+}) {
   const [active, setActive] = useState<WorkspaceTabId | undefined>(undefined);
   if (tabs.length === 0) return <div className="flex-1 overflow-auto" />;
   const value = active !== undefined && tabs.some((tab) => tab.id === active) ? active : tabs[0].id;
@@ -277,7 +305,7 @@ function WorkspaceTabs({ tabs }: { tabs: ResolvedWorkspaceTab<ReactNode>[] }) {
         ))}
       </TabsList>
       <div className="flex-1 overflow-auto">
-        <div className="mx-auto flex max-w-[960px] flex-col gap-4 p-4">
+        <ContentColumns aside={aside}>
           {tabs.map((tab) => (
             <TabsContent key={tab.id} value={tab.id} className="flex flex-col gap-4">
               {tab.contents.map((content, index) => (
@@ -285,7 +313,7 @@ function WorkspaceTabs({ tabs }: { tabs: ResolvedWorkspaceTab<ReactNode>[] }) {
               ))}
             </TabsContent>
           ))}
-        </div>
+        </ContentColumns>
       </div>
     </Tabs>
   );
