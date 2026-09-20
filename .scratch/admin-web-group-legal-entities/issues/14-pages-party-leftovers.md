@@ -1,7 +1,7 @@
 # 14 `pages/party` 收口尾巴：票 13 评审判断项里的死分派表、四份同形修订建议、其它模块的 `chipClass` 副本
 
 Category: chore
-Status: ready-for-agent
+Status: in-progress
 Blocked by: 无（13 已进 main，远端 main `090e250e`）
 地盘：`apps/admin-web/src/pages/party/`（`identity-deactivation-form.ts` + test、`IdentityDeactivationForm.tsx`、四份 `*-form.ts` + test、
 `registration-form.ts` + test）；第 3 条若做，`apps/admin-web/src/pages/{channel-selection,customs,network,operations,visibility}/` 里
@@ -39,3 +39,7 @@ Blocked by: 无（13 已进 main，远端 main `090e250e`）
   「最新修订加一」的实现只剩 `suggestedNextRevision` 一处——`git grep` 自己数，票面写钉的 SHA。
 
 ## Comments
+
+### 认领（2026-09-20 11:5x）
+
+第 1 / 2 / 4 条 ← 通道 5，分支 `mcp5-adminweb14a` 基 main `e16497de`，地盘 `pages/party`；第 3 条 ← 通道 4 另一支（其它模块页面），完工由推送方代落。票面只通道 5 写。
