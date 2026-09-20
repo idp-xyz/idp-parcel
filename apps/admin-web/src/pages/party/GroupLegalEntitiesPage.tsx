@@ -1,15 +1,5 @@
-import { useEffect, useState } from 'react';
-import {
-  Button,
-  Drawer,
-  DrawerBody,
-  DrawerHeader,
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-  Timeline,
-} from '@idpxyz/ui-primitives';
+import { useState } from 'react';
+import { Drawer, DrawerBody, DrawerHeader, Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../catalogue-api';
@@ -21,9 +11,10 @@ import {
   type GroupLegalEntityRecord,
   type LegalEntityRevisionListResponseBody,
 } from './api';
-import { identityStatusLabels, labelOf, legalEntityKindLabels, problemNote } from './presentation';
+import { identityStatusLabels, labelOf, legalEntityKindLabels } from './presentation';
 import { LegalEntityRegistrationForm } from './LegalEntityRegistrationForm';
 import { legalEntityRevisionTimeline, revisionHistoryNote } from './legal-entity-revisions';
+import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
 import {
   DetailRow,
   Instant,
@@ -111,80 +102,17 @@ const columns: ListColumn<GroupLegalEntityRecord>[] = [
 ];
 
 /**
- * 抽屉「修订历史」区（票 03 第 5 条）：按法人取整条修订链，纵向时间线；判读在 legal-entity-revisions.ts，
- * 这里只摆。每次换行重取，未回的旧请求按 cancelled 丢；答案顶层回显的法人标识再核一次，对不上就不摆——
- * 摆一段别的法人的历史比空着更坏。
- *
- * 读口墙前照旧显未配置：403 是「今天没有问到」，不是「这个法人没有历史」，两句续办不同（前者去配渠道，
- * 后者去查写侧），措辞把这一格点出来；不用 UnconfiguredState 大块——抽屉里一段区，一句话够。
+ * 法人册交给抽屉「修订历史」区（RevisionHistorySection）的那几样（票 03 第 5 条立、票 13 第 9 条改用共用件）：
+ * 判读在 legal-entity-revisions.ts。模块级常量——load 进 effect 依赖。
  */
-function LegalEntityRevisionHistory({ legalEntityId }: { legalEntityId: string }) {
-  const [answer, setAnswer] = useState<ApiResult<LegalEntityRevisionListResponseBody> | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listLegalEntityRevisions(legalEntityId).then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [legalEntityId, reloadKey]);
-
-  const retry = () => setReloadKey((value) => value + 1);
-  const note = 'mt-1 text-[12px] text-idpxyz-textMuted';
-
-  if (answer === null) {
-    return <p className={note}>正在读取修订历史…</p>;
-  }
-  if (answer.kind === 'unconfigured') {
-    return (
-      <p className={note}>
-        访问通道尚未配置：修订历史读口（GET /commercial-group-legal-entities/{'{legalEntityId}'}/revisions）当前
-        不可用（403）。这不是「这个法人没有历史」——今天没有问到；配置该上下文的访问通道后重新打开抽屉。
-      </p>
-    );
-  }
-  if (answer.kind === 'callerProblem') {
-    return (
-      <p className={note}>
-        调用方式问题（HTTP {answer.status}）：{problemNote(answer.code)}
-      </p>
-    );
-  }
-  if (answer.kind === 'noAnswer' || answer.kind === 'transport') {
-    return (
-      <p className={note}>
-        {answer.kind === 'noAnswer'
-          ? `服务端未形成答案（HTTP ${answer.status}）：${problemNote(answer.code)}`
-          : `无法连接主数据读取服务：${answer.message}`}
-        <Button variant="ghost" size="sm" className="ml-2" onClick={retry}>
-          重试
-        </Button>
-      </p>
-    );
-  }
-  if (answer.body.legalEntityId !== legalEntityId) {
-    return (
-      <p className={note}>
-        答案回显的法人（{answer.body.legalEntityId}）与所问（{legalEntityId}）不符，已丢弃。
-        <Button variant="ghost" size="sm" className="ml-2" onClick={retry}>
-          重试
-        </Button>
-      </p>
-    );
-  }
-
-  const items = legalEntityRevisionTimeline(answer.body.revisions, formatInstant);
-  return (
-    <>
-      <p className={note}>{revisionHistoryNote(items.length)}</p>
-      {items.length > 0 ? <Timeline className="mt-3" items={items} /> : null}
-    </>
-  );
-}
+const legalEntityRevisionHistory: RevisionHistoryRegister<LegalEntityRevisionListResponseBody> = {
+  subject: '法人',
+  endpoint: 'GET /commercial-group-legal-entities/{legalEntityId}/revisions',
+  load: listLegalEntityRevisions,
+  echoedSubjectId: (body) => body.legalEntityId,
+  timelineOf: (body) => legalEntityRevisionTimeline(body.revisions, formatInstant),
+  noteOf: revisionHistoryNote,
+};
 
 /**
  * 行详情抽屉（票 01 第 5 条）：列全字段，含表上撤下的种类与租户、停用两件；「修订历史」区自票 03 起取真数据。
@@ -243,7 +171,7 @@ function LegalEntityDrawer({
             </dl>
             <section className="mt-4">
               <h3 className="text-[12px] font-medium text-idpxyz-text">修订历史</h3>
-              <LegalEntityRevisionHistory legalEntityId={row.legalEntityId} />
+              <RevisionHistorySection register={legalEntityRevisionHistory} subjectId={row.legalEntityId} revision={row.revision} />
             </section>
           </DrawerBody>
         </>

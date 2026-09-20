@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import {
   Button,
   Drawer,
@@ -8,7 +8,6 @@ import {
   TabsList,
   TabsTrigger,
   TabsContent,
-  Timeline,
 } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
@@ -30,10 +29,10 @@ import {
   labelOf,
   partyNameUnknownNote,
   partyRoleLabels,
-  problemNote,
   relationshipStatusLabels,
 } from './presentation';
 import { businessPartyRevisionHistoryNote, businessPartyRevisionTimeline } from './business-party-revisions';
+import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
 import {
   DetailRow,
   Instant,
@@ -210,81 +209,17 @@ const identityColumns: ListColumn<BusinessPartyRecord>[] = [
 ];
 
 /**
- * 抽屉「修订历史」区（票 12 第 5 条）：按参与方取整条修订链，纵向时间线；判读在 business-party-revisions.ts
- * （两册共用的本体在 revision-timeline.ts），这里只摆。形状照 GroupLegalEntitiesPage 的 LegalEntityRevisionHistory：
- * 每次换行重取，未回的旧请求按 cancelled 丢；答案顶层回显的参与方标识再核一次，对不上就不摆——摆一段别的参与方
- * 的历史比空着更坏。
- *
- * 读口墙前照旧显未配置：403 是「今天没有问到」，不是「这个参与方没有历史」，两句续办不同（前者去配渠道，
- * 后者去查写侧），措辞把这一格点出来；不用 UnconfiguredState 大块——抽屉里一段区，一句话够。
+ * 参与方册交给抽屉「修订历史」区（RevisionHistorySection）的那几样（票 12 第 5 条立、票 13 第 9 条改用共用件）：
+ * 判读在 business-party-revisions.ts（两册共用的本体在 revision-timeline.ts）。模块级常量——load 进 effect 依赖。
  */
-function BusinessPartyRevisionHistory({ partyId }: { partyId: string }) {
-  const [answer, setAnswer] = useState<ApiResult<BusinessPartyRevisionListResponseBody> | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listBusinessPartyRevisions(partyId).then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [partyId, reloadKey]);
-
-  const retry = () => setReloadKey((value) => value + 1);
-  const note = 'mt-1 text-[12px] text-idpxyz-textMuted';
-
-  if (answer === null) {
-    return <p className={note}>正在读取修订历史…</p>;
-  }
-  if (answer.kind === 'unconfigured') {
-    return (
-      <p className={note}>
-        访问通道尚未配置：修订历史读口（GET /commercial-business-parties/{'{partyId}'}/revisions）当前不可用（403）。
-        这不是「这个参与方没有历史」——今天没有问到；配置该上下文的访问通道后重新打开抽屉。
-      </p>
-    );
-  }
-  if (answer.kind === 'callerProblem') {
-    return (
-      <p className={note}>
-        调用方式问题（HTTP {answer.status}）：{problemNote(answer.code)}
-      </p>
-    );
-  }
-  if (answer.kind === 'noAnswer' || answer.kind === 'transport') {
-    return (
-      <p className={note}>
-        {answer.kind === 'noAnswer'
-          ? `服务端未形成答案（HTTP ${answer.status}）：${problemNote(answer.code)}`
-          : `无法连接主数据读取服务：${answer.message}`}
-        <Button variant="ghost" size="sm" className="ml-2" onClick={retry}>
-          重试
-        </Button>
-      </p>
-    );
-  }
-  if (answer.body.partyId !== partyId) {
-    return (
-      <p className={note}>
-        答案回显的参与方（{answer.body.partyId}）与所问（{partyId}）不符，已丢弃。
-        <Button variant="ghost" size="sm" className="ml-2" onClick={retry}>
-          重试
-        </Button>
-      </p>
-    );
-  }
-
-  const items = businessPartyRevisionTimeline(answer.body.revisions, formatInstant);
-  return (
-    <>
-      <p className={note}>{businessPartyRevisionHistoryNote(items.length)}</p>
-      {items.length > 0 ? <Timeline className="mt-3" items={items} /> : null}
-    </>
-  );
-}
+const businessPartyRevisionHistory: RevisionHistoryRegister<BusinessPartyRevisionListResponseBody> = {
+  subject: '参与方',
+  endpoint: 'GET /commercial-business-parties/{partyId}/revisions',
+  load: listBusinessPartyRevisions,
+  echoedSubjectId: (body) => body.partyId,
+  timelineOf: (body) => businessPartyRevisionTimeline(body.revisions, formatInstant),
+  noteOf: businessPartyRevisionHistoryNote,
+};
 
 /**
  * 身份行详情抽屉（票 09 第 4 条）：列全字段，含表上没有的租户；「修订历史」区自票 12 起取真数据。
@@ -333,9 +268,7 @@ function BusinessPartyDrawer({ row, onClose }: { row: BusinessPartyRecord | null
             </dl>
             <section className="mt-4">
               <h3 className="text-[12px] font-medium text-idpxyz-text">修订历史</h3>
-              {/* key 带上列表行的最新修订号：登记签在抽屉开着时给同一参与方登了下一笔（或停用），列表重取后行的
-                  revision 变了，历史区随之重挂重取——只按 partyId 记依赖会让它继续显上一条链。 */}
-              <BusinessPartyRevisionHistory key={`${row.partyId}#r${row.revision}`} partyId={row.partyId} />
+              <RevisionHistorySection register={businessPartyRevisionHistory} subjectId={row.partyId} revision={row.revision} />
             </section>
           </DrawerBody>
         </>
