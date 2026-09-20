@@ -2951,3 +2951,26 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
   **归用户**：wsform 判断项 1–3（多标签 / 分栏 / ActivityBar）；ADR-0139 → Accepted 与否；票 11 `detail` 格 vs ADR-0140 Decision 三；`docs/ux/commercial-party.md` 仍 untracked、无人认领、未动。
 - **本节五数**（19:2x–20:1x）：CI main 绿/总 未量（`5a272da6` / `11e6111a` / `5b032504` 三个 run 刚起）· 集成时延——02 完工报 20:0x → 进 main 20:13 **约 10 分**（1 票；评审 5 分 + 代落 + 全量 139 s）· 重放笔数 **5**（02 五；不含推送方一笔与簿记）· 重复开发 0 ·
   会话重置 **1**（18:4x 通道 4 前任无响应、19:2x 通道 1 本会话起；4 的接续会话自报「新会话」计入）· 非作者评审缺席 0
+
+## 2026-09-20 20:2x–20:5x 通道 4 接任推送方（通道 1 20:25 派 04 评审后无再动静；用户 20:3x 经队列「现在只有你在工作了，下面可以回放了吗：`idp-parcel-mcp6-wsform03` / `-mcp3-wsform04` / `-mcp5-wsform05`」）
+
+### 20:25–20:33：04 非作者评审（通道 1 派，`task-192dd9f1`）
+
+- 隔离检出 `%TEMP%\idp-review-wsform04@59c51d25`，`pnpm install --offline` 4 s；门实跑 tsc 0 / run-tests 333 / vite 0（产物含「导出所选」1）/ architecture ok，与作者自报一致。
+- **Standards 0 / 3 · Spec 0 / 3**——`csvCellText` 字串 switch 与 `columns` 两份清单；行复选 `aria-label` 读出 rowKey 内部标识；`index.ts` 追加导出无页面引；Spec：行记忆在模板 ref、选中集在页面 state，委托查阅进详情模板卸载记忆清零、回来被筛掉的已选行不进 CSV 而 N 照计；复选格 `stopPropagation` 截整格成死区；探针自报未复核。原文落票面。看完删 `node_modules`、`worktree remove` 退 0。
+
+### 20:3x–20:51：量三树 → 03 不能、04 / 05 能 → 评 05 → 重放 → 全量 → `a5a5527d` 进 main
+
+- **量**（`branch-state.ps1 -NoFetch` + git，不读自报）：main = origin = `d2f11618`；三树干净、三支均已推 origin、基皆 `11e6111a`；三票与 ux-alignment/02 **无代码文件重叠**（03 `shell/*`、04 `templates/*` + 两首用页、05 `components/action-feedback*` + `pages/shipment-request` 五页）。
+  `idp-land-wsform04@5deab441`：通道 1 已把 04 三笔重放到 `d2f11618` 并代落完成记录，只差评审入票 + 门 + 推。
+- **03 不能**：`mcp6-wsform03@71786680` 三笔（command-actions + host + TopBar）之外 **`Layout.tsx` 零改动**——host 无人渲、`onOpenCommandPalette` 无人传，面板不可达，搜索位退回「命令面板未接线」禁用态（代码自己设计的诚实退路，可编可跑）；完成判据「无 aria-disabled」「Ctrl+K 出列表」不成立。
+  评审 ← 通道 4：**Spec 阻断 1 · Standards 0**，落 main 副本票面 Comments；释号广播里点名通道 6 补 `Layout` 接线。用户问过 A（推送方代补）/ B（等通道 6）——未答，按默认 B 不动。
+- **05 评审**（读作者树只读；门在重放 tip 上跑）：**Standards 0 / 3 · Spec 0 / 2**——`AuthorizedDispositionPage` 新插 `PendingRejection` 落在 `restrictedItemsBlock` 头注与函数之间（头注挂错符号）；撤回 / 取消两页确认正文半角标点；复核 / 处置两页同形五件；`feedbackFor` 建了钉了无人消费（审计 32 行全部已行内渲结果代数，票面第 3 条消费点为零）；作者未做的「detail 原文渲出」探针推送方代跑 4 / 4。
+- **重放**：`idp-land-wsform04` 上 cherry-pick `11e6111a..fef2958c` 五笔零冲突（`ef39faf7→36f7e472` / `9f136811→b35fb73c` / `fdb64b91→2f3a8d3a` / `caed9588→cdaa27b4` / `fef2958c→f8d37cf6`），04 六件 / 05 七件与作者 tip 逐 blob 同。
+  推送方两笔：`844bc6a7`（05 Standards 1，只移注释位置）、`a5a5527d`（04 评审入票 + 处置；05 完成记录代落 + 对照表处置列「已补 <sha>」+ 评审 + 处置 + Status → resolved）。
+- **门**在 `a5a5527d`：tsc 0 / run-tests **359**（343 + 9 + 7）/ vite 0（产物含「导出所选」「撤回整份委托」「逐件请求取消」「主动拒绝委托」「按策略拒绝委托」各 1）/ gofmt 空 / build vet 0 / 清点零差 / 占号 20:48 → 带 DSN 全量 20:48:17→20:50:35 **115 ok / 0 FAIL / 16 无测试 / 0 cached**。
+- 20:51:10 `ls-remote` 核 `d2f11618` 未动 → `push a5a5527d:main` 成，**远端 main = `a5a5527d`**（十笔：04 三 + 代落一 + 05 五 + 推送方一）；共享树 ff 同 SHA；释号广播带 SHA 对照与门禁数字。**先 push 再簿记。**
+- **簿记本笔**（纯 .md 自审）：票 04 / 05 Status → 已进 main + 进 main 记录；票 03 main 副本 Comments 落评审（阻断 1）；workspace-form spec 子票表 04 / 05 → resolved · 已进 main、03 加「未重放 + 原因」；本节。
+- **前沿**：03 等 `Layout` 接线（通道 6 或推送方代补，归用户定）；draft wsform/01 / 02 照上节；`mcp3-wsform04` / `mcp5-wsform05` 待改 `merged/` 并拆树（本节推完簿记后做）；04 Spec 1（记忆寿命）与 05 Standards 2 / 3 记票面未立票。
+- **本节五数**（20:2x–20:5x）：CI main 绿/总 未量（`a5a5527d` run 刚起）· 集成时延——04 完工报（20:1x 过半报后 crash，按 20:25 派评审起算）→ 20:51 **约 26 分**、05 末笔 20:26 → 20:51 **25 分**（2 票，中位 **25.5 分**；无完工报，按末笔时刻起算）· 重放笔数 **8**（04 三 + 05 五；不含推送方两笔与簿记）· 重复开发 0 ·
+  会话重置 **3**（通道 3 crash、通道 5 与通道 6 末笔后无响应；通道 1 20:25 后无动静未计）· 非作者评审缺席 0（04 / 05 / 03 皆通道 4 评、非作者）

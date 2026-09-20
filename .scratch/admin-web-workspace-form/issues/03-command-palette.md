@@ -42,3 +42,14 @@ Blocked by: admin-web-ux-alignment/02 进 main（读它的 `pages/my-work/recent
 - TopBar 搜索位不再有 `aria-disabled`；`vite build` 产物含「搜索或跳转」字面量。浏览器验收做不到如实写「未验」。
 
 ## Comments
+
+### 评审 ← 通道 4 · 钉 `mcp6-wsform03@71786680`（基 `11e6111a`）· 20:4x（推送方接任后评，只读作者树 `D:\tops\idp-parcel-mcp6-wsform03`；票面 Status 在分支上已改 in-progress，本 Comments 落在 main 的副本上）
+
+分支三笔码：`40873c9c` 第 1 条 `shell/command-actions.ts` + node:test 8 条；`ca56b925` 第 2 条 `shell/CommandPaletteHost.tsx`；`71786680` 第 3 条 `TopBar.tsx` + `top-bar-model.ts` 两常量改名改义、`top-bar-model.test.ts` 跟改逐条写理由。
+
+**Spec** — **阻断 1**：第 2 条「挂在 `Layout` 根下，与 `TopBar` 并列」未做——`Layout.tsx` 在分支上零改动，`CommandPaletteHost` 无人渲染、`TopBar` 的 `onOpenCommandPalette` 无人传；面板不可达，搜索位按代码设计退回「命令面板未接线」`aria-disabled` 留位。完成判据「TopBar 搜索位不再有 `aria-disabled`」「`Ctrl+K` 派发后 DOM 出现 `CommandPalette` 列表且含『打开 工作台』」在此 tip 上不成立（缺完成判据点名的东西 → 阻断）。回作者同一分支补：`Layout` 持 `open` state，渲 `<CommandPaletteHost open onOpenChange readRecent={() => listRecentObjects(window.localStorage)} recentObjectHash={recentObjectHash} />`，`TopBar` 传 `onOpenCommandPalette`；ux-alignment/02 已进 main，`fetch` + `rebase origin/main` 后 `Layout.tsx` 上 02 的钩子已在。非阻断：无。
+无发现（实核）：第 1 条三组 navigation / recent（前 `RECENT_ACTIONS_LIMIT` = 10）/ actions（只主题、密度两条，标签复用 `themeToggleLabel` / `densityToggleLabel` 与顶栏同句），无「新建 / 导出 / 刷新」假动作；`run` 只写 hash（`moduleHash` / 注入的 `recentObjectHash`），一条不发请求；关键词小写去重（vendor 过滤只小写查询词）；node:test 8 条含「空存储 recent 0 条」「id 全集无重复」「快捷键只认 Ctrl/⌘+K」；第 3 条搜索位接线态无 `aria-disabled`、`aria-keyshortcuts="Control+K Meta+K"`、键帽 `aria-hidden`，未接线态诚实退回留位（spec 红线：禁用态 + 说明，无假动作）；第 4 条头注写明零请求与「只搜到本机打开过的对象」边界；「不做」：无 `searchSource`、无最近命令、不动 `Sidebar` 与词表。
+
+**Standards** — 阻断：无。非阻断：无。无发现（实核）：注释全中文，引 `Layout.tsx` 文件头 / `templates/loading-shape.ts` 文件头 / idp-ui@6751fb2 用符号名与 SHA，无行号无计数；`command-actions.ts` 只 `import type` `@idpxyz/ui-workspace`，运行时零 `@idpxyz/*`，node:test 可 require；`RecentEntry` 与 02 的 `RecentObject` 结构兼容、不 import 那边类型（存储归 02），`recentObjectHash` 由调用方注入不复制写法；`top-bar-model.test.ts` 原「全局搜索位的名与禁用说明」一条改写，理由写在用例注释里（事实变了不是放松）；`TopBar` `onOpenCommandPalette` 可选是为接线前能编译，注释写明。
+
+**Spec 1 / 0 · Standards 0 / 0** → 有阻断，未重放；补完 `Layout` 接线后只需重跑 Spec 轴。

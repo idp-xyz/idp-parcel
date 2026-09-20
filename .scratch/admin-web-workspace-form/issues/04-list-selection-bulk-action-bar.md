@@ -1,7 +1,7 @@
 # 04 `ListPageTemplate` 多选 + 批量动作栏：选择模型、表头全选、「已选 N 项」栏、默认动作「导出所选 CSV」、页面级动作槽
 
 Category: enhancement
-Status: resolved——码两笔 tip `59c51d25`（分支 `mcp3-wsform04`，基 `11e6111a`；通道 3 20:1x 推完并报过半后会话 crash，完成记录由推送方按 git 与作者进度报代落，见下）；进 main 记录见 Comments。此前 in-progress（20:0x 通道 3 认领 task-b3f07954）、ready-for-agent
+Status: resolved · 已进 main `a5a5527d`（码 `8fe22c59` / `3b97134b`；评审 ← 通道 4 两轴 0 阻断）——码两笔分支 tip `59c51d25`（分支 `mcp3-wsform04`，基 `11e6111a`；通道 3 20:1x 推完并报过半后会话 crash，完成记录由推送方按 git 与作者进度报代落，见下）；进 main 记录见 Comments。此前 in-progress（20:0x 通道 3 认领 task-b3f07954）、ready-for-agent
 Blocked by: 无
 地盘：`apps/admin-web/src/templates/ListPageTemplate.tsx`（加可选 `selection` / `bulkActions` 两 prop）、`templates/list-page-structure.ts`（选择态纯逻辑）+ 新 `templates/list-selection.ts`
 （选择集 / 全选本页 / CSV 生成纯逻辑 + node:test）、`templates/index.ts`（只追加导出）、首用页两张：`pages/shipment-request/ShipmentRequestListPage.tsx`、
@@ -94,3 +94,12 @@ Blocked by: 无
 - Standards 1 / 2 / 3、Spec 2 / 3 → 记，不挡合入；均为形态与可读性上的判断项，改法都要动模板或首用页的行为，不由推送方代落。
 - Spec 1 → 记为已知边界：记忆在模板 ref、选中集在页面 state，`ShipmentRequestListPage` 进详情回来后被筛掉的已选行不进 CSV 而 N 照计。修法（记忆抬到页面，或模板收页面全量 `rows` 供查行）动模板 prop 形状，另立票；本票头注对「少行、N 不补」已如实。
 - 作者会话 crash，三条非阻断没有作者回应，原文照录。
+
+### 进 main 记录（推送方 · 通道 1 重放、通道 4 接任推完）
+
+- 重放：通道 1 在 `%TEMP%\idp-land-wsform04` 上把 `11e6111a..59c51d25` 三笔 cherry-pick 到 main `d2f11618` 零冲突（本票 6 件与 main 其后 ux-alignment/02 各笔零重叠），SHA 对照
+  `e0f80324→21d74b0b` / `8b2d15e7→8fe22c59` / `59c51d25→3b97134b`；六件与作者 tip 逐 blob 同（通道 4 接任后重核）。完成记录代落 `5deab441`。其上叠 05 五笔与推送方两笔，推送 tip `a5a5527d`。
+- 门禁在 `a5a5527d` 上实跑（通道 4）：`tsc -b --noEmit` 0 / `run-tests` **359**（main 343 + 本票 9 + 05 的 7）/ `vite build` 0（产物含「导出所选」「选择本页全部」各 1 处）/ `gofmt -l` 空 / `go build` 0 / `go vet` 0 / 清点重生成零差 /
+  带 DSN 全量 `-p 1 -count=1` 20:48:17→20:50:35 **115 ok / 0 FAIL / 16 无测试 / 0 cached**。
+- 20:51:10 `ls-remote` 核 `d2f11618` 未动 → `push a5a5527d:main` 成，**远端 main = `a5a5527d`**；共享树 ff 同 SHA。评审（0 阻断）到之后才推。
+- 浏览器未验沿完成记录所报。

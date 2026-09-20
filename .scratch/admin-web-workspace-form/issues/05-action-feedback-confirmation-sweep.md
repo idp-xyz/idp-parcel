@@ -1,7 +1,7 @@
 # 05 写动作反馈与高风险确认一致性：先审计全部写面调用点成对照表，再补 `useToast` / `ConfirmDialog` / 进行中态
 
 Category: enhancement
-Status: resolved——码三笔 tip `fef2958c`（分支 `mcp5-wsform05`，基 `11e6111a`；通道 5 20:26 推完最后一笔后会话未再响应，完成记录由推送方按 git 与票面对照表代落，见下）；进 main 记录见 Comments。此前 in-progress
+Status: resolved · 已进 main `a5a5527d`（码 `2f3a8d3a` / `cdaa27b4` / `f8d37cf6` + 推送方注释笔 `844bc6a7`；评审 ← 通道 4 两轴 0 阻断）——码三笔分支 tip `fef2958c`（分支 `mcp5-wsform05`，基 `11e6111a`；通道 5 20:26 推完最后一笔后会话未再响应，完成记录由推送方按 git 与票面对照表代落，见下）；进 main 记录见 Comments。此前 in-progress
 认领：通道 5 · 2026-09-20 20:1x · 分支 `mcp5-wsform05` · 基 `origin/main` `11e6111a` · worktree `D:\tops\idp-parcel-mcp5-wsform05`
 Blocked by: 无
 地盘：审计段只读全仓 `apps/admin-web/src/pages/**`；改动段落 `apps/admin-web/src/components/`（新 `components/action-feedback.ts` 纯逻辑 + 可能的 `components/ActionButton.tsx`）与
@@ -157,3 +157,12 @@ spec 把它当 toast 基线是误读，但它仍是「反馈完整」的基线�
 
 - Standards 1（头注挂错符号）→ 只动注释位置，推送方代落一笔（见进 main 记录）。
 - Standards 2 / 3、Spec 1 / 2 → 记，不挡合入；标点一致性与两页同形五件留作者或下一张触及这两页的票顺手。
+
+### 进 main 记录（推送方 · 通道 4 接任）
+
+- 重放：在 `%TEMP%\idp-land-wsform04`（已含 04 三笔 + 完成记录 `5deab441`）上把 `11e6111a..fef2958c` 五笔 cherry-pick 零冲突（本票 7 件与 04 六件、main 其后 ux-alignment/02 各笔零重叠），SHA 对照
+  `ef39faf7→36f7e472` / `9f136811→b35fb73c` / `fdb64b91→2f3a8d3a` / `caed9588→cdaa27b4` / `fef2958c→f8d37cf6`；七件与作者 tip 逐 blob 同。推送方两笔：`844bc6a7`（评审 Standards 1，只移注释位置）、`a5a5527d`（本票完成记录 + 评审 + 04 评审入票）。
+- 门禁在 `a5a5527d` 上实跑：`tsc -b --noEmit` 0 / `run-tests` **359**（main 343 + 04 的 9 + 本票 7）/ `vite build` 0（产物含四处新确认文案各 1）/ `gofmt -l` 空 / `go build` 0 / `go vet` 0 / 清点重生成零差 /
+  带 DSN 全量 `-p 1 -count=1` 20:48:17→20:50:35 **115 ok / 0 FAIL / 16 无测试 / 0 cached**。
+- 20:51:10 `ls-remote` 核 `d2f11618` 未动 → `push a5a5527d:main` 成，**远端 main = `a5a5527d`**；共享树 ff 同 SHA。
+- 浏览器未验沿完成记录所报。
