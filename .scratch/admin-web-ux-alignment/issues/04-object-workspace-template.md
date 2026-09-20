@@ -1,7 +1,7 @@
 # 04 `DetailPageTemplate` 对齐对象工作区母版：Object Header + Summary Strip + 稳定命名的 Tabs；委托查阅详情页首用
 
 Category: enhancement
-Status: in-progress——第 1–5 条已进 main（码 `ccd1ce3c`，推送方注释笔 `3fbf2ec2`；评审 ← 通道 6 两轴 0 阻断）；第 6 条演示页待补（03 已进 main，阻塞已解）
+Status: resolved——第 1–5 条已进 main（码 `ccd1ce3c`，推送方注释笔 `3fbf2ec2`；评审 ← 通道 6 两轴 0 阻断）；第 6 条演示页在分支 `mcp5-ux04-6`（码 tip `add1d41c`，基 main `bd067052`）待评审 / 进 main
 Blocked by: 无（原 Blocked by 03——两票都改 `pages/template-preview/*` 演示页；03 已与本票第 1–5 条同批进 main，第 6 条从 `origin/main` 起做）
 地盘：`apps/admin-web/src/templates/DetailPageTemplate.tsx`、`templates/types.ts`、`templates/demo.ts`、`templates/index.ts`、`pages/template-preview/*`
 （等 03）、`pages/shipment-request/ShipmentRequestDetailPage.tsx`（首用）。**不改另外两张用它的页**（`governance/StageAdmissionPage`、
@@ -93,8 +93,10 @@ Blocked by: 无（原 Blocked by 03——两票都改 `pages/template-preview/*`
 5. ✅ 首用 `ShipmentRequestDetailPage`：`meta` 四格（提交时间 / 系统接收时间 / 来源 / 当前提交版本，全是 `view` 实有字段）；`summary` 两格
    （`declaredParcelCount` / `priorVersionCount`，读口原样计数）；`tabs={[]}` → 只有「概要」一签（基本信息 + 现有三个区块）——委托的事件流与
    审计留痕都没有面向 UI 的读口，「时间线」「审计」无内容不出（裁决 1），不新造读口。主编号与状态词沿头区原位。
-6. ⏳ `template-preview` 演示页：**等 03 进 main**。推送方广播后 rebase 到 origin/main，在 `templates/demo.ts` 与 `pages/template-preview/*` 补一笔，
-   `renderToStaticMarkup` 断言签名顺序。
+6. ✅ `template-preview` 演示页（分支 `mcp5-ux04-6` 笔 `9eaba4f4`，基 main `bd067052`）：预览页新增「对象工作区」一签，渲染新组件
+   `pages/template-preview/ObjectWorkspaceDemo.tsx`——同一份合成申报单换成对象工作区排布：头区两行（主编号可复制 + 状态 + 元信息四格 + 两个快速动作）、
+   指标带四格、签按 审计 → 关联 → 概要 倒序传而渲染为 概要 · 关联 · 审计、右侧上下文一卡；样例数据进 `templates/demo.ts`（`demoWorkspace*` 五个导出），
+   基本信息 / 区块 / 审计留痕复用详情演示那三份。03 的列表演示与「详情模板」签未动。一次性 `renderToStaticMarkup` 探针 **28 断言全过**（见下）。
 
 **完成判据逐条**
 
@@ -109,8 +111,10 @@ Blocked by: 无（原 Blocked by 03——两票都改 `pages/template-preview/*`
   出签序为 概要 < 关联 < 审计、`content: null` 的文档签被剔、无内容签（时间线 / 异常 / 文档）不出、关联签带计数、aside 在、`role="tab"` 三个、
   概要签内模板内容在调用方内容之前、非当前签内容未挂载（Radix 默认不 forceMount）、`tabs=[]` 无审计 → 只有概要一签、`summary=[]` / `meta=[]`
   不渲染、不传 aside 无 `<aside>`、非 ready 态无签无指标带但对象头区仍在。
-- `template-preview` 产物断言 ⏳ 随第 6 条（等 03 进 main）。**组件层未钉**：照抄 05 / 06 实测结论——`.test.ts` 不能 `require` 任何 `import` 了
-  `@idpxyz/*` 的模块（`exports` 只有 `types` + `import`，CJS `require` 报 `ERR_PACKAGE_PATH_NOT_EXPORTED`），本票未再试。
+- `template-preview` 产物断言 ✅ **一次性实测、组件层未钉**（第 6 条完成记录里有逐条；`vite build` 产物 `dist/assets/index-*.js` 以 node 按 UTF-8 读、
+  `includes` 核到演示标题「托运申报单（对象工作区演示）」、`SYN-BATCH-240819-07`、「留痕口径（演示）」「上下文（演示）」两个快速动作文案与说明条「签按固定序出」
+  各 1 命中；签名固定表三词在）。**组件层未钉**的理由照抄 05 / 06 实测结论——`.test.ts` 不能 `require` 任何 `import` 了 `@idpxyz/*` 的模块
+  （`exports` 只有 `types` + `import`，CJS `require` 报 `ERR_PACKAGE_PATH_NOT_EXPORTED`），本票未再试。
 - 浏览器验收**未验**（本机无 gk.idp.xyz 会话）。
 
 **判断项**
@@ -184,3 +188,50 @@ workspace-tabs 符号——第 6 条断言要用，无害。缺：无。
   `go test ./internal/architecture/ -count=1` ok / 带 DSN 全量见 tasks.md 本节。
 - **第 6 条**：03 已进 main，阻塞解除；由通道 5 从 `origin/main` 起做 `templates/demo.ts` + `pages/template-preview/*` 一笔并 `renderToStaticMarkup` 断言签名顺序，
   评审只看那一笔增量。
+
+### 完成记录（第 6 条 · 通道 5 新会话 · 2026-09-20 17:4x–18:0x · 分支 `mcp5-ux04-6` · 基 main `bd067052` · 码 tip `add1d41c`）
+
+**笔** `9eaba4f4`（第 6 条，原 `5bb34bbf` 基 `3fbf2ec2`，推送方簿记笔 `bd067052` 进 main 后 rebase 到其上，内容一字未改）→ `add1d41c`（评审 Standards 2
+顺手笔，见下）→ 本票面笔。每笔 push origin；不推 main、不占 55432、不跑全仓。只碰 `pages/template-preview/TemplatePreviewPage.tsx`、新
+`pages/template-preview/ObjectWorkspaceDemo.tsx`、`templates/demo.ts`、`templates/workspace-tabs.ts`（Standards 2 那一笔）。`ListPageTemplate.tsx` /
+`DetailPageTemplate.tsx` / `Layout` / `App` / `index.css` / `navigation.ts` / `templates/index.ts` 一个没碰。
+
+**演示的形状**
+
+- 预览页 `Tabs` 加一签「对象工作区」（列表模板 / 详情模板之后、复核工作流之前），签内先一条说明栏（签为什么按固定序、三签为什么不出、头区为什么没有负责人 / 风险、
+  右侧上下文只在宽屏），再渲染 `ObjectWorkspaceDemo`，四态切换器照旧共用。「详情模板」那一签保留为同一模板不传新 prop 的叠 Card 形态，两签并排即「同一模板两形态」。
+- `ObjectWorkspaceDemo` 抽成独立组件而不写进预览页：让探针渲染的就是页面渲染的那棵树，不另拼一份「像页面」的 props；不取 `useToast`，快速动作反馈走 `onDemoAction`
+  回调（预览页接成 toast），探针因此不必套 `ToastProvider`。
+- 传给模板的：`identifier` 复用详情演示那份申报单号；`status` 待人工复核；`headerActions` 两个 `Button`（主 / 次要动作，点了只 toast）；`meta` 四格
+  （提交时间 / 系统接收时间 / 来源 / 当前提交版本，与首用页同形）；`summary` 四格（声明包裹件数 / 此前版本数 / 目的国/地区 / 提交批次——都是对象自己陈述的事实，
+  无派生 KPI）；`basicFields` / `sections` / `auditTrail` 复用 `demoDetailFields` / `demoDetailSections` / `demoDetailAuditTrail`；`tabs` 三签按
+  **审计 → 关联 → 概要** 传——审计与概要各接一张调用方卡（演示同 id 归并、模板内容在前），关联给一张五行关联对象表带 `count: 5`；`aside` 一张「上下文（演示）」卡三格事实。
+- `demo.ts` 新增一节「DetailPageTemplate 对象工作区演示数据」：`demoWorkspaceIdentifier` / `demoWorkspaceMeta` / `demoWorkspaceSummary` / `demoWorkspaceRelated`
+  （+ `DemoWorkspaceRelatedObject`）/ `demoWorkspaceAsideFacts`，全部 `SYN-` 前缀或「（演示）」后缀，不携带 JSX。
+
+**完成判据逐条（本笔）**
+
+- 四道门 ✅ 两笔各跑：`tsc -b --noEmit` 0 / `run-tests` **313**（与 main `3fbf2ec2` 同数，本笔零新增用例——要钉的纯逻辑第 3 条已钉，本笔全是组件层）/
+  `vite build` 0 / `go test ./internal/architecture/ -count=1` ok（新文件无路径字面量）。
+- `renderToStaticMarkup` 断言 ✅ **一次性实测、组件层未钉**：照第 1–5 条那套 esbuild 束（`node_modules/.pnpm/esbuild@0.25.12/…/bin/esbuild --bundle --platform=node
+  --format=cjs --jsx=automatic --loader:.css=empty`，探针源放 `%TEMP%`、以 `NODE_PATH` 指向本包 `node_modules` 解 `react-dom/server`，源与产物不入库），渲染
+  `ObjectWorkspaceDemo` ready 与 loading 两态，**28 断言 / 0 失败**：头区含主编号 `SYN-PS-240819-0002`、`aria-label="复制主编号"`、状态词、两个快速动作文案；
+  元信息行四格各在（按 `<dt class="text-idpxyz-textMuted">` 逐格核）；全文无「负责人」「风险」；指标带 **4 格**（按 `SummaryStrip` 标签行 class 计数）且四标签各在；
+  `role="tab"` **恰三个**，序为 **概要 < 关联 < 审计**（调用方传的是 审计 → 关联 → 概要）；关联签文本为「关联5」（带计数）；时间线 / 异常 / 文档三词不在任何签上；
+  概要签内「基本信息」在调用方「演示说明」之前；非当前签内容未挂载（`SYN-PARCEL-0002-1` 不在静态标记里）；`<aside` 在且含「上下文（演示）」；loading 态无
+  `role="tab"`、无指标带、头区主编号仍在。
+- `vite build` 产物 grep ✅ 见上文完成判据条目（以 node 按 UTF-8 读产物核，不走 PowerShell 管道——workflow.md 本机环境那条编码坑）。
+- 浏览器验收**未验**（本机无 gk.idp.xyz 会话）。
+
+**评审 Standards 2 顺手笔 `add1d41c`**（推送方处置写「可以另起一笔，不要求」）：`workspace-tabs.ts` 的 `WorkspaceTabId` 改为
+`(typeof workspaceTabOrder)[number]`，六个 id 只在常量数组写一遍、去掉 `satisfies readonly WorkspaceTabId[]`（否则循环引用）；`workspaceTabLabels: Record<WorkspaceTabId, string>`
+仍要求六键齐全。导出面不变；tsc 0 / run-tests 313。
+
+**判断项**
+
+- **指标带四格而非五六格**：多一格只能是「来源请求键」这类标识或从关联表数出来的计数，前者不是指标、后者是派生 KPI；4 落在票面 4–6 之内，auto-fit 栅格一排占满。
+- **summary 未放带徽章的格**：`DetailSummaryStat.value` 收 `ReactNode` 的能力由首用页与第 1–5 条探针已证，演示页再放一格状态词会与头区 `status` 同词重复。
+- **审计 / 概要两签各接一张调用方说明卡**：不接的话「三签乱序传」只剩关联一签是调用方的，乱序无从演示；卡的正文只说自己是什么（调用方同 id 内容、接在模板内容之后），不编业务。
+- **说明栏放在签内、模板之上**，与 03 列表签的「结构位」说明栏同位同字号；不塞进 aside——aside 窄屏藏，说明该在任何宽度都看得见。
+- **横幅「三个页面模板」未改**：对象工作区是 `DetailPageTemplate` 的另一形态，模板仍是三个。
+- spec 子票表 04 那一行未动（索引文件，推送方进 main 时连「已进 main」一并改）。
