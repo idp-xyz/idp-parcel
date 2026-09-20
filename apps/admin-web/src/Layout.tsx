@@ -71,8 +71,8 @@ export function Layout() {
           iconMap={sidebarIconMap}
         />
         <div className="resize-handle-h" onMouseDown={sidebarResize.handleMouseDown} />
-        {/* main 地标：读屏用户跳过导航直达页面内容的锚点。data-density 是密度两档在 DOM 上的落点，
-            模板层（票 03）按它选行高与间距，不必各自再读 useDensity。 */}
+        {/* main 地标：读屏用户跳过导航直达页面内容的锚点。data-density 是密度两档在 DOM 上的落点（票面第 4 条），
+            给只能从 DOM 读档的消费者（样式选择器、探针）用；ListPageTemplate 走的是 useDensity，不读它。 */}
         <main className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor" data-density={density}>
           {renderActive()}
         </main>
