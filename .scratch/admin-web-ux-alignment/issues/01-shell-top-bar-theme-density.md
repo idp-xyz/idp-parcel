@@ -1,7 +1,7 @@
 # 01 壳层：Top Bar 四件（归属信息 / 全局搜索位 / 作用域位 / 用户菜单位）、Light 默认 + 主题切换、密度两档
 
 Category: enhancement
-Status: resolved——2026-09-20 17:5x 通道 4 交活（task-88934341 接续；分支 `mcp4-ux01` tip `ea8b63b8` 基 main `7d29af39`，五笔已推 origin；待非作者评审与推送方重放）。此前 in-progress（15:57 通道 4 认领 task-2fa9c998，该会话 16:05 后无响应、三件未提交现场由接续会话 17:2x 原样入库 `2b8847cb`）；更早 ready-for-agent
+Status: resolved——2026-09-20 17:5x 通道 4 交活（task-88934341 接续；分支 `mcp4-ux01` 基 main `7d29af39`，代码五笔 tip `ea8b63b8`、本票面记录另一笔在其上，均已推 origin；待非作者评审与推送方重放）。此前 in-progress（15:57 通道 4 认领 task-2fa9c998，该会话 16:05 后无响应、三件未提交现场由接续会话 17:2x 原样入库 `2b8847cb`）；更早 ready-for-agent
 Blocked by: 无
 地盘：`apps/admin-web/src/App.tsx`、`Layout.tsx`、`index.css`、新 `apps/admin-web/src/shell/`（TopBar 及其子件）。不动 `navigation.ts`（票 02 的地盘）、不动 `pages/`。
 出处：spec「缺口」表第一档；手册「顶栏规范」「Top Bar 归属信息规范」「主题策略」「栅格与密度」；黄金标准「Top Bar 黄金标准」「Light Theme 黄金标准」；
