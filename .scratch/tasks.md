@@ -2871,3 +2871,17 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
   **归用户**：ADR-0139 → Accepted 与否；票 11 `detail` 格 vs ADR-0140 Decision 三；`docs/ux/commercial-party.md` 仍 untracked、无人认领、未动。
 - **本节五数**（17:1x–17:3x）：CI main 绿/总 未量（`3fbf2ec2` run 刚起）· 集成时延——03 完工报 15:46 → 进 main 17:30 **约 104 分**、04 第 1–5 条 15:48 → 17:30 约 102 分，中位约 103 分（2 票；其中 16:05→17:15 约 70 分是全部会话同止的空档，
   本会话接手到推出 17 分）· 重放笔数 **16**（03 八 + 04 八；不含推送方两笔与本簿记）· 重复开发 0 · 会话重置 **1**（16:0x 全通道同止一次；17:13 起本会话）· 非作者评审缺席 0（两票各有非作者评审，记录自任务台取回落票面）
+
+### 17:3x–17:5x 同一会话：04 第 6 条完工 → 通道 6 增量评审无阻断 → 纯 ff 进 main（`4a19ed33`）；01 交活、两条判断项代裁
+
+- 17:3x 通道 5 报 04 第 6 条完工：`mcp5-ux04-6@4a19ed33`（码 `9eaba4f4` + 顺手笔 `add1d41c`，基 `bd067052` = main = merge-base，纯 ff；5 件 +300/−11；作者四道门 tsc 0 / 313 / vite 0 / architecture ok，
+  一次性 esbuild 束 28 断言 / 0 失败）。17:41 派增量评审 → 通道 6（`task-0e700559`，钉 `4a19ed33`，至 18:00）；同时占号 55432。
+- 隔离树 `idp-land-ux04-6@4a19ed33`（`pnpm install --frozen-lockfile --offline` 4.6 s）四道门 + 静态门全绿；带 DSN 全量 17:47:54→17:50:18 **115 ok / 0 FAIL / 0 cached**，探针 PASS。
+- 17:5x 评审到：**Standards 0 / 2 · Spec 0 / 1**（两条 Fowler 轻、一条「提交批次是标识非量」记）→ 处置：记不改，票已 resolved。17:53:56 `ls-remote` 核 `bd067052` → `push 4a19ed33:main` 成，
+  **远端 main = `4a19ed33`**；共享树 ff 同 SHA；释号广播。**先 push 再簿记。**
+- 通道 4 报 01 交活（17:51，`mcp4-ux01` 码 tip `ea8b63b8`、票面 tip `0ec5dfa5`，基 `7d29af39`；run-tests 309；令牌 41 / 41 逐键同；探针 17 / 17）。两条判断项代裁：**(1) 搜索位不用 cmdk `Command`、用 Button 形外壳**
+  → 接受（`role=combobox aria-expanded` 而无列表对读屏是假动作，触 spec「留位不留假动作」；上游 TitleBar 同形），票面写成裁决；**(2) AuthGate 悬浮 `SessionBadge` 与新用户菜单重复** → 另起一笔在同分支删，
+  条件：TopBar 用户菜单在 AuthGate 放行后所有渲染路径上都在场，否则留着写理由；地盘句同笔加注。等通道 4 报最终 tip 再派评审（2 或 3，非作者）。
+- **簿记本笔**（纯 .md 自审，在 `4a19ed33` 之上）：票 04 Status → resolved · 已进 main + 评审 ← 通道 6 增量原文代落 + 处置 + 进 main 记录；spec 子票表 04 → resolved · 已进 main；本小节。
+- **收尾**：`mcp5-ux04-6` → `merged/`、远端删；`idp-land-ux04-6` 与 `idp-parcel-mcp5-ux04` 比内容后拆（通道 5 已报空闲）。
+- **前沿**：01 等最终 tip → 评审 → 重放（基 `7d29af39`，与 main 其后各笔零重叠，`merge-tree` 干跑过）；02 Blocked by 01 → 01 进 main 后转 ready 即派。六票余 01 / 02。

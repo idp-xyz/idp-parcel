@@ -1,7 +1,7 @@
 # 04 `DetailPageTemplate` 对齐对象工作区母版：Object Header + Summary Strip + 稳定命名的 Tabs；委托查阅详情页首用
 
 Category: enhancement
-Status: resolved——第 1–5 条已进 main（码 `ccd1ce3c`，推送方注释笔 `3fbf2ec2`；评审 ← 通道 6 两轴 0 阻断）；第 6 条演示页在分支 `mcp5-ux04-6`（码 tip `add1d41c`，基 main `bd067052`）待评审 / 进 main
+Status: resolved · 已进 main——第 1–5 条码 `ccd1ce3c`（推送方注释笔 `3fbf2ec2`；评审 ← 通道 6 两轴 0 阻断）；第 6 条码 `9eaba4f4` + `add1d41c`，票面 `4a19ed33` 纯 ff 进 main（评审 ← 通道 6 增量 0 / 2 · 0 / 1）
 Blocked by: 无（原 Blocked by 03——两票都改 `pages/template-preview/*` 演示页；03 已与本票第 1–5 条同批进 main，第 6 条从 `origin/main` 起做）
 地盘：`apps/admin-web/src/templates/DetailPageTemplate.tsx`、`templates/types.ts`、`templates/demo.ts`、`templates/index.ts`、`pages/template-preview/*`
 （等 03）、`pages/shipment-request/ShipmentRequestDetailPage.tsx`（首用）。**不改另外两张用它的页**（`governance/StageAdmissionPage`、
@@ -235,3 +235,39 @@ workspace-tabs 符号——第 6 条断言要用，无害。缺：无。
 - **说明栏放在签内、模板之上**，与 03 列表签的「结构位」说明栏同位同字号；不塞进 aside——aside 窄屏藏，说明该在任何宽度都看得见。
 - **横幅「三个页面模板」未改**：对象工作区是 `DetailPageTemplate` 的另一形态，模板仍是三个。
 - spec 子票表 04 那一行未动（索引文件，推送方进 main 时连「已进 main」一并改）。
+
+### 评审 ← 通道 6 · 第 6 条增量 · 钉 `4a19ed33`（码 `add1d41c`，基线 `bd067052` = merge-base，纯 ff）· 17:5x（推送方自任务台 `task-0e700559` 代落原文）
+
+只读，未碰作者树、未跑门禁、未占 55432；隔离树评完已拆。结论来自读 diff + `workspace-tabs.ts` / `.test.ts` 全文 + `DetailPageTemplate` 归并入口 + `demo.ts` 既有详情演示对照 + ui-theme-runtime dist 源。
+
+**Standards** — 阻断：无。非阻断：
+1. Duplicated Code（轻）：`demoDetailSections` → `DetailSection` 的适配（`content: <p …>{section.body}</p>`）在 `TemplatePreviewPage.tsx`「详情模板」签的 `sections` 与
+   `ObjectWorkspaceDemo.tsx` 的 `sections` 各写一遍；「同一份申报单两形态」本就要求两处同形，抬成 `template-preview/` 下一个小函数即可（不进 `demo.ts`，它刻意不带 JSX）。
+2. Data Clumps（轻）：`demo.ts` 的 `demoWorkspaceMeta` / `demoWorkspaceSummary` / `demoWorkspaceAsideFacts` 都是匿名 `{ label: string; value: string }[]`，同节
+   `DemoWorkspaceRelatedObject` 却给了命名接口；给一个 `DemoLabelValue` 类型两边一致。
+无发现（实核）：注释全中文、无跨文件行号 / 计数 / 变更说明；`demo.ts` 新增五导出全标「隔离合成 S」、全 `SYN-` 前缀或「（演示）」后缀、无 JSX，值与详情演示同一对象逐字对上；
+`meta` 四格无「负责人」「风险」（裁决 2）；色只用 idpxyz token；两新改文件无 BOM。**`add1d41c` 导出面未动**：`WorkspaceTabId = (typeof workspaceTabOrder)[number]` 得同一六值联合，
+`workspaceTabOrder` 类型不变，`workspaceTabLabels` / `WorkspaceTabInput` / `ResolvedWorkspaceTab` / `resolveWorkspaceTabs` 一字未动；测试零改、首条仍 `deepEqual` 六 id 与六词——派生后
+`Record` 双向卡死，比原来更紧。**`useToast` 理由成立**：dist 里 `useToast()` 无 Provider 直接 throw，组件不取它、走 `onDemoAction`，探针才能裸渲染与页面同一棵树。
+
+**Spec** — 阻断：无。第 6 条逐项 ✅：头区（`identifier` + `status` + 两个 `headerActions` + `meta` 四格）、指标带四格、三签、`aside` 一卡；样例进 `demo.ts` 合成 S；
+`renderToStaticMarkup` 可断言——组件抽独立且不依赖 Provider，作者一次性 28 断言、票面标「组件层未钉」符合完成判据的逃生条款。**固定序真验到**：`resolveWorkspaceTabs` 外循环按
+`workspaceTabOrder`，`workspace-tabs.test.ts`「调用方传入顺序不算数」的输入恰是 audit → related → summary，与 `ObjectWorkspaceDemo` 传参逐字同，纯函数层已钉。裁决 1 ✓；
+03 列表演示与「详情模板」签零改 ✓；`run-tests` 313 零新增成立（本笔无新纯逻辑）。
+非阻断：1. 指标带第四格「提交批次 SYN-BATCH-240819-07」是标识不是量，与判断项「标识……不是指标」自相矛盾，且同值在关联签首行与 aside「所属批次」三处出现；票面第 2 条「对象自身的事实」
+字面不违。建议判断项改成「标识可入带、计数不可派生」或换成对象自陈的量。记，不阻断。判断项其余无失真；超票面仅 `add1d41c`，在处置「不要求」许可内；缺：无。
+
+**Standards 0 / 2 · Spec 0 / 1** → 无阻断，可重放。
+
+### 处置（推送方 · 通道 1 · 17:5x）
+
+- Standards 1 / 2 与 Spec 1 → 记，不改：三条都是演示页与演示数据的口味级整理，票已 resolved；若下次有人动 `template-preview/` 顺手收。Spec 1 的判断项措辞以评审那句为准读——
+  「标识可入带、计数不可派生」是本票第 2 条「对象自身的事实、不放派生 KPI」的准确展开，票面判断项那句不改，留此处对照。
+
+### 进 main 记录（第 6 条 · 推送方 · 通道 1）
+
+- 基 `bd067052` = main tip = merge-base，三笔**纯 ff**（SHA 不变 `9eaba4f4` / `add1d41c` / `4a19ed33`），`git merge-base --is-ancestor` 直接答得出。
+- 门禁在隔离树 `idp-land-ux04-6@4a19ed33` 实跑：`tsc -b --noEmit` 0 / `run-tests` **313** / `vite build` 0（产物含 `SYN-BATCH-240819-07` 1 处）/ `gofmt -l` 空 / `go build` 0 /
+  `go vet` 0 / 清点重生成零差 / 带 DSN 全量 `-p 1 -count=1` 17:47:54→17:50:18 **115 ok / 0 FAIL / 16 无测试 / 0 cached**，DSN 判别单跑为 PASS。
+- 17:53:56 `ls-remote` 核 `bd067052` 未动 → `push 4a19ed33:main` 成，**远端 main = `4a19ed33`**；共享树 ff 同 SHA。评审到（17:5x）之后才推。
+- 浏览器未验沿作者所报。
