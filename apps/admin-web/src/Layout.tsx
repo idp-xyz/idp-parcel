@@ -1,15 +1,16 @@
 import { useEffect, useState } from 'react';
-import { Package } from 'lucide-react';
 import { Sidebar, useResize } from '@idpxyz/ui-workspace';
 import { useDensity } from '@idpxyz/ui-theme-runtime';
 import { navigationSections, sidebarIconMap, pageTitleById } from './navigation';
 import { pageById } from './page-registry';
 import { Workbench } from './pages/Workbench';
 import { UnwiredModule } from './pages/UnwiredModule';
+import { TopBar } from './shell/TopBar';
 
-// 传统控制台外壳：品牌头 + 左侧导航 + 单页区，参考 idp-ui
+// 传统控制台外壳：顶栏 + 左侧导航 + 单页区，参考 idp-ui
 // apps/loms-web 的 console/Layout；不引入标签页与底部/右侧面板，
 // 等首个真实页面出现后再按实际交互决定是否升级形态。
+// 顶栏是 shell/TopBar 自己的件（手册「顶栏规范」的全局位），这里只喂它当前页名。
 // 页面映射在 page-registry：没登记的 id 落 UnwiredModule 诚实占位——
 // 导航条目先于页面出现时，缺的是页面不是路由。工作台是外壳首页，
 // 不入登记，由这里直接渲染并注入跳转能力。
@@ -55,14 +56,7 @@ export function Layout() {
 
   return (
     <div className="h-screen w-screen flex flex-col bg-idpxyz-bg text-idpxyz-text overflow-hidden">
-      <div className="h-12 flex items-center gap-2 px-4 border-b border-idpxyz-border bg-idpxyz-titleBar shrink-0">
-        <Package className="h-5 w-5 text-idpxyz-accent" />
-        <span className="text-[14px] font-bold text-idpxyz-textBright">IDP Parcel</span>
-        <span className="text-[12px] text-idpxyz-textMuted">/ 租户管理台</span>
-        <span className="ml-auto text-[12px] text-idpxyz-textMuted">
-          {pageTitleById[active] || active}
-        </span>
-      </div>
+      <TopBar moduleTitle={pageTitleById[active] || active} />
 
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
