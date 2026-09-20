@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button, Timeline } from '@idpxyz/ui-primitives';
+import { SectionError } from '../../components/states';
 import type { ApiResult } from '../catalogue-api';
 import { problemNote } from './presentation';
 import type { RevisionTimelineItem } from './revision-timeline';
@@ -83,17 +84,19 @@ export function RevisionHistorySection<Body>({
       </p>
     );
   }
-  if (answer.kind === 'noAnswer' || answer.kind === 'transport') {
+  // 这两态是「这一段没读到、可重试」——区块级错误（票 admin-web-ux-alignment/06 第 2 条首用）：只红历史区这一段，抽屉
+  // 其余各格照常。标题 / 说明的分法与目录页 catalogueViewState 同一口径：状态句作标题，问题码注释或传输层消息作说明。
+  if (answer.kind === 'noAnswer') {
     return (
-      <p className={note}>
-        {answer.kind === 'noAnswer'
-          ? `服务端未形成答案（HTTP ${answer.status}）：${problemNote(answer.code)}`
-          : `无法连接主数据读取服务：${answer.message}`}
-        <Button variant="ghost" size="sm" className="ml-2" onClick={retry}>
-          重试
-        </Button>
-      </p>
+      <SectionError
+        title={`服务端未形成答案（HTTP ${answer.status}）`}
+        description={problemNote(answer.code)}
+        onRetry={retry}
+      />
     );
+  }
+  if (answer.kind === 'transport') {
+    return <SectionError title="无法连接主数据读取服务" description={answer.message} onRetry={retry} />;
   }
   const echoed = register.echoedSubjectId(answer.body);
   if (echoed !== subjectId) {

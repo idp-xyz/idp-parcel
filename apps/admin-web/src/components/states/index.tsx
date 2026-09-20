@@ -1,9 +1,15 @@
 import type { ReactNode } from 'react';
 import { AlertTriangle, Inbox, PlugZap, RotateCw } from 'lucide-react';
 
+export { SectionError, type SectionErrorProps } from './section-error';
+
 // 页面四态展示组件。命名与 props 是跨会话契约（v2 最终版）：templates/state-slot.tsx
 // 与 pages/shipment-request 按名导入，改名或收紧必填都会拆到消费方。
 // 全部 props 可选、内置中文兜底文案；样式只用 idpxyz 色 token。
+//
+// 错误按层分（手册「Error State」）：这里的 ErrorState 是**页级**——整个内容区换掉，对应「详情半份比没有更误导」
+// 那条红线；**区块级**在 section-error.tsx（一段区只红那一段）；**动作级**是登记 / 发布口答案区（RegistrationPanel
+// 的 answered 态）；**后台刷新**是 useRegisterList 重取时保留旧答案。后两层已在各自的件里，这里不另出件。
 //
 // 四态各自回答的问题不同——加载=还没答案；空=答案是「没有记录」；错误=这次没形成
 // 答案（可重试）；未配置=接入渠道未配置（实例半边未就绪），改请求或重试都不会好。
