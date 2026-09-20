@@ -119,8 +119,8 @@ test('种类选项从 identityKindLabels 派生', () => {
 });
 
 // Covers: 按种类把对应册的一行投成「标识 + 修订」——参与方册按 partyId、法人册按 legalEntityId、客户账户册按 accountId。
-// 三册体形各异，取键只在这一份投影里；组件那侧的 kindRegisters 按种类取到册后逐行调它，不各自再写一遍取键
-// （票 14 第 1 条：此前纯模块还留着一张「种类 → 三册里取哪一册」的分派表，生产侧无人调，删了——册在哪里由组件那张表说）。
+// 三册体形各异，取键只在这一份投影里；组件那侧的 kindRegisters 按种类取到册后逐行调它，不各自再写一遍取键——
+// 「种类 → 取哪一册」由组件那张表说，纯模块不另留一张（票 14 第 1 条）。
 test('按种类把对应册的一行投成「标识 + 修订」', () => {
   deepEqual(identityTargetOf.BUSINESS_PARTY(party('SYN-PARTY-01', 3)), { id: 'SYN-PARTY-01', revision: 3 });
   deepEqual(identityTargetOf.LEGAL_ENTITY(legalEntity('SYN-LE-01', 2)), { id: 'SYN-LE-01', revision: 2 });

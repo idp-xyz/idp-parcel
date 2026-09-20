@@ -109,8 +109,8 @@ export function isIdentityKind(kind: string): kind is IdentityKind {
  * 按 IdentityKind 键成 Record，词表多一格这里就编不过——分派表与词表一起长，漏一处在编译期就显。
  *
  * 「种类 → 三册里取哪一册」不在这里：那张表连读口、候选与读面名一起住在组件（IdentityDeactivationForm.tsx 的
- * kindRegisters），键在同一个 IdentityKind 上，取到册后逐行调这里的投影。纯模块此前还留过一份只按种类取册的
- * 分派表，生产侧无人调、只剩测试在钉（票 13 评审 N2 / S1），票 14 第 1 条删去——同一件事两张表，改词表的人会先撞见死的那张。
+ * kindRegisters），键在同一个 IdentityKind 上，取到册后逐行调这里的投影。「取哪一册」只有那一张表——同一件事两张表，
+ * 改词表的人会先撞见死的那张。
  */
 export const identityTargetOf = {
   BUSINESS_PARTY: (row: BusinessPartyRecord): RevisionedIdentity => ({ id: row.partyId, revision: row.revision }),

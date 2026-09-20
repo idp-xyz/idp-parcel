@@ -151,7 +151,7 @@ const kindRegisters: { [K in IdentityKind]: KindRegister<K> } = {
 };
 
 /** 配对里的答案投成「标识 + 修订」：没取到 / 不是业务答案 → null，建议退回 1。 */
-function targetsOf<K extends IdentityKind>({ register, answer }: RegisterAnswer<K>): readonly RevisionedIdentity[] | null {
+function pairedTargetsOf<K extends IdentityKind>({ register, answer }: RegisterAnswer<K>): readonly RevisionedIdentity[] | null {
   return answer?.kind === 'outcome' ? register.targetsOf(answer.body) : null;
 }
 
@@ -189,7 +189,7 @@ export function IdentityDeactivationForm({ parties, onDeactivated }: IdentityDea
   };
   const targetsFor = (kind: string): readonly RevisionedIdentity[] | null => {
     const paired = selectedRegisterFor(kind);
-    return paired === null ? null : targetsOf(paired);
+    return paired === null ? null : pairedTargetsOf(paired);
   };
 
   const form = useRegistrationForm<IdentityDeactivationDraft>({
