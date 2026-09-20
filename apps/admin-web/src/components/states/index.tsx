@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
-import { AlertTriangle, Inbox, PlugZap, RotateCw } from 'lucide-react';
+import { AlertTriangle, PlugZap, RotateCw } from 'lucide-react';
+import { TrulyEmptyState } from '@idpxyz/ui-primitives';
 
 export { SectionError, type SectionErrorProps } from './section-error';
 
@@ -38,15 +39,18 @@ export interface EmptyStateProps {
   action?: ReactNode;
 }
 
-/** 空态：答案已形成且为「没有记录」。与「未接线/未配置」是两种不同的真话，不得混用。 */
+/**
+ * 空态：答案已形成且为「没有记录」。与「未接线/未配置」是两种不同的真话，不得混用。
+ *
+ * 形取 ui-primitives 的 TrulyEmptyState（票 admin-web-ux-alignment/06 第 3 条），字归本仓：标题与说明**总是**传过去，原语自己的
+ * 英文缺省句（无 title / description 时才出）到不了页面。`action` 不映到它的 `onCreate`——那颗按钮的字「Create First Record」写死在
+ * 原语里，映过去就是把英文按钮放到页面上；本仓的动作位仍收 ReactNode，摆在卡片下方。筛空那一行（FilteredEmptyState）不在这里，
+ * 票面裁决 2：它的文案不可定制、不换。
+ */
 export function EmptyState({ title, description, action }: EmptyStateProps) {
   return (
-    <div className="text-center max-w-[420px] px-6">
-      <Inbox className="h-8 w-8 mx-auto mb-3 text-idpxyz-textMuted" aria-hidden />
-      <p className="text-[15px] text-idpxyz-textBright mb-1">{title ?? '暂无记录'}</p>
-      <p className="text-[12px] leading-5 text-idpxyz-textMuted">
-        {description ?? '当前条件下没有可显示的内容。'}
-      </p>
+    <div className="flex w-full flex-col items-center">
+      <TrulyEmptyState title={title ?? '暂无记录'} description={description ?? '当前条件下没有可显示的内容。'} />
       {action ? <div className="mt-4 flex justify-center">{action}</div> : null}
     </div>
   );
@@ -60,7 +64,13 @@ export interface ErrorStateProps {
   onRetry?: () => void;
 }
 
-/** 错误态：这一次没形成答案（5xx 或传输层未通）。给重试入口，错误码原样露出。 */
+/**
+ * 错误态：这一次没形成答案（5xx 或传输层未通）。给重试入口，错误码原样露出。
+ *
+ * 不包 ui-primitives 的 UnavailableState（票 admin-web-ux-alignment/06 第 3 条判「不换」）：它的标题「Data temporarily unavailable」、
+ * 说明与按钮「Retry」全写死、只收 onRetry，包一层就是把英文缺省句摆到页面上，与本仓文案规则相抵；且调用方今天把
+ * 传输失败与服务端未形成答案都送到这一态、只靠 title 区分，原语也没有传这句话的口。形先保持今天的，原语开放文案再换。
+ */
 export function ErrorState({ title, code, description, onRetry }: ErrorStateProps) {
   return (
     <div className="text-center max-w-[420px] px-6">
