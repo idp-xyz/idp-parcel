@@ -1,7 +1,7 @@
 # 06 Loading 按内容形状出骨架、错误按页 / 区块 / 动作分层、空态换 ui-primitives 三件
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress
 Blocked by: 无（03 / 04 改 `templates/ListPageTemplate.tsx` / `DetailPageTemplate.tsx`，本票**不碰这两个文件**；形状经 `TemplateViewState` 传进 `StateSlot`）
 地盘：`apps/admin-web/src/templates/state-slot.tsx`、`components/states/index.tsx`（+ 新 test）、`pages/catalogue-view.ts`（+ 既有 test）。**不逐页改 36 张列表页**：
 形状默认值由 `catalogueViewState` 给，页面零改动。
@@ -57,3 +57,7 @@ background refresh 五层，局部隔离、不整页红）、「状态与反馈�
 3. **区块级错误只出件 + 一处首用**：全站换法归各页自己的票；本票证明件能用、形对，不逐页铺。
 
 ## Comments
+
+### 认领（2026-09-20 12:5x）
+
+通道 5，分支 `mcp5-ux06` 基 main `86a96ab7`；地盘 `templates/state-slot.tsx`、`components/states/`、`pages/catalogue-view.ts`（+ test）、首用 `pages/party/RevisionHistorySection.tsx`。
