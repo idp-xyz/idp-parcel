@@ -171,8 +171,10 @@ function DisabledSlot({ label, reason }: { label: string; reason: string }) {
 }
 
 // 列表页模板：Breadcrumb + PageHeader + FilterBar + Table + Pagination，形态对齐 Monitor 页黄金标准
-// （idp-ui@53df1666「IDP Monitor Page Golden Standard」）。36 张列表页共用这一个模板：一切新位都走可选 prop，
-// 不传时的默认行为就是各页今天的行为。
+// （idp-ui@53df1666「IDP Monitor Page Golden Standard」）。所有列表页共用这一个模板，形态与行为分两条规矩：
+// 形态（四个结构位、surface 容器、按密度的行距）按黄金标准 Rule 2 无条件长出，不传任何新 prop 的页也长；
+// 行为（排序 / 保存视图 / 更多筛选的动作、双击与 Enter 开对象、行进 Tab 序）只在调用方接了对应 prop 时才有——
+// 不接的位是禁用按钮 + 悬停说明，不接 onRowOpen 的行不进 Tab 序、只响应单击。
 // 非 ready 态只替换表格区，页头与过滤条保留——加载中用户仍能改筛选条件。
 export function ListPageTemplate<Row>({
   title,
@@ -209,7 +211,7 @@ export function ListPageTemplate<Row>({
   const { density } = useDensity();
   const cellPadding = densityRowPadding(density);
 
-  // 行的交互属性由 rowInteraction 决定；这里只管把它们贴到 <tr> 上。没接任何回调时 className 为 undefined，与今天同。
+  // 行的交互属性由 rowInteraction 决定；这里只管把它们贴到 <tr> 上。没接任何回调时 className 为 undefined。
   const interaction = rowInteraction({ click: onRowClick !== undefined, open: onRowOpen !== undefined });
   const rowClass =
     [interaction.clickable ? 'cursor-pointer' : '', interaction.tabIndex !== undefined ? rowFocusClass : '']

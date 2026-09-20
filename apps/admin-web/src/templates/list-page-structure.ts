@@ -6,8 +6,8 @@ import type { ListDensity } from '@idpxyz/ui-theme-runtime';
 
 /**
  * 密度两档对应的行内边距（黄金标准「Table 黄金标准」11.5；两个值照 loms-web `cellPy`）。
- * 只给 Tailwind 类名，不给像素：与 TableCell 原语自带的 py-2 经 cn 合并时后者让位，两档都不等于今天的 py-2，
- * 所以切换密度是全站可见的变化，不是「comfortable = 老样子」。
+ * 只给 Tailwind 类名，不给像素：与 TableCell 原语自带的 py-2 经 cn 合并时后者让位，两档都不等于原语的 py-2，
+ * 所以切换密度是全站可见的变化，不是「comfortable = 原语默认」。
  */
 export function densityRowPadding(density: ListDensity): string {
   return density === 'compact' ? 'py-1' : 'py-2.5';
@@ -23,8 +23,8 @@ export interface RowInteractionInputs {
 
 export interface RowInteraction {
   /**
-   * 行进不进 Tab 序。只有接了 onRowOpen 才给 0——键盘要能「开」才值得让行可聚焦；没接就不给，36 张只接
-   * onRowClick 的页于是与今天逐字节同。不用正数：正数会抢整页的 Tab 顺序。
+   * 行进不进 Tab 序。只有接了 onRowOpen 才给 0——键盘要能「开」才值得让行可聚焦；没接就不给，只接 onRowClick
+   * 的页行属性不变。不用正数：正数会抢整页的 Tab 顺序。
    */
   tabIndex: 0 | undefined;
   /** 任一行回调存在即可点（指针样式）：双击本身也是指针动作。 */
