@@ -1,7 +1,7 @@
 # 14 `pages/party` 收口尾巴：票 13 评审判断项里的死分派表、四份同形修订建议、其它模块的 `chipClass` 副本
 
 Category: chore
-Status: in-progress
+Status: resolved
 Blocked by: 无（13 已进 main，远端 main `090e250e`）
 地盘：`apps/admin-web/src/pages/party/`（`identity-deactivation-form.ts` + test、`IdentityDeactivationForm.tsx`、四份 `*-form.ts` + test、
 `registration-form.ts` + test）；第 3 条若做，`apps/admin-web/src/pages/{channel-selection,customs,network,operations,visibility}/` 里
@@ -82,3 +82,56 @@ Blocked by: 无（13 已进 main，远端 main `090e250e`）
 - `const chipClass` ⏳ 钉 `baabfb1b` 十二命中：`components/registration/chip.ts` 的 `export const` 一 + 其它模块页面十一（`channel-selection` 1、`customs` 1、
   `network` 2、`operations` 3、`visibility` 4，与票面钉 `090e250e` 的数同）；这十一处是第 3 条，由通道 4 报。
 - 浏览器验收未验（同 13 口径）。
+
+### 完成记录·第 3 条（通道 4 · 2026-09-20 11:5x–12:0x · 分支 `mcp4-adminweb14b` 基 main `e16497de` · tip `3b26cdfe`；推送方按其 `report_task` 代落）
+
+3. ✅ 一笔 `3b26cdfe`，11 件 +11/−82：`channel-selection/ChannelSelectionDecisionsPage`、`customs/ComplianceRulesPage`、`network/NetworkCatalogPage` +
+   `RoutePlansPage`、`operations/EffectiveTimeJudgmentPage` + `NodeOperationsReviewPage` + `TransportFulfillmentReviewPage`、`visibility/ClaimPrerequisitesPage` +
+   `DisclosurePoliciesPage` + `ExceptionTriagePage` + `TrackingJudgmentRulesPage`——十一处私有 `const chipClass` 删、改 `import { chipClass } from
+   '../../components/registration'`（五页已有 registration 导入行的只补名，六页新增一行）。**留存：无**——钉 `e16497de` 脚本逐块比对，十一处与 `chip.ts` 导出体
+   逐字同。钉 `3b26cdfe`：`git grep -n "const chipClass" -- apps/admin-web/src` 命中 1（仅 `chip.ts:6` 的 `export const`），`pages` 下零。三道门 `tsc` 0 /
+   `run-tests` 289（基线 289，用例零改动）/ `vite build` 0。未碰 `pages/party`、`components/registration`、票面。推送方另核：`git diff e16497de 3b26cdfe`
+   除导入行外只有十一段同字模板串的删除。
+
+**完成判据（合两支，钉进 main 的 tip `3164b7d1`）**：`const chipClass` 只剩 `components/registration/chip.ts` 一处 ✅；「最新修订加一」实现只剩
+`suggestedNextRevision` 一处 ✅；`tsc` 0 / `run-tests` 290 / `vite build` 0 ✅。
+
+### 评审 ← 通道 6 · 两支一并 · 14a 钉 `8ad23acf`（码 `baabfb1b`）/ 14b 钉 `3b26cdfe` · 基线 `e16497de` · 12:1x–12:2x（推送方按其两条消息代落）
+
+（`task-13121320`；隔离树 `%TEMP%\idp-review-14`，两轴串行；三道门未复跑，以推送方 idp-land14 实跑为准。）
+
+- **Standards（阻断 0 / 非阻断 4）**：**N1** 变更说明式注释——`identity-deactivation-form.ts` `identityTargetOf` 文档注「纯模块此前还留过一份…票 14 第 1 条删去」与
+  `identity-deactivation-form.test.ts`「此前…删了」叙的是一次删除，git log 已载，留「种类 → 取哪一册住在组件 kindRegisters」那半即可；`KindRegister` 头注的
+  「此前…真的错过」是配对设计的理由，不算。**N2**（判断项）第 4 条设计量——核心（答案与册结对 + `selectedRegisterFor` 种类不对当未取到）由真缺陷撑住、也确实
+  撤了 13 N3 的擦型；但 `withAnswer` + `load()` 改交配对、`kindRegister` 里 `self` 自引，比「状态存 `{ kind, answer }` + 一个泛型 `pairFor`」重一层；三册而言可
+  接受，不必回改。**N3**（判断项）同文件自由函数 `targetsOf<K>(paired)` 与 `KindRegister.targetsOf(body)` 同名异型；改 `pairedTargetsOf` 或内联。**N4** 14b：
+  `chip.ts` 住 `components/registration/` 却被 route-plans / node-operations 等非登记页导入，位置名不副实；票面指定从此导入，不算本票发现，归后续上提 `components/`。
+  无发现：注释全中文、无行号、无跨文件活计数（`RegisterBodyOf`「三册」同文件枚举）；第 2 条四份包装与原实现逐式同（`id === '' || rows === null` 先判、find 取首、
+  +1），法人 `trim` 在包装里、共用体逐字比（新测 `'A '` → 1 钉住）；第 4 条 effect 依赖 `[selectedKind, reloadKey]` 与 `setLoaded(null)` 先行不变，`key` 同值，
+  文案未动；格下句改显 `form.revisionField.suggestion` 与 `known` 同一 `targetsFor(draft.kind)`、同一 `find`，`known` 在时恒为 `known.revision + 1`，恒等 ✓。
+  14b 十一处删的字串逐字同，只动导入。
+- **Spec（阻断 0 / 非阻断 2）**：**S1** 第 4 条修的那次渲染期抛没有自动化钉——守门 `selectedRegisterFor`（`loaded?.register.kind === kind`）住 .tsx，作者已如实记
+  「不加运行时用例」；真要钉得把这一比较抬进纯模块，超本票，只记。**S2** 第 1 条旧用例「对应册没取到 → null，不拿别的册冒充」那半随删除消失，这正是第 4 条出事
+  的规则；与 S1 同源，完成记录未点出这层关联。逐条 ✓：1 三符号 grep 零、用例改钉 `identityTargetOf` 三册取键、票面点名的那一条例外；2 `suggestedNextRevision`
+  一份、四包装导出名与签名不动、法人 trim 在包装、新测一条；3（14b）十一件 +11/−82、删的六行逐字同、无其它改动；4 判「改」理由成立——**真缺陷成立**：13 版
+  `suggestion: (draft) => suggestedDeactivationRevision(targetsFor(draft.kind), draft.id)` 实参先求值，种类下拉 `patch({ kind, id: '' })` 触发的渲染在 effect
+  `setLoaded(null)` 之前，`loaded` 仍为旧册 outcome，`kindRegisters[新种类].targetsOf(旧 body)` 在 `body.accounts.map` / `body.entities.map` 抛 TypeError
+  （`LEGAL_ENTITY` ↔ `CUSTOMER_ACCOUNT` 互切且上一册已答 outcome；`BUSINESS_PARTY` 方向 `loaded` 为 null 不触）；13 之前三册各有槽位不会错配，**是 13
+  （`92ca5332`）引入的回归**；修法只改类型与取答案守门，文案 / effect 依赖 / key 不变 ✓。完成判据：`*.test.ts` 删除行仅那一条 + 两处 import ✓；`revision + 1`
+  实现只 `registration-form.ts` 一处 ✓；`const chipClass` @`3b26cdfe` 只 chip.ts、@`baabfb1b` 12 与记录同 ✓。判断项「kindRegisters 键集是 tsc 钉」成立——
+  `tsconfig.test.json` include 只 `src/**/*.test.ts`，仓内无 `.test.ts` 引 `.tsx`，而 `tsc -b` 编组件，少键报错、多键多余属性 ✓。无票外行为；「不改页面文案」
+  成立；两支地盘无交。
+- **一行**：Standards 0 / 4 · Spec 0 / 2。无阻断。
+
+**处置（推送方）**：N1 + N3 在 idp-land14 tip 上改成一笔 `3164b7d1`（两处注释收成现状句、`targetsOf<K>(paired)` → `pairedTargetsOf`，调用一处随改；tsc 0 /
+290 / vite 0，自审）；N2 / S1 / S2 只记——S1 / S2 说的同一件事：「种类对不上当没取到」这条规则今天只有 tsc 与 `selectedRegisterFor` 的一行守着，要 node:test
+钉得把配对比较抬进纯模块，留作下一张收口票的候选（不立票，等它再被撞到）；N4 `chip.ts` 上提 `components/` 同为候选。
+
+### 进 main 记录（推送方 = 通道 1 · 2026-09-20 12:24）
+
+隔离树 `%TEMP%\idp-land14` detached 于 `c0b29402`（= 当时远端 main），先 14b 再 14a，六笔 cherry-pick 零冲突 `3b26cdfe→f1d6da55`；`fd1a47ee→b83fcf9c` /
+`d29b984b→22d45537` / `3877f60f→4aeca5bb` / `baabfb1b→b043565f` / `8ad23acf→b485379a`（`patch-id --stable` 逐笔同；两支改过的文件对各自作者 tip 零 diff），
+其上推送方 `3164b7d1`（评审 N1 / N3）。tip 上清点重生成 porcelain 空、`gofmt -l` 空、`go build ./...` / `go vet ./...` 0；admin-web 全新 `pnpm install
+--frozen-lockfile` 后 `tsc -b --noEmit` 0 / `run-tests` **290** / `vite build` 0；`const chipClass` 一处、`revision + 1` 实现一处；12:22 占号 → 带 DSN
+`go test -p 1 -count=1 ./...` **115 ok / 0 FAIL / 16 无测试 / 0 cached**，退出码 0（12:22:17→12:24:39；本票不动 Go）→ 评审无阻断（上）→ `ls-remote` 核
+`c0b29402` 未动 → 12:24 `push 3164b7d1:main` 成，**远端 main = `3164b7d1`**；共享树 ff 同 SHA。Status → resolved（本簿记笔）。
