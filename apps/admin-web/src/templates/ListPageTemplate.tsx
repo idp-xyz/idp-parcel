@@ -303,43 +303,59 @@ export function ListPageTemplate<Row>({
 
       {viewState.kind === 'ready' ? (
         <>
-          <div className="flex-1 overflow-auto">
-            <Table stickyHeader>
-              <TableHeader>
-                <TableRow>
-                  {columns.map((col) => (
-                    <TableHead key={col.id} className={`${alignClass(col.align)} ${col.className ?? ''}`}>
-                      {col.header}
-                    </TableHead>
-                  ))}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {rows.length === 0 && emptyRowsNote !== undefined ? (
-                  <TableRow>
-                    <TableCell colSpan={columns.length} className="text-center text-idpxyz-textMuted">
-                      {emptyRowsNote}
-                    </TableCell>
-                  </TableRow>
-                ) : null}
-                {rows.map((row) => (
-                  <TableRow
-                    key={rowKey(row)}
-                    className={onRowClick ? 'cursor-pointer' : undefined}
-                    onClick={onRowClick ? () => onRowClick(row) : undefined}
-                  >
-                    {columns.map((col) => (
-                      <TableCell
-                        key={col.id}
-                        className={`${cellPadding} ${alignClass(col.align)} ${col.className ?? ''}`}
+          {/* 主表放进 surface 层容器（黄金标准「Main Content 黄金标准」；照 loms-web ShipmentMonitor：外圈留白 + 边框 + 圆角 +
+              --idpxyz-sidebar 一档底色，Light 下页底 editor 是 Layer 1、这个容器是 Layer 2）。容器吃满剩余高度，滚动发生在容器内，
+              所以表头吸顶仍对着容器的滚动口；分页条留在容器外的页底，翻页时它不随表体滚走。 */}
+          <div className="flex min-h-0 flex-1 flex-col p-2">
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-idpxyz-border bg-idpxyz-sidebar">
+              <div className="min-h-0 flex-1 overflow-auto">
+                <Table stickyHeader>
+                  <TableHeader>
+                    <TableRow>
+                      {columns.map((col) => (
+                        // 吸顶表头原语自带 editor 底色，进了 sidebar 容器就成了一条异色带，这里盖成容器同色；靠 cn 同族让位，不改原语。
+                        <TableHead
+                          key={col.id}
+                          className={`bg-idpxyz-sidebar ${alignClass(col.align)} ${col.className ?? ''}`}
+                        >
+                          {col.header}
+                        </TableHead>
+                      ))}
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {rows.length === 0 && emptyRowsNote !== undefined ? (
+                      // 这一行不是数据行：不给悬停底色，纵向收紧到一行说明的高度——容器已经吃满剩余高度，空表体不该再用一整格
+                      // 数据行的留白把「筛没了」这句话顶开。
+                      <TableRow className="hover:bg-transparent">
+                        <TableCell
+                          colSpan={columns.length}
+                          className="py-1.5 text-center text-idpxyz-textMuted"
+                        >
+                          {emptyRowsNote}
+                        </TableCell>
+                      </TableRow>
+                    ) : null}
+                    {rows.map((row) => (
+                      <TableRow
+                        key={rowKey(row)}
+                        className={onRowClick ? 'cursor-pointer' : undefined}
+                        onClick={onRowClick ? () => onRowClick(row) : undefined}
                       >
-                        {col.render(row)}
-                      </TableCell>
+                        {columns.map((col) => (
+                          <TableCell
+                            key={col.id}
+                            className={`${cellPadding} ${alignClass(col.align)} ${col.className ?? ''}`}
+                          >
+                            {col.render(row)}
+                          </TableCell>
+                        ))}
+                      </TableRow>
                     ))}
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
+                  </TableBody>
+                </Table>
+              </div>
+            </div>
           </div>
           {pagination && (
             <div className="border-t border-idpxyz-border px-4 py-1.5 shrink-0">
