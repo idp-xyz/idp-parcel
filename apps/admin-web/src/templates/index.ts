@@ -28,6 +28,7 @@ export {
   type DetailPageTemplateProps,
   type DetailSection,
   type DetailMeta,
+  type DetailSummaryStat,
 } from './DetailPageTemplate';
 
 export {

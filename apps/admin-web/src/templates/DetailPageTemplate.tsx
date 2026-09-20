@@ -35,6 +35,17 @@ export interface DetailMeta {
   value: ReactNode;
 }
 
+/**
+ * 指标带的一格。value 只放对象自身从读口原样来的值（件数、修订号、金额已确认与否），
+ * 不放派生 KPI——目录读口一次拉全量且有截断上限，从截断列表数出来的数是假的（spec「不做」第一条）。
+ * value 收 ReactNode 与 `status` / `DetailField.value` 同一约定：要带色调的值由调用方放徽章，
+ * 色调 → 徽章变体的翻译只在 `domain/status.tsx` 一处，模板不另立一张表。
+ */
+export interface DetailSummaryStat {
+  label: string;
+  value: ReactNode;
+}
+
 export interface DetailPageTemplateProps {
   /** 页面标题（如「托运申报单」）。 */
   title: string;
@@ -49,6 +60,8 @@ export interface DetailPageTemplateProps {
    * 不传沿用单行头，另两张详情页因此一字节不变。
    */
   meta?: DetailMeta[];
+  /** 指标带（手册 Summary Strip，4–6 格一排）。不传或传空不渲染，不显「—」占位格。 */
+  summary?: DetailSummaryStat[];
   /** 「基本信息」区字段。两列栅格排布，字段多时自动换行。 */
   basicFields: DetailField[];
   /** 基本信息区标题，默认「基本信息」。 */
@@ -73,6 +86,7 @@ export function DetailPageTemplate({
   description,
   headerActions,
   meta,
+  summary,
   basicFields,
   basicTitle = '基本信息',
   sections,
@@ -129,6 +143,10 @@ export function DetailPageTemplate({
         </PageHeader>
       )}
 
+      {viewState.kind === 'ready' && summary !== undefined && summary.length > 0 && (
+        <SummaryStrip stats={summary} />
+      )}
+
       {viewState.kind === 'ready' ? (
         <div className="flex-1 overflow-auto">
           <div className="mx-auto flex max-w-[960px] flex-col gap-4 p-4">
@@ -183,6 +201,24 @@ export function DetailPageTemplate({
           <StateSlot state={viewState} override={stateOverride} />
         </div>
       )}
+    </div>
+  );
+}
+
+// 指标带：结构照 ui-primitives StatCard（小写标签 + 大数），没有直接用它——它的 value 只收
+// string | number、p-5 / text-2xl 是 Dashboard 尺度，对象头区下要的是能放徽章的格与更紧的密度。
+// auto-fit 栅格让 4 格与 6 格都占满一排，不为凑数留空格。
+function SummaryStrip({ stats }: { stats: DetailSummaryStat[] }) {
+  return (
+    <div className="grid shrink-0 grid-cols-[repeat(auto-fit,minmax(150px,1fr))] gap-3 border-b border-idpxyz-border px-4 py-3">
+      {stats.map((stat) => (
+        <Card key={stat.label} className="px-4 py-3 shadow-none hover:shadow-none">
+          <div className="text-[11px] font-medium uppercase tracking-wider text-idpxyz-textMuted">
+            {stat.label}
+          </div>
+          <div className="mt-1 text-lg font-semibold text-idpxyz-textBright">{stat.value}</div>
+        </Card>
+      ))}
     </div>
   );
 }
