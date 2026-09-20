@@ -27,6 +27,7 @@ export {
   DetailPageTemplate,
   type DetailPageTemplateProps,
   type DetailSection,
+  type DetailMeta,
 } from './DetailPageTemplate';
 
 export {
