@@ -91,7 +91,7 @@ export function SavedViewsPage() {
     <>
       <ListPageTemplate<SavedView>
         title={info.title}
-        description="各列表页存在这台浏览器里的筛选态，起了名字、可设为该模块的默认视图；只存本机，换机、换浏览器不带，不上服务端。行点回到那张列表页并带上视图。"
+        description="各列表页存在这台浏览器里的筛选态，起了名字、可设为该模块的默认视图；只存本机，换机、换浏览器不带，不上服务端。行点回到那张列表页并把视图 id 带在地址上——列表页那头读它的位今天还未接通。"
         moduleId="saved-views"
         search={{ value: keyword, onChange: setKeyword, placeholder: '搜索视图名称' }}
         filters={<ModuleChips moduleIds={savedViewModuleIds(list)} value={moduleId} onChange={setModuleId} />}
@@ -107,7 +107,7 @@ export function SavedViewsPage() {
             ? {
                 kind: 'empty',
                 title: '这台浏览器还没有保存过视图',
-                description: '在列表页的过滤条上按「保存当前视图」存下筛选态后，它会列在这里。',
+                description: '列表页过滤条上的「保存当前视图」位今天还未接通；接通后存下的筛选态会列在这里。',
               }
             : { kind: 'ready' }
         }

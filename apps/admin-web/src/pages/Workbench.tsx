@@ -175,7 +175,7 @@ export function Workbench({ onNavigate }: { onNavigate?: (id: string) => void })
             icon={Star}
             title="保存视图"
             total={views.length}
-            emptyNote="这台浏览器还没有保存过视图；在列表页的过滤条上按「保存当前视图」存下筛选态后，它会列在这里。"
+            emptyNote="这台浏览器还没有保存过视图。列表页过滤条上的「保存当前视图」位今天还未接通；接通后存下的筛选态会列在这里。"
             onViewAll={onNavigate ? () => onNavigate('saved-views') : undefined}
           >
             {views.slice(0, MY_WORK_PREVIEW_LIMIT).map((row) => (

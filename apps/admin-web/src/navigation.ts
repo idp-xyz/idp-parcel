@@ -58,7 +58,7 @@ export const navigationSections: NavigationSection[] = [
   {
     // 黄金标准「Left Navigation 黄金标准」Rule 6：左导航固定两层，「我的工作」在业务导航之上。两条目都是
     // 管理台自身的事实——本机浏览器里打开过的对象地址、存在本机的筛选态——不是限界上下文页，不发请求。
-    // 四项里的 Watchlists / My Queues 需要领域先有「关注」「指派」，CONTEXT 与 ADR 里都没有，不占位，归 owner 裁。
+    // Rule 6 列的 Watchlists / My Queues 需要领域先有「关注」「指派」，CONTEXT 与 ADR 里都没有，不占位，归 owner 裁。
     title: '我的工作',
     items: [
       { id: 'recent-objects', label: '最近对象', icon: 'recent-objects' },
