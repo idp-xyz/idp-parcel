@@ -1,7 +1,7 @@
 # 03 命令面板 `Ctrl+K`：导航 + 最近对象 + 壳层开关；TopBar 全局搜索位改为面板入口
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——2026-09-20 20:1x 通道 6 认领（task-9c302082，通道 1 20:08 派；分支 `mcp6-wsform03`，树 `D:/tops/idp-parcel-mcp6-wsform03`，基 origin/main `11e6111a`）。此前 ready-for-agent
 Blocked by: admin-web-ux-alignment/02 进 main（读它的 `pages/my-work/recent-objects.ts` 存储；`Layout.tsx` 同动，等它先落）
 地盘：新 `apps/admin-web/src/shell/command-actions.ts`（动作集纯逻辑 + node:test）、`shell/CommandPaletteHost.tsx`（挂 `@idpxyz/ui-workspace` 的 `CommandPalette` + 键盘监听）、
 `Layout.tsx`（渲染 host，一行）、`shell/TopBar.tsx` + `shell/top-bar-model.ts`（全局搜索位：禁用态 → 「打开命令面板」按钮，`Ctrl+K` 提示进 Tooltip）。
