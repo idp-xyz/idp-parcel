@@ -58,3 +58,20 @@ export {
 } from './state-slot';
 export { resolveBreadcrumb, type TemplateBreadcrumb } from './breadcrumb';
 export type { DetailField, AuditEntry } from './types';
+export type {
+  ListSelectionProps,
+  ListBulkActionsProps,
+  ListCsvExportProps,
+} from './ListPageTemplate';
+export {
+  clearSelection,
+  retainSelectedRows,
+  rowsToCsv,
+  selectedOnPage,
+  selectedRows,
+  toggleAllOnPage,
+  toggleSelected,
+  type CsvCellText,
+  type CsvColumn,
+  type PageSelectionState,
+} from './list-selection';

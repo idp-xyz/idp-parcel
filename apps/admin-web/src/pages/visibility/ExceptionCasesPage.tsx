@@ -79,6 +79,10 @@ const columns: ListColumn<CaseRow>[] = [
   col('mergedInto', '归并指向', { mono: true }),
 ];
 
+// 「导出所选（CSV）」按列取字：行上 values 已是按列 id 备好的字面量（主状态那格是词表词，与徽章同词），直接取；
+// 没登记的格导出为空，不代填「—」——那个破折号是屏幕上的留白记号，不是数据。
+const csvCellText = (row: CaseRow, column: ListColumn<CaseRow>) => row.values[column.id] ?? '';
+
 /**
  * 异常案件（visibility-exception）。行对象是围绕同一因果链和处置范围建立的
  * 业务案件。案件关闭不修改源事实、不解除来源限制；查阅不推进阶段、不合并、
@@ -86,6 +90,9 @@ const columns: ListColumn<CaseRow>[] = [
  */
 export function ExceptionCasesPage() {
   const [search, setSearch] = useState('');
+  // 多选集（票 admin-web-workspace-form/04）：按行键记，改检索词不清。批量动作只有导出所选——案件的归并 / 关闭是命令面的判断，
+  // 本仓今天没有对一批案件的命令端点，不传 extra。
+  const [checked, setChecked] = useState<ReadonlySet<string>>(() => new Set());
   const [reloadKey, setReloadKey] = useState(0);
   const [answer, setAnswer] = useState<ApiResult<ExceptionCaseListResponseBody> | null>(null);
 
@@ -139,6 +146,8 @@ export function ExceptionCasesPage() {
       columns={columns}
       rows={visibleRows}
       rowKey={(row) => row.key}
+      selection={{ selected: checked, onChange: setChecked }}
+      bulkActions={{ csv: { fileName: 'exception-cases.csv', cellText: csvCellText } }}
       viewState={catalogueViewState(answer, rows.length, retry, {
         module: info,
         endpoint: 'GET /exception-case-records',

@@ -97,6 +97,29 @@ const columns: ListColumn<ShipmentRequestSummary>[] = [
   },
 ];
 
+// 「导出所选（CSV）」按列取字：取行上已有的字段字面量，不取徽章渲出来的词——委托状态导出的是读模型的状态码，
+// 与列里的徽章词是同一事实的两种呈现，CSV 给机器读，码比词稳。
+const csvCellText = (row: ShipmentRequestSummary, column: ListColumn<ShipmentRequestSummary>) => {
+  switch (column.id) {
+    case 'shipment-request-id':
+      return row.shipmentRequestId;
+    case 'customer-account':
+      return row.customerAccountId;
+    case 'state':
+      return row.state;
+    case 'source':
+      return row.source;
+    case 'source-request-key':
+      return row.sourceRequestKey;
+    case 'declared-parcel-count':
+      return String(row.declaredParcelCount);
+    case 'submitted-at':
+      return row.submittedAt;
+    default:
+      return undefined;
+  }
+};
+
 // 取数答案 → 模板四态。空列表走空态而不是就绪态的空表格：模板明言不从 rows.length
 // 推断，「暂无数据」这一业务事实要由本页说出来。
 function viewStateOf(
@@ -151,6 +174,9 @@ export function ShipmentRequestListPage() {
   // 钻取选中：列表与详情共用一个导航位，选中后整区切详情。选中态的唯一来源是
   // hash，点行写 hash、状态经 hashchange 回流，与外壳同一纪律，不双写。
   const [selectedId, setSelectedId] = useState<string | null>(selectedIdFromHash);
+  // 多选集（票 admin-web-workspace-form/04）：按委托标识记，翻页 / 改检索词都不清；进详情再回来仍在（本组件不卸载，
+  // 只是整区切成详情）。批量动作只有导出所选——本仓今天没有能对一批委托做的命令端点，不传 extra。
+  const [checked, setChecked] = useState<ReadonlySet<string>>(() => new Set());
   // null 表示取数中；答案（含各种未形成）一律进 answer，页面不吞任何一格。
   const [answer, setAnswer] = useState<ApiResult<ViewsListResponseBody> | null>(null);
   const [reloadToken, setReloadToken] = useState(0);
@@ -209,6 +235,8 @@ export function ShipmentRequestListPage() {
       columns={columns}
       rows={visibleRows}
       rowKey={(row) => row.shipmentRequestId}
+      selection={{ selected: checked, onChange: setChecked }}
+      bulkActions={{ csv: { fileName: 'shipment-requests.csv', cellText: csvCellText } }}
       onRowClick={(row) => {
         window.location.hash = `#/shipment-request-inquiry/${encodeURIComponent(row.shipmentRequestId)}`;
       }}

@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode, type SyntheticEvent } from 'react';
 import {
   PageHeader,
   PageHeaderContent,
@@ -31,6 +31,17 @@ import {
   rowKeyOpens,
   type FilterBarSlot,
 } from './list-page-structure';
+import {
+  clearSelection,
+  retainSelectedRows,
+  rowsToCsv,
+  selectedOnPage,
+  selectedRows,
+  toggleAllOnPage,
+  toggleSelected,
+  type CsvCellText,
+  type PageSelectionState,
+} from './list-selection';
 import { StateSlot, type TemplateViewState, type StateSlotProps } from './state-slot';
 
 /** 列定义。render 拿整行而非取值路径，让调用方组合多字段（如单号+徽章）不求模板开洞。 */
@@ -88,6 +99,38 @@ export interface ListSavedViewsProps {
   onSelect: (id: string) => void;
 }
 
+/**
+ * 选择模型（蓝图 10.5「多选行 → 露出 Bulk Action Bar」）。选中集按 rowKey 记、由调用方持有——它是页面的 UI 瞬态，模板不替页面存；
+ * 翻页保留、筛选变更**不**自动清（用户可能在跨筛选攒一批再一起导出）；换模块（组件卸载）即丢，不进 saved-views：保存视图存的是
+ * 「筛选态」，选中集是对某一批具体对象的临时圈定，两者保质期差几个量级。传了才出复选列（表头 + 每行）；不传时 DOM 里没有任何
+ * 复选框，行为与今天同。
+ */
+export interface ListSelectionProps {
+  selected: ReadonlySet<string>;
+  onChange: (next: Set<string>) => void;
+}
+
+export interface ListCsvExportProps<Row> {
+  /** 下载文件名，含扩展名。 */
+  fileName: string;
+  /**
+   * 取字函数由调用方给：列的 render 出的是 ReactNode，CSV 不能从节点里抠字。对某列回 undefined 表示这一格没有文本；
+   * 一列在全部待导出行上都没有文本（如动作列）就整列跳过。
+   */
+  cellText: CsvCellText<Row, ListColumn<Row>>;
+}
+
+/**
+ * 批量动作栏放什么。栏本身随 selection 长出——`selected.size > 0` 时在 Filter Bar 之下、表之上；为 0 时不渲染，不留空条——
+ * 「已选 N 项」与「取消选择」是栏的固定件，这里只定中间的动作。默认动作只有本机能诚实完成的「导出所选（CSV）」，有 csv 才出；
+ * 要命令端点的批量动作（暂挂 / 分配 / 打标签之类）由调用方按端点有无经 extra 传入，模板不预设一个禁用的假动作
+ * （spec 红线：批量动作栏默认只有本机能完成的动作）。
+ */
+export interface ListBulkActionsProps<Row> {
+  csv?: ListCsvExportProps<Row>;
+  extra?: ReactNode;
+}
+
 export interface ListPageTemplateProps<Row> {
   title: string;
   description?: string;
@@ -117,6 +160,10 @@ export interface ListPageTemplateProps<Row> {
   columns: ListColumn<Row>[];
   rows: Row[];
   rowKey: (row: Row) => string;
+  /** 多选。不传则无复选列、无动作栏，与今天同。 */
+  selection?: ListSelectionProps;
+  /** 批量动作栏的动作；没传 selection 时它无处可长，不渲染。 */
+  bulkActions?: ListBulkActionsProps<Row>;
   /** 单击一行：预览 / 选中。有 onRowOpen 时它仍然是单击的语义，不被双击顶掉。 */
   onRowClick?: (row: Row) => void;
   /**
@@ -170,11 +217,62 @@ function DisabledSlot({ label, reason }: { label: string; reason: string }) {
   );
 }
 
+// 复选用原生 input 而不是 ui-primitives 的 Checkbox（Radix，渲成 button）：表格里一列几十个复选，原生控件自带 indeterminate 三态、
+// 键盘与 AT 语义，且与仓内既有表单（party/* 的 checkbox）同一个控件；accent 色让它吃主题令牌。
+const checkboxClass = 'accent-idpxyz-accent';
+
+// 表头复选。indeterminate 只是 DOM 属性、不是 HTML 特性，React 声明不了它，只能在提交后对着节点设；
+// checked 只在「全」时为真——「部分」既不算勾也不算空，由 indeterminate 表达。
+function PageSelectAllCheckbox({
+  state,
+  disabled,
+  onToggle,
+}: {
+  state: PageSelectionState;
+  disabled: boolean;
+  onToggle: () => void;
+}) {
+  const ref = useRef<HTMLInputElement>(null);
+  useEffect(() => {
+    if (ref.current) ref.current.indeterminate = state === 'some';
+  }, [state]);
+  return (
+    <input
+      ref={ref}
+      type="checkbox"
+      className={checkboxClass}
+      aria-label="选择本页全部"
+      checked={state === 'all'}
+      disabled={disabled}
+      onChange={onToggle}
+    />
+  );
+}
+
+// 复选格上截住指针事件：选择不等于预览（蓝图 10.5），格内的点击不冒泡成行的 onRowClick，双击不冒泡成 onRowOpen。
+// Enter 不必截——行的 onKeyDown 只认 target 是行本身的按键，复选框上的 Enter 到不了那条分支。
+const stopRowEvent = (event: SyntheticEvent) => event.stopPropagation();
+
+// 本机下载：Blob → 对象 URL → 隐藏 <a download> 点一下。URL 延后释放：部分浏览器在 click 返回时尚未开始读 Blob，同步 revoke 会下到空文件。
+function downloadTextFile(fileName: string, text: string, mimeType: string) {
+  const url = URL.createObjectURL(new Blob([text], { type: mimeType }));
+  const anchor = document.createElement('a');
+  anchor.href = url;
+  anchor.download = fileName;
+  anchor.rel = 'noopener';
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+  window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+}
+
 // 列表页模板：Breadcrumb + PageHeader + FilterBar + Table + Pagination，形态对齐 Monitor 页黄金标准
 // （idp-ui@53df1666「IDP Monitor Page Golden Standard」）。所有列表页共用这一个模板，形态与行为分两条规矩：
 // 形态（四个结构位、surface 容器、按密度的行距）按黄金标准 Rule 2 无条件长出，不传任何新 prop 的页也长；
 // 行为（排序 / 保存视图 / 更多筛选的动作、双击与 Enter 开对象、行进 Tab 序）只在调用方接了对应 prop 时才有——
 // 不接的位是禁用按钮 + 悬停说明，不接 onRowOpen 的行不进 Tab 序、只响应单击。
+// 多选（复选列 + 批量动作栏）是行为不是形态：接了 selection 才长，不接的页 DOM 里没有一个复选框——它改变行的点击语义
+// （多了一格不算行交互的地方），不能像结构位那样无条件长出。
 // 非 ready 态只替换表格区，页头与过滤条保留——加载中用户仍能改筛选条件。
 export function ListPageTemplate<Row>({
   title,
@@ -191,6 +289,8 @@ export function ListPageTemplate<Row>({
   columns,
   rows,
   rowKey,
+  selection,
+  bulkActions,
   onRowClick,
   onRowOpen,
   emptyRowsNote,
@@ -217,6 +317,26 @@ export function ListPageTemplate<Row>({
     [interaction.clickable ? 'cursor-pointer' : '', interaction.tabIndex !== undefined ? rowFocusClass : '']
       .filter((part) => part !== '')
       .join(' ') || undefined;
+
+  // 选中行的记忆（键 → 行），供「导出所选」拿到已翻走的行。放 ref 不放 state：它只在导出那一刻被读，不驱动渲染；
+  // 在 effect 里修剪而不在渲染中写 ref，导出是渲染之后的用户事件，读到的一定是修剪过的。
+  const selectedRowMemory = useRef(new Map<string, Row>());
+  const selectedKeys = selection?.selected;
+  useEffect(() => {
+    if (selectedKeys === undefined) return;
+    selectedRowMemory.current = retainSelectedRows(selectedRowMemory.current, selectedKeys, rows, rowKey);
+  }, [selectedKeys, rows, rowKey]);
+
+  const pageKeys = selection ? rows.map(rowKey) : [];
+  const pageSelection = selection ? selectedOnPage(selection.selected, pageKeys) : 'none';
+  const selectedCount = selection?.selected.size ?? 0;
+
+  const exportSelectedCsv = () => {
+    if (!selection || !bulkActions?.csv) return;
+    const { fileName, cellText } = bulkActions.csv;
+    const text = rowsToCsv(selectedRows(selectedRowMemory.current, selection.selected), columns, cellText);
+    downloadTextFile(fileName, text, 'text/csv;charset=utf-8');
+  };
 
   // 「更多筛选」展开与否是模板自己的呈现状态，不回流给调用方：调用方只关心筛选值。
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
@@ -329,6 +449,33 @@ export function ListPageTemplate<Row>({
         </div>
       )}
 
+      {/* 批量动作栏（蓝图 10.7）：Filter Bar 之下、表之上，有选中才出，不留空条；栏高随密度两档走同一个 py- 类。
+          不随 viewState 收起——选中集在取数中仍成立，导出所选读的是记忆里的行、不依赖当前表格区。 */}
+      {selection && selectedCount > 0 && (
+        <div
+          role="toolbar"
+          aria-label="批量动作"
+          className={`flex shrink-0 items-center gap-2 border-b border-idpxyz-accent/30 bg-idpxyz-accent/10 px-4 ${cellPadding}`}
+        >
+          <span className="text-[11px] font-medium text-idpxyz-accent">已选 {selectedCount} 项</span>
+          <span aria-hidden="true" className="mx-1 h-3 w-px bg-idpxyz-border" />
+          {bulkActions?.csv && (
+            <Button variant="ghost" size="sm" className="shrink-0" onClick={exportSelectedCsv}>
+              导出所选（CSV）
+            </Button>
+          )}
+          {bulkActions?.extra}
+          <Button
+            variant="ghost"
+            size="sm"
+            className="ml-auto shrink-0"
+            onClick={() => selection.onChange(clearSelection())}
+          >
+            取消选择
+          </Button>
+        </div>
+      )}
+
       {viewState.kind === 'ready' ? (
         <>
           {/* 主表放进 surface 层容器（黄金标准「Main Content 黄金标准」；照 loms-web ShipmentMonitor：外圈留白 + 边框 + 圆角 +
@@ -340,6 +487,15 @@ export function ListPageTemplate<Row>({
                 <Table stickyHeader>
                   <TableHeader>
                     <TableRow>
+                      {selection && (
+                        <TableHead className="w-8 bg-idpxyz-sidebar text-center">
+                          <PageSelectAllCheckbox
+                            state={pageSelection}
+                            disabled={rows.length === 0}
+                            onToggle={() => selection.onChange(toggleAllOnPage(selection.selected, pageKeys))}
+                          />
+                        </TableHead>
+                      )}
                       {columns.map((col) => (
                         // 吸顶表头原语自带 editor 底色，进了 sidebar 容器就成了一条异色带，这里盖成容器同色；靠 cn 同族让位，不改原语。
                         <TableHead
@@ -357,41 +513,59 @@ export function ListPageTemplate<Row>({
                       // 数据行的留白把「筛没了」这句话顶开。
                       <TableRow className="hover:bg-transparent">
                         <TableCell
-                          colSpan={columns.length}
+                          colSpan={columns.length + (selection ? 1 : 0)}
                           className="py-1.5 text-center text-idpxyz-textMuted"
                         >
                           {emptyRowsNote}
                         </TableCell>
                       </TableRow>
                     ) : null}
-                    {rows.map((row) => (
-                      <TableRow
-                        key={rowKey(row)}
-                        className={rowClass}
-                        tabIndex={interaction.tabIndex}
-                        onClick={onRowClick ? () => onRowClick(row) : undefined}
-                        onDoubleClick={onRowOpen ? () => onRowOpen(row) : undefined}
-                        onKeyDown={
-                          onRowOpen
-                            ? (event) => {
-                                // 只认落在行本身的 Enter：单元格里的按钮 / 链接自己吃 Enter，冒泡上来的不算开行，否则按一次
-                                // 触发两件事。
-                                if (event.target !== event.currentTarget || !rowKeyOpens(event.key)) return;
-                                onRowOpen(row);
-                              }
-                            : undefined
-                        }
-                      >
-                        {columns.map((col) => (
-                          <TableCell
-                            key={col.id}
-                            className={`${cellPadding} ${alignClass(col.align)} ${col.className ?? ''}`}
-                          >
-                            {col.render(row)}
-                          </TableCell>
-                        ))}
-                      </TableRow>
-                    ))}
+                    {rows.map((row) => {
+                      const key = rowKey(row);
+                      return (
+                        <TableRow
+                          key={key}
+                          className={rowClass}
+                          tabIndex={interaction.tabIndex}
+                          onClick={onRowClick ? () => onRowClick(row) : undefined}
+                          onDoubleClick={onRowOpen ? () => onRowOpen(row) : undefined}
+                          onKeyDown={
+                            onRowOpen
+                              ? (event) => {
+                                  // 只认落在行本身的 Enter：单元格里的按钮 / 链接自己吃 Enter，冒泡上来的不算开行，否则按一次
+                                  // 触发两件事。
+                                  if (event.target !== event.currentTarget || !rowKeyOpens(event.key)) return;
+                                  onRowOpen(row);
+                                }
+                              : undefined
+                          }
+                        >
+                          {selection && (
+                            <TableCell
+                              className={`${cellPadding} w-8 text-center`}
+                              onClick={stopRowEvent}
+                              onDoubleClick={stopRowEvent}
+                            >
+                              <input
+                                type="checkbox"
+                                className={checkboxClass}
+                                aria-label={`选择 ${key}`}
+                                checked={selection.selected.has(key)}
+                                onChange={() => selection.onChange(toggleSelected(selection.selected, key))}
+                              />
+                            </TableCell>
+                          )}
+                          {columns.map((col) => (
+                            <TableCell
+                              key={col.id}
+                              className={`${cellPadding} ${alignClass(col.align)} ${col.className ?? ''}`}
+                            >
+                              {col.render(row)}
+                            </TableCell>
+                          ))}
+                        </TableRow>
+                      );
+                    })}
                   </TableBody>
                 </Table>
               </div>
