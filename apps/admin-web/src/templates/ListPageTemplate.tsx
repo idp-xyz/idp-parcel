@@ -10,6 +10,7 @@ import {
   FilterGroup,
 } from '@idpxyz/ui-patterns';
 import {
+  Breadcrumb,
   Table,
   TableHeader,
   TableBody,
@@ -18,6 +19,8 @@ import {
   TableCell,
   Pagination,
 } from '@idpxyz/ui-primitives';
+import { navigationSections, pageTitleById } from '../navigation';
+import { resolveBreadcrumb, type TemplateBreadcrumb } from './breadcrumb';
 import { StateSlot, type TemplateViewState, type StateSlotProps } from './state-slot';
 
 /** 列定义。render 拿整行而非取值路径，让调用方组合多字段（如单号+徽章）不求模板开洞。 */
@@ -49,6 +52,13 @@ export interface ListPaginationProps {
 export interface ListPageTemplateProps<Row> {
   title: string;
   description?: string;
+  /**
+   * 面包屑 `区 › 页`。不传则按 moduleId 反查导航分区；两者都没有就不渲染这一条——
+   * 面包屑说的是「这页在业务体系里的位置」，模板不为没有位置的页编一个。
+   */
+  breadcrumb?: TemplateBreadcrumb;
+  /** 导航条目 id（与 navigation.ts 同一套），只用于反查面包屑。 */
+  moduleId?: string;
   /** 页头右侧动作区（如「导出」按钮）。 */
   headerActions?: ReactNode;
   /** 不传则不渲染搜索框——过滤条整体仍在，便于只有下拉筛选的页面。 */
@@ -77,11 +87,15 @@ export interface ListPageTemplateProps<Row> {
   stateOverride?: StateSlotProps['override'];
 }
 
-// 列表页模板：PageHeader + FilterBar + Table + Pagination。
+// 列表页模板：Breadcrumb + PageHeader + FilterBar + Table + Pagination，形态对齐 Monitor 页黄金标准
+// （idp-ui@53df1666「IDP Monitor Page Golden Standard」）。36 张列表页共用这一个模板：一切新位都走可选 prop，
+// 不传时的默认行为就是各页今天的行为。
 // 非 ready 态只替换表格区，页头与过滤条保留——加载中用户仍能改筛选条件。
 export function ListPageTemplate<Row>({
   title,
   description,
+  breadcrumb,
+  moduleId,
   headerActions,
   search,
   filters,
@@ -98,8 +112,17 @@ export function ListPageTemplate<Row>({
   const alignClass = (align?: 'left' | 'center' | 'right') =>
     align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left';
 
+  const crumb =
+    breadcrumb ?? (moduleId ? resolveBreadcrumb(moduleId, navigationSections, pageTitleById) : null);
+
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
+      {/* 22px 面包屑条，照 loms-web OrderList 的尺寸；分区不是页，所以只是文字、不给链接。 */}
+      {crumb && (
+        <div className="flex h-[22px] shrink-0 select-none items-center border-b border-idpxyz-border px-4">
+          <Breadcrumb items={[{ label: crumb.section }, { label: crumb.page }]} />
+        </div>
+      )}
       <PageHeader>
         <PageHeaderContent>
           <PageHeaderTitle>{title}</PageHeaderTitle>

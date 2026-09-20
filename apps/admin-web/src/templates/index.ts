@@ -31,4 +31,5 @@ export {
   type LoadingShape,
   type UnconfiguredFacts,
 } from './state-slot';
+export { resolveBreadcrumb, type TemplateBreadcrumb } from './breadcrumb';
 export type { DetailField, AuditEntry } from './types';
