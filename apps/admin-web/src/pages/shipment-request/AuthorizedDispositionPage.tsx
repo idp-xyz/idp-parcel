@@ -90,11 +90,6 @@ function caseDetailFields(body: AcceptanceReviewCaseResponseBody, entry: Authori
   return fields;
 }
 
-/**
- * 队列行上的受限项，逐条原词直显：处置角色选去向要看的正是这几行——哪一项受限、为什么、正文登记的
- * 失败处置是什么、责任在谁（ADR-0132 决定四：责任引用答「谁承担失败或补偿责任」，不答「谁有权处置」）。
- * 空数组不写「无受限项」——停在等处置的委托不该没有受限项，如实标坏数据征兆。
- */
 /** 待确认的「拒绝」：模板在 onDecide 时已把理由交出并清空输入框，这里把它和目标行一起攥住到确认或取消。 */
 interface PendingRejection {
   entry: AuthorizedDispositionQueueEntry;
@@ -111,6 +106,11 @@ function rejectionConfirmText({ entry, reason }: PendingRejection): string {
   );
 }
 
+/**
+ * 队列行上的受限项，逐条原词直显：处置角色选去向要看的正是这几行——哪一项受限、为什么、正文登记的
+ * 失败处置是什么、责任在谁（ADR-0132 决定四：责任引用答「谁承担失败或补偿责任」，不答「谁有权处置」）。
+ * 空数组不写「无受限项」——停在等处置的委托不该没有受限项，如实标坏数据征兆。
+ */
 function restrictedItemsBlock(entry: AuthorizedDispositionQueueEntry) {
   return (
     <div className="flex flex-col gap-1 text-[12px]">
