@@ -1,8 +1,8 @@
 # 04 `DetailPageTemplate` 对齐对象工作区母版：Object Header + Summary Strip + 稳定命名的 Tabs；委托查阅详情页首用
 
 Category: enhancement
-Status: in-progress
-Blocked by: 03（两票都改 `pages/template-preview/*` 演示页；03 进 main 后再动它。模板本体与首用页不等 03，可先做，演示页那一笔最后补）
+Status: in-progress——第 1–5 条已进 main（码 `ccd1ce3c`，推送方注释笔 `3fbf2ec2`；评审 ← 通道 6 两轴 0 阻断）；第 6 条演示页待补（03 已进 main，阻塞已解）
+Blocked by: 无（原 Blocked by 03——两票都改 `pages/template-preview/*` 演示页；03 已与本票第 1–5 条同批进 main，第 6 条从 `origin/main` 起做）
 地盘：`apps/admin-web/src/templates/DetailPageTemplate.tsx`、`templates/types.ts`、`templates/demo.ts`、`templates/index.ts`、`pages/template-preview/*`
 （等 03）、`pages/shipment-request/ShipmentRequestDetailPage.tsx`（首用）。**不改另外两张用它的页**（`governance/StageAdmissionPage`、
 `settlement/SettlementApplicationPage`）：一切新能力走可选 prop，不传时渲染与今天逐字节同。
@@ -23,8 +23,10 @@ Blocked by: 03（两票都改 `pages/template-preview/*` 演示页；03 进 main
    走新可选 prop `meta?: { label: string; value: ReactNode }[]`（如「最后更新」「提交方」「修订」），只显调用方给的，模板不替对象编造格。
    手册里的「风险」「负责人」两格：本仓没有对应领域来源（GLOSSARY 无「负责人」，风险归 visibility-exception 的案件而非对象本身），**不留位**——
    spec 红线「不虚构」，等有源再加 prop。
-2. **Summary Strip**：新可选 prop `summary?: { label: string; value: ReactNode; tone?: StatusTone }[]`（4–6 格，`StatCard` 一排），只放对象自身的事实
+2. **Summary Strip**：新可选 prop `summary?: { label: string; value: ReactNode }[]`（4–6 格，照 ui-primitives `StatCard` 的形以 `Card` 自排），只放对象自身的事实
    （件数、修订号、金额已确认与否这类从读口原样来的值），**不放派生 KPI**——spec「不做」第一条同一理由；不传不渲染，不显「—」占位格。
+   （评审 Spec (a)(b) 后改口：原写 `tone?: StatusTone` 与「`StatCard` 一排」——色调→徽章变体表 `badgeStatusByTone` 未导出且在 `domain/status.tsx`，
+   `templates/` 不新开对 `domain/` 的依赖，带色调的值由调用方放 `StatusBadgeFor`；`StatCard` 的 `value` 只收 `string | number`、尺度是 Dashboard 的。）
 3. **稳定命名的 Tabs**：新可选 prop `tabs?: { id: WorkspaceTabId; content: ReactNode; count?: number }[]`，`WorkspaceTabId = 'summary' | 'timeline' |
    'related' | 'exceptions' | 'documents' | 'audit'`；签名与顺序由模板里一张固定表钉住（概要 / 时间线 / 关联 / 异常 / 文档 / 审计），调用方只给 id 与内容，
    传进来的顺序不算数。传了 `tabs` 时：`basicFields` 进「概要」签顶部、`sections` 跟在其后、`auditTrail` 进「审计」签；调用方另给同 id 的 `content` 时
@@ -138,3 +140,47 @@ Blocked by: 03（两票都改 `pages/template-preview/*` 演示页；03 进 main
 新基上四道门：`tsc -b --noEmit` 0 / `run-tests` **304**（含 05 / 06 进 main 带来的用例 + 本票 6）/ `vite build` 0 /
 **`go test ./internal/architecture/ -count=1` ok**（推送方 15:40 广播新加的一道：管理台路径门禁扫 `apps/admin-web/src` 全部 `.ts`/`.tsx` 含测试文件；
 本票新增的 `workspace-tabs.test.ts` 没有路径字面量）。
+
+### 评审 ← 通道 6 · 第 1–5 条 · 钉 `2c780b5c`（码 `44662c30`，基 `7d29af39`）· 16:0x（推送方自任务台 `task-fd51e177` 代落原文）
+
+只读，隔离树已拆；未跑四道门，结论来自读 diff（含基线 `DetailPageTemplate.tsx` 全文对照）+ ui-primitives 源 + `domain/status.tsx` 导出面 + `shipment-request/api.ts` 读模型。
+
+**Standards** — 阻断：无。非阻断：
+1. `DetailPageTemplateProps.meta` 文档注「不传沿用单行头」与代码不符：头区形态由 `meta !== undefined || tabs !== undefined` 启用，`tabs` 的文档注未提它也切头区；
+   首用页恰靠 `tabs={[]}` + `meta`。函数内注释写对了，prop 注要跟上。
+2. `workspace-tabs.ts`：`WorkspaceTabId` 联合与 `workspaceTabOrder` 常量把六个 id 写了两遍，`satisfies` 只保元素合法不保六个齐；可 `type WorkspaceTabId =
+   (typeof workspaceTabOrder)[number]` 合为一处；今天由 `workspace-tabs.test.ts` 首条钉住（Duplicated Code，判断项，轻）。
+3. `DetailMeta` / `DetailSummaryStat` / `types.ts` `DetailField` 三个同形 `{label; value: ReactNode}`——按角色命名可接受，只记（轻）。
+无发现（实核）：**不传新 prop 时逐字节同从代码能读出**——头区 else 支是基线 JSX 原文；`summary === undefined` 不出件；`tabs === undefined` 走 `ContentColumns`，
+无 aside 时返回与基线同一串 class；`basicCard` / `sectionCards` / `auditCard` 与基线三块 JSX 逐字同；模板本体无 hook，hook 只在旧形态不挂载的 `WorkspaceTabs` /
+`CopyIdentifierButton` 里。固定表一处：`workspaceTabOrder` 定序、`workspaceTabLabels` 定词，`resolveWorkspaceTabs` 外循环按固定序、传入序不算数、模板内容在前。
+注释全中文、无行号 / 计数 / 变更说明；`StatCard` 确在 ui-primitives `card.tsx`（不在 ui-patterns）；diff 6 文件，禁碰清单未碰；色只用 idpxyz token。
+
+**Spec** — 阻断：无。五条逐条 ✅（1 头区两行 + `CopyIdentifierButton` + 无负责人 / 风险格；2 `SummaryStrip` 只在 ready 且非空渲染；3 `templateContents`
+归并如票面、不传 `tabs` 仍叠 Card；4 `aside` 无内容不占位、有则 `hidden xl:flex w-[280px]`；5 `buildMeta` 四格 / `buildSummary` 两格全是读口字段，件数取服务端计数；
+**审计签**：基线该页本就未传 `auditTrail`、`ShipmentRequestDetail` 无审计字段，票面「现有 auditTrail」对此页不成立，作者理由如实）。
+**(a) tone 裁：成立 → 票面改口**——`StatusTone` 已导出可引，但 `badgeStatusByTone` 未导出；`templates/` 今天零引 `domain/`，加 `tone` 要么新开依赖要么第二张表；
+`value: ReactNode` 已能放 `StatusBadgeFor`。**(b) StatCard 裁：成立 → 票面改口**——`StatCard` 在 ui-primitives `card.tsx`，`value: string | number`、`p-5` /
+`text-2xl`，`trend` 还用调色板色；自排标签行 class 与它逐字同。
+非阻断：1. 分签形态「概要」含基本信息卡多了 `basicFields.length > 0` 门，叠 Card 形态永远在——同一 prop 两种语义；边角 `tabs=[]` + 无字段无区块 → ready 态空白内容区，
+记票。2. 首用页头区四格与基本信息卡四值重复——作者已记「留给看过页面的人定」，不裁。
+完成判据：既有用例零改动 ✓；纯逻辑六条 ✓；「一次性实测、组件层未钉」标法诚实 ✓；第 6 条 ⏳ 明记；判断项无失真。超票面：`templates/index.ts` 桶导三个
+workspace-tabs 符号——第 6 条断言要用，无害。缺：无。
+
+**Standards 0 / 3 · Spec 0 / 2** → 无阻断，可重放；第 6 条演示页那一笔待 03 进 main 后另评增量。
+
+### 处置（推送方 · 通道 1 · 17:2x）
+
+- Standards 1 → 推送方代落 `3fbf2ec2`（只改注释：`meta` / `tabs` 两条 prop 注如实写「对象头区随任一传入而启用、空数组也算传了」）。
+- Standards 2 / 3、Spec 非阻断 1 / 2 → 记，不改（判断项；作者补第 6 条时若顺手合 `WorkspaceTabId` 为一处也可，不要求）。
+- Spec (a)(b) → 票面第 2 条改口（本簿记笔）。
+
+### 进 main 记录（第 1–5 条 · 推送方 · 通道 1）
+
+- 重放：叠在 03 的落地 tip `d791bc26` 上 cherry-pick `7d29af39..2c780b5c` 零冲突（`templates/index.ts` 两票 hunk 不相邻，`git merge-tree` 干跑先核过），
+  八笔 SHA 对照 `e13f2bd5→2f14a689` / `8b0f22b5→fcacb829` / `1431f2c9→cf36f32b` / `f2e48d78→8d3fa328` / `9d5a170b→e7e5f05e` / `44662c30→ccd1ce3c` /
+  `be8959c3→6400d369` / `2c780b5c→007a3394`；五件与作者 tip 逐字节同。推送 tip `3fbf2ec2`（含 Standards 1 注释笔）。
+- 门禁在 `3fbf2ec2` 上实跑：`tsc -b --noEmit` 0 / `run-tests` **313** / `vite build` 0 / `gofmt -l` 空 / `go build` 0 / `go vet` 0 / 清点重生成零差 /
+  `go test ./internal/architecture/ -count=1` ok / 带 DSN 全量见 tasks.md 本节。
+- **第 6 条**：03 已进 main，阻塞解除；由通道 5 从 `origin/main` 起做 `templates/demo.ts` + `pages/template-preview/*` 一笔并 `renderToStaticMarkup` 断言签名顺序，
+  评审只看那一笔增量。

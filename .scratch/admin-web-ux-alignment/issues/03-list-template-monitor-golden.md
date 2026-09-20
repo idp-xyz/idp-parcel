@@ -1,10 +1,11 @@
 # 03 `ListPageTemplate` 对齐 Monitor 黄金母版：面包屑、Filter Bar 完整结构位、密度、单击预览 / 双击开对象、surface 容器
 
 Category: enhancement
-Status: resolved
+Status: resolved · 已进 main（码 `082fafe0`，推送方注释笔 `d791bc26`，推送 tip `3fbf2ec2`；评审 ← 通道 2 两轴 0 阻断）
 Blocked by: 无（密度开关由 01 提供，但 `useDensity` 无 Provider 时应有默认——本票自己兜底，不等 01）
 地盘：`apps/admin-web/src/templates/ListPageTemplate.tsx`、`templates/types.ts`、`templates/demo.ts`、`pages/template-preview/*`（演示页跟着模板长）、
-`pages/catalogue-view.ts` 如需加共用判读。**不逐页改 36 张列表页**：一切新能力走可选 prop，默认行为与今天逐字节同。
+`pages/catalogue-view.ts` 如需加共用判读。**不逐页改列表页**：行为一律走可选 prop、不传则与原先同；形态按黄金标准 Rule 2 无条件长出（裁决 3，
+评审 Spec 2 后改口——原句「默认行为与今天逐字节同」对形态不成立）。
 出处：spec「缺口」表第三档；黄金标准「Page Header / Breadcrumb 黄金标准」「Filter Bar 黄金标准」（P0 最低可见结构、Rule 2）「Main Content 黄金标准」
 （surface container、吃满空间、页脚稳定）「Table 黄金标准」（单击 / 双击、密度）「留白与空间分配」；手册「Table 规范」「Drill-down 模式」；
 参照 idp-ui@53df1666 `apps/loms-web/src/loms/pages/OrderList.tsx`（22px 面包屑条、toolbar、`useDensity` 行高）与 `ShipmentMonitor.tsx`
@@ -48,6 +49,11 @@ Blocked by: 无（密度开关由 01 提供，但 `useDensity` 无 Provider 时�
 
 1. 禁用位用**按钮 + 悬停说明**而不是灰色占位方块：黄金标准要的是「结构位置」，可访问的说明比装饰方块诚实。
 2. 双击开对象在**当前上下文**打开（hash），不开标签页：本仓 console 形态无 Workbench Tabs（spec「不做」）。
+3. **默认形态按 Rule 2 改了，改了哪几样在此列清**（推送方进 main 时补，据评审 Spec 2 / Spec 3）：不传任何新 prop 的列表页，(a) Filter Bar 多出
+   排序 / 视图 / 保存视图 / 更多筛选四个 `aria-disabled` 位；(b) 主表进 surface 容器、吸顶表头底色盖成容器同色；(c) 行内边距随密度档，无 Provider
+   时随库回退 compact（`py-1`，原语默认 `py-2`）；(d) 过滤条由换行改横向滚（`overflow-x-auto` + 搜索框 `min-w-[160px]` + 计数 `shrink-0`）。
+   行为（回调、Tab 序、键盘）不传则同原先。**密度默认档归 01**：全站默认由 01 挂的 `DensityProvider` 初值定（01 票面第 3 条 = comfortable），
+   本票的 compact 回退只在 Provider 缺席时生效，是过渡；01 进 main 后列表行距从 `py-1` 变 `py-2.5` 是预期内的一次性变化，两票都不为迁就它改默认。
 
 ## Comments
 
@@ -115,3 +121,48 @@ Blocked by: 无（密度开关由 01 提供，但 `useDensity` 无 Provider 时�
 - 第 5 条键盘只认 Enter、不给 Space 等价单击：票面只要求 Enter 等价双击；Space 在滚动容器里是翻页键，行吞它会坏滚动。
 - 第 6 条演示页三位**全接真动作**而不是只摆位：接了的位若无动作就是演示页自己违反「留位不留假动作」；「未接入」档另给，两种长相都能验。
 - `spec.md` 子票表 03 那一行仍是 `ready-for-agent`，**没改**——它是六票共用的索引文件，留给推送方在进 main 簿记时翻，免得与 04 / 05 / 06 的同类改动撞行。
+
+### 评审 ← 通道 2 · 钉 `c4537d01`（码 `50b1a8c6`，基线 `3245faed`）· 16:0x（推送方自任务台 `task-18fac5ae` 代落原文）
+
+只读，隔离树已拆，未碰作者树，未跑 pnpm / tsc / Go。
+
+**Standards** — 阻断：无。非阻断：
+1. `ListPageTemplate.tsx` 头注「一切新位都走可选 prop，不传时的默认行为就是各页今天的行为」与代码相反：不传任何新 prop 时四个 `aria-disabled` 位
+   （`filterBarSlots` 无条件渲染）、surface 容器、`<th>` 的 `bg-idpxyz-sidebar`、每格 `py-1`（原语默认 `py-2`）、`FilterBar` 的 `overflow-x-auto` /
+   `min-w-[160px]` / `shrink-0` 全是无条件的。这是黄金标准 Rule 2 压过票面「逐字节同」的正当裁法，但注释要说真话（AGENTS「写代码注释」）。
+2. 跨文件计数「36 张」：`ListPageTemplate.tsx` 头注与 `list-page-structure.ts` `RowInteraction.tabIndex` 注释；同处「与今天逐字节同」是相对时点的变更说明。
+3. `templates/index.ts` 新导出 `densityRowPadding` / `filterBarSlots` / `rowInteraction` / `rowKeyOpens` / `resolveBreadcrumb` 及类型：全树零外部消费者
+   （Speculative Generality，判断项）。
+4. `TemplatePreviewPage.tsx` `demoSelectClass` 与 `ListPageTemplate.tsx` `filterControlClass` 字串几乎逐字相同；作者注释已写明不共享的取舍，记为已裁的
+   Duplicated Code，不要求改。
+无发现（实核）：注释全中文、引上游用小节号 + `idp-ui@53df1666`；`@idpxyz/ui-theme-runtime` 0.1.23 dist 里 `useDensity` 无 Provider 不抛、
+`DensityContext` 默认 compact、`DensityProvider` 初值 `useState("compact")`——作者两句实测都对；`densityRowPadding` 与 `<th>` 盖色经 `cn` / twMerge 让位成立；
+`Tooltip` 原语自带 Provider；`TableRow` 透传 `tabIndex` / `onDoubleClick` / `onKeyDown`；无 `onRowOpen` 时行属性与 `3245faed` 同；第 5 条只认 Enter 有判据。
+
+**Spec** — 阻断：无。非阻断：
+1. 第 3 条票面写兜底 comfortable，代码默认 compact：全站列表行距从原语 `py-2` 无条件收紧到 `py-1`；档位选 compact 靠的是黄金标准 11.5 而非实测；
+   01 若按手册把无存储默认定成 comfortable，落地时全站会再翻一次——要推送方 / 01 作者定一处。
+2. 完成判据「既有 run-tests 零改动仍绿（模板默认行为不变的证据）」后半句证据为空——run-tests 引不到模板，绿只证明纯函数没坏；默认形态实际变了，
+   票面没有一处写成「默认形态按 Rule 2 改了、改了哪几样」的裁决。建议补裁决 3 并改地盘句。
+3. 票面没要的：`FilterBar className="overflow-x-auto"` + 搜索框 `min-w-[160px]` + 计数 `shrink-0`——过滤条由换行改横向滚，判断项没提。
+无发现：第 1 / 2 / 4 / 5 / 6 条逐条对上（禁用位 `aria-disabled` + `Tooltip`、四句说明逐字同、`DisabledSlot` 无假动作；容器类与 `emptyRowsNote` 收紧；
+单击 / 双击 / Enter 判定；演示页「真动作」不越界、`demo.ts` 全标合成 S）；既有用例零改动；九条 node:test 齐；renderToStaticMarkup 如实标「一次性实测、
+组件层未钉」；判断项五条无失真。
+
+**Standards 0 / 4 · Spec 0 / 3** → 无阻断，可重放。
+
+### 处置（推送方 · 通道 1 · 16:0x–17:3x）
+
+- Standards 1 / 2 → 推送方代落 `d791bc26`（只改注释：头注分开「形态按 Rule 2 无条件长、行为按 prop 才有」；去「36 张」计数与「与今天逐字节同」时点句）。
+- Standards 3 / 4 → 记，不改（判断项）。
+- Spec 1 → 裁决 3：密度默认档归 01（comfortable），本票 compact 回退是过渡；已随 01 接续派单写给通道 4。
+- Spec 2 / 3 → 裁决 3 列清四样默认形态变化（含过滤条横滚）+ 地盘句改口（本簿记笔）。
+
+### 进 main 记录（推送方 · 通道 1）
+
+- 重放：`idp-land-ux03` 上 cherry-pick 到 main `7d29af39`，八笔 SHA 对照 `b9cd0a24→fc550091` / `c6b4777d→fefd44cd` / `fb147357→1e80c3b1` / `e7f17306→6a71e3b8` /
+  `b83efcc2→201ab817` / `7d73a532→da0f666a` / `50b1a8c6→082fafe0` / `c4537d01→760402c6`；八件与作者 tip 逐字节同，`templates/index.ts` 只差 06 的 `LoadingShape` 一行。
+  上一任通道 1 于 16:04 做完重放与 `d791bc26`，未推、未簿记即止；本任 17:1x 接手，按任务台里的评审记录续做。
+- 04 第 1–5 条叠在其上（见票 04），推送 tip `3fbf2ec2`；门禁在该 tip 上实跑：`tsc -b --noEmit` 0 / `run-tests` **313**（298 + 本票 9 + 04 六）/ `vite build` 0 /
+  `gofmt -l` 空 / `go build` 0 / `go vet` 0 / 清点重生成零差 / `go test ./internal/architecture/ -count=1` ok / 带 DSN 全量见 tasks.md 本节。
+- 浏览器未验沿作者所报；行焦点态 outline、Radix Tooltip 悬停、双击前两次 click 三件留首个真实接线页验。
