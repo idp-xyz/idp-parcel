@@ -17,6 +17,7 @@ import {
   FolderOpen,
   Globe,
   Handshake,
+  History,
   LayoutDashboard,
   Library,
   LineChart,
@@ -37,6 +38,7 @@ import {
   SlidersHorizontal,
   Split,
   Stamp,
+  Star,
   Ticket,
   TrendingUp,
   Truck,
@@ -53,6 +55,16 @@ import type { NavigationSection } from '@idpxyz/ui-workspace';
 // 实时现场作业（扫描/点验/装卸）不在本管理台：那属一线作业端（ADR-0021），
 // 这里的作业类条目只是治理与查阅面。
 export const navigationSections: NavigationSection[] = [
+  {
+    // 黄金标准「Left Navigation 黄金标准」Rule 6：左导航固定两层，「我的工作」在业务导航之上。两条目都是
+    // 管理台自身的事实——本机浏览器里打开过的对象地址、存在本机的筛选态——不是限界上下文页，不发请求。
+    // 四项里的 Watchlists / My Queues 需要领域先有「关注」「指派」，CONTEXT 与 ADR 里都没有，不占位，归 owner 裁。
+    title: '我的工作',
+    items: [
+      { id: 'recent-objects', label: '最近对象', icon: 'recent-objects' },
+      { id: 'saved-views', label: '保存视图', icon: 'saved-views' },
+    ],
+  },
   {
     title: '总览',
     items: [{ id: 'workbench', label: '工作台', icon: 'workbench' }],
@@ -169,6 +181,8 @@ export const navigationSections: NavigationSection[] = [
 ];
 
 export const sidebarIconMap: Record<string, ElementType> = {
+  'recent-objects': History,
+  'saved-views': Star,
   workbench: LayoutDashboard,
   'group-legal-entities': Building2,
   'business-parties': UsersRound,
@@ -223,6 +237,20 @@ export interface ModuleInfo {
 }
 
 export const moduleInfoById: Record<string, ModuleInfo> = {
+  // —— 我的工作（管理台自身；数据是本机浏览器的事实，不属任何限界上下文）——
+  'recent-objects': {
+    title: '最近对象',
+    owner: '管理台自身（apps/admin-web）',
+    source:
+      '.scratch/admin-web-ux-alignment/spec.md「缺口」表第二档；黄金标准「Left Navigation 黄金标准」Rule 6（My Work：Recent Objects）',
+  },
+  'saved-views': {
+    title: '保存视图',
+    owner: '管理台自身（apps/admin-web）',
+    source:
+      '.scratch/admin-web-ux-alignment/spec.md「缺口」表第二档；黄金标准「Left Navigation 黄金标准」Rule 6（My Work：Saved Views）',
+  },
+
   // —— 主数据（party-commercial 的身份与关系类所有权）——
   'group-legal-entities': {
     title: '集团与法人',
