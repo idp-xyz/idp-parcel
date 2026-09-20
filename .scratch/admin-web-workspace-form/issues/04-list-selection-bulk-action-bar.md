@@ -1,7 +1,7 @@
 # 04 `ListPageTemplate` 多选 + 批量动作栏：选择模型、表头全选、「已选 N 项」栏、默认动作「导出所选 CSV」、页面级动作槽
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——2026-09-20 20:0x 通道 3 认领（task-b3f07954，通道 1 20:06 派；分支 `mcp3-wsform04`，树 `D:/tops/idp-parcel-mcp3-wsform04`，基 origin/main `11e6111a`）。此前 ready-for-agent
 Blocked by: 无
 地盘：`apps/admin-web/src/templates/ListPageTemplate.tsx`（加可选 `selection` / `bulkActions` 两 prop）、`templates/list-page-structure.ts`（选择态纯逻辑）+ 新 `templates/list-selection.ts`
 （选择集 / 全选本页 / CSV 生成纯逻辑 + node:test）、`templates/index.ts`（只追加导出）、首用页两张：`pages/shipment-request/ShipmentRequestListPage.tsx`、
