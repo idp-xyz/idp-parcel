@@ -37,6 +37,7 @@ import {
   demoTriageDetailFields,
   type DemoShipmentRow,
 } from '../../templates/demo';
+import { ObjectWorkspaceDemo } from './ObjectWorkspaceDemo';
 
 // 四态切换器的档位。ready 之外四档演示 StateSlot 的各个非就绪态；
 // 文案在这里给演示值，真实页面的文案由各自业务场景决定。
@@ -324,6 +325,7 @@ export function TemplatePreviewPage() {
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="list">列表模板</TabsTrigger>
           <TabsTrigger value="detail">详情模板</TabsTrigger>
+          <TabsTrigger value="workspace">对象工作区</TabsTrigger>
           <TabsTrigger value="review">复核工作流模板</TabsTrigger>
         </TabsList>
 
@@ -470,6 +472,20 @@ export function TemplatePreviewPage() {
             }))}
             auditTrail={demoDetailAuditTrail}
             viewState={viewState}
+          />
+        </TabsContent>
+
+        <TabsContent value="workspace" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          {/* 同一模板的对象工作区形态（传 meta / summary / tabs / aside）；上一签「详情模板」是它不传新 prop 时的叠 Card 形态。 */}
+          <div className="flex items-center gap-2 border-b border-idpxyz-border px-4 py-1.5 shrink-0">
+            <span className="text-[11px] text-idpxyz-textMuted">
+              签按固定序出：调用方按 审计 → 关联 → 概要 传，渲染仍是 概要 · 关联 · 审计；时间线 / 异常 / 文档无内容不出签。
+              头区不设负责人 / 风险——本仓没有它们的领域来源。右侧上下文只在宽屏显示。
+            </span>
+          </div>
+          <ObjectWorkspaceDemo
+            viewState={viewState}
+            onDemoAction={(title, message) => addToast({ type: 'info', title, message })}
           />
         </TabsContent>
 

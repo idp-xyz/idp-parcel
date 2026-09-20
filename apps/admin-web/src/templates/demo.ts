@@ -168,6 +168,56 @@ export const demoDetailAuditTrail: AuditEntry[] = [
   },
 ];
 
+/* ── DetailPageTemplate 对象工作区演示数据（票 admin-web-ux-alignment/04 第 6 条） ── */
+
+/**
+ * 隔离合成 S：对象工作区演示的主对象，就是上面详情演示那份申报单——同一对象换成头区 + 指标带 + 签的排布，
+ * 看的人能把两张演示里的字段对上；基本信息 / 区块 / 审计留痕因此直接复用上面三份，不另造一套。
+ */
+export const demoWorkspaceIdentifier = 'SYN-PS-240819-0002';
+
+/** 隔离合成 S：头区第二行元信息。只放对象自身的事实；负责人 / 风险没有领域来源，不留位（票面裁决 2）。 */
+export const demoWorkspaceMeta: { label: string; value: string }[] = [
+  { label: '提交时间', value: '2024-08-19 09:47' },
+  { label: '系统接收时间', value: '2024-08-19 09:47:02' },
+  { label: '来源', value: 'API' },
+  { label: '当前提交版本', value: 'SYN-SV-0002-01' },
+];
+
+/**
+ * 隔离合成 S：指标带四格。值都是对象自己陈述的事实（件数、版本数、目的地、批次），
+ * 没有一格是从列表数出来的派生 KPI——指标带只回答对象「有多大 / 多少件」，不替页面算账。
+ */
+export const demoWorkspaceSummary: { label: string; value: string }[] = [
+  { label: '声明包裹件数', value: '3' },
+  { label: '此前版本数', value: '0' },
+  { label: '目的国/地区', value: 'DE' },
+  { label: '提交批次', value: 'SYN-BATCH-240819-07' },
+];
+
+/** 关联对象一行：对象类型 / 标识 / 一句说明。 */
+export interface DemoWorkspaceRelatedObject {
+  kind: string;
+  id: string;
+  note: string;
+}
+
+/** 隔离合成 S：「关联」签的内容——与本申报单相关的批次、声明包裹与接受判断任务。 */
+export const demoWorkspaceRelated: DemoWorkspaceRelatedObject[] = [
+  { kind: '提交批次', id: 'SYN-BATCH-240819-07', note: '本申报单所属的提交批次' },
+  { kind: '包裹', id: 'SYN-PARCEL-0002-1', note: '声明毛重 1.2 kg' },
+  { kind: '包裹', id: 'SYN-PARCEL-0002-2', note: '声明毛重 1.6 kg' },
+  { kind: '包裹', id: 'SYN-PARCEL-0002-3', note: '声明毛重 1.4 kg' },
+  { kind: '接受判断任务', id: 'SYN-AT-0002-01', note: '待人工复核' },
+];
+
+/** 隔离合成 S：右侧上下文的几格事实。 */
+export const demoWorkspaceAsideFacts: { label: string; value: string }[] = [
+  { label: '货主客户', value: '合成电商（演示B）' },
+  { label: '接入渠道', value: 'API' },
+  { label: '所属批次', value: 'SYN-BATCH-240819-07' },
+];
+
 /* ── ReviewFlowTemplate 演示数据 ── */
 
 /** 演示队列项：statusKind 档位由演示页映射成 StatusBadge，demo 不携带 JSX。 */
