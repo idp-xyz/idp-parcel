@@ -2,7 +2,9 @@ import { useEffect, useState } from 'react';
 import {
   DetailPageTemplate,
   type DetailField,
+  type DetailMeta,
   type DetailSection,
+  type DetailSummaryStat,
   type TemplateViewState,
 } from '../../templates';
 import {
@@ -38,6 +40,29 @@ import {
 // 「统一不可见结果」（CONTEXT.md）：单份查阅的 404 SHIPMENT_REQUEST_NOT_VISIBLE
 // 是终局业务答案，不存在、越权与其他租户对象同一语义——本页对它只说「不可见」，
 // 不按取数失败原因分辨呈现「不存在」与「无权查看」，也不提供重试。
+//
+// 对象工作区形态（票 admin-web-ux-alignment/04 首用）：头区元信息与指标带只放 view 字段实有的
+// 值——手册头区的「负责人」「风险」、签里的「时间线」本读模型都没有，不留位也不编（票面裁决 1、2）；
+// 基本信息卡仍是完整记录，头区那几格是它的速览，重复几个值换的是不用滚就能对上编号与版本。
+
+// 手册 Object Header 第二行：最后动过的时刻、提交方、修订——按读模型实有字段对应过去。
+function buildMeta(view: ShipmentRequestDetail): DetailMeta[] {
+  return [
+    { label: '提交时间', value: <span className="font-mono">{view.submittedAt}</span> },
+    { label: '系统接收时间', value: <span className="font-mono">{view.receivedAt}</span> },
+    { label: '来源', value: <span className="font-mono">{view.source}</span> },
+    { label: '当前提交版本', value: <span className="font-mono">{view.submissionVersionId}</span> },
+  ];
+}
+
+// 指标带只放读口原样给的计数：件数取读模型的 declaredParcelCount 而不是数 declaredParcels 的长度——
+// 两者今天相等，但前者是服务端的陈述，后者是页面自己算的。
+function buildSummary(view: ShipmentRequestDetail): DetailSummaryStat[] {
+  return [
+    { label: '声明包裹件数', value: view.declaredParcelCount },
+    { label: '此前版本数', value: view.priorVersionCount },
+  ];
+}
 
 function buildBasicFields(view: ShipmentRequestDetail): DetailField[] {
   return [
@@ -248,8 +273,13 @@ export function ShipmentRequestDetailPage({
           </button>
         ) : undefined
       }
+      meta={view ? buildMeta(view) : []}
+      summary={view ? buildSummary(view) : undefined}
       basicFields={view ? buildBasicFields(view) : []}
       sections={view ? buildSections(view) : undefined}
+      // 签只有「概要」（基本信息 + 现有区块）：委托的事件流与审计留痕都没有面向 UI 的读口，
+      // 「时间线」「审计」两签无内容不出（票面裁决 1），不为凑签造读口。
+      tabs={[]}
       viewState={viewStateOf(answer, () => setReloadToken((token) => token + 1))}
     />
   );
