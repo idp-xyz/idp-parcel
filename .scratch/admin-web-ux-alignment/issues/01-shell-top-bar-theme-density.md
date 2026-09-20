@@ -1,7 +1,7 @@
 # 01 壳层：Top Bar 四件（归属信息 / 全局搜索位 / 作用域位 / 用户菜单位）、Light 默认 + 主题切换、密度两档
 
 Category: enhancement
-Status: resolved——2026-09-20 17:5x 通道 4 交活（task-88934341 接续；分支 `mcp4-ux01` 基 main `7d29af39`，代码五笔 tip `ea8b63b8`、本票面记录另一笔在其上，均已推 origin；待非作者评审与推送方重放）。此前 in-progress（15:57 通道 4 认领 task-2fa9c998，该会话 16:05 后无响应、三件未提交现场由接续会话 17:2x 原样入库 `2b8847cb`）；更早 ready-for-agent
+Status: resolved——2026-09-20 17:5x 通道 4 交活（task-88934341 接续；分支 `mcp4-ux01` 基 main `7d29af39`，代码五笔 tip `ea8b63b8`、票面两笔在其上；18:1x 按推送方裁决补一笔 `5269239e` 删 `SessionBadge`，代码 tip 随之为 `5269239e`；均已推 origin；待非作者评审与推送方重放）。此前 in-progress（15:57 通道 4 认领 task-2fa9c998，该会话 16:05 后无响应、三件未提交现场由接续会话 17:2x 原样入库 `2b8847cb`）；更早 ready-for-agent
 Blocked by: 无
 地盘：`apps/admin-web/src/App.tsx`、`Layout.tsx`、`index.css`、新 `apps/admin-web/src/shell/`（TopBar 及其子件）。不动 `navigation.ts`（票 02 的地盘）、不动 `pages/`。
 `auth/AuthGate.tsx` 只删 `SessionBadge`（与用户菜单重复，推送方 18:0x 裁）——两个退出入口是本票引入的重复，由本票收；会话 / 登出逻辑不动。
@@ -53,6 +53,7 @@ Blocked by: 无
 | `2b8847cb` | 第 3 条后半 + 第 4 条 | `App.tsx` `DensityProvider` 与 `ThemeProvider` / `ToastProvider` 同级，挂 `ThemePreferenceMirror` / `DensityPreferenceAlignment`、`useSeedUpstreamTheme`；新 `shell/preference-sync.tsx`（三件不渲染 DOM 的同步件：主题在 Provider 首渲前播种、之后镜像写回；密度挂载后按存储值对齐一次、StrictMode 双跑用三段相位挡住）；`Layout.tsx` `<main data-density>`。**该笔是前任会话 16:04–16:05 留在树上的未提交现场，接续会话按 parallel-sessions「未提交现场」原样入库、一字未改**，提交信写的是证据（mtime、无响应起止）不是结论 |
 | `c3c2555a` | 第 1 条 | 新 `shell/top-bar-model.ts`（`PRODUCT_ATTRIBUTION = 'Parcel / IDP'`、分隔符 `·`、`attributionText`）+ `top-bar-model.test.ts`；新 `shell/TopBar.tsx` 左侧三段（归属两段弱化色、模块名称主色，模块名称 = `pageTitleById[active]`）；`Layout.tsx` 品牌头换成 `<TopBar>`。`ThemeProvider product` 仍不传，`App.tsx` 头注原句成立 |
 | `ea8b63b8` | 第 2 条 + 第 5 条 | `TopBar.tsx` 右侧四位：全局搜索（`Button outline`，`aria-disabled` + `Tooltip`「尚无跨对象搜索读口」，无 onClick）、作用域（`Tag outline` 只读 chip「作用域：由服务端按会话判定」+ 悬停说明为什么没有切换）、主题 / 密度切换（`IconButton`：`aria-label` 与 `Tooltip` 同一句，读 `useTheme` / `useDensity`）、用户菜单（`DropdownMenu`：`MenuLabel` 主体名 + `MenuItem destructive`「退出」→ `auth/oidc.ts` `logout`）；**不留铃铛**。新 `shell/session.ts` `useSessionPrincipal` 经 `ensureSession` + `displayName` 读主体名。`h-12` 不动 |
+| `5269239e` | 裁决落地（判断项 6） | `auth/AuthGate.tsx` 删悬浮 `SessionBadge`（JSX 引用、函数定义、它独用的 `displayName` / `logout` import）；两态、续期看守、`LoginScreen` 不动。同笔票面：地盘句加注、第 2 条括注改口、判断项 2 / 6 落为裁决 |
 
 **完成判据逐条**
 
@@ -84,6 +85,6 @@ Blocked by: 无
 7. **`shell/session.ts` 经 `ensureSession` 读会话**而不改 `AuthGate` 往子树传 context：同上，`auth/` 不在地盘。代价是首帧无名、下一拍补上；`ensureSession` 临近到期会顺手续期，与门自己的续期由 `oidc.ts` 在途单例合成一次。
 8. **第 5 条与第 2 条同笔**（`ea8b63b8`）：图标按钮本就按「`aria-label` 与 `Tooltip` 同句」造（`IconButton`），顶栏高度沿 `h-12`，没有单独可提的改动；派单「每条一笔」在这一条上没有内容可分。
 
-**评审 / 推送方要看的**：`git diff 7d29af39..ea8b63b8 -- apps/admin-web`（10 文件，+602 / −65）；只跑 `apps/admin-web` 三道门 + `./internal/architecture/`，不需 DSN。
+**评审 / 推送方要看的**：`git diff 7d29af39..5269239e -- apps/admin-web`（11 文件：上面 10 件 + `auth/AuthGate.tsx`）；只跑 `apps/admin-web` 三道门 + `./internal/architecture/`，不需 DSN。
 
 ## Comments
