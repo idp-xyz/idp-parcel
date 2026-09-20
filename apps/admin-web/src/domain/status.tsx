@@ -3,17 +3,6 @@ import { StatusBadge, type StatusBadgeProps } from '@idpxyz/ui-patterns';
 import { Tag } from '@idpxyz/ui-primitives';
 import { domainStatusLayers, statusLayerShapes, tagVariantByTone, type StatusLayer } from './status-layers';
 
-export {
-  domainStatusLayers,
-  statusLayers,
-  statusLayerShapes,
-  statusShapes,
-  tagVariantByTone,
-  type StatusLayer,
-  type StatusShape,
-  type TagVariant,
-} from './status-layers';
-
 // 租户管理台的领域状态词表：状态词 → 呈现色调的唯一映射。
 //
 // 词一律取权威文档原词（docs/domain/GLOSSARY.md 与各上下文 CONTEXT.md），不自造译法、
@@ -164,8 +153,10 @@ export interface LayeredStatusBadgeProps extends Omit<StatusBadgeProps, 'status'
 
 /**
  * 形随层、色随词的渲染件——层 → 形在 status-layers.ts 的 statusLayerShapes 一处定义，这里只按形取组件。
- * lifecycle 一层仍是今天的 StatusBadge，输出与加层轴之前逐字节同；其余四层今天词表里没有词，形先定下（黄金标准要五层在设计系统层
- * 预先分开），词进表那天不必再动渲染。`icon` / `hideIcon` 只有 StatusBadge 认，其它形只收 className 与 HTML 属性。
+ * lifecycle 一层就是 StatusBadge 本身，`icon` / `hideIcon` 原样透传；其它形只收 className 与 HTML 属性。
+ * tag-mono 与 tag-pill 两形不着色：Tag 的 outline 变体只有描边、没有按色调分的变体，`tone` 在这两形上不参与——
+ * 这是层还没有词时的设计系统层预设（黄金标准要五层在设计系统层预先分开），第一批 sla / flag 词进表时若要色，
+ * 改 statusLayerShapes 换形即可，不动词表、不动页面。
  */
 export function LayeredStatusBadge({ layer, tone, children, icon, hideIcon, className, ...rest }: LayeredStatusBadgeProps) {
   const htmlProps = rest as HTMLAttributes<HTMLSpanElement>;

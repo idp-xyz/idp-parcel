@@ -105,7 +105,7 @@ export const statusLayerShapes = {
   flag: 'tag-pill',
 } as const satisfies Record<StatusLayer, StatusShape>;
 
-/** 色调 → ui-primitives Tag 变体；与 status.tsx 里色调 → StatusBadge 变体那张表同一档次划分，只是组件库两套命名。 */
+/** 色调 → ui-primitives Tag 变体；与 status.tsx 的 `badgeStatusByTone` 同一档次划分，只是组件库两套命名。 */
 export type TagVariant = 'default' | 'outline' | 'success' | 'warning' | 'error' | 'primary';
 export const tagVariantByTone = {
   neutral: 'default',
