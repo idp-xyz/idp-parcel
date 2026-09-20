@@ -1,7 +1,7 @@
 # 03 `ListPageTemplate` 对齐 Monitor 黄金母版：面包屑、Filter Bar 完整结构位、密度、单击预览 / 双击开对象、surface 容器
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress
 Blocked by: 无（密度开关由 01 提供，但 `useDensity` 无 Provider 时应有默认——本票自己兜底，不等 01）
 地盘：`apps/admin-web/src/templates/ListPageTemplate.tsx`、`templates/types.ts`、`templates/demo.ts`、`pages/template-preview/*`（演示页跟着模板长）、
 `pages/catalogue-view.ts` 如需加共用判读。**不逐页改 36 张列表页**：一切新能力走可选 prop，默认行为与今天逐字节同。
@@ -50,3 +50,9 @@ Blocked by: 无（密度开关由 01 提供，但 `useDensity` 无 Provider 时�
 2. 双击开对象在**当前上下文**打开（hash），不开标签页：本仓 console 形态无 Workbench Tabs（spec「不做」）。
 
 ## Comments
+
+### 认领（2026-09-20 12:4x）
+
+通道 3，分支 `mcp3-ux03` 基 main `3245faed`，地盘 `templates/ListPageTemplate.tsx` / `templates/types.ts` / `templates/demo.ts` /
+`pages/template-preview/*`；`pages/catalogue-view.ts` 只加不改（06 同时在动它的 loading 态）。不碰 `Layout.tsx` / `App.tsx` / `index.css`（01）、
+`DetailPageTemplate.tsx`（04）、`state-slot.tsx` / `components/states`（06）、`domain/status.tsx`（05）；36 张列表页零改动。
