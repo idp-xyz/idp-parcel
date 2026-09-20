@@ -1,7 +1,8 @@
 # 05 写动作反馈与高风险确认一致性：先审计全部写面调用点成对照表，再补 `useToast` / `ConfirmDialog` / 进行中态
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress
+认领：通道 5 · 2026-09-20 20:1x · 分支 `mcp5-wsform05` · 基 `origin/main` `11e6111a` · worktree `D:\tops\idp-parcel-mcp5-wsform05`
 Blocked by: 无
 地盘：审计段只读全仓 `apps/admin-web/src/pages/**`；改动段落 `apps/admin-web/src/components/`（新 `components/action-feedback.ts` 纯逻辑 + 可能的 `components/ActionButton.tsx`）与
 各页写动作调用点（只改「按下 → 请求 → 结果」那几行，不改页面结构）。**不碰** `templates/*`、`shell/*`、`Layout.tsx`、`pages/party/**`（它已用 `useToast`，作为对照基线不动）。
