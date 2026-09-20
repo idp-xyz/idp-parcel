@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Undo2, XCircle } from 'lucide-react';
+import { ConfirmDialog } from '@idpxyz/ui-primitives';
 import { ReviewFlowTemplate, type DetailField, type ReviewDecisionOption } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { formatInstant } from '../catalogue-view';
@@ -94,6 +95,22 @@ function caseDetailFields(body: AcceptanceReviewCaseResponseBody, entry: Authori
  * 失败处置是什么、责任在谁（ADR-0132 决定四：责任引用答「谁承担失败或补偿责任」，不答「谁有权处置」）。
  * 空数组不写「无受限项」——停在等处置的委托不该没有受限项，如实标坏数据征兆。
  */
+/** 待确认的「拒绝」：模板在 onDecide 时已把理由交出并清空输入框，这里把它和目标行一起攥住到确认或取消。 */
+interface PendingRejection {
+  entry: AuthorizedDispositionQueueEntry;
+  reason: string;
+}
+
+// 确认弹层的正文（票 admin-web-workspace-form/05 第 3 条，蓝图 21.2）：写明拒的是哪份委托、影响谁、按什么理由，不写「确定吗」。
+// 「拒绝」是对受限委托形成的去向决定（ADR-0132 决定一），不是对受限控制的表决——正文照这条说，不说「驳回」。
+function rejectionConfirmText({ entry, reason }: PendingRejection): string {
+  return (
+    `将按策略拒绝委托 ${entry.shipmentRequestId}（客户账户 ${entry.customerAccountId}，提交版本 ${entry.submissionVersionId}，` +
+    `${entry.declaredParcelCount} 件）。拒绝是对这份受限委托形成的去向决定，形成后不再回到等待授权处置，也不会变成接受；` +
+    `理由：${reason}。`
+  );
+}
+
 function restrictedItemsBlock(entry: AuthorizedDispositionQueueEntry) {
   return (
     <div className="flex flex-col gap-1 text-[12px]">
@@ -138,6 +155,7 @@ export function AuthorizedDispositionPage() {
   } | null>(null);
   const [commandPending, setCommandPending] = useState(false);
   const [commandNote, setCommandNote] = useState<DispositionCommandNote | null>(null);
+  const [pendingRejection, setPendingRejection] = useState<PendingRejection | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -188,59 +206,99 @@ export function AuthorizedDispositionPage() {
     });
   };
 
+  // 「拒绝」按下之后再拦一道确认；「交客户补充」把委托交回客户续办，不是不可逆去向，不拦。
+  // 模板交出理由的同时已清空输入框，所以取消确认时要说一声理由需重填，不让人以为它还在。
+  const onDecide = ({
+    itemId,
+    decision,
+    reason,
+  }: {
+    itemId: string;
+    decision: AuthorizedDispositionChoice;
+    reason: string;
+  }) => {
+    const entry = entries.find((candidate) => candidate.shipmentRequestId === itemId);
+    if (!entry) return;
+    if (decision === 'REJECT') {
+      setCommandNote(null);
+      setPendingRejection({ entry, reason });
+      return;
+    }
+    decide(decision, entry, reason);
+  };
+  const confirmRejection = () => {
+    if (!pendingRejection) return;
+    setPendingRejection(null);
+    decide('REJECT', pendingRejection.entry, pendingRejection.reason);
+  };
+  const cancelRejection = () => {
+    setPendingRejection(null);
+    setCommandNote({ tone: 'problem', text: '「拒绝」未发出：确认时取消。委托仍停在等待授权处置；复核理由已清空，要拒绝请重填。' });
+  };
+
   return (
-    <ReviewFlowTemplate<AuthorizedDispositionChoice>
-      title={info.title}
-      description={`${info.owner}——停在「等待授权处置」的委托；处置只决定去向（拒绝 / 交客户补充），从不形成接受`}
-      queueTitle="等待授权处置"
-      queue={entries.map((entry) => {
-        const row = dispositionQueueRowOf(entry);
-        return {
-          id: row.id,
-          title: row.title,
-          subtitle: row.subtitle,
-          status: (
-            <span
-              className={`shrink-0 text-[11px] ${row.badData ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'}`}
-            >
-              {row.statusText}
-            </span>
-          ),
-          meta: row.meta,
-        };
-      })}
-      selectedId={selectedId}
-      onSelect={setSelectedId}
-      detailTitle="处置详情"
-      detailFields={caseBody && selectedEntry ? caseDetailFields(caseBody, selectedEntry) : undefined}
-      detailExtra={
-        <div className="flex flex-col gap-3">
-          {selectedEntry && restrictedItemsBlock(selectedEntry)}
-          {/* 单份读不回时不留空白：已记录的判断是处置的依据，缺了要说清缺在哪一步。 */}
-          {selectedId && !caseBody && (
-            <p className="text-[12px] text-idpxyz-textMuted">
-              {caseAnswer ? `已记录判断未取回：${caseFailureText(caseAnswer)}` : '正在取回已记录的判断…'}
-            </p>
-          )}
-          {caseBody && recordedJudgmentsBlock(caseBody.recordedJudgments)}
-          {commandNote && (
-            <p
-              className={`text-[12px] ${
-                commandNote.tone === 'outcome' ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'
-              }`}
-            >
-              {commandNote.text}
-            </p>
-          )}
-        </div>
-      }
-      decisions={dispositionDecisions}
-      decisionPending={commandPending}
-      onDecide={({ itemId, decision, reason }) => {
-        const entry = entries.find((candidate) => candidate.shipmentRequestId === itemId);
-        if (entry) decide(decision, entry, reason);
-      }}
-      viewState={dispositionQueueViewState(queueAnswer, retry, info)}
-    />
+    <>
+      <ReviewFlowTemplate<AuthorizedDispositionChoice>
+        title={info.title}
+        description={`${info.owner}——停在「等待授权处置」的委托；处置只决定去向（拒绝 / 交客户补充），从不形成接受`}
+        queueTitle="等待授权处置"
+        queue={entries.map((entry) => {
+          const row = dispositionQueueRowOf(entry);
+          return {
+            id: row.id,
+            title: row.title,
+            subtitle: row.subtitle,
+            status: (
+              <span
+                className={`shrink-0 text-[11px] ${row.badData ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'}`}
+              >
+                {row.statusText}
+              </span>
+            ),
+            meta: row.meta,
+          };
+        })}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+        detailTitle="处置详情"
+        detailFields={caseBody && selectedEntry ? caseDetailFields(caseBody, selectedEntry) : undefined}
+        detailExtra={
+          <div className="flex flex-col gap-3">
+            {selectedEntry && restrictedItemsBlock(selectedEntry)}
+            {/* 单份读不回时不留空白：已记录的判断是处置的依据，缺了要说清缺在哪一步。 */}
+            {selectedId && !caseBody && (
+              <p className="text-[12px] text-idpxyz-textMuted">
+                {caseAnswer ? `已记录判断未取回：${caseFailureText(caseAnswer)}` : '正在取回已记录的判断…'}
+              </p>
+            )}
+            {caseBody && recordedJudgmentsBlock(caseBody.recordedJudgments)}
+            {commandNote && (
+              <p
+                className={`text-[12px] ${
+                  commandNote.tone === 'outcome' ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'
+                }`}
+              >
+                {commandNote.text}
+              </p>
+            )}
+          </div>
+        }
+        decisions={dispositionDecisions}
+        decisionPending={commandPending}
+        onDecide={onDecide}
+        viewState={dispositionQueueViewState(queueAnswer, retry, info)}
+      />
+      {/* 「拒绝」是不可逆去向，按下之后再拦一道；确认即发命令，进行中由模板禁用按钮、结果由上面的 commandNote 呈现。 */}
+      <ConfirmDialog
+        open={pendingRejection !== null}
+        tone="danger"
+        title="按策略拒绝委托"
+        message={pendingRejection ? rejectionConfirmText(pendingRejection) : ''}
+        confirmLabel="拒绝"
+        cancelLabel="不拒绝"
+        onConfirm={confirmRejection}
+        onCancel={cancelRejection}
+      />
+    </>
   );
 }

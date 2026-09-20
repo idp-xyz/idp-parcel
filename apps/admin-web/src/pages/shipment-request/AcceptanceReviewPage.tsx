@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { CheckCircle2, XCircle } from 'lucide-react';
+import { ConfirmDialog } from '@idpxyz/ui-primitives';
 import {
   ReviewFlowTemplate,
   type AuditEntry,
@@ -82,6 +83,21 @@ function commandNoteOf<Body extends { outcome: string }>(
     default:
       return { tone: 'problem', text: `「${label}」未送达：${answer.message}` };
   }
+}
+
+/** 待确认的「主动拒绝委托」：模板在 onDecide 时已把理由交出并清空输入框，这里把它和目标行一起攥住到确认或取消。 */
+interface PendingRejection {
+  entry: AcceptanceReviewQueueEntry;
+  reason: string;
+}
+
+// 确认弹层的正文（票 admin-web-workspace-form/05 第 3 条，蓝图 21.2）：写明拒的是哪份委托、影响谁、按什么理由，不写「确定吗」。
+// 「主动拒绝」在自己的命令事务里当场形成决定、不发续办信封（ADR-0086 Decision 三）——正文照这条说，与「记录复核完成」分开。
+function rejectionConfirmText({ entry, reason }: PendingRejection): string {
+  return (
+    `将主动拒绝委托 ${entry.shipmentRequestId}（客户账户 ${entry.customerAccountId}，${entry.declaredParcelCount} 件）。` +
+    `拒绝在本次命令里当场形成决定，不再交下一轮判断，形成后不会变成接受；理由：${reason}。`
+  );
 }
 
 /** 单份读不回时说清缺在哪一步。渠道未配置与「查不到」不并成一句：恢复动作不同。 */
@@ -194,6 +210,7 @@ export function AcceptanceReviewPage() {
   } | null>(null);
   const [commandPending, setCommandPending] = useState(false);
   const [commandNote, setCommandNote] = useState<CommandNote | null>(null);
+  const [pendingRejection, setPendingRejection] = useState<PendingRejection | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -248,53 +265,88 @@ export function AcceptanceReviewPage() {
     });
   };
 
+  // 「主动拒绝委托」按下之后再拦一道确认；「记录复核完成」只落留痕、决定由下一轮判断形成，不拦。
+  // 模板交出理由的同时已清空输入框，所以取消确认时要说一声理由需重填，不让人以为它还在。
+  const onDecide = ({ itemId, decision, reason }: { itemId: string; decision: ReviewCommandId; reason: string }) => {
+    if (decision === 'reject') {
+      const entry = entries.find((candidate) => candidate.shipmentRequestId === itemId);
+      if (!entry) return;
+      setCommandNote(null);
+      setPendingRejection({ entry, reason });
+      return;
+    }
+    decide(decision, itemId, reason);
+  };
+  const confirmRejection = () => {
+    if (!pendingRejection) return;
+    setPendingRejection(null);
+    decide('reject', pendingRejection.entry.shipmentRequestId, pendingRejection.reason);
+  };
+  const cancelRejection = () => {
+    setPendingRejection(null);
+    setCommandNote({ tone: 'problem', text: '「主动拒绝委托」未发出：确认时取消。委托仍停在等待人工复核；复核理由已清空，要拒绝请重填。' });
+  };
+
   return (
-    <ReviewFlowTemplate<ReviewCommandId>
-      title={info.title}
-      description={`${info.owner}——停在「等待人工复核」的委托；复核完成只落留痕，决定由下一轮判断形成`}
-      queueTitle="等待人工复核"
-      queue={entries.map((entry) => ({
-        id: entry.shipmentRequestId,
-        title: entry.shipmentRequestId,
-        subtitle: `${entry.customerAccountId} · ${entry.declaredParcelCount} 件`,
-        status: queueStatusOf(entry),
-        meta: formatInstant(entry.submittedAt),
-      }))}
-      selectedId={selectedId}
-      onSelect={setSelectedId}
-      detailTitle="复核详情"
-      detailFields={caseBody ? caseDetailFields(caseBody) : undefined}
-      detailExtra={
-        <div className="flex flex-col gap-3">
-          {/* 单份读不回时不留空白：详情是复核的依据，缺了要说清缺在哪一步。 */}
-          {selectedId && !caseBody && (
-            <p className="text-[12px] text-idpxyz-textMuted">
-              {caseAnswer ? `复核详情未取回：${caseFailureText(caseAnswer)}` : '正在取回复核详情…'}
-            </p>
-          )}
-          {caseBody && recordedJudgmentsBlock(caseBody.recordedJudgments)}
-          {commandNote && (
-            <p
-              className={`text-[12px] ${
-                commandNote.tone === 'outcome' ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'
-              }`}
-            >
-              {commandNote.text}
-            </p>
-          )}
-        </div>
-      }
-      decisions={reviewCommands}
-      decisionPending={commandPending}
-      onDecide={({ itemId, decision, reason }) => decide(decision, itemId, reason)}
-      auditTrail={caseBody ? auditTrailOf(caseBody.review) : undefined}
-      viewState={catalogueViewState(queueAnswer, entries.length, retry, {
-        module: info,
-        endpoint: 'GET /acceptance-review-queue',
-        emptyTitle: '当前作用域没有等待人工复核的委托',
-        emptyDescription:
-          '读取入口已配置，队列为空——只有适用规则显式要求人工业务判断时委托才进入该队列，空队列是答案不是缺陷。',
-      })}
-    />
+    <>
+      <ReviewFlowTemplate<ReviewCommandId>
+        title={info.title}
+        description={`${info.owner}——停在「等待人工复核」的委托；复核完成只落留痕，决定由下一轮判断形成`}
+        queueTitle="等待人工复核"
+        queue={entries.map((entry) => ({
+          id: entry.shipmentRequestId,
+          title: entry.shipmentRequestId,
+          subtitle: `${entry.customerAccountId} · ${entry.declaredParcelCount} 件`,
+          status: queueStatusOf(entry),
+          meta: formatInstant(entry.submittedAt),
+        }))}
+        selectedId={selectedId}
+        onSelect={setSelectedId}
+        detailTitle="复核详情"
+        detailFields={caseBody ? caseDetailFields(caseBody) : undefined}
+        detailExtra={
+          <div className="flex flex-col gap-3">
+            {/* 单份读不回时不留空白：详情是复核的依据，缺了要说清缺在哪一步。 */}
+            {selectedId && !caseBody && (
+              <p className="text-[12px] text-idpxyz-textMuted">
+                {caseAnswer ? `复核详情未取回：${caseFailureText(caseAnswer)}` : '正在取回复核详情…'}
+              </p>
+            )}
+            {caseBody && recordedJudgmentsBlock(caseBody.recordedJudgments)}
+            {commandNote && (
+              <p
+                className={`text-[12px] ${
+                  commandNote.tone === 'outcome' ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'
+                }`}
+              >
+                {commandNote.text}
+              </p>
+            )}
+          </div>
+        }
+        decisions={reviewCommands}
+        decisionPending={commandPending}
+        onDecide={onDecide}
+        auditTrail={caseBody ? auditTrailOf(caseBody.review) : undefined}
+        viewState={catalogueViewState(queueAnswer, entries.length, retry, {
+          module: info,
+          endpoint: 'GET /acceptance-review-queue',
+          emptyTitle: '当前作用域没有等待人工复核的委托',
+          emptyDescription:
+            '读取入口已配置，队列为空——只有适用规则显式要求人工业务判断时委托才进入该队列，空队列是答案不是缺陷。',
+        })}
+      />
+      {/* 「主动拒绝委托」当场形成决定、不可逆，按下之后再拦一道；确认即发命令，进行中由模板禁用按钮、结果由上面的 commandNote 呈现。 */}
+      <ConfirmDialog
+        open={pendingRejection !== null}
+        tone="danger"
+        title="主动拒绝委托"
+        message={pendingRejection ? rejectionConfirmText(pendingRejection) : ''}
+        confirmLabel="拒绝委托"
+        cancelLabel="不拒绝"
+        onConfirm={confirmRejection}
+        onCancel={cancelRejection}
+      />
+    </>
   );
 }
