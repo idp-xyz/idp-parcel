@@ -21,9 +21,10 @@ import {
   Pagination,
   Tooltip,
 } from '@idpxyz/ui-primitives';
+import { useDensity } from '@idpxyz/ui-theme-runtime';
 import { navigationSections, pageTitleById } from '../navigation';
 import { resolveBreadcrumb, type TemplateBreadcrumb } from './breadcrumb';
-import { filterBarSlots, type FilterBarSlot } from './list-page-structure';
+import { densityRowPadding, filterBarSlots, type FilterBarSlot } from './list-page-structure';
 import { StateSlot, type TemplateViewState, type StateSlotProps } from './state-slot';
 
 /** 列定义。render 拿整行而非取值路径，让调用方组合多字段（如单号+徽章）不求模板开洞。 */
@@ -182,6 +183,13 @@ export function ListPageTemplate<Row>({
   const crumb =
     breadcrumb ?? (moduleId ? resolveBreadcrumb(moduleId, navigationSections, pageTitleById) : null);
 
+  // 密度（手册「栅格与密度」两档；黄金标准 11.5 Monitor 页默认推荐 Compact）。等票 admin-web-ux-alignment/01 在壳层挂
+  // DensityProvider 之前 Layout 里没有 Provider——实测 @idpxyz/ui-theme-runtime 0.1.23 的 useDensity 在无 Provider 时
+  // 不抛错，直接回 createContext 的默认值 compact，所以这里不需要 try / catch 兜底；01 挂上 Provider 后初值同为 compact，
+  // 全站默认档前后一致，切换才是用户的选择。
+  const { density } = useDensity();
+  const cellPadding = densityRowPadding(density);
+
   // 「更多筛选」展开与否是模板自己的呈现状态，不回流给调用方：调用方只关心筛选值。
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
   const slots = filterBarSlots({
@@ -321,7 +329,10 @@ export function ListPageTemplate<Row>({
                     onClick={onRowClick ? () => onRowClick(row) : undefined}
                   >
                     {columns.map((col) => (
-                      <TableCell key={col.id} className={`${alignClass(col.align)} ${col.className ?? ''}`}>
+                      <TableCell
+                        key={col.id}
+                        className={`${cellPadding} ${alignClass(col.align)} ${col.className ?? ''}`}
+                      >
                         {col.render(row)}
                       </TableCell>
                     ))}

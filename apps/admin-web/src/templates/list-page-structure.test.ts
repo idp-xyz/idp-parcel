@@ -1,6 +1,6 @@
 import { test } from 'node:test';
-import { deepEqual, equal } from 'node:assert/strict';
-import { filterBarSlots } from './list-page-structure';
+import { deepEqual, equal, notEqual } from 'node:assert/strict';
+import { densityRowPadding, filterBarSlots } from './list-page-structure';
 
 // 本文件钉的是列表页模板的结构位规则（票 admin-web-ux-alignment/03）。模板本体依赖 ESM-only 的 @idpxyz 原语，
 // run-tests 的 CommonJS 发射加载不了它（票面完成记录有实测），要钉的规则抬到 list-page-structure.ts 用这里钉。
@@ -40,4 +40,15 @@ test('接了的位启用、未接的照旧禁用，视图模式永远禁用', ()
     all.map((slot) => slot.label),
     none.map((slot) => slot.label),
   );
+});
+
+// Covers: 两档密度给出两个不同的 Tailwind 纵向内边距类，且都是 py- 前缀——TableCell 原语自带 py-2，cn（tailwind-merge）
+// 只在同一族类之间让位，换成别的前缀就叠加而不是替换，两档会长得一样。
+test('密度两档映射到不同的 py- 类', () => {
+  equal(densityRowPadding('compact'), 'py-1');
+  equal(densityRowPadding('comfortable'), 'py-2.5');
+  notEqual(densityRowPadding('compact'), densityRowPadding('comfortable'));
+  for (const density of ['compact', 'comfortable'] as const) {
+    equal(densityRowPadding(density).startsWith('py-'), true);
+  }
 });

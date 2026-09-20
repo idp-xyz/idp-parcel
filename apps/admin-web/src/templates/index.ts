@@ -12,7 +12,12 @@ export {
   type ListSavedView,
   type ListSavedViewsProps,
 } from './ListPageTemplate';
-export { filterBarSlots, type FilterBarSlot, type FilterBarSlotId } from './list-page-structure';
+export {
+  densityRowPadding,
+  filterBarSlots,
+  type FilterBarSlot,
+  type FilterBarSlotId,
+} from './list-page-structure';
 
 export {
   DetailPageTemplate,
