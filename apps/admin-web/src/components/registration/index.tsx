@@ -13,3 +13,4 @@ export {
   type MultiRegistrationPanelProps,
   type RegistrationTarget,
 } from './MultiRegistrationPanel';
+export { chipClass } from './chip';

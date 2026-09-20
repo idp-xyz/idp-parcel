@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { RegistrationPanel, type RegistrationPanelProps } from './RegistrationPanel';
+import { chipClass } from './chip';
 
 /**
  * 一页装多本登记册时的「登记」签（ADR-0085，票 admin-write-faces/02 切片 02a/02d）。
@@ -29,13 +30,6 @@ export interface MultiRegistrationPanelProps {
   /** problem+json 错误码的中文说明：一个上下文一份，各册共用。 */
   problemNote: (code: string) => string;
 }
-
-const chipClass = (active: boolean) =>
-  `px-2.5 py-1 text-[12px] rounded border ${
-    active
-      ? 'border-idpxyz-accent text-idpxyz-accent'
-      : 'border-idpxyz-border text-idpxyz-textMuted hover:bg-idpxyz-hover'
-  }`;
 
 export function MultiRegistrationPanel({
   moduleId,

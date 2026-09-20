@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { ListPageTemplate } from '../../templates';
-import { RegistrationPanel } from '../../components/registration';
+import { RegistrationPanel, chipClass } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState } from '../catalogue-view';
 import {
@@ -41,13 +41,6 @@ interface PublishedNotice {
   token: number;
   kind: CommercialPolicyKind;
 }
-
-const chipClass = (active: boolean) =>
-  `px-2.5 py-1 text-[12px] rounded border ${
-    active
-      ? 'border-idpxyz-accent text-idpxyz-accent'
-      : 'border-idpxyz-border text-idpxyz-textMuted hover:bg-idpxyz-hover'
-  }`;
 
 // 各政策册独立请求、独立列形;同页切换不把各类对象折成一份「大配置」。行与列的转写在
 // policy-rows.ts,本文件只管取数、切册与渲染。

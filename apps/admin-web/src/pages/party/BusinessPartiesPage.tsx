@@ -12,6 +12,7 @@ import {
 } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import { chipClass } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
@@ -628,14 +629,6 @@ const registers: { id: RegisterId; label: string }[] = [
   // 「停用」取身份状态格里的封闭词（已停用），不为登记签另造一个动词。
   { id: 'identity-deactivation', label: '身份停用' },
 ];
-
-// 与 MultiRegistrationPanel 的选册 chip 同形；那一份未导出，抬成共享件归收口票。
-const chipClass = (active: boolean) =>
-  `px-2.5 py-1 text-[12px] rounded border ${
-    active
-      ? 'border-idpxyz-accent text-idpxyz-accent'
-      : 'border-idpxyz-border text-idpxyz-textMuted hover:bg-idpxyz-hover'
-  }`;
 
 function RegistrationTab({
   parties,
