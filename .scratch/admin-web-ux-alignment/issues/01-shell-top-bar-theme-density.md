@@ -4,6 +4,7 @@ Category: enhancement
 Status: resolved——2026-09-20 17:5x 通道 4 交活（task-88934341 接续；分支 `mcp4-ux01` 基 main `7d29af39`，代码五笔 tip `ea8b63b8`、本票面记录另一笔在其上，均已推 origin；待非作者评审与推送方重放）。此前 in-progress（15:57 通道 4 认领 task-2fa9c998，该会话 16:05 后无响应、三件未提交现场由接续会话 17:2x 原样入库 `2b8847cb`）；更早 ready-for-agent
 Blocked by: 无
 地盘：`apps/admin-web/src/App.tsx`、`Layout.tsx`、`index.css`、新 `apps/admin-web/src/shell/`（TopBar 及其子件）。不动 `navigation.ts`（票 02 的地盘）、不动 `pages/`。
+`auth/AuthGate.tsx` 只删 `SessionBadge`（与用户菜单重复，推送方 18:0x 裁）——两个退出入口是本票引入的重复，由本票收；会话 / 登出逻辑不动。
 出处：spec「缺口」表第一档；手册「顶栏规范」「Top Bar 归属信息规范」「主题策略」「栅格与密度」；黄金标准「Top Bar 黄金标准」「Light Theme 黄金标准」；
 参照 idp-ui@53df1666 `apps/loms-web/src/console/Layout.tsx`（品牌头那 8 行）与 `packages/ui-theme-runtime`（`useTheme().toggleTheme`、`DensityProvider` / `useDensity().toggleDensity`）。
 
@@ -17,7 +18,9 @@ Blocked by: 无
 
 1. **归属信息**：品牌头左侧改为手册格式 `Parcel / IDP · {模块名称}`——「Parcel / IDP」弱化色，模块名称主色，中间 `·`；模块名称 = `pageTitleById[active]`。
    产品图标照旧 `Package`。`ThemeProvider product` **仍不传**（`ui-tokens` `ProductKey` 未登记 parcel，归用户在 idp-ui 上游登记），头注写明。
-2. **Top Bar 右侧全局工具区**，四个位从左到右：全局搜索（`Command` 系原语做外壳，**禁用态** + `Tooltip`「尚无跨对象搜索读口」——留位不留假动作）；
+2. **Top Bar 右侧全局工具区**，四个位从左到右：全局搜索（按钮形外壳——`Button outline` + `aria-disabled` + `Tooltip`「尚无跨对象搜索读口」——留位不留假动作；
+   **原文「`Command` 系原语做外壳」经推送方 18:0x 裁改口**：那是手段不是目的，cmdk 的 Input 渲成 `role=combobox aria-expanded` 而背后无列表，对读屏正是一个假动作；
+   上游 ui-workspace `TitleBar` 的搜索位本身也是按钮形外壳，`Command` 原语留给点开之后的 `CommandPalette`）；
    作用域（显示当前授权作用域——`AuthGate` 会话里若有租户 / 主体名就显，没有就显「作用域：由服务端按会话判定」的只读 chip，**不做切换器**：本产品一会话一租户）；
    主题切换（`useTheme().toggleTheme`，图标按钮带 accessible label）；密度切换（`useDensity().toggleDensity`）；用户菜单（`DropdownMenu`：显示会话主体 +
    「退出」走 `auth/oidc.ts` 既有登出）。告警 / 通知位**不留**——没有面向 UI 的通知读口，留一个永远为 0 的铃铛是假位。
@@ -70,11 +73,14 @@ Blocked by: 无
 **判断项**
 
 1. **密度默认档 = comfortable**（推送方 17:2x 裁定）：`preferences.ts` `DEFAULT_DENSITY = 'comfortable'`；03 的 `ListPageTemplate` 无 Provider 时随库回退 compact（`py-1`），挂上本票的 Provider 后列表行距变 `py-2.5`——预期内的一次性变化，未为迁就它改默认。
-2. **第 2 条「`Command` 系原语做外壳」未照字面**：全局搜索位用 `Button variant="outline"` 做外壳而不是 `Command` + `CommandInput`。理由：(a) cmdk 的 Input 渲成 `role="combobox" aria-expanded="true" aria-controls=<列表 id>`，一个禁用的搜索位背后没有列表，读屏会念出「组合框，已展开」——比没有名字更误导；(b) 上游 ui-workspace `TitleBar` 的搜索位本身也是按钮形外壳，`Command` 原语是点开之后的 `CommandPalette` 用的；(c) `CommandInput` 的包装 div 带死的 `border-b`，塞进顶栏一个带边框的盒子里会多一道线。接真搜索时这一位点开 `CommandPalette`，形与上游同。评审若认为该照字面，改回去是局部改动。
+2. **裁决（推送方 18:0x，接受）——第 2 条搜索位用 `Button variant="outline"` 做外壳，不用 `Command` + `CommandInput`**。理由一句：cmdk 的 Input 渲成 `role="combobox" aria-expanded="true" aria-controls=<列表 id>`，禁用的搜索位背后没有列表，读屏念出「组合框，已展开」是 spec 红线「留位不留假动作」正面撞上的那种假动作；上游 ui-workspace `TitleBar` 的搜索位本身也是按钮形外壳（点开才弹 `CommandPalette`），与之同形。另一件顺带的：`CommandInput` 的包装 div 带死的 `border-b`，塞进顶栏一个带边框的盒子里会多一道线。接真搜索时这一位点开 `CommandPalette`。票面第 2 条括注已按此改口。
 3. **第 2 条搜索位用 `aria-disabled` 不用原生 `disabled`**：原生 `disabled` 的按钮不发指针与焦点事件，Tooltip 永远弹不出来，「为什么不能用」就没人看得到。
 4. **第 5 条「所有图标按钮 aria-label + Tooltip」——用户菜单触发按钮不是纯图标**：带可见主体名（图标 + 名 + 箭头，上游 `TitleBar` 用户按钮的形）。原因是 ui-primitives 的 `Tooltip` 与 `DropdownMenu` 各自把 Radix 的 Root + Trigger 包成一个件、两个 `asChild` Trigger 套不到同一个 `button` 上（外层 Trigger 的 props 会被内层包装件吞掉，菜单打不开）；本仓没有直接依赖 `@radix-ui/*`，不能绕过包装自己拼。主体名未到的那一拍（读口异步，首帧）触发按钮只有图标、无 Tooltip、`aria-label="用户菜单"`——瞬态，写明不藏。
 5. **作用域 chip 恒显兜底句**：`id_token` 没有任何登记过的租户声明，ADR-0100 把操作者—租户绑定放在服务端操作者册；`TopBar` 留了 `tenantName` prop 与 `scopeChipLabel(tenantName)`，Layout 今天不传。有「本会话绑哪个租户」的读口时接上，位与文案不动。
-6. **`AuthGate` 的悬浮 `SessionBadge`（右下角「退出」）与新用户菜单重复**。`auth/AuthGate.tsx` 不在本票地盘、未动；它自己的注释写着「退出入口以悬浮徽章承载而不改 Layout：品牌头属页面形态地盘，本轮只做门」——顶栏接手之后那个徽章就该退场。建议另立一笔删 `SessionBadge`（顺带删它的 `displayName` 引用），归推送方派。
+6. **裁决（推送方 18:0x）——`AuthGate` 的悬浮 `SessionBadge`（右下角主体名 + 「退出」）另起一笔在同分支删**，条件是顶栏用户菜单在 `AuthGate` 放行后的所有渲染路径上都在场。
+   核过：放行后 `AuthGate` 只渲染 `children`，`children` 在 `main.tsx` 里就是 `<App>`；`App` → 三个 Provider → `Layout`，`Layout` 顶部无条件渲染 `<TopBar>`，`renderActive()` 只换主区；
+   `src/` 下没有任何 ErrorBoundary（`git grep` 零命中），不存在把 `Layout` 换掉的路径——条件成立，删。改动只在 `SessionBadge` 那一块：JSX 引用、函数定义、它独用的 `displayName` / `logout` 两个 import；
+   `checking` / `login` 两态、续期看守、`LoginScreen` 一字未动。它自己那句头注「退出入口以悬浮徽章承载而不改 Layout：品牌头属页面形态地盘，本轮只做门」写的就是「等顶栏接手」——现在接了。
 7. **`shell/session.ts` 经 `ensureSession` 读会话**而不改 `AuthGate` 往子树传 context：同上，`auth/` 不在地盘。代价是首帧无名、下一拍补上；`ensureSession` 临近到期会顺手续期，与门自己的续期由 `oidc.ts` 在途单例合成一次。
 8. **第 5 条与第 2 条同笔**（`ea8b63b8`）：图标按钮本就按「`aria-label` 与 `Tooltip` 同句」造（`IconButton`），顶栏高度沿 `h-12`，没有单独可提的改动；派单「每条一笔」在这一条上没有内容可分。
 

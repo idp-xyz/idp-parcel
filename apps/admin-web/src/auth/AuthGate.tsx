@@ -2,10 +2,8 @@ import { useEffect, useState, type ReactNode } from 'react';
 import {
   beginLogin,
   completeLogin,
-  displayName,
   ensureSession,
   isCallback,
-  logout,
   millisUntilRenewal,
   type OidcSession,
 } from './oidc';
@@ -103,12 +101,9 @@ export function AuthGate({ children }: { children: ReactNode }) {
     return <LoginScreen error={state.error} />;
   }
 
-  return (
-    <>
-      {children}
-      <SessionBadge session={state.session} />
-    </>
-  );
+  // 放行后只渲染子树：会话主体名与「退出」在壳层顶栏的用户菜单里（shell/TopBar），门这里不再挂悬浮徽章——
+  // 两个退出入口是重复，而 Layout 在放行后的每条渲染路径上都在，顶栏那一个不会缺席。
+  return <>{children}</>;
 }
 
 function LoginScreen({ error }: { error?: string }) {
@@ -128,22 +123,6 @@ function LoginScreen({ error }: { error?: string }) {
           使用 gk.idp.xyz 登录
         </button>
       </div>
-    </div>
-  );
-}
-
-// 退出入口以悬浮徽章承载而不改 Layout：品牌头属页面形态地盘，本轮只做门。
-function SessionBadge({ session }: { session: OidcSession }) {
-  return (
-    <div className="fixed bottom-3 right-3 z-50 flex items-center gap-2 rounded-full border border-neutral-700 bg-neutral-900/90 px-3 py-1.5 text-xs text-neutral-300 shadow-lg backdrop-blur">
-      <span>{displayName(session)}</span>
-      <button
-        type="button"
-        className="rounded-full px-2 py-0.5 text-neutral-400 hover:bg-neutral-700 hover:text-white"
-        onClick={logout}
-      >
-        退出
-      </button>
     </div>
   );
 }
