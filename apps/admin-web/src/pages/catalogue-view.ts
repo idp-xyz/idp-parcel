@@ -16,7 +16,8 @@ export function catalogueViewState<Body>(
   options: CatalogueViewOptions,
 ): TemplateViewState {
   if (!answer) {
-    return { kind: 'loading' };
+    // 目录页等的都是一张表，骨架就长成表（手册「Loading」）；列数这里不知道，用骨架件的默认列数。
+    return { kind: 'loading', shape: 'table' };
   }
   if (answer.kind === 'outcome') {
     if (recordCount === 0) {

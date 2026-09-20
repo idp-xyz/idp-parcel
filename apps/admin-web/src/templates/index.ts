@@ -28,6 +28,7 @@ export {
   StateSlot,
   type TemplateViewState,
   type StateSlotProps,
+  type LoadingShape,
   type UnconfiguredFacts,
 } from './state-slot';
 export type { DetailField, AuditEntry } from './types';
