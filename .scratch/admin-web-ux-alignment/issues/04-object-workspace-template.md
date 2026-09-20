@@ -1,7 +1,7 @@
 # 04 `DetailPageTemplate` 对齐对象工作区母版：Object Header + Summary Strip + 稳定命名的 Tabs；委托查阅详情页首用
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress
 Blocked by: 03（两票都改 `pages/template-preview/*` 演示页；03 进 main 后再动它。模板本体与首用页不等 03，可先做，演示页那一笔最后补）
 地盘：`apps/admin-web/src/templates/DetailPageTemplate.tsx`、`templates/types.ts`、`templates/demo.ts`、`templates/index.ts`、`pages/template-preview/*`
 （等 03）、`pages/shipment-request/ShipmentRequestDetailPage.tsx`（首用）。**不改另外两张用它的页**（`governance/StageAdmissionPage`、
@@ -59,3 +59,9 @@ Blocked by: 03（两票都改 `pages/template-preview/*` 演示页；03 进 main
 3. **不传 `tabs` 仍叠 Card**：两张未首用的页不改；母版与旧形态并存到它们各自的票再换。
 
 ## Comments
+
+### 认领（2026-09-20 15:3x）
+
+通道 5，分支 `mcp5-ux04` 基 main `86a96ab7`；地盘 `templates/DetailPageTemplate.tsx`、新纯模块 `templates/workspace-tabs.ts`（+ node:test）、
+首用 `pages/shipment-request/ShipmentRequestDetailPage.tsx`；`templates/types.ts` / `templates/index.ts` 只追加不改既有行（03 同时在追加）。
+第 6 条演示页与 `templates/demo.ts`、`pages/template-preview/*` 本轮不碰，等 03 进 main 后 rebase 再补。
