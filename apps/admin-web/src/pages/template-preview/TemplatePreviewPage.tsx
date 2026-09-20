@@ -23,6 +23,10 @@ import {
 // 按路径显式引入以保持「假数据只从演示入口注入」的单向依赖。
 import {
   demoShipmentRows,
+  demoListSortOptions,
+  demoListSavedViews,
+  type DemoListSavedView,
+  type DemoListSortKey,
   demoDetailFields,
   demoDetailSections,
   demoDetailAuditTrail,
@@ -45,6 +49,15 @@ const STATE_OPTIONS: { kind: PreviewStateKind; label: string }[] = [
   { kind: 'error', label: '错误' },
   { kind: 'unconfigured', label: '未配置' },
 ];
+
+// 演示页自己的下拉样子：与模板过滤条上的控件同高同字号。不从别的页面借类名，也不让模板为演示页导出内部常量。
+const demoSelectClass =
+  'h-6 rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 text-[11px] text-idpxyz-text ' +
+  'outline-none focus-visible:ring-1 focus-visible:ring-idpxyz-accent/35';
+
+// 主筛选 / 更多筛选的选项直接从演示行里取，不另造词——演示页展示的是位，不是词表。
+const demoStatusOptions = Array.from(new Set(demoShipmentRows.map((row) => row.statusLabel)));
+const demoDestinationOptions = Array.from(new Set(demoShipmentRows.map((row) => row.destination)));
 
 // 演示留痕的时间取本机时刻即可——本页全部数据都是隔离合成 S，不进任何台账。
 function formatDemoTimestamp(now: Date): string {
@@ -100,10 +113,20 @@ export function TemplatePreviewPage() {
   const { addToast } = useToast();
   const [stateKind, setStateKind] = useState<PreviewStateKind>('ready');
 
-  // 列表模板的演示交互状态：真实过滤与分页，让搜索框与页码可操作。
+  // 列表模板的演示交互状态：真实过滤、排序与分页，让搜索框、各个结构位与页码都可操作——接了的位必须有真动作，
+  // 演示页不能自己违反「留位不留假动作」。
   const [searchTerm, setSearchTerm] = useState('');
+  const [statusFilter, setStatusFilter] = useState<string>('all');
+  const [destinationFilter, setDestinationFilter] = useState<string>('all');
+  const [sortKey, setSortKey] = useState<DemoListSortKey>('submitted-desc');
   const [page, setPage] = useState(1);
   const [pageSize, setPageSize] = useState(10);
+  // 保存视图只存在本页内存里：切一个视图就把它的筛选态快照套回来，存一个就把当前筛选态快照进列表。
+  const [savedViews, setSavedViews] = useState<DemoListSavedView[]>(demoListSavedViews);
+  const [currentViewId, setCurrentViewId] = useState<string | null>(null);
+  // 结构位两档：接入（排序 / 保存视图 / 更多筛选都有真动作）与未接入（三位退成禁用按钮 + 悬停说明，验收裁决 1 的样子）。
+  // 视图模式位两档都是禁用的——本仓只有表格视图。
+  const [slotsWired, setSlotsWired] = useState(true);
 
   // 复核模板的演示交互状态：决定后把留痕追加进本地审计列表，
   // 演示「决定动作 → 审计留痕」的闭环；不落任何持久化。
@@ -151,13 +174,57 @@ export function TemplatePreviewPage() {
 
   const filteredRows = useMemo(() => {
     const term = searchTerm.trim().toLowerCase();
-    if (term === '') return demoShipmentRows;
-    return demoShipmentRows.filter(
+    const matched = demoShipmentRows.filter(
       (row) =>
-        row.requestId.toLowerCase().includes(term) ||
-        row.shipperClient.toLowerCase().includes(term),
+        (term === '' ||
+          row.requestId.toLowerCase().includes(term) ||
+          row.shipperClient.toLowerCase().includes(term)) &&
+        (statusFilter === 'all' || row.statusLabel === statusFilter) &&
+        (destinationFilter === 'all' || row.destination === destinationFilter),
     );
-  }, [searchTerm]);
+    // 演示时间是「YYYY-MM-DD HH:mm」定宽文本，字典序即时间序，不必解析。
+    return [...matched].sort((a, b) => {
+      switch (sortKey) {
+        case 'submitted-desc':
+          return b.submittedAt.localeCompare(a.submittedAt);
+        case 'submitted-asc':
+          return a.submittedAt.localeCompare(b.submittedAt);
+        case 'request-id':
+          return a.requestId.localeCompare(b.requestId);
+      }
+    });
+  }, [searchTerm, statusFilter, destinationFilter, sortKey]);
+
+  // 任何一个筛选维一动就回第一页，并且当前不再落在某个已存视图上——视图是快照，不跟着改。
+  const changeFilter = (apply: () => void) => {
+    apply();
+    setPage(1);
+    setCurrentViewId(null);
+  };
+
+  const applySavedView = (id: string) => {
+    const view = savedViews.find((candidate) => candidate.id === id);
+    if (!view) return;
+    setStatusFilter(view.status);
+    setDestinationFilter(view.destination);
+    setSortKey(view.sort);
+    setPage(1);
+    setCurrentViewId(id);
+  };
+
+  const saveCurrentView = () => {
+    const id = `syn-view-${Date.now()}`;
+    const view: DemoListSavedView = {
+      id,
+      label: `视图 ${savedViews.length + 1}（演示）`,
+      status: statusFilter,
+      destination: destinationFilter,
+      sort: sortKey,
+    };
+    setSavedViews((prev) => [...prev, view]);
+    setCurrentViewId(id);
+    addToast({ type: 'success', title: '已保存视图（演示）', message: `${view.label} 只存在本页内存里，刷新即失。` });
+  };
 
   const pagedRows = useMemo(
     () => filteredRows.slice((page - 1) * pageSize, page * pageSize),
@@ -262,9 +329,23 @@ export function TemplatePreviewPage() {
 
         {/* 每个 Tab 都撑满剩余高度，让模板自己的滚动与吸顶表头生效。 */}
         <TabsContent value="list" className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden">
+          {/* 结构位档位：分别验证「接了的位有真动作」与「没接的位退成禁用按钮 + 悬停说明」两条渲染路径。 */}
+          <div className="flex items-center gap-2 border-b border-idpxyz-border px-4 py-1.5 shrink-0">
+            <span className="text-[11px] text-idpxyz-textMuted shrink-0">结构位</span>
+            <FilterChip active={slotsWired} onClick={() => setSlotsWired(true)}>
+              已接入
+            </FilterChip>
+            <FilterChip active={!slotsWired} onClick={() => setSlotsWired(false)}>
+              未接入（禁用态）
+            </FilterChip>
+            <span className="ml-auto text-[11px] text-idpxyz-textMuted">
+              单击行 = 预览（toast）；双击或行聚焦后 Enter = 开对象（toast）。真实页面在此写 hash 二段路由。
+            </span>
+          </div>
           <ListPageTemplate<DemoShipmentRow>
             title="托运申报单（演示）"
             description="隔离合成 S 假数据"
+            moduleId="template-preview"
             headerActions={
               <Button
                 size="sm"
@@ -277,18 +358,78 @@ export function TemplatePreviewPage() {
             }
             search={{
               value: searchTerm,
-              onChange: (value) => {
-                setSearchTerm(value);
-                setPage(1);
-              },
+              onChange: (value) => changeFilter(() => setSearchTerm(value)),
               placeholder: '搜索申报单号 / 货主客户…',
             }}
+            filters={
+              <>
+                <FilterChip active={statusFilter === 'all'} onClick={() => changeFilter(() => setStatusFilter('all'))}>
+                  全部状态
+                </FilterChip>
+                {demoStatusOptions.map((status) => (
+                  <FilterChip
+                    key={status}
+                    active={statusFilter === status}
+                    onClick={() => changeFilter(() => setStatusFilter(status))}
+                  >
+                    {status}
+                  </FilterChip>
+                ))}
+              </>
+            }
+            sort={
+              slotsWired
+                ? {
+                    options: demoListSortOptions,
+                    value: sortKey,
+                    onChange: (value) => changeFilter(() => setSortKey(value as DemoListSortKey)),
+                  }
+                : undefined
+            }
+            savedViews={
+              slotsWired
+                ? {
+                    current: currentViewId,
+                    list: savedViews.map((view) => ({ id: view.id, label: view.label })),
+                    onSave: saveCurrentView,
+                    onSelect: applySavedView,
+                  }
+                : undefined
+            }
+            moreFilters={
+              slotsWired ? (
+                <label className="flex items-center gap-1.5 text-[11px] text-idpxyz-textMuted">
+                  目的国/地区
+                  <select
+                    className={demoSelectClass}
+                    aria-label="目的国/地区"
+                    value={destinationFilter}
+                    onChange={(event) => changeFilter(() => setDestinationFilter(event.target.value))}
+                  >
+                    <option value="all">全部</option>
+                    {demoDestinationOptions.map((destination) => (
+                      <option key={destination} value={destination}>
+                        {destination}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+              ) : undefined
+            }
             filterSummary={`共 ${filteredRows.length} 条（合成）`}
             columns={listColumns}
             rows={pagedRows}
             rowKey={(row) => row.requestId}
+            emptyRowsNote="当前筛选条件下没有匹配（演示）"
             onRowClick={(row) =>
-              addToast({ type: 'info', title: '行点击（演示）', message: row.requestId })
+              addToast({ type: 'info', title: '单击预览（演示）', message: row.requestId })
+            }
+            onRowOpen={(row) =>
+              addToast({
+                type: 'info',
+                title: '双击开对象（演示）',
+                message: `${row.requestId}——真实页面在此写 hash 二段路由，于当前上下文打开对象。`,
+              })
             }
             pagination={{
               page,

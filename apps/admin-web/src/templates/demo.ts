@@ -8,6 +8,7 @@
 // 保证删掉本文件不伤任何模板。
 
 import type { DetailField, AuditEntry } from './types';
+import type { ListSortOption } from './ListPageTemplate';
 
 /* ── ListPageTemplate 演示数据 ── */
 
@@ -67,6 +68,42 @@ export const demoShipmentRows: DemoShipmentRow[] = [
     statusLabel: '来源保全中',
     statusKind: 'pending',
     submittedAt: '2024-08-20 11:21',
+  },
+];
+
+/* ── ListPageTemplate Filter Bar 结构位演示数据（票 admin-web-ux-alignment/03 第 6 条） ── */
+
+/** 演示排序键：只对 demoShipmentRows 的字段起作用，不对应任何读口的排序参数。 */
+export type DemoListSortKey = 'submitted-desc' | 'submitted-asc' | 'request-id';
+
+/** 隔离合成 S：排序位演示选项。文案含方向，照模板对 ListSortOption.label 的要求由调用方给全。 */
+export const demoListSortOptions: (ListSortOption & { value: DemoListSortKey })[] = [
+  { value: 'submitted-desc', label: '提交时间 ↓' },
+  { value: 'submitted-asc', label: '提交时间 ↑' },
+  { value: 'request-id', label: '申报单号' },
+];
+
+/**
+ * 演示保存视图：一份筛选态的快照（状态 / 目的地 / 排序），'all' 表示该维不筛。
+ * 保存视图的真实实现（存哪、存多久）归票 admin-web-ux-alignment/02；这里只让演示页能切、能存到内存里。
+ */
+export interface DemoListSavedView {
+  id: string;
+  label: string;
+  status: string | 'all';
+  destination: string | 'all';
+  sort: DemoListSortKey;
+}
+
+/** 隔离合成 S：预置的两个演示视图，值只引用 demoShipmentRows 里实际出现的状态文案。 */
+export const demoListSavedViews: DemoListSavedView[] = [
+  { id: 'syn-view-all', label: '全部申报（演示）', status: 'all', destination: 'all', sort: 'submitted-desc' },
+  {
+    id: 'syn-view-review',
+    label: '待人工复核（演示）',
+    status: '待人工复核',
+    destination: 'all',
+    sort: 'submitted-desc',
   },
 ];
 
