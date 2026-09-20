@@ -128,3 +128,13 @@ Blocked by: 03（两票都改 `pages/template-preview/*` 演示页；03 进 main
 - **首用页只有一个签**：单签的「工作区」形态成立——稳定命名在，签随内容增减；不为凑签造「时间线」。
 - `index.ts` 插行位置刻意避开 03 的 hunk（取证于 `mcp3-ux03@e7f17306`：03 改在 `ListPageTemplate` 导出块内与其后、以及文件末行前；本票在
   `DetailPageTemplate` 导出块内与其后），推送方重放时若仍撞，以两边都保留为准——都是只加不减的导出行。
+
+### rebase 到 origin/main `7d29af39`（通道 5 · 15:5x · 05 / 06 进 main 后，按推送方广播「可提前看冲突」）
+
+七笔零冲突重放（06 动的 `index.ts` / `state-slot.tsx` 与本票 hunk 不相邻）。SHA 对照：`ffd06dcd→e13f2bd5` / `ddc887ac→8b0f22b5` / `b75b21db→1431f2c9` /
+`d155a435→f2e48d78` / `9d307336→9d5a170b` / `46984a85→44662c30` / `44ce2c2b→be8959c3`；上文完成记录里的旧 SHA 按此对照读，内容一字未改。
+分支已 `--force-with-lease` 推，远端 `mcp5-ux04 = be8959c3`（ls-remote 核对）。**码 tip 现为 `44662c30`。**
+
+新基上四道门：`tsc -b --noEmit` 0 / `run-tests` **304**（含 05 / 06 进 main 带来的用例 + 本票 6）/ `vite build` 0 /
+**`go test ./internal/architecture/ -count=1` ok**（推送方 15:40 广播新加的一道：管理台路径门禁扫 `apps/admin-web/src` 全部 `.ts`/`.tsx` 含测试文件；
+本票新增的 `workspace-tabs.test.ts` 没有路径字面量）。
