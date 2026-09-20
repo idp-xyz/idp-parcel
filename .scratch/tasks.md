@@ -2885,3 +2885,18 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - **簿记本笔**（纯 .md 自审，在 `4a19ed33` 之上）：票 04 Status → resolved · 已进 main + 评审 ← 通道 6 增量原文代落 + 处置 + 进 main 记录；spec 子票表 04 → resolved · 已进 main；本小节。
 - **收尾**：`mcp5-ux04-6` → `merged/`、远端删；`idp-land-ux04-6` 与 `idp-parcel-mcp5-ux04` 比内容后拆（通道 5 已报空闲）。
 - **前沿**：01 等最终 tip → 评审 → 重放（基 `7d29af39`，与 main 其后各笔零重叠，`merge-tree` 干跑过）；02 Blocked by 01 → 01 进 main 后转 ready 即派。六票余 01 / 02。
+
+### 17:5x–18:1x 同一会话：01 定 tip → 通道 2 评审无阻断 → 推送方三条注释代落 → 重放进 main（`ed7ef224`）；六票只余 02
+
+- 通道 4 按两条裁决补 `5269239e`（删 `SessionBadge`，条件核过成立：放行后 `AuthGate` 只渲染 `<App>`→`Layout` 无条件 `<TopBar>`，`src/` 无 ErrorBoundary）+ `113d048f` 票面，确认无加笔。
+  17:5x 派评审 → 通道 2（`task-34a89410`，钉 `113d048f`，至 18:25）；同时在 `idp-land-ux01` 上 cherry-pick 九笔到 `94bd39fd` 零冲突（12 件与作者 tip 逐字节同），`pnpm install --offline` 4.5 s，
+  四道门 tsc 0 / run-tests **324** / vite 0 / architecture ok + 静态门全绿，带 DSN 全量 18:00:19→18:02:46 115 ok / 0 FAIL / 0 cached。
+- 18:0x 评审到：**Standards 0 / 3 · Spec 0 / 2**（序数计数一处、`data-density` 注释消费者不实、`AuthGate.tsx` 末行无换行；存储 dark 的反向闪帧未列未验、`ScopeChip` Tooltip 挂非焦点元素）。
+  推送方代落 `ed7ef224`（只改注释与空白）；Spec 两条记入票面处置。**在 `ed7ef224` 上重跑**：tsc 0 / 324 / vite 0 / gofmt 空 / vet ok / 带 DSN 全量 18:06:16→18:08:15 **115 ok / 0 FAIL / 0 cached**，探针 PASS。
+- 18:08:27 `ls-remote` 核 `94bd39fd` 未动 → `push ed7ef224:main` 成，**远端 main = `ed7ef224`**（10 笔：01 九 + 推送方一；其下无他人提交）；共享树 ff 同 SHA；释号广播（SHA 对照 `949706e6→9b0e30d4` /
+  `a8fe62a4→aed4b860` / `2b8847cb→dc400b78` / `c3c2555a→ee3c2cf0` / `ea8b63b8→35244703` / `170c3527→9e8f1c83` / `0ec5dfa5→13db355a` / `5269239e→83da6021` / `113d048f→dd57ede1`）。**先 push 再簿记。**
+- **簿记本笔**（纯 .md 自审，在 `ed7ef224` 之上）：票 01 Status → resolved · 已进 main + 评审 ← 通道 2 原文代落 + 处置 + 进 main 记录；票 02 Blocked by → 无；spec 子票表 01 → resolved · 已进 main、02 → ready（阻塞解除，未派）；本小节。
+- **收尾**：`mcp4-ux01` → `merged/`、远端删；`idp-parcel-mcp4-ux01`（通道 4 已报空闲、树干净）与 `idp-land-ux01` 比内容后拆。
+- **用户问的三棵树至此全部收口**：03 / 04 / 01 都进 main，六票里 01 / 03 / 04 / 05 / 06 resolved · 已进 main，只余 **02**（ready、阻塞已解、未派——派不派归用户）。2 / 3 / 4 / 5 / 6 全部空闲。
+- **本节五数**（17:3x–18:1x）：CI main 绿/总 **2 / 2**（`3fbf2ec2` 与 `bd067052` 各 success；`4a19ed33` / `94bd39fd` / `ed7ef224` 三个 run 未量）· 集成时延——04 第 6 条完工报 17:3x → 进 main 17:54 **约 20 分**、
+  01 完工报 17:51（裁后定 tip 17:57）→ 进 main 18:08 **约 17 分**，中位约 18 分（2 票）· 重放笔数 **9**（01 九；04 第 6 条纯 ff 三笔不算重放；不含推送方两笔与簿记）· 重复开发 0 · 会话重置 0 · 非作者评审缺席 0

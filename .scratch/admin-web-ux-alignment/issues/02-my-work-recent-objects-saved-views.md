@@ -2,7 +2,7 @@
 
 Category: enhancement
 Status: ready-for-agent
-Blocked by: 01（同动 `Layout.tsx`；本票的记录钩子挂在 01 定下的壳层结构上）
+Blocked by: 无（原 01——同动 `Layout.tsx`，记录钩子挂在 01 定下的壳层结构上；01 已于 2026-09-20 18:08 进 main `ed7ef224`，从 `origin/main` 起做即可）
 地盘：`apps/admin-web/src/navigation.ts`（加「我的工作」分区两条目）、`Layout.tsx`（挂记录钩子；01 之后）、`page-registry.tsx`（登记两页）、
 新 `apps/admin-web/src/pages/my-work/`（`RecentObjectsPage.tsx`、`SavedViewsPage.tsx`、`recent-objects.ts` / `saved-views.ts` 纯逻辑 + test）、
 `pages/Workbench.tsx`（加「最近对象 / 保存视图」两块）。

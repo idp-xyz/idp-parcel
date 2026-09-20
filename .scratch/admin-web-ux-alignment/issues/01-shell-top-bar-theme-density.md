@@ -1,7 +1,7 @@
 # 01 壳层：Top Bar 四件（归属信息 / 全局搜索位 / 作用域位 / 用户菜单位）、Light 默认 + 主题切换、密度两档
 
 Category: enhancement
-Status: resolved——2026-09-20 17:5x 通道 4 交活（task-88934341 接续；分支 `mcp4-ux01` 基 main `7d29af39`，代码五笔 tip `ea8b63b8`、票面两笔在其上；18:1x 按推送方裁决补一笔 `5269239e` 删 `SessionBadge`，代码 tip 随之为 `5269239e`；均已推 origin；待非作者评审与推送方重放）。此前 in-progress（15:57 通道 4 认领 task-2fa9c998，该会话 16:05 后无响应、三件未提交现场由接续会话 17:2x 原样入库 `2b8847cb`）；更早 ready-for-agent
+Status: resolved · 已进 main（码 `83da6021`，推送方注释笔 `ed7ef224`；评审 ← 通道 2 两轴 0 阻断）——2026-09-20 17:5x 通道 4 交活（task-88934341 接续；分支 `mcp4-ux01` 基 main `7d29af39`，代码五笔 tip `ea8b63b8`、票面两笔在其上；按推送方裁决补一笔 `5269239e` 删 `SessionBadge`；均已推 origin）。此前 in-progress（15:57 通道 4 认领 task-2fa9c998，该会话 16:05 后无响应、三件未提交现场由接续会话 17:2x 原样入库 `2b8847cb`）；更早 ready-for-agent
 Blocked by: 无
 地盘：`apps/admin-web/src/App.tsx`、`Layout.tsx`、`index.css`、新 `apps/admin-web/src/shell/`（TopBar 及其子件）。不动 `navigation.ts`（票 02 的地盘）、不动 `pages/`。
 `auth/AuthGate.tsx` 只删 `SessionBadge`（与用户菜单重复，推送方 18:0x 裁）——两个退出入口是本票引入的重复，由本票收；会话 / 登出逻辑不动。
@@ -88,3 +88,46 @@ Blocked by: 无
 **评审 / 推送方要看的**：`git diff 7d29af39..5269239e -- apps/admin-web`（11 文件：上面 10 件 + `auth/AuthGate.tsx`）；只跑 `apps/admin-web` 三道门 + `./internal/architecture/`，不需 DSN。
 
 ## Comments
+
+### 评审 ← 通道 2 · 钉 `113d048f`（码 `5269239e`，基线 `7d29af39`）· 18:0x（推送方自任务台 `task-34a89410` 代落原文）
+
+只读，隔离树已拆，未跑门禁、未占 55432、未碰作者树。
+
+**Standards** — 阻断：无。非阻断：
+1. `shell/TopBar.tsx` 文件头注「手册『顶栏规范』列的第三样『Alerts / Notifications』」——序数即计数（AGENTS「改文档」条），手册那张表增删一项就无声变错；名字已在场，删「第三样」即可。
+2. `Layout.tsx` `<main data-density>` 处注释称「模板层（票 03）按它选行高与间距，不必各自再读 useDensity」，但 `templates/ListPageTemplate.tsx` 实为直接 `useDensity()`，该属性今日无读者。
+   属性本身是票面第 4 条要的，留；只改注释把消费者写实（此块来自 `2b8847cb` 原样入库的前任现场，写在 03 落地前）。
+3. `auth/AuthGate.tsx` 删 `SessionBadge` 后文件末尾无换行（仓内无 prettier / editorconfig 兜底，属手工纠）。
+无发现（实核）：注释全中文；跨文件引用皆用符号名 / 小节标题，无行号；`shell/preferences.ts` 头注对上游的断言实核 dist 成立——`ThemeProvider` `useState` 只读 `idpxyz-theme`、缺省 dark，
+`DensityProvider` `useState('compact')` 无初值口；`shell/preference-sync.tsx` `DensityPreferenceAlignment` 三段相位在 StrictMode 双跑下成立（ref 跨模拟卸载保留，第二跑见 `'toggled'` 不再切；
+写回只在 `'aligned'` 之后，而 aligned 要求 density === 存储值，故无把上游 compact 写进本产品键的窗口）；`useSeedUpstreamTheme` 在 App 函数体内先于 `ThemeProvider` 渲染，`useState` 懒初始化幂等；
+`readEnum` 坏值回默认，测试覆盖大小写 / 空串 / 串键；`shell/session.ts` `useSessionPrincipal` 只经 `ensureSession` 读同一份 sessionStorage，续期合入 `inFlightRenewal` 单例，无新鉴权路径；
+`AuthGate` 只删徽章块与其独用的 `displayName` / `logout` import，`OidcSession` 仍被 `GateState` 用；Fowler：`TopBar` 的 `tenantName` prop 无调用方属可能 Speculative Generality，但票面第 2 条明写「有租户名就显」，seam 合理，不计。
+
+**Spec** — 阻断：无。非阻断：
+1. `index.css` `:root` 挂 Light 后，存储为 dark 的操作者首帧是 Light，`.dark` 要等 `ThemeProvider` 的 `useEffect` 挂载后才加到 `<html>`——反向闪帧。票面「未验」只列了「Light 首屏是否有 dark 闪帧」，
+   这一向也该写进未验；修法是 `index.html` 内联脚本读 `parcel-admin-web:theme` 预挂 class，越地盘，不在本票。
+2. `shell/TopBar.tsx` `ScopeChip` 的 Tooltip 挂在 `Tag`（非焦点元素）上，「为什么没有切换」这句键盘 / 读屏到不了；票面只要求「悬停说明」，可不改，记一笔供 03 / 06 同型位参考。
+无发现：第 1 条 `PRODUCT_ATTRIBUTION`='Parcel / IDP' 弱化色、`·` aria-hidden、模块名主色，`App.tsx` 仍不传 product 且头注写明；第 2 条四位顺序搜索→作用域→主题/密度→用户，搜索 `Button variant=outline` + `aria-disabled` +
+Tooltip、无 onClick、无原生 disabled，作用域 `Tag` 只读无切换器，用户菜单 `MenuItem destructive` 退出经 `Layout` `onSignOut={logout}` 走 oidc.ts 既有登出，无铃铛；第 3 条 dark / light 两块实比 41 / 41 键、值零差，
+`.dark` 写在 `:root` 后同特异性压过，键名 / 默认值由 `preferences.test.ts` 钉住，`DEFAULT_DENSITY === 'comfortable'` 与 03 裁决 3 对上；第 4 条 `DensityProvider` 同级、`<main data-density>` 在；第 5 条 `h-12` 不动、
+`IconButton` aria-label 与 Tooltip 同句。完成判据：比法（gh api 取 53df1666 版 + 按块逐键逐值）写清；探针 17 / 17 标「一次性实测、组件层未钉」；浏览器「未验」如实。判断项 7 对 `inFlightRenewal` 的说法与 oidc.ts 相符，
+判断项 1 与 03 的 comfortable 默认一致；未动 `navigation.ts` / `pages/`；`SessionBadge` 删除为推送方裁决，不计越权。
+
+**Standards 0 / 3 · Spec 0 / 2** → 无阻断，可重放。
+
+### 处置（推送方 · 通道 1 · 18:0x）
+
+- Standards 1 / 2 / 3 → 推送方代落 `ed7ef224`（只改注释与空白：去「第三样」；`data-density` 注释写实为「给只能从 DOM 读档的消费者用，`ListPageTemplate` 走 `useDensity` 不读它」；`AuthGate.tsx` 补末行换行）。
+- Spec 1 → 记入未验：**存储为 dark 时首帧 Light → `.dark` 挂上的反向闪帧**与「Light 首屏是否有 dark 闪帧」同为未验；修法（`index.html` 内联脚本预挂 class）越地盘，随首个浏览器验收的票一并看，不另立票。
+- Spec 2 → 记；`ScopeChip` 的说明改挂可聚焦元素或加 `aria-describedby`，留给 02 动 `Layout` / 导航那一轮顺手，或首个浏览器验收时一并定。
+
+### 进 main 记录（推送方 · 通道 1）
+
+- 重放：`idp-land-ux01` 上 cherry-pick `7d29af39..113d048f` 九笔到 main `94bd39fd` 零冲突（本票 12 件与 main 其后各笔零重叠，`git merge-tree` 干跑先核过），SHA 对照
+  `949706e6→9b0e30d4` / `a8fe62a4→aed4b860` / `2b8847cb→dc400b78` / `c3c2555a→ee3c2cf0` / `ea8b63b8→35244703` / `170c3527→9e8f1c83` / `0ec5dfa5→13db355a` / `5269239e→83da6021` / `113d048f→dd57ede1`；
+  12 件与作者 tip 逐字节同。推送 tip `ed7ef224`（含 Standards 1 / 2 / 3 注释笔）。
+- 门禁在 `ed7ef224` 上实跑：`tsc -b --noEmit` 0 / `run-tests` **324**（main 313 + 本票 11）/ `vite build` 0（产物含「Parcel / IDP」1 处）/ `gofmt -l` 空 / `go build` 0 / `go vet` 0 / 清点重生成零差 /
+  带 DSN 全量 `-p 1 -count=1` 18:06:16→18:08:15 **115 ok / 0 FAIL / 16 无测试 / 0 cached**，DSN 判别单跑为 PASS。
+- 18:08:27 `ls-remote` 核 `94bd39fd` 未动 → `push ed7ef224:main` 成，**远端 main = `ed7ef224`**；共享树 ff 同 SHA。评审到之后才推。
+- 浏览器未验沿作者所报，另加评审 Spec 1 那一向。02 的 Blocked by 随本票进 main 解除。
