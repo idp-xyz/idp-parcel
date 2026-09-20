@@ -2759,3 +2759,12 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - **上节未量的 CI 补记**：`29e5117b` run 35116364710 **success**；`8608aa33` run 35117072635、`041adc37` run 35117907776 皆 success。
 - **前沿**：在途 0（13 评审 ← 通道 6 结论待补记）；ready 0；needs-info 04 / 05（归 owner）；draft pp-seams/04；first-party-api 三票等 ADR-0139。后续候选（未立票）：`suggested*Revision` 四份同形折一份、其它模块十一处 `chipClass` 改导入、02 载荷「不裁空白」判据（先改 02 判据再改码）。共享树 untracked：`.scratch/admin-web-ux-alignment/`（spec + 三票，无人认领）、`docs/ux/commercial-party.md`（自 09-16 起）。**归用户**：ADR-0139 → Accepted 与否；票 11 `detail` 格 vs ADR-0140 Decision 三；`docs/ux/` 与 `admin-web-ux-alignment` 归属。
 - **本节五数**（10:5x–11:3x）：CI main 绿/总 **3/3 已完 + 1 在跑**（`29e5117b` / `8608aa33` / `041adc37` success；`090e250e` run 35486623746 未完）· 集成时延——13 代码齐 11:13（`d1926646`）→ 进 main 11:27 **约 14 分**（含点名 4 分 + 全量 140 s；评审未等，1 票）· 重放笔数 **10**（不含本簿记笔）· 重复开发 0 · 会话重置 0（本会话 10:5x 起一任到底）· 非作者评审缺席 **1**（用户令先推；通道 6 在途，到后补记则改 0）
+
+### 11:3x–11:5x 同一会话：通道 6 评审到（两轴 0 阻断）→ 用户「那怎么办，请你自决」→ N1 注释笔 + 立票 14 + 簿记进 main
+
+- **评审 ← 通道 6**（`task-3faeb437`，11:4x 分两条到，隔离树 `idp-review-13`）：**Standards 0 / 3**（N1 五处注释跨文件活计数 + 「主语两字」误；N2 `deactivationTargetsOf` 三件生产侧无调用方；N3 `kindRegister<Body>` 擦型）· **Spec 0 / 2**（S1 第 2 条分派表仍两张、完成记录未提；S2 第 9 条 JSX 换行空白之变）；逐条 1–9 ✓、完成判据 ✓、判断项五条核过成立。全文代落票 13 Comments。到达时 `090e250e` 已在 main 五分钟——「用户令先推」那一格如实记，评审结论没改变要推的东西。
+- **自决**（用户 11:4x「那怎么办，请你自决」）：N1 是纯注释、归「不评什么」→ 推送方在 `%TEMP%\idp-land13n`（detached `56f5408f`）改成一笔 **`a0b16cd7`**（五处 + `register-list.ts` 头同类一处；`git diff -U0` 滤注释行后空、无 CR；junction 借共享树 `node_modules` 跑 tsc 0 / run-tests 289，跑完摘除）；S2 只记；**N2 / N3 / S1 + 13 判断项里的 `suggested*Revision` 四份同形、其它模块十一处 `chipClass` → 立票 14**（chore，ready-for-agent，四条可分人；02 载荷「不裁空白」判据列入「不做」并注明先问 owner）。
+- **簿记本笔**（纯 .md 自审，叠在 `a0b16cd7` 上）：票 13 评审代落 + 处置；新票 14；spec 13 行改口（评审到、N1 笔）+ 新 14 行；本节。→ `ls-remote` 核 `56f5408f` 未动 → `push <本笔>:main` → 共享树 ff → 广播 + 单发通道 6（谢、拆树、report_task 由它自己收）。
+- **收尾**：`idp-land13n` 推完拆；`idp-review-13` 归通道 6 拆。
+- **前沿**：ready 1——**14**（下一轮点名派；不赶）；在途 0；needs-info 04 / 05（归 owner）；draft pp-seams/04；first-party-api 三票等 ADR-0139。**归用户**同上节。
+- **本节五数**（11:3x–11:5x）：CI main 绿/总 未量（`090e250e` / `56f5408f` run 在跑或刚起）· 集成时延——本节无新代码票（N1 注释笔按「不评什么」自审直推）· 重放笔数 0 · 重复开发 0 · 会话重置 0 · 非作者评审缺席 **0**（13 的非作者评审已到、两轴 0 阻断；上节那格的「1」是时序——先推后到——不是缺席，两节合看为 0）

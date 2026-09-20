@@ -125,3 +125,31 @@ admin-web 全新 `pnpm install --frozen-lockfile` 后 `tsc -b --noEmit` 0 / `run
 **评审门如实记**：11:17 点名，通道 6 / 3 应答；3 是作者通道不能评，11:21 派通道 6 两轴评审（`task-3faeb437`，至 11:50）。用户 11:2x 两次经队列令「继续」，
 推送方在评审到达前先推——推前自审：逐笔读提交信与 `useRegistrationForm` / `registerListReducer` / `RevisionHistorySection` 三处共用件正文，四个共用件
 `git grep` 各一份，30 件对作者 tip 零 diff，三道门与全量皆绿；**这不算非作者评审**。通道 6 结论到后补记于下；有阻断另立票于 main 上修，不改写已推 SHA。
+
+### 评审 ← 通道 6 · 钉 `5421fc7e`（码 `d1926646`）· 基线 `8608aa33` · 11:4x（Standards 先到，Spec 随后；推送方按其两条消息代落）
+
+（`task-3faeb437`；隔离树 `%TEMP%\idp-review-13`，按 /code-review 两轴串行；三道门未复跑，以每笔提交信数字与推送方 idp-land13 实跑为准。到达时 `090e250e` 已在 main 五分钟。）
+
+- **Standards（阻断 0 / 非阻断 3）**：**N1** 跨文件活计数——`registration-form.ts` 头注「四份 *-form.ts」与 `RevisionedDraft` 注「四份表单同形」、
+  `registration-form.test.ts` 头「四份表单」、`list-order.ts` 头「三份共用」、`RevisionHistorySection.tsx` 头「两页」，再多一份消费方就静默变旧；同文件
+  「主语两字」落笔时已错（「参与方」三字）。**N2** `identity-deactivation-form.ts` 的 `deactivationTargetsOf` / `deactivationTargetsByKind` /
+  `IdentityRegisters` 生产侧已无调用方（组件改走 `kindRegisters[..].targetsOf`），只为「既有用例零改动」留着——Speculative Generality 判断项。
+  **N3** `IdentityDeactivationForm.tsx` 的 `kindRegister<Body>()` 把 Body 擦成 unknown 靠方法形参双变过编译，answer 与 optionsOf 的配对只由同一
+  `selectedKind` 键保证、类型不再守；头注已写理由，判断项。无发现：注释全中文、无行号；词表原词未动，`as const satisfies` 仍可传 `labelOf`；
+  `RevisionField` / `WallTimeField` 与法人页原内联格 class、「用建议值 {n}」、格下句逐字同；`useRegistrationForm` 建议按 draft、问题按
+  effectiveDraft、JSON 路交 null，与四份原壳一致；`registerListReducer` 只留 outcome、非 outcome 回 null；`RevisionHistorySection` 依赖
+  `[load, subjectId, revision, reloadKey]`，load 为模块级。
+- **Spec（阻断 0 / 非阻断 2）**：**S1** 第 2 条「合成一张表」——投影 `identityTargetOf` 确只一份，但种类 → 册的分派表仍有两张（组件 `kindRegisters`、
+  纯模块 `deactivationTargetsByKind`），后者只剩测试在调；完成记录未提。**S2** 第 9 条「文案逐字保住」——字逐一同，但 JSX 换行空白变了：旧法人页
+  「当前␠不可用」在换行处渲染出一个空格，共用件无；仅空白。逐条核对 1–9 ✓（壳四消费方；停用三分支与 switch 收掉；`revisionOf` 一处；`chipClass`
+  一处三处改导入；`ReferencePickerFor` 收页面答案、关系两只 Picker 不再重读、法人 / 客户账户册选中才读；`useRegisterList` 两页共用；停用后按
+  `sent.kind` 分派、null 两边重取；`statusBadge` / `partyNameUnknownNote` / 比较器 / `CodeFilter` 各归一，`matchesSearch` 对 undefined 仍按空串与旧
+  `partyName ?? ''` 同）。完成判据：`git diff 8608aa33..d1926646 -- '*.test.ts'` 删除行 0 ✓；四定义 grep 各一份 ✓；第 1 / 3 / 8 测试在 ✓。判断项：
+  第 3 那半不做理由成立（`legal-entity-form.test.ts`「空白去掉、空串照送」钉着 trim）✓；第 9「要 revision」成因链成立（两页抽屉都由 `selectedId`
+  在当前 rows 里 `find`；第 6 条前重取清答案 → 抽屉关重开 → 重挂重取，第 6 条后抽屉不卸载、只 `row.revision` 变，不记依赖确会留旧链）✓；「抽」✓；
+  `suggested*Revision` 只记不动与 grep 一致 ✓；其它模块 `chipClass` 副本实数 11 与票面同 ✓。无票外行为。
+- **一行**：Standards 0 / 3 · Spec 0 / 2。无阻断。
+
+**处置（推送方，11:5x）**：N1 纯注释在 main 之上改成一笔 `a0b16cd7`（五处 + `register-list.ts` 头同类一处；`git diff -U0` 滤注释行后空，tsc 0 / 289，
+自审）；S2 只记（空白之变是顺手修，共用件的写法是对的）；**N2 / S1 / N3 与本票判断项里的 `suggested*Revision` 四份同形、其它模块十一处
+`chipClass` 合成后续票 [14](./14-pages-party-leftovers.md)**（ready-for-agent）；第 3 条「不裁空白」那半也挂在 14 里但标「先裁 02 判据」。
