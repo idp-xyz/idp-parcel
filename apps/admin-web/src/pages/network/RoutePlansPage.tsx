@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import { chipClass } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
@@ -39,13 +40,6 @@ const info = moduleInfoById['route-plans'];
 //   「无当前有效路由」与改路决定如实单列（CONTEXT 硬句）：前者是初始判断结论的
 //     封闭一格，照词呈现不折进成计划行；后者透出改路判定三态词，改路建议本体住
 //     jsonb 属详情读法。
-
-const chipClass = (active: boolean) =>
-  `px-2.5 py-1 text-[12px] rounded border ${
-    active
-      ? 'border-idpxyz-accent text-idpxyz-accent'
-      : 'border-idpxyz-border text-idpxyz-textMuted hover:bg-idpxyz-hover'
-  }`;
 
 const initialRouteColumns: ListColumn<InitialRouteRecord>[] = [
   {

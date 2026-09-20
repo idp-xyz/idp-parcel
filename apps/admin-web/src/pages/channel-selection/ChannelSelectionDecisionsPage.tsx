@@ -15,6 +15,7 @@ import {
 } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import { chipClass } from '../../components/registration';
 import { formatInstant } from '../catalogue-view';
 import {
   findChannelSelectionDecision,
@@ -72,13 +73,6 @@ const columns: ListColumn<DecisionRow>[] = [
   col('tiedCandidates', '并列的候选', { mono: true }),
   col('candidateCount', '候选数', { className: 'w-[72px]' }),
 ];
-
-const chipClass = (active: boolean) =>
-  `px-2.5 py-1 text-[12px] rounded border ${
-    active
-      ? 'border-idpxyz-accent text-idpxyz-accent'
-      : 'border-idpxyz-border text-idpxyz-textMuted hover:bg-idpxyz-hover'
-  }`;
 
 export function ChannelSelectionDecisionsPage() {
   // 收窄入参分两格：输入框里的草稿与已提交的那一个。合成一格就会逐键触发查询，而每问一次都是一次真请求。

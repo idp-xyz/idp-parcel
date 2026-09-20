@@ -8,6 +8,7 @@ import {
   type ReviewDecisionOption,
 } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import { chipClass } from '../../components/registration';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
   listExceptionTriageRecords,
@@ -81,13 +82,6 @@ const registryOf: Record<TriageView, ExceptionTriageRegistry> = {
   episodes: 'signal-episode',
   requests: 'disposition-request',
 };
-
-const chipClass = (active: boolean) =>
-  `px-2.5 py-1 text-[12px] rounded border ${
-    active
-      ? 'border-idpxyz-accent text-idpxyz-accent'
-      : 'border-idpxyz-border text-idpxyz-textMuted hover:bg-idpxyz-hover'
-  }`;
 
 /** 发作期详情：逐字段照实转写，缺席按端点在场规则给词（成对缺席即仍活跃/未分诊）。 */
 function episodeDetailFields(episode: SignalEpisodeRecord): DetailField[] {

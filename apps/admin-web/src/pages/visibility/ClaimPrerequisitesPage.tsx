@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { ListPageTemplate, type ListColumn } from '../../templates';
-import { MultiRegistrationPanel, type RegistrationTarget } from '../../components/registration';
+import { MultiRegistrationPanel, chipClass, type RegistrationTarget } from '../../components/registration';
 import { catalogueViewState } from '../catalogue-view';
 import {
   listVisibilityCatalogues,
@@ -67,13 +67,6 @@ const kindColumns: Record<PrerequisiteKind, ListColumn<CatalogueRow>[]> = {
     col('approvedBy', '批准人', true),
   ],
 };
-
-const chipClass = (active: boolean) =>
-  `px-2.5 py-1 text-[12px] rounded border ${
-    active
-      ? 'border-idpxyz-accent text-idpxyz-accent'
-      : 'border-idpxyz-border text-idpxyz-textMuted hover:bg-idpxyz-hover'
-  }`;
 
 // 授权名单为空是「此账户当前不授权任何人代提」的显式决定(0018),与「还没登记」
 // (整行不在列表里)不是一回事:后者页面上根本没有这一行,前者必须说成一个决定。

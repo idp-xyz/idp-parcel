@@ -6,6 +6,7 @@ import {
   domainStatusTones,
   type DomainStatus,
 } from '../../domain/status';
+import { chipClass } from '../../components/registration';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
   listTransportFulfillmentRecords,
@@ -232,13 +233,6 @@ const masterDocumentStandingLabels: Record<string, string> = {
   REVOKED: '已撤销',
   SUPERSEDED: '已替代',
 };
-
-const chipClass = (active: boolean) =>
-  `px-2.5 py-1 text-[12px] rounded border ${
-    active
-      ? 'border-idpxyz-accent text-idpxyz-accent'
-      : 'border-idpxyz-border text-idpxyz-textMuted hover:bg-idpxyz-hover'
-  }`;
 
 function rowsOf(body: TransportFulfillmentListResponseBody): ReviewRow[] {
   switch (body.outcome) {

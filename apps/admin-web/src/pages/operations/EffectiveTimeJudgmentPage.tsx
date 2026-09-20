@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import { chipClass } from '../../components/registration';
 import {
   judgeEffectiveTime,
   listExternalTrackingFacts,
@@ -81,13 +82,6 @@ function columnsWithActions(onJudge: (row: FactRow) => void): ListColumn<FactRow
     },
   ];
 }
-
-const chipClass = (active: boolean) =>
-  `px-2.5 py-1 text-[12px] rounded border ${
-    active
-      ? 'border-idpxyz-accent text-idpxyz-accent'
-      : 'border-idpxyz-border text-idpxyz-textMuted hover:bg-idpxyz-hover'
-  }`;
 
 const viewWords: Record<ExternalTrackingFactView, string> = {
   pending: '待判断',

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ListPageTemplate, type ListColumn, type TemplateViewState } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import { chipClass } from '../../components/registration';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
   listNodeOperationsRecords,
@@ -172,13 +173,6 @@ const sections: ReviewSection[] = [
     ],
   },
 ];
-
-const chipClass = (active: boolean) =>
-  `px-2.5 py-1 text-[12px] rounded border ${
-    active
-      ? 'border-idpxyz-accent text-idpxyz-accent'
-      : 'border-idpxyz-border text-idpxyz-textMuted hover:bg-idpxyz-hover'
-  }`;
 
 function rowsOf(body: NodeOperationsListResponseBody): ReviewRow[] {
   switch (body.outcome) {

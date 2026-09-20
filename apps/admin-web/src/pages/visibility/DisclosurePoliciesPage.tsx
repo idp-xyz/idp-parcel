@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { ListPageTemplate, type ListColumn } from '../../templates';
-import { MultiRegistrationPanel, type RegistrationTarget } from '../../components/registration';
+import { MultiRegistrationPanel, chipClass, type RegistrationTarget } from '../../components/registration';
 import { catalogueViewState, formatRange } from '../catalogue-view';
 import {
   listVisibilityCatalogues,
@@ -120,13 +120,6 @@ const kindColumns: Record<DisclosureKind, ListColumn<PolicyRow>[]> = {
     col('approvedBy', '批准人', true),
   ],
 };
-
-const chipClass = (active: boolean) =>
-  `px-2.5 py-1 text-[12px] rounded border ${
-    active
-      ? 'border-idpxyz-accent text-idpxyz-accent'
-      : 'border-idpxyz-border text-idpxyz-textMuted hover:bg-idpxyz-hover'
-  }`;
 
 // 一维一格:态词配封闭三格词表,content 按 0012 只在「展示」态在场——在场就跟在态
 // 词后原样示出;页面不替服务端做第二道 shape 校验,来什么显什么。

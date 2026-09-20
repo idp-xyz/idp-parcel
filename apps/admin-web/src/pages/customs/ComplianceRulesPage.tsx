@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { ListPageTemplate, type ListColumn } from '../../templates';
-import { MultiRegistrationPanel, type RegistrationTarget } from '../../components/registration';
+import { MultiRegistrationPanel, chipClass, type RegistrationTarget } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatRange } from '../catalogue-view';
 import {
@@ -65,13 +65,6 @@ const registries: ReadonlyArray<{
     ],
   },
 ];
-
-const chipClass = (active: boolean) =>
-  `px-2.5 py-1 text-[12px] rounded border ${
-    active
-      ? 'border-idpxyz-accent text-idpxyz-accent'
-      : 'border-idpxyz-border text-idpxyz-textMuted hover:bg-idpxyz-hover'
-  }`;
 
 function rowsOf(body: ComplianceRulesListResponseBody): RuleRow[] {
   switch (body.outcome) {

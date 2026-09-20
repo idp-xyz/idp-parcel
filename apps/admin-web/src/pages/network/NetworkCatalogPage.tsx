@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { ListPageTemplate, type ListColumn } from '../../templates';
-import { MultiRegistrationPanel, type RegistrationTarget } from '../../components/registration';
+import { MultiRegistrationPanel, chipClass, type RegistrationTarget } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
 import {
@@ -100,13 +100,6 @@ const familyColumns: Record<NetworkCatalogFamily, ListColumn<CatalogRow>[]> = {
     col('effective', '适用区间', { mono: true, className: 'min-w-64' }),
   ],
 };
-
-const chipClass = (active: boolean) =>
-  `px-2.5 py-1 text-[12px] rounded border ${
-    active
-      ? 'border-idpxyz-accent text-idpxyz-accent'
-      : 'border-idpxyz-border text-idpxyz-textMuted hover:bg-idpxyz-hover'
-  }`;
 
 // 行体是七族字段并集上的可选字段(与 api.ts 的 NetworkVersionRecord 同形),这里按
 // 当前族取值;缺席字段如实显「—」,不为区间完整编造时刻。
