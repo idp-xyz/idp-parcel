@@ -13,6 +13,43 @@ export function densityRowPadding(density: ListDensity): string {
   return density === 'compact' ? 'py-1' : 'py-2.5';
 }
 
+/** 行交互的输入：调用方接了哪些行回调。 */
+export interface RowInteractionInputs {
+  /** 接了 onRowClick（单击：预览 / 选中）。 */
+  click: boolean;
+  /** 接了 onRowOpen（双击 / Enter：开对象）。 */
+  open: boolean;
+}
+
+export interface RowInteraction {
+  /**
+   * 行进不进 Tab 序。只有接了 onRowOpen 才给 0——键盘要能「开」才值得让行可聚焦；没接就不给，36 张只接
+   * onRowClick 的页于是与今天逐字节同。不用正数：正数会抢整页的 Tab 顺序。
+   */
+  tabIndex: 0 | undefined;
+  /** 任一行回调存在即可点（指针样式）：双击本身也是指针动作。 */
+  clickable: boolean;
+}
+
+/**
+ * 按调用方接了哪些行回调算出行的交互属性（手册「Table 规范」「Drill-down 模式」：单击预览、双击开对象；
+ * 手册「可访问性」表格键盘导航：行可聚焦、Enter 等价双击）。
+ */
+export function rowInteraction(inputs: RowInteractionInputs): RowInteraction {
+  return {
+    tabIndex: inputs.open ? 0 : undefined,
+    clickable: inputs.click || inputs.open,
+  };
+}
+
+/**
+ * 键盘上等价双击的键。只认 Enter（KeyboardEvent.key；小键盘回车的 key 也是 Enter）：Space 在滚动容器里是翻页键、
+ * 方向键留给浏览器滚动，行不能吞它们。
+ */
+export function rowKeyOpens(key: string): boolean {
+  return key === 'Enter';
+}
+
 /** Filter Bar 在搜索区与主筛选之后的四个结构位，顺序即渲染顺序。 */
 export type FilterBarSlotId = 'sort' | 'view-mode' | 'saved-view' | 'more-filters';
 

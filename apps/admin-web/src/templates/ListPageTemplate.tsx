@@ -24,7 +24,13 @@ import {
 import { useDensity } from '@idpxyz/ui-theme-runtime';
 import { navigationSections, pageTitleById } from '../navigation';
 import { resolveBreadcrumb, type TemplateBreadcrumb } from './breadcrumb';
-import { densityRowPadding, filterBarSlots, type FilterBarSlot } from './list-page-structure';
+import {
+  densityRowPadding,
+  filterBarSlots,
+  rowInteraction,
+  rowKeyOpens,
+  type FilterBarSlot,
+} from './list-page-structure';
 import { StateSlot, type TemplateViewState, type StateSlotProps } from './state-slot';
 
 /** 列定义。render 拿整行而非取值路径，让调用方组合多字段（如单号+徽章）不求模板开洞。 */
@@ -111,7 +117,13 @@ export interface ListPageTemplateProps<Row> {
   columns: ListColumn<Row>[];
   rows: Row[];
   rowKey: (row: Row) => string;
+  /** 单击一行：预览 / 选中。有 onRowOpen 时它仍然是单击的语义，不被双击顶掉。 */
   onRowClick?: (row: Row) => void;
+  /**
+   * 双击一行（或行聚焦后按 Enter）：开对象。开在当前上下文、由调用方写 hash 二段路由（票 admin-web-ux-alignment/03
+   * 裁决 2：本仓 console 形态无 Workbench Tabs，不开标签页）。接了它行才进 Tab 序；不接则行为与今天同。
+   */
+  onRowOpen?: (row: Row) => void;
   /**
    * ready 态下 rows 为空时表格区显的一行（如「当前筛选条件下没有匹配」）。它与 viewState 的空态是两个事实：
    * 空态说的是数据源为空，这一行说的是调用方在已取回数据上筛没了——调用方仍报 ready，模板不从 rows.length
@@ -132,6 +144,12 @@ export interface ListPageTemplateProps<Row> {
 const filterControlClass =
   'h-6 shrink-0 rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 text-[11px] text-idpxyz-text ' +
   'outline-none focus-visible:ring-1 focus-visible:ring-idpxyz-accent/35';
+
+// 可聚焦行的焦点态：outline 而不是 ring——ring 是 box-shadow，浏览器对 <tr> 不一定画；outline 内缩一格免得被容器
+// overflow 裁掉。只在 focus-visible 时出，鼠标点行不闪框。
+const rowFocusClass =
+  'focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-idpxyz-accent ' +
+  'focus-visible:bg-idpxyz-hover';
 
 // 禁用位：按钮 + 悬停说明，不是灰色占位方块（票 admin-web-ux-alignment/03 裁决 1）。
 // 用 aria-disabled 而不是 disabled：Button 原语的 disabled 带 pointer-events-none，悬停说明就出不来，
@@ -172,6 +190,7 @@ export function ListPageTemplate<Row>({
   rows,
   rowKey,
   onRowClick,
+  onRowOpen,
   emptyRowsNote,
   pagination,
   viewState,
@@ -189,6 +208,13 @@ export function ListPageTemplate<Row>({
   // 全站默认档前后一致，切换才是用户的选择。
   const { density } = useDensity();
   const cellPadding = densityRowPadding(density);
+
+  // 行的交互属性由 rowInteraction 决定；这里只管把它们贴到 <tr> 上。没接任何回调时 className 为 undefined，与今天同。
+  const interaction = rowInteraction({ click: onRowClick !== undefined, open: onRowOpen !== undefined });
+  const rowClass =
+    [interaction.clickable ? 'cursor-pointer' : '', interaction.tabIndex !== undefined ? rowFocusClass : '']
+      .filter((part) => part !== '')
+      .join(' ') || undefined;
 
   // 「更多筛选」展开与否是模板自己的呈现状态，不回流给调用方：调用方只关心筛选值。
   const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
@@ -339,8 +365,20 @@ export function ListPageTemplate<Row>({
                     {rows.map((row) => (
                       <TableRow
                         key={rowKey(row)}
-                        className={onRowClick ? 'cursor-pointer' : undefined}
+                        className={rowClass}
+                        tabIndex={interaction.tabIndex}
                         onClick={onRowClick ? () => onRowClick(row) : undefined}
+                        onDoubleClick={onRowOpen ? () => onRowOpen(row) : undefined}
+                        onKeyDown={
+                          onRowOpen
+                            ? (event) => {
+                                // 只认落在行本身的 Enter：单元格里的按钮 / 链接自己吃 Enter，冒泡上来的不算开行，否则按一次
+                                // 触发两件事。
+                                if (event.target !== event.currentTarget || !rowKeyOpens(event.key)) return;
+                                onRowOpen(row);
+                              }
+                            : undefined
+                        }
                       >
                         {columns.map((col) => (
                           <TableCell

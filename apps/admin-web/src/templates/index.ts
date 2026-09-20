@@ -15,8 +15,12 @@ export {
 export {
   densityRowPadding,
   filterBarSlots,
+  rowInteraction,
+  rowKeyOpens,
   type FilterBarSlot,
   type FilterBarSlotId,
+  type RowInteraction,
+  type RowInteractionInputs,
 } from './list-page-structure';
 
 export {
