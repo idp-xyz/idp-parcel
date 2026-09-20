@@ -5,7 +5,7 @@ import type { RegistrationResponseBody } from '../../components/registration';
 import { effectiveDraftOf, registrationLanded, revisionOf } from './registration-form';
 
 // 本文件钉的是参与方模块各登记表单共用的规则（票 admin-web-group-legal-entities/13 第 1 / 3 条抬出）：修订号格的编码
-// 层判据、建议值何时顶进草稿、登记册答什么才算落地。四份表单（法人 / 参与方 / 关系 / 停用）同一判，不各留一份。
+// 层判据、建议值何时顶进草稿、登记册答什么才算落地。各份表单（法人 / 参与方 / 关系 / 停用……）同一判，不各留一份。
 
 // Covers: 修订号只收正整数原文——零、负数、小数、空、非数字都编不出，交回 undefined 由各表单的问题表拦住不送。
 test('修订号只编正整数', () => {

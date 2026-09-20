@@ -4,14 +4,14 @@ import type { ApiResult } from '../catalogue-api';
 import { problemNote } from './presentation';
 import type { RevisionTimelineItem } from './revision-timeline';
 
-// 参与方身份两册（责任法人、业务参与方）详情抽屉「修订历史」区的共用件（票 admin-web-group-legal-entities/13 第 9 条）。
+// 参与方身份各册（责任法人、业务参与方……）详情抽屉「修订历史」区的共用件（票 admin-web-group-legal-entities/13 第 9 条）。
 // 此前 GroupLegalEntitiesPage 与 BusinessPartiesPage 各持一份同形的历史区组件（票 03 立、票 12 照抄），只在读口、回显
-// 标识的字段名、主语两字与判读函数上不同；把「何时重取」这条规则改一次要改两处，本条正是为改它而来，于是抽成一份，
-// 两册各交一份 RevisionHistoryRegister 进来。判读仍在 *-revisions.ts（纯函数，node:test 钉着），这里只摆。
+// 标识的字段名、主语一词与判读函数上不同；「何时重取」这条规则一改就得每份副本各改一遍，本条正是为改它而来，于是抽成
+// 一份，各册交一份 RevisionHistoryRegister 进来。判读仍在 *-revisions.ts（纯函数，node:test 钉着），这里只摆。
 //
 // 何时重取：按 subjectId **与 revision** 记依赖。票 13 第 6 条之后 useRegisterList 重取不再清上一份答案，抽屉在列表
 // 重取期间开着不卸载；登记签给同一对象登了下一笔（或停用），新答案到来后行的 revision 变了而 subjectId 没变——
-// 只按 subjectId 记依赖会让历史区继续显上一条链。票 12 (c) 在参与方页用 key 带修订号补这一格、法人页没有；两页
+// 只按 subjectId 记依赖会让历史区继续显上一条链。票 12 (c) 在参与方页用 key 带修订号补这一格、法人页没有；各消费方
 // 现在同一做法、由本件一处守住，调用方不必记得给 key。
 //
 // 每次换行或换修订重取，未回的旧请求按 cancelled 丢；答案顶层回显的标识再核一次，对不上就不摆——摆一段别的对象

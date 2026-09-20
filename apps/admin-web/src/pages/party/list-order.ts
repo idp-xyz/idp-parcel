@@ -1,6 +1,6 @@
 // 参与方模块各册页列表的排序比较器、搜索匹配与筛选下拉的形状（票 admin-web-group-legal-entities/09 立，票 13 第 8 条
-// 把法人页那份私有副本切过来并统一筛选码的类型）。纯函数，legal-entity-list.ts / business-party-list.ts /
-// party-relationship-list.ts 三份共用。
+// 把法人页那份私有副本切过来并统一筛选码的类型）。纯函数，各册的 *-list.ts（legal-entity-list.ts / business-party-list.ts /
+// party-relationship-list.ts……）共用。
 
 export interface SelectOption<Value extends string> {
   value: Value;

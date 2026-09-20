@@ -1,5 +1,5 @@
 // 参与方模块册页持有列表状态的钩子（票 admin-web-group-legal-entities/10 第 5 条立于业务参与方页，票 13 第 6 条抬成
-// 两页共用并改重取做法）。页面持有两张读签的列表答案再传下去：登记签从这份答案取修订号建议，登记册答 REGISTERED /
+// 各册页共用并改重取做法）。页面持有读签的列表答案再传下去：登记签从这份答案取修订号建议，登记册答 REGISTERED /
 // DEACTIVATED 时触发对应读签重取，两签共享同一份答案而不各取一次。
 //
 // 状态转移是纯函数 registerListReducer，node:test 钉着；钩子只负责把 load 接上 effect。
