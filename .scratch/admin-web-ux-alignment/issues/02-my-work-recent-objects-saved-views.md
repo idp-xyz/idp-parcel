@@ -1,7 +1,7 @@
 # 02 左导航「我的工作」：最近对象（hash 历史）+ 保存视图（本地筛选态）两页与记录钩子；Watchlists / My Queues 归 owner
 
 Category: enhancement
-Status: in-progress——2026-09-20 18:2x 通道 4 认领（task-fe0d5bc2；分支 `mcp4-ux02` 基 `origin/main` `1c04c773`，隔离树 `D:\tops\idp-parcel-mcp4-ux02`）。此前 ready-for-agent
+Status: resolved——2026-09-20 19:5x 通道 4 交活（task-002c3bd6 接续；分支 `mcp4-ux02` 基 `origin/main` `1c04c773`，隔离树 `D:\tops\idp-parcel-mcp4-ux02`；码三笔 tip `1deb5d38`、票面笔在其上；均已推 origin，**未进 main**——重放、评审派单、进 main 归通道 1）。此前 in-progress（18:2x 通道 4 认领 task-fe0d5bc2，该会话 18:4x 后无响应、六件未提交现场由接续会话 19:4x 原样入库 `89065856`）；更早 ready-for-agent
 Blocked by: 无（原 01——同动 `Layout.tsx`，记录钩子挂在 01 定下的壳层结构上；01 已于 2026-09-20 18:08 进 main `ed7ef224`，从 `origin/main` 起做即可）
 地盘：`apps/admin-web/src/navigation.ts`（加「我的工作」分区两条目）、`Layout.tsx`（挂记录钩子；01 之后）、`page-registry.tsx`（登记两页）、
 新 `apps/admin-web/src/pages/my-work/`（`RecentObjectsPage.tsx`、`SavedViewsPage.tsx`、`recent-objects.ts` / `saved-views.ts` 纯逻辑 + test）、
@@ -44,5 +44,42 @@ CONTEXT 与 ADR 里都没有，本仓红线不虚构，归 owner 裁要不要进
 - 导航新增分区在「总览」之前（黄金标准：My Work 在业务导航之上）；`Workbench` 就绪度四档计数不因两条新目录而失真（它们计入「已接线」，
   票面写明理由）。
 - 浏览器验收做不到如实写「未验」。
+
+## 完成记录（通道 4，2026-09-20 19:5x；分支 `mcp4-ux02`，码 tip `1deb5d38`，基 `origin/main` `1c04c773`）
+
+三笔，每笔三道门（`tsc -b --noEmit` / `run-tests` / `vite build`）+ `go test ./internal/architecture/ -count=1` 绿后推 origin（`89065856` 例外：先入库再跑门，见表）：
+
+| 笔 | 条 | 落点 |
+|---|---|---|
+| `a543a289` | 第 2 / 3 / 5 条纯逻辑 | 新 `pages/my-work/recent-objects.ts`（`recordRecentObject` 去重置顶、`RECENT_OBJECTS_LIMIT` 50、`clearRecentObjects` 唯一删除入口、`recentObjectFromHash` 只认两段并剥 `?`、`recentObjectTitle` 只拼字、`recentObjectHash`）与 `saved-views.ts`（`state` 不透明、`setDefaultSavedView` 同模块唯一、`listSavedViewsFor`、`removeSavedView` 唯一删除入口、`savedViewHash` = `#/<moduleId>?view=<id>`、`savedViewIdFromHash` 供 03 消费）；键 `parcel-admin-web:recent-objects` / `:saved-views`（与 `shell/preferences.ts` 同前缀）；存储、时钟、id 生成经接口注入；第 5 条隐私边界写进两份头注。`recent-objects.test.ts` / `saved-views.test.ts` node:test 19 条。前任会话 18:32 提交 |
+| `89065856` | 第 1 条 + 第 2 / 3 条页面 | `navigation.ts`「我的工作」分区在「总览」之前、`recent-objects`（History）/ `saved-views`（Star）两条目、`moduleInfoById` owner「管理台自身（apps/admin-web）」+ source 指 spec「缺口」表与黄金标准小节；`page-registry.tsx` `pageById` 登记两页；新 `pages/my-work/RecentObjectsPage.tsx`（头 + 「清空历史」`ConfirmDialog`、搜索 + 模块 chip、对象 / 模块 / 上次打开 `InstantCell`、行点跳 hash，走 `ListPageTemplate`）、`SavedViewsPage.tsx`（名称 / 模块 / 保存时刻 / 默认 `Tag`、设为默认 + 删除二次确认、行点跳 `savedViewHash`）、`shared.tsx`（`moduleTitleOf` / `ModuleChips` / `InstantCell`）、`index.ts`。**该笔是前任通道 4 会话 18:2x–18:4x 留在树上的未提交现场（mtime 18:33–18:46，截至 19:37 未响应），接续会话按 parallel-sessions「未提交现场」原样入库、一字未改**，提交信写的是证据不是结论；入库后四道门绿，无需补修笔 |
+| `1deb5d38` | 第 2 条钩子 + 第 4 条 + 完成判据「计入已接线」 | `Layout.tsx` `moduleIdFromHash` 取第一段前先 `split('?')[0]`；`recordRecentObjectFromHash` 挂在已有的 hashchange effect 里、首帧也记一次，moduleId 在 `pageTitleById` 内才记，标题 `recentObjectTitle(模块名, moduleId, objectId)`，不发请求取名；`page-registry.tsx` `liveIds` 追加两页（只追加、不动既有行）+ 头注改口；`pages/Workbench.tsx` `readinessMeta.live.explain` 同口径改口，就绪度四档之上加「最近对象 / 保存视图」两卡（各前 8、`本机 N 条`、「查看全部」→ `onNavigate`、行点写 `recentObjectHash` / `savedViewHash`、空态一句实话不放样例），复用 `shared.tsx` 的 `moduleTitleOf` / `InstantCell`，头注写明本机浏览器事实、与就绪度总览同一口径、不是业务统计 |
+
+**完成判据逐条**
+
+- ✅ 三道门 + 架构测试绿（三笔各自）：末笔 `tsc` 0 / `run-tests` **343 pass 0 fail**（main `1c04c773` 时 324；`a543a289` +19 → 343；`89065856` / `1deb5d38` 未改纯逻辑，用例零增减）/ `vite build` 0 / `go test ./internal/architecture/ -count=1` ok。
+- ✅ `recent-objects.test.ts` / `saved-views.test.ts`：去重置顶（含同标识不同模块不算同一对象）/ 上限从尾部截 / 清空唯一入口 / 默认同模块唯一且不越模块 / 按模块列出，各有正向与边界；另钉键名带产品名、坏存储当空、`recentObjectFromHash` 对一段 / 两段 / 带 `?view=` / 编码段 / 空的判读、地址与解析互逆、`savedViewIdFromHash`、页面过滤。存储用 `Map` 顶替 `RecentObjectsStorage` / `SavedViewsStorage`，时钟与 id 注入定值，不碰真 `localStorage`。
+- ✅ 导航新增分区在「总览」之前：`navigationSections` 首项即「我的工作」；探针（下）断言工作台模块总览里「我的工作」分区排在首个业务分区之前。
+- ✅ 就绪度四档计数不失真：两页登记进 `liveIds`，`readinessOf('recent-objects')` / `readinessOf('saved-views')` 皆 `live`；探针断言「我的工作」分区「已接线 2/2」、四档卡上的已接线总数与按 `navigationSections` × `readinessOf` 派生的值相等（在 `1deb5d38` 上为 42）。为什么计入「已接线」而不是别档，见判断项 1。
+- ◑ 组件层 `renderToStaticMarkup` 断言：**一次性实测、组件层未钉**（照 01 结论：`.test.ts` 引不到 `import` 了 `@idpxyz/*` 的模块）。照 01 那套一次性 esbuild 束（`.tmp-test/ux02-probe.tsx` → `$env:TEMP\ux02-probe.cjs`，同一条 esbuild 命令），`globalThis` 垫 `window`（`location.hash` / 内存 `localStorage` / 空 `addEventListener`）。断言 **21/21**：
+  有数时两卡标题在场、「查看全部」恰两处、「本机 2 条」恰两处、最近对象行标题与 `<time dateTime title>` 原串在场、保存视图行名称在场且「默认」`Tag` 恰一处、两卡排在「规划占位」卡之前、已接线释义已改口且旧句不在、「我的工作」分区 2/2、分区序、已接线总数 = 派生值、`readinessOf` 两页 = live；
+  空存储时两句空态在场、无 `<time>`、「本机 0 条」两处、「查看全部」仍两处；
+  外壳裹 `ThemeProvider` / `DensityProvider` / `ToastProvider` 渲 `Layout`：`#/saved-views?view=abc` 渲保存视图页（不落工作台、无「未接线」）、`#/recent-objects?view=abc` 渲最近对象页、`#/no-such-module?view=abc` 落回工作台、`#/saved-views` 无查询串照旧。源与产物不入库。
+- ❌ 浏览器**未验**（AuthGate 要 gk.idp.xyz 会话；静态渲染下 effect 不跑）。未验的具体有：记录钩子实跑——hash 变到对象地址 / 首帧刷新时 `localStorage` 真被写入、StrictMode 双跑只留一条；两页行点跳转与 `ConfirmDialog` 二次确认；工作台卡行点与「查看全部」；`History` / `Star` 图标在 `Sidebar` 上渲出；`?view=` 落到模块页后模块页自身的行为（本票不读，03 后续）。
+
+**判断项**
+
+1. **「已接线」口径改口的理由**。原句「页面对 parcel-api 真实端点发请求」写在所有登记页要么接 parcel-api、要么是骨架 / 演示的时候。「我的工作」两页的数据是本机浏览器的 localStorage——是真实来源、不是未配置、不是合成 S，另外三档都套不上：`skeleton` 的释义是「数据区如实呈现未配置态」而这两页没有「未配置」可呈现；`demo` 是合成 S 而这里是操作者自己的行为记录；`planned` 是页面待建。不登记进 `liveIds`，`readinessOf` 会把它们判成骨架，向使用者说「未配置」——与事实反向的失真。于是释义改成「页面已接真实数据来源：parcel-api 端点，或『我的工作』两页读的本机浏览器事实」，`liveIds` 头注同口径并点明两条例外的理由；集合只追加、既有行不动。**代价**：「已接线」总数从此含两条非 parcel-api 条目，拿总数判「多少页接了 parcel-api」的人要减二——两处注释都点明了，且工作台按分区列出，「我的工作 2/2」单独可见。
+2. **`moduleIdFromHash` 剥 `?` 的影响面**。改前：`#/<moduleId>?view=<id>` 的第一段是 `<moduleId>?view=<id>` 整串，查 `pageTitleById` 不中、落回工作台——`savedViewHash` 生成的地址在本票之前是死链。改后：先剥 `?` 再取段，模块页正常渲出，查询串原样留在 hash 里归模块页读（`savedViewIdFromHash`）；今天没有任何页读它，`?view=` 惰性但不再破坏路由。未知 id 带 `?` 仍落回工作台（探针）。剥的位置在 `decodeURIComponent` 之前，模块 id 都是 ASCII slug，编码过的 `%3F` 不会被误剥。**边界**：若有人手写 `#/<moduleId>/<objectId>?x=y`，外壳认模块没问题，`recentObjectFromHash` 也剥 `?` 得到干净的 objectId，但各模块页自己读第二段的那段代码（如委托查阅的详情钻取）本票未动、未核它们是否剥 `?`——本仓今天没有任何地方生成这种形状的地址（`savedViewHash` 只有一段），记在这里供 03 / 04 接 `?view=` 时一并看。
+3. **记录钩子挂在外壳而不是各页**：外壳站在每次 hash 变化的必经之路上，一处记、不用各列表页与详情页各自记；放进已有的 hashchange effect 里，不另起一个 hash 来源。首帧也记一次——刷新回到详情页、从收藏直接打开，都是「打开过」；同一对象去重置顶，StrictMode 双跑与重复触发都只留一条。只记导航词表内的 moduleId：未知 id 的地址已落回工作台，历史里若留下它就成了一条查无出处的模块。标题只拼字（票面第 2 条），对象名称属业务数据、不发请求取。
+4. **工作台两卡的跳转路径**：「查看全部」走 `onNavigate`（外壳注入的 `setActive`，写 `#/<id>`），行点直接写 `recentObjectHash` / `savedViewHash`——与两张页面的行点同一条路，都经 hashchange 回流到外壳，没有第二套跳转。`onNavigate` 在 props 里是可选的（既有签名），缺席时「查看全部」禁用；`Layout` 总是传。
+5. **两卡取「上」**：黄金标准把 My Work 放在业务导航之上，工作台里同样放在就绪度四档之前；派单给了上下两选项，取上。工作台页头描述句从「模块就绪度总览」改成「『我的工作』与模块就绪度总览」并点明「这台浏览器的记录」，h1「IDP Parcel 租户管理台」不动。
+6. **「我的工作」分区出现在工作台的模块总览里**（「已接线 2/2」，owner 显「管理台自身（apps/admin-web）」）：`Workbench` 的分区列表是「其余分区按导航原序呈现，不另造第二套分组」，不为它开例外；owner 那一栏写的是实话，不会被读成某个限界上下文。
+7. **前任现场原样入库而不是「修好再提」**：六件看着已写完但没过门没提交，按 parallel-sessions「未提交现场」原样入库、一字不改、提交信只写证据（mtime、无响应起止）；入库后四道门绿，不需要补修笔。前任写的页面形态已对齐 `ListPageTemplate`（黄金标准 Rule 2），未重写。
+8. **笔 B 未加 node:test**：未改纯逻辑；`moduleIdFromHash` 留在 `Layout.tsx`、没有抬成 `.ts` 纯函数——抬出去是一条新缝、超出派单，三种地址的落点由探针一次性覆盖（判据 ◑）。`recordRecentObjectFromHash` 的三个零件（`recentObjectFromHash` / `recentObjectTitle` / `recordRecentObject`）由 `a543a289` 的 node:test 钉住，组合本身未钉。
+9. **01 评审 Spec 2 留给 02 的那件（`ScopeChip` 的 Tooltip 挂在非焦点元素上）本票未做**：`shell/TopBar.tsx` 不在本票地盘，派单「不碰」清单之外也没有把它派进来；仍留给首个浏览器验收的票。
+10. **不做的照票面**：Watchlists / My Queues 不占位（归 owner）；不改 `templates/*`（03 地盘）、不改任何业务页、不碰共享树；`?view=` 怎么读归 03 后续。
+
+**评审 / 推送方要看的**：`git diff 1c04c773..1deb5d38 -- apps/admin-web`（12 文件：`Layout.tsx`、`navigation.ts`、`page-registry.tsx`、`pages/Workbench.tsx`、`pages/my-work/` 下八件）；只跑 `apps/admin-web` 三道门 + `./internal/architecture/`，不需 DSN。未动 `templates/*`。
 
 ## Comments
