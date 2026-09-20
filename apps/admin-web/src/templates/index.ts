@@ -7,7 +7,12 @@ export {
   type ListColumn,
   type ListSearchProps,
   type ListPaginationProps,
+  type ListSortOption,
+  type ListSortProps,
+  type ListSavedView,
+  type ListSavedViewsProps,
 } from './ListPageTemplate';
+export { filterBarSlots, type FilterBarSlot, type FilterBarSlotId } from './list-page-structure';
 
 export {
   DetailPageTemplate,

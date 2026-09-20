@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import {
   PageHeader,
   PageHeaderContent,
@@ -11,6 +11,7 @@ import {
 } from '@idpxyz/ui-patterns';
 import {
   Breadcrumb,
+  Button,
   Table,
   TableHeader,
   TableBody,
@@ -18,9 +19,11 @@ import {
   TableHead,
   TableCell,
   Pagination,
+  Tooltip,
 } from '@idpxyz/ui-primitives';
 import { navigationSections, pageTitleById } from '../navigation';
 import { resolveBreadcrumb, type TemplateBreadcrumb } from './breadcrumb';
+import { filterBarSlots, type FilterBarSlot } from './list-page-structure';
 import { StateSlot, type TemplateViewState, type StateSlotProps } from './state-slot';
 
 /** 列定义。render 拿整行而非取值路径，让调用方组合多字段（如单号+徽章）不求模板开洞。 */
@@ -49,6 +52,35 @@ export interface ListPaginationProps {
   pageSizeOptions?: number[];
 }
 
+export interface ListSortOption {
+  value: string;
+  /** 选项文案由调用方给全（含方向，如「提交时间 ↓」）：排序键是业务决定，模板不替它命名。 */
+  label: string;
+}
+
+export interface ListSortProps {
+  options: ListSortOption[];
+  value: string;
+  onChange: (value: string) => void;
+}
+
+export interface ListSavedView {
+  id: string;
+  label: string;
+}
+
+/**
+ * 保存视图位。保存的是「当前筛选态」这件 UI 自身的事实，存哪、存多久归调用方（票 admin-web-ux-alignment/02 落地后
+ * 各页按需接）；模板只给切换与保存两个动作的位置。
+ */
+export interface ListSavedViewsProps {
+  /** 当前选中的视图 id；不在任何已存视图上时为 null。 */
+  current: string | null;
+  list: ListSavedView[];
+  onSave: () => void;
+  onSelect: (id: string) => void;
+}
+
 export interface ListPageTemplateProps<Row> {
   title: string;
   description?: string;
@@ -65,6 +97,14 @@ export interface ListPageTemplateProps<Row> {
   search?: ListSearchProps;
   /** 过滤控件（下拉、chip 等）由调用方提供：筛选维度是业务决定，模板不预设。 */
   filters?: ReactNode;
+  /**
+   * 排序 / 保存视图 / 更多筛选三个位都可选：不传时位置照旧渲染成禁用按钮 + 悬停说明
+   * （黄金标准 Rule 2「即使功能未完整，也要按完整模板布局」），传了才有动作。
+   */
+  sort?: ListSortProps;
+  savedViews?: ListSavedViewsProps;
+  /** 低频筛选控件，收在「更多筛选」按钮之后的第二行里，不平铺进主过滤条。 */
+  moreFilters?: ReactNode;
   /** 过滤条右端的统计摘要（如「共 N 条」）。 */
   filterSummary?: ReactNode;
   columns: ListColumn<Row>[];
@@ -87,6 +127,30 @@ export interface ListPageTemplateProps<Row> {
   stateOverride?: StateSlotProps['override'];
 }
 
+// 过滤条上原生 select 的样子，与 FilterSearch 同高同字号；不从 pages/ 借类名——模板层不反向依赖页面层。
+const filterControlClass =
+  'h-6 shrink-0 rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 text-[11px] text-idpxyz-text ' +
+  'outline-none focus-visible:ring-1 focus-visible:ring-idpxyz-accent/35';
+
+// 禁用位：按钮 + 悬停说明，不是灰色占位方块（票 admin-web-ux-alignment/03 裁决 1）。
+// 用 aria-disabled 而不是 disabled：Button 原语的 disabled 带 pointer-events-none，悬停说明就出不来，
+// 键盘也聚焦不到它——说明本身是给人看的，位不能自己把说明藏起来。
+function DisabledSlot({ label, reason }: { label: string; reason: string }) {
+  return (
+    <Tooltip content={reason}>
+      <Button
+        variant="outline"
+        size="sm"
+        aria-disabled="true"
+        className="shrink-0 cursor-not-allowed opacity-50 hover:bg-transparent hover:text-idpxyz-textMuted"
+        onClick={(event) => event.preventDefault()}
+      >
+        {label}
+      </Button>
+    </Tooltip>
+  );
+}
+
 // 列表页模板：Breadcrumb + PageHeader + FilterBar + Table + Pagination，形态对齐 Monitor 页黄金标准
 // （idp-ui@53df1666「IDP Monitor Page Golden Standard」）。36 张列表页共用这一个模板：一切新位都走可选 prop，
 // 不传时的默认行为就是各页今天的行为。
@@ -99,6 +163,9 @@ export function ListPageTemplate<Row>({
   headerActions,
   search,
   filters,
+  sort,
+  savedViews,
+  moreFilters,
   filterSummary,
   columns,
   rows,
@@ -114,6 +181,77 @@ export function ListPageTemplate<Row>({
 
   const crumb =
     breadcrumb ?? (moduleId ? resolveBreadcrumb(moduleId, navigationSections, pageTitleById) : null);
+
+  // 「更多筛选」展开与否是模板自己的呈现状态，不回流给调用方：调用方只关心筛选值。
+  const [moreFiltersOpen, setMoreFiltersOpen] = useState(false);
+  const slots = filterBarSlots({
+    sort: sort !== undefined,
+    savedViews: savedViews !== undefined,
+    moreFilters: moreFilters !== undefined,
+  });
+
+  // 位的启用与否由 filterBarSlots 决定；这里只管「启用的位长什么样」。视图模式位永远禁用，走不到下面。
+  const renderSlot = (slot: FilterBarSlot) => {
+    if (!slot.enabled) {
+      return <DisabledSlot key={slot.id} label={slot.label} reason={slot.disabledReason ?? ''} />;
+    }
+    if (slot.id === 'sort' && sort) {
+      return (
+        <select
+          key={slot.id}
+          aria-label={slot.label}
+          className={filterControlClass}
+          value={sort.value}
+          onChange={(event) => sort.onChange(event.target.value)}
+        >
+          {sort.options.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      );
+    }
+    if (slot.id === 'saved-view' && savedViews) {
+      return (
+        <span key={slot.id} className="flex shrink-0 items-center gap-1">
+          <select
+            aria-label={slot.label}
+            className={filterControlClass}
+            value={savedViews.current ?? ''}
+            onChange={(event) => {
+              if (event.target.value !== '') savedViews.onSelect(event.target.value);
+            }}
+          >
+            <option value="">{slot.label}</option>
+            {savedViews.list.map((view) => (
+              <option key={view.id} value={view.id}>
+                {view.label}
+              </option>
+            ))}
+          </select>
+          <Button variant="outline" size="sm" className="shrink-0" onClick={savedViews.onSave}>
+            保存当前视图
+          </Button>
+        </span>
+      );
+    }
+    if (slot.id === 'more-filters' && moreFilters !== undefined) {
+      return (
+        <Button
+          key={slot.id}
+          variant={moreFiltersOpen ? 'default' : 'outline'}
+          size="sm"
+          className="shrink-0"
+          aria-expanded={moreFiltersOpen}
+          onClick={() => setMoreFiltersOpen((open) => !open)}
+        >
+          {slot.label}
+        </Button>
+      );
+    }
+    return null;
+  };
 
   return (
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
@@ -131,9 +269,10 @@ export function ListPageTemplate<Row>({
         {headerActions && <PageHeaderActions>{headerActions}</PageHeaderActions>}
       </PageHeader>
 
-      <FilterBar>
+      {/* 黄金标准 9.2 顺序：搜索 → 主筛选 → 排序 → 视图 → 保存视图 → 更多筛选 → 右端计数。位不够宽时横向滚，不换行。 */}
+      <FilterBar className="overflow-x-auto">
         {search && (
-          <div className="max-w-[280px] flex-1">
+          <div className="max-w-[280px] min-w-[160px] flex-1">
             <FilterSearch
               value={search.value}
               placeholder={search.placeholder}
@@ -143,10 +282,16 @@ export function ListPageTemplate<Row>({
           </div>
         )}
         {filters && <FilterGroup>{filters}</FilterGroup>}
+        <FilterGroup>{slots.map(renderSlot)}</FilterGroup>
         {filterSummary && (
-          <span className="ml-auto text-[11px] text-idpxyz-textMuted">{filterSummary}</span>
+          <span className="ml-auto shrink-0 text-[11px] text-idpxyz-textMuted">{filterSummary}</span>
         )}
       </FilterBar>
+      {moreFilters !== undefined && moreFiltersOpen && (
+        <div className="flex shrink-0 items-center gap-2 border-b border-idpxyz-border px-4 py-1.5">
+          {moreFilters}
+        </div>
+      )}
 
       {viewState.kind === 'ready' ? (
         <>
