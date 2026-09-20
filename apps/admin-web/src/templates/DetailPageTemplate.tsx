@@ -69,8 +69,9 @@ export interface DetailPageTemplateProps {
   description?: string;
   headerActions?: ReactNode;
   /**
-   * 对象头区元信息行。传了就按对象工作区头区渲染（两行、主编号可复制）；
-   * 不传沿用单行头，另两张详情页因此一字节不变。
+   * 对象头区元信息行。对象工作区头区（两行、主编号可复制）随 meta 或 tabs **任一**传入而启用——
+   * 传空数组也算传了，首用页正是靠 `tabs={[]}` + meta 切成头区形态；两者都不传才沿用单行头，
+   * 另两张详情页因此一字节不变。
    */
   meta?: DetailMeta[];
   /** 指标带（手册 Summary Strip，4–6 格一排）。不传或传空不渲染，不显「—」占位格。 */
@@ -88,6 +89,7 @@ export interface DetailPageTemplateProps {
   /**
    * 对象工作区的签。传了（哪怕是空数组）内容区就按签分：基本信息进「概要」顶部、区块跟在其后、
    * 审计留痕进「审计」，调用方同 id 的内容接在模板内容之后；没有内容的签不出（票面裁决 1）。
+   * 传了它也同时把页头切成对象工作区头区（与 meta 同一开关，见上）。
    * 不传仍叠 Card——另两张详情页不改，母版与旧形态并存到它们各自的票再换（票面裁决 3）。
    */
   tabs?: DetailWorkspaceTab[];
