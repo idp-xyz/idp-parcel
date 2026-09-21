@@ -1,7 +1,7 @@
 # 03 命令面板 `Ctrl+K`：导航 + 最近对象 + 壳层开关；TopBar 全局搜索位改为面板入口
 
 Category: enhancement
-Status: in-progress——2026-09-20 20:1x 通道 6 认领（task-9c302082，通道 1 20:08 派；分支 `mcp6-wsform03`，树 `D:/tops/idp-parcel-mcp6-wsform03`，基 origin/main `11e6111a`）。此前 ready-for-agent
+Status: resolved——2026-09-21 11:5x 推送方通道 1 代落完成记录（作者通道 6 会话 09-20 21:00 后无响应，`Layout.tsx` 现场原样入库为 `938a2a54`）；码 tip `938a2a54`，基 `87ff1edd` = main；进 main 记录待推后补。此前 in-progress——2026-09-20 20:1x 通道 6 认领（task-9c302082，通道 1 20:08 派；分支 `mcp6-wsform03`，树 `D:/tops/idp-parcel-mcp6-wsform03`，基 origin/main `11e6111a`，09-20 20:5x 后 rebase 到 `87ff1edd`）。此前 ready-for-agent
 Blocked by: admin-web-ux-alignment/02 进 main（读它的 `pages/my-work/recent-objects.ts` 存储；`Layout.tsx` 同动，等它先落）
 地盘：新 `apps/admin-web/src/shell/command-actions.ts`（动作集纯逻辑 + node:test）、`shell/CommandPaletteHost.tsx`（挂 `@idpxyz/ui-workspace` 的 `CommandPalette` + 键盘监听）、
 `Layout.tsx`（渲染 host，一行）、`shell/TopBar.tsx` + `shell/top-bar-model.ts`（全局搜索位：禁用态 → 「打开命令面板」按钮，`Ctrl+K` 提示进 Tooltip）。
@@ -40,6 +40,39 @@ Blocked by: admin-web-ux-alignment/02 进 main（读它的 `pages/my-work/recent
 - 四道门绿；`command-actions.test.ts` 四条以上；`top-bar-model.test.ts` 既有用例零改动或改动逐条写理由。
 - 一次性 esbuild 束：`Ctrl+K` 派发后 DOM 出现 `CommandPalette` 的列表且含「打开 工作台」；无最近对象时无 recent 组。
 - TopBar 搜索位不再有 `aria-disabled`；`vite build` 产物含「搜索或跳转」字面量。浏览器验收做不到如实写「未验」。
+
+## 完成记录（推送方代落，2026-09-21 11:5x；作者通道 6，码 tip `938a2a54`，基 `87ff1edd` = main）
+
+作者三笔码 + 认领笔在 09-20 20:1x–20:22 提完，20:4x 评审（通道 4，见 Comments）点出 `Layout` 接线未做；作者随后把分支 rebase 到 `87ff1edd`（四笔 `range-diff` 全 `=`），
+21:00 在树上写完 `Layout.tsx` 接线（+29/−2）**未提交**，此后无任何活动（`list_sessions` lastActivity 约 20:09，mtime 21:00:16）。推送方按 parallel-sessions「未提交现场」
+把那份改动原样入库一字不改（`938a2a54`，提交信写 mtime 与无响应证据），再做下面的门与探针。下表按 `git diff 87ff1edd..938a2a54` 写，不取记忆。
+
+| 笔 | 条 | 落点 |
+|---|---|---|
+| `fc1398e9` | 认领 | 票面 Status → in-progress |
+| `e785a28e` | 第 1 条 | 新 `shell/command-actions.ts`：`buildCommandActions({ pageTitleById, recentObjects, recentObjectHash, shellToggles, navigate? })` 出三组——`navigation`（词表每条「打开 <页名>」，`keywords` = 小写去重的 `[id, 页名]`，`run` 写 `moduleHash(id)` = `#/<id>`）/ `recent`（前 `RECENT_ACTIONS_LIMIT` = 10 条「打开 <title>」，`run` 写注入的 `recentObjectHash(entry)`，关键词 `[objectId, title, 模块名]`）/ `actions`（vendor 联合里没有 `shell`，壳层两开关落 `actions`：切主题、切密度，标签复用 `themeToggleLabel` / `densityToggleLabel` 与顶栏同句）；`RecentEntry` 与 02 的 `RecentObject` 结构兼容、不 import 那边类型；`isOpenCommandPaletteShortcut`（Ctrl/⌘+K，Alt 不认，大小写都算）；只 `import type` `@idpxyz/ui-workspace`。头注写明零请求与「只搜到本机打开过的对象」边界（第 4 条）。`command-actions.test.ts` node:test 8 条 |
+| `67982672` | 第 2 条前半 | 新 `shell/CommandPaletteHost.tsx`：受控件（`open` / `onOpenChange` / `readRecent` / `recentObjectHash`），`window` `keydown` 监听 → `isOpenCommandPaletteShortcut` → `preventDefault` + `onOpenChange(true)`；`open` 时按当下主题 / 密度与 `readRecent()` 重算动作集，关着给空集；Escape 交 vendor（0.1.25 开着时自己听 keydown，两处各关一次会调两遍）；渲 `<CommandPalette open onClose actions />` |
+| `18ba6620` | 第 3 条 | `TopBar.tsx` `GlobalSearchSlot` 收 `onOpen?`：有则可点按钮「搜索或跳转…」+ `kbd` 键帽（`aria-hidden`）+ `aria-keyshortcuts="Control+K Meta+K"`，Tooltip 写 `COMMAND_PALETTE_HINT`；无则退回留位（`aria-disabled` + `COMMAND_PALETTE_UNWIRED_REASON`）。头注「全局搜索今天是留位」改成入口实话。`top-bar-model.ts`：`GLOBAL_SEARCH_LABEL` → `COMMAND_PALETTE_TRIGGER_LABEL`（「搜索或跳转…」）、`GLOBAL_SEARCH_UNAVAILABLE_REASON` → `COMMAND_PALETTE_UNWIRED_REASON`（「命令面板未接线」），新增 `COMMAND_PALETTE_SHORTCUT_KEYS` / `COMMAND_PALETTE_ARIA_KEYSHORTCUTS` / `COMMAND_PALETTE_HINT`（「搜索导航与最近对象；跨对象搜索等读口」）；`top-bar-model.test.ts` +22/−7，改动那条用例注释写理由（事实变了不是放松） |
+| `938a2a54` | 第 2 条后半 | `Layout.tsx`：`commandPaletteOpen` state 在 Layout；`<TopBar onOpenCommandPalette={openCommandPalette} />`；`<CommandPaletteHost open onOpenChange readRecent={readRecentObjectsForPalette} recentObjectHash={recentObjectHash} />` 与 TopBar 并列；`readRecentObjectsForPalette = () => listRecentObjects(window.localStorage)` 是模块级常量（host 的 `useMemo` 依赖它的引用）；头注写两个入口共用一份 open 态、存储与地址写法由外壳注入 |
+
+**完成判据逐条**
+
+- ✅ 四道门（推送方在作者树 `938a2a54` 上实跑）：`tsc -b --noEmit` 0 / `run-tests` **368**（main 359 + 本票 8 + `top-bar-model.test.ts` 1）/ `vite build` 0 / `go test ./internal/architecture/` ok。
+- ✅ `command-actions.test.ts` 8 条（≥ 4）：导航一词一条含工作台、关键词含 id 与页名、最近对象 12 → 10 且 run 写对象地址、空存储 recent 0 条其余照常、关键词全小写、壳层两条指向目标态、id 全集无重复、快捷键只认 Ctrl/⌘+K。
+- ✅ `top-bar-model.test.ts` 既有用例：一条改写（「全局搜索位的名与禁用说明」→「搜索位作为命令面板入口的文案、键帽与说明」，五断言含「不写即将上线」），理由在用例注释里（原两常量改名改义，断言随事实作废）；新增一条「未接线时的留位说明」；其余零改动。
+- ✅ 一次性探针（推送方代跑，**源与产物不入库**）：happy-dom 20.14.5 装在 `%TEMP%\wsform03-probe`，esbuild 0.25.12 把 `App`（三 Provider + Layout）束成 CJS，`react-dom/client` 挂真 DOM、`act` 包事件：
+  **16 ok / 0 fail**——搜索位存在且无 `aria-disabled`、`aria-keyshortcuts` 对、键帽在、初始面板关着；`Ctrl+K` keydown 被 `preventDefault`、面板开、列表含「打开 工作台」、有 Navigation / Actions 组、
+  **无最近对象时无 Recent Objects 组**、无「新建 / 导出 / 刷新」；Escape 关；点搜索位开（TopBar 入口走同一份 open 态）；往 `parcel-admin-web:recent-objects` 写一条后再开出现 Recent Objects 组与「打开 委托查阅 · SR-1」；无修饰键的 `k` 不开。
+- ✅ `vite build` 产物含「搜索或跳转」1 处（`dist/assets/index-*.js` grep）。
+- ❌ 浏览器**未验**：面板视觉与焦点落入输入框、Chromium 上 Ctrl+K 是否真的没跑去地址栏、Tooltip 悬停文案、⌘+K 在 macOS。
+
+**判断项**（推送方按代码与头注代写）
+
+1. **open 态放 Layout 不放 host**：面板有两个入口（host 听的快捷键、TopBar 的按钮），TopBar 不在 host 之下，两个入口要指向同一份态，态只能在共同父级；host 因此是受控件。
+2. **壳层开关落 vendor 的 `actions` 组**：`CommandPaletteAction.group` 联合里没有 `shell`；不改 vendor，也不为两条动作另起一组。
+3. **关键词小写去重**：vendor 过滤时只小写查询词、`keywords` 原样 `includes`，大写对象标识（`SR-…`）不先小写永远搜不到——这是绕 vendor 的一个坑，写在 `keywordsOf` 注释里。
+4. **不搬 myshop-web 的假快捷动作与底栏 / 右栏切换**：前者 spec 红线不许假动作；后者本仓没有那两个位（等票 01 / 02），本票不留空动作。
+5. **Escape 不在 host 处理**：vendor 0.1.25 开着时自己听 keydown 处理 Escape / 方向键 / Enter，再关一次是重复且会让 `onOpenChange(false)` 调两遍。
 
 ## Comments
 
