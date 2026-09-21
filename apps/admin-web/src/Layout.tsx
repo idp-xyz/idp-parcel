@@ -6,9 +6,16 @@ import { pageById } from './page-registry';
 import { Workbench } from './pages/Workbench';
 import { UnwiredModule } from './pages/UnwiredModule';
 import { TopBar } from './shell/TopBar';
+import { CommandPaletteHost } from './shell/CommandPaletteHost';
 import { useSessionPrincipal } from './shell/session';
 import { logout } from './auth/oidc';
-import { recentObjectFromHash, recentObjectTitle, recordRecentObject } from './pages/my-work/recent-objects';
+import {
+  listRecentObjects,
+  recentObjectFromHash,
+  recentObjectHash,
+  recentObjectTitle,
+  recordRecentObject,
+} from './pages/my-work/recent-objects';
 
 // 传统控制台外壳：顶栏 + 左侧导航 + 单页区，参考 idp-ui
 // apps/loms-web 的 console/Layout；不引入标签页与底部/右侧面板，
@@ -26,6 +33,13 @@ import { recentObjectFromHash, recentObjectTitle, recordRecentObject } from './p
 // 点击导航写 hash，状态经 hashchange 事件回流——单一来源，不双写。
 // 外壳代管的唯一一件「页内」事是记最近对象：落到带第二段的对象地址就记一条本机历史
 // （pages/my-work/recent-objects.ts）——记的是地址不是状态，且只有外壳站在每次 hash 变化的必经之路上。
+//
+// 命令面板（shell/CommandPaletteHost）也挂在这里、与 TopBar 并列：它有两个入口——host 自己听的 Ctrl/⌘+K 与
+// TopBar 搜索位的按钮——两个入口要指向同一份 open 态，态只能在它们共同的父级。面板读最近对象用的是
+// recent-objects.ts 那一份读函数与地址写法，由外壳注入，host 不认识存储；面板里的跳转也只写 hash，走上面同一条路。
+
+/** 命令面板每次打开时重读一遍最近对象；模块级常量而不是每次渲染新建，host 的 useMemo 依赖它的引用。 */
+const readRecentObjectsForPalette = () => listRecentObjects(window.localStorage);
 
 function moduleIdFromHash(): string {
   // 先剥查询串再取段：`?view=` 挂在第一段上，不剥的话 `#/<moduleId>?view=<id>` 会被当成一个未知 id 落回工作台。
@@ -76,6 +90,8 @@ export function Layout() {
   });
   const { density } = useDensity();
   const principal = useSessionPrincipal();
+  const [commandPaletteOpen, setCommandPaletteOpen] = useState(false);
+  const openCommandPalette = () => setCommandPaletteOpen(true);
 
   const renderActive = () => {
     if (active === 'workbench') return <Workbench onNavigate={setActive} />;
@@ -85,7 +101,18 @@ export function Layout() {
 
   return (
     <div className="h-screen w-screen flex flex-col bg-idpxyz-bg text-idpxyz-text overflow-hidden">
-      <TopBar moduleTitle={pageTitleById[active] || active} principal={principal} onSignOut={logout} />
+      <TopBar
+        moduleTitle={pageTitleById[active] || active}
+        principal={principal}
+        onSignOut={logout}
+        onOpenCommandPalette={openCommandPalette}
+      />
+      <CommandPaletteHost
+        open={commandPaletteOpen}
+        onOpenChange={setCommandPaletteOpen}
+        readRecent={readRecentObjectsForPalette}
+        recentObjectHash={recentObjectHash}
+      />
 
       <div className="flex flex-1 overflow-hidden">
         <Sidebar
