@@ -138,4 +138,4 @@ How the generic skill flow maps onto this repo's PN slices, handoff work package
 
 ### Parallel sessions
 
-Territory, committing, and reporting when several sessions write one working tree. Single-session work does not need it. See [`docs/agents/parallel-sessions.md`](./docs/agents/parallel-sessions.md). 多会话时开工第一眼看 `scripts/branch-state.ps1` 算出来的状态页（main 与 origin、各树未提交、在途分支），派单前带 `-Path <地盘>` 查半成品；不读任何人的自报。
+Territory, committing, and reporting when several sessions write one working tree. Single-session work does not need it. See [`docs/agents/parallel-sessions.md`](./docs/agents/parallel-sessions.md). 多会话时开工第一眼看 `scripts/branch-state.ps1` 算出来的状态页（main 与 origin、各树未提交、在途分支），派单前带 `-Path <地盘>` 查半成品；不读任何人的自报。**diff 全在 `apps/admin-web/**` 的票不走它**：一人在 `main` 上直接做，落法见 [workflow.md「前端切片」](./docs/agents/workflow.md#前端切片一人在-main-上直接做)。

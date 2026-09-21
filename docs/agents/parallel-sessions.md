@@ -408,6 +408,11 @@ worktree 共用同一个 `.git`，`.git/hooks/pre-push` 对每个通道从任一
 （文件头注有安装、写锁、删锁三条命令），**尚未安装**——装了之后现行的推送方直推也要先写锁，切换日一并执行。
 它挡的是「没走落地流程就推 main」，挡不了有意绕过（`--no-verify`）——那一层只能靠升级套餐或转公开仓，归用户。
 
+**2026-09-21 起，diff 全在 `apps/admin-web/**` 的票不走本文这条路，也不走上面的 PR 形态**——用户当日裁定前端切片由一人在共享树的
+`main` 上顺序做，做法定义在 [workflow.md「前端切片」](./workflow.md#前端切片一人在-main-上直接做)，本文只指过去。切换条件那天已算过：
+`-p 1` 于 09-07 `f5bb9a85` 落地，09-20 04:28Z 至 09-21 04:13Z 之间 `main` 上连续 19 个 push run 全 `success`（`gh run list -b main`
+取证于 09-21 12:1x）。Go / SQL 侧仍走上面的重放；那半要不要也开到 PR + CI，条件已够，归用户定。
+
 等 owner 拍板的事同样从文档里算出来，不靠谁记得：`scripts/owner-review-queue.ps1 -Out .scratch/owner-review-queue.md`
 把 ADR 与票面里的「越权风险点」、`needs-info` / `blocked` 的票汇成一页；owner 复核完一条在原文旁写「owner 复核
 YYYY-MM-DD 认可」，脚本下次生成时会标出已复核的篇目。
