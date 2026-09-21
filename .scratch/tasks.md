@@ -2974,3 +2974,24 @@ MCP-2 10:3x 占号（只动一件票面 .md，`git log --all --not main` 对该�
 - **前沿**：03 等 `Layout` 接线（通道 6 或推送方代补，归用户定）；draft wsform/01 / 02 照上节；`mcp3-wsform04` / `mcp5-wsform05` 待改 `merged/` 并拆树（本节推完簿记后做）；04 Spec 1（记忆寿命）与 05 Standards 2 / 3 记票面未立票。
 - **本节五数**（20:2x–20:5x）：CI main 绿/总 未量（`a5a5527d` run 刚起）· 集成时延——04 完工报（20:1x 过半报后 crash，按 20:25 派评审起算）→ 20:51 **约 26 分**、05 末笔 20:26 → 20:51 **25 分**（2 票，中位 **25.5 分**；无完工报，按末笔时刻起算）· 重放笔数 **8**（04 三 + 05 五；不含推送方两笔与簿记）· 重复开发 0 ·
   会话重置 **3**（通道 3 crash、通道 5 与通道 6 末笔后无响应；通道 1 20:25 后无动静未计）· 非作者评审缺席 0（04 / 05 / 03 皆通道 4 评、非作者）
+
+## 2026-09-21 11:4x 通道 1 新会话（用户先用自带 `ask_question` 验通道，再令「调 idp-mcp-1 的 check_messages 开始监听」；首条消息「`D:\tops\idp-parcel-mcp6-wsform03` 现在可以回放了吗」→ 答不能 → 「修复，并回放」）
+
+### 11:4x–12:1x：量 → 答「不能」→ 接线现场原样入库 → 门 + 探针 → 完成记录 → 自跑 Spec 轴 → 隔离树全量 → `6739ab54` 进 main
+
+- **量**（`branch-state.ps1` 钉 `87ff1edd`，只读 git / `list_sessions`，不读自报）：main = origin = `87ff1edd`；唯一在途 `mcp6-wsform03@18ba6620`——领先 main 4 笔且 merge-base = main tip（作者 09-20 20:5x 后已 rebase，`range-diff 11e6111a..71786680 87ff1edd..18ba6620` 四笔全 `=`），
+  origin/mcp6-wsform03 仍停 rebase 前的 `71786680`（本地领先 23 / 落后 4）；树上 **`Layout.tsx` +29/−2 未提交**，mtime 09-20 21:00:16（距查看约 15 小时）。`list_sessions`：2–6 lastActivity 皆 09-20 20:0x–20:5x，通道 6 约 20:09——**没有一个通道活着**。共享树只 `?? docs/ux/`（归用户，未动）。
+- **答「可以回放了吗」**：不能。tip `18ba6620` 对 `Layout.tsx` 零改动，通道 4 20:4x 评审的 Spec 阻断 1（host 无人渲、`onOpenCommandPalette` 无人传、面板不可达）在此 tip 上原样成立；修复已写在树上但没进提交。差三步：提第 4 笔 + 门 + 完工报、重跑 Spec 轴拿无阻断、再快进。
+- **用户「修复，并回放」**（即 09-20 20:5x 问过未答的 A「推送方代补」）：
+  - 作者树上先跑四道门（含未提交件）：tsc 0 / run-tests 368 / vite 0 / architecture ok → `Layout.tsx` **原样入库一字不改** `938a2a54`（提交信写 mtime、`list_sessions` 证据与门禁数字；按 parallel-sessions「未提交现场」）。读 diff：接线正是评审要的形——`commandPaletteOpen` state 在 Layout、`TopBar onOpenCommandPalette`、`<CommandPaletteHost open onOpenChange readRecent recentObjectHash />` 与 TopBar 并列、`readRecentObjectsForPalette` 模块级常量、头注写两个入口共用一份 open 态。
+  - **探针**（推送方代跑，源与产物在 `%TEMP%\wsform03-probe`，不入库）：本仓 `.tsx` 组件层向来只有 `renderToStaticMarkup` 一次性束，「`Ctrl+K` 派发后 DOM 出现列表」这条判据静态渲染证不了——经代理 `npm i happy-dom@20.14.5 @happy-dom/global-registrator` 到 `%TEMP%`（仓内 lockfile 零改动），esbuild 0.25.12 把 `App`（三 Provider + Layout）束成 CJS、`fetch` 挂起、`react-dom/client` 挂真 DOM、`act` 包事件：
+    **16 ok / 0 fail**——搜索位无 `aria-disabled` + `aria-keyshortcuts` + 键帽；`Ctrl+K` 被 `preventDefault` 且面板开、列表含「打开 工作台」、Navigation / Actions 组在、**空存储无 Recent Objects 组**、无假动作；Escape 关；点搜索位开（同一份 open 态）；写一条最近对象再开出现 Recent Objects 组与「打开 委托查阅 · SR-1」；无修饰 `k` 不开。以后 admin-web 票要证事件路径可照此配方，成本一次 4 秒安装。
+  - 完成记录代落 `6739ab54`（五笔落点表、判据逐条、判断项五条、浏览器未验清单；Status → resolved）。
+  - **评审**：无通道可派（上条量数），按 workflow「没有就推送方自审并在票面如实写」——只重跑 Spec 轴（通道 4 原话），钉 `938a2a54`：**0 / 0**，票面 Comments 写明「推送方自跑，不算非作者评审」。
+- **隔离树** `%TEMP%\idp-land-wsform03 @ 6739ab54`（`pnpm install --offline` 5.8 s）：tsc 0 / run-tests 368 / vite 0（产物含「搜索或跳转」1）/ gofmt 空 / build vet 0 / architecture ok / 清点零差（admin-web 不入清点口径，仍跑）；12:0x 广播「窗口开」占 55432 → 真库探针 `TestFreezeScopesAreInvisibleToEachOther` PASS（非 SKIP）→ 带 DSN 全量 `-p 1 -count=1 ./...` 12:06:35→12:08:55 **115 ok / 0 FAIL / 16 无测试 / 0 cached**。
+- 12:09:17 `ls-remote` 核 `87ff1edd` 未动 → `push 6739ab54:main` 成（4 秒），**远端 main = `6739ab54`**（纯 ff 六笔：认领 + 三笔码 + 接线 + 完成记录；分支已在 main tip 上，**不 cherry-pick、SHA 不换**）；共享树 ff 同 SHA；12:09 释号广播带 SHA 与门禁数字。**先 push 再簿记。**
+- **簿记本笔**（纯 .md 自审）：票 03 Status → 已进 main + 评审 Spec 轴 ← 通道 1 + 处置 + 进 main 记录；workspace-form spec 子票表 03 → resolved · 已进 main；本节。
+- **收尾**：`mcp6-wsform03` → `merged/`、远端删（远端那支停在 rebase 前的 `71786680`，四笔与 main 上的逐 patch 同，删前核）；`idp-land-wsform03` 拆（先删 `node_modules`）；**作者树 `D:/tops/idp-parcel-mcp6-wsform03` 留着未拆**——内容已全进 main（`git diff 6739ab54 main -- <七件>` 空），拆不拆归用户，通道 6 若回来可直接在 `merged/` 指针上看到自己的活。
+- **前沿**：workspace-form 只剩 draft 01（等用户答判断项 1–3）/ 02（模板段可派，壳层段 Blocked by 01）；ux-alignment 六票全进 main。**归用户**（不变）：wsform 判断项 1–3；ADR-0139 → Accepted 与否；票 11 `detail` 格 vs ADR-0140 Decision 三；`docs/ux/commercial-party.md` 仍 untracked、未动；CI 计费。
+- **本节五数**（11:4x–12:1x）：CI main 绿/总 未量（`6739ab54` run 刚起）· 集成时延——03 无完工报，按接线笔现场 mtime 09-20 21:00 起算 → 09-21 12:09 **约 15 小时**（1 票；其中 14.5 小时是无人值守的夜间，有人后 11:45 → 12:09 **24 分**）· 重放笔数 **0**（纯 ff，不计 cherry-pick；进 main 六笔）· 重复开发 0 ·
+  会话重置 **1**（通道 1 本会话起；通道 6 末笔后无响应已计入上节）· 非作者评审缺席 **1**（03 接线笔 Spec 轴推送方自跑）

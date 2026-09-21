@@ -1,7 +1,7 @@
 # 03 命令面板 `Ctrl+K`：导航 + 最近对象 + 壳层开关；TopBar 全局搜索位改为面板入口
 
 Category: enhancement
-Status: resolved——2026-09-21 11:5x 推送方通道 1 代落完成记录（作者通道 6 会话 09-20 21:00 后无响应，`Layout.tsx` 现场原样入库为 `938a2a54`）；码 tip `938a2a54`，基 `87ff1edd` = main；进 main 记录待推后补。此前 in-progress——2026-09-20 20:1x 通道 6 认领（task-9c302082，通道 1 20:08 派；分支 `mcp6-wsform03`，树 `D:/tops/idp-parcel-mcp6-wsform03`，基 origin/main `11e6111a`，09-20 20:5x 后 rebase 到 `87ff1edd`）。此前 ready-for-agent
+Status: resolved · 已进 main `6739ab54`（2026-09-21 12:09 push，纯 ff，SHA 不换；进 main 记录见 Comments）——2026-09-21 11:5x 推送方通道 1 代落完成记录（作者通道 6 会话 09-20 21:00 后无响应，`Layout.tsx` 现场原样入库为 `938a2a54`）；码 tip `938a2a54`，基 `87ff1edd` = main。此前 in-progress——2026-09-20 20:1x 通道 6 认领（task-9c302082，通道 1 20:08 派；分支 `mcp6-wsform03`，树 `D:/tops/idp-parcel-mcp6-wsform03`，基 origin/main `11e6111a`，09-20 20:5x 后 rebase 到 `87ff1edd`）。此前 ready-for-agent
 Blocked by: admin-web-ux-alignment/02 进 main（读它的 `pages/my-work/recent-objects.ts` 存储；`Layout.tsx` 同动，等它先落）
 地盘：新 `apps/admin-web/src/shell/command-actions.ts`（动作集纯逻辑 + node:test）、`shell/CommandPaletteHost.tsx`（挂 `@idpxyz/ui-workspace` 的 `CommandPalette` + 键盘监听）、
 `Layout.tsx`（渲染 host，一行）、`shell/TopBar.tsx` + `shell/top-bar-model.ts`（全局搜索位：禁用态 → 「打开命令面板」按钮，`Ctrl+K` 提示进 Tooltip）。
@@ -86,3 +86,25 @@ Blocked by: admin-web-ux-alignment/02 进 main（读它的 `pages/my-work/recent
 **Standards** — 阻断：无。非阻断：无。无发现（实核）：注释全中文，引 `Layout.tsx` 文件头 / `templates/loading-shape.ts` 文件头 / idp-ui@6751fb2 用符号名与 SHA，无行号无计数；`command-actions.ts` 只 `import type` `@idpxyz/ui-workspace`，运行时零 `@idpxyz/*`，node:test 可 require；`RecentEntry` 与 02 的 `RecentObject` 结构兼容、不 import 那边类型（存储归 02），`recentObjectHash` 由调用方注入不复制写法；`top-bar-model.test.ts` 原「全局搜索位的名与禁用说明」一条改写，理由写在用例注释里（事实变了不是放松）；`TopBar` `onOpenCommandPalette` 可选是为接线前能编译，注释写明。
 
 **Spec 1 / 0 · Standards 0 / 0** → 有阻断，未重放；补完 `Layout` 接线后只需重跑 Spec 轴。
+
+### 评审 Spec 轴 ← 通道 1 · 钉 `938a2a54`（基 `87ff1edd`，只看接线笔 `git diff 18ba6620..938a2a54`）· 2026-09-21 11:5x（**推送方自跑，不算非作者评审**：`list_sessions` 2–6 皆 09-20 20:0x–20:5x 后无活动、无人可派；用户直接令「修复，并回放」）
+
+按上一条评审「补完 `Layout` 接线后只需重跑 Spec 轴」办，Standards 轴沿上一条（0 / 0），接线笔只补看一眼：注释全中文、引 `shell/CommandPaletteHost` / `recent-objects.ts` 用文件名与符号名、无行号无计数、`useState` 已在原 import 内。
+
+**Spec** — 阻断：无。非阻断：无。无发现（实核）：第 2 条「挂在 `Layout` 根下、与 `TopBar` 并列」——`<CommandPaletteHost … />` 紧跟 `<TopBar … />` 之后、同级；`open` state 在 `Layout`（`commandPaletteOpen` / `setCommandPaletteOpen`），`onOpenChange={setCommandPaletteOpen}` 直传 setter（引用稳定，host 的 `useEffect([onOpenChange])` 不会每帧重挂监听）；`TopBar` 收 `onOpenCommandPalette={openCommandPalette}`，上一条阻断里「无人传」不再成立；`readRecent` 是模块级常量 `readRecentObjectsForPalette`（引用稳定，`useMemo` 依赖不抖），存储仍归 02 的 `recent-objects.ts`、地址写法透传 `recentObjectHash`；面板里的跳转写 hash 走 Layout 同一条 `hashchange` 路。上一条评审点名的两条完成判据在 `938a2a54` 上由推送方代跑的一次性探针（happy-dom 真 DOM，16 ok / 0 fail）实测成立：搜索位无 `aria-disabled`；`Ctrl+K` 派发后 DOM 出现列表且含「打开 工作台」；空存储无 Recent Objects 组。「不做」仍守：未动 `Sidebar`、词表、`templates/*`、`pages/my-work/*`（只 import 读函数与地址写法）。
+
+**Spec 0 / 0（Standards 沿 0 / 0）** → 无阻断，可重放。
+
+### 处置（推送方 · 通道 1 · 2026-09-21）
+
+- 通道 4 的 Spec 阻断 1 → 已由 `938a2a54` 解除（作者写的接线原样入库，推送方零改动）。
+- 非阻断：两条评审皆无。
+- 作者会话无响应，完成记录与判断项由推送方按代码与头注代写；浏览器验收仍「未验」，沿完成记录所列。
+
+### 进 main 记录（推送方 · 通道 1）
+
+- 重放：不必 cherry-pick——作者 09-20 已把分支 rebase 到 `87ff1edd`（= 当时 main tip；四笔 `range-diff` 全 `=`：`d4485e35→fc1398e9` / `40873c9c→e785a28e` / `ca56b925→67982672` / `71786680→18ba6620`），推送方在同一分支上加接线笔 `938a2a54` 与完成记录 `6739ab54`，main 纯 ff 六笔、SHA 不换。本票七件（`Layout.tsx`、`shell/CommandPaletteHost.tsx`、`shell/command-actions.ts` + test、`shell/TopBar.tsx`、`shell/top-bar-model.ts` + test）与 main 其间零他人提交。
+- 门禁在隔离树 `%TEMP%\idp-land-wsform03 @ 6739ab54` 实跑（`pnpm install --frozen-lockfile --offline` 5.8 s）：`tsc -b --noEmit` 0 / `run-tests` **368**（main 359 + 8 + 1）/ `vite build` 0（产物含「搜索或跳转」1 处）/ `gofmt -l` 空 / `go build` 0 / `go vet` 0 / `go test ./internal/architecture/` ok / 清点重生成零差 /
+  占号 12:0x → 真库探针 `TestFreezeScopesAreInvisibleToEachOther` **PASS**（不是 SKIP）→ 带 DSN 全量 `-p 1 -count=1 ./...` 12:06:35→12:08:55 **115 ok / 0 FAIL / 16 无测试 / 0 cached**。
+- 12:09:17 `ls-remote` 核 `87ff1edd` 未动 → `push 6739ab54:main` 成（12:09:21），**远端 main = `6739ab54`**；共享树 ff 同 SHA；释号广播带门禁数字。**先 push 再簿记。**
+- 浏览器未验沿完成记录所报。
