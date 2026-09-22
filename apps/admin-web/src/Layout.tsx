@@ -1,7 +1,10 @@
-import { Fragment, useEffect, useMemo, useRef, useState, type ElementType } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ElementType } from 'react';
+import { PanelRightOpen } from 'lucide-react';
 import { EditorGroup, Sidebar, useResize } from '@idpxyz/ui-workspace';
 import { useDensity } from '@idpxyz/ui-theme-runtime';
+import { Button, Tooltip } from '@idpxyz/ui-primitives';
 import { navigationSections, sidebarIconMap, pageTitleById } from './navigation';
+import { InspectorPanel, InspectorProvider, type InspectorContent, type InspectorController } from './templates';
 import { pageById } from './page-registry';
 import { Workbench } from './pages/Workbench';
 import { UnwiredModule } from './pages/UnwiredModule';
@@ -19,6 +22,8 @@ import {
   recordRecentObject,
 } from './pages/my-work/recent-objects';
 import {
+  INSPECTOR_WIDTH_MAX,
+  INSPECTOR_WIDTH_MIN,
   SIDEBAR_WIDTH_MAX,
   SIDEBAR_WIDTH_MIN,
   WORKBENCH_MODULE_ID,
@@ -34,6 +39,8 @@ import {
   reopenClosed,
   reorderTabs,
   saveWorkspaceState,
+  setInspectorVisible,
+  setInspectorWidth,
   setSidebarWidth,
   tabForHash,
   togglePinned,
@@ -42,11 +49,16 @@ import {
   type WorkspaceState,
 } from './shell/workspace-state';
 
-// 多标签工作区外壳（票 admin-web-workspace-form/01，参照 idp-ui@6751fb2 apps/myshop-web/src/App.tsx）：顶栏 + 左侧导航 +
-// EditorGroup 多标签主区 + 底部状态栏。第一轮裁「不引入标签页、等首个真实页面出现后再定」的前提已变——真实页面早就有了
+// 多标签工作区外壳（票 admin-web-workspace-form/01 与 02 壳层段，参照 idp-ui@6751fb2 apps/myshop-web/src/App.tsx）：顶栏 + 左侧导航 +
+// EditorGroup 多标签主区 + 右侧检查器栏 + 底部状态栏。第一轮裁「不引入标签页、等首个真实页面出现后再定」的前提已变——真实页面早就有了
 // （委托查阅的 hash 二段详情、对象工作区母版），参照物也换成了多标签壳；蓝图母版 B / C 都假定人同时开着一张队列和几个对象在比对。
-// 右栏位（检查器）随票 02 装；底栏不留位——没有事件 / 日志 / 备注读口，一个永远空的底栏不是「禁用态 + 说明」能交代的（spec「不做」）。
+// 底栏不留位——没有事件 / 日志 / 备注读口，一个永远空的底栏不是「禁用态 + 说明」能交代的（spec「不做」）。
 // 不装 ActivityBar：本仓只有一种侧栏内容，myshop-web 的那一格点了也只是折叠侧栏，是 IDE 形不是能力。
+//
+// 检查器栏（蓝图母版 B「List → Preview → Inspector」）：列表页单击一行经 templates/inspector-context 的 useInspector 把内容交到这里，
+// 右栏常驻显示，翻行时跟着换；切换活动标签即清空——检查器说的是当前列表选中的那一行，换页就不成立了。栏可拖宽（240–480）、
+// 可折叠，两者都进工作区状态持久化；折起来时只剩一个展开按钮，不占宽。myshop-web 的 RightSidebar 按对象种类在壳层分派渲染器，
+// 这里反过来让**页面**给内容、壳层只渲染契约（templates/inspector.ts）——对象长什么样归拥有它的页，壳层不认识任何业务对象。
 //
 // 顶栏是 shell/TopBar 自己的件（手册「顶栏规范」的全局位），这里只喂它当前页名、会话主体名与登出动作；
 // 登出仍是 auth/oidc.ts 那一个，外壳不另起一套会话处置。
@@ -185,6 +197,35 @@ export function Layout() {
   const activeTab = workspace.tabs.find((tab) => tab.id === workspace.activeTabId) ?? null;
   const activeModuleId = activeTab ? moduleIdOfTab(activeTab.id) : WORKBENCH_MODULE_ID;
 
+  // 检查器：内容由列表页经 useInspector 交进来；控制口 useMemo 住，Provider 值不随每次渲染换引用。
+  const [inspectorContent, setInspectorContent] = useState<InspectorContent | null>(null);
+  const inspectorController = useMemo<InspectorController>(
+    () => ({ show: (content) => setInspectorContent(content), clear: () => setInspectorContent(null) }),
+    [],
+  );
+  useEffect(() => {
+    setInspectorContent(null);
+  }, [workspace.activeTabId]);
+  const inspectorResize = useResize({
+    direction: 'horizontal',
+    initialSize: workspace.inspectorWidth,
+    minSize: INSPECTOR_WIDTH_MIN,
+    maxSize: INSPECTOR_WIDTH_MAX,
+    // 把手在栏的左边、栏在右边：往左拖是变宽，与侧栏相反。
+    reverse: true,
+  });
+  useEffect(() => {
+    setWorkspace((state) =>
+      state.inspectorWidth === inspectorResize.size ? state : setInspectorWidth(state, inspectorResize.size),
+    );
+  }, [inspectorResize.size]);
+  // applyWorkspace 每次渲染新建，但它只读 ref 与稳定的 setState，第一份与最新一份等价，所以这里可以不依赖它。
+  const toggleInspector = useCallback(() => applyWorkspace((state) => setInspectorVisible(state, !state.inspectorVisible)), []);
+  const inspectorToggle = useMemo(
+    () => ({ visible: workspace.inspectorVisible, toggle: toggleInspector }),
+    [workspace.inspectorVisible, toggleInspector],
+  );
+
   // 标签图标沿侧栏同一张表按模块取；对象标签与它的模块页同图标——标签 id 带对象段，表要按 id 键入，所以逐标签映一遍。
   const tabIconMap = useMemo(() => {
     const map: Record<string, ElementType> = {};
@@ -215,6 +256,7 @@ export function Layout() {
         onOpenChange={setCommandPaletteOpen}
         readRecent={readRecentObjectsForPalette}
         recentObjectHash={recentObjectHash}
+        inspector={inspectorToggle}
       />
 
       <div className="flex flex-1 overflow-hidden">
@@ -227,8 +269,10 @@ export function Layout() {
         />
         <div className="resize-handle-h" onMouseDown={sidebarResize.handleMouseDown} />
         {/* main 地标：读屏用户跳过导航直达页面内容的锚点。data-density 是密度两档在 DOM 上的落点（第一轮 01 第 4 条），
-            给只能从 DOM 读档的消费者（样式选择器、探针）用；ListPageTemplate 走的是 useDensity，不读它。 */}
+            给只能从 DOM 读档的消费者（样式选择器、探针）用；ListPageTemplate 走的是 useDensity，不读它。
+            Provider 只包主区：检查器的内容只能来自主区里的页面。 */}
         <main className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor min-w-0" data-density={density}>
+          <InspectorProvider value={inspectorController}>
           <EditorGroup
             group={{ id: MAIN_EDITOR_GROUP_ID, tabs: workspace.tabs, activeTab: workspace.activeTabId ?? '' }}
             isActive
@@ -252,7 +296,29 @@ export function Layout() {
             emptyStateContent={<Workbench onNavigate={setActive} />}
             preserveInactiveTabContent={false}
           />
+          </InspectorProvider>
         </main>
+        {workspace.inspectorVisible ? (
+          <>
+            <div className="resize-handle-h" onMouseDown={inspectorResize.handleMouseDown} />
+            <aside
+              aria-label="检查器"
+              className="flex shrink-0 flex-col overflow-hidden border-l border-idpxyz-border"
+              style={{ width: inspectorResize.size }}
+            >
+              <InspectorPanel content={inspectorContent} onClose={toggleInspector} />
+            </aside>
+          </>
+        ) : (
+          // 折叠态只剩一个展开按钮：位还在（蓝图「即使功能未完整也要留位」），但不占宽。
+          <div className="flex shrink-0 flex-col items-center border-l border-idpxyz-border bg-idpxyz-sidebar px-0.5 pt-1">
+            <Tooltip content="显示检查器" side="left">
+              <Button variant="ghost" size="icon" aria-label="显示检查器" onClick={toggleInspector}>
+                <PanelRightOpen className="h-4 w-4" aria-hidden="true" />
+              </Button>
+            </Tooltip>
+          </div>
+        )}
       </div>
       <WorkspaceStatusBar location={workspaceLocationLabel(activeTab, pageTitleById[WORKBENCH_MODULE_ID])} />
     </div>

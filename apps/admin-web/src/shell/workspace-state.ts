@@ -27,6 +27,14 @@ export const SIDEBAR_WIDTH_DEFAULT = 240;
 export const SIDEBAR_WIDTH_MIN = 170;
 export const SIDEBAR_WIDTH_MAX = 500;
 
+/**
+ * 右侧检查器栏的宽度三值（票 02 壳层段）：蓝图 13 节要「宽度稳定」，区间沿票面 240–480；默认取中间偏窄——概要 ≤ 8 格的
+ * 键值对在 320 里排得开，再宽就抢了列表的列。默认可见：蓝图母版 B 把检查器当常驻位；不看时折起来，折叠态也持久化。
+ */
+export const INSPECTOR_WIDTH_DEFAULT = 320;
+export const INSPECTOR_WIDTH_MIN = 240;
+export const INSPECTOR_WIDTH_MAX = 480;
+
 /** 与 ui-workspace 的 Tab 同形的子集；不 import 它的类型是为了零依赖，Layout 把它原样交给 EditorGroup。 */
 export interface WorkspaceTab {
   /** 即 hash 路径 `<moduleId>` 或 `<moduleId>/<objectId>`（查询串已剥），见 tabIdFromHash。 */
@@ -45,6 +53,8 @@ export interface WorkspaceState {
   /** 最近关闭的在前。 */
   closedTabs: WorkspaceTab[];
   sidebarWidth: number;
+  inspectorWidth: number;
+  inspectorVisible: boolean;
 }
 
 /** localStorage 的最小子集；测试用 Map 顶替，生产传 window.localStorage。 */
@@ -54,7 +64,14 @@ export interface WorkspaceStorage {
 }
 
 export function initialWorkspaceState(): WorkspaceState {
-  return { tabs: [], activeTabId: null, closedTabs: [], sidebarWidth: SIDEBAR_WIDTH_DEFAULT };
+  return {
+    tabs: [],
+    activeTabId: null,
+    closedTabs: [],
+    sidebarWidth: SIDEBAR_WIDTH_DEFAULT,
+    inspectorWidth: INSPECTOR_WIDTH_DEFAULT,
+    inspectorVisible: true,
+  };
 }
 
 // —— hash ↔ 标签 ——
@@ -210,6 +227,14 @@ export function setSidebarWidth(state: WorkspaceState, width: number): Workspace
   return { ...state, sidebarWidth: clampWidth(width, SIDEBAR_WIDTH_MIN, SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_DEFAULT) };
 }
 
+export function setInspectorWidth(state: WorkspaceState, width: number): WorkspaceState {
+  return { ...state, inspectorWidth: clampWidth(width, INSPECTOR_WIDTH_MIN, INSPECTOR_WIDTH_MAX, INSPECTOR_WIDTH_DEFAULT) };
+}
+
+export function setInspectorVisible(state: WorkspaceState, visible: boolean): WorkspaceState {
+  return state.inspectorVisible === visible ? state : { ...state, inspectorVisible: visible };
+}
+
 // —— 持久化 ——
 
 function clampWidth(value: unknown, min: number, max: number, fallback: number): number {
@@ -276,6 +301,9 @@ export function loadWorkspaceState(
     activeTabId,
     closedTabs,
     sidebarWidth: clampWidth(v.sidebarWidth, SIDEBAR_WIDTH_MIN, SIDEBAR_WIDTH_MAX, SIDEBAR_WIDTH_DEFAULT),
+    inspectorWidth: clampWidth(v.inspectorWidth, INSPECTOR_WIDTH_MIN, INSPECTOR_WIDTH_MAX, INSPECTOR_WIDTH_DEFAULT),
+    // 非布尔当没存：只有明确存过 false 才算折起来，存坏了不该把常驻位藏掉。
+    inspectorVisible: typeof v.inspectorVisible === 'boolean' ? v.inspectorVisible : true,
   };
 }
 

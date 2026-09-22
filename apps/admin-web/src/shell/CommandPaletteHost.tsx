@@ -27,9 +27,11 @@ export interface CommandPaletteHostProps {
   readRecent: () => RecentEntry[];
   /** 最近对象的地址写法，与各模块页写 hash 的形一致；归第一轮 02，这里只透传给动作集。 */
   recentObjectHash: (entry: RecentEntry) => string;
+  /** 检查器栏的可见性与切法（票 02 壳层段）；归 Layout 的工作区状态，这里只透传给动作集。 */
+  inspector: { visible: boolean; toggle: () => void };
 }
 
-export function CommandPaletteHost({ open, onOpenChange, readRecent, recentObjectHash }: CommandPaletteHostProps) {
+export function CommandPaletteHost({ open, onOpenChange, readRecent, recentObjectHash, inspector }: CommandPaletteHostProps) {
   const { theme, toggleTheme } = useTheme();
   const { density, toggleDensity } = useDensity();
 
@@ -44,10 +46,17 @@ export function CommandPaletteHost({ open, onOpenChange, readRecent, recentObjec
             pageTitleById,
             recentObjects: readRecent(),
             recentObjectHash,
-            shellToggles: { theme, toggleTheme, density, toggleDensity },
+            shellToggles: {
+              theme,
+              toggleTheme,
+              density,
+              toggleDensity,
+              inspectorVisible: inspector.visible,
+              toggleInspector: inspector.toggle,
+            },
           })
         : [],
-    [open, readRecent, recentObjectHash, theme, toggleTheme, density, toggleDensity],
+    [open, readRecent, recentObjectHash, theme, toggleTheme, density, toggleDensity, inspector.visible, inspector.toggle],
   );
 
   return <CommandPalette open={open} onClose={close} actions={actions} />;

@@ -14,7 +14,7 @@ import { densityToggleLabel, themeToggleLabel } from './top-bar-model';
 //
 // 参照 idp-ui@6751fb2 apps/myshop-web/src/commandActions.ts 的三组分法（navigation / recent / actions），但它的
 // 「新建订单 / 导出 / 刷新」那组假快捷动作（run 只弹一句「功能开发中」）一条不搬——spec「红线」不允许假动作；
-// 它的「切换底栏 / 切换右栏」也不搬，本仓没有那两个位（等票 01 / 02 落了再加，本票不留空动作）。
+// 「切换右栏」随票 02 的检查器栏落地后加进壳层组（下面的 TOGGLE_INSPECTOR_ACTION_ID）；「切换底栏」不搬，本仓没有底栏。
 
 /**
  * 最近对象在本文件里需要的最小形；与第一轮 02 的 RecentObject（pages/my-work/recent-objects.ts）结构兼容，
@@ -29,12 +29,17 @@ export interface RecentEntry {
   title: string;
 }
 
-/** 壳层开关的现值与切法；由 CommandPaletteHost 从 useTheme / useDensity 取了注入，本文件不认识 Provider。 */
+/**
+ * 壳层开关的现值与切法；由 CommandPaletteHost 从 useTheme / useDensity 取了注入，本文件不认识 Provider。
+ * 检查器栏的可见性归 Layout 的工作区状态（shell/workspace-state.ts），同样由宿主注入现值与切法。
+ */
 export interface ShellToggles {
   theme: ThemePreference;
   toggleTheme: () => void;
   density: DensityPreference;
   toggleDensity: () => void;
+  inspectorVisible: boolean;
+  toggleInspector: () => void;
 }
 
 export interface BuildCommandActionsInput {
@@ -62,6 +67,12 @@ export const SHELL_ACTION_ID_PREFIX = 'shell:';
 
 export const TOGGLE_THEME_ACTION_ID = `${SHELL_ACTION_ID_PREFIX}toggle-theme`;
 export const TOGGLE_DENSITY_ACTION_ID = `${SHELL_ACTION_ID_PREFIX}toggle-density`;
+export const TOGGLE_INSPECTOR_ACTION_ID = `${SHELL_ACTION_ID_PREFIX}toggle-inspector`;
+
+/** 与主题 / 密度两条同一句式：说切过去会变成什么。 */
+export function inspectorToggleLabel(visible: boolean): string {
+  return visible ? '隐藏检查器' : '显示检查器';
+}
 
 /** 「打开 」后接页名或对象标题；中间一个空格，让面板按 label 匹配时「打开」不与页名黏成一个词。 */
 export function openLabel(target: string): string {
@@ -146,6 +157,13 @@ export function buildCommandActions({
       group: 'actions',
       keywords: keywordsOf('密度', '紧凑', '舒适', 'density', 'compact', 'comfortable'),
       run: shellToggles.toggleDensity,
+    },
+    {
+      id: TOGGLE_INSPECTOR_ACTION_ID,
+      label: inspectorToggleLabel(shellToggles.inspectorVisible),
+      group: 'actions',
+      keywords: keywordsOf('检查器', '右栏', 'inspector', 'sidebar'),
+      run: shellToggles.toggleInspector,
     },
   ];
 

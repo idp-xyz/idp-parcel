@@ -3,8 +3,10 @@ import { deepEqual, equal, ok } from 'node:assert/strict';
 import {
   RECENT_ACTIONS_LIMIT,
   TOGGLE_DENSITY_ACTION_ID,
+  TOGGLE_INSPECTOR_ACTION_ID,
   TOGGLE_THEME_ACTION_ID,
   buildCommandActions,
+  inspectorToggleLabel,
   isOpenCommandPaletteShortcut,
   moduleHash,
   openLabel,
@@ -34,6 +36,8 @@ function build(recentObjects: RecentEntry[], overrides: Partial<ShellToggles> = 
     toggleTheme: () => calls.push('theme'),
     density: 'comfortable',
     toggleDensity: () => calls.push('density'),
+    inspectorVisible: true,
+    toggleInspector: () => calls.push('inspector'),
     ...overrides,
   };
   const actions = buildCommandActions({
@@ -91,7 +95,7 @@ test('没有最近对象时 recent 组为空，其余两组照常', () => {
   const { actions } = build([]);
   equal(actions.filter((a) => a.group === 'recent').length, 0);
   equal(actions.filter((a) => a.group === 'navigation').length, Object.keys(pageTitleById).length);
-  equal(actions.filter((a) => a.group === 'actions').length, 2);
+  equal(actions.filter((a) => a.group === 'actions').length, 3);
 });
 
 // Covers: 最近对象的关键词含对象标识、标题与模块名；且一律小写——vendor 面板拿 keywords 原样 includes 小写后的查询词，
@@ -108,22 +112,25 @@ test('最近对象的关键词含标识、标题、模块名，且全部小写',
   for (const a of actions) for (const k of a.keywords) equal(k, k.toLowerCase());
 });
 
-// Covers: 壳层组只有主题与密度两条，落在 vendor 的 actions 组；标签沿顶栏「切换到 <目标态>」同一句；run 直接调注入的切法。
-// 没有「新建 / 导出 / 刷新」那类假快捷动作，也没有底栏 / 右栏切换——本仓没有那两个位。
-test('壳层组两条：切主题、切密度，标签指向目标态', () => {
-  const { actions, calls } = build([], { theme: 'dark', density: 'compact' });
+// Covers: 壳层组三条——切主题、切密度、切检查器栏——落在 vendor 的 actions 组；标签一律「切过去会变成什么」（主题 / 密度沿顶栏
+// 同一句，检查器按可见性答「隐藏 / 显示」）；run 直接调注入的切法。没有「新建 / 导出 / 刷新」那类假快捷动作，也没有底栏切换——本仓没有底栏。
+test('壳层组三条：切主题、切密度、切检查器，标签指向目标态', () => {
+  const { actions, calls } = build([], { theme: 'dark', density: 'compact', inspectorVisible: false });
   const shell = actions.filter((a) => a.group === 'actions');
   deepEqual(
     shell.map((a) => [a.id, a.label]),
     [
       [TOGGLE_THEME_ACTION_ID, '切换到浅色主题'],
       [TOGGLE_DENSITY_ACTION_ID, '切换到舒适密度'],
+      [TOGGLE_INSPECTOR_ACTION_ID, '显示检查器'],
     ],
   );
   shell[0].run();
   shell[1].run();
-  deepEqual(calls, ['theme', 'density']);
-  ok(!actions.some((a) => /新建|导出|刷新|底栏|右栏/.test(a.label)), '没有假快捷动作与不存在的位');
+  shell[2].run();
+  deepEqual(calls, ['theme', 'density', 'inspector']);
+  equal(inspectorToggleLabel(true), '隐藏检查器');
+  ok(!actions.some((a) => /新建|导出|刷新|底栏/.test(a.label)), '没有假快捷动作与不存在的位');
 });
 
 // Covers: 三组 id 互不相撞——同一个字串既是模块 id 又是对象标识时，前缀把它们分开。

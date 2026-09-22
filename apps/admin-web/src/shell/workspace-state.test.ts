@@ -2,6 +2,9 @@ import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
 import {
   CLOSED_TABS_LIMIT,
+  INSPECTOR_WIDTH_DEFAULT,
+  INSPECTOR_WIDTH_MAX,
+  INSPECTOR_WIDTH_MIN,
   SIDEBAR_WIDTH_DEFAULT,
   SIDEBAR_WIDTH_MAX,
   SIDEBAR_WIDTH_MIN,
@@ -20,6 +23,8 @@ import {
   reopenClosed,
   reorderTabs,
   saveWorkspaceState,
+  setInspectorVisible,
+  setInspectorWidth,
   setSidebarWidth,
   tabForHash,
   tabIdFromHash,
@@ -247,6 +252,32 @@ test('setSidebarWidth：钳进区间；非数回默认', () => {
   equal(setSidebarWidth(initialWorkspaceState(), 9999).sidebarWidth, SIDEBAR_WIDTH_MAX);
   equal(setSidebarWidth(initialWorkspaceState(), 1).sidebarWidth, SIDEBAR_WIDTH_MIN);
   equal(setSidebarWidth(initialWorkspaceState(), Number.NaN).sidebarWidth, SIDEBAR_WIDTH_DEFAULT);
+});
+
+// —— 检查器栏 ——
+
+test('检查器栏：默认可见且宽度取默认；setInspectorWidth 钳进区间；setInspectorVisible 同值不换对象', () => {
+  const state = initialWorkspaceState();
+  equal(state.inspectorVisible, true);
+  equal(state.inspectorWidth, INSPECTOR_WIDTH_DEFAULT);
+  equal(setInspectorWidth(state, 9999).inspectorWidth, INSPECTOR_WIDTH_MAX);
+  equal(setInspectorWidth(state, 1).inspectorWidth, INSPECTOR_WIDTH_MIN);
+  equal(setInspectorWidth(state, Number.NaN).inspectorWidth, INSPECTOR_WIDTH_DEFAULT);
+  equal(setInspectorVisible(state, true), state);
+  equal(setInspectorVisible(state, false).inspectorVisible, false);
+});
+
+test('load：检查器宽度越界钳进区间，可见性非布尔当没存（可见）', () => {
+  const storage = new MapStorage();
+  storage.setItem(
+    WORKSPACE_STORAGE_KEY,
+    JSON.stringify({ tabs: [], activeTabId: null, closedTabs: [], sidebarWidth: 240, inspectorWidth: 5, inspectorVisible: 'no' }),
+  );
+  const state = loadWorkspaceState(storage, known);
+  equal(state.inspectorWidth, INSPECTOR_WIDTH_MIN);
+  equal(state.inspectorVisible, true);
+  storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify({ tabs: [], inspectorVisible: false }));
+  equal(loadWorkspaceState(storage, known).inspectorVisible, false);
 });
 
 // —— 持久化 ——
