@@ -75,3 +75,25 @@ export {
   type CsvColumn,
   type PageSelectionState,
 } from './list-selection';
+
+export {
+  INSPECTOR_EMPTY_NOTE,
+  INSPECTOR_SUMMARY_LIMIT,
+  InspectorContractError,
+  inspectorActionDisabled,
+  inspectorSectionDefaultOpen,
+  inspectorSectionLabels,
+  inspectorSectionOrder,
+  presentFields,
+  resolveInspectorSections,
+  type InspectorAction,
+  type InspectorContent,
+  type InspectorField,
+  type InspectorRelatedLink,
+  type InspectorSection,
+  type InspectorSectionKind,
+  type InspectorStatusItem,
+  type ResolvedInspectorSection,
+} from './inspector';
+export { InspectorProvider, useInspector, type InspectorController } from './inspector-context';
+export { InspectorPanel, type InspectorPanelProps } from './InspectorPanel';

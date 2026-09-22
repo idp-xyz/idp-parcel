@@ -43,6 +43,8 @@ import {
   type PageSelectionState,
 } from './list-selection';
 import { StateSlot, type TemplateViewState, type StateSlotProps } from './state-slot';
+import { useInspector } from './inspector-context';
+import type { InspectorContent } from './inspector';
 
 /** 列定义。render 拿整行而非取值路径，让调用方组合多字段（如单号+徽章）不求模板开洞。 */
 export interface ListColumn<Row> {
@@ -167,8 +169,14 @@ export interface ListPageTemplateProps<Row> {
   /** 单击一行：预览 / 选中。有 onRowOpen 时它仍然是单击的语义，不被双击顶掉。 */
   onRowClick?: (row: Row) => void;
   /**
-   * 双击一行（或行聚焦后按 Enter）：开对象。开在当前上下文、由调用方写 hash 二段路由（票 admin-web-ux-alignment/03
-   * 裁决 2：本仓 console 形态无 Workbench Tabs，不开标签页）。接了它行才进 Tab 序；不接则行为与今天同。
+   * 单击一行时交给右侧检查器的内容（票 admin-web-workspace-form/02 第 3 条，蓝图母版 B「List → Preview → Inspector」）。
+   * 有它时单击 = `onRowClick?.(row)` **且**把 `inspector(row)` 交给壳层的检查器（经 useInspector），被单击的行标记为选中；
+   * 没有它时行为零变化。字段只取行里已有的，不发第二个请求。双击仍走 onRowOpen。
+   */
+  inspector?: (row: Row) => InspectorContent;
+  /**
+   * 双击一行（或行聚焦后按 Enter）：开对象。由调用方写 hash 二段路由；壳层已是多标签工作区（票 admin-web-workspace-form/01），
+   * 对象地址会开成自己的标签。接了它行才进 Tab 序；不接则行为与今天同。
    */
   onRowOpen?: (row: Row) => void;
   /**
@@ -292,6 +300,7 @@ export function ListPageTemplate<Row>({
   selection,
   bulkActions,
   onRowClick,
+  inspector,
   onRowOpen,
   emptyRowsNote,
   pagination,
@@ -300,6 +309,17 @@ export function ListPageTemplate<Row>({
 }: ListPageTemplateProps<Row>) {
   const alignClass = (align?: 'left' | 'center' | 'right') =>
     align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left';
+
+  // 检查器里正显示的那一行（键）。只在接了 inspector 时有意义；它是模板自己的呈现状态，不回流给调用方——调用方要的
+  // 是「单击了哪一行」（onRowClick），选中高亮只是告诉人右栏说的是哪一行。换模块（组件卸载）即丢。
+  const inspectorController = useInspector();
+  const [inspectedKey, setInspectedKey] = useState<string | null>(null);
+  const handleRowClick = (row: Row, key: string) => {
+    onRowClick?.(row);
+    if (!inspector) return;
+    setInspectedKey(key);
+    inspectorController.show(inspector(row));
+  };
 
   const crumb =
     breadcrumb ?? (moduleId ? resolveBreadcrumb(moduleId, navigationSections, pageTitleById) : null);
@@ -312,7 +332,11 @@ export function ListPageTemplate<Row>({
   const cellPadding = densityRowPadding(density);
 
   // 行的交互属性由 rowInteraction 决定；这里只管把它们贴到 <tr> 上。没接任何回调时 className 为 undefined。
-  const interaction = rowInteraction({ click: onRowClick !== undefined, open: onRowOpen !== undefined });
+  // 接了 inspector 的行也是可单击的——单击把它交给检查器。
+  const interaction = rowInteraction({
+    click: onRowClick !== undefined || inspector !== undefined,
+    open: onRowOpen !== undefined,
+  });
   const rowClass =
     [interaction.clickable ? 'cursor-pointer' : '', interaction.tabIndex !== undefined ? rowFocusClass : '']
       .filter((part) => part !== '')
@@ -522,12 +546,20 @@ export function ListPageTemplate<Row>({
                     ) : null}
                     {rows.map((row) => {
                       const key = rowKey(row);
+                      // 检查器正显示的行带一层底色与 data-inspected：多选的勾说的是「圈进批量动作」，这一层说的是
+                      // 「右栏在说它」，两件事各有各的记号，不共用复选框。
+                      const inspected = inspector !== undefined && inspectedKey === key;
                       return (
                         <TableRow
                           key={key}
-                          className={rowClass}
+                          className={
+                            [rowClass ?? '', inspected ? 'bg-idpxyz-accent/10 hover:bg-idpxyz-accent/15' : '']
+                              .filter((part) => part !== '')
+                              .join(' ') || undefined
+                          }
+                          data-inspected={inspected ? 'true' : undefined}
                           tabIndex={interaction.tabIndex}
-                          onClick={onRowClick ? () => onRowClick(row) : undefined}
+                          onClick={onRowClick || inspector ? () => handleRowClick(row, key) : undefined}
                           onDoubleClick={onRowOpen ? () => onRowOpen(row) : undefined}
                           onKeyDown={
                             onRowOpen

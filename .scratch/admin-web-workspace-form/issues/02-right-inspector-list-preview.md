@@ -1,8 +1,8 @@
 # 02 右侧检查器：壳层右栏位 + `InspectorContent` 契约（五节）+ `ListPageTemplate` 单击进检查器 + 两张首用页渲染器
 
 Category: enhancement
-Status: draft——分两段：**模板段**（契约 + 首用渲染器 + `ListPageTemplate` 接口）不等任何票，可先派；**壳层段**（右栏装进 `Layout.tsx`）Blocked by 01
-Blocked by: 01（仅壳层段）
+Status: in-progress——2026-09-22 通道 1 在 `main` 上直接做（workflow.md「前端切片」六步），紧接票 01 的壳层笔；模板段先落、壳层段随后。此前 draft——分两段：**模板段**（契约 + 首用渲染器 + `ListPageTemplate` 接口）不等任何票；**壳层段**（右栏装进 `Layout.tsx`）Blocked by 01
+Blocked by: 无（01 的壳层笔 `c9312bf6` 已在 main）
 地盘：新 `apps/admin-web/src/templates/inspector.ts`（契约类型 + 纯逻辑 + node:test）、新 `templates/InspectorPanel.tsx`（五节渲染件）、`templates/ListPageTemplate.tsx`
 （加可选 `inspector?: (row) => InspectorContent`，单击行时交给壳层——**不改** `onRowClick` 语义，只新增）、`templates/index.ts`（只追加）、`Layout.tsx`（壳层段：右栏位装
 `InspectorPanel`，可拖宽 `useResize({ reverse: true })`、可折叠、宽度进 01 的 `workspace-state`）、首用两页：`pages/shipment-request/ShipmentRequestListPage.tsx`、

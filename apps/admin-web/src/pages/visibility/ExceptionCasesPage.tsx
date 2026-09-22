@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { ListPageTemplate, type ListColumn } from '../../templates';
+import { ListPageTemplate, presentFields, type InspectorContent, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import {
   StatusBadgeFor,
@@ -83,6 +83,50 @@ const columns: ListColumn<CaseRow>[] = [
 // 没登记的格导出为空，不代填「—」——那个破折号是屏幕上的留白记号，不是数据。
 const csvCellText = (row: CaseRow, column: ListColumn<CaseRow>) => row.values[column.id] ?? '';
 
+// 右侧检查器的内容（票 admin-web-workspace-form/02 第 4 条）：全部取自行上已备好的 values，不发第二个请求。
+// 状态只有主状态一枚——严重度 / 优先级在案件行上无登记格（见 CaseRow 头注），检查器同样不代填；快速动作只有「打开分诊」——
+// 归并 / 关闭是命令面的判断、端点未建，不列一个禁用的假动作；关联对象没有——根对象是包裹身份、本管理台没有它的对象地址；
+// 审计取建立 / 首次响应 / 关闭 / 关闭结论 / 归并指向，空的格不进（presentFields）。
+function inspectorOf(row: CaseRow): InspectorContent {
+  const v = row.values;
+  return {
+    title: '异常案件',
+    subtitle: v.caseId,
+    sections: [
+      {
+        kind: 'summary',
+        fields: presentFields([
+          { label: '根对象', value: v.rootParcel, mono: true },
+          { label: '影响范围', value: v.impactScope, mono: true },
+          { label: '责任团队', value: v.responsibleTeam, mono: true },
+        ]),
+      },
+      { kind: 'status', items: [{ label: '主状态', word: v.phase }] },
+      {
+        kind: 'actions',
+        actions: [
+          {
+            label: '打开分诊',
+            onRun: () => {
+              window.location.hash = '#/exception-triage';
+            },
+          },
+        ],
+      },
+      {
+        kind: 'audit',
+        fields: presentFields([
+          { label: '建立时间', value: v.establishedAt, mono: true },
+          { label: '首次响应', value: v.firstResponse, mono: true },
+          { label: '关闭时间', value: v.closedAt, mono: true },
+          { label: '关闭结论', value: v.conclusion, mono: true },
+          { label: '归并指向', value: v.mergedInto, mono: true },
+        ]),
+      },
+    ],
+  };
+}
+
 /**
  * 异常案件（visibility-exception）。行对象是围绕同一因果链和处置范围建立的
  * 业务案件。案件关闭不修改源事实、不解除来源限制；查阅不推进阶段、不合并、
@@ -148,6 +192,7 @@ export function ExceptionCasesPage() {
       rowKey={(row) => row.key}
       selection={{ selected: checked, onChange: setChecked }}
       bulkActions={{ csv: { fileName: 'exception-cases.csv', cellText: csvCellText } }}
+      inspector={inspectorOf}
       viewState={catalogueViewState(answer, rows.length, retry, {
         module: info,
         endpoint: 'GET /exception-case-records',

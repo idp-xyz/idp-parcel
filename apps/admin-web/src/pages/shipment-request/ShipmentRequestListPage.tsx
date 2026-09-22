@@ -1,13 +1,16 @@
 import { useEffect, useState } from 'react';
 import {
   ListPageTemplate,
+  presentFields,
+  type InspectorContent,
   type ListColumn,
   type TemplateViewState,
 } from '../../templates';
 
 // 详情钻取选中承载在 hash 第二段（#/shipment-request-inquiry/<委托标识>），与外壳
 // 的模块级 hash 路由同一约定：刷新回到同一份详情、后退自然收回列表、详情可收藏
-// 转发。外壳只认第一段，本段归本页所有。
+// 转发。第二段的**含义**归本页（它是哪份委托）；外壳只把它当地址——多标签壳层拿前两段作
+// 标签 id，详情因此开成自己的一张标签、列表留在另一张（shell/workspace-state.ts）。
 function selectedIdFromHash(): string | null {
   const segments = window.location.hash.replace(/^#\/?/, '').split('/');
   return segments[0] === 'shipment-request-inquiry' && segments[1]
@@ -119,6 +122,46 @@ const csvCellText = (row: ShipmentRequestSummary, column: ListColumn<ShipmentReq
       return undefined;
   }
 };
+
+/** 详情地址：hash 二段，与本页顶部 selectedIdFromHash 读的同一形；壳层会把它开成自己的标签。 */
+function detailHash(shipmentRequestId: string): string {
+  return `#/shipment-request-inquiry/${encodeURIComponent(shipmentRequestId)}`;
+}
+
+// 右侧检查器的内容（票 admin-web-workspace-form/02 第 4 条）：全部取自行里已有的读模型字段，不发第二个请求。
+// 概要四格；状态一枚（词表词按词表着色，词表外的原样示码——与列里的徽章同一处置）；快速动作今天只有「打开详情」——
+// 撤回 / 取消 / 复核各有自己的页与门（提交与撤回、逐件取消、复核队列），不从检查器发命令；关联对象没有——读模型里的
+// 客户账户与来源请求键都不是本管理台里可寻址的对象地址，编一条链接就是死路；审计只有提交时刻——读模型没有「最近变更」。
+function inspectorOf(row: ShipmentRequestSummary): InspectorContent {
+  return {
+    title: '委托',
+    subtitle: row.shipmentRequestId,
+    sections: [
+      {
+        kind: 'summary',
+        fields: presentFields([
+          { label: '客户账户', value: row.customerAccountId, mono: true },
+          { label: '来源', value: row.source, mono: true },
+          { label: '来源请求键', value: row.sourceRequestKey, mono: true },
+          { label: '声明包裹', value: String(row.declaredParcelCount) },
+        ]),
+      },
+      { kind: 'status', items: [{ label: '委托状态', word: requestStateLabels[row.state] ?? row.state }] },
+      {
+        kind: 'actions',
+        actions: [
+          {
+            label: '打开详情',
+            onRun: () => {
+              window.location.hash = detailHash(row.shipmentRequestId);
+            },
+          },
+        ],
+      },
+      { kind: 'audit', fields: presentFields([{ label: '提交时间', value: row.submittedAt, mono: true }]) },
+    ],
+  };
+}
 
 // 取数答案 → 模板四态。空列表走空态而不是就绪态的空表格：模板明言不从 rows.length
 // 推断，「暂无数据」这一业务事实要由本页说出来。
@@ -237,8 +280,10 @@ export function ShipmentRequestListPage() {
       rowKey={(row) => row.shipmentRequestId}
       selection={{ selected: checked, onChange: setChecked }}
       bulkActions={{ csv: { fileName: 'shipment-requests.csv', cellText: csvCellText } }}
-      onRowClick={(row) => {
-        window.location.hash = `#/shipment-request-inquiry/${encodeURIComponent(row.shipmentRequestId)}`;
+      // 单击进检查器、双击（或 Enter）开详情——蓝图母版 B 的姿势：表还在左边，翻行时右栏跟着换（此前单击即整区切详情）。
+      inspector={inspectorOf}
+      onRowOpen={(row) => {
+        window.location.hash = detailHash(row.shipmentRequestId);
       }}
       viewState={viewStateOf(answer, rows.length, retry)}
     />

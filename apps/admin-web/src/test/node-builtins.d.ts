@@ -29,6 +29,12 @@ declare module 'node:assert/strict' {
   export function deepEqual<T>(actual: unknown, expected: T, message?: string): asserts actual is T;
   export function match(value: string, pattern: RegExp, message?: string): void;
   export function fail(message?: string): never;
+  // 契约错误要证「抛」（templates/inspector.test.ts）：expected 只声明测试用到的两种——Error 子类的构造器、断言函数。
+  export function throws(
+    fn: () => unknown,
+    expected?: (new (...args: never[]) => Error) | ((error: unknown) => boolean),
+    message?: string,
+  ): void;
 }
 
 // 契约测试读后端包 testdata/ 里的夹具（票 admin-web-audit-followups/04）。只声明按 utf8 读成
