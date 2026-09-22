@@ -1,8 +1,8 @@
 # 01 壳层升级为多标签工作区：`EditorGroup` + `StatusBar`、工作区状态本地持久化、hash ↔ 标签互为镜像、`Ctrl+W` / `Ctrl+Shift+T`
 
 Category: enhancement
-Status: draft——等用户答 spec「判断项」1–3（多标签要不要 / 分栏要不要 / `ActivityBar` 要不要）；答「要」再转 ready-for-agent
-Blocked by: admin-web-ux-alignment/02 进 main（同动 `Layout.tsx`：02 在它上面挂记录钩子，本票重写它的主区）
+Status: in-progress——2026-09-22 通道 1 在 `main` 上直接做（workflow.md「前端切片：一人在 main 上直接做」六步）。用户经 IDP 队列令「参考 idpxyz/idp-ui `apps/myshop-web`，理解，然后来调整我们的 ui」，未逐条答判断项；三项按 spec 推荐取值落地——1 多标签**要**（用户指向的参照物就是多标签壳）、2 分栏**不做**（`showSplitButtons={false}`）、3 `ActivityBar` **不装**；用户若要 2 / 3 各是一张追加票，不改本票已落的形。此前 draft——等用户答 spec「判断项」1–3
+Blocked by: 无（admin-web-ux-alignment/02 已进 main `5b032504`）
 地盘：`apps/admin-web/src/Layout.tsx`（主区从单页换成 `EditorGroup`；右栏 / 底栏两个**空位**只留结构不装内容，02 装）、新 `shell/workspace-state.ts`（标签集 / 活动标签 /
 已关闭栈 / 侧栏宽度的纯逻辑 + `localStorage` 持久化 + node:test）、新 `shell/WorkspaceStatusBar.tsx`（包 `StatusBar`）、`shell/preferences.ts`（若持久化键前缀要复用它的约定，只追加）。
 **不碰** `shell/TopBar.tsx`（不换 `TitleBar`）、`templates/*`、任何业务页、`page-registry.tsx`、`navigation.ts`。
