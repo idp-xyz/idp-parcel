@@ -1,16 +1,18 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useMemo } from 'react';
 import { CommandPalette } from '@idpxyz/ui-workspace';
 import { useDensity, useTheme } from '@idpxyz/ui-theme-runtime';
 import { pageTitleById } from '../navigation';
-import { buildCommandActions, isOpenCommandPaletteShortcut, type RecentEntry } from './command-actions';
+import { buildCommandActions, type RecentEntry } from './command-actions';
 
 // 命令面板宿主（票 admin-web-workspace-form/03 第 2 条）：把 @idpxyz/ui-workspace 的 CommandPalette 挂到壳层根下、
-// 装上 Ctrl/⌘+K 监听、每次打开时重算动作集。动作集本身归 command-actions.ts，这里只挂。
+// 每次打开时重算动作集。动作集本身归 command-actions.ts，这里只挂。
 //
 // 面板里没有任何一条动作发请求（理由与边界见 command-actions.ts 文件头）。
 //
-// open 态不放在这里而由 Layout 持有：面板有两个入口——本件监听的快捷键与 TopBar 搜索位的按钮——TopBar 不在本件之下，
-// 两个入口要指向同一份态，态只能在它们共同的父级。本件收 open / onOpenChange，像一个受控件。
+// open 态不放在这里而由 Layout 持有：面板有两个入口——Ctrl/⌘+K 与 TopBar 搜索位的按钮——TopBar 不在本件之下，
+// 两个入口要指向同一份态，态只能在它们共同的父级。本件收 open / onOpenChange，是一个受控件。
+// Ctrl/⌘+K 的监听也不在这里：壳层只挂一个 keydown（Layout），标签快捷键与它同一个分派点——两个监听各认各的会在
+// 「谁先 preventDefault」上互相猜（票 01 第 5 条）；判定函数仍是 command-actions 的 isOpenCommandPaletteShortcut。
 //
 // Escape 不在这里处理：vendor CommandPalette 0.1.25 打开时自己在 window 上监听 keydown，Escape → onClose、
 // 方向键与 Enter 也是它的；这里再关一次是重复，两处各关一次还会让 onOpenChange(false) 调两遍。
@@ -30,17 +32,6 @@ export interface CommandPaletteHostProps {
 export function CommandPaletteHost({ open, onOpenChange, readRecent, recentObjectHash }: CommandPaletteHostProps) {
   const { theme, toggleTheme } = useTheme();
   const { density, toggleDensity } = useDensity();
-
-  useEffect(() => {
-    const onKeyDown = (e: KeyboardEvent) => {
-      if (!isOpenCommandPaletteShortcut(e)) return;
-      // Ctrl+K 在 Chromium 默认聚焦地址栏，不拦下来面板开了焦点却跑了。
-      e.preventDefault();
-      onOpenChange(true);
-    };
-    window.addEventListener('keydown', onKeyDown);
-    return () => window.removeEventListener('keydown', onKeyDown);
-  }, [onOpenChange]);
 
   const close = useCallback(() => onOpenChange(false), [onOpenChange]);
 

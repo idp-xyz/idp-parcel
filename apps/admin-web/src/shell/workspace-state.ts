@@ -283,6 +283,22 @@ export function saveWorkspaceState(storage: WorkspaceStorage, state: WorkspaceSt
   storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify(state));
 }
 
+// —— 状态栏 ——
+
+/**
+ * 状态栏左侧的位置文字：活动标签地址的人话——`<模块名> · <对象标识>`，模块标签只有模块名，工作台显工作台的名字。
+ * 与 pages/my-work/recent-objects.ts 的 recentObjectTitle 同一个间隔号，同一件事两处不写两种字。
+ */
+export function workspaceLocationLabel(active: WorkspaceTab | null, workbenchTitle: string): string {
+  if (active === null) return workbenchTitle;
+  return active.subtitle ? `${active.name} · ${active.subtitle}` : active.name;
+}
+
+/** 状态栏右侧的主题词：说现在是什么（顶栏的切换按钮说切过去会变成什么，两处分工不同，词不重复）。 */
+export function themeWord(theme: 'light' | 'dark'): string {
+  return theme === 'dark' ? '深色主题' : '浅色主题';
+}
+
 // —— 快捷键 ——
 
 export type WorkspaceShortcut = 'close-active-tab' | 'reopen-closed-tab';

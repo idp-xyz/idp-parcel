@@ -23,7 +23,9 @@ import {
   setSidebarWidth,
   tabForHash,
   tabIdFromHash,
+  themeWord,
   togglePinned,
+  workspaceLocationLabel,
   workspaceShortcutOf,
   type WorkspaceState,
   type WorkspaceTab,
@@ -300,6 +302,19 @@ test('load：sidebarWidth 越界钳进区间', () => {
   const storage = new MapStorage();
   storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify({ tabs: [], activeTabId: null, closedTabs: [], sidebarWidth: 1 }));
   equal(loadWorkspaceState(storage, known).sidebarWidth, SIDEBAR_WIDTH_MIN);
+});
+
+// —— 状态栏 ——
+
+test('workspaceLocationLabel：对象标签「模块名 · 对象标识」、模块标签只有模块名、工作台显工作台', () => {
+  equal(workspaceLocationLabel({ id: 'shipment-request-inquiry/SR-1', name: '委托查阅', subtitle: 'SR-1' }, '工作台'), '委托查阅 · SR-1');
+  equal(workspaceLocationLabel({ id: 'exception-cases', name: '异常案件' }, '工作台'), '异常案件');
+  equal(workspaceLocationLabel(null, '工作台'), '工作台');
+});
+
+test('themeWord 说现在是什么', () => {
+  equal(themeWord('light'), '浅色主题');
+  equal(themeWord('dark'), '深色主题');
 });
 
 // —— 快捷键 ——
