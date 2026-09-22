@@ -129,9 +129,9 @@ export function InspectorPanel({ content, onClose }: InspectorPanelProps) {
       ) : (
         <InspectorBody>
           <InspectorIdentity title={content.title} subtitle={content.subtitle} />
-          {/* key 带内容标题：换了对象，节的展开态从默认重来——上一份对象折起来的审计不该替这一份决定。 */}
+          {/* key 只按节：翻行时节的展开态保留——处理队列的姿势是折掉不看的节、一行行往下翻，换一行就把折好的节全弹开等于每行重折一次。 */}
           {resolveInspectorSections(content).map((resolved) => (
-            <InspectorSection key={`${content.title}:${resolved.kind}`} title={resolved.label} defaultOpen={resolved.defaultOpen}>
+            <InspectorSection key={resolved.kind} title={resolved.label} defaultOpen={resolved.defaultOpen}>
               <SectionBody section={resolved.section} />
             </InspectorSection>
           ))}

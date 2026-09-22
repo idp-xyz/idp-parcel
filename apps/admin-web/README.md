@@ -31,7 +31,7 @@
 
 ## 技术栈
 
-Vite + React 19 + TypeScript + Tailwind CSS 3，UI 组件来自 [`idpxyz/idp-ui`](https://github.com/idpxyz/idp-ui) 的 `@idpxyz/*` 包（TypeScript 源码形态发布，消费方自行编译——因此 `tailwind.config.js` 要扫描 `node_modules/@idpxyz/*/src`）。外壳形态参考 loms-web 的传统控制台（品牌头 + 左侧导航 + 单页区）。
+Vite + React 19 + TypeScript + Tailwind CSS 3，UI 组件来自 [`idpxyz/idp-ui`](https://github.com/idpxyz/idp-ui) 的 `@idpxyz/*` 包（TypeScript 源码形态发布，消费方自行编译——因此 `tailwind.config.js` 要扫描 `node_modules/@idpxyz/*/src`）。外壳形态参考 myshop-web 的多标签工作区（品牌头 + 左侧导航 + `EditorGroup` 多标签主区 + 右侧检查器栏 + 底部状态栏；hash 仍是位置权威，标签集是它的镜像——取舍见 `src/Layout.tsx` 文件头）。
 
 `@idpxyz/*` 七个包**不从注册表装**：tarball 随仓放在 `vendor/idpxyz-ui/`（idp-ui `master` 构建，0.1.23 / 0.1.25），`package.json` 的 `pnpm.overrides` 把每个包——包括只作传递依赖出现的 `ui-icons`——钉到对应文件。这样任何一次全新检出都能 `pnpm install --frozen-lockfile`，不需要读包凭据；`.npmrc` 里那行 scope 注册表只标明上游发布在哪，overrides 之下不会被访问。换版本的动作是三件一起：替换 tarball、改 overrides 那几行、不带 `--frozen-lockfile` 重装一次让 lockfile 跟上。
 
