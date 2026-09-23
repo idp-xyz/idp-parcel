@@ -1,7 +1,7 @@
 # 01 壳层升级为多标签工作区：`EditorGroup` + `StatusBar`、工作区状态本地持久化、hash ↔ 标签互为镜像、`Ctrl+W` / `Ctrl+Shift+T`
 
 Category: enhancement
-Status: resolved——2026-09-22 通道 1 在 `main` 上直接做完（workflow.md「前端切片：一人在 main 上直接做」六步；本地 `3da0f23c` / `c9312bf6` 两笔码 + 本笔票面，**未推**——本宿主没有 GitHub 推送凭据，由推送方带走）。完成记录见文末。此前 in-progress——用户经 IDP 队列令「参考 idpxyz/idp-ui `apps/myshop-web`，理解，然后来调整我们的 ui」，未逐条答判断项；三项按 spec 推荐取值落地——1 多标签**要**（用户指向的参照物就是多标签壳）、2 分栏**不做**（`showSplitButtons={false}`）、3 `ActivityBar` **不装**；用户若要 2 / 3 各是一张追加票，不改本票已落的形。此前 draft——等用户答 spec「判断项」1–3
+Status: resolved——2026-09-22 通道 1 在 `main` 上直接做完（workflow.md「前端切片：一人在 main 上直接做」六步；本地 `3da0f23c` / `c9312bf6` 两笔码 + 本笔票面，**已进 main `539b8764`**（2026-09-23 push，`e0d3f89d..539b8764` 纯 ff，码 SHA 不换））。完成记录见文末。此前 in-progress——用户经 IDP 队列令「参考 idpxyz/idp-ui `apps/myshop-web`，理解，然后来调整我们的 ui」，未逐条答判断项；三项按 spec 推荐取值落地——1 多标签**要**（用户指向的参照物就是多标签壳）、2 分栏**不做**（`showSplitButtons={false}`）、3 `ActivityBar` **不装**；用户若要 2 / 3 各是一张追加票，不改本票已落的形。此前 draft——等用户答 spec「判断项」1–3
 Blocked by: 无（admin-web-ux-alignment/02 已进 main `5b032504`）
 地盘：`apps/admin-web/src/Layout.tsx`（主区从单页换成 `EditorGroup`；右栏 / 底栏两个**空位**只留结构不装内容，02 装）、新 `shell/workspace-state.ts`（标签集 / 活动标签 /
 已关闭栈 / 侧栏宽度的纯逻辑 + `localStorage` 持久化 + node:test）、新 `shell/WorkspaceStatusBar.tsx`（包 `StatusBar`）、`shell/preferences.ts`（若持久化键前缀要复用它的约定，只追加）。
@@ -85,3 +85,5 @@ myshop-web（有），真实页面早就有了（委托查阅的 hash 二段详�
 **评审**：共享面（`shell/*`、`Layout.tsx`）按 workflow 第 5 步要一份 Spec 轴。`list_sessions` 通道 2 / 3 online 但 idle 且不在 `check_messages` 上等，无人可派——**推送方自审**（判断项 1–7 即自审所得），不算非作者评审。
 
 ## Comments
+
+- 2026-09-23 · 进 main：`origin/main` = `539b8764`（`e0d3f89d..539b8764` 纯 ff，码 `3da0f23c` / `c9312bf6` 与票面笔 SHA 不换）。此前状态行写的「未推——本宿主没有 GitHub 推送凭据」在这次推送之后失效。
