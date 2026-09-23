@@ -4,7 +4,7 @@
   "approvedBy": "SYN-OPS-TRACKING-LEAD",
   "effectiveFrom": "2026-01-05T00:00:00Z",
   "entries": [
-    { "kind": "DELIVERY_FAILED", "confidence": "CARRIER_CONFIRMED", "outcome": "AUTO_ESTABLISH" },
+    { "kind": "DELIVERY_FAILED", "confidence": "CARRIER_CONFIRMED", "outcome": "AUTO_ESTABLISH", "team": "SYN-TEAM-EXC" },
     { "kind": "DELIVERY_FAILED", "confidence": "HEURISTIC", "outcome": "MANUAL_REVIEW" },
     { "kind": "CUSTOMS_HOLD", "confidence": "CARRIER_CONFIRMED", "outcome": "ATTACH_TO_EXISTING" },
     { "kind": "ETA_GAP", "confidence": "MONITOR_DERIVED", "outcome": "NO_CASE" }
