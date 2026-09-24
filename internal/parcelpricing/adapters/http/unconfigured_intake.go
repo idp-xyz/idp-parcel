@@ -48,7 +48,14 @@ var (
 	_ ReferenceSeriesPreviewIntake         = UnconfiguredIntake{}
 	_ ReferenceCatalogueRegistrationIntake = UnconfiguredIntake{}
 	_ EvaluationReplayIntake               = UnconfiguredIntake{}
+	_ EstimateIntake                       = UnconfiguredIntake{}
 )
+
+// IntakeEstimate 不读请求，判据同回放口：等的是操作者信封接线（ADR-0100，与回放同批）。从请求里取一个租户就是自报身份，
+// 这一口不能有那种「开发用」版本（ADR-0152 决定六）。
+func (UnconfiguredIntake) IntakeEstimate(context.Context, *http.Request) (application.FormEstimateEvaluationsCommand, error) {
+	return application.FormEstimateEvaluationsCommand{}, ErrAccessChannelNotConfigured
+}
 
 // IntakeEvaluationReplay 不读请求，判据同复核口：等的是操作者信封接线（ADR-0100），载荷形状已在
 // DecodeEvaluationReplayPayload。**从请求里铸一个触发者、或替它填一个证据层级**，都是这一口
