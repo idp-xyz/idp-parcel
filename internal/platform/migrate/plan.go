@@ -38,6 +38,9 @@ const (
 	// SchemaCollectionRemittance 归 collection-remittance 的业务表所有。代收本金与
 	// 运营结算是两个口径，两边不共享表，因此也不合用 settlement_accounting 那个 schema。
 	SchemaCollectionRemittance = "collection_remittance"
+	// SchemaAccessIdentity 归共享接入身份能力的登记册所有（ADR-0072 一、ADR-0100）。它不是限界
+	// 上下文，但册的数据归它，不借任何业务上下文的 schema。
+	SchemaAccessIdentity = "access_identity"
 	// SchemaHistory 归 Parcel 的迁移历史所有，既不是框架 schema 也不是业务 schema。
 	SchemaHistory = "parcel_migration"
 )
@@ -127,6 +130,10 @@ func Plan() ([]Step, error) {
 	if err != nil {
 		return nil, err
 	}
+	access, err := businessSteps(migrations.AccessIdentity, SchemaAccessIdentity)
+	if err != nil {
+		return nil, err
+	}
 	steps = append(steps, shipment...)
 	steps = append(steps, routing...)
 	steps = append(steps, nodes...)
@@ -138,6 +145,7 @@ func Plan() ([]Step, error) {
 	steps = append(steps, commercial...)
 	steps = append(steps, pricing...)
 	steps = append(steps, collection...)
+	steps = append(steps, access...)
 	return steps, nil
 }
 
@@ -149,7 +157,7 @@ func Schemas() []string {
 		SchemaParcelShipment, SchemaNetworkRouting, SchemaNodeOperations, SchemaVisibilityException,
 		SchemaSettlementAccounting, SchemaCustomsCompliance, SchemaTransportFulfillment,
 		SchemaPilotGovernance, SchemaPartyCommercial, SchemaParcelPricing,
-		SchemaCollectionRemittance,
+		SchemaCollectionRemittance, SchemaAccessIdentity,
 	}
 }
 
