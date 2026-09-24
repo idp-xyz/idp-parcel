@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode, type SyntheticEvent } from 'react';
+import { ChevronLeft, ChevronRight } from 'lucide-react';
 import {
   PageHeader,
   PageHeaderContent,
@@ -45,6 +46,7 @@ import {
 import { StateSlot, type TemplateViewState, type StateSlotProps } from './state-slot';
 import { useInspector } from './inspector-context';
 import type { InspectorContent } from './inspector';
+import { cursorPageSummary, cursorPagerControls } from './cursor-pagination';
 
 /** 列定义。render 拿整行而非取值路径，让调用方组合多字段（如单号+徽章）不求模板开洞。 */
 export interface ListColumn<Row> {
@@ -63,13 +65,34 @@ export interface ListSearchProps {
   placeholder?: string;
 }
 
+/** 页码形（缺省）：vendor Pagination，可跳页、可选每页条数。 */
 export interface ListPaginationProps {
+  mode?: 'page';
   page: number;
   pageSize: number;
   total: number;
   onPageChange: (page: number) => void;
   onPageSizeChange?: (pageSize: number) => void;
   pageSizeOptions?: number[];
+}
+
+/**
+ * 游标形（ADR-0144 决定八）：服务端只给向后的游标，没有跳页、没有每页条数——页大小归渠道契约，操作者找行靠筛选与检索。
+ * 走过的游标由调用方持有（cursor-pagination.ts 的 CursorTrail），模板只摆翻页条；各格照答复的 `page` 填。
+ */
+export interface ListCursorPaginationProps {
+  mode: 'cursor';
+  /** 当前第几页（1 起），即 cursorPageNumber(trail)。 */
+  page: number;
+  /** 答复回显的页大小。 */
+  size: number;
+  /** 答复的精确总数；null 即读口不给，不显总数与总页数。 */
+  total: number | null;
+  /** 答复的下一页游标；null 即末页，下一页钮不能按。 */
+  next: string | null;
+  onPrevious: () => void;
+  /** 收到的就是本页答复的 next，调用方压进自己的轨迹（nextCursorPage）。 */
+  onNext: (next: string) => void;
 }
 
 export interface ListSortOption {
@@ -186,8 +209,8 @@ export interface ListPageTemplateProps<Row> {
    * 推断任何一态。不传则空表体照旧只显表头。
    */
   emptyRowsNote?: ReactNode;
-  /** 不传则不渲染分页条（如队列页一次拉全量）。 */
-  pagination?: ListPaginationProps;
+  /** 不传则不渲染分页条（如队列页一次拉全量）。按 `mode` 分页码形与游标形；不写 `mode` 即页码形，与今天同。 */
+  pagination?: ListPaginationProps | ListCursorPaginationProps;
   /**
    * 四态由调用方注入，模板不从 rows.length 推断空态——
    * 「闸门未放行」与「暂无数据」在本产品是两个必须区分的事实。
@@ -223,6 +246,32 @@ function DisabledSlot({ label, reason }: { label: string; reason: string }) {
         {label}
       </Button>
     </Tooltip>
+  );
+}
+
+// 游标形的翻页条。不用 vendor Pagination：它由 total 推能不能翻下一页，答不了「next 为 null 即末页」与「total 为 null 不显总数」，
+// 文案也是英文。上一页 / 下一页用 disabled 而不是 DisabledSlot 那种 aria-disabled + 说明：到头了不是「功能没接」，没什么要解释的。
+function CursorPaginationBar({ pagination }: { pagination: ListCursorPaginationProps }) {
+  const { page, size, total, next, onPrevious, onNext } = pagination;
+  const { canPrevious, canNext } = cursorPagerControls(page, next);
+  return (
+    <nav
+      aria-label="翻页"
+      className="flex items-center justify-between gap-4 text-[11px] text-idpxyz-textMuted"
+      data-cursor-pagination
+    >
+      <span className="tabular-nums">{cursorPageSummary(page, size, total)}</span>
+      <div className="flex items-center gap-1">
+        <Button variant="ghost" size="sm" disabled={!canPrevious} onClick={onPrevious}>
+          <ChevronLeft className="h-3 w-3" aria-hidden="true" />
+          上一页
+        </Button>
+        <Button variant="ghost" size="sm" disabled={!canNext} onClick={() => next !== null && onNext(next)}>
+          下一页
+          <ChevronRight className="h-3 w-3" aria-hidden="true" />
+        </Button>
+      </div>
+    </nav>
   );
 }
 
@@ -647,15 +696,19 @@ export function ListPageTemplate<Row>({
           </div>
           {pagination && (
             <div className="border-t border-idpxyz-border px-4 py-1.5 shrink-0">
-              <Pagination
-                variant="table"
-                page={pagination.page}
-                pageSize={pagination.pageSize}
-                total={pagination.total}
-                onPageChange={pagination.onPageChange}
-                onPageSizeChange={pagination.onPageSizeChange}
-                pageSizeOptions={pagination.pageSizeOptions}
-              />
+              {pagination.mode === 'cursor' ? (
+                <CursorPaginationBar pagination={pagination} />
+              ) : (
+                <Pagination
+                  variant="table"
+                  page={pagination.page}
+                  pageSize={pagination.pageSize}
+                  total={pagination.total}
+                  onPageChange={pagination.onPageChange}
+                  onPageSizeChange={pagination.onPageSizeChange}
+                  pageSizeOptions={pagination.pageSizeOptions}
+                />
+              )}
             </div>
           )}
         </>

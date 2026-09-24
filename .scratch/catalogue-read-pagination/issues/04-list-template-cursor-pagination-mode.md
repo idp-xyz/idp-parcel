@@ -1,7 +1,7 @@
 # 04 `ListPageTemplate` 的 `pagination` 槽加游标模式（向后兼容）
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——2026-09-24 通道 1 接（通道 3 派单 `task-257cfc55`），在 `main` 上直接做（workflow.md「前端切片」）。此前 ready-for-agent
 Blocked by: 无
 地盘：`apps/admin-web/src/templates/ListPageTemplate.tsx`、新增的纯逻辑 `.ts` 与其 node:test、`templates/index.ts`（只追加）。
 出处：[ADR-0144](../../../docs/adr/0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 决定八。
