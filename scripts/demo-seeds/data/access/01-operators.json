@@ -1,0 +1,15 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "operators": [
+    {
+      "issuer": "https://syn-issuer-01.example.invalid",
+      "subject": "SYN-OPERATOR-CONFIG-01",
+      "basis": "SYN-OPERATOR-BASIS-01"
+    },
+    {
+      "issuer": "https://syn-issuer-01.example.invalid",
+      "subject": "SYN-OPERATOR-VIEWER-01",
+      "basis": "SYN-OPERATOR-BASIS-02"
+    }
+  ]
+}

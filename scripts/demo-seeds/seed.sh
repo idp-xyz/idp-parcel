@@ -34,6 +34,7 @@ go build -o "$BIN/" \
   ./cmd/parcel-ve-register \
   ./cmd/parcel-collection-register \
   ./cmd/parcel-governance-register \
+  ./cmd/parcel-access-register \
   ./scripts/demo-seeds/migrate
 
 echo "== 1/7 施加迁移计划（${RESET_FLAG:-不重置}） =="
@@ -178,5 +179,12 @@ echo "== 试点治理登记（pilot-governance：权威区间、暂停、恢复�
 # 范围那笔暂停对它自己的范围照旧立着，治理页上仍是「暂停中」。权威区间由上一行登记，本评审不再
 # 授予第二条——同一区间再授一次会被冲突预检拦下。
 "$BIN/parcel-governance-register" stage-review -input "$SEEDS/governance/08-stage-review-shipment-intake.json"
+
+echo "== 操作者册登记（access-identity：合成操作者主体与能力面授予；票 operator-channel/01） =="
+# 两个合成主体绑演示租户：配置员授两格（登记册配置写、主数据与运营查阅读），查阅员只授查阅读。
+# 证据层级只记 S，不登任何真实操作者。发行方是合成值：演示部署接上真 OIDC 发行方之后，要按那个
+# 发行方的标识另登一批——册上的主体不能改指到新发行方；旧的这批留着无害，不会有令牌带着合成发行方来。
+"$BIN/parcel-access-register" operator-register -input "$SEEDS/access/01-operators.json"
+"$BIN/parcel-access-register" operator-grant -input "$SEEDS/access/02-grants.json"
 
 echo "种子灌入完成：租户 SYN-TENANT-01，七上下文全部落库。"

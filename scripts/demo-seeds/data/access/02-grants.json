@@ -1,0 +1,29 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "grants": [
+    {
+      "grantId": "SYN-GRANT-CONFIG-WRITE-01",
+      "issuer": "https://syn-issuer-01.example.invalid",
+      "subject": "SYN-OPERATOR-CONFIG-01",
+      "capabilityFace": "REGISTRY_CONFIGURATION_WRITE",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-01"
+    },
+    {
+      "grantId": "SYN-GRANT-CONFIG-READ-01",
+      "issuer": "https://syn-issuer-01.example.invalid",
+      "subject": "SYN-OPERATOR-CONFIG-01",
+      "capabilityFace": "MASTER_DATA_AND_OPERATIONS_READ",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-02"
+    },
+    {
+      "grantId": "SYN-GRANT-VIEWER-READ-01",
+      "issuer": "https://syn-issuer-01.example.invalid",
+      "subject": "SYN-OPERATOR-VIEWER-01",
+      "capabilityFace": "MASTER_DATA_AND_OPERATIONS_READ",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-03"
+    }
+  ]
+}
