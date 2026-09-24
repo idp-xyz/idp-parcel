@@ -2,6 +2,7 @@ package cataloguepage_test
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
@@ -29,6 +30,29 @@ func TestAnEmptyCatalogueAnswersTheLastPageWithZeroTotal(t *testing.T) {
 func TestAPageWithMoreRowsCarriesTheNextCursor(t *testing.T) {
 	if got := marshal(t, cataloguepage.NewPage(200, "SYN-cursor", 431)); got != `{"size":200,"next":"SYN-cursor","total":431}` {
 		t.Fatalf("得 %s", got)
+	}
+}
+
+// Covers: 读面照页大小多取一行，只拿那一行判断有没有下一页（ADR-0144 决定一、五）；多出来的行不交给
+// 调用方，否则本页会比 page.size 多一行，末行位置也跟着错一格。
+func TestTrimCutsTheExtraRowAndReportsWhetherMoreFollow(t *testing.T) {
+	cases := map[string]struct {
+		rows []string
+		want []string
+		more bool
+	}{
+		"多取的那一行在": {rows: []string{"SYN-1", "SYN-2", "SYN-3"}, want: []string{"SYN-1", "SYN-2"}, more: true},
+		"恰好一页":    {rows: []string{"SYN-1", "SYN-2"}, want: []string{"SYN-1", "SYN-2"}, more: false},
+		"不满一页":    {rows: []string{"SYN-1"}, want: []string{"SYN-1"}, more: false},
+		"空":       {rows: nil, want: nil, more: false},
+	}
+	for name, test := range cases {
+		t.Run(name, func(t *testing.T) {
+			page, more := cataloguepage.Trim(test.rows, 2)
+			if !reflect.DeepEqual(page, test.want) || more != test.more {
+				t.Fatalf("得 %v / %v，应为 %v / %v", page, more, test.want, test.more)
+			}
+		})
 	}
 }
 
