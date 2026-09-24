@@ -156,6 +156,11 @@ var isolatedReadAdmittedPatterns = map[string]bool{
 	// 三条判据逐条满足：消费本上下文自己的存储读面、零持久化、作用域来自运营侧授权结果——上列不判号，判号走
 	// ports.RegistrationNumberTypeLookup；登记与停用两条写行挂的是字面量 UnconfiguredIntake{}。单列在表尾的理由同上。
 	"/commercial-registration-number-types": true,
+	// 法人资料修订历史（票 legal-entity-profile/03）与商业目录查阅共用同一个 Intake 变量，启用态必然随它一起放行。
+	// 三条判据逐条满足：消费本上下文自己的存储读面（0036 的资料修订表）、零持久化、作用域来自运营侧授权结果——法人标识
+	// 在路径上、租户仍只从注入作用域取；只列修订事实，不做按时点解析。登记写行挂的是字面量 UnconfiguredIntake{}。
+	// 经真路由期待 500 而不是 400，同样钉住 chi 把 {legalEntityId} 填进了 PathValue。单列在表尾的理由同上。
+	"/commercial-group-legal-entities/{legalEntityId}/profile-revisions": true,
 }
 
 // Covers: ADR-0078 Decision 一、二 — 启用态只放运营查阅行。unwired* 读口交回稳定

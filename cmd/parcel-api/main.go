@@ -347,6 +347,12 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 法人资料修订历史读口在资料登记册适配器上，不在商业目录适配器上（LegalEntityProfiles 同时实现写口与两个读口）。
+	// 写编排另构造自己的一只：适配器只包着 db、不带状态，两只读写同一张表。
+	legalEntityProfiles, err := pcpostgres.NewLegalEntityProfiles(db)
+	if err != nil {
+		return err
+	}
 	visibilityCatalogues, err := vepostgres.NewOperationsCatalogue(db)
 	if err != nil {
 		return err
@@ -493,12 +499,14 @@ func run(logger *slog.Logger) error {
 			commercialCatalog,
 			commercialCatalog,
 			commercialCatalog,
+			legalEntityProfiles,
 			commercialRegistration.publication,
 			commercialRegistration.publicationPreview,
 			commercialRegistration.publicationDrafts,
 			commercialRegistration.partyIdentity,
 			commercialRegistration.productChannel,
 			commercialRegistration.registrationNumberType,
+			commercialRegistration.legalEntityProfile,
 			commercialRegistration.channelAccountUse,
 			visibilityCatalogues,
 			veRegistration.milestoneMapping,

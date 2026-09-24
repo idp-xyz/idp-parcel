@@ -1048,6 +1048,27 @@ func (unwiredRegistrationNumberTypeRegistration) Deactivate(
 	return commercialapp.RegistrationNumberTypeResult{}, errOrchestrationNotWired
 }
 
+type unwiredLegalEntityProfileRegistration struct{}
+
+func (unwiredLegalEntityProfileRegistration) Register(
+	context.Context,
+	commercialapp.RegisterLegalEntityProfileCommand,
+) (commercialapp.LegalEntityProfileResult, error) {
+	return commercialapp.LegalEntityProfileResult{}, errOrchestrationNotWired
+}
+
+// unwiredLegalEntityProfileRevisions 是法人资料修订历史读口的占位。不挂在 unwiredCommercialCatalogue 上：生产装配交入
+// 的是资料登记册适配器，不是商业目录适配器，占位跟着生产的分法走。
+type unwiredLegalEntityProfileRevisions struct{}
+
+func (unwiredLegalEntityProfileRevisions) ListLegalEntityProfileRevisions(
+	context.Context,
+	commercialdomain.TenantID,
+	commercialdomain.LegalEntityReference,
+) ([]commercialports.LegalEntityProfileRevisionRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
 type unwiredChannelAccountUseRegistration struct{}
 
 func (unwiredChannelAccountUseRegistration) Register(

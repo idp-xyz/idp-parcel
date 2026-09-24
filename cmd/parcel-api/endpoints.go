@@ -126,12 +126,14 @@ func assembleBusinessEndpoints(
 	customerAccounts commercialhttp.CustomerAccountCatalogueReader,
 	productChannelMappings commercialhttp.ProductChannelCatalogueReader,
 	registrationNumberTypes commercialhttp.RegistrationNumberTypeCatalogueReader,
+	legalEntityProfiles commercialhttp.LegalEntityProfileRevisionHistoryReader,
 	commercialPublication commercialhttp.CommercialAuthorityPublisher,
 	commercialPublicationPreview commercialhttp.CommercialPublicationPreviewer,
 	commercialPublicationDrafts commercialhttp.PublicationDraftOperator,
 	partyIdentityRegistration commercialhttp.PartyIdentityRegistrar,
 	productChannelRegistration commercialhttp.ProductChannelRegistrar,
 	registrationNumberTypeRegistration commercialhttp.RegistrationNumberTypeRegistrar,
+	legalEntityProfileRegistration commercialhttp.LegalEntityProfileRegistrar,
 	channelAccountUseRegistration commercialhttp.ChannelAccountUseRegistrar,
 	visibilityCatalogues visibilityhttp.VisibilityCatalogueReader,
 	milestoneMappingRegistration visibilityhttp.MilestoneMappingRegistrar,
@@ -459,6 +461,10 @@ func assembleBusinessEndpoints(
 		// 整条修订链。同读口参数、同 Intake 变量（读同一张表、同一租户作用域、供同一页——裁决在 ports.LegalEntityRevisionHistoryRead）；
 		// 隔离读准入启用时随 commercialCatalogue 一格一起换值，不另加开关。{legalEntityId} 由 chi 填进 PathValue，端点按同名取。
 		{Pattern: "/commercial-group-legal-entities/{legalEntityId}/revisions", Handler: commercialhttp.NewQueryLegalEntityRevisionsEndpoint(commercialCatalogueIntake, partyIdentities)},
+		// 法人资料修订历史（ADR-0145 决定三，票 legal-entity-profile/03）：法人资料页的供数面，按路径里的法人展开资料修订链。
+		// 同 Intake 变量，隔离读准入启用时随 commercialCatalogue 一格一起换值；读口参数另立——资料修订在自己的登记册上，
+		// 生产装配交入的是资料登记册适配器而不是商业目录适配器。本口只交修订事实，此刻有效的是哪一笔由按时点解析回答。
+		{Pattern: "/commercial-group-legal-entities/{legalEntityId}/profile-revisions", Handler: commercialhttp.NewQueryLegalEntityProfileRevisionsEndpoint(commercialCatalogueIntake, legalEntityProfiles)},
 		{Pattern: "/commercial-party-relationships", Handler: commercialhttp.NewQueryPartyRelationshipsEndpoint(commercialCatalogueIntake, partyIdentities)},
 		// 货主客户账户册（票 admin-write-faces/04）——身份三级里的第三级，独立入口且独立读口
 		// 参数：它按 CONTEXT 落在客户与合同页而不是上面两册所在的页（一页一入口），读口跟着
@@ -514,6 +520,9 @@ func assembleBusinessEndpoints(
 		// 同参与方身份族取 `-deactivations`。
 		{Pattern: "/commercial-registration-number-type-registrations", Handler: commercialhttp.NewRegisterRegistrationNumberTypeEndpoint(commercialhttp.UnconfiguredIntake{}, registrationNumberTypeRegistration)},
 		{Pattern: "/commercial-registration-number-type-deactivations", Handler: commercialhttp.NewDeactivateRegistrationNumberTypeEndpoint(commercialhttp.UnconfiguredIntake{}, registrationNumberTypeRegistration)},
+		// 法人资料登记（ADR-0145 决定三，票 legal-entity-profile/03）只有登记修订一口：资料没有停用，新修订是往修订链上插
+		// 一笔。挂字面量 UnconfiguredIntake{}，判据同注册号类型两口。
+		{Pattern: "/commercial-legal-entity-profile-registrations", Handler: commercialhttp.NewRegisterLegalEntityProfileEndpoint(commercialhttp.UnconfiguredIntake{}, legalEntityProfileRegistration)},
 		// 渠道账号使用授权两口（ADR-0093）。撤销不叫 `-deactivations` 也不走 DELETE：它是往
 		// 修订链上追加一条终止事实，册上那一行不会消失，而那两个名字都会让登记方以为会。
 		// 分两口而不带动作字段的理由在端点族注释里：合一口之后载荷里会同时躺着动作与授权
