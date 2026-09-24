@@ -1,7 +1,7 @@
 # 集团与法人页：从「诚实的骨架」到运营配置员能用的册页
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-09-24 子票全部 resolved（04 / 05 由通道 3 按用户授权自决收口：04 → ADR-0144 与 `.scratch/catalogue-read-pagination/`，05 → ADR-0145、party-commercial CONTEXT 修订与 `.scratch/legal-entity-profile/`）
 出处：用户 2026-09-16 13:1x 经 IDP 队列通道 6 问「这个页面功能完整、UI/UX 专业吗，满足企业级小包业务的优秀产品吗」，
 通道 6 给出评估后用户令「你是系统和国际小包业务超级专家，你自决」。本规格是那次评估的落笔，票按评估条目拆。
 
@@ -62,7 +62,7 @@ parcel-api 的实探（GET 两读口 200、五个 POST 空载荷 400），浏览
 | [02](./issues/02-legal-entity-field-form.md) | 登记法人改逐字段表单（ADR-0101 决定八自裁），JSON 快照签降为受控批量口镜像 | resolved（同上） |
 | [03](./issues/03-legal-entity-revision-history-read-face.md) | 责任法人修订历史读口 + 详情抽屉「修订历史」区 | resolved（通道 5 → 1 封存 → 1 重放，`ef7086f0` 进 main，见票面完成记录） |
 | [04](./issues/04-catalogue-read-pagination-sort-filter-contract.md) | 目录读口分页 / 排序 / 筛选下推的契约决策 | resolved（2026-09-24 用户授权通道 3 自决；产出 ADR-0144 与 `.scratch/catalogue-read-pagination/` 首批实施票） |
-| [05](./issues/05-legal-entity-business-attributes.md) | 责任法人业务属性建模（税号、注册国家、开票主体、结算币种、联系人） | ready-for-agent（2026-09-24 用户授权通道 3 自决，裁决见票面；下一步修订 CONTEXT 并起草 ADR） |
+| [05](./issues/05-legal-entity-business-attributes.md) | 责任法人业务属性建模（税号、注册国家、开票主体、结算币种、联系人） | resolved（2026-09-24 用户授权通道 3 自决；产出 CONTEXT / GLOSSARY 修订、ADR-0145 与 `.scratch/legal-entity-profile/` 实施票） |
 | [06](./issues/06-isolated-write-admission-for-commercial-identity-family.md) | ADR-0091 逐口放行：`/commercial-*` 身份族在隔离形态下放行 | resolved（通道 4 → 4 新会话收尾，rebase 后以原 SHA ff 进 main，清点 `f6569f51`；见票面完成记录） |
 | [07](./issues/07-isolated-write-intake-decode-strict-and-comment-counts.md) | A 类尾巴：隔离身份 Intake 外壳解码改调 `decodeStrict`（尾随内容拒）+ 注释去计数（实做四处；06 评审 N1 / N3，可选 N2 未做） | resolved（通道 4，三笔原 SHA ff 进 main，远端 main = `19047d51`，评审 ← 通道 2 无阻断；见票面完成记录） |
 | [08](./issues/08-registration-hints-drop-tenant-id-and-malformed-note.md) | 登记签提示句去「外加整批的 tenantId」+ `problemNote` 的 `MALFORMED_REQUEST` 措辞改成读口 / 写口都成立（纯 .ts 文案） | resolved（通道 5 → 5 新会话收尾；与 09 同批重放进 main，远端 main = `1f569998`，评审 ← 通道 6 无阻断；见票面完成记录） |

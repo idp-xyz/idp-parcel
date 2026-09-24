@@ -1,7 +1,7 @@
 # 05 责任法人业务属性建模：税号、注册国家、开票主体、结算币种、联系人
 
 Category: enhancement
-Status: ready-for-agent——2026-09-24 用户授权通道 3 自决（见「裁决」节）；下一步修订 party-commercial `CONTEXT.md` 并起草 ADR，再拆票。此前 needs-info（归 owner：改的是 party-commercial 的领域语言与不变量，按 AGENTS「改文档」先改 CONTEXT.md 再改 UC）
+Status: resolved——2026-09-24 通道 3：产出齐——party-commercial `CONTEXT.md` 与 GLOSSARY 已修订、[ADR-0145](../../../docs/adr/0145-legal-entity-attributes-split-into-identity-layer-and-dated-profile.md)（按用户授权接受）、实施票 [`.scratch/legal-entity-profile/`](../../legal-entity-profile/spec.md)。ADR 对下面「裁决」有两处细化，以 ADR 为准（见 Comments）。用户授权通道 3 自决。此前 needs-info（归 owner：改的是 party-commercial 的领域语言与不变量，按 AGENTS「改文档」先改 CONTEXT.md 再改 UC）
 Blocked by: 无
 Type: grilling
 
@@ -56,3 +56,10 @@ party-commercial `CONTEXT.md`「责任法人」一节的修订 + GLOSSARY 若增
 之后拆迁移、领域、读写口、页面票。
 
 ## Comments
+
+- 2026-09-24 · 通道 3：读过 party-commercial `CONTEXT.md` 之后，[ADR-0145](../../../docs/adr/0145-legal-entity-attributes-split-into-identity-layer-and-dated-profile.md) 对上面裁决细化两处，以 ADR 为准：
+  一、第 1 条「录错同样走停用 + 重登」收回，录错走 CONTEXT 既有的「内容更正形成新的登记修订」并带更正依据——停用重登会让已挂在错号法人上的合同与
+  快照悬空，而更正机制本来就在；二、第 1 条资料层里的「结算币种」收回——币种由结算政策按责任法人、相对方、合同与费用范围解析（CONTEXT 既有），
+  在法人上再挂一格就是第二个权威。另补：注册号类型目录的每个类型标明属身份层还是资料层；开票资料首版只含开票抬头；单据开立时固定资料的修订引用，
+  而不是事后按时点重读。CONTEXT（Language、Rules、Lifecycles、Boundaries）与 GLOSSARY 已随 ADR 修订；实施票拆在
+  [`.scratch/legal-entity-profile/`](../../legal-entity-profile/spec.md)。本票 → resolved。
