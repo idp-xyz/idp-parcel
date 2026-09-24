@@ -54,13 +54,13 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：11 个模块共 178 份 SQL
+## 迁移：11 个模块共 179 份 SQL
 
 | 模块 | 份数 |
 |---|---|
 | collection_remittance | 1 |
 | customs_compliance | 23 |
-| network_routing | 9 |
+| network_routing | 10 |
 | node_operations | 4 |
 | parcel_pricing | 10 |
 | parcel_shipment | 22 |
