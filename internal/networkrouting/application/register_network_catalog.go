@@ -78,6 +78,11 @@ const (
 	CatalogTargetKindUnknown
 	CatalogAdjustmentKindUnknown
 	CatalogSourceMissing
+	// 覆盖与节点角色三格：覆盖不成形（国家码、前缀）要改覆盖；节点身份空白要补节点；没登覆盖却登了节点角色，
+	// 这版区域解析不了任何地址，节点角色无从生效——先登覆盖。
+	CatalogCoverageMalformed
+	CatalogNodeRoleBlank
+	CatalogNodeRolesWithoutCoverage
 )
 
 func (reason CatalogRefusalReason) String() string {
@@ -110,6 +115,12 @@ func (reason CatalogRefusalReason) String() string {
 		return "ADJUSTMENT_KIND_UNKNOWN"
 	case CatalogSourceMissing:
 		return "SOURCE_MISSING"
+	case CatalogCoverageMalformed:
+		return "COVERAGE_MALFORMED"
+	case CatalogNodeRoleBlank:
+		return "NODE_ROLE_BLANK"
+	case CatalogNodeRolesWithoutCoverage:
+		return "NODE_ROLES_WITHOUT_COVERAGE"
 	default:
 		return ""
 	}
@@ -274,6 +285,10 @@ func (service *NetworkCatalogRegistration) RegisterServiceAreaVersion(
 		row.EffectiveFrom, row.EffectiveTo, row.HasEffectiveTo); reason != CatalogRefusalReasonNone {
 		return catalogRefused(reason), nil
 	}
+	row, reason := normalizeServiceAreaCoverage(row)
+	if reason != CatalogRefusalReasonNone {
+		return catalogRefused(reason), nil
+	}
 
 	if err := service.registry.RegisterServiceAreaVersion(ctx, command.TenantID, row); err != nil {
 		return RegisterCatalogResult{}, fmt.Errorf("register service area version: %w", err)
@@ -389,4 +404,29 @@ func checkVersionRow(
 
 func catalogPresent(value string) bool {
 	return strings.TrimSpace(value) != ""
+}
+
+// normalizeServiceAreaCoverage 是服务区域覆盖与节点角色的受理门。覆盖经领域构造门收（形态与规整归
+// domain.ServiceAreaCoverage，本用例不另写一套），前缀按领域规整后的次序落库；节点身份逐个不得空白。没登覆盖
+// 却登了节点角色的版本拒收——它解析不了任何地址，节点角色无从生效。
+func normalizeServiceAreaCoverage(row ports.ServiceAreaDefinitionVersion) (ports.ServiceAreaDefinitionVersion, CatalogRefusalReason) {
+	if !row.HasCoverage {
+		if len(row.PostalPrefixes) > 0 || len(row.OriginNodes) > 0 || len(row.DestinationNodes) > 0 {
+			return row, CatalogNodeRolesWithoutCoverage
+		}
+		row.CoverageCountry = ""
+		return row, CatalogRefusalReasonNone
+	}
+	coverage, err := domain.NewServiceAreaCoverage(row.CoverageCountry, row.PostalPrefixes)
+	if err != nil {
+		return row, CatalogCoverageMalformed
+	}
+	for _, node := range append(append([]string(nil), row.OriginNodes...), row.DestinationNodes...) {
+		if !catalogPresent(node) {
+			return row, CatalogNodeRoleBlank
+		}
+	}
+	row.CoverageCountry = coverage.Country()
+	row.PostalPrefixes = coverage.PostalPrefixes()
+	return row, CatalogRefusalReasonNone
 }

@@ -144,6 +144,14 @@ type ServiceAreaDefinitionVersion struct {
 	EffectiveFrom  time.Time
 	EffectiveTo    time.Time
 	HasEffectiveTo bool
+	// 覆盖与节点角色（ADR-0148 决定二、五）。HasCoverage 为假即这版没登覆盖——本格落地之前的存量版本，或只登了
+	// 身份与有效期的版本；折叠时它不解析任何地址。PostalPrefixes 为空即整国家 / 地区覆盖；两组节点是这版区域
+	// 用来收寄（始发）与交付（尾程注入）的节点身份。
+	HasCoverage      bool
+	CoverageCountry  string
+	PostalPrefixes   []string
+	OriginNodes      []string
+	DestinationNodes []string
 }
 
 // ServiceCalendarDefinitionVersion 是某适用对象的服务日历适用版本行。

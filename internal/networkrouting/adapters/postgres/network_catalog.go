@@ -110,7 +110,9 @@ SELECT
         AND (effective_to IS NULL OR effective_to > $2)),
     (SELECT coalesce(jsonb_agg(jsonb_build_object(
             'code', area_code, 'version', version,
-            'effective_from', effective_from, 'effective_to', effective_to
+            'effective_from', effective_from, 'effective_to', effective_to,
+            'coverage_country', coverage_country, 'postal_prefixes', coverage_postal_prefixes,
+            'origin_nodes', origin_node_codes, 'destination_nodes', destination_node_codes
         ) ORDER BY area_code, version), '[]'::jsonb)
        FROM network_routing.service_area_version
       WHERE tenant_id = $1 AND effective_from <= $2
@@ -335,10 +337,43 @@ type lineVersionRow struct {
 }
 
 type areaVersionRow struct {
-	Code          string     `json:"code"`
-	Version       int32      `json:"version"`
-	EffectiveFrom time.Time  `json:"effective_from"`
-	EffectiveTo   *time.Time `json:"effective_to"`
+	Code             string     `json:"code"`
+	Version          int32      `json:"version"`
+	EffectiveFrom    time.Time  `json:"effective_from"`
+	EffectiveTo      *time.Time `json:"effective_to"`
+	CoverageCountry  *string    `json:"coverage_country"`
+	PostalPrefixes   []string   `json:"postal_prefixes"`
+	OriginNodes      []string   `json:"origin_nodes"`
+	DestinationNodes []string   `json:"destination_nodes"`
+}
+
+// serviceAreaCoverageColumns 把覆盖与节点角色折成四列：没登覆盖四列全落 NULL，空数组也落 NULL——库的 CHECK
+// 只收非空数组，「没有」只有 NULL 一种写法。
+func serviceAreaCoverageColumns(row ports.ServiceAreaDefinitionVersion) (*string, []byte, []byte, []byte, error) {
+	if !row.HasCoverage {
+		return nil, nil, nil, nil, nil
+	}
+	country := row.CoverageCountry
+	prefixes, err := optionalJSONArray(row.PostalPrefixes)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	origin, err := optionalJSONArray(row.OriginNodes)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	destination, err := optionalJSONArray(row.DestinationNodes)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	return &country, prefixes, origin, destination, nil
+}
+
+func optionalJSONArray(values []string) ([]byte, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	return json.Marshal(values)
 }
 
 type calendarVersionRow struct {
@@ -524,12 +559,18 @@ func (catalog *NetworkCatalog) RegisterServiceAreaVersion(
 			return fmt.Errorf("register service area version: 接续闭合前版本：%w", err)
 		}
 	}
+	coverageCountry, prefixes, originNodes, destinationNodes, err := serviceAreaCoverageColumns(row)
+	if err != nil {
+		return fmt.Errorf("register service area version: %w", err)
+	}
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO network_routing.service_area_version
-			(tenant_id, area_code, version, effective_from, effective_to)
-		 VALUES ($1, $2, $3, $4, $5)`,
+			(tenant_id, area_code, version, effective_from, effective_to,
+			 coverage_country, coverage_postal_prefixes, origin_node_codes, destination_node_codes)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 		tenant.String(), row.Code, row.Version, row.EffectiveFrom.UTC(),
 		optionalTime(row.EffectiveTo, row.HasEffectiveTo),
+		coverageCountry, prefixes, originNodes, destinationNodes,
 	); err != nil {
 		return fmt.Errorf("register service area version: %w", err)
 	}
