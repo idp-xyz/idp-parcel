@@ -98,6 +98,7 @@ var isolatedWriteAdmittedCommandLines = []string{
 	"/transport-fulfillment-dispatch-task-registrations",
 	"/transport-fulfillment-delivery-dispatch-triggers",
 	"/transport-fulfillment/deliveries",
+	"/transport-fulfillment/delivery-attempts",
 	"/transport-fulfillment-segment-closures",
 	"/transport-fulfillment-effective-time-judgments",
 	"/customs/external-results",

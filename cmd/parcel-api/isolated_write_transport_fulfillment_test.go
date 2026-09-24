@@ -127,9 +127,9 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 		status:  http.StatusOK,
 		outcome: "NOT_A_DELIVERY_TRIGGER",
 	},
-	// 交付生效首登：各格齐。交付只能落在已登记的派送尝试结果上（tfpostgres.DeliveryAttempts 只读，「一个入口同时造尝试和
-	// 造交付，就没有东西拦得住先声称到过场再声称交付成功」），而派送尝试登记册今天没有生产写入方——编排如实答`未受理`，
-	// 200。停点从「渠道未配置」挪到「派送尝试无写入方」，这一格照实写回 psb/05。
+	// 交付生效首登：各格齐，但指名的派送尝试不在册。交付只能落在已登记的派送尝试结果上（「一个入口同时造尝试和造交付，
+	// 就没有东西拦得住先声称到过场再声称交付成功」），编排如实答`未受理`，200。尝试登记之后交付走得过去，见
+	// TestARecordedDeliveryAttemptLetsTheEffectiveDeliveryThrough。
 	"/transport-fulfillment/deliveries": {
 		endpoint: func(t *testing.T, db *bentopg.DB, intake *tfhttp.IsolatedCommandIntake) http.Handler {
 			delivery, err := buildDeliveryOrchestration(db)
@@ -142,6 +142,23 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 			`"recipient":"SYN-RECIPIENT/consignee-10","proof":"SYN-POD/signature-10"}`,
 		status:  http.StatusOK,
 		outcome: "SOURCE_NOT_ACCEPTED",
+	},
+	// 派送尝试登记（票 product-strategy-boundary/19）：指名的派送任务不在册——编排如实答 DELIVERY_TASK_NOT_OPEN，形成了的
+	// 业务答案，200。表里各行互不依赖、顺序不定，所以这一行不借上面建任务那一行；任务在册时的首登见下面那条链。
+	"/transport-fulfillment/delivery-attempts": {
+		endpoint: func(t *testing.T, db *bentopg.DB, intake *tfhttp.IsolatedCommandIntake) http.Handler {
+			attempts, err := buildDeliveryAttemptOrchestration(db)
+			if err != nil {
+				t.Fatalf("装配派送尝试编排：%v", err)
+			}
+			return tfhttp.NewRecordDeliveryAttemptEndpoint(intake, attempts)
+		},
+		body: `{"task":"SYN-DISPATCH-08-13","attempt":"SYN-DELIVERY-ATTEMPT-08-13","executedBy":"SYN-COURIER-08",` +
+			`"place":"SYN-PLACE/consignee-13","plannedFrom":"2026-09-25T09:00:00+08:00","plannedTo":"2026-09-25T12:00:00+08:00",` +
+			`"arrivedAt":"2026-09-25T10:00:00+08:00","evidence":"SYN-EVIDENCE/arrival-13",` +
+			`"objects":[{"object":"SYN-PARCEL-08-13","outcome":"DELIVERED","occurredAt":"2026-09-25T10:05:00+08:00"}]}`,
+		status:  http.StatusOK,
+		outcome: "DELIVERY_TASK_NOT_OPEN",
 	},
 	// 关段声明：段不在册——编排如实答 SEGMENT_NOT_FOUND，形成了的业务答案，200。
 	"/transport-fulfillment-segment-closures": {
@@ -204,4 +221,64 @@ func TestIsolatedTransportFulfillmentLinesAnswerBusinessOutcomesAgainstARealData
 			assertNoOutcome(t, selfReported, pattern)
 		})
 	}
+}
+
+// Covers: 票 product-strategy-boundary/19 完成判据「隔离形态下登记一次妥投结果后，交付不再答 SOURCE_NOT_ACCEPTED」——
+// psb/05 格 12 的停点。建任务、登记派送尝试、交付生效三口都走生产装配与进程自己的隔离 Intake：尝试登记之前交付答`未受理`，
+// 登记一次妥投之后同一份交付落成 DELIVERY_REGISTERED。测试输入是隔离合成，只记 `S`。
+func TestARecordedDeliveryAttemptLetsTheEffectiveDeliveryThrough(t *testing.T) {
+	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	intake := isolatedWriteAdmissionForTest(t).transportFulfillmentIntake()
+	segmentOps, err := buildSegmentOperations(db)
+	if err != nil {
+		t.Fatalf("装配段运营编排：%v", err)
+	}
+	attempts, err := buildDeliveryAttemptOrchestration(db)
+	if err != nil {
+		t.Fatalf("装配派送尝试编排：%v", err)
+	}
+	delivery, err := buildDeliveryOrchestration(db)
+	if err != nil {
+		t.Fatalf("装配交付编排：%v", err)
+	}
+	post := func(endpoint http.Handler, pattern, body string) *httptest.ResponseRecorder {
+		recorder := httptest.NewRecorder()
+		endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, pattern, strings.NewReader(body)))
+		return recorder
+	}
+	step := func(name string, answered *httptest.ResponseRecorder, status int, outcome string) {
+		t.Helper()
+		if answered.Code != status || registrationOutcome(t, answered) != outcome {
+			t.Fatalf("%s：答 %d %s，want %d %s", name, answered.Code, answered.Body.String(), status, outcome)
+		}
+	}
+	deliveryEndpoint := tfhttp.NewRegisterEffectiveDeliveryEndpoint(intake, delivery)
+	const deliveryBody = `{"attempt":"SYN-DELIVERY-ATTEMPT-19-01","object":"SYN-PARCEL-19-01","method":"HANDED_TO_RECIPIENT",` +
+		`"recipient":"SYN-RECIPIENT/consignee-19","proof":"SYN-POD/signature-19"}`
+
+	step("尝试登记之前的交付",
+		post(deliveryEndpoint, "/transport-fulfillment/deliveries", deliveryBody),
+		http.StatusOK, "SOURCE_NOT_ACCEPTED")
+
+	step("建派送任务",
+		post(tfhttp.NewOpenDispatchTaskEndpoint(intake, segmentOps.opener), "/transport-fulfillment-dispatch-task-registrations",
+			`{"task":"SYN-DISPATCH-19-01","kind":"DELIVERY","objects":["SYN-PARCEL-19-01"],"place":"SYN-PLACE/consignee-19",`+
+				`"windowFrom":"2026-09-25T09:00:00+08:00","windowTo":"2026-09-25T12:00:00+08:00",`+
+				`"conditions":"SYN-CONDITION/signature-required","openedAt":"2026-09-24T20:00:00+08:00"}`),
+		http.StatusCreated, "DISPATCH_TASK_OPENED")
+
+	step("登记一次妥投",
+		post(tfhttp.NewRecordDeliveryAttemptEndpoint(intake, attempts), "/transport-fulfillment/delivery-attempts",
+			`{"task":"SYN-DISPATCH-19-01","attempt":"SYN-DELIVERY-ATTEMPT-19-01","executedBy":"SYN-COURIER-19",`+
+				`"place":"SYN-PLACE/consignee-19","plannedFrom":"2026-09-25T09:00:00+08:00","plannedTo":"2026-09-25T12:00:00+08:00",`+
+				`"arrivedAt":"2026-09-25T10:00:00+08:00","evidence":"SYN-EVIDENCE/arrival-19",`+
+				`"objects":[{"object":"SYN-PARCEL-19-01","outcome":"DELIVERED","occurredAt":"2026-09-25T10:05:00+08:00"}]}`),
+		http.StatusCreated, "ATTEMPT_RECORDED")
+
+	step("尝试登记之后的交付",
+		post(deliveryEndpoint, "/transport-fulfillment/deliveries", deliveryBody),
+		http.StatusCreated, "DELIVERY_REGISTERED")
 }

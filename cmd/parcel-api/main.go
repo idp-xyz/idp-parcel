@@ -172,6 +172,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	deliveryAttempt, err := buildDeliveryAttemptOrchestration(db)
+	if err != nil {
+		return err
+	}
 	controlFacts, err := buildControlFactOrchestrations(db)
 	if err != nil {
 		return err
@@ -454,6 +458,7 @@ func run(logger *slog.Logger) error {
 			controlFacts.pickupRegistration,
 			pickupCorrection,
 			controlFacts.pickupAttempt,
+			deliveryAttempt,
 			movementFact,
 			segmentOps.closer,
 			segmentOps.opener,

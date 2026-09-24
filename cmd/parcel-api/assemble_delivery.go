@@ -107,6 +107,54 @@ func buildDeliveryOrchestration(db *bentopg.DB) (tfhttp.DeliveryHandler, error) 
 	return transactionalDelivery{transactor: db.Transactor(), inner: handler}, nil
 }
 
+// transactionalDeliveryAttempt 把派送尝试登记包进一笔事务：尝试父行与逐对象结果子行要一起成立，写口按框架合同
+// 无事务即拒，事务边界归装配点（同 transactionalDelivery）。编排返回错误时整笔回滚。
+type transactionalDeliveryAttempt struct {
+	transactor bentoapp.Transactor
+	inner      *tfapp.RecordDeliveryAttemptHandler
+}
+
+var _ tfhttp.DeliveryAttemptHandler = transactionalDeliveryAttempt{}
+
+func (attempts transactionalDeliveryAttempt) Handle(
+	ctx context.Context,
+	command tfapp.RecordDeliveryAttemptCommand,
+) (tfapp.RecordDeliveryAttemptResult, error) {
+	var result tfapp.RecordDeliveryAttemptResult
+	err := attempts.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		handled, handleErr := attempts.inner.Handle(txCtx, command)
+		if handleErr != nil {
+			return handleErr
+		}
+		result = handled
+		return nil
+	})
+	if err != nil {
+		return tfapp.RecordDeliveryAttemptResult{}, err
+	}
+	return result, nil
+}
+
+// buildDeliveryAttemptOrchestration 装配 `/transport-fulfillment/delivery-attempts` 背后的真编排（票
+// product-strategy-boundary/19）。三条缝全接真：派送尝试登记册（与交付生效读的是同一张表）、揽派任务登记册的只读口、
+// 时钟。没有「显式未配置」缝，也不交发布意图：登记派送尝试只保全到场事实，由它形成运输收费发生项是另一步。
+func buildDeliveryAttemptOrchestration(db *bentopg.DB) (tfhttp.DeliveryAttemptHandler, error) {
+	attempts, err := tfpostgres.NewDeliveryAttempts(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: delivery attempts: %w", err)
+	}
+	tasks, err := tfpostgres.NewDispatchTasks(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: dispatch tasks: %w", err)
+	}
+	handler := tfapp.NewRecordDeliveryAttemptHandler(tfapp.RecordDeliveryAttemptDeps{
+		Attempts: attempts,
+		Tasks:    tasks,
+		Clock:    systemClock{},
+	})
+	return transactionalDeliveryAttempt{transactor: db.Transactor(), inner: handler}, nil
+}
+
 // buildParticipationEnder 装配结束参与那条编排，供交付与交接两条来源编排在各自事务里同步调用（票
 // tf-segment-lifecycle-closure/06 裁决 (i)）。它不包事务：调用它的编排已经在事务里，同一 ctx 带着同一笔。
 // 缝全接真——段登记册（按对象找段的读口也在这只上）、实际承运商判断登记册（「进下一段」立新段时

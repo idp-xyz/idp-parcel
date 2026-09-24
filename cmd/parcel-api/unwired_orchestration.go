@@ -182,6 +182,16 @@ func (unwiredPickupAttempt) Handle(
 	return tfapp.PerformOffsitePickupResult{}, errOrchestrationNotWired
 }
 
+// unwiredDeliveryAttempt 是派送尝试登记口的编排占位（票 product-strategy-boundary/19）。
+type unwiredDeliveryAttempt struct{}
+
+func (unwiredDeliveryAttempt) Handle(
+	context.Context,
+	tfapp.RecordDeliveryAttemptCommand,
+) (tfapp.RecordDeliveryAttemptResult, error) {
+	return tfapp.RecordDeliveryAttemptResult{}, errOrchestrationNotWired
+}
+
 // unwiredMovementFact 是移动事实口的编排占位（票 tf-segment-lifecycle-closure/05）。
 type unwiredMovementFact struct{}
 

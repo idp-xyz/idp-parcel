@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -94,6 +95,41 @@ func TestSavingTheSameAttemptAgainAnswersAlreadyRecordedAndKeepsTheFirst(t *test
 	}
 	if len(found.Results) != 1 || found.Results[0].Outcome() != domain.NoOneToReceive {
 		t.Fatalf("results = %+v, want the first report untouched", found.Results)
+	}
+}
+
+// TestDeliveryAttemptWritesRefuseToRunOutsideATransaction 证写入不会在缺少事务时改用连接池：父行与子行要一起成立。
+func TestDeliveryAttemptWritesRefuseToRunOutsideATransaction(t *testing.T) {
+	store, _ := newDeliveryAttemptStore(t)
+
+	record := storedDeliveryAttemptRecord(t, "tenant-1", "attempt-1", map[string]string{"parcel-1": ""})
+	if _, err := store.Save(t.Context(), record); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记应返回 ErrTransactionRequired，实得：%v", err)
+	}
+}
+
+// TestADeliveryAttemptRollbackLeavesNothingBehind 证尝试与它的对象结果随所在事务同生共死：回滚之后父行子行都不在。
+func TestADeliveryAttemptRollbackLeavesNothingBehind(t *testing.T) {
+	store, transactor := newDeliveryAttemptStore(t)
+	ctx := t.Context()
+	rollback := errors.New("回滚")
+
+	record := storedDeliveryAttemptRecord(t, "tenant-1", "attempt-1", map[string]string{"parcel-1": "", "parcel-2": "no-one-home"})
+	if err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		if _, err := store.Save(txCtx, record); err != nil {
+			return err
+		}
+		return rollback
+	}); !errors.Is(err, rollback) {
+		t.Fatalf("事务应以回滚错误结束，实得：%v", err)
+	}
+
+	if _, exists, err := store.FindByKey(ctx, record.Key); err != nil || exists {
+		t.Fatalf("回滚后仍读得到尝试：err=%v exists=%v", err, exists)
+	}
+	if _, _, present, err := store.LoadDeliveryResult(ctx, record.Key.TenantID, record.Key.Attempt,
+		deliveryViewValue(t, domain.NewCarriedObjectReference, "parcel-2")); err != nil || present {
+		t.Fatalf("回滚后仍读得到对象结果：err=%v present=%v", err, present)
 	}
 }
 

@@ -73,6 +73,7 @@ func assembleBusinessEndpoints(
 	pickupRegistration tfhttp.PickupRegistrationHandler,
 	pickupCorrection tfhttp.PickupCorrectionHandler,
 	pickupAttempt tfhttp.PickupAttemptHandler,
+	deliveryAttempt tfhttp.DeliveryAttemptHandler,
 	movementFact tfhttp.MovementFactHandler,
 	segmentCloser tfhttp.SegmentCloser,
 	dispatchTaskOpener tfhttp.DispatchTaskOpener,
@@ -244,6 +245,7 @@ func assembleBusinessEndpoints(
 	dispatchTaskIntake := tfhttp.DispatchTaskIntake(tfhttp.UnconfiguredIntake{})
 	deliveryDispatchTriggerIntake := tfhttp.DeliveryDispatchTriggerIntake(tfhttp.UnconfiguredIntake{})
 	deliveryRegistrationIntake := tfhttp.DeliveryRegistrationIntake(tfhttp.UnconfiguredIntake{})
+	deliveryAttemptIntake := tfhttp.DeliveryAttemptIntake(tfhttp.UnconfiguredIntake{})
 	segmentClosureIntake := tfhttp.SegmentClosureIntake(tfhttp.UnconfiguredIntake{})
 	effectiveTimeJudgmentIntake := tfhttp.EffectiveTimeJudgmentIntake(tfhttp.UnconfiguredIntake{})
 	if isolatedTransportFulfillment != nil {
@@ -255,6 +257,7 @@ func assembleBusinessEndpoints(
 		dispatchTaskIntake = isolatedTransportFulfillment
 		deliveryDispatchTriggerIntake = isolatedTransportFulfillment
 		deliveryRegistrationIntake = isolatedTransportFulfillment
+		deliveryAttemptIntake = isolatedTransportFulfillment
 		segmentClosureIntake = isolatedTransportFulfillment
 		effectiveTimeJudgmentIntake = isolatedTransportFulfillment
 	}
@@ -319,6 +322,10 @@ func assembleBusinessEndpoints(
 		{Pattern: "/node-operations-records", Handler: nodeopshttp.NewQueryNodeOperationsRecordsEndpoint(nodeOperationsCatalogueIntake, nodeOperationsRecords)},
 		{Pattern: "/transport-fulfillment/deliveries", Handler: tfhttp.NewRegisterEffectiveDeliveryEndpoint(deliveryRegistrationIntake, delivery)},
 		{Pattern: "/transport-fulfillment/delivery-proof-corrections", Handler: tfhttp.NewCorrectDeliveryProofEndpoint(tfhttp.UnconfiguredIntake{}, delivery)},
+		// 派送尝试登记（票 product-strategy-boundary/19）：执行方报来的每次到场与逐对象结果，交付生效只引用它登下的事实。
+		// 作业事实，生产渠道归操作者渠道的「作业事实登记」能力面（ADR-0149，operator-channel/10）；在那之前生产形态如实答
+		// 未配置，隔离形态经写开关逐口放行。
+		{Pattern: "/transport-fulfillment/delivery-attempts", Handler: tfhttp.NewRecordDeliveryAttemptEndpoint(deliveryAttemptIntake, deliveryAttempt)},
 		// 控制事实入口（票 tf-segment-lifecycle-closure/04）：交接一组（登记 + 更正）、揽收一组
 		// （单对象登记 + 更正 + 多对象执行），按事实分组而不按 UC 分。它们是 CONTEXT 成立边界的来源事实，
 		// 进段那道门（enterFulfillmentSegment）在生产上只从登记那几行走得到——接上之前它没有任何路。
