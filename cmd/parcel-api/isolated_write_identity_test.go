@@ -6,6 +6,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -54,8 +55,28 @@ func TestIsolatedLegalEntityRegistrationLandsAgainstARealDatabase(t *testing.T) 
 		t.Fatalf("参与方首登：outcome = %s（原因 %v），err = %v", landed.Outcome(), landed.Cause(), err)
 	}
 
+	// 法人登记按注册号类型目录判身份层（ADR-0145 决定一）：先经同一编排登一类身份层类型。
+	numberFormat := pcSynthetic(t, commercialdomain.NewRegistrationNumberFormat, `SYN-XA-[0-9]{6}`)
+	numberType, err := registration.registrationNumberType.Register(t.Context(), commercialapp.RegisterRegistrationNumberTypeCommand{
+		Tenant:   pcSynthetic(t, commercialdomain.NewTenantID, "SYN-TENANT-01"),
+		Country:  pcSynthetic(t, commercialdomain.NewRegistrationCountryCode, "XA"),
+		Code:     pcSynthetic(t, commercialdomain.NewRegistrationNumberTypeCode, "SYN-XA-LIFETIME"),
+		Revision: 1,
+		Spec: commercialdomain.RegistrationNumberTypeSpec{
+			Name:   pcSynthetic(t, commercialdomain.NewRegistrationNumberTypeName, "SYN 合成终身注册号（票 legal-entity-profile/02）"),
+			Layer:  commercialdomain.RegistrationNumberIdentityLayer,
+			Format: numberFormat,
+			Basis:  pcSynthetic(t, commercialdomain.NewRegistrationNumberTypeBasisReference, "SYN-BASIS/regno-xa"),
+		},
+		EffectiveFrom: time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC),
+	})
+	if err != nil || numberType.Outcome() != commercialapp.RegistrationNumberTypeRegistered {
+		t.Fatalf("注册号类型首登：outcome = %s，err = %v", numberType.Outcome(), err)
+	}
+
 	endpoint := commercialhttp.NewRegisterLegalEntityEndpoint(admission.partyIdentity, registration.partyIdentity)
-	item := `{"legalEntityId":"SYN-LE-06","partyId":"SYN-PARTY-06","revision":1,"basis":"SYN-BASIS/le-06","effectiveFrom":"2026-02-01T00:00:00Z"}`
+	item := `{"legalEntityId":"SYN-LE-06","partyId":"SYN-PARTY-06","revision":1,"basis":"SYN-BASIS/le-06","effectiveFrom":"2026-02-01T00:00:00Z",` +
+		`"registrationCountry":"XA","lifetimeRegistrationNumbers":[{"typeCode":"SYN-XA-LIFETIME","number":"SYN-XA-000006"}]}`
 
 	registered := httptest.NewRecorder()
 	endpoint.ServeHTTP(registered, httptest.NewRequest(http.MethodPost, "/commercial-legal-entity-registrations",

@@ -39,12 +39,21 @@ type businessPartyDocument struct {
 	EffectiveFrom time.Time `json:"effectiveFrom"`
 }
 
+// legalEntityDocument 的身份层三格与在线口 legalEntities 项逐字同形（ADR-0145 决定一、二）：键可缺，缺不缺由用例判。
 type legalEntityDocument struct {
-	LegalEntityID string    `json:"legalEntityId"`
-	PartyID       string    `json:"partyId"`
-	Revision      int       `json:"revision"`
-	Basis         string    `json:"basis"`
-	EffectiveFrom time.Time `json:"effectiveFrom"`
+	LegalEntityID               string                   `json:"legalEntityId"`
+	PartyID                     string                   `json:"partyId"`
+	Revision                    int                      `json:"revision"`
+	Basis                       string                   `json:"basis"`
+	EffectiveFrom               time.Time                `json:"effectiveFrom"`
+	RegistrationCountry         *string                  `json:"registrationCountry,omitempty"`
+	LifetimeRegistrationNumbers []lifetimeNumberDocument `json:"lifetimeRegistrationNumbers,omitempty"`
+	IdentityCorrectionBasis     *string                  `json:"identityCorrectionBasis,omitempty"`
+}
+
+type lifetimeNumberDocument struct {
+	TypeCode string `json:"typeCode"`
+	Number   string `json:"number"`
 }
 
 type customerAccountDocument struct {
@@ -194,6 +203,35 @@ func legalEntityCommandFrom(tenant pcdomain.TenantID, item legalEntityDocument) 
 		Revision:      item.Revision,
 		Basis:         basis,
 		EffectiveFrom: item.EffectiveFrom,
+	}
+	if item.RegistrationCountry != nil {
+		country, err := pcdomain.NewRegistrationCountryCode(*item.RegistrationCountry)
+		if err != nil {
+			return none, err
+		}
+		command.RegistrationCountry = &country
+	}
+	for _, number := range item.LifetimeRegistrationNumbers {
+		typeCode, err := pcdomain.NewRegistrationNumberTypeCode(number.TypeCode)
+		if err != nil {
+			return none, err
+		}
+		value, err := pcdomain.NewRegistrationNumber(number.Number)
+		if err != nil {
+			return none, err
+		}
+		lifetime, err := pcdomain.NewLifetimeRegistrationNumber(typeCode, value)
+		if err != nil {
+			return none, err
+		}
+		command.LifetimeNumbers = append(command.LifetimeNumbers, lifetime)
+	}
+	if item.IdentityCorrectionBasis != nil {
+		correction, err := pcdomain.NewIdentityBasisReference(*item.IdentityCorrectionBasis)
+		if err != nil {
+			return none, err
+		}
+		command.IdentityCorrectionBasis = &correction
 	}
 	return partyBatchCommand{
 		label: fmt.Sprintf("责任法人 %s r%d", item.LegalEntityID, item.Revision),
@@ -395,7 +433,12 @@ func runRegisterParties(ctx context.Context, args []string, getenv func(string) 
 		fmt.Fprintf(errOut, "构造身份登记册：%v\n", err)
 		return exitTechnical
 	}
-	handler := pcapplication.NewRegisterPartyIdentityHandler(registry)
+	numberTypes, err := pcpostgres.NewRegistrationNumberTypes(db)
+	if err != nil {
+		fmt.Fprintf(errOut, "构造注册号类型目录：%v\n", err)
+		return exitTechnical
+	}
+	handler := pcapplication.NewRegisterPartyIdentityHandler(registry, numberTypes)
 
 	attention := false
 	for index, command := range commands {
@@ -458,7 +501,8 @@ func runDeactivatePartyIdentity(ctx context.Context, args []string, getenv func(
 		fmt.Fprintf(errOut, "构造身份登记册：%v\n", err)
 		return exitTechnical
 	}
-	handler := pcapplication.NewRegisterPartyIdentityHandler(registry)
+	// 停用不判号，不接注册号类型目录。
+	handler := pcapplication.NewRegisterPartyIdentityHandler(registry, nil)
 
 	attention := false
 	for index, command := range commands {
