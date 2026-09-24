@@ -733,6 +733,16 @@ func (unwiredEvaluationReplay) Handle(
 	return pricingapp.ReplayPricingEvaluationResult{}, errOrchestrationNotWired
 }
 
+// unwiredPriceCardPreview 是价卡导入预览的命令占位（ADR-0101，票 price-card-import/02），判据同试算占位。
+type unwiredPriceCardPreview struct{}
+
+func (unwiredPriceCardPreview) Handle(
+	context.Context,
+	pricingapp.PreviewPriceCardImportCommand,
+) (pricingapp.PriceCardImportPreview, error) {
+	return pricingapp.PriceCardImportPreview{}, errOrchestrationNotWired
+}
+
 // unwiredPricingEstimate 是运营试算的命令占位（ADR-0152，票 operator-workspace-gaps/05）。判据同回放占位：不交回零值答复，
 // 稳定错误让「越过了 Intake」可观察为 NO_ANSWER_FORMED。
 type unwiredPricingEstimate struct{}

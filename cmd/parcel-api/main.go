@@ -337,6 +337,11 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 价卡导入预览编排（ADR-0101）：不碰库，接真不等操作者 Intake，判据同试算。
+	priceCardPreview, err := buildPriceCardImportPreview()
+	if err != nil {
+		return err
+	}
 	networkCatalog, err := nrpostgres.NewNetworkCatalog(db)
 	if err != nil {
 		return err
@@ -529,6 +534,7 @@ func run(logger *slog.Logger) error {
 			referenceCatalogueRegistration,
 			evaluationReplay,
 			pricingEstimate,
+			priceCardPreview,
 			networkCatalog,
 			routePlans,
 			networkCatalogRegistration,

@@ -49,12 +49,19 @@ var (
 	_ ReferenceCatalogueRegistrationIntake = UnconfiguredIntake{}
 	_ EvaluationReplayIntake               = UnconfiguredIntake{}
 	_ EstimateIntake                       = UnconfiguredIntake{}
+	_ PriceCardPreviewIntake               = UnconfiguredIntake{}
 )
 
 // IntakeEstimate 不读请求，判据同回放口：等的是操作者信封接线（ADR-0100，与回放同批）。从请求里取一个租户就是自报身份，
 // 这一口不能有那种「开发用」版本（ADR-0152 决定六）。
 func (UnconfiguredIntake) IntakeEstimate(context.Context, *http.Request) (application.FormEstimateEvaluationsCommand, error) {
 	return application.FormEstimateEvaluationsCommand{}, ErrAccessChannelNotConfigured
+}
+
+// IntakePriceCardPreview 不读请求，判据同序列预览口：预览不写库，但它答的是「这份文件在这个租户下读成什么」，
+// 租户要从信封来；上传解码（DecodePriceCardUpload）已经就位，真 Intake 接上信封即可直接用。
+func (UnconfiguredIntake) IntakePriceCardPreview(context.Context, *http.Request) (application.PreviewPriceCardImportCommand, error) {
+	return application.PreviewPriceCardImportCommand{}, ErrAccessChannelNotConfigured
 }
 
 // IntakeEvaluationReplay 不读请求，判据同复核口：等的是操作者信封接线（ADR-0100），载荷形状已在
