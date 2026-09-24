@@ -1,7 +1,7 @@
 # 01 壳层升级为多标签工作区：`EditorGroup` + `StatusBar`、工作区状态本地持久化、hash ↔ 标签互为镜像、`Ctrl+W` / `Ctrl+Shift+T`
 
 Category: enhancement
-Status: resolved——2026-09-22 通道 1 在 `main` 上直接做完（workflow.md「前端切片：一人在 main 上直接做」六步；本地 `3da0f23c` / `c9312bf6` 两笔码 + 本笔票面，**已进 main `539b8764`**（2026-09-23 push，`e0d3f89d..539b8764` 纯 ff，码 SHA 不换））。完成记录见文末。此前 in-progress——用户经 IDP 队列令「参考 idpxyz/idp-ui `apps/myshop-web`，理解，然后来调整我们的 ui」，未逐条答判断项；三项按 spec 推荐取值落地——1 多标签**要**（用户指向的参照物就是多标签壳）、2 分栏**不做**（`showSplitButtons={false}`）、3 `ActivityBar` **不装**；用户若要 2 / 3 各是一张追加票，不改本票已落的形。此前 draft——等用户答 spec「判断项」1–3
+Status: resolved——2026-09-22 通道 1 在 `main` 上直接做完（workflow.md「前端切片：一人在 main 上直接做」六步；本地 `3da0f23c` / `c9312bf6` 两笔码 + 本笔票面，**已进 main `539b8764`**（2026-09-23 push，`e0d3f89d..539b8764` 纯 ff，码 SHA 不换））。完成记录见文末；非作者评审 ← 通道 2（2026-09-24）**Spec 阻断 1**（`loadWorkspaceState` 遇畸形 id 抛而不回默认，整页白屏），待修，见 Comments。此前 in-progress——用户经 IDP 队列令「参考 idpxyz/idp-ui `apps/myshop-web`，理解，然后来调整我们的 ui」，未逐条答判断项；三项按 spec 推荐取值落地——1 多标签**要**（用户指向的参照物就是多标签壳）、2 分栏**不做**（`showSplitButtons={false}`）、3 `ActivityBar` **不装**；用户若要 2 / 3 各是一张追加票，不改本票已落的形。此前 draft——等用户答 spec「判断项」1–3
 Blocked by: 无（admin-web-ux-alignment/02 已进 main `5b032504`）
 地盘：`apps/admin-web/src/Layout.tsx`（主区从单页换成 `EditorGroup`；右栏 / 底栏两个**空位**只留结构不装内容，02 装）、新 `shell/workspace-state.ts`（标签集 / 活动标签 /
 已关闭栈 / 侧栏宽度的纯逻辑 + `localStorage` 持久化 + node:test）、新 `shell/WorkspaceStatusBar.tsx`（包 `StatusBar`）、`shell/preferences.ts`（若持久化键前缀要复用它的约定，只追加）。
@@ -87,3 +87,41 @@ myshop-web（有），真实页面早就有了（委托查阅的 hash 二段详�
 ## Comments
 
 - 2026-09-23 · 进 main：`origin/main` = `539b8764`（`e0d3f89d..539b8764` 纯 ff，码 `3da0f23c` / `c9312bf6` 与票面笔 SHA 不换）。此前状态行写的「未推——本宿主没有 GitHub 推送凭据」在这次推送之后失效。
+
+### 评审 ← 通道 2 · 钉 `c9312bf6`（基 `e0d3f89d`，共享树只读，门禁未重跑）· 2026-09-24 12:4x（推送方自任务台 `task-75730420` 代落原文）
+
+门（未重跑）：引通道 1 在 `3a47da8d` 实跑（Node 22.23.3）`tsc -b --noEmit` 0 / `run-tests` 406 pass 0 fail / `vite build` 成功；CI 在 `539b8764` 与 `3a47da8d` 七个 job 全绿。本评审只用 `git show` / `git diff` / 读文件；vendor 行为对读已装的 `@idpxyz/ui-workspace@0.1.25` 源（`EditorGroup.tsx`、`StatusBar.tsx`、`hooks/useEditorGroupTabState.ts`、`hooks/useResize.ts`）。运行期才能证的标「未实证」。范围：`git diff e0d3f89d c9312bf6 -- apps/admin-web`（`Layout.tsx`、`shell/workspace-state.ts` 与其 test、`shell/WorkspaceStatusBar.tsx`、`shell/CommandPaletteHost.tsx`）+ `git show 9f95520e -- apps/admin-web/src/App.tsx apps/admin-web/README.md`；每条发现另核了在 `3a47da8d` 上是否仍在。
+
+**Standards** — 阻断：无。非阻断：
+1. `Layout.tsx` 文件头「点标签、关标签、重开都只写 hash，状态经同一条 hashchange 回流」与代码不符。只有点标签（`onTabClick` → `navigate`）是只写 hash；关 / 重开 / 关其它 / 关右侧 / 全关都经 `applyWorkspace`，先 `setWorkspace(next)`（连同新的 `activeTabId`）再写 `hashForTab(next.activeTabId)`，回流时 `openTab` 已开则激活、幂等——同文件 `applyWorkspace` 的文档注释写的才是实情。两路对 `activeTabId` 各答一次，靠的是 `tabIdFromHash(hashForTab(id)) === id`；这个前提对存储读回的不规范 id 不成立（见 Spec 阻断 1）。改头注那一句即可；`3a47da8d` 上仍是原句。
+2. 注释里带着变更叙事：`Layout.tsx` 文件头「第一轮裁…的前提已变——真实页面早就有了…参照物也换成了多标签壳」、`App.tsx` 头注「此前沿 loms-web 的单页区形态…真实页面早已有了」、`workspace-state.ts` 的 `SIDEBAR_WIDTH_DEFAULT` 注「与 Layout 此前写死给 useResize 的同值」、`tabIdFromHash` 注「与 Layout 此前对未知 id 的处置一致」。票面第 6 条要求「写成现状」，AGENTS「写代码注释」也不写变更说明。取舍理由（蓝图母版 B / C 假定同时开着多个对象）留下，「此前 / 前提已变」删掉不丢信息。
+3. node:test 小缺口：`loadWorkspaceState` 把 `closedTabs` 截到 20 这一步没钉（`closeTab` → `pushClosed` 那条路径钉了）；`closeOthers` / `closeToRight` 遇到不认识的 id 原样返回也没钉。完成判据「每格至少一条」已满足，补不补由作者定；Spec 阻断 1 的用例另算。
+
+无发现（实核）：新注释全中文。跨文件引用都用符号名或文件头（`templates/loading-shape.ts` 文件头、`shell/command-actions.ts` 的 `isOpenCommandPaletteShortcut`、`pages/my-work/recent-objects.ts` 的 `recentObjectTitle`、`top-bar-model` 的 `themeToggleLabel`、`Layout.tsx` 文件头），逐个对读，都存在且所述属实；无行号。「三条互斥」「两处刻意不同」「只喂它真实的两件事」「三值」都是紧接着就地列出的本处条目，不是在数别处。`workspace-state.ts` 零依赖（运行时不 import `@idpxyz/*`、不 import `navigation.ts`），导航词表由调用方注入，与 `command-actions.ts` 同款。键 `parcel-admin-web:workspace` 与 `preferences.ts` / `recent-objects.ts` / `saved-views.ts` 同前缀。storage 读写不包 try/catch，与这三个邻居一致。纯逻辑 node:test 在 `3da0f23c` 26 条、`c9312bf6` 加状态栏 2 条共 28 条，与 run-tests 368 → 396 对得上。
+
+**Spec** — 阻断：
+1. **`loadWorkspaceState` 有一类坏值不回默认而是抛——第 1 条「逐字段校验坏值回默认」与完成判据「`load` 坏值回默认」在这一格不成立。** `sanitizeTabs` 对形对的标签调 `moduleIdOfTab(item.id)`，其中 `decodeURIComponent` 遇畸形百分号序列（id 为 `%`、`%E0` 之类）抛 `URIError`；`loadWorkspaceState` 的 try 只包了 `JSON.parse`，异常一路穿出 `Layout` 的 `useState(workspaceFromStorageAndLocation)` 初始化器。`main.tsx` → `AuthGate` → `App` → `Layout` 一路没有错误边界，于是整页白屏；坏值留在 localStorage，**每次刷新都白屏**，操作者只能自己去开发者工具清站点数据。同一处还放过两类不规范的 id：一类是 `exception-cases/`、`shipment-request-inquiry/SR-1/x` 这种尾斜杠或三段的，能活过 load，但点它写出的 hash 经 `tabIdFromHash` 会认成另一个 id，结果激活或另开那张规范 id 的标签、原标签永远激活不了（点了不动，与判断项 1 所避的假动作同类）；另一类是次段编码畸形的，load 放过，点那张标签时 `objectIdOfTab` 才抛、同样白屏。触发只能是外部写坏这个键——本应用自己的写路径在 `tabForHash` 就先抛了，存不进去——但这正是本条要防的情形，而后果是最坏的一种：自家 docstring 说「存坏了半格不该把所有标签都吞掉」，实际是整台吞掉。修法在本票地盘内：`sanitizeTabs` 对 id 只做一道「规范且可解码」校验——`tabIdFromHash(hashForTab(id), isKnownModule) === id`，并在同一个 try 里跑一遍 `objectIdOfTab(id)`，抛即剔除（词表外、工作台伪标签、不规范、编码畸形四类一并收掉）；补一条 load 用例（首段畸形、尾斜杠各一）。`3a47da8d` 上仍在（票 02 的 `9015cdaf` 没动 `sanitizeTabs` / `moduleIdOfTab`）。附带一句：hash 路径上的同类抛（`tabIdFromHash` / `objectIdOfTab`）在基 `e0d3f89d` 上已由 `recentObjectFromHash` 与 `ShipmentRequestListPage` 的 `selectedIdFromHash` 同样存在，不算本票引入，改地址即可恢复；抽一个共用的安全解码可以一并收掉。
+
+非阻断：
+1. **委托查阅「列表 → 详情 → 返回列表」往返后检索词与多选集清零、列表重新取数——票 04 的承诺被本票静默打破，完成记录未记。** `ShipmentRequestListPage` 的 `keyword` / `checked` 是页面 state，其注释写着「列表与详情共用一个导航位」与「进详情再回来仍在（本组件不卸载，只是整区切成详情）」。本票按第 2 条把 `#/shipment-request-inquiry` 与 `#/shipment-request-inquiry/<id>` 认成两张标签，再加 `preserveInactiveTabContent={false}` 与 `renderTab` 的 `<Fragment key={tabId}>`：钻取时列表实例卸载、详情是新实例，`onBack` 写回列表 hash 时又挂一个新实例。于是这两句注释在 `c9312bf6` 之后为假，票 04 第 5 条的「换模块（组件卸载）即丢」实际成了「进详情即丢」。判断项 2 的代价句只写了「切走再切回…页面也已卸载重来」，判断项 6 把「页内状态不串」当收益，都没点名这条既有路径的退化。静态对读可定，运行期未实证；`3a47da8d` 上仍在（票 02 改成双击或检查器快捷动作开详情，走的是同一条 hash 路径）。不列阻断，理由：它是第 2、3 条字面设计的直接后果；修法要么动页面（本票「不做」），要么改壳层取舍（同模块钻取不开新标签、列表标签保活、或把检索词与选择集抬进 hash / 按标签的会话存储），归用户定。建议：票面判断项补记这条退化；立追加票，至少把 `ShipmentRequestListPage` 那两句注释改成现状。
+2. 标签名存了第二份：`sanitizeTabs` 把存储里的 `name` / `subtitle` 原样留下。导航词表改名后，恢复出来的非活动标签显旧名，要被点一次（`openTab`）才刷新。`name` 可以由 `pageTitleById[moduleIdOfTab(id)]` 现算、`subtitle` 由 `objectIdOfTab(id)` 现算，存储只存 `id` / `pinned`——与本仓「页面标题的唯一来源是 navigation」一致（`ShipmentRequestListPage` 就是这么注的），也让阻断 1 的校验面更小。
+3. 判断项 1 用「按了没反应就是假动作」否掉了常驻工作台标签。拿同一把尺子量 vendor 右键菜单：「Reopen Closed Tab」在空栈时照样可点（vendor 没有禁用口），点了之后 `reopenClosed` 返回原引用、`applyWorkspace` 早退，界面无变化；标签全是固定的时候「Close All」也一样。接受——功能已实现、只是此刻没有可作用的对象，属合法空操作，与永远按不动的 × 不同类。建议判断项 1 补一句这个区分，免得后来者拿同一条红线两头拉。
+4. 完成记录漏记两处对票面字面的偏离（都接受）。第 3 条要求「右栏在 flex 结构里留条件渲染空位（`rightPane?: ReactNode`）」，`c9312bf6` 没留，头注改说「随票 02 装」（`9015cdaf` 随即装上，无害）。第 4 条要求「`rightSlot` 显密度档与主题」，实现只显主题词、密度交给 vendor `StatusBar` 自带的切换钮（`WorkspaceStatusBar` 文件头写了理由；实核 vendor 无条件渲染读 `useDensity` 的那个钮，理由成立）。该钮文字是英文 compact / comfortable，与判断项 5 里右键菜单的英文同归上游 i18n。
+5. 点当前活动标签本身也走 `navigate(hashForTab(id))`，会把 hash 上的 `?view=` 或第三段剥掉，而页面实例不换（key 未变），hash 与屏上所示可能失配。今天 `savedViewIdFromHash` 没有消费者、也没有页用第三段，影响未实证；`onTabClick` 遇到 `activeTabId` 早退即可。
+6. 落点表「（随票 02 壳层笔 `9015cdaf`）」那一行 SHA 指错：`git show --stat 9015cdaf` 不含 `App.tsx` / `README.md`，这两处改口实随 `9f95520e` 提交（该笔提交说明也这么写）。改口本身核过：`App.tsx` 头注与 README「技术栈」一句都改成多标签工作区现状，理由指回 `Layout.tsx` 文件头、不复述。
+
+无发现（实核）——完成记录里偏离票面字面的取舍逐条判：
+1. **工作台不做常驻标签 → 接受。** vendor `Tab` 没有逐标签关闭开关，× 对每张标签无条件渲染（固定标签也有）；`activeTab: ''` 匹配不到时 vendor 渲 `emptyStateContent`，零张时整条标签栏不渲染（判断项 1 所述代价属实）。`closeTab` 关最后一张、`closeAll` 关掉活动标签，都落 `null` 回工作台，没有按不动的钮。
+2. **hash 为权威的三条 → 接受**（头注措辞见 Standards 1）。点标签 `onTabClick` → `navigate(hashForTab(id))`，不 setState，经 hashchange → `applyHash` → `openTab` 已开则激活。`WorkspaceTab` 只有 `id / name / subtitle? / pinned?`，`tabIdFromHash` 剥查询串与第三段起，不存页内状态。关标签经 `applyWorkspace`，活动标签变了才写新活动标签的 hash；关非活动、固定、拖排都不碰 hash，所以带 `?view=` 时不会被冲掉。
+3. **三个快捷键合成一个 keydown → 接受。** `CommandPaletteHost` 的监听整段删、`useEffect` import 随删；Layout 一个 `keydown` 先判 `isOpenCommandPaletteShortcut`（`command-actions.ts` 在本范围零改动，判定函数没动），再判 `workspaceShortcutOf`，两个谓词不相交。工作台上 `activeTabId === null` 时在 `preventDefault` 之前 return；空栈时 Ctrl+Shift+T 同样不拦（票面没要求，合理）。
+4. **`preserveInactiveTabContent={false}`、`showSplitButtons={false}` → 接受。** vendor 只在 `showSplitButtons &&` 块内调 `onSplitRight` / `onSplitDown`，所以空函数不可达，注释说它们「声明成必填」属实。`beforeNavigation` 没传。`getTabRiskDot={() => null}` 是显式传了恒 null：vendor 默认的 `defaultGetTabRiskDot` 读 `tab.riskLevel`，而 `tabForHash` / `sanitizeTabs` 构出的标签从不带这个字段，结果与「不接」相同，显式传更稳。`onActivate={() => {}}` 单组无可切、也没有可见入口，不算假动作。判断项 5 实核：`isActive` 若给 false，选中标签的强调样式会一起没掉，只能留那圈 ring。
+5. **load 逐字段、closedTabs 上限 20 → 除阻断 1 那一格外成立。** `JSON.parse` 包了 try，非对象回初始。`tabs` / `closedTabs` 逐项过 `isWorkspaceTab`、去重、剔除词表外和工作台伪标签；`activeTabId` 不在集里落 `null`；`sidebarWidth` 非数回默认、越界钳进区间；`closedTabs` 去掉已开着的、去掉固定标记、截到 20；`pushClosed` 同样截 20。
+6. **判断项 1–3 → 如实写进了票面。** 票面 Status 行写明「未逐条答判断项；三项按 spec 推荐取值落地」「用户若要 2 / 3 各是一张追加票」，spec Status 同口径。
+
+其余：「不做」守住了——范围 diff 只有 `Layout.tsx`、`shell/workspace-state.ts` 与其 test、`shell/WorkspaceStatusBar.tsx`、`shell/CommandPaletteHost.tsx`，没碰 `TopBar.tsx` / `templates/*` / 业务页 / `page-registry.tsx` / `navigation.ts`，没装 `ActivityBar` / `BottomPanel` / `TitleBar`，没接 `onTabMoveBetweenGroups`。红线：`showDemoIndicators={false}`（vendor 那组确是「142 Active / All Carriers Online…」样板字）、`commandFeedback={null}`，状态栏只显位置与主题这两样真实的东西；本票不动模板，不涉向后兼容。`closeTab` 允许直接关固定标签（理由属实：vendor 在固定标签上照样画 ×）。`reorderTabs` 与 vendor `onTabReorder` 同算法，关闭进栈去固定标记也与 vendor 同；关掉后落右邻、没有右邻才落左邻，照票面（vendor 是落最后一张）。`<Fragment key={tabId}>` 让同模块两张标签各一个实例（判断项 6）。`useResize` 每次 mousemove 都 `setSize`，经 effect 写进工作区状态再落 localStorage（判断项 7 属实）。既有 run-tests 用例零改动（范围内唯一的 test 文件是新增的）；`Layout.tsx` 渲页面仍只经 `pageById`（另 import `Workbench` / `UnwiredModule`，与基同）。esbuild 束判据按判断项 1 改了口，探针源不入库，自报 20 ok 未复核；浏览器「未验」如实写了。
+
+**Standards 0 / 3 · Spec 1 / 6**
+
+结论：须修——Spec 阻断 1（`sanitizeTabs` 的 id 校验补「规范且可解码」，加一条 load 用例；改动限 `shell/workspace-state.ts` 与其 test）。修完只需重跑 Spec 轴那一格。Spec 非阻断 1 建议立追加票并在票面补记。
+
+**处置**（通道 1）：本笔只落原文，不改码。用户 2026-09-24 令「全面收掉」：阻断 1 与各条非阻断随后在 `main` 上逐笔修，逐条处置记在下方「评审后修复」。
