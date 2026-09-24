@@ -636,7 +636,7 @@ func TestPartyIdentityRegistrationTranscribesTheUseCaseAnswersVerbatim(t *testin
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			handler := application.NewRegisterPartyIdentityHandler(testCase.registry)
+			handler := application.NewRegisterPartyIdentityHandler(testCase.registry, nil)
 			endpoint := commercialhttp.NewRegisterBusinessPartyEndpoint(
 				commercialIntakeDouble{businessParty: pcBusinessPartyCommand(t, testCase.revision)},
 				handler,
@@ -662,7 +662,7 @@ func TestPartyIdentityRegistrationTranscribesTheUseCaseAnswersVerbatim(t *testin
 // RefusalReason），那时这条断言换成逐格比对。
 func TestNotAcceptedCarriesTheReasonAsProse(t *testing.T) {
 	handler := application.NewRegisterPartyIdentityHandler(
-		stubPartyIdentityRegistry{saveOutcome: ports.PartyRegistrySaved})
+		stubPartyIdentityRegistry{saveOutcome: ports.PartyRegistrySaved}, nil)
 	endpoint := commercialhttp.NewRegisterBusinessPartyEndpoint(
 		commercialIntakeDouble{businessParty: pcBusinessPartyCommand(t, 3)},
 		handler,
@@ -686,7 +686,7 @@ func TestNotAcceptedCarriesTheReasonAsProse(t *testing.T) {
 // 「差哪格」可言，给一个空串会让调用侧先判字段有没有值再判答案。
 func TestSuccessfulRegistrationCarriesNoCause(t *testing.T) {
 	handler := application.NewRegisterPartyIdentityHandler(
-		stubPartyIdentityRegistry{saveOutcome: ports.PartyRegistrySaved})
+		stubPartyIdentityRegistry{saveOutcome: ports.PartyRegistrySaved}, nil)
 	endpoint := commercialhttp.NewRegisterBusinessPartyEndpoint(
 		commercialIntakeDouble{businessParty: pcBusinessPartyCommand(t, 1)},
 		handler,
@@ -740,7 +740,7 @@ func TestDeactivationTranscribesItsOwnTwoGrades(t *testing.T) {
 	}
 	for _, testCase := range cases {
 		t.Run(testCase.name, func(t *testing.T) {
-			handler := application.NewRegisterPartyIdentityHandler(testCase.registry)
+			handler := application.NewRegisterPartyIdentityHandler(testCase.registry, nil)
 			endpoint := commercialhttp.NewDeactivatePartyIdentityEndpoint(
 				commercialIntakeDouble{deactivation: command}, handler)
 			recorder := httptest.NewRecorder()

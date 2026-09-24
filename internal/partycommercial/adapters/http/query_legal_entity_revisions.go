@@ -117,6 +117,7 @@ type legalEntityRevisionBody struct {
 	DeactivatedAt     string `json:"deactivatedAt,omitempty"`
 	DeactivationBasis string `json:"deactivationBasis,omitempty"`
 	RegisteredAt      string `json:"registeredAt"`
+	identityLayerBody
 }
 
 func legalEntityRevisionBodyOf(row ports.LegalEntityRevisionRow) legalEntityRevisionBody {
@@ -128,6 +129,10 @@ func legalEntityRevisionBodyOf(row ports.LegalEntityRevisionRow) legalEntityRevi
 		Basis:         row.Basis,
 		EffectiveFrom: rfc3339(row.EffectiveFrom),
 		RegisteredAt:  rfc3339(row.RegisteredAt),
+		identityLayerBody: identityLayerBodyOf(
+			row.HasIdentityLayer, row.RegistrationCountry, row.LifetimeNumbers,
+			row.HasIdentityCorrection, row.IdentityCorrectionBasis,
+		),
 	}
 	if row.HasDeactivation {
 		body.DeactivatedAt = rfc3339(row.DeactivatedAt)

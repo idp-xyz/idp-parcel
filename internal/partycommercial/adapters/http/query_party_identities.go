@@ -225,6 +225,46 @@ type groupLegalEntityBody struct {
 	DeactivatedAt     string `json:"deactivatedAt,omitempty"`
 	DeactivationBasis string `json:"deactivationBasis,omitempty"`
 	RegisteredAt      string `json:"registeredAt"`
+	identityLayerBody
+}
+
+// identityLayerBody 是法人身份层在答复里的四格（ADR-0145 决定一、二），目录行与修订历史行共用。判据同停用两件：
+// identityLayerRegistered 是显式布尔，为假即这笔修订登记于本格落地之前、国家与号都没有，页面据它如实说「本修订
+// 登记时尚无此格」，不拿空数组去推；更正依据只在这笔修订是身份更正时在场。
+type identityLayerBody struct {
+	IdentityLayerRegistered     bool                             `json:"identityLayerRegistered"`
+	RegistrationCountry         string                           `json:"registrationCountry,omitempty"`
+	LifetimeRegistrationNumbers []lifetimeRegistrationNumberBody `json:"lifetimeRegistrationNumbers,omitempty"`
+	IdentityCorrectionBasis     string                           `json:"identityCorrectionBasis,omitempty"`
+}
+
+type lifetimeRegistrationNumberBody struct {
+	TypeCode string `json:"typeCode"`
+	Number   string `json:"number"`
+}
+
+func identityLayerBodyOf(
+	hasIdentity bool,
+	country string,
+	numbers []ports.LifetimeRegistrationNumberRow,
+	hasCorrection bool,
+	correction string,
+) identityLayerBody {
+	body := identityLayerBody{IdentityLayerRegistered: hasIdentity}
+	if hasIdentity {
+		body.RegistrationCountry = country
+		body.LifetimeRegistrationNumbers = make([]lifetimeRegistrationNumberBody, len(numbers))
+		for index, number := range numbers {
+			body.LifetimeRegistrationNumbers[index] = lifetimeRegistrationNumberBody{
+				TypeCode: number.TypeCode,
+				Number:   number.Number,
+			}
+		}
+	}
+	if hasCorrection {
+		body.IdentityCorrectionBasis = correction
+	}
+	return body
 }
 
 const kindResponsibleLegalEntity = "RESPONSIBLE_LEGAL_ENTITY"
@@ -241,6 +281,10 @@ func groupLegalEntityBodyOf(row ports.GroupLegalEntityRow) groupLegalEntityBody 
 		Basis:          row.Basis,
 		EffectiveFrom:  rfc3339(row.EffectiveFrom),
 		RegisteredAt:   rfc3339(row.RegisteredAt),
+		identityLayerBody: identityLayerBodyOf(
+			row.HasIdentityLayer, row.RegistrationCountry, row.LifetimeNumbers,
+			row.HasIdentityCorrection, row.IdentityCorrectionBasis,
+		),
 	}
 	if row.HasPartyName {
 		body.PartyName = row.PartyName
