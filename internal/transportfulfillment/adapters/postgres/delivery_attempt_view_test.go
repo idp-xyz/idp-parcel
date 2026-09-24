@@ -180,9 +180,8 @@ func deliveryViewValue[T any](t *testing.T, construct func(string) (T, error), r
 	return value
 }
 
-// seedDeliveryAttempt 直插派送尝试行。视图只读，本仓今天还没有派送尝试的登记入口
-// （揽收侧有 PerformOffsitePickup，派送侧的对应用例尚未落地），所以夹具从库这一层
-// 造事实——证的是视图对那张权威表的翻译，不是某个写入方的行为。
+// seedDeliveryAttempt 直插派送尝试行：本文件证的是视图对那张权威表的翻译，不是写入方
+// （DeliveryAttempts.Save）的行为，夹具因此从库这一层造事实，绕开写口的复核。
 func seedDeliveryAttempt(t *testing.T, pool *pgxpool.Pool, tenant, attempt string, objects []string) {
 	t.Helper()
 	payload := "["

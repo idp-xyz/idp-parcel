@@ -28,7 +28,10 @@ func NewDispatchTasks(db *bentopg.DB) (*DispatchTasks, error) {
 	return &DispatchTasks{db: db}, nil
 }
 
-var _ ports.DispatchTaskRegistry = (*DispatchTasks)(nil)
+var (
+	_ ports.DispatchTaskRegistry = (*DispatchTasks)(nil)
+	_ ports.DispatchTaskReader   = (*DispatchTasks)(nil)
+)
 
 // FindByKey 按（租户+任务）取回整图。否定结果只回 false。
 //
