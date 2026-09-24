@@ -2,10 +2,12 @@ package tfhttp
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
 // 票 tf-segment-lifecycle-closure/07 的第二个写面：授权角色建立派送任务（UC-TF-006 的第二个触发源）。
@@ -15,6 +17,61 @@ import (
 // 需要完成什么，不表达已到场、取得控制或完成交付，所以这里没有任何到场或控制入参。
 type DispatchTaskIntake interface {
 	IntakeDispatchTask(ctx context.Context, request *http.Request) (application.OpenDispatchTaskCommand, error)
+}
+
+// DispatchTaskPayload 是建立派送任务的线格式，逐格镜像 application.OpenDispatchTaskCommand 去掉租户——工作范围七件加建立时刻。
+// kind 取 domain.DispatchTaskKind 的封闭词，三个时刻取 RFC 3339。
+type DispatchTaskPayload struct {
+	Task       string   `json:"task"`
+	Kind       string   `json:"kind"`
+	Objects    []string `json:"objects"`
+	Place      string   `json:"place"`
+	WindowFrom string   `json:"windowFrom"`
+	WindowTo   string   `json:"windowTo"`
+	Conditions string   `json:"conditions"`
+	OpenedAt   string   `json:"openedAt"`
+}
+
+// Command 把载荷连同信封给的租户翻成建立命令。种类词不在封闭集内、时刻解不出是坏报文（400）；种类空着照零值交进去，
+// 工作范围齐不齐由编排答`输入未受理`。
+func (payload DispatchTaskPayload) Command(tenant domain.TenantID) (application.OpenDispatchTaskCommand, error) {
+	none := application.OpenDispatchTaskCommand{}
+	if tenant.String() == "" {
+		return none, ErrOperatorIdentityMissing
+	}
+	command := application.OpenDispatchTaskCommand{
+		TenantID:   tenant,
+		Task:       payload.Task,
+		Objects:    payload.Objects,
+		Place:      payload.Place,
+		Conditions: payload.Conditions,
+	}
+	var err error
+	if payload.Kind != "" {
+		if command.Kind, err = dispatchTaskKindFromWord(payload.Kind); err != nil {
+			return none, err
+		}
+	}
+	if command.WindowFrom, err = parseOptionalInstant("windowFrom", payload.WindowFrom); err != nil {
+		return none, err
+	}
+	if command.WindowTo, err = parseOptionalInstant("windowTo", payload.WindowTo); err != nil {
+		return none, err
+	}
+	if command.OpenedAt, err = parseOptionalInstant("openedAt", payload.OpenedAt); err != nil {
+		return none, err
+	}
+	return command, nil
+}
+
+// dispatchTaskKindFromWord 是 domain.DispatchTaskKind 封闭集的名称镜像，词取各常量自己的 String()。
+func dispatchTaskKindFromWord(raw string) (domain.DispatchTaskKind, error) {
+	for _, kind := range []domain.DispatchTaskKind{domain.PickupDispatch, domain.DeliveryDispatch} {
+		if kind.String() == raw {
+			return kind, nil
+		}
+	}
+	return domain.DispatchTaskKindInvalid, fmt.Errorf("%w: kind=%q is not a dispatch task kind word", ErrMalformedRequest, raw)
 }
 
 // DispatchTaskOpener 是本适配器转交的应用编排。

@@ -84,6 +84,50 @@ var isolatedLines = map[string]isolatedLine{
 		},
 		valid: isolatedMovementFactBody,
 	},
+	"/transport-fulfillment-dispatch-task-registrations": {
+		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
+			_, err := intake.IntakeDispatchTask(context.Background(), request)
+			return err
+		},
+		valid: isolatedDispatchTaskBody,
+	},
+}
+
+const isolatedDispatchTaskBody = `{"task":"SYN-DISPATCH-08-07","kind":"DELIVERY","objects":["SYN-PARCEL-08-07","SYN-PARCEL-08-08"],` +
+	`"place":"SYN-PLACE/consignee-07","windowFrom":"2026-09-25T09:00:00+08:00","windowTo":"2026-09-25T12:00:00+08:00",` +
+	`"conditions":"SYN-CONDITION/signature-required","openedAt":"2026-09-24T20:00:00+08:00"}`
+
+// Covers: DispatchTaskIntake 契约「工作范围七件全从请求收」——任务、种类、对象范围、地点、时间窗、条件与建立时刻逐字来自载荷。
+func TestIsolatedCommandIntakeTranslatesDispatchTaskWithInjectedTenant(t *testing.T) {
+	command, err := isolatedCommandIntakeForTest(t).IntakeDispatchTask(context.Background(), commandRequest(isolatedDispatchTaskBody))
+	if err != nil {
+		t.Fatalf("intake：%v", err)
+	}
+	if got := command.TenantID.String(); got != isolatedCommandTenant {
+		t.Fatalf("TenantID = %q, want %q", got, isolatedCommandTenant)
+	}
+	if command.Task != "SYN-DISPATCH-08-07" || command.Kind.String() != "DELIVERY" || len(command.Objects) != 2 ||
+		command.Objects[0] != "SYN-PARCEL-08-07" || command.Objects[1] != "SYN-PARCEL-08-08" ||
+		command.Place != "SYN-PLACE/consignee-07" || command.Conditions != "SYN-CONDITION/signature-required" {
+		t.Fatalf("command = %+v，与载荷不符", command)
+	}
+	for name, pair := range map[string][2]time.Time{
+		"windowFrom": {command.WindowFrom, time.Date(2026, 9, 25, 1, 0, 0, 0, time.UTC)},
+		"windowTo":   {command.WindowTo, time.Date(2026, 9, 25, 4, 0, 0, 0, time.UTC)},
+		"openedAt":   {command.OpenedAt, time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)},
+	} {
+		if !pair[0].Equal(pair[1]) {
+			t.Fatalf("%s = %s, want %s", name, pair[0], pair[1])
+		}
+	}
+}
+
+// Covers: 任务种类取 domain.DispatchTaskKind 的封闭词——词表外是用法错误（400）。
+func TestIsolatedCommandIntakeRefusesAnUnknownDispatchTaskKind(t *testing.T) {
+	_, err := isolatedCommandIntakeForTest(t).IntakeDispatchTask(context.Background(), commandRequest(`{"task":"t","kind":"RETURN"}`))
+	if !errors.Is(err, tfhttp.ErrMalformedRequest) {
+		t.Fatalf("err = %v, want ErrMalformedRequest", err)
+	}
 }
 
 const isolatedMovementFactBody = `{"fact":"SYN-MOVE-08-06","schedule":"SYN-SCHEDULE/linehaul-06","kind":"DEPARTURE","location":"SYN-NODE-SHA-HUB",` +
@@ -390,6 +434,9 @@ func TestIsolatedCommandIntakeServesOnlyAdmittedLines(t *testing.T) {
 	}
 	if _, ok := intake.(tfhttp.MovementFactIntake); !ok {
 		t.Fatal("移动事实口该已放行")
+	}
+	if _, ok := intake.(tfhttp.DispatchTaskIntake); !ok {
+		t.Fatal("派送任务登记口该已放行")
 	}
 	for name, refused := range map[string]bool{
 		"揽收更正口（同族未列）":      isA[tfhttp.PickupCorrectionIntake](intake),
