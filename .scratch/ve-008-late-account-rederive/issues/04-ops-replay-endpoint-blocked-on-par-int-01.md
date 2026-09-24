@@ -1,8 +1,8 @@
 # 运维重放口：手工触发某（租户 + 包裹）重走派生
 
 Category: enhancement
-Status: needs-info
-Blocked by: PAR-INT-01（实例半边未提供授权依据）
+Status: needs-triage——2026-09-24 按 [product-strategy-boundary/02](../../product-strategy-boundary/issues/02-split-parameter-register-and-retriage-deferrals.md)「票：未 resolved 的」改判：运营重放端点是操作者面，等的是 ADR-0100 操作者渠道（机制缺口），不是 `PAR-INT-01`；重新分诊时按首个运维面定范围。此前：needs-info
+Blocked by: [operator-channel/03](../../operator-channel/issues/03-operator-envelope-and-answer-algebra.md)（操作者信封与铸造）。此前：PAR-INT-01（实例半边未提供授权依据），按上行改判撤下
 
 用户 2026-08-20 拍板 Q3：**保留为独立后续票，不与 01/02/03 同期。**
 
@@ -33,3 +33,4 @@ Blocked by: PAR-INT-01（实例半边未提供授权依据）
   （保留为独立后续票，不与 01/02/03 同期），阻断项 PAR-INT-01 票面已载且与
   syn-wall-door-audit 票 01 的裁定同源（ADR-0072）。needs-triage 改 needs-info；
   重启条件照「解除阻塞的条件」节：PAR-INT-01 由租户证据填上后重估。
+- 2026-09-24 通道 4：Status / Blocked by 两行落 product-strategy-boundary/02 的既有改判（用户同日令「避免以后的 agent 开发时老说没有真实的外部环境」）；「解除阻塞的条件」一节按旧口径写成，正文未改，以顶部两行为准。

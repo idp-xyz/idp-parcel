@@ -1,7 +1,8 @@
 # 接入渠道登记册与首个真渠道 Intake 缺失,渠道墙想配也没处配
 
 Category: enhancement
-Status: needs-info——ADR-0072 口径的重启条件已满足，票面范围已按其 Consequences 改写（见「重启范围」）；S0 的证据缺口三项未到，未到前不进 S1
+Status: needs-info——2026-09-24 按 [product-strategy-boundary/02](../../product-strategy-boundary/issues/02-split-parameter-register-and-retriage-deferrals.md)「票：未 resolved 的」重新定性：不再等候选租户的渠道证据。操作者一半是机制，由 [operator-channel](../../operator-channel/issues/) 承接（ADR-0100、ADR-0149）；客户一半等用户裁定 ADR-0139 至 0142。正文「S0 证据缺口」与 Comments 里「排期归用户 → 客户」按旧口径写成，未改写。此前：ADR-0072 口径的重启条件已满足，票面范围已按其 Consequences 改写（见「重启范围」）；S0 的证据缺口三项未到，未到前不进 S1
+Blocked by: 用户裁定 ADR-0139 至 0142（客户一半）
 
 来源:SYN-WALL-DOOR-AUDIT 走通审计(基线 `49a2ab0`),对应清单 W01/W02。
 
@@ -363,3 +364,5 @@ ADR-0055、ADR-0003、ADR-0052;`docs/product/PILOT-PARAMETER-REGISTER.md` PAR-IN
   **本票此刻无在线负责人**：MCP-1、MCP-2、MCP-5、MCP-6 频道心跳均已停（实测于 22:2x–22:3x）。
 
   未开代码，未建 worktree，未提交。证据等级 `S`。
+
+- 2026-09-24 · 通道 4：Status 行与新增的 Blocked by 行落 product-strategy-boundary/02 的既有定性（用户同日令「避免以后的 agent 开发时老说没有真实的外部环境」）；「重启范围」及其后正文未改写，以顶部两行为准。

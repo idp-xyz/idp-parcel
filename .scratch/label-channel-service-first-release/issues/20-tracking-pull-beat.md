@@ -1,8 +1,8 @@
 # 20 轨迹拉取节拍：`TrackingSource.Pull` 与 `Adopt` 之间没有生产入口
 
 Category: enhancement
-Status: draft
-Blocked by: 18
+Status: draft——2026-09-24 按 ADR-0146 重新定性（定性表见 [product-strategy-boundary/02](../../product-strategy-boundary/issues/02-split-parameter-register-and-retriage-deferrals.md)「票：未 resolved 的」）：连接器形态归产品策略，不再等第一家真源；对合成源与公开承运商参考配置做，随 [product-strategy-boundary/09](../../product-strategy-boundary/issues/09-tf-fulfillment-judgment-methods-and-connectors.md)「外部轨迹来源连接器」一项分诊后转 ready-for-agent。正文「随第一家真源」按旧口径写成，未改写
+Blocked by: 18（已 resolved）；[product-strategy-boundary/09](../../product-strategy-boundary/issues/09-tf-fulfillment-judgment-methods-and-connectors.md) 分诊
 
 ## 缺口
 
@@ -35,3 +35,7 @@ Blocked by: 18
 ## 参照
 
 票 `15` Answer 第一、五节；票 `16` 完成记录；`internal/transportfulfillment/ports/tracking_source.go`。
+
+## Comments
+
+- 2026-09-24 · 通道 4：Status / Blocked by 两行落 product-strategy-boundary/02 的既有定性（用户同日令「避免以后的 agent 开发时老说没有真实的外部环境」）；正文未改，以顶部两行为准。

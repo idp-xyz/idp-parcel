@@ -35,10 +35,13 @@
 ```mermaid
 flowchart TD
     slice["读 PN 切片表<br/>确认切片编号与主责上下文"] --> pack["读该 PN 的 docs/design/*handoff*<br/>认领一个 W 包"]
-    pack --> confirmed{"W 包的参数<br/>在登记册里是<br/>「已确认」吗？"}
-    confirmed -- 否 --> skeleton["只做稳定骨架 + 显式未配置分支<br/>或隔离合成 S 验证"]
-    confirmed -- 是 --> real["按真实参数实现"]
-    skeleton --> implement["/implement<br/>内驱 /tdd 红绿切片"]
+    pack --> classify{"每个待定格<br/>按分界检验归类"}
+    classify -- 机制 / 产品策略 --> build["做执行器、内置策略或参考配置<br/>外部系统对公开规范、沙箱或模拟源<br/>演示租户 + SYN 数据走通，记 S"]
+    classify -- 租户取值 --> confirmed{"登记册里是<br/>「已确认」吗？"}
+    confirmed -- 否 --> unconfigured["留空、拒绝默认<br/>如实答「未配置」，本票照常收口"]
+    confirmed -- 是 --> real["按该租户取值实现"]
+    build --> implement["/implement<br/>内驱 /tdd 红绿切片"]
+    unconfigured --> implement
     real --> implement
     implement --> review["/code-review 双轴<br/>Standards + Spec"]
     review -- Spec 轴对照 --> usecase["对应的 UC-* 文档"]
@@ -47,7 +50,9 @@ flowchart TD
 
 第一步的判据在 [AGENTS.md 的「开工顺序」](../../AGENTS.md#开工顺序)，这里不复述。
 
-**参数是否已确认**只看[参数登记册](../product/PILOT-PARAMETER-REGISTER.md)。登记册说「待提供」就是待提供——不用技术默认值补齐，也不因为合成数据跑通了就改状态。
+**先归类，再查登记册。** 三类（机制、产品策略、租户取值）与分界检验只在[开发主线](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md#切片的机制半边与实例半边)定义。登记册自 ADR-0146 起只装租户取值；某一行里若还写着判断方法或连接器，行内已点名它转去的工作票——照那张票做，不等这一行变状态。
+
+**租户取值是否已确认**只看[参数登记册](../product/PILOT-PARAMETER-REGISTER.md)。登记册说「待提供」就是待提供——不用技术默认值补齐，也不因为合成数据跑通了就改状态。
 
 **`/code-review` 的 Spec 轴**对照的是 `UC-*` 用例文档，不是工单描述。用例的输入、结果、失败边界就是验收口径。
 
@@ -61,7 +66,7 @@ flowchart TD
 - 影子运行不是第五种层级，按其实际数据来源记为 `R` 或 `S`；影子通过本身不构成 `P`
 - `/prototype` 的产出**最高只能是 `S`**，而且按技能本身的规矩，原型代码不进生产实现——它只提供证据，赢的设计交给 `/tdd` 重写
 
-**只实现已确认规则**——在设计那一步。未确认参数与 `BD-*` 保持可配置或显式未决分支。
+**租户取值留给租户**——在设计那一步。租户取值保持可配置或显式未决分支；未确认的 `BD-*` 先按三类归，归租户取值的同此办，归机制或产品策略的由本票做出来。
 
 **所有权清晰**——在分层那一步。变更落在正确的 `internal/<context>/` 下；领域包不依赖 HTTP 或 `pgx`。跨上下文只传递自己拥有的事实、判断或授权引用，接收方形成自己的结果。
 

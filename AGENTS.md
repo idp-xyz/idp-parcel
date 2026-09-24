@@ -13,7 +13,7 @@
 3. **定行为** — 读对应 `UC-*`（见 [application/README](./docs/application/README.md)）与相关 ADR（见 [adr/README](./docs/adr/README.md)）。  
    **完成**：用例输入/结果/失败边界与未确认 `BD-*` 已列出。
 4. **定交接** — 读该 PN 的 `docs/design/*handoff*`（无真实参数时优先合成任务包，如 [PN02-SYN](./docs/design/pn-02-synthetic-business-contract-development-task-pack.md)）。  
-   **完成**：知道当前只允许骨架 / 隔离 `S` / 还是可提交 PN-08 候选。
+   **完成**：每个待定格已按三类归好（三类见[红线](#红线)一节「软件产品」那段）：机制与产品策略由本票做出执行器或参考配置，租户取值留空答`未配置`；证据记 `S` 还是可提交 PN-08 候选已判明。
 5. **再编码** — 技术切片以 [Go 首个消费者决策简报](./docs/design/parcel-go-first-consumer-slice-decision-brief.md) 与包布局为准；默认主刀为 `UC-PS-001`「来源保全 → 生产归属 → 已提交」。  
    **完成**：变更落在正确 `internal/<context>/` 层；领域包不依赖 HTTP/`pgx`。
 
@@ -25,7 +25,7 @@
 
 | 目标 | 门禁 |
 |---|---|
-| 只实现已确认规则 | 未确认参数与 `BD-*` 保持可配置或显式未决；不写死为生产默认 |
+| 租户取值留给租户（旧称「只实现已确认规则」） | 租户取值保持可配置或显式未决，不写死为生产默认；未确认的 `BD-*` 先按三类归，归租户取值的同此办 |
 | 证据层级诚实 | 隔离合成 `S` 只记为 `S`；**某租户实例**进入生产只来自登记册证据 + PN-08 `Go` |
 | 所有权清晰 | 限界上下文表达语言与数据所有权；不等于微服务、进程或库表共享许可 |
 | 单一权威 | 一决策一处定义；用例与交接只引用，不复制第二套口径 |
@@ -33,7 +33,12 @@
 
 冲突时：产品基线 / 试点范围 / `CONTEXT*` / ADR 优先于用例与设计交接；交接优先于临时代码注释。
 
-**本仓开发的是卖给物流企业的软件产品，开发方不是运营企业。** 文档里的「运营企业」指购买产品的租户，锚点货主客户是租户的客户。当前尚无租户，因此真实价卡、客户合同、供应商协议一律不可能取得——遇到「等真实参数」时先分清它属机制半边还是实例半边，机制现在就做，实例留空并拒绝默认值。两半的划分与产品就绪判据见[开发主线](./docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)，那里是唯一权威。
+**本仓开发的是卖给物流企业的软件产品，开发方不是运营企业。** 文档里的「运营企业」指购买产品的租户，锚点货主客户是租户的客户。产品开发由开发方独立做完：缺真实参数、真源或租户证据时，先把那一格归进三类，再动手——
+
+- **机制**与**产品策略**（判断方法、内置策略、连接器形态、随产品发布的参考配置）现在就做完。外部系统对着公开规范、沙箱或模拟源接，用演示租户加 `SYN-` 数据走通，证据记 `S`。
+- **租户取值**（某个租户的具体数值、对象、人与阶段决定）留空并拒绝默认值，那一格如实答`未配置`。它属租户上线时的实施，票照常收口。
+
+立票与分诊时，`Blocked by` 与 `needs-info` 只指向另一张票、一篇待接受的 ADR 或一项用户决定。三类的分界检验与产品就绪判据见[开发主线](./docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md#切片的机制半边与实例半边)，取舍见 [ADR-0146](./docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)；两处是唯一权威。
 
 ## 写代码注释
 
@@ -116,7 +121,7 @@ Skill 是 Agent 作业流程，不是 shell 命令；Cursor 不一定显示 skil
 
 - 用例：[UC-PS-001](./docs/application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)
 - 技术边界：[parcel-go-first-consumer-slice-decision-brief.md](./docs/design/parcel-go-first-consumer-slice-decision-brief.md)
-- 范围：机制半边已放行，实例半边与 Bento 持久化闸门仍阻断；边界以 [ADR-0017](./docs/adr/0017-admission-gates-judged-by-blocking-cause.md) 为准，不在此复述
+- 范围：机制与产品策略已放行，租户取值与 Bento 持久化闸门仍阻断；边界以 [ADR-0017](./docs/adr/0017-admission-gates-judged-by-blocking-cause.md) 与 [ADR-0146](./docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 为准，不在此复述
 
 ## Agent skills
 
