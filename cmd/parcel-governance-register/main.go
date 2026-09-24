@@ -3,9 +3,11 @@
 // 信任边界是运维边界而不是商业渠道，故走受控 CLI 而不进 parcel-api 的端点面
 // （ADR-0055 的业务端点章程不辖此面；接入渠道那半在票 01 另行推进）。
 //
-// 首批只开三类（票 12 裁决）：权威区间（authority-interval——`OWNERSHIP_UNRESOLVED`
+// 首批三类（票 12 裁决）：权威区间（authority-interval——`OWNERSHIP_UNRESOLVED`
 // 的恢复动作落点）、暂停（suspend）与恢复（resume，四件由领域把门，无简化路径）。
-// 阶段评审与接管第二批，不在本入口。
+// 第二批里阶段评审已开（stage-review，票 demo-intake-admission-paused/01）：一份输入固定
+// 本次评审的候选版本组、记下 Go/No-Go，并随决定登记范围版本的覆盖关系——暂停按覆盖
+// 关系读，读不出即保守拦，这里是那条关系唯一的登记口。接管仍未开。
 //
 // 执行者身份走双轨（票 12 裁决）：①通道技术身份（OS 进程属主、主机名）由本入口
 // 自取，没有任何参数能传入或覆盖它，与登记同笔事务落 channel_execution 留痕；
@@ -25,6 +27,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -61,7 +64,12 @@ var (
 	commandAuthorityInterval = domain.ChannelCommandAuthorityInterval.String()
 	commandSuspend           = domain.ChannelCommandSuspend.String()
 	commandResume            = domain.ChannelCommandResume.String()
+	commandStageReview       = domain.ChannelCommandStageReview.String()
 )
+
+// errStageReviewNotLanded 让阶段评审那一笔事务在评审没落成时整笔撤回：候选组是这次评审
+// 固定的，不留一个没有评审的组在册上。它只在事务闭包与 execute 之间传话，不是故障。
+var errStageReviewNotLanded = errors.New("stage review did not land")
 
 type systemClock struct{}
 
@@ -94,11 +102,13 @@ type executionTracer interface {
 var _ executionTracer = (*pgadapter.ChannelExecutions)(nil)
 
 type registrars struct {
-	incidents  *application.GovernIncidentHandler
-	intervals  *application.RegisterAuthorityIntervalHandler
-	tracer     executionTracer
-	transactor bentoapp.Transactor
-	clock      ports.Clock
+	incidents     *application.GovernIncidentHandler
+	intervals     *application.RegisterAuthorityIntervalHandler
+	candidateSets *application.FixCandidateSetHandler
+	reviews       *application.RecordStageReviewHandler
+	tracer        executionTracer
+	transactor    bentoapp.Transactor
+	clock         ports.Clock
 }
 
 func main() {
@@ -109,14 +119,14 @@ func main() {
 
 func run(ctx context.Context, args []string, getenv func(string) string, out, errOut io.Writer) int {
 	if len(args) < 1 {
-		fmt.Fprintf(errOut, "用法：parcel-governance-register <%s|%s|%s> -input <file>\n",
-			commandAuthorityInterval, commandSuspend, commandResume)
+		fmt.Fprintf(errOut, "用法：parcel-governance-register <%s|%s|%s|%s> -input <file>\n",
+			commandAuthorityInterval, commandSuspend, commandResume, commandStageReview)
 		return exitUsage
 	}
 	command := args[0]
 	if _, known := domain.ParseChannelCommand(command); !known {
-		fmt.Fprintf(errOut, "未知登记种类 %q；首批只开 %s、%s、%s（阶段评审与接管第二批）\n",
-			command, commandAuthorityInterval, commandSuspend, commandResume)
+		fmt.Fprintf(errOut, "未知登记种类 %q；只开 %s、%s、%s、%s（接管未开）\n",
+			command, commandAuthorityInterval, commandSuspend, commandResume, commandStageReview)
 		return exitUsage
 	}
 
@@ -169,8 +179,9 @@ func run(ctx context.Context, args []string, getenv func(string) string, out, er
 	return code
 }
 
-// buildRegistrars 装配真实登记链：治理三库 + 权威区间册 + Outbox 交接 + 留痕库。
-// 接管库照样接上——治理用例的依赖不留 nil 口，但本入口没有开它的命令。
+// buildRegistrars 装配真实登记链：暂停/恢复/接管库 + 权威区间册 + 阶段评审的候选组、
+// 决定与覆盖关系库 + Outbox 交接 + 留痕库。接管库照样接上——治理用例的依赖不留 nil 口，
+// 但本入口没有开它的命令。
 func buildRegistrars(db *bentopg.DB) (registrars, error) {
 	none := registrars{}
 	suspensions, err := pgadapter.NewSuspensions(db)
@@ -188,6 +199,18 @@ func buildRegistrars(db *bentopg.DB) (registrars, error) {
 	intervals, err := pgadapter.NewAuthorityIntervals(db)
 	if err != nil {
 		return none, fmt.Errorf("构造权威区间册：%w", err)
+	}
+	candidateSets, err := pgadapter.NewCandidateSets(db)
+	if err != nil {
+		return none, fmt.Errorf("构造候选版本组库：%w", err)
+	}
+	reviewDecisions, err := pgadapter.NewReviewDecisions(db)
+	if err != nil {
+		return none, fmt.Errorf("构造评审决定库：%w", err)
+	}
+	relations, err := pgadapter.NewScopeVersionRelations(db)
+	if err != nil {
+		return none, fmt.Errorf("构造范围版本覆盖关系库：%w", err)
 	}
 	outboxStore, err := outbox.NewStore(db)
 	if err != nil {
@@ -214,12 +237,21 @@ func buildRegistrars(db *bentopg.DB) (registrars, error) {
 	registration := application.NewRegisterAuthorityIntervalHandler(application.RegisterAuthorityIntervalDeps{
 		Intervals: intervals,
 	})
+	reviews := application.NewRecordStageReviewHandler(application.RecordStageReviewDeps{
+		Candidates: candidateSets,
+		Reviews:    reviewDecisions,
+		Intervals:  intervals,
+		Relations:  relations,
+		Clock:      clock,
+	})
 	return registrars{
-		incidents:  incidents,
-		intervals:  registration,
-		tracer:     tracer,
-		transactor: db.Transactor(),
-		clock:      clock,
+		incidents:     incidents,
+		intervals:     registration,
+		candidateSets: application.NewFixCandidateSetHandler(candidateSets),
+		reviews:       reviews,
+		tracer:        tracer,
+		transactor:    db.Transactor(),
+		clock:         clock,
 	}, nil
 }
 
@@ -297,6 +329,37 @@ func execute(
 			return fmt.Sprintf("%s: 未决：%v", command, err), exitUndecided
 		}
 		return incidentAnswer(command, result.Outcome(), result.HandoffReference())
+	case domain.ChannelCommandStageReview:
+		input, err := stageReviewFromJSON(raw)
+		if err != nil {
+			return fmt.Sprintf("%s: 输入被拒：%v", command, err), exitUsage
+		}
+		var fixed application.FixCandidateSetResult
+		var result application.RecordStageReviewResult
+		err = regs.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+			handled, err := regs.candidateSets.Handle(txCtx, input.candidateSet)
+			if err != nil {
+				return err
+			}
+			fixed = handled
+			if fixed.Outcome() != application.CandidateSetFixed && fixed.Outcome() != application.CandidateSetAlreadyFixed {
+				return errStageReviewNotLanded
+			}
+			reviewed, err := regs.reviews.Handle(txCtx, input.command)
+			if err != nil {
+				return err
+			}
+			result = reviewed
+			if result.Outcome() != application.ReviewRecorded && result.Outcome() != application.ReviewExistingDecision {
+				return errStageReviewNotLanded
+			}
+			return traceExecution(txCtx, regs, channelCommand, stageReviewReference(input.command), identity,
+				true, result.Outcome().String())
+		})
+		if err != nil && !errors.Is(err, errStageReviewNotLanded) {
+			return fmt.Sprintf("%s: 未决：%v", command, err), exitUndecided
+		}
+		return stageReviewAnswer(fixed.Outcome(), result.Outcome(), stageReviewDetail(result))
 	default:
 		// ParseChannelCommand 只交回集合内的取值；这一支留给编译器之外的那种「集合加了格、这里没跟」。
 		return fmt.Sprintf("登记种类 %q 尚无执行路径", command), exitUsage
@@ -386,6 +449,76 @@ func intervalAnswer(
 	default:
 		return message, exitUndecided
 	}
+}
+
+// stageReviewReference 是留痕指名那次评审决定的引用：评审目标加候选组，正是决定的幂等键。
+func stageReviewReference(command application.RecordStageReviewCommand) string {
+	return command.Review.Objective + "/" + command.Review.Candidates.String()
+}
+
+// stageReviewDetail 把评审答案里要人看的那部分摊成文字：两类冲突逐对列出，两类续办引用
+// 原样给出。决定已落而区间或覆盖关系边没追加上时，续办引用非空。
+func stageReviewDetail(result application.RecordStageReviewResult) stageReviewNote {
+	note := stageReviewNote{}
+	for _, conflict := range result.Conflicts() {
+		note.conflicts = append(note.conflicts, formatInterval(conflict.First)+" 撞 "+formatInterval(conflict.Second))
+	}
+	for _, conflict := range result.CoverageConflicts() {
+		note.conflicts = append(note.conflicts, formatRelation(conflict.Declared)+" 撞在册 "+formatRelation(conflict.Existing))
+	}
+	for _, pending := range []string{result.IntervalContinuation(), result.CoverageContinuation()} {
+		if pending != "" {
+			note.continuations = append(note.continuations, pending)
+		}
+	}
+	return note
+}
+
+type stageReviewNote struct {
+	conflicts     []string
+	continuations []string
+}
+
+// stageReviewAnswer 把候选组与评审两段答案译成退出码。候选组没进册就没有评审可言，先看它；
+// 同标识异内容是治理答案（组不可扩张，要换新组标识，人看过再走），不是输入畸形。评审已落
+// 而续办引用非空时同样成治理退出码——决定在册、区间或边缺着，不能混进 0 里被忽略。
+func stageReviewAnswer(
+	fixed application.FixCandidateSetOutcome,
+	outcome application.StageReviewOutcome,
+	note stageReviewNote,
+) (string, int) {
+	switch fixed {
+	case application.CandidateSetFixed, application.CandidateSetAlreadyFixed:
+	case application.CandidateSetContentConflict:
+		return commandStageReview + ": CANDIDATE_SET_" + fixed.String() +
+			"（同标识的候选版本组已按另一份内容固定，组不可扩张——换一个候选组标识）", exitGovernance
+	case application.CandidateSetNotAccepted:
+		return commandStageReview + ": CANDIDATE_SET_" + fixed.String(), exitUsage
+	default:
+		return commandStageReview + ": CANDIDATE_SET_" + fixed.String(), exitUndecided
+	}
+
+	message := commandStageReview + ": " + outcome.String()
+	for _, conflict := range note.conflicts {
+		message += "\n  " + conflict
+	}
+	switch outcome {
+	case application.ReviewRecorded, application.ReviewExistingDecision:
+		if len(note.continuations) > 0 {
+			return fmt.Sprintf("%s（已入册，区间或覆盖关系边未追加上，续办引用 %v）", message, note.continuations), exitGovernance
+		}
+		return message, exitRegistered
+	case application.AuthorityConflictBlocked, application.CoverageConflictBlocked:
+		return message, exitGovernance
+	case application.ReviewNotAccepted:
+		return message, exitUsage
+	default:
+		return message, exitUndecided
+	}
+}
+
+func formatRelation(relation domain.ScopeVersionRelation) string {
+	return fmt.Sprintf("%s → %s %s", relation.Predecessor(), relation.Successor(), relation.Kind())
 }
 
 func formatInterval(interval domain.AuthorityInterval) string {
