@@ -15,6 +15,11 @@ type Query struct {
 	Filters map[string][]string
 	// Keyword 是去掉首尾空白的 q；空串即缺席。
 	Keyword string
+	// After 是上一页末行的位置，读面取严格排在它之后的行；nil 即第一页。
+	After *Position
+
+	catalogue *Catalogue
+	digest    string
 }
 
 // MalformedQuery 是查询参数不成立的拒绝。各上下文把它映射到 MALFORMED_REQUEST，Reason 原样放进
@@ -32,9 +37,11 @@ func malformed(format string, arguments ...any) *MalformedQuery {
 }
 
 // Decode 从查询串解出本册的一次查询。集外键、集外排序维、词表外或为空的筛选值、超长的 q、只能给一次
-// 却给了多次的键，一律答 *MalformedQuery。
+// 却给了多次的键、解不开或与本次条件不符的游标，一律答 *MalformedQuery。
 func (catalogue *Catalogue) Decode(values url.Values) (Query, error) {
-	query := Query{Sort: catalogue.defaultSort, Filters: map[string][]string{}}
+	query := Query{Sort: catalogue.defaultSort, Filters: map[string][]string{}, catalogue: catalogue}
+	selectors := map[string][]string{}
+	cursor, hasCursor := "", false
 
 	// 按键名顺序走，同一个坏请求每次报同一条理由。
 	keys := make([]string, 0, len(values))
@@ -66,8 +73,15 @@ func (catalogue *Catalogue) Decode(values url.Values) (Query, error) {
 				return Query{}, malformed("检索词 q 超过 %d 个字符", MaxKeywordRunes)
 			}
 			query.Keyword = keyword
+		case key == keyAfter:
+			value, err := single(key, given)
+			if err != nil {
+				return Query{}, err
+			}
+			cursor, hasCursor = value, true
 		case catalogue.selectors[key]:
-			// 选择器由端点自己读。
+			// 选择器由端点自己读；这里只记下取值进摘要。
+			selectors[key] = canonical(given)
 		default:
 			vocabulary, isFilter := catalogue.filters[key]
 			if !isFilter {
@@ -83,6 +97,16 @@ func (catalogue *Catalogue) Decode(values url.Values) (Query, error) {
 			}
 			query.Filters[key] = canonical(given)
 		}
+	}
+
+	// 摘要要等条件全部解完才算得出，游标因此最后解。
+	query.digest = catalogue.digest(query, selectors)
+	if hasCursor {
+		position, err := catalogue.decodeCursor(cursor, query)
+		if err != nil {
+			return Query{}, err
+		}
+		query.After = &position
 	}
 	return query, nil
 }
