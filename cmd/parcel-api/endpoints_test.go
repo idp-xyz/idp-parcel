@@ -11,6 +11,7 @@ import (
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/platform/buildinfo"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
+	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 )
 
 // businessEndpointProbes 是本进程应当服务的全部业务端点及各自的有效探测请求。它与
@@ -246,7 +247,7 @@ func assembleUnconfiguredBusinessEndpoints() []httpapi.BusinessEndpoint {
 // 辅助函数正是隔离读那组用例的入口——它若把读写入参并成一个，那组用例就再也证不了这件事。
 // 写行放行的三态另有 isolated_write_test.go。
 func assembleUnwiredBusinessEndpoints(isolatedRead *isolatedReadIntakes) []httpapi.BusinessEndpoint {
-	return assembleUnwiredBusinessEndpointsWith(isolatedRead, nil, nil, nil)
+	return assembleUnwiredBusinessEndpointsWith(isolatedRead, nil, nil, nil, nil)
 }
 
 func assembleUnwiredBusinessEndpointsWith(
@@ -254,6 +255,7 @@ func assembleUnwiredBusinessEndpointsWith(
 	isolatedSubmission shipmenthttp.SubmissionIntake,
 	isolatedPartyIdentity *commercialhttp.IsolatedPartyIdentityIntake,
 	isolatedNodeOperations *nodeopshttp.IsolatedCommandIntake,
+	isolatedTransportFulfillment *tfhttp.IsolatedCommandIntake,
 ) []httpapi.BusinessEndpoint {
 	return assembleBusinessEndpoints(
 		unwiredSubmission{},
@@ -367,6 +369,7 @@ func assembleUnwiredBusinessEndpointsWith(
 		isolatedSubmission,
 		isolatedPartyIdentity,
 		isolatedNodeOperations,
+		isolatedTransportFulfillment,
 	)
 }
 

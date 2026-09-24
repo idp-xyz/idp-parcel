@@ -160,6 +160,7 @@ func assembleBusinessEndpoints(
 	isolatedSubmission shipmenthttp.SubmissionIntake,
 	isolatedPartyIdentity *commercialhttp.IsolatedPartyIdentityIntake,
 	isolatedNodeOperations *nodeopshttp.IsolatedCommandIntake,
+	isolatedTransportFulfillment *tfhttp.IsolatedCommandIntake,
 ) []httpapi.BusinessEndpoint {
 	// 缺省朝拦：各隔离入参都为 nil 时，下面这组变量全取未配置即拒，整份装配与
 	// ADR-0078/0091 之前逐字节同形。
@@ -233,6 +234,10 @@ func assembleBusinessEndpoints(
 	if isolatedNodeOperations != nil {
 		receptionIntake = isolatedNodeOperations
 	}
+	pickupRegistrationIntake := tfhttp.PickupRegistrationIntake(tfhttp.UnconfiguredIntake{})
+	if isolatedTransportFulfillment != nil {
+		pickupRegistrationIntake = isolatedTransportFulfillment
+	}
 
 	return []httpapi.BusinessEndpoint{
 		{Pattern: "/shipment-requests", Handler: shipmenthttp.NewSubmitShipmentRequestEndpoint(submissionIntake, submission)},
@@ -293,7 +298,7 @@ func assembleBusinessEndpoints(
 		// 重派生另立票；它接的是自己那一格装配（assemble_offsite_pickup_correction.go），与首登共用一册。
 		{Pattern: "/transport-fulfillment/handovers", Handler: tfhttp.NewRegisterTransportHandoverEndpoint(tfhttp.UnconfiguredIntake{}, handover)},
 		{Pattern: "/transport-fulfillment/handover-corrections", Handler: tfhttp.NewCorrectTransportHandoverEndpoint(tfhttp.UnconfiguredIntake{}, handover)},
-		{Pattern: "/transport-fulfillment/offsite-pickups", Handler: tfhttp.NewRegisterOffsitePickupEndpoint(tfhttp.UnconfiguredIntake{}, pickupRegistration)},
+		{Pattern: "/transport-fulfillment/offsite-pickups", Handler: tfhttp.NewRegisterOffsitePickupEndpoint(pickupRegistrationIntake, pickupRegistration)},
 		{Pattern: "/transport-fulfillment/offsite-pickup-corrections", Handler: tfhttp.NewCorrectOffsitePickupEndpoint(tfhttp.UnconfiguredIntake{}, pickupCorrection)},
 		{Pattern: "/transport-fulfillment/offsite-pickup-attempts", Handler: tfhttp.NewPerformOffsitePickupEndpoint(tfhttp.UnconfiguredIntake{}, pickupAttempt)},
 		// 移动事实口（票 tf-segment-lifecycle-closure/05）：只收自营执行方的出发 / 移动 / 到达；外部承运
