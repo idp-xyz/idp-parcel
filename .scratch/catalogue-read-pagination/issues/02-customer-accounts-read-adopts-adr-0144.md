@@ -1,7 +1,7 @@
 # 02 客户账户目录读口（`/commercial-customer-accounts`）迁到 ADR-0144
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——2026-09-24 通道 2 认领（派单 `task-556d1395` ← 通道 3），隔离 worktree 分支 `mcp2-crp02`：票 03 尚未重放进 main，分支基 `mcp2-crp03` tip `c632f3e0`，重放时只取本票的笔。此前 ready-for-agent——迁移编号预留 party-commercial `0035`（`0034` 已由 legal-entity-profile/02 占用，`0033` 属 legal-entity-profile/01）
 Blocked by: 01
 地盘：`internal/partycommercial/adapters/http/query_customer_accounts.go` 与其测试、它消费的读端口与 postgres 读面、`migrations/` 下 party-commercial 模块的
 一条新迁移（索引）。
