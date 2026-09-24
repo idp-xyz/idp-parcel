@@ -1,7 +1,7 @@
 # 管理台工作区形态：以 idp-ui `apps/myshop-web` 为参照（UX 对齐第二轮）
 
 Category: enhancement
-Status: resolved——五票全落（03 / 04 / 05 于 09-20 至 09-21 进 main；01 / 02 于 2026-09-23 随 `539b8764` 进 main，码 SHA 不换）。判断项 1–3 未经用户逐条答，按 spec 推荐取值落地并写进票 01；用户若要分栏 / `ActivityBar` 各立追加票。2026-09-24 票 01 / 02 补齐非作者评审（通道 2 / 3），01 的 Spec 阻断与两票各条非阻断已在 `main` 上逐笔处置（本地，未推）；另立追加票 06（draft，形态取舍归用户）
+Status: in-progress——追加票 06 ready-for-agent（2026-09-24 用户授权通道 3 自决形态取舍，见票 06「判断项答复」）；原五票全落（03 / 04 / 05 于 09-20 至 09-21 进 main；01 / 02 于 2026-09-23 随 `539b8764` 进 main，码 SHA 不换）。判断项 1–3 于 2026-09-24 用户授权通道 3 自决：多标签要、分栏不做、`ActivityBar` 不装（见下方「判断项」各条答复）。2026-09-24 票 01 / 02 补齐非作者评审（通道 2 / 3），01 的 Spec 阻断与两票各条非阻断已在 `main` 上逐笔处置（本地，未推）；另立追加票 06（draft，形态取舍归用户）
 出处：用户 2026-09-20 19:4x 经 IDP 队列「`/workspace/idp/idp-ui/apps/myshop-web`，ssh idp-110-dev 参考这个 ui 对我们的项目进行 ux 优化」。
 参照物钉在 `idp-ui@6751fb2`（idp-110-dev `/workspace/idp/idp-ui`，2026-08-31 `feat(ui-workspace): CommandPalette async searchSource, badges, emptyState`；`scp` 取证于 19:4x，
 源在 `%TEMP%\myshop-web-ref`，不入库）：`apps/myshop-web`（MyShop 订单管理工作台演示，数据全为 `data/oms.ts` 硬编码样例）与一份规范
@@ -50,8 +50,12 @@ Status: resolved——五票全落（03 / 04 / 05 于 09-20 至 09-21 进 main�
 
 1. 多标签工作区要不要——蓝图与 myshop-web 都要；代价是 hash 路由与标签集要互为镜像（hash 仍是位置权威，见票 01），每张已打开的对象页都变成一个可关闭的标签。
    不要的话票 01 作废，02 / 03 / 04 / 05 不受影响。
+   **答（2026-09-24，用户授权通道 3 自决）：要**——已按推荐落地（票 01）。
 2. 分栏（`onSplitRight` / `onSplitDown`）要不要——myshop-web 有，两栏各自一组标签。推荐**第一版不做**（`showSplitButtons={false}`），先把单组标签做稳。
+   **答（同上）：不做。** 两组标签同时活动时，地址栏只能说其中一组，「hash 是位置的唯一权威」这条不变量就破了；并排比对的主诉求（队列 + 对象）已由检查器
+   承担（票 02）。等操作者报告要并排看两个完整对象时再立票。
 3. `ActivityBar` 要不要——推荐不要（理由见上）。
+   **答（同上）：不装。** 只有一种侧栏内容，一格图标不是能力；出现第二种侧栏内容时再议。
 
 阻塞边：01 与第一轮 02 同动 `Layout.tsx`，01 Blocked by ux-alignment/02 进 main；02 的壳层右栏位落在 01 重写后的 `Layout.tsx`，02 Blocked by 01（模板层的检查器契约与
 首用页渲染器不等 01，可先做，票面分两段）；03 读第一轮 02 的最近对象存储，03 Blocked by ux-alignment/02 进 main；04 只动 `templates/ListPageTemplate.tsx` +
@@ -79,4 +83,4 @@ Status: resolved——五票全落（03 / 04 / 05 于 09-20 至 09-21 进 main�
 | [03](./issues/03-command-palette.md) | 命令面板 `Ctrl+K`：导航 + 最近对象 + 壳层开关；TopBar 全局搜索位改为面板入口 | resolved · 已进 main `6739ab54`（码 `e785a28e` / `67982672` / `18ba6620` + `938a2a54`——通道 6 09-20 21:00 写完 `Layout.tsx` 接线未提交、会话无响应，推送方 09-21 原样入库；完成记录推送方代落 `6739ab54`；评审 ← 通道 4 Spec 阻断 1 → 接线笔后推送方自跑 Spec 轴 0 阻断，不算非作者评审） |
 | [04](./issues/04-list-selection-bulk-action-bar.md) | `ListPageTemplate` 多选 + 批量动作栏：选择模型、表头全选、「已选 N 项」栏、默认动作「导出所选 CSV」、页面级动作槽 | resolved · 已进 main `a5a5527d`（码 `8fe22c59` / `3b97134b`，推送方代落完成记录 `5deab441`；通道 3 码推完后会话 crash；评审 ← 通道 4 两轴 0 阻断，非阻断六条记票面） |
 | [05](./issues/05-action-feedback-confirmation-sweep.md) | 写动作反馈与高风险确认一致性：先审计全部写面调用点成对照表，再补 `useToast` / `ConfirmDialog` / 进行中态 | resolved · 已进 main `a5a5527d`（码 `2f3a8d3a` / `cdaa27b4` / `f8d37cf6` + 推送方注释笔 `844bc6a7`，完成记录由推送方代落；通道 5 末笔后会话未响应；评审 ← 通道 4 两轴 0 阻断） |
-| [06](./issues/06-list-detail-roundtrip-keeps-page-state.md) | 列表 → 详情往返保住检索词与多选集：多标签壳层下「进详情再回来即清零」的出路 | draft · 形态取舍等用户答（票 01 评审 ← 通道 2 Spec 非阻断 1） |
+| [06](./issues/06-list-detail-roundtrip-keeps-page-state.md) | 列表 → 详情往返保住检索词与多选集：多标签壳层下「进详情再回来即清零」的出路 | ready-for-agent · 2026-09-24 用户授权通道 3 自决：C 的检索词半 + 壳层记住各标签最后停在的完整地址，多选集进详情即丢（票 01 评审 ← 通道 2 Spec 非阻断 1） |
