@@ -104,6 +104,8 @@ var expectedWriteAdmittedLines = map[string]bool{
 	"/commercial-party-identity-deactivations":     true,
 	// 法人资料登记（票 legal-entity-profile/05）：与身份族同一个隔离 Intake 类型，一口一笔地放。
 	"/commercial-legal-entity-profile-registrations": true,
+	// 主链命令面（票 operator-channel/08）：各上下文一个隔离命令 Intake 类型，一口一笔地放。
+	"/node-operations/receptions": true,
 }
 
 // Covers: ADR-0091 Consequences「命令面按端点逐口放行，不是一次全开」 — 写面放行只及名单里那几行，其余命令面
@@ -114,7 +116,8 @@ var expectedWriteAdmittedLines = map[string]bool{
 // 要钉的分界。
 func TestIsolatedWriteAdmissionSwitchesOnlyTheAdmittedCommandLines(t *testing.T) {
 	router := httpapi.NewWithEndpoints(buildinfo.Info{},
-		assembleUnwiredBusinessEndpointsWith(nil, isolatedSubmissionIntakeForTest(t), isolatedPartyIdentityIntakeForTest(t)))
+		assembleUnwiredBusinessEndpointsWith(nil, isolatedSubmissionIntakeForTest(t), isolatedPartyIdentityIntakeForTest(t),
+			isolatedWriteAdmissionForTest(t).nodeOperationsIntake()))
 
 	for pattern, probe := range businessEndpointProbes {
 		response := httptest.NewRecorder()
@@ -138,6 +141,42 @@ func TestIsolatedWriteAdmissionSwitchesOnlyTheAdmittedCommandLines(t *testing.T)
 		if got := problemCode(t, response); got != "ACCESS_CHANNEL_NOT_CONFIGURED" {
 			t.Fatalf("%s: code = %q, want ACCESS_CHANNEL_NOT_CONFIGURED", pattern, got)
 		}
+	}
+}
+
+// Covers: 票 operator-channel/08 完成判据「生产形态（开关为 nil）逐字节不变」——隔离入参全为 nil 时，放行名单上的每一行
+// 答的仍是未配置即拒那一份字节：状态、内容类型与响应体逐字节等于字面量 UnconfiguredIntake{} 的答复。名单每放一口，这里
+// 就多钉一行；上面那组用例证的是「开了只及名单」，这一条证的是「不开就跟没写过一样」。
+func TestProductionFormAnswersTheAdmittedCommandLinesByteForByteUnconfigured(t *testing.T) {
+	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnconfiguredBusinessEndpoints())
+	const unconfigured = `{"error":{"code":"ACCESS_CHANNEL_NOT_CONFIGURED"}}` + "\n"
+
+	for pattern := range expectedWriteAdmittedLines {
+		probe := businessEndpointProbes[pattern]
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, httptest.NewRequest(probe.method, probe.target, strings.NewReader(`{"any":"body"}`)))
+
+		if response.Code != http.StatusForbidden {
+			t.Fatalf("%s: status = %d, want %d", pattern, response.Code, http.StatusForbidden)
+		}
+		if got := response.Header().Get("Content-Type"); got != "application/json" {
+			t.Fatalf("%s: Content-Type = %q, want application/json", pattern, got)
+		}
+		if got := response.Body.String(); got != unconfigured {
+			t.Fatalf("%s: body = %q, want %q——生产形态的字节变了", pattern, got, unconfigured)
+		}
+	}
+}
+
+// Covers: 票 operator-channel/08 — 合成租户合规时节点作业的隔离命令 Intake 随各格一起就位。它不需要库（租户与合成节点），
+// 因此与身份族同在这道门里构造；缺了它 `/node-operations/receptions` 只能挂字面量未配置，与「开关没设」不可分辨。
+func TestBuildIsolatedWriteAdmissionGrantsTheNodeOperationsIntake(t *testing.T) {
+	if isolatedWriteAdmissionForTest(t).nodeOperationsIntake() == nil {
+		t.Fatal("节点作业隔离命令 Intake 为空——收寄口会照旧答 403")
+	}
+	var disabled *isolatedWriteAdmission
+	if disabled.nodeOperationsIntake() != nil {
+		t.Fatal("未启用时交回了非 nil 的 Intake——装配点那一行会被换掉，生产形态就变了")
 	}
 }
 

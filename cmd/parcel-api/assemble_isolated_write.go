@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	nodeopshttp "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/http"
 	pspilot "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/pilotgovernance"
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 )
@@ -41,6 +42,11 @@ const (
 	isolatedSubmissionCustomerAcct = isolatedReadCustomerAccount
 )
 
+// isolatedReceptionNode 是节点收寄口注入的合成节点（票 operator-channel/08）。ReceptionIntake 的契约把节点身份与租户并列为
+// 「只能来自认证结果」，隔离形态没有设备登记册可查，认证结果就是这一个合成常量——载荷里带节点即拒。取种子网络的始发枢纽，
+// 让动线里的收寄落在网络定义认得的节点上；要在别的合成节点上收寄，改的是这一格，不是去采信请求。
+const isolatedReceptionNode = "SYN-NODE-SHA-HUB"
+
 // isolatedWriteAdmission 携带 ADR-0091 放行的写路径几格。nil 表示未启用——各装配函数
 // 对 nil 的处理与本记录之前逐字节同形。
 //
@@ -57,6 +63,8 @@ type isolatedWriteAdmission struct {
 	// partyIdentity 是 `/commercial-*` 身份族登记口的隔离 Intake（票 admin-web-group-legal-entities/06）。
 	// 租户格填开关值，行内容只从载荷取；它实现了哪几口的 Intake 接口，装配点就换得了哪几行——编译期锁住。
 	partyIdentity *commercialhttp.IsolatedPartyIdentityIntake
+	// 以下各格是主链命令面各上下文的隔离命令 Intake（票 operator-channel/08），锁法同 partyIdentity。
+	nodeOperations *nodeopshttp.IsolatedCommandIntake
 }
 
 // isolatedWriteAdmittedCommandLines 是写开关到此刻为止换上隔离 Intake 的命令面，供启动日志出声
@@ -70,6 +78,7 @@ var isolatedWriteAdmittedCommandLines = []string{
 	"/commercial-party-relationship-registrations",
 	"/commercial-party-identity-deactivations",
 	"/commercial-legal-entity-profile-registrations",
+	"/node-operations/receptions",
 }
 
 // admittedCommandLines 交回放行名单的副本：日志与测试都不该改得动那份表。
@@ -83,6 +92,14 @@ func (admission *isolatedWriteAdmission) partyIdentityIntake() *commercialhttp.I
 		return nil
 	}
 	return admission.partyIdentity
+}
+
+// nodeOperationsIntake 对 nil 接收者交回 nil，理由同 partyIdentityIntake。
+func (admission *isolatedWriteAdmission) nodeOperationsIntake() *nodeopshttp.IsolatedCommandIntake {
+	if admission == nil {
+		return nil
+	}
+	return admission.nodeOperations
 }
 
 // buildIsolatedWriteAdmission 解析隔离写路径准入的显式输入（ADR-0091 决定四）。
@@ -122,10 +139,15 @@ func buildIsolatedWriteAdmission(getenv func(string) string) (*isolatedWriteAdmi
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: isolated party identity intake: %w", err)
 	}
+	nodeOperations, err := nodeopshttp.NewIsolatedCommandIntake(tenant, isolatedReceptionNode)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: isolated node operations command intake: %w", err)
+	}
 	return &isolatedWriteAdmission{
 		governanceDirectory: directory,
 		selfAuthority:       isolatedSelfAuthority,
 		tenant:              tenant,
 		partyIdentity:       partyIdentity,
+		nodeOperations:      nodeOperations,
 	}, nil
 }
