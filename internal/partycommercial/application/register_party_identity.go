@@ -349,23 +349,11 @@ func (handler *RegisterPartyIdentityHandler) checkLifetimeNumbers(
 		if err != nil {
 			return "", err
 		}
-		switch check.Outcome() {
-		case domain.RegistrationNumberAccepted:
-			continue
-		case domain.RegistrationCountryNotRegistered:
-			return fmt.Sprintf("注册国家 / 地区 %s 在注册号类型目录里未登记：先在目录登记它的注册号类型", country), nil
-		case domain.RegistrationNumberTypeNotRegistered:
-			return fmt.Sprintf("注册号类型 %s 在 %s 的注册号类型目录里未登记", number.TypeCode(), country), nil
-		case domain.RegistrationNumberTypeNotEffective:
-			return fmt.Sprintf("注册号类型 %s 在法人生效时点 %s 不在用", number.TypeCode(), at.Format(time.RFC3339)), nil
-		case domain.RegistrationNumberLayerMismatch:
-			return fmt.Sprintf(
-				"注册号类型 %s 属资料层（税务登记号那一类），身份层只收终身注册号", number.TypeCode(),
-			), nil
-		case domain.RegistrationNumberFormatMismatch:
-			return fmt.Sprintf("注册号 %q 不合类型 %s 登记的格式", number.Number(), number.TypeCode()), nil
-		default:
-			return "", fmt.Errorf("注册号类型目录答出了未知结果 %d", check.Outcome())
+		refusal, err := registrationNumberRefusal(
+			check, country, number.TypeCode(), number.Number(), domain.RegistrationNumberIdentityLayer, "法人生效时点", at,
+		)
+		if err != nil || refusal != "" {
+			return refusal, err
 		}
 	}
 	return "", nil
