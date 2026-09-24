@@ -37,6 +37,7 @@ var (
 	_ MovementFactIntake            = (*IsolatedCommandIntake)(nil)
 	_ DispatchTaskIntake            = (*IsolatedCommandIntake)(nil)
 	_ DeliveryDispatchTriggerIntake = (*IsolatedCommandIntake)(nil)
+	_ DeliveryRegistrationIntake    = (*IsolatedCommandIntake)(nil)
 )
 
 // IsolatedCommandIntakeDeps 是构造本 Intake 的全部输入，全部是装配点给定的合成值。
@@ -140,6 +141,19 @@ func (intake *IsolatedCommandIntake) IntakeDeliveryDispatchTrigger(
 	var payload DeliveryDispatchTriggerPayload
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.TriggerDeliveryDispatchCommand{}, err
+	}
+	return payload.Command(intake.tenant)
+}
+
+// IntakeRegistration 译交付生效首登（`/transport-fulfillment/deliveries`）。方法名是 DeliveryRegistrationIntake 的通名（交付那份
+// 先落、占了它）；POD 更正口不在本票，本类型不实现 IntakeCorrection。
+func (intake *IsolatedCommandIntake) IntakeRegistration(
+	_ context.Context,
+	request *http.Request,
+) (application.RegisterEffectiveDeliveryCommand, error) {
+	var payload EffectiveDeliveryPayload
+	if err := decodeClosedPayload(request.Body, &payload); err != nil {
+		return application.RegisterEffectiveDeliveryCommand{}, err
 	}
 	return payload.Command(intake.tenant)
 }

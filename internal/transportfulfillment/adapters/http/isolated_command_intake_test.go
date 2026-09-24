@@ -98,6 +98,29 @@ var isolatedLines = map[string]isolatedLine{
 		},
 		valid: isolatedDeliveryDispatchTriggerBody,
 	},
+	"/transport-fulfillment/deliveries": {
+		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
+			_, err := intake.IntakeRegistration(context.Background(), request)
+			return err
+		},
+		valid: isolatedEffectiveDeliveryBody,
+	},
+}
+
+const isolatedEffectiveDeliveryBody = `{"attempt":"SYN-ATTEMPT-08-10","object":"SYN-PARCEL-08-10","method":"HANDED_TO_RECIPIENT",` +
+	`"recipient":"SYN-RECIPIENT/consignee-10","proof":"SYN-POD/signature-10"}`
+
+// Covers: DeliveryIntake 契约「事实内容必须从请求体收（ADR-0023）：对象、尝试、POD 证据引用都是派送端记录的事实」——
+// 五格逐字来自载荷，租户来自注入。
+func TestIsolatedCommandIntakeTranslatesEffectiveDeliveryWithInjectedTenant(t *testing.T) {
+	command, err := isolatedCommandIntakeForTest(t).IntakeRegistration(context.Background(), commandRequest(isolatedEffectiveDeliveryBody))
+	if err != nil {
+		t.Fatalf("intake：%v", err)
+	}
+	if command.TenantID.String() != isolatedCommandTenant || command.Attempt != "SYN-ATTEMPT-08-10" || command.Object != "SYN-PARCEL-08-10" ||
+		command.Method != "HANDED_TO_RECIPIENT" || command.Recipient != "SYN-RECIPIENT/consignee-10" || command.Proof != "SYN-POD/signature-10" {
+		t.Fatalf("command = %+v，与注入与载荷不符", command)
+	}
 }
 
 const isolatedDeliveryDispatchTriggerBody = `{"segment":"SYN-SEGMENT-08-09","object":"SYN-PARCEL-08-09","occurredAt":"2026-09-25T07:00:00+08:00"}`
@@ -469,6 +492,9 @@ func TestIsolatedCommandIntakeServesOnlyAdmittedLines(t *testing.T) {
 	}
 	if _, ok := intake.(tfhttp.DeliveryDispatchTriggerIntake); !ok {
 		t.Fatal("派送发起口该已放行")
+	}
+	if _, ok := intake.(tfhttp.DeliveryRegistrationIntake); !ok {
+		t.Fatal("交付生效首登口该已放行")
 	}
 	for name, refused := range map[string]bool{
 		"揽收更正口（同族未列）":      isA[tfhttp.PickupCorrectionIntake](intake),

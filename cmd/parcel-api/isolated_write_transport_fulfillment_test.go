@@ -127,6 +127,22 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 		status:  http.StatusOK,
 		outcome: "NOT_A_DELIVERY_TRIGGER",
 	},
+	// 交付生效首登：五格齐。交付只能落在已登记的派送尝试结果上（tfpostgres.DeliveryAttempts 只读，「一个入口同时造尝试和
+	// 造交付，就没有东西拦得住先声称到过场再声称交付成功」），而派送尝试登记册今天没有生产写入方——编排如实答`未受理`，
+	// 200。停点从「渠道未配置」挪到「派送尝试无写入方」，这一格照实写回 psb/05。
+	"/transport-fulfillment/deliveries": {
+		endpoint: func(t *testing.T, db *bentopg.DB, intake *tfhttp.IsolatedCommandIntake) http.Handler {
+			delivery, err := buildDeliveryOrchestration(db)
+			if err != nil {
+				t.Fatalf("装配交付编排：%v", err)
+			}
+			return tfhttp.NewRegisterEffectiveDeliveryEndpoint(intake, delivery)
+		},
+		body: `{"attempt":"SYN-ATTEMPT-08-10","object":"SYN-PARCEL-08-10","method":"HANDED_TO_RECIPIENT",` +
+			`"recipient":"SYN-RECIPIENT/consignee-10","proof":"SYN-POD/signature-10"}`,
+		status:  http.StatusOK,
+		outcome: "SOURCE_NOT_ACCEPTED",
+	},
 }
 
 // Covers: 票 operator-channel/08 完成判据「隔离环境里上列各口对合成写答业务结果而不是 ACCESS_CHANNEL_NOT_CONFIGURED」——

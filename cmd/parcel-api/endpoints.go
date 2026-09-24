@@ -241,6 +241,7 @@ func assembleBusinessEndpoints(
 	movementFactIntake := tfhttp.MovementFactIntake(tfhttp.UnconfiguredIntake{})
 	dispatchTaskIntake := tfhttp.DispatchTaskIntake(tfhttp.UnconfiguredIntake{})
 	deliveryDispatchTriggerIntake := tfhttp.DeliveryDispatchTriggerIntake(tfhttp.UnconfiguredIntake{})
+	deliveryRegistrationIntake := tfhttp.DeliveryRegistrationIntake(tfhttp.UnconfiguredIntake{})
 	if isolatedTransportFulfillment != nil {
 		pickupRegistrationIntake = isolatedTransportFulfillment
 		pickupAttemptIntake = isolatedTransportFulfillment
@@ -249,6 +250,7 @@ func assembleBusinessEndpoints(
 		movementFactIntake = isolatedTransportFulfillment
 		dispatchTaskIntake = isolatedTransportFulfillment
 		deliveryDispatchTriggerIntake = isolatedTransportFulfillment
+		deliveryRegistrationIntake = isolatedTransportFulfillment
 	}
 
 	return []httpapi.BusinessEndpoint{
@@ -299,7 +301,7 @@ func assembleBusinessEndpoints(
 		// 用的是字面量 UnconfiguredIntake{}；查阅行走本上下文自己的 Intake 变量，
 		// 隔离读准入（ADR-0078）启用时只换查阅行，命令行换不了。
 		{Pattern: "/node-operations-records", Handler: nodeopshttp.NewQueryNodeOperationsRecordsEndpoint(nodeOperationsCatalogueIntake, nodeOperationsRecords)},
-		{Pattern: "/transport-fulfillment/deliveries", Handler: tfhttp.NewRegisterEffectiveDeliveryEndpoint(tfhttp.UnconfiguredIntake{}, delivery)},
+		{Pattern: "/transport-fulfillment/deliveries", Handler: tfhttp.NewRegisterEffectiveDeliveryEndpoint(deliveryRegistrationIntake, delivery)},
 		{Pattern: "/transport-fulfillment/delivery-proof-corrections", Handler: tfhttp.NewCorrectDeliveryProofEndpoint(tfhttp.UnconfiguredIntake{}, delivery)},
 		// 控制事实入口（票 tf-segment-lifecycle-closure/04）：交接一组（登记 + 更正）、揽收一组
 		// （单对象登记 + 更正 + 多对象执行），按事实分组而不按 UC 分。它们是 CONTEXT 成立边界的来源事实，
