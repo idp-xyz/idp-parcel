@@ -1,7 +1,7 @@
 # 04 `ListPageTemplate` 的 `pagination` 槽加游标模式（向后兼容）
 
 Category: enhancement
-Status: in-progress——2026-09-24 通道 1 接（通道 3 派单 `task-257cfc55`），在 `main` 上直接做（workflow.md「前端切片」）。此前 ready-for-agent
+Status: resolved——2026-09-24 通道 1 在 `main` 上直接做完（workflow.md「前端切片」）：本地 `dc19e5f9` + 本笔票面，**未推**（本宿主 shell 无 GitHub 推送凭据，待用户在 Cursor 终端推）。完成记录见文末；推送方自审，不算非作者评审。此前 in-progress——通道 1 接（通道 3 派单 `task-257cfc55`）。此前 ready-for-agent
 Blocked by: 无
 地盘：`apps/admin-web/src/templates/ListPageTemplate.tsx`、新增的纯逻辑 `.ts` 与其 node:test、`templates/index.ts`（只追加）。
 出处：[ADR-0144](../../../docs/adr/0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 决定八。
@@ -22,3 +22,41 @@ Blocked by: 无
 - 三道门 + node:test 钉住：压栈 / 出栈、换条件清栈、`total` 为 `null`、末页（`next` 为 `null`）时下一页禁用。
 - 组件层用 `scripts/dom-probe.mjs` 实测一次（探针源不入库，结论写完成记录）；浏览器做不到如实写「未验」。
 - 共享面（`templates/*`）按 workflow 第 5 步要一份 Spec 轴评审。
+
+## 完成记录（2026-09-24，通道 1，`main` 上直接做）
+
+**落点**
+
+| 笔 | 文件 | 做了什么 |
+|---|---|---|
+| `dc19e5f9` | `templates/ListPageTemplate.tsx`、新 `templates/cursor-pagination.ts`、`.test.ts`、`templates/index.ts`、票面 | 第 1–3 条：`ListCursorPaginationProps`（`mode: 'cursor'`）与页码形按 `mode` 判别；模板自摆游标翻页条；纯逻辑（`CursorTrail` 压 / 出栈、`cursorTrailFor` 条件签名一变回第一页、`cursorTotalPages`、`cursorPagerControls`、`cursorPageSummary`）+ node:test 4 条；Status → in-progress |
+| 本笔 | 票面、spec | 完成记录 |
+
+**完成判据**
+
+- ✅ 三道门（钉 `dc19e5f9`，WSL，Node 22.20.0，取法同 `admin-web-workspace-form/01`「评审后修复」的门）：`tsc -b --noEmit` 退 0 / `run-tests` 424 → 428
+  pass 0 fail（本票 +4）/ `vite build` 成功。`go test ./internal/architecture/` 本机未跑，diff 全在 `apps/admin-web/**`，由 CI 兜。
+- ✅ node:test 钉住：压栈 / 出栈（含第一页再上一页原样返回）、换条件清栈（签名不变原样返回、变了回第一页）、`total` 为 `null`（不给总页数、摘要只说第几页）、
+  末页（`next` 为 `null`）不压栈且下一页钮不能按（`cursorPagerControls`）。
+- ✅ 探针（`scripts/dom-probe.mjs`，源 `/tmp/idp-probes/cursor-pagination-probe.tsx` 不入库）**11 ok / 0 fail**：用一个假读口（页大小 2、五行）加 `CursorTrail`
+  驱动模板——第一页「第 1 / 3 页 · 共 5 条」、上一页不能按；下一页压栈到第二页、再到末页「第 3 / 3 页」且下一页不能按；上一页出栈回第二页；换筛选条件回第一页；
+  `total` 为 `null` 时只显「第 1 页」；不传 `mode` 时仍渲 vendor `Pagination`（「1–2 of 5」），页上没有游标翻页条。
+- ✅ 不传游标变体的页零变化：页码形的既有调用（`CustomsRestrictionsPage`、`CustomsCasesPage`、`TemplatePreviewPage`）一行未改、tsc 通过。
+- ◑ 浏览器未验。
+
+**判断项**
+
+1. **游标轨迹由页面持有，模板只摆翻页条。** 页面自己取数，得知道当前要带哪个 `after`；模板握着它就得反过来替页面发请求。所以 `CursorTrail` 是给页面用的纯逻辑，
+   模板收的是照答复 `page` 填好的几格。
+2. **「换条件回第一页」靠条件签名，不靠页面记得去清。** `cursorTrailFor(trail, query)` 在签名变了时直接给第一页；签名里漏了哪一维，旧游标会被服务端按
+   ADR-0144 决定一拒掉（坏请求），不会静默翻出另一份列表的中段——票 05 接页面时签名要含排序、各筛选维与 `q`。
+3. **不用 vendor `Pagination`。** 它由 `total` 推能不能翻下一页，答不了「`next` 为 `null` 即末页」「`total` 为 `null` 不显总数」，文案也是英文；游标形没有跳页
+   与每页条数（ADR-0144 决定二、Consequences），两件 vendor 的主要能力本来就用不上。
+4. **到头的钮用原生 `disabled`**，不用 `DisabledSlot` 的 aria-disabled + 说明：到头了不是「功能没接」，没有要解释的。
+
+**评审**：共享面（`templates/*`）按 workflow 第 5 步要一份 Spec 轴。通道 3 在做浏览器验收、其余通道忙（用户今日已令推送方自审同类票），**推送方自审**，
+不算非作者评审。自审所得：第 1–3 条与「不做」逐条落了（diff 只在 `templates/` 与票面，未碰页面与读口）；与 ADR-0144 对得上——上一页由客户端回退（决定一）、
+换条件从第一页重取（决定一）、不给页大小选择（决定二）、`size` 按页大小而非本页行数算总页数、`total` 为 `null` 不显（决定五）；`ListPaginationProps` 只加
+可选判别字段、`templates/index.ts` 只追加，模板改动向后兼容。
+
+**推送**：未推。代理已恢复、`git fetch` 可用，但本 shell 没有 GitHub 推送凭据（`could not read Password`）；待用户在 Cursor 终端 `git push origin main`。
