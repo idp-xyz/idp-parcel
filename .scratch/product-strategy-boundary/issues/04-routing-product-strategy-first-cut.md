@@ -1,7 +1,7 @@
 # 04 路由第一刀：拆 `PAR-NET-14`，路由策略族与首个内置策略
 
 Category: enhancement
-Status: ready-for-agent（演示网络参考配置那半 Blocked by 03）
+Status: in-progress——2026-09-24 通道 5 认领（单 task-d12bb120-aac3-40b4-b1e9-a018b77afddc），分支 `mcp5-psb04` 基 `64b37f27`。此前：ready-for-agent（演示网络参考配置那半 Blocked by 03）
 Blocked by: 03（只挡演示网络参考配置那半）
 地盘：network-routing 的领域、应用与取数侧适配器；参数登记册 `PAR-NET-14` 一行的拆分结论。
 出处：[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定七；票 `nr-route-evidence-views/01`（needs-info，其重启条件由本票替换）。

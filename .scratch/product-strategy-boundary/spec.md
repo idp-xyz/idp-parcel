@@ -14,7 +14,7 @@ Status: in-progress——2026-09-24 通道 4 按用户授权自决立 ADR-0146 �
 | [01](./issues/01-regrade-slices-under-four-criteria.md) | 按四项判据逐切片重定级 | resolved · 结论落开发主线 |
 | [02](./issues/02-split-parameter-register-and-retriage-deferrals.md) | 参数登记册逐行拆分，以「实例半边」为由的暂缓逐份重新定性 | ready-for-agent |
 | [03](./issues/03-reference-configuration-adoption-pattern.md) | 参考配置的存放、版本与显式采用路径，在注册号类型目录上立样板 | ready-for-agent |
-| [04](./issues/04-routing-product-strategy-first-cut.md) | 路由第一刀：拆 `PAR-NET-14`，路由策略族与首个内置策略 | ready-for-agent · 演示网络那半 Blocked by 03 |
+| [04](./issues/04-routing-product-strategy-first-cut.md) | 路由第一刀：拆 `PAR-NET-14`，路由策略族与首个内置策略 | in-progress · 通道 5（分支 `mcp5-psb04`）· 演示网络那半 Blocked by 03 |
 | [05](./issues/05-demo-journey-criterion-evidence.md) | 第四条判据的动线取证：逐步列出停在`未配置`的每一格 | ready-for-agent · 收口 Blocked by 02、03、04 |
 
 走法：01、02、05 只动文档与票面，一人在共享树上顺序做；03、04 碰 Go / SQL，走[并行会话](../../docs/agents/parallel-sessions.md)那条路。
