@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -131,4 +132,115 @@ func TestCustomerAccountCatalogueShowsAllThreeLifecycleCellsAndTheDanglingParty(
 	if _, err := catalogue.ListCustomerAccounts(ctx, pcTenant(t, "tenant-1"), 0, customerAccountQuery(t, "")); err == nil {
 		t.Fatal("limit 为 0 时读面静默答了一页")
 	}
+}
+
+// Covers: 票 catalogue-read-pagination/02 完成判据「翻页期间插入新登记，已翻过的页不重出、未翻的页不漏行」——ADR-0144
+// 否决偏移分页的理由就是这一格：新登的排在最前，偏移会把上一页末尾那行挤进下一页开头。缺省序 -registeredAt 下，
+// 游标之后只取严格更早登记的行，翻页中途新登的账户落在已翻过的那头，后面各页照旧、不重不漏。
+func TestCustomerAccountCataloguePagesByCursorWithoutRepeatsOrGapsWhileAccountsArrive(t *testing.T) {
+	registrations, catalogue, transactor := newPartyIdentityRegistrations(t)
+	ctx := t.Context()
+	tenant := pcTenant(t, "tenant-1")
+
+	save := func(accountID string) {
+		registration := customerAccountRegistrationFixture(t, "tenant-1", accountID, "SYN-PARTY-01")
+		mustSavePartyIdentity(t, transactor, func(txCtx context.Context) (ports.PartyRegistrySaveOutcome, error) {
+			return registrations.SaveCustomerAccount(txCtx, registration)
+		})
+	}
+	// 逐笔各一个事务：登记时刻即事务起点，按保存先后递增，缺省序下后存的在前。
+	for _, accountID := range []string{"SYN-ACC-1", "SYN-ACC-2", "SYN-ACC-3", "SYN-ACC-4", "SYN-ACC-5"} {
+		save(accountID)
+	}
+
+	first, err := catalogue.ListCustomerAccounts(ctx, tenant, 2, customerAccountQuery(t, ""))
+	if err != nil {
+		t.Fatalf("第一页: %v", err)
+	}
+	if got := accountIDsOf(first.Rows); got != "SYN-ACC-5,SYN-ACC-4" || first.Total != 5 || first.Next == "" {
+		t.Fatalf("第一页 = %s（共 %d，next %q）", got, first.Total, first.Next)
+	}
+
+	save("SYN-ACC-6")
+
+	second, err := catalogue.ListCustomerAccounts(ctx, tenant, 2, customerAccountQuery(t, "after="+url.QueryEscape(first.Next)))
+	if err != nil {
+		t.Fatalf("第二页: %v", err)
+	}
+	if got := accountIDsOf(second.Rows); got != "SYN-ACC-3,SYN-ACC-2" || second.Total != 6 || second.Next == "" {
+		t.Fatalf("第二页 = %s（共 %d）；新登的 SYN-ACC-6 该落在已翻过的那头，总数跟着它变", got, second.Total)
+	}
+	third, err := catalogue.ListCustomerAccounts(ctx, tenant, 2, customerAccountQuery(t, "after="+url.QueryEscape(second.Next)))
+	if err != nil {
+		t.Fatalf("第三页: %v", err)
+	}
+	if got := accountIDsOf(third.Rows); got != "SYN-ACC-1" || third.Next != "" {
+		t.Fatalf("末页 = %s（next %q），want SYN-ACC-1 且 next 为空", got, third.Next)
+	}
+}
+
+// Covers: 完成判据「total 随筛选与 q 变」——总数与本页出自同一组条件（ADR-0144 决定五）：状态维内为或、维间为与，
+// q 在账户号、客户参与方号与参与方名称上做不分大小写的字面包含；q 里的 % 不当通配符。另钉按账户号升序的次序。
+func TestCustomerAccountCatalogueTotalFollowsFiltersAndKeyword(t *testing.T) {
+	registrations, catalogue, transactor := newPartyIdentityRegistrations(t)
+	ctx := t.Context()
+	tenant := pcTenant(t, "tenant-1")
+
+	for _, party := range []domain.BusinessPartyRegistration{
+		partyRegistrationFixture(t, "tenant-1", "SYN-PARTY-A", "SYN 华东货主"),
+		partyRegistrationFixture(t, "tenant-1", "SYN-PARTY-B", "SYN 华南货主"),
+	} {
+		mustSavePartyIdentity(t, transactor, func(txCtx context.Context) (ports.PartyRegistrySaveOutcome, error) {
+			return registrations.SaveBusinessParty(txCtx, party)
+		})
+	}
+	retiring := customerAccountRegistrationFixture(t, "tenant-1", "SYN-ACC-B2", "SYN-PARTY-B")
+	for _, registration := range []domain.CustomerAccountRegistration{
+		customerAccountRegistrationFixture(t, "tenant-1", "SYN-ACC-A1", "SYN-PARTY-A"),
+		futureCustomerAccountRegistrationFixture(t, "tenant-1", "SYN-ACC-A2", "SYN-PARTY-A"),
+		customerAccountRegistrationFixture(t, "tenant-1", "SYN-ACC-B1", "SYN-PARTY-B"),
+		retiring,
+	} {
+		mustSavePartyIdentity(t, transactor, func(txCtx context.Context) (ports.PartyRegistrySaveOutcome, error) {
+			return registrations.SaveCustomerAccount(txCtx, registration)
+		})
+	}
+	deactivated, err := retiring.Deactivate(pcValue(t, domain.NewIdentityBasisReference, "basis-deact"), identityDeactivateAt)
+	if err != nil {
+		t.Fatalf("deactivate account: %v", err)
+	}
+	mustSavePartyIdentity(t, transactor, func(txCtx context.Context) (ports.PartyRegistrySaveOutcome, error) {
+		return registrations.SaveCustomerAccount(txCtx, deactivated)
+	})
+
+	cases := []struct {
+		query string
+		want  string
+	}{
+		{"sort=accountId", "SYN-ACC-A1,SYN-ACC-A2,SYN-ACC-B1,SYN-ACC-B2"},
+		{"sort=accountId&status=EFFECTIVE", "SYN-ACC-A1,SYN-ACC-B1"},
+		{"sort=accountId&status=EFFECTIVE&status=REGISTERED", "SYN-ACC-A1,SYN-ACC-A2,SYN-ACC-B1"},
+		{"sort=accountId&customerPartyId=SYN-PARTY-B", "SYN-ACC-B1,SYN-ACC-B2"},
+		{"sort=accountId&customerPartyId=SYN-PARTY-B&status=DEACTIVATED", "SYN-ACC-B2"},
+		{"sort=accountId&q=" + url.QueryEscape("华东"), "SYN-ACC-A1,SYN-ACC-A2"},
+		{"sort=accountId&q=acc-b", "SYN-ACC-B1,SYN-ACC-B2"},
+		{"sort=accountId&q=%25", ""},
+	}
+	for _, tc := range cases {
+		page, err := catalogue.ListCustomerAccounts(ctx, tenant, 10, customerAccountQuery(t, tc.query))
+		if err != nil {
+			t.Fatalf("%s: %v", tc.query, err)
+		}
+		if got := accountIDsOf(page.Rows); got != tc.want || page.Total != int64(len(page.Rows)) {
+			t.Fatalf("%s = %s（共 %d），want %s 且总数与本页同一组条件", tc.query, got, page.Total, tc.want)
+		}
+	}
+}
+
+func accountIDsOf(rows []ports.CustomerAccountRow) string {
+	ids := make([]string, len(rows))
+	for index, row := range rows {
+		ids[index] = row.AccountID
+	}
+	return strings.Join(ids, ",")
 }

@@ -6,6 +6,8 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"testing"
 	"time"
 
@@ -173,5 +175,120 @@ func TestCustomerAccountsEndpointAnswersEmptyAndFailureApart(t *testing.T) {
 	empty.ServeHTTP(posted, httptest.NewRequest(http.MethodPost, "/commercial-customer-accounts", nil))
 	if posted.Code != http.StatusMethodNotAllowed || posted.Header().Get("Allow") != http.MethodGet {
 		t.Fatalf("POST status = %d, allow = %q", posted.Code, posted.Header().Get("Allow"))
+	}
+}
+
+// pagingAccountReaderDouble 记下收到的查询，并按那份查询给本页末行编下一页游标——游标只能由解出它的那份查询编，
+// 端点对它的校验（摘要与本次条件是否相符）才证得到。
+type pagingAccountReaderDouble struct {
+	seen *cataloguepage.Query
+}
+
+func (double *pagingAccountReaderDouble) ListCustomerAccounts(
+	_ context.Context, _ domain.TenantID, _ int, query cataloguepage.Query,
+) (ports.CataloguePage[ports.CustomerAccountRow], error) {
+	double.seen = &query
+	next, err := query.CursorAfter(cataloguepage.Position{
+		Value:    cataloguepage.FormatInstant(accountListedAt),
+		Identity: []string{"SYN-ACC-1"},
+	})
+	if err != nil {
+		return ports.CataloguePage[ports.CustomerAccountRow]{}, err
+	}
+	return ports.CataloguePage[ports.CustomerAccountRow]{
+		Rows:  []ports.CustomerAccountRow{{TenantID: "tenant-1", AccountID: "SYN-ACC-1", Status: "EFFECTIVE", RegisteredAt: accountListedAt}},
+		Next:  next,
+		Total: 3,
+	}, nil
+}
+
+type problemBody struct {
+	Error struct {
+		Code   string `json:"code"`
+		Detail string `json:"detail"`
+	} `json:"error"`
+}
+
+func getCustomerAccounts(t *testing.T, endpoint http.Handler, rawQuery string) (*httptest.ResponseRecorder, problemBody) {
+	t.Helper()
+	recorder := httptest.NewRecorder()
+	endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/commercial-customer-accounts?"+rawQuery, nil))
+	var problem problemBody
+	if recorder.Code != http.StatusOK {
+		if err := json.Unmarshal(recorder.Body.Bytes(), &problem); err != nil {
+			t.Fatalf("decode problem %s: %v", recorder.Body.Bytes(), err)
+		}
+	}
+	return recorder, problem
+}
+
+// Covers: 票 catalogue-read-pagination/02 完成判据「未知键、集外排序维、词表外筛选值各答 400 带理由散文」——查询参数一律
+// 封闭集（ADR-0144 决定三、四）：多给的键若被静默忽略，页面以为筛了、服务端其实没筛。解码先于 Intake：渠道未配置时
+// 写错参数也先答 400，与 /network-catalog 同一次序；参数对了才轮到 Intake 答 403。
+func TestCustomerAccountsEndpointRefusesQueriesOutsideTheDeclaration(t *testing.T) {
+	endpoint := commercialhttp.NewQueryCustomerAccountsEndpoint(intakeDouble{query: catalogueQuery(t)}, &pagingAccountReaderDouble{})
+	for _, tc := range []struct {
+		query  string
+		reason string
+	}{
+		{"tenant=tenant-2", "tenant"},
+		{"sort=status", "status"},
+		{"status=ARCHIVED", "ARCHIVED"},
+		{"q=" + strings.Repeat("字", cataloguepage.MaxKeywordRunes+1), "q"},
+		{"after=not-a-cursor", "请从第一页重取"},
+	} {
+		recorder, problem := getCustomerAccounts(t, endpoint, tc.query)
+		if recorder.Code != http.StatusBadRequest || problem.Error.Code != "MALFORMED_REQUEST" ||
+			!strings.Contains(problem.Error.Detail, tc.reason) {
+			t.Fatalf("%.40s: status = %d, problem = %+v；want 400 MALFORMED_REQUEST 且理由提到 %q", tc.query, recorder.Code, problem, tc.reason)
+		}
+	}
+
+	unconfigured := commercialhttp.NewQueryCustomerAccountsEndpoint(
+		intakeDouble{err: commercialhttp.ErrAccessChannelNotConfigured}, &pagingAccountReaderDouble{})
+	if recorder, _ := getCustomerAccounts(t, unconfigured, "sort=status"); recorder.Code != http.StatusBadRequest {
+		t.Fatalf("未配置渠道 + 坏参数 status = %d，want 400（解码先于 Intake）", recorder.Code)
+	}
+	if recorder, _ := getCustomerAccounts(t, unconfigured, "sort=accountId"); recorder.Code != http.StatusForbidden {
+		t.Fatalf("未配置渠道 + 好参数 status = %d，want 403", recorder.Code)
+	}
+}
+
+// Covers: 答复带 page（ADR-0144 决定五：size 是 Intake 定的页大小、next 与 total 照读口）；完成判据「换条件拿旧游标答 400」——
+// 游标里带着上一次的条件摘要，换了筛选还拿它，翻出来的是另一份列表的中段，端点不静默照翻；条件没变则照常把位置交给读口。
+func TestCustomerAccountsEndpointCarriesThePageAndRefusesAStaleCursor(t *testing.T) {
+	reader := &pagingAccountReaderDouble{}
+	endpoint := commercialhttp.NewQueryCustomerAccountsEndpoint(intakeDouble{query: catalogueQuery(t)}, reader)
+
+	recorder, _ := getCustomerAccounts(t, endpoint, "status=EFFECTIVE")
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("第一页 status = %d, body = %s", recorder.Code, recorder.Body)
+	}
+	var first struct {
+		Page struct {
+			Size  int     `json:"size"`
+			Next  *string `json:"next"`
+			Total *int64  `json:"total"`
+		} `json:"page"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &first); err != nil {
+		t.Fatalf("decode %s: %v", recorder.Body.Bytes(), err)
+	}
+	if first.Page.Size != 50 || first.Page.Next == nil || first.Page.Total == nil || *first.Page.Total != 3 {
+		t.Fatalf("page = %+v，want size 50（Intake 的页大小）、next 在场、total 3", first.Page)
+	}
+	if reader.seen == nil || reader.seen.Sort.String() != "-registeredAt" || reader.seen.After != nil {
+		t.Fatalf("读口收到的第一页查询 = %+v，want 缺省序 -registeredAt 且无游标", reader.seen)
+	}
+
+	cursor := url.QueryEscape(*first.Page.Next)
+	stale, problem := getCustomerAccounts(t, endpoint, "status=REGISTERED&after="+cursor)
+	if stale.Code != http.StatusBadRequest || problem.Error.Detail != "游标与本次的排序或筛选不符，请从第一页重取" {
+		t.Fatalf("换条件拿旧游标 status = %d, problem = %+v", stale.Code, problem)
+	}
+
+	next, _ := getCustomerAccounts(t, endpoint, "status=EFFECTIVE&after="+cursor)
+	if next.Code != http.StatusOK || reader.seen.After == nil || reader.seen.After.Identity[0] != "SYN-ACC-1" {
+		t.Fatalf("同条件翻页 status = %d, 读口收到的位置 = %+v", next.Code, reader.seen.After)
 	}
 }
