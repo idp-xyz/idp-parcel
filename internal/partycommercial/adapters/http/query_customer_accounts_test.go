@@ -12,6 +12,7 @@ import (
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // 本文件对货主客户账户目录端点（票 admin-write-faces/04）证传输面：行体逐字段转写、
@@ -25,15 +26,17 @@ type customerAccountReaderDouble struct {
 }
 
 func (double *customerAccountReaderDouble) ListCustomerAccounts(
-	_ context.Context, tenant domain.TenantID, _ int,
-) ([]ports.CustomerAccountRow, error) {
+	_ context.Context, tenant domain.TenantID, _ int, _ cataloguepage.Query,
+) (ports.CataloguePage[ports.CustomerAccountRow], error) {
 	if double.err != nil {
-		return nil, double.err
+		return ports.CataloguePage[ports.CustomerAccountRow]{}, double.err
 	}
 	if tenant != double.tenant {
-		return nil, nil
+		return ports.CataloguePage[ports.CustomerAccountRow]{}, nil
 	}
-	return double.accounts, nil
+	return ports.CataloguePage[ports.CustomerAccountRow]{
+		Rows: double.accounts, Total: int64(len(double.accounts)),
+	}, nil
 }
 
 var accountListedAt = time.Date(2026, 9, 3, 9, 0, 0, 0, time.UTC)
