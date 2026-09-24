@@ -1,7 +1,7 @@
 # 19 派送尝试结果没有生产写入方
 
 Category: enhancement
-Status: ready-for-agent——2026-09-24 通道 2 立票（用户令通道 2 独立承接）；纯机制缺口，UC-TF-006 已写明来源与不变量，无待裁项
+Status: in-progress——2026-09-24 通道 4 认领（用户同日令「做你自己的」，选通道 2 承接清单之外的票），隔离 worktree `idp-parcel-mcp4-psb19`、分支 `mcp4-psb19`。此前 ready-for-agent——2026-09-24 通道 2 立票（用户令通道 2 独立承接）；纯机制缺口，UC-TF-006 已写明来源与不变量，无待裁项
 Blocked by: 无
 地盘：`internal/transportfulfillment`（写口、持久化写入、编排、`adapters/http` 端点）、`cmd/parcel-api` 端点表一行与隔离写准入。
 出处：[票 05](./05-demo-journey-criterion-evidence.md) 格 12「08 重走」新停点：交付答 `SOURCE_NOT_ACCEPTED`。
