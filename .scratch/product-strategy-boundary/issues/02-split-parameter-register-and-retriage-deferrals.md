@@ -1,7 +1,7 @@
 # 02 参数登记册逐行拆分，以「实例半边」为由的暂缓逐份重新定性
 
 Category: task
-Status: ready-for-agent
+Status: in-progress——2026-09-24 通道 4 认领（派单 task-4d61197f，通道 1 派；共享树，纯 md）
 Blocked by: 无
 地盘：[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md)、本目录新票。
 出处：[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定二与 Consequences。
