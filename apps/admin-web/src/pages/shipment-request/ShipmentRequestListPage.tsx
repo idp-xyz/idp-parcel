@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import {
   ListPageTemplate,
   presentFields,
+  useAddressKeyword,
+  useTabReturn,
   type InspectorContent,
   type ListColumn,
   type TemplateViewState,
@@ -220,14 +222,15 @@ function viewStateOf(
 }
 
 export function ShipmentRequestListPage() {
-  // 检索词与下面的多选集都是本实例的页内状态：壳层把列表与每份详情开成各自的标签、非活动标签卸载，进详情（另一张标签）
-  // 再回来是新实例，两者清零。要不要保住、怎么保，见追加票 admin-web-workspace-form/06。
-  const [keyword, setKeyword] = useState('');
+  // 检索词在地址里（`?q=`）：壳层把列表与每份详情开成各自的标签、非活动标签卸载，进详情再回来是新实例——检索词靠地址活下来
+  // （壳层回程落回列表标签上次停的地址，本页挂载时读回，票 admin-web-workspace-form/06）。
+  const [keyword, setKeyword] = useAddressKeyword();
+  const tabReturn = useTabReturn();
   // 渲列表还是详情由 hash 二段定：详情地址在壳层是自己的一张标签，本组件在那张标签里渲详情。选中态的唯一来源是
   // hash，开行写 hash、状态经 hashchange 回流，与外壳同一纪律，不双写。
   const [selectedId, setSelectedId] = useState<string | null>(selectedIdFromHash);
-  // 多选集（票 admin-web-workspace-form/04）：按委托标识记，翻页 / 改检索词都不清。批量动作只有导出所选——本仓今天没有
-  // 能对一批委托做的命令端点，不传 extra。
+  // 多选集（票 admin-web-workspace-form/04）：按委托标识记，翻页 / 改检索词都不清；进详情即丢——它是一次批量动作的暂存，
+  // 不跟标签走（票 06）。批量动作只有导出所选——本仓今天没有能对一批委托做的命令端点，不传 extra。
   const [checked, setChecked] = useState<ReadonlySet<string>>(() => new Set());
   // null 表示取数中；答案（含各种未形成）一律进 answer，页面不吞任何一格。
   const [answer, setAnswer] = useState<ApiResult<ViewsListResponseBody> | null>(null);
@@ -254,9 +257,7 @@ export function ShipmentRequestListPage() {
     return (
       <ShipmentRequestDetailPage
         shipmentRequestId={selectedId}
-        onBack={() => {
-          window.location.hash = '#/shipment-request-inquiry';
-        }}
+        onBack={() => tabReturn.returnTo('shipment-request-inquiry')}
       />
     );
   }

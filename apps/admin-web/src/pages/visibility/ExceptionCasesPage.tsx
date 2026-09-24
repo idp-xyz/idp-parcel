@@ -1,5 +1,11 @@
 import { useEffect, useState } from 'react';
-import { ListPageTemplate, presentFields, type InspectorContent, type ListColumn } from '../../templates';
+import {
+  ListPageTemplate,
+  presentFields,
+  useAddressKeyword,
+  type InspectorContent,
+  type ListColumn,
+} from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import {
   StatusBadgeFor,
@@ -134,7 +140,8 @@ function inspectorOf(row: CaseRow): InspectorContent {
  * 不关闭——那些是案件命令面的判断，本页只消费存储读面。
  */
 export function ExceptionCasesPage() {
-  const [search, setSearch] = useState('');
+  // 检索词在地址里（`?q=`）：切到别的标签再回来仍在（票 admin-web-workspace-form/06）。
+  const [search, setSearch] = useAddressKeyword();
   // 多选集（票 admin-web-workspace-form/04）：按行键记，改检索词不清。批量动作只有导出所选——案件的归并 / 关闭是命令面的判断，
   // 本仓今天没有对一批案件的命令端点，不传 extra。
   const [checked, setChecked] = useState<ReadonlySet<string>>(() => new Set());
