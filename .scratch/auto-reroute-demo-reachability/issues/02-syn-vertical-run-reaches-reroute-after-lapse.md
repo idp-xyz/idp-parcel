@@ -1,8 +1,8 @@
 # 用 SYN 实例把纵向跑到 `rerouteAfterLapse`：进程测试 + 演示步骤，让自动改路那一支第一次被真键走到
 
 Category: enhancement
-Status: blocked——通道 2 于 2026-09-07 按票面「开工第一步」读完 `PlanReview` / `reviewCandidates` 与生产 `InitialRouteEvidenceView`，结论写在下方「裁决」节：交付第 1 件的头一步（登 SYN 网络定义让初始路由成立）在今天的生产装配里**走不到**——唯一的证据视图实现 `nrpostgres.NetworkDefinitions` 对已登记的范围响亮上抛 `ErrNetworkDefinitionUnresolvable`（解析层不在），初始路由停在 `ROUTE_EVIDENCE_UNAVAILABLE`，没有计划就没有复核、更没有 `rerouteAfterLapse`。本票因此不是「可开工」而是等解析层；未动代码。原状态行（通道 5 2026-09-04）：ready-for-agent，「依赖链已落，无待裁项」——票 01 复核结论表 NR-RESOLVER 行自己写了「『有定义时交出九族』的形状本复核未逐字段核，不在此担保」，缺口正在那一格
-Blocked by: [first-tenant-runway/03](../../first-tenant-runway/issues/03-network-resolution-layer.md)（网络解析层；它又阻断于 `PAR-NET-14` 实例半边）
+Status: needs-triage——2026-09-24 通道 5 按 routing-first-cut/01 改阻塞边：挡它的网络解析层已拆成 routing-first-cut 子票；08、10 落地后按新取数侧重读本票步骤再转 ready-for-agent（交付第 1 件头一步写的是把 SYN 网络定义登进 `0007` 定义登记册，取数侧改读目录后这一步要改写），去处见文末 Comments。此前：blocked——通道 2 于 2026-09-07 按票面「开工第一步」读完 `PlanReview` / `reviewCandidates` 与生产 `InitialRouteEvidenceView`，结论写在下方「裁决」节：交付第 1 件的头一步（登 SYN 网络定义让初始路由成立）在今天的生产装配里**走不到**——唯一的证据视图实现 `nrpostgres.NetworkDefinitions` 对已登记的范围响亮上抛 `ErrNetworkDefinitionUnresolvable`（解析层不在），初始路由停在 `ROUTE_EVIDENCE_UNAVAILABLE`，没有计划就没有复核、更没有 `rerouteAfterLapse`。本票因此不是「可开工」而是等解析层；未动代码。原状态行（通道 5 2026-09-04）：ready-for-agent，「依赖链已落，无待裁项」——票 01 复核结论表 NR-RESOLVER 行自己写了「『有定义时交出九族』的形状本复核未逐字段核，不在此担保」，缺口正在那一格
+Blocked by: [routing-first-cut/08](../../routing-first-cut/issues/08-shipment-carries-geo-projection-to-routing.md)（真实接受要携带地理投影，真键才走得到取数侧）、[routing-first-cut/10](../../routing-first-cut/issues/10-candidate-cost-from-leg-buy-evaluations.md)（合成目录上初始路由形成计划）；另加 routing-first-cut/02 若登出「关务资格缺执行器」而另立的那张票。此前：[first-tenant-runway/03](../../first-tenant-runway/issues/03-network-resolution-layer.md)（网络解析层；它又阻断于 `PAR-NET-14` 实例半边）
 
 ## 要做什么
 
@@ -59,3 +59,10 @@ Blocked by: [first-tenant-runway/03](../../first-tenant-runway/issues/03-network
 - 2026-09-07 · 通道 2：按「开工第一步」读码后写「裁决」节，转 `blocked` 指向 `first-tenant-runway/03`。
   起因是用户要求把 `.scratch` 未收口票逐张收口，本票是当时唯一的 ready-for-agent；读到 `NetworkDefinitions`
   的第二格才发现票面第 1 件头一步走不到。**未动代码，未建 worktree。**
+- 2026-09-24 · 通道 5（routing-first-cut/01）：挡本票的 `first-tenant-runway/03`（网络解析层）已收口、移交
+  [product-strategy-boundary/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md) 的子票，
+  阻塞边改指其中两张：[routing-first-cut/08](../../routing-first-cut/issues/08-shipment-carries-geo-projection-to-routing.md)
+  （本票要走真实接受形成的判断键，PS 得先随请求携带地理投影）与
+  [routing-first-cut/10](../../routing-first-cut/issues/10-candidate-cost-from-leg-buy-evaluations.md)（合成目录上初始路由
+  形成计划）。状态按 triage-labels 从 `blocked` 改 `needs-triage`：票面步骤写的是登 `0007` 定义登记册那条旧路，取数侧
+  改读目录后要按新路重写，再转 ready-for-agent。「裁决」节关于失效依据的结论不受影响。

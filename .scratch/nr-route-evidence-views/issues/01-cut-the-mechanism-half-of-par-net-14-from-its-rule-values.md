@@ -1,7 +1,7 @@
 # 三个路由证据视图卡在 PAR-NET-14，机制半边需要单独切出来
 
 Category: enhancement
-Status: needs-info
+Status: resolved——2026-09-24 通道 5 按 routing-first-cut/01 收口：重启条件由 product-strategy-boundary/04 替换，余下两口的取数侧移交 routing-first-cut/07、09、10，本票不再是可执行来源，去处见文末 Comments。此前：needs-info
 
 发现于 `a5095ae`（NR/TF 端口换真）。那一笔带走了七口，`NetworkEvidenceView`、
 `InitialRouteEvidenceView`、`AutoRerouteFactsView` 三口没带走。本票记的是**为什么没带走**，
@@ -148,3 +148,11 @@ Status: needs-info
   真适配器，空册行为与 nil 等价）。余两口（`NetworkEvidenceView`、`InitialRouteEvidenceView`）
   照本票预告只剩一层阻断：`PAR-NET-14` 规则正文（折叠规则，实例半边待提供）。仓内已无本票
   可推进的机制工，in-progress 改 needs-info；重启条件 = 参数登记册 `PAR-NET-14` 行状态变化。
+- 2026-09-24 通道 5（routing-first-cut/01）：[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)
+  决定七把 `PAR-NET-14` 的候选生成、过滤、排序等判断方法重新定性为产品策略，本票「重启条件 = 登记册该行状态
+  变化」由 [product-strategy-boundary/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)
+  替换。余下两口的取数侧移交：`NetworkEvidenceView` →
+  [routing-first-cut/07](../../routing-first-cut/issues/07-reachability-evidence-folded-from-catalog.md)；
+  `InitialRouteEvidenceView` → [routing-first-cut/09](../../routing-first-cut/issues/09-initial-route-evidence-folded-from-catalog.md)
+  与 [routing-first-cut/10](../../routing-first-cut/issues/10-candidate-cost-from-leg-buy-evaluations.md)。
+  同一件工作不留两个可执行来源，本票转 resolved；正文不改。

@@ -1,8 +1,8 @@
 # 网络解析层——把目录折成逐候选事实
 
 Category: enhancement
-Status: blocked（2026-09-02 MCP-5 答完三问；结论是被 `PAR-NET-14` 硬阻断，**本票暂不拆实现票**。阻断解除前唯一可动的是一张前置票，见 `## Answer` 第四节）
-Blocked by: `PAR-NET-14`（实例半边——[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md)仍「待提供」；不是本批任何一张票。本行由通道 2 于 2026-09-04 代簿记补上，让 tracker 能按字段过滤；`Status` 与 `## Answer` 一字未动）
+Status: resolved——2026-09-24 通道 5 按 routing-first-cut/01 收口：解析层移交 routing-first-cut/07、09、10，去处见文末 Comments。此前：blocked（2026-09-02 MCP-5 答完三问；结论是被 `PAR-NET-14` 硬阻断，**本票暂不拆实现票**。阻断解除前唯一可动的是一张前置票，见 `## Answer` 第四节）
+Blocked by: 无——已移交；原阻塞 `PAR-NET-14` 由 ADR-0146 决定七拆开。此前：`PAR-NET-14`（实例半边——[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md)仍「待提供」；不是本批任何一张票。本行由通道 2 于 2026-09-04 代簿记补上，让 tracker 能按字段过滤；`Status` 与 `## Answer` 一字未动）
 
 演示动线三堵墙的**墙三**，也是本批唯一一件真正在长的工程。取证基线 `c9835bf`。
 
@@ -87,3 +87,7 @@ Blocked by: `PAR-NET-14`（实例半边——[参数登记册](../../../docs/pro
 **跨批依赖**：`label-channel-service-first-release` 的票 `13`（`BUY` 评价到成本准则分值的桥）与票 `01`（平局裁决）。本票产出候选、那两票给候选算分与定序，端到端出计划三件缺一不可。开工时按当时状态与那一批对齐，不重复立票。
 
 **在等本票的**（2026-09-07 通道 2 补记）：[auto-reroute-demo-reachability/02](../../auto-reroute-demo-reachability/issues/02-syn-vertical-run-reaches-reroute-after-lapse.md)——让 `rerouteAfterLapse` 被真键走到，前置是初始路由能形成计划，而 `NetworkDefinitions` 对已登记范围只会上抛 `ErrNetworkDefinitionUnresolvable`；本票完成判据第一句到位那天它才能开工，取证见其「裁决」节。
+
+## Comments
+
+- 2026-09-24 通道 5（routing-first-cut/01）：[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定七把候选生成、过滤、排序划为产品策略，本票的阻塞 `PAR-NET-14` 就此拆开；Answer「二、`PAR-NET-14` 挡的是……」一节的结论由该决定取代（首个内置排序形态沿 `PAR-NET-16` 成本单维）。解析层本身移交 [product-strategy-boundary/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md) 的子票：可达性证据 → [routing-first-cut/07](../../routing-first-cut/issues/07-reachability-evidence-folded-from-catalog.md)，Answer「`0007` 与 `0008` 不合流」一节的视图修订来源与「ADR-0068 要改」一节的同笔部分停用由它承接；初始路由证据 → [routing-first-cut/09](../../routing-first-cut/issues/09-initial-route-evidence-folded-from-catalog.md)；候选成本 → [routing-first-cut/10](../../routing-first-cut/issues/10-candidate-cost-from-leg-buy-evaluations.md)。本票完成判据「三个证据视图之一能从合成目录产出逐候选事实并让初始路由形成计划」到 10 落地才兑现。同一件工作不留两个可执行来源，本票转 resolved；Answer 正文不改。
