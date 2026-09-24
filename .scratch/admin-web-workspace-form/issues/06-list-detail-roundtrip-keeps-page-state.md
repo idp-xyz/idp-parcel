@@ -1,7 +1,7 @@
 # 06 列表 → 详情往返保住检索词与多选集：多标签壳层下「进详情再回来即清零」的出路
 
 Category: enhancement
-Status: in-progress——2026-09-24 通道 1 接（通道 3 提议的分工），在 `main` 上直接做（workflow.md「前端切片」）；壳层段先落，模板与页面段随后。此前 ready-for-agent——2026-09-24 用户授权通道 3 自决：C 的检索词半 + 壳层记住每张标签最后停在的完整地址，多选集进详情即丢（见「判断项答复」）。此前 draft——2026-09-24 通道 1 按票 01 评审 ← 通道 2 的 Spec 非阻断 1 立，形态取舍归用户
+Status: resolved——2026-09-24 通道 1 在 `main` 上直接做完（workflow.md「前端切片」）：本地 `69f6413b` 壳层段 / `ebf8b025` 模板与页面段 / `c1b7f74b` 注释改口 + 本笔票面，**未推**（本宿主此刻连不上 GitHub 代理）。完成记录见文末。此前 in-progress——通道 1 接（通道 3 提议的分工）。此前 ready-for-agent——2026-09-24 用户授权通道 3 自决：C 的检索词半 + 壳层记住每张标签最后停在的完整地址，多选集进详情即丢（见「判断项答复」）。此前 draft——2026-09-24 通道 1 按票 01 评审 ← 通道 2 的 Spec 非阻断 1 立，形态取舍归用户
 Blocked by: 无
 地盘：`apps/admin-web/src/shell/workspace-state.ts` 与其 test、`Layout.tsx`（记地址、三条回程）、`templates/`（检索词读写地址的共用件、给页面的「回到某标签」口）、
 `pages/shipment-request/ShipmentRequestListPage.tsx`、`pages/visibility/ExceptionCasesPage.tsx`，外加票 04 票面补记多选集改口。全在 `apps/admin-web/**` 与票面，走
@@ -49,9 +49,53 @@ workflow.md「前端切片」。
 
 ## 不做
 
-- 答之前不改任何行为。
+- 侧栏、工作台与命令面板导航到已开的模块时写的仍是模块首址，不走回程记忆——那是「去某模块」，不是「回某标签」；判断项答复只定了三条回程。
+- 记下的地址不进 `localStorage`（判断项答复）；多选集不跟标签（票 04 改口）。
+- 检索词不下推读口：目录读口还不收 `q`，支持之后原样下推（`admin-web-group-legal-entities/04` 裁决第 3 条）。
 
 ## 完成判据
 
 - 按所选方案：委托查阅「检索 → 勾选 → 双击进详情 → 返回列表」后，方案承诺保住的状态仍在（`scripts/dom-probe.mjs` 实测，结论写票面）；没承诺保住的，
   页面注释与票 04 如实写。
+
+## 完成记录（2026-09-24，通道 1，`main` 上直接做）
+
+**落点**
+
+| 笔 | 文件 | 做了什么 |
+|---|---|---|
+| `69f6413b` | `shell/workspace-state.ts`、`.test.ts`、`Layout.tsx`、新 `templates/tab-return-context.tsx`、`templates/index.ts`、票面 | 壳层段：`TabAddressBook` 与 `rememberTabAddress` / `addressForTab` / `hashOfUrl`（node:test 4 条）；hashchange 按 `oldURL` 记下离开的完整地址；点标签、关标签落邻居、`TabReturnProvider` 的 `returnTo` 三条回程都走 `addressForTab`；Status → in-progress |
+| `ebf8b025` | 新 `templates/address-query.ts`、`.test.ts`、新 `templates/use-address-keyword.ts`、`templates/index.ts`、`ShipmentRequestListPage.tsx`、`ExceptionCasesPage.tsx` | 模板与页面段：`?q=` 读写纯函数（node:test 4 条）+ `useAddressKeyword`（写用 replaceState）；两页改用它；委托详情「返回列表」改经 `returnTo` |
+| `c1b7f74b` | `templates/list-selection.ts`、`ListPageTemplate.tsx` | 选择集生命周期注释改口：离开这张标签即丢 |
+| 本笔 | 票面、票 04、spec | 完成记录；票 04 补记改口；spec Status 与子票表 |
+
+**完成判据**
+
+- ✅ 三道门（钉 `ebf8b025`，WSL，Node 22.20.0，取法同票 01「评审后修复」的门）：`tsc -b --noEmit` 退 0 / `run-tests` 414 → 422 pass 0 fail（本票 +8）/
+  `vite build` 成功。`go test ./internal/architecture/` 本机未跑，diff 全在 `apps/admin-web/**`，由 CI 兜。
+- ✅ 探针（`scripts/dom-probe.mjs`，源 `/tmp/idp-probes/wsform06-probe.tsx` 不入库）**21 ok / 0 fail**；同一份对接票前的 `688a5ea9`（临时工作树，已拆）**11 FAIL**，
+  正是下面几条。探针先证了 happy-dom 改 hash 时自己派 hashchange 且带 `oldURL`——壳层记地址读的就是它，探针全程没有手动补派。
+  - 委托查阅敲检索词：地址成 `#/shipment-request-inquiry?q=%E7%94%B2+%E4%B9%99`，`history.length` 不变（判据补充「敲检索词不增加后退记录」）。
+  - 进详情后三条回程——点列表标签、关掉详情标签落回左邻、按「返回列表」——地址都回到带 `?q=` 的那一个，检索框里仍是「甲 乙」。
+  - 异常案件敲检索词进地址；切到委托查阅标签再点回来，地址与检索词都在；清空检索词即删键。
+  - 工作区存储里没有记下的地址（不进 `localStorage`）。
+- ◑ 「勾选」那半：按裁定多选集进详情即丢，不承诺保住；页面注释（`ebf8b025`、`c1b7f74b`）与票 04 Comments 如实写了。探针没有单测勾选——探针里页面读口挂起，
+  表里没有行可勾；「双击进详情」同理以直接写详情地址代替（双击走既有的 `onRowOpen` → 写同一个地址）。
+- ◑ 浏览器未验。
+
+**判断项**
+
+1. **记地址按 `oldURL`，页面写检索词时不通知壳层。** 页面写检索词用 replaceState，不触发 hashchange；壳层只在离开一张标签的那一次 hashchange 里读 `oldURL`，
+   那一刻地址栏里就是它最后的样子。页面不必知道壳层在记，壳层也不必认识页面有哪些查询键（`?view=`、`?q=` 与将来的一视同仁）。
+2. **回程只有三条。** 侧栏、工作台与命令面板导航到已开的模块写的是模块首址（见「不做」）。
+3. **`rememberTabAddress` 用 `tabForHash` 认标签。** 与 hash 开标签同一个构造器，记下的地址认回来一定是那张标签，`applyWorkspace` 两次答成同一张的前提（票 01）
+   不因回程改写而破；解不开的地址不记。
+4. **关掉的标签，地址不删。** 重开（Ctrl+Shift+T）或详情「返回列表」回到一张已关的列表标签时，落回它上次停的地址；会话一结束就没了。
+5. **`useAddressKeyword` 也听 hashchange。** 同一实例下地址被浏览器前进后退改了，检索框跟着地址走，页面不另存一份。
+
+**评审**：碰共享面（`templates/*`、`shell/*`、`Layout.tsx`），按 workflow 第 5 步要一份 Spec 轴。已派通道 3 只读复核（本票的形态取舍是它定的，实现是通道 1 写的，
+对实现而言它是非作者），结果回来代落；在此之前以**推送方自审**为准，不算非作者评审。自审所得：三条回程都走 `addressForTab`，`Layout` 里不再有写首址的
+回程（`hashForTab` 只剩注释提及）；`TabReturnProvider` 的默认实现写首址，壳层外照旧回得去；`templates/index.ts` 只追加；两页以 `useAddressKeyword` 替掉
+`useState('')`，检索框与筛选的用法不变。
+
+**推送**：未推，见票 01「评审后修复」的推送一节。
