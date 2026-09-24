@@ -35,7 +35,8 @@ func (catalogue *OperationsCatalogue) ListLegalEntityRevisions(
 
 	rows, err := querier.Query(ctx,
 		`SELECT tenant_id, legal_entity_id, party_id, revision, basis_ref, effective_from,
-		        deactivated_at, deactivation_basis, recorded_at
+		        deactivated_at, deactivation_basis, recorded_at,
+		        registration_country, lifetime_registration_numbers, identity_correction_basis
 		   FROM party_commercial.legal_entity_registration
 		  WHERE tenant_id = $1 AND legal_entity_id = $2
 		  ORDER BY revision ASC`,
@@ -53,9 +54,17 @@ func (catalogue *OperationsCatalogue) ListLegalEntityRevisions(
 		var row ports.LegalEntityRevisionRow
 		var deactivatedAt *time.Time
 		var deactivationBasis *string
+		var identity identityLayerColumns
 		if err := rows.Scan(
 			&row.TenantID, &row.LegalEntityID, &row.PartyID, &row.Revision, &row.Basis, &row.EffectiveFrom,
 			&deactivatedAt, &deactivationBasis, &row.RegisteredAt,
+			&identity.country, &identity.numbers, &identity.correction,
+		); err != nil {
+			return nil, fmt.Errorf("list legal entity revisions: %w", err)
+		}
+		if err := identity.apply(
+			&row.HasIdentityLayer, &row.RegistrationCountry, &row.LifetimeNumbers,
+			&row.HasIdentityCorrection, &row.IdentityCorrectionBasis,
 		); err != nil {
 			return nil, fmt.Errorf("list legal entity revisions: %w", err)
 		}

@@ -30,6 +30,12 @@ type LegalEntityRevisionRow struct {
 	DeactivationBasis string
 	HasDeactivation   bool
 	RegisteredAt      time.Time
+	// 身份层三格的判据同 GroupLegalEntityRow：历史修订 HasIdentityLayer 为假。
+	HasIdentityLayer        bool
+	RegistrationCountry     string
+	LifetimeNumbers         []LifetimeRegistrationNumberRow
+	HasIdentityCorrection   bool
+	IdentityCorrectionBasis string
 }
 
 // LegalEntityRevisionHistoryRead 是责任法人修订历史的读端口（票 admin-web-group-legal-

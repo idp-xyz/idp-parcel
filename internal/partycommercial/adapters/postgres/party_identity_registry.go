@@ -40,7 +40,7 @@ type identityRegistrationRow struct {
 	tenant    string
 	id        string
 	revision  int
-	extra     map[string]string
+	extra     map[string]any
 	basis     string
 	lifecycle domain.IdentityLifecycle
 	document  any
@@ -208,19 +208,24 @@ func (repository *PartyIdentityRegistrations) SaveBusinessParty(
 		tenant:    party.Tenant().String(),
 		id:        party.ID().String(),
 		revision:  registration.Revision(),
-		extra:     map[string]string{"party_name": party.Name().String()},
+		extra:     map[string]any{"party_name": party.Name().String()},
 		basis:     registration.Basis().String(),
 		lifecycle: registration.Lifecycle(),
 		document:  document,
 	})
 }
 
+// legalEntityDocument 的身份层三格一律 omitempty 且排在末尾：本格落地之前写下的快照没有它们，照旧编出同一串
+// 字节、同一个内容摘要——历史修订的重放判定不因加格而变成冲突。
 type legalEntityDocument struct {
 	Tenant        string `json:"tenant"`
 	LegalEntityID string `json:"legalEntityId"`
 	PartyID       string `json:"partyId"`
 	Revision      int    `json:"revision"`
 	identityLifecycleDocument
+	RegistrationCountry     string                   `json:"registrationCountry,omitempty"`
+	LifetimeNumbers         []lifetimeNumberDocument `json:"lifetimeRegistrationNumbers,omitempty"`
+	IdentityCorrectionBasis string                   `json:"identityCorrectionBasis,omitempty"`
 }
 
 func (repository *PartyIdentityRegistrations) SaveLegalEntity(
@@ -235,13 +240,35 @@ func (repository *PartyIdentityRegistrations) SaveLegalEntity(
 		Revision:                  registration.Revision(),
 		identityLifecycleDocument: lifecycleDocumentOf(registration.Basis(), registration.Lifecycle()),
 	}
+	// 身份层三列与快照同源；历史形状的修订三列落 NULL（0034 的同空同有约束）。
+	extra := map[string]any{
+		"party_id":                      entity.Party().String(),
+		"registration_country":          nil,
+		"lifetime_registration_numbers": nil,
+		"identity_correction_basis":     nil,
+	}
+	if layer, has := registration.IdentityLayer(); has {
+		numbers := lifetimeNumberDocumentsOf(layer)
+		raw, err := json.Marshal(numbers)
+		if err != nil {
+			return ports.PartyRegistrySaveOutcomeInvalid, fmt.Errorf("save legal_entity_registration: %w", err)
+		}
+		document.RegistrationCountry = layer.Country().String()
+		document.LifetimeNumbers = numbers
+		extra["registration_country"] = layer.Country().String()
+		extra["lifetime_registration_numbers"] = string(raw)
+	}
+	if basis, has := registration.IdentityCorrectionBasis(); has {
+		document.IdentityCorrectionBasis = basis.String()
+		extra["identity_correction_basis"] = basis.String()
+	}
 	return repository.saveIdentityRow(ctx, identityRegistrationRow{
 		table:     "legal_entity_registration",
 		idColumn:  "legal_entity_id",
 		tenant:    entity.Tenant().String(),
 		id:        entity.ID().String(),
 		revision:  registration.Revision(),
-		extra:     map[string]string{"party_id": entity.Party().String()},
+		extra:     extra,
 		basis:     registration.Basis().String(),
 		lifecycle: registration.Lifecycle(),
 		document:  document,
@@ -274,7 +301,7 @@ func (repository *PartyIdentityRegistrations) SaveCustomerAccount(
 		tenant:    account.Tenant().String(),
 		id:        account.ID().String(),
 		revision:  registration.Revision(),
-		extra:     map[string]string{"customer_party_id": account.CustomerParty().String()},
+		extra:     map[string]any{"customer_party_id": account.CustomerParty().String()},
 		basis:     registration.Basis().String(),
 		lifecycle: registration.Lifecycle(),
 		document:  document,
@@ -553,7 +580,26 @@ func legalEntityFromSnapshot(raw []byte) (domain.LegalEntityRegistration, error)
 	if err != nil {
 		return domain.LegalEntityRegistration{}, err
 	}
-	return domain.NewLegalEntityRegistration(entity, document.Revision, basis, lifecycle)
+	registration, err := domain.NewLegalEntityRegistration(entity, document.Revision, basis, lifecycle)
+	if err != nil {
+		return domain.LegalEntityRegistration{}, err
+	}
+	layer, hasIdentity, err := identityLayerFromDocuments(document.RegistrationCountry, document.LifetimeNumbers)
+	if err != nil {
+		return domain.LegalEntityRegistration{}, err
+	}
+	if !hasIdentity {
+		return registration, nil
+	}
+	var correction *domain.IdentityBasisReference
+	if document.IdentityCorrectionBasis != "" {
+		value, err := domain.NewIdentityBasisReference(document.IdentityCorrectionBasis)
+		if err != nil {
+			return domain.LegalEntityRegistration{}, err
+		}
+		correction = &value
+	}
+	return registration.WithIdentityLayer(layer, correction)
 }
 
 func customerAccountFromSnapshot(raw []byte) (domain.CustomerAccountRegistration, error) {
