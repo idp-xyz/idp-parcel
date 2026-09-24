@@ -118,6 +118,7 @@ export const navigationSections: NavigationSection[] = [
     title: '计价',
     items: [
       { id: 'pricing-evaluation', label: '价格评价', icon: 'pricing-evaluation' },
+      { id: 'pricing-estimate', label: '计价试算', icon: 'pricing-estimate' },
     ],
   },
   {
@@ -201,6 +202,7 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'price-card-catalog': BadgeDollarSign,
   'reference-series': TrendingUp,
   'pricing-evaluation': Calculator,
+  'pricing-estimate': Calculator,
   'network-catalog': Network,
   'service-areas': Globe,
   'route-plans': Route,
@@ -342,6 +344,11 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     title: '价格评价',
     owner: '小包计价（parcel-pricing）',
     source: 'docs/domain/parcel-pricing/CONTEXT.md「价格评价」生命周期（争议复核与回放）',
+  },
+  'pricing-estimate': {
+    title: '计价试算',
+    owner: '小包计价（parcel-pricing）',
+    source: 'docs/application/parcel-pricing/UC-PP-001-FORM-ESTIMATE-EVALUATIONS.md 与 docs/adr/0152-operator-estimate-is-a-pricing-use-case-computed-not-recorded-and-never-handed-to-settlement.md',
   },
 
   // —— 网络与路由（network-routing）——

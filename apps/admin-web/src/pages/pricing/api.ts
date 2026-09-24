@@ -442,3 +442,65 @@ export interface PricingEvaluationListResponseBody {
 export function listPricingEvaluations() {
   return exchangeMasterData<PricingEvaluationListResponseBody>('/pricing-evaluations');
 }
+
+// ---- 运营试算（UC-PP-001，ADR-0152；票 operator-workspace-gaps/06）----
+//
+// 端点在装配表里挂字面量 `UnconfiguredIntake{}`：真 Intake 随操作者渠道与回放同批换（operator-channel/06），**今天提交必然答 403
+// ACCESS_CHANNEL_NOT_CONFIGURED**，那是诚实答案不是接线缺陷。载荷与响应形状逐字镜像传输层 `estimate_evaluations.go`，不发明字段；
+// 载荷里没有租户——租户从操作者信封来，传输层按未知键拒。
+
+export interface EstimatePayload {
+  scope: string;
+  direction: string;
+  basisAt?: string;
+  weight: { value: string; unit: string };
+  dimensions?: { length: string; width: string; height: string; unit: string };
+  zone?: string;
+  postalRoute?: { origin: string; destination: string };
+  settlementCurrency?: string;
+}
+
+export interface EstimateMoney {
+  amount: string;
+  currency: string;
+}
+
+/** 一份试算评价的全部结论。合计只在评价完成时出现，其余各态缺席而不是零（CONTEXT：不得以零金额表达不可计价）。 */
+export interface EstimateEvaluationRecord {
+  evaluationId: string;
+  status: string;
+  evidence: string;
+  direction: string;
+  purpose: string;
+  semanticDigest: string;
+  total?: EstimateMoney;
+  chargeLines: { code: string; description: string; amount: EstimateMoney }[];
+  issues: { code: string; message: string }[];
+  explanation: string[];
+  manifest: { kind: string; id: string; version: string }[];
+}
+
+export interface EstimatePlanReference {
+  id: string;
+  version: string;
+}
+
+/** 逐卡一格：`EVALUATED` 带评价，`INPUT_INCOMPLETE` 带缺项码。 */
+export interface EstimateCandidateRecord {
+  plan: EstimatePlanReference;
+  answer: string;
+  missing?: string[];
+  evaluation?: EstimateEvaluationRecord;
+}
+
+/** `outcome` 只说编排；卡与卡之间不排序、不标首选（择优归网络与路由）。 */
+export interface EstimateResponseBody {
+  outcome: string;
+  reason?: string;
+  candidates: EstimateCandidateRecord[];
+  conflict: EstimatePlanReference[];
+}
+
+export function formEstimate(payload: EstimatePayload): Promise<ApiResult<EstimateResponseBody>> {
+  return postMasterData<EstimateResponseBody>('/pricing-estimates', payload);
+}

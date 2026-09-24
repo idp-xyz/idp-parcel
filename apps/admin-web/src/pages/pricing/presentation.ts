@@ -65,6 +65,39 @@ export const evaluationStatusLabels: Record<string, string> = {
   UNRATABLE: '不可计价',
 };
 
+// 评价的证据层级（docs/product/PILOT-ACCEPTANCE-MATRIX.md「证据层级」原词）。与上面参考序列的 evidenceGradeLabels 是两套词，不混用。
+export const evidenceLevelLabels: Record<string, string> = {
+  P: '真实生产',
+  R: '历史数据回放',
+  S: '受控模拟',
+};
+
+// 运营试算（ADR-0152 决定七）：`outcome` 只说编排，逐卡评价自己的状态用上面的 evaluationStatusLabels，不折进这里。
+export const estimateOutcomeLabels: Record<string, string> = {
+  FORMED: '已形成（逐卡并列，卡与卡之间不排序、不标首选）',
+  PRICE_CARD_NOT_CONFIGURED: '价卡未配置（此范围、方向、时点下没有适用价卡）',
+  PRICE_CARD_APPLICABILITY_CONFLICT: '价卡适用冲突（同一方案两版同时适用，交价卡治理责任方裁，本页不挑）',
+  NOT_ACCEPTED: '未受理（声明不成形，改声明后再试）',
+  UNDECIDED: '未决（依赖读不回，形成与否未知，稍后重试）',
+};
+
+export const estimateAnswerLabels: Record<string, string> = {
+  EVALUATED: '已评价',
+  INPUT_INCOMPLETE: '输入不全',
+};
+
+// 缺项按卡的目录绑定定：绑了分区目录的卡要邮编路线、没绑的卡要分区（ADR-0152 决定五）。
+export const estimateMissingLabels: Record<string, string> = {
+  ZONE: '分区（这张卡没绑分区目录，要发起方给分区）',
+  POSTAL_ROUTE: '邮编路线（这张卡按邮编路线查分区或偏远档位目录）',
+};
+
+export const estimateReasonLabels: Record<string, string> = {
+  PRICE_CARD_LOAD_UNAVAILABLE: '停在取适用价卡',
+  CONFLICT_CANDIDATES_UNAVAILABLE: '停在取冲突候选',
+  READING_COMPLETION_UNAVAILABLE: '停在补齐序列或目录读数',
+};
+
 export const problemCodeNotes: Record<string, string> = {
   METHOD_NOT_ALLOWED: '请求方法不被该端点允许。这是调用方式问题,不是业务答案。',
   MALFORMED_REQUEST: '请求构造不出查询,重发同样的内容不会改变结果。',
