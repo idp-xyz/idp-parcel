@@ -205,6 +205,12 @@ test('closeToRight：活动标签在左侧不动', () => {
   equal(state.activeTabId, 'a');
 });
 
+test('closeOthers / closeToRight：不认识的 id 原样返回', () => {
+  const state = stateWith([tab('a'), tab('b')], 'b');
+  equal(closeOthers(state, 'zzz'), state);
+  equal(closeToRight(state, 'zzz'), state);
+});
+
 test('closeAll：固定的留下；活动标签被关时落工作台，活动标签是固定的时不动', () => {
   const closed = closeAll(stateWith([tab('a', { pinned: true }), tab('b')], 'b'));
   deepEqual(ids(closed), ['a']);
@@ -273,11 +279,11 @@ test('load：检查器宽度越界钳进区间，可见性非布尔当没存（�
     WORKSPACE_STORAGE_KEY,
     JSON.stringify({ tabs: [], activeTabId: null, closedTabs: [], sidebarWidth: 240, inspectorWidth: 5, inspectorVisible: 'no' }),
   );
-  const state = loadWorkspaceState(storage, known);
+  const state = loadWorkspaceState(storage, pageTitleById);
   equal(state.inspectorWidth, INSPECTOR_WIDTH_MIN);
   equal(state.inspectorVisible, true);
   storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify({ tabs: [], inspectorVisible: false }));
-  equal(loadWorkspaceState(storage, known).inspectorVisible, false);
+  equal(loadWorkspaceState(storage, pageTitleById).inspectorVisible, false);
 });
 
 // —— 持久化 ——
@@ -290,16 +296,16 @@ test('save / load 往返相等', () => {
   state = closeTab(state, 'shipment-request-inquiry/SR-1');
   state = setSidebarWidth(state, 300);
   saveWorkspaceState(storage, state);
-  deepEqual(loadWorkspaceState(storage, known), state);
+  deepEqual(loadWorkspaceState(storage, pageTitleById), state);
 });
 
 test('load：没存、JSON 坏、不是对象 → 初始态', () => {
-  equal(loadWorkspaceState(new MapStorage(), known).tabs.length, 0);
+  equal(loadWorkspaceState(new MapStorage(), pageTitleById).tabs.length, 0);
   const bad = new MapStorage();
   bad.setItem(WORKSPACE_STORAGE_KEY, '{not json');
-  deepEqual(loadWorkspaceState(bad, known), initialWorkspaceState());
+  deepEqual(loadWorkspaceState(bad, pageTitleById), initialWorkspaceState());
   bad.setItem(WORKSPACE_STORAGE_KEY, '42');
-  deepEqual(loadWorkspaceState(bad, known), initialWorkspaceState());
+  deepEqual(loadWorkspaceState(bad, pageTitleById), initialWorkspaceState());
 });
 
 test('load：坏的那一格回默认，好的留下——形不对的标签、重复 id、词表外模块、工作台伪标签一律剔除', () => {
@@ -313,7 +319,7 @@ test('load：坏的那一格回默认，好的留下——形不对的标签、�
         { id: '', name: '空 id' },
         { id: 'gone-module/x', name: '词表已改' },
         { id: 'workbench', name: '工作台' },
-        { id: 'price-cards', name: 5 },
+        { id: 'price-cards', name: '价卡目录', pinned: 'yes' },
         { id: 'shipment-request-inquiry/SR-1', name: '委托查阅', subtitle: 'SR-1', pinned: true },
       ],
       activeTabId: 'gone-module/x',
@@ -321,7 +327,7 @@ test('load：坏的那一格回默认，好的留下——形不对的标签、�
       sidebarWidth: 'wide',
     }),
   );
-  const state = loadWorkspaceState(storage, known);
+  const state = loadWorkspaceState(storage, pageTitleById);
   deepEqual(ids(state), ['exception-cases', 'shipment-request-inquiry/SR-1']);
   equal(state.tabs[1].pinned, true);
   equal(state.activeTabId, null, '活动标签不在集里落工作台');
@@ -329,10 +335,63 @@ test('load：坏的那一格回默认，好的留下——形不对的标签、�
   equal(state.sidebarWidth, SIDEBAR_WIDTH_DEFAULT);
 });
 
+test('load：id 不规范或解码会抛的标签剔除，不抛出 load——畸形百分号、尾斜杠、三段、带查询串、次段畸形', () => {
+  const storage = new MapStorage();
+  storage.setItem(
+    WORKSPACE_STORAGE_KEY,
+    JSON.stringify({
+      tabs: [
+        { id: '%', name: '孤百分号' },
+        { id: '%E0', name: '首段畸形' },
+        { id: 'exception-cases/', name: '尾斜杠' },
+        { id: 'shipment-request-inquiry/SR-1/timeline', name: '三段' },
+        { id: 'exception-cases?view=v1', name: '带查询串' },
+        { id: 'shipment-request-inquiry/%E0%A4%A', name: '次段畸形' },
+        { id: 'price-cards', name: '价卡目录' },
+      ],
+      activeTabId: 'exception-cases/',
+      closedTabs: [{ id: '%E0%A4%A', name: '坏' }, { id: 'exception-cases', name: '异常案件' }],
+    }),
+  );
+  const state = loadWorkspaceState(storage, pageTitleById);
+  deepEqual(ids(state), ['price-cards']);
+  equal(state.activeTabId, null);
+  deepEqual(state.closedTabs.map((t) => t.id), ['exception-cases']);
+});
+
+test('load：名字与副标题按词表与 id 现算，存储里的旧名不读', () => {
+  const storage = new MapStorage();
+  storage.setItem(
+    WORKSPACE_STORAGE_KEY,
+    JSON.stringify({
+      tabs: [
+        { id: 'exception-cases', name: '改名前的旧名' },
+        { id: 'shipment-request-inquiry/SR%2F1', name: '旧', subtitle: '旧副标题' },
+      ],
+      closedTabs: [{ id: 'price-cards', name: '旧', subtitle: '不该有' }],
+    }),
+  );
+  const state = loadWorkspaceState(storage, pageTitleById);
+  deepEqual(state.tabs, [
+    { id: 'exception-cases', name: '异常案件' },
+    { id: 'shipment-request-inquiry/SR%2F1', name: '委托查阅', subtitle: 'SR/1' },
+  ]);
+  deepEqual(state.closedTabs, [{ id: 'price-cards', name: '价卡目录' }]);
+});
+
+test('load：已关闭栈截到上限，截的是最旧的那头', () => {
+  const storage = new MapStorage();
+  const closedTabs = Array.from({ length: CLOSED_TABS_LIMIT + 5 }, (_, i) => ({ id: `shipment-request-inquiry/SR-${i}` }));
+  storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify({ tabs: [], closedTabs }));
+  const state = loadWorkspaceState(storage, pageTitleById);
+  equal(state.closedTabs.length, CLOSED_TABS_LIMIT);
+  equal(state.closedTabs[0].id, 'shipment-request-inquiry/SR-0');
+});
+
 test('load：sidebarWidth 越界钳进区间', () => {
   const storage = new MapStorage();
   storage.setItem(WORKSPACE_STORAGE_KEY, JSON.stringify({ tabs: [], activeTabId: null, closedTabs: [], sidebarWidth: 1 }));
-  equal(loadWorkspaceState(storage, known).sidebarWidth, SIDEBAR_WIDTH_MIN);
+  equal(loadWorkspaceState(storage, pageTitleById).sidebarWidth, SIDEBAR_WIDTH_MIN);
 });
 
 // —— 状态栏 ——

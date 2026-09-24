@@ -242,29 +242,41 @@ function clampWidth(value: unknown, min: number, max: number, fallback: number):
   return Math.min(max, Math.max(min, value));
 }
 
-function isWorkspaceTab(value: unknown): value is WorkspaceTab {
+/** 存储里一张标签要读的只有 id 与固定标记；名字与副标题不读，由 id 现算（见 sanitizeTabs）。 */
+function isStoredTab(value: unknown): value is { id: string; pinned?: boolean } {
   if (typeof value !== 'object' || value === null) return false;
   const v = value as Record<string, unknown>;
-  return (
-    typeof v.id === 'string' &&
-    v.id !== '' &&
-    typeof v.name === 'string' &&
-    (v.subtitle === undefined || typeof v.subtitle === 'string') &&
-    (v.pinned === undefined || typeof v.pinned === 'boolean')
-  );
+  return typeof v.id === 'string' && v.id !== '' && (v.pinned === undefined || typeof v.pinned === 'boolean');
 }
 
-/** 只保留形对的、id 不重复的、模块在词表内的标签——词表已改的模块留在标签栏上会点进 UnwiredModule。 */
-function sanitizeTabs(value: unknown, isKnownModule: (moduleId: string) => boolean): WorkspaceTab[] {
+/**
+ * 按存储里的 id 重造标签：走 hash 开标签的同一个构造器 tabForHash，造得出、且认回来仍是这个 id 才算数。
+ * 「认回来仍是它」是 Layout 的前提——关标签后写 hashForTab(id)、hashchange 回流时再按 hash 认标签，两路对活动标签各答一次，
+ * 只有 id 规范时才答成同一张；尾斜杠、三段、带查询串的 id 写出的 hash 会被认成另一张，这一张就永远点不亮。
+ * 畸形百分号序列在解码时抛 URIError，接住当坏格。
+ */
+function tabFromStoredId(id: string, pageTitleById: Record<string, string>): WorkspaceTab | null {
+  try {
+    const tab = tabForHash(hashForTab(id), pageTitleById);
+    return tab !== null && tab.id === id ? tab : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * 只保留形对的、id 规范且可解码的、不重复的、模块在词表内的标签——词表已改的模块留在标签栏上会点进 UnwiredModule。
+ * 名字与副标题由词表与 id 现算、存储里那一份不读：导航词表是页面标题的唯一来源，词表改了名，恢复出来的标签跟着改。
+ */
+function sanitizeTabs(value: unknown, pageTitleById: Record<string, string>): WorkspaceTab[] {
   if (!Array.isArray(value)) return [];
   const seen = new Set<string>();
   const tabs: WorkspaceTab[] = [];
   for (const item of value) {
-    if (!isWorkspaceTab(item) || seen.has(item.id)) continue;
-    if (moduleIdOfTab(item.id) === WORKBENCH_MODULE_ID || !isKnownModule(moduleIdOfTab(item.id))) continue;
+    if (!isStoredTab(item) || seen.has(item.id)) continue;
+    const tab = tabFromStoredId(item.id, pageTitleById);
+    if (tab === null) continue;
     seen.add(item.id);
-    const tab: WorkspaceTab = { id: item.id, name: item.name };
-    if (item.subtitle !== undefined) tab.subtitle = item.subtitle;
     if (item.pinned) tab.pinned = true;
     tabs.push(tab);
   }
@@ -272,13 +284,11 @@ function sanitizeTabs(value: unknown, isKnownModule: (moduleId: string) => boole
 }
 
 /**
- * 读回上次的工作区：逐字段校验，坏的那一格回默认而不是整份丢——存坏了半格不该把所有标签都吞掉。
+ * 读回上次的工作区：逐字段校验，坏的那一格回默认而不是整份丢——存坏了半格不该把所有标签都吞掉。任何形状的坏存储都不从
+ * 这里抛出去：它在首帧就被读，抛出去整台起不来，而坏值还留在存储里，刷新也救不回来。
  * 存不下来、JSON 不合法当没存。活动标签不在标签集里时落工作台。
  */
-export function loadWorkspaceState(
-  storage: WorkspaceStorage,
-  isKnownModule: (moduleId: string) => boolean,
-): WorkspaceState {
+export function loadWorkspaceState(storage: WorkspaceStorage, pageTitleById: Record<string, string>): WorkspaceState {
   const raw = storage.getItem(WORKSPACE_STORAGE_KEY);
   if (raw === null) return initialWorkspaceState();
   let parsed: unknown;
@@ -289,10 +299,10 @@ export function loadWorkspaceState(
   }
   if (typeof parsed !== 'object' || parsed === null) return initialWorkspaceState();
   const v = parsed as Record<string, unknown>;
-  const tabs = sanitizeTabs(v.tabs, isKnownModule);
+  const tabs = sanitizeTabs(v.tabs, pageTitleById);
   const activeTabId =
     typeof v.activeTabId === 'string' && tabs.some((t) => t.id === v.activeTabId) ? v.activeTabId : null;
-  const closedTabs = sanitizeTabs(v.closedTabs, isKnownModule)
+  const closedTabs = sanitizeTabs(v.closedTabs, pageTitleById)
     .filter((tab) => !tabs.some((t) => t.id === tab.id))
     .map(({ pinned: _pinned, ...tab }) => tab)
     .slice(0, CLOSED_TABS_LIMIT);

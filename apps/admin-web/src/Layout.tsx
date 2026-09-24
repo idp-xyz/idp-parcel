@@ -83,8 +83,6 @@ import {
 /** 命令面板每次打开时重读一遍最近对象；模块级常量而不是每次渲染新建，host 的 useMemo 依赖它的引用。 */
 const readRecentObjectsForPalette = () => listRecentObjects(window.localStorage);
 
-const isKnownModule = (moduleId: string) => pageTitleById[moduleId] !== undefined;
-
 /** hash 落到标签集上：对象 / 模块地址开或激活对应标签；工作台、空 hash 与词表外的 id 都是「没有活动标签」。 */
 function applyHash(state: WorkspaceState, hash: string): WorkspaceState {
   const tab = tabForHash(hash, pageTitleById);
@@ -92,7 +90,7 @@ function applyHash(state: WorkspaceState, hash: string): WorkspaceState {
 }
 
 function workspaceFromStorageAndLocation(): WorkspaceState {
-  return applyHash(loadWorkspaceState(window.localStorage, isKnownModule), window.location.hash);
+  return applyHash(loadWorkspaceState(window.localStorage, pageTitleById), window.location.hash);
 }
 
 // 模块 id 必须在导航词表内才记：未知 id 的地址上面已落回工作台，历史里若留下它，就成了一条查无出处的模块。
