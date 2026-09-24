@@ -1,7 +1,7 @@
 # 01 演示库上隔离写路径的委托提交恒答 `ADMISSION_PAUSED`：种子注释「准入控制为 OPEN」在保守规则下已不成立
 
 Category: bug
-Status: ready-for-agent
+Status: in-progress——2026-09-24 通道 4 认领（派单 `task-e7f42ddf` ← 通道 3），隔离 worktree 分支 `mcp4-dia01`，基本笔
 Blocked by: 无
 地盘：`cmd/parcel-governance-register`（新增阶段评审登记子命令）、pilot-governance 应用层里阶段评审的入口（若 CLI 需要新接）、`scripts/demo-seeds`（`seed.sh`
 与 `data/governance/`）。碰 Go，走[并行会话](../../../docs/agents/parallel-sessions.md)那条路。
