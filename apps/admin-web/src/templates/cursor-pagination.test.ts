@@ -43,6 +43,14 @@ test('末页：next 为 null 时不压栈，下一页钮不能按；第一页上
   deepEqual(cursorPagerControls(1, null), { canPrevious: false, canNext: false });
 });
 
+test('同一个 next 连压两次只算一次（取数期间的第二次点击）', () => {
+  const once = nextCursorPage(startCursorTrail('q='), 'c1');
+  const twice = nextCursorPage(once, 'c1');
+  equal(twice, once);
+  equal(cursorPageNumber(twice), 2);
+  equal(cursorPageNumber(nextCursorPage(twice, 'c2')), 3, '新的 next 照压');
+});
+
 test('换条件清栈回第一页；条件没变原样返回', () => {
   const deep = nextCursorPage(nextCursorPage(startCursorTrail('sort=-registeredAt&q=甲'), 'c1'), 'c2');
   equal(cursorTrailFor(deep, 'sort=-registeredAt&q=甲'), deep);

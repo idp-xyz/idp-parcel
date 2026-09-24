@@ -30,9 +30,13 @@ export function cursorPageNumber(trail: CursorTrail): number {
   return trail.afters.length + 1;
 }
 
-/** 下一页：把本页答复的 `next` 压栈；`next` 为 null（已到末页）原样返回。 */
+/**
+ * 下一页：把本页答复的 `next` 压栈；`next` 为 null（已到末页）原样返回。`next` 就是当前页带的那个 `after` 时也原样返回：
+ * 那是取数期间旧答复还在、翻页条照渲时的第二次点击，压两次页号会多记一页、取的还是同一页。
+ */
 export function nextCursorPage(trail: CursorTrail, next: string | null): CursorTrail {
-  return next === null ? trail : { query: trail.query, afters: [...trail.afters, next] };
+  if (next === null || next === currentCursorAfter(trail)) return trail;
+  return { query: trail.query, afters: [...trail.afters, next] };
 }
 
 /** 上一页：出栈；已在第一页原样返回。 */
