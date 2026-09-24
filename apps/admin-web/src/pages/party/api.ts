@@ -359,6 +359,58 @@ export interface RegistrationNumberTypeListResponseBody {
   registrationNumberTypes: RegistrationNumberTypeRecord[];
 }
 
+// 法人资料（ADR-0145 决定三；后端 legalEntityProfileRevisionBody 与 legalEntityProfileEffectiveRevisionBody）：修订历史行、
+// 按时点解析答出的那一笔、登记口的一项共用这几格，读写两个方向一个样子。invoicingRegistered 是显式布尔：为假即这笔修订
+// 不带开票资料，页面照写，不拿 invoiceTitle 缺席去推。
+export interface RegisteredAddressRecord {
+  country: string;
+  lines: string[];
+}
+
+export interface TaxRegistrationNumberRecord {
+  typeCode: string;
+  number: string;
+}
+
+export interface LegalEntityContactRecord {
+  name: string;
+  email?: string;
+  phone?: string;
+}
+
+export interface LegalEntityProfileContent {
+  revision: number;
+  basis: string;
+  effectiveFrom: string;
+  registeredAddress: RegisteredAddressRecord;
+  taxRegistrationNumbers: TaxRegistrationNumberRecord[];
+  invoicingRegistered: boolean;
+  invoiceTitle?: string;
+  contacts: LegalEntityContactRecord[];
+}
+
+export interface LegalEntityProfileRevisionRecord extends LegalEntityProfileContent {
+  tenantId: string;
+  legalEntityId: string;
+  registeredAt: string;
+}
+
+export interface LegalEntityProfileRevisionListResponseBody {
+  outcome: string;
+  legalEntityId: string;
+  revisions: LegalEntityProfileRevisionRecord[];
+}
+
+// 按时点解析（ADR-0145 决定五、六）：PROFILE_INCOMPLETE 是明确的非成功，随答 incompleteCause；effectiveRevision 只在那一刻
+// 有生效的修订时在场——资料不全里「没有开票资料」那一格也带着它。
+export interface LegalEntityProfileResolutionResponseBody {
+  outcome: string;
+  legalEntityId: string;
+  at: string;
+  incompleteCause?: string;
+  effectiveRevision?: LegalEntityProfileContent;
+}
+
 // 参与方身份两册（票 admin-remainder-mechanism-batch/01）。partyNameKnown 与合同页
 // contentRegistered 同款显式布尔：法人钉着的参与方在册上查无此人是写入门失败才会
 // 出现的悬空，页面按缺席如实显示，不拿空串去推、不补占位文本。
@@ -577,6 +629,25 @@ export function listLegalEntityRevisions(
   );
 }
 
+// 法人资料的修订历史与按时点解析（票 legal-entity-profile/03、05），法人标识在路径上，判据同 listLegalEntityRevisions。
+export function listLegalEntityProfileRevisions(
+  legalEntityId: string,
+): Promise<ApiResult<LegalEntityProfileRevisionListResponseBody>> {
+  return exchangeMasterData<LegalEntityProfileRevisionListResponseBody>(
+    `/commercial-group-legal-entities/${encodeURIComponent(legalEntityId)}/profile-revisions`,
+  );
+}
+
+// 时点走查询串 at（RFC 3339）：问的是同一个资源在那一刻的样子，不是另一个资源。
+export function resolveLegalEntityProfile(
+  legalEntityId: string,
+  at: string,
+): Promise<ApiResult<LegalEntityProfileResolutionResponseBody>> {
+  return exchangeMasterData<LegalEntityProfileResolutionResponseBody>(
+    `/commercial-group-legal-entities/${encodeURIComponent(legalEntityId)}/profile-resolution?at=${encodeURIComponent(at)}`,
+  );
+}
+
 // 法人登记表单的国家与号类型候选从这里取（票 legal-entity-profile/04 第 1 项）。只是候选：目录里有没有这一国家、
 // 号合不合那一类的格式，登记时由服务端按目录判（ADR-0145 决定一），表单不据此拦。
 export function listRegistrationNumberTypes(): Promise<ApiResult<RegistrationNumberTypeListResponseBody>> {
@@ -641,6 +712,7 @@ export type CommercialRegistrationKind =
   | 'publication'
   | 'business-party'
   | 'legal-entity'
+  | 'legal-entity-profile'
   | 'customer-account'
   | 'party-relationship'
   | 'identity-deactivation'
@@ -660,6 +732,7 @@ export const commercialRegistrationEndpoints: Record<CommercialRegistrationKind,
   publication: '/commercial-publications',
   'business-party': '/commercial-business-party-registrations',
   'legal-entity': '/commercial-legal-entity-registrations',
+  'legal-entity-profile': '/commercial-legal-entity-profile-registrations',
   'customer-account': '/commercial-customer-account-registrations',
   'party-relationship': '/commercial-party-relationship-registrations',
   'identity-deactivation': '/commercial-party-identity-deactivations',
@@ -729,6 +802,14 @@ export const partyIdentityOutcomeLabels: Record<string, string> = {
   CONTENT_CONFLICT: '内容冲突（同修订号异内容；更正要占下一个修订号，不覆盖）',
   NOT_ACCEPTED: '受理门拒绝（修订错位或引用悬空，一个字节没写；原因随答复交回）',
   NOT_FOUND: '册上没有这一个身份（停用的对象从未登记）',
+};
+
+/** 法人资料登记口的答案代数（`application.LegalEntityProfileRegistrationOutcome` 原名）。资料没有停用，没有 DEACTIVATED。 */
+export const legalEntityProfileOutcomeLabels: Record<string, string> = {
+  REGISTERED: '已登记（本次落库；新修订自其生效时点起取代前一修订）',
+  ALREADY_REGISTERED: '同键同内容重放（原修订不被顶替）',
+  CONTENT_CONFLICT: '内容冲突（同修订号异内容；资料修订不可覆盖，要改就登下一个修订号）',
+  NOT_ACCEPTED: '受理门拒绝（法人不在册、修订错位、地址国家与身份不一致或税号不合目录等，一个字节没写；原因随答复交回）',
 };
 
 /** 服务形态与产品—渠道映射的登记答案代数（`application.ProductChannelOutcome` 原名）。 */

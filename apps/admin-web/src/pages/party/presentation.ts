@@ -229,6 +229,21 @@ export const partyNameUnknownNote = '参与方册查无此身份';
 /** 修订登记于身份层落地之前（identityLayerRegistered 为假）时身份两格的话；不填假值，句子只在这一处。 */
 export const identityLayerAbsentNote = '本修订登记时尚无此格';
 
+/** 法人资料按时点解析的五格（ADR-0145 决定五、六；后端 domain.LegalEntityProfileResolution 原名）。 */
+export const profileResolutionOutcomeLabels: Record<string, string> = {
+  RESOLVED: '已解析：这一刻有生效的资料修订，开票资料齐',
+  PROFILE_INCOMPLETE: '资料不全（明确非成功，开立方据此拒开，不以默认值补齐）',
+  LEGAL_ENTITY_NOT_REGISTERED: '法人不在册',
+  LEGAL_ENTITY_NOT_EFFECTIVE: '法人在这一刻尚未生效',
+  LEGAL_ENTITY_DEACTIVATED: '法人在这一刻已停用',
+};
+
+/** 资料不全的两种原因。 */
+export const profileIncompleteCauseLabels: Record<string, string> = {
+  NO_EFFECTIVE_REVISION: '这一刻没有生效的资料修订',
+  NO_INVOICING_DETAILS: '生效的那一笔没有开票资料',
+};
+
 export const problemCodeNotes: Record<string, string> = {
   METHOD_NOT_ALLOWED: '请求方法不被该端点允许。这是调用方式问题,不是业务答案。',
   // 一句覆盖读写两侧:problemNote 的签名只有 code,今天分不出这个 400 来自目录读口(kind)还是登记口
@@ -266,6 +281,7 @@ export const registrationTitles: Record<CommercialRegistrationKind, string> = {
   publication: '发布商业权威依据版本',
   'business-party': '登记业务参与方身份修订',
   'legal-entity': '登记责任法人身份修订',
+  'legal-entity-profile': '登记法人资料修订',
   'customer-account': '登记货主客户账户修订',
   'party-relationship': '登记参与方关系修订',
   'identity-deactivation': '停用身份（形成新修订）',
@@ -347,6 +363,14 @@ export const registrationSnapshotHints: Record<CommercialRegistrationKind, strin
       '身份层可带 registrationCountry / lifetimeRegistrationNumbers[{typeCode, number}] / identityCorrectionBasis' +
       '（首笔两格缺一拒登；更正依据只在更正修订上收）。' +
       '参与方必须已登记且在法人生效时点已生效——法人不钉悬空身份。',
+    { tenantGridFilledByChannel: true },
+  ),
+  'legal-entity-profile': snapshotHint(
+    'register-legal-entity-profiles',
+    'profiles 数组里一项的键为 legalEntityId / revision / basis / effectiveFrom，可选 registeredAddress{country, lines} / ' +
+      'taxRegistrationNumbers[{typeCode, number}] / invoiceTitle / contacts[{name, email, phone}]。新修订自其生效时点起' +
+      '取代前一修订，可以登记未来生效的修订；注册地址国家须与身份上的注册国家 / 地区一致。invoiceTitle 缺席即这笔不带' +
+      '开票资料，给了空串照样拒。',
     { tenantGridFilledByChannel: true },
   ),
   'customer-account': snapshotHint(

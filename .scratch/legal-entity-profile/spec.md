@@ -1,7 +1,7 @@
 # 责任法人业务属性：ADR-0145 落地
 
 Category: enhancement
-Status: in-progress——2026-09-24 通道 3 按票 [admin-web-group-legal-entities/05](../admin-web-group-legal-entities/issues/05-legal-entity-business-attributes.md) 的产出要求拆票；子票全部 ready-for-agent
+Status: resolved——2026-09-24 五张子票全部 resolved（04 于同日收尾）。此前 in-progress——2026-09-24 通道 3 按票 [admin-web-group-legal-entities/05](../admin-web-group-legal-entities/issues/05-legal-entity-business-attributes.md) 的产出要求拆票；子票全部 ready-for-agent
 出处：票 05（用户 2026-09-24 授权通道 3 自决）→ [ADR-0145](../../docs/adr/0145-legal-entity-attributes-split-into-identity-layer-and-dated-profile.md)；领域语言在
 party-commercial [`CONTEXT.md`](../../docs/domain/party-commercial/CONTEXT.md) 的「责任法人」「法人资料」词条、Rules 与 Lifecycles「法人资料」一节。
 
@@ -14,7 +14,7 @@ party-commercial [`CONTEXT.md`](../../docs/domain/party-commercial/CONTEXT.md) �
 | [01](./issues/01-registration-number-type-catalogue.md) | 注册号类型目录：按注册国家 / 地区登记注册号类型、格式与所属层 | resolved · 已进 main `5f6ee130` |
 | [02](./issues/02-legal-entity-identity-carries-registration.md) | 责任法人身份登记加注册国家 / 地区与终身注册号 | resolved · 已进 main（代码 `2862bf7d`…`f4dff29b`，清点 `9f270c03`）· 评审 ← 通道 5 须修一条已修、复核可接受 |
 | [03](./issues/03-legal-entity-profile-revisions-and-as-of-resolution.md) | 法人资料修订链与按时点解析（含「资料不全」答复） | resolved · 已进 main（代码 `aa099067`…`caaf7a9c`，清点 `4e7ed6b6`）· 评审 ← 通道 5 可接受 |
-| [04](./issues/04-admin-web-identity-fields-and-profile-face.md) | 管理台：法人登记表单加身份两格、法人资料页 | in-progress · 通道 3（前端切片，main）· 法人资料区的登记表单与当前有效区 Blocked by 05 |
+| [04](./issues/04-admin-web-identity-fields-and-profile-face.md) | 管理台：法人登记表单加身份两格、法人资料页 | resolved · 通道 1 接手（通道 3 崩）· main `344cd7eb` / `7c18bbee` / 收尾笔；演示种子走通未验 |
 | [05](./issues/05-profile-write-isolated-admission-and-as-of-resolution-read.md) | 服务端：资料登记写口进隔离写准入、法人资料按时点解析读口 | resolved · 已进 main（代码 `82fc0145` / `755253e0`，清点 `d228415b`）· 评审 ← 通道 1 可接受；推送方由作者通道 3 代行 |
 
 走法：01–03 碰 Go / SQL，走[并行会话](../../docs/agents/parallel-sessions.md)那条路；04 只在 `apps/admin-web/**` 与票面，走

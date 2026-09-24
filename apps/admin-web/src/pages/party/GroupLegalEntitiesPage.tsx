@@ -12,6 +12,7 @@ import {
   type LegalEntityRevisionListResponseBody,
 } from './api';
 import { identityLayerAbsentNote, identityStatusLabels, labelOf, legalEntityKindLabels } from './presentation';
+import { LegalEntityProfileSection } from './LegalEntityProfileSection';
 import { LegalEntityRegistrationForm } from './LegalEntityRegistrationForm';
 import { identityLayerCellsOf } from './legal-entity-identity';
 import { legalEntityRevisionTimeline, revisionHistoryNote } from './legal-entity-revisions';
@@ -139,7 +140,7 @@ const legalEntityRevisionHistory: RevisionHistoryRegister<LegalEntityRevisionLis
 
 /**
  * 行详情抽屉（票 01 第 5 条）：列全字段，含表上撤下的种类与租户、停用两件；「修订历史」区自票 03 起取真数据。
- * 身份两格与身份更正依据自票 legal-entity-profile/04 起照答复示出。
+ * 身份两格与身份更正依据自票 legal-entity-profile/04 起照答复示出；同票加「法人资料」区（当前有效、资料修订历史、登记新修订）。
  */
 function LegalEntityDrawer({
   row,
@@ -210,6 +211,10 @@ function LegalEntityDrawer({
             <section className="mt-4">
               <h3 className="text-[12px] font-medium text-idpxyz-text">修订历史</h3>
               <RevisionHistorySection register={legalEntityRevisionHistory} subjectId={row.legalEntityId} revision={row.revision} />
+            </section>
+            <section className="mt-4">
+              <h3 className="text-[12px] font-medium text-idpxyz-text">法人资料</h3>
+              <LegalEntityProfileSection key={row.legalEntityId} legalEntityId={row.legalEntityId} />
             </section>
           </DrawerBody>
         </>
