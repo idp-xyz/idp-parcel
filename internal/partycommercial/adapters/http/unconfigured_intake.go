@@ -166,6 +166,12 @@ func (UnconfiguredIntake) IntakeRegistrationNumberTypeRegistration(
 	return application.RegisterRegistrationNumberTypeCommand{}, ErrAccessChannelNotConfigured
 }
 
+func (UnconfiguredIntake) IntakeLegalEntityProfileRegistration(
+	context.Context, *http.Request,
+) (application.RegisterLegalEntityProfileCommand, error) {
+	return application.RegisterLegalEntityProfileCommand{}, ErrAccessChannelNotConfigured
+}
+
 func (UnconfiguredIntake) IntakeRegistrationNumberTypeDeactivation(
 	context.Context, *http.Request,
 ) (application.DeactivateRegistrationNumberTypeCommand, error) {
