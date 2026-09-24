@@ -131,7 +131,8 @@ function detailHash(shipmentRequestId: string): string {
 // 右侧检查器的内容（票 admin-web-workspace-form/02 第 4 条）：全部取自行里已有的读模型字段，不发第二个请求。
 // 概要四格；状态一枚（词表词按词表着色，词表外的原样示码——与列里的徽章同一处置）；快速动作今天只有「打开详情」——
 // 撤回 / 取消 / 复核各有自己的页与门（提交与撤回、逐件取消、复核队列），不从检查器发命令；关联对象没有——读模型里的
-// 客户账户与来源请求键都不是本管理台里可寻址的对象地址，编一条链接就是死路；审计只有提交时刻——读模型没有「最近变更」。
+// 客户账户与来源请求键都不是本管理台里可寻址的对象地址，编一条链接就是死路；审计取提交时刻与提交版本（票面的「修订」）——
+// 读模型没有「最近变更」。
 function inspectorOf(row: ShipmentRequestSummary): InspectorContent {
   return {
     title: '委托',
@@ -158,7 +159,13 @@ function inspectorOf(row: ShipmentRequestSummary): InspectorContent {
           },
         ],
       },
-      { kind: 'audit', fields: presentFields([{ label: '提交时间', value: row.submittedAt, mono: true }]) },
+      {
+        kind: 'audit',
+        fields: presentFields([
+          { label: '提交时间', value: row.submittedAt, mono: true },
+          { label: '提交版本', value: row.submissionVersionId, mono: true },
+        ]),
+      },
     ],
   };
 }
@@ -213,12 +220,14 @@ function viewStateOf(
 }
 
 export function ShipmentRequestListPage() {
+  // 检索词与下面的多选集都是本实例的页内状态：壳层把列表与每份详情开成各自的标签、非活动标签卸载，进详情（另一张标签）
+  // 再回来是新实例，两者清零。要不要保住、怎么保，见追加票 admin-web-workspace-form/06。
   const [keyword, setKeyword] = useState('');
-  // 钻取选中：列表与详情共用一个导航位，选中后整区切详情。选中态的唯一来源是
-  // hash，点行写 hash、状态经 hashchange 回流，与外壳同一纪律，不双写。
+  // 渲列表还是详情由 hash 二段定：详情地址在壳层是自己的一张标签，本组件在那张标签里渲详情。选中态的唯一来源是
+  // hash，开行写 hash、状态经 hashchange 回流，与外壳同一纪律，不双写。
   const [selectedId, setSelectedId] = useState<string | null>(selectedIdFromHash);
-  // 多选集（票 admin-web-workspace-form/04）：按委托标识记，翻页 / 改检索词都不清；进详情再回来仍在（本组件不卸载，
-  // 只是整区切成详情）。批量动作只有导出所选——本仓今天没有能对一批委托做的命令端点，不传 extra。
+  // 多选集（票 admin-web-workspace-form/04）：按委托标识记，翻页 / 改检索词都不清。批量动作只有导出所选——本仓今天没有
+  // 能对一批委托做的命令端点，不传 extra。
   const [checked, setChecked] = useState<ReadonlySet<string>>(() => new Set());
   // null 表示取数中；答案（含各种未形成）一律进 answer，页面不吞任何一格。
   const [answer, setAnswer] = useState<ApiResult<ViewsListResponseBody> | null>(null);
@@ -280,7 +289,7 @@ export function ShipmentRequestListPage() {
       rowKey={(row) => row.shipmentRequestId}
       selection={{ selected: checked, onChange: setChecked }}
       bulkActions={{ csv: { fileName: 'shipment-requests.csv', cellText: csvCellText } }}
-      // 单击进检查器、双击（或 Enter）开详情——蓝图母版 B 的姿势：表还在左边，翻行时右栏跟着换（此前单击即整区切详情）。
+      // 单击进检查器、双击（或 Enter）开详情——蓝图母版 B 的姿势：表还在左边，翻行时右栏跟着换。
       inspector={inspectorOf}
       onRowOpen={(row) => {
         window.location.hash = detailHash(row.shipmentRequestId);

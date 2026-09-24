@@ -84,7 +84,8 @@ const columns: ListColumn<CaseRow>[] = [
 const csvCellText = (row: CaseRow, column: ListColumn<CaseRow>) => row.values[column.id] ?? '';
 
 // 右侧检查器的内容（票 admin-web-workspace-form/02 第 4 条）：全部取自行上已备好的 values，不发第二个请求。
-// 状态只有主状态一枚——严重度 / 优先级在案件行上无登记格（见 CaseRow 头注），检查器同样不代填；快速动作只有「打开分诊」——
+// 状态只有主状态一枚——严重度 / 优先级在案件行上无登记格（见 CaseRow 头注），检查器同样不代填；快速动作只有「转到异常分诊」——
+// 落在模块页，分诊页列的是信号发作期与处置请求、没有按案件的地址，动作名不说「打开」免得暗示落到这件案子；
 // 归并 / 关闭是命令面的判断、端点未建，不列一个禁用的假动作；关联对象没有——根对象是包裹身份、本管理台没有它的对象地址；
 // 审计取建立 / 首次响应 / 关闭 / 关闭结论 / 归并指向，空的格不进（presentFields）。
 function inspectorOf(row: CaseRow): InspectorContent {
@@ -106,7 +107,7 @@ function inspectorOf(row: CaseRow): InspectorContent {
         kind: 'actions',
         actions: [
           {
-            label: '打开分诊',
+            label: '转到异常分诊',
             onRun: () => {
               window.location.hash = '#/exception-triage';
             },
