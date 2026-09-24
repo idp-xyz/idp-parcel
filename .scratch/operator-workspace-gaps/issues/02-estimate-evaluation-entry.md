@@ -1,7 +1,7 @@
 # 02 试算入口：面向运营的计价试算端点与管理台页
 
 Category: enhancement
-Status: draft
+Status: resolved——2026-09-25 通道 3 按用户授权自决：设计落成 ADR-0152 与 UC-PP-001，实现拆为票 05（后端）与 06（管理台页），见文末「裁决」
 Blocked by: 无
 出处：[spec](../spec.md) 缺口二。
 
@@ -31,3 +31,15 @@ Blocked by: 无
 碰 Go 与 `cmd/parcel-api` 端点表，走[并行会话](../../../docs/agents/parallel-sessions.md)那条路：隔离工作树、占号 `cmd/parcel-api/endpoints.go`、
 非作者评审、推送方重放。管理台页可在端点落地后另拆一张前端切片。页面的解释排法可参考 spec 里记的原型「同址多注入」比较卡（计费起点 → 目的地、
 命中分区、依据、逐项费用），规则一律以本仓 CONTEXT 为准。
+
+## 裁决（2026-09-25 · 通道 3，用户授权自决）
+
+「动手前要定的」四问由 [ADR-0152](../../../docs/adr/0152-operator-estimate-is-a-pricing-use-case-computed-not-recorded-and-never-handed-to-settlement.md)
+定、[UC-PP-001](../../../docs/application/parcel-pricing/UC-PP-001-FORM-ESTIMATE-EVALUATIONS.md) 写成用例，本票只作索引、不复述：
+
+1. 用例形状：UC-PP-001；应用用例 README「不单独建立报价用例」那句按 ADR-0152 决定一收窄。
+2. 留不留痕：只算不存，结构上不交结算（决定二）。
+3. 多候选：`LoadApplicable` 取全部适用价卡、逐卡各算一份、不择优（决定四）。
+4. 接入与准入：`POST /pricing-estimates`，`UnconfiguredIntake{}` 起步，随操作者渠道与回放同批换 Intake，不加隔离放行（决定六）。
+
+越权风险点四条列在 ADR「裁决方的能力边界」，待 owner 复核。实现拆票：[05](./05-estimate-endpoint-backend.md)（后端）、[06](./06-estimate-admin-page.md)（管理台页，阻塞于 05）。

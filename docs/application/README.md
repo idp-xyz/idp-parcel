@@ -8,7 +8,7 @@
 
 当前用例数量不能代表产品核心优先级。`UC-NO-001`、`UC-TF-001`、`UC-VE-001` 和 `UC-SA-001` 分别只覆盖关务触发的节点、运输、异常和代垫协作；它们不能替代正常运营主链。PN-02 的 `UC-PC-001/002` 与 `UC-PS-001/002/005` 已补齐商业权威、唯一解析、接单和决定前撤回，PN-04 的 `UC-TF-003..007` 与 `UC-PS-004/006` 已补齐常规运输、收费发生事实、逐包裹取消/收寄后处置和包裹终局，PN-06 的 `UC-VE-002..008` 已补齐内部投影、普通客户追踪、ETA/缺口、异常案件、客户通知和证据索赔编排，PN-07 的 `UC-SA-002..007` 已补齐价格评价采用、调整所有权、对账纳入、供应商账单、真实收付映射、核销、经营结果和金额结算编排。
 
-`parcel-pricing` 当前作为 PN-07 的内部纯计价前置能力，由 `UC-SA-002` 编排输入和消费评价；它不单独建立报价、合同或账务用例。后续只有在确认独立报价接受、锁价或外部计价服务责任后，才新增相应 `UC-PP-*` 用例。
+`parcel-pricing` 当前作为 PN-07 的内部纯计价前置能力，由 `UC-SA-002` 编排输入和消费评价；它不单独建立报价、合同或账务用例。后续只有在确认独立报价接受、锁价或外部计价服务责任后，才新增相应 `UC-PP-*` 用例。运营发起的试算不在此列：它不形成承诺、不进结算、不锁价，由 `UC-PP-001` 承担（[ADR-0152](../adr/0152-operator-estimate-is-a-pricing-use-case-computed-not-recorded-and-never-handed-to-settlement.md) 决定一收窄本句的适用场景）。
 
 PN-08 的阶段准入、暂停恢复、生产权威、对象级接管和 `Go/No-Go` 见[端到端试点与阶段准入开发交接](../design/pn-08-end-to-end-pilot-and-stage-admission-development-handoff.md)。这些是产品级试点治理记录，不是新的业务限界上下文，因此本目录不创建 `UC-GOV-*`，也不把它们写入任何委托、运输、关务或结算生命周期。
 
@@ -51,6 +51,7 @@ PN-08 的阶段准入、暂停恢复、生产权威、对象级接管和 `Go/No-
 |---|---|---|---|
 | `UC-PC-001` | [维护并发布商业权威依据](./party-commercial/UC-PC-001-MAINTAIN-AND-PUBLISH-COMMERCIAL-AUTHORITY.md) | `party-commercial` | 商业对象独立身份、不可覆盖发布、冲突和替代边界已形成，真实来源与批准参数待提供 |
 | `UC-PC-002` | [按范围与时点解析商业依据](./party-commercial/UC-PC-002-RESOLVE-COMMERCIAL-BASIS.md) | `party-commercial` | 独立商业选择锚点、唯一解析和逐项 `asOf` 两阶段机制已形成，真实锚点策略与商业版本待提供 |
+| `UC-PP-001` | [按假设包裹形成试算评价](./parcel-pricing/UC-PP-001-FORM-ESTIMATE-EVALUATIONS.md) | `parcel-pricing` | 逐适用价卡各算一份、只算不存、结构上不交结算、不择优的机制已定（ADR-0152），待实现；真实价卡、目录与序列待提供 |
 | `UC-PS-001` | [客户提交国际小包请求并取得生产归属或接单结果](./parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md) | `parcel-shipment` | 接单机制已确认，真实规则与参数待提供 |
 | `UC-PS-002` | [补充或更正已接受委托的客户原始资料](./parcel-shipment/UC-PS-002-AMEND-CUSTOMER-SOURCE-DATA.md) | `parcel-shipment` | 资料版本、阶段边界和下游交接已形成，真实字段与授权参数待确认 |
 | `UC-PS-003` | [形成有效网络收寄与正式承诺](./parcel-shipment/UC-PS-003-ESTABLISH-NETWORK-INTAKE-AND-FORMAL-COMMITMENT.md) | `parcel-shipment` | 两类来源统一采用、逐包裹责任起点和正式承诺机制已形成，真实资格与承诺参数待提供 |

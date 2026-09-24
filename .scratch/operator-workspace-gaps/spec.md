@@ -47,7 +47,9 @@ Status: in-progress
 | 号 | 题 | 形态 | 阻塞边 | 状态 |
 |---|---|---|---|---|
 | [01](./issues/01-party-overview-read-only-aggregate.md) | 参与方全景（只读聚合） | 前端切片，按 workflow「前端切片」在 `main` 上做 | — | resolved |
-| [02](./issues/02-estimate-evaluation-entry.md) | 试算入口：计价试算端点与管理台页 | 后端 + 前端，走并行会话那条路；先定用例形状 | — | draft |
+| [02](./issues/02-estimate-evaluation-entry.md) | 试算入口：定用例与取舍 | 设计票：落成 ADR-0152 与 UC-PP-001 | — | resolved |
+| [05](./issues/05-estimate-endpoint-backend.md) | 试算后端：编排、补齐读数共用件与 `POST /pricing-estimates` | 走并行会话那条路 | — | ready-for-agent |
+| [06](./issues/06-estimate-admin-page.md) | 管理台试算页 | 前端切片 | 05 | draft |
 | [03](./issues/03-customer-account-onboarding-readiness.md) | 开户就绪清单 | 先建模：按客户账户做一次不落账的解析 | — | draft |
 | [04](./issues/04-price-card-template-import-per-adr-0101.md) | 落地 ADR-0101 价卡导入 | 后端 + 前端，ADR 已接受，需先拆票 | — | draft |
 
