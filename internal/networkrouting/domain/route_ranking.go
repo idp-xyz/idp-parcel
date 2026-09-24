@@ -41,7 +41,7 @@ func RankingFormFrom(raw string) (RankingForm, error) {
 	}
 }
 
-// CandidateCostState 是候选成本事实的封闭三格。待判断与不可计价分开，是因为恢复动作不同：
+// CandidateCostState 是候选成本事实的封闭状态集。待判断与不可计价分开，是因为恢复动作不同：
 // 前者等评价形成，后者要改价卡或候选集合。
 type CandidateCostState uint8
 
@@ -115,8 +115,10 @@ const (
 	// RankingFormNotDeclared 是有合格候选、而路由策略版本没有声明排序形态：租户还没选，
 	// 不替它选一种。
 	RankingFormNotDeclared
-	// RankingNoPricedCandidate 是合格候选全部缺成本事实而出局：候选在，只是没有一家可比。
-	RankingNoPricedCandidate
+	// RankingCostsPending 是合格候选无一已计价、而其中有待判断的：等评价形成再排。
+	RankingCostsPending
+	// RankingCostsUnpriceable 是合格候选全部不可计价：重排也排不出来，要改价卡或候选集合。
+	RankingCostsUnpriceable
 	RankingCurrenciesDiffer
 	// RankingTied 是最低成本并列、选不出唯一一条：交人工裁决（`PAR-NET-16`「不得任选」）。
 	RankingTied
@@ -130,8 +132,10 @@ func (outcome RankingOutcome) String() string {
 		return "NO_QUALIFIED_CANDIDATE"
 	case RankingFormNotDeclared:
 		return "RANKING_FORM_NOT_DECLARED"
-	case RankingNoPricedCandidate:
-		return "NO_PRICED_CANDIDATE"
+	case RankingCostsPending:
+		return "COSTS_PENDING"
+	case RankingCostsUnpriceable:
+		return "COSTS_UNPRICEABLE"
 	case RankingCurrenciesDiffer:
 		return "CURRENCIES_DIFFER"
 	case RankingTied:
@@ -141,13 +145,11 @@ func (outcome RankingOutcome) String() string {
 	}
 }
 
-// RouteRanking 是候选评估层次 4 的结果。出局名单是合格候选里因缺成本事实而不参比的那些，
-// 留痕要说得出它们为什么没被比。
+// RouteRanking 是候选评估层次 4 的结果。
 type RouteRanking struct {
 	outcome  RankingOutcome
 	selected CandidateID
 	tied     []CandidateID
-	excluded []CandidateID
 }
 
 func (ranking RouteRanking) Outcome() RankingOutcome {
@@ -163,17 +165,12 @@ func (ranking RouteRanking) Tied() []CandidateID {
 	return append([]CandidateID(nil), ranking.tied...)
 }
 
-func (ranking RouteRanking) Excluded() []CandidateID {
-	return append([]CandidateID(nil), ranking.excluded...)
-}
-
 // RankRouteCandidates 执行候选评估层次 4：按路由策略版本声明的排序形态，在**合格**候选中
 // 择优（`AT-NR-001`「按适用策略排序，只形成一个当前有效计划」）。
 //
-// 最低成本并列时交 RankingTied 而不收尾。此前的多准则比较器全平时按候选标识升序收尾，理由
-// 是多维准则序几乎不会全维打平；成本单维恰恰最容易打平，按标识收尾等于让字母序替运营企业
-// 挑线路，而 `PAR-NET-16` 明禁无业务依据的选择。幂等不靠收尾守：同一份证据两次判断仍给同
-// 一个并列结果。
+// 最低成本并列时交 RankingTied 而不收尾：按候选标识收尾等于让字母序替运营企业挑线路，
+// `PAR-NET-16` 明禁无业务依据的选择；成本单维恰恰最容易打平，这一格是常规路径不是边缘。
+// 幂等不靠收尾守：同一份证据两次判断仍给同一个并列结果。
 func RankRouteCandidates(
 	form RankingForm,
 	candidates []RouteCandidate,
@@ -206,25 +203,30 @@ func RankRouteCandidates(
 	}
 
 	var priced []CandidateCostFact
-	var excluded []CandidateID
+	anyPending := false
 	for _, candidate := range qualified {
 		cost, stated := indexed[candidate.id]
 		if !stated {
 			// 待判断与不可计价都有自己的一格；什么都没说是证据装配漏了，不是其中哪一格。
 			return RouteRanking{}, ErrInvalidRanking
 		}
-		if cost.state != CandidateCostPriced {
-			excluded = append(excluded, candidate.id)
-			continue
+		switch cost.state {
+		case CandidateCostPriced:
+			priced = append(priced, cost)
+		case CandidateCostPending:
+			anyPending = true
 		}
-		priced = append(priced, cost)
 	}
 	if len(priced) == 0 {
-		return RouteRanking{outcome: RankingNoPricedCandidate, excluded: excluded}, nil
+		// 有一家待判断就先等：它的评价一形成就可能有得比，改价卡反倒不是此刻该做的事。
+		if anyPending {
+			return RouteRanking{outcome: RankingCostsPending}, nil
+		}
+		return RouteRanking{outcome: RankingCostsUnpriceable}, nil
 	}
 	for _, cost := range priced[1:] {
 		if cost.currency != priced[0].currency {
-			return RouteRanking{outcome: RankingCurrenciesDiffer, excluded: excluded}, nil
+			return RouteRanking{outcome: RankingCurrenciesDiffer}, nil
 		}
 	}
 	lowest := priced[0].amountMinor
@@ -240,7 +242,7 @@ func RankRouteCandidates(
 		}
 	}
 	if len(atLowest) > 1 {
-		return RouteRanking{outcome: RankingTied, tied: atLowest, excluded: excluded}, nil
+		return RouteRanking{outcome: RankingTied, tied: atLowest}, nil
 	}
-	return RouteRanking{outcome: RankingSelected, selected: atLowest[0], excluded: excluded}, nil
+	return RouteRanking{outcome: RankingSelected, selected: atLowest[0]}, nil
 }
