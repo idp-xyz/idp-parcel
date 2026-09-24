@@ -340,7 +340,7 @@ func (handler *ReassessRouteHandler) rerouteAfterLapse(
 		return record, nil
 
 	case domain.AutomaticRerouteAllowed:
-		newPlan, formed, err := handler.formPlanFromEvidence(ctx, trigger.Key(), candidates, evidence)
+		selection, err := handler.formPlanFromEvidence(ctx, trigger.Key(), candidates, evidence)
 		if errors.Is(err, errRouteIdentityUnavailable) {
 			// 取号依赖故障：失效已定不回滚，自动改路留给重触发——记录保留判定，
 			// 决定缺席如实表示「允许了但没形成」。
@@ -349,24 +349,50 @@ func (handler *ReassessRouteHandler) rerouteAfterLapse(
 		if err != nil {
 			return ports.ReassessmentRecord{}, err
 		}
-		if !formed {
-			// 无合格候选：自动改路形不成，退回纯失效并保留判定与阻塞（空清单如实
-			// 表示「条件都立、是选路不成」）。
+		switch selection.ranking.Outcome() {
+		case domain.RankingSelected:
+		case domain.RankingTied:
+			// 条件都立而选路选不出唯一一条：只形成建议，由授权角色在并列那几家之间裁。
+			blockers := domain.LowestCostTieBlockers(selection.ranking.Tied())
+			suggestion, err := domain.NewRerouteSuggestion(domain.RerouteSuggestionSpec{
+				Key:         trigger.Key(),
+				Trigger:     triggerRef,
+				Candidates:  candidates,
+				Blockers:    blockers,
+				SuggestedAt: now,
+			})
+			if err != nil {
+				return ports.ReassessmentRecord{}, fmt.Errorf("new tie reroute suggestion: %w", err)
+			}
+			record.RerouteState = domain.SuggestionOnly
+			record.RerouteBlockers = blockers
+			record.Suggestion = suggestion
+			record.HasSuggestion = true
 			return record, nil
+		case domain.RankingNoQualifiedCandidate,
+			domain.RankingFormNotDeclared,
+			domain.RankingNoPricedCandidate,
+			domain.RankingCurrenciesDiffer:
+			// 选路不成：自动改路形不成，退回纯失效并保留判定与阻塞（空清单如实表示
+			// 「条件都立、是选路不成」）。
+			return record, nil
+		default:
+			return ports.ReassessmentRecord{}, fmt.Errorf("network routing: unhandled ranking outcome %d",
+				selection.ranking.Outcome())
 		}
 		decision, err := domain.FormRerouteDecision(domain.RerouteDecisionSpec{
 			Authority:    authority,
 			Mode:         domain.AutomaticReroute,
 			Trigger:      triggerRef,
 			OriginalPlan: lapsedPlan.Version(),
-			NewPlan:      newPlan,
+			NewPlan:      selection.plan,
 			DecidedAt:    now,
 		})
 		if err != nil {
 			return ports.ReassessmentRecord{}, fmt.Errorf("form reroute decision: %w", err)
 		}
 		record.Conclusion = ports.ReassessmentRerouted
-		record.NewPlan = newPlan
+		record.NewPlan = selection.plan
 		record.HasNewPlan = true
 		record.Decision = decision
 		record.HasDecision = true
@@ -380,20 +406,28 @@ func (handler *ReassessRouteHandler) rerouteAfterLapse(
 // errRouteIdentityUnavailable 让调用方把「取号依赖故障」与领域故障分开转成未决续办。
 var errRouteIdentityUnavailable = errors.New("network routing: route identity factory unavailable")
 
-// formPlanFromEvidence 从收敛候选选路并按证据组计划。第二个返回值为 false 表示无合格
-// 候选——形不成计划但不是故障；证据答了候选却缺执行路径是装配坏，响亮报错不静默。
+// evidenceSelection 是从收敛候选选路的结果：排序结局，以及选中时按证据组好的计划。
+type evidenceSelection struct {
+	ranking domain.RouteRanking
+	plan    domain.InitialRoutePlan
+}
+
+// formPlanFromEvidence 从收敛候选选路，选中时按证据组计划；选不中的各格原样交回排序结局，
+// 由调用方按自己那条线分派——形不成计划不是故障。证据答了候选却缺执行路径是装配坏，响亮
+// 报错不静默。
 func (handler *ReassessRouteHandler) formPlanFromEvidence(
 	ctx context.Context,
 	key domain.InitialRouteJudgmentKey,
 	candidates []domain.RouteCandidate,
 	evidence ports.InitialRouteEvidence,
-) (domain.InitialRoutePlan, bool, error) {
-	selected, err := domain.SelectRouteCandidate(candidates, evidence.Scores, evidence.Priority)
-	if errors.Is(err, domain.ErrNoQualifiedCandidate) {
-		return domain.InitialRoutePlan{}, false, nil
-	}
+) (evidenceSelection, error) {
+	ranking, err := domain.RankRouteCandidates(evidence.RankingForm, candidates, evidence.CandidateCosts)
 	if err != nil {
-		return domain.InitialRoutePlan{}, false, fmt.Errorf("select route candidate: %w", err)
+		return evidenceSelection{}, fmt.Errorf("rank route candidates: %w", err)
+	}
+	selected, chosen := ranking.Selected()
+	if !chosen {
+		return evidenceSelection{ranking: ranking}, nil
 	}
 	var legs []domain.PlannedLeg
 	for _, path := range evidence.Paths {
@@ -403,11 +437,11 @@ func (handler *ReassessRouteHandler) formPlanFromEvidence(
 		}
 	}
 	if len(legs) == 0 {
-		return domain.InitialRoutePlan{}, false, ErrIncompleteRouteEvidence
+		return evidenceSelection{}, ErrIncompleteRouteEvidence
 	}
 	version, err := handler.deps.Identities.NextRoutePlanVersionID(ctx)
 	if err != nil {
-		return domain.InitialRoutePlan{}, false, errRouteIdentityUnavailable
+		return evidenceSelection{}, errRouteIdentityUnavailable
 	}
 	judgedAt := handler.deps.Clock.Now()
 	plan, err := domain.FormInitialRoutePlan(domain.InitialRoutePlanSpec{
@@ -422,9 +456,9 @@ func (handler *ReassessRouteHandler) formPlanFromEvidence(
 		EffectiveFrom: judgedAt,
 	})
 	if err != nil {
-		return domain.InitialRoutePlan{}, false, fmt.Errorf("form plan from evidence: %w", err)
+		return evidenceSelection{}, fmt.Errorf("form plan from evidence: %w", err)
 	}
-	return plan, true, nil
+	return evidenceSelection{ranking: ranking, plan: plan}, nil
 }
 
 // reassessNoRoute 是原先无路由的那条线：候选评估完成且有合格候选时形成首个当前有效
@@ -451,29 +485,42 @@ func (handler *ReassessRouteHandler) reassessNoRoute(
 		return handler.commit(ctx, trigger, record)
 	}
 
-	plan, formed, err := handler.formPlanFromEvidence(ctx, key, candidates, evidence)
+	selection, err := handler.formPlanFromEvidence(ctx, key, candidates, evidence)
 	if errors.Is(err, errRouteIdentityUnavailable) {
 		return handler.undecided(key, ReassessIdentityUnavailable), nil
 	}
 	if err != nil {
 		return ReassessRouteResult{}, err
 	}
-	if !formed {
-		record := ports.ReassessmentRecord{
-			Correlation:    trigger.Correlation(),
-			Key:            key,
-			Conclusion:     ports.ReassessmentPlanLapsed,
-			CandidateState: ports.NoQualifiedCandidates,
-			ReassessedAt:   handler.deps.Clock.Now(),
-		}
-		return handler.commit(ctx, trigger, record)
+	stillNoRoute := ports.ReassessmentRecord{
+		Correlation:  trigger.Correlation(),
+		Key:          key,
+		Conclusion:   ports.ReassessmentPlanLapsed,
+		ReassessedAt: handler.deps.Clock.Now(),
+	}
+	switch selection.ranking.Outcome() {
+	case domain.RankingSelected:
+	case domain.RankingNoQualifiedCandidate:
+		stillNoRoute.CandidateState = ports.NoQualifiedCandidates
+		return handler.commit(ctx, trigger, stillNoRoute)
+	case domain.RankingTied,
+		domain.RankingFormNotDeclared,
+		domain.RankingNoPricedCandidate,
+		domain.RankingCurrenciesDiffer:
+		// 候选在而排不出唯一一条：不形成首个计划，候选评估记未决。并列在这条线上也不挂建议——
+		// 这里没有被复核计划，改路三件落不了库（route_reassessment_reroute_on_reviewed_plan）。
+		stillNoRoute.CandidateState = ports.CandidateReviewUndecided
+		return handler.commit(ctx, trigger, stillNoRoute)
+	default:
+		return ReassessRouteResult{}, fmt.Errorf("network routing: unhandled ranking outcome %d",
+			selection.ranking.Outcome())
 	}
 	record := ports.ReassessmentRecord{
 		Correlation:    trigger.Correlation(),
 		Key:            key,
 		Conclusion:     ports.ReassessmentFirstPlanFormed,
 		CandidateState: ports.CandidatesAvailable,
-		NewPlan:        plan,
+		NewPlan:        selection.plan,
 		HasNewPlan:     true,
 		ReassessedAt:   handler.deps.Clock.Now(),
 	}
@@ -516,16 +563,26 @@ func (handler *ReassessRouteHandler) evaluateCandidates(
 	return candidates, false, nil
 }
 
-// reviewCandidates 在失效路径上给出候选评估状态（另存，不拦失效）。
+// reviewCandidates 在失效路径上给出候选评估状态（另存，不拦失效）。并列算有候选：候选可行，
+// 只是要授权角色裁；排不出来的三格（形态未声明、缺成本、币种不齐）与证据装配坏了都记未决，
+// 不冒充「没有合格候选」这个业务结论。
 func (handler *ReassessRouteHandler) reviewCandidates(evidence ports.InitialRouteEvidence) ports.CandidateReviewState {
 	candidates, undecided, err := handler.evaluateCandidates(evidence)
 	if err != nil || undecided {
 		return ports.CandidateReviewUndecided
 	}
-	if _, err := domain.SelectRouteCandidate(candidates, evidence.Scores, evidence.Priority); err != nil {
-		return ports.NoQualifiedCandidates
+	ranking, err := domain.RankRouteCandidates(evidence.RankingForm, candidates, evidence.CandidateCosts)
+	if err != nil {
+		return ports.CandidateReviewUndecided
 	}
-	return ports.CandidatesAvailable
+	switch ranking.Outcome() {
+	case domain.RankingSelected, domain.RankingTied:
+		return ports.CandidatesAvailable
+	case domain.RankingNoQualifiedCandidate:
+		return ports.NoQualifiedCandidates
+	default:
+		return ports.CandidateReviewUndecided
+	}
 }
 
 // commit 提交复核记录。并发下另一方先提交时读回赢家。

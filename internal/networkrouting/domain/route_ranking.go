@@ -2,139 +2,228 @@ package domain
 
 import "errors"
 
-var (
-	ErrInvalidRanking       = errors.New("network routing: invalid ranking facts")
-	ErrNoQualifiedCandidate = errors.New("network routing: no qualified candidate to select")
+var ErrInvalidRanking = errors.New("network routing: invalid ranking facts")
+
+// RankingForm 是路由策略版本声明的内置排序形态（ADR-0146 决定二、七）。形态的判断逻辑归
+// 产品、在这里执行；租户只选形态、填取值。
+type RankingForm uint8
+
+const (
+	RankingFormUndeclared RankingForm = iota
+	// CostSingleDimensionRanking 是 `PAR-NET-16` 已确认的首发形态：满足硬约束与时间可行性
+	// 之后按成本单维择优。
+	CostSingleDimensionRanking
 )
 
-// RankingCriterion 是策略排序的准则引用（时效、可靠性、成本、容量风险、已承诺偏好……）。
-// 刻意是引用不是封闭枚举：准则集合由路由策略版本声明（PAR-NET-14），在这里列一份就成了
-// 第二处定义。
-type RankingCriterion struct{ requiredValue }
-
-func NewRankingCriterion(value string) (RankingCriterion, error) {
-	required, err := newRequiredValue("ranking criterion", value)
-	return RankingCriterion{required}, err
-}
-
-// CriterionScore 是一个候选在一个准则上的可比取值：越小越优。分值的量纲与折算由策略
-// 版本拥有（时效折小时、成本折最小币单位都发生在事实形成处），领域只比较不折算——
-// 「应用层不得自行发明固定权重或行业默认阈值」，领域同样不发明。
-type CriterionScore struct {
-	criterion RankingCriterion
-	value     int64
-}
-
-func NewCriterionScore(criterion RankingCriterion, value int64) (CriterionScore, error) {
-	if !criterion.valid() || value < 0 {
-		return CriterionScore{}, ErrInvalidRanking
+func (form RankingForm) String() string {
+	switch form {
+	case CostSingleDimensionRanking:
+		return "COST_SINGLE_DIMENSION"
+	default:
+		return ""
 	}
-	return CriterionScore{criterion: criterion, value: value}, nil
 }
 
-func (score CriterionScore) Criterion() RankingCriterion {
-	return score.criterion
-}
+// CandidateCostState 是候选成本事实的封闭三格。待判断与不可计价分开，是因为恢复动作不同：
+// 前者等评价形成，后者要改价卡或候选集合。
+type CandidateCostState uint8
 
-func (score CriterionScore) Value() int64 {
-	return score.value
-}
+const (
+	CandidateCostStateInvalid CandidateCostState = iota
+	CandidateCostPriced
+	CandidateCostPending
+	CandidateCostUnpriceable
+)
 
-// CandidateScores 是一个合格候选的全部准则取值。
-type CandidateScores struct {
-	candidate CandidateID
-	scores    map[RankingCriterion]int64
-}
-
-func NewCandidateScores(candidate CandidateID, scores []CriterionScore) (CandidateScores, error) {
-	if !candidate.valid() || len(scores) == 0 {
-		return CandidateScores{}, ErrInvalidRanking
+func (state CandidateCostState) String() string {
+	switch state {
+	case CandidateCostPriced:
+		return "PRICED"
+	case CandidateCostPending:
+		return "PENDING"
+	case CandidateCostUnpriceable:
+		return "UNPRICEABLE"
+	default:
+		return ""
 	}
-	indexed := make(map[RankingCriterion]int64, len(scores))
-	for _, score := range scores {
-		if !score.criterion.valid() {
-			return CandidateScores{}, ErrInvalidRanking
-		}
-		if _, duplicated := indexed[score.criterion]; duplicated {
-			// 同一准则两个取值互相矛盾，取哪个都是掷硬币。
-			return CandidateScores{}, ErrInvalidRanking
-		}
-		indexed[score.criterion] = score.value
+}
+
+// CandidateCostFact 是一个候选在成本单维下的可比事实：已计价时带最小币单位金额与币种，
+// 待判断与不可计价两格不带金额——没有金额就是没有，不以零表示。金额从哪里来（按各候选
+// 自己的体积系数与进位算出的 BUY 评价）归取数侧，领域只比较不折算。
+type CandidateCostFact struct {
+	candidate   CandidateID
+	state       CandidateCostState
+	amountMinor int64
+	currency    requiredValue
+}
+
+func NewPricedCandidateCost(candidate CandidateID, amountMinor int64, currency string) (CandidateCostFact, error) {
+	code, err := newRequiredValue("candidate cost currency", currency)
+	if err != nil || !candidate.valid() || amountMinor < 0 {
+		return CandidateCostFact{}, ErrInvalidRanking
 	}
-	return CandidateScores{candidate: candidate, scores: indexed}, nil
+	return CandidateCostFact{
+		candidate:   candidate,
+		state:       CandidateCostPriced,
+		amountMinor: amountMinor,
+		currency:    code,
+	}, nil
 }
 
-func (scores CandidateScores) Candidate() CandidateID {
-	return scores.candidate
+func NewPendingCandidateCost(candidate CandidateID) (CandidateCostFact, error) {
+	return unpricedCandidateCost(candidate, CandidateCostPending)
 }
 
-// SelectRouteCandidate 执行候选评估层次 4：按策略声明的准则优先级序做字典序比较，在
-// **合格**候选中选出排序最高者（`AT-NR-001`「按适用策略排序，只形成一个当前有效计划」）。
+func NewUnpriceableCandidateCost(candidate CandidateID) (CandidateCostFact, error) {
+	return unpricedCandidateCost(candidate, CandidateCostUnpriceable)
+}
+
+func unpricedCandidateCost(candidate CandidateID, state CandidateCostState) (CandidateCostFact, error) {
+	if !candidate.valid() {
+		return CandidateCostFact{}, ErrInvalidRanking
+	}
+	return CandidateCostFact{candidate: candidate, state: state}, nil
+}
+
+// RankingOutcome 是一次按形态排序的封闭结果。
+type RankingOutcome uint8
+
+const (
+	RankingOutcomeInvalid RankingOutcome = iota
+	RankingSelected
+	// RankingNoQualifiedCandidate 是没有候选通过硬约束与时间可行性——那是`无当前有效路由`
+	// 或未决的信号，由编排按候选空间收没收敛去分，不是排序能替策略回答的。
+	RankingNoQualifiedCandidate
+	// RankingFormNotDeclared 是有合格候选、而路由策略版本没有声明排序形态：租户还没选，
+	// 不替它选一种。
+	RankingFormNotDeclared
+	// RankingNoPricedCandidate 是合格候选全部缺成本事实而出局：候选在，只是没有一家可比。
+	RankingNoPricedCandidate
+	RankingCurrenciesDiffer
+	// RankingTied 是最低成本并列、选不出唯一一条：交人工裁决（`PAR-NET-16`「不得任选」）。
+	RankingTied
+)
+
+func (outcome RankingOutcome) String() string {
+	switch outcome {
+	case RankingSelected:
+		return "SELECTED"
+	case RankingNoQualifiedCandidate:
+		return "NO_QUALIFIED_CANDIDATE"
+	case RankingFormNotDeclared:
+		return "RANKING_FORM_NOT_DECLARED"
+	case RankingNoPricedCandidate:
+		return "NO_PRICED_CANDIDATE"
+	case RankingCurrenciesDiffer:
+		return "CURRENCIES_DIFFER"
+	case RankingTied:
+		return "TIED"
+	default:
+		return ""
+	}
+}
+
+// RouteRanking 是候选评估层次 4 的结果。出局名单是合格候选里因缺成本事实而不参比的那些，
+// 留痕要说得出它们为什么没被比。
+type RouteRanking struct {
+	outcome  RankingOutcome
+	selected CandidateID
+	tied     []CandidateID
+	excluded []CandidateID
+}
+
+func (ranking RouteRanking) Outcome() RankingOutcome {
+	return ranking.outcome
+}
+
+func (ranking RouteRanking) Selected() (CandidateID, bool) {
+	return ranking.selected, ranking.outcome == RankingSelected
+}
+
+// Tied 交回最低成本并列的那几家，次序照证据给的候选次序，不承载任何先后。
+func (ranking RouteRanking) Tied() []CandidateID {
+	return append([]CandidateID(nil), ranking.tied...)
+}
+
+func (ranking RouteRanking) Excluded() []CandidateID {
+	return append([]CandidateID(nil), ranking.excluded...)
+}
+
+// RankRouteCandidates 执行候选评估层次 4：按路由策略版本声明的排序形态，在**合格**候选中
+// 择优（`AT-NR-001`「按适用策略排序，只形成一个当前有效计划」）。
 //
-//   - priority 是策略版本声明的准则序（第一准则分高下，平则看第二准则……），序本身是
-//     版本化事实输入，领域不排它也不补它；
-//   - 全部声明准则仍打平时按候选标识升序收尾——排序必须全序，两个「一样好」的候选靠
-//     掷硬币选会让同一份输入两次判断给出两个计划，幂等就死了；
-//   - 合格候选缺某个声明准则的取值是事实装配错误：少一个值的比较不是比较；
-//   - 没有合格候选交 ErrNoQualifiedCandidate——那是走`无当前有效路由`或未决的信号，
-//     不是这里能替策略回答的。
-func SelectRouteCandidate(
+// 最低成本并列时交 RankingTied 而不收尾。此前的多准则比较器全平时按候选标识升序收尾，理由
+// 是多维准则序几乎不会全维打平；成本单维恰恰最容易打平，按标识收尾等于让字母序替运营企业
+// 挑线路，而 `PAR-NET-16` 明禁无业务依据的选择。幂等不靠收尾守：同一份证据两次判断仍给同
+// 一个并列结果。
+func RankRouteCandidates(
+	form RankingForm,
 	candidates []RouteCandidate,
-	scores []CandidateScores,
-	priority []RankingCriterion,
-) (CandidateID, error) {
-	if len(priority) == 0 {
-		return CandidateID{}, ErrInvalidRanking
+	costs []CandidateCostFact,
+) (RouteRanking, error) {
+	if form != RankingFormUndeclared && form.String() == "" {
+		return RouteRanking{}, ErrInvalidRanking
 	}
-	for _, criterion := range priority {
-		if !criterion.valid() {
-			return CandidateID{}, ErrInvalidRanking
+	indexed := make(map[CandidateID]CandidateCostFact, len(costs))
+	for _, cost := range costs {
+		if !cost.candidate.valid() || cost.state.String() == "" {
+			return RouteRanking{}, ErrInvalidRanking
+		}
+		if _, duplicated := indexed[cost.candidate]; duplicated {
+			return RouteRanking{}, ErrInvalidRanking
+		}
+		indexed[cost.candidate] = cost
+	}
+	var qualified []RouteCandidate
+	for _, candidate := range candidates {
+		if candidate.outcome == CandidateQualified {
+			qualified = append(qualified, candidate)
 		}
 	}
-	indexed := make(map[CandidateID]CandidateScores, len(scores))
-	for _, entry := range scores {
-		if !entry.candidate.valid() {
-			return CandidateID{}, ErrInvalidRanking
-		}
-		if _, duplicated := indexed[entry.candidate]; duplicated {
-			return CandidateID{}, ErrInvalidRanking
-		}
-		indexed[entry.candidate] = entry
+	if len(qualified) == 0 {
+		return RouteRanking{outcome: RankingNoQualifiedCandidate}, nil
+	}
+	if form == RankingFormUndeclared {
+		return RouteRanking{outcome: RankingFormNotDeclared}, nil
 	}
 
-	var best CandidateID
-	var bestScores CandidateScores
-	found := false
-	for _, candidate := range candidates {
-		if candidate.outcome != CandidateQualified {
+	var priced []CandidateCostFact
+	var excluded []CandidateID
+	for _, candidate := range qualified {
+		cost, stated := indexed[candidate.id]
+		if !stated {
+			// 待判断与不可计价都有自己的一格；什么都没说是证据装配漏了，不是其中哪一格。
+			return RouteRanking{}, ErrInvalidRanking
+		}
+		if cost.state != CandidateCostPriced {
+			excluded = append(excluded, candidate.id)
 			continue
 		}
-		entry, scored := indexed[candidate.id]
-		if !scored {
-			return CandidateID{}, ErrInvalidRanking
-		}
-		for _, criterion := range priority {
-			if _, present := entry.scores[criterion]; !present {
-				return CandidateID{}, ErrInvalidRanking
-			}
-		}
-		if !found || ranksBefore(entry, bestScores, priority) {
-			best, bestScores, found = candidate.id, entry, true
+		priced = append(priced, cost)
+	}
+	if len(priced) == 0 {
+		return RouteRanking{outcome: RankingNoPricedCandidate, excluded: excluded}, nil
+	}
+	for _, cost := range priced[1:] {
+		if cost.currency != priced[0].currency {
+			return RouteRanking{outcome: RankingCurrenciesDiffer, excluded: excluded}, nil
 		}
 	}
-	if !found {
-		return CandidateID{}, ErrNoQualifiedCandidate
-	}
-	return best, nil
-}
-
-// ranksBefore 按声明序逐准则比较，全平时按候选标识收尾。
-func ranksBefore(left, right CandidateScores, priority []RankingCriterion) bool {
-	for _, criterion := range priority {
-		leftValue, rightValue := left.scores[criterion], right.scores[criterion]
-		if leftValue != rightValue {
-			return leftValue < rightValue
+	lowest := priced[0].amountMinor
+	for _, cost := range priced[1:] {
+		if cost.amountMinor < lowest {
+			lowest = cost.amountMinor
 		}
 	}
-	return left.candidate.String() < right.candidate.String()
+	var atLowest []CandidateID
+	for _, cost := range priced {
+		if cost.amountMinor == lowest {
+			atLowest = append(atLowest, cost.candidate)
+		}
+	}
+	if len(atLowest) > 1 {
+		return RouteRanking{outcome: RankingTied, tied: atLowest, excluded: excluded}, nil
+	}
+	return RouteRanking{outcome: RankingSelected, selected: atLowest[0], excluded: excluded}, nil
 }
