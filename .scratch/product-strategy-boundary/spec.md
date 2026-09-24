@@ -11,7 +11,7 @@ Status: in-progress——2026-09-24 通道 4 按用户授权自决立 ADR-0146 �
 
 | 票 | 标题 | 状态 |
 |---|---|---|
-| [01](./issues/01-regrade-slices-under-four-criteria.md) | 按四项判据逐切片重定级 | in-progress · 通道 4 |
+| [01](./issues/01-regrade-slices-under-four-criteria.md) | 按四项判据逐切片重定级 | resolved · 结论落开发主线 |
 | [02](./issues/02-split-parameter-register-and-retriage-deferrals.md) | 参数登记册逐行拆分，以「实例半边」为由的暂缓逐份重新定性 | ready-for-agent |
 | [03](./issues/03-reference-configuration-adoption-pattern.md) | 参考配置的存放、版本与显式采用路径，在注册号类型目录上立样板 | ready-for-agent |
 | [04](./issues/04-routing-product-strategy-first-cut.md) | 路由第一刀：拆 `PAR-NET-14`，路由策略族与首个内置策略 | ready-for-agent · 演示网络那半 Blocked by 03 |

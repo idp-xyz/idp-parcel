@@ -184,6 +184,23 @@ PN-08 是产品级试点治理与跨上下文应用编排，不是新的限界�
 
 **2026-09-24 补记（[ADR-0146](../adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)，用户授权通道 4 自决）。** 上表与上段「产品就绪里程碑就此成立」是按当时三项判据的如实定级，原样保留；判据自本日起改为四项（见上节），**按新判据产品就绪暂不成立**。能用证据坐实的有两处：PN-02 的可达性证据视图与 PN-03 的初始路由证据视图没有取数侧——票 `nr-route-evidence-views/01` 停着，正是因为路由算法被归进了实例——这两处判断点没有执行器。其余切片待按文件级证据重定级，重定级与演示动线判据的取证拆在 `.scratch/product-strategy-boundary/`，本段不替它们下结论。
 
+**按四项判据重定级（票 `product-strategy-boundary/01`，钉 `5445341c`，代码与 `dc62a481` 同）。** 取证面：生产装配点（`cmd/parcel-api`、`cmd/parcel-dispatch`）上以「实例半边」为由留空的缝、生产装配里的显式未配置桩、机制清点的端口精确口径缺；逐条按分界检验判「租户把自己的值全部登记之后，这一格答不答得出来」——答得出是租户取值未配置，答不出是产品策略缺执行器。没有逐 UC 走读；PN-05 与 PN-01 / 08 的切片内结论据装配点注释与端口面，未逐判断点复核。前两项判据沿用上表，下表只列第三项的缺口；第四项按动线整体判，见表后。
+
+| 切片 | 第三项（租户取值显式未配置，产品策略有执行器） | 缺执行器的判断点（证据：文件 + 符号） |
+|---|---|---|
+| 横切 | 未满足，作用于全部切片的生产形态 | 生产接入认证：端点表命令行与目录读口挂 `UnconfiguredIntake{}`，一律答 `ACCESS_CHANNEL_NOT_CONFIGURED`（`cmd/parcel-api/endpoints.go`）；运营请求到商业坐标的映射 `RequestSource` / `Scopes` 留空（`assemble_review.go`、`assemble_withdrawal.go`、`assemble_customer_amendment.go` 等）。认证机制与角色模型归产品策略（ADR-0100 已判运营身份为产品自有渠道族；客户侧 ADR-0139 仍 Proposed），账号与角色分派才是租户取值 |
+| PN-01 / 08 | 切片内满足 | 无切片内缺口；阶段评审与接管没有读面、接管没有登记口，属入口与读面，不属判断方法 |
+| PN-02 | 部分 | 可达性证据视图无取数侧（票 `nr-route-evidence-views/01`）；受理链逐项时点 `Values` 生产装配为 nil、第二阶段必答`未配置`（`cmd/parcel-dispatch/assemble.go` `acceptanceCommercialBasis`）；受理前财务控制的账户范围源与估价源为 nil（同文件 `NewPreAcceptanceControlAdapter` 的 `Scopes` / `Amounts`）；面单渠道择优链六条缝全部未配置且没有触发面——其中「账号使用授权选法」「供应商协议选法」是选取方法（`cmd/parcel-api/assemble_label_channel.go` `labelChannelSources`），计价输入口 `PricingInputResolver` 无实现 |
+| PN-03 | 部分 | 初始路由证据视图无取数侧（同上票）；初始路由消费门的商业适用性解析标识源答依赖不可用（`cmd/parcel-dispatch/assemble.go` `acceptanceConsumer`）；节点收寄的包裹身份核对是未配置桩，委托侧外部标识关联模型不存在（`cmd/parcel-api/assemble_reception.go` `unconfiguredParcelIdentityView`，票 `ps-external-mark-relations/01`） |
+| PN-04 | 部分 | 面单渠道出向连接器一家都没有（`assemble_label_channel.go` `unconfiguredLabelChannelGateway`）；派送节拍没有内置触发器，端点挂未配置（`assemble_delivery_dispatch.go`）；外部轨迹来源 `TrackingSource` 无实现 |
+| PN-05 | 切片内满足 | 装配点注释写明留白在登记册内容里（`assemble_external_results.go`），属租户取值；生产自动申报在首发范围外 |
+| PN-06 | 部分 | 客户通知出向连接器 `NotificationChannelGateway` 无实现（ADR-0142 首方 webhook 仍 Proposed） |
+| PN-07 | 部分 | 结算四口无实现：`ClaimAmountRuleView`、`ConfirmedChargeFactsView`、`SupplierAuditAuthorityView`、`SupplierPayableAccountView`；计价输入 `PricingInputResolver` 无实现（`pp-pricing-input-seams` 在办） |
+
+第四项（演示动线走通）：**未满足**。取证钉 `5445341c` 时委托提交仍答 `ADMISSION_PAUSED`，修复随票 `demo-intake-admission-paused/01` 在其后重放进 main；越过这一格，按装配点，受理链逐项时点必答`未配置`、初始路由证据视图无取数侧，动线至少在 PN-02 受理与 PN-03 路由两处停住。本次没有端到端实跑。
+
+**结论：按四项判据产品就绪不成立**——PN-02、03、04、06、07 各有产品策略缺执行器，横切的接入认证缺口作用于全部切片的生产形态，演示动线未走通。缺口逐条交票 `product-strategy-boundary/02` 立工作票；横切一格与 ADR-0139 至 0142 是同一道题，那四篇的接受归用户。
+
 #### 2026-09-02 裁决：生产接线棘轮那 32 条计入差量，「可派机制工作清零」不再成立
 
 上表各行的差量格与紧接其上那句「**无一张可派的机制工作票**」，**在本节范围内已被本条更正**。
