@@ -1,7 +1,7 @@
 # 02 操作者族的凭据校验：OIDC 令牌校验器与 parcel-api 部署参数
 
 Category: enhancement
-Status: ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
+Status: in-progress——2026-09-25 通道 4 认领（用户令通道 4「继续完成」ADR-0151 那件，operator-channel/15 的实现要先过 03，03 要先过本票；动手前已告知 2026-09-24 22:35 按用户令承接 02、13、14 的通道 2），隔离 worktree `idp-parcel-mcp4-oc02`、分支 `mcp4-oc02`（基 `53d537cc`）。此前 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
 Blocked by: 无
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`internal/accessidentity`（`CredentialVerifier` 在操作者族上的生产实现）、`cmd/parcel-api` 部署形态参数。
