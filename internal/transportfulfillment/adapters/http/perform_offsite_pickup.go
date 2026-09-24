@@ -19,7 +19,7 @@ type PickupAttemptIntake interface {
 }
 
 // OffsitePickupAttemptPayload 是一次到访多对象揽收执行的线格式，逐格镜像 application.PerformOffsitePickupCommand 去掉租户；
-// 三个时刻取 RFC 3339。段引用两层照命令分设：整次一个 segment，逐对象各自一个 plannedSegment。
+// 时刻一律取 RFC 3339。段引用两层照命令分设：整次一个 segment，逐对象各自一个 plannedSegment。
 type OffsitePickupAttemptPayload struct {
 	SourceID        string                              `json:"sourceId"`
 	Task            string                              `json:"task"`

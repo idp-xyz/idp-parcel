@@ -16,7 +16,7 @@ type PickupRegistrationIntake interface {
 }
 
 // OffsitePickupRegistrationPayload 是单对象揽收登记的线格式，逐格镜像 application.RegisterOffsitePickupCommand 去掉租户。
-// occurredAt 取 RFC 3339；段三格可缺，缺席即不立段（命令注释）。
+// occurredAt 取 RFC 3339；segment / plannedSegment / segmentServiceAction 可缺，缺席即不立段（命令注释）。
 type OffsitePickupRegistrationPayload struct {
 	Object               string `json:"object"`
 	Task                 string `json:"task"`

@@ -25,7 +25,7 @@ type DeliveryDispatchTriggerIntake interface {
 }
 
 // DeliveryDispatchTriggerPayload 是一拍触发的线格式：段、对象与这一拍的业务时间（RFC 3339）三格，逐格镜像
-// application.TriggerDeliveryDispatchCommand 去掉租户。地点、时间窗与条件不在形状里——七件由执行器向各所有者取。
+// application.TriggerDeliveryDispatchCommand 去掉租户。地点、时间窗与条件不在形状里——工作范围由执行器向各所有者取。
 type DeliveryDispatchTriggerPayload struct {
 	Segment    string `json:"segment"`
 	Object     string `json:"object"`

@@ -88,7 +88,7 @@ func TestIsolatedCommandIntakeTranslatesReceptionWithInjectedTenantAndNode(t *te
 	}
 }
 
-// Covers: 接收观察三态的另两格——明确拒收带原因、仅扫描带标识，两格都不带接收证据（与受控批量口同一组形状）。
+// Covers: 接收观察的明确拒收与仅扫描——前者带原因、后者带标识，都不带接收证据（与受控批量口同一组形状）。
 func TestIsolatedCommandIntakeTranslatesRefusalAndScanOnlyReceptions(t *testing.T) {
 	intake := isolatedCommandIntakeForTest(t)
 

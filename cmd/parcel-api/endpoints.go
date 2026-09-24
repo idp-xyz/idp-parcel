@@ -314,7 +314,7 @@ func assembleBusinessEndpoints(
 		{Pattern: "/node-operations/receptions", Handler: nodeopshttp.NewReceiveDeliveredUnitEndpoint(receptionIntake, reception)},
 		// 节点作业与运输履约查阅页（票 admin-skeleton-closure-batch/05）各一口按
 		// registry 分派（NO 三册、TF 四册）：分派对应「一页里的页签」。命令端点在上，
-		// 用的是字面量 UnconfiguredIntake{}；查阅行走本上下文自己的 Intake 变量，
+		// 走写开关的逐口变量（票 operator-channel/08）；查阅行走本上下文自己的 Intake 变量，
 		// 隔离读准入（ADR-0078）启用时只换查阅行，命令行换不了。
 		{Pattern: "/node-operations-records", Handler: nodeopshttp.NewQueryNodeOperationsRecordsEndpoint(nodeOperationsCatalogueIntake, nodeOperationsRecords)},
 		{Pattern: "/transport-fulfillment/deliveries", Handler: tfhttp.NewRegisterEffectiveDeliveryEndpoint(deliveryRegistrationIntake, delivery)},
@@ -322,8 +322,9 @@ func assembleBusinessEndpoints(
 		// 控制事实入口（票 tf-segment-lifecycle-closure/04）：交接一组（登记 + 更正）、揽收一组
 		// （单对象登记 + 更正 + 多对象执行），按事实分组而不按 UC 分。它们是 CONTEXT 成立边界的来源事实，
 		// 进段那道门（enterFulfillmentSegment）在生产上只从登记那几行走得到——接上之前它没有任何路。
-		// 命令面，同挂字面量 UnconfiguredIntake{}；命令里带着段引用，这几行比交付更不能让隔离读
-		// 开关换值：一条穿过去的请求会在段登记册上立出一个来源不明的实际履约段。
+		// 命令面，命令里带着段引用，这几行比交付更不能让隔离读开关换值：一条穿过去的请求会在段登记册
+		// 上立出一个来源不明的实际履约段。登记与执行三行经写开关逐口放行（票 operator-channel/08，写下
+		// 的段带 `SYN-` 租户维可分辨），两个更正口仍挂字面量 UnconfiguredIntake{}。
 		// 揽收更正口（票 tf-segment-lifecycle-closure/08）落新版本回指前版、重交 PS 采认，不进段——段侧
 		// 重派生另立票；它接的是自己那一格装配（assemble_offsite_pickup_correction.go），与首登共用一册。
 		{Pattern: "/transport-fulfillment/handovers", Handler: tfhttp.NewRegisterTransportHandoverEndpoint(handoverRegistrationIntake, handover)},
@@ -333,16 +334,19 @@ func assembleBusinessEndpoints(
 		{Pattern: "/transport-fulfillment/offsite-pickup-attempts", Handler: tfhttp.NewPerformOffsitePickupEndpoint(pickupAttemptIntake, pickupAttempt)},
 		// 移动事实口（票 tf-segment-lifecycle-closure/05）：只收自营执行方的出发 / 移动 / 到达；外部承运
 		// 轨迹**不从这里进**，走 TrackingSource 入站口的采纳执行器（label-channel/16 已落）。谁是自营
-		// 执行方由 Intake 的认证结果说，渠道未就位前同挂字面量 UnconfiguredIntake{}。
+		// 执行方由 Intake 的认证结果说：真渠道未就位；隔离形态的认证结果是装配点注入的合成来源
+		// （isolatedMovementSource，票 operator-channel/08）。
 		{Pattern: "/transport-fulfillment/movement-facts", Handler: tfhttp.NewRecordMovementFactEndpoint(movementFactIntake, movementFact)},
 		// TF 四个 admin 写面（ADR-0085，票 tf-segment-lifecycle-closure/07）：关段、建派送任务、装载分配、
 		// 明确终止参与。它们是运营决定不是承运方回传口，所以路径取读面册名前缀 `transport-fulfillment-`
-		// 而不是控制事实那组的 `/transport-fulfillment/...`。写准入不另立形，同挂字面量 UnconfiguredIntake{}。
+		// 而不是控制事实那组的 `/transport-fulfillment/...`。写准入不另立形：关段与建派送任务两行经写开关逐口
+		// 放行（票 operator-channel/08），装载分配与终止参与两行仍挂字面量 UnconfiguredIntake{}。
 		// 终止口只能铸终止那一路（tfhttp.ParticipationTermination 比应用命令窄），交付与交接两路是内部触发。
 		{Pattern: "/transport-fulfillment-segment-closures", Handler: tfhttp.NewCloseFulfillmentSegmentEndpoint(segmentClosureIntake, segmentCloser)},
 		{Pattern: "/transport-fulfillment-dispatch-task-registrations", Handler: tfhttp.NewOpenDispatchTaskEndpoint(dispatchTaskIntake, dispatchTaskOpener)},
 		// 末端派送任务内部触发执行器的生产入口（ADR-0114 决定二末句；票 tf-segment-lifecycle-closure/12「生产入口」）：谁按拍调、
-		// 拍频多大属调用方（实例半边），同挂字面量 UnconfiguredIntake{} 如实答未配置；与上一行手工建任务是两件事。
+		// 拍频多大属调用方（实例半边），真渠道未就位前如实答未配置；隔离形态经写开关放行这一口（票 operator-channel/08），
+		// 只让一拍能被调用、不替调用方定拍频。与上一行手工建任务是两件事。
 		{Pattern: "/transport-fulfillment-delivery-dispatch-triggers", Handler: tfhttp.NewTriggerDeliveryDispatchEndpoint(deliveryDispatchTriggerIntake, deliveryDispatchTrigger)},
 		{Pattern: "/transport-fulfillment-load-assignment-registrations", Handler: tfhttp.NewFormLoadAssignmentEndpoint(tfhttp.UnconfiguredIntake{}, loadAssigner)},
 		{Pattern: "/transport-fulfillment-participation-terminations", Handler: tfhttp.NewTerminateFulfillmentParticipationEndpoint(tfhttp.UnconfiguredIntake{}, participationEnder)},
@@ -359,14 +363,14 @@ func assembleBusinessEndpoints(
 		// 外部承运轨迹事实的有效时间判断面两口（ADR-0085，票 label-channel/21）。读口按（租户，轨迹源）上列当前版
 		// （待判断 / 全部），是判断人的「该判哪几条」：零登记零编辑零披露，消费本上下文自己的存储读面，走运输履约
 		// 查阅同一个 Intake 变量——隔离读准入（ADR-0078）启用时随查阅行一起换值。写口是所有者的显式判断（ADR-0102
-		// 决定三第一种来源），一次判断就把事实交给 visibility-exception 进客户可见面，同挂字面量 UnconfiguredIntake{}：
-		// 读开关换不了它。路径取读面册名前缀 `transport-fulfillment-`——两口都是运营侧动作，不是承运方回传口。
+		// 决定三第一种来源），一次判断就把事实交给 visibility-exception 进客户可见面：读开关换不了它，只有写开关
+		// 逐口放行（票 operator-channel/08）。路径取读面册名前缀 `transport-fulfillment-`——两口都是运营侧动作，不是承运方回传口。
 		{Pattern: "/transport-fulfillment-external-tracking-facts", Handler: tfhttp.NewQueryExternalTrackingFactsEndpoint(transportCatalogueIntake, externalTrackingFactReview)},
 		{Pattern: "/transport-fulfillment-effective-time-judgments", Handler: tfhttp.NewJudgeEffectiveTimeEndpoint(effectiveTimeJudgmentIntake, effectiveTimeJudgment)},
 		// 实际承运商首次有效收寄的判断面两口（票 label-channel/31，ADR-0135 决定八）。读口按（租户，载运对象）上列整条
 		// 收寄链，是判断人的「这个对象走到哪一版」：零登记零编辑零披露，消费本上下文自己的存储读面，走运输履约查阅同一个
-		// Intake 变量。写口是判断方的显式读法，一次判断落的是控制事实——立段、结束取消权、交 parcel-shipment 形成终局，
-		// 同挂字面量 UnconfiguredIntake{}：读开关换不了它。
+		// Intake 变量。写口是判断方的显式读法，一次判断落的是控制事实——立段、结束取消权、交 parcel-shipment 形成终局：
+		// 读开关换不了它，只有写开关逐口放行（票 operator-channel/08）。
 		{Pattern: "/transport-fulfillment-carrier-first-effective-pickups", Handler: tfhttp.NewQueryCarrierFirstEffectivePickupsEndpoint(transportCatalogueIntake, carrierPickupChain)},
 		{Pattern: "/transport-fulfillment-carrier-first-effective-pickup-judgments", Handler: tfhttp.NewJudgeCarrierFirstEffectivePickupEndpoint(carrierPickupJudgmentIntake, carrierPickupJudgment)},
 		// 总单登记两口（ADR-0113 决定五；票 tf-carrier-master-document-register/01）：登记一份总单的首版，与对它此刻的
@@ -478,7 +482,8 @@ func assembleBusinessEndpoints(
 		// 「登记解释规则」，那一半的缺席是页面在替它认账。
 		{Pattern: "/customs-case-requirement-registrations", Handler: customshttp.NewRegisterCaseRequirementEndpoint(customshttp.UnconfiguredIntake{}, caseRequirementRegistration)},
 		// 凭证、税费付款协作事项、税费付款核对三册的在线登记口（ADR-0085 决定一，票 sa-cc/07
-		// 步二；裁决「同族一致」三册都开）：写准入不另立形，同挂字面量 UnconfiguredIntake{}。
+		// 步二；裁决「同族一致」三册都开）：写准入不另立形。凭证口经写开关逐口放行（票 operator-channel/08：票面
+		// 与 psb/05 格 11 点名、ADR-0149 决定一归外部结果族），协作与核对两口仍挂字面量 UnconfiguredIntake{}。
 		// 路径的事物词取登记 CLI 的命令名（regulatory-credential / duty-collaboration /
 		// duty-payment-verification），同一本册在 CLI 与端点两处不换词；不取读口的册名
 		// （/customs-credentials 那组）——读口按册平铺，写口按命令命名，前五个登记口已是这么分的。
@@ -620,8 +625,9 @@ func assembleBusinessEndpoints(
 		{Pattern: "/settlement-funds-applications", Handler: settlementhttp.NewQuerySettlementFundsApplicationsEndpoint(settlementCatalogueIntake, settlementFundsApplications)},
 		{Pattern: "/settlement-operating-results", Handler: settlementhttp.NewQuerySettlementOperatingResultsEndpoint(settlementCatalogueIntake, settlementOperatingResults)},
 		// 外部资金事实采用 / 更正两口的在线登记口（ADR-0085 决定一，票 sa-cc/31；27 裁决 2 第二步）：
-		// 本上下文第一份命令面。写准入不另立形，同挂字面量 UnconfiguredIntake{}，隔离读放行换不了
-		// 这两行（编译期）。路径的事物词取登记 CLI parcel-settlement-register 的命令名（external-funds-fact /
+		// 本上下文第一份命令面。写准入不另立形，隔离读放行换不了这两行（编译期）；采用口经写开关逐口放行
+		// （票 operator-channel/08），更正口仍挂字面量 UnconfiguredIntake{}。路径的事物词取登记 CLI
+		// parcel-settlement-register 的命令名（external-funds-fact /
 		// external-funds-fact-correction），同一本册在 CLI 与端点两处不换词；前缀随本上下文读口的 /settlement-。
 		// 两口在生产上是同一只编排的两个方法，端点表仍各收一参：装配测试才盖得住「采用口接了更正编排」。
 		// 外部资金事实进产品只经这一口（ADR-0137 决定四）：CC 那侧没有、也不会有资金事实的在线口。

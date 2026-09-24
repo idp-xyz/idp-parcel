@@ -12,7 +12,8 @@ import (
 // HandoverIntake 把已认证的接入请求翻译成交接判断的首登 / 更正命令。
 //
 // 接口而非本包内解析代码的理由同 DeliveryIntake：租户身份只能来自认证结果（ADR-0003），
-// 真实接入渠道属 PAR-INT-01 待提供，未决期间本包不带任何实现。
+// 真实接入渠道属 PAR-INT-01 待提供，未决期间本包不带任何真渠道实现（隔离写准入的 IsolatedCommandIntake
+// 只实现首登那一口，理由同 DeliveryIntake）。
 //
 // **`Segment` 与 `PlannedSegment` 是命令的一部分，Intake 必须收。** 交接是 CONTEXT 成立边界的
 // 来源事实，对象进哪个实际履约段由这两格指名（缺席时编排不立段）。Intake 若不收它们，编排
@@ -41,7 +42,8 @@ type HandoverCorrectionIntake interface {
 }
 
 // HandoverRegistrationPayload 是交接判断首登的线格式，逐格镜像 application.RegisterTransportHandoverCommand 去掉租户，与既有
-// 传输层替身的请求体同形。verdict 取 domain.HandoverVerdict 的封闭词，judgedAt 取 RFC 3339；段三格可缺，缺席即不立段。
+// 传输层替身的请求体同形。verdict 取 domain.HandoverVerdict 的封闭词，judgedAt 取 RFC 3339；segment / plannedSegment /
+// segmentServiceAction 可缺，缺席即不立段。
 type HandoverRegistrationPayload struct {
 	Object               string `json:"object"`
 	Scope                string `json:"scope"`
