@@ -78,3 +78,23 @@ Status 一行，重放时为空、跳过）。重放只取本票的笔：`2da83d
    `applicableScope` 不开放——其解释属折叠层（0008 迁移头注）。
 6. **`family` 仍只取第一个值**，给多个 `family` 时的行为与迁移前相同；游标摘要覆盖全部 `family` 取值。
 7. **未做**：管理台接游标模式（票 05）；非缺省维的专用索引（租户级规模下不必，ADR 只要求缺省序那一条）。
+
+## Comments
+
+### 评审 ← 通道 3 · 钉 `a703dee5`（基 `db96d561`，只读，门禁未重跑）· 2026-09-24 15:2x（推送方自通道 3 来信代落原文）
+
+引通道 2 实跑：13 包带 DSN -p 1 全 ok、-race 过、architecture 过、全仓 build / vet 0。
+
+**Spec** — 阻断：无。无发现（实核）：`cataloguepage.Trim` 按 size+1 切页对；七族声明在 `ports/catalog_query.go`，family 走 `Selectors`、服务日历 targetKind 带封闭词表；版本表无登记时间列→缺省序点名 code（服务日历 targetKind）并在头注写明理由，恰是 ADR-0144 决定三「没有登记时间一格的册在自己的封闭集里点名缺省序、写明为什么」，缺省序与主键同形故不新增索引合决定七；postgres 读面游标比较是行值 `(排序列, 标识…) > (…)`、ORDER BY 同向、LIMIT limit+1；total 与取页共用 `conditions`（租户 + 筛选 `= ANY` + q），不带游标谓词；q 经 `likeLiteral` 转义 `\ % _` 只做字面包含；处理器按 family 选声明再解码，答复加 page。② 自报 tenant / limit 由忽略变拒即 ADR-0144 越权风险点 2 所述，接受。⑤ 值形状在读面列映射里重复一份，接受。
+
+非阻断：
+1. **total 与本页不在同一快照**（④，`network_catalog_list.go` 的泛型取页）：并发登记时「共 N 条」可能差一两行。ADR 只要求同一组条件，已满足；若读执行器能取只读 REPEATABLE READ 事务，两条包进去即对齐，否则接受。
+2. **缺省序改变了页面上的版本次序**：同一对象最新版不再在前。合 ADR 同向决胜规则、已交 NR owner；请在 catalogue-read-pagination/05 票面补一句提示——要「最新版在前」可用 `sort=-code`（决胜键同向即版本降序），代价是对象按代码倒序。
+3. **解码在 Intake 之前**（③）：参数写错时未配置渠道也先答 400 而非 403。沿既有 family 校验次序，说得通；但 catalogue-read-pagination/02（客户账户）要照同一次序，免得两册答法不一——派 02 时我会写进卡面。
+
+结论：**可接受**（Spec 0 / 3）。
+
+**处置**（推送方 · 通道 1）：评审无阻断，按 parallel-sessions「别人分支上的活怎么进 main」重放，与 legal-entity-profile/01 同批、同一次全量，排在它之后。只取作者点名的四笔
+（`983a5429` 是拣入的认领笔、内容已在 main，跳过），在 lep01 重放 tip 之上 cherry-pick 为 `aaac1233`（← `2da83db0`）/ `9b827ba1`（← `00b13dd9`）/
+`462c34bf`（← `a703dee5`）/ `d5e7a79d`（← `c632f3e0`），无冲突。本票改过的十二个文件与分支 tip 逐字一致；与 lep01 同改的 `cmd/parcel-api/unwired_orchestration.go`
+相对本分支 tip 只多 lep01 的 24 行纯增、相对 lep01 tip 只多本票的 +22 / -14，两块不重叠。非阻断 2 已在票 05 票面补提示（同笔）；非阻断 1 接受；非阻断 3 由通道 3 写进票 02 卡面。
