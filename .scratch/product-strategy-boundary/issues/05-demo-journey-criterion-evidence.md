@@ -49,7 +49,7 @@ Blocked by: 02、03、04（只挡收口）
 - 答复：dispatch 记 `dispatch.consumer_undecided`，错误正文「acceptance chain is undecided: stage REACHABILITY_JUDGMENT, reason COMMERCIAL_BASIS_UNDETERMINED」；重投 3 次后 outbox 那一行落 `ABANDONED`，委托停在`已提交`，`acceptance_processing_attempt` 零行（未决整笔回滚）。PC 那一层的原因在进程上取不到，探针取回：闭包 `APPLICABILITY_CONFLICT`，`ConflictingBases()` 为 `[SERVICE_PRODUCT]`。
 - 成因：发布批里 `SYN-PROD-CN-SG-EXPRESS` 与 `SYN-PROD-CN-SG-ECON` 两个服务产品同在 `SYN-SCOPE-01`（后者随 `d61f2b7d` 于 08-28 加入）。解析键按（租户，客户账户）登记一行，范围固定为 `SYN-SCOPE-01`、没有产品维；`CommercialResolutionKeys.FormResolutionKey` 只读那一行，委托草案里的 `requestedServiceProduct` 与 `destinationServiceScope` 进摘要、不进键。多候选答`适用冲突`是 UC-PC-002 的设计行为。
 - 归类：机制缺口 + 产品策略缺执行器。登记面没有让委托声明参与折键的形状，属机制；「按委托声明选服务范围或产品」是不看任何租户就答得出的判断方法，属产品策略。不是租户取值：租户登记得再全，同一客户账户下两个产品在这张登记面上也只能冲突。演示种子同范围两个产品是这一格的触发条件，不是缺陷——两半落地后那是正当形态。
-- 去处：[票 17](./17-requested-service-product-narrows-commercial-basis.md)（2026-09-24 通道 2 立；此前待立票——票 02 立的 06–14 都不含这一格）。
+- 去处：[票 17](./17-requested-service-product-narrows-commercial-basis.md)（2026-09-24 通道 2 立，承接[票 06](./06-ps-acceptance-and-label-selection-judgment-methods.md) 第 8 项——那一项由通道 4 于 `ca26a1ec` 补入，本格此前一直写着待立票）。
 
 **格 2 · 商业依据第二阶段：可达性判断时点`未配置`**（实测，反事实变体）
 

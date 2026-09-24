@@ -17,7 +17,7 @@ Blocked by: 无（第 4 项里公开承运商接口的参考配置那半等 03�
 5. **待核：资料修订的并发合并与下游交接**（`PAR-COM-13`「基础版本/并发合并规则」「与制签/收寄/装袋/申报/关闭后续办的交接规则」）。`UC-PS-002` 编排已有资料版本追加与「资料版本已形成」意图；核它们是否就是这两项的执行器，缺哪半补哪半。
 6. **待核：多包裹终局汇总**（`PAR-COM-17`「多包裹汇总」）。核 `UC-PS-004` 的「委托完成派生」是否即此方法。
 7. **待 PS owner 定：资料组词表**（`BD-PS-010`；票 02 暂缓清单：ADR-0120 与 ADR-0130 把「资料组怎么划」「收件怎么叫」判为实例半边）。有哪些资料组不看任何租户就答得出，按分界检验是产品词表；各组内哪些字段允许何时修订仍是租户取值（`PAR-COM-13`）。
-8. **商业依据第一阶段按委托声明选服务范围或产品**（[票 05](./05-demo-journey-criterion-evidence.md) 格 1，实测：演示租户受理链首停在第一阶段 `SERVICE_PRODUCT` 适用冲突；2026-09-24 经用户授权自决补入）。解析键按（租户，客户账户）登记一行、没有产品维，`CommercialResolutionKeys.FormResolutionKey` 只读那一行，委托声明的 `requestedServiceProduct` 与 `destinationServiceScope` 进摘要、不进键，同一客户账户下两个产品因此只能冲突。两半：让委托声明参与折键的登记面形状是机制；按委托声明选服务范围或产品是产品策略。票 05 判断项 1 提示可能只缺「从委托推出服务范围」这一步，先经 PC owner 复核。
+8. **商业依据第一阶段按委托声明选服务范围或产品**（[票 05](./05-demo-journey-criterion-evidence.md) 格 1，实测：演示租户受理链首停在第一阶段 `SERVICE_PRODUCT` 适用冲突；2026-09-24 经用户授权自决补入）。解析键按（租户，客户账户）登记一行、没有产品维，`CommercialResolutionKeys.FormResolutionKey` 只读那一行，委托声明的 `requestedServiceProduct` 与 `destinationServiceScope` 进摘要、不进键，同一客户账户下两个产品因此只能冲突。两半：让委托声明参与折键的登记面形状是机制；按委托声明选服务范围或产品是产品策略。票 05 判断项 1 提示可能只缺「从委托推出服务范围」这一步，先经 PC owner 复核。**→ 2026-09-24 通道 2 按用户令拆为[票 17](./17-requested-service-product-narrows-commercial-basis.md)并裁定（按委托声明的服务产品身份收窄候选，不取一产品一范围），本项以票 17 为准。**
 
 顺带（[票 01](./01-regrade-slices-under-four-criteria.md)「严格复核记录」交来，只改注释）：`acceptanceConsumer` 的函数头注与其行内 ADR-0064 注释相抵；`acceptanceFinancialControl` 里「`Amounts` 留空……见 `acceptanceChainConsumer` 的注释」指向一段不存在的注释，实际说明在 `ControlAmountSource`。
 
