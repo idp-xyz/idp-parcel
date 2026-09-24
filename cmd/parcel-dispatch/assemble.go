@@ -1394,7 +1394,7 @@ func acceptanceConsumer(
 	return consumer, nil
 }
 
-// initialRouteEvidence 是初始路由与复核两条线共用的证据视图：读版本化网络目录，选版时点取本上下文的
+// initialRouteEvidence 是初始路由与复核共用的证据视图：读版本化网络目录，选版时点取本上下文的
 // 路由判断时点（时钟）。
 func initialRouteEvidence(db *bentopg.DB, clock systemClock) (*nrapplication.CatalogInitialRouteEvidence, error) {
 	catalog, err := nrpostgres.NewNetworkCatalog(db)

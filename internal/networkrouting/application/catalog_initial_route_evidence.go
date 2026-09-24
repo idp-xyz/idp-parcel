@@ -16,7 +16,7 @@ import (
 var ErrInitialRouteEvidenceUnresolvable = errors.New(
 	"network routing: the network catalog is configured but initial route facts are not folded from it yet")
 
-// CatalogInitialRouteEvidence 是初始路由与复核两处证据视图的目录实现。在 routing-first-cut/09 之前它只答`未配置`
+// CatalogInitialRouteEvidence 是初始路由与复核所用证据视图的目录实现。在 routing-first-cut/09 之前它只答`未配置`
 // 这一格——与可达性一侧同一条判法（catalogConfiguredFor），不再读定义登记册（迁移 0007）；目录已配置时照旧上抛
 // ErrInitialRouteEvidenceUnresolvable。
 //

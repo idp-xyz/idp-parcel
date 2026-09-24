@@ -23,8 +23,8 @@ var ErrAmbiguousNetworkCatalog = errors.New(
 	"network routing postgres: 网络目录在同一时点有多个适用版本")
 
 // NetworkCatalog 是版本化网络目录的存取口（票 01 的机制四件）。它拥有定义原语的
-// 版本行与目录修订，只按判断时点选版、拒歧义，不做任何评估、过滤或排序。两个网络
-// 证据视图经选版读口读本目录（ADR-0148 决定六部分停用 ADR-0068 决定六，自票
+// 版本行与目录修订，只按判断时点选版、拒歧义，不做任何评估、过滤或排序。网络证据
+// 视图（可达性与初始路由）经选版读口读本目录（ADR-0148 决定六部分停用 ADR-0068 决定六，自票
 // routing-first-cut/07 起）：候选生成与事实折叠是产品策略，落在应用层
 // （application.CatalogNetworkEvidence），不落本适配器；`未配置`由目录修订锚与适用
 // 的路由策略版本答，视图修订就是本目录的修订锚。迁移 0008 头注里「三个证据视图不读
@@ -573,7 +573,7 @@ func (catalog *NetworkCatalog) RegisterLineVersion(
 	return catalog.bumpRevision(ctx, executor, tenant)
 }
 
-// RegisterServiceAreaVersion 追加一个服务区域版本：版本、有效区间与覆盖四列（迁移 0011，ADR-0148
+// RegisterServiceAreaVersion 追加一个服务区域版本：版本、有效区间与覆盖各列（迁移 0011，ADR-0148
 // 决定二、五）。覆盖形态由登记用例经领域构造门收过，这里只翻译成列。版本纪律同 RegisterNodeVersion。
 func (catalog *NetworkCatalog) RegisterServiceAreaVersion(
 	ctx context.Context,

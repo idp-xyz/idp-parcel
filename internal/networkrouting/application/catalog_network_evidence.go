@@ -125,7 +125,7 @@ func (view *CatalogNetworkEvidence) customsFindings(
 	return findings, nil
 }
 
-// catalogConfiguredFor 是`未配置`的唯一判法（ADR-0148 决定六），两个证据视图共用：目录修订锚存在，且判断时点有
+// catalogConfiguredFor 是`未配置`的唯一判法（ADR-0148 决定六），可达性与初始路由的证据视图共用：目录修订锚存在，且判断时点有
 // 适用范围等于这次服务目的的路由策略版本。快照已按判断时点选过版，这里只比范围。
 func catalogConfiguredFor(snapshot ports.NetworkCatalogSnapshot, configured bool, purpose domain.ServicePurpose) bool {
 	if !configured {

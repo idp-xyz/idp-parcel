@@ -21,7 +21,7 @@ type CustomsCandidate struct {
 }
 
 // CustomsApplicabilityQuery 是一次关务适用性询问：哪个租户、哪一刻、哪些候选。不带判断键——可达性与初始路由
-// 两处共用同一个来源，关务一侧要的只是租户、时点与候选段链。
+// 共用同一个来源，关务一侧要的只是租户、时点与候选段链。
 type CustomsApplicabilityQuery struct {
 	Tenant     domain.TenantID
 	AsOf       time.Time
