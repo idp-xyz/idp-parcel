@@ -13,10 +13,10 @@ import (
 // 同一族受控编排壳。适配器不判断任何业务结果，只转交与映射；两条命令的响应形状同一个——它们落进同一条版本链，
 // 调用方读的是同一种东西。
 
-// ContinuedAttemptDecisionIntake 把一次已认证的接入请求翻译成关闭或重开命令。它是接口而非解析代码，理由与
-// WithdrawalIntake 相同：委托来源身份只能来自认证结果（PAR-INT-01 待提供），登录操作人的身份也只作操作证据、
-// 不进任何一格（CONTEXT「登录操作人可以作为操作证据，但不能替代实际决定方和授权角色」）——采信自报的请求方
-// 或货主账户，就是让任何调用方替任何货主签字。真渠道 Intake 就位前本包不带任何实现。
+// ContinuedAttemptDecisionIntake 把一次已认证的接入请求翻译成关闭或重开命令。它是接口而非解析代码：委托来源
+// 身份、请求方与货主账户都不采信自报——采信了就是让任何调用方替任何货主签字；登录操作人的身份只作操作证据、
+// 不进任何一格（CONTEXT「登录操作人可以作为操作证据，但不能替代实际决定方和授权角色」），决定方由授权答复给出。
+// 生产渠道是操作者渠道的「运营决定」能力面（ADR-0151），真渠道 Intake 就位前本包不带任何实现。
 type ContinuedAttemptDecisionIntake interface {
 	IntakeControlledClosure(ctx context.Context, request *http.Request) (application.FormControlledClosureCommand, error)
 	IntakeReopening(ctx context.Context, request *http.Request) (application.FormReopeningCommand, error)

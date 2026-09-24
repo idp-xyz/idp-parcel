@@ -25,8 +25,8 @@ type RegistryQuery struct {
 
 // RegistryQueryIntake 把一次已认证的运营查阅请求翻译成查询。
 //
-// 它是接口而非解析代码：请求方身份必须核对，运营接入面的认证方式属 `PAR-INT-01`
-// 待提供；未决期间本包不带任何采信自报身份的实现，包括「开发用」版本。今天在场的
+// 它是接口而非解析代码：请求方身份必须核对，运营接入面的认证归操作者渠道
+// （ADR-0100），其真 Intake 未就位；未决期间本包不带任何采信自报身份的实现，包括「开发用」版本。今天在场的
 // 两个实现是一对：未配置（如实拒）与隔离读注入（ADR-0078 + ADR-0083 Decision 三）。
 type RegistryQueryIntake interface {
 	IntakeRegistryQuery(ctx context.Context, request *http.Request) (RegistryQuery, error)

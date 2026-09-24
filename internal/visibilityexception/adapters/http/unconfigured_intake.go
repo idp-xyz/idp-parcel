@@ -8,8 +8,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/application"
 )
 
-// ErrAccessChannelNotConfigured 表示当前没有任何已启用的接入渠道：真实渠道的认证方式
-// 属 `PAR-INT-01` 待提供，装配点上还没有一行真渠道 Intake（ADR-0055）。
+// ErrAccessChannelNotConfigured 表示当前没有任何已启用的接入渠道：真实渠道分两族
+// ——运营侧归操作者渠道（ADR-0100），客户侧属 `PAR-INT-01`（首方渠道见 ADR-0139 草案）——两族的真 Intake
+// 都未就位，装配点上还没有一行真渠道 Intake（ADR-0055）。
 //
 // 与 ErrMalformedRequest、ErrMalformedClaim 各分一格的判据同 ADR-0029——恢复动作不同：
 // 这一格要接入方去提供并配置渠道参数，改请求或重试都不会好。哨兵只此一个而不随端点分

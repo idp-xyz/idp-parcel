@@ -19,7 +19,7 @@ import (
 // 里的接入面处理器全部挂在这里：命令面、业务查阅面与主数据目录查阅面都从这一处进入
 // 进程路由，领域边界仍由各自的处理器和读口保持。
 //
-// 按 ADR-0055，本函数不再以空清单等 `PAR-INT-01`：每个端点各以「未配置即拒」的 Intake
+// 按 ADR-0055，本函数不以空清单等真渠道：每个端点各以「未配置即拒」的 Intake
 // 起步——不读业务内容、不采信自报身份、不构造命令，对每个请求如实答「接入渠道未配置」
 // （403 + ACCESS_CHANNEL_NOT_CONFIGURED）。空清单折叠了两件事：进程外看「产品没有这个
 // 能力」与「租户还没配置接入渠道」同答 404，而前者无事可做、后者要去提供渠道参数。
@@ -28,9 +28,10 @@ import (
 // 实现——分界同 ADR-0052：「读一个空登记册并如实答未配置不是默认实现，恰恰是它想保护
 // 的东西」，而这里的空登记册就是本函数自己：真渠道就位前它没有任何一行真 Intake。
 //
-// 真渠道 Intake 就位时在本函数逐端点替换，路由层与处理器不动；载荷规范化摘要与准入
-// 范围装配（`PAR-GOV-03..07`）仍拦着真渠道 Intake，未配置即拒绕开它们只因它走不到那
-// 一步（ADR-0055 第五条）。
+// 真渠道 Intake 就位时在本函数逐端点替换，路由层与处理器不动。载荷规范化摘要与准入
+// 范围装配（ADR-0055 第五条）按族解：登记写面不适用（ADR-0100），业务命令面按口定形状、
+// 铸信封前读生产权威区间（ADR-0149 决定四、ADR-0151 决定三）；未配置即拒绕开它们只因它
+// 走不到那一步。
 //
 // 路径取各包传输层测试已在用的那一个，不另立一套坐标；TF 的 POD 更正此前没有自己的
 // 路径，按它与首登「命令形状与恢复动作不同、故分两个端点」的理由取独立子资源。这些
@@ -277,25 +278,30 @@ func assembleBusinessEndpoints(
 		{Pattern: "/shipment-requests/withdrawals", Handler: shipmenthttp.NewWithdrawShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, withdrawal)},
 		{Pattern: "/shipment-requests/parcel-cancellations", Handler: shipmenthttp.NewCancelParcelEndpoint(shipmenthttp.UnconfiguredIntake{}, cancellation)},
 		// 受控关闭 / 重开决定两个命令口（票 label-channel/30）：同一只编排两条命令，运营侧写行，同挂字面量
-		// UnconfiguredIntake{}；请求方与货主账户属 `PAR-INT-01`（实例半边），隔离读准入换不了写行。
+		// UnconfiguredIntake{}，隔离读准入换不了写行。生产渠道是操作者渠道的「运营决定」能力面（ADR-0151）：
+		// 提交操作者只作操作证据、不进命令，决定方与授权角色由授权答复给出。
 		{Pattern: "/shipment-requests/continued-attempt-closures", Handler: shipmenthttp.NewFormControlledClosureEndpoint(shipmenthttp.UnconfiguredIntake{}, continuedAttemptDecisions)},
 		{Pattern: "/shipment-requests/continued-attempt-reopenings", Handler: shipmenthttp.NewFormReopeningEndpoint(shipmenthttp.UnconfiguredIntake{}, continuedAttemptDecisions)},
 		// 复核完成与主动拒绝两个命令口（票 09；ADR-0081 的命令面保留条款、ADR-0086）：
-		// 与其余命令面同挂字面量 UnconfiguredIntake{}，隔离读准入换不了写行。
+		// 与其余命令面同挂字面量 UnconfiguredIntake{}，隔离读准入换不了写行。生产渠道是操作者渠道的
+		// 「运营决定」能力面（ADR-0151）：复核人与决定人取认证出的提交操作者，有没有权由编排问 party-commercial。
 		{Pattern: "/shipment-requests/manual-review-completions", Handler: shipmenthttp.NewCompleteManualReviewEndpoint(shipmenthttp.UnconfiguredIntake{}, manualReview)},
 		{Pattern: "/shipment-requests/rejections", Handler: shipmenthttp.NewRejectShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, rejection)},
 		// 授权处置命令口（票 sa-preacceptance-policy-view/04；ADR-0132）：授权角色对停在`等待授权处置`的
-		// 委托选去向。运营侧写行，同挂字面量 UnconfiguredIntake{}；谁是处置人属 `PAR-INT-01`（实例半边）。
+		// 委托选去向。运营侧写行，同挂字面量 UnconfiguredIntake{}。生产渠道是操作者渠道的「运营决定」
+		// 能力面（ADR-0151）：处置人取认证出的提交操作者，有没有权由编排问 party-commercial。
 		{Pattern: "/shipment-requests/authorized-dispositions", Handler: shipmenthttp.NewDisposeShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, disposition)},
 		// 受控补充命令口（票 first-tenant-runway/09；ADR-0106 Decision 四）：客户在`已提交`委托上形成
 		// 同一委托的新提交版本，编排随新版本落库同事务铸「新提交版本已形成」信封驱动续办。它是客户
 		// 渠道的写行，同挂字面量 UnconfiguredIntake{}；谁能替哪个客户账户补充、基准版本怎么译，属
-		// `PAR-INT-01` 接入契约（实例半边），隔离读准入与隔离提交放行都换不了这一行。
+		// 客户渠道（`PAR-INT-01`；首方渠道见 ADR-0139 草案，接受与否归用户），隔离读准入与隔离
+		// 提交放行都换不了这一行。
 		{Pattern: "/shipment-requests/supplements", Handler: shipmenthttp.NewFormNewSubmissionVersionEndpoint(shipmenthttp.UnconfiguredIntake{}, supplement)},
 		// 资料修订命令口（UC-PS-002；票 ps-port-remainder/04）：客户或其授权代表在`已接受`委托上形成客户原始
-		// 资料新版本。客户渠道的写行，同挂字面量 UnconfiguredIntake{}；请求方与实际决定方怎么采信属
-		// `BD-PS-009` / `PAR-INT-01`（实例半边），隔离读准入与隔离提交放行都换不了这一行。编排接的是
-		// 未配置的授权与矩阵答复，越过 Intake 后如实停在授权未决——停点从「没有入口」变成「说得出停在哪」。
+		// 资料新版本。客户渠道的写行，同挂字面量 UnconfiguredIntake{}；请求方怎么认证属客户渠道
+		// （`PAR-INT-01`；首方渠道见 ADR-0139 草案），实际决定方怎么判属 `BD-PS-009`，隔离读准入与
+		// 隔离提交放行都换不了这一行。编排接的是未配置的授权与矩阵答复，越过 Intake 后如实停在授权
+		// 未决——停点从「没有入口」变成「说得出停在哪」。
 		{Pattern: "/shipment-requests/source-data-amendments", Handler: shipmenthttp.NewAmendCustomerSourceDataEndpoint(shipmenthttp.UnconfiguredIntake{}, amendment)},
 		{Pattern: "/shipment-request-views", Handler: shipmenthttp.NewQueryShipmentRequestViewsEndpoint(shipmentViewsIntake, requestViews)},
 		// 复核队列查阅（票 09）：委托查阅面的子集视图，Intake 沿用同一变量——隔离读
@@ -346,8 +352,9 @@ func assembleBusinessEndpoints(
 		{Pattern: "/transport-fulfillment/movement-facts", Handler: tfhttp.NewRecordMovementFactEndpoint(movementFactIntake, movementFact)},
 		// TF 四个 admin 写面（ADR-0085，票 tf-segment-lifecycle-closure/07）：关段、建派送任务、装载分配、
 		// 明确终止参与。它们是运营决定不是承运方回传口，所以路径取读面册名前缀 `transport-fulfillment-`
-		// 而不是控制事实那组的 `/transport-fulfillment/...`。写准入不另立形：关段与建派送任务两行经写开关逐口
-		// 放行（票 operator-channel/08），装载分配与终止参与两行仍挂字面量 UnconfiguredIntake{}。
+		// 而不是控制事实那组的 `/transport-fulfillment/...`。四口的生产渠道都是操作者渠道的「运营决定」能力面
+		// （ADR-0151）；在它就位前写准入不另立形：关段与建派送任务两行经写开关逐口放行（票 operator-channel/08），
+		// 装载分配与终止参与两行仍挂字面量 UnconfiguredIntake{}。
 		// 终止口只能铸终止那一路（tfhttp.ParticipationTermination 比应用命令窄），交付与交接两路是内部触发。
 		{Pattern: "/transport-fulfillment-segment-closures", Handler: tfhttp.NewCloseFulfillmentSegmentEndpoint(segmentClosureIntake, segmentCloser)},
 		{Pattern: "/transport-fulfillment-dispatch-task-registrations", Handler: tfhttp.NewOpenDispatchTaskEndpoint(dispatchTaskIntake, dispatchTaskOpener)},

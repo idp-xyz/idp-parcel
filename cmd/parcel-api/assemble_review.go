@@ -104,9 +104,10 @@ func (boundary reviewCompletionBoundary) Save(
 // （同一条接受判断链的第二扇门）。
 //
 // 「谁在复核」与「谁有权复核」两问的权威不同源，各归各口：前者是接入身份，由 Intake 半边
-// （PAR-INT-01 实例参数）核验后随命令交来复核人与证据引用；后者是商业授权，编排拿到委托就去问
-// party-commercial（UC-PC-003 带 ManualReviewAction，票 wiring-baseline-remainder/04），授权引用
-// 由那边签发进复核留痕——与主动拒绝同一条路。此前授权引用也由 Intake 整组注入，等于采信自报。
+// （操作者渠道的「运营决定」能力面，ADR-0151）核验后随命令交来复核人与证据引用；后者是商业
+// 授权，编排拿到委托就去问 party-commercial（UC-PC-003 带 ManualReviewAction，票
+// wiring-baseline-remainder/04），授权引用由那边签发进复核留痕——与主动拒绝同一条路。此前授权
+// 引用也由 Intake 整组注入，等于采信自报。
 //
 // 复核授权的请求映射（法人/权限等级/商业范围/结构化原因/时点，`PAR-COM-14`）是实例半边，生产
 // 装配留 nil——适配器答未形成，编排如实停在 error（HTTP 5xx NO_ANSWER_FORMED），不代拟坐标也不

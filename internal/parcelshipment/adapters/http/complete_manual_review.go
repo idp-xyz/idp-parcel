@@ -10,9 +10,9 @@ import (
 )
 
 // ManualReviewCompletionIntake 把一次已认证的接入请求翻译成复核完成命令。它是接口而非
-// 解析代码，理由与 WithdrawalIntake 相同：操作者认证与「渠道原始载荷 → 复核人/授权/证据
-// 引用」的翻译属渠道接入契约（PAR-INT-01 待提供），采信自报的复核人等于让任何调用方替
-// 任何角色签复核。未决期间本包不带任何实现，包括「开发用」的采信头部版本。
+// 解析代码：复核人取认证出的提交操作者，采信自报的复核人等于让任何调用方替任何角色签复核；
+// 他有没有权复核由编排问 party-commercial，不在这里判。生产渠道是操作者渠道的「运营决定」
+// 能力面（ADR-0151），真渠道 Intake 就位前本包不带任何实现，包括「开发用」的采信头部版本。
 type ManualReviewCompletionIntake interface {
 	IntakeManualReviewCompletion(
 		ctx context.Context,

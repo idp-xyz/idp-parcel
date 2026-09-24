@@ -8,8 +8,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/customscompliance/application"
 )
 
-// ErrAccessChannelNotConfigured 表示当前没有任何已启用的接入渠道：监管回执通道的认证
-// 方式属 `PAR-INT-03`、运营查阅接入面的认证方式属 `PAR-INT-01`，都待提供，装配点上还
+// ErrAccessChannelNotConfigured 表示当前没有任何已启用的接入渠道：监管回执经集成客户端族
+// 进来（ADR-0149，回执来源的实例取值属 `PAR-INT-03`）、运营查阅接入面的认证归操作者渠道（ADR-0100），
+// 两族的真 Intake 都未就位，装配点上还
 // 没有一行真通道 Intake（ADR-0055）。哨兵只此一个而不随端点分设：未配置是渠道这一层
 // 的状态，按端点分设哨兵会让装配点看起来能只配一半（判据同 visibilityhttp）。
 //
