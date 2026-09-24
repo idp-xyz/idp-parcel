@@ -1,7 +1,7 @@
 # 01 `internal/platform` 共用件：游标编解码、查询参数校验、答复 `page` 拼装
 
 Category: enhancement
-Status: in-progress——2026-09-24 通道 2 在分支 `mcp2-crp01` 上做完（基 `51d2548a`，完成记录见文末），待非作者评审与推送方重放；分支已推 origin（凭据到位后补推，见完成记录末段）。此前：通道 2 认领（派单 `task-44d76717` ← 通道 3），隔离 worktree 分支 `mcp2-crp01`，基于认领笔
+Status: resolved——2026-09-24 已进 main：15:4x 经 `git ls-remote` 实查远端 main 为 `24c647e4`，代码笔 `52f983ce` / `1167ea02` / `b9b04675` / `62a04eac`（与分支对照见 Comments「处置」）；评审非阻断 1 由票 03 的 `2da83db0`（`cataloguepage.Trim`）接住，同时刻查票 03 尚未重放。此前 in-progress——2026-09-24 通道 2 在分支 `mcp2-crp01` 上做完（基 `51d2548a`，完成记录见文末），待非作者评审与推送方重放；分支已推 origin（凭据到位后补推，见完成记录末段）。此前：通道 2 认领（派单 `task-44d76717` ← 通道 3），隔离 worktree 分支 `mcp2-crp01`，基于认领笔
 Blocked by: 无
 地盘：新包 `internal/platform/<名自定，如 cataloguepage>/` 与其测试。不碰任何上下文包。
 出处：[ADR-0144](../../../docs/adr/0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 决定一、三、四、五、七。
