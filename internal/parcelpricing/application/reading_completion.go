@@ -1,7 +1,7 @@
 // reading_completion.go 是形成评价前按价卡绑定补齐输入快照读数的那两步：序列取值（ADR-0099 决定四）与目录读数
 // （ADR-0109 决定三、四）。正式评价（EvaluatePricingHandler）与试算（FormEstimateEvaluationsHandler）共用这一份——
 // 两处各写一份会在下一次改复核门时分叉，试算与正式评价在同一形成时刻、同一版本清单下就不再给同一结果（ADR-0152
-// 决定三）。只读：四口全是解析与读取，没有写口。
+// 决定三）。只读：这几口全是解析与读取，没有写口。
 package application
 
 import (

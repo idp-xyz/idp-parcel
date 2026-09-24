@@ -86,7 +86,7 @@ type EstimateCandidateAnswer uint8
 
 const (
 	EstimateCandidateAnswerInvalid EstimateCandidateAnswer = iota
-	// EstimateCandidateEvaluated：交回那份试算评价，其状态五格原样透出。
+	// EstimateCandidateEvaluated：交回那份试算评价，评价自己的状态原样透出。
 	EstimateCandidateEvaluated
 	// EstimateCandidateInputIncomplete：这张卡要的某一格发起方没给，Missing 点名。
 	EstimateCandidateInputIncomplete
