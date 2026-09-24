@@ -46,7 +46,7 @@
       "effectiveFrom": "2026-01-02T00:00:00Z",
       "registrationCountry": "CN",
       "lifetimeRegistrationNumbers": [
-        {"typeCode": "SYN-CN-LIFETIME", "number": "SYN-CN-000001"}
+        {"typeCode": "USCC", "number": "91000000000000001X"}
       ]
     }
   ],
