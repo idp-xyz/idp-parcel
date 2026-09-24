@@ -136,7 +136,7 @@ myshop-web（有），真实页面早就有了（委托查阅的 hash 二段详�
 | `d365851b` | `shell/workspace-state.ts`、`.test.ts`、`Layout.tsx` | Spec 阻断 1；Spec 非阻断 2；Standards 非阻断 3 |
 | `06b1f87e` | `Layout.tsx`、`App.tsx`、`shell/workspace-state.ts` | Standards 非阻断 1 / 2；Spec 非阻断 5 |
 | `2056e054` | `pages/shipment-request/ShipmentRequestListPage.tsx` | Spec 非阻断 1 的注释半 |
-| 本笔 | 票面、追加票 06、spec 子票表 | Spec 非阻断 1 的追加票；Spec 非阻断 3 / 4 / 6（票面口径）；本段 |
+| `baee921d` | 票面、追加票 06、spec 子票表 | Spec 非阻断 1 的追加票；Spec 非阻断 3 / 4 / 6（票面口径）；本段 |
 
 **逐条处置**
 
