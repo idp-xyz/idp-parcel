@@ -1,10 +1,10 @@
-# 09 冻结边界与已执行前缀的判定
+# 04 冻结边界与已执行前缀的判定
 
 Category: enhancement
 Status: draft
-Blocked by: 08（路由策略版本的内容载体）
-父票：[04](./04-routing-product-strategy-first-cut.md)「路由策略族」那一步
-地盘：network-routing 领域与复核编排；路由策略版本内容（随 08 的载体扩，迁移号开工时预留）；network-routing [`CONTEXT.md`](../../../docs/domain/network-routing/CONTEXT.md) 相关句。
+Blocked by: 03（路由策略版本的内容载体）
+父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「路由策略族」那一步
+地盘：network-routing 领域与复核编排；路由策略版本内容（随 03 的载体扩，迁移号开工时预留）；network-routing [`CONTEXT.md`](../../../docs/domain/network-routing/CONTEXT.md) 相关句。
 出处：[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定二、七；CONTEXT Language「路由冻结边界」与 Rules「改路只能改变尚未执行的剩余旅程」；[UC-NR-003](../../../docs/application/network-routing/UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md) `AT-NR-041`。
 
 ## 做什么
@@ -15,7 +15,7 @@ Blocked by: 08（路由策略版本的内容载体）
 
 ## 不做
 
-- 不定任何租户的冻结取值；改善阈值与自动改路条件归 10；与装载的并发归 11。
+- 不定任何租户的冻结取值；改善阈值与自动改路条件归 05；与装载的并发归 06。
 
 ## 完成判据
 

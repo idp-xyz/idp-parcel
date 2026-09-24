@@ -1,9 +1,9 @@
-# 11 改路与装载 / 交接并发时按业务时间与生效边界裁决
+# 06 改路与装载 / 交接并发时按业务时间与生效边界裁决
 
 Category: enhancement
 Status: draft
-Blocked by: 09
-父票：[04](./04-routing-product-strategy-first-cut.md)「路由策略族」那一步
+Blocked by: 04
+父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「路由策略族」那一步
 地盘：network-routing 领域与复核编排；若要消费装载或交接结果，只在 NR 侧的消费方适配器里加（[ADR-0025](../../../docs/adr/0025-cross-context-adapters-live-on-the-consumer-side.md)）。
 出处：[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定七；network-routing [`CONTEXT.md`](../../../docs/domain/network-routing/CONTEXT.md)「改路与装载或交接并发时，按权威业务发生时间、改路生效边界和明确因果关系裁决」一句；[UC-NR-003](../../../docs/application/network-routing/UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md) `AT-NR-047`。
 
