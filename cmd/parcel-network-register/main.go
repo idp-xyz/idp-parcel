@@ -40,9 +40,9 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	adapter "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/postgres"
+	"go.idp.xyz/idp-parcel/internal/networkrouting/adapters/registrationjson"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/application"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
-	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 )
 
@@ -192,194 +192,60 @@ func commandFor(
 	kind string,
 	raw []byte,
 ) (func(ctx context.Context, registrar *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error), error) {
+	// 译装是 registrationjson 那一份，在线登记口共用它（票 operator-channel/04）；这里只按族挑函数、包成事务内的调用。
 	switch kind {
 	case kindNode:
-		var payload nodePayload
-		if err := decodeStrict(raw, &payload); err != nil {
-			return nil, err
-		}
-		tenant, err := domain.NewTenantID(payload.TenantID)
+		command, err := registrationjson.NodeVersionFromJSON(raw)
 		if err != nil {
 			return nil, err
-		}
-		command := application.RegisterNodeVersionCommand{
-			TenantID: tenant,
-			Node: ports.NodeDefinitionVersion{
-				Code:             payload.Code,
-				Version:          payload.Version,
-				BusinessTimezone: payload.BusinessTimezone,
-				EffectiveFrom:    payload.EffectiveFrom,
-				EffectiveTo:      timeOf(payload.EffectiveTo),
-				HasEffectiveTo:   payload.EffectiveTo != nil,
-			},
 		}
 		return func(ctx context.Context, registrar *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
 			return registrar.RegisterNodeVersion(ctx, command)
 		}, nil
 	case kindConnection:
-		var payload connectionPayload
-		if err := decodeStrict(raw, &payload); err != nil {
-			return nil, err
-		}
-		tenant, err := domain.NewTenantID(payload.TenantID)
+		command, err := registrationjson.ConnectionVersionFromJSON(raw)
 		if err != nil {
 			return nil, err
-		}
-		command := application.RegisterConnectionVersionCommand{
-			TenantID: tenant,
-			Connection: ports.ConnectionDefinitionVersion{
-				Code:             payload.Code,
-				Version:          payload.Version,
-				FromNode:         payload.FromNode,
-				ToNode:           payload.ToNode,
-				BusinessTimezone: payload.BusinessTimezone,
-				EffectiveFrom:    payload.EffectiveFrom,
-				EffectiveTo:      timeOf(payload.EffectiveTo),
-				HasEffectiveTo:   payload.EffectiveTo != nil,
-			},
 		}
 		return func(ctx context.Context, registrar *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
 			return registrar.RegisterConnectionVersion(ctx, command)
 		}, nil
 	case kindLine:
-		var payload linePayload
-		if err := decodeStrict(raw, &payload); err != nil {
-			return nil, err
-		}
-		tenant, err := domain.NewTenantID(payload.TenantID)
+		command, err := registrationjson.LineVersionFromJSON(raw)
 		if err != nil {
 			return nil, err
-		}
-		command := application.RegisterLineVersionCommand{
-			TenantID: tenant,
-			Line: ports.LineDefinitionVersion{
-				Code:             payload.Code,
-				Version:          payload.Version,
-				Segments:         payload.Segments,
-				BusinessTimezone: payload.BusinessTimezone,
-				ApplicableScope:  payload.ApplicableScope,
-				EffectiveFrom:    payload.EffectiveFrom,
-				EffectiveTo:      timeOf(payload.EffectiveTo),
-				HasEffectiveTo:   payload.EffectiveTo != nil,
-			},
 		}
 		return func(ctx context.Context, registrar *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
 			return registrar.RegisterLineVersion(ctx, command)
 		}, nil
 	case kindServiceArea:
-		var payload areaPayload
-		if err := decodeStrict(raw, &payload); err != nil {
-			return nil, err
-		}
-		tenant, err := domain.NewTenantID(payload.TenantID)
+		command, err := registrationjson.ServiceAreaVersionFromJSON(raw)
 		if err != nil {
 			return nil, err
 		}
-		area := ports.ServiceAreaDefinitionVersion{
-			Code:           payload.Code,
-			Version:        payload.Version,
-			EffectiveFrom:  payload.EffectiveFrom,
-			EffectiveTo:    timeOf(payload.EffectiveTo),
-			HasEffectiveTo: payload.EffectiveTo != nil,
-		}
-		if coverage := payload.Coverage; coverage != nil {
-			area.HasCoverage = true
-			area.CoverageCountry = coverage.Country
-			area.PostalPrefixes = coverage.PostalPrefixes
-			area.OriginNodes = coverage.OriginNodes
-			area.DestinationNodes = coverage.DestinationNodes
-		}
-		command := application.RegisterServiceAreaVersionCommand{TenantID: tenant, Area: area}
 		return func(ctx context.Context, registrar *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
 			return registrar.RegisterServiceAreaVersion(ctx, command)
 		}, nil
 	case kindServiceCalendar:
-		var payload calendarPayload
-		if err := decodeStrict(raw, &payload); err != nil {
-			return nil, err
-		}
-		tenant, err := domain.NewTenantID(payload.TenantID)
+		command, err := registrationjson.ServiceCalendarVersionFromJSON(raw)
 		if err != nil {
 			return nil, err
-		}
-		targetKind, err := ports.CatalogTargetKindFrom(payload.TargetKind)
-		if err != nil {
-			return nil, err
-		}
-		command := application.RegisterServiceCalendarVersionCommand{
-			TenantID: tenant,
-			Calendar: ports.ServiceCalendarDefinitionVersion{
-				TargetKind:     targetKind,
-				TargetCode:     payload.TargetCode,
-				Version:        payload.Version,
-				EffectiveFrom:  payload.EffectiveFrom,
-				EffectiveTo:    timeOf(payload.EffectiveTo),
-				HasEffectiveTo: payload.EffectiveTo != nil,
-			},
 		}
 		return func(ctx context.Context, registrar *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
 			return registrar.RegisterServiceCalendarVersion(ctx, command)
 		}, nil
 	case kindAvailabilityAdjustment:
-		var payload adjustmentPayload
-		if err := decodeStrict(raw, &payload); err != nil {
-			return nil, err
-		}
-		tenant, err := domain.NewTenantID(payload.TenantID)
+		command, err := registrationjson.AvailabilityAdjustmentFromJSON(raw)
 		if err != nil {
 			return nil, err
-		}
-		targetKind, err := ports.CatalogTargetKindFrom(payload.TargetKind)
-		if err != nil {
-			return nil, err
-		}
-		adjustmentKind, err := ports.AvailabilityAdjustmentKindFrom(payload.Kind)
-		if err != nil {
-			return nil, err
-		}
-		command := application.RegisterAvailabilityAdjustmentCommand{
-			TenantID: tenant,
-			Adjustment: ports.AvailabilityAdjustmentStatement{
-				Code:        payload.Code,
-				Version:     payload.Version,
-				TargetKind:  targetKind,
-				TargetCode:  payload.TargetCode,
-				Kind:        adjustmentKind,
-				Source:      payload.Source,
-				EffectiveAt: payload.EffectiveAt,
-				LiftedAt:    timeOf(payload.LiftedAt),
-				HasLiftedAt: payload.LiftedAt != nil,
-			},
 		}
 		return func(ctx context.Context, registrar *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
 			return registrar.RegisterAvailabilityAdjustment(ctx, command)
 		}, nil
 	case kindRouteStrategy:
-		var payload strategyPayload
-		if err := decodeStrict(raw, &payload); err != nil {
-			return nil, err
-		}
-		tenant, err := domain.NewTenantID(payload.TenantID)
+		command, err := registrationjson.RouteStrategyVersionFromJSON(raw)
 		if err != nil {
 			return nil, err
-		}
-		form := domain.RankingFormUndeclared
-		if payload.RankingForm != nil {
-			if form, err = domain.RankingFormFrom(*payload.RankingForm); err != nil {
-				return nil, err
-			}
-		}
-		command := application.RegisterRouteStrategyVersionCommand{
-			TenantID: tenant,
-			Strategy: ports.RouteStrategyDefinitionVersion{
-				Code:            payload.Code,
-				Version:         payload.Version,
-				ApplicableScope: payload.ApplicableScope,
-				RankingForm:     form,
-				EffectiveFrom:   payload.EffectiveFrom,
-				EffectiveTo:     timeOf(payload.EffectiveTo),
-				HasEffectiveTo:  payload.EffectiveTo != nil,
-			},
 		}
 		return func(ctx context.Context, registrar *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
 			return registrar.RegisterRouteStrategyVersion(ctx, command)
@@ -442,89 +308,6 @@ func timeOf(value *time.Time) time.Time {
 		return time.Time{}
 	}
 	return *value
-}
-
-// 七族登记行的 JSON 形状。可选终点用指针表达「不在场」——零时刻是合法的绝对时刻，
-// 不能兼作「没有终点」。
-
-type nodePayload struct {
-	TenantID         string     `json:"tenant_id"`
-	Code             string     `json:"code"`
-	Version          int32      `json:"version"`
-	BusinessTimezone string     `json:"business_timezone"`
-	EffectiveFrom    time.Time  `json:"effective_from"`
-	EffectiveTo      *time.Time `json:"effective_to"`
-}
-
-type connectionPayload struct {
-	TenantID         string     `json:"tenant_id"`
-	Code             string     `json:"code"`
-	Version          int32      `json:"version"`
-	FromNode         string     `json:"from_node"`
-	ToNode           string     `json:"to_node"`
-	BusinessTimezone string     `json:"business_timezone"`
-	EffectiveFrom    time.Time  `json:"effective_from"`
-	EffectiveTo      *time.Time `json:"effective_to"`
-}
-
-type linePayload struct {
-	TenantID         string     `json:"tenant_id"`
-	Code             string     `json:"code"`
-	Version          int32      `json:"version"`
-	Segments         []string   `json:"segments"`
-	BusinessTimezone string     `json:"business_timezone"`
-	ApplicableScope  string     `json:"applicable_scope"`
-	EffectiveFrom    time.Time  `json:"effective_from"`
-	EffectiveTo      *time.Time `json:"effective_to"`
-}
-
-type areaPayload struct {
-	TenantID      string     `json:"tenant_id"`
-	Code          string     `json:"code"`
-	Version       int32      `json:"version"`
-	EffectiveFrom time.Time  `json:"effective_from"`
-	EffectiveTo   *time.Time `json:"effective_to"`
-	// Coverage 缺席即这版没登覆盖；给了就由受理门按覆盖文法与节点角色逐格核。
-	Coverage *areaCoveragePayload `json:"coverage"`
-}
-
-type areaCoveragePayload struct {
-	Country          string   `json:"country"`
-	PostalPrefixes   []string `json:"postal_prefixes"`
-	OriginNodes      []string `json:"origin_nodes"`
-	DestinationNodes []string `json:"destination_nodes"`
-}
-
-type calendarPayload struct {
-	TenantID      string     `json:"tenant_id"`
-	TargetKind    string     `json:"target_kind"`
-	TargetCode    string     `json:"target_code"`
-	Version       int32      `json:"version"`
-	EffectiveFrom time.Time  `json:"effective_from"`
-	EffectiveTo   *time.Time `json:"effective_to"`
-}
-
-type adjustmentPayload struct {
-	TenantID    string     `json:"tenant_id"`
-	Code        string     `json:"code"`
-	Version     int32      `json:"version"`
-	TargetKind  string     `json:"target_kind"`
-	TargetCode  string     `json:"target_code"`
-	Kind        string     `json:"kind"`
-	Source      string     `json:"source"`
-	EffectiveAt time.Time  `json:"effective_at"`
-	LiftedAt    *time.Time `json:"lifted_at"`
-}
-
-type strategyPayload struct {
-	TenantID        string     `json:"tenant_id"`
-	Code            string     `json:"code"`
-	Version         int32      `json:"version"`
-	ApplicableScope string     `json:"applicable_scope"`
-	EffectiveFrom   time.Time  `json:"effective_from"`
-	EffectiveTo     *time.Time `json:"effective_to"`
-	// RankingForm 缺席即这一版没有声明排序形态；给了就必须是族内的词，空词同样拒。
-	RankingForm *string `json:"ranking_form"`
 }
 
 // autoRerouteFactsPayload 是四条件事实登记行的 JSON 形状。判断键六维逐个到达——键是
