@@ -68,13 +68,17 @@ func (document partyIdentityBatchDocument) itemCount() int {
 		len(document.CustomerAccounts) + len(document.Relationships)
 }
 
-// exactlyOne 是五口共用的形状门：本口恰一项、整份外壳也恰一项（即没有别的口的项）。一次一笔——本端点一次只收
-// 一项，批走受控 CLI，零项与多项都不是这一口的形状。
 func (document partyIdentityBatchDocument) exactlyOne(line string, own int) error {
+	return exactlyOneItem(line, own, document.itemCount())
+}
+
+// exactlyOneItem 是本包在线登记口共用的形状门：本口恰一项、整份外壳也恰一项（即没有别的口的项）。一次一笔——在线口
+// 一次只收一项，批走受控 CLI，零项与多项都不是这一口的形状。total 是外壳里全部口的项数。
+func exactlyOneItem(line string, own, total int) error {
 	if own != 1 {
 		return fmt.Errorf("%w: %s must carry exactly one item, got %d", ErrMalformedRequest, line, own)
 	}
-	if document.itemCount() != 1 {
+	if total != 1 {
 		return fmt.Errorf("%w: this endpoint only takes %s; items for other lines must be posted to their own endpoints", ErrMalformedRequest, line)
 	}
 	return nil

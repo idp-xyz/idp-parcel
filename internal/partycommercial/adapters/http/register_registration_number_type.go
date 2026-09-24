@@ -13,9 +13,9 @@ import (
 
 // RegistrationNumberTypeRegistrationIntake 把一次已认证的接入请求翻译成类型修订登记命令。
 //
-// 两个 Intake 都是接口而不是本包内的解析代码（ADR-0085 Decision 二，机制同 ADR-0055）：操作者认证
-// 归操作者渠道（ADR-0100），其真 Intake 未就位；采信请求自称的 tenantId 会穿透 ADR-0003 的隔离边界。未决
-// 期间本包不带任何实现，装配点挂 UnconfiguredIntake。
+// 两个 Intake 都是接口（ADR-0085 Decision 二，机制同 ADR-0055）：租户格只能来自认证结果——采信请求自称的
+// tenantId 会穿透 ADR-0003 的隔离边界。真实现是操作者渠道的 OperatorRegistryIntake（ADR-0100），译装与受控
+// CLI 共用 registrationjson 那一份。
 type RegistrationNumberTypeRegistrationIntake interface {
 	IntakeRegistrationNumberTypeRegistration(
 		ctx context.Context,

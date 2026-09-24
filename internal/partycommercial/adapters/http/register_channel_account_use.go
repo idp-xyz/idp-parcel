@@ -15,9 +15,9 @@ import (
 
 // ChannelAccountUseRegistrationIntake 把一次已认证的接入请求翻译成使用授权登记命令。
 //
-// 与本包其余 Intake 同样只是接口、本包不带实现（ADR-0085 Decision 二）：载荷翻译与操作者
-// 认证归操作者渠道（ADR-0100），其真 Intake 未就位；采信批文自称的 tenantId 会穿透 ADR-0003 的隔离
-// 边界。未决期间不带任何实现，包括「开发用」的采信头部版本。
+// 与本包其余 Intake 同样是接口（ADR-0085 Decision 二）：租户格只能来自认证结果，采信请求自称的
+// tenantId 会穿透 ADR-0003 的隔离边界。真实现是操作者渠道的 OperatorRegistryIntake（ADR-0100）；
+// 本族没有受控 CLI，载荷只有在线那一份（channel_account_use_payload.go）。
 //
 // 这一族比别族更不能开那个口子：它登的恰恰是「谁获准使用别人的渠道账号」，一个采信自报身份
 // 的 Intake 等于让请求方自己声明自己被授权了，而 ADR-0039 整篇讲的就是这件事不成立。

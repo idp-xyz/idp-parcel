@@ -58,6 +58,18 @@ func writeRegistrationIntakeProblem(response http.ResponseWriter, err error) {
 		writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
 		return
 	}
+	if errors.Is(err, ErrOperatorCredentialRejected) {
+		writeProblem(response, http.StatusUnauthorized, codeOperatorCredentialRejected)
+		return
+	}
+	if errors.Is(err, ErrOperatorNotGranted) {
+		writeProblem(response, http.StatusForbidden, codeOperatorNotGranted)
+		return
+	}
+	if errors.Is(err, ErrIdentityDependencyUnavailable) {
+		writeProblem(response, http.StatusServiceUnavailable, codeIdentityDependencyUnavailable)
+		return
+	}
 	// 解码收齐的逐格问题（运营操作者面载荷，ADR-0126 Decision 四）仍是「请求畸形」——改载荷才会好——只是多告诉
 	// 调用方哪几格；与光秃秃的 400 走同一格、同一个码，响应体多一节 problems。
 	var problems *PublicationPayloadProblems
