@@ -1,7 +1,7 @@
 # 07 可达性证据从版本化网络目录折出：视图修订、服务区域、候选与可执行性
 
 Category: enhancement
-Status: resolved——2026-09-24 通道 5 续做完成（单 task-67538d38，接封存笔 `f125ea1c`），分支 `mcp5-rfc07` 代码 tip `0a33cb16`、清点 `8feddbc9`，待非作者评审后重放；完成记录见文末。此前：in-progress——2026-09-24 通道 5 认领（单 task-2c47b04e-3fa8-4f06-8bc2-4d9ba6d00936），分支 `mcp5-rfc07` 基 `f9fffabe`；迁移号预留 network_routing `0011`。再此前：ready-for-agent
+Status: resolved · 已进 main——2026-09-24 通道 5 自行代行推送方以 merge commit `f2645d86` 合入 main（合并基 `537db8c1`；分支 `mcp5-rfc07` tip `e776cbd1` 原样进 main，SHA 不换）。评审只有作者自审、没有非作者评审（用户答「没有其他人帮你了，你自决吧」，隔离评审子代理不可用），非作者评审仍欠着；见 Comments「进 main 记录」。续做完成于单 task-67538d38（接封存笔 `f125ea1c`），代码 tip `0a33cb16`、清点 `8feddbc9`；完成记录见文末。此前：in-progress——2026-09-24 通道 5 认领（单 task-2c47b04e-3fa8-4f06-8bc2-4d9ba6d00936），分支 `mcp5-rfc07` 基 `f9fffabe`；迁移号预留 network_routing `0011`。再此前：ready-for-agent
 Blocked by: 02
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「接路由证据取数侧」那一步（可达性一侧）
 地盘：network-routing 目录的内容列（服务区域覆盖、节点对区域的覆盖等，新迁移，号开工时在频道预留）、目录登记口、postgres 取数侧、证据视图端口；[ADR-0068](../../../docs/adr/0068-versioned-network-catalog-structure-precedes-rule-content.md) 状态行与两处护栏注释（`0008` 迁移头注、目录适配器 `NetworkCatalog` 的类型注释）。
@@ -88,3 +88,11 @@ Blocked by: 02
   - **Standards · 阻断**：无。**非阻断（已修）**：新写的几处注释数了别处的东西——「两个证据视图共用」「读侧两个端口在 catalog_read.go」「两处共用同一个来源」「覆盖四列（迁移 0011）」等，违反 AGENTS.md「改文档」一节「计数与行号同构」；改成点名（「可达性与初始路由」「覆盖各列」），计数只留本声明内的（`serviceAreaCoverageColumns` 的四个返回值、拒收原因枚举紧挨着的四格）与 ADR 自己的术语（三格、三路）。**非阻断（留）**：`joinSortedUnique` 用切片原地去重的惯用法，读的人要想一下别名，但正确；引用串（`线路码@版本`、`LINE/…`、`ADJUSTMENT/…`）是字符串拼写，与本上下文「引用而非自由文本」的既有写法一致，不另立类型。
   - **Spec · 阻断**：无。**非阻断（留，均已在完成记录判断项里写明）**：ADR-0148 决定一「端口取回的事实各自带出处」在关务一格未落（出处形状取决于 12 第 4 问）；所携投影的版本化摘要未进判断记录（ADR-0075 决定三，归 08 完成判据）；PS 适配器测试替身改了签名（「不改 PS」按行为读，签名随端口必改）；`0008` 头注改由 `0011` 头注承载（checksum）。**核过、站得住**：首版候选按「首节点服务某始发区域、末节点服务某交付区域」生成而不按所携地址筛——若按地址筛，区域都不覆盖目的地时候选空间为空只能停在未形成判断，而 UC-NR-002 矩阵行 5 / `AT-NR-023` 要的是`不可达`带排除依据；缺版本上抛与 logical_path「刻意没有未知格」、矩阵行 7 一致。
   - 修复与本条同笔提交，只动注释；`go build ./...`、NR 与 CLI 包 vet / test 复跑为绿。
+
+### 进 main 记录（推送方 · 通道 5 自行代行）
+
+- **门**：只有上一条作者自审（两轴无阻断）；非作者评审未取得，照实记，不当成已过。代行推送的依据是用户在 IDP 队列那句「没有其他人帮你了，你自决吧」。
+- **合入方式**：merge commit，不 cherry-pick。分支上已有一笔 merge（`26e237a5` 合入 main `443a472e`），逐笔重放会让封存笔 `f125ea1c` 在登记拒收原因枚举处再撞一次；merge 让分支 SHA 原样进 main，`git merge-base --is-ancestor e776cbd1 main` 答得出「合了没」。先例：main 上 `b394adf4`、`f47f6983` 两笔合入。
+- **合并**：隔离检出 `/tmp/idp-land-rfc07`，main `537db8c1` 之上 `git merge --no-ff e776cbd1`，得 `f2645d86`。唯一冲突是生成物 `docs/product/MECHANISM-INVENTORY.md`，在合并树上重生成解决，随合并笔落；分支清点笔 `8feddbc9` 的数字因此被覆盖（main 在 `443a472e` 之后多了 access_identity 模块，迁移总数 181 → 182）。其余文件（含 `docs/adr/README.md`、本票面）自动合上。
+- **验证**（钉 `f2645d86`，DSN 已设，先单跑真库用例 `TestReachabilityOverARealCatalogAnswersUnconfigured` 为 PASS 非 SKIP）：`gofmt -l` 无输出、`go build ./...` 0、`go vet ./...` 0；`go test -p 1 -count=1 ./...` 全量 120 ok / 0 FAIL / 15 无测试文件，耗时 2 分 2 秒。
+- **推送**：推前 `ls-remote origin main` = `537db8c1`（与合并基一致），`git push origin f2645d86:main`；这一推发布的是本票 10 笔（认领、开工设计、之一、封存、分支合入、之二、之三、清点、完成记录、自审修复）加合并笔，共 11 笔，没有别人的提交。共享树 `main` 随后快进到 `f2645d86`，树上用户本地的 `.cursor/` 改动原样留着。
