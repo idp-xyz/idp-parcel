@@ -1,7 +1,7 @@
 # 01 `internal/platform` 共用件：游标编解码、查询参数校验、答复 `page` 拼装
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——2026-09-24 通道 2 认领（派单 `task-44d76717` ← 通道 3），隔离 worktree 分支 `mcp2-crp01`，基于本笔
 Blocked by: 无
 地盘：新包 `internal/platform/<名自定，如 cataloguepage>/` 与其测试。不碰任何上下文包。
 出处：[ADR-0144](../../../docs/adr/0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 决定一、三、四、五、七。
