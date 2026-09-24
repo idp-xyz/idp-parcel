@@ -147,18 +147,18 @@ type RegistrationNumberTypeStatus uint8
 
 const (
 	RegistrationNumberTypeStatusInvalid RegistrationNumberTypeStatus = iota
-	RegistrationNumberTypeRegistered
-	RegistrationNumberTypeEffective
-	RegistrationNumberTypeDeactivated
+	RegistrationNumberTypeStatusRegistered
+	RegistrationNumberTypeStatusEffective
+	RegistrationNumberTypeStatusDeactivated
 )
 
 func (status RegistrationNumberTypeStatus) String() string {
 	switch status {
-	case RegistrationNumberTypeRegistered:
+	case RegistrationNumberTypeStatusRegistered:
 		return "REGISTERED"
-	case RegistrationNumberTypeEffective:
+	case RegistrationNumberTypeStatusEffective:
 		return "EFFECTIVE"
-	case RegistrationNumberTypeDeactivated:
+	case RegistrationNumberTypeStatusDeactivated:
 		return "DEACTIVATED"
 	default:
 		return ""
@@ -201,12 +201,12 @@ func (lifecycle RegistrationNumberTypeLifecycle) StatusAt(at time.Time) Registra
 		return RegistrationNumberTypeStatusInvalid
 	}
 	if !lifecycle.deactivatedAt.IsZero() && !at.Before(lifecycle.deactivatedAt) {
-		return RegistrationNumberTypeDeactivated
+		return RegistrationNumberTypeStatusDeactivated
 	}
 	if !at.Before(lifecycle.effectiveFrom) {
-		return RegistrationNumberTypeEffective
+		return RegistrationNumberTypeStatusEffective
 	}
-	return RegistrationNumberTypeRegistered
+	return RegistrationNumberTypeStatusRegistered
 }
 
 func (lifecycle RegistrationNumberTypeLifecycle) EffectiveFrom() time.Time {
@@ -441,7 +441,7 @@ func (catalogue RegistrationNumberTypeCatalogue) Check(
 	if numberType.spec.Layer != layer {
 		return answer(RegistrationNumberLayerMismatch)
 	}
-	if numberType.lifecycle.StatusAt(at) != RegistrationNumberTypeEffective {
+	if numberType.lifecycle.StatusAt(at) != RegistrationNumberTypeStatusEffective {
 		return answer(RegistrationNumberTypeNotEffective)
 	}
 	if !numberType.spec.Format.matches(number) {

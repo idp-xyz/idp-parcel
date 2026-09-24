@@ -202,13 +202,13 @@ func TestRegistrationNumberTypeDeactivationFormsTheNextRevision(t *testing.T) {
 	if next.Revision() != 2 {
 		t.Fatalf("停用修订 = %d, want 2", next.Revision())
 	}
-	if got := next.Lifecycle().StatusAt(deactivatedAt.Add(-time.Second)); got != domain.RegistrationNumberTypeEffective {
+	if got := next.Lifecycle().StatusAt(deactivatedAt.Add(-time.Second)); got != domain.RegistrationNumberTypeStatusEffective {
 		t.Fatalf("停用前一刻状态 = %s, want EFFECTIVE", got)
 	}
-	if got := next.Lifecycle().StatusAt(deactivatedAt); got != domain.RegistrationNumberTypeDeactivated {
+	if got := next.Lifecycle().StatusAt(deactivatedAt); got != domain.RegistrationNumberTypeStatusDeactivated {
 		t.Fatalf("停用时点状态 = %s, want DEACTIVATED", got)
 	}
-	if got := registration.Lifecycle().StatusAt(registrationTypeEffectiveFrom.Add(-time.Second)); got != domain.RegistrationNumberTypeRegistered {
+	if got := registration.Lifecycle().StatusAt(registrationTypeEffectiveFrom.Add(-time.Second)); got != domain.RegistrationNumberTypeStatusRegistered {
 		t.Fatalf("生效前状态 = %s, want REGISTERED", got)
 	}
 	if gotBasis, gotAt, has := next.Lifecycle().Deactivation(); !has || gotBasis != basis || !gotAt.Equal(deactivatedAt) {

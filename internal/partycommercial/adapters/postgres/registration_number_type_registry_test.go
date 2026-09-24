@@ -124,21 +124,21 @@ func TestRegistrationNumberTypeRegistersRevisesAndDeactivates(t *testing.T) {
 
 	first := registrationTypeFixture(t, "tenant-1", "XA", "SYN-LIFETIME", 1,
 		domain.RegistrationNumberIdentityLayer, `SYN-[0-9]{6}`)
-	if outcome := saveRegistrationType(t, transactor, types, first); outcome != ports.RegistrationNumberTypeSaved {
+	if outcome := saveRegistrationType(t, transactor, types, first); outcome != ports.RegistrationNumberTypeRegistrySaved {
 		t.Fatalf("修订 1 = %s, want SAVED", outcome)
 	}
-	if outcome := saveRegistrationType(t, transactor, types, first); outcome != ports.RegistrationNumberTypeAlreadyRegistered {
+	if outcome := saveRegistrationType(t, transactor, types, first); outcome != ports.RegistrationNumberTypeRegistryAlreadyRegistered {
 		t.Fatalf("重放修订 1 = %s, want ALREADY_REGISTERED", outcome)
 	}
 	conflicting := registrationTypeFixture(t, "tenant-1", "XA", "SYN-LIFETIME", 1,
 		domain.RegistrationNumberIdentityLayer, `SYN-[0-9]{7}`)
-	if outcome := saveRegistrationType(t, transactor, types, conflicting); outcome != ports.RegistrationNumberTypeContentConflict {
+	if outcome := saveRegistrationType(t, transactor, types, conflicting); outcome != ports.RegistrationNumberTypeRegistryContentConflict {
 		t.Fatalf("同修订异内容 = %s, want CONTENT_CONFLICT", outcome)
 	}
 
 	corrected := registrationTypeFixture(t, "tenant-1", "XA", "SYN-LIFETIME", 2,
 		domain.RegistrationNumberIdentityLayer, `SYN-[0-9]{8}`)
-	if outcome := saveRegistrationType(t, transactor, types, corrected); outcome != ports.RegistrationNumberTypeSaved {
+	if outcome := saveRegistrationType(t, transactor, types, corrected); outcome != ports.RegistrationNumberTypeRegistrySaved {
 		t.Fatalf("修订 2 = %s, want SAVED", outcome)
 	}
 	loaded, found, err := types.LoadLatestRegistrationNumberType(ctx, tenant, country, code)
@@ -162,7 +162,7 @@ func TestRegistrationNumberTypeRegistersRevisesAndDeactivates(t *testing.T) {
 	if err != nil {
 		t.Fatalf("deactivate: %v", err)
 	}
-	if outcome := saveRegistrationType(t, transactor, types, retired); outcome != ports.RegistrationNumberTypeSaved {
+	if outcome := saveRegistrationType(t, transactor, types, retired); outcome != ports.RegistrationNumberTypeRegistrySaved {
 		t.Fatalf("停用修订 = %s, want SAVED", outcome)
 	}
 	loaded, found, err = types.LoadLatestRegistrationNumberType(ctx, tenant, country, code)
@@ -207,7 +207,7 @@ func TestRegistrationNumberTypeLookupRefusesLayerFormatAndUnregisteredCountry(t 
 		registrationTypeFixture(t, "tenant-1", "XA", "SYN-TAX", 1,
 			domain.RegistrationNumberProfileLayer, `SYN-TAX-[0-9]{4}`),
 	} {
-		if outcome := saveRegistrationType(t, transactor, types, registration); outcome != ports.RegistrationNumberTypeSaved {
+		if outcome := saveRegistrationType(t, transactor, types, registration); outcome != ports.RegistrationNumberTypeRegistrySaved {
 			t.Fatalf("登记 %s r%d = %s, want SAVED", registration.Code(), registration.Revision(), outcome)
 		}
 	}
@@ -250,7 +250,7 @@ func TestRegistrationNumberTypeRegistryIsTenantScoped(t *testing.T) {
 
 	own := registrationTypeFixture(t, "tenant-1", "XA", "SYN-LIFETIME", 1,
 		domain.RegistrationNumberIdentityLayer, `SYN-[0-9]{6}`)
-	if outcome := saveRegistrationType(t, transactor, types, own); outcome != ports.RegistrationNumberTypeSaved {
+	if outcome := saveRegistrationType(t, transactor, types, own); outcome != ports.RegistrationNumberTypeRegistrySaved {
 		t.Fatalf("登记 = %s, want SAVED", outcome)
 	}
 
