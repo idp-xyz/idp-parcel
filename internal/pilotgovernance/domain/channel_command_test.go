@@ -14,6 +14,7 @@ func TestChannelCommandRoundTripsThroughItsCommandLineSpelling(t *testing.T) {
 		domain.ChannelCommandAuthorityInterval,
 		domain.ChannelCommandSuspend,
 		domain.ChannelCommandResume,
+		domain.ChannelCommandStageReview,
 	} {
 		parsed, ok := domain.ParseChannelCommand(command.String())
 		if !ok || parsed != command {
@@ -26,7 +27,7 @@ func TestChannelCommandRoundTripsThroughItsCommandLineSpelling(t *testing.T) {
 }
 
 func TestChannelCommandRefusesWordsOutsideTheClosedSet(t *testing.T) {
-	for _, text := range []string{"", "takeover", "stage-review", "Suspend", " suspend"} {
+	for _, text := range []string{"", "takeover", "stage_review", "Stage-Review", "Suspend", " suspend"} {
 		if parsed, ok := domain.ParseChannelCommand(text); ok || parsed != domain.ChannelCommandInvalid {
 			t.Fatalf("%q 被译成 %v（ok=%v）；集合外的词不得进留痕", text, parsed, ok)
 		}
