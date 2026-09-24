@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
 // 票 tf-segment-lifecycle-closure/07 的第三个写面：运输运营形成装载分配（UC-TF-003/004 运输准备）。
@@ -71,4 +72,33 @@ func writeLoadAssignmentOutcome(response http.ResponseWriter, result application
 		status = http.StatusCreated
 	}
 	writeJSON(response, status, body)
+}
+
+// LoadAssignmentPayload 是装载分配登记口的线格式（票 operator-channel/15 定；此前本口只挂未配置、没有线格式）。
+// 载荷只有内容、没有身份：租户从信封来，载荷带租户即拒（封闭解码）。字段照命令逐格取，时刻照 ADR-0023 由提交方给。
+type LoadAssignmentPayload struct {
+	Assignment string   `json:"assignment"`
+	Schedule   string   `json:"schedule"`
+	Members    []string `json:"members"`
+	Version    string   `json:"version"`
+	AssignedAt string   `json:"assignedAt"`
+}
+
+// Command 把载荷连同信封给的租户翻成装载分配命令。时刻解不出是坏报文（400）；分配成不成立由编排答。
+func (payload LoadAssignmentPayload) Command(tenant domain.TenantID) (application.FormLoadAssignmentCommand, error) {
+	if tenant.String() == "" {
+		return application.FormLoadAssignmentCommand{}, ErrOperatorIdentityMissing
+	}
+	assignedAt, err := parseOptionalInstant("assignedAt", payload.AssignedAt)
+	if err != nil {
+		return application.FormLoadAssignmentCommand{}, err
+	}
+	return application.FormLoadAssignmentCommand{
+		TenantID:   tenant,
+		Assignment: payload.Assignment,
+		Schedule:   payload.Schedule,
+		Members:    append([]string(nil), payload.Members...),
+		Version:    payload.Version,
+		AssignedAt: assignedAt,
+	}, nil
 }

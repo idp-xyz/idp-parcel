@@ -97,3 +97,24 @@ func writeParticipationTerminationOutcome(response http.ResponseWriter, answer p
 	}
 	writeJSON(response, status, body)
 }
+
+// ParticipationTerminationPayload 是明确终止口的线格式（票 operator-channel/15 定；此前本口只挂未配置、没有线格式）。
+// 载荷只有内容、没有身份：租户从信封来，载荷带租户即拒。Basis 指向本上下文之外的处置决定，只能由调用方给。
+type ParticipationTerminationPayload struct {
+	Segment string `json:"segment"`
+	Object  string `json:"object"`
+	Basis   string `json:"basis"`
+	EndedAt string `json:"endedAt"`
+}
+
+// Termination 把载荷连同信封给的租户翻成一次明确终止。时刻解不出是坏报文（400）。
+func (payload ParticipationTerminationPayload) Termination(tenant domain.TenantID) (ParticipationTermination, error) {
+	if tenant.String() == "" {
+		return ParticipationTermination{}, ErrOperatorIdentityMissing
+	}
+	endedAt, err := parseOptionalInstant("endedAt", payload.EndedAt)
+	if err != nil {
+		return ParticipationTermination{}, err
+	}
+	return ParticipationTermination{TenantID: tenant, Segment: payload.Segment, Object: payload.Object, Basis: payload.Basis, EndedAt: endedAt}, nil
+}
