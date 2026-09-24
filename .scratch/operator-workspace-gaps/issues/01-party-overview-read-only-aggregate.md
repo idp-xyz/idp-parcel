@@ -1,7 +1,7 @@
 # 01 参与方全景（只读聚合）：在参与方详情抽屉里回答「它对我们是什么」
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-09-25 通道 3 按 workflow「前端切片」在共享树 `main` 上顺序做完，完成记录见文末
 Blocked by: 无
 地盘：`apps/admin-web/src/pages/party/BusinessPartiesPage.tsx`（只动 `BusinessPartyDrawer` 与把关系册答案传进抽屉的那几行）、
 新文件 `apps/admin-web/src/pages/party/party-overview.ts`（纯逻辑 + node:test）与 `PartyOverviewSection.tsx`。
@@ -42,3 +42,34 @@ Blocked by: 无
 - 纯逻辑单测覆盖五段关联（含方向两种、悬空名称、正文未登记的协议壳）与段状态（五种答案 × 零条 / 有条）。
 - 三道门退 0：`node node_modules/typescript/bin/tsc -b --noEmit`、`node scripts/run-tests.mjs`、`pnpm exec vite build`。
 - 本机对真 parcel-api（`SYN-TENANT-01`，只读）打开抽屉截图：至少一段有记录、一段零条或未配置，四态照实。
+
+## 完成记录（2026-09-25 · 通道 3）
+
+**落点**（`main` 上的 SHA；其间穿插别的会话三笔，均只碰 Go 或文档）：`209176fa` 立票，`a61c7f5b` 判读 `party-overview.ts` + node:test，
+`c8926c8a` 组件 `PartyOverviewSection.tsx` 与 `BusinessPartyDrawer` 分签接线，本记录随收口一笔。没有碰 `templates/*`、`shell/*`、
+`components/*` 这类共享面，按 workflow「前端切片」第 5 条业务页自查即可，不另要评审。
+
+**判据逐条**
+
+- ✅ 纯逻辑单测：`party-overview.test.ts` 八条——关系段两种方向与排序、已生效角色摘要（候选 / 撤销不进、词表外的码原样保留）、
+  供应商协议正文未登记的版本壳不归任何参与方、客户账户、责任法人、结算政策按客户相对方、段状态逐一对应读口五种结果加读取中与册种不符、
+  计数只在业务答案下报数。每条先红后绿。
+- ✅ 三道门：`tsc -b --noEmit` 退 0；`run-tests` 451/451；`vite build` 退 0（大于 500 kB 的块告警是 README「已知跟进」里的旧告警）。
+  在共享树上跑；admin-web 目录无他人在途改动，与 `c8926c8a` 的 admin-web 内容逐字节相同。
+- ✅ 本机真后端实测：parcel-api 从 `origin/main` `53d537cc` 的干净 detached 工作树构建，只开隔离读（`SYN-TENANT-01`，不开写）；
+  演示库 `postgres@127.0.0.1:55432` 原为空库，用 `scripts/demo-seeds/seed.sh` 首灌（不带 `--reset`）；管理台构建产物经本机代理
+  （`/api` → parcel-api）由 Windows Chrome 无头打开、按行点开抽屉截图。先直接读五个读口、独立算出每个参与方的全景，再拿页面对：
+  `SYN-PARTY-SHIPPER-01` 为「作为持有方：客户」、关系 1 · 客户账户 1（`SYN-ACCOUNT-01`）· 责任法人 0 · 供应商协议 0 · 结算政策 1
+  （`SYN-SETTLEMENT-PREPAID-01@v1` 预付）；`SYN-PARTY-OPERATOR-01` 为「作为相对方：客户」（候选的承运商代理关系照列、不进摘要）、
+  关系 2 · 责任法人 1（`SYN-LE-01`，注册国家 CN）——逐格一致。种子里两份供应商协议都是正文未登记的版本壳，页面如实一条不归。
+  「身份与修订」签原有各格与修订历史照旧。
+- ✅ 段级四态：在取证代理上对三口注入故障（供应商协议答 403 `ACCESS_CHANNEL_NOT_CONFIGURED`、法人答 503 `NO_ANSWER_FORMED`、
+  结算政策回显 `CREDIT_POLICY`）：三段分别显未配置句、区块级可重试错误、册种不符已丢弃，其余两段照常，顶部摘要三段报「—」。
+
+**取证方式要说清的一格**：管理台最外层有 OIDC 登录门（`gk.idp.xyz`），无头浏览器没有凭据。`oidc.ts` 头注写明令牌今天不随 `/api`
+外送、后端准入只看隔离读，所以登录门与本票无关；取证副本（`/tmp`，不入库）在页面加载前往 sessionStorage 注入一份会话桩绕过它。
+仓内代码与登录路径一行未动。
+
+**未验**：真登录路径下的同一流程（登录门未改，未重走）；窄屏布局；远端 CI——`main` 上本票三笔之下压着别的会话尚未推送的
+`71e41e6d`、`70107171`、`67d51dfd`，推 `c8926c8a` 会连它们一起发布；已于 00:4x 在频道问作者，得到同意或对方先推之后再推，
+推后看 `gh run list -b main -L 1`。
