@@ -1,7 +1,7 @@
 # 03 法人资料修订链与按时点解析（含「资料不全」答复）
 
 Category: enhancement
-Status: resolved——2026-09-24 通道 3 在分支 `mcp3-lep03` 上做完（基 `mcp3-lep02` tip `91949459`；代码 tip `4b9811fe`），分支已推 origin。进 main 由推送方安排非作者评审后重放，只取本票的笔：`4ea41a98` 至 `4b9811fe` 与本笔票面；`f52c15bb` 是 main 上认领笔 `60d37d65` 的拣入，重放时为空。02 已进 main（`f2c8cd57`），本分支尚未挪到 main 上。迁移编号占 party-commercial `0036`（`0035` 属 catalogue-read-pagination/02）。完成记录见文末
+Status: resolved · 已进 main——2026-09-24 评审 ← 通道 5 可接受（无阻断，派单 `task-b5798673`）；推送方（通道 1）重放进 main：代码笔 `aa099067` / `144e7601` / `24a1f315` / `d8930945` / `a2e9e881` / `1994fc11` / `37635f49` / `e868d777` / `caaf7a9c`，票面 `3ce62fb2`，清点 `4e7ed6b6`；分支 `mcp3-lep03`（代码 tip `ecdfbdf1`、票面 tip `bcbf217c`）作封存出处，新旧 SHA 对照见 Comments「进 main 记录」。迁移编号占 party-commercial `0036`（`0035` 属 catalogue-read-pagination/02）。完成记录与评审原文见下文
 Blocked by: 02
 地盘：party-commercial 新增的法人资料（领域、应用、端口、postgres 与 http 适配器），`migrations/` 下 party-commercial 模块的新迁移，演示种子。
 出处：[ADR-0145](../../../docs/adr/0145-legal-entity-attributes-split-into-identity-layer-and-dated-profile.md) 决定三、五、六；CONTEXT「法人资料」词条、Rules 中法人资料修订与
@@ -75,3 +75,28 @@ Blocked by: 02
 - 本分支基于 lep02 旧 tip `91949459`；02 已进 main（`f2c8cd57`），重放前要把本分支挪到 main 上、只取本票的笔。机制清点两边都重生成过，挪时按新 tip 再生成。
 - 演示种子里注册号类型目录与 `SYN-LE-01` 那一行，票 product-strategy-boundary/03（通道 4）也要动：资料种子依赖 `CN` 资料层 `SYN-CN-TAX` 与 `SYN-LE-01` 身份层国家 `CN`，已告知通道 4。
 - `scripts/demo-seeds/seed.sh` 在 git 里是 `100644`，README 写的 `./scripts/demo-seeds/seed.sh` 在 Linux 上报 permission denied，要用 `bash` 调；既有问题，不在本票改。
+
+## Comments
+
+### 评审 ← 通道 5 · 钉 `ecdfbdf1`（基 `91949459`，只读，门禁未重跑） · 2026-09-24 17:4x（派单 `task-b5798673`，推送方自任务报告代落原文）
+
+**Standards** — 阻断：无。非阻断：无。判号拒因抽成 `application.registrationNumberRefusal`、身份与资料两处共用，身份层各格文案逐字未变；新增 Go / SQL 注释无行号、无条目序号引用；新读口 `NewQueryLegalEntityProfileRevisionsEndpoint` 的 405 / 400 / 500 与既有 `query_legal_entity_revisions.go` 同形；夹具 `party-acme` 沿用 `cmd/parcel-commercial/register_parties_test.go` 既有写法，号与依据全为 `SYN-`。
+
+**Spec** — 阻断：无。非阻断：
+1. `RegisterLegalEntityProfileHandler.checkSuccessor` 对身份层未登记的历史法人拒收资料（续办：先登带身份层的法人修订）。合 ADR-0145 决定三「注册地址的国家 / 地区必须与身份上的注册国家 / 地区一致」，但与决定六「法人可以先登记、后补资料」合读时，历史法人要先补身份层才能补资料——判断项没写，宜补一条。
+
+结论：可接受。
+
+逐点：
+① ✓ `domain.ResolveLegalEntityProfile` 在「生效时点不晚于解析时点」的修订里取修订号最大者，正合 PC CONTEXT Lifecycles「后一修订生效时，前一修订自该时点起不再参与新的解析」（判断项 1 站得住）；未来生效者生效前跳过；资料不全两成因各成一格、不退回前一笔、不补默认（决定六）；法人未登记 / 未生效 / 已停用按解析时点分格；开立方固定 `Reference()`，行不可改（决定五）。票面「按时点解析端口」落为应用用例 `ResolveLegalEntityProfileHandler`，开立方接入时按 ADR-0025 在消费方开口，完成记录已写。登记侧：首笔须为 1、修订连续、法人在册且未停用、地址国家对身份、税号按目录资料层在资料生效时点判，重放照册面比对。
+② ✓ 0036 主键租户 + 法人 + 修订，无状态列、无「当前修订」；CHECK 过三值逻辑（`invoice_title IS NULL OR …`），数组形状、国家形状镜像 `RegistrationCountryCode`；无 CR、无 BOM（按入库字节量）。
+③ ✓ 写口只放 POST，`cmd/parcel-api` 端点表挂字面量 `commercialhttp.UnconfiguredIntake{}`（已核装配行）；读口挂商业目录 Intake，失败形同既有修订历史读口。
+④ ✓ `cmd/parcel-api` 端点两行、事务壳、未接线占位与测试表，`cmd/parcel-commercial` 新子命令，均为装配所需。
+⑤ ✓ 种子 `SYN-TENANT-01` / `SYN-LE-01` / `SYN-CN-TAX-0001`，文字值标「（演示）」、邮箱 `example.invalid`，同 `register-parties.json` 先例。
+⑥ ✓ 相容：本分支对 `register_party_identity.go` 只把 `checkLifetimeNumbers` 的拒因 switch 换成 `registrationNumberRefusal`（身份层文案逐字同，含「在法人生效时点 … 不在用」）；main 上的修复 `f4dff29b` 改的是 `RegisterLegalEntity` 的 `WithIdentityLayer` 出口与 `identityCorrectionRefusal`，不同函数；`legal_entity_identity_layer_test.go` 只给夹具加 `db` 字段，与修复新增的首登用例正交。资料用例经 `LegalEntityRegistrationLookup` 读回法人走修复后更严的 `WithIdentityLayer`，合法行都读得出（lep02 复核已核）。文本冲突留推送方重放时解。
+
+### 进 main 记录（推送方 · 通道 1）
+
+- **门**：评审可接受，无阻断；Spec 非阻断 1（身份层未登记的历史法人要先补身份层才能补资料，判断项未写）随票记在上文评审原文里，不挡合入，作者可补判断项或另立票。
+- **重放**：在共享树 main `68a6d055` 之上 cherry-pick 为 `aa099067`（← `4ea41a98`）/ `144e7601`（← `697b55d7`）/ `24a1f315`（← `31036a9f`）/ `d8930945`（← `aa822530`）/ `a2e9e881`（← `7c7f738b`）/ `1994fc11`（← `2c4e97ab`）/ `37635f49`（← `fef5bd6a`）/ `e868d777`（← `54ceebce`）/ `caaf7a9c`（← `ecdfbdf1`）/ `3ce62fb2`（← `bcbf217c`）。本分支基于 lep02 修复前的旧 tip，代码笔拣到已含 lep02 与其修复的 main 上无文本冲突；`register_party_identity.go` 与身份层真库测试两份与修复同文件不同处，评审逐点 ⑥ 判语义相容。票面笔在本目录 `spec.md` 子票表上与 main 冲突，按意图合：03 行取分支，01 与 02 行留 main。分支清点笔 `4b9811fe` 不重放，在批 tip 干净检出重生成为 `4e7ed6b6`；认领拣入 `f52c15bb` 与 main 上 `60d37d65` 等价，跳过。
+- **验证**：同一组代码笔先落在 main `f9d70b16` 上成 `9fdc80ca`，隔离树钉它：改动 `.go` gofmt 无输出，全仓 build / vet 退 0，迁移 `0036` 无 CR / BOM；先单跑真库用例 PASS 非 SKIP，带 DSN `go test -p 1 -count=1 ./...` 117 包 ok、0 FAIL。挪到 main `68a6d055` 之上后与 `9fdc80ca` 只差 `.md`；中途一版落在 `49c6dea3` 上的 tip `1fe7f3ea` 另带 DSN 全量一次，117 包 ok、0 FAIL。
