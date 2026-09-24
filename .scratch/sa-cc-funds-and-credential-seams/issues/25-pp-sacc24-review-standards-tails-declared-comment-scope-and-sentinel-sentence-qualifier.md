@@ -1,7 +1,7 @@
 # sa-cc/24 评审 Standards ① 前半 + ② + Spec ① 三条非阻断一笔收口：`Declared()` 头注「只有这里要改」收窄到校验、`assemble.go` 哨兵末句加限定并把「这一格」写成符号名
 
 Category: chore
-Status: 已进 main——2026-09-14 21:4x 通道 1 推送方：`mcp2-tails5@b0463e1a` 重放到 main `84e37713` 之上为 **`58ef74bd`**（与 19 / 20 / 21 / 22 取证四笔同批，批 tip `09833d67`；本簿记笔在其上）；`09833d67` 带 DSN 全仓 112 ok / 1 FAIL——那 1 FAIL 是 main 既有 flaky（CC postgres `TestFundsFactVersionsAccrueAsRowsThatPointBack`，与本票零关系，见 Comments 进 main 记录）；评审门推送方自审。此前 resolved——**完工待进 main，2026-09-14 21:2x 通道 2**（按通道 1 派单 task-4edf2e4d 自立自做；分支 `mcp2-tails5` 基远端 main `0bea3610`，树 `%TEMP%\idp-parcel-mcp2-tails5`；评审门：评审人自做自己评出的尾巴，纯注释，推送方自审，票面如实写）。此前 in-progress——2026-09-14 21:1x 通道 2 自立；要裁的为零
+Status: resolved · 已进 main——2026-09-14 21:4x 通道 1 推送方：`mcp2-tails5@b0463e1a` 重放到 main `84e37713` 之上为 **`58ef74bd`**（与 19 / 20 / 21 / 22 取证四笔同批，批 tip `09833d67`；本簿记笔在其上）；`09833d67` 带 DSN 全仓 112 ok / 1 FAIL——那 1 FAIL 是 main 既有 flaky（CC postgres `TestFundsFactVersionsAccrueAsRowsThatPointBack`，与本票零关系，见 Comments 进 main 记录）；评审门推送方自审。此前 resolved——**完工待进 main，2026-09-14 21:2x 通道 2**（按通道 1 派单 task-4edf2e4d 自立自做；分支 `mcp2-tails5` 基远端 main `0bea3610`，树 `%TEMP%\idp-parcel-mcp2-tails5`；评审门：评审人自做自己评出的尾巴，纯注释，推送方自审，票面如实写）。此前 in-progress——2026-09-14 21:1x 通道 2 自立；要裁的为零
 Blocked by: 无（[24](24-pp-sacc11-review-standards-tails-sentinel-comment-and-evidence-closed-set.md) 已进 main `5eb3caee` / 簿记 `0bea3610`，三条出处全在其 Comments「评审 ← 通道 2」与「处置」）。撞点：通道 3 在 `.scratch/pp-pricing-input-seams/`、通道 4 / 5 / 6 在本目录 19 / 20 / 21 / 22 的 Comments，都不碰本票两份代码文件与本票面；`spec.md` 只本通道动
 
 ## 缺口（出处逐条指到评审原话；取证于 `0bea3610`）

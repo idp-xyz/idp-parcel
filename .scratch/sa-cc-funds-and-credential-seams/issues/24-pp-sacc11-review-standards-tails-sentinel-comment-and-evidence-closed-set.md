@@ -1,7 +1,7 @@
 # sa-cc/11 评审 Standards 两条非阻断一笔收口：`assemble.go` 哨兵头注「前三格」一句改与代码相符、证据层级 S / R / P 封闭集只在领域一处
 
 Category: chore
-Status: 已进 main——2026-09-14 21:0x 通道 1 推送方：`mcp1-tails4@5eb3caee` 基 `eca6dba1` = 当时 main tip，共享 main **直接快进**（SHA 不换：代码 `5eb3caee`，本簿记笔在其上）；`5eb3caee` 带 DSN 全仓 113 ok / 0 FAIL；清点零差；评审门单通道自审，见 Comments 末条。此前 resolved——**完工待进 main，2026-09-14 20:5x 通道 1**（推送方自立自做：点名无人应答、除通道 1 外全部 crash；分支 `mcp1-tails4` 基远端 main `eca6dba1`，树 `%TEMP%\idp-parcel-mcp1-tails4`；两条与 [lc/41](../../label-channel-service-first-release/issues/41-lc40-review-standards-tail-channel-basis-translation-stopped-comment-count.md) 同笔；评审门：单通道无非作者可派，推送方自审，票面如实写）。此前 in-progress——2026-09-14 20:4x 通道 1 自立（评审尾巴 A 类推送方自做，先例 09-08 awf/08「全部你自己干」）；要裁的为零
+Status: resolved · 已进 main——2026-09-14 21:0x 通道 1 推送方：`mcp1-tails4@5eb3caee` 基 `eca6dba1` = 当时 main tip，共享 main **直接快进**（SHA 不换：代码 `5eb3caee`，本簿记笔在其上）；`5eb3caee` 带 DSN 全仓 113 ok / 0 FAIL；清点零差；评审门单通道自审，见 Comments 末条。此前 resolved——**完工待进 main，2026-09-14 20:5x 通道 1**（推送方自立自做：点名无人应答、除通道 1 外全部 crash；分支 `mcp1-tails4` 基远端 main `eca6dba1`，树 `%TEMP%\idp-parcel-mcp1-tails4`；两条与 [lc/41](../../label-channel-service-first-release/issues/41-lc40-review-standards-tail-channel-basis-translation-stopped-comment-count.md) 同笔；评审门：单通道无非作者可派，推送方自审，票面如实写）。此前 in-progress——2026-09-14 20:4x 通道 1 自立（评审尾巴 A 类推送方自做，先例 09-08 awf/08「全部你自己干」）；要裁的为零
 Blocked by: 无（[11](11-pp-inbox-consumer-receives-evaluation-request-envelope.md) 已进 main `6876e10f` / `eca6dba1`，两条出处全在其 Comments「评审 ← 通道 1」Standards ① ②）。撞点：在途分支零、其余通道全部 crash，无人共写
 
 ## 缺口（出处逐条指到评审原话；取证于 `eca6dba1`）

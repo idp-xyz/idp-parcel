@@ -1,7 +1,7 @@
 # CC postgres `TestFundsFactVersionsAccrueAsRowsThatPointBack` 用 map 迭代登记 v1 / v2，顺序随机、各自一笔事务，`ListFundsFactVersions` 按 `received_at` 如实列出反序时用例断言「v1 走样」——main 既有 flaky，生产代码没错
 
 Category: bug
-Status: 已进 main——2026-09-14 22:0x 通道 1 推送方：`mcp3-sacc26@5d9907aa` 重放到 main `3373f7cf` 之上为 **`2b2685c3`**（本簿记笔在其上）；评审 ← 通道 4 两轴 0 阻断 / 各 1 非阻断；`2b2685c3` 带 DSN 全仓 **113 ok / 0 FAIL**，两格探针 PASS 非 SKIP。此前 resolved——2026-09-14 21:4x 通道 3 完工（task-e73efbe2，通道 1 派单自立自做；`/tdd`；分支 `mcp3-sacc26` 基 main `5bf6eb84`，隔离树 `%TEMP%\idp-parcel-mcp3-sacc26`）：只改 `duty_payment_reconciliation_test.go` 一份，生产零 diff；完成判据逐条见「完成记录」；待非作者评审后进 main。此前 in-progress——同刻立票即开工
+Status: resolved · 已进 main——2026-09-14 22:0x 通道 1 推送方：`mcp3-sacc26@5d9907aa` 重放到 main `3373f7cf` 之上为 **`2b2685c3`**（本簿记笔在其上）；评审 ← 通道 4 两轴 0 阻断 / 各 1 非阻断；`2b2685c3` 带 DSN 全仓 **113 ok / 0 FAIL**，两格探针 PASS 非 SKIP。此前 resolved——2026-09-14 21:4x 通道 3 完工（task-e73efbe2，通道 1 派单自立自做；`/tdd`；分支 `mcp3-sacc26` 基 main `5bf6eb84`，隔离树 `%TEMP%\idp-parcel-mcp3-sacc26`）：只改 `duty_payment_reconciliation_test.go` 一份，生产零 diff；完成判据逐条见「完成记录」；待非作者评审后进 main。此前 in-progress——同刻立票即开工
 Blocked by: 无
 
 ## 缺口（推送方取证钉 `09833d67`，作者复现钉 `5bf6eb84`）

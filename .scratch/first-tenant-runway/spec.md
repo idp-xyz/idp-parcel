@@ -1,7 +1,7 @@
 # 从产品就绪走到第一个租户
 
 Category: enhancement
-Status: in-progress
+Status: resolved——2026-09-24 通道 1 按 issue-tracker「Complete a parent」收口：子票 01–10 逐份读过，Status 全为 resolved；起因是通道 2 同日完成度核查点名。此前 in-progress
 
 取证基线 `c9835bf`（工作树另有三处未提交改动，均不在本批地盘内）。
 
