@@ -2,7 +2,7 @@
 
 Category: enhancement
 Status: needs-triage——2026-09-24 通道 4 随票 02 立（登记册逐行拆分划出的产品策略，SA 一张）；逐项先核执行器有无
-Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 行第一项的机制缺口，缺它们时本票只能先定文法）
+Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 行第一项的机制缺口，归[票 16](./16-mechanism-gaps-without-a-ticket.md)；缺它们时本票只能先定文法）
 地盘：settlement-accounting 领域与应用层（金额、分摊、周期费用、指标），账单接入与财务交换的连接器适配器；规则正文若由 party-commercial 声明，PC 侧另开票。
 出处：[票 02](./02-split-parameter-register-and-retriage-deferrals.md)——[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md) `PAR-COM-07`、`PAR-SET-05`、`PAR-SET-06`、`PAR-SET-07`、`PAR-SET-08`、`PAR-SET-09`、`PAR-SET-10`、`PAR-INT-04`、`PAR-INT-05` 行内「〔ADR-0146 拆分〕」点名的部分。[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表 PN-07 行第三项当时记「未核」，本票即其补核。
 
@@ -15,6 +15,9 @@ Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 
 5. **供应商账单审核的越权升级判断结构**（`PAR-SET-05`「越权升级规则」；分权的角色模型归票 07）。`SupplierAuditAuthorityView` 的登记册与读口是重定级表 PN-07 行第一项的机制缺口。
 6. **待核：费用归属日的判定形态**（`PAR-SET-09`）。各金额唯一创建用例与既有借贷项纳入后续账期已由 SA 定（机制），不再列为租户证据。
 7. **待核：供应商账单接入与财务系统交换的连接器形态**（`PAR-INT-04`、`PAR-INT-05`）。账单接收编排已有；核通用导入 / 导出形态有无，某供应商与某财务系统的格式映射留租户。
+8. **BUY 评价请求的触发面**（[票 05](./05-demo-journey-criterion-evidence.md) 格 17；以下三项 2026-09-24 经用户授权自决补入）。`cmd/parcel-api/assemble_evaluation_request.go` 的 `buildEvaluationRequestOrchestration` 头注写「今天没有运营端点、也没有进程内触发面调它」「谁在什么业务时点为哪些发生项发起请求是产品题，触发面另票」——本项即那张票。
+9. **SELL 评价到客户费用**（票 05 格 19）。SELL 评价没有请求面，评价已记录信封的消费门只收 BUY·供应商成本，SA 应用层没有由评价形成客户费用的编排。消费门与形成编排是机制；SELL 评价何时发起是产品策略。
+10. **结算编排的生产入口与触发面**（票 05 格 20）。据票 05 取证，`NewConfirmChargeHandler`、`NewCutOffPublishStatementHandler`、`NewRecordChargeAdjustmentHandler`、`NewAllocateCostsHandler`、`NewReceiveSupplierBillHandler`、`NewAuditSupplierBillHandler`、`NewSettleClaimAmountsHandler` 在 `cmd/` 零引用。装配与入口是机制；何时确认、何时截单是产品策略；账期是租户取值，演示租户经参考配置采用。
 
 顺带（[票 01](./01-regrade-slices-under-four-criteria.md)「严格复核记录」交来，只改注释）：`PricingInputResolver` 的注释「三只读口今天都不存在」已被 `pp-pricing-input-seams` 01–03、05 推翻。
 
