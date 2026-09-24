@@ -960,6 +960,19 @@ type GroupLegalEntityRow struct {
 	DeactivationBasis string
 	HasDeactivation   bool
 	RegisteredAt      time.Time
+	// 身份层（ADR-0145 决定一）：HasIdentityLayer 为假即这笔修订登记于本格落地之前，国家与号两格都没有，
+	// 零值不兼作「国家为空」。IdentityCorrectionBasis 只在 HasIdentityCorrection 为真时有意义。
+	HasIdentityLayer        bool
+	RegistrationCountry     string
+	LifetimeNumbers         []LifetimeRegistrationNumberRow
+	HasIdentityCorrection   bool
+	IdentityCorrectionBasis string
+}
+
+// LifetimeRegistrationNumberRow 是目录与修订历史上列的一个终身注册号：按目录里哪一类登记，以及号本身。
+type LifetimeRegistrationNumberRow struct {
+	TypeCode string
+	Number   string
 }
 
 // PartyRelationshipRow 是业务参与方目录上列的一行：一段参与方关系的最新登记修订。

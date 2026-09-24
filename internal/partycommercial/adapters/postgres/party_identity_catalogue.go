@@ -108,6 +108,8 @@ func (catalogue *OperationsCatalogue) ListGroupLegalEntities(
 		        party.party_name,
 		        entity.revision, entity.basis_ref, entity.effective_from,
 		        entity.deactivated_at, entity.deactivation_basis, entity.recorded_at,
+		        entity.registration_country, entity.lifetime_registration_numbers,
+		        entity.identity_correction_basis,
 		        CASE
 		            WHEN entity.deactivated_at IS NOT NULL AND entity.deactivated_at <= now()
 		                THEN 'DEACTIVATED'
@@ -142,12 +144,20 @@ func (catalogue *OperationsCatalogue) ListGroupLegalEntities(
 		var partyName *string
 		var deactivatedAt *time.Time
 		var deactivationBasis *string
+		var identity identityLayerColumns
 		if err := rows.Scan(
 			&row.TenantID, &row.LegalEntityID, &row.PartyID,
 			&partyName,
 			&row.Revision, &row.Basis, &row.EffectiveFrom,
 			&deactivatedAt, &deactivationBasis, &row.RegisteredAt,
+			&identity.country, &identity.numbers, &identity.correction,
 			&row.Status,
+		); err != nil {
+			return nil, fmt.Errorf("list group legal entities: %w", err)
+		}
+		if err := identity.apply(
+			&row.HasIdentityLayer, &row.RegistrationCountry, &row.LifetimeNumbers,
+			&row.HasIdentityCorrection, &row.IdentityCorrectionBasis,
 		); err != nil {
 			return nil, fmt.Errorf("list group legal entities: %w", err)
 		}
