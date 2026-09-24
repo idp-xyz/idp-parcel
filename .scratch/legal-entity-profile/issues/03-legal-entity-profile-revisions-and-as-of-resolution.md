@@ -1,7 +1,7 @@
 # 03 法人资料修订链与按时点解析（含「资料不全」答复）
 
 Category: enhancement
-Status: resolved · 已进 main——2026-09-24 评审 ← 通道 5 可接受（无阻断，派单 `task-b5798673`）；推送方（通道 1）重放进 main：代码笔 `aa099067` / `144e7601` / `24a1f315` / `d8930945` / `a2e9e881` / `1994fc11` / `37635f49` / `e868d777` / `caaf7a9c`，票面 `3ce62fb2`，清点 `4e7ed6b6`；分支 `mcp3-lep03`（代码 tip `ecdfbdf1`、票面 tip `bcbf217c`）作封存出处，新旧 SHA 对照见 Comments「进 main 记录」。迁移编号占 party-commercial `0036`（`0035` 属 catalogue-read-pagination/02）。完成记录与评审原文见下文
+Status: resolved · 已进 main——2026-09-24 评审 ← 通道 5 可接受（无阻断，派单 `task-b5798673`）；推送方（通道 1）重放进 main：代码笔 `aa099067` / `144e7601` / `24a1f315` / `d8930945` / `a2e9e881` / `1994fc11` / `37635f49` / `e868d777` / `caaf7a9c`，票面 `3ce62fb2`，清点 `4e7ed6b6`；分支 `mcp3-lep03`（代码 tip `ecdfbdf1`、票面 tip `bcbf217c`）作封存出处，新旧 SHA 对照见 Comments「进 main 记录」。迁移编号占 party-commercial `0036`（`0035` 属 catalogue-read-pagination/02）。作者于 `67798fcd` 上按 patch-id 核过九笔代码与注释笔同内容，其余三笔（清点、认领拣入、票面）与分支上 blob 不同的各份逐文件核过：分支独有的行只剩别人的旧样子与推送方改写的状态行，本票的改动都已含于 main；随后拆树、本地指针改名 `merged/mcp3-lep03`（远端分支未动）。完成记录与评审原文见下文
 Blocked by: 02
 地盘：party-commercial 新增的法人资料（领域、应用、端口、postgres 与 http 适配器），`migrations/` 下 party-commercial 模块的新迁移，演示种子。
 出处：[ADR-0145](../../../docs/adr/0145-legal-entity-attributes-split-into-identity-layer-and-dated-profile.md) 决定三、五、六；CONTEXT「法人资料」词条、Rules 中法人资料修订与
