@@ -1,7 +1,7 @@
 # 04 目录读口分页 / 排序 / 筛选下推的契约决策
 
 Category: enhancement
-Status: in-progress——通道 3 认领（2026-09-24）：[ADR-0144](../../../docs/adr/0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 已起草并按用户授权接受，余逐册实施票待拆。2026-09-24 用户授权通道 3 自决（见「裁决」节）。此前 needs-info（归 owner：这是全部目录读口的契约形状，一决策一处定义，要先出 ADR 或设计交接）
+Status: resolved——2026-09-24 通道 3：产出齐——[ADR-0144](../../../docs/adr/0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md)（按用户授权接受）+ 首批实施票 [`.scratch/catalogue-read-pagination/`](../../catalogue-read-pagination/spec.md)，其余各册待首批进 main 后按同一形状逐册拆。用户授权通道 3 自决（见「裁决」节）。此前 needs-info（归 owner：这是全部目录读口的契约形状，一决策一处定义，要先出 ADR 或设计交接）
 Blocked by: 无
 Type: grilling
 
@@ -58,3 +58,5 @@ Type: grilling
   调用方自报」这条纪律不破；第 4 条答复形状多一格 `size`（本次使用的页大小），客户端据它算页数。另补了裁决没写到的：参数名（`after` / `sort` / 筛选维取
   答复体 JSON 字段名 / `q`）、未知键即拒、游标内带排序与筛选摘要（换条件拿旧游标即拒）、Intake 只管作用域与页大小而查询意图由处理器经共用件解码。
   越权风险点见 ADR 文末。剩逐册实施票待拆。
+- 2026-09-24 · 通道 3：首批实施票拆在 [`.scratch/catalogue-read-pagination/`](../../catalogue-read-pagination/spec.md)——共用件、客户账户与网络目录两册、
+  列表模板游标模式、首批两页下推。其余各册不预拆：首批若改了共用件接口，预拆的票就全是旧的。本票 → resolved。

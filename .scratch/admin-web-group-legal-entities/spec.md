@@ -61,7 +61,7 @@ parcel-api 的实探（GET 两读口 200、五个 POST 空载荷 400），浏览
 | [01](./issues/01-list-face-polish.md) | 集团与法人读面打磨：徽章、时间本地化、撤同值列、筛选排序、行详情抽屉、复制、操作者文案 | resolved（通道 6 → 4 → 1，分支 tip 见票面完成记录） |
 | [02](./issues/02-legal-entity-field-form.md) | 登记法人改逐字段表单（ADR-0101 决定八自裁），JSON 快照签降为受控批量口镜像 | resolved（同上） |
 | [03](./issues/03-legal-entity-revision-history-read-face.md) | 责任法人修订历史读口 + 详情抽屉「修订历史」区 | resolved（通道 5 → 1 封存 → 1 重放，`ef7086f0` 进 main，见票面完成记录） |
-| [04](./issues/04-catalogue-read-pagination-sort-filter-contract.md) | 目录读口分页 / 排序 / 筛选下推的契约决策 | ready-for-agent（2026-09-24 用户授权通道 3 自决，裁决见票面；下一步起草 ADR） |
+| [04](./issues/04-catalogue-read-pagination-sort-filter-contract.md) | 目录读口分页 / 排序 / 筛选下推的契约决策 | resolved（2026-09-24 用户授权通道 3 自决；产出 ADR-0144 与 `.scratch/catalogue-read-pagination/` 首批实施票） |
 | [05](./issues/05-legal-entity-business-attributes.md) | 责任法人业务属性建模（税号、注册国家、开票主体、结算币种、联系人） | ready-for-agent（2026-09-24 用户授权通道 3 自决，裁决见票面；下一步修订 CONTEXT 并起草 ADR） |
 | [06](./issues/06-isolated-write-admission-for-commercial-identity-family.md) | ADR-0091 逐口放行：`/commercial-*` 身份族在隔离形态下放行 | resolved（通道 4 → 4 新会话收尾，rebase 后以原 SHA ff 进 main，清点 `f6569f51`；见票面完成记录） |
 | [07](./issues/07-isolated-write-intake-decode-strict-and-comment-counts.md) | A 类尾巴：隔离身份 Intake 外壳解码改调 `decodeStrict`（尾随内容拒）+ 注释去计数（实做四处；06 评审 N1 / N3，可选 N2 未做） | resolved（通道 4，三笔原 SHA ff 进 main，远端 main = `19047d51`，评审 ← 通道 2 无阻断；见票面完成记录） |
