@@ -243,6 +243,7 @@ func assembleBusinessEndpoints(
 	deliveryDispatchTriggerIntake := tfhttp.DeliveryDispatchTriggerIntake(tfhttp.UnconfiguredIntake{})
 	deliveryRegistrationIntake := tfhttp.DeliveryRegistrationIntake(tfhttp.UnconfiguredIntake{})
 	segmentClosureIntake := tfhttp.SegmentClosureIntake(tfhttp.UnconfiguredIntake{})
+	effectiveTimeJudgmentIntake := tfhttp.EffectiveTimeJudgmentIntake(tfhttp.UnconfiguredIntake{})
 	if isolatedTransportFulfillment != nil {
 		pickupRegistrationIntake = isolatedTransportFulfillment
 		pickupAttemptIntake = isolatedTransportFulfillment
@@ -253,6 +254,7 @@ func assembleBusinessEndpoints(
 		deliveryDispatchTriggerIntake = isolatedTransportFulfillment
 		deliveryRegistrationIntake = isolatedTransportFulfillment
 		segmentClosureIntake = isolatedTransportFulfillment
+		effectiveTimeJudgmentIntake = isolatedTransportFulfillment
 	}
 
 	return []httpapi.BusinessEndpoint{
@@ -348,7 +350,7 @@ func assembleBusinessEndpoints(
 		// 决定三第一种来源），一次判断就把事实交给 visibility-exception 进客户可见面，同挂字面量 UnconfiguredIntake{}：
 		// 读开关换不了它。路径取读面册名前缀 `transport-fulfillment-`——两口都是运营侧动作，不是承运方回传口。
 		{Pattern: "/transport-fulfillment-external-tracking-facts", Handler: tfhttp.NewQueryExternalTrackingFactsEndpoint(transportCatalogueIntake, externalTrackingFactReview)},
-		{Pattern: "/transport-fulfillment-effective-time-judgments", Handler: tfhttp.NewJudgeEffectiveTimeEndpoint(tfhttp.UnconfiguredIntake{}, effectiveTimeJudgment)},
+		{Pattern: "/transport-fulfillment-effective-time-judgments", Handler: tfhttp.NewJudgeEffectiveTimeEndpoint(effectiveTimeJudgmentIntake, effectiveTimeJudgment)},
 		// 实际承运商首次有效收寄的判断面两口（票 label-channel/31，ADR-0135 决定八）。读口按（租户，载运对象）上列整条
 		// 收寄链，是判断人的「这个对象走到哪一版」：零登记零编辑零披露，消费本上下文自己的存储读面，走运输履约查阅同一个
 		// Intake 变量。写口是判断方的显式读法，一次判断落的是控制事实——立段、结束取消权、交 parcel-shipment 形成终局，
