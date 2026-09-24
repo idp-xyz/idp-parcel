@@ -1,7 +1,7 @@
 # 02 右侧检查器：壳层右栏位 + `InspectorContent` 契约（五节）+ `ListPageTemplate` 单击进检查器 + 两张首用页渲染器
 
 Category: enhancement
-Status: resolved——2026-09-22 通道 1 在 `main` 上直接做完（workflow.md「前端切片」六步；本地 `92cbcf1a` 模板段 / `9015cdaf` 壳层段 + 本笔票面与旧话改口，**已进 main `539b8764`**（2026-09-23 push，`e0d3f89d..539b8764` 纯 ff，码 SHA 不换））。完成记录见文末；非作者评审 ← 通道 3（2026-09-24，两轴 0 阻断，见 Comments），建议各条已在 `main` 上逐笔处置，见 Comments「评审后修复」；复核 ← 通道 3 Spec 0 阻断、可接受，其非阻断 1 已修 `fb9143df`（本地 `main`，**未推**——本宿主此刻连不上 GitHub 代理）。此前 in-progress——紧接票 01 的壳层笔；模板段先落、壳层段随后。此前 draft——分两段：**模板段**（契约 + 首用渲染器 + `ListPageTemplate` 接口）不等任何票；**壳层段**（右栏装进 `Layout.tsx`）Blocked by 01
+Status: resolved——2026-09-22 通道 1 在 `main` 上直接做完（workflow.md「前端切片」六步；本地 `92cbcf1a` 模板段 / `9015cdaf` 壳层段 + 本笔票面与旧话改口，**已进 main `539b8764`**（2026-09-23 push，`e0d3f89d..539b8764` 纯 ff，码 SHA 不换））。完成记录见文末；非作者评审 ← 通道 3（2026-09-24，两轴 0 阻断，见 Comments），建议各条已在 `main` 上逐笔处置，见 Comments「评审后修复」；复核 ← 通道 3 Spec 0 阻断、可接受，其非阻断 1 已修 `fb9143df`（**已进 main `9a477af9`**，2026-09-24 push，`3a47da8d..9a477af9` 纯 ff，CI 全绿，见 Comments 末条）。此前 in-progress——紧接票 01 的壳层笔；模板段先落、壳层段随后。此前 draft——分两段：**模板段**（契约 + 首用渲染器 + `ListPageTemplate` 接口）不等任何票；**壳层段**（右栏装进 `Layout.tsx`）Blocked by 01
 Blocked by: 无（01 的壳层笔 `c9312bf6` 已在 main）
 地盘：新 `apps/admin-web/src/templates/inspector.ts`（契约类型 + 纯逻辑 + node:test）、新 `templates/InspectorPanel.tsx`（五节渲染件）、`templates/ListPageTemplate.tsx`
 （加可选 `inspector?: (row) => InspectorContent`，单击行时交给壳层——**不改** `onRowClick` 语义，只新增）、`templates/index.ts`（只追加）、`Layout.tsx`（壳层段：右栏位装
@@ -229,3 +229,6 @@ myshop-web 的做法是**壳层级右栏**：选中对象常驻右侧，表还�
 结论：**可接受**（Spec 0 阻断 / 3 非阻断）。建议修掉非阻断 1（只动 `ListPageTemplate.tsx`、不动契约）；2、3 记票面即可。
 
 **处置**（通道 1）：非阻断 1 已修 `fb9143df`——取第一个修法，行的 `onFocus` 只认落在行本身且 `:focus-visible` 的聚焦，指针那一路只归 `onClick`，单击也不再交两次；run-tests 414 不变、探针 24 ok（happy-dom 不分输入方式，指针路径**未实证**，依据是浏览器对 `:focus-visible` 的规定：指针聚焦非文本控件时不匹配）。非阻断 2 补进上一节 Spec 5 那条；非阻断 3 三处照改——Spec 7 那条改口「在此补记」、完成记录判断项 3 与 6 原句后加指向更正的记号、判断项 8 补「声明包裹」。
+
+- 2026-09-24 · 进 main：`origin/main` = `9a477af9`（`3a47da8d..9a477af9` 纯 ff，本票评审代落、修复、复核代落与票面各笔 SHA 不换；用户完成 gh 设备码授权后由推送方推）。
+  CI run `35967167893` 七个 job 全绿；第四道门 `go test ./internal/architecture/` 另在 `c7ae9f51` 本机实跑 ok（go1.26.8）。上文各处「未推」在这次推送之后失效。

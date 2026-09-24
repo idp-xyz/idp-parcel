@@ -1,7 +1,7 @@
 # 01 壳层升级为多标签工作区：`EditorGroup` + `StatusBar`、工作区状态本地持久化、hash ↔ 标签互为镜像、`Ctrl+W` / `Ctrl+Shift+T`
 
 Category: enhancement
-Status: resolved——2026-09-22 通道 1 在 `main` 上直接做完（workflow.md「前端切片：一人在 main 上直接做」六步；本地 `3da0f23c` / `c9312bf6` 两笔码 + 本笔票面，**已进 main `539b8764`**（2026-09-23 push，`e0d3f89d..539b8764` 纯 ff，码 SHA 不换））。完成记录见文末；非作者评审 ← 通道 2（2026-09-24）Spec 阻断 1（`loadWorkspaceState` 遇畸形 id 抛而不回默认，整页白屏）已修 `d365851b`，各条非阻断逐条处置见 Comments「评审后修复」；复核改为推送方自审（用户令，其他通道忙）：阻断已解除，评审附带的 hash 路径同类抛一并修了 `00b7acdc`，见 Comments「自审」（本地 `main`，**未推**——本宿主此刻连不上 GitHub 代理）。此前 in-progress——用户经 IDP 队列令「参考 idpxyz/idp-ui `apps/myshop-web`，理解，然后来调整我们的 ui」，未逐条答判断项；三项按 spec 推荐取值落地——1 多标签**要**（用户指向的参照物就是多标签壳）、2 分栏**不做**（`showSplitButtons={false}`）、3 `ActivityBar` **不装**；用户若要 2 / 3 各是一张追加票，不改本票已落的形。此前 draft——等用户答 spec「判断项」1–3
+Status: resolved——2026-09-22 通道 1 在 `main` 上直接做完（workflow.md「前端切片：一人在 main 上直接做」六步；本地 `3da0f23c` / `c9312bf6` 两笔码 + 本笔票面，**已进 main `539b8764`**（2026-09-23 push，`e0d3f89d..539b8764` 纯 ff，码 SHA 不换））。完成记录见文末；非作者评审 ← 通道 2（2026-09-24）Spec 阻断 1（`loadWorkspaceState` 遇畸形 id 抛而不回默认，整页白屏）已修 `d365851b`，各条非阻断逐条处置见 Comments「评审后修复」；复核改为推送方自审（用户令，其他通道忙）：阻断已解除，评审附带的 hash 路径同类抛一并修了 `00b7acdc`，见 Comments「自审」（**已进 main `9a477af9`**，2026-09-24 push，`3a47da8d..9a477af9` 纯 ff，CI 全绿，见 Comments 末条）。此前 in-progress——用户经 IDP 队列令「参考 idpxyz/idp-ui `apps/myshop-web`，理解，然后来调整我们的 ui」，未逐条答判断项；三项按 spec 推荐取值落地——1 多标签**要**（用户指向的参照物就是多标签壳）、2 分栏**不做**（`showSplitButtons={false}`）、3 `ActivityBar` **不装**；用户若要 2 / 3 各是一张追加票，不改本票已落的形。此前 draft——等用户答 spec「判断项」1–3
 Blocked by: 无（admin-web-ux-alignment/02 已进 main `5b032504`）
 地盘：`apps/admin-web/src/Layout.tsx`（主区从单页换成 `EditorGroup`；右栏 / 底栏两个**空位**只留结构不装内容，02 装）、新 `shell/workspace-state.ts`（标签集 / 活动标签 /
 已关闭栈 / 侧栏宽度的纯逻辑 + `localStorage` 持久化 + node:test）、新 `shell/WorkspaceStatusBar.tsx`（包 `StatusBar`）、`shell/preferences.ts`（若持久化键前缀要复用它的约定，只追加）。
@@ -217,3 +217,6 @@ Spec 非阻断 1 的出路票 06 已做完；2 属实；3 / 4 / 6 票面已补�
    回来。`tabIdFromHash` 的文档注释写明了这个前提，不另加防线。
 
 结论：**阻断 1 已解除**，无新阻断。
+
+- 2026-09-24 · 进 main：`origin/main` = `9a477af9`（`3a47da8d..9a477af9` 纯 ff，本票评审代落、修复、自审与票面各笔 SHA 不换；用户完成 gh 设备码授权后由推送方推）。
+  CI run `35967167893` 七个 job 全绿；第四道门 `go test ./internal/architecture/` 另在 `c7ae9f51` 本机实跑 ok（go1.26.8）。上文各处「未推」在这次推送之后失效。

@@ -1,7 +1,7 @@
 # 04 `ListPageTemplate` 的 `pagination` 槽加游标模式（向后兼容）
 
 Category: enhancement
-Status: resolved——2026-09-24 通道 1 在 `main` 上直接做完（workflow.md「前端切片」）：本地 `dc19e5f9` + 本笔票面，**未推**（本宿主 shell 无 GitHub 推送凭据，待用户在 Cursor 终端推）。完成记录见文末；非作者评审 ← 通道 3 Spec 0 阻断、可接受，其非阻断 1 已修 `6677f930`，见 Comments。此前 in-progress——通道 1 接（通道 3 派单 `task-257cfc55`）。此前 ready-for-agent
+Status: resolved——2026-09-24 通道 1 在 `main` 上直接做完（workflow.md「前端切片」）：本地 `dc19e5f9` + 本笔票面，**已进 main `9a477af9`**（2026-09-24 push，`3a47da8d..9a477af9` 纯 ff，CI 全绿，见 Comments 末条）。完成记录见文末；非作者评审 ← 通道 3 Spec 0 阻断、可接受，其非阻断 1 已修 `6677f930`，见 Comments。此前 in-progress——通道 1 接（通道 3 派单 `task-257cfc55`）。此前 ready-for-agent
 Blocked by: 无
 地盘：`apps/admin-web/src/templates/ListPageTemplate.tsx`、新增的纯逻辑 `.ts` 与其 node:test、`templates/index.ts`（只追加）。
 出处：[ADR-0144](../../../docs/adr/0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 决定八。
@@ -77,3 +77,6 @@ Blocked by: 无
 结论：**可接受**（Spec 0 / 1）。
 
 **处置**（通道 1）：非阻断 1 取前者，已修 `6677f930`——`nextCursorPage` 遇到的 `next` 就是当前页带的 `after` 时原样返回（正常翻页下两者不会相等：下一页的游标指在下一页末行之后，不是当前页的起点），node:test 一条；三道门（钉 `6677f930`）tsc 0 / run-tests 428 → 429 / vite build 成功，探针 11 ok 不变。
+
+- 2026-09-24 · 进 main：`origin/main` = `9a477af9`（`3a47da8d..9a477af9` 纯 ff，本票各笔 SHA 不换；用户完成 gh 设备码授权后由推送方推）。CI run `35967167893` 七个 job
+  全绿，其中 admin-web job 跑的就是 `6677f930` 之后的码；第四道门 `go test ./internal/architecture/` 另在 `c7ae9f51` 本机实跑 ok（go1.26.8）。上文各处「未推」在这次推送之后失效。

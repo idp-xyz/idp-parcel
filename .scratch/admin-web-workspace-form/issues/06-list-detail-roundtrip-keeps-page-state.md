@@ -1,7 +1,7 @@
 # 06 列表 → 详情往返保住检索词与多选集：多标签壳层下「进详情再回来即清零」的出路
 
 Category: enhancement
-Status: resolved——2026-09-24 通道 1 在 `main` 上直接做完（workflow.md「前端切片」）：本地 `69f6413b` 壳层段 / `ebf8b025` 模板与页面段 / `c1b7f74b` 注释改口 + 票面 `cd4d8193`，**未推**（本宿主此刻连不上 GitHub 代理）。完成记录见文末；推送方自审可接受（用户令，其他通道忙），见 Comments。此前 in-progress——通道 1 接（通道 3 提议的分工）。此前 ready-for-agent——2026-09-24 用户授权通道 3 自决：C 的检索词半 + 壳层记住每张标签最后停在的完整地址，多选集进详情即丢（见「判断项答复」）。此前 draft——2026-09-24 通道 1 按票 01 评审 ← 通道 2 的 Spec 非阻断 1 立，形态取舍归用户
+Status: resolved——2026-09-24 通道 1 在 `main` 上直接做完（workflow.md「前端切片」）：本地 `69f6413b` 壳层段 / `ebf8b025` 模板与页面段 / `c1b7f74b` 注释改口 + 票面 `cd4d8193`，**已进 main `9a477af9`**（2026-09-24 push，`3a47da8d..9a477af9` 纯 ff，CI 全绿，见 Comments 末条）。完成记录见文末；推送方自审可接受（用户令，其他通道忙），见 Comments。此前 in-progress——通道 1 接（通道 3 提议的分工）。此前 ready-for-agent——2026-09-24 用户授权通道 3 自决：C 的检索词半 + 壳层记住每张标签最后停在的完整地址，多选集进详情即丢（见「判断项答复」）。此前 draft——2026-09-24 通道 1 按票 01 评审 ← 通道 2 的 Spec 非阻断 1 立，形态取舍归用户
 Blocked by: 无
 地盘：`apps/admin-web/src/shell/workspace-state.ts` 与其 test、`Layout.tsx`（记地址、三条回程）、`templates/`（检索词读写地址的共用件、给页面的「回到某标签」口）、
 `pages/shipment-request/ShipmentRequestListPage.tsx`、`pages/visibility/ExceptionCasesPage.tsx`，外加票 04 票面补记多选集改口。全在 `apps/admin-web/**` 与票面，走
@@ -129,3 +129,6 @@ workflow.md「前端切片」。
    `URLSearchParams` 解，语义不变。
 
 结论：**可接受**，无阻断。
+
+- 2026-09-24 · 进 main：`origin/main` = `9a477af9`（`3a47da8d..9a477af9` 纯 ff，本票各笔 SHA 不换；用户完成 gh 设备码授权后由推送方推）。CI run `35967167893` 七个 job
+  全绿；第四道门 `go test ./internal/architecture/` 另在 `c7ae9f51` 本机实跑 ok（go1.26.8）。上文各处「未推」在这次推送之后失效。
