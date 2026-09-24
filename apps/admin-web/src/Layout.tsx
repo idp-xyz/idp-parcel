@@ -50,8 +50,8 @@ import {
 } from './shell/workspace-state';
 
 // 多标签工作区外壳（票 admin-web-workspace-form/01 与 02 壳层段，参照 idp-ui@6751fb2 apps/myshop-web/src/App.tsx）：顶栏 + 左侧导航 +
-// EditorGroup 多标签主区 + 右侧检查器栏 + 底部状态栏。第一轮裁「不引入标签页、等首个真实页面出现后再定」的前提已变——真实页面早就有了
-// （委托查阅的 hash 二段详情、对象工作区母版），参照物也换成了多标签壳；蓝图母版 B / C 都假定人同时开着一张队列和几个对象在比对。
+// EditorGroup 多标签主区 + 右侧检查器栏 + 底部状态栏。多标签是因为蓝图母版 B / C 都假定人同时开着一张队列和几个对象在比对，
+// 单页区每回一次列表就丢一次对象。
 // 底栏不留位——没有事件 / 日志 / 备注读口，一个永远空的底栏不是「禁用态 + 说明」能交代的（spec「不做」）。
 // 不装 ActivityBar：本仓只有一种侧栏内容，myshop-web 的那一格点了也只是折叠侧栏，是 IDE 形不是能力。
 //
@@ -64,9 +64,12 @@ import {
 // 登出仍是 auth/oidc.ts 那一个，外壳不另起一套会话处置。
 // 页面映射在 page-registry：没登记的 id 落 UnwiredModule 诚实占位——导航条目先于页面出现时，缺的是页面不是路由。
 //
-// **导航位置的唯一权威仍是地址栏 hash**（#/<模块id>[/<对象id>][/<页内子路径>][?<查询串>]）：刷新回到原页、浏览器前进后退可用、
+// **导航位置的唯一权威是地址栏 hash**（#/<模块id>[/<对象id>][/<页内子路径>][?<查询串>]）：刷新回到原页、浏览器前进后退可用、
 // 模块页与对象页都可收藏转发。标签集是 hash 的镜像不是第二个权威：标签 id 就是 hash 的前两段（shell/workspace-state.ts 的
-// tabIdFromHash），hashchange → openTab（新地址开新标签 / 已开则激活）；点标签、关标签、重开都只写 hash，状态经同一条 hashchange 回流。
+// tabIdFromHash），hashchange → openTab（新地址开新标签 / 已开则激活）。点标签只写 hash，状态经 hashchange 回流；关、重开、批量关
+// 得先在标签集上算（关掉活动标签该落哪个邻居只有标签集知道），于是先落状态、活动标签变了再写 hash（applyWorkspace），回流时
+// openTab 已开则激活、幂等。后一路对活动标签答了两次，两次答成同一张靠的是 id 规范——hashForTab(id) 认回来仍是 id；
+// 从存储读回的标签由 loadWorkspaceState 按这一条筛过。
 // 三条互斥各自为何：不双写——若点标签既 setState 又写 hash，两条路对同一件事各答一次，失配时没人知道哪个对；
 // 不在标签里存页内状态——第二段之后与查询串归页面（详情钻取、保存视图的 `?view=`），标签只记地址，页面卸载即丢；
 // 关标签写 hash——关掉活动标签后「现在在哪」这一问仍由 hash 答，标签集只是算出该落到哪个邻居，再把答案写回地址。
@@ -276,7 +279,10 @@ export function Layout() {
             isActive
             showSplitButtons={false}
             onActivate={() => {}}
-            onTabClick={(id) => navigate(hashForTab(id))}
+            // 点已活动的那张不写 hash：hash 上可能带着页内的 ?view= 或第三段，重写会剥掉它们而页面实例不换，地址与屏上所示就失配了。
+            onTabClick={(id) => {
+              if (id !== workspaceRef.current.activeTabId) navigate(hashForTab(id));
+            }}
             onTabClose={(id) => applyWorkspace((state) => closeTab(state, id))}
             onTabPin={(id) => applyWorkspace((state) => togglePinned(state, id))}
             onCloseOthers={(id) => applyWorkspace((state) => closeOthers(state, id))}

@@ -11,7 +11,7 @@
 //   - **工作台不是标签，是「没有活动标签」那一格。** myshop-web 的工作台是一张常驻标签；本仓若照搬，EditorGroup 会在它上面
 //     照样画一个 ×，按下去什么都不发生——spec 红线不允许假动作。这里把工作台做成 EditorGroup 的 emptyStateContent：
 //     activeTabId 为 null 即显示工作台，关掉最后一张标签自然落回它，没有一个按不动的按钮。
-//   - **hash 仍是位置权威**（Layout.tsx 文件头）：标签 id 就是 hash 路径，点标签写 hash、hashchange 再回流成 openTab；
+//   - **hash 是位置权威**（Layout.tsx 文件头）：标签 id 就是 hash 路径，点标签写 hash、hashchange 再回流成 openTab；
 //     本模块不写 window.location，也不在标签里另存页内状态。
 
 export const WORKSPACE_STORAGE_KEY = 'parcel-admin-web:workspace';
@@ -22,7 +22,7 @@ export const WORKBENCH_MODULE_ID = 'workbench';
 /** 已关闭栈上限，沿 myshop-web：再多也不会有人一路 Ctrl+Shift+T 翻回去。 */
 export const CLOSED_TABS_LIMIT = 20;
 
-/** 侧栏宽度三值与 Layout 此前写死给 useResize 的同值；抬到这里让 load 的区间校验与拖拽的钳位用同一组数。 */
+/** 侧栏宽度三值：load 的区间校验与拖拽的钳位要用同一组数，所以定在这里。 */
 export const SIDEBAR_WIDTH_DEFAULT = 240;
 export const SIDEBAR_WIDTH_MIN = 170;
 export const SIDEBAR_WIDTH_MAX = 500;
@@ -80,7 +80,7 @@ export function initialWorkspaceState(): WorkspaceState {
  * 从 hash 认出标签 id：`#/<moduleId>[/<objectId>][/…][?…]` → `<moduleId>` 或 `<moduleId>/<objectId>`。
  * 只取前两段——第三段起归页面自己（今天没有页用到，用到时它是页内位置不是另一张标签）；查询串（保存视图的 `?view=`）
  * 归模块页读，剥掉不进 id。段保持 hash 里的原样（不解码）：id 要能原样写回 hash，解码再编码不保证字节相同。
- * 词表外的模块 id 与空 hash 都答 null——落工作台，与 Layout 此前对未知 id 的处置一致。
+ * 词表外的模块 id 与空 hash 都答 null——落工作台。
  */
 export function tabIdFromHash(hash: string, isKnownModule: (moduleId: string) => boolean): string | null {
   const path = hash.replace(/^#\/?/, '').split('?')[0];

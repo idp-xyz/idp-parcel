@@ -3,8 +3,7 @@ import { Layout } from './Layout';
 import { DensityPreferenceAlignment, ThemePreferenceMirror, useSeedUpstreamTheme } from './shell/preference-sync';
 
 // 租户管理台外壳：多标签工作区形态（品牌头 + 左侧导航 + EditorGroup 多标签主区 + 右侧检查器栏 + 底部状态栏），
-// 参照 idp-ui apps/myshop-web（票 admin-web-workspace-form/01、02）。此前沿 loms-web 的单页区形态、把「标签页 / 面板」
-// 留待首个真实页面出现后再议——真实页面早已有了，形态取舍与理由在 Layout.tsx 文件头，这里不复述。
+// 参照 idp-ui apps/myshop-web（票 admin-web-workspace-form/01、02）。形态取舍与理由在 Layout.tsx 文件头，这里不复述。
 //
 // 三个 Provider 同级：ThemeProvider（主题）、DensityProvider（密度两档，手册「栅格与密度」；
 // 票 03 的列表模板从 useDensity 读它）、ToastProvider。主题与密度的默认值与持久化不归上游
