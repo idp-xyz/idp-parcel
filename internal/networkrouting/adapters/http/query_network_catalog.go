@@ -298,20 +298,39 @@ func lineVersionBodyOf(row ports.LineDefinitionVersion) lineVersionBody {
 	}
 }
 
+// serviceAreaVersionBody 的 Coverage 在这版没登覆盖时整格缺席：「覆盖整个国家」（只有 country）与
+// 「还没登覆盖」各是一种答案，给一份空覆盖会让后者看起来像前者。
 type serviceAreaVersionBody struct {
-	Code          string `json:"code"`
-	Version       int32  `json:"version"`
-	EffectiveFrom string `json:"effectiveFrom"`
-	EffectiveTo   string `json:"effectiveTo,omitempty"`
+	Code          string                   `json:"code"`
+	Version       int32                    `json:"version"`
+	EffectiveFrom string                   `json:"effectiveFrom"`
+	EffectiveTo   string                   `json:"effectiveTo,omitempty"`
+	Coverage      *serviceAreaCoverageBody `json:"coverage,omitempty"`
+}
+
+type serviceAreaCoverageBody struct {
+	Country          string   `json:"country"`
+	PostalPrefixes   []string `json:"postalPrefixes,omitempty"`
+	OriginNodes      []string `json:"originNodes,omitempty"`
+	DestinationNodes []string `json:"destinationNodes,omitempty"`
 }
 
 func serviceAreaVersionBodyOf(row ports.ServiceAreaDefinitionVersion) serviceAreaVersionBody {
-	return serviceAreaVersionBody{
+	body := serviceAreaVersionBody{
 		Code:          row.Code,
 		Version:       row.Version,
 		EffectiveFrom: utcText(row.EffectiveFrom),
 		EffectiveTo:   optionalUTCText(row.EffectiveTo, row.HasEffectiveTo),
 	}
+	if row.HasCoverage {
+		body.Coverage = &serviceAreaCoverageBody{
+			Country:          row.CoverageCountry,
+			PostalPrefixes:   row.PostalPrefixes,
+			OriginNodes:      row.OriginNodes,
+			DestinationNodes: row.DestinationNodes,
+		}
+	}
+	return body
 }
 
 type serviceCalendarVersionBody struct {

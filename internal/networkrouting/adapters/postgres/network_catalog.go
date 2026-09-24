@@ -240,11 +240,7 @@ func rebuildCatalogSnapshot(
 		return none, err
 	}
 	for _, row := range areas {
-		snapshot.ServiceAreas = append(snapshot.ServiceAreas, ports.ServiceAreaDefinitionVersion{
-			Code: row.Code, Version: row.Version,
-			EffectiveFrom: row.EffectiveFrom, EffectiveTo: timeOf(row.EffectiveTo),
-			HasEffectiveTo: row.EffectiveTo != nil,
-		})
+		snapshot.ServiceAreas = append(snapshot.ServiceAreas, row.definition())
 	}
 
 	var calendars []calendarVersionRow
@@ -350,6 +346,23 @@ type areaVersionRow struct {
 	PostalPrefixes   []string   `json:"postal_prefixes"`
 	OriginNodes      []string   `json:"origin_nodes"`
 	DestinationNodes []string   `json:"destination_nodes"`
+}
+
+// definition 译回一行区域版本。覆盖国家为 NULL 即这版没登覆盖，其余三列按 CHECK 必同为 NULL。
+func (row areaVersionRow) definition() ports.ServiceAreaDefinitionVersion {
+	area := ports.ServiceAreaDefinitionVersion{
+		Code: row.Code, Version: row.Version,
+		EffectiveFrom: row.EffectiveFrom, EffectiveTo: timeOf(row.EffectiveTo),
+		HasEffectiveTo: row.EffectiveTo != nil,
+	}
+	if row.CoverageCountry != nil {
+		area.HasCoverage = true
+		area.CoverageCountry = *row.CoverageCountry
+		area.PostalPrefixes = row.PostalPrefixes
+		area.OriginNodes = row.OriginNodes
+		area.DestinationNodes = row.DestinationNodes
+	}
+	return area
 }
 
 // serviceAreaCoverageColumns 把覆盖与节点角色折成四列：没登覆盖四列全落 NULL，空数组也落 NULL——库的 CHECK
@@ -565,8 +578,8 @@ func (catalog *NetworkCatalog) RegisterLineVersion(
 	return catalog.bumpRevision(ctx, executor, tenant)
 }
 
-// RegisterServiceAreaVersion 追加一个服务区域版本。覆盖内容列未定（开放集，等
-// PAR-NET-14 的形态），本方法只登版本与有效区间。版本纪律同 RegisterNodeVersion。
+// RegisterServiceAreaVersion 追加一个服务区域版本：版本、有效区间与覆盖四列（迁移 0011，ADR-0148
+// 决定二、五）。覆盖形态由登记用例经领域构造门收过，这里只翻译成列。版本纪律同 RegisterNodeVersion。
 func (catalog *NetworkCatalog) RegisterServiceAreaVersion(
 	ctx context.Context,
 	tenant domain.TenantID,

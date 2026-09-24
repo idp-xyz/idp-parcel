@@ -275,16 +275,21 @@ func commandFor(
 		if err != nil {
 			return nil, err
 		}
-		command := application.RegisterServiceAreaVersionCommand{
-			TenantID: tenant,
-			Area: ports.ServiceAreaDefinitionVersion{
-				Code:           payload.Code,
-				Version:        payload.Version,
-				EffectiveFrom:  payload.EffectiveFrom,
-				EffectiveTo:    timeOf(payload.EffectiveTo),
-				HasEffectiveTo: payload.EffectiveTo != nil,
-			},
+		area := ports.ServiceAreaDefinitionVersion{
+			Code:           payload.Code,
+			Version:        payload.Version,
+			EffectiveFrom:  payload.EffectiveFrom,
+			EffectiveTo:    timeOf(payload.EffectiveTo),
+			HasEffectiveTo: payload.EffectiveTo != nil,
 		}
+		if coverage := payload.Coverage; coverage != nil {
+			area.HasCoverage = true
+			area.CoverageCountry = coverage.Country
+			area.PostalPrefixes = coverage.PostalPrefixes
+			area.OriginNodes = coverage.OriginNodes
+			area.DestinationNodes = coverage.DestinationNodes
+		}
+		command := application.RegisterServiceAreaVersionCommand{TenantID: tenant, Area: area}
 		return func(ctx context.Context, registrar *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
 			return registrar.RegisterServiceAreaVersion(ctx, command)
 		}, nil
@@ -479,6 +484,15 @@ type areaPayload struct {
 	Version       int32      `json:"version"`
 	EffectiveFrom time.Time  `json:"effective_from"`
 	EffectiveTo   *time.Time `json:"effective_to"`
+	// Coverage 缺席即这版没登覆盖；给了就由受理门按覆盖文法与节点角色逐格核。
+	Coverage *areaCoveragePayload `json:"coverage"`
+}
+
+type areaCoveragePayload struct {
+	Country          string   `json:"country"`
+	PostalPrefixes   []string `json:"postal_prefixes"`
+	OriginNodes      []string `json:"origin_nodes"`
+	DestinationNodes []string `json:"destination_nodes"`
 }
 
 type calendarPayload struct {

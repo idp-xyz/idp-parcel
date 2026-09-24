@@ -440,6 +440,43 @@ func TestExecuteTranslatesTheDeclaredRankingForm(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0148 决定二、五的登记半边——服务区域的 coverage 一格译成覆盖与节点角色到达写入口（前缀经
+// 领域构造门规整）；不带这一格即这版没登覆盖；覆盖不成形由受理门指名拒绝。
+func TestExecuteTranslatesServiceAreaCoverage(t *testing.T) {
+	covered := []byte(`{"tenant_id":"SYN-TENANT-1","code":"SYN-AREA-XA","version":1,
+		"effective_from":"2026-08-20T12:00:00Z",
+		"coverage":{"country":"XA","postal_prefixes":["20","10"],
+			"origin_nodes":["SYN-NODE-A"],"destination_nodes":["SYN-NODE-B"]}}`)
+	double := &registryDouble{}
+	if message, code := execute(t.Context(), kindServiceArea, covered, registrarOver(t, double), passthroughTransactor{}); code != exitRegistered {
+		t.Fatalf("message=%q code=%d, 想要 REGISTERED/0", message, code)
+	}
+	if area := double.area; area == nil || !area.HasCoverage || area.CoverageCountry != "XA" ||
+		strings.Join(area.PostalPrefixes, ",") != "10,20" ||
+		strings.Join(area.OriginNodes, ",") != "SYN-NODE-A" || strings.Join(area.DestinationNodes, ",") != "SYN-NODE-B" {
+		t.Fatalf("覆盖没有译成领域规整后的形状到达写入口：%+v", double.area)
+	}
+
+	bare := []byte(`{"tenant_id":"SYN-TENANT-1","code":"SYN-AREA-XA","version":1,
+		"effective_from":"2026-08-20T12:00:00Z"}`)
+	double = &registryDouble{}
+	if message, code := execute(t.Context(), kindServiceArea, bare, registrarOver(t, double), passthroughTransactor{}); code != exitRegistered {
+		t.Fatalf("message=%q code=%d; 没登覆盖的版本应照旧登得进", message, code)
+	}
+	if double.area == nil || double.area.HasCoverage {
+		t.Fatalf("没给 coverage 却译出了覆盖：%+v", double.area)
+	}
+
+	malformed := []byte(`{"tenant_id":"SYN-TENANT-1","code":"SYN-AREA-XA","version":1,
+		"effective_from":"2026-08-20T12:00:00Z","coverage":{"country":"xa"}}`)
+	double = &registryDouble{}
+	message, code := execute(t.Context(), kindServiceArea, malformed, registrarOver(t, double), passthroughTransactor{})
+	if code != exitUsage || !strings.Contains(message, "COVERAGE_MALFORMED") || double.calls() != 0 {
+		t.Fatalf("message=%q code=%d calls=%d, 想要 REFUSED(COVERAGE_MALFORMED)/1 且写入口零调用",
+			message, code, double.calls())
+	}
+}
+
 // Covers: 译装门在入库前拒——未知族、未知字段、封闭枚举外的词、空白租户都不到达
 // 写入口，全部译成退出码 1。
 func TestExecuteRefusesAtTheTranslationGate(t *testing.T) {

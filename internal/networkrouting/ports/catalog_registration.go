@@ -136,8 +136,8 @@ type LineDefinitionVersion struct {
 	HasEffectiveTo   bool
 }
 
-// ServiceAreaDefinitionVersion 是一个服务区域的适用版本行。覆盖内容列未定
-// （开放集，等 PAR-NET-14 的形态），版本机制先行。
+// ServiceAreaDefinitionVersion 是一个服务区域的适用版本行：版本、有效区间与覆盖。覆盖文法首版两种形态
+// （整个国家 / 地区，或国家 / 地区加一组邮编前缀），形态归产品、取值归租户（ADR-0148 决定二）。
 type ServiceAreaDefinitionVersion struct {
 	Code           string
 	Version        int32
