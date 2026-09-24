@@ -1,7 +1,7 @@
 # 03 参考配置的存放、版本与显式采用路径，在注册号类型目录上立样板
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——2026-09-24 通道 4 认领（派单 task-a6b49376，通道 1 派；分支 `mcp4-psb03` 基 `f2c8cd57`，树 `/home/tops/workspace/idp-parcel-mcp4-psb03`）
 Blocked by: 无
 地盘：参考配置的存放目录（本票定）；party-commercial 注册号类型目录的采用路径（`parcel-commercial` CLI 与登记用例）；演示种子里对应一行。
 出处：[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定三、越权风险点 4、5；[ADR-0145](../../../docs/adr/0145-legal-entity-attributes-split-into-identity-layer-and-dated-profile.md) 越权风险点 2。
