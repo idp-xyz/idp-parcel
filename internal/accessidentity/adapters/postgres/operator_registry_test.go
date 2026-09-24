@@ -347,14 +347,27 @@ func TestOperatorRegisterTablesGuardTheInvariantsThemselves(t *testing.T) {
 		tenantOne, "SYN-GRANT-01", grantStartsAt, "")
 }
 
-// Covers: 写入只经框架事务——拿不到事务句柄时报错，不退回连接池。
-func TestOperatorRegistrationRefusesToWriteOutsideATransaction(t *testing.T) {
+// Covers: PBC-08——三个写口只经框架事务，拿不到事务句柄时答 ErrTransactionRequired，不退回连接池
+// 自动提交。
+func TestOperatorRegistrationWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	register := newOperatorRegister(t)
-	binding := bindingOf(t, subjectOf(t, syntheticIssuer, "SYN-OPERATOR-01"), tenantOne, "SYN-OPERATOR-BASIS-01")
-	if _, err := register.registry.RegisterOperator(t.Context(), binding); err == nil {
-		t.Fatal("无事务的登记应报错")
+	subject := subjectOf(t, syntheticIssuer, "SYN-OPERATOR-01")
+	ctx := t.Context()
+
+	if _, err := register.registry.RegisterOperator(ctx,
+		bindingOf(t, subject, tenantOne, "SYN-OPERATOR-BASIS-01")); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记主体：err = %v, want ErrTransactionRequired", err)
 	}
-	if _, found, err := register.registry.FindOperator(t.Context(), binding.Subject()); found || err != nil {
+	if _, err := register.registry.RegisterGrant(ctx,
+		grantOf(t, tenantOne, "SYN-GRANT-01", subject, accessidentity.CapabilityRegistryConfigurationWrite,
+			grantStartsAt, time.Time{})); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记授予：err = %v, want ErrTransactionRequired", err)
+	}
+	if _, err := register.registry.RegisterRevocation(ctx,
+		revocationOf(t, tenantOne, "SYN-GRANT-01", grantStartsAt, "SYN-REVOKE-BASIS-01")); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记撤销：err = %v, want ErrTransactionRequired", err)
+	}
+	if _, found, err := register.registry.FindOperator(ctx, subject); found || err != nil {
 		t.Fatalf("无事务登记之后：found %v, err %v; want 未落册", found, err)
 	}
 }
