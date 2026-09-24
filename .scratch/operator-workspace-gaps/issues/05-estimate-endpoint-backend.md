@@ -1,7 +1,7 @@
 # 05 试算后端：计价试算编排、补齐读数共用件与 `POST /pricing-estimates`
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——2026-09-25 通道 3 认领，隔离树 idp-parcel-mcp3-est05、分支 mcp3-est05，基线 03509b46
 Blocked by: 无
 地盘：`internal/parcelpricing/application`（新试算编排；把 `EvaluatePricingHandler` 的补齐读数两步抽成共用件）、`internal/parcelpricing/adapters/http`
 （新端点、载荷解码与响应）、`cmd/parcel-api/endpoints.go` 与其测试（端点表一行，**改前占号**）、机制清点重生成。
