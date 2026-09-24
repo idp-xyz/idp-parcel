@@ -101,8 +101,10 @@ const (
 	// RouteCandidatesTied 是最低成本并列、选不出唯一一条（`PAR-NET-16`）：候选可行、等授权角色
 	// 裁，所以既不是计划也不是`无当前有效路由`。
 	RouteCandidatesTied
-	// RouteCandidateCostsNotPriced 是合格候选全部缺成本事实（待判断或不可计价）而无一可比。
-	RouteCandidateCostsNotPriced
+	// RouteCandidateCostsPending 与 RouteCandidateCostsUnpriceable 都是合格候选无一已计价，分格
+	// 是因为恢复动作相反：前者等评价形成会自己好，后者要有人改价卡或候选集合（ADR-0029）。
+	RouteCandidateCostsPending
+	RouteCandidateCostsUnpriceable
 	RouteCandidateCostCurrenciesDiffer
 )
 
@@ -130,8 +132,10 @@ func (reason RouteUndecidedReason) String() string {
 		return "RANKING_FORM_NOT_CONFIGURED"
 	case RouteCandidatesTied:
 		return "CANDIDATES_TIED"
-	case RouteCandidateCostsNotPriced:
-		return "CANDIDATE_COSTS_NOT_PRICED"
+	case RouteCandidateCostsPending:
+		return "CANDIDATE_COSTS_PENDING"
+	case RouteCandidateCostsUnpriceable:
+		return "CANDIDATE_COSTS_UNPRICEABLE"
 	case RouteCandidateCostCurrenciesDiffer:
 		return "CANDIDATE_COST_CURRENCIES_DIFFER"
 	default:
@@ -413,8 +417,11 @@ func (handler *CreateInitialRouteHandler) judgeParcel(
 	case domain.RankingFormNotDeclared:
 		undecided := handler.undecidedParcel(key, RouteRankingFormNotConfigured)
 		return none, &undecided, nil
-	case domain.RankingNoPricedCandidate:
-		undecided := handler.undecidedParcel(key, RouteCandidateCostsNotPriced)
+	case domain.RankingCostsPending:
+		undecided := handler.undecidedParcel(key, RouteCandidateCostsPending)
+		return none, &undecided, nil
+	case domain.RankingCostsUnpriceable:
+		undecided := handler.undecidedParcel(key, RouteCandidateCostsUnpriceable)
 		return none, &undecided, nil
 	case domain.RankingCurrenciesDiffer:
 		undecided := handler.undecidedParcel(key, RouteCandidateCostCurrenciesDiffer)

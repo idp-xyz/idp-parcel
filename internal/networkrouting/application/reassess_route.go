@@ -371,7 +371,8 @@ func (handler *ReassessRouteHandler) rerouteAfterLapse(
 			return record, nil
 		case domain.RankingNoQualifiedCandidate,
 			domain.RankingFormNotDeclared,
-			domain.RankingNoPricedCandidate,
+			domain.RankingCostsPending,
+			domain.RankingCostsUnpriceable,
 			domain.RankingCurrenciesDiffer:
 			// 选路不成：自动改路形不成，退回纯失效并保留判定与阻塞（空清单如实表示
 			// 「条件都立、是选路不成」）。
@@ -505,7 +506,8 @@ func (handler *ReassessRouteHandler) reassessNoRoute(
 		return handler.commit(ctx, trigger, stillNoRoute)
 	case domain.RankingTied,
 		domain.RankingFormNotDeclared,
-		domain.RankingNoPricedCandidate,
+		domain.RankingCostsPending,
+		domain.RankingCostsUnpriceable,
 		domain.RankingCurrenciesDiffer:
 		// 候选在而排不出唯一一条：不形成首个计划，候选评估记未决。并列在这条线上也不挂建议——
 		// 这里没有被复核计划，改路三件落不了库（route_reassessment_reroute_on_reviewed_plan）。
@@ -564,8 +566,8 @@ func (handler *ReassessRouteHandler) evaluateCandidates(
 }
 
 // reviewCandidates 在失效路径上给出候选评估状态（另存，不拦失效）。并列算有候选：候选可行，
-// 只是要授权角色裁；排不出来的三格（形态未声明、缺成本、币种不齐）与证据装配坏了都记未决，
-// 不冒充「没有合格候选」这个业务结论。
+// 只是要授权角色裁；排不出唯一一条的各格与证据装配坏了都记未决，不冒充「没有合格候选」这个
+// 业务结论。
 func (handler *ReassessRouteHandler) reviewCandidates(evidence ports.InitialRouteEvidence) ports.CandidateReviewState {
 	candidates, undecided, err := handler.evaluateCandidates(evidence)
 	if err != nil || undecided {
@@ -580,7 +582,14 @@ func (handler *ReassessRouteHandler) reviewCandidates(evidence ports.InitialRout
 		return ports.CandidatesAvailable
 	case domain.RankingNoQualifiedCandidate:
 		return ports.NoQualifiedCandidates
+	case domain.RankingFormNotDeclared,
+		domain.RankingCostsPending,
+		domain.RankingCostsUnpriceable,
+		domain.RankingCurrenciesDiffer:
+		return ports.CandidateReviewUndecided
 	default:
+		// 这里交不出错误：失效必须照常落库，候选评估不得拦它（硬句）。认不出的结局落「未决」——
+		// 候选评估状态里只有它不下结论，不会让失效记录冒出一个没人判过的「有候选」或「无候选」。
 		return ports.CandidateReviewUndecided
 	}
 }

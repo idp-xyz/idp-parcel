@@ -42,7 +42,8 @@ func TestCostSingleDimensionSelectsTheUniqueLowestAmongQualified(t *testing.T) {
 
 // Covers: `PAR-NET-16`「候选评价为待判断或不可计价时该候选出局，不得以零金额或其他候选金额
 // 顶替」——缺成本的两格都出局，剩下的唯一最低者照选；若按零顶替，出局的那两家会被选中。
-// 合格候选全部缺成本时交「无已计价候选」，不硬选一个。
+// 合格候选全部缺已计价成本时不硬选一个，按恢复动作分两格：有待判断的等评价，全部不可计价的
+// 要改价卡或候选集合（ADR-0029）。
 func TestCandidatesWithoutCostFactsAreExcludedNotZeroed(t *testing.T) {
 	candidates := []domain.RouteCandidate{
 		qualifiedRouteCandidate(t, "cand-pending"),
@@ -67,18 +68,22 @@ func TestCandidatesWithoutCostFactsAreExcludedNotZeroed(t *testing.T) {
 	if ranking.Outcome() != domain.RankingSelected || !ok || selected.String() != "cand-priced" {
 		t.Fatalf("outcome = %s, selected = %s (%v); want SELECTED cand-priced", ranking.Outcome(), selected, ok)
 	}
-	excluded := ranking.Excluded()
-	if len(excluded) != 2 || excluded[0].String() != "cand-pending" || excluded[1].String() != "cand-unpriceable" {
-		t.Fatalf("excluded = %v, want [cand-pending cand-unpriceable]", excluded)
-	}
 
-	allWithout, err := domain.RankRouteCandidates(domain.CostSingleDimensionRanking, candidates[:2],
+	stillPending, err := domain.RankRouteCandidates(domain.CostSingleDimensionRanking, candidates[:2],
 		[]domain.CandidateCostFact{pending, unpriceable})
 	if err != nil {
 		t.Fatalf("rank without priced: %v", err)
 	}
-	if _, ok := allWithout.Selected(); allWithout.Outcome() != domain.RankingNoPricedCandidate || ok {
-		t.Fatalf("outcome = %s (selected %v), want NO_PRICED_CANDIDATE and nothing selected", allWithout.Outcome(), ok)
+	if _, ok := stillPending.Selected(); stillPending.Outcome() != domain.RankingCostsPending || ok {
+		t.Fatalf("outcome = %s (selected %v), want COSTS_PENDING and nothing selected", stillPending.Outcome(), ok)
+	}
+	allUnpriceable, err := domain.RankRouteCandidates(domain.CostSingleDimensionRanking, candidates[1:2],
+		[]domain.CandidateCostFact{unpriceable})
+	if err != nil {
+		t.Fatalf("rank all unpriceable: %v", err)
+	}
+	if _, ok := allUnpriceable.Selected(); allUnpriceable.Outcome() != domain.RankingCostsUnpriceable || ok {
+		t.Fatalf("outcome = %s (selected %v), want COSTS_UNPRICEABLE and nothing selected", allUnpriceable.Outcome(), ok)
 	}
 }
 
