@@ -1,7 +1,7 @@
 # 02 右侧检查器：壳层右栏位 + `InspectorContent` 契约（五节）+ `ListPageTemplate` 单击进检查器 + 两张首用页渲染器
 
 Category: enhancement
-Status: resolved——2026-09-22 通道 1 在 `main` 上直接做完（workflow.md「前端切片」六步；本地 `92cbcf1a` 模板段 / `9015cdaf` 壳层段 + 本笔票面与旧话改口，**已进 main `539b8764`**（2026-09-23 push，`e0d3f89d..539b8764` 纯 ff，码 SHA 不换））。完成记录见文末。此前 in-progress——紧接票 01 的壳层笔；模板段先落、壳层段随后。此前 draft——分两段：**模板段**（契约 + 首用渲染器 + `ListPageTemplate` 接口）不等任何票；**壳层段**（右栏装进 `Layout.tsx`）Blocked by 01
+Status: resolved——2026-09-22 通道 1 在 `main` 上直接做完（workflow.md「前端切片」六步；本地 `92cbcf1a` 模板段 / `9015cdaf` 壳层段 + 本笔票面与旧话改口，**已进 main `539b8764`**（2026-09-23 push，`e0d3f89d..539b8764` 纯 ff，码 SHA 不换））。完成记录见文末；非作者评审 ← 通道 3（2026-09-24，两轴 0 阻断，见 Comments）。此前 in-progress——紧接票 01 的壳层笔；模板段先落、壳层段随后。此前 draft——分两段：**模板段**（契约 + 首用渲染器 + `ListPageTemplate` 接口）不等任何票；**壳层段**（右栏装进 `Layout.tsx`）Blocked by 01
 Blocked by: 无（01 的壳层笔 `c9312bf6` 已在 main）
 地盘：新 `apps/admin-web/src/templates/inspector.ts`（契约类型 + 纯逻辑 + node:test）、新 `templates/InspectorPanel.tsx`（五节渲染件）、`templates/ListPageTemplate.tsx`
 （加可选 `inspector?: (row) => InspectorContent`，单击行时交给壳层——**不改** `onRowClick` 语义，只新增）、`templates/index.ts`（只追加）、`Layout.tsx`（壳层段：右栏位装
@@ -90,3 +90,41 @@ myshop-web 的做法是**壳层级右栏**：选中对象常驻右侧，表还�
 ## Comments
 
 - 2026-09-23 · 进 main：`origin/main` = `539b8764`（`e0d3f89d..539b8764` 纯 ff，码 `92cbcf1a` / `9015cdaf` 与票面笔 SHA 不换）。此前状态行写的「未推——本宿主没有 GitHub 推送凭据」在这次推送之后失效。
+
+### 评审 ← 通道 3 · 钉 `9f95520e`（基 `c9312bf6`，共享树只读，门禁未重跑）· 2026-09-24 12:3x（推送方自任务台 `task-5a1d3537` 代落原文）
+
+门禁未重跑，引通道 1 在 `3a47da8d` 实跑（Node 22.23.3）：`tsc -b --noEmit` 0 / `run-tests` 406 pass 0 fail / `vite build` 成功；CI 在 `539b8764` 与 `3a47da8d` 七个 job 全绿。`9f95520e..3a47da8d` 在 `apps/admin-web` 下零差、共享树该目录无未提交改动，钉点即现 main。读的是 `git diff c9312bf6 9f95520e -- apps/admin-web`（17 文件）、现文件与 vendor 源（`@idpxyz/ui-primitives@0.1.25` 的 `src/inspector.tsx`，`@idpxyz/ui-workspace@0.1.25` 的 `EditorGroup.tsx`、`hooks/useResize.ts`）。
+
+**Standards** — 阻断：无。非阻断：
+1. 收起控件读屏无名：`Layout.tsx` 把 `toggleInspector` 作 `InspectorHeader` 的 `onClose` 传入，vendor 渲染的 × 是无 `aria-label`、无 `title` 的裸 `<button>`——展开态下栏内唯一的收起控件读屏无名、无悬停说明，× 的通行语义又是「关闭」；折叠态的展开按钮却有 `aria-label="显示检查器"` + Tooltip，两端不对称。不动 vendor 的修法：`InspectorHeader` 收 `children`（渲在 × 之前），放一个 `PanelRightClose` 图标按钮带 `aria-label="隐藏检查器"` + Tooltip，不再传 `onClose`（判断项 6 随之改口）。同族记 vendor：`InspectorSection` 的标题按钮无 `aria-expanded`，翻行保留折叠态之后读屏更难知道哪节折着。
+2. 注释抄了别处的值：`Layout.tsx` 文件头「栏可拖宽（240–480）」抄的是 `shell/workspace-state.ts` 的 `INSPECTOR_WIDTH_MIN` / `INSPECTOR_WIDTH_MAX`；`InspectorPanel.tsx` `SectionBody` 的「横排在 240px 的栏里会折成两行半」抄的是同一个下限，还让模板层注释绑上了壳层的具体宽度（同文件头说「宽度由父级给，自己不定宽」）。常量一改两句无声变旧，与「不计数」同一理由；改引常量名或只说「窄栏」。
+3. 变更说明进了注释：`ShipmentRequestListPage.tsx` `inspector` prop 上方「（此前单击即整区切详情）」、`shell/command-actions.ts` 文件头「「切换右栏」随票 02 的检查器栏落地后加进壳层组」、`App.tsx` 头注「此前沿 loms-web 的单页区形态……」是历史叙述，归票面与提交信息（AGENTS「不写变更说明」）。
+4. 重复 key 的缝：`InspectorPanel.tsx` 的 `FieldRows`、`SectionBody`（状态）、`ActionButton` 列表以 `label` 作 key，关联对象以 `hash`；契约又允许同种节多次给、`mergeSections` 按序接起——同名格一出现即重复 key。今天两页撞不上。可让 `resolveInspectorSections` 对同节重名抛 `InspectorContractError`（与契约「抛而不静默」同口径），或 key 带序号。
+
+无发现（实核）：注释全中文；跨文件引用皆为符号名 / 文件路径（`templates/workspace-tabs.ts` 同一手法、`ListPageTemplate` 的 `DisabledSlot`、`ShipmentRequestListPage` 的 `requestStateBadge`、`CaseRow` 头注均实有其物），无行号；蓝图 10.8「六节」锚在 `idp-ui@6751fb2`，其余计数只数本文件自己的东西。命名 / 惯用法与邻近一致：`inspectorOf` 对 `viewStateOf` / `csvCellText`，`INSPECTOR_WIDTH_*` / `setInspectorWidth` 对 `SIDEBAR_WIDTH_*` / `setSidebarWidth`，禁用动作 `aria-disabled` + Tooltip + `preventDefault` 与 `DisabledSlot` 同形，词表判法与 `ExceptionCasesPage` `toneWordOrText` 同为 `in domainStatusTones`。纯逻辑有 node:test：`inspector.test.ts` 8 条，`workspace-state.test.ts` 检查器 2 条（钳区间、非数回默认、非布尔当可见），`command-actions.test.ts` 壳层组改三条——396 → 406 与新增 8 + 2 对得上。分层：`templates/*` 新增引用只有 `./inspector`、`./inspector-context`、`../domain/status`（共享词表，非页面层）与 `@idpxyz/*`，不引 `pages/`；`inspector.ts` 不引 React / 原语，CJS 测试链可载；`templates/index.ts` 只追加。`toggleInspector` 空依赖 `useCallback` 包 `applyWorkspace`：实核 `applyWorkspace` 只读 `workspaceRef` 与稳定的 `setWorkspace`，`setInspectorVisible` 不改 `activeTabId`、不写 hash，注释成立。
+
+**Spec** — 阻断：无。
+
+派单七项取舍逐条判：
+1. 契约硬规则落为渲染时抛 `InspectorContractError`（票面写「dev 下抛」）→ **接受**。定性为编程错误、抛而不静默，与契约一致；`inspector.ts` 被 `inspector.test.ts` 引、身在 `tsconfig.test.json` 的 CJS 链里、碰不得 `import.meta`，理由成立。代价见非阻断 2。
+2. `ListPageTemplate` 不传 `inspector` 零变化 → **接受（实核）**。`rowInteraction` 的 `click` 退化为 `onRowClick !== undefined`；行 `className` 在 `inspected` 恒假时化简回 `rowClass`（含 `undefined`）；不出 `data-inspected`；`onClick` 仅在 `onRowClick || inspector` 时挂，`handleRowClick` 先调 `onRowClick?.(row)`、无 `inspector` 即返回；无 Provider 时 `useInspector` 给 `noopController`；`onDoubleClick` 与 Enter 仍只走 `onRowOpen`；复选格 `stopRowEvent` 截单击，勾选不进检查器。
+3. 委托查阅单击语义变更 → **接受**。合 `list-page-structure.ts` `rowInteraction` 头注所引手册「Drill-down 模式：单击预览、双击开对象」与蓝图母版 B；检索全库（除 node_modules）无文档或用例写过「委托查阅单击进详情」（命中只有本票与 spec 状态行）。此前该页只接 `onRowClick`，行不进 Tab 序、键盘开不了详情；现接 `onRowOpen`，Enter 可开——是改进。代价：检查器折起时单击只剩行高亮。
+4. 两张首用页 → **接受**。两个 `inspectorOf` 都是行的纯函数，不发请求；「关联对象两页都不给」实核成立——全 `src/pages` 只有 `ShipmentRequestListPage` 读 hash 第二段，客户账户、来源请求键、包裹身份都没有对象地址，`case-api.ts` 的 `ExceptionCaseRecord` 也没有委托标识；动作各一条且都有落点（hash 二段 / `#/exception-triage`）。附非阻断 3、6。
+5. 壳层 → **接受**。vendor `useResize` 实有 `reverse`（`startSize - diff`，钳 min/max）；240 / 480 / 默认 320 在 `shell/workspace-state.ts`；宽与可见性进 `WorkspaceState`，由既有的 `saveWorkspaceState` effect 落盘，`loadWorkspaceState` 越界钳、非布尔当可见。「换标签清空」读码实核两半都清：Layout 的 `useEffect([workspace.activeTabId])` 把 `inspectorContent` 置空；行高亮 `inspectedKey` 是 `ListPageTemplate` 局部 state，而 `renderTab` 以 `Fragment key={tabId}` 包页、`EditorGroup` 在 `preserveInactiveTabContent={false}` 下只挂活动标签——换标签即卸旧页、高亮归零，列表与同模块详情两张标签也不共用实例；无子组件在挂载时调 `show`，父级 effect 不会误清新内容。运行期**未实证**。
+6. 节展开态翻行保留（`key={kind}`）→ **接受**，并更正一处叙述：票面第 2 条只写默认展开哪几节，没写按对象重置；首版 `92cbcf1a` 的 key 是 `${content.title}:${resolved.kind}`，而两页 `title` 是常量「委托」「异常案件」（标识在 `subtitle`），首版本来就不按对象重置——`9f95520e` 对两页零行为变化，改的是让注释说真话。判断项 3「首版曾按对象重置」与实际不符。残留：某行缺某节（如审计全空）再翻到有它的行，该节重挂回默认。
+7. 默认可见、全页常驻、不进 `DetailPageTemplate`、命令面板「显示 / 隐藏检查器」→ **接受**。`initialWorkspaceState` 可见；diff 未碰 `DetailPageTemplate`；`TOGGLE_INSPECTOR_ACTION_ID` 标签随可见性答目标态，测试钉。代价见非阻断 1。
+
+非阻断：
+1. 空态句在多数页不成立（第 7 项的副作用，建议下一笔先修）：右栏全页常驻，`INSPECTOR_EMPTY_NOTE`「在列表里单击一行，这里显示它的概要」只在两张首用页为真。`GroupLegalEntitiesPage`、`BusinessPartiesPage`、`ChannelSelectionDecisionsPage` 单击行走本页自己的选中预览（`setSelectedId` / `setInspecting`），`RecentObjectsPage`、`SavedViewsPage` 单击即打开——右栏照旧空着却仍这么说；对象标签（如委托详情）上也显这句——票面说「检查器不进对象页」，内容确实没进，但栏和一句指向列表的空态还在。spec 红线「留位只允许禁用态 + 说明」要的是一句为真的说明。修法任一：`ListPageTemplate` 接了 `inspector` 时经控制口报「本页供内容」、壳层据此选空态句；或改成处处为真的一句。
+2. 契约错误会拖垮整个外壳（第 1 项的代价，建议下一笔先修）：`resolveInspectorSections` 在 `InspectorPanel` 渲染时调，`apps/admin-web/src` 下没有任何错误边界——一次违约 React 即卸掉整棵树、整台白屏。今天两页撞不上（概要候选 ≤ 4 格、动作都有 `onRun`），但 `presentFields` 让格数随数据变：将来某页列 9 个候选格、样例行有空时开发期过得去，生产里全满的那行一点就白屏。判断项 5「测试先拦」只拦契约函数本身；页面 `inspectorOf` 在 `.tsx` 里、不在 CJS 测试链，没有测试跑到它。修法：`InspectorPanel` 就地 try/catch `resolveInspectorSections`，接住 `InspectorContractError` 在栏内显错误句、其余照抛——开发期照样响亮，生产不牵连外壳，也不必分 dev / prod（没有测试引 `InspectorPanel.tsx` 或 `templates/index.ts`，它本就不在测试链，`import.meta` 的顾虑不及于它）。
+3. 委托查阅检查器字段偏离票面、完成记录未载：票面第 4 条概要「委托号 / 客户 / 服务产品 / 提交时刻」、第 1 条审计「创建 / 更新 / 修订 / 来源」；`ShipmentRequestListPage.tsx` `inspectorOf` 把提交时刻放进默认折叠的审计节、把来源放进概要，行里已有的 `submissionVersionId`（提交版本，即审计的「修订」）哪节都没进。服务产品读模型没有（`api.ts` `ShipmentRequestSummary` 头注明言不虚构），缺得正当。建议把 `submissionVersionId` 补进审计，其余作为取舍补进判断项。
+4. 检查器只有指针能到：`rowInteraction` 仅在接了 `onRowOpen` 时给行 `tabIndex`——异常案件页只接 `inspector`，行不可聚焦；委托查阅行可聚焦但 Enter 是开详情，没有键把行交给检查器。可把「接了 `inspector`」也算进 Tab 序理由、聚焦即交给检查器（不占 Enter / Space）。属判断项，交作者定。
+5. 检查器是单击那一刻的行快照：检索筛掉该行后右栏仍显它、行高亮已消失；出错重取后同键行若还在，高亮回到新行而右栏是旧快照，状态词可能已变。模板握着 `inspectedKey` 与新 `rows`，可在 `rows` 变时按键重推或清空。低优先。
+6. 异常案件「打开分诊」落在模块级 `#/exception-triage`：该页列信号发作期册与处置请求册，不列案件、也没有按案件的地址，点了回不到「这件案子的分诊」。票面第 4 条原样如此，不算偏离；动作名可改为不暗示对象范围的「转到异常分诊」。
+7. 完成记录写「四道门」只列三道（缺 `go test ./internal/architecture/`）；CI 的 Test shards 按 `go list ./...` 全覆盖，第四道由 CI 绿兜住，记录补一句即可。
+
+无发现（实核）：spec 红线——状态簇走 `StatusWord` → `StatusBadgeFor` → `LayeredStatusBadge`（层由 `domainStatusLayers` 定），词表外原样示文，未另画；无假动作——`resolveInspectorSections` 对既无 `onRun` 又无 `disabledReason` 的动作抛，两页动作都有真实落点，撤回 / 取消 / 复核 / 归并 / 关闭不列（红线「只放已有端点的」是限制不是义务）；无假数据——字段全取自行，`presentFields` 丢空格、不代填「—」；异常案件状态只一枚主状态，严重度 / 优先级在 `ExceptionCaseRecord` 上结构性不存在；模板改动向后兼容（第 2 项）。票面「不做」：无 Notes 节、无检查器内表单、无 toast 假反馈、未碰 `DetailPageTemplate` 与两页以外的页（`App.tsx` / `README.md` 只改注释与说明）、`getTabRiskDot` 仍 `() => null`。完成判据：node:test 三类（节序 / 缺省与空节 / 假动作抛）各至少一条在；探针源不入库，自报 25 ok 未复核。
+
+**Standards 0 / 4 · Spec 0 / 7** → 结论：**可接受**。建议下一笔先修 Spec 非阻断 1（空态句）与 2（面板就地接住契约错误），两件都不动内容契约 `InspectorContent`；其余记票面。
+
+**处置**（通道 1）：本笔只落原文，不改码、不立票。评审建议先修的 Spec 非阻断 1 / 2 与其余非阻断待用户定；完成记录判断项 3 那句与实际不符（Spec 第 6 项），完成记录未改写，以本评审为准。
