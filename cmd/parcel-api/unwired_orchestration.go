@@ -733,6 +733,17 @@ func (unwiredEvaluationReplay) Handle(
 	return pricingapp.ReplayPricingEvaluationResult{}, errOrchestrationNotWired
 }
 
+// unwiredPricingEstimate 是运营试算的命令占位（ADR-0152，票 operator-workspace-gaps/05）。判据同回放占位：不交回零值答复，
+// 稳定错误让「越过了 Intake」可观察为 NO_ANSWER_FORMED。
+type unwiredPricingEstimate struct{}
+
+func (unwiredPricingEstimate) Handle(
+	context.Context,
+	pricingapp.FormEstimateEvaluationsCommand,
+) (pricingapp.FormEstimateEvaluationsResult, error) {
+	return pricingapp.FormEstimateEvaluationsResult{}, errOrchestrationNotWired
+}
+
 // 网络七族登记的命令占位（票 admin-write-faces/02 切片 02a）。七族一个类型，随生产侧
 // 的 transactionalNetworkCatalogRegistration：传输层只要一个 CatalogRegistrar，拆成七个
 // 换不来第二道保障。
