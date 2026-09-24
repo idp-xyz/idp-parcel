@@ -2,9 +2,11 @@ package tfhttp
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
 // PickupAttemptIntake 把已认证的接入请求翻译成一次到访多对象的揽收执行命令。
@@ -14,6 +16,111 @@ import (
 // Intake 两层都要收——收了整次那一格而漏掉逐对象那一格，成员差异就在端点层被抹平了。
 type PickupAttemptIntake interface {
 	IntakePickupAttempt(ctx context.Context, request *http.Request) (application.PerformOffsitePickupCommand, error)
+}
+
+// OffsitePickupAttemptPayload 是一次到访多对象揽收执行的线格式，逐格镜像 application.PerformOffsitePickupCommand 去掉租户；
+// 三个时刻取 RFC 3339。段引用两层照命令分设：整次一个 segment，逐对象各自一个 plannedSegment。
+type OffsitePickupAttemptPayload struct {
+	SourceID        string                              `json:"sourceId"`
+	Task            string                              `json:"task"`
+	Attempt         string                              `json:"attempt"`
+	ExecutedBy      string                              `json:"executedBy"`
+	Place           string                              `json:"place"`
+	PlannedFrom     string                              `json:"plannedFrom"`
+	PlannedTo       string                              `json:"plannedTo"`
+	ArrivedAt       string                              `json:"arrivedAt"`
+	Evidence        string                              `json:"evidence"`
+	RescheduledFrom string                              `json:"rescheduledFrom,omitempty"`
+	Segment         string                              `json:"segment,omitempty"`
+	Objects         []OffsitePickupAttemptObjectPayload `json:"objects"`
+}
+
+// OffsitePickupAttemptObjectPayload 是逐对象的一项。outcome 取 domain.AttemptObjectOutcome 的封闭词；basis 与 control 可缺
+// ——失败对象不带控制依据，带了由编排拒。
+type OffsitePickupAttemptObjectPayload struct {
+	Object         string `json:"object"`
+	Outcome        string `json:"outcome"`
+	Basis          string `json:"basis,omitempty"`
+	Control        string `json:"control,omitempty"`
+	OccurredAt     string `json:"occurredAt"`
+	PlannedSegment string `json:"plannedSegment,omitempty"`
+}
+
+// Command 把载荷连同信封给的租户翻成执行命令。时刻解不出、成败词不在封闭集内是坏报文（400）；引用缺席时照零值交进去，
+// 由编排答`未受理`——命令上这几格是领域值对象，Intake 只在给了值时过它们的构造门。
+func (payload OffsitePickupAttemptPayload) Command(tenant domain.TenantID) (application.PerformOffsitePickupCommand, error) {
+	none := application.PerformOffsitePickupCommand{}
+	if tenant.String() == "" {
+		return none, ErrOperatorIdentityMissing
+	}
+	command := application.PerformOffsitePickupCommand{
+		TenantID:        tenant,
+		SourceID:        payload.SourceID,
+		Task:            payload.Task,
+		Attempt:         payload.Attempt,
+		ExecutedBy:      payload.ExecutedBy,
+		Place:           payload.Place,
+		Evidence:        payload.Evidence,
+		RescheduledFrom: payload.RescheduledFrom,
+		Segment:         payload.Segment,
+	}
+	var err error
+	if command.PlannedFrom, err = parseOptionalInstant("plannedFrom", payload.PlannedFrom); err != nil {
+		return none, err
+	}
+	if command.PlannedTo, err = parseOptionalInstant("plannedTo", payload.PlannedTo); err != nil {
+		return none, err
+	}
+	if command.ArrivedAt, err = parseOptionalInstant("arrivedAt", payload.ArrivedAt); err != nil {
+		return none, err
+	}
+	for index, object := range payload.Objects {
+		submission, err := object.submission()
+		if err != nil {
+			return none, fmt.Errorf("%w: objects[%d]: %v", ErrMalformedRequest, index, err)
+		}
+		command.Objects = append(command.Objects, submission)
+	}
+	return command, nil
+}
+
+func (object OffsitePickupAttemptObjectPayload) submission() (application.ObjectPickupSubmission, error) {
+	submission := application.ObjectPickupSubmission{PlannedSegment: object.PlannedSegment}
+	var err error
+	if object.Object != "" {
+		if submission.Object, err = domain.NewCarriedObjectReference(object.Object); err != nil {
+			return submission, err
+		}
+	}
+	if object.Outcome != "" {
+		if submission.Outcome, err = attemptObjectOutcomeFromWord(object.Outcome); err != nil {
+			return submission, err
+		}
+	}
+	if object.Basis != "" {
+		if submission.Basis, err = domain.NewAttemptResultBasisReference(object.Basis); err != nil {
+			return submission, err
+		}
+	}
+	if object.Control != "" {
+		if submission.Control, err = domain.NewTransportControlReference(object.Control); err != nil {
+			return submission, err
+		}
+	}
+	submission.OccurredAt, err = parseOptionalInstant("occurredAt", object.OccurredAt)
+	return submission, err
+}
+
+// attemptObjectOutcomeFromWord 是 domain.AttemptObjectOutcome 封闭集的名称镜像，词取各常量自己的 String()，不另立一份词表。
+func attemptObjectOutcomeFromWord(raw string) (domain.AttemptObjectOutcome, error) {
+	for _, outcome := range []domain.AttemptObjectOutcome{
+		domain.ObjectPickedUp, domain.CustomerAbsent, domain.GoodsNotReady, domain.PackagingUnacceptable,
+	} {
+		if outcome.String() == raw {
+			return outcome, nil
+		}
+	}
+	return domain.AttemptObjectOutcomeInvalid, fmt.Errorf("outcome=%q is not an attempt object outcome word", raw)
 }
 
 // PickupAttemptHandler 是本适配器转交的应用编排。

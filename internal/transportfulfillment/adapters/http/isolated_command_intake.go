@@ -26,7 +26,10 @@ type IsolatedCommandIntake struct {
 }
 
 // 已成笔的口。每放一口在这里多一行断言、多一个方法，装配点多换一行。
-var _ PickupRegistrationIntake = (*IsolatedCommandIntake)(nil)
+var (
+	_ PickupRegistrationIntake = (*IsolatedCommandIntake)(nil)
+	_ PickupAttemptIntake      = (*IsolatedCommandIntake)(nil)
+)
 
 // IsolatedCommandIntakeDeps 是构造本 Intake 的全部输入，全部是装配点给定的合成值。
 type IsolatedCommandIntakeDeps struct {
@@ -50,6 +53,18 @@ func (intake *IsolatedCommandIntake) IntakePickupRegistration(
 	var payload OffsitePickupRegistrationPayload
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.RegisterOffsitePickupCommand{}, err
+	}
+	return payload.Command(intake.tenant)
+}
+
+// IntakePickupAttempt 译一次到访多对象的揽收执行（`/transport-fulfillment/offsite-pickup-attempts`）。
+func (intake *IsolatedCommandIntake) IntakePickupAttempt(
+	_ context.Context,
+	request *http.Request,
+) (application.PerformOffsitePickupCommand, error) {
+	var payload OffsitePickupAttemptPayload
+	if err := decodeClosedPayload(request.Body, &payload); err != nil {
+		return application.PerformOffsitePickupCommand{}, err
 	}
 	return payload.Command(intake.tenant)
 }
