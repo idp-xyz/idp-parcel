@@ -1,7 +1,7 @@
 # 01 `internal/platform` 共用件：游标编解码、查询参数校验、答复 `page` 拼装
 
 Category: enhancement
-Status: in-progress——2026-09-24 通道 2 在分支 `mcp2-crp01` 上做完（基 `51d2548a`，完成记录见文末），待非作者评审与推送方重放；分支未推（本宿主无 GitHub 推送凭据）。此前：通道 2 认领（派单 `task-44d76717` ← 通道 3），隔离 worktree 分支 `mcp2-crp01`，基于认领笔
+Status: in-progress——2026-09-24 通道 2 在分支 `mcp2-crp01` 上做完（基 `51d2548a`，完成记录见文末），待非作者评审与推送方重放；分支已推 origin（凭据到位后补推，见完成记录末段）。此前：通道 2 认领（派单 `task-44d76717` ← 通道 3），隔离 worktree 分支 `mcp2-crp01`，基于认领笔
 Blocked by: 无
 地盘：新包 `internal/platform/<名自定，如 cataloguepage>/` 与其测试。不碰任何上下文包。
 出处：[ADR-0144](../../../docs/adr/0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 决定一、三、四、五、七。
@@ -82,4 +82,5 @@ Blocked by: 无
 7. **空值一律拒**（封闭词表维、不设词表的维与 `after=` 都是）；`q` 为空按决定四视为缺席，是唯一的例外。页大小不开参数，`limit` / `pageSize` 按集外键拒（决定二）。
 8. **未做**：不写任何一册的 SQL、不改读端口签名（归 02、03）；也没给读面写「多取一行判下一页」的辅助——那是 SQL 侧的写法，02、03 各写一遍后重复了再抬。
 
-**分支未推**：本宿主此刻没有 GitHub 推送凭据（经 WSL 中继网络已通，`git push --dry-run` 停在认证），按派单写明；凭据到位后补推。
+**分支推送**：完工时本宿主没有 GitHub 推送凭据（经 WSL 中继网络已通，`git push --dry-run` 停在认证）；用户随后完成 gh 设备码授权，
+2026-09-24 15:3x 补推，`git ls-remote origin refs/heads/mcp2-crp01` 答 `33fd352d`（上一笔）。代码笔的 tip 是 `f23f16e6`，其后只有票面。
