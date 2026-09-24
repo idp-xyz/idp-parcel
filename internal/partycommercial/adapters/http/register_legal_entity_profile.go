@@ -7,8 +7,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/partycommercial/application"
 )
 
-// 法人资料的在线登记口（ADR-0145 决定三；登记写面通例同 ADR-0085 Decision 一）。资料没有停用这一步，只有
-// 登记修订一个端点：新修订是往修订链上插一笔，不是改旧行，所以没有 PATCH/DELETE，方法门只放 POST。
+// 法人资料的在线登记口（ADR-0145 决定三；登记写面通例同 ADR-0085 Decision 一），与受控 CLI 的
+// register-legal-entity-profiles 同源。资料没有停用这一步，只有登记修订一个端点：新修订是往修订链上插一笔，
+// 不是改旧行，所以没有 PATCH/DELETE，方法门只放 POST。
 
 // LegalEntityProfileRegistrationIntake 把一次已认证的接入请求翻译成资料修订登记命令。它是接口而不是本包内的
 // 解析代码，理由同 RegistrationNumberTypeRegistrationIntake：操作者认证属渠道接入契约，未决期间装配点挂
