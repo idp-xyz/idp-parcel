@@ -163,7 +163,11 @@ type ResolutionKey struct {
 	Settlement SettlementSelector
 	// Credit 只在请求信用政策依据时有意义，纪律同上（ADR-0127）。
 	Credit CreditSelector
-	Anchor SelectionAnchor
+	// ServiceProduct 是委托声明请求的服务产品——对象身份，不是版本：选哪一版仍按锚点解（ADR-0080）。在场即收窄
+	// 候选：服务产品按身份，其余对象看正文有没有指名另一个服务产品（admitsDeclaredServiceProduct）。它不设「只对
+	// 某一种依据在场」的纪律——闭包把它带给每一项成员，起不起作用由候选自己的正文决定。
+	ServiceProduct CommercialObjectID
+	Anchor         SelectionAnchor
 }
 
 func (key ResolutionKey) minimumIdentityEstablished() bool {
@@ -196,7 +200,7 @@ func (key ResolutionKey) minimumIdentityEstablished() bool {
 }
 
 func (key ResolutionKey) fingerprint() string {
-	return strings.Join([]string{
+	parts := []string{
 		key.TenantID.String(),
 		key.CustomerAccountID.String(),
 		key.LegalEntityCandidate.String(),
@@ -208,7 +212,13 @@ func (key ResolutionKey) fingerprint() string {
 		key.Credit.fingerprint(),
 		key.Anchor.PolicyVersion().String(),
 		key.Anchor.At().Format(time.RFC3339Nano),
-	}, "\x00")
+	}
+	// 声明的服务产品只在在场时追加：不声明的键指纹与这一维出现之前逐字节相同，已固定的解析标识与续办引用
+	// 因此不因本维的出现而改口。
+	if key.ServiceProduct.valid() {
+		parts = append(parts, "service-product="+key.ServiceProduct.String())
+	}
+	return strings.Join(parts, "\x00")
 }
 
 // ResolutionOutcome 是第一阶段可能给出的封闭答案集合。它们刻意分开：`无适用依据`是
@@ -610,11 +620,15 @@ func resolutionIdentity(key ResolutionKey, view AuthorityViewRevision, adopted C
 }
 
 // applicable 把登记册收窄到仍可用于新决定的版本：请求的依据类型、请求的适用范围，
-// 且在锚点时刻生效。已收尾的版本在这里就落选，而不是留到后面再过滤。
+// 且在锚点时刻生效；委托声明了服务产品时，还要容得下那个产品。已收尾的版本在这里就落选，
+// 而不是留到后面再过滤。
 func (registry *CommercialRegistry) applicable(key ResolutionKey) []CommercialVersion {
 	matches := make([]CommercialVersion, 0, 2)
 	for _, version := range registry.versions {
 		if version.tenant != key.TenantID || version.kind != key.RequiredBasis || version.scope != key.Scope {
+			continue
+		}
+		if key.ServiceProduct.valid() && !version.admitsDeclaredServiceProduct(key.ServiceProduct) {
 			continue
 		}
 		// 选用区间问登记册：有效性更正不改版本值对象上的原区间（ADR-0038）。
@@ -627,4 +641,21 @@ func (registry *CommercialRegistry) applicable(key ResolutionKey) []CommercialVe
 		matches = append(matches, version)
 	}
 	return matches
+}
+
+// admitsDeclaredServiceProduct 答委托声明了某个服务产品时这一版还能不能参选：服务产品本身按身份；其余对象
+// 正文指名了另一个服务产品的落选，指名了声明的那个或根本没指名服务产品的照旧参选。
+//
+// 只收窄服务产品而不收窄指名它的对象不够：同一范围两个产品各配一份接单规则包是常规形态，那样规则包那一项仍会
+// 答`适用冲突`。收窄之后 namedReferencesConfirmed 照旧事后核对，两道各守一边。
+func (version CommercialVersion) admitsDeclaredServiceProduct(declared CommercialObjectID) bool {
+	if version.kind == ServiceProductObject {
+		return version.objectID == declared
+	}
+	for _, reference := range version.references {
+		if reference.kind == ServiceProductObject && reference.objectID != declared {
+			return false
+		}
+	}
+	return true
 }
