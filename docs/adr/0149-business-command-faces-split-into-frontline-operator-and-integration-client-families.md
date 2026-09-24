@@ -1,6 +1,6 @@
 # ADR-0149：主链业务命令面按提交者分两族——一线作业事实走操作者渠道族新增的「作业事实登记」能力面（人 + 已登记设备），外部结果与资金事实走集成客户端族（客户端凭据，推送源经签名 webhook）；ADR-0055 决定五两项按口逐一解
 
-Status: Accepted（2026-09-24，用户经 IDP 队列授权通道 4「参考专业头部软件的做法，你来帮我自决吧」，承票 operator-channel/09。裁决能力边界：读过 [ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md) 决定一至六与 Consequences、[ADR-0055](./0055-business-endpoint-intake-has-an-unconfigured-grade.md) 决定五、[ADR-0023](./0023-work-fact-identity-and-time-are-minted-by-the-device.md) 所定的纪律、[ADR-0091](./0091-isolated-form-extends-to-the-write-path-by-graded-switches.md) 逐口放行在 `cmd/parcel-api/endpoints.go` 头注里的装配形态、`internal/accessidentity` 的全部导出面。没读：ADR-0139 至 0142 全文（客户渠道，Proposed）、各命令口载荷的现有形状——后者逐口在实施票里核。）
+Status: Accepted（2026-09-24，用户经 IDP 队列授权通道 4「参考专业头部软件的做法，你来帮我自决吧」，承票 operator-channel/09。裁决能力边界：读过 [ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md) 决定一至六与 Consequences、[ADR-0055](./0055-business-endpoint-intake-has-an-unconfigured-grade.md) 决定五、[ADR-0023](./0023-work-fact-identity-and-time-are-minted-by-the-device.md) 所定的纪律、[ADR-0091](./0091-isolated-form-extends-to-the-write-path-by-graded-switches.md) 逐口放行在 `cmd/parcel-api/endpoints.go` 头注里的装配形态、`internal/accessidentity` 的全部导出面。没读：ADR-0139 至 0142 全文（客户渠道，Proposed）、各命令口载荷的现有形状——后者逐口在实施票里核。）；**部分停用**：决定一列举里「派送任务」「段关闭」两项对管理台手工建派送任务与关段两口（`/transport-fulfillment-dispatch-task-registrations`、`/transport-fulfillment-segment-closures`）的适用已由 [ADR-0151](./0151-unassigned-command-faces-get-their-families.md) 停用——两口是运营写决定，归操作者渠道的「运营决定」能力面；派送发起口与其余各条不变
 Date: 2026-09-24
 
 ## Context
@@ -65,3 +65,4 @@ ADR-0100 把操作者渠道限在登记册配置写面与目录查阅面，并�
 - [ADR-0091](./0091-isolated-form-extends-to-the-write-path-by-graded-switches.md)：隔离形态逐口放行，照旧
 - [ADR-0021](./0021-frontline-operations-client-is-part-of-the-product.md)：一线作业端属产品
 - 票 [operator-channel/09](../../.scratch/operator-channel/issues/09-decision-production-channel-for-business-command-faces.md)：本记录承接的决策票
+- [ADR-0151](./0151-unassigned-command-faces-get-their-families.md)：部分停用本记录决定一列举里「派送任务」「段关闭」两项对管理台两口的适用——两口与装载分配、终止参与同为运营写决定，归「运营决定」能力面

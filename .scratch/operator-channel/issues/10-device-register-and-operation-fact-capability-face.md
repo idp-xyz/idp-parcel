@@ -12,6 +12,8 @@ Blocked by: 01、03
 1. 操作者册加能力面「作业事实登记」，授予按租户 × 作业范围（节点、场外作业范围）。
 2. 设备册：设备标识、所属租户与作业范围、状态（登记 / 停用），受控 CLI 登记；参数登记册增「作业设备」一行（租户取值）。
 3. 铸造：令牌有效 + 在册有授予 + 设备已登记且在用，才铸带「操作者主体 + 设备」的信封；答复另加「设备未登记或已停用」一格。
+4. 主链事实的更正口随原事实归本能力面（2026-09-24 随 [ADR-0151](../../../docs/adr/0151-unassigned-command-faces-get-their-families.md) 决定四补）：`/transport-fulfillment/handover-corrections`、`/transport-fulfillment/offsite-pickup-corrections`、`/transport-fulfillment/delivery-proof-corrections` 与首登口同一份认证与授予。
+5. 关段 `/transport-fulfillment-segment-closures` 与手工建派送任务 `/transport-fulfillment-dispatch-task-registrations` 不归本能力面（2026-09-25 随 ADR-0151 决定六改）：它们是管理台上的运营写决定，归 [15](./15-operation-decision-faces-take-operator-intake.md) 的「运营决定」能力面；派送发起口照旧在本能力面的范围内。
 
 ## 完成判据
 

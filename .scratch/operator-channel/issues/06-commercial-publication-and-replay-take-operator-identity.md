@@ -11,6 +11,7 @@ Blocked by: 04
 
 1. 商业发布：录入者与批准者两身份都从 `OperatorEnvelope` 来；审批职责规则未登记时批准门照旧答未配置。
 2. 计价回放端点换操作者 Intake。
+3. 发布表单的词表读口 `/commercial-publication-vocabularies` 一并换操作者 Intake（2026-09-24 随 [ADR-0151](../../../docs/adr/0151-unassigned-command-faces-get-their-families.md) 决定五补）：它不要租户、不读存储读面，唯一的消费者是发布四口喂的表单。
 
 ## 不做
 

@@ -52,6 +52,8 @@ Blocked by: 无——ADR-0100 已接受，这一格不等任何决定
 | [12](../../operator-channel/issues/12-signed-webhook-inbound.md) | 签名 webhook 入向 | 11 |
 | [13](../../operator-channel/issues/13-command-payload-canonicalization-per-face.md) | 各命令口的载荷规范化形状（逐口） | 无 |
 | [14](../../operator-channel/issues/14-admission-scope-read-and-grade.md) | 准入范围读口与「不在准入范围」一格 | 无（接进铸造随 10、11） |
+| [15](../../operator-channel/issues/15-operation-decision-faces-take-operator-intake.md) | 「运营决定」能力面：委托侧五个运营决定口与 TF 四个管理台写面换操作者 Intake（2026-09-24 随 ADR-0151 补立，2026-09-25 复核改定） | 03、14 |
+| [16](../../operator-channel/issues/16-stale-par-int-01-comments-on-operator-faces.md) | 过期注释：运营侧接入面的认证不再写「属 `PAR-INT-01` 待提供」（2026-09-25 随 ADR-0151 补立并做完） | 无 |
 
 **前沿**：01、02、08、13、14。要最早让隔离环境里的主链命令面答业务结果，走 08；要最早让合成操作者在登记写面与目录查阅面上走通，走 01 + 02 → 03 → 04 / 05；生产上的主链命令面要 10 或 11（外加 12）与 13、14 都到位，按口逐步开。
 

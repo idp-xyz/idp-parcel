@@ -11,6 +11,7 @@ Blocked by: 02
 
 1. 集成客户端册：客户端标识绑定唯一租户与一个来源身份，授予按事实类型登记、可撤销、带生效区间；凭据本体不入库，只存凭据引用。
 2. OAuth 2.0 client credentials 令牌校验，方式同 02；可选 mTLS 绑定。
+2a. 外部资金事实的更正口 `/settlement-external-funds-fact-correction-registrations` 随原事实归本族（2026-09-24 随 [ADR-0151](../../../docs/adr/0151-unassigned-command-faces-get-their-families.md) 决定四补）：与首登口同一份认证与授予。
 3. 集成客户端信封：租户、客户端、来源身份、授予集；与操作者信封、客户来源信封分型，编译期不可互换。
 
 ## 完成判据

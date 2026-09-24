@@ -26,3 +26,7 @@ Blocked by: 无；角色能不能落到真人，受开发主线重定级表「�
 ## 完成判据
 
 - 第 1 项经 PC owner 复核后有执行器，或记明改判不成立的理由；第 2 项有一份角色模型（落 PC `CONTEXT.md` 与授予格），各上下文 owner 各复核一次；登记册对应行同步收短。
+
+## Comments
+
+- 2026-09-25 · 通道 2（随 [ADR-0151](../../../docs/adr/0151-unassigned-command-faces-get-their-families.md) 复核）：第 2 项的动作清单还缺「授权处置」。party-commercial 的授权动作封闭集（`AuthorizedAction`）里没有这一格，`/shipment-requests/authorized-dispositions` 因此装的是 `UnconfiguredAuthorizedDispositionAuthorizer`、对每次处置答「授权规则未配置」（ADR-0132 越权风险点 2 写「归 PC 另票」，至今无票）。动作词是机制，谁持这一格是租户取值；加上之后把装配点的未配置授权器换成翻译适配器（形照复核那一只）。[operator-channel/15](../../operator-channel/issues/15-operation-decision-faces-take-operator-intake.md) 换上操作者 Intake 后，这一口越过 Intake 停的就是这一格。
