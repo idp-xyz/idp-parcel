@@ -1,7 +1,7 @@
 # 04 登记册配置写面逐口换操作者 Intake
 
 Category: enhancement
-Status: in-progress——2026-09-25 通道 4 认领（用户令独立完成操作者渠道这条链），逐上下文分批进 main：第一批可见性八口、第二批关务七口、第三批网络七口、第四批计价四口已换（见文末）。此前 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
+Status: in-progress——2026-09-25 通道 4 认领（用户令独立完成操作者渠道这条链），逐上下文分批进 main：第一批可见性八口、第二批关务七口、第三批网络七口、第四批计价四口、第五批商业参与方六口已换（见文末）。此前 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
 Blocked by: 03
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`cmd/parcel-api` 端点表里 ADR-0085 决定一那一族登记端点的装配行及其装配测试。
@@ -26,7 +26,7 @@ Blocked by: 03
 - 关务 7 口：`/customs-{interpretation-rule,gate-catalog,candidate-port,declaration-path,case-requirement,duty-collaboration,duty-payment-verification}-registrations`——**第二批已换**。
 - 网络 7 口：`/network-catalog-{node,connection,line,service-area,service-calendar,availability-adjustment,route-strategy}-registrations`——**第三批已换**。
 - 计价 5 口：`/pricing-{price-card,reference-series,reference-catalogue}-registrations` 与 `/pricing-reference-series-{reviews,previews}`——**第四批已换其中四口**；价卡登记口的在线导入属 price-card-import 那一批（ADR-0101，通道 3 认领），不在本票换。
-- 商业参与方 6 口：`/commercial-{service-product-form,product-channel-mapping,registration-number-type,channel-account-use}-registrations`、`/commercial-registration-number-type-deactivations`、`/commercial-channel-account-use-revocations`。
+- 商业参与方 6 口：`/commercial-{service-product-form,product-channel-mapping,registration-number-type,channel-account-use}-registrations`、`/commercial-registration-number-type-deactivations`、`/commercial-channel-account-use-revocations`——**第五批已换**。
 - TF 5 口：`/transport-fulfillment-external-carrier-credential-{registrations,applicability-changes}`、`/transport-fulfillment-effective-time-rule-registrations`、`/transport-fulfillment-carrier-master-document-{registrations,revisions}`。
 
 **本票，但在隔离放行名单上**（换口要同笔撤放行，ADR-0150 决定三；等演示环境走通操作者渠道）：商业参与方身份一族 6 口（`/commercial-{business-party,legal-entity,customer-account,party-relationship,legal-entity-profile}-registrations`、`/commercial-party-identity-deactivations`），以及 `/customs-regulatory-credential-registrations`。
@@ -53,4 +53,15 @@ Blocked by: 03
 ### 第四批进展 ← 通道 4 · 2026-09-25
 
 计价四口：参考序列登记、预览、复核与参考目录登记。计价的在线线格式早已定好（ADR-0101 决定一的运营操作者面载荷：`ReferenceSeriesRegistrationPayload`、`ReferenceCataloguePayload`，注释写明「租户与登记责任方从 OperatorEnvelope 来，由 Intake 作为入参交进来」），本批只补那个 Intake：`pricinghttp.OperatorRegistryIntake`，登记责任方取认证出的提交操作者（发行方 + sub）。序列复核此前没有在线载荷，照受控批量口的复核文档去掉租户与复核人两格定了 `ReferenceSeriesReviewPayload`，复核人取认证结果——四眼门比的就是两个认证过的身份。受控批量口走领域快照重建（`Rehydrate…Registration`），与在线表单载荷本就是两种输入，不合并。`writeRegistrationIntakeProblem` 加三格；防腐适配器 `internal/parcelpricing/adapters/accessidentity`；端点表四行换成 `operatorRegistries.pricing`。
+
+### 第五批进展 ← 通道 4 · 2026-09-25
+
+商业参与方六口：服务形态、产品—渠道映射、注册号类型登记与停用、渠道账号使用授权登记与撤销。
+
+- **线格式照本包在线口的既有惯例**（`IsolatedPartyIdentityIntake` 注释）：镜像受控 CLI 的批文、去掉整批的 `tenantId`——键在场即拒（`null` 也算），本口恰一项、别的口的项拒。管理台今天送的也是批文形状（`apps/admin-web/src/pages/party/api.ts`），只差去掉 `tenantId`。
+- **译装先下沉**：`register-products` 与 `register-registration-number-types` 的批文外壳与逐项翻译（连同注册号类型的参考配置采用路径）下沉为 `internal/partycommercial/adapters/registrationjson`，CLI 只留逐项回显与事务；「每份已发布参考配置过领域构造门与样例」那条测试随翻译迁入该包。外壳的 `tenantId` 用 `json.RawMessage`：CLI 经 `DocumentTenant` 取整批租户，在线口见键即拒——形状只定义一处。
+- **不重复**：在线口复用本包隔离形态的 `decodeClosedDocument` 与 `refuseSelfReportedTenant`；「恰一项」的判据从身份族外壳的方法里提成包内函数 `exactlyOneItem`，两边共用同一句拒绝。
+- **使用授权族没有受控 CLI**，载荷只有在线一份（`channel_account_use_payload.go`）：两格存续按封闭集译、缺席译成未答交发布门判；撤销载荷装不下授权正文（ADR-0093 决定六）。
+- 防腐适配器 `internal/partycommercial/adapters/accessidentity`；`writeRegistrationIntakeProblem` 加三格；三处接口注释的「真 Intake 未就位」改为指向真实现。
+- **留给前端**（`apps/admin-web/**` 一人在 main 上做）：`api.ts` 在线登记口那段注释（「请求体形状此刻没有契约」「商业的译装在 package main 里」）已过期；操作者渠道配好之后请求体要去掉 `tenantId`。与 16 记下的管理台 `PAR-INT-01` 注释清扫同一张前端票办。
 
