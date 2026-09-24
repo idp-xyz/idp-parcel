@@ -16,15 +16,15 @@
 | parcelshipment | 191 | 184 | 20 | 35 | 10 | 18 |
 | partycommercial | 149 | 157 | 12 | 39 | 1 | 35 |
 | pilotgovernance | 22 | 20 | 5 | 6 | 1 | 4 |
-| platform（非业务） | 22 | 21 | 0 | 0 | 0 | 0 |
+| platform（非业务） | 23 | 22 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 101 | 82 | 14 | 43 | 9 | 9 |
 | transportfulfillment | 148 | 135 | 26 | 36 | 11 | 28 |
-| visibilityexception | 98 | 93 | 11 | 30 | 8 | 10 |
-| **合计** | 1053 | 997 | 133 | 274 | 57 | 148 |
+| visibilityexception | 100 | 96 | 11 | 30 | 8 | 11 |
+| **合计** | 1056 | 1001 | 133 | 274 | 57 | 149 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 71、测试 101。
 
-## 跨上下文消费缝：27 组，76 个生产文件
+## 跨上下文消费缝：28 组，77 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -49,6 +49,7 @@
 | transportfulfillment | networkrouting | 1 |
 | transportfulfillment | parcelshipment | 1 |
 | transportfulfillment | partycommercial | 2 |
+| visibilityexception | accessidentity | 1 |
 | visibilityexception | customscompliance | 2 |
 | visibilityexception | networkrouting | 1 |
 | visibilityexception | nodeoperations | 1 |
