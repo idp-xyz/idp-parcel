@@ -13,6 +13,7 @@ import (
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
 // ErrMalformedRequest 表示这次请求构造不出命令，且重发同样的内容不会改变结果。
@@ -45,6 +46,31 @@ type DeliveryRegistrationIntake interface {
 // DeliveryProofCorrectionIntake 是 POD 更正口的 Intake。
 type DeliveryProofCorrectionIntake interface {
 	IntakeCorrection(ctx context.Context, request *http.Request) (application.CorrectDeliveryProofCommand, error)
+}
+
+// EffectiveDeliveryPayload 是交付生效首登的线格式，逐格镜像 application.RegisterEffectiveDeliveryCommand 去掉租户，与既有
+// 传输层替身的请求体同键。五格都是派送端记录的事实（ADR-0023），成不成形由编排答。
+type EffectiveDeliveryPayload struct {
+	Attempt   string `json:"attempt"`
+	Object    string `json:"object"`
+	Method    string `json:"method"`
+	Recipient string `json:"recipient"`
+	Proof     string `json:"proof"`
+}
+
+// Command 把载荷连同信封给的租户翻成首登命令。
+func (payload EffectiveDeliveryPayload) Command(tenant domain.TenantID) (application.RegisterEffectiveDeliveryCommand, error) {
+	if tenant.String() == "" {
+		return application.RegisterEffectiveDeliveryCommand{}, ErrOperatorIdentityMissing
+	}
+	return application.RegisterEffectiveDeliveryCommand{
+		TenantID:  tenant,
+		Attempt:   payload.Attempt,
+		Object:    payload.Object,
+		Method:    payload.Method,
+		Recipient: payload.Recipient,
+		Proof:     payload.Proof,
+	}, nil
 }
 
 // DeliveryHandler 是本适配器转交的应用编排。适配器不判断任何业务结果，只转交与映射。

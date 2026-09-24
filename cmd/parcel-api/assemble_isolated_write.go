@@ -93,6 +93,7 @@ var isolatedWriteAdmittedCommandLines = []string{
 	"/transport-fulfillment/movement-facts",
 	"/transport-fulfillment-dispatch-task-registrations",
 	"/transport-fulfillment-delivery-dispatch-triggers",
+	"/transport-fulfillment/deliveries",
 }
 
 // admittedCommandLines 交回放行名单的副本：日志与测试都不该改得动那份表。
