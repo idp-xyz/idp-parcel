@@ -26,6 +26,9 @@ const OperatorSourceAdminConsole = "ADMIN_CONSOLE"
 type OperatorRequest struct {
 	TenantID string
 	Face     CapabilityFace
+	// Admission 非空表示这一口形成生产事实，铸造前要判准入范围（ADR-0149 决定四、ADR-0151 决定三）；
+	// 登记册配置写面不形成生产事实，传空（ADR-0100）。
+	Admission *AdmissionRequirement
 }
 
 // OperatorEnvelope 是经铸造的操作者身份：租户、操作者主体、铸造那一刻生效的授予集，来源固定为
@@ -55,22 +58,31 @@ func (envelope OperatorEnvelope) Minted() bool { return envelope.subject.issuer 
 
 // OperatorMinter 铸造操作者信封。
 type OperatorMinter struct {
-	verifier OperatorCredentialVerifier
-	registry OperatorRegistry
-	now      func() time.Time
+	verifier  OperatorCredentialVerifier
+	registry  OperatorRegistry
+	admission AdmissionScope
+	now       func() time.Time
 }
 
-func NewOperatorMinter(verifier OperatorCredentialVerifier, registry OperatorRegistry, now func() time.Time) (*OperatorMinter, error) {
-	if verifier == nil || registry == nil || now == nil {
+// NewOperatorMinter 的 admission 不许缺：没登对照时传 UnconfiguredAdmissionScope，答不在准入范围。
+// 允许缺席就得替缺席挑一个答案，而放行与拦截都不是该由构造器挑的。
+func NewOperatorMinter(
+	verifier OperatorCredentialVerifier,
+	registry OperatorRegistry,
+	admission AdmissionScope,
+	now func() time.Time,
+) (*OperatorMinter, error) {
+	if verifier == nil || registry == nil || admission == nil || now == nil {
 		return nil, ErrNilDependency
 	}
-	return &OperatorMinter{verifier: verifier, registry: registry, now: now}, nil
+	return &OperatorMinter{verifier: verifier, registry: registry, admission: admission, now: now}, nil
 }
 
 // MintOperator 铸造一次操作者出示的信封：校验令牌 → 查操作者册 → 按请求的租户与能力面核授予。
 //
-// 核验方的三格（未配置、令牌不过、取不回公钥集）原样交回；之后的失败只有两格：册读不动答依赖
-// 故障，其余一律答 ErrOperatorNotGranted。租户只取自册上的绑定，请求里的租户只用来比对——身份
+// 核验方的三格（未配置、令牌不过、取不回公钥集）原样交回；查册之后：册读不动答依赖故障，其余一律
+// 答 ErrOperatorNotGranted；请求带准入要求时再判准入范围，不覆盖答 ErrOutsideAdmissionScope、
+// 读不动答 ErrAdmissionScopeUnavailable。租户只取自册上的绑定，请求里的租户只用来比对——身份
 // 不来自调用方能自由指定的东西（ADR-0003），同 Minter 那一侧的纪律。
 func (minter *OperatorMinter) MintOperator(
 	ctx context.Context,
@@ -88,6 +100,16 @@ func (minter *OperatorMinter) MintOperator(
 	at := minter.now()
 	if !found || standing.binding.tenantID != strings.TrimSpace(request.TenantID) || !standing.HoldsAt(request.Face, at) {
 		return OperatorEnvelope{}, ErrOperatorNotGranted
+	}
+	// 准入范围判在授予之后：没有授予的人不该从答复里看出这个租户登没登区间。
+	if request.Admission != nil {
+		admitted, err := minter.admission.Admits(ctx, standing.binding.tenantID, *request.Admission, at)
+		if err != nil {
+			return OperatorEnvelope{}, fmt.Errorf("%w: %w", ErrAdmissionScopeUnavailable, err)
+		}
+		if !admitted {
+			return OperatorEnvelope{}, ErrOutsideAdmissionScope
+		}
 	}
 	var grants []CapabilityFace
 	for _, recorded := range standing.grants {

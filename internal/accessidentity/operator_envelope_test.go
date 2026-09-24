@@ -77,7 +77,7 @@ func standingWith(t *testing.T, faces ...accessidentity.CapabilityFace) accessid
 
 func newMinter(t *testing.T, verifier accessidentity.OperatorCredentialVerifier, registry accessidentity.OperatorRegistry) *accessidentity.OperatorMinter {
 	t.Helper()
-	minter, err := accessidentity.NewOperatorMinter(verifier, registry, func() time.Time { return mintAt })
+	minter, err := accessidentity.NewOperatorMinter(verifier, registry, accessidentity.UnconfiguredAdmissionScope{}, func() time.Time { return mintAt })
 	if err != nil {
 		t.Fatalf("NewOperatorMinter: %v", err)
 	}
@@ -112,11 +112,13 @@ func TestGrantedOperatorIsMintedIntoAnOperatorEnvelope(t *testing.T) {
 
 // grades 是答复代数的四格：三格对外（ADR-0100 决定四），外加依赖故障。每一格只许被自己那个哨兵认出。
 var grades = map[string]error{
-	"not configured":       accessidentity.ErrAccessChannelNotConfigured,
-	"credential rejected":  accessidentity.ErrCredentialRejected,
-	"not granted":          accessidentity.ErrOperatorNotGranted,
-	"verifier unavailable": accessidentity.ErrCredentialVerifierUnavailable,
-	"registry unavailable": accessidentity.ErrOperatorRegistryUnavailable,
+	"not configured":        accessidentity.ErrAccessChannelNotConfigured,
+	"credential rejected":   accessidentity.ErrCredentialRejected,
+	"not granted":           accessidentity.ErrOperatorNotGranted,
+	"verifier unavailable":  accessidentity.ErrCredentialVerifierUnavailable,
+	"registry unavailable":  accessidentity.ErrOperatorRegistryUnavailable,
+	"outside admission":     accessidentity.ErrOutsideAdmissionScope,
+	"admission unavailable": accessidentity.ErrAdmissionScopeUnavailable,
 }
 
 func assertGrade(t *testing.T, err error, want string) {
@@ -217,20 +219,85 @@ func TestZeroOperatorEnvelopeIsUnusable(t *testing.T) {
 func TestOperatorMinterNeedsAllItsDependencies(t *testing.T) {
 	verifier := verifierFake{}
 	registry := registryFake{}
+	admission := accessidentity.UnconfiguredAdmissionScope{}
 	now := func() time.Time { return mintAt }
 	for name, build := range map[string]func() (*accessidentity.OperatorMinter, error){
 		"verifier": func() (*accessidentity.OperatorMinter, error) {
-			return accessidentity.NewOperatorMinter(nil, registry, now)
+			return accessidentity.NewOperatorMinter(nil, registry, admission, now)
 		},
 		"registry": func() (*accessidentity.OperatorMinter, error) {
-			return accessidentity.NewOperatorMinter(verifier, nil, now)
+			return accessidentity.NewOperatorMinter(verifier, nil, admission, now)
+		},
+		"admission": func() (*accessidentity.OperatorMinter, error) {
+			return accessidentity.NewOperatorMinter(verifier, registry, nil, now)
 		},
 		"clock": func() (*accessidentity.OperatorMinter, error) {
-			return accessidentity.NewOperatorMinter(verifier, registry, nil)
+			return accessidentity.NewOperatorMinter(verifier, registry, admission, nil)
 		},
 	} {
 		if _, err := build(); !errors.Is(err, accessidentity.ErrNilDependency) {
 			t.Fatalf("minter without %s: err = %v, want ErrNilDependency", name, err)
 		}
 	}
+}
+
+type admissionFake struct {
+	admitted bool
+	err      error
+	calls    *int
+}
+
+func (fake admissionFake) Admits(context.Context, string, accessidentity.AdmissionRequirement, time.Time) (bool, error) {
+	*fake.calls++
+	return fake.admitted, fake.err
+}
+
+var decisionRequirement = &accessidentity.AdmissionRequirement{Capability: "OPERATION_DECISION", FactKind: "MANUAL_REVIEW_COMPLETION"}
+
+func TestAdmissionScopeIsJudgedOnlyForFacesThatRequireItAndAfterTheGrant(t *testing.T) {
+	granted := registryFake{standing: standingWith(t, accessidentity.CapabilityRegistryConfigurationWrite), found: true}
+	cases := map[string]struct {
+		registry    accessidentity.OperatorRegistry
+		admitted    bool
+		err         error
+		requirement *accessidentity.AdmissionRequirement
+		want        string
+		wantCalls   int
+	}{
+		"face requires admission and the interval covers it":     {registry: granted, admitted: true, requirement: decisionRequirement, wantCalls: 1},
+		"face requires admission and no interval covers it":      {registry: granted, requirement: decisionRequirement, want: "outside admission", wantCalls: 1},
+		"admission scope cannot be read":                         {registry: granted, err: errors.New("connection refused"), requirement: decisionRequirement, want: "admission unavailable", wantCalls: 1},
+		"registry faces carry no admission requirement":          {registry: granted, err: errors.New("must not be consulted"), wantCalls: 0},
+		"operator without the grant is refused before admission": {registry: registryFake{found: false}, admitted: true, requirement: decisionRequirement, want: "not granted", wantCalls: 0},
+	}
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			calls := 0
+			minter, err := accessidentity.NewOperatorMinter(verifierFake{subject: operatorSubject(t)}, testCase.registry,
+				admissionFake{admitted: testCase.admitted, err: testCase.err, calls: &calls}, func() time.Time { return mintAt })
+			if err != nil {
+				t.Fatal(err)
+			}
+			envelope, err := minter.MintOperator(context.Background(), accessidentity.NewOperatorCredential("presented.operator.token"),
+				accessidentity.OperatorRequest{TenantID: operatorTenant, Face: accessidentity.CapabilityRegistryConfigurationWrite, Admission: testCase.requirement})
+			if testCase.want == "" {
+				if err != nil || !envelope.Minted() {
+					t.Fatalf("err = %v, minted = %v; want a minted envelope", err, envelope.Minted())
+				}
+			} else {
+				assertGrade(t, err, testCase.want)
+			}
+			if calls != testCase.wantCalls {
+				t.Fatalf("admission scope consulted %d times, want %d", calls, testCase.wantCalls)
+			}
+		})
+	}
+}
+
+func TestUnconfiguredAdmissionScopeAdmitsNothing(t *testing.T) {
+	minter := newMinter(t, verifierFake{subject: operatorSubject(t)},
+		registryFake{standing: standingWith(t, accessidentity.CapabilityRegistryConfigurationWrite), found: true})
+	_, err := minter.MintOperator(context.Background(), accessidentity.NewOperatorCredential("presented.operator.token"),
+		accessidentity.OperatorRequest{TenantID: operatorTenant, Face: accessidentity.CapabilityRegistryConfigurationWrite, Admission: decisionRequirement})
+	assertGrade(t, err, "outside admission")
 }
