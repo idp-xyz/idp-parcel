@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"strings"
 
+	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	nodeopshttp "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/http"
 	pspilot "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/pilotgovernance"
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
@@ -72,6 +73,7 @@ type isolatedWriteAdmission struct {
 	// 以下各格是主链命令面各上下文的隔离命令 Intake（票 operator-channel/08），锁法同 partyIdentity。
 	nodeOperations       *nodeopshttp.IsolatedCommandIntake
 	transportFulfillment *tfhttp.IsolatedCommandIntake
+	customs              *customshttp.IsolatedCommandIntake
 }
 
 // isolatedWriteAdmittedCommandLines 是写开关到此刻为止换上隔离 Intake 的命令面，供启动日志出声
@@ -96,6 +98,7 @@ var isolatedWriteAdmittedCommandLines = []string{
 	"/transport-fulfillment/deliveries",
 	"/transport-fulfillment-segment-closures",
 	"/transport-fulfillment-effective-time-judgments",
+	"/customs/external-results",
 }
 
 // admittedCommandLines 交回放行名单的副本：日志与测试都不该改得动那份表。
@@ -125,6 +128,14 @@ func (admission *isolatedWriteAdmission) transportFulfillmentIntake() *tfhttp.Is
 		return nil
 	}
 	return admission.transportFulfillment
+}
+
+// customsIntake 对 nil 接收者交回 nil，理由同 partyIdentityIntake。
+func (admission *isolatedWriteAdmission) customsIntake() *customshttp.IsolatedCommandIntake {
+	if admission == nil {
+		return nil
+	}
+	return admission.customs
 }
 
 // buildIsolatedWriteAdmission 解析隔离写路径准入的显式输入（ADR-0091 决定四）。
@@ -175,6 +186,10 @@ func buildIsolatedWriteAdmission(getenv func(string) string) (*isolatedWriteAdmi
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: isolated transport fulfillment command intake: %w", err)
 	}
+	customs, err := customshttp.NewIsolatedCommandIntake(customshttp.IsolatedCommandIntakeDeps{Tenant: tenant, Clock: systemClock{}})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: isolated customs command intake: %w", err)
+	}
 	return &isolatedWriteAdmission{
 		governanceDirectory:  directory,
 		selfAuthority:        isolatedSelfAuthority,
@@ -182,5 +197,6 @@ func buildIsolatedWriteAdmission(getenv func(string) string) (*isolatedWriteAdmi
 		partyIdentity:        partyIdentity,
 		nodeOperations:       nodeOperations,
 		transportFulfillment: transportFulfillment,
+		customs:              customs,
 	}, nil
 }

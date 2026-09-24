@@ -116,6 +116,7 @@ var expectedWriteAdmittedLines = map[string]bool{
 	"/transport-fulfillment/deliveries":                               true,
 	"/transport-fulfillment-segment-closures":                         true,
 	"/transport-fulfillment-effective-time-judgments":                 true,
+	"/customs/external-results":                                       true,
 }
 
 // Covers: ADR-0091 Consequences「命令面按端点逐口放行，不是一次全开」 — 写面放行只及名单里那几行，其余命令面
@@ -127,7 +128,8 @@ var expectedWriteAdmittedLines = map[string]bool{
 func TestIsolatedWriteAdmissionSwitchesOnlyTheAdmittedCommandLines(t *testing.T) {
 	router := httpapi.NewWithEndpoints(buildinfo.Info{},
 		assembleUnwiredBusinessEndpointsWith(nil, isolatedSubmissionIntakeForTest(t), isolatedPartyIdentityIntakeForTest(t),
-			isolatedWriteAdmissionForTest(t).nodeOperationsIntake(), isolatedWriteAdmissionForTest(t).transportFulfillmentIntake()))
+			isolatedWriteAdmissionForTest(t).nodeOperationsIntake(), isolatedWriteAdmissionForTest(t).transportFulfillmentIntake(),
+			isolatedWriteAdmissionForTest(t).customsIntake()))
 
 	for pattern, probe := range businessEndpointProbes {
 		response := httptest.NewRecorder()
@@ -197,6 +199,18 @@ func TestBuildIsolatedWriteAdmissionGrantsTheTransportFulfillmentIntake(t *testi
 	}
 	var disabled *isolatedWriteAdmission
 	if disabled.transportFulfillmentIntake() != nil {
+		t.Fatal("未启用时交回了非 nil 的 Intake——装配点那几行会被换掉，生产形态就变了")
+	}
+}
+
+// Covers: 票 operator-channel/08 — 关务的隔离命令 Intake 同上：租户加本进程时钟（外部结果的接收时刻是服务端自己的），随各格
+// 一起就位，未启用时交回 nil。
+func TestBuildIsolatedWriteAdmissionGrantsTheCustomsIntake(t *testing.T) {
+	if isolatedWriteAdmissionForTest(t).customsIntake() == nil {
+		t.Fatal("关务隔离命令 Intake 为空——主链 CC 各口会照旧答 403")
+	}
+	var disabled *isolatedWriteAdmission
+	if disabled.customsIntake() != nil {
 		t.Fatal("未启用时交回了非 nil 的 Intake——装配点那几行会被换掉，生产形态就变了")
 	}
 }
