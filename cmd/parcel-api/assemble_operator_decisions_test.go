@@ -138,6 +138,12 @@ var swappedRegistryFaces = []string{
 	"/pricing-reference-series-reviews",
 	"/pricing-reference-series-previews",
 	"/pricing-reference-catalogue-registrations",
+	"/commercial-service-product-form-registrations",
+	"/commercial-product-channel-mapping-registrations",
+	"/commercial-registration-number-type-registrations",
+	"/commercial-registration-number-type-deactivations",
+	"/commercial-channel-account-use-registrations",
+	"/commercial-channel-account-use-revocations",
 }
 
 // failingRegister 是读不动的操作者册；readerRegister 只有查阅授予、没有登记写授予。

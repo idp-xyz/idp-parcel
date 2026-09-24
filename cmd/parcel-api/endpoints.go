@@ -591,12 +591,12 @@ func assembleBusinessEndpoints(
 		{Pattern: "/commercial-customer-account-registrations", Handler: commercialhttp.NewRegisterCustomerAccountEndpoint(customerAccountRegistrationIntake, partyIdentityRegistration)},
 		{Pattern: "/commercial-party-relationship-registrations", Handler: commercialhttp.NewRegisterPartyRelationshipEndpoint(partyRelationshipRegistrationIntake, partyIdentityRegistration)},
 		{Pattern: "/commercial-party-identity-deactivations", Handler: commercialhttp.NewDeactivatePartyIdentityEndpoint(partyIdentityDeactivationIntake, partyIdentityRegistration)},
-		{Pattern: "/commercial-service-product-form-registrations", Handler: commercialhttp.NewRegisterServiceProductFormEndpoint(commercialhttp.UnconfiguredIntake{}, productChannelRegistration)},
-		{Pattern: "/commercial-product-channel-mapping-registrations", Handler: commercialhttp.NewRegisterProductChannelMappingEndpoint(commercialhttp.UnconfiguredIntake{}, productChannelRegistration)},
+		{Pattern: "/commercial-service-product-form-registrations", Handler: commercialhttp.NewRegisterServiceProductFormEndpoint(operatorRegistries.commercial, productChannelRegistration)},
+		{Pattern: "/commercial-product-channel-mapping-registrations", Handler: commercialhttp.NewRegisterProductChannelMappingEndpoint(operatorRegistries.commercial, productChannelRegistration)},
 		// 注册号类型目录两口（票 legal-entity-profile/01）：登记修订与停用，停用是修订链上的新一笔，
 		// 同参与方身份族取 `-deactivations`。
-		{Pattern: "/commercial-registration-number-type-registrations", Handler: commercialhttp.NewRegisterRegistrationNumberTypeEndpoint(commercialhttp.UnconfiguredIntake{}, registrationNumberTypeRegistration)},
-		{Pattern: "/commercial-registration-number-type-deactivations", Handler: commercialhttp.NewDeactivateRegistrationNumberTypeEndpoint(commercialhttp.UnconfiguredIntake{}, registrationNumberTypeRegistration)},
+		{Pattern: "/commercial-registration-number-type-registrations", Handler: commercialhttp.NewRegisterRegistrationNumberTypeEndpoint(operatorRegistries.commercial, registrationNumberTypeRegistration)},
+		{Pattern: "/commercial-registration-number-type-deactivations", Handler: commercialhttp.NewDeactivateRegistrationNumberTypeEndpoint(operatorRegistries.commercial, registrationNumberTypeRegistration)},
 		// 法人资料登记（ADR-0145 决定三，票 legal-entity-profile/03）只有登记修订一口：资料没有停用，新修订是往修订链上插
 		// 一笔。按 ADR-0091 逐口放进隔离写准入（票 legal-entity-profile/05），走自己的 Intake 变量，与身份族同一个隔离类型。
 		{Pattern: "/commercial-legal-entity-profile-registrations", Handler: commercialhttp.NewRegisterLegalEntityProfileEndpoint(legalEntityProfileRegistrationIntake, legalEntityProfileRegistration)},
@@ -604,8 +604,8 @@ func assembleBusinessEndpoints(
 		// 修订链上追加一条终止事实，册上那一行不会消失，而那两个名字都会让登记方以为会。
 		// 分两口而不带动作字段的理由在端点族注释里：合一口之后载荷里会同时躺着动作与授权
 		// 正文，等于把「后继修订不得改换账号或双方」那道门要挡的机会又递回给调用方。
-		{Pattern: "/commercial-channel-account-use-registrations", Handler: commercialhttp.NewRegisterChannelAccountUseEndpoint(commercialhttp.UnconfiguredIntake{}, channelAccountUseRegistration)},
-		{Pattern: "/commercial-channel-account-use-revocations", Handler: commercialhttp.NewRevokeChannelAccountUseEndpoint(commercialhttp.UnconfiguredIntake{}, channelAccountUseRegistration)},
+		{Pattern: "/commercial-channel-account-use-registrations", Handler: commercialhttp.NewRegisterChannelAccountUseEndpoint(operatorRegistries.commercial, channelAccountUseRegistration)},
+		{Pattern: "/commercial-channel-account-use-revocations", Handler: commercialhttp.NewRevokeChannelAccountUseEndpoint(operatorRegistries.commercial, channelAccountUseRegistration)},
 		// VE 六类目录查阅与运营追踪查阅同属租户内运营读面，共用同一个
 		// OperationsTrackingIntake 变量：隔离读准入（ADR-0078）启用时两行一起换值，
 		// 判据同为那三条（消费所属上下文存储读面、零持久化、作用域为运营侧授权结果）。

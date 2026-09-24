@@ -14,6 +14,8 @@ import (
 	psaccess "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/accessidentity"
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	pcaccess "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/accessidentity"
+	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 	tfaccess "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/accessidentity"
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 	veaccess "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/accessidentity"
@@ -71,6 +73,7 @@ type operatorRegistryIntakes struct {
 	customs    *customshttp.OperatorRegistryIntake
 	network    *networkhttp.OperatorRegistryIntake
 	pricing    *pricinghttp.OperatorRegistryIntake
+	commercial *commercialhttp.OperatorRegistryIntake
 }
 
 func buildOperatorRegistryIntakes(minter *accessidentity.OperatorMinter) (operatorRegistryIntakes, error) {
@@ -109,5 +112,13 @@ func buildOperatorRegistryIntakes(minter *accessidentity.OperatorMinter) (operat
 	if err != nil {
 		return operatorRegistryIntakes{}, err
 	}
-	return operatorRegistryIntakes{visibility: visibility, customs: customs, network: network, pricing: pricing}, nil
+	commercialAuthenticator, err := pcaccess.NewOperatorRegistryAuthenticator(minter)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	commercial, err := commercialhttp.NewOperatorRegistryIntake(commercialAuthenticator)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	return operatorRegistryIntakes{visibility: visibility, customs: customs, network: network, pricing: pricing, commercial: commercial}, nil
 }
