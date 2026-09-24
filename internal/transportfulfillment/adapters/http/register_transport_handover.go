@@ -2,9 +2,11 @@ package tfhttp
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
 // HandoverIntake 把已认证的接入请求翻译成交接判断的首登 / 更正命令。
@@ -36,6 +38,71 @@ type HandoverRegistrationIntake interface {
 // HandoverCorrectionIntake 是交接更正口的 Intake。
 type HandoverCorrectionIntake interface {
 	IntakeHandoverCorrection(ctx context.Context, request *http.Request) (application.CorrectTransportHandoverCommand, error)
+}
+
+// HandoverRegistrationPayload 是交接判断首登的线格式，逐格镜像 application.RegisterTransportHandoverCommand 去掉租户，与既有
+// 传输层替身的请求体同形。verdict 取 domain.HandoverVerdict 的封闭词，judgedAt 取 RFC 3339；段三格可缺，缺席即不立段。
+type HandoverRegistrationPayload struct {
+	Object               string `json:"object"`
+	Scope                string `json:"scope"`
+	ReleasedBy           string `json:"releasedBy"`
+	ReceivedBy           string `json:"receivedBy"`
+	Verdict              string `json:"verdict"`
+	ReleasingEvidence    string `json:"releasingEvidence"`
+	ReceivingEvidence    string `json:"receivingEvidence"`
+	Rule                 string `json:"rule"`
+	Basis                string `json:"basis"`
+	Version              string `json:"version"`
+	JudgedAt             string `json:"judgedAt"`
+	Segment              string `json:"segment,omitempty"`
+	PlannedSegment       string `json:"plannedSegment,omitempty"`
+	SegmentServiceAction string `json:"segmentServiceAction,omitempty"`
+}
+
+// Command 把载荷连同信封给的租户翻成首登命令。结论词不在封闭集内、时刻解不出是坏报文（400）；结论空着照零值交进去，
+// 其余成不成形都留给编排答`未受理`。
+func (payload HandoverRegistrationPayload) Command(tenant domain.TenantID) (application.RegisterTransportHandoverCommand, error) {
+	none := application.RegisterTransportHandoverCommand{}
+	if tenant.String() == "" {
+		return none, ErrOperatorIdentityMissing
+	}
+	command := application.RegisterTransportHandoverCommand{
+		TenantID:             tenant,
+		Object:               payload.Object,
+		Scope:                payload.Scope,
+		ReleasedBy:           payload.ReleasedBy,
+		ReceivedBy:           payload.ReceivedBy,
+		ReleasingEvidence:    payload.ReleasingEvidence,
+		ReceivingEvidence:    payload.ReceivingEvidence,
+		Rule:                 payload.Rule,
+		Basis:                payload.Basis,
+		Version:              payload.Version,
+		Segment:              payload.Segment,
+		PlannedSegment:       payload.PlannedSegment,
+		SegmentServiceAction: payload.SegmentServiceAction,
+	}
+	var err error
+	if payload.Verdict != "" {
+		if command.Verdict, err = handoverVerdictFromWord(payload.Verdict); err != nil {
+			return none, err
+		}
+	}
+	if command.JudgedAt, err = parseOptionalInstant("judgedAt", payload.JudgedAt); err != nil {
+		return none, err
+	}
+	return command, nil
+}
+
+// handoverVerdictFromWord 是 domain.HandoverVerdict 封闭集的名称镜像，词取各常量自己的 String()。
+func handoverVerdictFromWord(raw string) (domain.HandoverVerdict, error) {
+	for _, verdict := range []domain.HandoverVerdict{
+		domain.ObjectHandedOver, domain.HandoverRefused, domain.HandoverPendingConfirmation,
+	} {
+		if verdict.String() == raw {
+			return verdict, nil
+		}
+	}
+	return domain.HandoverVerdictInvalid, fmt.Errorf("%w: verdict=%q is not a handover verdict word", ErrMalformedRequest, raw)
 }
 
 // HandoverHandler 是本适配器转交的应用编排。适配器不判断任何业务结果，只转交与映射。

@@ -64,6 +64,62 @@ var isolatedLines = map[string]isolatedLine{
 		},
 		valid: carrierPickupJudgmentBody,
 	},
+	"/transport-fulfillment/handovers": {
+		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
+			_, err := intake.IntakeHandoverRegistration(context.Background(), request)
+			return err
+		},
+		valid: handoverRegistrationBody,
+	},
+}
+
+const handoverRegistrationBody = `{"object":"SYN-PARCEL-08-05","scope":"SYN-SCOPE/hub-dock-05","releasedBy":"SYN-PARTY/hub-08",` +
+	`"receivedBy":"SYN-PARTY/linehaul-08","verdict":"HANDED_OVER","releasingEvidence":"SYN-EVIDENCE/release-05",` +
+	`"receivingEvidence":"SYN-EVIDENCE/receive-05","rule":"SYN-RULE/handover@v1","basis":"SYN-BASIS/handover-05","version":"v1",` +
+	`"judgedAt":"2026-09-24T13:00:00+08:00","segment":"SYN-SEGMENT-08-05","plannedSegment":"SYN-PLANNED-08-05",` +
+	`"segmentServiceAction":"LINEHAUL"}`
+
+// Covers: HandoverIntake 契约「`Segment` 与 `PlannedSegment` 是命令的一部分，Intake 必须收」——交接判断的十三格逐字来自
+// 载荷，判断时刻照 ADR-0023 不由服务端补。
+func TestIsolatedCommandIntakeTranslatesHandoverRegistrationWithInjectedTenant(t *testing.T) {
+	command, err := isolatedCommandIntakeForTest(t).IntakeHandoverRegistration(context.Background(), commandRequest(handoverRegistrationBody))
+	if err != nil {
+		t.Fatalf("intake：%v", err)
+	}
+	if got := command.TenantID.String(); got != isolatedCommandTenant {
+		t.Fatalf("TenantID = %q, want %q", got, isolatedCommandTenant)
+	}
+	for name, pair := range map[string][2]string{
+		"object":               {command.Object, "SYN-PARCEL-08-05"},
+		"scope":                {command.Scope, "SYN-SCOPE/hub-dock-05"},
+		"releasedBy":           {command.ReleasedBy, "SYN-PARTY/hub-08"},
+		"receivedBy":           {command.ReceivedBy, "SYN-PARTY/linehaul-08"},
+		"verdict":              {command.Verdict.String(), "HANDED_OVER"},
+		"releasingEvidence":    {command.ReleasingEvidence, "SYN-EVIDENCE/release-05"},
+		"receivingEvidence":    {command.ReceivingEvidence, "SYN-EVIDENCE/receive-05"},
+		"rule":                 {command.Rule, "SYN-RULE/handover@v1"},
+		"basis":                {command.Basis, "SYN-BASIS/handover-05"},
+		"version":              {command.Version, "v1"},
+		"segment":              {command.Segment, "SYN-SEGMENT-08-05"},
+		"plannedSegment":       {command.PlannedSegment, "SYN-PLANNED-08-05"},
+		"segmentServiceAction": {command.SegmentServiceAction, "LINEHAUL"},
+	} {
+		if pair[0] != pair[1] {
+			t.Fatalf("%s = %q, want %q", name, pair[0], pair[1])
+		}
+	}
+	if want := time.Date(2026, 9, 24, 5, 0, 0, 0, time.UTC); !command.JudgedAt.Equal(want) {
+		t.Fatalf("JudgedAt = %s, want %s", command.JudgedAt, want)
+	}
+}
+
+// Covers: 交接结论取 domain.HandoverVerdict 的封闭词——词表外是用法错误（400）。
+func TestIsolatedCommandIntakeRefusesAnUnknownHandoverVerdict(t *testing.T) {
+	_, err := isolatedCommandIntakeForTest(t).IntakeHandoverRegistration(context.Background(),
+		commandRequest(`{"object":"o","scope":"s","verdict":"MAYBE"}`))
+	if !errors.Is(err, tfhttp.ErrMalformedRequest) {
+		t.Fatalf("err = %v, want ErrMalformedRequest", err)
+	}
 }
 
 const carrierPickupJudgmentBody = `{"object":"SYN-PARCEL-08-04","source":"CARRIER_PICKUP_SCAN","evidenceReference":"SYN-SCAN-08-04",` +
@@ -268,6 +324,9 @@ func TestIsolatedCommandIntakeServesOnlyAdmittedLines(t *testing.T) {
 	}
 	if _, ok := intake.(tfhttp.CarrierPickupJudgmentIntake); !ok {
 		t.Fatal("承运商首次有效收寄判断口该已放行")
+	}
+	if _, ok := intake.(tfhttp.HandoverRegistrationIntake); !ok {
+		t.Fatal("交接首登口该已放行")
 	}
 	for name, refused := range map[string]bool{
 		"揽收更正口（同族未列）":      isA[tfhttp.PickupCorrectionIntake](intake),

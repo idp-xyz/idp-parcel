@@ -68,6 +68,22 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 		status:  http.StatusOK,
 		outcome: "PICKUP_PENDING",
 	},
+	// 交接判断首登：结论已交接、两侧证据与规则齐、不带依据（依据只属拒收与待确认）、不指名段——落一版交接，
+	// 201 HANDOVER_REGISTERED。
+	"/transport-fulfillment/handovers": {
+		endpoint: func(t *testing.T, db *bentopg.DB, intake *tfhttp.IsolatedCommandIntake) http.Handler {
+			controlFacts, err := buildControlFactOrchestrations(db)
+			if err != nil {
+				t.Fatalf("装配控制事实编排：%v", err)
+			}
+			return tfhttp.NewRegisterTransportHandoverEndpoint(intake, controlFacts.handover)
+		},
+		body: `{"object":"SYN-PARCEL-08-05","scope":"SYN-SCOPE/hub-dock-05","releasedBy":"SYN-PARTY/hub-08","receivedBy":"SYN-PARTY/linehaul-08",` +
+			`"verdict":"HANDED_OVER","releasingEvidence":"SYN-EVIDENCE/release-05","receivingEvidence":"SYN-EVIDENCE/receive-05",` +
+			`"rule":"SYN-RULE/handover@v1","version":"v1","judgedAt":"2026-09-24T13:00:00+08:00"}`,
+		status:  http.StatusCreated,
+		outcome: "HANDOVER_REGISTERED",
+	},
 }
 
 // Covers: 票 operator-channel/08 完成判据「隔离环境里上列各口对合成写答业务结果而不是 ACCESS_CHANNEL_NOT_CONFIGURED」——
