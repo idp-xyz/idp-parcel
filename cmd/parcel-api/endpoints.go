@@ -125,11 +125,13 @@ func assembleBusinessEndpoints(
 	partyIdentities commercialhttp.PartyIdentityCatalogueReader,
 	customerAccounts commercialhttp.CustomerAccountCatalogueReader,
 	productChannelMappings commercialhttp.ProductChannelCatalogueReader,
+	registrationNumberTypes commercialhttp.RegistrationNumberTypeCatalogueReader,
 	commercialPublication commercialhttp.CommercialAuthorityPublisher,
 	commercialPublicationPreview commercialhttp.CommercialPublicationPreviewer,
 	commercialPublicationDrafts commercialhttp.PublicationDraftOperator,
 	partyIdentityRegistration commercialhttp.PartyIdentityRegistrar,
 	productChannelRegistration commercialhttp.ProductChannelRegistrar,
+	registrationNumberTypeRegistration commercialhttp.RegistrationNumberTypeRegistrar,
 	channelAccountUseRegistration commercialhttp.ChannelAccountUseRegistrar,
 	visibilityCatalogues visibilityhttp.VisibilityCatalogueReader,
 	milestoneMappingRegistration visibilityhttp.MilestoneMappingRegistrar,
@@ -468,6 +470,9 @@ func assembleBusinessEndpoints(
 		// /commercial-service-products：那边上列版本壳，这边上列登记册信封（产品×渠道
 		// ×区间的修订），行形状与修订轴不同（裁决在 ports.ProductChannelMappingCatalogueRead）。
 		{Pattern: "/commercial-product-channel-mappings", Handler: commercialhttp.NewQueryProductChannelMappingsEndpoint(commercialCatalogueIntake, productChannelMappings)},
+		// 注册号类型目录（ADR-0145 决定一，票 legal-entity-profile/01）：按注册国家 / 地区登记的
+		// 类型、格式与所属层的最新修订。判号不走本口，走 ports.RegistrationNumberTypeLookup。
+		{Pattern: "/commercial-registration-number-types", Handler: commercialhttp.NewQueryRegistrationNumberTypesEndpoint(commercialCatalogueIntake, registrationNumberTypes)},
 		// 商业八类配置写面（ADR-0085，票 admin-write-faces/02 切片 02c）：写准入不另立形，
 		// 判据同上——命令面一律挂字面量 UnconfiguredIntake{}，隔离读准入换不了写行。
 		//
@@ -505,6 +510,10 @@ func assembleBusinessEndpoints(
 		{Pattern: "/commercial-party-identity-deactivations", Handler: commercialhttp.NewDeactivatePartyIdentityEndpoint(partyIdentityDeactivationIntake, partyIdentityRegistration)},
 		{Pattern: "/commercial-service-product-form-registrations", Handler: commercialhttp.NewRegisterServiceProductFormEndpoint(commercialhttp.UnconfiguredIntake{}, productChannelRegistration)},
 		{Pattern: "/commercial-product-channel-mapping-registrations", Handler: commercialhttp.NewRegisterProductChannelMappingEndpoint(commercialhttp.UnconfiguredIntake{}, productChannelRegistration)},
+		// 注册号类型目录两口（票 legal-entity-profile/01）：登记修订与停用，停用是修订链上的新一笔，
+		// 同参与方身份族取 `-deactivations`。
+		{Pattern: "/commercial-registration-number-type-registrations", Handler: commercialhttp.NewRegisterRegistrationNumberTypeEndpoint(commercialhttp.UnconfiguredIntake{}, registrationNumberTypeRegistration)},
+		{Pattern: "/commercial-registration-number-type-deactivations", Handler: commercialhttp.NewDeactivateRegistrationNumberTypeEndpoint(commercialhttp.UnconfiguredIntake{}, registrationNumberTypeRegistration)},
 		// 渠道账号使用授权两口（ADR-0093）。撤销不叫 `-deactivations` 也不走 DELETE：它是往
 		// 修订链上追加一条终止事实，册上那一行不会消失，而那两个名字都会让登记方以为会。
 		// 分两口而不带动作字段的理由在端点族注释里：合一口之后载荷里会同时躺着动作与授权
