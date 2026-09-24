@@ -331,7 +331,7 @@ func buildCommercialRegistrationOrchestration(db *bentopg.DB) (commercialRegistr
 		},
 		partyIdentity: transactionalPartyIdentityRegistration{
 			transactor: transactor,
-			inner:      commercialapp.NewRegisterPartyIdentityHandler(identities),
+			inner:      commercialapp.NewRegisterPartyIdentityHandler(identities, registrationNumberTypes),
 		},
 		productChannel: transactionalProductChannelRegistration{
 			transactor: transactor,

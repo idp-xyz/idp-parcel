@@ -43,7 +43,11 @@
       "partyId": "SYN-PARTY-OPERATOR-01",
       "revision": 1,
       "basis": "SYN-REG-BASIS-LE-01",
-      "effectiveFrom": "2026-01-02T00:00:00Z"
+      "effectiveFrom": "2026-01-02T00:00:00Z",
+      "registrationCountry": "CN",
+      "lifetimeRegistrationNumbers": [
+        {"typeCode": "SYN-CN-LIFETIME", "number": "SYN-CN-000001"}
+      ]
     }
   ],
   "customerAccounts": [

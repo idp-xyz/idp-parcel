@@ -17,7 +17,8 @@ const partyFullBatchJSON = `{
     {"partyId": "party-beta", "name": "Beta 贸易", "revision": 1, "basis": "REG/party-beta", "effectiveFrom": "2026-01-01T00:00:00Z"}
   ],
   "legalEntities": [
-    {"legalEntityId": "legal-acme", "partyId": "party-acme", "revision": 1, "basis": "REG/legal-acme", "effectiveFrom": "2026-01-02T00:00:00Z"}
+    {"legalEntityId": "legal-acme", "partyId": "party-acme", "revision": 1, "basis": "REG/legal-acme", "effectiveFrom": "2026-01-02T00:00:00Z",
+     "registrationCountry": "XA", "lifetimeRegistrationNumbers": [{"typeCode": "SYN-LIFETIME", "number": "SYN-000001"}]}
   ],
   "customerAccounts": [
     {"accountId": "account-beta", "customerPartyId": "party-beta", "revision": 1, "basis": "REG/account-beta", "effectiveFrom": "2026-01-02T00:00:00Z"}
@@ -127,6 +128,11 @@ func TestDeactivationBatchTranslation(t *testing.T) {
 // 异正文报 CONTENT_CONFLICT 请人看、停用落新修订且重放停用不重复落笔。
 func TestRegisterPartiesBatchLandsRepliesAndDeactivates(t *testing.T) {
 	dsn := freshMigratedDSN(t)
+	// 法人项带身份层（ADR-0145 决定一），登记用例按注册号类型目录判号：目录先登，否则法人答「国家未登记」。
+	if code := runCLI(t, dsn, "register-registration-number-types", "-input",
+		batchFile(t, registrationNumberTypeBatchJSON)); code != exitLanded {
+		t.Fatalf("注册号类型目录 exit = %d, want %d", code, exitLanded)
+	}
 
 	batch := batchFile(t, partyFullBatchJSON)
 	if code := runCLI(t, dsn, "register-parties", "-input", batch); code != exitLanded {
