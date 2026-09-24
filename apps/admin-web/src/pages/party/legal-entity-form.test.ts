@@ -1,8 +1,10 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
-import type { GroupLegalEntityRecord } from './api';
+import type { GroupLegalEntityRecord, RegistrationNumberTypeRecord } from './api';
 import {
   emptyLegalEntityDraft,
+  identityCountryOptions,
+  identityTypeOptions,
   legalEntityFieldPaths,
   legalEntityLocalProblems,
   legalEntityPayloadOf,
@@ -113,5 +115,107 @@ test('认领的路径表', () => {
     'legalEntities[0].revision',
     'legalEntities[0].basis',
     'legalEntities[0].effectiveFrom',
+    'legalEntities[0].registrationCountry',
+    'legalEntities[0].lifetimeRegistrationNumbers',
+    'legalEntities[0].identityCorrectionBasis',
   ]);
+});
+
+// Covers: 身份层三格（票 legal-entity-profile/04 第 1 项）——填了就去首尾空白带上，号按行成项、次序照填；
+// 两格都空的行当作没填；三格留空则键缺席而不是空串（空串会被 Intake 当成「给了」而答形状错）。
+test('身份层三格：填了照带，留空缺席', () => {
+  const filled = legalEntityPayloadOf(
+    draft({
+      registrationCountry: ' SG ',
+      lifetimeNumbers: [
+        { typeCode: ' SYN-UEN ', number: ' 200000001Z ' },
+        { typeCode: '', number: '  ' },
+        { typeCode: 'SYN-ALT', number: '2' },
+      ],
+      identityCorrectionBasis: ' SYN-CORRECTION-01 ',
+    }),
+    'UTC',
+  ).legalEntities[0];
+  equal(filled.registrationCountry, 'SG');
+  deepEqual(filled.lifetimeRegistrationNumbers, [
+    { typeCode: 'SYN-UEN', number: '200000001Z' },
+    { typeCode: 'SYN-ALT', number: '2' },
+  ]);
+  equal(filled.identityCorrectionBasis, 'SYN-CORRECTION-01');
+
+  const blank = legalEntityPayloadOf(
+    draft({ registrationCountry: '  ', lifetimeNumbers: [{ typeCode: ' ', number: '' }], identityCorrectionBasis: ' ' }),
+    'UTC',
+  ).legalEntities[0];
+  equal('registrationCountry' in blank, false);
+  equal('lifetimeRegistrationNumbers' in blank, false);
+  equal('identityCorrectionBasis' in blank, false);
+});
+
+// Covers: 只填了类型或只填了号的行编不成 Intake 要的一项，本地按行号报在号表路径上；整行空或整行齐都不报。
+// 国家在不在目录、号合不合格式不在本地判。
+test('半填的号行是编码层问题，按行报', () => {
+  deepEqual(
+    legalEntityLocalProblems(
+      draft({
+        registrationCountry: 'NOT-A-COUNTRY',
+        lifetimeNumbers: [
+          { typeCode: 'SYN-UEN', number: '' },
+          { typeCode: '', number: '' },
+          { typeCode: 'SYN-ALT', number: 'anything' },
+          { typeCode: ' ', number: '3' },
+        ],
+      }),
+      'UTC',
+    ),
+    { 'legalEntities[0].lifetimeRegistrationNumbers': ['第 1 行：类型与号要成对填', '第 4 行：类型与号要成对填'] },
+  );
+});
+
+function numberType(over: Partial<RegistrationNumberTypeRecord>): RegistrationNumberTypeRecord {
+  return {
+    tenantId: 'SYN-TENANT-01',
+    countryCode: 'SG',
+    typeCode: 'SYN-UEN',
+    revision: 1,
+    typeName: '合成终身号',
+    layer: 'IDENTITY',
+    formatPattern: '^[0-9A-Z]+$',
+    basis: 'SYN-RNT-BASIS-01',
+    status: 'EFFECTIVE',
+    effectiveFrom: '2026-01-01T00:00:00Z',
+    registeredAt: '2026-01-01T00:00:00Z',
+    ...over,
+  };
+}
+
+// Covers: 国家候选取身份层类型的国家码、去重、按码排序；资料层类型的国家不进候选。
+test('国家候选：身份层国家去重排序', () => {
+  deepEqual(
+    identityCountryOptions([
+      numberType({ countryCode: 'SG' }),
+      numberType({ countryCode: 'CN', typeCode: 'SYN-USCC' }),
+      numberType({ countryCode: 'SG', typeCode: 'SYN-ALT' }),
+      numberType({ countryCode: 'MY', typeCode: 'SYN-GST', layer: 'PROFILE' }),
+    ]),
+    [
+      { value: 'CN', label: 'CN' },
+      { value: 'SG', label: 'SG' },
+    ],
+  );
+});
+
+// Covers: 类型候选按国家（去首尾空白后比）只列身份层；已停用的照列并括注，拒不拒由服务端判；没选国家即无候选。
+test('类型候选：按国家列身份层，停用照列并括注', () => {
+  const types = [
+    numberType({}),
+    numberType({ typeCode: 'SYN-OLD', typeName: '旧号', deactivatedAt: '2026-06-01T00:00:00Z' }),
+    numberType({ typeCode: 'SYN-GST', typeName: '资料层号', layer: 'PROFILE' }),
+    numberType({ countryCode: 'CN', typeCode: 'SYN-USCC' }),
+  ];
+  deepEqual(identityTypeOptions(types, ' SG '), [
+    { value: 'SYN-UEN', label: 'SYN-UEN · 合成终身号' },
+    { value: 'SYN-OLD', label: 'SYN-OLD · 旧号（已停用）' },
+  ]);
+  deepEqual(identityTypeOptions(types, ''), []);
 });

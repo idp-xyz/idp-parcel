@@ -4,12 +4,14 @@ import { RegistrationAnswerNote, RegistrationPanel } from '../../components/regi
 import {
   commercialRegistrationEndpoints,
   listBusinessParties,
+  listRegistrationNumberTypes,
   partyIdentityOutcomeLabels,
   type BusinessPartyListResponseBody,
   type GroupLegalEntityRecord,
+  type RegistrationNumberTypeListResponseBody,
 } from './api';
 import { problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
-import { Field, ReferencePicker } from './PublicationFormFields';
+import { Field, Problems, ReferencePicker, ReferencePickerFor, fieldLabel, useLoaded } from './PublicationFormFields';
 import {
   RevisionField,
   WallTimeField,
@@ -18,15 +20,18 @@ import {
 } from './party-registration-fields';
 import {
   emptyLegalEntityDraft,
+  identityCountryOptions,
+  identityTypeOptions,
   legalEntityLocalProblems,
   legalEntityPayloadOf,
   suggestedRevision,
   type LegalEntityDraft,
+  type LifetimeNumberDraft,
 } from './legal-entity-form';
 
 /**
- * 责任法人身份登记的逐字段表单（票 admin-web-group-legal-entities/02；ADR-0101 决定八自裁：五格、低频、无矩阵，
- * 直接逐字段表单，不走「模板导入 → 草稿 → 批准 → 发布」那条为上百格矩阵设计的路）。壳与共用格在
+ * 责任法人身份登记的逐字段表单（票 admin-web-group-legal-entities/02，身份层三格随票 legal-entity-profile/04 加入；
+ * ADR-0101 决定八自裁：格少、低频、无矩阵，直接逐字段表单，不走「模板导入 → 草稿 → 批准 → 发布」那条为上百格矩阵设计的路）。壳与共用格在
  * party-registration-fields.tsx（与业务参与方页三份表单同一份），这里只摆本册的格。
  *
  * **本组件不算摘要、不裁任何门、不判领域规则**（伞票 admin-write-faces/07 硬句）：参与方在不在册、届时是否已生效、
@@ -62,9 +67,17 @@ export function LegalEntityRegistrationForm({ knownEntities, onRegistered }: Leg
     onLanded: onRegistered,
   });
   const { draft, patch, problems, locked, timeZone } = form;
+  // 国家与号类型的候选读一次：一张表单里国家格与每一行的类型格共用这一份目录答案。
+  const typeCatalogue = useLoaded(listRegistrationNumberTypes);
 
   // 本册的载荷裁空白（legalEntityPayloadOf），在册提示按裁过的标识找，与送出的是同一个对象。
   const known = knownEntities?.find((row) => row.legalEntityId === draft.legalEntityId.trim());
+
+  const setNumberRow = (index: number, change: Partial<LifetimeNumberDraft>) =>
+    patch({ lifetimeNumbers: draft.lifetimeNumbers.map((row, at) => (at === index ? { ...row, ...change } : row)) });
+  const addNumberRow = () => patch({ lifetimeNumbers: [...draft.lifetimeNumbers, { typeCode: '', number: '' }] });
+  const removeNumberRow = (index: number) =>
+    patch({ lifetimeNumbers: draft.lifetimeNumbers.filter((_, at) => at !== index) });
 
   return (
     <div className="flex-1 overflow-auto p-4 flex flex-col gap-4">
@@ -77,6 +90,10 @@ export function LegalEntityRegistrationForm({ knownEntities, onRegistered }: Leg
             一笔登记一个修订。首笔修订从 1 起、此后必须连续；更正占下一个修订号翻旧插新，不覆盖。参与方必须已在册且在
             法人生效时点已生效——这些都由服务端按册面判，表单只负责把格编对。提交打到{' '}
             <span className="font-mono">{endpoint}</span>；租户不在表单上，由接入渠道的认证结果填入。
+          </p>
+          <p className="text-xs text-idpxyz-textMuted">
+            注册国家 / 地区与终身注册号随身份登记：首笔两格缺一由服务端拒登，号的类型与格式按国家取自注册号类型目录。
+            号变了就是另一个法人；录错时在下一个修订里改正，并填身份更正依据。
           </p>
 
           <div className="grid grid-cols-2 gap-3">
@@ -135,6 +152,82 @@ export function LegalEntityRegistrationForm({ knownEntities, onRegistered }: Leg
               timeZone={timeZone}
               onChange={(effectiveFrom) => patch({ effectiveFrom })}
             />
+
+            <ReferencePickerFor<RegistrationNumberTypeListResponseBody>
+              answer={typeCatalogue}
+              label="注册国家 / 地区 *"
+              path="legalEntities[0].registrationCountry"
+              problems={problems}
+              value={draft.registrationCountry}
+              locked={locked}
+              onChange={(registrationCountry) => patch({ registrationCountry })}
+              optionsOf={(body) => identityCountryOptions(body.registrationNumberTypes)}
+              emptyNote="注册号类型目录今天没有身份层类型；先登记注册号类型，或手填国家码由服务端判。"
+              readFace="注册号类型目录"
+              manualPlaceholder="国家 / 地区码（如 CN、SG）"
+              optionsNote="候选是目录里登过身份层类型的国家 / 地区；目录里没有该国家的类型时服务端拒登，不以默认格式代替。"
+            />
+
+            <Field label="身份更正依据（只在更正修订上填）" path="legalEntities[0].identityCorrectionBasis" problems={problems}>
+              <Input
+                value={draft.identityCorrectionBasis}
+                readOnly={locked}
+                className="font-mono text-[13px]"
+                placeholder="更正依据引用；留空即不带"
+                onChange={(event) => patch({ identityCorrectionBasis: event.target.value })}
+              />
+              <span className="block text-[11px] text-idpxyz-textMuted mt-1">
+                首笔修订不收更正依据；改正国家或号时要不要依据、依据够不够，由服务端判。
+              </span>
+            </Field>
+
+            <div className="col-span-2">
+              <p className={fieldLabel}>终身注册号 *</p>
+              <div className="flex flex-col gap-2">
+                {draft.lifetimeNumbers.map((row, index) => (
+                  <div key={index} className="grid grid-cols-[1fr_1fr_auto] items-start gap-3">
+                    <ReferencePickerFor<RegistrationNumberTypeListResponseBody>
+                      answer={typeCatalogue}
+                      label={`类型（第 ${index + 1} 行）`}
+                      path={`legalEntities[0].lifetimeRegistrationNumbers[${index}].typeCode`}
+                      problems={problems}
+                      value={row.typeCode}
+                      locked={locked}
+                      onChange={(typeCode) => setNumberRow(index, { typeCode })}
+                      optionsOf={(body) => identityTypeOptions(body.registrationNumberTypes, draft.registrationCountry)}
+                      emptyNote="目录里这一国家 / 地区没有身份层类型（先选国家）；也可手填类型码由服务端判。"
+                      readFace="注册号类型目录"
+                      manualPlaceholder="类型码（如 USCC、UEN）"
+                    />
+                    <Field
+                      label={`号（第 ${index + 1} 行）`}
+                      path={`legalEntities[0].lifetimeRegistrationNumbers[${index}].number`}
+                      problems={problems}
+                    >
+                      <Input
+                        value={row.number}
+                        readOnly={locked}
+                        className="font-mono text-[13px]"
+                        placeholder="注册号原样填"
+                        onChange={(event) => setNumberRow(index, { number: event.target.value })}
+                      />
+                    </Field>
+                    <Button variant="ghost" className="mt-5" disabled={locked} onClick={() => removeNumberRow(index)}>
+                      移除
+                    </Button>
+                  </div>
+                ))}
+              </div>
+              <Problems lines={problems['legalEntities[0].lifetimeRegistrationNumbers']} />
+              <div className="mt-2 flex items-center gap-3">
+                <Button variant="outline" disabled={locked} onClick={addNumberRow}>
+                  添加一个终身注册号
+                </Button>
+                <span className="text-[11px] text-idpxyz-textMuted">
+                  一个法人可按类型登多个终身注册号；号的格式与所属层由服务端按目录判。
+                </span>
+              </div>
+            </div>
           </div>
 
           <div className="flex items-start gap-3">
@@ -151,7 +244,7 @@ export function LegalEntityRegistrationForm({ knownEntities, onRegistered }: Leg
         </CardContent>
       </Card>
 
-      {/* 受控批量口的在线镜像，折起来放底部：主路径是上面那五格（ADR-0101 决定一原句）。 */}
+      {/* 受控批量口的在线镜像，折起来放底部：主路径是上面那几格（ADR-0101 决定一原句）。 */}
       <details className="rounded border border-idpxyz-border">
         <summary className="cursor-pointer select-none px-4 py-2 text-[13px] text-idpxyz-textMuted">
           高级：粘贴登记快照 JSON（受控批量口 parcel-commercial register-parties 的在线镜像）

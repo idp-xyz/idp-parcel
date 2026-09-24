@@ -335,6 +335,30 @@ export interface LifetimeRegistrationNumberRecord {
   number: string;
 }
 
+// 注册号类型目录一行（ADR-0145 决定一；后端 registrationNumberTypeBody）：类型的最新修订。layer 是封闭两词
+// IDENTITY（终身注册号）/ PROFILE（资料层的号），两层各只收自己那一类。停用两件只在已停用时在场——看键在不在，
+// 不拿空串推。
+export interface RegistrationNumberTypeRecord {
+  tenantId: string;
+  countryCode: string;
+  typeCode: string;
+  revision: number;
+  typeName: string;
+  layer: string;
+  formatPattern: string;
+  basis: string;
+  status: string;
+  effectiveFrom: string;
+  deactivatedAt?: string;
+  deactivationBasis?: string;
+  registeredAt: string;
+}
+
+export interface RegistrationNumberTypeListResponseBody {
+  outcome: string;
+  registrationNumberTypes: RegistrationNumberTypeRecord[];
+}
+
 // 参与方身份两册（票 admin-remainder-mechanism-batch/01）。partyNameKnown 与合同页
 // contentRegistered 同款显式布尔：法人钉着的参与方在册上查无此人是写入门失败才会
 // 出现的悬空，页面按缺席如实显示，不拿空串去推、不补占位文本。
@@ -551,6 +575,12 @@ export function listLegalEntityRevisions(
   return exchangeMasterData<LegalEntityRevisionListResponseBody>(
     `/commercial-group-legal-entities/${encodeURIComponent(legalEntityId)}/revisions`,
   );
+}
+
+// 法人登记表单的国家与号类型候选从这里取（票 legal-entity-profile/04 第 1 项）。只是候选：目录里有没有这一国家、
+// 号合不合那一类的格式，登记时由服务端按目录判（ADR-0145 决定一），表单不据此拦。
+export function listRegistrationNumberTypes(): Promise<ApiResult<RegistrationNumberTypeListResponseBody>> {
+  return exchangeMasterData<RegistrationNumberTypeListResponseBody>('/commercial-registration-number-types');
 }
 
 export function listPartyRelationships(): Promise<ApiResult<PartyRelationshipListResponseBody>> {

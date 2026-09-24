@@ -343,7 +343,9 @@ export const registrationSnapshotHints: Record<CommercialRegistrationKind, strin
   ),
   'legal-entity': snapshotHint(
     'register-parties',
-    'legalEntities 数组里一项的键为 legalEntityId / partyId / revision / basis / effectiveFrom。' +
+    'legalEntities 数组里一项的键为 legalEntityId / partyId / revision / basis / effectiveFrom，' +
+      '身份层可带 registrationCountry / lifetimeRegistrationNumbers[{typeCode, number}] / identityCorrectionBasis' +
+      '（首笔两格缺一拒登；更正依据只在更正修订上收）。' +
       '参与方必须已登记且在法人生效时点已生效——法人不钉悬空身份。',
     { tenantGridFilledByChannel: true },
   ),
