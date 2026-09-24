@@ -2,7 +2,7 @@
 
 Category: enhancement
 Status: ready-for-agent
-Blocked by: [psb/03](../../product-strategy-boundary/issues/03-reference-configuration-adoption-pattern.md)、08、10；另加 02 若登出「关务资格缺执行器」而另立的那张票
+Blocked by: [psb/03](../../product-strategy-boundary/issues/03-reference-configuration-adoption-pattern.md)、08、10、12
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「演示网络作为参考配置」那一步
 地盘：参考配置的存放处（psb/03 定）与演示种子；[合成演示动线](../../../docs/design/synthetic-demo-journey-script.md)对应一步。
 出处：[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定三、四、五；psb/04 完成判据。
