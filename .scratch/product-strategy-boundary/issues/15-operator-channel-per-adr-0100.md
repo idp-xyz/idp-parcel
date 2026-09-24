@@ -1,7 +1,7 @@
 # 15 横切：ADR-0100 操作者渠道落地——操作者册、凭据校验、`OperatorEnvelope` 与端点逐个换真 Intake
 
 Category: enhancement
-Status: in-progress——跟踪容器：2026-09-24 通道 4 按通道 1 派单 task-2a0f590d（/to-tickets）拆为 [`.scratch/operator-channel/`](../../operator-channel/issues/) 下子票 01–09，全部 draft、拆法待用户认可，切片计划见文末。此前：needs-triage——2026-09-24 通道 4 经用户授权自决立（票 02 遗留：开发主线「按四项判据重定级」表「横切」行第一项与票 05 格 7、11、12、22，全仓没有实施票）；体量大，开工第一步是拆子票
+Status: in-progress——跟踪容器：2026-09-24 通道 4 按通道 1 派单 task-2a0f590d（/to-tickets）拆为 [`.scratch/operator-channel/`](../../operator-channel/issues/) 下子票 01–14：拆法经用户授权通道 4 自决认可（01–08 转 ready-for-agent），丙轨决策 09 落成 ADR-0149 并续编实施票 10–14，切片计划见文末。此前：拆法待用户认可（01–09 draft）；needs-triage——2026-09-24 通道 4 经用户授权自决立（票 02 遗留：开发主线「按四项判据重定级」表「横切」行第一项与票 05 格 7、11、12、22，全仓没有实施票）；体量大，开工第一步是拆子票
 Blocked by: 无——ADR-0100 已接受，这一格不等任何决定
 地盘：`internal/accessidentity`（操作者册、凭据校验、信封铸造）与其迁移、`cmd/parcel-api` 端点表的 Intake 装配；各上下文的授予格按[票 07](./07-pc-authorization-coordinates-and-role-models.md) 的角色模型读。
 出处：[ADR-0100](../../../docs/adr/0100-operator-identity-is-a-product-owned-access-channel-family.md)；[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表「横切」行第一项原话：`internal/accessidentity` 没有操作者册、OIDC 校验与 `OperatorEnvelope`，端点表的命令行与目录读口在隔离开关之外一律挂 `UnconfiguredIntake{}`；[票 05](./05-demo-journey-criterion-evidence.md) 格 7、11、12、22 与「不在主路径上的命令面」实测全部答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`。开发主线结论句把它列为机制缺口的头一件，「它挡着全部运营面」。
@@ -46,12 +46,17 @@ Blocked by: 无——ADR-0100 已接受，这一格不等任何决定
 | [06](../../operator-channel/issues/06-commercial-publication-and-replay-take-operator-identity.md) | 商业发布批准链与计价回放端点接上操作者身份 | 04 |
 | [07](../../operator-channel/issues/07-admin-web-login-gate.md) | 管理台登录门 | 02、03 |
 | [08](../../operator-channel/issues/08-isolated-release-of-main-chain-command-faces.md) | 隔离形态：主链命令面按 ADR-0091 逐口放行合成写（乙轨） | 无 |
-| [09](../../operator-channel/issues/09-decision-production-channel-for-business-command-faces.md) | 决策：主链业务命令面的生产渠道与 ADR-0055 决定五两项未决（丙轨） | 无 |
+| [09](../../operator-channel/issues/09-decision-production-channel-for-business-command-faces.md) | 决策：主链业务命令面的生产渠道与 ADR-0055 决定五两项未决（丙轨） | 无（已 resolved，落成 ADR-0149） |
+| [10](../../operator-channel/issues/10-device-register-and-operation-fact-capability-face.md) | 设备登记与「作业事实登记」能力面 | 01、03 |
+| [11](../../operator-channel/issues/11-integration-client-register-and-client-credentials.md) | 集成客户端册与客户端凭据校验 | 02 |
+| [12](../../operator-channel/issues/12-signed-webhook-inbound.md) | 签名 webhook 入向 | 11 |
+| [13](../../operator-channel/issues/13-command-payload-canonicalization-per-face.md) | 各命令口的载荷规范化形状（逐口） | 无 |
+| [14](../../operator-channel/issues/14-admission-scope-read-and-grade.md) | 准入范围读口与「不在准入范围」一格 | 无（接进铸造随 10、11） |
 
-**前沿**：01、02、08、09。要最早让隔离环境里的主链命令面答业务结果，走 08；要最早让合成操作者在登记写面与目录查阅面上走通，走 01 + 02 → 03 → 04 / 05。
+**前沿**：01、02、08、13、14。要最早让隔离环境里的主链命令面答业务结果，走 08；要最早让合成操作者在登记写面与目录查阅面上走通，走 01 + 02 → 03 → 04 / 05；生产上的主链命令面要 10 或 11（外加 12）与 13、14 都到位，按口逐步开。
 
 **与 [psb/07](./07-pc-authorization-coordinates-and-role-models.md) 的关系：不阻。** 本目录的授予是通道级的能力面授予（登记册配置写、主数据与运营查阅读），列由 ADR-0100 定死；psb/07 的角色模型是 party-commercial 的业务授权（谁能拒绝、撤回、修订、批准）。06 接商业发布时只把信封译成 PC 的「操作者主体引用 + 授予集」，审批规则的形态 ADR-0126 已定，所以 06 不等 psb/07。反过来，psb/07 定角色模型时应读 01 的授予结构、对齐「授予格从哪里来」——那是它的输入，不是阻塞边。
 
 **参数登记册「运营操作者账户与授予」一行**归 01：册的结构在那张票定死，行是租户取值。本轮不动登记册。
 
-**认可**：子票全部 draft；拆法经用户认可后转 ready-for-agent（`docs/agents/issue-tracker.md`「Draft and activate children」）。
+**认可**：子票先以 draft 发出；同日用户在 IDP 队列授权通道 4「参考专业头部软件的做法，你来帮我自决吧」，据此认可拆法，01–08 转 ready-for-agent（`docs/agents/issue-tracker.md`「Draft and activate children」）。丙轨 09 一并裁决：落成 [ADR-0149](../../../docs/adr/0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md)——一线作业事实走操作者渠道族的「作业事实登记」能力面（人 + 已登记设备），外部结果与资金事实走集成客户端族（客户端凭据，推送源经签名 webhook），ADR-0055 决定五两项按口逐一解；实施续编 10–14，均 ready-for-agent。

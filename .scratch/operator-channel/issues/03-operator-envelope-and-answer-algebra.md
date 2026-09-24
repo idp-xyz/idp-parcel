@@ -1,7 +1,7 @@
 # 03 `OperatorEnvelope` 与铸造、三格答复代数
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
 Blocked by: 01、02
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`internal/accessidentity`（信封类型与铸造）、`internal/platform/httpapi` 若需新答复格；`internal/accessidentity/doc.go`；ADR-0072 / 0085 的前向指针核对。

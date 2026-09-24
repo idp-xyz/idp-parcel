@@ -1,7 +1,7 @@
 # 07 管理台登录门：authorization_code + PKCE、Bearer 与三态文案
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
 Blocked by: 02、03
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`apps/admin-web/**`（前端切片，按 [workflow.md「前端切片」](../../../docs/agents/workflow.md) 一人在 main 上直接做）。
