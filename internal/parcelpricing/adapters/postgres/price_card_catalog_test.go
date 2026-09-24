@@ -323,8 +323,13 @@ func TestPriceCardAmbiguousVersionsAreRefused(t *testing.T) {
 
 	tenant := evaluationValue(t, domain.NewTenantID, "tenant-a")
 	scope := evaluationValue(t, domain.NewPricingScopeID, "scope-1")
-	if _, err := catalog.LoadApplicable(ctx, tenant, domain.PricingDirectionSell, scope, catalogAsOf); !errors.Is(err, adapter.ErrAmbiguousPriceCard) {
+	_, err := catalog.LoadApplicable(ctx, tenant, domain.PricingDirectionSell, scope, catalogAsOf)
+	if !errors.Is(err, adapter.ErrAmbiguousPriceCard) {
 		t.Fatalf("err = %v, 想要 ErrAmbiguousPriceCard", err)
+	}
+	// 应用层不依赖适配器，据端口哨兵按恢复动作分格（试算把它译成适用冲突，ADR-0152 决定四）。
+	if !errors.Is(err, ports.ErrAmbiguousPriceCard) {
+		t.Fatalf("err = %v, 想要同时认得出端口哨兵 ports.ErrAmbiguousPriceCard", err)
 	}
 }
 

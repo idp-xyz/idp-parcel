@@ -18,8 +18,8 @@ import (
 // 它是错误而不是业务答案（先例：NR 目录的 ErrAmbiguousNetworkCatalog）：多份**不同**
 // 方案同时适用是正当的多候选形态，但同一方案的两个版本同时适用意味着发布责任方没有
 // 完成替代关系，挑任何一版都是替它作决定。数据要修登记册，不能靠挑一版把它藏起来。
-var ErrAmbiguousPriceCard = errors.New(
-	"parcel pricing postgres: 同一方案身份在该时点有多个适用版本")
+var ErrAmbiguousPriceCard = fmt.Errorf(
+	"parcel pricing postgres: 同一方案身份在该时点有多个适用版本: %w", ports.ErrAmbiguousPriceCard)
 
 // PriceCards 实现 ports.PriceCardCatalog（票 07 件①②）与 ports.PriceCardVersionLoader
 // （票 wiring-baseline-remainder/06 件①）。它拥有价卡版本行的登记与装载，不做评价也不
