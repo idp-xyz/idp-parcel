@@ -99,6 +99,7 @@ var isolatedWriteAdmittedCommandLines = []string{
 	"/transport-fulfillment-segment-closures",
 	"/transport-fulfillment-effective-time-judgments",
 	"/customs/external-results",
+	"/customs-regulatory-credential-registrations",
 }
 
 // admittedCommandLines 交回放行名单的副本：日志与测试都不该改得动那份表。
