@@ -1,7 +1,7 @@
 # 08 隔离形态：主链命令面按 ADR-0091 逐口放行合成写
 
 Category: enhancement
-Status: in-progress——2026-09-24 通道 6 认领（通道 1 改派 task-a25599eb；原卡通道 4 零提交已撤），分支 `mcp6-oc08`，基 `443a472e`；实现、自验与 psb/05 重走已交（见文末「完成记录」），待非作者评审与推送方重放；拆法经用户授权通道 4 自决认可；ADR-0149 决定五写明本票的隔离放行不因生产渠道落地而退场
+Status: resolved · 已进 main——2026-09-24 评审 ← 通道 1（非作者）两轴无阻断、非阻断四条随票记；推送方通道 1 在 main `8cd50199` 之上逐笔重放分支 `mcp6-oc08` 的 `443a472e..29030a8e`（代码 `f043ed03`…`8dd1b339`、完成记录 `5d7ed969`），清点重生成 `ebafb877`；分支作封存出处，新旧 SHA 对照见 Comments「进 main 记录」。此前 in-progress——2026-09-24 通道 6 认领（通道 1 改派 task-a25599eb；原卡通道 4 零提交已撤），分支 `mcp6-oc08`，基 `443a472e`；实现、自验与 psb/05 重走已交（见文末「完成记录」）；拆法经用户授权通道 4 自决认可；ADR-0149 决定五写明本票的隔离放行不因生产渠道落地而退场
 Blocked by: 无
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 乙轨——**不是操作者渠道**，是让隔离环境里的主链先答业务结果的那条路
 地盘：`cmd/parcel-api` 端点表里主链命令面的装配行与各自的隔离 Intake 类型（照 `IsolatedPartyIdentityIntake` 与隔离提交口的形状），各上下文 `adapters/http` 里需要的隔离 Intake 实现。
@@ -80,3 +80,28 @@ Blocked by: 无
 2. **收寄的服务结果标记留空**：命令注释写明它「由接入层查好带入」，隔离形态没有那道查询，收了就是采信调用方自报的 PS 结论——已取消或终局的包裹在隔离环境里收寄时不带标记。
 3. **`833af4b1` 改了 tfhttp 导出签名**（交接、交付两组 Intake 拆成单方法接口、原名留作合集、四个端点构造函数参数收窄）：为了让「未放行的口在类型上装不进隔离 Intake」这把编译期锁在这两组上也成立；既有调用点一行未改照编，认领广播里已预告。
 4. 各上下文的封闭解码与「拼回租户」助手各写一份，不抽到平台包：上下文之间不共享适配器代码，与 PC 身份族那份同形。
+
+## Comments
+
+### 评审 ← 通道 1（推送方自跑；非作者，隔离子代理认证失败未起，两轴串行、各写各的）· 钉 `29030a8e`（基 `443a472e`，只读，不跑全仓）· 2026-09-24 22:0x
+
+前一评审会话停在 Standards 轴读 `cmd/parcel-api/endpoints.go`、未留结论；本条从头重跑两轴，不沿用。
+
+**Standards** — 阻断：无。非阻断三条：
+① `tfhttp.DeliveryIntake` 注释称 `IsolatedCommandIntake`「是唯一的实现」，而它只实现 `DeliveryRegistrationIntake`，本票 `TestIsolatedCommandIntakeServesOnlyAdmittedLines` 正断言它装不进 `DeliveryProofCorrectionIntake`——注释与代码相反；照同批 `HandoverIntake`「只实现首登那一口」改一句即可。
+② `assembleBusinessEndpoints` 头注「这句从前说的是……因此改成现在这句」又续一环变更史，AGENTS.md「写代码注释」：不写变更说明；可收成只述现行规则。
+③ 判断题 · Duplicated Code：收寄三态搭配门在 `nodeopshttp.applyReceptionClaim` 与 `parcel-frontline-import` 的 `intakeRowFrom` 各一份，此刻核过一致，但只靠手工同步；要收成一份得下沉 NO 应用层，另立票。
+无发现：ADR-0091 决定一、三、四（注入值带 `SYN-`；自报租户、节点、来源即拒；读开关换不了写行）；ADR-0023（身份与发生时间从载荷收、缺席交编排、不代铸；CC `ReceivedAt` 是服务端自己的接收时刻）；一口一变量、编译期锁；注释中文，无跨文件计数与行号。
+
+**Spec** — 阻断：无。非阻断一条：
+① 完成记录「作者自验」节末句「推送方自审过一轮」应为作者自审（修复笔 `06a35347` 是作者的）；下方进 main 记录按作者自审计，原句不改。
+无发现：放行的恰是「做什么」1 点名的各口，与基 `443a472e` 端点表逐行对过，其余挂字面量的写行都落在归类表某格；一口一笔、按 NO / TF / CC / SA 拆，`SYN-` 前缀门禁未动；psb/05 格 7、11、12、22 写回且只记 `S`，格 12「派送尝试无写入方」核过 `.scratch` 下无在途票；完成判据两条都有用例（真库用例逐口；`TestProductionFormAnswersTheAdmittedCommandLinesByteForByteUnconfigured` 覆盖放行名单每一行）；判断项四条与 ADR-0091 / 0023 及身份族先例相容，判断项 2 的标记不挡接收、受控批量口同样不填，是本票之前就在的缝。
+
+结论：可接受。
+
+### 进 main 记录（推送方 · 通道 1）
+
+- **门**：评审 ← 通道 1（非作者）两轴无阻断，合 parallel-sessions「推送方只在评审为无阻断时重放」；非阻断四条随票记、不挡合入，作者可另立票。通道 1 是本票派单方（task-a25599eb 写明「我派非作者评审后重放」）；通道 6 未对该卡报 done，交活以分支上的完成记录为准。
+- **重放**：在 main `8cd50199` 之上 cherry-pick `443a472e..29030a8e`，无冲突。其间进 main 的 operator-channel/01 与 routing-first-cut/07 与本票没有重叠文件（两侧 `git diff --name-only` 取交为空），按 parallel-sessions 直接在新 tip 上重放；本票动过的每份文件 blob 与分支 `29030a8e` 全同。分支上无清点笔，批 tip 干净检出重生成为 `ebafb877`。新旧 SHA 对照（分支 → main）：`ec70f4ac`→`4bfc9c3e`（认领）、`0ed1d78f`→`f043ed03`（NO）、`833af4b1`→`853e5587`（铺缝）、`5c8f90cc`→`822c75a4`、`9a9af1f0`→`0ad294cc`、`2bdb80cf`→`99f74a54`、`101d050c`→`25d6ab4d`、`81338d91`→`0aa5ce42`、`9e40f056`→`d3a7dcdf`、`aacda89b`→`6817fc4b`、`05aefa3f`→`23f3f556`、`c5f03169`→`019db8ad`、`114074d2`→`6f5a9903`（TF 各口）、`0c6dc343`→`d4f52c1c`、`1a38d8f8`→`1f5e8d73`（CC）、`21bbc0e2`→`7393c1d0`（SA）、`06a35347`→`8dd1b339`（自审修复）、`29030a8e`→`5d7ed969`（完成记录与 psb/05 重走）。
+- **验证**：钉 `ebafb877`（与本记录一笔只差 `.md`）：全仓 build / vet 退 0，`gofmt -l cmd internal` 无输出；先单跑本票真库用例（`cmd/parcel-api` 下 `TestIsolated…AgainstARealDatabase` 各条）是 PASS 非 SKIP；带 DSN `go test -p 1 -count=1 ./...` 120 包 ok、0 FAIL（另 15 包无测试文件）。
+- **推送**：推前 `ls-remote` 远端 main 仍是 `8cd50199`，`8cd50199..ebafb877` 只有本票重放各笔与清点一笔；`git push origin ebafb877:main`。本记录随后单独一笔。
