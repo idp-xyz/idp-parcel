@@ -10,16 +10,19 @@ import {
   SIDEBAR_WIDTH_MIN,
   WORKSPACE_STORAGE_KEY,
   activateTab,
+  addressForTab,
   closeAll,
   closeOthers,
   closeTab,
   closeToRight,
   hashForTab,
+  hashOfUrl,
   initialWorkspaceState,
   loadWorkspaceState,
   moduleIdOfTab,
   objectIdOfTab,
   openTab,
+  rememberTabAddress,
   reopenClosed,
   reorderTabs,
   saveWorkspaceState,
@@ -32,6 +35,7 @@ import {
   togglePinned,
   workspaceLocationLabel,
   workspaceShortcutOf,
+  type TabAddressBook,
   type WorkspaceState,
   type WorkspaceTab,
 } from './workspace-state';
@@ -106,6 +110,41 @@ test('tabForHash：名字取模块名、对象标识落 subtitle；模块标签�
 test('hashForTab：null 写 #/workbench，与侧栏点工作台同一形', () => {
   equal(hashForTab(null), '#/workbench');
   equal(hashForTab('exception-cases'), '#/exception-cases');
+});
+
+// —— 各标签上次停在哪 ——
+
+test('rememberTabAddress / addressForTab：离开时按标签 id 记完整地址，回程落回它；没记过落首址', () => {
+  let book: TabAddressBook = new Map();
+  book = rememberTabAddress(book, '#/shipment-request-inquiry?q=SR', pageTitleById);
+  book = rememberTabAddress(book, '#/shipment-request-inquiry/SR-1/timeline', pageTitleById);
+  equal(addressForTab(book, 'shipment-request-inquiry'), '#/shipment-request-inquiry?q=SR');
+  equal(addressForTab(book, 'shipment-request-inquiry/SR-1'), '#/shipment-request-inquiry/SR-1/timeline');
+  equal(addressForTab(book, 'exception-cases'), '#/exception-cases');
+  equal(addressForTab(book, null), '#/workbench');
+
+  book = rememberTabAddress(book, '#/shipment-request-inquiry', pageTitleById);
+  equal(addressForTab(book, 'shipment-request-inquiry'), '#/shipment-request-inquiry', '后一次离开覆盖前一次');
+});
+
+test('rememberTabAddress：工作台、词表外、空 hash、解码会抛的地址不记，原样返回', () => {
+  const book: TabAddressBook = new Map();
+  for (const hash of ['#/workbench', '#/no-such-module?q=x', '', '#/%E0?q=x', '#/shipment-request-inquiry/%E0%A4%A']) {
+    equal(rememberTabAddress(book, hash, pageTitleById), book, hash);
+  }
+  const same = rememberTabAddress(book, '#/exception-cases?q=x', pageTitleById);
+  equal(rememberTabAddress(same, '#/exception-cases?q=x', pageTitleById), same, '同一地址再记不换对象');
+});
+
+test('记下的地址认回来仍是那张标签', () => {
+  const book = rememberTabAddress(new Map(), '#/exception-cases?view=v1&q=%E5%BC%82', pageTitleById);
+  equal(tabIdFromHash(addressForTab(book, 'exception-cases'), known), 'exception-cases');
+});
+
+test('hashOfUrl：取首个 # 起的部分，没有 # 是空串', () => {
+  equal(hashOfUrl('http://localhost/app#/exception-cases?q=a#b'), '#/exception-cases?q=a#b');
+  equal(hashOfUrl('http://localhost/app'), '');
+  equal(hashOfUrl(''), '');
 });
 
 // —— openTab / activateTab ——

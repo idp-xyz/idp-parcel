@@ -4,7 +4,14 @@ import { EditorGroup, Sidebar, useResize } from '@idpxyz/ui-workspace';
 import { useDensity } from '@idpxyz/ui-theme-runtime';
 import { Button, Tooltip } from '@idpxyz/ui-primitives';
 import { navigationSections, sidebarIconMap, pageTitleById } from './navigation';
-import { InspectorPanel, InspectorProvider, type InspectorContent, type InspectorController } from './templates';
+import {
+  InspectorPanel,
+  InspectorProvider,
+  TabReturnProvider,
+  type InspectorContent,
+  type InspectorController,
+  type TabReturnController,
+} from './templates';
 import { pageById } from './page-registry';
 import { Workbench } from './pages/Workbench';
 import { UnwiredModule } from './pages/UnwiredModule';
@@ -28,14 +35,16 @@ import {
   SIDEBAR_WIDTH_MIN,
   WORKBENCH_MODULE_ID,
   activateTab,
+  addressForTab,
   closeAll,
   closeOthers,
   closeTab,
   closeToRight,
-  hashForTab,
+  hashOfUrl,
   loadWorkspaceState,
   moduleIdOfTab,
   openTab,
+  rememberTabAddress,
   reopenClosed,
   reorderTabs,
   saveWorkspaceState,
@@ -46,6 +55,7 @@ import {
   togglePinned,
   workspaceLocationLabel,
   workspaceShortcutOf,
+  type TabAddressBook,
   type WorkspaceState,
 } from './shell/workspace-state';
 
@@ -71,8 +81,12 @@ import {
 // 得先在标签集上算（关掉活动标签该落哪个邻居只有标签集知道），于是先落状态、活动标签变了再写 hash（applyWorkspace），回流时
 // openTab 已开则激活、幂等。后一路对活动标签答了两次，两次答成同一张靠的是 id 规范——hashForTab(id) 认回来仍是 id；
 // 从存储读回的标签由 loadWorkspaceState 按这一条筛过。
+// 回程（点标签、关标签落邻居、页面经 TabReturnProvider 回到某标签）写的是那张标签上次停的完整地址（addressForTab），不是只有
+// 前两段的首址：检索词这类只活在地址里的页内状态才留得住。它由 hashchange 的 oldURL 记下、按 tabForHash 归档，认回来仍是那张
+// 标签，上面「答成同一张」的前提不变。
 // 三条互斥各自为何：不双写——若点标签既 setState 又写 hash，两条路对同一件事各答一次，失配时没人知道哪个对；
-// 不在标签里存页内状态——第二段之后与查询串归页面（详情钻取、保存视图的 `?view=`），标签只记地址，页面卸载即丢；
+// 不在标签里存页内状态——第二段之后与查询串归页面（详情钻取、保存视图的 `?view=`、检索词的 `?q=`），标签至多记「上次停在
+// 哪个地址」，页面状态仍只从地址读、页面卸载即丢；
 // 关标签写 hash——关掉活动标签后「现在在哪」这一问仍由 hash 答，标签集只是算出该落到哪个邻居，再把答案写回地址。
 // 工作台不是标签而是 EditorGroup 的 emptyStateContent：activeTabId 为 null 即显示工作台，理由见 workspace-state.ts 文件头。
 // 非活动标签卸载（preserveInactiveTabContent 关）：每张页各自 fetch，留着会攒请求——myshop-web 的演示数据无此顾虑，我们有。
@@ -120,6 +134,8 @@ export function Layout() {
   // 事件回调（快捷键、EditorGroup 的各 on*）里读最新状态用 ref，不靠闭包——它们在同一帧里可能连着来两次。
   const workspaceRef = useRef(workspace);
   workspaceRef.current = workspace;
+  // 各标签上次停在的完整地址：hashchange 时按 oldURL 记下离开的那一格，回程时读。只在回程那一刻被读、不驱动渲染，放 ref。
+  const tabAddresses = useRef<TabAddressBook>(new Map());
 
   useEffect(() => {
     saveWorkspaceState(window.localStorage, workspace);
@@ -128,7 +144,8 @@ export function Layout() {
   useEffect(() => {
     // 首帧也记一次：刷新回到详情页、从收藏直接打开，都是「打开过」；同一对象去重置顶，重复记不会多出一条。
     recordRecentObjectFromHash();
-    const onHashChange = () => {
+    const onHashChange = (event: HashChangeEvent) => {
+      tabAddresses.current = rememberTabAddress(tabAddresses.current, hashOfUrl(event.oldURL), pageTitleById);
       setWorkspace((state) => applyHash(state, window.location.hash));
       recordRecentObjectFromHash();
     };
@@ -146,7 +163,7 @@ export function Layout() {
     if (next === prev) return;
     workspaceRef.current = next;
     setWorkspace(next);
-    if (next.activeTabId !== prev.activeTabId) window.location.hash = hashForTab(next.activeTabId);
+    if (next.activeTabId !== prev.activeTabId) window.location.hash = addressForTab(tabAddresses.current, next.activeTabId);
   };
 
   const navigate = (hash: string) => {
@@ -218,6 +235,15 @@ export function Layout() {
   useEffect(() => {
     setInspectorContent(null);
   }, [workspace.activeTabId]);
+  // 页面「回到某标签」的口：与点标签同一条回程，落回那张标签上次停的地址。
+  const tabReturn = useMemo<TabReturnController>(
+    () => ({
+      returnTo: (tabId) => {
+        window.location.hash = addressForTab(tabAddresses.current, tabId);
+      },
+    }),
+    [],
+  );
   const inspectorResize = useResize({
     direction: 'horizontal',
     initialSize: workspace.inspectorWidth,
@@ -285,6 +311,7 @@ export function Layout() {
             Provider 只包主区：检查器的内容只能来自主区里的页面。 */}
         <main className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor min-w-0" data-density={density}>
           <InspectorProvider value={inspectorController}>
+          <TabReturnProvider value={tabReturn}>
           <EditorGroup
             group={{ id: MAIN_EDITOR_GROUP_ID, tabs: workspace.tabs, activeTab: workspace.activeTabId ?? '' }}
             isActive
@@ -292,7 +319,7 @@ export function Layout() {
             onActivate={() => {}}
             // 点已活动的那张不写 hash：hash 上可能带着页内的 ?view= 或第三段，重写会剥掉它们而页面实例不换，地址与屏上所示就失配了。
             onTabClick={(id) => {
-              if (id !== workspaceRef.current.activeTabId) navigate(hashForTab(id));
+              if (id !== workspaceRef.current.activeTabId) navigate(addressForTab(tabAddresses.current, id));
             }}
             onTabClose={(id) => applyWorkspace((state) => closeTab(state, id))}
             onTabPin={(id) => applyWorkspace((state) => togglePinned(state, id))}
@@ -311,6 +338,7 @@ export function Layout() {
             emptyStateContent={<Workbench onNavigate={setActive} />}
             preserveInactiveTabContent={false}
           />
+          </TabReturnProvider>
           </InspectorProvider>
         </main>
         {workspace.inspectorVisible ? (

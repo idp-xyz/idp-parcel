@@ -1,7 +1,7 @@
 # 06 列表 → 详情往返保住检索词与多选集：多标签壳层下「进详情再回来即清零」的出路
 
 Category: enhancement
-Status: ready-for-agent——2026-09-24 用户授权通道 3 自决：C 的检索词半 + 壳层记住每张标签最后停在的完整地址，多选集进详情即丢（见「判断项答复」）。此前 draft——2026-09-24 通道 1 按票 01 评审 ← 通道 2 的 Spec 非阻断 1 立，形态取舍归用户
+Status: in-progress——2026-09-24 通道 1 接（通道 3 提议的分工），在 `main` 上直接做（workflow.md「前端切片」）；壳层段先落，模板与页面段随后。此前 ready-for-agent——2026-09-24 用户授权通道 3 自决：C 的检索词半 + 壳层记住每张标签最后停在的完整地址，多选集进详情即丢（见「判断项答复」）。此前 draft——2026-09-24 通道 1 按票 01 评审 ← 通道 2 的 Spec 非阻断 1 立，形态取舍归用户
 Blocked by: 无
 地盘：`apps/admin-web/src/shell/workspace-state.ts` 与其 test、`Layout.tsx`（记地址、三条回程）、`templates/`（检索词读写地址的共用件、给页面的「回到某标签」口）、
 `pages/shipment-request/ShipmentRequestListPage.tsx`、`pages/visibility/ExceptionCasesPage.tsx`，外加票 04 票面补记多选集改口。全在 `apps/admin-web/**` 与票面，走

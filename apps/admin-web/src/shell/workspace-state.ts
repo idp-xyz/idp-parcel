@@ -118,6 +118,47 @@ export function hashForTab(tabId: string | null): string {
   return `#/${tabId ?? WORKBENCH_MODULE_ID}`;
 }
 
+// —— 各标签上次停在哪 ——
+
+/**
+ * 标签 id → 离开它时地址栏里的完整 hash（含第三段与查询串，如检索词的 `?q=`）。回到一张标签时落回这里而不是只写前两段的
+ * 首址：检索词这类只活在地址里的页内状态，否则在点标签、关标签落邻居、详情「返回列表」三条回程上都会被剥掉。
+ * 只在会话内，不进 localStorage：刷新后活动标签的地址本就在地址栏里，非活动标签回到首址。
+ */
+export type TabAddressBook = ReadonlyMap<string, string>;
+
+/**
+ * 离开一个地址时记下它，归到它那张标签名下；造不出标签的（工作台、词表外、解码会抛的）不记——记不记只影响回程落在
+ * 原址还是首址。按 tabForHash 认标签，与 hash 开标签同一个构造器，所以记下的地址认回来一定是那张标签。
+ */
+export function rememberTabAddress(
+  book: TabAddressBook,
+  leftHash: string,
+  pageTitleById: Record<string, string>,
+): TabAddressBook {
+  let tab: WorkspaceTab | null;
+  try {
+    tab = tabForHash(leftHash, pageTitleById);
+  } catch {
+    return book;
+  }
+  if (tab === null || book.get(tab.id) === leftHash) return book;
+  const next = new Map(book);
+  next.set(tab.id, leftHash);
+  return next;
+}
+
+/** 回到一张标签要写的地址：记过的完整地址，没记过就是它的首址；null（工作台）同 hashForTab。 */
+export function addressForTab(book: TabAddressBook, tabId: string | null): string {
+  return (tabId !== null ? book.get(tabId) : undefined) ?? hashForTab(tabId);
+}
+
+/** 一个完整 URL 的 hash 部分（首个 `#` 起）；没有就是空串。HashChangeEvent 的 oldURL 是完整 URL。 */
+export function hashOfUrl(url: string): string {
+  const at = url.indexOf('#');
+  return at < 0 ? '' : url.slice(at);
+}
+
 // —— 标签操作 ——
 
 function withoutClosed(closedTabs: WorkspaceTab[], id: string): WorkspaceTab[] {

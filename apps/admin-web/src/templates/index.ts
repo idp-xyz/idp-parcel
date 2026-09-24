@@ -102,3 +102,4 @@ export {
 } from './inspector';
 export { InspectorProvider, useInspector, type InspectorController } from './inspector-context';
 export { InspectorPanel, type InspectorPanelProps } from './InspectorPanel';
+export { TabReturnProvider, useTabReturn, type TabReturnController } from './tab-return-context';
