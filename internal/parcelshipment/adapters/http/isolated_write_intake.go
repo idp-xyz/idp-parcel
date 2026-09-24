@@ -225,16 +225,17 @@ func (intake *IsolatedSubmissionIntake) IntakeSubmission(
 
 	now := intake.clock.Now().UTC()
 	return application.SubmitShipmentRequestCommand{
-		Identity:          identity,
-		PayloadDigest:     canonical.Digest(),
-		OccurredAt:        now,
-		ReceivedAt:        now,
-		BatchID:           internalBatch,
-		ShipmentRequestID: internalRequest,
-		DeclaredParcelIDs: internalParcels,
-		AdmissionScope:    intake.admissionScope,
-		ExpectedRevision:  decision.Revision(),
-		DeclaredElements:  canonical.DeclaredElements(),
+		Identity:                identity,
+		PayloadDigest:           canonical.Digest(),
+		OccurredAt:              now,
+		ReceivedAt:              now,
+		BatchID:                 internalBatch,
+		ShipmentRequestID:       internalRequest,
+		DeclaredParcelIDs:       internalParcels,
+		AdmissionScope:          intake.admissionScope,
+		ExpectedRevision:        decision.Revision(),
+		DeclaredElements:        canonical.DeclaredElements(),
+		RequestedServiceProduct: canonical.RequestedServiceProduct(),
 	}, nil
 }
 
@@ -360,7 +361,7 @@ func scopeEntries(draft submissionDraft) []domain.CanonicalContentEntry {
 }
 
 func serviceEntries(draft submissionDraft) []domain.CanonicalContentEntry {
-	entries := map[string]string{"service.requestedProduct": draft.RequestedServiceProduct}
+	entries := map[string]string{domain.RequestedServiceProductEntryName: draft.RequestedServiceProduct}
 	for _, parcel := range draft.Parcels {
 		reference := strings.TrimSpace(parcel.CustomerParcelReference)
 		for name, value := range map[string]string{
