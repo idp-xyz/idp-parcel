@@ -82,6 +82,7 @@ var isolatedWriteAdmittedCommandLines = []string{
 	"/commercial-legal-entity-profile-registrations",
 	"/node-operations/receptions",
 	"/transport-fulfillment/offsite-pickups",
+	"/transport-fulfillment/offsite-pickup-attempts",
 }
 
 // admittedCommandLines 交回放行名单的副本：日志与测试都不该改得动那份表。

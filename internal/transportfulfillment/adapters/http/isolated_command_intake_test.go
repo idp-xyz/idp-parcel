@@ -50,6 +50,79 @@ var isolatedLines = map[string]isolatedLine{
 		},
 		valid: offsitePickupRegistrationBody,
 	},
+	"/transport-fulfillment/offsite-pickup-attempts": {
+		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
+			_, err := intake.IntakePickupAttempt(context.Background(), request)
+			return err
+		},
+		valid: offsitePickupAttemptBody,
+	},
+}
+
+const offsitePickupAttemptBody = `{"sourceId":"SYN-DEVICE-08/attempt-01","task":"SYN-TASK-08-02","attempt":"SYN-ATTEMPT-08-02",` +
+	`"executedBy":"SYN-COURIER-08","place":"SYN-PLACE/shipper-dock-02","plannedFrom":"2026-09-24T08:00:00+08:00",` +
+	`"plannedTo":"2026-09-24T10:00:00+08:00","arrivedAt":"2026-09-24T08:40:00+08:00","evidence":"SYN-EVIDENCE/visit-02",` +
+	`"rescheduledFrom":"SYN-ATTEMPT-08-00","segment":"SYN-SEGMENT-08-02","objects":[` +
+	`{"object":"SYN-PARCEL-08-02","outcome":"PICKED_UP","control":"SYN-CONTROL/signed-02",` +
+	`"occurredAt":"2026-09-24T08:45:00+08:00","plannedSegment":"SYN-PLANNED-08-02"},` +
+	`{"object":"SYN-PARCEL-08-03","outcome":"GOODS_NOT_READY","basis":"SYN-BASIS/note-03","occurredAt":"2026-09-24T08:46:00+08:00"}]}`
+
+// Covers: PickupAttemptIntake 契约「段引用两层都要收」——整次到访一个 segment、逐对象各自的 plannedSegment；事实身份
+// sourceId 与各时刻照 ADR-0023 从载荷如实收，逐对象成败与依据逐字进命令，传输层不替它汇总。
+func TestIsolatedCommandIntakeTranslatesOffsitePickupAttemptWithInjectedTenant(t *testing.T) {
+	command, err := isolatedCommandIntakeForTest(t).IntakePickupAttempt(context.Background(), commandRequest(offsitePickupAttemptBody))
+	if err != nil {
+		t.Fatalf("intake：%v", err)
+	}
+	if got := command.TenantID.String(); got != isolatedCommandTenant {
+		t.Fatalf("TenantID = %q, want %q", got, isolatedCommandTenant)
+	}
+	for name, pair := range map[string][2]string{
+		"sourceId":        {command.SourceID, "SYN-DEVICE-08/attempt-01"},
+		"task":            {command.Task, "SYN-TASK-08-02"},
+		"attempt":         {command.Attempt, "SYN-ATTEMPT-08-02"},
+		"executedBy":      {command.ExecutedBy, "SYN-COURIER-08"},
+		"place":           {command.Place, "SYN-PLACE/shipper-dock-02"},
+		"evidence":        {command.Evidence, "SYN-EVIDENCE/visit-02"},
+		"rescheduledFrom": {command.RescheduledFrom, "SYN-ATTEMPT-08-00"},
+		"segment":         {command.Segment, "SYN-SEGMENT-08-02"},
+	} {
+		if pair[0] != pair[1] {
+			t.Fatalf("%s = %q, want %q", name, pair[0], pair[1])
+		}
+	}
+	for name, pair := range map[string][2]time.Time{
+		"plannedFrom": {command.PlannedFrom, time.Date(2026, 9, 24, 0, 0, 0, 0, time.UTC)},
+		"plannedTo":   {command.PlannedTo, time.Date(2026, 9, 24, 2, 0, 0, 0, time.UTC)},
+		"arrivedAt":   {command.ArrivedAt, time.Date(2026, 9, 24, 0, 40, 0, 0, time.UTC)},
+	} {
+		if !pair[0].Equal(pair[1]) {
+			t.Fatalf("%s = %s, want %s", name, pair[0], pair[1])
+		}
+	}
+	if len(command.Objects) != 2 {
+		t.Fatalf("objects = %d 项, want 2——逐对象分别成败，不许合并", len(command.Objects))
+	}
+	picked, notReady := command.Objects[0], command.Objects[1]
+	if picked.Object.String() != "SYN-PARCEL-08-02" || picked.Outcome.String() != "PICKED_UP" ||
+		picked.Basis.String() != "" || picked.Control.String() != "SYN-CONTROL/signed-02" ||
+		picked.PlannedSegment != "SYN-PLANNED-08-02" ||
+		!picked.OccurredAt.Equal(time.Date(2026, 9, 24, 0, 45, 0, 0, time.UTC)) {
+		t.Fatalf("第一件 = %+v，与载荷不符", picked)
+	}
+	if notReady.Object.String() != "SYN-PARCEL-08-03" || notReady.Outcome.String() != "GOODS_NOT_READY" ||
+		notReady.Basis.String() != "SYN-BASIS/note-03" || notReady.Control.String() != "" || notReady.PlannedSegment != "" {
+		t.Fatalf("第二件 = %+v，与载荷不符——没给的控制依据与计划段不该被补上", notReady)
+	}
+}
+
+// Covers: 对象成败取封闭词表——词表外的词是用法错误（400），不留到编排去答成`未受理`；空着则交给编排判。
+func TestIsolatedCommandIntakeRefusesAnUnknownAttemptObjectOutcome(t *testing.T) {
+	_, err := isolatedCommandIntakeForTest(t).IntakePickupAttempt(context.Background(), commandRequest(
+		`{"sourceId":"s","attempt":"a","objects":[{"object":"o","outcome":"LOST","occurredAt":"2026-09-24T08:45:00+08:00"}]}`))
+	if !errors.Is(err, tfhttp.ErrMalformedRequest) {
+		t.Fatalf("err = %v, want ErrMalformedRequest", err)
+	}
 }
 
 const offsitePickupRegistrationBody = `{"object":"SYN-PARCEL-08-01","task":"SYN-TASK-08-01","attempt":"SYN-ATTEMPT-08-01",` +
@@ -157,6 +230,9 @@ func TestIsolatedCommandIntakeServesOnlyAdmittedLines(t *testing.T) {
 	var intake any = isolatedCommandIntakeForTest(t)
 	if _, ok := intake.(tfhttp.PickupRegistrationIntake); !ok {
 		t.Fatal("场外揽收登记口该已放行")
+	}
+	if _, ok := intake.(tfhttp.PickupAttemptIntake); !ok {
+		t.Fatal("场外揽收尝试口该已放行")
 	}
 	for name, refused := range map[string]bool{
 		"揽收更正口（同族未列）":      isA[tfhttp.PickupCorrectionIntake](intake),

@@ -37,6 +37,22 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 		status:  http.StatusCreated,
 		outcome: "PICKUP_REGISTERED",
 	},
+	// 一次到访多对象揽收执行：一件揽到手带控制依据、不指名段——落一次到访结果，201 ATTEMPT_RECORDED。
+	"/transport-fulfillment/offsite-pickup-attempts": {
+		endpoint: func(t *testing.T, db *bentopg.DB, intake *tfhttp.IsolatedCommandIntake) http.Handler {
+			controlFacts, err := buildControlFactOrchestrations(db)
+			if err != nil {
+				t.Fatalf("装配控制事实编排：%v", err)
+			}
+			return tfhttp.NewPerformOffsitePickupEndpoint(intake, controlFacts.pickupAttempt)
+		},
+		body: `{"sourceId":"SYN-DEVICE-08/attempt-01","task":"SYN-TASK-08-02","attempt":"SYN-ATTEMPT-08-02","executedBy":"SYN-COURIER-08",` +
+			`"place":"SYN-PLACE/shipper-dock-02","plannedFrom":"2026-09-24T08:00:00+08:00","plannedTo":"2026-09-24T10:00:00+08:00",` +
+			`"arrivedAt":"2026-09-24T08:40:00+08:00","evidence":"SYN-EVIDENCE/visit-02","objects":[{"object":"SYN-PARCEL-08-02",` +
+			`"outcome":"PICKED_UP","control":"SYN-CONTROL/signed-02","occurredAt":"2026-09-24T08:45:00+08:00"}]}`,
+		status:  http.StatusCreated,
+		outcome: "ATTEMPT_RECORDED",
+	},
 }
 
 // Covers: 票 operator-channel/08 完成判据「隔离环境里上列各口对合成写答业务结果而不是 ACCESS_CHANNEL_NOT_CONFIGURED」——

@@ -235,8 +235,10 @@ func assembleBusinessEndpoints(
 		receptionIntake = isolatedNodeOperations
 	}
 	pickupRegistrationIntake := tfhttp.PickupRegistrationIntake(tfhttp.UnconfiguredIntake{})
+	pickupAttemptIntake := tfhttp.PickupAttemptIntake(tfhttp.UnconfiguredIntake{})
 	if isolatedTransportFulfillment != nil {
 		pickupRegistrationIntake = isolatedTransportFulfillment
+		pickupAttemptIntake = isolatedTransportFulfillment
 	}
 
 	return []httpapi.BusinessEndpoint{
@@ -300,7 +302,7 @@ func assembleBusinessEndpoints(
 		{Pattern: "/transport-fulfillment/handover-corrections", Handler: tfhttp.NewCorrectTransportHandoverEndpoint(tfhttp.UnconfiguredIntake{}, handover)},
 		{Pattern: "/transport-fulfillment/offsite-pickups", Handler: tfhttp.NewRegisterOffsitePickupEndpoint(pickupRegistrationIntake, pickupRegistration)},
 		{Pattern: "/transport-fulfillment/offsite-pickup-corrections", Handler: tfhttp.NewCorrectOffsitePickupEndpoint(tfhttp.UnconfiguredIntake{}, pickupCorrection)},
-		{Pattern: "/transport-fulfillment/offsite-pickup-attempts", Handler: tfhttp.NewPerformOffsitePickupEndpoint(tfhttp.UnconfiguredIntake{}, pickupAttempt)},
+		{Pattern: "/transport-fulfillment/offsite-pickup-attempts", Handler: tfhttp.NewPerformOffsitePickupEndpoint(pickupAttemptIntake, pickupAttempt)},
 		// 移动事实口（票 tf-segment-lifecycle-closure/05）：只收自营执行方的出发 / 移动 / 到达；外部承运
 		// 轨迹**不从这里进**，走 TrackingSource 入站口的采纳执行器（label-channel/16 已落）。谁是自营
 		// 执行方由 Intake 的认证结果说，渠道未就位前同挂字面量 UnconfiguredIntake{}。
