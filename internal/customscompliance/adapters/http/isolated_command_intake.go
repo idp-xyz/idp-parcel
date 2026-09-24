@@ -10,6 +10,7 @@ import (
 	"strings"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/customscompliance/adapters/registrationjson"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/application"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	"go.idp.xyz/idp-parcel/internal/customscompliance/ports"
@@ -32,7 +33,10 @@ type IsolatedCommandIntake struct {
 }
 
 // 已成笔的口。每放一口在这里多一行断言、多一个方法，装配点多换一行。
-var _ ResultIntake = (*IsolatedCommandIntake)(nil)
+var (
+	_ ResultIntake                           = (*IsolatedCommandIntake)(nil)
+	_ RegulatoryCredentialRegistrationIntake = (*IsolatedCommandIntake)(nil)
+)
 
 // IsolatedCommandIntakeDeps 是构造本 Intake 的全部输入：装配点给定的合成租户，与本进程的时钟。
 type IsolatedCommandIntakeDeps struct {
@@ -148,6 +152,53 @@ func releaseKindFromWord(raw string) (domain.ReleaseKind, error) {
 		}
 	}
 	return domain.ReleaseKindInvalid, fmt.Errorf("%w: release.kind=%q is not a release kind word", ErrMalformedRequest, raw)
+}
+
+// IntakeRegulatoryCredentialRegistration 译一版监管凭证登记（`/customs-regulatory-credential-registrations`）。线格式是受控 CLI
+// `-input` 的登记快照去掉 tenantId；本方法把注入的租户拼回那一格，交给 registrationjson 那一份译装——RegulatoryCredentialRegistrationIntake
+// 的契约写明「登记快照本体的译装已有一份，本包不得另写」。译装拒的一律是用法错误（未知字段、构造门、封闭词表），答 400。
+func (intake *IsolatedCommandIntake) IntakeRegulatoryCredentialRegistration(
+	_ context.Context,
+	request *http.Request,
+) (application.RegisterCredentialCommand, error) {
+	snapshot, err := intake.snapshotWithInjectedTenant(request.Body)
+	if err != nil {
+		return application.RegisterCredentialCommand{}, err
+	}
+	command, err := registrationjson.RegulatoryCredentialFromJSON(snapshot)
+	if err != nil {
+		return application.RegisterCredentialCommand{}, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
+	}
+	return command, nil
+}
+
+// snapshotWithInjectedTenant 读一份登记快照、拒自报租户，把注入的租户拼回 tenantId 一格。键在场即拒、不看值（`"tenantId": null`
+// 也是自报）：值与开关碰巧相同也拒，否则同一份载荷在别的环境里就是穿透 ADR-0003 隔离边界的第一步。只在一个 JSON 对象上拼，
+// 尾随的第二个值同样拒；其余键原样交给译装，由它的严格解码判认不认识。
+func (intake *IsolatedCommandIntake) snapshotWithInjectedTenant(body io.Reader) ([]byte, error) {
+	decoder := json.NewDecoder(body)
+	var snapshot map[string]json.RawMessage
+	if err := decoder.Decode(&snapshot); err != nil {
+		return nil, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return nil, fmt.Errorf("%w: trailing content after the payload", ErrMalformedRequest)
+	}
+	if snapshot == nil {
+		return nil, fmt.Errorf("%w: the payload must be a JSON object", ErrMalformedRequest)
+	}
+	if _, present := snapshot["tenantId"]; present {
+		return nil, fmt.Errorf(
+			"%w: tenantId must not be carried in the payload; the tenant grid is filled by the access channel, not by the request",
+			ErrMalformedRequest,
+		)
+	}
+	tenant, err := json.Marshal(intake.tenant.String())
+	if err != nil {
+		return nil, fmt.Errorf("customs compliance http: encode injected tenant: %w", err)
+	}
+	snapshot["tenantId"] = tenant
+	return json.Marshal(snapshot)
 }
 
 // decodeClosedDocument 以封闭形状解载荷。未知键拒：载荷里出现 tenantId、receivedAt 之类的键不是可以忽略的噪声，是采信自报

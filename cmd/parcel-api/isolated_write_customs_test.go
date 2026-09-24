@@ -37,6 +37,20 @@ var isolatedCustomsLines = map[string]isolatedCustomsLine{
 		status:  http.StatusOK,
 		outcome: "UNATTRIBUTABLE",
 	},
+	// 监管凭证登记：一版凭证、有效期有序——登进凭证册，201 REGISTERED。
+	"/customs-regulatory-credential-registrations": {
+		endpoint: func(t *testing.T, db *bentopg.DB, intake *customshttp.IsolatedCommandIntake) http.Handler {
+			registration, err := buildCustomsRegistrationOrchestration(db)
+			if err != nil {
+				t.Fatalf("装配关务登记编排：%v", err)
+			}
+			return customshttp.NewRegisterRegulatoryCredentialEndpoint(intake, registration.regulatoryCredential)
+		},
+		body: `{"credentialId":"SYN-CRED-0801","issuerRef":"SYN-AUTHORITY/customs-sg","holderRef":"SYN-HOLDER/broker-08",` +
+			`"procedureRef":"SYN-PROCEDURE/import-general","validFrom":"2026-09-01T00:00:00Z","validTo":"2027-08-31T00:00:00Z","uses":12}`,
+		status:  http.StatusCreated,
+		outcome: "REGISTERED",
+	},
 }
 
 // Covers: 票 operator-channel/08 完成判据「隔离环境里上列各口对合成写答业务结果而不是 ACCESS_CHANNEL_NOT_CONFIGURED」——

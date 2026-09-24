@@ -112,6 +112,57 @@ func TestIsolatedCommandIntakeRefusesMalformedExternalResults(t *testing.T) {
 	}
 }
 
+const isolatedRegulatoryCredentialBody = `{"credentialId":"SYN-CRED-0801","issuerRef":"SYN-AUTHORITY/customs-sg",` +
+	`"holderRef":"SYN-HOLDER/broker-08","procedureRef":"SYN-PROCEDURE/import-general","validFrom":"2026-09-01T00:00:00Z",` +
+	`"validTo":"2027-08-31T00:00:00Z","uses":12}`
+
+// Covers: 凭证登记口的线格式就是受控 CLI `-input` 的登记快照去掉 tenantId（registrationjson 包注释：tenantId 是不是调用方有权写
+// 的那个租户由在线口的 Intake 回答）——隔离 Intake 把注入的租户拼回那一格，交给同一份译装，不在本包另写第二份。
+func TestIsolatedCommandIntakeTranslatesRegulatoryCredentialWithInjectedTenant(t *testing.T) {
+	command, err := isolatedCommandIntakeForTest(t).IntakeRegulatoryCredentialRegistration(context.Background(),
+		commandRequest(isolatedRegulatoryCredentialBody))
+	if err != nil {
+		t.Fatalf("intake：%v", err)
+	}
+	if got := command.TenantID.String(); got != isolatedCommandTenant {
+		t.Fatalf("TenantID = %q, want %q（注入值，不是请求里的自报）", got, isolatedCommandTenant)
+	}
+	if command.ID.String() != "SYN-CRED-0801" || command.Issuer.String() != "SYN-AUTHORITY/customs-sg" ||
+		command.Holder.String() != "SYN-HOLDER/broker-08" || command.Procedure.String() != "SYN-PROCEDURE/import-general" ||
+		command.Uses != 12 {
+		t.Fatalf("command = %+v，与载荷不符", command)
+	}
+	if !command.ValidFrom.Equal(time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)) || !command.ValidTo.Equal(time.Date(2027, 8, 31, 0, 0, 0, 0, time.UTC)) {
+		t.Fatalf("有效期 = %s..%s，与载荷不符", command.ValidFrom, command.ValidTo)
+	}
+}
+
+// Covers: 载荷里带 tenantId 即拒——值与开关相同也拒（同身份族隔离 Intake 的纪律）；拼接只在一个 JSON 对象上做，别的形状、
+// 尾随内容与译装不认的键都拒。
+func TestIsolatedCommandIntakeRefusesMalformedRegulatoryCredentials(t *testing.T) {
+	intake := isolatedCommandIntakeForTest(t)
+	rest := strings.TrimPrefix(isolatedRegulatoryCredentialBody, "{")
+	for name, testCase := range map[string]struct{ body, keyword string }{
+		"与开关同值的租户": {`{"tenantId":"` + isolatedCommandTenant + `",` + rest, "tenantId"},
+		"空租户":      {`{"tenantId":null,` + rest, "tenantId"},
+		"null":     {`null`, ""},
+		"数组":       {`[` + isolatedRegulatoryCredentialBody + `]`, ""},
+		"尾随内容":     {isolatedRegulatoryCredentialBody + ` {"x":1}`, "trailing"},
+		"未知键":      {`{"issuedBy":"x",` + rest, ""},
+		"空载荷":      {``, ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := intake.IntakeRegulatoryCredentialRegistration(context.Background(), commandRequest(testCase.body))
+			if !errors.Is(err, customshttp.ErrMalformedRequest) {
+				t.Fatalf("err = %v, want ErrMalformedRequest", err)
+			}
+			if testCase.keyword != "" && !strings.Contains(err.Error(), testCase.keyword) {
+				t.Fatalf("拒绝理由没点名 %s：%v", testCase.keyword, err)
+			}
+		})
+	}
+}
+
 // Covers: 立不起来的注入在构造时拒，不等第一个请求。
 func TestNewIsolatedCommandIntakeRejectsBlankInjection(t *testing.T) {
 	if _, err := customshttp.NewIsolatedCommandIntake(customshttp.IsolatedCommandIntakeDeps{Tenant: " ", Clock: fixedClock{}}); err == nil {
@@ -128,6 +179,9 @@ func TestIsolatedCommandIntakeServesOnlyAdmittedLines(t *testing.T) {
 	var intake any = isolatedCommandIntakeForTest(t)
 	if _, ok := intake.(customshttp.ResultIntake); !ok {
 		t.Fatal("外部结果口该已放行")
+	}
+	if _, ok := intake.(customshttp.RegulatoryCredentialRegistrationIntake); !ok {
+		t.Fatal("监管凭证登记口该已放行")
 	}
 	for name, refused := range map[string]bool{
 		"解释规则登记口（04 那族）":   isA[customshttp.InterpretationRuleRegistrationIntake](intake),

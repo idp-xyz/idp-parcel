@@ -258,8 +258,10 @@ func assembleBusinessEndpoints(
 		effectiveTimeJudgmentIntake = isolatedTransportFulfillment
 	}
 	externalResultIntake := customshttp.ResultIntake(customshttp.UnconfiguredIntake{})
+	regulatoryCredentialRegistrationIntake := customshttp.RegulatoryCredentialRegistrationIntake(customshttp.UnconfiguredIntake{})
 	if isolatedCustoms != nil {
 		externalResultIntake = isolatedCustoms
+		regulatoryCredentialRegistrationIntake = isolatedCustoms
 	}
 
 	return []httpapi.BusinessEndpoint{
@@ -478,7 +480,7 @@ func assembleBusinessEndpoints(
 		// 协作与核对两口在生产上是同一只编排的两个方法，端点表仍各收一参：装配测试才盖得住
 		// 「协作口接了核对编排」。外部资金事实没有在线口：它只经 settlement-accounting 的采用信封
 		// 进 CC（ADR-0137 决定四）。
-		{Pattern: "/customs-regulatory-credential-registrations", Handler: customshttp.NewRegisterRegulatoryCredentialEndpoint(customshttp.UnconfiguredIntake{}, regulatoryCredentialRegistration)},
+		{Pattern: "/customs-regulatory-credential-registrations", Handler: customshttp.NewRegisterRegulatoryCredentialEndpoint(regulatoryCredentialRegistrationIntake, regulatoryCredentialRegistration)},
 		{Pattern: "/customs-duty-collaboration-registrations", Handler: customshttp.NewRegisterDutyCollaborationEndpoint(customshttp.UnconfiguredIntake{}, dutyCollaborationRegistration)},
 		{Pattern: "/customs-duty-payment-verification-registrations", Handler: customshttp.NewRegisterDutyPaymentVerificationEndpoint(customshttp.UnconfiguredIntake{}, dutyPaymentVerificationRegistration)},
 		{Pattern: "/commercial-service-products", Handler: commercialhttp.NewQueryServiceProductsEndpoint(commercialCatalogueIntake, serviceProducts)},
