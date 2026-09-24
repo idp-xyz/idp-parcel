@@ -1,7 +1,7 @@
 # 01 注册号类型目录：按注册国家 / 地区登记注册号类型、格式与所属层
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——2026-09-24 通道 4 认领（派单 `task-c785cb7e` ← 通道 3），隔离 worktree 分支 `mcp4-lep01`，基本笔
 Blocked by: 无
 地盘：party-commercial 的领域、应用、postgres 与 http 适配器里新增的一本登记册，`migrations/` 下 party-commercial 模块的新迁移，`scripts/demo-seeds` 的合成条目。
 出处：[ADR-0145](../../../docs/adr/0145-legal-entity-attributes-split-into-identity-layer-and-dated-profile.md) 决定一；CONTEXT Rules「责任法人身份登记必须带注册国家 / 地区……」一句。
