@@ -27,6 +27,12 @@ Status: in-progress——2026-09-24 通道 4 按用户授权自决立 ADR-0146 �
 | [14](./issues/14-pp-postal-prefix-granularity-and-public-unit-reference-configuration.md) | PP：邮编前缀匹配形态与公开标准的参考配置 | needs-triage · 参考配置那半 Blocked by 03 |
 | [15](./issues/15-operator-channel-per-adr-0100.md) | 横切：ADR-0100 操作者渠道落地 | in-progress · 跟踪容器，子票在 [`operator-channel/`](../operator-channel/issues/) 01–14（拆法经用户授权自决认可；09 落成 ADR-0149） |
 | [16](./issues/16-mechanism-gaps-without-a-ticket.md) | 机制缺口：重定级表第一项里尚无票的几处 | needs-triage · 按上下文拆 |
+| [17](./issues/17-requested-service-product-narrows-commercial-basis.md) | 委托声明的服务产品参与商业依据解析（票 05 格 1） | ready-for-agent · 裁决已写 |
+| [18](./issues/18-customs-case-and-declaration-submission-entry.md) | 关务立案与提交申报：生产入口与触发面（票 05 格 9） | needs-triage |
+| [19](./issues/19-delivery-attempt-result-has-no-production-writer.md) | 派送尝试结果没有生产写入方（票 05 格 12） | ready-for-agent |
+| [20](./issues/20-buy-evaluation-request-trigger.md) | BUY 评价请求的触发面（票 05 格 17） | needs-triage |
+| [21](./issues/21-sell-evaluation-to-customer-charge.md) | SELL 评价到客户费用：请求面、消费门与形成编排（票 05 格 19） | needs-triage |
+| [22](./issues/22-settlement-orchestrations-assembly-and-triggers.md) | 结算其余编排的装配、入口与触发面（票 05 格 20） | needs-triage |
 
 走法：01、02、05 只动文档与票面，一人在共享树上顺序做；03、04 碰 Go / SQL，走[并行会话](../../docs/agents/parallel-sessions.md)那条路。
 

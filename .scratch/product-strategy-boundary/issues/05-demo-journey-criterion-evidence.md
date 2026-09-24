@@ -49,7 +49,7 @@ Blocked by: 02、03、04（只挡收口）
 - 答复：dispatch 记 `dispatch.consumer_undecided`，错误正文「acceptance chain is undecided: stage REACHABILITY_JUDGMENT, reason COMMERCIAL_BASIS_UNDETERMINED」；重投 3 次后 outbox 那一行落 `ABANDONED`，委托停在`已提交`，`acceptance_processing_attempt` 零行（未决整笔回滚）。PC 那一层的原因在进程上取不到，探针取回：闭包 `APPLICABILITY_CONFLICT`，`ConflictingBases()` 为 `[SERVICE_PRODUCT]`。
 - 成因：发布批里 `SYN-PROD-CN-SG-EXPRESS` 与 `SYN-PROD-CN-SG-ECON` 两个服务产品同在 `SYN-SCOPE-01`（后者随 `d61f2b7d` 于 08-28 加入）。解析键按（租户，客户账户）登记一行，范围固定为 `SYN-SCOPE-01`、没有产品维；`CommercialResolutionKeys.FormResolutionKey` 只读那一行，委托草案里的 `requestedServiceProduct` 与 `destinationServiceScope` 进摘要、不进键。多候选答`适用冲突`是 UC-PC-002 的设计行为。
 - 归类：机制缺口 + 产品策略缺执行器。登记面没有让委托声明参与折键的形状，属机制；「按委托声明选服务范围或产品」是不看任何租户就答得出的判断方法，属产品策略。不是租户取值：租户登记得再全，同一客户账户下两个产品在这张登记面上也只能冲突。演示种子同范围两个产品是这一格的触发条件，不是缺陷——两半落地后那是正当形态。
-- 去处：待立票——票 02 立的 06–14 都不含这一格（本单不立票）。
+- 去处：[票 17](./17-requested-service-product-narrows-commercial-basis.md)（2026-09-24 通道 2 立；此前待立票——票 02 立的 06–14 都不含这一格）。
 
 **格 2 · 商业依据第二阶段：可达性判断时点`未配置`**（实测，反事实变体）
 
@@ -103,7 +103,7 @@ Blocked by: 02、03、04（只挡收口）
 
 - 证据：`internal/customscompliance/application` 的 `NewEstablishCaseHandler`、`NewSubmitDeclarationHandler` 在 `cmd/` 零引用；接受决定的扇出 `acceptanceFan` 只到 VE 与初始路由。生产进程里没有任何端点或消费门会建案或提交。
 - 归类：装配缺，属机制缺口；「谁在什么业务时点为哪些包裹建案、提交」的触发面属产品策略缺执行器。
-- 去处：待立票——[票 10](./10-cc-declaration-channel-and-public-regulatory-reference-configuration.md) 只含申报发送连接器（格 10），立案与提交的装配和触发面不在 06–14 里。
+- 去处：[票 18](./18-customs-case-and-declaration-submission-entry.md)（2026-09-24 通道 2 立；此前待立票——[票 10](./10-cc-declaration-channel-and-public-regulatory-reference-configuration.md) 只含申报发送连接器（格 10），立案与提交的装配和触发面不在 06–14 里）。
 
 **格 10 · 申报发送通道**（代码）
 
@@ -122,7 +122,7 @@ Blocked by: 02、03、04（只挡收口）
 
 - 答复：`/transport-fulfillment/handovers`、`/transport-fulfillment/movement-facts`、`/transport-fulfillment-dispatch-task-registrations`、`/transport-fulfillment-delivery-dispatch-triggers`、`/transport-fulfillment/deliveries`、`/transport-fulfillment-segment-closures`、`/transport-fulfillment-effective-time-judgments` 全部 `403 ACCESS_CHANNEL_NOT_CONFIGURED`。
 - 归类：同格 7。去处：票 01 表横切第一项。
-- **08 重走**（同格 7 那次取证）：各口都越过渠道——交接 `201 HANDOVER_REGISTERED`；移动（自营到达）`201 MOVEMENT_FACT_RECORDED`；手工建派送任务 `201 DISPATCH_TASK_OPENED`；段关闭对不在册的段 `200 SEGMENT_NOT_FOUND`；有效时间判断对不在册的轨迹事实 `200 INPUT_NOT_ACCEPTED`（外部轨迹只经 `TrackingSource` 入站口进，即格 14）。往下串一步：交接带 `segmentServiceAction=FINAL_DELIVERY` 进派送段后，派送发起 `200 REQUIREMENT_MISSING`（`DELIVERY_PLACE`、`DELIVERY_WINDOW`、`DELIVERY_CONDITION`——即格 13 的执行器缺口），同段关闭 `200 SEGMENT_STILL_ACTIVE`。**新停点一处**：交付 `200 SOURCE_NOT_ACCEPTED`——交付只能落在已登记的派送尝试结果上，而派送尝试登记册（`tfpostgres.DeliveryAttempts`，只读）全仓没有生产写入方。归类：机制缺口（登记册无写入方）；去处：待立票——06–14 与 operator-channel 目录都不含这一格。
+- **08 重走**（同格 7 那次取证）：各口都越过渠道——交接 `201 HANDOVER_REGISTERED`；移动（自营到达）`201 MOVEMENT_FACT_RECORDED`；手工建派送任务 `201 DISPATCH_TASK_OPENED`；段关闭对不在册的段 `200 SEGMENT_NOT_FOUND`；有效时间判断对不在册的轨迹事实 `200 INPUT_NOT_ACCEPTED`（外部轨迹只经 `TrackingSource` 入站口进，即格 14）。往下串一步：交接带 `segmentServiceAction=FINAL_DELIVERY` 进派送段后，派送发起 `200 REQUIREMENT_MISSING`（`DELIVERY_PLACE`、`DELIVERY_WINDOW`、`DELIVERY_CONDITION`——即格 13 的执行器缺口），同段关闭 `200 SEGMENT_STILL_ACTIVE`。**新停点一处**：交付 `200 SOURCE_NOT_ACCEPTED`——交付只能落在已登记的派送尝试结果上，而派送尝试登记册（`tfpostgres.DeliveryAttempts`，只读）全仓没有生产写入方。归类：机制缺口（登记册无写入方）；去处：[票 19](./19-delivery-attempt-result-has-no-production-writer.md)（2026-09-24 通道 2 立；此前待立票——06–14 与 operator-channel 目录都不含这一格）。
 
 **格 13 · 派送发起**（代码）
 
@@ -155,7 +155,7 @@ Blocked by: 02、03、04（只挡收口）
 **格 17 · BUY 评价请求没有触发面**（代码）
 
 - 证据：`cmd/parcel-api/assemble_evaluation_request.go` 的 `buildEvaluationRequestOrchestration` 头注原话「今天没有运营端点、也没有进程内触发面调它」，「谁在什么业务时点为哪些发生项发起请求是产品题，触发面另票」；`main` 装它只为 fail-fast，产物即丢。
-- 归类：产品策略缺执行器（触发策略）。去处：待立票——06–14 都不含；[票 12](./12-sa-amount-grammars-allocation-forms-and-accounting-connectors.md) 管金额文法与形态，不管评价请求的触发面。
+- 归类：产品策略缺执行器（触发策略）。去处：[票 20](./20-buy-evaluation-request-trigger.md)（2026-09-24 通道 2 立；此前待立票——06–14 都不含；[票 12](./12-sa-amount-grammars-allocation-forms-and-accounting-connectors.md) 管金额文法与形态，不管评价请求的触发面）。
 
 **格 18 · BUY 评价到供应商预期成本：来源引用两头没接上**（代码）
 
@@ -165,12 +165,12 @@ Blocked by: 02、03、04（只挡收口）
 **格 19 · SELL 评价到客户费用**（代码）
 
 - 证据：SELL 评价没有请求面——PP 的生产入口只有 SA 评价请求信封一条，而 SA 只发 BUY 目的的请求（`RequestBuyEvaluation`）。评价已记录信封的消费门只收 BUY·供应商成本，同处注释原话「SELL 那一半只能在这里安静地走掉」。SA 应用层没有由评价形成客户费用的编排，`domain.FormCustomerCharge` 唯一的生产调用在库适配器的重建路径上。
-- 归类：缺消费门与形成编排，属机制缺口；SELL 评价何时发起属产品策略缺执行器（触发策略）。去处：待立票——06–14 都不含。
+- 归类：缺消费门与形成编排，属机制缺口；SELL 评价何时发起属产品策略缺执行器（触发策略）。去处：[票 21](./21-sell-evaluation-to-customer-charge.md)（2026-09-24 通道 2 立；此前待立票——06–14 都不含）。
 
 **格 20 · 费用确认、对账单截单发布及其余结算编排没有生产入口**（代码）
 
 - 证据：`internal/settlementaccounting/application` 的 `NewConfirmChargeHandler`、`NewCutOffPublishStatementHandler`、`NewRecordChargeAdjustmentHandler`、`NewAllocateCostsHandler`、`NewReceiveSupplierBillHandler`、`NewAuditSupplierBillHandler`、`NewSettleClaimAmountsHandler` 在 `cmd/` 零引用。这一类不在生产接线棘轮的网里（棘轮排除 `New*` 构造，见开发主线「2026-09-02 裁决」一段）。
-- 归类：装配与入口缺，属机制缺口；何时确认、何时截单的触发面属产品策略缺执行器；账期是租户取值，经参考配置在演示租户上采用。去处：赔付金额文法与分摊形态归票 12 第 1、2 项；这几个编排的装配与触发面 06–14 都不含，待立票。
+- 归类：装配与入口缺，属机制缺口；何时确认、何时截单的触发面属产品策略缺执行器；账期是租户取值，经参考配置在演示租户上采用。去处：赔付金额文法与分摊形态归票 12 第 1、2 项；这几个编排的装配与触发面归[票 22](./22-settlement-orchestrations-assembly-and-triggers.md)（2026-09-24 通道 2 立；此前待立票——06–14 都不含）。
 
 **格 21 · 结算四口没有生产实现**（代码）
 
@@ -202,7 +202,7 @@ Blocked by: 02、03、04（只挡收口）
 
 票 01 表里有、这条动线的主路径没碰到、本次未取证的：面单择优链各格（PN-02）、授权请求坐标 `RequestSource`（横切第三项前半）。
 
-**票 02 于 `17865872` 立的 06–14 也没接住的**：格 1、9、17、19，以及格 20 的装配与触发面那一半——今天没有任何票，去处写「待立票」。
+**票 02 于 `17865872` 立的 06–14 也没接住的**：格 1、9、17、19，以及格 20 的装配与触发面那一半——盘点时没有任何票，去处写「待立票」；2026-09-24 通道 2 按格各立一票（17–22，格 12「08 重走」新停点那一格归 19），各格去处已改指新票。
 
 ### 给第 3 步的旁记（动线脚本与今天的现状不符处；本单不改脚本正文）
 
