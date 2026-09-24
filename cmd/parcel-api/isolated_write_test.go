@@ -105,9 +105,10 @@ var expectedWriteAdmittedLines = map[string]bool{
 	// 法人资料登记（票 legal-entity-profile/05）：与身份族同一个隔离 Intake 类型，一口一笔地放。
 	"/commercial-legal-entity-profile-registrations": true,
 	// 主链命令面（票 operator-channel/08）：各上下文一个隔离命令 Intake 类型，一口一笔地放。
-	"/node-operations/receptions":                    true,
-	"/transport-fulfillment/offsite-pickups":         true,
-	"/transport-fulfillment/offsite-pickup-attempts": true,
+	"/node-operations/receptions":                                     true,
+	"/transport-fulfillment/offsite-pickups":                          true,
+	"/transport-fulfillment/offsite-pickup-attempts":                  true,
+	"/transport-fulfillment-carrier-first-effective-pickup-judgments": true,
 }
 
 // Covers: ADR-0091 Consequences「命令面按端点逐口放行，不是一次全开」 — 写面放行只及名单里那几行，其余命令面

@@ -57,6 +57,38 @@ var isolatedLines = map[string]isolatedLine{
 		},
 		valid: offsitePickupAttemptBody,
 	},
+	"/transport-fulfillment-carrier-first-effective-pickup-judgments": {
+		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
+			_, err := intake.IntakeCarrierPickupJudgment(context.Background(), request)
+			return err
+		},
+		valid: carrierPickupJudgmentBody,
+	},
+}
+
+const carrierPickupJudgmentBody = `{"object":"SYN-PARCEL-08-04","source":"CARRIER_PICKUP_SCAN","evidenceReference":"SYN-SCAN-08-04",` +
+	`"evidenceVersion":"v1","expressesControl":true,"occurredAt":"2026-09-24T11:00:00+08:00","carrierKind":"EXTERNAL_PARTY",` +
+	`"carrierReference":"SYN-PARTY/carrier-08","segment":"SYN-SEGMENT-08-04"}`
+
+// Covers: 判断口的线格式是本包既有的 CarrierPickupJudgmentPayload，隔离 Intake 只把注入的租户交进它的 Command——读法本体
+// （expressesControl）、证据来源与业务发生时间逐字来自载荷。
+func TestIsolatedCommandIntakeTranslatesCarrierPickupJudgmentWithInjectedTenant(t *testing.T) {
+	command, err := isolatedCommandIntakeForTest(t).IntakeCarrierPickupJudgment(context.Background(), commandRequest(carrierPickupJudgmentBody))
+	if err != nil {
+		t.Fatalf("intake：%v", err)
+	}
+	if got := command.TenantID.String(); got != isolatedCommandTenant {
+		t.Fatalf("TenantID = %q, want %q", got, isolatedCommandTenant)
+	}
+	if command.Object != "SYN-PARCEL-08-04" || command.Source.String() != "CARRIER_PICKUP_SCAN" ||
+		command.EvidenceReference != "SYN-SCAN-08-04" || command.EvidenceVersion != "v1" || !command.ExpressesControl ||
+		command.SubjectKind.String() != "EXTERNAL_PARTY" || command.SubjectReference != "SYN-PARTY/carrier-08" ||
+		command.Segment != "SYN-SEGMENT-08-04" {
+		t.Fatalf("command = %+v，与载荷不符", command)
+	}
+	if want := time.Date(2026, 9, 24, 3, 0, 0, 0, time.UTC); !command.OccurredAt.Equal(want) {
+		t.Fatalf("OccurredAt = %s, want %s", command.OccurredAt, want)
+	}
 }
 
 const offsitePickupAttemptBody = `{"sourceId":"SYN-DEVICE-08/attempt-01","task":"SYN-TASK-08-02","attempt":"SYN-ATTEMPT-08-02",` +
@@ -233,6 +265,9 @@ func TestIsolatedCommandIntakeServesOnlyAdmittedLines(t *testing.T) {
 	}
 	if _, ok := intake.(tfhttp.PickupAttemptIntake); !ok {
 		t.Fatal("场外揽收尝试口该已放行")
+	}
+	if _, ok := intake.(tfhttp.CarrierPickupJudgmentIntake); !ok {
+		t.Fatal("承运商首次有效收寄判断口该已放行")
 	}
 	for name, refused := range map[string]bool{
 		"揽收更正口（同族未列）":      isA[tfhttp.PickupCorrectionIntake](intake),

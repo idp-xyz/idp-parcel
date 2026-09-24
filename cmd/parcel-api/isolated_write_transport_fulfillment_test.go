@@ -53,6 +53,21 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 		status:  http.StatusCreated,
 		outcome: "ATTEMPT_RECORDED",
 	},
+	// 承运商首次有效收寄的显式判断：承运商揽收扫描一条、表达取得控制、承运主体给引用。生产装配的承运主体目录读 PC 的真
+	// 身份登记册，合成承运方没在册，判断如实落成`待确认`（IDENTITY_NOT_REGISTERED）——形成了的业务答案，200。
+	"/transport-fulfillment-carrier-first-effective-pickup-judgments": {
+		endpoint: func(t *testing.T, db *bentopg.DB, intake *tfhttp.IsolatedCommandIntake) http.Handler {
+			judge, _, err := buildCarrierPickupJudgment(db)
+			if err != nil {
+				t.Fatalf("装配承运商收寄判断编排：%v", err)
+			}
+			return tfhttp.NewJudgeCarrierFirstEffectivePickupEndpoint(intake, judge)
+		},
+		body: `{"object":"SYN-PARCEL-08-04","source":"CARRIER_PICKUP_SCAN","evidenceReference":"SYN-SCAN-08-04","evidenceVersion":"v1",` +
+			`"expressesControl":true,"occurredAt":"2026-09-24T11:00:00+08:00","carrierKind":"EXTERNAL_PARTY","carrierReference":"SYN-PARTY/carrier-08"}`,
+		status:  http.StatusOK,
+		outcome: "PICKUP_PENDING",
+	},
 }
 
 // Covers: 票 operator-channel/08 完成判据「隔离环境里上列各口对合成写答业务结果而不是 ACCESS_CHANNEL_NOT_CONFIGURED」——

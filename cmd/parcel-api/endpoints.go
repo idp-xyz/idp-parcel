@@ -236,9 +236,11 @@ func assembleBusinessEndpoints(
 	}
 	pickupRegistrationIntake := tfhttp.PickupRegistrationIntake(tfhttp.UnconfiguredIntake{})
 	pickupAttemptIntake := tfhttp.PickupAttemptIntake(tfhttp.UnconfiguredIntake{})
+	carrierPickupJudgmentIntake := tfhttp.CarrierPickupJudgmentIntake(tfhttp.UnconfiguredIntake{})
 	if isolatedTransportFulfillment != nil {
 		pickupRegistrationIntake = isolatedTransportFulfillment
 		pickupAttemptIntake = isolatedTransportFulfillment
+		carrierPickupJudgmentIntake = isolatedTransportFulfillment
 	}
 
 	return []httpapi.BusinessEndpoint{
@@ -340,7 +342,7 @@ func assembleBusinessEndpoints(
 		// Intake 变量。写口是判断方的显式读法，一次判断落的是控制事实——立段、结束取消权、交 parcel-shipment 形成终局，
 		// 同挂字面量 UnconfiguredIntake{}：读开关换不了它。
 		{Pattern: "/transport-fulfillment-carrier-first-effective-pickups", Handler: tfhttp.NewQueryCarrierFirstEffectivePickupsEndpoint(transportCatalogueIntake, carrierPickupChain)},
-		{Pattern: "/transport-fulfillment-carrier-first-effective-pickup-judgments", Handler: tfhttp.NewJudgeCarrierFirstEffectivePickupEndpoint(tfhttp.UnconfiguredIntake{}, carrierPickupJudgment)},
+		{Pattern: "/transport-fulfillment-carrier-first-effective-pickup-judgments", Handler: tfhttp.NewJudgeCarrierFirstEffectivePickupEndpoint(carrierPickupJudgmentIntake, carrierPickupJudgment)},
 		// 总单登记两口（ADR-0113 决定五；票 tf-carrier-master-document-register/01）：登记一份总单的首版，与对它此刻的
 		// 当前版形成一次撤销 / 替代 / 关联重述。运营登记不是承运方回传口，路径取读面册名前缀 `transport-fulfillment-`；
 		// 新版本口不叫 `-corrections`，理由同凭证。写准入不另立形，同挂字面量 UnconfiguredIntake{}：一份总单登进去就成了
