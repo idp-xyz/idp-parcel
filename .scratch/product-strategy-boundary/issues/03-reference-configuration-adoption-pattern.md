@@ -1,7 +1,7 @@
 # 03 参考配置的存放、版本与显式采用路径，在注册号类型目录上立样板
 
 Category: enhancement
-Status: resolved——2026-09-24 通道 4 在分支 `mcp4-psb03` 完成（派单 task-a6b49376；基 `f2c8cd57`，代码 tip `1be757a6`）；待推送方派非作者评审后重放进 main，见文末「完成记录」
+Status: resolved · 已进 main——2026-09-24 评审 ← 通道 3 可接受（无阻断，派单 `task-69213e98`）；推送方（通道 1）重放进 main：ADR-0147 `27ca40f9`，代码笔 `c1446ebc` / `26e48a0e` / `1df8a4bf` / `b215c11d`，票面 `1aa3ec46`；分支 `mcp4-psb03`（代码 tip `1be757a6`、票面 tip `58422e36`）作封存出处，新旧 SHA 对照见 Comments「进 main 记录」。完成记录见文末
 Blocked by: 无
 地盘：参考配置的存放目录（本票定）；party-commercial 注册号类型目录的采用路径（`parcel-commercial` CLI 与登记用例）；演示种子里对应一行。
 出处：[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定三、越权风险点 4、5；[ADR-0145](../../../docs/adr/0145-legal-entity-attributes-split-into-identity-layer-and-dated-profile.md) 越权风险点 2。
@@ -32,6 +32,25 @@ Blocked by: 无
 - 判号口：02 经 `ports.RegistrationNumberTypeLookup` 的 `Check` 判终身注册号（身份层，按法人生效时点取目录修订）。采用路径若改了这个口的语义或目录修订的读法，02 的登记用例 `RegisterPartyIdentityHandler` 要一起看。
 
 建议以 02 进 main 之后的 main 为基开工。
+
+### 评审 ← 通道 3 · 钉 `1be757a6`（基 `f2c8cd57`，只读；门禁未重跑，只复跑点名的 `referenceconfig` 与 `internal/architecture`，均 ok） · 2026-09-24 17:5x（派单 `task-69213e98`，推送方自任务报告代落原文）
+
+**Standards** — 阻断：无。非阻断：
+1. 票面「与样板不同的登记册」一节 VE 那条写「`register_catalog.go` 要求显式 `approvedBy`」：仓里同名文件两个（`application` 与 `adapters/http`），要求在 `application.CatalogApprovalMissing`。按 AGENTS.md「引另一个文件……优先用符号名」改指符号。
+2. （判断）参考配置到登记命令的翻译（`registrationNumberTypesFromReference`、`adoptedRegistrationNumberTypeSpec`）落在 `cmd/parcel-commercial` 的 main 包；在线登记口配上 Intake 那天要复制或搬家。票面地盘写明「parcel-commercial CLI 与登记用例」，本轮可不动，记一笔即可。
+其余信号：注释中文、跨文件引用用符号与 ADR 号、无行号；`.gitattributes` 新行注释写清了为何钉 LF。
+
+**Spec** — 阻断：无。非阻断：
+1. 合并提醒：种子 README 组成表里，本票改了注册号类型那一行，lep03（`mcp3-lep03`，resolved 待评）紧随其后插资料种子一行，后进 main 的一方会撞一处文本冲突，两行都留即可；seed.sh 两边改的不相邻。
+逐问：① 嵌入、一版一文件、`releases` 钉 sha256（`Open` 答 `ErrAlteredAfterRelease`），`.gitattributes` 钉 LF 护摘要；采用正文经 `registrationNumberTypeContentFrom` 过同一套构造门，合 ADR-0146 决定三。② 依据写 `Reference.Citation()`，自带名称 / 层 / 格式 / 依据即拒，未采用答 `COUNTRY_NOT_REGISTERED`。③ 两份只含格式与合成样例、不带校验位；SG 三路选择由领域 `^(?:…)$` 整串锚定。④ `ports.RegistrationNumberTypeLookup` / `Check` 未动，`SYN-LE-01` 仍 CN；lep03 只引资料层 `SYN-CN-TAX` 与 CN，本票两者都保留，无值要对。⑤ 新目录在票面地盘内；`.gitattributes` 越字面地盘但为摘要机制必需。⑥ 抽查 `MappingBasisReference`、发布载体录入 / 批准、`SeriesEvidenceVerifiable`、VE 批准门、`duty_payment_gate_rule.go`，均有据。
+
+结论：可接受——两轴无阻断；重放时注意种子 README 那一处文本冲突（Spec 非阻断 1）。只读 worktree 已拆。
+
+### 进 main 记录（推送方 · 通道 1）
+
+- **门**：评审可接受，两轴无阻断；Standards 非阻断 1（「与样板不同的登记册」VE 那条宜改指符号 `application.CatalogApprovalMissing`）、2（参考配置到登记命令的翻译在 CLI main 包，在线登记口配 Intake 时要搬）与 Spec 非阻断 1（种子 README 合并冲突）随票记在上面评审原文里，不挡合入。
+- **重放**：在共享树 main `7731bf57` 之上 cherry-pick 为 `27ca40f9`（← `a84b26e8`）/ `c1446ebc`（← `db7ddfcf`）/ `26e48a0e`（← `d7c05f04`）/ `1df8a4bf`（← `b80fdb54`）/ `b215c11d`（← `1be757a6`）/ `1aa3ec46`（← `58422e36`）。三处 `.md` 冲突按意图合（与作者重放预核一致）：`docs/adr/README.md` 0147 与 0148 两行都留、按号排；种子 README 取本票改过的注册号类型一行、保留 lep03 新加的法人资料一行；本票 Status 行取分支。`seed.sh` 与 lep03 的改动自动合上，两段都在。认领笔 `307e0b60` 早已随 `31dc5f25` 进 main。机制清点在批 tip 重生成零差，无清点笔。
+- **验证**：批 tip 上改动 `.go` gofmt 无输出，全仓 build / vet 退 0；同一组代码先落在 main `c6ae249b` 上成 `420c05a8`，钉它带 DSN 全量 118 包 ok、0 FAIL（先单跑真库用例 PASS 非 SKIP）；挪到 `7731bf57` 之上后与它只差 `.md`。作者预核（合到 `67798fcd`）另跑过一次性库 `seed.sh` 干净灌与 `--reset` 重灌，均退 0，lep03 的法人资料两项答 REGISTERED。
 
 ## 完成记录（2026-09-24，通道 4，分支 `mcp4-psb03`，基 `f2c8cd57`）
 
