@@ -18,13 +18,13 @@
 | pilotgovernance | 22 | 20 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 23 | 22 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 101 | 82 | 14 | 43 | 9 | 9 |
-| transportfulfillment | 148 | 135 | 26 | 36 | 11 | 28 |
+| transportfulfillment | 150 | 137 | 26 | 36 | 11 | 29 |
 | visibilityexception | 100 | 96 | 11 | 30 | 8 | 11 |
-| **合计** | 1067 | 1011 | 133 | 274 | 57 | 154 |
+| **合计** | 1069 | 1013 | 133 | 274 | 57 | 155 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 71、测试 101。
 
-## 跨上下文消费缝：32 组，81 个生产文件
+## 跨上下文消费缝：32 组，82 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -49,7 +49,7 @@
 | settlementaccounting | customscompliance | 2 |
 | settlementaccounting | parcelpricing | 2 |
 | settlementaccounting | partycommercial | 3 |
-| transportfulfillment | accessidentity | 1 |
+| transportfulfillment | accessidentity | 2 |
 | transportfulfillment | networkrouting | 1 |
 | transportfulfillment | parcelshipment | 1 |
 | transportfulfillment | partycommercial | 2 |
