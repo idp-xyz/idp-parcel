@@ -252,7 +252,7 @@ func TestServiceProductsEndpointOnlyAcceptsGet(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0055/ADR-0077 Decision 三——PAR-INT-01 未登记,生产装配的 Intake 对
+// Covers: ADR-0055/ADR-0077 Decision 三——操作者渠道(ADR-0100)未就位,生产装配的 Intake 对
 // 每个请求一律 403,不读业务内容。
 func TestServiceProductsEndpointAnswersUnconfiguredIntakeWith403(t *testing.T) {
 	endpoint := commercialhttp.NewQueryServiceProductsEndpoint(

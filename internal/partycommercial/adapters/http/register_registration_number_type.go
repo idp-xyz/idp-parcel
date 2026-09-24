@@ -14,7 +14,7 @@ import (
 // RegistrationNumberTypeRegistrationIntake 把一次已认证的接入请求翻译成类型修订登记命令。
 //
 // 两个 Intake 都是接口而不是本包内的解析代码（ADR-0085 Decision 二，机制同 ADR-0055）：操作者认证
-// 属渠道接入契约，`PAR-INT-01` 待提供；采信请求自称的 tenantId 会穿透 ADR-0003 的隔离边界。未决
+// 归操作者渠道（ADR-0100），其真 Intake 未就位；采信请求自称的 tenantId 会穿透 ADR-0003 的隔离边界。未决
 // 期间本包不带任何实现，装配点挂 UnconfiguredIntake。
 type RegistrationNumberTypeRegistrationIntake interface {
 	IntakeRegistrationNumberTypeRegistration(

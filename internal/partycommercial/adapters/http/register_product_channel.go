@@ -18,7 +18,7 @@ import (
 //
 // 两个 Intake 都是接口而不是本包内的解析代码（ADR-0085 Decision 二，机制同 ADR-0055）：
 // 引用检查与领域构造门在用例侧已实现，但「渠道原始载荷 → 登记快照」的翻译与操作者
-// 认证属渠道接入契约，`PAR-INT-01` 待提供；采信批文自称的 tenantId 会穿透 ADR-0003 的
+// 认证归操作者渠道（ADR-0100），其真 Intake 未就位；采信批文自称的 tenantId 会穿透 ADR-0003 的
 // 隔离边界（判据与参与方身份那一族同一条，不复述）。未决期间本包不带任何实现，包括
 // 「开发用」的采信头部版本。
 type ServiceProductFormRegistrationIntake interface {

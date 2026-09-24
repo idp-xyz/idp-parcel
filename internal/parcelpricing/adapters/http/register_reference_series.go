@@ -8,8 +8,8 @@ import (
 )
 
 // ReferenceSeriesRegistrationIntake 把一次已认证的接入请求翻译成序列登记命令。
-// 接口而非实现的理由同 PriceCardRegistrationIntake：翻译与操作者认证属渠道接入契约
-// （`PAR-INT-01` 待提供），重建门在领域侧（RehydrateReferenceSeriesRegistration）。
+// 接口而非实现的理由同 PriceCardRegistrationIntake：翻译与操作者认证归操作者渠道
+// （ADR-0100，真 Intake 未就位），重建门在领域侧（RehydrateReferenceSeriesRegistration）。
 type ReferenceSeriesRegistrationIntake interface {
 	IntakeReferenceSeriesRegistration(ctx context.Context, request *http.Request) (application.RegisterReferenceSeriesCommand, error)
 }

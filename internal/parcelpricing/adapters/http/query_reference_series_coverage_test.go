@@ -87,7 +87,7 @@ func TestCoverageEndpointTakesOnlyGET(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0055/ADR-0077——PAR-INT-01 未登记时生产装配的 Intake 一律 403，不读业务内容。
+// Covers: ADR-0055/ADR-0077——操作者渠道（ADR-0100）未就位时生产装配的 Intake 一律 403，不读业务内容。
 func TestCoverageEndpointAnswersUnconfiguredIntakeWith403(t *testing.T) {
 	endpoint := pricinghttp.NewQueryReferenceSeriesCoverageEndpoint(
 		pricinghttp.UnconfiguredIntake{},

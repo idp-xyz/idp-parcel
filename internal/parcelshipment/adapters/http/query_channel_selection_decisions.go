@@ -32,7 +32,7 @@ type ChannelSelectionDecisionQuery struct {
 }
 
 // ChannelSelectionDecisionQueryIntake 把一次已认证的运营查阅请求翻译成查询。它是接口而非解析代码，理由同本包
-// 其余 Intake：作用域整组只能来自认证与授权结果（`PAR-INT-01` 待提供），采信自报租户会穿透 ADR-0003 的隔离
+// 其余 Intake：作用域整组只能来自认证与授权结果（操作者渠道 ADR-0100，真 Intake 未就位），采信自报租户会穿透 ADR-0003 的隔离
 // 边界。未决期间本包不带任何采信实现，包括「开发用」的采信头部版本。
 type ChannelSelectionDecisionQueryIntake interface {
 	IntakeChannelSelectionDecisionQuery(ctx context.Context, request *http.Request) (ChannelSelectionDecisionQuery, error)

@@ -27,7 +27,7 @@ type ShipmentRequestViewQuery struct {
 // ShipmentRequestViewsIntake 把一次已认证的查阅请求翻译成查询。
 //
 // 它是接口而非解析代码，理由与 SubmissionIntake 相同：作用域整组只能来自认证与授权
-// 结果（PAR-INT-01 待提供），采信客户自报的租户或账户会穿透 ADR-0003 的隔离边界。
+// 结果（运营查阅归操作者渠道 ADR-0100，真 Intake 未就位），采信客户自报的租户或账户会穿透 ADR-0003 的隔离边界。
 // 未决期间本包不带任何实现，包括「开发用」的采信头部版本。
 type ShipmentRequestViewsIntake interface {
 	IntakeListQuery(ctx context.Context, request *http.Request) (ShipmentRequestViewsQuery, error)

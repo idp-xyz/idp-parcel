@@ -30,7 +30,7 @@ func New(info buildinfo.Info) http.Handler {
 }
 
 // NewWithEndpoints 在进程级端点之外挂载业务端点。空清单合法——那正是接线闸门关着
-// 时的形状：装配缝已开，逐端点等各自的 Intake 实现（PAR-INT-01）就位。
+// 时的形状：装配缝已开，逐端点等各自那一族的真 Intake 就位（客户渠道 PAR-INT-01、操作者渠道 ADR-0100、集成客户端族 ADR-0149）。
 func NewWithEndpoints(info buildinfo.Info, endpoints []BusinessEndpoint) http.Handler {
 	router := chi.NewRouter()
 	router.Use(middleware.RequestID)

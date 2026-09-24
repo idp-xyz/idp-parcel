@@ -18,7 +18,7 @@ import (
 var catalogueBaseAt = time.Date(2026, 8, 28, 9, 0, 0, 0, time.UTC)
 
 // grantedCatalogueIntake 装出「认证已就位」的接入面:作用域与页大小都来自它,不读
-// 请求内容。真通道未登记(PAR-INT-01),生产装配点不会有这样的实现——它只在测试里
+// 请求内容。真渠道(操作者渠道,ADR-0100)未就位,生产装配点不会有这样的实现——它只在测试里
 // 存在,为的是隔离验证端点的转写。
 type grantedCatalogueIntake struct {
 	tenant string

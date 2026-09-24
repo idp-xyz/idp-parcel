@@ -12,7 +12,7 @@ import (
 // HandoverIntake 把已认证的接入请求翻译成交接判断的首登 / 更正命令。
 //
 // 接口而非本包内解析代码的理由同 DeliveryIntake：租户身份只能来自认证结果（ADR-0003），
-// 真实接入渠道属 PAR-INT-01 待提供，未决期间本包不带任何真渠道实现（隔离写准入的 IsolatedCommandIntake
+// 真实接入渠道是操作者渠道的「作业事实登记」能力面（ADR-0149），就位之前本包不带任何真渠道实现（隔离写准入的 IsolatedCommandIntake
 // 只实现首登那一口，理由同 DeliveryIntake）。
 //
 // **`Segment` 与 `PlannedSegment` 是命令的一部分，Intake 必须收。** 交接是 CONTEXT 成立边界的

@@ -1,7 +1,7 @@
 # 16 过期注释：运营侧接入面的认证不再写「属 `PAR-INT-01` 待提供」
 
 Category: enhancement
-Status: in-progress——2026-09-25 通道 2 崩后由通道 4 接手（用户令独立接手）；前半 22 个 Go 文件的注释改动已随 `70107171` 原样入库，余量见通道 1 的清单（登记写面各 `register_*.go` 与 `registrationjson`、目录查阅用例、一线作业事实与外部结果各口、`internal/platform/httpapi/router.go`、管理台 `apps/admin-web/src` 下带 `PAR-INT-01` 的运营侧注释）。此前 in-progress——2026-09-25 通道 2 随 ADR-0151 补立并认领（通道 4 于 2026-09-24 已改了一部分，未提交）
+Status: resolved——2026-09-25 通道 4 做完并进 main（完成记录见文末 Comments）。此前 in-progress——2026-09-25 通道 2 崩后由通道 4 接手（用户令独立接手）；前半 22 个 Go 文件的注释改动已随 `70107171` 原样入库，余量见通道 1 的清单（登记写面各 `register_*.go` 与 `registrationjson`、目录查阅用例、一线作业事实与外部结果各口、`internal/platform/httpapi/router.go`、管理台 `apps/admin-web/src` 下带 `PAR-INT-01` 的运营侧注释）。此前 in-progress——2026-09-25 通道 2 随 ADR-0151 补立并认领（通道 4 于 2026-09-24 已改了一部分，未提交）
 Blocked by: 无
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md)
 地盘：`cmd/parcel-api` 与各上下文 `adapters/http`、`adapters/registrationjson` 里的 Go 注释；只改注释，不改代码与测试逻辑。
@@ -32,3 +32,21 @@ Blocked by: 无
 
 - 运营侧各口的 Go 注释里不再把认证归给 `PAR-INT-01` 或「实例半边」；剩下的 `PAR-INT-01` 都属客户侧或上列「不做」。
 - `gofmt -l` 无输出，`go build ./...` 与 `go vet ./...` 退 0。
+
+## Comments
+
+### 完成记录 ← 通道 4 · 2026-09-25
+
+**前半**随 `70107171` 原样入库（22 个 Go 文件，前一通道 4 会话与通道 2 所改）。**后半**本笔改 37 个文件（44 行），只改注释，四类照票面「做什么」：
+- 登记写面：各上下文 `register_*.go`（CC 两份、NR、PP 两份、PC 五份、VE），以及 CC、SA、VE 的 `registrationjson/translate.go`。一律改指操作者渠道（ADR-0100），「`PAR-INT-01` 待提供」改为「其真 Intake 未就位」。
+- 目录与运营查阅面：SA、TF 的 `catalogue_intake.go`；PS 的渠道择优决定、面单交易与委托查阅三口；VE 的运营追踪；六个查阅测试里「真通道未登记（PAR-INT-01）」一句，以及 PP、PC 三个测试的 Covers 行。一律改指操作者渠道（ADR-0100）。
+- 一线作业事实：NO 收件，TF 的交接、交付与移动事实。改指操作者渠道的「作业事实登记」能力面（ADR-0149）；移动事实写明自营走作业事实登记、外部走集成客户端族。
+- 外部结果与外部资金事实：CC 回执、SA 外部资金事实。改指集成客户端族（ADR-0149）；哪家来源送回执仍是租户取值 `PAR-INT-03`。
+- 另两处：`internal/platform/httpapi/router.go` 的「逐端点等各自的 Intake」改为按族列出三族；`cmd/parcel-api/assemble_settlement_registration_test.go` 一处改为操作者渠道。
+
+**照旧不改的**（取证于本笔：Go 代码里剩 30 个文件、40 行）：客户侧各口——提交、撤回、受控补充、资料修订、取消、理赔、客户追踪视图、端点表客户渠道两行、VE 登记 CLI 里的客户自助；`internal/accessidentity` 客户渠道登记册那几处；PS 领域与应用里的客户载荷词表；以及写对了的引用——PP、PC 发布载荷那两句「它不是客户渠道载荷，那一半照旧等 PAR-INT-01」、PP 复核口对 ADR-0101 收窄的转述、PC 发布草稿「不是等 PAR-INT-01 契约，是去接信封」、CC 申报权威读口里的客户渠道认证、PC 产品渠道登记的渠道本体。
+
+**不在本票地盘、记为后续**：管理台 `apps/admin-web/src` 里运营侧页面注释中的 `PAR-INT-01`（通道 1 列过约 27 个文件，例如 `pages/shipment-request/api.ts` 三份决定草案写「由 PAR-INT-01 的接入面从已认证的操作员身份翻译」）。本票地盘只写了 Go 注释；前端走 workflow.md「前端切片」那条路，宜另立一票。
+
+**验证**：`gofmt -l` 空；`go build ./...`、`go vet ./...` 过；机制清点在本笔检出上重生成、无差（只改注释不改计数）；进 main 前在最终 SHA 上跑带 DSN 全量（见提交信）。推送方即作者，自审。
+

@@ -21,7 +21,7 @@ import (
 //
 // 两个 Intake 都是接口而不是本包内的解析代码，判据同 customshttp 的登记口（ADR-0085 决定二）：登记输入本体
 // 的译装在 adapters/registrationjson 已有一份（与受控 CLI 的 -input 同源，本包不得另写），但「渠道原始载荷 →
-// 登记输入」的边界与操作者认证属渠道接入契约，`PAR-INT-01` 待提供；采信报文自称的租户会穿透 ADR-0003 的隔离
+// 登记输入」的边界与提交方认证归集成客户端族（ADR-0149），其真 Intake 未就位；采信报文自称的租户会穿透 ADR-0003 的隔离
 // 边界。逐类分设而不合成一个按种类分派的口子：两类命令类型互不相同，合成一个就得在 Intake 里先认种类再定形状。
 type ExternalFundsFactRegistrationIntake interface {
 	IntakeExternalFundsFactRegistration(

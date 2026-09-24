@@ -133,7 +133,7 @@ func TestPriceCardsEndpointOnlyAcceptsGet(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0055/ADR-0077 Decision 三——PAR-INT-01 未登记,生产装配的 Intake 对
+// Covers: ADR-0055/ADR-0077 Decision 三——操作者渠道(ADR-0100)未就位,生产装配的 Intake 对
 // 每个请求一律 403,不读业务内容;两个端点同答。
 func TestPricingEndpointsAnswerUnconfiguredIntakeWith403(t *testing.T) {
 	cards := pricinghttp.NewQueryPriceCardsEndpoint(pricinghttp.UnconfiguredIntake{}, &cardReaderDouble{})

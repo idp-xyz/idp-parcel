@@ -21,7 +21,7 @@ type OperationsTrackingQuery struct {
 // OperationsTrackingIntake 把一次已认证的运营查阅请求翻译成查询。
 //
 // 它是接口而非解析代码,理由与 QueryIntake 相同:请求方身份与租户「必须同时核对」
-// (CONTEXT 投影规则),认证方式属 `PAR-INT-01` 待提供;采信自报租户会穿透 ADR-0003
+// (CONTEXT 投影规则),认证归操作者渠道(ADR-0100),真 Intake 未就位;采信自报租户会穿透 ADR-0003
 // 的隔离边界。未决期间本包不带任何实现,包括「开发用」的采信头部版本。
 type OperationsTrackingIntake interface {
 	IntakeOperationsQuery(ctx context.Context, request *http.Request) (OperationsTrackingQuery, error)

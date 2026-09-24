@@ -31,7 +31,7 @@ import (
 // 测试输入是隔离合成，只记 `S`，不进生产装配；币种取测试码 XTS，不预填任何真实币种。
 
 // translatingFundsIntake 把请求体经 registrationjson 译成命令——本用例要证的是端点体之后那半条链，Intake 这一格
-// 在生产上还是未配置（`PAR-INT-01`），这里用译装那一份代替、不另写解析（红线「译装只用 registrationjson 那一份」）。
+// 在生产上还是未配置（操作者渠道未就位，ADR-0100），这里用译装那一份代替、不另写解析（红线「译装只用 registrationjson 那一份」）。
 type translatingFundsIntake struct{}
 
 func (translatingFundsIntake) IntakeExternalFundsFactRegistration(

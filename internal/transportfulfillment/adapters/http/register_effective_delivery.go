@@ -25,7 +25,7 @@ var ErrMalformedRequest = errors.New("transport fulfillment http: malformed requ
 // DeliveryIntake 把已认证的接入请求翻译成首登/更正命令。
 //
 // 它是接口而不是本包内的解析代码：租户身份按 ADR-0003 只能来自认证结果，真实接入渠道
-// 的认证方式属 PAR-INT-01 待提供；ADR-0029 要求越权探针一律以「未找到」作答，那也是
+// 的认证归操作者渠道的「作业事实登记」能力面（ADR-0149），尚未就位；ADR-0029 要求越权探针一律以「未找到」作答，那也是
 // 认证层的话。未决期间本包不带任何真渠道实现，包括「开发用」的采信头部版本；隔离写准入的
 // IsolatedCommandIntake（ADR-0091）是唯一的实现，它不采信任何自报，租户取注入值。
 //
