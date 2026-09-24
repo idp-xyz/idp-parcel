@@ -99,6 +99,21 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 		status:  http.StatusCreated,
 		outcome: "MOVEMENT_FACT_RECORDED",
 	},
+	// 授权角色建立派送任务：工作范围七件齐——立一个任务，201 DISPATCH_TASK_OPENED。
+	"/transport-fulfillment-dispatch-task-registrations": {
+		endpoint: func(t *testing.T, db *bentopg.DB, intake *tfhttp.IsolatedCommandIntake) http.Handler {
+			segmentOps, err := buildSegmentOperations(db)
+			if err != nil {
+				t.Fatalf("装配段运营编排：%v", err)
+			}
+			return tfhttp.NewOpenDispatchTaskEndpoint(intake, segmentOps.opener)
+		},
+		body: `{"task":"SYN-DISPATCH-08-07","kind":"DELIVERY","objects":["SYN-PARCEL-08-07"],"place":"SYN-PLACE/consignee-07",` +
+			`"windowFrom":"2026-09-25T09:00:00+08:00","windowTo":"2026-09-25T12:00:00+08:00","conditions":"SYN-CONDITION/signature-required",` +
+			`"openedAt":"2026-09-24T20:00:00+08:00"}`,
+		status:  http.StatusCreated,
+		outcome: "DISPATCH_TASK_OPENED",
+	},
 }
 
 // Covers: 票 operator-channel/08 完成判据「隔离环境里上列各口对合成写答业务结果而不是 ACCESS_CHANNEL_NOT_CONFIGURED」——

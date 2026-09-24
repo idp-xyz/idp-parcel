@@ -35,6 +35,7 @@ var (
 	_ CarrierPickupJudgmentIntake = (*IsolatedCommandIntake)(nil)
 	_ HandoverRegistrationIntake  = (*IsolatedCommandIntake)(nil)
 	_ MovementFactIntake          = (*IsolatedCommandIntake)(nil)
+	_ DispatchTaskIntake          = (*IsolatedCommandIntake)(nil)
 )
 
 // IsolatedCommandIntakeDeps 是构造本 Intake 的全部输入，全部是装配点给定的合成值。
@@ -115,4 +116,16 @@ func (intake *IsolatedCommandIntake) IntakeMovementFact(
 		return application.RecordMovementFactCommand{}, err
 	}
 	return payload.Command(intake.tenant, intake.movementSource)
+}
+
+// IntakeDispatchTask 译授权角色建立派送任务（`/transport-fulfillment-dispatch-task-registrations`）。
+func (intake *IsolatedCommandIntake) IntakeDispatchTask(
+	_ context.Context,
+	request *http.Request,
+) (application.OpenDispatchTaskCommand, error) {
+	var payload DispatchTaskPayload
+	if err := decodeClosedPayload(request.Body, &payload); err != nil {
+		return application.OpenDispatchTaskCommand{}, err
+	}
+	return payload.Command(intake.tenant)
 }
