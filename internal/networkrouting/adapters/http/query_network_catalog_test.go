@@ -7,12 +7,15 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"reflect"
+	"strings"
 	"testing"
 	"time"
 
 	networkhttp "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 var endpointBaseAt = time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
@@ -51,7 +54,7 @@ func (intake failingCatalogueIntake) IntakeCatalogueQuery(
 	return networkhttp.NetworkCatalogQuery{}, intake.err
 }
 
-// stubCatalogReader 是读口替身：记录收到的键，交回预置的行或故障。
+// stubCatalogReader 是读口替身：记录收到的键与查询对象，交回预置的行、page 两格或故障。
 type stubCatalogReader struct {
 	nodes       []ports.NodeDefinitionVersion
 	connections []ports.ConnectionDefinitionVersion
@@ -60,49 +63,50 @@ type stubCatalogReader struct {
 	calendars   []ports.ServiceCalendarDefinitionVersion
 	adjustments []ports.AvailabilityAdjustmentStatement
 	strategies  []ports.RouteStrategyDefinitionVersion
+	next        func(cataloguepage.Query) string
+	total       int64
 	err         error
 
 	gotTenant string
 	gotLimit  int
+	gotQuery  cataloguepage.Query
 }
 
-func (stub *stubCatalogReader) record(tenant domain.TenantID, limit int) {
-	stub.gotTenant, stub.gotLimit = tenant.String(), limit
+func pageOf[Row any](stub *stubCatalogReader, tenant domain.TenantID, limit int, query cataloguepage.Query, rows []Row) (ports.CatalogPage[Row], error) {
+	stub.gotTenant, stub.gotLimit, stub.gotQuery = tenant.String(), limit, query
+	page := ports.CatalogPage[Row]{Rows: rows, Total: stub.total}
+	if stub.next != nil {
+		page.Next = stub.next(query)
+	}
+	return page, stub.err
 }
 
-func (stub *stubCatalogReader) ListNodeVersions(_ context.Context, tenant domain.TenantID, limit int) ([]ports.NodeDefinitionVersion, error) {
-	stub.record(tenant, limit)
-	return stub.nodes, stub.err
+func (stub *stubCatalogReader) ListNodeVersions(_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.NodeDefinitionVersion], error) {
+	return pageOf(stub, tenant, limit, query, stub.nodes)
 }
 
-func (stub *stubCatalogReader) ListConnectionVersions(_ context.Context, tenant domain.TenantID, limit int) ([]ports.ConnectionDefinitionVersion, error) {
-	stub.record(tenant, limit)
-	return stub.connections, stub.err
+func (stub *stubCatalogReader) ListConnectionVersions(_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.ConnectionDefinitionVersion], error) {
+	return pageOf(stub, tenant, limit, query, stub.connections)
 }
 
-func (stub *stubCatalogReader) ListLineVersions(_ context.Context, tenant domain.TenantID, limit int) ([]ports.LineDefinitionVersion, error) {
-	stub.record(tenant, limit)
-	return stub.lines, stub.err
+func (stub *stubCatalogReader) ListLineVersions(_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.LineDefinitionVersion], error) {
+	return pageOf(stub, tenant, limit, query, stub.lines)
 }
 
-func (stub *stubCatalogReader) ListServiceAreaVersions(_ context.Context, tenant domain.TenantID, limit int) ([]ports.ServiceAreaDefinitionVersion, error) {
-	stub.record(tenant, limit)
-	return stub.areas, stub.err
+func (stub *stubCatalogReader) ListServiceAreaVersions(_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.ServiceAreaDefinitionVersion], error) {
+	return pageOf(stub, tenant, limit, query, stub.areas)
 }
 
-func (stub *stubCatalogReader) ListServiceCalendarVersions(_ context.Context, tenant domain.TenantID, limit int) ([]ports.ServiceCalendarDefinitionVersion, error) {
-	stub.record(tenant, limit)
-	return stub.calendars, stub.err
+func (stub *stubCatalogReader) ListServiceCalendarVersions(_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.ServiceCalendarDefinitionVersion], error) {
+	return pageOf(stub, tenant, limit, query, stub.calendars)
 }
 
-func (stub *stubCatalogReader) ListAvailabilityAdjustments(_ context.Context, tenant domain.TenantID, limit int) ([]ports.AvailabilityAdjustmentStatement, error) {
-	stub.record(tenant, limit)
-	return stub.adjustments, stub.err
+func (stub *stubCatalogReader) ListAvailabilityAdjustments(_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.AvailabilityAdjustmentStatement], error) {
+	return pageOf(stub, tenant, limit, query, stub.adjustments)
 }
 
-func (stub *stubCatalogReader) ListRouteStrategyVersions(_ context.Context, tenant domain.TenantID, limit int) ([]ports.RouteStrategyDefinitionVersion, error) {
-	stub.record(tenant, limit)
-	return stub.strategies, stub.err
+func (stub *stubCatalogReader) ListRouteStrategyVersions(_ context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.RouteStrategyDefinitionVersion], error) {
+	return pageOf(stub, tenant, limit, query, stub.strategies)
 }
 
 // unreachableCatalogReader 断言读口未被触到：传输形状的拒绝与未配置格都发生在读库
@@ -113,39 +117,39 @@ func (stub unreachableCatalogReader) fail() {
 	stub.t.Fatal("a refused request reached the catalogue reader")
 }
 
-func (stub unreachableCatalogReader) ListNodeVersions(context.Context, domain.TenantID, int) ([]ports.NodeDefinitionVersion, error) {
+func (stub unreachableCatalogReader) ListNodeVersions(context.Context, domain.TenantID, int, cataloguepage.Query) (ports.CatalogPage[ports.NodeDefinitionVersion], error) {
 	stub.fail()
-	return nil, nil
+	return ports.CatalogPage[ports.NodeDefinitionVersion]{}, nil
 }
 
-func (stub unreachableCatalogReader) ListConnectionVersions(context.Context, domain.TenantID, int) ([]ports.ConnectionDefinitionVersion, error) {
+func (stub unreachableCatalogReader) ListConnectionVersions(context.Context, domain.TenantID, int, cataloguepage.Query) (ports.CatalogPage[ports.ConnectionDefinitionVersion], error) {
 	stub.fail()
-	return nil, nil
+	return ports.CatalogPage[ports.ConnectionDefinitionVersion]{}, nil
 }
 
-func (stub unreachableCatalogReader) ListLineVersions(context.Context, domain.TenantID, int) ([]ports.LineDefinitionVersion, error) {
+func (stub unreachableCatalogReader) ListLineVersions(context.Context, domain.TenantID, int, cataloguepage.Query) (ports.CatalogPage[ports.LineDefinitionVersion], error) {
 	stub.fail()
-	return nil, nil
+	return ports.CatalogPage[ports.LineDefinitionVersion]{}, nil
 }
 
-func (stub unreachableCatalogReader) ListServiceAreaVersions(context.Context, domain.TenantID, int) ([]ports.ServiceAreaDefinitionVersion, error) {
+func (stub unreachableCatalogReader) ListServiceAreaVersions(context.Context, domain.TenantID, int, cataloguepage.Query) (ports.CatalogPage[ports.ServiceAreaDefinitionVersion], error) {
 	stub.fail()
-	return nil, nil
+	return ports.CatalogPage[ports.ServiceAreaDefinitionVersion]{}, nil
 }
 
-func (stub unreachableCatalogReader) ListServiceCalendarVersions(context.Context, domain.TenantID, int) ([]ports.ServiceCalendarDefinitionVersion, error) {
+func (stub unreachableCatalogReader) ListServiceCalendarVersions(context.Context, domain.TenantID, int, cataloguepage.Query) (ports.CatalogPage[ports.ServiceCalendarDefinitionVersion], error) {
 	stub.fail()
-	return nil, nil
+	return ports.CatalogPage[ports.ServiceCalendarDefinitionVersion]{}, nil
 }
 
-func (stub unreachableCatalogReader) ListAvailabilityAdjustments(context.Context, domain.TenantID, int) ([]ports.AvailabilityAdjustmentStatement, error) {
+func (stub unreachableCatalogReader) ListAvailabilityAdjustments(context.Context, domain.TenantID, int, cataloguepage.Query) (ports.CatalogPage[ports.AvailabilityAdjustmentStatement], error) {
 	stub.fail()
-	return nil, nil
+	return ports.CatalogPage[ports.AvailabilityAdjustmentStatement]{}, nil
 }
 
-func (stub unreachableCatalogReader) ListRouteStrategyVersions(context.Context, domain.TenantID, int) ([]ports.RouteStrategyDefinitionVersion, error) {
+func (stub unreachableCatalogReader) ListRouteStrategyVersions(context.Context, domain.TenantID, int, cataloguepage.Query) (ports.CatalogPage[ports.RouteStrategyDefinitionVersion], error) {
 	stub.fail()
-	return nil, nil
+	return ports.CatalogPage[ports.RouteStrategyDefinitionVersion]{}, nil
 }
 
 func catalogRequest(t *testing.T, query string) *http.Request {
@@ -272,7 +276,8 @@ func TestCatalogueIntakeFailuresKeepTheirGrades(t *testing.T) {
 }
 
 // Covers: ADR-0077 Decision 一/五 — 节点族逐字段转写：未闭版 effectiveTo 缺席、已闭版
-// 在场；租户与页大小从作用域来，不采信请求自报。
+// 在场；租户与页大小从作用域来（自报的 tenant / limit 在 ADR-0144 之下已是集外键，见
+// TestSelfReportedScopeParametersAreRefusedBeforeTheIntake）。
 func TestNodeVersionsAreListedVerbatim(t *testing.T) {
 	reader := &stubCatalogReader{
 		nodes: []ports.NodeDefinitionVersion{
@@ -291,13 +296,13 @@ func TestNodeVersionsAreListedVerbatim(t *testing.T) {
 		grantedCatalogueIntake{tenant: "TENANT-1", limit: 25}, reader,
 	)
 	response := httptest.NewRecorder()
-	endpoint.ServeHTTP(response, catalogRequest(t, "?family=node&tenant=TENANT-9&limit=9999"))
+	endpoint.ServeHTTP(response, catalogRequest(t, "?family=node"))
 
 	if response.Code != http.StatusOK {
 		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
 	}
 	if reader.gotTenant != "TENANT-1" || reader.gotLimit != 25 {
-		t.Fatalf("读口收到的键走样：tenant=%q limit=%d（自报查询参数被采信了）",
+		t.Fatalf("读口收到的键走样：tenant=%q limit=%d（应取自作用域）",
 			reader.gotTenant, reader.gotLimit)
 	}
 
@@ -417,6 +422,10 @@ func TestAnEmptyFamilyAnswersAnEmptyArray(t *testing.T) {
 	if string(fields["versions"]) != "[]" {
 		t.Fatalf("空族没有交回空数组：%s", response.Body.String())
 	}
+	// ADR-0144 决定五：空目录仍如实答空——next 为 null、total 为 0，size 回显作用域给的页大小。
+	if string(fields["page"]) != `{"size":25,"next":null,"total":0}` {
+		t.Fatalf("空族的 page 走样：%s", response.Body.String())
+	}
 }
 
 // Covers: ADR-0022/ADR-0029 — 读不回是答案未形成（5xx），不伪装成空族：前者该重试，
@@ -436,4 +445,142 @@ func TestAFailingCatalogueReadIsNoAnswerRatherThanAnEmptyFamily(t *testing.T) {
 		t.Fatalf("code = %q, want NO_ANSWER_FORMED", got)
 	}
 	assertNoOutcome(t, response)
+}
+
+func problemDetailText(t *testing.T, response *httptest.ResponseRecorder) string {
+	t.Helper()
+	var body struct {
+		Error struct {
+			Detail string `json:"detail"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode problem response %s: %v", response.Body.Bytes(), err)
+	}
+	return body.Error.Detail
+}
+
+// Covers: ADR-0144 决定四「未知参数键 → MALFORMED_REQUEST」——自报的 tenant / limit 从前被忽略，
+// 如今是集外键，在 Intake 之前就拒（越权风险点 2 预告过的收紧）；读口不被触到。
+func TestSelfReportedScopeParametersAreRefusedBeforeTheIntake(t *testing.T) {
+	endpoint := networkhttp.NewQueryNetworkCatalogEndpoint(
+		failingCatalogueIntake{err: errors.New("intake must not be consulted")},
+		unreachableCatalogReader{t: t},
+	)
+	for _, query := range []string{"?family=node&tenant=TENANT-9", "?family=node&limit=9999"} {
+		response := httptest.NewRecorder()
+		endpoint.ServeHTTP(response, catalogRequest(t, query))
+		if response.Code != http.StatusBadRequest || problemCode(t, response) != "MALFORMED_REQUEST" {
+			t.Fatalf("%s: %d %s", query, response.Code, response.Body.String())
+		}
+		if problemDetailText(t, response) == "" {
+			t.Fatalf("%s: 400 没带理由散文", query)
+		}
+	}
+}
+
+// Covers: ADR-0144 决定三、四、一——集外排序维、词表外筛选值、别族或换条件后的游标、超长的 q，都在
+// Intake 之前答 400，detail 带理由散文；读口不被触到。
+func TestMalformedQueryParametersAreRefusedWithAReason(t *testing.T) {
+	endpoint := networkhttp.NewQueryNetworkCatalogEndpoint(
+		failingCatalogueIntake{err: errors.New("intake must not be consulted")},
+		unreachableCatalogReader{t: t},
+	)
+	nodeQuery, err := ports.NodeVersionCatalogue.Decode(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	nodeCursor, err := nodeQuery.CursorAfter(cataloguepage.Position{
+		Value: "SYN-NODE-01", Identity: []string{"SYN-NODE-01", "1"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	cases := map[string]string{
+		"集外排序维":    "?family=node&sort=businessTimezone",
+		"词表外筛选值":   "?family=service-calendar&targetKind=AREA",
+		"集外筛选维":    "?family=line&applicableScope=SYN-SCOPE",
+		"别族的游标":    "?family=line&after=" + nodeCursor,
+		"换条件后的旧游标": "?family=node&code=SYN-NODE-02&after=" + nodeCursor,
+		"超长的 q":    "?family=node&q=" + strings.Repeat("S", cataloguepage.MaxKeywordRunes+1),
+	}
+	for name, query := range cases {
+		t.Run(name, func(t *testing.T) {
+			response := httptest.NewRecorder()
+			endpoint.ServeHTTP(response, catalogRequest(t, query))
+			if response.Code != http.StatusBadRequest || problemCode(t, response) != "MALFORMED_REQUEST" {
+				t.Fatalf("%d %s", response.Code, response.Body.String())
+			}
+			if problemDetailText(t, response) == "" {
+				t.Fatalf("400 没带理由散文：%s", response.Body.String())
+			}
+		})
+	}
+}
+
+// Covers: ADR-0144 决定六——端点按所选族的声明解出查询对象原样交给读口：排序、筛选（维内多值）、q。
+func TestTheDecodedQueryReachesTheReader(t *testing.T) {
+	reader := &stubCatalogReader{}
+	endpoint := networkhttp.NewQueryNetworkCatalogEndpoint(
+		grantedCatalogueIntake{tenant: "TENANT-1", limit: 25}, reader,
+	)
+	response := httptest.NewRecorder()
+	endpoint.ServeHTTP(response, catalogRequest(t,
+		"?family=connection&sort=-effectiveFrom&fromNode=SYN-NODE-02&fromNode=SYN-NODE-01&q=%20SYN%20"))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+	}
+	got := reader.gotQuery
+	if got.Sort != (cataloguepage.Sort{Field: "effectiveFrom", Descending: true}) {
+		t.Fatalf("排序走样：%v", got.Sort)
+	}
+	if want := []string{"SYN-NODE-01", "SYN-NODE-02"}; !reflect.DeepEqual(got.Filters["fromNode"], want) {
+		t.Fatalf("筛选走样：%v", got.Filters)
+	}
+	if got.Keyword != "SYN" || got.After != nil {
+		t.Fatalf("q 或游标走样：%+v", got)
+	}
+}
+
+// Covers: ADR-0144 决定五——答复的 page 由读口的下一游标与总数拼成，size 回显作用域给的页大小；
+// 把 next 原样带回 after，读口收到的就是上一页末行的位置。
+func TestTheAnswerCarriesThePageAndItsCursorComesBack(t *testing.T) {
+	last := cataloguepage.Position{Value: "SYN-NODE-07", Identity: []string{"SYN-NODE-07", "3"}}
+	reader := &stubCatalogReader{
+		total: 42,
+		next: func(query cataloguepage.Query) string {
+			cursor, err := query.CursorAfter(last)
+			if err != nil {
+				t.Fatalf("替身编游标：%v", err)
+			}
+			return cursor
+		},
+	}
+	endpoint := networkhttp.NewQueryNetworkCatalogEndpoint(
+		grantedCatalogueIntake{tenant: "TENANT-1", limit: 25}, reader,
+	)
+	response := httptest.NewRecorder()
+	endpoint.ServeHTTP(response, catalogRequest(t, "?family=node&code=SYN-NODE-07"))
+	var body struct {
+		Page struct {
+			Size  int     `json:"size"`
+			Next  *string `json:"next"`
+			Total *int64  `json:"total"`
+		} `json:"page"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode %s: %v", response.Body.Bytes(), err)
+	}
+	if body.Page.Size != 25 || body.Page.Next == nil || body.Page.Total == nil || *body.Page.Total != 42 {
+		t.Fatalf("page 走样：%s", response.Body.String())
+	}
+
+	response = httptest.NewRecorder()
+	endpoint.ServeHTTP(response, catalogRequest(t, "?family=node&code=SYN-NODE-07&after="+*body.Page.Next))
+	if response.Code != http.StatusOK {
+		t.Fatalf("带回游标：status = %d body = %s", response.Code, response.Body.String())
+	}
+	if reader.gotQuery.After == nil || !reflect.DeepEqual(*reader.gotQuery.After, last) {
+		t.Fatalf("读口收到的位置：%+v，应为 %+v", reader.gotQuery.After, last)
+	}
 }

@@ -26,6 +26,7 @@ import (
 	commercialdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	commercialports "go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 	govports "go.idp.xyz/idp-parcel/internal/pilotgovernance/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 	settlementapp "go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
 	settlementdomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	settlementports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
@@ -1070,56 +1071,63 @@ func (unwiredNetworkCatalogue) ListNodeVersions(
 	context.Context,
 	networkdomain.TenantID,
 	int,
-) ([]networkports.NodeDefinitionVersion, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (networkports.CatalogPage[networkports.NodeDefinitionVersion], error) {
+	return networkports.CatalogPage[networkports.NodeDefinitionVersion]{}, errOrchestrationNotWired
 }
 
 func (unwiredNetworkCatalogue) ListConnectionVersions(
 	context.Context,
 	networkdomain.TenantID,
 	int,
-) ([]networkports.ConnectionDefinitionVersion, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (networkports.CatalogPage[networkports.ConnectionDefinitionVersion], error) {
+	return networkports.CatalogPage[networkports.ConnectionDefinitionVersion]{}, errOrchestrationNotWired
 }
 
 func (unwiredNetworkCatalogue) ListLineVersions(
 	context.Context,
 	networkdomain.TenantID,
 	int,
-) ([]networkports.LineDefinitionVersion, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (networkports.CatalogPage[networkports.LineDefinitionVersion], error) {
+	return networkports.CatalogPage[networkports.LineDefinitionVersion]{}, errOrchestrationNotWired
 }
 
 func (unwiredNetworkCatalogue) ListServiceAreaVersions(
 	context.Context,
 	networkdomain.TenantID,
 	int,
-) ([]networkports.ServiceAreaDefinitionVersion, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (networkports.CatalogPage[networkports.ServiceAreaDefinitionVersion], error) {
+	return networkports.CatalogPage[networkports.ServiceAreaDefinitionVersion]{}, errOrchestrationNotWired
 }
 
 func (unwiredNetworkCatalogue) ListServiceCalendarVersions(
 	context.Context,
 	networkdomain.TenantID,
 	int,
-) ([]networkports.ServiceCalendarDefinitionVersion, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (networkports.CatalogPage[networkports.ServiceCalendarDefinitionVersion], error) {
+	return networkports.CatalogPage[networkports.ServiceCalendarDefinitionVersion]{}, errOrchestrationNotWired
 }
 
 func (unwiredNetworkCatalogue) ListAvailabilityAdjustments(
 	context.Context,
 	networkdomain.TenantID,
 	int,
-) ([]networkports.AvailabilityAdjustmentStatement, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (networkports.CatalogPage[networkports.AvailabilityAdjustmentStatement], error) {
+	return networkports.CatalogPage[networkports.AvailabilityAdjustmentStatement]{}, errOrchestrationNotWired
 }
 
 func (unwiredNetworkCatalogue) ListRouteStrategyVersions(
 	context.Context,
 	networkdomain.TenantID,
 	int,
-) ([]networkports.RouteStrategyDefinitionVersion, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (networkports.CatalogPage[networkports.RouteStrategyDefinitionVersion], error) {
+	return networkports.CatalogPage[networkports.RouteStrategyDefinitionVersion]{}, errOrchestrationNotWired
 }
 
 // unwiredRoutePlans 是路由判断两册列表读口的占位，方法表与

@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // OperationsCatalogRead 是版本化网络目录的运营查阅上列读面(ADR-0077 Decision 一):
@@ -23,40 +24,50 @@ import (
 // 规则正文的列还不存在(PAR-NET-14),行类型今天透出的就是版本骨架,不多不少。
 //
 // Limit 必须为正;每页多大由接入面按渠道契约裁决,读口只拒绝无意义的取值。
+//
+// 翻页、排序与筛选照 ADR-0144 决定六:query 是端点经 cataloguepage 按本族声明
+// (catalog_query.go)解出的查询对象,各方法答本页行、下一游标与同一组条件下的总数。
 type OperationsCatalogRead interface {
 	ListNodeVersions(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]NodeDefinitionVersion, error)
+		query cataloguepage.Query,
+	) (CatalogPage[NodeDefinitionVersion], error)
 	ListConnectionVersions(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ConnectionDefinitionVersion, error)
+		query cataloguepage.Query,
+	) (CatalogPage[ConnectionDefinitionVersion], error)
 	ListLineVersions(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]LineDefinitionVersion, error)
+		query cataloguepage.Query,
+	) (CatalogPage[LineDefinitionVersion], error)
 	ListServiceAreaVersions(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ServiceAreaDefinitionVersion, error)
+		query cataloguepage.Query,
+	) (CatalogPage[ServiceAreaDefinitionVersion], error)
 	ListServiceCalendarVersions(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ServiceCalendarDefinitionVersion, error)
+		query cataloguepage.Query,
+	) (CatalogPage[ServiceCalendarDefinitionVersion], error)
 	ListAvailabilityAdjustments(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]AvailabilityAdjustmentStatement, error)
+		query cataloguepage.Query,
+	) (CatalogPage[AvailabilityAdjustmentStatement], error)
 	ListRouteStrategyVersions(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]RouteStrategyDefinitionVersion, error)
+		query cataloguepage.Query,
+	) (CatalogPage[RouteStrategyDefinitionVersion], error)
 }

@@ -75,12 +75,16 @@ func TestTheWiredCatalogRegistrationsRecordAgainstARealDatabase(t *testing.T) {
 		if err != nil {
 			t.Fatalf("构造网络目录读面：%v", err)
 		}
-		rows, err := catalog.ListNodeVersions(ctx, tenant, 50)
+		firstPage, err := networkports.NodeVersionCatalogue.Decode(nil)
+		if err != nil {
+			t.Fatalf("解出第一页查询：%v", err)
+		}
+		page, err := catalog.ListNodeVersions(ctx, tenant, 50, firstPage)
 		if err != nil {
 			t.Fatalf("读回节点版本：%v", err)
 		}
 		var found bool
-		for _, row := range rows {
+		for _, row := range page.Rows {
 			if row.Code == node.Code && row.Version == node.Version {
 				found = true
 			}
