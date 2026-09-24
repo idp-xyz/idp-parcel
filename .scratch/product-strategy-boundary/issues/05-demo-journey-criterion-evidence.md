@@ -1,7 +1,7 @@
 # 05 第四条判据的动线取证：逐步列出停在`未配置`的每一格
 
 Category: task
-Status: ready-for-agent（盘点现在即可做；收口 Blocked by 02、03、04）
+Status: in-progress——2026-09-24 16:57 通道 2 按通道 1 派单 task-c7df5ff3 认领盘点半（第 1 步全做、第 2 步做到能做的程度），隔离环境为 55432 上一次性库 `idp_mcp2_journey` + 钉 `64b37f27` 的 detached 检出；收口（第 3 步）Blocked by 02、03、04
 Blocked by: 02、03、04（只挡收口）
 地盘：[合成演示动线](../../../docs/design/synthetic-demo-journey-script.md)与本目录票面。
 出处：[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定五第四条、越权风险点 2。
