@@ -204,7 +204,7 @@ func excludedEvidence(t *testing.T) nrports.InitialRouteEvidence {
 	}
 	return nrports.InitialRouteEvidence{
 		ServiceAreas: []nrdomain.ServiceAreaResolution{resolution},
-		Priority:     []nrdomain.RankingCriterion{value(t, nrdomain.NewRankingCriterion, "TRANSIT_TIME")},
+		RankingForm:  nrdomain.CostSingleDimensionRanking,
 		Strategy:     value(t, nrdomain.NewRouteStrategyReference, "strategy-1/v1"),
 		ViewRevision: value(t, nrdomain.NewNetworkViewRevision, "net-view-rev-1"),
 	}

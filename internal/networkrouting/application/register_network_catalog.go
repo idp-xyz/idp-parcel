@@ -78,6 +78,9 @@ const (
 	CatalogTargetKindUnknown
 	CatalogAdjustmentKindUnknown
 	CatalogSourceMissing
+	// CatalogRankingFormUnknown 是路由策略版本声明了族外的排序形态。没声明不在此列——那是
+	// 租户还没选，照旧登得进（ADR-0146）。
+	CatalogRankingFormUnknown
 	// 覆盖与节点角色三格：覆盖不成形（国家码、前缀）要改覆盖；节点身份空白要补节点；没登覆盖却登了节点角色，
 	// 这版区域解析不了任何地址，节点角色无从生效——先登覆盖。
 	CatalogCoverageMalformed
@@ -115,6 +118,8 @@ func (reason CatalogRefusalReason) String() string {
 		return "ADJUSTMENT_KIND_UNKNOWN"
 	case CatalogSourceMissing:
 		return "SOURCE_MISSING"
+	case CatalogRankingFormUnknown:
+		return "RANKING_FORM_UNKNOWN"
 	case CatalogCoverageMalformed:
 		return "COVERAGE_MALFORMED"
 	case CatalogNodeRoleBlank:
@@ -328,6 +333,9 @@ func (service *NetworkCatalogRegistration) RegisterRouteStrategyVersion(
 	// 的声明，缺了这一版就没说清自己管哪里。
 	if !catalogPresent(row.ApplicableScope) {
 		return catalogRefused(CatalogApplicableScopeMissing), nil
+	}
+	if row.RankingForm != domain.RankingFormUndeclared && row.RankingForm.String() == "" {
+		return catalogRefused(CatalogRankingFormUnknown), nil
 	}
 
 	if err := service.registry.RegisterRouteStrategyVersion(ctx, command.TenantID, row); err != nil {

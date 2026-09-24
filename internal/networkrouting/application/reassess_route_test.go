@@ -40,8 +40,6 @@ func reassessCommand(t *testing.T, location string) application.ReassessRouteCom
 func currentPlanRecord(t *testing.T) ports.InitialRouteRecord {
 	t.Helper()
 	evidence := routableEvidence(t)
-	score := evidence.Scores[0]
-	_ = score
 	plan, err := domain.FormInitialRoutePlan(domain.InitialRoutePlanSpec{
 		Key:      reassessKey(t),
 		Version:  value(t, domain.NewRoutePlanVersionID, "plan-1/v1"),
@@ -251,6 +249,46 @@ func TestAFormerNoRouteFormsItsFirstCurrentPlan(t *testing.T) {
 	record, _ := result.Record()
 	if !record.HasNewPlan || record.NewPlan.SelectedCandidate().String() != "candidate-1" {
 		t.Fatalf("record = %#v; 首个当前有效计划没形成", record)
+	}
+}
+
+// Covers: 原先无路由、复核时最低成本并列——不形成首个计划（那等于任选一家），保持无当前有效
+// 路由并把候选评估记为未决，不冒充「没有合格候选」。这条线没有被复核计划，改路三件落不了库
+// （`route_reassessment_reroute_on_reviewed_plan`），所以不挂建议。
+func TestAFormerNoRouteWithATiedLowestCostFormsNoFirstPlan(t *testing.T) {
+	fixture := newReassessFixture(t)
+	noRoute, err := domain.FormNoCurrentRouteJudgment(domain.NoCurrentRouteJudgmentSpec{
+		Key: reassessKey(t),
+		Candidates: []domain.RouteCandidate{
+			eliminated(t, "candidate-1", "PATH_NOT_EXECUTABLE/SCHED-V3"),
+		},
+		Strategy:     value(t, domain.NewRouteStrategyReference, "strategy-1/v1"),
+		ViewRevision: value(t, domain.NewNetworkViewRevision, "net-view-rev-1"),
+		JudgedAt:     reassessedAt.Add(-time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("form prior no-route: %v", err)
+	}
+	fixture.routes.records[reassessKey(t)] = ports.InitialRouteRecord{
+		Key: reassessKey(t), NoRoute: noRoute, HasNoRoute: true,
+	}
+	fixture.evidence.byParcel["parcel-1"] = tiedEvidence(t)
+
+	result, err := fixture.handler.Handle(context.Background(), reassessCommand(t, "node-origin"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.ReassessedPlanLapsed {
+		t.Fatalf("outcome = %q, want PLAN_LAPSED——仍无当前有效路由", result.Outcome())
+	}
+	record, _ := result.Record()
+	if record.HasNewPlan || record.HasSuggestion || record.HasDecision {
+		t.Fatalf("new plan = %v, suggestion = %v, decision = %v; 并列不形成首个计划",
+			record.HasNewPlan, record.HasSuggestion, record.HasDecision)
+	}
+	if record.CandidateState != ports.CandidateReviewUndecided {
+		t.Fatalf("candidate state = %q, want CANDIDATE_REVIEW_UNDECIDED", record.CandidateState)
 	}
 }
 

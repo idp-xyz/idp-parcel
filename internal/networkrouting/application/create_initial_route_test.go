@@ -56,19 +56,10 @@ func routableEvidence(t *testing.T) ports.InitialRouteEvidence {
 	if err != nil {
 		t.Fatalf("new leg: %v", err)
 	}
-	score, err := domain.NewCriterionScore(value(t, domain.NewRankingCriterion, "TIMELINESS"), 1)
-	if err != nil {
-		t.Fatalf("new score: %v", err)
-	}
-	scores, err := domain.NewCandidateScores(value(t, domain.NewCandidateID, "candidate-1"),
-		[]domain.CriterionScore{score})
-	if err != nil {
-		t.Fatalf("new candidate scores: %v", err)
-	}
 	return ports.InitialRouteEvidence{
-		ServiceAreas: coveringAreas(t, "candidate-1"),
-		Scores:       []domain.CandidateScores{scores},
-		Priority:     []domain.RankingCriterion{value(t, domain.NewRankingCriterion, "TIMELINESS")},
+		ServiceAreas:   coveringAreas(t, "candidate-1"),
+		RankingForm:    domain.CostSingleDimensionRanking,
+		CandidateCosts: []domain.CandidateCostFact{pricedCandidateCost(t, "candidate-1", 1000, "CNY")},
 		Paths: []ports.CandidatePath{{
 			Candidate: value(t, domain.NewCandidateID, "candidate-1"),
 			Legs:      []domain.PlannedLeg{leg},
@@ -76,6 +67,31 @@ func routableEvidence(t *testing.T) ports.InitialRouteEvidence {
 		Strategy:     value(t, domain.NewRouteStrategyReference, "strategy-1/v1"),
 		ViewRevision: value(t, domain.NewNetworkViewRevision, "net-view-rev-1"),
 	}
+}
+
+func pricedCandidateCost(t *testing.T, candidate string, amountMinor int64, currency string) domain.CandidateCostFact {
+	t.Helper()
+	fact, err := domain.NewPricedCandidateCost(value(t, domain.NewCandidateID, candidate), amountMinor, currency)
+	if err != nil {
+		t.Fatalf("new priced candidate cost: %v", err)
+	}
+	return fact
+}
+
+// tiedEvidence 让两条都可行的候选在成本单维下同价。
+func tiedEvidence(t *testing.T) ports.InitialRouteEvidence {
+	t.Helper()
+	evidence := routableEvidence(t)
+	evidence.ServiceAreas = coveringAreas(t, "candidate-1", "candidate-2")
+	evidence.CandidateCosts = []domain.CandidateCostFact{
+		pricedCandidateCost(t, "candidate-1", 4200, "CNY"),
+		pricedCandidateCost(t, "candidate-2", 4200, "CNY"),
+	}
+	evidence.Paths = append(evidence.Paths, ports.CandidatePath{
+		Candidate: value(t, domain.NewCandidateID, "candidate-2"),
+		Legs:      evidence.Paths[0].Legs,
+	})
+	return evidence
 }
 
 func unroutableEvidence(t *testing.T) ports.InitialRouteEvidence {
@@ -475,16 +491,7 @@ func TestTwoParcelsFormTwoIndependentPlans(t *testing.T) {
 	second := routableEvidence(t)
 	// 第二个包裹的证据指向另一条候选与另一条段链。
 	second.ServiceAreas = coveringAreas(t, "candidate-2")
-	score, err := domain.NewCriterionScore(value(t, domain.NewRankingCriterion, "TIMELINESS"), 2)
-	if err != nil {
-		t.Fatalf("new score: %v", err)
-	}
-	scores, err := domain.NewCandidateScores(value(t, domain.NewCandidateID, "candidate-2"),
-		[]domain.CriterionScore{score})
-	if err != nil {
-		t.Fatalf("new candidate scores: %v", err)
-	}
-	second.Scores = []domain.CandidateScores{scores}
+	second.CandidateCosts = []domain.CandidateCostFact{pricedCandidateCost(t, "candidate-2", 2000, "CNY")}
 	window, err := domain.NewPlannedTimeWindow(routeJudgedAt, routeJudgedAt.Add(72*time.Hour),
 		value(t, domain.NewWindowBasisReference, "CALENDAR-V1/BUFFER-V1"))
 	if err != nil {
@@ -521,6 +528,41 @@ func TestTwoParcelsFormTwoIndependentPlans(t *testing.T) {
 	}
 	if planTwo.Nodes()[1].String() != "node-alternate" {
 		t.Fatalf("plan two nodes = %v", planTwo.Nodes())
+	}
+}
+
+// Covers: `PAR-NET-16`「并列且无法选出唯一一条时为冲突，交人工裁决，不得任选」在初始路由这一侧
+// ——最低成本并列既不形成计划也不形成`无当前有效路由`，停在带专格原因的未决、可续办，并交回
+// 全部候选与并列的那几家供留痕；不落库、不交意图。人工选择入口不在本期（UC-NR-001）。
+func TestALowestCostTieFormsNeitherPlanNorNoRoute(t *testing.T) {
+	fixture := newRouteFixture(t)
+	fixture.evidence.byParcel["parcel-1"] = tiedEvidence(t)
+
+	result, err := fixture.handler.Handle(context.Background(), routeCommand(t, "parcel-1"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	parcel := result.Parcels()[0]
+	if parcel.Outcome() != application.ParcelRouteUndecided || parcel.UndecidedReason() != application.RouteCandidatesTied {
+		t.Fatalf("parcel = %q/%q, want UNDECIDED/CANDIDATES_TIED", parcel.Outcome(), parcel.UndecidedReason())
+	}
+	if _, present := parcel.Plan(); present {
+		t.Fatal("并列时形成了计划——那等于替授权角色任选了一家")
+	}
+	if _, present := parcel.NoCurrentRoute(); present {
+		t.Fatal("并列时形成了无当前有效路由——候选明明可行")
+	}
+	if parcel.ContinuationReference().String() == "" {
+		t.Fatal("并列的未决无法安全续办")
+	}
+	if tied := parcel.TiedCandidates(); len(tied) != 2 {
+		t.Fatalf("tied = %v, want both candidates", tied)
+	}
+	if candidates := parcel.Candidates(); len(candidates) != 2 {
+		t.Fatalf("candidates = %v; 全部候选要随并列理由一起交回", candidates)
+	}
+	if fixture.store.saved != 0 || len(fixture.downstream.intents) != 0 {
+		t.Fatalf("saved = %d, intents = %d; 并列不落库也不交意图", fixture.store.saved, len(fixture.downstream.intents))
 	}
 }
 

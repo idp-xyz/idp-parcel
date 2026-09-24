@@ -140,7 +140,8 @@ SELECT
         AND (current.lifted_at IS NULL OR current.lifted_at > $2)),
     (SELECT coalesce(jsonb_agg(jsonb_build_object(
             'code', strategy_code, 'version', version, 'scope', applicable_scope,
-            'effective_from', effective_from, 'effective_to', effective_to
+            'effective_from', effective_from, 'effective_to', effective_to,
+            'ranking_form', ranking_form
         ) ORDER BY strategy_code, version), '[]'::jsonb)
        FROM network_routing.route_strategy_version
       WHERE tenant_id = $1 AND effective_from <= $2
@@ -298,8 +299,12 @@ func rebuildCatalogSnapshot(
 		return none, err
 	}
 	for _, row := range strategies {
+		form, err := rankingFormOf(row.RankingForm)
+		if err != nil {
+			return none, fmt.Errorf("译回路由策略族：%w", err)
+		}
 		snapshot.Strategies = append(snapshot.Strategies, ports.RouteStrategyDefinitionVersion{
-			Code: row.Code, Version: row.Version, ApplicableScope: row.Scope,
+			Code: row.Code, Version: row.Version, ApplicableScope: row.Scope, RankingForm: form,
 			EffectiveFrom: row.EffectiveFrom, EffectiveTo: timeOf(row.EffectiveTo),
 			HasEffectiveTo: row.EffectiveTo != nil,
 		})
@@ -401,6 +406,29 @@ type strategyVersionRow struct {
 	Scope         string     `json:"scope"`
 	EffectiveFrom time.Time  `json:"effective_from"`
 	EffectiveTo   *time.Time `json:"effective_to"`
+	RankingForm   *string    `json:"ranking_form"`
+}
+
+// rankingFormColumn 把排序形态写成列值：未声明落 NULL；族外的值在触库前拒——CHECK 也会拒，
+// 但撞 CHECK 会把整个环境事务打进中止态，登记方得到的只是一段约束名。
+func rankingFormColumn(form domain.RankingForm) (*string, error) {
+	if form == domain.RankingFormUndeclared {
+		return nil, nil
+	}
+	name := form.String()
+	if name == "" {
+		return nil, fmt.Errorf("%w: %d", domain.ErrUnknownRankingForm, form)
+	}
+	return &name, nil
+}
+
+// rankingFormOf 译回列值。族外的词报错而不吸收成「未声明」：那是 CHECK 被后续迁移放宽而 Go 侧
+// 没跟上，照「未声明」读会让一版声明过形态的策略在排序时答未配置。
+func rankingFormOf(raw *string) (domain.RankingForm, error) {
+	if raw == nil {
+		return domain.RankingFormUndeclared, nil
+	}
+	return domain.RankingFormFrom(*raw)
 }
 
 // refuseAmbiguity 对一族适用行按身份查重（件②：两版同时适用交回错误不挑一个）。
@@ -617,14 +645,18 @@ func (catalog *NetworkCatalog) RegisterServiceCalendarVersion(
 	return catalog.bumpRevision(ctx, executor, tenant)
 }
 
-// RegisterRouteStrategyVersion 追加一个路由策略版本。规则正文属 PAR-NET-14，这里
-// 只登版本、范围与有效区间。版本纪律同 RegisterNodeVersion。
+// RegisterRouteStrategyVersion 追加一个路由策略版本：版本、范围、有效区间与这一版声明的排序
+// 形态。版本纪律同 RegisterNodeVersion。
 func (catalog *NetworkCatalog) RegisterRouteStrategyVersion(
 	ctx context.Context,
 	tenant domain.TenantID,
 	row ports.RouteStrategyDefinitionVersion,
 ) error {
 	executor, err := catalog.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("register route strategy version: %w", err)
+	}
+	form, err := rankingFormColumn(row.RankingForm)
 	if err != nil {
 		return fmt.Errorf("register route strategy version: %w", err)
 	}
@@ -641,10 +673,10 @@ func (catalog *NetworkCatalog) RegisterRouteStrategyVersion(
 	}
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO network_routing.route_strategy_version
-			(tenant_id, strategy_code, version, applicable_scope, effective_from, effective_to)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
+			(tenant_id, strategy_code, version, applicable_scope, effective_from, effective_to, ranking_form)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		tenant.String(), row.Code, row.Version, row.ApplicableScope,
-		row.EffectiveFrom.UTC(), optionalTime(row.EffectiveTo, row.HasEffectiveTo),
+		row.EffectiveFrom.UTC(), optionalTime(row.EffectiveTo, row.HasEffectiveTo), form,
 	); err != nil {
 		return fmt.Errorf("register route strategy version: %w", err)
 	}

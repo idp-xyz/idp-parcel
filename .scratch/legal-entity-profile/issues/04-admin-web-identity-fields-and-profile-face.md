@@ -1,15 +1,15 @@
 # 04 管理台：法人登记表单加身份两格、法人资料页
 
 Category: enhancement
-Status: ready-for-agent
-Blocked by: 02、03
+Status: in-progress——2026-09-24 通道 3 认领（派单 `task-a5cd823d`），前端切片、共享树 `main` 上直接做；通道 1 裁定第 2 项缺的两处服务端拆给 05，本票先做第 1、3 项与第 2 项的修订历史展示
+Blocked by: 02、03（均已进 main）；第 2 项的登记表单与当前有效区另等 [05](./05-profile-write-isolated-admission-and-as-of-resolution-read.md)
 地盘：`apps/admin-web/src/pages/party/` 下集团与法人页、法人登记表单与其 api 层；新增的纯逻辑 `.ts` 与其 node:test。
 出处：[ADR-0145](../../../docs/adr/0145-legal-entity-attributes-split-into-identity-layer-and-dated-profile.md)；登记表单形状沿 ADR-0101 Decision 八的逐字段表单。
 
 ## 做什么
 
 1. 法人登记表单加注册国家 / 地区与终身注册号（类型从 01 的目录读口取，只列身份层）；更正修订改号时要求填更正依据。
-2. 法人详情加「法人资料」区：当前有效的那一修订、修订历史、登记新修订的表单（含未来生效时点）。
+2. 法人详情加「法人资料」区：当前有效的那一修订、修订历史、登记新修订的表单（含未来生效时点）。当前有效区要 05 的按时点解析读口，登记表单要 05 放开的资料登记写口；修订历史读口今天已在。
 3. 列表与详情上身份两格照答复原样示出；历史修订两格为空时如实写「本修订登记时尚无此格」，不填假值。
 
 ## 不做

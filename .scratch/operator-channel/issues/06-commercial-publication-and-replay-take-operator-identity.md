@@ -1,7 +1,7 @@
 # 06 商业发布批准链与计价回放端点接上操作者身份
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
 Blocked by: 04
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`cmd/parcel-api` 里商业发布（`/commercial-publications`）与计价回放（`/pricing-evaluation-replays`）两处的 Intake 装配，以及把 `OperatorEnvelope` 译成 party-commercial「操作者主体引用 + 授予集」消费面的那一段。

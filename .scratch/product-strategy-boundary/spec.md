@@ -25,7 +25,7 @@ Status: in-progress——2026-09-24 通道 4 按用户授权自决立 ADR-0146 �
 | [12](./issues/12-sa-amount-grammars-allocation-forms-and-accounting-connectors.md) | SA：金额文法、分摊与周期费用形态、经营指标方法与账务连接器 | needs-triage |
 | [13](./issues/13-pg-hard-risk-detection-and-evidence-storage-connector.md) | PG：硬风险检测形态、证据存储连接器与回放差异分类 | needs-triage |
 | [14](./issues/14-pp-postal-prefix-granularity-and-public-unit-reference-configuration.md) | PP：邮编前缀匹配形态与公开标准的参考配置 | needs-triage · 参考配置那半 Blocked by 03 |
-| [15](./issues/15-operator-channel-per-adr-0100.md) | 横切：ADR-0100 操作者渠道落地 | in-progress · 跟踪容器，子票在 [`operator-channel/`](../operator-channel/issues/) 01–09（draft，拆法待认可） |
+| [15](./issues/15-operator-channel-per-adr-0100.md) | 横切：ADR-0100 操作者渠道落地 | in-progress · 跟踪容器，子票在 [`operator-channel/`](../operator-channel/issues/) 01–14（拆法经用户授权自决认可；09 落成 ADR-0149） |
 | [16](./issues/16-mechanism-gaps-without-a-ticket.md) | 机制缺口：重定级表第一项里尚无票的几处 | needs-triage · 按上下文拆 |
 
 走法：01、02、05 只动文档与票面，一人在共享树上顺序做；03、04 碰 Go / SQL，走[并行会话](../../docs/agents/parallel-sessions.md)那条路。

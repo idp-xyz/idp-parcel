@@ -161,6 +161,11 @@ var isolatedReadAdmittedPatterns = map[string]bool{
 	// 在路径上、租户仍只从注入作用域取；只列修订事实，不做按时点解析。登记写行挂的是字面量 UnconfiguredIntake{}。
 	// 经真路由期待 500 而不是 400，同样钉住 chi 把 {legalEntityId} 填进了 PathValue。单列在表尾的理由同上。
 	"/commercial-group-legal-entities/{legalEntityId}/profile-revisions": true,
+	// 法人资料按时点解析（票 legal-entity-profile/05）与商业目录查阅共用同一个 Intake 变量，启用态必然随它一起放行。三条
+	// 判据逐条满足：消费本上下文自己的存储读面（法人登记册与资料修订链，解析用例只读不写）、零持久化、作用域来自运营侧授权
+	// 结果——法人在路径上、时点在查询串上、租户仍只从注入作用域取。探针带合法的 `at`，启用态才走得到未接线读口答 500
+	// 而不是停在 400。单列在表尾的理由同上。
+	"/commercial-group-legal-entities/{legalEntityId}/profile-resolution": true,
 }
 
 // Covers: ADR-0078 Decision 一、二 — 启用态只放运营查阅行。unwired* 读口交回稳定

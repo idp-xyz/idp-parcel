@@ -428,6 +428,41 @@ func TestAnEmptyFamilyAnswersAnEmptyArray(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0146 决定二的查阅半边——路由策略版本声明的排序形态随行透出；没声明的版本缺这
+// 一格而不是给个空串，读的人分得出「选了哪一种」与「还没选」。
+func TestRouteStrategyVersionsShowTheirDeclaredRankingForm(t *testing.T) {
+	effective := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
+	endpoint := networkhttp.NewQueryNetworkCatalogEndpoint(
+		grantedCatalogueIntake{tenant: "TENANT-1", limit: 25},
+		&stubCatalogReader{strategies: []ports.RouteStrategyDefinitionVersion{
+			{Code: "strategy-declared", Version: 1, ApplicableScope: "scope-1",
+				RankingForm: domain.CostSingleDimensionRanking, EffectiveFrom: effective},
+			{Code: "strategy-undeclared", Version: 1, ApplicableScope: "scope-1", EffectiveFrom: effective},
+		}},
+	)
+	response := httptest.NewRecorder()
+	endpoint.ServeHTTP(response, catalogRequest(t, "?family=route-strategy"))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+	}
+	var body struct {
+		Versions []map[string]json.RawMessage `json:"versions"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode %s: %v", response.Body.Bytes(), err)
+	}
+	if len(body.Versions) != 2 {
+		t.Fatalf("versions = %s", response.Body.String())
+	}
+	if string(body.Versions[0]["rankingForm"]) != `"COST_SINGLE_DIMENSION"` {
+		t.Fatalf("声明过形态的版本没透出形态：%s", response.Body.String())
+	}
+	if _, present := body.Versions[1]["rankingForm"]; present {
+		t.Fatalf("没声明形态的版本长出了 rankingForm：%s", response.Body.String())
+	}
+}
+
 // Covers: ADR-0022/ADR-0029 — 读不回是答案未形成（5xx），不伪装成空族：前者该重试，
 // 后者是终局答案。
 func TestAFailingCatalogueReadIsNoAnswerRatherThanAnEmptyFamily(t *testing.T) {

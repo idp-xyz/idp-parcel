@@ -332,7 +332,7 @@ var adjustmentFamily = catalogFamily[ports.AvailabilityAdjustmentStatement]{
 var routeStrategyFamily = catalogFamily[ports.RouteStrategyDefinitionVersion]{
 	operation: "list route strategy versions",
 	table:     "network_routing.route_strategy_version",
-	selection: "strategy_code, version, applicable_scope, effective_from, effective_to",
+	selection: "strategy_code, version, applicable_scope, effective_from, effective_to, ranking_form",
 	sorts: map[string]keyColumn{
 		"code":          {"strategy_code", cataloguepage.Text},
 		"effectiveFrom": byEffectiveFrom,
@@ -343,12 +343,15 @@ var routeStrategyFamily = catalogFamily[ports.RouteStrategyDefinitionVersion]{
 	scan: func(rows pgx.Rows) (ports.RouteStrategyDefinitionVersion, error) {
 		var row ports.RouteStrategyDefinitionVersion
 		var effectiveTo *time.Time
+		var form *string
 		if err := rows.Scan(&row.Code, &row.Version, &row.ApplicableScope,
-			&row.EffectiveFrom, &effectiveTo); err != nil {
+			&row.EffectiveFrom, &effectiveTo, &form); err != nil {
 			return row, err
 		}
 		row.EffectiveTo, row.HasEffectiveTo = timeOf(effectiveTo), effectiveTo != nil
-		return row, nil
+		var err error
+		row.RankingForm, err = rankingFormOf(form)
+		return row, err
 	},
 	sortValues: func(row ports.RouteStrategyDefinitionVersion) map[string]string {
 		return map[string]string{"code": row.Code, "effectiveFrom": cataloguepage.FormatInstant(row.EffectiveFrom)}

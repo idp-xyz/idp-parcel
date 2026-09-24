@@ -2,8 +2,11 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
@@ -213,6 +216,59 @@ func TestCatalogueFamiliesDoNotBleedIntoEachOther(t *testing.T) {
 	}
 	if adjustments[1].Version != 2 || !adjustments[1].HasLiftedAt {
 		t.Fatalf("调整链次行应为带解除时间的版本 2，实得 %+v", adjustments[1])
+	}
+}
+
+// Covers: ADR-0146 决定二——路由策略版本带它声明的排序形态登记并读回；没声明的版本读回仍是
+// 未声明（不替租户选），族外的形态值适配器拒写、库里不留行；绕过适配器直接写族外词，由库面
+// CHECK 拦下（与领域形态集合同格的第二道网）。
+func TestARouteStrategyVersionCarriesItsDeclaredRankingForm(t *testing.T) {
+	catalog, transactor, pool := newNetworkCatalog(t)
+	ctx := t.Context()
+	tenant := scalar(t, domain.NewTenantID, "tenant-1")
+	effective := catalogAsOf.Add(-time.Hour)
+
+	within(t, transactor, ctx, func(txCtx context.Context) error {
+		if err := catalog.RegisterRouteStrategyVersion(txCtx, tenant, ports.RouteStrategyDefinitionVersion{
+			Code: "strategy-declared", Version: 1, ApplicableScope: "scope-declared",
+			EffectiveFrom: effective, RankingForm: domain.CostSingleDimensionRanking,
+		}); err != nil {
+			return err
+		}
+		return catalog.RegisterRouteStrategyVersion(txCtx, tenant, ports.RouteStrategyDefinitionVersion{
+			Code: "strategy-undeclared", Version: 1, ApplicableScope: "scope-declared",
+			EffectiveFrom: effective,
+		})
+	})
+	outsideFamily := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		return catalog.RegisterRouteStrategyVersion(txCtx, tenant, ports.RouteStrategyDefinitionVersion{
+			Code: "strategy-outside", Version: 1, ApplicableScope: "scope-declared",
+			EffectiveFrom: effective, RankingForm: domain.RankingForm(99),
+		})
+	})
+	if outsideFamily == nil {
+		t.Fatal("族外的排序形态值被写进了目录")
+	}
+
+	page, err := catalog.ListRouteStrategyVersions(ctx, tenant, 10, firstPage(t, ports.RouteStrategyVersionCatalogue))
+	if err != nil {
+		t.Fatalf("列路由策略族：%v", err)
+	}
+	forms := map[string]domain.RankingForm{}
+	for _, row := range page.Rows {
+		forms[row.Code] = row.RankingForm
+	}
+	if len(page.Rows) != 2 || forms["strategy-declared"] != domain.CostSingleDimensionRanking ||
+		forms["strategy-undeclared"] != domain.RankingFormUndeclared {
+		t.Fatalf("读回的排序形态走样：%+v", page.Rows)
+	}
+
+	_, err = pool.Exec(ctx, `INSERT INTO network_routing.route_strategy_version
+		(tenant_id, strategy_code, version, applicable_scope, effective_from, ranking_form)
+		VALUES ('tenant-1', 'strategy-raw', 1, 'scope-declared', now(), 'TIMELINESS_FIRST')`)
+	var pgErr *pgconn.PgError
+	if !errors.As(err, &pgErr) || pgErr.ConstraintName != "route_strategy_version_ranking_form_known" {
+		t.Fatalf("库面放行了族外的排序形态：%v", err)
 	}
 }
 
