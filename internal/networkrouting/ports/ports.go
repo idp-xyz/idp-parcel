@@ -145,7 +145,10 @@ type CandidatePath struct {
 
 // InitialRouteEvidence 是一次初始路由判断所需的版本化事实（UC-NR-001 层次 1–4 的输入
 // 清单）。与可达性证据同一条 ADR-0046 纪律：端口只取事实不做评估，事实与修订一次取回。
-// 排序准则序、分值量纲、日历与缓冲取值全属实例半边（PAR-NET-14）。
+// 日历与缓冲取值属租户取值。
+//
+// RankingForm 是 Strategy 所指那一版声明的排序形态，零值即该版未声明；CandidateCosts 按
+// 形态要的维度给出逐候选事实，每个合格候选恰一条——待判断与不可计价各有一格，不以缺席表达。
 type InitialRouteEvidence struct {
 	ServiceAreas      []domain.ServiceAreaResolution
 	RouteRequirements []domain.RouteRequirement
@@ -153,8 +156,8 @@ type InitialRouteEvidence struct {
 	HardConstraints   []domain.HardConstraintFinding
 	Projections       []domain.CandidateTimeProjection
 	CommittedBound    domain.CommittedTimeBound
-	Scores            []domain.CandidateScores
-	Priority          []domain.RankingCriterion
+	RankingForm       domain.RankingForm
+	CandidateCosts    []domain.CandidateCostFact
 	Paths             []CandidatePath
 	Strategy          domain.RouteStrategyReference
 	ViewRevision      domain.NetworkViewRevision

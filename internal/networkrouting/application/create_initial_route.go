@@ -95,6 +95,15 @@ const (
 	RouteHandoffLogUnavailable
 	RoutingApplicabilityUnavailable
 	RouteEvidenceSuperseded
+	// RouteRankingFormNotConfigured 是路由策略版本没有声明排序形态：等租户选形态（ADR-0146），
+	// 与证据未配置同属「等登记」，但要登记的是另一样东西。
+	RouteRankingFormNotConfigured
+	// RouteCandidatesTied 是最低成本并列、选不出唯一一条（`PAR-NET-16`）：候选可行、等授权角色
+	// 裁，所以既不是计划也不是`无当前有效路由`。
+	RouteCandidatesTied
+	// RouteCandidateCostsNotPriced 是合格候选全部缺成本事实（待判断或不可计价）而无一可比。
+	RouteCandidateCostsNotPriced
+	RouteCandidateCostCurrenciesDiffer
 )
 
 func (reason RouteUndecidedReason) String() string {
@@ -117,6 +126,14 @@ func (reason RouteUndecidedReason) String() string {
 		return "ROUTING_APPLICABILITY_UNAVAILABLE"
 	case RouteEvidenceSuperseded:
 		return "ROUTE_EVIDENCE_SUPERSEDED"
+	case RouteRankingFormNotConfigured:
+		return "RANKING_FORM_NOT_CONFIGURED"
+	case RouteCandidatesTied:
+		return "CANDIDATES_TIED"
+	case RouteCandidateCostsNotPriced:
+		return "CANDIDATE_COSTS_NOT_PRICED"
+	case RouteCandidateCostCurrenciesDiffer:
+		return "CANDIDATE_COST_CURRENCIES_DIFFER"
 	default:
 		return ""
 	}
@@ -132,7 +149,7 @@ type CreateInitialRouteCommand struct {
 }
 
 // ParcelRouteResult 是一个包裹的独立结果。计划与无路由各按在场标志给出，未决带原因与
-// 续办引用。
+// 续办引用；并列的未决另带全部候选与并列的那几家，授权角色裁的时候要看得见在哪几家之间裁。
 type ParcelRouteResult struct {
 	key          domain.InitialRouteJudgmentKey
 	outcome      ParcelRouteOutcome
@@ -143,6 +160,8 @@ type ParcelRouteResult struct {
 	reason       RouteUndecidedReason
 	continuation ContinuationReference
 	handoff      ContinuationReference
+	candidates   []domain.RouteCandidate
+	tied         []domain.CandidateID
 }
 
 func (result ParcelRouteResult) Key() domain.InitialRouteJudgmentKey {
@@ -172,6 +191,15 @@ func (result ParcelRouteResult) ContinuationReference() ContinuationReference {
 // RouteHandoffReference 非空说明结果已提交但意图还没交出去，重放会重发同一份。
 func (result ParcelRouteResult) RouteHandoffReference() ContinuationReference {
 	return result.handoff
+}
+
+// Candidates 只在`候选并列`时给出：本轮评估过的全部候选及各自的选择或淘汰依据。
+func (result ParcelRouteResult) Candidates() []domain.RouteCandidate {
+	return append([]domain.RouteCandidate(nil), result.candidates...)
+}
+
+func (result ParcelRouteResult) TiedCandidates() []domain.CandidateID {
+	return append([]domain.CandidateID(nil), result.tied...)
 }
 
 type CreateInitialRouteResult struct {
@@ -367,14 +395,33 @@ func (handler *CreateInitialRouteHandler) judgeParcel(
 	}
 
 	judgedAt := handler.deps.Clock.Now()
-	selected, err := domain.SelectRouteCandidate(candidates, evidence.Scores, evidence.Priority)
-	switch {
-	case errors.Is(err, domain.ErrNoQualifiedCandidate):
-		return handler.noRouteRecord(key, candidates, evidence, judgedAt)
-	case err != nil:
-		return none, nil, fmt.Errorf("select route candidate: %w", err)
+	ranking, err := domain.RankRouteCandidates(evidence.RankingForm, candidates, evidence.CandidateCosts)
+	if err != nil {
+		return none, nil, fmt.Errorf("rank route candidates: %w", err)
 	}
-	return handler.planRecord(ctx, key, selected, candidates, evidence, judgedAt)
+	switch ranking.Outcome() {
+	case domain.RankingSelected:
+		selected, _ := ranking.Selected()
+		return handler.planRecord(ctx, key, selected, candidates, evidence, judgedAt)
+	case domain.RankingNoQualifiedCandidate:
+		return handler.noRouteRecord(key, candidates, evidence, judgedAt)
+	case domain.RankingTied:
+		undecided := handler.undecidedParcel(key, RouteCandidatesTied)
+		undecided.candidates = append([]domain.RouteCandidate(nil), candidates...)
+		undecided.tied = ranking.Tied()
+		return none, &undecided, nil
+	case domain.RankingFormNotDeclared:
+		undecided := handler.undecidedParcel(key, RouteRankingFormNotConfigured)
+		return none, &undecided, nil
+	case domain.RankingNoPricedCandidate:
+		undecided := handler.undecidedParcel(key, RouteCandidateCostsNotPriced)
+		return none, &undecided, nil
+	case domain.RankingCurrenciesDiffer:
+		undecided := handler.undecidedParcel(key, RouteCandidateCostCurrenciesDiffer)
+		return none, &undecided, nil
+	default:
+		return none, nil, fmt.Errorf("network routing: unhandled ranking outcome %d", ranking.Outcome())
+	}
 }
 
 // planRecord 为选中候选形成待提交的计划记录。

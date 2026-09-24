@@ -92,6 +92,17 @@ func EvaluateAutoRerouteConditions(facts AutoRerouteFacts) (RerouteAuthority, []
 	return AutomaticRerouteAllowed, nil
 }
 
+// LowestCostTieBlockers 是四个自动条件都立、而最低成本并列选不出唯一一条时，建议要携带的
+// 「为什么没自动」清单：逐家点名并列候选，授权角色据此知道在哪几家之间裁（`PAR-NET-16`
+// 「不得任选」）。
+func LowestCostTieBlockers(tied []CandidateID) []string {
+	blockers := make([]string, 0, len(tied))
+	for _, candidate := range tied {
+		blockers = append(blockers, "LOWEST_COST_TIED/"+candidate.String())
+	}
+	return blockers
+}
+
 // RerouteTriggerReference 指名触发本次改路的原因事实（连接关闭、错过截单、实测变化……）。
 type RerouteTriggerReference struct{ requiredValue }
 
