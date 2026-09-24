@@ -30,12 +30,13 @@ type IsolatedCommandIntake struct {
 
 // 已成笔的口。每放一口在这里多一行断言、多一个方法，装配点多换一行。
 var (
-	_ PickupRegistrationIntake    = (*IsolatedCommandIntake)(nil)
-	_ PickupAttemptIntake         = (*IsolatedCommandIntake)(nil)
-	_ CarrierPickupJudgmentIntake = (*IsolatedCommandIntake)(nil)
-	_ HandoverRegistrationIntake  = (*IsolatedCommandIntake)(nil)
-	_ MovementFactIntake          = (*IsolatedCommandIntake)(nil)
-	_ DispatchTaskIntake          = (*IsolatedCommandIntake)(nil)
+	_ PickupRegistrationIntake      = (*IsolatedCommandIntake)(nil)
+	_ PickupAttemptIntake           = (*IsolatedCommandIntake)(nil)
+	_ CarrierPickupJudgmentIntake   = (*IsolatedCommandIntake)(nil)
+	_ HandoverRegistrationIntake    = (*IsolatedCommandIntake)(nil)
+	_ MovementFactIntake            = (*IsolatedCommandIntake)(nil)
+	_ DispatchTaskIntake            = (*IsolatedCommandIntake)(nil)
+	_ DeliveryDispatchTriggerIntake = (*IsolatedCommandIntake)(nil)
 )
 
 // IsolatedCommandIntakeDeps 是构造本 Intake 的全部输入，全部是装配点给定的合成值。
@@ -126,6 +127,19 @@ func (intake *IsolatedCommandIntake) IntakeDispatchTask(
 	var payload DispatchTaskPayload
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.OpenDispatchTaskCommand{}, err
+	}
+	return payload.Command(intake.tenant)
+}
+
+// IntakeDeliveryDispatchTrigger 译末端派送任务内部触发的一拍（`/transport-fulfillment-delivery-dispatch-triggers`）。谁按拍调、
+// 拍频多大属调用方（实例半边）；隔离形态只让这一拍能被调用，不替它定拍频。
+func (intake *IsolatedCommandIntake) IntakeDeliveryDispatchTrigger(
+	_ context.Context,
+	request *http.Request,
+) (application.TriggerDeliveryDispatchCommand, error) {
+	var payload DeliveryDispatchTriggerPayload
+	if err := decodeClosedPayload(request.Body, &payload); err != nil {
+		return application.TriggerDeliveryDispatchCommand{}, err
 	}
 	return payload.Command(intake.tenant)
 }

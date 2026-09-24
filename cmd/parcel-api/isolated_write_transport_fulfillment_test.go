@@ -114,6 +114,19 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 		status:  http.StatusCreated,
 		outcome: "DISPATCH_TASK_OPENED",
 	},
+	// 派送发起的一拍：段不在册——执行器如实答`不是触发事实`（SEGMENT_NOT_FOUND），形成了的业务答案，200。
+	"/transport-fulfillment-delivery-dispatch-triggers": {
+		endpoint: func(t *testing.T, db *bentopg.DB, intake *tfhttp.IsolatedCommandIntake) http.Handler {
+			trigger, err := buildDeliveryDispatchTrigger(db)
+			if err != nil {
+				t.Fatalf("装配派送发起执行器：%v", err)
+			}
+			return tfhttp.NewTriggerDeliveryDispatchEndpoint(intake, trigger)
+		},
+		body:    `{"segment":"SYN-SEGMENT-08-09","object":"SYN-PARCEL-08-09","occurredAt":"2026-09-25T07:00:00+08:00"}`,
+		status:  http.StatusOK,
+		outcome: "NOT_A_DELIVERY_TRIGGER",
+	},
 }
 
 // Covers: 票 operator-channel/08 完成判据「隔离环境里上列各口对合成写答业务结果而不是 ACCESS_CHANNEL_NOT_CONFIGURED」——
