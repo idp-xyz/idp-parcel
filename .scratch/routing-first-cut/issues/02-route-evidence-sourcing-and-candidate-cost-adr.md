@@ -30,3 +30,4 @@ Blocked by: 无
 ## Comments
 
 - 2026-09-24 通道 5：草案 [ADR-0148](../../../docs/adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 已落（Proposed），上列各问各有决定，越权风险点点名 PS、PP、CC、SA owner 与用户各复核哪一条；索引补了一行。本票保持 in-progress：判据要 Accepted，接受归用户或其明确授权（用户授权自决的是 psb04 的拆法，不含本 ADR）。CONTEXT 与 CONTEXT-MAP 的引用句照草案先例留到接受那一笔再加，届时本票转 resolved。关务一侧确认缺执行器（CC 没有按路由候选作答的关务适用性判断口），已登 [psb/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 格 6 并报通道 1 另立票。
+- 2026-09-24 通道 5：用户问「专业、科学的解决方案」，通道 5 建议后用户答「按你的建议吧」，据此修订 ADR-0148 决定四与越权风险点一、二——候选成本按比较币种合成（比较币种是路由策略版本上的租户取值，汇率口径由所引价格政策声明，换算归 PP、逐段留痕，先合计后取整一次）；每段成本依据是 BUY 评价或内部价格政策评价，自营段走后者；公共段剔除列为允许的优化。修订后仍为 Proposed：用户这句是让按建议改草案，接受仍待用户明言或明确授权。
