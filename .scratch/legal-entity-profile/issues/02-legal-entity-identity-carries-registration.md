@@ -1,7 +1,7 @@
 # 02 责任法人身份登记加注册国家 / 地区与终身注册号
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——2026-09-24 通道 3 认领：分支 `mcp3-lep02`，基 `mcp4-lep01` tip `6db15aa5`（票 01 已经非作者评审可接受、待推送方重放；重放时只取本票的笔）。迁移编号占 party-commercial `0034`（`0035` 留给 catalogue-read-pagination/02）
 Blocked by: 01
 地盘：party-commercial 责任法人身份登记的领域、应用、postgres 与 http 适配器（含 `query_party_identities.go` 的 `groupLegalEntityBody`），`migrations/` 下
 party-commercial 模块的新迁移，演示种子。
