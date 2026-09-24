@@ -118,6 +118,7 @@ var expectedWriteAdmittedLines = map[string]bool{
 	"/transport-fulfillment-effective-time-judgments":                 true,
 	"/customs/external-results":                                       true,
 	"/customs-regulatory-credential-registrations":                    true,
+	"/settlement-external-funds-fact-registrations":                   true,
 }
 
 // Covers: ADR-0091 Consequences「命令面按端点逐口放行，不是一次全开」 — 写面放行只及名单里那几行，其余命令面
@@ -130,7 +131,7 @@ func TestIsolatedWriteAdmissionSwitchesOnlyTheAdmittedCommandLines(t *testing.T)
 	router := httpapi.NewWithEndpoints(buildinfo.Info{},
 		assembleUnwiredBusinessEndpointsWith(nil, isolatedSubmissionIntakeForTest(t), isolatedPartyIdentityIntakeForTest(t),
 			isolatedWriteAdmissionForTest(t).nodeOperationsIntake(), isolatedWriteAdmissionForTest(t).transportFulfillmentIntake(),
-			isolatedWriteAdmissionForTest(t).customsIntake()))
+			isolatedWriteAdmissionForTest(t).customsIntake(), isolatedWriteAdmissionForTest(t).settlementIntake()))
 
 	for pattern, probe := range businessEndpointProbes {
 		response := httptest.NewRecorder()
@@ -213,6 +214,17 @@ func TestBuildIsolatedWriteAdmissionGrantsTheCustomsIntake(t *testing.T) {
 	var disabled *isolatedWriteAdmission
 	if disabled.customsIntake() != nil {
 		t.Fatal("未启用时交回了非 nil 的 Intake——装配点那几行会被换掉，生产形态就变了")
+	}
+}
+
+// Covers: 票 operator-channel/08 — 结算的隔离命令 Intake 同上：只收租户，随各格一起就位，未启用时交回 nil。
+func TestBuildIsolatedWriteAdmissionGrantsTheSettlementIntake(t *testing.T) {
+	if isolatedWriteAdmissionForTest(t).settlementIntake() == nil {
+		t.Fatal("结算隔离命令 Intake 为空——外部资金事实采用口会照旧答 403")
+	}
+	var disabled *isolatedWriteAdmission
+	if disabled.settlementIntake() != nil {
+		t.Fatal("未启用时交回了非 nil 的 Intake——装配点那一行会被换掉，生产形态就变了")
 	}
 }
 
