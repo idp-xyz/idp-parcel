@@ -134,6 +134,10 @@ var swappedRegistryFaces = []string{
 	"/network-catalog-service-calendar-registrations",
 	"/network-catalog-availability-adjustment-registrations",
 	"/network-catalog-route-strategy-registrations",
+	"/pricing-reference-series-registrations",
+	"/pricing-reference-series-reviews",
+	"/pricing-reference-series-previews",
+	"/pricing-reference-catalogue-registrations",
 }
 
 // failingRegister 是读不动的操作者册；readerRegister 只有查阅授予、没有登记写授予。

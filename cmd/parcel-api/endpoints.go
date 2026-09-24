@@ -426,18 +426,18 @@ func assembleBusinessEndpoints(
 		// 与其 CLI 命令一一对应（裁决在端点构造函数注释）；登记 CLI 保留为受控批量口，
 		// 两口消费同一登记用例，答案代数一致。
 		{Pattern: "/pricing-price-card-registrations", Handler: pricinghttp.NewRegisterPriceCardEndpoint(pricinghttp.UnconfiguredIntake{}, priceCardRegistration)},
-		{Pattern: "/pricing-reference-series-registrations", Handler: pricinghttp.NewRegisterReferenceSeriesEndpoint(pricinghttp.UnconfiguredIntake{}, referenceSeriesRegistration)},
+		{Pattern: "/pricing-reference-series-registrations", Handler: pricinghttp.NewRegisterReferenceSeriesEndpoint(operatorRegistries.pricing, referenceSeriesRegistration)},
 		// 序列版本复核（ADR-0099 决定二，票 pricing-reference-series-operations/04）：治理
 		// 动作也是命令行，同挂字面量 UnconfiguredIntake{}。**这一口比两个登记口更不能松**
 		// ——复核责任方是四眼门的一半，任何采信自报身份的 Intake 都等于把那道门拆了。
-		{Pattern: "/pricing-reference-series-reviews", Handler: pricinghttp.NewReviewReferenceSeriesEndpoint(pricinghttp.UnconfiguredIntake{}, referenceSeriesReview)},
+		{Pattern: "/pricing-reference-series-reviews", Handler: pricinghttp.NewReviewReferenceSeriesEndpoint(operatorRegistries.pricing, referenceSeriesReview)},
 		// 序列登记前预览（票 pricing-reference-series-operations/08，ADR-0101 决定四）：不写库，
 		// 但拟登本体要信封里的租户与登记责任方才立得住，等的与登记口是同一样东西，所以同挂
 		// 字面量 UnconfiguredIntake{}，不走查阅行的 Intake 变量——隔离读放行装不进它（编译期）。
-		{Pattern: "/pricing-reference-series-previews", Handler: pricinghttp.NewPreviewReferenceSeriesEndpoint(pricinghttp.UnconfiguredIntake{}, referenceSeriesPreview)},
+		{Pattern: "/pricing-reference-series-previews", Handler: pricinghttp.NewPreviewReferenceSeriesEndpoint(operatorRegistries.pricing, referenceSeriesPreview)},
 		// 计价参考目录登记写面（ADR-0109 Decision 二，票 price-card-shape-gaps/01）：模板导入的命令行，
 		// 同挂字面量 UnconfiguredIntake{}，判据同两个登记口。
-		{Pattern: "/pricing-reference-catalogue-registrations", Handler: pricinghttp.NewRegisterReferenceCatalogueEndpoint(pricinghttp.UnconfiguredIntake{}, referenceCatalogueRegistration)},
+		{Pattern: "/pricing-reference-catalogue-registrations", Handler: pricinghttp.NewRegisterReferenceCatalogueEndpoint(operatorRegistries.pricing, referenceCatalogueRegistration)},
 		// 评价回放的治理触发面（ADR-0124 决定一，票 wiring-baseline-remainder/06）：治理动作也是命令行，
 		// 同挂字面量 UnconfiguredIntake{}——触发者来自操作者信封，任何采信自报身份或替它填证据层级的
 		// Intake 都不能有；路径按动词叫 `-replays`，判据同复核口叫 `-reviews`。回放结果不交结算，
