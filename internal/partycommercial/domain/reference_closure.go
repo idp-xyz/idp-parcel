@@ -25,9 +25,12 @@ type ClosureResolutionKey struct {
 	Settlement SettlementSelector
 	// Credit 只在必需依据含信用政策时有意义（ADR-0127）：含则两维必填、不含则必缺。它与
 	// 单依据键上的形状相同——信用政策没有由本闭包解出的那一维。
-	Credit        CreditSelector
-	Anchor        SelectionAnchor
-	RequiredBases []CommercialObjectKind
+	Credit CreditSelector
+	// ServiceProduct 是委托声明请求的服务产品（对象身份，不是版本）。只在必需依据含服务产品时可在场：收窄一个本次
+	// 不解的产品无从谈起。在场时它随 singleBasisKey 带给每一项成员，收窄规则见 ResolutionKey 同名字段。
+	ServiceProduct CommercialObjectID
+	Anchor         SelectionAnchor
+	RequiredBases  []CommercialObjectKind
 }
 
 func (key ClosureResolutionKey) requires(kind CommercialObjectKind) bool {
@@ -82,6 +85,9 @@ func (key ClosureResolutionKey) minimumIdentityEstablished() bool {
 	} else if !key.Credit.empty() {
 		return false
 	}
+	if key.ServiceProduct.valid() && !key.requires(ServiceProductObject) {
+		return false
+	}
 
 	seen := make(map[CommercialObjectKind]struct{}, len(key.RequiredBases))
 	for _, kind := range key.RequiredBases {
@@ -118,10 +124,12 @@ func (key ClosureResolutionKey) fingerprint() string {
 	}, bases...), "\x00")
 }
 
-// singleBasisKey 一律不携带选择器：单依据键要求结算与信用之外的成员选择器缺席，无差别透传
+// singleBasisKey 不携带结算与信用选择器：单依据键要求结算与信用之外的成员选择器缺席，无差别透传
 // 会让整个闭包被误判输入未受理。结算政策那一项走 settlementBasisKey，它要等合同解出来才形
 // 得成——本方法给不出那一维，因此这里不为它开口子（ADR-0080）；信用政策那一项走
 // creditBasisKey（ADR-0127）。
+//
+// 声明的服务产品照带：它没有「只对某一种依据在场」的纪律，指名了别的产品的规则包也要随之落选。
 func (key ClosureResolutionKey) singleBasisKey(kind CommercialObjectKind) ResolutionKey {
 	return ResolutionKey{
 		TenantID:             key.TenantID,
@@ -131,6 +139,7 @@ func (key ClosureResolutionKey) singleBasisKey(kind CommercialObjectKind) Resolu
 		RequiredBasis:        kind,
 		Purpose:              key.Purpose,
 		PriceDirection:       key.PriceDirection,
+		ServiceProduct:       key.ServiceProduct,
 		Anchor:               key.Anchor,
 	}
 }
