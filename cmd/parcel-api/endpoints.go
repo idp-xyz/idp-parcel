@@ -159,16 +159,18 @@ func assembleBusinessEndpoints(
 	isolatedRead *isolatedReadIntakes,
 	isolatedSubmission shipmenthttp.SubmissionIntake,
 	isolatedPartyIdentity *commercialhttp.IsolatedPartyIdentityIntake,
+	isolatedNodeOperations *nodeopshttp.IsolatedCommandIntake,
 ) []httpapi.BusinessEndpoint {
 	// 缺省朝拦：各隔离入参都为 nil 时，下面这组变量全取未配置即拒，整份装配与
 	// ADR-0078/0091 之前逐字节同形。
 	//
 	// **读写入参各换各的行，互不顶替**（ADR-0091 决定四把开关也分成了两个）：isolatedRead
 	// 换查阅行，isolatedSubmission 只换 `/shipment-requests` 一行，isolatedPartyIdentity 只换
-	// `/commercial-*` 身份族里已成笔的那几行。其余命令面仍挂字面量 `UnconfiguredIntake{}`，
+	// `/commercial-*` 身份族里已成笔的那几行，各上下文的隔离命令 Intake（isolatedNodeOperations 等）只换
+	// 主链命令面里已成笔的那几行。其余命令面仍挂字面量 `UnconfiguredIntake{}`，
 	// 不经由任何变量——读这段代码就能看出它们两个开关都换不了。这句从前说的是「命令面全都
-	// 换不了」，ADR-0091 让提交那一行成了例外，票 06 又让身份族逐口成为例外，因此改成现在
-	// 这句；剩下那几行的字面量纪律一字未松。
+	// 换不了」，ADR-0091 让提交那一行成了例外，票 06 又让身份族逐口成为例外，票 operator-channel/08
+	// 再让主链命令面逐口成为例外，因此改成现在这句；剩下那几行的字面量纪律一字未松。
 	shipmentViewsIntake := shipmenthttp.ShipmentRequestViewsIntake(shipmenthttp.UnconfiguredIntake{})
 	labelTransactionIntake := shipmenthttp.LabelTransactionQueryIntake(shipmenthttp.UnconfiguredIntake{})
 	channelSelectionDecisionIntake := shipmenthttp.ChannelSelectionDecisionQueryIntake(shipmenthttp.UnconfiguredIntake{})
@@ -225,6 +227,13 @@ func assembleBusinessEndpoints(
 		legalEntityProfileRegistrationIntake = isolatedPartyIdentity
 	}
 
+	// 主链命令面按 ADR-0091 逐口放行（票 operator-channel/08）：每个上下文一个隔离命令 Intake 类型、每口一个变量，一个
+	// 上下文一个 if，不并进上面任何一个 if——理由同提交口那段。入参是具体类型：它此刻实现了哪几口，下面就只换得了哪几行。
+	receptionIntake := nodeopshttp.ReceptionIntake(nodeopshttp.UnconfiguredIntake{})
+	if isolatedNodeOperations != nil {
+		receptionIntake = isolatedNodeOperations
+	}
+
 	return []httpapi.BusinessEndpoint{
 		{Pattern: "/shipment-requests", Handler: shipmenthttp.NewSubmitShipmentRequestEndpoint(submissionIntake, submission)},
 		{Pattern: "/shipment-requests/withdrawals", Handler: shipmenthttp.NewWithdrawShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, withdrawal)},
@@ -267,7 +276,7 @@ func assembleBusinessEndpoints(
 		// 准入形同面单交易（只有租户维，本册没有账户维可分），自立 Intake 变量、随同一个隔离读开关换值；读口是
 		// 决定登记册本尊（两个契约一只适配器）。择优编排今天无生产装配点，接线前这一口读到的是空册，空册是如实答案。
 		{Pattern: "/channel-selection-decisions", Handler: shipmenthttp.NewQueryChannelSelectionDecisionsEndpoint(channelSelectionDecisionIntake, channelSelectionDecisions)},
-		{Pattern: "/node-operations/receptions", Handler: nodeopshttp.NewReceiveDeliveredUnitEndpoint(nodeopshttp.UnconfiguredIntake{}, reception)},
+		{Pattern: "/node-operations/receptions", Handler: nodeopshttp.NewReceiveDeliveredUnitEndpoint(receptionIntake, reception)},
 		// 节点作业与运输履约查阅页（票 admin-skeleton-closure-batch/05）各一口按
 		// registry 分派（NO 三册、TF 四册）：分派对应「一页里的页签」。命令端点在上，
 		// 用的是字面量 UnconfiguredIntake{}；查阅行走本上下文自己的 Intake 变量，
