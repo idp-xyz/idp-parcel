@@ -313,6 +313,11 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 运营试算编排（ADR-0152）：接真不等操作者 Intake，判据同回放——未配置 Intake 拒在编排之前。
+	pricingEstimate, err := buildPricingEstimateOrchestration(db)
+	if err != nil {
+		return err
+	}
 	networkCatalog, err := nrpostgres.NewNetworkCatalog(db)
 	if err != nil {
 		return err
@@ -504,6 +509,7 @@ func run(logger *slog.Logger) error {
 			referenceSeriesPreview,
 			referenceCatalogueRegistration,
 			evaluationReplay,
+			pricingEstimate,
 			networkCatalog,
 			routePlans,
 			networkCatalogRegistration,

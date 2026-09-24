@@ -103,6 +103,7 @@ func assembleBusinessEndpoints(
 	referenceSeriesPreview pricinghttp.ReferenceSeriesPreviewer,
 	referenceCatalogueRegistration pricinghttp.ReferenceCatalogueRegistrar,
 	evaluationReplay pricinghttp.EvaluationReplayer,
+	pricingEstimate pricinghttp.EstimateFormer,
 	networkCatalog networkhttp.OperationsCatalogReader,
 	routePlans networkhttp.RoutePlanCatalogueReader,
 	networkCatalogRegistration networkhttp.CatalogRegistrar,
@@ -440,6 +441,9 @@ func assembleBusinessEndpoints(
 		// Intake 都不能有；路径按动词叫 `-replays`，判据同复核口叫 `-reviews`。回放结果不交结算，
 		// 编排的依赖结构上就没有交付口。
 		{Pattern: "/pricing-evaluation-replays", Handler: pricinghttp.NewReplayEvaluationEndpoint(pricinghttp.UnconfiguredIntake{}, evaluationReplay)},
+		// 运营试算（ADR-0152 决定六，票 operator-workspace-gaps/05）：命令行，同挂字面量 UnconfiguredIntake{}——租户来自操作者
+		// 信封，真 Intake 与回放同批换；不加隔离放行（ADR-0150）。编排只算不存，依赖结构上没有评价库与交付口。
+		{Pattern: "/pricing-estimates", Handler: pricinghttp.NewEstimateEndpoint(pricinghttp.UnconfiguredIntake{}, pricingEstimate)},
 		{Pattern: "/network-catalog", Handler: networkhttp.NewQueryNetworkCatalogEndpoint(networkCatalogIntake, networkCatalog)},
 		{Pattern: "/route-plans", Handler: networkhttp.NewQueryRoutePlansEndpoint(networkCatalogIntake, routePlans)},
 		// 网络目录七族登记写面（ADR-0085，票 admin-write-faces/02 切片 02a）：登记是命令
