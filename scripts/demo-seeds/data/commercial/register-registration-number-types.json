@@ -3,12 +3,9 @@
   "types": [
     {
       "countryCode": "CN",
-      "typeCode": "SYN-CN-LIFETIME",
+      "typeCode": "USCC",
       "revision": 1,
-      "name": "合成终身注册号（演示用，非真实格式）",
-      "layer": "IDENTITY",
-      "format": "SYN-CN-[0-9]{6}",
-      "basis": "SYN-BASIS-REGNO-CN-01",
+      "adopt": "party-commercial/registration-number-types/CN@1",
       "effectiveFrom": "2026-01-01T00:00:00Z"
     },
     {
@@ -23,12 +20,9 @@
     },
     {
       "countryCode": "SG",
-      "typeCode": "SYN-SG-LIFETIME",
+      "typeCode": "UEN",
       "revision": 1,
-      "name": "合成终身注册号（演示用，非真实格式）",
-      "layer": "IDENTITY",
-      "format": "SYN-SG-[0-9]{6}[A-Z]",
-      "basis": "SYN-BASIS-REGNO-SG-01",
+      "adopt": "party-commercial/registration-number-types/SG@1",
       "effectiveFrom": "2026-01-01T00:00:00Z"
     },
     {

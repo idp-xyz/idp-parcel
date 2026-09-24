@@ -50,7 +50,8 @@ echo "== 2/7 商业权威发布（party-commercial：服务产品与五策略）
 # 巧合要维护，而是本上下文明禁借宽泛客户关系跨维归集。
 "$BIN/parcel-commercial" register-resolution-key \
   -input "$SEEDS/commercial/resolution-key-syn-account-01.json"
-# 注册号类型目录（票 legal-entity-profile/01）：CN / SG 两层各一类合成类型，另一类登记后停用。
+# 注册号类型目录（票 legal-entity-profile/01、product-strategy-boundary/03）：身份层显式采用 CN、SG 两份
+# 参考配置（ADR-0147），资料层各一类合成类型，另一类登记后停用。
 # 排在参与方身份之前：责任法人身份登记按注册国家 / 地区在这份目录里判号（ADR-0145 决定一）。
 "$BIN/parcel-commercial" register-registration-number-types \
   -input "$SEEDS/commercial/register-registration-number-types.json"
