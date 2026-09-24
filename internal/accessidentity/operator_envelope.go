@@ -26,6 +26,8 @@ const OperatorSourceAdminConsole = "ADMIN_CONSOLE"
 type OperatorRequest struct {
 	TenantID string
 	Face     CapabilityFace
+	// DecisionKind 只在 Face 为 CapabilityOperationDecision 时用：核的是这一种决定的授予。
+	DecisionKind DecisionKind
 	// Admission 非空表示这一口形成生产事实，铸造前要判准入范围（ADR-0149 决定四、ADR-0151 决定三）；
 	// 登记册配置写面不形成生产事实，传空（ADR-0100）。
 	Admission *AdmissionRequirement
@@ -39,9 +41,10 @@ type OperatorRequest struct {
 // 信封就等于它经过了铸造。包外仍能写出零值，所以零值做成不可用——Minted 为假、租户为空、不持有
 // 任何一格授予；消费方先问 Minted。
 type OperatorEnvelope struct {
-	tenantID string
-	subject  OperatorSubject
-	grants   []CapabilityFace
+	tenantID  string
+	subject   OperatorSubject
+	grants    []CapabilityFace
+	decisions []DecisionKind
 }
 
 func (envelope OperatorEnvelope) TenantID() string         { return envelope.tenantID }
@@ -51,6 +54,12 @@ func (envelope OperatorEnvelope) Source() string           { return OperatorSour
 // Holds 答信封里有没有 face 这一格生效授予。
 func (envelope OperatorEnvelope) Holds(face CapabilityFace) bool {
 	return slices.Contains(envelope.grants, face)
+}
+
+// HoldsDecision 答信封里有没有 kind 这一种运营决定的生效授予。「运营决定」一格不进 Holds，同
+// OperatorStanding.HoldsAt 的理由。
+func (envelope OperatorEnvelope) HoldsDecision(kind DecisionKind) bool {
+	return kind != "" && slices.Contains(envelope.decisions, kind)
 }
 
 // Minted 答这个信封是不是铸出来的。
@@ -98,7 +107,11 @@ func (minter *OperatorMinter) MintOperator(
 		return OperatorEnvelope{}, fmt.Errorf("%w: %w", ErrOperatorRegistryUnavailable, err)
 	}
 	at := minter.now()
-	if !found || standing.binding.tenantID != strings.TrimSpace(request.TenantID) || !standing.HoldsAt(request.Face, at) {
+	granted := standing.HoldsAt(request.Face, at)
+	if request.Face == CapabilityOperationDecision {
+		granted = standing.HoldsDecisionAt(request.DecisionKind, at)
+	}
+	if !found || standing.binding.tenantID != strings.TrimSpace(request.TenantID) || !granted {
 		return OperatorEnvelope{}, ErrOperatorNotGranted
 	}
 	// 准入范围判在授予之后：没有授予的人不该从答复里看出这个租户登没登区间。
@@ -112,10 +125,20 @@ func (minter *OperatorMinter) MintOperator(
 		}
 	}
 	var grants []CapabilityFace
+	var decisions []DecisionKind
 	for _, recorded := range standing.grants {
-		if recorded.EffectiveAt(at) && !slices.Contains(grants, recorded.grant.face) {
+		if !recorded.EffectiveAt(at) {
+			continue
+		}
+		if recorded.grant.face == CapabilityOperationDecision {
+			if !slices.Contains(decisions, recorded.grant.decisionKind) {
+				decisions = append(decisions, recorded.grant.decisionKind)
+			}
+			continue
+		}
+		if !slices.Contains(grants, recorded.grant.face) {
 			grants = append(grants, recorded.grant.face)
 		}
 	}
-	return OperatorEnvelope{tenantID: standing.binding.tenantID, subject: subject, grants: grants}, nil
+	return OperatorEnvelope{tenantID: standing.binding.tenantID, subject: subject, grants: grants, decisions: decisions}, nil
 }

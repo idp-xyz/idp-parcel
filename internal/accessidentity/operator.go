@@ -79,6 +79,9 @@ const (
 	CapabilityRegistryConfigurationWrite CapabilityFace = "REGISTRY_CONFIGURATION_WRITE"
 	// CapabilityMasterDataAndOperationsRead 是主数据与运营查阅读：ADR-0077 那一族目录查阅端点。
 	CapabilityMasterDataAndOperationsRead CapabilityFace = "MASTER_DATA_AND_OPERATIONS_READ"
+	// CapabilityOperationDecision 是运营决定：委托侧五个运营决定口与 TF 在管理台上作决定或判断的
+	// 各口（ADR-0151 决定一）。它的授予按决定种类登记，只能经 NewOperationDecisionGrant 建。
+	CapabilityOperationDecision CapabilityFace = "OPERATION_DECISION"
 )
 
 // reservedGovernanceRegistration 是治理登记那一格：ADR-0100 只预留它，授予模型按 ADR-0085
@@ -99,7 +102,7 @@ func ParseCapabilityFace(value string) (CapabilityFace, error) {
 // 包外转型递进来的值也要在这里被拦下。
 func (face CapabilityFace) checkGrantable() error {
 	switch face {
-	case CapabilityRegistryConfigurationWrite, CapabilityMasterDataAndOperationsRead:
+	case CapabilityRegistryConfigurationWrite, CapabilityMasterDataAndOperationsRead, CapabilityOperationDecision:
 		return nil
 	case reservedGovernanceRegistration:
 		return ErrCapabilityFaceReserved
@@ -148,12 +151,13 @@ func (interval EffectiveInterval) Contains(at time.Time) bool {
 // 撤了再授是两笔授予，不是一笔的两次修改——拿（主体、能力面）当键，后一笔就得覆盖前一笔，
 // 而前一笔正是那段时间里他确实有权的证据。
 type OperatorGrant struct {
-	tenantID string
-	grantID  string
-	subject  OperatorSubject
-	face     CapabilityFace
-	interval EffectiveInterval
-	basis    string
+	tenantID     string
+	grantID      string
+	subject      OperatorSubject
+	face         CapabilityFace
+	decisionKind DecisionKind
+	interval     EffectiveInterval
+	basis        string
 }
 
 func NewOperatorGrant(
@@ -166,6 +170,9 @@ func NewOperatorGrant(
 ) (OperatorGrant, error) {
 	if err := face.checkGrantable(); err != nil {
 		return OperatorGrant{}, err
+	}
+	if face == CapabilityOperationDecision {
+		return OperatorGrant{}, ErrDecisionKindRequired
 	}
 	tenant := strings.TrimSpace(tenantID)
 	id := strings.TrimSpace(grantID)
@@ -281,7 +288,13 @@ func (standing OperatorStanding) Grants() []RecordedGrant {
 }
 
 // HoldsAt 答这个操作者在 at 那一刻是否持有 face：名下有任何一笔该格的授予此刻生效即是。
+//
+// 「运营决定」一格在这里一律答否，要按种类问 HoldsDecisionAt：整格问答「是」，持有复核完成的
+// 人就过得了终止参与的检查。
 func (standing OperatorStanding) HoldsAt(face CapabilityFace, at time.Time) bool {
+	if face == CapabilityOperationDecision {
+		return false
+	}
 	for _, recorded := range standing.grants {
 		if recorded.grant.face == face && recorded.EffectiveAt(at) {
 			return true

@@ -111,11 +111,11 @@ func (registry *OperatorRegistry) RegisterGrant(
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO access_identity.operator_grant
 			(tenant_id, grant_id, issuer, subject, capability_face,
-			 effective_starts_at, effective_ends_at, basis_ref)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
+			 effective_starts_at, effective_ends_at, basis_ref, decision_kind)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
 		 ON CONFLICT DO NOTHING`,
 		grant.TenantID(), grant.GrantID(), subject.Issuer(), subject.Subject(), grant.Face().String(),
-		startsAt, endsAt, grant.Basis(),
+		startsAt, endsAt, grant.Basis(), optionalDecisionKind(grant.DecisionKind()),
 	)
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", operation, err)
@@ -128,13 +128,14 @@ func (registry *OperatorRegistry) RegisterGrant(
 		storedIssuer, storedSubject, storedFace, storedBasis string
 		storedStartsAt                                       time.Time
 		storedEndsAt                                         *time.Time
+		storedKind                                           *string
 	)
 	err = executor.QueryRow(ctx,
-		`SELECT issuer, subject, capability_face, effective_starts_at, effective_ends_at, basis_ref
+		`SELECT issuer, subject, capability_face, effective_starts_at, effective_ends_at, basis_ref, decision_kind
 		   FROM access_identity.operator_grant
 		  WHERE tenant_id = $1 AND grant_id = $2`,
 		grant.TenantID(), grant.GrantID(),
-	).Scan(&storedIssuer, &storedSubject, &storedFace, &storedStartsAt, &storedEndsAt, &storedBasis)
+	).Scan(&storedIssuer, &storedSubject, &storedFace, &storedStartsAt, &storedEndsAt, &storedBasis, &storedKind)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", fmt.Errorf("%s: 撞键后读不回既有行", operation)
 	}
@@ -144,6 +145,7 @@ func (registry *OperatorRegistry) RegisterGrant(
 	same := storedIssuer == subject.Issuer() &&
 		storedSubject == subject.Subject() &&
 		storedFace == grant.Face().String() &&
+		sameOptionalText(storedKind, optionalDecisionKind(grant.DecisionKind())) &&
 		sameInstant(storedStartsAt, startsAt) &&
 		sameOptionalInstant(storedEndsAt, endsAt) &&
 		storedBasis == grant.Basis()
@@ -228,7 +230,7 @@ func (registry *OperatorRegistry) FindOperator(
 	rows, err := querier.Query(ctx,
 		`SELECT o.tenant_id, o.basis_ref,
 		        g.grant_id, g.capability_face, g.effective_starts_at, g.effective_ends_at, g.basis_ref,
-		        r.revoked_at, r.basis_ref
+		        g.decision_kind, r.revoked_at, r.basis_ref
 		   FROM access_identity.operator o
 		   LEFT JOIN access_identity.operator_grant g
 		     ON g.issuer = o.issuer AND g.subject = o.subject AND g.tenant_id = o.tenant_id
@@ -253,11 +255,12 @@ func (registry *OperatorRegistry) FindOperator(
 			tenant, basis               string
 			grantID, face, grantBasis   *string
 			startsAt, endsAt, revokedAt *time.Time
+			decisionKind                *string
 			revocationBasis             *string
 		)
 		if err := rows.Scan(&tenant, &basis,
 			&grantID, &face, &startsAt, &endsAt, &grantBasis,
-			&revokedAt, &revocationBasis,
+			&decisionKind, &revokedAt, &revocationBasis,
 		); err != nil {
 			return accessidentity.OperatorStanding{}, false, fmt.Errorf("%s: %w", operation, err)
 		}
@@ -272,7 +275,7 @@ func (registry *OperatorRegistry) FindOperator(
 			continue
 		}
 		recorded, err := recordedGrantFromRow(tenant, subject,
-			*grantID, *face, *startsAt, endsAt, *grantBasis, revokedAt, revocationBasis)
+			*grantID, *face, decisionKind, *startsAt, endsAt, *grantBasis, revokedAt, revocationBasis)
 		if err != nil {
 			return accessidentity.OperatorStanding{}, false, fmt.Errorf("%s: 授予 %s：%w", operation, *grantID, err)
 		}
@@ -297,6 +300,7 @@ func recordedGrantFromRow(
 	tenant string,
 	subject accessidentity.OperatorSubject,
 	grantID, rawFace string,
+	rawDecisionKind *string,
 	startsAt time.Time,
 	endsAt *time.Time,
 	basis string,
@@ -315,7 +319,20 @@ func recordedGrantFromRow(
 	if err != nil {
 		return accessidentity.RecordedGrant{}, err
 	}
-	grant, err := accessidentity.NewOperatorGrant(tenant, grantID, subject, face, interval, basis)
+	var grant accessidentity.OperatorGrant
+	if face == accessidentity.CapabilityOperationDecision {
+		kind := ""
+		if rawDecisionKind != nil {
+			kind = *rawDecisionKind
+		}
+		decision, parseErr := accessidentity.ParseDecisionKind(kind)
+		if parseErr != nil {
+			return accessidentity.RecordedGrant{}, parseErr
+		}
+		grant, err = accessidentity.NewOperationDecisionGrant(tenant, grantID, subject, decision, interval, basis)
+	} else {
+		grant, err = accessidentity.NewOperatorGrant(tenant, grantID, subject, face, interval, basis)
+	}
 	if err != nil {
 		return accessidentity.RecordedGrant{}, err
 	}
@@ -344,4 +361,20 @@ func sameOptionalInstant(stored, given *time.Time) bool {
 		return stored == nil && given == nil
 	}
 	return sameInstant(*stored, *given)
+}
+
+// optionalDecisionKind 把「无决定种类」写成 NULL：列上的 CHECK 以 NULL 表示别的能力面。
+func optionalDecisionKind(kind accessidentity.DecisionKind) *string {
+	if kind == "" {
+		return nil
+	}
+	value := kind.String()
+	return &value
+}
+
+func sameOptionalText(stored, wanted *string) bool {
+	if stored == nil || wanted == nil {
+		return stored == nil && wanted == nil
+	}
+	return *stored == *wanted
 }

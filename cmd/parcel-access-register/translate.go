@@ -35,6 +35,7 @@ type grantItemDocument struct {
 	Issuer            string     `json:"issuer"`
 	Subject           string     `json:"subject"`
 	CapabilityFace    string     `json:"capabilityFace"`
+	DecisionKind      string     `json:"decisionKind,omitempty"`
 	EffectiveStartsAt time.Time  `json:"effectiveStartsAt"`
 	EffectiveEndsAt   *time.Time `json:"effectiveEndsAt,omitempty"`
 	Basis             string     `json:"basis"`
@@ -127,6 +128,18 @@ func grantFrom(tenantID string, entry grantItemDocument) (accessidentity.Operato
 	interval, err := accessidentity.NewEffectiveInterval(entry.EffectiveStartsAt, endsAt)
 	if err != nil {
 		return accessidentity.OperatorGrant{}, err
+	}
+	// 决定种类只属「运营决定」一格（ADR-0151 决定一）：那一格缺了要拒，别的格带了也要拒——带着
+	// 种类的登记册配置写授予，读批文的人会以为它只授了某一种决定。
+	if face == accessidentity.CapabilityOperationDecision {
+		kind, err := accessidentity.ParseDecisionKind(entry.DecisionKind)
+		if err != nil {
+			return accessidentity.OperatorGrant{}, fmt.Errorf("decisionKind %q：%w", entry.DecisionKind, err)
+		}
+		return accessidentity.NewOperationDecisionGrant(tenantID, entry.GrantID, subject, kind, interval, entry.Basis)
+	}
+	if entry.DecisionKind != "" {
+		return accessidentity.OperatorGrant{}, fmt.Errorf("decisionKind 只属 OPERATION_DECISION，%s 不带决定种类", face)
 	}
 	return accessidentity.NewOperatorGrant(tenantID, entry.GrantID, subject, face, interval, entry.Basis)
 }

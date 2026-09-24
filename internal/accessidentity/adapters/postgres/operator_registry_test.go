@@ -175,6 +175,33 @@ func TestOperatorRegistrationRecordsReplaysAndNeverOverwrites(t *testing.T) {
 // Covers: 票 operator-channel/01 完成判据「跨租户主体拒收」——已绑在甲租户的主体，乙租户登不进、也授不了；
 // 答复不披露绑在哪；键是发行方 + sub，别的发行方下同名 sub 是另一个主体，照常登。表结构自己也守：
 // 绕过登记口直接写，主体第二行与跨租户授予都进不了库。
+func TestOperationDecisionGrantRoundTripsItsDecisionKind(t *testing.T) {
+	register := newOperatorRegister(t)
+	subject := subjectOf(t, "https://id.syn.example/dex", "SYN-OPERATOR-07")
+	expectOutcome(t, "bind", register.bind(t, bindingOf(t, subject, "SYN-TENANT-01", "SYN-BIND-BASIS")), accessidentity.OperatorRegistrationRecorded)
+	interval, err := accessidentity.NewEffectiveInterval(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	decision := func(kind accessidentity.DecisionKind) accessidentity.OperatorGrant {
+		grant, err := accessidentity.NewOperationDecisionGrant("SYN-TENANT-01", "SYN-DECISION-01", subject, kind, interval, "SYN-GRANT-BASIS")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return grant
+	}
+
+	expectOutcome(t, "decision grant", register.grant(t, decision(accessidentity.DecisionSegmentClosure)), accessidentity.OperatorRegistrationRecorded)
+	expectOutcome(t, "same content replayed", register.grant(t, decision(accessidentity.DecisionSegmentClosure)), accessidentity.OperatorRegistrationAlreadyRegistered)
+	expectOutcome(t, "same grant, another kind", register.grant(t, decision(accessidentity.DecisionLoadAssignment)), accessidentity.OperatorRegistrationContentConflict)
+
+	standing := register.standing(t, subject)
+	at := time.Date(2026, 9, 25, 0, 0, 0, 0, time.UTC)
+	if !standing.HoldsDecisionAt(accessidentity.DecisionSegmentClosure, at) || standing.HoldsDecisionAt(accessidentity.DecisionLoadAssignment, at) {
+		t.Fatalf("decision kind did not round-trip: grants = %+v", standing.Grants())
+	}
+}
+
 func TestSubjectBoundToOneTenantIsRefusedByEveryOtherTenant(t *testing.T) {
 	register := newOperatorRegister(t)
 	subject := subjectOf(t, syntheticIssuer, "SYN-OPERATOR-01")

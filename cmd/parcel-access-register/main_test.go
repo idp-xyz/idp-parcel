@@ -197,6 +197,9 @@ func TestBatchTranslationRefusesBeforeTouchingTheDatabase(t *testing.T) {
 	if _, err := grantBatchFromJSON([]byte(grantItem(validGrantRest))); err != nil {
 		t.Fatalf("基准授予项应译得出，否则下面的拒收证不了各自那一处：%v", err)
 	}
+	if _, err := grantBatchFromJSON([]byte(grantItem(`"capabilityFace": "OPERATION_DECISION", "decisionKind": "SEGMENT_CLOSURE", "effectiveStartsAt": "2026-01-01T00:00:00Z", "basis": "SYN-GRANT-BASIS-01"`))); err != nil {
+		t.Fatalf("带决定种类的运营决定授予应译得出：%v", err)
+	}
 	if _, err := operatorBatchFromJSON([]byte(operatorBatch)); err != nil {
 		t.Fatalf("基准主体批应译得出：%v", err)
 	}
@@ -208,20 +211,23 @@ func TestBatchTranslationRefusesBeforeTouchingTheDatabase(t *testing.T) {
 		translate func([]byte) error
 		body      string
 	}{
-		"主体批未知字段": {operators, `{"tenantId": "SYN-TENANT-01", "operators": [{"issuer": "i", "subject": "s", "basis": "b", "name": "张三"}]}`},
-		"主体批缺租户":  {operators, `{"operators": [{"issuer": "i", "subject": "s", "basis": "b"}]}`},
-		"主体批空数组":  {operators, `{"tenantId": "SYN-TENANT-01", "operators": []}`},
-		"主体缺依据":   {operators, `{"tenantId": "SYN-TENANT-01", "operators": [{"issuer": "i", "subject": "s"}]}`},
-		"主体缺 sub": {operators, `{"tenantId": "SYN-TENANT-01", "operators": [{"issuer": "i", "basis": "b"}]}`},
-		"授予治理登记":  {grants, grantItem(`"capabilityFace": "GOVERNANCE_REGISTRATION", "effectiveStartsAt": "2026-01-01T00:00:00Z", "basis": "b"`)},
-		"授予未知格":   {grants, grantItem(`"capabilityFace": "ANYTHING", "effectiveStartsAt": "2026-01-01T00:00:00Z", "basis": "b"`)},
-		"授予缺起点":   {grants, grantItem(`"capabilityFace": "REGISTRY_CONFIGURATION_WRITE", "basis": "b"`)},
-		"授予倒置区间":  {grants, grantItem(validGrantRest + `, "effectiveEndsAt": "2025-12-31T00:00:00Z"`)},
-		"授予缺依据":   {grants, grantItem(`"capabilityFace": "REGISTRY_CONFIGURATION_WRITE", "effectiveStartsAt": "2026-01-01T00:00:00Z"`)},
-		"授予批空数组":  {grants, `{"tenantId": "SYN-TENANT-01", "grants": []}`},
-		"撤销缺时刻":   {revocations, `{"tenantId": "SYN-TENANT-01", "revocations": [{"grantId": "SYN-GRANT-01", "basis": "b"}]}`},
-		"撤销缺依据":   {revocations, `{"tenantId": "SYN-TENANT-01", "revocations": [{"grantId": "SYN-GRANT-01", "revokedAt": "2026-03-01T00:00:00Z"}]}`},
-		"撤销批未知字段": {revocations, `{"tenantId": "SYN-TENANT-01", "revocations": [{"grantId": "g", "revokedAt": "2026-03-01T00:00:00Z", "basis": "b", "cause": "x"}]}`},
+		"主体批未知字段":  {operators, `{"tenantId": "SYN-TENANT-01", "operators": [{"issuer": "i", "subject": "s", "basis": "b", "name": "张三"}]}`},
+		"主体批缺租户":   {operators, `{"operators": [{"issuer": "i", "subject": "s", "basis": "b"}]}`},
+		"主体批空数组":   {operators, `{"tenantId": "SYN-TENANT-01", "operators": []}`},
+		"主体缺依据":    {operators, `{"tenantId": "SYN-TENANT-01", "operators": [{"issuer": "i", "subject": "s"}]}`},
+		"主体缺 sub":  {operators, `{"tenantId": "SYN-TENANT-01", "operators": [{"issuer": "i", "basis": "b"}]}`},
+		"授予治理登记":   {grants, grantItem(`"capabilityFace": "GOVERNANCE_REGISTRATION", "effectiveStartsAt": "2026-01-01T00:00:00Z", "basis": "b"`)},
+		"授予未知格":    {grants, grantItem(`"capabilityFace": "ANYTHING", "effectiveStartsAt": "2026-01-01T00:00:00Z", "basis": "b"`)},
+		"授予缺起点":    {grants, grantItem(`"capabilityFace": "REGISTRY_CONFIGURATION_WRITE", "basis": "b"`)},
+		"授予倒置区间":   {grants, grantItem(validGrantRest + `, "effectiveEndsAt": "2025-12-31T00:00:00Z"`)},
+		"授予缺依据":    {grants, grantItem(`"capabilityFace": "REGISTRY_CONFIGURATION_WRITE", "effectiveStartsAt": "2026-01-01T00:00:00Z"`)},
+		"授予批空数组":   {grants, `{"tenantId": "SYN-TENANT-01", "grants": []}`},
+		"运营决定缺种类":  {grants, grantItem(`"capabilityFace": "OPERATION_DECISION", "effectiveStartsAt": "2026-01-01T00:00:00Z", "basis": "b"`)},
+		"运营决定未知种类": {grants, grantItem(`"capabilityFace": "OPERATION_DECISION", "decisionKind": "APPROVE_EVERYTHING", "effectiveStartsAt": "2026-01-01T00:00:00Z", "basis": "b"`)},
+		"别的格带种类":   {grants, grantItem(validGrantRest + `, "decisionKind": "SEGMENT_CLOSURE"`)},
+		"撤销缺时刻":    {revocations, `{"tenantId": "SYN-TENANT-01", "revocations": [{"grantId": "SYN-GRANT-01", "basis": "b"}]}`},
+		"撤销缺依据":    {revocations, `{"tenantId": "SYN-TENANT-01", "revocations": [{"grantId": "SYN-GRANT-01", "revokedAt": "2026-03-01T00:00:00Z"}]}`},
+		"撤销批未知字段":  {revocations, `{"tenantId": "SYN-TENANT-01", "revocations": [{"grantId": "g", "revokedAt": "2026-03-01T00:00:00Z", "basis": "b", "cause": "x"}]}`},
 	}
 	for name, probe := range cases {
 		if err := probe.translate([]byte(probe.body)); err == nil {
