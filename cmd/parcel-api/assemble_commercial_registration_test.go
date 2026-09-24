@@ -163,6 +163,119 @@ func TestTheWiredPublicationDraftPathLandsAgainstARealDatabase(t *testing.T) {
 	}
 }
 
+// Covers: 票 legal-entity-profile/03 资料登记口的第二参是真编排——资料登记用例接到了法人身份读口与注册号类型目录。
+// 两者都是构造参数，传错编译器看不见：带税务登记号的资料修订答`已登记`，要地址国家对着法人身份判过、税号对着
+// 目录判过；同修订同内容重放答`已在册`，即首登事务已提交。法人与目录先经同一编排登好。测试输入是隔离合成，只记 `S`。
+func TestTheWiredLegalEntityProfileRegistrationLandsAgainstARealDatabase(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	registration, err := buildCommercialRegistrationOrchestration(db)
+	if err != nil {
+		t.Fatalf("装配商业登记编排：%v", err)
+	}
+	ctx := t.Context()
+	tenant := pcSynthetic(t, commercialdomain.NewTenantID, "SYN-TENANT-API-LEP03")
+	country := pcSynthetic(t, commercialdomain.NewRegistrationCountryCode, "XA")
+	typesFrom := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	entityFrom := time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
+
+	for _, numberType := range []struct {
+		code, format string
+		layer        commercialdomain.RegistrationNumberLayer
+	}{
+		{"SYN-XA-LIFETIME", `SYN-XA-[0-9]{6}`, commercialdomain.RegistrationNumberIdentityLayer},
+		{"SYN-XA-TAX", `SYN-XA-TAX-[0-9]{4}`, commercialdomain.RegistrationNumberProfileLayer},
+	} {
+		result, err := registration.registrationNumberType.Register(ctx, commercialapp.RegisterRegistrationNumberTypeCommand{
+			Tenant:   tenant,
+			Country:  country,
+			Code:     pcSynthetic(t, commercialdomain.NewRegistrationNumberTypeCode, numberType.code),
+			Revision: 1,
+			Spec: commercialdomain.RegistrationNumberTypeSpec{
+				Name:   pcSynthetic(t, commercialdomain.NewRegistrationNumberTypeName, "SYN 合成类型 "+numberType.code),
+				Layer:  numberType.layer,
+				Format: pcSynthetic(t, commercialdomain.NewRegistrationNumberFormat, numberType.format),
+				Basis:  pcSynthetic(t, commercialdomain.NewRegistrationNumberTypeBasisReference, "SYN-BASIS/"+numberType.code),
+			},
+			EffectiveFrom: typesFrom,
+		})
+		if err != nil || result.Outcome() != commercialapp.RegistrationNumberTypeRegistered {
+			t.Fatalf("注册号类型 %s 首登：outcome = %s，err = %v", numberType.code, result.Outcome(), err)
+		}
+	}
+
+	party, err := commercialdomain.NewBusinessParty(tenant,
+		pcSynthetic(t, commercialdomain.NewPartyID, "SYN-API-LEP03-PARTY"),
+		pcSynthetic(t, commercialdomain.NewPartyName, "SYN 合成参与方（票 legal-entity-profile/03）"))
+	if err != nil {
+		t.Fatalf("构造业务参与方：%v", err)
+	}
+	if result, err := registration.partyIdentity.RegisterBusinessParty(ctx, commercialapp.RegisterBusinessPartyCommand{
+		Party:         party,
+		Revision:      1,
+		Basis:         pcSynthetic(t, commercialdomain.NewIdentityBasisReference, "SYN-BASIS/party-lep03"),
+		EffectiveFrom: typesFrom,
+	}); err != nil || result.Outcome() != commercialapp.PartyIdentityRegistered {
+		t.Fatalf("参与方首登：outcome = %s（原因 %v），err = %v", result.Outcome(), result.Cause(), err)
+	}
+	lifetime, err := commercialdomain.NewLifetimeRegistrationNumber(
+		pcSynthetic(t, commercialdomain.NewRegistrationNumberTypeCode, "SYN-XA-LIFETIME"),
+		pcSynthetic(t, commercialdomain.NewRegistrationNumber, "SYN-XA-000003"))
+	if err != nil {
+		t.Fatalf("构造终身注册号：%v", err)
+	}
+	entity := pcSynthetic(t, commercialdomain.NewLegalEntityReference, "SYN-API-LEP03-LE")
+	if result, err := registration.partyIdentity.RegisterLegalEntity(ctx, commercialapp.RegisterLegalEntityCommand{
+		Tenant:              tenant,
+		Entity:              entity,
+		Party:               party.ID(),
+		Revision:            1,
+		Basis:               pcSynthetic(t, commercialdomain.NewIdentityBasisReference, "SYN-BASIS/le-lep03"),
+		EffectiveFrom:       entityFrom,
+		RegistrationCountry: &country,
+		LifetimeNumbers:     []commercialdomain.LifetimeRegistrationNumber{lifetime},
+	}); err != nil || result.Outcome() != commercialapp.PartyIdentityRegistered {
+		t.Fatalf("法人首登：outcome = %s（原因 %v），err = %v", result.Outcome(), result.Cause(), err)
+	}
+
+	address, err := commercialdomain.NewRegisteredAddress(country, []string{"SYN 合成路 3 号"})
+	if err != nil {
+		t.Fatalf("构造注册地址：%v", err)
+	}
+	tax, err := commercialdomain.NewTaxRegistrationNumber(
+		pcSynthetic(t, commercialdomain.NewRegistrationNumberTypeCode, "SYN-XA-TAX"),
+		pcSynthetic(t, commercialdomain.NewRegistrationNumber, "SYN-XA-TAX-0003"))
+	if err != nil {
+		t.Fatalf("构造税务登记号：%v", err)
+	}
+	invoicing, err := commercialdomain.NewInvoicingDetails(pcSynthetic(t, commercialdomain.NewInvoiceTitle, "SYN 合成抬头"))
+	if err != nil {
+		t.Fatalf("构造开票资料：%v", err)
+	}
+	command := commercialapp.RegisterLegalEntityProfileCommand{
+		Tenant:        tenant,
+		Entity:        entity,
+		Revision:      1,
+		Basis:         pcSynthetic(t, commercialdomain.NewLegalEntityProfileBasisReference, "SYN-BASIS/profile-lep03"),
+		EffectiveFrom: entityFrom,
+		Address:       address,
+		TaxNumbers:    []commercialdomain.TaxRegistrationNumber{tax},
+		Invoicing:     &invoicing,
+	}
+	landed, err := registration.legalEntityProfile.Register(ctx, command)
+	if err != nil || landed.Outcome() != commercialapp.LegalEntityProfileRegistered {
+		t.Fatalf("资料首登：outcome = %s（原因 %v），err = %v", landed.Outcome(), landed.Cause(), err)
+	}
+	replayed, err := registration.legalEntityProfile.Register(ctx, command)
+	if err != nil || replayed.Outcome() != commercialapp.LegalEntityProfileAlreadyRegistered {
+		t.Fatalf("资料重放：outcome = %s（原因 %v），err = %v——读不到首行说明首登事务没提交",
+			replayed.Outcome(), replayed.Cause(), err)
+	}
+}
+
 func submittedSpec(result commercialapp.SubmitPublicationDraftResult) commercialdomain.CommercialVersionSpec {
 	draft, _ := result.Draft()
 	return draft.PublicationSpec()

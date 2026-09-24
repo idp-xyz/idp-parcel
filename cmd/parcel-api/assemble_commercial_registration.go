@@ -181,6 +181,25 @@ func (registration transactionalRegistrationNumberTypeRegistration) Deactivate(
 		})
 }
 
+// transactionalLegalEntityProfileRegistration 是法人资料登记（票 legal-entity-profile/03）的事务壳：一笔登记一笔
+// 事务，修订连续性读回、资料门读的法人身份与注册号类型目录，和落库看同一份快照。
+type transactionalLegalEntityProfileRegistration struct {
+	transactor bentoapp.Transactor
+	inner      *commercialapp.RegisterLegalEntityProfileHandler
+}
+
+var _ commercialhttp.LegalEntityProfileRegistrar = transactionalLegalEntityProfileRegistration{}
+
+func (registration transactionalLegalEntityProfileRegistration) Register(
+	ctx context.Context,
+	command commercialapp.RegisterLegalEntityProfileCommand,
+) (commercialapp.LegalEntityProfileResult, error) {
+	return commercialInTransaction(ctx, registration.transactor,
+		func(txCtx context.Context) (commercialapp.LegalEntityProfileResult, error) {
+			return registration.inner.Register(txCtx, command)
+		})
+}
+
 // commercialRegistrationOrchestration 收拢三族，供装配点一次取回。
 type transactionalChannelAccountUse struct {
 	transactor bentoapp.Transactor
@@ -261,6 +280,8 @@ type commercialRegistrationOrchestration struct {
 	channelAccountUse transactionalChannelAccountUse
 	// 注册号类型目录族（ADR-0145 决定一）：登记修订与停用两口共用这一个事务壳。
 	registrationNumberType transactionalRegistrationNumberTypeRegistration
+	// 法人资料（ADR-0145 决定三）：只有登记修订一口，资料没有停用。
+	legalEntityProfile transactionalLegalEntityProfileRegistration
 	// publicationPreview 没有事务壳：预览不读也不写（ADR-0126 Decision 四）。
 	publicationPreview *commercialapp.PreviewCommercialPublicationHandler
 	publicationDrafts  transactionalPublicationDrafts
@@ -291,6 +312,10 @@ func buildCommercialRegistrationOrchestration(db *bentopg.DB) (commercialRegistr
 	registrationNumberTypes, err := pcpostgres.NewRegistrationNumberTypes(db)
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: registration number type registry: %w", err)
+	}
+	legalEntityProfiles, err := pcpostgres.NewLegalEntityProfiles(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: legal entity profile registry: %w", err)
 	}
 	// 「参数已登记」续办信封（ADR-0094 决定四，票 first-tenant-runway/07 D4）：发布编排在声明落库的
 	// 同一事务里经 Outbox 发出，parcel-shipment 的消费门凭它重驱停在`等待运营登记`的委托。挂在
@@ -344,6 +369,10 @@ func buildCommercialRegistrationOrchestration(db *bentopg.DB) (commercialRegistr
 		registrationNumberType: transactionalRegistrationNumberTypeRegistration{
 			transactor: transactor,
 			inner:      commercialapp.NewRegisterRegistrationNumberTypeHandler(registrationNumberTypes),
+		},
+		legalEntityProfile: transactionalLegalEntityProfileRegistration{
+			transactor: transactor,
+			inner:      commercialapp.NewRegisterLegalEntityProfileHandler(legalEntityProfiles, identities, registrationNumberTypes),
 		},
 	}, nil
 }
