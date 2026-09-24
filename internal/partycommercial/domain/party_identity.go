@@ -218,12 +218,19 @@ func (registration BusinessPartyRegistration) Lifecycle() IdentityLifecycle {
 }
 
 // LegalEntityRegistration 是责任法人身份在登记册上的一笔修订，结构判据同
-// BusinessPartyRegistration。
+// BusinessPartyRegistration；另带身份层（ADR-0145 决定一）与身份更正依据（决定二）。
+//
+// 身份层是可缺的：本格落地之前登记的历史修订没有它，读回照样成立。新登记与新修订必须带，
+// 那道门在写入用例里，不在这里——这里要同时装得下历史修订。
 type LegalEntityRegistration struct {
-	entity    ResponsibleLegalEntity
-	revision  int
-	basis     IdentityBasisReference
-	lifecycle IdentityLifecycle
+	entity        ResponsibleLegalEntity
+	revision      int
+	basis         IdentityBasisReference
+	lifecycle     IdentityLifecycle
+	identity      LegalEntityIdentityLayer
+	hasIdentity   bool
+	correction    IdentityBasisReference
+	hasCorrection bool
 }
 
 func NewLegalEntityRegistration(
@@ -244,6 +251,30 @@ func NewLegalEntityRegistration(
 	}, nil
 }
 
+// WithIdentityLayer 交回带着身份层的同一笔修订；correction 非空即这笔修订是身份更正，携带其依据。
+// 身份更正依据只能随身份层出现——没有身份层的修订无从更正身份层。
+func (registration LegalEntityRegistration) WithIdentityLayer(
+	identity LegalEntityIdentityLayer,
+	correction *IdentityBasisReference,
+) (LegalEntityRegistration, error) {
+	if !identity.valid() {
+		return LegalEntityRegistration{}, ErrInvalidLegalEntityIdentityLayer
+	}
+	registration.identity = identity
+	registration.hasIdentity = true
+	registration.correction = IdentityBasisReference{}
+	registration.hasCorrection = false
+	if correction != nil {
+		if !correction.valid() {
+			return LegalEntityRegistration{}, ErrInvalidIdentityRegistration
+		}
+		registration.correction = *correction
+		registration.hasCorrection = true
+	}
+	return registration, nil
+}
+
+// Deactivate 交回下一笔修订。身份层原样沿用；身份更正依据不沿用——停用修订不更正任何号。
 func (registration LegalEntityRegistration) Deactivate(
 	basis IdentityBasisReference,
 	at time.Time,
@@ -254,7 +285,19 @@ func (registration LegalEntityRegistration) Deactivate(
 	}
 	registration.revision++
 	registration.lifecycle = deactivated
+	registration.correction = IdentityBasisReference{}
+	registration.hasCorrection = false
 	return registration, nil
+}
+
+// IdentityLayer 交回身份层；本格落地之前登记的历史修订答 false。
+func (registration LegalEntityRegistration) IdentityLayer() (LegalEntityIdentityLayer, bool) {
+	return registration.identity, registration.hasIdentity
+}
+
+// IdentityCorrectionBasis 交回身份更正依据；不是身份更正的修订答 false。
+func (registration LegalEntityRegistration) IdentityCorrectionBasis() (IdentityBasisReference, bool) {
+	return registration.correction, registration.hasCorrection
 }
 
 func (registration LegalEntityRegistration) Entity() ResponsibleLegalEntity {
