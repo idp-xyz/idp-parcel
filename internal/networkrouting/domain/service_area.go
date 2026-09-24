@@ -32,10 +32,13 @@ const (
 	AreaCoversDestination
 	AreaExcludesDestination
 	AddressInformationInsufficient
+	// AreaExcludesOrigin 是起点侧不在覆盖内：候选首节点所服务的区域都不覆盖寄件地址。UC-NR-002 层次 1 写的是
+	// 起止服务区域，只判终点侧会让一个收不了件的候选照样合格。
+	AreaExcludesOrigin
 )
 
 func (outcome ServiceAreaResolutionOutcome) valid() bool {
-	return outcome >= AreaCoversDestination && outcome <= AddressInformationInsufficient
+	return outcome >= AreaCoversDestination && outcome <= AreaExcludesOrigin
 }
 
 func (outcome ServiceAreaResolutionOutcome) String() string {
@@ -46,6 +49,8 @@ func (outcome ServiceAreaResolutionOutcome) String() string {
 		return "EXCLUDES_DESTINATION"
 	case AddressInformationInsufficient:
 		return "ADDRESS_INFORMATION_INSUFFICIENT"
+	case AreaExcludesOrigin:
+		return "EXCLUDES_ORIGIN"
 	default:
 		return ""
 	}
@@ -79,7 +84,7 @@ func NewServiceAreaResolution(spec ServiceAreaResolutionSpec) (ServiceAreaResolu
 		return ServiceAreaResolution{}, ErrInvalidServiceAreaResolution
 	}
 	switch spec.Outcome {
-	case AreaCoversDestination, AreaExcludesDestination:
+	case AreaCoversDestination, AreaExcludesDestination, AreaExcludesOrigin:
 		if !spec.AreaVersion.valid() || spec.Missing.valid() || spec.Reassess.valid() {
 			return ServiceAreaResolution{}, ErrInvalidServiceAreaResolution
 		}
@@ -136,10 +141,14 @@ func EvaluateServiceAreas(resolutions []ServiceAreaResolution) ([]RouteCandidate
 				return nil, nil, err
 			}
 			candidates = append(candidates, candidate)
-		case AreaExcludesDestination:
+		case AreaExcludesDestination, AreaExcludesOrigin:
 			// 原因引用携带区域版本：淘汰的稳定原因与它所依据的那一版一起留在候选上，
-			// `不可达`的复算才有处可查。
-			reason, err := NewCandidateReason("SERVICE_AREA_EXCLUDES_DESTINATION/" + resolution.areaVersion.String())
+			// `不可达`的复算才有处可查；起点侧与终点侧各用自己的原因，读的人才知道是哪一头收不了。
+			side := "SERVICE_AREA_EXCLUDES_DESTINATION/"
+			if resolution.outcome == AreaExcludesOrigin {
+				side = "SERVICE_AREA_EXCLUDES_ORIGIN/"
+			}
+			reason, err := NewCandidateReason(side + resolution.areaVersion.String())
 			if err != nil {
 				return nil, nil, err
 			}
