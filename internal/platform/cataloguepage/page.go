@@ -10,6 +10,15 @@ type Page struct {
 	Total *int64 `json:"total"`
 }
 
+// Trim 把读面照 size+1 取回的行切成本页：多出来的那一行只用来判断有没有下一页，不交给调用方。
+// size 即读面的页大小，由它的 limit 门禁保证为正。
+func Trim[T any](rows []T, size int) (page []T, more bool) {
+	if len(rows) > size {
+		return rows[:size], true
+	}
+	return rows, false
+}
+
 // NewPage 拼一格 page：next 为空串即已到末页，total 是与本页同一组条件下的精确总数。
 func NewPage(size int, next string, total int64) Page {
 	page := Page{Size: size, Total: &total}
