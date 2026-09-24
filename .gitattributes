@@ -17,3 +17,7 @@
 
 # git 钩子无扩展名，text=auto 在 Windows 检出会给 CRLF，复制进 .git/hooks 后 sh 读 #!/bin/sh\r 就死——与上面 *.sh 同一条病。
 scripts/git-hooks/* text eol=lf
+
+# 参考配置的发布清单按原文字节钉 sha256（ADR-0147）：text=auto 在 Windows 检出给 CRLF，嵌进二进制的原文
+# 就与清单对不上，Open 答「发布后被改过」——与上面 *.sql 因校验和钉 LF 同一个理由。
+referenceconfig/** text eol=lf
