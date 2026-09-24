@@ -131,6 +131,20 @@ func TestLowestCostTieIsHandedOverNotBrokenByIdentifier(t *testing.T) {
 	}
 }
 
+// Covers: 形态集合落在领域（ADR-0146 决定二）——首版族里只有成本单维一种，登记方给的词译得回
+// 才算声明了形态；族外的词拒绝，不吸收成某一格，也不回落成「未声明」。
+func TestRankingFormsAreAClosedFamily(t *testing.T) {
+	form, err := domain.RankingFormFrom("COST_SINGLE_DIMENSION")
+	if err != nil || form != domain.CostSingleDimensionRanking || form.String() != "COST_SINGLE_DIMENSION" {
+		t.Fatalf("form = %v (%q), err = %v; want COST_SINGLE_DIMENSION", form, form.String(), err)
+	}
+	for _, raw := range []string{"TIMELINESS_FIRST", "cost_single_dimension", ""} {
+		if _, err := domain.RankingFormFrom(raw); !errors.Is(err, domain.ErrUnknownRankingForm) {
+			t.Fatalf("RankingFormFrom(%q) err = %v, want ErrUnknownRankingForm", raw, err)
+		}
+	}
+}
+
 // Covers: 排序不替策略作答——没有合格候选是`无路由`或未决的信号，与形态有没有声明无关；有合格
 // 候选而版本没声明形态时交「形态未声明」，不替租户选一种；合格候选整条缺成本事实、或同一候选
 // 两条事实，是证据装配坏了，响亮报错而不是当成待判断。

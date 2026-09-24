@@ -415,6 +415,31 @@ func TestExecuteRoutesEachKindToItsRegisterMethod(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0146 决定二的登记半边——路由策略版本的 ranking_form 经领域构造门译成族内形态到达
+// 写入口；不带这一格即「未声明」，照旧登得进，不替租户选一种。
+func TestExecuteTranslatesTheDeclaredRankingForm(t *testing.T) {
+	declared := []byte(`{"tenant_id":"SYN-TENANT-1","code":"SYN-STRATEGY-1","version":1,
+		"applicable_scope":"SYN-SCOPE-DECLARED","effective_from":"2026-08-20T12:00:00Z",
+		"ranking_form":"COST_SINGLE_DIMENSION"}`)
+	double := &registryDouble{}
+	if message, code := execute(t.Context(), kindRouteStrategy, declared, registrarOver(t, double), passthroughTransactor{}); code != exitRegistered {
+		t.Fatalf("message=%q code=%d, 想要 REGISTERED/0", message, code)
+	}
+	if double.strategy == nil || double.strategy.RankingForm != domain.CostSingleDimensionRanking {
+		t.Fatalf("排序形态没有译成族内形态到达写入口：%+v", double.strategy)
+	}
+
+	undeclared := []byte(`{"tenant_id":"SYN-TENANT-1","code":"SYN-STRATEGY-1","version":1,
+		"applicable_scope":"SYN-SCOPE-DECLARED","effective_from":"2026-08-20T12:00:00Z"}`)
+	double = &registryDouble{}
+	if message, code := execute(t.Context(), kindRouteStrategy, undeclared, registrarOver(t, double), passthroughTransactor{}); code != exitRegistered {
+		t.Fatalf("message=%q code=%d; 没声明形态的版本应照旧登得进", message, code)
+	}
+	if double.strategy == nil || double.strategy.RankingForm != domain.RankingFormUndeclared {
+		t.Fatalf("没给 ranking_form 却译出了形态：%+v", double.strategy)
+	}
+}
+
 // Covers: 译装门在入库前拒——未知族、未知字段、封闭枚举外的词、空白租户都不到达
 // 写入口，全部译成退出码 1。
 func TestExecuteRefusesAtTheTranslationGate(t *testing.T) {
@@ -435,6 +460,12 @@ func TestExecuteRefusesAtTheTranslationGate(t *testing.T) {
 		},
 		"空白租户": {kindNode, `{"tenant_id":"  ","code":"SYN-NODE-A","version":1,
 			"business_timezone":"Asia/Shanghai","effective_from":"2026-08-20T12:00:00Z"}`},
+		"排序形态不在族内": {kindRouteStrategy, `{"tenant_id":"SYN-TENANT-1","code":"SYN-STRATEGY-1",
+			"version":1,"applicable_scope":"SYN-SCOPE-DECLARED","effective_from":"2026-08-20T12:00:00Z",
+			"ranking_form":"TIMELINESS_FIRST"}`},
+		"排序形态给了空词": {kindRouteStrategy, `{"tenant_id":"SYN-TENANT-1","code":"SYN-STRATEGY-1",
+			"version":1,"applicable_scope":"SYN-SCOPE-DECLARED","effective_from":"2026-08-20T12:00:00Z",
+			"ranking_form":""}`},
 	}
 
 	for name, test := range cases {

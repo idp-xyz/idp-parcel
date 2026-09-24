@@ -171,12 +171,13 @@ type AvailabilityAdjustmentStatement struct {
 	HasLiftedAt bool
 }
 
-// RouteStrategyDefinitionVersion 是一个路由策略的适用版本行。规则正文属 PAR-NET-14，
-// 这里只有版本、范围与有效区间。
+// RouteStrategyDefinitionVersion 是一个路由策略的适用版本行。RankingForm 是这一版声明的内置
+// 排序形态（ADR-0146），零值即这一版没有声明；冻结边界、改善阈值等其余规则正文这里没有。
 type RouteStrategyDefinitionVersion struct {
 	Code            string
 	Version         int32
 	ApplicableScope string
+	RankingForm     domain.RankingForm
 	EffectiveFrom   time.Time
 	EffectiveTo     time.Time
 	HasEffectiveTo  bool

@@ -358,12 +358,19 @@ func commandFor(
 		if err != nil {
 			return nil, err
 		}
+		form := domain.RankingFormUndeclared
+		if payload.RankingForm != nil {
+			if form, err = domain.RankingFormFrom(*payload.RankingForm); err != nil {
+				return nil, err
+			}
+		}
 		command := application.RegisterRouteStrategyVersionCommand{
 			TenantID: tenant,
 			Strategy: ports.RouteStrategyDefinitionVersion{
 				Code:            payload.Code,
 				Version:         payload.Version,
 				ApplicableScope: payload.ApplicableScope,
+				RankingForm:     form,
 				EffectiveFrom:   payload.EffectiveFrom,
 				EffectiveTo:     timeOf(payload.EffectiveTo),
 				HasEffectiveTo:  payload.EffectiveTo != nil,
@@ -502,6 +509,8 @@ type strategyPayload struct {
 	ApplicableScope string     `json:"applicable_scope"`
 	EffectiveFrom   time.Time  `json:"effective_from"`
 	EffectiveTo     *time.Time `json:"effective_to"`
+	// RankingForm 缺席即这一版没有声明排序形态；给了就必须是族内的词，空词同样拒。
+	RankingForm *string `json:"ranking_form"`
 }
 
 // autoRerouteFactsPayload 是四条件事实登记行的 JSON 形状。判断键六维逐个到达——键是

@@ -1,8 +1,14 @@
 package domain
 
-import "errors"
+import (
+	"errors"
+	"fmt"
+)
 
-var ErrInvalidRanking = errors.New("network routing: invalid ranking facts")
+var (
+	ErrInvalidRanking     = errors.New("network routing: invalid ranking facts")
+	ErrUnknownRankingForm = errors.New("network routing: unknown ranking form")
+)
 
 // RankingForm 是路由策略版本声明的内置排序形态（ADR-0146 决定二、七）。形态的判断逻辑归
 // 产品、在这里执行；租户只选形态、填取值。
@@ -21,6 +27,17 @@ func (form RankingForm) String() string {
 		return "COST_SINGLE_DIMENSION"
 	default:
 		return ""
+	}
+}
+
+// RankingFormFrom 逐格译回族内形态。空词也拒：「未声明」由登记形状里缺这一格表达，不由一个
+// 空字符串兜——否则族外的词与没填会在读侧长成同一个样子。
+func RankingFormFrom(raw string) (RankingForm, error) {
+	switch raw {
+	case "COST_SINGLE_DIMENSION":
+		return CostSingleDimensionRanking, nil
+	default:
+		return RankingFormUndeclared, fmt.Errorf("%w: %q", ErrUnknownRankingForm, raw)
 	}
 }
 

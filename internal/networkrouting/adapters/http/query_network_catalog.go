@@ -356,10 +356,13 @@ func adjustmentBodyOf(row ports.AvailabilityAdjustmentStatement) adjustmentBody 
 	}
 }
 
+// routeStrategyVersionBody 的 RankingForm 未声明时整格缺席：「还没选」与「选了哪一种」各是一种
+// 答案，给个空串会让前者看起来像选了一种叫空的形态。
 type routeStrategyVersionBody struct {
 	Code            string `json:"code"`
 	Version         int32  `json:"version"`
 	ApplicableScope string `json:"applicableScope"`
+	RankingForm     string `json:"rankingForm,omitempty"`
 	EffectiveFrom   string `json:"effectiveFrom"`
 	EffectiveTo     string `json:"effectiveTo,omitempty"`
 }
@@ -369,6 +372,7 @@ func routeStrategyVersionBodyOf(row ports.RouteStrategyDefinitionVersion) routeS
 		Code:            row.Code,
 		Version:         row.Version,
 		ApplicableScope: row.ApplicableScope,
+		RankingForm:     row.RankingForm.String(),
 		EffectiveFrom:   utcText(row.EffectiveFrom),
 		EffectiveTo:     optionalUTCText(row.EffectiveTo, row.HasEffectiveTo),
 	}
