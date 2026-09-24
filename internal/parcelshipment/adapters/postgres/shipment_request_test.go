@@ -71,6 +71,41 @@ func TestASubmittedRequestRoundTripsWholly(t *testing.T) {
 	}
 }
 
+// 票 psb/17：提交版本上委托声明的服务产品随快照往返，值原样；不声明的版本读回仍未声明。丢了它，商业依据解析键
+// 回读时就收窄不了候选，同一范围两个产品必然冲突。
+func TestTheRequestedServiceProductRoundTripsWithItsSubmissionVersion(t *testing.T) {
+	repository, transactor, _ := newShipmentRequests(t)
+	ctx := t.Context()
+
+	spec := submittedShipmentRequestSpec(t, "req-key-1", "request-1")
+	spec.RequestedProduct = domain.RequestedServiceProductOf([]domain.CanonicalContentEntry{
+		mustEntry(t, domain.RequestedServiceProductEntryName, " SYN-PROD-CN-SG-EXPRESS "),
+	})
+	declared, err := domain.SubmitShipmentRequest(spec)
+	if err != nil {
+		t.Fatalf("建单：%v", err)
+	}
+	mustInsert(t, transactor, ctx, repository, declared)
+	mustInsert(t, transactor, ctx, repository, submittedShipmentRequest(t, "req-key-2", "request-2"))
+
+	found := mustFind(t, repository, ctx, "req-key-1")
+	if got := found.CurrentSubmissionVersion().RequestedServiceProduct(); got.String() != " SYN-PROD-CN-SG-EXPRESS " {
+		t.Fatalf("读回的声明产品 = %q，值要原样", got.String())
+	}
+	if mustFind(t, repository, ctx, "req-key-2").CurrentSubmissionVersion().RequestedServiceProduct().Declared() {
+		t.Fatal("没声明产品的版本读回成了已声明")
+	}
+}
+
+func mustEntry(t *testing.T, name, value string) domain.CanonicalContentEntry {
+	t.Helper()
+	entry, err := domain.NewCanonicalContentEntry(name, value)
+	if err != nil {
+		t.Fatalf("条目 %q：%v", name, err)
+	}
+	return entry
+}
+
 // TestHistoryAndAttemptsSurviveTheRoundTrip 证受控补充历史（ADR-0045）与处理记录随
 // 快照往返：丢历史，一份补充过的委托重建后看起来像从未补充过；丢处理记录，「卡过几轮」
 // 从头数起。

@@ -290,8 +290,11 @@ type versionDocument struct {
 	Profiles          []profileDocument `json:"profiles,omitempty"`
 	// Elements 是随本版本申报的寄 / 收两段地址要素子段（pp-seams/05 裁决 2），落法照 Profiles：缺席即 omitempty 整段不写，
 	// 早于本票的快照没有这一段，读回即零值、读口如实答「要素缺席」。零迁移。
-	Elements      *elementsDocument `json:"elements,omitempty"`
-	EstablishedAt time.Time         `json:"establishedAt"`
+	Elements *elementsDocument `json:"elements,omitempty"`
+	// RequestedProduct 是随本版本声明的服务产品（票 psb/17），落法照 Elements：未声明即 omitempty 不写，早于本票的
+	// 快照读回即未声明。值原样落，不去空白。零迁移。
+	RequestedProduct string    `json:"requestedProduct,omitempty"`
+	EstablishedAt    time.Time `json:"establishedAt"`
 }
 
 // elementsDocument 按资料范围分两段；哪一段缺席就不写哪一段。
@@ -438,6 +441,7 @@ func versionDocumentOf(version domain.SubmissionVersion) versionDocument {
 		})
 	}
 	document.Elements = elementsDocumentOf(version.DeclaredElements())
+	document.RequestedProduct = version.RequestedServiceProduct().String()
 	return document
 }
 
@@ -678,6 +682,14 @@ func (document versionDocument) spec() (domain.RehydrateSubmissionVersionSpec, e
 		return domain.RehydrateSubmissionVersionSpec{}, err
 	}
 	spec.Elements = elements
+	if document.RequestedProduct != "" {
+		// 拼成封闭条目名的条目再经 RequestedServiceProductOf 读，与地址要素的读回同一条路：包外造不出半截的声明。
+		entry, err := domain.NewCanonicalContentEntry(domain.RequestedServiceProductEntryName, document.RequestedProduct)
+		if err != nil {
+			return domain.RehydrateSubmissionVersionSpec{}, err
+		}
+		spec.RequestedProduct = domain.RequestedServiceProductOf([]domain.CanonicalContentEntry{entry})
+	}
 	return spec, nil
 }
 

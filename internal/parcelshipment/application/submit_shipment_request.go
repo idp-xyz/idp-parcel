@@ -105,6 +105,8 @@ type SubmitShipmentRequestCommand struct {
 	// DeclaredElements 随首个提交版本申报的寄 / 收两段地址要素（pp-seams/05 裁决 3），与画像同口径允许缺席或只报一段。
 	// 它与 PayloadDigest 由接单入口对同一份规范化输入的同一次 CanonicalizeSubmission 产出，本编排不重算、不核对。
 	DeclaredElements domain.DeclaredAddressElements
+	// RequestedServiceProduct 随首个提交版本声明的服务产品（票 psb/17），出处与 DeclaredElements 同一次规范化，允许缺席。
+	RequestedServiceProduct domain.DeclaredServiceProduct
 }
 
 // SubmitShipmentRequestResult 携带调用方可以据以行动的内容。委托与归属决定各自可选、
@@ -253,14 +255,15 @@ func (handler *SubmitShipmentRequestHandler) Handle(
 	}
 
 	request, err := domain.SubmitShipmentRequest(domain.SubmitShipmentRequestSpec{
-		Candidate:   candidate,
-		Gate:        gate,
-		VersionID:   versionID,
-		TaskID:      taskID,
-		SubmittedAt: decidedAt,
-		Link:        link,
-		Profiles:    command.DeclaredProfiles,
-		Elements:    command.DeclaredElements,
+		Candidate:        candidate,
+		Gate:             gate,
+		VersionID:        versionID,
+		TaskID:           taskID,
+		SubmittedAt:      decidedAt,
+		Link:             link,
+		Profiles:         command.DeclaredProfiles,
+		Elements:         command.DeclaredElements,
+		RequestedProduct: command.RequestedServiceProduct,
 	})
 	if errors.Is(err, domain.ErrInvalidDeclaredMeasurement) {
 		// 画像不贴合成员集合（指着不存在的成员、一员两张、半截测量）与候选立不起来同格：

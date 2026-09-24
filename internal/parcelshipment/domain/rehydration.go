@@ -106,8 +106,11 @@ type RehydrateSubmissionVersionSpec struct {
 	Profiles []DeclaredParcelProfile
 	// Elements 同理收成品（pp-seams/05）：子段是值、字段未导出，包外只能经 AddressElementsOf 或零值造它；旧形快照
 	// 没有这一段，读回即零值，读口如实答「要素缺席」——不回填、不猜。
-	Elements      DeclaredAddressElements
-	EstablishedAt time.Time
+	Elements DeclaredAddressElements
+	// RequestedProduct 同理收成品（票 psb/17）：包外只能经 RequestedServiceProductOf 或零值造它；旧形快照没有这一格，
+	// 读回即未声明——不回填、不猜。
+	RequestedProduct DeclaredServiceProduct
+	EstablishedAt    time.Time
 }
 
 // RehydrateAcceptanceTaskSpec 是接受判断任务在库里的样子。
@@ -148,6 +151,7 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 			declaredParcelIDs: append([]DeclaredParcelID(nil), prior.DeclaredParcelIDs...),
 			profiles:          append([]DeclaredParcelProfile(nil), prior.Profiles...),
 			elements:          prior.Elements,
+			requestedProduct:  prior.RequestedProduct,
 			establishedAt:     prior.EstablishedAt,
 		})
 	}
@@ -176,6 +180,7 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 			declaredParcelIDs: append([]DeclaredParcelID(nil), snapshot.CurrentVersion.DeclaredParcelIDs...),
 			profiles:          append([]DeclaredParcelProfile(nil), snapshot.CurrentVersion.Profiles...),
 			elements:          snapshot.CurrentVersion.Elements,
+			requestedProduct:  snapshot.CurrentVersion.RequestedProduct,
 			establishedAt:     snapshot.CurrentVersion.EstablishedAt,
 		},
 		acceptanceTask: AcceptanceDecisionTask{
