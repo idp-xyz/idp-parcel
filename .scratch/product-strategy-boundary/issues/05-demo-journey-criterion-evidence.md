@@ -89,6 +89,7 @@ Blocked by: 02、03、04（只挡收口）
 - 答复：`POST /node-operations/receptions`、`/transport-fulfillment/offsite-pickups`、`/transport-fulfillment/offsite-pickup-attempts`、`/transport-fulfillment-carrier-first-effective-pickup-judgments` 全部 `403`，`{"error":{"code":"ACCESS_CHANNEL_NOT_CONFIGURED"}}`。
 - 证据：`cmd/parcel-api/endpoints.go` 的 `assembleBusinessEndpoints` 里这几行挂字面量 `UnconfiguredIntake{}`，两个隔离开关都换不了。
 - 归类：机制缺口。去处：票 01 表横切第一项（ADR-0100 操作者渠道未落地）。
+- **08 重走**（2026-09-24 20:44，通道 6，[operator-channel/08](../../operator-channel/issues/08-isolated-release-of-main-chain-command-faces.md)；代码钉 `06a35347`，一次性库按 `seed.sh` 原样灌、走完即删，两个隔离开关同取 `SYN-TENANT-01`；只记 `S`）：写开关逐口放行后四口都越过渠道、答业务结果——收寄明确接收 `200 RECEPTION_UNDECIDED`（身份核对缝显式未配置，即格 8 同一缝）、明确拒收 `200 INTAKE_NOT_FORMED`；单对象揽收 `201 PICKUP_REGISTERED`；多对象揽收执行 `201 ATTEMPT_RECORDED`；承运商首次有效收寄判断 `200 PICKUP_PENDING`（`IDENTITY_NOT_REGISTERED`：合成承运方不在 PC 身份登记册）。格 7 的 403 不再成立；生产形态（开关不设）仍是 403，那一半等 ADR-0149 的实施票（10、13、14）。
 
 **格 8 · 过渡期收寄批量口**（实测，反事实库）
 
@@ -113,6 +114,7 @@ Blocked by: 02、03、04（只挡收口）
 
 - 答复：`POST /customs/external-results`、`/customs-regulatory-credential-registrations` 均 `403 ACCESS_CHANNEL_NOT_CONFIGURED`。
 - 归类：同格 7。去处：票 01 表横切第一项。
+- **08 重走**（同格 7 那次取证）：外部结果 `200 UNATTRIBUTABLE`——声称的申报版本不在提交索引里，编排留存原始响应不猜；它之后的解释、辖区、层次事实要等格 9（立案与提交申报没有生产入口）先有一份提交才走得到。监管凭证登记 `201 REGISTERED`。
 
 #### 主链阶段 5 · 运输履约、交付与终局
 
@@ -120,6 +122,7 @@ Blocked by: 02、03、04（只挡收口）
 
 - 答复：`/transport-fulfillment/handovers`、`/transport-fulfillment/movement-facts`、`/transport-fulfillment-dispatch-task-registrations`、`/transport-fulfillment-delivery-dispatch-triggers`、`/transport-fulfillment/deliveries`、`/transport-fulfillment-segment-closures`、`/transport-fulfillment-effective-time-judgments` 全部 `403 ACCESS_CHANNEL_NOT_CONFIGURED`。
 - 归类：同格 7。去处：票 01 表横切第一项。
+- **08 重走**（同格 7 那次取证）：各口都越过渠道——交接 `201 HANDOVER_REGISTERED`；移动（自营到达）`201 MOVEMENT_FACT_RECORDED`；手工建派送任务 `201 DISPATCH_TASK_OPENED`；段关闭对不在册的段 `200 SEGMENT_NOT_FOUND`；有效时间判断对不在册的轨迹事实 `200 INPUT_NOT_ACCEPTED`（外部轨迹只经 `TrackingSource` 入站口进，即格 14）。往下串一步：交接带 `segmentServiceAction=FINAL_DELIVERY` 进派送段后，派送发起 `200 REQUIREMENT_MISSING`（`DELIVERY_PLACE`、`DELIVERY_WINDOW`、`DELIVERY_CONDITION`——即格 13 的执行器缺口），同段关闭 `200 SEGMENT_STILL_ACTIVE`。**新停点一处**：交付 `200 SOURCE_NOT_ACCEPTED`——交付只能落在已登记的派送尝试结果上，而派送尝试登记册（`tfpostgres.DeliveryAttempts`，只读）全仓没有生产写入方。归类：机制缺口（登记册无写入方）；去处：待立票——06–14 与 operator-channel 目录都不含这一格。
 
 **格 13 · 派送发起**（代码）
 
@@ -178,6 +181,7 @@ Blocked by: 02、03、04（只挡收口）
 
 - 答复：`POST /settlement-external-funds-fact-registrations` 答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`；受控 CLI `parcel-settlement-register` 是同一用例的另一口，本次未跑。
 - 归类：同格 7。去处：票 01 表横切第一项。
+- **08 重走**（同格 7 那次取证）：一条收款确认 `201 FUNDS_FACT_ADOPTED`；采用之后的映射与核销要格 19–21 那一段先有客户费用，本次未往下走。
 
 **不在主路径上的命令面**（实测，不计格）：`/shipment-requests/` 下的撤回、取消、复核完成、主动拒绝、授权处置、受控补充六口，以及 `/pricing-evaluation-replays`、`/commercial-publications`，全部 `403 ACCESS_CHANNEL_NOT_CONFIGURED`，根因同格 7 或格 15。
 
