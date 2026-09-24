@@ -53,7 +53,7 @@ Blocked by: 03（只挡演示网络参考配置那半）
 | [11](../../routing-first-cut/issues/11-demo-network-adopted-as-reference-configuration.md) | 演示网络经 psb/03 的采用路径进入演示租户 | psb/03、08、10、12 |
 | [12](../../routing-first-cut/issues/12-cc-customs-applicability-judgment-for-route-candidates.md) | customs-compliance 按路由候选作答的关务适用性判断口（地盘在 CC；02 取证后另立，通道 3 起草） | 02（ADR-0148 接受之笔）；接 NR 取数侧另等 07 |
 
-可以立刻开工的前沿是 02、03，彼此不相碰（一份 ADR / NR 领域与策略载体）；01 等 psb/02 的登记册那一笔落地后即可做。（2026-09-24 补记：01 已 resolved；02 的 ADR-0148 草案已落、待用户接受；03 由通道 2 在做；12 由通道 3 立票、待 CC owner 分诊。）
+可以立刻开工的前沿是 02、03，彼此不相碰（一份 ADR / NR 领域与策略载体）；01 等 psb/02 的登记册那一笔落地后即可做。（2026-09-24 补记：01、02 已 resolved——ADR-0148 经用户授权自决接受；03 由通道 2 在做；07 可开工（08 还等 07，10 还等 03、09）；12 由通道 3 立票、待 CC owner 分诊。）
 
 ### 完成判据对照
 

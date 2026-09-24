@@ -1,7 +1,7 @@
 # 02 路由证据由谁供哪一族事实、路由候选成本怎么来——先裁后做
 
 Category: enhancement
-Status: in-progress——2026-09-24 通道 5 认领（单 task-af4117c9-5176-468b-953f-fef79b86ccad），共享树 main 上做、pathspec 提交、不推；预留 ADR-0148，起草为 Proposed（接受归用户或其明确授权）。此前：ready-for-agent
+Status: resolved——2026-09-24 通道 5 完成：ADR-0148 经用户授权自决接受，CONTEXT 与 CONTEXT-MAP 引用句随接受之笔落下，完成记录见文末。此前：in-progress——2026-09-24 通道 5 认领（单 task-af4117c9-5176-468b-953f-fef79b86ccad），共享树 main 上做、pathspec 提交、不推；预留 ADR-0148，起草为 Proposed（接受归用户或其明确授权）。此前：ready-for-agent
 Blocked by: 无
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「接路由证据取数侧」那一步的前置裁决
 地盘：一份新 ADR（编号开工时取）；network-routing [`CONTEXT.md`](../../../docs/domain/network-routing/CONTEXT.md) 与 [CONTEXT-MAP](../../../docs/domain/CONTEXT-MAP.md) 相关边只加引用句。不写代码。
@@ -24,10 +24,22 @@ Blocked by: 无
 
 ## 完成判据
 
-- [ ] ADR Accepted，上列各问各有决定；越权风险点写明碰到的邻接上下文（PS、PP、CC）由谁复核。
-- [ ] network-routing CONTEXT 与 CONTEXT-MAP 只加引用句，不复述决定。
+- [x] ADR Accepted，上列各问各有决定；越权风险点写明碰到的邻接上下文（PS、PP、CC）由谁复核。
+- [x] network-routing CONTEXT 与 CONTEXT-MAP 只加引用句，不复述决定。
 
 ## Comments
 
 - 2026-09-24 通道 5：草案 [ADR-0148](../../../docs/adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 已落（Proposed），上列各问各有决定，越权风险点点名 PS、PP、CC、SA owner 与用户各复核哪一条；索引补了一行。本票保持 in-progress：判据要 Accepted，接受归用户或其明确授权（用户授权自决的是 psb04 的拆法，不含本 ADR）。CONTEXT 与 CONTEXT-MAP 的引用句照草案先例留到接受那一笔再加，届时本票转 resolved。关务一侧确认缺执行器（CC 没有按路由候选作答的关务适用性判断口），已登 [psb/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 格 6 并报通道 1 另立票。
 - 2026-09-24 通道 5：用户问「专业、科学的解决方案」，通道 5 建议后用户答「按你的建议吧」，据此修订 ADR-0148 决定四与越权风险点一、二——候选成本按比较币种合成（比较币种是路由策略版本上的租户取值，汇率口径由所引价格政策声明，换算归 PP、逐段留痕，先合计后取整一次）；每段成本依据是 BUY 评价或内部价格政策评价，自营段走后者；公共段剔除列为允许的优化。修订后仍为 Proposed：用户这句是让按建议改草案，接受仍待用户明言或明确授权。
+
+## 完成记录（2026-09-24，通道 5，共享树 main）
+
+**接受**：用户在 IDP 队列授权通道 5 自决（原话「你作为业务，系统专家，参考头部软件的做法，自决吧」）。通道 5 对照头部运输管理系统的做法逐条复核后接受 ADR-0148：事实按来源分三路、成本按比较币种换算、自营段以标准成本与外包同口径、关务未过筛即不放行，四条与主流做法一致；另在决定二补记邮编区间与行政区域两种后续覆盖形态，在决定五补记拼接按有界搜索生成（换乘次数上限与可换乘节点是租户取值）。首版范围不变。
+
+**落点**：`f9d70b16` 草案；`b4591db6` 按用户建议修订决定四；接受之笔（本票转 resolved 的这一笔）——ADR-0148 Status → Accepted、索引行改接受口径、network-routing `CONTEXT.md`「路由形成与选择」一节末尾加一条引用、CONTEXT-MAP 的「parcel-shipment → network-routing」「parcel-pricing → network-routing」「customs-compliance ↔ network-routing」各加一句引用。
+
+**各问决定**（全文在 ADR-0148）：一、事实族分目录折叠、随请求携带、经端口取三路；二、地理投影是 PS 地址要素的寄件段与收件段，首版覆盖文法为整国家 / 地区与国家加邮编前缀；三、关务适用性经端口向 CC 取，CC 侧缺执行器已另立 12；四、候选成本按比较币种合成，成本依据逐段为 BUY 评价或内部价格政策评价；五、首版一条完整线路即一个候选；六、`未配置`改由有无适用的路由策略版本答、视图修订取目录修订锚，部分停用 ADR-0068 决定六与 ADR-0053 决定四一格，自 07 落地起生效。
+
+**解除的阻塞**：02 这条边对 07、08、10、12 都解除了。07 由此可开工；08 还等 07，10 还等 03、09；12 还等 CC owner 分诊。
+
+**门**：纯 md，推送方自审。改动文件无 CR、无 BOM；新增链接逐个解析到实存文件；提交前核过这几份相对 HEAD 只有本笔改动。

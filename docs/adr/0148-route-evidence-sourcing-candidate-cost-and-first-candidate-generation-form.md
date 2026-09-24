@@ -1,6 +1,6 @@
 # ADR-0148：路由证据按来源分三路——目录折叠、随请求携带、经端口取；路由候选成本由逐段成本依据（BUY 评价或内部价格政策评价）按比较币种换算后合成，任一段缺依据即缺成本依据；首版候选生成以判断时点适用的一条完整线路为一个候选；`未配置`改由有无适用的路由策略版本答，视图修订取目录修订锚
 
-Status: Proposed（2026-09-24，通道 5 起草，票 [routing-first-cut/02](../../.scratch/routing-first-cut/issues/02-route-evidence-sourcing-and-candidate-cost-adr.md) 的产物；尚非依据，接受与否归用户或其明确授权——用户同日授权通道 5 自决的是票 product-strategy-boundary/04 的拆法，不覆盖本记录。草案期间 ADR-0053、ADR-0068 与 network-routing `CONTEXT.md`、CONTEXT-MAP 一字不动。同日按用户「按你的建议吧」修订决定四与越权风险点一、二：候选成本改按比较币种换算后合成，自营段经内部价格政策计成本；修订后仍为 Proposed。裁决能力边界：读过 network-routing [`CONTEXT.md`](../domain/network-routing/CONTEXT.md) 全文，[CONTEXT-MAP](../domain/CONTEXT-MAP.md) 中 network-routing 的各条边，[ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 全文，[ADR-0075](./0075-customer-address-is-carried-with-the-routing-request.md) Decision，[ADR-0068](./0068-versioned-network-catalog-structure-precedes-rule-content.md) 决定六，[ADR-0053](./0053-network-fact-families-are-derived-not-registrable.md) Decision，[ADR-0145](./0145-legal-entity-attributes-split-into-identity-layer-and-dated-profile.md) 决定四，票 `first-tenant-runway/03` 的 Answer、`nr-route-evidence-views/01`、`label-channel-service-first-release/01` 的裁决与 `/13` 的票头；代码读过 network-routing 的证据视图端口与初始路由判断管线、迁移 `0008` 的头注与表结构、parcel-shipment 的地址要素类型与渠道择优取成本的适配器；customs-compliance 与 parcel-pricing 的 `CONTEXT.md` 只按「口岸 / 申报路径 / 关务区域」「汇率 / 换算」检索读了相关句（含 PP 的「外部数值序列」「换算」词条与汇率口径不变量），party-commercial `CONTEXT.md` 读了「价格政策」词条。没读：CC、PP、PS 三份 `CONTEXT.md` 全文，settlement-accounting `CONTEXT.md`，`pp-pricing-input-seams` 的 spec，ADR-0109；ADR-0147 在起草中未读。拿不准的列在文末「越权风险点」。）
+Status: Accepted（2026-09-24，通道 5 起草，票 [routing-first-cut/02](../../.scratch/routing-first-cut/issues/02-route-evidence-sourcing-and-candidate-cost-adr.md) 的产物。同日按用户「按你的建议吧」修订决定四与越权风险点一、二：候选成本改按比较币种换算后合成，自营段经内部价格政策计成本。随后用户在 IDP 队列授权通道 5 自决接受——原话「你作为业务，系统专家，参考头部软件的做法，自决吧」；通道 5 对照头部运输管理系统的做法复核后接受，并在决定二、五补记后续形态。越权风险点待各上下文 owner 复核。决定六对 ADR-0068、ADR-0053 的部分停用自 routing-first-cut/07 落地的那一笔起生效，在那之前两份记录照旧。裁决能力边界：读过 network-routing [`CONTEXT.md`](../domain/network-routing/CONTEXT.md) 全文，[CONTEXT-MAP](../domain/CONTEXT-MAP.md) 中 network-routing 的各条边，[ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 全文，[ADR-0075](./0075-customer-address-is-carried-with-the-routing-request.md) Decision，[ADR-0068](./0068-versioned-network-catalog-structure-precedes-rule-content.md) 决定六，[ADR-0053](./0053-network-fact-families-are-derived-not-registrable.md) Decision，[ADR-0145](./0145-legal-entity-attributes-split-into-identity-layer-and-dated-profile.md) 决定四，票 `first-tenant-runway/03` 的 Answer、`nr-route-evidence-views/01`、`label-channel-service-first-release/01` 的裁决与 `/13` 的票头；代码读过 network-routing 的证据视图端口与初始路由判断管线、迁移 `0008` 的头注与表结构、parcel-shipment 的地址要素类型与渠道择优取成本的适配器；customs-compliance 与 parcel-pricing 的 `CONTEXT.md` 只按「口岸 / 申报路径 / 关务区域」「汇率 / 换算」检索读了相关句（含 PP 的「外部数值序列」「换算」词条与汇率口径不变量），party-commercial `CONTEXT.md` 读了「价格政策」词条。没读：CC、PP、PS 三份 `CONTEXT.md` 全文，settlement-accounting `CONTEXT.md`，`pp-pricing-input-seams` 的 spec，ADR-0109；ADR-0147 在起草中未读。拿不准的列在文末「越权风险点」。）
 Date: 2026-09-24
 
 ## Context
@@ -43,7 +43,7 @@ Date: 2026-09-24
 - **随请求携带**（ADR-0075 同款，判据同是同版性）：地理解析投影（决定二）、服务要求、承诺上界。三者都是判断对象那一版的内容——接受前是委托当前提交版本，接受后是接受基线——由发起方随请求交来；NR 只保存判断对象引用与所携内容的版本化摘要，不回读。
 - **经端口取**：候选的关务适用性（`customs-compliance`）与候选各段的成本评价（`parcel-pricing`：BUY 评价或内部价格政策评价，连同换算）。二者不进视图修订——视图修订只标目录那一路（决定六）；端口取回的事实各自带出处（关务判断标识、评价标识与版本清单），与判断一并留痕。
 
-**二、地理解析投影就是 PS 地址要素的寄件段与收件段，每段国家 / 地区码与邮编，原样携带。** 缺席如实：某一侧缺国家 / 地区码，服务区域解析在那一侧答资料不足，不补默认国家。服务区域覆盖文法首版两种形态：整个国家 / 地区；国家 / 地区加一组邮编前缀（按所携邮编串逐字比前缀）。邮编要不要规范化（去空白、大小写）走参考配置——与 parcel-pricing 同一份公开格式（票 [product-strategy-boundary/14](../../.scratch/product-strategy-boundary/issues/14-pp-postal-prefix-granularity-and-public-unit-reference-configuration.md)），采用路径按 ADR-0147（通道 4 起草中，票 [product-strategy-boundary/03](../../.scratch/product-strategy-boundary/issues/03-reference-configuration-adoption-pattern.md)），NR 不另定一套。行政区域不进首版文法：PS 的地址要素封闭集里没有它，要用先回 PS CONTEXT 扩集。
+**二、地理解析投影就是 PS 地址要素的寄件段与收件段，每段国家 / 地区码与邮编，原样携带。** 缺席如实：某一侧缺国家 / 地区码，服务区域解析在那一侧答资料不足，不补默认国家。服务区域覆盖文法首版两种形态：整个国家 / 地区；国家 / 地区加一组邮编前缀（按所携邮编串逐字比前缀）。邮编要不要规范化（去空白、大小写）走参考配置——与 parcel-pricing 同一份公开格式（票 [product-strategy-boundary/14](../../.scratch/product-strategy-boundary/issues/14-pp-postal-prefix-granularity-and-public-unit-reference-configuration.md)），采用路径按 ADR-0147（票 [product-strategy-boundary/03](../../.scratch/product-strategy-boundary/issues/03-reference-configuration-adoption-pattern.md) 的产物，待进 main），NR 不另定一套。行政区域不进首版文法：PS 的地址要素封闭集里没有它，要用先回 PS CONTEXT 扩集。后续形态：邮编区间（起止）在各国邮编格式经参考配置可比较之后加入，与主流运输管理系统的运输区域定义同一类；行政区域等 PS 扩集后加入。
 
 **三、关务适用性经端口向 CC 取；CC 侧的判断缺执行器，另立票，不在本票族里补。** 在它补上之前，取数侧对候选的关务一格如实答状态未知，领域照既有规则得出路由判断未决（UC-NR-001「依赖超时、版本无法解析、关务资格未知、候选计算失败或证据冲突只能形成路由判断未决」）；不答满足，也不自行推断候选是否跨关务区域——那是 CC 的判断。
 
@@ -57,7 +57,7 @@ Date: 2026-09-24
 6. **公共段剔除**（允许的优化，首版不必做）：所有候选都含的同一段（同一连接、同一承运方、同一成本依据引用）给每个候选加同一金额，不改变排序，可以不参与比较。实现时留痕要写明比较的是差异段成本，且自动改路的改善阈值只能按比较币种的绝对金额声明——按比例声明会因剔除公共段而变。
 7. **计价输入**：逐段的计价输入由 NR 侧的 parcel-pricing 消费方适配器组装：包裹事实按 CONTEXT「预路由使用客户声明快照；首次收寄复核使用当时已经取得的物理事实，到站复核使用当前有效物理实测」取；每段怎样折成价卡的区域词汇随 PP 的计价输入缝定。NR 不自算计价重量，也不自定区域。
 
-**五、首版候选生成：判断时点适用的一条完整线路即一个候选。** 线路首节点须按节点覆盖服务寄件侧的服务区域，末节点须服务收件侧；不拼接线路，也不截取线路中段。线路的连接序列即候选段链，每个连接成一段计划履约段。节点对服务区域的覆盖角色是目录内容：形状归产品，取值归租户。拼接是候选生成族的后续形态，加入时不改已登线路的含义。
+**五、首版候选生成：判断时点适用的一条完整线路即一个候选。** 线路首节点须按节点覆盖服务寄件侧的服务区域，末节点须服务收件侧；不拼接线路，也不截取线路中段。线路的连接序列即候选段链，每个连接成一段计划履约段。节点对服务区域的覆盖角色是目录内容：形状归产品，取值归租户。拼接是候选生成族的后续形态，加入时不改已登线路的含义；届时按有界搜索生成候选——换乘次数上限与可换乘节点是租户取值，不做无界枚举，这也是主流路由引擎在多段网络上的通行做法。
 
 **六、`未配置`改由判断时点有无适用的路由策略版本答；视图修订取目录修订锚。**
 
@@ -69,7 +69,7 @@ Date: 2026-09-24
 
 ## Consequences
 
-- 接受之笔：network-routing `CONTEXT.md` 与 CONTEXT-MAP 的「parcel-shipment → network-routing」「parcel-pricing → network-routing」「customs-compliance ↔ network-routing」各加一句引用本记录；草案期间不动。
+- 接受之笔已在 network-routing `CONTEXT.md`「路由形成与选择」一节末尾，与 CONTEXT-MAP 的「parcel-shipment → network-routing」「parcel-pricing → network-routing」「customs-compliance ↔ network-routing」各加一句引用本记录，不复述决定。
 - 证据视图端口要收随请求携带的三样，属导出签名改动（routing-first-cut/07、/09 开工前报窗口）；PS 随可达性请求与接受交接携带它们（/08）。
 - 证据结构为端口取回的两族带出处字段，判断记录随之留痕（/07、/09、/10）。
 - CC 侧另立一张票：按路由候选答关务适用性（区域、口岸、申报路径）的判断口；票 product-strategy-boundary/05 的动线取证登这一格。
