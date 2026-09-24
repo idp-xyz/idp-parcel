@@ -105,6 +105,13 @@ var isolatedLines = map[string]isolatedLine{
 		},
 		valid: isolatedEffectiveDeliveryBody,
 	},
+	"/transport-fulfillment/delivery-attempts": {
+		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
+			_, err := intake.IntakeDeliveryAttempt(context.Background(), request)
+			return err
+		},
+		valid: isolatedDeliveryAttemptBody,
+	},
 	"/transport-fulfillment-segment-closures": {
 		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
 			_, err := intake.IntakeSegmentClosure(context.Background(), request)

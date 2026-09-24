@@ -38,6 +38,7 @@ var (
 	_ DispatchTaskIntake            = (*IsolatedCommandIntake)(nil)
 	_ DeliveryDispatchTriggerIntake = (*IsolatedCommandIntake)(nil)
 	_ DeliveryRegistrationIntake    = (*IsolatedCommandIntake)(nil)
+	_ DeliveryAttemptIntake         = (*IsolatedCommandIntake)(nil)
 	_ SegmentClosureIntake          = (*IsolatedCommandIntake)(nil)
 	_ EffectiveTimeJudgmentIntake   = (*IsolatedCommandIntake)(nil)
 )
@@ -156,6 +157,18 @@ func (intake *IsolatedCommandIntake) IntakeRegistration(
 	var payload EffectiveDeliveryPayload
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.RegisterEffectiveDeliveryCommand{}, err
+	}
+	return payload.Command(intake.tenant)
+}
+
+// IntakeDeliveryAttempt 译一次派送到场的登记（`/transport-fulfillment/delivery-attempts`，票 product-strategy-boundary/19）。
+func (intake *IsolatedCommandIntake) IntakeDeliveryAttempt(
+	_ context.Context,
+	request *http.Request,
+) (application.RecordDeliveryAttemptCommand, error) {
+	var payload DeliveryAttemptPayload
+	if err := decodeClosedPayload(request.Body, &payload); err != nil {
+		return application.RecordDeliveryAttemptCommand{}, err
 	}
 	return payload.Command(intake.tenant)
 }

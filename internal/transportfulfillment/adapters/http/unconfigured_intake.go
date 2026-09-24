@@ -40,6 +40,7 @@ var _ HandoverIntake = UnconfiguredIntake{}
 var _ PickupRegistrationIntake = UnconfiguredIntake{}
 var _ PickupCorrectionIntake = UnconfiguredIntake{}
 var _ PickupAttemptIntake = UnconfiguredIntake{}
+var _ DeliveryAttemptIntake = UnconfiguredIntake{}
 var _ MovementFactIntake = UnconfiguredIntake{}
 var _ SegmentClosureIntake = UnconfiguredIntake{}
 var _ DispatchTaskIntake = UnconfiguredIntake{}
@@ -88,6 +89,12 @@ func (UnconfiguredIntake) IntakePickupRegistration(context.Context, *http.Reques
 
 func (UnconfiguredIntake) IntakePickupAttempt(context.Context, *http.Request) (application.PerformOffsitePickupCommand, error) {
 	return application.PerformOffsitePickupCommand{}, ErrAccessChannelNotConfigured
+}
+
+// IntakeDeliveryAttempt 堵住派送尝试登记口（票 product-strategy-boundary/19）：一份穿过去的尝试会成为交付生效可以
+// 引用的到场事实，理由同揽收两口。
+func (UnconfiguredIntake) IntakeDeliveryAttempt(context.Context, *http.Request) (application.RecordDeliveryAttemptCommand, error) {
+	return application.RecordDeliveryAttemptCommand{}, ErrAccessChannelNotConfigured
 }
 
 // IntakePickupCorrection 堵住揽收更正口（票 tf-segment-lifecycle-closure/08），理由同揽收两口：一份穿过去

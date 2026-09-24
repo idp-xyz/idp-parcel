@@ -22,6 +22,7 @@ func unconfiguredControlFactEndpoints(t *testing.T) map[string]http.Handler {
 		"/transport-fulfillment/handover-corrections":    tfhttp.NewCorrectTransportHandoverEndpoint(tfhttp.UnconfiguredIntake{}, handover),
 		"/transport-fulfillment/offsite-pickups":         tfhttp.NewRegisterOffsitePickupEndpoint(tfhttp.UnconfiguredIntake{}, unreachablePickupRegistrationHandler{t: t}),
 		"/transport-fulfillment/offsite-pickup-attempts": tfhttp.NewPerformOffsitePickupEndpoint(tfhttp.UnconfiguredIntake{}, unreachablePickupAttemptHandler{t: t}),
+		"/transport-fulfillment/delivery-attempts":       tfhttp.NewRecordDeliveryAttemptEndpoint(tfhttp.UnconfiguredIntake{}, unreachableDeliveryAttemptHandler{t: t}),
 	}
 }
 
