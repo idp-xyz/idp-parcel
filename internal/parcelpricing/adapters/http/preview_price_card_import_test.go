@@ -190,3 +190,44 @@ func TestDecodePriceCardUploadIsStrict(t *testing.T) {
 		}
 	}
 }
+
+// 操作者渠道：租户取认证出的身份，上传照严格解码；没令牌答凭据被拒，令牌有效而上传不合格答请求形状不对。
+func TestOperatorIntakeTakesTheTenantFromTheAuthenticatedOperator(t *testing.T) {
+	intake, err := pricinghttp.NewOperatorRegistryIntake(registryAuthenticator{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	upload := func(token string, build func(*multipart.Writer)) *http.Request {
+		request := uploadRequest(t, build)
+		if token != "" {
+			request.Header.Set("Authorization", "Bearer "+token)
+		}
+		return request
+	}
+	card := func(writer *multipart.Writer) {
+		part, err := writer.CreateFormFile("file", "card.xlsx")
+		if err != nil {
+			t.Fatal(err)
+		}
+		_, _ = part.Write([]byte("bytes"))
+	}
+	command, err := intake.IntakePriceCardPreview(context.Background(), upload("token", card))
+	if err != nil || command.Tenant.String() != "SYN-TENANT-01" || command.FileName != "card.xlsx" || string(command.Raw) != "bytes" {
+		t.Fatalf("command = %+v err = %v", command, err)
+	}
+	if _, err := intake.IntakePriceCardPreview(context.Background(), upload("", card)); !errors.Is(err, pricinghttp.ErrOperatorCredentialRejected) {
+		t.Fatalf("no token: err = %v", err)
+	}
+	extra := func(writer *multipart.Writer) {
+		card(writer)
+		_ = writer.WriteField("tenant", "SYN-TENANT-02")
+	}
+	if _, err := intake.IntakePriceCardPreview(context.Background(), upload("token", extra)); !errors.Is(err, pricinghttp.ErrMalformedRequest) {
+		t.Fatalf("self-reported tenant field: err = %v", err)
+	}
+	recorder := httptest.NewRecorder()
+	pricinghttp.NewPreviewPriceCardImportEndpoint(intake, priceCardPreviewerDouble{}).ServeHTTP(recorder, upload("", card))
+	if recorder.Code != http.StatusUnauthorized || !strings.Contains(recorder.Body.String(), "OPERATOR_CREDENTIAL_REJECTED") {
+		t.Fatalf("endpoint without token: status = %d body = %s", recorder.Code, recorder.Body)
+	}
+}

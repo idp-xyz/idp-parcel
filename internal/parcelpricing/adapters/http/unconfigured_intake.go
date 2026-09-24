@@ -59,7 +59,7 @@ func (UnconfiguredIntake) IntakeEstimate(context.Context, *http.Request) (applic
 }
 
 // IntakePriceCardPreview 不读请求，判据同序列预览口：预览不写库，但它答的是「这份文件在这个租户下读成什么」，
-// 租户要从信封来；上传解码（DecodePriceCardUpload）已经就位，真 Intake 接上信封即可直接用。
+// 租户要从信封来。操作者渠道的译法在 OperatorRegistryIntake 上。
 func (UnconfiguredIntake) IntakePriceCardPreview(context.Context, *http.Request) (application.PreviewPriceCardImportCommand, error) {
 	return application.PreviewPriceCardImportCommand{}, ErrAccessChannelNotConfigured
 }

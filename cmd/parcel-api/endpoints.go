@@ -447,9 +447,9 @@ func assembleBusinessEndpoints(
 		// 运营试算（ADR-0152 决定六，票 operator-workspace-gaps/05）：命令行，同挂字面量 UnconfiguredIntake{}——租户来自操作者
 		// 信封，真 Intake 与回放同批换；不加隔离放行（ADR-0150）。编排只算不存，依赖结构上没有评价库与交付口。
 		{Pattern: "/pricing-estimates", Handler: pricinghttp.NewEstimateEndpoint(pricinghttp.UnconfiguredIntake{}, pricingEstimate)},
-		// 价卡导入预览（ADR-0101 决定四，票 price-card-import/02）：命令行，同挂字面量 UnconfiguredIntake{}——租户来自操作者
-		// 信封，与登记写面同批换真；不加隔离放行（ADR-0150）。编排只读上传字节，依赖结构上没有仓储。
-		{Pattern: "/pricing-price-card-previews", Handler: pricinghttp.NewPreviewPriceCardImportEndpoint(pricinghttp.UnconfiguredIntake{}, priceCardPreview)},
+		// 价卡导入预览（ADR-0101 决定四，票 price-card-import/02）：命令行，挂操作者渠道的登记册 Intake——租户来自认证出的
+		// 身份，与序列预览同一个 Intake；不加隔离放行（ADR-0150）。编排只读上传字节，依赖结构上没有仓储。
+		{Pattern: "/pricing-price-card-previews", Handler: pricinghttp.NewPreviewPriceCardImportEndpoint(operatorRegistries.pricing, priceCardPreview)},
 		{Pattern: "/network-catalog", Handler: networkhttp.NewQueryNetworkCatalogEndpoint(networkCatalogIntake, networkCatalog)},
 		{Pattern: "/route-plans", Handler: networkhttp.NewQueryRoutePlansEndpoint(networkCatalogIntake, routePlans)},
 		// 网络目录七族登记写面（ADR-0085，票 admin-write-faces/02 切片 02a）：登记是命令

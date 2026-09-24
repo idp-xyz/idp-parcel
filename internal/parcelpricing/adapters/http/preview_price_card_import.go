@@ -8,11 +8,13 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
 // 价卡导入预览口（ADR-0101 决定四；票 price-card-import/02）：上传一份模板文件，答已校验（带内容
 // 摘要与方案概要）、带问题（逐格坐标）或未受理，不写库。租户来自操作者信封，与录入口等的是同一样
-// 东西，所以同挂字面量 UnconfiguredIntake{}；隔离读放行装不进它（编译期）。
+// 东西：装配点挂操作者渠道的登记册 Intake（OperatorRegistryIntake，与序列预览同一个），隔离读放行
+// 装不进它（编译期）。
 
 // PriceCardPreviewIntake 把一次已认证的接入请求翻译成预览命令：上传的文件 + 信封里的租户。
 type PriceCardPreviewIntake interface {
@@ -205,4 +207,20 @@ func DecodePriceCardUpload(request *http.Request) (PriceCardUpload, error) {
 // PreviewCommand 把上传与信封里的租户折成预览命令。
 func (upload PriceCardUpload) PreviewCommand(tenant domain.TenantID) application.PreviewPriceCardImportCommand {
 	return application.PreviewPriceCardImportCommand{Tenant: tenant, FileName: upload.FileName, Raw: upload.Raw}
+}
+
+var _ PriceCardPreviewIntake = (*OperatorRegistryIntake)(nil)
+
+// IntakePriceCardPreview 是操作者渠道对价卡导入预览的译法：先认证、后解上传，租户取认证出的身份。上传走本文件
+// 自己的解码与上限，不经登记载荷那条读取上限——一张价卡工作簿比一份 JSON 登记载荷大得多。
+func (intake *OperatorRegistryIntake) IntakePriceCardPreview(ctx context.Context, request *http.Request) (application.PreviewPriceCardImportCommand, error) {
+	operator, err := intake.authenticator.AuthenticateRegistryWrite(ctx, httpapi.BearerToken(request))
+	if err != nil {
+		return application.PreviewPriceCardImportCommand{}, err
+	}
+	upload, err := DecodePriceCardUpload(request)
+	if err != nil {
+		return application.PreviewPriceCardImportCommand{}, err
+	}
+	return upload.PreviewCommand(operator.Tenant), nil
 }
