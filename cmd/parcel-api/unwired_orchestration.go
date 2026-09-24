@@ -1032,6 +1032,22 @@ func (unwiredProductChannelRegistration) RegisterMapping(
 	return commercialapp.ProductChannelResult{}, errOrchestrationNotWired
 }
 
+type unwiredRegistrationNumberTypeRegistration struct{}
+
+func (unwiredRegistrationNumberTypeRegistration) Register(
+	context.Context,
+	commercialapp.RegisterRegistrationNumberTypeCommand,
+) (commercialapp.RegistrationNumberTypeResult, error) {
+	return commercialapp.RegistrationNumberTypeResult{}, errOrchestrationNotWired
+}
+
+func (unwiredRegistrationNumberTypeRegistration) Deactivate(
+	context.Context,
+	commercialapp.DeactivateRegistrationNumberTypeCommand,
+) (commercialapp.RegistrationNumberTypeResult, error) {
+	return commercialapp.RegistrationNumberTypeResult{}, errOrchestrationNotWired
+}
+
 type unwiredChannelAccountUseRegistration struct{}
 
 func (unwiredChannelAccountUseRegistration) Register(
@@ -1420,6 +1436,14 @@ func (unwiredCommercialCatalogue) ListProductChannelMappings(
 	commercialdomain.TenantID,
 	int,
 ) ([]commercialports.ProductChannelMappingRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredCommercialCatalogue) ListRegistrationNumberTypes(
+	context.Context,
+	commercialdomain.TenantID,
+	int,
+) ([]commercialports.RegistrationNumberTypeRow, error) {
 	return nil, errOrchestrationNotWired
 }
 

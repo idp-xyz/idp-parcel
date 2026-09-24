@@ -152,6 +152,10 @@ var isolatedReadAdmittedPatterns = map[string]bool{
 	// DISTINCT ON）、零持久化、作用域来自运营侧授权结果——参与方标识在路径上、租户仍只从注入作用域取。本用例经真
 	// 路由打到它并期待 500 而不是 400，顺带钉住 chi 把 {partyId} 填进了 PathValue。单列在表尾的理由同上。
 	"/commercial-business-parties/{partyId}/revisions": true,
+	// 注册号类型目录（票 legal-entity-profile/01）与商业目录查阅共用同一个 Intake 变量，启用态必然随它一起放行。
+	// 三条判据逐条满足：消费本上下文自己的存储读面、零持久化、作用域来自运营侧授权结果——上列不判号，判号走
+	// ports.RegistrationNumberTypeLookup；登记与停用两条写行挂的是字面量 UnconfiguredIntake{}。单列在表尾的理由同上。
+	"/commercial-registration-number-types": true,
 }
 
 // Covers: ADR-0078 Decision 一、二 — 启用态只放运营查阅行。unwired* 读口交回稳定

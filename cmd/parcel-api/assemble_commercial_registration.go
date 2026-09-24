@@ -152,6 +152,35 @@ func (registration transactionalProductChannelRegistration) RegisterMapping(
 		})
 }
 
+// transactionalRegistrationNumberTypeRegistration 是注册号类型目录族（票 legal-entity-profile/01）的
+// 事务壳：登记修订与停用各一笔事务，登记与它的修订连续性读回看同一份快照。
+type transactionalRegistrationNumberTypeRegistration struct {
+	transactor bentoapp.Transactor
+	inner      *commercialapp.RegisterRegistrationNumberTypeHandler
+}
+
+var _ commercialhttp.RegistrationNumberTypeRegistrar = transactionalRegistrationNumberTypeRegistration{}
+
+func (registration transactionalRegistrationNumberTypeRegistration) Register(
+	ctx context.Context,
+	command commercialapp.RegisterRegistrationNumberTypeCommand,
+) (commercialapp.RegistrationNumberTypeResult, error) {
+	return commercialInTransaction(ctx, registration.transactor,
+		func(txCtx context.Context) (commercialapp.RegistrationNumberTypeResult, error) {
+			return registration.inner.Register(txCtx, command)
+		})
+}
+
+func (registration transactionalRegistrationNumberTypeRegistration) Deactivate(
+	ctx context.Context,
+	command commercialapp.DeactivateRegistrationNumberTypeCommand,
+) (commercialapp.RegistrationNumberTypeResult, error) {
+	return commercialInTransaction(ctx, registration.transactor,
+		func(txCtx context.Context) (commercialapp.RegistrationNumberTypeResult, error) {
+			return registration.inner.Deactivate(txCtx, command)
+		})
+}
+
 // commercialRegistrationOrchestration 收拢三族，供装配点一次取回。
 type transactionalChannelAccountUse struct {
 	transactor bentoapp.Transactor
@@ -230,6 +259,8 @@ type commercialRegistrationOrchestration struct {
 	partyIdentity     transactionalPartyIdentityRegistration
 	productChannel    transactionalProductChannelRegistration
 	channelAccountUse transactionalChannelAccountUse
+	// 注册号类型目录族（ADR-0145 决定一）：登记修订与停用两口共用这一个事务壳。
+	registrationNumberType transactionalRegistrationNumberTypeRegistration
 	// publicationPreview 没有事务壳：预览不读也不写（ADR-0126 Decision 四）。
 	publicationPreview *commercialapp.PreviewCommercialPublicationHandler
 	publicationDrafts  transactionalPublicationDrafts
@@ -256,6 +287,10 @@ func buildCommercialRegistrationOrchestration(db *bentopg.DB) (commercialRegistr
 	channelAccountUse, err := pcpostgres.NewChannelAccountUseAuthorizations(db)
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: channel account use authorization registry: %w", err)
+	}
+	registrationNumberTypes, err := pcpostgres.NewRegistrationNumberTypes(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: registration number type registry: %w", err)
 	}
 	// 「参数已登记」续办信封（ADR-0094 决定四，票 first-tenant-runway/07 D4）：发布编排在声明落库的
 	// 同一事务里经 Outbox 发出，parcel-shipment 的消费门凭它重驱停在`等待运营登记`的委托。挂在
@@ -305,6 +340,10 @@ func buildCommercialRegistrationOrchestration(db *bentopg.DB) (commercialRegistr
 		channelAccountUse: transactionalChannelAccountUse{
 			transactor: transactor,
 			inner:      commercialapp.NewRegisterChannelAccountUseHandler(channelAccountUse),
+		},
+		registrationNumberType: transactionalRegistrationNumberTypeRegistration{
+			transactor: transactor,
+			inner:      commercialapp.NewRegisterRegistrationNumberTypeHandler(registrationNumberTypes),
 		},
 	}, nil
 }
