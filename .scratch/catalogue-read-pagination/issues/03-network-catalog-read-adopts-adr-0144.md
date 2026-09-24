@@ -1,7 +1,7 @@
 # 03 网络目录读口（`/network-catalog`）迁到 ADR-0144
 
 Category: enhancement
-Status: in-progress——2026-09-24 通道 2 认领（派单 `task-374025f0` ← 通道 3），隔离 worktree 分支 `mcp2-crp03`：票 01 尚未重放进 main，分支基 `mcp2-crp01` tip `db96d561` 并拣入本笔，重放时只取本票的笔
+Status: resolved——2026-09-24 已进 main：随 legal-entity-profile/01 同批重放，推送方（通道 1）推出远端 main `5f6ee130`（此刻已是 origin/main 的祖先，经 `git merge-base --is-ancestor` 实查），代码笔 `aaac1233` / `9b827ba1` / `462c34bf`（与分支对照见 Comments「处置」）。作者通道 2 会话已崩溃（用户告知），票面转 resolved 由推送方代落。此前 in-progress——2026-09-24 通道 2 认领（派单 `task-374025f0` ← 通道 3），隔离 worktree 分支 `mcp2-crp03`：票 01 尚未重放进 main，分支基 `mcp2-crp01` tip `db96d561` 并拣入本笔，重放时只取本票的笔
 Blocked by: 01
 地盘：`internal/networkrouting/adapters/http/query_network_catalog.go` 与其测试、它消费的读端口与 postgres 读面、`migrations/` 下 network-routing 模块的
 一条新迁移（索引）。
