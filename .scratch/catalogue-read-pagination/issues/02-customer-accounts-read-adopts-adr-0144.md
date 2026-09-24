@@ -1,7 +1,7 @@
 # 02 客户账户目录读口（`/commercial-customer-accounts`）迁到 ADR-0144
 
 Category: enhancement
-Status: ready-for-agent
+Status: ready-for-agent——迁移编号预留 party-commercial `0035`（`0034` 已由 legal-entity-profile/02 占用，`0033` 属 legal-entity-profile/01）
 Blocked by: 01
 地盘：`internal/partycommercial/adapters/http/query_customer_accounts.go` 与其测试、它消费的读端口与 postgres 读面、`migrations/` 下 party-commercial 模块的
 一条新迁移（索引）。
