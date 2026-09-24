@@ -52,6 +52,7 @@ const legalEntity = (legalEntityId: string, revision: number): GroupLegalEntityR
   basis: 'b',
   effectiveFrom: '2026-01-02T00:00:00Z',
   registeredAt: '2026-01-02T00:00:00Z',
+  identityLayerRegistered: false,
 });
 
 const account = (accountId: string, revision: number): CustomerAccountRecord => ({

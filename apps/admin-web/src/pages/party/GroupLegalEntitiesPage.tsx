@@ -11,8 +11,9 @@ import {
   type GroupLegalEntityRecord,
   type LegalEntityRevisionListResponseBody,
 } from './api';
-import { identityStatusLabels, labelOf, legalEntityKindLabels } from './presentation';
+import { identityLayerAbsentNote, identityStatusLabels, labelOf, legalEntityKindLabels } from './presentation';
 import { LegalEntityRegistrationForm } from './LegalEntityRegistrationForm';
+import { identityLayerCellsOf } from './legal-entity-identity';
 import { legalEntityRevisionTimeline, revisionHistoryNote } from './legal-entity-revisions';
 import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
 import {
@@ -37,6 +38,22 @@ import {
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['group-legal-entities'];
+
+function AbsentIdentityLayer() {
+  return <span className="text-idpxyz-textMuted">{identityLayerAbsentNote}</span>;
+}
+
+// 身份两格照答复原样示出，国家在上、号在下；最新修订登记于身份层落地之前时如实写 identityLayerAbsentNote。
+function IdentityLayerCell({ row }: { row: GroupLegalEntityRecord }) {
+  const cells = identityLayerCellsOf(row);
+  if (cells === null) return <AbsentIdentityLayer />;
+  return (
+    <div className="min-w-40">
+      <p>{cells.country}</p>
+      <p className="mt-0.5 text-idpxyz-textMuted">{cells.numbers}</p>
+    </div>
+  );
+}
 
 // 骨架期这里列过「运营集团租户」——ADR-0003 里那一级是配置与隔离边界本身，读面本来就在单租户
 // 作用域内取数，整列同值没有信息，接线时按 live 页惯例撤下。「对象类型」列同一判据撤下（票 01 第 3 条）：
@@ -63,6 +80,12 @@ const columns: ListColumn<GroupLegalEntityRecord>[] = [
     header: '业务参与方身份',
     className: 'font-mono text-xs',
     render: (row) => row.partyId,
+  },
+  {
+    id: 'identity-layer',
+    header: '注册国家 / 地区 · 终身注册号',
+    className: 'font-mono text-xs',
+    render: (row) => <IdentityLayerCell row={row} />,
   },
   {
     id: 'status',
@@ -116,6 +139,7 @@ const legalEntityRevisionHistory: RevisionHistoryRegister<LegalEntityRevisionLis
 
 /**
  * 行详情抽屉（票 01 第 5 条）：列全字段，含表上撤下的种类与租户、停用两件；「修订历史」区自票 03 起取真数据。
+ * 身份两格与身份更正依据自票 legal-entity-profile/04 起照答复示出。
  */
 function LegalEntityDrawer({
   row,
@@ -125,6 +149,7 @@ function LegalEntityDrawer({
   onClose: () => void;
 }) {
   const copy = useCopyToClipboard();
+  const identity = row ? identityLayerCellsOf(row) : null;
   return (
     <Drawer open={row !== null} onOpenChange={(open) => (open ? undefined : onClose())} aria-label="法人详情">
       {row ? (
@@ -149,6 +174,19 @@ function LegalEntityDrawer({
                 {row.partyId}
               </DetailRow>
               <DetailRow label="参与方名称">{row.partyNameKnown ? row.partyName : <UnknownPartyName />}</DetailRow>
+              <DetailRow label="注册国家 / 地区" mono>
+                {identity ? identity.country : <AbsentIdentityLayer />}
+              </DetailRow>
+              <DetailRow
+                label="终身注册号"
+                mono
+                onCopy={identity ? () => copy('终身注册号', identity.numbers) : undefined}
+              >
+                {identity ? identity.numbers : <AbsentIdentityLayer />}
+              </DetailRow>
+              <DetailRow label="身份更正依据" mono>
+                {row.identityCorrectionBasis ?? <span className="text-idpxyz-textMuted">—</span>}
+              </DetailRow>
               <DetailRow label="身份状态">{statusBadge(identityStatusLabels, row.status)}</DetailRow>
               <DetailRow label="登记依据" mono onCopy={() => copy('登记依据', row.basis)}>
                 {row.basis}

@@ -18,9 +18,13 @@ function revision(over: Partial<LegalEntityRevisionRecord>): LegalEntityRevision
     basis: 'SYN-REG-BASIS-LE-01',
     effectiveFrom: '2026-01-02T00:00:00Z',
     registeredAt: '2026-09-16T04:27:55Z',
+    // 身份层落地之前的旧形状；登了身份层的那几笔由各用例自己覆盖。
+    identityLayerRegistered: false,
     ...over,
   };
 }
+
+const absentIdentity = ' · 注册国家 / 地区与终身注册号：本修订登记时尚无此格';
 
 // 时刻格式化由页面注入（moment.ts 的 formatInstant 依赖装配点配置的时区）；测试里用一个打标记的替身，
 // 好看出哪几格真的过了格式化、哪几格被原样漏出去。
@@ -67,13 +71,14 @@ test('描述逐笔列依据、生效自、参与方身份，停用两件只在�
   const items = legalEntityRevisionTimeline(chain, tagged);
   equal(
     items[0].description,
-    '依据 SYN-REG-BASIS-LE-01 · 生效自 [2026-01-02T00:00:00Z] · 参与方身份 SYN-PARTY-OPERATOR-01',
+    '依据 SYN-REG-BASIS-LE-01 · 生效自 [2026-01-02T00:00:00Z] · 参与方身份 SYN-PARTY-OPERATOR-01' + absentIdentity,
   );
   equal(/停用/.test(items[0].description), false);
   equal(/停用/.test(items[1].description), false);
   equal(
     items[2].description,
     '依据 SYN-REG-BASIS-LE-01-R2 · 生效自 [2026-01-02T00:00:00Z] · 参与方身份 SYN-PARTY-OPERATOR-02' +
+      absentIdentity +
       ' · 停用于 [2026-06-01T00:00:00Z]（依据 SYN-DEACT-01）',
   );
   deepEqual(
@@ -84,6 +89,40 @@ test('描述逐笔列依据、生效自、参与方身份，停用两件只在�
     // 原始 ISO 串不得裸露在任何一格：裸露即某个时刻没过格式化。
     equal(/(^|[^[])\d{4}-\d{2}-\d{2}T/.test(item.description + item.timestamp), false);
   }
+});
+
+// Covers: 登了身份层的笔照答复原样显国家与号；没登的那笔如实写「本修订登记时尚无此格」而不是空着；身份更正依据
+// 只在更正那一笔在场（票 legal-entity-profile/04「历史修订两格为空时如实写」）。
+test('身份两格逐笔示出，旧笔如实写尚无此格，更正依据只在更正那笔', () => {
+  const identity = {
+    identityLayerRegistered: true,
+    registrationCountry: 'CN',
+    lifetimeRegistrationNumbers: [{ typeCode: 'USCC', number: '91000000000000001X' }],
+  };
+  const items = legalEntityRevisionTimeline(
+    [
+      revision({}),
+      revision({ revision: 2, ...identity }),
+      revision({
+        revision: 3,
+        ...identity,
+        lifetimeRegistrationNumbers: [{ typeCode: 'USCC', number: '91000000000000002Y' }],
+        identityCorrectionBasis: 'SYN-CORR-01',
+      }),
+    ],
+    tagged,
+  );
+  equal(items[0].description.endsWith(absentIdentity), true);
+  equal(
+    items[1].description,
+    '依据 SYN-REG-BASIS-LE-01 · 生效自 [2026-01-02T00:00:00Z] · 参与方身份 SYN-PARTY-OPERATOR-01' +
+      ' · 注册国家 / 地区 CN · 终身注册号 USCC 91000000000000001X',
+  );
+  equal(/更正/.test(items[1].description), false);
+  equal(
+    items[2].description.endsWith(' · 终身注册号 USCC 91000000000000002Y · 身份更正依据 SYN-CORR-01'),
+    true,
+  );
 });
 
 // Covers: 空数组不抛也不造项——法人不在册是读口交回的如实答案（票 03 裁 200 + []），页面另用一句话说。

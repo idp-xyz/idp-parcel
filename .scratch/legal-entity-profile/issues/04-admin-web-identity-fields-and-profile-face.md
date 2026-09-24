@@ -1,8 +1,8 @@
 # 04 管理台：法人登记表单加身份两格、法人资料页
 
 Category: enhancement
-Status: in-progress——2026-09-24 通道 3 认领（派单 `task-a5cd823d`），前端切片、共享树 `main` 上直接做；通道 1 裁定第 2 项缺的两处服务端拆给 05，本票先做第 1、3 项与第 2 项的修订历史展示
-Blocked by: 02、03（均已进 main）；第 2 项的登记表单与当前有效区另等 [05](./05-profile-write-isolated-admission-and-as-of-resolution-read.md)
+Status: in-progress——2026-09-24 通道 3 认领（派单 `task-a5cd823d`），前端切片、共享树 `main` 上直接做；第 2 项缺的两处服务端经通道 1 裁定拆给 05，05 同日进 main（`4244b1bb`），本票三项全做。通道 3 随后崩溃（用户 20:0x 告知），派单撤回；其未提交现场（第 3 项）由通道 1 接手验门后提交，第 1、2 项由通道 1 续做
+Blocked by: 02、03、[05](./05-profile-write-isolated-admission-and-as-of-resolution-read.md)（均已进 main）
 地盘：`apps/admin-web/src/pages/party/` 下集团与法人页、法人登记表单与其 api 层；新增的纯逻辑 `.ts` 与其 node:test。
 出处：[ADR-0145](../../../docs/adr/0145-legal-entity-attributes-split-into-identity-layer-and-dated-profile.md)；登记表单形状沿 ADR-0101 Decision 八的逐字段表单。
 

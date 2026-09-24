@@ -319,10 +319,26 @@ export interface SupplierAgreementListResponseBody {
   agreements: SupplierAgreementRecord[];
 }
 
+// 法人身份层在答复里的四格（ADR-0145 决定一、二；后端 identityLayerBody，目录行与修订历史行共用）。
+// identityLayerRegistered 是显式布尔：为假即这笔修订登记于身份层落地之前，国家与号都没有，页面如实写
+// identityLayerAbsentNote，不拿空数组去推。更正依据只在这笔修订是身份更正时在场。
+export interface IdentityLayerRecord {
+  identityLayerRegistered: boolean;
+  registrationCountry?: string;
+  lifetimeRegistrationNumbers?: LifetimeRegistrationNumberRecord[];
+  identityCorrectionBasis?: string;
+}
+
+/** 一个终身注册号：类型码取自注册号类型目录的身份层（按注册国家 / 地区解），号原样。 */
+export interface LifetimeRegistrationNumberRecord {
+  typeCode: string;
+  number: string;
+}
+
 // 参与方身份两册（票 admin-remainder-mechanism-batch/01）。partyNameKnown 与合同页
 // contentRegistered 同款显式布尔：法人钉着的参与方在册上查无此人是写入门失败才会
 // 出现的悬空，页面按缺席如实显示，不拿空串去推、不补占位文本。
-export interface GroupLegalEntityRecord {
+export interface GroupLegalEntityRecord extends IdentityLayerRecord {
   tenantId: string;
   legalEntityId: string;
   /** 封闭词转写：本册今天只有 RESPONSIBLE_LEGAL_ENTITY 一格（经营组织没有登记面）。 */
@@ -350,7 +366,7 @@ export interface GroupLegalEntityListResponseBody {
 // 「此刻的状态」会让被顶替的旧笔各自显出一格状态）、没有 partyName（名称在参与方册上不随法人修订走）。
 // 停用两件只在已停用那一笔在场——页面看键在不在，不拿空串推。partyId 每笔都在：法人钉着哪个参与方身份
 // 是这一笔修订的内容，两笔之间改了什么由页面并排显，读口不做 diff。
-export interface LegalEntityRevisionRecord {
+export interface LegalEntityRevisionRecord extends IdentityLayerRecord {
   tenantId: string;
   legalEntityId: string;
   partyId: string;

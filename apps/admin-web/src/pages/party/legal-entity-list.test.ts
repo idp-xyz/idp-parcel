@@ -27,6 +27,7 @@ function record(over: Partial<GroupLegalEntityRecord>): GroupLegalEntityRecord {
     basis: 'SYN-REG-BASIS-LE-01',
     effectiveFrom: '2026-01-02T00:00:00Z',
     registeredAt: '2026-09-16T04:27:55Z',
+    identityLayerRegistered: false,
     ...over,
   };
 }

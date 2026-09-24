@@ -226,6 +226,9 @@ export type IdentityKind = keyof typeof identityKindLabels;
 // 不补占位文本冒充名称。两页的列、抽屉与三册候选转写说的是同一件事，同一句话只在这里一处。
 export const partyNameUnknownNote = '参与方册查无此身份';
 
+/** 修订登记于身份层落地之前（identityLayerRegistered 为假）时身份两格的话；不填假值，句子只在这一处。 */
+export const identityLayerAbsentNote = '本修订登记时尚无此格';
+
 export const problemCodeNotes: Record<string, string> = {
   METHOD_NOT_ALLOWED: '请求方法不被该端点允许。这是调用方式问题,不是业务答案。',
   // 一句覆盖读写两侧:problemNote 的签名只有 code,今天分不出这个 400 来自目录读口(kind)还是登记口

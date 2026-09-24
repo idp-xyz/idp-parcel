@@ -95,6 +95,7 @@ test('建议修订号取列表最新修订加一，不在册为一', () => {
       basis: 'b',
       effectiveFrom: '2026-01-02T00:00:00Z',
       registeredAt: '2026-01-02T00:00:00Z',
+      identityLayerRegistered: false,
     },
   ];
   equal(suggestedRevision(rows, 'SYN-LE-01'), 4);
