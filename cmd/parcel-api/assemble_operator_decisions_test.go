@@ -64,11 +64,100 @@ func (acceptingVerifier) VerifyOperatorCredential(_ context.Context, credential 
 
 // unconfiguredOperatorDecisions 是发行方参数未设时的运营决定 Intake：与生产装配在未配置环境里的那一套同形。
 func unconfiguredOperatorDecisions() operatorDecisionIntakes {
-	decisions, err := buildOperatorDecisionIntakes(accessidentity.UnconfiguredOperatorCredentialVerifier{}, decisionRegister{}, unwiredDecisionTargets{})
+	decisions, err := buildOperatorDecisionIntakes(unconfiguredOperatorMinter(), unwiredDecisionTargets{})
 	if err != nil {
 		panic(err)
 	}
 	return decisions
+}
+
+func unconfiguredOperatorRegistries() operatorRegistryIntakes {
+	registries, err := buildOperatorRegistryIntakes(unconfiguredOperatorMinter())
+	if err != nil {
+		panic(err)
+	}
+	return registries
+}
+
+func unconfiguredOperatorMinter() *accessidentity.OperatorMinter {
+	minter, err := buildOperatorMinter(accessidentity.UnconfiguredOperatorCredentialVerifier{}, decisionRegister{})
+	if err != nil {
+		panic(err)
+	}
+	return minter
+}
+
+// registryWriterRegister 是操作者册的替身：主体绑在 SYN-TENANT-01 上，持有登记册配置写的授予。
+type registryWriterRegister struct{}
+
+func (registryWriterRegister) FindOperator(_ context.Context, subject accessidentity.OperatorSubject) (accessidentity.OperatorStanding, bool, error) {
+	binding, err := accessidentity.NewOperatorBinding(subject, "SYN-TENANT-01", "SYN-BASIS-BINDING")
+	if err != nil {
+		return accessidentity.OperatorStanding{}, false, err
+	}
+	interval, err := accessidentity.NewEffectiveInterval(time.Now().Add(-time.Hour), time.Time{})
+	if err != nil {
+		return accessidentity.OperatorStanding{}, false, err
+	}
+	grant, err := accessidentity.NewOperatorGrant("SYN-TENANT-01", "SYN-GRANT-WRITE", subject, accessidentity.CapabilityRegistryConfigurationWrite, interval, "SYN-BASIS-GRANT")
+	if err != nil {
+		return accessidentity.OperatorStanding{}, false, err
+	}
+	recorded, err := accessidentity.NewRecordedGrant(grant, nil)
+	if err != nil {
+		return accessidentity.OperatorStanding{}, false, err
+	}
+	standing, err := accessidentity.NewOperatorStanding(binding, []accessidentity.RecordedGrant{recorded})
+	return standing, err == nil, err
+}
+
+var swappedRegistryFaces = []string{
+	"/visibility-catalogue-milestone-mapping-registrations",
+	"/visibility-catalogue-triage-rule-registrations",
+	"/visibility-catalogue-notification-policy-registrations",
+	"/visibility-catalogue-claim-eligibility-registrations",
+	"/visibility-catalogue-claim-authorization-registrations",
+	"/visibility-catalogue-disclosure-policy-registrations",
+	"/visibility-catalogue-exception-disclosure-rule-registrations",
+	"/visibility-catalogue-conflict-signal-rule-registrations",
+}
+
+func TestSwappedRegistryFacesAnswerFromTheOperatorChannel(t *testing.T) {
+	minter, err := buildOperatorMinter(acceptingVerifier{}, registryWriterRegister{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registries, err := buildOperatorRegistryIntakes(minter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), registries, nil, nil, nil, nil, nil, nil, nil))
+
+	for _, pattern := range swappedRegistryFaces {
+		cases := map[string]struct {
+			token  string
+			status int
+			code   string
+		}{
+			"no bearer token": {"", http.StatusUnauthorized, "OPERATOR_CREDENTIAL_REJECTED"},
+			// 授予齐备：认证过了才走到译装，批文自报租户在那里被拒——租户只从信封来。
+			"granted, tenant self-reported": {"presented.operator.token", http.StatusBadRequest, "MALFORMED_REQUEST"},
+		}
+		for name, testCase := range cases {
+			request := httptest.NewRequest(http.MethodPost, pattern, strings.NewReader(`{"tenantId": "SYN-TENANT-02"}`))
+			if testCase.token != "" {
+				request.Header.Set("Authorization", "Bearer "+testCase.token)
+			}
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			if response.Code != testCase.status {
+				t.Fatalf("%s, %s: status = %d, want %d", pattern, name, response.Code, testCase.status)
+			}
+			if got := problemCode(t, response); got != testCase.code {
+				t.Fatalf("%s, %s: code = %q, want %q", pattern, name, got, testCase.code)
+			}
+		}
+	}
 }
 
 var swappedDecisionFaces = map[string]accessidentity.DecisionKind{
@@ -84,11 +173,15 @@ func TestSwappedDecisionFacesAnswerFromTheOperatorChannel(t *testing.T) {
 	for _, kind := range swappedDecisionFaces {
 		kinds = append(kinds, kind)
 	}
-	decisions, err := buildOperatorDecisionIntakes(acceptingVerifier{}, decisionRegister{kinds: kinds}, unwiredDecisionTargets{})
+	minter, err := buildOperatorMinter(acceptingVerifier{}, decisionRegister{kinds: kinds})
 	if err != nil {
 		t.Fatal(err)
 	}
-	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithDecisions(decisions, nil, nil, nil, nil, nil, nil, nil))
+	decisions, err := buildOperatorDecisionIntakes(minter, unwiredDecisionTargets{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(decisions, unconfiguredOperatorRegistries(), nil, nil, nil, nil, nil, nil, nil))
 
 	for pattern := range swappedDecisionFaces {
 		cases := map[string]struct {

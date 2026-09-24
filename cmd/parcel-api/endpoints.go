@@ -167,6 +167,7 @@ func assembleBusinessEndpoints(
 	isolatedCustoms *customshttp.IsolatedCommandIntake,
 	isolatedSettlement *settlementhttp.IsolatedCommandIntake,
 	operatorDecisions operatorDecisionIntakes,
+	operatorRegistries operatorRegistryIntakes,
 ) []httpapi.BusinessEndpoint {
 	// 缺省朝拦：各隔离入参都为 nil 时，下面这组变量全取未配置即拒，整份装配与
 	// ADR-0078/0091 之前逐字节同形。
@@ -613,17 +614,17 @@ func assembleBusinessEndpoints(
 		// 立形，判据同上。路径取「读口册名 + 该类种类词 + -registrations」，种类词与查阅
 		// 的 `?kind=` 同字（换成小写连字）——同一本册在读口与写口不换词；分诊那一格 CLI
 		// 叫 triage-rules 而读口 kind 叫 TRIAGE_RULE，路径随读口，单复数不在此处再分叉。
-		{Pattern: "/visibility-catalogue-milestone-mapping-registrations", Handler: visibilityhttp.NewRegisterMilestoneMappingEndpoint(visibilityhttp.UnconfiguredIntake{}, milestoneMappingRegistration)},
-		{Pattern: "/visibility-catalogue-triage-rule-registrations", Handler: visibilityhttp.NewRegisterTriageRulesEndpoint(visibilityhttp.UnconfiguredIntake{}, triageRulesRegistration)},
-		{Pattern: "/visibility-catalogue-notification-policy-registrations", Handler: visibilityhttp.NewRegisterNotificationPolicyEndpoint(visibilityhttp.UnconfiguredIntake{}, notificationPolicyRegistration)},
-		{Pattern: "/visibility-catalogue-claim-eligibility-registrations", Handler: visibilityhttp.NewRegisterClaimEligibilityEndpoint(visibilityhttp.UnconfiguredIntake{}, claimEligibilityRegistration)},
-		{Pattern: "/visibility-catalogue-claim-authorization-registrations", Handler: visibilityhttp.NewRegisterClaimAuthorizationEndpoint(visibilityhttp.UnconfiguredIntake{}, claimAuthorizationRegistration)},
-		{Pattern: "/visibility-catalogue-disclosure-policy-registrations", Handler: visibilityhttp.NewRegisterDisclosurePolicyEndpoint(visibilityhttp.UnconfiguredIntake{}, disclosurePolicyRegistration)},
+		{Pattern: "/visibility-catalogue-milestone-mapping-registrations", Handler: visibilityhttp.NewRegisterMilestoneMappingEndpoint(operatorRegistries.visibility, milestoneMappingRegistration)},
+		{Pattern: "/visibility-catalogue-triage-rule-registrations", Handler: visibilityhttp.NewRegisterTriageRulesEndpoint(operatorRegistries.visibility, triageRulesRegistration)},
+		{Pattern: "/visibility-catalogue-notification-policy-registrations", Handler: visibilityhttp.NewRegisterNotificationPolicyEndpoint(operatorRegistries.visibility, notificationPolicyRegistration)},
+		{Pattern: "/visibility-catalogue-claim-eligibility-registrations", Handler: visibilityhttp.NewRegisterClaimEligibilityEndpoint(operatorRegistries.visibility, claimEligibilityRegistration)},
+		{Pattern: "/visibility-catalogue-claim-authorization-registrations", Handler: visibilityhttp.NewRegisterClaimAuthorizationEndpoint(operatorRegistries.visibility, claimAuthorizationRegistration)},
+		{Pattern: "/visibility-catalogue-disclosure-policy-registrations", Handler: visibilityhttp.NewRegisterDisclosurePolicyEndpoint(operatorRegistries.visibility, disclosurePolicyRegistration)},
 		// 异常披露规则（0023）与冲突信号规则（0025）两册写面（票 ve-disclosure-policy-view/02
 		// 步二，口径「同族一致」）：路径种类词随读口 kind 原词 EXCEPTION_DISCLOSURE_RULE /
 		// CONFLICT_SIGNAL_RULE 变形，写准入同上一律字面量 UnconfiguredIntake{}。
-		{Pattern: "/visibility-catalogue-exception-disclosure-rule-registrations", Handler: visibilityhttp.NewRegisterExceptionDisclosureRulesEndpoint(visibilityhttp.UnconfiguredIntake{}, exceptionDisclosureRulesRegistration)},
-		{Pattern: "/visibility-catalogue-conflict-signal-rule-registrations", Handler: visibilityhttp.NewRegisterConflictSignalRuleEndpoint(visibilityhttp.UnconfiguredIntake{}, conflictSignalRuleRegistration)},
+		{Pattern: "/visibility-catalogue-exception-disclosure-rule-registrations", Handler: visibilityhttp.NewRegisterExceptionDisclosureRulesEndpoint(operatorRegistries.visibility, exceptionDisclosureRulesRegistration)},
+		{Pattern: "/visibility-catalogue-conflict-signal-rule-registrations", Handler: visibilityhttp.NewRegisterConflictSignalRuleEndpoint(operatorRegistries.visibility, conflictSignalRuleRegistration)},
 		// VE 案件侧三页（票 admin-skeleton-closure-batch/06）：分诊两册、案件单册、
 		// 理赔追偿三册，与目录及追踪查阅同族同 Intake 变量。生产装配三口共用一个
 		// CaseReview 读适配器（六方法一型），此处三参分收是为了让装配测试盖得住

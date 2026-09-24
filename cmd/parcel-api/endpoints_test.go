@@ -263,14 +263,15 @@ func assembleUnwiredBusinessEndpointsWith(
 	isolatedCustoms *customshttp.IsolatedCommandIntake,
 	isolatedSettlement *settlementhttp.IsolatedCommandIntake,
 ) []httpapi.BusinessEndpoint {
-	return assembleUnwiredBusinessEndpointsWithDecisions(unconfiguredOperatorDecisions(),
+	return assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), unconfiguredOperatorRegistries(),
 		isolatedRead, isolatedSubmission, isolatedPartyIdentity, isolatedNodeOperations,
 		isolatedTransportFulfillment, isolatedCustoms, isolatedSettlement)
 }
 
-// assembleUnwiredBusinessEndpointsWithDecisions 同上，另收运营决定口的 Intake：换口那几行的答复格由它钉。
-func assembleUnwiredBusinessEndpointsWithDecisions(
+// assembleUnwiredBusinessEndpointsWithOperatorIntakes 同上，另收操作者渠道各口的 Intake：换口那几行的答复格由它钉。
+func assembleUnwiredBusinessEndpointsWithOperatorIntakes(
 	operatorDecisions operatorDecisionIntakes,
+	operatorRegistries operatorRegistryIntakes,
 	isolatedRead *isolatedReadIntakes,
 	isolatedSubmission shipmenthttp.SubmissionIntake,
 	isolatedPartyIdentity *commercialhttp.IsolatedPartyIdentityIntake,
@@ -397,6 +398,7 @@ func assembleUnwiredBusinessEndpointsWithDecisions(
 		isolatedCustoms,
 		isolatedSettlement,
 		operatorDecisions,
+		operatorRegistries,
 	)
 }
 

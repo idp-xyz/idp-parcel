@@ -125,7 +125,15 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	operatorDecisions, err := buildOperatorDecisionIntakes(operatorVerifier, operatorRegistry, requestViews)
+	operatorMinter, err := buildOperatorMinter(operatorVerifier, operatorRegistry)
+	if err != nil {
+		return err
+	}
+	operatorDecisions, err := buildOperatorDecisionIntakes(operatorMinter, requestViews)
+	if err != nil {
+		return err
+	}
+	operatorRegistries, err := buildOperatorRegistryIntakes(operatorMinter)
 	if err != nil {
 		return err
 	}
@@ -584,6 +592,7 @@ func run(logger *slog.Logger) error {
 			isolatedWrite.customsIntake(),
 			isolatedWrite.settlementIntake(),
 			operatorDecisions,
+			operatorRegistries,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
