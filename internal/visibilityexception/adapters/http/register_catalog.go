@@ -299,6 +299,18 @@ func writeCatalogRegistrationIntakeProblem(response http.ResponseWriter, err err
 		writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
 		return
 	}
+	if errors.Is(err, ErrOperatorCredentialRejected) {
+		writeProblem(response, http.StatusUnauthorized, codeOperatorCredentialRejected)
+		return
+	}
+	if errors.Is(err, ErrOperatorNotGranted) {
+		writeProblem(response, http.StatusForbidden, codeOperatorNotGranted)
+		return
+	}
+	if errors.Is(err, ErrIdentityDependencyUnavailable) {
+		writeProblem(response, http.StatusServiceUnavailable, codeIdentityDependencyUnavailable)
+		return
+	}
 	if errors.Is(err, ErrMalformedRegistration) {
 		writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 		return

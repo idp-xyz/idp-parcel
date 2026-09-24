@@ -13,6 +13,7 @@ package registrationjson
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -29,6 +30,34 @@ import (
 // 输入里没有任何通道技术身份字段：那是身份双轨的第①轨，由入口自取（见
 // parcel-ve-register 的 currentChannelIdentity），不可由参数传入或覆盖；这里翻译的
 // approvedBy 是第②轨——登记内容，册面语义是「登记者声明了谁批准」。
+
+// tenantOf 决定一份批文的租户取自哪（票 operator-channel/04）。受控批量口取批文里的 tenantId——那是运维在库网内的
+// 治理动作；在线口取操作者信封给的租户，批文里出现 tenantId 键即拒——采信自报租户会穿透 ADR-0003 的隔离边界。
+// 两条路共用同一份译装：分成两份，同一个登记口就有了两套形状口径。
+type tenantOf func(documentTenant string) (domain.TenantID, error)
+
+func tenantFromDocument(documentTenant string) (domain.TenantID, error) {
+	return domain.NewTenantID(documentTenant)
+}
+
+func injectedTenant(tenant domain.TenantID) tenantOf {
+	return func(string) (domain.TenantID, error) { return tenant, nil }
+}
+
+// ErrSelfReportedTenant 表示在线口的批文里带了 tenantId：租户只从认证结果来。
+var ErrSelfReportedTenant = errors.New("visibility registration: online input must not carry tenantId; the tenant comes from the operator envelope")
+
+// refuseSelfReportedTenant 键在场即拒、不看值：`"tenantId": null` 也是自报。批文不是 JSON 对象时交给 decodeStrict 去答形状错。
+func refuseSelfReportedTenant(raw []byte) error {
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &top); err != nil {
+		return nil
+	}
+	if _, present := top["tenantId"]; present {
+		return ErrSelfReportedTenant
+	}
+	return nil
+}
 
 func decodeStrict(raw []byte, document any, what string) error {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
@@ -107,12 +136,24 @@ type milestoneMappingDocument struct {
 }
 
 func MilestoneMappingFromJSON(raw []byte) (application.RegisterMilestoneMappingCommand, error) {
+	return milestoneMappingFromJSON(raw, tenantFromDocument)
+}
+
+// MilestoneMappingFromJSONForTenant 是在线口那一路：租户取操作者信封给的，批文带 tenantId 即拒。
+func MilestoneMappingFromJSONForTenant(raw []byte, tenant domain.TenantID) (application.RegisterMilestoneMappingCommand, error) {
+	if err := refuseSelfReportedTenant(raw); err != nil {
+		return application.RegisterMilestoneMappingCommand{}, err
+	}
+	return milestoneMappingFromJSON(raw, injectedTenant(tenant))
+}
+
+func milestoneMappingFromJSON(raw []byte, tenantSource tenantOf) (application.RegisterMilestoneMappingCommand, error) {
 	none := application.RegisterMilestoneMappingCommand{}
 	var document milestoneMappingDocument
 	if err := decodeStrict(raw, &document, "里程碑映射"); err != nil {
 		return none, err
 	}
-	tenant, err := domain.NewTenantID(document.TenantID)
+	tenant, err := tenantSource(document.TenantID)
 	if err != nil {
 		return none, err
 	}
@@ -158,12 +199,24 @@ type triageRulesDocument struct {
 }
 
 func TriageRulesFromJSON(raw []byte) (application.RegisterTriageRulesCommand, error) {
+	return triageRulesFromJSON(raw, tenantFromDocument)
+}
+
+// TriageRulesFromJSONForTenant 是在线口那一路：租户取操作者信封给的，批文带 tenantId 即拒。
+func TriageRulesFromJSONForTenant(raw []byte, tenant domain.TenantID) (application.RegisterTriageRulesCommand, error) {
+	if err := refuseSelfReportedTenant(raw); err != nil {
+		return application.RegisterTriageRulesCommand{}, err
+	}
+	return triageRulesFromJSON(raw, injectedTenant(tenant))
+}
+
+func triageRulesFromJSON(raw []byte, tenantSource tenantOf) (application.RegisterTriageRulesCommand, error) {
 	none := application.RegisterTriageRulesCommand{}
 	var document triageRulesDocument
 	if err := decodeStrict(raw, &document, "分诊规则"); err != nil {
 		return none, err
 	}
-	tenant, err := domain.NewTenantID(document.TenantID)
+	tenant, err := tenantSource(document.TenantID)
 	if err != nil {
 		return none, err
 	}
@@ -215,12 +268,24 @@ type notificationPolicyDocument struct {
 }
 
 func NotificationPolicyFromJSON(raw []byte) (application.RegisterNotificationPolicyCommand, error) {
+	return notificationPolicyFromJSON(raw, tenantFromDocument)
+}
+
+// NotificationPolicyFromJSONForTenant 是在线口那一路：租户取操作者信封给的，批文带 tenantId 即拒。
+func NotificationPolicyFromJSONForTenant(raw []byte, tenant domain.TenantID) (application.RegisterNotificationPolicyCommand, error) {
+	if err := refuseSelfReportedTenant(raw); err != nil {
+		return application.RegisterNotificationPolicyCommand{}, err
+	}
+	return notificationPolicyFromJSON(raw, injectedTenant(tenant))
+}
+
+func notificationPolicyFromJSON(raw []byte, tenantSource tenantOf) (application.RegisterNotificationPolicyCommand, error) {
 	none := application.RegisterNotificationPolicyCommand{}
 	var document notificationPolicyDocument
 	if err := decodeStrict(raw, &document, "通知策略"); err != nil {
 		return none, err
 	}
-	tenant, err := domain.NewTenantID(document.TenantID)
+	tenant, err := tenantSource(document.TenantID)
 	if err != nil {
 		return none, err
 	}
@@ -260,12 +325,24 @@ type claimEligibilityDocument struct {
 }
 
 func ClaimEligibilityFromJSON(raw []byte) (application.RegisterClaimEligibilityCommand, error) {
+	return claimEligibilityFromJSON(raw, tenantFromDocument)
+}
+
+// ClaimEligibilityFromJSONForTenant 是在线口那一路：租户取操作者信封给的，批文带 tenantId 即拒。
+func ClaimEligibilityFromJSONForTenant(raw []byte, tenant domain.TenantID) (application.RegisterClaimEligibilityCommand, error) {
+	if err := refuseSelfReportedTenant(raw); err != nil {
+		return application.RegisterClaimEligibilityCommand{}, err
+	}
+	return claimEligibilityFromJSON(raw, injectedTenant(tenant))
+}
+
+func claimEligibilityFromJSON(raw []byte, tenantSource tenantOf) (application.RegisterClaimEligibilityCommand, error) {
 	none := application.RegisterClaimEligibilityCommand{}
 	var document claimEligibilityDocument
 	if err := decodeStrict(raw, &document, "索赔资格声明"); err != nil {
 		return none, err
 	}
-	tenant, err := domain.NewTenantID(document.TenantID)
+	tenant, err := tenantSource(document.TenantID)
 	if err != nil {
 		return none, err
 	}
@@ -305,6 +382,18 @@ type claimAuthorizationDocument struct {
 }
 
 func ClaimAuthorizationFromJSON(raw []byte) (application.RegisterClaimAuthorizationCommand, error) {
+	return claimAuthorizationFromJSON(raw, tenantFromDocument)
+}
+
+// ClaimAuthorizationFromJSONForTenant 是在线口那一路：租户取操作者信封给的，批文带 tenantId 即拒。
+func ClaimAuthorizationFromJSONForTenant(raw []byte, tenant domain.TenantID) (application.RegisterClaimAuthorizationCommand, error) {
+	if err := refuseSelfReportedTenant(raw); err != nil {
+		return application.RegisterClaimAuthorizationCommand{}, err
+	}
+	return claimAuthorizationFromJSON(raw, injectedTenant(tenant))
+}
+
+func claimAuthorizationFromJSON(raw []byte, tenantSource tenantOf) (application.RegisterClaimAuthorizationCommand, error) {
 	none := application.RegisterClaimAuthorizationCommand{}
 	var document claimAuthorizationDocument
 	if err := decodeStrict(raw, &document, "申请人授权名单"); err != nil {
@@ -313,7 +402,7 @@ func ClaimAuthorizationFromJSON(raw []byte) (application.RegisterClaimAuthorizat
 	if document.Applicants == nil {
 		return none, fmt.Errorf("申请人名单字段必须在场（不授权任何人写 []）——缺字段是漏填，不当显式空名单收")
 	}
-	tenant, err := domain.NewTenantID(document.TenantID)
+	tenant, err := tenantSource(document.TenantID)
 	if err != nil {
 		return none, err
 	}
@@ -483,12 +572,24 @@ func MaterialReceiptRevocationFromJSON(raw []byte) (application.RevokeMaterialRe
 }
 
 func DisclosurePolicyFromJSON(raw []byte) (application.RegisterDisclosurePolicyCommand, error) {
+	return disclosurePolicyFromJSON(raw, tenantFromDocument)
+}
+
+// DisclosurePolicyFromJSONForTenant 是在线口那一路：租户取操作者信封给的，批文带 tenantId 即拒。
+func DisclosurePolicyFromJSONForTenant(raw []byte, tenant domain.TenantID) (application.RegisterDisclosurePolicyCommand, error) {
+	if err := refuseSelfReportedTenant(raw); err != nil {
+		return application.RegisterDisclosurePolicyCommand{}, err
+	}
+	return disclosurePolicyFromJSON(raw, injectedTenant(tenant))
+}
+
+func disclosurePolicyFromJSON(raw []byte, tenantSource tenantOf) (application.RegisterDisclosurePolicyCommand, error) {
 	none := application.RegisterDisclosurePolicyCommand{}
 	var document disclosurePolicyDocument
 	if err := decodeStrict(raw, &document, "披露策略"); err != nil {
 		return none, err
 	}
-	tenant, err := domain.NewTenantID(document.TenantID)
+	tenant, err := tenantSource(document.TenantID)
 	if err != nil {
 		return none, err
 	}
@@ -550,12 +651,24 @@ type exceptionDisclosureRulesDocument struct {
 }
 
 func ExceptionDisclosureRulesFromJSON(raw []byte) (application.RegisterExceptionDisclosureRulesCommand, error) {
+	return exceptionDisclosureRulesFromJSON(raw, tenantFromDocument)
+}
+
+// ExceptionDisclosureRulesFromJSONForTenant 是在线口那一路：租户取操作者信封给的，批文带 tenantId 即拒。
+func ExceptionDisclosureRulesFromJSONForTenant(raw []byte, tenant domain.TenantID) (application.RegisterExceptionDisclosureRulesCommand, error) {
+	if err := refuseSelfReportedTenant(raw); err != nil {
+		return application.RegisterExceptionDisclosureRulesCommand{}, err
+	}
+	return exceptionDisclosureRulesFromJSON(raw, injectedTenant(tenant))
+}
+
+func exceptionDisclosureRulesFromJSON(raw []byte, tenantSource tenantOf) (application.RegisterExceptionDisclosureRulesCommand, error) {
 	none := application.RegisterExceptionDisclosureRulesCommand{}
 	var document exceptionDisclosureRulesDocument
 	if err := decodeStrict(raw, &document, "异常披露规则"); err != nil {
 		return none, err
 	}
-	tenant, err := domain.NewTenantID(document.TenantID)
+	tenant, err := tenantSource(document.TenantID)
 	if err != nil {
 		return none, err
 	}
@@ -606,12 +719,24 @@ type conflictSignalRuleDocument struct {
 }
 
 func ConflictSignalRuleFromJSON(raw []byte) (application.RegisterConflictSignalRuleCommand, error) {
+	return conflictSignalRuleFromJSON(raw, tenantFromDocument)
+}
+
+// ConflictSignalRuleFromJSONForTenant 是在线口那一路：租户取操作者信封给的，批文带 tenantId 即拒。
+func ConflictSignalRuleFromJSONForTenant(raw []byte, tenant domain.TenantID) (application.RegisterConflictSignalRuleCommand, error) {
+	if err := refuseSelfReportedTenant(raw); err != nil {
+		return application.RegisterConflictSignalRuleCommand{}, err
+	}
+	return conflictSignalRuleFromJSON(raw, injectedTenant(tenant))
+}
+
+func conflictSignalRuleFromJSON(raw []byte, tenantSource tenantOf) (application.RegisterConflictSignalRuleCommand, error) {
 	none := application.RegisterConflictSignalRuleCommand{}
 	var document conflictSignalRuleDocument
 	if err := decodeStrict(raw, &document, "冲突信号规则"); err != nil {
 		return none, err
 	}
-	tenant, err := domain.NewTenantID(document.TenantID)
+	tenant, err := tenantSource(document.TenantID)
 	if err != nil {
 		return none, err
 	}
