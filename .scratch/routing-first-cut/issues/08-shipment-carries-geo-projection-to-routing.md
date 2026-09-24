@@ -1,7 +1,7 @@
 # 08 小包托运请求随路由判断携带地理解析投影（ADR-0075 的 PS 半边）
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent
 Blocked by: 02、07
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「接路由证据取数侧」那一步（端到端的前提）
 地盘：parcel-shipment 发往 network-routing 的可达性请求与接受交接载荷；network-routing 侧消费方适配器的翻译。

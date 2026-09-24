@@ -1,7 +1,7 @@
 # 06 改路与装载 / 交接并发时按业务时间与生效边界裁决
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent
 Blocked by: 04
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「路由策略族」那一步
 地盘：network-routing 领域与复核编排；若要消费装载或交接结果，只在 NR 侧的消费方适配器里加（[ADR-0025](../../../docs/adr/0025-cross-context-adapters-live-on-the-consumer-side.md)）。

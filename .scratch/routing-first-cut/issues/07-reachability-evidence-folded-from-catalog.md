@@ -1,7 +1,7 @@
 # 07 可达性证据从版本化网络目录折出：视图修订、服务区域、候选与可执行性
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent
 Blocked by: 02
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「接路由证据取数侧」那一步（可达性一侧）
 地盘：network-routing 目录的内容列（服务区域覆盖、节点对区域的覆盖等，新迁移，号开工时在频道预留）、目录登记口、postgres 取数侧、证据视图端口；[ADR-0068](../../../docs/adr/0068-versioned-network-catalog-structure-precedes-rule-content.md) 状态行与两处护栏注释（`0008` 迁移头注、目录适配器 `NetworkCatalog` 的类型注释）。
