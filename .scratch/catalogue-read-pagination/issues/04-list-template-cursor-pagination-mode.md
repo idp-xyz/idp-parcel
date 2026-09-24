@@ -1,7 +1,7 @@
 # 04 `ListPageTemplate` 的 `pagination` 槽加游标模式（向后兼容）
 
 Category: enhancement
-Status: resolved——2026-09-24 通道 1 在 `main` 上直接做完（workflow.md「前端切片」）：本地 `dc19e5f9` + 本笔票面，**未推**（本宿主 shell 无 GitHub 推送凭据，待用户在 Cursor 终端推）。完成记录见文末；推送方自审，不算非作者评审。此前 in-progress——通道 1 接（通道 3 派单 `task-257cfc55`）。此前 ready-for-agent
+Status: resolved——2026-09-24 通道 1 在 `main` 上直接做完（workflow.md「前端切片」）：本地 `dc19e5f9` + 本笔票面，**未推**（本宿主 shell 无 GitHub 推送凭据，待用户在 Cursor 终端推）。完成记录见文末；非作者评审 ← 通道 3 Spec 0 阻断、可接受，其非阻断 1 已修 `6677f930`，见 Comments。此前 in-progress——通道 1 接（通道 3 派单 `task-257cfc55`）。此前 ready-for-agent
 Blocked by: 无
 地盘：`apps/admin-web/src/templates/ListPageTemplate.tsx`、新增的纯逻辑 `.ts` 与其 node:test、`templates/index.ts`（只追加）。
 出处：[ADR-0144](../../../docs/adr/0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 决定八。
@@ -30,7 +30,8 @@ Blocked by: 无
 | 笔 | 文件 | 做了什么 |
 |---|---|---|
 | `dc19e5f9` | `templates/ListPageTemplate.tsx`、新 `templates/cursor-pagination.ts`、`.test.ts`、`templates/index.ts`、票面 | 第 1–3 条：`ListCursorPaginationProps`（`mode: 'cursor'`）与页码形按 `mode` 判别；模板自摆游标翻页条；纯逻辑（`CursorTrail` 压 / 出栈、`cursorTrailFor` 条件签名一变回第一页、`cursorTotalPages`、`cursorPagerControls`、`cursorPageSummary`）+ node:test 4 条；Status → in-progress |
-| 本笔 | 票面、spec | 完成记录 |
+| `c7ae9f51` | 票面、spec | 完成记录 |
+| `6677f930` | `templates/cursor-pagination.ts`、`.test.ts` | 评审 ← 通道 3 非阻断 1：同一个 `next` 不压两次 |
 
 **完成判据**
 
@@ -54,9 +55,25 @@ Blocked by: 无
    与每页条数（ADR-0144 决定二、Consequences），两件 vendor 的主要能力本来就用不上。
 4. **到头的钮用原生 `disabled`**，不用 `DisabledSlot` 的 aria-disabled + 说明：到头了不是「功能没接」，没有要解释的。
 
-**评审**：共享面（`templates/*`）按 workflow 第 5 步要一份 Spec 轴。通道 3 在做浏览器验收、其余通道忙（用户今日已令推送方自审同类票），**推送方自审**，
-不算非作者评审。自审所得：第 1–3 条与「不做」逐条落了（diff 只在 `templates/` 与票面，未碰页面与读口）；与 ADR-0144 对得上——上一页由客户端回退（决定一）、
+**评审**：共享面（`templates/*`）按 workflow 第 5 步要一份 Spec 轴。通道 3 随后补了非作者评审（Spec 0 阻断、可接受，见 Comments）；在那之前的推送方自审所得：第 1–3 条与「不做」逐条落了（diff 只在 `templates/` 与票面，未碰页面与读口）；与 ADR-0144 对得上——上一页由客户端回退（决定一）、
 换条件从第一页重取（决定一）、不给页大小选择（决定二）、`size` 按页大小而非本页行数算总页数、`total` 为 `null` 不显（决定五）；`ListPaginationProps` 只加
 可选判别字段、`templates/index.ts` 只追加，模板改动向后兼容。
 
 **推送**：未推。代理已恢复、`git fetch` 可用，但本 shell 没有 GitHub 推送凭据（`could not read Password`）；待用户在 Cursor 终端 `git push origin main`。
+
+## Comments
+
+### 评审 ← 通道 3 · 钉 `dc19e5f9`（基 `47c80a8e`，共享树只读，门禁未重跑）· 2026-09-24 15:0x（推送方自通道 3 来信代落原文）
+
+引通道 1 在 `dc19e5f9` 实跑的 tsc 0 / run-tests 428 / vite build 与探针 11 ok。
+
+**Spec** — 阻断：无。
+
+无发现（实核）：票面第 1 条——`ListCursorPaginationProps` 与页码形按 `mode` 判别，页码形 `mode?: 'page'` 可选，`ListPageTemplate` 不写 `mode` 仍走 vendor `Pagination`，既有调用零变化；`CursorPaginationBar` 上一页 / 下一页 + `cursorPageSummary`，`total` 为 null 只说第几页、`next` 为 null 下一页不能按，对得上 ADR-0144 决定五（`size` 按「回显的页大小」注、不当本页行数）。第 2 条——`cursor-pagination.ts` 压 / 出栈、`cursorTrailFor` 条件签名一变回第一页、`cursorTotalPages` 由 size 与 total 算且 null 不猜，均有 node:test。翻页条只挂在 `viewState.kind === 'ready'` 分支内，出错 / 未配置 / 空态走 `StateSlot`，故「共 0 条」不会出现在非就绪态（管理台 README 计数通则）。`templates/index.ts` 只追加。
+
+非阻断：
+1. **同一个 `next` 可能被压两次**（`cursor-pagination.ts` 的 `nextCursorPage`）。页面若在取下一页期间保留旧答复（异常案件页重取就不置空 `answer`），翻页条照渲、`next` 仍是上一页那个，连点两次即 `afters` 里同一游标出现两次——页号多记一页、第二次取的还是同一页。纯逻辑里一句就能挡：`next` 等于 `currentCursorAfter(trail)` 时原样返回，并补一条 node:test；或把「取数期间进 loading 态或挡第二次点击」写进票 05 的完成判据。前者便宜且幂等，建议取前者。
+
+结论：**可接受**（Spec 0 / 1）。
+
+**处置**（通道 1）：非阻断 1 取前者，已修 `6677f930`——`nextCursorPage` 遇到的 `next` 就是当前页带的 `after` 时原样返回（正常翻页下两者不会相等：下一页的游标指在下一页末行之后，不是当前页的起点），node:test 一条；三道门（钉 `6677f930`）tsc 0 / run-tests 428 → 429 / vite build 成功，探针 11 ok 不变。
