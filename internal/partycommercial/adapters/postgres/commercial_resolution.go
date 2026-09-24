@@ -153,9 +153,12 @@ type closureDocument struct {
 	Settlement *settlementSelectorDocument `json:"settlement,omitempty"`
 	// Credit 只在必需依据含信用政策时出现（ADR-0127，同一条「含则必填、不含则必缺」）；不写
 	// 下来读回的键同样立不起来。
-	Credit       *creditSelectorDocument `json:"credit,omitempty"`
-	ViewRevision string                  `json:"viewRevision"`
-	Adopted      []adoptedDocument       `json:"adopted"`
+	Credit *creditSelectorDocument `json:"credit,omitempty"`
+	// ServiceProduct 是键上委托声明的服务产品（票 psb/17），只在声明时出现。丢了它，提交前重解按范围重跑，同一范围
+	// 两个产品即冲突，一份仍然成立的解析被判成已失效。omitempty：不声明的快照逐字节不变，内容摘要随之不变。
+	ServiceProduct string            `json:"serviceProduct,omitempty"`
+	ViewRevision   string            `json:"viewRevision"`
+	Adopted        []adoptedDocument `json:"adopted"`
 }
 
 // creditSelectorDocument 两维齐全：信用政策没有由闭包解出的那一维，键上给的就是全部。
@@ -236,6 +239,7 @@ func documentOfClosure(closure domain.CommercialClosure) closureDocument {
 			ChargeType: key.Credit.ChargeType.String(),
 		}
 	}
+	document.ServiceProduct = key.ServiceProduct.String()
 	if revision, ok := closure.ViewRevision(); ok {
 		document.ViewRevision = revision.String()
 	}
@@ -325,6 +329,11 @@ func (document closureDocument) closure() (domain.CommercialClosure, error) {
 	}
 	if document.Credit != nil {
 		if key.Credit, err = document.Credit.selector(); err != nil {
+			return domain.CommercialClosure{}, err
+		}
+	}
+	if document.ServiceProduct != "" {
+		if key.ServiceProduct, err = domain.NewCommercialObjectID(document.ServiceProduct); err != nil {
 			return domain.CommercialClosure{}, err
 		}
 	}
