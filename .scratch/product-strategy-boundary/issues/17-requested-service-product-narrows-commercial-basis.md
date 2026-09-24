@@ -1,7 +1,7 @@
 # 17 委托声明的服务产品参与商业依据解析：同一范围多个产品不再必然`适用冲突`
 
 Category: enhancement
-Status: in-progress——2026-09-24 通道 2 认领（用户令独立承接），隔离 worktree `idp-parcel-mcp2-psb17`、分支 `mcp2-psb17`。此前 ready-for-agent——同日通道 2 立票并按用户令自决裁定（用户原话「按你的建议，你自己全部开工做，独立完成」），裁决见下
+Status: ready-for-agent——2026-09-25 通道 2 崩后认领释放（通道 4 按用户令独立接手时处置）：半成品在分支 `mcp2-psb17`（已推 origin），`026be1ae`、`51cac469`、`485a6d33` 三笔是通道 2 做完的之一至之三，`0ca53342` 原样封存它未提交的一份测试（mtime 停在 2026-09-24 22:53:38，没跑过）；接手时写明「从 `mcp2-psb17@0ca53342` 接着做」还是「另起」。此前 in-progress——2026-09-24 通道 2 认领（用户令独立承接），隔离 worktree `idp-parcel-mcp2-psb17`、分支 `mcp2-psb17`。此前 ready-for-agent——同日通道 2 立票并按用户令自决裁定（用户原话「按你的建议，你自己全部开工做，独立完成」），裁决见下
 Blocked by: 无
 地盘：`internal/partycommercial`（闭包解析键、逐项解析键、闭包落库与迁移）、`internal/parcelshipment` 领域读口与 `adapters/partycommercial`；party-commercial `CONTEXT.md`、UC-PC-002、新 ADR。
 出处：[票 05](./05-demo-journey-criterion-evidence.md) 格 1（实测 + 探针）与判断项 1——演示动线按种子原样灌时的第一个停点。本票承接[票 06](./06-ps-acceptance-and-label-selection-judgment-methods.md) 第 8 项（通道 4 于 `ca26a1ec` 补入）：立票时漏看了那一项，票 06 该项已改指本票，裁决只记在这里。
