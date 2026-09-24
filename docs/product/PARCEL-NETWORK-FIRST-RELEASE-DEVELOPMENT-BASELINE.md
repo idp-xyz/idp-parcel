@@ -184,22 +184,22 @@ PN-08 是产品级试点治理与跨上下文应用编排，不是新的限界�
 
 **2026-09-24 补记（[ADR-0146](../adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)，用户授权通道 4 自决）。** 上表与上段「产品就绪里程碑就此成立」是按当时三项判据的如实定级，原样保留；判据自本日起改为四项（见上节），**按新判据产品就绪暂不成立**。能用证据坐实的有两处：PN-02 的可达性证据视图与 PN-03 的初始路由证据视图没有取数侧——票 `nr-route-evidence-views/01` 停着，正是因为路由算法被归进了实例——这两处判断点没有执行器。其余切片待按文件级证据重定级，重定级与演示动线判据的取证拆在 `.scratch/product-strategy-boundary/`，本段不替它们下结论。
 
-**按四项判据重定级（票 `product-strategy-boundary/01`，钉 `5445341c`，代码与 `dc62a481` 同）。** 取证面：生产装配点（`cmd/parcel-api`、`cmd/parcel-dispatch`）上以「实例半边」为由留空的缝、生产装配里的显式未配置桩、机制清点的端口精确口径缺；逐条按分界检验判「租户把自己的值全部登记之后，这一格答不答得出来」——答得出是租户取值未配置，答不出是产品策略缺执行器。没有逐 UC 走读；PN-05 与 PN-01 / 08 的切片内结论据装配点注释与端口面，未逐判断点复核。前两项判据沿用上表，下表只列第三项的缺口；第四项按动线整体判，见表后。
+**按四项判据重定级（票 `product-strategy-boundary/01`，钉 `5445341c`，代码与 `dc62a481` 同；同日经用户令严格复核更正，复核钉 `8516d8d1`，更正清单见票面）。** 取证面：生产装配点（`cmd/parcel-api`、`cmd/parcel-dispatch`）上留空的缝与显式未配置桩、机制清点的端口精确口径缺，逐条回读端口与装配注释。分界按三分判：租户把自己的值全部登记之后这一格答得出，是租户取值未配置，第三项允许；答不出时再看缺的是什么——缺形状、登记册、读口或回指是**机制缺口**，记第一项；缺判断方法、选法、连接器形态或触发策略是**产品策略缺执行器**，记第三项。上表第一项的定级早于 [ADR-0100](../adr/0100-operator-identity-is-a-product-owned-access-channel-family.md)，那时按「HTTP 接入面的认证属 `PAR-INT-01` 实例半边、不计入」读；ADR-0100 已把操作者身份判归机制半边，上表第一项因此不能沿用，下表把它与第三项一并重判；第二项（受控案例可复算）沿用上表。没有逐 UC 走读，「未见缺口」只说本次取证面上没有，结论是缺口的下界；第四项按动线整体判，见表后。
 
-| 切片 | 第三项（租户取值显式未配置，产品策略有执行器） | 缺执行器的判断点（证据：文件 + 符号） |
+| 切片 | 第一项（骨架完整）：机制缺口 | 第三项（租户取值显式未配置，产品策略有执行器）：产品策略缺执行器 |
 |---|---|---|
-| 横切 | 未满足，作用于全部切片的生产形态 | 生产接入认证：端点表命令行与目录读口挂 `UnconfiguredIntake{}`，一律答 `ACCESS_CHANNEL_NOT_CONFIGURED`（`cmd/parcel-api/endpoints.go`）；运营请求到商业坐标的映射 `RequestSource` / `Scopes` 留空（`assemble_review.go`、`assemble_withdrawal.go`、`assemble_customer_amendment.go` 等）。认证机制与角色模型归产品策略（ADR-0100 已判运营身份为产品自有渠道族；客户侧 ADR-0139 仍 Proposed），账号与角色分派才是租户取值 |
-| PN-01 / 08 | 切片内满足 | 无切片内缺口；阶段评审与接管没有读面、接管没有登记口，属入口与读面，不属判断方法 |
-| PN-02 | 部分 | 可达性证据视图无取数侧（票 `nr-route-evidence-views/01`）；受理链逐项时点 `Values` 生产装配为 nil、第二阶段必答`未配置`（`cmd/parcel-dispatch/assemble.go` `acceptanceCommercialBasis`）；受理前财务控制的账户范围源与估价源为 nil（同文件 `NewPreAcceptanceControlAdapter` 的 `Scopes` / `Amounts`）；面单渠道择优链六条缝全部未配置且没有触发面——其中「账号使用授权选法」「供应商协议选法」是选取方法（`cmd/parcel-api/assemble_label_channel.go` `labelChannelSources`），计价输入口 `PricingInputResolver` 无实现 |
-| PN-03 | 部分 | 初始路由证据视图无取数侧（同上票）；初始路由消费门的商业适用性解析标识源答依赖不可用（`cmd/parcel-dispatch/assemble.go` `acceptanceConsumer`）；节点收寄的包裹身份核对是未配置桩，委托侧外部标识关联模型不存在（`cmd/parcel-api/assemble_reception.go` `unconfiguredParcelIdentityView`，票 `ps-external-mark-relations/01`） |
-| PN-04 | 部分 | 面单渠道出向连接器一家都没有（`assemble_label_channel.go` `unconfiguredLabelChannelGateway`）；派送节拍没有内置触发器，端点挂未配置（`assemble_delivery_dispatch.go`）；外部轨迹来源 `TrackingSource` 无实现 |
-| PN-05 | 切片内满足 | 装配点注释写明留白在登记册内容里（`assemble_external_results.go`），属租户取值；生产自动申报在首发范围外 |
-| PN-06 | 部分 | 客户通知出向连接器 `NotificationChannelGateway` 无实现（ADR-0142 首方 webhook 仍 Proposed） |
-| PN-07 | 部分 | 结算四口无实现：`ClaimAmountRuleView`、`ConfirmedChargeFactsView`、`SupplierAuditAuthorityView`、`SupplierPayableAccountView`；计价输入 `PricingInputResolver` 无实现（`pp-pricing-input-seams` 在办） |
+| 横切 | **未满足**，作用于全部切片的运营面：操作者渠道（ADR-0100 已接受）没有落地——`internal/accessidentity` 没有操作者册、OIDC 校验与 `OperatorEnvelope`，其 `doc.go` 仍写「本轮既没有登记册的表，也没有凭据形态」；端点表的命令行与目录读口在隔离开关（ADR-0078 / 0091）之外一律挂 `UnconfiguredIntake{}`，答 `ACCESS_CHANNEL_NOT_CONFIGURED`（`cmd/parcel-api/endpoints.go`）。这一格不等任何决定 | **未满足**：授权请求坐标的推导——`RequestSource` 生产为 nil（`assemble_review.go`、`assemble_withdrawal.go`、`assemble_customer_amendment.go`、`assemble_continued_attempt_decision.go`）。代码注释判它为 `PAR-COM-14` 实例半边；按分界检验，从请求方与委托推出法人、权限等级与商业范围是方法，授权授予与原因目录才是租户取值（改判，待 PC owner 复核）。客户侧接入渠道的形态待 ADR-0139 至 0142 接受，归用户 |
+| PN-01 / 08 | 未见缺口 | 未见缺口。余量不属判据：阶段评审与接管两册没有查阅口（`query_governance_registers.go` 注明第二批未开），接管没有登记口 |
+| PN-02 | **未满足**：可达性资格视图的闭包标识生产为 nil（`cmd/parcel-dispatch/assemble.go` `acceptanceReachability`）——ADR-0064 的「从已接受解析回指」只改了初始路由那条链；网络定义登记册没有写入方、定义原语未设计（`NetworkDefinitions`）；受理前财务控制的作用域源已接 `PolicyBackedControlScopeSource`，缺的账户目录背后没有结算账户登记册（SA 只有 `SettlementAccountID` 值对象），租户无处登记；面单择优链的「接受时解析回指」源未接（`labelChannelSources` 的 `Resolutions`，与闭包标识同形） | **未满足**：路由解析层（候选生成、过滤、排序）不存在，网络定义登记了也答 `ErrNetworkDefinitionUnresolvable`（票 `nr-route-evidence-views/01`）；受理链逐项时点 `Values` 为 nil、第二阶段必答`未配置`（`acceptanceCommercialBasis`；标准语义可内置折法，租户截点才是取值——改判，待 PC owner 复核）；受理前控制金额 `Amounts` 为 nil，缺估价方法（`ControlAmountSource`）；面单择优链缺账号使用授权选法、供应商协议选法与触发面（`assemble_label_channel.go` 文件头注自称触发面「是产品题」），其余三个取数口（渠道约束、计价输入 `PricingInputSource`、BUY 价卡）未逐口定性；面单出向连接器一家都没有（`unconfiguredLabelChannelGateway`；面单渠道服务的 CPS-06 / 07 属本切片） |
+| PN-03 | **未满足**：节点收寄的身份核对缝是未配置桩，PS 侧外部标识关联模型不存在（`assemble_reception.go` `unconfiguredParcelIdentityView`，注释明写它「不是实例半边……是提供方机制未建」，票 `ps-external-mark-relations/01`）；网络定义登记册同 PN-02 | **未满足**：初始路由解析层同 PN-02（`InitialRouteEvidenceView` 由同一个 `NetworkDefinitions` 实现）。初始路由消费门的商业适用性已按 ADR-0064 从已接受解析回指（`NewRoutingApplicability`），不是缺口 |
+| PN-04 | 未见缺口 | **未满足**：外部轨迹来源连接器一家都没有（`TrackingSource`，端口注释称「设计而不是欠账」，按 ADR-0146 连接器形态归产品策略——改判）；派送执行器与端点都在，缺内置的发起策略（`assemble_delivery_dispatch.go`；拍频是租户取值，可给参考配置） |
+| PN-05 | 未见缺口：外部结果七缝全接真，留白在登记册内容里（`assemble_external_results.go`） | **未满足**：申报发送通道——提交版本意图 `customs-compliance.declaration-submission.formed` 唯一的消费方是 VE 投影，没有把申报交给海关或报关服务商的连接器。首发要求授权确认后提交，并保留提交尝试与逐步外部回执（[PILOT-SCOPE](./PILOT-SCOPE.md)）；「不启用生产自动申报」只排除自动，不排除提交 |
+| PN-06 | 未见缺口 | **未满足**：客户通知出向连接器 `NotificationChannelGateway` 无实现（ADR-0142 首方 webhook 仍 Proposed） |
+| PN-07 | **未满足**：结算四口 `ClaimAmountRuleView`、`ConfirmedChargeFactsView`、`SupplierAuditAuthorityView`、`SupplierPayableAccountView` 没有生产实现、`cmd/` 无一处引用，缺的是登记册与读口，册里的行才是租户取值；`PricingInputResolver` 无实现——提供方三只读口已随 `pp-pricing-input-seams` 进 main，缺消费侧适配器与 NO 实测登记册（该批 04，draft） | 未核：本次没有复核金额规则、分摊与确认条件的判断方法是否齐 |
 
-第四项（演示动线走通）：**未满足**。取证钉 `5445341c` 时委托提交仍答 `ADMISSION_PAUSED`，修复随票 `demo-intake-admission-paused/01` 在其后重放进 main；越过这一格，按装配点，受理链逐项时点必答`未配置`、初始路由证据视图无取数侧，动线至少在 PN-02 受理与 PN-03 路由两处停住。本次没有端到端实跑。
+第四项（演示动线走通）：**未满足**。取证钉 `5445341c` 时委托提交仍答 `ADMISSION_PAUSED`，修复随票 `demo-intake-admission-paused/01` 在其后重放进 main；越过这一格，按装配点受理链至少有两处停住：逐项时点 `Values` 为 nil，第二阶段必答`未配置`；可达性证据取自网络定义登记册，那本册没有写入方，生产上恒答`未配置`，演示租户也无从登记。本次没有端到端实跑。
 
-**结论：按四项判据产品就绪不成立**——PN-02、03、04、06、07 各有产品策略缺执行器，横切的接入认证缺口作用于全部切片的生产形态，演示动线未走通。缺口逐条交票 `product-strategy-boundary/02` 立工作票；横切一格与 ADR-0139 至 0142 是同一道题，那四篇的接受归用户。
+**结论：按四项判据产品就绪不成立。** 第一项在横切（操作者渠道）与 PN-02、03、07 不满足；第三项在横切与 PN-02 至 07 不满足；第四项未满足。三类缺口的恢复路径不同：机制缺口现在就能做、不等任何决定，头一件是 ADR-0100 操作者渠道，它挡着全部运营面；产品策略缺口按 ADR-0146 交内置策略或参考配置；客户侧接入渠道的形态待 ADR-0139 至 0142 接受，归用户。缺口逐条交票 `product-strategy-boundary/02` 立工作票。
 
 #### 2026-09-02 裁决：生产接线棘轮那 32 条计入差量，「可派机制工作清零」不再成立
 

@@ -1,7 +1,7 @@
 # 01 按四项判据逐切片重定级
 
 Category: task
-Status: resolved——2026-09-24 通道 4 交付（共享树，取证钉 `5445341c`，代码与 `dc62a481` 同），结论落开发主线「机制半边现状」一节；纯 md，自审
+Status: resolved——2026-09-24 通道 4 交付（共享树，取证钉 `5445341c`，代码与 `dc62a481` 同），结论落开发主线「机制半边现状」一节；同日经用户令严格复核更正（复核钉 `8516d8d1`，见文末「严格复核记录」）；纯 md，自审
 Blocked by: 无
 地盘：开发主线「机制半边现状」一节（取证只读全仓）。
 出处：[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定五、六。
@@ -37,3 +37,21 @@ Blocked by: 无
 4. 第四项没有端到端实跑，按装配点推断；实跑取证归 05。
 
 未做：没有补任何实现。缺口逐条交 02 立工作票。
+
+## 严格复核记录（2026-09-24，用户令「严格审查，是这样吗」，复核钉 `8516d8d1`）
+
+逐格回读代码，结论句「按四项判据产品就绪不成立」成立且更强，但表内七处要改，已在开发主线原段更正（交付那一版在 `8516d8d1`，可比对）：
+
+1. **方法错**：原分界是二分——登记完答得出是租户取值，答不出就是产品策略缺执行器。漏了第三种：缺的是形状、登记册、读口或回指，是机制缺口，记第一项。原表把这一类全记成第三项，并写「前两项判据沿用上表」；而上表第一项定级早于 ADR-0100，按「HTTP 接入面认证属 `PAR-INT-01` 实例半边、不计入」读，ADR-0100 已推翻其操作者一半。更正后第一项在横切与 PN-02、03、07 不满足。
+2. **引证反了**：横切格原写「认证机制与角色模型归产品策略（ADR-0100 已判……）」。ADR-0100 Decision 一原话是「属机制半边」，且其实施（操作者册、OIDC 校验、`OperatorEnvelope`、`migrations/access_identity/`）至今没有落地——`internal/accessidentity/doc.go` 仍写「本轮既没有登记册的表，也没有凭据形态」。对用户说的「横切一格要等 ADR-0139 至 0142 接受才能动」只对客户侧成立，操作者一半现在就能做。
+3. **证据错**：PN-03 原写「初始路由消费门的商业适用性解析标识源答依赖不可用」。`acceptanceConsumer` 的行内代码是 `NewRoutingApplicability(closures)`，按 ADR-0064 从已接受解析回指，只在解析库缺那一行时答依赖不可用——不是缺口。误据是该函数头注，它比行内注释旧。
+4. **漏报**：PN-02 可达性资格视图的闭包标识生产为 nil（`acceptanceReachability`），ADR-0064 的回指只改了初始路由那条链；与「证据视图无取数侧」是两道缝。
+5. **标准不一**：PN-05 原判切片内满足，理由「生产自动申报在首发范围外」。申报提交意图 `customs-compliance.declaration-submission.formed` 唯一的消费方是 VE 投影，没有发送通道；`PILOT-SCOPE` 要求授权确认后提交并保留提交尝试与逐步外部回执——排除的是自动，不是提交。按 PN-04 / 06 连接器的同一标准判部分。
+6. **符号引错**：PN-02 把面单择优链的计价输入记成 `PricingInputResolver`。那条链的缝是 PS 侧 `PricingInputSource`；`PricingInputResolver` 是 PP 服务 UC-SA-002 的口，属 PN-07。
+7. **不精确与放错切片**：受理前财务控制的 `Scopes` 不是 nil，是 `PolicyBackedControlScopeSource`，留空的只是其账户目录，而 SA 根本没有结算账户登记册（机制缺口）；面单出向连接器按 CPS-06 / 07 属 PN-02，原表放在 PN-04。
+
+另外把网络定义登记册的实况补进了表：没有写入方、定义原语未设计，登记了也答 `ErrNetworkDefinitionUnresolvable`——机制与产品策略两类缺口叠在一处，第四项的推断因此更稳（演示租户无从登记）。
+
+复核时见到三处代码注释已经失效，不属本票，交 02 顺带：`acceptanceConsumer` 函数头注与行内 ADR-0064 注释相抵；`acceptanceFinancialControl` 里「`Amounts` 留空……见 `acceptanceChainConsumer` 的注释」指向一段不存在的注释，说明实际在 `ControlAmountSource`；`PricingInputResolver` 注释「三只读口今天都不存在」已被 `pp-pricing-input-seams` 01–03、05 推翻。
+
+复核仍守的边界：PN-07 的产品策略一侧（金额规则、分摊、确认条件的判断方法）没有复核，表内记「未核」；面单择优链其余三个取数口未逐口定性。
