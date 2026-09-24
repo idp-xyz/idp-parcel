@@ -73,6 +73,23 @@ func run(logger *slog.Logger) error {
 			"admittedCommandLines", isolatedWrite.admittedCommandLines())
 	}
 
+	// 操作者渠道的信任锚（ADR-0100 决定二）与两道隔离开关同处最早：参数只设了一半要在开池之前
+	// 带原因退出。配没配都出声——操作者族未配置时整族答 403，而那与「配了但授予没登」在页面上同样
+	// 进不去，启动日志是分辨两者的第一处。核验方今天构造即丢：它的消费者是铸造操作者信封那一段
+	// （票 operator-channel/03），装配在这里只为 fail-fast。
+	_, operatorChannelConfigured, err := buildOperatorCredentialVerifier(os.Getenv)
+	if err != nil {
+		return err
+	}
+	if operatorChannelConfigured {
+		logger.Info("Operator channel issuer configured (ADR-0100): operator tokens verified against the issuer's JWKS",
+			"issuer", os.Getenv(operatorIssuerEnv),
+			"jwksURL", os.Getenv(operatorJWKSURLEnv),
+			"audience", os.Getenv(operatorAudienceEnv))
+	} else {
+		logger.Info("Operator channel not configured (ADR-0100): issuer parameters unset, operator family answers ACCESS_CHANNEL_NOT_CONFIGURED")
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
