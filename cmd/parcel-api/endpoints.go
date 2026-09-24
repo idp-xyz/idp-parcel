@@ -166,6 +166,7 @@ func assembleBusinessEndpoints(
 	isolatedTransportFulfillment *tfhttp.IsolatedCommandIntake,
 	isolatedCustoms *customshttp.IsolatedCommandIntake,
 	isolatedSettlement *settlementhttp.IsolatedCommandIntake,
+	operatorDecisions operatorDecisionIntakes,
 ) []httpapi.BusinessEndpoint {
 	// 缺省朝拦：各隔离入参都为 nil 时，下面这组变量全取未配置即拒，整份装配与
 	// ADR-0078/0091 之前逐字节同形。
@@ -286,12 +287,12 @@ func assembleBusinessEndpoints(
 		// 复核完成与主动拒绝两个命令口（票 09；ADR-0081 的命令面保留条款、ADR-0086）：
 		// 与其余命令面同挂字面量 UnconfiguredIntake{}，隔离读准入换不了写行。生产渠道是操作者渠道的
 		// 「运营决定」能力面（ADR-0151）：复核人与决定人取认证出的提交操作者，有没有权由编排问 party-commercial。
-		{Pattern: "/shipment-requests/manual-review-completions", Handler: shipmenthttp.NewCompleteManualReviewEndpoint(shipmenthttp.UnconfiguredIntake{}, manualReview)},
-		{Pattern: "/shipment-requests/rejections", Handler: shipmenthttp.NewRejectShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, rejection)},
+		{Pattern: "/shipment-requests/manual-review-completions", Handler: shipmenthttp.NewCompleteManualReviewEndpoint(operatorDecisions.shipment, manualReview)},
+		{Pattern: "/shipment-requests/rejections", Handler: shipmenthttp.NewRejectShipmentRequestEndpoint(operatorDecisions.shipment, rejection)},
 		// 授权处置命令口（票 sa-preacceptance-policy-view/04；ADR-0132）：授权角色对停在`等待授权处置`的
 		// 委托选去向。运营侧写行，同挂字面量 UnconfiguredIntake{}。生产渠道是操作者渠道的「运营决定」
 		// 能力面（ADR-0151）：处置人取认证出的提交操作者，有没有权由编排问 party-commercial。
-		{Pattern: "/shipment-requests/authorized-dispositions", Handler: shipmenthttp.NewDisposeShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, disposition)},
+		{Pattern: "/shipment-requests/authorized-dispositions", Handler: shipmenthttp.NewDisposeShipmentRequestEndpoint(operatorDecisions.shipment, disposition)},
 		// 受控补充命令口（票 first-tenant-runway/09；ADR-0106 Decision 四）：客户在`已提交`委托上形成
 		// 同一委托的新提交版本，编排随新版本落库同事务铸「新提交版本已形成」信封驱动续办。它是客户
 		// 渠道的写行，同挂字面量 UnconfiguredIntake{}；谁能替哪个客户账户补充、基准版本怎么译，属
@@ -363,8 +364,8 @@ func assembleBusinessEndpoints(
 		// 拍频多大属调用方（实例半边），真渠道未就位前如实答未配置；隔离形态经写开关放行这一口（票 operator-channel/08），
 		// 只让一拍能被调用、不替调用方定拍频。与上一行手工建任务是两件事。
 		{Pattern: "/transport-fulfillment-delivery-dispatch-triggers", Handler: tfhttp.NewTriggerDeliveryDispatchEndpoint(deliveryDispatchTriggerIntake, deliveryDispatchTrigger)},
-		{Pattern: "/transport-fulfillment-load-assignment-registrations", Handler: tfhttp.NewFormLoadAssignmentEndpoint(tfhttp.UnconfiguredIntake{}, loadAssigner)},
-		{Pattern: "/transport-fulfillment-participation-terminations", Handler: tfhttp.NewTerminateFulfillmentParticipationEndpoint(tfhttp.UnconfiguredIntake{}, participationEnder)},
+		{Pattern: "/transport-fulfillment-load-assignment-registrations", Handler: tfhttp.NewFormLoadAssignmentEndpoint(operatorDecisions.transport, loadAssigner)},
+		{Pattern: "/transport-fulfillment-participation-terminations", Handler: tfhttp.NewTerminateFulfillmentParticipationEndpoint(operatorDecisions.transport, participationEnder)},
 		// 外部承运凭证登记两口（ADR-0085，票 label-channel/18）：登记一份凭证的首版，与对它此刻的当前版落
 		// 一次作废 / 失效 / 替代。它们是运营登记不是承运方回传口，路径取读面册名前缀 `transport-fulfillment-`；
 		// 改变口不叫 `-corrections`——作废、失效、替代改变的是适用关系而不是更正一个判断，原版本一字不动。

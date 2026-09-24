@@ -263,6 +263,22 @@ func assembleUnwiredBusinessEndpointsWith(
 	isolatedCustoms *customshttp.IsolatedCommandIntake,
 	isolatedSettlement *settlementhttp.IsolatedCommandIntake,
 ) []httpapi.BusinessEndpoint {
+	return assembleUnwiredBusinessEndpointsWithDecisions(unconfiguredOperatorDecisions(),
+		isolatedRead, isolatedSubmission, isolatedPartyIdentity, isolatedNodeOperations,
+		isolatedTransportFulfillment, isolatedCustoms, isolatedSettlement)
+}
+
+// assembleUnwiredBusinessEndpointsWithDecisions 同上，另收运营决定口的 Intake：换口那几行的答复格由它钉。
+func assembleUnwiredBusinessEndpointsWithDecisions(
+	operatorDecisions operatorDecisionIntakes,
+	isolatedRead *isolatedReadIntakes,
+	isolatedSubmission shipmenthttp.SubmissionIntake,
+	isolatedPartyIdentity *commercialhttp.IsolatedPartyIdentityIntake,
+	isolatedNodeOperations *nodeopshttp.IsolatedCommandIntake,
+	isolatedTransportFulfillment *tfhttp.IsolatedCommandIntake,
+	isolatedCustoms *customshttp.IsolatedCommandIntake,
+	isolatedSettlement *settlementhttp.IsolatedCommandIntake,
+) []httpapi.BusinessEndpoint {
 	return assembleBusinessEndpoints(
 		unwiredSubmission{},
 		unwiredWithdrawal{},
@@ -380,6 +396,7 @@ func assembleUnwiredBusinessEndpointsWith(
 		isolatedTransportFulfillment,
 		isolatedCustoms,
 		isolatedSettlement,
+		operatorDecisions,
 	)
 }
 

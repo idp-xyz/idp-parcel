@@ -10,6 +10,7 @@ import (
 	"syscall"
 	"time"
 
+	aipg "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/postgres"
 	crpostgres "go.idp.xyz/idp-parcel/internal/collectionremittance/adapters/postgres"
 	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	nrpostgres "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/postgres"
@@ -75,9 +76,9 @@ func run(logger *slog.Logger) error {
 
 	// 操作者渠道的信任锚（ADR-0100 决定二）与两道隔离开关同处最早：参数只设了一半要在开池之前
 	// 带原因退出。配没配都出声——操作者族未配置时整族答 403，而那与「配了但授予没登」在页面上同样
-	// 进不去，启动日志是分辨两者的第一处。核验方今天构造即丢：它的消费者是铸造操作者信封那一段
-	// （票 operator-channel/03），装配在这里只为 fail-fast。
-	_, operatorChannelConfigured, err := buildOperatorCredentialVerifier(os.Getenv)
+	// 进不去，启动日志是分辨两者的第一处。核验方交给运营决定口的操作者铸造器（票 operator-channel/15），
+	// 在开池之后连同操作者册一起装。
+	operatorVerifier, operatorChannelConfigured, err := buildOperatorCredentialVerifier(os.Getenv)
 	if err != nil {
 		return err
 	}
@@ -115,6 +116,16 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	requestViews, err := pspostgres.NewShipmentRequestViews(db)
+	if err != nil {
+		return err
+	}
+	// 运营决定口的操作者 Intake（ADR-0151；票 operator-channel/15）：委托侧的寻址读口就是委托查阅适配器
+	// （ports.OperatorDecisionTargets 在其上补齐，同表、整租户可见）。
+	operatorRegistry, err := aipg.NewOperatorRegistry(db)
+	if err != nil {
+		return err
+	}
+	operatorDecisions, err := buildOperatorDecisionIntakes(operatorVerifier, operatorRegistry, requestViews)
 	if err != nil {
 		return err
 	}
@@ -572,6 +583,7 @@ func run(logger *slog.Logger) error {
 			isolatedWrite.transportFulfillmentIntake(),
 			isolatedWrite.customsIntake(),
 			isolatedWrite.settlementIntake(),
+			operatorDecisions,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
