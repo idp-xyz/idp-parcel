@@ -50,6 +50,10 @@ echo "== 2/7 商业权威发布（party-commercial：服务产品与五策略）
 # 巧合要维护，而是本上下文明禁借宽泛客户关系跨维归集。
 "$BIN/parcel-commercial" register-resolution-key \
   -input "$SEEDS/commercial/resolution-key-syn-account-01.json"
+# 注册号类型目录（票 legal-entity-profile/01）：CN / SG 两层各一类合成类型，另一类登记后停用。
+# 排在参与方身份之前：责任法人身份登记按注册国家 / 地区在这份目录里判号（ADR-0145 决定一）。
+"$BIN/parcel-commercial" register-registration-number-types \
+  -input "$SEEDS/commercial/register-registration-number-types.json"
 # 参与方身份四册（票 admin-remainder-mechanism-batch/01）：SYN-LE-01 与 SYN-ACCOUNT-01
 # 在此获得身份册登记，与上面发布批里的同名引用同指一物。停用批单独一笔，让法人页
 # 与参与方页的身份状态三格（已登记/已生效/已停用）都有真实例可显。
