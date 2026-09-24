@@ -144,6 +144,11 @@ var swappedRegistryFaces = []string{
 	"/commercial-registration-number-type-deactivations",
 	"/commercial-channel-account-use-registrations",
 	"/commercial-channel-account-use-revocations",
+	"/transport-fulfillment-external-carrier-credential-registrations",
+	"/transport-fulfillment-external-carrier-credential-applicability-changes",
+	"/transport-fulfillment-effective-time-rule-registrations",
+	"/transport-fulfillment-carrier-master-document-registrations",
+	"/transport-fulfillment-carrier-master-document-revisions",
 }
 
 // failingRegister 是读不动的操作者册；readerRegister 只有查阅授予、没有登记写授予。

@@ -372,11 +372,11 @@ func assembleBusinessEndpoints(
 		// 改变口不叫 `-corrections`——作废、失效、替代改变的是适用关系而不是更正一个判断，原版本一字不动。
 		// 写准入不另立形，同挂字面量 UnconfiguredIntake{}：一份凭证登进去就会被收编执行器用来把外部轨迹认到
 		// 某个载运对象上，这两行比查阅行更不能让隔离读开关换值。
-		{Pattern: "/transport-fulfillment-external-carrier-credential-registrations", Handler: tfhttp.NewRegisterExternalCarrierCredentialEndpoint(tfhttp.UnconfiguredIntake{}, credentialRegistration)},
-		{Pattern: "/transport-fulfillment-external-carrier-credential-applicability-changes", Handler: tfhttp.NewChangeExternalCarrierCredentialApplicabilityEndpoint(tfhttp.UnconfiguredIntake{}, credentialRegistration)},
+		{Pattern: "/transport-fulfillment-external-carrier-credential-registrations", Handler: tfhttp.NewRegisterExternalCarrierCredentialEndpoint(operatorRegistries.transport, credentialRegistration)},
+		{Pattern: "/transport-fulfillment-external-carrier-credential-applicability-changes", Handler: tfhttp.NewChangeExternalCarrierCredentialApplicabilityEndpoint(operatorRegistries.transport, credentialRegistration)},
 		// 有效时间规则登记（label-channel/19）与凭证两行同一格：一版规则登进去会让收编执行器替该源
 		// 此后每一条素材形成有效时间，登记方身份没有可采信的渠道前 Intake 恒堵。
-		{Pattern: "/transport-fulfillment-effective-time-rule-registrations", Handler: tfhttp.NewRegisterEffectiveTimeRuleEndpoint(tfhttp.UnconfiguredIntake{}, effectiveTimeRuleRegistration)},
+		{Pattern: "/transport-fulfillment-effective-time-rule-registrations", Handler: tfhttp.NewRegisterEffectiveTimeRuleEndpoint(operatorRegistries.transport, effectiveTimeRuleRegistration)},
 		// 外部承运轨迹事实的有效时间判断面两口（ADR-0085，票 label-channel/21）。读口按（租户，轨迹源）上列当前版
 		// （待判断 / 全部），是判断人的「该判哪几条」：零登记零编辑零披露，消费本上下文自己的存储读面，走运输履约
 		// 查阅同一个 Intake 变量——隔离读准入（ADR-0078）启用时随查阅行一起换值。写口是所有者的显式判断（ADR-0102
@@ -394,8 +394,8 @@ func assembleBusinessEndpoints(
 		// 当前版形成一次撤销 / 替代 / 关联重述。运营登记不是承运方回传口，路径取读面册名前缀 `transport-fulfillment-`；
 		// 新版本口不叫 `-corrections`，理由同凭证。写准入不另立形，同挂字面量 UnconfiguredIntake{}：一份总单登进去就成了
 		// parcel-pricing 主单级评价可引的身份（ADR-0111），这两行不能让隔离读开关换值。
-		{Pattern: "/transport-fulfillment-carrier-master-document-registrations", Handler: tfhttp.NewRegisterCarrierMasterDocumentEndpoint(tfhttp.UnconfiguredIntake{}, masterDocumentRegistration)},
-		{Pattern: "/transport-fulfillment-carrier-master-document-revisions", Handler: tfhttp.NewReviseCarrierMasterDocumentEndpoint(tfhttp.UnconfiguredIntake{}, masterDocumentRegistration)},
+		{Pattern: "/transport-fulfillment-carrier-master-document-registrations", Handler: tfhttp.NewRegisterCarrierMasterDocumentEndpoint(operatorRegistries.transport, masterDocumentRegistration)},
+		{Pattern: "/transport-fulfillment-carrier-master-document-revisions", Handler: tfhttp.NewReviseCarrierMasterDocumentEndpoint(operatorRegistries.transport, masterDocumentRegistration)},
 		{Pattern: "/transport-fulfillment-records", Handler: tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(transportCatalogueIntake, transportFulfillmentRecords)},
 		// 交接范围汇总（票 admin-web-audit-followups/06，读面来自 tf-unwired-seven/03）。
 		// 它是本装配表上第一行第二参不是读口而是**应用读用例**的查阅端点：汇总是派生量，

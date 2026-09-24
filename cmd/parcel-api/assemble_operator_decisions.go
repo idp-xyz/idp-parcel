@@ -74,6 +74,7 @@ type operatorRegistryIntakes struct {
 	network    *networkhttp.OperatorRegistryIntake
 	pricing    *pricinghttp.OperatorRegistryIntake
 	commercial *commercialhttp.OperatorRegistryIntake
+	transport  *tfhttp.OperatorRegistryIntake
 }
 
 func buildOperatorRegistryIntakes(minter *accessidentity.OperatorMinter) (operatorRegistryIntakes, error) {
@@ -120,5 +121,13 @@ func buildOperatorRegistryIntakes(minter *accessidentity.OperatorMinter) (operat
 	if err != nil {
 		return operatorRegistryIntakes{}, err
 	}
-	return operatorRegistryIntakes{visibility: visibility, customs: customs, network: network, pricing: pricing, commercial: commercial}, nil
+	transportAuthenticator, err := tfaccess.NewOperatorRegistryAuthenticator(minter)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	transport, err := tfhttp.NewOperatorRegistryIntake(transportAuthenticator)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	return operatorRegistryIntakes{visibility: visibility, customs: customs, network: network, pricing: pricing, commercial: commercial, transport: transport}, nil
 }
