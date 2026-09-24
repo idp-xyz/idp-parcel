@@ -1,7 +1,7 @@
 # 01 操作者册：领域、迁移首个模块、受控登记口与参数登记册一行
 
 Category: enhancement
-Status: ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可（「参考专业头部软件的做法，你来帮我自决吧」）；ADR-0149 另让本册多一格能力面「作业事实登记」，那一格归 10
+Status: in-progress——2026-09-24 通道 2 认领（通道 1 派单 task-3d612285，原卡续派）：隔离 worktree `idp-parcel-mcp2-oc01`、分支 `mcp2-oc01`，基 `443a472e`；新迁移模块 `access_identity` `0001`，受控 CLI 落新进程 `cmd/parcel-access-register`，参数登记册行号取 `PAR-INT-08`。此前：ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可（「参考专业头部软件的做法，你来帮我自决吧」）；ADR-0149 另让本册多一格能力面「作业事实登记」，那一格归 10
 Blocked by: 无
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md)「操作者渠道落地」甲轨第一步
 地盘：`internal/accessidentity`（操作者册的领域、端口与 postgres 适配器）、`migrations/access_identity/` 首个模块（共享接线文件 `migrations/migrations.go` 与计划装配按 parallel-sessions「占号、同笔、逐块核」办）、受控登记 CLI 一个子命令、参数登记册增一行。
