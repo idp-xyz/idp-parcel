@@ -4,8 +4,8 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"strings"
 
+	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
@@ -154,14 +154,5 @@ func (intake *OperatorDecisionIntake) IntakeParticipationTermination(ctx context
 
 // tenantFor 交回出示者在这一种决定上的租户。租户只取自认证结果（ADR-0003），载荷里不收租户。
 func (intake *OperatorDecisionIntake) tenantFor(ctx context.Context, request *http.Request, decision OperatorDecision) (domain.TenantID, error) {
-	return intake.authenticator.AuthenticateOperatorDecision(ctx, bearerToken(request), decision)
-}
-
-// bearerToken 取 `Authorization: Bearer …` 的令牌；缺席或不是 Bearer 即空串，交核验方答「令牌缺失」。
-func bearerToken(request *http.Request) string {
-	scheme, token, found := strings.Cut(request.Header.Get("Authorization"), " ")
-	if !found || !strings.EqualFold(scheme, "Bearer") {
-		return ""
-	}
-	return strings.TrimSpace(token)
+	return intake.authenticator.AuthenticateOperatorDecision(ctx, httpapi.BearerToken(request), decision)
 }

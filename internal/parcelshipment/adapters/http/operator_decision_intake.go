@@ -7,11 +7,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
 // 操作者渠道在本包的四格答复（ADR-0100 决定四、ADR-0149 决定四），与 ErrAccessChannelNotConfigured 并列，
@@ -96,7 +96,7 @@ type authorizedDispositionPayload struct {
 // IntakeManualReviewCompletion 译复核完成（`/shipment-requests/manual-review-completions`）。命令里没有原因格，
 // 管理台送来的复核理由就是复核留痕的证据引用；提交版本取服务端当前版本——管理台这一口的草案不带版本。
 func (intake *OperatorDecisionIntake) IntakeManualReviewCompletion(ctx context.Context, request *http.Request) (application.CompleteManualReviewCommand, error) {
-	operator, err := intake.authenticator.AuthenticateOperatorDecision(ctx, bearerToken(request), OperatorDecisionManualReviewCompletion)
+	operator, err := intake.authenticator.AuthenticateOperatorDecision(ctx, httpapi.BearerToken(request), OperatorDecisionManualReviewCompletion)
 	if err != nil {
 		return application.CompleteManualReviewCommand{}, err
 	}
@@ -128,7 +128,7 @@ func (intake *OperatorDecisionIntake) IntakeManualReviewCompletion(ctx context.C
 // IntakeActiveRejection 译主动拒绝（`/shipment-requests/rejections`）。理由进结构化原因格；证据格取认证出的操作者
 // ——登录操作人可以作为操作证据（PS CONTEXT）。提交版本取服务端当前版本，理由同复核完成。
 func (intake *OperatorDecisionIntake) IntakeActiveRejection(ctx context.Context, request *http.Request) (application.RejectShipmentRequestCommand, error) {
-	operator, err := intake.authenticator.AuthenticateOperatorDecision(ctx, bearerToken(request), OperatorDecisionActiveRejection)
+	operator, err := intake.authenticator.AuthenticateOperatorDecision(ctx, httpapi.BearerToken(request), OperatorDecisionActiveRejection)
 	if err != nil {
 		return application.RejectShipmentRequestCommand{}, err
 	}
@@ -165,7 +165,7 @@ func (intake *OperatorDecisionIntake) IntakeActiveRejection(ctx context.Context,
 // IntakeAuthorizedDisposition 译授权处置（`/shipment-requests/authorized-dispositions`）。提交版本取草案送来的那一份：
 // 处置挂在版本的判断任务上，不指名版本就分不清签给了谁（管理台草案原注）；证据格同主动拒绝。
 func (intake *OperatorDecisionIntake) IntakeAuthorizedDisposition(ctx context.Context, request *http.Request) (application.DisposeShipmentRequestCommand, error) {
-	operator, err := intake.authenticator.AuthenticateOperatorDecision(ctx, bearerToken(request), OperatorDecisionAuthorizedDisposition)
+	operator, err := intake.authenticator.AuthenticateOperatorDecision(ctx, httpapi.BearerToken(request), OperatorDecisionAuthorizedDisposition)
 	if err != nil {
 		return application.DisposeShipmentRequestCommand{}, err
 	}
@@ -250,13 +250,4 @@ func decodeDecisionPayload(body io.Reader, target any) error {
 		return fmt.Errorf("%w: trailing content", ErrMalformedRequest)
 	}
 	return nil
-}
-
-// bearerToken 取 `Authorization: Bearer …` 的令牌；缺席或不是 Bearer 即空串，交认证方答「令牌缺失」。
-func bearerToken(request *http.Request) string {
-	scheme, token, found := strings.Cut(request.Header.Get("Authorization"), " ")
-	if !found || !strings.EqualFold(scheme, "Bearer") {
-		return ""
-	}
-	return strings.TrimSpace(token)
 }
