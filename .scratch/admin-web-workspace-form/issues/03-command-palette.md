@@ -108,3 +108,5 @@ Blocked by: admin-web-ux-alignment/02 进 main（读它的 `pages/my-work/recent
   占号 12:0x → 真库探针 `TestFreezeScopesAreInvisibleToEachOther` **PASS**（不是 SKIP）→ 带 DSN 全量 `-p 1 -count=1 ./...` 12:06:35→12:08:55 **115 ok / 0 FAIL / 16 无测试 / 0 cached**。
 - 12:09:17 `ls-remote` 核 `87ff1edd` 未动 → `push 6739ab54:main` 成（12:09:21），**远端 main = `6739ab54`**；共享树 ff 同 SHA；释号广播带门禁数字。**先 push 再簿记。**
 - 浏览器未验沿完成记录所报。
+- 2026-09-24 · 真浏览器验收 ← 用户（环境见票 01 Comments 同日一条，钉 `04898af1`）：`Ctrl+K` 起面板、跳转页面、列最近对象、切换检查器——用户答
+  「全过」，上一条「浏览器未验」据此失效。
