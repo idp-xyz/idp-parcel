@@ -56,6 +56,7 @@
 - [`PP-S03` 证据与合成契约开发交接](./design/pp-s03-par-set-02-03-evidence-and-synthetic-contract.md)：在无真实 SELL/BUY 参数时固定隔离 `S` 的计价验收、费用代码交接和缺映射 `PENDING` 边界；不创建结算对象或解除生产门禁。
 - [`PP-S03-W01` Golden Case 源证据闭合工作单](./design/pp-s03-w01-golden-case-source-evidence-request.md)：把源文件身份、哈希、取数范围、参考设计自述的四条源价卡差异和使用授权整理成可执行取证，并固定完全闭合、部分闭合与不可闭合三种结论；不修改参考树，不改写证据层级，也不单独构成参数状态转换。
 - [计价规则模型最终设计](./design/pp-pricing-rule-model-final-design.md)：一次性固定 `parcel-pricing` 规则模型的概念集合与形态——特征判定、附加费规则与分区分档价表、百分比与取较大值、方案级条件最低计价重量、费用依赖与排除集、计价参考序列（燃油费率与汇率）、币种换算——并给出范围判据、待取证项与实施顺序。概念定义与不变量已抬升至[小包计价上下文](./domain/parcel-pricing/CONTEXT.md)，本文保留每条从卡上哪一处得出的推导过程；所有数值保持`待参数化`，不确定任何金额或阈值。
+- [价卡导入模板与校验规范](./design/pp-price-card-import-template-and-validation-spec.md)：ADR-0101 决定二要的那份产品契约——模板版本 `PPT-1` 与规范化版本的对应、工作簿的表与列逐一对到领域构造函数入参、格的读法（拒收会被电子表格改写的值）、逐格问题清单与整份不收的边界、模板文件由同一张列定义生成；语义校验一律留给领域构造门，本文不另立规则。
 - [`BD-PP-001` 不可计价结果语义决策简报](./design/pp-unratable-outcome-decision-brief.md)：记录「计价规则明确判定不可计价时形成什么结果」的定案与依据——新增「不可计价」终态、只表达价卡侧排除、与待判断/冲突/未形成互不替代、禁止零金额变通；语义本身以 `parcel-pricing` CONTEXT 为准，本文只记录决定过程与仍待价卡证据的排除条款目录。
 - [计价治理案例转录本](./design/pp-golden-case-transcript.md)：说明 136 个治理案例如何逐字转录进本仓、如何复核保真、各分组的证据层级与阻断状态，并登记未转录内容及其理由；它是审阅入口与转录说明，不构成新的验收依据，也不改变任何案例的层级。案例数据本体在 [`docs/reference/golden-cases/`](./reference/golden-cases/)。
 - [参考设计吸收覆盖对照](./design/pp-reference-design-absorption-coverage.md)：逐节登记参考设计各交付物在本仓的落点，按`已吸收`、`已确认不采纳`、`待决`三态标注并给出权威链接；它是台账，只索引不复述规则，也不替参考设计的正确性背书。

@@ -1,7 +1,7 @@
 # 01 设计文档《价卡导入模板与校验规范》
 
 Category: enhancement
-Status: in-progress——2026-09-25 通道 3 认领，在共享树 main 上做
+Status: resolved——2026-09-25 通道 3；完成记录见文末
 Blocked by: 无
 地盘：`docs/design/` 新增一篇 parcel-pricing 设计文档，`docs/README.md` 登入口一句。
 出处：[spec](../spec.md)；ADR-0101 决定二与 Consequences 第三条。
@@ -32,3 +32,33 @@ Blocked by: 无
 ## 形态
 
 纯 md，在共享树 `main` 上做（同 `product-strategy-boundary/02` 的先例）。
+
+## 完成记录（2026-09-25，通道 3）
+
+产物：[`docs/design/pp-price-card-import-template-and-validation-spec.md`](../../../docs/design/pp-price-card-import-template-and-validation-spec.md)；`docs/README.md` 在计价设计文档一组登了入口。纯 md，共享树 `main`。
+
+验收逐条：
+- **文档头部**有模板版本 `PPT-1`，并写明对应规范化版本 `PPC-5`，附进位规则与对应表。
+- **每一列都对到构造门入参**，领域里可表达的形态都有承载的表。覆盖面：
+  - 三种价表族，附加费查表用的价表与主价表同形；
+  - 分段进位与体积重因子；
+  - 固定费用与附加费的按件计费；
+  - 附加费的互斥立场、分组优先级、条件最低计价重量；
+  - 条件树的全部特征来源；
+  - 计算树的全部方法，含按序列费率；
+  - 费用依赖、参考序列、排除条款、参考目录、金额取整、版本清单依赖；
+  - 逐包与非逐包两种方案。
+- **`docs/README.md`** 有入口一句。
+
+写作时对着代码核过的事实：
+- 规范化版本常量现值为 `PPC-5`。
+- 各构造函数签名与封闭枚举，读自 `internal/parcelpricing/domain`。
+- 领域在构造时对价表行、各类规则、依赖、绑定、排除条款与目录链接排序，所以这些表的行序不进摘要。
+- 类别判定恒为 `EQ`；单段进位就是一段不封顶的分段。
+- `percentShare` 按百分之一计，`percentage` 列填百分数。
+- 零值结构件与 `NewPricingPlanStructures(nil, nil, nil)` 立出的方案内容摘要相等。这一条是用一次性测试实测的，跑完即删、未入库。
+- 种子的计价范围为 `SYN-SCOPE-01`，生效起点按 UTC 零点解析。
+
+给 02 的交接：第八节的验收判据（两张种子卡经模板导入，摘要须与种子逐字节相等）是 02 的主验收；读取件与写出件的位置、第五节格的读法、第六节问题码的封闭集合都是 02 的实现依据。
+
+评审：作者自审，没有非作者评审。

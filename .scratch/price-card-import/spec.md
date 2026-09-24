@@ -31,7 +31,7 @@ Status: in-progress——2026-09-25 通道 3 立（用户授权自决）；子�
 
 | 号 | 题 | 形态 | 阻塞边 | 状态 |
 |---|---|---|---|---|
-| [01](./issues/01-template-and-validation-spec.md) | 设计文档《价卡导入模板与校验规范》 | 纯文档 | — | in-progress |
+| [01](./issues/01-template-and-validation-spec.md) | 设计文档《价卡导入模板与校验规范》 | 纯文档 | — | resolved |
 | [02](./issues/02-template-decoding-and-preview-face.md) | 模板解码与预览口 | 走并行会话那条路 | 01 | ready-for-agent |
 | [03](./issues/03-draft-register-and-submission-face.md) | 草稿册、录入口与草稿查阅读口 | 走并行会话那条路 | 02 | ready-for-agent |
 | [04](./issues/04-approval-and-publication.md) | 审批职责规则、批准与发布 | 走并行会话那条路 | 03 | ready-for-agent |
