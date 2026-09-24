@@ -89,3 +89,27 @@ numberType, consulted := check.Type() // 所对照的类型修订（代码 + 修
 8. 地盘补一格 `cmd/parcel-commercial`（新子命令文件 + `main.go` 分派一处、用法串两处）：种子只能经登记 CLI 入库（ADR-0077
    Consequences）；开工时已经 `report_task` 报备通道 3。
 9. 管理台未接这本目录的页面（票面未要，`liveIds` 不变）；三个新端点目前没有前端消费方。
+
+## Comments
+
+### 评审 ← 通道 3 · 钉 `6f246025`（基 `47c80a8e`，只读，门禁未重跑）· 2026-09-24 15:2x（推送方自通道 3 来信代落原文）
+
+引通道 4 在 `f0216e34` 实跑：gofmt 0、build / vet 0、带 DSN -p 1 改动包 + 反向依赖 17 包 2367 pass、architecture ok、种子在一次性库端到端过。评审人是 ADR-0145 起草人，非代码作者。
+
+**Standards** — 阻断：无。非阻断：
+1. `internal/partycommercial/adapters/http/unconfigured_intake.go` 的接口断言 var 块被 gofmt 整块重对齐（新名 `RegistrationNumberTypeRegistrationIntake` 更长），语义纯增，但既有十几行都成了改动行——任何同期往这块里加东西的分支重放时会冲突，请排重放次序时留意（lep02 大概率也会动它）。无发现：注释中文、引 CONTEXT 原句与 ADR 决定号不引行号；共享接线 cmd/parcel-api 纯增。
+
+**Spec** — 阻断：无。无发现（实核）：ADR-0145 决定一——`RegistrationNumberTypeCatalogue.Check` 目录无该国家即答 `COUNTRY_NOT_REGISTERED`、不以默认格式代替；层钉在类型上（`RegistrationNumberLayer` 封闭集，迁移 `layer IN ('IDENTITY','PROFILE')`），错层答 `LAYER_MISMATCH`；判定次序国家→类型→层→生效期→格式，各格续办不同故分格交回；`Check.Type()` 交回所对照的类型修订供随登记固定。格式 RE2 整串匹配、先单独编译正文挡住不配平写法，防回溯爆炸。迁移 0033 按租户（主键租户 + 国家 + 类型 + 修订）、只建结构不种行；种子五条类型代码与格式全是 `SYN-` 形，不带真实 UEN / 统一社会信用代码格式——「产品不带生产默认」成立。票 01 判据：登记写面挂 `UnconfiguredIntake{}`（未配置即拒）、目录读口随商业目录隔离读放行沿 ADR-0077（未采 ADR-0144 与决定七「未迁的册维持今天」一致）。一个国家的类型全被停用时答 `TYPE_NOT_EFFECTIVE` 而非「国家未登记」，合 ADR 原意（国家登过、类型不在用）。
+
+非阻断：
+2. **只校格式、不算校验位**（作者判断项已列）：UEN 与统一社会信用代码都带校验位，形状对而校验位错的号会被放过。首版接受；若要校验位，它是按类型可配的算法，另立票，不在本分支补。
+
+结论：**可接受**（Standards 0 / 1 · Spec 0 / 1）。
+
+**处置**（推送方 · 通道 1）：评审无阻断，按 parallel-sessions「别人分支上的活怎么进 main」重放，与 catalogue-read-pagination/03 同批、同一次全量。分支 `mcp4-lep01` 的十笔在 `ef9b8225` 上
+cherry-pick 为 `d53c9fe3`（← `7276ada4`）/ `f93568fc`（← `12064b12`）/ `71163777`（← `be92501c`）/ `d2cc4007`（← `7419f9aa`）/ `b09574c4`（← `ac96efe3`）/
+`dcc79a76`（← `152d705d`）/ `af5aec60`（← `6f246025`）/ `f2c903b6`（← `f0216e34`）/ `dd80b6b6`（← `983ce80e`）/ `6b9a76f3`（← `6db15aa5`）。代码与票面二十六个文件
+与分支 tip 逐字一致（`git diff origin/mcp4-lep01 <重放 tip> -- <本票改过的文件，清点与 spec 除外>` 为空）；两处冲突都不在代码上：清点笔 `f0216e34` 与 main 上
+catalogue-read-pagination/01 的清点笔同改合计行，照原笔「推送方重放到 tip 后照例重生成」在重放 tip 上重生成；`983ce80e` 改 spec 子票表 01 行，与 main 上
+lep02 认领笔 `eb0e86f6` 改的 02 行相邻，取 01 行本票的、02 行 main 的。非阻断 1 已照办（lep02 叠在本分支上，不另排次序）；非阻断 2 首版接受、校验位另立票，
+归作者 / 用户定。
