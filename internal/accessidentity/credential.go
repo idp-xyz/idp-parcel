@@ -6,19 +6,29 @@ import (
 	"strings"
 )
 
-// ErrAccessChannelNotConfigured 表示登记册里没有这次请求所认领的那一行。恢复动作是
-// 去配置渠道参数（PAR-INT-01），换一份凭据或重试都不会好。
+// ErrAccessChannelNotConfigured 表示这次出示所走的渠道没配置。客户渠道上是登记册里没有
+// 所认领的那一行，恢复动作是去配置渠道参数（PAR-INT-01）；操作者渠道上是 parcel-api 的发行方
+// 部署参数未设（ADR-0100 决定二），恢复动作是去配部署参数。两族都是换一份凭据或重试不会好。
 //
 // 它与 ErrCredentialRejected 分成两格而不是合成一句「认证失败」，判据同 ADR-0029：
 // 恢复动作不同——这一格找的是配渠道的人，那一格找的是持凭据的人。合成一格会让两种
 // 恢复动作在同一个答复下不可分辨，而不可分辨的代价由收到答复的那一方付。
 var ErrAccessChannelNotConfigured = errors.New("access identity: access channel is not configured")
 
-// ErrCredentialRejected 表示登记行在册，但核验方拒绝了这次出示。
+// ErrCredentialRejected 表示核验方拒绝了这次出示：客户渠道上是登记行在册而凭据不符，
+// 操作者渠道上是令牌缺失、过期或校验不过。
 //
 // 它不说明哪一半不对，理由同 ADR-0029 的探针同答约束：细分会把「这个渠道标识存在」
 // 这件事告诉一个还没证明自己是谁的调用方。
 var ErrCredentialRejected = errors.New("access identity: presented credential rejected")
+
+// ErrCredentialVerifierUnavailable 表示核验方此刻答不出这次出示对不对：它要的外部依赖取不回
+// 或答得不成形（操作者族上是发行方的 JWKS）。
+//
+// 它与 ErrCredentialRejected 分成两格，判据同 ADR-0029：那一格要持凭据的人去换凭据，这一格要
+// 运维去救依赖——凭据可能完全没毛病，换多少次也不会好；合成一格会让人去重新登录一个其实
+// 有效的会话。
+var ErrCredentialVerifierUnavailable = errors.New("access identity: credential verifier is unavailable")
 
 // ErrInvalidChannelKey 表示这次出示没说清自己认领哪一行登记，还没走到核验那一步。
 var ErrInvalidChannelKey = errors.New("access identity: claimed channel key is empty")
