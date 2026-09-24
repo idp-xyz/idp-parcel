@@ -9,11 +9,13 @@ import {
   InspectorShell,
   Tooltip,
 } from '@idpxyz/ui-primitives';
+import { SectionError } from '../components/states';
 import { StatusBadgeFor, domainStatusTones, type DomainStatus } from '../domain/status';
 import {
+  INSPECTOR_CONTRACT_ERROR_TITLE,
   INSPECTOR_EMPTY_NOTE,
   inspectorActionDisabled,
-  resolveInspectorSections,
+  resolveInspectorForPanel,
   type InspectorAction,
   type InspectorContent,
   type InspectorField,
@@ -116,6 +118,24 @@ function SectionBody({ section }: { section: InspectorSectionContent }) {
   }
 }
 
+function ResolvedSections({ content }: { content: InspectorContent }) {
+  const resolution = resolveInspectorForPanel(content);
+  if (resolution.kind === 'contractError') {
+    // 不给重试：内容是页面从行上算出来的，再算一遍还是同一份。
+    return <SectionError title={INSPECTOR_CONTRACT_ERROR_TITLE} description={resolution.message} />;
+  }
+  return (
+    <>
+      {/* key 只按节：翻行时节的展开态保留——处理队列的姿势是折掉不看的节、一行行往下翻，换一行就把折好的节全弹开等于每行重折一次。 */}
+      {resolution.sections.map((resolved) => (
+        <InspectorSection key={resolved.kind} title={resolved.label} defaultOpen={resolved.defaultOpen}>
+          <SectionBody section={resolved.section} />
+        </InspectorSection>
+      ))}
+    </>
+  );
+}
+
 export function InspectorPanel({ content, onClose }: InspectorPanelProps) {
   return (
     <InspectorShell className="bg-idpxyz-sidebar" data-inspector-panel>
@@ -129,12 +149,7 @@ export function InspectorPanel({ content, onClose }: InspectorPanelProps) {
       ) : (
         <InspectorBody>
           <InspectorIdentity title={content.title} subtitle={content.subtitle} />
-          {/* key 只按节：翻行时节的展开态保留——处理队列的姿势是折掉不看的节、一行行往下翻，换一行就把折好的节全弹开等于每行重折一次。 */}
-          {resolveInspectorSections(content).map((resolved) => (
-            <InspectorSection key={resolved.kind} title={resolved.label} defaultOpen={resolved.defaultOpen}>
-              <SectionBody section={resolved.section} />
-            </InspectorSection>
-          ))}
+          <ResolvedSections content={content} />
         </InspectorBody>
       )}
     </InspectorShell>

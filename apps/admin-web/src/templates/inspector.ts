@@ -38,6 +38,9 @@ export const INSPECTOR_SUMMARY_LIMIT = 8;
 /** 没选中行时的一句空态；不放假内容。 */
 export const INSPECTOR_EMPTY_NOTE = '在列表里单击一行，这里显示它的概要';
 
+/** 内容违约时栏里那一段错误的标题；违反了哪条由 InspectorContractError 的说明补上。 */
+export const INSPECTOR_CONTRACT_ERROR_TITLE = '这一行的检查器内容不合契约，没有显示';
+
 /** 键值一格；值是已排好版的字，取自行里已有字段，不发第二个请求。 */
 export interface InspectorField {
   label: string;
@@ -159,6 +162,25 @@ export function resolveInspectorSections(content: InspectorContent): ResolvedIns
     resolved.push({ kind, label: inspectorSectionLabels[kind], defaultOpen: inspectorSectionDefaultOpen[kind], section });
   }
   return resolved;
+}
+
+/** 面板上一次归并的结果：要么是要渲染的节，要么是一条契约错误的说明。 */
+export type InspectorResolution =
+  | { kind: 'sections'; sections: ResolvedInspectorSection[] }
+  | { kind: 'contractError'; message: string };
+
+/**
+ * 面板渲染时用的归并：契约错误接住成说明，别的错误照抛。契约错误仍是编程错误、仍要响亮，但它只关乎这一行的检查器内容——
+ * 在渲染里抛出去，React 会卸掉直到最近错误边界的整棵子树，一行内容违约就拖垮了外壳；接住后栏里照样说出违反了哪条，别处不受牵连。
+ * 不分开发 / 生产：概要格数随数据变（presentFields 丢空格），开发期样例行过得去的页，生产里全满的那一行才撞上。
+ */
+export function resolveInspectorForPanel(content: InspectorContent): InspectorResolution {
+  try {
+    return { kind: 'sections', sections: resolveInspectorSections(content) };
+  } catch (error) {
+    if (error instanceof InspectorContractError) return { kind: 'contractError', message: error.message };
+    throw error;
+  }
 }
 
 /** 一个动作在面板上是不是禁用态：给了说明就是（即便同时给了 onRun——说明在场就不该能按）。 */

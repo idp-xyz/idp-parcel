@@ -1,11 +1,12 @@
 import { test } from 'node:test';
-import { deepEqual, equal, throws } from 'node:assert/strict';
+import { deepEqual, equal, match, throws } from 'node:assert/strict';
 import {
   INSPECTOR_SUMMARY_LIMIT,
   InspectorContractError,
   inspectorActionDisabled,
   inspectorSectionOrder,
   presentFields,
+  resolveInspectorForPanel,
   resolveInspectorSections,
   type InspectorContent,
 } from './inspector';
@@ -94,6 +95,18 @@ test('动作既无 onRun 也无 disabledReason 抛；有其一放行', () => {
     }).length,
     1,
   );
+});
+
+test('resolveInspectorForPanel：合契约的照常归并，契约错误接住成说明，别的错误照抛', () => {
+  const ok = resolveInspectorForPanel(full);
+  equal(ok.kind, 'sections');
+  if (ok.kind === 'sections') deepEqual(ok.sections.map((s) => s.kind), [...inspectorSectionOrder]);
+
+  const violated = resolveInspectorForPanel({ title: 'x', sections: [{ kind: 'actions', actions: [{ label: '空转' }] }] });
+  equal(violated.kind, 'contractError');
+  if (violated.kind === 'contractError') match(violated.message, /空转/);
+
+  throws(() => resolveInspectorForPanel({ title: 'x', sections: null as unknown as InspectorContent['sections'] }), TypeError);
 });
 
 test('inspectorActionDisabled：给了说明即禁用，即便同时给了 onRun', () => {

@@ -94,6 +94,9 @@ export {
   type InspectorSectionKind,
   type InspectorStatusItem,
   type ResolvedInspectorSection,
+  INSPECTOR_CONTRACT_ERROR_TITLE,
+  resolveInspectorForPanel,
+  type InspectorResolution,
 } from './inspector';
 export { InspectorProvider, useInspector, type InspectorController } from './inspector-context';
 export { InspectorPanel, type InspectorPanelProps } from './InspectorPanel';
