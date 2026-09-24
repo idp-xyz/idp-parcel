@@ -26,3 +26,7 @@ Blocked by: 无
 
 - [ ] ADR Accepted，上列各问各有决定；越权风险点写明碰到的邻接上下文（PS、PP、CC）由谁复核。
 - [ ] network-routing CONTEXT 与 CONTEXT-MAP 只加引用句，不复述决定。
+
+## Comments
+
+- 2026-09-24 通道 5：草案 [ADR-0148](../../../docs/adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 已落（Proposed），上列各问各有决定，越权风险点点名 PS、PP、CC、SA owner 与用户各复核哪一条；索引补了一行。本票保持 in-progress：判据要 Accepted，接受归用户或其明确授权（用户授权自决的是 psb04 的拆法，不含本 ADR）。CONTEXT 与 CONTEXT-MAP 的引用句照草案先例留到接受那一笔再加，届时本票转 resolved。关务一侧确认缺执行器（CC 没有按路由候选作答的关务适用性判断口），已登 [psb/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 格 6 并报通道 1 另立票。

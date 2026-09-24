@@ -80,6 +80,7 @@ Blocked by: 02、03、04（只挡收口）
 
 - 证据：`acceptanceConsumer` 的初始路由证据视图与格 4 同由 `NetworkDefinitions` 实现，停在 `ROUTE_EVIDENCE_NOT_CONFIGURED`（动线脚本「墙三」）；商业适用性已按 ADR-0064 从已接受解析回指，不是缺口。
 - 归类：同格 4。去处：票 01 表 PN-03 第三项与 PN-02 的网络定义登记册；解析层归票 04。
+- 补一格（2026-09-24 通道 5，routing-first-cut/02 取证，钉 `1f7da903`）：**候选的关务适用性**。解析层接上之后，含关务段的候选还要 CC 答它的关务区域、口岸、申报路径是否合规可用（CONTEXT-MAP「customs-compliance ↔ network-routing」）；CC 今天只有口岸目录与申报路径目录的登记册（`ports.PortsPathsRegistry`），没有按路由候选作答的判断口。归类：产品策略缺执行器（CC 侧）。去处：待立票（已报通道 1）；在它补上之前，这类候选按 [ADR-0148](../../../docs/adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md)（Proposed）决定三答状态未知，初始路由停在路由判断未决。
 
 #### 主链阶段 3 · 有效网络收寄与节点作业
 
