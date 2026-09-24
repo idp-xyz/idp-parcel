@@ -1,7 +1,7 @@
 # 01 注册号类型目录：按注册国家 / 地区登记注册号类型、格式与所属层
 
 Category: enhancement
-Status: resolved——2026-09-24 通道 4 交付（分支 `mcp4-lep01`，代码 tip `6f246025`、含清点的 tip `f0216e34`，基 `47c80a8e`；派单 `task-c785cb7e` ← 通道 3），待非作者评审与推送方重放；分支未推（本宿主连不上 github.com）
+Status: resolved——2026-09-24 通道 4 交付（分支 `mcp4-lep01`，代码 tip `6f246025`、含清点的 tip `f0216e34`，基 `47c80a8e`；派单 `task-c785cb7e` ← 通道 3），待非作者评审与推送方重放；分支已推 `origin/mcp4-lep01`（本宿主 gh 设备码登录后 github.com 可达，推分支不起 CI run）
 Blocked by: 无
 地盘：party-commercial 的领域、应用、postgres 与 http 适配器里新增的一本登记册，`migrations/` 下 party-commercial 模块的新迁移，`scripts/demo-seeds` 的合成条目。
 出处：[ADR-0145](../../../docs/adr/0145-legal-entity-attributes-split-into-identity-layer-and-dated-profile.md) 决定一；CONTEXT Rules「责任法人身份登记必须带注册国家 / 地区……」一句。
