@@ -29,7 +29,7 @@ Status: in-progress——2026-09-24 通道 4 按用户授权自决立 ADR-0146 �
 | [16](./issues/16-mechanism-gaps-without-a-ticket.md) | 机制缺口：重定级表第一项里尚无票的几处 | needs-triage · 按上下文拆 |
 | [17](./issues/17-requested-service-product-narrows-commercial-basis.md) | 委托声明的服务产品参与商业依据解析（票 05 格 1；承接票 06 第 8 项） | in-progress · 通道 2（分支 `mcp2-psb17`） |
 | [18](./issues/18-customs-case-and-declaration-submission-entry.md) | 关务立案与提交申报：生产入口与触发面（票 05 格 9） | needs-triage |
-| [19](./issues/19-delivery-attempt-result-has-no-production-writer.md) | 派送尝试结果没有生产写入方（票 05 格 12） | in-progress · 通道 4（分支 `mcp4-psb19`） |
+| [19](./issues/19-delivery-attempt-result-has-no-production-writer.md) | 派送尝试结果没有生产写入方（票 05 格 12） | resolved · 已进 main `30e2c929`（通道 4，推送方自审） |
 | [20](./issues/20-buy-evaluation-request-trigger.md) | BUY 评价请求的触发面（票 05 格 17） | needs-triage |
 | [21](./issues/21-sell-evaluation-to-customer-charge.md) | SELL 评价到客户费用：请求面、消费门与形成编排（票 05 格 19） | needs-triage |
 | [22](./issues/22-settlement-orchestrations-assembly-and-triggers.md) | 结算其余编排的装配、入口与触发面（票 05 格 20） | needs-triage |
