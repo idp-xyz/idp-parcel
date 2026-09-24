@@ -1,7 +1,7 @@
 # 01 操作者册：领域、迁移首个模块、受控登记口与参数登记册一行
 
 Category: enhancement
-Status: in-progress——2026-09-24 通道 2 认领（通道 1 派单 task-3d612285，原卡续派）：隔离 worktree `idp-parcel-mcp2-oc01`、分支 `mcp2-oc01`，基 `443a472e`；新迁移模块 `access_identity` `0001`，受控 CLI 落新进程 `cmd/parcel-access-register`，参数登记册行号取 `PAR-INT-08`。同日交活（代码 tip `f2d7dbfd`，含清点 `09f90e5f`），待非作者评审与重放。此前：ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可（「参考专业头部软件的做法，你来帮我自决吧」）；ADR-0149 另让本册多一格能力面「作业事实登记」，那一格归 10
+Status: resolved——2026-09-24 进 main：推送方通道 1 在 main `344cd7eb` 之上逐笔重放分支 `e1ff562f`…`65935720`（得 `c77ccec7` / `b96d8780` / `0789d46d` / `052adb37` / `52ebd37d` / `cde759d1` / `79419b62`；分支清点笔 `09f90e5f` 不重放），批 tip 干净检出重生成清点 `34dfe865`；验证钉 `34dfe865`：gofmt 空、vet / build 退 0，带 DSN `go test -count=1 -p 1 -v ./...` 120 包 ok / 0 FAIL，SKIP 仅 `TestHelperTemplateOwnerProcess`（照设计）。评审为推送方自审（不算非作者评审），无阻断，见 Comments。此前 in-progress——2026-09-24 通道 2 认领（通道 1 派单 task-3d612285，原卡续派）：隔离 worktree `idp-parcel-mcp2-oc01`、分支 `mcp2-oc01`，基 `443a472e`；新迁移模块 `access_identity` `0001`，受控 CLI 落新进程 `cmd/parcel-access-register`，参数登记册行号取 `PAR-INT-08`。同日交活（代码 tip `f2d7dbfd`，含清点 `09f90e5f`），待非作者评审与重放。此前：ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可（「参考专业头部软件的做法，你来帮我自决吧」）；ADR-0149 另让本册多一格能力面「作业事实登记」，那一格归 10
 Blocked by: 无
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md)「操作者渠道落地」甲轨第一步
 地盘：`internal/accessidentity`（操作者册的领域、端口与 postgres 适配器）、`migrations/access_identity/` 首个模块（共享接线文件 `migrations/migrations.go` 与计划装配按 parallel-sessions「占号、同笔、逐块核」办）、受控登记 CLI 一个子命令、参数登记册增一行。
@@ -81,3 +81,19 @@ Blocked by: 无
 - 开发主线「按四项判据重定级」表「横切」行写「`internal/accessidentity` 没有操作者册、OIDC 校验与 `OperatorEnvelope`」：本票进 main 后「没有操作者册」一句不再成立（该格「未满足」的结论照旧成立，OIDC 与信封归 02、03），归开发主线维护方改。
 - `doc.go`「本轮既没有登记册的表，也没有凭据形态」整段改写归 03；本票只改了会因本票而变假的那一个从句。
 - 共享接线文件（`migrations/migrations.go`、`internal/platform/migrate/plan.go`）的占号保持到本票重放进 main；往既有模块加迁移不碰这两个文件。
+
+## Comments
+
+### 评审 ← 通道 1（推送方自审，不算非作者评审）· 钉 `65935720`（基 `443a472e`，只读）· 2026-09-24 20:2x
+
+无空闲的非作者通道（通道 5、6 在做 routing-first-cut/07、operator-channel/08，通道 2 是作者）；子代理按 workflow.md「本机环境」不用。按 parallel-sessions「合入前独立评审」由推送方在主会话串行自审。
+
+**Standards** — 阻断：无。非阻断：无。无发现（实核）：领域包 `internal/accessidentity` 只引标准库，不依赖 pgx / HTTP；新增注释全中文，跨文件引用只用 ADR 决定号与符号名，无行号、无计数；`migrations/migrations.go`、`internal/platform/migrate/plan.go` 与新模块目录同笔（`8aaedb7b`）；`doc.go` 只改会因本票变假的那一个从句；迁移只增表、不种行。
+
+**Spec** — 阻断：无。非阻断：
+1. 参数登记册 `PAR-INT-08` 把「作业事实登记一格按租户 × 作业范围授予、同登本行」与可授的两格并列写，读作此刻可授；而 `CapabilityFace.checkGrantable` 与迁移 CHECK `operator_grant_capability_face_decided` 都还不收这一格（归 operator-channel/10）。建议在该句标明「待 operator-channel/10」，可由 10 同笔改，不挡合入。
+2. 地盘行写「受控登记 CLI 一个子命令」，落成新进程 `cmd/parcel-access-register` 的三个子命令——作者判断项 1 已给依据（一模块一个 `parcel-*-register` 的先例、派单授权），可接受。
+
+无发现（实核）：「做什么」逐条对上——主体键不含租户、跨租户授予过不了外键、治理登记只预留且与未知格分开答、区间含起点不含终点、撤销自其时刻起不生效；迁移不种行；CLI 整批在一个事务里（`WithinTransaction`）；合成主体 `SYN-` 与合成发行方，`seed.sh` 注明只记 `S`。「不做」守住：无凭据校验与信封铸造，`cmd/parcel-api` 未动。完成判据点名的用例在检出里都在。
+
+结论：无阻断，准予重放。
