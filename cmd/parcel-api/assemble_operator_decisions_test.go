@@ -120,6 +120,13 @@ var swappedRegistryFaces = []string{
 	"/visibility-catalogue-disclosure-policy-registrations",
 	"/visibility-catalogue-exception-disclosure-rule-registrations",
 	"/visibility-catalogue-conflict-signal-rule-registrations",
+	"/customs-interpretation-rule-registrations",
+	"/customs-gate-catalog-registrations",
+	"/customs-candidate-port-registrations",
+	"/customs-declaration-path-registrations",
+	"/customs-case-requirement-registrations",
+	"/customs-duty-collaboration-registrations",
+	"/customs-duty-payment-verification-registrations",
 }
 
 func TestSwappedRegistryFacesAnswerFromTheOperatorChannel(t *testing.T) {

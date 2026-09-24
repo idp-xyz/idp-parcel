@@ -5,6 +5,8 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
+	ccaccess "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/accessidentity"
+	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	psaccess "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/accessidentity"
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
@@ -62,6 +64,7 @@ func buildOperatorDecisionIntakes(minter *accessidentity.OperatorMinter, targets
 // 逐上下文补：每补一个上下文，这里多一格、端点表多换几行。
 type operatorRegistryIntakes struct {
 	visibility *visibilityhttp.OperatorRegistryIntake
+	customs    *customshttp.OperatorRegistryIntake
 }
 
 func buildOperatorRegistryIntakes(minter *accessidentity.OperatorMinter) (operatorRegistryIntakes, error) {
@@ -76,5 +79,13 @@ func buildOperatorRegistryIntakes(minter *accessidentity.OperatorMinter) (operat
 	if err != nil {
 		return operatorRegistryIntakes{}, err
 	}
-	return operatorRegistryIntakes{visibility: visibility}, nil
+	customsAuthenticator, err := ccaccess.NewOperatorRegistryAuthenticator(minter)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	customs, err := customshttp.NewOperatorRegistryIntake(customsAuthenticator)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	return operatorRegistryIntakes{visibility: visibility, customs: customs}, nil
 }

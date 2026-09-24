@@ -491,16 +491,16 @@ func assembleBusinessEndpoints(
 		// 路径不照网络那样带上读口册名：关务的查阅入口本就按事物平铺（/customs-case-registers、
 		// /customs-gate-conditions、/customs-ports-paths），四个事物词在整个关务面上唯一，
 		// 前缀套前缀只会把路径拉长而分不出更多东西。事物词与读口的 `?registry=` 同源。
-		{Pattern: "/customs-interpretation-rule-registrations", Handler: customshttp.NewRegisterInterpretationRuleEndpoint(customshttp.UnconfiguredIntake{}, interpretationRuleRegistration)},
-		{Pattern: "/customs-gate-catalog-registrations", Handler: customshttp.NewRegisterGateCatalogEndpoint(customshttp.UnconfiguredIntake{}, gateCatalogRegistration)},
-		{Pattern: "/customs-candidate-port-registrations", Handler: customshttp.NewRegisterCandidatePortEndpoint(customshttp.UnconfiguredIntake{}, candidatePortRegistration)},
-		{Pattern: "/customs-declaration-path-registrations", Handler: customshttp.NewRegisterDeclarationPathEndpoint(customshttp.UnconfiguredIntake{}, declarationPathRegistration)},
+		{Pattern: "/customs-interpretation-rule-registrations", Handler: customshttp.NewRegisterInterpretationRuleEndpoint(operatorRegistries.customs, interpretationRuleRegistration)},
+		{Pattern: "/customs-gate-catalog-registrations", Handler: customshttp.NewRegisterGateCatalogEndpoint(operatorRegistries.customs, gateCatalogRegistration)},
+		{Pattern: "/customs-candidate-port-registrations", Handler: customshttp.NewRegisterCandidatePortEndpoint(operatorRegistries.customs, candidatePortRegistration)},
+		{Pattern: "/customs-declaration-path-registrations", Handler: customshttp.NewRegisterDeclarationPathEndpoint(operatorRegistries.customs, declarationPathRegistration)},
 		// 建案要求规则是关务的第五类配置，比另四类晚一步接进来：票 admin-write-faces/02
 		// 的关务片把十二个用例分成「配置四类」与「案件事实七类」，四加七只有十一个，漏掉
 		// 的第十二个正是它。它有登记用例、有 CLI 命令（case-requirement）、读面早在合规
 		// 规则页的册 chip 里，唯独端点表没有它的行——管理台的规则页因此只能把签名写死成
 		// 「登记解释规则」，那一半的缺席是页面在替它认账。
-		{Pattern: "/customs-case-requirement-registrations", Handler: customshttp.NewRegisterCaseRequirementEndpoint(customshttp.UnconfiguredIntake{}, caseRequirementRegistration)},
+		{Pattern: "/customs-case-requirement-registrations", Handler: customshttp.NewRegisterCaseRequirementEndpoint(operatorRegistries.customs, caseRequirementRegistration)},
 		// 凭证、税费付款协作事项、税费付款核对三册的在线登记口（ADR-0085 决定一，票 sa-cc/07
 		// 步二；裁决「同族一致」三册都开）：写准入不另立形。凭证口经写开关逐口放行（票 operator-channel/08：票面
 		// 与 psb/05 格 11 点名、ADR-0149 决定一归外部结果族），协作与核对两口仍挂字面量 UnconfiguredIntake{}。
@@ -511,8 +511,8 @@ func assembleBusinessEndpoints(
 		// 「协作口接了核对编排」。外部资金事实没有在线口：它只经 settlement-accounting 的采用信封
 		// 进 CC（ADR-0137 决定四）。
 		{Pattern: "/customs-regulatory-credential-registrations", Handler: customshttp.NewRegisterRegulatoryCredentialEndpoint(regulatoryCredentialRegistrationIntake, regulatoryCredentialRegistration)},
-		{Pattern: "/customs-duty-collaboration-registrations", Handler: customshttp.NewRegisterDutyCollaborationEndpoint(customshttp.UnconfiguredIntake{}, dutyCollaborationRegistration)},
-		{Pattern: "/customs-duty-payment-verification-registrations", Handler: customshttp.NewRegisterDutyPaymentVerificationEndpoint(customshttp.UnconfiguredIntake{}, dutyPaymentVerificationRegistration)},
+		{Pattern: "/customs-duty-collaboration-registrations", Handler: customshttp.NewRegisterDutyCollaborationEndpoint(operatorRegistries.customs, dutyCollaborationRegistration)},
+		{Pattern: "/customs-duty-payment-verification-registrations", Handler: customshttp.NewRegisterDutyPaymentVerificationEndpoint(operatorRegistries.customs, dutyPaymentVerificationRegistration)},
 		{Pattern: "/commercial-service-products", Handler: commercialhttp.NewQueryServiceProductsEndpoint(commercialCatalogueIntake, serviceProducts)},
 		{Pattern: "/commercial-policies", Handler: commercialhttp.NewQueryCommercialPoliciesEndpoint(commercialCatalogueIntake, commercialPolicies)},
 		{Pattern: "/commercial-customer-contracts", Handler: commercialhttp.NewQueryCustomerContractsEndpoint(commercialCatalogueIntake, commercialRelations)},
