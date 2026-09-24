@@ -1,7 +1,7 @@
 # 03 路由策略版本声明排序形态；首个内置形态「满足硬约束后按成本单维择优，并列交人工」
 
 Category: enhancement
-Status: in-progress——2026-09-24 通道 2 认领（通道 1 派单 task-389c2c39）：隔离 worktree `idp-parcel-mcp2-rfc03`、分支 `mcp2-rfc03`，基 `abc9088c`；迁移号预留 network_routing `0010`。同日交活，待非作者评审与重放，见文末「完成记录」
+Status: resolved · 已进 main——2026-09-24 评审 ← 通道 3（非作者）可接受、无阻断；通道 1、通道 2 已崩，通道 3 按用户令接手收尾并代行推送方重放进 main：认领 `3c98a4da`、代码笔 `e812e288` / `d4367ac0` / `af78b558`、完成记录 `238f748b`，清点 `4a3ad293`；分支 `mcp2-rfc03`（代码 tip `095724a6`、票面 tip `c73242c9`）作封存出处，新旧 SHA 对照见 Comments「进 main 记录」。迁移编号占 network_routing `0010`。此前 in-progress——通道 2 认领（通道 1 派单 task-389c2c39），同日交活；完成记录与评审原文见下文
 Blocked by: 无
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「路由策略族」那一步的排序部分，与「首个内置排序策略」那一步
 地盘：network-routing 领域与应用（排序与初始路由、复核两处择优出口）；目录路由策略版本的内容列与登记口（新迁移，号开工时在频道预留）；network-routing [`CONTEXT.md`](../../../docs/domain/network-routing/CONTEXT.md)、[UC-NR-001](../../../docs/application/network-routing/UC-NR-001-CREATE-INITIAL-ROUTE.md)、[UC-NR-003](../../../docs/application/network-routing/UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md) 的相关句。
@@ -67,3 +67,27 @@ Blocked by: 无
 3. 查阅体 `/network-catalog?family=route-strategy` 透出 `rankingForm`（未声明整格缺席）：票面只要求真库读回，这一格按 ADR-0077「按族列版本行原文」顺带补上。
 4. 全部缺成本分 `COSTS_PENDING` 与 `COSTS_UNPRICEABLE`、有一家待判断就先等：票面只说「出局」，分格依 ADR-0029，「先等」是本票的读法。
 5. 地盘外、未动：`internal/parcelshipment/domain/channel_candidate_cost.go` 两段注释引已删的 `SelectRouteCandidate`，并说路由侧按候选标识升序收尾，本票之后不再成立，归 PS owner 改注释。
+
+## Comments
+
+### 评审 ← 通道 3 · 钉 `095724a6`（基 `abc9088c`，只读） · 2026-09-24（通道 1、通道 2 已崩，通道 3 按用户令接手收尾）
+
+**Standards** — 阻断：无。非阻断：
+1. 地盘外 `internal/parcelshipment/domain/channel_candidate_cost.go` 的注释仍引已删的 `SelectRouteCandidate`、说路由侧按候选标识收尾；本票进 main 后即成假话（作者判断项 5 已点名），归 PS owner 另笔改。
+2. （判断）`domain.CandidateCostFact` 的币种用通用 `requiredValue`；首版可接受，/10 接比较币种时再看要不要立币种值对象。
+
+其余信号：注释中文、无行号与跨文件计数；迁移 `0010` 只加可空列与 CHECK，头注写清为何可空、CHECK 与领域形态集合逐字同格。
+
+**Spec** — 阻断：无。非阻断：
+1. 做什么「并列的去处」要「留痕全部候选与并列理由」：候选随 `ParcelRouteResult.Candidates()` / `TiedCandidates()` 交回、不落库（作者判断项 2 已写：NR 没有未决尝试的库，候选成本今天也无来源）。持久化要随人工裁决入口一起立，立那张票时宜写进完成判据。
+2. ADR-0148 决定四已按用户指示修订并接受（候选成本按比较币种合成）。CONTEXT 新规则句「已计价候选币种不齐时停下不比」今天成立——策略版本还没有比较币种一格，正是决定四「策略版本没登比较币种时……出现不同币种即停下不比」那一格；/10 补比较币种时要把这句限定上。比较币种与所引价格政策两项按 0148 Consequences 归 /10。
+
+逐项：形态族与登记口拒族外 ✓；只比合格、缺成本出局不顶替、币种不齐停下、最低并列交冲突不按标识收尾 ✓；初始路由并列成未决、不落计划也不落无路由，复核并列只成建议 ✓——缺成本、币种不齐、形态未声明也都落未决，合 0148 决定四「不得落`无当前有效路由`」；成本事实形状 ✓；前提变化写进 CONTEXT 规则句 ✓。
+
+结论：可接受——两轴无阻断。
+
+### 进 main 记录（推送方 · 通道 3 代行，通道 1 已崩）
+
+- **门**：评审 ← 通道 3（非作者）可接受、无阻断；上文四条非阻断随票记，不挡合入。
+- **重放**：沿用通道 1 崩前在隔离检出 `/tmp/replay-rfc03` 上的试重放（main `256665ed` 之上 cherry-pick）：认领 `3c98a4da`（← `60bbbf13`）/ 之一 `e812e288`（← `d2abd929`）/ 之二 `d4367ac0`（← `eee29a45`）/ 修复 `af78b558`（← `095724a6`）/ 完成记录 `238f748b`（← `c73242c9`）。通道 3 接手时核过：分支各笔（清点笔除外）patch 等价，本票动过的 22 份代码文件 blob 全同。分支清点笔 `4462bca3` 不重放，批 tip 干净检出重生成为 `4a3ad293`。
+- **验证**：钉 `4a3ad293`（与本记录一笔只差 `.md`）：全仓 build / vet 退 0，本票 `.go` gofmt 无输出；先单跑真库用例 `TestARouteStrategyVersionCarriesItsDeclaredRankingForm` 是 PASS 非 SKIP；带 DSN `go test -p 1 -count=1 ./...` 118 包 ok、0 FAIL（另 15 包无测试文件）。
