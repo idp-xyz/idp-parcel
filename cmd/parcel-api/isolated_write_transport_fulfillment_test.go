@@ -84,6 +84,21 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 		status:  http.StatusCreated,
 		outcome: "HANDOVER_REGISTERED",
 	},
+	// 自营执行方的到达事实：到达不受门禁管（门禁只约束装载出发），不带门禁两格——落一条移动事实，201 MOVEMENT_FACT_RECORDED。
+	// 来源格是装配点注入的合成来源，不在载荷里。
+	"/transport-fulfillment/movement-facts": {
+		endpoint: func(t *testing.T, db *bentopg.DB, intake *tfhttp.IsolatedCommandIntake) http.Handler {
+			movement, err := buildMovementFactOrchestration(db)
+			if err != nil {
+				t.Fatalf("装配移动事实编排：%v", err)
+			}
+			return tfhttp.NewRecordMovementFactEndpoint(intake, movement)
+		},
+		body: `{"fact":"SYN-MOVE-08-06","schedule":"SYN-SCHEDULE/linehaul-06","kind":"ARRIVAL","location":"SYN-NODE-SIN-HUB",` +
+			`"version":"v1","occurredAt":"2026-09-24T18:00:00+08:00"}`,
+		status:  http.StatusCreated,
+		outcome: "MOVEMENT_FACT_RECORDED",
+	},
 }
 
 // Covers: 票 operator-channel/08 完成判据「隔离环境里上列各口对合成写答业务结果而不是 ACCESS_CHANNEL_NOT_CONFIGURED」——

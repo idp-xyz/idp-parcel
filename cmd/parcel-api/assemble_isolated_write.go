@@ -48,6 +48,11 @@ const (
 // 让动线里的收寄落在网络定义认得的节点上；要在别的合成节点上收寄，改的是这一格，不是去采信请求。
 const isolatedReceptionNode = "SYN-NODE-SHA-HUB"
 
+// isolatedMovementSource 是移动事实口注入的合成来源（票 operator-channel/08）。MovementFactIntake 的契约把「自营还是外部」
+// 交给认证结果说，隔离形态的认证结果就是这一个常量：它说自营执行方，外部承运轨迹照旧只走 TrackingSource 入站口。
+// 带 `SYN-` 前缀：来源维是事后分辨隔离行的两维之一（ADR-0091 决定三）。
+const isolatedMovementSource = "SYN-SOURCE/self-operated-executor"
+
 // isolatedWriteAdmission 携带 ADR-0091 放行的写路径几格。nil 表示未启用——各装配函数
 // 对 nil 的处理与本记录之前逐字节同形。
 //
@@ -85,6 +90,7 @@ var isolatedWriteAdmittedCommandLines = []string{
 	"/transport-fulfillment/offsite-pickup-attempts",
 	"/transport-fulfillment-carrier-first-effective-pickup-judgments",
 	"/transport-fulfillment/handovers",
+	"/transport-fulfillment/movement-facts",
 }
 
 // admittedCommandLines 交回放行名单的副本：日志与测试都不该改得动那份表。
@@ -157,7 +163,10 @@ func buildIsolatedWriteAdmission(getenv func(string) string) (*isolatedWriteAdmi
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: isolated node operations command intake: %w", err)
 	}
-	transportFulfillment, err := tfhttp.NewIsolatedCommandIntake(tfhttp.IsolatedCommandIntakeDeps{Tenant: tenant})
+	transportFulfillment, err := tfhttp.NewIsolatedCommandIntake(tfhttp.IsolatedCommandIntakeDeps{
+		Tenant:         tenant,
+		MovementSource: isolatedMovementSource,
+	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: isolated transport fulfillment command intake: %w", err)
 	}
