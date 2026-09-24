@@ -32,6 +32,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 | `data/pricing/` | `cmd/parcel-pricing-register` | 两张价卡（SELL 首重续重 / BUY 重量段）+ 两条参考序列（燃油、汇率）+ 两份序列复核（不复核不在用，ADR-0099）——由 `seedgen` 生成，勿手改 |
 | `data/network/` | `cmd/parcel-network-register` | 七族 14 行：4 节点（含一次换版）、3 连接、1 线路、2 服务区、1 日历、1 台风停运调整、1 路由策略 |
 | `data/customs/` | `cmd/parcel-customs-register` | 八册 20 份：就绪与授权（各含第二单元，授权含一次撤销）、解释规则（含一次换版）、义务目录+两项（已了结/已承接）、门禁目录+判断（含一份只登目录的空清单格）、建案要求两向（要求/显式不要求）、口岸目录（SZX 含一次换版 + SIN）、申报路径两向（CN 出口 / SG 进口） |
+| `data/access/` | `cmd/parcel-access-register` | 操作者册（ADR-0100 决定二第三条）：两个合成操作者主体绑演示租户，配置员授登记册配置写与主数据与运营查阅读两格，查阅员只授查阅读；发行方是合成值，演示部署接上真 OIDC 发行方后按其标识另登 |
 | `migrate/` | — | 迁移助手（`migrate.Run` 的隔离环境入口；迁移计划刻意没有生产入口） |
 | `seedgen/` | — | 计价快照生成器：价卡与序列的登记输入带规范化版本号与内容摘要自校，必须经真领域构造函数折装；PPC/PRS 规范化版本升级时重跑并提交新产物 |
 
