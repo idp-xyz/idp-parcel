@@ -133,6 +133,7 @@ go run ./cmd/parcel-dispatch
 
 **墙三 · 路由拿不到证据。** 就算前两堵都过、委托成`已接受`，初始路由会停在 `RouteEvidenceNotConfigured`：三个证据视图只读 `network_routing.network_definition`，而那张表至今零生产写入方（第 3 步登记的是另一套目录表，`bumpRevision` 推的是目录修订锚，长不出这张表的行）。没有路由就没有下游的费用。
 **重启条件**：解析层——把目录折成逐候选事实。被 `PAR-NET-14` 阻断，且 [ADR-0068](../adr/0068-versioned-network-catalog-structure-precedes-rule-content.md) Consequences 已明文接受这段「目录可写可读、尚无人读它产出事实」的时期。
+> 2026-09-24 补记（票 `routing-first-cut/07` 进 main，merge `f2645d86`）：上两段写于当时，原样保留；成因一句自本合入起过时——证据视图不再读 `network_definition`，改读第 3 步登记的那套目录，`未配置`由目录修订锚与适用于服务目的的路由策略版本答（[ADR-0148](../adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定六），阻断也不再归 `PAR-NET-14`（ADR-0146 决定七）。可观察的停点不变：种子策略的适用范围是 `SYN-SCOPE-01`，与调度器的服务目的 `NETWORK_SERVICE` 不一致，种子服务区域也没登覆盖，初始路由照旧停在 `RouteEvidenceNotConfigured`。演示网络经参考配置采用、形成初始路由归 `routing-first-cut/11`。
 
 三堵墙对应的机制票都在 `.scratch/syn-wall-door-audit/issues/`（依次为 01、13、04），墙面清单见同目录 `report.md`。
 
