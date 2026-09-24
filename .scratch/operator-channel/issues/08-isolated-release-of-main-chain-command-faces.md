@@ -1,7 +1,7 @@
 # 08 隔离形态：主链命令面按 ADR-0091 逐口放行合成写
 
 Category: enhancement
-Status: ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可；ADR-0149 决定五写明本票的隔离放行不因生产渠道落地而退场
+Status: in-progress——2026-09-24 通道 6 认领（通道 1 改派 task-a25599eb；原卡通道 4 零提交已撤），分支 `mcp6-oc08`，基 `443a472e`；拆法经用户授权通道 4 自决认可；ADR-0149 决定五写明本票的隔离放行不因生产渠道落地而退场
 Blocked by: 无
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 乙轨——**不是操作者渠道**，是让隔离环境里的主链先答业务结果的那条路
 地盘：`cmd/parcel-api` 端点表里主链命令面的装配行与各自的隔离 Intake 类型（照 `IsolatedPartyIdentityIntake` 与隔离提交口的形状），各上下文 `adapters/http` 里需要的隔离 Intake 实现。
