@@ -10,7 +10,7 @@
 | architecture（非业务） | 0 | 13 | 0 | 0 | 0 | 0 |
 | collectionremittance | 22 | 10 | 4 | 6 | 0 | 3 |
 | customscompliance | 97 | 98 | 18 | 41 | 10 | 14 |
-| networkrouting | 59 | 57 | 8 | 13 | 2 | 5 |
+| networkrouting | 62 | 59 | 8 | 13 | 2 | 6 |
 | nodeoperations | 31 | 26 | 3 | 10 | 4 | 6 |
 | parcelpricing | 102 | 96 | 12 | 14 | 1 | 17 |
 | parcelshipment | 191 | 184 | 20 | 35 | 10 | 18 |
@@ -20,16 +20,17 @@
 | settlementaccounting | 101 | 82 | 14 | 43 | 9 | 9 |
 | transportfulfillment | 148 | 135 | 26 | 36 | 11 | 28 |
 | visibilityexception | 100 | 96 | 11 | 30 | 8 | 11 |
-| **合计** | 1058 | 1004 | 133 | 274 | 57 | 150 |
+| **合计** | 1061 | 1006 | 133 | 274 | 57 | 151 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 71、测试 101。
 
-## 跨上下文消费缝：29 组，78 个生产文件
+## 跨上下文消费缝：30 组，79 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
 | customscompliance | accessidentity | 1 |
 | customscompliance | settlementaccounting | 2 |
+| networkrouting | accessidentity | 1 |
 | networkrouting | parcelshipment | 3 |
 | networkrouting | partycommercial | 3 |
 | nodeoperations | transportfulfillment | 1 |
