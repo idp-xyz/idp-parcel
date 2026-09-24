@@ -178,7 +178,7 @@ func registerParty(
 // 停用后不再收新修订。
 func TestPartyRegistrationDeactivationRoundTrip(t *testing.T) {
 	registry := newFakePartyRegistry()
-	handler := application.NewRegisterPartyIdentityHandler(registry)
+	handler := application.NewRegisterPartyIdentityHandler(registry, nil)
 	ctx := context.Background()
 
 	command := application.RegisterBusinessPartyCommand{
@@ -236,7 +236,7 @@ func TestPartyRegistrationDeactivationRoundTrip(t *testing.T) {
 // Covers: 修订连续性门——首笔必须是 1，跳号被拒且一个字节没写。
 func TestRevisionSlotsMustBeContiguous(t *testing.T) {
 	registry := newFakePartyRegistry()
-	handler := application.NewRegisterPartyIdentityHandler(registry)
+	handler := application.NewRegisterPartyIdentityHandler(registry, nil)
 	ctx := context.Background()
 
 	first := application.RegisterBusinessPartyCommand{
@@ -271,17 +271,17 @@ func TestRevisionSlotsMustBeContiguous(t *testing.T) {
 // 时点都被拒；钉住有效参与方后登记落册。
 func TestLegalEntityDemandsAnEffectiveParty(t *testing.T) {
 	registry := newFakePartyRegistry()
-	handler := application.NewRegisterPartyIdentityHandler(registry)
+	handler := application.NewRegisterPartyIdentityHandler(registry, newFakeNumberTypes(t))
 	ctx := context.Background()
 
-	command := application.RegisterLegalEntityCommand{
+	command := withLegalEntityIdentity(t, application.RegisterLegalEntityCommand{
 		Tenant:        identityValue(t, domain.NewTenantID, "tenant-1"),
 		Entity:        identityValue(t, domain.NewLegalEntityReference, "le-1"),
 		Party:         identityValue(t, domain.NewPartyID, "party-le"),
 		Revision:      1,
 		Basis:         identityValue(t, domain.NewIdentityBasisReference, "basis-le"),
 		EffectiveFrom: entityEffectiveFrom,
-	}
+	}, "XA", "SYN-XA-LIFETIME", "SYN-XA-000001")
 	dangling, err := handler.RegisterLegalEntity(ctx, command)
 	if err != nil || dangling.Outcome() != application.PartyIdentityNotAccepted {
 		t.Fatalf("dangling party = (%v, %v), want NOT_ACCEPTED", dangling.Outcome(), err)
@@ -305,7 +305,7 @@ func TestLegalEntityDemandsAnEffectiveParty(t *testing.T) {
 // Covers: 票 01 客户账户登记（ADR-0003 第三级）——同一守卫适用于客户参与方引用。
 func TestCustomerAccountDemandsAnEffectiveCustomerParty(t *testing.T) {
 	registry := newFakePartyRegistry()
-	handler := application.NewRegisterPartyIdentityHandler(registry)
+	handler := application.NewRegisterPartyIdentityHandler(registry, nil)
 	ctx := context.Background()
 
 	command := application.RegisterCustomerAccountCommand{
@@ -331,7 +331,7 @@ func TestCustomerAccountDemandsAnEffectiveCustomerParty(t *testing.T) {
 // Covers: 关系登记——双方都要已生效；带批准事实走真转换落已生效，缺批准落候选。
 func TestRelationshipRegistrationChecksBothPartiesAndApproval(t *testing.T) {
 	registry := newFakePartyRegistry()
-	handler := application.NewRegisterPartyIdentityHandler(registry)
+	handler := application.NewRegisterPartyIdentityHandler(registry, nil)
 	ctx := context.Background()
 
 	registerParty(t, handler, "tenant-1", "party-cust", "货主客户参与方")
@@ -401,7 +401,7 @@ func TestRelationshipRegistrationChecksBothPartiesAndApproval(t *testing.T) {
 // Covers: 停用命令的落点声明——册上没有的身份答未找到，修订错位被拒。
 func TestDeactivationChecksTargetAndRevision(t *testing.T) {
 	registry := newFakePartyRegistry()
-	handler := application.NewRegisterPartyIdentityHandler(registry)
+	handler := application.NewRegisterPartyIdentityHandler(registry, nil)
 	ctx := context.Background()
 
 	missing, err := handler.Deactivate(ctx, application.DeactivatePartyIdentityCommand{
