@@ -2,10 +2,12 @@ package commercialhttp
 
 import (
 	"context"
+	"errors"
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // CustomerAccountCatalogueReader 是货主客户账户目录端点消费的读口（票 admin-write-faces/04）。
@@ -18,7 +20,8 @@ type CustomerAccountCatalogueReader interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
-	) ([]ports.CustomerAccountRow, error)
+		query cataloguepage.Query,
+	) (ports.CataloguePage[ports.CustomerAccountRow], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致。
@@ -33,6 +36,10 @@ const outcomeCustomerAccountsListed = "CUSTOMER_ACCOUNTS_LISTED"
 // 它与 /commercial-customer-contracts 分立而不折进去：合同上列的是商业版本壳（草稿→发布→
 // 退役），账户上列的是参与方身份的登记修订（登记→生效→停用），两套状态代数在同一响应形状里
 // 会相互冒充——判据与身份/关系两口分立那条同一句。
+//
+// 查询参数（after、sort、筛选维与 q）按 ports.CustomerAccountCatalogue 解码（ADR-0144 决定六），属传输形状、
+// 先于 Intake：不成立即 400，理由散文放进 detail。与 /network-catalog 同一次序——两册对同一个坏请求答法一致，
+// 未配置渠道时写错参数也先答 400 而不是 403。
 func NewQueryCustomerAccountsEndpoint(
 	intake CommercialCatalogueIntake,
 	reader CustomerAccountCatalogueReader,
@@ -44,13 +51,24 @@ func NewQueryCustomerAccountsEndpoint(
 			return
 		}
 
+		pageQuery, err := ports.CustomerAccountCatalogue.Decode(request.URL.Query())
+		if err != nil {
+			var malformed *cataloguepage.MalformedQuery
+			if errors.As(err, &malformed) {
+				writeProblemWithDetail(response, http.StatusBadRequest, codeMalformedRequest, malformed.Reason)
+				return
+			}
+			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
+			return
+		}
+
 		query, err := intake.IntakeCatalogueQuery(request.Context(), request)
 		if err != nil {
 			writeCatalogueIntakeProblem(response, err)
 			return
 		}
 
-		rows, err := reader.ListCustomerAccounts(request.Context(), query.Scope.Tenant(), query.Limit)
+		page, err := reader.ListCustomerAccounts(request.Context(), query.Scope.Tenant(), query.Limit, pageQuery)
 		if err != nil {
 			// 读不回是答案未形成，不是「空目录」——伪装成后者会让一次该重试的故障变成一份
 			// 看起来如实的空册。
@@ -58,13 +76,14 @@ func NewQueryCustomerAccountsEndpoint(
 			return
 		}
 
-		bodies := make([]customerAccountBody, 0, len(rows))
-		for _, row := range rows {
+		bodies := make([]customerAccountBody, 0, len(page.Rows))
+		for _, row := range page.Rows {
 			bodies = append(bodies, customerAccountBodyOf(row))
 		}
 		writeJSON(response, http.StatusOK, customerAccountListResponse{
 			Outcome:  outcomeCustomerAccountsListed,
 			Accounts: bodies,
+			Page:     cataloguepage.NewPage(query.Limit, page.Next, page.Total),
 		})
 	})
 }
@@ -72,6 +91,7 @@ func NewQueryCustomerAccountsEndpoint(
 type customerAccountListResponse struct {
 	Outcome  string                `json:"outcome"`
 	Accounts []customerAccountBody `json:"accounts"`
+	Page     cataloguepage.Page    `json:"page"`
 }
 
 // customerAccountBody 逐字段透出账户最新修订与其客户参与方名称。

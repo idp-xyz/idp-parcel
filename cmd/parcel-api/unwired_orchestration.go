@@ -1377,8 +1377,9 @@ func (unwiredCommercialCatalogue) ListCustomerAccounts(
 	context.Context,
 	commercialdomain.TenantID,
 	int,
-) ([]commercialports.CustomerAccountRow, error) {
-	return nil, errOrchestrationNotWired
+	cataloguepage.Query,
+) (commercialports.CataloguePage[commercialports.CustomerAccountRow], error) {
+	return commercialports.CataloguePage[commercialports.CustomerAccountRow]{}, errOrchestrationNotWired
 }
 
 func (unwiredCommercialCatalogue) ListCustomerContracts(
