@@ -1,6 +1,6 @@
 # ADR-0091：隔离形态从查阅面扩到写路径，按分级开关放行——入格判据取代枚举；写面有持久化，可分辨物由 `SYN-` 前缀承担
 
-Status: Accepted（2026-09-02，用户经 IDP 队列通道 5 在四路范围选项间裁定「一份 ADR 同时裁两格」；本记录据此把写面 Intake 与生产归属范围目录合并裁决）
+Status: Accepted（2026-09-02，用户经 IDP 队列通道 5 在四路范围选项间裁定「一份 ADR 同时裁两格」；本记录据此把写面 Intake 与生产归属范围目录合并裁决）；**部分停用**：决定六「隔离形态不因真渠道出现而自动退场」一句已由 [ADR-0150](./0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 停用——隔离形态是真渠道缺位时的过渡，某一口真渠道 Intake 落地即在同一笔撤下该口的隔离放行；同句「也不因它出现而获得任何真实租户」与其余各条不变
 Date: 2026-09-02
 
 ## Context
@@ -60,4 +60,5 @@ Date: 2026-09-02
 - [ADR-0003：采用集团租户、法人责任与货主客户账户三级边界](./0003-group-tenant-legal-entity-customer-account.md)：注入合成租户不读自报，不触碰该边界
 - [ADR-0017：实现准入闸门按阻断理由分别裁决](./0017-admission-gates-judged-by-blocking-cause.md)：机制半边放行与实例半边阻断分别判读的依据
 - [参数登记册](../product/PILOT-PARAMETER-REGISTER.md)：`PAR-INT-01` 与 `PAR-GOV-03..07` 的登记处，本记录不改变其状态
+- [ADR-0150](./0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md)：部分停用本记录决定六「隔离形态不因真渠道出现而自动退场」一句——合成租户经真渠道进出，隔离形态逐口随真渠道退场
 - 来源：`.scratch/first-tenant-runway/issues/01-isolated-write-admission.md`（墙一）与 `.scratch/first-tenant-runway/issues/02-isolated-governance-scope-directory.md`（墙二）

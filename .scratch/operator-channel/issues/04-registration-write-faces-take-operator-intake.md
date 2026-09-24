@@ -15,3 +15,4 @@ Blocked by: 03
 ## 完成判据
 
 - 归类表完整；已换各口对合成操作者答业务结果、对三格各答其格（带测试）；装配测试与端点表仍一一对照。
+- 随 [ADR-0150](../../../docs/adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 决定三（2026-09-24 补）：已换各口若在隔离放行名单上（如 `/commercial-*` 身份族），同一笔撤下该口的隔离放行——隔离 Intake 上的方法与放行名单那一行，隔离放行用例改写为真渠道答复格用例。

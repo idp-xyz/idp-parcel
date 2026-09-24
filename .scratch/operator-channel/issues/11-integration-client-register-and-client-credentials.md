@@ -16,3 +16,4 @@ Blocked by: 02
 ## 完成判据
 
 - 客户端未登记、授予不含该事实类型、区间外、令牌无效各答其格（带测试）；参数登记册那一行已增。
+- 随 [ADR-0150](../../../docs/adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 决定三（2026-09-24 补）：换上集成客户端 Intake 的各口（今天经写开关放行的外部结果、监管凭证登记、外部资金事实等）同一笔撤下隔离放行，隔离放行用例改写为真渠道答复格用例。
