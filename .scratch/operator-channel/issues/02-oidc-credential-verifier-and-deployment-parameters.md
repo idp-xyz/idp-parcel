@@ -1,7 +1,7 @@
 # 02 操作者族的凭据校验：OIDC 令牌校验器与 parcel-api 部署参数
 
 Category: enhancement
-Status: in-progress——2026-09-25 分支完工，待评审与进 main（完成记录见文末 Comments）。2026-09-25 通道 4 认领（用户令通道 4「继续完成」ADR-0151 那件，operator-channel/15 的实现要先过 03，03 要先过本票；动手前已告知 2026-09-24 22:35 按用户令承接 02、13、14 的通道 2），隔离 worktree `idp-parcel-mcp4-oc02`、分支 `mcp4-oc02`（基 `53d537cc`）。此前 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
+Status: resolved——2026-09-25 已进 main（`bb4ade8a`，进 main 记录见文末）。此前 in-progress——2026-09-25 分支完工；2026-09-25 通道 4 认领（用户令通道 4「继续完成」ADR-0151 那件，operator-channel/15 的实现要先过 03，03 要先过本票；动手前已告知 2026-09-24 22:35 按用户令承接 02、13、14 的通道 2），隔离 worktree `idp-parcel-mcp4-oc02`、分支 `mcp4-oc02`（基 `53d537cc`）。此前 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
 Blocked by: 无
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`internal/accessidentity`（`CredentialVerifier` 在操作者族上的生产实现）、`cmd/parcel-api` 部署形态参数。
@@ -50,3 +50,11 @@ Blocked by: 无
 **评审**：尚无非作者评审。作者按票面与 ADR-0100 自查过一遍，**不算非作者评审**。
 
 **未做**：发行方接进演示环境（随 07）；`OperatorEnvelope` 与铸造（03）；`accessidentity/doc.go` 那段「本轮既没有登记册的表，也没有凭据形态」的改写（03 第 4 条）。
+
+### 进 main 记录 ← 通道 4 · 2026-09-25
+
+通道 2 崩后，用户令通道 4 独立决策、自行推送。四笔重放到当时的共享 main `67d51dfd` 之上（普通 cherry-pick）。对照：认领 `a36b4a0e` ← `8a3f8ef1`；校验器 `0045335e` ← `0eece0b1`；部署参数 `041256d6` ← `d8153b08`；完成记录 `fb27e79d` ← `dc9a0c39`。分支上的清点笔 `aae54dca` 不重放，在重放 tip 上重生成为 `bb4ade8a`，数字与分支上相同。分支 `mcp4-oc02` 作封存出处。
+
+**验证**钉 `bb4ade8a`，在干净检出上跑：`gofmt -l` 空；`go build ./...`、`go vet ./...` 过；带 DSN 的 `go test -count=1 -p 1 ./...` 121 ok / 0 FAIL / 15 无测试文件。这一推同时发布了压在下面的通道 3 两笔（`209176fa` 规格、`a61c7f5b` 管理台代码），所以同一 SHA 上另跑了管理台三道门禁：tsc 过，测试 451 / 451，vite build 过。`git push origin bb4ade8a:main`，远端由 `53d537cc` 快进到 `bb4ade8a`。
+
+**评审**：推送方即作者，只有自审，**不算非作者评审**。谁有空可以对同一批 SHA 补评：基线 `67d51dfd`，tip `bb4ade8a`，spec 指本票面。
