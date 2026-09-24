@@ -1,7 +1,7 @@
 # 05 服务端：资料登记写口进隔离写准入、法人资料按时点解析读口
 
 Category: enhancement
-Status: ready-for-agent——2026-09-24 通道 3 立（通道 1 就派单 `task-a5cd823d` 裁定「拆」：04 的「法人资料」区缺的两处服务端单立本票）
+Status: in-progress——2026-09-24 通道 3 认领（派单 `task-0d7de977`）：隔离 worktree `idp-parcel-mcp3-lep05`、分支 `mcp3-lep05`，基 origin/main `4c3f7b89`。此前 ready-for-agent——通道 3 立（通道 1 就派单 `task-a5cd823d` 裁定「拆」：04 的「法人资料」区缺的两处服务端单立本票）
 Blocked by: 无
 地盘：party-commercial http 适配器（隔离写 Intake 加资料登记一口、新增按时点解析读口端点）；`cmd/parcel-api` 端点表两行（资料登记写行换 Intake 变量、解析读口新行）、装配入参与路由 / 隔离准入测试表。不碰领域与应用判断。
 出处：[ADR-0091](../../../docs/adr/0091-isolated-form-extends-to-the-write-path-by-graded-switches.md)（写路径逐口放行、可分辨物由 `SYN-` 前缀承担）；[ADR-0077](../../../docs/adr/0077-master-data-catalogue-read-follows-the-operations-read-pattern.md)（目录查阅通例）；[ADR-0145](../../../docs/adr/0145-legal-entity-attributes-split-into-identity-layer-and-dated-profile.md) 决定五、六；[票 03](./03-legal-entity-profile-revisions-and-as-of-resolution.md) 完成记录「未做 / 风险」里「按时点解析只到应用用例与端口」与「写口未进隔离写准入」；[票 04](./04-admin-web-identity-fields-and-profile-face.md)「法人详情加『法人资料』区」。
