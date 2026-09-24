@@ -6,7 +6,7 @@
 
 | 上下文 | 生产 | 测试 | 应用编排 | postgres 适配器 | 其中 Outbox 投递 | http 适配器 |
 |---|---|---|---|---|---|---|
-| accessidentity | 12 | 7 | 0 | 1 | 0 | 0 |
+| accessidentity | 13 | 8 | 0 | 1 | 0 | 0 |
 | architecture（非业务） | 0 | 13 | 0 | 0 | 0 | 0 |
 | collectionremittance | 22 | 10 | 4 | 6 | 0 | 3 |
 | customscompliance | 95 | 95 | 18 | 41 | 10 | 13 |
@@ -20,7 +20,7 @@
 | settlementaccounting | 101 | 82 | 14 | 43 | 9 | 9 |
 | transportfulfillment | 146 | 133 | 26 | 36 | 11 | 27 |
 | visibilityexception | 98 | 93 | 11 | 30 | 8 | 10 |
-| **合计** | 1043 | 989 | 131 | 273 | 57 | 145 |
+| **合计** | 1044 | 990 | 131 | 273 | 57 | 145 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 69、测试 100。
 
@@ -54,11 +54,11 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：12 个模块共 182 份 SQL
+## 迁移：12 个模块共 183 份 SQL
 
 | 模块 | 份数 |
 |---|---|
-| access_identity | 1 |
+| access_identity | 2 |
 | collection_remittance | 1 |
 | customs_compliance | 23 |
 | network_routing | 11 |
