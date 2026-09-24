@@ -2,7 +2,6 @@ package shipmenthttp
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"time"
 
@@ -48,15 +47,7 @@ func NewCompleteManualReviewEndpoint(
 
 		command, err := intake.IntakeManualReviewCompletion(request.Context(), request)
 		if err != nil {
-			if errors.Is(err, ErrAccessChannelNotConfigured) {
-				writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
-				return
-			}
-			if errors.Is(err, ErrMalformedRequest) {
-				writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-				return
-			}
-			writeProblem(response, http.StatusInternalServerError, codeIntakeFailed)
+			writeIntakeProblem(response, err)
 			return
 		}
 
