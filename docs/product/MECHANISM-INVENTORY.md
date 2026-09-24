@@ -14,13 +14,13 @@
 | nodeoperations | 30 | 25 | 3 | 10 | 4 | 5 |
 | parcelpricing | 99 | 94 | 10 | 14 | 1 | 16 |
 | parcelshipment | 187 | 181 | 20 | 34 | 10 | 17 |
-| partycommercial | 137 | 147 | 10 | 37 | 1 | 32 |
+| partycommercial | 138 | 147 | 10 | 37 | 1 | 32 |
 | pilotgovernance | 21 | 19 | 4 | 6 | 1 | 4 |
 | platform（非业务） | 22 | 21 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 100 | 81 | 14 | 43 | 9 | 8 |
 | transportfulfillment | 141 | 129 | 25 | 36 | 11 | 24 |
 | visibilityexception | 98 | 93 | 11 | 30 | 8 | 10 |
-| **合计** | 1012 | 960 | 125 | 271 | 57 | 136 |
+| **合计** | 1013 | 960 | 125 | 271 | 57 | 136 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 65、测试 92。
 
@@ -54,7 +54,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：11 个模块共 176 份 SQL
+## 迁移：11 个模块共 177 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -64,7 +64,7 @@
 | node_operations | 4 |
 | parcel_pricing | 10 |
 | parcel_shipment | 22 |
-| party_commercial | 33 |
+| party_commercial | 34 |
 | pilot_governance | 7 |
 | settlement_accounting | 21 |
 | transport_fulfillment | 20 |
