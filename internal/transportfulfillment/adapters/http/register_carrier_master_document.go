@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
 // 总单登记册的在线登记口（ADR-0113 决定五；票 tf-carrier-master-document-register/01；写面形状按 ADR-0085
@@ -19,11 +20,91 @@ import (
 
 // MasterDocumentIntake 把已认证的接入请求翻译成总单首登 / 形成新版本两条命令。
 //
-// 接口而非本包内解析代码的理由同 DeliveryIntake：租户身份只能来自认证结果（ADR-0003），运营操作者渠道
-// （ADR-0100）就位前本包不带任何实现，装配点挂 UnconfiguredIntake。方法名按事实具名，理由在 HandoverIntake。
+// 接口而非本包内解析代码的理由同 DeliveryIntake：租户身份只能来自认证结果（ADR-0003）。真实现是操作者渠道的
+// OperatorRegistryIntake（ADR-0100），逐字段翻译用下面两份载荷。方法名按事实具名，理由在 HandoverIntake。
 type MasterDocumentIntake interface {
 	IntakeMasterDocumentRegistration(ctx context.Context, request *http.Request) (application.RegisterMasterDocumentCommand, error)
 	IntakeMasterDocumentRevision(ctx context.Context, request *http.Request) (application.ReviseMasterDocumentCommand, error)
+}
+
+// MasterDocumentAssociationPayload 是一条关联：种类词与引用，对不对由编排判。
+type MasterDocumentAssociationPayload struct {
+	Kind      string `json:"kind"`
+	Reference string `json:"reference"`
+}
+
+func associationInputs(payloads []MasterDocumentAssociationPayload) []application.MasterDocumentAssociationInput {
+	if payloads == nil {
+		return nil
+	}
+	inputs := make([]application.MasterDocumentAssociationInput, 0, len(payloads))
+	for _, association := range payloads {
+		inputs = append(inputs, application.MasterDocumentAssociationInput{Kind: association.Kind, Reference: association.Reference})
+	}
+	return inputs
+}
+
+// MasterDocumentRegistrationPayload 是总单首登的线格式：字段与 application.RegisterMasterDocumentCommand 一一对应，
+// 只少租户一格，键名与本族应答同名。这里不过领域构造门，理由在 EffectiveTimeRuleRegistrationPayload.Command。
+type MasterDocumentRegistrationPayload struct {
+	Document     string                             `json:"document"`
+	Version      string                             `json:"version"`
+	Issuer       string                             `json:"issuer"`
+	Scope        string                             `json:"scope"`
+	Commission   string                             `json:"commission,omitempty"`
+	Booking      string                             `json:"booking,omitempty"`
+	Associations []MasterDocumentAssociationPayload `json:"associations"`
+}
+
+func (payload MasterDocumentRegistrationPayload) Command(tenant domain.TenantID) (application.RegisterMasterDocumentCommand, error) {
+	if tenant.String() == "" {
+		return application.RegisterMasterDocumentCommand{}, ErrOperatorIdentityMissing
+	}
+	return application.RegisterMasterDocumentCommand{
+		TenantID:     tenant,
+		Document:     payload.Document,
+		Version:      payload.Version,
+		Issuer:       payload.Issuer,
+		Scope:        payload.Scope,
+		Commission:   payload.Commission,
+		Booking:      payload.Booking,
+		Associations: associationInputs(payload.Associations),
+	}, nil
+}
+
+// MasterDocumentRevisionPayload 是形成新版本的线格式。revision 取 REVOKE / SUPERSEDE / RESTATE_ASSOCIATIONS；认不出的
+// 词译成零值，由编排答`未受理`。
+type MasterDocumentRevisionPayload struct {
+	Document     string                             `json:"document"`
+	Revision     string                             `json:"revision"`
+	At           string                             `json:"at"`
+	NewVersion   string                             `json:"newVersion"`
+	Replacement  string                             `json:"replacement,omitempty"`
+	Associations []MasterDocumentAssociationPayload `json:"associations,omitempty"`
+}
+
+func (payload MasterDocumentRevisionPayload) Command(tenant domain.TenantID) (application.ReviseMasterDocumentCommand, error) {
+	var none application.ReviseMasterDocumentCommand
+	if tenant.String() == "" {
+		return none, ErrOperatorIdentityMissing
+	}
+	at, err := parseOptionalInstant("at", payload.At)
+	if err != nil {
+		return none, err
+	}
+	revision, err := domain.ParseMasterDocumentRevision(payload.Revision)
+	if err != nil {
+		revision = domain.MasterDocumentRevisionInvalid
+	}
+	return application.ReviseMasterDocumentCommand{
+		TenantID:     tenant,
+		Document:     payload.Document,
+		Revision:     revision,
+		At:           at,
+		NewVersion:   payload.NewVersion,
+		Replacement:  payload.Replacement,
+		Associations: associationInputs(payload.Associations),
+	}, nil
 }
 
 // MasterDocumentRegistrar 是本适配器转交的应用编排。适配器不判断任何业务结果，只转交与映射。

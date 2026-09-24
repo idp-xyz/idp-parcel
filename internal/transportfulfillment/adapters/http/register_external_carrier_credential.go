@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
 // 外部承运凭证登记册的在线登记口（label-channel/18；写面形状按 ADR-0085 两阶段接线）。
@@ -17,12 +18,83 @@ import (
 
 // CredentialIntake 把已认证的接入请求翻译成凭证首登 / 改变适用关系两条命令。
 //
-// 接口而非本包内解析代码的理由同 DeliveryIntake：租户身份只能来自认证结果（ADR-0003），运营操作者
-// 渠道（ADR-0100）就位前本包不带任何实现，装配点挂 UnconfiguredIntake。方法名按事实具名，理由在
+// 接口而非本包内解析代码的理由同 DeliveryIntake：租户身份只能来自认证结果（ADR-0003）。真实现是操作者
+// 渠道的 OperatorRegistryIntake（ADR-0100），逐字段翻译用下面两份载荷。方法名按事实具名，理由在
 // HandoverIntake。
 type CredentialIntake interface {
 	IntakeCredentialRegistration(ctx context.Context, request *http.Request) (application.RegisterExternalCarrierCredentialCommand, error)
 	IntakeCredentialApplicabilityChange(ctx context.Context, request *http.Request) (application.ChangeCredentialApplicabilityCommand, error)
+}
+
+// CredentialRegistrationPayload 是凭证首登的线格式：字段与 application.RegisterExternalCarrierCredentialCommand
+// 一一对应，只少租户一格，键名与本族应答同名。这里不过领域构造门：词在不在集合内由编排答`未受理`（理由在
+// EffectiveTimeRuleRegistrationPayload.Command）；时刻按 RFC 3339，给了却解不出才是坏报文。
+type CredentialRegistrationPayload struct {
+	Credential     string `json:"credential"`
+	Version        string `json:"version"`
+	Assigner       string `json:"assigner"`
+	IdentifiedKind string `json:"identifiedKind"`
+	IdentifiedRef  string `json:"identifiedRef"`
+	EffectiveFrom  string `json:"effectiveFrom"`
+	EffectiveUntil string `json:"effectiveUntil,omitempty"`
+}
+
+func (payload CredentialRegistrationPayload) Command(tenant domain.TenantID) (application.RegisterExternalCarrierCredentialCommand, error) {
+	var none application.RegisterExternalCarrierCredentialCommand
+	if tenant.String() == "" {
+		return none, ErrOperatorIdentityMissing
+	}
+	from, err := parseOptionalInstant("effectiveFrom", payload.EffectiveFrom)
+	if err != nil {
+		return none, err
+	}
+	until, err := parseOptionalInstant("effectiveUntil", payload.EffectiveUntil)
+	if err != nil {
+		return none, err
+	}
+	return application.RegisterExternalCarrierCredentialCommand{
+		TenantID:       tenant,
+		Credential:     payload.Credential,
+		Version:        payload.Version,
+		Assigner:       payload.Assigner,
+		IdentifiedKind: payload.IdentifiedKind,
+		IdentifiedRef:  payload.IdentifiedRef,
+		EffectiveFrom:  from,
+		EffectiveUntil: until,
+	}, nil
+}
+
+// CredentialApplicabilityChangePayload 是改变适用关系的线格式。change 取领域状态词（REVOKED / EXPIRED /
+// SUPERSEDED）；认不出的词译成零值，由编排答`未受理`，与首登的词同一条判据。
+type CredentialApplicabilityChangePayload struct {
+	Credential  string `json:"credential"`
+	Change      string `json:"change"`
+	At          string `json:"at"`
+	NewVersion  string `json:"newVersion"`
+	Replacement string `json:"replacement,omitempty"`
+}
+
+func (payload CredentialApplicabilityChangePayload) Command(tenant domain.TenantID) (application.ChangeCredentialApplicabilityCommand, error) {
+	var none application.ChangeCredentialApplicabilityCommand
+	if tenant.String() == "" {
+		return none, ErrOperatorIdentityMissing
+	}
+	at, err := parseOptionalInstant("at", payload.At)
+	if err != nil {
+		return none, err
+	}
+	change, err := domain.ParseCredentialStanding(payload.Change)
+	if err != nil {
+		change = domain.CredentialStandingInvalid
+	}
+	return application.ChangeCredentialApplicabilityCommand{
+		TenantID:    tenant,
+		Credential:  payload.Credential,
+		Change:      change,
+		At:          at,
+		NewVersion:  payload.NewVersion,
+		Replacement: payload.Replacement,
+	}, nil
 }
 
 // CredentialRegistrar 是本适配器转交的应用编排。适配器不判断任何业务结果，只转交与映射。

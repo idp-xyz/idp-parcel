@@ -25,8 +25,8 @@ import (
 var ErrOperatorIdentityMissing = errors.New("transport fulfillment http: operator identity (tenant) is required")
 
 // EffectiveTimeRuleIntake 把已认证的接入请求翻译成规则登记命令。接口而非本包内解析代码的理由同
-// CredentialIntake：租户身份只能来自认证结果（ADR-0003），操作者渠道（ADR-0100）就位前本包不带任何实现，
-// 装配点挂 UnconfiguredIntake。
+// CredentialIntake：租户身份只能来自认证结果（ADR-0003）。真实现是操作者渠道的 OperatorRegistryIntake
+// （ADR-0100）。
 type EffectiveTimeRuleIntake interface {
 	IntakeEffectiveTimeRuleRegistration(ctx context.Context, request *http.Request) (application.RegisterEffectiveTimeRuleCommand, error)
 }

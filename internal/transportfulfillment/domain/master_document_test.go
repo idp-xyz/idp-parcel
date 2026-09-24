@@ -402,3 +402,15 @@ func TestRehydrationRefusesRowsTheDomainCannotProduce(t *testing.T) {
 		})
 	}
 }
+
+func TestMasterDocumentRevisionWordsRoundTrip(t *testing.T) {
+	for _, revision := range []domain.MasterDocumentRevision{domain.MasterDocumentRevocation, domain.MasterDocumentSupersession, domain.MasterDocumentAssociationRestatement} {
+		parsed, err := domain.ParseMasterDocumentRevision(revision.String())
+		if err != nil || parsed != revision {
+			t.Fatalf("%s: parsed %v, %v", revision, parsed, err)
+		}
+	}
+	if _, err := domain.ParseMasterDocumentRevision("CORRECT"); !errors.Is(err, domain.ErrInvalidMasterDocument) {
+		t.Fatalf("unknown word: err = %v, want ErrInvalidMasterDocument", err)
+	}
+}
