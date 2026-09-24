@@ -24,6 +24,7 @@ Status: in-progress——2026-09-25 通道 3 立（用户授权自决）；子�
 2. **审批职责规则由 parcel-pricing 自有一条，按租户。** 形状同 PC 的 `ApprovalDutyRule`，但不共用那一条。价卡批准是 PP 生命周期「已校验 → 已批准」的一步，租户对价卡与对商业版本的审批要求可以不同（比如价卡要定价主管那一级）。参数登记册另增一行，写口只给测试用，同 ADR-0126 决定五。
 3. **原始文件本体不存。** 外置证据库的连接器还没有（`product-strategy-boundary/13`），草稿与现行登记一样只记文件名与 SHA-256。
 4. **端点全部以 `UnconfiguredIntake{}` 进端点表**（ADR-0085 两阶段）。换真 Intake 归 `operator-channel/04`（登记写面换真）那一族，不在本批。
+   - **2026-09-25 更正**：operator-channel/04 第四批已把计价登记册 Intake（`OperatorRegistryIntake`）落地，并在它的归类表写明「价卡的在线导入属 price-card-import 那一批」。本批各口因此直接挂这个 Intake，不再先挂 `UnconfiguredIntake{}`；票 02 起照此办。
 5. **受控 CLI 与 seed 路径不变**（ADR-0101 Consequences）。
 6. **物理格式与模板规范归子票 01 的设计文档定**，ADR-0101 决定二把它交给了设计文档。
 
@@ -32,7 +33,7 @@ Status: in-progress——2026-09-25 通道 3 立（用户授权自决）；子�
 | 号 | 题 | 形态 | 阻塞边 | 状态 |
 |---|---|---|---|---|
 | [01](./issues/01-template-and-validation-spec.md) | 设计文档《价卡导入模板与校验规范》 | 纯文档 | — | resolved |
-| [02](./issues/02-template-decoding-and-preview-face.md) | 模板解码与预览口 | 走并行会话那条路 | 01 | in-progress |
+| [02](./issues/02-template-decoding-and-preview-face.md) | 模板解码与预览口 | 走并行会话那条路 | 01 | resolved |
 | [03](./issues/03-draft-register-and-submission-face.md) | 草稿册、录入口与草稿查阅读口 | 走并行会话那条路 | 02 | ready-for-agent |
 | [04](./issues/04-approval-and-publication.md) | 审批职责规则、批准与发布 | 走并行会话那条路 | 03 | ready-for-agent |
 | [05](./issues/05-admin-import-tab.md) | 管理台「导入价卡」签 | 前端切片 | 03 | ready-for-agent |
