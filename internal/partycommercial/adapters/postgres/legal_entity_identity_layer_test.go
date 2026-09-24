@@ -26,6 +26,7 @@ var legalEntityIdentityFrom = time.Date(2026, 2, 1, 0, 0, 0, 0, time.UTC)
 
 type legalEntityIdentityFixture struct {
 	pool       *pgxpool.Pool
+	db         *bentopg.DB
 	identities *adapter.PartyIdentityRegistrations
 	types      *adapter.RegistrationNumberTypes
 	catalogue  *adapter.OperationsCatalogue
@@ -54,6 +55,7 @@ func newLegalEntityIdentityFixture(t *testing.T) legalEntityIdentityFixture {
 	}
 	fixture := legalEntityIdentityFixture{
 		pool:       pool,
+		db:         db,
 		identities: identities,
 		types:      types,
 		catalogue:  catalogue,
