@@ -1,7 +1,7 @@
 # 04 登记册配置写面逐口换操作者 Intake
 
 Category: enhancement
-Status: in-progress——2026-09-25 通道 4 认领（用户令独立完成操作者渠道这条链），逐上下文分批进 main：第一批可见性八口已换（见文末）。此前 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
+Status: in-progress——2026-09-25 通道 4 认领（用户令独立完成操作者渠道这条链），逐上下文分批进 main：第一批可见性八口、第二批关务七口已换（见文末）。此前 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
 Blocked by: 03
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`cmd/parcel-api` 端点表里 ADR-0085 决定一那一族登记端点的装配行及其装配测试。
@@ -23,7 +23,7 @@ Blocked by: 03
 
 **本票，且不在隔离放行名单上**（在未配置环境里换口没有可观察变化，可以先换）：
 - 可见性 8 口：`/visibility-catalogue-{milestone-mapping,triage-rule,notification-policy,claim-eligibility,claim-authorization,disclosure-policy,exception-disclosure-rule,conflict-signal-rule}-registrations`——**第一批已换**。
-- 关务 7 口：`/customs-{interpretation-rule,gate-catalog,candidate-port,declaration-path,case-requirement,duty-collaboration,duty-payment-verification}-registrations`。
+- 关务 7 口：`/customs-{interpretation-rule,gate-catalog,candidate-port,declaration-path,case-requirement,duty-collaboration,duty-payment-verification}-registrations`——**第二批已换**。
 - 网络 7 口：`/network-catalog-{node,connection,line,service-area,service-calendar,availability-adjustment,route-strategy}-registrations`。
 - 计价 5 口：`/pricing-{price-card,reference-series,reference-catalogue}-registrations` 与 `/pricing-reference-series-{reviews,previews}`。
 - 商业参与方 6 口：`/commercial-{service-product-form,product-channel-mapping,registration-number-type,channel-account-use}-registrations`、`/commercial-registration-number-type-deactivations`、`/commercial-channel-account-use-revocations`。
@@ -41,4 +41,8 @@ Blocked by: 03
 - `cmd/parcel-api`：铸造器改为 `buildOperatorMinter` 建一只、运营决定与登记写面共用；端点表八行换成操作者 Intake。发行方参数没设时八口照旧答 403 未配置。
 - **判断项**：批文里的 `approvedBy` 在线口仍照受控批量口从批文取——它记的是批准人引用，不是提交者；认证出的提交操作者在快照里没有格（与 CLI 同）。要不要把提交操作者落册，另裁。
 - **下几批要先做的一步**：关务的译装已在 `registrationjson`，照本批办；网络、计价、商业参与方、TF 的译装还在各自的登记 CLI 里，要先下沉成 `registrationjson` 包（照可见性当初下沉的先例），在线口才有「那一份」可用——不另写平行的解码。
+
+### 第二批进展 ← 通道 4 · 2026-09-25
+
+关务七口照第一批办：`registrationjson` 七个译装拆成受控批量口入口与在线入口 `…ForTenant`（门禁目录经 `gateKeyFrom` 取租户，改为先从租户来源取再交它，其余六个是通用改法），CLI 行为不变；`customshttp.OperatorRegistryIntake` 实现七口 Intake；`writeRegistrationIntakeProblem` 加三格；防腐适配器在 `internal/customscompliance/adapters/accessidentity`；端点表七行换成 `operatorRegistries.customs`。新增在线入口的测试（关务 `registrationjson` 此前没有包内测试，它的译装由受控 CLI 的测试钉）。
 
