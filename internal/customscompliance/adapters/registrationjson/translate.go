@@ -15,6 +15,7 @@ package registrationjson
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -168,12 +169,24 @@ type interpretationRuleDocument struct {
 
 // InterpretationRuleFromJSON 译装一次解释规则版本登记。
 func InterpretationRuleFromJSON(raw []byte) (application.RegisterInterpretationRuleCommand, error) {
+	return interpretationRuleFromJSON(raw, tenantFromDocument)
+}
+
+// InterpretationRuleFromJSONForTenant 是在线口那一路：租户取操作者信封给的，批文带 tenantId 即拒。
+func InterpretationRuleFromJSONForTenant(raw []byte, tenant domain.TenantID) (application.RegisterInterpretationRuleCommand, error) {
+	if err := refuseSelfReportedTenant(raw); err != nil {
+		return application.RegisterInterpretationRuleCommand{}, err
+	}
+	return interpretationRuleFromJSON(raw, injectedTenant(tenant))
+}
+
+func interpretationRuleFromJSON(raw []byte, tenantSource tenantOf) (application.RegisterInterpretationRuleCommand, error) {
 	none := application.RegisterInterpretationRuleCommand{}
 	var document interpretationRuleDocument
 	if err := decodeStrict(raw, &document); err != nil {
 		return none, fmt.Errorf("解释规则登记输入不是本入口的形状：%w", err)
 	}
-	tenant, err := domain.NewTenantID(document.TenantID)
+	tenant, err := tenantSource(document.TenantID)
 	if err != nil {
 		return none, err
 	}
@@ -311,13 +324,29 @@ type gateCatalogDocument struct {
 
 // GateCatalogFromJSON 译装一次门禁前置条件目录登记。
 func GateCatalogFromJSON(raw []byte) (application.RegisterGateCatalogCommand, error) {
+	return gateCatalogFromJSON(raw, tenantFromDocument)
+}
+
+// GateCatalogFromJSONForTenant 是在线口那一路：租户取操作者信封给的，批文带 tenantId 即拒。
+func GateCatalogFromJSONForTenant(raw []byte, tenant domain.TenantID) (application.RegisterGateCatalogCommand, error) {
+	if err := refuseSelfReportedTenant(raw); err != nil {
+		return application.RegisterGateCatalogCommand{}, err
+	}
+	return gateCatalogFromJSON(raw, injectedTenant(tenant))
+}
+
+func gateCatalogFromJSON(raw []byte, tenantSource tenantOf) (application.RegisterGateCatalogCommand, error) {
 	none := application.RegisterGateCatalogCommand{}
 	var document gateCatalogDocument
 	if err := decodeStrict(raw, &document); err != nil {
 		return none, fmt.Errorf("门禁目录登记输入不是本入口的形状：%w", err)
 	}
+	sourced, err := tenantSource(document.TenantID)
+	if err != nil {
+		return none, err
+	}
 	tenant, scope, action, boundary, err := gateKeyFrom(
-		document.TenantID, document.ScopeRef, document.Action, document.BoundaryRef)
+		sourced.String(), document.ScopeRef, document.Action, document.BoundaryRef)
 	if err != nil {
 		return none, err
 	}
@@ -385,12 +414,24 @@ type caseRequirementDocument struct {
 
 // CaseRequirementFromJSON 译装一次建案要求规则登记。
 func CaseRequirementFromJSON(raw []byte) (application.RegisterCaseRequirementRuleCommand, error) {
+	return caseRequirementFromJSON(raw, tenantFromDocument)
+}
+
+// CaseRequirementFromJSONForTenant 是在线口那一路：租户取操作者信封给的，批文带 tenantId 即拒。
+func CaseRequirementFromJSONForTenant(raw []byte, tenant domain.TenantID) (application.RegisterCaseRequirementRuleCommand, error) {
+	if err := refuseSelfReportedTenant(raw); err != nil {
+		return application.RegisterCaseRequirementRuleCommand{}, err
+	}
+	return caseRequirementFromJSON(raw, injectedTenant(tenant))
+}
+
+func caseRequirementFromJSON(raw []byte, tenantSource tenantOf) (application.RegisterCaseRequirementRuleCommand, error) {
 	none := application.RegisterCaseRequirementRuleCommand{}
 	var document caseRequirementDocument
 	if err := decodeStrict(raw, &document); err != nil {
 		return none, fmt.Errorf("建案要求规则登记输入不是本入口的形状：%w", err)
 	}
-	tenant, err := domain.NewTenantID(document.TenantID)
+	tenant, err := tenantSource(document.TenantID)
 	if err != nil {
 		return none, err
 	}
@@ -429,12 +470,24 @@ type candidatePortDocument struct {
 
 // CandidatePortFromJSON 译装一次口岸合规候选版本登记。
 func CandidatePortFromJSON(raw []byte) (application.RegisterCandidatePortCommand, error) {
+	return candidatePortFromJSON(raw, tenantFromDocument)
+}
+
+// CandidatePortFromJSONForTenant 是在线口那一路：租户取操作者信封给的，批文带 tenantId 即拒。
+func CandidatePortFromJSONForTenant(raw []byte, tenant domain.TenantID) (application.RegisterCandidatePortCommand, error) {
+	if err := refuseSelfReportedTenant(raw); err != nil {
+		return application.RegisterCandidatePortCommand{}, err
+	}
+	return candidatePortFromJSON(raw, injectedTenant(tenant))
+}
+
+func candidatePortFromJSON(raw []byte, tenantSource tenantOf) (application.RegisterCandidatePortCommand, error) {
 	none := application.RegisterCandidatePortCommand{}
 	var document candidatePortDocument
 	if err := decodeStrict(raw, &document); err != nil {
 		return none, fmt.Errorf("口岸目录登记输入不是本入口的形状：%w", err)
 	}
-	tenant, err := domain.NewTenantID(document.TenantID)
+	tenant, err := tenantSource(document.TenantID)
 	if err != nil {
 		return none, err
 	}
@@ -465,12 +518,24 @@ type declarationPathDocument struct {
 
 // DeclarationPathFromJSON 译装一次申报路径版本登记。
 func DeclarationPathFromJSON(raw []byte) (application.RegisterDeclarationPathCommand, error) {
+	return declarationPathFromJSON(raw, tenantFromDocument)
+}
+
+// DeclarationPathFromJSONForTenant 是在线口那一路：租户取操作者信封给的，批文带 tenantId 即拒。
+func DeclarationPathFromJSONForTenant(raw []byte, tenant domain.TenantID) (application.RegisterDeclarationPathCommand, error) {
+	if err := refuseSelfReportedTenant(raw); err != nil {
+		return application.RegisterDeclarationPathCommand{}, err
+	}
+	return declarationPathFromJSON(raw, injectedTenant(tenant))
+}
+
+func declarationPathFromJSON(raw []byte, tenantSource tenantOf) (application.RegisterDeclarationPathCommand, error) {
 	none := application.RegisterDeclarationPathCommand{}
 	var document declarationPathDocument
 	if err := decodeStrict(raw, &document); err != nil {
 		return none, fmt.Errorf("申报路径登记输入不是本入口的形状：%w", err)
 	}
-	tenant, err := domain.NewTenantID(document.TenantID)
+	tenant, err := tenantSource(document.TenantID)
 	if err != nil {
 		return none, err
 	}
@@ -579,12 +644,24 @@ type dutyCollaborationDocument struct {
 // 结果；在这里拒掉它，那一格就从 CLI 上消失了，等于入口替编排改判。打错的词另论：词表外
 // 的取值就是用法错误，在这里指名拒。
 func DutyCollaborationFromJSON(raw []byte) (application.FormDutyCollaborationCommand, error) {
+	return dutyCollaborationFromJSON(raw, tenantFromDocument)
+}
+
+// DutyCollaborationFromJSONForTenant 是在线口那一路：租户取操作者信封给的，批文带 tenantId 即拒。
+func DutyCollaborationFromJSONForTenant(raw []byte, tenant domain.TenantID) (application.FormDutyCollaborationCommand, error) {
+	if err := refuseSelfReportedTenant(raw); err != nil {
+		return application.FormDutyCollaborationCommand{}, err
+	}
+	return dutyCollaborationFromJSON(raw, injectedTenant(tenant))
+}
+
+func dutyCollaborationFromJSON(raw []byte, tenantSource tenantOf) (application.FormDutyCollaborationCommand, error) {
 	none := application.FormDutyCollaborationCommand{}
 	var document dutyCollaborationDocument
 	if err := decodeStrict(raw, &document); err != nil {
 		return none, fmt.Errorf("协作事项登记输入不是本入口的形状：%w", err)
 	}
-	tenant, err := domain.NewTenantID(document.TenantID)
+	tenant, err := tenantSource(document.TenantID)
 	if err != nil {
 		return none, err
 	}
@@ -648,12 +725,24 @@ type dutyPaymentVerificationDocument struct {
 // 入口不从范围推。fundsVersion 必填（票 sa-cc/19）：核对比的是资金事实的哪一版由登记方说，入口不取
 // 「最近接收」顶替——同一事实两版并存时那个答案是到达顺序，不是核对所指。
 func DutyPaymentVerificationFromJSON(raw []byte) (application.VerifyDutyPaymentCommand, error) {
+	return dutyPaymentVerificationFromJSON(raw, tenantFromDocument)
+}
+
+// DutyPaymentVerificationFromJSONForTenant 是在线口那一路：租户取操作者信封给的，批文带 tenantId 即拒。
+func DutyPaymentVerificationFromJSONForTenant(raw []byte, tenant domain.TenantID) (application.VerifyDutyPaymentCommand, error) {
+	if err := refuseSelfReportedTenant(raw); err != nil {
+		return application.VerifyDutyPaymentCommand{}, err
+	}
+	return dutyPaymentVerificationFromJSON(raw, injectedTenant(tenant))
+}
+
+func dutyPaymentVerificationFromJSON(raw []byte, tenantSource tenantOf) (application.VerifyDutyPaymentCommand, error) {
 	none := application.VerifyDutyPaymentCommand{}
 	var document dutyPaymentVerificationDocument
 	if err := decodeStrict(raw, &document); err != nil {
 		return none, fmt.Errorf("付款核对登记输入不是本入口的形状：%w", err)
 	}
-	tenant, err := domain.NewTenantID(document.TenantID)
+	tenant, err := tenantSource(document.TenantID)
 	if err != nil {
 		return none, err
 	}
@@ -880,6 +969,34 @@ func dutyFactValidityFrom(raw string) (domain.DutyFactValidity, error) {
 }
 
 // decodeStrict 拒未知字段：打错的键静默丢弃，会让操作员以为登进去的比实际多。
+// tenantOf 决定一份批文的租户取自哪（票 operator-channel/04）。受控批量口取批文里的 tenantId——那是运维在库网内的
+// 治理动作；在线口取操作者信封给的租户，批文里出现 tenantId 键即拒——采信自报租户会穿透 ADR-0003 的隔离边界。
+// 两条路共用同一份译装：分成两份，同一个登记口就有了两套形状口径。
+type tenantOf func(documentTenant string) (domain.TenantID, error)
+
+func tenantFromDocument(documentTenant string) (domain.TenantID, error) {
+	return domain.NewTenantID(documentTenant)
+}
+
+func injectedTenant(tenant domain.TenantID) tenantOf {
+	return func(string) (domain.TenantID, error) { return tenant, nil }
+}
+
+// ErrSelfReportedTenant 表示在线口的批文里带了 tenantId：租户只从认证结果来。
+var ErrSelfReportedTenant = errors.New("customs registration: online input must not carry tenantId; the tenant comes from the operator envelope")
+
+// refuseSelfReportedTenant 键在场即拒、不看值：`"tenantId": null` 也是自报。批文不是 JSON 对象时交给 decodeStrict 去答形状错。
+func refuseSelfReportedTenant(raw []byte) error {
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &top); err != nil {
+		return nil
+	}
+	if _, present := top["tenantId"]; present {
+		return ErrSelfReportedTenant
+	}
+	return nil
+}
+
 func decodeStrict(raw []byte, target any) error {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
