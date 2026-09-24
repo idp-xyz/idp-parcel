@@ -89,21 +89,22 @@ const reservedGovernanceRegistration = "GOVERNANCE_REGISTRATION"
 // ParseCapabilityFace 按字面取值认能力面，大小写不折叠：册里存的就是这些字面量。
 func ParseCapabilityFace(value string) (CapabilityFace, error) {
 	face := CapabilityFace(value)
-	if face.grantable() {
-		return face, nil
+	if err := face.checkGrantable(); err != nil {
+		return "", err
 	}
-	if value == reservedGovernanceRegistration {
-		return "", ErrCapabilityFaceReserved
-	}
-	return "", ErrCapabilityFaceUnknown
+	return face, nil
 }
 
-func (face CapabilityFace) grantable() bool {
+// checkGrantable 是能力面唯一的入口闸：解析与构造授予都经它，CapabilityFace 是字符串底型，
+// 包外转型递进来的值也要在这里被拦下。
+func (face CapabilityFace) checkGrantable() error {
 	switch face {
 	case CapabilityRegistryConfigurationWrite, CapabilityMasterDataAndOperationsRead:
-		return true
+		return nil
+	case reservedGovernanceRegistration:
+		return ErrCapabilityFaceReserved
 	}
-	return false
+	return ErrCapabilityFaceUnknown
 }
 
 func (face CapabilityFace) String() string { return string(face) }
@@ -163,11 +164,8 @@ func NewOperatorGrant(
 	interval EffectiveInterval,
 	basis string,
 ) (OperatorGrant, error) {
-	if !face.grantable() {
-		if string(face) == reservedGovernanceRegistration {
-			return OperatorGrant{}, ErrCapabilityFaceReserved
-		}
-		return OperatorGrant{}, ErrCapabilityFaceUnknown
+	if err := face.checkGrantable(); err != nil {
+		return OperatorGrant{}, err
 	}
 	tenant := strings.TrimSpace(tenantID)
 	id := strings.TrimSpace(grantID)
