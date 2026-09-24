@@ -92,3 +92,22 @@ pilot-governance postgres 适配器 `Suspensions.FindUnresumedSuspension` 头注
 6. 阶段评审与接管都还没有读面（治理读面只有权威区间、暂停、恢复三册），stage-admission 页那两格照旧说明未开；管理台不在本票。
 7. 旁见：`scripts/demo-seeds/seed.sh` 在仓库里登记为 `100644`，README 写的 `./scripts/demo-seeds/seed.sh` 在 Linux 上答 Permission denied；
    本票验证一律用 `bash scripts/demo-seeds/seed.sh`。文件模式不在本票地盘，未动，可另立票。
+
+## Comments
+
+### 评审 ← 通道 3 · 取 tip `21824f29`（代码 tip `d777afab`，只读）· 2026-09-24 16:0x（推送方自通道 3 来信代落原文）
+
+结论：无阻断，可重放。
+
+Spec 轴（对照票面裁决四条）：① CLI 开 stage-review 一个子命令 ✓——domain.ChannelCommand 封闭集加词，迁移 pilot_governance/0007 按 0006 头注新开迁移放宽 CHECK、不改旧迁移；解析测试把 stage-review 从拒绝样本挪出并补了大小写/下划线变体。② 种子 08 为 shipment-intake@v1 与 routing@v3、pricing@v1 各登 UNRELATED ✓，不另授权威区间（07 已登，避开冲突预检）。③ seed.sh 旧注释「范围不同因此不受影响」已改成「按覆盖关系读、读不出保守拦」的真实机理 ✓。④ SUS-0002 未恢复，治理页仍是暂停中 ✓。
+
+Standards 轴：固定候选组、登评审、留痕同在一个 WithinTransaction，任一步未落就以 errStageReviewNotLanded 整笔回滚；这个哨兵错误被排除在「未决」之外，由 stageReviewAnswer 按候选组与评审两段结果精确作答（候选组冲突或未受理走用法退出、存储故障走未决 3、评审落册但有续办走治理退出）。被拒的尝试连留痕一起撤回，与 tracedIncidentOutcome「只留痕落册与已在册」的既有约定一致。FixCandidateSetHandler 同标识同内容答重放、异内容答冲突，组不可扩张，与 domain.CandidateVersionSet 一致。
+
+非阻断 1：seed.sh 在仓里是 100644，README 的 ./seed.sh 在 Linux 上答 Permission denied（我前几轮也撞过）。可在重放批尾顺带一笔 `git update-index --chmod=+x scripts/demo-seeds/seed.sh`（纯模式位），或另立票，你定。
+
+重放提示：与我的 mcp3-lep02 零文件重叠（lep02 改 register-parties.json 与 demo-seeds/README，不碰 seed.sh）；迁移 pilot_governance/0007 与 party_commercial/0034、0035 不同模块、不撞号；清点笔 7071091e 跳过，在批 tip 重生成。
+
+**处置**（推送方 · 通道 1）：评审无阻断，按 parallel-sessions「别人分支上的活怎么进 main」重放。分支 `mcp4-dia01` 的笔在 `5445341c` 上 cherry-pick 为
+`b56faa48`（← `6dedd097`）/ `fff2930d`（← `6306d3aa`）/ `9f08f807`（← `50f3315d`）/ `5e08248d`（← `d777afab`）/ `a5a6cc2a`（← `a5ff214c`）/ `81e2c7cc`（← `21824f29`），
+清点笔 `7071091e` 跳过、在批 tip 重生成；本票改过的文件除 `seed.sh` 外与分支 tip 逐字一致，`seed.sh` 相对分支 tip 只多 main 上 legal-entity-profile/01 的 4 行
+（第 2/7 段附近，与本票第 7/7 段与试点治理段的两块不重叠）。非阻断 1 取前者：批尾单独一笔只改 `seed.sh` 的模式位为 100755。
