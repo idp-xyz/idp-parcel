@@ -76,13 +76,19 @@ type RegisterBusinessPartyCommand struct {
 
 // RegisterLegalEntityCommand 登记责任法人身份的一笔修订。Party 是引用：法人必须钉在
 // 已登记且届时已生效的参与方身份上，参与方内容（名称）在参与方册上，不随法人重复登记。
+//
+// 身份层三格（ADR-0145 决定一、二）各自可缺，缺与不缺由用例判：新登记与新修订缺国家或缺号即
+// `未受理`；重放本格落地之前的历史修订时三格都缺，照册面原样比对。
 type RegisterLegalEntityCommand struct {
-	Tenant        domain.TenantID
-	Entity        domain.LegalEntityReference
-	Party         domain.PartyID
-	Revision      int
-	Basis         domain.IdentityBasisReference
-	EffectiveFrom time.Time
+	Tenant                  domain.TenantID
+	Entity                  domain.LegalEntityReference
+	Party                   domain.PartyID
+	Revision                int
+	Basis                   domain.IdentityBasisReference
+	EffectiveFrom           time.Time
+	RegistrationCountry     *domain.RegistrationCountryCode
+	LifetimeNumbers         []domain.LifetimeRegistrationNumber
+	IdentityCorrectionBasis *domain.IdentityBasisReference
 }
 
 // RegisterCustomerAccountCommand 登记货主客户账户的一笔修订，判据同法人登记。
@@ -151,11 +157,17 @@ type DeactivatePartyIdentityCommand struct {
 // RegisterPartyIdentityHandler 是参与方身份与关系登记的写侧编排：领域门 → 引用与
 // 修订连续性检查 → 登记册落库。调用方逐命令各起事务（批不是聚合，AT-PC-011）。
 type RegisterPartyIdentityHandler struct {
-	registry ports.PartyIdentityRegistry
+	registry    ports.PartyIdentityRegistry
+	numberTypes ports.RegistrationNumberTypeLookup
 }
 
-func NewRegisterPartyIdentityHandler(registry ports.PartyIdentityRegistry) *RegisterPartyIdentityHandler {
-	return &RegisterPartyIdentityHandler{registry: registry}
+// NewRegisterPartyIdentityHandler 的 numberTypes 只有责任法人的新登记与新修订用得上（按注册号类型
+// 目录判号）；不登法人的调用方可以给 nil，给了 nil 又去登法人，用例答技术失败而不是替它放行。
+func NewRegisterPartyIdentityHandler(
+	registry ports.PartyIdentityRegistry,
+	numberTypes ports.RegistrationNumberTypeLookup,
+) *RegisterPartyIdentityHandler {
+	return &RegisterPartyIdentityHandler{registry: registry, numberTypes: numberTypes}
 }
 
 // RegisterBusinessParty 登记业务参与方身份修订。
@@ -250,11 +262,130 @@ func (handler *RegisterPartyIdentityHandler) RegisterLegalEntity(
 		return result, nil
 	}
 
+	// 身份层的三道门只拦将要落册的新登记与新修订；修订号落在已有修订上的是重放或冲突，照册面原样
+	// 比对——历史修订没有身份层，目录也可能已经修订过，拿今天的门去拦一次重放只会把「已登记」答错。
+	successor := !found || command.Revision > latestRevision
+	identity, hasIdentity, err := legalEntityIdentityLayerFrom(command)
+	if err != nil {
+		return notAccepted(err), nil
+	}
+	if successor {
+		if !hasIdentity {
+			return notAccepted(errors.New(
+				"新登记与新修订必须带注册国家 / 地区与至少一个终身注册号（ADR-0145 决定一）",
+			)), nil
+		}
+		refusal, err := handler.checkLifetimeNumbers(ctx, command.Tenant, identity, lifecycle.EffectiveFrom())
+		if err != nil {
+			return PartyRegistryResult{}, fmt.Errorf("register legal entity: %w", err)
+		}
+		if refusal != "" {
+			return notAccepted(errors.New(refusal)), nil
+		}
+	}
+	if hasIdentity {
+		registration, err = registration.WithIdentityLayer(identity, command.IdentityCorrectionBasis)
+		if err != nil {
+			return notAccepted(err), nil
+		}
+	} else if command.IdentityCorrectionBasis != nil {
+		return notAccepted(errors.New("身份更正依据只随身份层出现：本修订没带注册国家 / 地区与终身注册号")), nil
+	}
+	if successor && found {
+		if err := domain.CheckLegalEntityIdentitySuccession(latest, registration); err != nil {
+			return notAccepted(identitySuccessionRefusal(err)), nil
+		}
+	}
+
 	outcome, err := handler.registry.SaveLegalEntity(ctx, registration)
 	if err != nil {
 		return PartyRegistryResult{}, fmt.Errorf("register legal entity: %w", err)
 	}
 	return registrationResult(outcome), nil
+}
+
+// legalEntityIdentityLayerFrom 把命令上的身份层两格合成一个身份层。两格都缺即没有身份层（重放历史
+// 修订的形状）；缺一格是登记方漏填，按`未受理`交回并说清缺的是哪一格。
+func legalEntityIdentityLayerFrom(command RegisterLegalEntityCommand) (domain.LegalEntityIdentityLayer, bool, error) {
+	if command.RegistrationCountry == nil && len(command.LifetimeNumbers) == 0 {
+		return domain.LegalEntityIdentityLayer{}, false, nil
+	}
+	if command.RegistrationCountry == nil {
+		return domain.LegalEntityIdentityLayer{}, false, errors.New(
+			"缺注册国家 / 地区：终身注册号要按注册国家 / 地区的注册号类型目录判",
+		)
+	}
+	if len(command.LifetimeNumbers) == 0 {
+		return domain.LegalEntityIdentityLayer{}, false, fmt.Errorf(
+			"缺终身注册号：注册国家 / 地区 %s 下至少要登一个终身注册号", command.RegistrationCountry,
+		)
+	}
+	layer, err := domain.NewLegalEntityIdentityLayer(*command.RegistrationCountry, command.LifetimeNumbers)
+	if err != nil {
+		return domain.LegalEntityIdentityLayer{}, false, fmt.Errorf("身份层不成立（一类终身注册号只收一个）：%w", err)
+	}
+	return layer, true, nil
+}
+
+// checkLifetimeNumbers 按注册号类型目录逐个判身份层上的号（ADR-0145 决定一），判的时点是法人生效时点：
+// 身份在那一刻生效，号的类型那一刻就得在用；目录条目的生效时点由实施方按该类号实际启用的时间登记。
+// 非空的第一个返回值是给登记方看的拒绝理由；error 只留给读目录的技术失败——一次该重试的故障不能答成「未登记」。
+func (handler *RegisterPartyIdentityHandler) checkLifetimeNumbers(
+	ctx context.Context,
+	tenant domain.TenantID,
+	identity domain.LegalEntityIdentityLayer,
+	at time.Time,
+) (string, error) {
+	if handler.numberTypes == nil {
+		return "", errors.New("注册号类型目录未装配，判不了终身注册号")
+	}
+	country := identity.Country()
+	catalogue, err := handler.numberTypes.LoadRegistrationNumberTypeCatalogue(ctx, tenant, country)
+	if err != nil {
+		return "", err
+	}
+	for _, number := range identity.Numbers() {
+		check, err := catalogue.Check(number.TypeCode(), domain.RegistrationNumberIdentityLayer, number.Number(), at)
+		if err != nil {
+			return "", err
+		}
+		switch check.Outcome() {
+		case domain.RegistrationNumberAccepted:
+			continue
+		case domain.RegistrationCountryNotRegistered:
+			return fmt.Sprintf("注册国家 / 地区 %s 在注册号类型目录里未登记：先在目录登记它的注册号类型", country), nil
+		case domain.RegistrationNumberTypeNotRegistered:
+			return fmt.Sprintf("注册号类型 %s 在 %s 的注册号类型目录里未登记", number.TypeCode(), country), nil
+		case domain.RegistrationNumberTypeNotEffective:
+			return fmt.Sprintf("注册号类型 %s 在法人生效时点 %s 不在用", number.TypeCode(), at.Format(time.RFC3339)), nil
+		case domain.RegistrationNumberLayerMismatch:
+			return fmt.Sprintf(
+				"注册号类型 %s 属资料层（税务登记号那一类），身份层只收终身注册号", number.TypeCode(),
+			), nil
+		case domain.RegistrationNumberFormatMismatch:
+			return fmt.Sprintf("注册号 %q 不合类型 %s 登记的格式", number.Number(), number.TypeCode()), nil
+		default:
+			return "", fmt.Errorf("注册号类型目录答出了未知结果 %d", check.Outcome())
+		}
+	}
+	return "", nil
+}
+
+// identitySuccessionRefusal 把接续门的两种拒绝译成登记方看得懂的续办；别的错误原样交回。
+func identitySuccessionRefusal(err error) error {
+	switch {
+	case errors.Is(err, domain.ErrIdentityLayerChangedWithoutCorrection):
+		return errors.New(
+			"身份层（注册国家 / 地区或终身注册号）不作变更：号真的变了就停用本法人、登记新法人；" +
+				"是当初录错了，就带身份更正依据登记更正修订（ADR-0145 决定二）",
+		)
+	case errors.Is(err, domain.ErrIdentityCorrectionWithoutChange):
+		return errors.New(
+			"身份更正依据只随改了身份层的修订出现：本修订没改身份层（或是历史修订第一次补登两格），不带更正依据",
+		)
+	default:
+		return err
+	}
 }
 
 // RegisterCustomerAccount 登记货主客户账户修订。跨租户绑定由 domain.NewCustomerAccount
