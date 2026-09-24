@@ -1,8 +1,8 @@
 # 06 管理台试算页
 
 Category: enhancement
-Status: draft
-Blocked by: 05
+Status: ready-for-agent——2026-09-25 票 05 已进 main，阻塞解除
+Blocked by: 05（resolved）
 地盘：`apps/admin-web/src/pages/pricing/`（新页与纯逻辑）、`apps/admin-web/src/navigation.ts` 与 `page-registry.tsx`（登记一个模块）。
 出处：[02 的裁决](./02-estimate-evaluation-entry.md)；行为以 [UC-PP-001](../../../docs/application/parcel-pricing/UC-PP-001-FORM-ESTIMATE-EVALUATIONS.md) 为准。
 
