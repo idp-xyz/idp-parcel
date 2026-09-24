@@ -1,8 +1,8 @@
 # 15 委托与履约的运营决定口：操作者渠道增「运营决定」能力面，委托侧五口与 TF 管理台上的决定与判断口换操作者 Intake
 
 Category: enhancement
-Status: in-progress——2026-09-25 通道 4 认领（用户令独立完成 ADR-0151 那件；前置 03、14 均已 resolved），分支 `mcp4-oc15`，分块逐笔进 main：之一「运营决定」能力面按决定种类授予（领域、迁移、册适配器、登记 CLI）。此前 ready-for-agent——2026-09-24 随 ADR-0151 立（用户同日「同意你的决定，开干」）；2026-09-25 通道 2 按用户「开干前，全面审查，确保确实如此」复核后改定范围、阻塞与完成判据，复核记录见文末 Comments
-Blocked by: 03、14
+Status: in-progress——2026-09-25 通道 4 认领（用户令独立完成 ADR-0151 那件；前置 03、14 均已 resolved），分块逐笔进 main：之一、之二、之三已进 main（见文末进展记录）；余下装配换口被 07 挡住，受控关闭与重开等请求方格与 PS owner 对齐。此前 ready-for-agent——2026-09-24 随 ADR-0151 立（用户同日「同意你的决定，开干」）；2026-09-25 通道 2 按用户「开干前，全面审查，确保确实如此」复核后改定范围、阻塞与完成判据，复核记录见文末 Comments
+Blocked by: 装配换口一格——[07](./07-admin-web-login-gate.md)（管理台登录门：换口后各口要 Bearer 令牌，管理台今天调复核、拒绝、处置与有效时间判断几口不带令牌），以及演示环境接上发行方与合成操作者授予；受控关闭与重开两口——请求方格与 PS owner 对齐（本票做什么第 3 条）。03、14 已 resolved
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`internal/accessidentity`（能力面授予格「运营决定」）；`cmd/parcel-api` 端点表里下列各口的 Intake 装配与装配测试；`internal/parcelshipment/adapters/http` 与 `internal/transportfulfillment/adapters/http` 各口的操作者 Intake。
 出处：[ADR-0151](../../../docs/adr/0151-unassigned-command-faces-get-their-families.md) 决定一、二、三、六；[ADR-0100](../../../docs/adr/0100-operator-identity-is-a-product-owned-access-channel-family.md) 决定二、四；[ADR-0149](../../../docs/adr/0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md) 决定四。
@@ -65,4 +65,16 @@ Blocked by: 03、14
   4. **委托寻址**（委托侧五口）：复用已有的委托查阅读口（`pspostgres.ShipmentRequestViews` 按委托标识取详情，详情带客户账户、来源、来源请求键），不新写查询。它的作用域（`AuthorizedQueryScope`）还带「可见客户账户」一维，操作者渠道上怎么取值先对齐；查不到与越权探针同答。
   5. **TF 隔离放行**：关段、建派送任务、两个判断口的放行在 `cmd/parcel-api/assemble_isolated_write.go`，换口的同一笔撤下（ADR-0150）。
   6. 动 `cmd/parcel-api/endpoints.go` 前先占号：通道 3 的 ADR-0152 试算实现也要改它。
+
+### 进展记录 ← 通道 4 · 2026-09-25
+
+- **之一** `1d3b9d79`（main `961525fb`）：「运营决定」能力面按十一种决定授予。含领域类型、迁移 `access_identity/0002`（种类列与两道 CHECK）、册适配器、登记 CLI；`OperatorRequest.DecisionKind` 与信封的 `HoldsDecision`。
+- **之二** `98925946`（main `76511c67`）：TF 六口的 `tfhttp.OperatorDecisionIntake`。线格式复用各口既有 `…Payload`，装载分配与终止参与两口的载荷随之新定。`commandEndpoint` 加四格答复。防腐适配器在 `internal/transportfulfillment/adapters/accessidentity`。请求没指名租户时，`accessidentity` 取册上绑定的租户。
+- **之三** `44ef6a4a`（main `161dc5ca`）：复核完成、主动拒绝、授权处置三口的 `shipmenthttp.OperatorDecisionIntake`。`ports.OperatorDecisionTargets` 按租户与委托标识寻址，postgres 实现在委托查阅适配器上。`writeIntakeProblem` 加四格并成为本包唯一映射。防腐适配器在 `internal/parcelshipment/adapters/accessidentity`。
+- 每笔进 main 前都在推的那个 SHA 上跑了带 DSN 的全量（121 / 122 / 123 包 ok，0 FAIL），推送方即作者自审，**不算非作者评审**。
+
+**余下两格与判断项**：
+1. **装配换口**（完成判据第 1、2、3 条）：在 `cmd/parcel-api` 装配——用 02 号票的校验器、postgres 操作者册与准入桥（租户对照 + `AuthorityCoverage`，其 SelfAuthority 与 PS 生产归属取同一值）建 `OperatorMinter`，再建两边的防腐认证方与 Intake——然后逐口换，并同笔撤下 TF 四口的隔离放行（ADR-0150）。挡在两处：管理台登录门（07），以及演示环境要能走操作者渠道（Dex 接进 compose、合成操作者与十一种决定的授予、合成租户的准入对照与区间）。现在换，演示动线与管理台这几页会当场断。
+2. **受控关闭与重开**：命令里的请求方格（重开另有货主账户格）不采信自报，操作者渠道上怎么形成由 PS owner 裁（ADR-0151 决定二）；定之前两口照旧挂未配置。
+3. **判断项**（留给评审与 PS owner）：复核完成的证据格取管理台送来的复核理由；主动拒绝与授权处置的证据格取 `OPERATOR/<发行方>#<sub>`，理由进结构化原因格；复核完成与主动拒绝的提交版本取服务端当前版本（管理台草案不带），授权处置取草案送来的版本；运营决定口的准入要求取能力 `OPERATION_DECISION`、事实类型为决定种类——治理登记册那一侧的能力与事实类型词表尚无先例，首个租户登记区间时要对齐。
 
