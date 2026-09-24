@@ -161,6 +161,7 @@ func assembleBusinessEndpoints(
 	isolatedPartyIdentity *commercialhttp.IsolatedPartyIdentityIntake,
 	isolatedNodeOperations *nodeopshttp.IsolatedCommandIntake,
 	isolatedTransportFulfillment *tfhttp.IsolatedCommandIntake,
+	isolatedCustoms *customshttp.IsolatedCommandIntake,
 ) []httpapi.BusinessEndpoint {
 	// 缺省朝拦：各隔离入参都为 nil 时，下面这组变量全取未配置即拒，整份装配与
 	// ADR-0078/0091 之前逐字节同形。
@@ -255,6 +256,10 @@ func assembleBusinessEndpoints(
 		deliveryRegistrationIntake = isolatedTransportFulfillment
 		segmentClosureIntake = isolatedTransportFulfillment
 		effectiveTimeJudgmentIntake = isolatedTransportFulfillment
+	}
+	externalResultIntake := customshttp.ResultIntake(customshttp.UnconfiguredIntake{})
+	if isolatedCustoms != nil {
+		externalResultIntake = isolatedCustoms
 	}
 
 	return []httpapi.BusinessEndpoint{
@@ -373,7 +378,7 @@ func assembleBusinessEndpoints(
 		{Pattern: "/customer-tracking-view", Handler: visibilityhttp.NewQueryCustomerTrackingViewEndpoint(visibilityhttp.UnconfiguredIntake{}, trackingViews)},
 		{Pattern: "/tracking-projections", Handler: visibilityhttp.NewQueryTrackingProjectionsEndpoint(trackingProjectionsIntake, projectionViews)},
 		{Pattern: "/claims", Handler: visibilityhttp.NewReceiveClaimEndpoint(visibilityhttp.UnconfiguredIntake{}, claims)},
-		{Pattern: "/customs/external-results", Handler: customshttp.NewReceiveExternalResultEndpoint(customshttp.UnconfiguredIntake{}, results)},
+		{Pattern: "/customs/external-results", Handler: customshttp.NewReceiveExternalResultEndpoint(externalResultIntake, results)},
 		{Pattern: "/pricing-price-cards", Handler: pricinghttp.NewQueryPriceCardsEndpoint(pricingCatalogueIntake, priceCards)},
 		{Pattern: "/pricing-reference-series", Handler: pricinghttp.NewQueryReferenceSeriesEndpoint(pricingCatalogueIntake, referenceSeries)},
 		// 覆盖地平线（票 pricing-reference-series-operations/05 第 1 项）：一条序列一行，

@@ -542,6 +542,7 @@ func run(logger *slog.Logger) error {
 			isolatedWrite.partyIdentityIntake(),
 			isolatedWrite.nodeOperationsIntake(),
 			isolatedWrite.transportFulfillmentIntake(),
+			isolatedWrite.customsIntake(),
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,
