@@ -71,6 +71,44 @@ func TestResolutionRoundTripsTheAdoptedServiceProduct(t *testing.T) {
 	}
 }
 
+// Covers: 票 psb/17 —— 键上委托声明的服务产品随闭包落库、读回。丢了它，提交前重解按范围解出两个候选，一份仍然
+// 成立的解析就被判成已失效；而 Save 与 Load 两侧都不会报错。
+func TestResolutionRoundTripsTheDeclaredServiceProduct(t *testing.T) {
+	repository, transactor, _ := newResolutions(t)
+	ctx := t.Context()
+	closure := uniqueClosureDeclaringServiceProduct(t, "product-1")
+
+	mustSaveResolution(t, transactor, ctx, repository, closure)
+
+	found, ok, err := repository.LoadResolution(ctx, closure.ResolutionKey().TenantID, closure.ResolutionID())
+	if err != nil {
+		t.Fatalf("按标识取回：%v", err)
+	}
+	if !ok {
+		t.Fatal("写入后 found=false")
+	}
+	if got := found.ResolutionKey().ServiceProduct.String(); got != "product-1" {
+		t.Fatalf("读回的解析键声明产品 = %q, want product-1", got)
+	}
+}
+
+// Covers: 票 psb/17 —— 不声明产品的闭包快照不多出这一键：既有快照的内容摘要因此不变，同一份闭包重放仍答已登记。
+func TestAClosureWithoutADeclaredServiceProductCarriesNoneBack(t *testing.T) {
+	repository, transactor, _ := newResolutions(t)
+	ctx := t.Context()
+	closure := uniqueClosureWithServiceProduct(t)
+
+	mustSaveResolution(t, transactor, ctx, repository, closure)
+
+	found, _, err := repository.LoadResolution(ctx, closure.ResolutionKey().TenantID, closure.ResolutionID())
+	if err != nil {
+		t.Fatalf("按标识取回：%v", err)
+	}
+	if got := found.ResolutionKey().ServiceProduct.String(); got != "" {
+		t.Fatalf("不声明产品的闭包读回声明产品 = %q, want 缺席", got)
+	}
+}
+
 // Covers: ADR-0044 —— 采用了结算政策的闭包必须读得回来，且方式与六维适用范围随它读回。
 //
 // 这一票之前是「写得进、读不回」：解析键上的结算选择器没落库，读回时最小身份立不起来，
@@ -359,6 +397,12 @@ func uniqueClosure(t *testing.T) domain.CommercialClosure {
 
 func uniqueClosureWithServiceProduct(t *testing.T) domain.CommercialClosure {
 	t.Helper()
+	return uniqueClosureDeclaringServiceProduct(t, "")
+}
+
+// uniqueClosureDeclaringServiceProduct 同上，declared 非空时键上带委托声明的服务产品（票 psb/17）。
+func uniqueClosureDeclaringServiceProduct(t *testing.T, declared string) domain.CommercialClosure {
+	t.Helper()
 
 	registry := domain.NewCommercialRegistry()
 	contract := effectiveContract(t, "contract-1", "v1", "digest-1")
@@ -384,7 +428,7 @@ func uniqueClosureWithServiceProduct(t *testing.T) domain.CommercialClosure {
 	if err != nil {
 		t.Fatalf("选择锚点：%v", err)
 	}
-	closure := domain.ResolveCommercialClosure(registry, domain.ClosureResolutionKey{
+	key := domain.ClosureResolutionKey{
 		TenantID:             pcTenant(t, "tenant-1"),
 		CustomerAccountID:    pcValue(t, domain.NewCustomerAccountID, "customer-1"),
 		LegalEntityCandidate: pcValue(t, domain.NewLegalEntityReference, "legal-1"),
@@ -396,7 +440,11 @@ func uniqueClosureWithServiceProduct(t *testing.T) domain.CommercialClosure {
 			domain.AcceptanceRulePackageObject,
 			domain.ServiceProductObject,
 		},
-	}, nil)
+	}
+	if declared != "" {
+		key.ServiceProduct = pcValue(t, domain.NewCommercialObjectID, declared)
+	}
+	closure := domain.ResolveCommercialClosure(registry, key, nil)
 	if closure.Outcome() != domain.UniquelyResolved {
 		t.Fatalf("outcome = %q, want UNIQUELY_RESOLVED", closure.Outcome())
 	}
