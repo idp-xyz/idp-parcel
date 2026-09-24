@@ -1,7 +1,7 @@
 # 09 初始路由证据从目录折出：日历与截单成时间投影，线路成段链，策略版本成引用
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent
 Blocked by: 07
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「接路由证据取数侧」那一步（初始路由一侧，成本除外）
 地盘：network-routing 目录的内容列（服务日历、截单、节点处理时间与衔接缓冲的形状，新迁移号开工时预留）、postgres 取数侧。

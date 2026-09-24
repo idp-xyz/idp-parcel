@@ -1,7 +1,7 @@
 # 10 候选成本：计划履约段的 BUY 评价经 parcel-pricing 合成候选成本
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent
 Blocked by: 02、03、09
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「接路由证据取数侧」那一步（成本），也是「首个内置排序策略」的事实来源
 地盘：network-routing 的出向端口与 parcel-pricing 消费方适配器（NR 侧）；目录线路版本上指向 BUY 价卡的引用列（新迁移号开工时预留）。parcel-pricing 若需新口，先在频道与 PP 地盘的主人约。

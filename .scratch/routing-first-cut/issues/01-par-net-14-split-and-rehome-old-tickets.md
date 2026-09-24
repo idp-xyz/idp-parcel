@@ -1,7 +1,7 @@
 # 01 登记册 `PAR-NET-14` 写回拆分结论，被它挡住的旧票改去处
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent
 Blocked by: [psb/02](../../product-strategy-boundary/issues/02-split-parameter-register-and-retriage-deferrals.md) 登记册那一笔落地（写法照它；它落地并报 SHA 后，在共享树上单独 pathspec 提这一行，避开邻行冲突）
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「拆 `PAR-NET-14`」那一步
 地盘：[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md) `PAR-NET-14` 一行（其余行归 psb/02）；下列旧票的状态行与阻塞行。

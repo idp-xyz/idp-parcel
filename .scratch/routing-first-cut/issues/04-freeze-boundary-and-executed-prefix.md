@@ -1,7 +1,7 @@
 # 04 冻结边界与已执行前缀的判定
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent
 Blocked by: 03（路由策略版本的内容载体）
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「路由策略族」那一步
 地盘：network-routing 领域与复核编排；路由策略版本内容（随 03 的载体扩，迁移号开工时预留）；network-routing [`CONTEXT.md`](../../../docs/domain/network-routing/CONTEXT.md) 相关句。

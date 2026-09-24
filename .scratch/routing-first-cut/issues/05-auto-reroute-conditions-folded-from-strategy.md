@@ -1,7 +1,7 @@
 # 05 自动改路条件由策略与计划事实折出，改善阈值按策略判
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent
 Blocked by: 04
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「路由策略族」那一步
 地盘：network-routing 领域与复核编排；路由策略版本内容（自动改路开关与改善阈值的形态）；与自动改路事实目录的关系。

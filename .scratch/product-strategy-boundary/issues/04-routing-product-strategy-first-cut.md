@@ -1,7 +1,7 @@
 # 04 路由第一刀：拆 `PAR-NET-14`，路由策略族与首个内置策略
 
 Category: enhancement
-Status: in-progress——跟踪容器：2026-09-24 通道 5 按 /to-tickets 拆为 [`.scratch/routing-first-cut/`](../../routing-first-cut/issues/) 下子票 01–11（全部 `draft`，待通道 1 认可拆法后转 ready-for-agent），切片计划见文末；本票自身不再有可执行工作。此前：in-progress——2026-09-24 通道 5 认领（单 task-d12bb120-aac3-40b4-b1e9-a018b77afddc），分支 `mcp5-psb04` 基 `64b37f27`。此前：ready-for-agent（演示网络参考配置那半 Blocked by 03）
+Status: in-progress——跟踪容器：2026-09-24 通道 5 按 /to-tickets 拆为 [`.scratch/routing-first-cut/`](../../routing-first-cut/issues/) 下子票 01–11，切片计划见文末；本票自身不再有可执行工作。拆法认可：用户同日在 IDP 队列授权通道 5 自决（原话「你作为业务和系统专家，能能自决吗」），通道 5 以认可人身份重审后认可（作者即认可人，不算非作者复核），子票由 `draft` 转 ready-for-agent；子票放独立目录经通道 1 认可。此前：in-progress——2026-09-24 通道 5 认领（单 task-d12bb120-aac3-40b4-b1e9-a018b77afddc），分支 `mcp5-psb04` 基 `64b37f27`。此前：ready-for-agent（演示网络参考配置那半 Blocked by 03）
 Blocked by: 03（只挡演示网络参考配置那半）
 地盘：network-routing 的领域、应用与取数侧适配器；参数登记册 `PAR-NET-14` 一行的拆分结论。
 出处：[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定七；票 `nr-route-evidence-views/01`（needs-info，其重启条件由本票替换）。

@@ -1,7 +1,7 @@
 # 03 路由策略版本声明排序形态；首个内置形态「满足硬约束后按成本单维择优，并列交人工」
 
 Category: enhancement
-Status: draft
+Status: ready-for-agent
 Blocked by: 无
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「路由策略族」那一步的排序部分，与「首个内置排序策略」那一步
 地盘：network-routing 领域与应用（排序与初始路由、复核两处择优出口）；目录路由策略版本的内容列与登记口（新迁移，号开工时在频道预留）；network-routing [`CONTEXT.md`](../../../docs/domain/network-routing/CONTEXT.md)、[UC-NR-001](../../../docs/application/network-routing/UC-NR-001-CREATE-INITIAL-ROUTE.md)、[UC-NR-003](../../../docs/application/network-routing/UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md) 的相关句。
