@@ -103,7 +103,7 @@ export interface ListSavedViewsProps {
 
 /**
  * 选择模型（蓝图 10.5「多选行 → 露出 Bulk Action Bar」）。选中集按 rowKey 记、由调用方持有——它是页面的 UI 瞬态，模板不替页面存；
- * 翻页保留、筛选变更**不**自动清（用户可能在跨筛选攒一批再一起导出）；换模块（组件卸载）即丢，不进 saved-views：保存视图存的是
+ * 翻页保留、筛选变更**不**自动清（用户可能在跨筛选攒一批再一起导出）；离开这张标签（切走、进详情——组件卸载）即丢，不进 saved-views：保存视图存的是
  * 「筛选态」，选中集是对某一批具体对象的临时圈定，两者保质期差几个量级。传了才出复选列（表头 + 每行）；不传时 DOM 里没有任何
  * 复选框，行为与今天同。
  */
@@ -312,7 +312,7 @@ export function ListPageTemplate<Row>({
     align === 'right' ? 'text-right' : align === 'center' ? 'text-center' : 'text-left';
 
   // 检查器里正显示的那一行（键）。只在接了 inspector 时有意义；它是模板自己的呈现状态，不回流给调用方——调用方要的
-  // 是「单击了哪一行」（onRowClick），选中高亮只是告诉人右栏说的是哪一行。换模块（组件卸载）即丢。
+  // 是「单击了哪一行」（onRowClick），选中高亮只是告诉人右栏说的是哪一行。离开这张标签（组件卸载）即丢。
   const inspectorController = useInspector();
   const [inspectedKey, setInspectedKey] = useState<string | null>(null);
   const offersInspector = inspector !== undefined;
