@@ -1,7 +1,7 @@
 # 01 按四项判据逐切片重定级
 
 Category: task
-Status: ready-for-agent
+Status: in-progress——2026-09-24 通道 4 认领（用户令「继续」、授权自决），共享树顺序做，取证钉 `dc62a481`
 Blocked by: 无
 地盘：开发主线「机制半边现状」一节（取证只读全仓）。
 出处：[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定五、六。
