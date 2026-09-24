@@ -2,7 +2,6 @@ package shipmenthttp
 
 import (
 	"context"
-	"errors"
 	"net/http"
 	"time"
 
@@ -67,15 +66,7 @@ func continuedAttemptDecisionEndpoint(
 		}
 		result, intakeErr, handleErr := step(request.Context(), request)
 		if intakeErr != nil {
-			if errors.Is(intakeErr, ErrAccessChannelNotConfigured) {
-				writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
-				return
-			}
-			if errors.Is(intakeErr, ErrMalformedRequest) {
-				writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-				return
-			}
-			writeProblem(response, http.StatusInternalServerError, codeIntakeFailed)
+			writeIntakeProblem(response, intakeErr)
 			return
 		}
 		if handleErr != nil {

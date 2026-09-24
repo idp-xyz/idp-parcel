@@ -2,7 +2,6 @@ package shipmenthttp
 
 import (
 	"context"
-	"errors"
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
@@ -44,15 +43,7 @@ func NewDisposeShipmentRequestEndpoint(
 
 		command, err := intake.IntakeAuthorizedDisposition(request.Context(), request)
 		if err != nil {
-			if errors.Is(err, ErrAccessChannelNotConfigured) {
-				writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
-				return
-			}
-			if errors.Is(err, ErrMalformedRequest) {
-				writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-				return
-			}
-			writeProblem(response, http.StatusInternalServerError, codeIntakeFailed)
+			writeIntakeProblem(response, err)
 			return
 		}
 

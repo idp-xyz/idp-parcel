@@ -146,9 +146,27 @@ func serveDetail(
 	})
 }
 
+// writeIntakeProblem 是本包 Intake 失败的唯一映射：各口不再各抄一份。操作者渠道的四格与未配置并列，各对一种
+// 恢复动作（ADR-0029）。
 func writeIntakeProblem(response http.ResponseWriter, err error) {
 	if errors.Is(err, ErrAccessChannelNotConfigured) {
 		writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
+		return
+	}
+	if errors.Is(err, ErrOperatorCredentialRejected) {
+		writeProblem(response, http.StatusUnauthorized, codeOperatorCredentialRejected)
+		return
+	}
+	if errors.Is(err, ErrOperatorNotGranted) {
+		writeProblem(response, http.StatusForbidden, codeOperatorNotGranted)
+		return
+	}
+	if errors.Is(err, ErrOutsideAdmissionScope) {
+		writeProblem(response, http.StatusForbidden, codeOutsideAdmissionScope)
+		return
+	}
+	if errors.Is(err, ErrIdentityDependencyUnavailable) {
+		writeProblem(response, http.StatusServiceUnavailable, codeIdentityDependencyUnavailable)
 		return
 	}
 	if errors.Is(err, ErrMalformedRequest) {
