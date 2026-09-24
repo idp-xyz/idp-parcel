@@ -30,8 +30,9 @@ var (
 	ErrAlteredAfterRelease = errors.New("reference configuration: content differs from its released digest")
 )
 
-// citationPrefix 是引用串自身的形状版本（ADR-0147 决定三）。串里要多带一格时换 REFCFG-2，旧串照旧可读。
-const citationPrefix = "REFCFG-1:"
+// citationShapeVersion 是引用串自身的形状版本（ADR-0147 决定三），与引用之间以冒号相接——写法同摘要串的
+// `PSC-1`、`PCC-1`。串里要多带一格时换 REFCFG-2，旧串照旧可读。
+const citationShapeVersion = "REFCFG-1"
 
 // 标识恰三段：上下文 / 目录 / 键。上下文与目录是小写短横线名；键取该目录的自然键（如国家 / 地区码），
 // 允许大写。
@@ -82,7 +83,7 @@ func ParseReference(text string) (Reference, error) {
 // ParseCitation 从依据格反解引用串。不带前缀或形状不对的串答 false：依据格里别的依据照旧是别的依据，
 // 不当成一次坏掉的采用。
 func ParseCitation(text string) (Reference, bool) {
-	rest, found := strings.CutPrefix(text, citationPrefix)
+	rest, found := strings.CutPrefix(text, citationShapeVersion+":")
 	if !found {
 		return Reference{}, false
 	}
@@ -107,7 +108,7 @@ func (reference Reference) String() string {
 
 // Citation 交回写进登记依据格的引用串。
 func (reference Reference) Citation() string {
-	return citationPrefix + reference.String()
+	return citationShapeVersion + ":" + reference.String()
 }
 
 // Open 交回一份已发布参考配置的原文。未发布答 ErrNotReleased；原文与发布时的摘要不符答
