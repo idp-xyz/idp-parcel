@@ -171,12 +171,13 @@ export interface ListPageTemplateProps<Row> {
   /**
    * 单击一行时交给右侧检查器的内容（票 admin-web-workspace-form/02 第 3 条，蓝图母版 B「List → Preview → Inspector」）。
    * 有它时单击 = `onRowClick?.(row)` **且**把 `inspector(row)` 交给壳层的检查器（经 useInspector），被单击的行标记为选中；
-   * 没有它时行为零变化。字段只取行里已有的，不发第二个请求。双击仍走 onRowOpen。
+   * 行进 Tab 序、聚焦即交给检查器；rows 换了按键重推或清空。没有它时行为零变化。字段只取行里已有的，不发第二个请求。
+   * 双击仍走 onRowOpen。
    */
   inspector?: (row: Row) => InspectorContent;
   /**
    * 双击一行（或行聚焦后按 Enter）：开对象。由调用方写 hash 二段路由；壳层已是多标签工作区（票 admin-web-workspace-form/01），
-   * 对象地址会开成自己的标签。接了它行才进 Tab 序；不接则行为与今天同。
+   * 对象地址会开成自己的标签。接了它（或 inspector）行才进 Tab 序；不接则行为与今天同。
    */
   onRowOpen?: (row: Row) => void;
   /**
@@ -278,7 +279,7 @@ function downloadTextFile(fileName: string, text: string, mimeType: string) {
 // （idp-ui@53df1666「IDP Monitor Page Golden Standard」）。所有列表页共用这一个模板，形态与行为分两条规矩：
 // 形态（四个结构位、surface 容器、按密度的行距）按黄金标准 Rule 2 无条件长出，不传任何新 prop 的页也长；
 // 行为（排序 / 保存视图 / 更多筛选的动作、双击与 Enter 开对象、行进 Tab 序）只在调用方接了对应 prop 时才有——
-// 不接的位是禁用按钮 + 悬停说明，不接 onRowOpen 的行不进 Tab 序、只响应单击。
+// 不接的位是禁用按钮 + 悬停说明，onRowOpen 与 inspector 都不接的行不进 Tab 序、只响应单击。
 // 多选（复选列 + 批量动作栏）是行为不是形态：接了 selection 才长，不接的页 DOM 里没有一个复选框——它改变行的点击语义
 // （多了一格不算行交互的地方），不能像结构位那样无条件长出。
 // 非 ready 态只替换表格区，页头与过滤条保留——加载中用户仍能改筛选条件。
@@ -316,12 +317,37 @@ export function ListPageTemplate<Row>({
   const [inspectedKey, setInspectedKey] = useState<string | null>(null);
   const offersInspector = inspector !== undefined;
   useEffect(() => (offersInspector ? inspectorController.offer() : undefined), [offersInspector, inspectorController]);
+  // 最近交给检查器的那份内容的 JSON（函数不进 JSON）。rows 变了按键重推时拿它比：页面常在每次渲染里重建行对象（把读模型
+  // 映成展示行），比对象身份会每次都交——交了壳层重渲本页、本页又重建行，转不出来；比内容只在字真变了时才交。
+  const shownContentJson = useRef<string | null>(null);
+  const inspectRow = (row: Row, key: string) => {
+    if (!inspector) return;
+    const content = inspector(row);
+    shownContentJson.current = JSON.stringify(content);
+    setInspectedKey(key);
+    inspectorController.show(content);
+  };
   const handleRowClick = (row: Row, key: string) => {
     onRowClick?.(row);
-    if (!inspector) return;
-    setInspectedKey(key);
-    inspectorController.show(inspector(row));
+    inspectRow(row, key);
   };
+  // 右栏不留单击那一刻的旧快照：rows 换了（重取、检索改了）就按键找回那一行重推，找不到就清空。
+  // inspector 与 rowKey 不作依赖：它们常是每次渲染新建的函数，用本次渲染的那一份就对。
+  useEffect(() => {
+    if (!inspector || inspectedKey === null) return;
+    const row = rows.find((candidate) => rowKey(candidate) === inspectedKey);
+    if (row === undefined) {
+      shownContentJson.current = null;
+      setInspectedKey(null);
+      inspectorController.clear();
+      return;
+    }
+    const content = inspector(row);
+    const json = JSON.stringify(content);
+    if (json === shownContentJson.current) return;
+    shownContentJson.current = json;
+    inspectorController.show(content);
+  }, [rows, inspectedKey]);
 
   const crumb =
     breadcrumb ?? (moduleId ? resolveBreadcrumb(moduleId, navigationSections, pageTitleById) : null);
@@ -338,6 +364,7 @@ export function ListPageTemplate<Row>({
   const interaction = rowInteraction({
     click: onRowClick !== undefined || inspector !== undefined,
     open: onRowOpen !== undefined,
+    inspect: inspector !== undefined,
   });
   const rowClass =
     [interaction.clickable ? 'cursor-pointer' : '', interaction.tabIndex !== undefined ? rowFocusClass : '']
@@ -562,6 +589,15 @@ export function ListPageTemplate<Row>({
                           data-inspected={inspected ? 'true' : undefined}
                           tabIndex={interaction.tabIndex}
                           onClick={onRowClick || inspector ? () => handleRowClick(row, key) : undefined}
+                          // 聚焦即交给检查器：键盘用户没有单击，Tab 到哪一行右栏就说哪一行；不占 Enter（那是开对象）。
+                          // 只认落在行本身的聚焦——行里的复选框、按钮聚焦时冒泡上来的不算。
+                          onFocus={
+                            inspector
+                              ? (event) => {
+                                  if (event.target === event.currentTarget) inspectRow(row, key);
+                                }
+                              : undefined
+                          }
                           onDoubleClick={onRowOpen ? () => onRowOpen(row) : undefined}
                           onKeyDown={
                             onRowOpen

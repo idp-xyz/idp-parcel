@@ -67,6 +67,12 @@ test('有 onRowOpen 时行可聚焦且可点', () => {
   deepEqual(rowInteraction({ click: true, open: true }), { tabIndex: 0, clickable: true });
 });
 
+// Covers: 接了 inspector 的行也进 Tab 序——键盘用户没有单击，要靠聚焦把行送进检查器。
+test('有 inspector 时行可聚焦', () => {
+  deepEqual(rowInteraction({ click: true, open: false, inspect: true }), { tabIndex: 0, clickable: true });
+  deepEqual(rowInteraction({ click: true, open: false, inspect: false }), { tabIndex: undefined, clickable: true });
+});
+
 // Covers: 键盘上只有 Enter 等价双击（手册「可访问性」表格键盘导航）；Space 在滚动容器里是翻页键、方向键留给浏览器滚动，
 // 都不能被行吞掉。
 test('只有 Enter 等价双击', () => {

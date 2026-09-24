@@ -15,16 +15,18 @@ export function densityRowPadding(density: ListDensity): string {
 
 /** 行交互的输入：调用方接了哪些行回调。 */
 export interface RowInteractionInputs {
-  /** 接了 onRowClick（单击：预览 / 选中）。 */
+  /** 接了 onRowClick 或 inspector（单击：预览 / 选中 / 交给检查器）。 */
   click: boolean;
   /** 接了 onRowOpen（双击 / Enter：开对象）。 */
   open: boolean;
+  /** 接了 inspector（聚焦即交给检查器）。 */
+  inspect?: boolean;
 }
 
 export interface RowInteraction {
   /**
-   * 行进不进 Tab 序。只有接了 onRowOpen 才给 0——键盘要能「开」才值得让行可聚焦；没接就不给，只接 onRowClick
-   * 的页行属性不变。不用正数：正数会抢整页的 Tab 顺序。
+   * 行进不进 Tab 序。接了 onRowOpen（键盘要能「开」）或 inspector（键盘要能把行送进检查器）才给 0；都没接就不给，
+   * 只接 onRowClick 的页行属性不变。不用正数：正数会抢整页的 Tab 顺序。
    */
   tabIndex: 0 | undefined;
   /** 任一行回调存在即可点（指针样式）：双击本身也是指针动作。 */
@@ -37,7 +39,7 @@ export interface RowInteraction {
  */
 export function rowInteraction(inputs: RowInteractionInputs): RowInteraction {
   return {
-    tabIndex: inputs.open ? 0 : undefined,
+    tabIndex: inputs.open || inputs.inspect ? 0 : undefined,
     clickable: inputs.click || inputs.open,
   };
 }
