@@ -1,5 +1,5 @@
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ElementType } from 'react';
-import { PanelRightOpen } from 'lucide-react';
+import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { EditorGroup, Sidebar, useResize } from '@idpxyz/ui-workspace';
 import { useDensity } from '@idpxyz/ui-theme-runtime';
 import { Button, Tooltip } from '@idpxyz/ui-primitives';
@@ -56,8 +56,9 @@ import {
 // 不装 ActivityBar：本仓只有一种侧栏内容，myshop-web 的那一格点了也只是折叠侧栏，是 IDE 形不是能力。
 //
 // 检查器栏（蓝图母版 B「List → Preview → Inspector」）：列表页单击一行经 templates/inspector-context 的 useInspector 把内容交到这里，
-// 右栏常驻显示，翻行时跟着换；切换活动标签即清空——检查器说的是当前列表选中的那一行，换页就不成立了。栏可拖宽（240–480）、
-// 可折叠，两者都进工作区状态持久化；折起来时只剩一个展开按钮，不占宽。myshop-web 的 RightSidebar 按对象种类在壳层分派渲染器，
+// 右栏常驻显示，翻行时跟着换；切换活动标签即清空——检查器说的是当前列表选中的那一行，换页就不成立了。栏可拖宽（区间是
+// workspace-state 的 INSPECTOR_WIDTH_MIN / INSPECTOR_WIDTH_MAX）、可折叠，两者都进工作区状态持久化；折起来时只剩一个展开按钮，
+// 不占宽。栏顶是收起按钮而不是 ×：常驻位折起来内容还在，× 的通行语义是丢弃。myshop-web 的 RightSidebar 按对象种类在壳层分派渲染器，
 // 这里反过来让**页面**给内容、壳层只渲染契约（templates/inspector.ts）——对象长什么样归拥有它的页，壳层不认识任何业务对象。
 //
 // 顶栏是 shell/TopBar 自己的件（手册「顶栏规范」的全局位），这里只喂它当前页名、会话主体名与登出动作；
@@ -320,7 +321,17 @@ export function Layout() {
               className="flex shrink-0 flex-col overflow-hidden border-l border-idpxyz-border"
               style={{ width: inspectorResize.size }}
             >
-              <InspectorPanel content={inspectorContent} contentOffered={inspectorOffers > 0} onClose={toggleInspector} />
+              <InspectorPanel
+                content={inspectorContent}
+                contentOffered={inspectorOffers > 0}
+                headerActions={
+                  <Tooltip content="隐藏检查器" side="left">
+                    <Button variant="ghost" size="icon" className="h-5 w-5" aria-label="隐藏检查器" onClick={toggleInspector}>
+                      <PanelRightClose className="h-3.5 w-3.5" aria-hidden="true" />
+                    </Button>
+                  </Tooltip>
+                }
+              />
             </aside>
           </>
         ) : (

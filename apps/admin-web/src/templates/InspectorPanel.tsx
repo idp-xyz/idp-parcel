@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import {
   Button,
   InspectorActions,
@@ -35,8 +36,11 @@ export interface InspectorPanelProps {
   content: InspectorContent | null;
   /** 本页有没有往检查器里交内容；只决定空态句，有内容时不看它。 */
   contentOffered: boolean;
-  /** 栏顶的关闭 / 折叠动作；不传则不出 × 。 */
-  onClose?: () => void;
+  /**
+   * 栏顶标题同一行右端的控件（如壳层的收起按钮）。不走 InspectorHeader 的 onClose：vendor 为它渲的 × 没有可读名字、
+   * 也没有悬停说明，栏上的动作叫什么、长什么样由宿主定。
+   */
+  headerActions?: ReactNode;
 }
 
 const PANEL_TITLE = '检查器';
@@ -96,7 +100,7 @@ function SectionBody({ section }: { section: InspectorSectionContent }) {
         </>
       );
     case 'actions':
-      // 纵排：动作名是整句中文，横排在 240px 的栏里会折成两行半。
+      // 纵排：动作名是整句中文，横排在窄栏里会折成两行半。
       return (
         <InspectorActions className="flex-col items-stretch gap-1 mt-0">
           {section.actions.map((action) => (
@@ -138,10 +142,10 @@ function ResolvedSections({ content }: { content: InspectorContent }) {
   );
 }
 
-export function InspectorPanel({ content, contentOffered, onClose }: InspectorPanelProps) {
+export function InspectorPanel({ content, contentOffered, headerActions }: InspectorPanelProps) {
   return (
     <InspectorShell className="bg-idpxyz-sidebar" data-inspector-panel>
-      <InspectorHeader title={PANEL_TITLE} onClose={onClose} />
+      <InspectorHeader title={PANEL_TITLE}>{headerActions}</InspectorHeader>
       {content === null ? (
         <InspectorBody>
           <p className="text-[11px] text-idpxyz-textMuted" data-inspector-empty>

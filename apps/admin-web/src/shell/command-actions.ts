@@ -14,7 +14,7 @@ import { densityToggleLabel, themeToggleLabel } from './top-bar-model';
 //
 // 参照 idp-ui@6751fb2 apps/myshop-web/src/commandActions.ts 的三组分法（navigation / recent / actions），但它的
 // 「新建订单 / 导出 / 刷新」那组假快捷动作（run 只弹一句「功能开发中」）一条不搬——spec「红线」不允许假动作；
-// 「切换右栏」随票 02 的检查器栏落地后加进壳层组（下面的 TOGGLE_INSPECTOR_ACTION_ID）；「切换底栏」不搬，本仓没有底栏。
+// 「切换右栏」落为壳层组的「显示 / 隐藏检查器」（下面的 TOGGLE_INSPECTOR_ACTION_ID）；「切换底栏」不搬，本仓没有底栏。
 
 /**
  * 最近对象在本文件里需要的最小形；与第一轮 02 的 RecentObject（pages/my-work/recent-objects.ts）结构兼容，
