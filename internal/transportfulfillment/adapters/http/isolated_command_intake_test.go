@@ -91,6 +91,35 @@ var isolatedLines = map[string]isolatedLine{
 		},
 		valid: isolatedDispatchTaskBody,
 	},
+	"/transport-fulfillment-delivery-dispatch-triggers": {
+		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
+			_, err := intake.IntakeDeliveryDispatchTrigger(context.Background(), request)
+			return err
+		},
+		valid: isolatedDeliveryDispatchTriggerBody,
+	},
+}
+
+const isolatedDeliveryDispatchTriggerBody = `{"segment":"SYN-SEGMENT-08-09","object":"SYN-PARCEL-08-09","occurredAt":"2026-09-25T07:00:00+08:00"}`
+
+// Covers: DeliveryDispatchTriggerIntake 契约「租户从信封给，段、对象与这一拍的业务时间从请求收」——请求里没有任何地点、
+// 时间窗或条件（ADR-0114 决定三），载荷形状只有这三格。
+func TestIsolatedCommandIntakeTranslatesDeliveryDispatchTriggerWithInjectedTenant(t *testing.T) {
+	command, err := isolatedCommandIntakeForTest(t).IntakeDeliveryDispatchTrigger(context.Background(), commandRequest(isolatedDeliveryDispatchTriggerBody))
+	if err != nil {
+		t.Fatalf("intake：%v", err)
+	}
+	if command.TenantID.String() != isolatedCommandTenant || command.Segment != "SYN-SEGMENT-08-09" || command.Object != "SYN-PARCEL-08-09" {
+		t.Fatalf("command = %+v，与注入与载荷不符", command)
+	}
+	if want := time.Date(2026, 9, 24, 23, 0, 0, 0, time.UTC); !command.OccurredAt.Equal(want) {
+		t.Fatalf("OccurredAt = %s, want %s", command.OccurredAt, want)
+	}
+	_, err = isolatedCommandIntakeForTest(t).IntakeDeliveryDispatchTrigger(context.Background(),
+		commandRequest(`{"segment":"s","object":"o","place":"SYN-PLACE/x"}`))
+	if !errors.Is(err, tfhttp.ErrMalformedRequest) {
+		t.Fatalf("带地点的触发：err = %v, want ErrMalformedRequest——地点由执行器向所有者取，调用方给不了也不该给", err)
+	}
 }
 
 const isolatedDispatchTaskBody = `{"task":"SYN-DISPATCH-08-07","kind":"DELIVERY","objects":["SYN-PARCEL-08-07","SYN-PARCEL-08-08"],` +
@@ -437,6 +466,9 @@ func TestIsolatedCommandIntakeServesOnlyAdmittedLines(t *testing.T) {
 	}
 	if _, ok := intake.(tfhttp.DispatchTaskIntake); !ok {
 		t.Fatal("派送任务登记口该已放行")
+	}
+	if _, ok := intake.(tfhttp.DeliveryDispatchTriggerIntake); !ok {
+		t.Fatal("派送发起口该已放行")
 	}
 	for name, refused := range map[string]bool{
 		"揽收更正口（同族未列）":      isA[tfhttp.PickupCorrectionIntake](intake),

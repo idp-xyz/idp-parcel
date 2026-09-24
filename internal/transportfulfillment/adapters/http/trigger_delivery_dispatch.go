@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
 // 票 tf-segment-lifecycle-closure/12「生产入口」节：末端派送任务**内部触发执行器**的生产入口（ADR-0114 决定二末句
@@ -21,6 +22,31 @@ import (
 // DeliveryDispatchTriggerIntake 把已认证的一拍翻译成触发命令：租户从信封给，段、对象与这一拍的业务时间从请求收。
 type DeliveryDispatchTriggerIntake interface {
 	IntakeDeliveryDispatchTrigger(ctx context.Context, request *http.Request) (application.TriggerDeliveryDispatchCommand, error)
+}
+
+// DeliveryDispatchTriggerPayload 是一拍触发的线格式：段、对象与这一拍的业务时间（RFC 3339）三格，逐格镜像
+// application.TriggerDeliveryDispatchCommand 去掉租户。地点、时间窗与条件不在形状里——七件由执行器向各所有者取。
+type DeliveryDispatchTriggerPayload struct {
+	Segment    string `json:"segment"`
+	Object     string `json:"object"`
+	OccurredAt string `json:"occurredAt"`
+}
+
+// Command 把载荷连同信封给的租户翻成触发命令。时刻解不出是坏报文（400）；段与对象成不成触发事实由执行器答。
+func (payload DeliveryDispatchTriggerPayload) Command(tenant domain.TenantID) (application.TriggerDeliveryDispatchCommand, error) {
+	if tenant.String() == "" {
+		return application.TriggerDeliveryDispatchCommand{}, ErrOperatorIdentityMissing
+	}
+	occurredAt, err := parseOptionalInstant("occurredAt", payload.OccurredAt)
+	if err != nil {
+		return application.TriggerDeliveryDispatchCommand{}, err
+	}
+	return application.TriggerDeliveryDispatchCommand{
+		TenantID:   tenant,
+		Segment:    payload.Segment,
+		Object:     payload.Object,
+		OccurredAt: occurredAt,
+	}, nil
 }
 
 // DeliveryDispatchTriggerer 是本适配器转交的执行器。
