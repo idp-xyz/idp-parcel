@@ -589,12 +589,16 @@ export function ListPageTemplate<Row>({
                           data-inspected={inspected ? 'true' : undefined}
                           tabIndex={interaction.tabIndex}
                           onClick={onRowClick || inspector ? () => handleRowClick(row, key) : undefined}
-                          // 聚焦即交给检查器：键盘用户没有单击，Tab 到哪一行右栏就说哪一行；不占 Enter（那是开对象）。
-                          // 只认落在行本身的聚焦——行里的复选框、按钮聚焦时冒泡上来的不算。
+                          // 键盘聚焦即交给检查器：键盘用户没有单击，Tab 到哪一行右栏就说哪一行；不占 Enter（那是开对象）。
+                          // 只认落在行本身、且由键盘带来的聚焦（:focus-visible）：行里的复选框、按钮聚焦时冒泡上来的不算；指针按下也会
+                          // 把焦点给行（点在复选格的留白上，或某些浏览器点复选框本身时），那一路归 onClick——被 stopRowEvent 截下的
+                          // 单击不该从这里漏进检查器，选择不等于预览。
                           onFocus={
                             inspector
                               ? (event) => {
-                                  if (event.target === event.currentTarget) inspectRow(row, key);
+                                  if (event.target !== event.currentTarget) return;
+                                  if (!event.currentTarget.matches(':focus-visible')) return;
+                                  inspectRow(row, key);
                                 }
                               : undefined
                           }
