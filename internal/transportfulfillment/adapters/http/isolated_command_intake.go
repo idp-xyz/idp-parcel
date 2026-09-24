@@ -23,6 +23,9 @@ import (
 // UnconfiguredIntake{}，且在类型上就装不进本类型——每放一口在这里多一个方法，装配点多换一行，两处都看得见。
 type IsolatedCommandIntake struct {
 	tenant domain.TenantID
+	// movementSource 是移动事实口的来源格。MovementFactIntake 的契约把「自营还是外部」交给认证结果说，隔离形态的认证结果
+	// 就是装配点给定的这一个合成来源；载荷里带 source 即拒。
+	movementSource string
 }
 
 // 已成笔的口。每放一口在这里多一行断言、多一个方法，装配点多换一行。
@@ -31,11 +34,13 @@ var (
 	_ PickupAttemptIntake         = (*IsolatedCommandIntake)(nil)
 	_ CarrierPickupJudgmentIntake = (*IsolatedCommandIntake)(nil)
 	_ HandoverRegistrationIntake  = (*IsolatedCommandIntake)(nil)
+	_ MovementFactIntake          = (*IsolatedCommandIntake)(nil)
 )
 
 // IsolatedCommandIntakeDeps 是构造本 Intake 的全部输入，全部是装配点给定的合成值。
 type IsolatedCommandIntakeDeps struct {
-	Tenant string
+	Tenant         string
+	MovementSource string
 }
 
 // NewIsolatedCommandIntake 由装配点以显式合成值构造。立不起来的值在这里拒：装配错误要在启动时暴露，不该等到第一个请求。
@@ -44,7 +49,10 @@ func NewIsolatedCommandIntake(deps IsolatedCommandIntakeDeps) (*IsolatedCommandI
 	if err != nil {
 		return nil, fmt.Errorf("transport fulfillment http: isolated command intake: %w", err)
 	}
-	return &IsolatedCommandIntake{tenant: tenant}, nil
+	if _, err := domain.NewMovementSourceReference(deps.MovementSource); err != nil {
+		return nil, fmt.Errorf("transport fulfillment http: isolated command intake: %w", err)
+	}
+	return &IsolatedCommandIntake{tenant: tenant, movementSource: deps.MovementSource}, nil
 }
 
 // IntakePickupRegistration 译单对象场外揽收登记（`/transport-fulfillment/offsite-pickups`）。
@@ -95,4 +103,16 @@ func (intake *IsolatedCommandIntake) IntakeHandoverRegistration(
 		return application.RegisterTransportHandoverCommand{}, err
 	}
 	return payload.Command(intake.tenant)
+}
+
+// IntakeMovementFact 译自营执行方的一条实际移动事实（`/transport-fulfillment/movement-facts`）。来源格取注入值。
+func (intake *IsolatedCommandIntake) IntakeMovementFact(
+	_ context.Context,
+	request *http.Request,
+) (application.RecordMovementFactCommand, error) {
+	var payload MovementFactPayload
+	if err := decodeClosedPayload(request.Body, &payload); err != nil {
+		return application.RecordMovementFactCommand{}, err
+	}
+	return payload.Command(intake.tenant, intake.movementSource)
 }

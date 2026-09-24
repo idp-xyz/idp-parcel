@@ -238,11 +238,13 @@ func assembleBusinessEndpoints(
 	pickupAttemptIntake := tfhttp.PickupAttemptIntake(tfhttp.UnconfiguredIntake{})
 	carrierPickupJudgmentIntake := tfhttp.CarrierPickupJudgmentIntake(tfhttp.UnconfiguredIntake{})
 	handoverRegistrationIntake := tfhttp.HandoverRegistrationIntake(tfhttp.UnconfiguredIntake{})
+	movementFactIntake := tfhttp.MovementFactIntake(tfhttp.UnconfiguredIntake{})
 	if isolatedTransportFulfillment != nil {
 		pickupRegistrationIntake = isolatedTransportFulfillment
 		pickupAttemptIntake = isolatedTransportFulfillment
 		carrierPickupJudgmentIntake = isolatedTransportFulfillment
 		handoverRegistrationIntake = isolatedTransportFulfillment
+		movementFactIntake = isolatedTransportFulfillment
 	}
 
 	return []httpapi.BusinessEndpoint{
@@ -310,7 +312,7 @@ func assembleBusinessEndpoints(
 		// 移动事实口（票 tf-segment-lifecycle-closure/05）：只收自营执行方的出发 / 移动 / 到达；外部承运
 		// 轨迹**不从这里进**，走 TrackingSource 入站口的采纳执行器（label-channel/16 已落）。谁是自营
 		// 执行方由 Intake 的认证结果说，渠道未就位前同挂字面量 UnconfiguredIntake{}。
-		{Pattern: "/transport-fulfillment/movement-facts", Handler: tfhttp.NewRecordMovementFactEndpoint(tfhttp.UnconfiguredIntake{}, movementFact)},
+		{Pattern: "/transport-fulfillment/movement-facts", Handler: tfhttp.NewRecordMovementFactEndpoint(movementFactIntake, movementFact)},
 		// TF 四个 admin 写面（ADR-0085，票 tf-segment-lifecycle-closure/07）：关段、建派送任务、装载分配、
 		// 明确终止参与。它们是运营决定不是承运方回传口，所以路径取读面册名前缀 `transport-fulfillment-`
 		// 而不是控制事实那组的 `/transport-fulfillment/...`。写准入不另立形，同挂字面量 UnconfiguredIntake{}。

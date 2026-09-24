@@ -17,11 +17,17 @@ import (
 // 期望值取自载荷字面量而不是重算：这里证的是「译装没换字」。成形与否（对象引用立不立得住、控制证据缺不缺）不在这里证
 // ——那是编排答`未受理`的格，本 Intake 不预判。
 
-const isolatedCommandTenant = "SYN-TENANT-01"
+const (
+	isolatedCommandTenant         = "SYN-TENANT-01"
+	isolatedCommandMovementSource = "SYN-SOURCE/self-operated-executor"
+)
 
 func isolatedCommandIntakeForTest(t *testing.T) *tfhttp.IsolatedCommandIntake {
 	t.Helper()
-	intake, err := tfhttp.NewIsolatedCommandIntake(tfhttp.IsolatedCommandIntakeDeps{Tenant: isolatedCommandTenant})
+	intake, err := tfhttp.NewIsolatedCommandIntake(tfhttp.IsolatedCommandIntakeDeps{
+		Tenant:         isolatedCommandTenant,
+		MovementSource: isolatedCommandMovementSource,
+	})
 	if err != nil {
 		t.Fatalf("构造隔离命令 Intake：%v", err)
 	}
@@ -71,6 +77,60 @@ var isolatedLines = map[string]isolatedLine{
 		},
 		valid: handoverRegistrationBody,
 	},
+	"/transport-fulfillment/movement-facts": {
+		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
+			_, err := intake.IntakeMovementFact(context.Background(), request)
+			return err
+		},
+		valid: isolatedMovementFactBody,
+	},
+}
+
+const isolatedMovementFactBody = `{"fact":"SYN-MOVE-08-06","schedule":"SYN-SCHEDULE/linehaul-06","kind":"DEPARTURE","location":"SYN-NODE-SHA-HUB",` +
+	`"version":"v1","occurredAt":"2026-09-24T14:00:00+08:00","gateRequired":true,"gateClearance":"SYN-GATE/release-06"}`
+
+// Covers: MovementFactIntake 契约「这个口只收自营执行方的事实；『自营还是外部』由 Intake 的认证结果说」——隔离形态的认证
+// 结果是装配点给定的合成来源，事实本体与门禁两格（gateRequired / gateClearance 必须收）逐字来自载荷。
+func TestIsolatedCommandIntakeTranslatesMovementFactWithInjectedTenantAndSource(t *testing.T) {
+	command, err := isolatedCommandIntakeForTest(t).IntakeMovementFact(context.Background(), commandRequest(isolatedMovementFactBody))
+	if err != nil {
+		t.Fatalf("intake：%v", err)
+	}
+	if got := command.TenantID.String(); got != isolatedCommandTenant {
+		t.Fatalf("TenantID = %q, want %q", got, isolatedCommandTenant)
+	}
+	if command.Source != isolatedCommandMovementSource {
+		t.Fatalf("Source = %q, want %q（注入值——外部轨迹不从这个口进，来源不由请求自报）", command.Source, isolatedCommandMovementSource)
+	}
+	if command.Fact != "SYN-MOVE-08-06" || command.Schedule != "SYN-SCHEDULE/linehaul-06" || command.Kind.String() != "DEPARTURE" ||
+		command.Location != "SYN-NODE-SHA-HUB" || command.Version != "v1" || !command.GateRequired ||
+		command.GateClearance != "SYN-GATE/release-06" {
+		t.Fatalf("command = %+v，与载荷不符", command)
+	}
+	if want := time.Date(2026, 9, 24, 6, 0, 0, 0, time.UTC); !command.OccurredAt.Equal(want) {
+		t.Fatalf("OccurredAt = %s, want %s", command.OccurredAt, want)
+	}
+}
+
+// Covers: 载荷里带 source 即拒——来源只来自注入，放它进来就是让外部轨迹冒充自营事实从这个口进。事实种类取封闭词，
+// 词表外是用法错误（400）。
+func TestIsolatedCommandIntakeRefusesSelfReportedMovementSourceAndUnknownKinds(t *testing.T) {
+	intake := isolatedCommandIntakeForTest(t)
+	_, err := intake.IntakeMovementFact(context.Background(), commandRequest(`{"source":"SYN-SOURCE/carrier-feed",`+strings.TrimPrefix(isolatedMovementFactBody, "{")))
+	if !errors.Is(err, tfhttp.ErrMalformedRequest) || !strings.Contains(err.Error(), "source") {
+		t.Fatalf("自报来源：err = %v, want 点名 source 的 ErrMalformedRequest", err)
+	}
+	_, err = intake.IntakeMovementFact(context.Background(), commandRequest(`{"fact":"f","kind":"TELEPORT"}`))
+	if !errors.Is(err, tfhttp.ErrMalformedRequest) {
+		t.Fatalf("词表外种类：err = %v, want ErrMalformedRequest", err)
+	}
+}
+
+// Covers: 立不起来的合成来源在构造时拒（同租户那一格）。
+func TestNewIsolatedCommandIntakeRejectsBlankMovementSource(t *testing.T) {
+	if _, err := tfhttp.NewIsolatedCommandIntake(tfhttp.IsolatedCommandIntakeDeps{Tenant: isolatedCommandTenant, MovementSource: " "}); err == nil {
+		t.Fatal("空来源被接受")
+	}
 }
 
 const handoverRegistrationBody = `{"object":"SYN-PARCEL-08-05","scope":"SYN-SCOPE/hub-dock-05","releasedBy":"SYN-PARTY/hub-08",` +
@@ -307,7 +367,7 @@ func TestIsolatedCommandIntakeRefusesAnUnparsablePickupInstant(t *testing.T) {
 
 // Covers: 立不起来的注入在构造时拒，不等第一个请求（同隔离读 Intake 的纪律）。
 func TestNewIsolatedCommandIntakeRejectsBlankTenant(t *testing.T) {
-	if _, err := tfhttp.NewIsolatedCommandIntake(tfhttp.IsolatedCommandIntakeDeps{Tenant: "   "}); err == nil {
+	if _, err := tfhttp.NewIsolatedCommandIntake(tfhttp.IsolatedCommandIntakeDeps{Tenant: "   ", MovementSource: isolatedCommandMovementSource}); err == nil {
 		t.Fatal("空租户被接受")
 	}
 }
@@ -327,6 +387,9 @@ func TestIsolatedCommandIntakeServesOnlyAdmittedLines(t *testing.T) {
 	}
 	if _, ok := intake.(tfhttp.HandoverRegistrationIntake); !ok {
 		t.Fatal("交接首登口该已放行")
+	}
+	if _, ok := intake.(tfhttp.MovementFactIntake); !ok {
+		t.Fatal("移动事实口该已放行")
 	}
 	for name, refused := range map[string]bool{
 		"揽收更正口（同族未列）":      isA[tfhttp.PickupCorrectionIntake](intake),

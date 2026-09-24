@@ -2,10 +2,12 @@ package tfhttp
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
 // MovementFactIntake 把已认证的接入请求翻译成一条实际移动事实的登记命令（UC-TF-005「执行方接入：
@@ -20,6 +22,58 @@ import (
 // 由请求给，领域按种类判它该不该在场；Intake 漏收这两格，一条该被门禁挡住的出发就登上了。
 type MovementFactIntake interface {
 	IntakeMovementFact(ctx context.Context, request *http.Request) (application.RecordMovementFactCommand, error)
+}
+
+// MovementFactPayload 是移动事实的线格式，逐格镜像 application.RecordMovementFactCommand 去掉租户与来源——两格都归认证结果
+// （来源说的是「自营还是外部」，见 MovementFactIntake）。kind 取 domain.MovementFactKind 的封闭词，occurredAt 取 RFC 3339。
+type MovementFactPayload struct {
+	Fact          string `json:"fact"`
+	Schedule      string `json:"schedule"`
+	Kind          string `json:"kind"`
+	Location      string `json:"location"`
+	Version       string `json:"version"`
+	OccurredAt    string `json:"occurredAt"`
+	GateRequired  bool   `json:"gateRequired"`
+	GateClearance string `json:"gateClearance,omitempty"`
+}
+
+// Command 把载荷连同信封给的租户与来源翻成登记命令。种类词不在封闭集内、时刻解不出是坏报文（400）；种类空着照零值交进去，
+// 门禁该不该在场、其余格成不成形都留给编排答（`门禁未放行`与`未受理`各自成格）。
+func (payload MovementFactPayload) Command(tenant domain.TenantID, source string) (application.RecordMovementFactCommand, error) {
+	none := application.RecordMovementFactCommand{}
+	if tenant.String() == "" {
+		return none, ErrOperatorIdentityMissing
+	}
+	command := application.RecordMovementFactCommand{
+		TenantID:      tenant,
+		Fact:          payload.Fact,
+		Schedule:      payload.Schedule,
+		Location:      payload.Location,
+		Source:        source,
+		Version:       payload.Version,
+		GateRequired:  payload.GateRequired,
+		GateClearance: payload.GateClearance,
+	}
+	var err error
+	if payload.Kind != "" {
+		if command.Kind, err = movementFactKindFromWord(payload.Kind); err != nil {
+			return none, err
+		}
+	}
+	if command.OccurredAt, err = parseOptionalInstant("occurredAt", payload.OccurredAt); err != nil {
+		return none, err
+	}
+	return command, nil
+}
+
+// movementFactKindFromWord 是 domain.MovementFactKind 封闭集的名称镜像，词取各常量自己的 String()。
+func movementFactKindFromWord(raw string) (domain.MovementFactKind, error) {
+	for _, kind := range []domain.MovementFactKind{domain.DepartureFact, domain.InTransitFact, domain.ArrivalFact} {
+		if kind.String() == raw {
+			return kind, nil
+		}
+	}
+	return domain.MovementFactKindInvalid, fmt.Errorf("%w: kind=%q is not a movement fact kind word", ErrMalformedRequest, raw)
 }
 
 // MovementFactHandler 是本适配器转交的应用编排。
