@@ -46,6 +46,7 @@ import { useRegisterList } from './register-list';
 import { BusinessPartyRegistrationForm } from './BusinessPartyRegistrationForm';
 import { PartyRelationshipRegistrationForm } from './PartyRelationshipRegistrationForm';
 import { IdentityDeactivationForm } from './IdentityDeactivationForm';
+import { PartyOverviewSection } from './PartyOverviewSection';
 import {
   businessPartyCountSummary,
   businessPartyNoMatchNote,
@@ -223,8 +224,20 @@ const businessPartyRevisionHistory: RevisionHistoryRegister<BusinessPartyRevisio
 
 /**
  * 身份行详情抽屉（票 09 第 4 条）：列全字段，含表上没有的租户；「修订历史」区自票 12 起取真数据。
+ * 票 operator-workspace-gaps/01 起分两签：「全景」（默认）回答这个参与方对我们是什么，「身份与修订」装原有各格一格不改。
+ * 签按参与方重置（key）：从一个参与方的「身份与修订」换到另一个，先看到的仍是全景。
  */
-function BusinessPartyDrawer({ row, onClose }: { row: BusinessPartyRecord | null; onClose: () => void }) {
+function BusinessPartyDrawer({
+  row,
+  onClose,
+  relationships,
+  retryRelationships,
+}: {
+  row: BusinessPartyRecord | null;
+  onClose: () => void;
+  relationships: ApiResult<PartyRelationshipListResponseBody> | null;
+  retryRelationships: () => void;
+}) {
   const copy = useCopyToClipboard();
   return (
     <Drawer open={row !== null} onOpenChange={(open) => (open ? undefined : onClose())} aria-label="参与方身份详情">
@@ -236,40 +249,56 @@ function BusinessPartyDrawer({ row, onClose }: { row: BusinessPartyRecord | null
               <span className="font-mono text-xs text-idpxyz-textMuted">r{row.revision}</span>
               {statusBadge(identityStatusLabels, row.status)}
             </div>
+            <p className="mt-0.5 text-[13px] text-idpxyz-text">{row.partyName}</p>
           </DrawerHeader>
           <DrawerBody>
-            <dl>
-              <DetailRow label="参与方标识" mono onCopy={() => copy('参与方标识', row.partyId)}>
-                {row.partyId}
-              </DetailRow>
-              <DetailRow label="修订" mono>
-                r{row.revision}
-              </DetailRow>
-              <DetailRow label="名称">{row.partyName}</DetailRow>
-              <DetailRow label="状态">{statusBadge(identityStatusLabels, row.status)}</DetailRow>
-              <DetailRow label="依据" mono onCopy={() => copy('依据', row.basis)}>
-                {row.basis}
-              </DetailRow>
-              <DetailRow label="生效时点" mono>
-                <Instant value={row.effectiveFrom} />
-              </DetailRow>
-              <DetailRow label="停用时点" mono>
-                {row.deactivatedAt ? <Instant value={row.deactivatedAt} /> : <span className="text-idpxyz-textMuted">未停用</span>}
-              </DetailRow>
-              <DetailRow label="停用依据" mono>
-                {row.deactivationBasis ?? <span className="text-idpxyz-textMuted">—</span>}
-              </DetailRow>
-              <DetailRow label="登记时间" mono>
-                <Instant value={row.registeredAt} />
-              </DetailRow>
-              <DetailRow label="租户" mono>
-                {row.tenantId}
-              </DetailRow>
-            </dl>
-            <section className="mt-4">
-              <h3 className="text-[12px] font-medium text-idpxyz-text">修订历史</h3>
-              <RevisionHistorySection register={businessPartyRevisionHistory} subjectId={row.partyId} revision={row.revision} />
-            </section>
+            <Tabs key={row.partyId} defaultValue="overview" className="gap-0">
+              <TabsList>
+                <TabsTrigger value="overview">全景</TabsTrigger>
+                <TabsTrigger value="identity">身份与修订</TabsTrigger>
+              </TabsList>
+              <TabsContent value="overview">
+                <PartyOverviewSection
+                  partyId={row.partyId}
+                  relationships={relationships}
+                  retryRelationships={retryRelationships}
+                />
+              </TabsContent>
+              <TabsContent value="identity">
+                <dl>
+                  <DetailRow label="参与方标识" mono onCopy={() => copy('参与方标识', row.partyId)}>
+                    {row.partyId}
+                  </DetailRow>
+                  <DetailRow label="修订" mono>
+                    r{row.revision}
+                  </DetailRow>
+                  <DetailRow label="名称">{row.partyName}</DetailRow>
+                  <DetailRow label="状态">{statusBadge(identityStatusLabels, row.status)}</DetailRow>
+                  <DetailRow label="依据" mono onCopy={() => copy('依据', row.basis)}>
+                    {row.basis}
+                  </DetailRow>
+                  <DetailRow label="生效时点" mono>
+                    <Instant value={row.effectiveFrom} />
+                  </DetailRow>
+                  <DetailRow label="停用时点" mono>
+                    {row.deactivatedAt ? <Instant value={row.deactivatedAt} /> : <span className="text-idpxyz-textMuted">未停用</span>}
+                  </DetailRow>
+                  <DetailRow label="停用依据" mono>
+                    {row.deactivationBasis ?? <span className="text-idpxyz-textMuted">—</span>}
+                  </DetailRow>
+                  <DetailRow label="登记时间" mono>
+                    <Instant value={row.registeredAt} />
+                  </DetailRow>
+                  <DetailRow label="租户" mono>
+                    {row.tenantId}
+                  </DetailRow>
+                </dl>
+                <section className="mt-4">
+                  <h3 className="text-[12px] font-medium text-idpxyz-text">修订历史</h3>
+                  <RevisionHistorySection register={businessPartyRevisionHistory} subjectId={row.partyId} revision={row.revision} />
+                </section>
+              </TabsContent>
+            </Tabs>
           </DrawerBody>
         </>
       ) : null}
@@ -357,9 +386,14 @@ function PartyRelationshipDrawer({ row, onClose }: { row: PartyRelationshipRecor
 function BusinessPartyIdentitiesTable({
   answer,
   retry,
+  relationships,
+  retryRelationships,
 }: {
   answer: ApiResult<BusinessPartyListResponseBody> | null;
   retry: () => void;
+  /** 关系册答案随页面持有、交给抽屉全景签（票 operator-workspace-gaps/01），与关系签同一份，不另取。 */
+  relationships: ApiResult<PartyRelationshipListResponseBody> | null;
+  retryRelationships: () => void;
 }) {
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<BusinessPartyStatusFilter>('ALL');
@@ -428,7 +462,12 @@ function BusinessPartyIdentitiesTable({
           emptyDescription: '读取入口已配置，但登记册为空；页面不会预置参与方。在「登记」签登记第一个。',
         })}
       />
-      <BusinessPartyDrawer row={selected} onClose={() => setSelectedId(null)} />
+      <BusinessPartyDrawer
+        row={selected}
+        onClose={() => setSelectedId(null)}
+        relationships={relationships}
+        retryRelationships={retryRelationships}
+      />
     </>
   );
 }
@@ -631,7 +670,12 @@ export function BusinessPartiesPage() {
           value="identities"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
-          <BusinessPartyIdentitiesTable answer={parties.answer} retry={parties.retry} />
+          <BusinessPartyIdentitiesTable
+            answer={parties.answer}
+            retry={parties.retry}
+            relationships={relationships.answer}
+            retryRelationships={relationships.retry}
+          />
         </TabsContent>
         <TabsContent
           value="relationships"
