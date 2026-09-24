@@ -286,14 +286,14 @@ func (handler *RegisterPartyIdentityHandler) RegisterLegalEntity(
 	if hasIdentity {
 		registration, err = registration.WithIdentityLayer(identity, command.IdentityCorrectionBasis)
 		if err != nil {
-			return notAccepted(err), nil
+			return notAccepted(identityCorrectionRefusal(err)), nil
 		}
 	} else if command.IdentityCorrectionBasis != nil {
 		return notAccepted(errors.New("身份更正依据只随身份层出现：本修订没带注册国家 / 地区与终身注册号")), nil
 	}
 	if successor && found {
 		if err := domain.CheckLegalEntityIdentitySuccession(latest, registration); err != nil {
-			return notAccepted(identitySuccessionRefusal(err)), nil
+			return notAccepted(identityCorrectionRefusal(err)), nil
 		}
 	}
 
@@ -371,8 +371,9 @@ func (handler *RegisterPartyIdentityHandler) checkLifetimeNumbers(
 	return "", nil
 }
 
-// identitySuccessionRefusal 把接续门的两种拒绝译成登记方看得懂的续办；别的错误原样交回。
-func identitySuccessionRefusal(err error) error {
+// identityCorrectionRefusal 把身份更正依据的拒绝译成登记方看得懂的续办；别的错误原样交回。首笔登记带更正依据
+// （WithIdentityLayer 拒）与后续修订没改身份层却带（接续门拒）是同一个哨兵，续办同一句：去掉更正依据。
+func identityCorrectionRefusal(err error) error {
 	switch {
 	case errors.Is(err, domain.ErrIdentityLayerChangedWithoutCorrection):
 		return errors.New(
@@ -381,7 +382,7 @@ func identitySuccessionRefusal(err error) error {
 		)
 	case errors.Is(err, domain.ErrIdentityCorrectionWithoutChange):
 		return errors.New(
-			"身份更正依据只随改了身份层的修订出现：本修订没改身份层（或是历史修订第一次补登两格），不带更正依据",
+			"身份更正依据只随改了身份层的修订出现：首笔登记、历史修订第一次补登两格与没改身份层的修订都无可更正，不带更正依据",
 		)
 	default:
 		return err

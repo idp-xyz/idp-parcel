@@ -117,8 +117,8 @@ func expectNotAccepted(t *testing.T, result application.PartyRegistryResult, err
 	}
 }
 
-// Covers: 票 legal-entity-profile/02 第 1 条——新登记缺国家 / 地区、缺号、国家 / 地区未登记、类型未登记、
-// 号属资料层、格式不符各拒一条（理由各自说清续办），合格即落册、同内容重放答重复。
+// Covers: 票 legal-entity-profile/02「新登记缺一拒登，号经 01 的校验」——新登记缺国家 / 地区、缺号、国家 / 地区
+// 未登记、类型未登记、号属资料层、格式不符各拒一条（理由各自说清续办），合格即落册、同内容重放答重复。
 func TestLegalEntityIdentityLayerGates(t *testing.T) {
 	registry := newFakePartyRegistry()
 	handler := application.NewRegisterPartyIdentityHandler(registry, newFakeNumberTypes(t))
@@ -173,25 +173,35 @@ func TestLegalEntityIdentityLayerGates(t *testing.T) {
 	}
 }
 
-// Covers: 票 legal-entity-profile/02 第 2 条——修订改了号必须带身份更正依据，不带即拒；带了即落为更正修订；
-// 没改却带更正依据同样拒。
+// Covers: 票 legal-entity-profile/02「不作变更，录错走更正」——修订改了号必须带身份更正依据，不带即拒；带了即落为
+// 更正修订；没改却带更正依据同样拒；首笔登记之前没有可更正的号，带了即拒、一个字节不写，修订 1 在册后带着重放也拒。
 func TestLegalEntityIdentityCorrectionNeedsABasis(t *testing.T) {
 	registry := newFakePartyRegistry()
 	handler := application.NewRegisterPartyIdentityHandler(registry, newFakeNumberTypes(t))
 	ctx := context.Background()
 	registerParty(t, handler, "tenant-1", "party-le", "运营法人参与方")
 
+	correction := identityValue(t, domain.NewIdentityBasisReference, "SYN-CORRECTION-01")
 	first := withLegalEntityIdentity(t, legalEntityCommand(t, 1), "XA", "SYN-XA-LIFETIME", "SYN-XA-000001")
+	firstWithCorrection := first
+	firstWithCorrection.IdentityCorrectionBasis = &correction
+	result, err := handler.RegisterLegalEntity(ctx, firstWithCorrection)
+	expectNotAccepted(t, result, err, "首笔登记")
+	if _, found, _ := registry.LoadLatestLegalEntity(ctx, first.Tenant, first.Entity); found {
+		t.Fatal("a refused first registration must not write a byte")
+	}
+
 	if result, err := handler.RegisterLegalEntity(ctx, first); err != nil || result.Outcome() != application.PartyIdentityRegistered {
 		t.Fatalf("first = (%v, %v)", result.Outcome(), err)
 	}
+	result, err = handler.RegisterLegalEntity(ctx, firstWithCorrection)
+	expectNotAccepted(t, result, err, "首笔登记")
 
 	changed := withLegalEntityIdentity(t, legalEntityCommand(t, 2), "XA", "SYN-XA-LIFETIME", "SYN-XA-000009")
-	result, err := handler.RegisterLegalEntity(ctx, changed)
+	result, err = handler.RegisterLegalEntity(ctx, changed)
 	expectNotAccepted(t, result, err, "不作变更")
 
 	unchanged := withLegalEntityIdentity(t, legalEntityCommand(t, 2), "XA", "SYN-XA-LIFETIME", "SYN-XA-000001")
-	correction := identityValue(t, domain.NewIdentityBasisReference, "SYN-CORRECTION-01")
 	unchanged.IdentityCorrectionBasis = &correction
 	result, err = handler.RegisterLegalEntity(ctx, unchanged)
 	expectNotAccepted(t, result, err, "身份更正依据只随改了身份层的修订出现")
@@ -207,7 +217,7 @@ func TestLegalEntityIdentityCorrectionNeedsABasis(t *testing.T) {
 	}
 }
 
-// Covers: 票 legal-entity-profile/02 第 3 条——本格落地之前的历史修订没有身份层：原样重放答重复；
+// Covers: 票 legal-entity-profile/02「既有修订不改写」——本格落地之前的历史修订没有身份层：原样重放答重复；
 // 下一笔修订仍须带两格；第一次补登不带更正依据即落册。
 func TestLegacyLegalEntityRevisionReplaysAndBackfills(t *testing.T) {
 	registry := newFakePartyRegistry()

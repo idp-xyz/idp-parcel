@@ -252,7 +252,9 @@ func NewLegalEntityRegistration(
 }
 
 // WithIdentityLayer 交回带着身份层的同一笔修订；correction 非空即这笔修订是身份更正，携带其依据。
-// 身份更正依据只能随身份层出现——没有身份层的修订无从更正身份层。
+// 身份更正依据只能随身份层出现——没有身份层的修订无从更正身份层；也不能落在修订 1 上——更正是在已登记的
+// 修订之后按内容形成新的登记修订（ADR-0145 决定二），首笔登记之前没有可更正的号。这一条不看册面，
+// 从这一格存在起就成立，所以连读回也拦：册上不该有、库也不收这样的行。
 func (registration LegalEntityRegistration) WithIdentityLayer(
 	identity LegalEntityIdentityLayer,
 	correction *IdentityBasisReference,
@@ -267,6 +269,9 @@ func (registration LegalEntityRegistration) WithIdentityLayer(
 	if correction != nil {
 		if !correction.valid() {
 			return LegalEntityRegistration{}, ErrInvalidIdentityRegistration
+		}
+		if registration.revision == 1 {
+			return LegalEntityRegistration{}, ErrIdentityCorrectionWithoutChange
 		}
 		registration.correction = *correction
 		registration.hasCorrection = true
