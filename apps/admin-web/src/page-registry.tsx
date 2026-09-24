@@ -1,110 +1,98 @@
-import type { ComponentType } from 'react';
-import {
-  ShipmentRequestPage,
-  ShipmentRequestListPage,
-  CancelParcelPage,
-  LabelTransactionsPage,
-  AcceptanceReviewPage,
-  AuthorizedDispositionPage,
-} from './pages/shipment-request';
-import { ChannelSelectionDecisionsPage } from './pages/channel-selection';
-import { TemplatePreviewPage } from './pages/template-preview';
-import { StageAdmissionPage } from './pages/governance';
-import {
-  PriceCardCatalogPage,
-  ReferenceSeriesPage,
-  PricingEvaluationsPage,
-} from './pages/pricing';
-import {
-  NetworkCatalogPage,
-  ServiceAreasPage,
-  RoutePlansPage,
-} from './pages/network';
-import {
-  NodeOperationsReviewPage,
-  TransportFulfillmentReviewPage,
-  EffectiveTimeJudgmentPage,
-} from './pages/operations';
-import {
-  ChargesBillingPage,
-  OperatingMetricsPage,
-  ReconciliationPage,
-  SettlementApplicationPage,
-} from './pages/settlement';
-import { CodLedgerPage } from './pages/collection';
-import {
-  TrackingProjectionPage,
-  ExceptionCasesPage,
-  ExceptionTriagePage,
-  ClaimsRecoveryPage,
-  TrackingJudgmentRulesPage,
-  DisclosurePoliciesPage,
-  ClaimPrerequisitesPage,
-} from './pages/visibility';
-import {
-  CustomsCasesPage,
-  CustomsRestrictionsPage,
-  CustomsPortsPathsPage,
-  ComplianceRulesPage,
-} from './pages/customs';
-import {
-  GroupLegalEntitiesPage,
-  BusinessPartiesPage,
-  PartyContractsPage,
-  SupplierAgreementsPage,
-  ServiceProductsPage,
-  ChannelProductCatalogPage,
-  CommercialPoliciesPage,
-} from './pages/party';
-import { RecentObjectsPage, SavedViewsPage } from './pages/my-work';
+import { lazy, type ComponentType } from 'react';
+
+// 页面按域懒加载（票 admin-web-bundle-size/01）：每个域的 barrel 是一个懒加载块，入口块只剩外壳、工作台与模板。
+// 同一个域的几页共用一个 import()，模块只取一次。别处要从某个域取非页面的东西（如 main.tsx 的 configure*Api）时
+// 直接引那个模块、不经 barrel：入口一静态引 barrel，那个域就被钉回入口块。
+const loadMyWork = () => import('./pages/my-work');
+const loadShipmentRequest = () => import('./pages/shipment-request');
+const loadChannelSelection = () => import('./pages/channel-selection');
+const loadTemplatePreview = () => import('./pages/template-preview');
+const loadGovernance = () => import('./pages/governance');
+const loadPricing = () => import('./pages/pricing');
+const loadNetwork = () => import('./pages/network');
+const loadOperations = () => import('./pages/operations');
+const loadSettlement = () => import('./pages/settlement');
+const loadCollection = () => import('./pages/collection');
+const loadVisibility = () => import('./pages/visibility');
+const loadCustoms = () => import('./pages/customs');
+const loadParty = () => import('./pages/party');
+
+const domainLoaders = [
+  loadMyWork,
+  loadShipmentRequest,
+  loadChannelSelection,
+  loadTemplatePreview,
+  loadGovernance,
+  loadPricing,
+  loadNetwork,
+  loadOperations,
+  loadSettlement,
+  loadCollection,
+  loadVisibility,
+  loadCustoms,
+  loadParty,
+];
+
+// 导出名经属性访问取（`(m) => m.XxxPage`），拼错仍是 tsc 错误——不用字符串名查表。
+function page<Module>(load: () => Promise<Module>, pick: (module: Module) => ComponentType): ComponentType {
+  return lazy(() => load().then((module) => ({ default: pick(module) })));
+}
+
+/**
+ * 首屏后空闲时把各域块预取回来：导航点击、命令面板、恢复标签与 hash 直达走的是同一条加载路径，预取之后切页不再等块。
+ * 取回失败不在这里报——真打开那一页时由页面区的错误边界接住。
+ */
+export function prefetchPages(): void {
+  for (const load of domainLoaders) void load().catch(() => undefined);
+}
 
 // 页面登记：导航 id → 页面组件的唯一映射。工作台不在此登记——它是外壳的
 // 总览首页而非业务模块，由 Layout 直接渲染；这样工作台可以反向读取本登记
 // 派生就绪度总览而不形成模块环。没登记的 id 落 UnwiredModule 诚实占位。
 export const pageById: Record<string, ComponentType> = {
-  'recent-objects': RecentObjectsPage,
-  'saved-views': SavedViewsPage,
-  'shipment-request': ShipmentRequestPage,
-  'shipment-request-inquiry': ShipmentRequestListPage,
-  'label-transactions': LabelTransactionsPage,
-  'channel-selection-decisions': ChannelSelectionDecisionsPage,
-  'cancel-parcel': CancelParcelPage,
-  'template-preview': TemplatePreviewPage,
-  'acceptance-review': AcceptanceReviewPage,
-  'authorized-disposition': AuthorizedDispositionPage,
-  'exception-triage': ExceptionTriagePage,
-  reconciliation: ReconciliationPage,
-  'settlement-application': SettlementApplicationPage,
-  'stage-admission': StageAdmissionPage,
-  'price-card-catalog': PriceCardCatalogPage,
-  'reference-series': ReferenceSeriesPage,
-  'pricing-evaluation': PricingEvaluationsPage,
-  'network-catalog': NetworkCatalogPage,
-  'service-areas': ServiceAreasPage,
-  'route-plans': RoutePlansPage,
-  'node-operations-review': NodeOperationsReviewPage,
-  'transport-fulfillment-review': TransportFulfillmentReviewPage,
-  'effective-time-judgment': EffectiveTimeJudgmentPage,
-  'charges-billing': ChargesBillingPage,
-  'operating-metrics': OperatingMetricsPage,
-  'cod-ledger': CodLedgerPage,
-  'tracking-projection': TrackingProjectionPage,
-  'exception-cases': ExceptionCasesPage,
-  'claims-recovery': ClaimsRecoveryPage,
-  'tracking-judgment-rules': TrackingJudgmentRulesPage,
-  'disclosure-policies': DisclosurePoliciesPage,
-  'claim-prerequisites': ClaimPrerequisitesPage,
-  'customs-cases': CustomsCasesPage,
-  'customs-restrictions': CustomsRestrictionsPage,
-  'customs-ports-paths': CustomsPortsPathsPage,
-  'compliance-rules': ComplianceRulesPage,
-  'group-legal-entities': GroupLegalEntitiesPage,
-  'business-parties': BusinessPartiesPage,
-  'party-contracts': PartyContractsPage,
-  'supplier-agreements': SupplierAgreementsPage,
-  'service-products': ServiceProductsPage,
-  'channel-product-catalog': ChannelProductCatalogPage,
-  'commercial-policies': CommercialPoliciesPage,
+  'recent-objects': page(loadMyWork, (m) => m.RecentObjectsPage),
+  'saved-views': page(loadMyWork, (m) => m.SavedViewsPage),
+  'shipment-request': page(loadShipmentRequest, (m) => m.ShipmentRequestPage),
+  'shipment-request-inquiry': page(loadShipmentRequest, (m) => m.ShipmentRequestListPage),
+  'label-transactions': page(loadShipmentRequest, (m) => m.LabelTransactionsPage),
+  'channel-selection-decisions': page(loadChannelSelection, (m) => m.ChannelSelectionDecisionsPage),
+  'cancel-parcel': page(loadShipmentRequest, (m) => m.CancelParcelPage),
+  'template-preview': page(loadTemplatePreview, (m) => m.TemplatePreviewPage),
+  'acceptance-review': page(loadShipmentRequest, (m) => m.AcceptanceReviewPage),
+  'authorized-disposition': page(loadShipmentRequest, (m) => m.AuthorizedDispositionPage),
+  'exception-triage': page(loadVisibility, (m) => m.ExceptionTriagePage),
+  reconciliation: page(loadSettlement, (m) => m.ReconciliationPage),
+  'settlement-application': page(loadSettlement, (m) => m.SettlementApplicationPage),
+  'stage-admission': page(loadGovernance, (m) => m.StageAdmissionPage),
+  'price-card-catalog': page(loadPricing, (m) => m.PriceCardCatalogPage),
+  'reference-series': page(loadPricing, (m) => m.ReferenceSeriesPage),
+  'pricing-evaluation': page(loadPricing, (m) => m.PricingEvaluationsPage),
+  'network-catalog': page(loadNetwork, (m) => m.NetworkCatalogPage),
+  'service-areas': page(loadNetwork, (m) => m.ServiceAreasPage),
+  'route-plans': page(loadNetwork, (m) => m.RoutePlansPage),
+  'node-operations-review': page(loadOperations, (m) => m.NodeOperationsReviewPage),
+  'transport-fulfillment-review': page(loadOperations, (m) => m.TransportFulfillmentReviewPage),
+  'effective-time-judgment': page(loadOperations, (m) => m.EffectiveTimeJudgmentPage),
+  'charges-billing': page(loadSettlement, (m) => m.ChargesBillingPage),
+  'operating-metrics': page(loadSettlement, (m) => m.OperatingMetricsPage),
+  'cod-ledger': page(loadCollection, (m) => m.CodLedgerPage),
+  'tracking-projection': page(loadVisibility, (m) => m.TrackingProjectionPage),
+  'exception-cases': page(loadVisibility, (m) => m.ExceptionCasesPage),
+  'claims-recovery': page(loadVisibility, (m) => m.ClaimsRecoveryPage),
+  'tracking-judgment-rules': page(loadVisibility, (m) => m.TrackingJudgmentRulesPage),
+  'disclosure-policies': page(loadVisibility, (m) => m.DisclosurePoliciesPage),
+  'claim-prerequisites': page(loadVisibility, (m) => m.ClaimPrerequisitesPage),
+  'customs-cases': page(loadCustoms, (m) => m.CustomsCasesPage),
+  'customs-restrictions': page(loadCustoms, (m) => m.CustomsRestrictionsPage),
+  'customs-ports-paths': page(loadCustoms, (m) => m.CustomsPortsPathsPage),
+  'compliance-rules': page(loadCustoms, (m) => m.ComplianceRulesPage),
+  'group-legal-entities': page(loadParty, (m) => m.GroupLegalEntitiesPage),
+  'business-parties': page(loadParty, (m) => m.BusinessPartiesPage),
+  'party-contracts': page(loadParty, (m) => m.PartyContractsPage),
+  'supplier-agreements': page(loadParty, (m) => m.SupplierAgreementsPage),
+  'service-products': page(loadParty, (m) => m.ServiceProductsPage),
+  'channel-product-catalog': page(loadParty, (m) => m.ChannelProductCatalogPage),
+  'commercial-policies': page(loadParty, (m) => m.CommercialPoliciesPage),
 };
 
 /**

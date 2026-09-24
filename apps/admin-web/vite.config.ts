@@ -14,15 +14,17 @@ export default defineConfig({
   build: {
     rollupOptions: {
       output: {
-        // 按变更频率拆 vendor 块：react 与组件库几乎不随业务页变，拆开后
-        // 业务改动只失效 app 块的缓存，也让单块体积回到告警线内。
-        // 页面本身不做路由级懒加载——重量在依赖不在页面，拆页面只添加载闪烁。
+        // 按变更频率拆 vendor 块：react 与组件库几乎不随业务页变，拆开后业务改动不失效它们的缓存。
+        // 页面另按域懒加载（page-registry.tsx）：应用代码本身大到能把入口块推过告警线，加载闪烁由首屏后
+        // 空闲预取盖住。vendor 块仍超线，病根在上游组件库，见 README「已知跟进」。
         manualChunks(id: string) {
           if (!id.includes('node_modules')) return undefined;
           if (/[\\/]node_modules[\\/](react|react-dom|scheduler)[\\/]/.test(id)) {
             return 'react-vendor';
           }
           if (id.includes('@idpxyz')) return 'ui-kit';
+          // 兜底规则也收懒加载页独用的第三方依赖，会把它提前拉进首屏。今天各页只经 ui-kit 用第三方依赖；
+          // 哪天某页独用一个重依赖，先改这条。
           return 'vendor';
         },
       },

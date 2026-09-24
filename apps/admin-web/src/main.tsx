@@ -3,8 +3,9 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App';
 import { AuthGate } from './auth/AuthGate';
-import { configureShipmentRequestApi } from './pages/shipment-request';
-import { configureVisibilityApi } from './pages/visibility';
+// 从各域的 api 模块取，不经 barrel：入口静态引 barrel 会把那个域的页面钉回入口块（懒加载的理由见 page-registry）。
+import { configureShipmentRequestApi } from './pages/shipment-request/api';
+import { configureVisibilityApi } from './pages/visibility/api';
 import { configureMasterDataApi } from './pages/catalogue-api';
 import { configureDisplayTimeZone } from './pages/moment';
 

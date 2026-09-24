@@ -38,7 +38,7 @@ A + B 后首屏 JS（入口 + `react-vendor` + `ui-kit` + `vendor`）合计由 2
 
 | 票 | 标题 | 状态 |
 |---|---|---|
-| [01](./issues/01-lazy-load-pages-by-context.md) | 页面按域懒加载，首屏块压回告警线内（B） | ready-for-agent · 开工前等共享树上在途的前端票提交 |
+| [01](./issues/01-lazy-load-pages-by-context.md) | 页面按域懒加载，首屏块压回告警线内（B） | resolved · 通道 1 · 入口块 70.58 kB；浏览器实测未验 |
 | [02](./issues/02-icon-picker-off-main-entry-and-chunk-gate.md) | 上游把 `IconPicker` 移出主入口，本仓换装新包并把超线改为构建失败（A + 门禁） | ready-for-human · 上游 `idp-ui` 半边归用户或另开 `idp-ui` 会话；Blocked by 01 |
 
 走法：两张票本仓那半的 diff 都只在 `apps/admin-web/**` 与票面，走 [workflow.md「前端切片」](../../docs/agents/workflow.md#前端切片一人在-main-上直接做)。

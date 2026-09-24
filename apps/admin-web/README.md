@@ -61,4 +61,4 @@ pnpm test       # scripts/run-tests.mjs
 
 ## 已知跟进
 - 产品色：`ui-tokens` 的 `productAccent` 尚未登记 parcel，`App.tsx` 暂用默认色；登记属上游 idp-ui 仓的改动。
-- 产物体积：vendor 块约 1.17MB（gzip 约 239KB），构成是 framer-motion/radix/d3/highlight 等 `@idpxyz` 传递依赖——本应用只用到部分组件，但上游桶导出与缺 `sideEffects` 声明让未用的重依赖摇不掉。已按变更频率拆 `react-vendor`/`ui-kit`/`vendor` 三块保缓存（业务改动只失效 app 块）；根治（`sideEffects: false` 与子路径导出）属上游 idp-ui 仓。
+- 产物体积：`vendor` 块超过 Vite 的 500 kB 告警线。主因是 `@idpxyz/ui-primitives` 主入口里的 `IconPicker`：它以 `import *` 引整套 `lucide-react` 与 `country-flag-icons`，并在模块顶层遍历，本应用用不到也摇不掉。根治是上游把它挪到子路径入口，本仓换装新包时把超线改成构建失败（`.scratch/admin-web-bundle-size/` 票 02）。页面已按域懒加载（`src/page-registry.tsx`），入口块在告警线内；`react-vendor`/`ui-kit`/`vendor` 三块仍按变更频率拆以保缓存。

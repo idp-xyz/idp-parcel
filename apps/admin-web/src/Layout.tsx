@@ -1,4 +1,4 @@
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState, type ElementType } from 'react';
+import { Fragment, Suspense, useCallback, useEffect, useMemo, useRef, useState, type ElementType } from 'react';
 import { PanelRightClose, PanelRightOpen } from 'lucide-react';
 import { EditorGroup, Sidebar, useResize } from '@idpxyz/ui-workspace';
 import { useDensity } from '@idpxyz/ui-theme-runtime';
@@ -12,7 +12,8 @@ import {
   type InspectorController,
   type TabReturnController,
 } from './templates';
-import { pageById } from './page-registry';
+import { pageById, prefetchPages } from './page-registry';
+import { PageChunkBoundary, PageLoading } from './shell/PageChunkBoundary';
 import { Workbench } from './pages/Workbench';
 import { UnwiredModule } from './pages/UnwiredModule';
 import { TopBar } from './shell/TopBar';
@@ -274,11 +275,31 @@ export function Layout() {
     return map;
   }, [workspace.tabs]);
 
+  // 首屏渲完、浏览器空闲时预取各域页面块，此后切页不再等块（懒加载与预取的取舍见 page-registry）。
+  useEffect(() => {
+    // 类型里总有 requestIdleCallback，旧版 Safari 实际没有，退回定时。
+    if (typeof window.requestIdleCallback === 'function') window.requestIdleCallback(() => prefetchPages());
+    else window.setTimeout(prefetchPages, 1500);
+  }, []);
+
   // 按标签 id 键住内容：两张标签同一模块（列表与它的一份详情）时不复用同一个页面实例，切标签就是换页，页内状态不串。
+  // 页面块按域懒加载：加载态与取不回来都只占这一张标签的页面区。
   const renderTab = (tabId: string) => {
     const moduleId = moduleIdOfTab(tabId);
     const Page = pageById[moduleId];
-    return <Fragment key={tabId}>{Page ? <Page /> : <UnwiredModule moduleId={moduleId} />}</Fragment>;
+    return (
+      <Fragment key={tabId}>
+        {Page ? (
+          <PageChunkBoundary>
+            <Suspense fallback={<PageLoading />}>
+              <Page />
+            </Suspense>
+          </PageChunkBoundary>
+        ) : (
+          <UnwiredModule moduleId={moduleId} />
+        )}
+      </Fragment>
+    );
   };
 
   return (
