@@ -14,15 +14,15 @@
 | nodeoperations | 30 | 25 | 3 | 10 | 4 | 5 |
 | parcelpricing | 99 | 94 | 10 | 14 | 1 | 16 |
 | parcelshipment | 187 | 181 | 20 | 34 | 10 | 17 |
-| partycommercial | 130 | 143 | 9 | 35 | 1 | 30 |
+| partycommercial | 137 | 147 | 10 | 37 | 1 | 32 |
 | pilotgovernance | 20 | 18 | 3 | 6 | 1 | 4 |
 | platform（非业务） | 22 | 21 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 100 | 81 | 14 | 43 | 9 | 8 |
 | transportfulfillment | 141 | 129 | 25 | 36 | 11 | 24 |
 | visibilityexception | 98 | 93 | 11 | 30 | 8 | 10 |
-| **合计** | 1003 | 953 | 123 | 269 | 57 | 134 |
+| **合计** | 1010 | 957 | 124 | 271 | 57 | 136 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 64、测试 90。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 65、测试 91。
 
 ## 跨上下文消费缝：25 组，74 个生产文件
 
@@ -54,7 +54,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：11 个模块共 174 份 SQL
+## 迁移：11 个模块共 175 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -64,13 +64,13 @@
 | node_operations | 4 |
 | parcel_pricing | 10 |
 | parcel_shipment | 22 |
-| party_commercial | 32 |
+| party_commercial | 33 |
 | pilot_governance | 6 |
 | settlement_accounting | 21 |
 | transport_fulfillment | 20 |
 | visibility_exception | 26 |
 
-## 接线面：接入面端点 126 个，消费适配器 33 个生产文件，直投路由表 24 条
+## 接线面：接入面端点 129 个，消费适配器 33 个生产文件，直投路由表 24 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -82,12 +82,12 @@
 | nodeoperations | 2 |
 | parcelpricing | 11 |
 | parcelshipment | 15 |
-| partycommercial | 26 |
+| partycommercial | 29 |
 | pilotgovernance | 1 |
 | settlementaccounting | 6 |
 | transportfulfillment | 24 |
 | visibilityexception | 15 |
-| **合计** | 126 |
+| **合计** | 129 |
 
 消费适配器按 `internal/<消费方>/adapters/` 下 `inbox`、`adoptconsume`、`finalconsume`、`veconsume` 四类目录的生产文件数。它与上面的「跨上下文消费缝」是两种东西：那一栏数的是消费方为某个提供方写的防腐层，这一栏数的是接进程内直投信封的消费门。
 
@@ -113,7 +113,7 @@
 | visibilityexception | 8 |
 | **合计** | 24 |
 
-## 端口：声明 413 个；基线口径缺 14，精确口径缺 7
+## 端口：声明 416 个；基线口径缺 14，精确口径缺 7
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
