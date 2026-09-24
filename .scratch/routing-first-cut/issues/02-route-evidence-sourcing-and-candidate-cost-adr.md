@@ -1,7 +1,7 @@
 # 02 路由证据由谁供哪一族事实、路由候选成本怎么来——先裁后做
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——2026-09-24 通道 5 认领（单 task-af4117c9-5176-468b-953f-fef79b86ccad），共享树 main 上做、pathspec 提交、不推；预留 ADR-0148，起草为 Proposed（接受归用户或其明确授权）。此前：ready-for-agent
 Blocked by: 无
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「接路由证据取数侧」那一步的前置裁决
 地盘：一份新 ADR（编号开工时取）；network-routing [`CONTEXT.md`](../../../docs/domain/network-routing/CONTEXT.md) 与 [CONTEXT-MAP](../../../docs/domain/CONTEXT-MAP.md) 相关边只加引用句。不写代码。
