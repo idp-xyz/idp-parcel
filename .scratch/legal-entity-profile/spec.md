@@ -14,7 +14,8 @@ party-commercial [`CONTEXT.md`](../../docs/domain/party-commercial/CONTEXT.md) �
 | [01](./issues/01-registration-number-type-catalogue.md) | 注册号类型目录：按注册国家 / 地区登记注册号类型、格式与所属层 | resolved · 已进 main `5f6ee130` |
 | [02](./issues/02-legal-entity-identity-carries-registration.md) | 责任法人身份登记加注册国家 / 地区与终身注册号 | resolved · 已进 main（代码 `2862bf7d`…`f4dff29b`，清点 `9f270c03`）· 评审 ← 通道 5 须修一条已修、复核可接受 |
 | [03](./issues/03-legal-entity-profile-revisions-and-as-of-resolution.md) | 法人资料修订链与按时点解析（含「资料不全」答复） | resolved · 已进 main（代码 `aa099067`…`caaf7a9c`，清点 `4e7ed6b6`）· 评审 ← 通道 5 可接受 |
-| [04](./issues/04-admin-web-identity-fields-and-profile-face.md) | 管理台：法人登记表单加身份两格、法人资料页 | ready-for-agent · Blocked by 02、03 |
+| [04](./issues/04-admin-web-identity-fields-and-profile-face.md) | 管理台：法人登记表单加身份两格、法人资料页 | in-progress · 通道 3（前端切片，main）· 法人资料区的登记表单与当前有效区 Blocked by 05 |
+| [05](./issues/05-profile-write-isolated-admission-and-as-of-resolution-read.md) | 服务端：资料登记写口进隔离写准入、法人资料按时点解析读口 | ready-for-agent |
 
 走法：01–03 碰 Go / SQL，走[并行会话](../../docs/agents/parallel-sessions.md)那条路；04 只在 `apps/admin-web/**` 与票面，走
 [workflow.md「前端切片」](../../docs/agents/workflow.md#前端切片一人在-main-上直接做)。
