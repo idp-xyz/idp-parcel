@@ -1,7 +1,7 @@
 # 02 责任法人身份登记加注册国家 / 地区与终身注册号
 
 Category: enhancement
-Status: resolved——2026-09-24 通道 3 在分支 `mcp3-lep02` 上做完（基 `mcp4-lep01` tip `6db15aa5`；代码 tip `d1d80542`，首轮代码 tip `9e0f3553`，含清点 tip `4193e0e7`），分支已推 origin。非作者评审（通道 5）须修一条，已在同一分支修完，待 Spec 轴复核后由推送方重放，只取本票的笔：`15dad3e5` 至 `4193e0e7`、首轮票面 `91949459`、评审处置 `d1d80542` 与本笔票面；`1d845397` 是 main 上认领笔 `eb0e86f6` 的拣入，重放时为空。迁移编号占 party-commercial `0034`（`0035` 留给 catalogue-read-pagination/02）。完成记录与评审处置见文末
+Status: resolved · 已进 main——2026-09-24 评审 ← 通道 5 须修一条（派单 `task-c4ce2895`）→ 作者通道 3 在同一分支修为 `d1d80542` → 复核 ← 通道 5 只重跑 Spec 轴、可接受（派单 `task-303a9f6f`）；推送方（通道 1）重放进 main：代码笔 `2862bf7d` / `6aed430e` / `b52b008d` / `40269613` / `d165eb79` / `f4dff29b`，票面 `8ac87ebe` / `63edbfd5`，清点 `9f270c03`；分支 `mcp3-lep02`（代码 tip `d1d80542`、票面 tip `2385486a`）作封存出处，新旧 SHA 对照见 Comments「进 main 记录」。迁移编号占 party-commercial `0034`（`0035` 已随 catalogue-read-pagination/02 先进 main，加载器按名排序、允许空号）。完成记录、评审处置与评审原文见下文
 Blocked by: 01
 地盘：party-commercial 责任法人身份登记的领域、应用、postgres 与 http 适配器（含 `query_party_identities.go` 的 `groupLegalEntityBody`），`migrations/` 下
 party-commercial 模块的新迁移，演示种子。
@@ -92,3 +92,42 @@ party-commercial 模块的新迁移，演示种子。
 **门**（钉 `d1d80542`，WSL，go1.26.8，DSN 为门禁库 55432）：`go build ./...`、`go vet ./...` 退 0；改动的 `.go` `gofmt -l` 无输出；迁移 `0034` 无 CR、无 BOM；先单跑真库用例 `TestLegalEntityIdentityLayerAgainstTheRealCatalogue` 是 `PASS` 不是 `SKIP`。改动包（PC 领域、应用、postgres 适配器与 `migrations`）与 `go list` 反查的反向依赖、`internal/architecture` 共 37 包 `-p 1 -count=1 -v`：35 包 ok、2 包无测试文件、0 FAIL；`--- PASS` 3787、`--- FAIL` 0、`--- SKIP` 1（`pgtest` 的 `TestHelperTemplateOwnerProcess`，只由另一用例以子进程驱动，与 DSN 无关）。迁移一改，反向依赖就扩到各上下文的真库包与全部依赖迁移的 `cmd/*`。全量由推送方跑。
 
 自上次已验 SHA `4193e0e7` 以来动过的 `.go` / `.sql`：`internal/partycommercial/domain/` 下 `party_identity.go`、`legal_entity_identity_layer.go`、`legal_entity_identity_layer_test.go`；`internal/partycommercial/application/` 下 `register_party_identity.go`、`register_legal_entity_identity_test.go`；`internal/partycommercial/adapters/postgres/legal_entity_identity_layer_test.go`；`migrations/party_commercial/0034_legal_entity_identity_layer.sql`。
+
+## Comments
+
+### 评审 ← 通道 5 · 钉 `9e0f3553`（基 `6db15aa5`，只读，门禁未重跑） · 2026-09-24 16:4x（派单 `task-c4ce2895`，改派自通道 4 超时撤回的 `task-f97975ee`；推送方自任务报告代落原文）
+
+**Standards** — 阻断：无。非阻断：
+1. `application/register_legal_entity_identity_test.go` 三个 Covers 注释写「票 legal-entity-profile/02 第 1 / 2 / 3 条」。按 AGENTS.md「改文档」：跨文件引用不用行号也不用计数，Go 注释同受约束；条目序号与行号同构，票面增删一条就无声指错。改引条目原句，如「不作变更，录错走更正」。全仓只有 2 个 .go 文件这样写，不是既有惯例。
+2. Data Clumps（判断）：身份层五格在 `ports.GroupLegalEntityRow` 与 `ports.LegalEntityRevisionRow` 各抄一份，`identityLayerBodyOf` 收五个散参、两处逐格传。可在 `ports` 抽一个身份层行类型嵌入两行；`LegalEntityRevisionRow` 那句「判据同 GroupLegalEntityRow」就是这份重复的自述。
+3. `legalEntityIdentityLayerFrom` 把 `domain.NewLegalEntityIdentityLayer` 的任何错误都说成「一类终身注册号只收一个」；今天可达的只有这一种，构造器以后加校验时理由会答错（判断）。
+
+**Spec** — 阻断：
+1. 通道 4 线索成立。`RegisterPartyIdentityHandler.RegisterLegalEntity` 只在 `successor && found` 时调 `domain.CheckLegalEntityIdentitySuccession`，首登带 `IdentityCorrectionBasis` 经 `WithIdentityLayer` 原样落册；迁移 0034 的 `legal_entity_registration_correction_needs_identity` 只要求有身份层，库也放行。内存替身实测 r1 答 `REGISTERED`、册上带依据；现有用例只测 r2。定阻断：ADR-0145 决定二与 CONTEXT Rules「录错按内容更正形成新的登记修订并携带更正依据」，r1 无可更正；完成记录判断项 4「没改带了也拒」对首登不成立；既有修订不改写，错依据会永久挂在修订历史读口上。修：首登带依据按 `ErrIdentityCorrectionWithoutChange` 拒，补用例（最好真库一条）。
+
+非阻断：
+1. 历史法人（0034 之前登记）的停用修订经 `LegalEntityRegistration.Deactivate` 落册时仍无身份层，字面偏离做什么 3「自本票起的新登记与新修订必须带两格」；取舍合理（停用命令不收身份层），但判断项没写，宜补一条。
+
+结论：须修——阻断仅 Spec 1（首登带身份更正依据照常落册）；Standards 无阻断。
+
+逐点：① ✓ 缺国家 / 缺号在 `legalEntityIdentityLayerFrom` 与 successor 门拒；`checkLifetimeNumbers` 以 `RegistrationNumberIdentityLayer` 调目录 `Check`、按法人生效时点判，六种结果各译续办理由，判定次序随 lep01 的 `Check`。② r2 起的接续门成立（改号不带依据拒、没改带依据拒、历史补登带依据拒），领域上没有「改号」修订；首登缺口即 Spec 阻断 1。③ ✓ 三列全可空，四条 CHECK 对三格全空的存量行恒真，不拖旧行。④ ✓ `identityLayerBody` 由 `groupLegalEntityBody` 与 `legalEntityRevisionBody` 共用，`identityLayerRegistered` 显式布尔不省略；Intake 形状错包 `ErrMalformedRequest`，走 `registration_transport.go` 既有 `writeProblemWithDetail`。⑤ ✓ `NewRegisterPartyIdentityHandler` 调用点齐：parcel-api 编排与 `register-parties` 接真目录，停用 CLI 给 nil 并注明「停用不判号」；行类型的 postgres 两个读口已补读三列。⑥ ✓ `SYN-LE-01` 补 `CN` + `SYN-CN-LIFETIME` / `SYN-CN-000001`，类型登在 `SYN-TENANT-01` 下、格式为合成。
+
+复现方式：/tmp detached worktree（`9e0f3553`）加一个一次性内存用例，单跑 `internal/partycommercial/application`，输出 `outcome=REGISTERED`、`revision=1 correction="SYN-CORRECTION-01" hasCorrection=true`；跑完删文件并 `git worktree remove`（未加 --force）。共享树与作者树未动，未 commit / push，未写票面。
+
+### 复核 ← 通道 5 · 钉 `d1d80542`（基 `9e0f3553`，票面取 `2385486a`，只读） · 2026-09-24 17:1x（派单 `task-303a9f6f`；推送方自任务报告代落原文）
+**Spec** — 阻断：无。非阻断：无。
+结论：可接受——上轮 Spec 阻断 1 已修住。
+逐点：
+① ✓ 领域 `party_identity.go` 的 `WithIdentityLayer` 拒修订 1 带依据（`ErrIdentityCorrectionWithoutChange`）；应用 `RegisterLegalEntity` 经 `identityCorrectionRefusal` 答未受理且不写；迁移 0034 加 `legal_entity_registration_correction_not_first_revision`。/tmp 反证：去掉领域那道检查，`TestFirstLegalEntityRevisionCarriesNoCorrection` 与 `TestLegalEntityIdentityCorrectionNeedsABasis` 红、应用层回到 REGISTERED；还原后 PASS，真库两例带 DSN PASS（非 SKIP）。
+② ✓ 同一 handler 里缺格（`legalEntityIdentityLayerFrom`）与「依据只随身份层出现」本就不看 successor 答未受理；判断项 3 管的是依册面 / 目录的门，修订 1 这条只看修订号与字段、任何册面都不可能收过，判断项 10 成立，合 ADR-0145 决定二「录错按内容更正形成新的登记修订」。
+③ ✓ `party_identity_registry.go` 的法人快照读回无身份层即提前返回，不经 `WithIdentityLayer`；停用修订无依据；更正修订修订号 ≥ 2。
+④ ✓ NULL 安全（revision 自 0015 起 NOT NULL），存量行恒真，写法同 0034 其余 CHECK；就地改的校验和影响票面「评审处置」已写。
+⑤ ✓ 无夹带；受理文案扩到三种情形对「没改却带」仍成立；CLI、隔离写口、种子同走此 handler，停用经 `Deactivate` 清依据，无半修入口。
+⑥ ✓ 判断项 11–13 与「评审处置·非阻断」如实：Standards 1 已改，2、3 留并写取舍，Spec 非阻断 1 成判断项 11。
+更正上轮一处：Standards 1 里「全仓只有 2 个 .go 文件这样写、不是既有惯例」是按带票名的窄模式数的；放宽到「第 N 条」，PC 旧测试注释里还有（如 `isolated_write_intake_test.go`）。AGENTS.md 那条规矩照样成立，只是「非既有惯例」一说偏强，结论不变。
+
+### 进 main 记录（推送方 · 通道 1）
+
+- **门**：首轮评审须修，阻断只有 Spec 1（首登带身份更正依据照常落册）；作者在同一分支修为 `d1d80542`，复核只重跑 Spec 轴，无阻断、无非阻断。首轮非阻断按上文「评审处置」一段处置，不挡合入。推送方先试起隔离子代理跑复核，认证失败未成，复核改派原评审人通道 5。
+- **重放**：在共享树 main `d0eb2e18` 之上 cherry-pick 为 `2862bf7d`（← `15dad3e5`）/ `6aed430e`（← `5eb16753`）/ `b52b008d`（← `4bc10b03`）/ `40269613`（← `5bd38b7e`）/ `d165eb79`（← `9e0f3553`）/ `f4dff29b`（← `d1d80542`）/ `8ac87ebe`（← `91949459`）/ `63edbfd5`（← `2385486a`）。两笔票面在本目录 `spec.md` 子票表上与 main 冲突，按意图合：02 行取分支，01 与 03 行留 main。分支清点笔 `4193e0e7` 不重放，在批 tip 干净检出重生成为 `9f270c03`（partycommercial 生产文件 138 → 140、测试 147 → 151、postgres 37 → 38；迁移 177 → 178）；认领笔 `1d845397` 与 main 上 `eb0e86f6` 等价，跳过。
+- **验证**：同一组代码笔先落在 `d5abc96b` 上成 `a569439b`，隔离树钉它：改动 `.go` gofmt 无输出，全仓 build / vet 退 0，迁移 `0034` 无 CR / BOM；先单跑真库用例 PASS 非 SKIP，带 DSN `go test -p 1 -count=1 ./...` 117 包 ok、0 FAIL。挪到 main `d0eb2e18` 之上后与 `a569439b` 只差 `.md`（其间 main 上通道 2 / 4 的票面与登记册笔，以及本笔）；中途一版落在 `17865872` 上的 tip `25afcdda` 另带 DSN 全量一次，117 包 ok、0 FAIL。
