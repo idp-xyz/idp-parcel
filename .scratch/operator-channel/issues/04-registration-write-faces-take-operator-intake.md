@@ -1,7 +1,7 @@
 # 04 登记册配置写面逐口换操作者 Intake
 
 Category: enhancement
-Status: ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
+Status: in-progress——2026-09-25 通道 4 认领（用户令独立完成操作者渠道这条链），逐上下文分批进 main：第一批可见性八口已换（见文末）。此前 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
 Blocked by: 03
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`cmd/parcel-api` 端点表里 ADR-0085 决定一那一族登记端点的装配行及其装配测试。
@@ -16,3 +16,29 @@ Blocked by: 03
 
 - 归类表完整；已换各口对合成操作者答业务结果、对三格各答其格（带测试）；装配测试与端点表仍一一对照。
 - 随 [ADR-0150](../../../docs/adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 决定三（2026-09-24 补）：已换各口若在隔离放行名单上（如 `/commercial-*` 身份族），同一笔撤下该口的隔离放行——隔离 Intake 上的方法与放行名单那一行，隔离放行用例改写为真渠道答复格用例。
+
+## Comments
+
+### 归类表 ← 通道 4 · 2026-09-25（取证钉 `8d515c4c` 的端点表）
+
+**本票，且不在隔离放行名单上**（在未配置环境里换口没有可观察变化，可以先换）：
+- 可见性 8 口：`/visibility-catalogue-{milestone-mapping,triage-rule,notification-policy,claim-eligibility,claim-authorization,disclosure-policy,exception-disclosure-rule,conflict-signal-rule}-registrations`——**第一批已换**。
+- 关务 7 口：`/customs-{interpretation-rule,gate-catalog,candidate-port,declaration-path,case-requirement,duty-collaboration,duty-payment-verification}-registrations`。
+- 网络 7 口：`/network-catalog-{node,connection,line,service-area,service-calendar,availability-adjustment,route-strategy}-registrations`。
+- 计价 5 口：`/pricing-{price-card,reference-series,reference-catalogue}-registrations` 与 `/pricing-reference-series-{reviews,previews}`。
+- 商业参与方 6 口：`/commercial-{service-product-form,product-channel-mapping,registration-number-type,channel-account-use}-registrations`、`/commercial-registration-number-type-deactivations`、`/commercial-channel-account-use-revocations`。
+- TF 5 口：`/transport-fulfillment-external-carrier-credential-{registrations,applicability-changes}`、`/transport-fulfillment-effective-time-rule-registrations`、`/transport-fulfillment-carrier-master-document-{registrations,revisions}`。
+
+**本票，但在隔离放行名单上**（换口要同笔撤放行，ADR-0150 决定三；等演示环境走通操作者渠道）：商业参与方身份一族 6 口（`/commercial-{business-party,legal-entity,customer-account,party-relationship,legal-entity-profile}-registrations`、`/commercial-party-identity-deactivations`），以及 `/customs-regulatory-credential-registrations`。
+
+**不归本票**：商业发布五口与 `/pricing-evaluation-replays` 归 06；运营决定口归 15；外部资金事实两口归 11（集成客户端族，ADR-0151 决定四）；作业事实、外部结果、客户委托命令归 08、09、10、11（ADR-0100 决定四、五明文不覆盖）；`/pricing-estimates` 归 operator-workspace-gaps（ADR-0152）。
+
+### 第一批进展 ← 通道 4 · 2026-09-25
+
+- **译装只用 registrationjson 那一份**：可见性 `registrationjson` 的八个译装拆成受控批量口入口（签名不变，租户取批文）与在线入口 `…ForTenant`（租户取信封，批文带 `tenantId` 键即拒，`null` 也拒），两者共用同一个本体，CLI 行为不变。
+- `visibilityhttp.OperatorRegistryIntake` 实现八口 Intake：先认证、再读批文（1 MiB 上限）交在线入口；登记写面的答复映射加三格（401 / 403 未授予 / 503）。防腐适配器在 `internal/visibilityexception/adapters/accessidentity`，以登记册配置写能力面铸信封、不带准入要求（ADR-0100 决定四）。
+- 读 Bearer 令牌提成 `internal/platform/httpapi.BearerToken`，PS、TF 两处改用，不再各抄一份。
+- `cmd/parcel-api`：铸造器改为 `buildOperatorMinter` 建一只、运营决定与登记写面共用；端点表八行换成操作者 Intake。发行方参数没设时八口照旧答 403 未配置。
+- **判断项**：批文里的 `approvedBy` 在线口仍照受控批量口从批文取——它记的是批准人引用，不是提交者；认证出的提交操作者在快照里没有格（与 CLI 同）。要不要把提交操作者落册，另裁。
+- **下几批要先做的一步**：关务的译装已在 `registrationjson`，照本批办；网络、计价、商业参与方、TF 的译装还在各自的登记 CLI 里，要先下沉成 `registrationjson` 包（照可见性当初下沉的先例），在线口才有「那一份」可用——不另写平行的解码。
+
