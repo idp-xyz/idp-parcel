@@ -2,7 +2,7 @@
 
 Category: enhancement
 Status: draft
-Blocked by: 无
+Blocked by: [product-strategy-boundary/17](../../product-strategy-boundary/issues/17-requested-service-product-narrows-commercial-basis.md)
 出处：[spec](../spec.md) 缺口三。
 
 ## 为什么
@@ -28,3 +28,10 @@ Blocked by: 无
 ## 形态
 
 碰 Go 与端点表，走并行会话那条路；管理台可挂在「客户与合同」页的客户账户行详情里，端点落地后另拆前端切片。
+
+## Comments
+
+- 2026-09-25 · 通道 3：**暂不做，挂阻塞边。** 用户同日问 03、04 需不需要完成，判断如下。
+  - **不是产品就绪的判据项。** 开发主线四项判据里没有它，也没有 ADR 要求它。它是运营体验的改进：让缺配置在开户时就看得见，而不是等第一单被拒。值得做，但排在 04 之后。
+  - **它要读的那一块正在改。** 本票「动手前要定的」第 1 项要按「客户账户、服务产品与一个商业选择锚点」逐项解析；让服务产品参与商业依据解析，正是 `product-strategy-boundary/17` 的内容。那张票的半成品停在分支 `mcp2-psb17`，至今未进 main。现在按旧的解析形状建只读口，17 落地后要跟着改一遍。
+  - 17 进 main 后，本票先按「动手前要定的」三项建模（可能要一篇 ADR 定只读解析的形状），再转 ready-for-agent。

@@ -1,7 +1,7 @@
 # 04 落地 ADR-0101 价卡导入：模板 → 草稿 → 批准 → 发布
 
 Category: enhancement
-Status: draft
+Status: in-progress——跟踪容器：2026-09-25 通道 3 拆为 [`.scratch/price-card-import/`](../../price-card-import/spec.md) 下子票 01–06（用户授权自决），本票自身不再有可执行工作；子票全部 resolved 时本票随之 resolved。此前 draft
 Blocked by: 无
 出处：[spec](../spec.md) 缺口四。
 
