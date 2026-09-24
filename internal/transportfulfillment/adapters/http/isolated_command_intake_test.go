@@ -105,6 +105,29 @@ var isolatedLines = map[string]isolatedLine{
 		},
 		valid: isolatedEffectiveDeliveryBody,
 	},
+	"/transport-fulfillment-segment-closures": {
+		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
+			_, err := intake.IntakeSegmentClosure(context.Background(), request)
+			return err
+		},
+		valid: isolatedSegmentClosureBody,
+	},
+}
+
+const isolatedSegmentClosureBody = `{"segment":"SYN-SEGMENT-08-11","closedAt":"2026-09-25T20:00:00+08:00"}`
+
+// Covers: SegmentClosureIntake——关段声明是运营决定，段与关段时刻两格逐字来自载荷，租户来自注入。
+func TestIsolatedCommandIntakeTranslatesSegmentClosureWithInjectedTenant(t *testing.T) {
+	command, err := isolatedCommandIntakeForTest(t).IntakeSegmentClosure(context.Background(), commandRequest(isolatedSegmentClosureBody))
+	if err != nil {
+		t.Fatalf("intake：%v", err)
+	}
+	if command.TenantID.String() != isolatedCommandTenant || command.Segment != "SYN-SEGMENT-08-11" {
+		t.Fatalf("command = %+v，与注入与载荷不符", command)
+	}
+	if want := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC); !command.ClosedAt.Equal(want) {
+		t.Fatalf("ClosedAt = %s, want %s", command.ClosedAt, want)
+	}
 }
 
 const isolatedEffectiveDeliveryBody = `{"attempt":"SYN-ATTEMPT-08-10","object":"SYN-PARCEL-08-10","method":"HANDED_TO_RECIPIENT",` +
@@ -495,6 +518,9 @@ func TestIsolatedCommandIntakeServesOnlyAdmittedLines(t *testing.T) {
 	}
 	if _, ok := intake.(tfhttp.DeliveryRegistrationIntake); !ok {
 		t.Fatal("交付生效首登口该已放行")
+	}
+	if _, ok := intake.(tfhttp.SegmentClosureIntake); !ok {
+		t.Fatal("段关闭口该已放行")
 	}
 	for name, refused := range map[string]bool{
 		"揽收更正口（同族未列）":      isA[tfhttp.PickupCorrectionIntake](intake),

@@ -38,6 +38,7 @@ var (
 	_ DispatchTaskIntake            = (*IsolatedCommandIntake)(nil)
 	_ DeliveryDispatchTriggerIntake = (*IsolatedCommandIntake)(nil)
 	_ DeliveryRegistrationIntake    = (*IsolatedCommandIntake)(nil)
+	_ SegmentClosureIntake          = (*IsolatedCommandIntake)(nil)
 )
 
 // IsolatedCommandIntakeDeps 是构造本 Intake 的全部输入，全部是装配点给定的合成值。
@@ -154,6 +155,18 @@ func (intake *IsolatedCommandIntake) IntakeRegistration(
 	var payload EffectiveDeliveryPayload
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.RegisterEffectiveDeliveryCommand{}, err
+	}
+	return payload.Command(intake.tenant)
+}
+
+// IntakeSegmentClosure 译关段声明（`/transport-fulfillment-segment-closures`）。
+func (intake *IsolatedCommandIntake) IntakeSegmentClosure(
+	_ context.Context,
+	request *http.Request,
+) (application.CloseFulfillmentSegmentCommand, error) {
+	var payload SegmentClosurePayload
+	if err := decodeClosedPayload(request.Body, &payload); err != nil {
+		return application.CloseFulfillmentSegmentCommand{}, err
 	}
 	return payload.Command(intake.tenant)
 }

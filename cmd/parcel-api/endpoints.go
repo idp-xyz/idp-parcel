@@ -242,6 +242,7 @@ func assembleBusinessEndpoints(
 	dispatchTaskIntake := tfhttp.DispatchTaskIntake(tfhttp.UnconfiguredIntake{})
 	deliveryDispatchTriggerIntake := tfhttp.DeliveryDispatchTriggerIntake(tfhttp.UnconfiguredIntake{})
 	deliveryRegistrationIntake := tfhttp.DeliveryRegistrationIntake(tfhttp.UnconfiguredIntake{})
+	segmentClosureIntake := tfhttp.SegmentClosureIntake(tfhttp.UnconfiguredIntake{})
 	if isolatedTransportFulfillment != nil {
 		pickupRegistrationIntake = isolatedTransportFulfillment
 		pickupAttemptIntake = isolatedTransportFulfillment
@@ -251,6 +252,7 @@ func assembleBusinessEndpoints(
 		dispatchTaskIntake = isolatedTransportFulfillment
 		deliveryDispatchTriggerIntake = isolatedTransportFulfillment
 		deliveryRegistrationIntake = isolatedTransportFulfillment
+		segmentClosureIntake = isolatedTransportFulfillment
 	}
 
 	return []httpapi.BusinessEndpoint{
@@ -323,7 +325,7 @@ func assembleBusinessEndpoints(
 		// 明确终止参与。它们是运营决定不是承运方回传口，所以路径取读面册名前缀 `transport-fulfillment-`
 		// 而不是控制事实那组的 `/transport-fulfillment/...`。写准入不另立形，同挂字面量 UnconfiguredIntake{}。
 		// 终止口只能铸终止那一路（tfhttp.ParticipationTermination 比应用命令窄），交付与交接两路是内部触发。
-		{Pattern: "/transport-fulfillment-segment-closures", Handler: tfhttp.NewCloseFulfillmentSegmentEndpoint(tfhttp.UnconfiguredIntake{}, segmentCloser)},
+		{Pattern: "/transport-fulfillment-segment-closures", Handler: tfhttp.NewCloseFulfillmentSegmentEndpoint(segmentClosureIntake, segmentCloser)},
 		{Pattern: "/transport-fulfillment-dispatch-task-registrations", Handler: tfhttp.NewOpenDispatchTaskEndpoint(dispatchTaskIntake, dispatchTaskOpener)},
 		// 末端派送任务内部触发执行器的生产入口（ADR-0114 决定二末句；票 tf-segment-lifecycle-closure/12「生产入口」）：谁按拍调、
 		// 拍频多大属调用方（实例半边），同挂字面量 UnconfiguredIntake{} 如实答未配置；与上一行手工建任务是两件事。
