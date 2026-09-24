@@ -146,6 +146,24 @@ func TestLegalEntityIdentitySuccession(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0145 决定二——首笔登记之前没有登记过的号：修订 1 带身份更正依据即不成立，拒因与「没改却带」同一个；
+// 修订 2 起带不带由接续门比对前一笔判，这里不拦。
+func TestFirstLegalEntityRevisionCarriesNoCorrection(t *testing.T) {
+	layer := identityLayer(t, "XA", lifetimeNumber(t, "SYN-XA-LIFETIME", "SYN-XA-000001"))
+	correction := commercialValue(t, domain.NewIdentityBasisReference, "SYN-CORRECTION-01")
+
+	if _, err := legalEntityRevision(t, 1).WithIdentityLayer(layer, &correction); !errors.Is(err, domain.ErrIdentityCorrectionWithoutChange) {
+		t.Fatalf("revision 1 with a correction basis: error = %v, want ErrIdentityCorrectionWithoutChange", err)
+	}
+	carried, err := legalEntityRevision(t, 2).WithIdentityLayer(layer, &correction)
+	if err != nil {
+		t.Fatalf("revision 2 with a correction basis: error = %v, want nil", err)
+	}
+	if basis, has := carried.IdentityCorrectionBasis(); !has || basis != correction {
+		t.Fatalf("revision 2 correction basis = %q (has %v)", basis, has)
+	}
+}
+
 // Covers: 停用修订原样沿用身份层、不沿用身份更正依据；身份更正依据不能以零值出现。
 func TestLegalEntityDeactivationKeepsTheIdentityLayer(t *testing.T) {
 	layer := identityLayer(t, "XA", lifetimeNumber(t, "SYN-XA-LIFETIME", "SYN-XA-000001"))

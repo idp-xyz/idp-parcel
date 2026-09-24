@@ -124,15 +124,20 @@ func expectRefused(t *testing.T, result application.PartyRegistryResult, mention
 }
 
 // Covers: 票 legal-entity-profile/02 完成判据「真库用例：缺国家、缺号、号不属该国身份层类型、格式不符各拒一条；
-// 更正修订改号须带依据，不带即拒」——拒绝的一个字节不写；合格即落册，身份层从目录上列与修订历史读回。
+// 更正修订改号须带依据，不带即拒」——拒绝的一个字节不写；合格即落册，身份层从目录上列与修订历史读回。首笔登记
+// 带更正依据同样拒、不写；库也不收修订 1 上的更正依据。
 func TestLegalEntityIdentityLayerAgainstTheRealCatalogue(t *testing.T) {
 	fixture := newLegalEntityIdentityFixture(t)
 	ctx := t.Context()
+	basis := pcValue(t, domain.NewIdentityBasisReference, "SYN-CORRECTION-01")
 
 	expectRefused(t, fixture.register(t, identityCommand(t, 1, "", "SYN-XA-LIFETIME", "SYN-XA-000001")), "缺注册国家 / 地区")
 	expectRefused(t, fixture.register(t, identityCommand(t, 1, "XA", "", "")), "缺终身注册号")
 	expectRefused(t, fixture.register(t, identityCommand(t, 1, "XA", "SYN-XA-TAX", "SYN-XA-TAX-0001")), "属资料层")
 	expectRefused(t, fixture.register(t, identityCommand(t, 1, "XA", "SYN-XA-LIFETIME", "SYN-XA-12")), "不合类型")
+	firstWithCorrection := identityCommand(t, 1, "XA", "SYN-XA-LIFETIME", "SYN-XA-000001")
+	firstWithCorrection.IdentityCorrectionBasis = &basis
+	expectRefused(t, fixture.register(t, firstWithCorrection), "首笔登记")
 	if rows, err := fixture.catalogue.ListGroupLegalEntities(ctx, pcTenant(t, "tenant-1"), 10); err != nil || len(rows) != 0 {
 		t.Fatalf("refused registrations wrote rows: %d rows, err %v", len(rows), err)
 	}
@@ -143,7 +148,6 @@ func TestLegalEntityIdentityLayerAgainstTheRealCatalogue(t *testing.T) {
 	expectRefused(t, fixture.register(t, identityCommand(t, 2, "XA", "SYN-XA-LIFETIME", "SYN-XA-000009")), "不作变更")
 
 	corrected := identityCommand(t, 2, "XA", "SYN-XA-LIFETIME", "SYN-XA-000009")
-	basis := pcValue(t, domain.NewIdentityBasisReference, "SYN-CORRECTION-01")
 	corrected.IdentityCorrectionBasis = &basis
 	if result := fixture.register(t, corrected); result.Outcome() != application.PartyIdentityRegistered {
 		t.Fatalf("correction outcome = %s (%v)", result.Outcome(), result.Cause())
@@ -179,6 +183,13 @@ func TestLegalEntityIdentityLayerAgainstTheRealCatalogue(t *testing.T) {
 	}
 	if layer, has := latest.IdentityLayer(); !has || layer.Numbers()[0].Number().String() != "SYN-XA-000009" {
 		t.Fatalf("latest identity layer = %+v (has %v)", layer, has)
+	}
+
+	_, err = fixture.pool.Exec(ctx,
+		`UPDATE party_commercial.legal_entity_registration SET identity_correction_basis = 'SYN-CORRECTION-02'
+		  WHERE legal_entity_id = 'le-1' AND revision = 1`)
+	if err == nil || !strings.Contains(err.Error(), "legal_entity_registration_correction_not_first_revision") {
+		t.Fatalf("a correction basis on revision 1 must violate the first-revision constraint, got %v", err)
 	}
 }
 

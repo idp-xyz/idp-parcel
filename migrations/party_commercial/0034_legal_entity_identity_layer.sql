@@ -7,8 +7,10 @@
 -- 是否合格由写入用例按注册号类型目录判，库只钉形状；identity_correction_basis 只随改了身份层的更正修订出现。
 --
 -- 三格都可空：本格落地之前登记的历史修订没有身份层，读回照样成立——新登记与新修订必须带两格的门在写入用例，不在
--- 这里。库钉三件事：两格同空同有（缺一格的行不是任何一种合法修订）、国家形状与号数组非空、更正依据不脱离身份层
--- 单独出现。存量行三格全空，新 CHECK 对它们恒真；ADD CONSTRAINT 默认校验存量行，这一点由它自己证。
+-- 这里。库钉的是单看一行就判得出的形状：两格同空同有（缺一格的行不是任何一种合法修订）、国家形状与号数组非空、
+-- 更正依据不脱离身份层单独出现、也不落在修订 1 上（首笔登记之前没有可更正的号）。「更正依据只随改了身份层的修订
+-- 出现」要和前一笔比，归写入用例。存量行三格全空，新 CHECK 对它们恒真；ADD CONSTRAINT 默认校验存量行，这一点由它
+-- 自己证。
 
 ALTER TABLE party_commercial.legal_entity_registration
     ADD COLUMN registration_country          text,
@@ -30,4 +32,6 @@ ALTER TABLE party_commercial.legal_entity_registration
         CHECK (
             identity_correction_basis IS NULL
             OR (registration_country IS NOT NULL AND btrim(identity_correction_basis) <> '')
-        );
+        ),
+    ADD CONSTRAINT legal_entity_registration_correction_not_first_revision
+        CHECK (identity_correction_basis IS NULL OR revision > 1);

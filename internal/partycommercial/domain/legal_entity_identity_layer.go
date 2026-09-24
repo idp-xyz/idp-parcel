@@ -11,8 +11,8 @@ var (
 	// ErrIdentityLayerChangedWithoutCorrection 是一笔新修订改了身份层却没带身份更正依据。身份层不作变更
 	// （ADR-0145 决定二）：号真的变了就是另一个法人，停用本法人、登记新法人；录错才走更正。
 	ErrIdentityLayerChangedWithoutCorrection = errors.New("party commercial: identity layer changed without a correction basis")
-	// ErrIdentityCorrectionWithoutChange 是身份更正依据出现在没改身份层的修订上——包括历史修订第一次补登
-	// 身份层：那是补上一直缺着的两格，不是更正一个录错的号。
+	// ErrIdentityCorrectionWithoutChange 是身份更正依据出现在没改身份层的修订上——包括首笔登记与历史修订第一次
+	// 补登身份层：前者之前没有登记过的号，后者是补上一直缺着的两格，都不是更正一个录错的号。
 	ErrIdentityCorrectionWithoutChange = errors.New("party commercial: identity correction basis without an identity layer change")
 )
 
@@ -115,7 +115,7 @@ func (layer LegalEntityIdentityLayer) valid() bool {
 //   - 最新修订是本格落地之前的历史修订、没有身份层：新修订第一次补上两格，是补登不是更正，同样不许带。
 //
 // 新修订必须带身份层由写入用例在调它之前把门；停用修订由 LegalEntityRegistration.Deactivate 原样沿用
-// 身份层、不经这里。
+// 身份层、不经这里；首笔登记没有最新修订可比，也不经这里，它带不带更正依据由 WithIdentityLayer 判。
 func CheckLegalEntityIdentitySuccession(latest, next LegalEntityRegistration) error {
 	if !next.hasIdentity {
 		return fmt.Errorf("%w: the successor revision carries no identity layer", ErrInvalidLegalEntityIdentityLayer)
