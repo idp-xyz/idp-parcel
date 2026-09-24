@@ -1,7 +1,7 @@
 # 01 壳层升级为多标签工作区：`EditorGroup` + `StatusBar`、工作区状态本地持久化、hash ↔ 标签互为镜像、`Ctrl+W` / `Ctrl+Shift+T`
 
 Category: enhancement
-Status: resolved——2026-09-22 通道 1 在 `main` 上直接做完（workflow.md「前端切片：一人在 main 上直接做」六步；本地 `3da0f23c` / `c9312bf6` 两笔码 + 本笔票面，**已进 main `539b8764`**（2026-09-23 push，`e0d3f89d..539b8764` 纯 ff，码 SHA 不换））。完成记录见文末；非作者评审 ← 通道 2（2026-09-24）Spec 阻断 1（`loadWorkspaceState` 遇畸形 id 抛而不回默认，整页白屏）已修 `d365851b`，各条非阻断逐条处置见 Comments「评审后修复」（本地 `main`，**未推**——本宿主此刻连不上 GitHub 代理）。此前 in-progress——用户经 IDP 队列令「参考 idpxyz/idp-ui `apps/myshop-web`，理解，然后来调整我们的 ui」，未逐条答判断项；三项按 spec 推荐取值落地——1 多标签**要**（用户指向的参照物就是多标签壳）、2 分栏**不做**（`showSplitButtons={false}`）、3 `ActivityBar` **不装**；用户若要 2 / 3 各是一张追加票，不改本票已落的形。此前 draft——等用户答 spec「判断项」1–3
+Status: resolved——2026-09-22 通道 1 在 `main` 上直接做完（workflow.md「前端切片：一人在 main 上直接做」六步；本地 `3da0f23c` / `c9312bf6` 两笔码 + 本笔票面，**已进 main `539b8764`**（2026-09-23 push，`e0d3f89d..539b8764` 纯 ff，码 SHA 不换））。完成记录见文末；非作者评审 ← 通道 2（2026-09-24）Spec 阻断 1（`loadWorkspaceState` 遇畸形 id 抛而不回默认，整页白屏）已修 `d365851b`，各条非阻断逐条处置见 Comments「评审后修复」；复核改为推送方自审（用户令，其他通道忙）：阻断已解除，评审附带的 hash 路径同类抛一并修了 `00b7acdc`，见 Comments「自审」（本地 `main`，**未推**——本宿主此刻连不上 GitHub 代理）。此前 in-progress——用户经 IDP 队列令「参考 idpxyz/idp-ui `apps/myshop-web`，理解，然后来调整我们的 ui」，未逐条答判断项；三项按 spec 推荐取值落地——1 多标签**要**（用户指向的参照物就是多标签壳）、2 分栏**不做**（`showSplitButtons={false}`）、3 `ActivityBar` **不装**；用户若要 2 / 3 各是一张追加票，不改本票已落的形。此前 draft——等用户答 spec「判断项」1–3
 Blocked by: 无（admin-web-ux-alignment/02 已进 main `5b032504`）
 地盘：`apps/admin-web/src/Layout.tsx`（主区从单页换成 `EditorGroup`；右栏 / 底栏两个**空位**只留结构不装内容，02 装）、新 `shell/workspace-state.ts`（标签集 / 活动标签 /
 已关闭栈 / 侧栏宽度的纯逻辑 + `localStorage` 持久化 + node:test）、新 `shell/WorkspaceStatusBar.tsx`（包 `StatusBar`）、`shell/preferences.ts`（若持久化键前缀要复用它的约定，只追加）。
@@ -136,6 +136,7 @@ myshop-web（有），真实页面早就有了（委托查阅的 hash 二段详�
 | `d365851b` | `shell/workspace-state.ts`、`.test.ts`、`Layout.tsx` | Spec 阻断 1；Spec 非阻断 2；Standards 非阻断 3 |
 | `06b1f87e` | `Layout.tsx`、`App.tsx`、`shell/workspace-state.ts` | Standards 非阻断 1 / 2；Spec 非阻断 5 |
 | `2056e054` | `pages/shipment-request/ShipmentRequestListPage.tsx` | Spec 非阻断 1 的注释半 |
+| `00b7acdc` | `templates/address-query.ts`、`.test.ts`、`templates/index.ts`、`shell/workspace-state.ts`、`.test.ts`、`pages/my-work/recent-objects.ts`、`.test.ts`、`ShipmentRequestListPage.tsx` | 评审附带一句：hash 路径上的同类抛（见下「自审」第 3 条） |
 | `baee921d` | 票面、追加票 06、spec 子票表 | Spec 非阻断 1 的追加票；Spec 非阻断 3 / 4 / 6（票面口径）；本段 |
 
 **逐条处置**
@@ -180,9 +181,39 @@ comfortable，与右键菜单的英文同归上游 i18n。
 `#/exception-cases?view=v1` 剥成 `#/exception-cases`。修复后：坏存储下首帧不抛、只剩规范的那张标签、标签名按词表现算；点已活动标签 hash 不变、点别的
 标签照写。
 
-**评审**：修复碰共享面（`shell/*`、`Layout.tsx`），按 workflow 第 5 步要一份 Spec 轴；评审点名「修完只需重跑 Spec 轴那一格」。复核已派回通道 2（任务台，
-结果回来代落）；在此之前以**推送方自审**为准，不算非作者评审。自审所得：评审列的四类（词表外、工作台伪标签、不规范、编码畸形）与尾斜杠、三段、带查询串
+**评审**：修复碰共享面（`shell/*`、`Layout.tsx`），按 workflow 第 5 步要一份 Spec 轴；评审点名「修完只需重跑 Spec 轴那一格」。复核单派回通道 2 后没被领走，
+用户令推送方自审（其他通道忙），单已撤回——重跑见下一节「自审」，**不算非作者评审**。派单时的初步自审所得：评审列的四类（词表外、工作台伪标签、不规范、编码畸形）与尾斜杠、三段、带查询串
 都在 load 用例或探针里；`loadWorkspaceState` 改签名只有 `Layout` 一处调用；存储格式不变、旧存储照读；`tabForHash` 构出的 id 本就规范，`openTab` 那条路不受影响。
 
 **推送**：未推。本宿主（WSL）仓库级 `http.proxy` 指向 `127.0.0.1:7897`，此刻连接被拒；直连 GitHub 超时。本地 `main` 比 `origin/main`（`3a47da8d`）多出两票的评审代落笔、
 修复笔与票面笔，推送后在此补一行进 main 记录。
+
+### 自审 ← 通道 1 · 钉 `00b7acdc`（基 `376b6ea1`，推送方自审，**不算非作者评审**）· 2026-09-24 14:3x
+
+复核单 `task-54011b5d` 派回通道 2 后一直没被领走，用户令推送方自审（其他通道忙），单已撤回。重跑的是评审点名的 Spec 轴那一格，外加非阻断处置核对。
+
+门（实跑，WSL，Node 22.20.0，钉 `00b7acdc`）：`tsc -b --noEmit` 退 0 / `run-tests` 424 pass 0 fail / `vite build` 成功。
+
+**Spec** — 阻断：无。
+
+1. **阻断 1 → 解除。** 存储里的每张标签经 `tabFromStoredId` 按 id 重造：`tabForHash(hashForTab(id))` 造得出、且认回来仍是同一个 id 才留。评审列的四类逐一对上——
+   词表外、工作台伪标签由 `tabIdFromHash` 答 null；不规范（尾斜杠、三段、带查询串）写出的 hash 认回来是另一个 id；编码畸形（首段 / 次段）自 `00b7acdc` 起由
+   `tabIdFromHash` 经 `decodeHashSegment` 答 null（此前 `d365851b` 靠 try/catch 接住）。`loadWorkspaceState` 对任何形状的存储都不再抛：`JSON.parse` 包着，其余各步
+   都是全函数（storage 读写本身不包，与三个邻居一致，评审已判）。证据：load 用例一条（五类坏 id + 已关闭栈里的坏 id）；探针 `wsform-review-fixes-probe` 对修复前
+   `376b6ea1` 坏存储首帧抛 `URIError: URI malformed`，修复后首帧不抛、只剩规范的那张标签。
+2. **没有新缝。** `loadWorkspaceState` 改签名只有 `Layout` 一处调用；存储格式不变，旧存储照读（名字不读）；`pinned` 照留；构出的 id 规范，`applyWorkspace` 两次答成
+   同一张的前提成立——票 06 的回程改写落回的地址同样按 `tabForHash` 归档，前提不破。
+3. **评审附带一句（hash 路径上的同类抛）→ 已修 `00b7acdc`。** 评审判它不算本票引入，但同属「地址来自外部、首帧读到就抛」：地址栏是 `#/%E0`、
+   `#/shipment-request-inquiry/%E0%A4%A` 这类被截断的链接时，`tabIdFromHash`（`Layout` 的 `useState` 初始化器里）与 `recentObjectFromHash`（首帧 effect 里）都会抛，
+   整台白屏，坏地址还留在地址栏里。抽了共用的 `decodeHashSegment`，三处（连委托页 `selectedIdFromHash`）解不开即不认、落工作台；`tabForHash` 由此是全函数，
+   `tabFromStoredId` / `rememberTabAddress` 里成了死码的 try/catch 删掉。探针 `malformed-hash-probe`（源在 `/tmp/idp-probes/`，不入库）**9 ok**；对 `cd4d8193`
+   **4 FAIL**：两个坏地址首帧抛、运行中跳到坏地址整棵树消失（该份里「不开标签」「不记最近对象」几项在旧码上报 ok，是因为树没渲染出来，不作数）。
+
+**非阻断处置核对**：Standards 1 属实（头注与 `applyWorkspace` 的文档注释一致）；Standards 2 属实（评审点名的几个文件里已无「此前」「前提已变」）；Standards 3 属实；
+Spec 非阻断 1 的出路票 06 已做完；2 属实；3 / 4 / 6 票面已补；5 属实（探针：点已活动标签 hash 不变）。
+
+非阻断（自审新记）：
+1. `moduleIdOfTab` / `objectIdOfTab` 仍直接 `decodeURIComponent`——只对 `tabIdFromHash` 认过的 id 调，今天所有调用点都是；将来有人拿原始地址段喂它们，同类抛会
+   回来。`tabIdFromHash` 的文档注释写明了这个前提，不另加防线。
+
+结论：**阻断 1 已解除**，无新阻断。

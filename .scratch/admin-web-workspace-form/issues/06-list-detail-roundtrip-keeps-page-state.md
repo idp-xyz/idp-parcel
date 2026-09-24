@@ -1,7 +1,7 @@
 # 06 列表 → 详情往返保住检索词与多选集：多标签壳层下「进详情再回来即清零」的出路
 
 Category: enhancement
-Status: resolved——2026-09-24 通道 1 在 `main` 上直接做完（workflow.md「前端切片」）：本地 `69f6413b` 壳层段 / `ebf8b025` 模板与页面段 / `c1b7f74b` 注释改口 + 本笔票面，**未推**（本宿主此刻连不上 GitHub 代理）。完成记录见文末。此前 in-progress——通道 1 接（通道 3 提议的分工）。此前 ready-for-agent——2026-09-24 用户授权通道 3 自决：C 的检索词半 + 壳层记住每张标签最后停在的完整地址，多选集进详情即丢（见「判断项答复」）。此前 draft——2026-09-24 通道 1 按票 01 评审 ← 通道 2 的 Spec 非阻断 1 立，形态取舍归用户
+Status: resolved——2026-09-24 通道 1 在 `main` 上直接做完（workflow.md「前端切片」）：本地 `69f6413b` 壳层段 / `ebf8b025` 模板与页面段 / `c1b7f74b` 注释改口 + 票面 `cd4d8193`，**未推**（本宿主此刻连不上 GitHub 代理）。完成记录见文末；推送方自审可接受（用户令，其他通道忙），见 Comments。此前 in-progress——通道 1 接（通道 3 提议的分工）。此前 ready-for-agent——2026-09-24 用户授权通道 3 自决：C 的检索词半 + 壳层记住每张标签最后停在的完整地址，多选集进详情即丢（见「判断项答复」）。此前 draft——2026-09-24 通道 1 按票 01 评审 ← 通道 2 的 Spec 非阻断 1 立，形态取舍归用户
 Blocked by: 无
 地盘：`apps/admin-web/src/shell/workspace-state.ts` 与其 test、`Layout.tsx`（记地址、三条回程）、`templates/`（检索词读写地址的共用件、给页面的「回到某标签」口）、
 `pages/shipment-request/ShipmentRequestListPage.tsx`、`pages/visibility/ExceptionCasesPage.tsx`，外加票 04 票面补记多选集改口。全在 `apps/admin-web/**` 与票面，走
@@ -67,7 +67,8 @@ workflow.md「前端切片」。
 | `69f6413b` | `shell/workspace-state.ts`、`.test.ts`、`Layout.tsx`、新 `templates/tab-return-context.tsx`、`templates/index.ts`、票面 | 壳层段：`TabAddressBook` 与 `rememberTabAddress` / `addressForTab` / `hashOfUrl`（node:test 4 条）；hashchange 按 `oldURL` 记下离开的完整地址；点标签、关标签落邻居、`TabReturnProvider` 的 `returnTo` 三条回程都走 `addressForTab`；Status → in-progress |
 | `ebf8b025` | 新 `templates/address-query.ts`、`.test.ts`、新 `templates/use-address-keyword.ts`、`templates/index.ts`、`ShipmentRequestListPage.tsx`、`ExceptionCasesPage.tsx` | 模板与页面段：`?q=` 读写纯函数（node:test 4 条）+ `useAddressKeyword`（写用 replaceState）；两页改用它；委托详情「返回列表」改经 `returnTo` |
 | `c1b7f74b` | `templates/list-selection.ts`、`ListPageTemplate.tsx` | 选择集生命周期注释改口：离开这张标签即丢 |
-| 本笔 | 票面、票 04、spec | 完成记录；票 04 补记改口；spec Status 与子票表 |
+| `cd4d8193` | 票面、票 04、spec | 完成记录；票 04 补记改口；spec Status 与子票表 |
+| `00b7acdc` | `shell/workspace-state.ts` 等 | 票 01 评审附带一句的修复（`decodeHashSegment`）顺带删掉 `rememberTabAddress` 里成了死码的 try/catch——`tabForHash` 已是全函数 |
 
 **完成判据**
 
@@ -93,9 +94,38 @@ workflow.md「前端切片」。
 4. **关掉的标签，地址不删。** 重开（Ctrl+Shift+T）或详情「返回列表」回到一张已关的列表标签时，落回它上次停的地址；会话一结束就没了。
 5. **`useAddressKeyword` 也听 hashchange。** 同一实例下地址被浏览器前进后退改了，检索框跟着地址走，页面不另存一份。
 
-**评审**：碰共享面（`templates/*`、`shell/*`、`Layout.tsx`），按 workflow 第 5 步要一份 Spec 轴。已派通道 3 只读复核（本票的形态取舍是它定的，实现是通道 1 写的，
-对实现而言它是非作者），结果回来代落；在此之前以**推送方自审**为准，不算非作者评审。自审所得：三条回程都走 `addressForTab`，`Layout` 里不再有写首址的
+**评审**：碰共享面（`templates/*`、`shell/*`、`Layout.tsx`），按 workflow 第 5 步要一份 Spec 轴。复核单派给通道 3 后，用户令推送方自审（其他通道忙），单已撤回——
+自审见下一节，**不算非作者评审**。派单时的初步自审所得：三条回程都走 `addressForTab`，`Layout` 里不再有写首址的
 回程（`hashForTab` 只剩注释提及）；`TabReturnProvider` 的默认实现写首址，壳层外照旧回得去；`templates/index.ts` 只追加；两页以 `useAddressKeyword` 替掉
 `useState('')`，检索框与筛选的用法不变。
 
 **推送**：未推，见票 01「评审后修复」的推送一节。
+
+## Comments
+
+### 自审 ← 通道 1 · 钉 `00b7acdc`（基 `688a5ea9`，推送方自审，**不算非作者评审**）· 2026-09-24 14:3x
+
+复核单 `task-1d27bdfe` 派给通道 3 后，用户令推送方自审（其他通道忙），单已撤回。门同票 01 的「自审」（钉 `00b7acdc`：`tsc -b --noEmit` 退 0 / `run-tests` 424 pass
+0 fail / `vite build` 成功）；探针 `wsform06-probe` 在 `00b7acdc` 上重跑仍 21 ok。
+
+**Spec** — 阻断：无。
+
+1. **三条回程都落回记下的地址，没有第四条写首址的回程。** 全 `src` 写 `location.hash` 的地方逐个过：`applyWorkspace`（关 ×、右键关其它 / 关右侧 / 全关、Ctrl+W、
+   Ctrl+Shift+T 重开都经它）与 `TabReturnProvider` 的 `returnTo` 写 `addressForTab`；`onTabClick` 经 `navigate` 写 `addressForTab`。其余都是「去某处」而不是「回某标签」：
+   侧栏与工作台（`setActive` 写模块首址）、命令面板（`moduleHash` / `recentObjectHash`）、最近对象与保存视图页、委托查阅开详情（`detailHash`）、检查器快速动作、
+   默认口 `firstAddressController`——与「不做」第一条一致。
+2. **记下的地址不会记错标签。** 键由离开的那个地址自己经 `tabForHash` 认出；hash 是位置权威，离开时活动的就是这张。`tabForHash` 对解不开的地址答 null
+   （`00b7acdc` 起是全函数），记下的地址认回来一定是这张标签，`applyWorkspace` 两次答成同一张的前提成立。
+3. **`useAddressKeyword` 与别的 hashchange 不冲突。** 写地址用 replaceState，不派 hashchange——壳层不因敲字记地址，委托查阅的 `selectedId` 监听也不被触发；它自己听
+   hashchange 只为跟读 `q`，与 `selectedId` 是两份独立的读。离开列表时旧实例在卸载前多读一次（`q` 为空），无害。`#/` 守卫挡住了「没有 hash 时 replaceState 改到
+   search 上」那条路。
+4. **完成记录属实。** 判据逐条有探针对应；判断项 1–5 与代码对得上；「不做」三条属实（命令面板写 `moduleHash` 已核）。与通道 3 的「判断项答复」无偏离：键名 `q`、
+   replaceState、只在会话内、三条回程、多选集进详情即丢都照做。
+
+非阻断（自审新记）：
+1. 在已活动的列表标签上点侧栏里同一模块，写的是模块首址，检索词随之清空。这是「去某模块」的语义（「不做」第一条），不是缺陷；若操作者反映「点侧栏把检索冲掉了」，
+   改法是 `setActive` 对已开的标签也走 `addressForTab`。
+2. `hashWithQueryValue` 经 `URLSearchParams` 重新序列化查询串，别的键的编码可能被规整（`%20` → `+`）；读的一方（`savedViewIdFromHash`、`hashQueryValue`）都用
+   `URLSearchParams` 解，语义不变。
+
+结论：**可接受**，无阻断。
