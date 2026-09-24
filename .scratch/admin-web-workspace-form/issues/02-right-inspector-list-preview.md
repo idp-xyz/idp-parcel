@@ -1,7 +1,7 @@
 # 02 右侧检查器：壳层右栏位 + `InspectorContent` 契约（五节）+ `ListPageTemplate` 单击进检查器 + 两张首用页渲染器
 
 Category: enhancement
-Status: resolved——2026-09-22 通道 1 在 `main` 上直接做完（workflow.md「前端切片」六步；本地 `92cbcf1a` 模板段 / `9015cdaf` 壳层段 + 本笔票面与旧话改口，**已进 main `539b8764`**（2026-09-23 push，`e0d3f89d..539b8764` 纯 ff，码 SHA 不换））。完成记录见文末；非作者评审 ← 通道 3（2026-09-24，两轴 0 阻断，见 Comments）。此前 in-progress——紧接票 01 的壳层笔；模板段先落、壳层段随后。此前 draft——分两段：**模板段**（契约 + 首用渲染器 + `ListPageTemplate` 接口）不等任何票；**壳层段**（右栏装进 `Layout.tsx`）Blocked by 01
+Status: resolved——2026-09-22 通道 1 在 `main` 上直接做完（workflow.md「前端切片」六步；本地 `92cbcf1a` 模板段 / `9015cdaf` 壳层段 + 本笔票面与旧话改口，**已进 main `539b8764`**（2026-09-23 push，`e0d3f89d..539b8764` 纯 ff，码 SHA 不换））。完成记录见文末；非作者评审 ← 通道 3（2026-09-24，两轴 0 阻断，见 Comments），建议各条已在 `main` 上逐笔处置，见 Comments「评审后修复」（本地 `main`，**未推**——本宿主此刻连不上 GitHub 代理）。此前 in-progress——紧接票 01 的壳层笔；模板段先落、壳层段随后。此前 draft——分两段：**模板段**（契约 + 首用渲染器 + `ListPageTemplate` 接口）不等任何票；**壳层段**（右栏装进 `Layout.tsx`）Blocked by 01
 Blocked by: 无（01 的壳层笔 `c9312bf6` 已在 main）
 地盘：新 `apps/admin-web/src/templates/inspector.ts`（契约类型 + 纯逻辑 + node:test）、新 `templates/InspectorPanel.tsx`（五节渲染件）、`templates/ListPageTemplate.tsx`
 （加可选 `inspector?: (row) => InspectorContent`，单击行时交给壳层——**不改** `onRowClick` 语义，只新增）、`templates/index.ts`（只追加）、`Layout.tsx`（壳层段：右栏位装
@@ -128,3 +128,60 @@ myshop-web 的做法是**壳层级右栏**：选中对象常驻右侧，表还�
 **Standards 0 / 4 · Spec 0 / 7** → 结论：**可接受**。建议下一笔先修 Spec 非阻断 1（空态句）与 2（面板就地接住契约错误），两件都不动内容契约 `InspectorContent`；其余记票面。
 
 **处置**（通道 1）：本笔只落原文，不改码、不立票。评审建议先修的 Spec 非阻断 1 / 2 与其余非阻断待用户定；完成记录判断项 3 那句与实际不符（Spec 第 6 项），完成记录未改写，以本评审为准。
+
+### 评审后修复（2026-09-24，通道 1，`main` 上直接做；用户令「全面收掉」）
+
+**落点**
+
+| 笔 | 文件 | 收的是 |
+|---|---|---|
+| `9f7de26e` | `templates/inspector.ts`、`.test.ts`、`templates/index.ts`、`InspectorPanel.tsx` | Spec 非阻断 2 |
+| `07a25e61` | `inspector.ts`、`.test.ts`、`index.ts`、`InspectorPanel.tsx`、`inspector-context.tsx`、`ListPageTemplate.tsx`、`Layout.tsx` | Spec 非阻断 1 |
+| `387203de` | `InspectorPanel.tsx`、`Layout.tsx`、`shell/command-actions.ts` | Standards 非阻断 1 / 2；Standards 非阻断 3 的壳层 / 模板半 |
+| `93376770` | `inspector.ts`、`.test.ts`、`InspectorPanel.tsx` | Standards 非阻断 4 |
+| `2a677101` | `ListPageTemplate.tsx`、`templates/list-page-structure.ts`、`.test.ts` | Spec 非阻断 4 / 5 |
+| `2056e054` | `pages/shipment-request/ShipmentRequestListPage.tsx`、`pages/visibility/ExceptionCasesPage.tsx` | Spec 非阻断 3 / 6；Standards 非阻断 3 的页面半 |
+| 本笔 | 票面 | Spec 非阻断 7；判断项更正；本段 |
+
+**逐条处置**
+
+- Standards 非阻断 1 → 已改：栏顶收起钮由 `Layout` 给（`PanelRightClose` 图标钮，`aria-label` 与 Tooltip 都是「隐藏检查器」，与折叠态的「显示检查器」成对），
+  `InspectorPanel` 的 `onClose` 换成 `headerActions`，不再渲 vendor 的无名 ×。同族的 vendor `InspectorSection` 标题钮无 `aria-expanded`：不动 vendor，归上游。
+- Standards 非阻断 2 → 已改：`Layout.tsx` 头注改引 `INSPECTOR_WIDTH_MIN` / `INSPECTOR_WIDTH_MAX`，`SectionBody` 注改说「窄栏」。
+- Standards 非阻断 3 → 已删：`ShipmentRequestListPage` 的「此前单击即整区切详情」、`command-actions.ts` 头注「随票 02 … 落地后加进」；`App.tsx` 头注随票 01 那条一并删。
+- Standards 非阻断 4 → 已改：`resolveInspectorSections` 对同一节里重名的格（关联对象按地址）抛 `InspectorContractError`。选「抛」不选「键带序号」：与契约「抛而
+  不静默」同口径，而且两格同名，读的人本来就分不清哪格是哪格。
+- **Spec 非阻断 1 → 已改。** 控制口加 `offer()`（返回撤回函数），列表模板接了 `inspector` 时挂载期声明、卸载撤回；`Layout` 计数后以 `contentOffered` 交给面板，
+  `inspectorEmptyNote` 二选一——供内容的页仍说「在列表里单击一行，这里显示它的概要」，其余页（工作台、对象标签、自带预览的列表、单击即开的页）说
+  「本页没有要在检查器里显示的内容」。评审给了两个修法，取前一个（壳层据实选句）：后一个（换一句处处为真的话）在两张首用页上会丢掉「单击一行」这条操作指引。
+- **Spec 非阻断 2 → 已改。** `resolveInspectorForPanel` 接住 `InspectorContractError`，面板在栏内以 `SectionError`（标题 + 违反的是哪条，不给重试）替掉各节，别的
+  错误照抛；不分开发 / 生产。
+- Spec 非阻断 3 → 已补 `submissionVersionId`（「提交版本」，进审计节）；其余偏离作取舍记入判断项 8。
+- Spec 非阻断 4 →（作者定）做了：接了 `inspector` 的行进 Tab 序，聚焦即交给检查器（只认落在行本身的聚焦，不占 Enter / Space）；`rowInteraction` 加可选
+  `inspect`，不传的调用零变化。代价：只接 `inspector` 的列表（异常案件）每行一个 Tab 停点，与接了 `onRowOpen` 的页相同。
+- Spec 非阻断 5 → 已改：`rows` 变时按键找回那一行重推，找不到就清空。比的是内容 JSON 而不是行对象身份——异常案件页每次渲染都 `map` 重建行对象，按身份比会
+  与壳层互相重渲、转不出来（探针用同样写法的页实测：重渲 5 轮后 show 仍是 1 次）。
+- Spec 非阻断 6 → 已改：「打开分诊」改名「转到异常分诊」。已核 `ExceptionTriagePage`：它列信号发作期册与处置请求册，没有按案件的地址。
+- Spec 非阻断 7 → 完成记录补一句：「四道门」的第四道 `go test ./internal/architecture/` 当时没有单跑，由 CI 的 Test shards（`go list ./...`）兜住；本轮同样没在本机跑，见「门」。
+
+**判断项更正与补记**
+
+- 判断项 3 更正：首版 `92cbcf1a` 的节 key 是 `${content.title}:${resolved.kind}`，而两页 `title` 是常量，首版本来就不按对象重置；`9f95520e` 对两页零行为变化，改的是
+  让注释说真话。「首版曾按对象重置」一句不成立。
+- 判断项 6 改口：`onClose` 不再复用为「折叠」，栏顶是宿主给的带名收起钮（见 Standards 非阻断 1）。
+- 8. **委托查阅检查器字段对票面第 1 / 4 条的取舍**：委托号在检查器副标题；服务产品读模型没有（`ShipmentRequestSummary` 不虚构），不列；提交时刻与提交版本同归
+  审计节（都是修订元数据）；来源与来源请求键放概要（行上已有，说明这份委托从哪来）。
+
+**门**：同票 01「评审后修复」——钉 `2056e054`，Node 22.20.0，`tsc -b --noEmit` 退 0 / `run-tests` 406 → 414 pass 0 fail（票 02 这边 +4）/ `vite build` 成功；
+`go test ./internal/architecture/` 本机未跑，由 CI 兜。
+
+**探针**（与票 01 共用 `/tmp/idp-probes/wsform-review-fixes-probe.tsx`，不入库）：修复后 **24 ok / 0 fail**；对修复前 `376b6ea1` **17 FAIL**，本票相关的几项：
+工作台与委托详情对象标签上的空态句是「在列表里单击一行…」；栏里有 1 个无名按钮（vendor ×）；只接 `inspector` 的行没有 tabindex、聚焦不进检查器；重取后
+同键行内容变了不重推、行被检索筛掉不清空；概要 9 格与同节重名时渲染直接抛出。修复后：四种页面上的空态句各自为真；收起 / 展开成对且都有名字；聚焦行
+即交给检查器、聚焦行里的复选框不算；重取后按键重推、筛掉即清空、单击照旧；两种违约都在栏内显错误段，合契约的内容照常渲。
+
+**评审**：修复碰共享面（`templates/*`、`shell/*`、`Layout.tsx`），按 workflow 第 5 步要一份 Spec 轴。复核已派回通道 3（任务台，结果回来代落）；在此之前以
+**推送方自审**为准，不算非作者评审。自审所得：模板改动向后兼容——不传 `inspector` 的列表既不声明 `offer`、行也不进 Tab 序，`rowInteraction` 的新入参可选；
+`InspectorPanel` 换 prop 只有 `Layout` 一处调用；`templates/index.ts` 只追加；空态句两句都不放假内容；重复名与超格一样走契约错误，不静默截断。
+
+**推送**：同票 01——未推，推送后在票 01 与本票各补一行进 main 记录。

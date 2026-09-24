@@ -1,7 +1,7 @@
 # 01 壳层升级为多标签工作区：`EditorGroup` + `StatusBar`、工作区状态本地持久化、hash ↔ 标签互为镜像、`Ctrl+W` / `Ctrl+Shift+T`
 
 Category: enhancement
-Status: resolved——2026-09-22 通道 1 在 `main` 上直接做完（workflow.md「前端切片：一人在 main 上直接做」六步；本地 `3da0f23c` / `c9312bf6` 两笔码 + 本笔票面，**已进 main `539b8764`**（2026-09-23 push，`e0d3f89d..539b8764` 纯 ff，码 SHA 不换））。完成记录见文末；非作者评审 ← 通道 2（2026-09-24）**Spec 阻断 1**（`loadWorkspaceState` 遇畸形 id 抛而不回默认，整页白屏），待修，见 Comments。此前 in-progress——用户经 IDP 队列令「参考 idpxyz/idp-ui `apps/myshop-web`，理解，然后来调整我们的 ui」，未逐条答判断项；三项按 spec 推荐取值落地——1 多标签**要**（用户指向的参照物就是多标签壳）、2 分栏**不做**（`showSplitButtons={false}`）、3 `ActivityBar` **不装**；用户若要 2 / 3 各是一张追加票，不改本票已落的形。此前 draft——等用户答 spec「判断项」1–3
+Status: resolved——2026-09-22 通道 1 在 `main` 上直接做完（workflow.md「前端切片：一人在 main 上直接做」六步；本地 `3da0f23c` / `c9312bf6` 两笔码 + 本笔票面，**已进 main `539b8764`**（2026-09-23 push，`e0d3f89d..539b8764` 纯 ff，码 SHA 不换））。完成记录见文末；非作者评审 ← 通道 2（2026-09-24）Spec 阻断 1（`loadWorkspaceState` 遇畸形 id 抛而不回默认，整页白屏）已修 `d365851b`，各条非阻断逐条处置见 Comments「评审后修复」（本地 `main`，**未推**——本宿主此刻连不上 GitHub 代理）。此前 in-progress——用户经 IDP 队列令「参考 idpxyz/idp-ui `apps/myshop-web`，理解，然后来调整我们的 ui」，未逐条答判断项；三项按 spec 推荐取值落地——1 多标签**要**（用户指向的参照物就是多标签壳）、2 分栏**不做**（`showSplitButtons={false}`）、3 `ActivityBar` **不装**；用户若要 2 / 3 各是一张追加票，不改本票已落的形。此前 draft——等用户答 spec「判断项」1–3
 Blocked by: 无（admin-web-ux-alignment/02 已进 main `5b032504`）
 地盘：`apps/admin-web/src/Layout.tsx`（主区从单页换成 `EditorGroup`；右栏 / 底栏两个**空位**只留结构不装内容，02 装）、新 `shell/workspace-state.ts`（标签集 / 活动标签 /
 已关闭栈 / 侧栏宽度的纯逻辑 + `localStorage` 持久化 + node:test）、新 `shell/WorkspaceStatusBar.tsx`（包 `StatusBar`）、`shell/preferences.ts`（若持久化键前缀要复用它的约定，只追加）。
@@ -125,3 +125,64 @@ myshop-web（有），真实页面早就有了（委托查阅的 hash 二段详�
 结论：须修——Spec 阻断 1（`sanitizeTabs` 的 id 校验补「规范且可解码」，加一条 load 用例；改动限 `shell/workspace-state.ts` 与其 test）。修完只需重跑 Spec 轴那一格。Spec 非阻断 1 建议立追加票并在票面补记。
 
 **处置**（通道 1）：本笔只落原文，不改码。用户 2026-09-24 令「全面收掉」：阻断 1 与各条非阻断随后在 `main` 上逐笔修，逐条处置记在下方「评审后修复」。
+
+### 评审后修复（2026-09-24，通道 1，`main` 上直接做）
+
+**落点**
+
+| 笔 | 文件 | 收的是 |
+|---|---|---|
+| `376b6ea1` | 票面 | 代落通道 2 评审原文 |
+| `d365851b` | `shell/workspace-state.ts`、`.test.ts`、`Layout.tsx` | Spec 阻断 1；Spec 非阻断 2；Standards 非阻断 3 |
+| `06b1f87e` | `Layout.tsx`、`App.tsx`、`shell/workspace-state.ts` | Standards 非阻断 1 / 2；Spec 非阻断 5 |
+| `2056e054` | `pages/shipment-request/ShipmentRequestListPage.tsx` | Spec 非阻断 1 的注释半 |
+| 本笔 | 票面、追加票 06、spec 子票表 | Spec 非阻断 1 的追加票；Spec 非阻断 3 / 4 / 6（票面口径）；本段 |
+
+**逐条处置**
+
+- **Spec 阻断 1 → 已修。** `sanitizeTabs` 对每张存储标签按 id 经 `tabForHash(hashForTab(id))` 重造（`tabFromStoredId`），造不出、认回来不是同一个 id、解码抛
+  `URIError` 的一律剔除——畸形百分号、尾斜杠、三段、带查询串、次段畸形与原有的词表外、工作台伪标签走同一道门。评审给的修法是在现有校验上再补一道
+  「规范且可解码」；这里改为直接用 hash 开标签的那一个构造器：两条来路（hash 开标签 / 存储恢复标签）共用一个构造器，规范性由构造保证，不用两处各写一份
+  校验。load 用例一条（五类坏 id + 已关闭栈里的坏 id）。
+- Standards 非阻断 1 → 已改：`Layout.tsx` 头注按实际两条路写——点标签只写 hash；关 / 重开 / 批量关先落状态、活动标签变了再写 hash，两次答成同一张靠
+  id 规范，存储读回的标签由 `loadWorkspaceState` 按这一条筛过。
+- Standards 非阻断 2 → 已删：`Layout.tsx` 头注「第一轮裁…前提已变」、`App.tsx` 头注「此前沿 loms-web…」、`SIDEBAR_WIDTH_DEFAULT` 注「Layout 此前写死」、
+  `tabIdFromHash` 注「与 Layout 此前…一致」。取舍理由（母版 B / C 同时开着多个对象）留下；`workspace-state.ts` 文件头与 `Layout.tsx` 头注各一个「仍」顺手删。
+- Standards 非阻断 3 → 已补：`load` 把已关闭栈截到上限、`closeOthers` / `closeToRight` 遇未知 id 原样返回，各一条。
+- Spec 非阻断 1 → `ShipmentRequestListPage` 两句失真注释改成现状（列表与详情各一张标签、进详情即丢）；行为的出路立追加票
+  [06](./06-list-detail-roundtrip-keeps-page-state.md)，形态取舍归用户。判断项补 8（见下）。
+- Spec 非阻断 2 → 已改：标签名与副标题由词表与 id 现算，存储里那一份不读；`loadWorkspaceState` 第二参由 `isKnownModule` 改收 `pageTitleById`（与
+  `tabForHash` 同形）。存储格式不变：`saveWorkspaceState` 仍整份写，多出的 `name` / `subtitle` 只是不再被读，旧存储照读。
+- Spec 非阻断 3 → 判断项 1 补一句（见下）。
+- Spec 非阻断 4 → 完成记录补载两处偏离（见下）。
+- Spec 非阻断 5 → 已改：`onTabClick` 遇已活动标签不写 hash。
+- Spec 非阻断 6 → 落点更正（见下）。
+
+**判断项补记**
+
+- 补判断项 1：「按了没反应就是假动作」量的是**永远**作用不到任何对象的控件。右键菜单「Reopen Closed Tab」在空栈时、「Close All」在全是固定标签时点了
+  无变化，是功能在、此刻没有可作用的对象——合法空操作，不按这条红线判。
+- 8. **列表 → 详情往返丢检索词与多选集**：票 04 第 5 条「换模块（组件卸载）即丢」在本票之后实际是「进详情即丢」——列表与详情各一张标签、非活动标签卸载、
+  内容按标签 id 键住。判断项 2 的代价句与判断项 6 的「页内状态不串」都没点名这条退化；出路归追加票 06。
+
+**完成记录补载的偏离**（都接受）：第 3 条「右栏在 flex 结构里留条件渲染空位（`rightPane?`）」本票没留、头注写「随票 02 装」，`9015cdaf` 随即装上；第 4 条
+「`rightSlot` 显密度档与主题」实现只显主题词，密度交给 vendor `StatusBar` 自带的切换钮（`WorkspaceStatusBar` 文件头写了理由），钮字英文 compact /
+comfortable，与右键菜单的英文同归上游 i18n。
+
+**落点更正**：完成记录落点表「（随票 02 壳层笔 `9015cdaf`）」那一行应为 `9f95520e`——`App.tsx` / `README.md` 两处改口随它提交。原表不改写，以此为准。
+
+**门**（钉 `2056e054`；WSL 上跑，Node 22.20.0——本机没有 22，临时从 npmmirror 取官方包、sha256 校验过，只放 `/tmp` 不装进系统；本机自带的 Node 20.18.2
+其 `node --test` 不认 glob，跑不了 `run-tests`）：`tsc -b --noEmit` 退 0 / `run-tests` 406 → 414 pass 0 fail（票 01 这边 +4）/ `vite build` 成功。
+`go test ./internal/architecture/` 本机未跑：WSL 的 go 要先下 go1.26.5 工具链，出不了网；diff 全在 `apps/admin-web/**`，由 CI 兜。
+
+**探针**（`scripts/dom-probe.mjs`，源 `/tmp/idp-probes/wsform-review-fixes-probe.tsx` 不入库，与票 02 共用一份）：修复后 **24 ok / 0 fail**。同一份探针对修复前的
+`376b6ea1`（临时工作树，已拆）**17 FAIL**，本票相关的几项：存储里有畸形百分号 id 时 App 首帧抛 `URIError: URI malformed`、整棵树不渲染；点已活动标签把
+`#/exception-cases?view=v1` 剥成 `#/exception-cases`。修复后：坏存储下首帧不抛、只剩规范的那张标签、标签名按词表现算；点已活动标签 hash 不变、点别的
+标签照写。
+
+**评审**：修复碰共享面（`shell/*`、`Layout.tsx`），按 workflow 第 5 步要一份 Spec 轴；评审点名「修完只需重跑 Spec 轴那一格」。复核已派回通道 2（任务台，
+结果回来代落）；在此之前以**推送方自审**为准，不算非作者评审。自审所得：评审列的四类（词表外、工作台伪标签、不规范、编码畸形）与尾斜杠、三段、带查询串
+都在 load 用例或探针里；`loadWorkspaceState` 改签名只有 `Layout` 一处调用；存储格式不变、旧存储照读；`tabForHash` 构出的 id 本就规范，`openTab` 那条路不受影响。
+
+**推送**：未推。本宿主（WSL）仓库级 `http.proxy` 指向 `127.0.0.1:7897`，此刻连接被拒；直连 GitHub 超时。本地 `main` 比 `origin/main`（`3a47da8d`）多出两票的评审代落笔、
+修复笔与票面笔，推送后在此补一行进 main 记录。
