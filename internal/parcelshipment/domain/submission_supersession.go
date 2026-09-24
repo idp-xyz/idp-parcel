@@ -28,8 +28,10 @@ type NewSubmissionVersionSpec struct {
 	Profiles []DeclaredParcelProfile
 	// Elements 是随新版本申报的寄 / 收两段地址要素（pp-seams/05），同画像纪律随本版本重报、不继承：
 	// 接受基线可以落在任何一代提交版本上，读口从基线所指那一版自己的子段读值。
-	Elements      DeclaredAddressElements
-	EstablishedAt time.Time
+	Elements DeclaredAddressElements
+	// RequestedProduct 是随新版本声明的服务产品（票 psb/17），同 Elements 纪律随本版本重报、不继承。
+	RequestedProduct DeclaredServiceProduct
+	EstablishedAt    time.Time
 }
 
 // FormNewSubmissionVersion 在`已提交`态用受控补充或纠错形成同一委托的新提交版本
@@ -101,6 +103,7 @@ func (request ShipmentRequest) FormNewSubmissionVersion(spec NewSubmissionVersio
 		declaredParcelIDs: members,
 		profiles:          profiles,
 		elements:          spec.Elements,
+		requestedProduct:  spec.RequestedProduct,
 		establishedAt:     spec.EstablishedAt,
 	}
 	request.acceptanceTask = AcceptanceDecisionTask{

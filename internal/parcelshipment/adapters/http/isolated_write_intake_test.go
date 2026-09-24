@@ -146,6 +146,32 @@ func TestIsolatedSubmissionIntakeDoesNotDressADependencyFailureAsAMalformedReque
 	}
 }
 
+// Covers: 票 psb/17——草案的 requestedServiceProduct 以封闭条目名进服务要求段，随同一次 CanonicalizeSubmission 既进
+// 摘要又挑成声明的产品进命令；条目名取既有的字面，所以既有草案的摘要一字不变。
+func TestIsolatedSubmissionIntakeCarriesTheRequestedServiceProductFromOneCanonicalization(t *testing.T) {
+	intake := newIsolatedIntake(t, &permittingOwnershipDouble{revision: "SYN-REV-1"})
+
+	command, err := intake.IntakeSubmission(context.Background(), draftRequest(isolatedDraft))
+	if err != nil {
+		t.Fatalf("接入草案：%v", err)
+	}
+	if got := command.RequestedServiceProduct; got.String() != "国际小包标准" {
+		t.Fatalf("命令里的声明产品 = %q, want 国际小包标准", got.String())
+	}
+
+	undeclared := strings.Replace(isolatedDraft, `"requestedServiceProduct": "国际小包标准",`, ``, 1)
+	plain, err := intake.IntakeSubmission(context.Background(), draftRequest(undeclared))
+	if err != nil {
+		t.Fatalf("接入不带产品的草案：%v", err)
+	}
+	if plain.RequestedServiceProduct.Declared() {
+		t.Fatalf("没报产品的草案带出了 %q", plain.RequestedServiceProduct.String())
+	}
+	if plain.PayloadDigest == command.PayloadDigest {
+		t.Fatal("报没报产品摘要一样——声明的产品是内容，不进摘要就检不出同键异容")
+	}
+}
+
 // Covers: pp-seams/05 裁决 3 与完成判据 (3)「接单入口用例断言摘要与内容出自同一次调用」——草案的寄 / 收邮编与国家 / 地区码
 // 字段译成按封闭要素名命名的范围条目，随同一次 CanonicalizeSubmission 既进摘要又挑成要素子段进命令：带了邮编摘要就变
 // （它是内容），要素子段里就有同一个值（它是内容的那一半）；不带则子段缺席、摘要与从前一字不差——新字段留空不改任何

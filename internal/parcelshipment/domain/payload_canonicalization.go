@@ -159,8 +159,9 @@ func CanonicalizeSubmissionPayload(spec SubmissionPayloadSpec) (PayloadDigest, e
 // 一起交出、一起进命令，接单入口不必再为内容多调一次——内容与摘要各说各话的口子在结构上就不存在。测量那一半
 // 不在这里：画像（Profiles）本就是 SubmissionPayloadSpec 的强类型段，命令原样带走。
 type CanonicalSubmission struct {
-	digest   PayloadDigest
-	elements DeclaredAddressElements
+	digest           PayloadDigest
+	elements         DeclaredAddressElements
+	requestedProduct DeclaredServiceProduct
 }
 
 // Digest 是与 CanonicalizeSubmissionPayload 对同一份输入算出的同一个摘要。
@@ -171,6 +172,11 @@ func (canonical CanonicalSubmission) Digest() PayloadDigest {
 // DeclaredElements 是从 Scope 条目里按封闭要素名挑出的寄 / 收两段地址要素，随提交版本进快照。
 func (canonical CanonicalSubmission) DeclaredElements() DeclaredAddressElements {
 	return canonical.elements
+}
+
+// RequestedServiceProduct 是从 Service 条目里按封闭条目名读出的委托声明的服务产品，随提交版本进快照（票 psb/17）。
+func (canonical CanonicalSubmission) RequestedServiceProduct() DeclaredServiceProduct {
+	return canonical.requestedProduct
 }
 
 // CanonicalizeSubmission 一次调用交回摘要 + 内容。摘要走既有的 CanonicalizeSubmissionPayload（算法与产出零改，
@@ -187,6 +193,7 @@ func CanonicalizeSubmission(spec SubmissionPayloadSpec) (CanonicalSubmission, er
 			AddressElementsOf(SenderPlaceDataGroup(), spec.Scope),
 			AddressElementsOf(DeliveryPlaceDataGroup(), spec.Scope),
 		),
+		requestedProduct: RequestedServiceProductOf(spec.Service),
 	}, nil
 }
 

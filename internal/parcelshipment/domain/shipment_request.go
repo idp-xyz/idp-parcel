@@ -60,8 +60,11 @@ type SubmissionVersion struct {
 	profiles []DeclaredParcelProfile
 	// elements 是随本版本申报的寄 / 收两段地址要素子段（pp-seams/05 裁决 2）：由 CanonicalizeSubmission 与摘要一次
 	// 产出、随版本进快照；其余寄收件条目只进 PayloadDigest。整段缺席合法——客户没报邮编是常态，读口如实答缺。
-	elements      DeclaredAddressElements
-	establishedAt time.Time
+	elements DeclaredAddressElements
+	// requestedProduct 是随本版本声明的服务产品（票 psb/17），纪律同 elements：由 CanonicalizeSubmission 产出、随
+	// 版本进快照，缺席合法；每一版带自己的，不从上一版继承。
+	requestedProduct DeclaredServiceProduct
+	establishedAt    time.Time
 }
 
 func (version SubmissionVersion) VersionID() SubmissionVersionID {
@@ -84,6 +87,11 @@ func (version SubmissionVersion) DeclaredProfiles() []DeclaredParcelProfile {
 // DeclaredElements 交回本版本的地址要素子段（寄 / 收两段，缺席如实）。它是值，拷贝即语义。
 func (version SubmissionVersion) DeclaredElements() DeclaredAddressElements {
 	return version.elements
+}
+
+// RequestedServiceProduct 交回本版本声明的服务产品；未声明即零值。商业依据解析键按它收窄服务产品候选（票 psb/17）。
+func (version SubmissionVersion) RequestedServiceProduct() DeclaredServiceProduct {
+	return version.requestedProduct
 }
 
 // ProfileFor 按成员取声明画像。缺席是真话：这个成员没申报测量，读取方（估价装配等）
@@ -219,6 +227,8 @@ type SubmitShipmentRequestSpec struct {
 	// Elements 是随首个提交版本申报的寄 / 收两段地址要素（pp-seams/05），同画像口径允许缺席或只报一段；
 	// 它与 Candidate 的来源指纹里的摘要出自同一次 CanonicalizeSubmission，本构造器不重算也不核对。
 	Elements DeclaredAddressElements
+	// RequestedProduct 是随首个提交版本声明的服务产品（票 psb/17），出处与 Elements 同一次规范化，允许缺席。
+	RequestedProduct DeclaredServiceProduct
 }
 
 type ShipmentRequest struct {
@@ -295,6 +305,7 @@ func SubmitShipmentRequest(spec SubmitShipmentRequestSpec) (ShipmentRequest, err
 			declaredParcelIDs: spec.Candidate.DeclaredParcelIDs(),
 			profiles:          profiles,
 			elements:          spec.Elements,
+			requestedProduct:  spec.RequestedProduct,
 			establishedAt:     spec.SubmittedAt,
 		},
 		acceptanceTask: AcceptanceDecisionTask{
@@ -328,6 +339,12 @@ func (request ShipmentRequest) State() ShipmentRequestState {
 
 func (request ShipmentRequest) CurrentSubmissionVersion() SubmissionVersion {
 	return request.currentVersion
+}
+
+// SubmissionVersionByID 按版本号在当前版本与历史版本里找某一版提交版本。商业依据查询回指的是某一版（票 psb/17），
+// 那一版不一定还是当前版本；找不到交回 false，由调用方判它是指错还是读面坏了。
+func (request ShipmentRequest) SubmissionVersionByID(versionID SubmissionVersionID) (SubmissionVersion, bool) {
+	return request.submissionVersionByID(versionID)
 }
 
 // submissionVersionByID 在当前版本与历史版本里找某一版提交版本——接受基线所指的那一版就这么取。找不到是读面坏了：
