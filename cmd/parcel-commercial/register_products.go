@@ -16,36 +16,12 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"time"
 
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
+	"go.idp.xyz/idp-parcel/internal/partycommercial/adapters/registrationjson"
 	pcapplication "go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 )
-
-type productBatchDocument struct {
-	TenantID string                          `json:"tenantId"`
-	Scope    string                          `json:"scope"`
-	Forms    []serviceProductFormDocument    `json:"forms,omitempty"`
-	Mappings []productChannelMappingDocument `json:"mappings,omitempty"`
-}
-
-type serviceProductFormDocument struct {
-	ProductID string `json:"productId"`
-	Version   string `json:"version"`
-	Form      string `json:"form"`
-}
-
-type productChannelMappingDocument struct {
-	MappingID         string     `json:"mappingId"`
-	Revision          int        `json:"revision"`
-	ProductID         string     `json:"productId"`
-	ProductVersion    string     `json:"productVersion"`
-	Channels          []string   `json:"channels"`
-	Basis             string     `json:"basis"`
-	EffectiveStartsAt time.Time  `json:"effectiveStartsAt"`
-	EffectiveEndsAt   *time.Time `json:"effectiveEndsAt,omitempty"`
-}
 
 // productBatchCommand 是翻译产物里的一项：标签供回显，执行闭包对着处理器跑。
 type productBatchCommand struct {
@@ -56,11 +32,11 @@ type productBatchCommand struct {
 func productBatchFromJSON(raw []byte) ([]productBatchCommand, error) {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	var document productBatchDocument
+	var document registrationjson.ProductBatchDocument
 	if err := decoder.Decode(&document); err != nil {
 		return nil, fmt.Errorf("产品登记批不是本入口的形状：%w", err)
 	}
-	tenant, err := pcdomain.NewTenantID(document.TenantID)
+	tenant, err := registrationjson.DocumentTenant(document.TenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -93,27 +69,11 @@ func productBatchFromJSON(raw []byte) ([]productBatchCommand, error) {
 func serviceProductFormCommandFrom(
 	tenant pcdomain.TenantID,
 	scope pcdomain.CommercialScopeReference,
-	item serviceProductFormDocument,
+	item registrationjson.ServiceProductFormDocument,
 ) (productBatchCommand, error) {
-	none := productBatchCommand{}
-	objectID, err := pcdomain.NewCommercialObjectID(item.ProductID)
+	command, err := registrationjson.ServiceProductFormCommand(tenant, scope, item)
 	if err != nil {
-		return none, err
-	}
-	version, err := pcdomain.NewCommercialVersionLabel(item.Version)
-	if err != nil {
-		return none, err
-	}
-	form, err := serviceProductFormFromName(item.Form)
-	if err != nil {
-		return none, err
-	}
-	command := pcapplication.RegisterServiceProductFormCommand{
-		Tenant:   tenant,
-		Scope:    scope,
-		ObjectID: objectID,
-		Version:  version,
-		Form:     form,
+		return productBatchCommand{}, err
 	}
 	return productBatchCommand{
 		label: fmt.Sprintf("服务形态 %s/%s %s", item.ProductID, item.Version, item.Form),
@@ -126,65 +86,11 @@ func serviceProductFormCommandFrom(
 func productChannelMappingCommandFrom(
 	tenant pcdomain.TenantID,
 	scope pcdomain.CommercialScopeReference,
-	item productChannelMappingDocument,
+	item registrationjson.ProductChannelMappingDocument,
 ) (productBatchCommand, error) {
-	none := productBatchCommand{}
-	id, err := pcdomain.NewProductChannelMappingID(item.MappingID)
+	command, err := registrationjson.ProductChannelMappingCommand(tenant, scope, item)
 	if err != nil {
-		return none, err
-	}
-	product, err := pcdomain.NewCommercialObjectID(item.ProductID)
-	if err != nil {
-		return none, err
-	}
-	productVersion, err := pcdomain.NewCommercialVersionLabel(item.ProductVersion)
-	if err != nil {
-		return none, err
-	}
-	// channels 缺席（或 null）是输入缺件；`[]` 是登记者说出的“未配置”声明——该产品
-	// 尚无可用渠道候选（CONTEXT 渠道绑定格）。两者必须可分辨，所以这里看 nil 而非长度。
-	if item.Channels == nil {
-		return none, fmt.Errorf("channels 缺席：要么给渠道引用，要么写 [] 显式声明未配置")
-	}
-	binding := pcdomain.UnconfiguredChannelBinding()
-	if len(item.Channels) > 0 {
-		references := make([]pcdomain.ChannelProductReference, 0, len(item.Channels))
-		for _, raw := range item.Channels {
-			reference, err := pcdomain.NewChannelProductReference(raw)
-			if err != nil {
-				return none, err
-			}
-			references = append(references, reference)
-		}
-		binding, err = pcdomain.NewConfiguredChannelBinding(references)
-		if err != nil {
-			return none, err
-		}
-	}
-	basis, err := pcdomain.NewMappingBasisReference(item.Basis)
-	if err != nil {
-		return none, err
-	}
-	endsAt := time.Time{}
-	if item.EffectiveEndsAt != nil {
-		endsAt = *item.EffectiveEndsAt
-	}
-	interval, err := pcdomain.NewEffectiveInterval(item.EffectiveStartsAt, endsAt)
-	if err != nil {
-		return none, err
-	}
-	command := pcapplication.RegisterProductChannelMappingCommand{
-		Tenant:   tenant,
-		Scope:    scope,
-		ID:       id,
-		Revision: item.Revision,
-		Spec: pcdomain.ProductChannelMappingSpec{
-			Product:        product,
-			ProductVersion: productVersion,
-			Binding:        binding,
-			Effective:      interval,
-			Basis:          basis,
-		},
+		return productBatchCommand{}, err
 	}
 	return productBatchCommand{
 		label: fmt.Sprintf("产品—渠道映射 %s r%d", item.MappingID, item.Revision),
@@ -192,18 +98,6 @@ func productChannelMappingCommandFrom(
 			return handler.RegisterMapping(ctx, command)
 		},
 	}, nil
-}
-
-// serviceProductFormFromName 是 domain.ServiceProductForm 封闭集的名称镜像；集合外取值
-// 拒收不吸收。两格自 ADR-0088 起并列（面单渠道服务由 PAR-COM-12 的范围裁剪改为纳入）。
-func serviceProductFormFromName(raw string) (pcdomain.ServiceProductForm, error) {
-	switch raw {
-	case pcdomain.NetworkServiceForm.String():
-		return pcdomain.NetworkServiceForm, nil
-	case pcdomain.LabelChannelServiceForm.String():
-		return pcdomain.LabelChannelServiceForm, nil
-	}
-	return pcdomain.ServiceProductFormInvalid, fmt.Errorf("未知服务形态 %q", raw)
 }
 
 func runRegisterProducts(ctx context.Context, args []string, getenv func(string) string, out, errOut io.Writer) int {

@@ -21,171 +21,12 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"strings"
-	"time"
 
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
+	"go.idp.xyz/idp-parcel/internal/partycommercial/adapters/registrationjson"
 	pcapplication "go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
-	"go.idp.xyz/idp-parcel/referenceconfig"
 )
-
-// registrationNumberTypeReferenceDirectory 是注册号类型目录的参考配置标识前缀；标识末段（键）是注册
-// 国家 / 地区，一份参考配置只收该国家 / 地区的类型。
-const registrationNumberTypeReferenceDirectory = "party-commercial/registration-number-types/"
-
-type registrationNumberTypeBatchDocument struct {
-	TenantID      string                                       `json:"tenantId"`
-	Types         []registrationNumberTypeItemDocument         `json:"types,omitempty"`
-	Deactivations []registrationNumberTypeDeactivationDocument `json:"deactivations,omitempty"`
-}
-
-type registrationNumberTypeItemDocument struct {
-	CountryCode   string    `json:"countryCode"`
-	TypeCode      string    `json:"typeCode"`
-	Revision      int       `json:"revision"`
-	Name          string    `json:"name"`
-	Layer         string    `json:"layer"`
-	Format        string    `json:"format"`
-	Basis         string    `json:"basis"`
-	Adopt         string    `json:"adopt,omitempty"`
-	EffectiveFrom time.Time `json:"effectiveFrom"`
-}
-
-type registrationNumberTypeReferenceDocument struct {
-	Identifier string                                        `json:"identifier"`
-	Version    int                                           `json:"version"`
-	Title      string                                        `json:"title"`
-	Source     string                                        `json:"source"`
-	Note       string                                        `json:"note"`
-	Types      []registrationNumberTypeReferenceItemDocument `json:"types"`
-}
-
-type registrationNumberTypeReferenceItemDocument struct {
-	CountryCode string   `json:"countryCode"`
-	TypeCode    string   `json:"typeCode"`
-	Name        string   `json:"name"`
-	Layer       string   `json:"layer"`
-	Format      string   `json:"format"`
-	Samples     []string `json:"samples"`
-}
-
-// referencedRegistrationNumberType 是一份参考配置里已过领域构造门的一个类型；依据格留空，由采用路径
-// 写成引用串。样例只供发布前的测试拿来过判断方法，不进任何登记。
-type referencedRegistrationNumberType struct {
-	country pcdomain.RegistrationCountryCode
-	code    pcdomain.RegistrationNumberTypeCode
-	spec    pcdomain.RegistrationNumberTypeSpec
-	samples []pcdomain.RegistrationNumber
-}
-
-func registrationNumberTypesFromReference(reference referenceconfig.Reference) ([]referencedRegistrationNumberType, error) {
-	key, isRegistrationNumberTypes := strings.CutPrefix(reference.Identifier(), registrationNumberTypeReferenceDirectory)
-	if !isRegistrationNumberTypes {
-		return nil, fmt.Errorf("%s 不是注册号类型目录的参考配置", reference)
-	}
-	raw, err := referenceconfig.Open(reference)
-	if err != nil {
-		return nil, err
-	}
-	decoder := json.NewDecoder(bytes.NewReader(raw))
-	decoder.DisallowUnknownFields()
-	var document registrationNumberTypeReferenceDocument
-	if err := decoder.Decode(&document); err != nil {
-		return nil, fmt.Errorf("参考配置 %s 不是注册号类型目录的形状：%w", reference, err)
-	}
-	if len(document.Types) == 0 {
-		return nil, fmt.Errorf("参考配置 %s 没有任何类型", reference)
-	}
-	types := make([]referencedRegistrationNumberType, 0, len(document.Types))
-	for _, item := range document.Types {
-		if item.CountryCode != key {
-			return nil, fmt.Errorf("参考配置 %s 的类型 %s 属 %q，不属本份的键 %q", reference, item.TypeCode, item.CountryCode, key)
-		}
-		country, err := pcdomain.NewRegistrationCountryCode(item.CountryCode)
-		if err != nil {
-			return nil, err
-		}
-		code, err := pcdomain.NewRegistrationNumberTypeCode(item.TypeCode)
-		if err != nil {
-			return nil, err
-		}
-		spec, err := registrationNumberTypeContentFrom(item.Name, item.Layer, item.Format)
-		if err != nil {
-			return nil, fmt.Errorf("参考配置 %s 的类型 %s：%w", reference, item.TypeCode, err)
-		}
-		samples := make([]pcdomain.RegistrationNumber, 0, len(item.Samples))
-		for _, text := range item.Samples {
-			sample, err := pcdomain.NewRegistrationNumber(text)
-			if err != nil {
-				return nil, err
-			}
-			samples = append(samples, sample)
-		}
-		types = append(types, referencedRegistrationNumberType{country: country, code: code, spec: spec, samples: samples})
-	}
-	return types, nil
-}
-
-// registrationNumberTypeContentFrom 翻译一个类型的名称、层与格式，批文与参考配置两条路共用这一段。
-func registrationNumberTypeContentFrom(name, layer, format string) (pcdomain.RegistrationNumberTypeSpec, error) {
-	typeName, err := pcdomain.NewRegistrationNumberTypeName(name)
-	if err != nil {
-		return pcdomain.RegistrationNumberTypeSpec{}, err
-	}
-	typeLayer, known := pcdomain.RegistrationNumberLayerNamed(layer)
-	if !known {
-		return pcdomain.RegistrationNumberTypeSpec{}, fmt.Errorf("未知层 %q：只收 %s 或 %s", layer,
-			pcdomain.RegistrationNumberIdentityLayer, pcdomain.RegistrationNumberProfileLayer)
-	}
-	typeFormat, err := pcdomain.NewRegistrationNumberFormat(format)
-	if err != nil {
-		return pcdomain.RegistrationNumberTypeSpec{}, err
-	}
-	return pcdomain.RegistrationNumberTypeSpec{Name: typeName, Layer: typeLayer, Format: typeFormat}, nil
-}
-
-// adoptedRegistrationNumberTypeSpec 按批文点名的参考配置版本形成一项采用的正文，依据格写成引用串。
-func adoptedRegistrationNumberTypeSpec(
-	item registrationNumberTypeItemDocument,
-	country pcdomain.RegistrationCountryCode,
-	code pcdomain.RegistrationNumberTypeCode,
-) (pcdomain.RegistrationNumberTypeSpec, referenceconfig.Reference, error) {
-	if item.Name != "" || item.Layer != "" || item.Format != "" || item.Basis != "" {
-		return pcdomain.RegistrationNumberTypeSpec{}, referenceconfig.Reference{},
-			fmt.Errorf("采用项的名称、层、格式与依据取自参考配置，批文不另写")
-	}
-	reference, err := referenceconfig.ParseReference(item.Adopt)
-	if err != nil {
-		return pcdomain.RegistrationNumberTypeSpec{}, referenceconfig.Reference{}, err
-	}
-	types, err := registrationNumberTypesFromReference(reference)
-	if err != nil {
-		return pcdomain.RegistrationNumberTypeSpec{}, referenceconfig.Reference{}, err
-	}
-	for _, numberType := range types {
-		if numberType.country != country || numberType.code != code {
-			continue
-		}
-		basis, err := pcdomain.NewRegistrationNumberTypeBasisReference(reference.Citation())
-		if err != nil {
-			return pcdomain.RegistrationNumberTypeSpec{}, referenceconfig.Reference{}, err
-		}
-		spec := numberType.spec
-		spec.Basis = basis
-		return spec, reference, nil
-	}
-	return pcdomain.RegistrationNumberTypeSpec{}, referenceconfig.Reference{},
-		fmt.Errorf("参考配置 %s 里没有类型 %s/%s", reference, item.CountryCode, item.TypeCode)
-}
-
-type registrationNumberTypeDeactivationDocument struct {
-	CountryCode string    `json:"countryCode"`
-	TypeCode    string    `json:"typeCode"`
-	Revision    int       `json:"revision"`
-	Basis       string    `json:"basis"`
-	At          time.Time `json:"at"`
-}
 
 // registrationNumberTypeBatchCommand 是翻译产物里的一项：标签供回显，执行闭包对着处理器跑。
 type registrationNumberTypeBatchCommand struct {
@@ -196,11 +37,11 @@ type registrationNumberTypeBatchCommand struct {
 func registrationNumberTypeBatchFromJSON(raw []byte) ([]registrationNumberTypeBatchCommand, error) {
 	decoder := json.NewDecoder(bytes.NewReader(raw))
 	decoder.DisallowUnknownFields()
-	var document registrationNumberTypeBatchDocument
+	var document registrationjson.RegistrationNumberTypeBatchDocument
 	if err := decoder.Decode(&document); err != nil {
 		return nil, fmt.Errorf("注册号类型登记批不是本入口的形状：%w", err)
 	}
-	tenant, err := pcdomain.NewTenantID(document.TenantID)
+	tenant, err := registrationjson.DocumentTenant(document.TenantID)
 	if err != nil {
 		return nil, err
 	}
@@ -228,48 +69,15 @@ func registrationNumberTypeBatchFromJSON(raw []byte) ([]registrationNumberTypeBa
 
 func registrationNumberTypeCommandFrom(
 	tenant pcdomain.TenantID,
-	item registrationNumberTypeItemDocument,
+	item registrationjson.RegistrationNumberTypeDocument,
 ) (registrationNumberTypeBatchCommand, error) {
-	none := registrationNumberTypeBatchCommand{}
-	country, err := pcdomain.NewRegistrationCountryCode(item.CountryCode)
+	command, adoptedFrom, err := registrationjson.RegistrationNumberTypeCommand(tenant, item)
 	if err != nil {
-		return none, err
-	}
-	code, err := pcdomain.NewRegistrationNumberTypeCode(item.TypeCode)
-	if err != nil {
-		return none, err
+		return registrationNumberTypeBatchCommand{}, err
 	}
 	label := fmt.Sprintf("注册号类型 %s/%s r%d", item.CountryCode, item.TypeCode, item.Revision)
-	var spec pcdomain.RegistrationNumberTypeSpec
 	if item.Adopt != "" {
-		adopted, reference, err := adoptedRegistrationNumberTypeSpec(item, country, code)
-		if err != nil {
-			return none, err
-		}
-		spec = adopted
-		label += fmt.Sprintf("（采用 %s）", reference)
-	} else {
-		content, err := registrationNumberTypeContentFrom(item.Name, item.Layer, item.Format)
-		if err != nil {
-			return none, err
-		}
-		basis, err := pcdomain.NewRegistrationNumberTypeBasisReference(item.Basis)
-		if err != nil {
-			return none, err
-		}
-		spec = content
-		spec.Basis = basis
-	}
-	if item.EffectiveFrom.IsZero() {
-		return none, fmt.Errorf("effectiveFrom 缺席：生效时点不代填")
-	}
-	command := pcapplication.RegisterRegistrationNumberTypeCommand{
-		Tenant:        tenant,
-		Country:       country,
-		Code:          code,
-		Revision:      item.Revision,
-		Spec:          spec,
-		EffectiveFrom: item.EffectiveFrom,
+		label += fmt.Sprintf("（采用 %s）", adoptedFrom)
 	}
 	return registrationNumberTypeBatchCommand{
 		label: label,
@@ -281,31 +89,11 @@ func registrationNumberTypeCommandFrom(
 
 func registrationNumberTypeDeactivationFrom(
 	tenant pcdomain.TenantID,
-	item registrationNumberTypeDeactivationDocument,
+	item registrationjson.RegistrationNumberTypeDeactivationDocument,
 ) (registrationNumberTypeBatchCommand, error) {
-	none := registrationNumberTypeBatchCommand{}
-	country, err := pcdomain.NewRegistrationCountryCode(item.CountryCode)
+	command, err := registrationjson.RegistrationNumberTypeDeactivationCommand(tenant, item)
 	if err != nil {
-		return none, err
-	}
-	code, err := pcdomain.NewRegistrationNumberTypeCode(item.TypeCode)
-	if err != nil {
-		return none, err
-	}
-	basis, err := pcdomain.NewRegistrationNumberTypeBasisReference(item.Basis)
-	if err != nil {
-		return none, err
-	}
-	if item.At.IsZero() {
-		return none, fmt.Errorf("at 缺席：停用时点不代填")
-	}
-	command := pcapplication.DeactivateRegistrationNumberTypeCommand{
-		Tenant:   tenant,
-		Country:  country,
-		Code:     code,
-		Revision: item.Revision,
-		Basis:    basis,
-		At:       item.At,
+		return registrationNumberTypeBatchCommand{}, err
 	}
 	return registrationNumberTypeBatchCommand{
 		label: fmt.Sprintf("停用注册号类型 %s/%s r%d", item.CountryCode, item.TypeCode, item.Revision),
