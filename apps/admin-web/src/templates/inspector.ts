@@ -35,8 +35,19 @@ export const inspectorSectionDefaultOpen: Record<InspectorSectionKind, boolean> 
 /** 概要格数上限（蓝图 13.2「不成为第二张页」）：超过它的内容属详情页。 */
 export const INSPECTOR_SUMMARY_LIMIT = 8;
 
-/** 没选中行时的一句空态；不放假内容。 */
+/** 本页供内容、还没选中行时的一句空态；不放假内容。 */
 export const INSPECTOR_EMPTY_NOTE = '在列表里单击一行，这里显示它的概要';
+
+/** 本页不往检查器里交内容时的空态。 */
+export const INSPECTOR_IDLE_NOTE = '本页没有要在检查器里显示的内容';
+
+/**
+ * 空态句按本页供不供内容二选一：栏对所有页常驻，而「在列表里单击一行」只在接了检查器的列表页上为真——
+ * spec 红线「留位只允许禁用态 + 说明」要的是一句为真的说明。
+ */
+export function inspectorEmptyNote(pageOffersContent: boolean): string {
+  return pageOffersContent ? INSPECTOR_EMPTY_NOTE : INSPECTOR_IDLE_NOTE;
+}
 
 /** 内容违约时栏里那一段错误的标题；违反了哪条由 InspectorContractError 的说明补上。 */
 export const INSPECTOR_CONTRACT_ERROR_TITLE = '这一行的检查器内容不合契约，没有显示';

@@ -97,6 +97,8 @@ export {
   INSPECTOR_CONTRACT_ERROR_TITLE,
   resolveInspectorForPanel,
   type InspectorResolution,
+  INSPECTOR_IDLE_NOTE,
+  inspectorEmptyNote,
 } from './inspector';
 export { InspectorProvider, useInspector, type InspectorController } from './inspector-context';
 export { InspectorPanel, type InspectorPanelProps } from './InspectorPanel';

@@ -11,11 +11,19 @@ export interface InspectorController {
   show(content: InspectorContent): void;
   /** 回到空态。切换活动标签时由壳层调——检查器显示的是当前列表选中的行，换页就不成立了。 */
   clear(): void;
+  /**
+   * 声明本页会往检查器里交内容，返回撤回函数；列表模板接了 inspector 时挂载期调、卸载时撤回。栏对所有页常驻，
+   * 壳层凭它选空态句（inspector.ts 的 inspectorEmptyNote）。
+   */
+  offer(): () => void;
 }
 
 const noopController: InspectorController = {
   show() {},
   clear() {},
+  offer() {
+    return () => {};
+  },
 };
 
 const InspectorContext = createContext<InspectorController>(noopController);

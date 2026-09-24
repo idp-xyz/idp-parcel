@@ -13,8 +13,8 @@ import { SectionError } from '../components/states';
 import { StatusBadgeFor, domainStatusTones, type DomainStatus } from '../domain/status';
 import {
   INSPECTOR_CONTRACT_ERROR_TITLE,
-  INSPECTOR_EMPTY_NOTE,
   inspectorActionDisabled,
+  inspectorEmptyNote,
   resolveInspectorForPanel,
   type InspectorAction,
   type InspectorContent,
@@ -33,6 +33,8 @@ import {
 
 export interface InspectorPanelProps {
   content: InspectorContent | null;
+  /** 本页有没有往检查器里交内容；只决定空态句，有内容时不看它。 */
+  contentOffered: boolean;
   /** 栏顶的关闭 / 折叠动作；不传则不出 × 。 */
   onClose?: () => void;
 }
@@ -136,14 +138,14 @@ function ResolvedSections({ content }: { content: InspectorContent }) {
   );
 }
 
-export function InspectorPanel({ content, onClose }: InspectorPanelProps) {
+export function InspectorPanel({ content, contentOffered, onClose }: InspectorPanelProps) {
   return (
     <InspectorShell className="bg-idpxyz-sidebar" data-inspector-panel>
       <InspectorHeader title={PANEL_TITLE} onClose={onClose} />
       {content === null ? (
         <InspectorBody>
           <p className="text-[11px] text-idpxyz-textMuted" data-inspector-empty>
-            {INSPECTOR_EMPTY_NOTE}
+            {inspectorEmptyNote(contentOffered)}
           </p>
         </InspectorBody>
       ) : (

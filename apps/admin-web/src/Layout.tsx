@@ -200,8 +200,18 @@ export function Layout() {
 
   // 检查器：内容由列表页经 useInspector 交进来；控制口 useMemo 住，Provider 值不随每次渲染换引用。
   const [inspectorContent, setInspectorContent] = useState<InspectorContent | null>(null);
+  // 主区里挂着几个供内容的列表——非活动标签卸载，实际只有活动页的零个或一个；只拿来选空态句。
+  // 计数而不是布尔：换标签时旧页撤回与新页声明的先后不由这里定。
+  const [inspectorOffers, setInspectorOffers] = useState(0);
   const inspectorController = useMemo<InspectorController>(
-    () => ({ show: (content) => setInspectorContent(content), clear: () => setInspectorContent(null) }),
+    () => ({
+      show: (content) => setInspectorContent(content),
+      clear: () => setInspectorContent(null),
+      offer: () => {
+        setInspectorOffers((n) => n + 1);
+        return () => setInspectorOffers((n) => n - 1);
+      },
+    }),
     [],
   );
   useEffect(() => {
@@ -310,7 +320,7 @@ export function Layout() {
               className="flex shrink-0 flex-col overflow-hidden border-l border-idpxyz-border"
               style={{ width: inspectorResize.size }}
             >
-              <InspectorPanel content={inspectorContent} onClose={toggleInspector} />
+              <InspectorPanel content={inspectorContent} contentOffered={inspectorOffers > 0} onClose={toggleInspector} />
             </aside>
           </>
         ) : (

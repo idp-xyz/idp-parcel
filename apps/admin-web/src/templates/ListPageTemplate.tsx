@@ -314,6 +314,8 @@ export function ListPageTemplate<Row>({
   // 是「单击了哪一行」（onRowClick），选中高亮只是告诉人右栏说的是哪一行。换模块（组件卸载）即丢。
   const inspectorController = useInspector();
   const [inspectedKey, setInspectedKey] = useState<string | null>(null);
+  const offersInspector = inspector !== undefined;
+  useEffect(() => (offersInspector ? inspectorController.offer() : undefined), [offersInspector, inspectorController]);
   const handleRowClick = (row: Row, key: string) => {
     onRowClick?.(row);
     if (!inspector) return;

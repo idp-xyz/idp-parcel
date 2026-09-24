@@ -4,6 +4,7 @@ import {
   INSPECTOR_SUMMARY_LIMIT,
   InspectorContractError,
   inspectorActionDisabled,
+  inspectorEmptyNote,
   inspectorSectionOrder,
   presentFields,
   resolveInspectorForPanel,
@@ -107,6 +108,11 @@ test('resolveInspectorForPanel：合契约的照常归并，契约错误接住�
   if (violated.kind === 'contractError') match(violated.message, /空转/);
 
   throws(() => resolveInspectorForPanel({ title: 'x', sections: null as unknown as InspectorContent['sections'] }), TypeError);
+});
+
+test('inspectorEmptyNote：供内容的页指向单击一行，不供的页不指向列表', () => {
+  match(inspectorEmptyNote(true), /单击一行/);
+  equal(/单击|列表/.test(inspectorEmptyNote(false)), false);
 });
 
 test('inspectorActionDisabled：给了说明即禁用，即便同时给了 onRun', () => {
