@@ -109,6 +109,7 @@ var expectedWriteAdmittedLines = map[string]bool{
 	"/transport-fulfillment/offsite-pickups":                          true,
 	"/transport-fulfillment/offsite-pickup-attempts":                  true,
 	"/transport-fulfillment-carrier-first-effective-pickup-judgments": true,
+	"/transport-fulfillment/handovers":                                true,
 }
 
 // Covers: ADR-0091 Consequences「命令面按端点逐口放行，不是一次全开」 — 写面放行只及名单里那几行，其余命令面
