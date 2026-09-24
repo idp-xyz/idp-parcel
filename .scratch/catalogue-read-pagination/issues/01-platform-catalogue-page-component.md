@@ -83,4 +83,4 @@ Blocked by: 无
 8. **未做**：不写任何一册的 SQL、不改读端口签名（归 02、03）；也没给读面写「多取一行判下一页」的辅助——那是 SQL 侧的写法，02、03 各写一遍后重复了再抬。
 
 **分支推送**：完工时本宿主没有 GitHub 推送凭据（经 WSL 中继网络已通，`git push --dry-run` 停在认证）；用户随后完成 gh 设备码授权，
-2026-09-24 15:3x 补推，`git ls-remote origin refs/heads/mcp2-crp01` 答 `33fd352d`（上一笔）。代码笔的 tip 是 `f23f16e6`，其后只有票面。
+2026-09-24 14:5x 补推，`git ls-remote origin refs/heads/mcp2-crp01` 答 `33fd352d`（上一笔）。代码笔的 tip 是 `f23f16e6`，其后只有票面。
