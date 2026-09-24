@@ -60,6 +60,10 @@ echo "== 2/7 商业权威发布（party-commercial：服务产品与五策略）
 "$BIN/parcel-commercial" register-parties -input "$SEEDS/commercial/register-parties.json"
 "$BIN/parcel-commercial" deactivate-party-identity \
   -input "$SEEDS/commercial/deactivate-party-retired-01.json"
+# 法人资料（票 legal-entity-profile/03）：SYN-LE-01 两笔修订，先不带开票资料、后补抬头，让资料页的「资料不全」与
+# 修订切换都有真实例可显。排在参与方身份之后：资料引用已登记的责任法人，地址国家对着它的身份层判。
+"$BIN/parcel-commercial" register-legal-entity-profiles \
+  -input "$SEEDS/commercial/register-legal-entity-profiles.json"
 # 服务形态与产品—渠道映射（票 admin-remainder-mechanism-batch/02）：EXPRESS 配两个
 # 渠道引用，ECON 显式登记「未配置」——批级判据点名实例格显式未配置要有真实例可显；
 # 渠道本体不预造（ADR-0072），引用等 PAR-INT-01 的接入证据。

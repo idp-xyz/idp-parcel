@@ -1,0 +1,32 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "profiles": [
+    {
+      "legalEntityId": "SYN-LE-01",
+      "revision": 1,
+      "basis": "SYN-PROFILE-BASIS-LE-01-R1",
+      "effectiveFrom": "2026-01-02T00:00:00Z",
+      "registeredAddress": {"country": "CN", "lines": ["合成市合成区演示路 1 号（演示）"]},
+      "taxRegistrationNumbers": [
+        {"typeCode": "SYN-CN-TAX", "number": "SYN-CN-TAX-0001"}
+      ],
+      "contacts": [
+        {"name": "合成联系人一号（演示）", "email": "syn-le-01@example.invalid"}
+      ]
+    },
+    {
+      "legalEntityId": "SYN-LE-01",
+      "revision": 2,
+      "basis": "SYN-PROFILE-BASIS-LE-01-R2",
+      "effectiveFrom": "2026-03-01T00:00:00Z",
+      "registeredAddress": {"country": "CN", "lines": ["合成市合成区演示路 1 号（演示）"]},
+      "taxRegistrationNumbers": [
+        {"typeCode": "SYN-CN-TAX", "number": "SYN-CN-TAX-0001"}
+      ],
+      "invoiceTitle": "合成运营方一号（演示）",
+      "contacts": [
+        {"name": "合成联系人一号（演示）", "email": "syn-le-01@example.invalid"}
+      ]
+    }
+  ]
+}
