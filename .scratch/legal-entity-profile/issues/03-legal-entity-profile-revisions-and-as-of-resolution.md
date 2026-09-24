@@ -1,7 +1,7 @@
 # 03 法人资料修订链与按时点解析（含「资料不全」答复）
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——2026-09-24 通道 3 认领：隔离 worktree `idp-parcel-mcp3-lep03`、分支 `mcp3-lep03`，基 `mcp3-lep02` tip `91949459`（02 尚未重放进 main，重放时只取本票的笔）；迁移编号预留 party-commercial `0036`（`0035` 属 catalogue-read-pagination/02）
 Blocked by: 02
 地盘：party-commercial 新增的法人资料（领域、应用、端口、postgres 与 http 适配器），`migrations/` 下 party-commercial 模块的新迁移，演示种子。
 出处：[ADR-0145](../../../docs/adr/0145-legal-entity-attributes-split-into-identity-layer-and-dated-profile.md) 决定三、五、六；CONTEXT「法人资料」词条、Rules 中法人资料修订与
