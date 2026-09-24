@@ -32,6 +32,8 @@ func NewPartyIdentityRegistrations(db *bentopg.DB) (*PartyIdentityRegistrations,
 
 var _ ports.PartyIdentityRegistry = (*PartyIdentityRegistrations)(nil)
 
+var _ ports.LegalEntityRegistrationLookup = (*PartyIdentityRegistrations)(nil)
+
 // identityRegistrationRow 收拢三本身份册共同的行内容：Save 的列值与快照由它折出，
 // 三册不各抄一份 INSERT 骨架。
 type identityRegistrationRow struct {
