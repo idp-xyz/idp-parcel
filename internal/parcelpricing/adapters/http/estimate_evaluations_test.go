@@ -139,10 +139,9 @@ func TestEstimateEndpointReturnsEveryCandidateWithItsOwnEvaluation(t *testing.T)
 		t.Fatalf("body = %s, 想要 FORMED 两格", recorder.Body)
 	}
 	evaluated := body.Candidates[0]
-	total, _ := evaluation.Total()
 	if evaluated.Answer != "EVALUATED" || evaluated.Plan.ID != "SYN-PLAN-EST" || evaluated.Evaluation == nil ||
 		evaluated.Evaluation.Status != "COMPLETED" || evaluated.Evaluation.Evidence != "S" ||
-		evaluated.Evaluation.Total == nil || evaluated.Evaluation.Total.Amount != total.Amount().String() ||
+		evaluated.Evaluation.Total == nil || evaluated.Evaluation.Total.Amount != "55" ||
 		evaluated.Evaluation.Total.Currency != "CNY" || len(evaluated.Evaluation.ChargeLines) == 0 || len(evaluated.Evaluation.Manifest) == 0 {
 		t.Fatalf("已评价那格 = %+v body = %s", evaluated, recorder.Body)
 	}

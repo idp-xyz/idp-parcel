@@ -59,7 +59,7 @@ func NewEstimateEndpoint(intake EstimateIntake, former EstimateFormer) http.Hand
 	})
 }
 
-// estimateResponse 是试算端点的封闭响应形状。`outcome` 只说编排（ADR-0152 决定七）；逐卡评价自己的状态五格在
+// estimateResponse 是试算端点的封闭响应形状。`outcome` 只说编排（ADR-0152 决定七）；逐卡评价自己的状态在
 // `evaluation.status` 上原样透出，面上不再折一遍。
 type estimateResponse struct {
 	Outcome    string                  `json:"outcome"`

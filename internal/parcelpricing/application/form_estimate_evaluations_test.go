@@ -366,3 +366,29 @@ func TestEstimateHandlerRefusesIncompleteWiring(t *testing.T) {
 		t.Fatalf("err = %v, 想要 ErrCatalogueResolutionHalfWired", half)
 	}
 }
+
+// UC-PP-001 验收示例 2：多卡并列——两张身份不同的适用卡各形成一份评价、各带自己的版本清单；按装载顺序交回，没有首选
+// （择优归 network-routing，ADR-0152 决定四）。
+func TestEstimateOverSeveralCardsEvaluatesEachWithItsOwnManifest(t *testing.T) {
+	first := minimalPlan(t)
+	second := planWithIdentity(t, minimalPlanPriced(t, "8"), "plan-2")
+	handler := newEstimateHandler(t, &applicablePriceCardsDouble{plans: []domain.PricingPlanVersion{first, second}})
+
+	result, err := handler.Handle(context.Background(), estimateCommand(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome != application.EstimateEvaluationsFormed || len(result.Candidates) != 2 {
+		t.Fatalf("result = %+v, 想要已形成且两格", result)
+	}
+	for index, plan := range []domain.PricingPlanVersion{first, second} {
+		candidate := result.Candidates[index]
+		if candidate.Answer != application.EstimateCandidateEvaluated || candidate.Plan != plan.Reference() ||
+			candidate.Evaluation.PlanReference() != plan.Reference() || candidate.Evaluation.Status() != domain.EvaluationCompleted {
+			t.Fatalf("第 %d 格 = %+v, 想要这张卡自己的完成评价", index, candidate)
+		}
+	}
+	if result.Candidates[0].Evaluation.ID() == result.Candidates[1].Evaluation.ID() {
+		t.Fatalf("两张卡得到同一评价标识 %s", result.Candidates[0].Evaluation.ID())
+	}
+}
