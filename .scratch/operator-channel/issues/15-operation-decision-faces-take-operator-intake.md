@@ -57,3 +57,12 @@ Blocked by: 03、14
 4. **委托寻址**。五口命令都带委托来源身份，操作者信封里没有；草稿只列为风险点，改为本票「做什么」第 4 条。
 5. **生产上走不到业务结果**。复核、拒绝、受控关闭与重开的授权请求映射在生产装配里是 nil（psb/07 第 1 项），授权处置装的是未配置授权器（PC 授权动作词表缺这一格，ADR-0132 越权风险点 2）；草稿的完成判据「七口答业务结果」在生产装配上不成立。改为逐口如实停在今天的格、装配测试以合成授权证已授权路径。
 6. **清扫票 16 不存在**。ADR 与 psb/15 引了「同日做完」的 16，而全仓还有几十处过期注释（含本票五口自己的 Intake 注释）；本次补立并做完。
+
+- 2026-09-25 · 通道 4 · 实施笔记（之一已进 main `961525fb`；之二至之五照此复用现成实现，不另起一套）：
+  1. **Intake 形状**：各口已有 `XxxIntake` 接口（`IntakeXxx(ctx, *http.Request)` 交回命令），今天由 `UnconfiguredIntake{}` 满足、部分口另有隔离实现。操作者渠道就是这些接口的又一种实现，在 `cmd/parcel-api/endpoints.go` 装配点逐口换，处理器与路由不动（同端点表头注「逐端点替换」的纪律）。
+  2. **答复格映射**：各上下文的哨兵与答复码写在自己的 `adapters/http`（PS 是 `unconfigured_intake.go` 里的 `ErrAccessChannelNotConfigured` 与 `ErrMalformedRequest`）。PS 已有 `writeIntakeProblem`（`query_shipment_request_views.go`），而五个决定口的处理器各自内联了一份同样的映射。新格——令牌不过 401、未授予 403、不在准入范围 403、依赖故障 503——加进 `writeIntakeProblem`，五口改调它，不再各抄一份。TF 照同一办法。`accessidentity` 的哨兵在操作者 Intake 里译成本上下文的哨兵，处理器不认识 `accessidentity`。
+  3. **铸造**：`accessidentity.OperatorMinter.MintOperator`，请求 `{TenantID, Face: CapabilityOperationDecision, DecisionKind, Admission}`。十一口各对一个 `DecisionKind`；`AdmissionRequirement` 的能力与事实类型逐口定（ADR-0151 决定三：运营决定口要判准入）。
+  4. **委托寻址**（委托侧五口）：复用已有的委托查阅读口（`pspostgres.ShipmentRequestViews` 按委托标识取详情，详情带客户账户、来源、来源请求键），不新写查询。它的作用域（`AuthorizedQueryScope`）还带「可见客户账户」一维，操作者渠道上怎么取值先对齐；查不到与越权探针同答。
+  5. **TF 隔离放行**：关段、建派送任务、两个判断口的放行在 `cmd/parcel-api/assemble_isolated_write.go`，换口的同一笔撤下（ADR-0150）。
+  6. 动 `cmd/parcel-api/endpoints.go` 前先占号：通道 3 的 ADR-0152 试算实现也要改它。
+
