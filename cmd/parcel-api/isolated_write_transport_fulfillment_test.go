@@ -143,6 +143,19 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 		status:  http.StatusOK,
 		outcome: "SOURCE_NOT_ACCEPTED",
 	},
+	// 关段声明：段不在册——编排如实答 SEGMENT_NOT_FOUND，形成了的业务答案，200。
+	"/transport-fulfillment-segment-closures": {
+		endpoint: func(t *testing.T, db *bentopg.DB, intake *tfhttp.IsolatedCommandIntake) http.Handler {
+			segmentOps, err := buildSegmentOperations(db)
+			if err != nil {
+				t.Fatalf("装配段运营编排：%v", err)
+			}
+			return tfhttp.NewCloseFulfillmentSegmentEndpoint(intake, segmentOps.closer)
+		},
+		body:    `{"segment":"SYN-SEGMENT-08-11","closedAt":"2026-09-25T20:00:00+08:00"}`,
+		status:  http.StatusOK,
+		outcome: "SEGMENT_NOT_FOUND",
+	},
 }
 
 // Covers: 票 operator-channel/08 完成判据「隔离环境里上列各口对合成写答业务结果而不是 ACCESS_CHANNEL_NOT_CONFIGURED」——
