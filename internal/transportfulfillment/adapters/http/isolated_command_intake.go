@@ -39,6 +39,7 @@ var (
 	_ DeliveryDispatchTriggerIntake = (*IsolatedCommandIntake)(nil)
 	_ DeliveryRegistrationIntake    = (*IsolatedCommandIntake)(nil)
 	_ SegmentClosureIntake          = (*IsolatedCommandIntake)(nil)
+	_ EffectiveTimeJudgmentIntake   = (*IsolatedCommandIntake)(nil)
 )
 
 // IsolatedCommandIntakeDeps 是构造本 Intake 的全部输入，全部是装配点给定的合成值。
@@ -167,6 +168,19 @@ func (intake *IsolatedCommandIntake) IntakeSegmentClosure(
 	var payload SegmentClosurePayload
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.CloseFulfillmentSegmentCommand{}, err
+	}
+	return payload.Command(intake.tenant)
+}
+
+// IntakeEffectiveTimeJudgment 译外部承运轨迹事实有效时间的显式判断（`/transport-fulfillment-effective-time-judgments`）。线格式是
+// 本包既有的 EffectiveTimeJudgmentPayload；解码走封闭门，理由同 IntakeCarrierPickupJudgment。
+func (intake *IsolatedCommandIntake) IntakeEffectiveTimeJudgment(
+	_ context.Context,
+	request *http.Request,
+) (application.JudgeEffectiveTimeCommand, error) {
+	var payload EffectiveTimeJudgmentPayload
+	if err := decodeClosedPayload(request.Body, &payload); err != nil {
+		return application.JudgeEffectiveTimeCommand{}, err
 	}
 	return payload.Command(intake.tenant)
 }

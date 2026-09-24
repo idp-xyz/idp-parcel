@@ -156,6 +156,20 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 		status:  http.StatusOK,
 		outcome: "SEGMENT_NOT_FOUND",
 	},
+	// 有效时间显式判断：指名的轨迹事实不在册（外部轨迹只经 TrackingSource 入站口进，隔离形态不开那条路）——编排如实答
+	// `未受理`，形成了的业务答案，200。
+	"/transport-fulfillment-effective-time-judgments": {
+		endpoint: func(t *testing.T, db *bentopg.DB, intake *tfhttp.IsolatedCommandIntake) http.Handler {
+			judge, err := buildEffectiveTimeJudgment(db)
+			if err != nil {
+				t.Fatalf("装配有效时间判断编排：%v", err)
+			}
+			return tfhttp.NewJudgeEffectiveTimeEndpoint(intake, judge)
+		},
+		body:    `{"fact":"SYN-TRACKING-FACT-08-12","effectiveAt":"2026-09-24T16:00:00+08:00"}`,
+		status:  http.StatusOK,
+		outcome: "INPUT_NOT_ACCEPTED",
+	},
 }
 
 // Covers: 票 operator-channel/08 完成判据「隔离环境里上列各口对合成写答业务结果而不是 ACCESS_CHANNEL_NOT_CONFIGURED」——

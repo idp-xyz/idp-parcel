@@ -112,6 +112,30 @@ var isolatedLines = map[string]isolatedLine{
 		},
 		valid: isolatedSegmentClosureBody,
 	},
+	"/transport-fulfillment-effective-time-judgments": {
+		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
+			_, err := intake.IntakeEffectiveTimeJudgment(context.Background(), request)
+			return err
+		},
+		valid: isolatedEffectiveTimeJudgmentBody,
+	},
+}
+
+const isolatedEffectiveTimeJudgmentBody = `{"fact":"SYN-TRACKING-FACT-08-12","effectiveAt":"2026-09-24T16:00:00+08:00"}`
+
+// Covers: 判断口的线格式是本包既有的 EffectiveTimeJudgmentPayload（指名的事实与所有者给出的有效时间），隔离 Intake 只把注入的
+// 租户交进它的 Command。
+func TestIsolatedCommandIntakeTranslatesEffectiveTimeJudgmentWithInjectedTenant(t *testing.T) {
+	command, err := isolatedCommandIntakeForTest(t).IntakeEffectiveTimeJudgment(context.Background(), commandRequest(isolatedEffectiveTimeJudgmentBody))
+	if err != nil {
+		t.Fatalf("intake：%v", err)
+	}
+	if command.TenantID.String() != isolatedCommandTenant || command.Fact != "SYN-TRACKING-FACT-08-12" {
+		t.Fatalf("command = %+v，与注入与载荷不符", command)
+	}
+	if want := time.Date(2026, 9, 24, 8, 0, 0, 0, time.UTC); !command.EffectiveAt.Equal(want) {
+		t.Fatalf("EffectiveAt = %s, want %s", command.EffectiveAt, want)
+	}
 }
 
 const isolatedSegmentClosureBody = `{"segment":"SYN-SEGMENT-08-11","closedAt":"2026-09-25T20:00:00+08:00"}`
@@ -521,6 +545,9 @@ func TestIsolatedCommandIntakeServesOnlyAdmittedLines(t *testing.T) {
 	}
 	if _, ok := intake.(tfhttp.SegmentClosureIntake); !ok {
 		t.Fatal("段关闭口该已放行")
+	}
+	if _, ok := intake.(tfhttp.EffectiveTimeJudgmentIntake); !ok {
+		t.Fatal("有效时间判断口该已放行")
 	}
 	for name, refused := range map[string]bool{
 		"揽收更正口（同族未列）":      isA[tfhttp.PickupCorrectionIntake](intake),
