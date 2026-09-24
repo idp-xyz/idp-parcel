@@ -84,6 +84,38 @@ test(`概要超过 ${INSPECTOR_SUMMARY_LIMIT} 格抛契约错误，恰好 ${INSP
   );
 });
 
+test('同一节里重名抛契约错误（含同种节接起来后撞名、关联对象同地址）；不同节同名放行', () => {
+  throws(
+    () =>
+      resolveInspectorSections({
+        title: 'x',
+        sections: [
+          { kind: 'summary', fields: [{ label: 'a', value: '1' }] },
+          { kind: 'summary', fields: [{ label: 'a', value: '2' }] },
+        ],
+      }),
+    (error: unknown) => error instanceof InspectorContractError && /「a」/.test(error.message),
+  );
+  throws(
+    () =>
+      resolveInspectorSections({
+        title: 'x',
+        sections: [{ kind: 'related', links: [{ label: 'p', hash: '#/a' }, { label: 'q', hash: '#/a' }] }],
+      }),
+    InspectorContractError,
+  );
+  equal(
+    resolveInspectorSections({
+      title: 'x',
+      sections: [
+        { kind: 'summary', fields: [{ label: '时间', value: '1' }] },
+        { kind: 'audit', fields: [{ label: '时间', value: '2' }] },
+      ],
+    }).length,
+    2,
+  );
+});
+
 test('动作既无 onRun 也无 disabledReason 抛；有其一放行', () => {
   throws(
     () => resolveInspectorSections({ title: 'x', sections: [{ kind: 'actions', actions: [{ label: '空转' }] }] }),

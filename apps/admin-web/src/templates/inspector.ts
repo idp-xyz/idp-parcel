@@ -126,6 +126,30 @@ function isEmptySection(section: InspectorSection): boolean {
   }
 }
 
+/** 一节里各格的名字；关联对象按地址认。 */
+function sectionEntryNames(section: InspectorSection): string[] {
+  switch (section.kind) {
+    case 'summary':
+    case 'audit':
+      return section.fields.map((f) => f.label);
+    case 'status':
+      return section.items.map((i) => i.label);
+    case 'actions':
+      return section.actions.map((a) => a.label);
+    case 'related':
+      return section.links.map((l) => l.hash);
+  }
+}
+
+function firstRepeated(names: string[]): string | null {
+  const seen = new Set<string>();
+  for (const name of names) {
+    if (seen.has(name)) return name;
+    seen.add(name);
+  }
+  return null;
+}
+
 /** 同一种节给了多次就按序接起来；接法按节的内容类型各自拼数组。 */
 function mergeSections(kind: InspectorSectionKind, parts: InspectorSection[]): InspectorSection {
   switch (kind) {
@@ -148,6 +172,7 @@ function mergeSections(kind: InspectorSectionKind, parts: InspectorSection[]): I
  * - 空节**不渲染**（不出现在结果里），而不是渲染一个空标题——节是导航，点不进的导航是死路。
  * - 概要超过 INSPECTOR_SUMMARY_LIMIT 格抛：多出来的属详情页，截断会静默丢字段、放行会让检查器长成第二张页。
  * - 动作既无 onRun 也无 disabledReason 抛：那是假动作。
+ * - 同一节里重名抛（关联对象按地址）：两格同名，读的人分不清哪格是哪格；同一种节给多次接起来时最容易撞上。
  */
 export function resolveInspectorSections(content: InspectorContent): ResolvedInspectorSection[] {
   const resolved: ResolvedInspectorSection[] = [];
@@ -156,6 +181,12 @@ export function resolveInspectorSections(content: InspectorContent): ResolvedIns
     if (parts.length === 0) continue;
     const section = mergeSections(kind, parts);
     if (isEmptySection(section)) continue;
+    const repeated = firstRepeated(sectionEntryNames(section));
+    if (repeated !== null) {
+      throw new InspectorContractError(
+        `检查器「${content.title}」的「${inspectorSectionLabels[kind]}」节里「${repeated}」出现了不止一次；同一节里一格一个名字`,
+      );
+    }
     if (section.kind === 'summary' && section.fields.length > INSPECTOR_SUMMARY_LIMIT) {
       throw new InspectorContractError(
         `检查器概要最多 ${INSPECTOR_SUMMARY_LIMIT} 格，「${content.title}」给了 ${section.fields.length} 格；多出来的属详情页`,

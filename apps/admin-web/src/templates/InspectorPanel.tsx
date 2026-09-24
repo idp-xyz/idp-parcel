@@ -53,6 +53,7 @@ function StatusWord({ word }: { word: string }) {
   );
 }
 
+// 各节的行以名字（关联对象以地址）作键：同一节里不重名是 resolveInspectorSections 的契约，违约走不到这里。
 function FieldRows({ fields }: { fields: InspectorField[] }) {
   return (
     <>
