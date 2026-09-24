@@ -250,6 +250,11 @@ func TestCatalogRegistrationRefusesIncompleteRowsBySlot(t *testing.T) {
 			row.ApplicableScope = "  "
 			return s.RegisterRouteStrategyVersion(t.Context(), application.RegisterRouteStrategyVersionCommand{TenantID: tenant(t), Strategy: row})
 		}, application.CatalogApplicableScopeMissing},
+		{"策略排序形态不在族内", func(t *testing.T, s *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
+			row := validStrategy()
+			row.RankingForm = domain.RankingForm(99)
+			return s.RegisterRouteStrategyVersion(t.Context(), application.RegisterRouteStrategyVersionCommand{TenantID: tenant(t), Strategy: row})
+		}, application.CatalogRankingFormUnknown},
 
 		{"调整种类不在封闭四格", func(t *testing.T, s *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
 			row := validAdjustment()
