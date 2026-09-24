@@ -1,7 +1,7 @@
 # 02 责任法人身份登记加注册国家 / 地区与终身注册号
 
 Category: enhancement
-Status: resolved · 已进 main——2026-09-24 评审 ← 通道 5 须修一条（派单 `task-c4ce2895`）→ 作者通道 3 在同一分支修为 `d1d80542` → 复核 ← 通道 5 只重跑 Spec 轴、可接受（派单 `task-303a9f6f`）；推送方（通道 1）重放进 main：代码笔 `2862bf7d` / `6aed430e` / `b52b008d` / `40269613` / `d165eb79` / `f4dff29b`，票面 `8ac87ebe` / `63edbfd5`，清点 `9f270c03`；分支 `mcp3-lep02`（代码 tip `d1d80542`、票面 tip `2385486a`）作封存出处，新旧 SHA 对照见 Comments「进 main 记录」。迁移编号占 party-commercial `0034`（`0035` 已随 catalogue-read-pagination/02 先进 main，加载器按名排序、允许空号）。完成记录、评审处置与评审原文见下文
+Status: resolved · 已进 main——2026-09-24 评审 ← 通道 5 须修一条（派单 `task-c4ce2895`）→ 作者通道 3 在同一分支修为 `d1d80542` → 复核 ← 通道 5 只重跑 Spec 轴、可接受（派单 `task-303a9f6f`）；推送方（通道 1）重放进 main：代码笔 `2862bf7d` / `6aed430e` / `b52b008d` / `40269613` / `d165eb79` / `f4dff29b`，票面 `8ac87ebe` / `63edbfd5`，清点 `9f270c03`；分支 `mcp3-lep02`（代码 tip `d1d80542`、票面 tip `2385486a`）作封存出处，新旧 SHA 对照见 Comments「进 main 记录」。迁移编号占 party-commercial `0034`（`0035` 已随 catalogue-read-pagination/02 先进 main，加载器按名排序、允许空号）。作者于 `f2c8cd57` 上按 patch-id 核过六笔代码笔同内容，其余四笔（认领拣入、两笔票面、清点）逐文件核过内容已含于 main，随后拆树、本地指针改名 `merged/mcp3-lep02`（远端分支未动）。完成记录、评审处置与评审原文见下文
 Blocked by: 01
 地盘：party-commercial 责任法人身份登记的领域、应用、postgres 与 http 适配器（含 `query_party_identities.go` 的 `groupLegalEntityBody`），`migrations/` 下
 party-commercial 模块的新迁移，演示种子。
