@@ -17,6 +17,7 @@ import (
 	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
+	commercialapp "go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	govpg "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/platform/buildinfo"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
@@ -353,6 +354,13 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 法人资料按时点解析（票 legal-entity-profile/05）交入的是应用读用例：它读法人最新修订与整条资料修订链，交领域判。
+	// 法人那一侧读身份登记册——资料的写入与解析都经窄口 LegalEntityRegistrationLookup 看法人，同一只适配器。
+	partyIdentityRegistrations, err := pcpostgres.NewPartyIdentityRegistrations(db)
+	if err != nil {
+		return err
+	}
+	legalEntityProfileResolver := commercialapp.NewResolveLegalEntityProfileHandler(legalEntityProfiles, partyIdentityRegistrations)
 	visibilityCatalogues, err := vepostgres.NewOperationsCatalogue(db)
 	if err != nil {
 		return err
@@ -500,6 +508,7 @@ func run(logger *slog.Logger) error {
 			commercialCatalog,
 			commercialCatalog,
 			legalEntityProfiles,
+			legalEntityProfileResolver,
 			commercialRegistration.publication,
 			commercialRegistration.publicationPreview,
 			commercialRegistration.publicationDrafts,
