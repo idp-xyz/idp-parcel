@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
@@ -27,6 +28,11 @@ const (
 	// 由治理责任方裁决续办；原行保持原样。
 	PriceCardCanonicalizationDiffers
 )
+
+// ErrAmbiguousPriceCard 是 LoadApplicable 契约里「同一方案身份在该时点有两个及以上适用版本」那一格的哨兵。它是登记册
+// 数据错误（发布责任方没完成替代关系），不是业务答案；消费方要按恢复动作分格时 errors.Is 它——哨兵放在端口上，应用层
+// 才不必去认某个适配器的同名变量。
+var ErrAmbiguousPriceCard = errors.New("parcel pricing: a price card plan has more than one applicable version")
 
 // PriceCardCatalog 是价卡版本仓储的存取口（票 07 的机制三件之①②）。它拥有已发布
 // 定价方案版本的登记行与按（方向 + 适用范围 + 计价基准时点）的装载，不做评价、不选
