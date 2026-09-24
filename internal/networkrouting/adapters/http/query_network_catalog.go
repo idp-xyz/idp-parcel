@@ -14,6 +14,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/cataloguepage"
 )
 
 // ErrMalformedRequest 表示这次请求构造不出查询，且重发同样的内容不会改变结果。
@@ -49,13 +50,13 @@ type CatalogueQueryIntake interface {
 // （ADR-0068 Decision 六）不因本端点松动——上列按族透版本行原文，不选版不折叠，
 // 形不成判断依据。
 type OperationsCatalogReader interface {
-	ListNodeVersions(ctx context.Context, tenant domain.TenantID, limit int) ([]ports.NodeDefinitionVersion, error)
-	ListConnectionVersions(ctx context.Context, tenant domain.TenantID, limit int) ([]ports.ConnectionDefinitionVersion, error)
-	ListLineVersions(ctx context.Context, tenant domain.TenantID, limit int) ([]ports.LineDefinitionVersion, error)
-	ListServiceAreaVersions(ctx context.Context, tenant domain.TenantID, limit int) ([]ports.ServiceAreaDefinitionVersion, error)
-	ListServiceCalendarVersions(ctx context.Context, tenant domain.TenantID, limit int) ([]ports.ServiceCalendarDefinitionVersion, error)
-	ListAvailabilityAdjustments(ctx context.Context, tenant domain.TenantID, limit int) ([]ports.AvailabilityAdjustmentStatement, error)
-	ListRouteStrategyVersions(ctx context.Context, tenant domain.TenantID, limit int) ([]ports.RouteStrategyDefinitionVersion, error)
+	ListNodeVersions(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.NodeDefinitionVersion], error)
+	ListConnectionVersions(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.ConnectionDefinitionVersion], error)
+	ListLineVersions(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.LineDefinitionVersion], error)
+	ListServiceAreaVersions(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.ServiceAreaDefinitionVersion], error)
+	ListServiceCalendarVersions(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.ServiceCalendarDefinitionVersion], error)
+	ListAvailabilityAdjustments(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.AvailabilityAdjustmentStatement], error)
+	ListRouteStrategyVersions(ctx context.Context, tenant domain.TenantID, limit int, query cataloguepage.Query) (ports.CatalogPage[ports.RouteStrategyDefinitionVersion], error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义，只消费 ADR-0077
@@ -87,6 +88,17 @@ const (
 	familyRouteStrategy          = "route-strategy"
 )
 
+// familyCatalogues 是各族的查询声明（ADR-0144）：family 选中哪一族，就按哪一族的声明解码其余参数。
+var familyCatalogues = map[string]*cataloguepage.Catalogue{
+	familyNode:                   ports.NodeVersionCatalogue,
+	familyConnection:             ports.ConnectionVersionCatalogue,
+	familyLine:                   ports.LineVersionCatalogue,
+	familyServiceArea:            ports.ServiceAreaVersionCatalogue,
+	familyServiceCalendar:        ports.ServiceCalendarVersionCatalogue,
+	familyAvailabilityAdjustment: ports.AvailabilityAdjustmentCatalogue,
+	familyRouteStrategy:          ports.RouteStrategyVersionCatalogue,
+}
+
 // NewQueryNetworkCatalogEndpoint 交回网络目录运营查阅的 HTTP 入口
 // （GET /network-catalog，ADR-0077）。
 //
@@ -94,6 +106,9 @@ const (
 // 在场与否、取值在不在封闭集内属传输形状（与方法检查同级，先于 Intake），读它不构成
 // 读业务内容——未配置 Intake 对全部分支同答 403，分支选择不泄露任何东西。缺席按坏
 // 请求拒：替调用方默认一族就是替它猜。
+//
+// 其余查询参数（after、sort、筛选维与 q）按所选族的声明解码（ADR-0144 决定六），同属
+// 传输形状、同样先于 Intake：不成立即 400，理由散文放进 detail。
 func NewQueryNetworkCatalogEndpoint(
 	intake CatalogueQueryIntake,
 	reader OperationsCatalogReader,
@@ -105,8 +120,20 @@ func NewQueryNetworkCatalogEndpoint(
 			return
 		}
 
-		family := request.URL.Query().Get("family")
-		if !knownFamily(family) {
+		values := request.URL.Query()
+		family := values.Get("family")
+		catalogue, known := familyCatalogues[family]
+		if !known {
+			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
+			return
+		}
+		pageQuery, err := catalogue.Decode(values)
+		if err != nil {
+			var malformed *cataloguepage.MalformedQuery
+			if errors.As(err, &malformed) {
+				writeProblemWithDetail(response, http.StatusBadRequest, codeMalformedRequest, malformed.Reason)
+				return
+			}
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
@@ -122,75 +149,67 @@ func NewQueryNetworkCatalogEndpoint(
 
 		switch family {
 		case familyNode:
-			serveVersionList(response, outcomeNodeVersionsListed, nodeVersionBodyOf,
-				func() ([]ports.NodeDefinitionVersion, error) {
-					return reader.ListNodeVersions(ctx, tenant, limit)
+			serveVersionPage(response, outcomeNodeVersionsListed, limit, nodeVersionBodyOf,
+				func() (ports.CatalogPage[ports.NodeDefinitionVersion], error) {
+					return reader.ListNodeVersions(ctx, tenant, limit, pageQuery)
 				})
 		case familyConnection:
-			serveVersionList(response, outcomeConnectionVersionsListed, connectionVersionBodyOf,
-				func() ([]ports.ConnectionDefinitionVersion, error) {
-					return reader.ListConnectionVersions(ctx, tenant, limit)
+			serveVersionPage(response, outcomeConnectionVersionsListed, limit, connectionVersionBodyOf,
+				func() (ports.CatalogPage[ports.ConnectionDefinitionVersion], error) {
+					return reader.ListConnectionVersions(ctx, tenant, limit, pageQuery)
 				})
 		case familyLine:
-			serveVersionList(response, outcomeLineVersionsListed, lineVersionBodyOf,
-				func() ([]ports.LineDefinitionVersion, error) {
-					return reader.ListLineVersions(ctx, tenant, limit)
+			serveVersionPage(response, outcomeLineVersionsListed, limit, lineVersionBodyOf,
+				func() (ports.CatalogPage[ports.LineDefinitionVersion], error) {
+					return reader.ListLineVersions(ctx, tenant, limit, pageQuery)
 				})
 		case familyServiceArea:
-			serveVersionList(response, outcomeServiceAreaVersionsListed, serviceAreaVersionBodyOf,
-				func() ([]ports.ServiceAreaDefinitionVersion, error) {
-					return reader.ListServiceAreaVersions(ctx, tenant, limit)
+			serveVersionPage(response, outcomeServiceAreaVersionsListed, limit, serviceAreaVersionBodyOf,
+				func() (ports.CatalogPage[ports.ServiceAreaDefinitionVersion], error) {
+					return reader.ListServiceAreaVersions(ctx, tenant, limit, pageQuery)
 				})
 		case familyServiceCalendar:
-			serveVersionList(response, outcomeServiceCalendarVersionsListed, serviceCalendarVersionBodyOf,
-				func() ([]ports.ServiceCalendarDefinitionVersion, error) {
-					return reader.ListServiceCalendarVersions(ctx, tenant, limit)
+			serveVersionPage(response, outcomeServiceCalendarVersionsListed, limit, serviceCalendarVersionBodyOf,
+				func() (ports.CatalogPage[ports.ServiceCalendarDefinitionVersion], error) {
+					return reader.ListServiceCalendarVersions(ctx, tenant, limit, pageQuery)
 				})
 		case familyAvailabilityAdjustment:
-			serveVersionList(response, outcomeAvailabilityAdjustmentsListed, adjustmentBodyOf,
-				func() ([]ports.AvailabilityAdjustmentStatement, error) {
-					return reader.ListAvailabilityAdjustments(ctx, tenant, limit)
+			serveVersionPage(response, outcomeAvailabilityAdjustmentsListed, limit, adjustmentBodyOf,
+				func() (ports.CatalogPage[ports.AvailabilityAdjustmentStatement], error) {
+					return reader.ListAvailabilityAdjustments(ctx, tenant, limit, pageQuery)
 				})
 		case familyRouteStrategy:
-			serveVersionList(response, outcomeRouteStrategyVersionsListed, routeStrategyVersionBodyOf,
-				func() ([]ports.RouteStrategyDefinitionVersion, error) {
-					return reader.ListRouteStrategyVersions(ctx, tenant, limit)
+			serveVersionPage(response, outcomeRouteStrategyVersionsListed, limit, routeStrategyVersionBodyOf,
+				func() (ports.CatalogPage[ports.RouteStrategyDefinitionVersion], error) {
+					return reader.ListRouteStrategyVersions(ctx, tenant, limit, pageQuery)
 				})
 		}
 	})
 }
 
-func knownFamily(family string) bool {
-	switch family {
-	case familyNode, familyConnection, familyLine, familyServiceArea,
-		familyServiceCalendar, familyAvailabilityAdjustment, familyRouteStrategy:
-		return true
-	default:
-		return false
-	}
-}
-
-// serveVersionList 是七族共用的转写：读回、逐行转体、2xx 成格。读不回是答案未形成
-// （5xx），不伪装成空族——前者该重试，后者是终局答案。
-func serveVersionList[Entry any, Body any](
+// serveVersionPage 是七族共用的转写：读回、逐行转体、带上 page、2xx 成格。读不回是答案
+// 未形成（5xx），不伪装成空族——前者该重试，后者是终局答案。
+func serveVersionPage[Entry any, Body any](
 	response http.ResponseWriter,
 	outcome string,
+	limit int,
 	bodyOf func(Entry) Body,
-	list func() ([]Entry, error),
+	list func() (ports.CatalogPage[Entry], error),
 ) {
-	entries, err := list()
+	page, err := list()
 	if err != nil {
 		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 		return
 	}
 	// 空列表交回空数组而不是 null：调用方判「没有行」不该先判「有没有字段」。
-	bodies := make([]Body, 0, len(entries))
-	for _, entry := range entries {
+	bodies := make([]Body, 0, len(page.Rows))
+	for _, entry := range page.Rows {
 		bodies = append(bodies, bodyOf(entry))
 	}
 	writeJSON(response, http.StatusOK, versionListResponse[Body]{
 		Outcome:  outcome,
 		Versions: bodies,
+		Page:     cataloguepage.NewPage(limit, page.Next, page.Total),
 	})
 }
 
@@ -207,8 +226,9 @@ func writeCatalogueIntakeProblem(response http.ResponseWriter, err error) {
 }
 
 type versionListResponse[Body any] struct {
-	Outcome  string `json:"outcome"`
-	Versions []Body `json:"versions"`
+	Outcome  string             `json:"outcome"`
+	Versions []Body             `json:"versions"`
+	Page     cataloguepage.Page `json:"page"`
 }
 
 // 各族行体逐字段透出版本行原文，不经披露删减（运营查阅在租户内，无跨账户存在性可泄）。
@@ -371,10 +391,17 @@ type problemResponse struct {
 
 type problemDetail struct {
 	Code string `json:"code"`
+	// Detail 是给操作者看的散文，只随「改请求才会好」的 4xx 在场，前端原样示出、不据此分支
+	// （同 party-commercial 的同名一格）。
+	Detail string `json:"detail,omitempty"`
 }
 
 func writeProblem(response http.ResponseWriter, status int, code string) {
 	writeJSON(response, status, problemResponse{Error: problemDetail{Code: code}})
+}
+
+func writeProblemWithDetail(response http.ResponseWriter, status int, code string, detail string) {
+	writeJSON(response, status, problemResponse{Error: problemDetail{Code: code, Detail: detail}})
 }
 
 func writeJSON(response http.ResponseWriter, status int, value any) {
