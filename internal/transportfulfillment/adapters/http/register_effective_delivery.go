@@ -26,7 +26,8 @@ var ErrMalformedRequest = errors.New("transport fulfillment http: malformed requ
 //
 // 它是接口而不是本包内的解析代码：租户身份按 ADR-0003 只能来自认证结果，真实接入渠道
 // 的认证方式属 PAR-INT-01 待提供；ADR-0029 要求越权探针一律以「未找到」作答，那也是
-// 认证层的话。未决期间本包不带任何实现，包括「开发用」的采信头部版本。
+// 认证层的话。未决期间本包不带任何真渠道实现，包括「开发用」的采信头部版本；隔离写准入的
+// IsolatedCommandIntake（ADR-0091）是唯一的实现，它不采信任何自报，租户取注入值。
 //
 // 与信封相反，**事实内容必须从请求体收**（ADR-0023）：对象、尝试、POD 证据引用与
 // 更正时间都是设备/派送端记录的事实——服务器代铸任何一样，离线补传的重放就会被误判
@@ -49,7 +50,7 @@ type DeliveryProofCorrectionIntake interface {
 }
 
 // EffectiveDeliveryPayload 是交付生效首登的线格式，逐格镜像 application.RegisterEffectiveDeliveryCommand 去掉租户，与既有
-// 传输层替身的请求体同键。五格都是派送端记录的事实（ADR-0023），成不成形由编排答。
+// 传输层替身的请求体同键。各格都是派送端记录的事实（ADR-0023），成不成形由编排答。
 type EffectiveDeliveryPayload struct {
 	Attempt   string `json:"attempt"`
 	Object    string `json:"object"`

@@ -19,8 +19,8 @@ type DispatchTaskIntake interface {
 	IntakeDispatchTask(ctx context.Context, request *http.Request) (application.OpenDispatchTaskCommand, error)
 }
 
-// DispatchTaskPayload 是建立派送任务的线格式，逐格镜像 application.OpenDispatchTaskCommand 去掉租户——工作范围七件加建立时刻。
-// kind 取 domain.DispatchTaskKind 的封闭词，三个时刻取 RFC 3339。
+// DispatchTaskPayload 是建立派送任务的线格式，逐格镜像 application.OpenDispatchTaskCommand 去掉租户——工作范围加建立时刻。
+// kind 取 domain.DispatchTaskKind 的封闭词，时刻一律取 RFC 3339。
 type DispatchTaskPayload struct {
 	Task       string   `json:"task"`
 	Kind       string   `json:"kind"`

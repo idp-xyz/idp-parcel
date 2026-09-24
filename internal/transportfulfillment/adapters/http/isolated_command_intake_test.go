@@ -158,7 +158,7 @@ const isolatedEffectiveDeliveryBody = `{"attempt":"SYN-ATTEMPT-08-10","object":"
 	`"recipient":"SYN-RECIPIENT/consignee-10","proof":"SYN-POD/signature-10"}`
 
 // Covers: DeliveryIntake 契约「事实内容必须从请求体收（ADR-0023）：对象、尝试、POD 证据引用都是派送端记录的事实」——
-// 五格逐字来自载荷，租户来自注入。
+// 各格逐字来自载荷，租户来自注入。
 func TestIsolatedCommandIntakeTranslatesEffectiveDeliveryWithInjectedTenant(t *testing.T) {
 	command, err := isolatedCommandIntakeForTest(t).IntakeRegistration(context.Background(), commandRequest(isolatedEffectiveDeliveryBody))
 	if err != nil {
@@ -173,7 +173,7 @@ func TestIsolatedCommandIntakeTranslatesEffectiveDeliveryWithInjectedTenant(t *t
 const isolatedDeliveryDispatchTriggerBody = `{"segment":"SYN-SEGMENT-08-09","object":"SYN-PARCEL-08-09","occurredAt":"2026-09-25T07:00:00+08:00"}`
 
 // Covers: DeliveryDispatchTriggerIntake 契约「租户从信封给，段、对象与这一拍的业务时间从请求收」——请求里没有任何地点、
-// 时间窗或条件（ADR-0114 决定三），载荷形状只有这三格。
+// 时间窗或条件（ADR-0114 决定三），载荷形状只有段、对象与业务时间。
 func TestIsolatedCommandIntakeTranslatesDeliveryDispatchTriggerWithInjectedTenant(t *testing.T) {
 	command, err := isolatedCommandIntakeForTest(t).IntakeDeliveryDispatchTrigger(context.Background(), commandRequest(isolatedDeliveryDispatchTriggerBody))
 	if err != nil {
@@ -282,7 +282,7 @@ const handoverRegistrationBody = `{"object":"SYN-PARCEL-08-05","scope":"SYN-SCOP
 	`"judgedAt":"2026-09-24T13:00:00+08:00","segment":"SYN-SEGMENT-08-05","plannedSegment":"SYN-PLANNED-08-05",` +
 	`"segmentServiceAction":"LINEHAUL"}`
 
-// Covers: HandoverIntake 契约「`Segment` 与 `PlannedSegment` 是命令的一部分，Intake 必须收」——交接判断的十三格逐字来自
+// Covers: HandoverIntake 契约「`Segment` 与 `PlannedSegment` 是命令的一部分，Intake 必须收」——交接判断各格逐字来自
 // 载荷，判断时刻照 ADR-0023 不由服务端补。
 func TestIsolatedCommandIntakeTranslatesHandoverRegistrationWithInjectedTenant(t *testing.T) {
 	command, err := isolatedCommandIntakeForTest(t).IntakeHandoverRegistration(context.Background(), commandRequest(handoverRegistrationBody))
@@ -422,7 +422,7 @@ const offsitePickupRegistrationBody = `{"object":"SYN-PARCEL-08-01","task":"SYN-
 	`"segmentServiceAction":"OFFSITE_PICKUP"}`
 
 // Covers: PickupRegistrationIntake 契约「租户只能来自认证结果、事实内容从请求体收」+ `Segment`/`PlannedSegment` 必须收——
-// 隔离形态的认证结果是开关值；十格逐字来自载荷，请求头与查询串里的自报一律无视。
+// 隔离形态的认证结果是开关值；各格逐字来自载荷，请求头与查询串里的自报一律无视。
 func TestIsolatedCommandIntakeTranslatesOffsitePickupRegistrationWithInjectedTenant(t *testing.T) {
 	command, err := isolatedCommandIntakeForTest(t).IntakePickupRegistration(context.Background(), commandRequest(offsitePickupRegistrationBody))
 	if err != nil {

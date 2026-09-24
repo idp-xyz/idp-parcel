@@ -106,7 +106,7 @@ func (intake *IsolatedCommandIntake) IntakeReception(
 	return command, nil
 }
 
-// applyReceptionClaim 按接收观察三态核搭配并译进命令。搭配门与受控批量口的收寄模板同一组：明确接收必带标识与接收证据、
+// applyReceptionClaim 按接收观察的各态核搭配并译进命令。搭配门与受控批量口的收寄模板同一组：明确接收必带标识与接收证据、
 // 不带拒收原因；拒收必带原因、不带证据；仅扫描必带标识、两样都不带。给了不该给的是拒不是忽略——既有记录形状没有地方
 // 放它，静默丢掉会让操作员以为登进去了。
 func applyReceptionClaim(command *application.ReceiveDeliveredUnitCommand, document receptionDocument) error {
