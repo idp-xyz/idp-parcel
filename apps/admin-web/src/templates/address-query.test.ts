@@ -1,9 +1,16 @@
 import { test } from 'node:test';
 import { equal } from 'node:assert/strict';
-import { ADDRESS_KEYWORD_PARAM, hashQueryValue, hashWithQueryValue } from './address-query';
+import { ADDRESS_KEYWORD_PARAM, decodeHashSegment, hashQueryValue, hashWithQueryValue } from './address-query';
 
 // 本文件钉的是 hash 查询串的读写（票 admin-web-workspace-form/06）：检索词进地址、与 `?view=` 同层、清空即删键。
 // 钩子那半（replaceState 不压后退记录、回程读回）在 node:test 里钉不到，用 scripts/dom-probe.mjs 一次性实测，结论写票面。
+
+test('decodeHashSegment：解得开的照解，畸形百分号答 null 不抛', () => {
+  equal(decodeHashSegment('SR%2F1'), 'SR/1');
+  equal(decodeHashSegment('%E5%BC%82'), '异');
+  equal(decodeHashSegment('plain'), 'plain');
+  for (const bad of ['%', '%E0', '%E0%A4%A', 'a%zz']) equal(decodeHashSegment(bad), null, bad);
+});
 
 test('检索词的键名是 q', () => {
   equal(ADDRESS_KEYWORD_PARAM, 'q');

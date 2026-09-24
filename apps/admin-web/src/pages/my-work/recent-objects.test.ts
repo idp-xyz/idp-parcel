@@ -125,6 +125,8 @@ test('从 hash 认对象地址', () => {
   equal(recentObjectFromHash('#/'), null);
   equal(recentObjectFromHash(''), null);
   equal(recentObjectFromHash('#/m/'), null);
+  equal(recentObjectFromHash('#/shipment-request-inquiry/%E0%A4%A'), null, '解不开的段不认、不抛');
+  equal(recentObjectFromHash('#/%E0/SR-1'), null, '解不开的段不认、不抛');
 });
 
 // Covers: 对象地址与解析互逆，标识按 URI 组件编码。

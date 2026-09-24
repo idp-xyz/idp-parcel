@@ -90,6 +90,13 @@ test('tabIdFromHash：空 hash、#/workbench 与词表外的模块都落工作�
   equal(tabIdFromHash('#/no-such-module/x', known), null);
 });
 
+test('tabIdFromHash / tabForHash：解不开的段（畸形百分号）落工作台，不抛', () => {
+  for (const hash of ['#/%E0', '#/%', '#/shipment-request-inquiry/%E0%A4%A', '#/shipment-request-inquiry/%?q=x']) {
+    equal(tabIdFromHash(hash, known), null, hash);
+    equal(tabForHash(hash, pageTitleById), null, hash);
+  }
+});
+
 test('tabIdFromHash：段保持 hash 原样不解码，写回 hash 字节相同', () => {
   const id = tabIdFromHash('#/shipment-request-inquiry/SR%2F1', known);
   equal(id, 'shipment-request-inquiry/SR%2F1');

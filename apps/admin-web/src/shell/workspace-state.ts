@@ -3,8 +3,9 @@
 //
 // 为什么单独一个 .ts：每个操作的正向与边界（关活动标签落到哪个邻居、固定的不被批量关、已关闭栈上限、坏存储回默认）
 // 都是与 React 无关的事实，组件层在 node:test 里钉不到（理由见 templates/loading-shape.ts 文件头），抬到这里钉。
-// 零依赖——不 import 任何 @idpxyz/* 的运行时也不 import navigation.ts（那里带着 lucide 图标），测试编成 CommonJS 后能直接
-// require；导航词表由调用方以 pageTitleById 注入，与 shell/command-actions.ts 同款。
+// 零依赖——不 import 任何 @idpxyz/* 的运行时也不 import navigation.ts（那里带着 lucide 图标），只引同样零依赖的
+// templates/address-query.ts，测试编成 CommonJS 后能直接 require；导航词表由调用方以 pageTitleById 注入，与
+// shell/command-actions.ts 同款。
 //
 // 参照 idp-ui@6751fb2 apps/myshop-web/src/hooks/useWorkspaceState.ts 与本仓 vendor 的 ui-workspace useEditorGroupTabState：
 // 固定的标签排在前、批量关闭放过固定的、已关闭栈上限 20、load 逐字段校验坏值回默认。两处刻意不同：
@@ -13,6 +14,8 @@
 //     activeTabId 为 null 即显示工作台，关掉最后一张标签自然落回它，没有一个按不动的按钮。
 //   - **hash 是位置权威**（Layout.tsx 文件头）：标签 id 就是 hash 路径，点标签写 hash、hashchange 再回流成 openTab；
 //     本模块不写 window.location，也不在标签里另存页内状态。
+
+import { decodeHashSegment } from '../templates/address-query';
 
 export const WORKSPACE_STORAGE_KEY = 'parcel-admin-web:workspace';
 
@@ -80,14 +83,16 @@ export function initialWorkspaceState(): WorkspaceState {
  * 从 hash 认出标签 id：`#/<moduleId>[/<objectId>][/…][?…]` → `<moduleId>` 或 `<moduleId>/<objectId>`。
  * 只取前两段——第三段起归页面自己（今天没有页用到，用到时它是页内位置不是另一张标签）；查询串（保存视图的 `?view=`）
  * 归模块页读，剥掉不进 id。段保持 hash 里的原样（不解码）：id 要能原样写回 hash，解码再编码不保证字节相同。
- * 词表外的模块 id 与空 hash 都答 null——落工作台。
+ * 词表外的模块 id、空 hash 与解不开的段（畸形百分号）都答 null——落工作台。所以认出来的 id 两段都解得开，
+ * tabForHash 与 moduleIdOfTab / objectIdOfTab 对它不会抛。
  */
 export function tabIdFromHash(hash: string, isKnownModule: (moduleId: string) => boolean): string | null {
   const path = hash.replace(/^#\/?/, '').split('?')[0];
   const [first, second] = path.split('/');
   if (!first) return null;
-  const moduleId = decodeURIComponent(first);
-  if (moduleId === WORKBENCH_MODULE_ID || !isKnownModule(moduleId)) return null;
+  const moduleId = decodeHashSegment(first);
+  if (moduleId === null || moduleId === WORKBENCH_MODULE_ID || !isKnownModule(moduleId)) return null;
+  if (second && decodeHashSegment(second) === null) return null;
   return second ? `${first}/${second}` : first;
 }
 
@@ -128,7 +133,7 @@ export function hashForTab(tabId: string | null): string {
 export type TabAddressBook = ReadonlyMap<string, string>;
 
 /**
- * 离开一个地址时记下它，归到它那张标签名下；造不出标签的（工作台、词表外、解码会抛的）不记——记不记只影响回程落在
+ * 离开一个地址时记下它，归到它那张标签名下；造不出标签的（工作台、词表外、解不开的）不记——记不记只影响回程落在
  * 原址还是首址。按 tabForHash 认标签，与 hash 开标签同一个构造器，所以记下的地址认回来一定是那张标签。
  */
 export function rememberTabAddress(
@@ -136,12 +141,7 @@ export function rememberTabAddress(
   leftHash: string,
   pageTitleById: Record<string, string>,
 ): TabAddressBook {
-  let tab: WorkspaceTab | null;
-  try {
-    tab = tabForHash(leftHash, pageTitleById);
-  } catch {
-    return book;
-  }
+  const tab = tabForHash(leftHash, pageTitleById);
   if (tab === null || book.get(tab.id) === leftHash) return book;
   const next = new Map(book);
   next.set(tab.id, leftHash);
@@ -294,15 +294,11 @@ function isStoredTab(value: unknown): value is { id: string; pinned?: boolean } 
  * 按存储里的 id 重造标签：走 hash 开标签的同一个构造器 tabForHash，造得出、且认回来仍是这个 id 才算数。
  * 「认回来仍是它」是 Layout 的前提——关标签后写 hashForTab(id)、hashchange 回流时再按 hash 认标签，两路对活动标签各答一次，
  * 只有 id 规范时才答成同一张；尾斜杠、三段、带查询串的 id 写出的 hash 会被认成另一张，这一张就永远点不亮。
- * 畸形百分号序列在解码时抛 URIError，接住当坏格。
+ * 畸形百分号序列由 tabIdFromHash 答 null，同样造不出。
  */
 function tabFromStoredId(id: string, pageTitleById: Record<string, string>): WorkspaceTab | null {
-  try {
-    const tab = tabForHash(hashForTab(id), pageTitleById);
-    return tab !== null && tab.id === id ? tab : null;
-  } catch {
-    return null;
-  }
+  const tab = tabForHash(hashForTab(id), pageTitleById);
+  return tab !== null && tab.id === id ? tab : null;
 }
 
 /**

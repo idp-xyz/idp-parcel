@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import {
   ListPageTemplate,
+  decodeHashSegment,
   presentFields,
   useAddressKeyword,
   useTabReturn,
@@ -15,9 +16,7 @@ import {
 // 标签 id，详情因此开成自己的一张标签、列表留在另一张（shell/workspace-state.ts）。
 function selectedIdFromHash(): string | null {
   const segments = window.location.hash.replace(/^#\/?/, '').split('/');
-  return segments[0] === 'shipment-request-inquiry' && segments[1]
-    ? decodeURIComponent(segments[1])
-    : null;
+  return segments[0] === 'shipment-request-inquiry' && segments[1] ? decodeHashSegment(segments[1]) : null;
 }
 import { StatusBadgeFor, type DomainStatus } from '../../domain/status';
 import { moduleInfoById } from '../../navigation';

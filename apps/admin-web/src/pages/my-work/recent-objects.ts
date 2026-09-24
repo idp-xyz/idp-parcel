@@ -8,8 +8,10 @@
 // 不上服务端、不进任何读口；`clearRecentObjects` 是唯一的删除入口，页面上「清空历史」就是它，没有逐条删——
 // 一条历史不是一个对象，删一条并不让那个对象消失，只会让人以为它消失了。
 //
-// 为什么零依赖：与 shell/preferences.ts 同款，不 import 任何 @idpxyz/* 的东西，测试编成 CommonJS 后能直接 require；
-// 存储经 RecentObjectsStorage 注入，测试用 Map 顶替、不碰真 localStorage。
+// 为什么零依赖：与 shell/preferences.ts 同款，不 import 任何 @idpxyz/* 的东西（只引同样零依赖的 templates/address-query.ts），
+// 测试编成 CommonJS 后能直接 require；存储经 RecentObjectsStorage 注入，测试用 Map 顶替、不碰真 localStorage。
+
+import { decodeHashSegment } from '../../templates/address-query';
 
 export const RECENT_OBJECTS_STORAGE_KEY = 'parcel-admin-web:recent-objects';
 
@@ -85,13 +87,15 @@ export function recentObjectTitle(moduleTitle: string | undefined, moduleId: str
 
 /**
  * 从地址栏 hash 认出「对象地址」：`#/<moduleId>/<objectId>[?…]` 才算，只有一段的是模块页、不记；
- * 第一段上可能挂着 `?view=` 之类的查询串（保存视图跳转用），归模块页读，这里剥掉不认。
+ * 第一段上可能挂着 `?view=` 之类的查询串（保存视图跳转用），归模块页读，这里剥掉不认。解不开的段（畸形百分号）也不认。
  */
 export function recentObjectFromHash(hash: string): { moduleId: string; objectId: string } | null {
   const path = hash.replace(/^#\/?/, '').split('?')[0];
   const [first, second] = path.split('/');
   if (!first || !second) return null;
-  return { moduleId: decodeURIComponent(first), objectId: decodeURIComponent(second) };
+  const moduleId = decodeHashSegment(first);
+  const objectId = decodeHashSegment(second);
+  return moduleId === null || objectId === null ? null : { moduleId, objectId };
 }
 
 /** 对象地址：与各模块页写 hash 的形一致，标识按 URI 组件编码。 */
