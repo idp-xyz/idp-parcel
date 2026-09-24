@@ -2,13 +2,18 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"strings"
 	"testing"
 	"time"
 
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
+
 	adapter "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
 // 票 legal-entity-profile/03 的真库用例：法人资料经应用层用例落进 0036，再经解析用例按时点读回。法人 le-1 由
@@ -262,5 +267,21 @@ func TestLegalEntityProfileRegisterReplaysAndReadsBack(t *testing.T) {
 	}
 	if taxShape != "array" || contactShape != "array" || !invoiceTitleIsNull {
 		t.Fatalf("空集合应落成空数组、缺开票资料应落成 NULL，得到 %s / %s / %v", taxShape, contactShape, invoiceTitleIsNull)
+	}
+}
+
+// Covers: PBC-08 行为面负向证据——资料登记册的写口在无事务上下文必须被 RequireExecutor 拒绝。拒绝先于任何入参解读，
+// 所以传零值就够。
+func TestLegalEntityProfileWritesRefuseToRunOutsideATransaction(t *testing.T) {
+	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	profiles, err := adapter.NewLegalEntityProfiles(db)
+	if err != nil {
+		t.Fatalf("构造法人资料登记册：%v", err)
+	}
+	if _, err := profiles.SaveLegalEntityProfile(t.Context(), domain.LegalEntityProfileRevision{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务 SaveLegalEntityProfile 应返回 ErrTransactionRequired，实得：%v", err)
 	}
 }
