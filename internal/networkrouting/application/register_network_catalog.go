@@ -81,6 +81,12 @@ const (
 	// CatalogRankingFormUnknown 是路由策略版本声明了族外的排序形态。没声明不在此列——那是
 	// 租户还没选，照旧登得进（ADR-0146）。
 	CatalogRankingFormUnknown
+	// 覆盖与节点角色四格：覆盖不成形（国家码、前缀，或没登覆盖国家却带前缀）要改覆盖；节点身份空白要补节点；
+	// 同一角色里一个节点登两次要删重；没登覆盖却登了节点角色，这版区域解析不了任何地址，节点角色无从生效——先登覆盖。
+	CatalogCoverageMalformed
+	CatalogNodeRoleBlank
+	CatalogNodeRoleDuplicated
+	CatalogNodeRolesWithoutCoverage
 )
 
 func (reason CatalogRefusalReason) String() string {
@@ -115,6 +121,14 @@ func (reason CatalogRefusalReason) String() string {
 		return "SOURCE_MISSING"
 	case CatalogRankingFormUnknown:
 		return "RANKING_FORM_UNKNOWN"
+	case CatalogCoverageMalformed:
+		return "COVERAGE_MALFORMED"
+	case CatalogNodeRoleBlank:
+		return "NODE_ROLE_BLANK"
+	case CatalogNodeRoleDuplicated:
+		return "NODE_ROLE_DUPLICATED"
+	case CatalogNodeRolesWithoutCoverage:
+		return "NODE_ROLES_WITHOUT_COVERAGE"
 	default:
 		return ""
 	}
@@ -279,6 +293,10 @@ func (service *NetworkCatalogRegistration) RegisterServiceAreaVersion(
 		row.EffectiveFrom, row.EffectiveTo, row.HasEffectiveTo); reason != CatalogRefusalReasonNone {
 		return catalogRefused(reason), nil
 	}
+	row, reason := normalizeServiceAreaCoverage(row)
+	if reason != CatalogRefusalReasonNone {
+		return catalogRefused(reason), nil
+	}
 
 	if err := service.registry.RegisterServiceAreaVersion(ctx, command.TenantID, row); err != nil {
 		return RegisterCatalogResult{}, fmt.Errorf("register service area version: %w", err)
@@ -397,4 +415,47 @@ func checkVersionRow(
 
 func catalogPresent(value string) bool {
 	return strings.TrimSpace(value) != ""
+}
+
+// normalizeServiceAreaCoverage 是服务区域覆盖与节点角色的受理门。覆盖经领域构造门收（形态与规整归
+// domain.ServiceAreaCoverage，本用例不另写一套），前缀按领域规整后的次序落库；节点身份逐个不得空白，同一角色里
+// 不得重复。没登覆盖的版本不收覆盖内容：带前缀是覆盖不成形，带节点角色是角色无从生效——它解析不了任何地址。
+// 节点是否已在目录里登记不在此判：节点可以后登，匹配不上的角色在折叠时自然不起作用。
+func normalizeServiceAreaCoverage(row ports.ServiceAreaDefinitionVersion) (ports.ServiceAreaDefinitionVersion, CatalogRefusalReason) {
+	if !row.HasCoverage {
+		switch {
+		case len(row.PostalPrefixes) > 0:
+			return row, CatalogCoverageMalformed
+		case len(row.OriginNodes) > 0 || len(row.DestinationNodes) > 0:
+			return row, CatalogNodeRolesWithoutCoverage
+		}
+		row.CoverageCountry = ""
+		return row, CatalogRefusalReasonNone
+	}
+	coverage, err := domain.NewServiceAreaCoverage(row.CoverageCountry, row.PostalPrefixes)
+	if err != nil {
+		return row, CatalogCoverageMalformed
+	}
+	for _, role := range [][]string{row.OriginNodes, row.DestinationNodes} {
+		if reason := checkNodeRole(role); reason != CatalogRefusalReasonNone {
+			return row, reason
+		}
+	}
+	row.CoverageCountry = coverage.Country()
+	row.PostalPrefixes = coverage.PostalPrefixes()
+	return row, CatalogRefusalReasonNone
+}
+
+func checkNodeRole(nodes []string) CatalogRefusalReason {
+	seen := make(map[string]struct{}, len(nodes))
+	for _, node := range nodes {
+		if !catalogPresent(node) {
+			return CatalogNodeRoleBlank
+		}
+		if _, duplicated := seen[node]; duplicated {
+			return CatalogNodeRoleDuplicated
+		}
+		seen[node] = struct{}{}
+	}
+	return CatalogRefusalReasonNone
 }

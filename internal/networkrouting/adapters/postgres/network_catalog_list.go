@@ -222,7 +222,8 @@ var lineFamily = catalogFamily[ports.LineDefinitionVersion]{
 var serviceAreaFamily = catalogFamily[ports.ServiceAreaDefinitionVersion]{
 	operation: "list service area versions",
 	table:     "network_routing.service_area_version",
-	selection: "area_code, version, effective_from, effective_to",
+	selection: "area_code, version, effective_from, effective_to, " +
+		"coverage_country, coverage_postal_prefixes, origin_node_codes, destination_node_codes",
 	sorts: map[string]keyColumn{
 		"code":          {"area_code", cataloguepage.Text},
 		"effectiveFrom": byEffectiveFrom,
@@ -231,13 +232,24 @@ var serviceAreaFamily = catalogFamily[ports.ServiceAreaDefinitionVersion]{
 	filters:  map[string]string{"code": "area_code"},
 	keyword:  []string{"area_code"},
 	scan: func(rows pgx.Rows) (ports.ServiceAreaDefinitionVersion, error) {
-		var row ports.ServiceAreaDefinitionVersion
-		var effectiveTo *time.Time
-		if err := rows.Scan(&row.Code, &row.Version, &row.EffectiveFrom, &effectiveTo); err != nil {
-			return row, err
+		var row areaVersionRow
+		var prefixes, origin, destination []byte
+		if err := rows.Scan(&row.Code, &row.Version, &row.EffectiveFrom, &row.EffectiveTo,
+			&row.CoverageCountry, &prefixes, &origin, &destination); err != nil {
+			return ports.ServiceAreaDefinitionVersion{}, err
 		}
-		row.EffectiveTo, row.HasEffectiveTo = timeOf(effectiveTo), effectiveTo != nil
-		return row, nil
+		for _, column := range []struct {
+			raw    []byte
+			target *[]string
+		}{{prefixes, &row.PostalPrefixes}, {origin, &row.OriginNodes}, {destination, &row.DestinationNodes}} {
+			if column.raw == nil {
+				continue
+			}
+			if err := json.Unmarshal(column.raw, column.target); err != nil {
+				return ports.ServiceAreaDefinitionVersion{}, fmt.Errorf("译回服务区域覆盖：%w", err)
+			}
+		}
+		return row.definition(), nil
 	},
 	sortValues: func(row ports.ServiceAreaDefinitionVersion) map[string]string {
 		return map[string]string{"code": row.Code, "effectiveFrom": cataloguepage.FormatInstant(row.EffectiveFrom)}

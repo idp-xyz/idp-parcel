@@ -23,8 +23,13 @@ var ErrAmbiguousNetworkCatalog = errors.New(
 	"network routing postgres: 网络目录在同一时点有多个适用版本")
 
 // NetworkCatalog 是版本化网络目录的存取口（票 01 的机制四件）。它拥有定义原语的
-// 版本行与目录修订，不做任何评估、过滤或排序——那一层属 PAR-NET-14，在它存在之前
-// 三个证据视图不读本目录（护栏：三口取数侧不接，NetworkDefinitions 照旧作答）。
+// 版本行与目录修订，只按判断时点选版、拒歧义，不做任何评估、过滤或排序。网络证据
+// 视图（可达性与初始路由）经选版读口读本目录（ADR-0148 决定六部分停用 ADR-0068 决定六，自票
+// routing-first-cut/07 起）：候选生成与事实折叠是产品策略，落在应用层
+// （application.CatalogNetworkEvidence），不落本适配器；`未配置`由目录修订锚与适用
+// 的路由策略版本答，视图修订就是本目录的修订锚。迁移 0008 头注里「三个证据视图不读
+// 本目录」是立表时的状态，迁移按 checksum 固定不改，以本注释、迁移 0011 头注与
+// ADR-0148 为准。
 type NetworkCatalog struct {
 	db *bentopg.DB
 }
@@ -36,23 +41,13 @@ func NewNetworkCatalog(db *bentopg.DB) (*NetworkCatalog, error) {
 	return &NetworkCatalog{db: db}, nil
 }
 
-// 登记口的端口契约用编译期钉住——接口漂移在构建时暴露（先例：parcel-pricing-register
-// 对两个登记用例的钉法）。行类型与封闭枚举的定义在 ports 侧（登记用例要拿它们表达
-// 受理门，而应用层不得依赖适配器），本文件只留读侧快照与七个写方法的实现。
-var _ ports.NetworkCatalogRegistry = (*NetworkCatalog)(nil)
-
-// NetworkCatalogSnapshot 是一次取回：七类定义在 asOf 的适用行与它们共同来自的修订。
-// 事实与修订同版由单条语句担保（单语句单快照），不靠调用方两次取回再对号。
-type NetworkCatalogSnapshot struct {
-	Nodes        []ports.NodeDefinitionVersion
-	Connections  []ports.ConnectionDefinitionVersion
-	Lines        []ports.LineDefinitionVersion
-	ServiceAreas []ports.ServiceAreaDefinitionVersion
-	Calendars    []ports.ServiceCalendarDefinitionVersion
-	Adjustments  []ports.AvailabilityAdjustmentStatement
-	Strategies   []ports.RouteStrategyDefinitionVersion
-	Revision     domain.NetworkViewRevision
-}
+// 登记口与选版读口的端口契约用编译期钉住——接口漂移在构建时暴露（先例：
+// parcel-pricing-register 对两个登记用例的钉法）。行类型、快照与封闭枚举的定义在
+// ports 侧（登记用例与证据视图的折叠都在应用层，而应用层不得依赖适配器）。
+var (
+	_ ports.NetworkCatalogRegistry = (*NetworkCatalog)(nil)
+	_ ports.NetworkCatalogRead     = (*NetworkCatalog)(nil)
+)
 
 // LoadDefinitionsAt 按判断时点取回目录。三格与证据视图同形（ADR-0052）：快照在场即
 // 定义；第二格 false 即**这个租户从未登记过任何网络定义**（未配置）；error 只表示
@@ -68,8 +63,8 @@ func (catalog *NetworkCatalog) LoadDefinitionsAt(
 	ctx context.Context,
 	tenant domain.TenantID,
 	asOf time.Time,
-) (NetworkCatalogSnapshot, bool, error) {
-	none := NetworkCatalogSnapshot{}
+) (ports.NetworkCatalogSnapshot, bool, error) {
+	none := ports.NetworkCatalogSnapshot{}
 	if tenant.String() == "" {
 		return none, false, fmt.Errorf("load network catalog: tenant is required")
 	}
@@ -110,7 +105,9 @@ SELECT
         AND (effective_to IS NULL OR effective_to > $2)),
     (SELECT coalesce(jsonb_agg(jsonb_build_object(
             'code', area_code, 'version', version,
-            'effective_from', effective_from, 'effective_to', effective_to
+            'effective_from', effective_from, 'effective_to', effective_to,
+            'coverage_country', coverage_country, 'postal_prefixes', coverage_postal_prefixes,
+            'origin_nodes', origin_node_codes, 'destination_nodes', destination_node_codes
         ) ORDER BY area_code, version), '[]'::jsonb)
        FROM network_routing.service_area_version
       WHERE tenant_id = $1 AND effective_from <= $2
@@ -166,14 +163,14 @@ SELECT
 func rebuildCatalogSnapshot(
 	revision int64,
 	nodesRaw, connectionsRaw, linesRaw, areasRaw, calendarsRaw, adjustmentsRaw, strategiesRaw []byte,
-) (NetworkCatalogSnapshot, error) {
-	none := NetworkCatalogSnapshot{}
+) (ports.NetworkCatalogSnapshot, error) {
+	none := ports.NetworkCatalogSnapshot{}
 
 	viewRevision, err := domain.NewNetworkViewRevision(strconv.FormatInt(revision, 10))
 	if err != nil {
 		return none, err
 	}
-	snapshot := NetworkCatalogSnapshot{Revision: viewRevision}
+	snapshot := ports.NetworkCatalogSnapshot{Revision: viewRevision}
 
 	var nodes []nodeVersionRow
 	if err := json.Unmarshal(nodesRaw, &nodes); err != nil {
@@ -238,11 +235,7 @@ func rebuildCatalogSnapshot(
 		return none, err
 	}
 	for _, row := range areas {
-		snapshot.ServiceAreas = append(snapshot.ServiceAreas, ports.ServiceAreaDefinitionVersion{
-			Code: row.Code, Version: row.Version,
-			EffectiveFrom: row.EffectiveFrom, EffectiveTo: timeOf(row.EffectiveTo),
-			HasEffectiveTo: row.EffectiveTo != nil,
-		})
+		snapshot.ServiceAreas = append(snapshot.ServiceAreas, row.definition())
 	}
 
 	var calendars []calendarVersionRow
@@ -340,10 +333,60 @@ type lineVersionRow struct {
 }
 
 type areaVersionRow struct {
-	Code          string     `json:"code"`
-	Version       int32      `json:"version"`
-	EffectiveFrom time.Time  `json:"effective_from"`
-	EffectiveTo   *time.Time `json:"effective_to"`
+	Code             string     `json:"code"`
+	Version          int32      `json:"version"`
+	EffectiveFrom    time.Time  `json:"effective_from"`
+	EffectiveTo      *time.Time `json:"effective_to"`
+	CoverageCountry  *string    `json:"coverage_country"`
+	PostalPrefixes   []string   `json:"postal_prefixes"`
+	OriginNodes      []string   `json:"origin_nodes"`
+	DestinationNodes []string   `json:"destination_nodes"`
+}
+
+// definition 译回一行区域版本。覆盖国家为 NULL 即这版没登覆盖，其余三列按 CHECK 必同为 NULL。
+func (row areaVersionRow) definition() ports.ServiceAreaDefinitionVersion {
+	area := ports.ServiceAreaDefinitionVersion{
+		Code: row.Code, Version: row.Version,
+		EffectiveFrom: row.EffectiveFrom, EffectiveTo: timeOf(row.EffectiveTo),
+		HasEffectiveTo: row.EffectiveTo != nil,
+	}
+	if row.CoverageCountry != nil {
+		area.HasCoverage = true
+		area.CoverageCountry = *row.CoverageCountry
+		area.PostalPrefixes = row.PostalPrefixes
+		area.OriginNodes = row.OriginNodes
+		area.DestinationNodes = row.DestinationNodes
+	}
+	return area
+}
+
+// serviceAreaCoverageColumns 把覆盖与节点角色折成四列：没登覆盖四列全落 NULL，空数组也落 NULL——库的 CHECK
+// 只收非空数组，「没有」只有 NULL 一种写法。
+func serviceAreaCoverageColumns(row ports.ServiceAreaDefinitionVersion) (*string, []byte, []byte, []byte, error) {
+	if !row.HasCoverage {
+		return nil, nil, nil, nil, nil
+	}
+	country := row.CoverageCountry
+	prefixes, err := optionalJSONArray(row.PostalPrefixes)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	origin, err := optionalJSONArray(row.OriginNodes)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	destination, err := optionalJSONArray(row.DestinationNodes)
+	if err != nil {
+		return nil, nil, nil, nil, err
+	}
+	return &country, prefixes, origin, destination, nil
+}
+
+func optionalJSONArray(values []string) ([]byte, error) {
+	if len(values) == 0 {
+		return nil, nil
+	}
+	return json.Marshal(values)
 }
 
 type calendarVersionRow struct {
@@ -530,8 +573,8 @@ func (catalog *NetworkCatalog) RegisterLineVersion(
 	return catalog.bumpRevision(ctx, executor, tenant)
 }
 
-// RegisterServiceAreaVersion 追加一个服务区域版本。覆盖内容列未定（开放集，等
-// PAR-NET-14 的形态），本方法只登版本与有效区间。版本纪律同 RegisterNodeVersion。
+// RegisterServiceAreaVersion 追加一个服务区域版本：版本、有效区间与覆盖各列（迁移 0011，ADR-0148
+// 决定二、五）。覆盖形态由登记用例经领域构造门收过，这里只翻译成列。版本纪律同 RegisterNodeVersion。
 func (catalog *NetworkCatalog) RegisterServiceAreaVersion(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -552,12 +595,18 @@ func (catalog *NetworkCatalog) RegisterServiceAreaVersion(
 			return fmt.Errorf("register service area version: 接续闭合前版本：%w", err)
 		}
 	}
+	coverageCountry, prefixes, originNodes, destinationNodes, err := serviceAreaCoverageColumns(row)
+	if err != nil {
+		return fmt.Errorf("register service area version: %w", err)
+	}
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO network_routing.service_area_version
-			(tenant_id, area_code, version, effective_from, effective_to)
-		 VALUES ($1, $2, $3, $4, $5)`,
+			(tenant_id, area_code, version, effective_from, effective_to,
+			 coverage_country, coverage_postal_prefixes, origin_node_codes, destination_node_codes)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 		tenant.String(), row.Code, row.Version, row.EffectiveFrom.UTC(),
 		optionalTime(row.EffectiveTo, row.HasEffectiveTo),
+		coverageCountry, prefixes, originNodes, destinationNodes,
 	); err != nil {
 		return fmt.Errorf("register service area version: %w", err)
 	}

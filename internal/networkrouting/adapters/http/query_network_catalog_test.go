@@ -463,6 +463,43 @@ func TestRouteStrategyVersionsShowTheirDeclaredRankingForm(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0148 决定二、五的查阅半边——服务区域版本登的覆盖与节点角色随行透出；没登覆盖的版本整格
+// 缺席而不是给一份空覆盖，读的人分得出「覆盖整个国家」与「还没登覆盖」。
+func TestServiceAreaVersionsShowTheirCoverage(t *testing.T) {
+	effective := time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
+	endpoint := networkhttp.NewQueryNetworkCatalogEndpoint(
+		grantedCatalogueIntake{tenant: "TENANT-1", limit: 25},
+		&stubCatalogReader{areas: []ports.ServiceAreaDefinitionVersion{
+			{Code: "area-covered", Version: 1, EffectiveFrom: effective,
+				HasCoverage: true, CoverageCountry: "XA", PostalPrefixes: []string{"10"},
+				OriginNodes: []string{"node-a"}},
+			{Code: "area-bare", Version: 1, EffectiveFrom: effective},
+		}},
+	)
+	response := httptest.NewRecorder()
+	endpoint.ServeHTTP(response, catalogRequest(t, "?family=service-area"))
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+	}
+	var body struct {
+		Versions []map[string]json.RawMessage `json:"versions"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode %s: %v", response.Body.Bytes(), err)
+	}
+	if len(body.Versions) != 2 {
+		t.Fatalf("versions = %s", response.Body.String())
+	}
+	if got := string(body.Versions[0]["coverage"]); got !=
+		`{"country":"XA","postalPrefixes":["10"],"originNodes":["node-a"]}` {
+		t.Fatalf("登过覆盖的版本透出 %s", got)
+	}
+	if _, present := body.Versions[1]["coverage"]; present {
+		t.Fatalf("没登覆盖的版本长出了 coverage：%s", response.Body.String())
+	}
+}
+
 // Covers: ADR-0022/ADR-0029 — 读不回是答案未形成（5xx），不伪装成空族：前者该重试，
 // 后者是终局答案。
 func TestAFailingCatalogueReadIsNoAnswerRatherThanAnEmptyFamily(t *testing.T) {

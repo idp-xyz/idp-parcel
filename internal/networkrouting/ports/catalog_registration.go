@@ -10,11 +10,9 @@ import (
 
 // 本文件是版本化网络目录（ADR-0068）的登记边界：七类定义原语的登记行形状与写入口。
 // 行类型自持久化适配器上移到端口层，是因为登记用例（应用层）要以它们表达受理门，
-// 而应用层不得依赖适配器；读侧的快照与选版**刻意不设端口**——解析层存在之前三个
-// 证据视图不读本目录（ADR-0068 Decision 六），把选版读口抬成端口等于向三口发出
-// 邀请，正是护栏要挡的方向。catalog_read.go 的运营查阅上列端口（ADR-0077）不属
-// 这一类：它按族列版本行原文，不选版不折叠，形不成判断依据，对三口没有可消费的
-// 形状。
+// 而应用层不得依赖适配器。读侧端口在 catalog_read.go：选版读口供证据视图的目录
+// 折叠（ADR-0148 决定六部分停用 ADR-0068 决定六之后，证据视图读本目录），运营查阅
+// 上列按族列版本行原文、不选版不折叠。
 
 // CatalogTargetKind 是日历与可用性调整的适用对象类别，封闭三类（CONTEXT：针对节点、
 // 网络连接或线路）。
@@ -136,14 +134,22 @@ type LineDefinitionVersion struct {
 	HasEffectiveTo   bool
 }
 
-// ServiceAreaDefinitionVersion 是一个服务区域的适用版本行。覆盖内容列未定
-// （开放集，等 PAR-NET-14 的形态），版本机制先行。
+// ServiceAreaDefinitionVersion 是一个服务区域的适用版本行：版本、有效区间与覆盖。覆盖文法首版两种形态
+// （整个国家 / 地区，或国家 / 地区加一组邮编前缀），形态归产品、取值归租户（ADR-0148 决定二）。
 type ServiceAreaDefinitionVersion struct {
 	Code           string
 	Version        int32
 	EffectiveFrom  time.Time
 	EffectiveTo    time.Time
 	HasEffectiveTo bool
+	// 覆盖与节点角色（ADR-0148 决定二、五）。HasCoverage 为假即这版没登覆盖——本格落地之前的存量版本，或只登了
+	// 身份与有效期的版本；折叠时它不解析任何地址。PostalPrefixes 为空即整国家 / 地区覆盖；两组节点是这版区域
+	// 用来收寄（始发）与交付（尾程注入）的节点身份。
+	HasCoverage      bool
+	CoverageCountry  string
+	PostalPrefixes   []string
+	OriginNodes      []string
+	DestinationNodes []string
 }
 
 // ServiceCalendarDefinitionVersion 是某适用对象的服务日历适用版本行。

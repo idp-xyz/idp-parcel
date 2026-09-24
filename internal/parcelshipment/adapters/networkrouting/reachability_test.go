@@ -57,6 +57,7 @@ type evidenceDouble struct {
 func (double *evidenceDouble) LoadNetworkEvidence(
 	_ context.Context,
 	_ nrdomain.ReachabilityJudgmentKey,
+	_ nrports.RequestCarriedContent,
 ) (nrports.NetworkEvidence, bool, error) {
 	if double.err != nil {
 		return nrports.NetworkEvidence{}, false, double.err

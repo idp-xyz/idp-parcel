@@ -69,7 +69,8 @@ const (
 	JudgmentStoreUnavailable
 	CommercialEligibilityUnavailable
 	NetworkEvidenceUnavailable
-	// NetworkEvidenceNotConfigured 是网络定义登记册对这个范围未配置（ADR-0052）。
+	// NetworkEvidenceNotConfigured 是这个判断范围未配置：网络目录为空，或判断时点没有适用于该服务
+	// 目的的路由策略版本（ADR-0052、ADR-0148 决定六）。
 	// 与依赖不可用分格：那一格等运维，这一格等租户登记网络定义。两者都不是`资料不足`
 	// ——`资料不足`说的是这个包裹的地址等信息不全，是向客户要东西的理由。
 	NetworkEvidenceNotConfigured
@@ -101,9 +102,12 @@ func (reference ContinuationReference) String() string {
 	return reference.value
 }
 
+// AssessParcelReachabilityCommand 的 Carried 是发起方随请求交来的判断对象内容（ADR-0075；ADR-0148 决定一），
+// 不进判断范围：判断身份由 Key 各维构成，所携内容换了一版就是换了提交版本，范围自然不同。
 type AssessParcelReachabilityCommand struct {
 	Correlation domain.RequestCorrelationID
 	Key         domain.ReachabilityJudgmentKey
+	Carried     ports.RequestCarriedContent
 }
 
 type AssessParcelReachabilityResult struct {
@@ -217,10 +221,10 @@ func (handler *AssessParcelReachabilityHandler) Handle(
 		}, nil
 	}
 
-	evidence, configured, err := handler.evidence.LoadNetworkEvidence(ctx, command.Key)
+	evidence, configured, err := handler.evidence.LoadNetworkEvidence(ctx, command.Key, command.Carried)
 	if !configured && err == nil {
-		// 首发唯一走得到的真实分支：没有租户就没有网络定义，如实答未配置。折成空证据
-		// 会让领域评出`不可达`，那是从缺配置里编出一个业务结论。
+		// 目录为空或没有适用的路由策略版本，如实答未配置。折成空证据会让领域评出`不可达`，
+		// 那是从缺配置里编出一个业务结论。
 		return handler.notFormed(command, NetworkEvidenceNotConfigured), nil
 	}
 	if err != nil {

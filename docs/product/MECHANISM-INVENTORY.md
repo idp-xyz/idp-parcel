@@ -10,7 +10,7 @@
 | architecture（非业务） | 0 | 13 | 0 | 0 | 0 | 0 |
 | collectionremittance | 22 | 10 | 4 | 6 | 0 | 3 |
 | customscompliance | 94 | 94 | 18 | 41 | 10 | 12 |
-| networkrouting | 56 | 52 | 6 | 14 | 2 | 5 |
+| networkrouting | 59 | 57 | 8 | 13 | 2 | 5 |
 | nodeoperations | 30 | 25 | 3 | 10 | 4 | 5 |
 | parcelpricing | 99 | 94 | 10 | 14 | 1 | 16 |
 | parcelshipment | 187 | 181 | 20 | 34 | 10 | 17 |
@@ -20,7 +20,7 @@
 | settlementaccounting | 100 | 81 | 14 | 43 | 9 | 8 |
 | transportfulfillment | 141 | 129 | 25 | 36 | 11 | 24 |
 | visibilityexception | 98 | 93 | 11 | 30 | 8 | 10 |
-| **合计** | 1026 | 972 | 127 | 274 | 57 | 139 |
+| **合计** | 1029 | 977 | 129 | 273 | 57 | 139 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 68、测试 95。
 
@@ -54,14 +54,14 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：12 个模块共 181 份 SQL
+## 迁移：12 个模块共 182 份 SQL
 
 | 模块 | 份数 |
 |---|---|
 | access_identity | 1 |
 | collection_remittance | 1 |
 | customs_compliance | 23 |
-| network_routing | 10 |
+| network_routing | 11 |
 | node_operations | 4 |
 | parcel_pricing | 10 |
 | parcel_shipment | 22 |
@@ -114,10 +114,13 @@
 | visibilityexception | 8 |
 | **合计** | 24 |
 
-## 端口：声明 420 个；基线口径缺 14，精确口径缺 7
+## 端口：声明 422 个；基线口径缺 17，精确口径缺 7
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
+- `networkrouting.CustomsApplicabilitySource` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/networkrouting/application.CustomsApplicabilityNotConnected）
+- `networkrouting.InitialRouteEvidenceView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/networkrouting/application.CatalogInitialRouteEvidence）
+- `networkrouting.NetworkEvidenceView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/networkrouting/application.CatalogNetworkEvidence）
 - `nodeoperations.ParcelIdentityView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/cmd/parcel-api.unconfiguredParcelIdentityView）
 - `parcelpricing.PricingInputResolver` 
 - `parcelshipment.ContinuedAttemptRegisterView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres.ContinuedAttemptRegisters）

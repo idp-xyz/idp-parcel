@@ -1,10 +1,11 @@
 // Package ports 声明 network-routing 自有的语义边界。判断库、计划适用性、交接登记册、
-// 计划版本签发与两个发布意图都已有 PostgreSQL 适配器；仍只有测试替身的是五个证据与
-// 适用性视图——它们要产出的逐候选事实，其生成、过滤与排序规则属 PAR-NET-14，登记册
-// 状态待提供，因而不得先写一份默认实现。
+// 计划版本签发、两个发布意图与版本化网络目录都已有 PostgreSQL 适配器；网络证据视图
+// （可达性与初始路由）由应用层从目录折出（候选生成与折叠是产品策略，ADR-0146 决定七、
+// ADR-0148），目录内容是租户取值。
 //
-// 这条禁令按 ADR-0052 有一条分界：它禁的是**替租户拟一份网络定义**。读一个空登记册并
-// 如实答`未配置`不是默认实现，恰恰是它想保护的东西——三个证据视图为此都带`未配置`格。
+// 不得替租户拟一份网络定义：证据视图不带任何默认网络，目录为空或没有适用的路由策略
+// 版本时如实答`未配置`（ADR-0052、ADR-0148 决定六）——那不是默认实现，恰恰是这条禁令
+// 想保护的东西。
 package ports
 
 import (
@@ -27,19 +28,30 @@ type NetworkEvidence struct {
 	ViewRevision      domain.NetworkViewRevision
 }
 
+// RequestCarriedContent 是随判断请求携带、由发起方交来的判断对象内容（ADR-0148 决定一「随请求携带」一路，
+// ADR-0075 同款，判据是同版性）：它是判断对象那一版的内容，本上下文只用它判断，不回读、不保存本体。首版只含
+// 地理解析投影；服务要求与承诺上界随 routing-first-cut/08、09 加入。零值即发起方什么都没带。
+type RequestCarriedContent struct {
+	Geo domain.GeoResolutionProjection
+}
+
 // NetworkEvidenceView 为一次判断取回版本化网络事实。
 //
-// 三格，缺一不可（ADR-0052）：事实在场即证据；第二个返回值为 false 即**网络定义登记册
-// 对这个判断范围未配置**；error 只表示依赖调不通、超时这类技术故障。
+// 三格，缺一不可（ADR-0052）：事实在场即证据；第二个返回值为 false 即**这个判断范围
+// 未配置**——租户的目录修订锚不存在，或判断时点没有适用于该服务目的的路由策略版本
+// （ADR-0148 决定六）；error 只表示依赖调不通、超时，或目录登记了而解不出这类故障。
 //
 // 三格分开是因为恢复动作两两不同：未配置要租户去登记网络定义，依赖不可用要运维去救那个
 // 依赖，而事实齐备才轮到领域评估。**空册绝不折成空证据**——领域会照常评估并得出`无当前
 // 有效路由`，那是从缺配置里编出一个业务结论，用例明写它与`未决`不能合并。反向同样禁：
 // 把技术故障装扮成一个证据缺口，会让它进入`资料不足`统计。
+//
+// carried 是随请求携带的内容；视图修订只标目录那一路，不随所携内容变。
 type NetworkEvidenceView interface {
 	LoadNetworkEvidence(
 		ctx context.Context,
 		key domain.ReachabilityJudgmentKey,
+		carried RequestCarriedContent,
 	) (NetworkEvidence, bool, error)
 }
 

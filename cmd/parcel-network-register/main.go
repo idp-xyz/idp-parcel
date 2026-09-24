@@ -5,13 +5,13 @@
 //
 // 输入是一份登记行 JSON（-kind 指族，-file 指路径），未知字段一律拒绝——打错的键
 // 静默丢弃会让操作员以为登进去的比实际多。译装后交给登记用例过受理门，缺件在入库前
-// 拒绝并指名差哪格。本工具不携带任何默认取值——目录内容全属实例半边（PAR-NET-01..15
-// 待提供），机制先行；服务区域地理覆盖、日历内容、策略规则正文的列还不存在
-// （PAR-NET-14），本口今天登的就是版本骨架，不多不少。
+// 拒绝并指名差哪格。本工具不携带任何默认取值——目录内容是租户取值，形状归产品；
+// 本口登的是库里已有的列，不多不少：服务区域的覆盖与节点角色、路由策略的排序形态已有
+// 列，日历内容与策略其余规则正文的列还不存在。
 //
-// 登记的是 0008 的七张版本表；0007 的（租户+服务目的）网络定义登记册**不在本口**——
-// 该行如何随目录登记形成属两表合流口径，判给解析层设计（ADR-0068 Decision 六），
-// 在那之前三个证据视图照旧答`未配置`，本口登多少都不改变这一点。
+// 登记的是 0008 的七张版本表（与后续迁移扩的列）。网络证据视图从这份目录折出事实
+// （ADR-0148 决定六）：登进一版适用于某服务目的的路由策略，这个范围就不再答`未配置`。
+// 0007 的定义登记册不再被读，也不在本口。
 //
 // 本工具假设业务 schema 已由迁移作业施加，不自行迁移。
 //
@@ -275,16 +275,21 @@ func commandFor(
 		if err != nil {
 			return nil, err
 		}
-		command := application.RegisterServiceAreaVersionCommand{
-			TenantID: tenant,
-			Area: ports.ServiceAreaDefinitionVersion{
-				Code:           payload.Code,
-				Version:        payload.Version,
-				EffectiveFrom:  payload.EffectiveFrom,
-				EffectiveTo:    timeOf(payload.EffectiveTo),
-				HasEffectiveTo: payload.EffectiveTo != nil,
-			},
+		area := ports.ServiceAreaDefinitionVersion{
+			Code:           payload.Code,
+			Version:        payload.Version,
+			EffectiveFrom:  payload.EffectiveFrom,
+			EffectiveTo:    timeOf(payload.EffectiveTo),
+			HasEffectiveTo: payload.EffectiveTo != nil,
 		}
+		if coverage := payload.Coverage; coverage != nil {
+			area.HasCoverage = true
+			area.CoverageCountry = coverage.Country
+			area.PostalPrefixes = coverage.PostalPrefixes
+			area.OriginNodes = coverage.OriginNodes
+			area.DestinationNodes = coverage.DestinationNodes
+		}
+		command := application.RegisterServiceAreaVersionCommand{TenantID: tenant, Area: area}
 		return func(ctx context.Context, registrar *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
 			return registrar.RegisterServiceAreaVersion(ctx, command)
 		}, nil
@@ -479,6 +484,15 @@ type areaPayload struct {
 	Version       int32      `json:"version"`
 	EffectiveFrom time.Time  `json:"effective_from"`
 	EffectiveTo   *time.Time `json:"effective_to"`
+	// Coverage 缺席即这版没登覆盖；给了就由受理门按覆盖文法与节点角色逐格核。
+	Coverage *areaCoveragePayload `json:"coverage"`
+}
+
+type areaCoveragePayload struct {
+	Country          string   `json:"country"`
+	PostalPrefixes   []string `json:"postal_prefixes"`
+	OriginNodes      []string `json:"origin_nodes"`
+	DestinationNodes []string `json:"destination_nodes"`
 }
 
 type calendarPayload struct {

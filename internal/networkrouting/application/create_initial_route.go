@@ -84,7 +84,8 @@ const (
 	RouteUndecidedReasonNone RouteUndecidedReason = iota
 	RouteStoreUnavailable
 	RouteEvidenceUnavailable
-	// RouteEvidenceNotConfigured 是网络定义登记册对这个范围未配置（ADR-0052）。它与
+	// RouteEvidenceNotConfigured 是这个范围未配置：网络目录为空，或判断时点没有适用于该服务目的的
+	// 路由策略版本（ADR-0052、ADR-0148 决定六）。它与
 	// RouteEvidenceUnavailable 分格，因为恢复动作相反：未配置要租户去登记网络定义，
 	// 不可用要运维去救依赖。也绝不译成`无当前有效路由`——那是领域从「全部候选确定性
 	// 淘汰」得出的判断，而这里是还没人说过网络长什么样。

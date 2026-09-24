@@ -38,6 +38,7 @@ type evidenceDouble struct {
 func (double *evidenceDouble) LoadNetworkEvidence(
 	_ context.Context,
 	key domain.ReachabilityJudgmentKey,
+	_ ports.RequestCarriedContent,
 ) (ports.NetworkEvidence, bool, error) {
 	double.assembled++
 	double.assembleKey = key
@@ -278,7 +279,7 @@ func TestUnavailableNetworkEvidenceIsNotFormedRatherThanInsufficientEvidence(t *
 	}
 }
 
-// Covers: ADR-0052 的「未配置」格——网络定义登记册对这个范围未配置时如实答未形成判断并
+// Covers: ADR-0052 的「未配置」格——这个范围的网络定义未配置时如实答未形成判断并
 // 占**自己**的原因格，不与依赖不可用共用，更不评成`不可达`。首发无租户时这是唯一走得到
 // 的真实分支：折成空证据会让领域照常评估、得出一个业务结论，而实际情况是还没人说过网络
 // 长什么样。两格的恢复动作相反——这一格等租户去登记，那一格等运维去救依赖。

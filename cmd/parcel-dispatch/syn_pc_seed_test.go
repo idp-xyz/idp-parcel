@@ -6,7 +6,6 @@ import (
 	"time"
 
 	nrpartycommercial "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/partycommercial"
-	nrpostgres "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/postgres"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	pspartycommercial "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -20,7 +19,7 @@ import (
 // ResolutionID=`SYN-RES-01` 配上一份真实 PC 闭包——同一次首次 Save 同时采用接单规则包
 // 与可观察的 NetworkServiceForm 服务产品。生产路径与 synSCommercialBasis 都不动：
 // formDecision 继续发明快照；种子只补持久化面。禁止第二次 Save 同标识，禁止
-// INSERT network_definition，禁止 SaveServiceProduct。
+// 登记网络目录，禁止 SaveServiceProduct。
 //
 // 空资格清单会让 JudgeIntakeEligibility 直接 ESTABLISHED 并形成承诺；只种一种来源会
 // 让另一条链走 NOT_APPLICABLE 并入账。两件都禁止。
@@ -318,19 +317,20 @@ func assertRoutingApplicabilityRequired(t *testing.T, fixture *synVerticalFixtur
 	}
 }
 
-// assertRouteEvidenceUnconfigured 用生产登记册钉死下一诚实停点：这个范围没有网络定义。
+// assertRouteEvidenceUnconfigured 用生产证据视图钉死下一诚实停点：这个范围没有网络定义——
+// 目录为空，或没有适用于这个服务目的的路由策略版本（ADR-0148 决定六）。
 func assertRouteEvidenceUnconfigured(t *testing.T, fixture *synVerticalFixture) {
 	t.Helper()
-	definitions, err := nrpostgres.NewNetworkDefinitions(fixture.db)
+	evidence, err := initialRouteEvidence(fixture.db, systemClock{})
 	if err != nil {
-		t.Fatalf("构造网络定义登记册：%v", err)
+		t.Fatalf("构造初始路由证据视图：%v", err)
 	}
-	_, configured, err := definitions.LoadInitialRouteEvidence(t.Context(), synInitialRouteKey(t, fixture))
+	_, configured, err := evidence.LoadInitialRouteEvidence(t.Context(), synInitialRouteKey(t, fixture))
 	if err != nil {
 		t.Fatalf("LoadInitialRouteEvidence：%v", err)
 	}
 	if configured {
-		t.Fatal("网络定义已配置——种子不得 INSERT network_definition")
+		t.Fatal("网络定义已配置——种子不得登记网络目录")
 	}
 }
 

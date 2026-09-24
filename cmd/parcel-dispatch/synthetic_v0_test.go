@@ -66,7 +66,7 @@ func TestSYNIncompleteJudgmentsStayUndecidedWithoutAnAcceptanceEnvelope(t *testi
 // 把信封投进 FanOut（先 VE 客户归属确立补派生，后 NR 初始路由）；已接受重建门已开
 // （ADR-0061），NR 消费者按引用读回委托并进入 CreateInitialRoute。生产装配按已接受
 // 解析回指闭包（ADR-0064）；本用例调同一份 SYN-PC-PRODUCT 种子让 SYN-RES-01 采用可
-// 观察的 NetworkServiceForm，适用性译成要求判断。网络定义登记册空册，NR 腿停在
+// 观察的 NetworkServiceForm，适用性译成要求判断。网络目录空册，NR 腿停在
 // ROUTE_EVIDENCE_NOT_CONFIGURED；VE 腿常态空转（包裹还没流转、无当前投影）成功入账
 // ——两本 inbox 互不隶属，VE 成功不改变 NR 腿的未决记账，整封失败码仍是
 // dispatch.consumer_undecided（仅全路未决才记未决，外部评审票 01 的分格）。不得写可
