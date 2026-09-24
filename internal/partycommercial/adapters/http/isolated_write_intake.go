@@ -90,12 +90,17 @@ type businessPartyDocument struct {
 	EffectiveFrom time.Time `json:"effectiveFrom"`
 }
 
+// legalEntityDocument 的身份层三格（ADR-0145 决定一、二）键可缺：缺即没给，是缺是漏由用例判（新登记缺国家或缺号答
+// `未受理`），Intake 只管形状——给了就得是合格的国家形状与非空的类型、号。
 type legalEntityDocument struct {
-	LegalEntityID string    `json:"legalEntityId"`
-	PartyID       string    `json:"partyId"`
-	Revision      int       `json:"revision"`
-	Basis         string    `json:"basis"`
-	EffectiveFrom time.Time `json:"effectiveFrom"`
+	LegalEntityID               string                           `json:"legalEntityId"`
+	PartyID                     string                           `json:"partyId"`
+	Revision                    int                              `json:"revision"`
+	Basis                       string                           `json:"basis"`
+	EffectiveFrom               time.Time                        `json:"effectiveFrom"`
+	RegistrationCountry         *string                          `json:"registrationCountry,omitempty"`
+	LifetimeRegistrationNumbers []lifetimeRegistrationNumberBody `json:"lifetimeRegistrationNumbers,omitempty"`
+	IdentityCorrectionBasis     *string                          `json:"identityCorrectionBasis,omitempty"`
 }
 
 type customerAccountDocument struct {
@@ -320,14 +325,52 @@ func (intake *IsolatedPartyIdentityIntake) IntakeLegalEntityRegistration(
 	if err != nil {
 		return none, fmt.Errorf("%w: legalEntities[0].basis: %v", ErrMalformedRequest, err)
 	}
-	return application.RegisterLegalEntityCommand{
+	command := application.RegisterLegalEntityCommand{
 		Tenant:        intake.tenant,
 		Entity:        entity,
 		Party:         party,
 		Revision:      item.Revision,
 		Basis:         basis,
 		EffectiveFrom: item.EffectiveFrom,
-	}, nil
+	}
+	if err := applyLegalEntityIdentityFields(&command, item); err != nil {
+		return none, err
+	}
+	return command, nil
+}
+
+// applyLegalEntityIdentityFields 把载荷上的身份层三格译进命令；形状不对包 ErrMalformedRequest，字段名随报。
+func applyLegalEntityIdentityFields(command *application.RegisterLegalEntityCommand, item legalEntityDocument) error {
+	if item.RegistrationCountry != nil {
+		country, err := domain.NewRegistrationCountryCode(*item.RegistrationCountry)
+		if err != nil {
+			return fmt.Errorf("%w: legalEntities[0].registrationCountry: %v", ErrMalformedRequest, err)
+		}
+		command.RegistrationCountry = &country
+	}
+	for index, number := range item.LifetimeRegistrationNumbers {
+		typeCode, err := domain.NewRegistrationNumberTypeCode(number.TypeCode)
+		if err != nil {
+			return fmt.Errorf("%w: legalEntities[0].lifetimeRegistrationNumbers[%d].typeCode: %v", ErrMalformedRequest, index, err)
+		}
+		value, err := domain.NewRegistrationNumber(number.Number)
+		if err != nil {
+			return fmt.Errorf("%w: legalEntities[0].lifetimeRegistrationNumbers[%d].number: %v", ErrMalformedRequest, index, err)
+		}
+		lifetime, err := domain.NewLifetimeRegistrationNumber(typeCode, value)
+		if err != nil {
+			return fmt.Errorf("%w: legalEntities[0].lifetimeRegistrationNumbers[%d]: %v", ErrMalformedRequest, index, err)
+		}
+		command.LifetimeNumbers = append(command.LifetimeNumbers, lifetime)
+	}
+	if item.IdentityCorrectionBasis != nil {
+		correction, err := domain.NewIdentityBasisReference(*item.IdentityCorrectionBasis)
+		if err != nil {
+			return fmt.Errorf("%w: legalEntities[0].identityCorrectionBasis: %v", ErrMalformedRequest, err)
+		}
+		command.IdentityCorrectionBasis = &correction
+	}
+	return nil
 }
 
 // decodeBatch 解登记外壳并执行自报租户那道拒。
