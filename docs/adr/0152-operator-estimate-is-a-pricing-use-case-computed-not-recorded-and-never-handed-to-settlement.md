@@ -1,6 +1,6 @@
 # ADR-0152: 运营试算是计价自有的应用用例——按假设包裹对每张适用价卡各形成一份试算评价，只算不存、结构上不交结算、不择优；入口是 `parcel-api` 命令行 `POST /pricing-estimates`，起步未配置、随操作者渠道换 Intake
 
-Status: Accepted（2026-09-25，用户经 IDP 队列答通道 3「按你的理解和建议，你自己独立完成吧」「按你的建议，但是要理解我们的实现方式」授权自决；票 [operator-workspace-gaps/02](../../.scratch/operator-workspace-gaps/issues/02-estimate-evaluation-entry.md) 的产物。越权风险点见「裁决方的能力边界」，待 owner 复核）
+Status: Accepted（2026-09-25，用户经 IDP 队列答通道 3「按你的理解和建议，你自己独立完成吧」「按你的建议，但是要理解我们的实现方式」授权自决；票 [operator-workspace-gaps/02](../../.scratch/operator-workspace-gaps/issues/02-estimate-evaluation-entry.md) 的产物。越权风险点见「裁决方的能力边界」，同日用户授权通道 3 代为复核、四条维持，见文末「owner 复核记录」）
 Date: 2026-09-25
 
 ## Context
@@ -86,3 +86,11 @@ Date: 2026-09-25
 - [UC-PP-001 按假设包裹形成试算评价](../application/parcel-pricing/UC-PP-001-FORM-ESTIMATE-EVALUATIONS.md)
 - [ADR-0022](./0022-http-status-carries-answer-formed-not-business-verdict.md)、[ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md)、[ADR-0124](./0124-evaluation-replay-is-triggered-through-a-parcel-api-command-endpoint-and-never-handed-to-settlement.md)、[ADR-0150](./0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md)
 - 票 [operator-workspace-gaps/02](../../.scratch/operator-workspace-gaps/issues/02-estimate-evaluation-entry.md)
+
+## owner 复核记录
+
+- 2026-09-25：用户经 IDP 队列答通道 3「你是业务和系统专家，请你自决」，授权通道 3 代为复核四条越权风险点。**这是受托复核，不是 owner 本人认可**；四条逐条维持：
+  1. 范围口径收窄：CONTEXT 已把试算能力放进首发，面向运营的入口是它最直接的消费方；试算不接受、不锁价、不形成承诺，那句要挡的是报价。
+  2. 证据层级 `S`：证据层级描述的是本次执行的数据来源，假设包裹标 `P` 会把假设冒充成生产证据；价卡是生产配置这一面不改变输入的性质。
+  3. 查阅读授予：能力面按语义分，不按 HTTP 方法分；试算不写任何册，用 `POST` 只是因为结构化声明放请求体更合适。另立「试算」能力面会给授予模型添一格没有独立授权理由的面。
+  4. 放弃留痕：要追溯的是报价，将来随报价对象自己留；把试算改成入册只会多出一个被结算误采用的面。
