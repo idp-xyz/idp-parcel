@@ -46,21 +46,23 @@ func (UnconfiguredIntake) IntakeCatalogueQuery(context.Context, *http.Request) (
 // 这段注释此前写着一个数（「八个」），已改成指代整份名单：名单每增一类就要有人记得回来改
 // 那个数，而漏改不会有任何东西变红——本仓已因同形的计数吃过几次亏。
 var (
-	_ CommercialPublicationIntake             = UnconfiguredIntake{}
-	_ CommercialPublicationPreviewIntake      = UnconfiguredIntake{}
-	_ PublicationDraftSubmissionIntake        = UnconfiguredIntake{}
-	_ PublicationDraftApprovalIntake          = UnconfiguredIntake{}
-	_ PublicationDraftPublicationIntake       = UnconfiguredIntake{}
-	_ PublicationVocabularyIntake             = UnconfiguredIntake{}
-	_ BusinessPartyRegistrationIntake         = UnconfiguredIntake{}
-	_ LegalEntityRegistrationIntake           = UnconfiguredIntake{}
-	_ CustomerAccountRegistrationIntake       = UnconfiguredIntake{}
-	_ PartyRelationshipRegistrationIntake     = UnconfiguredIntake{}
-	_ PartyIdentityDeactivationIntake         = UnconfiguredIntake{}
-	_ ServiceProductFormRegistrationIntake    = UnconfiguredIntake{}
-	_ ProductChannelMappingRegistrationIntake = UnconfiguredIntake{}
-	_ ChannelAccountUseRegistrationIntake     = UnconfiguredIntake{}
-	_ ChannelAccountUseRevocationIntake       = UnconfiguredIntake{}
+	_ CommercialPublicationIntake              = UnconfiguredIntake{}
+	_ CommercialPublicationPreviewIntake       = UnconfiguredIntake{}
+	_ PublicationDraftSubmissionIntake         = UnconfiguredIntake{}
+	_ PublicationDraftApprovalIntake           = UnconfiguredIntake{}
+	_ PublicationDraftPublicationIntake        = UnconfiguredIntake{}
+	_ PublicationVocabularyIntake              = UnconfiguredIntake{}
+	_ BusinessPartyRegistrationIntake          = UnconfiguredIntake{}
+	_ LegalEntityRegistrationIntake            = UnconfiguredIntake{}
+	_ CustomerAccountRegistrationIntake        = UnconfiguredIntake{}
+	_ PartyRelationshipRegistrationIntake      = UnconfiguredIntake{}
+	_ PartyIdentityDeactivationIntake          = UnconfiguredIntake{}
+	_ ServiceProductFormRegistrationIntake     = UnconfiguredIntake{}
+	_ ProductChannelMappingRegistrationIntake  = UnconfiguredIntake{}
+	_ ChannelAccountUseRegistrationIntake      = UnconfiguredIntake{}
+	_ ChannelAccountUseRevocationIntake        = UnconfiguredIntake{}
+	_ RegistrationNumberTypeRegistrationIntake = UnconfiguredIntake{}
+	_ RegistrationNumberTypeDeactivationIntake = UnconfiguredIntake{}
 )
 
 // 方法逐个写出而不借一个泛型助手：Go 的方法不能泛型化，而这里要的恰是「每类各有
@@ -156,4 +158,16 @@ func (UnconfiguredIntake) IntakeChannelAccountUseRevocation(
 	context.Context, *http.Request,
 ) (application.RevokeChannelAccountUseCommand, error) {
 	return application.RevokeChannelAccountUseCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeRegistrationNumberTypeRegistration(
+	context.Context, *http.Request,
+) (application.RegisterRegistrationNumberTypeCommand, error) {
+	return application.RegisterRegistrationNumberTypeCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeRegistrationNumberTypeDeactivation(
+	context.Context, *http.Request,
+) (application.DeactivateRegistrationNumberTypeCommand, error) {
+	return application.DeactivateRegistrationNumberTypeCommand{}, ErrAccessChannelNotConfigured
 }
