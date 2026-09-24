@@ -21,7 +21,7 @@ import (
 // 检出编译不过（`no matching files found`）——本行已两度因跨会话卷带断过远端构建，
 // 新模块的目录、本行与模块函数必须同一笔提交一起落。
 //
-//go:embed all:parcel_shipment all:network_routing all:node_operations all:visibility_exception all:customs_compliance all:settlement_accounting all:transport_fulfillment all:pilot_governance all:party_commercial all:parcel_pricing all:collection_remittance
+//go:embed all:parcel_shipment all:network_routing all:node_operations all:visibility_exception all:customs_compliance all:settlement_accounting all:transport_fulfillment all:pilot_governance all:party_commercial all:parcel_pricing all:collection_remittance all:access_identity
 var assets embed.FS
 
 // Asset 是一份业务迁移。SQL 只读，校验和对文件原始内容计算——一份已施加的迁移
@@ -87,6 +87,12 @@ func ParcelPricing() ([]Asset, error) {
 // CollectionRemittance 返回 collection-remittance 的业务迁移，按文件名序排列。
 func CollectionRemittance() ([]Asset, error) {
 	return assetsForModule("collection_remittance")
+}
+
+// AccessIdentity 返回共享接入身份能力（internal/accessidentity）的迁移，按文件名序排列。它不是
+// 限界上下文（ADR-0072 一），但操作者册的数据归它，照样独占一个 schema。
+func AccessIdentity() ([]Asset, error) {
+	return assetsForModule("access_identity")
 }
 
 func assetsForModule(module string) ([]Asset, error) {

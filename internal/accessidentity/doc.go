@@ -13,8 +13,9 @@
 // ADR-0072 二维持了 ADR-0055 的否决，原句挡的是两件：「登记册**表结构**与**凭据形态**
 // 在 PAR-INT-01 最低证据到位前不立」。所以：
 //
-//   - 表：本包只有装载口 ChannelRegistry 这个接口，仓内没有它的生产实现，也没有
-//     migrations/access_identity/。空册可读是正常态而不是故障——FindChannel 用
+//   - 表：本包只有装载口 ChannelRegistry 这个接口，仓内没有它的生产实现；
+//     migrations/access_identity/ 里只有操作者册（ADR-0100），没有客户渠道的表。
+//     空册可读是正常态而不是故障——FindChannel 用
 //     found=false 而不是 error 表达它（ADR-0052 的分界句：读一个空登记册并如实答未配置
 //     不是默认实现，恰恰是它想保护的东西）。
 //   - 凭据形态：本包**不知道凭据长什么样**。ChannelCredentialProof 只有一个方法，只交出
