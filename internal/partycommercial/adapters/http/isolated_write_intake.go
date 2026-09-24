@@ -30,11 +30,12 @@ type IsolatedPartyIdentityIntake struct {
 
 // 已成笔的口。每放一口在这里多一行断言、多一个方法，装配点多换一行。
 var (
-	_ LegalEntityRegistrationIntake       = (*IsolatedPartyIdentityIntake)(nil)
-	_ BusinessPartyRegistrationIntake     = (*IsolatedPartyIdentityIntake)(nil)
-	_ CustomerAccountRegistrationIntake   = (*IsolatedPartyIdentityIntake)(nil)
-	_ PartyRelationshipRegistrationIntake = (*IsolatedPartyIdentityIntake)(nil)
-	_ PartyIdentityDeactivationIntake     = (*IsolatedPartyIdentityIntake)(nil)
+	_ LegalEntityRegistrationIntake        = (*IsolatedPartyIdentityIntake)(nil)
+	_ BusinessPartyRegistrationIntake      = (*IsolatedPartyIdentityIntake)(nil)
+	_ CustomerAccountRegistrationIntake    = (*IsolatedPartyIdentityIntake)(nil)
+	_ PartyRelationshipRegistrationIntake  = (*IsolatedPartyIdentityIntake)(nil)
+	_ PartyIdentityDeactivationIntake      = (*IsolatedPartyIdentityIntake)(nil)
+	_ LegalEntityProfileRegistrationIntake = (*IsolatedPartyIdentityIntake)(nil)
 )
 
 // NewIsolatedPartyIdentityIntake 由装配点以显式合成值构造。立不起来的租户在这里拒：装配错误要在启动时暴露，
@@ -474,4 +475,106 @@ func (intake *IsolatedPartyIdentityIntake) IntakePartyIdentityDeactivation(
 		Basis:    basis,
 		At:       item.At,
 	}, nil
+}
+
+// legalEntityProfileBatchDocument 是资料登记口的载荷外壳：镜像受控 CLI `register-legal-entity-profiles` 的输入文档，去掉整批的
+// tenantId（这一格只为拒而存在，理由同 partyIdentityBatchDocument.TenantID）。不并进身份族那份外壳：资料不是身份，CLI 里
+// 也是两个子命令各收各的文档。
+type legalEntityProfileBatchDocument struct {
+	TenantID json.RawMessage              `json:"tenantId"`
+	Profiles []legalEntityProfileDocument `json:"profiles"`
+}
+
+// legalEntityProfileDocument 与受控 CLI 的一项逐字同形，子格沿修订历史读口的答复体——一份资料在读写两个方向上同一个样子。
+// 注册地址键可缺：缺即没给，由用例答`未受理`（判据同身份层三格）；给了就得立得住。invoiceTitle 缺席即这笔修订不带开票资料，
+// 给了空串照样拒，不当缺席。
+type legalEntityProfileDocument struct {
+	LegalEntityID          string                      `json:"legalEntityId"`
+	Revision               int                         `json:"revision"`
+	Basis                  string                      `json:"basis"`
+	EffectiveFrom          time.Time                   `json:"effectiveFrom"`
+	RegisteredAddress      *registeredAddressBody      `json:"registeredAddress,omitempty"`
+	TaxRegistrationNumbers []taxRegistrationNumberBody `json:"taxRegistrationNumbers,omitempty"`
+	InvoiceTitle           *string                     `json:"invoiceTitle,omitempty"`
+	Contacts               []legalEntityContactBody    `json:"contacts,omitempty"`
+}
+
+// IntakeLegalEntityProfileRegistration 把一次管理台登记译成法人资料修订登记命令（票 legal-entity-profile/05）。形状级失败包
+// ErrMalformedRequest；法人在不在册、地址国家对不对得上身份、税号合不合目录，一律送进用例答`未受理`（判据同法人口）。
+func (intake *IsolatedPartyIdentityIntake) IntakeLegalEntityProfileRegistration(
+	_ context.Context,
+	request *http.Request,
+) (application.RegisterLegalEntityProfileCommand, error) {
+	none := application.RegisterLegalEntityProfileCommand{}
+	document, err := decodeClosedDocument[legalEntityProfileBatchDocument](request)
+	if err != nil {
+		return none, err
+	}
+	if err := refuseSelfReportedTenant(document.TenantID); err != nil {
+		return none, err
+	}
+	if len(document.Profiles) != 1 {
+		return none, fmt.Errorf("%w: profiles must carry exactly one item, got %d", ErrMalformedRequest, len(document.Profiles))
+	}
+	item := document.Profiles[0]
+	entity, err := domain.NewLegalEntityReference(item.LegalEntityID)
+	if err != nil {
+		return none, fmt.Errorf("%w: profiles[0].legalEntityId: %v", ErrMalformedRequest, err)
+	}
+	basis, err := domain.NewLegalEntityProfileBasisReference(item.Basis)
+	if err != nil {
+		return none, fmt.Errorf("%w: profiles[0].basis: %v", ErrMalformedRequest, err)
+	}
+	command := application.RegisterLegalEntityProfileCommand{
+		Tenant:        intake.tenant,
+		Entity:        entity,
+		Revision:      item.Revision,
+		Basis:         basis,
+		EffectiveFrom: item.EffectiveFrom,
+	}
+	if item.RegisteredAddress != nil {
+		country, err := domain.NewRegistrationCountryCode(item.RegisteredAddress.Country)
+		if err != nil {
+			return none, fmt.Errorf("%w: profiles[0].registeredAddress.country: %v", ErrMalformedRequest, err)
+		}
+		address, err := domain.NewRegisteredAddress(country, item.RegisteredAddress.Lines)
+		if err != nil {
+			return none, fmt.Errorf("%w: profiles[0].registeredAddress: %v", ErrMalformedRequest, err)
+		}
+		command.Address = address
+	}
+	for index, number := range item.TaxRegistrationNumbers {
+		typeCode, err := domain.NewRegistrationNumberTypeCode(number.TypeCode)
+		if err != nil {
+			return none, fmt.Errorf("%w: profiles[0].taxRegistrationNumbers[%d].typeCode: %v", ErrMalformedRequest, index, err)
+		}
+		value, err := domain.NewRegistrationNumber(number.Number)
+		if err != nil {
+			return none, fmt.Errorf("%w: profiles[0].taxRegistrationNumbers[%d].number: %v", ErrMalformedRequest, index, err)
+		}
+		tax, err := domain.NewTaxRegistrationNumber(typeCode, value)
+		if err != nil {
+			return none, fmt.Errorf("%w: profiles[0].taxRegistrationNumbers[%d]: %v", ErrMalformedRequest, index, err)
+		}
+		command.TaxNumbers = append(command.TaxNumbers, tax)
+	}
+	if item.InvoiceTitle != nil {
+		title, err := domain.NewInvoiceTitle(*item.InvoiceTitle)
+		if err != nil {
+			return none, fmt.Errorf("%w: profiles[0].invoiceTitle: %v", ErrMalformedRequest, err)
+		}
+		details, err := domain.NewInvoicingDetails(title)
+		if err != nil {
+			return none, fmt.Errorf("%w: profiles[0].invoiceTitle: %v", ErrMalformedRequest, err)
+		}
+		command.Invoicing = &details
+	}
+	for index, contact := range item.Contacts {
+		built, err := domain.NewLegalEntityContact(contact.Name, contact.Email, contact.Phone)
+		if err != nil {
+			return none, fmt.Errorf("%w: profiles[0].contacts[%d]: %v", ErrMalformedRequest, index, err)
+		}
+		command.Contacts = append(command.Contacts, built)
+	}
+	return command, nil
 }
