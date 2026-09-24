@@ -127,6 +127,7 @@ func assembleBusinessEndpoints(
 	productChannelMappings commercialhttp.ProductChannelCatalogueReader,
 	registrationNumberTypes commercialhttp.RegistrationNumberTypeCatalogueReader,
 	legalEntityProfiles commercialhttp.LegalEntityProfileRevisionHistoryReader,
+	legalEntityProfileResolver commercialhttp.LegalEntityProfileResolver,
 	commercialPublication commercialhttp.CommercialAuthorityPublisher,
 	commercialPublicationPreview commercialhttp.CommercialPublicationPreviewer,
 	commercialPublicationDrafts commercialhttp.PublicationDraftOperator,
@@ -205,20 +206,23 @@ func assembleBusinessEndpoints(
 		submissionIntake = isolatedSubmission
 	}
 
-	// `/commercial-*` 身份族是 ADR-0091 逐口放行的第二批（票 admin-web-group-legal-entities/06），入参收的是
-	// **具体类型**而不是某个 Intake 接口：五口的接口互不相同，而放行是一口一笔——这个类型此刻实现了哪几口，
-	// 下面就只换得了哪几行，多换一行编译期就红。一口一个变量、不并进上面任何一个 if：理由同提交口那段。
+	// `/commercial-*` 身份族是 ADR-0091 逐口放行的第二批（票 admin-web-group-legal-entities/06），法人资料登记口随后
+	// 放进同一个类型（票 legal-entity-profile/05）。入参收的是**具体类型**而不是某个 Intake 接口：各口的接口互不相同，
+	// 而放行是一口一笔——这个类型此刻实现了哪几口，下面就只换得了哪几行，多换一行编译期就红。一口一个变量、不并进上面
+	// 任何一个 if：理由同提交口那段。
 	legalEntityRegistrationIntake := commercialhttp.LegalEntityRegistrationIntake(commercialhttp.UnconfiguredIntake{})
 	businessPartyRegistrationIntake := commercialhttp.BusinessPartyRegistrationIntake(commercialhttp.UnconfiguredIntake{})
 	customerAccountRegistrationIntake := commercialhttp.CustomerAccountRegistrationIntake(commercialhttp.UnconfiguredIntake{})
 	partyRelationshipRegistrationIntake := commercialhttp.PartyRelationshipRegistrationIntake(commercialhttp.UnconfiguredIntake{})
 	partyIdentityDeactivationIntake := commercialhttp.PartyIdentityDeactivationIntake(commercialhttp.UnconfiguredIntake{})
+	legalEntityProfileRegistrationIntake := commercialhttp.LegalEntityProfileRegistrationIntake(commercialhttp.UnconfiguredIntake{})
 	if isolatedPartyIdentity != nil {
 		legalEntityRegistrationIntake = isolatedPartyIdentity
 		businessPartyRegistrationIntake = isolatedPartyIdentity
 		customerAccountRegistrationIntake = isolatedPartyIdentity
 		partyRelationshipRegistrationIntake = isolatedPartyIdentity
 		partyIdentityDeactivationIntake = isolatedPartyIdentity
+		legalEntityProfileRegistrationIntake = isolatedPartyIdentity
 	}
 
 	return []httpapi.BusinessEndpoint{
@@ -465,6 +469,10 @@ func assembleBusinessEndpoints(
 		// 同 Intake 变量，隔离读准入启用时随 commercialCatalogue 一格一起换值；读口参数另立——资料修订在自己的登记册上，
 		// 生产装配交入的是资料登记册适配器而不是商业目录适配器。本口只交修订事实，此刻有效的是哪一笔由按时点解析回答。
 		{Pattern: "/commercial-group-legal-entities/{legalEntityId}/profile-revisions", Handler: commercialhttp.NewQueryLegalEntityProfileRevisionsEndpoint(commercialCatalogueIntake, legalEntityProfiles)},
+		// 法人资料按时点解析（ADR-0145 决定五、六，票 legal-entity-profile/05）：给定时点答那一刻有效的是哪一笔、能不能开立。
+		// 同 Intake 变量，隔离读准入启用时随 commercialCatalogue 一格一起换值；第二参是应用读用例而不是读口——哪一笔有效只能由
+		// 领域对时点判出，在装配点预先挑一遍就等于为同一判断立第二个口径。
+		{Pattern: "/commercial-group-legal-entities/{legalEntityId}/profile-resolution", Handler: commercialhttp.NewQueryLegalEntityProfileResolutionEndpoint(commercialCatalogueIntake, legalEntityProfileResolver)},
 		{Pattern: "/commercial-party-relationships", Handler: commercialhttp.NewQueryPartyRelationshipsEndpoint(commercialCatalogueIntake, partyIdentities)},
 		// 货主客户账户册（票 admin-write-faces/04）——身份三级里的第三级，独立入口且独立读口
 		// 参数：它按 CONTEXT 落在客户与合同页而不是上面两册所在的页（一页一入口），读口跟着
@@ -521,8 +529,8 @@ func assembleBusinessEndpoints(
 		{Pattern: "/commercial-registration-number-type-registrations", Handler: commercialhttp.NewRegisterRegistrationNumberTypeEndpoint(commercialhttp.UnconfiguredIntake{}, registrationNumberTypeRegistration)},
 		{Pattern: "/commercial-registration-number-type-deactivations", Handler: commercialhttp.NewDeactivateRegistrationNumberTypeEndpoint(commercialhttp.UnconfiguredIntake{}, registrationNumberTypeRegistration)},
 		// 法人资料登记（ADR-0145 决定三，票 legal-entity-profile/03）只有登记修订一口：资料没有停用，新修订是往修订链上插
-		// 一笔。挂字面量 UnconfiguredIntake{}，判据同注册号类型两口。
-		{Pattern: "/commercial-legal-entity-profile-registrations", Handler: commercialhttp.NewRegisterLegalEntityProfileEndpoint(commercialhttp.UnconfiguredIntake{}, legalEntityProfileRegistration)},
+		// 一笔。按 ADR-0091 逐口放进隔离写准入（票 legal-entity-profile/05），走自己的 Intake 变量，与身份族同一个隔离类型。
+		{Pattern: "/commercial-legal-entity-profile-registrations", Handler: commercialhttp.NewRegisterLegalEntityProfileEndpoint(legalEntityProfileRegistrationIntake, legalEntityProfileRegistration)},
 		// 渠道账号使用授权两口（ADR-0093）。撤销不叫 `-deactivations` 也不走 DELETE：它是往
 		// 修订链上追加一条终止事实，册上那一行不会消失，而那两个名字都会让登记方以为会。
 		// 分两口而不带动作字段的理由在端点族注释里：合一口之后载荷里会同时躺着动作与授权

@@ -1070,6 +1070,17 @@ func (unwiredLegalEntityProfileRevisions) ListLegalEntityProfileRevisions(
 	return nil, errOrchestrationNotWired
 }
 
+type unwiredLegalEntityProfileResolver struct{}
+
+func (unwiredLegalEntityProfileResolver) Resolve(
+	context.Context,
+	commercialdomain.TenantID,
+	commercialdomain.LegalEntityReference,
+	time.Time,
+) (commercialdomain.LegalEntityProfileResolution, error) {
+	return commercialdomain.LegalEntityProfileResolution{}, errOrchestrationNotWired
+}
+
 type unwiredChannelAccountUseRegistration struct{}
 
 func (unwiredChannelAccountUseRegistration) Register(
