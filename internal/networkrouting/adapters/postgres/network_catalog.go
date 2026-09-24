@@ -23,8 +23,13 @@ var ErrAmbiguousNetworkCatalog = errors.New(
 	"network routing postgres: 网络目录在同一时点有多个适用版本")
 
 // NetworkCatalog 是版本化网络目录的存取口（票 01 的机制四件）。它拥有定义原语的
-// 版本行与目录修订，不做任何评估、过滤或排序——那一层属 PAR-NET-14，在它存在之前
-// 三个证据视图不读本目录（护栏：三口取数侧不接，NetworkDefinitions 照旧作答）。
+// 版本行与目录修订，只按判断时点选版、拒歧义，不做任何评估、过滤或排序。两个网络
+// 证据视图经选版读口读本目录（ADR-0148 决定六部分停用 ADR-0068 决定六，自票
+// routing-first-cut/07 起）：候选生成与事实折叠是产品策略，落在应用层
+// （application.CatalogNetworkEvidence），不落本适配器；`未配置`由目录修订锚与适用
+// 的路由策略版本答，视图修订就是本目录的修订锚。迁移 0008 头注里「三个证据视图不读
+// 本目录」是立表时的状态，迁移按 checksum 固定不改，以本注释、迁移 0011 头注与
+// ADR-0148 为准。
 type NetworkCatalog struct {
 	db *bentopg.DB
 }
@@ -36,23 +41,13 @@ func NewNetworkCatalog(db *bentopg.DB) (*NetworkCatalog, error) {
 	return &NetworkCatalog{db: db}, nil
 }
 
-// 登记口的端口契约用编译期钉住——接口漂移在构建时暴露（先例：parcel-pricing-register
-// 对两个登记用例的钉法）。行类型与封闭枚举的定义在 ports 侧（登记用例要拿它们表达
-// 受理门，而应用层不得依赖适配器），本文件只留读侧快照与七个写方法的实现。
-var _ ports.NetworkCatalogRegistry = (*NetworkCatalog)(nil)
-
-// NetworkCatalogSnapshot 是一次取回：七类定义在 asOf 的适用行与它们共同来自的修订。
-// 事实与修订同版由单条语句担保（单语句单快照），不靠调用方两次取回再对号。
-type NetworkCatalogSnapshot struct {
-	Nodes        []ports.NodeDefinitionVersion
-	Connections  []ports.ConnectionDefinitionVersion
-	Lines        []ports.LineDefinitionVersion
-	ServiceAreas []ports.ServiceAreaDefinitionVersion
-	Calendars    []ports.ServiceCalendarDefinitionVersion
-	Adjustments  []ports.AvailabilityAdjustmentStatement
-	Strategies   []ports.RouteStrategyDefinitionVersion
-	Revision     domain.NetworkViewRevision
-}
+// 登记口与选版读口的端口契约用编译期钉住——接口漂移在构建时暴露（先例：
+// parcel-pricing-register 对两个登记用例的钉法）。行类型、快照与封闭枚举的定义在
+// ports 侧（登记用例与证据视图的折叠都在应用层，而应用层不得依赖适配器）。
+var (
+	_ ports.NetworkCatalogRegistry = (*NetworkCatalog)(nil)
+	_ ports.NetworkCatalogRead     = (*NetworkCatalog)(nil)
+)
 
 // LoadDefinitionsAt 按判断时点取回目录。三格与证据视图同形（ADR-0052）：快照在场即
 // 定义；第二格 false 即**这个租户从未登记过任何网络定义**（未配置）；error 只表示
@@ -68,8 +63,8 @@ func (catalog *NetworkCatalog) LoadDefinitionsAt(
 	ctx context.Context,
 	tenant domain.TenantID,
 	asOf time.Time,
-) (NetworkCatalogSnapshot, bool, error) {
-	none := NetworkCatalogSnapshot{}
+) (ports.NetworkCatalogSnapshot, bool, error) {
+	none := ports.NetworkCatalogSnapshot{}
 	if tenant.String() == "" {
 		return none, false, fmt.Errorf("load network catalog: tenant is required")
 	}
@@ -168,14 +163,14 @@ SELECT
 func rebuildCatalogSnapshot(
 	revision int64,
 	nodesRaw, connectionsRaw, linesRaw, areasRaw, calendarsRaw, adjustmentsRaw, strategiesRaw []byte,
-) (NetworkCatalogSnapshot, error) {
-	none := NetworkCatalogSnapshot{}
+) (ports.NetworkCatalogSnapshot, error) {
+	none := ports.NetworkCatalogSnapshot{}
 
 	viewRevision, err := domain.NewNetworkViewRevision(strconv.FormatInt(revision, 10))
 	if err != nil {
 		return none, err
 	}
-	snapshot := NetworkCatalogSnapshot{Revision: viewRevision}
+	snapshot := ports.NetworkCatalogSnapshot{Revision: viewRevision}
 
 	var nodes []nodeVersionRow
 	if err := json.Unmarshal(nodesRaw, &nodes); err != nil {

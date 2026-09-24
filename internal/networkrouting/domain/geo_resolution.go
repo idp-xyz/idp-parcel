@@ -36,15 +36,29 @@ func (side GeoResolutionSide) PostalCode() (string, bool) {
 	return side.postalCode, side.hasPostalCode
 }
 
+// HasUsableCountry 答这一侧的国家 / 地区码在场且成形。覆盖匹配答资料不足时，国家码可用就说明缺的是邮编。
+func (side GeoResolutionSide) HasUsableCountry() bool {
+	return side.hasCountry && isCountryCodeShape(side.country)
+}
+
 // GeoResolutionProjection 是随判断请求携带的地理解析投影（ADR-0075；ADR-0148 决定二）：PS 地址要素的寄件段
 // 与收件段。它是判断对象那一版的内容，本上下文只用它解析服务区域，不保存地址本体。
+//
+// 零值是「发起方没带投影」，与「带了、某一侧缺国家码」分得开：两者都落`资料不足`，但前者缺的是请求没把地址
+// 带来，向客户要资料补不上它，缺口要单独点名。
 type GeoResolutionProjection struct {
 	sender   GeoResolutionSide
 	delivery GeoResolutionSide
+	carried  bool
 }
 
 func NewGeoResolutionProjection(sender, delivery GeoResolutionSide) GeoResolutionProjection {
-	return GeoResolutionProjection{sender: sender, delivery: delivery}
+	return GeoResolutionProjection{sender: sender, delivery: delivery, carried: true}
+}
+
+// Carried 答发起方是否随请求带了投影。
+func (projection GeoResolutionProjection) Carried() bool {
+	return projection.carried
 }
 
 func (projection GeoResolutionProjection) Sender() GeoResolutionSide {

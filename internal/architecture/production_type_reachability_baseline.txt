@@ -46,16 +46,15 @@
 
 # ---- network-routing ----
 
-# 二类：只由 NewHardConstraintFinding / NewPathExecutability / NewRouteRequirement /
-# NewServiceAreaResolution 交出，四个构造器零生产调用，包外只有测试在用。它们是路由证据链
-# （硬约束、路径可执行性、路由要求、服务区解析）的输入规格——等 nr-route-evidence-views/01 与
-# first-tenant-runway/03 的执行器，两票都阻于 PAR-NET-14。
+# 二类：只由 NewRouteRequirement 交出，构造器零生产调用，包外只有测试在用。它是路由证据链里客户
+# 要求（服务要求）的输入规格——服务要求随请求携带（ADR-0148 决定一），等 PS 携带与取数侧收它的
+# 那两票（routing-first-cut/08、09）。
 # CriterionScore 曾在这里，随 routing-first-cut/03 删掉：多准则比较器换成路由策略版本声明的排序
 # 形态，评分一族整个退场。**在 60bbbf13 的干净内容上数得剪前 15、剪后 14**，只对该检出成立。
-internal/networkrouting/domain HardConstraintFindingSpec
-internal/networkrouting/domain PathExecutabilitySpec
+# HardConstraintFindingSpec / PathExecutabilitySpec / ServiceAreaResolutionSpec 曾在这里，随
+# routing-first-cut/07 剪掉：可达性证据视图从目录折出事实（application.CatalogNetworkEvidence），
+# 三者由它的调用入种子。**在 0b003474 的内容上数得剪前 14、剪后 11**，只对该检出成立。
 internal/networkrouting/domain RouteRequirementSpec
-internal/networkrouting/domain ServiceAreaResolutionSpec
 
 # ---- parcel-pricing ----
 

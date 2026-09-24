@@ -1192,6 +1192,9 @@ func acceptanceCommercialBasis(
 // 资格视图的闭包标识留 nil：可达性判断键上没有解析标识，而范围到解析的映射属试点参数
 // （ADR-0064 明写本记录只改初始路由那条链，可达性这条不变）。留 nil 时资格视图答未配置，
 // 编排形成`未形成判断`——不代拟一个解析标识去问另一个产品的网络资格。
+//
+// 证据视图从版本化网络目录折出（ADR-0148）。关务来源接「未接」实现：customs-compliance 按路由
+// 候选作答的判断口还没有（routing-first-cut/12），逐候选如实答状态未知，不答满足（决定三）。
 func acceptanceReachability(
 	db *bentopg.DB,
 	outboxStore *outbox.Store,
@@ -1199,9 +1202,13 @@ func acceptanceReachability(
 	settings dispatchSettings,
 	clock systemClock,
 ) (*psnetworkrouting.ReachabilityAdapter, error) {
-	definitions, err := nrpostgres.NewNetworkDefinitions(db)
+	catalog, err := nrpostgres.NewNetworkCatalog(db)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: reachability network definitions: %w", err)
+		return nil, fmt.Errorf("parcel-dispatch: reachability network catalog: %w", err)
+	}
+	evidence, err := nrapplication.NewCatalogNetworkEvidence(catalog, nrapplication.CustomsApplicabilityNotConnected{})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: reachability network evidence: %w", err)
 	}
 	store, err := nrpostgres.NewReachabilityJudgments(db)
 	if err != nil {
@@ -1221,8 +1228,8 @@ func acceptanceReachability(
 	}
 	return psnetworkrouting.NewReachabilityAdapter(psnetworkrouting.ReachabilityAdapterDeps{
 		Assess: nrapplication.NewAssessParcelReachabilityHandler(
-			eligibility, definitions, store, handoff, clock),
-		Revalidate: nrapplication.NewValidateReachabilityJudgmentHandler(definitions, store),
+			eligibility, evidence, store, handoff, clock),
+		Revalidate: nrapplication.NewValidateReachabilityJudgmentHandler(evidence, store),
 		Purpose:    settings.purpose,
 	}), nil
 }
@@ -1320,8 +1327,9 @@ func acceptanceFinancialControl(
 // acceptanceConsumer 接 UC-NR-001 那条线：PS 接受决定信封 → 消费门 → 初始路由编排。
 //
 // 商业适用性视图的解析标识来源是实例半边，今天没有租户登记过，因此它按「依赖不可用」
-// 答复，编排形成`未决`。网络定义登记册同理答`未配置`。两者都不是接线错误——首发就该
-// 停在这里，而不是靠一份编出来的默认值往下走。
+// 答复，编排形成`未决`。初始路由证据视图读版本化网络目录：目录为空或没有适用的路由策略
+// 版本答`未配置`；已配置时初始路由事实族还没折出（routing-first-cut/09、10），照旧响亮上抛。
+// 两者都不是接线错误——首发就该停在这里，而不是靠一份编出来的默认值往下走。
 func acceptanceConsumer(
 	db *bentopg.DB,
 	outboxStore *outbox.Store,
@@ -1329,9 +1337,9 @@ func acceptanceConsumer(
 	settings dispatchSettings,
 	clock systemClock,
 ) (dispatch.Consumer, error) {
-	definitions, err := nrpostgres.NewNetworkDefinitions(db)
+	evidence, err := initialRouteEvidence(db, clock)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: network definitions: %w", err)
+		return nil, err
 	}
 	routeStore, err := nrpostgres.NewInitialRoutes(db)
 	if err != nil {
@@ -1363,7 +1371,7 @@ func acceptanceConsumer(
 
 	routeHandler := nrapplication.NewCreateInitialRouteHandler(nrapplication.CreateInitialRouteDeps{
 		Applicability: applicability,
-		Evidence:      definitions,
+		Evidence:      evidence,
 		Store:         routeStore,
 		Log:           handoffLog,
 		Downstream:    downstream,
@@ -1386,6 +1394,20 @@ func acceptanceConsumer(
 	return consumer, nil
 }
 
+// initialRouteEvidence 是初始路由与复核两条线共用的证据视图：读版本化网络目录，选版时点取本上下文的
+// 路由判断时点（时钟）。
+func initialRouteEvidence(db *bentopg.DB, clock systemClock) (*nrapplication.CatalogInitialRouteEvidence, error) {
+	catalog, err := nrpostgres.NewNetworkCatalog(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: network catalog: %w", err)
+	}
+	evidence, err := nrapplication.NewCatalogInitialRouteEvidence(catalog, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: initial route evidence: %w", err)
+	}
+	return evidence, nil
+}
+
 // networkIntakeConsumer 接 UC-NR-003 那条线：PS 有效网络收寄采用结果信封 → 消费门 →
 // 按采用键取回记录 → 复核编排。它是纵向闭环里收寄那一段回到路由的一拍。
 //
@@ -1401,9 +1423,9 @@ func networkIntakeConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: initial route store: %w", err)
 	}
-	definitions, err := nrpostgres.NewNetworkDefinitions(db)
+	evidence, err := initialRouteEvidence(db, clock)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: network definitions: %w", err)
+		return nil, err
 	}
 	applicabilities, err := nrpostgres.NewPlanApplicabilities(db)
 	if err != nil {
@@ -1428,7 +1450,7 @@ func networkIntakeConsumer(
 	}
 	reassessHandler := nrapplication.NewReassessRouteHandler(nrapplication.ReassessRouteDeps{
 		Routes:        routeStore,
-		Evidence:      definitions,
+		Evidence:      evidence,
 		Applicability: applicabilities,
 		Store:         reassessments,
 		Log:           handoffLog,

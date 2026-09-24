@@ -121,7 +121,9 @@ func (handler *ValidateReachabilityJudgmentHandler) Handle(
 		return handler.notFormed(command, JudgmentStoreUnavailable), nil
 	}
 
-	evidence, configured, err := handler.evidence.LoadNetworkEvidence(ctx, command.Key)
+	// 重校只比视图修订，而修订是目录修订锚，不随所携内容变；原判断所携的投影本上下文不留
+	// （ADR-0075 决定三），这里也无从再带，所以不携带任何内容。
+	evidence, configured, err := handler.evidence.LoadNetworkEvidence(ctx, command.Key, ports.RequestCarriedContent{})
 	if !configured && err == nil {
 		// 登记册未配置时同样既不能确认也不能断言换代：没有当前修订可比，原判断的
 		// 有效性无从判断（ADR-0052）。

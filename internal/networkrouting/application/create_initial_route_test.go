@@ -133,7 +133,7 @@ type routeEvidenceDouble struct {
 	// 取回答出不同的修订。
 	sequence map[string][]ports.InitialRouteEvidence
 	errs     map[string]error
-	// unconfigured 按包裹标明「网络定义登记册未配置」，与 errs 分开：那一格是依赖
+	// unconfigured 按包裹标明「网络定义未配置」，与 errs 分开：那一格是依赖
 	// 不可用，这一格是还没人登记过网络（ADR-0052）。
 	unconfigured map[string]bool
 	loaded       int
