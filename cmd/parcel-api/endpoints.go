@@ -456,13 +456,13 @@ func assembleBusinessEndpoints(
 		// CLI 的 `-kind` 逐字同一个，同一本册在三处不换词。一族一个端点而不用 `?family=`
 		// 把七族塑进一个口：七族的命令类型互不相同，合成一口就得在 Intake 里先认族再定
 		// 形状，装配点从此可以把一族的译装接到另一族的端点上而编译仍绿。
-		{Pattern: "/network-catalog-node-registrations", Handler: networkhttp.NewRegisterNodeVersionEndpoint(networkhttp.UnconfiguredIntake{}, networkCatalogRegistration)},
-		{Pattern: "/network-catalog-connection-registrations", Handler: networkhttp.NewRegisterConnectionVersionEndpoint(networkhttp.UnconfiguredIntake{}, networkCatalogRegistration)},
-		{Pattern: "/network-catalog-line-registrations", Handler: networkhttp.NewRegisterLineVersionEndpoint(networkhttp.UnconfiguredIntake{}, networkCatalogRegistration)},
-		{Pattern: "/network-catalog-service-area-registrations", Handler: networkhttp.NewRegisterServiceAreaVersionEndpoint(networkhttp.UnconfiguredIntake{}, networkCatalogRegistration)},
-		{Pattern: "/network-catalog-service-calendar-registrations", Handler: networkhttp.NewRegisterServiceCalendarVersionEndpoint(networkhttp.UnconfiguredIntake{}, networkCatalogRegistration)},
-		{Pattern: "/network-catalog-availability-adjustment-registrations", Handler: networkhttp.NewRegisterAvailabilityAdjustmentEndpoint(networkhttp.UnconfiguredIntake{}, networkCatalogRegistration)},
-		{Pattern: "/network-catalog-route-strategy-registrations", Handler: networkhttp.NewRegisterRouteStrategyVersionEndpoint(networkhttp.UnconfiguredIntake{}, networkCatalogRegistration)},
+		{Pattern: "/network-catalog-node-registrations", Handler: networkhttp.NewRegisterNodeVersionEndpoint(operatorRegistries.network, networkCatalogRegistration)},
+		{Pattern: "/network-catalog-connection-registrations", Handler: networkhttp.NewRegisterConnectionVersionEndpoint(operatorRegistries.network, networkCatalogRegistration)},
+		{Pattern: "/network-catalog-line-registrations", Handler: networkhttp.NewRegisterLineVersionEndpoint(operatorRegistries.network, networkCatalogRegistration)},
+		{Pattern: "/network-catalog-service-area-registrations", Handler: networkhttp.NewRegisterServiceAreaVersionEndpoint(operatorRegistries.network, networkCatalogRegistration)},
+		{Pattern: "/network-catalog-service-calendar-registrations", Handler: networkhttp.NewRegisterServiceCalendarVersionEndpoint(operatorRegistries.network, networkCatalogRegistration)},
+		{Pattern: "/network-catalog-availability-adjustment-registrations", Handler: networkhttp.NewRegisterAvailabilityAdjustmentEndpoint(operatorRegistries.network, networkCatalogRegistration)},
+		{Pattern: "/network-catalog-route-strategy-registrations", Handler: networkhttp.NewRegisterRouteStrategyVersionEndpoint(operatorRegistries.network, networkCatalogRegistration)},
 		{Pattern: "/customs-compliance-rules", Handler: customshttp.NewQueryComplianceRulesEndpoint(complianceRulesIntake, complianceRules)},
 		// 案件配置册、门禁条件册与规则库查阅同属关务租户内运营读面，共用同一个
 		// CatalogueQueryIntake 变量：隔离读准入（ADR-0078）启用时它们随该变量一起换值，

@@ -7,6 +7,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	ccaccess "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/accessidentity"
 	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
+	nraccess "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/accessidentity"
+	networkhttp "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/http"
 	psaccess "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/accessidentity"
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
@@ -65,6 +67,7 @@ func buildOperatorDecisionIntakes(minter *accessidentity.OperatorMinter, targets
 type operatorRegistryIntakes struct {
 	visibility *visibilityhttp.OperatorRegistryIntake
 	customs    *customshttp.OperatorRegistryIntake
+	network    *networkhttp.OperatorRegistryIntake
 }
 
 func buildOperatorRegistryIntakes(minter *accessidentity.OperatorMinter) (operatorRegistryIntakes, error) {
@@ -87,5 +90,13 @@ func buildOperatorRegistryIntakes(minter *accessidentity.OperatorMinter) (operat
 	if err != nil {
 		return operatorRegistryIntakes{}, err
 	}
-	return operatorRegistryIntakes{visibility: visibility, customs: customs}, nil
+	networkAuthenticator, err := nraccess.NewOperatorRegistryAuthenticator(minter)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	network, err := networkhttp.NewOperatorRegistryIntake(networkAuthenticator)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	return operatorRegistryIntakes{visibility: visibility, customs: customs, network: network}, nil
 }

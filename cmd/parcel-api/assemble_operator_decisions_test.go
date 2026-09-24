@@ -127,6 +127,74 @@ var swappedRegistryFaces = []string{
 	"/customs-case-requirement-registrations",
 	"/customs-duty-collaboration-registrations",
 	"/customs-duty-payment-verification-registrations",
+	"/network-catalog-node-registrations",
+	"/network-catalog-connection-registrations",
+	"/network-catalog-line-registrations",
+	"/network-catalog-service-area-registrations",
+	"/network-catalog-service-calendar-registrations",
+	"/network-catalog-availability-adjustment-registrations",
+	"/network-catalog-route-strategy-registrations",
+}
+
+// failingRegister 是读不动的操作者册；readerRegister 只有查阅授予、没有登记写授予。
+type failingRegister struct{}
+
+func (failingRegister) FindOperator(context.Context, accessidentity.OperatorSubject) (accessidentity.OperatorStanding, bool, error) {
+	return accessidentity.OperatorStanding{}, false, errors.New("operator register unreachable")
+}
+
+type readerRegister struct{}
+
+func (readerRegister) FindOperator(_ context.Context, subject accessidentity.OperatorSubject) (accessidentity.OperatorStanding, bool, error) {
+	binding, err := accessidentity.NewOperatorBinding(subject, "SYN-TENANT-01", "SYN-BASIS-BINDING")
+	if err != nil {
+		return accessidentity.OperatorStanding{}, false, err
+	}
+	interval, err := accessidentity.NewEffectiveInterval(time.Now().Add(-time.Hour), time.Time{})
+	if err != nil {
+		return accessidentity.OperatorStanding{}, false, err
+	}
+	grant, err := accessidentity.NewOperatorGrant("SYN-TENANT-01", "SYN-GRANT-READ", subject, accessidentity.CapabilityMasterDataAndOperationsRead, interval, "SYN-BASIS-GRANT")
+	if err != nil {
+		return accessidentity.OperatorStanding{}, false, err
+	}
+	recorded, err := accessidentity.NewRecordedGrant(grant, nil)
+	if err != nil {
+		return accessidentity.OperatorStanding{}, false, err
+	}
+	standing, err := accessidentity.NewOperatorStanding(binding, []accessidentity.RecordedGrant{recorded})
+	return standing, err == nil, err
+}
+
+func TestSwappedRegistryFacesMapTheRefusalAndDependencyGrades(t *testing.T) {
+	registers := map[string]struct {
+		register accessidentity.OperatorRegistry
+		status   int
+		code     string
+	}{
+		"read grant only":  {readerRegister{}, http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+		"register is down": {failingRegister{}, http.StatusServiceUnavailable, "IDENTITY_DEPENDENCY_UNAVAILABLE"},
+	}
+	for name, testCase := range registers {
+		minter, err := buildOperatorMinter(acceptingVerifier{}, testCase.register)
+		if err != nil {
+			t.Fatal(err)
+		}
+		registries, err := buildOperatorRegistryIntakes(minter)
+		if err != nil {
+			t.Fatal(err)
+		}
+		router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), registries, nil, nil, nil, nil, nil, nil, nil))
+		for _, pattern := range swappedRegistryFaces {
+			request := httptest.NewRequest(http.MethodPost, pattern, strings.NewReader(`{}`))
+			request.Header.Set("Authorization", "Bearer presented.operator.token")
+			response := httptest.NewRecorder()
+			router.ServeHTTP(response, request)
+			if response.Code != testCase.status || problemCode(t, response) != testCase.code {
+				t.Fatalf("%s, %s: answer = %d %q, want %d %q", pattern, name, response.Code, problemCode(t, response), testCase.status, testCase.code)
+			}
+		}
+	}
 }
 
 func TestSwappedRegistryFacesAnswerFromTheOperatorChannel(t *testing.T) {
