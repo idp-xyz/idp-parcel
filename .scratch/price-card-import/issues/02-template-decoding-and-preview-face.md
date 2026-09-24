@@ -1,7 +1,7 @@
 # 02 模板解码与预览口
 
 Category: enhancement
-Status: ready-for-agent——2026-09-25 通道 3 立票并激活（用户授权自决）
+Status: in-progress——2026-09-25 通道 3 认领，隔离 worktree `idp-parcel-mcp3-pci02`、分支 `mcp3-pci02`
 Blocked by: 01
 地盘：
 - 01 定下的读取件位置；
