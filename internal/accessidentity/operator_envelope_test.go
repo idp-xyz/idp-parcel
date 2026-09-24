@@ -160,10 +160,6 @@ func TestOperatorAnswerGradesDoNotStandInForEachOther(t *testing.T) {
 			verifier: verifierFake{subject: subject},
 			registry: registryFake{standing: writer, found: true}, tenant: "SYN-TENANT-02", want: "not granted",
 		},
-		"request names no tenant": {
-			verifier: verifierFake{subject: subject},
-			registry: registryFake{standing: writer, found: true}, tenant: "", want: "not granted",
-		},
 		"no grant for the requested face": {
 			verifier: verifierFake{subject: subject},
 			registry: registryFake{standing: standingWith(t, accessidentity.CapabilityMasterDataAndOperationsRead), found: true},
@@ -207,6 +203,14 @@ func revokedStanding(t *testing.T, revokedAt time.Time) accessidentity.OperatorS
 		t.Fatal(err)
 	}
 	return revoked
+}
+
+func TestUnnamedTenantIsTakenFromTheOperatorsBinding(t *testing.T) {
+	minter := newMinter(t, verifierFake{subject: operatorSubject(t)}, registryFake{standing: standingWith(t, accessidentity.CapabilityRegistryConfigurationWrite), found: true})
+	envelope, err := mint(minter, "", accessidentity.CapabilityRegistryConfigurationWrite)
+	if err != nil || envelope.TenantID() != operatorTenant {
+		t.Fatalf("unnamed tenant: envelope tenant %q, err %v; want the bound tenant", envelope.TenantID(), err)
+	}
 }
 
 func TestZeroOperatorEnvelopeIsUnusable(t *testing.T) {

@@ -111,7 +111,10 @@ func (minter *OperatorMinter) MintOperator(
 	if request.Face == CapabilityOperationDecision {
 		granted = standing.HoldsDecisionAt(request.DecisionKind, at)
 	}
-	if !found || standing.binding.tenantID != strings.TrimSpace(request.TenantID) || !granted {
+	// 请求没指名租户时取册上的绑定：一个操作者只绑一个租户，取绑定仍是「身份来自册、不来自请求」。
+	// 指名了就比对，指名的不是绑定的那个就答未授予。
+	named := strings.TrimSpace(request.TenantID)
+	if !found || (named != "" && standing.binding.tenantID != named) || !granted {
 		return OperatorEnvelope{}, ErrOperatorNotGranted
 	}
 	// 准入范围判在授予之后：没有授予的人不该从答复里看出这个租户登没登区间。
