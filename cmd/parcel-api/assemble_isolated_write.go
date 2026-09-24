@@ -7,6 +7,7 @@ import (
 	nodeopshttp "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/http"
 	pspilot "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/pilotgovernance"
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
+	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 )
 
 // isolatedWriteTenantEnv 是隔离写路径准入（ADR-0091）的显式输入。它与隔离读面的开关
@@ -64,7 +65,8 @@ type isolatedWriteAdmission struct {
 	// 租户格填开关值，行内容只从载荷取；它实现了哪几口的 Intake 接口，装配点就换得了哪几行——编译期锁住。
 	partyIdentity *commercialhttp.IsolatedPartyIdentityIntake
 	// 以下各格是主链命令面各上下文的隔离命令 Intake（票 operator-channel/08），锁法同 partyIdentity。
-	nodeOperations *nodeopshttp.IsolatedCommandIntake
+	nodeOperations       *nodeopshttp.IsolatedCommandIntake
+	transportFulfillment *tfhttp.IsolatedCommandIntake
 }
 
 // isolatedWriteAdmittedCommandLines 是写开关到此刻为止换上隔离 Intake 的命令面，供启动日志出声
@@ -79,6 +81,7 @@ var isolatedWriteAdmittedCommandLines = []string{
 	"/commercial-party-identity-deactivations",
 	"/commercial-legal-entity-profile-registrations",
 	"/node-operations/receptions",
+	"/transport-fulfillment/offsite-pickups",
 }
 
 // admittedCommandLines 交回放行名单的副本：日志与测试都不该改得动那份表。
@@ -100,6 +103,14 @@ func (admission *isolatedWriteAdmission) nodeOperationsIntake() *nodeopshttp.Iso
 		return nil
 	}
 	return admission.nodeOperations
+}
+
+// transportFulfillmentIntake 对 nil 接收者交回 nil，理由同 partyIdentityIntake。
+func (admission *isolatedWriteAdmission) transportFulfillmentIntake() *tfhttp.IsolatedCommandIntake {
+	if admission == nil {
+		return nil
+	}
+	return admission.transportFulfillment
 }
 
 // buildIsolatedWriteAdmission 解析隔离写路径准入的显式输入（ADR-0091 决定四）。
@@ -143,11 +154,16 @@ func buildIsolatedWriteAdmission(getenv func(string) string) (*isolatedWriteAdmi
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: isolated node operations command intake: %w", err)
 	}
+	transportFulfillment, err := tfhttp.NewIsolatedCommandIntake(tfhttp.IsolatedCommandIntakeDeps{Tenant: tenant})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: isolated transport fulfillment command intake: %w", err)
+	}
 	return &isolatedWriteAdmission{
-		governanceDirectory: directory,
-		selfAuthority:       isolatedSelfAuthority,
-		tenant:              tenant,
-		partyIdentity:       partyIdentity,
-		nodeOperations:      nodeOperations,
+		governanceDirectory:  directory,
+		selfAuthority:        isolatedSelfAuthority,
+		tenant:               tenant,
+		partyIdentity:        partyIdentity,
+		nodeOperations:       nodeOperations,
+		transportFulfillment: transportFulfillment,
 	}, nil
 }

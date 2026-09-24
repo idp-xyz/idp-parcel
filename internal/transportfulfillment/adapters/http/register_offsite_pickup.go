@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
 // PickupRegistrationIntake 把已认证的接入请求翻译成单对象揽收登记命令。接口而非解析代码的理由
@@ -12,6 +13,46 @@ import (
 // 进段门的两个来源侧。
 type PickupRegistrationIntake interface {
 	IntakePickupRegistration(ctx context.Context, request *http.Request) (application.RegisterOffsitePickupCommand, error)
+}
+
+// OffsitePickupRegistrationPayload 是单对象揽收登记的线格式，逐格镜像 application.RegisterOffsitePickupCommand 去掉租户。
+// occurredAt 取 RFC 3339；段三格可缺，缺席即不立段（命令注释）。
+type OffsitePickupRegistrationPayload struct {
+	Object               string `json:"object"`
+	Task                 string `json:"task"`
+	Attempt              string `json:"attempt"`
+	Place                string `json:"place"`
+	Control              string `json:"control"`
+	ExecutedBy           string `json:"executedBy"`
+	OccurredAt           string `json:"occurredAt"`
+	Segment              string `json:"segment,omitempty"`
+	PlannedSegment       string `json:"plannedSegment,omitempty"`
+	SegmentServiceAction string `json:"segmentServiceAction,omitempty"`
+}
+
+// Command 把载荷连同信封给的租户翻成登记命令。只有时刻在这里解（解不出 400）；对象、尝试与控制证据成不成形留给编排
+// 答`未受理`——那是形成了的业务答案，不是坏报文。
+func (payload OffsitePickupRegistrationPayload) Command(tenant domain.TenantID) (application.RegisterOffsitePickupCommand, error) {
+	if tenant.String() == "" {
+		return application.RegisterOffsitePickupCommand{}, ErrOperatorIdentityMissing
+	}
+	occurredAt, err := parseOptionalInstant("occurredAt", payload.OccurredAt)
+	if err != nil {
+		return application.RegisterOffsitePickupCommand{}, err
+	}
+	return application.RegisterOffsitePickupCommand{
+		TenantID:             tenant,
+		Object:               payload.Object,
+		Task:                 payload.Task,
+		Attempt:              payload.Attempt,
+		Place:                payload.Place,
+		Control:              payload.Control,
+		ExecutedBy:           payload.ExecutedBy,
+		OccurredAt:           occurredAt,
+		Segment:              payload.Segment,
+		PlannedSegment:       payload.PlannedSegment,
+		SegmentServiceAction: payload.SegmentServiceAction,
+	}, nil
 }
 
 // PickupRegistrationHandler 是本适配器转交的应用编排。
