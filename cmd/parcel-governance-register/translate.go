@@ -6,10 +6,11 @@ import (
 	"fmt"
 	"time"
 
+	"go.idp.xyz/idp-parcel/internal/pilotgovernance/application"
 	"go.idp.xyz/idp-parcel/internal/pilotgovernance/domain"
 )
 
-// 本文件把三种登记输入 JSON 折成领域规格。翻译严格且零默认：未知字段拒收（打错
+// 本文件把各种登记输入 JSON 折成领域规格。翻译严格且零默认：未知字段拒收（打错
 // 字段名不得静默变成「没给」）、有构造门的标识在这里就拒、其余内容原样递给领域门
 // ——九件缺一、恢复四件那类判据在域，这里绝不代填。
 //
@@ -149,4 +150,198 @@ func resumptionSpecFromJSON(raw []byte) (domain.ResumptionDecisionSpec, error) {
 		return none, err
 	}
 	return spec, nil
+}
+
+type candidateSetDocument struct {
+	SetID      string    `json:"setId"`
+	Scope      string    `json:"scope"`
+	Parameters string    `json:"parameters"`
+	Rules      string    `json:"rules"`
+	FormedAt   time.Time `json:"formedAt"`
+}
+
+type deviationDocument struct {
+	Scope         string    `json:"scope"`
+	Control       string    `json:"control"`
+	Owner         string    `json:"owner"`
+	CloseBy       time.Time `json:"closeBy"`
+	ResidualRisk  string    `json:"residualRisk"`
+	AcceptanceRef string    `json:"acceptanceRef"`
+}
+
+type stageReviewDecisionDocument struct {
+	Stage        string              `json:"stage"`
+	Objective    string              `json:"objective"`
+	EvidencePack string              `json:"evidencePack"`
+	Verdict      string              `json:"verdict"`
+	Disposition  string              `json:"disposition,omitempty"`
+	Deviations   []deviationDocument `json:"deviations,omitempty"`
+	DecidedBy    string              `json:"decidedBy"`
+	DecidedAt    time.Time           `json:"decidedAt"`
+	EffectiveAt  time.Time           `json:"effectiveAt"`
+}
+
+type coverageDocument struct {
+	Predecessor string `json:"predecessor"`
+	Kind        string `json:"kind"`
+}
+
+type stageReviewDocument struct {
+	CandidateSet    candidateSetDocument        `json:"candidateSet"`
+	Review          stageReviewDecisionDocument `json:"review"`
+	GrantedInterval *authorityIntervalDocument  `json:"grantedInterval,omitempty"`
+	Coverage        []coverageDocument          `json:"coverage,omitempty"`
+}
+
+// stageReviewInput 是一份阶段评审输入的两半：本次评审固定的候选版本组，与评审命令本身。
+// 评审的范围版本与候选组引用都取自这一份候选组——评审评的就是这组，输入里不另给第二份，
+// 免得两处写得对不上。
+type stageReviewInput struct {
+	candidateSet domain.CandidateVersionSet
+	command      application.RecordStageReviewCommand
+}
+
+func stageReviewFromJSON(raw []byte) (stageReviewInput, error) {
+	none := stageReviewInput{}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	var document stageReviewDocument
+	if err := decoder.Decode(&document); err != nil {
+		return none, fmt.Errorf("阶段评审输入不是本入口的形状：%w", err)
+	}
+
+	setID, err := domain.NewCandidateVersionSetID(document.CandidateSet.SetID)
+	if err != nil {
+		return none, err
+	}
+	scope, err := domain.NewScopeVersionReference(document.CandidateSet.Scope)
+	if err != nil {
+		return none, err
+	}
+	parameters, err := domain.NewParameterSnapshotReference(document.CandidateSet.Parameters)
+	if err != nil {
+		return none, err
+	}
+	rules, err := domain.NewRuleVersionsReference(document.CandidateSet.Rules)
+	if err != nil {
+		return none, err
+	}
+	set, err := domain.FixCandidateVersionSet(setID, scope, parameters, rules, document.CandidateSet.FormedAt)
+	if err != nil {
+		return none, err
+	}
+
+	stage, known := executionStageNamed(document.Review.Stage)
+	if !known {
+		return none, fmt.Errorf("未知执行阶段 %q", document.Review.Stage)
+	}
+	verdict, known := reviewVerdictNamed(document.Review.Verdict)
+	if !known {
+		return none, fmt.Errorf("未知评审结论 %q", document.Review.Verdict)
+	}
+	// 处理方式缺席是 Go 的正当形状；写了就必须是封闭四值之一——Go 带处理方式、No-Go 缺处理
+	// 方式都由领域门拒，这里不替它补。
+	disposition := domain.NoGoDispositionInvalid
+	if document.Review.Disposition != "" {
+		if disposition, known = noGoDispositionNamed(document.Review.Disposition); !known {
+			return none, fmt.Errorf("未知 No-Go 处理方式 %q", document.Review.Disposition)
+		}
+	}
+	deviations := make([]domain.AcceptedDeviation, 0, len(document.Review.Deviations))
+	for _, deviation := range document.Review.Deviations {
+		deviations = append(deviations, domain.AcceptedDeviation{
+			Scope:         deviation.Scope,
+			Control:       deviation.Control,
+			Owner:         deviation.Owner,
+			CloseBy:       deviation.CloseBy,
+			ResidualRisk:  deviation.ResidualRisk,
+			AcceptanceRef: deviation.AcceptanceRef,
+		})
+	}
+
+	command := application.RecordStageReviewCommand{
+		Review: domain.StageReviewDecisionSpec{
+			Stage:        stage,
+			Objective:    document.Review.Objective,
+			Scope:        set.Scope(),
+			Candidates:   set.ID(),
+			EvidencePack: document.Review.EvidencePack,
+			Verdict:      verdict,
+			Disposition:  disposition,
+			Deviations:   deviations,
+			DecidedBy:    document.Review.DecidedBy,
+			DecidedAt:    document.Review.DecidedAt,
+			EffectiveAt:  document.Review.EffectiveAt,
+		},
+	}
+	if document.GrantedInterval != nil {
+		granted := domain.AuthorityInterval{
+			ObjectScope: document.GrantedInterval.ObjectScope,
+			Capability:  document.GrantedInterval.Capability,
+			FactKind:    document.GrantedInterval.FactKind,
+			Authority:   document.GrantedInterval.Authority,
+			From:        document.GrantedInterval.FromAt,
+		}
+		if document.GrantedInterval.ToAt != nil {
+			granted.To = *document.GrantedInterval.ToAt
+		}
+		command.GrantedInterval = &granted
+	}
+	for _, declaration := range document.Coverage {
+		predecessor, err := domain.NewScopeVersionReference(declaration.Predecessor)
+		if err != nil {
+			return none, err
+		}
+		kind, known := scopeRelationKindNamed(declaration.Kind)
+		if !known {
+			return none, fmt.Errorf("未知覆盖关系种类 %q", declaration.Kind)
+		}
+		command.Coverage = append(command.Coverage, domain.ScopeCoverageDeclaration{
+			Predecessor: predecessor,
+			Kind:        kind,
+		})
+	}
+	return stageReviewInput{candidateSet: set, command: command}, nil
+}
+
+// 下面四个是领域封闭集的名称镜像：认 String() 的原词，集合外与空串一律不认，不猜近似。
+
+func executionStageNamed(name string) (domain.ExecutionStage, bool) {
+	for _, stage := range []domain.ExecutionStage{
+		domain.NotYetInExecution, domain.HistoricalReplay, domain.ShadowRun, domain.LimitedProduction,
+	} {
+		if stage.String() == name {
+			return stage, true
+		}
+	}
+	return domain.ExecutionStageInvalid, false
+}
+
+func reviewVerdictNamed(name string) (domain.ReviewVerdict, bool) {
+	for _, verdict := range []domain.ReviewVerdict{domain.StageGo, domain.StageNoGo} {
+		if verdict.String() == name {
+			return verdict, true
+		}
+	}
+	return domain.ReviewVerdictInvalid, false
+}
+
+func noGoDispositionNamed(name string) (domain.NoGoDisposition, bool) {
+	for _, disposition := range []domain.NoGoDisposition{
+		domain.KeepCurrentScope, domain.SuspendNewAdmission, domain.FixAndReassess, domain.ObjectLevelTakeover,
+	} {
+		if disposition.String() == name {
+			return disposition, true
+		}
+	}
+	return domain.NoGoDispositionInvalid, false
+}
+
+func scopeRelationKindNamed(name string) (domain.ScopeVersionRelationKind, bool) {
+	for _, kind := range []domain.ScopeVersionRelationKind{domain.ScopeInheritsSuspensions, domain.ScopeUnrelated} {
+		if kind.String() == name {
+			return kind, true
+		}
+	}
+	return domain.ScopeVersionRelationKindInvalid, false
 }
