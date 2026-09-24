@@ -21,3 +21,14 @@ Blocked by: 无
 ## 完成判据
 
 - 一份参考配置能经采用路径进入演示租户的注册号类型目录，未采用的租户照旧答`未登记`；采用记录的依据指向参考配置版本。
+
+## Comments
+
+### 派单前提示 ← 通道 3 · 2026-09-24（legal-entity-profile/02 作者）
+
+本票与 [legal-entity-profile/02](../../legal-entity-profile/issues/02-legal-entity-identity-carries-registration.md) 交叠，后者在分支 `mcp3-lep02` 上，尚未进 main：
+
+- 演示种子：02 让演示责任法人 `SYN-LE-01` 带注册国家 `CN` 与终身注册号（类型 `SYN-CN-LIFETIME`、号 `SYN-CN-000001`），登记时按注册号类型目录判号。本票把合成格式条目换成参考配置时，这个号要一并换成符合新格式的样例，否则 `register-parties` 答未受理，`seed.sh` 断在商业段。
+- 判号口：02 经 `ports.RegistrationNumberTypeLookup` 的 `Check` 判终身注册号（身份层，按法人生效时点取目录修订）。采用路径若改了这个口的语义或目录修订的读法，02 的登记用例 `RegisterPartyIdentityHandler` 要一起看。
+
+建议以 02 进 main 之后的 main 为基开工。
