@@ -50,13 +50,14 @@ Blocked by: 03（只挡演示网络参考配置那半）
 | [08](../../routing-first-cut/issues/08-shipment-carries-geo-projection-to-routing.md) | PS 随路由判断携带地理解析投影（ADR-0075 的 PS 半边） | 02、07 |
 | [09](../../routing-first-cut/issues/09-initial-route-evidence-folded-from-catalog.md) | 初始路由证据从目录折出（时间投影、段链、策略引用） | 07 |
 | [10](../../routing-first-cut/issues/10-candidate-cost-from-leg-buy-evaluations.md) | 候选成本：段的 BUY 评价经 PP 合成 | 02、03、09 |
-| [11](../../routing-first-cut/issues/11-demo-network-adopted-as-reference-configuration.md) | 演示网络经 psb/03 的采用路径进入演示租户 | psb/03、08、10 |
+| [11](../../routing-first-cut/issues/11-demo-network-adopted-as-reference-configuration.md) | 演示网络经 psb/03 的采用路径进入演示租户 | psb/03、08、10、12 |
+| [12](../../routing-first-cut/issues/12-cc-customs-applicability-judgment-for-route-candidates.md) | customs-compliance 按路由候选作答的关务适用性判断口（地盘在 CC；02 取证后另立，通道 3 起草） | 02（ADR-0148 接受之笔）；接 NR 取数侧另等 07 |
 
-可以立刻开工的前沿是 02、03，彼此不相碰（一份 ADR / NR 领域与策略载体）；01 等 psb/02 的登记册那一笔落地后即可做。
+可以立刻开工的前沿是 02、03，彼此不相碰（一份 ADR / NR 领域与策略载体）；01 等 psb/02 的登记册那一笔落地后即可做。（2026-09-24 补记：01 已 resolved；02 的 ADR-0148 草案已落、待用户接受；03 由通道 2 在做；12 由通道 3 立票、待 CC owner 分诊。）
 
 ### 完成判据对照
 
-- **「演示租户上一票已接受的委托能形成初始路由」**：关键路径 02 → 07 → 09 → 10（并 03）→ 11（并 psb/03、08）。**另有一条可能挡在路上的缝不在本票族里**：候选的关务资格。02 若判定 CC 侧今天没有按候选作答的判断方法，那是 ADR-0146 意义上又一处缺执行器，登进 psb/05 的动线取证并另立票；它补上之前，含关务段的候选只能答状态未知 → 路由判断未决，11 的判据到不了。
+- **「演示租户上一票已接受的委托能形成初始路由」**：关键路径 02 → 07 → 09 → 10（并 03）→ 11（并 psb/03、08、12）。候选的关务资格原先不在本票族里：02 取证确认 CC 侧没有按候选作答的判断方法（ADR-0146 意义上又一处缺执行器），已登 psb/05 格 6 并另立为 12，地盘在 CC；12 补上之前，含关务段的候选只能答状态未知 → 路由判断未决，11 的判据到不了。
 - **「`nr-route-evidence-views/01` 与被它挡住的两张 blocked 票各有去处」**：01。
 
 ### 做法约定
