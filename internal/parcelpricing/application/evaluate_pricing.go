@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
@@ -112,6 +111,17 @@ func NewEvaluatePricingHandler(deps EvaluatePricingDeps) *EvaluatePricingHandler
 	return &EvaluatePricingHandler{deps: deps}
 }
 
+// completion 是本编排交给共用补齐件的那四口与时钟（ADR-0152 决定三）。
+func (handler *EvaluatePricingHandler) completion() readingCompletion {
+	return readingCompletion{
+		clock:            handler.deps.Clock,
+		inForce:          handler.deps.InForce,
+		seriesVersions:   handler.deps.SeriesVersions,
+		catalogueInForce: handler.deps.CatalogueInForce,
+		catalogues:       handler.deps.Catalogues,
+	}
+}
+
 // Handle 把一次评价请求推进到入册结果：幂等按评价标识（同标识同语义即重放返原——
 // 评价是纯计算，重复请求不重算不换结果；同标识异语义是冲突不顶替）→ EvaluatePricing
 // 纯函数（失败评价同样是版本化结果，照样入册与交付——解释里带着失败原因，不是丢弃品）
@@ -123,11 +133,8 @@ func (handler *EvaluatePricingHandler) Handle(
 	if command.Request.ID().String() == "" {
 		return EvaluatePricingResult{outcome: EvaluationRequestNotAccepted}, nil
 	}
-	if (handler.deps.InForce == nil) != (handler.deps.SeriesVersions == nil) {
-		return EvaluatePricingResult{outcome: EvaluationUndecided}, ErrSeriesResolutionHalfWired
-	}
-	if (handler.deps.CatalogueInForce == nil) != (handler.deps.Catalogues == nil) {
-		return EvaluatePricingResult{outcome: EvaluationUndecided}, ErrCatalogueResolutionHalfWired
+	if err := handler.completion().halfWired(); err != nil {
+		return EvaluatePricingResult{outcome: EvaluationUndecided}, err
 	}
 
 	existing, found, err := handler.deps.Store.FindByID(ctx, command.Request.ID())
@@ -138,15 +145,10 @@ func (handler *EvaluatePricingHandler) Handle(
 		return handler.settleAgainstExisting(ctx, command, existing), nil
 	}
 
-	request, notes, err := handler.completeSeriesReadings(ctx, command.Request)
+	request, notes, err := handler.completion().complete(ctx, command.Request)
 	if err != nil {
 		return EvaluatePricingResult{outcome: EvaluationUndecided}, nil
 	}
-	request, catalogueNotes, err := handler.completeCatalogueReadings(ctx, request)
-	if err != nil {
-		return EvaluatePricingResult{outcome: EvaluationUndecided}, nil
-	}
-	notes = append(notes, catalogueNotes...)
 	command.Request = request
 
 	evaluation := domain.EvaluatePricing(command.Request)
@@ -257,73 +259,6 @@ func borrowSeriesReadings(request domain.EvaluationRequest, existing domain.Pric
 	return withSeriesReadings(request, readings)
 }
 
-// completeSeriesReadings 在形成评价前补齐输入快照里缺席的序列取值（ADR-0099 决定四）：
-// 按（租户、种类、序列标识、评价形成时刻）解析在用版本，再按计价基准时点在该版本内解析
-// 期次。两个时点分开是要点——形成时刻定版本，基准时点定期次。解析不到不编造：留一条
-// 说明进解释，让缺取值照旧在纯函数里落待判断；说明按恢复动作分格，登记侧据以续办。
-// 依赖故障返回 error——在用与否未知时形成评价会把一次故障记成一次待判断。
-func (handler *EvaluatePricingHandler) completeSeriesReadings(
-	ctx context.Context,
-	request domain.EvaluationRequest,
-) (domain.EvaluationRequest, []string, error) {
-	if handler.deps.InForce == nil {
-		return request, nil, nil
-	}
-	missing := missingSeriesBindings(request)
-	if len(missing) == 0 {
-		return request, nil, nil
-	}
-	tenant := request.Input().TenantID()
-	formedAt := handler.deps.Clock.Now()
-	basisAt := request.Input().BusinessAt()
-
-	readings := make([]domain.ReferenceSeriesValue, 0, len(missing))
-	notes := make([]string, 0)
-	for _, binding := range missing {
-		reference, outcome, err := handler.deps.InForce.ResolveInForce(ctx, tenant, binding.Kind(), binding.SeriesID(), formedAt)
-		if err != nil {
-			return domain.EvaluationRequest{}, nil, fmt.Errorf("resolve in-force series version: %w", err)
-		}
-		switch outcome {
-		case ports.SeriesVersionInForce:
-			reading, found, err := handler.deps.SeriesVersions.ResolveAt(ctx, tenant, reference, basisAt)
-			if err != nil {
-				return domain.EvaluationRequest{}, nil, fmt.Errorf("resolve series period: %w", err)
-			}
-			if !found {
-				notes = append(notes, fmt.Sprintf("series %s (%s) in-force version %s has no period covering pricing basis time %s",
-					binding.SeriesID(), binding.Kind(), reference.Version(), basisAt.UTC().Format(time.RFC3339)))
-				// 金额序列的「窗外无期次」是卡声明过的那一格（ADR-0110 Decision 三），不是缺证据：把「查过这一版、
-				// 无期次」冻结进输入，纯函数按卡上的窗外行为分流；费率序列没有窗外，缺期次照旧只留说明。
-				if binding.Kind() == domain.ReferenceSeriesPublishedAmount {
-					absent, err := domain.NewAbsentSeriesReading(binding.Kind(), reference)
-					if err != nil {
-						return domain.EvaluationRequest{}, nil, fmt.Errorf("freeze absent series reading: %w", err)
-					}
-					readings = append(readings, absent)
-				}
-				continue
-			}
-			readings = append(readings, reading.Value())
-		case ports.SeriesHasNoRegisteredVersion:
-			notes = append(notes, fmt.Sprintf("series %s (%s) has no registered version", binding.SeriesID(), binding.Kind()))
-		case ports.SeriesHasNoApprovedVersion:
-			notes = append(notes, fmt.Sprintf("series %s (%s) has registered versions but none approved by review before %s",
-				binding.SeriesID(), binding.Kind(), formedAt.UTC().Format(time.RFC3339)))
-		case ports.SeriesKindDisagrees:
-			notes = append(notes, fmt.Sprintf("series %s is registered under another kind than the plan's %s binding",
-				binding.SeriesID(), binding.Kind()))
-		default:
-			return domain.EvaluationRequest{}, nil, fmt.Errorf("%w: in-force outcome %d", ErrUnexpectedInForceOutcome, outcome)
-		}
-	}
-	completed, err := withSeriesReadings(request, readings)
-	if err != nil {
-		return domain.EvaluationRequest{}, nil, fmt.Errorf("attach resolved series readings: %w", err)
-	}
-	return completed.WithSeriesResolutionNotes(notes...), notes, nil
-}
-
 // missingCatalogueLinks 列出卡绑定了、而请求的输入快照里没有读数的目录。重放一律视为不缺（重放携带原读数）。
 func missingCatalogueLinks(request domain.EvaluationRequest) []domain.ReferenceCatalogueLink {
 	if _, replay := request.ReplayOf(); replay {
@@ -340,78 +275,6 @@ func missingCatalogueLinks(request domain.EvaluationRequest) []domain.ReferenceC
 		}
 	}
 	return missing
-}
-
-// completeCatalogueReadings 在形成评价前补齐输入快照里缺席的目录读数（ADR-0109 Decision 三、四）：按
-// （租户、种类、目录标识、评价形成时刻）解析在用版本——复核门照序列那一条（ADR-0099）——再按计价基准
-// 时点与输入的邮编路线在该版本内解读数；这一版在基准时点不生效同样是「没查到」。查过没查到的读数照样
-// 冻结进输入（值缺席、版本在），纯函数据以落 ZONE_UNRESOLVED / REMOTE_TIER_UNRESOLVED；没有在用版本时留
-// 说明，不编造。输入没带邮编路线的请求解不了，留说明交给纯函数按缺分区处置。
-func (handler *EvaluatePricingHandler) completeCatalogueReadings(
-	ctx context.Context,
-	request domain.EvaluationRequest,
-) (domain.EvaluationRequest, []string, error) {
-	if handler.deps.CatalogueInForce == nil {
-		return request, nil, nil
-	}
-	missing := missingCatalogueLinks(request)
-	if len(missing) == 0 {
-		return request, nil, nil
-	}
-	tenant := request.Input().TenantID()
-	formedAt := handler.deps.Clock.Now()
-	basisAt := request.Input().BusinessAt()
-	route, hasRoute := request.Input().PostalRoute()
-
-	readings := make([]domain.ResolvedCatalogueValue, 0, len(missing))
-	notes := make([]string, 0)
-	for _, link := range missing {
-		if !hasRoute {
-			notes = append(notes, fmt.Sprintf("catalogue %s (%s) cannot be consulted: the input carries no postal route", link.CatalogueID(), link.Kind()))
-			continue
-		}
-		reference, outcome, err := handler.deps.CatalogueInForce.ResolveInForce(ctx, tenant, link.Kind(), link.CatalogueID(), formedAt)
-		if err != nil {
-			return domain.EvaluationRequest{}, nil, fmt.Errorf("resolve in-force catalogue version: %w", err)
-		}
-		switch outcome {
-		case ports.CatalogueVersionInForce:
-			reading, applicable, err := handler.deps.Catalogues.ResolveAt(ctx, tenant, reference, basisAt, route)
-			if err != nil {
-				return domain.EvaluationRequest{}, nil, fmt.Errorf("resolve catalogue reading: %w", err)
-			}
-			if !applicable {
-				notes = append(notes, fmt.Sprintf("catalogue %s (%s) in-force version %s is not effective at pricing basis time %s",
-					link.CatalogueID(), link.Kind(), reference.Version(), basisAt.UTC().Format(time.RFC3339)))
-				continue
-			}
-			readings = append(readings, reading)
-		case ports.CatalogueHasNoRegisteredVersion:
-			notes = append(notes, fmt.Sprintf("catalogue %s (%s) has no registered version", link.CatalogueID(), link.Kind()))
-		case ports.CatalogueHasNoApprovedVersion:
-			notes = append(notes, fmt.Sprintf("catalogue %s (%s) has registered versions but none approved by review before %s",
-				link.CatalogueID(), link.Kind(), formedAt.UTC().Format(time.RFC3339)))
-		case ports.CatalogueKindDisagrees:
-			notes = append(notes, fmt.Sprintf("catalogue %s is registered under another kind than the plan's %s link",
-				link.CatalogueID(), link.Kind()))
-		default:
-			return domain.EvaluationRequest{}, nil, fmt.Errorf("%w: catalogue in-force outcome %d", ErrUnexpectedInForceOutcome, outcome)
-		}
-	}
-	completed := request
-	if len(readings) > 0 {
-		values := append(request.Input().CatalogueReadings(), readings...)
-		input, err := request.Input().WithReferenceCatalogues(values...)
-		if err != nil {
-			return domain.EvaluationRequest{}, nil, fmt.Errorf("attach resolved catalogue readings: %w", err)
-		}
-		// 与 withSeriesReadings 同一手法：只换输入一格，回指与序列那一步留下的说明都原样保留。
-		completed, err = request.WithInput(input)
-		if err != nil {
-			return domain.EvaluationRequest{}, nil, fmt.Errorf("attach resolved catalogue readings: %w", err)
-		}
-	}
-	return completed.WithSeriesResolutionNotes(notes...), notes, nil
 }
 
 // handOff 交发布意图。失败不翻评价，留续办引用重发同一份。
