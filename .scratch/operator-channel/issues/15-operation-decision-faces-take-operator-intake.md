@@ -1,4 +1,4 @@
-# 15 委托与履约的运营决定口：操作者渠道增「运营决定」能力面，委托侧五口与 TF 四个管理台写面换操作者 Intake
+# 15 委托与履约的运营决定口：操作者渠道增「运营决定」能力面，委托侧五口与 TF 管理台上的决定与判断口换操作者 Intake
 
 Category: enhancement
 Status: ready-for-agent——2026-09-24 随 ADR-0151 立（用户同日「同意你的决定，开干」）；2026-09-25 通道 2 按用户「开干前，全面审查，确保确实如此」复核后改定范围、阻塞与完成判据，复核记录见文末 Comments
@@ -9,11 +9,11 @@ Blocked by: 03、14
 
 ## 做什么
 
-1. 操作者册的授予多一个能力面「运营决定」，授予按租户 × 决定种类登记：复核完成、主动拒绝、授权处置、受控关闭、受控重开、关段、建派送任务、装载分配、终止参与。
+1. 操作者册的授予多一个能力面「运营决定」，授予按租户 × 决定种类登记：复核完成、主动拒绝、授权处置、受控关闭、受控重开、关段、建派送任务、装载分配、终止参与、有效时间判断、承运商首次有效收寄判断。
 2. 下列各口在装配点换成操作者 Intake，每换一口，该口的「未配置即拒」测试改写为答复格测试：
    - 委托侧：`/shipment-requests/manual-review-completions`、`/shipment-requests/rejections`、`/shipment-requests/authorized-dispositions`、`/shipment-requests/continued-attempt-closures`、`/shipment-requests/continued-attempt-reopenings`；
-   - TF：`/transport-fulfillment-segment-closures`、`/transport-fulfillment-dispatch-task-registrations`、`/transport-fulfillment-load-assignment-registrations`、`/transport-fulfillment-participation-terminations`。
-   关段与建派送任务两口今天经写开关放行，换口的同一笔撤下隔离放行（ADR-0150）。
+   - TF：`/transport-fulfillment-segment-closures`、`/transport-fulfillment-dispatch-task-registrations`、`/transport-fulfillment-load-assignment-registrations`、`/transport-fulfillment-participation-terminations`、`/transport-fulfillment-effective-time-judgments`、`/transport-fulfillment-carrier-first-effective-pickup-judgments`。
+   关段、建派送任务、有效时间判断与承运商首次有效收寄判断四口今天经写开关放行，换口的同一笔撤下隔离放行（ADR-0150）。
 3. 身份格照 ADR-0151 决定二逐口取：
    - 租户与提交操作者只从信封来；
    - 复核人、拒绝决定人、处置人取提交操作者，有没有权仍由编排问 party-commercial；
@@ -34,7 +34,7 @@ Blocked by: 03、14
 - 上列各口：发行方未配置 / 令牌无效 / 无此决定种类的授予 / 不在准入范围四格各答其格，带测试；装配测试与端点表仍一一对照。
 - 租户、提交操作者与委托来源身份都不从请求体收，请求体带即 `400`；复核人、拒绝决定人、处置人等于提交操作者；受控关闭与重开的命令里不出现提交操作者（带测试）。
 - 越过 Intake 之后：TF 各口答业务结果；委托侧五口到达编排，在各自的授权缺口补上之前，生产装配如实停在该口今天的格——复核完成 `NO_ANSWER_FORMED`，主动拒绝「拒绝授权不可用」，受控关闭与重开「未决 · 授权口不可用」，授权处置「授权规则未配置」；装配测试以合成的授权映射或授权器证已授权时答业务结果（同 `manualReviewOrchestrationWith` 的做法）。
-- 关段与建派送任务两口的隔离放行已撤，其隔离用例改写为真渠道答复格用例。
+- 关段、建派送任务、有效时间判断与承运商首次有效收寄判断四口的隔离放行已撤，其隔离用例改写为真渠道答复格用例。
 
 ## Comments
 

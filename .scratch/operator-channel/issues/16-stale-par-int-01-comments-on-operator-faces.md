@@ -1,7 +1,7 @@
 # 16 过期注释：运营侧接入面的认证不再写「属 `PAR-INT-01` 待提供」
 
 Category: enhancement
-Status: in-progress——2026-09-25 通道 2 随 ADR-0151 补立并认领（通道 4 于 2026-09-24 已改了一部分，未提交）
+Status: in-progress——2026-09-25 通道 2 崩后由通道 4 接手（用户令独立接手）；前半 22 个 Go 文件的注释改动已随 `70107171` 原样入库，余量见通道 1 的清单（登记写面各 `register_*.go` 与 `registrationjson`、目录查阅用例、一线作业事实与外部结果各口、`internal/platform/httpapi/router.go`、管理台 `apps/admin-web/src` 下带 `PAR-INT-01` 的运营侧注释）。此前 in-progress——2026-09-25 通道 2 随 ADR-0151 补立并认领（通道 4 于 2026-09-24 已改了一部分，未提交）
 Blocked by: 无
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md)
 地盘：`cmd/parcel-api` 与各上下文 `adapters/http`、`adapters/registrationjson` 里的 Go 注释；只改注释，不改代码与测试逻辑。
@@ -18,7 +18,7 @@ Blocked by: 无
 - 登记写面、目录与运营查阅面、商业发布：操作者渠道（ADR-0100）。
 - 一线作业事实：操作者渠道的「作业事实登记」能力面（ADR-0149）。
 - 外部结果与外部资金事实：集成客户端族（ADR-0149）；哪家监管或报关来源送回执，仍是租户取值 `PAR-INT-03`。
-- 委托侧运营决定口与 TF 四个管理台写面：操作者渠道的「运营决定」能力面（ADR-0151）。
+- 委托侧运营决定口与 TF 管理台上的决定与判断口：操作者渠道的「运营决定」能力面（ADR-0151）。
 - 各包「未配置」哨兵：按提交方分族，各族真 Intake 都未就位。
 
 ## 不做
