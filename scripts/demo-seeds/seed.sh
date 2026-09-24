@@ -147,9 +147,10 @@ echo "== 7/7 代收与清分登记（collection-remittance：分户账、指令�
 "$BIN/parcel-collection-register" posting -input "$SEEDS/collection/09-posting-shortfall.json"
 "$BIN/parcel-collection-register" posting -input "$SEEDS/collection/10-posting-allocation-payable.json"
 
-echo "== 试点治理登记（pilot-governance：权威区间、暂停、恢复；票 admin-skeleton-closure-batch/02） =="
-# 治理是产品级机制，登记无租户维（ADR-0083）；登记走受控 CLI（票 syn-wall-door-audit/12），
-# 首批只开三类——阶段评审与接管第二批，故 stage-admission 页那两格如实说明未开，不造数。
+echo "== 试点治理登记（pilot-governance：权威区间、暂停、恢复、阶段评审；票 admin-skeleton-closure-batch/02） =="
+# 治理是产品级机制，登记无租户维（ADR-0083）；登记走受控 CLI（票 syn-wall-door-audit/12）。
+# 首批三类之外，第二批的阶段评审已开（票 demo-intake-admission-paused/01），接管仍未开；
+# 阶段评审与接管都还没有读面，stage-admission 页那两格照旧如实说明未开，不造数。
 # 权威区间讲一次交接：旧引擎区间已闭、试点引擎接棒开放区间，相邻不重叠（冲突预检半开区间语义）。
 # 暂停两笔一笔已恢复：恢复四件（解除证据、一致性核对、在途盘点、决定人）由领域门把守，缺一不可。
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/01-authority-interval-routing-legacy.json"
@@ -160,8 +161,13 @@ echo "== 试点治理登记（pilot-governance：权威区间、暂停、恢复�
 "$BIN/parcel-governance-register" suspend -input "$SEEDS/governance/06-suspension-pricing-scope.json"
 # 委托受理维的权威区间（ADR-0091）：隔离写路径准入启用时，生产归属就是拿这一行作答。
 # 四维必须与 cmd/parcel-api 的 isolatedGovernance* 常量逐字相同——对不上的后果不是报错，
-# 是查不到这一行，答出来的`权威未确定`与「压根没登记」一模一样。本行的试点范围版本与
-# 上面两笔暂停各不相同，因此不受它们影响，准入控制为 OPEN。
+# 是查不到这一行，答出来的`权威未确定`与「压根没登记」一模一样。
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/07-authority-interval-shipment-intake.json"
+# 委托受理的范围版本与上面两笔暂停的范围不同，但不同不等于互不影响：暂停按登记的覆盖关系读，
+# 读不出就保守拦（domain.AdmissionSuspendedByUnreadableScopeRelation）。这一笔阶段评审随 Go 为
+# shipment-intake@v1 与 routing@v3、pricing@v1 各登一条「互不相干」，准入控制因此为 OPEN；计价
+# 范围那笔暂停对它自己的范围照旧立着，治理页上仍是「暂停中」。权威区间由上一行登记，本评审不再
+# 授予第二条——同一区间再授一次会被冲突预检拦下。
+"$BIN/parcel-governance-register" stage-review -input "$SEEDS/governance/08-stage-review-shipment-intake.json"
 
 echo "种子灌入完成：租户 SYN-TENANT-01，七上下文全部落库。"

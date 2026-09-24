@@ -1,0 +1,22 @@
+{
+  "candidateSet": {
+    "setId": "SYN-GOV-CANDSET-0001",
+    "scope": "SYN-PILOT-SCOPE/shipment-intake@v1",
+    "parameters": "SYN-PARAM-SNAPSHOT/shipment-intake-v1",
+    "rules": "SYN-RULES/shipment-intake-v1",
+    "formedAt": "2025-12-15T00:00:00Z"
+  },
+  "review": {
+    "stage": "SHADOW_RUN",
+    "objective": "SYN-OBJECTIVE/shipment-intake-limited-production",
+    "evidencePack": "SYN-EVIDENCE/shadow-run-report-251226",
+    "verdict": "GO",
+    "decidedBy": "SYN-GOV-DECIDER-01",
+    "decidedAt": "2025-12-28T00:00:00Z",
+    "effectiveAt": "2026-01-01T00:00:00Z"
+  },
+  "coverage": [
+    {"predecessor": "SYN-PILOT-SCOPE/routing@v3", "kind": "UNRELATED"},
+    {"predecessor": "SYN-PILOT-SCOPE/pricing@v1", "kind": "UNRELATED"}
+  ]
+}
