@@ -14,18 +14,18 @@ type RegistrationNumberTypeSaveOutcome uint8
 
 const (
 	RegistrationNumberTypeSaveOutcomeInvalid RegistrationNumberTypeSaveOutcome = iota
-	RegistrationNumberTypeSaved
-	RegistrationNumberTypeAlreadyRegistered
-	RegistrationNumberTypeContentConflict
+	RegistrationNumberTypeRegistrySaved
+	RegistrationNumberTypeRegistryAlreadyRegistered
+	RegistrationNumberTypeRegistryContentConflict
 )
 
 func (outcome RegistrationNumberTypeSaveOutcome) String() string {
 	switch outcome {
-	case RegistrationNumberTypeSaved:
+	case RegistrationNumberTypeRegistrySaved:
 		return "SAVED"
-	case RegistrationNumberTypeAlreadyRegistered:
+	case RegistrationNumberTypeRegistryAlreadyRegistered:
 		return "ALREADY_REGISTERED"
-	case RegistrationNumberTypeContentConflict:
+	case RegistrationNumberTypeRegistryContentConflict:
 		return "CONTENT_CONFLICT"
 	default:
 		return ""

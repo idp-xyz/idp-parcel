@@ -112,7 +112,7 @@ func (repository *RegistrationNumberTypes) SaveRegistrationNumberType(
 		return ports.RegistrationNumberTypeSaveOutcomeInvalid, fmt.Errorf("%s: %w", operation, err)
 	}
 	if tag.RowsAffected() > 0 {
-		return ports.RegistrationNumberTypeSaved, nil
+		return ports.RegistrationNumberTypeRegistrySaved, nil
 	}
 
 	var existingDigest string
@@ -129,9 +129,9 @@ func (repository *RegistrationNumberTypes) SaveRegistrationNumberType(
 		return ports.RegistrationNumberTypeSaveOutcomeInvalid, fmt.Errorf("%s: %w", operation, err)
 	}
 	if existingDigest == contentDigest {
-		return ports.RegistrationNumberTypeAlreadyRegistered, nil
+		return ports.RegistrationNumberTypeRegistryAlreadyRegistered, nil
 	}
-	return ports.RegistrationNumberTypeContentConflict, nil
+	return ports.RegistrationNumberTypeRegistryContentConflict, nil
 }
 
 func (repository *RegistrationNumberTypes) LoadLatestRegistrationNumberType(
