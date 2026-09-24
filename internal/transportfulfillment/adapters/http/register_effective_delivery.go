@@ -30,8 +30,20 @@ var ErrMalformedRequest = errors.New("transport fulfillment http: malformed requ
 // 与信封相反，**事实内容必须从请求体收**（ADR-0023）：对象、尝试、POD 证据引用与
 // 更正时间都是设备/派送端记录的事实——服务器代铸任何一样，离线补传的重放就会被误判
 // 成新事实。
+//
+// 两口各有自己的单方法接口、端点各收其一，DeliveryIntake 是合集；分法与理由同 HandoverIntake。
 type DeliveryIntake interface {
+	DeliveryRegistrationIntake
+	DeliveryProofCorrectionIntake
+}
+
+// DeliveryRegistrationIntake 是交付生效首登口的 Intake。
+type DeliveryRegistrationIntake interface {
 	IntakeRegistration(ctx context.Context, request *http.Request) (application.RegisterEffectiveDeliveryCommand, error)
+}
+
+// DeliveryProofCorrectionIntake 是 POD 更正口的 Intake。
+type DeliveryProofCorrectionIntake interface {
 	IntakeCorrection(ctx context.Context, request *http.Request) (application.CorrectDeliveryProofCommand, error)
 }
 
@@ -58,7 +70,7 @@ const (
 )
 
 // NewRegisterEffectiveDeliveryEndpoint 交回交付生效首登的 HTTP 入口。
-func NewRegisterEffectiveDeliveryEndpoint(intake DeliveryIntake, handler DeliveryHandler) http.Handler {
+func NewRegisterEffectiveDeliveryEndpoint(intake DeliveryRegistrationIntake, handler DeliveryHandler) http.Handler {
 	return endpoint(func(request *http.Request) (application.RegisterEffectiveDeliveryResult, error, bool) {
 		command, err := intake.IntakeRegistration(request.Context(), request)
 		if err != nil {
@@ -72,7 +84,7 @@ func NewRegisterEffectiveDeliveryEndpoint(intake DeliveryIntake, handler Deliver
 // NewCorrectDeliveryProofEndpoint 交回 POD 更正的 HTTP 入口。首登与更正是两个端点：
 // 它们的命令形状与恢复动作不同，合并成一个入口就得靠请求体里的模式字段分路——那是
 // 给「第三种模式」开的门。
-func NewCorrectDeliveryProofEndpoint(intake DeliveryIntake, handler DeliveryHandler) http.Handler {
+func NewCorrectDeliveryProofEndpoint(intake DeliveryProofCorrectionIntake, handler DeliveryHandler) http.Handler {
 	return endpoint(func(request *http.Request) (application.RegisterEffectiveDeliveryResult, error, bool) {
 		command, err := intake.IntakeCorrection(request.Context(), request)
 		if err != nil {

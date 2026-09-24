@@ -19,8 +19,22 @@ import (
 // 方法名带 `Handover` 而不照交付那份叫 `IntakeRegistration`：UnconfiguredIntake 一个类型要同时
 // 堵住本包全部命令面（未配置是渠道这一层的状态，不是某个端点的状态），而 Go 不允许同名方法
 // 返回不同命令类型。交付那份先落、占了通名；此后的 Intake 都按事实具名，同 IntakeCatalogueQuery。
+//
+// 两口各有自己的单方法接口，端点各收其一；HandoverIntake 是两者的合集，留给要整组实现的一方
+// （UnconfiguredIntake 两口同堵）。分开的理由是逐口放行（ADR-0091 Consequences）：一个只放行了
+// 首登的实现在类型上就装不进更正口，不必为凑齐合集去写一个假装未配置的更正方法。
 type HandoverIntake interface {
+	HandoverRegistrationIntake
+	HandoverCorrectionIntake
+}
+
+// HandoverRegistrationIntake 是交接首登口的 Intake。
+type HandoverRegistrationIntake interface {
 	IntakeHandoverRegistration(ctx context.Context, request *http.Request) (application.RegisterTransportHandoverCommand, error)
+}
+
+// HandoverCorrectionIntake 是交接更正口的 Intake。
+type HandoverCorrectionIntake interface {
 	IntakeHandoverCorrection(ctx context.Context, request *http.Request) (application.CorrectTransportHandoverCommand, error)
 }
 
@@ -37,7 +51,7 @@ type HandoverHandler interface {
 }
 
 // NewRegisterTransportHandoverEndpoint 交回交接判断首登的 HTTP 入口。
-func NewRegisterTransportHandoverEndpoint(intake HandoverIntake, handler HandoverHandler) http.Handler {
+func NewRegisterTransportHandoverEndpoint(intake HandoverRegistrationIntake, handler HandoverHandler) http.Handler {
 	return commandEndpoint(func(request *http.Request) (application.RegisterTransportHandoverResult, error, bool) {
 		command, err := intake.IntakeHandoverRegistration(request.Context(), request)
 		if err != nil {
@@ -50,7 +64,7 @@ func NewRegisterTransportHandoverEndpoint(intake HandoverIntake, handler Handove
 
 // NewCorrectTransportHandoverEndpoint 交回交接判断更正的 HTTP 入口。首登与更正分两个端点，
 // 理由同交付：命令形状与恢复动作不同，合成一个入口就得靠请求体里的模式字段分路。
-func NewCorrectTransportHandoverEndpoint(intake HandoverIntake, handler HandoverHandler) http.Handler {
+func NewCorrectTransportHandoverEndpoint(intake HandoverCorrectionIntake, handler HandoverHandler) http.Handler {
 	return commandEndpoint(func(request *http.Request) (application.RegisterTransportHandoverResult, error, bool) {
 		command, err := intake.IntakeHandoverCorrection(request.Context(), request)
 		if err != nil {
