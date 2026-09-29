@@ -1,7 +1,7 @@
 # 03 计价参考目录、自动改路事实，以及三处没有写入口的空表
 
 Category: enhancement
-Status: in-progress——2026-09-29 通道 4（分支 `mcp4-seedc`）
+Status: block 1 done、block 2 已取证——2026-09-29 通道 4；同日通道 1 重放进 main，见文末「进 main 记录」。接管写侧另立 `.scratch/takeover-write-side`（用户裁决要开，待选项）。
 Blocked by: 无
 地盘：`scripts/demo-seeds/data/pricing/`、`data/network/`、`seedgen/`、`README.md` 与 `seed.sh` 里这两段。不改 commercial / customs / collection。
 出处：用户反馈 `./parcel.sh seed` 后页面业务数据不完整。派单 `task-b125d095` ← 通道 1。
@@ -70,3 +70,12 @@ CLI 有 batch 入口。通道 3 负责复核，本票不管。
 - 不给 `network_definition` / 初始路由 / 适用性 / 可达性新开登记口。
 - 不 INSERT。
 - 不碰门禁库 `127.0.0.1:55432`。
+
+## 进 main 记录（2026-09-29，通道 1 推送）
+
+分支 `mcp4-seedc@c5d13025`（已推 origin）。三笔在隔离树 `/tmp/idp-replay-seed` 顺序重放到 `e2ff20bb` 之上：`33c1aae8→cd9f767c`（`git range-diff` 为 `=`）、`c5d13025→5064da1a`（`!`：`scripts/demo-seeds/README.md` 两处文本冲突，两边正文都留）、`f0d16476→4feb8d2f`（`!`：README 组成表一处冲突，取 pricing/network 行来自 03、customs/visibility/collection 行来自 02）；另加 `2171a208` 按评审非阻断意见修 README 数据故事里信用政策/客户服务规则挂靠的措辞。
+推送方验证：链 tip `2171a208` 上 gofmt 空，vet 与 build 退出 0，清点门 current，分片覆盖核对通过（148 个包）；一次性库 `127.0.0.1:55461` 上 `seed.sh --reset` 三笔合并后退出 0（供应商协议 2、分区目录 1、自动改路事实 1、回汇批次 2、监管凭证 2、索赔材料收讯 2）；含 DSN `go test -p 1 -count=1 ./...` 一次：**134 ok / 0 FAIL / 14 无测试**。三笔都不改 Go 生产/测试代码（03 只动 seedgen 生成器与产物），清点无变化。
+
+## Comments
+
+**评审 ← 通道 2 · 钉 `c5d13025` · 无阻断**：重跑 seedgen 后 `git diff` 为空；私有库 55452 `seed.sh --reset` 两次退出 0，`reference_catalogue_version` 1、review 1、`auto_reroute_facts` 1，`network_definition`/`initial_route`/`plan_applicability`/`reachability_judgment`/`takeover_record` 均为 0；四张路由表无登记入口属实；价格政策由 `publish` 承接属实（在 `mcp2-seedcomp` 已补）；接管未开与 ADR-0128 决定五属实。非阻断：① 自动改路那行键对不上任何委托，只展示形状（README 已写明）；② 初始路由证据已改读目录，「0007 恒未配置」属实但不挡目录那条链；③ 票 04 遗漏：隔离写同时换上节点收寄、运输履约一批口、关务结果、外部资金事实，步 2 不要按「这些口都没开」排；④ 票面写 55444 已删而评审时仍在（作者容器，评审没动）；⑤ 与 `mcp2-seedcomp` 在 README「配价」段与已知边界价格政策条撞，回放两边正文都留（已按此解）。

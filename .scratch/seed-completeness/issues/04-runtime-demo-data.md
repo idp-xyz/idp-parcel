@@ -1,7 +1,7 @@
 # 04 运行时演示数据：一单的一生（方案，确认前不实现）
 
 Category: enhancement
-Status: draft——2026-09-29 通道 4 出方案，等通道 1 转用户确认
+Status: 步 0 已裁决（用户 2026-09-29：只做步 0，步 1/2 不做）；方案随 03 进 main，步 0 实现在分支 `mcp4-seedd`（评审中）。
 Blocked by: 用户裁决（见文末）
 地盘：本票只写方案。确认前不改种子、不改命令面、不 INSERT。
 出处：派单 `task-b125d095` ← 通道 1。空表范围：`parcel_shipment` 委托侧、`settlement_accounting`、`transport_fulfillment`、`node_operations`、visibility 案件类。
@@ -49,3 +49,7 @@ Blocked by: 用户裁决（见文末）
 4. 接管记录保持未开（ADR-0128 决定五）。回汇批次归通道 3。
 
 确认前本票不实现。
+
+## 用户裁决与进 main（2026-09-29）
+
+用户选「步 0：隔离写下提交一笔委托到 SUBMITTED」，步 1/2 不做。方案文本随 `5064da1a` 进 main；步 0 实现（`mcp4-seedd@d9648b4b`）待非作者评审后另行回放。

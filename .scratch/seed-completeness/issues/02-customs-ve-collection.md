@@ -1,7 +1,7 @@
 # 02 种子补全：关务 / 可视与异常 / 代收 缺口
 
 Category: enhancement
-Status: 待通道 1 回放（作者通道 3，分支 `mcp3-seedb`）
+Status: done——2026-09-29 通道 3；同日通道 1 重放进 main，见文末「进 main 记录」。
 Blocked by: 无
 地盘：`scripts/demo-seeds/data/customs/`、`data/visibility/`、`data/collection/`，以及 `scripts/demo-seeds/seed.sh` 与 `README.md` 里这三段。不改登记 CLI，不改管理台页面，不碰 `data/commercial/`、`data/pricing/`、`data/network/`。
 
@@ -44,3 +44,11 @@ Blocked by: 无
 | 代收分户账 | CNY 账 `SYN-BATCH-CNY-OPEN`=`COLLECTED`、`SYN-BATCH-CNY-HANDED`=`HANDED_FOR_PAYMENT`（页词「已归集」「已交付汇付」）。SGD 账 0 笔，页显「未配置」 |
 | 索赔材料收讫 | 收讫两行、撤销一行（发票）。管理台没有这一册的页 |
 
+## 进 main 记录（2026-09-29，通道 1 推送）
+
+分支 `mcp3-seedb@f0d16476`（本地分支，未推 origin，随重放进 main）。三笔在隔离树 `/tmp/idp-replay-seed` 顺序重放到 `e2ff20bb` 之上：`33c1aae8→cd9f767c`（`git range-diff` 为 `=`）、`c5d13025→5064da1a`（`!`：`scripts/demo-seeds/README.md` 两处文本冲突，两边正文都留）、`f0d16476→4feb8d2f`（`!`：README 组成表一处冲突，取 pricing/network 行来自 03、customs/visibility/collection 行来自 02）；另加 `2171a208` 按评审非阻断意见修 README 数据故事里信用政策/客户服务规则挂靠的措辞。
+推送方验证：链 tip `2171a208` 上 gofmt 空，vet 与 build 退出 0，清点门 current，分片覆盖核对通过（148 个包）；一次性库 `127.0.0.1:55461` 上 `seed.sh --reset` 三笔合并后退出 0（供应商协议 2、分区目录 1、自动改路事实 1、回汇批次 2、监管凭证 2、索赔材料收讯 2）；含 DSN `go test -p 1 -count=1 ./...` 一次：**134 ok / 0 FAIL / 14 无测试**。三笔都不改 Go 生产/测试代码（03 只动 seedgen 生成器与产物），清点无变化。
+
+## Comments
+
+**评审 ← 通道 4 · 钉 `f0d16476` · 无阻断**：可丢弃库 55454 独立重放退出 0；`regulatory-credential` 两次 REGISTERED、`duty-collaboration` 两次 COLLABORATION_FORMED、`exception-disclosure-rules` 与 `conflict-signal-rule` REGISTERED、`claim-material-receipt` 两次 REGISTERED 后 revocation REVOKED、`batch` 两次 REGISTERED、`hand-over` HANDED_OVER；关务 26 份 JSON 与 README 一致；凭证 02 `uses=0` 被读口收成「来源未提供次数」、admin-web 无索赔材料页、`duty-payment-verification` 不登资金事实且 diff 无 INSERT，作者结论成立；`SYN-ACCOUNT-02` 复用既有可视种子。作者未改 Go、未跑包测试，够。提示：seed.sh 与 README 同 03 改的不同段落，回放有文本冲突、语义不冲突（已按此解）。

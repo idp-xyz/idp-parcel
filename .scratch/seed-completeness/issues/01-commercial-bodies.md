@@ -1,7 +1,7 @@
 # 01 商业发布批补齐正文
 
 Category: enhancement
-Status: done——分支 `mcp2-seedcomp`，作者通道 2，不自审。推送方是通道 1。
+Status: done——2026-09-29 通道 2；同日通道 1 重放进 main，见文末「进 main 记录」。
 Blocked by: 无
 地盘：`scripts/demo-seeds/data/commercial/`、`scripts/demo-seeds/README.md` 的组成表与数据故事、`scripts/demo-seeds/seed.sh` 里商业发布那一行说明。不改网络、关务、计价、可见性、代收的种子。
 
@@ -42,3 +42,12 @@ Blocked by: 无
 | 资料修订允许 | 读面缺失。允许已落在接单规则包版本上，政策册目录查询不选这张表，页面没有这一列 |
 
 两份方向授权在授权规则册上仍是没有取消授权正文的壳。这是发布口没有方向正文通道，不是页面没接。
+
+## 进 main 记录（2026-09-29，通道 1 推送）
+
+分支 `mcp2-seedcomp@33c1aae8`（已推 origin）。三笔在隔离树 `/tmp/idp-replay-seed` 顺序重放到 `e2ff20bb` 之上：`33c1aae8→cd9f767c`（`git range-diff` 为 `=`）、`c5d13025→5064da1a`（`!`：`scripts/demo-seeds/README.md` 两处文本冲突，两边正文都留）、`f0d16476→4feb8d2f`（`!`：README 组成表一处冲突，取 pricing/network 行来自 03、customs/visibility/collection 行来自 02）；另加 `2171a208` 按评审非阻断意见修 README 数据故事里信用政策/客户服务规则挂靠的措辞。
+推送方验证：链 tip `2171a208` 上 gofmt 空，vet 与 build 退出 0，清点门 current，分片覆盖核对通过（148 个包）；一次性库 `127.0.0.1:55461` 上 `seed.sh --reset` 三笔合并后退出 0（供应商协议 2、分区目录 1、自动改路事实 1、回汇批次 2、监管凭证 2、索赔材料收讯 2）；含 DSN `go test -p 1 -count=1 ./...` 一次：**134 ok / 0 FAIL / 14 无测试**。三笔都不改 Go 生产/测试代码（03 只动 seedgen 生成器与产物），清点无变化。
+
+## Comments
+
+**评审 ← 通道 3 · 钉 `33c1aae8` · 无阻断**：私有库 55453 `seed.sh --reset` 退出 0，14/14 `PUBLISHED_EFFECTIVE`，入册摘要与 JSON 声明一致；两份方向授权仍是 `sha256:syn-` 壳、合同委派与资料修订允许已落库但管理台无列，属实；本差分不改 Go、无测试读 `publish-batch.json`，作者只跑 build/vet 够。非阻断：README 故事第 2 条「信用政策与客户服务规则都挂在同一法人与预付费用上」与数据不符（信用是 `SYN-LE-01`+`SYN-CHARGE-PREPAID`，客户服务规则是 `SYN-LE-01`+产品 `SYN-PROD-CN-SG-EXPRESS`）——已在 `2171a208` 改。
