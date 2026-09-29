@@ -1,7 +1,7 @@
 # 17 委托声明的服务产品参与商业依据解析：同一范围多个产品不再必然`适用冲突`
 
 Category: enhancement
-Status: resolved——2026-09-29 通道 2；完成记录见文末。进 main 的 SHA 等重放后补。此前 in-progress——2026-09-29 通道 2 认领，从 `mcp2-psb17@0ca53342` 接着做；隔离 worktree `idp-parcel-mcp2-psb17`、分支 `mcp2-psb17b`（基 `a23d1338`）。此前 ready-for-agent——2026-09-25 通道 2 崩后认领释放（通道 4 按用户令独立接手时处置）：半成品在分支 `mcp2-psb17`（已推 origin），`026be1ae`、`51cac469`、`485a6d33` 三笔是通道 2 做完的之一至之三，`0ca53342` 原样封存它未提交的一份测试（mtime 停在 2026-09-24 22:53:38，没跑过）；接手时写明「从 `mcp2-psb17@0ca53342` 接着做」还是「另起」。此前 in-progress——2026-09-24 通道 2 认领（用户令独立承接），隔离 worktree `idp-parcel-mcp2-psb17`、分支 `mcp2-psb17`。此前 ready-for-agent——同日通道 2 立票并按用户令自决裁定（用户原话「按你的建议，你自己全部开工做，独立完成」），裁决见下
+Status: resolved——2026-09-29 通道 2；完成记录见文末。同日通道 1 重放进 main，SHA 见文末「进 main 记录」。此前 in-progress——2026-09-29 通道 2 认领，从 `mcp2-psb17@0ca53342` 接着做；隔离 worktree `idp-parcel-mcp2-psb17`、分支 `mcp2-psb17b`（基 `a23d1338`）。此前 ready-for-agent——2026-09-25 通道 2 崩后认领释放（通道 4 按用户令独立接手时处置）：半成品在分支 `mcp2-psb17`（已推 origin），`026be1ae`、`51cac469`、`485a6d33` 三笔是通道 2 做完的之一至之三，`0ca53342` 原样封存它未提交的一份测试（mtime 停在 2026-09-24 22:53:38，没跑过）；接手时写明「从 `mcp2-psb17@0ca53342` 接着做」还是「另起」。此前 in-progress——2026-09-24 通道 2 认领（用户令独立承接），隔离 worktree `idp-parcel-mcp2-psb17`、分支 `mcp2-psb17`。此前 ready-for-agent——同日通道 2 立票并按用户令自决裁定（用户原话「按你的建议，你自己全部开工做，独立完成」），裁决见下
 Blocked by: 无
 地盘：`internal/partycommercial`（闭包解析键、逐项解析键、闭包落库与迁移）、`internal/parcelshipment` 领域读口与 `adapters/partycommercial`；party-commercial `CONTEXT.md`、UC-PC-002、新 ADR。
 出处：[票 05](./05-demo-journey-criterion-evidence.md) 格 1（实测 + 探针）与判断项 1——演示动线按种子原样灌时的第一个停点。本票承接[票 06](./06-ps-acceptance-and-label-selection-judgment-methods.md) 第 8 项（通道 4 于 `ca26a1ec` 补入）：立票时漏看了那一项，票 06 该项已改指本票，裁决只记在这里。
@@ -40,7 +40,7 @@ Blocked by: 无
 
 ## 完成记录（2026-09-29，通道 2）
 
-从 `mcp2-psb17@0ca53342` 接着做。旧分支指针不动。新分支 `mcp2-psb17b`，基 `a23d1338`（取证时 `origin/main` 同此）。进 main 的 SHA 等重放后补；下面是分支上的 SHA。
+从 `mcp2-psb17@0ca53342` 接着做。旧分支指针不动。新分支 `mcp2-psb17b`，基 `a23d1338`（取证时 `origin/main` 同此）。进 main 的 SHA 见文末「进 main 记录」；下面是分支上的 SHA。
 
 重放四笔（出处在 `mcp2-psb17`）：
 - `ba84fc4e` 裁决 4 实现前修订（出处 `bf7a9a30`）
@@ -60,4 +60,23 @@ Blocked by: 无
 - 自验：`go build ./...` 与 `go vet ./...` 退出 0。`go test -count=1 -p 1` 跑了动过的包及其反向依赖，外加 `./internal/architecture/...`，带 `IDP_PARCEL_POSTGRES_DSN`，全部 ok，没有 FAIL。
 - 演示动线只记 `S`：见票 05 格 1「17 重走」。代码钉 `04f70633`。
 
-没有非作者评审。评审由通道 1 另派。
+非作者评审见文末 Comments（通道 3，两轴无阻断）。
+
+## 进 main 记录（2026-09-29 10:2x，通道 1 推送）
+
+分支 `mcp2-psb17b@bd3645f2`（已推 origin；旧分支 `mcp2-psb17@0ca53342` 作封存出处）在隔离树重放到 `99a6090e` 之后，零冲突，`git range-diff` 逐笔为 `=`：
+`ba84fc4e→10d091cd` / `d79ac993→e0f2b110` / `e0791932→010cb1af` / `0ebb2682→1b8a34b7` / `7b1bd8f1→f00c4424` / `3b756f67→925c3f76` / `04f70633→92fc0611` / `bd3645f2→1e683185`。
+清点在链 tip 重生成为 `527dd775`（parcelshipment 生产 191→193、测试 184→186；partycommercial 测试 160→161；合计 1081 / 1021；跨上下文消费缝生产文件 82→83，其中 parcelshipment→partycommercial 20→21）。
+
+推送方验证：`527dd775` 上 gofmt 空，vet 与 build 退出 0，清点门与分片覆盖核对通过（148 个包）；含 DSN `go test -p 1 -count=1 ./...` 一次：**134 ok / 0 FAIL / 14 无测试，151 s**，探针 `TestResolutionRoundTripsTheDeclaredServiceProduct` 含 DSN 为 PASS。本笔只改票面。
+
+评审两条非阻断（原文见下 Comments）随票记：① `cmd/parcel-dispatch/assemble.go` 的 `acceptanceCommercialBasis` 不在票面地盘与占号广播里，评审判为完成判据「受理链越过格 1」要求的生产接线，不是越界；② 票 05「走到哪」开篇仍写按种子原样灌停在格 1、格 1 标题仍是适用冲突，同节「17 重走」已写越过格 1——开篇现况句留给作者判改不改。
+
+## Comments
+
+**评审 ← 通道 3 · 钉 `bd3645f2` · 10:15**（基 `a23d1338`，隔离树 `/tmp/idp-review-psb17`；原文在通道 1 台账 `task-ca4ba07a`）
+
+- **逐格**：① 就绪检查列的缺格都补上了——键来源 `RequestedServiceProductKeys.FormResolutionKey`；`CommercialBasisQuery` 头注补「产品身份不是版本」；ADR-0153；CONTEXT「商业依据解析」与 UC-PC-002「解析键至少包含」及 AT-PC-050；票 05 格 1「17 重走」只记 S；判据两句已按修订后裁决 4 改；snapshot JSON 不迁移的理由在票面「做什么」第 3 条与 ADR Consequences（`closureDocument.ServiceProduct` omitempty）。② 地盘：`cmd/parcel-dispatch/assemble.go` 是票面要求的接线，不是越界——`acceptanceCommercialBasis`（`3b756f67`）把 `NewRequestedServiceProductKeys` 包在 `NewCommercialResolutionKeys` 外，不接这里受理链仍停格 1；`cmd/parcel-commercial` 的 `NewCommercialResolutionKeys` 只 Register。③ ADR-0153 决定一至四与票面裁决 1–4（含修订后裁决 4）同向；权威在 ADR，CONTEXT 与 UC 引 ADR-0153，没有第二套口径。
+- **Standards**：阻断无。非阻断：`assemble.go` 的 `acceptanceCommercialBasis` 不在票面地盘与占号广播里，但是完成判据「受理链越过格 1」的生产接线，没有第二套解析行为。无发现：ADR-0153 与裁决同向；CONTEXT「商业依据解析」、UC-PC-002 只引该 ADR；证据只记 S；不另开迁移的理由与 `closureDocument.ServiceProduct` 的 omitempty 一致；领域包不依赖 HTTP/pgx，未写死默认产品。
+- **Spec**：阻断无。非阻断：票 05「走到哪」仍写按种子原样灌停在格 1，格 1 标题仍是适用冲突；同节「17 重走」已写越过格 1、下一停点格 2（只记 S，钉 `04f70633`）——写回做到了，开篇现况句没改。无发现：缺格已补；`RequestedServiceProductKeys.FormResolutionKey` 把声明叠上 ServiceProduct，未声明则缺席，不要服务产品依据不去读，读失败上抛；封存测试已作集成候选；头注、ADR-0153、CONTEXT、UC-PC-002、AT-PC-050、判据改写、真库用例名都在。评审未重跑测试。
+- **结论**：无阻断。
