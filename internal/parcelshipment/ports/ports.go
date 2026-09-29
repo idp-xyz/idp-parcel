@@ -673,7 +673,7 @@ type NetworkIntakeHandoff interface {
 }
 
 // CommercialBasisQuery 是 parcel-shipment 请 party-commercial 据以解析的范围。它只
-// 携带引用：本上下文说明需要哪种依据，绝不指定应当选中哪个商业版本。
+// 携带引用：本上下文说明需要哪种依据，绝不指定应当选中哪个商业版本；产品身份不是版本。
 type CommercialBasisQuery struct {
 	Identity          domain.SourceIdentity
 	ShipmentRequestID domain.ShipmentRequestID

@@ -1045,7 +1045,7 @@ func acceptanceChainConsumers(
 		return none, fmt.Errorf("parcel-dispatch: acceptance judgments: %w", err)
 	}
 
-	commercial, err := acceptanceCommercialBasis(db, clock)
+	commercial, err := acceptanceCommercialBasis(db, requests, clock)
 	if err != nil {
 		return none, err
 	}
@@ -1142,6 +1142,7 @@ func acceptanceChainConsumers(
 // 在事后核对。
 func acceptanceCommercialBasis(
 	db *bentopg.DB,
+	requests psports.ShipmentRequestRepository,
 	clock systemClock,
 ) (*pspartycommercial.CommercialBasisAdapter, error) {
 	publications, err := pcpostgres.NewCommercialPublications(db)
@@ -1168,9 +1169,19 @@ func acceptanceCommercialBasis(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: resolution key store: %w", err)
 	}
-	keys, err := pspartycommercial.NewCommercialResolutionKeys(keyStore)
+	formed, err := pspartycommercial.NewCommercialResolutionKeys(keyStore)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: resolution keys: %w", err)
+	}
+	// 登记面只折（租户，客户账户）那一行。委托声明的服务产品在提交版本上，叠到键上之后
+	// 同一范围里的多个产品才能按身份收窄（票 psb/17）；不在这里叠，受理链仍停在格 1。
+	products, err := pspartycommercial.NewShipmentRequestedServiceProduct(requests)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: requested service product: %w", err)
+	}
+	keys, err := pspartycommercial.NewRequestedServiceProductKeys(formed, products)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: resolution keys with declared product: %w", err)
 	}
 	return pspartycommercial.NewCommercialBasisAdapter(pspartycommercial.CommercialBasisAdapterDeps{
 		Resolve:      pcapplication.NewResolveCommercialBasisHandler(authority, resolutions, clock),
