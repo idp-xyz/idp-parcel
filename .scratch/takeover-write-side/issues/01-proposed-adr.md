@@ -19,3 +19,11 @@ Blocked by: 用户裁决（[ADR-0154](../../../docs/adr/0154-takeover-record-wri
 4. 合成 S：写入口打开后给演示租户一行且只记 S，或写入口开但种子保持空，或写入口也先不开。
 
 第 5 项是继续不开的后果，不是实现选项：归属不答「其他权威」，交接步不开始，页面如实空。
+
+## 进 main 记录（2026-09-29，通道 1 推送）
+
+分支 `mcp2-takeover-adr@24bf90d4`（已推 origin）重放到 `7d12f3b0` 之上，零冲突，`git range-diff` 逐笔为 `=`：`9a40936e→b6791887`、`24bf90d4→9eddf1a8`。纯文档（ADR-0154 草案、ADR 索引一行、本票），没有代码变化，未重跑全量测试；上一次含 DSN 全量在 `ee4186ed`：134 ok / 0 FAIL。ADR 状态仍是 Proposed，五项待裁项等用户拍板，写入口未实现。
+
+## Comments
+
+**评审 ← 通道 4 · 钉 `9a40936e`，复审 `24bf90d4`**：首审一条阻断——待裁 2 丙与「领域今天已经拒绝」把 `RecordTakeover` 说成「三件齐就可以」，与代码不符（构造函数还拒绝已接受事实、外部未决、实际控制、责任、下一步为空白与生效时刻为零；表约束 `takeover_record_not_blank` 覆盖那几列文本）。作者以 `24bf90d4` 新增提交改为逐条列出拒绝条件，并改准「`Takeovers.Save` 在 `incident_records.go`、生产无调用方、CLI 无接管子命令」的措辞。复审：拒绝清单与构造函数和表约束一致（`AuthorityInterval.valid`；`inventory_present`、`bounds` 约束），无阻断、无非阻断。其余事实（ADR-0128 决定五、PAR-GOV-05..07 三格待提供、编号 0154 不与 main 上 0153 冲突、Status Proposed 无 Decision、不填规则版本/人/范围/阈值）首审即成立。
