@@ -33,7 +33,9 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 | `data/commercial/register-legal-entity-profiles.json` | `cmd/parcel-commercial register-legal-entity-profiles` | 法人资料（ADR-0145 决定三）：`SYN-LE-01` 两笔修订——修订 1 不带开票资料（按它生效的时段解析答「资料不全」），修订 2 自 3 月起补上开票抬头；注册地址在 `CN`，与法人身份层的注册国家一致，税号取目录里 `CN` 的资料层合成类型。排在参与方身份之后：资料引用已登记的责任法人 |
 | `data/pricing/` | `cmd/parcel-pricing-register` | 两张价卡（SELL 首重续重 / BUY 重量段）+ 两条参考序列（燃油、汇率）+ 两份序列复核 + 一份分区参考目录与其复核（不复核不在用，ADR-0099 / ADR-0109）——由 `seedgen` 生成，勿手改 |
 | `data/network/` | `cmd/parcel-network-register` | 七族 14 行：4 节点（含一次换版）、3 连接、1 线路、2 服务区、1 日历、1 台风停运调整、1 路由策略；另加 1 行自动改路事实（判断键对齐 `SYN-ACCOUNT-01` 与 `SYN-RS-CN-SG-01`，不是一笔已受理委托的运行时产物） |
-| `data/customs/` | `cmd/parcel-customs-register` | 八册 20 份：就绪与授权（各含第二单元，授权含一次撤销）、解释规则（含一次换版）、义务目录+两项（已了结/已承接）、门禁目录+判断（含一份只登目录的空清单格）、建案要求两向（要求/显式不要求）、口岸目录（SZX 含一次换版 + SIN）、申报路径两向（CN 出口 / SG 进口） |
+| `data/customs/` | `cmd/parcel-customs-register` | 十册 26 份：就绪与授权（第三单元先就绪再撤销就绪；第二单元只撤授权）、解释规则（含一次换版）、义务目录+两项（已了结/已承接）、门禁目录+判断（含一份只登目录的空清单格）、建案要求两向（要求/显式不要求）、口岸目录（SZX 含一次换版 + SIN）、申报路径两向（CN 出口 / SG 进口）、监管凭证两版（一版写明次数额度、一版来源未提供额度）、税费付款协作两格（核定税费 / 明确无需付款）。税费付款核对不在包内，见已知边界 |
+| `data/visibility/` | `cmd/parcel-ve-register` | 里程碑映射、分诊规则、通知策略、索赔资格、索赔授权两格（一格空名单）、披露策略、异常披露规则、冲突信号规则、索赔材料收讫两笔（照片留下、发票收讫后撤销） |
+| `data/collection/` | `cmd/parcel-collection-register` | 一条 COD 指令走全程（渠道报收、银行短收、短款、清分进应付客户）+ SGD 分户账只开立；CNY 账两笔回汇批次（已归集 / 已交出汇付主张），SGD 账无批次 |
 | `data/access/` | `cmd/parcel-access-register` | 操作者册（ADR-0100 决定二第三条）：两个合成操作者主体绑演示租户，配置员授登记册配置写与主数据与运营查阅读两格，查阅员只授查阅读；发行方是合成值，演示部署接上真 OIDC 发行方后按其标识另登 |
 | `migrate/` | — | 迁移助手（`migrate.Run` 的隔离环境入口；迁移计划刻意没有生产入口） |
 | `seedgen/` | — | 计价快照生成器：价卡、序列与参考目录的登记输入带规范化版本号与内容摘要自校，必须经真领域构造函数折装；PPC/PRS/PRC 规范化版本升级时重跑并提交新产物 |
@@ -67,6 +69,19 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
    合规候选口岸 `SYN-PORT-SZX-01`（v1→v2 换版）与 `SYN-PORT-SIN-01`，申报路径
    `SYN-PATH-CN-EXPORT-01`（经 SZX、EXPORT、舱单模式）与 `SYN-PATH-SG-IMPORT-01`
    （经 SIN、IMPORT、正式模式）——路径以标识引用口岸，两册对照属读侧（票 03 裁量）。
+   第三申报单元 `SYN-UNIT-CN-EXPORT-03` 曾就绪、随后按 `SYN-CAUSE-READINESS-WITHDRAWN` 不再就绪。
+   报关行 `SYN-BROKER-01` 持两版监管凭证，程序都是 `SYN-PROC-CN-EXPORT`：`SYN-CRED-CN-EXPORT-01`
+   写明 12 次额度，`SYN-CRED-CN-EXPORT-02` 不写次数（来源未提供额度）。出口单元上的税费协作
+   按核定 `SYN-DUTY-CN-SG-01` 形成，义务人是 `SYN-LE-01`、交接给 `SYN-BROKER-01`；进口单元
+   `SYN-UNIT-SG-IMPORT-01` 另有一格明确无需付款（依据 `SYN-BASIS-NO-DUTY-SG-IMPORT`）。
+5. **对外怎么说、材料收到没有**（visibility-exception）：异常披露规则 `SYN-VE-EXC-DISCLOSE-V1`
+   与分诊同一对信号——`SYN-ACCOUNT-01` 的 `CUSTOMS_HOLD`（承运确认）可披露、不自动发布；
+   `SYN-ACCOUNT-02` 的 `ETA_GAP` 明确不披露。冲突信号规则一租户一条，钉在 `CUSTOMS_HOLD` /
+   `SYN-VE-CONFLICT-V1`。索赔批次 `SYN-CLAIM-BATCH-CN-SG-01` 的同一事项收了照片与发票，
+   发票次日撤销，照片留下。
+6. **代收怎么归集**（collection-remittance）：`SYN-ACCOUNT-01` / `SYN-LE-01` / CNY /
+   `SYN-CH-SG-POST-STD` 这本账上，`SYN-BATCH-CNY-OPEN` 停在已归集，`SYN-BATCH-CNY-HANDED`
+   已交出汇付主张。交出的是主张，不是付款，六个资金位置不因此改数。同客户的 SGD 账仍然没有批次。
 
 ## 已知边界（如实记录，不是缺陷）
 
@@ -89,3 +104,14 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
   版本严丝合缝——差一维就不再被采用，本上下文不许借宽泛客户关系跨维归集。
 - 七页真数据展示还依赖查询端点的目录 Intake 配置（PAR-INT-01 未决期间装配
   UnconfiguredIntake，生产路径 403 是刻意的）；本包只负责库内数据态，页面接线归票 07。
+- 税费付款核对（`duty-payment-verification`）不进本包。核对要三样前置同时在册：已接收的
+  外部资金事实版本、同一范围上已形成的协作事项、该监管程序的付款人规则。资金事实只经
+  settlement-accounting 的采用信封进关务（本登记 CLI 故意没有这条命令）；付款人规则也没有
+  种子能调用的登记入口。协作事项两格已经落下，核对仍会答前置未齐（退出码 3）。不绕过 CLI
+  往核对表插行。
+- 索赔材料收讫落在 `visibility_exception.claim_material_receipt`（及撤销表）。管理台没有
+  读这一册的页，灌进去也没有页可看。
+- 回汇批次不再整段留空。早先「一笔不造、页面显未配置」把演示租户的合成实例当成了不许填的
+  租户取值；同段的指令、事实和记账已经是 `SYN-` 实例。现在 CNY 账有已归集与已交出两格，
+  SGD 账仍无批次，分户账页对空批次继续写「未配置」。不带 `--reset` 重放本节仍会在既有记账处
+  因余额不足中止，批次与交出这两步本身重放走 0。

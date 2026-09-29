@@ -1,0 +1,8 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "batch": "SYN-CLAIM-BATCH-CN-SG-01",
+  "item": "SYN-CLAIM-ITEM-01",
+  "material": "SYN-MAT-PHOTO",
+  "receivedAt": "2026-03-02T08:00:00Z",
+  "receivedBy": "SYN-OPS-CLAIMS-LEAD"
+}

@@ -1,0 +1,9 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "kind": "ASSESSED_DUTY",
+  "dutyRef": "SYN-DUTY-CN-SG-01",
+  "scopeRef": "SYN-UNIT-CN-EXPORT-01",
+  "obligorRef": "SYN-LE-01",
+  "requirementRef": "SYN-ASSESS-CN-SG-01",
+  "targetRef": "SYN-BROKER-01"
+}

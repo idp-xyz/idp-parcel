@@ -103,7 +103,7 @@ echo "== 4/7 网络目录登记（network-routing：七族版本行） =="
 # 已灌过的库重跑本节请用 --reset。
 "$BIN/parcel-network-register" -kind auto-reroute-facts -file "$SEEDS/network/15-auto-reroute-facts-cn-sg-v1.json"
 
-echo "== 5/7 关务案件配置登记（customs-compliance：八册） =="
+echo "== 5/7 关务案件配置登记（customs-compliance：就绪/授权/规则/义务/门禁/建案/口岸/路径/凭证/协作） =="
 "$BIN/parcel-customs-register" readiness-register -input "$SEEDS/customs/01-readiness-cn-export.json"
 "$BIN/parcel-customs-register" authority-grant -input "$SEEDS/customs/02-authority-grant.json"
 # 第二单元灌出「就绪仍有效、授权已撤销」——0006 迁移自注点名必须表达得出的那一格，
@@ -132,8 +132,18 @@ echo "== 5/7 关务案件配置登记（customs-compliance：八册） =="
 "$BIN/parcel-customs-register" candidate-port -input "$SEEDS/customs/18-candidate-port-sin-v1.json"
 "$BIN/parcel-customs-register" declaration-path -input "$SEEDS/customs/19-declaration-path-cn-export.json"
 "$BIN/parcel-customs-register" declaration-path -input "$SEEDS/customs/20-declaration-path-sg-import.json"
+# 第三申报单元先就绪再撤销：单元 01 仍有效、单元 02 只撤授权，就绪撤销要有自己的一格。
+"$BIN/parcel-customs-register" readiness-register -input "$SEEDS/customs/21-readiness-cn-export-03.json"
+"$BIN/parcel-customs-register" readiness-revoke -input "$SEEDS/customs/22-readiness-revoke-03.json"
+# 监管凭证两版：01 写明次数额度，02 不写 uses（领域把缺席与 0 都记成来源未提供额度）。
+"$BIN/parcel-customs-register" regulatory-credential -input "$SEEDS/customs/23-regulatory-credential-broker-01.json"
+"$BIN/parcel-customs-register" regulatory-credential -input "$SEEDS/customs/24-regulatory-credential-quota-unstated.json"
+# 税费协作两格：出口单元按核定税费形成，进口单元显式无需付款。核对命令不在这里——
+# 它要已接收的资金事实版本和付款人规则，这两样本 CLI 都没有登记入口。
+"$BIN/parcel-customs-register" duty-collaboration -input "$SEEDS/customs/25-duty-collaboration-assessed.json"
+"$BIN/parcel-customs-register" duty-collaboration -input "$SEEDS/customs/26-duty-collaboration-not-required.json"
 
-echo "== 6/7 追踪与异常目录登记（visibility-exception：六类七笔） =="
+echo "== 6/7 追踪与异常目录登记（visibility-exception：目录册 + 材料收讫） =="
 "$BIN/parcel-ve-register" milestone-mapping -input "$SEEDS/visibility/01-milestone-mapping-v1.json"
 "$BIN/parcel-ve-register" triage-rules -input "$SEEDS/visibility/02-triage-rules-v1.json"
 "$BIN/parcel-ve-register" notification-policy -input "$SEEDS/visibility/03-notification-policy-disclose-v1.json"
@@ -141,14 +151,23 @@ echo "== 6/7 追踪与异常目录登记（visibility-exception：六类七笔�
 "$BIN/parcel-ve-register" claim-authorization -input "$SEEDS/visibility/05-claim-authorization-account-01.json"
 "$BIN/parcel-ve-register" claim-authorization -input "$SEEDS/visibility/06-claim-authorization-account-02-empty.json"
 "$BIN/parcel-ve-register" disclosure-policy -input "$SEEDS/visibility/07-disclosure-policy-v1.json"
+# 异常披露规则与分诊用同一对信号（CUSTOMS_HOLD / ETA_GAP）：账户 01 可披露但不自动发布，
+# 账户 02 的 ETA 缺口明确不披露。冲突信号规则一租户一条，钉在 CUSTOMS_HOLD 上。
+"$BIN/parcel-ve-register" exception-disclosure-rules -input "$SEEDS/visibility/08-exception-disclosure-rules-v1.json"
+"$BIN/parcel-ve-register" conflict-signal-rule -input "$SEEDS/visibility/09-conflict-signal-rule-v1.json"
+# 同一索赔批次收两样材料：照片留下，发票收讫后撤销。管理台今天没有这一册的读页。
+"$BIN/parcel-ve-register" claim-material-receipt -input "$SEEDS/visibility/10-claim-material-receipt-photo.json"
+"$BIN/parcel-ve-register" claim-material-receipt -input "$SEEDS/visibility/11-claim-material-receipt-invoice.json"
+"$BIN/parcel-ve-register" claim-material-receipt-revocation -input "$SEEDS/visibility/12-claim-material-receipt-invoice-revocation.json"
 
 echo "== 7/7 代收与清分登记（collection-remittance：分户账、指令、事实与记账） =="
 # 一条 COD 指令走全程（票 admin-remainder-mechanism-batch/04）：渠道报收全额入账
 # `渠道在途`；银行实际到账少于渠道报收，到账部分凭该到账事实搬进`待清分`，差额先登
 # 短款差异事项、再凭它落进`短款`——差额不自动落账；到账部分凭 ALLOCATION（指向代收
 # 指令）清分进`应付客户`，进应付客户不得凭代收事实（第四条依据门）。SGD 分户账只
-# 开立不记账，让「已开立但当期无记账」与「未开立」分得开；回汇批次一笔不造——批次
-# 属实例半边，页面上那格要显式展示未配置。
+# 开立不记账，让「已开立但当期无记账」与「未开立」分得开。CNY 账上两笔回汇批次：
+# 一笔停在已归集，一笔交出汇付主张（主张不是付款，账上位置不变）。SGD 账仍无批次，
+# 分户账页那一格继续显「未配置」。批次是演示租户的合成实例，与本段其余 SYN- 行同一类。
 #
 # 已灌过的库上重放本节会在记账处以 UNDERFUNDED（退出码 4）中止：写口的重放判定排在
 # 余额守卫之后，来源位置被原记账清空后守卫先答余额不足，轮不到「已在册」（实测于
@@ -163,6 +182,9 @@ echo "== 7/7 代收与清分登记（collection-remittance：分户账、指令�
 "$BIN/parcel-collection-register" discrepancy -input "$SEEDS/collection/08-discrepancy-shortfall.json"
 "$BIN/parcel-collection-register" posting -input "$SEEDS/collection/09-posting-shortfall.json"
 "$BIN/parcel-collection-register" posting -input "$SEEDS/collection/10-posting-allocation-payable.json"
+"$BIN/parcel-collection-register" batch -input "$SEEDS/collection/11-batch-cny-open.json"
+"$BIN/parcel-collection-register" batch -input "$SEEDS/collection/12-batch-cny-handed.json"
+"$BIN/parcel-collection-register" hand-over -input "$SEEDS/collection/13-hand-over-cny-handed.json"
 
 echo "== 试点治理登记（pilot-governance：权威区间、暂停、恢复、阶段评审；票 admin-skeleton-closure-batch/02） =="
 # 治理是产品级机制，登记无租户维（ADR-0083）；登记走受控 CLI（票 syn-wall-door-audit/12）。

@@ -1,0 +1,10 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "batchRef": "SYN-BATCH-CNY-OPEN",
+  "customerRef": "SYN-ACCOUNT-01",
+  "legalEntityRef": "SYN-LE-01",
+  "currency": "CNY",
+  "channelRef": "SYN-CH-SG-POST-STD",
+  "collectedThrough": "2026-02-10T00:00:00Z",
+  "formedAt": "2026-02-11T00:00:00Z"
+}

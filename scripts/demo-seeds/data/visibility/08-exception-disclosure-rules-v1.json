@@ -1,0 +1,23 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "version": "SYN-VE-EXC-DISCLOSE-V1",
+  "approvedBy": "SYN-OPS-TRACKING-LEAD",
+  "effectiveFrom": "2026-01-05T00:00:00Z",
+  "entries": [
+    {
+      "customer": "SYN-ACCOUNT-01",
+      "signalKind": "CUSTOMS_HOLD",
+      "confidence": "CARRIER_CONFIRMED",
+      "disclosable": true,
+      "autoRelease": false,
+      "content": "SYN-VE-CONTENT-CUSTOMS-HOLD-V1"
+    },
+    {
+      "customer": "SYN-ACCOUNT-02",
+      "signalKind": "ETA_GAP",
+      "confidence": "MONITOR_DERIVED",
+      "disclosable": false,
+      "autoRelease": false
+    }
+  ]
+}

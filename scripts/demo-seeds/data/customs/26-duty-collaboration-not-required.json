@@ -1,0 +1,9 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "kind": "EXPLICITLY_NOT_REQUIRED",
+  "noPayBasis": "SYN-BASIS-NO-DUTY-SG-IMPORT",
+  "scopeRef": "SYN-UNIT-SG-IMPORT-01",
+  "obligorRef": "SYN-LE-01",
+  "requirementRef": "SYN-PROC-SG-IMPORT",
+  "targetRef": "SYN-BROKER-01"
+}

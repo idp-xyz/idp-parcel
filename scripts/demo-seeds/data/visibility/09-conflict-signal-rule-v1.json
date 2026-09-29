@@ -1,0 +1,7 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "signalKind": "CUSTOMS_HOLD",
+  "version": "SYN-VE-CONFLICT-V1",
+  "confidence": "CARRIER_CONFIRMED",
+  "approvedBy": "SYN-OPS-TRACKING-LEAD"
+}
