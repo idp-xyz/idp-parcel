@@ -6,7 +6,7 @@
       "objectId": "SYN-PROD-CN-SG-EXPRESS",
       "version": "v1",
       "scope": "SYN-SCOPE-01",
-      "contentDigest": "sha256:syn-SYN-PROD-CN-SG-EXPRESS-v1",
+      "contentDigest": "PCC-1:42054e8ef613c0e7b56b5db2eb50c9657c55a85629eab9a9b2c6fbeeab9922c4",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "approval": {
         "reference": "SYN-APPROVAL-2026-001",
@@ -15,7 +15,15 @@
       },
       "approvalRoleStanding": "CONFIRMED",
       "declarations": {
-        "pendingRoutingBasis": "SYN-BASIS-PENDING-ROUTING-01"
+        "pendingRoutingBasis": "SYN-BASIS-PENDING-ROUTING-01",
+        "deliveryConditions": {
+          "methods": [
+            "SYN-METHOD-IN-PERSON",
+            "SYN-METHOD-LOCKER"
+          ],
+          "recipientScopeRule": "SYN-RULE-RECIPIENT-SCOPE-01",
+          "proofOfDeliveryRule": "SYN-RULE-POD-01"
+        }
       }
     },
     {
@@ -24,14 +32,23 @@
       "objectId": "SYN-PROD-CN-SG-ECON",
       "version": "v1",
       "scope": "SYN-SCOPE-01",
-      "contentDigest": "sha256:syn-SYN-PROD-CN-SG-ECON-v1",
+      "contentDigest": "PCC-1:1e555200912fe7d52a5abe5a94991c982f2c59347e22f92655a5f0971f143a64",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "approval": {
         "reference": "SYN-APPROVAL-2026-012",
         "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
         "approvedAt": "2025-12-15T00:00:00Z"
       },
-      "approvalRoleStanding": "CONFIRMED"
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {
+        "deliveryConditions": {
+          "methods": [
+            "SYN-METHOD-IN-PERSON"
+          ],
+          "recipientScopeRule": "SYN-RULE-RECIPIENT-SCOPE-01",
+          "proofOfDeliveryRule": "SYN-RULE-POD-01"
+        }
+      }
     },
     {
       "tenantId": "SYN-TENANT-01",
@@ -39,14 +56,35 @@
       "objectId": "SYN-FIN-CONTROL-01",
       "version": "v1",
       "scope": "SYN-SCOPE-01",
-      "contentDigest": "sha256:syn-SYN-FIN-CONTROL-01-v1",
+      "contentDigest": "PCC-1:b514043b226991c5f8404ab2322865d2b33078a9acde0101a1b541e2de857622",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "approval": {
         "reference": "SYN-APPROVAL-2026-002",
         "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
         "approvedAt": "2025-12-15T00:00:00Z"
       },
-      "approvalRoleStanding": "CONFIRMED"
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {
+        "preAcceptanceFinancialControlPolicyBody": {
+          "jointPassCondition": "ALL_CONTROLS_PASS",
+          "controls": [
+            {
+              "control": "PREPAID_FREEZE",
+              "chargeScope": "SYN-CHARGE-PREPAID",
+              "order": 1,
+              "onFailure": "REJECT",
+              "responsibility": "SYN-LE-01"
+            },
+            {
+              "control": "CREDIT_CHECK",
+              "chargeScope": "SYN-CHARGE-PREPAID",
+              "order": 2,
+              "onFailure": "REJECT",
+              "responsibility": "SYN-LE-01"
+            }
+          ]
+        }
+      }
     },
     {
       "tenantId": "SYN-TENANT-01",
@@ -54,7 +92,7 @@
       "objectId": "SYN-RULEPKG-01",
       "version": "v1",
       "scope": "SYN-SCOPE-01",
-      "contentDigest": "PCC-1:ae5abada5241c2427b6138a50b765804800033be973556de6d0ad6c29760295d",
+      "contentDigest": "PCC-1:5253ae7cbe2f35ee92dc7905a23185e135965461343aafb68b0300736fd00ba4",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "references": {
         "SERVICE_PRODUCT": "SYN-PROD-CN-SG-EXPRESS"
@@ -73,11 +111,26 @@
           "scope": "SYN-SCOPE-01",
           "effectiveStartsAt": "2026-01-01T00:00:00Z",
           "rules": [
-            { "category": "MINIMUM_INGRESS_IDENTITY", "reference": "SYN-RULE-INGRESS-IDENTITY-01" },
-            { "category": "SHIPMENT_INVARIANT", "reference": "SYN-RULE-SHIPMENT-BASIC-01" },
-            { "category": "PRODUCT_AND_CONTRACT_DOCUMENT", "reference": "SYN-RULE-PRODUCT-DOC-01" },
-            { "category": "REGULATORY_SOURCE_DOCUMENT", "reference": "SYN-RULE-CUSTOMS-DOC-01" },
-            { "category": "CROSS_FIELD_CONDITION", "reference": "SYN-RULE-CROSS-FIELD-01" }
+            {
+              "category": "MINIMUM_INGRESS_IDENTITY",
+              "reference": "SYN-RULE-INGRESS-IDENTITY-01"
+            },
+            {
+              "category": "SHIPMENT_INVARIANT",
+              "reference": "SYN-RULE-SHIPMENT-BASIC-01"
+            },
+            {
+              "category": "PRODUCT_AND_CONTRACT_DOCUMENT",
+              "reference": "SYN-RULE-PRODUCT-DOC-01"
+            },
+            {
+              "category": "REGULATORY_SOURCE_DOCUMENT",
+              "reference": "SYN-RULE-CUSTOMS-DOC-01"
+            },
+            {
+              "category": "CROSS_FIELD_CONDITION",
+              "reference": "SYN-RULE-CROSS-FIELD-01"
+            }
           ]
         },
         "acceptanceContent": {
@@ -91,8 +144,13 @@
           "manualReview": "NOT_REQUIRED"
         },
         "intakeQualification": {
-          "sources": ["NODE_INTAKE", "OFFSITE_PICKUP"],
-          "qualifications": ["SYN-QUAL-REALNAME-01"]
+          "sources": [
+            "NODE_INTAKE",
+            "OFFSITE_PICKUP"
+          ],
+          "qualifications": [
+            "SYN-QUAL-REALNAME-01"
+          ]
         },
         "asOfPolicies": [
           {
@@ -107,11 +165,34 @@
           }
         ],
         "finalRules": [
-          { "outcome": "EFFECTIVE_DELIVERY", "finalKind": "SYN-FINAL-DELIVERY-01" },
-          { "outcome": "RETURN_COMPLETED", "finalKind": "SYN-FINAL-RETURN-01" },
-          { "outcome": "SERVICE_TERMINATED", "finalKind": "SYN-FINAL-TERMINATED-01" },
-          { "outcome": "REGULATORY_DISPOSITION", "finalKind": "SYN-FINAL-REGULATORY-01" }
-        ]
+          {
+            "outcome": "EFFECTIVE_DELIVERY",
+            "finalKind": "SYN-FINAL-DELIVERY-01"
+          },
+          {
+            "outcome": "RETURN_COMPLETED",
+            "finalKind": "SYN-FINAL-RETURN-01"
+          },
+          {
+            "outcome": "SERVICE_TERMINATED",
+            "finalKind": "SYN-FINAL-TERMINATED-01"
+          },
+          {
+            "outcome": "REGULATORY_DISPOSITION",
+            "finalKind": "SYN-FINAL-REGULATORY-01"
+          }
+        ],
+        "sourceDataAmendment": {
+          "closed": false,
+          "rules": [
+            {
+              "dataGroup": "SYN-GROUP-CONSIGNEE-ADDRESS",
+              "stage": "ACCEPTED_NOT_YET_RECEIVED",
+              "intent": "CORRECTION",
+              "allowance": "ALLOWED"
+            }
+          ]
+        }
       }
     },
     {
@@ -120,7 +201,7 @@
       "objectId": "SYN-CONTRACT-01",
       "version": "v1",
       "scope": "SYN-SCOPE-01",
-      "contentDigest": "PCC-1:06de9a9c70b492c182b6668876f484861f75467c3c82c0285ddbc3deb38f4feb",
+      "contentDigest": "PCC-1:373d2e5bddfa7e6f4d9bb514cd931d60ba2961be391c2c25536192438293ef71",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "references": {
         "ACCEPTANCE_RULE_PACKAGE": "SYN-RULEPKG-01"
@@ -135,12 +216,39 @@
         "contractContent": {
           "rulePackage": "SYN-RULEPKG-01",
           "bindings": [
-            { "chargeScope": "SYN-CHARGE-PREPAID", "policy": "SYN-FIN-CONTROL-01" },
-            { "chargeScope": "SYN-CHARGE-COD", "inapplicabilityBasis": "SYN-BASIS-COD-NA-01" }
+            {
+              "chargeScope": "SYN-CHARGE-PREPAID",
+              "policy": "SYN-FIN-CONTROL-01"
+            },
+            {
+              "chargeScope": "SYN-CHARGE-COD",
+              "inapplicabilityBasis": "SYN-BASIS-COD-NA-01"
+            }
           ]
         },
         "preAcceptanceControl": {
           "requirement": "REQUIRED"
+        },
+        "contractDelegations": [
+          {
+            "delegatorKind": "CUSTOMER_ACCOUNT",
+            "delegator": "SYN-ACCOUNT-01",
+            "action": "SOURCE_DATA_AMENDMENT",
+            "scope": "SYN-SCOPE-01",
+            "level": "SYN-LEVEL-COMMERCIAL-01",
+            "effectiveStartsAt": "2026-01-01T00:00:00Z"
+          }
+        ],
+        "deliveryConditions": {
+          "tightens": {
+            "objectId": "SYN-PROD-CN-SG-EXPRESS",
+            "version": "v1"
+          },
+          "methods": [
+            "SYN-METHOD-IN-PERSON"
+          ],
+          "recipientScopeRule": "SYN-RULE-RECIPIENT-SCOPE-01",
+          "proofOfDeliveryRule": "SYN-RULE-POD-01"
         }
       }
     },
@@ -166,7 +274,10 @@
           "method": "PREPAID",
           "legalEntity": "SYN-LE-01",
           "counterparty": "SYN-PARTY-SHIPPER-01",
-          "contract": { "objectId": "SYN-CONTRACT-01", "version": "v1" },
+          "contract": {
+            "objectId": "SYN-CONTRACT-01",
+            "version": "v1"
+          },
           "chargeScope": "SYN-CHARGE-PREPAID",
           "currency": "CNY",
           "effectiveStartsAt": "2026-01-01T00:00:00Z"
@@ -179,14 +290,23 @@
       "objectId": "SYN-SUPPLIER-TRUNK-CN-SG-01",
       "version": "v1",
       "scope": "SYN-SCOPE-01",
-      "contentDigest": "sha256:syn-SYN-SUPPLIER-TRUNK-CN-SG-01-v1",
+      "contentDigest": "PCC-1:72457b0dacdf677b63bcb3578c76fa6d3ab1a361dac8a9f5a4d37b615bf92d87",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "approval": {
         "reference": "SYN-APPROVAL-2026-009",
         "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
         "approvedAt": "2025-12-15T00:00:00Z"
       },
-      "approvalRoleStanding": "CONFIRMED"
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {
+        "supplierAgreementBody": {
+          "supplier": "SYN-PARTY-CARRIER-TRUNK-01",
+          "legalEntity": "SYN-LE-01",
+          "scope": "SYN-SCOPE-01",
+          "purchasePlan": "SYN-PLAN-CN-SG-COST-01",
+          "effectiveStartsAt": "2026-01-01T00:00:00Z"
+        }
+      }
     },
     {
       "tenantId": "SYN-TENANT-01",
@@ -194,14 +314,23 @@
       "objectId": "SYN-SUPPLIER-LASTMILE-SG-01",
       "version": "v1",
       "scope": "SYN-SCOPE-01",
-      "contentDigest": "sha256:syn-SYN-SUPPLIER-LASTMILE-SG-01-v1",
+      "contentDigest": "PCC-1:3bad58347af536927a327ea7d26ef8c731f4b5870d52623c87d549045f01a180",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "approval": {
         "reference": "SYN-APPROVAL-2026-010",
         "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
         "approvedAt": "2025-12-15T00:00:00Z"
       },
-      "approvalRoleStanding": "CONFIRMED"
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {
+        "supplierAgreementBody": {
+          "supplier": "SYN-PARTY-CARRIER-LM-01",
+          "legalEntity": "SYN-LE-01",
+          "scope": "SYN-SCOPE-01",
+          "purchasePlan": "SYN-PLAN-CN-SG-COST-01",
+          "effectiveStartsAt": "2026-01-01T00:00:00Z"
+        }
+      }
     },
     {
       "tenantId": "SYN-TENANT-01",
@@ -209,7 +338,7 @@
       "objectId": "SYN-PRICE-RULE-CN-SG",
       "version": "v1",
       "scope": "SYN-SCOPE-01",
-      "contentDigest": "sha256:syn-SYN-PRICE-RULE-CN-SG-v1",
+      "contentDigest": "PCC-1:7af2ac84428aa922242893a01369b194247a13ba214712c1c88f054b87b7e6d2",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "references": {
         "SERVICE_PRODUCT": "SYN-PROD-CN-SG-EXPRESS"
@@ -219,7 +348,92 @@
         "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
         "approvedAt": "2025-12-15T00:00:00Z"
       },
-      "approvalRoleStanding": "CONFIRMED"
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {
+        "pricePolicyBody": {
+          "direction": "SELL",
+          "pricingPlan": "SYN-PLAN-CN-SG-01",
+          "planDirection": "SELL",
+          "conversion": "NONE",
+          "scope": "SYN-SCOPE-01",
+          "effectiveStartsAt": "2026-01-01T00:00:00Z",
+          "caliber": {
+            "taxDisposition": "TAX_EXCLUSIVE",
+            "taxClassification": "SYN-TAX-VAT-STANDARD",
+            "volumetricFactor": "5000",
+            "fx": {
+              "quoteType": "SYN-FX-QUOTE-MID",
+              "asOfSemantics": "SYN-ASOF-SUBMIT-TIME",
+              "asOfPolicyVersion": "SYN-ASOF-POLICY-01"
+            }
+          }
+        }
+      }
+    },
+    {
+      "tenantId": "SYN-TENANT-01",
+      "kind": "CREDIT_POLICY",
+      "objectId": "SYN-CREDIT-01",
+      "version": "v1",
+      "scope": "SYN-SCOPE-01",
+      "contentDigest": "PCC-1:4a7f2ae27bcb43bc3ccb5c5af4f81f847e75840154a60e0ab223a5798f52d268",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-013",
+        "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
+        "approvedAt": "2025-12-15T00:00:00Z"
+      },
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {
+        "creditPolicyBody": {
+          "legalEntity": "SYN-LE-01",
+          "authorityLevel": "SYN-LEVEL-COMMERCIAL-01",
+          "chargeType": "SYN-CHARGE-PREPAID",
+          "limitMinor": 500000,
+          "effectiveStartsAt": "2026-01-01T00:00:00Z"
+        }
+      }
+    },
+    {
+      "tenantId": "SYN-TENANT-01",
+      "kind": "CUSTOMER_SERVICE_RULE",
+      "objectId": "SYN-SERVICE-RULE-01",
+      "version": "v1",
+      "scope": "SYN-SCOPE-01",
+      "contentDigest": "PCC-1:fe550fd5063006ec4c07f1b5f88618ae2e05609ed23ee81cc8dfabca5c0fe723",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "references": {
+        "SERVICE_PRODUCT": "SYN-PROD-CN-SG-EXPRESS"
+      },
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-014",
+        "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
+        "approvedAt": "2025-12-15T00:00:00Z"
+      },
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {
+        "customerServiceRuleBody": {
+          "serviceProduct": "SYN-PROD-CN-SG-EXPRESS",
+          "responsible": "SYN-LE-01",
+          "scope": "SYN-SCOPE-01",
+          "claimDeadlines": [
+            {
+              "kind": "FIRST_CLAIM",
+              "startEvent": "SYN-EVENT-DELIVERED",
+              "days": 14,
+              "calendar": "SYN-CALENDAR-BUSINESS-01"
+            }
+          ],
+          "minimumMaterials": [
+            {
+              "claimKind": "SYN-CLAIM-LOSS",
+              "materials": [
+                "SYN-DOC-POD-01"
+              ]
+            }
+          ]
+        }
+      }
     },
     {
       "tenantId": "SYN-TENANT-01",
@@ -273,8 +487,14 @@
       "approvalRoleStanding": "CONFIRMED",
       "declarations": {
         "cancellationAuthority": [
-          { "party": "CUSTOMER", "rule": "SYN-RULE-CANCEL-CUSTOMER-01" },
-          { "party": "OPERATIONS", "rule": "SYN-RULE-CANCEL-OPS-01" }
+          {
+            "party": "CUSTOMER",
+            "rule": "SYN-RULE-CANCEL-CUSTOMER-01"
+          },
+          {
+            "party": "OPERATIONS",
+            "rule": "SYN-RULE-CANCEL-OPS-01"
+          }
         ]
       }
     }

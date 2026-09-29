@@ -40,7 +40,7 @@ go build -o "$BIN/" \
 echo "== 1/7 施加迁移计划（${RESET_FLAG:-不重置}） =="
 "$BIN/migrate" $RESET_FLAG
 
-echo "== 2/7 商业权威发布（party-commercial：服务产品与五策略）与消费方解析键登记 =="
+echo "== 2/7 商业权威发布（party-commercial：发布批正文）与消费方解析键登记 =="
 "$BIN/parcel-commercial" publish -input "$SEEDS/commercial/publish-batch.json"
 # 解析键属消费方（parcel-shipment）的实例半边，与上一行的商业权威发布不是同一件事，
 # 只因同一个 CLI 承两个入口才挨在一起。键上要结算依据、因而也要客户合同——结算政策按

@@ -23,6 +23,20 @@
       "effectiveFrom": "2026-01-01T00:00:00Z"
     },
     {
+      "partyId": "SYN-PARTY-CARRIER-TRUNK-01",
+      "name": "合成干线承运方（演示）",
+      "revision": 1,
+      "basis": "SYN-REG-BASIS-PARTY-CARRIER-TRUNK-01",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
+      "partyId": "SYN-PARTY-CARRIER-LM-01",
+      "name": "合成末端承运方（演示）",
+      "revision": 1,
+      "basis": "SYN-REG-BASIS-PARTY-CARRIER-LM-01",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
       "partyId": "SYN-PARTY-RETIRED-01",
       "name": "合成停用示例（演示）",
       "revision": 1,
