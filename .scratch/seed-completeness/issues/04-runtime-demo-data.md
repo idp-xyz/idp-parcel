@@ -70,3 +70,13 @@ Blocked by: 无
 ## 验证
 
 脚本提交 `92586f8f`。一次性库 `127.0.0.1:55444`（容器用完即删，未碰 `55432`）上 `seed.sh --reset` 之后，读写真开，`IDP_PARCEL_API_BASE=http://127.0.0.1:19084` 跑脚本退出 0：`已提交 SHR-IS5W4LKRV23DTVEWEOVLX34TF4`，来源键 `SYN-CUSTREF-20260929T044814Z`，列表与详情状态都是 `SUBMITTED`。`seed.sh` 不调用它。
+
+## 进 main 记录（2026-09-29，通道 1 推送）
+
+分支 `mcp4-seedd@d9648b4b`（已推 origin）在隔离树重放到 `ee4186ed` 之上：`92586f8f→83ab47ec`（`!`：README 与本票各一处文本冲突，README 两边正文都留；本票保留方案全文，把作者的「裁决 / 读面核对 / 脚本 / 验证」并入并把 Status 改为步 0 resolved）、`d9648b4b→046df51b`（`=`）。另加 `1c3c3bca` 按评审非阻断意见把「同一 UTC 秒内重跑答 `200 EXISTING_RESULT`、脚本失败退出」写进脚本头与 README。
+
+推送方验证：链 tip 上 gofmt 空，vet 与 build 退出 0，清点门 current，分片覆盖核对通过（148 个包）。相对已做过含 DSN 全量（134 ok / 0 FAIL，见票 01–03）的 `ee4186ed`，本链**只多一支 shell 脚本与 README、票面**，没有 Go 代码变化，所以没有重跑全量；脚本行为的验证是下面评审在私有库上的复现。
+
+## Comments
+
+**评审 ← 通道 3 · 钉 `d9648b4b` · 无阻断**：私有库 55455 + API 19085，`seed.sh --reset` 退出 0 之后复现——两个开关都不设，脚本退出 1、提交口 `403 ACCESS_CHANNEL_NOT_CONFIGURED`（`PAR-INT-01`）；只开写，断言 `201/SUBMITTED` 后因列表 403 退出，详情同样 403，行已在册；读写都设 `SYN-TENANT-01`，间隔 2 秒跑两次都退出 0，两笔不同 SHR、来源键不同、列表都是 `SUBMITTED`。`GET /tracking-projections` 读开时 `200 PROJECTIONS_LISTED` 且为空。差分只有票、README、脚本三份；脚本无 INSERT/psql，只打 `POST /shipment-requests` 与 `GET /shipment-request-views`；不改装配，生产默认仍是开关不设即拒；治理四维与 `data/governance/07-authority-interval-shipment-intake.json` 逐字一致。非阻断：重复跑不是幂等，同一 UTC 秒再跑撞同一来源键答 `200 EXISTING_RESULT`、脚本因要求 201 失败退出，脚本头与 README、票都没写这一格——已在 `1c3c3bca` 补。
