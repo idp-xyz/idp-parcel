@@ -1,10 +1,10 @@
 // demo-seeds/seedgen 生成计价种子快照 JSON，**仅限隔离环境**（票 master-data-wiring/08）。
 //
-// 价卡与序列的登记输入是领域折装的快照（MarshalPriceCardRegistration /
-// MarshalReferenceSeriesRegistration 的产物），携带规范化版本号与内容摘要自校——
-// 手写 JSON 拼不出合法摘要，所以种子由本生成器经真领域构造函数产出后落盘入库。
-// 产物提交在 scripts/demo-seeds/data/pricing/ 下；规范化版本升级（PPC/PRS 换号）时
-// 重跑本生成器再提交新产物即可。
+// 价卡、序列与参考目录的登记输入是领域折装的快照（MarshalPriceCardRegistration /
+// MarshalReferenceSeriesRegistration / MarshalReferenceCatalogueRegistration 的产物），
+// 携带规范化版本号与内容摘要自校——手写 JSON 拼不出合法摘要，所以种子由本生成器经真
+// 领域构造函数产出后落盘入库。产物提交在 scripts/demo-seeds/data/pricing/ 下；规范化
+// 版本升级（PPC/PRS/PRC 换号）时重跑本生成器再提交新产物即可。
 //
 // 全部实例值是 SYN- 前缀的合成内容，证据层级 S：不影射任何真实企业，不写生产默认值，
 // 不进参数登记册。跨上下文引用按所有权只引不解析：方向授权与汇率口径指向
@@ -47,6 +47,56 @@ func main() {
 	// 复核责任方与登记责任方不是同一个合成身份——四眼门在种子里也照守。
 	write(outDir, "reference-series-fuel-review.json", seriesReviewDocument("SYN-SERIES-FUEL-01", "v1"))
 	write(outDir, "reference-series-fx-cny-sgd-review.json", seriesReviewDocument("SYN-SERIES-FX-CNY-SGD", "v1"))
+	// 分区目录与价卡上的 Z1/Z2 对齐，但是另一本册：卡不绑目录标识，评价仍走调用方给值。
+	// 不复核就不在用，与序列同一条纪律。
+	write(outDir, "reference-catalogue-zone-cn-sg.json", zoneCatalogueSnapshot())
+	write(outDir, "reference-catalogue-zone-cn-sg-review.json", catalogueReviewDocument("SYN-CAT-ZONE-CN-SG", "v1"))
+}
+
+// catalogueReviewDocument 产出 parcel-pricing-register -kind reference-catalogue-review
+// 吃的复核文档。键名与该 CLI 的 catalogueReviewDocument 一致；四眼门同样要求复核人
+// 不是登记人。
+func catalogueReviewDocument(catalogueID, version string) []byte {
+	document := map[string]string{
+		"tenant":           tenantID,
+		"catalogueId":      catalogueID,
+		"catalogueVersion": version,
+		"reviewer":         reviewer,
+		"decision":         "APPROVED",
+		"basis":            "SYN-REVIEW/合成分区目录逐条对照公布表（S 级，仅隔离验证）",
+		"reviewedAt":       "2026-01-02T00:00:00Z",
+	}
+	raw, err := json.Marshal(document)
+	must("目录复核文档 "+catalogueID, err)
+	return raw
+}
+
+// zoneCatalogueSnapshot 折装分区目录 SYN-CAT-ZONE-CN-SG v1。目的侧粒度由这一版自己
+// 声明为 3 位（ADR-0109：机制只给槽，不预拟真实表的粒度）；前缀与分区都是合成值，
+// 证据只记 S，不是任何承运商的真分区表。Z1/Z2 与售价卡 SYN-PLAN-CN-SG-01 的区号同名，
+// 方便目录页和价卡页对得上；卡本身不绑这本目录。
+func zoneCatalogueSnapshot() []byte {
+	origin, err := domain.NewPostalPrefixCatalogueOrigin([]string{"200", "510"})
+	must("分区目录始发", err)
+	zoneEast, err := domain.NewCatalogueEntry("018", domain.CategoryValue("Z1"))
+	must("分区条目 018", err)
+	zoneSouth, err := domain.NewCatalogueEntry("238", domain.CategoryValue("Z2"))
+	must("分区条目 238", err)
+	registration, err := domain.NewReferenceCatalogueRegistration(domain.ReferenceCatalogueRegistrationSpec{
+		Tenant:           tenant(),
+		Kind:             domain.CatalogueKindZone,
+		Reference:        reference(domain.ArtifactReferenceCatalogue, "SYN-CAT-ZONE-CN-SG", "v1"),
+		SourceIdentifier: "SYN-CARRIER-ZONE-BULLETIN",
+		Registrant:       registrant,
+		Origin:           origin,
+		PrefixLength:     3,
+		Entries:          []domain.CatalogueEntry{zoneEast, zoneSouth},
+		Period:           period("2026-01-01"),
+	})
+	must("分区目录登记", err)
+	raw, err := domain.MarshalReferenceCatalogueRegistration(registration)
+	must("分区目录折装", err)
+	return raw
 }
 
 // seriesReviewDocument 产出 parcel-pricing-register -kind reference-series-review 吃的复核

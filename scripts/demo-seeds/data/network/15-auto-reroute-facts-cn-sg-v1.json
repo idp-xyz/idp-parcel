@@ -1,0 +1,15 @@
+{
+  "tenant_id": "SYN-TENANT-01",
+  "customer_account_id": "SYN-ACCOUNT-01",
+  "shipment_request_id": "SYN-REQUEST-CN-SG-01",
+  "acceptance_baseline": "SYN-BASELINE-CN-SG-01/v1",
+  "declared_parcel_id": "SYN-PARCEL-CN-SG-01",
+  "service_purpose": "NETWORK_SERVICE",
+  "version": 1,
+  "policy_allows_automatic": true,
+  "at_controlled_node": true,
+  "only_unexecuted_affected": true,
+  "unresolved_restrictions": [],
+  "outstanding_responsibilities": [],
+  "strategy_basis": "SYN-RS-CN-SG-01/v1"
+}

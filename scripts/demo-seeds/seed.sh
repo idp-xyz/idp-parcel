@@ -71,7 +71,7 @@ echo "== 2/7 商业权威发布（party-commercial：发布批正文）与消费
 # 渠道本体不预造（ADR-0072），引用等 PAR-INT-01 的接入证据。
 "$BIN/parcel-commercial" register-products -input "$SEEDS/commercial/register-products.json"
 
-echo "== 3/7 计价登记（parcel-pricing：价卡 + 参考序列 + 序列复核） =="
+echo "== 3/7 计价登记（parcel-pricing：价卡 + 参考序列 + 序列复核 + 参考目录） =="
 "$BIN/parcel-pricing-register" -kind price-card -file "$SEEDS/pricing/price-card-cn-sg.json"
 "$BIN/parcel-pricing-register" -kind price-card -file "$SEEDS/pricing/price-card-cn-sg-cost.json"
 "$BIN/parcel-pricing-register" -kind reference-series -file "$SEEDS/pricing/reference-series-fuel.json"
@@ -79,6 +79,9 @@ echo "== 3/7 计价登记（parcel-pricing：价卡 + 参考序列 + 序列复�
 # 序列版本经复核通过才在用（ADR-0099）：先登记再复核，复核责任方与登记责任方不同。
 "$BIN/parcel-pricing-register" -kind reference-series-review -file "$SEEDS/pricing/reference-series-fuel-review.json"
 "$BIN/parcel-pricing-register" -kind reference-series-review -file "$SEEDS/pricing/reference-series-fx-cny-sgd-review.json"
+# 参考目录同一条纪律（ADR-0109）：先登记再复核。价卡不绑这本目录，评价仍走调用方给值。
+"$BIN/parcel-pricing-register" -kind reference-catalogue -file "$SEEDS/pricing/reference-catalogue-zone-cn-sg.json"
+"$BIN/parcel-pricing-register" -kind reference-catalogue-review -file "$SEEDS/pricing/reference-catalogue-zone-cn-sg-review.json"
 
 echo "== 4/7 网络目录登记（network-routing：七族版本行） =="
 "$BIN/parcel-network-register" -kind node -file "$SEEDS/network/01-node-sha-hub-v1.json"
@@ -95,6 +98,10 @@ echo "== 4/7 网络目录登记（network-routing：七族版本行） =="
 "$BIN/parcel-network-register" -kind service-calendar -file "$SEEDS/network/12-calendar-line-cn-sg-v1.json"
 "$BIN/parcel-network-register" -kind availability-adjustment -file "$SEEDS/network/13-adjustment-typhoon-v1.json"
 "$BIN/parcel-network-register" -kind route-strategy -file "$SEEDS/network/14-route-strategy-cn-sg-v1.json"
+# 自动改路事实是登记方折算完的陈述（0009），不是初始路由跑出来的计划。判断键对齐
+# SYN-ACCOUNT-01 与 SYN-RS-CN-SG-01，不指向一笔已经受理的委托。同键再登答退出码 2，
+# 已灌过的库重跑本节请用 --reset。
+"$BIN/parcel-network-register" -kind auto-reroute-facts -file "$SEEDS/network/15-auto-reroute-facts-cn-sg-v1.json"
 
 echo "== 5/7 关务案件配置登记（customs-compliance：八册） =="
 "$BIN/parcel-customs-register" readiness-register -input "$SEEDS/customs/01-readiness-cn-export.json"

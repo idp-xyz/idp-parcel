@@ -15,8 +15,9 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
   ./scripts/demo-seeds/seed.sh --reset  # 复灌：DROP 全部 parcel schema → 重迁 → 重灌
 ```
 
-干净库上全程零报错。四个 CLI 对重复输入各自幂等（已登记/重放答 0），但网络目录的
-版本行撞主键会答未决（3）——对已灌过的库重跑请用 `--reset`。责任法人 `SYN-LE-01` 的修订 1
+干净库上全程零报错。计价登记对重复输入幂等（已登记/重放答 0）。网络目录的版本行撞
+主键会答未决（3），自动改路事实同键再登答治理格（2）——对已灌过的库重跑请用 `--reset`。
+责任法人 `SYN-LE-01` 的修订 1
 自票 legal-entity-profile/02 起带身份层（注册国家 `CN` 与合成终身注册号，ADR-0145 决定一）；在那之前
 灌过的库上这一笔是没有身份层的旧形状，重跑会答内容冲突（2），同样用 `--reset`。
 
@@ -30,12 +31,12 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 | `data/commercial/register-registration-number-types.json` | `cmd/parcel-commercial register-registration-number-types` | 注册号类型目录（ADR-0145 决定一）：身份层由演示租户显式采用 CN（统一社会信用代码）、SG（UEN）两份参考配置（ADR-0147，批文 `adopt` 格，依据格随之写成 `REFCFG-1:…@1`），资料层 CN、SG 各登一类 `SYN-` 合成税务登记号，另有一类 SG 资料层旧类型登记后停用，让目录状态的「已停用」有实例可显。产品本身不带任何国家 / 地区的目录条目：参考配置不采用就不进任何租户的目录 |
 | `data/commercial/register-parties.json` | `cmd/parcel-commercial register-parties` | 参与方身份：业务参与方（含合成干线承运方 `SYN-PARTY-CARRIER-TRUNK-01`、合成末端承运方 `SYN-PARTY-CARRIER-LM-01`，供两份供应商协议引用）、关系、责任法人、客户账户 |
 | `data/commercial/register-legal-entity-profiles.json` | `cmd/parcel-commercial register-legal-entity-profiles` | 法人资料（ADR-0145 决定三）：`SYN-LE-01` 两笔修订——修订 1 不带开票资料（按它生效的时段解析答「资料不全」），修订 2 自 3 月起补上开票抬头；注册地址在 `CN`，与法人身份层的注册国家一致，税号取目录里 `CN` 的资料层合成类型。排在参与方身份之后：资料引用已登记的责任法人 |
-| `data/pricing/` | `cmd/parcel-pricing-register` | 两张价卡（SELL 首重续重 / BUY 重量段）+ 两条参考序列（燃油、汇率）+ 两份序列复核（不复核不在用，ADR-0099）——由 `seedgen` 生成，勿手改 |
-| `data/network/` | `cmd/parcel-network-register` | 七族 14 行：4 节点（含一次换版）、3 连接、1 线路、2 服务区、1 日历、1 台风停运调整、1 路由策略 |
+| `data/pricing/` | `cmd/parcel-pricing-register` | 两张价卡（SELL 首重续重 / BUY 重量段）+ 两条参考序列（燃油、汇率）+ 两份序列复核 + 一份分区参考目录与其复核（不复核不在用，ADR-0099 / ADR-0109）——由 `seedgen` 生成，勿手改 |
+| `data/network/` | `cmd/parcel-network-register` | 七族 14 行：4 节点（含一次换版）、3 连接、1 线路、2 服务区、1 日历、1 台风停运调整、1 路由策略；另加 1 行自动改路事实（判断键对齐 `SYN-ACCOUNT-01` 与 `SYN-RS-CN-SG-01`，不是一笔已受理委托的运行时产物） |
 | `data/customs/` | `cmd/parcel-customs-register` | 八册 20 份：就绪与授权（各含第二单元，授权含一次撤销）、解释规则（含一次换版）、义务目录+两项（已了结/已承接）、门禁目录+判断（含一份只登目录的空清单格）、建案要求两向（要求/显式不要求）、口岸目录（SZX 含一次换版 + SIN）、申报路径两向（CN 出口 / SG 进口） |
 | `data/access/` | `cmd/parcel-access-register` | 操作者册（ADR-0100 决定二第三条）：两个合成操作者主体绑演示租户，配置员授登记册配置写与主数据与运营查阅读两格，查阅员只授查阅读；发行方是合成值，演示部署接上真 OIDC 发行方后按其标识另登 |
 | `migrate/` | — | 迁移助手（`migrate.Run` 的隔离环境入口；迁移计划刻意没有生产入口） |
-| `seedgen/` | — | 计价快照生成器：价卡与序列的登记输入带规范化版本号与内容摘要自校，必须经真领域构造函数折装；PPC/PRS 规范化版本升级时重跑并提交新产物 |
+| `seedgen/` | — | 计价快照生成器：价卡、序列与参考目录的登记输入带规范化版本号与内容摘要自校，必须经真领域构造函数折装；PPC/PRS/PRC 规范化版本升级时重跑并提交新产物 |
 
 ## 数据故事（同一合成租户 SYN-TENANT-01，范围 SYN-SCOPE-01）
 
@@ -52,10 +53,14 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
    Z1/Z2 两区，MAX 计费重体积系数 5000）方向授权引商业授权对象 `SYN-AUTH-PRICE-DIR-01`，
    方案结构绑燃油序列 `SYN-SERIES-FUEL-01`；成本卡 `SYN-PLAN-CN-SG-COST-01`（BUY）引
    `SYN-AUTH-COST-DIR-01`，两份供应商协议（干线、末端）都采购这一份买入方案；汇率序列 `SYN-SERIES-FX-CNY-SGD` 的口径引价格规则
-   `SYN-PRICE-RULE-CN-SG`（汇率不收裸值）。该价格规则同时带卖出方向的价格政策正文与口径，口径与卖出价卡同一套（未税、材积除数 5000、提交时点汇率）。信用政策与客户服务规则各一份，都挂在同一法人与预付费用上。
+   `SYN-PRICE-RULE-CN-SG`（汇率不收裸值）。该价格规则同时带卖出方向的价格政策正文与口径，口径与卖出价卡同一套（未税、材积除数 5000、提交时点汇率）。信用政策与客户服务规则各一份，都挂在同一法人与预付费用上。 分区目录 `SYN-CAT-ZONE-CN-SG` 用合成 3 位前缀
+   把 `018`/`238` 映到同名的 Z1/Z2，始发覆盖 `200` 与 `510`；价卡不绑这本目录，评价仍走
+   调用方给值。
 3. **一单会走的网**（network-routing）：上海枢纽→深圳口岸→新加坡枢纽→新加坡末端四节点
    三连接成线路 `SYN-LINE-CN-SG-01`（applicable_scope 同 `SYN-SCOPE-01`）；上海枢纽 v1→v2
    换版展示版本轴；一次台风停运（SUSPENSION，已解除）展示临时调整与稳定定义分离。
+   自动改路事实一行把四条件陈述折在策略 `SYN-RS-CN-SG-01/v1` 上，判断键是合成的，库里
+   没有对应的委托。
 4. **过关的规则**（customs-compliance）：中国出口侧就绪+提交授权、放行结果解释规则 v1→v2
    换版、案件 `SYN-CASE-CN-SG-01` 的关闭义务（一项已了结、一项承接给 `SYN-BROKER-01`）、
    跨关区移动门禁（前置条件已满足）、建案要求两向（CN 出口要求建案、SG 进口显式不要求）；
@@ -69,7 +74,14 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
   `parcel-pricing` 的登记；两套数字要对上是种子自己的事，发布口不替价卡校对。
   `RehydrateAdoptedBasisSpec` 的快照重建至今缺席，补发布通道不等于补重建（记于票
   `commercial-closure-settlement-key/02`）。
-  `service_product_form`（0008）那半边已经补上（票 `admin-remainder-mechanism-batch/02`）：
+- `pilot_governance.takeover_record` 没有登记入口。`parcel-governance-register` 对未知种类
+  答「接管未开」；ADR-0128 决定五写明接管记录的语义与写侧不在该记录内，`PAR-GOV-05..07`
+  仍是待提供的租户取值。这是刻意没开，不是种子漏调用。演示不造接管行。
+- 网络这四张空表不是种子漏灌：`network_definition`（0007）头注写明今天没有写入方，读口恒答
+  未配置，登记口也不再读它（`parcel-network-register` 只登 0008 目录与 0009 事实）。
+  `initial_route`、`plan_applicability`、`reachability_judgment` 是一次路由判断留下的运行时
+  记录，没有登记 CLI。自动改路事实有 CLI，本包登了一行合成陈述，它填不满这三张表。
+- `service_product_form`（0008）那半边已经补上（票 `admin-remainder-mechanism-batch/02`）：
   `register-products` 子命令是 `SaveServiceProduct` 的进程级调用方，本包两个产品的形态随
   种子落册，服务产品页的形态列不再为空。
 - 结算政策那一格已经补上（票 `commercial-closure-settlement-key/02`）：发布批里的
