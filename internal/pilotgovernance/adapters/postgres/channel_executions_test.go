@@ -199,10 +199,10 @@ func TestChannelExecutionCommandIsClosedOnBothSides(t *testing.T) {
 			return err
 		})
 	}
-	if err := rawInsert("takeover"); err == nil {
-		t.Fatalf("集合外命令绕过适配器直接写表被接受了；迁移 0006 的 CHECK 应拦下")
+	if err := rawInsert("take-over"); err == nil {
+		t.Fatalf("集合外命令绕过适配器直接写表被接受了；留痕表的 CHECK 应拦下")
 	}
-	if err := rawInsert(domain.ChannelCommandResume.String()); err != nil {
+	if err := rawInsert(domain.ChannelCommandTakeover.String()); err != nil {
 		t.Fatalf("集合内命令直接写表被拒：%v", err)
 	}
 	if count := fixture.countTraces(t, ctx, "raw-command-trace"); count != 1 {

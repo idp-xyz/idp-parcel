@@ -337,6 +337,64 @@ func noGoDispositionNamed(name string) (domain.NoGoDisposition, bool) {
 	return domain.NoGoDispositionInvalid, false
 }
 
+type takeoverDocument struct {
+	StopEvidence     string                    `json:"stopEvidence"`
+	Interval         authorityIntervalDocument `json:"interval"`
+	AcceptedFacts    string                    `json:"acceptedFacts"`
+	PendingExternals string                    `json:"pendingExternals"`
+	ActualControl    string                    `json:"actualControl"`
+	Responsibilities string                    `json:"responsibilities"`
+	NextAction       string                    `json:"nextAction"`
+	Inventory        inventoryDocument         `json:"inventory"`
+	EffectiveAt      time.Time                 `json:"effectiveAt"`
+}
+
+func takeoverSpecFromJSON(raw []byte) (domain.TakeoverRecordSpec, error) {
+	none := domain.TakeoverRecordSpec{}
+	decoder := json.NewDecoder(bytes.NewReader(raw))
+	decoder.DisallowUnknownFields()
+	var document takeoverDocument
+	if err := decoder.Decode(&document); err != nil {
+		return none, fmt.Errorf("接管输入不是本入口的形状：%w", err)
+	}
+	entries := make([]domain.InventoryEntry, 0, len(document.Inventory.Entries))
+	for _, entry := range document.Inventory.Entries {
+		entries = append(entries, domain.InventoryEntry{
+			ObjectIdentity:   entry.ObjectIdentity,
+			CurrentFacts:     entry.CurrentFacts,
+			CurrentAuthority: entry.CurrentAuthority,
+			ResponsibleParty: entry.ResponsibleParty,
+			NextAction:       entry.NextAction,
+			ReviewBy:         entry.ReviewBy,
+		})
+	}
+	inventory, err := domain.TakeInventory(entries, document.Inventory.TakenAt)
+	if err != nil {
+		return none, err
+	}
+	interval := domain.AuthorityInterval{
+		ObjectScope: document.Interval.ObjectScope,
+		Capability:  document.Interval.Capability,
+		FactKind:    document.Interval.FactKind,
+		Authority:   document.Interval.Authority,
+		From:        document.Interval.FromAt,
+	}
+	if document.Interval.ToAt != nil {
+		interval.To = *document.Interval.ToAt
+	}
+	return domain.TakeoverRecordSpec{
+		StopEvidence:     document.StopEvidence,
+		Interval:         interval,
+		AcceptedFacts:    document.AcceptedFacts,
+		PendingExternals: document.PendingExternals,
+		ActualControl:    document.ActualControl,
+		Responsibilities: document.Responsibilities,
+		NextAction:       document.NextAction,
+		Inventory:        inventory,
+		EffectiveAt:      document.EffectiveAt,
+	}, nil
+}
+
 func scopeRelationKindNamed(name string) (domain.ScopeVersionRelationKind, bool) {
 	for _, kind := range []domain.ScopeVersionRelationKind{domain.ScopeInheritsSuspensions, domain.ScopeUnrelated} {
 		if kind.String() == name {

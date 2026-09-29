@@ -2,8 +2,8 @@ package domain
 
 // ChannelCommand 是受控通道命令的封闭集合（票 pilot-governance-context-gaps/01 裁决）。
 //
-// 这个集合归产品定，不归租户扩：`parcel-governance-register` 按批开放子命令（首批三个；第二批里
-// 阶段评审已开、接管未开），留痕表 `channel_execution.command` 记的就是「哪一个受控命令被执行过」
+// 这个集合归产品定，不归租户扩：`parcel-governance-register` 按批开放子命令（首批三个；第二批
+// 阶段评审；接管由 ADR-0154 打开），留痕表 `channel_execution.command` 记的就是「哪一个受控命令被执行过」
 // ——一个入口不认识的词到不了留痕那一步（入口先按集合拒），所以把集合关在领域里不会让任何真实发生
 // 过的执行写不进去。此前集合只封闭在 CLI 的字符串常量与一个 switch 上；搬到这里之后 enum 门禁替它
 // 守「新增取值必须同时补 String()」，库上另有一道 CHECK 作第二道镜像（迁移 0006，阶段评审一词由
@@ -19,10 +19,11 @@ const (
 	ChannelCommandSuspend
 	ChannelCommandResume
 	ChannelCommandStageReview
+	ChannelCommandTakeover
 )
 
 func (command ChannelCommand) valid() bool {
-	return command >= ChannelCommandAuthorityInterval && command <= ChannelCommandStageReview
+	return command >= ChannelCommandAuthorityInterval && command <= ChannelCommandTakeover
 }
 
 func (command ChannelCommand) String() string {
@@ -35,6 +36,8 @@ func (command ChannelCommand) String() string {
 		return "resume"
 	case ChannelCommandStageReview:
 		return "stage-review"
+	case ChannelCommandTakeover:
+		return "takeover"
 	default:
 		return ""
 	}

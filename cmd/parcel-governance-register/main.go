@@ -7,7 +7,8 @@
 // 的恢复动作落点）、暂停（suspend）与恢复（resume，四件由领域把门，无简化路径）。
 // 第二批里阶段评审已开（stage-review，票 demo-intake-admission-paused/01）：一份输入固定
 // 本次评审的候选版本组、记下 Go/No-Go，并随决定登记范围版本的覆盖关系——暂停按覆盖
-// 关系读，读不出即保守拦，这里是那条关系唯一的登记口。接管仍未开。
+// 关系读，读不出即保守拦，这里是那条关系唯一的登记口。接管已开（takeover，ADR-0154）：
+// 调用现成 TakeOver，不加暂停或既有区间前置；HTTP 不在本入口。
 //
 // 执行者身份走双轨（票 12 裁决）：①通道技术身份（OS 进程属主、主机名）由本入口
 // 自取，没有任何参数能传入或覆盖它，与登记同笔事务落 channel_execution 留痕；
@@ -65,6 +66,7 @@ var (
 	commandSuspend           = domain.ChannelCommandSuspend.String()
 	commandResume            = domain.ChannelCommandResume.String()
 	commandStageReview       = domain.ChannelCommandStageReview.String()
+	commandTakeover          = domain.ChannelCommandTakeover.String()
 )
 
 // errStageReviewNotLanded 让阶段评审那一笔事务在评审没落成时整笔撤回：候选组是这次评审
@@ -119,14 +121,14 @@ func main() {
 
 func run(ctx context.Context, args []string, getenv func(string) string, out, errOut io.Writer) int {
 	if len(args) < 1 {
-		fmt.Fprintf(errOut, "用法：parcel-governance-register <%s|%s|%s|%s> -input <file>\n",
-			commandAuthorityInterval, commandSuspend, commandResume, commandStageReview)
+		fmt.Fprintf(errOut, "用法：parcel-governance-register <%s|%s|%s|%s|%s> -input <file>\n",
+			commandAuthorityInterval, commandSuspend, commandResume, commandStageReview, commandTakeover)
 		return exitUsage
 	}
 	command := args[0]
 	if _, known := domain.ParseChannelCommand(command); !known {
-		fmt.Fprintf(errOut, "未知登记种类 %q；只开 %s、%s、%s、%s（接管未开）\n",
-			command, commandAuthorityInterval, commandSuspend, commandResume, commandStageReview)
+		fmt.Fprintf(errOut, "未知登记种类 %q；只开 %s、%s、%s、%s、%s\n",
+			command, commandAuthorityInterval, commandSuspend, commandResume, commandStageReview, commandTakeover)
 		return exitUsage
 	}
 
@@ -329,6 +331,25 @@ func execute(
 			return fmt.Sprintf("%s: 未决：%v", command, err), exitUndecided
 		}
 		return incidentAnswer(command, result.Outcome(), result.HandoffReference())
+	case domain.ChannelCommandTakeover:
+		spec, err := takeoverSpecFromJSON(raw)
+		if err != nil {
+			return fmt.Sprintf("%s: 输入被拒：%v", command, err), exitUsage
+		}
+		var result application.GovernIncidentResult
+		err = regs.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+			handled, err := regs.incidents.TakeOver(txCtx, spec)
+			if err != nil {
+				return err
+			}
+			result = handled
+			return traceExecution(txCtx, regs, channelCommand, intervalReference(spec.Interval), identity,
+				tracedIncidentOutcome(result.Outcome()), result.Outcome().String())
+		})
+		if err != nil {
+			return fmt.Sprintf("%s: 未决：%v", command, err), exitUndecided
+		}
+		return takeoverAnswer(result.Outcome(), result.HandoffReference(), result.Conflicts())
 	case domain.ChannelCommandStageReview:
 		input, err := stageReviewFromJSON(raw)
 		if err != nil {
@@ -371,7 +392,8 @@ func execute(
 func tracedIncidentOutcome(outcome application.GovernIncidentOutcome) bool {
 	switch outcome {
 	case application.SuspensionRecorded, application.SuspensionExisting,
-		application.ResumptionRecorded, application.ResumptionExisting:
+		application.ResumptionRecorded, application.ResumptionExisting,
+		application.TakeoverRecorded, application.TakeoverExisting:
 		return true
 	default:
 		return false
@@ -422,6 +444,32 @@ func incidentAnswer(command string, outcome application.GovernIncidentOutcome, h
 		application.ResumptionRecorded, application.ResumptionExisting:
 		return message, exitRegistered
 	case application.SuspensionNotFound, application.GovernIncidentNotAccepted:
+		return message, exitUsage
+	default:
+		return message, exitUndecided
+	}
+}
+
+// takeoverAnswer 与 incidentAnswer 同一套退出码，另把冲突阻断列成与权威区间登记相同的治理格。
+func takeoverAnswer(
+	outcome application.GovernIncidentOutcome,
+	handoffRef string,
+	conflicts []domain.AuthorityConflict,
+) (string, int) {
+	message := commandTakeover + ": " + outcome.String()
+	if handoffRef != "" {
+		return fmt.Sprintf("%s（已入册，下游意图未交出去，续办引用 %s）", message, handoffRef), exitGovernance
+	}
+	switch outcome {
+	case application.TakeoverRecorded, application.TakeoverExisting:
+		return message, exitRegistered
+	case application.TakeoverConflictBlocked:
+		detail := ""
+		for _, conflict := range conflicts {
+			detail += "\n  " + formatInterval(conflict.First) + " 撞 " + formatInterval(conflict.Second)
+		}
+		return message + detail, exitGovernance
+	case application.GovernIncidentNotAccepted:
 		return message, exitUsage
 	default:
 		return message, exitUndecided

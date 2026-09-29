@@ -431,7 +431,7 @@ func TestRunRejectsUsageErrors(t *testing.T) {
 		t.Fatalf("缺命令退出码 = %d", code)
 	}
 	if code := run(ctx, []string{"take-over"}, noEnv, io.Discard, io.Discard); code != exitUsage {
-		t.Fatalf("集合外命令退出码 = %d（接管是第二批，不在本入口）", code)
+		t.Fatalf("集合外命令退出码 = %d（take-over 不是 takeover）", code)
 	}
 	if code := run(ctx, []string{commandSuspend}, noEnv, io.Discard, io.Discard); code != exitUsage {
 		t.Fatalf("缺 -input 退出码 = %d", code)
@@ -443,5 +443,59 @@ func TestRunRejectsUsageErrors(t *testing.T) {
 	}
 	if code := run(ctx, []string{commandSuspend, "-input", input}, noEnv, io.Discard, io.Discard); code != exitUsage {
 		t.Fatalf("缺 DSN 退出码 = %d（登记口不猜连接串）", code)
+	}
+}
+
+func takeoverInput() []byte {
+	return []byte(`{
+		"stopEvidence": "evidence-pack/authority-stopped",
+		"interval": {
+			"objectScope": "pilot-members/v1",
+			"capability": "shipment-intake",
+			"factKind": "production-ownership",
+			"authority": "successor-system",
+			"fromAt": "2026-08-24T04:00:00Z"
+		},
+		"acceptedFacts": "facts-index/1",
+		"pendingExternals": "pending-externals/1",
+		"actualControl": "control-map/1",
+		"responsibilities": "funds-and-customs/1",
+		"nextAction": "notify partners",
+		"inventory": {
+			"takenAt": "2026-08-24T03:00:00Z",
+			"entries": [{
+				"objectIdentity": "request-1",
+				"currentFacts": "accepted",
+				"currentAuthority": "idp-parcel",
+				"responsibleParty": "ops-lead",
+				"nextAction": "monitor",
+				"reviewBy": "2026-08-27T03:00:00Z"
+			}]
+		},
+		"effectiveAt": "2026-08-24T04:00:00Z"
+	}`)
+}
+
+func TestExecuteTakeoverLandsWithoutAPriorSuspension(t *testing.T) {
+	fixture := newExecuteFixture()
+
+	message, code := execute(context.Background(), commandTakeover, takeoverInput(), executeIdentity, fixture.regs)
+	if code != exitRegistered {
+		t.Fatalf("退出码 = %d（%s），要 %d", code, message, exitRegistered)
+	}
+	if !strings.Contains(message, "TAKEOVER_RECORDED") {
+		t.Fatalf("答复 = %q，要含 TAKEOVER_RECORDED", message)
+	}
+	if len(fixture.intervals.intervals) != 1 {
+		t.Fatalf("追加的权威区间 = %d，要 1", len(fixture.intervals.intervals))
+	}
+	if len(fixture.tracer.executions) != 1 || fixture.tracer.executions[0].Command.String() != commandTakeover {
+		t.Fatalf("留痕 = %+v，要一条 takeover", fixture.tracer.executions)
+	}
+
+	blank := []byte(`{"stopEvidence":"  ","interval":{"objectScope":"pilot-members/v1","capability":"shipment-intake","factKind":"production-ownership","authority":"successor-system","fromAt":"2026-08-24T04:00:00Z"},"acceptedFacts":"facts-index/1","pendingExternals":"pending-externals/1","actualControl":"control-map/1","responsibilities":"funds-and-customs/1","nextAction":"notify partners","inventory":{"takenAt":"2026-08-24T03:00:00Z","entries":[{"objectIdentity":"request-1","currentFacts":"accepted","currentAuthority":"idp-parcel","responsibleParty":"ops-lead","nextAction":"monitor","reviewBy":"2026-08-27T03:00:00Z"}]},"effectiveAt":"2026-08-24T04:00:00Z"}`)
+	message, code = execute(context.Background(), commandTakeover, blank, executeIdentity, fixture.regs)
+	if code != exitUsage || !strings.Contains(message, "NOT_ACCEPTED") {
+		t.Fatalf("空白停写证据 = %d（%s），要用法错误", code, message)
 	}
 }

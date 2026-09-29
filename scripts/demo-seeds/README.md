@@ -89,9 +89,9 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
   `parcel-pricing` 的登记；两套数字要对上是种子自己的事，发布口不替价卡校对。
   `RehydrateAdoptedBasisSpec` 的快照重建至今缺席，补发布通道不等于补重建（记于票
   `commercial-closure-settlement-key/02`）。
-- `pilot_governance.takeover_record` 没有登记入口。`parcel-governance-register` 对未知种类
-  答「接管未开」；ADR-0128 决定五写明接管记录的语义与写侧不在该记录内，`PAR-GOV-05..07`
-  仍是待提供的租户取值。这是刻意没开，不是种子漏调用。演示不造接管行。
+- `pilot_governance.takeover_record` 的写入口已开：`parcel-governance-register takeover`
+  （ADR-0154）。本包不造接管行。停写证据、继任权威和在途盘点要等证据责任方给出隔离 `S`
+  或自然发生的 `P`；`PAR-GOV-05..07` 的租户值仍待提供，开发方不填。空表是如实的。
 - 网络这四张空表不是种子漏灌：`network_definition`（0007）头注写明今天没有写入方，读口恒答
   未配置，登记口也不再读它（`parcel-network-register` 只登 0008 目录与 0009 事实）。
   `initial_route`、`plan_applicability`、`reachability_judgment` 是一次路由判断留下的运行时
