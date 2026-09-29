@@ -1,8 +1,8 @@
 # 04 运行时演示数据：一单的一生（方案，确认前不实现）
 
 Category: enhancement
-Status: 步 0 已裁决（用户 2026-09-29：只做步 0，步 1/2 不做）；方案随 03 进 main，步 0 实现在分支 `mcp4-seedd`（评审中）。
-Blocked by: 用户裁决（见文末）
+Status: 步 0 resolved——用户 2026-09-29 裁决只做步 0，步 1/2 不做；步 0 实现随本笔进 main（通道 4 作者，通道 3 非作者评审）。方案文本保留在下面。
+Blocked by: 无
 地盘：本票只写方案。确认前不改种子、不改命令面、不 INSERT。
 出处：派单 `task-b125d095` ← 通道 1。空表范围：`parcel_shipment` 委托侧、`settlement_accounting`、`transport_fulfillment`、`node_operations`、visibility 案件类。
 
@@ -48,8 +48,21 @@ Blocked by: 用户裁决（见文末）
 3. 价格政策正文归通道 2 的商业发布批（见票 03），不放进运行时脚本。
 4. 接管记录保持未开（ADR-0128 决定五）。回汇批次归通道 3。
 
-确认前本票不实现。
+（以上「用户必须先裁的」已裁：第 1 项走隔离写；第 2 项只做步 0；第 3、4 项如所列。）
 
-## 用户裁决与进 main（2026-09-29）
+## 裁决
 
-用户选「步 0：隔离写下提交一笔委托到 SUBMITTED」，步 1/2 不做。方案文本随 `5064da1a` 进 main；步 0 实现（`mcp4-seedd@d9648b4b`）待非作者评审后另行回放。
+演示走隔离写，不等 `PAR-INT-01`。步 0 就够：一笔委托停在`已提交`。轨迹和对账单不在本票。价格政策正文归通道 2。接管保持未开。回汇批次归通道 3。
+
+## 读面核对（先于脚本）
+
+一次性库 `127.0.0.1:55444`，`seed.sh --reset` 之后：
+
+- 只设 `IDP_PARCEL_ISOLATED_WRITE_TENANT=SYN-TENANT-01`：`POST /shipment-requests` 答 `201` `SUBMITTED`；`GET /shipment-request-views` 的列表与详情都答 `403` `ACCESS_CHANNEL_NOT_CONFIGURED`。提交落库之后再查，仍是 403。
+- 读、写都设为 `SYN-TENANT-01`（与 `parcel.sh` 相同）：同一笔列表答 `200` `LISTED`、详情答 `200` `REQUEST_VIEW`，状态都是 `SUBMITTED`。轨迹投影答 `200` `PROJECTIONS_LISTED` 且列表为空。
+
+读开关不开时查阅面仍是未配置。脚本不换入口、不写库去绕过这道 403。
+
+## 脚本
+
+`IDP_PARCEL_API_BASE` 指向已按上面两个开关拉起的 API。每次用新的 `SYN-CUSTREF-` / `SYN-PCLREF-` 时间戳，避免同键重放。断言提交 `201`/`SUBMITTED`，再断言列表与详情都读到这一笔且状态为 `SUBMITTED`。任一口 403 即失败退出。

@@ -115,3 +115,12 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
   租户取值；同段的指令、事实和记账已经是 `SYN-` 实例。现在 CNY 账有已归集与已交出两格，
   SGD 账仍无批次，分户账页对空批次继续写「未配置」。不带 `--reset` 重放本节仍会在既有记账处
   因余额不足中止，批次与交出这两步本身重放走 0。
+- 运行时只多一步，而且**不在** `seed.sh` 里：`submit-one-shipment.sh` 对已经在跑的
+  `parcel-api` 打 `POST /shipment-requests`，断言 `201` / `SUBMITTED`，再从
+  `GET /shipment-request-views` 把同一笔读回来。起进程要与 `parcel.sh` 一样同时设
+  `IDP_PARCEL_ISOLATED_READ_TENANT` 与 `IDP_PARCEL_ISOLATED_WRITE_TENANT`，都是
+  `SYN-TENANT-01`。只开写、不开读时提交能落成已提交，列表和详情仍答 `403`
+  `ACCESS_CHANNEL_NOT_CONFIGURED`——读 Intake 还是未配置，脚本看到 403 就停，不改门。
+  两个都不设时提交口自己也是这道 403（`PAR-INT-01`）。路由、运输履约、节点作业、
+  轨迹投影、异常案件、结算这些运行时页保持空着：本脚本不灌它们，空是如实答案。
+  证据只记 `S`。
