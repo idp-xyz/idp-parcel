@@ -66,3 +66,7 @@ Blocked by: 无
 ## 脚本
 
 `IDP_PARCEL_API_BASE` 指向已按上面两个开关拉起的 API。每次用新的 `SYN-CUSTREF-` / `SYN-PCLREF-` 时间戳，避免同键重放。断言提交 `201`/`SUBMITTED`，再断言列表与详情都读到这一笔且状态为 `SUBMITTED`。任一口 403 即失败退出。
+
+## 验证
+
+脚本提交 `92586f8f`。一次性库 `127.0.0.1:55444`（容器用完即删，未碰 `55432`）上 `seed.sh --reset` 之后，读写真开，`IDP_PARCEL_API_BASE=http://127.0.0.1:19084` 跑脚本退出 0：`已提交 SHR-IS5W4LKRV23DTVEWEOVLX34TF4`，来源键 `SYN-CUSTREF-20260929T044814Z`，列表与详情状态都是 `SUBMITTED`。`seed.sh` 不调用它。
