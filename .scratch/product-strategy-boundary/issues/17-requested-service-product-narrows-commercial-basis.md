@@ -1,7 +1,7 @@
 # 17 委托声明的服务产品参与商业依据解析：同一范围多个产品不再必然`适用冲突`
 
 Category: enhancement
-Status: in-progress——2026-09-29 通道 2 认领，从 `mcp2-psb17@0ca53342` 接着做；隔离 worktree `idp-parcel-mcp2-psb17`、分支 `mcp2-psb17b`（基 `a23d1338`）。此前 ready-for-agent——2026-09-25 通道 2 崩后认领释放（通道 4 按用户令独立接手时处置）：半成品在分支 `mcp2-psb17`（已推 origin），`026be1ae`、`51cac469`、`485a6d33` 三笔是通道 2 做完的之一至之三，`0ca53342` 原样封存它未提交的一份测试（mtime 停在 2026-09-24 22:53:38，没跑过）；接手时写明「从 `mcp2-psb17@0ca53342` 接着做」还是「另起」。此前 in-progress——2026-09-24 通道 2 认领（用户令独立承接），隔离 worktree `idp-parcel-mcp2-psb17`、分支 `mcp2-psb17`。此前 ready-for-agent——同日通道 2 立票并按用户令自决裁定（用户原话「按你的建议，你自己全部开工做，独立完成」），裁决见下
+Status: resolved——2026-09-29 通道 2；完成记录见文末。进 main 的 SHA 等重放后补。此前 in-progress——2026-09-29 通道 2 认领，从 `mcp2-psb17@0ca53342` 接着做；隔离 worktree `idp-parcel-mcp2-psb17`、分支 `mcp2-psb17b`（基 `a23d1338`）。此前 ready-for-agent——2026-09-25 通道 2 崩后认领释放（通道 4 按用户令独立接手时处置）：半成品在分支 `mcp2-psb17`（已推 origin），`026be1ae`、`51cac469`、`485a6d33` 三笔是通道 2 做完的之一至之三，`0ca53342` 原样封存它未提交的一份测试（mtime 停在 2026-09-24 22:53:38，没跑过）；接手时写明「从 `mcp2-psb17@0ca53342` 接着做」还是「另起」。此前 in-progress——2026-09-24 通道 2 认领（用户令独立承接），隔离 worktree `idp-parcel-mcp2-psb17`、分支 `mcp2-psb17`。此前 ready-for-agent——同日通道 2 立票并按用户令自决裁定（用户原话「按你的建议，你自己全部开工做，独立完成」），裁决见下
 Blocked by: 无
 地盘：`internal/partycommercial`（闭包解析键、逐项解析键、闭包落库与迁移）、`internal/parcelshipment` 领域读口与 `adapters/partycommercial`；party-commercial `CONTEXT.md`、UC-PC-002、新 ADR。
 出处：[票 05](./05-demo-journey-criterion-evidence.md) 格 1（实测 + 探针）与判断项 1——演示动线按种子原样灌时的第一个停点。本票承接[票 06](./06-ps-acceptance-and-label-selection-judgment-methods.md) 第 8 项（通道 4 于 `ca26a1ec` 补入）：立票时漏看了那一项，票 06 该项已改指本票，裁决只记在这里。
@@ -37,3 +37,27 @@ Blocked by: 无
 - PS 用例：读口取出声明的产品；适配器把它放进键；未声明时键上缺席。
 - 真库（含 DSN）：闭包落库与回读带这一维。
 - 演示动线（只记 `S`）：种子原样灌、委托声明 `SYN-PROD-CN-SG-EXPRESS` 时受理链越过格 1，结果写回票 05 格 1。
+
+## 完成记录（2026-09-29，通道 2）
+
+从 `mcp2-psb17@0ca53342` 接着做。旧分支指针不动。新分支 `mcp2-psb17b`，基 `a23d1338`（取证时 `origin/main` 同此）。进 main 的 SHA 等重放后补；下面是分支上的 SHA。
+
+重放四笔（出处在 `mcp2-psb17`）：
+- `ba84fc4e` 裁决 4 实现前修订（出处 `bf7a9a30`）
+- `d79ac993` 解析键带委托声明的服务产品（出处 `026be1ae`）
+- `e0791932` 闭包快照带上这一维（出处 `51cac469`）
+- `0ebb2682` 封闭条目名读口与提交版本（出处 `485a6d33`）
+
+续做：
+- `7b1bd8f1` 认领
+- `3b756f67` 登记面折出的键上叠声明的产品。`0ca53342` 封存的 `requested_service_product_keys_test.go` 已采用为集成候选（该封存笔写明非集成候选且当时编译红，没有整笔 cherry-pick）
+- `04f70633` ADR-0153、CONTEXT 解析一节、UC-PC-002、判据按修订后的裁决 4 收口
+- 本记录所在的提交：票面转 resolved，票 05 格 1 写回 17 重走
+
+验收：
+- 领域用例在 `internal/partycommercial/domain` 与 `internal/parcelshipment/domain`；键来源半边在 `requested_service_product_keys_test.go`。
+- 真库：`TestResolutionRoundTripsTheDeclaredServiceProduct` 在本机 55432 门禁上 `-v` 为 PASS，不是 SKIP。
+- 自验：`go build ./...` 与 `go vet ./...` 退出 0。`go test -count=1 -p 1` 跑了动过的包及其反向依赖，外加 `./internal/architecture/...`，带 `IDP_PARCEL_POSTGRES_DSN`，全部 ok，没有 FAIL。
+- 演示动线只记 `S`：见票 05 格 1「17 重走」。代码钉 `04f70633`。
+
+没有非作者评审。评审由通道 1 另派。
