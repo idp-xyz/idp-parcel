@@ -37,13 +37,14 @@ Blocked by: 02、03、04（只挡收口）
 
 - 第 1–4 步的读面全部答 `200`，没有一格停在哨兵上（`/commercial-*`、`/pricing-*`、`/network-catalog` 七族、`/customs-compliance-rules` 两册）。价格政策仍是有答案的空册（`COMMERCIAL_POLICIES_LISTED`，零行），不是哨兵。
 - 第 5 步提交放行：`POST /shipment-requests` 答 `201 SUBMITTED`，生产归属 `IDP_PARCEL` / `OPEN`——墙一、墙二在隔离形态下确实过了。
-- 此后按种子原样灌的演示租户**停在格 1**；反事实变体越过格 1 后**停在格 2**。格 2 在今天的装配上任何登记都解不开，所以格 3 起端到端都走不到，对外命令口逐个实打，进程内的链按代码记。
+- 2026-09-24 盘点：按种子原样灌的演示租户**停在格 1**；反事实变体越过格 1 后**停在格 2**。格 2 在当时的装配上任何登记都解不开，所以格 3 起端到端都走不到，对外命令口逐个实打，进程内的链按代码记。
+- **2026-09-29 更正**（票 17 进 main 之后，见格 1「17 重走」）：按种子原样灌、委托声明 `SYN-PROD-CN-SG-EXPRESS` 时，受理链越过格 1，下一停点是格 2（`REACHABILITY_AS_OF_NOT_CONFIGURED`）。上面那句「停在格 1」只描述 09-24 的取证。
 
 ### 各格
 
 #### 主链阶段 1 · 受理链（`AdvanceAcceptanceChainHandler`：逐包裹可达性 → 整份委托财务控制 → 形成决定）
 
-**格 1 · 商业依据第一阶段：`适用冲突`**（实测 + 探针）
+**格 1 · 商业依据第一阶段：`适用冲突`**（2026-09-24 实测 + 探针；17 重走已越过，见下）
 
 - 口：dispatch 投 `parcel-shipment.shipment-request.submitted` → 可达性段开头的 `formAdoptedBasis` → `CommercialBasisAdapter.ResolveCommercialBasis`。
 - 答复：dispatch 记 `dispatch.consumer_undecided`，错误正文「acceptance chain is undecided: stage REACHABILITY_JUDGMENT, reason COMMERCIAL_BASIS_UNDETERMINED」；重投 3 次后 outbox 那一行落 `ABANDONED`，委托停在`已提交`，`acceptance_processing_attempt` 零行（未决整笔回滚）。PC 那一层的原因在进程上取不到，探针取回：闭包 `APPLICABILITY_CONFLICT`，`ConflictingBases()` 为 `[SERVICE_PRODUCT]`。
@@ -211,7 +212,7 @@ Blocked by: 02、03、04（只挡收口）
 - 「起 dispatch」一节说 dispatch 对逐条投递失败一行日志都不打。今天每次失败都打一条 `WARN`「Delivery failed and was recorded for retry」，未决时正文带 PS 那一层的 `stage` 与 `reason`；PC 那一层的细分原因仍取不到，格 1 靠探针才拿到。
 - 「前置」一节以启动日志为放行判据。`Parcel API listening` 这一行在绑定端口**之前**打出，端口被占时照样出现，随后才是 `ERROR`「Parcel API stopped」「address already in use」——只看那一行会把没起来的进程当成起来了。
 - 「取证」一节的行数随种子变了：`/commercial-service-products` 今天 2 行，`/commercial-policies?kind=SETTLEMENT_POLICY` 今天 1 行（表里分别是 1 与 0）。
-- 第 5 步「委托侧两种跑法」的第二种只写到`已提交`。按种子原样灌，受理链停在格 1，重投烧完落 `ABANDONED`——与 `first-tenant-runway/07` 当年只灌治理那一行的现场同形，成因不同。
+- 第 5 步「委托侧两种跑法」的第二种只写到`已提交`。2026-09-24 按种子原样灌，受理链停在格 1，重投烧完落 `ABANDONED`——与 `first-tenant-runway/07` 当年只灌治理那一行的现场同形，成因不同。2026-09-29 票 17 重走后，同一灌法越过格 1，见格 1「17 重走」。
 
 ### 判断项
 
