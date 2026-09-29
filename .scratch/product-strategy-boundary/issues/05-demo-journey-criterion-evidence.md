@@ -50,6 +50,7 @@ Blocked by: 02、03、04（只挡收口）
 - 成因：发布批里 `SYN-PROD-CN-SG-EXPRESS` 与 `SYN-PROD-CN-SG-ECON` 两个服务产品同在 `SYN-SCOPE-01`（后者随 `d61f2b7d` 于 08-28 加入）。解析键按（租户，客户账户）登记一行，范围固定为 `SYN-SCOPE-01`、没有产品维；`CommercialResolutionKeys.FormResolutionKey` 只读那一行，委托草案里的 `requestedServiceProduct` 与 `destinationServiceScope` 进摘要、不进键。多候选答`适用冲突`是 UC-PC-002 的设计行为。
 - 归类：机制缺口 + 产品策略缺执行器。登记面没有让委托声明参与折键的形状，属机制；「按委托声明选服务范围或产品」是不看任何租户就答得出的判断方法，属产品策略。不是租户取值：租户登记得再全，同一客户账户下两个产品在这张登记面上也只能冲突。演示种子同范围两个产品是这一格的触发条件，不是缺陷——两半落地后那是正当形态。
 - 去处：[票 17](./17-requested-service-product-narrows-commercial-basis.md)（2026-09-24 通道 2 立，承接[票 06](./06-ps-acceptance-and-label-selection-judgment-methods.md) 第 8 项——那一项由通道 4 于 `ca26a1ec` 补入，本格此前一直写着待立票）。
+- **17 重走**（2026-09-29 通道 2，代码钉 `04f70633`，分支 `mcp2-psb17b`；一次性库 `idp_mcp2_psb17` 按 `scripts/demo-seeds/seed.sh` 原样灌，走完删库。证据只记 `S`）：委托草案 `requestedServiceProduct` 为 `SYN-PROD-CN-SG-EXPRESS`，`POST /shipment-requests` 答 `201 SUBMITTED`。dispatch 把 `parcel-shipment.shipment-request.submitted` 一拍投成 `PUBLISHED`。闭包落库唯一解出，快照 `serviceProduct` 为 `SYN-PROD-CN-SG-EXPRESS`，采用的服务产品是它（同范围的 `SYN-PROD-CN-SG-ECON` 没有进采用集）。`acceptance_processing_attempt` 一行：`reason_ref=REACHABILITY_AS_OF_NOT_CONFIGURED`，`resume_path=OPERATOR_REGISTRATION`。格 1 越过，下一停点是格 2。
 
 **格 2 · 商业依据第二阶段：可达性判断时点`未配置`**（实测，反事实变体）
 
