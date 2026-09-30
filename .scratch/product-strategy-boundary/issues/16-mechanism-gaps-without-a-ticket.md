@@ -83,3 +83,13 @@ Blocked by: 无
 - **核过无发现**：取 `CommercialResolutionReferenceFor`，即接受决定上固定的解析，与 ADR-0064 同形；接受后不再形成新提交版本，未接受答未形成；按租户取行、租户不一致有哨兵；`TestTheAcceptedDecisionResolutionSourceReadsTheStoredDecision` 带 DSN `-v` 为 PASS，走生产 `ShipmentRequests`，末行改答未配置、删租户核对都红；链仍停在约束那一格，属实；票 16 第 4 项落地句与开发主线补记与代码一致；第 2–3 项、票 06 第 3 项、租户行、解析号未碰；`internal/architecture` 过。
 - 推送方验证：隔离检出 `220fd8b1` 上清点另成 `6e741abb`；gofmt 空、build 与 vet 绿，真库用例单跑 PASS，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。
 - **结论：不重放**，回作者同一分支修（`a8f632d2` 之上）；修完两轴重跑。
+
+**评审 ← 通道 1（隔离子代理，非作者）· 钉 `55a0d7f1`（通道 3 分支 `mcp3-psb16-02`，第 2 项，ADR-0158，基 `d3942581`）· 2026-09-30 22:20**
+
+- **阻断**：
+  - 推送方全量（重放到 `1712eccc` 之上为 `ba9e0253`、清点 `1cfd506b`，带 DSN `-p 1 -count=1`）红：`internal/architecture` 的 `TestEveryPersistenceWriteMethodCarriesTransactionRequiredEvidence`——新写口 `SettlementAccounts.Save` 没有「无事务即拒」的负向用例。作者自验未跑 `internal/architecture`。
+  - Spec（推送方核过代码）：目录键里的「结算政策」实为政策版本。生产 `settlementTermsFor` 交回的回显形如 `<对象>/<版本>`，`RegisteredAccountDirectory.FindSettlementAccount` 原样拿它比 `settlement_policy_id`，而登记格名为 `settlementPolicyId`、`SettlementPolicyReference` 注释写「版本生命周期不在本上下文」。租户按政策标识登记，生产永远查不到；政策升版原账户即失配，另登要么冲突要么拆账。用例两侧都写同一版本串，把它盖住了；ADR-0158 未讨论。
+  - Standards：ADR-0158 推翻 ADR-0081 决定六「结算账户目录……全部留 nil」，未按 ADR 索引标「部分停用」（Status、Links 前向指针与索引行）；「候选与反方」把对账周期、业务时区、截单时刻、付款条件说成 `PAR-SET-01` 点名的条件，前三格属 `PAR-SET-09`、付款条件属 `PAR-COM-10`（商业侧结算政策）——账户上再必填一份原文，就是第二套口径（红线「单一权威」）。
+- **非阻断**：结算相对方、责任法人、租户三个谓词与重放/冲突分类无用例守住（Spec 变异：去掉任一个或让重放答已登记，全绿），`settlement-account` 命令与 `SettlementAccountFromJSON` 无测试；生产装配无守卫（把 `acceptanceFinancialControl` 里的目录换回 nil，`cmd/parcel-dispatch` 全绿）；`SettlementAccountDirectory`、`NewPolicyBackedControlScopeSource` 注释仍写目录属「实例半边」、nil「正是首发要停的地方」，`registrationjson` 包头注只讲资金事实；「五格唯一」「不设修订」是新不变量，只进了 ADR 没先进 SA `CONTEXT`；`ChargeDirectionFromName` 与 postgres 包 `chargeDirectionFrom` 重复且把词表解析放进领域层，`SettlementPolicyReference`、`ResponsibilityBasis` 与既有 `AdoptedPolicyReference`、`ContractBasisReference` 重复，`FindSettlementAccount` 与 `FormControlScope` 各译一遍法人与币种且错误归类不一；`classify` 第二次查询结果不被使用；`Save` 是全仓唯一用 SAVEPOINT 的写法（SA 其余写口 `ON CONFLICT DO NOTHING` 再读回）；「付款方与相对方重复」「方向词不在词表」包成 `ErrBlankValue`；PS 适配器依赖带 `Save` 的 `SettlementAccountRegister`，宜收窄为只读口（先例 `AdoptedFundsFactView`）。
+- **核过无发现**：「只查应收」有 ADR 决定三与注释支撑；五格唯一约束落在库上；未登种子行；第 3–4 项与 `ControlAmountSource` 未动；两条真库用例带 DSN `-v` 为 PASS，去掉政策谓词会红。
+- **结论：不重放**，回作者同一分支修；修完两轴重跑。
