@@ -7,6 +7,24 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
+func TestTheAllocationFormCommandTranslatesBeforeTheTransaction(t *testing.T) {
+	raw := []byte(`{
+		"tenantId": "SYN-T1",
+		"ruleVersion": "rule-1/v1",
+		"form": "BY_WEIGHT"
+	}`)
+	dispatch, err := commandFor(commandAllocationForm, raw)
+	if err != nil || dispatch == nil {
+		t.Fatalf("allocation-form 译装失败：dispatch=%v err=%v", dispatch, err)
+	}
+	if _, err := commandFor(commandAllocationForm, []byte(`{"tenantId":"SYN-T1","ruleVersion":"rule-1/v1","form":"BY_WEIGHT","basis":1}`)); err == nil {
+		t.Fatal("权重被收成分法登记")
+	}
+	if _, err := commandFor(commandAllocationForm, []byte(`{"tenantId":"SYN-T1","ruleVersion":"rule-1/v1","form":"EQUAL"}`)); err == nil {
+		t.Fatal("均摊被收成一套分法")
+	}
+}
+
 func TestTheSettlementAccountCommandTranslatesBeforeTheTransaction(t *testing.T) {
 	raw := []byte(`{
 		"tenantId": "SYN-T1",

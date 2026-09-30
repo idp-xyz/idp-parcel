@@ -95,7 +95,8 @@ type PortionDirective struct {
 }
 
 // AllocateCostCommand 携带一次成本分摊。刻意没有规则字段——规则版本由视图给出（无
-// 规则不分摊），份额是规则引擎算好的输入，守恒由领域把门。
+// 规则不分摊），份额是已经算好的输入，守恒由领域把门。按重、按件、按收入三套分法
+// 在 ApportionCosts 里展开，没登记分法时那里答未配置，不在这里默认均摊。
 type AllocateCostCommand struct {
 	TenantID    domain.TenantID
 	Allocation  string
