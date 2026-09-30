@@ -49,3 +49,4 @@ Date: 2026-09-30
 - [settlement-accounting CONTEXT](../domain/settlement-accounting/CONTEXT.md)
 - 票 `.scratch/product-strategy-boundary/issues/16-mechanism-gaps-without-a-ticket.md` 第 3 项
 - [ADR-0161](./0161-claim-and-recovery-amounts-use-one-grammar.md)：金额规则版本之后，限额、比例、免赔怎样组成金额
+- [ADR-0163](./0163-supplier-audit-escalation-compares-the-matched-amount-to-a-ceiling.md)：审核授权之后，已匹配金额怎样相对上限升级

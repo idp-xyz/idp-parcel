@@ -344,6 +344,7 @@ func TestAuditStopsOnUnconfiguredInstanceHalves(t *testing.T) {
 		for _, reason := range []application.AuditUndecidedReason{
 			application.AuditBillStoreUnavailable, application.AuditAuthorityUnavailable, application.AuditAuthorityUnconfigured,
 			application.PayableAccountUnavailable, application.PayableAccountUnconfigured, application.PayableStoreUnavailable,
+			application.AuditEscalationViewUnavailable, application.AuditEscalationUnconfigured,
 		} {
 			label := reason.String()
 			if label == "" {
@@ -351,11 +352,11 @@ func TestAuditStopsOnUnconfiguredInstanceHalves(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 6 {
+		if len(labels) != 8 {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if application.AuditUndecidedReason(len(labels)+1).String() != "" {
-			t.Fatal("第七个未决原因带了标签——封闭集合被悄悄放开")
+			t.Fatal("第九个未决原因带了标签——封闭集合被悄悄放开")
 		}
 	})
 }
@@ -497,6 +498,42 @@ func TestASupplierCreditNoteAppendsToItsPayable(t *testing.T) {
 		}
 		if application.CreditUndecidedReason(len(labels)+1).String() != "" {
 			t.Fatal("第三个未决原因带了标签——封闭集合被悄悄放开")
+		}
+	})
+}
+
+func TestAnAuditedAmountAboveTheCeilingMustEscalate(t *testing.T) {
+	fixture := receivedFixture(t)
+	ceiling, err := domain.NewAuditEscalationCeiling(11_999)
+	if err != nil {
+		t.Fatalf("ceiling: %v", err)
+	}
+	fixture.escalation.ceiling = ceiling
+
+	result, err := fixture.handler.Audit(context.Background(), auditCommand(t, "bill-1", "line-1", "payable-1"))
+	if err != nil {
+		t.Fatalf("audit: %v", err)
+	}
+	if result.Outcome() != application.AuditMustEscalate {
+		t.Fatalf("outcome = %q，想要 AUDIT_MUST_ESCALATE", result.Outcome())
+	}
+	if len(fixture.payables.records) != 0 {
+		t.Fatal("超过上限仍写下了审核应付")
+	}
+
+	t.Run("a missing ceiling stays unconfigured", func(t *testing.T) {
+		unconfigured := receivedFixture(t)
+		unconfigured.escalation.configured = false
+		result, err := unconfigured.handler.Audit(context.Background(), auditCommand(t, "bill-1", "line-1", "payable-1"))
+		if err != nil {
+			t.Fatalf("audit: %v", err)
+		}
+		if result.Outcome() != application.AuditUndecided ||
+			result.UndecidedReason() != application.AuditEscalationUnconfigured {
+			t.Fatalf("outcome = %q reason = %q", result.Outcome(), result.UndecidedReason())
+		}
+		if len(unconfigured.payables.records) != 0 {
+			t.Fatal("没登记上限仍写下了审核应付")
 		}
 	})
 }

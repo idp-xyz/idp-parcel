@@ -134,6 +134,7 @@ type ReceiveSupplierBillDeps struct {
 	Costs       ports.ExpectedCostView
 	Authority   ports.SupplierAuditAuthorityView
 	Accounts    ports.SupplierPayableAccountView
+	Escalation  ports.AuditEscalationCeilingView
 	Payables    ports.AuditedPayableStore
 	CreditNotes ports.SupplierCreditNoteStore
 	Downstream  ports.SupplierBillHandoff

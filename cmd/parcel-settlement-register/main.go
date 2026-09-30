@@ -67,6 +67,7 @@ type registrar struct {
 	catalogues *application.RegisterSettlementCatalogueHandler
 	grammars   *application.RegisterAmountGrammarHandler
 	forms      *application.RegisterAllocationFormHandler
+	ceilings   *application.RegisterAuditEscalationCeilingHandler
 	transactor bentoapp.Transactor
 }
 
@@ -219,12 +220,21 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造分摊分法登记：%w", err)
 	}
+	ceilings, err := sapostgres.NewAuditEscalationCeilings(db)
+	if err != nil {
+		return none, fmt.Errorf("构造越权升级上限登记册：%w", err)
+	}
+	ceilingHandler, err := application.NewRegisterAuditEscalationCeilingHandler(ceilings, systemClock{})
+	if err != nil {
+		return none, fmt.Errorf("构造越权升级上限登记：%w", err)
+	}
 	return registrar{
 		funds:      funds,
 		accounts:   accountHandler,
 		catalogues: catalogueHandler,
 		grammars:   grammarHandler,
 		forms:      formHandler,
+		ceilings:   ceilingHandler,
 		transactor: db.Transactor(),
 	}, nil
 }

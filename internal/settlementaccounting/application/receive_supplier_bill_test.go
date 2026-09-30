@@ -116,6 +116,39 @@ func (double *authorityViewDouble) LoadSupplierAuditAuthority(
 	return auditor, true, err
 }
 
+// escalationCeilingDouble 在夹具里登记上限 12000，等于已匹配行的金额。等于上限仍在权限内。
+// 这是测试替这一组供应商填的租户取值，生产代码没有这份默认。
+type escalationCeilingDouble struct {
+	configured bool
+	ceiling    domain.AuditEscalationCeiling
+	err        error
+}
+
+func (double *escalationCeilingDouble) LoadAuditEscalationCeiling(
+	_ context.Context,
+	_ domain.TenantID,
+	_ domain.SupplierPartyReference,
+	_ domain.LegalEntityReference,
+	_ domain.CurrencyCode,
+) (domain.AuditEscalationCeiling, bool, error) {
+	if double.err != nil {
+		return domain.AuditEscalationCeiling{}, false, double.err
+	}
+	if !double.configured {
+		return domain.AuditEscalationCeiling{}, false, nil
+	}
+	return double.ceiling, true, nil
+}
+
+func fixtureEscalationCeiling(t *testing.T) domain.AuditEscalationCeiling {
+	t.Helper()
+	ceiling, err := domain.NewAuditEscalationCeiling(12_000)
+	if err != nil {
+		t.Fatalf("ceiling: %v", err)
+	}
+	return ceiling
+}
+
 type billHandoffDouble struct {
 	intents []ports.SupplierBillHandoffIntent
 	err     error
@@ -141,6 +174,7 @@ type billFixture struct {
 	costs       *costViewDouble
 	authority   *authorityViewDouble
 	accounts    *accountViewDouble
+	escalation  *escalationCeilingDouble
 	payables    *payableStoreDouble
 	creditNotes *creditNoteStoreDouble
 	handoff     *billHandoffDouble
@@ -154,6 +188,7 @@ func newBillFixture(t *testing.T) *billFixture {
 		costs:       &costViewDouble{costs: map[string]domain.SupplierExpectedCost{}},
 		authority:   &authorityViewDouble{configured: true},
 		accounts:    &accountViewDouble{configured: true},
+		escalation:  &escalationCeilingDouble{configured: true, ceiling: fixtureEscalationCeiling(t)},
 		payables:    newPayableStore(),
 		creditNotes: newCreditNoteStore(),
 		handoff:     &billHandoffDouble{},
@@ -163,6 +198,7 @@ func newBillFixture(t *testing.T) *billFixture {
 		Costs:       fixture.costs,
 		Authority:   fixture.authority,
 		Accounts:    fixture.accounts,
+		Escalation:  fixture.escalation,
 		Payables:    fixture.payables,
 		CreditNotes: fixture.creditNotes,
 		Downstream:  fixture.handoff,

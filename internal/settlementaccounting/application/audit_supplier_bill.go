@@ -35,6 +35,7 @@ const (
 	PayableExistingResult
 	PayableConflict
 	LineNotAuditable
+	AuditMustEscalate
 	AuditNotAccepted
 	AuditUndecided
 )
@@ -49,6 +50,8 @@ func (outcome AuditOutcome) String() string {
 		return "PAYABLE_CONFLICT"
 	case LineNotAuditable:
 		return "LINE_NOT_AUDITABLE"
+	case AuditMustEscalate:
+		return "AUDIT_MUST_ESCALATE"
 	case AuditNotAccepted:
 		return "SOURCE_NOT_ACCEPTED"
 	case AuditUndecided:
@@ -71,6 +74,8 @@ const (
 	PayableAccountUnavailable
 	PayableAccountUnconfigured
 	PayableStoreUnavailable
+	AuditEscalationViewUnavailable
+	AuditEscalationUnconfigured
 )
 
 func (reason AuditUndecidedReason) String() string {
@@ -87,6 +92,10 @@ func (reason AuditUndecidedReason) String() string {
 		return "PAYABLE_ACCOUNT_UNCONFIGURED"
 	case PayableStoreUnavailable:
 		return "PAYABLE_STORE_UNAVAILABLE"
+	case AuditEscalationViewUnavailable:
+		return "AUDIT_ESCALATION_VIEW_UNAVAILABLE"
+	case AuditEscalationUnconfigured:
+		return "AUDIT_ESCALATION_UNCONFIGURED"
 	default:
 		return ""
 	}
@@ -213,6 +222,11 @@ func (handler *ReceiveSupplierBillHandler) Audit(
 	if err != nil {
 		return AuditResult{outcome: AuditNotAccepted}, nil
 	}
+	if stopped, ok := handler.escalationStop(
+		ctx, command.TenantID, reception.Claim.Supplier(), reception.Claim.LegalEntity(),
+		match.Currency(), match.ClaimedMinor(), command.Claim.String()); ok {
+		return stopped, nil
+	}
 
 	record := ports.AuditedPayableRecord{
 		Key:           payableKey,
@@ -248,6 +262,39 @@ func matchForLine(record ports.BillReceptionRecord, line domain.BillLineReferenc
 		}
 	}
 	return domain.BillLineMatch{}, false
+}
+
+func (handler *ReceiveSupplierBillHandler) escalationStop(
+	ctx context.Context,
+	tenant domain.TenantID,
+	supplier domain.SupplierPartyReference,
+	legalEntity domain.LegalEntityReference,
+	currency domain.CurrencyCode,
+	amountMinor int64,
+	subject string,
+) (AuditResult, bool) {
+	if handler.deps.Escalation == nil {
+		return auditUndecided(AuditEscalationViewUnavailable, subject), true
+	}
+	ceiling, found, err := handler.deps.Escalation.LoadAuditEscalationCeiling(
+		ctx, tenant, supplier, legalEntity, currency)
+	if err != nil {
+		return auditUndecided(AuditEscalationViewUnavailable, subject), true
+	}
+	if !found {
+		return auditUndecided(AuditEscalationUnconfigured, subject), true
+	}
+	judgment, err := ceiling.Judge(amountMinor)
+	if err != nil {
+		return AuditResult{outcome: AuditNotAccepted}, true
+	}
+	if judgment == domain.AuditMustEscalate {
+		return AuditResult{
+			outcome:      AuditMustEscalate,
+			continuation: billContinuation("AUDIT_MUST_ESCALATE", subject),
+		}, true
+	}
+	return AuditResult{}, false
 }
 
 func auditUndecided(reason AuditUndecidedReason, subject string) AuditResult {
