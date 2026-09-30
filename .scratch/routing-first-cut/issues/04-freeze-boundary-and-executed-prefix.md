@@ -1,7 +1,7 @@
 # 04 冻结边界与已执行前缀的判定
 
 Category: enhancement
-Status: in-progress——2026-09-30 分支 mcp2-rfc04（ADR-0172），尚未进 main
+Status: resolved——2026-10-01 进 main（`67602b37→efc1fee8`，补提交 `c6db4c51→df6c45e3`，清点 `255e2a6d`，ADR-0172）。Blocked by 03 已在 main
 Blocked by: 03（路由策略版本的内容载体）
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「路由策略族」那一步
 地盘：network-routing 领域与复核编排；路由策略版本内容（随 03 的载体扩，迁移号开工时预留）；network-routing [`CONTEXT.md`](../../../docs/domain/network-routing/CONTEXT.md) 相关句。
@@ -19,6 +19,22 @@ Blocked by: 03（路由策略版本的内容载体）
 
 ## 完成判据
 
-- [ ] 领域用例：前缀判定（可控节点在计划节点上 / 不在 / 尚无可控节点）与冻结判定各分格覆盖。
-- [ ] 复核用例覆盖 `AT-NR-041`。
-- [ ] 策略版本未声明冻结形态时，冻结判断答未配置，不当作「未冻结」。
+- [x] 领域用例：前缀判定（可控节点在计划节点上 / 不在 / 尚无可控节点）与冻结判定各分格覆盖。
+- [x] 复核用例覆盖 `AT-NR-041`。
+- [x] 策略版本未声明冻结形态时，冻结判断答未配置，不当作「未冻结」。
+
+## Comments
+
+**评审 ← 通道 1 · 钉 `67602b37` · 2026-10-01**
+
+- **阻断**：无。架构门禁 PASS。`TestFreezeStaysUnconfiguredWhenTheFormIsUndeclared`、`TestAFrozenPlanIsKeptWhenItIsStillExecutable`、`TestExecutedPrefixDoesNotInventANodeFromAScan` PASS。
+- **结论：可重放**。全量在拣选后才红：两条既有「仍适用」收寄用例的证据没声明冻结形态，答了 `FREEZE_FORM_UNCONFIGURED`。退回原分支补提交，不改写 `67602b37`。
+
+**补提交评审 ← 通道 1 · 钉 `c6db4c51`**
+
+- 只改两份测试。`evidenceWithOpenFreeze` 声明 `REMAINING_SEGMENT_COUNT`，限额 0；计划一段、收寄在首节点，剩余段数 1，已配置且未越过。未声明路径未改回「未冻结」。
+- **阻断**：无。
+
+**进 main 记录（2026-10-01，通道 1）**
+
+重放到 `c06bc7a7` 之上，零冲突：`67602b37→efc1fee8`，`c6db4c51→df6c45e3`，清点 `255e2a6d`。ADR 索引按编号把 0172 排到 0170、0171 之后。全量 `go test -p 1 -count=1 ./...`：135 ok / 0 FAIL。分支作封存出处。
