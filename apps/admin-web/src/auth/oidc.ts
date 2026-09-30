@@ -26,6 +26,8 @@ const SESSION_KEY = 'parcel.oidc.session';
 // 提前量：到期前这么久就当作不可用并续期，避免拿着临界令牌发请求。
 const RENEW_SKEW_MS = 30_000;
 
+// 令牌端点不可达时不能让登录门永久停在「正在检查登录状态」；超过这段时间交给登录门呈现可重试的错误。
+const TOKEN_REQUEST_TIMEOUT_MS = 10_000;
 // 签发方漏给 expires_in 时的兜底寿命。不能记成「此刻已过期」——那会让每次
 // 会话检查都去换一次令牌，把轮换型 refresh_token 磨完。
 const FALLBACK_LIFETIME_SECONDS = 300;
@@ -179,12 +181,22 @@ async function doCompleteLogin(): Promise<{ session: OidcSession; returnTo: stri
 async function exchange(form: Record<string, string>, previous?: OidcSession): Promise<OidcSession> {
   let response: Response;
   try {
-    response = await fetch(TOKEN_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams(form).toString(),
-    });
-  } catch {
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), TOKEN_REQUEST_TIMEOUT_MS);
+    try {
+      response = await fetch(TOKEN_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+        body: new URLSearchParams(form).toString(),
+        signal: controller.signal,
+      });
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  } catch (error) {
+    if (error instanceof DOMException && error.name === 'AbortError') {
+      throw new Error('令牌端点响应超时，请检查开发代理 /oidc、网络连接或统一身份服务状态');
+    }
     throw new Error('连不上令牌端点，请检查开发代理 /oidc 是否可达');
   }
   const body = (await response.json().catch(() => ({}))) as Record<string, unknown>;
