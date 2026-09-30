@@ -4,6 +4,7 @@ import type { GroupLegalEntityRecord } from './api';
 import {
   countLegalEntities,
   defaultLegalEntitySort,
+  effectiveShareOfInUse,
   filterLegalEntities,
   legalEntityCountSummary,
   legalEntityNeedsAttention,
@@ -92,6 +93,14 @@ test('countLegalEntities 按状态与待补计数', () => {
     attention: 2,
   });
   deepEqual(countLegalEntities([record({ status: 'SOMETHING_NEW' })]).byStatus, { REGISTERED: 0, EFFECTIVE: 0, DEACTIVATED: 0 });
+});
+
+// Covers: 占比分母只数在用两格——已停用的不进分母；没有在用法人答 null 而不是 0。
+test('effectiveShareOfInUse 只按在用法人算', () => {
+  equal(effectiveShareOfInUse(countLegalEntities(rows)), 67);
+  equal(effectiveShareOfInUse(countLegalEntities([record({ status: 'EFFECTIVE' })])), 100);
+  equal(effectiveShareOfInUse(countLegalEntities([record({ status: 'DEACTIVATED' })])), null);
+  equal(effectiveShareOfInUse(countLegalEntities([])), null);
 });
 
 // Covers: 默认按登记时间新→旧；四列各按其键，方向随 dir；排序不改原数组；认不得的键原样交回。

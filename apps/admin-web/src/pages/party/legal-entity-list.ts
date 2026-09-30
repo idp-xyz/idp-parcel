@@ -31,7 +31,8 @@ export const defaultLegalEntitySort: WorkbenchSort = { key: 'registered-at', dir
 
 /**
  * 待补：最新修订登记于身份层落地之前（注册国家与终身注册号两格没有），或参与方册查无这个身份（名称转写不到）。
- * 两件都要运营方再登一笔才会好，是这张册上唯一「需要人去做点什么」的形态；停用是终局，不算待补。
+ * 两件都要有人去处理，是这张册上唯一「需要人去做点什么」的形态，但处置不同：前者登记下一修订补齐；后者是写入门
+ * 失败留下的悬空（api.ts GroupLegalEntityRecord 头注），法人钉着的参与方身份改不了，要去查参与方册。停用是终局，不算待补。
  */
 export function legalEntityNeedsAttention(row: GroupLegalEntityRecord): boolean {
   return !row.identityLayerRegistered || !row.partyNameKnown;
@@ -64,6 +65,16 @@ export function countLegalEntities(rows: readonly GroupLegalEntityRecord[]): Leg
     if (legalEntityNeedsAttention(row)) attention += 1;
   }
   return { total: rows.length, byStatus, attention };
+}
+
+/**
+ * 在用法人里已生效的占比（整数百分比）。分母只数在用的两格（已登记、已生效）：已停用的永远不会再生效，算进分母
+ * 这条就永远到不了 100%。没有在用法人时答 null，页面显「—」而不是给空集编一个 0%。
+ */
+export function effectiveShareOfInUse(counts: LegalEntityCounts): number | null {
+  const inUse = counts.byStatus.REGISTERED + counts.byStatus.EFFECTIVE;
+  if (inUse === 0) return null;
+  return Math.round((counts.byStatus.EFFECTIVE / inUse) * 100);
 }
 
 /**

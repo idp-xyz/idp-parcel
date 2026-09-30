@@ -13,8 +13,7 @@ import {
 import type { GroupLegalEntityRecord } from './api';
 import { identityLayerAbsentNote, identityStatusLabels, labelOf, legalEntityKindLabels, partyNameUnknownNote } from './presentation';
 import { identityLayerCellsOf } from './legal-entity-identity';
-import { legalEntityLifecycle, type LifecycleStageState } from './legal-entity-lifecycle';
-import { legalEntityNeedsAttention } from './legal-entity-list';
+import { legalEntityLifecycle, lifecycleConnectorReached, type LifecycleStageState } from './legal-entity-lifecycle';
 import { LegalEntityProfileSection } from './LegalEntityProfileSection';
 import { legalEntityRevisionHistory } from './LegalEntityDetailPage';
 import { RevisionHistorySection } from './RevisionHistorySection';
@@ -22,16 +21,29 @@ import { DetailRow, Instant, UnknownPartyName, statusBadge, useCopyToClipboard }
 
 type PanelTab = 'overview' | 'profile' | 'history';
 
-function RefChip({ label, value, title }: { label: string; value?: string; title: string }) {
+/** 引用签：点一下复制，与参照页同一手势。 */
+function RefChip({
+  label,
+  value,
+  title,
+  onCopy,
+}: {
+  label: string;
+  value?: string;
+  title: string;
+  onCopy: (label: string, value: string) => void;
+}) {
   if (!value) return null;
   return (
-    <span
-      title={title}
-      className="inline-flex max-w-full items-center gap-1 rounded border border-idpxyz-border bg-idpxyz-inputBg/50 px-1.5 py-0.5 text-[10px]"
+    <button
+      type="button"
+      title={`${title}（点击复制）`}
+      onClick={() => onCopy(title, value)}
+      className="inline-flex max-w-full items-center gap-1 rounded border border-idpxyz-border bg-idpxyz-inputBg/50 px-1.5 py-0.5 text-[10px] hover:border-idpxyz-accent/50"
     >
       <span className="text-idpxyz-textMuted">{label}</span>
       <span className="truncate font-mono text-idpxyz-text">{value}</span>
-    </span>
+    </button>
   );
 }
 
@@ -74,7 +86,9 @@ function Lifecycle({ row }: { row: GroupLegalEntityRecord }) {
           </div>
           {index < stages.length - 1 && (
             <span
-              className={`mx-1.5 mb-3.5 h-px flex-1 ${stage.state === 'done' ? 'bg-emerald-500/40' : 'bg-idpxyz-border'}`}
+              className={`mx-1.5 mb-3.5 h-px flex-1 ${
+                lifecycleConnectorReached(stage, stages[index + 1]) ? 'bg-emerald-500/40' : 'bg-idpxyz-border'
+              }`}
               aria-hidden="true"
             />
           )}
@@ -102,10 +116,14 @@ export function LegalEntityDetailPanel({
   onOpenObjectPage: () => void;
 }) {
   const [tab, setTab] = useState<PanelTab>('overview');
+  const [formOpenRequest, setFormOpenRequest] = useState(0);
   const copy = useCopyToClipboard();
   const identity = identityLayerCellsOf(row);
-  const attention = legalEntityNeedsAttention(row);
   const kind = labelOf(legalEntityKindLabels, row.kind);
+  const openProfileForm = () => {
+    setTab('profile');
+    setFormOpenRequest((count) => count + 1);
+  };
 
   return (
     <div className="flex h-full w-full flex-col bg-idpxyz-bg" aria-label={`责任法人 ${row.legalEntityId}`}>
@@ -123,13 +141,13 @@ export function LegalEntityDetailPanel({
               <Instant value={row.registeredAt} />
             </p>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
-              <RefChip label="国家" value={identity?.country} title="注册国家 / 地区" />
-              <RefChip label="注册号" value={identity?.numbers} title="终身注册号" />
-              <RefChip label="依据" value={row.basis} title="登记依据" />
+              <RefChip label="国家" value={identity?.country} title="注册国家 / 地区" onCopy={copy} />
+              <RefChip label="注册号" value={identity?.numbers} title="终身注册号" onCopy={copy} />
+              <RefChip label="依据" value={row.basis} title="登记依据" onCopy={copy} />
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <Button size="sm" onClick={() => setTab('profile')}>
+            <Button size="sm" onClick={openProfileForm}>
               <FileText className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
               登记资料修订
             </Button>
@@ -156,7 +174,7 @@ export function LegalEntityDetailPanel({
                 }}
               >
                 <Users className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-                到业务参与方页停用
+                到业务参与方页停用 <span className="ml-1 font-mono text-idpxyz-textMuted">{row.partyId}</span>
               </MenuItem>
             </DropdownMenu>
             <Button variant="ghost" size="icon" onClick={onClose} aria-label="关闭详情" title="关闭（Esc）">
@@ -176,14 +194,19 @@ export function LegalEntityDetailPanel({
             </span>
           </div>
         )}
-        {attention && (
+        {/* 两件待补各报各的处置（判据在 legal-entity-list.ts legalEntityNeedsAttention）：身份层缺格登下一修订能补；
+            参与方悬空是写入门失败留下的，登新修订补不上。 */}
+        {!row.identityLayerRegistered && (
+          <div className="flex items-center gap-2 rounded border border-orange-500/30 bg-orange-500/10 px-2.5 py-1.5 text-[11px] text-orange-400">
+            <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <span>待补：身份层两格{identityLayerAbsentNote}。登记同一法人的下一修订补齐（列表页头「登记责任法人」）。</span>
+          </div>
+        )}
+        {!row.partyNameKnown && (
           <div className="flex items-center gap-2 rounded border border-orange-500/30 bg-orange-500/10 px-2.5 py-1.5 text-[11px] text-orange-400">
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span>
-              待补：
-              {!row.identityLayerRegistered ? `身份层两格${identityLayerAbsentNote}` : ''}
-              {!row.identityLayerRegistered && !row.partyNameKnown ? '；' : ''}
-              {!row.partyNameKnown ? partyNameUnknownNote : ''}。登记下一修订补齐（页头「登记责任法人」）。
+              待查：{partyNameUnknownNote}（{row.partyId}）。这是写入门失败留下的悬空，登记新修订补不上，需到业务参与方页核对参与方册。
             </span>
           </div>
         )}
@@ -247,7 +270,11 @@ export function LegalEntityDetailPanel({
             </dl>
           </TabsContent>
           <TabsContent value="profile" className="mt-0">
-            <LegalEntityProfileSection key={row.legalEntityId} legalEntityId={row.legalEntityId} />
+            <LegalEntityProfileSection
+              key={row.legalEntityId}
+              legalEntityId={row.legalEntityId}
+              formOpenRequest={formOpenRequest}
+            />
           </TabsContent>
           <TabsContent value="history" className="mt-0">
             <RevisionHistorySection register={legalEntityRevisionHistory} subjectId={row.legalEntityId} revision={row.revision} />

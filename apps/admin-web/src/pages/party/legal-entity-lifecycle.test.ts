@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
 import type { GroupLegalEntityRecord } from './api';
-import { legalEntityLifecycle } from './legal-entity-lifecycle';
+import { legalEntityLifecycle, lifecycleConnectorReached } from './legal-entity-lifecycle';
 
 function record(over: Partial<GroupLegalEntityRecord>): GroupLegalEntityRecord {
   return {
@@ -36,6 +36,20 @@ test('已停用时生效段按时点判走过或跳过', () => {
     ['done', 'skipped', 'current'],
   );
   deepEqual(states(record({ status: 'DEACTIVATED', deactivatedAt: 'not-a-time' })), ['done', 'done', 'current']);
+});
+
+// Covers: 连线只在前段走过、后段走过或正在时画成走过——连进、连出被跳过的那段都不算。
+test('lifecycleConnectorReached 不把跳过的那段画成走过', () => {
+  const connectors = (row: GroupLegalEntityRecord) => {
+    const stages = legalEntityLifecycle(row)!;
+    return [lifecycleConnectorReached(stages[0], stages[1]), lifecycleConnectorReached(stages[1], stages[2])];
+  };
+  deepEqual(connectors(record({ status: 'EFFECTIVE' })), [true, false]);
+  deepEqual(connectors(record({ status: 'DEACTIVATED', deactivatedAt: '2026-06-01T00:00:00Z' })), [true, true]);
+  deepEqual(
+    connectors(record({ status: 'DEACTIVATED', effectiveFrom: '2030-01-01T00:00:00Z', deactivatedAt: '2026-06-01T00:00:00Z' })),
+    [false, false],
+  );
 });
 
 // Covers: 三格之外的状态码不画——不把服务端新增的一格硬塞进旧三段。

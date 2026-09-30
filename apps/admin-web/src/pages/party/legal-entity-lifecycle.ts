@@ -32,6 +32,11 @@ export function legalEntityLifecycle(row: GroupLegalEntityRecord): LifecycleStag
   });
 }
 
+/** 两段之间的连线画成「走过」：前一段走过、后一段走过或正在——连到被跳过的那段不算走过。 */
+export function lifecycleConnectorReached(from: LifecycleStage, to: LifecycleStage): boolean {
+  return from.state === 'done' && (to.state === 'done' || to.state === 'current');
+}
+
 function effectiveBeforeDeactivation(row: GroupLegalEntityRecord): boolean {
   if (row.deactivatedAt === undefined) return true;
   const effective = Date.parse(row.effectiveFrom);

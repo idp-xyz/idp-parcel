@@ -4,7 +4,7 @@ import { Button } from '@idpxyz/ui-primitives';
 import { useToast } from '@idpxyz/ui-theme-runtime';
 import { useSplitResize, useWorkspaceTabPanel } from '@idpxyz/ui-workspace';
 import { StateSlot, type StateSlotProps, type TemplateViewState } from './state-slot';
-import { stepSelection, workbenchKeyAction, type WorkbenchSort } from './workbench';
+import { stepSelection, workbenchKeyAction, type WorkbenchFocus, type WorkbenchSort } from './workbench';
 
 /** 命令头里的一格指标。可点即筛选，active 表示它正是当前筛选。custom 替换数值位（如进度条）。 */
 export interface WorkbenchKpi {
@@ -60,8 +60,6 @@ export interface WorkbenchPageTemplateProps<Row> {
   rowAttention?: (row: Row) => boolean;
   sort?: WorkbenchSort;
   onSort?: (key: string) => void;
-  /** 双击一行开对象（整页标签）。单击是选中进详情栏。 */
-  onRowOpen?: (row: Row) => void;
   /** ready 态下筛没了时的那句话；与 viewState 的空态（册上本来就没有）是两件事。 */
   noMatchText: string;
   onClearFilters?: () => void;
@@ -71,13 +69,16 @@ export interface WorkbenchPageTemplateProps<Row> {
   stateOverride?: StateSlotProps['override'];
 }
 
-// 焦点落在这些部件里时方向键与 `/` 归部件自己（菜单上下选、页签左右切、弹层里打字）。
-const WIDGET_SELECTOR = '[role="menu"],[role="dialog"],[role="listbox"],[role="tablist"],[role="combobox"]';
+// 自己收 Esc 与方向键的部件（菜单上下选、弹层里 Esc 关弹层、下拉选项）；页签条单列，见 workbenchKeyAction。
+const OVERLAY_SELECTOR = '[role="menu"],[role="dialog"],[role="listbox"],[role="combobox"]';
 
-function isTyping(target: EventTarget | null): boolean {
-  if (!(target instanceof HTMLElement)) return false;
+function focusOf(target: EventTarget | null): WorkbenchFocus {
+  if (!(target instanceof HTMLElement)) return 'free';
   const tag = target.tagName;
-  return tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable;
+  if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT' || target.isContentEditable) return 'typing';
+  if (target.closest(OVERLAY_SELECTOR)) return 'overlay';
+  if (target.closest('[role="tablist"]')) return 'tablist';
+  return 'free';
 }
 
 /**
@@ -87,7 +88,7 @@ function isTyping(target: EventTarget | null): boolean {
  *
  * 与参照页的差别都是本仓规矩逼出来的：四态走 StateSlot（未配置 ≠ 暂无数据）；没有批量勾选列与分页位——今天接它的
  * 册既没有批量命令端点，读口也不分页，摆出来就是假动作；键盘只在本标签是工作区活动标签时生效，壳层会把非活动标签
- * 留在 DOM 里。
+ * 留在 DOM 里。行上不接双击：第一击开栏会收列、行跟着重排，第二击可能落到另一行上；开整页对象归详情栏的动作。
  */
 export function WorkbenchPageTemplate<Row>({
   title,
@@ -108,7 +109,6 @@ export function WorkbenchPageTemplate<Row>({
   rowAttention,
   sort,
   onSort,
-  onRowOpen,
   noMatchText,
   onClearFilters,
   renderDetail,
@@ -161,9 +161,7 @@ export function WorkbenchPageTemplate<Row>({
     if (!activeTab) return;
     const onKey = (event: KeyboardEvent) => {
       if (event.defaultPrevented) return;
-      const target = event.target instanceof HTMLElement ? event.target : null;
-      const busy = isTyping(target) || target?.closest(WIDGET_SELECTOR) != null;
-      const action = workbenchKeyAction(event.key, busy, selectedKey !== null);
+      const action = workbenchKeyAction(event.key, focusOf(event.target), detailOpen);
       if (action === null) return;
       event.preventDefault();
       if (action === 'focus-search') searchRef.current?.focus();
@@ -175,7 +173,7 @@ export function WorkbenchPageTemplate<Row>({
     };
     window.addEventListener('keydown', onKey);
     return () => window.removeEventListener('keydown', onKey);
-  }, [activeTab, selectedKey, onSelect, ready]);
+  }, [activeTab, selectedKey, detailOpen, onSelect, ready]);
 
   // 选中行换了就把它滚进可视区：方向键一路按下去不该把选中行按到屏幕外。
   useEffect(() => {
@@ -262,7 +260,6 @@ export function WorkbenchPageTemplate<Row>({
                 tabIndex={0}
                 aria-selected={selected}
                 onClick={() => onSelect(selected ? null : key)}
-                onDoubleClick={onRowOpen ? () => onRowOpen(row) : undefined}
                 onKeyDown={(event) => onRowKeyDown(event, key)}
                 className={`cursor-pointer border-b border-idpxyz-border/50 transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-idpxyz-accent ${
                   selected

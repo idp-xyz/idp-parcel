@@ -24,6 +24,7 @@ import { useRegisterList } from './register-list';
 import {
   countLegalEntities,
   defaultLegalEntitySort,
+  effectiveShareOfInUse,
   filterLegalEntities,
   legalEntityCountSummary,
   legalEntityNeedsAttention,
@@ -163,7 +164,7 @@ function selectedIdFromHash(): string | null {
  *
  * 形态照 idp-prism 采购订单工作台（票 admin-web-group-legal-entities/15，用户令「完全参考」，取代 spec「不做」里
  * 「不改两签结构」那一条）：命令头指标可点即筛、状态胶囊带计数、表头点排序、单击行在右栏开详情（可拖宽）、
- * 双击或对象地址开整页对象标签、↑/↓ 换行 Esc 收栏 `/` 检索。登记从页头主动作进登记视图，不再是第二个签。
+ * 详情栏「更多」或对象地址开整页对象标签、↑/↓ 换行 Esc 收栏 `/` 检索。登记从页头主动作进登记视图，不再是第二个签。
  *
  * 参照页有而这里没有的，都是因为册上没有对应的事实或端点：分页（读口一页答完，下推归票 04）、批量勾选
  * （没有批量命令端点）、收货 / 证据 / 协作（法人册不承载）。指标与计数数的是已取回的这一页，只在拿到业务答案后显示——
@@ -234,7 +235,7 @@ export function GroupLegalEntitiesPage() {
   const visible = sortLegalEntities(filterLegalEntities(entities, { search, status, attentionOnly }), sort);
   const answered = answer?.kind === 'outcome';
   const counts = countLegalEntities(entities);
-  const effectivePct = counts.total > 0 ? Math.round((counts.byStatus.EFFECTIVE / counts.total) * 100) : 0;
+  const effectiveShare = effectiveShareOfInUse(counts);
   const toggleStatus = (code: LegalEntityStatusFilter) => setStatus(status === code ? 'ALL' : code);
 
   const kpis: WorkbenchKpi[] | undefined = answered
@@ -262,14 +263,17 @@ export function GroupLegalEntitiesPage() {
           onClick: () => toggleStatus('EFFECTIVE'),
         },
         {
-          label: '生效占比',
+          label: '在用中已生效',
           value: '',
-          custom: (
-            <div className="flex items-center gap-1.5">
-              <Progress value={effectivePct} size="sm" variant={effectivePct >= 100 ? 'success' : 'default'} className="w-24" />
-              <span className="text-[12px] font-semibold leading-none text-idpxyz-textBright">{effectivePct}%</span>
-            </div>
-          ),
+          custom:
+            effectiveShare === null ? (
+              <span className="text-[12px] font-semibold leading-none text-idpxyz-textMuted">—</span>
+            ) : (
+              <div className="flex items-center gap-1.5">
+                <Progress value={effectiveShare} size="sm" variant={effectiveShare >= 100 ? 'success' : 'default'} className="w-24" />
+                <span className="text-[12px] font-semibold leading-none text-idpxyz-textBright">{effectiveShare}%</span>
+              </div>
+            ),
         },
       ]
     : undefined;
@@ -315,9 +319,6 @@ export function GroupLegalEntitiesPage() {
       rowAttention={legalEntityNeedsAttention}
       sort={sort}
       onSort={(key) => setSort(toggleWorkbenchSort(sort, key))}
-      onRowOpen={(row) => {
-        window.location.hash = detailHash(row.legalEntityId);
-      }}
       noMatchText={legalEntityNoMatchNote}
       onClearFilters={() => {
         setSearch('');

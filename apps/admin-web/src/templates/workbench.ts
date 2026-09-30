@@ -18,13 +18,20 @@ export function toggleWorkbenchSort(current: WorkbenchSort, key: string): Workbe
 export type WorkbenchKeyAction = 'focus-search' | 'close-detail' | 'select-next' | 'select-previous';
 
 /**
- * 按键 → 动作。在输入框里只认不了任何键：`/` 与方向键在那里是在打字、移光标。Esc 只在详情开着时算关详情，
- * 否则不占它（壳层与弹层可能要用）。
+ * 按键时焦点在哪：输入框里（typing）、菜单 / 弹层 / 下拉这类自己收 Esc 与方向键的部件里（overlay）、
+ * 页签条里（tablist，方向键归它切签，Esc 不归它）、别处（free）。
  */
-export function workbenchKeyAction(key: string, editing: boolean, detailOpen: boolean): WorkbenchKeyAction | null {
-  if (editing) return null;
-  if (key === '/') return 'focus-search';
+export type WorkbenchFocus = 'free' | 'typing' | 'overlay' | 'tablist';
+
+/**
+ * 按键 → 动作。输入框与弹层里一个键都不占；页签条里只让出方向键与 `/`，Esc 照旧收详情——详情栏的页签条就在栏里，
+ * 点过页签后 Esc 收不了栏会让人以为键盘坏了。Esc 只在详情真开着时算关详情，否则不占它（壳层与弹层可能要用）。
+ */
+export function workbenchKeyAction(key: string, focus: WorkbenchFocus, detailOpen: boolean): WorkbenchKeyAction | null {
+  if (focus === 'typing' || focus === 'overlay') return null;
   if (key === 'Escape') return detailOpen ? 'close-detail' : null;
+  if (focus === 'tablist') return null;
+  if (key === '/') return 'focus-search';
   if (key === 'ArrowDown') return 'select-next';
   if (key === 'ArrowUp') return 'select-previous';
   return null;

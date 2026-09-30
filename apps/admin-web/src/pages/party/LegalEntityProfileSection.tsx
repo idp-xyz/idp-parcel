@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, Card, CardContent, Input, Textarea } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { RegistrationAnswerNote } from '../../components/registration';
@@ -51,10 +51,23 @@ const profileRevisionHistory: RevisionHistoryRegister<LegalEntityProfileRevision
   noteOf: profileRevisionHistoryNote,
 };
 
-export function LegalEntityProfileSection({ legalEntityId }: { legalEntityId: string }) {
+export function LegalEntityProfileSection({
+  legalEntityId,
+  formOpenRequest = 0,
+}: {
+  legalEntityId: string;
+  /** 调用方每要一次「直接打开登记表」就加一（工作台详情栏的主动作）；0 即没要过。 */
+  formOpenRequest?: number;
+}) {
   // 登记落册一次加一：当前有效区与历史区都按它重取，新登的那笔立刻可见。
   const [landed, setLanded] = useState(0);
-  const [formOpen, setFormOpen] = useState(false);
+  const [formOpen, setFormOpen] = useState(formOpenRequest > 0);
+  const formRef = useRef<HTMLElement>(null);
+  useEffect(() => {
+    if (formOpenRequest === 0) return;
+    setFormOpen(true);
+    formRef.current?.scrollIntoView({ block: 'start' });
+  }, [formOpenRequest]);
   return (
     <div className="flex flex-col gap-5">
       <section>
@@ -73,7 +86,7 @@ export function LegalEntityProfileSection({ legalEntityId }: { legalEntityId: st
         </div>
         <RevisionHistorySection register={profileRevisionHistory} subjectId={legalEntityId} revision={landed} />
       </section>
-      <section className="border-t border-idpxyz-border pt-5">
+      <section ref={formRef} className="border-t border-idpxyz-border pt-5">
         {formOpen ? (
           <ProfileRegistrationForm legalEntityId={legalEntityId} onLanded={() => setLanded((count) => count + 1)} />
         ) : (

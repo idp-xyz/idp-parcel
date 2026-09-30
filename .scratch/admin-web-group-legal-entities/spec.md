@@ -45,6 +45,7 @@ parcel-api 的实探（GET 两读口 200、五个 POST 空载荷 400），浏览
 - **第二轮（08–12）**：由通道 1 点名后派给应答的通道，各在自己的隔离 worktree 上做；08 / 09 / 11 可并行，10 与 12 等 09 进 main。**五票已全部进 main**（2026-09-16 23:35，远端 main `29e5117b`）；各票评审的判断项归收口票 13，**13 亦已进 main**（2026-09-20 11:27，远端 main `090e250e`）。
 - **只出票不动手**：票 03（Go 读口 + 前端历史区）、04（契约决策）、05（CONTEXT 建模）、06（ADR-0091 放口）。
 - **不做**：不改两签结构为「列表 + 主按钮 + 抽屉」——二十余张册页同用两签，一页独改只添不一致；若要换形态另立票全站一起换。不加导出。
+  **集团与法人页这一条已被[票 15](./issues/15-legal-entities-follow-purchase-order-workbench.md) 取代**（2026-09-30 用户令照采购订单工作台做）；其余册页照旧。
 
 ## 红线
 
@@ -72,3 +73,4 @@ parcel-api 的实探（GET 两读口 200、五个 POST 空载荷 400），浏览
 | [12](./issues/12-business-party-revision-history-read-face.md) | 业务参与方修订历史读口 + 抽屉「修订历史」区（按票 03 形态） | resolved（通道 4；(a)(b) 七笔进 main `44c4ebe2`、(c) 两笔进 main `29e5117b`，两段评审 ← 通道 2 皆无阻断；见票面） |
 | [13](./issues/13-pages-party-consolidation.md) | `pages/party` 收口：09 / 10 / 12 评审判断项里的同形副本、重复 switch 与陈旧读面归一（九条，可分人） | resolved（通道 3 → 4 → 1 三任；九条十笔重放进 main，远端 main = `090e250e`；第 9 条判「抽」共用历史区 + 两页按 revision 记依赖；评审 ← 通道 6 两轴 0 阻断（Standards 0/3、Spec 0/2），到时 `090e250e` 已在 main——用户令先推，N1 注释笔 `a0b16cd7` 推送方代落；其余判断项归 14） |
 | [14](./issues/14-pages-party-leftovers.md) | `pages/party` 收口尾巴：死分派表删、`suggested*Revision` 四份折一、其它模块十一处 `chipClass` 改导入、`kindRegister` 擦型只判（四条可分人） | resolved（通道 5 做 1/2/4 + 通道 4 做 3，两支六笔重放 + 推送方 N1/N3 笔进 main，远端 main = `3164b7d1`；第 4 条判「改」——评审证实 13 `92ca5332` 引入的换种类那一帧抛的回归，已修；评审 ← 通道 6 两轴 0 阻断（Standards 0/4、Spec 0/2）；候选未立票：配对比较抬进纯模块以 node:test 钉、`chip.ts` 上提 `components/`） |
+| [15](./issues/15-legal-entities-follow-purchase-order-workbench.md) | 集团与法人页照 idp-prism 采购订单工作台重做：命令头指标、胶囊、表头排序、可拖主从、键盘、窄栏详情；新增 `WorkbenchPageTemplate` | resolved（通道 3，前端切片直接在 main；Spec 评审 0 阻断、九条非阻断八条修、一条 ◑；见票面完成记录） |
