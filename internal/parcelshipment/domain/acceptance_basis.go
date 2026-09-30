@@ -632,6 +632,8 @@ type ReachabilityJudgment struct {
 	value      ReachabilityValue
 	basis      ReachabilityBasisReference
 	asOf       JudgmentAsOf
+	// formedUnder 是形成这份判断时采用的商业解析。零值是还没记下解析的旧形状。
+	formedUnder CommercialResolutionID
 }
 
 // ReachabilityJudgmentSpec 是形成一次可达性判断引用所需的全部输入。入参从 4 涨到 5，按本包
@@ -682,6 +684,17 @@ func (judgment ReachabilityJudgment) AsOf() JudgmentAsOf {
 // Basis 只在`不适用`时给出：它说的是这个问题为什么不该问，其余三值都是问过之后的答案。
 func (judgment ReachabilityJudgment) Basis() ReachabilityBasisReference {
 	return judgment.basis
+}
+
+// FormedUnderResolution 是形成这份判断时采用的商业解析。零值表示账上没记下。
+func (judgment ReachabilityJudgment) FormedUnderResolution() CommercialResolutionID {
+	return judgment.formedUnder
+}
+
+// FormedUnder 交回同一份判断，并记下它形成时采用的解析。不改判断标识、取值与时点。
+func (judgment ReachabilityJudgment) FormedUnder(resolution CommercialResolutionID) ReachabilityJudgment {
+	judgment.formedUnder = resolution
+	return judgment
 }
 
 func (judgment ReachabilityJudgment) valid() bool {

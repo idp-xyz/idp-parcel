@@ -53,8 +53,8 @@ var (
 )
 
 // correlationIdentity 是交给提供方的请求关联，同时充当译回本上下文的判断标识——与 SA
-// 适配器的 controlRequestIdentity 同一路数：提供方按关联持有中间状态（ADR-0027），重校
-// 用同一派生就能回指同一次判断，两侧都不必发明第二套编号。
+// 适配器的 controlRequestIdentity 同一路数：提供方按关联持有中间状态（ADR-0027）。
+// 解析标识在关联里。重校回指形成时记下的那一串，不另造编号。
 func correlationIdentity(
 	shipmentRequestID psdomain.ShipmentRequestID,
 	submissionVersion psdomain.SubmissionVersionID,
@@ -69,8 +69,8 @@ func correlationIdentity(
 	return identity + "/" + resolution.String()
 }
 
-// AssessParcelReachability 执行形成半边：按同一派生形成关联与判断键，交提供方形成（或
-// 找回）三值判断，再译回本上下文的判断引用。
+// AssessParcelReachability 执行形成半边：关联带上这一轮的解析，判断键不带。交提供方形成
+// （或找回）三值判断，再译回本上下文的判断引用。
 func (adapter *ReachabilityAdapter) AssessParcelReachability(
 	ctx context.Context,
 	request psports.ReachabilityRequest,
@@ -93,8 +93,8 @@ func (adapter *ReachabilityAdapter) AssessParcelReachability(
 	return assessmentFor(request, command, answer)
 }
 
-// RevalidateReachabilityJudgment 执行重校半边：同一派生回指原判断，提供方按视图修订
-// 确认或判换代，结果按全函数译回。
+// RevalidateReachabilityJudgment 执行重校半边：有记下的判断标识就按它回指原判断，
+// 否则按委托、提交版本与包裹派生。提供方按视图修订确认或判换代，结果按全函数译回。
 func (adapter *ReachabilityAdapter) RevalidateReachabilityJudgment(
 	ctx context.Context,
 	query psports.ReachabilityRevalidationQuery,

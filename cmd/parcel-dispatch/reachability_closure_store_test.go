@@ -19,7 +19,7 @@ import (
 )
 
 // Covers: 票 psb/16 第 1 项——真 PC 解析库里的闭包，经 NewCommercialEligibility 按命令带来的解析标识取回。
-// 网络服务译成要求，面单渠道服务译成不要求；空引用与租户不一致都不被读成未配置。
+// 网络服务译成要求，面单渠道服务译成不要求。空引用与租户不一致都拒，不交回一份资格结论。
 func TestCommercialEligibilityReadsAStoredClosureByTheCommandResolution(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))

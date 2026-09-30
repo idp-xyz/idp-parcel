@@ -141,8 +141,8 @@ func TestRoutingApplicabilityTenantMismatchIsNotUnconfigured(t *testing.T) {
 
 	_, err := view.AssessRoutingApplicability(
 		t.Context(), foreign, adoptedResolution(t, closure))
-	if !errors.Is(err, adapter.ErrRoutingClosureTenantMismatch) {
-		t.Fatalf("err = %v, want ErrRoutingClosureTenantMismatch", err)
+	if !errors.Is(err, adapter.ErrClosureTenantMismatch) {
+		t.Fatalf("err = %v, want ErrClosureTenantMismatch", err)
 	}
 	if errors.Is(err, adapter.ErrServiceProductUnavailable) {
 		t.Fatal("租户不一致被折成了服务产品不可用")

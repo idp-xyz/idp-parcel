@@ -179,7 +179,7 @@ func (handler *AdvanceAcceptanceJudgmentHandler) Handle(
 		}
 		return handler.undecided(ctx, command, reason), nil
 	}
-	judgment := assessment.Judgment
+	judgment := assessment.Judgment.FormedUnder(adopted.snapshot.ResolutionID())
 	// 判断没能记到任务上就不算推进。交回一个没记下的判断，接受那一步会引用一条查不回来
 	// 的依据。
 	if err := handler.recorder.RecordReachabilityJudgment(

@@ -56,8 +56,8 @@ func (repository *AcceptanceJudgments) RecordReachabilityJudgment(
 		`INSERT INTO parcel_shipment.acceptance_reachability_judgment
 			(tenant_id, shipment_request_id, submission_version, parcel_id, as_of_at,
 			 judgment_id, judgment_value, basis_ref,
-			 as_of_kind, as_of_semantics, as_of_policy)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			 as_of_kind, as_of_semantics, as_of_policy, resolution_id)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		 ON CONFLICT DO NOTHING`,
 		tenant.String(),
 		requestID.String(),
@@ -70,6 +70,7 @@ func (repository *AcceptanceJudgments) RecordReachabilityJudgment(
 		asOf.Kind().String(),
 		asOf.Semantics().String(),
 		asOf.PolicyVersion().String(),
+		judgment.FormedUnderResolution().String(),
 	)
 	if err != nil {
 		return fmt.Errorf("record reachability judgment: %w", err)
@@ -235,7 +236,11 @@ func (repository *AcceptanceJudgments) LoadRecordedJudgments(
 		return ports.RecordedJudgments{}, fmt.Errorf("load recorded judgments: %w", err)
 	}
 
-	reachability, err := loadReachabilityJudgments(ctx, querier, tenant, requestID, version)
+	adopted, err := loadAdoptedResolution(ctx, querier, tenant, requestID)
+	if err != nil {
+		return ports.RecordedJudgments{}, err
+	}
+	reachability, err := loadReachabilityJudgments(ctx, querier, tenant, requestID, version, adopted)
 	if err != nil {
 		return ports.RecordedJudgments{}, err
 	}
@@ -243,7 +248,7 @@ func (repository *AcceptanceJudgments) LoadRecordedJudgments(
 	if err != nil {
 		return ports.RecordedJudgments{}, err
 	}
-	adopted, err := loadAdoptedResolution(ctx, querier, tenant, requestID)
+	stale, err := reachabilityFormedUnderAnotherResolution(ctx, querier, tenant, requestID, version, adopted)
 	if err != nil {
 		return ports.RecordedJudgments{}, err
 	}
@@ -251,6 +256,7 @@ func (repository *AcceptanceJudgments) LoadRecordedJudgments(
 		Reachability:                reachability,
 		FinancialControl:            control,
 		AdoptedCommercialResolution: adopted,
+		ReachabilityStaleResolution: stale,
 	}, nil
 }
 
@@ -267,19 +273,25 @@ func loadReachabilityJudgments(
 	tenant domain.TenantID,
 	requestID domain.ShipmentRequestID,
 	version domain.SubmissionVersionID,
+	adopted domain.CommercialResolutionID,
 ) ([]domain.ReachabilityJudgment, error) {
 	rows, err := querier.Query(ctx,
 		`SELECT DISTINCT ON (parcel_id)
 		        parcel_id, judgment_id, judgment_value, basis_ref,
-		        as_of_at, as_of_kind, as_of_semantics, as_of_policy
+		        as_of_at, as_of_kind, as_of_semantics, as_of_policy, resolution_id
 		   FROM parcel_shipment.acceptance_reachability_judgment
 		  WHERE tenant_id = $1
 		    AND shipment_request_id = $2
 		    AND submission_version = $3
-		  ORDER BY parcel_id, as_of_at DESC`,
+		    AND ($4 = '' OR resolution_id = $4 OR resolution_id = '')
+		  ORDER BY parcel_id,
+		           CASE WHEN $4 <> '' AND resolution_id = $4 THEN 0 ELSE 1 END,
+		           as_of_at DESC,
+		           recorded_at DESC`,
 		tenant.String(),
 		requestID.String(),
 		version.String(),
+		adopted.String(),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("load reachability judgments: %w", err)
@@ -293,17 +305,19 @@ func loadReachabilityJudgments(
 			judgmentID, basisRef          *string
 			asOfAt                        time.Time
 			kindRaw, semantics, policyRaw string
+			resolutionID                  string
 		)
 		if err := rows.Scan(&parcelID, &judgmentID, &valueRaw, &basisRef,
-			&asOfAt, &kindRaw, &semantics, &policyRaw); err != nil {
+			&asOfAt, &kindRaw, &semantics, &policyRaw, &resolutionID); err != nil {
 			return nil, fmt.Errorf("load reachability judgments: %w", err)
 		}
 		judgment, err := rebuildReachabilityJudgment(reachabilityRow{
-			parcelID:   parcelID,
-			judgmentID: judgmentID,
-			value:      valueRaw,
-			basis:      basisRef,
-			asOf:       asOfRow{at: asOfAt, kind: kindRaw, semantics: semantics, policy: policyRaw},
+			parcelID:     parcelID,
+			judgmentID:   judgmentID,
+			value:        valueRaw,
+			basis:        basisRef,
+			asOf:         asOfRow{at: asOfAt, kind: kindRaw, semantics: semantics, policy: policyRaw},
+			resolutionID: resolutionID,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("load reachability judgments: %w", err)
@@ -314,6 +328,47 @@ func loadReachabilityJudgments(
 		return nil, fmt.Errorf("load reachability judgments: %w", err)
 	}
 	return judgments, nil
+}
+
+// reachabilityFormedUnderAnotherResolution 回答：有成员的判断是在别的解析下形成的，而当前采用的解析下还没有。
+func reachabilityFormedUnderAnotherResolution(
+	ctx context.Context,
+	querier bentopg.Querier,
+	tenant domain.TenantID,
+	requestID domain.ShipmentRequestID,
+	version domain.SubmissionVersionID,
+	adopted domain.CommercialResolutionID,
+) (bool, error) {
+	if adopted.String() == "" {
+		return false, nil
+	}
+	var count int
+	err := querier.QueryRow(ctx,
+		`SELECT count(*) FROM (
+		    SELECT parcel_id
+		      FROM parcel_shipment.acceptance_reachability_judgment
+		     WHERE tenant_id = $1
+		       AND shipment_request_id = $2
+		       AND submission_version = $3
+		       AND resolution_id <> ''
+		       AND resolution_id <> $4
+		    EXCEPT
+		    SELECT parcel_id
+		      FROM parcel_shipment.acceptance_reachability_judgment
+		     WHERE tenant_id = $1
+		       AND shipment_request_id = $2
+		       AND submission_version = $3
+		       AND resolution_id = $4
+		 ) stale`,
+		tenant.String(),
+		requestID.String(),
+		version.String(),
+		adopted.String(),
+	).Scan(&count)
+	if err != nil {
+		return false, fmt.Errorf("load reachability judgments: %w", err)
+	}
+	return count > 0, nil
 }
 
 // loadFinancialControl 交回本版当前采用的那一次控制结果，同样按时点取最新。没有行时交回零值：
@@ -454,11 +509,12 @@ type asOfRow struct {
 }
 
 type reachabilityRow struct {
-	parcelID   string
-	judgmentID *string
-	value      string
-	basis      *string
-	asOf       asOfRow
+	parcelID     string
+	judgmentID   *string
+	value        string
+	basis        *string
+	asOf         asOfRow
+	resolutionID string
 }
 
 type financialControlRow struct {
@@ -509,7 +565,18 @@ func rebuildReachabilityJudgment(row reachabilityRow) (domain.ReachabilityJudgme
 			return domain.ReachabilityJudgment{}, err
 		}
 	}
-	return domain.NewReachabilityJudgment(spec)
+	judgment, err := domain.NewReachabilityJudgment(spec)
+	if err != nil {
+		return domain.ReachabilityJudgment{}, err
+	}
+	if row.resolutionID != "" {
+		resolution, err := domain.NewCommercialResolutionID(row.resolutionID)
+		if err != nil {
+			return domain.ReachabilityJudgment{}, err
+		}
+		judgment = judgment.FormedUnder(resolution)
+	}
+	return judgment, nil
 }
 
 // rebuildFinancialControl 走重建门 RehydrateFinancialControlResult（ADR-0028 / ADR-0125 决定二）：库里

@@ -1,6 +1,6 @@
 # ADR-0064: 初始路由适用性闭包标识从已接受解析标识回指
 
-Status: Accepted。部分停用：后果里「可达性那条链的 `ReachabilityClosureIdentity` 不变」一句已由 [ADR-0156](./0156-reachability-closure-identity-comes-from-the-adopted-resolution.md) 停用。决定一至四与初始路由那条回指不变。
+Status: Accepted。部分停用：后果里「可达性那条链的 `ReachabilityClosureIdentity` 不变」一句，以及 Context 里「`ReachabilityClosureIdentity` 仍属实例半边（可达性判断键同样没有解析标识，且本记录不管 UC-NR-002）」一句，已由 [ADR-0156](./0156-reachability-closure-identity-comes-from-the-adopted-resolution.md) 停用。该符号已不存在。决定一至四与初始路由那条回指不变。正文不改写。
 Date: 2026-08-18
 
 ## Context
