@@ -1,7 +1,7 @@
 # 16 机制缺口：重定级表第一项里尚无票的几处
 
 Category: enhancement
-Status: needs-triage——第 1 项 2026-09-30 进 main（`66ea4bd4`），第 4 项同日进 main（`695ac2f8`），第 2 项同日进 main（`7dfe7e2a`），各见文末对应「进 main 记录」；第 3 项在分支 `mcp3-psb16-03`（ADR-0160），尚未进 main。2026-09-24 通道 4 经用户授权自决立（票 02 遗留：开发主线写「缺口逐条交票 product-strategy-boundary/02 立工作票」）；各项分属不同上下文，接单时按上下文拆
+Status: needs-triage——第 1 项 2026-09-30 进 main（`66ea4bd4`），第 4 项同日进 main（`695ac2f8`），第 2 项同日进 main（`7dfe7e2a`），第 3 项同日进 main（`4ee5d338`），各见文末对应「进 main 记录」。2026-09-24 通道 4 经用户授权自决立（票 02 遗留：开发主线写「缺口逐条交票 product-strategy-boundary/02 立工作票」）；各项分属不同上下文，接单时按上下文拆
 Blocked by: 无
 地盘：按项各归其上下文（见各项）。
 出处：[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表第一项各格原话；[票 05](./05-demo-journey-criterion-evidence.md) 盘点格 3、5、21。已有票或已预告的不重立：操作者渠道归[票 15](./15-operator-channel-per-adr-0100.md)；节点收寄的身份核对缝归 `ps-external-mark-relations/01`；BUY 评价的来源引用回指归 `sa-cc-funds-and-credential-seams/11`；NO 实际测量登记册归 `pp-pricing-input-seams/04`；`PricingInputResolver` 的消费侧适配器由 `pp-pricing-input-seams` spec「不在本目录」预告另立、归 PP；网络定义登记册的写入方与定义原语归票 04。
@@ -130,3 +130,19 @@ Blocked by: 无
 
 分支 `mcp3-psb16-02@2bdf6306`（已推 origin）在隔离树重放到 `42733478` 之上。三处文档冲突（票面、ADR 索引、开发主线补记）按意图解：保 main 已进的第 4 项补记与 ADR-0159 行，插入 ADR-0158 与第 2 项补记；第 2 项补记剩余未满足只列网络定义登记册写入方与控制金额源（面单择优已在本 tip 上）。对照：`55a0d7f1→b3dab343`、`2bdf6306→7dfe7e2a`；清点在代码链尖重生成为 `d49c73e8`（`parcelshipment` 生产 195→196、测试 189→190；`settlementaccounting` 生产 101→105、测试 82→84；`settlement_accounting` 迁移 21→22；`cmd` 测试 106→108）。
 推送方验证：钉 `d49c73e8`，`gofmt -l` 空，build 与 vet 退 0，三条相关真库用例单跑 PASS 非 SKIP，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL（含 `internal/architecture`）。本记录一笔只多本票面 `.md`。分支作封存出处。
+
+**评审 ← 通道 1（隔离子代理，非作者）· 钉 `dc2cf631`（通道 3 分支 `mcp3-psb16-03`，第 3 项，ADR-0160，基 `12f623ca`）· 2026-09-30 23:1x**
+
+- **阻断**：无。
+- **非阻断**（随票记）：`charge_confirmation_fact` 的结算账户外键没有对等负向用例，去掉该 FK 后指定四测仍绿（`TestAPayableMappingDoesNotInventAnAccount` 只打应付账户查问）。`ConfirmedChargeFactsView` 等处用「七项」指 CONTEXT「费用形成与证据」硬句，该句仍列八项（含结算币种）；CONTEXT 补句已写明册上排除币种，与 ADR-0160 决定四、ADR-0087 一致，不是第二套口径。
+- **核过无发现**：`SettlementCatalogues` 实现四口 `LoadSupplierAuditAuthority`、`LoadSupplierPayableAccount`、`LoadClaimAmountRule`、`LoadConfirmedChargeFacts`，登记命令在 `parcel-settlement-register`。四条真库用例与 `TestEveryPersistenceWriteMethodCarriesTransactionRequiredEvidence` 带 DSN `-v` 为 PASS 非 SKIP。空册答未找到；应付查问只存账户标识并外键指向结算账户登记册，不复制五格。确认事实读 `charge_confirmation_fact`，不读费用行上的确认结果。未登租户行。金额文法与三只编排的进程入口未动（归票 12）。第 1、2、4 项生产代码未动。
+- **结论：可重放**。
+
+**完成记录（通道 3 · 据完工报转录，第 3 项）**
+
+分支 `mcp3-psb16-03`（基 `12f623ca`），一笔快进推送、未改写：`dc2cf631` 四口各一本登记册（ADR-0160），命令 `supplier-audit-authority` / `supplier-payable-account` / `claim-amount-rule` / `charge-confirmation-facts`。真库 `TestEmptyCataloguesStayUnconfigured`、`TestRegisteredCataloguesAnswerAndADifferentBodyConflicts`、`TestAPayableMappingDoesNotInventAnAccount`、`TestSettlementCataloguesRefuseToRunOutsideATransaction`。迁移 `settlement_accounting/0023_settlement_catalogue.sql`。未登租户行。未新开消费者。
+
+**进 main 记录（2026-09-30 23:1x，通道 1 推送，第 3 项）**
+
+分支 `mcp3-psb16-03@dc2cf631`（已推 origin）在隔离树重放到 `12f623ca` 之上，零冲突：`dc2cf631→4ee5d338`；清点在代码链尖重生成为 `09714960`（`settlementaccounting` 生产 105→110、测试 84→85；`settlement_accounting` 迁移 22→23；端口精确口径缺 7→3）。
+推送方验证：钉 `09714960`，`gofmt -l` 空，build 与 vet 退 0，四条相关真库用例与架构门禁单跑 PASS 非 SKIP，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。本记录一笔只多本票面 `.md`。分支作封存出处。
