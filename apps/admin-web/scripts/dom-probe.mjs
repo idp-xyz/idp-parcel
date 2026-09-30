@@ -105,7 +105,10 @@ try {
 }
 
 // 在 harness 目录里跑，两个 external 从它的 node_modules 解；NODE_ENV 留给 react 自己读，开发版才有 act。
-const run = spawnSync(process.execPath, [outfile], {
+// global-registrator 只发 ESM，束成 CJS 后是 require 它：Node 22.12 / 20.19 起默认放行，更早的 20.x 要开旗
+// （WSL 宿主的 Node 20.18 不开旗报 ERR_REQUIRE_ESM）。
+const nodeArgs = process.features.require_module ? [] : ['--experimental-require-module'];
+const run = spawnSync(process.execPath, [...nodeArgs, outfile], {
   cwd: harnessDir,
   stdio: 'inherit',
   env: { ...process.env, NODE_ENV: process.env.NODE_ENV ?? 'development' },

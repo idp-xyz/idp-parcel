@@ -5,13 +5,21 @@ export {
   ListPageTemplate,
   type ListPageTemplateProps,
   type ListColumn,
-  type ListMasterDetailProps,
   type ListSearchProps,
+  type ListPaginationProps,
   type ListSortOption,
   type ListSortProps,
   type ListSavedView,
   type ListSavedViewsProps,
 } from './ListPageTemplate';
+export {
+  WorkbenchPageTemplate,
+  type WorkbenchPageTemplateProps,
+  type WorkbenchColumn,
+  type WorkbenchKpi,
+  type WorkbenchChip,
+} from './WorkbenchPageTemplate';
+export { toggleWorkbenchSort, type WorkbenchSort } from './workbench';
 export {
   densityRowPadding,
   filterBarSlots,

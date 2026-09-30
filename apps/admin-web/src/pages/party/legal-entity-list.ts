@@ -1,13 +1,14 @@
-// 集团与法人页的筛选与排序纯逻辑（票 admin-web-group-legal-entities/01）。全部是纯函数，node:test
-// 钉着；页面只负责摆。
+// 集团与法人页的筛选、排序与计数纯逻辑（票 admin-web-group-legal-entities/01 立，票 15 改成工作台口径）。全部是纯函数，
+// node:test 钉着；页面只负责摆。
 //
-// 两条都只在**已取回的行**上做（README 列表页上列通则：不下推成查询参数——那要改端点契约，
-// 归票 04）。端点今天答的是每个法人的最新修订、上限 isolatedReadLimit 一页，这里的排序是对这一页排，
-// 不是对册排；分页下推之前这条限制如实存在，页面不假装成全量。
+// 几件事都只在**已取回的行**上做（README 列表页上列通则：不下推成查询参数——那要改端点契约，
+// 归票 04）。端点今天答的是每个法人的最新修订、上限 isolatedReadLimit 一页，这里的排序与计数是对这一页，
+// 不是对册；分页下推之前这条限制如实存在，页面不假装成全量。
 
+import type { WorkbenchSort } from '../../templates/workbench';
 import type { GroupLegalEntityRecord } from './api';
 import { identityStatusLabels, type IdentityStatusCode } from './presentation';
-import { byInstant, byString, codeFilterOptions, matchesSearch, type CodeFilter, type SelectOption } from './list-order';
+import { byInstant, byString, codeFilterOptions, matchesSearch, type CodeFilter } from './list-order';
 
 /** 身份状态封闭三格（domain IdentityStatus 原名，从 identityStatusLabels 的键派生）加「全部」。 */
 export type LegalEntityStatusFilter = CodeFilter<IdentityStatusCode>;
@@ -15,22 +16,26 @@ export type LegalEntityStatusFilter = CodeFilter<IdentityStatusCode>;
 export interface LegalEntityFilter {
   search: string;
   status: LegalEntityStatusFilter;
+  /** 只看待补的行（legalEntityNeedsAttention）。 */
+  attentionOnly: boolean;
 }
 
+// 胶囊的码与词都从 identityStatusLabels 派生——那份词表是 CONTEXT 原词在前端的唯一一处。
+export const legalEntityStatusFilterOptions = codeFilterOptions(identityStatusLabels, '全部');
+
+/** 表头可排的四列。 */
+export type LegalEntitySortKey = 'legal-entity' | 'party-name' | 'effective-from' | 'registered-at';
+
+/** 默认登记时间新→旧（票 01 裁决 2：运营配置员最常看「刚登进去的那条」）。 */
+export const defaultLegalEntitySort: WorkbenchSort = { key: 'registered-at', dir: -1 };
+
 /**
- * 排序键。默认登记时间新→旧（裁决 2：运营配置员最常看「刚登进去的那条」）；标识按字典序；
- * 生效自早→晚给「哪些还没到生效时点」这种问题用。
+ * 待补：最新修订登记于身份层落地之前（注册国家与终身注册号两格没有），或参与方册查无这个身份（名称转写不到）。
+ * 两件都要运营方再登一笔才会好，是这张册上唯一「需要人去做点什么」的形态；停用是终局，不算待补。
  */
-export type LegalEntitySortKey = 'registered-desc' | 'id-asc' | 'effective-asc';
-
-// 选项表由页面直接渲染，码与词都从 identityStatusLabels 派生——那份词表是 CONTEXT 原词在前端的唯一一处。
-export const legalEntityStatusFilterOptions = codeFilterOptions(identityStatusLabels, '全部状态');
-
-export const legalEntitySortOptions: readonly SelectOption<LegalEntitySortKey>[] = [
-  { value: 'registered-desc', label: '登记时间 新→旧' },
-  { value: 'id-asc', label: '法人标识 A→Z' },
-  { value: 'effective-asc', label: '生效自 早→晚' },
-];
+export function legalEntityNeedsAttention(row: GroupLegalEntityRecord): boolean {
+  return !row.identityLayerRegistered || !row.partyNameKnown;
+}
 
 /** 搜索是包含匹配、不分大小写，命中法人标识 / 参与方身份 / 名称 / 状态原名任一格。 */
 export function filterLegalEntities(
@@ -39,12 +44,30 @@ export function filterLegalEntities(
 ): GroupLegalEntityRecord[] {
   return rows.filter((row) => {
     if (filter.status !== 'ALL' && row.status !== filter.status) return false;
+    if (filter.attentionOnly && !legalEntityNeedsAttention(row)) return false;
     return matchesSearch(filter.search, [row.legalEntityId, row.partyId, row.partyName, row.status]);
   });
 }
 
+export interface LegalEntityCounts {
+  total: number;
+  byStatus: Record<IdentityStatusCode, number>;
+  attention: number;
+}
+
+/** 命令头指标与状态胶囊的计数，数的是已取回的这一页。 */
+export function countLegalEntities(rows: readonly GroupLegalEntityRecord[]): LegalEntityCounts {
+  const byStatus: Record<IdentityStatusCode, number> = { REGISTERED: 0, EFFECTIVE: 0, DEACTIVATED: 0 };
+  let attention = 0;
+  for (const row of rows) {
+    if (row.status in byStatus) byStatus[row.status as IdentityStatusCode] += 1;
+    if (legalEntityNeedsAttention(row)) attention += 1;
+  }
+  return { total: rows.length, byStatus, attention };
+}
+
 /**
- * 过滤条右端的计数摘要（票 01 裁决 1）：总数与当前显示数分开报。四态里的空态说的是「登记册为空」，
+ * 工具条右端的计数摘要（票 01 裁决 1）：总数与当前显示数分开报。四态里的空态说的是「登记册为空」，
  * 筛选筛没了是「当前条件下无匹配」，两者续办不同（前者去登记，后者改条件）——所以筛空时这里照显
  * 「共 N 个，当前显示 0 个」，表格区另显 legalEntityNoMatchNote，不把页面切成空态。
  */
@@ -55,22 +78,29 @@ export function legalEntityCountSummary(total: number, visible: number): string 
 /** 筛出为空时表格区那一行的话；措辞点明是「筛选条件」，与空态「尚无登记」分得开。 */
 export const legalEntityNoMatchNote = '当前筛选条件下没有匹配的法人';
 
-/** 排序交回新数组，不改输入。 */
+/** 按表头排序交回新数组，不改输入；同值保持原序。认不得的键原样交回。 */
 export function sortLegalEntities(
   rows: readonly GroupLegalEntityRecord[],
-  key: LegalEntitySortKey,
+  sort: WorkbenchSort,
 ): GroupLegalEntityRecord[] {
-  const sorted = [...rows];
+  const compare = comparatorOf(sort.key as LegalEntitySortKey);
+  if (compare === null) return [...rows];
+  return [...rows].sort((left, right) => sort.dir * compare(left, right));
+}
+
+function comparatorOf(
+  key: LegalEntitySortKey,
+): ((left: GroupLegalEntityRecord, right: GroupLegalEntityRecord) => number) | null {
   switch (key) {
-    case 'registered-desc':
-      sorted.sort((left, right) => byInstant(right.registeredAt, left.registeredAt));
-      break;
-    case 'id-asc':
-      sorted.sort((left, right) => byString(left.legalEntityId, right.legalEntityId));
-      break;
-    case 'effective-asc':
-      sorted.sort((left, right) => byInstant(left.effectiveFrom, right.effectiveFrom));
-      break;
+    case 'legal-entity':
+      return (left, right) => byString(left.legalEntityId, right.legalEntityId);
+    case 'party-name':
+      return (left, right) => byString(left.partyName ?? '', right.partyName ?? '');
+    case 'effective-from':
+      return (left, right) => byInstant(left.effectiveFrom, right.effectiveFrom);
+    case 'registered-at':
+      return (left, right) => byInstant(left.registeredAt, right.registeredAt);
+    default:
+      return null;
   }
-  return sorted;
 }

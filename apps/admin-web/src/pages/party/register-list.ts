@@ -12,6 +12,13 @@ export interface RegisterListState<Body> {
   answer: ApiResult<Body> | null;
   /** 重取序号：问了几次。effect 以它为依赖，每变一次重取一次。 */
   version: number;
+  /** 手上这份答案答的是第几问；首答之前是 null。与 version 不等即还有一问在途（工作台刷新钮据此转圈、收尾报 toast）。 */
+  answeredVersion: number | null;
+}
+
+/** 有没有一问在途。重取保留旧业务答案，所以不能拿 answer 是否为 null 判。 */
+export function registerListPending<Body>(state: RegisterListState<Body>): boolean {
+  return state.answeredVersion !== state.version;
 }
 
 export type RegisterListEvent<Body> = { kind: 'reload' } | { kind: 'answered'; answer: ApiResult<Body> };
@@ -30,9 +37,13 @@ export function registerListReducer<Body>(
 ): RegisterListState<Body> {
   switch (event.kind) {
     case 'reload':
-      return { answer: state.answer?.kind === 'outcome' ? state.answer : null, version: state.version + 1 };
+      return {
+        answer: state.answer?.kind === 'outcome' ? state.answer : null,
+        version: state.version + 1,
+        answeredVersion: state.answeredVersion,
+      };
     case 'answered':
-      return { answer: event.answer, version: state.version };
+      return { answer: event.answer, version: state.version, answeredVersion: state.version };
   }
 }
 
@@ -41,7 +52,7 @@ export function registerListReducer<Body>(
  * 写成内联箭头会每次渲染重取。未回的旧请求按 cancelled 丢，不让慢答案盖掉快答案。
  */
 export function useRegisterList<Body>(load: () => Promise<ApiResult<Body>>) {
-  const [state, dispatch] = useReducer(registerListReducer<Body>, { answer: null, version: 0 });
+  const [state, dispatch] = useReducer(registerListReducer<Body>, { answer: null, version: 0, answeredVersion: null });
 
   useEffect(() => {
     let cancelled = false;
@@ -54,5 +65,5 @@ export function useRegisterList<Body>(load: () => Promise<ApiResult<Body>>) {
   }, [load, state.version]);
 
   const retry = () => dispatch({ kind: 'reload' });
-  return { answer: state.answer, retry, version: state.version };
+  return { answer: state.answer, retry, version: state.version, pending: registerListPending(state) };
 }

@@ -20,10 +20,10 @@ import { Instant, UnknownPartyName, statusBadge } from './detail-primitives';
 const info = moduleInfoById['group-legal-entities'];
 
 /**
- * 对象页「时间线」签交给修订历史区的那几样。判读在 legal-entity-revisions.ts。
+ * 对象页「时间线」签与工作台详情栏「修订历史」签交给修订历史区的那几样。判读在 legal-entity-revisions.ts。
  * 模块级常量——load 进 effect 依赖。
  */
-const legalEntityRevisionHistory: RevisionHistoryRegister<LegalEntityRevisionListResponseBody> = {
+export const legalEntityRevisionHistory: RevisionHistoryRegister<LegalEntityRevisionListResponseBody> = {
   subject: '法人',
   endpoint: 'GET /commercial-group-legal-entities/{legalEntityId}/revisions',
   load: listLegalEntityRevisions,
@@ -110,7 +110,7 @@ function viewStateOf(
     module: info,
     endpoint: 'GET /commercial-group-legal-entities',
     emptyTitle: '当前租户尚无责任法人登记',
-    emptyDescription: '在「登记法人」签登记第一个，或用受控 CLI parcel-commercial register-parties 灌入。',
+    emptyDescription: '用列表页头「登记责任法人」登记第一个，或用受控 CLI parcel-commercial register-parties 灌入。',
   });
 }
 

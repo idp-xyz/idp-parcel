@@ -1,55 +1,54 @@
 import { useEffect, useState } from 'react';
-import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
+import { AlertTriangle, ArrowLeft, Plus } from 'lucide-react';
+import { Button, Progress } from '@idpxyz/ui-primitives';
 import {
-  ListPageTemplate,
+  WorkbenchPageTemplate,
   decodeHashSegment,
-  presentFields,
+  toggleWorkbenchSort,
   useTabReturn,
-  type InspectorContent,
-  type ListColumn,
+  type WorkbenchChip,
+  type WorkbenchColumn,
+  type WorkbenchKpi,
+  type WorkbenchSort,
 } from '../../templates';
 import { moduleInfoById } from '../../navigation';
-import type { ApiResult } from '../catalogue-api';
 import { catalogueViewState } from '../catalogue-view';
-import { formatInstant } from '../moment';
-import {
-  listGroupLegalEntities,
-  type GroupLegalEntityListResponseBody,
-  type GroupLegalEntityRecord,
-} from './api';
-import {
-  identityLayerAbsentNote,
-  identityStatusLabels,
-  labelOf,
-  partyNameUnknownNote,
-} from './presentation';
+import { listGroupLegalEntities, type GroupLegalEntityRecord } from './api';
+import { identityLayerAbsentNote, identityStatusLabels } from './presentation';
 import { LegalEntityRegistrationForm } from './LegalEntityRegistrationForm';
 import { identityLayerCellsOf } from './legal-entity-identity';
 import { LegalEntityDetailPage } from './LegalEntityDetailPage';
+import { LegalEntityDetailPanel } from './LegalEntityDetailPanel';
 import { Instant, UnknownPartyName, statusBadge } from './detail-primitives';
 import { useRegisterList } from './register-list';
 import {
+  countLegalEntities,
+  defaultLegalEntitySort,
   filterLegalEntities,
   legalEntityCountSummary,
+  legalEntityNeedsAttention,
   legalEntityNoMatchNote,
-  legalEntitySortOptions,
   legalEntityStatusFilterOptions,
   sortLegalEntities,
-  type LegalEntitySortKey,
   type LegalEntityStatusFilter,
 } from './legal-entity-list';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['group-legal-entities'];
 
-function AbsentIdentityLayer() {
-  return <span className="text-idpxyz-textMuted">{identityLayerAbsentNote}</span>;
-}
+const emptyDescription = '用页头「登记责任法人」登记第一个，或用受控 CLI parcel-commercial register-parties 灌入。';
+
+// 行首圆点的颜色随身份状态；待补的行圆点闪，与参照页「逾期 / 暂挂」同一个记号。
+const statusDotClass: Record<string, string> = {
+  REGISTERED: 'bg-sky-400',
+  EFFECTIVE: 'bg-emerald-400',
+  DEACTIVATED: 'bg-gray-400',
+};
 
 // 身份两格照答复原样示出，国家在上、号在下；最新修订登记于身份层落地之前时如实写 identityLayerAbsentNote。
 function IdentityLayerCell({ row }: { row: GroupLegalEntityRecord }) {
   const cells = identityLayerCellsOf(row);
-  if (cells === null) return <AbsentIdentityLayer />;
+  if (cells === null) return <span className="text-idpxyz-textMuted">{identityLayerAbsentNote}</span>;
   return (
     <div className="min-w-40">
       <p>{cells.country}</p>
@@ -60,77 +59,89 @@ function IdentityLayerCell({ row }: { row: GroupLegalEntityRecord }) {
 
 // 骨架期这里列过「运营集团租户」——ADR-0003 里那一级是配置与隔离边界本身，读面本来就在单租户
 // 作用域内取数，整列同值没有信息，接线时按 live 页惯例撤下。「对象类型」列同一判据撤下（票 01 第 3 条）：
-// 本册今天只有 RESPONSIBLE_LEGAL_ENTITY 一格，种类进检查器概要与对象页。
-const columns: ListColumn<GroupLegalEntityRecord>[] = [
+// 本册今天只有 RESPONSIBLE_LEGAL_ENTITY 一格，种类进详情栏与对象页。
+const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
   {
-    id: 'legal-entity',
+    key: 'legal-entity',
     header: '法人标识',
-    className: 'min-w-44',
+    sortKey: 'legal-entity',
     render: (row) => (
-      <div>
-        <p className="font-mono text-[13px] font-semibold text-idpxyz-text">{row.legalEntityId}</p>
-        <p className="mt-1 text-[11px] text-idpxyz-textMuted">当前修订 · <span className="font-mono">r{row.revision}</span></p>
+      <div className="flex min-w-0 items-center gap-1.5">
+        <span
+          className={`h-1.5 w-1.5 shrink-0 rounded-full ${statusDotClass[row.status] ?? 'bg-idpxyz-textMuted'} ${
+            legalEntityNeedsAttention(row) ? 'animate-pulse' : ''
+          }`}
+          aria-hidden="true"
+        />
+        <span className="truncate font-mono font-medium text-idpxyz-accent">{row.legalEntityId}</span>
+        <span className="shrink-0 font-mono text-[9px] text-idpxyz-textMuted">r{row.revision}</span>
+        {legalEntityNeedsAttention(row) && (
+          <AlertTriangle className="h-3 w-3 shrink-0 text-orange-400" aria-label="待补" />
+        )}
       </div>
     ),
   },
   {
-    id: 'name',
+    key: 'party',
     header: '责任主体',
-    className: 'min-w-48',
-    hideWhenMasterDetailOpen: true,
+    sortKey: 'party-name',
+    hideWhenDetailOpen: true,
     // 名称在参与方册上（法人不抄第二份）；转写不到那一格的话与判据在 presentation.ts 的 partyNameUnknownNote。
     render: (row) => (
       <div>
-        <p className="text-[13px] font-medium text-idpxyz-text">{row.partyNameKnown ? row.partyName : <UnknownPartyName />}</p>
-        <p className="mt-1 font-mono text-[11px] text-idpxyz-textMuted">{row.partyId}</p>
+        <div className="text-idpxyz-textBright">{row.partyNameKnown ? row.partyName : <UnknownPartyName />}</div>
+        <div className="font-mono text-[10px] text-idpxyz-textMuted">{row.partyId}</div>
       </div>
     ),
   },
   {
-    id: 'identity-layer',
+    key: 'identity-layer',
     header: '注册身份',
-    className: 'min-w-48',
-    hideWhenMasterDetailOpen: true,
+    hideWhenDetailOpen: true,
     render: (row) => <IdentityLayerCell row={row} />,
   },
   {
-    id: 'status',
+    key: 'status',
     header: '状态',
-    align: 'center',
-    className: 'min-w-28',
-    // 已停用行标出停用时点：停用只自其时点起不再支持新的商业决定，时点是这格
-    // 状态的内容而不是装饰。
+    // 已停用行标出停用时点：停用只自其时点起不再支持新的商业决定，时点是这格状态的内容而不是装饰。
     render: (row) => (
-      <div className="flex flex-col items-center gap-1">
+      <div className="flex flex-col items-start gap-1">
         {statusBadge(identityStatusLabels, row.status)}
         {row.deactivatedAt ? (
-          <p className="font-mono text-[11px] text-idpxyz-textMuted">
+          <span className="font-mono text-[10px] text-idpxyz-textMuted">
             自 <Instant value={row.deactivatedAt} />
-          </p>
+          </span>
         ) : null}
       </div>
     ),
   },
   {
-    id: 'effective-from',
+    key: 'effective-from',
     header: '生效自',
-    className: 'min-w-44 font-mono text-xs',
-    hideWhenMasterDetailOpen: true,
-    render: (row) => <Instant value={row.effectiveFrom} />,
+    sortKey: 'effective-from',
+    // 已登记即还没到生效时点，时刻标琥珀色——与参照页「预计到货」临近那一格同一个提示。
+    render: (row) => (
+      <span className={`font-mono ${row.status === 'REGISTERED' ? 'font-medium text-amber-400' : 'text-idpxyz-text'}`}>
+        <Instant value={row.effectiveFrom} />
+      </span>
+    ),
   },
   {
-    id: 'basis',
+    key: 'basis',
     header: '登记依据',
-    className: 'min-w-44 font-mono text-xs',
-    hideWhenMasterDetailOpen: true,
-    render: (row) => row.basis,
+    hideWhenDetailOpen: true,
+    render: (row) => <span className="font-mono text-idpxyz-textMuted">{row.basis}</span>,
   },
   {
-    id: 'registered-at',
+    key: 'registered-at',
     header: '登记时间',
-    className: 'min-w-44 font-mono text-xs text-idpxyz-textMuted',
-    hideWhenMasterDetailOpen: true,
-    render: (row) => <Instant value={row.registeredAt} />,
+    sortKey: 'registered-at',
+    hideWhenDetailOpen: true,
+    render: (row) => (
+      <span className="font-mono text-idpxyz-textMuted">
+        <Instant value={row.registeredAt} />
+      </span>
+    ),
   },
 ];
 
@@ -147,194 +158,50 @@ function selectedIdFromHash(): string | null {
 }
 
 /**
- * 右侧检查器只放行上已有的概要（契约：不发第二个请求，概要 ≤ 8 格）。
- * 身份状态只进「状态」一节，不在概要里再写一遍。停用两件未停用时不占格。
- * 登记依据、登记时间、租户、修订号进默认折叠的审计。修订历史与法人资料要另取数，
- * 不进检查器，走「打开详情」。业务参与方页没有按标识的对象地址，链落到模块页，标识写在链的词上。
- */
-function inspectorOf(row: GroupLegalEntityRecord): InspectorContent {
-  const identity = identityLayerCellsOf(row);
-  return {
-    title: '法人',
-    subtitle: row.legalEntityId,
-    sections: [
-      {
-        kind: 'summary',
-        fields: presentFields([
-          { label: '参与方身份', value: row.partyId, mono: true },
-          { label: '注册国家 / 地区', value: identity?.country ?? identityLayerAbsentNote, mono: true },
-          { label: '终身注册号', value: identity?.numbers ?? identityLayerAbsentNote, mono: true },
-          { label: '生效自', value: formatInstant(row.effectiveFrom), mono: true },
-          row.deactivatedAt
-            ? { label: '停用时点', value: formatInstant(row.deactivatedAt), mono: true }
-            : null,
-          row.deactivationBasis
-            ? { label: '停用依据', value: row.deactivationBasis, mono: true }
-            : null,
-        ]),
-      },
-      {
-        kind: 'status',
-        items: [{ label: '身份状态', word: labelOf(identityStatusLabels, row.status) }],
-      },
-      {
-        kind: 'actions',
-        actions: [
-          {
-            label: '打开详情',
-            onRun: () => {
-              window.location.hash = detailHash(row.legalEntityId);
-            },
-          },
-        ],
-      },
-      {
-        kind: 'related',
-        links: [{ label: `业务参与方 ${row.partyId}`, hash: '#/business-parties' }],
-      },
-      {
-        kind: 'audit',
-        fields: presentFields([
-          { label: '登记依据', value: row.basis, mono: true },
-          { label: '登记时间', value: formatInstant(row.registeredAt), mono: true },
-          { label: '租户', value: row.tenantId, mono: true },
-          { label: '修订号', value: `r${row.revision}`, mono: true },
-        ]),
-      },
-    ],
-  };
-}
-
-/**
- * 集团与法人（party-commercial）。行对象是责任法人的最新登记修订：法人钉在稳定的
- * 业务参与方身份上（ADR-0003 三级边界的第二级），名称从参与方册转写；身份登记按
- * 修订版本化不可覆盖，停用形成新修订而不是删除。
+ * 集团与法人（party-commercial）。行对象是责任法人的最新登记修订：法人钉在稳定的业务参与方身份上
+ * （ADR-0003 三级边界的第二级），名称从参与方册转写；身份登记按修订版本化不可覆盖，停用形成新修订而不是删除。
  *
- * 列表状态由页面持有再传进来：登记签要读已取回的列表给修订号建议、登记成功后要触发重取，
- * 两签共享同一份答案而不各取一次。
- */
-function GroupLegalEntitiesTable({
-  answer,
-  retry,
-  previewId,
-  onPreviewChange,
-}: {
-  answer: ApiResult<GroupLegalEntityListResponseBody> | null;
-  retry: () => void;
-  previewId: string | null;
-  onPreviewChange: (id: string | null) => void;
-}) {
-  const [search, setSearch] = useState('');
-  const [status, setStatus] = useState<LegalEntityStatusFilter>('ALL');
-  const [sort, setSort] = useState<LegalEntitySortKey>('registered-desc');
-
-  const entities = answer?.kind === 'outcome' ? answer.body.entities : [];
-  // 筛选与排序只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约（归票 04）。
-  const visibleEntities = sortLegalEntities(filterLegalEntities(entities, { search, status }), sort);
-
-  return (
-    <ListPageTemplate<GroupLegalEntityRecord>
-        title={info.title}
-        description="责任法人是对外签约、开票与结算的经营主体；每次登记形成新修订，历史不可覆盖"
-        search={{
-          value: search,
-          onChange: setSearch,
-          placeholder: '搜索法人、参与方身份或名称',
-        }}
-        filters={
-          <select
-            className="h-6 shrink-0 rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 text-[11px] text-idpxyz-text outline-none focus-visible:ring-1 focus-visible:ring-idpxyz-accent/35"
-            value={status}
-            aria-label="身份状态"
-            onChange={(event) => setStatus(event.target.value as LegalEntityStatusFilter)}
-          >
-            {legalEntityStatusFilterOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        }
-        sort={{
-          options: [...legalEntitySortOptions],
-          value: sort,
-          onChange: (value) => setSort(value as LegalEntitySortKey),
-        }}
-        filterSummary={
-          // 计数只在拿到业务答案后显示：未配置态与错误态下报「0 个」会与状态区「这不是目录为空」直接矛盾
-          // （README 列表页上列通则）。总数与当前显示数分开报（票 01 裁决 1）。
-          answer?.kind === 'outcome' ? legalEntityCountSummary(entities.length, visibleEntities.length) : undefined
-        }
-        masterDetail={{
-          selectedKey: previewId,
-          onSelect: onPreviewChange,
-          renderDetail: (entity) => (
-            <LegalEntityDetailPage
-              legalEntityId={entity.legalEntityId}
-              row={entity}
-              listAnswer={answer}
-              retry={retry}
-              onBack={() => onPreviewChange(null)}
-            />
-          ),
-        }}
-        columns={columns}
-        rows={visibleEntities}
-        rowKey={(row) => row.legalEntityId}
-        // 单击进检查器，双击开对象页：表留在左边，翻行时右栏跟着换，不再用抽屉盖住列表。
-        inspector={inspectorOf}
-        onRowOpen={(row) => {
-          window.location.hash = detailHash(row.legalEntityId);
-        }}
-        // 筛出为空不是空态（裁决 1）：viewState 按总数判，表格区另显一行。
-        emptyRowsNote={legalEntityNoMatchNote}
-        viewState={catalogueViewState(answer, entities.length, retry, {
-          module: info,
-          endpoint: 'GET /commercial-group-legal-entities',
-          emptyTitle: '当前租户尚无责任法人登记',
-          emptyDescription: '在「登记法人」签登记第一个，或用受控 CLI parcel-commercial register-parties 灌入。',
-        })}
-      />
-  );
-}
-
-/**
- * 集团与法人：查阅法人册，外加登记签（ADR-0085，票 admin-write-faces/02 切片 02c）。
+ * 形态照 idp-prism 采购订单工作台（票 admin-web-group-legal-entities/15，用户令「完全参考」，取代 spec「不做」里
+ * 「不改两签结构」那一条）：命令头指标可点即筛、状态胶囊带计数、表头点排序、单击行在右栏开详情（可拖宽）、
+ * 双击或对象地址开整页对象标签、↑/↓ 换行 Esc 收栏 `/` 检索。登记从页头主动作进登记视图，不再是第二个签。
  *
- * 登记签只装法人身份登记一册。停用不摆这里：写签跟着读得最全的那一页走，业务参与方页的
- * 身份本体册停用时点与依据两件都显。本页列表的身份状态格只标停用时点；对象页会列出依据，
- * 停用签仍留在那一页，不在本签再摆一份。
+ * 参照页有而这里没有的，都是因为册上没有对应的事实或端点：分页（读口一页答完，下推归票 04）、批量勾选
+ * （没有批量命令端点）、收货 / 证据 / 协作（法人册不承载）。指标与计数数的是已取回的这一页，只在拿到业务答案后显示——
+ * 未配置态与错误态下报「0 个」会与状态区「这不是目录为空」直接矛盾（README 列表页上列通则）。
  *
- * 不是「一个口跨三种身份所以哪都不能摆」——那条路走不通的是**按身份切签**：快照收的是
- * deactivations 数组、kind 在每一项上，切开就得让每页拒收非本页那种 kind，等于管理台编一条
- * 服务端没有的约束。跨读面本身不是禁令，读得最全的那一页收下它才是。
+ * 没有行级编辑或删除面：更正占下一个修订号翻旧插新，停用形成新修订。停用留在业务参与方页——那一页读得最全，
+ * 快照收 deactivations 数组、kind 在每一项上，按身份切签就得让每页拒收非本页那种 kind，等于管理台编一条
+ * 服务端没有的约束。墙降之前登记必然答 403「接入渠道未配置」，那是诚实答案。
  *
- * 也没有行级编辑或删除面：身份登记按修订版本化不可覆盖，更正占下一个修订号翻旧插新，
- * 停用形成新修订，所以本签只有登记一个动作。墙降之前它必然答 403「接入渠道未配置」，
- * 那是诚实答案；墙降当天在装配点换真 Intake 即点亮，本页一行不用改。
- *
- * 登记签自票 admin-web-group-legal-entities/02 起是逐字段表单（ADR-0101 决定八自裁），JSON 快照签
- * 降为表单里的折叠区。
+ * 列表状态（检索、筛选、排序、选中行）挂在页面上：进登记视图再回来还在。
  */
 export function GroupLegalEntitiesPage() {
-  const { answer, retry } = useRegisterList(listGroupLegalEntities);
+  const { answer, retry, pending } = useRegisterList(listGroupLegalEntities);
   const tabReturn = useTabReturn();
   // 渲列表还是对象页由 hash 二段定：对象地址在壳层是自己的一张标签，本组件在那张标签里渲对象页。
-  const [selectedId, setSelectedId] = useState<string | null>(selectedIdFromHash);
-  const [previewId, setPreviewId] = useState<string | null>(null);
+  const [objectId, setObjectId] = useState<string | null>(selectedIdFromHash);
+  const [view, setView] = useState<'list' | 'register'>('list');
+  const [search, setSearch] = useState('');
+  const [status, setStatus] = useState<LegalEntityStatusFilter>('ALL');
+  const [attentionOnly, setAttentionOnly] = useState(false);
+  const [sort, setSort] = useState<WorkbenchSort>(defaultLegalEntitySort);
+  const [selectedKey, setSelectedKey] = useState<string | null>(null);
+
   useEffect(() => {
-    const onHashChange = () => setSelectedId(selectedIdFromHash());
+    const onHashChange = () => setObjectId(selectedIdFromHash());
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
-  // 列表没取到（加载中 / 未配置 / 出错）传 null：表单那边建议修订号一律为 1，不拿空数组冒充「册上没有」。
-  const knownEntities = answer?.kind === 'outcome' ? answer.body.entities : null;
 
-  if (selectedId !== null) {
-    const row = knownEntities?.find((entity) => entity.legalEntityId === selectedId) ?? null;
+  // 列表没取到（加载中 / 未配置 / 出错）传 null：登记表单那边建议修订号一律为 1，不拿空数组冒充「册上没有」。
+  const knownEntities = answer?.kind === 'outcome' ? answer.body.entities : null;
+  const entities = knownEntities ?? [];
+
+  if (objectId !== null) {
+    const row = entities.find((entity) => entity.legalEntityId === objectId) ?? null;
     return (
       <LegalEntityDetailPage
-        legalEntityId={selectedId}
+        legalEntityId={objectId}
         row={row}
         listAnswer={answer}
         retry={retry}
@@ -343,26 +210,139 @@ export function GroupLegalEntitiesPage() {
     );
   }
 
+  if (view === 'register') {
+    return (
+      <div className="flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
+        <div className="flex shrink-0 items-center gap-4 border-b border-idpxyz-border px-6 py-3">
+          <Button variant="ghost" size="sm" onClick={() => setView('list')}>
+            <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden="true" />
+            返回列表
+          </Button>
+          <div className="min-w-0">
+            <h1 className="text-[16px] font-semibold leading-tight text-idpxyz-textBright">登记责任法人</h1>
+            <p className="truncate text-[11px] text-idpxyz-textMuted">
+              每次登记形成新修订，历史不可覆盖；更正身份就登记同一法人的下一修订号
+            </p>
+          </div>
+        </div>
+        <LegalEntityRegistrationForm knownEntities={knownEntities} onRegistered={retry} />
+      </div>
+    );
+  }
+
+  // 筛选与排序只在已取回的这一页数据上做，不下推成查询参数——那要改端点契约（归票 04）。
+  const visible = sortLegalEntities(filterLegalEntities(entities, { search, status, attentionOnly }), sort);
+  const answered = answer?.kind === 'outcome';
+  const counts = countLegalEntities(entities);
+  const effectivePct = counts.total > 0 ? Math.round((counts.byStatus.EFFECTIVE / counts.total) * 100) : 0;
+  const toggleStatus = (code: LegalEntityStatusFilter) => setStatus(status === code ? 'ALL' : code);
+
+  const kpis: WorkbenchKpi[] | undefined = answered
+    ? [
+        {
+          label: '待补',
+          value: counts.attention,
+          tone: counts.attention > 0 ? 'text-orange-400' : undefined,
+          icon: counts.attention > 0 ? <AlertTriangle className="h-3 w-3 text-orange-400" aria-hidden="true" /> : undefined,
+          active: attentionOnly,
+          onClick: () => setAttentionOnly(!attentionOnly),
+        },
+        {
+          label: '已登记未生效',
+          value: counts.byStatus.REGISTERED,
+          tone: counts.byStatus.REGISTERED > 0 ? 'text-amber-400' : undefined,
+          active: status === 'REGISTERED',
+          onClick: () => toggleStatus('REGISTERED'),
+        },
+        {
+          label: '已生效',
+          value: counts.byStatus.EFFECTIVE,
+          tone: 'text-sky-400',
+          active: status === 'EFFECTIVE',
+          onClick: () => toggleStatus('EFFECTIVE'),
+        },
+        {
+          label: '生效占比',
+          value: '',
+          custom: (
+            <div className="flex items-center gap-1.5">
+              <Progress value={effectivePct} size="sm" variant={effectivePct >= 100 ? 'success' : 'default'} className="w-24" />
+              <span className="text-[12px] font-semibold leading-none text-idpxyz-textBright">{effectivePct}%</span>
+            </div>
+          ),
+        },
+      ]
+    : undefined;
+
+  const statusChips: WorkbenchChip[] | undefined = answered
+    ? legalEntityStatusFilterOptions
+        .filter(
+          (option) =>
+            option.value === 'ALL' ||
+            option.value === status ||
+            counts.byStatus[option.value as keyof typeof counts.byStatus] > 0,
+        )
+        .map((option) => ({
+          id: option.value,
+          label: option.label,
+          count: option.value === 'ALL' ? counts.total : counts.byStatus[option.value as keyof typeof counts.byStatus],
+          active: status === option.value,
+          onClick: () => (option.value === 'ALL' ? setStatus('ALL') : toggleStatus(option.value)),
+        }))
+    : undefined;
+
   return (
-    <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
-      <Tabs defaultValue="entities" className="flex-1 flex flex-col overflow-hidden gap-0">
-        <TabsList className="px-4 shrink-0">
-          <TabsTrigger value="entities">责任法人目录</TabsTrigger>
-          <TabsTrigger value="register">登记责任法人</TabsTrigger>
-        </TabsList>
-        <TabsContent
-          value="entities"
-          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
-        >
-          <GroupLegalEntitiesTable answer={answer} retry={retry} previewId={previewId} onPreviewChange={setPreviewId} />
-        </TabsContent>
-        <TabsContent
-          value="register"
-          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
-        >
-          <LegalEntityRegistrationForm knownEntities={knownEntities} onRegistered={retry} />
-        </TabsContent>
-      </Tabs>
-    </div>
+    <WorkbenchPageTemplate<GroupLegalEntityRecord>
+      title={info.title}
+      subtitle="责任法人是对外签约、开票与结算的经营主体 · 每次登记形成新修订，历史不可覆盖"
+      kpis={kpis}
+      onRefresh={retry}
+      refreshing={pending}
+      primaryAction={
+        <Button onClick={() => setView('register')}>
+          <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
+          登记责任法人
+        </Button>
+      }
+      search={{ value: search, onChange: setSearch, placeholder: '搜索法人、参与方身份或名称…' }}
+      statusChips={statusChips}
+      toolbarRight={answered ? legalEntityCountSummary(entities.length, visible.length) : undefined}
+      columns={columns}
+      rows={visible}
+      rowKey={(row) => row.legalEntityId}
+      selectedKey={selectedKey}
+      onSelect={setSelectedKey}
+      rowAttention={legalEntityNeedsAttention}
+      sort={sort}
+      onSort={(key) => setSort(toggleWorkbenchSort(sort, key))}
+      onRowOpen={(row) => {
+        window.location.hash = detailHash(row.legalEntityId);
+      }}
+      noMatchText={legalEntityNoMatchNote}
+      onClearFilters={() => {
+        setSearch('');
+        setStatus('ALL');
+        setAttentionOnly(false);
+      }}
+      renderDetail={(key) => {
+        const row = visible.find((entity) => entity.legalEntityId === key);
+        return row ? (
+          <LegalEntityDetailPanel
+            row={row}
+            onClose={() => setSelectedKey(null)}
+            onOpenObjectPage={() => {
+              window.location.hash = detailHash(row.legalEntityId);
+            }}
+          />
+        ) : null;
+      }}
+      // 筛出为空不是空态（票 01 裁决 1）：viewState 按总数判，表格区另显 noMatchText。
+      viewState={catalogueViewState(answer, entities.length, retry, {
+        module: info,
+        endpoint: 'GET /commercial-group-legal-entities',
+        emptyTitle: '当前租户尚无责任法人登记',
+        emptyDescription,
+      })}
+    />
   );
 }
