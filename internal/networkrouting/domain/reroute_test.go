@@ -159,3 +159,36 @@ func rerouteSpec(
 		DecidedAt:    reroutedAt,
 	}
 }
+
+func TestFoldAutoRerouteLeavesUndeclaredAsASuggestion(t *testing.T) {
+	authority, blockers := domain.FoldAutoReroute(
+		domain.AutoRerouteFormUndeclared, nil, true, true, nil, nil,
+	)
+	if authority != domain.SuggestionOnly || len(blockers) != 1 || blockers[0] != "AUTO_REROUTE_UNCONFIGURED" {
+		t.Fatalf("authority = %q blockers = %v", authority, blockers)
+	}
+	threshold := 0
+	authority, blockers = domain.FoldAutoReroute(
+		domain.CostImprovementAutoReroute, &threshold, true, true, nil, nil,
+	)
+	if authority != domain.AutomaticRerouteAllowed || len(blockers) != 0 {
+		t.Fatalf("declared = %q blockers = %v", authority, blockers)
+	}
+}
+
+func TestCostImprovementIsCurrentMinusNext(t *testing.T) {
+	current := mustValue(t, domain.NewCandidateID, "candidate-current")
+	next := mustValue(t, domain.NewCandidateID, "candidate-next")
+	priced := func(id domain.CandidateID, amount int64) domain.CandidateCostFact {
+		t.Helper()
+		fact, err := domain.NewPricedCandidateCost(id, amount, "CNY")
+		if err != nil {
+			t.Fatalf("priced: %v", err)
+		}
+		return fact
+	}
+	improved, ok := domain.CostImprovementMinor(priced(current, 1000), priced(next, 100))
+	if !ok || improved != 900 {
+		t.Fatalf("improvement = %d ok = %v", improved, ok)
+	}
+}

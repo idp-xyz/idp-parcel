@@ -189,7 +189,7 @@ func TestAFrozenPlanIsKeptWhenItIsStillExecutable(t *testing.T) {
 	fixture := newReassessFixture(t)
 	record := currentPlanRecord(t)
 	fixture.routes.records[record.Key] = record
-	evidence := routableEvidence(t)
+	evidence := declareCostImprovement(cheaperAlternative(t, 100), 0)
 	limit := 1
 	evidence.FreezeForm = domain.RemainingSegmentCountFreeze
 	evidence.FreezeRemainingSegmentLimit = &limit
@@ -203,8 +203,36 @@ func TestAFrozenPlanIsKeptWhenItIsStillExecutable(t *testing.T) {
 		t.Fatalf("outcome = %q, want STILL_APPLICABLE", result.Outcome())
 	}
 	kept, present := result.Record()
-	if !present || kept.HasNewPlan {
+	if !present || kept.HasNewPlan || kept.HasDecision {
 		t.Fatal("越过冻结边界仍造了新计划")
+	}
+}
+
+// Covers: 仍可执行且未越过冻结边界时，成本改善严格大于已登记阈值才自动切换。
+// 阈值 0 是本测试交入的租户取值。
+func TestACostImprovementBeforeTheFreezeBoundaryFormsANewPlan(t *testing.T) {
+	fixture := newReassessFixture(t)
+	record := currentPlanRecord(t)
+	fixture.routes.records[record.Key] = record
+	evidence := declareCostImprovement(cheaperAlternative(t, 100), 0)
+	limit := 0
+	evidence.FreezeForm = domain.RemainingSegmentCountFreeze
+	evidence.FreezeRemainingSegmentLimit = &limit
+	fixture.evidence.byParcel["parcel-1"] = evidence
+
+	result, err := fixture.handler.Handle(context.Background(), reassessCommand(t, "node-origin"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.ReassessedRerouted {
+		t.Fatalf("outcome = %q, want REROUTED", result.Outcome())
+	}
+	switched, present := result.Record()
+	if !present || !switched.HasNewPlan || switched.NewPlan.SelectedCandidate().String() != "candidate-2" {
+		t.Fatalf("new plan = %#v", switched.NewPlan)
+	}
+	if len(fixture.applicability.saved) != 2 {
+		t.Fatalf("saved applicability = %d, want superseded original and successor", len(fixture.applicability.saved))
 	}
 }
 

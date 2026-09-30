@@ -176,10 +176,15 @@ type InitialRouteEvidence struct {
 	// 未声明不是未冻结。
 	FreezeForm                  domain.FreezeForm
 	FreezeRemainingSegmentLimit *int
-	CandidateCosts              []domain.CandidateCostFact
-	Paths                       []CandidatePath
-	Strategy                    domain.RouteStrategyReference
-	ViewRevision                domain.NetworkViewRevision
+	// AutoRerouteForm 零值或阈值为 nil 即这一版没有声明自动改路。未声明不是允许，也不是不允许。
+	AutoRerouteForm                      domain.AutoRerouteForm
+	AutoRerouteImprovementThresholdMinor *int
+	UnresolvedRestrictions               []domain.RestrictionReference
+	OutstandingResponsibilities          []domain.ResponsibilityReference
+	CandidateCosts                       []domain.CandidateCostFact
+	Paths                                []CandidatePath
+	Strategy                             domain.RouteStrategyReference
+	ViewRevision                         domain.NetworkViewRevision
 }
 
 // InitialRouteEvidenceView 为一次初始路由判断取回版本化事实。三格语义同
@@ -335,9 +340,8 @@ func (kind ReassessmentConclusionKind) String() string {
 	}
 }
 
-// AutoRerouteFactsView 按判断键取自动改路四条件的事实（政策允许、在受控节点、仅未
-// 执行受影响、限制与责任清单）。第二个返回值为 false 即「事实目录未配置」——不猜：
-// 只失效不改路，连改路建议都形不成（说不出「为什么没自动」）。依赖调不通作为错误返回。
+// AutoRerouteFactsView 是事实目录的读口。复核不再读它：自动改路由策略版本当场折出
+// （ADR-0173）。目录只留历史陈述，不是判断权威。第二个返回值为 false 即这本册没有该键。
 type AutoRerouteFactsView interface {
 	LoadAutoRerouteFacts(
 		ctx context.Context,

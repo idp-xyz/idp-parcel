@@ -9,57 +9,28 @@ import (
 	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 )
 
-type autoRerouteFactsDouble struct {
-	facts      domain.AutoRerouteFacts
-	configured bool
-	err        error
-}
-
-func (double *autoRerouteFactsDouble) LoadAutoRerouteFacts(
-	_ context.Context,
-	_ domain.InitialRouteJudgmentKey,
-) (domain.AutoRerouteFacts, bool, error) {
-	if double.err != nil {
-		return domain.AutoRerouteFacts{}, false, double.err
-	}
-	return double.facts, double.configured, nil
-}
-
-// rerouteFixture 在标准复核夹具上接入自动改路事实缝，并预置「计划失效+候选可用」的
-// 前提（实际位置不在计划上、证据可选出 candidate-1）。
-func rerouteFixture(t *testing.T, facts *autoRerouteFactsDouble) *reassessFixture {
+// rerouteFixture 预置「计划失效+候选可用」的前提（实际位置不在计划上）。
+// 自动改路由证据上的策略声明折出，不读事实目录。
+func rerouteFixture(t *testing.T) *reassessFixture {
 	t.Helper()
 	fixture := newReassessFixture(t)
 	record := currentPlanRecord(t)
 	fixture.routes.records[record.Key] = record
 	fixture.evidence.byParcel["parcel-1"] = routableEvidence(t)
-	fixture.handler = application.NewReassessRouteHandler(application.ReassessRouteDeps{
-		Routes:        fixture.routes,
-		Evidence:      fixture.evidence,
-		Applicability: fixture.applicability,
-		Store:         fixture.store,
-		Log:           fixture.log,
-		Identities:    &routeIdentityDouble{},
-		Clock:         fixedClock{at: reassessedAt},
-		AutoReroute:   facts,
-	})
 	return fixture
 }
 
-func allConditionsMet() domain.AutoRerouteFacts {
-	return domain.AutoRerouteFacts{
-		PolicyAllowsAutomatic:  true,
-		AtControlledNode:       true,
-		OnlyUnexecutedAffected: true,
-	}
+func declareCostImprovement(evidence ports.InitialRouteEvidence, threshold int) ports.InitialRouteEvidence {
+	evidence.AutoRerouteForm = domain.CostImprovementAutoReroute
+	evidence.AutoRerouteImprovementThresholdMinor = &threshold
+	return evidence
 }
 
-// Covers: UC-NR-003 7B「四个条件同时满足才允许自动改路」的编排面——失效已定、候选可用
-// 且条件全立时，同一份复核记录升格为`已改路`：自动模式决定在场、新计划版本不同于原
-// 计划、原计划的失效照常落库（改路不豁免失效）。
+// Covers: AT-NR-037 当前有效实测使原线路不再合格，存在替代候选且允许自动改路 → 新计划。
+// 阈值 0 是本测试交入的租户取值，不是产品默认。
 func TestAllConditionsMetFormsAnAutomaticRerouteDecision(t *testing.T) {
-	facts := &autoRerouteFactsDouble{facts: allConditionsMet(), configured: true}
-	fixture := rerouteFixture(t, facts)
+	fixture := rerouteFixture(t)
+	fixture.evidence.byParcel["parcel-1"] = declareCostImprovement(cheaperAlternative(t, 100), 0)
 
 	result, err := fixture.handler.Handle(context.Background(), reassessCommand(t, "node-actual-elsewhere"))
 	if err != nil {
@@ -84,13 +55,11 @@ func TestAllConditionsMetFormsAnAutomaticRerouteDecision(t *testing.T) {
 	}
 }
 
-// Covers: 7C「不满足自动条件时形成带候选与阻塞清单的改路建议，等授权角色决定」——
-// 政策不允许自动：结论仍是`已失效`，建议在场、阻塞点名 POLICY_DOES_NOT_ALLOW_AUTOMATIC、
-// 候选随建议保全；不形成决定。
+// Covers: AT-NR-042 候选可行但成本改善没有超过已登记阈值 → 只形成建议，计划不自动换。
 func TestUnmetConditionsLeaveASuggestionForTheAuthorizedRole(t *testing.T) {
-	facts := allConditionsMet()
-	facts.PolicyAllowsAutomatic = false
-	fixture := rerouteFixture(t, &autoRerouteFactsDouble{facts: facts, configured: true})
+	fixture := rerouteFixture(t)
+	// 改善是 900，阈值 1000 是本测试交入的租户取值。
+	fixture.evidence.byParcel["parcel-1"] = declareCostImprovement(cheaperAlternative(t, 100), 1000)
 
 	result, err := fixture.handler.Handle(context.Background(), reassessCommand(t, "node-actual-elsewhere"))
 	if err != nil {
@@ -107,7 +76,7 @@ func TestUnmetConditionsLeaveASuggestionForTheAuthorizedRole(t *testing.T) {
 	if !record.HasSuggestion || record.HasDecision {
 		t.Fatalf("suggestion = %v decision = %v; 建议与决定互斥", record.HasSuggestion, record.HasDecision)
 	}
-	if len(record.Suggestion.Blockers()) != 1 || record.Suggestion.Blockers()[0] != "POLICY_DOES_NOT_ALLOW_AUTOMATIC" {
+	if len(record.Suggestion.Blockers()) != 1 || record.Suggestion.Blockers()[0] != "IMPROVEMENT_BELOW_THRESHOLD" {
 		t.Fatalf("blockers = %v", record.Suggestion.Blockers())
 	}
 	if len(record.Suggestion.Candidates()) == 0 {
@@ -119,8 +88,8 @@ func TestUnmetConditionsLeaveASuggestionForTheAuthorizedRole(t *testing.T) {
 // 成本并列选不出唯一一条：不形成自动改路决定也不换新计划，只形成改路建议交授权角色（UC-NR-003
 // 7C），阻塞逐家点名并列候选，候选随建议保全。
 func TestALowestCostTieOnlyLeavesASuggestion(t *testing.T) {
-	fixture := rerouteFixture(t, &autoRerouteFactsDouble{facts: allConditionsMet(), configured: true})
-	fixture.evidence.byParcel["parcel-1"] = tiedEvidence(t)
+	fixture := rerouteFixture(t)
+	fixture.evidence.byParcel["parcel-1"] = declareCostImprovement(tiedEvidence(t), 0)
 
 	result, err := fixture.handler.Handle(context.Background(), reassessCommand(t, "node-actual-elsewhere"))
 	if err != nil {
@@ -154,11 +123,12 @@ func TestALowestCostTieOnlyLeavesASuggestion(t *testing.T) {
 // Covers: 硬句「存在未解除硬限制时自动与人工都不能绕过」——禁行只记录禁行依据：结论
 // `已失效`、三态为禁行、阻塞点名未解除限制；建议与决定都不形成。
 func TestUnresolvedRestrictionsBarRerouteEntirely(t *testing.T) {
-	facts := allConditionsMet()
-	facts.UnresolvedRestrictions = []domain.RestrictionReference{
+	fixture := rerouteFixture(t)
+	evidence := declareCostImprovement(cheaperAlternative(t, 100), 0)
+	evidence.UnresolvedRestrictions = []domain.RestrictionReference{
 		value(t, domain.NewRestrictionReference, "CUSTOMS_HOLD/CC-7"),
 	}
-	fixture := rerouteFixture(t, &autoRerouteFactsDouble{facts: facts, configured: true})
+	fixture.evidence.byParcel["parcel-1"] = evidence
 
 	result, err := fixture.handler.Handle(context.Background(), reassessCommand(t, "node-actual-elsewhere"))
 	if err != nil {
@@ -180,10 +150,9 @@ func TestUnresolvedRestrictionsBarRerouteEntirely(t *testing.T) {
 	}
 }
 
-// Covers: 实例半边纪律——自动改路事实目录未配置：失效照常落库，改路评估整段不做（三态
-// 保持未评估、无建议无决定），不猜政策也不猜节点受控性。
-func TestUnconfiguredRerouteFactsFallBackToAPureLapse(t *testing.T) {
-	fixture := rerouteFixture(t, &autoRerouteFactsDouble{configured: false})
+// Covers: 策略版本没声明自动改路时只形成建议、不自动，答未配置。不当成允许或不允许。
+func TestUndeclaredAutoRerouteOnlySuggests(t *testing.T) {
+	fixture := rerouteFixture(t)
 
 	result, err := fixture.handler.Handle(context.Background(), reassessCommand(t, "node-actual-elsewhere"))
 	if err != nil {
@@ -194,11 +163,14 @@ func TestUnconfiguredRerouteFactsFallBackToAPureLapse(t *testing.T) {
 		t.Fatalf("outcome = %q", result.Outcome())
 	}
 	record, _ := result.Record()
-	if record.RerouteState != domain.RerouteAuthorityInvalid {
-		t.Fatalf("reroute state = %q; 未配置不得给出三态判定", record.RerouteState)
+	if record.RerouteState != domain.SuggestionOnly {
+		t.Fatalf("reroute state = %q, want SUGGESTION_ONLY", record.RerouteState)
 	}
-	if record.HasSuggestion || record.HasDecision || record.HasNewPlan {
-		t.Fatal("未配置的事实缝长出了建议、决定或新计划")
+	if !record.HasSuggestion || record.HasDecision || record.HasNewPlan {
+		t.Fatal("未声明自动改路不得形成决定或新计划")
+	}
+	if len(record.Suggestion.Blockers()) != 1 || record.Suggestion.Blockers()[0] != "AUTO_REROUTE_UNCONFIGURED" {
+		t.Fatalf("blockers = %v", record.Suggestion.Blockers())
 	}
 	if record.CandidateState != ports.CandidatesAvailable {
 		t.Fatalf("candidate state = %q; 候选评估状态照常记录", record.CandidateState)

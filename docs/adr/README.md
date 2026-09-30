@@ -176,6 +176,7 @@
 - [ADR-0170：结算编排从 parcel-api 进入；确认与截单没登记就不做](./0170-settlement-orchestrations-enter-through-parcel-api.md)｜**入口**：六个构造接在 parcel-api。审核在接收编排上。确认与截单空册不调用。2026-09-30。装配是机制，触发是产品策略，接受依据是 ADR-0146 决定一。
 - [ADR-0171：计价输入在没有实测读口时用申报，并标明来源](./0171-pricing-input-resolver-uses-declaration-until-a-measurement-port-exists.md)｜**输入**：发生项成员、申报测量、地址要素三口接上。没有实测时用申报。集运单元不可得。2026-09-30。本项是机制，接受依据是 ADR-0146 决定一。
 - [ADR-0172：冻结边界的首版形态是剩余计划段数，没声明就不是未冻结](./0172-route-freeze-is-remaining-segment-count.md)｜**冻结**：剩余段数不超过登记值即越过边界。未声明答未配置。2026-09-30。本项是产品策略，接受依据是 ADR-0146 决定二、决定七。
+- [ADR-0173：自动改路由策略版本折出，事实目录不再是判断权威](./0173-auto-reroute-is-folded-from-the-strategy-version.md)｜**自动改路**：成本改善严格大于已登记阈值才自动切换。未声明只形成建议。2026-09-30。本项是产品策略，接受依据是 ADR-0146 决定二、决定七。
 
 ## 已被取代决策
 

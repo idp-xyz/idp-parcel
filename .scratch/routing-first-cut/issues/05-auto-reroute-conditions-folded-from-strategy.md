@@ -1,7 +1,7 @@
 # 05 自动改路条件由策略与计划事实折出，改善阈值按策略判
 
 Category: enhancement
-Status: ready-for-agent
+Status: done
 Blocked by: 04
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「路由策略族」那一步
 地盘：network-routing 领域与复核编排；路由策略版本内容（自动改路开关与改善阈值的形态）；与自动改路事实目录的关系。
@@ -19,6 +19,6 @@ Blocked by: 04
 
 ## 完成判据
 
-- [ ] 复核用例覆盖 `AT-NR-037`（允许自动 → 新计划）、`AT-NR-041`（过冻结不切）、`AT-NR-042`（不满足 → 只建议）。
-- [ ] 策略版本未声明自动改路时只形成建议、不自动，与今天「事实目录未配置即不猜」同一纪律。
-- [ ] 事实目录的去留写进 CONTEXT 或 ADR，代码与之一致。
+- [x] 复核用例覆盖 `AT-NR-037`（允许自动 → 新计划）、`AT-NR-041`（过冻结不切）、`AT-NR-042`（不满足 → 只建议）。
+- [x] 策略版本未声明自动改路时只形成建议、不自动，与今天「事实目录未配置即不猜」同一纪律。
+- [x] 事实目录的去留写进 CONTEXT 或 ADR，代码与之一致。
