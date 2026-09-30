@@ -43,6 +43,7 @@ import {
   type CsvCellText,
   type PageSelectionState,
 } from './list-selection';
+import { skeletonOf } from './loading-shape';
 import { StateSlot, type TemplateViewState, type StateSlotProps } from './state-slot';
 import { useInspector } from './inspector-context';
 import type { InspectorContent } from './inspector';
@@ -713,6 +714,16 @@ export function ListPageTemplate<Row>({
             </div>
           )}
         </>
+      ) : viewState.kind === 'loading' && skeletonOf(viewState.shape) === 'table' ? (
+        // 表形骨架摆进与真表同一个 surface 容器、顶对齐、列数随真表：居中放会让几行骨架浮在页面中下部，上面一大片空。
+        <div className="flex min-h-0 flex-1 flex-col p-2">
+          <div className="min-h-0 overflow-hidden rounded-md border border-idpxyz-border bg-idpxyz-sidebar">
+            <StateSlot
+              state={{ ...viewState, cols: viewState.cols ?? columns.length + (selection ? 1 : 0) }}
+              override={stateOverride}
+            />
+          </div>
+        </div>
       ) : (
         <div className="flex-1 flex items-center justify-center overflow-auto">
           <StateSlot state={viewState} override={stateOverride} />

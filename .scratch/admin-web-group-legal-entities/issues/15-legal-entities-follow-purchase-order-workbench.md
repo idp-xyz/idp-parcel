@@ -80,6 +80,9 @@ Blocked by: 无
   用户「显示检查器」的偏好不动，其余页照旧常驻。列表滚动区去掉 `pr-2` 与 `scrollbar-gutter:stable` 那条留白，首末列对称 `pl-6` / `pr-6`。
 - 实看：临时 harness（`.tmp-test/`，已删）起 vite，Windows 侧 headless Chrome 1440×900 截图，暗色下列表、详情栏、整壳各一张：
   分隔线为暗色、表格到右缘、业务参与方页检查器栏照旧、本页不再有空栏。
+- 用户第二张截图（加载态）：表形骨架被居中，几行浮在页面中下部、上面一大片空、首格贴左。工作台与 `ListPageTemplate` 两处
+  表形骨架改为顶对齐、列数随真表（`ListPageTemplate` 摆进与真表同一个 surface 容器）；其余形状照旧居中。同一 harness
+  以永不答的读口截暗色加载态两张（本页、业务参与方页）实看。
 - **不在本票修、需另定**：同一个 `/NN` 失效在别处也在——`apps/admin-web/src` 另有十余处（`ListPageTemplate` 检查中行与批量栏底色、
   `ReviewFlowTemplate` 等），`@idpxyz/*` 包源码有七十余处，今天都不生效。全局修法是把 `tailwind.config.js` 的主题色改成带
   `<alpha-value>` 的 `color-mix` 写法，一改全站这些底色与边框都会「突然出现」，是全站外观变化，候选另立票。

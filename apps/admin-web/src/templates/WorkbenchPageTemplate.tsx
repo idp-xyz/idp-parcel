@@ -4,6 +4,7 @@ import { Button } from '@idpxyz/ui-primitives';
 import { useToast } from '@idpxyz/ui-theme-runtime';
 import { useSplitResize, useWorkspaceTabPanel } from '@idpxyz/ui-workspace';
 import { useInspector } from './inspector-context';
+import { skeletonOf } from './loading-shape';
 import { StateSlot, type StateSlotProps, type TemplateViewState } from './state-slot';
 import { stepSelection, workbenchKeyAction, type WorkbenchFocus, type WorkbenchSort } from './workbench';
 
@@ -405,6 +406,12 @@ export function WorkbenchPageTemplate<Row>({
           <div ref={listRef} className="min-h-0 flex-1 overflow-auto">
             {ready ? (
               table
+            ) : viewState.kind === 'loading' && skeletonOf(viewState.shape) === 'table' ? (
+              // 加载骨架摆成表的样子：顶对齐、列数随真表、首格与真表 pl-6 对齐（骨架格自带 px-3）。居中放会让几行
+              // 骨架浮在页面中下部，上面一大片空，读起来像页面坏了。
+              <div className="px-3">
+                <StateSlot state={{ ...viewState, cols: viewState.cols ?? visibleColumns.length }} override={stateOverride} />
+              </div>
             ) : (
               <div className="flex h-full items-center justify-center">
                 <StateSlot state={viewState} override={stateOverride} />
