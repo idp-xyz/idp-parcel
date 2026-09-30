@@ -161,6 +161,38 @@ type claimRuleViewDouble struct {
 	err        error
 }
 
+// amountGrammarDouble 在夹具里登记一份合成取值：万分比 10000、免赔 0、限额很大。
+// 这是测试替这条责任结论填的租户取值，生产代码没有这份默认。
+type amountGrammarDouble struct {
+	configured bool
+	grammar    domain.AmountGrammar
+	err        error
+}
+
+func (double *amountGrammarDouble) LoadAmountGrammar(
+	_ context.Context,
+	_ domain.TenantID,
+	_ domain.AmountGrammarSubject,
+	_ string,
+) (domain.AmountGrammar, bool, error) {
+	if double.err != nil {
+		return domain.AmountGrammar{}, false, double.err
+	}
+	if !double.configured {
+		return domain.AmountGrammar{}, false, nil
+	}
+	return double.grammar, true, nil
+}
+
+func identityAmountGrammar(t *testing.T) domain.AmountGrammar {
+	t.Helper()
+	grammar, err := domain.NewAmountGrammar(1_000_000_000_000, 10_000, 0)
+	if err != nil {
+		t.Fatalf("identity grammar: %v", err)
+	}
+	return grammar
+}
+
 func (double *claimRuleViewDouble) LoadClaimAmountRule(
 	_ context.Context,
 	_ domain.TenantID,
@@ -202,6 +234,7 @@ type claimFixture struct {
 	acknowledgements *acknowledgementStoreDouble
 	adjustments      *claimAdjustmentStoreDouble
 	rules            *claimRuleViewDouble
+	grammar          *amountGrammarDouble
 	handoff          *claimHandoffDouble
 	handler          *application.SettleClaimAmountsHandler
 }
@@ -214,6 +247,7 @@ func newClaimFixture(t *testing.T) *claimFixture {
 		acknowledgements: newAcknowledgementStore(),
 		adjustments:      newClaimAdjustmentStore(),
 		rules:            &claimRuleViewDouble{configured: true},
+		grammar:          &amountGrammarDouble{configured: true, grammar: identityAmountGrammar(t)},
 		handoff:          &claimHandoffDouble{},
 	}
 	fixture.handler = application.NewSettleClaimAmountsHandler(application.SettleClaimAmountsDeps{
@@ -222,6 +256,7 @@ func newClaimFixture(t *testing.T) *claimFixture {
 		Acknowledgements: fixture.acknowledgements,
 		Adjustments:      fixture.adjustments,
 		Rules:            fixture.rules,
+		Grammar:          fixture.grammar,
 		Downstream:       fixture.handoff,
 		Clock:            claimClock{at: claimNowAt},
 	})
@@ -526,6 +561,7 @@ func TestClaimSettlementRecoveryDiscipline(t *testing.T) {
 			application.ClaimAmountStoreUnavailable, application.ReceivableStoreUnavailable,
 			application.AcknowledgementStoreUnavailable, application.ClaimAdjustmentStoreUnavailable,
 			application.ClaimRuleViewUnavailable, application.ClaimRuleUnconfigured,
+			application.ClaimGrammarViewUnavailable, application.ClaimGrammarUnconfigured,
 		} {
 			label := reason.String()
 			if label == "" {
@@ -533,11 +569,79 @@ func TestClaimSettlementRecoveryDiscipline(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 6 {
+		if len(labels) != 8 {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if application.ClaimUndecidedReason(len(labels)+1).String() != "" {
-			t.Fatal("第七个未决原因带了标签——封闭集合被悄悄放开")
+			t.Fatal("第九个未决原因带了标签——封闭集合被悄悄放开")
 		}
 	})
+}
+
+func TestClaimAmountsUseTheRegisteredGrammarInsteadOfTheAssertedAmount(t *testing.T) {
+	fixture := newClaimFixture(t)
+	grammar, err := domain.NewAmountGrammar(5_000, 8_000, 1_000)
+	if err != nil {
+		t.Fatalf("grammar: %v", err)
+	}
+	fixture.grammar.grammar = grammar
+	command := formClaimAmountCommand(t)
+	command.AmountMinor = 10_000
+
+	formed, err := fixture.handler.FormClaimAmount(context.Background(), command)
+	if err != nil {
+		t.Fatalf("form: %v", err)
+	}
+	if formed.Outcome() != application.ClaimAmountFormed {
+		t.Fatalf("outcome = %q", formed.Outcome())
+	}
+	record, _ := formed.ClaimAmount()
+	_, amount := record.Amount.Amount()
+	if amount != 5_000 {
+		t.Fatalf("金额 = %d，想要封顶后的 5000，不是主张 10000", amount)
+	}
+	composition, ok := formed.Composition()
+	if !ok || composition.ScaledMinor() != 7_200 || !composition.Capped() {
+		t.Fatalf("展开 scaled=%d capped=%v ok=%v", composition.ScaledMinor(), composition.Capped(), ok)
+	}
+
+	t.Run("missing grammar parameters stay unconfigured", func(t *testing.T) {
+		unconfigured := newClaimFixture(t)
+		unconfigured.grammar.configured = false
+		result, err := unconfigured.handler.FormClaimAmount(context.Background(), formClaimAmountCommand(t))
+		if err != nil {
+			t.Fatalf("form: %v", err)
+		}
+		if result.Outcome() != application.ClaimUndecided ||
+			result.UndecidedReason() != application.ClaimGrammarUnconfigured {
+			t.Fatalf("outcome = %q reason = %q", result.Outcome(), result.UndecidedReason())
+		}
+		if len(unconfigured.amounts.records) != 0 {
+			t.Fatal("未登记的文法仍写下了主张金额")
+		}
+	})
+
+	t.Run("a composed zero does not form an amount", func(t *testing.T) {
+		zeroed := newClaimFixture(t)
+		zeroed.grammar.grammar = amountGrammarForTest(t, 10_000, 10_000, 9_000)
+		result, err := zeroed.handler.FormClaimAmount(context.Background(), formClaimAmountCommand(t))
+		if err != nil {
+			t.Fatalf("form: %v", err)
+		}
+		if result.Outcome() != application.ClaimAmountNotFormed {
+			t.Fatalf("outcome = %q", result.Outcome())
+		}
+		if len(zeroed.amounts.records) != 0 {
+			t.Fatal("算出 0 仍写下了金额")
+		}
+	})
+}
+
+func amountGrammarForTest(t *testing.T, limit, ratio, deductible int64) domain.AmountGrammar {
+	t.Helper()
+	grammar, err := domain.NewAmountGrammar(limit, ratio, deductible)
+	if err != nil {
+		t.Fatalf("grammar: %v", err)
+	}
+	return grammar
 }

@@ -26,6 +26,7 @@ const (
 	commandSupplierPayableAccount      = "supplier-payable-account"
 	commandClaimAmountRule             = "claim-amount-rule"
 	commandChargeConfirmationFacts     = "charge-confirmation-facts"
+	commandAmountGrammar               = "amount-grammar"
 )
 
 var allCommands = []string{
@@ -36,6 +37,7 @@ var allCommands = []string{
 	commandSupplierPayableAccount,
 	commandClaimAmountRule,
 	commandChargeConfirmationFacts,
+	commandAmountGrammar,
 }
 
 // dispatchFunc 是一条命令在事务内的一次调用，交回已经归好退出码的答复。资金事实与结算账户是两族答案，
@@ -124,6 +126,19 @@ func commandFor(command string, raw []byte) (dispatchFunc, error) {
 				return "", 0, err
 			}
 			message, code := catalogueAnswer(commandClaimAmountRule, effect, registration.Rule().String())
+			return message, code, nil
+		}, nil
+	case commandAmountGrammar:
+		tenant, registration, err := registrationjson.AmountGrammarFromJSON(raw)
+		if err != nil {
+			return nil, err
+		}
+		return func(ctx context.Context, registrar registrar) (string, int, error) {
+			effect, err := registrar.grammars.RegisterAmountGrammar(ctx, tenant, registration)
+			if err != nil {
+				return "", 0, err
+			}
+			message, code := catalogueAnswer(commandAmountGrammar, effect, registration.Ref())
 			return message, code, nil
 		}, nil
 	case commandChargeConfirmationFacts:

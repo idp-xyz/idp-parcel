@@ -170,6 +170,7 @@ type advanceFixture struct {
 	recoveries  *recoveryStoreDouble
 	adjustments *adjustmentStoreDouble
 	contracts   *contractViewDouble
+	grammar     *amountGrammarDouble
 	handoff     *advanceHandoffDouble
 	handler     *application.AssessAdvanceRecoveryHandler
 }
@@ -181,6 +182,7 @@ func newAdvanceFixture(t *testing.T) *advanceFixture {
 		recoveries:  newRecoveryStore(),
 		adjustments: newAdjustmentStore(),
 		contracts:   &contractViewDouble{configured: true},
+		grammar:     &amountGrammarDouble{configured: true, grammar: identityAmountGrammar(t)},
 		handoff:     &advanceHandoffDouble{},
 	}
 	fixture.handler = application.NewAssessAdvanceRecoveryHandler(application.AssessAdvanceRecoveryDeps{
@@ -188,6 +190,7 @@ func newAdvanceFixture(t *testing.T) *advanceFixture {
 		Recoveries:  fixture.recoveries,
 		Adjustments: fixture.adjustments,
 		Contracts:   fixture.contracts,
+		Grammar:     fixture.grammar,
 		Downstream:  fixture.handoff,
 		Clock:       advanceClock{at: advanceNowAt},
 	})
@@ -507,6 +510,7 @@ func TestAdvanceRecoveryDiscipline(t *testing.T) {
 			application.AssessmentStoreUnavailable, application.RecoveryStoreUnavailable,
 			application.AdjustmentStoreUnavailable, application.ContractViewUnavailable,
 			application.ContractUnconfigured,
+			application.RecoveryGrammarViewUnavailable, application.RecoveryGrammarUnconfigured,
 		} {
 			label := reason.String()
 			if label == "" {
@@ -514,11 +518,51 @@ func TestAdvanceRecoveryDiscipline(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 5 {
+		if len(labels) != 7 {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if application.AdvanceUndecidedReason(len(labels)+1).String() != "" {
-			t.Fatal("第六个未决原因带了标签——封闭集合被悄悄放开")
+			t.Fatal("第八个未决原因带了标签——封闭集合被悄悄放开")
+		}
+	})
+}
+
+func TestRecoveryUsesTheRegisteredGrammarInsteadOfTheAssertedAmount(t *testing.T) {
+	fixture := newAdvanceFixture(t)
+	if _, err := fixture.handler.Assess(context.Background(), assessCommand(t, domain.AdvanceEstablished)); err != nil {
+		t.Fatalf("assess: %v", err)
+	}
+	fixture.grammar.grammar = amountGrammarForTest(t, 10_000, 5_000, 1_000)
+
+	formed, err := fixture.handler.FormRecovery(context.Background(), formRecoveryCommand(t))
+	if err != nil {
+		t.Fatalf("form recovery: %v", err)
+	}
+	if formed.Outcome() != application.RecoveryFormed {
+		t.Fatalf("outcome = %q", formed.Outcome())
+	}
+	record, _ := formed.Recovery()
+	_, amount := record.Recovery.Amount()
+	if amount != 2_000 {
+		t.Fatalf("金额 = %d，想要 2000，不是主张 5000", amount)
+	}
+
+	t.Run("missing grammar parameters stay unconfigured", func(t *testing.T) {
+		unconfigured := newAdvanceFixture(t)
+		if _, err := unconfigured.handler.Assess(context.Background(), assessCommand(t, domain.AdvanceEstablished)); err != nil {
+			t.Fatalf("assess: %v", err)
+		}
+		unconfigured.grammar.configured = false
+		result, err := unconfigured.handler.FormRecovery(context.Background(), formRecoveryCommand(t))
+		if err != nil {
+			t.Fatalf("form recovery: %v", err)
+		}
+		if result.Outcome() != application.AdvanceUndecidedOutcome ||
+			result.UndecidedReason() != application.RecoveryGrammarUnconfigured {
+			t.Fatalf("outcome = %q reason = %q", result.Outcome(), result.UndecidedReason())
+		}
+		if len(unconfigured.recoveries.records) != 0 {
+			t.Fatal("未登记的文法仍写下了主张金额")
 		}
 	})
 }

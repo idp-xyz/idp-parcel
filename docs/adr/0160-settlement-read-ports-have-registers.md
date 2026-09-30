@@ -48,3 +48,4 @@ Date: 2026-09-30
 - [ADR-0158](./0158-settlement-account-register-is-an-immutable-tuple.md)：结算账户登记册
 - [settlement-accounting CONTEXT](../domain/settlement-accounting/CONTEXT.md)
 - 票 `.scratch/product-strategy-boundary/issues/16-mechanism-gaps-without-a-ticket.md` 第 3 项
+- [ADR-0161](./0161-claim-and-recovery-amounts-use-one-grammar.md)：金额规则版本之后，限额、比例、免赔怎样组成金额

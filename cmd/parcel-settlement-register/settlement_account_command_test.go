@@ -64,4 +64,19 @@ func TestTheCatalogueCommandsTranslateBeforeTheTransaction(t *testing.T) {
 	if code != exitConflict || !strings.Contains(conflict, "冲突") {
 		t.Fatalf("conflict = %q code=%d", conflict, code)
 	}
+
+	grammar := []byte(`{
+		"tenantId": "SYN-T1",
+		"subjectKind": "CLAIM_RULE",
+		"subjectRef": "claim-rule/v2",
+		"limitMinor": 5000,
+		"ratioBasisPoints": 8000,
+		"deductibleMinor": 1000
+	}`)
+	if _, err := commandFor(commandAmountGrammar, grammar); err != nil {
+		t.Fatalf("amount-grammar 译装失败：%v", err)
+	}
+	if _, err := commandFor(commandAmountGrammar, []byte(`{"tenantId":"SYN-T1","subjectKind":"CLAIM_RULE","subjectRef":"claim-rule/v2","limitMinor":1,"ratioBasisPoints":10001,"deductibleMinor":0}`)); err == nil {
+		t.Fatal("超出万分比 10000 的比例被收成文法登记")
+	}
 }

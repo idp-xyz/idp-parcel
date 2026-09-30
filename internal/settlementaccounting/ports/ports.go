@@ -1042,7 +1042,8 @@ type OperatingHandoff interface {
 }
 
 // ClaimAmountRuleView 取责任结论适用的限额/比例/免赔金额规则版本。found=false 表示
-// 金额规则册上没有这一行——没有规则版本不形成金额（AT-SA-147）。
+// 金额规则册上没有这一行——没有规则版本不形成金额（AT-SA-147）。限额、比例、免赔
+// 怎样组成金额不在这本册里，三项取值在 AmountGrammarView。
 type ClaimAmountRuleView interface {
 	LoadClaimAmountRule(
 		ctx context.Context,
