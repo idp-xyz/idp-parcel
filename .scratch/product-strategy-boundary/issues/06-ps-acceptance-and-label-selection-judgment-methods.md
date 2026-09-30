@@ -38,3 +38,12 @@ Blocked by: 无（第 4 项里公开承运商接口的参考配置那半等 03�
 - **非阻断**：`receivedAt` 为零应报 error 而不是答`未配置`，该分支无测试；`acceptanceChainConsumers` 注释称财务控制那格形不成，实际靠种子取值成立；`submissionReceiptLookup` 与同包 finder 同形；「系统接收时刻」与 `CONTEXT` 原词「系统接收时间」不一；开发主线 PN-02 行「逐项时点 `Values` 为 nil」已部分失真。
 - 验证：隔离检出 `729bb56d` 上带 DSN `go test -p 1 -count=1 ./...` 绿（含 PG）。
 - **结论：不重放**，回作者同一分支修；修完两轴重跑。
+
+**评审 ← 通道 1（隔离子代理，非作者）· 钉 `299cd954`（同一分支，修 `729bb56d` 阻断那一笔，基 `729bb56d`）· 2026-09-30 19:37**
+
+- **阻断**（两轴各自得出，同一处）：新参考配置 `parcel-shipment/as-of-semantics/submission-receipt@1` 的上下文前缀、目录与键由作者自定。ADR-0147 越权风险点 3 原文「由该上下文 owner 定键」，派单写「需要用户拍板的先问用户，不自定」；进 `referenceconfig` 的 `releases` 即发布、不可改写。同处也没走 ADR-0147 决定四、五：规则包语义格只过非空构造门，引用串写错版本照登、判断时静默答`未配置`；没有测试经采用路径过门；JSON 的 `foldsTo` 无代码读。若语义格不算依据格，「以参考配置引用选时点形态」是新取舍，要 ADR。已交用户定。
+- **非阻断**：`FormAsOfValue` 不看判断类别，`SubmissionReceiptAsOf`、`acceptanceChainConsumers`、`acceptanceCommercialBasis` 的注释与主线 PN-02 格仍把财务控制「形不成」写成结构性的，实际靠种子取值；PS `CONTEXT`「没选用这一形态的语义，包括租户自己的截点，答`未配置`」把执行器现状写成不变式；主线 PN-02 格原地改写（该文惯例「上表单元格不改写」）且删了「待 PC owner 复核」；价格政策 `fx.asOfSemantics` 也采用该引用，无执行器认、两份 `CONTEXT` 未覆盖；`TestDemoSeedAdoptsTheSubmissionReceiptCitation` 在适配器测试里数演示种子采用次数；种子重算的两个 `contentDigest` 没有经 PC 发布翻译的证据。
+- **误报一条**：Spec 轴称清点带进无关漂移（`pilot_governance` 迁移 7→8）。基点上的清点本就过期，main 的 `22e83c83` 补过同一格；重放尖端重生成零差。
+- **核过无发现**：执行器不再认任何 `SYN-` 串；未采用照旧答`未配置`；种子财务控制那格未动；零值系统接收时间报错且有测试；读委托复用 `shipmentRequestFinder`、类型导出并有编译期断言；未并进 ADR-0156。
+- 推送方预演：隔离树把 `729bb56d`、`299cd954` 重放到 `22e83c83` 之上得 `137c07d6`、`a7ba1c71`，零冲突，清点重生成无差；链尖 gofmt 空、build 与 vet 绿，带 DSN（单跑真库用例为 PASS）`go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。预演不推。
+- **结论：不重放**。用户定下标识与采用路径后回作者同一分支修；修完两轴重跑。
