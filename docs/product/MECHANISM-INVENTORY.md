@@ -12,7 +12,7 @@
 | customscompliance | 97 | 98 | 18 | 41 | 10 | 14 |
 | networkrouting | 62 | 59 | 8 | 13 | 2 | 6 |
 | nodeoperations | 31 | 26 | 3 | 10 | 4 | 6 |
-| parcelpricing | 112 | 102 | 13 | 14 | 1 | 19 |
+| parcelpricing | 113 | 103 | 13 | 14 | 1 | 19 |
 | parcelshipment | 196 | 190 | 20 | 35 | 10 | 18 |
 | partycommercial | 153 | 161 | 12 | 39 | 1 | 37 |
 | pilotgovernance | 22 | 20 | 5 | 6 | 1 | 4 |
@@ -20,11 +20,11 @@
 | settlementaccounting | 158 | 108 | 26 | 54 | 9 | 9 |
 | transportfulfillment | 150 | 137 | 26 | 36 | 11 | 29 |
 | visibilityexception | 100 | 96 | 11 | 30 | 8 | 11 |
-| **合计** | 1141 | 1051 | 146 | 285 | 57 | 156 |
+| **合计** | 1142 | 1052 | 146 | 285 | 57 | 156 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 74、测试 109。
 
-## 跨上下文消费缝：32 组，88 个生产文件
+## 跨上下文消费缝：33 组，89 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -36,6 +36,7 @@
 | nodeoperations | transportfulfillment | 1 |
 | parcelpricing | accessidentity | 1 |
 | parcelpricing | settlementaccounting | 2 |
+| parcelpricing | transportfulfillment | 1 |
 | parcelshipment | accessidentity | 1 |
 | parcelshipment | customscompliance | 1 |
 | parcelshipment | networkrouting | 1 |
@@ -121,7 +122,7 @@
 | visibilityexception | 8 |
 | **合计** | 24 |
 
-## 端口：声明 452 个；基线口径缺 31，精确口径缺 3
+## 端口：声明 452 个；基线口径缺 30，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
@@ -129,7 +130,6 @@
 - `networkrouting.InitialRouteEvidenceView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/networkrouting/application.CatalogInitialRouteEvidence）
 - `networkrouting.NetworkEvidenceView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/networkrouting/application.CatalogNetworkEvidence）
 - `nodeoperations.ParcelIdentityView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/cmd/parcel-api.unconfiguredParcelIdentityView）
-- `parcelpricing.PricingInputResolver` 
 - `parcelshipment.ContinuedAttemptRegisterView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres.ContinuedAttemptRegisters）
 - `parcelshipment.CurrentFinalView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres.FinalOutcomes）
 - `parcelshipment.LabelChannelGateway` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/cmd/parcel-api.unconfiguredLabelChannelGateway）
@@ -159,6 +159,5 @@
 
 精确口径缺（无具体类型完整实现）：
 
-- `parcelpricing.PricingInputResolver` 
 - `transportfulfillment.TrackingSource` （虚高：名字出现过，但无人实现）
 - `visibilityexception.NotificationChannelGateway` 
