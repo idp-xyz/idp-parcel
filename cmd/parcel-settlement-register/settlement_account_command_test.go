@@ -25,6 +25,24 @@ func TestTheAllocationFormCommandTranslatesBeforeTheTransaction(t *testing.T) {
 	}
 }
 
+func TestTheBuyEvaluationTriggerCommandTranslatesBeforeTheTransaction(t *testing.T) {
+	raw := []byte(`{
+		"tenantId": "SYN-T1",
+		"occurrenceReason": "BOOKING",
+		"moment": "OCCURRENCE_FORMED"
+	}`)
+	dispatch, err := commandFor(commandBuyEvaluationTrigger, raw)
+	if err != nil || dispatch == nil {
+		t.Fatalf("buy-evaluation-trigger 译装失败：dispatch=%v err=%v", dispatch, err)
+	}
+	if _, err := commandFor(commandBuyEvaluationTrigger, []byte(`{"tenantId":"SYN-T1","occurrenceReason":"BOOKING","moment":"SETTLEMENT_PERIOD"}`)); err == nil {
+		t.Fatal("结算周期被收成触发时点")
+	}
+	if _, err := commandFor(commandBuyEvaluationTrigger, []byte(`{"tenantId":"SYN-T1","occurrenceReason":"BOOKING","moment":"OCCURRENCE_FORMED","reasons":["CANCEL"]}`)); err == nil {
+		t.Fatal("预列的发生项清单被收成触发登记")
+	}
+}
+
 func TestTheSettlementAccountCommandTranslatesBeforeTheTransaction(t *testing.T) {
 	raw := []byte(`{
 		"tenantId": "SYN-T1",

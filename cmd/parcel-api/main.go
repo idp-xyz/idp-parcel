@@ -187,8 +187,8 @@ func run(logger *slog.Logger) error {
 	if _, err := buildLabelChannelOrchestration(db); err != nil {
 		return err
 	}
-	// 请求评价编排（票 sa-cc/08）：同上一条纪律，启动时装配只为 fail-fast。产物今天没有触发面（三件合格来源引用
-	// 的交付方——结算作业或上游编排——尚不存在，触发面另票），构造即丢；不为此种任何行。
+	// 请求评价编排（票 sa-cc/08）：启动时装配只为 fail-fast。触发面是编排上的 Trigger：发生项原因没登记答未配置，
+	// 不发起请求。构造结果不挂端点；三件来源引用仍由调用方交进来，不为此种任何行。
 	if _, err := buildEvaluationRequestOrchestration(db); err != nil {
 		return err
 	}

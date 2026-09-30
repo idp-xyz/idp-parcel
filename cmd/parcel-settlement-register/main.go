@@ -68,6 +68,7 @@ type registrar struct {
 	grammars   *application.RegisterAmountGrammarHandler
 	forms      *application.RegisterAllocationFormHandler
 	ceilings   *application.RegisterAuditEscalationCeilingHandler
+	triggers   *application.RegisterBuyEvaluationTriggerHandler
 	transactor bentoapp.Transactor
 }
 
@@ -228,6 +229,14 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造越权升级上限登记：%w", err)
 	}
+	triggerStore, err := sapostgres.NewBuyEvaluationTriggers(db)
+	if err != nil {
+		return none, fmt.Errorf("构造评价请求触发登记册：%w", err)
+	}
+	triggerHandler, err := application.NewRegisterBuyEvaluationTriggerHandler(triggerStore, systemClock{})
+	if err != nil {
+		return none, fmt.Errorf("构造评价请求触发登记：%w", err)
+	}
 	return registrar{
 		funds:      funds,
 		accounts:   accountHandler,
@@ -235,6 +244,7 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 		grammars:   grammarHandler,
 		forms:      formHandler,
 		ceilings:   ceilingHandler,
+		triggers:   triggerHandler,
 		transactor: db.Transactor(),
 	}, nil
 }
