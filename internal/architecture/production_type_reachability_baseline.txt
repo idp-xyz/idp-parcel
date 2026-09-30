@@ -56,6 +56,16 @@
 # 三者由它的调用入种子。**在 0b003474 的内容上数得剪前 14、剪后 11**，只对该检出成立。
 internal/networkrouting/domain RouteRequirementSpec
 
+# 一类：经 ArbitrateLoadingConcurrency 取得，它在函数名棘轮基线里。等 NR 消费方适配器把装载事实
+# （权威业务发生时间、节点、所依计划版本、因果陈述）交给它；票 routing-first-cut/06 的接线缺口
+# 写的是同一处。随它出名单。动手前在父提交 b0baf6c1 上数得本文件 11 条；加上这五条后是 16。
+# 只对这一加成立。
+internal/networkrouting/domain CausalityStatement
+internal/networkrouting/domain LoadingConcurrencyJudgment
+internal/networkrouting/domain LoadingConcurrencyOutcome
+internal/networkrouting/domain LoadingFact
+internal/networkrouting/domain RerouteEffectBoundary
+
 # ---- parcel-pricing ----
 
 # 二类：只由 NewPricingPlanID / NewRateTableID / NewWeightPolicyID 交出，三个构造器零生产调用，
