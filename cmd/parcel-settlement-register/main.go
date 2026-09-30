@@ -63,16 +63,17 @@ const (
 
 // registrar 是本口的全部依赖：采用编排、结算账户登记，加环境事务的来源。
 type registrar struct {
-	funds      *application.MapExternalFundsHandler
-	accounts   *application.RegisterSettlementAccountHandler
-	catalogues *application.RegisterSettlementCatalogueHandler
-	grammars   *application.RegisterAmountGrammarHandler
-	forms      *application.RegisterAllocationFormHandler
-	ceilings   *application.RegisterAuditEscalationCeilingHandler
-	triggers   *application.RegisterBuyEvaluationTriggerHandler
-	connectors *application.RegisterAccountingConnectorHandler
-	fees       *application.RegisterPeriodicFeeHandler
-	transactor bentoapp.Transactor
+	funds        *application.MapExternalFundsHandler
+	accounts     *application.RegisterSettlementAccountHandler
+	catalogues   *application.RegisterSettlementCatalogueHandler
+	grammars     *application.RegisterAmountGrammarHandler
+	forms        *application.RegisterAllocationFormHandler
+	ceilings     *application.RegisterAuditEscalationCeilingHandler
+	triggers     *application.RegisterBuyEvaluationTriggerHandler
+	connectors   *application.RegisterAccountingConnectorHandler
+	fees         *application.RegisterPeriodicFeeHandler
+	attributions *application.RegisterChargeAttributionHandler
+	transactor   bentoapp.Transactor
 }
 
 // systemClock 给版本行的采用时刻与信封的记录时刻：那两个时刻不是登记输入，是「本口此刻形成」——与载荷里的
@@ -256,17 +257,26 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造周期费用登记：%w", err)
 	}
+	attributionStore, err := sapostgres.NewChargeAttributions(db)
+	if err != nil {
+		return none, fmt.Errorf("构造归属日判定登记册：%w", err)
+	}
+	attributionHandler, err := application.NewRegisterChargeAttributionHandler(attributionStore, systemClock{})
+	if err != nil {
+		return none, fmt.Errorf("构造归属日判定登记：%w", err)
+	}
 	return registrar{
-		funds:      funds,
-		accounts:   accountHandler,
-		catalogues: catalogueHandler,
-		grammars:   grammarHandler,
-		forms:      formHandler,
-		ceilings:   ceilingHandler,
-		triggers:   triggerHandler,
-		connectors: connectorHandler,
-		fees:       feeHandler,
-		transactor: db.Transactor(),
+		funds:        funds,
+		accounts:     accountHandler,
+		catalogues:   catalogueHandler,
+		grammars:     grammarHandler,
+		forms:        formHandler,
+		ceilings:     ceilingHandler,
+		triggers:     triggerHandler,
+		connectors:   connectorHandler,
+		fees:         feeHandler,
+		attributions: attributionHandler,
+		transactor:   db.Transactor(),
 	}, nil
 }
 

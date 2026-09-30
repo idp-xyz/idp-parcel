@@ -62,6 +62,26 @@ func TestTheAccountingConnectorCommandTranslatesBeforeTheTransaction(t *testing.
 	}
 }
 
+func TestTheChargeAttributionCommandTranslatesBeforeTheTransaction(t *testing.T) {
+	raw := []byte(`{
+		"tenantId": "SYN-T1",
+		"feeItem": "BASE",
+		"form": "SOURCE_OCCURRED",
+		"timeZone": "UTC",
+		"cutoffMinute": 1080
+	}`)
+	dispatch, err := commandFor(commandChargeAttribution, raw)
+	if err != nil || dispatch == nil {
+		t.Fatalf("charge-attribution 译装失败：dispatch=%v err=%v", dispatch, err)
+	}
+	if _, err := commandFor(commandChargeAttribution, []byte(`{"tenantId":"SYN-T1","feeItem":"BASE","form":"DELIVERED","timeZone":"UTC","cutoffMinute":1080}`)); err == nil {
+		t.Fatal("签收被收成归属日形态")
+	}
+	if _, err := commandFor(commandChargeAttribution, []byte(`{"tenantId":"SYN-T1","feeItem":"BASE","form":"SOURCE_OCCURRED","cutoffMinute":1080}`)); err == nil {
+		t.Fatal("缺时区仍被收成归属日判定")
+	}
+}
+
 func TestTheSettlementAccountCommandTranslatesBeforeTheTransaction(t *testing.T) {
 	raw := []byte(`{
 		"tenantId": "SYN-T1",
