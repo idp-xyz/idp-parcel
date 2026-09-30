@@ -70,6 +70,8 @@ const (
 	ApplicabilityStoreUnavailable
 	ReassessStoreUnavailable
 	ReassessIdentityUnavailable
+	// FreezeFormUnconfigured 是策略版本没有声明冻结形态。不能把它当成未冻结。
+	FreezeFormUnconfigured
 )
 
 func (reason ReassessUndecidedReason) String() string {
@@ -92,6 +94,8 @@ func (reason ReassessUndecidedReason) String() string {
 		return "REASSESS_STORE_UNAVAILABLE"
 	case ReassessIdentityUnavailable:
 		return "REASSESS_IDENTITY_UNAVAILABLE"
+	case FreezeFormUnconfigured:
+		return "FREEZE_FORM_UNCONFIGURED"
 	default:
 		return ""
 	}
@@ -209,8 +213,31 @@ func (handler *ReassessRouteHandler) Handle(
 	return handler.reassessNoRoute(ctx, trigger, evidence)
 }
 
+// freezeOf 在原计划仍可执行时判断有没有越过冻结边界。未声明形态答未配置，不当成未冻结。
+// 硬约束失效不走这里。
+func freezeOf(
+	plan domain.InitialRoutePlan,
+	trigger domain.ReassessmentTrigger,
+	evidence ports.InitialRouteEvidence,
+) (domain.FreezeJudgment, bool) {
+	nodes, ok := domain.PlanNodes(plan.Legs())
+	if !ok {
+		return domain.FreezeJudgment{}, true
+	}
+	prefix := domain.JudgeExecutedPrefix(nodes, trigger.Control(), trigger.Location().String())
+	if prefix.Grade() != domain.ExecutedPrefixEstablished {
+		return domain.FreezeJudgment{}, true
+	}
+	judgment, err := domain.JudgeFreezeBoundary(evidence.FreezeForm, evidence.FreezeRemainingSegmentLimit, prefix.RemainingSegments())
+	if err != nil || judgment.Unconfigured() {
+		return judgment, true
+	}
+	return judgment, false
+}
+
 // reassessPlan 是原来有计划的那条线：6A 独立判定，仍适用即保留、失效即失效（候选状态
-// 另存）、看不清停未决。
+// 另存）、看不清停未决。仍适用时先看冻结：未声明停未配置；已越过边界则保留原计划，
+// 轻微改善不改路。
 func (handler *ReassessRouteHandler) reassessPlan(
 	ctx context.Context,
 	trigger domain.ReassessmentTrigger,
@@ -229,6 +256,9 @@ func (handler *ReassessRouteHandler) reassessPlan(
 		return handler.undecided(key, PlanReviewInconclusive), nil
 
 	case domain.PlanStillApplicable:
+		if _, unconfigured := freezeOf(plan, trigger, evidence); unconfigured {
+			return handler.undecided(key, FreezeFormUnconfigured), nil
+		}
 		record := ports.ReassessmentRecord{
 			Correlation:  trigger.Correlation(),
 			Key:          key,

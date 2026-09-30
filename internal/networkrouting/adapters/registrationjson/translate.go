@@ -11,6 +11,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/networkrouting/application"
@@ -305,16 +306,32 @@ func routeStrategyVersionFromJSON(raw []byte, tenantSource tenantOf) (applicatio
 			return application.RegisterRouteStrategyVersionCommand{}, err
 		}
 	}
+	freeze := domain.FreezeFormUndeclared
+	var freezeLimit *int
+	if payload.FreezeForm != nil || payload.FreezeRemainingSegments != nil {
+		if payload.FreezeForm == nil || payload.FreezeRemainingSegments == nil {
+			return application.RegisterRouteStrategyVersionCommand{}, fmt.Errorf("freeze form and remaining segments must be declared together")
+		}
+		if freeze, err = domain.FreezeFormFrom(*payload.FreezeForm); err != nil {
+			return application.RegisterRouteStrategyVersionCommand{}, err
+		}
+		if *payload.FreezeRemainingSegments < 0 {
+			return application.RegisterRouteStrategyVersionCommand{}, fmt.Errorf("freeze remaining segments must be >= 0")
+		}
+		freezeLimit = payload.FreezeRemainingSegments
+	}
 	return application.RegisterRouteStrategyVersionCommand{
 		TenantID: tenant,
 		Strategy: ports.RouteStrategyDefinitionVersion{
-			Code:            payload.Code,
-			Version:         payload.Version,
-			ApplicableScope: payload.ApplicableScope,
-			RankingForm:     form,
-			EffectiveFrom:   payload.EffectiveFrom,
-			EffectiveTo:     timeOf(payload.EffectiveTo),
-			HasEffectiveTo:  payload.EffectiveTo != nil,
+			Code:                        payload.Code,
+			Version:                     payload.Version,
+			ApplicableScope:             payload.ApplicableScope,
+			RankingForm:                 form,
+			FreezeForm:                  freeze,
+			FreezeRemainingSegmentLimit: freezeLimit,
+			EffectiveFrom:               payload.EffectiveFrom,
+			EffectiveTo:                 timeOf(payload.EffectiveTo),
+			HasEffectiveTo:              payload.EffectiveTo != nil,
 		},
 	}, nil
 }
@@ -414,4 +431,7 @@ type strategyPayload struct {
 	EffectiveTo     *time.Time `json:"effective_to"`
 	// RankingForm 缺席即这一版没有声明排序形态；给了就必须是族内的词，空词同样拒。
 	RankingForm *string `json:"ranking_form"`
+	// FreezeForm 与 FreezeRemainingSegments 同缺即未声明；只给一半拒。
+	FreezeForm              *string `json:"freeze_form"`
+	FreezeRemainingSegments *int    `json:"freeze_remaining_segments"`
 }

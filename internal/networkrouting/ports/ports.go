@@ -172,10 +172,14 @@ type InitialRouteEvidence struct {
 	Projections       []domain.CandidateTimeProjection
 	CommittedBound    domain.CommittedTimeBound
 	RankingForm       domain.RankingForm
-	CandidateCosts    []domain.CandidateCostFact
-	Paths             []CandidatePath
-	Strategy          domain.RouteStrategyReference
-	ViewRevision      domain.NetworkViewRevision
+	// FreezeForm 零值且 FreezeRemainingSegmentLimit 为 nil 即这一版没有声明冻结形态。
+	// 未声明不是未冻结。
+	FreezeForm                  domain.FreezeForm
+	FreezeRemainingSegmentLimit *int
+	CandidateCosts              []domain.CandidateCostFact
+	Paths                       []CandidatePath
+	Strategy                    domain.RouteStrategyReference
+	ViewRevision                domain.NetworkViewRevision
 }
 
 // InitialRouteEvidenceView 为一次初始路由判断取回版本化事实。三格语义同
