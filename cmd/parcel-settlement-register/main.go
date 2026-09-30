@@ -46,6 +46,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
+	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
@@ -62,6 +63,7 @@ const (
 type registrar struct {
 	funds      *application.MapExternalFundsHandler
 	accounts   *application.RegisterSettlementAccountHandler
+	catalogues *application.RegisterSettlementCatalogueHandler
 	transactor bentoapp.Transactor
 }
 
@@ -189,7 +191,16 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造结算账户登记：%w", err)
 	}
-	return registrar{funds: funds, accounts: accountHandler, transactor: db.Transactor()}, nil
+	catalogues, err := sapostgres.NewSettlementCatalogues(db)
+	if err != nil {
+		return none, fmt.Errorf("构造结算读口登记册：%w", err)
+	}
+	catalogueHandler, err := application.NewRegisterSettlementCatalogueHandler(
+		catalogues, catalogues, catalogues, catalogues, systemClock{})
+	if err != nil {
+		return none, fmt.Errorf("构造结算读口登记：%w", err)
+	}
+	return registrar{funds: funds, accounts: accountHandler, catalogues: catalogueHandler, transactor: db.Transactor()}, nil
 }
 
 // execute 把一份登记输入推进到采用答案：译装 → 在环境事务内交用例 → 答案译成退出码。译装失败当场拒、不进事务
@@ -213,6 +224,9 @@ func execute(ctx context.Context, command string, raw []byte, registrar registra
 		// 未决，按 ADR-0029 的恢复动作判：同一份输入重投永远同一个结果，要改的是引用的长度或形，不是重试——归 3
 		// 会让人按未决那句「重跑补发」重跑到预算耗尽。答复点名框架给的原因，操作者据此改输入。
 		return fmt.Sprintf("%s: 未登记——采用信封被框架确定性拒收，要改的是输入引用的长度或形，同一份再交仍会被拒：%v", command, err), exitUsage
+	}
+	if errors.Is(err, sadomain.ErrCatalogueTargetMissing) {
+		return fmt.Sprintf("%s: 未登记——指向的结算账户还不在账户册上，先登记账户再交这一行：%v", command, err), exitUsage
 	}
 	if err != nil {
 		return fmt.Sprintf("%s: 未决：%v", command, err), exitUndecided
@@ -282,6 +296,19 @@ func accountAnswer(command string, effect ports.SettlementAccountRegistrationEff
 		return command + ": 已存在（" + accountID + "）", exitRegistered
 	case ports.SettlementAccountConflict:
 		return command + ": 冲突（" + accountID + "，同键已在册且内容不同——绝不覆盖，先核对既有登记）", exitConflict
+	default:
+		return fmt.Sprintf("%s: 未知应用结果 %d", command, effect), exitUndecided
+	}
+}
+
+func catalogueAnswer(command string, effect ports.CatalogueRegistrationEffect, subject string) (string, int) {
+	switch effect {
+	case ports.CatalogueRegistered:
+		return command + ": 已登记（" + subject + "）", exitRegistered
+	case ports.CatalogueReplay:
+		return command + ": 已存在（" + subject + "）", exitRegistered
+	case ports.CatalogueConflict:
+		return command + ": 冲突（" + subject + "，同键已在册且内容不同——绝不覆盖，先核对既有登记）", exitConflict
 	default:
 		return fmt.Sprintf("%s: 未知应用结果 %d", command, effect), exitUndecided
 	}

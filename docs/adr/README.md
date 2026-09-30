@@ -164,6 +164,7 @@
 - [ADR-0157：内置时点形态以参考配置发布，租户在时点语义格用引用选用](./0157-built-in-as-of-forms-are-adopted-as-reference-citations.md)｜**形态选择格**：不是 ADR-0147 的依据格；带 `REFCFG-1:` 的值登记时须已发布，否则拒。2026-09-30 用户授权通道 1 自决。
 - [ADR-0158：结算账户登记册是一行固定属性，接受前控制只查应收](./0158-settlement-account-register-is-an-immutable-tuple.md)｜**登记册**：五格固定、绑结算政策对象不绑某一版、不设修订；部分停用 [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md) 决定六的结算账户目录留 nil。空册与没有相符应收行都停在 `CONTROL_SCOPE_NOT_CONFIGURED`。2026-09-30。本项是机制，接受依据是 ADR-0146 决定一。
 - [ADR-0159：面单择优的接受时解析回指从接受决定上读](./0159-label-channel-resolution-comes-from-the-accepted-decision.md)｜**回指**：择优查询带来源身份与声明包裹，解析标识从该成员的接受决定读，不另造映射。空身份或未接受仍是未形成。2026-09-30。本项是机制，接受依据是 ADR-0146 决定一「机制与产品策略同属产品交付轨道，开发方现在就做」。
+- [ADR-0160：四本结算读口各有登记册，空册仍答未配置](./0160-settlement-read-ports-have-registers.md)｜**登记册**：审核授权、供应商应付账户查问、确认事实、金额规则版本各一本，不设修订。空册仍按各口已有语义停住。2026-09-30。本项是机制，接受依据是 ADR-0146 决定一。
 
 ## 已被取代决策
 

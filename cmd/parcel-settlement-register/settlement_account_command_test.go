@@ -41,3 +41,27 @@ func TestAccountAnswerKeepsReplayRegisteredAndConflictApart(t *testing.T) {
 		t.Fatalf("conflict = %q code=%d", conflict, code)
 	}
 }
+
+func TestTheCatalogueCommandsTranslateBeforeTheTransaction(t *testing.T) {
+	raw := []byte(`{
+		"tenantId": "SYN-T1",
+		"supplierId": "SUP-1",
+		"legalEntityId": "LE-1",
+		"auditorId": "AUDITOR-1"
+	}`)
+	dispatch, err := commandFor(commandSupplierAuditAuthority, raw)
+	if err != nil || dispatch == nil {
+		t.Fatalf("supplier-audit-authority 译装失败：%v", err)
+	}
+	if _, err := commandFor(commandSupplierPayableAccount, []byte(`{"accountId":"ACCT-1","extra":1}`)); err == nil {
+		t.Fatal("未知字段仍被收成应付账户查问")
+	}
+	registered, code := catalogueAnswer(commandClaimAmountRule, ports.CatalogueRegistered, "rule-1/v1")
+	if code != exitRegistered || !strings.Contains(registered, "rule-1/v1") {
+		t.Fatalf("registered = %q code=%d", registered, code)
+	}
+	conflict, code := catalogueAnswer(commandClaimAmountRule, ports.CatalogueConflict, "rule-1/v1")
+	if code != exitConflict || !strings.Contains(conflict, "冲突") {
+		t.Fatalf("conflict = %q code=%d", conflict, code)
+	}
+}
