@@ -227,6 +227,8 @@ PN-08 是产品级试点治理与跨上下文应用编排，不是新的限界�
 
 2026-09-30 补记（票 `product-strategy-boundary/12` 第 4 项）：上表单元格不改写。PN-07 第三项里经营指标方法这一格已有执行器，本项不新造一套，也不立新 ADR。三口径的采用规则在 `DeriveOperatingResult`，新版本在 `OperatingResult.Rederive`：原快照保留，新版本回指前一版。报告币与截至时点由命令交入，空白被拒。归属日仍不在这一格。
 
+2026-09-30 补记（票 `product-strategy-boundary/12` 第 6 项，ADR-0168）：上表单元格不改写。费用归属日原先没有执行器。现在按已登记形态判定：来源发生或费用确认，在业务时区里落成公历日，达到截单时刻归到下一日。命令是 `parcel-settlement-register charge-attribution`。没登记不形成归属日。包裹创建、收寄、签收不是形态。
+
 2026-09-24 补记（票 `routing-first-cut/07` 进 main，merge `f2645d86`）：上表按所钉 SHA 如实定级，原样保留；其中 PN-02 与 PN-03 两行提到 `NetworkDefinitions` / `ErrNetworkDefinitionUnresolvable` 的几句自本合入起部分过时——可达性证据视图已从版本化网络目录折出事实（候选生成、服务区域解析、含临时调整的可执行性；关务一格在 `routing-first-cut/12` 之前如实答状态未知），`NetworkDefinitions` 已删，`未配置`改由目录修订锚与适用于服务目的的路由策略版本答（[ADR-0148](../adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定六）；初始路由证据视图用同一判法答`未配置`，对已配置范围在 `routing-first-cut/09`、`10` 之前照旧响亮上抛。两格是否转满足留给下一次按四项判据的重定级，本条不替它下结论。
 
 #### 2026-09-02 裁决：生产接线棘轮那 32 条计入差量，「可派机制工作清零」不再成立

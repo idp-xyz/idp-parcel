@@ -68,3 +68,4 @@ ADR-0017 预先点名过这种误判：「把机制半边误判为实例半边�
 - [合成演示动线](../design/synthetic-demo-journey-script.md)：第四条判据所指的动线
 - [ADR-0162](./0162-cost-allocation-forms-are-weight-piece-and-revenue.md)：成本分摊的按重、按件、按收入
 - [ADR-0164](./0164-buy-evaluation-request-trigger-is-occurrence-formed.md)：BUY 评价请求在发生项形成时发起，原因没登记则不发起
+- [ADR-0168](./0168-charge-attribution-date-is-a-registered-form.md)：费用归属日按已登记形态判定，没登记不形成归属日

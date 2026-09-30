@@ -1,7 +1,7 @@
 # 12 settlement-accounting：金额文法、分摊与周期费用形态、经营指标方法与账务连接器
 
 Category: enhancement
-Status: in-progress——2026-09-30 第 1 项进 main（`161bb646`，ADR-0161），第 2 项进 main（`83489825`，ADR-0162），第 5 项进 main（`9a3b9e9a`，ADR-0163），第 8 项进 main（`7c084917`，ADR-0164），第 7 项进 main（`cab6613c`，ADR-0166），第 3 项进 main（`6b3d7d80`，ADR-0165），第 4 项进 main（`f8ead9ad`，已有执行器，无新 ADR）；第 6 项在通道 2 进行中；第 9、10 项未做
+Status: in-progress——2026-09-30 第 1 项进 main（`161bb646`，ADR-0161），第 2 项进 main（`83489825`，ADR-0162），第 5 项进 main（`9a3b9e9a`，ADR-0163），第 8 项进 main（`7c084917`，ADR-0164），第 7 项进 main（`cab6613c`，ADR-0166），第 3 项进 main（`6b3d7d80`，ADR-0165），第 4 项进 main（`f8ead9ad`，已有执行器，无新 ADR）；第 6 项在本重放（ADR-0168）；第 9、10 项未做
 Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 行第一项的机制缺口，归[票 16](./16-mechanism-gaps-without-a-ticket.md)；缺它们时本票只能先定文法）
 地盘：settlement-accounting 领域与应用层（金额、分摊、周期费用、指标），账单接入与财务交换的连接器适配器；规则正文若由 party-commercial 声明，PC 侧另开票。
 出处：[票 02](./02-split-parameter-register-and-retriage-deferrals.md)——[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md) `PAR-COM-07`、`PAR-SET-05`、`PAR-SET-06`、`PAR-SET-07`、`PAR-SET-08`、`PAR-SET-09`、`PAR-SET-10`、`PAR-INT-04`、`PAR-INT-05` 行内「〔ADR-0146 拆分〕」点名的部分。[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表 PN-07 行第三项当时记「未核」，本票即其补核。
@@ -13,7 +13,7 @@ Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 
 3. **待核：周期费用的计算形态**（`PAR-SET-07`「最低消费、保底量、返利」）。落地：没有既有执行器。价卡最低重量与评价里的最低收费不是这一格。ADR-0165，三套形态加本期不适用；命令 `periodic-fee`；空册不形成周期费用。
 4. **待核：经营指标各阶段口径与新指标版本的形成方法**（`PAR-SET-10` 已确认约束栏写的就是这套方法）。核现有指标派生是否按它实现。落地：已按约束栏实现，不新造执行器，不立新 ADR。预估口径只收客户预估费用与供应商预期成本，已确认口径只收客户运营应收、审核应付与关联贷项且贷项不得独自在场，已结算口径只用这三类的核销分配角色。符号：`domain.ComponentRole.admittedBy`、`domain.DeriveOperatingResult`、`domain.OperatingResult.Rederive`、`application.AllocateCostsHandler.Derive`、`application.AllocateCostsHandler.Rederive`。测试：`TestOperatingResultIsDerivedNotEdited`、`TestOperatingResultsDeriveAndRederive`。报告币与截至时点由派生命令交入，空白被拒，没有默认币种或默认时点；组成项空集不派生。
 5. **供应商账单审核的越权升级判断结构**（`PAR-SET-05`「越权升级规则」；分权的角色模型归票 07）。`SupplierAuditAuthorityView` 的登记册与读口是重定级表 PN-07 行第一项的机制缺口。落地：ADR-0163，已匹配金额小于或等于上限在权限内，大于上限必须升级且不形成应付；上限命令 `audit-escalation-ceiling`，空册不默认放行。角色模型仍归票 07。
-6. **待核：费用归属日的判定形态**（`PAR-SET-09`）。各金额唯一创建用例与既有借贷项纳入后续账期已由 SA 定（机制），不再列为租户证据。
+6. **费用归属日的判定形态**（`PAR-SET-09`）。各金额唯一创建用例与既有借贷项纳入后续账期已由 SA 定（机制），不再列为租户证据。落地：原先没有归属日执行器。ADR-0168，形态是来源发生或费用确认，达到截单时刻归到下一日；命令 `charge-attribution`，空册答未配置。账户周期、时区与截单时刻仍是租户取值。
 7. **供应商账单接入与财务系统交换的连接器形态**（`PAR-INT-04`、`PAR-INT-05`）。账单接收编排已有；核通用导入 / 导出形态有无，某供应商与某财务系统的格式映射留租户。2026-09-30 通道 2 按 [ADR-0166](../../../docs/adr/0166-accounting-exchange-uses-a-canonical-document.md) 落地这一项：没有通用文件导入或报文导出。内置形态是规范文书，命令 `accounting-connector`。没登记答未配置。本票第 3、4、6、9、10 项未动。
 8. **BUY 评价请求的触发面**（[票 05](./05-demo-journey-criterion-evidence.md) 格 17；以下三项 2026-09-24 经用户授权自决补入）。`cmd/parcel-api/assemble_evaluation_request.go` 的 `buildEvaluationRequestOrchestration` 头注写「今天没有运营端点、也没有进程内触发面调它」「谁在什么业务时点为哪些发生项发起请求是产品题，触发面另票」——本项即那张票。落地：ADR-0164，触发面是 `evaluationRequestOrchestration.Trigger`，时点只有发生项形成；发生项原因命令 `buy-evaluation-trigger`，空册答未配置，不发起请求。
 9. **SELL 评价到客户费用**（票 05 格 19）。SELL 评价没有请求面，评价已记录信封的消费门只收 BUY·供应商成本，SA 应用层没有由评价形成客户费用的编排。消费门与形成编排是机制；SELL 评价何时发起是产品策略。
