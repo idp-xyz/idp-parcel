@@ -16,7 +16,7 @@ func TestNetworkServiceFormRequiresANetworkJudgment(t *testing.T) {
 	closure := closureWithProduct(t, true)
 	view := newEligibility(t, closure)
 
-	eligibility, err := view.AssessNetworkEligibility(t.Context(), reachabilityKey(t), routingResolution(t, closure))
+	eligibility, err := view.AssessNetworkEligibility(t.Context(), reachabilityKey(t), adoptedResolution(t, closure))
 	if err != nil {
 		t.Fatalf("assess: %v", err)
 	}
@@ -29,7 +29,7 @@ func TestAbsentServiceProductIsDependencyUnavailableNotNotRequired(t *testing.T)
 	closure := closureWithProduct(t, false)
 	view := newEligibility(t, closure)
 
-	eligibility, err := view.AssessNetworkEligibility(t.Context(), reachabilityKey(t), routingResolution(t, closure))
+	eligibility, err := view.AssessNetworkEligibility(t.Context(), reachabilityKey(t), adoptedResolution(t, closure))
 	if !errors.Is(err, adapter.ErrServiceProductUnavailable) {
 		t.Fatalf("err = %v, want ErrServiceProductUnavailable", err)
 	}
@@ -67,9 +67,9 @@ func TestReachabilityClosureTenantMismatchIsNotUnconfigured(t *testing.T) {
 	foreign := reachabilityKey(t)
 	foreign.TenantID = mustNR(t, nrdomain.NewTenantID, "tenant-other")
 
-	_, err := view.AssessNetworkEligibility(t.Context(), foreign, routingResolution(t, closure))
-	if !errors.Is(err, adapter.ErrRoutingClosureTenantMismatch) {
-		t.Fatalf("err = %v, want ErrRoutingClosureTenantMismatch", err)
+	_, err := view.AssessNetworkEligibility(t.Context(), foreign, adoptedResolution(t, closure))
+	if !errors.Is(err, adapter.ErrClosureTenantMismatch) {
+		t.Fatalf("err = %v, want ErrClosureTenantMismatch", err)
 	}
 	if errors.Is(err, adapter.ErrServiceProductUnavailable) {
 		t.Fatal("租户不一致被折成了服务产品不可用")
@@ -103,7 +103,7 @@ func TestRoutingApplicabilityUsesTheSameFormTranslation(t *testing.T) {
 	view := newRouting(t, closure)
 
 	eligibility, err := view.AssessRoutingApplicability(
-		t.Context(), routingKey(t), routingResolution(t, closure))
+		t.Context(), routingKey(t), adoptedResolution(t, closure))
 	if err != nil {
 		t.Fatalf("assess routing: %v", err)
 	}
@@ -114,7 +114,7 @@ func TestRoutingApplicabilityUsesTheSameFormTranslation(t *testing.T) {
 	absentClosure := closureWithProduct(t, false)
 	absent := newRouting(t, absentClosure)
 	if _, err := absent.AssessRoutingApplicability(
-		t.Context(), routingKey(t), routingResolution(t, absentClosure),
+		t.Context(), routingKey(t), adoptedResolution(t, absentClosure),
 	); !errors.Is(err, adapter.ErrServiceProductUnavailable) {
 		t.Fatalf("absent product err = %v, want ErrServiceProductUnavailable", err)
 	}
@@ -140,7 +140,7 @@ func TestRoutingApplicabilityTenantMismatchIsNotUnconfigured(t *testing.T) {
 	foreign.TenantID = mustNR(t, nrdomain.NewTenantID, "tenant-other")
 
 	_, err := view.AssessRoutingApplicability(
-		t.Context(), foreign, routingResolution(t, closure))
+		t.Context(), foreign, adoptedResolution(t, closure))
 	if !errors.Is(err, adapter.ErrRoutingClosureTenantMismatch) {
 		t.Fatalf("err = %v, want ErrRoutingClosureTenantMismatch", err)
 	}
@@ -153,7 +153,7 @@ func translateViaClosure(t *testing.T, product pcdomain.ServiceProduct) (nrdomai
 	t.Helper()
 	closure := rehydratedClosure(t, product, true)
 	view := newEligibility(t, closure)
-	return view.AssessNetworkEligibility(t.Context(), reachabilityKey(t), routingResolution(t, closure))
+	return view.AssessNetworkEligibility(t.Context(), reachabilityKey(t), adoptedResolution(t, closure))
 }
 
 func newEligibility(t *testing.T, closure pcdomain.CommercialClosure) *adapter.CommercialEligibility {
@@ -174,7 +174,7 @@ func newRouting(t *testing.T, closure pcdomain.CommercialClosure) *adapter.Routi
 	return view
 }
 
-func routingResolution(t *testing.T, closure pcdomain.CommercialClosure) nrdomain.CommercialResolutionReference {
+func adoptedResolution(t *testing.T, closure pcdomain.CommercialClosure) nrdomain.CommercialResolutionReference {
 	t.Helper()
 	return mustNR(t, nrdomain.NewCommercialResolutionReference, closure.ResolutionID().String())
 }

@@ -105,8 +105,8 @@ func (reference ContinuationReference) String() string {
 // AssessParcelReachabilityCommand 的 Carried 是发起方随请求交来的判断对象内容（ADR-0075；ADR-0148 决定一），
 // 不进判断范围：判断身份由 Key 各维构成，所携内容换了一版就是换了提交版本，范围自然不同。
 //
-// Resolution 是消费方本轮已经采用的商业解析（ADR-0156）。它与 Key 并列，不参与
-// SameJudgmentScope：换一次解析不是另一次可达性判断。
+// Resolution 是消费方本轮已经采用的商业解析（ADR-0156）。它不进判断键，所以
+// SameJudgmentScope 不比较它。换解析是另一次请求：关联把标识带上，不命中上一次的重放。
 type AssessParcelReachabilityCommand struct {
 	Correlation domain.RequestCorrelationID
 	Key         domain.ReachabilityJudgmentKey

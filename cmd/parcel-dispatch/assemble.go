@@ -1018,7 +1018,7 @@ const operatorRegistrationRedrivePageSize = 200
 //
 //   - 时点取值源只折「提交接收」（产品参考配置引用 → 本提交版本的系统接收时间）。
 //     租户在哪格采用就在哪格形成；演示种子的财务控制格没采用，所以答`未配置`；
-//   - 可达性闭包标识从本轮已采用的商业解析回指（ADR-0156），不再留一份判断键到解析的映射；
+//   - 可达性闭包标识从本轮已采用的商业解析回指（ADR-0156）；
 //   - 结算账户目录（SettlementAccountDirectory）与控制金额源（ControlAmountSource）nil
 //     ——控制停在 `CONTROL_SCOPE_NOT_CONFIGURED` / `CONTROL_AMOUNT_NOT_CONFIGURED`，绝不
 //     代拟一个账户或拿零去占客户资金。
