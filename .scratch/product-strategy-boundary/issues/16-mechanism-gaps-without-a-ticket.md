@@ -1,7 +1,7 @@
 # 16 机制缺口：重定级表第一项里尚无票的几处
 
 Category: enhancement
-Status: needs-triage——第 1 项 2026-09-30 进 main（`66ea4bd4`，见文末「进 main 记录」），第 2、3 项未动。2026-09-24 通道 4 经用户授权自决立（票 02 遗留：开发主线写「缺口逐条交票 product-strategy-boundary/02 立工作票」）；各项分属不同上下文，接单时按上下文拆。第 1 项 2026-09-30 进 main（`66ea4bd4`，见文末「进 main 记录」）；第 2、3 项未动
+Status: needs-triage——第 1 项 2026-09-30 进 main（`66ea4bd4`），第 4 项同日进 main（`695ac2f8`），各见文末对应「进 main 记录」；第 2 项在通道 3 分支 `mcp3-psb16-02` 返修中，第 3 项未动。2026-09-24 通道 4 经用户授权自决立（票 02 遗留：开发主线写「缺口逐条交票 product-strategy-boundary/02 立工作票」）；各项分属不同上下文，接单时按上下文拆
 Blocked by: 无
 地盘：按项各归其上下文（见各项）。
 出处：[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表第一项各格原话；[票 05](./05-demo-journey-criterion-evidence.md) 盘点格 3、5、21。已有票或已预告的不重立：操作者渠道归[票 15](./15-operator-channel-per-adr-0100.md)；节点收寄的身份核对缝归 `ps-external-mark-relations/01`；BUY 评价的来源引用回指归 `sa-cc-funds-and-credential-seams/11`；NO 实际测量登记册归 `pp-pricing-input-seams/04`；`PricingInputResolver` 的消费侧适配器由 `pp-pricing-input-seams` spec「不在本目录」预告另立、归 PP；网络定义登记册的写入方与定义原语归票 04。
@@ -93,3 +93,20 @@ Blocked by: 无
 - **非阻断**：结算相对方、责任法人、租户三个谓词与重放/冲突分类无用例守住（Spec 变异：去掉任一个或让重放答已登记，全绿），`settlement-account` 命令与 `SettlementAccountFromJSON` 无测试；生产装配无守卫（把 `acceptanceFinancialControl` 里的目录换回 nil，`cmd/parcel-dispatch` 全绿）；`SettlementAccountDirectory`、`NewPolicyBackedControlScopeSource` 注释仍写目录属「实例半边」、nil「正是首发要停的地方」，`registrationjson` 包头注只讲资金事实；「五格唯一」「不设修订」是新不变量，只进了 ADR 没先进 SA `CONTEXT`；`ChargeDirectionFromName` 与 postgres 包 `chargeDirectionFrom` 重复且把词表解析放进领域层，`SettlementPolicyReference`、`ResponsibilityBasis` 与既有 `AdoptedPolicyReference`、`ContractBasisReference` 重复，`FindSettlementAccount` 与 `FormControlScope` 各译一遍法人与币种且错误归类不一；`classify` 第二次查询结果不被使用；`Save` 是全仓唯一用 SAVEPOINT 的写法（SA 其余写口 `ON CONFLICT DO NOTHING` 再读回）；「付款方与相对方重复」「方向词不在词表」包成 `ErrBlankValue`；PS 适配器依赖带 `Save` 的 `SettlementAccountRegister`，宜收窄为只读口（先例 `AdoptedFundsFactView`）。
 - **核过无发现**：「只查应收」有 ADR 决定三与注释支撑；五格唯一约束落在库上；未登种子行；第 3–4 项与 `ControlAmountSource` 未动；两条真库用例带 DSN `-v` 为 PASS，去掉政策谓词会红。
 - **结论：不重放**，回作者同一分支修；修完两轴重跑。
+
+**评审 ← 通道 1（隔离子代理，非作者）· 钉 `18e01663`（通道 2 分支 `mcp2-psb16-04`，第 4 项，ADR-0159，基 `d3942581`，三笔净改动）· 2026-09-30 22:28**
+
+- 上一轮阻断（注释失真与计数）已修；非阻断里 nil 回落真读口、装配无守卫、未权衡 `CommercialResolutionReferenceView`、多包裹取哪个成员、构造期拒 nil、未形成混进未配置、`acceptedShipmentRequests` 重复、租户判空已处理。
+- **阻断**：Spec 一条——`channel_selection_basis_test.go` 里 `TestTheTranslatorRefusesNilReadersAndNamesEachUnwiredSource` 头注仍把接受时解析源称为「实例半边源」，与 ADR-0159「本项是机制」相反。一行注释，推送方在进 main 那一笔改掉，不回作者。
+- **非阻断**（随票记）：翻译器 `resolutionFor` 把源的错误一律收成未配置、源对「已提交未接受」答 `(false,nil)`，两个变异都全绿——修复卡⑤「未形成分开报」只在源这一层有用例守，全链没有用例断言停因是 `ErrAcceptanceResolutionNotFormed`；「未接受」一格与构造期拒 nil 无用例；ADR 决定一说 `CommercialResolutionReferenceView`「找任一已接受成员」不准确（多于一行答 `ErrAmbiguousParcelTarget`），不复用的理由仍成立、两口都经 `CommercialResolutionReferenceFor` 取值；「一笔面单交易只盖一份委托」PS `CONTEXT` 没写也无处拦，建议记进票 06 第 3 项触发面那张票；`NewChannelSelectionBasisTranslator` 头注一句里三次「账号使用授权读口」；`assemble_label_channel.go` 文件头与 `labelChannelSources` 注释有变更叙述；`acceptedDecisionResolution.ResolutionFor` 的 `requests == nil` 分支走不到，查询租户为零值时静默跳过租户核对；`saveAcceptedLabelChannelRequest` 与同包 `acceptOnRealAssemblyWith` 重复。
+- **核过无发现**：仍读接受决定上固定的解析（ADR-0064 同形），不造映射、不造解析号；装配改交 nil、删租户核对、源对非成员答未找到，都有用例红；ADR-0159 节次齐、未部分停用任何已接受 ADR；`channel_selection_decision.go`、`establish_selected_label_transaction.go`、`main.go` 只改注释；第 2–3 项、票 06 第 3 项、租户行未碰；`internal/architecture` 过。
+- **结论：可重放**，阻断由进 main 那一笔补齐。
+
+**完成记录（通道 2 · 据三次完工报转录，第 4 项）**
+
+分支 `mcp2-psb16-04`（基 `d3942581`），三笔均快进推送、未改写：`220fd8b1` 生产装配 `NewAcceptedDecisionResolution`，查询带来源身份与声明包裹，解析标识从接受决定读，真库用例 `TestTheAcceptedDecisionResolutionSourceReadsTheStoredDecision`（丢掉 `CommercialResolutionReferenceFor` 的结果即红）；`a8f632d2` 只改号 ADR 0158→0159（通道 3 先占 0158）；`18e01663` 注释按现状改写不再计数，删 `Resolutions` 缝直接装配，未形成（`ErrAcceptanceResolutionNotFormed`）与没装分开，构造期拒 nil，ADR-0159 写明不复用 `CommercialResolutionReferenceView`、多包裹不互核，守装配用例 `TestProductionAssemblyReadsTheAcceptedDecisionResolution`（装配改传 nil 即红）。作者自验：`go build` / `go vet` 绿；`parcelshipment` 与 `cmd/*` 带 DSN `-count=1 -p 1` 绿。无 `.sql`。
+
+**进 main 记录（2026-09-30 22:3x，通道 1 推送，第 4 项）**
+
+分支 `mcp2-psb16-04@18e01663`（已推 origin）在隔离树重放到 `5167c2b8` 之上，零冲突：`220fd8b1→ac5dd62b`、`a8f632d2→462c3065`、`18e01663→695ac2f8`；清点在代码链尖重生成为 `05060ee9`（`parcelshipment` 生产 194→195、测试 188→189）。本记录一笔另改上面阻断那一行测试注释。
+推送方验证：钉 `05060ee9`，`gofmt -l` 空，build 与 vet 退 0，两条相关真库用例单跑 PASS 非 SKIP，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL（含 `internal/architecture`）；本记录一笔只多一行测试注释与 `.md`，另在其上重跑 gofmt、build、vet 与 `internal/parcelshipment/adapters/partycommercial` 包测试。分支作封存出处。
