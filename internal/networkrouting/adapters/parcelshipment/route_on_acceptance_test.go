@@ -278,7 +278,7 @@ type acceptanceEvidenceDouble struct {
 }
 
 func (double acceptanceEvidenceDouble) LoadInitialRouteEvidence(
-	_ context.Context, _ nrdomain.InitialRouteJudgmentKey,
+	_ context.Context, _ nrdomain.InitialRouteJudgmentKey, _ nrports.RequestCarriedContent,
 ) (nrports.InitialRouteEvidence, bool, error) {
 	if double.err != nil {
 		return nrports.InitialRouteEvidence{}, false, double.err

@@ -1,11 +1,11 @@
 package application_test
 
 import (
-	"errors"
 	"testing"
 
 	"go.idp.xyz/idp-parcel/internal/networkrouting/application"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
+	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 )
 
 func catalogInitialRouteKey(t *testing.T) domain.InitialRouteJudgmentKey {
@@ -20,9 +20,8 @@ func catalogInitialRouteKey(t *testing.T) domain.InitialRouteJudgmentKey {
 	}
 }
 
-// Covers: ADR-0148 决定六的初始路由半边——`未配置`与可达性一侧同一条规则（目录修订锚、适用于服务目的的路由策略
-// 版本），不再读定义登记册（0007）；判断时点是本上下文的路由判断时点（取时钟）。目录已配置而初始路由事实族的
-// 折叠还没落（时间投影、段链、成本归 routing-first-cut/09、10），照旧响亮上抛，不退成`未配置`也不退成空证据。
+// Covers: ADR-0148 决定六的初始路由半边——`未配置`与可达性一侧同一条规则。目录已配置时折出除成本外的事实；
+// 没登记节点日历不补默认投影。判断时点取时钟。
 func TestTheCatalogInitialRouteEvidenceDecidesUnconfiguredAndOtherwiseStaysLoud(t *testing.T) {
 	noStrategy := syntheticCatalog(t)
 	noStrategy.snapshot.Strategies = nil
@@ -32,7 +31,7 @@ func TestTheCatalogInitialRouteEvidenceDecidesUnconfiguredAndOtherwiseStaysLoud(
 			if err != nil {
 				t.Fatalf("构造：%v", err)
 			}
-			_, configured, err := view.LoadInitialRouteEvidence(t.Context(), catalogInitialRouteKey(t))
+			_, configured, err := view.LoadInitialRouteEvidence(t.Context(), catalogInitialRouteKey(t), ports.RequestCarriedContent{})
 			if err != nil || configured {
 				t.Fatalf("configured=%v err=%v，想要未配置", configured, err)
 			}
@@ -46,9 +45,12 @@ func TestTheCatalogInitialRouteEvidenceDecidesUnconfiguredAndOtherwiseStaysLoud(
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
-	_, configured, err := view.LoadInitialRouteEvidence(t.Context(), catalogInitialRouteKey(t))
-	if !errors.Is(err, application.ErrInitialRouteEvidenceUnresolvable) || configured {
-		t.Fatalf("configured=%v err=%v，想要 ErrInitialRouteEvidenceUnresolvable", configured, err)
+	evidence, configured, err := view.LoadInitialRouteEvidence(t.Context(), catalogInitialRouteKey(t), ports.RequestCarriedContent{})
+	if err != nil || !configured || !evidence.Strategy.Valid() {
+		t.Fatalf("configured=%v err=%v strategy=%s，目录已配置时应折出除成本外的事实", configured, err, evidence.Strategy)
+	}
+	if len(evidence.Projections) != 0 {
+		t.Fatal("没登记节点日历却折出了时间投影")
 	}
 
 	if _, err := application.NewCatalogInitialRouteEvidence(nil, fixedClock{at: judgedAt}); err == nil {

@@ -153,13 +153,17 @@ type ServiceAreaDefinitionVersion struct {
 }
 
 // ServiceCalendarDefinitionVersion 是某适用对象的服务日历适用版本行。
+// 截单、处理时长与衔接缓冲都是这一版的内容（ADR-0175）。指针为空是没登记这一格，与登记了 0 不同。
 type ServiceCalendarDefinitionVersion struct {
-	TargetKind     CatalogTargetKind
-	TargetCode     string
-	Version        int32
-	EffectiveFrom  time.Time
-	EffectiveTo    time.Time
-	HasEffectiveTo bool
+	TargetKind         CatalogTargetKind
+	TargetCode         string
+	Version            int32
+	EffectiveFrom      time.Time
+	EffectiveTo        time.Time
+	HasEffectiveTo     bool
+	CutoffLocalMinute  *int
+	ProcessingMinutes  *int
+	BufferMinutes      *int
 }
 
 // AvailabilityAdjustmentStatement 是一条临时调整陈述——历史链上的一个版本行
