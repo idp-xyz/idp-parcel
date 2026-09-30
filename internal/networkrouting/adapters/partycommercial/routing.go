@@ -16,8 +16,6 @@ var (
 	// 初始路由与可达性共用这一哨兵。
 	ErrClosureTenantMismatch = errors.New(
 		"network routing partycommercial adapter: loaded commercial closure belongs to another tenant")
-	// ErrRoutingClosureTenantMismatch 是同一哨兵的旧名，初始路由测试仍按这个名字认。
-	ErrRoutingClosureTenantMismatch = ErrClosureTenantMismatch
 )
 
 // RoutingApplicability 实现 nrports.RoutingApplicabilityView：同一份形态翻译表
@@ -42,7 +40,7 @@ func (adapter *RoutingApplicability) AssessRoutingApplicability(
 	key nrdomain.InitialRouteJudgmentKey,
 	resolution nrdomain.CommercialResolutionReference,
 ) (nrdomain.NetworkEligibility, error) {
-	closure, err := loadClosure(ctx, adapter.closures, key.TenantID.String(), resolution)
+	closure, err := loadClosure(ctx, adapter.closures, key.TenantID, resolution)
 	if err != nil {
 		return nrdomain.NetworkEligibility{}, err
 	}

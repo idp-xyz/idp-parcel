@@ -375,6 +375,48 @@ func TestJudgmentsBelongToTheSubmissionVersionTheyWereFormedFor(t *testing.T) {
 	}
 }
 
+// TestANewResolutionAtTheSameInstantIsTheJudgmentTheDecisionReads 证提交接收把两轮钉在同一时点时，
+// 换解析形成的判断不会被主键吞掉，决定读回的是当前采用的那一份，旧解析的判断留在库里。
+func TestANewResolutionAtTheSameInstantIsTheJudgmentTheDecisionReads(t *testing.T) {
+	judgments, transactor, pool := newAcceptanceJudgments(t)
+	ctx := t.Context()
+	tenant, requestID := psTenant(t, "tenant-1"), taskRequestID(t, "REQ-1")
+	version := taskVersion(t, "VER-1")
+	firstResolution := mustBuild(t, domain.NewCommercialResolutionID, "RES-1")
+	secondResolution := mustBuild(t, domain.NewCommercialResolutionID, "RES-2")
+	first := reachabilityJudgment(t, "parcel-1", domain.ReachabilityUnreachable, "NRJ-RES-1", "", taskAsOfFirst).
+		FormedUnder(firstResolution)
+	second := reachabilityJudgment(t, "parcel-1", domain.ReachabilityReachable, "NRJ-RES-2", "", taskAsOfFirst).
+		FormedUnder(secondResolution)
+
+	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		if err := judgments.RecordReachabilityJudgment(txCtx, tenant, requestID, version, first); err != nil {
+			return err
+		}
+		if err := judgments.RecordReachabilityJudgment(txCtx, tenant, requestID, version, second); err != nil {
+			return err
+		}
+		return judgments.RecordAdoptedCommercialResolution(txCtx, tenant, requestID, secondResolution)
+	})
+
+	recorded, err := judgments.LoadRecordedJudgments(ctx, tenant, requestID, version)
+	if err != nil {
+		t.Fatalf("读回：%v", err)
+	}
+	if recorded.ReachabilityStaleResolution {
+		t.Fatal("当前解析下的判断已经记下，却被标成还没有")
+	}
+	if len(recorded.Reachability) != 1 || recorded.Reachability[0] != second {
+		t.Fatalf("决定读回 %+v，want 当前解析 RES-2 的那份可达——旧解析的判断不该配新依据", recorded.Reachability)
+	}
+	if rows := countTaskRows(t, pool,
+		`SELECT count(*) FROM parcel_shipment.acceptance_reachability_judgment
+		  WHERE tenant_id = $1 AND shipment_request_id = $2 AND parcel_id = 'parcel-1'`,
+		"tenant-1", "REQ-1"); rows != 2 {
+		t.Fatalf("库里 %d 行判断，want 2——换解析的新判断被同一时点的主键吞掉了", rows)
+	}
+}
+
 // TestRecordingTheSameJudgmentTwiceKeepsTheFirst 证同版本同成员同时点重复到达是重放：保留先到
 // 者，且撞键后事务仍可用（编排还要在同一事务里继续办事）。
 func TestRecordingTheSameJudgmentTwiceKeepsTheFirst(t *testing.T) {
@@ -531,10 +573,10 @@ func TestAcceptanceJudgmentShapesArePinnedInTheDatabase(t *testing.T) {
 		`INSERT INTO parcel_shipment.acceptance_reachability_judgment
 			(tenant_id, shipment_request_id, submission_version, parcel_id, as_of_at,
 			 judgment_id, judgment_value, basis_ref,
-			 as_of_kind, as_of_semantics, as_of_policy)
+			 as_of_kind, as_of_semantics, as_of_policy, resolution_id)
 		 VALUES ('tenant-1', 'REQ-x', 'VER-x', 'parcel-x', now(),
 		         NULL, 'NOT_APPLICABLE', NULL,
-		         'REACHABILITY', 'sem-1', 'policy-1')`); err == nil {
+		         'REACHABILITY', 'sem-1', 'policy-1', '')`); err == nil {
 		t.Error("一次没有依据的`不适用`按 NULL 溜进了判断库——它与一次悄悄放行分不开")
 	}
 
@@ -542,10 +584,10 @@ func TestAcceptanceJudgmentShapesArePinnedInTheDatabase(t *testing.T) {
 		`INSERT INTO parcel_shipment.acceptance_reachability_judgment
 			(tenant_id, shipment_request_id, submission_version, parcel_id, as_of_at,
 			 judgment_id, judgment_value, basis_ref,
-			 as_of_kind, as_of_semantics, as_of_policy)
+			 as_of_kind, as_of_semantics, as_of_policy, resolution_id)
 		 VALUES ('tenant-1', 'REQ-x', 'VER-x', 'parcel-y', now(),
 		         NULL, 'REACHABLE', NULL,
-		         'REACHABILITY', 'sem-1', 'policy-1')`); err == nil {
+		         'REACHABILITY', 'sem-1', 'policy-1', '')`); err == nil {
 		t.Error("一份没有权威标识的`可达`按 NULL 溜进了判断库")
 	}
 
@@ -555,10 +597,10 @@ func TestAcceptanceJudgmentShapesArePinnedInTheDatabase(t *testing.T) {
 		`INSERT INTO parcel_shipment.acceptance_reachability_judgment
 			(tenant_id, shipment_request_id, submission_version, parcel_id, as_of_at,
 			 judgment_id, judgment_value, basis_ref,
-			 as_of_kind, as_of_semantics, as_of_policy)
+			 as_of_kind, as_of_semantics, as_of_policy, resolution_id)
 		 VALUES ('tenant-1', 'REQ-x', '  ', 'parcel-z', now(),
 		         'NRJ-z', 'REACHABLE', NULL,
-		         'REACHABILITY', 'sem-1', 'policy-1')`); err == nil {
+		         'REACHABILITY', 'sem-1', 'policy-1', '')`); err == nil {
 		t.Error("一份不属于任何提交版本的判断溜进了判断库")
 	}
 

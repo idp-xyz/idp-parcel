@@ -265,6 +265,9 @@ type RecordedJudgments struct {
 	Reachability                []domain.ReachabilityJudgment
 	FinancialControl            domain.FinancialControlResult
 	AdoptedCommercialResolution domain.CommercialResolutionID
+	// ReachabilityStaleResolution 表示本版已经有可达性判断，但没有一份是在当前采用的解析下形成的。
+	// 决定不能拿另一份解析的判断配这一份依据。
+	ReachabilityStaleResolution bool
 }
 
 // RecordedJudgmentReader 取回接受判断任务上已记录的判断，供形成决定那一步装配校验结果。

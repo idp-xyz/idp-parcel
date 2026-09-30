@@ -35,7 +35,7 @@ func (adapter *CommercialEligibility) AssessNetworkEligibility(
 	key nrdomain.ReachabilityJudgmentKey,
 	resolution nrdomain.CommercialResolutionReference,
 ) (nrdomain.NetworkEligibility, error) {
-	closure, err := loadClosure(ctx, adapter.closures, key.TenantID.String(), resolution)
+	closure, err := loadClosure(ctx, adapter.closures, key.TenantID, resolution)
 	if err != nil {
 		return nrdomain.NetworkEligibility{}, err
 	}
@@ -47,14 +47,14 @@ func (adapter *CommercialEligibility) AssessNetworkEligibility(
 func loadClosure(
 	ctx context.Context,
 	closures pcports.CommercialResolutionView,
-	tenantRaw string,
+	tenant nrdomain.TenantID,
 	resolution nrdomain.CommercialResolutionReference,
 ) (pcdomain.CommercialClosure, error) {
 	if !resolution.Valid() {
 		return pcdomain.CommercialClosure{}, fmt.Errorf("%w: commercial resolution reference is not configured",
 			ErrServiceProductUnavailable)
 	}
-	tenant, err := pcdomain.NewTenantID(tenantRaw)
+	commercialTenant, err := pcdomain.NewTenantID(tenant.String())
 	if err != nil {
 		return pcdomain.CommercialClosure{}, fmt.Errorf("%w: tenant: %v", ErrUntranslatableAnswer, err)
 	}
@@ -62,7 +62,7 @@ func loadClosure(
 	if err != nil {
 		return pcdomain.CommercialClosure{}, fmt.Errorf("%w: resolution: %v", ErrUntranslatableAnswer, err)
 	}
-	closure, loaded, err := closures.LoadResolution(ctx, tenant, resolutionID)
+	closure, loaded, err := closures.LoadResolution(ctx, commercialTenant, resolutionID)
 	if err != nil {
 		return pcdomain.CommercialClosure{}, fmt.Errorf("load commercial closure: %w", err)
 	}
@@ -70,9 +70,9 @@ func loadClosure(
 		return pcdomain.CommercialClosure{}, fmt.Errorf("%w: commercial closure %q was not found",
 			ErrServiceProductUnavailable, resolutionID)
 	}
-	if closure.ResolutionKey().TenantID != tenant {
+	if closure.ResolutionKey().TenantID != commercialTenant {
 		return pcdomain.CommercialClosure{}, fmt.Errorf("%w: identity %q closure %q",
-			ErrClosureTenantMismatch, tenant, closure.ResolutionKey().TenantID)
+			ErrClosureTenantMismatch, commercialTenant, closure.ResolutionKey().TenantID)
 	}
 	return closure, nil
 }

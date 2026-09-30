@@ -179,6 +179,9 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 
 	// 可达性判断同属提交前重校窗口（`AT-PS-037`）：判断形成后网络视图换代的，原结果不再
 	// 用于接受。提交后的视图变化不追溯——已决定的委托在上面的早退分支就交回了历史决定。
+	if recorded.ReachabilityStaleResolution {
+		return handler.undecided(ctx, command, ReachabilityJudgmentSuperseded, request.State()), nil
+	}
 	reachabilityStall, err := handler.revalidateReachability(ctx, command, recorded.Reachability)
 	if err != nil {
 		return FormAcceptanceDecisionResult{}, err
