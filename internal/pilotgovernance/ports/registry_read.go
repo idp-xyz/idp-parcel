@@ -5,8 +5,9 @@ import (
 	"time"
 )
 
-// 本文件是治理登记册三册的伴生列表读端口（票 admin-skeleton-closure-batch/02，键形
-// 依 ADR-0083）：管理台 stage-admission 页的供数面。
+// 本文件是治理登记册四册的伴生列表读端口（票 admin-skeleton-closure-batch/02 的三册，
+// 接管册依 ADR-0155；键形依 ADR-0083）：管理台 stage-admission 页的供数面。
+// 阶段评审不在本口——它的查阅仍未开。
 //
 // 签名按登记册实有维度成形，**不收租户参数**（ADR-0083 Decision 二）：治理是产品级
 // 机制，八张表零 tenant_id 是设计不是漏了；对没有这一维的册子收下租户参数只有两种
@@ -62,9 +63,30 @@ type ResumptionRegistryRow struct {
 	EffectiveAt      time.Time
 }
 
-// GovernanceRegistryRead 是治理登记册三册的伴生列表读端口。
+// TakeoverRegistryRow 是对象级接管册上列的一行。身份是区间四维加生效区间；盘点
+// jsonb 不上列——与恢复决定同纪律，装载仍走 TakeoverStore.FindByInterval。
+type TakeoverRegistryRow struct {
+	ObjectScope      string
+	Capability       string
+	FactKind         string
+	Authority        string
+	FromAt           time.Time
+	ToAt             time.Time
+	HasToAt          bool
+	StopEvidence     string
+	AcceptedFacts    string
+	PendingExternals string
+	ActualControl    string
+	Responsibilities string
+	NextAction       string
+	InventoryTakenAt time.Time
+	EffectiveAt      time.Time
+}
+
+// GovernanceRegistryRead 是治理登记册四册的伴生列表读端口。阶段评审不在其中。
 type GovernanceRegistryRead interface {
 	ListAuthorityIntervals(ctx context.Context, limit int) ([]AuthorityIntervalRegistryRow, error)
 	ListSuspensions(ctx context.Context, limit int) ([]SuspensionRegistryRow, error)
 	ListResumptions(ctx context.Context, limit int) ([]ResumptionRegistryRow, error)
+	ListTakeovers(ctx context.Context, limit int) ([]TakeoverRegistryRow, error)
 }

@@ -1,6 +1,7 @@
-// 治理登记册三册的 fetch 出口（GET /governance-registers?register=…，票
-// admin-skeleton-closure-batch/02）。形状以 internal/pilotgovernance/adapters/http
-// 传输层为准，此处只做镜像不虚构。
+// 治理登记册四册的 fetch 出口（GET /governance-registers?register=…，票
+// admin-skeleton-closure-batch/02；接管册 ADR-0155）。形状以
+// internal/pilotgovernance/adapters/http 传输层为准，此处只做镜像不虚构。
+// 阶段评审查阅仍未开，这里不补一个空请求。
 //
 // 治理无租户维是设计不是缺列（ADR-0083）：请求上本来就不带租户，端点的准入形是
 // 产品实例级注入（隔离读开关启用时由装配侧配置），前端与其他目录页共用同一套
@@ -76,5 +77,34 @@ export function listSuspensions(): Promise<ApiResult<SuspensionListResponseBody>
 export function listResumptions(): Promise<ApiResult<ResumptionListResponseBody>> {
   return exchangeMasterData<ResumptionListResponseBody>(
     '/governance-registers?register=resumption',
+  );
+}
+
+/** 对象级接管一行。盘点 jsonb 不在列面，只留盘点时刻。toAt 缺席即开放区间。 */
+export interface TakeoverRecord {
+  objectScope: string;
+  capability: string;
+  factKind: string;
+  authority: string;
+  fromAt: string;
+  toAt?: string;
+  stopEvidence: string;
+  acceptedFacts: string;
+  pendingExternals: string;
+  actualControl: string;
+  responsibilities: string;
+  nextAction: string;
+  inventoryTakenAt: string;
+  effectiveAt: string;
+}
+
+export interface TakeoverListResponseBody {
+  outcome: 'TAKEOVERS_LISTED';
+  takeovers: TakeoverRecord[];
+}
+
+export function listTakeovers(): Promise<ApiResult<TakeoverListResponseBody>> {
+  return exchangeMasterData<TakeoverListResponseBody>(
+    '/governance-registers?register=takeover',
   );
 }

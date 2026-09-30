@@ -27,6 +27,7 @@ type registryReadFixture struct {
 	intervals   *adapter.AuthorityIntervals
 	suspensions *adapter.Suspensions
 	resumptions *adapter.Resumptions
+	takeovers   *adapter.Takeovers
 	transactor  bentoapp.Transactor
 }
 
@@ -53,11 +54,16 @@ func newRegistryReadFixture(t *testing.T) *registryReadFixture {
 	if err != nil {
 		t.Fatalf("构造恢复库：%v", err)
 	}
+	takeovers, err := adapter.NewTakeovers(db)
+	if err != nil {
+		t.Fatalf("构造接管库：%v", err)
+	}
 	return &registryReadFixture{
 		registers:   registers,
 		intervals:   intervals,
 		suspensions: suspensions,
 		resumptions: resumptions,
+		takeovers:   takeovers,
 		transactor:  db.Transactor(),
 	}
 }
@@ -244,4 +250,86 @@ func TestSuspensionAndResumptionRegistriesTranscribeTheColumnFace(t *testing.T) 
 	if _, err := fixture.registers.ListResumptions(ctx, 0); err == nil {
 		t.Fatal("恢复册 limit 0 未被拒")
 	}
+}
+
+func TestTakeoverRegistryTranscribesScalarsAndOmitsInventory(t *testing.T) {
+	fixture := newRegistryReadFixture(t)
+	ctx := t.Context()
+
+	empty, err := fixture.registers.ListTakeovers(ctx, 10)
+	if err != nil {
+		t.Fatalf("空册上列：%v", err)
+	}
+	if len(empty) != 0 {
+		t.Fatalf("空册交回 %d 行", len(empty))
+	}
+
+	later := registryTakeover(t, "SYN-SCOPE/later", registryReadAt.Add(2*time.Hour), false)
+	earlier := registryTakeover(t, "SYN-SCOPE/earlier", registryReadAt, true)
+	for _, record := range []domain.TakeoverRecord{earlier, later} {
+		fixture.write(t, ctx, func(txCtx context.Context) error {
+			_, err := fixture.takeovers.Save(txCtx, record)
+			return err
+		})
+	}
+
+	listed, err := fixture.registers.ListTakeovers(ctx, 10)
+	if err != nil {
+		t.Fatalf("上列接管：%v", err)
+	}
+	if len(listed) != 2 {
+		t.Fatalf("上列 %d 行，want 2", len(listed))
+	}
+	if listed[0].ObjectScope != "SYN-SCOPE/later" || listed[1].ObjectScope != "SYN-SCOPE/earlier" {
+		t.Fatalf("排序变形：%q, %q", listed[0].ObjectScope, listed[1].ObjectScope)
+	}
+	open := listed[0]
+	if open.HasToAt || open.StopEvidence != "SYN-EVIDENCE/writer-stopped" ||
+		open.NextAction != "SYN-NEXT/hold" || !open.EffectiveAt.Equal(registryReadAt.Add(2*time.Hour)) {
+		t.Fatalf("开放接管列面变形：%+v", open)
+	}
+	closed := listed[1]
+	if !closed.HasToAt || !closed.ToAt.Equal(registryReadAt.Add(48*time.Hour)) {
+		t.Fatalf("闭合接管上界变形：%+v", closed)
+	}
+
+	limited, err := fixture.registers.ListTakeovers(ctx, 1)
+	if err != nil {
+		t.Fatalf("带 limit 上列：%v", err)
+	}
+	if len(limited) != 1 {
+		t.Fatalf("limit 1 交回 %d 行", len(limited))
+	}
+	if _, err := fixture.registers.ListTakeovers(ctx, 0); err == nil {
+		t.Fatal("接管册 limit 0 未被拒")
+	}
+}
+
+func registryTakeover(t *testing.T, scope string, effectiveAt time.Time, closed bool) domain.TakeoverRecord {
+	t.Helper()
+	interval := domain.AuthorityInterval{
+		ObjectScope: scope,
+		Capability:  "shipment-intake",
+		FactKind:    "acceptance-decision",
+		Authority:   "SYN-AUTH/successor",
+		From:        registryReadAt,
+	}
+	if closed {
+		interval.To = registryReadAt.Add(48 * time.Hour)
+	}
+	record, err := domain.RecordTakeover(domain.TakeoverRecordSpec{
+		StopEvidence:     "SYN-EVIDENCE/writer-stopped",
+		Interval:         interval,
+		AcceptedFacts:    "SYN-FACTS/cutover",
+		PendingExternals: "SYN-EXT/none",
+		ActualControl:    "SYN-CTRL/ops-desk",
+		Responsibilities: "SYN-DUTY/ops-owner",
+		NextAction:       "SYN-NEXT/hold",
+		Inventory:        incidentInventory(t, "SYN-OBJ-0001"),
+		EffectiveAt:      effectiveAt,
+	})
+	if err != nil {
+		t.Fatalf("形成接管：%v", err)
+	}
+	return record
 }

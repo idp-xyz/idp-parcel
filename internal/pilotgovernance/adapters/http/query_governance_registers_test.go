@@ -13,9 +13,10 @@ import (
 	"go.idp.xyz/idp-parcel/internal/pilotgovernance/ports"
 )
 
-// 本文件对治理登记册端点（票 admin-skeleton-closure-batch/02）证传输面：方法门、
-// register 封闭三册缺席按坏请求拒且不触读口、未配置 Intake 对全部分支 403、行体
-// 逐字段转写且开放区间上界如实缺席、空册答空数组、读失败答 5xx。
+// 本文件对治理登记册端点（票 admin-skeleton-closure-batch/02，接管册 ADR-0155）证
+// 传输面：方法门、register 封闭四册缺席按坏请求拒且不触读口、未配置 Intake 对全部分支
+// 403、行体逐字段转写且开放区间上界如实缺席、接管盘点 jsonb 不上列、空册答空数组、
+// 读失败答 5xx。阶段评审查阅仍不在封闭集内。
 
 var registryEndpointAt = time.Date(2026, 8, 21, 12, 0, 0, 0, time.UTC)
 
@@ -23,6 +24,7 @@ type stubRegistryReader struct {
 	intervals   []ports.AuthorityIntervalRegistryRow
 	suspensions []ports.SuspensionRegistryRow
 	resumptions []ports.ResumptionRegistryRow
+	takeovers   []ports.TakeoverRegistryRow
 	err         error
 
 	gotLimit int
@@ -49,6 +51,13 @@ func (stub *stubRegistryReader) ListResumptions(
 	return stub.resumptions, stub.err
 }
 
+func (stub *stubRegistryReader) ListTakeovers(
+	_ context.Context, limit int,
+) ([]ports.TakeoverRegistryRow, error) {
+	stub.gotLimit = limit
+	return stub.takeovers, stub.err
+}
+
 // unreachableRegistryReader 断言读口未被触到：传输形状的拒绝与未配置格都发生在
 // 读库之前。
 type unreachableRegistryReader struct{ t *testing.T }
@@ -70,6 +79,13 @@ func (reader unreachableRegistryReader) ListSuspensions(
 func (reader unreachableRegistryReader) ListResumptions(
 	_ context.Context, _ int,
 ) ([]ports.ResumptionRegistryRow, error) {
+	reader.t.Fatal("读口不该被触到")
+	return nil, nil
+}
+
+func (reader unreachableRegistryReader) ListTakeovers(
+	_ context.Context, _ int,
+) ([]ports.TakeoverRegistryRow, error) {
 	reader.t.Fatal("读口不该被触到")
 	return nil, nil
 }
@@ -106,11 +122,10 @@ func TestGovernanceRegistersEndpointRejectsNonGetAndUnknownRegister(t *testing.T
 		t.Fatalf("Allow = %q, want GET", allow)
 	}
 
-	// 阶段评审与接管第二批未开（票 12），不在封闭集内——今天问就是坏请求。
+	// 阶段评审查阅仍未开，不在封闭集内——今天问就是坏请求。缺席参数同拒。
 	for _, target := range []string{
 		"/governance-registers",
 		"/governance-registers?register=stage-review",
-		"/governance-registers?register=takeover",
 	} {
 		recorder := httptest.NewRecorder()
 		endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, target, nil))
@@ -124,7 +139,7 @@ func TestGovernanceRegistersEndpointRejectsNonGetAndUnknownRegister(t *testing.T
 func TestGovernanceRegistersEndpointAnswersForbiddenWhenIntakeUnconfigured(t *testing.T) {
 	endpoint := governancehttp.NewQueryGovernanceRegistersEndpoint(
 		governancehttp.UnconfiguredIntake{}, unreachableRegistryReader{t: t})
-	for _, register := range []string{"authority-interval", "suspension", "resumption"} {
+	for _, register := range []string{"authority-interval", "suspension", "resumption", "takeover"} {
 		recorder := httptest.NewRecorder()
 		endpoint.ServeHTTP(recorder,
 			httptest.NewRequest(http.MethodGet, "/governance-registers?register="+register, nil))
@@ -271,6 +286,56 @@ func TestGovernanceRegistersEndpointTranscribesSuspensionsAndResumptions(t *test
 	}
 }
 
+func TestGovernanceRegistersEndpointTranscribesTakeoversWithoutInventory(t *testing.T) {
+	reader := &stubRegistryReader{
+		takeovers: []ports.TakeoverRegistryRow{{
+			ObjectScope:      "SYN-SCOPE/lane",
+			Capability:       "shipment-intake",
+			FactKind:         "acceptance-decision",
+			Authority:        "SYN-AUTH/successor",
+			FromAt:           registryEndpointAt,
+			StopEvidence:     "SYN-EVIDENCE/writer-stopped",
+			AcceptedFacts:    "SYN-FACTS/cutover",
+			PendingExternals: "SYN-EXT/none",
+			ActualControl:    "SYN-CTRL/ops-desk",
+			Responsibilities: "SYN-DUTY/ops-owner",
+			NextAction:       "SYN-NEXT/hold",
+			InventoryTakenAt: registryEndpointAt.Add(time.Hour),
+			EffectiveAt:      registryEndpointAt.Add(2 * time.Hour),
+		}},
+	}
+	endpoint := governancehttp.NewQueryGovernanceRegistersEndpoint(grantedIntake(t, 25), reader)
+	recorder := httptest.NewRecorder()
+	endpoint.ServeHTTP(recorder,
+		httptest.NewRequest(http.MethodGet, "/governance-registers?register=takeover", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("接管册答 %d, want 200\n%s", recorder.Code, recorder.Body.String())
+	}
+	body := registryBody(t, recorder)
+	if body["outcome"] != "TAKEOVERS_LISTED" {
+		t.Fatalf("outcome = %v", body["outcome"])
+	}
+	takeovers, _ := body["takeovers"].([]any)
+	if len(takeovers) != 1 {
+		t.Fatalf("takeovers 形状变形：%v", body["takeovers"])
+	}
+	row, _ := takeovers[0].(map[string]any)
+	if row["objectScope"] != "SYN-SCOPE/lane" ||
+		row["stopEvidence"] != "SYN-EVIDENCE/writer-stopped" ||
+		row["nextAction"] != "SYN-NEXT/hold" {
+		t.Fatalf("接管行转写变形：%v", row)
+	}
+	if _, present := row["toAt"]; present {
+		t.Fatalf("开放区间不该带上界：%v", row)
+	}
+	if _, present := row["inventory"]; present {
+		t.Fatalf("盘点 jsonb 泄进了列面：%v", row)
+	}
+	if _, present := row["inventoryTakenAt"].(string); !present {
+		t.Fatalf("盘点时刻没透出：%v", row)
+	}
+}
+
 func TestGovernanceRegistersEndpointAnswersEmptyRegistryAsEmptyArray(t *testing.T) {
 	endpoint := governancehttp.NewQueryGovernanceRegistersEndpoint(
 		grantedIntake(t, 25), &stubRegistryReader{})
@@ -293,7 +358,7 @@ func TestGovernanceRegistersEndpointAnswersEmptyRegistryAsEmptyArray(t *testing.
 func TestGovernanceRegistersEndpointAnswersServerErrorWhenReadFails(t *testing.T) {
 	endpoint := governancehttp.NewQueryGovernanceRegistersEndpoint(
 		grantedIntake(t, 25), &stubRegistryReader{err: errors.New("寄了")})
-	for _, register := range []string{"authority-interval", "suspension", "resumption"} {
+	for _, register := range []string{"authority-interval", "suspension", "resumption", "takeover"} {
 		recorder := httptest.NewRecorder()
 		endpoint.ServeHTTP(recorder,
 			httptest.NewRequest(http.MethodGet, "/governance-registers?register="+register, nil))

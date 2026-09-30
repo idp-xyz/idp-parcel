@@ -10,10 +10,11 @@ import (
 	"go.idp.xyz/idp-parcel/internal/pilotgovernance/ports"
 )
 
-// GovernanceRegisters 实现治理登记册三册的列表读端口（票 admin-skeleton-closure-batch/02，
-// 键形依 ADR-0083）。与写侧仓储（AuthorityIntervals / Suspensions / Resumptions）分立
-// 成型：那三口按标识取单行、供冲突预检与恢复门，这一口只做目录上列——两种消费不共口，
-// 理由与 ports.GovernanceRegistryRead 口面注同句。
+// GovernanceRegisters 实现治理登记册四册的列表读端口（票 admin-skeleton-closure-batch/02
+// 的三册，接管册依 ADR-0155；键形依 ADR-0083）。与写侧仓储分立成型：写侧按标识取单行、
+// 供冲突预检与恢复门，这一口只做目录上列——两种消费不共口，理由与
+// ports.GovernanceRegistryRead 口面注同句。接管的盘点 jsonb 不透出，装载归
+// Takeovers.FindByInterval。
 //
 // 只读：上列不重建领域对象、不做冲突判断。语句**没有租户条件**——不是漏了 ADR-0003
 // 那一句，是这些表没有租户列（产品级机制，ADR-0083 Decision 一），往语句里写租户
@@ -173,4 +174,55 @@ func (registers *GovernanceRegisters) ListResumptions(
 		return nil, fmt.Errorf("list resumptions: %w", err)
 	}
 	return resumptions, nil
+}
+
+// ListTakeovers 上列对象级接管册。排序以生效时刻倒序，同刻按区间四维与开始时刻正序
+// 收尾。盘点 jsonb 不选列。
+func (registers *GovernanceRegisters) ListTakeovers(
+	ctx context.Context,
+	limit int,
+) ([]ports.TakeoverRegistryRow, error) {
+	if err := registryListLimit("list takeovers", limit); err != nil {
+		return nil, err
+	}
+	querier, err := registers.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list takeovers: %w", err)
+	}
+
+	rows, err := querier.Query(ctx,
+		`SELECT object_scope, capability, fact_kind, authority, from_at, to_at,
+		        stop_evidence, accepted_facts, pending_externals, actual_control,
+		        responsibilities, next_action, inventory_taken_at, effective_at
+		   FROM pilot_governance.takeover_record
+		  ORDER BY effective_at DESC, object_scope, capability, fact_kind, authority, from_at
+		  LIMIT $1`,
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list takeovers: %w", err)
+	}
+	defer rows.Close()
+
+	takeovers := make([]ports.TakeoverRegistryRow, 0, limit)
+	for rows.Next() {
+		var row ports.TakeoverRegistryRow
+		var toAt *time.Time
+		if err := rows.Scan(
+			&row.ObjectScope, &row.Capability, &row.FactKind, &row.Authority,
+			&row.FromAt, &toAt, &row.StopEvidence, &row.AcceptedFacts,
+			&row.PendingExternals, &row.ActualControl, &row.Responsibilities,
+			&row.NextAction, &row.InventoryTakenAt, &row.EffectiveAt,
+		); err != nil {
+			return nil, fmt.Errorf("list takeovers: %w", err)
+		}
+		if toAt != nil {
+			row.ToAt, row.HasToAt = *toAt, true
+		}
+		takeovers = append(takeovers, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list takeovers: %w", err)
+	}
+	return takeovers, nil
 }

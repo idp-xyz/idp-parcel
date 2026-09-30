@@ -1240,6 +1240,13 @@ func (unwiredGovernanceRegisters) ListResumptions(
 	return nil, errOrchestrationNotWired
 }
 
+func (unwiredGovernanceRegisters) ListTakeovers(
+	context.Context,
+	int,
+) ([]govports.TakeoverRegistryRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
 type unwiredComplianceRules struct{}
 
 func (unwiredComplianceRules) ListCaseRequirementRules(

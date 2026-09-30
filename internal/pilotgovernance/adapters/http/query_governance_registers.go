@@ -18,42 +18,45 @@ const (
 )
 
 // GovernanceRegistryReader 是治理登记册端点消费的读口。上列的是检索列面：恢复决定
-// 的盘点 jsonb 不透出——见 ports.GovernanceRegistryRead 的口面纪律。读口不收租户，
-// 与端点同句（ADR-0083 Decision 二）。
+// 与接管记录的盘点 jsonb 不透出——见 ports.GovernanceRegistryRead 的口面纪律。读口
+// 不收租户，与端点同句（ADR-0083 Decision 二）。
 type GovernanceRegistryReader interface {
 	ListAuthorityIntervals(ctx context.Context, limit int) ([]ports.AuthorityIntervalRegistryRow, error)
 	ListSuspensions(ctx context.Context, limit int) ([]ports.SuspensionRegistryRow, error)
 	ListResumptions(ctx context.Context, limit int) ([]ports.ResumptionRegistryRow, error)
+	ListTakeovers(ctx context.Context, limit int) ([]ports.TakeoverRegistryRow, error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
 var _ GovernanceRegistryReader = ports.GovernanceRegistryRead(nil)
 
-// 业务结果的封闭集合：三册各占一格。空册如实答空列表走 2xx 成格，不折成未配置
+// 业务结果的封闭集合：四册各占一格。空册如实答空列表走 2xx 成格，不折成未配置
 // （ADR-0077 Decision 四原文适用：空册的续办是运营方去登记口登记，未配置的续办是
 // 接入方去配置渠道——恢复动作不同）。
 const (
 	outcomeAuthorityIntervalsListed = "AUTHORITY_INTERVALS_LISTED"
 	outcomeSuspensionsListed        = "SUSPENSIONS_LISTED"
 	outcomeResumptionsListed        = "RESUMPTIONS_LISTED"
+	outcomeTakeoversListed          = "TAKEOVERS_LISTED"
 )
 
-// register 查询参数的封闭三册。词取登记 CLI 子命令与库表的既有转写——登记口与
-// 查阅口对同一册用同一个词，页面不必维护第二套对照表。阶段评审与接管两册第二批
-// 未开（票 12 首批三类裁决），不在封闭集内——加词属新裁决，不属装配。
+// register 查询参数的封闭四册。词取登记 CLI 子命令与库表的既有转写——登记口与
+// 查阅口对同一册用同一个词，页面不必维护第二套对照表。接管册由 ADR-0155 打开。
+// 阶段评审查阅仍未开，不在封闭集内。
 const (
 	registerAuthorityInterval = "authority-interval"
 	registerSuspension        = "suspension"
 	registerResumption        = "resumption"
+	registerTakeover          = "takeover"
 )
 
 // NewQueryGovernanceRegistersEndpoint 交回治理登记册查阅的 HTTP 入口
 // （GET /governance-registers；最终路径归装配票，本批为 closure-batch/07）。
 //
-// 三册共用一个端点，按 `register` 查询参数分派（先例：networkrouting 目录端点一口
+// 四册共用一个端点，按 `register` 查询参数分派（先例：networkrouting 目录端点一口
 // 七分派）：参数在场与否、取值在不在封闭集内属传输形状，先于 Intake；未配置 Intake
 // 对全部分支同答 403，分支选择不泄露任何东西。缺席按坏请求拒：替调用方默认一册就是
-// 替它猜。
+// 替它猜。本入口只查阅，不登记接管。
 func NewQueryGovernanceRegistersEndpoint(
 	intake RegistryQueryIntake,
 	reader GovernanceRegistryReader,
@@ -67,7 +70,7 @@ func NewQueryGovernanceRegistersEndpoint(
 
 		register := request.URL.Query().Get("register")
 		if register != registerAuthorityInterval && register != registerSuspension &&
-			register != registerResumption {
+			register != registerResumption && register != registerTakeover {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
@@ -98,6 +101,12 @@ func NewQueryGovernanceRegistersEndpoint(
 				resumptionBodyOf,
 				func() ([]ports.ResumptionRegistryRow, error) {
 					return reader.ListResumptions(ctx, limit)
+				})
+		case registerTakeover:
+			serveRegistryList(response, outcomeTakeoversListed, "takeovers",
+				takeoverBodyOf,
+				func() ([]ports.TakeoverRegistryRow, error) {
+					return reader.ListTakeovers(ctx, limit)
 				})
 		}
 	})
@@ -197,6 +206,45 @@ type resumptionBody struct {
 	DecidedBy        string `json:"decidedBy"`
 	DecidedAt        string `json:"decidedAt"`
 	EffectiveAt      string `json:"effectiveAt"`
+}
+
+type takeoverBody struct {
+	ObjectScope      string `json:"objectScope"`
+	Capability       string `json:"capability"`
+	FactKind         string `json:"factKind"`
+	Authority        string `json:"authority"`
+	FromAt           string `json:"fromAt"`
+	ToAt             string `json:"toAt,omitempty"`
+	StopEvidence     string `json:"stopEvidence"`
+	AcceptedFacts    string `json:"acceptedFacts"`
+	PendingExternals string `json:"pendingExternals"`
+	ActualControl    string `json:"actualControl"`
+	Responsibilities string `json:"responsibilities"`
+	NextAction       string `json:"nextAction"`
+	InventoryTakenAt string `json:"inventoryTakenAt"`
+	EffectiveAt      string `json:"effectiveAt"`
+}
+
+func takeoverBodyOf(row ports.TakeoverRegistryRow) takeoverBody {
+	body := takeoverBody{
+		ObjectScope:      row.ObjectScope,
+		Capability:       row.Capability,
+		FactKind:         row.FactKind,
+		Authority:        row.Authority,
+		FromAt:           rfc3339(row.FromAt),
+		StopEvidence:     row.StopEvidence,
+		AcceptedFacts:    row.AcceptedFacts,
+		PendingExternals: row.PendingExternals,
+		ActualControl:    row.ActualControl,
+		Responsibilities: row.Responsibilities,
+		NextAction:       row.NextAction,
+		InventoryTakenAt: rfc3339(row.InventoryTakenAt),
+		EffectiveAt:      rfc3339(row.EffectiveAt),
+	}
+	if row.HasToAt {
+		body.ToAt = rfc3339(row.ToAt)
+	}
+	return body
 }
 
 func resumptionBodyOf(row ports.ResumptionRegistryRow) resumptionBody {

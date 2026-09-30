@@ -88,7 +88,7 @@
 - [ADR-0080：引用闭包先解合同再据以解结算政策——合同维是结论不是输入，前提未解析自成一格](./0080-commercial-closure-resolves-the-contract-first-and-keys-settlement-by-it.md)
 - [ADR-0081：接受判断由信封驱动——提交落库即交出「委托已提交」，推进落在派发一拍；提交事务随之改两段边界](./0081-acceptance-judgment-is-envelope-driven.md)
 - [ADR-0082：代收分户账按四维立键、余额只由追加式记账派生，回汇批次形成即冻结——分配守恒由记账形状交付，不靠事后对平](./0082-collection-subledger-is-keyed-by-four-dimensions-and-posted-append-only.md)
-- [ADR-0083：试点治理读面按登记册实有维度成形——无租户维是设计；隔离读放行沿用同一开关，注入不带租户的产品级作用域；呈现面留在管理台并明示实例级作用域](./0083-pilot-governance-read-face-carries-registry-dimensions-only.md)
+- [ADR-0083：试点治理读面按登记册实有维度成形——无租户维是设计；隔离读放行沿用同一开关，注入不带租户的产品级作用域；呈现面留在管理台并明示实例级作用域](./0083-pilot-governance-read-face-carries-registry-dimensions-only.md)｜**部分停用**：决定四里接管格「第二批未开」由 [ADR-0155](./0155-takeover-register-read-opens-on-the-existing-catalogue.md) 停用；阶段评审格与无租户维仍有效
 - [ADR-0084：面单交易是独立聚合——建立即固定覆盖与依据，双层结果一次记录不许互推，定案是派生谓词；继续尝试决定单列登记册不进聚合](./0084-label-transaction-is-an-independent-aggregate-with-two-level-results.md)
 - [ADR-0085：登记册配置写面进端点表带未配置格——写表单属产品能力，CLI 保留为受控批量口；写准入不另立形，与其余命令面同等真渠道证据](./0085-registry-write-faces-enter-the-endpoint-table-with-unconfigured-grade.md)｜**部分停用**：其 Decision 二补记「两族各自要过 `PAR-INT-01` 的真证据门」一句的前半，与 Decision 二「本记录新增的登记端点也在被拦之列」一句，已由 [ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md) 停用——**适用场景**限管理台操作者族与登记册配置写面；「不得互相顶替」后半保留，客户业务面照旧过 `PAR-INT-01` 并被 ADR-0055 Decision 五两项拦着。Decision 三原句不变，票 01 评论对它「翻译属渠道接入契约」的引申由 [ADR-0101](./0101-operator-facing-registration-payload-shape-is-product-defined.md) 收窄为客户渠道载荷。其余各条不变
 - [ADR-0086：等待人工复核是入账暂停——暂停与等待态同事务落库，续办由「复核已完成」信封另行驱动；细分 ADR-0081 的未决语义，重投留给会自己回来的依赖](./0086-manual-review-wait-is-a-committed-pause-resumed-by-completion-envelope.md)｜**部分停用**：其 Context 把`等待受控补充`判在「回滚重投是对的」那一侧的分侧——原句「等待受控补充 / 等待内部续办：重投重跑同一轮，等的依赖（客户新提交版本、抖动的内部依赖）会自己回来」中关于**客户新提交版本**的那一半——已由 [ADR-0106](./0106-customer-supplement-wait-is-a-committed-pause-resumed-by-the-new-submission-version-envelope.md) 停用，理由是代码证实新版本不会自己回来、回来了也不是在途那封信封受益。**适用场景**：只停`等待受控补充`那一半；`等待内部续办`的分侧与 Decision 一至四不变，其余各条不变
@@ -159,6 +159,7 @@
 - [ADR-0152：运营试算是计价自有的应用用例——按假设包裹对每张适用价卡各形成一份试算评价，只算不存、结构上不交结算、不择优；入口是 `parcel-api` 命令行 `POST /pricing-estimates`，起步未配置、随操作者渠道换 Intake](./0152-operator-estimate-is-a-pricing-use-case-computed-not-recorded-and-never-handed-to-settlement.md)
 - [ADR-0153：委托声明的服务产品身份收窄商业解析——同一范围多个产品不再必然适用冲突；收窄的是对象身份不是版本；正文指名了另一产品的成员落选](./0153-declared-service-product-identity-narrows-commercial-resolution.md)
 - [ADR-0154：接管记录的写侧尚未裁——先定谁可以写、写之前要有什么；不填 PAR-GOV-05..07 的租户值](./0154-takeover-record-write-side-is-not-yet-decided.md)｜**先开 CLI、HTTP 另票**：调用现成 `TakeOver`，不加暂停或既有区间前置，不与暂停、恢复、阶段评审互引；种子不造行。2026-09-29 用户授权自决。实现不在本记录。
+- [ADR-0155：对象级接管的查阅口开在既有治理登记册上——空册如实空；不造种子行；HTTP 写仍另票](./0155-takeover-register-read-opens-on-the-existing-catalogue.md)｜**查阅口**：`register=takeover` 上列标量，盘点 jsonb 不上列；空册空数组。部分停用 ADR-0083 决定四的接管半句。2026-09-29 用户授权继续。
 
 ## 已被取代决策
 
