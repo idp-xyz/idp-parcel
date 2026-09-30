@@ -20,3 +20,15 @@ Blocked by: 无
 ## 完成判据
 
 - 每项有生产实现（带真库测试），或记明已由别票承接；`PAR-SET-01` 等行的租户取值今后有处可登。
+
+## Comments
+
+**评审 ← 通道 1（隔离子代理，非作者）· 钉 `5ac58a96`（通道 2 分支 `mcp2-reachability-closure`，第 1 项，ADR-0156，基 `a40393b7`）· 2026-09-30 20:32**
+
+- **阻断**（两轴各一条，推送方核过原文）：
+  - Spec：本票完成判据「每项有生产实现（带真库测试）」未达。`NewCommercialEligibility` 按解析标识经真库 `LoadResolution` 取闭包这条路没有任何真库用例跑到：适配器测试用内存替身 `newClosureStore`，`networkrouting/adapters/postgres` 的 `catalogReachEligibility` 是替身只改了签名，`cmd/parcel-dispatch` 的真图用例 `TestAnUnconfiguredAcceptanceChainStallsAsUndecidedOnTheRealGraph` 停在第一阶段、走不到可达性。完工报「真库测试在 networkrouting/adapters/postgres 与 cmd/parcel-dispatch」一句因此不成立。
+  - Standards：ADR-0156 部分停用 ADR-0064 后果一句，只改了 `docs/adr/README.md` 索引行；ADR 索引「部分停用」要求「改被停用记录的 `Status` 行与 Links 节各加一条前向指针」，ADR-0064 正文仍写「可达性那条链的 `ReachabilityClosureIdentity` 不变」，与 0156、与代码两套口径（红线「单一权威」）。
+- **非阻断**：ADR-0156 Status 的授权依据查不到出处——通道规则里「继续」是「检查队列」，不是接受 ADR；本项属机制，按 AGENTS 红线开发方本可自决，应改援引这条，并补裁决能力边界与越权风险点一节。解析标识不进 `SameJudgmentScope`，而 UC-NR-002 要「新……商业版本……形成新判断版本」、可达性这条链每轮经 `formAdoptedBasis` 重解——0064 那条理由靠的是已接受解析固定不变，0156 没说明为何照搬，请作者在 ADR 里答（答不上就升为阻断）。`CommercialResolutionReference` 类型注释仍写「已固定」「不是初始路由判断维」；`CommercialEligibility.AssessNetworkEligibility` 与 `RoutingApplicability.AssessRoutingApplicability` 逐行同体；可达性路径复用名字带 Routing 的 `ErrRoutingClosureTenantMismatch` 与测试辅助 `routingResolution`；`CommercialEligibility` 与 `acceptanceReachability` 注释里「不再……」是变更说明；开发主线 PN-02 格「闭包标识生产为 nil」已过时，照该文「上表单元格不改写」补一条补记。
+- **核过无发现**：闭包标识取自 `formAdoptedBasis` 本提交版本第一阶段已记下的解析，与 UC-PC-002、ADR-0064 一致；`ReachabilityClosureIdentity` 已删，无判断键到解析的映射；空引用答未配置、编排形成`未形成判断`；租户不一致有哨兵；第 2–4 项、种子、租户行未动；`internal/architecture` 过。
+- 推送方验证：隔离检出 `5ac58a96` 上清点重生成无差；gofmt 空、build 与 vet 绿，单跑真库用例为 PASS，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。
+- **结论：不重放**，回作者同一分支修；修完两轴重跑。
