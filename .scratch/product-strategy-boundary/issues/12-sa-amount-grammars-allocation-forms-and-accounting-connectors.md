@@ -1,7 +1,7 @@
 # 12 settlement-accounting：金额文法、分摊与周期费用形态、经营指标方法与账务连接器
 
 Category: enhancement
-Status: in-progress——2026-09-30 第 1 项进 main（`161bb646`，ADR-0161），第 2 项进 main（`83489825`，ADR-0162），第 5 项进 main（`9a3b9e9a`，ADR-0163），第 8 项进 main（`7c084917`，ADR-0164），第 7 项进 main（`cab6613c`，ADR-0166），第 3 项进 main（`6b3d7d80`，ADR-0165），第 4 项进 main（`f8ead9ad`，已有执行器，无新 ADR），第 6 项进 main（`1e3b9f9d`，ADR-0168），第 9 项进 main（`bfd09015`，ADR-0169）；第 10 项在分支 mcp2-psb12-10（ADR-0170），尚未进 main
+Status: in-progress——十项均已进 main。第 10 项 `f9c5192e`（ADR-0170）。此前各项见文末进 main 记录。
 Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 行第一项的机制缺口，归[票 16](./16-mechanism-gaps-without-a-ticket.md)；缺它们时本票只能先定文法）
 地盘：settlement-accounting 领域与应用层（金额、分摊、周期费用、指标），账单接入与财务交换的连接器适配器；规则正文若由 party-commercial 声明，PC 侧另开票。
 出处：[票 02](./02-split-parameter-register-and-retriage-deferrals.md)——[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md) `PAR-COM-07`、`PAR-SET-05`、`PAR-SET-06`、`PAR-SET-07`、`PAR-SET-08`、`PAR-SET-09`、`PAR-SET-10`、`PAR-INT-04`、`PAR-INT-05` 行内「〔ADR-0146 拆分〕」点名的部分。[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表 PN-07 行第三项当时记「未核」，本票即其补核。
@@ -172,3 +172,19 @@ Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 
 
 重放到 `baad0fbf` 之上，零冲突：`93daf4d3→bfd09015`。清点在代码链尖重生成为 `31168ea2`（`settlementaccounting` 生产 145→153、测试 102→106；`settlementaccounting`→`parcelpricing` 消费缝 2→4；`settlement_accounting` 迁移份数 30→31，文件号 `0032`）。
 推送方验证：钉 `31168ea2`，build 退 0，架构门禁与点名用例 PASS，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。本记录一笔只多本票面 `.md`。分支作封存出处。
+
+**评审 ← 通道 1 · 钉 `5174732f`（通道 2 分支 `mcp2-psb12-10`，第 10 项，ADR-0170，基 `af0245bb`）· 2026-10-01 01:0x**
+
+- **阻断**：无。架构门禁带 DSN 为 PASS。`TestSettlementOrchestrationsStayUnconfiguredWhenTheMomentIsNotRegistered`、`TestSettlementMomentsRefuseToRunOutsideATransaction` PASS。仓内没有 `NewAuditSupplierBillHandler`，审核是 `ReceiveSupplierBillHandler.Audit`。
+- **非阻断**（随票记）：`adjust`、`allocate`、`supplier`、`claims` 只在装配里被构造并断言非 nil，调用方法只有 `Confirm` 与 `CutOff`。ADR-0170 决定三写明其余入口不另设触发册。
+- **核过无发现**：六个构造在 `buildSettlementOrchestrations`。确认与截单没登记答 `SETTLEMENT_MOMENT_UNCONFIGURED`。没有把 SELL 形成接进派发。迁移 `0033`。未登租户行。未改 ADR-0161 至 0169 的决定正文。
+- **结论：可重放**。票 12 十项到此收口。
+
+**完成记录（通道 2 · 据完工报转录，第 10 项）**
+
+分支 `mcp2-psb12-10`（基 `af0245bb`），一笔未改写：`5174732f`。命令 `settlement-moment`。
+
+**进 main 记录（2026-10-01 01:0x，通道 1 推送，第 10 项）**
+
+重放到 `af0245bb` 之上，零冲突：`5174732f→f9c5192e`。清点在代码链尖重生成为 `b91ceb3f`（`cmd` 生产 73→74、测试 108→109；`settlement_accounting` 迁移份数 31→32，文件号 `0033`）。
+推送方验证：钉 `b91ceb3f`，build 退 0，架构门禁与点名用例 PASS，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。本记录一笔只多本票面 `.md`。分支作封存出处。票 12 十项到此收口。
