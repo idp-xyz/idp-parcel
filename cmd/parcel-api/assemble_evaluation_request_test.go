@@ -104,10 +104,48 @@ func TestTheProductionEvaluationRequestOrchestrationRegistersAndHandsOffOnce(t *
 	}
 }
 
+func TestTheProductionTriggerDoesNotRequestWhenTheReasonIsNotRegistered(t *testing.T) {
+	db := evaluationRequestTestDB(t)
+	orchestration, err := buildEvaluationRequestOrchestration(db)
+	if err != nil {
+		t.Fatalf("装配请求评价编排：%v", err)
+	}
+	command := evaluationRequestTestCommand(t, "SYN-TENANT-TRIGGER")
+	triggered, err := orchestration.Trigger(t.Context(), command)
+	if err != nil {
+		t.Fatalf("触发：%v", err)
+	}
+	if triggered.Outcome() != saapplication.BuyEvaluationTriggerUnconfigured {
+		t.Fatalf("outcome = %s", triggered.Outcome())
+	}
+	if _, fired := triggered.Request(); fired {
+		t.Fatal("没登记仍发起了请求")
+	}
+	eventID := command.TenantID.String() + "/evaluation-request/"
+	if count := outboxRowsLike(t, db, eventID); count != 0 {
+		t.Fatalf("没登记却有 %d 封信封", count)
+	}
+}
+
 func TestTheEvaluationRequestOrchestrationRefusesANilDB(t *testing.T) {
 	if _, err := buildEvaluationRequestOrchestration(nil); err == nil {
 		t.Fatal("db 为 nil 却装配成功")
 	}
+}
+
+func outboxRowsLike(t *testing.T, db *bentopg.DB, prefix string) int {
+	t.Helper()
+	querier, err := db.ReadExecutor(t.Context())
+	if err != nil {
+		t.Fatalf("取读执行器：%v", err)
+	}
+	var count int
+	if err := querier.QueryRow(t.Context(),
+		`SELECT count(*) FROM `+migrate.SchemaBento+`.outbox WHERE event_id LIKE $1`, prefix+"%",
+	).Scan(&count); err != nil {
+		t.Fatalf("数信封：%v", err)
+	}
+	return count
 }
 
 func outboxRowsFor(t *testing.T, db *bentopg.DB, eventID string) int {

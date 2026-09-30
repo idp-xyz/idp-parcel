@@ -67,6 +67,7 @@ type registrar struct {
 	catalogues *application.RegisterSettlementCatalogueHandler
 	grammars   *application.RegisterAmountGrammarHandler
 	forms      *application.RegisterAllocationFormHandler
+	triggers   *application.RegisterBuyEvaluationTriggerHandler
 	transactor bentoapp.Transactor
 }
 
@@ -219,12 +220,21 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造分摊分法登记：%w", err)
 	}
+	triggerStore, err := sapostgres.NewBuyEvaluationTriggers(db)
+	if err != nil {
+		return none, fmt.Errorf("构造评价请求触发登记册：%w", err)
+	}
+	triggerHandler, err := application.NewRegisterBuyEvaluationTriggerHandler(triggerStore, systemClock{})
+	if err != nil {
+		return none, fmt.Errorf("构造评价请求触发登记：%w", err)
+	}
 	return registrar{
 		funds:      funds,
 		accounts:   accountHandler,
 		catalogues: catalogueHandler,
 		grammars:   grammarHandler,
 		forms:      formHandler,
+		triggers:   triggerHandler,
 		transactor: db.Transactor(),
 	}, nil
 }
