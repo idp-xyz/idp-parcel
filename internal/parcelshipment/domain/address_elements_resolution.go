@@ -119,6 +119,11 @@ type ShipmentAddressElements struct {
 	destination AddressElementsResolution
 }
 
+// NewShipmentAddressElements 把已经译好的两段合成读口答案。派生仍只在 AddressElementsFor；消费侧替身用这一条，不另写一套格。
+func NewShipmentAddressElements(origin, destination AddressElementsResolution) ShipmentAddressElements {
+	return ShipmentAddressElements{origin: origin, destination: destination}
+}
+
 // NoShipmentAddressElements 是两段皆「无」的答复：对象不属任何已接受委托的成员集合。
 func NoShipmentAddressElements() ShipmentAddressElements {
 	return ShipmentAddressElements{origin: NoAddressElementsResolution(), destination: NoAddressElementsResolution()}

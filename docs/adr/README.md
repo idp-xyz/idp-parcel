@@ -174,6 +174,7 @@
 - [ADR-0168：费用归属日按已登记形态判定，没登记就不形成](./0168-charge-attribution-date-is-a-registered-form.md)｜**归属日**：来源发生或费用确认，达到截单时刻归到下一日。空册不形成归属日。2026-09-30。本项是产品策略，接受依据是 ADR-0146 决定一、决定二。
 - [ADR-0169：SELL 评价形成客户费用，何时发起另册登记](./0169-sell-evaluation-forms-a-customer-charge.md)｜**消费门**：只认 SELL·客户费用。触发空册不发起。不使用 BUY 请求身份。2026-09-30。本项是机制加产品策略，接受依据是 ADR-0146 决定一。
 - [ADR-0170：结算编排从 parcel-api 进入；确认与截单没登记就不做](./0170-settlement-orchestrations-enter-through-parcel-api.md)｜**入口**：六个构造接在 parcel-api。审核在接收编排上。确认与截单空册不调用。2026-09-30。装配是机制，触发是产品策略，接受依据是 ADR-0146 决定一。
+- [ADR-0171：计价输入在没有实测读口时用申报，并标明来源](./0171-pricing-input-resolver-uses-declaration-until-a-measurement-port-exists.md)｜**输入**：发生项成员、申报测量、地址要素三口接上。没有实测时用申报。集运单元不可得。2026-09-30。本项是机制，接受依据是 ADR-0146 决定一。
 
 ## 已被取代决策
 

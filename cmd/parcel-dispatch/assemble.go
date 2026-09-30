@@ -29,6 +29,7 @@ import (
 	ppinbox "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/inbox"
 	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	ppsettlement "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/settlementaccounting"
+	pptransport "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/transportfulfillment"
 	ppapplication "go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	psidentity "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/identity"
@@ -2445,10 +2446,9 @@ const evaluationRequestFormationEvidence = ppdomain.EvidenceSynthetic
 // PP 的 `adapters/settlementaccounting`；PP application 不 import SA。这是 PP 第一条生产形成路：EvaluatePricingHandler
 // 此前在组合根里零调用。
 //
-// 入口的 Inputs 读口**不装**（裁决 4 的量）：包裹主体 / 分区 / 计费重量三样各归 TF / NO / PS 一只本上下文今天没有的
-// 读口，接一个永远答「不在」的替身等于把替身放进生产装配；入口对缺席答「输入不可得」并点名那三只，消费者据以
-// 停在 evaluationRequestSubmittedUndecidedSentinels 那一格。读口接上那天，后继票在这里补 Inputs 一行，消费者、
-// 入口与路由行不变。
+// Inputs 装的是消费侧解析器（ADR-0171）：发生项成员走 TF，申报测量与地址要素走 PS。节点实测登记册还没有
+// （pp-pricing-input-seams/04），Measured 保持 nil——没有实测时用申报，并在事实引用里标明来源是申报。
+// 不接一只永远答「不在」的替身。
 //
 // EvaluatePricingHandler 的序列 / 目录两对在用解析成对装齐（ADR-0099 决定四、ADR-0109 Decision 三）：卡绑了序列或
 // 目录时评价前按在用版本补齐取值，解析不到留说明落待判断；只装一半构造期就拒。
@@ -2499,11 +2499,28 @@ func formEvaluationOnEvaluationRequestConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: pricing evaluation identities: %w", err)
 	}
+	occurrences, err := tfpostgres.NewChargeOccurrences(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: charge occurrence members: %w", err)
+	}
+	shipments, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: declared measurement and address elements: %w", err)
+	}
+	inputs, err := pptransport.NewResolver(pptransport.ResolverDeps{
+		Members:   occurrences,
+		Declared:  shipments,
+		Addresses: shipments,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pricing input resolver: %w", err)
+	}
 	form, err := ppapplication.NewFormEvaluationFromRequestHandler(ppapplication.FormEvaluationFromRequestDeps{
 		Evaluations: evaluations,
 		PriceCards:  cards,
 		Identity:    identities,
 		Evaluate:    evaluate,
+		Inputs:      inputs,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: form evaluation from request: %w", err)
