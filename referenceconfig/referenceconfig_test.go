@@ -35,6 +35,27 @@ func TestAReferenceRoundTripsAndCitesWithItsShapeVersion(t *testing.T) {
 	if _, isCitation := ParseCitation("SYN-BASIS-REGNO-CN-01"); isCitation {
 		t.Fatalf("不带前缀的依据不是引用串")
 	}
+	if _, claimed, err := OpenCitation("SYN-BASIS-REGNO-CN-01"); claimed || err != nil {
+		t.Fatalf("不带前缀不是一次声称的引用：claimed=%v err=%v", claimed, err)
+	}
+}
+
+// Covers: ADR-0157 决定三——带前缀的串必须能打开已发布版本；形状坏了也是声称，不能再当不透明串。
+func TestAClaimedCitationMustOpenAReleasedVersion(t *testing.T) {
+	reference, err := ParseReference("parcel-shipment/as-of-semantics/submission-receipt@1")
+	if err != nil {
+		t.Fatalf("解析：%v", err)
+	}
+	opened, claimed, err := OpenCitation(reference.Citation())
+	if !claimed || err != nil || opened != reference {
+		t.Fatalf("已发布引用：%v claimed=%v err=%v", opened, claimed, err)
+	}
+	if _, claimed, err := OpenCitation("REFCFG-1:parcel-shipment/as-of-semantics/submission-receipt@2"); !claimed || !errors.Is(err, ErrNotReleased) {
+		t.Fatalf("未发布：claimed=%v err=%v", claimed, err)
+	}
+	if _, claimed, err := OpenCitation("REFCFG-1:not-a-reference"); !claimed || !errors.Is(err, ErrInvalidReference) {
+		t.Fatalf("坏形状：claimed=%v err=%v", claimed, err)
+	}
 }
 
 // Covers: 形状不对的「标识@版本」一律拒收——版本从 1 起、不带前导零；标识恰三段、上下文与目录是小写
