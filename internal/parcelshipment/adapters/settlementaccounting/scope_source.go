@@ -9,10 +9,9 @@ import (
 	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 )
 
-// SettlementAccountDirectory 把采用结算政策的（法人/相对方/币种）换成结算账户。这是
-// 作用域缝的实例半边：账户映射是租户的配置（SA CONTEXT「一个结算账户固定一个责任法人、
-// 结算相对方、收付方向和结算币种」），没有租户就没有目录。第二个返回值为 false 即
-// 「显式未配置」——停下，不代拟一个账户去冻别人的钱。
+// SettlementAccountDirectory 把采用结算政策的（法人/相对方/币种/政策对象）换成结算账户。
+// 生产装配接的是结算账户登记册。第二个返回值为 false 即这一组应收账户没登记——停下，
+// 不代拟一个账户去冻别人的钱。
 type SettlementAccountDirectory interface {
 	FindSettlementAccount(
 		ctx context.Context,
@@ -32,8 +31,8 @@ type PolicyBackedControlScopeSource struct {
 	directory  SettlementAccountDirectory
 }
 
-// NewPolicyBackedControlScopeSource 装配两半。directory 允许为 nil：账户目录属实例半边，
-// nil 是「显式未配置」的诚实表达，届时作用域停在未形成——正是首发要停的地方。
+// NewPolicyBackedControlScopeSource 装配两半。directory 为 nil 时作用域停在未形成，
+// 留给还没接目录的测试；生产装配传入登记册，空册与没登记的应收行都答未找到。
 func NewPolicyBackedControlScopeSource(
 	commercial psports.CommercialBasisResolver,
 	directory SettlementAccountDirectory,

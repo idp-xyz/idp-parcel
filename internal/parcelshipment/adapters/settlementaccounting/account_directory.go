@@ -13,10 +13,10 @@ import (
 // 这一缝形成的是货主侧接受前控制的作用域，收付方向固定为应收：应付行在同一册上，
 // 但不是这一问的答案。预付或账期在结算政策的适用范围里，不另作一维。
 type RegisteredAccountDirectory struct {
-	accounts saports.SettlementAccountRegister
+	accounts saports.SettlementAccountView
 }
 
-func NewRegisteredAccountDirectory(accounts saports.SettlementAccountRegister) (*RegisteredAccountDirectory, error) {
+func NewRegisteredAccountDirectory(accounts saports.SettlementAccountView) (*RegisteredAccountDirectory, error) {
 	if accounts == nil {
 		return nil, fmt.Errorf("settlement account directory: register is nil")
 	}
@@ -44,7 +44,7 @@ func (directory *RegisteredAccountDirectory) FindSettlementAccount(
 	if err != nil {
 		return sadomain.SettlementAccountID{}, false, fmt.Errorf("settlement account directory: %w", err)
 	}
-	policy, err := sadomain.NewSettlementPolicyReference(terms.Policy().String())
+	policy, err := sadomain.NewSettlementPolicyReference(terms.Policy().Object())
 	if err != nil {
 		return sadomain.SettlementAccountID{}, false, fmt.Errorf("settlement account directory: %w", err)
 	}

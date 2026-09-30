@@ -50,3 +50,23 @@ func financialControlAsOf(t *testing.T) domain.JudgmentAsOf {
 	}
 	return asOf
 }
+
+func TestAStoredPolicyEchoRebuildsTheObjectAndTheVersion(t *testing.T) {
+	echo, err := domain.ParseSettlementPolicyEcho("settle-1/v1")
+	if err != nil {
+		t.Fatalf("parse: %v", err)
+	}
+	if echo.Object() != "settle-1" || echo.Version() != "v1" || echo.String() != "settle-1/v1" {
+		t.Fatalf("echo = %s object=%s version=%s", echo, echo.Object(), echo.Version())
+	}
+	fresh, err := domain.NewSettlementPolicyEcho("settle-1", "v2")
+	if err != nil {
+		t.Fatalf("new: %v", err)
+	}
+	if fresh.Object() != echo.Object() || fresh.String() != "settle-1/v2" {
+		t.Fatalf("fresh = %s object=%s", fresh, fresh.Object())
+	}
+	if _, err := domain.ParseSettlementPolicyEcho("settle-1"); err == nil {
+		t.Fatal("没有版本的旧串仍被当成回显")
+	}
+}

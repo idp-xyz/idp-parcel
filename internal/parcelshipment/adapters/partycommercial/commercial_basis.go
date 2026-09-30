@@ -398,7 +398,7 @@ func settlementTermsFor(closure pcdomain.CommercialClosure) (psdomain.AdoptedSet
 	}
 
 	echo, err := psdomain.NewSettlementPolicyEcho(
-		policy.Version().ObjectID().String() + "/" + policy.Version().Version().String())
+		policy.Version().ObjectID().String(), policy.Version().Version().String())
 	if err != nil {
 		return psdomain.AdoptedSettlementTerms{}, fmt.Errorf("%w: settlement policy echo: %v", ErrUntranslatableAnswer, err)
 	}

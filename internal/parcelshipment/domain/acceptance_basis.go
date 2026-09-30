@@ -2,6 +2,8 @@ package domain
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 )
 
@@ -309,12 +311,43 @@ func (asOf JudgmentAsOf) valid() bool {
 		asOf.semantics.valid() && asOf.policyVersion.valid()
 }
 
-// SettlementPolicyEcho 指名解析采用的那份结算政策版本。
-type SettlementPolicyEcho struct{ requiredValue }
+// SettlementPolicyEcho 把解析采用的结算政策分成对象与版本两格。账户登记绑对象；
+// 版本只留在回显里，已落库的快照仍按「对象/版本」一整串写回。
+type SettlementPolicyEcho struct {
+	object  requiredValue
+	version requiredValue
+}
 
-func NewSettlementPolicyEcho(value string) (SettlementPolicyEcho, error) {
-	required, err := newRequiredValue("settlement policy echo", value)
-	return SettlementPolicyEcho{required}, err
+func NewSettlementPolicyEcho(object, version string) (SettlementPolicyEcho, error) {
+	parsedObject, err := newRequiredValue("settlement policy object", object)
+	if err != nil {
+		return SettlementPolicyEcho{}, err
+	}
+	parsedVersion, err := newRequiredValue("settlement policy version", version)
+	if err != nil {
+		return SettlementPolicyEcho{}, err
+	}
+	return SettlementPolicyEcho{object: parsedObject, version: parsedVersion}, nil
+}
+
+func (echo SettlementPolicyEcho) Object() string  { return echo.object.String() }
+func (echo SettlementPolicyEcho) Version() string { return echo.version.String() }
+
+func (echo SettlementPolicyEcho) String() string {
+	return echo.object.String() + "/" + echo.version.String()
+}
+
+func (echo SettlementPolicyEcho) valid() bool {
+	return echo.object.valid() && echo.version.valid()
+}
+
+// ParseSettlementPolicyEcho 从已落库的「对象/版本」回显重建。目录不调用它。
+func ParseSettlementPolicyEcho(stored string) (SettlementPolicyEcho, error) {
+	at := strings.LastIndex(stored, "/")
+	if at <= 0 || at == len(stored)-1 {
+		return SettlementPolicyEcho{}, fmt.Errorf("%w: settlement policy echo", ErrInvalidCommercialBasisSnapshot)
+	}
+	return NewSettlementPolicyEcho(stored[:at], stored[at+1:])
 }
 
 // SettlementMethodEcho 回显解析出的预付/账期方式。本上下文不按它分支（那是 SA 的事），

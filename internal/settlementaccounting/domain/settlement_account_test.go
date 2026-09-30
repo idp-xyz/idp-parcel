@@ -41,7 +41,7 @@ func accountFixture(t *testing.T, direction domain.ChargeDirection, payer string
 		t.Fatal(err)
 	}
 	account, err := domain.NewSettlementAccount(
-		mustID(t, "ACCT-1"), key, payerRef, distinct, basis, mustStatement(t),
+		mustID(t, "ACCT-1"), key, payerRef, distinct, basis,
 	)
 	if err != nil {
 		t.Fatalf("account: %v", err)
@@ -56,15 +56,6 @@ func mustID(t *testing.T, value string) domain.SettlementAccountID {
 		t.Fatal(err)
 	}
 	return id
-}
-
-func mustStatement(t *testing.T) domain.AccountStatementTerms {
-	t.Helper()
-	terms, err := domain.NewAccountStatementTerms("MONTHLY", "Asia/Shanghai", "18:00", "NET-30")
-	if err != nil {
-		t.Fatalf("statement: %v", err)
-	}
-	return terms
 }
 
 func mustRef[T any](t *testing.T, parse func(string) (T, error), value string) T {
@@ -93,7 +84,6 @@ func TestSettlementAccountRejectsAPayerThatRepeatsTheCounterparty(t *testing.T) 
 		mustRef(t, domain.NewSettlementCounterpartyReference, "CP-1"),
 		true,
 		mustRef(t, domain.NewResponsibilityBasis, "CONTRACT-1"),
-		mustStatement(t),
 	)
 	if err == nil {
 		t.Fatal("付款责任方与结算相对方相同仍立了起来")
