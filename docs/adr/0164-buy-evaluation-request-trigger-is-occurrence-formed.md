@@ -40,3 +40,4 @@ Date: 2026-09-30
 - [ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)
 - [UC-SA-002](../application/settlement-accounting/UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md)
 - 票 `.scratch/product-strategy-boundary/issues/12-sa-amount-grammars-allocation-forms-and-accounting-connectors.md` 第 8 项
+- [ADR-0169](./0169-sell-evaluation-forms-a-customer-charge.md)：SELL 评价到客户费用

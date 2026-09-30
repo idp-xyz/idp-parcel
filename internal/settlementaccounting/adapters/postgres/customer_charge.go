@@ -178,6 +178,54 @@ func (repository *CustomerCharges) SaveConfirmed(
 	return ports.ChargeSaved, nil
 }
 
+// SaveEstimated 写下尚未确认的客户费用。七项确认事实留空。已有同一标识则不覆盖。
+func (repository *CustomerCharges) SaveEstimated(
+	ctx context.Context,
+	tenant domain.TenantID,
+	charge domain.CustomerCharge,
+) (ports.ChargeSaveOutcome, error) {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return ports.ChargeSaveOutcomeInvalid, fmt.Errorf("save estimated charge: %w", err)
+	}
+	if charge.Stage() != domain.ChargeEstimated && charge.Stage() != domain.ChargeProvisional {
+		return ports.ChargeSaveOutcomeInvalid, fmt.Errorf("save estimated charge: charge is already confirmed")
+	}
+	originalCurrency, originalMinor := charge.OriginalAmount()
+	settlementCurrency, settlementMinor := charge.SettlementAmount()
+	var conversion *string
+	if reference, present := charge.Conversion(); present {
+		value := reference.String()
+		conversion = &value
+	}
+	tag, err := executor.Exec(ctx,
+		`INSERT INTO settlement_accounting.customer_charge
+			(tenant_id, charge_id, fee_item, evaluation_ref, original_currency,
+			 original_minor, settlement_currency, settlement_minor, conversion_ref,
+			 stage, formed_at, recorded_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $11)
+		 ON CONFLICT DO NOTHING`,
+		tenant.String(),
+		charge.ID().String(),
+		charge.FeeItem().String(),
+		charge.Evaluation().String(),
+		originalCurrency.String(),
+		originalMinor,
+		settlementCurrency.String(),
+		settlementMinor,
+		conversion,
+		charge.Stage().String(),
+		charge.FormedAt().UTC(),
+	)
+	if err != nil {
+		return ports.ChargeSaveOutcomeInvalid, fmt.Errorf("save estimated charge: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ports.ChargeAlreadyConfirmed, nil
+	}
+	return ports.ChargeSaved, nil
+}
+
 // chargeRow 是 customer_charge 一行的原始列值，交给重建走形成门。
 type chargeRow struct {
 	id                 domain.CustomerChargeID
