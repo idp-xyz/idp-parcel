@@ -54,9 +54,11 @@ var (
 	// ErrSupplierAgreementNotEffective 说那一版协议未生效或有效区间没盖住择优时点。
 	ErrSupplierAgreementNotEffective = errors.New("parcel shipment: supplier agreement is not effective at the selection time")
 
-	// ErrAcceptanceResolutionNotConfigured 说「这次择优对应哪一次委托接受时的商业解析」答不上来。择优查询今天
-	// 不带委托或包裹的引用（ChannelSelectionSubject 头注原句），回指只能由消费方的实例半边给。
+	// ErrAcceptanceResolutionNotConfigured 说这次择优没有读到接受决定上的商业解析：源没装、查询没带来源身份或
+	// 包裹，或者该成员没有已接受的回指。
 	ErrAcceptanceResolutionNotConfigured = errors.New("parcel shipment: acceptance resolution source not configured")
+	// ErrAcceptanceResolutionTenantMismatch 说查询上的租户与来源身份不是同一个。这是写坏的查询，不是未配置。
+	ErrAcceptanceResolutionTenantMismatch = errors.New("parcel shipment: acceptance resolution query tenant does not match the shipment")
 )
 
 // ChannelAccountUseSelection 是「这个候选该用哪条授权」的答复：登记标识，连同被授权人应当是谁（运营企业在 PC

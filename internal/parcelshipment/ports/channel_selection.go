@@ -14,15 +14,20 @@ import (
 // 的四种非完成结果各自成格）。并成一个口会逼调用方从一份混合结果里再把两类分开。
 
 // ChannelSelectionQuery 是一次渠道择优的输入：在哪个租户的哪个商业范围下、按哪笔产品—渠道
-// 映射、对准哪个时点。
+// 映射、对准哪个时点，以及这次择优对着哪一份已接受委托的哪个成员。
 //
 // 时点由调用方给而不是由实现取当下时钟：同一份委托重算两次必须得到同一批候选，读时钟会让
 // 它随调用时刻漂移，而漂移出来的差别在结果上看不出来。
+//
+// Shipment 与 Parcel 只用来找到接受决定上固定的那一次商业解析（ADR-0158）。解析标识不放在
+// 查询上：调用方自报一个号就是另一套解析。两格为空，回指答不上来。
 type ChannelSelectionQuery struct {
-	Tenant  domain.TenantID
-	Scope   domain.CommercialScopeReference
-	Mapping domain.ProductChannelMappingReference
-	At      time.Time
+	Tenant   domain.TenantID
+	Scope    domain.CommercialScopeReference
+	Mapping  domain.ProductChannelMappingReference
+	At       time.Time
+	Shipment domain.SourceIdentity
+	Parcel   domain.DeclaredParcelID
 }
 
 // ChannelCandidateAssembly 交回该时点可参与择优的渠道候选。
