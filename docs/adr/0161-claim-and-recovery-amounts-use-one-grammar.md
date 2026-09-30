@@ -44,3 +44,4 @@ Date: 2026-09-30
 - [ADR-0160](./0160-settlement-read-ports-have-registers.md)：金额规则版本册
 - [settlement-accounting CONTEXT](../domain/settlement-accounting/CONTEXT.md)
 - 票 `.scratch/product-strategy-boundary/issues/12-sa-amount-grammars-allocation-forms-and-accounting-connectors.md` 第 1 项
+- [ADR-0163](./0163-supplier-audit-escalation-compares-the-matched-amount-to-a-ceiling.md)：越权升级

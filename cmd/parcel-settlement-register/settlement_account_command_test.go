@@ -97,4 +97,17 @@ func TestTheCatalogueCommandsTranslateBeforeTheTransaction(t *testing.T) {
 	if _, err := commandFor(commandAmountGrammar, []byte(`{"tenantId":"SYN-T1","subjectKind":"CLAIM_RULE","subjectRef":"claim-rule/v2","limitMinor":1,"ratioBasisPoints":10001,"deductibleMinor":0}`)); err == nil {
 		t.Fatal("超出万分比 10000 的比例被收成文法登记")
 	}
+	ceiling := []byte(`{
+		"tenantId": "SYN-T1",
+		"supplierId": "SUP-1",
+		"legalEntityId": "LE-1",
+		"currency": "USD",
+		"ceilingMinor": 12000
+	}`)
+	if _, err := commandFor(commandAuditEscalationCeiling, ceiling); err != nil {
+		t.Fatalf("audit-escalation-ceiling 译装失败：%v", err)
+	}
+	if _, err := commandFor(commandAuditEscalationCeiling, []byte(`{"tenantId":"SYN-T1","supplierId":"SUP-1","legalEntityId":"LE-1","currency":"USD","ceilingMinor":-1}`)); err == nil {
+		t.Fatal("负上限被收成越权升级登记")
+	}
 }
