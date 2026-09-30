@@ -1,7 +1,7 @@
 # 12 settlement-accounting：金额文法、分摊与周期费用形态、经营指标方法与账务连接器
 
 Category: enhancement
-Status: in-progress——2026-09-30 第 1 项进 main（`161bb646`，ADR-0161），第 2 项进 main（`83489825`，ADR-0162），第 5 项进 main（`9a3b9e9a`，ADR-0163），第 8 项进 main（`7c084917`，ADR-0164）；第 7 项已落地、尚未进 main；第 3、4、6、9、10 项未做
+Status: in-progress——2026-09-30 第 1 项进 main（`161bb646`，ADR-0161），第 2 项进 main（`83489825`，ADR-0162），第 5 项进 main（`9a3b9e9a`，ADR-0163），第 8 项进 main（`7c084917`，ADR-0164），第 7 项进 main（`cab6613c`，ADR-0166）；第 3 项在通道 3 进行中；第 4、6、9、10 项未做
 Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 行第一项的机制缺口，归[票 16](./16-mechanism-gaps-without-a-ticket.md)；缺它们时本票只能先定文法）
 地盘：settlement-accounting 领域与应用层（金额、分摊、周期费用、指标），账单接入与财务交换的连接器适配器；规则正文若由 party-commercial 声明，PC 侧另开票。
 出处：[票 02](./02-split-parameter-register-and-retriage-deferrals.md)——[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md) `PAR-COM-07`、`PAR-SET-05`、`PAR-SET-06`、`PAR-SET-07`、`PAR-SET-08`、`PAR-SET-09`、`PAR-SET-10`、`PAR-INT-04`、`PAR-INT-05` 行内「〔ADR-0146 拆分〕」点名的部分。[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表 PN-07 行第三项当时记「未核」，本票即其补核。
@@ -94,3 +94,19 @@ Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 
 
 第 8 项在 `9a3b9e9a` 之上重放，文档与登记命令冲突按两边都留解开：`f4f70cc0→7c084917`（含迁移改号 `0027`）。清点在两笔代码之上重生成为 `eef58da6`（`settlementaccounting` 生产 120→130、测试 90→95；`settlement_accounting` 迁移 25→27）。
 推送方验证：钉 `eef58da6`，`gofmt -l` 空，build 与 vet 退 0，两边架构门禁单跑 PASS，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。本记录一笔只多本票面 `.md`。两条分支作封存出处。
+
+**评审 ← 通道 1 · 钉 `dfd48b24`（通道 2 分支 `mcp2-psb12-07`，第 7 项，ADR-0166，基 `ca60f16d`）· 2026-10-01 00:2x**
+
+- **阻断**：无。`TestEveryPersistenceWriteMethodCarriesTransactionRequiredEvidence` 带 DSN 为 PASS。`TestAnUnregisteredAccountingConnectorStaysUnconfigured`、`TestAccountingConnectorsRefuseToRunOutsideATransaction`、`TestAccountingConnectorOnlyAcceptsCanonicalExchange` PASS。
+- **非阻断**（随票记）：`AdmitAccountingExchangeHandler.Admit` 放行后不调用账单接收，也不调用资金事实采用。ADR-0166 决定三写明如此。
+- **核过无发现**：内置形态只有 `CANONICAL`。命令 `accounting-connector`。没登记答 `ACCOUNTING_CONNECTOR_UNCONFIGURED`。迁移 `0029`，`0028` 留给周期费用。未登租户行。未改周期费用，未改 ADR-0161 至 0164 的决定正文。
+- **结论：可重放**。
+
+**完成记录（通道 2 · 据完工报转录，第 7 项）**
+
+分支 `mcp2-psb12-07`（基 `ca60f16d`），一笔未改写：`dfd48b24`。既有通用导入/导出没有。新做规范文书形态。
+
+**进 main 记录（2026-10-01 00:2x，通道 1 推送，第 7 项）**
+
+重放到 `ca60f16d` 之上，零冲突：`dfd48b24→cab6613c`。清点在代码链尖重生成为 `97f37a7c`（`settlementaccounting` 生产 130→135、测试 95→97；`settlement_accounting` 迁移份数 27→28，文件号是 `0029`，`0028` 空给第 3 项）。
+推送方验证：钉 `97f37a7c`，`gofmt -l` 空，build 与 vet 退 0，架构门禁与点名真库用例 PASS，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。本记录一笔只多本票面 `.md`。分支作封存出处。
