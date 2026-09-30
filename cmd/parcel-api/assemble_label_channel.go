@@ -29,25 +29,23 @@ import (
 // 一笔面单交易的建立是产品题，触发面另票）。装配函数存在的意义是让「已装配、未触发」有一处可核：每一段的真适配器、
 // 留痕三件、事务壳与显式未配置的缝都在这里，接触发面的那张票只需要调 labelChannelOrchestration.Flow。
 //
-// 三个取数口（渠道约束、计价输入、BUY 价卡）与翻译器的账号使用授权选法、供应商协议选法仍是实例半边
-// （`PAR-INT-02` / `PAR-COM-10` / `PAR-SET-03`）：生产装配交显式未配置的实现。接受时解析回指不是那一类：
-// 它从已接受决定上读（ADR-0159），缝留空就装这个读口。链在择优那一格仍会因约束未配置停下，不建立交易、
+// 渠道约束、计价输入、BUY 价卡，以及翻译器的账号使用授权选法、供应商协议选法，仍是实例半边
+// （`PAR-INT-02` / `PAR-COM-10` / `PAR-SET-03`）：生产装配交显式未配置的实现。接受时解析回指不是那一类，
+// 生产装配直接装接受决定读口（ADR-0159），没有可替换的缝。链在择优那一格仍会因约束未配置停下，不建立交易、
 // 不写决定记录；不为变绿种任何映射、价卡或约束。
 
-// labelChannelSources 是组合根留给实例半边的缝。约束、计价输入、BUY 价卡、账号使用授权、供应商协议为 nil
-// 即按显式未配置装配——这不是默认值，是「租户尚未登记」这一事实在装配点上的写法。Resolutions 为 nil 则装
-// 接受决定回指，不留空。测试替身把前五个配上（合成串）才能走到择优落定之后。
+// labelChannelSources 是组合根留给实例半边的缝。每一格为 nil 即按显式未配置装配——这不是默认值，是「租户尚未
+// 登记」这一事实在装配点上的写法。接受时解析回指不在这些缝里。
 type labelChannelSources struct {
 	Constraints  pscommercial.ChannelConstraintSource
 	PricingInput pspricing.PricingInputSource
 	BuyPlans     pspricing.ChannelBuyPlanSource
 	Accounts     pscommercial.ChannelAccountUseSource
 	Agreements   pscommercial.SupplierAgreementSource
-	Resolutions  pscommercial.AcceptanceResolutionSource
 }
 
-// labelChannelSeams 是 buildLabelChannelOrchestrationWith 收的全部可替换处：六个实例半边缝，加三个**只给测试用**的
-// 端口级替身位（装配 / 成本 / 翻译，nil → 真适配器）。后三个存在的理由：真装配与真翻译读的是 PC 的映射、发布册、
+// labelChannelSeams 是 buildLabelChannelOrchestrationWith 收的全部可替换处：上面那些实例半边缝，加上只给测试用的
+// 端口级替身（装配、成本、翻译；nil 则用真适配器）。替身存在的理由：真装配与真翻译读的是 PC 的映射、发布册、
 // 账号使用授权与供应商协议，那些行是实例半边、仓里没有种子，验收路径要走到择优落定之后只能在端口这一层换合成
 // 替身；生产装配从不填它们（buildLabelChannelOrchestration 交零值）。
 type labelChannelSeams struct {
@@ -67,7 +65,8 @@ type labelChannelOrchestration struct {
 	Gateway      shipmentports.LabelChannelGateway
 }
 
-// buildLabelChannelOrchestration 是生产装配：六个实例半边缝全部显式未配置，三个端口都是真适配器。
+// buildLabelChannelOrchestration 是生产装配：实例半边缝全部显式未配置，装配、成本、翻译都是真适配器，
+// 接受时解析回指装接受决定读口。
 func buildLabelChannelOrchestration(db *bentopg.DB) (labelChannelOrchestration, error) {
 	return buildLabelChannelOrchestrationWith(db, labelChannelSeams{})
 }
@@ -123,7 +122,8 @@ func buildLabelChannelOrchestrationWith(db *bentopg.DB, seams labelChannelSeams)
 		Clock:       clock,
 	})
 
-	// 票 29 的翻译器：两个 PC 读口必装（构造期拒 nil，票 lc/35 收 lc/29 评审那条），三个源按缝。
+	// 票 29 的翻译器：两个 PC 读口必装（构造期拒 nil，票 lc/35 收 lc/29 评审那条）。账号使用授权与供应商协议按缝。
+	// 接受时解析回指直接装接受决定读口，不留缝。
 	authorizations, err := pcpostgres.NewChannelAccountUseAuthorizations(db)
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: channel account use authorizations: %w", err)
@@ -136,9 +136,9 @@ func buildLabelChannelOrchestrationWith(db *bentopg.DB, seams labelChannelSeams)
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: shipment requests: %w", err)
 	}
-	resolutions := sources.Resolutions
-	if resolutions == nil {
-		resolutions = pscommercial.NewAcceptedDecisionResolution(requests)
+	resolutions, err := pscommercial.NewAcceptedDecisionResolution(requests)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: acceptance resolution: %w", err)
 	}
 	basisTranslator, err := pscommercial.NewChannelSelectionBasisTranslator(pscommercial.ChannelSelectionBasisTranslatorDeps{
 		Accounts:       sources.Accounts,
@@ -339,9 +339,9 @@ func (unconfiguredLabelChannelGateway) QuerySubmission(
 	return shipmentports.LabelSubmissionQueryOutcome{Outcome: outbound.Unconfigured()}, nil
 }
 
-// 三个取数口与三个源的显式未配置实现。它们不读请求、不构造任何东西、不作任何业务判断，只把「未配置」按各自
-// 端口的形状交出来：约束口交零值（ChannelConstraint 零值即未配置，装配适配器据此答 ErrChannelConstraintNotConfigured）；
-// 其余五口第二个返回值为 false。
+// 渠道约束、计价输入、BUY 价卡的显式未配置实现。它们不读请求、不构造任何东西、不作任何业务判断。约束口交零值
+// （ChannelConstraint 零值即未配置，装配适配器据此答 ErrChannelConstraintNotConfigured）；计价输入与 BUY 价卡第二个
+// 返回值为 false。账号使用授权与供应商协议为 nil 时由翻译器自己答未配置。
 
 type unconfiguredChannelConstraints struct{}
 

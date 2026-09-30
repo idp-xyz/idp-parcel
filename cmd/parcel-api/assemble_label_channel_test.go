@@ -13,6 +13,7 @@ import (
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	shipmentdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	shipmentports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/outbound"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
@@ -307,7 +308,7 @@ func labelChannelBasis(t *testing.T) shipmentdomain.SelectedChannelBasis {
 	return basis
 }
 
-// 三个端口级合成替身：只给测试用（labelChannelSeams 头注），不进生产装配。
+// 端口级合成替身：只给测试用（labelChannelSeams 头注），不进生产装配。
 
 type labelChannelAssemblyDouble struct {
 	candidates []shipmentdomain.ChannelCandidateID
@@ -332,6 +333,203 @@ func (double labelChannelCostsDouble) ChannelCandidateCosts(
 type labelChannelTranslatorDouble struct {
 	basis shipmentdomain.SelectedChannelBasis
 	err   error
+}
+
+// Covers: 生产装配把接受时解析回指直接装上。账号与协议的选法配上之后，翻译读到已接受决定上的解析，
+// 停在授权登记册取不到那一条——不是「源没装」，也不是「回指未形成」。
+func TestProductionAssemblyReadsTheAcceptedDecisionResolution(t *testing.T) {
+	db := labelChannelTestDB(t)
+	identity, parcel := saveAcceptedLabelChannelRequest(t, db)
+	winner := pricedChannelCandidate(t, "SYN-CAND-LC-RES", "9.00", "SYN-EVAL-LC-RES")
+	winner, err := winner.WithRate(mustValue(t, shipmentdomain.NewChannelRateReference, "SYN-BUY-PLAN-LC-RES/v1"))
+	if err != nil {
+		t.Fatalf("赢家带费率：%v", err)
+	}
+	pcTenant := mustValue(t, pcdomain.NewTenantID, "SYN-TENANT-LC-RES")
+	pcScope := mustValue(t, pcdomain.NewCommercialScopeReference, "SYN-SCOPE-LC-RES")
+	agreement := effectiveCommercialShell(t, pcTenant, pcdomain.SupplierAgreementObject, "SYN-AGREE-LC-RES", pcScope)
+
+	chain, err := buildLabelChannelOrchestrationWith(db, labelChannelSeams{
+		labelChannelSources: labelChannelSources{
+			Accounts: labelChannelAccountDouble{selection: pscommercial.ChannelAccountUseSelection{
+				Authorization: mustValue(t, pcdomain.NewChannelAccountUseAuthorizationID, "SYN-AUTH-LC-RES"),
+				Grantee:       mustValue(t, pcdomain.NewPartyID, "SYN-PARTY-LC-RES"),
+			}},
+			Agreements: labelChannelAgreementDouble{version: agreement},
+		},
+		Assembly: labelChannelAssemblyDouble{candidates: []shipmentdomain.ChannelCandidateID{winner.Candidate()}},
+		Costs:    labelChannelCostsDouble{costs: []shipmentdomain.ChannelCandidateCost{winner}},
+	})
+	if err != nil {
+		t.Fatalf("装配：%v", err)
+	}
+	command := labelChannelCommand(t, "SYN-TENANT-LC-RES", "SYN-LT-LC-RES")
+	command.Selection.Shipment = identity
+	command.Selection.Parcel = parcel
+
+	_, err = chain.Flow.Establish(t.Context(), command)
+	if errors.Is(err, pscommercial.ErrAcceptanceResolutionNotConfigured) || errors.Is(err, pscommercial.ErrAcceptanceResolutionNotFormed) {
+		t.Fatalf("回指没从接受决定上读到：%v", err)
+	}
+	if !errors.Is(err, pscommercial.ErrChannelAccountUseNotRegistered) {
+		t.Fatalf("error = %v，want 授权登记册取不到——解析已经读过", err)
+	}
+}
+
+func saveAcceptedLabelChannelRequest(t *testing.T, db *bentopg.DB) (shipmentdomain.SourceIdentity, shipmentdomain.DeclaredParcelID) {
+	t.Helper()
+	identity, err := shipmentdomain.NewSourceIdentity(
+		mustValue(t, shipmentdomain.NewTenantID, "SYN-TENANT-LC-RES"),
+		mustValue(t, shipmentdomain.NewCustomerAccountID, "SYN-CUSTOMER-LC-RES"),
+		mustValue(t, shipmentdomain.NewSource, "portal"),
+		mustValue(t, shipmentdomain.NewSourceRequestKey, "SYN-KEY-LC-RES"),
+	)
+	if err != nil {
+		t.Fatalf("来源身份：%v", err)
+	}
+	parcel := mustValue(t, shipmentdomain.NewDeclaredParcelID, "SYN-PARCEL-LC-RES")
+	scope, err := shipmentdomain.NewAdmissionScope(
+		mustValue(t, shipmentdomain.NewAdmissionScopeReference, "SYN-SCOPE-REF-LC-RES"),
+		mustValue(t, shipmentdomain.NewAdmissionScopeDigest, "SYN-SCOPE-LC-RES"),
+	)
+	if err != nil {
+		t.Fatalf("准入范围：%v", err)
+	}
+	validity, err := shipmentdomain.NewOwnershipValidityInterval(
+		labelChannelSelectionAt.Add(-24*time.Hour),
+		labelChannelSelectionAt.Add(24*time.Hour),
+	)
+	if err != nil {
+		t.Fatalf("有效区间：%v", err)
+	}
+	ownership, err := shipmentdomain.NewProductionOwnershipDecision(shipmentdomain.ProductionOwnershipDecisionSpec{
+		DecisionID:       mustValue(t, shipmentdomain.NewProductionOwnershipDecisionID, "SYN-OWN-LC-RES"),
+		Scope:            scope,
+		Authority:        shipmentdomain.ProductionAuthorityIDPParcel,
+		AdmissionControl: shipmentdomain.AdmissionControlOpen,
+		RuleVersion:      mustValue(t, shipmentdomain.NewProductionOwnershipRuleVersion, "SYN-RULE-LC-RES"),
+		AsOf:             labelChannelSelectionAt,
+		Validity:         validity,
+		Revision:         mustValue(t, shipmentdomain.NewProductionOwnershipRevision, "SYN-REV-LC-RES"),
+		DecisionAt:       labelChannelSelectionAt,
+	})
+	if err != nil {
+		t.Fatalf("归属决定：%v", err)
+	}
+	gate, err := shipmentdomain.EvaluateFutureSubmissionGate(
+		ownership, scope.Digest(),
+		mustValue(t, shipmentdomain.NewProductionOwnershipRevision, "SYN-REV-LC-RES"), labelChannelSelectionAt)
+	if err != nil {
+		t.Fatalf("建单门禁：%v", err)
+	}
+	fingerprint, err := shipmentdomain.NewSourceSubmissionFingerprint(
+		identity,
+		mustValue(t, shipmentdomain.NewPayloadDigest, "syn-lc-res-digest"),
+		labelChannelSelectionAt.Add(-time.Hour),
+		labelChannelSelectionAt.Add(-time.Hour+time.Second),
+	)
+	if err != nil {
+		t.Fatalf("来源指纹：%v", err)
+	}
+	candidate, err := shipmentdomain.NewSubmissionCandidate(
+		fingerprint,
+		mustValue(t, shipmentdomain.NewSubmissionBatchID, "SYN-BATCH-LC-RES"),
+		mustValue(t, shipmentdomain.NewShipmentRequestID, "SYN-REQUEST-LC-RES"),
+		[]shipmentdomain.DeclaredParcelID{parcel},
+	)
+	if err != nil {
+		t.Fatalf("提交候选：%v", err)
+	}
+	request, err := shipmentdomain.SubmitShipmentRequest(shipmentdomain.SubmitShipmentRequestSpec{
+		Candidate:   candidate,
+		Gate:        gate,
+		VersionID:   mustValue(t, shipmentdomain.NewSubmissionVersionID, "SYN-VERSION-LC-RES"),
+		TaskID:      mustValue(t, shipmentdomain.NewAcceptanceDecisionTaskID, "SYN-TASK-LC-RES"),
+		SubmittedAt: labelChannelSelectionAt,
+	})
+	if err != nil {
+		t.Fatalf("建单：%v", err)
+	}
+	applicable, err := shipmentdomain.NewApplicableCheckGroups(shipmentdomain.NetworkReachabilityCheck)
+	if err != nil {
+		t.Fatalf("适用校验组：%v", err)
+	}
+	basis, err := shipmentdomain.NewCommercialBasisSnapshot(shipmentdomain.CommercialBasisSnapshotSpec{
+		ResolutionID: mustValue(t, shipmentdomain.NewCommercialResolutionID, "SYN-RES-LC-RES"),
+		RulePackage:  mustValue(t, shipmentdomain.NewRulePackageReference, "SYN-RULES-LC-RES/v1"),
+		ViewRevision: mustValue(t, shipmentdomain.NewCommercialViewRevision, "SYN-VIEW-LC-RES"),
+		Applicable:   applicable,
+		ManualReview: shipmentdomain.ManualReviewNotRequiredByRules,
+	})
+	if err != nil {
+		t.Fatalf("商业依据：%v", err)
+	}
+	check, err := shipmentdomain.NewAcceptanceCheck(shipmentdomain.NetworkReachabilityCheck, parcel, shipmentdomain.CheckPassed, shipmentdomain.CheckReason{})
+	if err != nil {
+		t.Fatalf("接受校验：%v", err)
+	}
+	repository, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		t.Fatalf("构造委托仓储：%v", err)
+	}
+	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		inserted, insertErr := repository.Insert(txCtx, identity, request)
+		if insertErr != nil {
+			return insertErr
+		}
+		if inserted != shipmentports.ShipmentRequestInserted {
+			return errors.New("insert outcome")
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("种单：%v", err)
+	}
+	loaded, found, err := repository.FindBySourceIdentity(t.Context(), identity)
+	if err != nil || !found {
+		t.Fatalf("取回委托：err=%v found=%v", err, found)
+	}
+	accepted, err := loaded.Decide(shipmentdomain.AcceptanceDecisionSpec{
+		DecisionID: mustValue(t, shipmentdomain.NewAcceptanceDecisionID, "SYN-ACCEPT-LC-RES"),
+		Checks:     []shipmentdomain.AcceptanceCheck{check},
+		Basis:      basis,
+		DecidedAt:  labelChannelSelectionAt.Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("形成接受：%v", err)
+	}
+	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		saved, saveErr := repository.Save(txCtx, identity, accepted)
+		if saveErr != nil {
+			return saveErr
+		}
+		if saved != shipmentports.ShipmentRequestSaved {
+			return errors.New("save outcome")
+		}
+		return nil
+	}); err != nil {
+		t.Fatalf("存已接受的委托：%v", err)
+	}
+	return identity, parcel
+}
+
+type labelChannelAccountDouble struct {
+	selection pscommercial.ChannelAccountUseSelection
+}
+
+func (double labelChannelAccountDouble) AuthorizationFor(
+	context.Context, shipmentports.ChannelSelectionQuery, shipmentdomain.ChannelCandidateID,
+) (pscommercial.ChannelAccountUseSelection, bool, error) {
+	return double.selection, true, nil
+}
+
+type labelChannelAgreementDouble struct {
+	version pcdomain.CommercialVersion
+}
+
+func (double labelChannelAgreementDouble) AgreementFor(
+	context.Context, shipmentports.ChannelSelectionQuery, shipmentdomain.ChannelCandidateID,
+) (pcdomain.CommercialVersion, bool, error) {
+	return double.version, true, nil
 }
 
 func (double labelChannelTranslatorDouble) TranslateSelectedCandidate(
