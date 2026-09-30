@@ -43,3 +43,16 @@ Blocked by: 无
 - **核过无发现**：`initial_route.go` 只改注释；`routing.go` 抽 `loadClosure` 行为不变；`form_acceptance_decision.go` 只给可达性重校加 `JudgmentID`，初始路由不变；不需新迁移之说对 NR 成立；第 2–4 项、种子、租户行未动；`internal/architecture` 过。
 - 推送方预演：隔离树把两笔重放到 `01d7d5e8` 之上得 `6bbb0709`、`16d78781`，零冲突，清点无差；链尖 gofmt 空、build 与 vet 绿，新真库用例单跑 PASS，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。预演不推。
 - **结论：不重放**，回作者同一分支修；修完两轴重跑。
+
+**评审 ← 通道 1（隔离子代理，非作者）· 钉 `489e77a5`（同一分支，基 `a40393b7`，三笔净改动，含迁移 `0023`）· 2026-09-30 21:12**
+
+- 上一轮两条阻断：README 索引口径已消；判断账吞新判断那段代码已修——`TestANewResolutionAtTheSameInstantIsTheJudgmentTheDecisionReads` 带 DSN `-v` 为 PASS，放到 `f6289f96` 的判断账上为红（Spec 轴实测）。
+- **阻断**：
+  - Spec（推送方复现过变异）：修复没有测试守住。那条用例自己调 `FormedUnder`，只验判断账，没走 `resolveAdoptedAgain` → 推进 → 决定这条链。删掉 `AdvanceAcceptanceJudgmentHandler.Handle` 里唯一那处 `FormedUnder`，带 DSN 的 `parcelshipment/application`、`parcelshipment/adapters/postgres`、`cmd/parcel-dispatch` 仍全绿；`loadReachabilityJudgments` 又放行 `resolution_id = ''` 配任意采用解析，`0023` 无非空 CHECK——删了那一处，原缺陷原样回来。
+  - 两轴同一处：ADR-0156 越权风险点 2 仍写同版本同时点「消费方仍只留先到者」，与改写后的决定五、与迁移 `0023`（解析进主键）相反（红线「单一权威」）。
+  - Standards：ADR-0064 部分停用的范围各处不一——Status 已标 Context 那句失效，README 的 0064 索引行、0064 的 Links、0156 的 Consequences 与 Links 仍只说后果那一句（ADR 索引「部分停用」）。
+- **非阻断**：`RecordReachabilityJudgment` 遇零值写 `''`、读口 `''` 兜底、`formedUnder` 注释里的「旧形状」库里不可能存在（Speculative Generality）；决定分支复用 `ReachabilityJudgmentSuperseded`，与 `judgment_continuation.go`「压格就会让不同的缺口共用一条引用」相抵，其上 AT-PS-037 注释讲的是网络视图换代，应用层无测试；`reachabilityFormedUnderAnotherResolution` 错误前缀照抄 `load reachability judgments`，失效判定写在适配器 SQL 里；决定五与 `ReachabilityStaleResolution` 注释写「没有一份是在当前解析下形成的」，实现是逐成员判；`0023` 头注以「尚无租户」为理由与 ADR-0150 不合，实际理由是只有 `ReachabilityAssessed` 才记行、本系列之前闭包标识为 nil 只能`未形成判断`，任何环境都无存量行（推送方核过记账路径）；0156 裁决能力边界里仍有非原文引文。
+- 另一条 Standards「分支没重生成清点」不作阻断：作者写明留给推送方，推送方在链尖兜底（预演里是 `247c7fde`，`parcel_shipment` 迁移 22→23 份）。
+- **核过无发现**：`0023` 在 `migrations/parcel_shipment`，编号与 main 不撞，按目录嵌入不需另接线，`internal/platform/migrate` 带 DSN 过；决定读口优先取当前解析下的判断；README 0156 行与 Status 一致；上一轮非阻断中「同一派生回指」注释、别名、测试头注、`loadClosure` 参数已改；第 2–4 项、租户行、解析号未碰；`internal/architecture` 过。
+- 推送方预演：三笔重放到 `cc5e2c83` 之上得 `7001c6cd`、`dcfc70db`、`7a2a1c07`，清点另成 `247c7fde`；链尖 gofmt 空、build 与 vet 绿，两条新真库用例单跑 PASS，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。预演不推。
+- **结论：不重放**，回作者同一分支修；修完两轴重跑。
