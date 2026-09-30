@@ -58,8 +58,8 @@ Blocked by: 无
 - c6 连到「未经过」那段的连线画成绿 → `lifecycleConnectorReached`，连进、连出被跳过的那段都不算走过。✅
 - a1 主动作只切签、表单还要再点一下 → `LegalEntityProfileSection` 收 `formOpenRequest`，主动作直接打开并滚到表单。✅
 - a2 引用签不可复制 → 改成按钮，点一下复制。✅
-- a3「到业务参与方页停用」没带参与方 → ◑ 菜单项写上参与方身份；业务参与方页没有按身份的地址或 `?q=` 检索，真带过去要改那一页，
-  不在本票地盘。
+- a3「到业务参与方页停用」没带参与方 → ✅ 菜单写 hash `#/business-parties?q=<partyId>`（`hashWithQueryValue`）；身份册检索改走
+  `useAddressKeyword`，挂载即按地址筛到那一行。关系册检索仍是页内状态。用户 2026-09-30 裁定补上，原先记「不在本票地盘」。
 
 ## 完成记录（2026-09-30，通道 3，前端切片直接在 main 上做）
 
@@ -97,3 +97,10 @@ Blocked by: 无
 - **不在本票修、需另定**：同一个 `/NN` 失效在别处也在——`apps/admin-web/src` 另有十余处（`ListPageTemplate` 检查中行与批量栏底色、
   `ReviewFlowTemplate` 等），`@idpxyz/*` 包源码有七十余处，今天都不生效。全局修法是把 `tailwind.config.js` 的主题色改成带
   `<alpha-value>` 的 `color-mix` 写法，一改全站这些底色与边框都会「突然出现」，是全站外观变化，候选另立票。
+
+**用户裁定（2026-09-30）：补上停用入口定位到参与方**（原先 a3 的 ◑）：
+
+- 「到业务参与方页停用」写 `#/business-parties?q=<partyId>`，身份册检索从页内 `useState` 改为 `useAddressKeyword`，
+  与委托查询、异常案件同一条地址检索。壳层 `preserveInactiveTabContent={false}`，从法人页过来是一次新挂载，默认签就是身份册，检索词在首帧读到。
+- 关系册检索不动：停用定位的是身份，两条检索共用一个 `?q=` 会互相覆盖。
+- 不预填身份停用表单：入口把人带到这一行，停用仍走登记签里既有的那张表（种类、修订、依据、时刻都要人填）。

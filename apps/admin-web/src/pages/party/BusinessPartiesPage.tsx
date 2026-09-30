@@ -9,7 +9,7 @@ import {
   TabsTrigger,
   TabsContent,
 } from '@idpxyz/ui-primitives';
-import { ListPageTemplate, type ListColumn } from '../../templates';
+import { ListPageTemplate, useAddressKeyword, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { chipClass } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
@@ -395,7 +395,9 @@ function BusinessPartyIdentitiesTable({
   relationships: ApiResult<PartyRelationshipListResponseBody> | null;
   retryRelationships: () => void;
 }) {
-  const [search, setSearch] = useState('');
+  // 检索词放在地址 `?q=`：集团与法人详情的「到业务参与方页停用」带上参与方标识，这一册挂载时已经筛到那一行。
+  // 关系册检索留在页内，停用入口定位的是身份这一册。
+  const [search, setSearch] = useAddressKeyword();
   const [status, setStatus] = useState<BusinessPartyStatusFilter>('ALL');
   const [sort, setSort] = useState<BusinessPartySortKey>('registered-desc');
   const [selectedId, setSelectedId] = useState<string | null>(null);

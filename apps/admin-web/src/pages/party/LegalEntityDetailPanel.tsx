@@ -17,6 +17,7 @@ import { legalEntityLifecycle, lifecycleConnectorReached, type LifecycleStageSta
 import { LegalEntityProfileSection } from './LegalEntityProfileSection';
 import { legalEntityRevisionHistory } from './LegalEntityDetailPage';
 import { RevisionHistorySection } from './RevisionHistorySection';
+import { ADDRESS_KEYWORD_PARAM, hashWithQueryValue } from '../../templates/address-query';
 import { DetailRow, Instant, UnknownPartyName, statusBadge, useCopyToClipboard } from './detail-primitives';
 
 type PanelTab = 'overview' | 'profile' | 'history';
@@ -103,7 +104,8 @@ function Lifecycle({ row }: { row: GroupLegalEntityRecord }) {
  * 头部（标识 + 种类 / 状态 / 修订徽章 + 一行副题 + 引用签）· 主动作 + 「更多」菜单 + 关闭 · 生命周期条 · 关键事实条 · 页签。
  *
  * 内容只取行上已有的与两个既有区块（法人资料、修订历史各自取数），不为详情栏另开读口。动作只摆本产品真有的：
- * 登记资料修订在「法人资料」签里；停用照页头注释的分工留在业务参与方页，这里只给去那一页的路。
+ * 登记资料修订在「法人资料」签里；停用照页头注释的分工留在业务参与方页。去那一页时把参与方标识放进地址的
+ * `?q=`，身份册挂载时已经筛到这一行——只写 `#/business-parties` 的话，人还得自己在册里找。
  * 参照页的收货、证据、协作三签在法人册上没有对应的事实，不摆。
  */
 export function LegalEntityDetailPanel({
@@ -177,7 +179,11 @@ export function LegalEntityDetailPanel({
               <MenuSeparator />
               <MenuItem
                 onSelect={() => {
-                  window.location.hash = '#/business-parties';
+                  window.location.hash = hashWithQueryValue(
+                    '#/business-parties',
+                    ADDRESS_KEYWORD_PARAM,
+                    row.partyId,
+                  );
                 }}
               >
                 <Users className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
