@@ -1,7 +1,7 @@
 # 12 settlement-accounting：金额文法、分摊与周期费用形态、经营指标方法与账务连接器
 
 Category: enhancement
-Status: in-progress——2026-09-30 第 1 项进 main（`161bb646`，ADR-0161），第 2 项进 main（`83489825`，ADR-0162），第 5 项进 main（`9a3b9e9a`，ADR-0163），第 8 项进 main（`7c084917`，ADR-0164），第 7 项进 main（`cab6613c`，ADR-0166），第 3 项进 main（`6b3d7d80`，ADR-0165），第 4 项进 main（`f8ead9ad`，已有执行器，无新 ADR）；第 6 项在本重放（ADR-0168）；第 9、10 项未做
+Status: in-progress——2026-09-30 第 1 项进 main（`161bb646`，ADR-0161），第 2 项进 main（`83489825`，ADR-0162），第 5 项进 main（`9a3b9e9a`，ADR-0163），第 8 项进 main（`7c084917`，ADR-0164），第 7 项进 main（`cab6613c`，ADR-0166），第 3 项进 main（`6b3d7d80`，ADR-0165），第 4 项进 main（`f8ead9ad`，已有执行器，无新 ADR），第 6 项进 main（`1e3b9f9d`，ADR-0168）；第 9、10 项未做
 Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 行第一项的机制缺口，归[票 16](./16-mechanism-gaps-without-a-ticket.md)；缺它们时本票只能先定文法）
 地盘：settlement-accounting 领域与应用层（金额、分摊、周期费用、指标），账单接入与财务交换的连接器适配器；规则正文若由 party-commercial 声明，PC 侧另开票。
 出处：[票 02](./02-split-parameter-register-and-retriage-deferrals.md)——[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md) `PAR-COM-07`、`PAR-SET-05`、`PAR-SET-06`、`PAR-SET-07`、`PAR-SET-08`、`PAR-SET-09`、`PAR-SET-10`、`PAR-INT-04`、`PAR-INT-05` 行内「〔ADR-0146 拆分〕」点名的部分。[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表 PN-07 行第三项当时记「未核」，本票即其补核。
@@ -140,3 +140,19 @@ Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 
 **进 main 记录（2026-10-01 00:4x，通道 1 推送，第 4 项）**
 
 重放到 `39998c14` 之上，零冲突：`b6cd7507→f8ead9ad`。无代码、无清点。本记录一笔只多本票面 `.md`。分支作封存出处。
+
+**评审 ← 通道 1 · 钉 `6b8f00e1`（通道 2 分支 `mcp2-psb12-06`，第 6 项，ADR-0168，基 `39998c14`）· 2026-10-01 00:4x**
+
+- **阻断**：无。架构门禁带 DSN 为 PASS。`TestAttributionDateRollsForwardAtCutoff`、`TestJudgeChargeAttributionStaysUnconfiguredWhenTheFeeItemIsNotRegistered`、`TestChargeAttributionsRefuseToRunOutsideATransaction` PASS。
+- **非阻断**（随票记）：截单编排不调用这次判定。ADR-0168 越权风险点 3 写明如此。
+- **核过无发现**：原先没有归属日执行器。形态是 `SOURCE_OCCURRED` 或 `CHARGE_CONFIRMED`，达到截单时刻归下一日。没登记答 `CHARGE_ATTRIBUTION_UNCONFIGURED`。包裹创建、收寄、签收不是形态。迁移 `0031`。未登租户行。未改指标派生，未改 ADR-0161 至 0166 的决定正文。
+- **结论：可重放**。
+
+**完成记录（通道 2 · 据完工报转录，第 6 项）**
+
+分支 `mcp2-psb12-06`（基 `39998c14`），一笔未改写：`6b8f00e1`。命令 `charge-attribution`。
+
+**进 main 记录（2026-10-01 00:4x，通道 1 推送，第 6 项）**
+
+重放到 `0ceacfee` 之上，票面与开发主线补记按两边都留解开：`6b8f00e1→1e3b9f9d`。清点在代码链尖重生成为 `eaf61c5c`（`settlementaccounting` 生产 140→145、测试 99→102；`settlement_accounting` 迁移份数 29→30，文件号 `0031`，`0030` 未用）。
+推送方验证：钉 `eaf61c5c`，build 退 0，架构门禁与点名用例 PASS，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。本记录一笔只多本票面 `.md`。分支作封存出处。
