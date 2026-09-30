@@ -1,7 +1,7 @@
 # 06 parcel-shipment：受理链与面单择优链上被归进实例半边的判断方法
 
 Category: enhancement
-Status: needs-triage——2026-09-24 通道 4 随票 02 立（登记册逐行拆分划出的产品策略，PS 一张）；逐项先核执行器有无，缺的定出内置策略或参考配置形态后转 ready-for-agent
+Status: needs-triage——2026-09-24 通道 4 随票 02 立（登记册逐行拆分划出的产品策略，PS 一张）；逐项先核执行器有无，缺的定出内置策略或参考配置形态后转 ready-for-agent。第 1 项只落了「提交接收」一种形态，2026-09-30 随票 23 进 main（`953d748c`，见文末「进 main 记录」）；其余语义与第 2–7 项未动
 Blocked by: 无（第 4 项里公开承运商接口的参考配置那半等 03）
 地盘：`internal/parcelshipment/adapters/` 下受理链与面单择优链的消费侧适配器，`cmd/parcel-api`、`cmd/parcel-dispatch` 的对应装配点；缝对面的 party-commercial、parcel-pricing、settlement-accounting 只读，要改提供方另开票。
 出处：[票 02](./02-split-parameter-register-and-retriage-deferrals.md) 登记册逐行拆分——[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md) `PAR-COM-13`、`PAR-COM-14`、`PAR-COM-15`、`PAR-COM-17`、`PAR-INT-02`、`PAR-NET-16` 行内「〔ADR-0146 拆分〕」点名的部分；[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定一、二与决定五第三条。已知缺口沿用[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表 PN-02 行的原话，不另立口径。
@@ -60,3 +60,22 @@ Blocked by: 无（第 4 项里公开承运商接口的参考配置那半等 03�
 6. **非阻断的处置**：执行器不限判断类别，租户在哪格采用就在哪格形成，`SubmissionReceiptAsOf`、`acceptanceChainConsumers`、`acceptanceCommercialBasis` 的注释照此改；PS `CONTEXT` 那句改成「没有执行器认得的语义答`未配置`」；开发主线 PN-02 格与第四项段恢复钉 `5445341c` 的原文（含「待 PC owner 复核」），只留补记；价格政策汇率格保留采用，由票 23 在 PC `CONTEXT` 补一句覆盖；去掉在适配器测试里数种子采用次数的那条，种子证据改由票 23 给出。
 
 裁决能力边界：读过 ADR-0146、ADR-0147 全文，ADR-0148 的 Status 与涉及排序形态的决定，`networkrouting/domain` 的 `RankingForm`，`299cd954` 的全部 diff，本票全文，parallel-sessions 评审与重放两节。没读：PC 发布规范化的实现细节、计价侧对汇率时点语义的消费、分层门禁许不许 PC 领域包引 `referenceconfig`、ADR-0150 与 ADR-0156 全文。越权风险点：① 把「采用」扩到形态选择格（PC owner 复核，与 ADR-0146 越权风险点 4 同类）；② 前缀归 PS 而非 PC（PS、PC owner）；③ 汇率格采用而计价侧无执行器（PP owner）。
+
+**评审 ← 通道 1（隔离子代理，非作者）· 钉 `f00db9be`（基 `a4bc4c1c`，本分支四笔净改动，含票 23）· 2026-09-30 20:09**
+
+- **阻断**：Spec 轴一条——派单点名的「两张票各自的完成记录」票面上没有。分支基点上既无本票 Comments 也无票 23，作者无处可写；推送方在进 main 那一笔按完工报原文转录（见下），推前补齐。同条另称完工报缺 `.go`/`.sql` 清单，误报：完工报列了八个 `.go`、无 `.sql`，与 `git diff --name-only 299cd954 f00db9be` 一致。
+- **非阻断**（随票记，建议作者另立收尾票）：
+  - Standards：PC 领域包的 `NewAsOfSemanticsReference` 引 `referenceconfig`，是领域包首次引仓库根包，与架构门禁 `infrastructureImports` 的注释「领域类型只用标准库和框架的领域事件合同表达」不符（门禁未列、测试不报），ADR-0157 越权风险点未列；`SubmissionReceiptAsOf`、`acceptanceCommercialBasis` 注释写种子事实「演示种子的财务控制格没采用」，种子一改即无声失真（措辞出自派单，缺口在派单方）；`OpenCitation` 拒坏形状，与同包 `ParseCitation` 注释「不当成一次坏掉的采用」口径相反，包注释与 `Citation` 注释仍只说依据格；ADR-0157 Status 未写裁决能力边界（在所引裁决里），Context 叙述了中间提交；新测试写死 `@1`，未遍历 `Released()`，ADR-0147 决定五要「每份」；`citationGateAndDigest` 以 panic 为通过信号，另有只为两句报错立的错误类型；开发主线补记按位置写「第 1 项」。
+  - Spec：`cmd/parcel-commercial` 两个拒收用例只替换第一处引用，汇率格拒收只由领域单测覆盖；「可达性时点照旧能形成」没有把种子引用接到执行器的测试；`AsOfValueSource` 注释「租户截点与其余语义形不成……等登记」与裁决 6② 同题未改，`acceptanceChainConsumers` 仍把已接上的时点项列在「其余实例半边留空」之下；开发主线补记漏了价格政策汇率格采用而无执行器；ADR-0157 决定四「执行器不按判断类别设限」超出裁决第 3 点，与第 6 点同向，裁决方认可。
+- **核过无发现**（两轴合）：执行器不认任何 `SYN-` 串；`foldsTo` 已删、摘要重钉；登记门在 `NewAsOfSemanticsReference`，规则包格与汇率格的发布翻译、规范化、管理台草稿、PG 重建都经它；开发主线 PN-02 格与第四项段与基点逐字节一致，只加补记；两份 `CONTEXT` 与 ADR-0157 合裁决；未并进 ADR-0156；`internal/architecture` 全过。
+- 推送方另核：对 `TestDemoSeedClearsTheCitationGateAndItsDeclaredDigests` 做一次变异——种子规则包摘要改一位即红（报「声明 … 算出 …」），还原即绿；种子两个重算摘要为真。
+- **结论：可重放**，阻断由进 main 那一笔补齐。
+
+**完成记录（通道 2 · 据完工报 `task-c53d52f3` 原文转录；分支上无本票票面可写）**
+
+已推送 `mcp2-submission-receipt-asof@f00db9be`（不改写 `299cd954` / `729bb56d`）。两笔：`040cf813` ADR-0157 与注释 / 主线订正；`f00db9be` 登记门。执行器仍不认 `SYN-`。带 `REFCFG-1:` 且未发布或坏形状的引用在登记拒；演示种子经发布翻译且摘要对得上。`go build` / `go vet` 绿；受影响包与 `cmd/*` 含 DSN、`-v` 无 SKIP。自 `299cd954` 的 `.go`：`translate_citation_gate_test.go`、`assemble.go`、`submission_receipt_as_of.go`、`submission_receipt_as_of_test.go`、`as_of_policy.go`、`as_of_policy_test.go`、`referenceconfig.go`、`referenceconfig_test.go`；无 `.sql`。
+
+**进 main 记录（2026-09-30 20:1x，通道 1 推送）**
+
+分支 `mcp2-submission-receipt-asof@f00db9be`（已推 origin）在隔离树重放到 `4155eea0` 之上（先在 `24af8123` 上重放验过一遍，其间前端在共享树 `main` 提了只动 `apps/admin-web` 与其票面的 `4155eea0`，改在它之上重来），零冲突：`729bb56d→b56abd09`、`299cd954→f7c91ede`、`040cf813→b82ca955`、`f00db9be→953d748c`。清点在链尖重生成与合并结果无差，不另成笔。本记录与票 23 同一笔。
+推送方验证：钉 `953d748c`（与本记录一笔只差 `.md`），`gofmt -l` 空，build 与 vet 退 0，单跑真库用例为 PASS 非 SKIP，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。分支作封存出处。

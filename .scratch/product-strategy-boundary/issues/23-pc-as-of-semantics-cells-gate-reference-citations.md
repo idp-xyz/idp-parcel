@@ -1,7 +1,7 @@
 # 23 party-commercial：时点语义格对参考配置引用的登记门
 
 Category: enhancement
-Status: ready-for-agent——2026-09-30 通道 1 按用户授权自决立（[票 06](./06-ps-acceptance-and-label-selection-judgment-methods.md) Comments「裁决 ← 通道 1」第 5 条）；派通道 2，与票 06 修复同一分支 `mcp2-submission-receipt-asof`、分笔提交、一起重放
+Status: resolved——2026-09-30 通道 2 完工（`f00db9be`），同日通道 1 随票 06 重放进 main（`953d748c`），见文末「完成记录」「进 main 记录」。此前 ready-for-agent——2026-09-30 通道 1 按用户授权自决立（[票 06](./06-ps-acceptance-and-label-selection-judgment-methods.md) Comments「裁决 ← 通道 1」第 5 条）；派通道 2，与票 06 修复同一分支 `mcp2-submission-receipt-asof`、分笔提交、一起重放
 Blocked by: ADR-0157（随票 06 修复同一分支起草）
 地盘：party-commercial 规则包与价格政策发布翻译里时点语义格那一段及其测试（落在领域构造门还是翻译适配器，按分层门禁定）；party-commercial `CONTEXT.md` 那一句。不碰 parcel-shipment。
 出处：票 06 Comments「评审 ← 通道 1 · 钉 `299cd954`」的阻断与其后的裁决。
@@ -22,3 +22,18 @@ Blocked by: ADR-0157（随票 06 修复同一分支起草）
 
 - 上面四项各有落点与证据。
 - 全仓 `go build` 与 `go vet` 绿；受影响包及其反向依赖 `-count=1` 绿，`cmd/*` 带 DSN。
+
+## 完成记录
+
+作者自验与改动清单见票 06 Comments「完成记录（通道 2 · 据完工报 `task-c53d52f3` 原文转录）」，两张票同一份完工报，不抄第二遍。下面是推送方按 `f00db9be` 的 diff 对照「做什么」逐项列的落点：
+
+1. 登记门在 party-commercial 领域构造门 `NewAsOfSemanticsReference`，经 `referenceconfig.OpenCitation` 解析并确认已发布；规则包格与价格政策汇率格都经这一个构造门。
+2. 构造门测试：`cmd/parcel-commercial` 的 `TestAnUnreleasedAsOfCitationIsRefusedAtTranslation`、`TestAMalformedAsOfCitationIsRefusedAtTranslation`，领域包 `as_of_policy_test.go`，`referenceconfig_test.go`。
+3. 种子证据取测试一路：`TestDemoSeedClearsTheCitationGateAndItsDeclaredDigests` 读真实的 `publish-batch.json` 经发布翻译并核声明摘要。
+4. party-commercial `CONTEXT.md` 规则包那句已覆盖价格政策汇率格与登记校验。
+
+未尽之处（汇率格拒收只由领域单测覆盖、测试写死 `@1`、以 panic 为通过信号、领域包引 `referenceconfig` 的分层例外）记在票 06 Comments「评审 ← 通道 1 · 钉 `f00db9be`」的非阻断里。
+
+## 进 main 记录
+
+随票 06 同一次重放，SHA 对照与推送方验证见票 06「进 main 记录（2026-09-30 20:1x，通道 1 推送）」。本票的代码笔是 `f00db9be→953d748c`。
