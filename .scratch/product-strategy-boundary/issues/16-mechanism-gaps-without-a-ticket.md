@@ -73,3 +73,13 @@ Blocked by: 无
 
 分支 `mcp2-reachability-closure@4a54f7bb`（已推 origin）在隔离树重放到 `713537f3` 之上，零冲突：`5ac58a96→3a600e5c`、`f6289f96→e7b4cd1b`、`489e77a5→6b670743`、`4a54f7bb→66ea4bd4`；清点在代码链尖重生成为 `9b21ff41`（`parcel_shipment` 迁移 22→23 份，`cmd` 测试 105→106）。本记录一笔另补 README 0156 行（见上阻断）。
 推送方验证：钉 `9b21ff41`（与本记录一笔只差 `.md`），`gofmt -l` 空，build 与 vet 退 0，三条相关真库用例单跑 PASS 非 SKIP，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。分支作封存出处。
+
+**评审 ← 通道 1（隔离子代理，非作者）· 钉 `220fd8b1`（通道 2 分支 `mcp2-psb16-04`，第 4 项，基 `d3942581`）· 2026-09-30 22:10**
+
+派单记录：21:51 点名通道 2、3，截止 21:54 前两个应答；第 4 项派通道 2（`task-a2b043d0`），第 2 项派通道 3（`task-02ca259f`）。通道 2 的 ADR 先写成 0158，与通道 3 在频道先占的 0158 撞号，随后在 `a8f632d2` 只改号为 0159（推送方逐文件核过：把 0159 换回 0158 后七个文件与 `220fd8b1` 逐字节一致）。
+
+- **阻断**（Standards）：本笔让既有注释成了假话，且都是 AGENTS「改文档」禁止的计数：`buildLabelChannelOrchestration`「六个实例半边缝全部显式未配置」、`labelChannelSeams`「六个实例半边缝」、`channel_selection_basis.go` 文件头「三问是消费方自己的实例半边」、`ChannelSelectionBasisTranslatorDeps`「三个实例半边源」、`ErrChannelBasisTranslationStopped` 仍把 Resolutions 算作实例半边、领域 `ChannelSelectionSubject` 头注「那两者进入参那天，本引用随之加格」与 ADR 决定一相反；新写的「测试替身把前五个配上」又是计数且不实（测试只换端口级替身）。
+- **非阻断**：`labelChannelSources` 的约定是「nil 即按显式未配置装配」，`Resolutions` 却是 nil 时装真读口，同一结构两种相反语义，无测试设这一格——第 1 项的做法是删缝、直接装配；删掉装配里 `NewAcceptedDecisionResolution(requests)` 那一行，带 DSN 的 `cmd/parcel-api` 仍全绿（Spec 轴变异）；已有按（租户，包裹）回答的 `ports.CommercialResolutionReferenceView`（ADR-0133）读同一回指，本笔另开一条读路，ADR 候选与 Links 未权衡；`EstablishSelectedLabelTransactionCommand` 的 `CoveredParcels` 与 `Selection.Shipment`、`Selection.Parcel` 不互核，多包裹交易取哪个成员 ADR 未说；`NewAcceptedDecisionResolution` 构造期不拒 nil，与同包构造函数及 `NewChannelSelectionBasisTranslator` 头注「构造期拒……」不一；`acceptedShipmentRequests` 与同包 finder 同形；`ErrAcceptanceResolutionNotConfigured` 也承载未接受、非成员、查无委托，把`未形成`答成`未配置`；行为测试只在 `adapters/postgres`，实现包无单测；`query.Shipment.TenantID().String() == ""` 判空。
+- **核过无发现**：取 `CommercialResolutionReferenceFor`，即接受决定上固定的解析，与 ADR-0064 同形；接受后不再形成新提交版本，未接受答未形成；按租户取行、租户不一致有哨兵；`TestTheAcceptedDecisionResolutionSourceReadsTheStoredDecision` 带 DSN `-v` 为 PASS，走生产 `ShipmentRequests`，末行改答未配置、删租户核对都红；链仍停在约束那一格，属实；票 16 第 4 项落地句与开发主线补记与代码一致；第 2–3 项、票 06 第 3 项、租户行、解析号未碰；`internal/architecture` 过。
+- 推送方验证：隔离检出 `220fd8b1` 上清点另成 `6e741abb`；gofmt 空、build 与 vet 绿，真库用例单跑 PASS，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。
+- **结论：不重放**，回作者同一分支修（`a8f632d2` 之上）；修完两轴重跑。
