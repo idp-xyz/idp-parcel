@@ -1,7 +1,7 @@
 # 06 改路与装载 / 交接并发时按业务时间与生效边界裁决
 
 Category: enhancement
-Status: ready-for-agent
+Status: done
 Blocked by: 04
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「路由策略族」那一步
 地盘：network-routing 领域与复核编排；若要消费装载或交接结果，只在 NR 侧的消费方适配器里加（[ADR-0025](../../../docs/adr/0025-cross-context-adapters-live-on-the-consumer-side.md)）。
@@ -18,5 +18,11 @@ Blocked by: 04
 
 ## 完成判据
 
-- [ ] 领域用例：装载先、改路先、同一时刻、因果不明各一格。
-- [ ] `AT-NR-047` 在复核用例里有覆盖，或票面写明接线缺口与去处。
+- [x] 领域用例：装载先、改路先、同一时刻、因果不明各一格。
+- [x] `AT-NR-047` 在复核用例里有覆盖，或票面写明接线缺口与去处。
+
+## 接线缺口
+
+复核今天没有装载事实。`ReassessOnIntakeAdapter` 只把 parcel-shipment 的节点收寄和场外揽收译成控制依据，运输交接在这里是控制种类，不是装载发生时间、节点和所依计划版本。NR 不订阅 transport-fulfillment 或 node-operations。
+
+去处：装载或交接事实由那两个上下文拥有。NR 要裁 `AT-NR-047` 时，在消费方适配器里把权威业务发生时间、节点、所依计划版本和因果陈述交给 `ArbitrateLoadingConcurrency`。不在本票新开订阅。路由偏离之后的处置去 visibility-exception。

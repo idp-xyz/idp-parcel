@@ -71,5 +71,6 @@ ADR-0017 预先点名过这种误判：「把机制半边误判为实例半边�
 - [ADR-0168](./0168-charge-attribution-date-is-a-registered-form.md)：费用归属日按已登记形态判定，没登记不形成归属日
 - [ADR-0172](./0172-route-freeze-is-remaining-segment-count.md)：冻结边界首版形态是剩余计划段数，没声明不是未冻结
 - [ADR-0173](./0173-auto-reroute-is-folded-from-the-strategy-version.md)：自动改路由策略版本折出，没声明只形成建议；事实目录不再是判断权威
+- [ADR-0174](./0174-loading-concurrency-is-judged-by-business-time.md)：改路与装载并发按业务时间裁决；同一时刻与因果不明都不并进前两格
 - [ADR-0170](./0170-settlement-orchestrations-enter-through-parcel-api.md)：结算编排从 parcel-api 进入；确认与截单没登记就不做
 - [ADR-0171](./0171-pricing-input-resolver-uses-declaration-until-a-measurement-port-exists.md)：没有实测读口时计价输入用申报并标明来源
