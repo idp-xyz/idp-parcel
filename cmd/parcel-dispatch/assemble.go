@@ -1016,7 +1016,8 @@ const operatorRegistrationRedrivePageSize = 200
 // 实例半边全部留空，各自的「显式未配置」形状各归各口——今天没有租户，这些参数一个也说
 // 不出，而每一个空位都是首发该停下的地方，不是要绕过的地方：
 //
-//   - 时点取值源（AsOfValueSource）nil——时点停在`未配置`，判断不发起；
+//   - 时点取值源只折「提交接收」（SYN-ASOF-SUBMIT-TIME → 本提交版本的 receivedAt）。
+//     其余语义，包括租户截点与财务控制那格，仍形不成，停在`未配置`；
 //   - 可达性闭包标识（ReachabilityClosureIdentity）nil——资格视图答未配置，判断`未形成`；
 //   - 结算账户目录（SettlementAccountDirectory）与控制金额源（ControlAmountSource）nil
 //     ——控制停在 `CONTROL_SCOPE_NOT_CONFIGURED` / `CONTROL_AMOUNT_NOT_CONFIGURED`，绝不
@@ -1183,6 +1184,10 @@ func acceptanceCommercialBasis(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: resolution keys with declared product: %w", err)
 	}
+	values, err := pspartycommercial.NewSubmissionReceiptAsOf(requests)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: submission receipt as-of: %w", err)
+	}
 	return pspartycommercial.NewCommercialBasisAdapter(pspartycommercial.CommercialBasisAdapterDeps{
 		Resolve:      pcapplication.NewResolveCommercialBasisHandler(authority, resolutions, clock),
 		Revalidate:   pcapplication.NewValidateCommercialBasisHandler(resolutions, authority, clock),
@@ -1190,7 +1195,7 @@ func acceptanceCommercialBasis(
 		AsOfPolicies: asOfPolicies,
 		Contents:     contents,
 		Keys:         keys,
-		// Values 留空：实例半边，见函数注释。
+		Values:       values,
 	}), nil
 }
 
