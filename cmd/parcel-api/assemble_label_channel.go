@@ -29,13 +29,14 @@ import (
 // 一笔面单交易的建立是产品题，触发面另票）。装配函数存在的意义是让「已装配、未触发」有一处可核：每一段的真适配器、
 // 留痕三件、事务壳与显式未配置的缝都在这里，接触发面的那张票只需要调 labelChannelOrchestration.Flow。
 //
-// 三个取数口（渠道约束、计价输入、BUY 价卡）与翻译器的三个源（账号使用授权选法、供应商协议选法、接受时解析回指）
-// 都是实例半边（`PAR-INT-02` / `PAR-COM-10` / `PAR-SET-03`）：生产装配一律交显式未配置的实现——链在择优那一格如实停在
-// 「未配置」，不建立交易、不写决定记录；照 UnconfiguredIntakeQualificationEvidence{} 那一路，不为变绿种任何映射、
-// 价卡或约束。
+// 三个取数口（渠道约束、计价输入、BUY 价卡）与翻译器的账号使用授权选法、供应商协议选法仍是实例半边
+// （`PAR-INT-02` / `PAR-COM-10` / `PAR-SET-03`）：生产装配交显式未配置的实现。接受时解析回指不是那一类：
+// 它从已接受决定上读（ADR-0158），缝留空就装这个读口。链在择优那一格仍会因约束未配置停下，不建立交易、
+// 不写决定记录；不为变绿种任何映射、价卡或约束。
 
-// labelChannelSources 是组合根留给实例半边的六个缝。任一为 nil 即按显式未配置装配——这不是默认值，是「租户尚未
-// 登记」这一事实在装配点上的写法；测试替身把它们配上（合成串）才能走到择优落定之后。
+// labelChannelSources 是组合根留给实例半边的缝。约束、计价输入、BUY 价卡、账号使用授权、供应商协议为 nil
+// 即按显式未配置装配——这不是默认值，是「租户尚未登记」这一事实在装配点上的写法。Resolutions 为 nil 则装
+// 接受决定回指，不留空。测试替身把前五个配上（合成串）才能走到择优落定之后。
 type labelChannelSources struct {
 	Constraints  pscommercial.ChannelConstraintSource
 	PricingInput pspricing.PricingInputSource
@@ -131,10 +132,18 @@ func buildLabelChannelOrchestrationWith(db *bentopg.DB, seams labelChannelSeams)
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: supplier agreement contents: %w", err)
 	}
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: shipment requests: %w", err)
+	}
+	resolutions := sources.Resolutions
+	if resolutions == nil {
+		resolutions = pscommercial.NewAcceptedDecisionResolution(requests)
+	}
 	basisTranslator, err := pscommercial.NewChannelSelectionBasisTranslator(pscommercial.ChannelSelectionBasisTranslatorDeps{
 		Accounts:       sources.Accounts,
 		Agreements:     sources.Agreements,
-		Resolutions:    sources.Resolutions,
+		Resolutions:    resolutions,
 		Authorizations: authorizations,
 		Contents:       agreements,
 	})
