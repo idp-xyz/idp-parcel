@@ -1,7 +1,7 @@
 # 12 settlement-accounting：金额文法、分摊与周期费用形态、经营指标方法与账务连接器
 
 Category: enhancement
-Status: in-progress——2026-09-30 第 1 项进 main（`161bb646`，ADR-0161），第 2 项进 main（`83489825`，ADR-0162），第 5 项进 main（`9a3b9e9a`，ADR-0163），第 8 项进 main（`7c084917`，ADR-0164），第 7 项进 main（`cab6613c`，ADR-0166）；第 3 项在本重放（ADR-0165）；第 4、6、9、10 项未做
+Status: in-progress——2026-09-30 第 1 项进 main（`161bb646`，ADR-0161），第 2 项进 main（`83489825`，ADR-0162），第 5 项进 main（`9a3b9e9a`，ADR-0163），第 8 项进 main（`7c084917`，ADR-0164），第 7 项进 main（`cab6613c`，ADR-0166），第 3 项进 main（`6b3d7d80`，ADR-0165）；第 4、6、9、10 项未做
 Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 行第一项的机制缺口，归[票 16](./16-mechanism-gaps-without-a-ticket.md)；缺它们时本票只能先定文法）
 地盘：settlement-accounting 领域与应用层（金额、分摊、周期费用、指标），账单接入与财务交换的连接器适配器；规则正文若由 party-commercial 声明，PC 侧另开票。
 出处：[票 02](./02-split-parameter-register-and-retriage-deferrals.md)——[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md) `PAR-COM-07`、`PAR-SET-05`、`PAR-SET-06`、`PAR-SET-07`、`PAR-SET-08`、`PAR-SET-09`、`PAR-SET-10`、`PAR-INT-04`、`PAR-INT-05` 行内「〔ADR-0146 拆分〕」点名的部分。[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表 PN-07 行第三项当时记「未核」，本票即其补核。
@@ -110,3 +110,20 @@ Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 
 
 重放到 `ca60f16d` 之上，零冲突：`dfd48b24→cab6613c`。清点在代码链尖重生成为 `97f37a7c`（`settlementaccounting` 生产 130→135、测试 95→97；`settlement_accounting` 迁移份数 27→28，文件号是 `0029`，`0028` 空给第 3 项）。
 推送方验证：钉 `97f37a7c`，`gofmt -l` 空，build 与 vet 退 0，架构门禁与点名真库用例 PASS，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。本记录一笔只多本票面 `.md`。分支作封存出处。
+
+**评审 ← 通道 1 · 钉 `85270ef1`（通道 3 分支 `mcp3-psb12-03`，第 3 项，ADR-0165，基 `ca60f16d`）· 2026-10-01 00:3x**
+
+- **阻断**：无。架构门禁带 DSN 为 PASS。`TestMinimumSpendShortfallIsTheGapBelowTheFloor`、`TestVolumeFloorChargesTheMissingQuantityAtTheRegisteredRate`、`TestTieredRebateAppliesEachBandOnlyToItsSlice`、`TestEmptyPeriodicFeesStayUnconfigured`、`TestPeriodicFeesRefuseToRunOutsideATransaction` PASS。
+- **非阻断**（随票记）：执行器没有接进截单或确认费用。ADR-0165 越权风险点 3 写明如此。
+- **核过无发现**：没有既有周期费用执行器。最低消费是补差，保底量是不足数量乘单价向下取整，阶梯返利按档只乘本档。`NOT_APPLICABLE` 不造金额。没登记不形成周期费用。算出 0 不形成一笔费用。迁移 `0028`。未登租户行。未改连接器，未改 ADR-0161 至 0164 的决定正文。
+- **重放**：父仍是 `ca60f16d`，main 已有第 7 项。文档与登记命令冲突按两边都留解开。
+- **结论：可重放**。
+
+**完成记录（通道 3 · 据完工报转录，第 3 项）**
+
+分支 `mcp3-psb12-03`（基 `ca60f16d`），一笔未改写：`85270ef1`。命令 `periodic-fee`。
+
+**进 main 记录（2026-10-01 00:3x，通道 1 推送，第 3 项）**
+
+重放到 `18e39f1a` 之上，登记命令与文档冲突按两边都留解开：`85270ef1→6b3d7d80`。清点在代码链尖重生成为 `4ab9a589`（`settlementaccounting` 生产 135→140、测试 97→99；`settlement_accounting` 迁移份数 28→29，文件号 `0028`）。
+推送方验证：钉 `4ab9a589`，build 退 0，架构门禁与点名用例 PASS，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。本记录一笔只多本票面 `.md`。分支作封存出处。
