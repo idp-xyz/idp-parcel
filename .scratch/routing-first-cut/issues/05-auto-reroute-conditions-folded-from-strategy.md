@@ -1,7 +1,7 @@
 # 05 自动改路条件由策略与计划事实折出，改善阈值按策略判
 
 Category: enhancement
-Status: done
+Status: resolved——2026-10-01 进 main（`f0464748→c2eccaa2`，ADR-0173）。Blocked by 04 已在 main
 Blocked by: 04
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「路由策略族」那一步
 地盘：network-routing 领域与复核编排；路由策略版本内容（自动改路开关与改善阈值的形态）；与自动改路事实目录的关系。
@@ -22,3 +22,15 @@ Blocked by: 04
 - [x] 复核用例覆盖 `AT-NR-037`（允许自动 → 新计划）、`AT-NR-041`（过冻结不切）、`AT-NR-042`（不满足 → 只建议）。
 - [x] 策略版本未声明自动改路时只形成建议、不自动，与今天「事实目录未配置即不猜」同一纪律。
 - [x] 事实目录的去留写进 CONTEXT 或 ADR，代码与之一致。
+
+## Comments
+
+**评审 ← 通道 1 · 钉 `f0464748` · 2026-10-01**
+
+- **阻断**：无。架构门禁 PASS。`TestAllConditionsMetFormsAnAutomaticRerouteDecision`、`TestUnmetConditionsLeaveASuggestionForTheAuthorizedRole`、`TestAFrozenPlanIsKeptWhenItIsStillExecutable`、`TestUndeclaredAutoRerouteOnlySuggests` PASS。领域与应用、登记 JSON、network_routing 真库 PASS。
+- 改善是严格大于已登记阈值；比不出（缺价或币种不同）不自动。未声明答 `AUTO_REROUTE_UNCONFIGURED`，只形成建议。复核不读事实目录。只声明一半拒。
+- **结论：可重放**。
+
+**进 main 记录（2026-10-01，通道 1）**
+
+重放到 `c0dbe3a6` 之上，零冲突：`f0464748→c2eccaa2`，清点 `50a935ac`。迁移号 0013。全量 `go test -p 1 -count=1 ./...`：135 ok / 0 FAIL。分支作封存出处。
