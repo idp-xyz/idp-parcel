@@ -22,7 +22,7 @@
 | visibilityexception | 100 | 96 | 11 | 30 | 8 | 11 |
 | **合计** | 1082 | 1023 | 134 | 274 | 57 | 156 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 73、测试 105。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 73、测试 106。
 
 ## 跨上下文消费缝：32 组，84 个生产文件
 
@@ -61,7 +61,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：12 个模块共 184 份 SQL
+## 迁移：12 个模块共 185 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -71,7 +71,7 @@
 | network_routing | 11 |
 | node_operations | 4 |
 | parcel_pricing | 10 |
-| parcel_shipment | 22 |
+| parcel_shipment | 23 |
 | party_commercial | 36 |
 | pilot_governance | 8 |
 | settlement_accounting | 21 |
