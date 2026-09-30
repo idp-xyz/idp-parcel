@@ -1,7 +1,7 @@
 # 12 settlement-accounting：金额文法、分摊与周期费用形态、经营指标方法与账务连接器
 
 Category: enhancement
-Status: in-progress——2026-09-30 第 1 项进 main（`161bb646`，ADR-0161）；第 2 项在分支 mcp2-psb12-02（ADR-0162），尚未进 main；第 3–10 项未做
+Status: in-progress——2026-09-30 第 1 项进 main（`161bb646`，ADR-0161），第 2 项进 main（`83489825`，ADR-0162）；第 3–10 项未做
 Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 行第一项的机制缺口，归[票 16](./16-mechanism-gaps-without-a-ticket.md)；缺它们时本票只能先定文法）
 地盘：settlement-accounting 领域与应用层（金额、分摊、周期费用、指标），账单接入与财务交换的连接器适配器；规则正文若由 party-commercial 声明，PC 侧另开票。
 出处：[票 02](./02-split-parameter-register-and-retriage-deferrals.md)——[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md) `PAR-COM-07`、`PAR-SET-05`、`PAR-SET-06`、`PAR-SET-07`、`PAR-SET-08`、`PAR-SET-09`、`PAR-SET-10`、`PAR-INT-04`、`PAR-INT-05` 行内「〔ADR-0146 拆分〕」点名的部分。[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表 PN-07 行第三项当时记「未核」，本票即其补核。
@@ -47,3 +47,20 @@ Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 
 
 分支 `mcp3-psb12-01@d481f1fb`（已推 origin）在隔离树重放到 `28ba713e` 之上，零冲突：`d481f1fb→161bb646`；清点在代码链尖重生成为 `d1f3f93a`（`settlementaccounting` 生产 110→115、测试 85→87；`settlement_accounting` 迁移 23→24）。
 推送方验证：钉 `d1f3f93a`，`gofmt -l` 空，build 与 vet 退 0，点名用例与架构门禁单跑 PASS 非 SKIP，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。本记录一笔只多本票面 `.md`。分支作封存出处。
+
+**评审 ← 通道 1（隔离子代理，非作者）· 钉 `6b47bd0e`（通道 2 分支 `mcp2-psb12-02`，第 2 项，ADR-0162，基 `7a28618c`）· 2026-09-30 23:5x**
+
+- 初评 `c4c9b484`（基 `28ba713e`）两条阻断：迁移前缀与 main 上金额文法的 `0024` 重复；`AllocationForms.SaveAllocationForm` 没有无事务拒证，架构门禁红。作者先重放成 `6b47bd0e`（迁移改为 `0025`），再加 `78a2e5ab`。
+- **阻断**：无。`TestAllocationFormsRefuseToRunOutsideATransaction` 与 `TestEveryPersistenceWriteMethodCarriesTransactionRequiredEvidence` 带 DSN 为 PASS。
+- **非阻断**（随票记）：`AllocateCostsHandler` 仍只收命令里的 `Portions`，不读分法册。ADR-0162 决定四写明不改编排，`UC-SA-006` 步骤 3「分法未登记则待判断」因此只在 `ApportionCosts` 上成立。
+- **核过无发现**：`Apportion` 按重、按件、按收入共用最大余数，余数相同按目标标识升序。空册答 `ALLOCATION_FORM_UNCONFIGURED`，不均摊。`NOT_APPLICABLE` 是登记的不适用。权重在当次 `Bases`。未登租户行。未改金额文法与 ADR-0161。第 3–10 项未做。
+- **结论：可重放**。
+
+**完成记录（通道 2 · 据完工报转录，第 2 项）**
+
+分支 `mcp2-psb12-02`。`c4c9b484` 已被作者重放替换为 `6b47bd0e`（父 `7a28618c`，迁移 `0025`）；`78a2e5ab` 补无事务拒证，未改写前笔。内置分法 `BY_WEIGHT`、`BY_PIECE`、`BY_REVENUE`，命令 `allocation-form`。未改 `SettleClaimAmounts` / `amount-grammar` / ADR-0161。
+
+**进 main 记录（2026-09-30 23:5x，通道 1 推送，第 2 项）**
+
+分支 `mcp2-psb12-02@78a2e5ab`（已推 origin）在隔离树重放到 `7a28618c` 之上，零冲突：`6b47bd0e→83489825`、`78a2e5ab→3fac7239`；清点在代码链尖重生成为 `08963b62`（`settlementaccounting` 生产 115→120、测试 87→90；`settlement_accounting` 迁移 24→25）。
+推送方验证：钉 `08963b62`，`gofmt -l` 空，build 与 vet 退 0，无事务拒证与架构门禁单跑 PASS，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。本记录一笔只多本票面 `.md`。分支作封存出处。
