@@ -1,7 +1,7 @@
 # 12 settlement-accounting：金额文法、分摊与周期费用形态、经营指标方法与账务连接器
 
 Category: enhancement
-Status: in-progress——2026-09-30 第 1 项进 main（`161bb646`，ADR-0161），第 2 项进 main（`83489825`，ADR-0162），第 5 项进 main（`9a3b9e9a`，ADR-0163），第 8 项进 main（`7c084917`，ADR-0164），第 7 项进 main（`cab6613c`，ADR-0166），第 3 项进 main（`6b3d7d80`，ADR-0165）；第 4 项在分支 mcp3-psb12-04（已有执行器，不新造，无新 ADR），尚未进 main；第 6、9、10 项未做
+Status: in-progress——2026-09-30 第 1 项进 main（`161bb646`，ADR-0161），第 2 项进 main（`83489825`，ADR-0162），第 5 项进 main（`9a3b9e9a`，ADR-0163），第 8 项进 main（`7c084917`，ADR-0164），第 7 项进 main（`cab6613c`，ADR-0166），第 3 项进 main（`6b3d7d80`，ADR-0165），第 4 项进 main（`f8ead9ad`，已有执行器，无新 ADR）；第 6 项在通道 2 进行中；第 9、10 项未做
 Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 行第一项的机制缺口，归[票 16](./16-mechanism-gaps-without-a-ticket.md)；缺它们时本票只能先定文法）
 地盘：settlement-accounting 领域与应用层（金额、分摊、周期费用、指标），账单接入与财务交换的连接器适配器；规则正文若由 party-commercial 声明，PC 侧另开票。
 出处：[票 02](./02-split-parameter-register-and-retriage-deferrals.md)——[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md) `PAR-COM-07`、`PAR-SET-05`、`PAR-SET-06`、`PAR-SET-07`、`PAR-SET-08`、`PAR-SET-09`、`PAR-SET-10`、`PAR-INT-04`、`PAR-INT-05` 行内「〔ADR-0146 拆分〕」点名的部分。[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表 PN-07 行第三项当时记「未核」，本票即其补核。
@@ -127,3 +127,16 @@ Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 
 
 重放到 `18e39f1a` 之上，登记命令与文档冲突按两边都留解开：`85270ef1→6b3d7d80`。清点在代码链尖重生成为 `4ab9a589`（`settlementaccounting` 生产 135→140、测试 97→99；`settlement_accounting` 迁移份数 28→29，文件号 `0028`）。
 推送方验证：钉 `4ab9a589`，build 退 0，架构门禁与点名用例 PASS，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。本记录一笔只多本票面 `.md`。分支作封存出处。
+
+**评审 ← 通道 1 · 钉 `b6cd7507`（通道 3 分支 `mcp3-psb12-04`，第 4 项，无新 ADR，基 `39998c14`）· 2026-10-01 00:4x**
+
+- **阻断**：无。只改两份文档。推送方在 main 上读过 `ComponentRole.admittedBy`：预估只收客户预估费用与供应商预期成本，已确认只收客户运营应收、审核应付与供应商贷项，已结算只收这三类的核销分配角色。与 `PAR-SET-10` 约束栏一致。
+- **结论：可重放**。不重跑全量。
+
+**完成记录（通道 3 · 据完工报转录，第 4 项）**
+
+分支 `mcp3-psb12-04`（基 `39998c14`），一笔未改写：`b6cd7507`。不新造执行器，不立 ADR。
+
+**进 main 记录（2026-10-01 00:4x，通道 1 推送，第 4 项）**
+
+重放到 `39998c14` 之上，零冲突：`b6cd7507→f8ead9ad`。无代码、无清点。本记录一笔只多本票面 `.md`。分支作封存出处。
