@@ -171,6 +171,19 @@ type fixedClock struct{ at time.Time }
 
 func (clock fixedClock) Now() time.Time { return clock.at }
 
+// evidenceWithOpenFreeze 声明剩余段数形态，限额 0。计划只有一段、收寄在首节点时剩余段数是 1，
+// 判断已配置且未越过边界。未声明不是未冻结，所以仍适用的证据必须把形态写上。
+func evidenceWithOpenFreeze(t *testing.T) nrports.InitialRouteEvidence {
+	t.Helper()
+	limit := 0
+	return nrports.InitialRouteEvidence{
+		Strategy:                    value(t, nrdomain.NewRouteStrategyReference, "strategy-1/v1"),
+		ViewRevision:                value(t, nrdomain.NewNetworkViewRevision, "net-view-rev-1"),
+		FreezeForm:                  nrdomain.RemainingSegmentCountFreeze,
+		FreezeRemainingSegmentLimit: &limit,
+	}
+}
+
 // planOnFile 把一份真经 NR 领域形成的计划放进路由历史（首节点即收寄节点，复核应答
 // 仍适用）。
 func planOnFile(t *testing.T) nrports.InitialRouteRecord {
@@ -219,11 +232,8 @@ func planOnFile(t *testing.T) nrports.InitialRouteRecord {
 // 收寄地点、来源版本=收寄结果版本、控制=节点收寄格），走完真实复核编排答「仍适用」。
 func TestAnAdoptedIntakeTriggersARealReassessment(t *testing.T) {
 	handler := nrapplication.NewReassessRouteHandler(nrapplication.ReassessRouteDeps{
-		Routes: &routeStoreDouble{records: map[nrdomain.InitialRouteJudgmentKey]nrports.InitialRouteRecord{reassessKey(t): planOnFile(t)}},
-		Evidence: evidenceDouble{evidence: nrports.InitialRouteEvidence{
-			Strategy:     value(t, nrdomain.NewRouteStrategyReference, "strategy-1/v1"),
-			ViewRevision: value(t, nrdomain.NewNetworkViewRevision, "net-view-rev-1"),
-		}},
+		Routes:        &routeStoreDouble{records: map[nrdomain.InitialRouteJudgmentKey]nrports.InitialRouteRecord{reassessKey(t): planOnFile(t)}},
+		Evidence:      evidenceDouble{evidence: evidenceWithOpenFreeze(t)},
 		Applicability: &applicabilityStoreDouble{byPlan: map[nrdomain.RoutePlanVersionID]nrdomain.PlanApplicability{}},
 		Store:         &reassessStoreDouble{byCorrelation: map[nrdomain.RequestCorrelationID]nrports.ReassessmentRecord{}},
 		Log:           &logDouble{digests: map[nrdomain.RequestCorrelationID]string{}},
