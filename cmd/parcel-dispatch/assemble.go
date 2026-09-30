@@ -1019,9 +1019,9 @@ const operatorRegistrationRedrivePageSize = 200
 //   - 时点取值源只折「提交接收」（产品参考配置引用 → 本提交版本的系统接收时间）。
 //     租户在哪格采用就在哪格形成；演示种子的财务控制格没采用，所以答`未配置`；
 //   - 可达性闭包标识从本轮已采用的商业解析回指（ADR-0156）；
-//   - 结算账户目录（SettlementAccountDirectory）与控制金额源（ControlAmountSource）nil
-//     ——控制停在 `CONTROL_SCOPE_NOT_CONFIGURED` / `CONTROL_AMOUNT_NOT_CONFIGURED`，绝不
-//     代拟一个账户或拿零去占客户资金。
+//   - 结算账户目录读结算账户登记册：册上没有与这次解析回显相符的应收账户时，控制停在
+//     `CONTROL_SCOPE_NOT_CONFIGURED`，不代拟账户。控制金额源（ControlAmountSource）仍为 nil
+//     ——停在 `CONTROL_AMOUNT_NOT_CONFIGURED`，不拿零去占客户资金。
 //
 // 解析键登记面（Keys）反而接真：它是本上下文自己的登记表，`parcel-commercial
 // register-resolution-key` 已经能往里写，空册时按「显式未配置」答`解析未决`。接上它与留
@@ -1256,10 +1256,9 @@ func acceptanceReachability(
 // 那笔裁决），回指由本装配显式接上。空册时它答未配置，编排形成`待判断`而不是「不要求控制」
 // ——后者正是 CONTEXT 禁止的默认信用通过。
 //
-// 作用域源接 PolicyBackedControlScopeSource 而不是留 nil，两者今天的答复同为
-// `CONTROL_SCOPE_NOT_CONFIGURED`，差别在缺的是哪一半：留 nil 是机制半边也没接，接上它
-// 之后缺的只剩账户目录这一个租户参数（`SettlementAccountDirectory` 留 nil，不得为验它
-// 造一份映射）。恢复动作因此从「写代码」变成「登记参数」，与解析键登记面同一条理由。
+// 作用域源接 PolicyBackedControlScopeSource。账户目录是结算账户登记册：空册与「这一组
+// 应收账户没登记」都答 `CONTROL_SCOPE_NOT_CONFIGURED`，差别只在租户有没有登过别的账户。
+// 控制金额源仍留 nil，不得为验它造一份估价。
 //
 // 它与三条判断腿共用同一个商业依据适配器：作用域从**那一次**解析的结算政策回显派生
 // （ADR-0044/0047 接通的缝），另建一个解析入口会给出第二次解析的机会，而施加与释放两径
@@ -1324,13 +1323,20 @@ func acceptanceFinancialControl(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: apply pre-acceptance control: %w", err)
 	}
+	accounts, err := sapostgres.NewSettlementAccounts(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: settlement accounts: %w", err)
+	}
+	directory, err := pssettlement.NewRegisteredAccountDirectory(accounts)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: settlement account directory: %w", err)
+	}
 	return pssettlement.NewPreAcceptanceControlAdapter(pssettlement.PreAcceptanceControlAdapterDeps{
 		Apply:   apply,
 		Release: saapplication.NewReleasePreAcceptanceControlHandler(freezes, exposures, clock),
 		Scopes: pssettlement.NewPolicyBackedControlScopeSource(
 			commercial,
-			// 账户目录留空：实例半边，见函数注释。
-			nil,
+			directory,
 		),
 		// Amounts 留空：估价缝属实例半边，见 acceptanceChainConsumer 的注释。
 	}), nil

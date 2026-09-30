@@ -151,3 +151,84 @@ func decodeStrict(raw []byte, target any) error {
 	decoder.DisallowUnknownFields()
 	return decoder.Decode(target)
 }
+
+type settlementAccountDocument struct {
+	TenantID            string `json:"tenantId"`
+	AccountID           string `json:"accountId"`
+	LegalEntityID       string `json:"legalEntityId"`
+	CounterpartyID      string `json:"counterpartyId"`
+	Direction           string `json:"direction"`
+	Currency            string `json:"currency"`
+	SettlementPolicyID  string `json:"settlementPolicyId"`
+	PayerID             string `json:"payerId"`
+	ResponsibilityBasis string `json:"responsibilityBasis"`
+	ReconciliationCycle string `json:"reconciliationCycle"`
+	BusinessTimeZone    string `json:"businessTimeZone"`
+	Cutoff              string `json:"cutoff"`
+	PaymentTerms        string `json:"paymentTerms"`
+}
+
+// SettlementAccountFromJSON 译装一笔结算账户登记。payerId 缺席表示付款责任方就是结算相对方；
+// 给了却与相对方相同，或给了空白，由领域门拒。其余各格没有缺席这一态。
+func SettlementAccountFromJSON(raw []byte) (application.RegisterSettlementAccountCommand, error) {
+	none := application.RegisterSettlementAccountCommand{}
+	var document settlementAccountDocument
+	if err := decodeStrict(raw, &document); err != nil {
+		return none, fmt.Errorf("结算账户登记输入不是本入口的形状：%w", err)
+	}
+	tenant, err := domain.NewTenantID(document.TenantID)
+	if err != nil {
+		return none, fmt.Errorf("tenantId：%w", err)
+	}
+	accountID, err := domain.NewSettlementAccountID(document.AccountID)
+	if err != nil {
+		return none, fmt.Errorf("accountId：%w", err)
+	}
+	legalEntity, err := domain.NewLegalEntityReference(document.LegalEntityID)
+	if err != nil {
+		return none, fmt.Errorf("legalEntityId：%w", err)
+	}
+	counterparty, err := domain.NewSettlementCounterpartyReference(document.CounterpartyID)
+	if err != nil {
+		return none, fmt.Errorf("counterpartyId：%w", err)
+	}
+	direction, err := domain.ChargeDirectionFromName(document.Direction)
+	if err != nil {
+		return none, fmt.Errorf("direction：%w", err)
+	}
+	currency, err := domain.NewCurrencyCode(document.Currency)
+	if err != nil {
+		return none, fmt.Errorf("currency：%w", err)
+	}
+	policy, err := domain.NewSettlementPolicyReference(document.SettlementPolicyID)
+	if err != nil {
+		return none, fmt.Errorf("settlementPolicyId：%w", err)
+	}
+	key, err := domain.NewSettlementAccountKey(legalEntity, counterparty, direction, currency, policy)
+	if err != nil {
+		return none, fmt.Errorf("结算账户键：%w", err)
+	}
+	var payer domain.SettlementCounterpartyReference
+	payerDistinct := document.PayerID != ""
+	if payerDistinct {
+		payer, err = domain.NewSettlementCounterpartyReference(document.PayerID)
+		if err != nil {
+			return none, fmt.Errorf("payerId：%w", err)
+		}
+	}
+	basis, err := domain.NewResponsibilityBasis(document.ResponsibilityBasis)
+	if err != nil {
+		return none, fmt.Errorf("responsibilityBasis：%w", err)
+	}
+	statement, err := domain.NewAccountStatementTerms(
+		document.ReconciliationCycle, document.BusinessTimeZone, document.Cutoff, document.PaymentTerms,
+	)
+	if err != nil {
+		return none, fmt.Errorf("对账条件：%w", err)
+	}
+	account, err := domain.NewSettlementAccount(accountID, key, payer, payerDistinct, basis, statement)
+	if err != nil {
+		return none, err
+	}
+	return application.RegisterSettlementAccountCommand{Tenant: tenant, Account: account}, nil
+}

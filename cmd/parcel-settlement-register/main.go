@@ -4,8 +4,9 @@
 // 更正也先登在这里、再经采用信封到 CC。在此之前采用编排在生产依赖图上零装配，首版与更正都只有测试直写能到。
 //
 // 命令表在 translate.go 的 allCommands，一处列全：`external-funds-fact` 采用一条事实的首版，
-// `external-funds-fact-correction` 采用一次外部更正（同一事实回指当前链头的新版本，只有金额变——UC-SA-001
-// 「更正必须形成新来源版本」）。两条是两个命令类型、两条用例方法，不共享入口：更正无回指时不能退化成首版。
+// `external-funds-fact-correction` 采用一次外部更正，`settlement-account` 登记一笔结算账户。
+// 资金两条是两个命令类型、两条用例方法，不共享入口：更正无回指时不能退化成首版。
+// 结算账户是另一族答案：固定属性冲突绝不覆盖，册上没有的账户也不在这里代拟。
 //
 // 本口只开人工 / 受控批量的门，不自动采用：任何回调 / 文件到达都不在这里（UC-SA-005 输入表「不因接收回调
 // 自动采用」；真实财务系统来源仍 `No-Go / 待参数化`，PAR-INT-05）。输入全部来自 -input 指定的 JSON 文件，未知
@@ -57,9 +58,10 @@ const (
 	exitUndecided  = 3
 )
 
-// registrar 是本口的全部依赖：采用编排加环境事务的来源。
+// registrar 是本口的全部依赖：采用编排、结算账户登记，加环境事务的来源。
 type registrar struct {
 	funds      *application.MapExternalFundsHandler
+	accounts   *application.RegisterSettlementAccountHandler
 	transactor bentoapp.Transactor
 }
 
@@ -179,7 +181,15 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造外部资金采用编排：%w", err)
 	}
-	return registrar{funds: funds, transactor: db.Transactor()}, nil
+	accounts, err := sapostgres.NewSettlementAccounts(db)
+	if err != nil {
+		return none, fmt.Errorf("构造结算账户登记册：%w", err)
+	}
+	accountHandler, err := application.NewRegisterSettlementAccountHandler(accounts, systemClock{})
+	if err != nil {
+		return none, fmt.Errorf("构造结算账户登记：%w", err)
+	}
+	return registrar{funds: funds, accounts: accountHandler, transactor: db.Transactor()}, nil
 }
 
 // execute 把一份登记输入推进到采用答案：译装 → 在环境事务内交用例 → 答案译成退出码。译装失败当场拒、不进事务
@@ -191,10 +201,11 @@ func execute(ctx context.Context, command string, raw []byte, registrar registra
 		return fmt.Sprintf("%s: 译装被拒：%v", command, err), exitUsage
 	}
 
-	var handled application.FundsResult
+	var message string
+	var code int
 	err = registrar.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		result, err := dispatch(txCtx, registrar)
-		handled = result
+		answered, answeredCode, err := dispatch(txCtx, registrar)
+		message, code = answered, answeredCode
 		return err
 	})
 	if errors.Is(err, ports.ErrFundsFactHandoffRejected) {
@@ -206,10 +217,7 @@ func execute(ctx context.Context, command string, raw []byte, registrar registra
 	if err != nil {
 		return fmt.Sprintf("%s: 未决：%v", command, err), exitUndecided
 	}
-	// 事务成功却交回零值结果（Outcome 是无效格）时，fundsAnswer 的默认分支会把它折成「未知应用结果」——
-	// 那是实现坏了，不是业务答案。
-	return fundsAnswer(command, handled.Outcome(), handled.UndecidedReason(),
-		handled.FundsHandoffReference(), subjectOf(handled))
+	return message, code
 }
 
 // subjectOf 取已采用 / 已存在那一版的事实与版本字面，打进答复：操作员看的是「哪条事实的哪一版落了」，不是一个词。
@@ -263,5 +271,18 @@ func fundsAnswer(
 	default:
 		// 用例交回一个它自己都不认识的格是实现坏了，不是业务答案。
 		return fmt.Sprintf("%s: 未知应用结果 %d", command, outcome), exitUndecided
+	}
+}
+
+func accountAnswer(command string, effect ports.SettlementAccountRegistrationEffect, accountID string) (string, int) {
+	switch effect {
+	case ports.SettlementAccountRegistered:
+		return command + ": 已登记（" + accountID + "）", exitRegistered
+	case ports.SettlementAccountReplay:
+		return command + ": 已存在（" + accountID + "）", exitRegistered
+	case ports.SettlementAccountConflict:
+		return command + ": 冲突（" + accountID + "，同键已在册且内容不同——绝不覆盖，先核对既有登记）", exitConflict
+	default:
+		return fmt.Sprintf("%s: 未知应用结果 %d", command, effect), exitUndecided
 	}
 }
