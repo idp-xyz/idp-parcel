@@ -178,15 +178,18 @@ type AvailabilityAdjustmentStatement struct {
 }
 
 // RouteStrategyDefinitionVersion 是一个路由策略的适用版本行。RankingForm 是这一版声明的内置
-// 排序形态（ADR-0146），零值即这一版没有声明；冻结边界、改善阈值等其余规则正文这里没有。
+// 排序形态（ADR-0146），零值即这一版没有声明。冻结形态与剩余段数限额同一版声明，缺一格即未声明。
 type RouteStrategyDefinitionVersion struct {
 	Code            string
 	Version         int32
 	ApplicableScope string
 	RankingForm     domain.RankingForm
-	EffectiveFrom   time.Time
-	EffectiveTo     time.Time
-	HasEffectiveTo  bool
+	// FreezeForm 零值且限额为 nil 即这一版没有声明冻结形态。
+	FreezeForm                  domain.FreezeForm
+	FreezeRemainingSegmentLimit *int
+	EffectiveFrom               time.Time
+	EffectiveTo                 time.Time
+	HasEffectiveTo              bool
 }
 
 // NetworkCatalogRegistry 是版本化网络目录七类定义原语的写入口（ADR-0068）。

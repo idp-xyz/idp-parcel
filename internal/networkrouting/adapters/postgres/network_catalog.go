@@ -419,6 +419,18 @@ type strategyVersionRow struct {
 
 // rankingFormColumn 把排序形态写成列值：未声明落 NULL；族外的值在触库前拒——CHECK 也会拒，
 // 但撞 CHECK 会把整个环境事务打进中止态，登记方得到的只是一段约束名。
+func freezeColumns(form domain.FreezeForm, limit *int) (*string, *int, error) {
+	if form == domain.FreezeFormUndeclared && limit == nil {
+		return nil, nil, nil
+	}
+	if form == domain.FreezeFormUndeclared || limit == nil || form.String() == "" || *limit < 0 {
+		return nil, nil, fmt.Errorf("%w: freeze declaration", domain.ErrUnknownFreezeForm)
+	}
+	name := form.String()
+	value := *limit
+	return &name, &value, nil
+}
+
 func rankingFormColumn(form domain.RankingForm) (*string, error) {
 	if form == domain.RankingFormUndeclared {
 		return nil, nil
@@ -668,6 +680,10 @@ func (catalog *NetworkCatalog) RegisterRouteStrategyVersion(
 	if err != nil {
 		return fmt.Errorf("register route strategy version: %w", err)
 	}
+	freezeForm, freezeLimit, err := freezeColumns(row.FreezeForm, row.FreezeRemainingSegmentLimit)
+	if err != nil {
+		return fmt.Errorf("register route strategy version: %w", err)
+	}
 	if !row.HasEffectiveTo {
 		if _, err := executor.Exec(ctx,
 			`UPDATE network_routing.route_strategy_version
@@ -681,10 +697,11 @@ func (catalog *NetworkCatalog) RegisterRouteStrategyVersion(
 	}
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO network_routing.route_strategy_version
-			(tenant_id, strategy_code, version, applicable_scope, effective_from, effective_to, ranking_form)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+			(tenant_id, strategy_code, version, applicable_scope, effective_from, effective_to, ranking_form,
+			 freeze_form, freeze_remaining_segments)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 		tenant.String(), row.Code, row.Version, row.ApplicableScope,
-		row.EffectiveFrom.UTC(), optionalTime(row.EffectiveTo, row.HasEffectiveTo), form,
+		row.EffectiveFrom.UTC(), optionalTime(row.EffectiveTo, row.HasEffectiveTo), form, freezeForm, freezeLimit,
 	); err != nil {
 		return fmt.Errorf("register route strategy version: %w", err)
 	}

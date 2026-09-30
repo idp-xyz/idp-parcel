@@ -24,6 +24,15 @@ func reassessKey(t *testing.T) domain.InitialRouteJudgmentKey {
 	}
 }
 
+func evidenceBeforeFreeze(t *testing.T) ports.InitialRouteEvidence {
+	t.Helper()
+	evidence := routableEvidence(t)
+	limit := 0
+	evidence.FreezeForm = domain.RemainingSegmentCountFreeze
+	evidence.FreezeRemainingSegmentLimit = &limit
+	return evidence
+}
+
 func reassessCommand(t *testing.T, location string) application.ReassessRouteCommand {
 	t.Helper()
 	return application.ReassessRouteCommand{Trigger: domain.ReassessmentTriggerSpec{
@@ -159,7 +168,7 @@ func TestAReassessmentKeepsAStillApplicablePlan(t *testing.T) {
 	fixture := newReassessFixture(t)
 	record := currentPlanRecord(t)
 	fixture.routes.records[record.Key] = record
-	fixture.evidence.byParcel["parcel-1"] = routableEvidence(t)
+	fixture.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
 
 	result, err := fixture.handler.Handle(context.Background(), reassessCommand(t, "node-origin"))
 	if err != nil {
@@ -172,6 +181,45 @@ func TestAReassessmentKeepsAStillApplicablePlan(t *testing.T) {
 	kept, present := result.Record()
 	if !present || kept.ReviewedPlan.String() != "plan-1/v1" || kept.HasNewPlan {
 		t.Fatalf("record = %#v; 仍适用不得制造新计划", kept)
+	}
+}
+
+// Covers: AT-NR-041 已过冻结边界且原计划仍可执行时，不因改善改路。
+func TestAFrozenPlanIsKeptWhenItIsStillExecutable(t *testing.T) {
+	fixture := newReassessFixture(t)
+	record := currentPlanRecord(t)
+	fixture.routes.records[record.Key] = record
+	evidence := routableEvidence(t)
+	limit := 1
+	evidence.FreezeForm = domain.RemainingSegmentCountFreeze
+	evidence.FreezeRemainingSegmentLimit = &limit
+	fixture.evidence.byParcel["parcel-1"] = evidence
+
+	result, err := fixture.handler.Handle(context.Background(), reassessCommand(t, "node-origin"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.ReassessedStillApplicable {
+		t.Fatalf("outcome = %q, want STILL_APPLICABLE", result.Outcome())
+	}
+	kept, present := result.Record()
+	if !present || kept.HasNewPlan {
+		t.Fatal("越过冻结边界仍造了新计划")
+	}
+}
+
+func TestAnUndeclaredFreezeFormDoesNotCountAsUnfrozen(t *testing.T) {
+	fixture := newReassessFixture(t)
+	record := currentPlanRecord(t)
+	fixture.routes.records[record.Key] = record
+	fixture.evidence.byParcel["parcel-1"] = routableEvidence(t)
+
+	result, err := fixture.handler.Handle(context.Background(), reassessCommand(t, "node-origin"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.ReassessUndecided || result.UndecidedReason() != application.FreezeFormUnconfigured {
+		t.Fatalf("outcome = %q reason = %q", result.Outcome(), result.UndecidedReason())
 	}
 }
 
@@ -298,7 +346,7 @@ func TestReplayConflictAndMissingHistoryStayDisciplined(t *testing.T) {
 	fixture := newReassessFixture(t)
 	record := currentPlanRecord(t)
 	fixture.routes.records[record.Key] = record
-	fixture.evidence.byParcel["parcel-1"] = routableEvidence(t)
+	fixture.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
 
 	if _, err := fixture.handler.Handle(context.Background(), reassessCommand(t, "node-origin")); err != nil {
 		t.Fatalf("first handle: %v", err)
