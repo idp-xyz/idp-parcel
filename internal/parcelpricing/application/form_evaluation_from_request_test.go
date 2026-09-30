@@ -289,8 +289,9 @@ func TestFormEvaluationFromRequestStopsWhenNoOrManyPriceCardsApply(t *testing.T)
 	}
 }
 
-// Covers: 裁决 4「输入不可得」——今天生产装配没有任何输入读口（Inputs 为 nil）时，入口在解析价卡之后停下，
-// 点名缺的三只读口（TF 发生项成员对象、NO / PS 实重尺寸、PS 邮编路线），不猜不填不拿默认重量顶；零写入、零铸造。
+// Covers: 裁决 4「输入不可得」——调用方没装 Inputs 时，入口在解析价卡之后停下，点名缺的三只读口
+// （TF 发生项成员对象、NO / PS 实重尺寸、PS 邮编路线），不猜不填不拿默认重量顶；零写入、零铸造。
+// 生产装配另装消费侧解析器，不走这一格。
 func TestFormEvaluationFromRequestNamesTheMissingReadPortsWhenNoInputResolverIsWired(t *testing.T) {
 	fixture := newFormFixture(t, nil)
 

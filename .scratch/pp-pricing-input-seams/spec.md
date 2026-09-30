@@ -61,7 +61,7 @@ sa-cc/11「进 main 记录」（2026-09-14 20:4x）后继一句「三只输入�
 
 ## 不在本目录
 
-- **PP 消费侧适配器**：实现 `PricingInputResolver`，落 `internal/parcelpricing/adapters/<provider>/`（三只口各一只消费侧适配器，或一只编排三口），`docs/domain/CONTEXT-MAP.md` 加 PP→TF / PP→NO / PP→PS 三条消费边，`cmd/parcel-dispatch/assemble.go` `formEvaluationOnEvaluationRequestConsumer` 补 `Inputs` 一行——三只口进 main 后另立，归 PP。单位对表（PS `MeasurementUnitReference` 自由串 → PP `WeightUnit` / `LengthUnit` 封闭集）、成员对象 → `EvaluationSubject` 映射、两源并存时按谁，都是那张票的事。
+- **PP 消费侧适配器**：已落 [ADR-0171](../../docs/adr/0171-pricing-input-resolver-uses-declaration-until-a-measurement-port-exists.md)。一只编排器在 `internal/parcelpricing/adapters/transportfulfillment`，问 TF 成员、PS 申报测量、PS 地址要素；`CONTEXT-MAP` 补了 PP→TF 与 PP→PS。PP→NO 等 04 的实测登记册，今天没有实测时用申报并标明来源。`formEvaluationOnEvaluationRequestConsumer` 已接 `Inputs`。单位对表只认 KG/G/LB/OZ 与 CM/IN。单一已受理包裹映射 `AcceptedPackage`；集运单元答输入不可得，不新增评价对象种类。某一计算目的是否拒用申报仍未决。
 - **PP 评价对象要不要加「集运单元」一种**（ADR-0111 四种里没有）——归 PP owner，01「要裁的」2 会碰到它，本目录只记不裁。
 - **两源并存按谁**（02 裁决 2）：机制规则「实重与尺寸优先取仍有效的实际测量；无实测取申报并在快照事实引用里标来源；实测在时申报不得顶替；某一计算目的是否拒用申报保持可配置或显式未决」——写进 PP `CONTEXT.md`「计价输入快照」，随 PP 消费侧适配器票落，不在提供方四票。
 - **起点为节点邮编时的读口**（03 裁决 3）：承运商分区表按注入 / 收寄节点分始发区时，起点邮编的提供方是 NR（节点身份）/ NO（节点收寄），不是 PS——等首份真实分区表声明始发维度（ADR-0109 决定二）再立，归 NR / NO。

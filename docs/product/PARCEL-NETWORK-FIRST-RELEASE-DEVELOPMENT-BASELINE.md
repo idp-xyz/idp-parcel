@@ -233,6 +233,8 @@ PN-08 是产品级试点治理与跨上下文应用编排，不是新的限界�
 
 2026-09-30 补记（票 `product-strategy-boundary/12` 第 10 项，ADR-0170）：上表单元格不改写。票面点名的结算编排接到 `parcel-api` 的 `buildSettlementOrchestrations`。没有单独的审核构造函数，审核在接收编排上。确认与截单没登记不调用。命令是 `parcel-settlement-register settlement-moment`。账期不在这本册里。SELL 形成编排仍不进派发。
 
+2026-09-30 补记（票 `pp-pricing-input-seams` 消费侧，ADR-0171）：上表单元格不改写。PN-07 第一项里「`PricingInputResolver` 无实现」已过时：消费侧解析器接在评价请求形成入口。发生项成员走运输履约，申报测量与地址要素走小包托运。节点实测登记册仍没有，没有实测时用申报并标明来源。不填默认重量、尺寸、邮编或分区。集运单元停在输入不可得。
+
 2026-09-24 补记（票 `routing-first-cut/07` 进 main，merge `f2645d86`）：上表按所钉 SHA 如实定级，原样保留；其中 PN-02 与 PN-03 两行提到 `NetworkDefinitions` / `ErrNetworkDefinitionUnresolvable` 的几句自本合入起部分过时——可达性证据视图已从版本化网络目录折出事实（候选生成、服务区域解析、含临时调整的可执行性；关务一格在 `routing-first-cut/12` 之前如实答状态未知），`NetworkDefinitions` 已删，`未配置`改由目录修订锚与适用于服务目的的路由策略版本答（[ADR-0148](../adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定六）；初始路由证据视图用同一判法答`未配置`，对已配置范围在 `routing-first-cut/09`、`10` 之前照旧响亮上抛。两格是否转满足留给下一次按四项判据的重定级，本条不替它下结论。
 
 #### 2026-09-02 裁决：生产接线棘轮那 32 条计入差量，「可派机制工作清零」不再成立

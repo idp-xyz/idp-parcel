@@ -129,8 +129,8 @@ type FormEvaluationFromRequestResult struct {
 }
 
 // FormEvaluationFromRequestDeps 是入口的依赖。四口必备：回指读口守「同一请求一份评价」、解析读口是第 ① 步、
-// 铸造口签评价标识、既有评价编排是第 ③ 步。Inputs 可缺席，是有意的：造快照所需的三只跨上下文读口今天不存在
-// （裁决 4），生产装配不接任何实现，入口对缺席答「输入不可得」并点名它们——不用一个永远答「不在」的替身顶上。
+// 铸造口签评价标识、既有评价编排是第 ③ 步。Inputs 可缺席，是给还没装消费侧解析器的调用方：缺席时入口答
+// 「输入不可得」并点名三只读口。生产装配装的是 adapters/transportfulfillment 的解析器（ADR-0171）。
 type FormEvaluationFromRequestDeps struct {
 	Evaluations ports.EvaluationByRequestView
 	PriceCards  ports.PriceCardInForceResolver
@@ -164,8 +164,7 @@ func NewFormEvaluationFromRequestHandler(deps FormEvaluationFromRequestDeps) (*F
 	return &FormEvaluationFromRequestHandler{deps: deps}, nil
 }
 
-// missingInputReadPorts 是今天造不出快照的原因（裁决 4 的量）：快照要的四样里只有业务时点在 SA 请求上，其余三样
-// 各归一只本上下文没有的读口。写成三条是让「等谁」可读——三只读口各归不同上下文、各是一张票。
+// missingInputReadPorts 是调用方没装 Inputs 时的点名。生产装配已经装上消费侧解析器；这一格留给测试和仍缺席的调用方。
 var missingInputReadPorts = []string{
 	"transport-fulfillment: no read-only view of the charge occurrence's member carried objects (evaluation subject)",
 	"node-operations / parcel-shipment: no read port for measured or declared actual weight and dimensions (pricing weight)",

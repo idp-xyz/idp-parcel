@@ -503,6 +503,10 @@ const (
 	// 授权依据，这里只登引用不解析其内容——解析属授权工件的所有者。
 	ArtifactCommercialAuthorization ArtifactKind = "commercial-authorization"
 	ArtifactNumericProfile          ArtifactKind = "numeric-profile"
+	// 客户申报测量进入计价输入快照时的事实种类。版本串以 declaration 开头，标明来源是申报不是实测。
+	ArtifactDeclaredMeasurement ArtifactKind = "declared-measurement"
+	// 地址要素进入计价输入快照时的事实种类。版本串以 address 开头。
+	ArtifactAddressElements ArtifactKind = "address-elements"
 )
 
 // NumericProfileV1Reference 是评价清单里内置的数值口径引用。只带三元（ADR-0108 Decision 五）：

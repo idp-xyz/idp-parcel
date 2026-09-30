@@ -72,11 +72,9 @@ type PricingInputResolution struct {
 // PricingInputResolver 按合格来源引用造计价输入快照（UC-SA-002 步 2 后半「`parcel-pricing` 采用测量、运输收费
 // 发生项、其他履约、面单及已解析商业依据形成不可变计价输入快照」）。
 //
-// 这是本上下文的消费侧端口：快照要的四样里，包裹主体在 TF 发生项的成员对象上（正式包裹身份或集运单元，分属
-// PS / NO）、分区要 PS 的起讫邮编、计费重量要 NO 实测或 PS 申报的实重与尺寸，三只读口今天都不存在（票 sa-cc/11
-// 裁决 4 的量）。端口现在立，是让入口有一处诚实地问「今天造得出来吗」；实现归提供方那一侧的只读口接上之后
-// 的消费侧适配器，不在本票造。生产装配今天不接任何实现——入口对缺席的实现答「输入不可得」并点名那三只读口，
-// 不用一个永远答「不在」的替身顶上（sa-cc/01 组合根同一取舍）。
+// 这是本上下文的消费侧端口。实现在 adapters/transportfulfillment（ADR-0171）：成员走运输履约，申报测量与
+// 地址要素走小包托运。节点实测登记册仍缺（pp-pricing-input-seams/04）；没接实测读口时用申报，并在事实引用里
+// 标明来源。调用方没装实现时，入口仍答「输入不可得」并点名那三只读口，不用一个永远答「不在」的替身顶上。
 type PricingInputResolver interface {
 	ResolvePricingInput(ctx context.Context, query PricingInputQuery) (PricingInputResolution, error)
 }
