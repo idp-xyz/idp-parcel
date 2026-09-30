@@ -32,3 +32,14 @@ Blocked by: 无
 - **核过无发现**：闭包标识取自 `formAdoptedBasis` 本提交版本第一阶段已记下的解析，与 UC-PC-002、ADR-0064 一致；`ReachabilityClosureIdentity` 已删，无判断键到解析的映射；空引用答未配置、编排形成`未形成判断`；租户不一致有哨兵；第 2–4 项、种子、租户行未动；`internal/architecture` 过。
 - 推送方验证：隔离检出 `5ac58a96` 上清点重生成无差；gofmt 空、build 与 vet 绿，单跑真库用例为 PASS，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。
 - **结论：不重放**，回作者同一分支修；修完两轴重跑。
+
+**评审 ← 通道 1（隔离子代理，非作者）· 钉 `f6289f96`（同一分支，基 `a40393b7`，两笔净改动）· 2026-09-30 20:55**
+
+- 上一轮两条阻断已消：`TestCommercialEligibilityReadsAStoredClosureByTheCommandResolution` 用真库 `pcpostgres.NewCommercialResolutions`，带 DSN `-v` 为 PASS；ADR-0064 只在 Status 与 Links 各加前向指针，正文未改写。
+- **阻断**（两轴各一条，推送方核过代码）：
+  - Spec：派单问「商业解析换了版本时，旧轮的可达性判断会不会被当成同一次判断复用；会就改」。会，且没改。NR 侧无碍（`reachability_judgment` 主键是租户 + 关联，换解析另存一行）；PS 判断账 `RecordReachabilityJudgment` 撞键 `ON CONFLICT DO NOTHING`，键里有版本、成员、时点，没有解析，其注释原话「同成员同时点再来一次是权威重放既有判断，保留先到者」。复现链：`revalidateOrResolve` 判依据被推翻 → `resolveAdoptedAgain` 把采用解析改记成 RES-2 → 下一轮按 RES-2 形成的判断因「提交接收」对同一版本给同一时点而撞键被吞 → 读回仍是 RES-1 那份，`revalidateReachability` 按它的 `JudgmentID` 只核视图修订、答仍当前 → 决定用 RES-2 的依据配 RES-1 的判断，正是 `resolveAdoptedAgain` 注释要防的「在旧依据下形成的判断」。ADR-0156 决定五说新版本「靠提交版本或判断时点」成为另一份判断，这条路径上两者都不变；越权风险点把它推给 PS owner 等于承认会复用。此前闭包标识为 nil、可达性形成不了，这条路本笔才变得可达。
+  - Standards：`docs/adr/README.md` 里 0156 的索引行写「用户授权继续」，0156 Status 写那次答复「不是本记录的接受依据」，两处口径相反（红线「单一权威」）。
+- **非阻断**：`reachability.go` 的 `correlationIdentity` 与 `RevalidateReachabilityJudgment` 注释仍写「同一派生回指」，重校已改按 `JudgmentID`；`routing.go` 保留 `ErrRoutingClosureTenantMismatch` 别名只为一处测试，改测试后删别名；`reachability_closure_store_test.go` 头注「空引用……不被读成未配置」与断言和 `CommercialEligibility` 注释相反；ADR-0156 两处引文不是原句（UC-NR-002 原句「新地址、声明、商业版本……需要形成新判断版本」；「机制与产品策略开发方现在就做」出自 ADR-0146 决定一而非 AGENTS）；ADR-0064 Context「`ReachabilityClosureIdentity` 仍属实例半边」一句也已失效且符号已删，按「部分停用」同一机制在 Status 标注；`loadClosure(tenantRaw string)` 先 `String()` 再解析。
+- **核过无发现**：`initial_route.go` 只改注释；`routing.go` 抽 `loadClosure` 行为不变；`form_acceptance_decision.go` 只给可达性重校加 `JudgmentID`，初始路由不变；不需新迁移之说对 NR 成立；第 2–4 项、种子、租户行未动；`internal/architecture` 过。
+- 推送方预演：隔离树把两笔重放到 `01d7d5e8` 之上得 `6bbb0709`、`16d78781`，零冲突，清点无差；链尖 gofmt 空、build 与 vet 绿，新真库用例单跑 PASS，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。预演不推。
+- **结论：不重放**，回作者同一分支修；修完两轴重跑。
