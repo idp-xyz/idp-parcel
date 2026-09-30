@@ -222,6 +222,8 @@ export function Layout() {
   // 主区里挂着几个供内容的列表——非活动标签卸载，实际只有活动页的零个或一个；只拿来选空态句。
   // 计数而不是布尔：换标签时旧页撤回与新页声明的先后不由这里定。
   const [inspectorOffers, setInspectorOffers] = useState(0);
+  // 自带详情栏的工作台页挂着时检查器栏让位；同样计数，理由同 inspectorOffers。
+  const [inspectorYields, setInspectorYields] = useState(0);
   const inspectorController = useMemo<InspectorController>(
     () => ({
       show: (content) => setInspectorContent(content),
@@ -229,6 +231,10 @@ export function Layout() {
       offer: () => {
         setInspectorOffers((n) => n + 1);
         return () => setInspectorOffers((n) => n - 1);
+      },
+      yieldColumn: () => {
+        setInspectorYields((n) => n + 1);
+        return () => setInspectorYields((n) => n - 1);
       },
     }),
     [],
@@ -362,7 +368,7 @@ export function Layout() {
           </TabReturnProvider>
           </InspectorProvider>
         </main>
-        {workspace.inspectorVisible ? (
+        {workspace.inspectorVisible && inspectorYields === 0 ? (
           <>
             <div className="resize-handle-h" onMouseDown={inspectorResize.handleMouseDown} />
             <aside

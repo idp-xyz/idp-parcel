@@ -67,5 +67,19 @@ Blocked by: 无
 - 判据：三道门 ✅（tsc -b --noEmit 退 0、run-tests 465/465、vite build 退 0）；dom-probe ✅ 36 项全 ok——表头排序两向与 aria-sort、
   指标与胶囊筛选及计数、占比分母、筛空与清除、单击开栏收列、分隔条在、↑/↓、页签条内方向键不换行而 Esc 照收、栏未显示时 Esc 不占、
   `/` 聚焦、刷新重取与 toast、主动作直接开资料表、登记视图往返保留排序、行上无双击、生命周期连线；共享面评审 ✅（上）。
-- 未验：happy-dom 没有布局，分隔条只验了 `role="separator"` 与 `onMouseDown` 接上，拖动手感、窄栏里各区块的实际排布没在真浏览器里看过；
-  本窗口没有浏览器工具。参照页 i18n、收货 / 证据 / 协作签、分页、批量按「不做」如实缺席。
+- 未验：happy-dom 没有布局，分隔条只验了 `role="separator"` 与 `onMouseDown` 接上，拖动手感没试过。参照页 i18n、收货 / 证据 / 协作签、
+  分页、批量按「不做」如实缺席。
+
+**用户反馈（2026-09-30 20:0x，队列截图）：「右边有空白，dark 模式有白线」**，处置随 `24af8123` 之后一笔：
+
+- 白线：主题色在 `tailwind.config.js` 是裸 `var(--idpxyz-…)`，Tailwind 不生成 `/NN` 透明度变体（`vite build` 产物里实测
+  `border-idpxyz-border/50`、`bg-idpxyz-accent/10`、`bg-idpxyz-hover/30` 等零命中），行分隔线落回 preflight 浅灰，选中与悬停底色、
+  指标激活底色、详情栏引用签与事实条底色也都是空的。本票三个文件改用主题实色令牌（border / hover / activeItem / sidebar），
+  逐类对构建产物核过全部存在。
+- 右边空白：本票撤掉检查器后，壳层检查器栏仍常驻、只剩一句空态。检查器控制口加 `yieldColumn()`，工作台模板挂载期间让位，
+  用户「显示检查器」的偏好不动，其余页照旧常驻。列表滚动区去掉 `pr-2` 与 `scrollbar-gutter:stable` 那条留白，首末列对称 `pl-6` / `pr-6`。
+- 实看：临时 harness（`.tmp-test/`，已删）起 vite，Windows 侧 headless Chrome 1440×900 截图，暗色下列表、详情栏、整壳各一张：
+  分隔线为暗色、表格到右缘、业务参与方页检查器栏照旧、本页不再有空栏。
+- **不在本票修、需另定**：同一个 `/NN` 失效在别处也在——`apps/admin-web/src` 另有十余处（`ListPageTemplate` 检查中行与批量栏底色、
+  `ReviewFlowTemplate` 等），`@idpxyz/*` 包源码有七十余处，今天都不生效。全局修法是把 `tailwind.config.js` 的主题色改成带
+  `<alpha-value>` 的 `color-mix` 写法，一改全站这些底色与边框都会「突然出现」，是全站外观变化，候选另立票。

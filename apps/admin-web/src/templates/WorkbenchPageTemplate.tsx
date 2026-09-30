@@ -3,6 +3,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Inbox, RefreshCw, Search } from 'lucid
 import { Button } from '@idpxyz/ui-primitives';
 import { useToast } from '@idpxyz/ui-theme-runtime';
 import { useSplitResize, useWorkspaceTabPanel } from '@idpxyz/ui-workspace';
+import { useInspector } from './inspector-context';
 import { StateSlot, type StateSlotProps, type TemplateViewState } from './state-slot';
 import { stepSelection, workbenchKeyAction, type WorkbenchFocus, type WorkbenchSort } from './workbench';
 
@@ -69,6 +70,8 @@ export interface WorkbenchPageTemplateProps<Row> {
   stateOverride?: StateSlotProps['override'];
 }
 
+// 主题色在 tailwind.config.js 里是裸 `var(--idpxyz-…)`，Tailwind 不给它们生成 `/NN` 透明度变体——不报错，类直接不存在，
+// 边框随之落回 preflight 的浅灰（暗色主题下就是白线）。本文件一律用主题实色令牌（hover / activeItem / border）。
 // 自己收 Esc 与方向键的部件（菜单上下选、弹层里 Esc 关弹层、下拉选项）；页签条单列，见 workbenchKeyAction。
 const OVERLAY_SELECTOR = '[role="menu"],[role="dialog"],[role="listbox"],[role="combobox"]';
 
@@ -121,6 +124,9 @@ export function WorkbenchPageTemplate<Row>({
   const tabPanel = useWorkspaceTabPanel();
   const activeTab = tabPanel?.isActiveTab ?? true;
   const { addToast } = useToast();
+  // 详情就在右栏，壳层的检查器栏在本页让位——否则右边常驻一条空栏。
+  const inspector = useInspector();
+  useEffect(() => inspector.yieldColumn(), [inspector]);
   const ready = viewState.kind === 'ready';
   const detailOpen = ready && selectedKey !== null && rows.some((row) => rowKey(row) === selectedKey);
 
@@ -219,7 +225,7 @@ export function WorkbenchPageTemplate<Row>({
                 key={column.key}
                 scope="col"
                 className={`px-3 py-2 font-medium ${index === 0 ? 'pl-6' : ''} ${column.right ? 'text-right' : ''} ${
-                  index === visibleColumns.length - 1 ? 'pr-8' : ''
+                  index === visibleColumns.length - 1 ? 'pr-6' : ''
                 }`}
                 style={column.width ? { width: column.width } : undefined}
                 aria-sort={
@@ -261,19 +267,19 @@ export function WorkbenchPageTemplate<Row>({
                 aria-selected={selected}
                 onClick={() => onSelect(selected ? null : key)}
                 onKeyDown={(event) => onRowKeyDown(event, key)}
-                className={`cursor-pointer border-b border-idpxyz-border/50 transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-idpxyz-accent ${
+                className={`cursor-pointer border-b border-idpxyz-border transition-colors focus-visible:outline focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-idpxyz-accent ${
                   selected
-                    ? 'bg-idpxyz-accent/10 shadow-[inset_2px_0_0_0_var(--idpxyz-accent,#6366f1)]'
+                    ? 'bg-idpxyz-activeItem shadow-[inset_2px_0_0_0_var(--idpxyz-accent)]'
                     : attention
                       ? 'bg-orange-500/5 hover:bg-orange-500/10'
-                      : 'hover:bg-idpxyz-hover/30'
+                      : 'hover:bg-idpxyz-hover'
                 }`}
               >
                 {visibleColumns.map((column, index) => (
                   <td
                     key={column.key}
                     className={`px-3 py-2.5 ${index === 0 ? 'pl-6' : ''} ${column.right ? 'text-right' : ''} ${
-                      index === visibleColumns.length - 1 ? 'pr-8' : ''
+                      index === visibleColumns.length - 1 ? 'pr-6' : ''
                     }`}
                   >
                     {column.render(row)}
@@ -314,7 +320,7 @@ export function WorkbenchPageTemplate<Row>({
                     aria-pressed={kpi.onClick ? kpi.active === true : undefined}
                     title={kpi.label}
                     className={`flex shrink-0 flex-col items-start gap-0.5 rounded px-1.5 py-0.5 transition-colors disabled:cursor-default ${
-                      kpi.active ? 'bg-idpxyz-accent/10 ring-1 ring-idpxyz-accent/40' : 'hover:bg-idpxyz-hover/50'
+                      kpi.active ? 'bg-idpxyz-activeItem ring-1 ring-idpxyz-accent' : 'hover:bg-idpxyz-hover'
                     }`}
                   >
                     <span className="flex items-center gap-1 whitespace-nowrap text-[9px] uppercase leading-none tracking-wide text-idpxyz-textMuted">
@@ -396,7 +402,7 @@ export function WorkbenchPageTemplate<Row>({
           className="flex min-h-0 min-w-0 flex-col"
           style={detailOpen ? { flex: `0 0 ${split.ratio}%` } : { flex: '1 1 100%' }}
         >
-          <div ref={listRef} className="min-h-0 flex-1 overflow-auto pr-2 [scrollbar-gutter:stable]">
+          <div ref={listRef} className="min-h-0 flex-1 overflow-auto">
             {ready ? (
               table
             ) : (

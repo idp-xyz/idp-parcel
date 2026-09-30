@@ -39,7 +39,7 @@ function RefChip({
       type="button"
       title={`${title}（点击复制）`}
       onClick={() => onCopy(title, value)}
-      className="inline-flex max-w-full items-center gap-1 rounded border border-idpxyz-border bg-idpxyz-inputBg/50 px-1.5 py-0.5 text-[10px] hover:border-idpxyz-accent/50"
+      className="inline-flex max-w-full items-center gap-1 rounded border border-idpxyz-border bg-idpxyz-sidebar px-1.5 py-0.5 text-[10px] hover:border-idpxyz-accent"
     >
       <span className="text-idpxyz-textMuted">{label}</span>
       <span className="truncate font-mono text-idpxyz-text">{value}</span>
@@ -49,16 +49,16 @@ function RefChip({
 
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="min-w-0 rounded-md border border-idpxyz-border bg-idpxyz-inputBg/50 px-3 py-2">
+    <div className="min-w-0 rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2">
       <p className="text-[10px] text-idpxyz-textMuted">{label}</p>
-      <p className="mt-0.5 truncate font-mono text-[12px] font-semibold text-idpxyz-textBright">{children}</p>
+      <p className="mt-0.5 break-words font-mono text-[12px] font-semibold leading-snug text-idpxyz-textBright">{children}</p>
     </div>
   );
 }
 
 const stageDotClass: Record<LifecycleStageState, string> = {
   done: 'border-emerald-500/50 bg-emerald-500/20 text-emerald-400',
-  current: 'border-idpxyz-accent bg-idpxyz-accent/20 text-idpxyz-accent',
+  current: 'border-idpxyz-accent bg-idpxyz-activeItem text-idpxyz-accent',
   skipped: 'border-dashed border-idpxyz-border bg-transparent text-idpxyz-textMuted',
   pending: 'border-idpxyz-border bg-idpxyz-inputBg text-idpxyz-textMuted',
 };
