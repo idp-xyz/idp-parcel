@@ -1,7 +1,7 @@
 # 16 机制缺口：重定级表第一项里尚无票的几处
 
 Category: enhancement
-Status: needs-triage——2026-09-24 通道 4 经用户授权自决立（票 02 遗留：开发主线写「缺口逐条交票 product-strategy-boundary/02 立工作票」）；各项分属不同上下文，接单时按上下文拆
+Status: needs-triage——第 1 项 2026-09-30 进 main（`66ea4bd4`，见文末「进 main 记录」），第 2–4 项未动。2026-09-24 通道 4 经用户授权自决立（票 02 遗留：开发主线写「缺口逐条交票 product-strategy-boundary/02 立工作票」）；各项分属不同上下文，接单时按上下文拆。第 1 项 2026-09-30 进 main（`66ea4bd4`，见文末「进 main 记录」）；第 2–4 项未动
 Blocked by: 无
 地盘：按项各归其上下文（见各项）。
 出处：[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表第一项各格原话；[票 05](./05-demo-journey-criterion-evidence.md) 盘点格 3、5、21。已有票或已预告的不重立：操作者渠道归[票 15](./15-operator-channel-per-adr-0100.md)；节点收寄的身份核对缝归 `ps-external-mark-relations/01`；BUY 评价的来源引用回指归 `sa-cc-funds-and-credential-seams/11`；NO 实际测量登记册归 `pp-pricing-input-seams/04`；`PricingInputResolver` 的消费侧适配器由 `pp-pricing-input-seams` spec「不在本目录」预告另立、归 PP；网络定义登记册的写入方与定义原语归票 04。
@@ -56,3 +56,20 @@ Blocked by: 无
 - **核过无发现**：`0023` 在 `migrations/parcel_shipment`，编号与 main 不撞，按目录嵌入不需另接线，`internal/platform/migrate` 带 DSN 过；决定读口优先取当前解析下的判断；README 0156 行与 Status 一致；上一轮非阻断中「同一派生回指」注释、别名、测试头注、`loadClosure` 参数已改；第 2–4 项、租户行、解析号未碰；`internal/architecture` 过。
 - 推送方预演：三笔重放到 `cc5e2c83` 之上得 `7001c6cd`、`dcfc70db`、`7a2a1c07`，清点另成 `247c7fde`；链尖 gofmt 空、build 与 vet 绿，两条新真库用例单跑 PASS，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。预演不推。
 - **结论：不重放**，回作者同一分支修；修完两轴重跑。
+
+**评审 ← 通道 1（隔离子代理，非作者）· 钉 `4a54f7bb`（同一分支，基 `a40393b7`，四笔净改动）· 2026-09-30 21:36**
+
+- 上一轮三条阻断：修复有测试守住——删掉推进里的 `FormedUnder`，`cmd/parcel-dispatch` 六条红（推送方与 Spec 轴各复现一次）；推进改打旧解析、让 `reachabilityFormedUnderAnotherResolution` 恒答否，`TestAChangedResolutionAdvancesANewJudgmentTheDecisionReads` 都红；去掉读口按解析过滤，由适配器用例 `TestANewResolutionAtTheSameInstantIsTheJudgmentTheDecisionReads` 守；去掉 `0023` 的 CHECK，`TestAcceptanceJudgmentShapesArePinnedInTheDatabase` 红。越权风险点 2 与决定五、`0023` 已一致。ADR-0064 部分停用范围：0064 的 Status、Links、README 0064 行与 0156 的 Consequences、Links 已写两句。
+- **阻断**：Spec 一条——`docs/adr/README.md` 里 ADR-0156 自己那一行仍只写「部分停用 ADR-0064 后果里可达性那一句」，漏了 Context 那句（修复卡 3「各处一致」）。纯索引一行，推送方在进 main 那一笔补齐，不回作者。Standards 轴称「五处一致」漏看了这一行。
+- **非阻断**（随票记，建议作者另立收尾票）：`resolution_change_acceptance_test.go` 头注说删掉 `FormedUnder` 后「决定停在形成于别的解析」，实测是首轮推进就因 `ErrReachabilityResolutionRequired` 落进 `JUDGMENT_NOT_RECORDED`，注里的 `RES-1` 与代码 `SYN-RES-R1` 不一；字段 `RecordedJudgments.ReachabilityStaleResolution` 未随查询与新原因改名，同一概念三个名字；`form_acceptance_decision.go` 新注复述常量注的理由，两处都把 AT-PS-037 只归给网络视图换代；ADR-0156 决定五写「按已失效重做」而代码另立 `ReachabilityJudgmentFormedUnderAnotherResolution`；`0023` 头注「本系列之前」是变更说明；README 0064 行漏「其余各条不变」；「判断须带形成时的解析」只落在 postgres 适配器与 CHECK 上，端口 `AcceptanceJudgmentRecorder` 未声明；领域 `formedUnder` 注释「零值是……旧形状」与 `rebuildReachabilityJudgment` 的 `!= ""` 分支在 CHECK 之下走不到。
+- **核过无发现**：新用例接真 PS 库与两个真编排，断言决定读的是 `SYN-NRJ-RES-2` / `SYN-RES-R2` 并形成接受；新续办原因有 `String()`、归内部重试，别处无穷举映射；`0023` 与 `internal/platform/migrate`、`internal/architecture` 带 DSN 过；引文是原句；ADR-0064 只改 Status 与 Links；第 2–4 项、租户行、生产代码里的解析号未碰。
+- **结论：可重放**，阻断由进 main 那一笔补齐。
+
+**完成记录（通道 2 · 据四次完工报转录，第 1 项）**
+
+分支 `mcp2-reachability-closure`，四笔均快进推送、未改写：`5ac58a96` 闭包标识从本轮已采用的商业解析回指（ADR-0156，删 `ReachabilityClosureIdentity`，装配不再传 nil）；`f6289f96` 真库用例 `TestCommercialEligibilityReadsAStoredClosureByTheCommandResolution`，ADR-0064 前向指针，关联带上解析、换解析不重放旧判断；`489e77a5` 迁移 `0023` 把 `resolution_id` 并进可达性判断主键，决定只采用当前解析下的判断；`4a54f7bb` 编排用例 `TestAChangedResolutionAdvancesANewJudgmentTheDecisionReads`（删 `FormedUnder` 即红），空解析写入报 `ErrReachabilityResolutionRequired`，`0023` 加非空 CHECK，换解析另立续办原因 `ReachabilityJudgmentFormedUnderAnotherResolution`。作者自验：`go build` / `go vet` 绿；networkrouting、parcelshipment、`cmd/*` 含 DSN `-count=1 -p 1` 绿，新真库用例 `-v` 无 SKIP。未改 `migrations.go` / `plan.go`（按目录嵌入）；未动第 2–4 项，未登租户行，未造解析号。
+
+**进 main 记录（2026-09-30 21:3x，通道 1 推送）**
+
+分支 `mcp2-reachability-closure@4a54f7bb`（已推 origin）在隔离树重放到 `713537f3` 之上，零冲突：`5ac58a96→3a600e5c`、`f6289f96→e7b4cd1b`、`489e77a5→6b670743`、`4a54f7bb→66ea4bd4`；清点在代码链尖重生成为 `9b21ff41`（`parcel_shipment` 迁移 22→23 份，`cmd` 测试 105→106）。本记录一笔另补 README 0156 行（见上阻断）。
+推送方验证：钉 `9b21ff41`（与本记录一笔只差 `.md`），`gofmt -l` 空，build 与 vet 退 0，三条相关真库用例单跑 PASS 非 SKIP，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。分支作封存出处。
