@@ -1,6 +1,8 @@
 package domain
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"sort"
@@ -67,6 +69,34 @@ func (projection GeoResolutionProjection) Sender() GeoResolutionSide {
 
 func (projection GeoResolutionProjection) Delivery() GeoResolutionSide {
 	return projection.delivery
+}
+
+// geoProjectionCanonicalVersion 是投影摘要的规范化版本（ADR-0014）。形状变了就换号，不改这一版的字节。
+const geoProjectionCanonicalVersion = "GRP-1"
+
+// ContentDigest 是所携投影的版本化内容摘要。地址本体不进这串；同一投影两次摘要相同，任一格变了摘要就变。
+func (projection GeoResolutionProjection) ContentDigest() string {
+	payload := strings.Join([]string{
+		geoProjectionCanonicalVersion,
+		geoSideCanonical(projection.sender),
+		geoSideCanonical(projection.delivery),
+		boolCanonical(projection.carried),
+	}, "\n")
+	sum := sha256.Sum256([]byte(payload))
+	return geoProjectionCanonicalVersion + ":" + hex.EncodeToString(sum[:])
+}
+
+func geoSideCanonical(side GeoResolutionSide) string {
+	country, hasCountry := side.Country()
+	postal, hasPostal := side.PostalCode()
+	return strings.Join([]string{boolCanonical(hasCountry), country, boolCanonical(hasPostal), postal}, "\x00")
+}
+
+func boolCanonical(value bool) string {
+	if value {
+		return "1"
+	}
+	return "0"
 }
 
 // CoverageMatch 是一侧地址对一版服务区域覆盖的封闭答案。`资料不足`单独一格：它不是「不覆盖」，

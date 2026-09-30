@@ -69,14 +69,15 @@ func (repository *ReachabilityJudgments) FindByCorrelation(
 		declaredParcel, servicePurpose                      string
 		asOfSemantic, asOfStrategy                          string
 		asOfAt, judgedAt                                    time.Time
-		conclusion, viewRevision                            string
-		candidatesJSON, gapsJSON                            []byte
+		conclusion, viewRevision, geoDigest                 string
+		candidatesJSON, gapsJSON, serviceAreaVersionsJSON   []byte
 	)
 	err = querier.QueryRow(ctx,
 		`SELECT customer_account_id, shipment_request_id, submission_version_id,
 		        declared_parcel_id, service_purpose,
 		        as_of_semantic, as_of_at, as_of_strategy_version,
-		        conclusion, candidates, evidence_gaps, view_revision, judged_at
+		        conclusion, candidates, evidence_gaps, view_revision, judged_at,
+		        geo_projection_digest, service_area_versions
 		   FROM network_routing.reachability_judgment
 		  WHERE tenant_id = $1
 		    AND correlation_id = $2`,
@@ -85,7 +86,8 @@ func (repository *ReachabilityJudgments) FindByCorrelation(
 	).Scan(&customerAccount, &shipmentRequest, &submissionVersion,
 		&declaredParcel, &servicePurpose,
 		&asOfSemantic, &asOfAt, &asOfStrategy,
-		&conclusion, &candidatesJSON, &gapsJSON, &viewRevision, &judgedAt)
+		&conclusion, &candidatesJSON, &gapsJSON, &viewRevision, &judgedAt,
+		&geoDigest, &serviceAreaVersionsJSON)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.ReachabilityJudgmentRecord{}, false, nil
 	}
@@ -115,11 +117,17 @@ func (repository *ReachabilityJudgments) FindByCorrelation(
 		return ports.ReachabilityJudgmentRecord{}, false, fmt.Errorf("find reachability judgment: %w", err)
 	}
 
+	var serviceAreaVersions []string
+	if err := json.Unmarshal(serviceAreaVersionsJSON, &serviceAreaVersions); err != nil {
+		return ports.ReachabilityJudgmentRecord{}, false, fmt.Errorf("find reachability judgment: %w", err)
+	}
 	return ports.ReachabilityJudgmentRecord{
-		Key:          key,
-		Finding:      finding,
-		JudgedAt:     judgedAt.UTC(),
-		ViewRevision: revision,
+		Key:                 key,
+		Finding:             finding,
+		JudgedAt:            judgedAt.UTC(),
+		ViewRevision:        revision,
+		GeoProjectionDigest: geoDigest,
+		ServiceAreaVersions: serviceAreaVersions,
 	}, true, nil
 }
 
@@ -143,6 +151,14 @@ func (repository *ReachabilityJudgments) Save(
 	if err != nil {
 		return ports.ReachabilityJudgmentSaveOutcomeInvalid, fmt.Errorf("save reachability judgment: %w", err)
 	}
+	versions := record.ServiceAreaVersions
+	if versions == nil {
+		versions = []string{}
+	}
+	versionsJSON, err := json.Marshal(versions)
+	if err != nil {
+		return ports.ReachabilityJudgmentSaveOutcomeInvalid, fmt.Errorf("save reachability judgment: %w", err)
+	}
 
 	// `已有记录`用 ON CONFLICT DO NOTHING 而不是捕 23505 译码：撞键的 INSERT 会把
 	// 整个事务打进中止态，同一事务里的后续读写全部失败——而`已有记录`是业务答案
@@ -154,8 +170,9 @@ func (repository *ReachabilityJudgments) Save(
 			 customer_account_id, shipment_request_id, submission_version_id,
 			 declared_parcel_id, service_purpose,
 			 as_of_semantic, as_of_at, as_of_strategy_version,
-			 conclusion, candidates, evidence_gaps, view_revision, judged_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			 conclusion, candidates, evidence_gaps, view_revision, judged_at,
+			 geo_projection_digest, service_area_versions)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 		 ON CONFLICT DO NOTHING`,
 		key.TenantID.String(),
 		correlation.String(),
@@ -172,6 +189,8 @@ func (repository *ReachabilityJudgments) Save(
 		gapsJSON,
 		record.ViewRevision.String(),
 		record.JudgedAt.UTC(),
+		record.GeoProjectionDigest,
+		versionsJSON,
 	)
 	if err != nil {
 		return ports.ReachabilityJudgmentSaveOutcomeInvalid, fmt.Errorf("save reachability judgment: %w", err)

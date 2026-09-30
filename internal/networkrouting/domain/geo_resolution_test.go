@@ -93,3 +93,25 @@ func TestServiceAreaResolutionExcludesOnTheOriginSide(t *testing.T) {
 		t.Fatalf("origin exclusion without area version: error = %v", err)
 	}
 }
+
+func TestAGeoProjectionDigestIsStableUntilTheAddressChanges(t *testing.T) {
+	first := domain.NewGeoResolutionProjection(side("CN", "100000"), side("US", "10001"))
+	again := domain.NewGeoResolutionProjection(side("CN", "100000"), side("US", "10001"))
+	if first.ContentDigest() != again.ContentDigest() {
+		t.Fatalf("same projection digested twice as %s and %s", first.ContentDigest(), again.ContentDigest())
+	}
+	revised := domain.NewGeoResolutionProjection(side("CN", "100000"), side("US", "10002"))
+	if revised.ContentDigest() == first.ContentDigest() {
+		t.Fatal("a changed postal code kept the same digest")
+	}
+	padded := domain.NewGeoResolutionProjection(
+		domain.NewGeoResolutionSide("CN", true, " 100000", true),
+		side("US", "10001"),
+	)
+	if padded.ContentDigest() == first.ContentDigest() {
+		t.Fatal("whitespace was stripped before the digest")
+	}
+	if first.ContentDigest()[:6] != "GRP-1:" {
+		t.Fatalf("digest = %s", first.ContentDigest())
+	}
+}

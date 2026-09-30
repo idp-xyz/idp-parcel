@@ -55,13 +55,15 @@ type evidenceDouble struct {
 	revision      string
 	err           error
 	notConfigured bool
+	lastCarried   nrports.RequestCarriedContent
 }
 
 func (double *evidenceDouble) LoadNetworkEvidence(
 	_ context.Context,
 	_ nrdomain.ReachabilityJudgmentKey,
-	_ nrports.RequestCarriedContent,
+	carried nrports.RequestCarriedContent,
 ) (nrports.NetworkEvidence, bool, error) {
+	double.lastCarried = carried
 	if double.err != nil {
 		return nrports.NetworkEvidence{}, false, double.err
 	}
@@ -208,6 +210,54 @@ func (fixture *reachabilityFixture) revalidationQuery(t *testing.T) psports.Reac
 		SubmissionVersion: request.SubmissionVersion,
 		DeclaredParcelID:  request.DeclaredParcelID,
 		AsOf:              request.AsOf,
+	}
+}
+
+// Covers: 同一提交版本两次请求的投影摘要一致；地址改版后摘要变；判断记录对得上摘要与所用服务区域版本。
+func TestAReachabilityJudgmentAttestsTheCarriedProjectionDigest(t *testing.T) {
+	fixture := newReachabilityFixture(t)
+	request := fixture.request(t)
+	request.Geo = psdomain.NewCarriedGeoProjection(
+		psdomain.NewCarriedGeoSide("CN", true, "100000", true),
+		psdomain.NewCarriedGeoSide("US", true, "10001", true),
+	)
+
+	if _, err := fixture.adapter.AssessParcelReachability(context.Background(), request); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := fixture.adapter.AssessParcelReachability(context.Background(), request); err != nil {
+		t.Fatal(err)
+	}
+	if len(fixture.store.records) != 1 {
+		t.Fatalf("records = %d, want 1", len(fixture.store.records))
+	}
+	var recorded nrports.ReachabilityJudgmentRecord
+	for _, record := range fixture.store.records {
+		recorded = record
+	}
+	want := fixture.evidence.lastCarried.Geo.ContentDigest()
+	if recorded.GeoProjectionDigest != want || want == "" {
+		t.Fatalf("digest = %s, want %s", recorded.GeoProjectionDigest, want)
+	}
+	if len(recorded.ServiceAreaVersions) != 1 || recorded.ServiceAreaVersions[0] != "AREA-V1" {
+		t.Fatalf("service area versions = %v", recorded.ServiceAreaVersions)
+	}
+	country, present := fixture.evidence.lastCarried.Geo.Delivery().Country()
+	if !present || country != "US" {
+		t.Fatalf("delivery country = %q present=%v", country, present)
+	}
+
+	revised := request
+	revised.SubmissionVersion = value(t, psdomain.NewSubmissionVersionID, "version-2")
+	revised.Geo = psdomain.NewCarriedGeoProjection(
+		psdomain.NewCarriedGeoSide("CN", true, "100000", true),
+		psdomain.NewCarriedGeoSide("US", true, "10002", true),
+	)
+	if _, err := fixture.adapter.AssessParcelReachability(context.Background(), revised); err != nil {
+		t.Fatal(err)
+	}
+	if fixture.evidence.lastCarried.Geo.ContentDigest() == want {
+		t.Fatal("the revised address kept the first digest")
 	}
 }
 

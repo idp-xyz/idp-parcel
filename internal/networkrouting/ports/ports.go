@@ -79,11 +79,16 @@ type CommercialEligibilityView interface {
 //
 // ViewRevision 同在记录而不在结论里：它是证据出处不是三值判断的一部分，留在记录上供
 // 消费方比对「判断形成后视图有没有换代」（CONTEXT「保留……当前修订标识」）。
+//
+// GeoProjectionDigest 与 ServiceAreaVersions 是当次解析依据里除判断键以外的两件
+// （ADR-0075 决定三）：所携投影的版本化内容摘要，以及这次用过的服务区域版本。地址本体不在记录上。
 type ReachabilityJudgmentRecord struct {
-	Key          domain.ReachabilityJudgmentKey
-	Finding      domain.ReachabilityFinding
-	JudgedAt     time.Time
-	ViewRevision domain.NetworkViewRevision
+	Key                 domain.ReachabilityJudgmentKey
+	Finding             domain.ReachabilityFinding
+	JudgedAt            time.Time
+	ViewRevision        domain.NetworkViewRevision
+	GeoProjectionDigest string
+	ServiceAreaVersions []string
 }
 
 // ReachabilityJudgmentSaveOutcome 是保存一次判断的封闭写入结果。error 只留给「答不出」，

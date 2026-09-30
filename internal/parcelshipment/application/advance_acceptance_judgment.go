@@ -161,6 +161,16 @@ func (handler *AdvanceAcceptanceJudgmentHandler) Handle(
 		return handler.undecided(ctx, command, reason, scope...), nil
 	}
 
+	request, found, err := handler.requests.FindBySourceIdentity(ctx, command.Identity)
+	if err != nil {
+		return handler.undecided(ctx, command, ReachabilityAuthorityUnavailable), nil
+	}
+	var geo domain.CarriedGeoProjection
+	if found {
+		if version, ok := request.SubmissionVersionByID(command.SubmissionVersion); ok {
+			geo = version.GeoProjection()
+		}
+	}
 	assessment, err := handler.reachability.AssessParcelReachability(ctx, ports.ReachabilityRequest{
 		Identity:          command.Identity,
 		ShipmentRequestID: command.ShipmentRequestID,
@@ -168,6 +178,7 @@ func (handler *AdvanceAcceptanceJudgmentHandler) Handle(
 		DeclaredParcelID:  command.DeclaredParcelID,
 		AsOf:              adopted.asOf,
 		Resolution:        adopted.snapshot.ResolutionID(),
+		Geo:               geo,
 	})
 	if err != nil {
 		return handler.undecided(ctx, command, ReachabilityAuthorityUnavailable), nil

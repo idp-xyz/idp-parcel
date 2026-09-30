@@ -10,6 +10,7 @@ import (
 
 	nrapplication "go.idp.xyz/idp-parcel/internal/networkrouting/application"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
+	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
@@ -168,7 +169,22 @@ func (adapter *ReachabilityAdapter) assessCommandFor(
 		Correlation: correlationFor(request.ShipmentRequestID, request.SubmissionVersion, request.DeclaredParcelID, request.Resolution),
 		Key:         key,
 		Resolution:  resolution,
+		Carried:     nrports.RequestCarriedContent{Geo: geoProjection(request.Geo)},
 	}, nil
+}
+
+func geoProjection(carried psdomain.CarriedGeoProjection) nrdomain.GeoResolutionProjection {
+	if !carried.Carried() {
+		return nrdomain.GeoResolutionProjection{}
+	}
+	senderCountry, senderCountryPresent := carried.Sender().Country()
+	senderPostal, senderPostalPresent := carried.Sender().PostalCode()
+	deliveryCountry, deliveryCountryPresent := carried.Delivery().Country()
+	deliveryPostal, deliveryPostalPresent := carried.Delivery().PostalCode()
+	return nrdomain.NewGeoResolutionProjection(
+		nrdomain.NewGeoResolutionSide(senderCountry, senderCountryPresent, senderPostal, senderPostalPresent),
+		nrdomain.NewGeoResolutionSide(deliveryCountry, deliveryCountryPresent, deliveryPostal, deliveryPostalPresent),
+	)
 }
 
 // resolutionReference 把本上下文已经采用的解析标识译成提供方的命令附加字段。
