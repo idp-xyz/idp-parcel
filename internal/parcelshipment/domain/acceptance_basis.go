@@ -180,9 +180,9 @@ func (kind JudgmentKind) String() string {
 	}
 }
 
-// AsOfSemanticsReference 标明一项判断锚到哪个业务时点。它保持为不透明引用：语义属
-// party-commercial 登记的版本化政策，本上下文只携带引用，既不解释它，也不提供一组取值
-// 供人挑选。
+// AsOfSemanticsReference 标明一项判断锚到哪个业务时点。它仍是引用：本类型不把引用折成时刻。
+// 产品以参考配置发布可选用的形态（「提交接收」折成该提交版本的系统接收时间，由消费方执行器认）；
+// 租户在规则包里显式采用。没采用的语义这里不解释，也不在本类型里列成一份供人挑选的清单。
 type AsOfSemanticsReference struct{ requiredValue }
 
 func NewAsOfSemanticsReference(value string) (AsOfSemanticsReference, error) {
