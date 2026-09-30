@@ -34,6 +34,7 @@ const (
 	RecoveryExistingResult
 	RecoveryConflict
 	RecoveryNotEstablished
+	RecoveryAmountNotFormed
 	AdjustmentFormed
 	AdjustmentExistingResult
 	AdjustmentConflict
@@ -57,6 +58,8 @@ func (outcome AdvanceOutcome) String() string {
 		return "RECOVERY_CONFLICT"
 	case RecoveryNotEstablished:
 		return "ADVANCE_NOT_ESTABLISHED"
+	case RecoveryAmountNotFormed:
+		return "RECOVERY_AMOUNT_NOT_FORMED"
 	case AdjustmentFormed:
 		return "ADJUSTMENT_FORMED"
 	case AdjustmentExistingResult:
@@ -83,6 +86,8 @@ const (
 	AdjustmentStoreUnavailable
 	ContractViewUnavailable
 	ContractUnconfigured
+	RecoveryGrammarViewUnavailable
+	RecoveryGrammarUnconfigured
 )
 
 func (reason AdvanceUndecidedReason) String() string {
@@ -97,6 +102,10 @@ func (reason AdvanceUndecidedReason) String() string {
 		return "CONTRACT_VIEW_UNAVAILABLE"
 	case ContractUnconfigured:
 		return "CONTRACT_UNCONFIGURED"
+	case RecoveryGrammarViewUnavailable:
+		return "RECOVERY_GRAMMAR_VIEW_UNAVAILABLE"
+	case RecoveryGrammarUnconfigured:
+		return "RECOVERY_GRAMMAR_UNCONFIGURED"
 	default:
 		return ""
 	}
@@ -146,14 +155,16 @@ type AdjustRecoveryCommand struct {
 }
 
 type AdvanceResult struct {
-	outcome      AdvanceOutcome
-	reason       AdvanceUndecidedReason
-	assessment   ports.AdvanceAssessmentRecord
-	recovery     ports.AdvanceRecoveryRecord
-	adjustment   ports.RecoveryAdjustmentRecord
-	hasRecord    bool
-	continuation string
-	handoff      string
+	outcome        AdvanceOutcome
+	reason         AdvanceUndecidedReason
+	assessment     ports.AdvanceAssessmentRecord
+	recovery       ports.AdvanceRecoveryRecord
+	adjustment     ports.RecoveryAdjustmentRecord
+	composition    domain.AmountComposition
+	hasComposition bool
+	hasRecord      bool
+	continuation   string
+	handoff        string
 }
 
 func (result AdvanceResult) Outcome() AdvanceOutcome {
@@ -177,6 +188,10 @@ func (result AdvanceResult) Adjustment() (ports.RecoveryAdjustmentRecord, bool) 
 	return result.adjustment, result.hasRecord && result.adjustment.Key.Adjustment.String() != ""
 }
 
+func (result AdvanceResult) Composition() (domain.AmountComposition, bool) {
+	return result.composition, result.hasComposition
+}
+
 func (result AdvanceResult) ContinuationReference() string {
 	return result.continuation
 }
@@ -191,6 +206,7 @@ type AssessAdvanceRecoveryDeps struct {
 	Recoveries  ports.AdvanceRecoveryStore
 	Adjustments ports.RecoveryAdjustmentStore
 	Contracts   ports.ContractResponsibilityView
+	Grammar     ports.AmountGrammarView
 	Downstream  ports.AdvanceRecoveryHandoff
 	// SettlementInputs 是结算输入版本里付款核对一格的登记册（UC-SA-001 步 2），只由 AdoptDutyPaymentVerification
 	// 走；Assess / FormRecovery / Adjust 三条路不碰它——采用输入与形成判断是两步，共用一只处理方只为
@@ -295,10 +311,19 @@ func (handler *AssessAdvanceRecoveryHandler) FormRecovery(
 		// 合同责任目录是实例半边：未配置停在未决，不默认可回收。
 		return advanceUndecided(ContractUnconfigured, command.Recovery), nil
 	}
+	composition, stop, err := composeRegisteredAmount(
+		ctx, handler.deps.Grammar, command.TenantID, domain.AmountGrammarRecoveryContract,
+		contract.String(), command.AmountMinor)
+	if err != nil {
+		return AdvanceResult{}, err
+	}
+	if stopped, ok := recoveryGrammarStop(stop, composition, command.Recovery); ok {
+		return stopped, nil
+	}
 
 	recovery, err := domain.FormCustomerAdvanceRecovery(
 		assessmentRecord.Assessment, recoveryID, customer, contract, account,
-		command.AmountMinor, command.FormedAt)
+		composition.AmountMinor(), command.FormedAt)
 	if errors.Is(err, domain.ErrAdvanceNotEstablished) {
 		// 代垫未成立：回收无从形成——业务负向，等新证据重评，不是改单。
 		return AdvanceResult{outcome: RecoveryNotEstablished}, nil
@@ -327,7 +352,10 @@ func (handler *AssessAdvanceRecoveryHandler) FormRecovery(
 	}
 	switch saved {
 	case ports.AdvanceRecoverySaved:
-		result := AdvanceResult{outcome: RecoveryFormed, recovery: record, hasRecord: true}
+		result := AdvanceResult{
+			outcome: RecoveryFormed, recovery: record, hasRecord: true,
+			composition: composition, hasComposition: true,
+		}
 		result.handoff = handler.handOffRecovery(ctx, record)
 		return result, nil
 	case ports.AdvanceRecoveryAlreadyFormed:
@@ -466,6 +494,27 @@ func adjustmentFrom(command AdjustRecoveryCommand) (domain.RecoveryAdjustment, e
 		return domain.RecoveryAdjustment{}, err
 	}
 	return domain.FormRecoveryAdjustment(spec)
+}
+
+func recoveryGrammarStop(
+	stop grammarLookup,
+	composition domain.AmountComposition,
+	subject string,
+) (AdvanceResult, bool) {
+	switch stop {
+	case grammarViewUnavailable:
+		return advanceUndecided(RecoveryGrammarViewUnavailable, subject), true
+	case grammarUnconfigured:
+		return advanceUndecided(RecoveryGrammarUnconfigured, subject), true
+	case grammarNotFormed:
+		return AdvanceResult{
+			outcome: RecoveryAmountNotFormed, composition: composition, hasComposition: true,
+		}, true
+	case grammarRejected:
+		return AdvanceResult{outcome: AdvanceNotAccepted}, true
+	default:
+		return AdvanceResult{}, false
+	}
 }
 
 func advanceUndecided(reason AdvanceUndecidedReason, subject string) AdvanceResult {

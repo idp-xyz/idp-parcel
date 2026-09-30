@@ -34,6 +34,7 @@ const (
 	ClaimAdjustmentFormed
 	ClaimAdjustmentExisting
 	ClaimAdjustmentConflict
+	ClaimAmountNotFormed
 	ClaimNotAccepted
 	ClaimUndecided
 )
@@ -64,6 +65,8 @@ func (outcome ClaimSettlementOutcome) String() string {
 		return "EXISTING_CLAIM_ADJUSTMENT"
 	case ClaimAdjustmentConflict:
 		return "CLAIM_ADJUSTMENT_CONFLICT"
+	case ClaimAmountNotFormed:
+		return "CLAIM_AMOUNT_NOT_FORMED"
 	case ClaimNotAccepted:
 		return "SOURCE_NOT_ACCEPTED"
 	case ClaimUndecided:
@@ -85,6 +88,8 @@ const (
 	ClaimAdjustmentStoreUnavailable
 	ClaimRuleViewUnavailable
 	ClaimRuleUnconfigured
+	ClaimGrammarViewUnavailable
+	ClaimGrammarUnconfigured
 )
 
 func (reason ClaimUndecidedReason) String() string {
@@ -101,6 +106,10 @@ func (reason ClaimUndecidedReason) String() string {
 		return "CLAIM_RULE_VIEW_UNAVAILABLE"
 	case ClaimRuleUnconfigured:
 		return "CLAIM_RULE_UNCONFIGURED"
+	case ClaimGrammarViewUnavailable:
+		return "CLAIM_GRAMMAR_VIEW_UNAVAILABLE"
+	case ClaimGrammarUnconfigured:
+		return "CLAIM_GRAMMAR_UNCONFIGURED"
 	default:
 		return ""
 	}
@@ -171,6 +180,8 @@ type ClaimSettlementResult struct {
 	receivable      ports.ReceivableRecord
 	acknowledgement ports.AcknowledgementRecord
 	adjustment      ports.ClaimAdjustmentRecord
+	composition     domain.AmountComposition
+	hasComposition  bool
 	hasRecord       bool
 	continuation    string
 	handoff         string
@@ -201,6 +212,10 @@ func (result ClaimSettlementResult) Adjustment() (ports.ClaimAdjustmentRecord, b
 	return result.adjustment, result.hasRecord && result.adjustment.Key.Adjustment.String() != ""
 }
 
+func (result ClaimSettlementResult) Composition() (domain.AmountComposition, bool) {
+	return result.composition, result.hasComposition
+}
+
 func (result ClaimSettlementResult) ContinuationReference() string {
 	return result.continuation
 }
@@ -216,6 +231,7 @@ type SettleClaimAmountsDeps struct {
 	Acknowledgements ports.RecoveryAcknowledgementStore
 	Adjustments      ports.ClaimAmountAdjustmentStore
 	Rules            ports.ClaimAmountRuleView
+	Grammar          ports.AmountGrammarView
 	Downstream       ports.ClaimSettlementHandoff
 	Clock            ports.Clock
 }
@@ -253,8 +269,18 @@ func (handler *SettleClaimAmountsHandler) FormClaimAmount(
 		// 金额规则目录是实例半边：未配置停在未决，不默认限额。
 		return claimUndecided(ClaimRuleUnconfigured, command.Amount), nil
 	}
+	composition, stop, err := composeRegisteredAmount(
+		ctx, handler.deps.Grammar, command.TenantID, domain.AmountGrammarClaimRule, rule.String(), command.AmountMinor)
+	if err != nil {
+		return ClaimSettlementResult{}, err
+	}
+	if stopped, ok := claimGrammarStop(stop, composition, command.Amount); ok {
+		return stopped, nil
+	}
 
-	amount, err := claimAmountFrom(command, amountID, responsibility, rule)
+	formed := command
+	formed.AmountMinor = composition.AmountMinor()
+	amount, err := claimAmountFrom(formed, amountID, responsibility, rule)
 	if err != nil {
 		return ClaimSettlementResult{outcome: ClaimNotAccepted}, nil
 	}
@@ -279,7 +305,10 @@ func (handler *SettleClaimAmountsHandler) FormClaimAmount(
 	}
 	switch saved {
 	case ports.ClaimAmountSaved:
-		result := ClaimSettlementResult{outcome: ClaimAmountFormed, amount: record, hasRecord: true}
+		result := ClaimSettlementResult{
+			outcome: ClaimAmountFormed, amount: record, hasRecord: true,
+			composition: composition, hasComposition: true,
+		}
 		result.handoff = handler.handOff(ctx, ports.ClaimSettlementIntent{ClaimAmount: record}, command.Amount)
 		return result, nil
 	case ports.ClaimAmountAlreadyFormed:
@@ -315,8 +344,18 @@ func (handler *SettleClaimAmountsHandler) FormReceivable(
 	if !configured {
 		return claimUndecided(ClaimRuleUnconfigured, command.Receivable), nil
 	}
+	composition, stop, err := composeRegisteredAmount(
+		ctx, handler.deps.Grammar, command.TenantID, domain.AmountGrammarClaimRule, rule.String(), command.AmountMinor)
+	if err != nil {
+		return ClaimSettlementResult{}, err
+	}
+	if stopped, ok := claimGrammarStop(stop, composition, command.Receivable); ok {
+		return stopped, nil
+	}
 
-	receivable, err := receivableFrom(command, receivableID, responsibility, rule)
+	formed := command
+	formed.AmountMinor = composition.AmountMinor()
+	receivable, err := receivableFrom(formed, receivableID, responsibility, rule)
 	if err != nil {
 		return ClaimSettlementResult{outcome: ClaimNotAccepted}, nil
 	}
@@ -341,7 +380,10 @@ func (handler *SettleClaimAmountsHandler) FormReceivable(
 	}
 	switch saved {
 	case ports.ReceivableSaved:
-		result := ClaimSettlementResult{outcome: ReceivableFormed, receivable: record, hasRecord: true}
+		result := ClaimSettlementResult{
+			outcome: ReceivableFormed, receivable: record, hasRecord: true,
+			composition: composition, hasComposition: true,
+		}
 		result.handoff = handler.handOff(ctx, ports.ClaimSettlementIntent{Receivable: record}, command.Receivable)
 		return result, nil
 	case ports.ReceivableAlreadyFormed:
@@ -612,6 +654,27 @@ func adjustmentSpecFrom(command AdjustClaimAmountCommand) (domain.ClaimAmountAdj
 		return domain.ClaimAmountAdjustment{}, err
 	}
 	return domain.FormClaimAmountAdjustment(spec)
+}
+
+func claimGrammarStop(
+	stop grammarLookup,
+	composition domain.AmountComposition,
+	subject string,
+) (ClaimSettlementResult, bool) {
+	switch stop {
+	case grammarViewUnavailable:
+		return claimUndecided(ClaimGrammarViewUnavailable, subject), true
+	case grammarUnconfigured:
+		return claimUndecided(ClaimGrammarUnconfigured, subject), true
+	case grammarNotFormed:
+		return ClaimSettlementResult{
+			outcome: ClaimAmountNotFormed, composition: composition, hasComposition: true,
+		}, true
+	case grammarRejected:
+		return ClaimSettlementResult{outcome: ClaimNotAccepted}, true
+	default:
+		return ClaimSettlementResult{}, false
+	}
 }
 
 func claimUndecided(reason ClaimUndecidedReason, subject string) ClaimSettlementResult {

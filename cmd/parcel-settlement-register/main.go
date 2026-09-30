@@ -64,6 +64,7 @@ type registrar struct {
 	funds      *application.MapExternalFundsHandler
 	accounts   *application.RegisterSettlementAccountHandler
 	catalogues *application.RegisterSettlementCatalogueHandler
+	grammars   *application.RegisterAmountGrammarHandler
 	transactor bentoapp.Transactor
 }
 
@@ -200,7 +201,21 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造结算读口登记：%w", err)
 	}
-	return registrar{funds: funds, accounts: accountHandler, catalogues: catalogueHandler, transactor: db.Transactor()}, nil
+	grammars, err := sapostgres.NewAmountGrammars(db)
+	if err != nil {
+		return none, fmt.Errorf("构造金额文法登记册：%w", err)
+	}
+	grammarHandler, err := application.NewRegisterAmountGrammarHandler(grammars, systemClock{})
+	if err != nil {
+		return none, fmt.Errorf("构造金额文法登记：%w", err)
+	}
+	return registrar{
+		funds:      funds,
+		accounts:   accountHandler,
+		catalogues: catalogueHandler,
+		grammars:   grammarHandler,
+		transactor: db.Transactor(),
+	}, nil
 }
 
 // execute 把一份登记输入推进到采用答案：译装 → 在环境事务内交用例 → 答案译成退出码。译装失败当场拒、不进事务
