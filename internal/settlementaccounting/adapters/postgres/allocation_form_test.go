@@ -2,13 +2,25 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
+
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	adapter "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
+
+func TestAllocationFormsRefuseToRunOutsideATransaction(t *testing.T) {
+	forms := newAllocationForms(t)
+	registration := allocationFormRegistration(t, allocationFormRule(t, "rule-1/v1"), domain.AllocationByWeight)
+
+	if _, err := forms.SaveAllocationForm(t.Context(), registerTenant(t), registration, time.Now()); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("事务外 Save 应答 ErrTransactionRequired，实得：%v", err)
+	}
+}
 
 func TestAllocationFormChoiceReplaysConflictsAndMissesAsUnconfigured(t *testing.T) {
 	db := catalogueDB(t)
@@ -46,6 +58,15 @@ func TestAllocationFormChoiceReplaysConflictsAndMissesAsUnconfigured(t *testing.
 	if err != nil || !found || loaded != domain.AllocationByWeight {
 		t.Fatalf("读回 form=%s found=%v err=%v", loaded, found, err)
 	}
+}
+
+func newAllocationForms(t *testing.T) *adapter.AllocationForms {
+	t.Helper()
+	forms, err := adapter.NewAllocationForms(catalogueDB(t))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return forms
 }
 
 func allocationFormRule(t *testing.T, value string) domain.AllocationRuleVersionReference {
