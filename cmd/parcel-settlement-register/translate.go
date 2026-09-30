@@ -30,6 +30,7 @@ const (
 	commandAllocationForm              = "allocation-form"
 	commandAuditEscalationCeiling      = "audit-escalation-ceiling"
 	commandBuyEvaluationTrigger        = "buy-evaluation-trigger"
+	commandPeriodicFee                 = "periodic-fee"
 )
 
 var allCommands = []string{
@@ -44,6 +45,7 @@ var allCommands = []string{
 	commandAllocationForm,
 	commandAuditEscalationCeiling,
 	commandBuyEvaluationTrigger,
+	commandPeriodicFee,
 }
 
 // dispatchFunc 是一条命令在事务内的一次调用，交回已经归好退出码的答复。资金事实与结算账户是两族答案，
@@ -197,6 +199,19 @@ func commandFor(command string, raw []byte) (dispatchFunc, error) {
 				return "", 0, err
 			}
 			message, code := catalogueAnswer(commandChargeConfirmationFacts, effect, registration.Charge().String())
+			return message, code, nil
+		}, nil
+	case commandPeriodicFee:
+		tenant, registration, err := registrationjson.PeriodicFeeFromJSON(raw)
+		if err != nil {
+			return nil, err
+		}
+		return func(ctx context.Context, registrar registrar) (string, int, error) {
+			effect, err := registrar.fees.RegisterPeriodicFee(ctx, tenant, registration)
+			if err != nil {
+				return "", 0, err
+			}
+			message, code := catalogueAnswer(commandPeriodicFee, effect, registration.Rule().String())
 			return message, code, nil
 		}, nil
 	default:

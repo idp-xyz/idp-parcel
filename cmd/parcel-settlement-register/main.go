@@ -69,6 +69,7 @@ type registrar struct {
 	forms      *application.RegisterAllocationFormHandler
 	ceilings   *application.RegisterAuditEscalationCeilingHandler
 	triggers   *application.RegisterBuyEvaluationTriggerHandler
+	fees       *application.RegisterPeriodicFeeHandler
 	transactor bentoapp.Transactor
 }
 
@@ -237,6 +238,14 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造评价请求触发登记：%w", err)
 	}
+	feeStore, err := sapostgres.NewPeriodicFees(db)
+	if err != nil {
+		return none, fmt.Errorf("构造周期费用登记册：%w", err)
+	}
+	feeHandler, err := application.NewRegisterPeriodicFeeHandler(feeStore, systemClock{})
+	if err != nil {
+		return none, fmt.Errorf("构造周期费用登记：%w", err)
+	}
 	return registrar{
 		funds:      funds,
 		accounts:   accountHandler,
@@ -245,6 +254,7 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 		forms:      formHandler,
 		ceilings:   ceilingHandler,
 		triggers:   triggerHandler,
+		fees:       feeHandler,
 		transactor: db.Transactor(),
 	}, nil
 }

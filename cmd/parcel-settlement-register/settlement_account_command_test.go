@@ -128,4 +128,16 @@ func TestTheCatalogueCommandsTranslateBeforeTheTransaction(t *testing.T) {
 	if _, err := commandFor(commandAuditEscalationCeiling, []byte(`{"tenantId":"SYN-T1","supplierId":"SUP-1","legalEntityId":"LE-1","currency":"USD","ceilingMinor":-1}`)); err == nil {
 		t.Fatal("负上限被收成越权升级登记")
 	}
+	fee := []byte(`{
+		"tenantId": "SYN-T1",
+		"ruleRef": "periodic-1/v1",
+		"form": "MINIMUM_SPEND",
+		"minimumMinor": 80000
+	}`)
+	if _, err := commandFor(commandPeriodicFee, fee); err != nil {
+		t.Fatalf("periodic-fee 译装失败：%v", err)
+	}
+	if _, err := commandFor(commandPeriodicFee, []byte(`{"tenantId":"SYN-T1","ruleRef":"periodic-1/v1","form":"MINIMUM_SPEND","minimumMinor":1,"committedQuantity":1}`)); err == nil {
+		t.Fatal("最低消费行收下了保底量")
+	}
 }

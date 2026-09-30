@@ -169,6 +169,7 @@
 - [ADR-0162：成本分摊的内置分法是按重、按件、按收入，尾差按最大余数](./0162-cost-allocation-forms-are-weight-piece-and-revenue.md)｜**分法**：三套共用最大余数，余数相同按目标标识升序。选用另册登记，空册不算出份额。2026-09-30。本项是产品策略，接受依据是 ADR-0146 决定一、决定二。
 - [ADR-0163：供应商审核越权升级只比已匹配金额与已登记上限](./0163-supplier-audit-escalation-compares-the-matched-amount-to-a-ceiling.md)｜**升级**：小于或等于上限在权限内，大于上限必须升级。上限另册登记，空册不形成应付。2026-09-30。本项是产品策略，接受依据是 ADR-0146 决定一、决定二。
 - [ADR-0164：BUY 评价请求的触发面是发生项形成，原因没登记就不发起](./0164-buy-evaluation-request-trigger-is-occurrence-formed.md)｜**触发面**：只在已登记的发生项原因上发起。空册不发起请求。2026-09-30。本项是产品策略，接受依据是 ADR-0146 决定一、决定二。
+- [ADR-0165：周期费用的计算形态是最低消费、保底量、阶梯返利](./0165-periodic-fees-are-minimum-spend-volume-floor-and-tiered-rebate.md)｜**形态**：补差、不足数量乘单价、分档返利。数值另册登记，空册不形成周期费用。2026-09-30。本项是产品策略，接受依据是 ADR-0146 决定一、决定二。
 
 ## 已被取代决策
 
