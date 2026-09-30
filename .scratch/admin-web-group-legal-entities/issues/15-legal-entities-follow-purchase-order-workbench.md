@@ -90,6 +90,10 @@ Blocked by: 无
   `window.location.origin`），IdP 是否登记了它需用户核，`parcel.sh` 与 `.wslconfig` 也归用户。
   ② 详情栏：Radix 默认卸掉非活动签，每切回修订历史 / 法人资料一次就重取一次、闪一次加载态。改为去过的签隐藏挂着；
   dom-probe 实测来回切签只取一次，没去过的签不取。
+- 用户问「页面里的 inspector 还需要吗」→ 取证：38 张列表页里只有委托查询、异常案件两页供检查器内容，其余 35 页开着检查器时
+  右边是一条只写「本页没有要在检查器里显示的内容」的空栏。用户裁定（按通道 3 建议）：**只在供内容的页出检查器栏**，连折叠态展开钮；
+  其余页右边不留。本票先前加的 `yieldColumn` 随之撤掉（新规则已覆盖），`InspectorPanel` 的 `contentOffered` 与 `inspectorEmptyNote`
+  / `INSPECTOR_IDLE_NOTE` 成了死分支一并删。取代 workspace-form/02 第 7 条「对所有页常驻」，在那张票面旁注了一句。
 - **不在本票修、需另定**：同一个 `/NN` 失效在别处也在——`apps/admin-web/src` 另有十余处（`ListPageTemplate` 检查中行与批量栏底色、
   `ReviewFlowTemplate` 等），`@idpxyz/*` 包源码有七十余处，今天都不生效。全局修法是把 `tailwind.config.js` 的主题色改成带
   `<alpha-value>` 的 `color-mix` 写法，一改全站这些底色与边框都会「突然出现」，是全站外观变化，候选另立票。

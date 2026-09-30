@@ -12,24 +12,17 @@ export interface InspectorController {
   /** 回到空态。切换活动标签时由壳层调——检查器显示的是当前列表选中的行，换页就不成立了。 */
   clear(): void;
   /**
-   * 声明本页会往检查器里交内容，返回撤回函数；列表模板接了 inspector 时挂载期调、卸载时撤回。栏对所有页常驻
-   * （除非本页 yieldColumn），壳层凭它选空态句（inspector.ts 的 inspectorEmptyNote）。
+   * 声明本页会往检查器里交内容，返回撤回函数；列表模板接了 inspector 时挂载期调、卸载时撤回。壳层只在有页声明时
+   * 才出检查器栏（连折叠态的展开钮一起）——不供内容的页右边原先常驻一条只写「本页没有内容」的空栏
+   * （票 admin-web-group-legal-entities/15 用户裁定改）。
    */
   offer(): () => void;
-  /**
-   * 声明本页自带详情栏，检查器栏在本页挂载期间让位，返回撤回函数（票 admin-web-group-legal-entities/15）。工作台页的详情
-   * 就在列表右侧，再常驻一条空检查器栏只是右边一块空白。用户「显示检查器」的偏好不动，离开本页栏即回来。
-   */
-  yieldColumn(): () => void;
 }
 
 const noopController: InspectorController = {
   show() {},
   clear() {},
   offer() {
-    return () => {};
-  },
-  yieldColumn() {
     return () => {};
   },
 };

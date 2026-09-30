@@ -219,11 +219,9 @@ export function Layout() {
 
   // 检查器：内容由列表页经 useInspector 交进来；控制口 useMemo 住，Provider 值不随每次渲染换引用。
   const [inspectorContent, setInspectorContent] = useState<InspectorContent | null>(null);
-  // 主区里挂着几个供内容的列表——非活动标签卸载，实际只有活动页的零个或一个；只拿来选空态句。
+  // 主区里挂着几个供内容的列表——非活动标签卸载，实际只有活动页的零个或一个；为零时右边不出检查器栏。
   // 计数而不是布尔：换标签时旧页撤回与新页声明的先后不由这里定。
   const [inspectorOffers, setInspectorOffers] = useState(0);
-  // 自带详情栏的工作台页挂着时检查器栏让位；同样计数，理由同 inspectorOffers。
-  const [inspectorYields, setInspectorYields] = useState(0);
   const inspectorController = useMemo<InspectorController>(
     () => ({
       show: (content) => setInspectorContent(content),
@@ -231,10 +229,6 @@ export function Layout() {
       offer: () => {
         setInspectorOffers((n) => n + 1);
         return () => setInspectorOffers((n) => n - 1);
-      },
-      yieldColumn: () => {
-        setInspectorYields((n) => n + 1);
-        return () => setInspectorYields((n) => n - 1);
       },
     }),
     [],
@@ -368,7 +362,9 @@ export function Layout() {
           </TabReturnProvider>
           </InspectorProvider>
         </main>
-        {workspace.inspectorVisible && inspectorYields === 0 ? (
+        {/* 不供检查器内容的页（多数列表页、工作台页、对象页）右边什么都不留：常驻一条只写「本页没有内容」的空栏
+            就是右边一块空白（票 admin-web-group-legal-entities/15 用户裁定）。「显示 / 隐藏」偏好照存，到了供内容的页才生效。 */}
+        {inspectorOffers === 0 ? null : workspace.inspectorVisible ? (
           <>
             <div className="resize-handle-h" onMouseDown={inspectorResize.handleMouseDown} />
             <aside
@@ -378,7 +374,6 @@ export function Layout() {
             >
               <InspectorPanel
                 content={inspectorContent}
-                contentOffered={inspectorOffers > 0}
                 headerActions={
                   <Tooltip content="隐藏检查器" side="left">
                     <Button variant="ghost" size="icon" className="h-5 w-5" aria-label="隐藏检查器" onClick={toggleInspector}>

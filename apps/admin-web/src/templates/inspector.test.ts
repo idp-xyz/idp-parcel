@@ -1,10 +1,10 @@
 import { test } from 'node:test';
 import { deepEqual, equal, match, throws } from 'node:assert/strict';
 import {
+  INSPECTOR_EMPTY_NOTE,
   INSPECTOR_SUMMARY_LIMIT,
   InspectorContractError,
   inspectorActionDisabled,
-  inspectorEmptyNote,
   inspectorSectionOrder,
   presentFields,
   resolveInspectorForPanel,
@@ -142,9 +142,9 @@ test('resolveInspectorForPanel：合契约的照常归并，契约错误接住�
   throws(() => resolveInspectorForPanel({ title: 'x', sections: null as unknown as InspectorContent['sections'] }), TypeError);
 });
 
-test('inspectorEmptyNote：供内容的页指向单击一行，不供的页不指向列表', () => {
-  match(inspectorEmptyNote(true), /单击一行/);
-  equal(/单击|列表/.test(inspectorEmptyNote(false)), false);
+// 栏只在供内容的页出现，空态句指向「单击一行」。
+test('INSPECTOR_EMPTY_NOTE 指向单击一行', () => {
+  match(INSPECTOR_EMPTY_NOTE, /单击一行/);
 });
 
 test('inspectorActionDisabled：给了说明即禁用，即便同时给了 onRun', () => {

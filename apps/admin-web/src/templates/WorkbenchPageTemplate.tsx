@@ -3,7 +3,6 @@ import { ArrowDown, ArrowUp, ArrowUpDown, Inbox, RefreshCw, Search } from 'lucid
 import { Button } from '@idpxyz/ui-primitives';
 import { useToast } from '@idpxyz/ui-theme-runtime';
 import { useSplitResize, useWorkspaceTabPanel } from '@idpxyz/ui-workspace';
-import { useInspector } from './inspector-context';
 import { skeletonOf } from './loading-shape';
 import { StateSlot, type StateSlotProps, type TemplateViewState } from './state-slot';
 import { stepSelection, workbenchKeyAction, type WorkbenchFocus, type WorkbenchSort } from './workbench';
@@ -125,9 +124,6 @@ export function WorkbenchPageTemplate<Row>({
   const tabPanel = useWorkspaceTabPanel();
   const activeTab = tabPanel?.isActiveTab ?? true;
   const { addToast } = useToast();
-  // 详情就在右栏，壳层的检查器栏在本页让位——否则右边常驻一条空栏。
-  const inspector = useInspector();
-  useEffect(() => inspector.yieldColumn(), [inspector]);
   const ready = viewState.kind === 'ready';
   const detailOpen = ready && selectedKey !== null && rows.some((row) => rowKey(row) === selectedKey);
 

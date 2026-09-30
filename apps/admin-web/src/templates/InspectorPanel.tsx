@@ -14,8 +14,8 @@ import { SectionError } from '../components/states';
 import { StatusBadgeFor, domainStatusTones, type DomainStatus } from '../domain/status';
 import {
   INSPECTOR_CONTRACT_ERROR_TITLE,
+  INSPECTOR_EMPTY_NOTE,
   inspectorActionDisabled,
-  inspectorEmptyNote,
   resolveInspectorForPanel,
   type InspectorAction,
   type InspectorContent,
@@ -34,8 +34,6 @@ import {
 
 export interface InspectorPanelProps {
   content: InspectorContent | null;
-  /** 本页有没有往检查器里交内容；只决定空态句，有内容时不看它。 */
-  contentOffered: boolean;
   /**
    * 栏顶标题同一行右端的控件（如壳层的收起按钮）。不走 InspectorHeader 的 onClose：vendor 为它渲的 × 没有可读名字、
    * 也没有悬停说明，栏上的动作叫什么、长什么样由宿主定。
@@ -143,14 +141,14 @@ function ResolvedSections({ content }: { content: InspectorContent }) {
   );
 }
 
-export function InspectorPanel({ content, contentOffered, headerActions }: InspectorPanelProps) {
+export function InspectorPanel({ content, headerActions }: InspectorPanelProps) {
   return (
     <InspectorShell className="bg-idpxyz-sidebar" data-inspector-panel>
       <InspectorHeader title={PANEL_TITLE}>{headerActions}</InspectorHeader>
       {content === null ? (
         <InspectorBody>
           <p className="text-[11px] text-idpxyz-textMuted" data-inspector-empty>
-            {inspectorEmptyNote(contentOffered)}
+            {INSPECTOR_EMPTY_NOTE}
           </p>
         </InspectorBody>
       ) : (

@@ -84,6 +84,7 @@ myshop-web 的做法是**壳层级右栏**：选中对象常驻右侧，表还�
 5. **概要 ≤ 8 与假动作两条硬规则抛而不是静默**：契约错误是编程错误，`InspectorContractError` 在渲染时抛出、测试先拦；不做 dev-only（本包 tsconfig 无 `process` 声明，也不引 `import.meta` 进 CJS 测试链）。
 6. `InspectorRow` 的值 `truncate` 无 title（vendor），长标识会被截且无悬停全文；记下不改 vendor。`onClose` 复用为「折叠」——蓝图的检查器常驻，× 的语义是收起不是丢弃内容，展开后内容仍在。（已改为宿主给的带名收起钮，见 Comments「评审后修复」。）
 7. 检查器栏默认**可见**且对所有页常驻（蓝图母版 B 的常驻位）；今天只有两页给内容，其余页看到的是空态一句。折叠态持久化，不看的人折一次即可。
+   **2026-09-30 已改**：用户裁定只在供内容的页出栏（连折叠态展开钮），其余页右边不留空栏——见 [集团与法人票 15](../../admin-web-group-legal-entities/issues/15-legal-entities-follow-purchase-order-workbench.md)。
 
 **评审**：共享面（`templates/*`、`shell/*`、`Layout.tsx`）按 workflow 第 5 步要一份 Spec 轴；无可派通道（同票 01），**推送方自审**——判断项 3 与 4 即自审改动，不算非作者评审。
 
