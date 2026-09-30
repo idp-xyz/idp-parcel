@@ -17,10 +17,10 @@
 | partycommercial | 153 | 161 | 12 | 39 | 1 | 37 |
 | pilotgovernance | 22 | 20 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
-| settlementaccounting | 105 | 84 | 15 | 44 | 9 | 9 |
+| settlementaccounting | 110 | 85 | 16 | 45 | 9 | 9 |
 | transportfulfillment | 150 | 137 | 26 | 36 | 11 | 29 |
 | visibilityexception | 100 | 96 | 11 | 30 | 8 | 11 |
-| **合计** | 1088 | 1027 | 135 | 275 | 57 | 156 |
+| **合计** | 1093 | 1028 | 136 | 276 | 57 | 156 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 73、测试 108。
 
@@ -61,7 +61,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：12 个模块共 186 份 SQL
+## 迁移：12 个模块共 187 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -74,7 +74,7 @@
 | parcel_shipment | 23 |
 | party_commercial | 36 |
 | pilot_governance | 8 |
-| settlement_accounting | 22 |
+| settlement_accounting | 23 |
 | transport_fulfillment | 20 |
 | visibility_exception | 26 |
 
@@ -121,7 +121,7 @@
 | visibilityexception | 8 |
 | **合计** | 24 |
 
-## 端口：声明 428 个；基线口径缺 18，精确口径缺 7
+## 端口：声明 432 个；基线口径缺 22，精确口径缺 3
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
@@ -136,20 +136,20 @@
 - `parcelshipment.ResponsibilityStartView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres.IntakeAdoptions）
 - `partycommercial.ApprovalDutyRuleView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres.ApprovalDutyRules）
 - `partycommercial.ServiceProductFormRegistry` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres.CommercialPublications）
-- `settlementaccounting.ClaimAmountRuleView` 
-- `settlementaccounting.ConfirmedChargeFactsView` 
+- `settlementaccounting.ChargeConfirmationFactRegister` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.SettlementCatalogues）
+- `settlementaccounting.ClaimAmountRuleRegister` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.SettlementCatalogues）
+- `settlementaccounting.ClaimAmountRuleView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.SettlementCatalogues）
+- `settlementaccounting.ConfirmedChargeFactsView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.SettlementCatalogues）
 - `settlementaccounting.SettlementAccountRegister` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.SettlementAccounts）
-- `settlementaccounting.SupplierAuditAuthorityView` 
-- `settlementaccounting.SupplierPayableAccountView` 
+- `settlementaccounting.SupplierAuditAuthorityRegister` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.SettlementCatalogues）
+- `settlementaccounting.SupplierAuditAuthorityView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.SettlementCatalogues）
+- `settlementaccounting.SupplierPayableAccountRegister` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.SettlementCatalogues）
+- `settlementaccounting.SupplierPayableAccountView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.SettlementCatalogues）
 - `transportfulfillment.FailedAttemptSource` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.PickupAttempts）
 - `visibilityexception.NotificationChannelGateway` 
 
 精确口径缺（无具体类型完整实现）：
 
 - `parcelpricing.PricingInputResolver` 
-- `settlementaccounting.ClaimAmountRuleView` 
-- `settlementaccounting.ConfirmedChargeFactsView` 
-- `settlementaccounting.SupplierAuditAuthorityView` 
-- `settlementaccounting.SupplierPayableAccountView` 
 - `transportfulfillment.TrackingSource` （虚高：名字出现过，但无人实现）
 - `visibilityexception.NotificationChannelGateway` 
