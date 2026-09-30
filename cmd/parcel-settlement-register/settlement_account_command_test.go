@@ -82,6 +82,20 @@ func TestTheChargeAttributionCommandTranslatesBeforeTheTransaction(t *testing.T)
 	}
 }
 
+func TestTheSettlementMomentCommandTranslatesBeforeTheTransaction(t *testing.T) {
+	raw := []byte(`{"tenantId":"SYN-T1","moment":"CONFIRM"}`)
+	dispatch, err := commandFor(commandSettlementMoment, raw)
+	if err != nil || dispatch == nil {
+		t.Fatalf("settlement-moment 译装失败：dispatch=%v err=%v", dispatch, err)
+	}
+	if _, err := commandFor(commandSettlementMoment, []byte(`{"tenantId":"SYN-T1","moment":"CONFIRM","cutoff":"18:00"}`)); err == nil {
+		t.Fatal("钟点被收成结算触发")
+	}
+	if _, err := commandFor(commandSettlementMoment, []byte(`{"tenantId":"SYN-T1","moment":"ON_DELIVERY"}`)); err == nil {
+		t.Fatal("签收时点被收成结算触发")
+	}
+}
+
 func TestTheSettlementAccountCommandTranslatesBeforeTheTransaction(t *testing.T) {
 	raw := []byte(`{
 		"tenantId": "SYN-T1",

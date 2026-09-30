@@ -192,6 +192,10 @@ func run(logger *slog.Logger) error {
 	if _, err := buildEvaluationRequestOrchestration(db); err != nil {
 		return err
 	}
+	// 结算编排入口（票 psb/12 第 10 项）：七个构造接在这里。确认与截单没登记答未配置。
+	if _, err := buildSettlementOrchestrations(db); err != nil {
+		return err
+	}
 	cancellation, err := buildCancellationOrchestration(db)
 	if err != nil {
 		return err
