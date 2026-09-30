@@ -43,6 +43,25 @@ func TestTheBuyEvaluationTriggerCommandTranslatesBeforeTheTransaction(t *testing
 	}
 }
 
+func TestTheAccountingConnectorCommandTranslatesBeforeTheTransaction(t *testing.T) {
+	raw := []byte(`{
+		"tenantId": "SYN-T1",
+		"exchangeKind": "SUPPLIER_BILL",
+		"counterparty": "SYN-SUPPLIER",
+		"form": "CANONICAL"
+	}`)
+	dispatch, err := commandFor(commandAccountingConnector, raw)
+	if err != nil || dispatch == nil {
+		t.Fatalf("accounting-connector 译装失败：dispatch=%v err=%v", dispatch, err)
+	}
+	if _, err := commandFor(commandAccountingConnector, []byte(`{"tenantId":"SYN-T1","exchangeKind":"SUPPLIER_BILL","counterparty":"SYN-SUPPLIER","form":"SAP_IDOC"}`)); err == nil {
+		t.Fatal("财务系统报文被收成连接器形态")
+	}
+	if _, err := commandFor(commandAccountingConnector, []byte(`{"tenantId":"SYN-T1","exchangeKind":"SUPPLIER_BILL","counterparty":"SYN-SUPPLIER","form":"CANONICAL","mapping":{"column":"A"}}`)); err == nil {
+		t.Fatal("格式映射被收成连接器登记")
+	}
+}
+
 func TestTheSettlementAccountCommandTranslatesBeforeTheTransaction(t *testing.T) {
 	raw := []byte(`{
 		"tenantId": "SYN-T1",
