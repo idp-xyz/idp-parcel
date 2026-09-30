@@ -1,7 +1,7 @@
 # 16 机制缺口：重定级表第一项里尚无票的几处
 
 Category: enhancement
-Status: needs-triage——第 1 项 2026-09-30 进 main（`66ea4bd4`），第 4 项同日进 main（`695ac2f8`），各见文末对应「进 main 记录」；第 2 项在通道 3 分支 `mcp3-psb16-02` 返修中，第 3 项未动。2026-09-24 通道 4 经用户授权自决立（票 02 遗留：开发主线写「缺口逐条交票 product-strategy-boundary/02 立工作票」）；各项分属不同上下文，接单时按上下文拆
+Status: needs-triage——第 1 项 2026-09-30 进 main（`66ea4bd4`），第 4 项同日进 main（`695ac2f8`），第 2 项同日进 main（`7dfe7e2a`），各见文末对应「进 main 记录」；第 3 项未动。2026-09-24 通道 4 经用户授权自决立（票 02 遗留：开发主线写「缺口逐条交票 product-strategy-boundary/02 立工作票」）；各项分属不同上下文，接单时按上下文拆
 Blocked by: 无
 地盘：按项各归其上下文（见各项）。
 出处：[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表第一项各格原话；[票 05](./05-demo-journey-criterion-evidence.md) 盘点格 3、5、21。已有票或已预告的不重立：操作者渠道归[票 15](./15-operator-channel-per-adr-0100.md)；节点收寄的身份核对缝归 `ps-external-mark-relations/01`；BUY 评价的来源引用回指归 `sa-cc-funds-and-credential-seams/11`；NO 实际测量登记册归 `pp-pricing-input-seams/04`；`PricingInputResolver` 的消费侧适配器由 `pp-pricing-input-seams` spec「不在本目录」预告另立、归 PP；网络定义登记册的写入方与定义原语归票 04。
@@ -110,3 +110,23 @@ Blocked by: 无
 
 分支 `mcp2-psb16-04@18e01663`（已推 origin）在隔离树重放到 `5167c2b8` 之上，零冲突：`220fd8b1→ac5dd62b`、`a8f632d2→462c3065`、`18e01663→695ac2f8`；清点在代码链尖重生成为 `05060ee9`（`parcelshipment` 生产 194→195、测试 188→189）。本记录一笔另改上面阻断那一行测试注释。
 推送方验证：钉 `05060ee9`，`gofmt -l` 空，build 与 vet 退 0，两条相关真库用例单跑 PASS 非 SKIP，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL（含 `internal/architecture`）；本记录一笔只多一行测试注释与 `.md`，另在其上重跑 gofmt、build、vet 与 `internal/parcelshipment/adapters/partycommercial` 包测试。分支作封存出处。
+
+**评审 ← 通道 1（隔离子代理，非作者）· 钉 `2bdf6306`（通道 3 分支 `mcp3-psb16-02`，第 2 项，ADR-0158，基 `d3942581`，两笔净改动）· 2026-09-30 22:4x**
+
+- 上一轮三条阻断已消（推送方核过代码与真库）：
+  - architecture：`TestSavingASettlementAccountRequiresATransaction` 点名 `ErrTransactionRequired`，`TestEveryPersistenceWriteMethodCarriesTransactionRequiredEvidence` 带 DSN `-v` 为 PASS。
+  - Spec：`RegisteredAccountDirectory.FindSettlementAccount` 取 `SettlementPolicyEcho.Object()` 建键，不比 `Policy().String()`；`TestAPolicyObjectRegisteredOnceAnswersBothAdoptedVersions` 带 DSN `-v` 为 PASS 非 SKIP。若目录仍比版本整串，该用例会对 v1/v2 查不到已登对象而行红。
+  - Standards：ADR-0158 改写四格否决与目录读对象；ADR-0081 `Status`、Links、README 0081/0158 行均标部分停用决定六「结算账户目录留 nil」；`0022` 与领域行已无对账周期、业务时区、截单时刻、付款条件。
+- **阻断**：无。
+- **非阻断**（随票记）：领域 `SameRegistration` 仍只覆盖方向；`registrationjson` 包头仍写「外部资金事实」；`ChargeDirectionFromName` 与 `ChargeDirection.String` 双开关、`Save` 独用 SAVEPOINT、`ErrBlankValue` 包裹非空白，本笔未触及。`NewRegisteredAccountDirectory` 空参报错仍写 `register is nil`。
+- **核过无发现**：生产装配 `acceptanceFinancialControl` 接 `NewRegisteredAccountDirectory`，`TestAcceptanceFinancialControlDoesNotPassANilAccountDirectory` 守住；命令译装在事务前，`TestTheSettlementAccountCommandTranslatesBeforeTheTransaction` 绿；CONTEXT 已写五格唯一、绑政策对象；种子无账户行；第 1、3、4 项无生产代码；读口收窄为 `SettlementAccountView`。
+- **结论：可重放**。
+
+**完成记录（通道 3 · 据两次完工报转录，第 2 项）**
+
+分支 `mcp3-psb16-02`（基 `d3942581`），两笔均快进推送、未改写：`55a0d7f1` 结算账户登记册接上接受前控制的账户目录（ADR-0158，命令 `parcel-settlement-register settlement-account`，空册与没有相符应收行停在 `CONTROL_SCOPE_NOT_CONFIGURED`）；`2bdf6306` 目录按政策对象查找、账户行去掉对账四格、ADR-0081 决定六「结算账户目录留 nil」部分停用，无事务拒证 `TestSavingASettlementAccountRequiresATransaction`，跨版本 `TestAPolicyObjectRegisteredOnceAnswersBothAdoptedVersions`。作者自验：`go build` 绿；SA/PS postgres 与 `cmd/parcel-dispatch` `-count=1` 绿。迁移 `settlement_accounting/0022_settlement_account.sql`。未登租户行，未动第 3 项。
+
+**进 main 记录（2026-09-30 22:4x，通道 1 推送，第 2 项）**
+
+分支 `mcp3-psb16-02@2bdf6306`（已推 origin）在隔离树重放到 `42733478` 之上。三处文档冲突（票面、ADR 索引、开发主线补记）按意图解：保 main 已进的第 4 项补记与 ADR-0159 行，插入 ADR-0158 与第 2 项补记；第 2 项补记剩余未满足只列网络定义登记册写入方与控制金额源（面单择优已在本 tip 上）。对照：`55a0d7f1→b3dab343`、`2bdf6306→7dfe7e2a`；清点在代码链尖重生成为 `d49c73e8`（`parcelshipment` 生产 195→196、测试 189→190；`settlementaccounting` 生产 101→105、测试 82→84；`settlement_accounting` 迁移 21→22；`cmd` 测试 106→108）。
+推送方验证：钉 `d49c73e8`，`gofmt -l` 空，build 与 vet 退 0，三条相关真库用例单跑 PASS 非 SKIP，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL（含 `internal/architecture`）。本记录一笔只多本票面 `.md`。分支作封存出处。
