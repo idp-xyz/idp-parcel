@@ -162,7 +162,7 @@
 - [ADR-0155：对象级接管的查阅口开在既有治理登记册上——空册如实空；不造种子行；HTTP 写仍另票](./0155-takeover-register-read-opens-on-the-existing-catalogue.md)｜**查阅口**：`register=takeover` 上列标量，盘点 jsonb 不上列；空册空数组。部分停用 ADR-0083 决定四的接管半句。2026-09-29 用户授权继续。
 - [ADR-0156：可达性资格的闭包标识从本轮已采用的商业解析回指](./0156-reachability-closure-identity-comes-from-the-adopted-resolution.md)｜**回指**：解析标识随可达性命令带过，不进判断键，不另造映射。空引用仍是未形成。部分停用 ADR-0064 后果里可达性那一句与 Context 里「`ReachabilityClosureIdentity` 仍属实例半边」那一句。2026-09-30。本项是机制，接受依据是 ADR-0146 决定一「机制与产品策略同属产品交付轨道，开发方现在就做」，不是通道里的「继续」。
 - [ADR-0157：内置时点形态以参考配置发布，租户在时点语义格用引用选用](./0157-built-in-as-of-forms-are-adopted-as-reference-citations.md)｜**形态选择格**：不是 ADR-0147 的依据格；带 `REFCFG-1:` 的值登记时须已发布，否则拒。2026-09-30 用户授权通道 1 自决。
-- [ADR-0158：面单择优的接受时解析回指从接受决定上读](./0158-label-channel-resolution-comes-from-the-accepted-decision.md)｜**回指**：择优查询带来源身份与声明包裹，解析标识从该成员的接受决定读，不另造映射。空身份或未接受仍是未形成。2026-09-30。本项是机制，接受依据是 ADR-0146 决定一「机制与产品策略同属产品交付轨道，开发方现在就做」。
+- [ADR-0159：面单择优的接受时解析回指从接受决定上读](./0159-label-channel-resolution-comes-from-the-accepted-decision.md)｜**回指**：择优查询带来源身份与声明包裹，解析标识从该成员的接受决定读，不另造映射。空身份或未接受仍是未形成。2026-09-30。本项是机制，接受依据是 ADR-0146 决定一「机制与产品策略同属产品交付轨道，开发方现在就做」。
 
 ## 已被取代决策
 
