@@ -1,7 +1,7 @@
 # 12 settlement-accounting：金额文法、分摊与周期费用形态、经营指标方法与账务连接器
 
 Category: enhancement
-Status: in-progress——2026-09-30 第 1 项在分支 mcp3-psb12-01（ADR-0161），尚未进 main；第 2–10 项未做
+Status: in-progress——2026-09-30 第 1 项进 main（`161bb646`，ADR-0161）；第 2 项在通道 2 分支进行中；第 3–10 项未做
 Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 行第一项的机制缺口，归[票 16](./16-mechanism-gaps-without-a-ticket.md)；缺它们时本票只能先定文法）
 地盘：settlement-accounting 领域与应用层（金额、分摊、周期费用、指标），账单接入与财务交换的连接器适配器；规则正文若由 party-commercial 声明，PC 侧另开票。
 出处：[票 02](./02-split-parameter-register-and-retriage-deferrals.md)——[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md) `PAR-COM-07`、`PAR-SET-05`、`PAR-SET-06`、`PAR-SET-07`、`PAR-SET-08`、`PAR-SET-09`、`PAR-SET-10`、`PAR-INT-04`、`PAR-INT-05` 行内「〔ADR-0146 拆分〕」点名的部分。[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表 PN-07 行第三项当时记「未核」，本票即其补核。
@@ -29,3 +29,21 @@ Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 
 ## 完成判据
 
 - 每项要么有执行器（带测试），要么记下已有执行器的证据；登记册对应行同步收短。
+
+## Comments
+
+**评审 ← 通道 1（隔离子代理，非作者）· 钉 `d481f1fb`（通道 3 分支 `mcp3-psb12-01`，第 1 项，ADR-0161，基 `28ba713e`）· 2026-09-30 23:4x**
+
+- **阻断**：无。
+- **非阻断**（随票记）：`FormReceivable` 已写入文法结果，但没有用例钉住；若仍保存命令的 `AmountMinor`，`TestClaimAmountsUseTheRegisteredGrammarInsteadOfTheAssertedAmount` 仍绿。`FormClaimAmount` 与 `FormRecovery` 改回主张会红。`claimGrammarStop` 与 `recoveryGrammarStop` 是重复开关。
+- **核过无发现**：`AmountGrammar.Compose` 先免赔（不足记 0）、再按万分比向下取整、再以限额封顶；比例封在 0–10000。三项取值在 `amount_grammar_parameter`，命令 `amount-grammar`，不写回金额规则版本册。没登记答 `CLAIM_GRAMMAR_UNCONFIGURED` / `RECOVERY_GRAMMAR_UNCONFIGURED`，不用主张顶上。算出 0 不形成金额。未登租户行。点名真库与领域用例带 DSN `-v` 为 PASS 非 SKIP；`internal/architecture` 过。第 2–10 项未做。`NewSettleClaimAmountsHandler` 仍不在 `cmd/`，属第 10 项。
+- **结论：可重放**。
+
+**完成记录（通道 3 · 据完工报转录，第 1 项）**
+
+分支 `mcp3-psb12-01`（基 `28ba713e`），一笔快进推送、未改写：`d481f1fb` 赔付、退款与代垫回收按 ADR-0161 同一套文法算。真库 `TestAmountGrammarsRefuseToRunOutsideATransaction`、`TestEmptyAmountGrammarsStayUnconfigured`、`TestAnAmountGrammarRegistersReplaysAndConflicts`。迁移 `settlement_accounting/0024_amount_grammar_parameter.sql`。未登租户行。
+
+**进 main 记录（2026-09-30 23:4x，通道 1 推送，第 1 项）**
+
+分支 `mcp3-psb12-01@d481f1fb`（已推 origin）在隔离树重放到 `28ba713e` 之上，零冲突：`d481f1fb→161bb646`；清点在代码链尖重生成为 `d1f3f93a`（`settlementaccounting` 生产 110→115、测试 85→87；`settlement_accounting` 迁移 23→24）。
+推送方验证：钉 `d1f3f93a`，`gofmt -l` 空，build 与 vet 退 0，点名用例与架构门禁单跑 PASS 非 SKIP，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。本记录一笔只多本票面 `.md`。分支作封存出处。
