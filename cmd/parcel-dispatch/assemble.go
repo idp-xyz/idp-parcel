@@ -1013,11 +1013,11 @@ const operatorRegistrationRedrivePageSize = 200
 // 重校验（UC-PC-002 步骤 8），三步各建一个适配器不改变行为，但会让「三条腿问的是同一个
 // 权威」这件事在装配上看不出来，下一个改这里的人很容易给某一条腿换上另一份配置。
 //
-// 实例半边全部留空，各自的「显式未配置」形状各归各口——今天没有租户，这些参数一个也说
+// 其余实例半边留空，各自的「显式未配置」形状各归各口——今天没有租户，这些参数一个也说
 // 不出，而每一个空位都是首发该停下的地方，不是要绕过的地方：
 //
-//   - 时点取值源只折「提交接收」（SYN-ASOF-SUBMIT-TIME → 本提交版本的 receivedAt）。
-//     其余语义，包括租户截点与财务控制那格，仍形不成，停在`未配置`；
+//   - 时点取值源只折「提交接收」（产品参考配置引用 → 本提交版本的系统接收时间）。
+//     财务控制那格与租户截点仍形不成，停在`未配置`；
 //   - 可达性闭包标识（ReachabilityClosureIdentity）nil——资格视图答未配置，判断`未形成`；
 //   - 结算账户目录（SettlementAccountDirectory）与控制金额源（ControlAmountSource）nil
 //     ——控制停在 `CONTROL_SCOPE_NOT_CONFIGURED` / `CONTROL_AMOUNT_NOT_CONFIGURED`，绝不
@@ -1137,10 +1137,9 @@ func acceptanceChainConsumers(
 // acceptanceCommercialBasis 接商业依据三阶段（UC-PC-002）：解析闭包、按规则包声明形成
 // 判断时点、提交决定前按原解析重校验。
 //
-// Values 留 nil 的代价要说清：时点语义的取值（「按哪个时刻算」）属 `PAR-COM-14` 实例半边，
-// 没有租户就说不出。留 nil 时第二阶段答`未配置`，两条判断腿都在发起权威调用之前停下——
-// 那是对的，一次在无人授权的时点上作出的判断，既解释不了自己按哪一版策略执行，也没法
-// 在事后核对。
+// 时点取值源接「提交接收」：租户采用产品参考配置后，值是该提交版本的系统接收时间。
+// 财务控制那格与租户截点形不成，第二阶段答`未配置`，在发起权威调用之前停下——
+// 一次在无人授权的时点上作出的判断，既解释不了自己按哪一版策略执行，也没法在事后核对。
 func acceptanceCommercialBasis(
 	db *bentopg.DB,
 	requests psports.ShipmentRequestRepository,

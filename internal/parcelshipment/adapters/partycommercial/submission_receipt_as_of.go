@@ -5,39 +5,54 @@ import (
 	"fmt"
 	"time"
 
-	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/referenceconfig"
 )
 
-// submissionReceiptSemantics 是参考配置里可达性时点锚已经采用的那一格
-// （SYN-ASOF-SUBMIT-TIME）：锚在本提交版本已记录的系统接收时刻。
+// submissionReceiptReference 是「提交接收」这一形态的参考配置（ADR-0147）。
+// 租户在规则包里选用的是它的引用串，不是租户自己起的名字。
+const submissionReceiptReference = "parcel-shipment/as-of-semantics/submission-receipt@1"
+
+// SubmissionReceiptAsOf 把「提交接收」折成该提交版本已记录的系统接收时间。
 //
-// 它是判断方法，不是租户截点。截点、以及其余语义（含财务控制那格 SYN-ASOF-ACCEPT-TIME），
-// 这里形不成值，交回未配置。不用本地时钟，也不用接收时刻去补 requestEffectiveAt。
-const submissionReceiptSemantics = "SYN-ASOF-SUBMIT-TIME"
-
-// submissionReceiptLookup 只取形成「提交接收」时点要用的那份委托。
-type submissionReceiptLookup interface {
-	FindBySourceIdentity(ctx context.Context, identity psdomain.SourceIdentity) (psdomain.ShipmentRequest, bool, error)
+// 只认产品发布的那一版引用。其余语义，包括租户截点与财务控制那格，这里形不成值，交回未配置。
+// 不用本地时钟，也不用系统接收时间去补 requestEffectiveAt。
+type SubmissionReceiptAsOf struct {
+	requests  shipmentRequestFinder
+	semantics string
 }
 
-// submissionReceiptAsOf 按声明语义把「提交接收」折成该提交版本的 receivedAt。
-type submissionReceiptAsOf struct {
-	requests submissionReceiptLookup
-}
-
-func NewSubmissionReceiptAsOf(requests submissionReceiptLookup) (*submissionReceiptAsOf, error) {
+func NewSubmissionReceiptAsOf(requests shipmentRequestFinder) (*SubmissionReceiptAsOf, error) {
 	if requests == nil {
 		return nil, fmt.Errorf("parcel shipment partycommercial adapter: submission receipt as-of: requests is nil")
 	}
-	return &submissionReceiptAsOf{requests: requests}, nil
+	citation, err := SubmissionReceiptCitation()
+	if err != nil {
+		return nil, fmt.Errorf("parcel shipment partycommercial adapter: submission receipt as-of: %w", err)
+	}
+	return &SubmissionReceiptAsOf{requests: requests, semantics: citation}, nil
 }
 
-func (source *submissionReceiptAsOf) FormAsOfValue(
+var _ AsOfValueSource = (*SubmissionReceiptAsOf)(nil)
+
+// SubmissionReceiptCitation 交回写进时点策略语义格的产品引用。原文打不开就不交：
+// 采用指向的必须是已发布的那一版。
+func SubmissionReceiptCitation() (string, error) {
+	reference, err := referenceconfig.ParseReference(submissionReceiptReference)
+	if err != nil {
+		return "", err
+	}
+	if _, err := referenceconfig.Open(reference); err != nil {
+		return "", err
+	}
+	return reference.Citation(), nil
+}
+
+func (source *SubmissionReceiptAsOf) FormAsOfValue(
 	ctx context.Context,
 	query psports.JudgmentAsOfQuery,
 ) (time.Time, bool, error) {
-	if query.Declared.Semantics().String() != submissionReceiptSemantics {
+	if query.Declared.Semantics().String() != source.semantics {
 		return time.Time{}, false, nil
 	}
 	request, found, err := source.requests.FindBySourceIdentity(ctx, query.Identity)
@@ -51,9 +66,18 @@ func (source *submissionReceiptAsOf) FormAsOfValue(
 	if !ok {
 		return time.Time{}, false, fmt.Errorf("submission receipt as-of: submission version not on request")
 	}
-	received := version.SourceSubmission().ReceivedAt()
-	if received.IsZero() {
-		return time.Time{}, false, nil
+	at, err := submissionReceiptInstant(version.SourceSubmission().ReceivedAt())
+	if err != nil {
+		return time.Time{}, false, err
 	}
-	return received, true, nil
+	return at, true, nil
+}
+
+// submissionReceiptInstant 把已记录的系统接收时间交回去。零值过不了来源指纹的构造门，
+// 走到这里是数据损坏，不是还没登记——答未配置会让人去补一份永远补不来的策略。
+func submissionReceiptInstant(received time.Time) (time.Time, error) {
+	if received.IsZero() {
+		return time.Time{}, fmt.Errorf("submission receipt as-of: receivedAt is zero")
+	}
+	return received, nil
 }
