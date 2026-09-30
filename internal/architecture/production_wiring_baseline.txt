@@ -407,6 +407,11 @@ internal/parcelshipment/domain ParseDeliveryPlaceReference
 # c0cdebba 上量得底数 **4**（非注释非空行：parcel-shipment 1、network-routing 1、party-commercial 2），
 # 剪后实测 **3**，两个数锚在同一棵树上，只对该检出成立。NR 段自此又空了——但别把「这一组空了」读成 NR 都接上了，
 # 本门禁只量导出工厂。
+# ArbitrateLoadingConcurrency（票 routing-first-cut/06，ADR-0174）按权威业务发生时间、改路生效边界和明确因果关系
+# 裁决装载与改路谁先。等 NR 消费方适配器把装载事实交给它：权威业务发生时间、节点、所依计划版本和因果陈述，
+# 从 transport-fulfillment 或 node-operations 译过来。那一层落地这行出名单。同笔五个导出类型在类型可达性基线里，
+# 经本函数取得，随它出名单。动手前在父提交 b0baf6c1 上数得本文件 1 条；加上这一条后是 2。只对这一加成立。
+internal/networkrouting/domain ArbitrateLoadingConcurrency
 
 
 # —— transport-fulfillment ——
