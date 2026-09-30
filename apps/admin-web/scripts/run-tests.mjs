@@ -7,7 +7,7 @@
 //   - 删掉的测试会在 .tmp-test/ 留下过时 .js 继续被跑，先清目录再编。
 //   - 本机 node_modules/.bin/tsc 垫片缺失（见 docs/agents/workflow.md 本机环境），走 typescript
 //     包的入口文件对装好垫片的机器同样成立。
-import { rmSync, mkdirSync, writeFileSync } from 'node:fs';
+import { rmSync, mkdirSync, writeFileSync, readdirSync } from 'node:fs';
 import { spawnSync } from 'node:child_process';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -26,8 +26,15 @@ const tsc = spawnSync(
 );
 if (tsc.status !== 0) process.exit(tsc.status ?? 1);
 
-// `--test` 不收目录只收文件或 glob；glob 由 Node 自己展开，不经 shell。
-const tests = spawnSync(process.execPath, ['--test', '.tmp-test/**/*.test.js'], {
+// `--test` 不收目录只收文件；Node 18 不会替命令行参数展开 `**`，所以这里递归收集已编译的测试文件。
+function testFilesUnder(directory) {
+  return readdirSync(directory, { withFileTypes: true }).flatMap((entry) => {
+    const path = join(directory, entry.name);
+    return entry.isDirectory() ? testFilesUnder(path) : entry.name.endsWith('.test.js') ? [path] : [];
+  });
+}
+
+const tests = spawnSync(process.execPath, ['--test', ...testFilesUnder(outDir)], {
   stdio: 'inherit',
   cwd: appRoot,
 });

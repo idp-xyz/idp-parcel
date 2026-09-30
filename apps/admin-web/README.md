@@ -49,7 +49,7 @@ pnpm test       # scripts/run-tests.mjs
 
 ## 与后端联调
 
-前端一律带 `/api` 前缀发起，`vite.config.ts` 的开发代理剥前缀转发到 `cmd/parcel-api`（默认 `:8080`，后端用 `IDP_PARCEL_HTTP_ADDR` 改监听、前端用 `PARCEL_API_TARGET` 改目标）。代理链已烟测：穿过代理后端收到 `/shipment-requests`（前缀已剥），403 未配置包封原样穿回。
+前端一律带 `/api` 前缀发起，`vite.config.ts` 的开发代理剥前缀转发到 `cmd/parcel-api`（代理缺省目标 `:19080`；parcel-api 自身缺省监听 `:8080`，起后端时用 `IDP_PARCEL_HTTP_ADDR=:19080` 对齐，前端用 `PARCEL_API_TARGET` 改目标）。代理链已烟测：穿过代理后端收到 `/shipment-requests`（前缀已剥），403 未配置包封原样穿回。
 
 本机两处暗礁（实测 2026-08-24）：
 - **8080 被 Windows 服务（svchost）占用**——本机起 parcel-api 需 `IDP_PARCEL_HTTP_ADDR` 换端口，并给前端配同值 `PARCEL_API_TARGET`；
