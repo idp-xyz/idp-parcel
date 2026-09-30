@@ -8,6 +8,7 @@ import (
 	nrinbox "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/inbox"
 	nrapplication "go.idp.xyz/idp-parcel/internal/networkrouting/application"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
+	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
@@ -127,6 +128,7 @@ func (adapter *RouteOnAcceptanceAdapter) HandleAcceptedDecision(
 		Handoff:    spec,
 		Purpose:    adapter.purpose,
 		Resolution: resolution,
+		Carried:    nrports.RequestCarriedContent{Geo: geoFromDecision(decision)},
 	})
 	if err != nil {
 		return fmt.Errorf("create initial route: %w", err)
@@ -298,4 +300,20 @@ func outcomeToConsumption(result nrapplication.CreateInitialRouteResult) error {
 		return fmt.Errorf("%w: unexpected route handoff outcome %q",
 			ErrUntranslatableAnswer, result.Outcome())
 	}
+}
+
+func geoFromDecision(decision nrinbox.AcceptedDecision) nrdomain.GeoResolutionProjection {
+	if !decision.Geo.Carried {
+		return nrdomain.GeoResolutionProjection{}
+	}
+	return nrdomain.NewGeoResolutionProjection(
+		nrdomain.NewGeoResolutionSide(
+			decision.Geo.SenderCountry, decision.Geo.SenderCountryPresent,
+			decision.Geo.SenderPostal, decision.Geo.SenderPostalPresent,
+		),
+		nrdomain.NewGeoResolutionSide(
+			decision.Geo.DeliveryCountry, decision.Geo.DeliveryCountryPresent,
+			decision.Geo.DeliveryPostal, decision.Geo.DeliveryPostalPresent,
+		),
+	)
 }

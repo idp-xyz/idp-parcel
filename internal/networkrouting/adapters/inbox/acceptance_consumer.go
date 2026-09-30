@@ -49,6 +49,21 @@ type AcceptedDecision struct {
 	SubmissionVersion string
 	DecisionID        string
 	State             string
+	// Geo 是随交接携带的地理解析投影。Carried 为假表示这封信封没带。
+	Geo CarriedGeo
+}
+
+// CarriedGeo 是信封上的地理维。值原样，不去空白。
+type CarriedGeo struct {
+	Carried                bool
+	SenderCountry          string
+	SenderCountryPresent   bool
+	SenderPostal           string
+	SenderPostalPresent    bool
+	DeliveryCountry        string
+	DeliveryCountryPresent bool
+	DeliveryPostal         string
+	DeliveryPostalPresent  bool
 }
 
 // DecisionHandler 是本消费者转交的处理方。真实装配接 NR 的初始路由编排；消费门
@@ -109,6 +124,17 @@ func decodeAcceptedDecision(payload []byte) (AcceptedDecision, error) {
 		SubmissionVersion string `json:"submissionVersion"`
 		DecisionID        string `json:"decisionId"`
 		State             string `json:"state"`
+		Geo               *struct {
+			Carried                bool   `json:"carried"`
+			SenderCountry          string `json:"senderCountry"`
+			SenderCountryPresent   bool   `json:"senderCountryPresent"`
+			SenderPostal           string `json:"senderPostal"`
+			SenderPostalPresent    bool   `json:"senderPostalPresent"`
+			DeliveryCountry        string `json:"deliveryCountry"`
+			DeliveryCountryPresent bool   `json:"deliveryCountryPresent"`
+			DeliveryPostal         string `json:"deliveryPostal"`
+			DeliveryPostalPresent  bool   `json:"deliveryPostalPresent"`
+		} `json:"geo"`
 	}
 	if err := json.Unmarshal(payload, &body); err != nil {
 		return AcceptedDecision{}, fmt.Errorf("%w: %v", ErrPoisonEnvelope, err)
@@ -128,7 +154,7 @@ func decodeAcceptedDecision(payload []byte) (AcceptedDecision, error) {
 	if body.State == "" || body.SubmissionVersion == "" {
 		return AcceptedDecision{}, fmt.Errorf("%w: missing decision facts", ErrPoisonEnvelope)
 	}
-	return AcceptedDecision{
+	decision := AcceptedDecision{
 		TenantID:          body.TenantID,
 		CustomerAccountID: body.CustomerAccountID,
 		Source:            body.Source,
@@ -137,5 +163,19 @@ func decodeAcceptedDecision(payload []byte) (AcceptedDecision, error) {
 		SubmissionVersion: body.SubmissionVersion,
 		DecisionID:        body.DecisionID,
 		State:             body.State,
-	}, nil
+	}
+	if body.Geo != nil {
+		decision.Geo = CarriedGeo{
+			Carried:                body.Geo.Carried,
+			SenderCountry:          body.Geo.SenderCountry,
+			SenderCountryPresent:   body.Geo.SenderCountryPresent,
+			SenderPostal:           body.Geo.SenderPostal,
+			SenderPostalPresent:    body.Geo.SenderPostalPresent,
+			DeliveryCountry:        body.Geo.DeliveryCountry,
+			DeliveryCountryPresent: body.Geo.DeliveryCountryPresent,
+			DeliveryPostal:         body.Geo.DeliveryPostal,
+			DeliveryPostalPresent:  body.Geo.DeliveryPostalPresent,
+		}
+	}
+	return decision, nil
 }

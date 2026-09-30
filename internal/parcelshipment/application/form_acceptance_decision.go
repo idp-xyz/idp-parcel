@@ -578,12 +578,17 @@ func (handler *FormAcceptanceDecisionHandler) handOffDecision(
 	if !formed {
 		return domain.OwnershipContinuationReference{}
 	}
+	var geo domain.CarriedGeoProjection
+	if version, ok := request.SubmissionVersionByID(command.SubmissionVersion); ok {
+		geo = version.GeoProjection()
+	}
 	if err := handler.deps.Downstream.HandOffAcceptanceDecision(ctx, ports.AcceptanceDecisionHandoffIntent{
 		Identity:          command.Identity,
 		ShipmentRequestID: command.ShipmentRequestID,
 		SubmissionVersion: command.SubmissionVersion,
 		DecisionID:        decision.DecisionID(),
 		State:             request.State(),
+		Geo:               geo,
 	}); err != nil {
 		return judgmentContinuation(
 			AcceptanceDecisionNotHandedOff,

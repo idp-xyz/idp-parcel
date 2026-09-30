@@ -89,6 +89,11 @@ func (version SubmissionVersion) DeclaredElements() DeclaredAddressElements {
 	return version.elements
 }
 
+// GeoProjection 是这一版提交上要随路由判断带走的地理维。
+func (version SubmissionVersion) GeoProjection() CarriedGeoProjection {
+	return GeoProjectionOf(version.elements)
+}
+
 // RequestedServiceProduct 交回本版本声明的服务产品；未声明即零值。商业依据解析键按它收窄服务产品候选（票 psb/17）。
 func (version SubmissionVersion) RequestedServiceProduct() DeclaredServiceProduct {
 	return version.requestedProduct

@@ -8,6 +8,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -272,10 +273,12 @@ func (handler *AssessParcelReachabilityHandler) Handle(
 
 	// 时钟在结论形成之后才读，因此判断时间落在证据装配之后而非之前。
 	record := ports.ReachabilityJudgmentRecord{
-		Key:          command.Key,
-		Finding:      finding,
-		JudgedAt:     handler.clock.Now(),
-		ViewRevision: evidence.ViewRevision,
+		Key:                 command.Key,
+		Finding:             finding,
+		JudgedAt:            handler.clock.Now(),
+		ViewRevision:        evidence.ViewRevision,
+		GeoProjectionDigest: command.Carried.Geo.ContentDigest(),
+		ServiceAreaVersions: serviceAreaVersions(evidence.ServiceAreas),
 	}
 	saved, err := handler.store.Save(ctx, command.Correlation, record)
 	if err != nil {
@@ -381,4 +384,19 @@ func continuationFor(command AssessParcelReachabilityCommand, label string) Cont
 		command.Key.AsOf.At().Format(time.RFC3339Nano),
 	}, "\x00")))
 	return ContinuationReference{value: "CONT-" + hex.EncodeToString(digest[:8])}
+}
+
+func serviceAreaVersions(areas []domain.ServiceAreaResolution) []string {
+	seen := map[string]struct{}{}
+	versions := make([]string, 0, len(areas))
+	for _, area := range areas {
+		version := area.AreaVersion().String()
+		if _, ok := seen[version]; ok {
+			continue
+		}
+		seen[version] = struct{}{}
+		versions = append(versions, version)
+	}
+	sort.Strings(versions)
+	return versions
 }

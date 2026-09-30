@@ -133,3 +133,66 @@ func (elements DeclaredAddressElements) InGroup(group SourceDataGroupReference) 
 func (elements DeclaredAddressElements) Empty() bool {
 	return elements.sender.Empty() && elements.delivery.Empty()
 }
+
+// CarriedGeoSide 是过界的一侧地理维：国家 / 地区码与邮编，原样，不去空白。在场标志把「没报」和「报了空白」分开。
+type CarriedGeoSide struct {
+	country        string
+	countryPresent bool
+	postalCode     string
+	postalPresent  bool
+}
+
+func NewCarriedGeoSide(country string, countryPresent bool, postalCode string, postalPresent bool) CarriedGeoSide {
+	if !countryPresent {
+		country = ""
+	}
+	if !postalPresent {
+		postalCode = ""
+	}
+	return CarriedGeoSide{
+		country:        country,
+		countryPresent: countryPresent,
+		postalCode:     postalCode,
+		postalPresent:  postalPresent,
+	}
+}
+
+func (side CarriedGeoSide) Country() (string, bool) {
+	return side.country, side.countryPresent
+}
+
+func (side CarriedGeoSide) PostalCode() (string, bool) {
+	return side.postalCode, side.postalPresent
+}
+
+func carriedGeoSideFrom(elements AddressElements) CarriedGeoSide {
+	country, countryPresent := elements.CountryCode()
+	postal, postalPresent := elements.PostalCode()
+	return NewCarriedGeoSide(country, countryPresent, postal, postalPresent)
+}
+
+// CarriedGeoProjection 是随可达性请求与接受交接交出的地理解析投影（ADR-0075、ADR-0148 决定二）。
+// 只有寄件段与收件段的国家 / 地区码和邮编。零值是没带；构造出来的一份即使两侧都缺国家码也算带了。
+type CarriedGeoProjection struct {
+	sender   CarriedGeoSide
+	delivery CarriedGeoSide
+	carried  bool
+}
+
+func NewCarriedGeoProjection(sender, delivery CarriedGeoSide) CarriedGeoProjection {
+	return CarriedGeoProjection{sender: sender, delivery: delivery, carried: true}
+}
+
+func (projection CarriedGeoProjection) Carried() bool { return projection.carried }
+
+func (projection CarriedGeoProjection) Sender() CarriedGeoSide { return projection.sender }
+
+func (projection CarriedGeoProjection) Delivery() CarriedGeoSide { return projection.delivery }
+
+// GeoProjectionOf 从提交版本上的地址要素取地理维。身份内容不在这分投影里。
+func GeoProjectionOf(elements DeclaredAddressElements) CarriedGeoProjection {
+	return NewCarriedGeoProjection(
+		carriedGeoSideFrom(elements.InGroup(SenderPlaceDataGroup())),
+		carriedGeoSideFrom(elements.InGroup(DeliveryPlaceDataGroup())),
+	)
+}

@@ -147,10 +147,13 @@ func (reason RouteUndecidedReason) String() string {
 // CreateInitialRouteCommand 携带路由交接的原料、服务目的和已接受解析标识。
 // 目的是消费侧装配参数（与可达性适配器的 Purpose 同款）：属服务产品的话语，未配置时
 // 交接未受理。解析标识是命令附加字段，不是判断维（ADR-0064）。
+// Carried 是接受交接带来的地理解析投影。初始路由证据折叠还不收这格，指纹把它算进去，
+// 同一交接换了地址就不再是重放。
 type CreateInitialRouteCommand struct {
 	Handoff    domain.RouteHandoffSpec
 	Purpose    domain.ServicePurpose
 	Resolution domain.CommercialResolutionReference
+	Carried    ports.RequestCarriedContent
 }
 
 // ParcelRouteResult 是一个包裹的独立结果。计划与无路由各按在场标志给出，未决带原因与
@@ -267,7 +270,7 @@ func (handler *CreateInitialRouteHandler) Handle(
 
 	// 重放与冲突在读任何权威之前分界（步骤 2）：同关联同指纹是重放（继续走，逐包裹按键
 	// 找回已有结果），异指纹是冲突——原交接与原结果不被覆盖。
-	digest := handoffDigest(command.Handoff)
+	digest := handoffDigest(command.Handoff, command.Carried.Geo)
 	recorded, found, err := handler.deps.Log.FindDigest(ctx, command.Handoff.TenantID, handoff.Correlation())
 	if err != nil {
 		return handler.undecidedHandoff(keys, RouteHandoffLogUnavailable), nil
@@ -624,7 +627,7 @@ func routeContinuation(key domain.InitialRouteJudgmentKey, reason RouteUndecided
 
 // handoffDigest 是交接内容的稳定指纹：同关联异指纹即冲突。成员序不参与——同一批成员
 // 换个顺序不是另一份交接。
-func handoffDigest(spec domain.RouteHandoffSpec) string {
+func handoffDigest(spec domain.RouteHandoffSpec, geo domain.GeoResolutionProjection) string {
 	members := make([]string, 0, len(spec.Parcels))
 	for _, parcel := range spec.Parcels {
 		members = append(members, parcel.String())
@@ -637,6 +640,7 @@ func handoffDigest(spec domain.RouteHandoffSpec) string {
 		spec.AcceptanceDecision.String(),
 		spec.AcceptanceBaseline.String(),
 		strings.Join(members, ","),
+		geo.ContentDigest(),
 	}, "\x00")
 	digest := sha256.Sum256([]byte(payload))
 	return hex.EncodeToString(digest[:])

@@ -48,14 +48,27 @@ var _ ports.AcceptanceDecisionHandoff = (*OutboxAcceptanceDecisionHandoff)(nil)
 // acceptanceDecisionPayload 是意图载荷的传输形状：决定引用与决定后的生命周期状态，
 // 不带校验明细或基线内容（下游按各自门禁重新读取与判断）。
 type acceptanceDecisionPayload struct {
-	TenantID          string `json:"tenantId"`
-	CustomerAccountID string `json:"customerAccountId"`
-	Source            string `json:"source"`
-	SourceRequestKey  string `json:"sourceRequestKey"`
-	ShipmentRequestID string `json:"shipmentRequestId"`
-	SubmissionVersion string `json:"submissionVersion"`
-	DecisionID        string `json:"decisionId"`
-	State             string `json:"state"`
+	TenantID          string                `json:"tenantId"`
+	CustomerAccountID string                `json:"customerAccountId"`
+	Source            string                `json:"source"`
+	SourceRequestKey  string                `json:"sourceRequestKey"`
+	ShipmentRequestID string                `json:"shipmentRequestId"`
+	SubmissionVersion string                `json:"submissionVersion"`
+	DecisionID        string                `json:"decisionId"`
+	State             string                `json:"state"`
+	Geo               *acceptanceGeoPayload `json:"geo,omitempty"`
+}
+
+type acceptanceGeoPayload struct {
+	Carried                bool   `json:"carried"`
+	SenderCountry          string `json:"senderCountry"`
+	SenderCountryPresent   bool   `json:"senderCountryPresent"`
+	SenderPostal           string `json:"senderPostal"`
+	SenderPostalPresent    bool   `json:"senderPostalPresent"`
+	DeliveryCountry        string `json:"deliveryCountry"`
+	DeliveryCountryPresent bool   `json:"deliveryCountryPresent"`
+	DeliveryPostal         string `json:"deliveryPostal"`
+	DeliveryPostalPresent  bool   `json:"deliveryPostalPresent"`
 }
 
 // HandOffAcceptanceDecision 把一份意图入队。信封 ID 取决定标识——意图由结果标识
@@ -65,7 +78,7 @@ func (handoff *OutboxAcceptanceDecisionHandoff) HandOffAcceptanceDecision(
 	intent ports.AcceptanceDecisionHandoffIntent,
 ) error {
 
-	payload, err := json.Marshal(acceptanceDecisionPayload{
+	body := acceptanceDecisionPayload{
 		TenantID:          intent.Identity.TenantID().String(),
 		CustomerAccountID: intent.Identity.CustomerAccountID().String(),
 		Source:            intent.Identity.Source().String(),
@@ -74,7 +87,25 @@ func (handoff *OutboxAcceptanceDecisionHandoff) HandOffAcceptanceDecision(
 		SubmissionVersion: intent.SubmissionVersion.String(),
 		DecisionID:        intent.DecisionID.String(),
 		State:             intent.State.String(),
-	})
+	}
+	if intent.Geo.Carried() {
+		senderCountry, senderCountryPresent := intent.Geo.Sender().Country()
+		senderPostal, senderPostalPresent := intent.Geo.Sender().PostalCode()
+		deliveryCountry, deliveryCountryPresent := intent.Geo.Delivery().Country()
+		deliveryPostal, deliveryPostalPresent := intent.Geo.Delivery().PostalCode()
+		body.Geo = &acceptanceGeoPayload{
+			Carried:                true,
+			SenderCountry:          senderCountry,
+			SenderCountryPresent:   senderCountryPresent,
+			SenderPostal:           senderPostal,
+			SenderPostalPresent:    senderPostalPresent,
+			DeliveryCountry:        deliveryCountry,
+			DeliveryCountryPresent: deliveryCountryPresent,
+			DeliveryPostal:         deliveryPostal,
+			DeliveryPostalPresent:  deliveryPostalPresent,
+		}
+	}
+	payload, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("hand off acceptance decision: %w", err)
 	}

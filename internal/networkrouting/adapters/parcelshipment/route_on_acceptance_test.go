@@ -49,6 +49,53 @@ func TestAnAcceptedDecisionRoutesTheBaselineMembers(t *testing.T) {
 	}
 }
 
+// Covers: 同一投影两次交接指纹一致；只改邮编则指纹变。决定标识与基线保持不动。
+func TestAnAddressRevisionChangesTheAcceptanceHandoffDigest(t *testing.T) {
+	digestOf := func(geo nrinbox.CarriedGeo) string {
+		t.Helper()
+		log := &logDouble{digests: map[nrdomain.RequestCorrelationID]string{}}
+		handler := nrapplication.NewCreateInitialRouteHandler(nrapplication.CreateInitialRouteDeps{
+			Applicability: routingApplicabilityDouble{},
+			Evidence:      acceptanceEvidenceDouble{evidence: excludedEvidence(t)},
+			Store:         newAcceptanceRouteStore(),
+			Log:           log,
+			Downstream:    routeDownstreamDouble{},
+			Identities:    &identityDouble{},
+			Clock:         fixedClock{at: acceptedAt},
+		})
+		subject, err := adapter.NewRouteOnAcceptanceAdapter(
+			&acceptedRequestSourceDouble{request: acceptedShipmentRequest(t)},
+			handler,
+			value(t, nrdomain.NewServicePurpose, "NETWORK_SERVICE"),
+		)
+		if err != nil {
+			t.Fatal(err)
+		}
+		envelope := acceptedEnvelope()
+		envelope.Geo = geo
+		if err := subject.HandleAcceptedDecision(context.Background(), envelope); err != nil {
+			t.Fatal(err)
+		}
+		recorded := log.digests[value(t, nrdomain.NewRequestCorrelationID, "acceptance/decision-1")]
+		if recorded == "" {
+			t.Fatal("handoff digest was not recorded")
+		}
+		return recorded
+	}
+	original := nrinbox.CarriedGeo{
+		Carried: true, SenderCountry: "CN", SenderCountryPresent: true,
+		DeliveryCountry: "US", DeliveryCountryPresent: true, DeliveryPostal: "10001", DeliveryPostalPresent: true,
+	}
+	revised := original
+	revised.DeliveryPostal = "10002"
+	if digestOf(original) != digestOf(original) {
+		t.Fatal("the same projection produced two handoff digests")
+	}
+	if digestOf(original) == digestOf(revised) {
+		t.Fatal("a changed postal code kept the handoff digest")
+	}
+}
+
 // Covers: UC-NR-001 启动条件「只有状态字符串而没有基线引用时不得继续」——信封说已接受
 // 而权威的基线钉在另一个提交版本上时停下，不拿状态字当基线用。
 func TestAnEnvelopeDisagreeingWithTheAuthorityStops(t *testing.T) {

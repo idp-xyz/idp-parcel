@@ -918,6 +918,8 @@ type ReachabilityRequest struct {
 	DeclaredParcelID  domain.DeclaredParcelID
 	AsOf              domain.JudgmentAsOf
 	Resolution        domain.CommercialResolutionID
+	// Geo 是当前提交版本的地理解析投影。零值表示这次请求没带。
+	Geo domain.CarriedGeoProjection
 }
 
 // ReachabilityOutcome 是 network-routing 一次可达性答复在本上下文的落点。
@@ -1391,12 +1393,14 @@ type SourceDataVersionHandoff interface {
 // 它携带决定标识、委托与提交版本的引用及决定后的生命周期状态，不携带校验明细或基线内容：
 // 跨上下文只传引用，下游按各自的门禁重新读取与判断。State 一起交出，因为接受与拒绝都是
 // 已形成的决定而下游要办的事不同——只发决定标识会逼每个下游先回读一次才能分流。
+// Geo 是该提交版本的地理解析投影，随交接带走；网络与路由不回读地址。
 type AcceptanceDecisionHandoffIntent struct {
 	Identity          domain.SourceIdentity
 	ShipmentRequestID domain.ShipmentRequestID
 	SubmissionVersion domain.SubmissionVersionID
 	DecisionID        domain.AcceptanceDecisionID
 	State             domain.ShipmentRequestState
+	Geo               domain.CarriedGeoProjection
 }
 
 // AcceptanceDecisionHandoff 把一份已提交的接受决定引用交给适用下游。
