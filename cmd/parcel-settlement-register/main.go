@@ -7,6 +7,7 @@
 // `external-funds-fact-correction` 采用一次外部更正，`settlement-account` 登记一笔结算账户。
 // 资金两条是两个命令类型、两条用例方法，不共享入口：更正无回指时不能退化成首版。
 // 结算账户是另一族答案：固定属性冲突绝不覆盖，册上没有的账户也不在这里代拟。
+// `allocation-form` 只登记一条分摊规则版本选用的分法，不登权重，也不在这里把来源金额展开成份额。
 //
 // 本口只开人工 / 受控批量的门，不自动采用：任何回调 / 文件到达都不在这里（UC-SA-005 输入表「不因接收回调
 // 自动采用」；真实财务系统来源仍 `No-Go / 待参数化`，PAR-INT-05）。输入全部来自 -input 指定的 JSON 文件，未知
@@ -65,6 +66,7 @@ type registrar struct {
 	accounts   *application.RegisterSettlementAccountHandler
 	catalogues *application.RegisterSettlementCatalogueHandler
 	grammars   *application.RegisterAmountGrammarHandler
+	forms      *application.RegisterAllocationFormHandler
 	transactor bentoapp.Transactor
 }
 
@@ -209,11 +211,20 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造金额文法登记：%w", err)
 	}
+	formStore, err := sapostgres.NewAllocationForms(db)
+	if err != nil {
+		return none, fmt.Errorf("构造分摊分法登记册：%w", err)
+	}
+	formHandler, err := application.NewRegisterAllocationFormHandler(formStore, systemClock{})
+	if err != nil {
+		return none, fmt.Errorf("构造分摊分法登记：%w", err)
+	}
 	return registrar{
 		funds:      funds,
 		accounts:   accountHandler,
 		catalogues: catalogueHandler,
 		grammars:   grammarHandler,
+		forms:      formHandler,
 		transactor: db.Transactor(),
 	}, nil
 }

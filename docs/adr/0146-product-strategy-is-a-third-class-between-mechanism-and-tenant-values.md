@@ -66,3 +66,4 @@ ADR-0017 预先点名过这种误判：「把机制半边误判为实例半边�
 - [开发主线：切片的机制半边与实例半边](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)：三分与四条判据的运行定义
 - [参数登记册](../product/PILOT-PARAMETER-REGISTER.md)：`PAR-NET-14` 与 `PAR-NET-16` 两行
 - [合成演示动线](../design/synthetic-demo-journey-script.md)：第四条判据所指的动线
+- [ADR-0162](./0162-cost-allocation-forms-are-weight-piece-and-revenue.md)：成本分摊的按重、按件、按收入
