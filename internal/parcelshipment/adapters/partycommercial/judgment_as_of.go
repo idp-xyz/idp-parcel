@@ -22,10 +22,9 @@ var ErrUntranslatableAnswer = errors.New("parcel shipment partycommercial adapte
 
 // AsOfValueSource 按声明的时点语义为一项判断形成值。
 //
-// 语义如何折成一个时刻属实例半边（`PAR-COM-14` 的租户政策），ports.JudgmentAsOfQuery 的
-// 类型注释把「消费方」定为适配器，值只在这里形成。第二个返回值报告「这项语义我形不成」，
-// error 报告「我此刻答不出」——前者等登记、后者等恢复，压成一个调用方就不知道该催人还是
-// 该重试。
+// 标准语义由产品折法形成（提交接收见 submissionReceiptAsOf）。租户截点与其余语义形不成，
+// 第二个返回值 false，等登记。error 报告「我此刻答不出」。两者压成一个，调用方就不知道
+// 该催人还是该重试。
 type AsOfValueSource interface {
 	FormAsOfValue(ctx context.Context, query psports.JudgmentAsOfQuery) (time.Time, bool, error)
 }
