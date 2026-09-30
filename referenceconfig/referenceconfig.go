@@ -96,6 +96,22 @@ func ParseCitation(text string) (Reference, bool) {
 	return reference, true
 }
 
+// OpenCitation 处理声称是引用的串。不带前缀答 claimed=false，调用方当不透明值。
+// 带前缀但形状不对，或该版未发布，claimed=true 且 err 非空：登记必须拒，不能当成另一个不透明串。
+func OpenCitation(text string) (Reference, bool, error) {
+	if !strings.HasPrefix(text, citationShapeVersion+":") {
+		return Reference{}, false, nil
+	}
+	reference, ok := ParseCitation(text)
+	if !ok {
+		return Reference{}, true, fmt.Errorf("%w: %q", ErrInvalidReference, text)
+	}
+	if _, err := Open(reference); err != nil {
+		return Reference{}, true, err
+	}
+	return reference, true, nil
+}
+
 func (reference Reference) Identifier() string {
 	return reference.identifier
 }

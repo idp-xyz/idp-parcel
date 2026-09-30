@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
+	"go.idp.xyz/idp-parcel/referenceconfig"
 )
 
 func rulePackage(t *testing.T) domain.CommercialVersion {
@@ -20,6 +21,26 @@ func rulePackage(t *testing.T) domain.CommercialVersion {
 		t.Fatalf("take effect: %v", err)
 	}
 	return live
+}
+
+// Covers: ADR-0147 决定五、ADR-0157 决定三——引用「提交接收」能立成领域对象；未发布与坏形状拒；不带前缀仍是不透明值。
+func TestAReferenceCitationMustBeReleasedToBecomeASemanticsReference(t *testing.T) {
+	reference, err := referenceconfig.ParseReference("parcel-shipment/as-of-semantics/submission-receipt@1")
+	if err != nil {
+		t.Fatalf("解析：%v", err)
+	}
+	if _, err := domain.NewAsOfSemanticsReference(reference.Citation()); err != nil {
+		t.Fatalf("已发布引用：%v", err)
+	}
+	if _, err := domain.NewAsOfSemanticsReference("REFCFG-1:parcel-shipment/as-of-semantics/submission-receipt@2"); !errors.Is(err, referenceconfig.ErrNotReleased) {
+		t.Fatalf("未发布：%v", err)
+	}
+	if _, err := domain.NewAsOfSemanticsReference("REFCFG-1:not-a-reference"); !errors.Is(err, referenceconfig.ErrInvalidReference) {
+		t.Fatalf("坏形状：%v", err)
+	}
+	if _, err := domain.NewAsOfSemanticsReference("AT_ACCEPTANCE"); err != nil {
+		t.Fatalf("不带前缀：%v", err)
+	}
 }
 
 func asOfPolicy(t *testing.T, judgment domain.JudgmentType, semantics, policyVersion string) domain.AsOfPolicy {
