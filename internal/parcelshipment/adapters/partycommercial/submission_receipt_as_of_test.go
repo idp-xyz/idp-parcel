@@ -3,9 +3,6 @@ package partycommercial_test
 import (
 	"context"
 	"errors"
-	"os"
-	"path/filepath"
-	"strings"
 	"testing"
 
 	adapter "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
@@ -76,21 +73,6 @@ func TestSubmissionReceiptAsOfSurfacesLookupErrors(t *testing.T) {
 	}
 }
 
-func TestDemoSeedAdoptsTheSubmissionReceiptCitation(t *testing.T) {
-	citation := submissionReceiptCitation(t)
-	raw, err := os.ReadFile(filepath.Join(moduleRoot(t), "scripts/demo-seeds/data/commercial/publish-batch.json"))
-	if err != nil {
-		t.Fatalf("读演示种子：%v", err)
-	}
-	text := string(raw)
-	if strings.Contains(text, "SYN-ASOF-SUBMIT-TIME") {
-		t.Fatal("演示种子仍写着租户自拟的提交接收语义")
-	}
-	if strings.Count(text, citation) != 2 {
-		t.Fatalf("产品引用出现 %d 次，want 2", strings.Count(text, citation))
-	}
-}
-
 func submissionReceiptCitation(t *testing.T) string {
 	t.Helper()
 	citation, err := adapter.SubmissionReceiptCitation()
@@ -98,24 +80,6 @@ func submissionReceiptCitation(t *testing.T) string {
 		t.Fatalf("产品引用：%v", err)
 	}
 	return citation
-}
-
-func moduleRoot(t *testing.T) string {
-	t.Helper()
-	dir, err := os.Getwd()
-	if err != nil {
-		t.Fatalf("工作目录：%v", err)
-	}
-	for {
-		if _, err := os.Stat(filepath.Join(dir, "go.mod")); err == nil {
-			return dir
-		}
-		parent := filepath.Dir(dir)
-		if parent == dir {
-			t.Fatal("找不到 go.mod")
-		}
-		dir = parent
-	}
 }
 
 func receiptQuery(

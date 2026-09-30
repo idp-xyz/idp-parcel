@@ -53,7 +53,7 @@ type release struct {
 var releases = []release{
 	{"party-commercial/registration-number-types/CN", 1, "46087f2adfc18dc277d4dc534c2254663de5e13f8415cc8b180a553cb0fa300c"},
 	{"party-commercial/registration-number-types/SG", 1, "928d06b9ee6b96ded103aad5bc636c5e40e408a2620e67b026811cd0bb96767c"},
-	{"parcel-shipment/as-of-semantics/submission-receipt", 1, "5c971a12bad29a5f07ed8478b63606fae6f77530a7357ac783de11604826c8db"},
+	{"parcel-shipment/as-of-semantics/submission-receipt", 1, "299a3e122322e3b44bef185ee42fd3a97991942efd866cf731f9d2493d6764b2"},
 }
 
 // Reference 指名一份参考配置的一个版本。

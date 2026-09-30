@@ -2,6 +2,5 @@
   "identifier": "parcel-shipment/as-of-semantics/submission-receipt",
   "version": 1,
   "title": "提交接收",
-  "foldsTo": "receivedAt",
-  "note": "判断依据时点取该提交版本已记录的系统接收时间。不用来源发生时间，不用系统当前时间顶替。租户截点不在这份参考配置里。"
+  "note": "判断依据时点取该提交版本已记录的系统接收时间。不用来源发生时间，不用系统当前时间顶替。折法在消费方执行器里，不在这份文件里。"
 }
