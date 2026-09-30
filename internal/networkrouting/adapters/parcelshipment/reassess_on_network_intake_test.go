@@ -60,10 +60,7 @@ func reassessorWithHistory(t *testing.T) *adapter.ReassessOnIntakeAdapter {
 		Routes: &routeStoreDouble{records: map[nrdomain.InitialRouteJudgmentKey]nrports.InitialRouteRecord{
 			reassessKey(t): planOnFile(t),
 		}},
-		Evidence: evidenceDouble{evidence: nrports.InitialRouteEvidence{
-			Strategy:     value(t, nrdomain.NewRouteStrategyReference, "strategy-1/v1"),
-			ViewRevision: value(t, nrdomain.NewNetworkViewRevision, "net-view-rev-1"),
-		}},
+		Evidence:      evidenceDouble{evidence: evidenceWithOpenFreeze(t)},
 		Applicability: &applicabilityStoreDouble{byPlan: map[nrdomain.RoutePlanVersionID]nrdomain.PlanApplicability{}},
 		Store:         &reassessStoreDouble{byCorrelation: map[nrdomain.RequestCorrelationID]nrports.ReassessmentRecord{}},
 		Log:           &logDouble{digests: map[nrdomain.RequestCorrelationID]string{}},
