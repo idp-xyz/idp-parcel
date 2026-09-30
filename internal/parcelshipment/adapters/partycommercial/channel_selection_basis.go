@@ -19,9 +19,10 @@ import (
 // 采购决定，都问 PC 自己的谓词（AllowsUseAt / SupportsProcurementAt）；本包只把「不允许」分成调用方续办
 // 不同的几格（撤销了去拿新授权、过期了去续期、盖错渠道去修配置），不重写判据。
 //
-// 「这次该用哪一条授权、哪一版协议、哪一次接受时解析」三问是消费方自己的实例半边（裁决 (1)，同
-// ResolutionKeySource 留在本包的那条理由）：今天没有租户，谁也说不出候选 channel-a 该走哪条授权；三个源
-// 未配置时各自具名停下，不代拟、不拿「最新一条」顶替「适用的那条」。
+// 账号使用授权与供应商协议的选法是消费方自己的实例半边（裁决 (1)，同 ResolutionKeySource 留在本包的那条理由）：
+// 今天没有租户，谁也说不出候选该走哪条授权、哪一版协议；源未配置时各自具名停下，不代拟、不拿「最新一条」顶替
+// 「适用的那条」。接受时解析不是同一类：它从接受决定上读（ADR-0159）。源没装答未配置；来源身份或包裹为空、
+// 查无此委托、成员未接受，答未形成。
 
 var (
 	// ErrSelectedCandidateRateAbsent 说择优步交出的赢家没带费率引用。Rate 是 Establish 必填的一格，缺席
@@ -54,9 +55,11 @@ var (
 	// ErrSupplierAgreementNotEffective 说那一版协议未生效或有效区间没盖住择优时点。
 	ErrSupplierAgreementNotEffective = errors.New("parcel shipment: supplier agreement is not effective at the selection time")
 
-	// ErrAcceptanceResolutionNotConfigured 说这次择优没有读到接受决定上的商业解析：源没装、查询没带来源身份或
-	// 包裹，或者该成员没有已接受的回指。
+	// ErrAcceptanceResolutionNotConfigured 说接受时解析回指没装。查无委托、成员未接受、身份或包裹为空不是这一格。
 	ErrAcceptanceResolutionNotConfigured = errors.New("parcel shipment: acceptance resolution source not configured")
+	// ErrAcceptanceResolutionNotFormed 说这次择优没有读到接受决定上的商业解析：来源身份或包裹为空、查无此委托，
+	// 或该成员没有已接受的回指。这是未形成，不是源没装。
+	ErrAcceptanceResolutionNotFormed = errors.New("parcel shipment: acceptance resolution is not formed")
 	// ErrAcceptanceResolutionTenantMismatch 说查询上的租户与来源身份不是同一个。这是写坏的查询，不是未配置。
 	ErrAcceptanceResolutionTenantMismatch = errors.New("parcel shipment: acceptance resolution query tenant does not match the shipment")
 )
@@ -87,7 +90,8 @@ type SupplierAgreementSource interface {
 	) (pcdomain.CommercialVersion, bool, error)
 }
 
-// AcceptanceResolutionSource 回答某次择优对应哪一次委托接受时的商业解析。第二个返回值为 false 即「显式未配置」。
+// AcceptanceResolutionSource 回答某次择优对应哪一次委托接受时的商业解析。第二个返回值为 false 且 error 为空，
+// 调用方读成未配置。未形成由 ErrAcceptanceResolutionNotFormed 交回。
 type AcceptanceResolutionSource interface {
 	ResolutionFor(
 		ctx context.Context,
@@ -105,7 +109,8 @@ type ChannelAccountUseReader interface {
 	) (pcdomain.ChannelAccountUseAuthorizationRegistration, bool, error)
 }
 
-// ChannelSelectionBasisTranslatorDeps 收拢三个实例半边源与两个 PC 读口；≥5 个输入按本仓分界用结构体。
+// ChannelSelectionBasisTranslatorDeps 收拢账号使用授权、供应商协议、接受时解析回指，以及账号使用授权读口与协议内容读口。
+// 前两格是实例半边，解析回指不是。输入超过构造器能看清的程度，按本仓分界用结构体。
 type ChannelSelectionBasisTranslatorDeps struct {
 	Accounts       ChannelAccountUseSource
 	Agreements     SupplierAgreementSource
@@ -119,10 +124,10 @@ type ChannelSelectionBasisTranslator struct {
 	deps ChannelSelectionBasisTranslatorDeps
 }
 
-// NewChannelSelectionBasisTranslator 装配翻译器。三个源允许为 nil：那是「显式未配置」的诚实表达，届时翻译停在
-// 各自具名的那一格——那正是首发要停下的地方，不是要绕过的地方。两个 PC 读口不是实例半边、没有「未配置」可停
-// （lc/29 评审 Standards 那条，票 lc/35 收）：nil 到了 authorizationOf / agreementOf 那一步就是 panic 而不是具名停，
-// 所以构造期拒——形照同包 NewCommercialResolutionKeys，装配错在启动那一刻露出来。
+// NewChannelSelectionBasisTranslator 装配翻译器。账号使用授权、供应商协议、接受时解析回指允许为 nil：那是
+// 「显式未配置」的诚实表达，届时翻译停在各自具名的那一格。生产装配不把解析回指留成 nil。账号使用授权读口与协议内容读口不是实例半边、
+// 没有「未配置」可停（lc/29 评审 Standards 那条，票 lc/35 收）：账号使用授权读口或协议内容读口为 nil，到了 authorizationOf / agreementOf 那一步就是
+// panic 而不是具名停，所以构造期拒账号使用授权读口与协议内容读口为 nil——形照同包 NewCommercialResolutionKeys，装配错在启动那一刻露出来。
 func NewChannelSelectionBasisTranslator(deps ChannelSelectionBasisTranslatorDeps) (*ChannelSelectionBasisTranslator, error) {
 	if deps.Authorizations == nil {
 		return nil, fmt.Errorf("parcel shipment party commercial: channel account use reader is nil")
@@ -137,8 +142,9 @@ var _ psports.ChannelSelectionBasisTranslator = (*ChannelSelectionBasisTranslato
 
 // TranslateSelectedCandidate 交回七格齐备的择优结果，或在第一个答不出的格具名停下。
 //
-// 次序：先核手上这份选中候选译得出去（费率在场、候选译成渠道产品引用），再问三个源，再去两个读口取回并核，
-// 最后折成对象。源先问、读口后取：源答不上来时读口取回的东西没处用，而读口可能是一次远程读。
+// 次序：先核手上这份选中候选译得出去（费率在场、候选译成渠道产品引用），再问账号使用授权、供应商协议、
+// 接受时解析，再去账号使用授权读口与协议内容读口取回并核，最后折成对象。源先问、读口后取：源答不上来时读口取回的东西没处用，
+// 而读口可能是一次远程读。
 func (translator *ChannelSelectionBasisTranslator) TranslateSelectedCandidate(
 	ctx context.Context,
 	query psports.ChannelSelectionQuery,

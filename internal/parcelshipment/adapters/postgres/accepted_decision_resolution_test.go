@@ -24,7 +24,10 @@ func TestTheAcceptedDecisionResolutionSourceReadsTheStoredDecision(t *testing.T)
 	identity := requestIdentity(t, key)
 	mustSave(t, transactor, ctx, repository, identity, accepted)
 
-	source := pscommercial.NewAcceptedDecisionResolution(repository)
+	source, err := pscommercial.NewAcceptedDecisionResolution(repository)
+	if err != nil {
+		t.Fatalf("装配回指：%v", err)
+	}
 	member := mustBuild(t, domain.NewDeclaredParcelID, "parcel-1")
 	tenant := mustBuild(t, domain.NewTenantID, "tenant-1")
 
@@ -35,23 +38,23 @@ func TestTheAcceptedDecisionResolutionSourceReadsTheStoredDecision(t *testing.T)
 		t.Fatalf("回指 = %q configured=%v err=%v，want RES-1", got, configured, err)
 	}
 
-	other, configured, err := source.ResolutionFor(ctx, ports.ChannelSelectionQuery{
+	_, _, err = source.ResolutionFor(ctx, ports.ChannelSelectionQuery{
 		Tenant: tenant, Shipment: identity, Parcel: mustBuild(t, domain.NewDeclaredParcelID, "parcel-9"),
 	})
-	if err != nil || configured || other.String() != "" {
-		t.Fatalf("非成员 = %q configured=%v err=%v，want 未形成", other, configured, err)
+	if !errors.Is(err, pscommercial.ErrAcceptanceResolutionNotFormed) {
+		t.Fatalf("非成员 = %v，want 未形成", err)
 	}
 
-	missing, configured, err := source.ResolutionFor(ctx, ports.ChannelSelectionQuery{})
-	if err != nil || configured || missing.String() != "" {
-		t.Fatalf("空查询 = %q configured=%v err=%v，want 未形成", missing, configured, err)
+	_, _, err = source.ResolutionFor(ctx, ports.ChannelSelectionQuery{})
+	if !errors.Is(err, pscommercial.ErrAcceptanceResolutionNotFormed) {
+		t.Fatalf("空查询 = %v，want 未形成", err)
 	}
 
-	unknown, configured, err := source.ResolutionFor(ctx, ports.ChannelSelectionQuery{
+	_, _, err = source.ResolutionFor(ctx, ports.ChannelSelectionQuery{
 		Tenant: tenant, Shipment: requestIdentity(t, "req-key-absent"), Parcel: member,
 	})
-	if err != nil || configured || unknown.String() != "" {
-		t.Fatalf("查无委托 = %q configured=%v err=%v，want 未形成", unknown, configured, err)
+	if !errors.Is(err, pscommercial.ErrAcceptanceResolutionNotFormed) {
+		t.Fatalf("查无委托 = %v，want 未形成", err)
 	}
 
 	_, _, err = source.ResolutionFor(ctx, ports.ChannelSelectionQuery{

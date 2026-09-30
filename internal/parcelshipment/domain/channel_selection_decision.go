@@ -43,9 +43,8 @@ func NewChannelCostEvaluationReference(value string) (ChannelCostEvaluationRefer
 	return ChannelCostEvaluationReference{required}, err
 }
 
-// ChannelSelectionSubject 是被择优的对象引用：在哪个商业范围下、按哪笔产品—渠道映射。它照择优编排
-// 的入参取（裁决「按票 12 择优编排的入参取」）——今天编排的入参里没有面单交易或包裹的引用，
-// 这里就不凭空造一个；那两者进入参那天，本引用随之加格，旧记录这一格读回为缺席。
+// ChannelSelectionSubject 是被择优的对象引用：在哪个商业范围下、按哪笔产品—渠道映射。查询上的来源身份与
+// 声明包裹只用来读接受决定上的解析（ADR-0159），不进这条记录，也不给已落下的记录补格。
 type ChannelSelectionSubject struct {
 	scope   CommercialScopeReference
 	mapping ProductChannelMappingReference

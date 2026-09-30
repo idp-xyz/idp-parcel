@@ -8,19 +8,17 @@ import (
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
-// acceptedShipmentRequests 是接受时解析回指要用的窄读口。委托仓储的键是来源身份。
-type acceptedShipmentRequests interface {
-	FindBySourceIdentity(ctx context.Context, identity psdomain.SourceIdentity) (psdomain.ShipmentRequest, bool, error)
-}
-
 // acceptedDecisionResolution 从已接受委托的接受决定上读商业解析（ADR-0159）。
 type acceptedDecisionResolution struct {
-	requests acceptedShipmentRequests
+	requests shipmentRequestFinder
 }
 
 // NewAcceptedDecisionResolution 装配生产用的接受时解析回指。requests 为 nil 是装配缺件。
-func NewAcceptedDecisionResolution(requests acceptedShipmentRequests) AcceptanceResolutionSource {
-	return acceptedDecisionResolution{requests: requests}
+func NewAcceptedDecisionResolution(requests shipmentRequestFinder) (AcceptanceResolutionSource, error) {
+	if requests == nil {
+		return nil, fmt.Errorf("parcel shipment party commercial: shipment requests are nil")
+	}
+	return acceptedDecisionResolution{requests: requests}, nil
 }
 
 func (source acceptedDecisionResolution) ResolutionFor(
@@ -30,10 +28,10 @@ func (source acceptedDecisionResolution) ResolutionFor(
 	if source.requests == nil {
 		return psdomain.CommercialResolutionID{}, false, fmt.Errorf("acceptance resolution: shipment requests are nil")
 	}
-	if query.Shipment.TenantID().String() == "" || query.Parcel.String() == "" {
-		return psdomain.CommercialResolutionID{}, false, nil
+	if query.Shipment == (psdomain.SourceIdentity{}) || query.Parcel == (psdomain.DeclaredParcelID{}) {
+		return psdomain.CommercialResolutionID{}, false, ErrAcceptanceResolutionNotFormed
 	}
-	if query.Tenant.String() != "" && query.Shipment.TenantID() != query.Tenant {
+	if query.Tenant != (psdomain.TenantID{}) && query.Shipment.TenantID() != query.Tenant {
 		return psdomain.CommercialResolutionID{}, false, fmt.Errorf("%w: query %q shipment %q",
 			ErrAcceptanceResolutionTenantMismatch, query.Tenant, query.Shipment.TenantID())
 	}
@@ -42,7 +40,14 @@ func (source acceptedDecisionResolution) ResolutionFor(
 		return psdomain.CommercialResolutionID{}, false, fmt.Errorf("acceptance resolution: %w", err)
 	}
 	if !found {
-		return psdomain.CommercialResolutionID{}, false, nil
+		return psdomain.CommercialResolutionID{}, false, ErrAcceptanceResolutionNotFormed
 	}
-	return request.CommercialResolutionReferenceFor(query.Parcel)
+	resolution, present, err := request.CommercialResolutionReferenceFor(query.Parcel)
+	if err != nil {
+		return psdomain.CommercialResolutionID{}, false, err
+	}
+	if !present {
+		return psdomain.CommercialResolutionID{}, false, ErrAcceptanceResolutionNotFormed
+	}
+	return resolution, true, nil
 }
