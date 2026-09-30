@@ -1,7 +1,7 @@
 # 12 settlement-accounting：金额文法、分摊与周期费用形态、经营指标方法与账务连接器
 
 Category: enhancement
-Status: in-progress——2026-09-30 第 1 项进 main（`161bb646`，ADR-0161），第 2 项进 main（`83489825`，ADR-0162）；第 5 项在分支 mcp3-psb12-05（ADR-0163），第 8 项在分支 mcp2-psb12-08（ADR-0164），均尚未进 main；第 3、4、6、7、9、10 项未做
+Status: in-progress——2026-09-30 第 1 项进 main（`161bb646`，ADR-0161），第 2 项进 main（`83489825`，ADR-0162），第 5 项进 main（`9a3b9e9a`，ADR-0163），第 8 项进 main（`7c084917`，ADR-0164）；第 3、4、6、7、9、10 项未做
 Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 行第一项的机制缺口，归[票 16](./16-mechanism-gaps-without-a-ticket.md)；缺它们时本票只能先定文法）
 地盘：settlement-accounting 领域与应用层（金额、分摊、周期费用、指标），账单接入与财务交换的连接器适配器；规则正文若由 party-commercial 声明，PC 侧另开票。
 出处：[票 02](./02-split-parameter-register-and-retriage-deferrals.md)——[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md) `PAR-COM-07`、`PAR-SET-05`、`PAR-SET-06`、`PAR-SET-07`、`PAR-SET-08`、`PAR-SET-09`、`PAR-SET-10`、`PAR-INT-04`、`PAR-INT-05` 行内「〔ADR-0146 拆分〕」点名的部分。[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表 PN-07 行第三项当时记「未核」，本票即其补核。
@@ -64,3 +64,33 @@ Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 
 
 分支 `mcp2-psb12-02@78a2e5ab`（已推 origin）在隔离树重放到 `7a28618c` 之上，零冲突：`6b47bd0e→83489825`、`78a2e5ab→3fac7239`；清点在代码链尖重生成为 `08963b62`（`settlementaccounting` 生产 115→120、测试 87→90；`settlement_accounting` 迁移 24→25）。
 推送方验证：钉 `08963b62`，`gofmt -l` 空，build 与 vet 退 0，无事务拒证与架构门禁单跑 PASS，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。本记录一笔只多本票面 `.md`。分支作封存出处。
+
+**评审 ← 通道 1 · 钉 `73c99b30`（通道 3 分支 `mcp3-psb12-05`，第 5 项，ADR-0163，基 `801cd6d8`）· 2026-10-01 00:0x**
+
+- **阻断**：无。`TestEveryPersistenceWriteMethodCarriesTransactionRequiredEvidence` 带 DSN 为 PASS。`TestAnAuditedAmountAboveTheCeilingMustEscalate`、`TestAnAmountWithinTheCeilingStaysInsideAuthority`、`TestARegisteredZeroCeilingIsNotUnconfigured` 与三条真库用例 PASS。
+- **核过无发现**：已匹配金额小于或等于上限在权限内，大于上限答 `AUDIT_MUST_ESCALATE`，不形成应付，也不记成拒绝。上限另册，命令 `audit-escalation-ceiling`，不写进审核授权册。没登记不默认放行。上限 0 是一份登记。未登租户行。未改金额文法、分摊分法、`assemble_evaluation_request.go`。
+- **结论：可重放**。
+
+**完成记录（通道 3 · 据完工报转录，第 5 项）**
+
+分支 `mcp3-psb12-05`（基 `801cd6d8`），一笔未改写：`73c99b30`。迁移 `settlement_accounting/0026_audit_escalation_ceiling.sql`。
+
+**进 main 记录（2026-10-01 00:0x，通道 1 推送，第 5 项）**
+
+重放到 `801cd6d8` 之上，零冲突：`73c99b30→9a3b9e9a`。
+
+**评审 ← 通道 1 · 钉 `f4f70cc0`（通道 2 分支 `mcp2-psb12-08`，第 8 项，ADR-0164，基 `801cd6d8`）· 2026-10-01 00:0x**
+
+- **阻断**：无。架构门禁带 DSN 为 PASS。`TestTheProductionTriggerDoesNotRequestWhenTheReasonIsNotRegistered` 与触发面用例 PASS。
+- **核过无发现**：触发面在 `evaluationRequestOrchestration.Trigger`，时点只有 `OCCURRENCE_FORMED`。原因没登记答 `BUY_EVALUATION_TRIGGER_UNCONFIGURED`，不发起请求。未改审核、金额文法、分摊分法。
+- **重放时改了一处**：与第 5 项同占迁移前缀 `0026`。第 5 项保留 `0026_audit_escalation_ceiling.sql`，本项文件改为 `0027_buy_evaluation_trigger.sql`，ADR-0164 后果那句一并改。登记命令与越权升级命令在 `parcel-settlement-register` 里都留下。
+- **结论：可重放**。
+
+**完成记录（通道 2 · 据完工报转录，第 8 项）**
+
+分支 `mcp2-psb12-08`（基 `801cd6d8`），一笔未改写：`f4f70cc0`。作者迁移文件名是 `0026_buy_evaluation_trigger.sql`。
+
+**进 main 记录（2026-10-01 00:0x，通道 1 推送，第 5 与第 8 项）**
+
+第 8 项在 `9a3b9e9a` 之上重放，文档与登记命令冲突按两边都留解开：`f4f70cc0→7c084917`（含迁移改号 `0027`）。清点在两笔代码之上重生成为 `eef58da6`（`settlementaccounting` 生产 120→130、测试 90→95；`settlement_accounting` 迁移 25→27）。
+推送方验证：钉 `eef58da6`，`gofmt -l` 空，build 与 vet 退 0，两边架构门禁单跑 PASS，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。本记录一笔只多本票面 `.md`。两条分支作封存出处。
