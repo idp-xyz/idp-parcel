@@ -1,6 +1,6 @@
 # ADR-0081: 接受判断由信封驱动——提交落库即交出「委托已提交」，推进落在派发一拍；提交事务随之改两段边界
 
-Status: Accepted
+Status: Accepted（部分停用：决定六里「结算账户目录留 nil」这一格由 [ADR-0158](./0158-settlement-account-register-is-an-immutable-tuple.md) 停用——生产装配接结算账户登记册。决定六其余各格不由该记录停用。）
 Date: 2026-08-27
 
 ## Context
@@ -64,3 +64,4 @@ Date: 2026-08-27
 - [ADR-0055：业务端点 Intake 增设「未配置」格](./0055-business-endpoint-intake-has-an-unconfigured-grade.md)：端点面的语义边界，路 A 否决理由之一
 - [ADR-0017：准入闸门按阻塞原因裁判](./0017-admission-gates-judged-by-blocking-cause.md)：事务与 Outbox 不进应用层，Decision 五的依据
 - [ADR-0063：收寄硬资格证明由消费侧窄口取证](./0063-intake-qualification-proof-is-a-consumer-side-evidence-port.md)：「显式未配置」与恢复动作分界，Decision 六的判据
+- [ADR-0158：结算账户登记册是一行固定属性，接受前控制只查应收](./0158-settlement-account-register-is-an-immutable-tuple.md)：部分停用决定六的结算账户目录留 nil

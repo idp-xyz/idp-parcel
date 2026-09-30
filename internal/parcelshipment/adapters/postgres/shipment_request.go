@@ -1126,7 +1126,7 @@ func (document commercialBasisDocument) snapshot() (domain.CommercialBasisSnapsh
 		spec.PendingRouting = allowance
 	}
 	if document.Settlement != nil {
-		policy, err := domain.NewSettlementPolicyEcho(document.Settlement.Policy)
+		policy, err := domain.ParseSettlementPolicyEcho(document.Settlement.Policy)
 		if err != nil {
 			return domain.CommercialBasisSnapshot{}, err
 		}

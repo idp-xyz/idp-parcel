@@ -45,16 +45,13 @@ func (repository *SettlementAccounts) Save(
 		payerArg = payer.String()
 	}
 	key := account.Key()
-	statement := account.Statement()
 	_, err = executor.Exec(ctx, `
 		INSERT INTO settlement_accounting.settlement_account (
 			tenant_id, account_id, legal_entity_id, counterparty_id, direction, currency,
-			settlement_policy_id, payer_id, responsibility_basis, reconciliation_cycle,
-			business_time_zone, cutoff, payment_terms, registered_at
+			settlement_policy_id, payer_id, responsibility_basis, registered_at
 		) VALUES (
 			$1, $2, $3, $4, $5, $6,
-			$7, $8, $9, $10,
-			$11, $12, $13, $14
+			$7, $8, $9, $10
 		)`,
 		tenant.String(),
 		account.ID().String(),
@@ -65,10 +62,6 @@ func (repository *SettlementAccounts) Save(
 		key.Policy().String(),
 		payerArg,
 		account.Responsibility().String(),
-		statement.Cycle(),
-		statement.TimeZone(),
-		statement.Cutoff(),
-		statement.Payment(),
 		at.UTC(),
 	)
 	if err == nil {
@@ -172,18 +165,18 @@ func (repository *SettlementAccounts) classify(
 
 const settlementAccountSelect = `
 	SELECT account_id, legal_entity_id, counterparty_id, direction, currency, settlement_policy_id,
-	       payer_id, responsibility_basis, reconciliation_cycle, business_time_zone, cutoff, payment_terms
+	       payer_id, responsibility_basis
 	  FROM settlement_accounting.settlement_account`
 
 func scanAccount(row pgx.Row) (domain.SettlementAccount, bool, error) {
 	var (
 		accountID, legalEntity, counterparty, direction, currency, policy string
 		payer                                                             *string
-		basis, cycle, timeZone, cutoff, payment                           string
+		basis                                                             string
 	)
 	err := row.Scan(
 		&accountID, &legalEntity, &counterparty, &direction, &currency, &policy,
-		&payer, &basis, &cycle, &timeZone, &cutoff, &payment,
+		&payer, &basis,
 	)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.SettlementAccount{}, false, nil
@@ -231,11 +224,7 @@ func scanAccount(row pgx.Row) (domain.SettlementAccount, bool, error) {
 	if err != nil {
 		return domain.SettlementAccount{}, false, err
 	}
-	statement, err := domain.NewAccountStatementTerms(cycle, timeZone, cutoff, payment)
-	if err != nil {
-		return domain.SettlementAccount{}, false, err
-	}
-	account, err := domain.NewSettlementAccount(id, key, payerRef, payerDistinct, responsibility, statement)
+	account, err := domain.NewSettlementAccount(id, key, payerRef, payerDistinct, responsibility)
 	if err != nil {
 		return domain.SettlementAccount{}, false, err
 	}

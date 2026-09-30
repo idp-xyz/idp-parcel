@@ -142,3 +142,42 @@ func TestExternalFundsFactCorrectionFromJSONRejectsForeignFieldsAndBlankVersions
 		}
 	}
 }
+
+const settlementAccountDocument = `{
+	"tenantId": "SYN-T1",
+	"accountId": "ACCT-1",
+	"legalEntityId": "LE-1",
+	"counterpartyId": "CP-1",
+	"direction": "RECEIVABLE",
+	"currency": "XTS",
+	"settlementPolicyId": "settle-1",
+	"responsibilityBasis": "CONTRACT-1"
+}`
+
+func TestSettlementAccountFromJSONCarriesTheRegisterRow(t *testing.T) {
+	command, err := registrationjson.SettlementAccountFromJSON([]byte(settlementAccountDocument))
+	if err != nil {
+		t.Fatalf("译装被拒：%v", err)
+	}
+	if command.Tenant.String() != "SYN-T1" || command.Account.ID().String() != "ACCT-1" {
+		t.Fatalf("tenant=%s account=%s", command.Tenant, command.Account.ID())
+	}
+	key := command.Account.Key()
+	if key.Policy().String() != "settle-1" || key.Direction() != domain.ChargeReceivable {
+		t.Fatalf("policy=%s direction=%s", key.Policy(), key.Direction())
+	}
+	if _, distinct := command.Account.Payer(); distinct {
+		t.Fatal("缺席的付款责任方被另存了")
+	}
+}
+
+func TestSettlementAccountFromJSONRejectsStatementFieldsAndARepeatedPayer(t *testing.T) {
+	withCycle := strings.Replace(settlementAccountDocument, `"responsibilityBasis"`, `"reconciliationCycle": "MONTHLY", "responsibilityBasis"`, 1)
+	if _, err := registrationjson.SettlementAccountFromJSON([]byte(withCycle)); err == nil {
+		t.Fatal("对账周期仍被收进账户行")
+	}
+	repeated := strings.Replace(settlementAccountDocument, `"responsibilityBasis"`, `"payerId": "CP-1", "responsibilityBasis"`, 1)
+	if _, err := registrationjson.SettlementAccountFromJSON([]byte(repeated)); err == nil {
+		t.Fatal("付款责任方与相对方相同仍被译装")
+	}
+}

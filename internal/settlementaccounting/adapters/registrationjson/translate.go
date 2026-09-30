@@ -162,10 +162,6 @@ type settlementAccountDocument struct {
 	SettlementPolicyID  string `json:"settlementPolicyId"`
 	PayerID             string `json:"payerId"`
 	ResponsibilityBasis string `json:"responsibilityBasis"`
-	ReconciliationCycle string `json:"reconciliationCycle"`
-	BusinessTimeZone    string `json:"businessTimeZone"`
-	Cutoff              string `json:"cutoff"`
-	PaymentTerms        string `json:"paymentTerms"`
 }
 
 // SettlementAccountFromJSON 译装一笔结算账户登记。payerId 缺席表示付款责任方就是结算相对方；
@@ -220,13 +216,7 @@ func SettlementAccountFromJSON(raw []byte) (application.RegisterSettlementAccoun
 	if err != nil {
 		return none, fmt.Errorf("responsibilityBasis：%w", err)
 	}
-	statement, err := domain.NewAccountStatementTerms(
-		document.ReconciliationCycle, document.BusinessTimeZone, document.Cutoff, document.PaymentTerms,
-	)
-	if err != nil {
-		return none, fmt.Errorf("对账条件：%w", err)
-	}
-	account, err := domain.NewSettlementAccount(accountID, key, payer, payerDistinct, basis, statement)
+	account, err := domain.NewSettlementAccount(accountID, key, payer, payerDistinct, basis)
 	if err != nil {
 		return none, err
 	}

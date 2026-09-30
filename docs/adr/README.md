@@ -86,7 +86,7 @@
 - [ADR-0078：隔离环境运营查阅按装配注入放行——合成租户显式入参、缺省朝拦，写路径与客户查阅面维持未配置即拒](./0078-isolated-environment-operations-reads-admit-by-assembly-injection.md)｜**部分停用**：其 Decision 四中「按环境选择的只有装配点上查阅行的 Intake 一件事」一句已由 [ADR-0091](./0091-isolated-form-extends-to-the-write-path-by-graded-switches.md) 停用——适用面由枚举改为入格判据（注入值全为 `SYN-` 合成、不采信自报身份、生产装配无此路径），写路径的命令面 Intake 与生产归属范围目录据此入格。同条另两句（不得据此再添 demo/mode 类全局开关或第二个 main；pgtest 环境处理通例不变）与其余各条不变。**适用场景**：仅限满足那三条判据的缝；`/customer-tracking-view` 的排除判据（客户维是调用方自己的身份主张）不因判据化而松动
 - [ADR-0079：接受前控制策略视图凭商业解析回指提问——消费方只回显标识，提供方从已固定闭包取合同；坏回指是 error 不是未登记](./0079-pre-acceptance-control-policy-view-asks-by-commercial-resolution-reference.md)
 - [ADR-0080：引用闭包先解合同再据以解结算政策——合同维是结论不是输入，前提未解析自成一格](./0080-commercial-closure-resolves-the-contract-first-and-keys-settlement-by-it.md)
-- [ADR-0081：接受判断由信封驱动——提交落库即交出「委托已提交」，推进落在派发一拍；提交事务随之改两段边界](./0081-acceptance-judgment-is-envelope-driven.md)
+- [ADR-0081：接受判断由信封驱动——提交落库即交出「委托已提交」，推进落在派发一拍；提交事务随之改两段边界](./0081-acceptance-judgment-is-envelope-driven.md)｜**部分停用**：决定六「结算账户目录留 nil」由 [ADR-0158](./0158-settlement-account-register-is-an-immutable-tuple.md) 停用；决定六其余各格仍有效
 - [ADR-0082：代收分户账按四维立键、余额只由追加式记账派生，回汇批次形成即冻结——分配守恒由记账形状交付，不靠事后对平](./0082-collection-subledger-is-keyed-by-four-dimensions-and-posted-append-only.md)
 - [ADR-0083：试点治理读面按登记册实有维度成形——无租户维是设计；隔离读放行沿用同一开关，注入不带租户的产品级作用域；呈现面留在管理台并明示实例级作用域](./0083-pilot-governance-read-face-carries-registry-dimensions-only.md)｜**部分停用**：决定四里接管格「第二批未开」由 [ADR-0155](./0155-takeover-register-read-opens-on-the-existing-catalogue.md) 停用；阶段评审格与无租户维仍有效
 - [ADR-0084：面单交易是独立聚合——建立即固定覆盖与依据，双层结果一次记录不许互推，定案是派生谓词；继续尝试决定单列登记册不进聚合](./0084-label-transaction-is-an-independent-aggregate-with-two-level-results.md)
@@ -162,7 +162,7 @@
 - [ADR-0155：对象级接管的查阅口开在既有治理登记册上——空册如实空；不造种子行；HTTP 写仍另票](./0155-takeover-register-read-opens-on-the-existing-catalogue.md)｜**查阅口**：`register=takeover` 上列标量，盘点 jsonb 不上列；空册空数组。部分停用 ADR-0083 决定四的接管半句。2026-09-29 用户授权继续。
 - [ADR-0156：可达性资格的闭包标识从本轮已采用的商业解析回指](./0156-reachability-closure-identity-comes-from-the-adopted-resolution.md)｜**回指**：解析标识随可达性命令带过，不进判断键，不另造映射。空引用仍是未形成。部分停用 ADR-0064 后果里可达性那一句与 Context 里「`ReachabilityClosureIdentity` 仍属实例半边」那一句。2026-09-30。本项是机制，接受依据是 ADR-0146 决定一「机制与产品策略同属产品交付轨道，开发方现在就做」，不是通道里的「继续」。
 - [ADR-0157：内置时点形态以参考配置发布，租户在时点语义格用引用选用](./0157-built-in-as-of-forms-are-adopted-as-reference-citations.md)｜**形态选择格**：不是 ADR-0147 的依据格；带 `REFCFG-1:` 的值登记时须已发布，否则拒。2026-09-30 用户授权通道 1 自决。
-- [ADR-0158：结算账户登记册是一行固定属性，接受前控制只查应收](./0158-settlement-account-register-is-an-immutable-tuple.md)｜**登记册**：五格固定、不设修订；空册与没有相符应收行都停在 `CONTROL_SCOPE_NOT_CONFIGURED`。2026-09-30。本项是机制，接受依据是 ADR-0146 决定一。
+- [ADR-0158：结算账户登记册是一行固定属性，接受前控制只查应收](./0158-settlement-account-register-is-an-immutable-tuple.md)｜**登记册**：五格固定、绑结算政策对象不绑某一版、不设修订；部分停用 [ADR-0081](./0081-acceptance-judgment-is-envelope-driven.md) 决定六的结算账户目录留 nil。空册与没有相符应收行都停在 `CONTROL_SCOPE_NOT_CONFIGURED`。2026-09-30。本项是机制，接受依据是 ADR-0146 决定一。
 - [ADR-0159：面单择优的接受时解析回指从接受决定上读](./0159-label-channel-resolution-comes-from-the-accepted-decision.md)｜**回指**：择优查询带来源身份与声明包裹，解析标识从该成员的接受决定读，不另造映射。空身份或未接受仍是未形成。2026-09-30。本项是机制，接受依据是 ADR-0146 决定一「机制与产品策略同属产品交付轨道，开发方现在就做」。
 
 ## 已被取代决策

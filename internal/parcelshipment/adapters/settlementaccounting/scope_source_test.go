@@ -63,10 +63,19 @@ func (double *directoryDouble) FindSettlementAccount(
 	return double.account, double.found, nil
 }
 
+func settlementPolicyEcho(t *testing.T, object, version string) psdomain.SettlementPolicyEcho {
+	t.Helper()
+	echo, err := psdomain.NewSettlementPolicyEcho(object, version)
+	if err != nil {
+		t.Fatalf("policy echo: %v", err)
+	}
+	return echo
+}
+
 func adoptedTerms(t *testing.T) psdomain.AdoptedSettlementTerms {
 	t.Helper()
 	terms, err := psdomain.NewAdoptedSettlementTerms(psdomain.AdoptedSettlementTermsSpec{
-		Policy:       value(t, psdomain.NewSettlementPolicyEcho, "settlement-policy-1/v3"),
+		Policy:       settlementPolicyEcho(t, "settlement-policy-1", "v3"),
 		Method:       value(t, psdomain.NewSettlementMethodEcho, "TERMS"),
 		LegalEntity:  value(t, psdomain.NewSettlementLegalEntityEcho, "legal-1"),
 		Counterparty: value(t, psdomain.NewSettlementCounterpartyEcho, "counterparty-1"),
