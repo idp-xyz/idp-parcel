@@ -7,21 +7,21 @@ import (
 
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
-	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 	pcports "go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 )
 
 var (
-	// ErrRoutingClosureTenantMismatch 表示按调用方租户取回的闭包，其解析键却指着另一个
-	// 租户。解析标识不是能力凭证（ADR-0003 / ADR-0064）：混进未配置会让运维去等一份
-	// 其实已经写坏的映射。
-	ErrRoutingClosureTenantMismatch = errors.New(
+	// ErrClosureTenantMismatch 表示按调用方租户取回的闭包，其解析键却指着另一个租户。
+	// 解析标识不是能力凭证（ADR-0003）：混进未配置会让运维去等一份其实已经写坏的闭包。
+	// 初始路由与可达性共用这一哨兵。
+	ErrClosureTenantMismatch = errors.New(
 		"network routing partycommercial adapter: loaded commercial closure belongs to another tenant")
+	// ErrRoutingClosureTenantMismatch 是同一哨兵的旧名，初始路由测试仍按这个名字认。
+	ErrRoutingClosureTenantMismatch = ErrClosureTenantMismatch
 )
 
 // RoutingApplicability 实现 nrports.RoutingApplicabilityView：同一份形态翻译表
-// （UC-NR-001 步骤 3 / ADR-0050）。闭包标识由命令带来的已接受解析引用回指
-// （ADR-0064），不再要一份判断键到 RES 的实例映射。
+// （UC-NR-001 步骤 3 / ADR-0050）。闭包标识由命令带来的已接受解析引用回指（ADR-0064）。
 type RoutingApplicability struct {
 	closures pcports.CommercialResolutionView
 }
@@ -42,30 +42,9 @@ func (adapter *RoutingApplicability) AssessRoutingApplicability(
 	key nrdomain.InitialRouteJudgmentKey,
 	resolution nrdomain.CommercialResolutionReference,
 ) (nrdomain.NetworkEligibility, error) {
-	none := nrdomain.NetworkEligibility{}
-	if !resolution.Valid() {
-		return none, fmt.Errorf("%w: commercial resolution reference is not configured",
-			ErrServiceProductUnavailable)
-	}
-	tenant, err := pcdomain.NewTenantID(key.TenantID.String())
+	closure, err := loadClosure(ctx, adapter.closures, key.TenantID.String(), resolution)
 	if err != nil {
-		return none, fmt.Errorf("%w: tenant: %v", ErrUntranslatableAnswer, err)
-	}
-	resolutionID, err := pcdomain.NewResolutionID(resolution.String())
-	if err != nil {
-		return none, fmt.Errorf("%w: resolution: %v", ErrUntranslatableAnswer, err)
-	}
-	closure, loaded, err := adapter.closures.LoadResolution(ctx, tenant, resolutionID)
-	if err != nil {
-		return none, fmt.Errorf("load commercial closure: %w", err)
-	}
-	if !loaded {
-		return none, fmt.Errorf("%w: commercial closure %q was not found",
-			ErrServiceProductUnavailable, resolutionID)
-	}
-	if closure.ResolutionKey().TenantID != tenant {
-		return none, fmt.Errorf("%w: identity %q closure %q",
-			ErrRoutingClosureTenantMismatch, tenant, closure.ResolutionKey().TenantID)
+		return nrdomain.NetworkEligibility{}, err
 	}
 	return eligibilityFromClosure(closure)
 }

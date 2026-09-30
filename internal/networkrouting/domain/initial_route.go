@@ -26,8 +26,9 @@ func NewAcceptanceBaselineReference(value string) (AcceptanceBaselineReference, 
 	return AcceptanceBaselineReference{required}, err
 }
 
-// CommercialResolutionReference 是消费方对一次已固定商业解析的引用（ADR-0064）。
-// 权威在提供方按标识持有的闭包；它是命令附加字段，不是初始路由判断维。
+// CommercialResolutionReference 是消费方对一次商业解析的引用。权威在提供方按标识持有的闭包。
+// 它是命令附加字段：初始路由回指已接受决定上的那一次（ADR-0064），可达性回指本轮已采用的那一次
+// （ADR-0156）。两种用法都不是判断键上的一维。
 type CommercialResolutionReference struct{ requiredValue }
 
 func NewCommercialResolutionReference(value string) (CommercialResolutionReference, error) {

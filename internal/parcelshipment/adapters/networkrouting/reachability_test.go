@@ -255,6 +255,43 @@ func TestAdoptedResolutionIsCarriedBesideTheJudgmentKey(t *testing.T) {
 	if got := fixture.eligibility.resolution.String(); got != "RES-adopted" {
 		t.Fatalf("resolution carried = %q, want RES-adopted", got)
 	}
+	if assessment, err := fixture.adapter.AssessParcelReachability(context.Background(), request); err != nil {
+		t.Fatalf("assess: %v", err)
+	} else if assessment.Judgment.JudgmentID().String() != "request-1/version-1/parcel-1/RES-adopted" {
+		t.Fatalf("judgment ID = %q, want the correlation with the resolution", assessment.Judgment.JudgmentID())
+	}
+}
+
+// Covers: ADR-0156——解析标识不进判断键。换一个解析是另一次请求，不把上一次的判断交回。
+func TestAnotherResolutionIsNotAReplayOfTheFirstJudgment(t *testing.T) {
+	fixture := newReachabilityFixture(t)
+	firstRequest := fixture.request(t)
+	firstRequest.Resolution = value(t, psdomain.NewCommercialResolutionID, "RES-1")
+	first, err := fixture.adapter.AssessParcelReachability(context.Background(), firstRequest)
+	if err != nil {
+		t.Fatalf("assess first: %v", err)
+	}
+	if first.Judgment.JudgmentID().String() != "request-1/version-1/parcel-1/RES-1" {
+		t.Fatalf("first ID = %q", first.Judgment.JudgmentID())
+	}
+
+	secondRequest := fixture.request(t)
+	secondRequest.Resolution = value(t, psdomain.NewCommercialResolutionID, "RES-2")
+	second, err := fixture.adapter.AssessParcelReachability(context.Background(), secondRequest)
+	if err != nil {
+		t.Fatalf("assess second: %v", err)
+	}
+	if second.Judgment.JudgmentID().String() != "request-1/version-1/parcel-1/RES-2" {
+		t.Fatalf("second ID = %q, want a different request", second.Judgment.JudgmentID())
+	}
+
+	replay, err := fixture.adapter.AssessParcelReachability(context.Background(), firstRequest)
+	if err != nil {
+		t.Fatalf("replay first: %v", err)
+	}
+	if replay.Judgment.JudgmentID() != first.Judgment.JudgmentID() {
+		t.Fatal("同一解析的重放没有交回原判断")
+	}
 }
 
 // Covers: `AT-PS-037`「被有效新版本或限制推翻 → 原结果不再用于接受」的适配器一环——同一

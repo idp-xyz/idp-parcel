@@ -442,6 +442,7 @@ func (handler *FormAcceptanceDecisionHandler) revalidateReachability(
 			SubmissionVersion: command.SubmissionVersion,
 			DeclaredParcelID:  judgment.DeclaredParcelID(),
 			AsOf:              judgment.AsOf(),
+			JudgmentID:        judgment.JudgmentID(),
 		})
 		if err != nil {
 			return ReachabilityRevalidationUnavailable, nil

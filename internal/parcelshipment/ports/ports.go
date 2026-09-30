@@ -837,6 +837,9 @@ type ReachabilityRevalidationQuery struct {
 	SubmissionVersion domain.SubmissionVersionID
 	DeclaredParcelID  domain.DeclaredParcelID
 	AsOf              domain.JudgmentAsOf
+	// JudgmentID 是形成那次判断时记下的关联。解析标识在关联里、不在判断键里，重校要回指
+	// 这一份，不能按不含解析的派生另查一次。零值沿用派生，给还没带上解析的旧判断。
+	JudgmentID domain.ReachabilityJudgmentID
 }
 
 // ReachabilityRevalidationOutcome 是可达性重校在本上下文的封闭落点。

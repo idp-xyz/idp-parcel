@@ -59,8 +59,14 @@ func correlationIdentity(
 	shipmentRequestID psdomain.ShipmentRequestID,
 	submissionVersion psdomain.SubmissionVersionID,
 	parcelID psdomain.DeclaredParcelID,
+	resolution psdomain.CommercialResolutionID,
 ) string {
-	return shipmentRequestID.String() + "/" + submissionVersion.String() + "/" + parcelID.String()
+	identity := shipmentRequestID.String() + "/" + submissionVersion.String() + "/" + parcelID.String()
+	// 解析标识不进判断键。把它留在关联外面，同键重放会交回旧判断，换过的闭包不再被问到。
+	if resolution.String() == "" {
+		return identity
+	}
+	return identity + "/" + resolution.String()
 }
 
 // AssessParcelReachability 执行形成半边：按同一派生形成关联与判断键，交提供方形成（或
@@ -107,8 +113,16 @@ func (adapter *ReachabilityAdapter) RevalidateReachabilityJudgment(
 	if err != nil {
 		return psports.ReachabilityRevalidation{}, err
 	}
+	correlation := correlationFor(query.ShipmentRequestID, query.SubmissionVersion, query.DeclaredParcelID, psdomain.CommercialResolutionID{})
+	if query.JudgmentID.String() != "" {
+		parsed, err := nrdomain.NewRequestCorrelationID(query.JudgmentID.String())
+		if err != nil {
+			return psports.ReachabilityRevalidation{}, fmt.Errorf("%w: judgment ID: %v", ErrUntranslatableAnswer, err)
+		}
+		correlation = parsed
+	}
 	answer, err := adapter.revalidate.Handle(ctx, nrapplication.ValidateReachabilityJudgmentCommand{
-		Correlation: correlationFor(query.ShipmentRequestID, query.SubmissionVersion, query.DeclaredParcelID),
+		Correlation: correlation,
 		Key:         key,
 	})
 	if err != nil {
@@ -151,7 +165,7 @@ func (adapter *ReachabilityAdapter) assessCommandFor(
 		return nrapplication.AssessParcelReachabilityCommand{}, fmt.Errorf("%w: commercial resolution: %v", ErrUntranslatableAnswer, err)
 	}
 	return nrapplication.AssessParcelReachabilityCommand{
-		Correlation: correlationFor(request.ShipmentRequestID, request.SubmissionVersion, request.DeclaredParcelID),
+		Correlation: correlationFor(request.ShipmentRequestID, request.SubmissionVersion, request.DeclaredParcelID, request.Resolution),
 		Key:         key,
 		Resolution:  resolution,
 	}, nil
@@ -212,9 +226,10 @@ func correlationFor(
 	shipmentRequestID psdomain.ShipmentRequestID,
 	submissionVersion psdomain.SubmissionVersionID,
 	parcelID psdomain.DeclaredParcelID,
+	resolution psdomain.CommercialResolutionID,
 ) nrdomain.RequestCorrelationID {
 	correlation, err := nrdomain.NewRequestCorrelationID(
-		correlationIdentity(shipmentRequestID, submissionVersion, parcelID))
+		correlationIdentity(shipmentRequestID, submissionVersion, parcelID, resolution))
 	if err != nil {
 		return nrdomain.RequestCorrelationID{}
 	}
