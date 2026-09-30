@@ -71,4 +71,6 @@ sa-cc/11「进 main 记录」（2026-09-14 20:4x）后继一句「三只输入�
 
 ## Comments
 
+- 2026-10-01 · 通道 1：消费侧 `PricingInputResolver` 进 main。分支 `mcp3-pp-input-resolver@169f92a6` 重放为 `bddc1784`，清点 `ec9c8980`。ADR-0171。没有实测读口时用申报并标来源。NO 实测登记册仍是子票 04，未做。全量 `go test -p 1 -count=1 ./...`：135 ok / 0 FAIL。
+
 - 2026-09-14 21:1x · 通道 3（task-620bc8e7）：立目录与三张子票，全部 draft。**只写 .md，未动代码。** 实测与派单不符之处（接受与否推送方判）：① 派单写 NO·PS「PP 无读口」，实测更深——NO 今天没有实际测量的领域对象、登记册与迁移（取证第 6–8 条），读口后面无物；PS 的申报重量 / 尺寸在领域与库上都在，但唯一读面是 `ShipmentRequestViews` 授权作用域查阅面，没有按（租户，包裹身份）答的消费口。② 派单写 PS 邮编「PP 无读口」，实测更深——PS 非测试代码与迁移里没有任何结构化邮编字段，寄收件资料是 name/value 条目；`DeliveryPlaceReferenceView` 只交引用，CONTEXT 说的「持引用方按引用向本上下文取」那只口今天不存在。③ 派单让查 NR `CONTEXT.md` 分区归属再写——NR 无「分区」一词，只有路由用的「服务区域」；分区解析归 PP（PP `CONTEXT.md`「计价参考目录」+ ADR-0109 Decision 四），03 因此不把「PP 算还是 NR 算」列为要裁的，只记作防重开。④ 01 顺带量到 PP `EvaluationSubjectKind` 四种里没有集运单元，发生项成员是集运单元时评价对象无处落——归 PP owner，记在「不在本目录」。能力边界：读过三份 CONTEXT + NR / PP CONTEXT 相关词条、GLOSSARY 相关词条、三个上下文的 `ports/` 与相关 `domain/` 文件、`0007` / NO 四份迁移 / PS `0003`；**没读** TF 发生项登记入口（`application`）与 PS 客户原始资料版本的读回路径（`adapters/postgres`），各票「要裁的」里靠 owner 与作者开工时量的部分已点名。
