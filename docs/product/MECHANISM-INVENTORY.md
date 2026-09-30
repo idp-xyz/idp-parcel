@@ -13,18 +13,18 @@
 | networkrouting | 62 | 59 | 8 | 13 | 2 | 6 |
 | nodeoperations | 31 | 26 | 3 | 10 | 4 | 6 |
 | parcelpricing | 112 | 102 | 13 | 14 | 1 | 19 |
-| parcelshipment | 195 | 189 | 20 | 35 | 10 | 18 |
+| parcelshipment | 196 | 190 | 20 | 35 | 10 | 18 |
 | partycommercial | 153 | 161 | 12 | 39 | 1 | 37 |
 | pilotgovernance | 22 | 20 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
-| settlementaccounting | 101 | 82 | 14 | 43 | 9 | 9 |
+| settlementaccounting | 105 | 84 | 15 | 44 | 9 | 9 |
 | transportfulfillment | 150 | 137 | 26 | 36 | 11 | 29 |
 | visibilityexception | 100 | 96 | 11 | 30 | 8 | 11 |
-| **合计** | 1083 | 1024 | 134 | 274 | 57 | 156 |
+| **合计** | 1088 | 1027 | 135 | 275 | 57 | 156 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 73、测试 106。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 73、测试 108。
 
-## 跨上下文消费缝：32 组，85 个生产文件
+## 跨上下文消费缝：32 组，86 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -43,7 +43,7 @@
 | parcelshipment | parcelpricing | 3 |
 | parcelshipment | partycommercial | 23 |
 | parcelshipment | pilotgovernance | 2 |
-| parcelshipment | settlementaccounting | 2 |
+| parcelshipment | settlementaccounting | 3 |
 | parcelshipment | transportfulfillment | 5 |
 | partycommercial | accessidentity | 1 |
 | settlementaccounting | customscompliance | 2 |
@@ -61,7 +61,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：12 个模块共 185 份 SQL
+## 迁移：12 个模块共 186 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -74,7 +74,7 @@
 | parcel_shipment | 23 |
 | party_commercial | 36 |
 | pilot_governance | 8 |
-| settlement_accounting | 21 |
+| settlement_accounting | 22 |
 | transport_fulfillment | 20 |
 | visibility_exception | 26 |
 
@@ -121,7 +121,7 @@
 | visibilityexception | 8 |
 | **合计** | 24 |
 
-## 端口：声明 426 个；基线口径缺 17，精确口径缺 7
+## 端口：声明 428 个；基线口径缺 18，精确口径缺 7
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
@@ -138,6 +138,7 @@
 - `partycommercial.ServiceProductFormRegistry` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres.CommercialPublications）
 - `settlementaccounting.ClaimAmountRuleView` 
 - `settlementaccounting.ConfirmedChargeFactsView` 
+- `settlementaccounting.SettlementAccountRegister` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.SettlementAccounts）
 - `settlementaccounting.SupplierAuditAuthorityView` 
 - `settlementaccounting.SupplierPayableAccountView` 
 - `transportfulfillment.FailedAttemptSource` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.PickupAttempts）
