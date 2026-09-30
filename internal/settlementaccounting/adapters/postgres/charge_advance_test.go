@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -259,6 +260,9 @@ func TestChargeAdvanceWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := charges.SaveConfirmed(ctx, tenant, confirmedCharge(t, "charge-1", "DELIVERY_FINALIZED/final-1")); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务 SaveConfirmed：%v", err)
 	}
+	if _, err := charges.SaveEstimated(ctx, tenant, estimatedCharge(t, "charge-estimated")); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务 SaveEstimated：%v", err)
+	}
 	if _, err := assessments.Save(ctx, establishedAssessmentRecord(t, "tenant-a", "assessment-1")); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务 Save 评估：%v", err)
 	}
@@ -437,6 +441,26 @@ func TestChargeAdvanceCheckConstraintsRejectImpossibleRows(t *testing.T) {
 	}
 }
 
+func TestAnEstimatedCustomerChargeIsSavedOnce(t *testing.T) {
+	charges, _, _, transactor, _ := newChargeAdvanceStores(t)
+	tenant := saTenant(t, "tenant-a")
+	charge := estimatedCharge(t, "charge-estimated")
+	err := transactor.WithinTransaction(t.Context(), func(ctx context.Context) error {
+		saved, err := charges.SaveEstimated(ctx, tenant, charge)
+		if err != nil || saved != ports.ChargeSaved {
+			return fmt.Errorf("save = %d: %w", saved, err)
+		}
+		again, err := charges.SaveEstimated(ctx, tenant, charge)
+		if err != nil || again != ports.ChargeAlreadyConfirmed {
+			return fmt.Errorf("again = %d: %w", again, err)
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
 func newChargeAdvanceStores(t *testing.T) (
 	*adapter.CustomerCharges,
 	*adapter.AdvanceAssessments,
@@ -464,6 +488,25 @@ func newChargeAdvanceStores(t *testing.T) (
 		t.Fatalf("构造回收库：%v", err)
 	}
 	return charges, assessments, recoveries, db.Transactor(), pool
+}
+
+func estimatedCharge(t *testing.T, id string) domain.CustomerCharge {
+	t.Helper()
+	charge, err := domain.FormCustomerCharge(domain.CustomerChargeSpec{
+		ID:                 saValue(t, domain.NewCustomerChargeID, id),
+		FeeItem:            saValue(t, domain.NewFeeItemReference, "BASE_FREIGHT"),
+		Evaluation:         saValue(t, domain.NewSellEvaluationReference, "evaluation-sell-1"),
+		OriginalCurrency:   saValue(t, domain.NewCurrencyCode, "CNY"),
+		OriginalMinor:      45600,
+		SettlementCurrency: saValue(t, domain.NewCurrencyCode, "CNY"),
+		SettlementMinor:    45600,
+		Stage:              domain.ChargeEstimated,
+		FormedAt:           chargeFormedAt,
+	})
+	if err != nil {
+		t.Fatalf("构造预估费用：%v", err)
+	}
+	return charge
 }
 
 func confirmedCharge(t *testing.T, id, basis string) domain.CustomerCharge {
