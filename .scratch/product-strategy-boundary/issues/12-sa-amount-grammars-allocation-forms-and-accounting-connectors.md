@@ -1,7 +1,7 @@
 # 12 settlement-accounting：金额文法、分摊与周期费用形态、经营指标方法与账务连接器
 
 Category: enhancement
-Status: in-progress——2026-09-30 第 1 项进 main（`161bb646`，ADR-0161），第 2 项进 main（`83489825`，ADR-0162），第 5 项进 main（`9a3b9e9a`，ADR-0163），第 8 项进 main（`7c084917`，ADR-0164），第 7 项进 main（`cab6613c`，ADR-0166）；第 3 项在通道 3 进行中；第 4、6、9、10 项未做
+Status: in-progress——2026-09-30 第 1 项进 main（`161bb646`，ADR-0161），第 2 项进 main（`83489825`，ADR-0162），第 5 项进 main（`9a3b9e9a`，ADR-0163），第 8 项进 main（`7c084917`，ADR-0164），第 7 项进 main（`cab6613c`，ADR-0166）；第 3 项在本重放（ADR-0165）；第 4、6、9、10 项未做
 Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 行第一项的机制缺口，归[票 16](./16-mechanism-gaps-without-a-ticket.md)；缺它们时本票只能先定文法）
 地盘：settlement-accounting 领域与应用层（金额、分摊、周期费用、指标），账单接入与财务交换的连接器适配器；规则正文若由 party-commercial 声明，PC 侧另开票。
 出处：[票 02](./02-split-parameter-register-and-retriage-deferrals.md)——[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md) `PAR-COM-07`、`PAR-SET-05`、`PAR-SET-06`、`PAR-SET-07`、`PAR-SET-08`、`PAR-SET-09`、`PAR-SET-10`、`PAR-INT-04`、`PAR-INT-05` 行内「〔ADR-0146 拆分〕」点名的部分。[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表 PN-07 行第三项当时记「未核」，本票即其补核。
@@ -10,7 +10,7 @@ Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 
 
 1. **赔付 / 退款与代垫回收金额的计算文法**（`PAR-COM-07`「赔付/退款责任、限额、比例和免赔依据」、`PAR-SET-08`「金额分配、比例/限额/免赔」）。`SettleClaimAmounts` 只核金额规则版本在不在，金额本身由命令带入（`AmountMinor`）；限额、比例、免赔怎样组成一个金额是方法，各数值是租户取值。规则版本的登记册与读口（`ClaimAmountRuleView`）是重定级表 PN-07 行第一项的机制缺口。落地：ADR-0161，先免赔、再按万分比向下取整、再以限额封顶；三项数值命令 `amount-grammar`，空册不形成金额。金额分配仍属第 2 项。
 2. **成本分摊的内置形态**（`PAR-SET-06`「分摊规则」）。`AllocateCosts` 只核分摊规则版本在不在，各份额由命令带入（`Portions`）；按重、按件、按收入等分法归产品，是否适用与选哪种归租户。落地：ADR-0162，三套分法共用最大余数，余数相同按目标标识升序；选用命令 `allocation-form`，空册答未配置，不均摊。各对象权重随分摊交入。
-3. **待核：周期费用的计算形态**（`PAR-SET-07`「最低消费、保底量、返利」）。
+3. **待核：周期费用的计算形态**（`PAR-SET-07`「最低消费、保底量、返利」）。落地：没有既有执行器。价卡最低重量与评价里的最低收费不是这一格。ADR-0165，三套形态加本期不适用；命令 `periodic-fee`；空册不形成周期费用。
 4. **待核：经营指标各阶段口径与新指标版本的形成方法**（`PAR-SET-10` 已确认约束栏写的就是这套方法）。核现有指标派生是否按它实现。
 5. **供应商账单审核的越权升级判断结构**（`PAR-SET-05`「越权升级规则」；分权的角色模型归票 07）。`SupplierAuditAuthorityView` 的登记册与读口是重定级表 PN-07 行第一项的机制缺口。落地：ADR-0163，已匹配金额小于或等于上限在权限内，大于上限必须升级且不形成应付；上限命令 `audit-escalation-ceiling`，空册不默认放行。角色模型仍归票 07。
 6. **待核：费用归属日的判定形态**（`PAR-SET-09`）。各金额唯一创建用例与既有借贷项纳入后续账期已由 SA 定（机制），不再列为租户证据。

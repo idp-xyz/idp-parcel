@@ -221,7 +221,9 @@ PN-08 是产品级试点治理与跨上下文应用编排，不是新的限界�
 
 2026-09-30 补记（票 `product-strategy-boundary/12` 第 8 项，ADR-0164）：上表单元格不改写。BUY 评价请求的触发面是 `evaluationRequestOrchestration.Trigger`，时点只有发生项形成。发生项原因没登记不发起请求。面单交易与渠道择优的触发面仍不在这一格。
 
-2026-09-30 补记（票 `product-strategy-boundary/12` 第 7 项，ADR-0166）：上表单元格不改写。供应商账单与财务交换没有通用文件导入或报文导出。内置连接器形态是规范文书，命令是 `parcel-settlement-register accounting-connector`。没登记答未配置。对方的格式映射仍是租户取值。周期费用、费用归属日与经营指标方法仍不在这一格。
+2026-09-30 补记（票 `product-strategy-boundary/12` 第 7 项，ADR-0166）：上表单元格不改写。供应商账单与财务交换没有通用文件导入或报文导出。内置连接器形态是规范文书，命令是 `parcel-settlement-register accounting-connector`。没登记答未配置。对方的格式映射仍是租户取值。费用归属日与经营指标方法仍不在这一格。
+
+2026-09-30 补记（票 `product-strategy-boundary/12` 第 3 项，ADR-0165）：上表单元格不改写。PN-07 第三项里周期费用这一格已有执行器：最低消费补差、保底量不足乘单价、阶梯返利按档切分。命令是 `parcel-settlement-register periodic-fee`。没登记不形成周期费用。价卡上的最低收费仍来自评价。归属日与经营指标方法仍不在这一格。
 
 2026-09-24 补记（票 `routing-first-cut/07` 进 main，merge `f2645d86`）：上表按所钉 SHA 如实定级，原样保留；其中 PN-02 与 PN-03 两行提到 `NetworkDefinitions` / `ErrNetworkDefinitionUnresolvable` 的几句自本合入起部分过时——可达性证据视图已从版本化网络目录折出事实（候选生成、服务区域解析、含临时调整的可执行性；关务一格在 `routing-first-cut/12` 之前如实答状态未知），`NetworkDefinitions` 已删，`未配置`改由目录修订锚与适用于服务目的的路由策略版本答（[ADR-0148](../adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定六）；初始路由证据视图用同一判法答`未配置`，对已配置范围在 `routing-first-cut/09`、`10` 之前照旧响亮上抛。两格是否转满足留给下一次按四项判据的重定级，本条不替它下结论。
 

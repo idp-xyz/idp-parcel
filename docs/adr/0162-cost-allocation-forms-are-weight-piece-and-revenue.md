@@ -43,3 +43,4 @@ Date: 2026-09-30
 - [UC-SA-006](../application/settlement-accounting/UC-SA-006-ALLOCATE-COSTS-AND-DERIVE-OPERATING-RESULTS.md)
 - 票 `.scratch/product-strategy-boundary/issues/12-sa-amount-grammars-allocation-forms-and-accounting-connectors.md` 第 2 项
 - [ADR-0163](./0163-supplier-audit-escalation-compares-the-matched-amount-to-a-ceiling.md)：越权升级
+- [ADR-0165](./0165-periodic-fees-are-minimum-spend-volume-floor-and-tiered-rebate.md)：周期费用
