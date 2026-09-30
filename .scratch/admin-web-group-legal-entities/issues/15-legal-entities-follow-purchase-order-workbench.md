@@ -83,6 +83,13 @@ Blocked by: 无
 - 用户第二张截图（加载态）：表形骨架被居中，几行浮在页面中下部、上面一大片空、首格贴左。工作台与 `ListPageTemplate` 两处
   表形骨架改为顶对齐、列数随真表（`ListPageTemplate` 摆进与真表同一个 surface 容器）；其余形状照旧居中。同一 harness
   以永不答的读口截暗色加载态两张（本页、业务参与方页）实看。
+- 用户反馈「打开修订历史很慢」：后端实测 2–5ms（直连与经 vite 代理都是）。慢在两处——
+  ① 本机环境：Windows 浏览器连 WSL 的 `localhost` 先试 IPv6 `::1`，这台机上 `::1` 不通（mirrored 模式下对 parcel-api 的 `*:19080`
+  与试起的 `--host ::` vite 同样不通），每条新连接等约 200ms 才退到 IPv4；`127.0.0.1` 约 1ms（Windows 侧 curl.exe 实测）。
+  keep-alive 空闲断开后的每次点击都要再付一次。不在代码里修：换 `127.0.0.1` 会改 OIDC 的 redirect_uri（取自
+  `window.location.origin`），IdP 是否登记了它需用户核，`parcel.sh` 与 `.wslconfig` 也归用户。
+  ② 详情栏：Radix 默认卸掉非活动签，每切回修订历史 / 法人资料一次就重取一次、闪一次加载态。改为去过的签隐藏挂着；
+  dom-probe 实测来回切签只取一次，没去过的签不取。
 - **不在本票修、需另定**：同一个 `/NN` 失效在别处也在——`apps/admin-web/src` 另有十余处（`ListPageTemplate` 检查中行与批量栏底色、
   `ReviewFlowTemplate` 等），`@idpxyz/*` 包源码有七十余处，今天都不生效。全局修法是把 `tailwind.config.js` 的主题色改成带
   `<alpha-value>` 的 `color-mix` 写法，一改全站这些底色与边框都会「突然出现」，是全站外观变化，候选另立票。

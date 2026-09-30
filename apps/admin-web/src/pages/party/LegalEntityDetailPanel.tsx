@@ -116,12 +116,19 @@ export function LegalEntityDetailPanel({
   onOpenObjectPage: () => void;
 }) {
   const [tab, setTab] = useState<PanelTab>('overview');
+  // 去过的签留着挂载（隐藏而不卸载）：Radix 默认卸掉非活动签，法人资料与修订历史两区每切回来一次就重取一次、闪一次加载态。
+  // 只留「去过的」，不一开栏就三签全挂——方向键逐行翻时不为没看的签取数。
+  const [visited, setVisited] = useState<ReadonlySet<PanelTab>>(() => new Set<PanelTab>(['overview']));
   const [formOpenRequest, setFormOpenRequest] = useState(0);
   const copy = useCopyToClipboard();
   const identity = identityLayerCellsOf(row);
   const kind = labelOf(legalEntityKindLabels, row.kind);
+  const selectTab = (next: PanelTab) => {
+    setTab(next);
+    setVisited((previous) => (previous.has(next) ? previous : new Set(previous).add(next)));
+  };
   const openProfileForm = () => {
-    setTab('profile');
+    selectTab('profile');
     setFormOpenRequest((count) => count + 1);
   };
 
@@ -223,7 +230,7 @@ export function LegalEntityDetailPanel({
         <Fact label="停用时点">{row.deactivatedAt ? <Instant value={row.deactivatedAt} /> : '未停用'}</Fact>
       </div>
 
-      <Tabs value={tab} onValueChange={(value) => setTab(value as PanelTab)} className="flex min-h-0 flex-1 flex-col">
+      <Tabs value={tab} onValueChange={(value) => selectTab(value as PanelTab)} className="flex min-h-0 flex-1 flex-col">
         <TabsList className="mx-5 mt-3 shrink-0">
           <TabsTrigger value="overview">
             <IdCard className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
@@ -269,14 +276,22 @@ export function LegalEntityDetailPanel({
               </DetailRow>
             </dl>
           </TabsContent>
-          <TabsContent value="profile" className="mt-0">
+          <TabsContent
+            value="profile"
+            forceMount={visited.has('profile') || undefined}
+            className="mt-0 data-[state=inactive]:hidden"
+          >
             <LegalEntityProfileSection
               key={row.legalEntityId}
               legalEntityId={row.legalEntityId}
               formOpenRequest={formOpenRequest}
             />
           </TabsContent>
-          <TabsContent value="history" className="mt-0">
+          <TabsContent
+            value="history"
+            forceMount={visited.has('history') || undefined}
+            className="mt-0 data-[state=inactive]:hidden"
+          >
             <RevisionHistorySection register={legalEntityRevisionHistory} subjectId={row.legalEntityId} revision={row.revision} />
           </TabsContent>
         </div>
