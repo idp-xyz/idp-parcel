@@ -88,6 +88,10 @@ func NewPricedCandidateCost(candidate CandidateID, amountMinor int64, currency s
 	}, nil
 }
 
+func (fact CandidateCostFact) Candidate() CandidateID {
+	return fact.candidate
+}
+
 func NewPendingCandidateCost(candidate CandidateID) (CandidateCostFact, error) {
 	return unpricedCandidateCost(candidate, CandidateCostPending)
 }

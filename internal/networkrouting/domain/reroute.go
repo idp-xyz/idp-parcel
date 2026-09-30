@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -24,9 +25,8 @@ func NewResponsibilityReference(value string) (ResponsibilityReference, error) {
 	return ResponsibilityReference{required}, err
 }
 
-// AutoRerouteFacts 是自动改路四条件的事实输入。前三件由取数侧按策略版本、控制节点与
-// 已执行前缀折成布尔（阈值与冻结边界的取值属 PAR-NET-14 实例半边），后两件是引用清单
-// ——不满足时建议要说得出缺什么。
+// AutoRerouteFacts 是自动改路条件折完之后的布尔与引用清单。是否允许自动、改善阈值
+// 由策略版本声明，不由这组布尔自作权威。限制与既有责任是这次判断带入的引用。
 type AutoRerouteFacts struct {
 	PolicyAllowsAutomatic       bool
 	AtControlledNode            bool
@@ -90,6 +90,72 @@ func EvaluateAutoRerouteConditions(facts AutoRerouteFacts) (RerouteAuthority, []
 		return SuggestionOnly, blockers
 	}
 	return AutomaticRerouteAllowed, nil
+}
+
+// AutoRerouteForm 是策略版本声明的自动改路形态。未声明不是允许，也不是不允许。
+type AutoRerouteForm uint8
+
+const (
+	AutoRerouteFormUndeclared AutoRerouteForm = iota
+	// CostImprovementAutoReroute 在成本改善严格大于已登记阈值、且其余条件成立时允许自动。
+	// 阈值是租户取值。
+	CostImprovementAutoReroute
+)
+
+func (form AutoRerouteForm) String() string {
+	switch form {
+	case CostImprovementAutoReroute:
+		return "COST_IMPROVEMENT"
+	default:
+		return ""
+	}
+}
+
+func AutoRerouteFormFrom(raw string) (AutoRerouteForm, error) {
+	switch raw {
+	case "COST_IMPROVEMENT":
+		return CostImprovementAutoReroute, nil
+	default:
+		return AutoRerouteFormUndeclared, fmt.Errorf("%w: %q", ErrInvalidReroute, raw)
+	}
+}
+
+// FoldAutoReroute 由策略声明、可控节点、已执行前缀和限制折出自动条件。
+// 未声明时只形成建议，阻塞写 AUTO_REROUTE_UNCONFIGURED，不当成允许或不允许。
+// 改善是否超过阈值由调用方在选出唯一候选后再判；这里只折结构条件。
+func FoldAutoReroute(
+	form AutoRerouteForm,
+	threshold *int,
+	atControlledNode bool,
+	onlyUnexecuted bool,
+	restrictions []RestrictionReference,
+	responsibilities []ResponsibilityReference,
+) (RerouteAuthority, []string) {
+	if len(restrictions) > 0 {
+		return EvaluateAutoRerouteConditions(AutoRerouteFacts{
+			UnresolvedRestrictions: restrictions,
+		})
+	}
+	if form != CostImprovementAutoReroute || threshold == nil {
+		return SuggestionOnly, []string{"AUTO_REROUTE_UNCONFIGURED"}
+	}
+	return EvaluateAutoRerouteConditions(AutoRerouteFacts{
+		PolicyAllowsAutomatic:       true,
+		AtControlledNode:            atControlledNode,
+		OnlyUnexecutedAffected:      onlyUnexecuted,
+		OutstandingResponsibilities: responsibilities,
+	})
+}
+
+// CostImprovementMinor 是当前候选成本减去新候选成本。比不出（缺价、币种不同）时第二返回值是假。
+func CostImprovementMinor(current, next CandidateCostFact) (int64, bool) {
+	if current.state != CandidateCostPriced || next.state != CandidateCostPriced {
+		return 0, false
+	}
+	if current.currency.String() != next.currency.String() {
+		return 0, false
+	}
+	return current.amountMinor - next.amountMinor, true
 }
 
 // LowestCostTieBlockers 是四个自动条件都立、而最低成本并列选不出唯一一条时，建议要携带的

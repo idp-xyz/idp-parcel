@@ -320,18 +320,34 @@ func routeStrategyVersionFromJSON(raw []byte, tenantSource tenantOf) (applicatio
 		}
 		freezeLimit = payload.FreezeRemainingSegments
 	}
+	autoForm := domain.AutoRerouteFormUndeclared
+	var autoThreshold *int
+	if payload.AutoRerouteForm != nil || payload.AutoRerouteImprovementThresholdMinor != nil {
+		if payload.AutoRerouteForm == nil || payload.AutoRerouteImprovementThresholdMinor == nil {
+			return application.RegisterRouteStrategyVersionCommand{}, fmt.Errorf("auto reroute form and improvement threshold must be declared together")
+		}
+		if autoForm, err = domain.AutoRerouteFormFrom(*payload.AutoRerouteForm); err != nil {
+			return application.RegisterRouteStrategyVersionCommand{}, err
+		}
+		if *payload.AutoRerouteImprovementThresholdMinor < 0 {
+			return application.RegisterRouteStrategyVersionCommand{}, fmt.Errorf("auto reroute improvement threshold must be >= 0")
+		}
+		autoThreshold = payload.AutoRerouteImprovementThresholdMinor
+	}
 	return application.RegisterRouteStrategyVersionCommand{
 		TenantID: tenant,
 		Strategy: ports.RouteStrategyDefinitionVersion{
-			Code:                        payload.Code,
-			Version:                     payload.Version,
-			ApplicableScope:             payload.ApplicableScope,
-			RankingForm:                 form,
-			FreezeForm:                  freeze,
-			FreezeRemainingSegmentLimit: freezeLimit,
-			EffectiveFrom:               payload.EffectiveFrom,
-			EffectiveTo:                 timeOf(payload.EffectiveTo),
-			HasEffectiveTo:              payload.EffectiveTo != nil,
+			Code:                                 payload.Code,
+			Version:                              payload.Version,
+			ApplicableScope:                      payload.ApplicableScope,
+			RankingForm:                          form,
+			FreezeForm:                           freeze,
+			FreezeRemainingSegmentLimit:          freezeLimit,
+			AutoRerouteForm:                      autoForm,
+			AutoRerouteImprovementThresholdMinor: autoThreshold,
+			EffectiveFrom:                        payload.EffectiveFrom,
+			EffectiveTo:                          timeOf(payload.EffectiveTo),
+			HasEffectiveTo:                       payload.EffectiveTo != nil,
 		},
 	}, nil
 }
@@ -434,4 +450,7 @@ type strategyPayload struct {
 	// FreezeForm 与 FreezeRemainingSegments 同缺即未声明；只给一半拒。
 	FreezeForm              *string `json:"freeze_form"`
 	FreezeRemainingSegments *int    `json:"freeze_remaining_segments"`
+	// AutoRerouteForm 与阈值同缺即未声明；只给一半拒。阈值是租户取值。
+	AutoRerouteForm                      *string `json:"auto_reroute_form"`
+	AutoRerouteImprovementThresholdMinor *int    `json:"auto_reroute_improvement_threshold_minor"`
 }

@@ -187,9 +187,12 @@ type RouteStrategyDefinitionVersion struct {
 	// FreezeForm 零值且限额为 nil 即这一版没有声明冻结形态。
 	FreezeForm                  domain.FreezeForm
 	FreezeRemainingSegmentLimit *int
-	EffectiveFrom               time.Time
-	EffectiveTo                 time.Time
-	HasEffectiveTo              bool
+	// AutoRerouteForm 零值或阈值为 nil 即这一版没有声明自动改路。阈值是租户取值。
+	AutoRerouteForm                      domain.AutoRerouteForm
+	AutoRerouteImprovementThresholdMinor *int
+	EffectiveFrom                        time.Time
+	EffectiveTo                          time.Time
+	HasEffectiveTo                       bool
 }
 
 // NetworkCatalogRegistry 是版本化网络目录七类定义原语的写入口（ADR-0068）。

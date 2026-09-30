@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
@@ -138,8 +139,7 @@ type ReassessRouteDeps struct {
 	Log           ports.RouteHandoffLog
 	Identities    ports.RouteIdentityFactory
 	Clock         ports.Clock
-	// AutoReroute 是 7B 自动改路四条件的事实取数缝。nil 与「事实目录未配置」同义——
-	// 失效照常落库，改路评估整段不做，连建议都不形成（说不出「为什么没自动」）。
+	// AutoReroute 是事实目录读口。复核不读它（ADR-0173）：自动改路由策略版本当场折出。
 	AutoReroute ports.AutoRerouteFactsView
 }
 
@@ -256,7 +256,8 @@ func (handler *ReassessRouteHandler) reassessPlan(
 		return handler.undecided(key, PlanReviewInconclusive), nil
 
 	case domain.PlanStillApplicable:
-		if _, unconfigured := freezeOf(plan, trigger, evidence); unconfigured {
+		judgment, unconfigured := freezeOf(plan, trigger, evidence)
+		if unconfigured {
 			return handler.undecided(key, FreezeFormUnconfigured), nil
 		}
 		record := ports.ReassessmentRecord{
@@ -265,6 +266,18 @@ func (handler *ReassessRouteHandler) reassessPlan(
 			Conclusion:   ports.ReassessmentStillApplicable,
 			ReviewedPlan: plan.Version(),
 			ReassessedAt: handler.deps.Clock.Now(),
+		}
+		// 已越过冻结边界则保留原计划，轻微改善不改路。未越过时，成本改善严格大于
+		// 已登记阈值才允许自动切换。
+		if judgment.Crossed() {
+			return handler.commit(ctx, trigger, record)
+		}
+		switched, err := handler.tryImprovementReroute(ctx, trigger, plan, evidence, record)
+		if err != nil {
+			return ReassessRouteResult{}, err
+		}
+		if switched.HasNewPlan {
+			return handler.commit(ctx, trigger, switched)
 		}
 		return handler.commit(ctx, trigger, record)
 
@@ -313,9 +326,9 @@ func (handler *ReassessRouteHandler) reassessPlan(
 	}
 }
 
-// rerouteAfterLapse 在失效记录之上评估 7B 自动改路与 7C 改路建议。三态分派：条件全立
-// 形成自动改路决定（结论升格为`已改路`）；有阻塞形成带候选与阻塞清单的建议等授权角色；
-// 硬限制禁行只记录禁行依据。事实未配置或候选取数失败退回纯失效——不猜也不含糊。
+// rerouteAfterLapse 在失效记录之上评估 7B 自动改路与 7C 改路建议。条件由策略版本折出，
+// 不读事实目录。未声明只形成建议。条件全立且成本改善严格大于已登记阈值时形成自动改路
+// 决定（结论升格为`已改路`）；有阻塞形成建议等授权角色；硬限制禁行只记录禁行依据。
 func (handler *ReassessRouteHandler) rerouteAfterLapse(
 	ctx context.Context,
 	trigger domain.ReassessmentTrigger,
@@ -323,15 +336,7 @@ func (handler *ReassessRouteHandler) rerouteAfterLapse(
 	evidence ports.InitialRouteEvidence,
 	record ports.ReassessmentRecord,
 ) (ports.ReassessmentRecord, error) {
-	if handler.deps.AutoReroute == nil {
-		return record, nil
-	}
-	facts, configured, err := handler.deps.AutoReroute.LoadAutoRerouteFacts(ctx, trigger.Key())
-	if err != nil || !configured {
-		return record, nil
-	}
-
-	authority, blockers := domain.EvaluateAutoRerouteConditions(facts)
+	authority, blockers := structuralAutoReroute(trigger, lapsedPlan, evidence)
 	record.RerouteState = authority
 	record.RerouteBlockers = blockers
 
@@ -381,6 +386,16 @@ func (handler *ReassessRouteHandler) rerouteAfterLapse(
 		}
 		switch selection.ranking.Outcome() {
 		case domain.RankingSelected:
+			improved, comparable := costImprovement(
+				evidence.CandidateCosts,
+				lapsedPlan.SelectedCandidate(),
+				selection.plan.SelectedCandidate(),
+			)
+			threshold := evidence.AutoRerouteImprovementThresholdMinor
+			if !comparable || threshold == nil || improved <= int64(*threshold) {
+				return handler.suggestionOnly(record, trigger.Key(), triggerRef, candidates, now,
+					[]string{"IMPROVEMENT_BELOW_THRESHOLD"})
+			}
 		case domain.RankingTied:
 			// 条件都立而选路选不出唯一一条：只形成建议，由授权角色在并列那几家之间裁。
 			blockers := domain.LowestCostTieBlockers(selection.ranking.Tied())
@@ -432,6 +447,151 @@ func (handler *ReassessRouteHandler) rerouteAfterLapse(
 	default:
 		return ports.ReassessmentRecord{}, fmt.Errorf("network routing: unhandled reroute authority %d", authority)
 	}
+}
+
+func (handler *ReassessRouteHandler) suggestionOnly(
+	record ports.ReassessmentRecord,
+	key domain.InitialRouteJudgmentKey,
+	triggerRef domain.RerouteTriggerReference,
+	candidates []domain.RouteCandidate,
+	now time.Time,
+	blockers []string,
+) (ports.ReassessmentRecord, error) {
+	suggestion, err := domain.NewRerouteSuggestion(domain.RerouteSuggestionSpec{
+		Key:         key,
+		Trigger:     triggerRef,
+		Candidates:  candidates,
+		Blockers:    blockers,
+		SuggestedAt: now,
+	})
+	if err != nil {
+		return ports.ReassessmentRecord{}, fmt.Errorf("new reroute suggestion: %w", err)
+	}
+	record.RerouteState = domain.SuggestionOnly
+	record.RerouteBlockers = blockers
+	record.Suggestion = suggestion
+	record.HasSuggestion = true
+	return record, nil
+}
+
+// tryImprovementReroute 在计划仍可执行、且尚未越过冻结边界时，按成本改善决定是否自动切换。
+// 没形成新计划时交回原记录，调用方保留原计划。
+func (handler *ReassessRouteHandler) tryImprovementReroute(
+	ctx context.Context,
+	trigger domain.ReassessmentTrigger,
+	plan domain.InitialRoutePlan,
+	evidence ports.InitialRouteEvidence,
+	record ports.ReassessmentRecord,
+) (ports.ReassessmentRecord, error) {
+	authority, _ := structuralAutoReroute(trigger, plan, evidence)
+	if authority != domain.AutomaticRerouteAllowed {
+		return record, nil
+	}
+	candidates, undecided, err := handler.evaluateCandidates(evidence)
+	if err != nil || undecided {
+		return record, nil
+	}
+	selection, err := handler.formPlanFromEvidence(ctx, trigger.Key(), candidates, evidence)
+	if errors.Is(err, errRouteIdentityUnavailable) {
+		return record, nil
+	}
+	if err != nil {
+		return ports.ReassessmentRecord{}, err
+	}
+	if selection.ranking.Outcome() != domain.RankingSelected {
+		return record, nil
+	}
+	improved, comparable := costImprovement(
+		evidence.CandidateCosts, plan.SelectedCandidate(), selection.plan.SelectedCandidate(),
+	)
+	threshold := evidence.AutoRerouteImprovementThresholdMinor
+	if !comparable || threshold == nil || improved <= int64(*threshold) {
+		return record, nil
+	}
+	triggerRef, err := domain.NewRerouteTriggerReference(trigger.Correlation().String())
+	if err != nil {
+		return ports.ReassessmentRecord{}, fmt.Errorf("reroute trigger reference: %w", err)
+	}
+	now := handler.deps.Clock.Now()
+	decision, err := domain.FormRerouteDecision(domain.RerouteDecisionSpec{
+		Authority:    authority,
+		Mode:         domain.AutomaticReroute,
+		Trigger:      triggerRef,
+		OriginalPlan: plan.Version(),
+		NewPlan:      selection.plan,
+		DecidedAt:    now,
+	})
+	if err != nil {
+		return ports.ReassessmentRecord{}, fmt.Errorf("form reroute decision: %w", err)
+	}
+	applicability, err := handler.loadApplicability(ctx, plan)
+	if err != nil {
+		return ports.ReassessmentRecord{}, err
+	}
+	basis, err := domain.NewApplicabilityBasisReference("COST_IMPROVEMENT")
+	if err != nil {
+		return ports.ReassessmentRecord{}, err
+	}
+	superseded, err := applicability.Supersede(selection.plan.Version(), basis, now)
+	if err != nil {
+		return ports.ReassessmentRecord{}, fmt.Errorf("supersede plan applicability: %w", err)
+	}
+	if err := handler.deps.Applicability.Save(ctx, superseded); err != nil {
+		return ports.ReassessmentRecord{}, err
+	}
+	successor, err := domain.EstablishPlanApplicability(selection.plan.Version(), selection.plan.EffectiveFrom())
+	if err != nil {
+		return ports.ReassessmentRecord{}, err
+	}
+	if err := handler.deps.Applicability.Save(ctx, successor); err != nil {
+		return ports.ReassessmentRecord{}, err
+	}
+	record.Conclusion = ports.ReassessmentRerouted
+	record.RerouteState = authority
+	record.NewPlan = selection.plan
+	record.HasNewPlan = true
+	record.Decision = decision
+	record.HasDecision = true
+	return record, nil
+}
+
+func structuralAutoReroute(
+	trigger domain.ReassessmentTrigger,
+	plan domain.InitialRoutePlan,
+	evidence ports.InitialRouteEvidence,
+) (domain.RerouteAuthority, []string) {
+	atNode := trigger.Control() == domain.NodeIntakeControl || trigger.Control() == domain.TransportHandoverControl
+	onlyUnexecuted := false
+	if nodes, ok := domain.PlanNodes(plan.Legs()); ok {
+		prefix := domain.JudgeExecutedPrefix(nodes, trigger.Control(), trigger.Location().String())
+		onlyUnexecuted = prefix.Grade() == domain.ExecutedPrefixEstablished ||
+			prefix.Grade() == domain.ExecutedPrefixNodeNotOnPlan
+	}
+	return domain.FoldAutoReroute(
+		evidence.AutoRerouteForm,
+		evidence.AutoRerouteImprovementThresholdMinor,
+		atNode,
+		onlyUnexecuted,
+		evidence.UnresolvedRestrictions,
+		evidence.OutstandingResponsibilities,
+	)
+}
+
+func costImprovement(costs []domain.CandidateCostFact, current, next domain.CandidateID) (int64, bool) {
+	var currentFact, nextFact domain.CandidateCostFact
+	var haveCurrent, haveNext bool
+	for _, cost := range costs {
+		if cost.Candidate() == current {
+			currentFact, haveCurrent = cost, true
+		}
+		if cost.Candidate() == next {
+			nextFact, haveNext = cost, true
+		}
+	}
+	if !haveCurrent || !haveNext {
+		return 0, false
+	}
+	return domain.CostImprovementMinor(currentFact, nextFact)
 }
 
 // errRouteIdentityUnavailable 让调用方把「取号依赖故障」与领域故障分开转成未决续办。

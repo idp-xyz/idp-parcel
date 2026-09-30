@@ -79,6 +79,21 @@ func pricedCandidateCost(t *testing.T, candidate string, amountMinor int64, curr
 }
 
 // tiedEvidence 让两条都可行的候选在成本单维下同价。
+func cheaperAlternative(t *testing.T, amountMinor int64) ports.InitialRouteEvidence {
+	t.Helper()
+	evidence := routableEvidence(t)
+	evidence.ServiceAreas = coveringAreas(t, "candidate-1", "candidate-2")
+	evidence.CandidateCosts = []domain.CandidateCostFact{
+		pricedCandidateCost(t, "candidate-1", 1000, "CNY"),
+		pricedCandidateCost(t, "candidate-2", amountMinor, "CNY"),
+	}
+	evidence.Paths = append(evidence.Paths, ports.CandidatePath{
+		Candidate: value(t, domain.NewCandidateID, "candidate-2"),
+		Legs:      evidence.Paths[0].Legs,
+	})
+	return evidence
+}
+
 func tiedEvidence(t *testing.T) ports.InitialRouteEvidence {
 	t.Helper()
 	evidence := routableEvidence(t)

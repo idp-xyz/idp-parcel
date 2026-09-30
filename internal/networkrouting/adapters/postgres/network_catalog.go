@@ -136,7 +136,9 @@ SELECT
     (SELECT coalesce(jsonb_agg(jsonb_build_object(
             'code', strategy_code, 'version', version, 'scope', applicable_scope,
             'effective_from', effective_from, 'effective_to', effective_to,
-            'ranking_form', ranking_form
+            'ranking_form', ranking_form,
+            'auto_reroute_form', auto_reroute_form,
+            'auto_reroute_improvement_threshold_minor', auto_reroute_improvement_threshold_minor
         ) ORDER BY strategy_code, version), '[]'::jsonb)
        FROM network_routing.route_strategy_version
       WHERE tenant_id = $1 AND effective_from <= $2
@@ -294,8 +296,13 @@ func rebuildCatalogSnapshot(
 		if err != nil {
 			return none, fmt.Errorf("译回路由策略族：%w", err)
 		}
+		autoForm, autoThreshold, err := autoRerouteOf(row.AutoRerouteForm, row.AutoRerouteImprovementThresholdMinor)
+		if err != nil {
+			return none, fmt.Errorf("译回路由策略族：%w", err)
+		}
 		snapshot.Strategies = append(snapshot.Strategies, ports.RouteStrategyDefinitionVersion{
 			Code: row.Code, Version: row.Version, ApplicableScope: row.Scope, RankingForm: form,
+			AutoRerouteForm: autoForm, AutoRerouteImprovementThresholdMinor: autoThreshold,
 			EffectiveFrom: row.EffectiveFrom, EffectiveTo: timeOf(row.EffectiveTo),
 			HasEffectiveTo: row.EffectiveTo != nil,
 		})
@@ -409,12 +416,14 @@ type adjustmentRow struct {
 }
 
 type strategyVersionRow struct {
-	Code          string     `json:"code"`
-	Version       int32      `json:"version"`
-	Scope         string     `json:"scope"`
-	EffectiveFrom time.Time  `json:"effective_from"`
-	EffectiveTo   *time.Time `json:"effective_to"`
-	RankingForm   *string    `json:"ranking_form"`
+	Code                                 string     `json:"code"`
+	Version                              int32      `json:"version"`
+	Scope                                string     `json:"scope"`
+	EffectiveFrom                        time.Time  `json:"effective_from"`
+	EffectiveTo                          *time.Time `json:"effective_to"`
+	RankingForm                          *string    `json:"ranking_form"`
+	AutoRerouteForm                      *string    `json:"auto_reroute_form"`
+	AutoRerouteImprovementThresholdMinor *int       `json:"auto_reroute_improvement_threshold_minor"`
 }
 
 // rankingFormColumn 把排序形态写成列值：未声明落 NULL；族外的值在触库前拒——CHECK 也会拒，
@@ -444,6 +453,33 @@ func rankingFormColumn(form domain.RankingForm) (*string, error) {
 
 // rankingFormOf 译回列值。族外的词报错而不吸收成「未声明」：那是 CHECK 被后续迁移放宽而 Go 侧
 // 没跟上，照「未声明」读会让一版声明过形态的策略在排序时答未配置。
+func autoRerouteColumns(form domain.AutoRerouteForm, threshold *int) (*string, *int, error) {
+	if form == domain.AutoRerouteFormUndeclared && threshold == nil {
+		return nil, nil, nil
+	}
+	if form != domain.CostImprovementAutoReroute || threshold == nil || *threshold < 0 {
+		return nil, nil, fmt.Errorf("%w: auto reroute declaration", domain.ErrInvalidReroute)
+	}
+	name := form.String()
+	value := *threshold
+	return &name, &value, nil
+}
+
+func autoRerouteOf(form *string, threshold *int) (domain.AutoRerouteForm, *int, error) {
+	if form == nil && threshold == nil {
+		return domain.AutoRerouteFormUndeclared, nil, nil
+	}
+	if form == nil || threshold == nil {
+		return domain.AutoRerouteFormUndeclared, nil, fmt.Errorf("%w: auto reroute pair", domain.ErrInvalidReroute)
+	}
+	parsed, err := domain.AutoRerouteFormFrom(*form)
+	if err != nil {
+		return domain.AutoRerouteFormUndeclared, nil, err
+	}
+	value := *threshold
+	return parsed, &value, nil
+}
+
 func rankingFormOf(raw *string) (domain.RankingForm, error) {
 	if raw == nil {
 		return domain.RankingFormUndeclared, nil
@@ -684,6 +720,10 @@ func (catalog *NetworkCatalog) RegisterRouteStrategyVersion(
 	if err != nil {
 		return fmt.Errorf("register route strategy version: %w", err)
 	}
+	autoForm, autoThreshold, err := autoRerouteColumns(row.AutoRerouteForm, row.AutoRerouteImprovementThresholdMinor)
+	if err != nil {
+		return fmt.Errorf("register route strategy version: %w", err)
+	}
 	if !row.HasEffectiveTo {
 		if _, err := executor.Exec(ctx,
 			`UPDATE network_routing.route_strategy_version
@@ -698,10 +738,11 @@ func (catalog *NetworkCatalog) RegisterRouteStrategyVersion(
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO network_routing.route_strategy_version
 			(tenant_id, strategy_code, version, applicable_scope, effective_from, effective_to, ranking_form,
-			 freeze_form, freeze_remaining_segments)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			 freeze_form, freeze_remaining_segments, auto_reroute_form, auto_reroute_improvement_threshold_minor)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 		tenant.String(), row.Code, row.Version, row.ApplicableScope,
 		row.EffectiveFrom.UTC(), optionalTime(row.EffectiveTo, row.HasEffectiveTo), form, freezeForm, freezeLimit,
+		autoForm, autoThreshold,
 	); err != nil {
 		return fmt.Errorf("register route strategy version: %w", err)
 	}

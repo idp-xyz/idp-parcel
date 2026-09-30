@@ -13,9 +13,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 )
 
-// AutoRerouteFactsCatalog 是自动改路四条件事实目录的存取口（审计票 05，W10）。
-// 它拥有按判断键版本化的事实陈述，不做任何条件评估——评估在领域
-// （EvaluateAutoRerouteConditions），这里只翻译。
+// AutoRerouteFactsCatalog 是自动改路事实目录的存取口。复核不再读它：自动改路由策略
+// 版本当场折出（ADR-0173）。这本册只留历史陈述，不是判断权威。
 type AutoRerouteFactsCatalog struct {
 	db *bentopg.DB
 }

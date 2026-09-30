@@ -344,7 +344,7 @@ var adjustmentFamily = catalogFamily[ports.AvailabilityAdjustmentStatement]{
 var routeStrategyFamily = catalogFamily[ports.RouteStrategyDefinitionVersion]{
 	operation: "list route strategy versions",
 	table:     "network_routing.route_strategy_version",
-	selection: "strategy_code, version, applicable_scope, effective_from, effective_to, ranking_form",
+	selection: "strategy_code, version, applicable_scope, effective_from, effective_to, ranking_form, auto_reroute_form, auto_reroute_improvement_threshold_minor",
 	sorts: map[string]keyColumn{
 		"code":          {"strategy_code", cataloguepage.Text},
 		"effectiveFrom": byEffectiveFrom,
@@ -356,13 +356,19 @@ var routeStrategyFamily = catalogFamily[ports.RouteStrategyDefinitionVersion]{
 		var row ports.RouteStrategyDefinitionVersion
 		var effectiveTo *time.Time
 		var form *string
+		var autoForm *string
+		var autoThreshold *int
 		if err := rows.Scan(&row.Code, &row.Version, &row.ApplicableScope,
-			&row.EffectiveFrom, &effectiveTo, &form); err != nil {
+			&row.EffectiveFrom, &effectiveTo, &form, &autoForm, &autoThreshold); err != nil {
 			return row, err
 		}
 		row.EffectiveTo, row.HasEffectiveTo = timeOf(effectiveTo), effectiveTo != nil
 		var err error
 		row.RankingForm, err = rankingFormOf(form)
+		if err != nil {
+			return row, err
+		}
+		row.AutoRerouteForm, row.AutoRerouteImprovementThresholdMinor, err = autoRerouteOf(autoForm, autoThreshold)
 		return row, err
 	},
 	sortValues: func(row ports.RouteStrategyDefinitionVersion) map[string]string {
