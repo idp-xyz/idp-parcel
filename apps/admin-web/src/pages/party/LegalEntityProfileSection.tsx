@@ -32,7 +32,7 @@ import {
   type TaxNumberDraft,
 } from './legal-entity-profile';
 
-// 法人详情抽屉的「法人资料」区（票 legal-entity-profile/04 第 2 项；ADR-0145 决定三、五、六）：当前有效的那一修订、修订历史、
+// 法人对象页「概要」签里的「法人资料」区（票 legal-entity-profile/04 第 2 项；ADR-0145 决定三、五、六）：当前有效的那一修订、修订历史、
 // 登记新修订的表单。判读与载荷在 legal-entity-profile.ts（纯函数，node:test 钉着），这里只摆。
 //
 // 调用方按法人给 key：换一个法人就整块重挂，表单草稿里钉的法人标识不会停在上一个法人身上。
@@ -56,12 +56,24 @@ export function LegalEntityProfileSection({ legalEntityId }: { legalEntityId: st
   const [landed, setLanded] = useState(0);
   const [formOpen, setFormOpen] = useState(false);
   return (
-    <>
-      <h4 className="mt-2 text-[12px] font-medium text-idpxyz-text">当前有效</h4>
-      <CurrentProfile legalEntityId={legalEntityId} landed={landed} />
-      <h4 className="mt-4 text-[12px] font-medium text-idpxyz-text">资料修订历史</h4>
-      <RevisionHistorySection register={profileRevisionHistory} subjectId={legalEntityId} revision={landed} />
-      <div className="mt-4">
+    <div className="flex flex-col gap-5">
+      <section>
+        <div className="flex items-start justify-between gap-3">
+          <div>
+            <h4 className="text-[13px] font-semibold text-idpxyz-text">当前有效资料</h4>
+            <p className="mt-1 text-xs text-idpxyz-textMuted">按生效时点读取法人资料；未来生效的修订不会覆盖历史。</p>
+          </div>
+        </div>
+        <CurrentProfile legalEntityId={legalEntityId} landed={landed} />
+      </section>
+      <section className="border-t border-idpxyz-border pt-5">
+        <div>
+          <h4 className="text-[13px] font-semibold text-idpxyz-text">资料修订历史</h4>
+          <p className="mt-1 text-xs text-idpxyz-textMuted">每次登记形成新的资料修订，已登记内容不可覆盖。</p>
+        </div>
+        <RevisionHistorySection register={profileRevisionHistory} subjectId={legalEntityId} revision={landed} />
+      </section>
+      <section className="border-t border-idpxyz-border pt-5">
         {formOpen ? (
           <ProfileRegistrationForm legalEntityId={legalEntityId} onLanded={() => setLanded((count) => count + 1)} />
         ) : (
@@ -69,8 +81,8 @@ export function LegalEntityProfileSection({ legalEntityId }: { legalEntityId: st
             登记新的资料修订
           </Button>
         )}
-      </div>
-    </>
+      </section>
+    </div>
   );
 }
 
@@ -103,7 +115,7 @@ function CurrentProfile({ legalEntityId, landed }: { legalEntityId: string; land
   const retry = () => setReloadKey((value) => value + 1);
   return (
     <div className="mt-1 flex flex-col gap-2">
-      <div className="max-w-80">
+      <div className="mt-3 max-w-80 rounded-md border border-idpxyz-border bg-idpxyz-sidebar/60 p-3">
         <WallTimeField
           label="按时点查看（留空即此刻）"
           path="at"
@@ -132,7 +144,7 @@ function ResolutionAnswer({
   if (answer.kind === 'unconfigured') {
     return (
       <p className={note}>
-        访问通道尚未配置：法人资料按时点解析读口当前不可用（403）。这不是「资料不全」——今天没有问到；配置该上下文的访问通道后重新打开抽屉。
+        访问通道尚未配置：法人资料按时点解析读口当前不可用（403）。这不是「资料不全」——今天没有问到；配置该上下文的访问通道后重新打开这一页。
       </p>
     );
   }

@@ -56,6 +56,8 @@ export interface ListColumn<Row> {
   align?: 'left' | 'center' | 'right';
   /** 附加到表头与单元格的 Tailwind 类（如宽度约束）。 */
   className?: string;
+  /** 主从分栏打开时隐藏次要列，保留主身份/状态列。 */
+  hideWhenMasterDetailOpen?: boolean;
   render: (row: Row) => ReactNode;
 }
 
@@ -156,6 +158,15 @@ export interface ListBulkActionsProps<Row> {
   extra?: ReactNode;
 }
 
+export interface ListMasterDetailProps<Row> {
+  /** 当前主从分栏中打开的行键；null 表示只显示列表。 */
+  selectedKey: string | null;
+  /** 单击已选行再次收起详情，或由关闭按钮清空。 */
+  onSelect: (key: string | null) => void;
+  /** 详情作为列表右侧同级面板渲染，不覆盖列表。 */
+  renderDetail: (row: Row) => ReactNode;
+}
+
 export interface ListPageTemplateProps<Row> {
   title: string;
   description?: string;
@@ -211,6 +222,8 @@ export interface ListPageTemplateProps<Row> {
   emptyRowsNote?: ReactNode;
   /** 不传则不渲染分页条（如队列页一次拉全量）。按 `mode` 分页码形与游标形；不写 `mode` 即页码形，与今天同。 */
   pagination?: ListPaginationProps | ListCursorPaginationProps;
+  /** 主从工作区：选中行后把详情以内嵌同级面板展示，适合需要连续对比的运营目录。 */
+  masterDetail?: ListMasterDetailProps<Row>;
   /**
    * 四态由调用方注入，模板不从 rows.length 推断空态——
    * 「闸门未放行」与「暂无数据」在本产品是两个必须区分的事实。
@@ -354,6 +367,7 @@ export function ListPageTemplate<Row>({
   onRowOpen,
   emptyRowsNote,
   pagination,
+  masterDetail,
   viewState,
   stateOverride,
 }: ListPageTemplateProps<Row>) {
@@ -378,6 +392,9 @@ export function ListPageTemplate<Row>({
   };
   const handleRowClick = (row: Row, key: string) => {
     onRowClick?.(row);
+    if (masterDetail) {
+      masterDetail.onSelect(masterDetail.selectedKey === key ? null : key);
+    }
     inspectRow(row, key);
   };
   // 右栏不留单击那一刻的旧快照：rows 换了（重取、检索改了）就按键找回那一行重推，找不到就清空。
@@ -432,6 +449,13 @@ export function ListPageTemplate<Row>({
   const pageKeys = selection ? rows.map(rowKey) : [];
   const pageSelection = selection ? selectedOnPage(selection.selected, pageKeys) : 'none';
   const selectedCount = selection?.selected.size ?? 0;
+
+  const visibleColumns = masterDetail?.selectedKey
+    ? columns.filter((column) => !column.hideWhenMasterDetailOpen)
+    : columns;
+  const selectedMasterRow = masterDetail?.selectedKey
+    ? rows.find((row) => rowKey(row) === masterDetail.selectedKey)
+    : undefined;
 
   const exportSelectedCsv = () => {
     if (!selection || !bulkActions?.csv) return;
@@ -583,9 +607,13 @@ export function ListPageTemplate<Row>({
           {/* 主表放进 surface 层容器（黄金标准「Main Content 黄金标准」；照 loms-web ShipmentMonitor：外圈留白 + 边框 + 圆角 +
               --idpxyz-sidebar 一档底色，Light 下页底 editor 是 Layer 1、这个容器是 Layer 2）。容器吃满剩余高度，滚动发生在容器内，
               所以表头吸顶仍对着容器的滚动口；分页条留在容器外的页底，翻页时它不随表体滚走。 */}
-          <div className="flex min-h-0 flex-1 flex-col p-2">
-            <div className="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-idpxyz-border bg-idpxyz-sidebar">
-              <div className="min-h-0 flex-1 overflow-auto">
+          <div className="flex min-h-0 flex-1 gap-2 p-2">
+            <div
+              data-pane="list"
+              className={`flex min-h-0 flex-col ${selectedMasterRow ? 'min-w-0 flex-[0_0_52%]' : 'min-w-0 flex-1'}`}
+            >
+              <div className="min-h-0 flex-1 overflow-hidden rounded-md border border-idpxyz-border bg-idpxyz-sidebar">
+                <div className="min-h-0 h-full overflow-auto">
                 <Table stickyHeader>
                   <TableHeader>
                     <TableRow>
@@ -598,8 +626,8 @@ export function ListPageTemplate<Row>({
                           />
                         </TableHead>
                       )}
-                      {columns.map((col) => (
-                        // 吸顶表头原语自带 editor 底色，进了 sidebar 容器就成了一条异色带，这里盖成容器同色；靠 cn 同族让位，不改原语。
+                      {visibleColumns.map((col) => (
+                        // 吸顶表头原语自带 editor 底色，进了 sidebar 容器就成了一条异色带；靠 cn 同族让位，不改原语。
                         <TableHead
                           key={col.id}
                           className={`bg-idpxyz-sidebar ${alignClass(col.align)} ${col.className ?? ''}`}
@@ -615,7 +643,7 @@ export function ListPageTemplate<Row>({
                       // 数据行的留白把「筛没了」这句话顶开。
                       <TableRow className="hover:bg-transparent">
                         <TableCell
-                          colSpan={columns.length + (selection ? 1 : 0)}
+                          colSpan={visibleColumns.length + (selection ? 1 : 0)}
                           className="py-1.5 text-center text-idpxyz-textMuted"
                         >
                           {emptyRowsNote}
@@ -678,7 +706,7 @@ export function ListPageTemplate<Row>({
                               />
                             </TableCell>
                           )}
-                          {columns.map((col) => (
+                          {visibleColumns.map((col) => (
                             <TableCell
                               key={col.id}
                               className={`${cellPadding} ${alignClass(col.align)} ${col.className ?? ''}`}
@@ -691,8 +719,17 @@ export function ListPageTemplate<Row>({
                     })}
                   </TableBody>
                 </Table>
+                </div>
               </div>
             </div>
+            {masterDetail && selectedMasterRow ? (
+              <>
+                <div className="resize-handle-h" aria-hidden="true" />
+                <div data-pane="detail" className="min-w-0 min-h-0 flex-1 overflow-hidden rounded-md border border-idpxyz-border bg-idpxyz-sidebar">
+                  {masterDetail.renderDetail(selectedMasterRow)}
+                </div>
+              </>
+            ) : null}
           </div>
           {pagination && (
             <div className="border-t border-idpxyz-border px-4 py-1.5 shrink-0">

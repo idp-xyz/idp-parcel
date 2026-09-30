@@ -85,18 +85,23 @@ export function LegalEntityRegistrationForm({ knownEntities, onRegistered }: Leg
         <CardHeader>
           <CardTitle>{registrationTitles[kind]}</CardTitle>
         </CardHeader>
-        <CardContent className="flex flex-col gap-4">
-          <p className="text-xs text-idpxyz-textMuted">
-            一笔登记一个修订。首笔修订从 1 起、此后必须连续；更正占下一个修订号翻旧插新，不覆盖。参与方必须已在册且在
-            法人生效时点已生效——这些都由服务端按册面判，表单只负责把格编对。提交打到{' '}
-            <span className="font-mono">{endpoint}</span>；租户不在表单上，由接入渠道的认证结果填入。
-          </p>
-          <p className="text-xs text-idpxyz-textMuted">
-            注册国家 / 地区与终身注册号随身份登记：首笔两格缺一由服务端拒登，号的类型与格式按国家取自注册号类型目录。
-            号变了就是另一个法人；录错时在下一个修订里改正，并填身份更正依据。
-          </p>
+        <CardContent className="flex flex-col gap-6">
+          <div className="rounded-md border border-idpxyz-border bg-idpxyz-sidebar/60 p-3">
+            <p className="text-[13px] font-medium text-idpxyz-text">登记说明</p>
+            <p className="mt-1 text-xs leading-5 text-idpxyz-textMuted">
+              一笔登记一个修订。首笔修订从 1 起、此后必须连续；更正占下一个修订号翻旧插新，不覆盖。参与方必须已在册且在法人生效时点已生效——这些都由服务端按册面判，表单只负责把格编对。
+            </p>
+            <p className="mt-1 text-xs leading-5 text-idpxyz-textMuted">
+              提交打到 <span className="font-mono">{endpoint}</span>；租户不在表单上，由接入渠道的认证结果填入。
+            </p>
+          </div>
 
-          <div className="grid grid-cols-2 gap-3">
+          <section className="flex flex-col gap-3">
+            <div>
+              <h3 className="text-[13px] font-semibold text-idpxyz-text">法人身份</h3>
+              <p className="mt-1 text-xs text-idpxyz-textMuted">先确定稳定的法人身份，再登记其生效时间与依据。</p>
+            </div>
+            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
             <Field label="法人标识 *" path="legalEntities[0].legalEntityId" problems={problems}>
               <Input
                 value={draft.legalEntityId}
@@ -228,9 +233,10 @@ export function LegalEntityRegistrationForm({ knownEntities, onRegistered }: Leg
                 </span>
               </div>
             </div>
-          </div>
+            </div>
+          </section>
 
-          <div className="flex items-start gap-3">
+          <div className="flex items-start gap-3 border-t border-idpxyz-border pt-4">
             <Button onClick={form.send} disabled={locked || !form.canSend}>
               {locked ? '提交中…' : '提交登记'}
             </Button>

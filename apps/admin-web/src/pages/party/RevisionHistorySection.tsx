@@ -5,7 +5,7 @@ import type { ApiResult } from '../catalogue-api';
 import { problemNote } from './presentation';
 import type { RevisionTimelineItem } from './revision-timeline';
 
-// 参与方身份各册（责任法人、业务参与方……）详情抽屉「修订历史」区的共用件（票 admin-web-group-legal-entities/13 第 9 条）。
+// 参与方身份各册（责任法人对象页、业务参与方抽屉……）「修订历史」区的共用件（票 admin-web-group-legal-entities/13 第 9 条）。
 // 此前 GroupLegalEntitiesPage 与 BusinessPartiesPage 各持一份同形的历史区组件（票 03 立、票 12 照抄），只在读口、回显
 // 标识的字段名、主语一词与判读函数上不同；「何时重取」这条规则一改就得每份副本各改一遍，本条正是为改它而来，于是抽成
 // 一份，各册交一份 RevisionHistoryRegister 进来。判读仍在 *-revisions.ts（纯函数，node:test 钉着），这里只摆。
@@ -73,7 +73,7 @@ export function RevisionHistorySection<Body>({
     return (
       <p className={note}>
         访问通道尚未配置：修订历史读口（{register.endpoint}）当前不可用（403）。这不是「这个{register.subject}
-        没有历史」——今天没有问到；配置该上下文的访问通道后重新打开抽屉。
+        没有历史」——今天没有问到；配置该上下文的访问通道后再看这一段。
       </p>
     );
   }

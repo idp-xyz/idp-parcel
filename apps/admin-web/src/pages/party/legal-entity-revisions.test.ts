@@ -6,7 +6,7 @@ import {
   revisionHistoryNote,
 } from './legal-entity-revisions';
 
-// 本文件钉抽屉「修订历史」区的判读（票 admin-web-group-legal-entities/03 第 5 条）：每笔显修订号、依据、
+// 本文件钉对象页「时间线」签的判读（票 admin-web-group-legal-entities/03 第 5 条）：每笔显修订号、依据、
 // 生效自、登记时间，停用那笔标出；序照读口交回的修订号升序，页面不重排也不做 diff。
 
 function revision(over: Partial<LegalEntityRevisionRecord>): LegalEntityRevisionRecord {

@@ -454,7 +454,7 @@ export interface LegalEntityRevisionRecord extends IdentityLayerRecord {
   registeredAt: string;
 }
 
-// 顶层回显 legalEntityId：抽屉切换行时上一问的答案可能后到，页面据此核对答的是不是此刻问的那个法人，
+// 顶层回显 legalEntityId：换一个法人时上一问的答案可能后到，页面据此核对答的是不是此刻问的那个法人，
 // 不拿数组首笔去推（空数组没有首笔）。revisions 按修订号升序；法人不在册答 200 + []（票 03 按 ADR-0022 裁：
 // 能力在、册在、只是没有这一个身份），不是 404。
 export interface LegalEntityRevisionListResponseBody {
