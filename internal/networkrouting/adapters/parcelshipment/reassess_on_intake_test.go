@@ -103,7 +103,7 @@ func (double *routeStoreDouble) Save(
 type evidenceDouble struct{ evidence nrports.InitialRouteEvidence }
 
 func (double evidenceDouble) LoadInitialRouteEvidence(
-	_ context.Context, _ nrdomain.InitialRouteJudgmentKey,
+	_ context.Context, _ nrdomain.InitialRouteJudgmentKey, _ nrports.RequestCarriedContent,
 ) (nrports.InitialRouteEvidence, bool, error) {
 	return double.evidence, true, nil
 }

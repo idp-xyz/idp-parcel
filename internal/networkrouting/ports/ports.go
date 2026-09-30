@@ -32,7 +32,8 @@ type NetworkEvidence struct {
 // ADR-0075 同款，判据是同版性）：它是判断对象那一版的内容，本上下文只用它判断，不回读、不保存本体。首版只含
 // 地理解析投影；服务要求与承诺上界随 routing-first-cut/08、09 加入。零值即发起方什么都没带。
 type RequestCarriedContent struct {
-	Geo domain.GeoResolutionProjection
+	Geo        domain.GeoResolutionProjection
+	Commitment domain.CommittedTimeBound
 }
 
 // NetworkEvidenceView 为一次判断取回版本化网络事实。
@@ -199,6 +200,7 @@ type InitialRouteEvidenceView interface {
 	LoadInitialRouteEvidence(
 		ctx context.Context,
 		key domain.InitialRouteJudgmentKey,
+		carried RequestCarriedContent,
 	) (InitialRouteEvidence, bool, error)
 }
 

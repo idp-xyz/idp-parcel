@@ -75,6 +75,10 @@ func (executability PathExecutability) Outcome() PathExecutabilityOutcome {
 	return executability.outcome
 }
 
+func (executability PathExecutability) Schedule() ScheduleVersionReference {
+	return executability.schedule
+}
+
 // EvaluatePathExecutability 执行候选评估层次 4：排除不可执行路径，淘汰原因携带日历/
 // 截单版本依据。已淘汰候选保持原依据；没有事实的候选原样通过——事实是声明式的，缺一条
 // 不等于排除。同一候选两条事实互相矛盾时取哪条都是掷硬币，作装配错误上抛。

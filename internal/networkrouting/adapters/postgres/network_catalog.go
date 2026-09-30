@@ -114,7 +114,10 @@ SELECT
         AND (effective_to IS NULL OR effective_to > $2)),
     (SELECT coalesce(jsonb_agg(jsonb_build_object(
             'target_kind', target_kind, 'target_code', target_code, 'version', version,
-            'effective_from', effective_from, 'effective_to', effective_to
+            'effective_from', effective_from, 'effective_to', effective_to,
+            'cutoff_local_minute', cutoff_local_minute,
+            'processing_minutes', processing_minutes,
+            'buffer_minutes', buffer_minutes
         ) ORDER BY target_kind, target_code, version), '[]'::jsonb)
        FROM network_routing.service_calendar_version
       WHERE tenant_id = $1 AND effective_from <= $2
@@ -257,7 +260,10 @@ func rebuildCatalogSnapshot(
 		snapshot.Calendars = append(snapshot.Calendars, ports.ServiceCalendarDefinitionVersion{
 			TargetKind: kind, TargetCode: row.TargetCode, Version: row.Version,
 			EffectiveFrom: row.EffectiveFrom, EffectiveTo: timeOf(row.EffectiveTo),
-			HasEffectiveTo: row.EffectiveTo != nil,
+			HasEffectiveTo:    row.EffectiveTo != nil,
+			CutoffLocalMinute: row.CutoffLocalMinute,
+			ProcessingMinutes: row.ProcessingMinutes,
+			BufferMinutes:     row.BufferMinutes,
 		})
 	}
 
@@ -397,11 +403,14 @@ func optionalJSONArray(values []string) ([]byte, error) {
 }
 
 type calendarVersionRow struct {
-	TargetKind    string     `json:"target_kind"`
-	TargetCode    string     `json:"target_code"`
-	Version       int32      `json:"version"`
-	EffectiveFrom time.Time  `json:"effective_from"`
-	EffectiveTo   *time.Time `json:"effective_to"`
+	TargetKind        string     `json:"target_kind"`
+	TargetCode        string     `json:"target_code"`
+	Version           int32      `json:"version"`
+	EffectiveFrom     time.Time  `json:"effective_from"`
+	EffectiveTo       *time.Time `json:"effective_to"`
+	CutoffLocalMinute *int       `json:"cutoff_local_minute"`
+	ProcessingMinutes *int       `json:"processing_minutes"`
+	BufferMinutes     *int       `json:"buffer_minutes"`
 }
 
 type adjustmentRow struct {
@@ -691,10 +700,12 @@ func (catalog *NetworkCatalog) RegisterServiceCalendarVersion(
 	}
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO network_routing.service_calendar_version
-			(tenant_id, target_kind, target_code, version, effective_from, effective_to)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
+			(tenant_id, target_kind, target_code, version, effective_from, effective_to,
+			 cutoff_local_minute, processing_minutes, buffer_minutes)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 		tenant.String(), kind, row.TargetCode, row.Version, row.EffectiveFrom.UTC(),
 		optionalTime(row.EffectiveTo, row.HasEffectiveTo),
+		row.CutoffLocalMinute, row.ProcessingMinutes, row.BufferMinutes,
 	); err != nil {
 		return fmt.Errorf("register service calendar version: %w", err)
 	}

@@ -157,6 +157,7 @@ type routeEvidenceDouble struct {
 func (double *routeEvidenceDouble) LoadInitialRouteEvidence(
 	_ context.Context,
 	key domain.InitialRouteJudgmentKey,
+	_ ports.RequestCarriedContent,
 ) (ports.InitialRouteEvidence, bool, error) {
 	double.loaded++
 	parcel := key.DeclaredParcelID.String()

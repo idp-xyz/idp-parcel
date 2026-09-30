@@ -196,7 +196,7 @@ func (handler *ReassessRouteHandler) Handle(
 		return handler.undecided(key, NoRoutingHistory), nil
 	}
 
-	evidence, configured, err := handler.deps.Evidence.LoadInitialRouteEvidence(ctx, key)
+	evidence, configured, err := handler.deps.Evidence.LoadInitialRouteEvidence(ctx, key, ports.RequestCarriedContent{})
 	if err != nil {
 		return handler.undecided(key, ReassessEvidenceUnavailable), nil
 	}

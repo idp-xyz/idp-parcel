@@ -303,7 +303,7 @@ func (handler *CreateInitialRouteHandler) Handle(
 
 	results := make([]ParcelRouteResult, 0, len(keys))
 	for _, key := range keys {
-		result, err := handler.routeOneParcel(ctx, handoff.Correlation(), key)
+		result, err := handler.routeOneParcel(ctx, handoff.Correlation(), key, command.Carried)
 		if err != nil {
 			return CreateInitialRouteResult{}, err
 		}
@@ -321,6 +321,7 @@ func (handler *CreateInitialRouteHandler) routeOneParcel(
 	ctx context.Context,
 	correlation domain.RequestCorrelationID,
 	key domain.InitialRouteJudgmentKey,
+	carried ports.RequestCarriedContent,
 ) (ParcelRouteResult, error) {
 	existing, found, err := handler.deps.Store.FindByKey(ctx, key)
 	if err != nil {
@@ -330,7 +331,7 @@ func (handler *CreateInitialRouteHandler) routeOneParcel(
 		return handler.existingResult(ctx, correlation, key, existing), nil
 	}
 
-	evidence, configured, err := handler.deps.Evidence.LoadInitialRouteEvidence(ctx, key)
+	evidence, configured, err := handler.deps.Evidence.LoadInitialRouteEvidence(ctx, key, carried)
 	if err != nil {
 		return handler.undecidedParcel(key, RouteEvidenceUnavailable), nil
 	}
@@ -343,11 +344,8 @@ func (handler *CreateInitialRouteHandler) routeOneParcel(
 		if err != nil {
 			return ParcelRouteResult{}, err
 		}
-		if undecided != nil {
-			return *undecided, nil
-		}
 
-		fresh, configured, err := handler.deps.Evidence.LoadInitialRouteEvidence(ctx, key)
+		fresh, configured, err := handler.deps.Evidence.LoadInitialRouteEvidence(ctx, key, carried)
 		if err != nil {
 			return handler.undecidedParcel(key, RouteEvidenceUnavailable), nil
 		}
@@ -356,10 +354,14 @@ func (handler *CreateInitialRouteHandler) routeOneParcel(
 			// 的证据定案。
 			return handler.undecidedParcel(key, RouteEvidenceNotConfigured), nil
 		}
-		if fresh.ViewRevision == evidence.ViewRevision {
-			return handler.commit(ctx, correlation, key, record)
+		if fresh.ViewRevision != evidence.ViewRevision {
+			evidence = fresh
+			continue
 		}
-		evidence = fresh
+		if undecided != nil {
+			return *undecided, nil
+		}
+		return handler.commit(ctx, correlation, key, record)
 	}
 	return handler.undecidedParcel(key, RouteEvidenceSuperseded), nil
 }

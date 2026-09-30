@@ -7,6 +7,7 @@ import (
 
 	nrpartycommercial "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/partycommercial"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
+	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 	pspartycommercial "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
@@ -325,7 +326,7 @@ func assertRouteEvidenceUnconfigured(t *testing.T, fixture *synVerticalFixture) 
 	if err != nil {
 		t.Fatalf("构造初始路由证据视图：%v", err)
 	}
-	_, configured, err := evidence.LoadInitialRouteEvidence(t.Context(), synInitialRouteKey(t, fixture))
+	_, configured, err := evidence.LoadInitialRouteEvidence(t.Context(), synInitialRouteKey(t, fixture), nrports.RequestCarriedContent{})
 	if err != nil {
 		t.Fatalf("LoadInitialRouteEvidence：%v", err)
 	}
