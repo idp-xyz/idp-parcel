@@ -49,4 +49,4 @@ Date: 2026-08-18
 - [ADR-0003：集团租户边界](./0003-group-tenant-legal-entity-customer-account.md)
 - [ADR-0025：跨上下文适配器落在消费方](./0025-cross-context-adapters-live-on-the-consumer-side.md)
 - [UC-NR-001：形成初始路由](../application/network-routing/UC-NR-001-CREATE-INITIAL-ROUTE.md)
-- [ADR-0156：可达性资格的闭包标识从本轮已采用的商业解析回指](./0156-reachability-closure-identity-comes-from-the-adopted-resolution.md)：停用本记录后果里可达性那一句；正文其余各条不改写
+- [ADR-0156：可达性资格的闭包标识从本轮已采用的商业解析回指](./0156-reachability-closure-identity-comes-from-the-adopted-resolution.md)：停用本记录后果里可达性那一句，以及 Context 里「`ReachabilityClosureIdentity` 仍属实例半边」那一句；正文其余各条不改写

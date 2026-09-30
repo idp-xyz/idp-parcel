@@ -265,7 +265,7 @@ type RecordedJudgments struct {
 	Reachability                []domain.ReachabilityJudgment
 	FinancialControl            domain.FinancialControlResult
 	AdoptedCommercialResolution domain.CommercialResolutionID
-	// ReachabilityStaleResolution 表示本版已经有可达性判断，但没有一份是在当前采用的解析下形成的。
+	// ReachabilityStaleResolution 表示本版里有成员的可达性判断是在别的解析下形成的，当前采用的解析下还没有该成员的一份。
 	// 决定不能拿另一份解析的判断配这一份依据。
 	ReachabilityStaleResolution bool
 }

@@ -284,6 +284,7 @@ func (fixture *synVerticalFixture) recordPassingJudgments(t *testing.T, ctx cont
 	if err != nil {
 		t.Fatalf("可达性判断：%v", err)
 	}
+	reachable = reachable.FormedUnder(mustPS(t, psdomain.NewCommercialResolutionID, "SYN-RES-01"))
 	controlAsOf := synJudgmentAsOf(t, psdomain.FinancialControlJudgmentKind, time.Now().UTC().Add(-time.Minute))
 	held := synHeldControl(t, "SYN-SAC-01", controlAsOf)
 

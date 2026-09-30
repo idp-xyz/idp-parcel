@@ -177,11 +177,13 @@ func (handler *FormAcceptanceDecisionHandler) Handle(
 		return handler.undecided(ctx, command, ManualReviewPolicyNotDeclared, request.State()), nil
 	}
 
+	// 逐成员看：该成员已有判断，却没有一份是在当前采用的解析下形成的。这与下面的网络视图换代
+	// （`AT-PS-037`）不是同一个缺口。续办引用按原因派生，压进同一格会让两种缺口共用一条引用。
+	if recorded.ReachabilityStaleResolution {
+		return handler.undecided(ctx, command, ReachabilityJudgmentFormedUnderAnotherResolution, request.State()), nil
+	}
 	// 可达性判断同属提交前重校窗口（`AT-PS-037`）：判断形成后网络视图换代的，原结果不再
 	// 用于接受。提交后的视图变化不追溯——已决定的委托在上面的早退分支就交回了历史决定。
-	if recorded.ReachabilityStaleResolution {
-		return handler.undecided(ctx, command, ReachabilityJudgmentSuperseded, request.State()), nil
-	}
 	reachabilityStall, err := handler.revalidateReachability(ctx, command, recorded.Reachability)
 	if err != nil {
 		return FormAcceptanceDecisionResult{}, err

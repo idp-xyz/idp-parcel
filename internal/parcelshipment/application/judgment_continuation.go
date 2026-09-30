@@ -144,6 +144,13 @@ const (
 	ControlDispositionUnavailable
 	ControlDispositionNotFormed
 
+	// ReachabilityJudgmentFormedUnderAnotherResolution 说的是本版某成员的可达性判断是在别的
+	// 解析下形成的，当前采用的解析下还没有该成员的一份。恢复动作是按新解析再推进一次判断。
+	//
+	// 它与 ReachabilityJudgmentSuperseded 分开：那一格是网络视图换代（AT-PS-037），这一格是
+	// 解析换了、旧判断还在。续办引用按原因派生，压进同一格会让两种缺口共用一条引用。
+	ReachabilityJudgmentFormedUnderAnotherResolution
+
 	// judgmentPendingReasonEnd 不是一个原因，是封闭集合的上界，**必须永远排在最后**。
 	//
 	// 它让「每个取值都有 String()」可以被遍历检查，而那条检查堵的是一条静默链：漏补
@@ -235,6 +242,8 @@ func (reason JudgmentPendingReason) String() string {
 		return "REACHABILITY_REQUEST_NOT_ACCEPTED"
 	case ReachabilityJudgmentSuperseded:
 		return "REACHABILITY_JUDGMENT_SUPERSEDED"
+	case ReachabilityJudgmentFormedUnderAnotherResolution:
+		return "REACHABILITY_JUDGMENT_FORMED_UNDER_ANOTHER_RESOLUTION"
 	case ReachabilityRevalidationJudgmentNotFound:
 		return "REACHABILITY_REVALIDATION_JUDGMENT_NOT_FOUND"
 	case ReachabilityRevalidationUndetermined:

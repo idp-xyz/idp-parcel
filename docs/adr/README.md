@@ -69,7 +69,7 @@
 - [ADR-0061：已接受委托的重建门按快照表达能力开门](./0061-accepted-shipment-request-rehydration-by-snapshot-expressiveness.md)
 - [ADR-0062：采用规则版本从已接受解析标识回指提供方持有的闭包](./0062-adopted-stage-owner-from-accepted-resolution.md)
 - [ADR-0063：收寄硬资格证明由消费侧窄口取证，商业上下文只声明开放引用](./0063-intake-qualification-proof-is-a-consumer-side-evidence-port.md)
-- [ADR-0064：初始路由适用性闭包标识从已接受解析标识回指](./0064-initial-route-applicability-closure-from-accepted-resolution.md)｜**部分停用**：后果里「可达性那条链的 `ReachabilityClosureIdentity` 不变」一句已由 [ADR-0156](./0156-reachability-closure-identity-comes-from-the-adopted-resolution.md) 停用。决定一至四与初始路由那条回指不变
+- [ADR-0064：初始路由适用性闭包标识从已接受解析标识回指](./0064-initial-route-applicability-closure-from-accepted-resolution.md)｜**部分停用**：后果里「可达性那条链的 `ReachabilityClosureIdentity` 不变」一句，以及 Context 里「`ReachabilityClosureIdentity` 仍属实例半边（可达性判断键同样没有解析标识，且本记录不管 UC-NR-002）」一句，已由 [ADR-0156](./0156-reachability-closure-identity-comes-from-the-adopted-resolution.md) 停用。该符号已不存在。决定一至四与初始路由那条回指不变。正文不改写
 - [ADR-0065：追踪投影版本只增不改写；替代关系由源上下文给出，不进冲突裁决](./0065-projection-versions-are-append-only-and-supersession-is-source-given.md)
 - [ADR-0066：多载运对象信封在消费侧按成员循环拆分；成员维进事实引用，不进事实类型](./0066-multi-object-envelope-unrolls-per-member-on-the-consumer-side.md)
 - [ADR-0067：预期成本纠错版本整组重述一个评价的计价结果，同币种两额相等对所有版本成立](./0067-cost-correction-restates-the-whole-evaluation-result.md)
