@@ -29,3 +29,12 @@ Blocked by: 无（第 4 项里公开承运商接口的参考配置那半等 03�
 ## 完成判据
 
 - 每项要么有执行器（带测试），要么记下已有执行器的证据；登记册对应行「〔ADR-0146 拆分〕」一句同步收短。
+
+## Comments
+
+**评审 ← 通道 1（隔离子代理，非作者）· 钉 `729bb56d`（通道 2 分支 `mcp2-submission-receipt-asof`，第 1 项的局部步）· 2026-09-30 18:51**
+
+- **阻断**（两轴各自得出，同一处）：`submission_receipt_as_of.go` 的 `submissionReceiptSemantics` 按 `SYN-ASOF-SUBMIT-TIME` 开关。该串只出现在演示种子 `publish-batch.json` 里 `SYN-TENANT-01` 自己的规则包，是租户取值，不是产品形态。与 ADR-0146 决定二（形态的判断逻辑归产品，租户只选形态）、决定三（参考配置版本化，不含任何租户的实例数据）、ADR-0150 决定一（代码路径不区分合成租户与真实租户）相抵；两个领域包 `AsOfSemanticsReference` 注释「既不解释它」随之失真，要改先改 `CONTEXT`。
+- **非阻断**：`receivedAt` 为零应报 error 而不是答`未配置`，该分支无测试；`acceptanceChainConsumers` 注释称财务控制那格形不成，实际靠种子取值成立；`submissionReceiptLookup` 与同包 finder 同形；「系统接收时刻」与 `CONTEXT` 原词「系统接收时间」不一；开发主线 PN-02 行「逐项时点 `Values` 为 nil」已部分失真。
+- 验证：隔离检出 `729bb56d` 上带 DSN `go test -p 1 -count=1 ./...` 绿（含 PG）。
+- **结论：不重放**，回作者同一分支修；修完两轴重跑。
