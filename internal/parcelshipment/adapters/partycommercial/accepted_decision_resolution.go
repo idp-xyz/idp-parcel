@@ -13,7 +13,7 @@ type acceptedShipmentRequests interface {
 	FindBySourceIdentity(ctx context.Context, identity psdomain.SourceIdentity) (psdomain.ShipmentRequest, bool, error)
 }
 
-// acceptedDecisionResolution 从已接受委托的接受决定上读商业解析（ADR-0158）。
+// acceptedDecisionResolution 从已接受委托的接受决定上读商业解析（ADR-0159）。
 type acceptedDecisionResolution struct {
 	requests acceptedShipmentRequests
 }
