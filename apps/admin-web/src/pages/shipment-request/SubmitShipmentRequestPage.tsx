@@ -535,6 +535,13 @@ function SubmitOutcomeCard({ body, status }: { body: SubmitResponseBody; status:
             {ownership.continuationReference ? (
               <DetailRow label="续办引用" value={ownership.continuationReference} mono />
             ) : null}
+            {ownership.handoffConfirmationReference ? (
+              <DetailRow
+                label="交接确认引用"
+                value={ownership.handoffConfirmationReference}
+                mono
+              />
+            ) : null}
             {ownership.suspensionReference ? (
               <DetailRow label="暂停引用" value={ownership.suspensionReference} mono />
             ) : null}

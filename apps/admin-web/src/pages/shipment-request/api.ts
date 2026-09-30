@@ -51,6 +51,7 @@ export interface ProductionOwnershipView {
   handoffReference?: string;
   unresolvedReason?: string;
   continuationReference?: string;
+  handoffConfirmationReference?: string;
   suspensionReference?: string;
 }
 
