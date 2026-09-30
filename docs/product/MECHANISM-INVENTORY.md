@@ -17,10 +17,10 @@
 | partycommercial | 153 | 161 | 12 | 39 | 1 | 37 |
 | pilotgovernance | 22 | 20 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
-| settlementaccounting | 115 | 87 | 17 | 46 | 9 | 9 |
+| settlementaccounting | 120 | 90 | 18 | 47 | 9 | 9 |
 | transportfulfillment | 150 | 137 | 26 | 36 | 11 | 29 |
 | visibilityexception | 100 | 96 | 11 | 30 | 8 | 11 |
-| **合计** | 1098 | 1030 | 137 | 277 | 57 | 156 |
+| **合计** | 1103 | 1033 | 138 | 278 | 57 | 156 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 73、测试 108。
 
@@ -61,7 +61,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：12 个模块共 188 份 SQL
+## 迁移：12 个模块共 189 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -74,7 +74,7 @@
 | parcel_shipment | 23 |
 | party_commercial | 36 |
 | pilot_governance | 8 |
-| settlement_accounting | 24 |
+| settlement_accounting | 25 |
 | transport_fulfillment | 20 |
 | visibility_exception | 26 |
 
@@ -121,7 +121,7 @@
 | visibilityexception | 8 |
 | **合计** | 24 |
 
-## 端口：声明 434 个；基线口径缺 24，精确口径缺 3
+## 端口：声明 436 个；基线口径缺 24，精确口径缺 3
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
