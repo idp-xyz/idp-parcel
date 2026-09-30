@@ -167,6 +167,7 @@ func (handler *AdvanceAcceptanceJudgmentHandler) Handle(
 		SubmissionVersion: command.SubmissionVersion,
 		DeclaredParcelID:  command.DeclaredParcelID,
 		AsOf:              adopted.asOf,
+		Resolution:        adopted.snapshot.ResolutionID(),
 	})
 	if err != nil {
 		return handler.undecided(ctx, command, ReachabilityAuthorityUnavailable), nil

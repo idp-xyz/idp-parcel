@@ -1018,7 +1018,7 @@ const operatorRegistrationRedrivePageSize = 200
 //
 //   - 时点取值源只折「提交接收」（产品参考配置引用 → 本提交版本的系统接收时间）。
 //     租户在哪格采用就在哪格形成；演示种子的财务控制格没采用，所以答`未配置`；
-//   - 可达性闭包标识（ReachabilityClosureIdentity）nil——资格视图答未配置，判断`未形成`；
+//   - 可达性闭包标识从本轮已采用的商业解析回指（ADR-0156），不再留一份判断键到解析的映射；
 //   - 结算账户目录（SettlementAccountDirectory）与控制金额源（ControlAmountSource）nil
 //     ——控制停在 `CONTROL_SCOPE_NOT_CONFIGURED` / `CONTROL_AMOUNT_NOT_CONFIGURED`，绝不
 //     代拟一个账户或拿零去占客户资金。
@@ -1205,9 +1205,9 @@ func acceptanceCommercialBasis(
 // 服务目的取本进程的部署形态参数——它属实例半边但已由 settingsFromEnv 强制必填，因此这
 // 里拿到的一定是配置过的值，不是零值兜底。
 //
-// 资格视图的闭包标识留 nil：可达性判断键上没有解析标识，而范围到解析的映射属试点参数
-// （ADR-0064 明写本记录只改初始路由那条链，可达性这条不变）。留 nil 时资格视图答未配置，
-// 编排形成`未形成判断`——不代拟一个解析标识去问另一个产品的网络资格。
+// 资格视图只持解析闭包的只读口（ADR-0156）。闭包标识由消费方把本轮已采用的解析
+// 随命令带来，不在这里留一份判断键到解析的映射，也不代拟标识。空引用时视图答未配置，
+// 编排形成`未形成判断`。
 //
 // 证据视图从版本化网络目录折出（ADR-0148）。关务来源接「未接」实现：customs-compliance 按路由
 // 候选作答的判断口还没有（routing-first-cut/12），逐候选如实答状态未知，不答满足（决定三）。
@@ -1234,11 +1234,7 @@ func acceptanceReachability(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: reachability handoff: %w", err)
 	}
-	eligibility, err := nrpartycommercial.NewCommercialEligibility(
-		resolutions,
-		// 闭包标识留空：实例半边，见函数注释。
-		nil,
-	)
+	eligibility, err := nrpartycommercial.NewCommercialEligibility(resolutions)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: reachability commercial eligibility: %w", err)
 	}

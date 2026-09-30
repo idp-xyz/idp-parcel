@@ -122,7 +122,7 @@ func (fixture *catalogReachFixture) seedNetwork(t *testing.T) {
 
 type catalogReachEligibility struct{}
 
-func (catalogReachEligibility) AssessNetworkEligibility(context.Context, domain.ReachabilityJudgmentKey) (domain.NetworkEligibility, error) {
+func (catalogReachEligibility) AssessNetworkEligibility(context.Context, domain.ReachabilityJudgmentKey, domain.CommercialResolutionReference) (domain.NetworkEligibility, error) {
 	return domain.NewNetworkEligibility(domain.NetworkJudgmentRequired, domain.EligibilityBasisReference{})
 }
 

@@ -104,9 +104,13 @@ func (reference ContinuationReference) String() string {
 
 // AssessParcelReachabilityCommand 的 Carried 是发起方随请求交来的判断对象内容（ADR-0075；ADR-0148 决定一），
 // 不进判断范围：判断身份由 Key 各维构成，所携内容换了一版就是换了提交版本，范围自然不同。
+//
+// Resolution 是消费方本轮已经采用的商业解析（ADR-0156）。它与 Key 并列，不参与
+// SameJudgmentScope：换一次解析不是另一次可达性判断。
 type AssessParcelReachabilityCommand struct {
 	Correlation domain.RequestCorrelationID
 	Key         domain.ReachabilityJudgmentKey
+	Resolution  domain.CommercialResolutionReference
 	Carried     ports.RequestCarriedContent
 }
 
@@ -208,7 +212,7 @@ func (handler *AssessParcelReachabilityHandler) Handle(
 
 	// 商业适用先于候选装配。顺序不能反：一个本就不要求判断的服务，没有理由先被装配一遍
 	// 候选——那次装配既是白做的，也已经读了这个客户的网络资格。
-	eligibility, err := handler.eligibility.AssessNetworkEligibility(ctx, command.Key)
+	eligibility, err := handler.eligibility.AssessNetworkEligibility(ctx, command.Key, command.Resolution)
 	if err != nil {
 		// 商业侧调不通形成`未形成判断`，不读成「不要求判断」。混起来会让一次商业故障
 		// 变成`不适用`，而`不适用`说的是这个问题不该问，与问过了没答案是两回事。

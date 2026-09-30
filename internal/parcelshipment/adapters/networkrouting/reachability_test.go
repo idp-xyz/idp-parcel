@@ -35,12 +35,15 @@ func (clock fixedClock) Now() time.Time { return clock.at }
 type eligibilityDouble struct {
 	eligibility nrdomain.NetworkEligibility
 	err         error
+	resolution  nrdomain.CommercialResolutionReference
 }
 
 func (double *eligibilityDouble) AssessNetworkEligibility(
 	_ context.Context,
 	_ nrdomain.ReachabilityJudgmentKey,
+	resolution nrdomain.CommercialResolutionReference,
 ) (nrdomain.NetworkEligibility, error) {
+	double.resolution = resolution
 	if double.err != nil {
 		return nrdomain.NetworkEligibility{}, double.err
 	}
@@ -238,6 +241,19 @@ func TestAFormedFindingBecomesAReachabilityJudgment(t *testing.T) {
 	if replay.Outcome != psports.ReachabilityAssessed ||
 		replay.Judgment.JudgmentID() != assessment.Judgment.JudgmentID() {
 		t.Fatal("重放没有交回同一份判断")
+	}
+}
+
+func TestAdoptedResolutionIsCarriedBesideTheJudgmentKey(t *testing.T) {
+	fixture := newReachabilityFixture(t)
+	request := fixture.request(t)
+	request.Resolution = value(t, psdomain.NewCommercialResolutionID, "RES-adopted")
+
+	if _, err := fixture.adapter.AssessParcelReachability(context.Background(), request); err != nil {
+		t.Fatalf("assess: %v", err)
+	}
+	if got := fixture.eligibility.resolution.String(); got != "RES-adopted" {
+		t.Fatalf("resolution carried = %q, want RES-adopted", got)
 	}
 }
 

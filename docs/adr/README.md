@@ -69,7 +69,7 @@
 - [ADR-0061：已接受委托的重建门按快照表达能力开门](./0061-accepted-shipment-request-rehydration-by-snapshot-expressiveness.md)
 - [ADR-0062：采用规则版本从已接受解析标识回指提供方持有的闭包](./0062-adopted-stage-owner-from-accepted-resolution.md)
 - [ADR-0063：收寄硬资格证明由消费侧窄口取证，商业上下文只声明开放引用](./0063-intake-qualification-proof-is-a-consumer-side-evidence-port.md)
-- [ADR-0064：初始路由适用性闭包标识从已接受解析标识回指](./0064-initial-route-applicability-closure-from-accepted-resolution.md)
+- [ADR-0064：初始路由适用性闭包标识从已接受解析标识回指](./0064-initial-route-applicability-closure-from-accepted-resolution.md)｜**部分停用**：后果里「可达性那条链的 `ReachabilityClosureIdentity` 不变」一句已由 [ADR-0156](./0156-reachability-closure-identity-comes-from-the-adopted-resolution.md) 停用。决定一至四与初始路由那条回指不变
 - [ADR-0065：追踪投影版本只增不改写；替代关系由源上下文给出，不进冲突裁决](./0065-projection-versions-are-append-only-and-supersession-is-source-given.md)
 - [ADR-0066：多载运对象信封在消费侧按成员循环拆分；成员维进事实引用，不进事实类型](./0066-multi-object-envelope-unrolls-per-member-on-the-consumer-side.md)
 - [ADR-0067：预期成本纠错版本整组重述一个评价的计价结果，同币种两额相等对所有版本成立](./0067-cost-correction-restates-the-whole-evaluation-result.md)
@@ -160,6 +160,7 @@
 - [ADR-0153：委托声明的服务产品身份收窄商业解析——同一范围多个产品不再必然适用冲突；收窄的是对象身份不是版本；正文指名了另一产品的成员落选](./0153-declared-service-product-identity-narrows-commercial-resolution.md)
 - [ADR-0154：接管记录的写侧尚未裁——先定谁可以写、写之前要有什么；不填 PAR-GOV-05..07 的租户值](./0154-takeover-record-write-side-is-not-yet-decided.md)｜**先开 CLI、HTTP 另票**：调用现成 `TakeOver`，不加暂停或既有区间前置，不与暂停、恢复、阶段评审互引；种子不造行。2026-09-29 用户授权自决。实现不在本记录。
 - [ADR-0155：对象级接管的查阅口开在既有治理登记册上——空册如实空；不造种子行；HTTP 写仍另票](./0155-takeover-register-read-opens-on-the-existing-catalogue.md)｜**查阅口**：`register=takeover` 上列标量，盘点 jsonb 不上列；空册空数组。部分停用 ADR-0083 决定四的接管半句。2026-09-29 用户授权继续。
+- [ADR-0156：可达性资格的闭包标识从本轮已采用的商业解析回指](./0156-reachability-closure-identity-comes-from-the-adopted-resolution.md)｜**回指**：解析标识随可达性命令带过，不进判断键，不另造映射。空引用仍是未形成。部分停用 ADR-0064 后果里可达性那一句。2026-09-30 用户授权继续。
 - [ADR-0157：内置时点形态以参考配置发布，租户在时点语义格用引用选用](./0157-built-in-as-of-forms-are-adopted-as-reference-citations.md)｜**形态选择格**：不是 ADR-0147 的依据格；带 `REFCFG-1:` 的值登记时须已发布，否则拒。2026-09-30 用户授权通道 1 自决。
 
 ## 已被取代决策

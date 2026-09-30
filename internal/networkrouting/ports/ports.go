@@ -63,10 +63,13 @@ type NetworkEvidenceView interface {
 //
 // 依赖调不通要作为错误返回，由应用层形成`未形成判断`。把它读成「不要求」会让一次商业侧
 // 故障变成`不适用`，而用例明写不得以`不适用`代替其他结果，也不得虚构运营网络。
+//
+// 解析标识与判断键并列传入（ADR-0156）：它是本轮已采用的商业解析，不是判断维，不得并进 key。
 type CommercialEligibilityView interface {
 	AssessNetworkEligibility(
 		ctx context.Context,
 		key domain.ReachabilityJudgmentKey,
+		resolution domain.CommercialResolutionReference,
 	) (domain.NetworkEligibility, error)
 }
 
