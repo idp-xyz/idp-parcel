@@ -22,12 +22,20 @@ const (
 	commandExternalFundsFact           = "external-funds-fact"
 	commandExternalFundsFactCorrection = "external-funds-fact-correction"
 	commandSettlementAccount           = "settlement-account"
+	commandSupplierAuditAuthority      = "supplier-audit-authority"
+	commandSupplierPayableAccount      = "supplier-payable-account"
+	commandClaimAmountRule             = "claim-amount-rule"
+	commandChargeConfirmationFacts     = "charge-confirmation-facts"
 )
 
 var allCommands = []string{
 	commandExternalFundsFact,
 	commandExternalFundsFactCorrection,
 	commandSettlementAccount,
+	commandSupplierAuditAuthority,
+	commandSupplierPayableAccount,
+	commandClaimAmountRule,
+	commandChargeConfirmationFacts,
 }
 
 // dispatchFunc 是一条命令在事务内的一次调用，交回已经归好退出码的答复。资金事实与结算账户是两族答案，
@@ -77,6 +85,58 @@ func commandFor(command string, raw []byte) (dispatchFunc, error) {
 				return "", 0, err
 			}
 			message, code := accountAnswer(commandSettlementAccount, effect, translated.Account.ID().String())
+			return message, code, nil
+		}, nil
+	case commandSupplierAuditAuthority:
+		tenant, registration, err := registrationjson.SupplierAuditAuthorityFromJSON(raw)
+		if err != nil {
+			return nil, err
+		}
+		return func(ctx context.Context, registrar registrar) (string, int, error) {
+			effect, err := registrar.catalogues.RegisterSupplierAuditAuthority(ctx, tenant, registration)
+			if err != nil {
+				return "", 0, err
+			}
+			message, code := catalogueAnswer(commandSupplierAuditAuthority, effect, registration.Auditor().String())
+			return message, code, nil
+		}, nil
+	case commandSupplierPayableAccount:
+		tenant, registration, err := registrationjson.SupplierPayableAccountFromJSON(raw)
+		if err != nil {
+			return nil, err
+		}
+		return func(ctx context.Context, registrar registrar) (string, int, error) {
+			effect, err := registrar.catalogues.RegisterSupplierPayableAccount(ctx, tenant, registration)
+			if err != nil {
+				return "", 0, err
+			}
+			message, code := catalogueAnswer(commandSupplierPayableAccount, effect, registration.Account().String())
+			return message, code, nil
+		}, nil
+	case commandClaimAmountRule:
+		tenant, registration, err := registrationjson.ClaimAmountRuleFromJSON(raw)
+		if err != nil {
+			return nil, err
+		}
+		return func(ctx context.Context, registrar registrar) (string, int, error) {
+			effect, err := registrar.catalogues.RegisterClaimAmountRule(ctx, tenant, registration)
+			if err != nil {
+				return "", 0, err
+			}
+			message, code := catalogueAnswer(commandClaimAmountRule, effect, registration.Rule().String())
+			return message, code, nil
+		}, nil
+	case commandChargeConfirmationFacts:
+		tenant, registration, err := registrationjson.ChargeConfirmationFactsFromJSON(raw)
+		if err != nil {
+			return nil, err
+		}
+		return func(ctx context.Context, registrar registrar) (string, int, error) {
+			effect, err := registrar.catalogues.RegisterChargeConfirmationFacts(ctx, tenant, registration)
+			if err != nil {
+				return "", 0, err
+			}
+			message, code := catalogueAnswer(commandChargeConfirmationFacts, effect, registration.Charge().String())
 			return message, code, nil
 		}, nil
 	default:

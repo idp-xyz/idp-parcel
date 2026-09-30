@@ -322,7 +322,7 @@ type ExpectedCostRegistry interface {
 }
 
 // SupplierAuditAuthorityView 取该供应商/责任法人范围的审核授权配置。found=false 表示
-// 授权未配置——实例半边未提供时审核停在未决，不默认放行也不虚构授权人（UC-SA-004
+// 授权册上没有这一组——审核停在未决，不默认放行也不虚构授权人（UC-SA-004
 // 「无授权不得人工接受或拒绝」）。
 type SupplierAuditAuthorityView interface {
 	LoadSupplierAuditAuthority(
@@ -335,7 +335,7 @@ type SupplierAuditAuthorityView interface {
 
 // SupplierPayableAccountView 取该供应商/责任法人/币种的供应商审核应付所归集的结算账户
 // （`PAR-SET-01`「首发主伙伴供应商审核应付/费用贷项的结算账户、方向、币种和归集范围」）。
-// found=false 表示账户未登记——实例半边未提供时审核停在未决，不默认账户、不从供应商身份
+// found=false 表示这一组没有登记——审核停在未决，不默认账户、不从供应商身份
 // 推导：CONTEXT「结算账户……不能由客户账户或当前组织临时推导」对供应商侧同样成立。
 //
 // 与 SupplierAuditAuthorityView 分两个读口：授权答「谁能审」，账户答「审过的应付归哪本账」，
@@ -454,8 +454,8 @@ type ConfirmationConditionView interface {
 }
 
 // ConfirmedChargeFactsView 取这笔费用在确认时必须固定的七项事实（SA CONTEXT「费用形成
-// 与证据」硬句，ADR-0087 决定一）。found=false 表示这些事实无处可取——实例半边未提供时
-// 确认停在未决，不用空值凑格。
+// 与证据」硬句，ADR-0087 决定一的结果列另写在费用行上）。found=false 表示确认事实册
+// 上没有这一行——确认停在未决，不用空值凑格。
 //
 // 与 ConfirmationConditionView 分两个读口而不并成一个：条件核对答的是「这笔费用能不能
 // 确认」，本读口答的是「确认下来钉哪些事实」，两者的未配置态等的东西不同（一个等确认
@@ -1042,7 +1042,7 @@ type OperatingHandoff interface {
 }
 
 // ClaimAmountRuleView 取责任结论适用的限额/比例/免赔金额规则版本。found=false 表示
-// 金额规则目录未配置——没有规则版本不形成金额（实例半边，AT-SA-147）。
+// 金额规则册上没有这一行——没有规则版本不形成金额（AT-SA-147）。
 type ClaimAmountRuleView interface {
 	LoadClaimAmountRule(
 		ctx context.Context,
