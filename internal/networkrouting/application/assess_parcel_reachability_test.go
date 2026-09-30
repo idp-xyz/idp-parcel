@@ -93,6 +93,7 @@ type eligibilityDouble struct {
 func (double *eligibilityDouble) AssessNetworkEligibility(
 	_ context.Context,
 	_ domain.ReachabilityJudgmentKey,
+	_ domain.CommercialResolutionReference,
 ) (domain.NetworkEligibility, error) {
 	double.asked++
 	if double.err != nil {

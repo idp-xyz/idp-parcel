@@ -16,7 +16,7 @@ func TestNetworkServiceFormRequiresANetworkJudgment(t *testing.T) {
 	closure := closureWithProduct(t, true)
 	view := newEligibility(t, closure)
 
-	eligibility, err := view.AssessNetworkEligibility(t.Context(), reachabilityKey(t))
+	eligibility, err := view.AssessNetworkEligibility(t.Context(), reachabilityKey(t), routingResolution(t, closure))
 	if err != nil {
 		t.Fatalf("assess: %v", err)
 	}
@@ -29,7 +29,7 @@ func TestAbsentServiceProductIsDependencyUnavailableNotNotRequired(t *testing.T)
 	closure := closureWithProduct(t, false)
 	view := newEligibility(t, closure)
 
-	eligibility, err := view.AssessNetworkEligibility(t.Context(), reachabilityKey(t))
+	eligibility, err := view.AssessNetworkEligibility(t.Context(), reachabilityKey(t), routingResolution(t, closure))
 	if !errors.Is(err, adapter.ErrServiceProductUnavailable) {
 		t.Fatalf("err = %v, want ErrServiceProductUnavailable", err)
 	}
@@ -38,16 +38,41 @@ func TestAbsentServiceProductIsDependencyUnavailableNotNotRequired(t *testing.T)
 	}
 }
 
-func TestUnconfiguredClosureIdentityIsDependencyUnavailable(t *testing.T) {
+func TestBlankResolutionReferenceIsDependencyUnavailable(t *testing.T) {
 	closure := closureWithProduct(t, true)
-	view, err := adapter.NewCommercialEligibility(newClosureStore(closure), nil)
-	if err != nil {
-		t.Fatalf("new eligibility: %v", err)
-	}
+	view := newEligibility(t, closure)
 
-	_, err = view.AssessNetworkEligibility(t.Context(), reachabilityKey(t))
+	_, err := view.AssessNetworkEligibility(t.Context(), reachabilityKey(t), nrdomain.CommercialResolutionReference{})
 	if !errors.Is(err, adapter.ErrServiceProductUnavailable) {
 		t.Fatalf("err = %v, want ErrServiceProductUnavailable", err)
+	}
+}
+
+func TestReachabilityClosureMissingIsDependencyUnavailable(t *testing.T) {
+	closure := closureWithProduct(t, true)
+	view := newEligibility(t, closure)
+
+	_, err := view.AssessNetworkEligibility(
+		t.Context(), reachabilityKey(t),
+		mustNR(t, nrdomain.NewCommercialResolutionReference, "RES-missing"),
+	)
+	if !errors.Is(err, adapter.ErrServiceProductUnavailable) {
+		t.Fatalf("err = %v, want ErrServiceProductUnavailable", err)
+	}
+}
+
+func TestReachabilityClosureTenantMismatchIsNotUnconfigured(t *testing.T) {
+	closure := closureWithProduct(t, true)
+	view := newEligibility(t, closure)
+	foreign := reachabilityKey(t)
+	foreign.TenantID = mustNR(t, nrdomain.NewTenantID, "tenant-other")
+
+	_, err := view.AssessNetworkEligibility(t.Context(), foreign, routingResolution(t, closure))
+	if !errors.Is(err, adapter.ErrRoutingClosureTenantMismatch) {
+		t.Fatalf("err = %v, want ErrRoutingClosureTenantMismatch", err)
+	}
+	if errors.Is(err, adapter.ErrServiceProductUnavailable) {
+		t.Fatal("租户不一致被折成了服务产品不可用")
 	}
 }
 
@@ -128,15 +153,12 @@ func translateViaClosure(t *testing.T, product pcdomain.ServiceProduct) (nrdomai
 	t.Helper()
 	closure := rehydratedClosure(t, product, true)
 	view := newEligibility(t, closure)
-	return view.AssessNetworkEligibility(t.Context(), reachabilityKey(t))
+	return view.AssessNetworkEligibility(t.Context(), reachabilityKey(t), routingResolution(t, closure))
 }
 
 func newEligibility(t *testing.T, closure pcdomain.CommercialClosure) *adapter.CommercialEligibility {
 	t.Helper()
-	view, err := adapter.NewCommercialEligibility(
-		newClosureStore(closure),
-		fixedReachabilityIdentity{id: closure.ResolutionID()},
-	)
+	view, err := adapter.NewCommercialEligibility(newClosureStore(closure))
 	if err != nil {
 		t.Fatalf("new eligibility: %v", err)
 	}
@@ -178,17 +200,6 @@ func (double *closureStoreDouble) LoadResolution(
 
 func (double *closureStoreDouble) Save(_ context.Context, _ pcdomain.CommercialClosure) (pcports.ResolutionSaveOutcome, error) {
 	return pcports.ResolutionSaveOutcomeInvalid, errors.New("save is not used by the eligibility adapter")
-}
-
-type fixedReachabilityIdentity struct {
-	id pcdomain.ResolutionID
-}
-
-func (identity fixedReachabilityIdentity) ResolutionID(
-	_ context.Context,
-	_ nrdomain.ReachabilityJudgmentKey,
-) (pcdomain.ResolutionID, bool, error) {
-	return identity.id, true, nil
 }
 
 func closureWithProduct(t *testing.T, registerProduct bool) pcdomain.CommercialClosure {

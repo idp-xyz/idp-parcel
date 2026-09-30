@@ -56,6 +56,9 @@ func TestAcceptanceJudgmentResolvesBasisThenFormsAsOfThenAssesses(t *testing.T) 
 	if requested.PolicyVersion().String() == "" {
 		t.Fatal("the formed asOf did not carry the policy version that authorised it")
 	}
+	if got := fixture.reachability.lastResolution.String(); got != "RES-1" {
+		t.Fatalf("reachability resolution = %q, want the adopted RES-1", got)
+	}
 
 	judgement, present := result.ReachabilityJudgment()
 	if !present || judgement.Value() != domain.ReachabilityReachable {
@@ -615,13 +618,14 @@ func (double *commercialBasisDouble) RevalidateCommercialBasis(
 }
 
 type reachabilityDouble struct {
-	t        *testing.T
-	value    domain.ReachabilityValue
-	outcome  ports.ReachabilityOutcome
-	err      error
-	record   func(string)
-	calls    int
-	lastAsOf domain.JudgmentAsOf
+	t              *testing.T
+	value          domain.ReachabilityValue
+	outcome        ports.ReachabilityOutcome
+	err            error
+	record         func(string)
+	calls          int
+	lastAsOf       domain.JudgmentAsOf
+	lastResolution domain.CommercialResolutionID
 	// parcels 按序留下每一轮问的是哪个成员。计数分不出「逐成员各问一次」和「问了同一个
 	// 成员两次」，而接受决定要的是每个成员各有一份判断。
 	parcels []domain.DeclaredParcelID
@@ -635,6 +639,7 @@ func (double *reachabilityDouble) AssessParcelReachability(
 	double.record("assess-reachability")
 	double.calls++
 	double.lastAsOf = request.AsOf
+	double.lastResolution = request.Resolution
 	double.parcels = append(double.parcels, request.DeclaredParcelID)
 	if double.err != nil {
 		return ports.ReachabilityAssessment{}, double.err

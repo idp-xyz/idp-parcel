@@ -902,12 +902,16 @@ type CommercialBasisResolver interface {
 
 // ReachabilityRequest 携带按所采用规则包声明的策略形成的判断时点。权威提供方必须校验
 // 并回显它——所以它显式随请求传递，而不是留给提供方自己的时钟。
+//
+// Resolution 是本轮已经记下的商业解析（ADR-0156）。它是命令附加字段，不是判断维。
+// 零值表示还没有采用过解析，提供方答未形成，不代拟标识。
 type ReachabilityRequest struct {
 	Identity          domain.SourceIdentity
 	ShipmentRequestID domain.ShipmentRequestID
 	SubmissionVersion domain.SubmissionVersionID
 	DeclaredParcelID  domain.DeclaredParcelID
 	AsOf              domain.JudgmentAsOf
+	Resolution        domain.CommercialResolutionID
 }
 
 // ReachabilityOutcome 是 network-routing 一次可达性答复在本上下文的落点。

@@ -146,10 +146,24 @@ func (adapter *ReachabilityAdapter) assessCommandFor(
 	if err != nil {
 		return nrapplication.AssessParcelReachabilityCommand{}, err
 	}
+	resolution, err := resolutionReference(request.Resolution)
+	if err != nil {
+		return nrapplication.AssessParcelReachabilityCommand{}, fmt.Errorf("%w: commercial resolution: %v", ErrUntranslatableAnswer, err)
+	}
 	return nrapplication.AssessParcelReachabilityCommand{
 		Correlation: correlationFor(request.ShipmentRequestID, request.SubmissionVersion, request.DeclaredParcelID),
 		Key:         key,
+		Resolution:  resolution,
 	}, nil
+}
+
+// resolutionReference 把本上下文已经采用的解析标识译成提供方的命令附加字段。
+// 零值留零值：提供方把空引用答成未形成，这里不代拟一个标识。非空却译不出是词汇表之外，上抛。
+func resolutionReference(id psdomain.CommercialResolutionID) (nrdomain.CommercialResolutionReference, error) {
+	if id.String() == "" {
+		return nrdomain.CommercialResolutionReference{}, nil
+	}
+	return nrdomain.NewCommercialResolutionReference(id.String())
 }
 
 // judgmentKeyFor 把消费方标识译成提供方判断键。立不起来的部分译成零值交提供方短路作答
