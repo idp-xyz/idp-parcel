@@ -13,6 +13,10 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
+// ErrReachabilityResolutionRequired 说明这次可达性判断没有形成时的商业解析。
+// 空串写进账会在「提交接收」的同一时点上撞上旧键，决定再把旧判断配给新解析。
+var ErrReachabilityResolutionRequired = errors.New("parcel shipment: reachability judgment has no resolution")
+
 // AcceptanceJudgments 同时实现 ports.AcceptanceJudgmentRecorder 与
 // ports.RecordedJudgmentReader：接受判断任务上采用了什么，与提交决定前读回什么，是同一批
 // 行的两面。拆成两个类型只会让「写进去的形状」与「读出来的形状」各有一处定义。
@@ -36,9 +40,9 @@ func NewAcceptanceJudgments(db *bentopg.DB) (*AcceptanceJudgments, error) {
 
 // RecordReachabilityJudgment 把一个已采用的可达性判断追加到任务上。
 //
-// 同一成员的重判各占一行，键上带提交版本与时点：重判必须以新时点发起（`AT-PS-037`），同版本
-// 同成员同时点再来一次是权威重放既有判断，保留先到者。版本在键里是为了让新版本的判断在时点
-// 策略把两版钉在同一时点时仍成为自己那一版的行，而不是被旧版那份吞成重放（迁移 0018）。
+// 同一成员的重判各占一行，键上带提交版本、时点与形成时的解析。重判必须以新时点发起（`AT-PS-037`）。
+// 同版本、同成员、同时点、同一解析再来一次是权威重放，保留先到者。新版本或新解析即使被时点策略
+// 钉在同一时点，也各占一行（迁移 0018、0023）。没有形成时的解析则拒绝写入，不记空串。
 func (repository *AcceptanceJudgments) RecordReachabilityJudgment(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -49,6 +53,9 @@ func (repository *AcceptanceJudgments) RecordReachabilityJudgment(
 	executor, err := repository.db.RequireExecutor(ctx)
 	if err != nil {
 		return fmt.Errorf("record reachability judgment: %w", err)
+	}
+	if judgment.FormedUnderResolution().String() == "" {
+		return fmt.Errorf("record reachability judgment: %w", ErrReachabilityResolutionRequired)
 	}
 
 	asOf := judgment.AsOf()
@@ -260,7 +267,7 @@ func (repository *AcceptanceJudgments) LoadRecordedJudgments(
 	}, nil
 }
 
-// loadReachabilityJudgments 在本版内逐成员只交回当前采用的那一份：按时点取最新。
+// loadReachabilityJudgments 在本版内逐成员只交回当前采用的那一份：已采用解析时只取该解析下的行，按时点取最新。
 //
 // 一个成员交回两份是不行的——形成决定那一步逐条译成校验结果，一份被推翻的`不可达`会连同
 // 重判后的`可达`一起进 Decide，而任何一项确定性失败都拒绝整份版本。`AT-PS-037` 要的正是
@@ -283,11 +290,8 @@ func loadReachabilityJudgments(
 		  WHERE tenant_id = $1
 		    AND shipment_request_id = $2
 		    AND submission_version = $3
-		    AND ($4 = '' OR resolution_id = $4 OR resolution_id = '')
-		  ORDER BY parcel_id,
-		           CASE WHEN $4 <> '' AND resolution_id = $4 THEN 0 ELSE 1 END,
-		           as_of_at DESC,
-		           recorded_at DESC`,
+		    AND ($4 = '' OR resolution_id = $4)
+		  ORDER BY parcel_id, as_of_at DESC, recorded_at DESC`,
 		tenant.String(),
 		requestID.String(),
 		version.String(),
@@ -350,7 +354,6 @@ func reachabilityFormedUnderAnotherResolution(
 		     WHERE tenant_id = $1
 		       AND shipment_request_id = $2
 		       AND submission_version = $3
-		       AND resolution_id <> ''
 		       AND resolution_id <> $4
 		    EXCEPT
 		    SELECT parcel_id
@@ -366,7 +369,7 @@ func reachabilityFormedUnderAnotherResolution(
 		adopted.String(),
 	).Scan(&count)
 	if err != nil {
-		return false, fmt.Errorf("load reachability judgments: %w", err)
+		return false, fmt.Errorf("reachability judgments formed under another resolution: %w", err)
 	}
 	return count > 0, nil
 }

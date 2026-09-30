@@ -35,11 +35,12 @@ func TestAdoptedJudgmentsRoundTripThroughTheTask(t *testing.T) {
 	ctx := t.Context()
 	tenant, requestID := psTenant(t, "tenant-1"), taskRequestID(t, "REQ-1")
 
-	reachable := reachabilityJudgment(t, "parcel-1", domain.ReachabilityReachable, "NRJ-1", "", taskAsOfFirst)
-	notApplicable := reachabilityJudgment(t, "parcel-2", domain.ReachabilityNotApplicable,
-		"", "LABEL_ONLY_CHANNEL_SERVICE", taskAsOfFirst)
-	held := financialControlResult(t, domain.FinancialControlHeld, "SAC-1", "", taskAsOfFirst)
 	resolution := mustBuild(t, domain.NewCommercialResolutionID, "RES-1")
+	reachable := reachabilityJudgment(t, "parcel-1", domain.ReachabilityReachable, "NRJ-1", "", taskAsOfFirst).
+		FormedUnder(resolution)
+	notApplicable := reachabilityJudgment(t, "parcel-2", domain.ReachabilityNotApplicable,
+		"", "LABEL_ONLY_CHANNEL_SERVICE", taskAsOfFirst).FormedUnder(resolution)
+	held := financialControlResult(t, domain.FinancialControlHeld, "SAC-1", "", taskAsOfFirst)
 
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
 		if err := judgments.RecordReachabilityJudgment(txCtx, tenant, requestID, taskVersion(t, "VER-1"), reachable); err != nil {
@@ -267,8 +268,11 @@ func TestARejudgedMemberDecidesByItsLatestJudgment(t *testing.T) {
 	ctx := t.Context()
 	tenant, requestID := psTenant(t, "tenant-1"), taskRequestID(t, "REQ-1")
 
-	superseded := reachabilityJudgment(t, "parcel-1", domain.ReachabilityUnreachable, "NRJ-1", "", taskAsOfFirst)
-	rejudged := reachabilityJudgment(t, "parcel-1", domain.ReachabilityReachable, "NRJ-2", "", taskAsOfSecond)
+	resolution := mustBuild(t, domain.NewCommercialResolutionID, "RES-1")
+	superseded := reachabilityJudgment(t, "parcel-1", domain.ReachabilityUnreachable, "NRJ-1", "", taskAsOfFirst).
+		FormedUnder(resolution)
+	rejudged := reachabilityJudgment(t, "parcel-1", domain.ReachabilityReachable, "NRJ-2", "", taskAsOfSecond).
+		FormedUnder(resolution)
 	firstControl := financialControlResult(t, domain.FinancialControlNotApplicable, "", "PC-NO-CONTROL-1", taskAsOfFirst)
 	laterControl := financialControlResult(t, domain.FinancialControlHeld, "SAC-2", "", taskAsOfSecond)
 
@@ -319,8 +323,11 @@ func TestJudgmentsBelongToTheSubmissionVersionTheyWereFormedFor(t *testing.T) {
 	tenant, requestID := psTenant(t, "tenant-1"), taskRequestID(t, "REQ-1")
 	first, supplemented, unjudged := taskVersion(t, "VER-1"), taskVersion(t, "VER-2"), taskVersion(t, "VER-3")
 
-	insufficient := reachabilityJudgment(t, "parcel-1", domain.ReachabilityInsufficientEvidence, "NRJ-1", "", taskAsOfFirst)
-	reachable := reachabilityJudgment(t, "parcel-1", domain.ReachabilityReachable, "NRJ-2", "", taskAsOfFirst)
+	resolution := mustBuild(t, domain.NewCommercialResolutionID, "RES-1")
+	insufficient := reachabilityJudgment(t, "parcel-1", domain.ReachabilityInsufficientEvidence, "NRJ-1", "", taskAsOfFirst).
+		FormedUnder(resolution)
+	reachable := reachabilityJudgment(t, "parcel-1", domain.ReachabilityReachable, "NRJ-2", "", taskAsOfFirst).
+		FormedUnder(resolution)
 	firstControl := financialControlResult(t, domain.FinancialControlHeld, "SAC-1", "", taskAsOfFirst)
 	laterControl := financialControlResult(t, domain.FinancialControlNotApplicable, "", "PC-NO-CONTROL-2", taskAsOfFirst)
 
@@ -417,6 +424,27 @@ func TestANewResolutionAtTheSameInstantIsTheJudgmentTheDecisionReads(t *testing.
 	}
 }
 
+// TestAReachabilityJudgmentWithoutAResolutionIsNotRecorded 证零值解析写不进账：空串会在同一时点上变成可被决定读到的旧行。
+func TestAReachabilityJudgmentWithoutAResolutionIsNotRecorded(t *testing.T) {
+	judgments, transactor, pool := newAcceptanceJudgments(t)
+	ctx := t.Context()
+	tenant, requestID := psTenant(t, "tenant-1"), taskRequestID(t, "REQ-1")
+	bare := reachabilityJudgment(t, "parcel-1", domain.ReachabilityReachable, "NRJ-1", "", taskAsOfFirst)
+
+	err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		return judgments.RecordReachabilityJudgment(txCtx, tenant, requestID, taskVersion(t, "VER-1"), bare)
+	})
+	if !errors.Is(err, adapter.ErrReachabilityResolutionRequired) {
+		t.Fatalf("零值解析应拒绝写入，实得：%v", err)
+	}
+	if rows := countTaskRows(t, pool,
+		`SELECT count(*) FROM parcel_shipment.acceptance_reachability_judgment
+		  WHERE tenant_id = $1 AND shipment_request_id = $2`,
+		"tenant-1", "REQ-1"); rows != 0 {
+		t.Fatalf("库里 %d 行判断，want 0——空解析被记成了一行", rows)
+	}
+}
+
 // TestRecordingTheSameJudgmentTwiceKeepsTheFirst 证同版本同成员同时点重复到达是重放：保留先到
 // 者，且撞键后事务仍可用（编排还要在同一事务里继续办事）。
 func TestRecordingTheSameJudgmentTwiceKeepsTheFirst(t *testing.T) {
@@ -424,9 +452,12 @@ func TestRecordingTheSameJudgmentTwiceKeepsTheFirst(t *testing.T) {
 	ctx := t.Context()
 	tenant, requestID := psTenant(t, "tenant-1"), taskRequestID(t, "REQ-1")
 
-	first := reachabilityJudgment(t, "parcel-1", domain.ReachabilityReachable, "NRJ-1", "", taskAsOfFirst)
-	// 同一时点上的另一份答复：权威对同一业务时刻只该有一个答案，第二份是重放而不是新判断。
-	second := reachabilityJudgment(t, "parcel-1", domain.ReachabilityUnreachable, "NRJ-2", "", taskAsOfFirst)
+	resolution := mustBuild(t, domain.NewCommercialResolutionID, "RES-1")
+	first := reachabilityJudgment(t, "parcel-1", domain.ReachabilityReachable, "NRJ-1", "", taskAsOfFirst).
+		FormedUnder(resolution)
+	// 同一时点、同一解析上的另一份答复：权威对同一业务时刻只该有一个答案，第二份是重放而不是新判断。
+	second := reachabilityJudgment(t, "parcel-1", domain.ReachabilityUnreachable, "NRJ-2", "", taskAsOfFirst).
+		FormedUnder(resolution)
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
 		return judgments.RecordReachabilityJudgment(txCtx, tenant, requestID, taskVersion(t, "VER-1"), first)
 	})
@@ -534,9 +565,10 @@ func TestAnotherTenantReadsNoneOfTheseJudgments(t *testing.T) {
 	ctx := t.Context()
 	owner, requestID := psTenant(t, "tenant-1"), taskRequestID(t, "REQ-1")
 
-	judgment := reachabilityJudgment(t, "parcel-1", domain.ReachabilityReachable, "NRJ-1", "", taskAsOfFirst)
-	control := financialControlResult(t, domain.FinancialControlHeld, "SAC-1", "", taskAsOfFirst)
 	resolution := mustBuild(t, domain.NewCommercialResolutionID, "RES-1")
+	judgment := reachabilityJudgment(t, "parcel-1", domain.ReachabilityReachable, "NRJ-1", "", taskAsOfFirst).
+		FormedUnder(resolution)
+	control := financialControlResult(t, domain.FinancialControlHeld, "SAC-1", "", taskAsOfFirst)
 	mustWithinTransaction(t, transactor, ctx, func(txCtx context.Context) error {
 		if err := judgments.RecordReachabilityJudgment(txCtx, owner, requestID, taskVersion(t, "VER-1"), judgment); err != nil {
 			return err
@@ -576,7 +608,7 @@ func TestAcceptanceJudgmentShapesArePinnedInTheDatabase(t *testing.T) {
 			 as_of_kind, as_of_semantics, as_of_policy, resolution_id)
 		 VALUES ('tenant-1', 'REQ-x', 'VER-x', 'parcel-x', now(),
 		         NULL, 'NOT_APPLICABLE', NULL,
-		         'REACHABILITY', 'sem-1', 'policy-1', '')`); err == nil {
+		         'REACHABILITY', 'sem-1', 'policy-1', 'RES-x')`); err == nil {
 		t.Error("一次没有依据的`不适用`按 NULL 溜进了判断库——它与一次悄悄放行分不开")
 	}
 
@@ -587,7 +619,7 @@ func TestAcceptanceJudgmentShapesArePinnedInTheDatabase(t *testing.T) {
 			 as_of_kind, as_of_semantics, as_of_policy, resolution_id)
 		 VALUES ('tenant-1', 'REQ-x', 'VER-x', 'parcel-y', now(),
 		         NULL, 'REACHABLE', NULL,
-		         'REACHABILITY', 'sem-1', 'policy-1', '')`); err == nil {
+		         'REACHABILITY', 'sem-1', 'policy-1', 'RES-x')`); err == nil {
 		t.Error("一份没有权威标识的`可达`按 NULL 溜进了判断库")
 	}
 
@@ -600,8 +632,19 @@ func TestAcceptanceJudgmentShapesArePinnedInTheDatabase(t *testing.T) {
 			 as_of_kind, as_of_semantics, as_of_policy, resolution_id)
 		 VALUES ('tenant-1', 'REQ-x', '  ', 'parcel-z', now(),
 		         'NRJ-z', 'REACHABLE', NULL,
-		         'REACHABILITY', 'sem-1', 'policy-1', '')`); err == nil {
+		         'REACHABILITY', 'sem-1', 'policy-1', 'RES-x')`); err == nil {
 		t.Error("一份不属于任何提交版本的判断溜进了判断库")
+	}
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO parcel_shipment.acceptance_reachability_judgment
+			(tenant_id, shipment_request_id, submission_version, parcel_id, as_of_at,
+			 judgment_id, judgment_value, basis_ref,
+			 as_of_kind, as_of_semantics, as_of_policy, resolution_id)
+		 VALUES ('tenant-1', 'REQ-x', 'VER-x', 'parcel-blank', now(),
+		         'NRJ-blank', 'REACHABLE', NULL,
+		         'REACHABILITY', 'sem-1', 'policy-1', '')`); err == nil {
+		t.Error("一份没有形成时解析的判断溜进了判断库")
 	}
 
 	if _, err := pool.Exec(ctx,
@@ -795,7 +838,8 @@ func TestAcceptanceJudgmentWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	tenant, requestID := psTenant(t, "tenant-1"), taskRequestID(t, "REQ-1")
 
 	if err := judgments.RecordReachabilityJudgment(ctx, tenant, requestID, taskVersion(t, "VER-1"),
-		reachabilityJudgment(t, "parcel-1", domain.ReachabilityReachable, "NRJ-1", "", taskAsOfFirst),
+		reachabilityJudgment(t, "parcel-1", domain.ReachabilityReachable, "NRJ-1", "", taskAsOfFirst).
+			FormedUnder(mustBuild(t, domain.NewCommercialResolutionID, "RES-1")),
 	); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务记录可达性判断应返回 ErrTransactionRequired，实得：%v", err)
 	}
@@ -822,9 +866,10 @@ func TestAcceptanceJudgmentRollbackLeavesNothingBehind(t *testing.T) {
 	tenant, requestID := psTenant(t, "tenant-1"), taskRequestID(t, "REQ-1")
 	rollback := errors.New("回滚")
 
-	judgment := reachabilityJudgment(t, "parcel-1", domain.ReachabilityReachable, "NRJ-1", "", taskAsOfFirst)
-	control := financialControlResult(t, domain.FinancialControlHeld, "SAC-1", "", taskAsOfFirst)
 	resolution := mustBuild(t, domain.NewCommercialResolutionID, "RES-1")
+	judgment := reachabilityJudgment(t, "parcel-1", domain.ReachabilityReachable, "NRJ-1", "", taskAsOfFirst).
+		FormedUnder(resolution)
+	control := financialControlResult(t, domain.FinancialControlHeld, "SAC-1", "", taskAsOfFirst)
 	attempt := taskAttempt(t, "JUDGMENT_NOT_RECORDED", domain.ResumeByInternalRetry, "CONT-a1b2", taskAttemptedAt)
 	if err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
 		if err := judgments.RecordReachabilityJudgment(txCtx, tenant, requestID, taskVersion(t, "VER-1"), judgment); err != nil {
