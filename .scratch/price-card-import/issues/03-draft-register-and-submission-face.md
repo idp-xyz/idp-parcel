@@ -1,7 +1,7 @@
 # 03 草稿册、录入口与草稿查阅读口
 
 Category: enhancement
-Status: ready-for-agent——2026-09-25 通道 3 立票并激活（用户授权自决）
+Status: in-progress——2026-10-08 通道 2 认领（单 task-23300dc1-8f6a-4e3e-a8da-f8b2ff450f7a），分支 `mcp2-pci03` 基 `187dccd2`，工作树 `/home/tops/workspace/idp-parcel-mcp2-pci03`。此前：ready-for-agent——2026-09-25 通道 3 立票并激活（用户授权自决）
 Blocked by: 02
 地盘：
 - `migrations/parcel_pricing/`：新模块；
