@@ -158,6 +158,9 @@ type PricingInputSnapshot struct {
 	factReferences []VersionedFactReference
 	seriesValues   []ReferenceSeriesValue
 	settlement     *Currency
+	// comparison 是本次评价的比较币种（ADR-0148 决定四）：路由策略版本的租户取值，只服务内部
+	// 择优比较，不改结算。与 settlement 同路随快照进来，不另立来源。
+	comparison *Currency
 }
 
 // NewAggregatePricingInputSnapshot 立一份票级 / 主单级评价输入（ADR-0111 Decision 二）：主体是委托或承运总单，
@@ -259,6 +262,26 @@ func (input PricingInputSnapshot) SettlementCurrency() (Currency, bool) {
 		return Currency{}, false
 	}
 	return *input.settlement, true
+}
+
+// WithComparisonCurrency 记录本次评价的比较币种（ADR-0148 决定四）。它只服务网络路由侧的内部
+// 择优比较；结算照样按 SettlementCurrency 输出，比较币种不改变结算侧的金额与取整。
+func (input PricingInputSnapshot) WithComparisonCurrency(comparison Currency) (PricingInputSnapshot, error) {
+	if !input.valid() || !comparison.valid() {
+		return PricingInputSnapshot{}, ErrPricingInputInvalid
+	}
+	updated := copyInputSnapshot(input)
+	declared := comparison
+	updated.comparison = &declared
+	return updated, nil
+}
+
+// ComparisonCurrency 报出本次评价声明的比较币种；未声明即只按卡币种计价，不多算一笔比较换算。
+func (input PricingInputSnapshot) ComparisonCurrency() (Currency, bool) {
+	if input.comparison == nil {
+		return Currency{}, false
+	}
+	return *input.comparison, true
 }
 
 // WithReferenceSeries 返回一份携带本次评价已解析序列取值的副本。它与构造函数分开，

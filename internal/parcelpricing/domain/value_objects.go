@@ -125,6 +125,20 @@ func (currency Currency) valid() bool {
 	return len(currency.code) == 3 && currency.code == strings.ToUpper(currency.code) && allLetters(currency.code)
 }
 
+// MinorUnitScale 报出该币种最小币单位的小数位（ISO 4217 公开基准，产品内置数据，不是租户取值）。
+// 绝大多数币种是 2 位；0 位与 3 位的异常集封闭且在 ISO 里固定，各列一张小表，其余按 2 位答。
+// 消费侧拿它把精确十进制合计取整一次时用（ADR-0148 决定四：按比较币种的最小币单位取整）。
+func (currency Currency) MinorUnitScale() uint8 {
+	switch currency.code {
+	case "JPY", "KRW", "VND", "CLP", "ISK", "XOF", "XAF", "XPF", "KMF", "BIF", "DJF", "GNF", "RWF", "UGX", "PYG", "VUV":
+		return 0
+	case "KWD", "BHD", "OMR", "JOD", "TND", "IQD", "LYD":
+		return 3
+	default:
+		return 2
+	}
+}
+
 type ChargeCode struct {
 	value string
 }

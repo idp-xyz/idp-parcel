@@ -313,6 +313,9 @@ type PricingEvaluation struct {
 	chargeLines          []ChargeLine
 	total                *Money
 	conversion           *ConversionStep
+	// comparison 是本次评价的比较币种结果（ADR-0148 决定四）：金额保持全精度，留给消费侧
+	// 逐段合成后取整一次——它不过卡的兑换后取整与合计取整，因为那两点的标尺是结算价，不是比较值。
+	comparison *comparisonResult
 	// amountRounding 是本次评价按卡上策略做过的每一次取整（ADR-0107）：逐行的先于换算后的，
 	// 换算后的先于合计的。合计不再等于费用行之和时，差在这里可复算。
 	amountRounding []AmountRoundingStep
@@ -653,6 +656,9 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 	if err != nil {
 		return evaluation.withCalculationError(fmt.Errorf("%w: %v", ErrEvaluationArithmetic, err))
 	}
+	// pricedTotal 是原币精确合计：结算换算与比较换算一律从它出发，互不为基准，也不以对方的
+	// 取整结果当输入。
+	pricedTotal := total
 
 	// 卡按自己的币种计价，合同却按另一个币种结算；CONTEXT 把换算放进评价内部，
 	// 使结果保持为一个可复算的最终价格，而不是一个还要结算侧补完的半成品数字。
@@ -686,6 +692,32 @@ func EvaluatePricing(request EvaluationRequest) PricingEvaluation {
 			evaluation.explanation = append(evaluation.explanation, roundStep.explain())
 		}
 		total = converted
+	}
+
+	// 比较币种换算是上一笔结算换算的同形延伸（ADR-0148 决定四），但两条纪律不同：换算
+	// 一律从原币合计出发（不与结算换算互为基准）；金额保持全精度，不过卡的取整点。比较
+	// 币种等于卡币种时不发生换算，比较金额就是原币精确合计。
+	if comparison, declared := request.input.ComparisonCurrency(); declared {
+		evaluation.comparison = &comparisonResult{amount: pricedTotal}
+		if comparison != pricedTotal.currency {
+			reading, resolved := series[ReferenceSeriesExchangeRate]
+			if !resolved {
+				return evaluation.withOutcome(EvaluationPending, newSeriesEvaluationIssue("EXCHANGE_RATE_UNRESOLVED",
+					fmt.Errorf("%w: comparing in %s needs an exchange rate", ErrMissingReferenceSeriesValue, comparison).Error(),
+					ReferenceSeriesExchangeRate, ""))
+			}
+			step, comparisonErr := convertAmount(pricedTotal, reading, comparison)
+			if comparisonErr != nil {
+				return evaluation.withCalculationError(comparisonErr)
+			}
+			basis, _ := reading.QuoteBasis()
+			evaluation.comparison = &comparisonResult{amount: step.converted, step: &step}
+			evaluation.explanation = append(evaluation.explanation,
+				fmt.Sprintf("compared %s %s in %s %s at %s from %s quoted per %s",
+					step.original.amount.String(), step.original.currency,
+					step.converted.amount.String(), step.converted.currency,
+					step.rate.String(), step.series.ID(), basis.ID()))
+		}
 	}
 
 	// 合计是策略必声明的那一点（ADR-0107 Decision 二）：声明了策略的卡，交出去的合计 scale 就是进位
@@ -733,11 +765,34 @@ func ReplayPricingEvaluation(
 	return replayed, nil
 }
 
-func (evaluation PricingEvaluation) ID() EvaluationID                { return evaluation.id }
-func (evaluation PricingEvaluation) Status() EvaluationStatus        { return evaluation.status }
-func (evaluation PricingEvaluation) Evidence() EvidenceKind          { return evaluation.evidence }
-func (evaluation PricingEvaluation) Direction() PricingDirection     { return evaluation.direction }
-func (evaluation PricingEvaluation) Purpose() PricingPurpose         { return evaluation.purpose }
+func (evaluation PricingEvaluation) ID() EvaluationID            { return evaluation.id }
+func (evaluation PricingEvaluation) Status() EvaluationStatus    { return evaluation.status }
+func (evaluation PricingEvaluation) Evidence() EvidenceKind      { return evaluation.evidence }
+func (evaluation PricingEvaluation) Direction() PricingDirection { return evaluation.direction }
+func (evaluation PricingEvaluation) Purpose() PricingPurpose     { return evaluation.purpose }
+
+// comparisonResult 是评价对比较币种一格的作答：金额是保持全精度的比较值（ADR-0148 决定四），
+// 只有发生了换算才另带换算步骤。比较币种未声明时整格缺席。
+type comparisonResult struct {
+	amount Money
+	step   *ConversionStep
+}
+
+// ComparisonAmount 报出比较币种金额。比较币种未声明时第二个返回值为假——缺席不是零值。
+func (evaluation PricingEvaluation) ComparisonAmount() (Money, bool) {
+	if evaluation.comparison == nil {
+		return Money{}, false
+	}
+	return evaluation.comparison.amount, true
+}
+
+// ComparisonStep 报出这笔比较币种作答的换算步骤；比较币种与卡币种相同、没发生换算时为假。
+func (evaluation PricingEvaluation) ComparisonStep() (ConversionStep, bool) {
+	if evaluation.comparison == nil || evaluation.comparison.step == nil {
+		return ConversionStep{}, false
+	}
+	return *evaluation.comparison.step, true
+}
 func (evaluation PricingEvaluation) PlanReference() VersionReference { return evaluation.planReference }
 func (evaluation PricingEvaluation) PlanEffectivePeriod() EffectivePeriod {
 	return evaluation.planPeriod
@@ -843,6 +898,10 @@ func (evaluation PricingEvaluation) valid() bool {
 		return false
 	}
 	if evaluation.matchedRate != nil && !evaluation.matchedRate.valid() {
+		return false
+	}
+	if evaluation.comparison != nil &&
+		(!evaluation.comparison.amount.valid() || (evaluation.comparison.step != nil && !evaluation.comparison.step.valid())) {
 		return false
 	}
 	if evaluation.status == EvaluationCompleted {
@@ -1098,6 +1157,10 @@ func copyInputSnapshot(input PricingInputSnapshot) PricingInputSnapshot {
 			manifest.totalVolumetric = &volumetric
 		}
 		copy.members = &manifest
+	}
+	if input.comparison != nil {
+		comparison := *input.comparison
+		copy.comparison = &comparison
 	}
 	copy.factReferences = append([]VersionedFactReference(nil), input.factReferences...)
 	copy.seriesValues = append([]ReferenceSeriesValue(nil), input.seriesValues...)

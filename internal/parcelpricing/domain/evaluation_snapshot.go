@@ -101,6 +101,7 @@ type inputSnapshotDocument struct {
 	FactReferences    []versionReferenceSnapshot `json:"factReferences"`
 	SeriesValues      []seriesValueSnapshot      `json:"seriesValues"`
 	Settlement        *string                    `json:"settlement,omitempty"`
+	Comparison        *string                    `json:"comparison,omitempty"`
 }
 
 type weightResultSnapshot struct {
@@ -141,6 +142,13 @@ type conversionSnapshot struct {
 	Rate      decimalSnapshot          `json:"rate"`
 	Series    versionReferenceSnapshot `json:"series"`
 	Converted moneySnapshot            `json:"converted"`
+}
+
+// comparisonSnapshot 是比较币种作答的快照形状（ADR-0148 决定四）。金额单独一格：比较币种等于
+// 卡币种时没有换算，金额就是原币精确合计；发生了换算再带换算步骤。
+type comparisonSnapshot struct {
+	Amount     moneySnapshot       `json:"amount"`
+	Conversion *conversionSnapshot `json:"conversion,omitempty"`
 }
 
 // issueSnapshot 多两格可缺席的「涉及序列」主体（ADR-0105 Decision 二）：只进快照不进规范化文档，旧快照没有
@@ -222,6 +230,7 @@ type evaluationSnapshot struct {
 	ChargeLines          []chargeLineSnapshot         `json:"chargeLines"`
 	Total                *moneySnapshot               `json:"total,omitempty"`
 	Conversion           *conversionSnapshot          `json:"conversion,omitempty"`
+	Comparison           *comparisonSnapshot          `json:"comparison,omitempty"`
 	AmountRounding       []amountRoundingStepSnapshot `json:"amountRounding,omitempty"`
 	Issues               []issueSnapshot              `json:"issues"`
 	Explanation          []string                     `json:"explanation"`
@@ -286,6 +295,19 @@ func MarshalEvaluationSnapshot(evaluation PricingEvaluation) ([]byte, error) {
 			Converted: moneyOf(evaluation.conversion.converted),
 		}
 		document.Conversion = &conversion
+	}
+	if evaluation.comparison != nil {
+		comparison := comparisonSnapshot{Amount: moneyOf(evaluation.comparison.amount)}
+		if evaluation.comparison.step != nil {
+			step := conversionSnapshot{
+				Original:  moneyOf(evaluation.comparison.step.original),
+				Rate:      decimalOf(evaluation.comparison.step.rate),
+				Series:    versionReferenceOf(evaluation.comparison.step.series),
+				Converted: moneyOf(evaluation.comparison.step.converted),
+			}
+			comparison.Conversion = &step
+		}
+		document.Comparison = &comparison
 	}
 	for _, step := range evaluation.amountRounding {
 		document.AmountRounding = append(document.AmountRounding, amountRoundingStepOf(step))
@@ -358,6 +380,19 @@ func RehydrateEvaluationSnapshot(raw []byte) (PricingEvaluation, error) {
 			converted: moneyFrom(document.Conversion.Converted),
 		}
 		evaluation.conversion = &conversion
+	}
+	if document.Comparison != nil {
+		comparison := comparisonResult{amount: moneyFrom(document.Comparison.Amount)}
+		if document.Comparison.Conversion != nil {
+			step := ConversionStep{
+				original:  moneyFrom(document.Comparison.Conversion.Original),
+				rate:      decimalFrom(document.Comparison.Conversion.Rate),
+				series:    versionReferenceFrom(document.Comparison.Conversion.Series),
+				converted: moneyFrom(document.Comparison.Conversion.Converted),
+			}
+			comparison.step = &step
+		}
+		evaluation.comparison = &comparison
 	}
 	for _, issue := range document.Issues {
 		evaluation.issues = append(evaluation.issues, issueFromSnapshot(issue))
@@ -469,6 +504,10 @@ func inputDocumentOf(input PricingInputSnapshot) inputSnapshotDocument {
 		settlement := input.settlement.code
 		document.Settlement = &settlement
 	}
+	if input.comparison != nil {
+		comparison := input.comparison.code
+		document.Comparison = &comparison
+	}
 	if input.postal != nil {
 		document.Postal = &postalRouteSnapshot{Origin: input.postal.origin, Destination: input.postal.destination}
 	}
@@ -535,6 +574,10 @@ func inputFrom(document inputSnapshotDocument) PricingInputSnapshot {
 	if document.Settlement != nil {
 		settlement := Currency{code: *document.Settlement}
 		input.settlement = &settlement
+	}
+	if document.Comparison != nil {
+		comparison := Currency{code: *document.Comparison}
+		input.comparison = &comparison
 	}
 	if document.Postal != nil {
 		input.postal = &PostalRoute{origin: document.Postal.Origin, destination: document.Postal.Destination}

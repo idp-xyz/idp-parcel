@@ -788,11 +788,19 @@ type canonicalEvaluation struct {
 	PricingWeight    *canonicalPricingWeightDocument `json:"pricing_weight,omitempty"`
 	MatchedRate      *canonicalRateSelectionDocument `json:"matched_rate,omitempty"`
 	Conversion       *canonicalConversionDocument    `json:"conversion,omitempty"`
+	Comparison       *canonicalComparisonDocument    `json:"comparison,omitempty"`
 	ChargeLines      []canonicalChargeLineDocument   `json:"charge_lines"`
 	// 没有任何一次取整时省略：未声明策略的卡与 ADR-0107 之前的评价在这一格上字节相同。
 	AmountRounding []canonicalAmountRoundingStep `json:"amount_rounding,omitempty"`
 	Total          *canonicalMoney               `json:"total,omitempty"`
 	Issues         []canonicalEvaluationIssue    `json:"issues"`
+}
+
+// canonicalComparisonDocument 把比较币种作答留在摘要里：金额单独一格——比较币种等于卡币种时
+// 没有换算步骤，金额就是原币精确合计，只有它进摘要这一格；发生了换算时再带换算两侧与汇率。
+type canonicalComparisonDocument struct {
+	Amount     canonicalMoney               `json:"amount"`
+	Conversion *canonicalConversionDocument `json:"conversion,omitempty"`
 }
 
 type canonicalEvaluationIssue struct {
@@ -872,6 +880,14 @@ func hashPricingEvaluation(evaluation PricingEvaluation) string {
 	if evaluation.conversion != nil {
 		conversion := canonicalConversionValue(*evaluation.conversion)
 		document.Conversion = &conversion
+	}
+	if evaluation.comparison != nil {
+		comparison := canonicalComparisonDocument{Amount: canonicalMoneyValue(evaluation.comparison.amount)}
+		if evaluation.comparison.step != nil {
+			step := canonicalConversionValue(*evaluation.comparison.step)
+			comparison.Conversion = &step
+		}
+		document.Comparison = &comparison
 	}
 	for _, line := range evaluation.chargeLines {
 		document.ChargeLines = append(document.ChargeLines, canonicalChargeLineValue(line))
