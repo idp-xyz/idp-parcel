@@ -169,6 +169,10 @@ type InitialRoutePlanSpec struct {
 	// CostCitations 是选中候选逐段的成本出处（票 routing-first-cut/10）：缺它不坏计划的
 	// 结构，坏的是「这段为什么这么贵」的复算链——留痕与判断一并落，审计才能回原币与汇率上争。
 	CostCitations []PlannedLegCostCitation
+	// CustomsCitations 是本次判断全部候选的关务出处（票 routing-first-cut/12，ADR-0148
+	// 决定一）：逐候选一条，出处随计划一并留痕——被选中的那条为什么过得去关务、被淘汰
+	// 的那几条卡在哪一版目录上，复核者按判断标识与目录版本引用重算得回。
+	CustomsCitations []CustomsApplicabilityCitation
 }
 
 // InitialRoutePlan 是针对一个明确包裹和服务目的、带版本和生效边界的未来路径意图
@@ -184,6 +188,7 @@ type InitialRoutePlan struct {
 	judgedAt      time.Time
 	effectiveFrom time.Time
 	costCitations []PlannedLegCostCitation
+	customsCites  []CustomsApplicabilityCitation
 }
 
 // FormInitialRoutePlan 立三类不变量：
@@ -250,6 +255,20 @@ func FormInitialRoutePlan(spec InitialRoutePlanSpec) (InitialRoutePlan, error) {
 		seenOrdinals[citation.ordinal] = struct{}{}
 	}
 
+	// 关务出处（票 routing-first-cut/12）：候选必须落在本次已评估空间内、互不重复。出处
+	// 缺席不坏计划（来源未接时如实没有），带一条指向空间外的候选就等于替一次没被评估的
+	// 东西留痕。
+	seenCustoms := make(map[CandidateID]struct{}, len(spec.CustomsCitations))
+	for _, citation := range spec.CustomsCitations {
+		if _, ok := seen[citation.Candidate()]; !ok {
+			return InitialRoutePlan{}, ErrInvalidRoutePlan
+		}
+		if _, duplicated := seenCustoms[citation.Candidate()]; duplicated {
+			return InitialRoutePlan{}, ErrInvalidRoutePlan
+		}
+		seenCustoms[citation.Candidate()] = struct{}{}
+	}
+
 	return InitialRoutePlan{
 		key:           spec.Key,
 		version:       spec.Version,
@@ -261,6 +280,7 @@ func FormInitialRoutePlan(spec InitialRoutePlanSpec) (InitialRoutePlan, error) {
 		judgedAt:      spec.JudgedAt.UTC(),
 		effectiveFrom: spec.EffectiveFrom.UTC(),
 		costCitations: append([]PlannedLegCostCitation(nil), spec.CostCitations...),
+		customsCites:  append([]CustomsApplicabilityCitation(nil), spec.CustomsCitations...),
 	}, nil
 }
 
@@ -299,6 +319,12 @@ func (plan InitialRoutePlan) LegAt(ordinal int) (PlannedLeg, bool) {
 // 计划回来是空列表——出处是取数侧合成时才有的内容，不是计划结构的必备件。
 func (plan InitialRoutePlan) CostCitations() []PlannedLegCostCitation {
 	return append([]PlannedLegCostCitation(nil), plan.costCitations...)
+}
+
+// CustomsCitations 交回全部候选的关务出处留痕拷贝（票 routing-first-cut/12）。来源未接
+// 的一版计划回来是空列表，与逐段成本出处同一形状约定。
+func (plan InitialRoutePlan) CustomsCitations() []CustomsApplicabilityCitation {
+	return append([]CustomsApplicabilityCitation(nil), plan.customsCites...)
 }
 
 // PlannedLegCostCitation 是选中候选某一段的成本出处（票 routing-first-cut/10，ADR-0148 决定四）：

@@ -279,6 +279,7 @@ func (handler *AssessParcelReachabilityHandler) Handle(
 		ViewRevision:        evidence.ViewRevision,
 		GeoProjectionDigest: command.Carried.Geo.ContentDigest(),
 		ServiceAreaVersions: serviceAreaVersions(evidence.ServiceAreas),
+		CustomsCitations:    evidence.CustomsCitations,
 	}
 	saved, err := handler.store.Save(ctx, command.Correlation, record)
 	if err != nil {

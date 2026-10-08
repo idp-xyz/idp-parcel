@@ -7,6 +7,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
@@ -76,7 +77,7 @@ func (view *CatalogNetworkEvidence) LoadNetworkEvidence(
 	if err != nil {
 		return none, false, err
 	}
-	constraints, err := view.customsFindings(ctx, key, candidates)
+	constraints, citations, err := customsFindings(ctx, view.customs, key.TenantID, key.AsOf.At(), carried.Geo, candidates)
 	if err != nil {
 		return none, false, err
 	}
@@ -84,22 +85,30 @@ func (view *CatalogNetworkEvidence) LoadNetworkEvidence(
 		ServiceAreas:      areas,
 		PathExecutability: executability,
 		HardConstraints:   constraints,
+		CustomsCitations:  citations,
 		ViewRevision:      snapshot.Revision,
 	}, true, nil
 }
 
 // customsFindings 向关务来源逐候选取适用性，并核它逐条答了。候选空间为空时不问——没有要作答的东西。
-func (view *CatalogNetworkEvidence) customsFindings(
+// 候选两端国家/地区取自随请求携带的地理解析投影（寄件/收件国，routing-first-cut/12 分诊裁定二）；
+// 缺码如实交缺席格，由 CC 按「证据不足」答状态未知。可达性与初始路由两个证据视图共用它。
+func customsFindings(
 	ctx context.Context,
-	key domain.ReachabilityJudgmentKey,
+	source ports.CustomsApplicabilitySource,
+	tenant domain.TenantID,
+	asOf time.Time,
+	projection domain.GeoResolutionProjection,
 	candidates []catalogCandidate,
-) ([]domain.HardConstraintFinding, error) {
+) ([]domain.HardConstraintFinding, []domain.CustomsApplicabilityCitation, error) {
 	if len(candidates) == 0 {
-		return nil, nil
+		return nil, nil, nil
 	}
+	origin, hasOrigin := usableCountry(projection.Sender())
+	destination, hasDestination := usableCountry(projection.Delivery())
 	query := ports.CustomsApplicabilityQuery{
-		Tenant:     key.TenantID,
-		AsOf:       key.AsOf.At(),
+		Tenant:     tenant,
+		AsOf:       asOf,
 		Candidates: make([]ports.CustomsCandidate, 0, len(candidates)),
 	}
 	for _, candidate := range candidates {
@@ -107,22 +116,78 @@ func (view *CatalogNetworkEvidence) customsFindings(
 		for _, leg := range candidate.legs {
 			legs = append(legs, ports.CustomsCandidateLeg{Connection: leg.Code, FromNode: leg.FromNode, ToNode: leg.ToNode})
 		}
-		query.Candidates = append(query.Candidates, ports.CustomsCandidate{Candidate: candidate.id, Legs: legs})
+		query.Candidates = append(query.Candidates, ports.CustomsCandidate{
+			Candidate:      candidate.id,
+			Origin:         origin,
+			HasOrigin:      hasOrigin,
+			Destination:    destination,
+			HasDestination: hasDestination,
+			Legs:           legs,
+		})
 	}
-	findings, err := view.customs.AssessCustomsApplicability(ctx, query)
+	assessment, err := source.AssessCustomsApplicability(ctx, query)
 	if err != nil {
-		return nil, fmt.Errorf("assess customs applicability: %w", err)
+		return nil, nil, fmt.Errorf("assess customs applicability: %w", err)
 	}
+	findings := assessment.Findings
 	answered := make(map[domain.CandidateID]struct{}, len(findings))
 	for _, finding := range findings {
 		answered[finding.Candidate()] = struct{}{}
 	}
 	for _, candidate := range candidates {
 		if _, ok := answered[candidate.id]; !ok {
-			return nil, fmt.Errorf("%w: %s", ErrCustomsAnswerIncomplete, candidate.id)
+			return nil, nil, fmt.Errorf("%w: %s", ErrCustomsAnswerIncomplete, candidate.id)
 		}
 	}
-	return findings, nil
+	citations, err := customsCitationsFor(candidates, assessment.Citations)
+	if err != nil {
+		return nil, nil, err
+	}
+	return findings, citations, nil
+}
+
+// usableCountry 把投影一侧折成关务来源要的端点国家/地区：国家码成形才算在场，缺席与
+// 不成形都是证据不足（与 ADR-0148 决定二服务区域解析同一纪律）。
+func usableCountry(side domain.GeoResolutionSide) (string, bool) {
+	if !side.HasUsableCountry() {
+		return "", false
+	}
+	country, _ := side.Country()
+	return country, true
+}
+
+// customsCitationsFor 核关务出处的形状：出处缺席是来源未接的如实形态（零条放行），带
+// 了就必须逐候选恰一条、且都指在本次候选空间内——半个来源的出处会把判断记录引到错
+// 的复核去处。
+func customsCitationsFor(
+	candidates []catalogCandidate,
+	citations []domain.CustomsApplicabilityCitation,
+) ([]domain.CustomsApplicabilityCitation, error) {
+	if len(citations) == 0 {
+		return nil, nil
+	}
+	inSpace := make(map[domain.CandidateID]struct{}, len(candidates))
+	for _, candidate := range candidates {
+		inSpace[candidate.id] = struct{}{}
+	}
+	cited := make(map[domain.CandidateID]struct{}, len(citations))
+	for _, citation := range citations {
+		if _, duplicated := cited[citation.Candidate()]; duplicated {
+			return nil, fmt.Errorf("%w: %s 出处给了两条", ErrCustomsAnswerIncomplete, citation.Candidate())
+		}
+		cited[citation.Candidate()] = struct{}{}
+	}
+	for _, candidate := range candidates {
+		if _, ok := cited[candidate.id]; !ok {
+			return nil, fmt.Errorf("%w: %s 缺出处", ErrCustomsAnswerIncomplete, candidate.id)
+		}
+	}
+	for id := range cited {
+		if _, ok := inSpace[id]; !ok {
+			return nil, fmt.Errorf("%w: %s 的出处不在本次候选空间", ErrCustomsAnswerIncomplete, id)
+		}
+	}
+	return citations, nil
 }
 
 // catalogConfiguredFor 是`未配置`的唯一判法（ADR-0148 决定六），可达性与初始路由的证据视图共用：目录修订锚存在，且判断时点有
@@ -456,7 +521,8 @@ func joinSortedUnique(values []string) string {
 
 // CustomsApplicabilityNotConnected 是关务来源未接时的如实作答（ADR-0148 决定三）：逐候选答状态未知，领域照既有
 // 规则得出`资料不足`（可达性）或未决（初始路由）；不答满足，也不自行推断候选是否跨关务区域——那是
-// customs-compliance 的判断。CC 侧判断口落地后由消费方适配器取代它（routing-first-cut/12）。
+// customs-compliance 的判断。出处一并缺席：没有判断可指，不代拟一份（routing-first-cut/12 分诊裁定四）。
+// CC 侧判断口落地后由消费方适配器取代它（adapters/customscompliance）。
 type CustomsApplicabilityNotConnected struct{}
 
 var _ ports.CustomsApplicabilitySource = CustomsApplicabilityNotConnected{}
@@ -464,14 +530,15 @@ var _ ports.CustomsApplicabilitySource = CustomsApplicabilityNotConnected{}
 func (CustomsApplicabilityNotConnected) AssessCustomsApplicability(
 	_ context.Context,
 	query ports.CustomsApplicabilityQuery,
-) ([]domain.HardConstraintFinding, error) {
+) (ports.CustomsApplicabilityAssessment, error) {
+	none := ports.CustomsApplicabilityAssessment{}
 	missing, err := domain.NewEvidenceGapReference("CUSTOMS_APPLICABILITY_NOT_CONNECTED")
 	if err != nil {
-		return nil, err
+		return none, err
 	}
 	reassess, err := domain.NewReassessmentCondition("CUSTOMS_APPLICABILITY_SOURCE_CONNECTED")
 	if err != nil {
-		return nil, err
+		return none, err
 	}
 	findings := make([]domain.HardConstraintFinding, 0, len(query.Candidates))
 	for _, candidate := range query.Candidates {
@@ -482,9 +549,9 @@ func (CustomsApplicabilityNotConnected) AssessCustomsApplicability(
 			Reassess:  reassess,
 		})
 		if err != nil {
-			return nil, err
+			return none, err
 		}
 		findings = append(findings, finding)
 	}
-	return findings, nil
+	return ports.CustomsApplicabilityAssessment{Findings: findings}, nil
 }

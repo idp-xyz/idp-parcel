@@ -18,6 +18,7 @@ import (
 	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	ccsettlement "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/settlementaccounting"
 	ccapplication "go.idp.xyz/idp-parcel/internal/customscompliance/application"
+	nrcustoms "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/customscompliance"
 	nrinbox "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/inbox"
 	nrpricing "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/parcelpricing"
 	nrparcelshipment "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/parcelshipment"
@@ -1212,8 +1213,9 @@ func acceptanceCommercialBasis(
 // 随命令带来，不在这里留一份判断键到解析的映射，也不代拟标识。空引用时视图答未配置，
 // 编排形成`未形成判断`。
 //
-// 证据视图从版本化网络目录折出（ADR-0148）。关务来源接「未接」实现：customs-compliance 按路由
-// 候选作答的判断口还没有（routing-first-cut/12），逐候选如实答状态未知，不答满足（决定三）。
+// 证据视图从版本化网络目录折出（ADR-0148）。关务来源接 customs-compliance 的判断口
+// （routing-first-cut/12）：候选投影翻译过去、三格答案译回硬约束，出处随之留痕；目录
+// 读不到时 CC 如实答状态未知，不冒充满足。
 func acceptanceReachability(
 	db *bentopg.DB,
 	outboxStore *outbox.Store,
@@ -1225,7 +1227,7 @@ func acceptanceReachability(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: reachability network catalog: %w", err)
 	}
-	evidence, err := nrapplication.NewCatalogNetworkEvidence(catalog, nrapplication.CustomsApplicabilityNotConnected{})
+	evidence, err := nrapplication.NewCatalogNetworkEvidence(catalog, customsApplicabilitySource(db))
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: reachability network evidence: %w", err)
 	}
@@ -1358,7 +1360,7 @@ func acceptanceConsumer(
 	settings dispatchSettings,
 	clock systemClock,
 ) (dispatch.Consumer, error) {
-	evidence, err := initialRouteEvidence(db, clock)
+	evidence, err := initialRouteEvidence(db, clock, customsApplicabilitySource(db))
 	if err != nil {
 		return nil, err
 	}
@@ -1417,17 +1419,48 @@ func acceptanceConsumer(
 }
 
 // initialRouteEvidence 是初始路由与复核共用的证据视图：读版本化网络目录，选版时点取本上下文的
-// 路由判断时点（时钟）。
-func initialRouteEvidence(db *bentopg.DB, clock systemClock) (*nrapplication.CatalogInitialRouteEvidence, error) {
+// 路由判断时点（时钟）。关务来源与可达性同一条（routing-first-cut/12）。
+func initialRouteEvidence(
+	db *bentopg.DB,
+	clock systemClock,
+	customs nrports.CustomsApplicabilitySource,
+) (*nrapplication.CatalogInitialRouteEvidence, error) {
 	catalog, err := nrpostgres.NewNetworkCatalog(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: network catalog: %w", err)
 	}
-	evidence, err := nrapplication.NewCatalogInitialRouteEvidence(catalog, clock)
+	evidence, err := nrapplication.NewCatalogInitialRouteEvidence(catalog, customs, clock)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: initial route evidence: %w", err)
 	}
 	return evidence, nil
+}
+
+// customsApplicabilitySource 装配关务适用性取数侧（票 routing-first-cut/12）：CC 的判断
+// 服务读两本目录的全量快照即时作答，NR 侧适配器翻译投影与答案。
+func customsApplicabilitySource(db *bentopg.DB) nrports.CustomsApplicabilitySource {
+	snapshots, err := ccpostgres.NewPortsPathsSnapshots(db)
+	if err != nil {
+		return brokenCustomsSource{err: fmt.Errorf("parcel-dispatch: ports paths snapshots: %w", err)}
+	}
+	assessor, err := nrcustoms.NewCustomsApplicabilityAssessor(
+		ccapplication.NewCustomsApplicabilityHandler(ccapplication.CustomsApplicabilityDeps{Catalog: snapshots}))
+	if err != nil {
+		return brokenCustomsSource{err: fmt.Errorf("parcel-dispatch: customs applicability assessor: %w", err)}
+	}
+	return assessor
+}
+
+// brokenCustomsSource 是关务来源装配失败时的如实形态：调用即答依赖故障，让编排形成
+// `未形成判断`，不代拟一条满足（判据同 brokenCostSource）。
+type brokenCustomsSource struct {
+	err error
+}
+
+func (broken brokenCustomsSource) AssessCustomsApplicability(
+	context.Context, nrports.CustomsApplicabilityQuery,
+) (nrports.CustomsApplicabilityAssessment, error) {
+	return nrports.CustomsApplicabilityAssessment{}, broken.err
 }
 
 // routeCosts 装配候选成本取数侧（票 routing-first-cut/10）：目录依据、内部政策解析与方案
@@ -1490,7 +1523,7 @@ func networkIntakeConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: initial route store: %w", err)
 	}
-	evidence, err := initialRouteEvidence(db, clock)
+	evidence, err := initialRouteEvidence(db, clock, customsApplicabilitySource(db))
 	if err != nil {
 		return nil, err
 	}

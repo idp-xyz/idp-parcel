@@ -123,6 +123,49 @@ func TestAnInitialRoutePlanCarriesItsFullSelectionBasis(t *testing.T) {
 	}
 }
 
+// Covers: routing-first-cut/12 的出处留痕——计划随形带全候选的关务出处，指在本次已评
+// 估空间内、互不重复；出处缺席（来源未接）不坏计划，指向空间外或重复是形状拼不拢。
+func TestAPlanCarriesCustomsCitationsWithinItsCandidateSpace(t *testing.T) {
+	citation := func(t *testing.T, candidate string) domain.CustomsApplicabilityCitation {
+		t.Helper()
+		built, err := domain.NewCustomsApplicabilityCitation(domain.CustomsApplicabilityCitationSpec{
+			Candidate: mustValue(t, domain.NewCandidateID, candidate),
+			Judgment:  "SYN-JUDGMENT-" + candidate,
+			Versions:  []string{"PORT:SYN-P@2026-01-01T00:00:00Z"},
+		})
+		if err != nil {
+			t.Fatalf("new customs citation: %v", err)
+		}
+		return built
+	}
+
+	spec := planSpec(t)
+	spec.CustomsCitations = []domain.CustomsApplicabilityCitation{
+		citation(t, "cand-1"), citation(t, "cand-2"),
+	}
+	plan, err := domain.FormInitialRoutePlan(spec)
+	if err != nil {
+		t.Fatalf("form initial route plan: %v", err)
+	}
+	if got := plan.CustomsCitations(); len(got) != 2 || got[0].Candidate().String() != "cand-1" {
+		t.Fatalf("customs citations = %+v，想要全候选各一条", got)
+	}
+
+	outside := planSpec(t)
+	outside.CustomsCitations = []domain.CustomsApplicabilityCitation{citation(t, "cand-9")}
+	if _, err := domain.FormInitialRoutePlan(outside); !errors.Is(err, domain.ErrInvalidRoutePlan) {
+		t.Fatalf("err = %v，出处指向候选空间之外必须被拒", err)
+	}
+
+	duplicated := planSpec(t)
+	duplicated.CustomsCitations = []domain.CustomsApplicabilityCitation{
+		citation(t, "cand-1"), citation(t, "cand-1"),
+	}
+	if _, err := domain.FormInitialRoutePlan(duplicated); !errors.Is(err, domain.ErrInvalidRoutePlan) {
+		t.Fatalf("err = %v，同一候选两条出处必须被拒", err)
+	}
+}
+
 // Covers: 选择依据链的构造期防线——选中不在册、选中已被淘汰、段链断裂、窗口倒挂，任一
 // 都立不起一个计划；`AT-NR-014` 的外部不透明段用已知交接点表达，不需要内部节点。
 func TestAPlanRefusesABrokenSelectionOrChain(t *testing.T) {

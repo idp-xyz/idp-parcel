@@ -48,6 +48,13 @@ type gapRow struct {
 	Reassessment string   `json:"reassessment"`
 }
 
+// customsCitationRow 是关务出处列的 jsonb 行模型（票 routing-first-cut/12）。
+type customsCitationRow struct {
+	Candidate string   `json:"candidate"`
+	Judgment  string   `json:"judgment"`
+	Versions  []string `json:"versions,omitempty"`
+}
+
 // FindByCorrelation 按（租户+请求关联）取回已提交判断。
 //
 // 走 ReadExecutor：事务内读得到本事务刚写的行，事务外用显式注入的连接池。否定结果
@@ -71,13 +78,14 @@ func (repository *ReachabilityJudgments) FindByCorrelation(
 		asOfAt, judgedAt                                    time.Time
 		conclusion, viewRevision, geoDigest                 string
 		candidatesJSON, gapsJSON, serviceAreaVersionsJSON   []byte
+		customsCitationsJSON                                []byte
 	)
 	err = querier.QueryRow(ctx,
 		`SELECT customer_account_id, shipment_request_id, submission_version_id,
 		        declared_parcel_id, service_purpose,
 		        as_of_semantic, as_of_at, as_of_strategy_version,
 		        conclusion, candidates, evidence_gaps, view_revision, judged_at,
-		        geo_projection_digest, service_area_versions
+		        geo_projection_digest, service_area_versions, customs_citations
 		   FROM network_routing.reachability_judgment
 		  WHERE tenant_id = $1
 		    AND correlation_id = $2`,
@@ -87,7 +95,7 @@ func (repository *ReachabilityJudgments) FindByCorrelation(
 		&declaredParcel, &servicePurpose,
 		&asOfSemantic, &asOfAt, &asOfStrategy,
 		&conclusion, &candidatesJSON, &gapsJSON, &viewRevision, &judgedAt,
-		&geoDigest, &serviceAreaVersionsJSON)
+		&geoDigest, &serviceAreaVersionsJSON, &customsCitationsJSON)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.ReachabilityJudgmentRecord{}, false, nil
 	}
@@ -121,6 +129,10 @@ func (repository *ReachabilityJudgments) FindByCorrelation(
 	if err := json.Unmarshal(serviceAreaVersionsJSON, &serviceAreaVersions); err != nil {
 		return ports.ReachabilityJudgmentRecord{}, false, fmt.Errorf("find reachability judgment: %w", err)
 	}
+	citations, err := rebuildCustomsCitations(customsCitationsJSON)
+	if err != nil {
+		return ports.ReachabilityJudgmentRecord{}, false, fmt.Errorf("find reachability judgment: %w", err)
+	}
 	return ports.ReachabilityJudgmentRecord{
 		Key:                 key,
 		Finding:             finding,
@@ -128,6 +140,7 @@ func (repository *ReachabilityJudgments) FindByCorrelation(
 		ViewRevision:        revision,
 		GeoProjectionDigest: geoDigest,
 		ServiceAreaVersions: serviceAreaVersions,
+		CustomsCitations:    citations,
 	}, true, nil
 }
 
@@ -159,6 +172,10 @@ func (repository *ReachabilityJudgments) Save(
 	if err != nil {
 		return ports.ReachabilityJudgmentSaveOutcomeInvalid, fmt.Errorf("save reachability judgment: %w", err)
 	}
+	citationsJSON, err := json.Marshal(rowsOfCustomsCitations(record.CustomsCitations))
+	if err != nil {
+		return ports.ReachabilityJudgmentSaveOutcomeInvalid, fmt.Errorf("save reachability judgment: %w", err)
+	}
 
 	// `已有记录`用 ON CONFLICT DO NOTHING 而不是捕 23505 译码：撞键的 INSERT 会把
 	// 整个事务打进中止态，同一事务里的后续读写全部失败——而`已有记录`是业务答案
@@ -171,8 +188,8 @@ func (repository *ReachabilityJudgments) Save(
 			 declared_parcel_id, service_purpose,
 			 as_of_semantic, as_of_at, as_of_strategy_version,
 			 conclusion, candidates, evidence_gaps, view_revision, judged_at,
-			 geo_projection_digest, service_area_versions)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
+			 geo_projection_digest, service_area_versions, customs_citations)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
 		 ON CONFLICT DO NOTHING`,
 		key.TenantID.String(),
 		correlation.String(),
@@ -191,6 +208,7 @@ func (repository *ReachabilityJudgments) Save(
 		record.JudgedAt.UTC(),
 		record.GeoProjectionDigest,
 		versionsJSON,
+		citationsJSON,
 	)
 	if err != nil {
 		return ports.ReachabilityJudgmentSaveOutcomeInvalid, fmt.Errorf("save reachability judgment: %w", err)
@@ -390,4 +408,44 @@ func gapScopeFrom(raw string) (domain.EvidenceGapScope, error) {
 	default:
 		return 0, fmt.Errorf("unknown evidence gap scope %q", raw)
 	}
+}
+
+// rowsOfCustomsCitations 把关务出处折成 jsonb 行。nil 折成空数组——已有行没有出处是
+// 「来源未接」的如实形态，与「还没出过处」的旧行读回同一形状。
+func rowsOfCustomsCitations(citations []domain.CustomsApplicabilityCitation) []customsCitationRow {
+	rows := make([]customsCitationRow, 0, len(citations))
+	for _, citation := range citations {
+		rows = append(rows, customsCitationRow{
+			Candidate: citation.Candidate().String(),
+			Judgment:  citation.Judgment(),
+			Versions:  citation.Versions(),
+		})
+	}
+	return rows
+}
+
+// rebuildCustomsCitations 把 jsonb 行读回领域出处，逐条走构造门——坏行在读口拦下上抛，
+// 不把一个指空的出处交回去（判据同 Finding 的重建）。
+func rebuildCustomsCitations(raw []byte) ([]domain.CustomsApplicabilityCitation, error) {
+	var rows []customsCitationRow
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		return nil, err
+	}
+	citations := make([]domain.CustomsApplicabilityCitation, 0, len(rows))
+	for _, row := range rows {
+		candidate, err := domain.NewCandidateID(row.Candidate)
+		if err != nil {
+			return nil, err
+		}
+		citation, err := domain.NewCustomsApplicabilityCitation(domain.CustomsApplicabilityCitationSpec{
+			Candidate: candidate,
+			Judgment:  row.Judgment,
+			Versions:  row.Versions,
+		})
+		if err != nil {
+			return nil, err
+		}
+		citations = append(citations, citation)
+	}
+	return citations, nil
 }
