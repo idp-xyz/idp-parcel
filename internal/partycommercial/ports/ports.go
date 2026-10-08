@@ -217,6 +217,24 @@ type PricePolicyCaliberView interface {
 	) (domain.PricePolicyCaliber, bool, error)
 }
 
+// InternalCostPolicyView 取已登记的价格政策正文：消费方按显式引用（对象身份 + 版本标签）点读，
+// 不必为一份正文装下整册。这是自营段的成本依据读口（ADR-0148 决定四：内部价格政策下的价卡经
+// parcel-pricing 同一评价机制出价，本口答「这一版政策绑哪份方案」）。
+//
+// 方向不在这里筛：引用指到了别的方向时如实交回正文，拒译是消费侧桥的职责（与 PS 桥拒绝
+// 非供应商成本评价同一手法）。found=false = 这一版没有登记价格正文——与 CreditPolicyContentView
+// 同一格语义，续办是去发布；读取失败与坏行（半缺列、方向集外）走 error，不得折成 found=false。
+//
+// 租户显式入参，同本包其余端口（ADR-0003）。显式租户必须与拥有版本同一身份。
+type InternalCostPolicyView interface {
+	LoadInternalCostPolicy(
+		ctx context.Context,
+		tenant domain.TenantID,
+		objectID domain.CommercialObjectID,
+		version domain.CommercialVersionLabel,
+	) (domain.CommercialPricePolicy, bool, error)
+}
+
 // IntakeQualificationView 取已唯一选出的接单规则包版本的收寄资格声明（PAR-COM-16）。
 //
 // 它与 CommercialAuthorityView 分开：前者回答「这个范围有几个适用候选」，本口回答已
