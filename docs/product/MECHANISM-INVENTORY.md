@@ -10,29 +10,30 @@
 | architecture（非业务） | 0 | 13 | 0 | 0 | 0 | 0 |
 | collectionremittance | 22 | 10 | 4 | 6 | 0 | 3 |
 | customscompliance | 97 | 98 | 18 | 41 | 10 | 14 |
-| networkrouting | 65 | 62 | 9 | 13 | 2 | 6 |
+| networkrouting | 67 | 64 | 9 | 13 | 2 | 6 |
 | nodeoperations | 31 | 26 | 3 | 10 | 4 | 6 |
 | parcelpricing | 113 | 103 | 13 | 14 | 1 | 19 |
 | parcelshipment | 196 | 190 | 20 | 35 | 10 | 18 |
-| partycommercial | 153 | 161 | 12 | 39 | 1 | 37 |
+| partycommercial | 154 | 162 | 12 | 40 | 1 | 37 |
 | pilotgovernance | 22 | 20 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 158 | 108 | 26 | 54 | 9 | 9 |
 | transportfulfillment | 150 | 137 | 26 | 36 | 11 | 29 |
 | visibilityexception | 100 | 96 | 11 | 30 | 8 | 11 |
-| **合计** | 1145 | 1055 | 147 | 285 | 57 | 156 |
+| **合计** | 1148 | 1058 | 147 | 286 | 57 | 156 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 74、测试 109。
 
-## 跨上下文消费缝：33 组，89 个生产文件
+## 跨上下文消费缝：34 组，91 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
 | customscompliance | accessidentity | 1 |
 | customscompliance | settlementaccounting | 2 |
 | networkrouting | accessidentity | 1 |
+| networkrouting | parcelpricing | 1 |
 | networkrouting | parcelshipment | 3 |
-| networkrouting | partycommercial | 3 |
+| networkrouting | partycommercial | 4 |
 | nodeoperations | transportfulfillment | 1 |
 | parcelpricing | accessidentity | 1 |
 | parcelpricing | settlementaccounting | 2 |
@@ -62,14 +63,14 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：12 个模块共 200 份 SQL
+## 迁移：12 个模块共 201 份 SQL
 
 | 模块 | 份数 |
 |---|---|
 | access_identity | 2 |
 | collection_remittance | 1 |
 | customs_compliance | 23 |
-| network_routing | 15 |
+| network_routing | 16 |
 | node_operations | 4 |
 | parcel_pricing | 10 |
 | parcel_shipment | 23 |
@@ -122,7 +123,7 @@
 | visibilityexception | 8 |
 | **合计** | 24 |
 
-## 端口：声明 452 个；基线口径缺 30，精确口径缺 2
+## 端口：声明 454 个；基线口径缺 30，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
