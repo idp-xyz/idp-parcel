@@ -38,14 +38,26 @@ func NewInitialRoutes(db *bentopg.DB) (*InitialRoutes, error) {
 // planRow 与 legRow 是计划 jsonb 列的行模型；noRouteRow 是无路可走判断的。判断键
 // 不进 jsonb：键由平铺列独家拥有，存两份迟早各说各话。
 type planRow struct {
-	Version       string         `json:"version"`
-	Selected      string         `json:"selected"`
-	Candidates    []candidateRow `json:"candidates"`
-	Legs          []legRow       `json:"legs"`
-	Strategy      string         `json:"strategy"`
-	ViewRevision  string         `json:"view_revision"`
-	JudgedAt      time.Time      `json:"judged_at"`
-	EffectiveFrom time.Time      `json:"effective_from"`
+	Version       string            `json:"version"`
+	Selected      string            `json:"selected"`
+	Candidates    []candidateRow    `json:"candidates"`
+	Legs          []legRow          `json:"legs"`
+	Strategy      string            `json:"strategy"`
+	ViewRevision  string            `json:"view_revision"`
+	JudgedAt      time.Time         `json:"judged_at"`
+	EffectiveFrom time.Time         `json:"effective_from"`
+	CostCitations []costCitationRow `json:"cost_citations,omitempty"`
+}
+
+// costCitationRow 是逐段成本出处留痕的行模型（票 routing-first-cut/10）：旧计划没有
+// 这一格，读回空列表照常成立——出处是取数侧合成时才有的内容。
+type costCitationRow struct {
+	Ordinal            int    `json:"ordinal"`
+	EvaluationID       string `json:"evaluation_id"`
+	PlanReference      string `json:"plan_reference"`
+	PolicyReference    string `json:"policy_reference,omitempty"`
+	ComparisonAmount   string `json:"comparison_amount"`
+	ComparisonCurrency string `json:"comparison_currency"`
 }
 
 type legRow struct {
@@ -230,7 +242,26 @@ func rowOfPlan(plan domain.InitialRoutePlan) planRow {
 		ViewRevision:  plan.ViewRevision().String(),
 		JudgedAt:      plan.JudgedAt(),
 		EffectiveFrom: plan.EffectiveFrom(),
+		CostCitations: rowsOfCostCitations(plan.CostCitations()),
 	}
+}
+
+func rowsOfCostCitations(citations []domain.PlannedLegCostCitation) []costCitationRow {
+	rows := make([]costCitationRow, 0, len(citations))
+	for _, citation := range citations {
+		row := costCitationRow{
+			Ordinal:            citation.Ordinal(),
+			EvaluationID:       citation.EvaluationID(),
+			PlanReference:      citation.PlanReference(),
+			ComparisonAmount:   citation.ComparisonAmount(),
+			ComparisonCurrency: citation.ComparisonCurrency(),
+		}
+		if policy, stated := citation.PolicyReference(); stated {
+			row.PolicyReference = policy
+		}
+		rows = append(rows, row)
+	}
+	return rows
 }
 
 func rowOfNoRoute(judgment domain.NoCurrentRouteJudgment) noRouteRow {
@@ -275,6 +306,22 @@ func rebuildPlan(key domain.InitialRouteJudgmentKey, data []byte) (domain.Initia
 	if err != nil {
 		return domain.InitialRoutePlan{}, err
 	}
+	citations := make([]domain.PlannedLegCostCitation, 0, len(row.CostCitations))
+	for _, stored := range row.CostCitations {
+		citation, err := domain.NewPlannedLegCostCitation(domain.PlannedLegCostCitationSpec{
+			Ordinal:            stored.Ordinal,
+			EvaluationID:       stored.EvaluationID,
+			PlanReference:      stored.PlanReference,
+			PolicyReference:    stored.PolicyReference,
+			HasPolicy:          stored.PolicyReference != "",
+			ComparisonAmount:   stored.ComparisonAmount,
+			ComparisonCurrency: stored.ComparisonCurrency,
+		})
+		if err != nil {
+			return domain.InitialRoutePlan{}, err
+		}
+		citations = append(citations, citation)
+	}
 	return domain.FormInitialRoutePlan(domain.InitialRoutePlanSpec{
 		Key:           key,
 		Version:       version,
@@ -285,6 +332,7 @@ func rebuildPlan(key domain.InitialRouteJudgmentKey, data []byte) (domain.Initia
 		ViewRevision:  revision,
 		JudgedAt:      row.JudgedAt,
 		EffectiveFrom: row.EffectiveFrom,
+		CostCitations: citations,
 	})
 }
 

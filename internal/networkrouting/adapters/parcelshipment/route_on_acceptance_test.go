@@ -19,6 +19,16 @@ import (
 
 var acceptedAt = time.Date(2026, 8, 14, 9, 0, 0, 0, time.UTC)
 
+// costPassthrough 是编排替身：证据带什么成本事实就交回什么——取数侧的合成由它自己的
+// 用例盖住，这里不重测一遍。
+type costPassthrough struct{}
+
+func (costPassthrough) LoadCandidateCosts(
+	_ context.Context, _ nrdomain.InitialRouteJudgmentKey, evidence nrports.InitialRouteEvidence,
+) (nrports.RouteCandidateCosts, error) {
+	return nrports.RouteCandidateCosts{Facts: evidence.CandidateCosts}, nil
+}
+
 // Covers: UC-NR-001 输入组与步骤 4「按接受基线逐包裹建立独立判断范围」经适配器端到端
 // ——信封只带引用，基线、成员与接受时间全取自 PS 的委托聚合，逐成员形成真实结果。
 func TestAnAcceptedDecisionRoutesTheBaselineMembers(t *testing.T) {
@@ -57,6 +67,7 @@ func TestAnAddressRevisionChangesTheAcceptanceHandoffDigest(t *testing.T) {
 		handler := nrapplication.NewCreateInitialRouteHandler(nrapplication.CreateInitialRouteDeps{
 			Applicability: routingApplicabilityDouble{},
 			Evidence:      acceptanceEvidenceDouble{evidence: excludedEvidence(t)},
+			Costs:         costPassthrough{},
 			Store:         newAcceptanceRouteStore(),
 			Log:           log,
 			Downstream:    routeDownstreamDouble{},
@@ -220,6 +231,7 @@ func newRouteOnAcceptance(
 	handler := nrapplication.NewCreateInitialRouteHandler(nrapplication.CreateInitialRouteDeps{
 		Applicability: routingApplicabilityDouble{},
 		Evidence:      acceptanceEvidenceDouble{evidence: evidence, err: evidenceErr},
+		Costs:         costPassthrough{},
 		Store:         routes,
 		Log:           &logDouble{digests: map[nrdomain.RequestCorrelationID]string{}},
 		Downstream:    routeDownstreamDouble{},

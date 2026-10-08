@@ -10,6 +10,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
@@ -208,6 +209,29 @@ type InitialRouteEvidenceView interface {
 		key domain.InitialRouteJudgmentKey,
 		carried RequestCarriedContent,
 	) (InitialRouteEvidence, bool, error)
+}
+
+// ErrRouteCostSourceNotConfigured 是候选成本取数侧缺计价输入取数路径时的如实答复
+// （票 routing-first-cut/10）：那半是消费方的实例半边，没接就没有依据，不得编一份空输入
+// 让每个候选都算出一个看着合法的价格。
+var ErrRouteCostSourceNotConfigured = errors.New("network routing: route cost source not configured")
+
+// RouteCandidateCosts 是取数侧为一次判断交回的成本族：逐候选三态事实 + 逐段评价出处。
+type RouteCandidateCosts struct {
+	Facts     []domain.CandidateCostFact
+	Citations []domain.PlannedLegCostCitation
+}
+
+// RouteCandidateCostSource 为一次初始路由判断取回候选成本（routing-first-cut/10，ADR-0148
+// 决定四）。事实族在取数侧兑现：逐段向 parcel-pricing 取评价、按比较币种不舍入求和取整一次，
+// 合成每候逐一格三态事实；出处（评价标识、方案引用、内部政策引用与全精度比较金额）随事实
+// 交回，由编排并入计划留痕。计价输入没接时以 ErrRouteCostSourceNotConfigured 如实作答。
+type RouteCandidateCostSource interface {
+	LoadCandidateCosts(
+		ctx context.Context,
+		key domain.InitialRouteJudgmentKey,
+		evidence InitialRouteEvidence,
+	) (RouteCandidateCosts, error)
 }
 
 // RoutingApplicabilityView 取商业侧对「这个服务要不要形成网络路由」的回答（UC-NR-001

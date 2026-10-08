@@ -107,6 +107,11 @@ const (
 	RouteCandidateCostsPending
 	RouteCandidateCostsUnpriceable
 	RouteCandidateCostCurrenciesDiffer
+	// RouteCostSourceNotConfigured 是候选成本取数侧没接计价输入路径（票 routing-first-cut/10）：
+	// 那半是消费方的实例半边，没接就没有成本依据，等接入。
+	RouteCostSourceNotConfigured
+	// RouteCostSourceUnavailable 是取数侧执行失败（依赖读不回）：等依赖恢复重试。
+	RouteCostSourceUnavailable
 )
 
 func (reason RouteUndecidedReason) String() string {
@@ -139,6 +144,10 @@ func (reason RouteUndecidedReason) String() string {
 		return "CANDIDATE_COSTS_UNPRICEABLE"
 	case RouteCandidateCostCurrenciesDiffer:
 		return "CANDIDATE_COST_CURRENCIES_DIFFER"
+	case RouteCostSourceNotConfigured:
+		return "COST_SOURCE_NOT_CONFIGURED"
+	case RouteCostSourceUnavailable:
+		return "COST_SOURCE_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -237,6 +246,7 @@ func (result CreateInitialRouteResult) UndecidedReason() RouteUndecidedReason {
 type CreateInitialRouteDeps struct {
 	Applicability ports.RoutingApplicabilityView
 	Evidence      ports.InitialRouteEvidenceView
+	Costs         ports.RouteCandidateCostSource
 	Store         ports.InitialRouteStore
 	Log           ports.RouteHandoffLog
 	Downstream    ports.InitialRouteHandoff
@@ -405,6 +415,24 @@ func (handler *CreateInitialRouteHandler) judgeParcel(
 	}
 
 	judgedAt := handler.deps.Clock.Now()
+
+	// 成本族在取数侧兑现（routing-first-cut/10）：取数侧没接或执行失败都如实未决，
+	// 不拿缺依据的候选装成可排序的事实。
+	if handler.deps.Costs == nil {
+		undecided := handler.undecidedParcel(key, RouteCostSourceNotConfigured)
+		return none, &undecided, nil
+	}
+	costs, err := handler.deps.Costs.LoadCandidateCosts(ctx, key, evidence)
+	if err != nil {
+		if errors.Is(err, ports.ErrRouteCostSourceNotConfigured) {
+			undecided := handler.undecidedParcel(key, RouteCostSourceNotConfigured)
+			return none, &undecided, nil
+		}
+		undecided := handler.undecidedParcel(key, RouteCostSourceUnavailable)
+		return none, &undecided, nil
+	}
+	evidence.CandidateCosts = costs.Facts
+
 	ranking, err := domain.RankRouteCandidates(evidence.RankingForm, candidates, evidence.CandidateCosts)
 	if err != nil {
 		return none, nil, fmt.Errorf("rank route candidates: %w", err)
@@ -412,7 +440,7 @@ func (handler *CreateInitialRouteHandler) judgeParcel(
 	switch ranking.Outcome() {
 	case domain.RankingSelected:
 		selected, _ := ranking.Selected()
-		return handler.planRecord(ctx, key, selected, candidates, evidence, judgedAt)
+		return handler.planRecord(ctx, key, selected, candidates, evidence, costs.Citations, judgedAt)
 	case domain.RankingNoQualifiedCandidate:
 		return handler.noRouteRecord(key, candidates, evidence, judgedAt)
 	case domain.RankingTied:
@@ -437,13 +465,15 @@ func (handler *CreateInitialRouteHandler) judgeParcel(
 	}
 }
 
-// planRecord 为选中候选形成待提交的计划记录。
+// planRecord 为选中候选形成待提交的计划记录。选中候选的逐段成本出处随计划一并留痕
+// （票 routing-first-cut/10）：审计回得到原币与汇率，不必重放整条取数链。
 func (handler *CreateInitialRouteHandler) planRecord(
 	ctx context.Context,
 	key domain.InitialRouteJudgmentKey,
 	selected domain.CandidateID,
 	candidates []domain.RouteCandidate,
 	evidence ports.InitialRouteEvidence,
+	costCitations []domain.PlannedLegCostCitation,
 	judgedAt time.Time,
 ) (ports.InitialRouteRecord, *ParcelRouteResult, error) {
 	none := ports.InitialRouteRecord{}
@@ -473,6 +503,7 @@ func (handler *CreateInitialRouteHandler) planRecord(
 		ViewRevision:  evidence.ViewRevision,
 		JudgedAt:      judgedAt,
 		EffectiveFrom: judgedAt,
+		CostCitations: costCitations,
 	})
 	if err != nil {
 		return none, nil, fmt.Errorf("form initial route plan: %w", err)

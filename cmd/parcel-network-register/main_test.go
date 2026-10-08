@@ -97,6 +97,13 @@ func (double *registryDouble) RegisterRouteStrategyVersion(
 	return double.err
 }
 
+func (double *registryDouble) RegisterLineCostBases(
+	_ context.Context, tenant domain.TenantID, _ string, _ int32, _ []ports.LineSegmentCostBasis,
+) error {
+	double.lastTenant = tenant
+	return double.err
+}
+
 func (double *registryDouble) RegisterAvailabilityAdjustment(
 	_ context.Context, tenant domain.TenantID, row ports.AvailabilityAdjustmentStatement,
 ) error {

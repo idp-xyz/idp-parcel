@@ -303,6 +303,18 @@ func TestCatalogRevisionAdvancesWithEveryRegistrationKind(t *testing.T) {
 	}
 }
 
+// Covers: 成本依据写口与其余目录写口同一条事务纪律——无事务上下文不得落库。
+func TestLineCostBasesRefuseToRunOutsideATransaction(t *testing.T) {
+	catalog, _, _ := newNetworkCatalog(t)
+
+	err := catalog.RegisterLineCostBases(t.Context(),
+		scalar(t, domain.NewTenantID, "tenant-1"), "line-x", 1,
+		[]ports.LineSegmentCostBasis{{SegmentIndex: 0, Kind: ports.SupplierBuyPlanBasis, Reference: "plan/v1"}})
+	if !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记应返回 ErrTransactionRequired，实得：%v", err)
+	}
+}
+
 func newNetworkCatalog(t *testing.T) (*adapter.NetworkCatalog, bentoapp.Transactor, *pgxpool.Pool) {
 	t.Helper()
 

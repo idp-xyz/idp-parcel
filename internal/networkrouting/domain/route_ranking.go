@@ -92,6 +92,16 @@ func (fact CandidateCostFact) Candidate() CandidateID {
 	return fact.candidate
 }
 
+// State 报出候选成本的状态格。金额与币种只在已计价格有值——待判断与不可计价没有金额，
+// 不以零表示；读不该读的格是调用方拿错了格。
+func (fact CandidateCostFact) State() CandidateCostState { return fact.state }
+
+// AmountMinor 报出已计价金额（最小币单位）；未计价格答零，判据是 State 不是它。
+func (fact CandidateCostFact) AmountMinor() int64 { return fact.amountMinor }
+
+// Currency 报出已计价金额的币种；未计价格答空串。
+func (fact CandidateCostFact) Currency() string { return fact.currency.value }
+
 func NewPendingCandidateCost(candidate CandidateID) (CandidateCostFact, error) {
 	return unpricedCandidateCost(candidate, CandidateCostPending)
 }

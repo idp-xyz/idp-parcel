@@ -293,6 +293,7 @@ func newRouteFixture(t *testing.T) *routeFixture {
 	fixture.handler = application.NewCreateInitialRouteHandler(application.CreateInitialRouteDeps{
 		Applicability: fixture.applicability,
 		Evidence:      fixture.evidence,
+		Costs:         passthroughCosts{},
 		Store:         fixture.store,
 		Log:           fixture.log,
 		Downstream:    fixture.downstream,
@@ -300,6 +301,18 @@ func newRouteFixture(t *testing.T) *routeFixture {
 		Clock:         fixedClock{at: routeJudgedAt},
 	})
 	return fixture
+}
+
+// passthroughCosts 是既有编排双轴测试的白盒替身：证据里带什么事实就交回什么事实，
+// 不另合成——取数侧的合成正交地被其自身用例盖住，这里不重测一遍。
+type passthroughCosts struct{}
+
+func (passthroughCosts) LoadCandidateCosts(
+	_ context.Context,
+	_ domain.InitialRouteJudgmentKey,
+	evidence ports.InitialRouteEvidence,
+) (ports.RouteCandidateCosts, error) {
+	return ports.RouteCandidateCosts{Facts: evidence.CandidateCosts}, nil
 }
 
 // Covers: `AT-NR-012`「同一委托三个包裹分别可路由、确定无路由和依赖未决——三个包裹分别

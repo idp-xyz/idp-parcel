@@ -166,6 +166,9 @@ type InitialRoutePlanSpec struct {
 	ViewRevision  NetworkViewRevision
 	JudgedAt      time.Time
 	EffectiveFrom time.Time
+	// CostCitations 是选中候选逐段的成本出处（票 routing-first-cut/10）：缺它不坏计划的
+	// 结构，坏的是「这段为什么这么贵」的复算链——留痕与判断一并落，审计才能回原币与汇率上争。
+	CostCitations []PlannedLegCostCitation
 }
 
 // InitialRoutePlan 是针对一个明确包裹和服务目的、带版本和生效边界的未来路径意图
@@ -180,6 +183,7 @@ type InitialRoutePlan struct {
 	viewRevision  NetworkViewRevision
 	judgedAt      time.Time
 	effectiveFrom time.Time
+	costCitations []PlannedLegCostCitation
 }
 
 // FormInitialRoutePlan 立三类不变量：
@@ -231,6 +235,21 @@ func FormInitialRoutePlan(spec InitialRoutePlanSpec) (InitialRoutePlan, error) {
 		}
 	}
 
+	// 逐段成本出处（票 routing-first-cut/10）：序位必须落在段链上、互不重复、每格自洽。
+	seenOrdinals := make(map[int]struct{}, len(spec.CostCitations))
+	for _, citation := range spec.CostCitations {
+		if !citation.valid() {
+			return InitialRoutePlan{}, ErrInvalidRoutePlan
+		}
+		if citation.ordinal < 1 || citation.ordinal > len(spec.Legs) {
+			return InitialRoutePlan{}, ErrInvalidRoutePlan
+		}
+		if _, duplicated := seenOrdinals[citation.ordinal]; duplicated {
+			return InitialRoutePlan{}, ErrInvalidRoutePlan
+		}
+		seenOrdinals[citation.ordinal] = struct{}{}
+	}
+
 	return InitialRoutePlan{
 		key:           spec.Key,
 		version:       spec.Version,
@@ -241,6 +260,7 @@ func FormInitialRoutePlan(spec InitialRoutePlanSpec) (InitialRoutePlan, error) {
 		viewRevision:  spec.ViewRevision,
 		judgedAt:      spec.JudgedAt.UTC(),
 		effectiveFrom: spec.EffectiveFrom.UTC(),
+		costCitations: append([]PlannedLegCostCitation(nil), spec.CostCitations...),
 	}, nil
 }
 
@@ -273,6 +293,82 @@ func (plan InitialRoutePlan) LegAt(ordinal int) (PlannedLeg, bool) {
 		return PlannedLeg{}, false
 	}
 	return plan.legs[ordinal-1], true
+}
+
+// CostCitations 交回逐段成本出处留痕的拷贝（票 routing-first-cut/10）。缺口径的一版
+// 计划回来是空列表——出处是取数侧合成时才有的内容，不是计划结构的必备件。
+func (plan InitialRoutePlan) CostCitations() []PlannedLegCostCitation {
+	return append([]PlannedLegCostCitation(nil), plan.costCitations...)
+}
+
+// PlannedLegCostCitation 是选中候选某一段的成本出处（票 routing-first-cut/10，ADR-0148 决定四）：
+// 哪一次评价、按哪份方案出的价、内部段还带政策引用，以及全精度比较金额——取整只发生在合成
+// 那一步（决定四.3），留痕留取整前的值，争议才回得到原币与汇率上。
+type PlannedLegCostCitation struct {
+	ordinal            int
+	evaluationID       string
+	planReference      string
+	policyReference    string
+	hasPolicy          bool
+	comparisonAmount   string
+	comparisonCurrency string
+}
+
+// PlannedLegCostCitationSpec 是逐段成本出处的构造输入。Ordinal 与 PlannedLegReference 同一口径：
+// 自首段起计、首段为 1。
+type PlannedLegCostCitationSpec struct {
+	Ordinal            int
+	EvaluationID       string
+	PlanReference      string
+	PolicyReference    string
+	HasPolicy          bool
+	ComparisonAmount   string
+	ComparisonCurrency string
+}
+
+func NewPlannedLegCostCitation(spec PlannedLegCostCitationSpec) (PlannedLegCostCitation, error) {
+	if spec.Ordinal < 1 || spec.EvaluationID == "" || spec.PlanReference == "" ||
+		spec.ComparisonAmount == "" || spec.ComparisonCurrency == "" {
+		return PlannedLegCostCitation{}, ErrInvalidRoutePlan
+	}
+	if spec.HasPolicy && spec.PolicyReference == "" {
+		return PlannedLegCostCitation{}, ErrInvalidRoutePlan
+	}
+	return PlannedLegCostCitation{
+		ordinal:            spec.Ordinal,
+		evaluationID:       spec.EvaluationID,
+		planReference:      spec.PlanReference,
+		policyReference:    spec.PolicyReference,
+		hasPolicy:          spec.HasPolicy,
+		comparisonAmount:   spec.ComparisonAmount,
+		comparisonCurrency: spec.ComparisonCurrency,
+	}, nil
+}
+
+func (citation PlannedLegCostCitation) Ordinal() int          { return citation.ordinal }
+func (citation PlannedLegCostCitation) EvaluationID() string  { return citation.evaluationID }
+func (citation PlannedLegCostCitation) PlanReference() string { return citation.planReference }
+func (citation PlannedLegCostCitation) ComparisonAmount() string {
+	return citation.comparisonAmount
+}
+func (citation PlannedLegCostCitation) ComparisonCurrency() string {
+	return citation.comparisonCurrency
+}
+
+// PolicyReference 报出内部段的政策引用；外包段没有政策，第二个返回值为假。
+func (citation PlannedLegCostCitation) PolicyReference() (string, bool) {
+	if !citation.hasPolicy {
+		return "", false
+	}
+	return citation.policyReference, true
+}
+
+func (citation PlannedLegCostCitation) valid() bool {
+	if citation.ordinal < 1 || citation.evaluationID == "" || citation.planReference == "" ||
+		citation.comparisonAmount == "" || citation.comparisonCurrency == "" {
+		return false
+	}
+	return !citation.hasPolicy || citation.policyReference != ""
 }
 
 // Nodes 按段链推导有序计划节点序列。节点不单独存一份：两份就可能各说各话，而段链连续

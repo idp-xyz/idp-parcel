@@ -19,11 +19,13 @@ import (
 	ccsettlement "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/settlementaccounting"
 	ccapplication "go.idp.xyz/idp-parcel/internal/customscompliance/application"
 	nrinbox "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/inbox"
+	nrpricing "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/parcelpricing"
 	nrparcelshipment "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/parcelshipment"
 	nrpartycommercial "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/partycommercial"
 	nrpostgres "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/postgres"
 	nrapplication "go.idp.xyz/idp-parcel/internal/networkrouting/application"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
+	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
 	ppidentity "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/identity"
 	ppinbox "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/inbox"
@@ -1391,6 +1393,7 @@ func acceptanceConsumer(
 	routeHandler := nrapplication.NewCreateInitialRouteHandler(nrapplication.CreateInitialRouteDeps{
 		Applicability: applicability,
 		Evidence:      evidence,
+		Costs:         routeCosts(db),
 		Store:         routeStore,
 		Log:           handoffLog,
 		Downstream:    downstream,
@@ -1425,6 +1428,51 @@ func initialRouteEvidence(db *bentopg.DB, clock systemClock) (*nrapplication.Cat
 		return nil, fmt.Errorf("parcel-dispatch: initial route evidence: %w", err)
 	}
 	return evidence, nil
+}
+
+// routeCosts 装配候选成本取数侧（票 routing-first-cut/10）：目录依据、内部政策解析与方案
+// 装载全接库；计价输入的实例半边（包裹事实从哪取）没租户路径，如实未配置——没接之前
+// 成本排序未决照旧，不编一份空输入让候选假出价。
+func routeCosts(db *bentopg.DB) nrports.RouteCandidateCostSource {
+	catalog, err := nrpostgres.NewNetworkCatalog(db)
+	if err != nil {
+		return brokenCostSource{err: fmt.Errorf("parcel-dispatch: network catalog: %w", err)}
+	}
+	publications, err := pcpostgres.NewCommercialPublications(db)
+	if err != nil {
+		return brokenCostSource{err: fmt.Errorf("parcel-dispatch: commercial publications: %w", err)}
+	}
+	priceCards, err := pppostgres.NewPriceCards(db)
+	if err != nil {
+		return brokenCostSource{err: fmt.Errorf("parcel-dispatch: price cards: %w", err)}
+	}
+	return nrpricing.NewRouteCandidateCostAdapter(nrpricing.RouteCandidateCostDeps{
+		Bases:    catalog,
+		Internal: nrpartycommercial.NewInternalPlanResolver(publications),
+		Input:    unconfiguredRoutePricingInput{},
+		Plans:    priceCards,
+	})
+}
+
+// unconfiguredRoutePricingInput 是没有租户计价输入路径时的如实作答：计价输入的取数路径
+// 是消费方实例半边，没接就没有依据。
+type unconfiguredRoutePricingInput struct{}
+
+func (unconfiguredRoutePricingInput) PricingInputFor(
+	context.Context, nrdomain.InitialRouteJudgmentKey,
+) (ppdomain.PricingInputSnapshot, bool, error) {
+	return ppdomain.PricingInputSnapshot{}, false, nil
+}
+
+// brokenCostSource 把装配期的失败留到判断时如实报出来，不静默落进某一格。
+type brokenCostSource struct {
+	err error
+}
+
+func (broken brokenCostSource) LoadCandidateCosts(
+	context.Context, nrdomain.InitialRouteJudgmentKey, nrports.InitialRouteEvidence,
+) (nrports.RouteCandidateCosts, error) {
+	return nrports.RouteCandidateCosts{}, broken.err
 }
 
 // networkIntakeConsumer 接 UC-NR-003 那条线：PS 有效网络收寄采用结果信封 → 消费门 →
