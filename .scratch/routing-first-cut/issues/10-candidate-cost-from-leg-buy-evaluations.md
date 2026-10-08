@@ -1,7 +1,7 @@
 # 10 候选成本：计划履约段的 BUY 评价经 parcel-pricing 合成候选成本
 
 Category: enhancement
-Status: in-progress——2026-10-08 TraeCode 会话认领（用户令「开始接下一张票」；阻塞 02、03、09 均已在 main）。当前：交活，`5b0d46f2`/`e4c1242c`/`5f09dde5`/`e9fef1ed` 四笔码 + 完成记录在分支 `mcp3-rfc10`，待评审与重放。此前：ready-for-agent
+Status: resolved · 已进 main——2026-10-08 纯快进 `53422925..f01a6077`（`f5257626`/`5b0d46f2`/`e4c1242c`/`5f09dde5`/`e9fef1ed`/`743927d8` + 清点 `f01a6077`，SHA 不换）。分支 `mcp3-rfc10` 作封存出处。此前：in-progress——2026-10-08 TraeCode 会话认领（用户令「开始接下一张票」；阻塞 02、03、09 均已在 main）。此前：ready-for-agent
 Blocked by: 02、03、09
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「接路由证据取数侧」那一步（成本），也是「首个内置排序策略」的事实来源
 地盘：network-routing 的出向端口与 parcel-pricing 消费方适配器（NR 侧）；目录线路版本上指向 BUY 价卡的引用列（新迁移号开工时预留）。parcel-pricing 若需新口，先在频道与 PP 地盘的主人约。
@@ -56,6 +56,20 @@ Blocked by: 02、03、09
 5. **04 折叠缺口同笔修复**：`freeze_form`/`freeze_remaining_segments` 此前只写不读（快照折回恒未声明），随 0016 一并补 SELECT/行模型/重建三处与回归用例。计入口径：这是 04 落地余下的缺陷，不是本票新引入。
 
 **未验 / 边界**：演示租户端到端（rfc/11 与 demo-seeds 的实例半边）；计价输入取数路径仍为「未配置」哨兵（消费方实例半边，编不得）；真租户价卡与政策随登记册证据才升 `R`——本票全部取证为 `S`。评审：本会话是唯一执行方，推送方自审（不算非作者评审），单据按并行会话口径留白。
+
+## Comments
+
+### 进 main 记录（2026-10-08，TraeCode 会话代推送方）
+
+- **纯快进，不 cherry-pick、SHA 不换**：`origin/main` = `f01a6077`（`53422925` 之上六笔码/票面 + 清点一笔）；分支 `mcp3-rfc10` 是 main 祖先，作封存出处。
+- **门**：清点在 `/tmp/idp-replay-rfc10`（`743927d8` 的干净检出）上重生成；全量 `go test -p 1 -count=1 ./...` 带 DSN **136 ok / 0 FAIL / 0 失败行**（17:5x–18:0x 一轮）。
+- **清点**：networkrouting 生产 65→67、测试 62→64；partycommercial 生产 153→154、测试 161→162、HTTP 39→40；合计 1145→1148 生产、1055→1058 测试、第四列 285→286；消费缝 networkrouting→parcelpricing 新 +1、networkrouting→partycommercial 3→4；network_routing 迁移 15→16。
+- **评审**：本会话是唯一执行方——推送方自审（完成记录「判断项」五条即自审所得），**不算非作者评审**，按并行会话口径照实留白。
+- **远端分支**：`origin/mcp3-rfc10` 停在其已进 main 的祖先上，按下述「收尾」删；本地改名 `merged/mcp3-rfc10` 指针留档。
+
+### 收尾
+
+- 远端 `mcp3-rfc10` 已删（其内容全在 main，SHA 对照零差）；本地指针改名 `merged/mcp3-rfc10`；重放树 `/tmp/idp-replay-rfc10` 拆。
 
 ## 实施方案（2026-10-08 认领时草定，随实现修订；已完成项见完成记录）
 
