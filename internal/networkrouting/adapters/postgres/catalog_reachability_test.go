@@ -136,18 +136,29 @@ type catalogReachCustoms struct{}
 
 func (catalogReachCustoms) AssessCustomsApplicability(
 	_ context.Context, query ports.CustomsApplicabilityQuery,
-) ([]domain.HardConstraintFinding, error) {
+) (ports.CustomsApplicabilityAssessment, error) {
+	none := ports.CustomsApplicabilityAssessment{}
 	findings := make([]domain.HardConstraintFinding, 0, len(query.Candidates))
+	citations := make([]domain.CustomsApplicabilityCitation, 0, len(query.Candidates))
 	for _, candidate := range query.Candidates {
 		finding, err := domain.NewHardConstraintFinding(domain.HardConstraintFindingSpec{
 			Candidate: candidate.Candidate, Outcome: domain.ConstraintSatisfied,
 		})
 		if err != nil {
-			return nil, err
+			return none, err
 		}
 		findings = append(findings, finding)
+		citation, err := domain.NewCustomsApplicabilityCitation(domain.CustomsApplicabilityCitationSpec{
+			Candidate: candidate.Candidate,
+			Judgment:  "SYN-JUDGMENT-" + candidate.Candidate.String(),
+			Versions:  []string{"PORT:SYN-PORT-SZX-01@2026-01-01T00:00:00Z"},
+		})
+		if err != nil {
+			return none, err
+		}
+		citations = append(citations, citation)
 	}
-	return findings, nil
+	return ports.CustomsApplicabilityAssessment{Findings: findings, Citations: citations}, nil
 }
 
 type catalogReachClock struct{}
@@ -252,6 +263,11 @@ func TestReachabilityOverARealCatalogFormsEachOfTheThreeValues(t *testing.T) {
 			}
 			if record.Finding.Value() != test.want || record.ViewRevision.String() != "9" {
 				t.Fatalf("落库判断 = %s / 修订 %q，想要 %s / 目录修订锚 9", record.Finding.Value(), record.ViewRevision, test.want)
+			}
+			citations := record.CustomsCitations
+			if len(citations) != 1 || citations[0].Candidate().String() != "SYN-LINE-XA-XB@1" ||
+				citations[0].Judgment() != "SYN-JUDGMENT-SYN-LINE-XA-XB@1" || len(citations[0].Versions()) != 1 {
+				t.Fatalf("落库关务出处 = %+v，想要逐候选一条带判断标识与目录版本引用（ADR-0148 决定一）", citations)
 			}
 		})
 	}

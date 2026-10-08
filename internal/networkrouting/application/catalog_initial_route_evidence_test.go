@@ -27,7 +27,7 @@ func TestTheCatalogInitialRouteEvidenceDecidesUnconfiguredAndOtherwiseStaysLoud(
 	noStrategy.snapshot.Strategies = nil
 	for name, catalog := range map[string]*catalogReadDouble{"目录修订锚不存在": {}, "没有适用策略": noStrategy} {
 		t.Run(name, func(t *testing.T) {
-			view, err := application.NewCatalogInitialRouteEvidence(catalog, fixedClock{at: judgedAt})
+			view, err := application.NewCatalogInitialRouteEvidence(catalog, satisfiedCustoms(), fixedClock{at: judgedAt})
 			if err != nil {
 				t.Fatalf("构造：%v", err)
 			}
@@ -41,7 +41,7 @@ func TestTheCatalogInitialRouteEvidenceDecidesUnconfiguredAndOtherwiseStaysLoud(
 		})
 	}
 
-	view, err := application.NewCatalogInitialRouteEvidence(syntheticCatalog(t), fixedClock{at: judgedAt})
+	view, err := application.NewCatalogInitialRouteEvidence(syntheticCatalog(t), satisfiedCustoms(), fixedClock{at: judgedAt})
 	if err != nil {
 		t.Fatalf("构造：%v", err)
 	}
@@ -52,11 +52,17 @@ func TestTheCatalogInitialRouteEvidenceDecidesUnconfiguredAndOtherwiseStaysLoud(
 	if len(evidence.Projections) != 0 {
 		t.Fatal("没登记节点日历却折出了时间投影")
 	}
+	if len(evidence.HardConstraints) != 1 || len(evidence.CustomsCitations) != 1 {
+		t.Fatal("初始路由证据该带上逐候选的关务事实与出处（routing-first-cut/12）")
+	}
 
-	if _, err := application.NewCatalogInitialRouteEvidence(nil, fixedClock{at: judgedAt}); err == nil {
+	if _, err := application.NewCatalogInitialRouteEvidence(nil, satisfiedCustoms(), fixedClock{at: judgedAt}); err == nil {
 		t.Fatal("nil 目录读口应在构造期被拒")
 	}
-	if _, err := application.NewCatalogInitialRouteEvidence(syntheticCatalog(t), nil); err == nil {
+	if _, err := application.NewCatalogInitialRouteEvidence(syntheticCatalog(t), satisfiedCustoms(), nil); err == nil {
 		t.Fatal("nil 时钟应在构造期被拒")
+	}
+	if _, err := application.NewCatalogInitialRouteEvidence(syntheticCatalog(t), nil, fixedClock{at: judgedAt}); err == nil {
+		t.Fatal("nil 关务来源应在构造期被拒")
 	}
 }

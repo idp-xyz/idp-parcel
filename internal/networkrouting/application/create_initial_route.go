@@ -494,16 +494,17 @@ func (handler *CreateInitialRouteHandler) planRecord(
 		return none, &undecided, nil
 	}
 	plan, err := domain.FormInitialRoutePlan(domain.InitialRoutePlanSpec{
-		Key:           key,
-		Version:       version,
-		Selected:      selected,
-		Candidates:    candidates,
-		Legs:          legs,
-		Strategy:      evidence.Strategy,
-		ViewRevision:  evidence.ViewRevision,
-		JudgedAt:      judgedAt,
-		EffectiveFrom: judgedAt,
-		CostCitations: costCitations,
+		Key:              key,
+		Version:          version,
+		Selected:         selected,
+		Candidates:       candidates,
+		Legs:             legs,
+		Strategy:         evidence.Strategy,
+		ViewRevision:     evidence.ViewRevision,
+		JudgedAt:         judgedAt,
+		EffectiveFrom:    judgedAt,
+		CostCitations:    costCitations,
+		CustomsCitations: evidence.CustomsCitations,
 	})
 	if err != nil {
 		return none, nil, fmt.Errorf("form initial route plan: %w", err)

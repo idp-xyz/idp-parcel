@@ -10,11 +10,14 @@ import (
 )
 
 // CatalogInitialRouteEvidence 是初始路由与复核所用证据视图的目录实现。除成本外的事实族从目录折出
-// （ADR-0148 决定一、ADR-0175）。成本缺席不在这里补。
+// （ADR-0148 决定一、ADR-0175）。成本缺席不在这里补；关务适用性经端口取（与可达性证据同一个来源，
+// 出处随证据交回、随初始路由记录留痕）。
 //
-// 初始路由判断键没有 asOf：路由判断时点归本上下文（UC-NR-001「网络判断基线」一行），取时钟。
+// 初始路由判断键没有 asOf：路由判断时点归本上下文（UC-NR-001「网络判断基线」一行），取时钟；关务
+// 询问的时点取的也是这同一个时点。
 type CatalogInitialRouteEvidence struct {
 	catalog ports.NetworkCatalogRead
+	customs ports.CustomsApplicabilitySource
 	clock   ports.Clock
 }
 
@@ -22,15 +25,19 @@ var _ ports.InitialRouteEvidenceView = (*CatalogInitialRouteEvidence)(nil)
 
 func NewCatalogInitialRouteEvidence(
 	catalog ports.NetworkCatalogRead,
+	customs ports.CustomsApplicabilitySource,
 	clock ports.Clock,
 ) (*CatalogInitialRouteEvidence, error) {
 	if catalog == nil {
 		return nil, fmt.Errorf("network routing application: network catalog read is required")
 	}
+	if customs == nil {
+		return nil, fmt.Errorf("network routing application: customs applicability source is required")
+	}
 	if clock == nil {
 		return nil, fmt.Errorf("network routing application: clock is required")
 	}
-	return &CatalogInitialRouteEvidence{catalog: catalog, clock: clock}, nil
+	return &CatalogInitialRouteEvidence{catalog: catalog, customs: customs, clock: clock}, nil
 }
 
 // LoadInitialRouteEvidence 三格见 ports.InitialRouteEvidenceView。成本不在这里折（归 routing-first-cut/10）。
@@ -72,9 +79,15 @@ func (view *CatalogInitialRouteEvidence) LoadInitialRouteEvidence(
 	if err != nil {
 		return none, false, err
 	}
+	constraints, citations, err := customsFindings(ctx, view.customs, key.TenantID, asOf, carried.Geo, candidates)
+	if err != nil {
+		return none, false, err
+	}
 	return ports.InitialRouteEvidence{
 		ServiceAreas:                         areas,
 		PathExecutability:                    executability,
+		HardConstraints:                      constraints,
+		CustomsCitations:                     citations,
 		Projections:                          projections,
 		CommittedBound:                       carried.Commitment,
 		RankingForm:                          strategy.RankingForm,

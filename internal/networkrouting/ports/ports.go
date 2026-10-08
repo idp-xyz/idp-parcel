@@ -26,7 +26,9 @@ type NetworkEvidence struct {
 	RouteRequirements []domain.RouteRequirement
 	PathExecutability []domain.PathExecutability
 	HardConstraints   []domain.HardConstraintFinding
-	ViewRevision      domain.NetworkViewRevision
+	// CustomsCitations 是关务事实逐候选的出处（ADR-0148 决定一），随判断记录一并留痕。
+	CustomsCitations []domain.CustomsApplicabilityCitation
+	ViewRevision     domain.NetworkViewRevision
 }
 
 // RequestCarriedContent 是随判断请求携带、由发起方交来的判断对象内容（ADR-0148 决定一「随请求携带」一路，
@@ -84,6 +86,8 @@ type CommercialEligibilityView interface {
 //
 // GeoProjectionDigest 与 ServiceAreaVersions 是当次解析依据里除判断键以外的两件
 // （ADR-0075 决定三）：所携投影的版本化内容摘要，以及这次用过的服务区域版本。地址本体不在记录上。
+// CustomsCitations 是关务事实逐候选的出处（ADR-0148 决定一）：已接的关务来源逐候选带
+// 出处；来源未接时缺席是如实形态，不是判断缺件。
 type ReachabilityJudgmentRecord struct {
 	Key                 domain.ReachabilityJudgmentKey
 	Finding             domain.ReachabilityFinding
@@ -91,6 +95,7 @@ type ReachabilityJudgmentRecord struct {
 	ViewRevision        domain.NetworkViewRevision
 	GeoProjectionDigest string
 	ServiceAreaVersions []string
+	CustomsCitations    []domain.CustomsApplicabilityCitation
 }
 
 // ReachabilityJudgmentSaveOutcome 是保存一次判断的封闭写入结果。error 只留给「答不出」，
@@ -176,9 +181,11 @@ type InitialRouteEvidence struct {
 	RouteRequirements []domain.RouteRequirement
 	PathExecutability []domain.PathExecutability
 	HardConstraints   []domain.HardConstraintFinding
-	Projections       []domain.CandidateTimeProjection
-	CommittedBound    domain.CommittedTimeBound
-	RankingForm       domain.RankingForm
+	// CustomsCitations 与可达性证据同一形状：关务事实逐候选的出处，随初始路由记录留痕。
+	CustomsCitations []domain.CustomsApplicabilityCitation
+	Projections      []domain.CandidateTimeProjection
+	CommittedBound   domain.CommittedTimeBound
+	RankingForm      domain.RankingForm
 	// FreezeForm 零值且 FreezeRemainingSegmentLimit 为 nil 即这一版没有声明冻结形态。
 	// 未声明不是未冻结。
 	FreezeForm                  domain.FreezeForm

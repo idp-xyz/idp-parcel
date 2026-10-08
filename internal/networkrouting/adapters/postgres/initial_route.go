@@ -47,6 +47,9 @@ type planRow struct {
 	JudgedAt      time.Time         `json:"judged_at"`
 	EffectiveFrom time.Time         `json:"effective_from"`
 	CostCitations []costCitationRow `json:"cost_citations,omitempty"`
+	// CustomsCitations 是全候选的关务出处留痕（票 routing-first-cut/12）：旧计划没有这
+	// 一格，读回空列表照常成立——出处与逐段成本出处同一个缺席约定。
+	CustomsCitations []customsCitationRow `json:"customs_citations,omitempty"`
 }
 
 // costCitationRow 是逐段成本出处留痕的行模型（票 routing-first-cut/10）：旧计划没有
@@ -234,16 +237,30 @@ func rowOfPlan(plan domain.InitialRoutePlan) planRow {
 		})
 	}
 	return planRow{
-		Version:       plan.Version().String(),
-		Selected:      plan.SelectedCandidate().String(),
-		Candidates:    rowsOfCandidates(plan.Candidates()),
-		Legs:          legRows,
-		Strategy:      plan.Strategy().String(),
-		ViewRevision:  plan.ViewRevision().String(),
-		JudgedAt:      plan.JudgedAt(),
-		EffectiveFrom: plan.EffectiveFrom(),
-		CostCitations: rowsOfCostCitations(plan.CostCitations()),
+		Version:          plan.Version().String(),
+		Selected:         plan.SelectedCandidate().String(),
+		Candidates:       rowsOfCandidates(plan.Candidates()),
+		Legs:             legRows,
+		Strategy:         plan.Strategy().String(),
+		ViewRevision:     plan.ViewRevision().String(),
+		JudgedAt:         plan.JudgedAt(),
+		EffectiveFrom:    plan.EffectiveFrom(),
+		CostCitations:    rowsOfCostCitations(plan.CostCitations()),
+		CustomsCitations: rowsOfPlanCustomsCitations(plan.CustomsCitations()),
 	}
+}
+
+// rowsOfPlanCustomsCitations 把全候选关务出处折成行模型。
+func rowsOfPlanCustomsCitations(citations []domain.CustomsApplicabilityCitation) []customsCitationRow {
+	rows := make([]customsCitationRow, 0, len(citations))
+	for _, citation := range citations {
+		rows = append(rows, customsCitationRow{
+			Candidate: citation.Candidate().String(),
+			Judgment:  citation.Judgment(),
+			Versions:  citation.Versions(),
+		})
+	}
+	return rows
 }
 
 func rowsOfCostCitations(citations []domain.PlannedLegCostCitation) []costCitationRow {
@@ -322,17 +339,34 @@ func rebuildPlan(key domain.InitialRouteJudgmentKey, data []byte) (domain.Initia
 		}
 		citations = append(citations, citation)
 	}
+	customsCitations := make([]domain.CustomsApplicabilityCitation, 0, len(row.CustomsCitations))
+	for _, stored := range row.CustomsCitations {
+		customsCandidate, err := domain.NewCandidateID(stored.Candidate)
+		if err != nil {
+			return domain.InitialRoutePlan{}, err
+		}
+		customsCitation, err := domain.NewCustomsApplicabilityCitation(domain.CustomsApplicabilityCitationSpec{
+			Candidate: customsCandidate,
+			Judgment:  stored.Judgment,
+			Versions:  stored.Versions,
+		})
+		if err != nil {
+			return domain.InitialRoutePlan{}, err
+		}
+		customsCitations = append(customsCitations, customsCitation)
+	}
 	return domain.FormInitialRoutePlan(domain.InitialRoutePlanSpec{
-		Key:           key,
-		Version:       version,
-		Selected:      selected,
-		Candidates:    candidates,
-		Legs:          legs,
-		Strategy:      strategy,
-		ViewRevision:  revision,
-		JudgedAt:      row.JudgedAt,
-		EffectiveFrom: row.EffectiveFrom,
-		CostCitations: citations,
+		Key:              key,
+		Version:          version,
+		Selected:         selected,
+		Candidates:       candidates,
+		Legs:             legs,
+		Strategy:         strategy,
+		ViewRevision:     revision,
+		JudgedAt:         row.JudgedAt,
+		EffectiveFrom:    row.EffectiveFrom,
+		CostCitations:    citations,
+		CustomsCitations: customsCitations,
 	})
 }
 

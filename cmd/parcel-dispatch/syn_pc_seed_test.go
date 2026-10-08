@@ -322,7 +322,7 @@ func assertRoutingApplicabilityRequired(t *testing.T, fixture *synVerticalFixtur
 // 目录为空，或没有适用于这个服务目的的路由策略版本（ADR-0148 决定六）。
 func assertRouteEvidenceUnconfigured(t *testing.T, fixture *synVerticalFixture) {
 	t.Helper()
-	evidence, err := initialRouteEvidence(fixture.db, systemClock{})
+	evidence, err := initialRouteEvidence(fixture.db, systemClock{}, customsApplicabilitySource(fixture.db))
 	if err != nil {
 		t.Fatalf("构造初始路由证据视图：%v", err)
 	}

@@ -51,12 +51,14 @@ type customsDouble struct {
 
 func (double *customsDouble) AssessCustomsApplicability(
 	_ context.Context, query ports.CustomsApplicabilityQuery,
-) ([]domain.HardConstraintFinding, error) {
+) (ports.CustomsApplicabilityAssessment, error) {
+	none := ports.CustomsApplicabilityAssessment{}
 	double.gotQuery = query
 	if double.err != nil {
-		return nil, double.err
+		return none, double.err
 	}
 	findings := make([]domain.HardConstraintFinding, 0, len(query.Candidates))
+	citations := make([]domain.CustomsApplicabilityCitation, 0, len(query.Candidates))
 	for _, candidate := range query.Candidates {
 		if double.omit[candidate.Candidate.String()] {
 			continue
@@ -65,17 +67,25 @@ func (double *customsDouble) AssessCustomsApplicability(
 		if double.outcome == domain.RestrictionApplies {
 			restriction, err := domain.NewRestrictionReference("SYN-CUSTOMS-RESTRICTION-1")
 			if err != nil {
-				return nil, err
+				return none, err
 			}
 			spec.Restriction = restriction
 		}
 		finding, err := domain.NewHardConstraintFinding(spec)
 		if err != nil {
-			return nil, err
+			return none, err
 		}
 		findings = append(findings, finding)
+		citation, err := domain.NewCustomsApplicabilityCitation(domain.CustomsApplicabilityCitationSpec{
+			Candidate: candidate.Candidate,
+			Judgment:  "SYN-JUDGMENT-" + candidate.Candidate.String(),
+		})
+		if err != nil {
+			return none, err
+		}
+		citations = append(citations, citation)
 	}
-	return findings, nil
+	return ports.CustomsApplicabilityAssessment{Findings: findings, Citations: citations}, nil
 }
 
 func satisfiedCustoms() *customsDouble {
@@ -209,6 +219,27 @@ func TestACatalogLineCoveringBothEndsIsReachable(t *testing.T) {
 		Connection: "SYN-CONN-ORIGIN-GATE", FromNode: "SYN-NODE-ORIGIN", ToNode: "SYN-NODE-GATE",
 	}) || legs[1].ToNode != "SYN-NODE-LAST-MILE" {
 		t.Fatalf("关务来源收到的段链 = %+v", legs)
+	}
+	projected := query.Candidates[0]
+	if projected.Origin != "XA" || !projected.HasOrigin ||
+		projected.Destination != "XB" || !projected.HasDestination {
+		t.Fatalf("关务来源收到的两端国家 = %q/%v → %q/%v，该随请求投影携带寄件/收件国",
+			projected.Origin, projected.HasOrigin, projected.Destination, projected.HasDestination)
+	}
+}
+
+// Covers: routing-first-cut/12 分诊裁定二——不成形的国家码与缺席同为证据不足：关务投影
+// 只带成形的国家码，缺格如实交缺席格，由 CC 按「证据不足」答状态未知。
+func TestTheCustomsQueryCarriesOnlyUsableEndpointCountries(t *testing.T) {
+	customs := satisfiedCustoms()
+	_, _ = assessThroughCatalog(t, syntheticCatalog(t), customs, carriedGeo("xa", "", "XB", "100200"))
+
+	projected := customs.gotQuery.Candidates[0]
+	if projected.HasOrigin || projected.Origin != "" {
+		t.Fatalf("寄件国 = %q/%v，不成形的国家码该按缺席交，不把垃圾码当国家", projected.Origin, projected.HasOrigin)
+	}
+	if projected.Destination != "XB" || !projected.HasDestination {
+		t.Fatalf("收件国 = %q/%v，成形国家码该照带", projected.Destination, projected.HasDestination)
 	}
 }
 

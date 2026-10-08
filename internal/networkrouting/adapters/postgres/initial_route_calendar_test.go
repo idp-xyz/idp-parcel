@@ -26,7 +26,7 @@ func TestInitialRouteEvidenceFoldsCalendarTimeAcrossZones(t *testing.T) {
 	effective := asOf.Add(-24 * time.Hour)
 	seedCalendarNetwork(t, transactor, ctx, catalog, tenant, effective, true)
 
-	view, err := application.NewCatalogInitialRouteEvidence(catalog, calendarClock{at: asOf})
+	view, err := application.NewCatalogInitialRouteEvidence(catalog, catalogReachCustoms{}, calendarClock{at: asOf})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -69,7 +69,7 @@ func TestANodeWithoutACalendarIsNotGivenADefaultWindow(t *testing.T) {
 	asOf := time.Date(2026, 8, 20, 9, 0, 0, 0, time.UTC)
 	seedCalendarNetwork(t, transactor, ctx, catalog, tenant, asOf.Add(-24*time.Hour), false)
 
-	view, err := application.NewCatalogInitialRouteEvidence(catalog, calendarClock{at: asOf})
+	view, err := application.NewCatalogInitialRouteEvidence(catalog, catalogReachCustoms{}, calendarClock{at: asOf})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -97,7 +97,7 @@ func TestACatalogWriteBeforeCommitRejudgesOnTheRealReadSide(t *testing.T) {
 	seedCalendarNetwork(t, transactor, ctx, catalog, tenant, effective, true)
 
 	flip := &flipOnSecondRead{inner: catalog, transactor: transactor, tenant: tenant, effective: effective}
-	view, err := application.NewCatalogInitialRouteEvidence(flip, calendarClock{at: asOf})
+	view, err := application.NewCatalogInitialRouteEvidence(flip, catalogReachCustoms{}, calendarClock{at: asOf})
 	if err != nil {
 		t.Fatal(err)
 	}
