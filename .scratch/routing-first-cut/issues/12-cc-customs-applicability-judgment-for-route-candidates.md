@@ -1,8 +1,8 @@
 # 12 customs-compliance：按路由候选作答的关务适用性判断口
 
 Category: enhancement
-Status: needs-triage——2026-09-24 通道 3 立（派单 `task-1f910231` ← 通道 1；出自 02 的取证与 [psb/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 格 6）。建在 [ADR-0148](../../../docs/adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md)（Proposed）决定三上，判断口的形状与作答层级归 CC owner（0148 越权风险点 4）：0148 接受、CC owner 在分诊时定下文「待 CC owner 定」各问之后，转 ready-for-agent
-Blocked by: 02（ADR-0148 接受之笔 02 才 resolved）；「接到 NR 取数侧」那一项另等 07
+Status: ready-for-agent——2026-10-08 TraeCode 会话按用户令代 CC owner 分诊，「待 CC owner 定」四问裁定见文末「关务适用性判断分诊」。此前的 needs-triage——2026-09-24 通道 3 立（派单 `task-1f910231` ← 通道 1；出自 02 的取证与 [psb/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 格 6）。建在 [ADR-0148](../../../docs/adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md)（Proposed）决定三上，判断口的形状与作答层级归 CC owner（0148 越权风险点 4）：0148 接受、CC owner 在分诊时定下文「待 CC owner 定」各问之后，转 ready-for-agent
+Blocked by: 无（原 02、07 均已进 main；接 NR 取数侧那一项的地盘另含 NR owner，轮次 4 前报窗口）
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「演示租户上一票已接受的委托能形成初始路由」那条关键路径上挡路的缝（切片计划的子票表由通道 5 补入）
 归档：psb/04 与 ADR-0148 决定三都写这张票「另立、不在本票族里补」，指的是 NR 取数侧各票不代 CC 补执行器；本票就是那张另立的票，地盘在 CC。放在本目录、编号 12 是派单的归档选择（通道 1 与通道 5 协调）。
 地盘：customs-compliance 的领域、应用与端口（新判断口）及其读侧适配器；customs-compliance `CONTEXT.md` 相关词条与规则（经 CC owner）；「接到 NR 取数侧」那一项另含 network-routing 的 `adapters/customscompliance` 消费方适配器。
@@ -51,3 +51,13 @@ CC 有口岸目录与申报路径目录两本登记册（`ports.PortsPathsRegist
 - [ ] 同输入重复作答结果一致，答案带出处。
 - [ ] 接到 NR 取数侧后，合成网络上含关务段的候选不再停在状态未知；psb/05 格 6 的取证据此更新（证据只记 `S`）。
 - [ ] 不进参数登记册；演示数据全为 `SYN-` 合成值。
+
+## 关务适用性判断分诊（2026-10-08，TraeCode 会话代 CC owner 裁定；CC owner 若在别处就位可 supersede）
+
+**一、作答层级——口岸 + 申报路径两级，区域首版不建模。** 口岸与申报路径两本册已在（有生效区间与三维结构）；区域维今天没有建模（`CandidatePortEntry` 注释明说），要建先得定「口岸→区域归属」的数据来源，那正是 psb/10 的公开监管参考配置族（口岸代码与所属关务区域），不并进本票。作答粒度是候选级：这个候选含关务段时，能否用该租户判断时点在册的口岸与申报路径过关，不做段级口岸匹配。
+
+**二、候选关务投影——由 NR 组装，形状 = 段链（现有 `CustomsCandidate` 形状）+ 两端国家/地区（寄件/收件国，ADR-0148 决定二的地理解析投影随请求携带、已到 NR 证据）。** CC 不读 NR 目录、不从节点猜跨境点；申报方向由两端国家对确定。某一侧缺国家码时，CC 按「证据不足」答状态未知（与决定二服务区域同一纪律）。这一格牵 NR owner——本分诊代裁，NR owner 可 supersede，落到轮次 4（消费方适配器）时眼见为实。
+
+**三、答案代数——封闭三格加理由：可用 / 不可用（理由三格分别指：口岸未登记、口岸在判断时点未生效、申报路径三维对不上，方向与申报模式可各自指）/ 状态未知（目录为空或依赖读不到）。** 状态未知不折成可用。内部合规限制的覆盖与解除**不并入**本口：那属于既有限制与放行门禁判断链的答案（CONTEXT-MAP 那条边的「限制及解除结果」由既有机制另答）。不可用落到 NR 硬约束哪一格，由轮次 4 与 NR owner 定，本票不先裁。
+
+**四、判断记录——首版即时作答，不落判断史库。** 出处 = 判断标识（按 租户 + 时点 + 候选 + 目录版本 铸成、可重算）+ 口岸/申报路径目录版本引用，NR 随路由判断留痕（ADR-0148 决定一）。CC「合规判断」词条的强制保存规则针对「明确申报范围」的判断链；本口是新族「关务适用性判断」，无申报范围，首版不并进那条强制——将来要争「当时为什么这么判」另立版本化判断史扩展票。同输入重复作答一致由目录版本可重放性保证（判据三）。
