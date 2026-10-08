@@ -140,8 +140,12 @@ SELECT
             'code', strategy_code, 'version', version, 'scope', applicable_scope,
             'effective_from', effective_from, 'effective_to', effective_to,
             'ranking_form', ranking_form,
+            'freeze_form', freeze_form,
+            'freeze_remaining_segments', freeze_remaining_segments,
             'auto_reroute_form', auto_reroute_form,
-            'auto_reroute_improvement_threshold_minor', auto_reroute_improvement_threshold_minor
+            'auto_reroute_improvement_threshold_minor', auto_reroute_improvement_threshold_minor,
+            'comparison_currency', comparison_currency,
+            'comparison_price_policy', comparison_price_policy
         ) ORDER BY strategy_code, version), '[]'::jsonb)
        FROM network_routing.route_strategy_version
       WHERE tenant_id = $1 AND effective_from <= $2
@@ -302,19 +306,36 @@ func rebuildCatalogSnapshot(
 		if err != nil {
 			return none, fmt.Errorf("译回路由策略族：%w", err)
 		}
+		freezeForm, freezeLimit, err := freezeOf(row.FreezeForm, row.FreezeRemainingSegments)
+		if err != nil {
+			return none, fmt.Errorf("译回路由策略族：%w", err)
+		}
 		autoForm, autoThreshold, err := autoRerouteOf(row.AutoRerouteForm, row.AutoRerouteImprovementThresholdMinor)
 		if err != nil {
 			return none, fmt.Errorf("译回路由策略族：%w", err)
 		}
 		snapshot.Strategies = append(snapshot.Strategies, ports.RouteStrategyDefinitionVersion{
 			Code: row.Code, Version: row.Version, ApplicableScope: row.Scope, RankingForm: form,
+			FreezeForm: freezeForm, FreezeRemainingSegmentLimit: freezeLimit,
 			AutoRerouteForm: autoForm, AutoRerouteImprovementThresholdMinor: autoThreshold,
-			EffectiveFrom: row.EffectiveFrom, EffectiveTo: timeOf(row.EffectiveTo),
+			HasComparisonCurrency:    row.ComparisonCurrency != nil,
+			ComparisonCurrency:       stringOf(row.ComparisonCurrency),
+			HasComparisonPricePolicy: row.ComparisonPricePolicy != nil,
+			ComparisonPricePolicy:    stringOf(row.ComparisonPricePolicy),
+			EffectiveFrom:            row.EffectiveFrom, EffectiveTo: timeOf(row.EffectiveTo),
 			HasEffectiveTo: row.EffectiveTo != nil,
 		})
 	}
 
 	return snapshot, nil
+}
+
+// stringOf 解可空列；nil 即没登这一格，与空串不是一回事。
+func stringOf(value *string) string {
+	if value == nil {
+		return ""
+	}
+	return *value
 }
 
 type nodeVersionRow struct {
@@ -431,8 +452,12 @@ type strategyVersionRow struct {
 	EffectiveFrom                        time.Time  `json:"effective_from"`
 	EffectiveTo                          *time.Time `json:"effective_to"`
 	RankingForm                          *string    `json:"ranking_form"`
+	FreezeForm                           *string    `json:"freeze_form"`
+	FreezeRemainingSegments              *int       `json:"freeze_remaining_segments"`
 	AutoRerouteForm                      *string    `json:"auto_reroute_form"`
 	AutoRerouteImprovementThresholdMinor *int       `json:"auto_reroute_improvement_threshold_minor"`
+	ComparisonCurrency                   *string    `json:"comparison_currency"`
+	ComparisonPricePolicy                *string    `json:"comparison_price_policy"`
 }
 
 // rankingFormColumn 把排序形态写成列值：未声明落 NULL；族外的值在触库前拒——CHECK 也会拒，
@@ -486,6 +511,23 @@ func autoRerouteOf(form *string, threshold *int) (domain.AutoRerouteForm, *int, 
 		return domain.AutoRerouteFormUndeclared, nil, err
 	}
 	value := *threshold
+	return parsed, &value, nil
+}
+
+// freezeOf 译回冻结声明列对。它与写入侧 freezeColumns 互为镜像；读侧半缺的列对是库被
+// 手改坏或 CHECK 被后续迁移放宽而 Go 侧没跟上——报错而不吸收成「未声明」。
+func freezeOf(form *string, limit *int) (domain.FreezeForm, *int, error) {
+	if form == nil && limit == nil {
+		return domain.FreezeFormUndeclared, nil, nil
+	}
+	if form == nil || limit == nil {
+		return domain.FreezeFormUndeclared, nil, fmt.Errorf("%w: freeze pair", domain.ErrUnknownFreezeForm)
+	}
+	parsed, err := domain.FreezeFormFrom(*form)
+	if err != nil {
+		return domain.FreezeFormUndeclared, nil, err
+	}
+	value := *limit
 	return parsed, &value, nil
 }
 
@@ -630,6 +672,81 @@ func (catalog *NetworkCatalog) RegisterLineVersion(
 	return catalog.bumpRevision(ctx, executor, tenant)
 }
 
+// RegisterLineCostBases 追加一条线路版本的逐段成本依据（迁移 0016，票 routing-first-cut/10）。
+// 每段一条依据、段号对段链数组下标；种类与引用串在触库前拒集合外的词（与其余族的 CHECK 同一
+// 纪律：不撞环境事务中止态）。行随线路版本内容走，目录修订由版本行登记时推进，这里不另推。
+func (catalog *NetworkCatalog) RegisterLineCostBases(
+	ctx context.Context,
+	tenant domain.TenantID,
+	lineCode string,
+	version int32,
+	bases []ports.LineSegmentCostBasis,
+) error {
+	executor, err := catalog.db.RequireExecutor(ctx)
+	if err != nil {
+		return fmt.Errorf("register line cost bases: %w", err)
+	}
+	for _, basis := range bases {
+		kind := basis.Kind.String()
+		if kind == "" {
+			return fmt.Errorf("register line cost bases: 未知线路段成本依据种类")
+		}
+		if _, err := executor.Exec(ctx,
+			`INSERT INTO network_routing.line_cost_basis
+				(tenant_id, line_code, version, segment_index, basis_kind, basis_ref)
+			 VALUES ($1, $2, $3, $4, $5, $6)`,
+			tenant.String(), lineCode, version, basis.SegmentIndex, kind, basis.Reference,
+		); err != nil {
+			return fmt.Errorf("register line cost bases: %w", err)
+		}
+	}
+	return nil
+}
+
+// LoadLineCostBases 读回一条线路版本的逐段成本依据，按段号升序。没登过依据即空列表不是错误：
+// 段没挂依据，取数侧如实答待判断（ADR-0148 决定四）。租户显式入参。
+func (catalog *NetworkCatalog) LoadLineCostBases(
+	ctx context.Context,
+	tenant domain.TenantID,
+	lineCode string,
+	version int32,
+) ([]ports.LineSegmentCostBasis, error) {
+	querier, err := catalog.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("load line cost bases: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT segment_index, basis_kind, basis_ref
+		   FROM network_routing.line_cost_basis
+		  WHERE tenant_id = $1 AND line_code = $2 AND version = $3
+		  ORDER BY segment_index`,
+		tenant.String(), lineCode, version,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("load line cost bases: %w", err)
+	}
+	defer rows.Close()
+
+	bases := make([]ports.LineSegmentCostBasis, 0, 2)
+	for rows.Next() {
+		var basis ports.LineSegmentCostBasis
+		var raw string
+		if err := rows.Scan(&basis.SegmentIndex, &raw, &basis.Reference); err != nil {
+			return nil, fmt.Errorf("load line cost bases: %w", err)
+		}
+		kind, err := ports.LineCostBasisKindFrom(raw)
+		if err != nil {
+			return nil, fmt.Errorf("load line cost bases: %w", err)
+		}
+		basis.Kind = kind
+		bases = append(bases, basis)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("load line cost bases: %w", err)
+	}
+	return bases, nil
+}
+
 // RegisterServiceAreaVersion 追加一个服务区域版本：版本、有效区间与覆盖各列（迁移 0011，ADR-0148
 // 决定二、五）。覆盖形态由登记用例经领域构造门收过，这里只翻译成列。版本纪律同 RegisterNodeVersion。
 func (catalog *NetworkCatalog) RegisterServiceAreaVersion(
@@ -749,11 +866,14 @@ func (catalog *NetworkCatalog) RegisterRouteStrategyVersion(
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO network_routing.route_strategy_version
 			(tenant_id, strategy_code, version, applicable_scope, effective_from, effective_to, ranking_form,
-			 freeze_form, freeze_remaining_segments, auto_reroute_form, auto_reroute_improvement_threshold_minor)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+			 freeze_form, freeze_remaining_segments, auto_reroute_form, auto_reroute_improvement_threshold_minor,
+			 comparison_currency, comparison_price_policy)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
 		tenant.String(), row.Code, row.Version, row.ApplicableScope,
 		row.EffectiveFrom.UTC(), optionalTime(row.EffectiveTo, row.HasEffectiveTo), form, freezeForm, freezeLimit,
 		autoForm, autoThreshold,
+		optionalString(row.ComparisonCurrency, row.HasComparisonCurrency),
+		optionalString(row.ComparisonPricePolicy, row.HasComparisonPricePolicy),
 	); err != nil {
 		return fmt.Errorf("register route strategy version: %w", err)
 	}
@@ -821,4 +941,12 @@ func optionalTime(value time.Time, present bool) *time.Time {
 	}
 	utc := value.UTC()
 	return &utc
+}
+
+// optionalString 把「已声明 / 未声明」折成可空列：未声明落 NULL，声明了落值。
+func optionalString(value string, present bool) *string {
+	if !present {
+		return nil
+	}
+	return &value
 }

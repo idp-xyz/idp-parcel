@@ -317,3 +317,119 @@ func newNetworkCatalog(t *testing.T) (*adapter.NetworkCatalog, bentoapp.Transact
 	}
 	return catalog, db.Transactor(), pool
 }
+
+// Covers: 迁移 0016 与 ADR-0148 决定四——比较币种与所引价格政策是策略版本上的租户取值，
+// 登了原样折回，没登如实缺格（不是空串）。冻结两列随同路径折回（票 04 的折叠缺口补上）。
+func TestStrategyComparisonAndFreezeDeclarationsFoldBack(t *testing.T) {
+	catalog, transactor, _ := newNetworkCatalog(t)
+	ctx := t.Context()
+	tenant := scalar(t, domain.NewTenantID, "tenant-1")
+	effective := catalogAsOf.Add(-time.Hour)
+	limit := 2
+
+	within(t, transactor, ctx, func(txCtx context.Context) error {
+		return catalog.RegisterRouteStrategyVersion(txCtx, tenant, ports.RouteStrategyDefinitionVersion{
+			Code: "strategy-compare", Version: 1, ApplicableScope: "purpose-export",
+			RankingForm: domain.CostSingleDimensionRanking,
+			FreezeForm:  domain.RemainingSegmentCountFreeze, FreezeRemainingSegmentLimit: &limit,
+			HasComparisonCurrency: true, ComparisonCurrency: "CNY",
+			HasComparisonPricePolicy: true, ComparisonPricePolicy: "fx-caliber/v1",
+			EffectiveFrom: effective,
+		})
+	})
+
+	snapshot, configured, err := catalog.LoadDefinitionsAt(ctx, tenant, catalogAsOf)
+	if err != nil || !configured {
+		t.Fatalf("读目录：err=%v configured=%v", err, configured)
+	}
+	if len(snapshot.Strategies) != 1 {
+		t.Fatalf("应有 1 版适用策略，实得 %d", len(snapshot.Strategies))
+	}
+	strategy := snapshot.Strategies[0]
+	if !strategy.HasComparisonCurrency || strategy.ComparisonCurrency != "CNY" {
+		t.Fatalf("比较币种没有按声明折回：%+v", strategy)
+	}
+	if !strategy.HasComparisonPricePolicy || strategy.ComparisonPricePolicy != "fx-caliber/v1" {
+		t.Fatalf("所引价格政策没有按声明折回：%+v", strategy)
+	}
+	if strategy.FreezeForm != domain.RemainingSegmentCountFreeze ||
+		strategy.FreezeRemainingSegmentLimit == nil || *strategy.FreezeRemainingSegmentLimit != 2 {
+		t.Fatalf("冻结声明没有按登记折回：%+v", strategy)
+	}
+}
+
+// Covers: 同一路径的另一半——没登比较币种时缺格如实交出，不折成默认币种。
+func TestStrategyWithoutComparisonDeclarationFoldsBackUndeclared(t *testing.T) {
+	catalog, transactor, _ := newNetworkCatalog(t)
+	ctx := t.Context()
+	tenant := scalar(t, domain.NewTenantID, "tenant-1")
+
+	within(t, transactor, ctx, func(txCtx context.Context) error {
+		return catalog.RegisterRouteStrategyVersion(txCtx, tenant, ports.RouteStrategyDefinitionVersion{
+			Code: "strategy-plain", Version: 1, ApplicableScope: "purpose-export",
+			EffectiveFrom: catalogAsOf.Add(-time.Hour),
+		})
+	})
+
+	snapshot, _, err := catalog.LoadDefinitionsAt(ctx, tenant, catalogAsOf)
+	if err != nil {
+		t.Fatalf("读目录：%v", err)
+	}
+	strategy := snapshot.Strategies[0]
+	if strategy.HasComparisonCurrency || strategy.HasComparisonPricePolicy {
+		t.Fatalf("没登的比较声明被折成了已声明：%+v", strategy)
+	}
+}
+
+// Covers: 迁移 0016 的线路段成本依据册——按段号升序读回、两形（外包 BUY 价卡 / 内部政策）
+// 原样往返、租户隔离、没登依据是空列表不是错误。
+func TestLineCostBasesRoundTripInSegmentOrder(t *testing.T) {
+	catalog, transactor, _ := newNetworkCatalog(t)
+	ctx := t.Context()
+	tenant := scalar(t, domain.NewTenantID, "tenant-1")
+	effective := catalogAsOf.Add(-time.Hour)
+
+	within(t, transactor, ctx, func(txCtx context.Context) error {
+		if err := catalog.RegisterLineVersion(txCtx, tenant, ports.LineDefinitionVersion{
+			Code: "line-two-legs", Version: 1, Segments: []string{"conn-a", "conn-b"},
+			BusinessTimezone: "Asia/Shanghai", ApplicableScope: "purpose-export",
+			EffectiveFrom: effective,
+		}); err != nil {
+			return err
+		}
+		return catalog.RegisterLineCostBases(txCtx, tenant, "line-two-legs", 1, []ports.LineSegmentCostBasis{
+			{SegmentIndex: 1, Kind: ports.SupplierBuyPlanBasis, Reference: "plan-buy/v2"},
+			{SegmentIndex: 0, Kind: ports.InternalPolicyBasis, Reference: "policy-internal/v1"},
+		})
+	})
+
+	bases, err := catalog.LoadLineCostBases(ctx, tenant, "line-two-legs", 1)
+	if err != nil {
+		t.Fatalf("读成本依据：%v", err)
+	}
+	if len(bases) != 2 || bases[0].SegmentIndex != 0 || bases[1].SegmentIndex != 1 {
+		t.Fatalf("依据应按段号升序读回，实得 %+v", bases)
+	}
+	if bases[0].Kind != ports.InternalPolicyBasis || bases[0].Reference != "policy-internal/v1" {
+		t.Fatalf("段 0 的依据没有原样读回：%+v", bases[0])
+	}
+	if bases[1].Kind != ports.SupplierBuyPlanBasis || bases[1].Reference != "plan-buy/v2" {
+		t.Fatalf("段 1 的依据没有原样读回：%+v", bases[1])
+	}
+
+	missing, err := catalog.LoadLineCostBases(ctx, tenant, "line-two-legs", 99)
+	if err != nil {
+		t.Fatalf("没登过依据的版本不该报错：%v", err)
+	}
+	if len(missing) != 0 {
+		t.Fatalf("没登依据的版本应答空列表，实得 %+v", missing)
+	}
+
+	other, err := catalog.LoadLineCostBases(ctx, scalar(t, domain.NewTenantID, "tenant-2"), "line-two-legs", 1)
+	if err != nil {
+		t.Fatalf("跨租户读：%v", err)
+	}
+	if len(other) != 0 {
+		t.Fatalf("别的租户读到了这份依据：%+v", other)
+	}
+}

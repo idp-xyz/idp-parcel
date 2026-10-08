@@ -247,6 +247,12 @@ func (stub stubCatalogRegistry) RegisterRouteStrategyVersion(
 	return stub.err
 }
 
+func (stub stubCatalogRegistry) RegisterLineCostBases(
+	context.Context, domain.TenantID, string, int32, []ports.LineSegmentCostBasis,
+) error {
+	return stub.err
+}
+
 // registrationEndpoints 把七个登记端点各构一次，键取登记口 `-kind` 的族名。
 //
 // 逐族走一遍而不是只测一族：端点体由 newRegistrationEndpoint 共用，但七个构造函数各自

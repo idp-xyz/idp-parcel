@@ -155,15 +155,15 @@ type ServiceAreaDefinitionVersion struct {
 // ServiceCalendarDefinitionVersion 是某适用对象的服务日历适用版本行。
 // 截单、处理时长与衔接缓冲都是这一版的内容（ADR-0175）。指针为空是没登记这一格，与登记了 0 不同。
 type ServiceCalendarDefinitionVersion struct {
-	TargetKind         CatalogTargetKind
-	TargetCode         string
-	Version            int32
-	EffectiveFrom      time.Time
-	EffectiveTo        time.Time
-	HasEffectiveTo     bool
-	CutoffLocalMinute  *int
-	ProcessingMinutes  *int
-	BufferMinutes      *int
+	TargetKind        CatalogTargetKind
+	TargetCode        string
+	Version           int32
+	EffectiveFrom     time.Time
+	EffectiveTo       time.Time
+	HasEffectiveTo    bool
+	CutoffLocalMinute *int
+	ProcessingMinutes *int
+	BufferMinutes     *int
 }
 
 // AvailabilityAdjustmentStatement 是一条临时调整陈述——历史链上的一个版本行
@@ -183,6 +183,8 @@ type AvailabilityAdjustmentStatement struct {
 
 // RouteStrategyDefinitionVersion 是一个路由策略的适用版本行。RankingForm 是这一版声明的内置
 // 排序形态（ADR-0146），零值即这一版没有声明。冻结形态与剩余段数限额同一版声明，缺一格即未声明。
+// 比较币种与所引价格政策（ADR-0148 决定四）是租户取值，缺一格即未声明——没登比较币种时取数侧
+// 只在同币种下合成，异币种进未决格，不写死任何默认币种。
 type RouteStrategyDefinitionVersion struct {
 	Code            string
 	Version         int32
@@ -194,9 +196,57 @@ type RouteStrategyDefinitionVersion struct {
 	// AutoRerouteForm 零值或阈值为 nil 即这一版没有声明自动改路。阈值是租户取值。
 	AutoRerouteForm                      domain.AutoRerouteForm
 	AutoRerouteImprovementThresholdMinor *int
-	EffectiveFrom                        time.Time
-	EffectiveTo                          time.Time
-	HasEffectiveTo                       bool
+	// HasComparisonCurrency / HasComparisonPricePolicy 为假即这一版没登这两格（不是空串）。
+	HasComparisonCurrency    bool
+	ComparisonCurrency       string
+	HasComparisonPricePolicy bool
+	ComparisonPricePolicy    string
+	EffectiveFrom            time.Time
+	EffectiveTo              time.Time
+	HasEffectiveTo           bool
+}
+
+// LineCostBasisKind 是线路段成本依据的封闭两类（票 routing-first-cut/10，ADR-0148 决定四）：
+// 外包段引 parcel-pricing 的 BUY 价卡方案，自营段引 party-commercial 的内部价格政策版本。
+type LineCostBasisKind uint8
+
+const (
+	LineCostBasisKindInvalid LineCostBasisKind = iota
+	SupplierBuyPlanBasis
+	InternalPolicyBasis
+)
+
+func (kind LineCostBasisKind) String() string {
+	switch kind {
+	case SupplierBuyPlanBasis:
+		return "SUPPLIER_BUY_PLAN"
+	case InternalPolicyBasis:
+		return "INTERNAL_POLICY"
+	default:
+		return ""
+	}
+}
+
+// LineCostBasisKindFrom 逐格译回封闭两类，default 兜两头：读侧是「CHECK 被后续迁移放宽而 Go 侧
+// 没跟上」——那时报错；写侧是登记方给了集合外的词——由登记口在入库前拒绝。
+func LineCostBasisKindFrom(raw string) (LineCostBasisKind, error) {
+	switch raw {
+	case "SUPPLIER_BUY_PLAN":
+		return SupplierBuyPlanBasis, nil
+	case "INTERNAL_POLICY":
+		return InternalPolicyBasis, nil
+	default:
+		return LineCostBasisKindInvalid, fmt.Errorf("未知线路段成本依据种类 %q", raw)
+	}
+}
+
+// LineSegmentCostBasis 是线路段链上一个位置的候选成本依据引用。SegmentIndex 对段链数组下标
+// （序即语义，与 LineDefinitionVersion.Segments 同一数组）；Reference 是引用串——外包段是方案
+// 「id/version」，自营段是政策版本「对象身份/版本标签」，正文分别归被引上下文，这里只持引用。
+type LineSegmentCostBasis struct {
+	SegmentIndex int
+	Kind         LineCostBasisKind
+	Reference    string
 }
 
 // NetworkCatalogRegistry 是版本化网络目录七类定义原语的写入口（ADR-0068）。
@@ -225,6 +275,16 @@ type NetworkCatalogRegistry interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		row LineDefinitionVersion,
+	) error
+	// RegisterLineCostBases 追加一条线路版本的逐段成本依据（票 routing-first-cut/10）。它是线路
+	// 版本的内容半，只伴随既有版本行登记：目录修订仍由版本行负责推进，这里只保证依据行与
+	// 版本行同一事务（ADR-0068 Decision 五）。
+	RegisterLineCostBases(
+		ctx context.Context,
+		tenant domain.TenantID,
+		lineCode string,
+		version int32,
+		bases []LineSegmentCostBasis,
 	) error
 	RegisterServiceAreaVersion(
 		ctx context.Context,

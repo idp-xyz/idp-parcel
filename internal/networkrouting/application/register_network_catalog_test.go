@@ -81,6 +81,14 @@ func (double *catalogRegistryDouble) RegisterRouteStrategyVersion(
 	return double.err
 }
 
+func (double *catalogRegistryDouble) RegisterLineCostBases(
+	_ context.Context, tenant domain.TenantID, lineCode string, version int32, bases []ports.LineSegmentCostBasis,
+) error {
+	double.calls++
+	double.lastTenant = tenant
+	return double.err
+}
+
 func (double *catalogRegistryDouble) RegisterAvailabilityAdjustment(
 	_ context.Context, tenant domain.TenantID, row ports.AvailabilityAdjustmentStatement,
 ) error {
