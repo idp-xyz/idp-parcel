@@ -48,6 +48,8 @@ Blocked by: 无
 
 ### 进 main 记录（推送方 · 通道 1）
 
+- **收尾（2026-10-08，TraeCode 会话）**：远端 `origin/mcp4-psb03`（票面 tip `58422e36`）已删——重放对照核毕：ADR-0147 `27ca40f9` 与四笔码、票面笔 `1aa3ec46` 均在 main 血缘上；本地封存指针 `merged/mcp4-psb03` 留着；无残留 worktree。spec 子票表 03 行早已是 resolved · 已进 main。
+
 - **门**：评审可接受，两轴无阻断；Standards 非阻断 1（「与样板不同的登记册」VE 那条宜改指符号 `application.CatalogApprovalMissing`）、2（参考配置到登记命令的翻译在 CLI main 包，在线登记口配 Intake 时要搬）与 Spec 非阻断 1（种子 README 合并冲突）随票记在上面评审原文里，不挡合入。
 - **重放**：在共享树 main `7731bf57` 之上 cherry-pick 为 `27ca40f9`（← `a84b26e8`）/ `c1446ebc`（← `db7ddfcf`）/ `26e48a0e`（← `d7c05f04`）/ `1df8a4bf`（← `b80fdb54`）/ `b215c11d`（← `1be757a6`）/ `1aa3ec46`（← `58422e36`）。三处 `.md` 冲突按意图合（与作者重放预核一致）：`docs/adr/README.md` 0147 与 0148 两行都留、按号排；种子 README 取本票改过的注册号类型一行、保留 lep03 新加的法人资料一行；本票 Status 行取分支。`seed.sh` 与 lep03 的改动自动合上，两段都在。认领笔 `307e0b60` 早已随 `31dc5f25` 进 main。机制清点在批 tip 重生成零差，无清点笔。
 - **验证**：批 tip 上改动 `.go` gofmt 无输出，全仓 build / vet 退 0；同一组代码先落在 main `c6ae249b` 上成 `420c05a8`，钉它带 DSN 全量 118 包 ok、0 FAIL（先单跑真库用例 PASS 非 SKIP）；挪到 `7731bf57` 之上后与它只差 `.md`。作者预核（合到 `67798fcd`）另跑过一次性库 `seed.sh` 干净灌与 `--reset` 重灌，均退 0，lep03 的法人资料两项答 REGISTERED。
