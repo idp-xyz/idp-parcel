@@ -71,14 +71,20 @@ func NewPreviewPriceCardImportHandler(reader ports.PriceCardTemplateReader) (*Pr
 }
 
 func (handler *PreviewPriceCardImportHandler) Handle(_ context.Context, command PreviewPriceCardImportCommand) (PriceCardImportPreview, error) {
-	if command.Tenant.String() == "" {
-		return PriceCardImportPreview{Outcome: PriceCardImportNotAccepted}, nil
+	return readPriceCardImport(handler.reader, command.Tenant, command.FileName, command.Raw), nil
+}
+
+// readPriceCardImport 是预览与录入共用的那一段：命令立不住（缺租户、文件名不合格）答未受理、不读文件；否则按上传
+// 字节算源文件身份，交模板读口读成三种读法之一。
+func readPriceCardImport(reader ports.PriceCardTemplateReader, tenant domain.TenantID, fileName string, raw []byte) PriceCardImportPreview {
+	if tenant.String() == "" {
+		return PriceCardImportPreview{Outcome: PriceCardImportNotAccepted}
 	}
-	source, err := sourceFileOf(command.FileName, command.Raw)
+	source, err := sourceFileOf(fileName, raw)
 	if err != nil {
-		return PriceCardImportPreview{Outcome: PriceCardImportNotAccepted}, nil
+		return PriceCardImportPreview{Outcome: PriceCardImportNotAccepted}
 	}
-	reading := handler.reader.ReadPriceCardTemplate(command.Raw)
+	reading := reader.ReadPriceCardTemplate(raw)
 	preview := PriceCardImportPreview{
 		TemplateVersion: reading.TemplateVersion,
 		SourceFile:      source,
@@ -92,7 +98,7 @@ func (handler *PreviewPriceCardImportHandler) Handle(_ context.Context, command 
 	default:
 		preview.Outcome, preview.Plan = PriceCardImportHasProblems, reading.Plan
 	}
-	return preview, nil
+	return preview
 }
 
 // sourceFileOf 按上传字节算源文件身份：SHA-256 由服务端算，不采信调用方声明的哈希。
