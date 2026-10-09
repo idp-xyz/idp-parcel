@@ -105,6 +105,8 @@ func assembleBusinessEndpoints(
 	evaluationReplay pricinghttp.EvaluationReplayer,
 	pricingEstimate pricinghttp.EstimateFormer,
 	priceCardPreview pricinghttp.PriceCardImportPreviewer,
+	priceCardDraftSubmission pricinghttp.PriceCardDraftSubmitter,
+	priceCardDrafts pricinghttp.PriceCardDraftReader,
 	networkCatalog networkhttp.OperationsCatalogReader,
 	routePlans networkhttp.RoutePlanCatalogueReader,
 	networkCatalogRegistration networkhttp.CatalogRegistrar,
@@ -450,6 +452,11 @@ func assembleBusinessEndpoints(
 		// 价卡导入预览（ADR-0101 决定四，票 price-card-import/02）：命令行，挂操作者渠道的登记册 Intake——租户来自认证出的
 		// 身份，与序列预览同一个 Intake；不加隔离放行（ADR-0150）。编排只读上传字节，依赖结构上没有仓储。
 		{Pattern: "/pricing-price-card-previews", Handler: pricinghttp.NewPreviewPriceCardImportEndpoint(operatorRegistries.pricing, priceCardPreview)},
+		// 价卡草稿录入口与草稿查阅读口（ADR-0101 决定三与 Consequences，票 price-card-import/03）：与预览口同挂操作者渠道的
+		// 登记册 Intake——Consequences 写明草稿查阅读口也挂操作者 Intake，所以读口不走查阅行的 Intake 变量，隔离读放行换不了
+		// 它。读口另立 `-draft-views` 路径：`/pricing-price-card-drafts` 已是录入口，一个路径只挂一个方法。
+		{Pattern: "/pricing-price-card-drafts", Handler: pricinghttp.NewSubmitPriceCardDraftEndpoint(operatorRegistries.pricing, priceCardDraftSubmission)},
+		{Pattern: "/pricing-price-card-draft-views", Handler: pricinghttp.NewQueryPriceCardDraftsEndpoint(operatorRegistries.pricing, priceCardDrafts)},
 		{Pattern: "/network-catalog", Handler: networkhttp.NewQueryNetworkCatalogEndpoint(networkCatalogIntake, networkCatalog)},
 		{Pattern: "/route-plans", Handler: networkhttp.NewQueryRoutePlansEndpoint(networkCatalogIntake, routePlans)},
 		// 网络目录七族登记写面（ADR-0085，票 admin-write-faces/02 切片 02a）：登记是命令
