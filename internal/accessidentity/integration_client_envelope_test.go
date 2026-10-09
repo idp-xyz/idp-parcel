@@ -106,8 +106,8 @@ func TestGrantedIntegrationClientIsMintedIntoAnIntegrationClientEnvelope(t *test
 	}
 }
 
-// clientGrades 是集成客户端答复代数的各格：对外三格沿 ADR-0100 决定四（未配置、令牌不过、未授予），外加准入一格与
-// 三种依赖故障。每一格只许被自己那个哨兵认出。
+// clientGrades 是集成客户端答复代数的各格：对外沿 ADR-0100 决定四（未配置、令牌不过、未授予），外加不在准入范围与
+// 各种依赖故障。每一格只许被自己那个哨兵认出。
 var clientGrades = map[string]error{
 	"not configured":        accessidentity.ErrAccessChannelNotConfigured,
 	"credential rejected":   accessidentity.ErrCredentialRejected,
