@@ -85,12 +85,12 @@ type jsonWebKey struct {
 
 // fetchKeys 取发行方的公钥集。取不回、状态不对与内容不成形都答依赖故障：那是发行方那头的事，
 // 与出示的令牌无关。
-func (verifier *Verifier) fetchKeys(ctx context.Context) (keySet, error) {
-	request, err := http.NewRequestWithContext(ctx, http.MethodGet, verifier.config.JWKSURL, nil)
+func (tokens *issuerTokens) fetchKeys(ctx context.Context) (keySet, error) {
+	request, err := http.NewRequestWithContext(ctx, http.MethodGet, tokens.config.JWKSURL, nil)
 	if err != nil {
 		return keySet{}, unavailable(err)
 	}
-	response, err := verifier.client.Do(request)
+	response, err := tokens.client.Do(request)
 	if err != nil {
 		return keySet{}, unavailable(err)
 	}
