@@ -219,3 +219,79 @@ Blocked by: 02、03、04（只挡收口）
 1. 格 1 的两半是按票 01 的三分判的。UC-PC-002 把解析键上的区分维定为「服务范围」，所以缺的也可能只是「从委托推出服务范围」这一步，而不是给解析键加产品维；归 PC owner 复核。
 2. 格 3 起全部是代码取证，没有端到端走到。它们是缺口的下界，真走到时也可能换成别的停法。
 3. 反事实变体只去掉 ECON，用来看清格 1 之后的停点，不代表对演示租户的配置建议。
+
+## 重走（钉 `7f8eddd7`，2026-10-09）
+
+2026-10-09 通道 3 按通道 1 派单 `task-97bd0920` 做：主链从第 5 步提交起逐阶段往下走，到第一个用登记解不开的停点为止；停点之后能实打的实打，打不到的按代码记。本节只追加，上面各格与「盘点」一节不动。
+
+**取证环境。** 代码钉 `7f8eddd7`（当时的 `origin/main`，detached 检出）。库是 55432 上的一次性库 `idp_mcp3_journey`，按该检出里的 `scripts/demo-seeds/seed.sh` 原样灌，退 0。进程按动线脚本「前置」起：`cmd/parcel-api` 读写两个隔离开关同取 `SYN-TENANT-01`，启动日志有 ADR-0078 与 ADR-0091 两行放行声明；`cmd/parcel-dispatch` 七个变量取脚本里的演示值。委托用 `scripts/demo-seeds/submit-one-shipment.sh` 提交，全是 `SYN-` 值，`requestedServiceProduct` 为 `SYN-PROD-CN-SG-EXPRESS`，与 09-29 那次同一取法。取证时段 04:27Z–04:33Z。证据层级同「盘点」一节：实测 / 探针 / 代码，全部只记 `S`。取证时 rfc/12 还没进 main。
+
+**结论**
+
+- 格 1、格 2 都已越过，格 3 也越过。
+- 今天的第一停点是**格 4 · 可达性网络证据**：NR 答 `NETWORK_EVIDENCE_NOT_CONFIGURED`，PS 那一层记成 `REACHABILITY_JUDGMENT_NOT_FORMED`。去处 [routing-first-cut/11](../../routing-first-cut/issues/11-demo-network-adopted-as-reference-configuration.md)，Status `ready-for-agent`，**不是 needs-triage**。
+- 格 5 没越过（代码 + 库态，链没走到）：时点那一半仍答`未配置`；账户目录那一半登记册已有，但种子没登账户。
+
+### 主链逐格
+
+**格 1 · 商业依据第一阶段**（实测）：越过。格 4 探针取到的请求关联里带着本轮唯一解出的闭包 `CLO-d3cacd02263f77e9`。
+
+**格 2 · 可达性判断时点**（实测）：越过。受理链没停在 `REACHABILITY_AS_OF_NOT_CONFIGURED`，走进了可达性判断本身。种子规则包 `SYN-RULEPKG-01` 的 `NETWORK_REACHABILITY` 时点格采用了 `REFCFG-1:parcel-shipment/as-of-semantics/submission-receipt@1`，`acceptanceCommercialBasis` 的 `Values` 已接 `NewSubmissionReceiptAsOf`（[票 06](./06-ps-acceptance-and-label-selection-judgment-methods.md) 第 1 项那一种形态，`953d748c`）。
+
+**格 3 · 可达性资格视图的闭包标识**（探针）：越过。资格视图收命令随带的闭包标识（ADR-0156，[票 16](./16-mechanism-gaps-without-a-ticket.md) 第 1 项）；探针看到的 NR 原因不是 `COMMERCIAL_ELIGIBILITY_UNAVAILABLE`，资格那一步已判为要求判断，才走到证据视图。
+
+**格 4 · 可达性网络证据——今天的第一停点**（实测 + 探针）
+
+- 答复：`POST /shipment-requests` 答 `201 SUBMITTED`（`SHR-I7IKPK7J2AZ6OZSWNZ6ED7CQUQ`），列表与详情读回已提交。dispatch 投 `parcel-shipment.shipment-request.submitted` 记 `dispatch.consumer_undecided`，错误正文「acceptance chain is undecided: stage REACHABILITY_JUDGMENT, reason REACHABILITY_JUDGMENT_NOT_FORMED」；重投 3 次后那一行 `ABANDONED`，委托停在`已提交`。`acceptance_processing_attempt`、`acceptance_reachability_judgment`、`acceptance_adopted_resolution` 与 `network_routing.reachability_judgment` 都是零行（未决整笔回滚）。
+- NR 那一层的原因在进程上取不到：PS 适配器把它放进 `ReachabilityAssessment.Reason`（`"NR-" + NotFormedReason`），随回滚一起丢掉。探针取回：在一次性检出里给 `internal/parcelshipment/adapters/networkrouting/reachability.go` 的 `JudgmentNotFormed` 分支临时加一行日志，另编一个 dispatch，再提交一笔（`SHR-NVCCLIESFMSOBK4VPFXVJZMBII`），日志为 `nrReason=NETWORK_EVIDENCE_NOT_CONFIGURED`。跑完即还原检出、删掉探针二进制，未入库。
+- 成因（库态 + 代码）：证据视图答`未配置`的唯一判法是 `catalogConfiguredFor`，要求判断时点有适用范围等于服务目的的路由策略版本（ADR-0148 决定六）。种子登的路由策略 `SYN-RS-CN-SG-01` v1 与线路 `SYN-LINE-CN-SG-01` v1 适用范围都是 `SYN-SCOPE-01`，dispatch 的服务目的是 `NETWORK_SERVICE`；两个服务区域也都没登覆盖国家与节点。这就是动线脚本「墙三」补记写的那一处，今天在可达性这一段就先停下了。
+- 归类：租户取值（演示租户的网络适用范围与覆盖），应经参考配置在演示租户上采用。机制（目录折证据，routing-first-cut/07）与采用路径（[票 03](./03-reference-configuration-adoption-pattern.md)）都已在 main。
+- 去处：[routing-first-cut/11](../../routing-first-cut/issues/11-demo-network-adopted-as-reference-configuration.md)，Status `ready-for-agent`。它 Blocked by 的 psb/03、rfc/08、rfc/10 已在 main，只有 rfc/12 未进 main。
+- 另记一处形状：这个停点不落续办记录，靠烧完重投预算落 `ABANDONED`，与 09-24 格 1 同形；09-29 格 2 那次至少留下一行 `acceptance_processing_attempt`（`resume_path=OPERATOR_REGISTRATION`）。可达性证据`未配置`在 PS 侧被读成依赖未决，而不是一个可续办的等待态。本单不判它该不该如此，记给通道 1。
+
+**格 5 · 受理前财务控制**（代码 + 库态；链停在格 4，没走到）
+
+- 时点一半，没越过。种子规则包里 `PRE_ACCEPTANCE_FINANCIAL_CONTROL` 那一格的语义是合成串 `SYN-ASOF-ACCEPT-TIME`，没采用产品参考配置；`SubmissionReceiptAsOf.FormAsOfValue` 只认 `submission-receipt@1` 那一版引用，其余答未配置（类型注释原话「演示种子的财务控制格没采用这一形态，所以那一格答未配置」）。走到时应停在 `FINANCIAL_CONTROL_AS_OF_NOT_CONFIGURED`。归类：租户取值（演示租户这一格采用哪一种形态），经参考配置采用。去处：票 06，Status `needs-triage`；它的评审记录写明「种子财务控制那格未动」，按 `SYN-ASOF-ACCEPT-TIME` 在 `.scratch` 与 `docs` 全文检索无命中，本次没找到点名这一格采用的票。
+- 账户目录一半，没越过。机制已在：`acceptanceFinancialControl` 的作用域源接 `NewRegisteredAccountDirectory`，背后是结算账户登记册（票 16 第 2 项，ADR-0158）。但一次性库里 `settlement_accounting.settlement_account` 零行，种子脚本也没有登结算账户的一步，走到时答 `CONTROL_SCOPE_NOT_CONFIGURED`。归类：租户取值（演示租户的结算账户）。去处：票 16 第 2 项只做了登记册与命令，明写不登租户行；演示租户那一行**今天没有票接**。
+- 控制金额源 `Amounts` 仍留空（估价方法），去处同「盘点」：票 06 第 2 项，`needs-triage`。
+
+**格 6 · 初始路由证据**（代码；rfc/12 未进 main 时）
+
+- 初始路由证据视图与格 4 用同一个 `catalogConfiguredFor`，种子原样灌时停在 `ROUTE_EVIDENCE_NOT_CONFIGURED`，成因与去处同格 4。
+- rfc/12 未进 main 时，main 上的初始路由证据视图不问关务；可达性证据视图的关务来源仍是 `CustomsApplicabilityNotConnected`，逐候选答状态未知。去处 [routing-first-cut/12](../../routing-first-cut/issues/12-cc-customs-applicability-judgment-for-route-candidates.md)：main 上票面 `ready-for-agent`，分支 `mcp3-rfc12` 上已完工、待评审与重放。
+- 成本一格：`routeCosts` 的计价输入接 `unconfiguredRoutePricingInput{}`，成本排序会停在未决。routing-first-cut/10 的完成记录把它记为消费方实例半边，演示租户端到端归 rfc/11。
+
+### 停点之后各格
+
+命令口用空 JSON 体实打，只看渠道门放没放行：答 `400 MALFORMED_REQUEST` 或 `200` 业务结果的，就是已越过渠道、走到了业务校验。代码格只核了「盘点」点名的那个缺口符号今天还在不在。
+
+| 格 | 今天 | 层级 | 去处 · Status |
+|---|---|---|---|
+| 7 节点收寄与场外揽收 | 收寄 `400 MALFORMED_REQUEST`、场外揽收与揽收执行 `200 SOURCE_NOT_ACCEPTED`、承运商首次有效收寄 `400 MALFORMED_REQUEST`：隔离形态下渠道已放行，与「08 重走」一致；生产形态仍 403 | 实测 | operator-channel/10、13 均 `ready-for-agent`；容器 [票 15](./15-operator-channel-per-adr-0100.md) `in-progress` |
+| 8 过渡期收寄批量口 | `cmd/parcel-api` 的 `unconfiguredParcelIdentityView` 仍在 | 代码 | `ps-external-mark-relations/01` `needs-info` |
+| 9 立案与提交申报 | `NewEstablishCaseHandler`、`NewSubmitDeclarationHandler` 在 `cmd/` 仍零引用 | 代码 | [票 18](./18-customs-case-and-declaration-submission-entry.md) `needs-triage` |
+| 10 申报发送通道 | `customs-compliance.declaration-submission.formed` 的消费方仍只有 VE | 代码 | [票 10](./10-cc-declaration-channel-and-public-regulatory-reference-configuration.md) `needs-triage` |
+| 11 外部结果与凭证 | 外部结果 `200 SOURCE_NOT_ACCEPTED`、凭证登记 `400 MALFORMED_REQUEST`：渠道已放行 | 实测 | 同格 7 |
+| 12 交接、移动、派送与交付 | 交接、交付、派送尝试 `200 SOURCE_NOT_ACCEPTED`；移动、建派送任务、派送发起、段关闭、有效时间判断 `200 INPUT_NOT_ACCEPTED`：渠道已放行；派送尝试写入方已在（[票 19](./19-delivery-attempt-result-has-no-production-writer.md) resolved） | 实测 | 同格 7 |
+| 13 派送发起 | 触发执行器的地点、窗口、条件三条要求缝已接真（ADR-0114）；定时发起策略本次未核 | 代码 | [票 09](./09-tf-fulfillment-judgment-methods-and-connectors.md) 第 2 项，`needs-triage` |
+| 14 外部轨迹来源 | `TrackingSource` 仍无实现 | 代码 | 票 09 第 1 项，`needs-triage` |
+| 15 客户侧读写面 | `GET /customer-tracking-view`、`POST /claims` 仍 `403 ACCESS_CHANNEL_NOT_CONFIGURED` | 实测 | 同「盘点」（票 01 表横切第三项；票 01 本身已 resolved，本次没找到承接的工作票） |
+| 16 客户通知出向 | `NotificationChannelGateway` 仍无实现 | 代码 | [票 11](./11-ve-eta-triage-disclosure-methods-and-notification-connector.md) `needs-triage` |
+| 17 BUY 评价请求触发面 | `buildEvaluationRequestOrchestration` 仍只在 `main` 里 fail-fast，产物即丢 | 代码 | [票 20](./20-buy-evaluation-request-trigger.md) `needs-triage` |
+| 18 BUY 评价到供应商预期成本 | `buyEvaluationRecordedUndecidedSentinels` 仍列 `ErrSourceReferencesUnrecorded`，装配注释仍写「今天两头没接上」 | 代码 | `sa-cc-funds-and-credential-seams/11`：已于 09-14 resolved，去处与代码对不上（见下） |
+| 19 SELL 评价到客户费用 | SA 应用层已有 SELL 评价形成客户费用的编排（`bfd09015`，触发另册登记），`cmd/` 里没装它 | 代码 | [票 21](./21-sell-evaluation-to-customer-charge.md) `needs-triage`；进展出自 [票 12](./12-sa-amount-grammars-allocation-forms-and-accounting-connectors.md) |
+| 20 结算编排 | 确认、截单、调整、分摊、供应商账单、索赔金额结算已在 `cmd/parcel-api` 装配（`f9c5192e`，ADR-0170）；确认与截单先问触发册，没登记答未配置 | 代码 | [票 22](./22-settlement-orchestrations-assembly-and-triggers.md) `needs-triage`；进展出自票 12 第 10 项 |
+| 21 结算四口 | 四本登记册与登记命令已进 main（`4ee5d338`，ADR-0160）；读口在生产装配里接没接、种子登没登，本次未核 | 代码 | 票 16 第 3 项（容器 `needs-triage`） |
+| 22 外部资金事实在线口 | `400 MALFORMED_REQUEST`：渠道已放行 | 实测 | 同格 7 |
+
+### 与去处票对不上的几处（记给通道 1，本单不改别的票面）
+
+- 格 18 的去处 `sa-cc-funds-and-credential-seams/11` 于 09-14 已 resolved，而代码仍把这一格当未决哨兵、注释仍写两头没接上。是票面去处过时还是注释过时，本次没核。
+- 格 19、20 的代码进展来自票 12（`bfd09015`、`f9c5192e`），票 21、22 的 Status 仍是 `needs-triage`，票面没跟着变。
+- 格 5 的两个租户取值格（财务控制时点那一格的采用、演示租户的结算账户）本次都没找到点名它们的票。
+
+### 判断项
+
+1. 格 4 归租户取值，依据是机制与采用路径都已在 main，缺的是演示租户这份网络的适用范围与覆盖；若评审认为 `SYN-SCOPE-01` 与服务目的 `NETWORK_SERVICE` 的不一致本身该由产品给出映射，它就转成产品策略缺执行器，去处仍是 rfc/11 一带。
+2. 格 3 越过是从探针原因反推的：NR 先判资格、后判证据，原因落在证据上，说明资格那一步没答「不可用」也没答「不适用」。资格视图本身没有单独取证。
+3. 格 5 起全部是代码取证，与「盘点」判断项 2 同理：是缺口的下界，真走到时可能换成别的停法。
