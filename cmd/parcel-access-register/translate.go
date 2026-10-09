@@ -1,7 +1,8 @@
 package main
 
-// 本文件把三种登记批译成领域类型：逐字段过 accessidentity 的构造门，未知字段、缺件与形状错在触库
-// 之前拒收，一格不代填——没有缺省的生效起点或撤销时刻，也没有缺省依据。
+// 本文件把操作者册的三种登记批译成领域类型（集成客户端册的在 translate_integration_client.go）：逐字段过
+// accessidentity 的构造门，未知字段、缺件与形状错在触库之前拒收，一格不代填——没有缺省的生效起点或撤销时刻，
+// 也没有缺省依据。
 
 import (
 	"bytes"
@@ -72,8 +73,9 @@ func operatorBatchFromJSON(raw []byte) ([]batchItem, error) {
 		}
 		items = append(items, batchItem{
 			label: fmt.Sprintf("操作者 %s %s", subject.Issuer(), subject.Subject()),
-			apply: func(ctx context.Context, registrar accessidentity.OperatorRegistrar) (accessidentity.OperatorRegistrationOutcome, error) {
-				return registrar.RegisterOperator(ctx, binding)
+			apply: func(ctx context.Context, books registers) (outcome, error) {
+				answer, err := books.operators.RegisterOperator(ctx, binding)
+				return operatorOutcome(answer), err
 			},
 		})
 	}
@@ -96,8 +98,9 @@ func grantBatchFromJSON(raw []byte) ([]batchItem, error) {
 		}
 		items = append(items, batchItem{
 			label: fmt.Sprintf("授予 %s（%s · %s）", grant.GrantID(), grant.Subject().Subject(), grant.Face()),
-			apply: func(ctx context.Context, registrar accessidentity.OperatorRegistrar) (accessidentity.OperatorRegistrationOutcome, error) {
-				return registrar.RegisterGrant(ctx, grant)
+			apply: func(ctx context.Context, books registers) (outcome, error) {
+				answer, err := books.operators.RegisterGrant(ctx, grant)
+				return operatorOutcome(answer), err
 			},
 		})
 	}
@@ -113,19 +116,7 @@ func grantFrom(tenantID string, entry grantItemDocument) (accessidentity.Operato
 	if err != nil {
 		return accessidentity.OperatorGrant{}, fmt.Errorf("capabilityFace %q：%w", entry.CapabilityFace, err)
 	}
-	if entry.EffectiveStartsAt.IsZero() {
-		return accessidentity.OperatorGrant{}, fmt.Errorf("effectiveStartsAt 缺席：生效起点不代填")
-	}
-	endsAt := time.Time{}
-	if entry.EffectiveEndsAt != nil {
-		// 显式给零值与缺席在领域里同义（不设终点），批文里却是两种写法；拒掉前者，免得一个写坏的
-		// 终点被静静读成无限期。
-		if entry.EffectiveEndsAt.IsZero() {
-			return accessidentity.OperatorGrant{}, fmt.Errorf("effectiveEndsAt 给了零值：不设终点请省略该字段")
-		}
-		endsAt = *entry.EffectiveEndsAt
-	}
-	interval, err := accessidentity.NewEffectiveInterval(entry.EffectiveStartsAt, endsAt)
+	interval, err := intervalFrom(entry.EffectiveStartsAt, entry.EffectiveEndsAt)
 	if err != nil {
 		return accessidentity.OperatorGrant{}, err
 	}
@@ -144,7 +135,44 @@ func grantFrom(tenantID string, entry grantItemDocument) (accessidentity.Operato
 	return accessidentity.NewOperatorGrant(tenantID, entry.GrantID, subject, face, interval, entry.Basis)
 }
 
+// intervalFrom 译授予的生效区间，两本册的授予批共用：起点不代填。
+func intervalFrom(startsAt time.Time, endsAt *time.Time) (accessidentity.EffectiveInterval, error) {
+	if startsAt.IsZero() {
+		return accessidentity.EffectiveInterval{}, fmt.Errorf("effectiveStartsAt 缺席：生效起点不代填")
+	}
+	end := time.Time{}
+	if endsAt != nil {
+		// 显式给零值与缺席在领域里同义（不设终点），批文里却是两种写法；拒掉前者，免得一个写坏的
+		// 终点被静静读成无限期。
+		if endsAt.IsZero() {
+			return accessidentity.EffectiveInterval{}, fmt.Errorf("effectiveEndsAt 给了零值：不设终点请省略该字段")
+		}
+		end = *endsAt
+	}
+	return accessidentity.NewEffectiveInterval(startsAt, end)
+}
+
 func revocationBatchFromJSON(raw []byte) ([]batchItem, error) {
+	revocations, err := revocationsFromJSON(raw)
+	if err != nil {
+		return nil, err
+	}
+	items := make([]batchItem, 0, len(revocations))
+	for _, revocation := range revocations {
+		items = append(items, batchItem{
+			label: fmt.Sprintf("撤销 %s", revocation.GrantID()),
+			apply: func(ctx context.Context, books registers) (outcome, error) {
+				answer, err := books.operators.RegisterRevocation(ctx, revocation)
+				return operatorOutcome(answer), err
+			},
+		})
+	}
+	return items, nil
+}
+
+// revocationsFromJSON 译一份撤销批，两本册共用同一形状：撤一笔授予要的就是（租户、授予标识、时刻、依据）。撤的是哪
+// 一本册的授予由子命令定，批文里不写。
+func revocationsFromJSON(raw []byte) ([]accessidentity.GrantRevocation, error) {
 	var document revocationBatchDocument
 	if err := decodeStrict(raw, &document, "撤销登记批"); err != nil {
 		return nil, err
@@ -152,7 +180,7 @@ func revocationBatchFromJSON(raw []byte) ([]batchItem, error) {
 	if err := requireBatch(document.TenantID, len(document.Revocations), "撤销登记批"); err != nil {
 		return nil, err
 	}
-	items := make([]batchItem, 0, len(document.Revocations))
+	revocations := make([]accessidentity.GrantRevocation, 0, len(document.Revocations))
 	for _, entry := range document.Revocations {
 		if entry.RevokedAt.IsZero() {
 			return nil, fmt.Errorf("revocations/%s：revokedAt 缺席：撤销时刻不代填", entry.GrantID)
@@ -161,14 +189,9 @@ func revocationBatchFromJSON(raw []byte) ([]batchItem, error) {
 		if err != nil {
 			return nil, fmt.Errorf("revocations/%s：%w", entry.GrantID, err)
 		}
-		items = append(items, batchItem{
-			label: fmt.Sprintf("撤销 %s", revocation.GrantID()),
-			apply: func(ctx context.Context, registrar accessidentity.OperatorRegistrar) (accessidentity.OperatorRegistrationOutcome, error) {
-				return registrar.RegisterRevocation(ctx, revocation)
-			},
-		})
+		revocations = append(revocations, revocation)
 	}
-	return items, nil
+	return revocations, nil
 }
 
 func decodeStrict(raw []byte, target any, what string) error {

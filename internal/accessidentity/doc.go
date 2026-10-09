@@ -8,18 +8,22 @@
 // 在这里是四个字符串，业务含义由消费方各自的领域类型承载——把 parcelshipment 的
 // SourceIdentity 搬进来就等于让一个技术能力拥有了业务语言。
 //
-// # 客户渠道那一半仍等 PAR-INT-01；操作者那一半已按 ADR-0100 立
+// # 客户渠道那一半仍等 PAR-INT-01；操作者与集成客户端两族已立
 //
 // 操作者渠道不受下面那道否决：ADR-0100 决定一把 ADR-0072 决定二的适用场景收窄为客户接入渠道。
 // 操作者那一半已有操作者册（migrations/access_identity/，OperatorRegistry）、OIDC 令牌校验
 // （adapters/oidc，OperatorCredentialVerifier）与 OperatorEnvelope 的铸造（OperatorMinter）。
+//
+// 集成客户端族（ADR-0149 决定三：外部结果与资金事实的提交方是外部系统）同样不受那道否决——外部系统不是客户
+// 渠道。它有集成客户端册（IntegrationClientRegistry）、客户端凭据令牌校验（adapters/oidc 的 ClientVerifier，
+// 含 RFC 8705 证书绑定）与 IntegrationClientEnvelope 的铸造（IntegrationClientMinter）。
 // 本节以下只说客户渠道那一半。
 //
 // ADR-0072 二维持了 ADR-0055 的否决，原句挡的是两件：「登记册**表结构**与**凭据形态**
 // 在 PAR-INT-01 最低证据到位前不立」。所以：
 //
 //   - 表：本包只有装载口 ChannelRegistry 这个接口，仓内没有它的生产实现；
-//     migrations/access_identity/ 已随 ADR-0100 的操作者册立起，但其中没有客户渠道的表。
+//     migrations/access_identity/ 已随操作者册与集成客户端册立起，但其中没有客户渠道的表。
 //     空册可读是正常态而不是故障——FindChannel 用
 //     found=false 而不是 error 表达它（ADR-0052 的分界句：读一个空登记册并如实答未配置
 //     不是默认实现，恰恰是它想保护的东西）。
