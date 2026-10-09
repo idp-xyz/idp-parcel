@@ -50,7 +50,21 @@ var (
 	_ EvaluationReplayIntake               = UnconfiguredIntake{}
 	_ EstimateIntake                       = UnconfiguredIntake{}
 	_ PriceCardPreviewIntake               = UnconfiguredIntake{}
+	_ PriceCardDraftSubmissionIntake       = UnconfiguredIntake{}
+	_ PriceCardDraftQueryIntake            = UnconfiguredIntake{}
 )
+
+// IntakePriceCardDraftSubmission 不读请求，判据同预览口：录入者与租户都要从信封来。操作者渠道的译法在
+// OperatorRegistryIntake 上。
+func (UnconfiguredIntake) IntakePriceCardDraftSubmission(context.Context, *http.Request) (application.SubmitPriceCardDraftCommand, error) {
+	return application.SubmitPriceCardDraftCommand{}, ErrAccessChannelNotConfigured
+}
+
+// IntakePriceCardDraftQuery 不读请求：草稿查阅的租户同样只从信封来（ADR-0101 Consequences 把这一口也挂在操作者
+// Intake 上），连查询串里的状态也不解。
+func (UnconfiguredIntake) IntakePriceCardDraftQuery(context.Context, *http.Request) (PriceCardDraftQuery, error) {
+	return PriceCardDraftQuery{}, ErrAccessChannelNotConfigured
+}
 
 // IntakeEstimate 不读请求，判据同回放口：等的是操作者信封接线（ADR-0100，与回放同批）。从请求里取一个租户就是自报身份，
 // 这一口不能有那种「开发用」版本（ADR-0152 决定六）。
