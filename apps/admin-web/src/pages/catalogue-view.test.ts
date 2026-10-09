@@ -50,3 +50,24 @@ test('调用方问题带理由散文时原样接在问题码说明之后，不�
   equal(withDetail.description, `${without.description} ${detail}`);
   equal(withDetail.title, without.title);
 });
+
+// 票 catalogue-read-pagination/05：检索下推之后，答回零行不再等于册为空。
+// Covers: 带收窄条件的零行 → ready（由页面的 emptyRowsNote 说「这组条件下没有」）；不带条件的零行 → 空态，与先前同；有行时两者都是 ready。
+test('带检索或筛选条件答出零行仍是 ready，不带条件的零行才是空态', () => {
+  const options = {
+    module: moduleInfo,
+    endpoint: 'GET /commercial-customer-accounts',
+    emptyTitle: '当前租户尚无货主客户账户登记',
+    emptyDescription: '登记册为空',
+  };
+  const answer = { kind: 'outcome' as const, status: 200, body: {} };
+
+  deepEqual(catalogueViewState(answer, 0, () => {}, { ...options, narrowed: true }), { kind: 'ready' });
+  deepEqual(catalogueViewState(answer, 0, () => {}, options), {
+    kind: 'empty',
+    title: options.emptyTitle,
+    description: options.emptyDescription,
+  });
+  deepEqual(catalogueViewState(answer, 3, () => {}, { ...options, narrowed: true }), { kind: 'ready' });
+  deepEqual(catalogueViewState(answer, 3, () => {}, options), { kind: 'ready' });
+});

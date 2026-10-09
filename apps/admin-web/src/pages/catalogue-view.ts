@@ -7,6 +7,11 @@ interface CatalogueViewOptions {
   endpoint: string;
   emptyTitle: string;
   emptyDescription: string;
+  /**
+   * 这一问带没带收窄条件（检索词或筛选维下推到已迁 ADR-0144 的读口，catalogue-query 的 catalogueConditionsNarrow）。带着条件答出
+   * 零行说的是「这组条件下没有」，不是册为空：仍报 ready，由页面经模板的 emptyRowsNote 说那一句；不带条件的零行才配空态。
+   */
+  narrowed?: boolean;
 }
 
 export function catalogueViewState<Body>(
@@ -20,7 +25,7 @@ export function catalogueViewState<Body>(
     return { kind: 'loading', shape: 'table' };
   }
   if (answer.kind === 'outcome') {
-    if (recordCount === 0) {
+    if (recordCount === 0 && !options.narrowed) {
       return {
         kind: 'empty',
         title: options.emptyTitle,

@@ -3,6 +3,7 @@
 // 传输与五格判读收敛在共享 catalogue-api,本文件只保留本上下文的类型与查询函数。
 
 import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue-api';
+import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
 import type { RegistrationResponseBody } from '../../components/registration';
 
 export type { ApiResult } from '../catalogue-api';
@@ -565,6 +566,7 @@ export interface CustomerAccountRecord {
 export interface CustomerAccountListResponseBody {
   outcome: 'CUSTOMER_ACCOUNTS_LISTED';
   accounts: CustomerAccountRecord[];
+  page: CataloguePage;
 }
 
 // 产品—渠道映射册（票 admin-remainder-mechanism-batch/02）。channels 为空数组即显式
@@ -674,8 +676,16 @@ export function listBusinessPartyRevisions(
 // 客户账户册与客户合同同页分签却各走自己的入口：合同上列的是商业版本壳（草稿→发布→
 // 退役），账户上列的是参与方身份的登记修订（登记→生效→停用），两套状态代数不同——判据
 // 与上面身份/关系两口分立那条同一句。
-export function listCustomerAccounts(): Promise<ApiResult<CustomerAccountListResponseBody>> {
-  return exchangeMasterData<CustomerAccountListResponseBody>('/commercial-customer-accounts');
+//
+// 本册读口已迁到 ADR-0144（票 catalogue-read-pagination/02）：收条件与游标，答复带 page。两样都可缺——缺即第一页、缺省序、
+// 不筛，不翻页的调用方照旧拿到第一页。可排维与筛选维以读口的声明为准，这里不抄一份。
+export function listCustomerAccounts(
+  conditions: CatalogueConditions = {},
+  after: string | null = null,
+): Promise<ApiResult<CustomerAccountListResponseBody>> {
+  return exchangeMasterData<CustomerAccountListResponseBody>(
+    catalogueRequestPath('/commercial-customer-accounts', conditions, after),
+  );
 }
 
 // 映射目录不并进 /commercial-service-products：那边上列版本壳（自票 25 起外加一节可缺的产品层交付条件），

@@ -1,9 +1,11 @@
 import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
-import { ListPageTemplate, type ListColumn } from '../../templates';
+import { ListPageTemplate, useAddressKeyword, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { RegistrationPanel } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
+import { catalogueConditionsNarrow } from '../catalogue-query';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import { CustomerContractPublicationForm } from './CustomerContractPublicationForm';
 import { DeliveryConditionsCell } from './DeliveryConditionsCell';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
@@ -13,7 +15,6 @@ import {
   listCustomerContracts,
   partyIdentityOutcomeLabels,
   registerCommercial,
-  type CustomerAccountListResponseBody,
   type CustomerAccountRecord,
   type CustomerContractListResponseBody,
   type CustomerContractRecord,
@@ -260,33 +261,15 @@ const accountColumns: ListColumn<CustomerAccountRecord>[] = [
  * 落在本页而不是业务参与方页：那页的所有权语言是「角色中立的业务参与方身份」，而账户
  * 引用一个身份、定义里就带着角色（货主客户）——与责任法人落自己的页同一条理由。本页的
  * 所有权语言原句第一项就是「客户账户」，合同的相对方也正是它。
+ *
+ * 读口已迁到 ADR-0144（票 catalogue-read-pagination/02、05）：检索词沿地址上的 `?q=` 停稳后下推，翻页走游标，换检索词回第一页；
+ * 次序是读口的缺省序，本签不另排。不在答回来的那一页上再筛——截断之后再筛，答出的「没有」可能是假的。检索覆盖哪几格以读口为准。
  */
 function CustomerAccountsTable() {
-  const [search, setSearch] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<CustomerAccountListResponseBody> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listCustomerAccounts().then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
+  const [search, setSearch] = useAddressKeyword();
+  const conditions = { q: useSettledKeyword(search) };
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listCustomerAccounts);
   const accounts = answer?.kind === 'outcome' ? answer.body.accounts : [];
-  const needle = search.trim().toLowerCase();
-  const visibleAccounts = needle
-    ? accounts.filter((row) =>
-        [row.accountId, row.customerPartyId, row.customerPartyName ?? '', row.status].some(
-          (value) => value.toLowerCase().includes(needle),
-        ),
-      )
-    : accounts;
-  const retry = () => setReloadKey((value) => value + 1);
 
   return (
     <ListPageTemplate<CustomerAccountRecord>
@@ -297,18 +280,19 @@ function CustomerAccountsTable() {
         onChange: setSearch,
         placeholder: '搜索账户、客户参与方或名称',
       }}
-      filterSummary={
-        answer?.kind === 'outcome' ? `当前返回 ${accounts.length} 个货主客户账户` : undefined
-      }
+      filterSummary={answer?.kind === 'outcome' ? `本页 ${accounts.length} 个货主客户账户` : undefined}
       columns={accountColumns}
-      rows={visibleAccounts}
+      rows={accounts}
       rowKey={(row) => row.accountId}
+      emptyRowsNote="当前检索条件下没有匹配的货主客户账户"
+      pagination={pagination}
       viewState={catalogueViewState(answer, accounts.length, retry, {
         module: info,
         endpoint: 'GET /commercial-customer-accounts',
         emptyTitle: '当前租户尚无货主客户账户登记',
         emptyDescription:
           '读取入口已配置，但登记册为空；页面不会预置账户。登记可走本页「登记账户」签，或受控 CLI parcel-commercial register-parties。',
+        narrowed: catalogueConditionsNarrow(conditions),
       })}
     />
   );
