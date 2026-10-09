@@ -1,7 +1,7 @@
 # 11 集成客户端册与客户端凭据校验：外部结果与资金事实的信任入口
 
 Category: enhancement
-Status: ready-for-agent——2026-09-24 随 ADR-0149 立（用户授权通道 4 自决）
+Status: in-progress——2026-10-09 通道 4 认领（通道 1 派单 task-9c89948b），隔离 worktree `idp-parcel-mcp4-oc11`、分支 `mcp4-oc11`（基 `187dccd2`）。此前 ready-for-agent——2026-09-24 随 ADR-0149 立（用户授权通道 4 自决）
 Blocked by: 02
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 丙轨实施
 地盘：`internal/accessidentity`（集成客户端册、客户端凭据令牌校验、集成客户端信封）与其迁移、受控登记 CLI、参数登记册增「集成客户端与凭据」一行。
