@@ -70,4 +70,12 @@ func TestPricingWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := catalogueReviews.Record(ctx, domain.CatalogueReview{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务记录目录复核应返回 ErrTransactionRequired，实得：%v", err)
 	}
+
+	drafts, err := adapter.NewPriceCardDrafts(db)
+	if err != nil {
+		t.Fatalf("构造草稿册：%v", err)
+	}
+	if _, err := drafts.SubmitDraft(ctx, domain.PriceCardDraft{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务录入草稿应返回 ErrTransactionRequired，实得：%v", err)
+	}
 }
