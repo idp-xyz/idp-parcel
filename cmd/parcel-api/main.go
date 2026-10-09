@@ -346,6 +346,15 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 价卡录入编排与草稿册读口（ADR-0101 决定三）：两口挂操作者渠道的登记册 Intake，判据同预览。
+	priceCardDraftSubmission, err := buildPriceCardDraftSubmission(db)
+	if err != nil {
+		return err
+	}
+	priceCardDrafts, err := pppostgres.NewPriceCardDrafts(db)
+	if err != nil {
+		return err
+	}
 	networkCatalog, err := nrpostgres.NewNetworkCatalog(db)
 	if err != nil {
 		return err
@@ -539,6 +548,8 @@ func run(logger *slog.Logger) error {
 			evaluationReplay,
 			pricingEstimate,
 			priceCardPreview,
+			priceCardDraftSubmission,
+			priceCardDrafts,
 			networkCatalog,
 			routePlans,
 			networkCatalogRegistration,

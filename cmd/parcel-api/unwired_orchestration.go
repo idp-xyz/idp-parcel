@@ -743,6 +743,29 @@ func (unwiredPriceCardPreview) Handle(
 	return pricingapp.PriceCardImportPreview{}, errOrchestrationNotWired
 }
 
+// unwiredPriceCardDraftSubmission 是价卡录入的命令占位（ADR-0101 决定三，票 price-card-import/03），判据同预览占位。
+type unwiredPriceCardDraftSubmission struct{}
+
+func (unwiredPriceCardDraftSubmission) Handle(
+	context.Context,
+	pricingapp.SubmitPriceCardDraftCommand,
+) (pricingapp.SubmitPriceCardDraftResult, error) {
+	return pricingapp.SubmitPriceCardDraftResult{}, errOrchestrationNotWired
+}
+
+// unwiredPriceCardDrafts 是草稿册查阅读口的占位（票 price-card-import/03）。不并进 unwiredPricingCatalogue：草稿不是
+// 价卡版本，生产装配点上它是草稿册自己的适配器，判据同 unwiredPricingEvaluations。
+type unwiredPriceCardDrafts struct{}
+
+func (unwiredPriceCardDrafts) ListPriceCardDrafts(
+	context.Context,
+	pricingdomain.TenantID,
+	pricingdomain.PriceCardDraftStatus,
+	int,
+) ([]pricingdomain.PriceCardDraft, error) {
+	return nil, errOrchestrationNotWired
+}
+
 // unwiredPricingEstimate 是运营试算的命令占位（ADR-0152，票 operator-workspace-gaps/05）。判据同回放占位：不交回零值答复，
 // 稳定错误让「越过了 Intake」可观察为 NO_ANSWER_FORMED。
 type unwiredPricingEstimate struct{}
