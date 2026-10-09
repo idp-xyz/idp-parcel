@@ -77,7 +77,7 @@ func NewIntegrationClientMinter(
 // MintIntegrationClient 铸造一次集成客户端出示的信封：校验令牌 → 查集成客户端册 → 核证书绑定要求 → 按所交的事实
 // 类型核授予 → 判准入范围。
 //
-// 核验方的三格原样交回；册读不动答依赖故障；不在册或无此类生效授予答 ErrIntegrationClientNotGranted；册上要求证书
+// 核验方的各格（未配置、令牌不过、取不回公钥集）原样交回；册读不动答依赖故障；不在册或无此类生效授予答 ErrIntegrationClientNotGranted；册上要求证书
 // 绑定而令牌没绑答 ErrCredentialRejected；准入范围不覆盖答 ErrOutsideAdmissionScope、读不动答
 // ErrAdmissionScopeUnavailable。租户与来源身份只取自册上的绑定。
 func (minter *IntegrationClientMinter) MintIntegrationClient(

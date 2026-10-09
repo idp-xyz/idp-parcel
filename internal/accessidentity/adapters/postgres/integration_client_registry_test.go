@@ -147,7 +147,7 @@ func expectClientOutcome(t *testing.T, label string, got, want accessidentity.In
 	}
 }
 
-// Covers: 票面完成判据「客户端未登记……各答其格」的册这一侧——首登落册，绑定的六件（主体、租户、来源身份、凭据引用、
+// Covers: 票面完成判据「客户端未登记……各答其格」的册这一侧——首登落册，绑定的各件（主体、租户、来源身份、凭据引用、
 // 证书绑定要求、依据）原样读回；同内容重放答原结果；同主体同租户而任何一件不同答冲突，册上那一行原样不动；不在册的
 // 主体答 found=false 而不是 error。
 func TestIntegrationClientRegistrationRecordsReplaysAndNeverOverwrites(t *testing.T) {

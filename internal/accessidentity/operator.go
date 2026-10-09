@@ -252,10 +252,15 @@ func (recorded RecordedGrant) Revocation() (GrantRevocation, bool) {
 
 // EffectiveAt 答这笔授予在 at 那一刻生不生效：在区间内，且还没到撤销时刻。
 func (recorded RecordedGrant) EffectiveAt(at time.Time) bool {
-	if !recorded.grant.interval.Contains(at) {
+	return effectiveAt(recorded.grant.interval, recorded.revocation, recorded.revoked, at)
+}
+
+// effectiveAt 是两族授予共用的生效判断：区间含起点、不含终点，自撤销时刻起（含该时刻）不再生效。
+func effectiveAt(interval EffectiveInterval, revocation GrantRevocation, revoked bool, at time.Time) bool {
+	if !interval.Contains(at) {
 		return false
 	}
-	return !recorded.revoked || at.Before(recorded.revocation.revokedAt)
+	return !revoked || at.Before(revocation.revokedAt)
 }
 
 // ErrGrantOutsideBinding 表示现状里混进了别的主体或别的租户名下的授予。
