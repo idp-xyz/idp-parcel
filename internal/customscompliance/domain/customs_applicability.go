@@ -284,13 +284,10 @@ func FoldCustomsApplicability(
 	versions := catalogVersionReferences(entries)
 	judgmentID := customsApplicabilityJudgmentID(tenant, asOf, candidate, versions)
 
-	if !hasOriginCountry || !hasDestinationCountry {
-		return unknownJudgment(candidate, EndpointCountryMissing, endpointSide(hasOriginCountry, hasDestinationCountry), judgmentID, versions)
-	}
-	if originCountry == destinationCountry {
-		return newCustomsApplicabilityJudgment(customsApplicabilityJudgmentSpec{
-			Candidate: candidate, Outcome: CustomsAvailable, JudgmentID: judgmentID, Versions: versions,
-		})
+	if judgment, decided, err := foldEndpoints(
+		candidate, originCountry, hasOriginCountry, destinationCountry, hasDestinationCountry, judgmentID, versions,
+	); decided {
+		return judgment, err
 	}
 	if len(entries.Ports) == 0 && len(entries.Paths) == 0 {
 		return unknownJudgment(candidate, CatalogEmpty, CustomsEndpointSideInvalid, judgmentID, versions)
@@ -311,19 +308,57 @@ func FoldCustomsApplicability(
 	})
 }
 
-// FoldCustomsApplicabilityUnreadable 折「依赖读不到」那格：读口没有读数可引用，出处只
-// 剩 租户 + 时点 + 候选 铸成的判断标识。把依赖故障折成错误上抛，会把它从答案代数里赶
-// 出去——而状态未知那格本为它立（CONTEXT「关务适用性判断」规则）。
+// FoldCustomsApplicabilityUnreadable 折目录读不到时的作答。读不到只拦得住要靠目录作答
+// 的候选：缺国家码与两端同国照常作答（见 foldEndpoints），只有两端异国的候选答状态未知
+// （目录读不到）。把依赖故障折成错误上抛，会把它从答案代数里赶出去——而状态未知那格本
+// 为它立（CONTEXT「关务适用性判断」规则）。读口没有读数可引用，出处里没有目录版本，判
+// 断标识按 catalogUnreadableBasis 铸。
 func FoldCustomsApplicabilityUnreadable(
 	tenant TenantID,
 	candidate RouteCandidateReference,
+	originCountry string,
+	hasOriginCountry bool,
+	destinationCountry string,
+	hasDestinationCountry bool,
 	asOf time.Time,
 ) (CustomsApplicabilityJudgment, error) {
 	if !tenant.valid() || !candidate.valid() || asOf.IsZero() {
 		return CustomsApplicabilityJudgment{}, ErrInvalidCustomsApplicabilityJudgment
 	}
-	judgmentID := customsApplicabilityJudgmentID(tenant, asOf, candidate, nil)
+	judgmentID := customsApplicabilityJudgmentID(tenant, asOf, candidate, []string{catalogUnreadableBasis})
+	if judgment, decided, err := foldEndpoints(
+		candidate, originCountry, hasOriginCountry, destinationCountry, hasDestinationCountry, judgmentID, nil,
+	); decided {
+		return judgment, err
+	}
 	return unknownJudgment(candidate, CatalogUnreadable, CustomsEndpointSideInvalid, judgmentID, nil)
+}
+
+// foldEndpoints 折不靠目录的两格：任一端缺国家码 → 状态未知（证据不足，指名哪一端）；
+// 两端同国 → 可用（不含关务段）。decided=false 即两端异国，要看目录。目录读得到与读不到
+// 两条路都先过这里——这两格若随目录可读与否改答，境内候选会跟着 CC 的依赖故障一起停摆，
+// 缺码也会被指给修好了也解不开它的运维。
+func foldEndpoints(
+	candidate RouteCandidateReference,
+	originCountry string,
+	hasOriginCountry bool,
+	destinationCountry string,
+	hasDestinationCountry bool,
+	judgmentID string,
+	versions []string,
+) (CustomsApplicabilityJudgment, bool, error) {
+	if !hasOriginCountry || !hasDestinationCountry {
+		judgment, err := unknownJudgment(candidate, EndpointCountryMissing,
+			endpointSide(hasOriginCountry, hasDestinationCountry), judgmentID, versions)
+		return judgment, true, err
+	}
+	if originCountry == destinationCountry {
+		judgment, err := newCustomsApplicabilityJudgment(customsApplicabilityJudgmentSpec{
+			Candidate: candidate, Outcome: CustomsAvailable, JudgmentID: judgmentID, Versions: versions,
+		})
+		return judgment, true, err
+	}
+	return CustomsApplicabilityJudgment{}, false, nil
 }
 
 // customsCrossingSides 是含关务段的候选要核的两侧：寄件国一侧出口、收件国一侧进口。
@@ -429,18 +464,25 @@ func catalogVersionReferences(entries CustomsApplicabilityEntries) []string {
 	return unique
 }
 
-// customsApplicabilityJudgmentID 按 租户 + 时点 + 候选 + 目录版本引用 铸成可重算的判断
-// 标识。目录版本引用进标识而答案不进：同一份快照折出的答案确定不变，标识不必替答案
-// 背书；快照变了标识跟着变，出处自然指到新依据上。
+// catalogUnreadableBasis 在目录读不到时代替目录版本引用进判断标识。版本引用一律以
+// `PORT:`/`PATH:` 起头，这一行与任何一份引用清单都撞不上。出处只交判断标识与引用清单，
+// 而读不到与目录为空的引用清单同样为空：标识再撞上，复核按出处重算只会算出目录为空，
+// 把一次依赖故障改写成租户没登记。
+const catalogUnreadableBasis = "CATALOG:UNREADABLE"
+
+// customsApplicabilityJudgmentID 按 租户 + 时点 + 候选 + 目录依据 铸成可重算的判断标识；
+// 目录依据在读得到时是目录版本引用，读不到时是 catalogUnreadableBasis。依据进标识而答案
+// 不进：同一份快照折出的答案确定不变，标识不必替答案背书；快照变了标识跟着变，出处自然
+// 指到新依据上。
 func customsApplicabilityJudgmentID(
 	tenant TenantID,
 	asOf time.Time,
 	candidate RouteCandidateReference,
-	versions []string,
+	basis []string,
 ) string {
-	lines := make([]string, 0, len(versions)+3)
+	lines := make([]string, 0, len(basis)+3)
 	lines = append(lines, tenant.String(), asOf.UTC().Format(time.RFC3339Nano), candidate.String())
-	lines = append(lines, versions...)
+	lines = append(lines, basis...)
 	sum := sha256.Sum256([]byte(strings.Join(lines, "\x00")))
 	return hex.EncodeToString(sum[:])
 }
