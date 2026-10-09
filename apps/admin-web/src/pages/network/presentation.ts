@@ -12,6 +12,18 @@ export const familyLabels: Record<NetworkCatalogFamily, string> = {
   'route-strategy': '路由策略版本',
 };
 
+// 检索框的提示:各族的 q 落在哪几格(ADR-0144 决定四:只在该册点名的文本列上做包含匹配),照 networkrouting postgres 读面
+// 各族 catalogFamily 的 keyword 列写。只写那边点了名的格,不写「代码等」这种兜底——检索已下推,提示里多说一格,人就会去搜一格搜不到的。
+export const keywordPlaceholders: Record<NetworkCatalogFamily, string> = {
+  node: '按节点代码检索',
+  connection: '按连接代码或两端节点代码检索',
+  line: '按线路代码检索',
+  'service-area': '按区域代码检索',
+  'service-calendar': '按适用对象代码检索',
+  'availability-adjustment': '按调整代码、适用对象代码或来源检索',
+  'route-strategy': '按策略代码检索',
+};
+
 /** 网络目录页 chip:六族,不露服务区域(专页承担)。 */
 export const networkCatalogFamilies: NetworkCatalogFamily[] = [
   'node',

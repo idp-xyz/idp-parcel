@@ -1,20 +1,20 @@
-import { useEffect, useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
-import { ListPageTemplate, type ListColumn } from '../../templates';
+import { ListPageTemplate, useAddressKeyword, type ListColumn } from '../../templates';
 import { RegistrationPanel } from '../../components/registration';
-import type { ApiResult } from '../catalogue-api';
+import { catalogueConditionsNarrow } from '../catalogue-query';
 import { catalogueViewState, formatRange } from '../catalogue-view';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import {
   listNetworkCatalog,
+  networkCatalogConditions,
   networkRegistrationEndpoints,
   registerNetworkCatalogVersion,
   registrationOutcomeLabels,
   registrationRefusalReasonLabels,
-  type NetworkCatalogListResponseBody,
   type NetworkVersionRecord,
 } from './api';
-import { problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
+import { keywordPlaceholders, problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
 
 const info = moduleInfoById['service-areas'];
 
@@ -46,28 +46,13 @@ const columns: ListColumn<NetworkVersionRecord>[] = [
   },
 ];
 
+// 与网络目录页同一读口(family=service-area),同一种接法:检索词沿地址上的 ?q= 停稳后下推,翻页走游标,换检索词回第一页
+// (ADR-0144,票 catalogue-read-pagination/03、05);次序是读口本族的缺省序,不在答回来的那一页上再筛。
 function ServiceAreasTable() {
-  const [keyword, setKeyword] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
-  const [answer, setAnswer] = useState<ApiResult<NetworkCatalogListResponseBody> | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    setAnswer(null);
-    void listNetworkCatalog('service-area').then((next) => {
-      if (!cancelled) setAnswer(next);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
+  const [keyword, setKeyword] = useAddressKeyword();
+  const conditions = networkCatalogConditions('service-area', { q: useSettledKeyword(keyword) });
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listNetworkCatalog);
   const areas = answer?.kind === 'outcome' ? answer.body.versions : [];
-  const needle = keyword.trim().toLowerCase();
-  const visibleAreas = needle
-    ? areas.filter((row) => (row.code ?? '').toLowerCase().includes(needle))
-    : areas;
-  const retry = () => setReloadKey((value) => value + 1);
 
   return (
     <ListPageTemplate<NetworkVersionRecord>
@@ -76,20 +61,23 @@ function ServiceAreasTable() {
       search={{
         value: keyword,
         onChange: setKeyword,
-        placeholder: '按区域代码检索',
+        placeholder: keywordPlaceholders['service-area'],
       }}
       filterSummary={
         // 同 NetworkCatalogPage:无业务答案不报数,免与未配置态说明打架。
-        answer?.kind === 'outcome' ? `当前返回 ${areas.length} 个版本` : undefined
+        answer?.kind === 'outcome' ? `本页 ${areas.length} 个版本` : undefined
       }
       columns={columns}
-      rows={visibleAreas}
+      rows={areas}
       rowKey={(row) => `${row.code}@${row.version}`}
+      emptyRowsNote="当前检索条件下没有匹配的服务区域版本"
+      pagination={pagination}
       viewState={catalogueViewState(answer, areas.length, retry, {
         module: info,
         endpoint: 'GET /network-catalog?family=service-area',
         emptyTitle: '当前租户尚无服务区域版本',
         emptyDescription: '读取入口已配置,但服务区域目录为空;页面不会虚构区域与覆盖关系。',
+        narrowed: catalogueConditionsNarrow(conditions),
       })}
     />
   );

@@ -1,9 +1,11 @@
 // 本目录 fetch 出口:网络目录运营查阅(GET /network-catalog,ADR-0077、票
 // master-data-wiring/03)。七族按 ?family= 分派;管理台网络目录页只请求六族,
 // 服务区域族由服务区域页固定 family=service-area 请求(MCP-4 终表与 MCP-3 裁决)。
+// 读口已迁到 ADR-0144(票 catalogue-read-pagination/03):翻页走游标,检索与各族筛选维下推。
 // 传输与五格判读收敛在共享 catalogue-api,本文件只保留本上下文的类型与查询函数。
 
 import { exchangeMasterData, postMasterData, type ApiResult } from '../catalogue-api';
+import { catalogueRequestPath, type CatalogueConditions, type CataloguePage } from '../catalogue-query';
 import type { RegistrationResponseBody } from '../../components/registration';
 
 export type { ApiResult } from '../catalogue-api';
@@ -48,13 +50,31 @@ export interface NetworkVersionRecord {
 export interface NetworkCatalogListResponseBody {
   outcome: NetworkCatalogOutcome;
   versions: NetworkVersionRecord[];
+  page: CataloguePage;
 }
 
-export function listNetworkCatalog(
+/**
+ * 网络目录一问的条件。family 是册子选择器(ADR-0144 决定四):保持原义、不兼作筛选维,但与检索、筛选、排序并在同一组条件里——
+ * 游标摘要覆盖它,页面的条件签名也就覆盖它,换族即回第一页。各族点名的可排维与筛选维各不相同,以读口的声明为准,这里不抄一份。
+ */
+export type NetworkCatalogConditions = CatalogueConditions & {
+  readonly selectors: { readonly family: NetworkCatalogFamily };
+};
+
+export function networkCatalogConditions(
   family: NetworkCatalogFamily,
+  conditions: Omit<CatalogueConditions, 'selectors'> = {},
+): NetworkCatalogConditions {
+  return { ...conditions, selectors: { family } };
+}
+
+/** 游标缺即第一页。 */
+export function listNetworkCatalog(
+  conditions: NetworkCatalogConditions,
+  after: string | null = null,
 ): Promise<ApiResult<NetworkCatalogListResponseBody>> {
   return exchangeMasterData<NetworkCatalogListResponseBody>(
-    `/network-catalog?family=${encodeURIComponent(family)}`,
+    catalogueRequestPath('/network-catalog', conditions, after),
   );
 }
 
@@ -89,7 +109,7 @@ export const networkRegistrationEndpoints: Record<NetworkCatalogFamily, string> 
  *
  * 传输层那边逐族各立一个端点构造函数，为的是让「把一族的译装接到另一族的端点上」在
  * 编译期就红；那条保护在这里没有落点——快照本体在前端是未翻译的 JSON，分不分函数都
- * 一样送得出去。所以这里与读口的 `listNetworkCatalog` 同形：族是封闭集里的一个参数。
+ * 一样送得出去。所以这里与读口同形：族是封闭集里的一个参数（读口经 `networkCatalogConditions` 带上）。
  */
 export function registerNetworkCatalogVersion(
   family: NetworkCatalogFamily,

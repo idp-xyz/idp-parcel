@@ -1,23 +1,25 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
-import { ListPageTemplate, type ListColumn } from '../../templates';
+import { ListPageTemplate, useAddressKeyword, type ListColumn } from '../../templates';
 import { MultiRegistrationPanel, chipClass, type RegistrationTarget } from '../../components/registration';
-import type { ApiResult } from '../catalogue-api';
+import { catalogueConditionsNarrow } from '../catalogue-query';
 import { catalogueViewState, formatInstant, formatRange } from '../catalogue-view';
+import { useCatalogueCursor, useSettledKeyword } from '../use-catalogue-cursor';
 import {
   listNetworkCatalog,
+  networkCatalogConditions,
   networkRegistrationEndpoints,
   registerNetworkCatalogVersion,
   registrationOutcomeLabels,
   registrationRefusalReasonLabels,
   type NetworkCatalogFamily,
-  type NetworkCatalogListResponseBody,
   type NetworkVersionRecord,
 } from './api';
 import {
   adjustmentKindLabels,
   familyLabels,
+  keywordPlaceholders,
   labelOf,
   networkCatalogFamilies,
   problemNote,
@@ -173,37 +175,18 @@ function rowValues(family: NetworkCatalogFamily, record: NetworkVersionRecord): 
 }
 
 // 逐族查阅版本原文;chip 六族不含服务区域(MCP-3 裁决③,服务区域由专页承担)。
+// 读口已迁到 ADR-0144(票 catalogue-read-pagination/03、05):检索词沿地址上的 ?q= 停稳后下推,翻页走游标,换族或换检索词
+// 回第一页;次序是读口各族的缺省序,本页不另排。不在答回来的那一页上再筛——截断之后再筛,答出的「没有」可能是假的。
 function NetworkCatalogTable() {
   const [familyId, setFamilyId] = useState<NetworkCatalogFamily>('node');
-  const [keyword, setKeyword] = useState('');
-  const [reloadKey, setReloadKey] = useState(0);
-  const [loaded, setLoaded] = useState<{
-    family: NetworkCatalogFamily;
-    answer: ApiResult<NetworkCatalogListResponseBody>;
-  } | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void listNetworkCatalog(familyId).then((answer) => {
-      if (!cancelled) setLoaded({ family: familyId, answer });
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, [familyId, reloadKey]);
-
-  const answer = loaded?.family === familyId ? loaded.answer : null;
+  const [keyword, setKeyword] = useAddressKeyword();
+  const conditions = networkCatalogConditions(familyId, { q: useSettledKeyword(keyword) });
+  const { answer, pagination, retry } = useCatalogueCursor(conditions, listNetworkCatalog);
+  // 手上的答复认的是此刻这一问的条件签名(族在其中),答的一定是当前族,不会把上一族的行套进这一族的列。
   const rows =
     answer?.kind === 'outcome'
       ? answer.body.versions.map((record) => rowValues(familyId, record))
       : [];
-  const needle = keyword.trim().toLowerCase();
-  const visibleRows = needle
-    ? rows.filter((row) =>
-        Object.values(row.values).some((value) => value.toLowerCase().includes(needle)),
-      )
-    : rows;
-  const retry = () => setReloadKey((value) => value + 1);
 
   return (
     <ListPageTemplate<CatalogRow>
@@ -212,7 +195,7 @@ function NetworkCatalogTable() {
       search={{
         value: keyword,
         onChange: setKeyword,
-        placeholder: '按代码或适用对象代码检索',
+        placeholder: keywordPlaceholders[familyId],
       }}
       filters={
         <>
@@ -232,17 +215,20 @@ function NetworkCatalogTable() {
         // 计数只在拿到业务答案后显示:未配置/错误态下「0 个版本」会与状态区
         // 「这不是目录为空」的说明自相矛盾(与 pricing 两页同一守卫)。
         answer?.kind === 'outcome'
-          ? `${familyLabels[familyId]} ${rows.length} 个版本`
+          ? `${familyLabels[familyId]} 本页 ${rows.length} 个版本`
           : undefined
       }
       columns={familyColumns[familyId]}
-      rows={visibleRows}
+      rows={rows}
       rowKey={(row) => row.key}
+      emptyRowsNote={`当前检索条件下没有匹配的${familyLabels[familyId]}版本`}
+      pagination={pagination}
       viewState={catalogueViewState(answer, rows.length, retry, {
         module: info,
         endpoint: `GET /network-catalog?family=${familyId}`,
         emptyTitle: `当前租户尚无${familyLabels[familyId]}版本`,
         emptyDescription: '读取入口已配置,但该目录族为空;页面不会借其他族的数据补位。',
+        narrowed: catalogueConditionsNarrow(conditions),
       })}
     />
   );
