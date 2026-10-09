@@ -287,7 +287,7 @@ func TestFoldRefusesDegenerateInputs(t *testing.T) {
 func TestJudgmentShapeValidationRejectsIncoherentLoads(t *testing.T) {
 	candidate := candidateRef(t, "cand-shape")
 
-	coherent := CustomsApplicabilityJudgmentSpec{
+	coherent := customsApplicabilityJudgmentSpec{
 		Candidate: candidate, Outcome: CustomsAvailable, JudgmentID: "id-1",
 	}
 	if _, err := newCustomsApplicabilityJudgment(coherent); err != nil {
@@ -299,7 +299,7 @@ func TestJudgmentShapeValidationRejectsIncoherentLoads(t *testing.T) {
 		t.Fatal("可用却带不可用理由，形状拼不拢必须被拒")
 	}
 
-	unavailable := CustomsApplicabilityJudgmentSpec{
+	unavailable := customsApplicabilityJudgmentSpec{
 		Candidate: candidate, Outcome: CustomsUnavailable, Reason: PathDirectionNotCovered,
 		Direction: ImportManifest, JudgmentID: "id-2",
 	}
@@ -312,7 +312,7 @@ func TestJudgmentShapeValidationRejectsIncoherentLoads(t *testing.T) {
 		t.Fatal("一条事实同时指名方向与口岸读不出它是哪一格，必须被拒")
 	}
 
-	unknown := CustomsApplicabilityJudgmentSpec{
+	unknown := customsApplicabilityJudgmentSpec{
 		Candidate: candidate, Outcome: CustomsStatusUnknown, Unknown: EndpointCountryMissing,
 		Side: EndpointSideOrigin, JudgmentID: "id-3",
 	}
@@ -324,7 +324,7 @@ func TestJudgmentShapeValidationRejectsIncoherentLoads(t *testing.T) {
 		t.Fatal("目录为空却带端点侧负载，必须被拒")
 	}
 
-	blankVersion := CustomsApplicabilityJudgmentSpec{
+	blankVersion := customsApplicabilityJudgmentSpec{
 		Candidate: candidate, Outcome: CustomsAvailable, JudgmentID: "id-4",
 		Versions: []string{"PORT:P@2026-01-01T00:00:00Z", " "},
 	}
@@ -332,7 +332,7 @@ func TestJudgmentShapeValidationRejectsIncoherentLoads(t *testing.T) {
 		t.Fatal("目录版本引用里的空白行必须被拒")
 	}
 
-	noID := CustomsApplicabilityJudgmentSpec{Candidate: candidate, Outcome: CustomsAvailable}
+	noID := customsApplicabilityJudgmentSpec{Candidate: candidate, Outcome: CustomsAvailable}
 	if _, err := newCustomsApplicabilityJudgment(noID); err == nil {
 		t.Fatal("没有判断标识的答案读不出出处，必须被拒")
 	}

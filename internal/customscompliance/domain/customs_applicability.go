@@ -184,7 +184,7 @@ type CustomsApplicabilityJudgment struct {
 // newCustomsApplicabilityJudgment 按结果分片校验后装配：可用不带任何理由字段；不可用
 // 必须带成立的理由——口岸两格指名口岸，方向格指名方向；状态未知必须带未知理由——缺国
 // 家码再指名哪一端。两头全带或全空的答案复核对不上任何一格，不让它成形。
-func newCustomsApplicabilityJudgment(spec CustomsApplicabilityJudgmentSpec) (CustomsApplicabilityJudgment, error) {
+func newCustomsApplicabilityJudgment(spec customsApplicabilityJudgmentSpec) (CustomsApplicabilityJudgment, error) {
 	if !spec.Candidate.valid() || !spec.Outcome.valid() || spec.JudgmentID == "" {
 		return CustomsApplicabilityJudgment{}, ErrInvalidCustomsApplicabilityJudgment
 	}
@@ -239,9 +239,9 @@ func newCustomsApplicabilityJudgment(spec CustomsApplicabilityJudgmentSpec) (Cus
 	}, nil
 }
 
-// CustomsApplicabilityJudgmentSpec 是构造一份作答所需的全部输入。哪个理由格带哪件负载
+// customsApplicabilityJudgmentSpec 是构造一份作答所需的全部输入。哪个理由格带哪件负载
 // 见构造时的分片校验，这里不重复列。
-type CustomsApplicabilityJudgmentSpec struct {
+type customsApplicabilityJudgmentSpec struct {
 	Candidate  RouteCandidateReference
 	Outcome    CustomsApplicabilityOutcome
 	Reason     CustomsUnavailableReason
@@ -288,7 +288,7 @@ func FoldCustomsApplicability(
 		return unknownJudgment(candidate, EndpointCountryMissing, endpointSide(hasOriginCountry, hasDestinationCountry), judgmentID, versions)
 	}
 	if originCountry == destinationCountry {
-		return newCustomsApplicabilityJudgment(CustomsApplicabilityJudgmentSpec{
+		return newCustomsApplicabilityJudgment(customsApplicabilityJudgmentSpec{
 			Candidate: candidate, Outcome: CustomsAvailable, JudgmentID: judgmentID, Versions: versions,
 		})
 	}
@@ -301,12 +301,12 @@ func FoldCustomsApplicability(
 		if covered {
 			continue
 		}
-		return newCustomsApplicabilityJudgment(CustomsApplicabilityJudgmentSpec{
+		return newCustomsApplicabilityJudgment(customsApplicabilityJudgmentSpec{
 			Candidate: candidate, Outcome: CustomsUnavailable, Reason: reason,
 			Port: port, Direction: direction, JudgmentID: judgmentID, Versions: versions,
 		})
 	}
-	return newCustomsApplicabilityJudgment(CustomsApplicabilityJudgmentSpec{
+	return newCustomsApplicabilityJudgment(customsApplicabilityJudgmentSpec{
 		Candidate: candidate, Outcome: CustomsAvailable, JudgmentID: judgmentID, Versions: versions,
 	})
 }
@@ -452,7 +452,7 @@ func unknownJudgment(
 	judgmentID string,
 	versions []string,
 ) (CustomsApplicabilityJudgment, error) {
-	return newCustomsApplicabilityJudgment(CustomsApplicabilityJudgmentSpec{
+	return newCustomsApplicabilityJudgment(customsApplicabilityJudgmentSpec{
 		Candidate: candidate, Outcome: CustomsStatusUnknown, Unknown: reason,
 		Side: side, JudgmentID: judgmentID, Versions: versions,
 	})
