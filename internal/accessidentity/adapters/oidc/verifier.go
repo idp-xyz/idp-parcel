@@ -1,5 +1,6 @@
-// Package oidc 是操作者渠道凭据校验的生产实现（ADR-0100 决定二）：parcel-api 自己按发行方的
-// JWKS 校验令牌的签名、iss、aud 与有效期，交回经核验的操作者主体。
+// Package oidc 是两族令牌校验的生产实现：操作者渠道（ADR-0100 决定二）与集成客户端族（ADR-0149 决定三）。parcel-api
+// 自己按发行方的 JWKS 校验令牌的签名、iss、aud 与有效期，交回经核验的主体。两族各有一组部署参数、各建一只校验器，
+// 核验共用同一段（issuerTokens）。
 package oidc
 
 import (
@@ -20,17 +21,18 @@ import (
 )
 
 // ErrInvalidConfig 表示部署参数缺件或不成形，校验器建不成。
-var ErrInvalidConfig = errors.New("oidc: operator channel issuer parameters are incomplete or malformed")
+var ErrInvalidConfig = errors.New("oidc: issuer parameters are incomplete or malformed")
 
-// Config 是操作者渠道信任锚的三件部署形态参数（ADR-0100 决定二第一条）。三件全部必填、
-// 不给默认值：发行方与受众属部署，缺省任何一个都等于替部署方选了一个信任锚。
+// Config 是一族信任锚的三件部署形态参数（ADR-0100 决定二第一条；集成客户端族照同一方式，ADR-0149 决定三）。三件全部
+// 必填、不给默认值：发行方与受众属部署，缺省任何一个都等于替部署方选了一个信任锚。
 type Config struct {
 	// Issuer 是发行方标识，与令牌的 iss 逐字比较。
 	Issuer string
 	// JWKSURL 是发行方公钥集的地址。它单列而不由 Issuer 推出：不做 OIDC 发现，于是校验路径上
 	// 只有这一处出网，发行方的发现文档写错也拖不垮它。
 	JWKSURL string
-	// Audience 是本部署在发行方那里的受众（管理台 SPA 的客户端标识），令牌的 aud 须含它。
+	// Audience 是本部署在发行方那里的受众，令牌的 aud 须含它：操作者族取管理台 SPA 的客户端标识，集成客户端族取本产品
+	// API 的资源标识。两族受众不同，一族的令牌因此过不了另一族的校验。
 	Audience string
 }
 
@@ -69,8 +71,9 @@ func absoluteHTTPURL(value string) error {
 // 间隔才认得新钥。
 const minRefetchInterval = time.Minute
 
-// Verifier 核验操作者令牌。
-type Verifier struct {
+// issuerTokens 是对一个发行方所签令牌的核验：按它的公钥集验签名，再核 iss、aud 与有效期。两族的校验器各包一只，
+// 只在交回什么主体、看不看 cnf 上分开。
+type issuerTokens struct {
 	config Config
 	client *http.Client
 	now    func() time.Time
@@ -85,17 +88,42 @@ type Verifier struct {
 	lastErr       error
 }
 
-var _ accessidentity.OperatorCredentialVerifier = (*Verifier)(nil)
-
-// NewVerifier 建校验器。client 的超时由装配方定；now 是校验有效期所用的钟。
-func NewVerifier(config Config, client *http.Client, now func() time.Time) (*Verifier, error) {
+func newIssuerTokens(config Config, client *http.Client, now func() time.Time) (*issuerTokens, error) {
 	if err := config.validate(); err != nil {
 		return nil, err
 	}
 	if client == nil || now == nil {
 		return nil, errors.New("oidc: verifier needs an HTTP client and a clock")
 	}
-	return &Verifier{config: config, client: client, now: now}, nil
+	return &issuerTokens{config: config, client: client, now: now}, nil
+}
+
+// Verifier 核验操作者令牌。
+type Verifier struct {
+	tokens *issuerTokens
+}
+
+var _ accessidentity.OperatorCredentialVerifier = (*Verifier)(nil)
+
+// NewVerifier 建操作者族的校验器。client 的超时由装配方定；now 是校验有效期所用的钟。
+func NewVerifier(config Config, client *http.Client, now func() time.Time) (*Verifier, error) {
+	tokens, err := newIssuerTokens(config, client, now)
+	if err != nil {
+		return nil, err
+	}
+	return &Verifier{tokens: tokens}, nil
+}
+
+// VerifyOperatorCredential 交回令牌的（发行方、sub）为操作者主体。
+func (verifier *Verifier) VerifyOperatorCredential(
+	ctx context.Context,
+	credential accessidentity.OperatorCredential,
+) (accessidentity.OperatorSubject, error) {
+	verified, err := verifier.tokens.verify(ctx, credential.Token())
+	if err != nil {
+		return accessidentity.OperatorSubject{}, err
+	}
+	return accessidentity.NewOperatorSubject(verifier.tokens.config.Issuer, verified.Subject)
 }
 
 type header struct {
@@ -119,6 +147,8 @@ type claims struct {
 	Audience  audience     `json:"aud"`
 	Expiry    *numericDate `json:"exp"`
 	NotBefore *numericDate `json:"nbf"`
+	// Confirmation 是 RFC 7800 的 cnf，原样留着：只有集成客户端族核对它（RFC 8705），操作者族不看。
+	Confirmation json.RawMessage `json:"cnf"`
 }
 
 // numericDate 是 RFC 7519 第 2 节的 NumericDate：自纪元起的秒数，可带小数；写成串的不认。
@@ -151,111 +181,107 @@ func (value *audience) UnmarshalJSON(raw []byte) error {
 	return nil
 }
 
-// VerifyOperatorCredential 先验签名、后读声明：签名过之前，载荷里的 iss、aud、exp 一个字都不信，
-// 否则一枚伪造令牌能借「过期」「受众不符」这类拒因探出本部署认什么。
-func (verifier *Verifier) VerifyOperatorCredential(
-	ctx context.Context,
-	credential accessidentity.OperatorCredential,
-) (accessidentity.OperatorSubject, error) {
-	raw := credential.Token()
+// verify 先验签名、后读声明：签名过之前，载荷里的 iss、aud、exp 一个字都不信，否则一枚伪造令牌能借「过期」
+// 「受众不符」这类拒因探出本部署认什么。交回的声明 sub 必不为空。
+func (tokens *issuerTokens) verify(ctx context.Context, raw string) (claims, error) {
 	if raw == "" {
-		return accessidentity.OperatorSubject{}, rejected("token is absent")
+		return claims{}, rejected("token is absent")
 	}
 	parts := strings.Split(raw, ".")
 	if len(parts) != 3 {
-		return accessidentity.OperatorSubject{}, rejected("token is not a JWS compact serialization")
+		return claims{}, rejected("token is not a JWS compact serialization")
 	}
 	var decodedHeader header
 	if err := decodeSegment(parts[0], &decodedHeader); err != nil {
-		return accessidentity.OperatorSubject{}, rejected("header is not a well-formed JSON object")
+		return claims{}, rejected("header is not a well-formed JSON object")
 	}
 	if !slices.Contains(acceptedAlgorithms, decodedHeader.Algorithm) {
-		return accessidentity.OperatorSubject{}, rejected("alg is not an accepted asymmetric algorithm")
+		return claims{}, rejected("alg is not an accepted asymmetric algorithm")
 	}
 	// RFC 7515 第 4.1.11 节：crit 列出的扩展收方不认得就必须拒；本校验器一个扩展也不认。
 	if len(decodedHeader.Critical) > 0 {
-		return accessidentity.OperatorSubject{}, rejected("header lists critical extensions")
+		return claims{}, rejected("header lists critical extensions")
 	}
 	signature, err := base64.RawURLEncoding.DecodeString(parts[2])
 	if err != nil {
-		return accessidentity.OperatorSubject{}, rejected("signature is not base64url")
+		return claims{}, rejected("signature is not base64url")
 	}
-	key, found, err := verifier.keyFor(ctx, decodedHeader.KeyID)
+	key, found, err := tokens.keyFor(ctx, decodedHeader.KeyID)
 	if err != nil {
-		return accessidentity.OperatorSubject{}, err
+		return claims{}, err
 	}
 	// 算法由钥定，不由头部定：头部的 alg 只用来核对它与钥自己的算法一致。
 	if !found || key.alg != decodedHeader.Algorithm || !key.verify(parts[0]+"."+parts[1], signature) {
-		return accessidentity.OperatorSubject{}, rejected("signature does not verify against the issuer's key set")
+		return claims{}, rejected("signature does not verify against the issuer's key set")
 	}
 	var decoded claims
 	if err := decodeSegment(parts[1], &decoded); err != nil {
-		return accessidentity.OperatorSubject{}, rejected("claims are not a well-formed JSON object")
+		return claims{}, rejected("claims are not a well-formed JSON object")
 	}
-	// iss 逐字比较，不折叠末尾斜杠或大小写：OIDC Core 要求发行方标识精确匹配，而操作者主体的
-	// 身份就是（发行方、sub）这一对，放宽比较等于让两个发行方的同一个 sub 撞成一个人。
-	if decoded.Issuer != verifier.config.Issuer {
-		return accessidentity.OperatorSubject{}, rejected("iss is not this deployment's issuer")
+	// iss 逐字比较，不折叠末尾斜杠或大小写：OIDC Core 要求发行方标识精确匹配，而主体的身份就是（发行方、sub）
+	// 这一对，放宽比较等于让两个发行方的同一个 sub 撞成一个主体。
+	if decoded.Issuer != tokens.config.Issuer {
+		return claims{}, rejected("iss is not this deployment's issuer")
 	}
-	if !slices.Contains(decoded.Audience, verifier.config.Audience) {
-		return accessidentity.OperatorSubject{}, rejected("aud does not name this deployment")
+	if !slices.Contains(decoded.Audience, tokens.config.Audience) {
+		return claims{}, rejected("aud does not name this deployment")
 	}
-	now := verifier.now()
+	now := tokens.now()
 	if decoded.Expiry == nil || !now.Before(decoded.Expiry.at) {
-		return accessidentity.OperatorSubject{}, rejected("token has expired or carries no exp")
+		return claims{}, rejected("token has expired or carries no exp")
 	}
 	if decoded.NotBefore != nil && now.Add(notBeforeLeeway).Before(decoded.NotBefore.at) {
-		return accessidentity.OperatorSubject{}, rejected("token is not valid yet")
+		return claims{}, rejected("token is not valid yet")
 	}
 	if strings.TrimSpace(decoded.Subject) == "" {
-		return accessidentity.OperatorSubject{}, rejected("sub is absent")
+		return claims{}, rejected("sub is absent")
 	}
-	return accessidentity.NewOperatorSubject(verifier.config.Issuer, decoded.Subject)
+	return decoded, nil
 }
 
 // keyFor 取 kid 所指的验签钥：缓存里有就用；没有且上次取已过 minRefetchInterval（或从未取过），
 // 才向发行方重取一次。发行方宕着时缓存里已有的钥照常能验。
-func (verifier *Verifier) keyFor(ctx context.Context, kid string) (publicKey, bool, error) {
-	if key, found, settled, err := verifier.cached(kid); found || settled {
+func (tokens *issuerTokens) keyFor(ctx context.Context, kid string) (publicKey, bool, error) {
+	if key, found, settled, err := tokens.cached(kid); found || settled {
 		return key, found, err
 	}
-	verifier.fetching.Lock()
-	defer verifier.fetching.Unlock()
+	tokens.fetching.Lock()
+	defer tokens.fetching.Unlock()
 	// 等取锁期间别人可能刚取回，再看一眼缓存。
-	if key, found, settled, err := verifier.cached(kid); found || settled {
+	if key, found, settled, err := tokens.cached(kid); found || settled {
 		return key, found, err
 	}
 
-	set, err := verifier.fetchKeys(ctx)
-	verifier.mu.Lock()
-	defer verifier.mu.Unlock()
-	verifier.lastAttemptAt = verifier.now()
-	verifier.lastAttemptOK = err == nil
-	verifier.lastErr = err
+	set, err := tokens.fetchKeys(ctx)
+	tokens.mu.Lock()
+	defer tokens.mu.Unlock()
+	tokens.lastAttemptAt = tokens.now()
+	tokens.lastAttemptOK = err == nil
+	tokens.lastErr = err
 	if err != nil {
 		// 取失败不清空旧钥：发行方一时答不上来，不等于它此前公布的钥作废了。
 		return publicKey{}, false, err
 	}
-	verifier.keys = set
+	tokens.keys = set
 	key, found := set.find(kid)
 	return key, found, nil
 }
 
 // cached 查缓存。settled 为真表示不必为这个 kid 再去发行方：离上次取还不到间隔，上次取成功就
 // 答「公钥集里没有这把钥」，上次取失败就原样答那次的依赖故障。
-func (verifier *Verifier) cached(kid string) (key publicKey, found, settled bool, err error) {
-	verifier.mu.RLock()
-	defer verifier.mu.RUnlock()
-	if key, found := verifier.keys.find(kid); found {
+func (tokens *issuerTokens) cached(kid string) (key publicKey, found, settled bool, err error) {
+	tokens.mu.RLock()
+	defer tokens.mu.RUnlock()
+	if key, found := tokens.keys.find(kid); found {
 		return key, true, true, nil
 	}
-	if verifier.lastAttemptAt.IsZero() || verifier.now().Sub(verifier.lastAttemptAt) >= minRefetchInterval {
+	if tokens.lastAttemptAt.IsZero() || tokens.now().Sub(tokens.lastAttemptAt) >= minRefetchInterval {
 		return publicKey{}, false, false, nil
 	}
-	if verifier.lastAttemptOK {
+	if tokens.lastAttemptOK {
 		return publicKey{}, false, true, nil
 	}
-	return publicKey{}, false, true, verifier.lastErr
+	return publicKey{}, false, true, tokens.lastErr
 }
 
 // rejected 把拒因包进 ErrCredentialRejected。拒因只给服务端诊断用：答复代数对外只有「令牌不过」
