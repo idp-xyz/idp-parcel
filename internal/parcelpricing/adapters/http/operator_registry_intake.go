@@ -47,7 +47,7 @@ type OperatorRegistryAuthenticator interface {
 }
 
 // OperatorRegistryIntake 是操作者渠道在本包参考序列登记、预览、复核与参考目录登记各口的 Intake（ADR-0100 决定四；
-// 票 operator-channel/04），价卡导入预览口也挂它（方法在 preview_price_card_import.go，票 price-card-import/02）。
+// 票 operator-channel/04）。价卡导入那一批的各口也挂它（票 price-card-import/02 起），译法各在该口自己的文件里。
 //
 // 线格式是本包既有的运营操作者面载荷（ADR-0101 决定一）：序列登记与预览共用 ReferenceSeriesRegistrationPayload，目录
 // 登记用 ReferenceCataloguePayload，它们的注释本就写明「租户与登记责任方从 OperatorEnvelope 来，由 Intake 作为入参交
