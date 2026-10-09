@@ -249,22 +249,48 @@ func TestJudgmentIDTracksCatalogAndCandidate(t *testing.T) {
 	}
 }
 
-func TestUnreadableFoldCarriesJudgmentIDWithoutVersions(t *testing.T) {
+func foldUnreadable(
+	t *testing.T,
+	candidate RouteCandidateReference,
+	origin string, hasOrigin bool,
+	destination string, hasDestination bool,
+) CustomsApplicabilityJudgment {
+	t.Helper()
 	judgment, err := FoldCustomsApplicabilityUnreadable(
-		applicabilityTenant, candidateRef(t, "cand-unreadable"), applicabilityAsOf)
+		applicabilityTenant, candidate, origin, hasOrigin, destination, hasDestination, applicabilityAsOf)
 	if err != nil {
 		t.Fatalf("FoldCustomsApplicabilityUnreadable: %v", err)
 	}
+	return judgment
+}
+
+func TestUnreadableFoldCarriesJudgmentIDWithoutVersions(t *testing.T) {
+	candidate := candidateRef(t, "cand-unreadable")
+	judgment := foldUnreadable(t, candidate, "CN", true, "SG", true)
 	if judgment.Outcome() != CustomsStatusUnknown || judgment.UnknownReason() != CatalogUnreadable {
 		t.Fatalf("outcome/unknown = %q/%q，依赖读不到该折成状态未知", judgment.Outcome().String(), judgment.UnknownReason().String())
 	}
 	if judgment.JudgmentID() == "" || len(judgment.Versions()) != 0 {
 		t.Fatal("读不到时出处只有判断标识，没有目录版本可引")
 	}
-	again, err := FoldCustomsApplicabilityUnreadable(
-		applicabilityTenant, candidateRef(t, "cand-unreadable"), applicabilityAsOf)
-	if err != nil || again.JudgmentID() != judgment.JudgmentID() {
+	if again := foldUnreadable(t, candidate, "CN", true, "SG", true); again.JudgmentID() != judgment.JudgmentID() {
 		t.Fatal("同租户、同时点、同候选的重算判断标识必须一致")
+	}
+	if empty := fold(t, candidate, "CN", true, "SG", true, CustomsApplicabilityEntries{}); empty.JudgmentID() == judgment.JudgmentID() {
+		t.Fatal("读不到与目录为空的引用清单同样为空，判断标识再撞上，出处就分不出这两格")
+	}
+}
+
+func TestUnreadableFoldStillAnswersCellsThatNeedNoCatalog(t *testing.T) {
+	domestic := foldUnreadable(t, candidateRef(t, "cand-domestic"), "CN", true, "CN", true)
+	if domestic.Outcome() != CustomsAvailable {
+		t.Fatalf("outcome/unknown = %q/%q，两端同国不靠目录也答得出可用",
+			domestic.Outcome().String(), domestic.UnknownReason().String())
+	}
+	noOrigin := foldUnreadable(t, candidateRef(t, "cand-no-origin"), "", false, "SG", true)
+	if side, ok := noOrigin.EndpointSide(); noOrigin.UnknownReason() != EndpointCountryMissing || !ok || side != EndpointSideOrigin {
+		t.Fatalf("unknown/side = %q/%q，缺寄件国要向发起方补，不该指给依赖",
+			noOrigin.UnknownReason().String(), side.String())
 	}
 }
 

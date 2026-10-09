@@ -276,7 +276,7 @@ func TestUnknownReasonsMapOntoNamedGaps(t *testing.T) {
 		}, "CUSTOMS_PORT_PATH_CATALOG_EMPTY", "CUSTOMS_PORT_PATH_CATALOG_REGISTERED"},
 		{"目录读不到", "cand-unreadable", func(t *testing.T) ccdomain.CustomsApplicabilityJudgment {
 			judgment, err := ccdomain.FoldCustomsApplicabilityUnreadable(
-				tenant, customsCandidate(t, "cand-unreadable"), assessAsOf)
+				tenant, customsCandidate(t, "cand-unreadable"), "CN", true, "SG", true, assessAsOf)
 			if err != nil {
 				t.Fatalf("FoldCustomsApplicabilityUnreadable: %v", err)
 			}

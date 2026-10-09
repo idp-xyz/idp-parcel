@@ -57,19 +57,24 @@ func answeredCandidate(t *testing.T, ref, origin, destination string) ports.Cust
 	}
 }
 
-func TestUnreadableCatalogAnswersUnknownForEveryCandidate(t *testing.T) {
+func TestUnreadableCatalogAnswersUnknownForEveryCrossingCandidate(t *testing.T) {
 	judgments := judge(t, snapshotDouble{err: errors.New("db down")},
 		answeredCandidate(t, "cand-a", "CN", "SG"),
-		answeredCandidate(t, "cand-b", "CN", "SG"))
-	if len(judgments) != 2 {
+		answeredCandidate(t, "cand-b", "CN", "SG"),
+		answeredCandidate(t, "cand-domestic", "CN", "CN"))
+	if len(judgments) != 3 {
 		t.Fatalf("len = %d，逐候选作答一条都不能少", len(judgments))
 	}
-	for _, judgment := range judgments {
+	for _, judgment := range judgments[:2] {
 		if judgment.Outcome() != domain.CustomsStatusUnknown ||
 			judgment.UnknownReason() != domain.CatalogUnreadable {
 			t.Fatalf("outcome/unknown = %q/%q，依赖读不到该折成状态未知、不上抛",
 				judgment.Outcome().String(), judgment.UnknownReason().String())
 		}
+	}
+	if judgments[2].Outcome() != domain.CustomsAvailable {
+		t.Fatalf("同国候选 = %q/%q，读不到目录也不该拦不含关务段的候选",
+			judgments[2].Outcome().String(), judgments[2].UnknownReason().String())
 	}
 }
 
