@@ -45,7 +45,10 @@ export function catalogueViewState<Body>(
     return {
       kind: 'error',
       title: `调用方式问题（HTTP ${answer.status}）`,
-      description: problemNote(answer.code),
+      // detail 是服务端随 4xx 交回的理由散文（如目录读口说查询参数为何不成立），原样接在问题码说明之后，不查表、不据此分支；
+      // 缺席即服务端没给，说明照旧。
+      description:
+        answer.detail === undefined ? problemNote(answer.code) : `${problemNote(answer.code)} ${answer.detail}`,
     };
   }
   if (answer.kind === 'noAnswer') {

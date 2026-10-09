@@ -1,7 +1,7 @@
 # 05 管理台首批两页改为服务端翻页、筛选与检索下推，README 通则改写
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——2026-10-09 通道 5 接（通道 1 派单 `task-2be15e03`），在共享树 `main` 上直接做（workflow.md「前端切片」）。此前 ready-for-agent
 Blocked by: 02、03、04；另等 [admin-web-workspace-form/06](../../admin-web-workspace-form/issues/06-list-detail-roundtrip-keeps-page-state.md) 进 main（检索词进地址）
 地盘：用 `/commercial-customer-accounts` 与 `/network-catalog` 的页面（`pages/party/api.ts`、`pages/network/api.ts` 及其列表页）、`apps/admin-web/README.md`。
 出处：[ADR-0144](../../../docs/adr/0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 决定四、八与 Consequences。
