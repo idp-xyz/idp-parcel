@@ -1,7 +1,7 @@
 # 12 customs-compliance：按路由候选作答的关务适用性判断口
 
 Category: enhancement
-Status: in-progress——2026-10-08 TraeCode 会话认领（用户令「开始接下一张票」；阻塞均无，文末分诊裁定即本票口径）。此前：ready-for-agent——2026-10-08 TraeCode 会话按用户令代 CC owner 分诊，「待 CC owner 定」四问裁定见文末「关务适用性判断分诊」。更早的 needs-triage——2026-09-24 通道 3 立（派单 `task-1f910231` ← 通道 1；出自 02 的取证与 [psb/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 格 6）。建在 [ADR-0148](../../../docs/adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md)（Proposed）决定三上，判断口的形状与作答层级归 CC owner（0148 越权风险点 4）：0148 接受、CC owner 在分诊时定下文「待 CC owner 定」各问之后，转 ready-for-agent
+Status: in-progress · 完工待评审与重放——2026-10-09 通道 3 收口（派单 `task-5351ee37` ← 通道 1）：代码笔自基线 `993995e7` 至 `0c17d9b5`，清点 `6e441e43`，完成记录见文末；评审由通道 1 另派非作者，作者不自评。此前：in-progress——2026-10-08 TraeCode 会话认领（用户令「开始接下一张票」；阻塞均无，文末分诊裁定即本票口径）。此前：ready-for-agent——2026-10-08 TraeCode 会话按用户令代 CC owner 分诊，「待 CC owner 定」四问裁定见文末「关务适用性判断分诊」。更早的 needs-triage——2026-09-24 通道 3 立（派单 `task-1f910231` ← 通道 1；出自 02 的取证与 [psb/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 格 6）。建在 [ADR-0148](../../../docs/adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md)（Proposed）决定三上，判断口的形状与作答层级归 CC owner（0148 越权风险点 4）：0148 接受、CC owner 在分诊时定下文「待 CC owner 定」各问之后，转 ready-for-agent
 Blocked by: 无（原 02、07 均已进 main；接 NR 取数侧那一项的地盘另含 NR owner，轮次 4 前报窗口）
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「演示租户上一票已接受的委托能形成初始路由」那条关键路径上挡路的缝（切片计划的子票表由通道 5 补入）
 归档：psb/04 与 ADR-0148 决定三都写这张票「另立、不在本票族里补」，指的是 NR 取数侧各票不代 CC 补执行器；本票就是那张另立的票，地盘在 CC。放在本目录、编号 12 是派单的归档选择（通道 1 与通道 5 协调）。
@@ -46,11 +46,13 @@ CC 有口岸目录与申报路径目录两本登记册（`ports.PortsPathsRegist
 
 ## 完成判据
 
-- [ ] CC `CONTEXT.md` 有「关务适用性判断」词条与规则，出自 CC owner 的分诊裁定。
-- [ ] 真库用例：合成口岸与申报路径目录上，候选得出可用、不可用（口岸未登记或未生效、申报路径三维对不上；限制若并入再加一条）与状态未知（目录为空、依赖读不到）各一；状态未知不折成可用。
-- [ ] 同输入重复作答结果一致，答案带出处。
-- [ ] 接到 NR 取数侧后，合成网络上含关务段的候选不再停在状态未知；psb/05 格 6 的取证据此更新（证据只记 `S`）。
-- [ ] 不进参数登记册；演示数据全为 `SYN-` 合成值。
+- [x] CC `CONTEXT.md` 有「关务适用性判断」词条与规则，出自 CC owner 的分诊裁定。
+- [x] 真库用例：合成口岸与申报路径目录上，候选得出可用、不可用（口岸未登记或未生效、申报路径三维对不上；限制若并入再加一条）与状态未知（目录为空、依赖读不到）各一；状态未知不折成可用。
+- [x] 同输入重复作答结果一致，答案带出处。
+- [x] 接到 NR 取数侧后，合成网络上含关务段的候选不再停在状态未知；psb/05 格 6 的取证据此更新（证据只记 `S`）。
+- [x] 不进参数登记册；演示数据全为 `SYN-` 合成值。
+
+凭据逐格见文末「完成记录」。
 
 ## 关务适用性判断分诊（2026-10-08，TraeCode 会话代 CC owner 裁定；CC owner 若在别处就位可 supersede）
 
@@ -61,3 +63,47 @@ CC 有口岸目录与申报路径目录两本登记册（`ports.PortsPathsRegist
 **三、答案代数——封闭三格加理由：可用 / 不可用（理由三格分别指：口岸未登记、口岸在判断时点未生效、申报路径三维对不上，方向与申报模式可各自指）/ 状态未知（目录为空或依赖读不到）。** 状态未知不折成可用。内部合规限制的覆盖与解除**不并入**本口：那属于既有限制与放行门禁判断链的答案（CONTEXT-MAP 那条边的「限制及解除结果」由既有机制另答）。不可用落到 NR 硬约束哪一格，由轮次 4 与 NR owner 定，本票不先裁。
 
 **四、判断记录——首版即时作答，不落判断史库。** 出处 = 判断标识（按 租户 + 时点 + 候选 + 目录版本 铸成、可重算）+ 口岸/申报路径目录版本引用，NR 随路由判断留痕（ADR-0148 决定一）。CC「合规判断」词条的强制保存规则针对「明确申报范围」的判断链；本口是新族「关务适用性判断」，无申报范围，首版不并进那条强制——将来要争「当时为什么这么判」另立版本化判断史扩展票。同输入重复作答一致由目录版本可重放性保证（判据三）。
+
+## 完成记录（2026-10-09，通道 3，派单 `task-5351ee37`；分支 `mcp3-rfc12` 基 `993995e7`；待评审与重放）
+
+**落点**
+
+| 笔 | 内容 |
+|---|---|
+| `c39d4d7f` | 票面：认领 |
+| `6cb57bb9` | party-commercial 两文件补尾换行（gofmt，非本票语义）；已挑进 main 为 `187dccd2`，重放时跳过 |
+| `4b967223` | customs-compliance：CONTEXT「关务适用性判断」词条与规则；领域按口岸 + 申报路径两级折三格，判断标识按 租户 + 时点 + 候选 + 目录版本 铸成；端口快照读形状；应用层即时作答、不落史库；postgres 全量快照读口；真库用例 |
+| `1183f7cc` | network-routing：消费方适配器 `adapters/customscompliance`（投影带两端国家，三格译回硬约束，出处随判断留痕）；可达性与初始路由两条证据视图接上；迁移 network_routing `0017`（可达性判断记录加 `customs_citations` 列），初始路由计划 jsonb 带同形出处；`parcel-dispatch` 装配根换成真判断服务 |
+| `0873a719` | CC：作答装配输入改为包内未导出类型，类型可达性棘轮转绿，行为不变 |
+| `5b81e938` | CC CONTEXT 规则三、四改写（判断项 1） |
+| `79614fd8` | CC：目录读不到时缺码与两端同国照常作答，读不到以 `CATALOG:UNREADABLE` 铸判断标识；对照检查 `customs_applicability_criteria_test.go` |
+| `40db1d3d` | 判据四取证：`cmd/parcel-dispatch` 合成网络经生产装配取关务真答两条真库用例；NR 初始路由计划关务出处真库往返 |
+| `0c17d9b5` | psb/05 格 6 补 rfc/12 取证，只记 `S` |
+| `6e441e43` | 清点：在 `0c17d9b5` 的干净检出上重生成 |
+| 本笔 | 票面：判据勾选、完成记录、Status |
+
+**完成判据**
+
+- ✅ CC CONTEXT 词条与规则：词条「关务适用性判断」与「### 关务适用性判断」各条规则落在 `4b967223`，规则三、四在收口时改写（`5b81e938`）。与分诊四问逐问对得上：口岸 + 申报路径两级、区域不建模、候选级作答（裁定一）；申报方向由两端国家对定，缺码答状态未知（裁定二）；答案闭合三格，内部合规限制不并入（裁定三）；即时作答不落史库，出处为判断标识加目录版本引用（裁定四）。
+- ✅ 真库三格：`customs_applicability_criteria_test.go` 的 `TestApplicabilityCriterionRealCatalogAnswersEveryCell`（可用；不可用分口岸未登记、口岸未生效、进口一侧无路径、进口路径未生效；状态未知分目录为空与三种缺码；多个合成租户共一库，租户隔离一并受检）、`TestApplicabilityCriterionUnreadableCatalogIsStatusUnknownNotAnError`（依赖读不到）、`TestApplicabilityCriterionCellsNeedingNoCatalogIgnoreItsReadability`；另有 `4b967223` 的 `TestCustomsApplicabilityJudgesFromRealCatalog`。状态未知没有一格折成可用。限制按裁定三不并入，不加那一条。
+- ✅ 同输入一致、带出处：`TestApplicabilityCriterionRepeatedJudgmentIsIdenticalAndBoundToItsInputs`（同输入逐项一致；换候选、换时点、出口路径换版后判断标识都变，换版后目录版本引用也变）、`TestApplicabilityCriterionEmptyAndUnreadableCatalogsCiteDifferently`；领域层 `TestSameInputFoldsIdenticalJudgments`、`TestJudgmentIDTracksCatalogAndCandidate`、`TestUnreadableFoldCarriesJudgmentIDWithoutVersions`。
+- ✅ 接到 NR 后不再停在状态未知，psb/05 格 6 已更新（`0c17d9b5`，只记 `S`）：`cmd/parcel-dispatch` 的 `TestSyntheticCrossBorderCandidatesGetCustomsAnswersThroughProductionWiring`（`SYN-LINE-CN-SG-01@1` 关务事实 `SATISFIED`，出处带 CC 判断标识与 `PORT:`/`PATH:` 引用）与 `TestSyntheticNetworkCustomsAnswersFollowTheTenantsCatalog`（未登目录的租户 `STATUS_UNKNOWN`、缺口 `CUSTOMS_PORT_PATH_CATALOG_EMPTY`；缺进口路径的租户 `RESTRICTION_APPLIES`）。变异由本会话复现：在 `0c17d9b5` 的临时检出上把 `customsApplicabilitySource` 换回 `CustomsApplicabilityNotConnected`，两条全红（`STATUS_UNKNOWN`、缺口 `CUSTOMS_APPLICABILITY_NOT_CONNECTED`、没有出处），已还原、未提交。出处落库：可达性判断记录见 `TestReachabilityOverARealCatalogFormsEachOfTheThreeValues`（迁移 `0017` 那一列往返），初始路由计划见 `TestAPlanKeepsItsCustomsCitationsThroughTheStore`。
+- ✅ 不进登记册、演示数据全 `SYN-`：自 `993995e7` 以来 `docs/product/PILOT-PARAMETER-REGISTER.md` 与 `scripts/demo-seeds/` 都没动；psb/05 格 6 所引两条用例的租户、网络、口岸、路径与委托标识全是 `SYN-` 值。领域与包级用例里另有 `tenant-c1`、`cand-cn-sg` 这类测试夹具标识，不进种子，也不作取证。
+
+**门（钉 `0c17d9b5`，带 DSN，2026-10-09 04:21Z–04:24Z）**
+
+- `go build ./...`、`go vet ./...` 全仓退 0；`gofmt -l .` 无输出。
+- 开跑前单跑判据四两条真库用例，`-v` 下是 `PASS` 不是 `SKIP`。
+- `go test -p 1 -count=1 -v`，`IDP_PARCEL_POSTGRES_DSN` 指 55432 门禁库。范围用 `go list` 反查：动过的包、它们的反向依赖（含只在测试里导入的）、全部 `pgtest` 使用方（迁移 `0017` 进了每个真库用例的建库），加 `./internal/architecture/...`，钉在此 SHA 上共 71 个包，其中 `cmd/*` 13 个。结果 69 个 `ok`、2 个无测试文件；`--- FAIL` 0；`--- SKIP` 1，是 `pgtest` 的 `TestHelperTemplateOwnerProcess`（只由子进程驱动的助手，与 DSN 无关）。
+- `0c17d9b5` 之后只有清点与本票面两笔 `.md`，没动 `.go`/`.sql`。全仓 `-p 1` 全量留给重放台。
+
+**判断项**（待评审；涉 CC 的可由 CC owner supersede）
+
+1. **CONTEXT 规则三、四改写**（`5b81e938`）：分诊原文规则三没限定候选，与规则二「两端同国即可用」在「同国 + 依赖读不到」那一格字面相抵。改为缺码与两端同国两格不靠目录作答、读不到时照常作答，只有两端异国的候选在读不到时答状态未知；规则四补一句：读不到与目录为空的判断标识不得相同。
+2. **申报模式这一维首版不评**：裁定三写「方向与申报模式可各自指」，而裁定二定的候选投影（段链 + 两端国家）不带申报模式，CONTEXT 规则一据此写明首版不评模式维。不可用理由于是只有口岸未登记、口岸未生效、方向对不上三种；要评模式，得先给投影补模式来源，另立票。
+3. **不可用落到 NR 硬约束哪一格**（裁定三留给轮次 4 与 NR owner）：消费方适配器把不可用译成 `RESTRICTION_APPLIES`，限制引用为 `CUSTOMS_APPLICABILITY/<判断标识>/<理由>`；状态未知译成命名缺口（缺国家码指名一端 / 目录为空 / 目录读不到），各带重判触发。NR owner 没有单独复核，评审时眼见为实。
+4. **目录版本引用取该租户两本目录的全量行**（含判断时点未生效的行），不只取作答用到的那几行。好处是出处能复原整份依据（未生效本身就是作答理由）；代价是该租户目录每登一行或换一版，它所有候选的判断标识都跟着换，哪怕那一行与候选无关。
+
+**暂存测试的处置**：`/home/tops/workspace/.hold-mcp3-rfc12/customs_applicability_outcomes_test.go`（12,523 字节，sha256 以 `d79bc644` 开头）**不采用**，文件留在原处。理由：按判据逐格对，它十条用例钉的判据在本分支上都已有同判据的用例（`79614fd8` 的对照检查之外，还有 `4b967223` 的真库用例与领域用例），它独有的两片 red 与对照检查的两片 red 判据相同、已由 `79614fd8` 修掉，并进来只会在同一个包里多一份钉同样判据的文件；字面上只有它有的一格「缺出口路径、指名出口方向」，与已钉的进口一侧走同一个按方向参数化的 `sideCovered`。取证：本会话把它只拷进临时检出带 DSN 各跑一次——在 `0873a719` 上 8 条 `PASS`、2 条 `FAIL`（目录读不到时两端同国被答成 `STATUS_UNKNOWN`/`CATALOG_UNREADABLE`；读不到与目录为空共用判断标识），在 `0c17d9b5` 上 10 条全 `PASS`。
+
+**未验 / 边界**：演示动线没有重走，演示种子那份（线路适用范围 `SYN-SCOPE-01`、服务区域未带覆盖国家）能否越过「墙三」未核，归 psb/05 的重走；初始路由能否落成计划还要看成本排序（rfc/10 已进 main），本票没量；全部取证只记 `S`。评审由通道 1 另派非作者，本会话是作者，不自评。
