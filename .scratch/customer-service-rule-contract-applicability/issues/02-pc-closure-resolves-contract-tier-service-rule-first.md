@@ -1,7 +1,7 @@
 # 02 PC 闭包：客户服务规则合同优先解析，与结算政策同排第二段
 
 Category: enhancement
-Status: ready-for-agent——2026-10-10 通道 1 发布：拆法作者通道 3（`task-2b404e22`），通道 1 经用户 19:1x 授权认可并裁定拆法清单所附七问
+Status: in-progress——2026-10-10 通道 5 认领（单 task-b39b287a-4dfa-4c14-9786-0d43264c2aab），分支 `mcp5-csr02` 基 `1d67e27c`。此前：ready-for-agent——2026-10-10 通道 1 发布：拆法作者通道 3（`task-2b404e22`），通道 1 经用户 19:1x 授权认可并裁定拆法清单所附七问
 Blocked by: 无
 父票：[spec](../spec.md)
 地盘：`internal/partycommercial/domain` 的闭包解析；碰 Go，走[并行会话](../../../docs/agents/parallel-sessions.md)那条路。
