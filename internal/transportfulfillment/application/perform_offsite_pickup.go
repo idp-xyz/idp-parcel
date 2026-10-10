@@ -224,13 +224,17 @@ func (handler *PerformOffsitePickupHandler) Handle(
 		return storeUndecided(command.SourceID), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedPickupContentDigest(command)) {
+		case domain.SamePayload:
+			// 同一尝试和内容重复回传：返回原结果，不重复建立控制或履约参与（AT-TF-019）。
+			return handler.existingResult(ctx, existing), nil
+		case domain.DifferentPayload:
 			// 同一来源身份携带不同对象、时间或结果：冲突保留原结果，不用最后消息覆盖
 			// （AT-TF-020）。
 			return PerformOffsitePickupResult{outcome: PickupSourceConflict}, nil
+		default:
+			return storeUndecided(command.SourceID), nil
 		}
-		// 同一尝试和内容重复回传：返回原结果，不重复建立控制或履约参与（AT-TF-019）。
-		return handler.existingResult(ctx, existing), nil
 	}
 
 	attempt, err := formAttempt(command)

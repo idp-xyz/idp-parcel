@@ -225,12 +225,16 @@ func (handler *RegisterTransportHandoverHandler) Register(
 		return handoverRegistryUndecided(command.Object), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedHandoverDigest(command)) {
+		case domain.SamePayload:
+			return handler.existingResult(ctx, existing), nil
+		case domain.DifferentPayload:
 			// 同一判断版本携带不同裁决或证据：冲突保留原判断——改判走更正入口换新版，
 			// 不按最后到达顶替。
 			return RegisterTransportHandoverResult{outcome: HandoverRegistrationConflict}, nil
+		default:
+			return handoverRegistryUndecided(command.Object), nil
 		}
-		return handler.existingResult(ctx, existing), nil
 	}
 
 	result, err := handler.commit(ctx, ports.TransportHandoverRecord{

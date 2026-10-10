@@ -188,11 +188,15 @@ func (handler *RegisterEffectiveDeliveryHandler) Register(
 		return deliveryStoreUndecided(command.Object), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedDeliveryContentDigest(command)) {
+		case domain.SamePayload:
+			return handler.existingResult(ctx, existing), nil
+		case domain.DifferentPayload:
 			// 同一（对象+尝试）携带不同 POD/方式/接收方：首登不顶替，修 POD 走更正入口。
 			return RegisterEffectiveDeliveryResult{outcome: DeliveryRegistrationConflict}, nil
+		default:
+			return deliveryStoreUndecided(command.Object), nil
 		}
-		return handler.existingResult(ctx, existing), nil
 	}
 
 	attempt, attemptResult, resultFound, err := handler.deps.Attempts.LoadDeliveryResult(ctx, command.TenantID, attemptRef, objectRef)

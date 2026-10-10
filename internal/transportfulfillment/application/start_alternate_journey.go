@@ -155,12 +155,16 @@ func (handler *StartAlternateJourneyHandler) Handle(
 		return journeyStoreUndecided(command.Journey), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedJourneyDigest(command)) {
+		case domain.SamePayload:
+			return handler.existingResult(ctx, existing), nil
+		case domain.DifferentPayload:
 			// 同一处置携带不同旅程身份或成员：冲突保留原旅程——同一处置决定不开两条
 			// 替代旅程。
 			return StartAlternateJourneyResult{outcome: JourneyStartConflict}, nil
+		default:
+			return journeyStoreUndecided(command.Journey), nil
 		}
-		return handler.existingResult(ctx, existing), nil
 	}
 
 	record := ports.AlternateJourneyRecord{
