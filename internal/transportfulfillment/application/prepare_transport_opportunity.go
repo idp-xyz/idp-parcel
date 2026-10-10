@@ -223,7 +223,10 @@ func (handler *PrepareTransportOpportunityHandler) EstablishSchedule(
 	}
 
 	key := ports.ScheduleKey{TenantID: command.TenantID, Schedule: scheduleRef}
-	digest := opportunityDigest(command.Direction, command.DepartsAt.UTC().Format(time.RFC3339Nano))
+	_, digest, err := domain.CanonicalizeEstablishSchedulePayload(command.Direction, command.DepartsAt)
+	if err != nil {
+		return OpportunityResult{}, err
+	}
 	existing, found, err := handler.deps.Schedules.FindByKey(ctx, key)
 	if err != nil {
 		return opportunityUndecided(ScheduleStoreUnavailable, command.Schedule), nil
@@ -277,7 +280,10 @@ func (handler *PrepareTransportOpportunityHandler) EstablishPool(
 	}
 
 	key := ports.CapacityPoolKey{TenantID: command.TenantID, Pool: pool.Pool()}
-	digest := opportunityDigest(command.Schedule, command.Unit, fmt.Sprintf("%d", command.Capacity))
+	_, digest, err := domain.CanonicalizeEstablishPoolPayload(command.Schedule, command.Unit, command.Capacity)
+	if err != nil {
+		return OpportunityResult{}, err
+	}
 	existing, found, err := handler.deps.Pools.FindByKey(ctx, key)
 	if err != nil {
 		return opportunityUndecided(PoolStoreUnavailable, command.Pool), nil
@@ -467,9 +473,4 @@ func opportunityUndecided(reason OpportunityUndecidedReason, subject string) Opp
 func opportunityContinuation(parts ...string) string {
 	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return "CONT-" + hex.EncodeToString(digest[:8])
-}
-
-func opportunityDigest(parts ...string) string {
-	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
-	return hex.EncodeToString(digest[:])
 }

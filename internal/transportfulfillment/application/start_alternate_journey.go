@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -147,7 +146,10 @@ func (handler *StartAlternateJourneyHandler) Handle(
 		Purpose:  journey.Purpose(),
 		Basis:    journey.Basis(),
 	}
-	digest := journeyDigest(command)
+	_, digest, err := domain.CanonicalizeAlternateJourneyPayload(command.Journey, command.BasisKind, command.StartedAt, command.Members)
+	if err != nil {
+		return StartAlternateJourneyResult{}, err
+	}
 	existing, found, err := handler.deps.Journeys.FindByKey(ctx, key)
 	if err != nil {
 		return journeyStoreUndecided(command.Journey), nil
@@ -257,17 +259,4 @@ func (handler *StartAlternateJourneyHandler) handOff(
 func journeyContinuation(parts ...string) string {
 	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return "CONT-" + hex.EncodeToString(digest[:8])
-}
-
-// journeyDigest 是同一处置键下的内容比对锚：旅程身份、成员与开始时间任一不同即是
-// 另一条旅程。成员先排序——提交顺序不构成不同的旅程。
-func journeyDigest(command StartAlternateJourneyCommand) string {
-	members := append([]string(nil), command.Members...)
-	sort.Strings(members)
-	digest := sha256.Sum256([]byte(strings.Join(append([]string{
-		command.Journey,
-		fmt.Sprintf("%d", command.BasisKind),
-		command.StartedAt.UTC().Format(time.RFC3339Nano),
-	}, members...), "\x00")))
-	return hex.EncodeToString(digest[:])
 }

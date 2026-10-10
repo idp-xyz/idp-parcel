@@ -10,7 +10,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -155,7 +154,18 @@ func (handler *AcceptRegulatoryDispositionHandler) Handle(
 	}
 
 	key := ports.DispositionAcceptanceKey{Tenant: command.TenantID, Item: command.Item}
-	digest := dispositionDigest(command)
+	_, digest, err := domain.CanonicalizeRegulatoryDispositionPayload(
+		command.Basis.String(),
+		command.MovementAction,
+		command.Decision,
+		command.AcceptedObjects,
+		command.DeclineBasis,
+		command.MovementAuthority,
+		command.DecidedAt,
+	)
+	if err != nil {
+		return AcceptDispositionResult{}, err
+	}
 	existing, found, err := handler.deps.Acceptances.FindByKey(ctx, key)
 	if err != nil {
 		return AcceptDispositionResult{outcome: AcceptDispositionUndecided, reason: DispositionAcceptanceStoreUnavailable}, nil
@@ -269,23 +279,6 @@ func (handler *AcceptRegulatoryDispositionHandler) handOffReceipt(
 		return "CONT-" + dispositionReceiptDigest(record.Key)
 	}
 	return ""
-}
-
-// dispositionDigest 折叠承接决定的全部业务内容：同键异指纹即冒名冲突。
-func dispositionDigest(command AcceptRegulatoryDispositionCommand) string {
-	objects := append([]string(nil), command.AcceptedObjects...)
-	sort.Strings(objects)
-	parts := []string{
-		command.Basis.String(),
-		strings.TrimSpace(command.MovementAction),
-		command.Decision.String(),
-		strings.Join(objects, ","),
-		command.DeclineBasis,
-		strings.TrimSpace(command.MovementAuthority),
-		command.DecidedAt.UTC().Format(time.RFC3339Nano),
-	}
-	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
-	return hex.EncodeToString(digest[:8])
 }
 
 func dispositionReceiptDigest(key ports.DispositionAcceptanceKey) string {
