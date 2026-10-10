@@ -140,6 +140,8 @@ var swappedRegistryFaces = []string{
 	"/pricing-reference-series-previews",
 	"/pricing-reference-catalogue-registrations",
 	"/pricing-price-card-drafts",
+	"/pricing-price-card-draft-approvals",
+	"/pricing-price-card-draft-publications",
 	"/commercial-service-product-form-registrations",
 	"/commercial-product-channel-mapping-registrations",
 	"/commercial-registration-number-type-registrations",

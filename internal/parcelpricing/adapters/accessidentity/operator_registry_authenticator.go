@@ -44,7 +44,20 @@ func (authenticator *OperatorRegistryAuthenticator) AuthenticateRegistryWrite(ct
 	}
 	// 登记责任方与复核人的引用取（发行方、sub）这一对：sub 只在它的发行方之内唯一（ADR-0100 决定二第三条）。
 	subject := envelope.Subject()
-	return pricinghttp.OperatorIdentity{Tenant: tenant, Operator: subject.Issuer() + "#" + subject.Subject()}, nil
+	var grants []string
+	for _, face := range grantableFaces {
+		if envelope.Holds(face) {
+			grants = append(grants, face.String())
+		}
+	}
+	return pricinghttp.OperatorIdentity{Tenant: tenant, Operator: subject.Issuer() + "#" + subject.Subject(), Grants: grants}, nil
+}
+
+// grantableFaces 是译进授予集的能力面。信封只答「持不持某一格」、不交名单，所以这里逐格问；运营决定那一格按决定种类
+// 另答、不进 Holds，不在这里。接入身份能力的授权模型加了能力面，这里要跟着加一格，否则批准门看不见它。
+var grantableFaces = []identity.CapabilityFace{
+	identity.CapabilityRegistryConfigurationWrite,
+	identity.CapabilityMasterDataAndOperationsRead,
 }
 
 // answer 把共享接入身份能力的格译成 pricinghttp 的格：处理器只认本上下文的哨兵。

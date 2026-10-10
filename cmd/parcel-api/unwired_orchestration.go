@@ -753,6 +753,26 @@ func (unwiredPriceCardDraftSubmission) Handle(
 	return pricingapp.SubmitPriceCardDraftResult{}, errOrchestrationNotWired
 }
 
+// unwiredPriceCardDraftApproval 与 unwiredPriceCardDraftPublication 是价卡草稿批准与发布的命令占位（ADR-0101 决定五，
+// 票 price-card-import/04），判据同录入占位。
+type unwiredPriceCardDraftApproval struct{}
+
+func (unwiredPriceCardDraftApproval) Handle(
+	context.Context,
+	pricingapp.ApprovePriceCardDraftCommand,
+) (pricingapp.ApprovePriceCardDraftResult, error) {
+	return pricingapp.ApprovePriceCardDraftResult{}, errOrchestrationNotWired
+}
+
+type unwiredPriceCardDraftPublication struct{}
+
+func (unwiredPriceCardDraftPublication) Handle(
+	context.Context,
+	pricingapp.PublishPriceCardDraftCommand,
+) (pricingapp.PublishPriceCardDraftResult, error) {
+	return pricingapp.PublishPriceCardDraftResult{}, errOrchestrationNotWired
+}
+
 // unwiredPriceCardDrafts 是草稿册查阅读口的占位（票 price-card-import/03）。不并进 unwiredPricingCatalogue：草稿不是
 // 价卡版本，生产装配点上它是草稿册自己的适配器，判据同 unwiredPricingEvaluations。
 type unwiredPriceCardDrafts struct{}

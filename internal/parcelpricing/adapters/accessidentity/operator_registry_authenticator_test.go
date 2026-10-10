@@ -82,6 +82,23 @@ func TestRegistryWriterAuthenticatesToTheBoundTenantWithoutAnAdmissionCheck(t *t
 	}
 }
 
+// Covers: 票 price-card-import/04 第 2 条——批准门要的授予集由这里从信封译出：持有的能力面逐格译成授予名，没持有的不进。
+func TestTheGrantSetCarriesTheFacesTheEnvelopeHolds(t *testing.T) {
+	both := authenticator(t, operatorVerifier{}, operatorRegister{faces: []identity.CapabilityFace{
+		identity.CapabilityRegistryConfigurationWrite, identity.CapabilityMasterDataAndOperationsRead,
+	}})
+	operator, err := both.AuthenticateRegistryWrite(context.Background(), "presented.operator.token")
+	if err != nil || len(operator.Grants) != 2 ||
+		operator.Grants[0] != "REGISTRY_CONFIGURATION_WRITE" || operator.Grants[1] != "MASTER_DATA_AND_OPERATIONS_READ" {
+		t.Fatalf("grants = %v, err = %v", operator.Grants, err)
+	}
+	writerOnly := authenticator(t, operatorVerifier{}, operatorRegister{faces: []identity.CapabilityFace{identity.CapabilityRegistryConfigurationWrite}})
+	operator, err = writerOnly.AuthenticateRegistryWrite(context.Background(), "presented.operator.token")
+	if err != nil || len(operator.Grants) != 1 || operator.Grants[0] != "REGISTRY_CONFIGURATION_WRITE" {
+		t.Fatalf("grants = %v, err = %v", operator.Grants, err)
+	}
+}
+
 func TestRegistryGradesTranslateIntoPricingGrades(t *testing.T) {
 	writer := operatorRegister{faces: []identity.CapabilityFace{identity.CapabilityRegistryConfigurationWrite}}
 	cases := map[string]struct {

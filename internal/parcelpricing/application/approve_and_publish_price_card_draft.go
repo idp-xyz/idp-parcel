@@ -63,19 +63,11 @@ type ApprovePriceCardDraftCommand struct {
 	Approver domain.OperatorSubject
 }
 
+// ApprovePriceCardDraftResult 是批准的结果。Draft 是推进后的草稿，只在`已批准`时在场。
 type ApprovePriceCardDraftResult struct {
-	outcome  ApprovePriceCardDraftOutcome
-	draft    domain.PriceCardDraft
-	hasDraft bool
-}
-
-func (result ApprovePriceCardDraftResult) Outcome() ApprovePriceCardDraftOutcome {
-	return result.outcome
-}
-
-// Draft 交回推进后的草稿；只在`已批准`时在场。
-func (result ApprovePriceCardDraftResult) Draft() (domain.PriceCardDraft, bool) {
-	return result.draft, result.hasDraft
+	Outcome  ApprovePriceCardDraftOutcome
+	Draft    domain.PriceCardDraft
+	HasDraft bool
 }
 
 type ApprovePriceCardDraftHandler struct {
@@ -103,15 +95,15 @@ func (handler *ApprovePriceCardDraftHandler) Handle(ctx context.Context, command
 		return ApprovePriceCardDraftResult{}, fmt.Errorf("approve price card draft: %w", err)
 	}
 	if !found {
-		return ApprovePriceCardDraftResult{outcome: PriceCardApprovalDraftNotFound}, nil
+		return ApprovePriceCardDraftResult{Outcome: PriceCardApprovalDraftNotFound}, nil
 	}
 	switch draft.Status() {
 	case domain.PriceCardDraftStatusDraft:
-		return ApprovePriceCardDraftResult{outcome: PriceCardApprovalDraftNotValidated}, nil
+		return ApprovePriceCardDraftResult{Outcome: PriceCardApprovalDraftNotValidated}, nil
 	case domain.PriceCardDraftStatusApproved:
-		return ApprovePriceCardDraftResult{outcome: PriceCardApprovalDraftAlreadyApproved}, nil
+		return ApprovePriceCardDraftResult{Outcome: PriceCardApprovalDraftAlreadyApproved}, nil
 	case domain.PriceCardDraftStatusPublished:
-		return ApprovePriceCardDraftResult{outcome: PriceCardApprovalDraftAlreadyPublished}, nil
+		return ApprovePriceCardDraftResult{Outcome: PriceCardApprovalDraftAlreadyPublished}, nil
 	}
 
 	rule, configured, err := handler.rules.LoadPriceCardApprovalDutyRule(ctx, command.Tenant)
@@ -119,15 +111,15 @@ func (handler *ApprovePriceCardDraftHandler) Handle(ctx context.Context, command
 		return ApprovePriceCardDraftResult{}, fmt.Errorf("approve price card draft: %w", err)
 	}
 	if !configured {
-		return ApprovePriceCardDraftResult{outcome: PriceCardApprovalNotConfigured}, nil
+		return ApprovePriceCardDraftResult{Outcome: PriceCardApprovalNotConfigured}, nil
 	}
 
 	approved, err := draft.Approve(command.Approver, rule, handler.clock.Now())
 	switch {
 	case errors.Is(err, domain.ErrDraftApproverIsSubmitter):
-		return ApprovePriceCardDraftResult{outcome: PriceCardApprovalNeedsAnotherApprover}, nil
+		return ApprovePriceCardDraftResult{Outcome: PriceCardApprovalNeedsAnotherApprover}, nil
 	case errors.Is(err, domain.ErrDraftApproverLacksRequiredGrant):
-		return ApprovePriceCardDraftResult{outcome: PriceCardApprovalApproverNotQualified}, nil
+		return ApprovePriceCardDraftResult{Outcome: PriceCardApprovalApproverNotQualified}, nil
 	case err != nil:
 		// 规则不是本租户的、批准者立不住、时钟早于录入：都是装配或调用方的错，不是业务答案。
 		return ApprovePriceCardDraftResult{}, fmt.Errorf("approve price card draft: %w", err)
@@ -139,11 +131,11 @@ func (handler *ApprovePriceCardDraftHandler) Handle(ctx context.Context, command
 	}
 	switch outcome {
 	case ports.PriceCardDraftAdvanced:
-		return ApprovePriceCardDraftResult{outcome: PriceCardDraftApproved, draft: approved, hasDraft: true}, nil
+		return ApprovePriceCardDraftResult{Outcome: PriceCardDraftApproved, Draft: approved, HasDraft: true}, nil
 	case ports.PriceCardDraftAdvanceNotFound:
-		return ApprovePriceCardDraftResult{outcome: PriceCardApprovalDraftNotFound}, nil
+		return ApprovePriceCardDraftResult{Outcome: PriceCardApprovalDraftNotFound}, nil
 	case ports.PriceCardDraftAdvanceSuperseded:
-		return ApprovePriceCardDraftResult{outcome: PriceCardApprovalDraftChanged}, nil
+		return ApprovePriceCardDraftResult{Outcome: PriceCardApprovalDraftChanged}, nil
 	default:
 		return ApprovePriceCardDraftResult{}, fmt.Errorf("approve price card draft: unexpected advance outcome %q", outcome)
 	}
@@ -185,26 +177,14 @@ type PublishPriceCardDraftCommand struct {
 	Plan   domain.VersionReference
 }
 
+// PublishPriceCardDraftResult 是发布的结果。Registration 是登记用例的答复，只在真交给了它时在场（`已发布`与`发布
+// 未落定`两格）；Draft 是推进后的草稿，只在`已发布`时在场。
 type PublishPriceCardDraftResult struct {
-	outcome         PublishPriceCardDraftOutcome
-	registration    RegisterPriceCardOutcome
-	hasRegistration bool
-	draft           domain.PriceCardDraft
-	hasDraft        bool
-}
-
-func (result PublishPriceCardDraftResult) Outcome() PublishPriceCardDraftOutcome {
-	return result.outcome
-}
-
-// Registration 交回登记用例的答复，只在真交给了它时在场（`已发布`与`发布未落定`两格）。
-func (result PublishPriceCardDraftResult) Registration() (RegisterPriceCardOutcome, bool) {
-	return result.registration, result.hasRegistration
-}
-
-// Draft 交回推进后的草稿；只在`已发布`时在场。
-func (result PublishPriceCardDraftResult) Draft() (domain.PriceCardDraft, bool) {
-	return result.draft, result.hasDraft
+	Outcome         PublishPriceCardDraftOutcome
+	Registration    RegisterPriceCardOutcome
+	HasRegistration bool
+	Draft           domain.PriceCardDraft
+	HasDraft        bool
 }
 
 // PublishPriceCardDraftHandler 收的是具体的 *RegisterPriceCardHandler 而不是接口：发布 = 交既有登记用例是 ADR-0101
@@ -234,13 +214,13 @@ func (handler *PublishPriceCardDraftHandler) Handle(ctx context.Context, command
 		return PublishPriceCardDraftResult{}, fmt.Errorf("publish price card draft: %w", err)
 	}
 	if !found {
-		return PublishPriceCardDraftResult{outcome: PriceCardPublicationDraftNotFound}, nil
+		return PublishPriceCardDraftResult{Outcome: PriceCardPublicationDraftNotFound}, nil
 	}
 	switch draft.Status() {
 	case domain.PriceCardDraftStatusDraft, domain.PriceCardDraftStatusValidated:
-		return PublishPriceCardDraftResult{outcome: PriceCardPublicationDraftNotApproved}, nil
+		return PublishPriceCardDraftResult{Outcome: PriceCardPublicationDraftNotApproved}, nil
 	case domain.PriceCardDraftStatusPublished:
-		return PublishPriceCardDraftResult{outcome: PriceCardPublicationDraftAlreadyPublished}, nil
+		return PublishPriceCardDraftResult{Outcome: PriceCardPublicationDraftAlreadyPublished}, nil
 	}
 
 	registration, err := draft.Registration()
@@ -248,15 +228,15 @@ func (handler *PublishPriceCardDraftHandler) Handle(ctx context.Context, command
 		return PublishPriceCardDraftResult{}, fmt.Errorf("publish price card draft: %w", err)
 	}
 	registered, err := handler.registrar.Handle(ctx, RegisterPriceCardCommand{Registration: registration})
-	result := PublishPriceCardDraftResult{registration: registered, hasRegistration: true}
+	result := PublishPriceCardDraftResult{Registration: registered, HasRegistration: true}
 	if err != nil {
-		result.outcome = PriceCardPublicationNotLanded
+		result.Outcome = PriceCardPublicationNotLanded
 		return result, fmt.Errorf("publish price card draft: %w", err)
 	}
 	switch registered {
 	case PriceCardRecorded, PriceCardAlreadyOnRegister:
 	default:
-		result.outcome = PriceCardPublicationNotLanded
+		result.Outcome = PriceCardPublicationNotLanded
 		return result, nil
 	}
 
@@ -272,6 +252,6 @@ func (handler *PublishPriceCardDraftHandler) Handle(ctx context.Context, command
 		// 读时在、写时不在或已被别人动过：登记已写、草稿没跟上，上抛让整笔回滚、两边一起重来。
 		return PublishPriceCardDraftResult{}, fmt.Errorf("publish price card draft: the draft could not follow the landed registration (%s)", outcome)
 	}
-	result.outcome, result.draft, result.hasDraft = PriceCardDraftPublished, published, true
+	result.Outcome, result.Draft, result.HasDraft = PriceCardDraftPublished, published, true
 	return result, nil
 }

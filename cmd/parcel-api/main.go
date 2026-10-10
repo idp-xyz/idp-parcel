@@ -381,6 +381,15 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 价卡草稿批准与发布编排（ADR-0101 决定五、六）：两口同挂操作者渠道的登记册 Intake；审批职责规则未登记时批准答`未配置`。
+	priceCardDraftApproval, err := buildPriceCardDraftApproval(db)
+	if err != nil {
+		return err
+	}
+	priceCardDraftPublication, err := buildPriceCardDraftPublication(db)
+	if err != nil {
+		return err
+	}
 	networkCatalog, err := nrpostgres.NewNetworkCatalog(db)
 	if err != nil {
 		return err
@@ -576,6 +585,8 @@ func run(logger *slog.Logger) error {
 			priceCardPreview,
 			priceCardDraftSubmission,
 			priceCardDrafts,
+			priceCardDraftApproval,
+			priceCardDraftPublication,
 			networkCatalog,
 			routePlans,
 			networkCatalogRegistration,

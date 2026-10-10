@@ -107,6 +107,8 @@ func assembleBusinessEndpoints(
 	priceCardPreview pricinghttp.PriceCardImportPreviewer,
 	priceCardDraftSubmission pricinghttp.PriceCardDraftSubmitter,
 	priceCardDrafts pricinghttp.PriceCardDraftReader,
+	priceCardDraftApproval pricinghttp.PriceCardDraftApprover,
+	priceCardDraftPublication pricinghttp.PriceCardDraftPublisher,
 	networkCatalog networkhttp.OperationsCatalogReader,
 	routePlans networkhttp.RoutePlanCatalogueReader,
 	networkCatalogRegistration networkhttp.CatalogRegistrar,
@@ -452,6 +454,11 @@ func assembleBusinessEndpoints(
 		// 它。读口另立 `-draft-views` 路径：`/pricing-price-card-drafts` 已是录入口，一个路径只挂一个方法。
 		{Pattern: "/pricing-price-card-drafts", Handler: pricinghttp.NewSubmitPriceCardDraftEndpoint(operatorRegistries.pricing, priceCardDraftSubmission)},
 		{Pattern: "/pricing-price-card-draft-views", Handler: pricinghttp.NewQueryPriceCardDraftsEndpoint(operatorRegistries.pricing, priceCardDrafts)},
+		// 价卡草稿批准口与发布口（ADR-0101 决定五，票 price-card-import/04）：同挂操作者渠道的登记册 Intake——批准者主体与
+		// 授予集要从信封来（spec 自决第 4 格 2026-09-25 更正：本批各口直接挂这个 Intake）。发布在用例层交既有价卡登记，
+		// 不经 `/pricing-price-card-registrations` 那一口。
+		{Pattern: "/pricing-price-card-draft-approvals", Handler: pricinghttp.NewApprovePriceCardDraftEndpoint(operatorRegistries.pricing, priceCardDraftApproval)},
+		{Pattern: "/pricing-price-card-draft-publications", Handler: pricinghttp.NewPublishPriceCardDraftEndpoint(operatorRegistries.pricing, priceCardDraftPublication)},
 		{Pattern: "/network-catalog", Handler: networkhttp.NewQueryNetworkCatalogEndpoint(networkCatalogIntake, networkCatalog)},
 		{Pattern: "/route-plans", Handler: networkhttp.NewQueryRoutePlansEndpoint(networkCatalogIntake, routePlans)},
 		// 网络目录七族登记写面（ADR-0085，票 admin-write-faces/02 切片 02a）：登记是命令

@@ -186,13 +186,13 @@ func TestApprovalAnswersNotConfiguredWhileTheTenantHasNoRule(t *testing.T) {
 	drafts := newDraftProgressFake(validated)
 
 	result := approve(t, newApproveHandler(t, drafts, &approvalDutyRuleFake{}), validated.Plan(), subject(t, draftApprover, pricingSupervisorGrant))
-	if result.Outcome() != application.PriceCardApprovalNotConfigured || result.Outcome().String() != "NOT_CONFIGURED" {
-		t.Fatalf("outcome = %v，want NOT_CONFIGURED", result.Outcome())
+	if result.Outcome != application.PriceCardApprovalNotConfigured || result.Outcome.String() != "NOT_CONFIGURED" {
+		t.Fatalf("outcome = %v，want NOT_CONFIGURED", result.Outcome)
 	}
 	if len(drafts.advanced) != 0 {
 		t.Fatal("未配置却推进了草稿")
 	}
-	if _, has := result.Draft(); has {
+	if _, has := result.Draft, result.HasDraft; has {
 		t.Fatal("未配置不该交回草稿")
 	}
 }
@@ -224,8 +224,8 @@ func TestApprovalGateAnswersEachCellOfTheRule(t *testing.T) {
 			validated := validatedPriceCardDraft(t)
 			drafts := newDraftProgressFake(validated)
 			result := approve(t, newApproveHandler(t, drafts, test.rule(t)), validated.Plan(), test.approver(t))
-			if result.Outcome() != test.want || result.Outcome().String() != test.wantName {
-				t.Fatalf("outcome = %v，want %s", result.Outcome(), test.wantName)
+			if result.Outcome != test.want || result.Outcome.String() != test.wantName {
+				t.Fatalf("outcome = %v，want %s", result.Outcome, test.wantName)
 			}
 			if test.want != application.PriceCardDraftApproved {
 				if len(drafts.advanced) != 0 {
@@ -233,7 +233,7 @@ func TestApprovalGateAnswersEachCellOfTheRule(t *testing.T) {
 				}
 				return
 			}
-			draft, has := result.Draft()
+			draft, has := result.Draft, result.HasDraft
 			if !has || draft.Status() != domain.PriceCardDraftStatusApproved || len(drafts.advanced) != 1 {
 				t.Fatalf("通过却没推进：has=%v advanced=%d", has, len(drafts.advanced))
 			}
@@ -269,8 +269,8 @@ func TestApprovalAnswersFromTheCellTheDraftIsIn(t *testing.T) {
 			drafts := newDraftProgressFake(test.draft)
 			rules := configuredRule(t, false, "")
 			result := approve(t, newApproveHandler(t, drafts, rules), test.draft.Plan(), subject(t, draftApprover))
-			if result.Outcome().String() != test.want {
-				t.Fatalf("outcome = %v，want %s", result.Outcome(), test.want)
+			if result.Outcome.String() != test.want {
+				t.Fatalf("outcome = %v，want %s", result.Outcome, test.want)
 			}
 			if rules.reads != 0 || len(drafts.advanced) != 0 {
 				t.Fatalf("状态不对却读了规则（%d 次）或推进了草稿（%d 次）", rules.reads, len(drafts.advanced))
@@ -279,8 +279,8 @@ func TestApprovalAnswersFromTheCellTheDraftIsIn(t *testing.T) {
 	}
 
 	missing := approve(t, newApproveHandler(t, newDraftProgressFake(), configuredRule(t, false, "")), validated.Plan(), subject(t, draftApprover))
-	if missing.Outcome() != application.PriceCardApprovalDraftNotFound || missing.Outcome().String() != "DRAFT_NOT_FOUND" {
-		t.Fatalf("册上没有：outcome = %v", missing.Outcome())
+	if missing.Outcome != application.PriceCardApprovalDraftNotFound || missing.Outcome.String() != "DRAFT_NOT_FOUND" {
+		t.Fatalf("册上没有：outcome = %v", missing.Outcome)
 	}
 }
 
@@ -290,8 +290,8 @@ func TestApprovalThatLosesTheRaceOrItsDependenciesIsNotAnApproval(t *testing.T) 
 	drafts := newDraftProgressFake(validated)
 	drafts.superseded = true
 	result := approve(t, newApproveHandler(t, drafts, configuredRule(t, false, "")), validated.Plan(), subject(t, draftApprover))
-	if result.Outcome() != application.PriceCardApprovalDraftChanged || result.Outcome().String() != "DRAFT_CHANGED" {
-		t.Fatalf("outcome = %v，want DRAFT_CHANGED", result.Outcome())
+	if result.Outcome != application.PriceCardApprovalDraftChanged || result.Outcome.String() != "DRAFT_CHANGED" {
+		t.Fatalf("outcome = %v，want DRAFT_CHANGED", result.Outcome)
 	}
 
 	unavailable := errors.New("规则册读不动")
@@ -334,8 +334,8 @@ func TestPublishingHandsTheApprovedDraftItselfToTheRegistration(t *testing.T) {
 	if err != nil {
 		t.Fatalf("发布编排：%v", err)
 	}
-	if result.Outcome() != application.PriceCardDraftPublished || result.Outcome().String() != "DRAFT_PUBLISHED" {
-		t.Fatalf("outcome = %v，want DRAFT_PUBLISHED", result.Outcome())
+	if result.Outcome != application.PriceCardDraftPublished || result.Outcome.String() != "DRAFT_PUBLISHED" {
+		t.Fatalf("outcome = %v，want DRAFT_PUBLISHED", result.Outcome)
 	}
 	if len(catalog.registered) != 1 {
 		t.Fatalf("登记用例收到 %d 份，want 1", len(catalog.registered))
@@ -352,7 +352,7 @@ func TestPublishingHandsTheApprovedDraftItselfToTheRegistration(t *testing.T) {
 	if handed.PublicationApprover() != draftApprover {
 		t.Fatalf("publicationApprover = %q，want 批准者 %q", handed.PublicationApprover(), draftApprover)
 	}
-	draft, has := result.Draft()
+	draft, has := result.Draft, result.HasDraft
 	if !has || draft.Status() != domain.PriceCardDraftStatusPublished || len(drafts.advanced) != 1 {
 		t.Fatalf("登记落定却没推进草稿：has=%v advanced=%d", has, len(drafts.advanced))
 	}
@@ -390,12 +390,12 @@ func TestEveryRegistrationAnswerIsHandedBackAsIs(t *testing.T) {
 			} else if err != nil {
 				t.Fatalf("发布编排：%v", err)
 			}
-			registration, handed := result.Registration()
+			registration, handed := result.Registration, result.HasRegistration
 			if !handed || registration.String() != test.name {
 				t.Fatalf("登记答复 = %v（%v），want 原样的 %s", registration, handed, test.name)
 			}
-			if result.Outcome().String() != test.want {
-				t.Fatalf("outcome = %v，want %s", result.Outcome(), test.want)
+			if result.Outcome.String() != test.want {
+				t.Fatalf("outcome = %v，want %s", result.Outcome, test.want)
 			}
 			if published := len(drafts.advanced) == 1; published != test.published {
 				t.Fatalf("推进了 %d 次，want 落定才推进（%v）", len(drafts.advanced), test.published)
@@ -428,16 +428,16 @@ func TestPublishingAnswersFromTheCellTheDraftIsIn(t *testing.T) {
 			if err != nil {
 				t.Fatalf("发布编排：%v", err)
 			}
-			if result.Outcome().String() != test.want || len(catalog.registered) != 0 {
-				t.Fatalf("outcome = %v（登记收到 %d 份），want %s 且不交登记", result.Outcome(), len(catalog.registered), test.want)
+			if result.Outcome.String() != test.want || len(catalog.registered) != 0 {
+				t.Fatalf("outcome = %v（登记收到 %d 份），want %s 且不交登记", result.Outcome, len(catalog.registered), test.want)
 			}
 		})
 	}
 
 	missing, err := newPublishHandler(t, newDraftProgressFake(), &priceCardCatalogDouble{}).Handle(context.Background(),
 		application.PublishPriceCardDraftCommand{Tenant: draftTenant(t), Plan: validated.Plan()})
-	if err != nil || missing.Outcome().String() != "DRAFT_NOT_FOUND" {
-		t.Fatalf("册上没有：outcome = %v err = %v", missing.Outcome(), err)
+	if err != nil || missing.Outcome.String() != "DRAFT_NOT_FOUND" {
+		t.Fatalf("册上没有：outcome = %v err = %v", missing.Outcome, err)
 	}
 }
 

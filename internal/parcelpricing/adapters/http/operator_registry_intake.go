@@ -38,6 +38,9 @@ const maxRegistrationBytes = 1 << 20
 type OperatorIdentity struct {
 	Tenant   domain.TenantID
 	Operator string
+	// Grants 是铸造那一刻信封里持有的授予名。只有批准口用它——批准门拿它比审批职责规则要求的那一格（票
+	// price-card-import/04）；其余各口只认提交操作者。
+	Grants []string
 }
 
 // OperatorRegistryAuthenticator 认证一次登记册配置写出示。失败只交回本包的格；从共享接入身份能力译过来的那一层在
