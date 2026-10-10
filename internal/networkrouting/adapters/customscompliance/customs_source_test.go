@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	ccapplication "go.idp.xyz/idp-parcel/internal/customscompliance/application"
 	ccdomain "go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	ccports "go.idp.xyz/idp-parcel/internal/customscompliance/ports"
 	adapter "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/customscompliance"
@@ -326,6 +327,43 @@ func TestAnUnreadableCatalogIsADependencyFailureNotAGap(t *testing.T) {
 	}
 	if len(assessment.Findings) != 0 || len(assessment.Citations) != 0 {
 		t.Fatalf("assessment = %+v，依赖调不通时不交事实也不交出处", assessment)
+	}
+}
+
+type unreadableCatalog struct{}
+
+func (unreadableCatalog) LoadPortsPathsSnapshot(context.Context, ccdomain.TenantID) (ccports.PortsPathsSnapshot, error) {
+	return ccports.PortsPathsSnapshot{}, errors.New("customs port and path catalog unreachable")
+}
+
+// Covers: 两端同国不靠目录作答（CC CONTEXT「关务适用性判断」规则），目录读不到时照常答可用、译成满足——上抛
+// 只该截住要靠目录作答的候选，同国跟着停摆就是境内件随 CC 的依赖故障一起停。判断服务接真的 CC 处理器而不是答卷
+// 替身：坏在 CC 读不到时整批答状态未知，还是坏在本桥连同国一起上抛，这条都红。
+func TestASameCountryCandidateIsStillAnsweredWhenTheCatalogIsUnreadable(t *testing.T) {
+	judge := ccapplication.NewCustomsApplicabilityHandler(ccapplication.CustomsApplicabilityDeps{Catalog: unreadableCatalog{}})
+	assessor, err := adapter.NewCustomsApplicabilityAssessor(judge)
+	if err != nil {
+		t.Fatalf("NewCustomsApplicabilityAssessor: %v", err)
+	}
+	query := nrQuery(t, "cand-domestic")
+	query.Candidates[0].Origin = "SG"
+
+	assessment, err := assessor.AssessCustomsApplicability(t.Context(), query)
+	if err != nil {
+		t.Fatalf("err = %v，两端同国不靠目录作答，目录读不到时照常作答", err)
+	}
+	if len(assessment.Findings) != 1 || assessment.Findings[0].Outcome() != nrdomain.ConstraintSatisfied {
+		t.Fatalf("findings = %+v，两端同国该译成满足", assessment.Findings)
+	}
+	// 出处是读不到那条路铸的判断标识：读口没有读数可引，所以没有目录版本，标识也不是目录为空时那一个。
+	want, err := ccdomain.FoldCustomsApplicabilityUnreadable(
+		customsTenant(t), customsCandidate(t, "cand-domestic"), "SG", true, "SG", true, assessAsOf)
+	if err != nil {
+		t.Fatalf("FoldCustomsApplicabilityUnreadable: %v", err)
+	}
+	if len(assessment.Citations) != 1 || assessment.Citations[0].Judgment() != want.JudgmentID() ||
+		len(assessment.Citations[0].Versions()) != 0 {
+		t.Fatalf("citations = %+v，想要判断标识 %s、不带目录版本", assessment.Citations, want.JudgmentID())
 	}
 }
 
