@@ -1,7 +1,7 @@
 # 04 审批职责规则、批准与发布
 
 Category: enhancement
-Status: 阻断已修，待重放——2026-10-11 00:1x 通道 4（单 task-d1ca5f8d）：评审 ← 通道 2（`task-0a040d5e`，钉 `09795163`）Standards 阻断一条（S1）修于 `38e366f6`，S2 注释笔 `303d79cd`，票面是其后一笔；评审照录与逐条处置见文末 Comments。此前：in-progress——**完工，待评审与重放**（2026-10-10 通道 4；分支 `mcp4-pci04`，代码 tip `f3e79282`，基 `e266a876`；其后是登记册、清点与本票面三笔）；完成记录见文末。此前：in-progress——2026-10-10 通道 4 认领（单 task-ea81d298-cf3d-4f0e-adc3-2e4add1af98f，重派 task-d4d0063c），分支 `mcp4-pci04` 基 `e266a876`，工作树 `/home/tops/workspace/idp-parcel-mcp4-pci04`。此前：ready-for-agent——2026-09-25 通道 3 立票并激活（用户授权自决）
+Status: resolved——2026-10-11 00:18 通道 1 重放进 main：`7749db93`…`cf7af06d`，清点 `b07939a7`；修复笔推送方自审，进 main 记录见文末。此前 阻断已修，待重放——2026-10-11 00:1x 通道 4（单 task-d1ca5f8d）：评审 ← 通道 2（`task-0a040d5e`，钉 `09795163`）Standards 阻断一条（S1）修于 `38e366f6`，S2 注释笔 `303d79cd`，票面是其后一笔；评审照录与逐条处置见文末 Comments。此前：in-progress——**完工，待评审与重放**（2026-10-10 通道 4；分支 `mcp4-pci04`，代码 tip `f3e79282`，基 `e266a876`；其后是登记册、清点与本票面三笔）；完成记录见文末。此前：in-progress——2026-10-10 通道 4 认领（单 task-ea81d298-cf3d-4f0e-adc3-2e4add1af98f，重派 task-d4d0063c），分支 `mcp4-pci04` 基 `e266a876`，工作树 `/home/tops/workspace/idp-parcel-mcp4-pci04`。此前：ready-for-agent——2026-09-25 通道 3 立票并激活（用户授权自决）
 Blocked by: 03（已解：03 resolved，main `f8177a9d`）
 地盘：
 - `migrations/parcel_pricing/`；
@@ -143,3 +143,30 @@ go build ./... 与 go vet ./... 退 0；带 DSN go test -count=1 -p 1 ./internal
 - **P3**：只记，见「没做的、留给后续」CONTEXT 那条；由通道 1 另立票。
 
 验证（`mcp4-pci04` 工作树，提交前的工作副本内容即 `303d79cd`，WSL，go1.26.8）：改动的两份 `.go` `gofmt -l` 无输出、无 CR、无 BOM；`git diff -U0` 下增删行全是注释行；`go build ./...`、`go vet ./...` 退 0。只改了 `.md` 与注释，按派单不重跑测试，由通道 1 自审。
+
+### 修复自审（通道 1 · 2026-10-11 00:1x）
+
+改动只是 `.md` 与注释（parallel-sessions「不评什么」），推送方自审：`38e366f6` 的「当前登记」以「待提供」开头，合乎同文件「登记规则」；「所需证据」改为用引文指向判断项，不再替待复核的格下定论。`303d79cd` 的 `.go` 增删行去掉注释行为空（`git diff -U0 09795163 303d79cd -- '*.go'` 实测）；两段新注释只写取舍与代价，无行号与计数。无发现。
+
+## 进 main 记录（通道 1 · 2026-10-11 00:18）
+
+- 重放：上一个通道 1 会话 2026-10-10 23:18 在 `idp-parcel-replay-c1b` 上叠在 `70f32c2a` 的那一版不含修复，不再用；本次在隔离检出 `/tmp/idp-land-pci04` 上从 `9024a892` 另起，cherry-pick 分支各笔，零冲突；分支上的清点笔 `d8e8bb68` 不搬，清点在重放 tip 上重生成。本票改过的每份非清点文件与作者 tip `aecd5857` 逐文件 `git diff` 为空。
+
+  | 分支 `mcp4-pci04` | main |
+  |---|---|
+  | `1ca18b67` 认领 | `7749db93` |
+  | `d5d79429` 领域、端口与编排 | `537179a7` |
+  | `087b4185` 迁移 0012 与 Postgres 适配器 | `c31da436` |
+  | `f3e79282` HTTP 两口与装配 | `fa7f19fa` |
+  | `3291b79c` 参数登记册 `PAR-SET-12` | `fb91122b` |
+  | `d8e8bb68` 清点 | 不搬，由 `b07939a7` 重生成 |
+  | `09795163` 完成记录 | `fa5f5e5f` |
+  | `38e366f6` 阻断修复（登记册） | `d692904e` |
+  | `303d79cd` 注释 | `b0a5ff9f` |
+  | `aecd5857` 评审照录与修复记录 | `cf7af06d` |
+
+- 清点 `b07939a7`（在 `cf7af06d` 的检出上重生成）：parcelpricing 生产 119→124、测试 108→112；parcel_pricing 迁移 11→12；接入面端点 137→139；端口声明 457→460，基线口径多出的缺口是 `PriceCardApprovalDutyRuleView`（清点自标「虚低：精确口径已实现」）。
+- 门（同一检出 @ `b07939a7`）：gofmt 两改动目录无输出；`go build ./...`、`go vet ./...` 退 0；真库探针 `TestFreezeScopesAreInvisibleToEachOther` 为 PASS 非 SKIP；带 DSN `go test -count=1 -p 1 ./...` 00:15:30→00:18:06，138 ok / 0 FAIL / 14 无测试 / 0 cached；`-v` 单跑 `TestTheWiredPriceCardDraftApprovalAndPublicationRecordAgainstARealDatabase` 与 `TestApprovalAndPublicationAdvanceTheDraftRow` 均为 PASS。
+- 推：00:18:41 `ls-remote` 核 `9024a892` 未动 → 00:18:45 `push b07939a7:main` 成，远端 main = `b07939a7`（本票各笔与清点，其下无他人提交）；共享树 ff 同 SHA。本笔簿记在其上，纯 .md，推送方自审。
+- 评审：非作者 ← 通道 2（Standards 阻断一，已修；见上 Comments）；修复笔推送方自审（见上）。
+- P3 立票 [07](07-parcel-pricing-context-gains-approval-duty-rule-and-operator-subject-terms.md)（needs-triage）。

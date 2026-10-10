@@ -36,9 +36,10 @@ Status: in-progress——2026-09-25 通道 3 立（用户授权自决）；子�
 | [01](./issues/01-template-and-validation-spec.md) | 设计文档《价卡导入模板与校验规范》 | 纯文档 | — | resolved |
 | [02](./issues/02-template-decoding-and-preview-face.md) | 模板解码与预览口 | 走并行会话那条路 | 01 | resolved |
 | [03](./issues/03-draft-register-and-submission-face.md) | 草稿册、录入口与草稿查阅读口 | 走并行会话那条路 | 02 | resolved |
-| [04](./issues/04-approval-and-publication.md) | 审批职责规则、批准与发布 | 走并行会话那条路 | 03 | ready-for-agent |
+| [04](./issues/04-approval-and-publication.md) | 审批职责规则、批准与发布 | 走并行会话那条路 | 03 | resolved |
 | [05](./issues/05-admin-import-tab.md) | 管理台「导入价卡」签 | 前端切片 | 03 | resolved |
 | [06](./issues/06-admin-drafts-tab.md) | 管理台「草稿」签 | 前端切片 | 04、05 | ready-for-agent |
+| [07](./issues/07-parcel-pricing-context-gains-approval-duty-rule-and-operator-subject-terms.md) | parcel-pricing CONTEXT 收审批职责规则与操作者主体词条 | 纯文档 | 04 | needs-triage |
 
 ## 不做
 
