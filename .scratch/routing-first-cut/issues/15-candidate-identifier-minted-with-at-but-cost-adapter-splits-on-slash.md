@@ -1,7 +1,7 @@
 # 15 候选标识「线路@版本」与成本适配器按「/」切不一致：计价输入一接上，初始路由就落成本来源不可用
 
 Category: bug
-Status: in-progress——**评审无阻断，非阻断两条已改，待增量复评与重放**（2026-10-10 21:1x 通道 1；代码 tip `7cab7369`；评审与处置见 Comments）。此前：in-progress——**完工，待评审与重放**（2026-10-10 20:5x 通道 1，新会话接续；分支 `mcp1-rfc15`，代码 tip `2301cd5d`，基 `1d67e27c`）；完成记录见文末。此前：in-progress——2026-10-10 20:3x 通道 1 认领（认领笔 `8bccdd5c` 提交于 20:31，原写 21:0x 是笔误；用户令通道 1 自己完成：通道 3 在派单前已 crash，`task-33e8ef5a` 未执行）；分支 `mcp1-rfc15`，基 `1d67e27c`，隔离工作树 `/home/tops/workspace/idp-parcel-mcp1-rfc15`。此前：ready-for-agent——2026-10-10 通道 1 立（用户授权自决），出自 [11](11-demo-network-adopted-as-reference-configuration.md) 完工报里通道 2 的探针实测（探针未入库）
+Status: resolved——2026-10-10 21:2x 通道 1 推进 main（快进，SHA 与分支相同）：`8bccdd5c`…`2c8a6c97`，清点 `3bdf8aad`；进 main 记录见文末。此前：in-progress——**评审无阻断，非阻断两条已改，待增量复评与重放**（2026-10-10 21:1x 通道 1；代码 tip `7cab7369`；评审与处置见 Comments）。此前：in-progress——**完工，待评审与重放**（2026-10-10 20:5x 通道 1，新会话接续；分支 `mcp1-rfc15`，代码 tip `2301cd5d`，基 `1d67e27c`）；完成记录见文末。此前：in-progress——2026-10-10 20:3x 通道 1 认领（认领笔 `8bccdd5c` 提交于 20:31，原写 21:0x 是笔误；用户令通道 1 自己完成：通道 3 在派单前已 crash，`task-33e8ef5a` 未执行）；分支 `mcp1-rfc15`，基 `1d67e27c`，隔离工作树 `/home/tops/workspace/idp-parcel-mcp1-rfc15`。此前：ready-for-agent——2026-10-10 通道 1 立（用户授权自决），出自 [11](11-demo-network-adopted-as-reference-configuration.md) 完工报里通道 2 的探针实测（探针未入库）
 Blocked by: 无逻辑依赖——铸标识的一侧随 [09](09-initial-route-evidence-folded-from-catalog.md)、切标识的一侧随 [10](10-candidate-cost-from-leg-buy-evaluations.md)，两侧在 main 上都已存在
 归档：不属 [psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md) 的子票集；放在本目录是因为它是 09 与 10 之间的缝。
 地盘：`internal/networkrouting` 里候选标识的铸造与解析两侧及其用例。
@@ -85,3 +85,14 @@ Blocked by: 无逻辑依赖——铸标识的一侧随 [09](09-initial-route-evi
 - 验证（钉 `7cab7369`）：`go build ./...`、`go vet ./...` 退出 0，改动文件 `gofmt -l` 零行；带 DSN 的 `go test -count=1 -p 1` 范围同完成记录——30 个包
   ok、0 FAIL；`-v` 两条真库用例 PASS，非 SKIP。
 - 增量复评：交通道 3，只评 `a44941d2..7cab7369`。
+
+## 进 main 记录（通道 1 · 2026-10-10 21:2x）
+
+- 远端 main `1d67e27c` → `3bdf8aad`：本票五笔快进进 main，SHA 与分支 `mcp1-rfc15` 相同（`8bccdd5c`、`2301cd5d`、`a44941d2`、`7cab7369`、`2c8a6c97`）；
+  同一次推送带着 [operator-channel/04](../../operator-channel/issues/04-registration-write-faces-take-operator-intake.md) 剩余第 3 件的重放与清点 `3bdf8aad`。
+- 评审：通道 3 `task-1213993e`（钉 `a44941d2`）两轴无阻断；增量复评 `task-761435ac`（钉 `2c8a6c97`）无阻断，原非阻断两条已解。
+- 增量复评新提的非阻断一条随票记、未改：`generateCatalogCandidates` 对 `NewLineCandidateID` 的错误原样上抛，没像同函数其余目录数据问题那样包
+  `ErrCatalogUnresolvable`。生产走不到（登记口先拒空编码与非正版本），生产代码也不按这个哨兵分流，今天无行为差。
+- 验证（推送方，钉合入候选 `270617d4`，清点随后成笔）：`go build ./...`、`go vet ./...` 退出 0；带 DSN 全仓 `go test -count=1 -p 1 ./...` 138 个包 ok、
+  0 FAIL；`-v` 单跑 `TestTheCostSideResolvesTheLineOfACandidateMintedByCatalogFolding` 为 PASS，不是 SKIP。
+- 解锁：[17](17-initial-route-pricing-input-from-customer-declaration.md) 的「Blocked by 15」那条缝已在 main（17 仍待分诊）。

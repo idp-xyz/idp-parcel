@@ -159,3 +159,10 @@ Status 行由推送方在两件进 main 时一并改，免得两条分支各改�
 自报租户改用本族合法行加 `tenant_id` 键，M5（`registrationjson` 的 `refuseSelfReportedTenant` 不再拒）下七族子用例全红（证完还原）；上面完成
 记录的 M1 补了改法，判断项的机制按评审更正。验证（钉 `504ddc6b`）：`go build ./...`、`go vet ./...` 退出 0，`gofmt -l` 零行；`go test -count=1 -p 1`
 本包、`registrationjson`、`./internal/architecture/...` 三包 ok。增量复评：交通道 3。
+
+**进 main 记录（通道 1 · 21:2x）**：远端 main `1d67e27c` → `3bdf8aad`。本件六笔重放在 routing-first-cut/15 的快进之上，SHA 换了——分支
+`mcp1-oc04-nrhttp` 的 `88bf4845`、`12653a57`、`22f4347e`、`de01b9af`、`504ddc6b`、`fcf42627` 在 main 上依次是 `9ad00f97`、`35b4aa68`、`f5f0b839`、
+`877a49d8`、`940cb3dd`、`270617d4`，清点 `3bdf8aad`。评审：通道 3 `task-70b55252`（钉 `de01b9af`）两轴无阻断；增量复评 `task-1e15e82c`（钉 `fcf42627`）
+无阻断，原非阻断三条已解。增量复评新提的判断性非阻断一条随票记、未改：答复格按批文表遍历，端点表日后多一族而批文表没补时那一族静默不测（今天七键
+一一对上）。验证（推送方）：合入候选 `270617d4` 上带 DSN 全仓 138 个包 ok、0 FAIL。第 2 件在 `mcp2-oc04-pcr` 上完工待评审；Status 行等第 2 件进 main
+时一并改。
