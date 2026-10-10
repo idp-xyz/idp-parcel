@@ -99,6 +99,7 @@ func TestOperatorRegistryIntakeTranslatesEveryNetworkFamilyUnderTheAuthenticated
 }
 
 // Covers: ADR-0100 决定四的三格与未配置一格逐族经端点答各自的码，批文自报租户答坏报文；被拒的登记一个也走不到登记编排。
+// 自报租户用本族的合法行加 tenant_id 键：只带那一个键的批文在部分族会因缺格答坏报文，分不出拒的是不是自报租户。
 func TestNetworkOperatorRegistryAnswerGrades(t *testing.T) {
 	cases := map[string]struct {
 		err    error
@@ -112,21 +113,27 @@ func TestNetworkOperatorRegistryAnswerGrades(t *testing.T) {
 		"identity dependency down": {err: networkhttp.ErrIdentityDependencyUnavailable, token: "t", status: http.StatusServiceUnavailable, code: "IDENTITY_DEPENDENCY_UNAVAILABLE"},
 	}
 	for name, testCase := range cases {
-		endpoints := registrationEndpoints(operatorIntake(t, operatorAuthenticator{err: testCase.err}), unreachableRegistrar(t))
-		for family, endpoint := range endpoints {
-			recorder := httptest.NewRecorder()
-			endpoint.ServeHTTP(recorder, operatorRegistration(testCase.token, strings.NewReader(onlineRegistrationRows[family])))
-			if code := problemCode(t, recorder); recorder.Code != testCase.status || code != testCase.code {
-				t.Fatalf("%s / %s：答 %d %q，想要 %d %q", name, family, recorder.Code, code, testCase.status, testCase.code)
-			}
+		for family, row := range onlineRegistrationRows {
+			t.Run(name+"/"+family, func(t *testing.T) {
+				endpoint := registrationEndpoints(operatorIntake(t, operatorAuthenticator{err: testCase.err}), unreachableRegistrar(t))[family]
+				recorder := httptest.NewRecorder()
+				endpoint.ServeHTTP(recorder, operatorRegistration(testCase.token, strings.NewReader(row)))
+				if code := problemCode(t, recorder); recorder.Code != testCase.status || code != testCase.code {
+					t.Fatalf("答 %d %q，想要 %d %q", recorder.Code, code, testCase.status, testCase.code)
+				}
+			})
 		}
 	}
-	for family, endpoint := range registrationEndpoints(operatorIntake(t, operatorAuthenticator{}), unreachableRegistrar(t)) {
-		recorder := httptest.NewRecorder()
-		endpoint.ServeHTTP(recorder, operatorRegistration("t", strings.NewReader(`{"tenant_id": "SYN-TENANT-02"}`)))
-		if code := problemCode(t, recorder); recorder.Code != http.StatusBadRequest || code != "MALFORMED_REQUEST" {
-			t.Fatalf("自报租户 / %s：答 %d %q，想要 400 MALFORMED_REQUEST", family, recorder.Code, code)
-		}
+	for family, row := range onlineRegistrationRows {
+		t.Run("self-reported tenant/"+family, func(t *testing.T) {
+			endpoint := registrationEndpoints(operatorIntake(t, operatorAuthenticator{}), unreachableRegistrar(t))[family]
+			body := strings.Replace(row, "{", `{"tenant_id": "SYN-TENANT-02", `, 1)
+			recorder := httptest.NewRecorder()
+			endpoint.ServeHTTP(recorder, operatorRegistration("t", strings.NewReader(body)))
+			if code := problemCode(t, recorder); recorder.Code != http.StatusBadRequest || code != "MALFORMED_REQUEST" {
+				t.Fatalf("答 %d %q，想要 400 MALFORMED_REQUEST", recorder.Code, code)
+			}
+		})
 	}
 }
 
