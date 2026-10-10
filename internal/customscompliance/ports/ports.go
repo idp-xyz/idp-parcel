@@ -1203,7 +1203,7 @@ type PayerRequirementRuleView interface {
 // 不按到达顺序覆盖，UC-CC-009 核对规则那句），同一内容重复核对不出第二版。程序与资金版本折进
 // 指纹而不加一维（票 sa-cc/22 裁决 2、sa-cc/19 裁决 3）：这份键形在 0016 主键、0019 门禁读数、SA 采用表、
 // 信封载荷与信封 ID 上各存一份，加维每一处都得跟着改。新行的指纹是领域 CanonicalizeDutyVerificationPayload
-// 的 CCC-1 形；CCC-1 之前入册的行键上是无版本指纹，只在应用层 unversionedVerificationDigest 一处算。
+// 的 CCC-1 形；CCC-1 之前入册的行键上是无版本指纹，由应用层 unversionedVerificationDigest 算。
 type DutyVerificationKey struct {
 	TenantID domain.TenantID
 	Duty     domain.AssessedDutyReference

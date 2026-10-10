@@ -2,6 +2,9 @@ package application_test
 
 import (
 	"context"
+	"errors"
+	"regexp"
+	"strings"
 	"testing"
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/application"
@@ -77,7 +80,7 @@ func unversionedDigestCases(t *testing.T) []unversionedDigestCase {
 }
 
 // Covers: ADR-0014「规范化版本不同不是冲突」——CCC-1 之前入库的记录存的是无版本摘要，同一条命令
-// 重放按无版本那一版重算再比，认作原记录；同身份换内容仍不是重放。键上带指纹的两口（税费付款核对、
+// 重放按无版本那一版重算再比，认作原记录；同身份换内容仍不是重放。键上带指纹的口（税费付款核对、
 // 处置执行核对）另证不因 CCC-1 键撞不上而再落一行、再交一份意图。
 func TestRecordsStoredBeforeCCC1AreComparedUnderTheirOwnShape(t *testing.T) {
 	for _, testCase := range unversionedDigestCases(t) {
@@ -87,6 +90,47 @@ func TestRecordsStoredBeforeCCC1AreComparedUnderTheirOwnShape(t *testing.T) {
 			testCase.replay(t)
 			testCase.changed(t)
 		})
+	}
+}
+
+// Covers: 新记录写的是 CCC-1 形——无版本那一版只用来比旧记录、拼旧行的键，误写进新记录时上一例
+// 照样绿，要在这里断。键上带指纹的口断的是键上那枚指纹。
+func TestNewRecordsAreStoredUnderCCC1(t *testing.T) {
+	for _, testCase := range unversionedDigestCases(t) {
+		t.Run(testCase.name, func(t *testing.T) {
+			if stored, _ := testCase.first(t); !strings.HasPrefix(stored, "CCC-1:") {
+				t.Fatalf("新记录落下的摘要是 %q，want CCC-1 形", stored)
+			}
+		})
+	}
+}
+
+// Covers: 续办引用截的是指纹本身，不是形状前缀——CCC-1 新键上是前缀之后的 8 位；无版本旧键上与改动前
+// 同一串（定值取基 1121ba61 上那一版指纹的前 8 位）。
+func TestAContinuationReferenceNamesTheFingerprintNotItsShape(t *testing.T) {
+	fixture := newVerifyFixture(t)
+	fixture.facts.facts = []domain.ExecutionFact{executionFact(t, "DESTRUCTION-EXEC/1", 1)}
+	fixture.downstream.err = errors.New("downstream unreachable")
+
+	formed, err := fixture.handler.Handle(context.Background(), verifyCommand(t))
+	wantOutcome(t, formed.Outcome(), err, application.VerificationRecorded)
+	if !regexp.MustCompile(`^CONT-VERIFICATION/decision-1/[0-9a-f]{8}$`).MatchString(formed.HandoffReference()) {
+		t.Fatalf("CCC-1 键上的续办引用 = %q：末段该是 8 位指纹", formed.HandoffReference())
+	}
+
+	if len(fixture.store.byKey) != 1 {
+		t.Fatalf("册上有 %d 版核对，want 1", len(fixture.store.byKey))
+	}
+	for key, verification := range fixture.store.byKey {
+		delete(fixture.store.byKey, key)
+		key.Digest = "9de48e942298c286fe69b31c1c06cdc9ecbc58c433a69f07eb6fbce9c41cfb3f"
+		fixture.store.byKey[key] = verification
+		break
+	}
+	replay, err := fixture.handler.Handle(context.Background(), verifyCommand(t))
+	wantOutcome(t, replay.Outcome(), err, application.VerificationExistingResult)
+	if replay.HandoffReference() != "CONT-VERIFICATION/decision-1/9de48e94" {
+		t.Fatalf("无版本旧键上的续办引用 = %q，want 与改动前同一串", replay.HandoffReference())
 	}
 }
 
