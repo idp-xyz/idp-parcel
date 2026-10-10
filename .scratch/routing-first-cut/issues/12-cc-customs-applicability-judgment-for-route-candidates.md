@@ -1,7 +1,7 @@
 # 12 customs-compliance：按路由候选作答的关务适用性判断口
 
 Category: enhancement
-Status: in-progress · 阻断已修，待复评与重放——2026-10-10 16:07 通道 2（用户令接手通道 1 在途的修复；分支 `mcp3-rfc12`，代码 tip `71ff7440`、其后只动票面，基 `993995e7`；见文末「阻断修复记录」；通道 2 已是这次修复的提交方，复评另派非作者）。此前：完工待评审与重放——2026-10-09 通道 3 收口（派单 `task-5351ee37` ← 通道 1）：代码笔自基线 `993995e7` 至 `0c17d9b5`，清点 `6e441e43`，完成记录见文末；评审由通道 1 另派非作者，作者不自评；通道 2 非作者评审钉 `8b3224d4` 一条阻断（两轴同一件）。此前：in-progress——2026-10-08 TraeCode 会话认领（用户令「开始接下一张票」；阻塞均无，文末分诊裁定即本票口径）。此前：ready-for-agent——2026-10-08 TraeCode 会话按用户令代 CC owner 分诊，「待 CC owner 定」四问裁定见文末「关务适用性判断分诊」。更早的 needs-triage——2026-09-24 通道 3 立（派单 `task-1f910231` ← 通道 1；出自 02 的取证与 [psb/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 格 6）。建在 [ADR-0148](../../../docs/adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md)（Proposed）决定三上，判断口的形状与作答层级归 CC owner（0148 越权风险点 4）：0148 接受、CC owner 在分诊时定下文「待 CC owner 定」各问之后，转 ready-for-agent
+Status: resolved——2026-10-10 16:42 通道 1 重放进 main（`717959d9`…`18be66e8`，清点 `613fdb74`）；评审门是推送方自审、不算非作者评审，见文末 Comments 与进 main 记录。此前：in-progress · 阻断已修，待复评与重放——2026-10-10 16:07 通道 2（用户令接手通道 1 在途的修复；分支 `mcp3-rfc12`，代码 tip `71ff7440`、其后只动票面，基 `993995e7`；见文末「阻断修复记录」；通道 2 已是这次修复的提交方，复评另派非作者）。此前：完工待评审与重放——2026-10-09 通道 3 收口（派单 `task-5351ee37` ← 通道 1）：代码笔自基线 `993995e7` 至 `0c17d9b5`，清点 `6e441e43`，完成记录见文末；评审由通道 1 另派非作者，作者不自评；通道 2 非作者评审钉 `8b3224d4` 一条阻断（两轴同一件）。此前：in-progress——2026-10-08 TraeCode 会话认领（用户令「开始接下一张票」；阻塞均无，文末分诊裁定即本票口径）。此前：ready-for-agent——2026-10-08 TraeCode 会话按用户令代 CC owner 分诊，「待 CC owner 定」四问裁定见文末「关务适用性判断分诊」。更早的 needs-triage——2026-09-24 通道 3 立（派单 `task-1f910231` ← 通道 1；出自 02 的取证与 [psb/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 格 6）。建在 [ADR-0148](../../../docs/adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md)（Proposed）决定三上，判断口的形状与作答层级归 CC owner（0148 越权风险点 4）：0148 接受、CC owner 在分诊时定下文「待 CC owner 定」各问之后，转 ready-for-agent
 Blocked by: 无（原 02、07 均已进 main；接 NR 取数侧那一项的地盘另含 NR owner，轮次 4 前报窗口）
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「演示租户上一票已接受的委托能形成初始路由」那条关键路径上挡路的缝（切片计划的子票表由通道 5 补入）
 归档：psb/04 与 ADR-0148 决定三都写这张票「另立、不在本票族里补」，指的是 NR 取数侧各票不代 CC 补执行器；本票就是那张另立的票，地盘在 CC。放在本目录、编号 12 是派单的归档选择（通道 1 与通道 5 协调）。
@@ -152,3 +152,30 @@ CC 有口岸目录与申报路径目录两本登记册（`ports.PortsPathsRegist
 非阻断：判断项 2。`internal/customscompliance/domain/customs_applicability.go` 的 `sideCovered` 不评申报模式。裁定三写「方向与申报模式可各自指」，裁定二的投影不带模式，判断项 2 已另立票。代码没有默认某种模式。
 
 无发现：判断项 1 对，`foldEndpoints` 与规则三、四一致，缺码与同国不靠目录，只有异国且读不到才状态未知，判断标识与空目录分开。判断项 4 对，`catalogVersionReferences` 取两本目录全量行。判据其余格在：词条与规则已落、同输入带出处、psb/05 格 6 只记 `S`、登记册与种子无改动。未改候选生成、排序、冻结与改路，限制不并入，无参考配置，无新 ADR。不可用译成 `RESTRICTION_APPLIES`，引用带判断标识与理由。
+
+**复评 ← 通道 1 · 推送方自审，不算非作者评审 · 钉 `6f16046d` · 16:37**（看 `8b3224d4..6f16046d`，即阻断修复 `209cea4c`、`71ff7440` 与票面；读分支 tip 的 diff 与 `git grep`，未建检出。）
+
+为什么是自审：上文「谁写了什么」写明 `209cea4c` 出自通道 1、提交与票面出自通道 2，原票作者是通道 3；通道 4–6 截至 16:31 离线；用户 16:31 前令通道 1 独立完成后续、不再用其他通道；workflow.md「本仓不用子代理」。按该条，评审门退到推送方自审并如实标注。通道 1 同时是 `209cea4c` 的代码作者，所以这一份连「推送方非作者」也不是。
+
+**Standards**
+
+阻断：无。
+
+非阻断：无。
+
+无发现：修复只落在 NR 消费方适配器 `customs_source.go`（`unknownGap` 遇 `CatalogUnreadable` 交回 `ErrCustomsCatalogUnreadable`），CC 的答案代数与 `TestApplicabilityCriterionUnreadableCatalogIsStatusUnknownNotAnError` 未动，合 ADR-0148 决定三（判断归 CC、适配器只翻译）。`71ff7440` 把 CC CONTEXT 词条里的不可用理由换成指向规则节，同一决策只剩一处定义，消掉上一条评审 Standards 的非阻断。注释全中文，引用用符号与节名，无行号。`git grep -E 'CATALOG_UNREADABLE|CATALOG_RESTORED'` 在 `6f16046d` 上只命中 CC 领域自己的理由词形与本票面，NR 侧已无那对缺口词。
+
+**Spec**
+
+阻断：无。
+
+非阻断：无。
+
+无发现：原阻断（两轴同一件）已解。`catalog_network_evidence.go` 以 `%w` 包住关务来源的错误交回；NR 应用层读证据视图的各处都把 error 折成依赖调不通那一格——`assess_parcel_reachability.go` 与 `validate_reachability_judgment.go` 答 `NetworkEvidenceUnavailable`（`未形成判断`），`create_initial_route.go` 首读与重校答 `RouteEvidenceUnavailable`（`未决`），`reassess_route.go` 答 `ReassessEvidenceUnavailable`；装配失败的 `brokenCustomsSource` 走同一条。`TestAnUnreadableCatalogIsADependencyFailureNotAGap` 断整份上抛、已作答的那条也不交；`cmd/parcel-dispatch` 的 `TestAnUnreadableCustomsCatalogReachesBothEvidenceViewsAsADependencyFailure` 经生产装配证到初始路由与可达性的证据视图。判断项 3 的改写与代码一致；完成判据各格未受影响。
+
+### 进 main 记录（推送方 · 通道 1）
+
+- **门**：上一条推送方自审无阻断（不算非作者评审，理由见该条）；原评审（通道 2 钉 `8b3224d4`）的阻断与 Standards 非阻断都已修。
+- **重放**（16:38，隔离树 `/tmp/mcp1-land-rfc12`）：在 main `bc9ab094`（operator-channel/13 刚进 main）之上 cherry-pick，无冲突；跳过 `6cb57bb9`（已以 `187dccd2` 进 main）与分支清点 `6e441e43`。`git range-diff 993995e7..6f16046d` 对重放：其余各笔全 `=`，跳过的两笔为 `<`。本票文件在分支 tip 与重放 tip 上只差 psb/05 那一份，差的是 main 侧在 `993995e7` 之后对它的追加，本票那段原样在。迁移 `network_routing/0017` 在 main 上无同号。新旧 SHA 对照（分支 → main）：`c39d4d7f`→`717959d9`（认领）、`4b967223`→`9bcc1864`、`1183f7cc`→`6534ae41`、`0873a719`→`73efb6af`、`5b81e938`→`420846a8`、`79614fd8`→`006b9626`、`40db1d3d`→`c2e3d0c7`、`0c17d9b5`→`084e4b51`（psb/05）、`8b3224d4`→`58da606b`（完成记录）、`b4094ca7`→`171b1da8`（评审）、`209cea4c`→`3ed590b4`、`71ff7440`→`e9e1bbf7`、`6f16046d`→`18be66e8`（票面）。批 tip 干净检出重生成清点为 `613fdb74`。
+- **验证**（钉 `613fdb74`，16:39–16:42，DSN 指 55432）：干净检出 `gofmt -l .` 无输出；全仓 build / vet 退 0；先 `-v` 单跑 `TestFreezeScopesAreInvisibleToEachOther`、`TestSyntheticCrossBorderCandidatesGetCustomsAnswersThroughProductionWiring`、`TestAnUnreadableCustomsCatalogReachesBothEvidenceViewsAsADependencyFailure`，都是 PASS 非 SKIP；清点生成器重跑无漂移；`go test -count=1 -p 1 ./...` 138 包 ok、0 FAIL（另 14 包无测试文件）。
+- **推送**（16:42）：推前 `ls-remote` 远端 main 是 `bc9ab094`，`bc9ab094..613fdb74` 只有本票重放与清点；`git push origin 613fdb74:main`，CI run `38038844986` success。共享树 main 随后快进到 `613fdb74`，树上他人的未提交改动与本批文件零交叠、原样留着。本记录随后单独一笔。
