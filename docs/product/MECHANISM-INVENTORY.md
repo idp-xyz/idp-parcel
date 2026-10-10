@@ -10,7 +10,7 @@
 | architecture（非业务） | 0 | 13 | 0 | 0 | 0 | 0 |
 | collectionremittance | 22 | 10 | 4 | 6 | 0 | 3 |
 | customscompliance | 104 | 105 | 20 | 42 | 10 | 14 |
-| networkrouting | 71 | 69 | 9 | 13 | 2 | 6 |
+| networkrouting | 71 | 71 | 9 | 13 | 2 | 6 |
 | nodeoperations | 33 | 28 | 4 | 10 | 4 | 6 |
 | parcelpricing | 119 | 108 | 14 | 15 | 1 | 21 |
 | parcelshipment | 196 | 190 | 20 | 35 | 10 | 18 |
@@ -20,7 +20,7 @@
 | settlementaccounting | 162 | 111 | 28 | 54 | 9 | 9 |
 | transportfulfillment | 152 | 139 | 27 | 36 | 11 | 29 |
 | visibilityexception | 100 | 96 | 11 | 30 | 8 | 11 |
-| **合计** | 1178 | 1086 | 154 | 289 | 57 | 158 |
+| **合计** | 1178 | 1088 | 154 | 289 | 57 | 158 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 76、测试 111。
 
