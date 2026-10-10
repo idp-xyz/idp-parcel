@@ -134,7 +134,7 @@ http 测试。逐条如下，交通道 1 定。取证全部实测于 `a8cf12ff`�
 用户 21:1x 告知通道 4 已 crash，改由通道 1 自己做。第 2 件由通道 2 在 `mcp2-oc04-pcr` 上做（`task-4a593223`）。两件各记在自己那一节；
 Status 行由推送方在两件进 main 时一并改，免得两条分支各改同一行。
 
-**完成记录（通道 1 · 2026-10-10 21:2x · 代码 tip `12653a57`，基 `1d67e27c`）**——完工，待评审与重放
+**完成记录（通道 1 · 2026-10-10 21:1x · 代码 tip `12653a57`，基 `1d67e27c`）**——完工，待评审与重放
 
 - 各笔：`88bf4845` 认领；`12653a57` 用例。只加 `internal/networkrouting/adapters/http/operator_registry_intake_test.go`，生产代码零改动。
 - 照另五族的 `operator_registry_intake_test.go` 补本包那一层，四条：
