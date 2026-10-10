@@ -578,42 +578,17 @@ func advanceContinuation(parts ...string) string {
 }
 
 func assessDigest(command AssessAdvanceCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		fmt.Sprintf("%d", command.Verdict),
-		command.Obligation,
-		command.FundsFact,
-		command.Payer,
-		command.Responsibility,
-		command.Basis,
-		command.Currency,
-		fmt.Sprintf("%d", command.AmountMinor),
-		command.Version,
-		command.JudgedAt.UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return settlementCanonicalDigest(domain.CanonicalizeAssessAdvancePayload(
+		int64(command.Verdict), command.Obligation, command.FundsFact, command.Payer, command.Responsibility, command.Basis,
+		command.Currency, command.AmountMinor, command.Version, command.JudgedAt))
 }
 
 func recoveryDigest(command FormRecoveryCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		command.Assessment,
-		command.Customer,
-		command.Account,
-		fmt.Sprintf("%d", command.AmountMinor),
-		command.FormedAt.UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return settlementCanonicalDigest(domain.CanonicalizeFormRecoveryPayload(
+		command.Assessment, command.Customer, command.Account, command.AmountMinor, command.FormedAt))
 }
 
 func adjustDigest(command AdjustRecoveryCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		command.Recovery,
-		fmt.Sprintf("%d", command.Reason),
-		command.NewBasis,
-		fmt.Sprintf("%d", command.Direction),
-		command.Currency,
-		fmt.Sprintf("%d", command.AmountMinor),
-		command.Period,
-		command.FormedAt.UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return settlementCanonicalDigest(domain.CanonicalizeAdjustRecoveryPayload(
+		command.Recovery, int64(command.Reason), command.NewBasis, int64(command.Direction), command.Currency, command.AmountMinor, command.Period, command.FormedAt))
 }

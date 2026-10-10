@@ -9,9 +9,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
-	"time"
 
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
@@ -301,30 +299,17 @@ func billContinuation(parts ...string) string {
 // billContentDigest 是同一主张身份的内容比对锚：供应商、账期、币种、行金额与逐行裁决
 // 任一不同即是另一份内容。行先排序——提交顺序不构成不同的内容。
 func billContentDigest(command ReceiveSupplierBillCommand) string {
-	lines := make([]string, 0, len(command.Claim.Lines))
-	for _, line := range command.Claim.Lines {
-		lines = append(lines, strings.Join([]string{
-			line.Line.String(),
-			line.FeeItem.String(),
-			fmt.Sprintf("%d", line.ClaimedMinor),
-		}, "\x1f"))
+	lines := make([]domain.SupplierBillLineContent, len(command.Claim.Lines))
+	for i, line := range command.Claim.Lines {
+		lines[i] = domain.SupplierBillLineContent{Line: line.Line.String(), FeeItem: line.FeeItem.String(), ClaimedMinor: line.ClaimedMinor}
 	}
-	sort.Strings(lines)
-	directives := make([]string, 0, len(command.Directives))
-	for _, directive := range command.Directives {
-		directives = append(directives, strings.Join([]string{
-			directive.Line.String(),
-			fmt.Sprintf("%d", directive.Classification),
-			directive.ExpectedVersion.String(),
-			directive.Basis.String(),
-		}, "\x1f"))
+	directives := make([]domain.SupplierBillDirectiveContent, len(command.Directives))
+	for i, directive := range command.Directives {
+		directives[i] = domain.SupplierBillDirectiveContent{
+			Line: directive.Line.String(), Classification: int64(directive.Classification),
+			ExpectedVersion: directive.ExpectedVersion.String(), Basis: directive.Basis.String(),
+		}
 	}
-	sort.Strings(directives)
-	digest := sha256.Sum256([]byte(strings.Join(append(append([]string{
-		command.Claim.Supplier.String(),
-		command.Claim.Period.String(),
-		command.Claim.Currency.String(),
-		command.Claim.ReceivedAt.UTC().Format(time.RFC3339Nano),
-	}, lines...), directives...), "\x00")))
-	return hex.EncodeToString(digest[:])
+	return settlementCanonicalDigest(domain.CanonicalizeSupplierBillPayload(
+		command.Claim.Supplier.String(), command.Claim.Period.String(), command.Claim.Currency.String(), command.Claim.ReceivedAt, lines, directives))
 }

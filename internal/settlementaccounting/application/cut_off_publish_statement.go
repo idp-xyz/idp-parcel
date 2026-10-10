@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -721,50 +720,23 @@ func statementContinuation(parts ...string) string {
 }
 
 func publishDigest(command PublishStatementCommand) string {
-	charges := append([]string(nil), command.ChargeIDs...)
-	sort.Strings(charges)
-	digest := sha256.Sum256([]byte(strings.Join(append([]string{
-		command.Account,
-		command.Period,
-		command.Version,
-		command.Currency,
-		fmt.Sprintf("%d", command.DeclaredTotalMinor),
-		command.CutOffAt.UTC().Format(time.RFC3339Nano),
-	}, charges...), "\x00")))
-	return hex.EncodeToString(digest[:])
+	return settlementCanonicalDigest(domain.CanonicalizePublishStatementPayload(
+		command.Account, command.Period, command.Version, command.Currency, command.DeclaredTotalMinor, command.CutOffAt, command.ChargeIDs))
 }
 
 func inclusionDigest(command IncludeLateChargeCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		command.Number,
-		command.ChargeID,
-		command.SubsequentPeriod,
-		command.IncludedAt.UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return settlementCanonicalDigest(domain.CanonicalizeLateChargeInclusionPayload(
+		command.Number, command.ChargeID, command.SubsequentPeriod, command.IncludedAt))
 }
 
-// adjustmentInclusionDigest 与 inclusionDigest 分开算：两种纳入指向的金额对象不同类
-// （费用 / 调整），同一个纳入标识先纳费用再纳调整是冲突，不能因为两段字符串恰好相同而
-// 被读成重放。
+// adjustmentInclusionDigest 与 inclusionDigest 分面：两种纳入指向的金额对象不同类
+// （费用 / 调整），同一个纳入标识先纳费用再纳调整是冲突。
 func adjustmentInclusionDigest(command IncludeAdjustmentCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		"adjustment",
-		command.Number,
-		command.AdjustmentID,
-		command.SubsequentPeriod,
-		command.IncludedAt.UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return settlementCanonicalDigest(domain.CanonicalizeAdjustmentInclusionPayload(
+		command.Number, command.AdjustmentID, command.SubsequentPeriod, command.IncludedAt))
 }
 
 func disputeDigest(command OpenDisputeCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		command.Number,
-		command.ChargeID,
-		fmt.Sprintf("%d", command.DisputedMinor),
-		command.Reason,
-		command.OpenedAt.UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return settlementCanonicalDigest(domain.CanonicalizeOpenDisputePayload(
+		command.Number, command.ChargeID, command.DisputedMinor, command.Reason, command.OpenedAt))
 }

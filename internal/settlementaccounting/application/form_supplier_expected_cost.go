@@ -11,7 +11,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
@@ -285,21 +284,20 @@ func expectedCostDigest(cost domain.SupplierExpectedCost) string {
 	settlementCurrency, settlementMinor := cost.SettlementAmount()
 	conversion, _ := cost.Conversion()
 	occurrence := cost.Occurrence()
-	digest := sha256.Sum256([]byte(strings.Join([]string{
+	return settlementCanonicalDigest(domain.CanonicalizeSupplierExpectedCostPayload(
 		cost.Version().String(),
 		occurrence.ID().String(),
 		occurrence.Reason().String(),
 		occurrence.Version().String(),
-		occurrence.OccurredAt().UTC().Format(time.RFC3339Nano),
+		occurrence.OccurredAt(),
 		cost.FeeItem().String(),
 		cost.RuleVersion().String(),
 		cost.Agreement().String(),
 		cost.Evaluation().String(),
 		originalCurrency.String(),
-		fmt.Sprintf("%d", originalMinor),
+		originalMinor,
 		settlementCurrency.String(),
-		fmt.Sprintf("%d", settlementMinor),
+		settlementMinor,
 		conversion.String(),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	))
 }

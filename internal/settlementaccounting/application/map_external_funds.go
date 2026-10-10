@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -765,16 +764,8 @@ func fundsContinuation(parts ...string) string {
 // 不变式在版本边界上断开。0018 之前本上下文的采用没有生产入口、存量为零，故不回算旧行的摘要，
 // 靠的只是这一条（与该迁移头注同一句）。日后再改摘要元素，要么回算存量，要么在这里再记一版起点。
 func adoptDigest(command AdoptFundsFactCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		command.Source,
-		strings.TrimSpace(command.Payer),
-		fmt.Sprintf("%d", command.Kind),
-		command.Currency,
-		fmt.Sprintf("%d", command.AmountMinor),
-		command.Version,
-		command.OccurredAt.UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return settlementCanonicalDigest(domain.CanonicalizeAdoptFundsFactPayload(
+		command.Source, command.Payer, int64(command.Kind), command.Currency, command.AmountMinor, command.Version, command.OccurredAt))
 }
 
 // correctDigest 只算命令自己带的四样：回指、新版本、金额、更正时刻。来源 / 付款人 / 种类 / 币种 / 发生时刻
@@ -782,41 +773,21 @@ func adoptDigest(command AdoptFundsFactCommand) string {
 // 不是重放。与 adoptDigest 元素不同是有意的：同一（事实、版本）若先经 AdoptFact 作首版落下、再有人拿它
 // 当更正版本来提，两份摘要必不相等，答`冲突`而不是把首版当成更正的重放。
 func correctDigest(command CorrectFundsFactCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		command.Corrects,
-		command.Version,
-		fmt.Sprintf("%d", command.AmountMinor),
-		command.CorrectedAt.UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return settlementCanonicalDigest(domain.CanonicalizeCorrectFundsFactPayload(command.Corrects, command.Version, command.AmountMinor, command.CorrectedAt))
 }
 
 func mapDigest(command MapFundsCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		command.Fact,
-		fmt.Sprintf("%d", command.TargetKind),
-		command.Target,
-		command.Basis,
-		command.MappedAt.UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return settlementCanonicalDigest(domain.CanonicalizeMapFundsPayload(command.Fact, int64(command.TargetKind), command.Target, command.Basis, command.MappedAt))
 }
 
 func applyDigest(command ApplySettlementCommand) string {
-	mappings := append([]string(nil), command.MappingRefs...)
-	sort.Strings(mappings)
-	parts := []string{
-		command.Fact,
-		command.TargetCurrency,
-		command.Basis,
-		command.AppliedAt.UTC().Format(time.RFC3339Nano),
+	allocations := make([]domain.SettlementAllocationContent, len(command.Allocations))
+	for i, allocation := range command.Allocations {
+		allocations[i] = domain.SettlementAllocationContent{
+			Mapping: allocation.Mapping, TargetKind: int64(allocation.TargetKind), Target: allocation.Target,
+			Direction: int64(allocation.Direction), AmountMinor: allocation.AmountMinor,
+		}
 	}
-	parts = append(parts, mappings...)
-	for _, allocation := range command.Allocations {
-		parts = append(parts, fmt.Sprintf("%s|%d|%s|%d|%d",
-			allocation.Mapping, allocation.TargetKind, allocation.Target,
-			allocation.Direction, allocation.AmountMinor))
-	}
-	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return settlementCanonicalDigest(domain.CanonicalizeApplySettlementPayload(
+		command.Fact, command.TargetCurrency, command.Basis, command.AppliedAt, command.MappingRefs, allocations))
 }
