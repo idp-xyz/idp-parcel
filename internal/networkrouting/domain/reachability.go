@@ -5,6 +5,7 @@ package domain
 import (
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -40,6 +41,31 @@ type CandidateID struct{ requiredValue }
 func NewCandidateID(value string) (CandidateID, error) {
 	required, err := newRequiredValue("candidate ID", value)
 	return CandidateID{required}, err
+}
+
+// lineCandidateSeparator 隔开首版候选标识里的线路与版本。
+const lineCandidateSeparator = "@"
+
+// NewLineCandidateID 铸 ADR-0148 首个候选生成形态的候选标识：候选是一条线路的一个适用版本。标识进判断
+// 留痕、进库，形如「线路@版本」。要从标识取回线路版本的一侧只经 LineVersion，不自己约定分隔符——两侧
+// 各写一份时编得过、测得绿，到成本取数那一刻才答不出线路。
+func NewLineCandidateID(lineCode string, version int32) (CandidateID, error) {
+	return NewCandidateID(lineCode + lineCandidateSeparator + strconv.FormatInt(int64(version), 10))
+}
+
+// LineVersion 从首版形态的候选标识取回线路与版本。不是这一形态铸的标识答 ok 为假，由调用方按自己的
+// 失败格答，不猜。版本取最后一个分隔符之后的那段，线路编码里即便含分隔符也解得回。
+func (id CandidateID) LineVersion() (lineCode string, version int32, ok bool) {
+	raw := id.String()
+	at := strings.LastIndex(raw, lineCandidateSeparator)
+	if at <= 0 || at == len(raw)-1 {
+		return "", 0, false
+	}
+	parsed, err := strconv.ParseInt(raw[at+1:], 10, 32)
+	if err != nil {
+		return "", 0, false
+	}
+	return raw[:at], int32(parsed), true
 }
 
 // CandidateReason 是候选被淘汰或留作证据未知的稳定原因。它是引用而非自由文本，这样

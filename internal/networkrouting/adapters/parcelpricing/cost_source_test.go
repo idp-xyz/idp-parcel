@@ -288,8 +288,18 @@ func evidenceWithComparison(t *testing.T, currency string, paths ...nrports.Cand
 
 func pathOf(t *testing.T, line string, legs int) nrports.CandidatePath {
 	t.Helper()
-	candidate := value(t, nrdomain.NewCandidateID, line+"/1")
+	candidate := lineCandidate(t, line)
 	return nrports.CandidatePath{Candidate: candidate, Legs: make([]nrdomain.PlannedLeg, legs)}
+}
+
+// lineCandidate 按目录折叠同一个铸法给线路的版本 1 铸候选标识。
+func lineCandidate(t *testing.T, line string) nrdomain.CandidateID {
+	t.Helper()
+	candidate, err := nrdomain.NewLineCandidateID(line, 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return candidate
 }
 
 func judgmentKey(t *testing.T) nrdomain.InitialRouteJudgmentKey {
@@ -300,7 +310,7 @@ func judgmentKey(t *testing.T) nrdomain.InitialRouteJudgmentKey {
 func factOf(t *testing.T, facts []nrdomain.CandidateCostFact, candidate string) nrdomain.CandidateCostFact {
 	t.Helper()
 	for _, fact := range facts {
-		if fact.Candidate().String() == candidate+"/1" {
+		if fact.Candidate() == lineCandidate(t, candidate) {
 			return fact
 		}
 	}

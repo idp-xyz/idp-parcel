@@ -201,17 +201,12 @@ func (adapter *RouteCandidateCostAdapter) resolveLegs(
 	}
 	var legs []legEvaluation
 	for _, path := range evidence.Paths {
-		code, versionRaw, ok := strings.Cut(path.Candidate.String(), "/")
-		if !ok || code == "" || versionRaw == "" {
+		code, version, ok := path.Candidate.LineVersion()
+		if !ok {
 			return nil, fmt.Errorf("%w: candidate %q carries no line reference",
 				errUntranslatableEvaluation, path.Candidate)
 		}
-		version64, err := strconv.ParseInt(versionRaw, 10, 32)
-		if err != nil {
-			return nil, fmt.Errorf("%w: candidate %q version: %v",
-				errUntranslatableEvaluation, path.Candidate, err)
-		}
-		bases, err := adapter.deps.Bases.LoadLineCostBases(ctx, key.TenantID, code, int32(version64))
+		bases, err := adapter.deps.Bases.LoadLineCostBases(ctx, key.TenantID, code, version)
 		if err != nil {
 			return nil, fmt.Errorf("load line cost bases for %s: %w", code, err)
 		}

@@ -265,7 +265,7 @@ func generateCatalogCandidates(snapshot ports.NetworkCatalogSnapshot, purpose do
 		if err != nil {
 			return nil, err
 		}
-		id, err := domain.NewCandidateID(lineReference)
+		id, err := domain.NewLineCandidateID(line.Code, line.Version)
 		if err != nil {
 			return nil, err
 		}

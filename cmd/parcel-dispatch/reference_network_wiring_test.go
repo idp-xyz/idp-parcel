@@ -8,14 +8,17 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	nrpricing "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/parcelpricing"
 	nrpostgres "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/adapters/registrationjson"
 	nrapplication "go.idp.xyz/idp-parcel/internal/networkrouting/application"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
+	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 )
 
 // 票 routing-first-cut/11 判据一的取证：演示租户照 scripts/demo-seeds/data/network 的登记行逐行登记（稳定定义都是
@@ -180,6 +183,77 @@ func TestTheAdoptedDemoNetworkGetsPastRouteEvidenceThroughProductionWiring(t *te
 	if !errors.Is(err, nrports.ErrRouteCostSourceNotConfigured) {
 		t.Fatalf("候选成本取数侧：err = %v，今天应答计价输入未配置", err)
 	}
+}
+
+// Covers: 票 routing-first-cut/15 判据二——目录折叠经生产装配铸出的候选标识原样交候选成本取数侧，取数侧解得回同一条
+// 线路版本并拿它去读逐段依据。计价输入换成已配置的替身，只为越过「计价输入未配置」那一格走到解标识；读依据那一步
+// 截住，之后的评价不在本用例。取数侧若与铸造侧各自约定分隔符，这里在读依据之前就答 carries no line reference。
+func TestTheCostSideResolvesTheLineOfACandidateMintedByCatalogFolding(t *testing.T) {
+	db := newWiringDB(t)
+	registerDemoNetworkSeeds(t, db)
+	seedWiringCustomsCatalog(t, db, demoTenant, true)
+	evidence := loadWiringEvidence(t, db, demoTenant)
+
+	bases := &stoppingLineBases{}
+	costs := nrpricing.NewRouteCandidateCostAdapter(nrpricing.RouteCandidateCostDeps{
+		Bases: bases,
+		Input: configuredRoutePricingInput{snapshot: syntheticPricingInput(t)},
+	})
+	_, err := costs.LoadCandidateCosts(t.Context(), wiringRouteKey(t, demoTenant), evidence)
+	if !errors.Is(err, errStopAtLineBases) {
+		t.Fatalf("候选成本取数侧没走到读逐段依据：err = %v", err)
+	}
+	if len(bases.asked) != 1 || bases.asked[0] != (askedLine{code: "SYN-LINE-CN-SG-01", version: 1}) {
+		t.Fatalf("取数侧读依据 = %+v，想要 SYN-LINE-CN-SG-01 版本 1", bases.asked)
+	}
+}
+
+var errStopAtLineBases = errors.New("stop at line cost bases")
+
+type askedLine struct {
+	code    string
+	version int32
+}
+
+// stoppingLineBases 记下取数侧拿哪条线路版本来读依据，随即截住，不往下评价。
+type stoppingLineBases struct{ asked []askedLine }
+
+func (bases *stoppingLineBases) LoadLineCostBases(
+	_ context.Context, _ nrdomain.TenantID, lineCode string, version int32,
+) ([]nrports.LineSegmentCostBasis, error) {
+	bases.asked = append(bases.asked, askedLine{code: lineCode, version: version})
+	return nil, errStopAtLineBases
+}
+
+// configuredRoutePricingInput 答已配置。快照须是一份合法输入：判断声明了比较币时取数侧先拿它声明比较币，在解标识之前。
+type configuredRoutePricingInput struct{ snapshot ppdomain.PricingInputSnapshot }
+
+func (input configuredRoutePricingInput) PricingInputFor(
+	context.Context, nrdomain.InitialRouteJudgmentKey,
+) (ppdomain.PricingInputSnapshot, bool, error) {
+	return input.snapshot, true, nil
+}
+
+func syntheticPricingInput(t *testing.T) ppdomain.PricingInputSnapshot {
+	t.Helper()
+	check := func(what string, err error) {
+		t.Helper()
+		if err != nil {
+			t.Fatalf("合成计价输入的%s：%v", what, err)
+		}
+	}
+	tenant, err := ppdomain.NewTenantID(demoTenant)
+	check("租户", err)
+	scope, err := ppdomain.NewPricingScopeID("SYN-SCOPE-01")
+	check("计价范围", err)
+	subject, err := ppdomain.NewEstimateSubject("SYN-ESTIMATE-01")
+	check("估价主体", err)
+	weight, err := ppdomain.NewWeightFromString("1", ppdomain.WeightUnitKilogram)
+	check("重量", err)
+	snapshot, err := ppdomain.NewPricingInputSnapshot(tenant, scope, subject, "Z1", weight, nil,
+		time.Date(2026, time.October, 10, 0, 0, 0, 0, time.UTC))
+	check("快照", err)
+	return snapshot
 }
 
 // Covers: 判据一的反事实——没采用演示网络的租户，初始路由与可达性两个证据视图经生产装配照旧答`未配置`；参考配置随产品

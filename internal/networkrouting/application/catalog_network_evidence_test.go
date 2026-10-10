@@ -204,6 +204,10 @@ func TestACatalogLineCoveringBothEndsIsReachable(t *testing.T) {
 	if candidate.ID().String() != "SYN-LINE-XA-XB@3" || candidate.Outcome() != domain.CandidateQualified {
 		t.Fatalf("候选 = %s/%s，想要线路版本 SYN-LINE-XA-XB@3 合格", candidate.ID(), candidate.Outcome())
 	}
+	// 成本取数侧只经 LineVersion 从候选标识取回线路版本，折叠铸出的标识必须解得回同一条线路。
+	if code, version, ok := candidate.ID().LineVersion(); !ok || code != "SYN-LINE-XA-XB" || version != 3 {
+		t.Fatalf("候选标识 %s 解出 %q 版本 %d（ok=%v），想要 SYN-LINE-XA-XB 版本 3", candidate.ID(), code, version, ok)
+	}
 	if len(store.saved) != 1 || store.saved[0].ViewRevision.String() != "7" {
 		t.Fatalf("落库判断的视图修订应为目录修订锚 7，实得 %+v", store.saved)
 	}
