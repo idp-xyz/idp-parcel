@@ -2,11 +2,8 @@ package application
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
@@ -129,10 +126,18 @@ func (handler *VerifyDispositionHandler) Handle(
 		}, nil
 	}
 
+	references := make([]string, len(facts))
+	for i, fact := range facts {
+		references[i] = fact.Fact().String()
+	}
+	_, digest, err := domain.CanonicalizeDispositionFactSetPayload(references)
+	if err != nil {
+		return VerifyDispositionResult{}, err
+	}
 	key := ports.VerificationKey{
 		TenantID: command.TenantID,
 		Decision: command.Decision.ID(),
-		Digest:   factSetDigest(facts),
+		Digest:   digest,
 	}
 	existing, found, err := handler.deps.Store.FindByKey(ctx, key)
 	if err != nil {
@@ -209,16 +214,4 @@ func (handler *VerifyDispositionHandler) handOff(
 		return ""
 	}
 	return "CONT-VERIFICATION/" + key.Decision.String() + "/" + key.Digest[:8]
-}
-
-// factSetDigest 是事实集的稳定指纹：逐事实引用排序后拼接——同一集合无论装载顺序
-// 如何指纹恒定，新事实到达自然换指纹。
-func factSetDigest(facts []domain.ExecutionFact) string {
-	references := make([]string, 0, len(facts))
-	for _, fact := range facts {
-		references = append(references, fact.Fact().String())
-	}
-	sort.Strings(references)
-	digest := sha256.Sum256([]byte(strings.Join(references, "\x00")))
-	return hex.EncodeToString(digest[:])
 }

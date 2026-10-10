@@ -200,7 +200,18 @@ func (handler *ReceiveExternalResultHandler) Handle(
 	}
 
 	key := ports.ExternalResultKey{TenantID: command.TenantID, SourceID: command.SourceID}
-	digest := externalResultDigest(command)
+	var releaseContent *domain.ExternalReleaseContent
+	if command.Release != nil {
+		releaseContent = &domain.ExternalReleaseContent{
+			Kind:      command.Release.Kind,
+			Authority: command.Release.Authority.String(),
+			Condition: command.Release.Condition,
+		}
+	}
+	_, digest, err := domain.CanonicalizeExternalResultPayload(command.Layer, command.RawSemantics, command.ClaimedVersion, command.Attempt, command.Scope, command.OccurredAt, releaseContent)
+	if err != nil {
+		return ReceiveExternalResultResult{}, err
+	}
 	existing, found, err := handler.deps.Results.FindByKey(ctx, key)
 	if err != nil {
 		return resultStoreUndecided(command.SourceID), nil
@@ -433,27 +444,4 @@ func (handler *ReceiveExternalResultHandler) handOff(
 func resultContinuation(parts ...string) string {
 	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return "CONT-" + hex.EncodeToString(digest[:8])
-}
-
-// externalResultDigest 是同一来源响应身份的内容比对锚：层、原始语义、声称版本、尝试
-// 序号、范围与业务时间任一不同即是另一份内容；放行层再加放行三件——同一来源身份先说
-// 全部放行后说部分放行是来源响应冲突，不是重放。不带放行三件时指纹与此前一字不变，
-// 已入库的非放行层记录重放仍比得上。
-func externalResultDigest(command ReceiveExternalResultCommand) string {
-	parts := []string{
-		fmt.Sprintf("%d", command.Layer),
-		command.RawSemantics,
-		command.ClaimedVersion,
-		fmt.Sprintf("%d", command.Attempt),
-		command.Scope,
-		command.OccurredAt.UTC().Format(time.RFC3339Nano),
-	}
-	if command.Release != nil {
-		parts = append(parts,
-			fmt.Sprintf("%d", command.Release.Kind),
-			command.Release.Authority.String(),
-			command.Release.Condition)
-	}
-	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
-	return hex.EncodeToString(digest[:])
 }
