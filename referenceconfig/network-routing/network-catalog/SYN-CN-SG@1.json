@@ -1,0 +1,47 @@
+{
+  "identifier": "network-routing/network-catalog/SYN-CN-SG",
+  "version": 1,
+  "title": "演示网络：上海枢纽经深圳口岸至新加坡末端（合成）",
+  "source": "合成演示数据。节点、连接、线路、服务区域、日历与路由策略全是 SYN- 合成值，不出自任何真实网络或租户；国家 / 地区码 CN、SG 与时区名取公开标准。",
+  "note": "供演示租户显式采用、走合成演示动线（ADR-0146 决定五第四条）。不含租户、修订号与生效时点，由采用方在采用行里给（ADR-0146 决定三、ADR-0147 决定四）。线路三段的成本依据都引演示种子里那一张合成 BUY 成本卡 SYN-PLAN-CN-SG-COST-01/v1：演示只有这一张成本卡，合成金额只让成本单维排序有得比，不代表任何成本结构；采用方没登这张卡，各段如实待判断。日历的截单、处理时长与衔接缓冲是演示用的合成分钟数，不是任何地区或行业的惯例。",
+  "nodes": [
+    {"code": "SYN-NODE-SHA-HUB", "business_timezone": "Asia/Shanghai"},
+    {"code": "SYN-NODE-SZX-GATE", "business_timezone": "Asia/Shanghai"},
+    {"code": "SYN-NODE-SIN-HUB", "business_timezone": "Asia/Singapore"},
+    {"code": "SYN-NODE-SIN-LM", "business_timezone": "Asia/Singapore"}
+  ],
+  "connections": [
+    {"code": "SYN-CONN-SHA-SZX", "from_node": "SYN-NODE-SHA-HUB", "to_node": "SYN-NODE-SZX-GATE", "business_timezone": "Asia/Shanghai"},
+    {"code": "SYN-CONN-SZX-SIN", "from_node": "SYN-NODE-SZX-GATE", "to_node": "SYN-NODE-SIN-HUB", "business_timezone": "Asia/Shanghai"},
+    {"code": "SYN-CONN-SIN-LM", "from_node": "SYN-NODE-SIN-HUB", "to_node": "SYN-NODE-SIN-LM", "business_timezone": "Asia/Singapore"}
+  ],
+  "lines": [
+    {
+      "code": "SYN-LINE-CN-SG-01",
+      "segments": ["SYN-CONN-SHA-SZX", "SYN-CONN-SZX-SIN", "SYN-CONN-SIN-LM"],
+      "business_timezone": "Asia/Shanghai",
+      "applicable_scope": "NETWORK_SERVICE",
+      "cost_bases": [
+        {"segment_index": 0, "kind": "SUPPLIER_BUY_PLAN", "reference": "SYN-PLAN-CN-SG-COST-01/v1"},
+        {"segment_index": 1, "kind": "SUPPLIER_BUY_PLAN", "reference": "SYN-PLAN-CN-SG-COST-01/v1"},
+        {"segment_index": 2, "kind": "SUPPLIER_BUY_PLAN", "reference": "SYN-PLAN-CN-SG-COST-01/v1"}
+      ]
+    }
+  ],
+  "service_areas": [
+    {"code": "SYN-AREA-CN-EAST", "coverage": {"country": "CN", "origin_nodes": ["SYN-NODE-SHA-HUB"]}},
+    {"code": "SYN-AREA-SG", "coverage": {"country": "SG", "destination_nodes": ["SYN-NODE-SIN-LM"]}}
+  ],
+  "service_calendars": [
+    {"target_kind": "NODE", "target_code": "SYN-NODE-SHA-HUB", "cutoff_local_minute": 1080, "processing_minutes": 240},
+    {"target_kind": "NODE", "target_code": "SYN-NODE-SZX-GATE", "cutoff_local_minute": 1200, "processing_minutes": 480},
+    {"target_kind": "NODE", "target_code": "SYN-NODE-SIN-HUB", "processing_minutes": 360},
+    {"target_kind": "NODE", "target_code": "SYN-NODE-SIN-LM", "processing_minutes": 240},
+    {"target_kind": "CONNECTION", "target_code": "SYN-CONN-SHA-SZX", "buffer_minutes": 720},
+    {"target_kind": "CONNECTION", "target_code": "SYN-CONN-SZX-SIN", "buffer_minutes": 360},
+    {"target_kind": "CONNECTION", "target_code": "SYN-CONN-SIN-LM", "buffer_minutes": 120}
+  ],
+  "route_strategies": [
+    {"code": "SYN-RS-CN-SG-01", "applicable_scope": "NETWORK_SERVICE", "ranking_form": "COST_SINGLE_DIMENSION"}
+  ]
+}

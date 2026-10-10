@@ -166,6 +166,136 @@ func TestACalendarRowCarriesItsContent(t *testing.T) {
 	}
 }
 
+// demoNetwork 是本票随产品发布的演示网络那一版（ADR-0147 决定二的标识写法）。
+const demoNetwork = "network-routing/network-catalog/SYN-CN-SG@1"
+
+// Covers: ADR-0147 决定四——采用行只给身份、修订号与生效时点，内容取自点名的那一版参考配置，依据格由采用路径写成
+// 引用串；修订号与生效时点照采用行原样，不代填。
+func TestAnAdoptRowTakesItsContentFromTheReferenceAndCitesIt(t *testing.T) {
+	reference, err := referenceconfig.ParseReference(demoNetwork)
+	if err != nil {
+		t.Fatalf("解析：%v", err)
+	}
+	citation := reference.Citation()
+
+	node, err := registrationjson.NodeVersionFromJSON([]byte(`{"tenant_id": "SYN-TENANT-01",
+		"code": "SYN-NODE-SIN-HUB", "version": 3, "effective_from": "2026-05-01T00:00:00Z",
+		"effective_to": "2026-12-01T00:00:00Z", "adopt": "` + demoNetwork + `"}`))
+	if err != nil {
+		t.Fatalf("采用节点：%v", err)
+	}
+	if node.TenantID.String() != "SYN-TENANT-01" || node.Node.Code != "SYN-NODE-SIN-HUB" || node.Node.Version != 3 ||
+		node.Node.BusinessTimezone != "Asia/Singapore" || node.Node.Basis.String() != citation ||
+		!node.Node.HasEffectiveTo || node.Node.EffectiveTo.Format("2006-01-02") != "2026-12-01" {
+		t.Fatalf("采用节点 = %+v", node)
+	}
+
+	line, err := registrationjson.LineVersionFromJSON([]byte(`{"tenant_id": "SYN-TENANT-01",
+		"code": "SYN-LINE-CN-SG-01", "version": 1, "effective_from": "2026-01-01T00:00:00Z", "adopt": "` + demoNetwork + `"}`))
+	if err != nil {
+		t.Fatalf("采用线路：%v", err)
+	}
+	if line.Line.ApplicableScope != "NETWORK_SERVICE" || len(line.Line.Segments) != len(line.CostBases) ||
+		line.Line.Basis.String() != citation || line.Line.HasEffectiveTo {
+		t.Fatalf("采用线路 = %+v", line)
+	}
+	for index, basis := range line.CostBases {
+		if basis.SegmentIndex != index || basis.Kind != ports.SupplierBuyPlanBasis || basis.Reference != "SYN-PLAN-CN-SG-COST-01/v1" {
+			t.Fatalf("线路成本依据 %d = %+v", index, basis)
+		}
+	}
+
+	calendar, err := registrationjson.ServiceCalendarVersionFromJSON([]byte(`{"tenant_id": "SYN-TENANT-01",
+		"target_kind": "NODE", "target_code": "SYN-NODE-SHA-HUB", "version": 1, "effective_from": "2026-01-01T00:00:00Z",
+		"adopt": "` + demoNetwork + `"}`))
+	if err != nil {
+		t.Fatalf("采用日历：%v", err)
+	}
+	if calendar.Calendar.ProcessingMinutes == nil || calendar.Calendar.CutoffLocalMinute == nil ||
+		calendar.Calendar.Basis.String() != citation {
+		t.Fatalf("采用日历 = %+v", calendar.Calendar)
+	}
+
+	strategy, err := registrationjson.RouteStrategyVersionFromJSON([]byte(`{"tenant_id": "SYN-TENANT-01",
+		"code": "SYN-RS-CN-SG-01", "version": 1, "effective_from": "2026-01-01T00:00:00Z", "adopt": "` + demoNetwork + `"}`))
+	if err != nil {
+		t.Fatalf("采用路由策略：%v", err)
+	}
+	if strategy.Strategy.RankingForm != domain.CostSingleDimensionRanking || strategy.Strategy.ApplicableScope != "NETWORK_SERVICE" ||
+		strategy.Strategy.Basis.String() != citation {
+		t.Fatalf("采用路由策略 = %+v", strategy.Strategy)
+	}
+
+	area, err := registrationjson.ServiceAreaVersionFromJSON([]byte(`{"tenant_id": "SYN-TENANT-01",
+		"code": "SYN-AREA-SG", "version": 1, "effective_from": "2026-01-01T00:00:00Z", "adopt": "` + demoNetwork + `"}`))
+	if err != nil {
+		t.Fatalf("采用服务区域：%v", err)
+	}
+	if !area.Area.HasCoverage || area.Area.CoverageCountry != "SG" || len(area.Area.DestinationNodes) != 1 ||
+		area.Area.Basis.String() != citation {
+		t.Fatalf("采用服务区域 = %+v", area.Area)
+	}
+
+	connection, err := registrationjson.ConnectionVersionFromJSON([]byte(`{"tenant_id": "SYN-TENANT-01",
+		"code": "SYN-CONN-SZX-SIN", "version": 1, "effective_from": "2026-01-01T00:00:00Z", "adopt": "` + demoNetwork + `"}`))
+	if err != nil {
+		t.Fatalf("采用连接：%v", err)
+	}
+	if connection.Connection.FromNode != "SYN-NODE-SZX-GATE" || connection.Connection.ToNode != "SYN-NODE-SIN-HUB" ||
+		connection.Connection.Basis.String() != citation {
+		t.Fatalf("采用连接 = %+v", connection.Connection)
+	}
+}
+
+// Covers: 采用行写了内容或依据即拒（那几格由参考配置与采用路径给）；点名的版本没发布、不是网络目录的参考配置、或
+// 里面没有这个身份，都在触库前拒——没有「最接近的一版」可顶替。
+func TestAnAdoptRowRefusesContentOfItsOwnAndReferencesThatDoNotResolve(t *testing.T) {
+	adopt := func(code, adopt, extra string) error {
+		_, err := registrationjson.NodeVersionFromJSON([]byte(`{"tenant_id": "SYN-TENANT-01", "code": "` + code +
+			`", "version": 1, "effective_from": "2026-01-01T00:00:00Z", "adopt": "` + adopt + `"` + extra + `}`))
+		return err
+	}
+	for _, extra := range []string{`, "business_timezone": "Asia/Tokyo"`, `, "basis": "SYN-NET-OPS/CHANGE-0001"`} {
+		if err := adopt("SYN-NODE-SHA-HUB", demoNetwork, extra); !errors.Is(err, registrationjson.ErrAdoptedContentGiven) {
+			t.Fatalf("采用行另写 %s：err=%v，想要 ErrAdoptedContentGiven", extra, err)
+		}
+	}
+	if err := adopt("SYN-NODE-SHA-HUB", "network-routing/network-catalog/SYN-CN-SG@99", ""); !errors.Is(err, referenceconfig.ErrNotReleased) {
+		t.Fatalf("未发布版本：err=%v，想要 ErrNotReleased", err)
+	}
+	if err := adopt("SYN-NODE-SHA-HUB", "network-catalog/SYN-CN-SG@1", ""); !errors.Is(err, referenceconfig.ErrInvalidReference) {
+		t.Fatalf("坏形状：err=%v，想要 ErrInvalidReference", err)
+	}
+	if err := adopt("SYN-NODE-SHA-HUB", "party-commercial/registration-number-types/CN@1", ""); !errors.Is(err, registrationjson.ErrNotNetworkCatalogReference) {
+		t.Fatalf("别的目录的参考配置：err=%v，想要 ErrNotNetworkCatalogReference", err)
+	}
+	if err := adopt("SYN-NODE-NOT-THERE", demoNetwork, ""); !errors.Is(err, registrationjson.ErrNotInReference) {
+		t.Fatalf("参考配置里没有的身份：err=%v，想要 ErrNotInReference", err)
+	}
+	if _, err := registrationjson.ServiceCalendarVersionFromJSON([]byte(`{"tenant_id": "SYN-TENANT-01",
+		"target_kind": "LINE", "target_code": "SYN-LINE-CN-SG-01", "version": 1, "effective_from": "2026-01-01T00:00:00Z",
+		"adopt": "` + demoNetwork + `"}`)); !errors.Is(err, registrationjson.ErrNotInReference) {
+		t.Fatalf("参考配置里没有的日历：err=%v，想要 ErrNotInReference", err)
+	}
+}
+
+// Covers: 在线口那一路同样能采用，租户取操作者信封；采用行带 tenant_id 照旧拒。
+func TestOnlineAdoptionTakesTheTenantFromTheEnvelope(t *testing.T) {
+	tenant, err := domain.NewTenantID("SYN-TENANT-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	command, err := registrationjson.NodeVersionFromJSONForTenant([]byte(`{"code": "SYN-NODE-SHA-HUB", "version": 1,
+		"effective_from": "2026-01-01T00:00:00Z", "adopt": "`+demoNetwork+`"}`), tenant)
+	if err != nil || command.TenantID != tenant || command.Node.BusinessTimezone != "Asia/Shanghai" {
+		t.Fatalf("在线口采用：%+v err=%v", command, err)
+	}
+	if _, err := registrationjson.NodeVersionFromJSONForTenant([]byte(`{"tenant_id": "SYN-TENANT-02", "code": "SYN-NODE-SHA-HUB",
+		"version": 1, "effective_from": "2026-01-01T00:00:00Z", "adopt": "`+demoNetwork+`"}`), tenant); !errors.Is(err, registrationjson.ErrSelfReportedTenant) {
+		t.Fatalf("在线口采用行自报租户：err=%v", err)
+	}
+}
+
 // Covers: 线路登记行带逐段成本依据（票 routing-first-cut/10 的列，本票接进登记口）：种类按封闭两类逐格译，集外的
 // 词在入库前拒。
 func TestALineRowCarriesItsCostBases(t *testing.T) {

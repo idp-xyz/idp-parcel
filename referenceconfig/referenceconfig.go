@@ -23,6 +23,7 @@ import (
 //
 //go:embed all:party-commercial
 //go:embed all:parcel-shipment
+//go:embed all:network-routing
 var assets embed.FS
 
 var (
@@ -54,6 +55,7 @@ var releases = []release{
 	{"party-commercial/registration-number-types/CN", 1, "46087f2adfc18dc277d4dc534c2254663de5e13f8415cc8b180a553cb0fa300c"},
 	{"party-commercial/registration-number-types/SG", 1, "928d06b9ee6b96ded103aad5bc636c5e40e408a2620e67b026811cd0bb96767c"},
 	{"parcel-shipment/as-of-semantics/submission-receipt", 1, "299a3e122322e3b44bef185ee42fd3a97991942efd866cf731f9d2493d6764b2"},
+	{"network-routing/network-catalog/SYN-CN-SG", 1, "ad25370891505b9f5a11615f7206ed73539ca65f96e764da31daca7b5f0f05e5"},
 }
 
 // Reference 指名一份参考配置的一个版本。
