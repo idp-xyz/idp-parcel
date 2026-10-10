@@ -176,6 +176,57 @@ func TestReRegisteringACredentialSplitsReplayFromConflict(t *testing.T) {
 	}
 }
 
+// CCC-1 形状覆盖原先逐字段比的每一件：机构、程序、期限两端任一换了都是`内容冲突`（持有人与
+// 额度见上一例）。
+func TestEveryFieldOfTheCredentialShapeSplitsAConflict(t *testing.T) {
+	changes := map[string]func(*testing.T, *application.RegisterCredentialCommand){
+		"机构": func(t *testing.T, command *application.RegisterCredentialCommand) {
+			command.Issuer = configValue(t, domain.NewRegulatoryAuthorityReference, "SYN-AUTHORITY-02")
+		},
+		"程序": func(t *testing.T, command *application.RegisterCredentialCommand) {
+			command.Procedure = configValue(t, domain.NewCustomsProcedureReference, "SYN-PROC-EXPORT")
+		},
+		"起始": func(_ *testing.T, command *application.RegisterCredentialCommand) {
+			command.ValidFrom = command.ValidFrom.Add(time.Hour)
+		},
+		"截止": func(_ *testing.T, command *application.RegisterCredentialCommand) {
+			command.ValidTo = command.ValidTo.Add(time.Hour)
+		},
+	}
+	for name, change := range changes {
+		t.Run(name, func(t *testing.T) {
+			handler := newCredentialHandler(&credentialStoreDouble{})
+			if outcome, err := handler.Handle(t.Context(), credentialCommand(t)); err != nil ||
+				outcome != application.ConfigurationRegistered {
+				t.Fatalf("首登：err=%v outcome=%v", err, outcome)
+			}
+			changed := credentialCommand(t)
+			change(t, &changed)
+			if outcome, err := handler.Handle(t.Context(), changed); err != nil ||
+				outcome != application.ConfigurationContentConflict {
+				t.Fatalf("换%s该是`内容冲突`：err=%v outcome=%v", name, err, outcome)
+			}
+		})
+	}
+}
+
+// 读回的时刻带库侧位置信息：同一时刻换个时区仍是同一张凭证，答`已存在`而不是`内容冲突`。
+func TestTheSameInstantInAnotherZoneReplaysTheCredential(t *testing.T) {
+	handler := newCredentialHandler(&credentialStoreDouble{})
+	if outcome, err := handler.Handle(t.Context(), credentialCommand(t)); err != nil ||
+		outcome != application.ConfigurationRegistered {
+		t.Fatalf("首登：err=%v outcome=%v", err, outcome)
+	}
+	shifted := credentialCommand(t)
+	zone := time.FixedZone("CST", 8*3600)
+	shifted.ValidFrom = shifted.ValidFrom.In(zone)
+	shifted.ValidTo = shifted.ValidTo.In(zone)
+	if outcome, err := handler.Handle(t.Context(), shifted); err != nil ||
+		outcome != application.ConfigurationExisting {
+		t.Fatalf("同一时刻换时区该是`已存在`：err=%v outcome=%v", err, outcome)
+	}
+}
+
 func TestCredentialRegistrationDependencyFailuresAreUndecided(t *testing.T) {
 	writerDown := &credentialStoreDouble{registerErr: errors.New("writer unavailable")}
 	outcome, err := newCredentialHandler(writerDown).Handle(t.Context(), credentialCommand(t))

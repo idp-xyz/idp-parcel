@@ -180,3 +180,32 @@ func CanonicalizeDispositionFactSetPayload(facts []string) ([]byte, string, erro
 		Facts:            sortedCopy(facts),
 	})
 }
+
+// CanonicalizeCredentialRegistrationPayload 定形「登记监管凭证」。字段是登记册原先逐字段比的
+// 那一组：机构、持有人、程序、期限两端与次数额度；凭证身份是查找键，不进摘要。额度未提供
+// 写 null，与「零次」分开。
+func CanonicalizeCredentialRegistrationPayload(credential RegulatoryCredential) ([]byte, string, error) {
+	var uses *int
+	if quota, provided := credential.Uses(); provided {
+		uses = &quota
+	}
+	return marshalPayload(struct {
+		Canonicalization string `json:"canonicalization"`
+		Face             string `json:"face"`
+		Issuer           string `json:"issuer"`
+		Holder           string `json:"holder"`
+		Procedure        string `json:"procedure"`
+		ValidFrom        string `json:"valid_from"`
+		ValidTo          string `json:"valid_to"`
+		Uses             *int   `json:"uses"`
+	}{
+		Canonicalization: payloadCanonicalizationVersion,
+		Face:             "REGISTER_CREDENTIAL",
+		Issuer:           credential.Issuer().String(),
+		Holder:           credential.Holder().String(),
+		Procedure:        credential.Procedure().String(),
+		ValidFrom:        canonicalInstant(credential.ValidFrom()),
+		ValidTo:          canonicalInstant(credential.ValidTo()),
+		Uses:             uses,
+	})
+}

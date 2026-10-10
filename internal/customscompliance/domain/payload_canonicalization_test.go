@@ -12,6 +12,31 @@ func cccInstant() time.Time {
 	return time.Date(2026, time.March, 5, 10, 11, 12, 345678901, time.FixedZone("CST", 8*3600))
 }
 
+// canonicalCredential 经领域登记构造出一张凭证（期限一天），再定形。额度为零即来源未提供。
+func canonicalCredential(from time.Time, uses int) ([]byte, string, error) {
+	id, err := domain.NewCredentialID("CRED")
+	if err != nil {
+		return nil, "", err
+	}
+	issuer, err := domain.NewRegulatoryAuthorityReference("AUTH")
+	if err != nil {
+		return nil, "", err
+	}
+	holder, err := domain.NewCredentialHolderReference("HOLDER")
+	if err != nil {
+		return nil, "", err
+	}
+	procedure, err := domain.NewCustomsProcedureReference("PROC")
+	if err != nil {
+		return nil, "", err
+	}
+	credential, err := domain.RegisterCredential(id, issuer, holder, procedure, from, from.Add(24*time.Hour), uses)
+	if err != nil {
+		return nil, "", err
+	}
+	return domain.CanonicalizeCredentialRegistrationPayload(credential)
+}
+
 func TestCommandPayloadsRoundTripAsCCC1(t *testing.T) {
 	at := cccInstant()
 	cases := []struct {
@@ -61,6 +86,18 @@ func TestCommandPayloadsRoundTripAsCCC1(t *testing.T) {
 			call: func() ([]byte, string, error) {
 				return domain.CanonicalizeDispositionFactSetPayload([]string{"FACT-B", "FACT-A"})
 			},
+		},
+		{
+			name:     "credential registration",
+			document: `{"canonicalization":"CCC-1","face":"REGISTER_CREDENTIAL","issuer":"AUTH","holder":"HOLDER","procedure":"PROC","valid_from":"2026-03-05T02:11:12.345678901Z","valid_to":"2026-03-06T02:11:12.345678901Z","uses":12}`,
+			digest:   "CCC-1:d982368033045e3bfc00d1c0659d5cc34dbac6ca84e61654213f351e37be595c",
+			call:     func() ([]byte, string, error) { return canonicalCredential(at, 12) },
+		},
+		{
+			name:     "credential registration without a uses quota",
+			document: `{"canonicalization":"CCC-1","face":"REGISTER_CREDENTIAL","issuer":"AUTH","holder":"HOLDER","procedure":"PROC","valid_from":"2026-03-05T02:11:12.345678901Z","valid_to":"2026-03-06T02:11:12.345678901Z","uses":null}`,
+			digest:   "CCC-1:fe6795bc8bcc404dc86a64e5a005411d2366e60e5c3ab243949da9f4664eb041",
+			call:     func() ([]byte, string, error) { return canonicalCredential(at, 0) },
 		},
 	}
 	for _, tc := range cases {

@@ -13,7 +13,7 @@ import (
 // 五本同族，是登记面不是判断——第一个读它的判断是 UC-CC-003 步 7（JudgeCredentialApplicability）。
 //
 // 冲突判定同其余登记册：写口一律 ON CONFLICT DO NOTHING，同键已在册只答`已登记`；读回
-// 在册版本逐字段比，同则`已存在`（重放），异则`内容冲突`（拒绝，绝不顶替）。凭证是不可变
+// 在册版本按 CCC-1 形状比，同则`已存在`（重放），异则`内容冲突`（拒绝，绝不顶替）。凭证是不可变
 // 版本，「同身份换期限/换持有人/换额度」在这里全是冲突——那是另一张凭证，走另一个身份登记。
 // 事务由进程级入口给出。
 //
@@ -74,23 +74,27 @@ func (handler *RegisterCredentialHandler) Handle(
 	if err != nil || !found {
 		return ConfigurationUndecided, nil
 	}
-	if !sameCredential(existing, credential) {
+	same, err := sameCredentialContent(existing, credential)
+	if err != nil {
+		return CaseConfigurationOutcomeInvalid, err
+	}
+	if !same {
 		return ConfigurationContentConflict, nil
 	}
 	return ConfigurationExisting, nil
 }
 
-// sameCredential 逐字段比两版凭证。时间用 Equal 而不是 ==：读回的时刻带库侧位置信息，
-// 按结构体相等比会把同一时刻判成两个。
-func sameCredential(existing, requested domain.RegulatoryCredential) bool {
-	existingUses, existingProvided := existing.Uses()
-	requestedUses, requestedProvided := requested.Uses()
-	return existing.ID() == requested.ID() &&
-		existing.Issuer() == requested.Issuer() &&
-		existing.Holder() == requested.Holder() &&
-		existing.Procedure() == requested.Procedure() &&
-		existing.ValidFrom().Equal(requested.ValidFrom()) &&
-		existing.ValidTo().Equal(requested.ValidTo()) &&
-		existingUses == requestedUses &&
-		existingProvided == requestedProvided
+// sameCredentialContent 按 CCC-1 形状比两版凭证。册上不存摘要，两侧都从凭证本体现算，所以
+// 没有无版本的旧摘要要认。形状把时刻写成 UTC：读回的时刻带库侧位置信息，按结构体相等比会把
+// 同一时刻判成两个。
+func sameCredentialContent(existing, requested domain.RegulatoryCredential) (bool, error) {
+	_, existingDigest, err := domain.CanonicalizeCredentialRegistrationPayload(existing)
+	if err != nil {
+		return false, err
+	}
+	_, requestedDigest, err := domain.CanonicalizeCredentialRegistrationPayload(requested)
+	if err != nil {
+		return false, err
+	}
+	return existingDigest == requestedDigest, nil
 }
