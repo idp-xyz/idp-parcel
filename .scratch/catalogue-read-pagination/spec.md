@@ -1,7 +1,7 @@
 # 目录读口分页、排序与筛选下推：ADR-0144 落地（首批）
 
 Category: enhancement
-Status: in-progress——2026-09-24 通道 3 按票 [admin-web-group-legal-entities/04](../admin-web-group-legal-entities/issues/04-catalogue-read-pagination-sort-filter-contract.md) 的产出要求拆票；子票全部 ready-for-agent
+Status: resolved——2026-10-10 通道 1：首批子票 01–05 全数 resolved（见下表，05 由通道 5 于 `7ae4488c` 收口），跟踪容器收口。下文「为什么先拆这五张」所说其余各册按同一形状逐册拆票，自此可以开拆，另立，不挂在本 spec 下。此前：in-progress——2026-09-24 通道 3 按票 [admin-web-group-legal-entities/04](../admin-web-group-legal-entities/issues/04-catalogue-read-pagination-sort-filter-contract.md) 的产出要求拆票；子票全部 ready-for-agent
 出处：票 admin-web-group-legal-entities/04（用户 2026-09-24 授权通道 3 自决）→ [ADR-0144](../../docs/adr/0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md)。
 
 契约只在 ADR-0144 一处定义；本 spec 与子票只引它的决定号，不复述参数名、答复形状与校验规则——复述的那一份会在 ADR 修订时留在这里变旧。
