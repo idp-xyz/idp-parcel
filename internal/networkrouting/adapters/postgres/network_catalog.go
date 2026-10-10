@@ -585,10 +585,10 @@ func (catalog *NetworkCatalog) RegisterNodeVersion(
 	}
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO network_routing.logistics_node_version
-			(tenant_id, node_code, version, business_timezone, effective_from, effective_to)
-		 VALUES ($1, $2, $3, $4, $5, $6)`,
+			(tenant_id, node_code, version, business_timezone, effective_from, effective_to, basis_ref)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
 		tenant.String(), row.Code, row.Version, row.BusinessTimezone,
-		row.EffectiveFrom.UTC(), optionalTime(row.EffectiveTo, row.HasEffectiveTo),
+		row.EffectiveFrom.UTC(), optionalTime(row.EffectiveTo, row.HasEffectiveTo), basisColumn(row.Basis),
 	); err != nil {
 		return fmt.Errorf("register node version: %w", err)
 	}
@@ -620,11 +620,11 @@ func (catalog *NetworkCatalog) RegisterConnectionVersion(
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO network_routing.network_connection_version
 			(tenant_id, connection_code, version, from_node_code, to_node_code,
-			 business_timezone, effective_from, effective_to)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			 business_timezone, effective_from, effective_to, basis_ref)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 		tenant.String(), row.Code, row.Version, row.FromNode, row.ToNode,
 		row.BusinessTimezone, row.EffectiveFrom.UTC(),
-		optionalTime(row.EffectiveTo, row.HasEffectiveTo),
+		optionalTime(row.EffectiveTo, row.HasEffectiveTo), basisColumn(row.Basis),
 	); err != nil {
 		return fmt.Errorf("register connection version: %w", err)
 	}
@@ -661,11 +661,11 @@ func (catalog *NetworkCatalog) RegisterLineVersion(
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO network_routing.line_version
 			(tenant_id, line_code, version, segments, business_timezone,
-			 applicable_scope, effective_from, effective_to)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)`,
+			 applicable_scope, effective_from, effective_to, basis_ref)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
 		tenant.String(), row.Code, row.Version, segments,
 		row.BusinessTimezone, row.ApplicableScope, row.EffectiveFrom.UTC(),
-		optionalTime(row.EffectiveTo, row.HasEffectiveTo),
+		optionalTime(row.EffectiveTo, row.HasEffectiveTo), basisColumn(row.Basis),
 	); err != nil {
 		return fmt.Errorf("register line version: %w", err)
 	}
@@ -776,11 +776,11 @@ func (catalog *NetworkCatalog) RegisterServiceAreaVersion(
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO network_routing.service_area_version
 			(tenant_id, area_code, version, effective_from, effective_to,
-			 coverage_country, coverage_postal_prefixes, origin_node_codes, destination_node_codes)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			 coverage_country, coverage_postal_prefixes, origin_node_codes, destination_node_codes, basis_ref)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		tenant.String(), row.Code, row.Version, row.EffectiveFrom.UTC(),
 		optionalTime(row.EffectiveTo, row.HasEffectiveTo),
-		coverageCountry, prefixes, originNodes, destinationNodes,
+		coverageCountry, prefixes, originNodes, destinationNodes, basisColumn(row.Basis),
 	); err != nil {
 		return fmt.Errorf("register service area version: %w", err)
 	}
@@ -818,11 +818,11 @@ func (catalog *NetworkCatalog) RegisterServiceCalendarVersion(
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO network_routing.service_calendar_version
 			(tenant_id, target_kind, target_code, version, effective_from, effective_to,
-			 cutoff_local_minute, processing_minutes, buffer_minutes)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)`,
+			 cutoff_local_minute, processing_minutes, buffer_minutes, basis_ref)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
 		tenant.String(), kind, row.TargetCode, row.Version, row.EffectiveFrom.UTC(),
 		optionalTime(row.EffectiveTo, row.HasEffectiveTo),
-		row.CutoffLocalMinute, row.ProcessingMinutes, row.BufferMinutes,
+		row.CutoffLocalMinute, row.ProcessingMinutes, row.BufferMinutes, basisColumn(row.Basis),
 	); err != nil {
 		return fmt.Errorf("register service calendar version: %w", err)
 	}
@@ -867,13 +867,14 @@ func (catalog *NetworkCatalog) RegisterRouteStrategyVersion(
 		`INSERT INTO network_routing.route_strategy_version
 			(tenant_id, strategy_code, version, applicable_scope, effective_from, effective_to, ranking_form,
 			 freeze_form, freeze_remaining_segments, auto_reroute_form, auto_reroute_improvement_threshold_minor,
-			 comparison_currency, comparison_price_policy)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+			 comparison_currency, comparison_price_policy, basis_ref)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)`,
 		tenant.String(), row.Code, row.Version, row.ApplicableScope,
 		row.EffectiveFrom.UTC(), optionalTime(row.EffectiveTo, row.HasEffectiveTo), form, freezeForm, freezeLimit,
 		autoForm, autoThreshold,
 		optionalString(row.ComparisonCurrency, row.HasComparisonCurrency),
 		optionalString(row.ComparisonPricePolicy, row.HasComparisonPricePolicy),
+		basisColumn(row.Basis),
 	); err != nil {
 		return fmt.Errorf("register route strategy version: %w", err)
 	}
@@ -949,4 +950,18 @@ func optionalString(value string, present bool) *string {
 		return nil
 	}
 	return &value
+}
+
+// basisColumn 把登记依据折成 basis_ref 列（迁移 0018）：没给依据落 NULL。
+func basisColumn(basis domain.CatalogBasisReference) *string {
+	return optionalString(basis.String(), basis.Present())
+}
+
+// basisOf 是 basisColumn 的镜像。读回的串照样过领域构造门：库里一串打不开的引用是数据坏了，报错而不是
+// 吸收成「没给依据」。
+func basisOf(raw *string) (domain.CatalogBasisReference, error) {
+	if raw == nil {
+		return domain.CatalogBasisReference{}, nil
+	}
+	return domain.NewCatalogBasisReference(*raw)
 }

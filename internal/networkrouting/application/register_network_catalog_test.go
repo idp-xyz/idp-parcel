@@ -22,6 +22,8 @@ var catalogEffective = time.Date(2026, 8, 20, 12, 0, 0, 0, time.UTC)
 type catalogRegistryDouble struct {
 	err   error
 	calls int
+	// order 记写入口各方法被调的先后，线路版本行与它的成本依据谁先落要看得见。
+	order []string
 
 	lastTenant domain.TenantID
 	node       ports.NodeDefinitionVersion
@@ -31,6 +33,11 @@ type catalogRegistryDouble struct {
 	calendar   ports.ServiceCalendarDefinitionVersion
 	strategy   ports.RouteStrategyDefinitionVersion
 	adjustment ports.AvailabilityAdjustmentStatement
+
+	costBasesErr     error
+	costBasesLine    string
+	costBasesVersion int32
+	costBases        []ports.LineSegmentCostBasis
 }
 
 func (double *catalogRegistryDouble) RegisterNodeVersion(
@@ -53,6 +60,7 @@ func (double *catalogRegistryDouble) RegisterLineVersion(
 	_ context.Context, tenant domain.TenantID, row ports.LineDefinitionVersion,
 ) error {
 	double.calls++
+	double.order = append(double.order, "line")
 	double.lastTenant, double.line = tenant, row
 	return double.err
 }
@@ -85,7 +93,12 @@ func (double *catalogRegistryDouble) RegisterLineCostBases(
 	_ context.Context, tenant domain.TenantID, lineCode string, version int32, bases []ports.LineSegmentCostBasis,
 ) error {
 	double.calls++
+	double.order = append(double.order, "line-cost-bases")
 	double.lastTenant = tenant
+	double.costBasesLine, double.costBasesVersion, double.costBases = lineCode, version, bases
+	if double.costBasesErr != nil {
+		return double.costBasesErr
+	}
 	return double.err
 }
 
@@ -235,6 +248,29 @@ func TestCatalogRegistrationRefusesIncompleteRowsBySlot(t *testing.T) {
 			row.ApplicableScope = ""
 			return s.RegisterLineVersion(t.Context(), application.RegisterLineVersionCommand{TenantID: tenant(t), Line: row})
 		}, application.CatalogApplicableScopeMissing},
+		{"线路成本依据段号越出段链", func(t *testing.T, s *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
+			return s.RegisterLineVersion(t.Context(), application.RegisterLineVersionCommand{TenantID: tenant(t), Line: validLine(),
+				CostBases: []ports.LineSegmentCostBasis{{SegmentIndex: 1, Kind: ports.SupplierBuyPlanBasis, Reference: "SYN-PLAN-1/v1"}}})
+		}, application.CatalogCostBasisMalformed},
+		{"线路成本依据段号为负", func(t *testing.T, s *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
+			return s.RegisterLineVersion(t.Context(), application.RegisterLineVersionCommand{TenantID: tenant(t), Line: validLine(),
+				CostBases: []ports.LineSegmentCostBasis{{SegmentIndex: -1, Kind: ports.SupplierBuyPlanBasis, Reference: "SYN-PLAN-1/v1"}}})
+		}, application.CatalogCostBasisMalformed},
+		{"线路同一段登两条成本依据", func(t *testing.T, s *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
+			return s.RegisterLineVersion(t.Context(), application.RegisterLineVersionCommand{TenantID: tenant(t), Line: validLine(),
+				CostBases: []ports.LineSegmentCostBasis{
+					{SegmentIndex: 0, Kind: ports.SupplierBuyPlanBasis, Reference: "SYN-PLAN-1/v1"},
+					{SegmentIndex: 0, Kind: ports.InternalPolicyBasis, Reference: "SYN-POLICY-1/v1"},
+				}})
+		}, application.CatalogCostBasisMalformed},
+		{"线路成本依据种类不在封闭两类", func(t *testing.T, s *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
+			return s.RegisterLineVersion(t.Context(), application.RegisterLineVersionCommand{TenantID: tenant(t), Line: validLine(),
+				CostBases: []ports.LineSegmentCostBasis{{SegmentIndex: 0, Kind: ports.LineCostBasisKindInvalid, Reference: "SYN-PLAN-1/v1"}}})
+		}, application.CatalogCostBasisMalformed},
+		{"线路成本依据引用空白", func(t *testing.T, s *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
+			return s.RegisterLineVersion(t.Context(), application.RegisterLineVersionCommand{TenantID: tenant(t), Line: validLine(),
+				CostBases: []ports.LineSegmentCostBasis{{SegmentIndex: 0, Kind: ports.SupplierBuyPlanBasis, Reference: "  "}}})
+		}, application.CatalogCostBasisMalformed},
 
 		{"区域缺身份码", func(t *testing.T, s *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
 			row := validArea()
@@ -252,6 +288,27 @@ func TestCatalogRegistrationRefusesIncompleteRowsBySlot(t *testing.T) {
 			row.TargetCode = ""
 			return s.RegisterServiceCalendarVersion(t.Context(), application.RegisterServiceCalendarVersionCommand{TenantID: tenant(t), Calendar: row})
 		}, application.CatalogIdentityMissing},
+		{"日历截单越出当日分钟", func(t *testing.T, s *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
+			row := validCalendar()
+			row.CutoffLocalMinute = minutes(1440)
+			return s.RegisterServiceCalendarVersion(t.Context(), application.RegisterServiceCalendarVersionCommand{TenantID: tenant(t), Calendar: row})
+		}, application.CatalogCalendarContentOutOfRange},
+		{"日历截单为负", func(t *testing.T, s *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
+			row := validCalendar()
+			row.CutoffLocalMinute = minutes(-1)
+			return s.RegisterServiceCalendarVersion(t.Context(), application.RegisterServiceCalendarVersionCommand{TenantID: tenant(t), Calendar: row})
+		}, application.CatalogCalendarContentOutOfRange},
+		{"日历处理时长为负", func(t *testing.T, s *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
+			row := validCalendar()
+			row.ProcessingMinutes = minutes(-1)
+			return s.RegisterServiceCalendarVersion(t.Context(), application.RegisterServiceCalendarVersionCommand{TenantID: tenant(t), Calendar: row})
+		}, application.CatalogCalendarContentOutOfRange},
+		{"日历衔接缓冲为负", func(t *testing.T, s *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
+			row := validCalendar()
+			row.TargetKind, row.TargetCode = ports.TargetConnection, "SYN-CONN-A-B"
+			row.BufferMinutes = minutes(-1)
+			return s.RegisterServiceCalendarVersion(t.Context(), application.RegisterServiceCalendarVersionCommand{TenantID: tenant(t), Calendar: row})
+		}, application.CatalogCalendarContentOutOfRange},
 
 		{"策略缺适用范围", func(t *testing.T, s *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
 			row := validStrategy()
@@ -390,5 +447,108 @@ func TestCatalogRegistrationSurfacesRegistryErrors(t *testing.T) {
 func TestCatalogRegistrationRequiresARegistry(t *testing.T) {
 	if _, err := application.NewNetworkCatalogRegistration(nil); err == nil {
 		t.Fatal("nil 写入口应在构造期被拒")
+	}
+}
+
+func minutes(value int) *int { return &value }
+
+// Covers: 登记依据与日历三格是这一版的内容，过门后一字不改地到达写入口；日历登了 0 就是 0，不与没登混成一格
+// （ADR-0175 决定一）。
+func TestCatalogRegistrationCarriesBasisAndCalendarContentUntouched(t *testing.T) {
+	double := &catalogRegistryDouble{}
+	service := newCatalogRegistration(t, double)
+	tenant := catalogTenant(t)
+	ctx := t.Context()
+	basis := value(t, domain.NewCatalogBasisReference, "SYN-NET-OPS/CHANGE-0001")
+
+	node := validNode()
+	node.Basis = basis
+	connection := validConnection()
+	connection.Basis = basis
+	line := validLine()
+	line.Basis = basis
+	area := validArea()
+	area.Basis = basis
+	calendar := validCalendar()
+	calendar.Basis = basis
+	calendar.CutoffLocalMinute, calendar.ProcessingMinutes = minutes(1080), minutes(0)
+	strategy := validStrategy()
+	strategy.Basis = basis
+
+	runs := []struct {
+		name string
+		run  func() (application.RegisterCatalogResult, error)
+		got  func() any
+		want any
+	}{
+		{"节点", func() (application.RegisterCatalogResult, error) {
+			return service.RegisterNodeVersion(ctx, application.RegisterNodeVersionCommand{TenantID: tenant, Node: node})
+		}, func() any { return double.node }, node},
+		{"连接", func() (application.RegisterCatalogResult, error) {
+			return service.RegisterConnectionVersion(ctx, application.RegisterConnectionVersionCommand{TenantID: tenant, Connection: connection})
+		}, func() any { return double.connection }, connection},
+		{"线路", func() (application.RegisterCatalogResult, error) {
+			return service.RegisterLineVersion(ctx, application.RegisterLineVersionCommand{TenantID: tenant, Line: line})
+		}, func() any { return double.line }, line},
+		{"服务区域", func() (application.RegisterCatalogResult, error) {
+			return service.RegisterServiceAreaVersion(ctx, application.RegisterServiceAreaVersionCommand{TenantID: tenant, Area: area})
+		}, func() any { return double.area }, area},
+		{"服务日历", func() (application.RegisterCatalogResult, error) {
+			return service.RegisterServiceCalendarVersion(ctx, application.RegisterServiceCalendarVersionCommand{TenantID: tenant, Calendar: calendar})
+		}, func() any { return double.calendar }, calendar},
+		{"路由策略", func() (application.RegisterCatalogResult, error) {
+			return service.RegisterRouteStrategyVersion(ctx, application.RegisterRouteStrategyVersionCommand{TenantID: tenant, Strategy: strategy})
+		}, func() any { return double.strategy }, strategy},
+	}
+	for _, run := range runs {
+		result, err := run.run()
+		if err != nil || result.Outcome() != application.CatalogRegistered {
+			t.Fatalf("%s：outcome=%s refusal=%s err=%v", run.name, result.Outcome(), result.RefusalReason(), err)
+		}
+		if !reflect.DeepEqual(run.got(), run.want) {
+			t.Fatalf("%s：写入口收到 %+v，想要原样 %+v", run.name, run.got(), run.want)
+		}
+	}
+}
+
+// Covers: 线路版本的逐段成本依据随版本行一起登（票 routing-first-cut/10 的写入口，本票接上登记用例）：版本行先落、
+// 依据行跟在后面，同一环境事务；依据原样到达，段没挂依据就不补。
+func TestALineVersionRegistersItsCostBasesAfterTheVersionRow(t *testing.T) {
+	double := &catalogRegistryDouble{}
+	service := newCatalogRegistration(t, double)
+	tenant := catalogTenant(t)
+	line := validLine()
+	line.Segments = []string{"SYN-CONN-A-B", "SYN-CONN-B-C", "SYN-CONN-C-D"}
+	bases := []ports.LineSegmentCostBasis{
+		{SegmentIndex: 0, Kind: ports.SupplierBuyPlanBasis, Reference: "SYN-PLAN-COST-1/v1"},
+		{SegmentIndex: 2, Kind: ports.InternalPolicyBasis, Reference: "SYN-POLICY-1/v1"},
+	}
+
+	result, err := service.RegisterLineVersion(t.Context(),
+		application.RegisterLineVersionCommand{TenantID: tenant, Line: line, CostBases: bases})
+	if err != nil || result.Outcome() != application.CatalogRegistered {
+		t.Fatalf("outcome=%s refusal=%s err=%v", result.Outcome(), result.RefusalReason(), err)
+	}
+	if !reflect.DeepEqual(double.order, []string{"line", "line-cost-bases"}) {
+		t.Fatalf("写入口调用次序 = %v，想要先版本行后依据行", double.order)
+	}
+	if double.costBasesLine != line.Code || double.costBasesVersion != line.Version || !reflect.DeepEqual(double.costBases, bases) {
+		t.Fatalf("依据行 = %s@%d %+v，想要 %s@%d %+v",
+			double.costBasesLine, double.costBasesVersion, double.costBases, line.Code, line.Version, bases)
+	}
+}
+
+// Covers: 依据行的写入口出错照样上抛不折格——版本行已在同一事务里，进程级入口回滚整笔。
+func TestALineCostBasesRegistryErrorSurfaces(t *testing.T) {
+	boom := errors.New("line cost basis store is down")
+	double := &catalogRegistryDouble{costBasesErr: boom}
+	service := newCatalogRegistration(t, double)
+
+	_, err := service.RegisterLineVersion(t.Context(), application.RegisterLineVersionCommand{
+		TenantID: catalogTenant(t), Line: validLine(),
+		CostBases: []ports.LineSegmentCostBasis{{SegmentIndex: 0, Kind: ports.SupplierBuyPlanBasis, Reference: "SYN-PLAN-1/v1"}},
+	})
+	if !errors.Is(err, boom) {
+		t.Fatalf("写入口的错误没有原样上抛：%v", err)
 	}
 }
