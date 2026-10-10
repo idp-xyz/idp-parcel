@@ -1,7 +1,7 @@
 # 13 关务适用性判断的评审尾巴：词条改引规则节、两处旧口径注释、NR 侧同国用例
 
 Category: enhancement
-Status: in-progress——2026-10-10 通道 2 认领，分支 `mcp2-rfc13`、基 `1f8b0cea`。此前 ready-for-agent——2026-10-10 通道 1 立（用户授权自决），出自 [12](12-cc-customs-applicability-judgment-for-route-candidates.md) 阻断修复两份非作者补评审（通道 3、通道 4，均钉 `18be66e8`）的非阻断项
+Status: in-progress——**完工，待评审与重放**（2026-10-10 21:4x 通道 2；分支 `mcp2-rfc13`，代码 tip `ce2e3454`，基 `1f8b0cea`）；完成记录见文末。此前 in-progress——2026-10-10 通道 2 认领，分支 `mcp2-rfc13`、基 `1f8b0cea`。此前 ready-for-agent——2026-10-10 通道 1 立（用户授权自决），出自 [12](12-cc-customs-applicability-judgment-for-route-candidates.md) 阻断修复两份非作者补评审（通道 3、通道 4，均钉 `18be66e8`）的非阻断项
 Blocked by: [11](11-demo-network-adopted-as-reference-configuration.md)（已解：11 已进 main，通道 1 派单时核过 `internal/networkrouting` 与 `internal/customscompliance` 上无他人在途）——不是逻辑依赖，是地盘：11 正在 `internal/networkrouting` 写，等它进 main 再动，免得一个目录两个写入方
 归档：不属 [psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md) 的子票集；放在本目录是因为出自 12 的评审。
 地盘：`docs/domain/customs-compliance/CONTEXT.md`「关务适用性判断」词条；`internal/networkrouting/adapters/customscompliance/` 的注释与用例；`cmd/parcel-dispatch/assemble.go` 里 `acceptanceReachability` 的头注。
@@ -22,6 +22,46 @@ Blocked by: [11](11-demo-network-adopted-as-reference-configuration.md)（已解
 
 ## 完成判据
 
-- [ ] 词条与规则节对状态未知只剩一处定义，「两端异国」限定在。
-- [ ] 两处注释与现行答法一致。
-- [ ] 同国用例在现状上绿、在上面两种改坏之一上红，写明怎么证的。
+- [x] 词条与规则节对状态未知只剩一处定义，「两端异国」限定在。——词条状态未知一格改为「带成因，成因各格同以该规则为准」（`ce2e3454`）；
+  成因只在规则节「关务适用性判断」里「任一端国家/地区缺码时作答状态未知」那一条列一处，「两端异国」限定在那里。邻词条未动，改后重读过。
+- [x] 两处注释与现行答法一致。——`ErrCustomsCatalogUnreadable` 补上经初始路由视图形成的`未决`；`acceptanceReachability` 头注改为两端异国的件
+  在这条装配上形成`未形成判断`（`b7b75a2d`）。
+- [x] 同国用例在现状上绿、在上面两种改坏之一上红，写明怎么证的。——`TestASameCountryCandidateIsStillAnsweredWhenTheCatalogIsUnreadable`
+  （`41bb6348`）现状 PASS，两种改坏都红，见完成记录「判别力」。
+
+## 完成记录（通道 2 · 2026-10-10 21:4x · 代码 tip `ce2e3454`，基 `1f8b0cea`）
+
+派单 `task-5b077857`；证据层级 `S`（合成替身与 `SYN-` 夹具）。
+
+**各笔**：`2c1d9936` 认领；`41bb6348` 第 3 条同国用例；`b7b75a2d` 第 2 条两处注释；`ce2e3454` 第 1 条词条；本记录随其后一笔。
+
+**判断项**
+
+1. 同国用例的判断服务接真的 CC 处理器（`ccapplication.NewCustomsApplicabilityHandler` 配一份读不动的目录），不用本文件的答卷替身：替身交的是
+   预先折好的作答，CC 侧「读不到时整批答状态未知」若坏在处理器里，替身照样交出可用，用例拦不住。该适配器包是 ADR-0025 定的跨上下文位置，
+   `TestBusinessModulesDoNotReachIntoEachOther` 对它整包豁免，用例导入 CC 的 application 不越界。
+2. 用例同时钉出处：判断标识等于 `FoldCustomsApplicabilityUnreadable` 对同一候选铸的那一个、不带目录版本——证它走的确是读不到那条路，没被当成
+   目录为空（CC 规则节要求两条路的判断标识不得相同）。
+3. 词条只换状态未知那一格的括号，形状照 `e9e1bbf7`；后面那句「状态未知不折成可用，也不从「查无记录」推导可用」留着——它说的是这一格怎么对待，
+   不是哪几格落进它，与规则节同向、不相抵。
+4. `acceptanceReachability` 头注写「两端异国的件」：同国与缺码不靠目录，目录读不到时照常作答，不是整条装配一律`未形成判断`。机制只在
+   `nrcustoms.ErrCustomsCatalogUnreadable` 的注释里讲，头注指过去。
+5. **提交信更正**：`41bb6348` 的提交信末句写「机制清点在本笔的检出上重生成，随笔提」，实际重生成无差，该笔没带清点文件。分支已推、本仓不
+   force-push，在此更正。
+
+**判别力**（临时变异，证完 `git checkout` 还原，未提交；钉 `41bb6348`）
+
+- M1 本桥连同国一起上抛：`translate` 的可用一格加「出处不带目录版本即交 `ErrCustomsCatalogUnreadable`」——新用例红，
+  `err = network routing: customs applicability: the customs port and path catalog is unreadable: candidate cand-domestic`。
+- M2 CC 读不到时整批答状态未知：`FoldCustomsApplicabilityUnreadable` 去掉先过 `foldEndpoints` 那一段——新用例红，同一句。
+- 现状：新用例 PASS，所在包全绿。
+
+**验证**（钉 `ce2e3454`，隔离工作树无未提交，含 PG）
+
+- `go build ./...`、`go vet ./...` 退 0；改动的 `.go` 文件 `gofmt -l` 零行，CR 与 BOM 均无。
+- `IDP_PARCEL_POSTGRES_DSN=postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable go test -count=1 -p 1` 退 0：包取 `go list -test` 反查依赖
+  `internal/networkrouting/adapters/customscompliance` 或 `cmd/parcel-dispatch` 的全部包（即该适配器包与 `cmd/parcel-dispatch`），加 `./internal/architecture/...`。
+- `-v` 单跑 `cmd/parcel-dispatch` 的 `TestAnUnreadableCustomsCatalogReachesBothEvidenceViewsAsADependencyFailure`：PASS，非 SKIP。
+- `tools/mechanism-inventory` 在 `ce2e3454` 的干净检出上重生成，`docs/product/MECHANISM-INVENTORY.md` 无差。
+
+**未验**：全仓 `go test ./...`，留推送方重放后那一跑。
