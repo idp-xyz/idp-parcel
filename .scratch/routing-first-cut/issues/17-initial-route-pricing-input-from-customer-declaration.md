@@ -1,7 +1,7 @@
 # 17 初始路由的计价输入：预路由用客户声明，逐段折成价卡区域待 PP owner 定
 
 Category: enhancement
-Status: 阻断已修，待 Spec 轴复评与重放——2026-10-10 23:5x 通道 5（task-c99d4d48）：通道 3 非作者评审（task-25096e0d，钉 `f698902d`）的 Spec 阻断一由 `98780032` 补用例修好，生产码不动；Standards 非阻断三条落在 `892325f5`（两处注释、一处哨兵改名，后者是生产码），其余处置见文末 Comments。进 main 时在下面那一列之外加取 `98780032`、`892325f5` 与本笔。此前：完工，待评审与重放——2026-10-10 23:2x 通道 5 在分支 `mcp5-rfc17`（基 `5e6cd4b6`）上做完并推 origin：代码 `943a4379`、`26da76a6`，清点 `783b664b`，票面为其后一笔；完成记录见文末。进 main 时取 `943a4379`、`26da76a6`、`783b664b` 与票面笔；认领笔 `57d5478e` 只改本行。此前：in-progress——2026-10-10 22:5x 通道 5 认领（单 task-e4c159c7，改派自 task-58320bc4），分支 `mcp5-rfc17` 基 main `5e6cd4b6`。此前：ready-for-agent——2026-10-10 22:2x 通道 1 分诊（用户授权自决）：本票收为机制半边，「逐段折成价卡区域」拆到 [18](18-leg-endpoints-folded-into-price-card-zones.md)（needs-info），见「分诊裁定」。此前 needs-triage——2026-10-10 通道 1 立（用户授权自决），出自 [11](11-demo-network-adopted-as-reference-configuration.md) 的判据一取证
+Status: resolved——2026-10-11 00:26 通道 1 重放进 main：`e856cc2c`…`cb9d21ef`，推送方代落注释 `2e466286`，清点 `86100a68`；复评与进 main 记录见文末。此前 阻断已修，待 Spec 轴复评与重放——2026-10-10 23:5x 通道 5（task-c99d4d48）：通道 3 非作者评审（task-25096e0d，钉 `f698902d`）的 Spec 阻断一由 `98780032` 补用例修好，生产码不动；Standards 非阻断三条落在 `892325f5`（两处注释、一处哨兵改名，后者是生产码），其余处置见文末 Comments。进 main 时在下面那一列之外加取 `98780032`、`892325f5` 与本笔。此前：完工，待评审与重放——2026-10-10 23:2x 通道 5 在分支 `mcp5-rfc17`（基 `5e6cd4b6`）上做完并推 origin：代码 `943a4379`、`26da76a6`，清点 `783b664b`，票面为其后一笔；完成记录见文末。进 main 时取 `943a4379`、`26da76a6`、`783b664b` 与票面笔；认领笔 `57d5478e` 只改本行。此前：in-progress——2026-10-10 22:5x 通道 5 认领（单 task-e4c159c7，改派自 task-58320bc4），分支 `mcp5-rfc17` 基 main `5e6cd4b6`。此前：ready-for-agent——2026-10-10 22:2x 通道 1 分诊（用户授权自决）：本票收为机制半边，「逐段折成价卡区域」拆到 [18](18-leg-endpoints-folded-into-price-card-zones.md)（needs-info），见「分诊裁定」。此前 needs-triage——2026-10-10 通道 1 立（用户授权自决），出自 [11](11-demo-network-adopted-as-reference-configuration.md) 的判据一取证
 Blocked by: [15](15-candidate-identifier-minted-with-at-but-cost-adapter-splits-on-slash.md)（已解：15 于 2026-10-10 21:2x 进 main）——计价输入一接上就会撞那条缝；[13](13-customs-applicability-review-tails.md)（已解：13 于 2026-10-10 22:3x 进 main）——不是逻辑依赖，是地盘：13 在 `cmd/parcel-dispatch/assemble.go` 改注释、待评审与重放，等它进 main 再动，免得一个文件两个写入方（[16](16-demo-tenant-pre-acceptance-financial-control-cells.md) 也改同一文件的注释，派单时核）
 归档：不属 [psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md) 的子票集；放在本目录是因为它挡在 11 判据一的路上。
 地盘：`internal/networkrouting` 的计价消费方适配器（`adapters/parcelpricing`）与计价输入端口；`cmd/parcel-dispatch` 的 `routeCosts` 装配。区域折法不在本票（18）。
@@ -145,3 +145,46 @@ M2b（M2 加上「全段未评价才答待判断」）：全绿 → Spec 阻断�
 - **Spec 非阻断④**：已作为判断项 10 补入，标「越权风险点 · 待 NR owner 复核」。
 - **Spec 非阻断⑤**：只记，不补。至今没有用例经处理器钉住「编排落 `CANDIDATE_COSTS_PENDING`」：域层只钉 `RankingCostsPending`，真库用例只测到适配器。映射是 `create_initial_route.go` 的既有代码，不是本票欠的。
 - **验证**（WSL，go1.26.8，DSN 指 55432）：`892325f5` 的内容在提交前跑——改动文件 `gofmt -l` 无输出，无 CR、无 BOM；`go build ./...`、`go vet ./...` 退 0；`go test -count=1 -p 1 ./internal/networkrouting/... ./internal/architecture/...` 退 0，13 包 ok；带 DSN 跑 `go test -count=1 -p 1 ./cmd/parcel-dispatch/...` 退 0。提交后在干净的 `892325f5` 上 `-v` 单跑 `TestTheAdoptedDemoNetworkGetsPastRouteEvidenceThroughProductionWiring` 与 `TestADeclaredParcelReachesTheCostSideWhileLegZonesStayUnconfigured`，都是 PASS，非 SKIP。只在既有测试文件里加了用例，没增删测试文件，不重生成机制清点。没跑全仓。
+
+### 复评 ← 通道 3 · 钉 `bb2806f1` · 2026-10-11 00:2x（`task-a41762a3` ← 通道 1；推送方照录）
+
+rfc/17 复评（通道 3，diff f698902d..bb2806f1，只读）结论：两轴都无阻断，阻断①已真解，可以重放。
+
+**Spec**
+
+- 阻断：无。阻断①已解——bb2806f1 上 cost_source.go 与 f698902d 逐字节相同（cmp 核过），故原 M2b 副本仍适用；作者的 /tmp/rfc17-mcp5-m2b.json 值就是这份副本、只是键换成作者树路径，确只差 M2b 两处。我按本检出路径重写 JSON 套上：新用例 TestAPricedLegDoesNotStandInForALegWhoseZoneIsUnconfigured 红（fact = PRICED 500 minor, want PENDING），整个 internal/networkrouting/... 只红这一条；同一 overlay 下 -skip 这条 → 包绿（它就是唯一的判别用例）；撤掉 overlay → 12 包全绿。
+- 非阻断：无。
+- 无发现：处置②–⑤照原意——判断项 1、3 补的代价就是评审所写，仍标待 NR / PP owner 复核；判断项 6 改写为拆口后新显的缺口、不再挂 10 判断项 3；新增判断项 10 只陈述事实、标待 NR owner 复核，没替 owner 拍板；⑤ 只记不补，与原意（既有映射、不算本票欠的）一致。评审原文照录无误。
+
+**Standards**
+
+- 阻断：无。
+- 非阻断（可不改、不挡重放）：internal/networkrouting/ports/ports.go 的 ErrRouteCostSourceNotConfigured 新头注写「只缺某一段的输入（区域、包裹事实）……那一段待判断」——包裹事实是整件判断的输入，缺了是各段全待判断，不是「某一段」；措辞不准，语义没错。
+- 无发现：892325f5 的两处头注只写机制，「消费方实例半边」已去掉，没再写实例现状。errUntranslatableParcelFacts 未导出，git grep 只见定义与 declared_parcel_facts.go 里三处 %w 包装，全仓无 errors.Is 按类别分派；编排对非哨兵错误一律落 COST_SOURCE_UNAVAILABLE，行为只变消息前缀。「各段共引」已改；剩下两处「三段」（TestTheAdoptedDemoNetworkGetsPastRouteEvidenceThroughProductionWiring 的场景头注与 Fatalf 消息）和同一用例的 len(evidence.Paths[0].Legs) != 3 断言同处，段数一变用例即红，不会无声失真，理由成立。
+
+门：在 bb2806f1 检出上 go build ./... 与 go vet ./... 退 0；go test -count=1 ./internal/networkrouting/... 12 包 ok；未跑 cmd 与全仓（按卡面）。M2b 红绿：套 M2b 新用例红、他人全绿；M2b + -skip 新用例绿；不套绿。检出 git status 始终干净，git worktree remove /tmp/idp-rereview-rfc17-mcp3 已做（未加 --force），/tmp/rfc17-mut 已删。未改任何分支、未提交、未推。
+
+### 复评处置（通道 1 · 2026-10-11 00:2x）
+
+- Standards 非阻断：推送方代落 `2e466286`，只改 `ErrRouteCostSourceNotConfigured` 头注那一行，把缺某一段的区域（那一段待判断）与缺包裹事实（各段都待判断）分开说。作者通道 5 余量已留尽，一行注释不值再派一轮。
+
+## 进 main 记录（通道 1 · 2026-10-11 00:26）
+
+- 重放：隔离检出 `/tmp/idp-land-rfc17` 从 `53c71086` 起，cherry-pick 分支各笔，零冲突；分支上的清点笔 `783b664b` 不搬，清点在重放 tip 上重生成。`cmd/parcel-dispatch/assemble.go` 也被 [16](16-demo-tenant-pre-acceptance-financial-control-cells.md) 改过注释，自动合并后两边的改动都在：本票改过的每份非清点文件与作者 tip `bb2806f1` 逐文件比，只差 16 改的那两段注释。
+
+  | 分支 `mcp5-rfc17` | main |
+  |---|---|
+  | `57d5478e` 认领 | `e856cc2c` |
+  | `943a4379` 机制半边 | `b33ea7f6` |
+  | `26da76a6` 真库用例 | `aaa870f1` |
+  | `783b664b` 清点 | 不搬，由 `86100a68` 重生成 |
+  | `f698902d` 完成记录 | `c3168f44` |
+  | `98780032` 阻断修复（用例） | `1d7be3bc` |
+  | `892325f5` 非阻断（注释与哨兵） | `a8bd8cd5` |
+  | `bb2806f1` 评审照录与处置 | `cb9d21ef` |
+  | 推送方代落（复评非阻断） | `2e466286` |
+
+- 清点 `86100a68`（在 `2e466286` 的检出上重生成）：networkrouting 生产 71→72、测试 71→72；跨上下文消费缝生产文件 94→95，networkrouting→parcelpricing 1→2。
+- 门（同一检出 @ `86100a68`）：gofmt 两改动目录无输出；`go build ./...`、`go vet ./...` 退 0；真库探针 `TestFreezeScopesAreInvisibleToEachOther` 为 PASS 非 SKIP；带 DSN `go test -count=1 -p 1 ./...` 00:23:16→00:26:15，138 ok / 0 FAIL / 14 无测试 / 0 cached；`-v` 单跑 `TestTheAdoptedDemoNetworkGetsPastRouteEvidenceThroughProductionWiring`、`TestADeclaredParcelReachesTheCostSideWhileLegZonesStayUnconfigured`、`TestTheCostSideResolvesTheLineOfACandidateMintedByCatalogFolding` 均为 PASS。
+- 推：00:26:32 `ls-remote` 核 `53c71086` 未动 → 00:26:36 `push 86100a68:main` 成，远端 main = `86100a68`（本票各笔、代落一笔与清点，其下无他人提交）；共享树 ff 同 SHA。本笔簿记在其上，纯 .md，推送方自审。
+- 评审：非作者 ← 通道 3（Spec 阻断一，已修）；复评 ← 通道 3，两轴零阻断（见上）。
