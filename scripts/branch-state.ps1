@@ -7,6 +7,7 @@
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts/branch-state.ps1 -Classify    # 给未加前缀的分支判 ABSORBED / NOT-ABSORBED（改名 merged/ 前跑）
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts/branch-state.ps1 -Branch merged/mcp6-awf13,salvage/mcp5-awf13   # 只判点名的分支（隐含 -Classify），任何前缀都行，逗号分隔
 #   powershell -NoProfile -ExecutionPolicy Bypass -File scripts/branch-state.ps1 -Audit       # 游离提交审计（慢，几分钟）
+#   pwsh -NoProfile -File scripts/branch-state.ps1 [同上参数]                                  # Linux / WSL：git 只装在 WSL 里的宿主就在那里跑
 #
 # 约定（见 docs/agents/parallel-sessions.md「拆工作树」「派发前先点名」两节）：
 #   merged/*  —— 内容已全进 main 的指针；salvage/* —— 只防丢、不集成；未加前缀 —— 在途或归用户。
@@ -49,7 +50,9 @@ param(
 $ErrorActionPreference = 'Stop'
 $repo = (git rev-parse --show-toplevel 2>$null)
 if (-not $repo) { Write-Error '不在 git 仓库里'; exit 2 }
-$repo = $repo -replace '/', '\'
+# 只在 Windows 上把 git 给的正斜杠换成反斜杠：Linux（含 WSL）上反斜杠不是分隔符，换了之后 git -C 找不到目录。
+$sep = [System.IO.Path]::DirectorySeparatorChar
+$repo = $repo -replace '/', $sep
 # 经这个函数传参给 git 有两处暗礁，都是 PowerShell 参数绑定吃掉了东西、git 收到的与写的不一样（09-09 复现于 -Classify）：
 #   传数组必须用 @数组 展开（如下方 `'--' @files`）——[string[]] 剩余参数把一个数组实参拼成一个空格连接的串，git 当成
 #   一个文件名报 `Filename too long`；路径分隔符 `--` 必须写成带引号的 `'--'`——裸的 `--` 是绑定器的「参数结束」记号，
@@ -92,7 +95,7 @@ foreach ($l in (G worktree list --porcelain)) {
 }
 if ($cur) { $wt += $cur }
 foreach ($t in $wt) {
-    $p = $t.path -replace '/', '\'
+    $p = $t.path -replace '/', $sep
     $st = @(& git -C $p status --porcelain --untracked-files=all 2>$null)
     $flag = if ($st.Count -gt 0) { "**未提交 $($st.Count) 行**" } else { '干净' }
     "- ``$($t.path)`` @ $($t.head) [$($t.branch)] — $flag"
@@ -142,7 +145,7 @@ if ($Path) {
     }
     $wtDirty = @()
     foreach ($t in $wt) {
-        $p = $t.path -replace '/', '\'
+        $p = $t.path -replace '/', $sep
         if ($p -ieq $repo) { continue }
         $d = @(& git -C $p status --porcelain --untracked-files=all -- $Path 2>$null)
         if ($d.Count -gt 0) { $wtDirty += "- ``$($t.path)`` [$($t.branch)] 工作副本里有 $($d.Count) 行未提交落在这块地盘上" }
@@ -276,13 +279,16 @@ if ($Audit) {
     "## 游离提交审计（不在任何 ref 上的提交，两级核：patch-id 对全部 ref → 逐文件 blob 对 main 历史）"
     ""
     $ids = @{}
-    foreach ($l in (G log -p --no-merges --format='commit %H' --all --since=2026-08-01 | & git -C $repo patch-id --stable)) { $p = $l -split ' '; if ($p.Count -ge 2 -and -not $ids.ContainsKey($p[0])) { $ids[$p[0]] = $p[1] } }
+    # -p 不能经 G 传：G 是高级函数，-p 会被当成它的公共参数——5.1 里静默绑到 -PipelineVariable、git 收不到，
+    # 7.4 起与 -ProgressAction 撞成歧义直接报错。
+    foreach ($l in (& git -C $repo log -p --no-merges --format='commit %H' --all --since=2026-08-01 2>$null | & git -C $repo patch-id --stable)) { $p = $l -split ' '; if ($p.Count -ge 2 -and -not $ids.ContainsKey($p[0])) { $ids[$p[0]] = $p[1] } }
     $un = @(& git -C $repo fsck --unreachable --no-reflogs --no-progress 2>$null | Where-Object { $_ -match 'unreachable commit (\w+)' } | ForEach-Object { $Matches[1] })
     $equiv = 0; $mdOnly = 0; $rest = @()
     foreach ($c in $un) {
-        $pid = (& git -C $repo diff-tree -p --root $c 2>$null | & git -C $repo patch-id --stable)
-        if (-not $pid) { $equiv++; continue }
-        if ($ids.ContainsKey((($pid -split ' ')[0]))) { $equiv++; continue }
+        # 不能叫 $pid：PowerShell 变量名不分大小写，$PID 是只读自动变量，赋值即终止错误。
+        $patchId = (& git -C $repo diff-tree -p --root $c 2>$null | & git -C $repo patch-id --stable)
+        if (-not $patchId) { $equiv++; continue }
+        if ($ids.ContainsKey((($patchId -split ' ')[0]))) { $equiv++; continue }
         $code = @(G diff-tree --no-commit-id --name-only -r $c | Where-Object { ($_ -notmatch '\.md$') -and ($book -notcontains $_) })
         if ($code.Count -eq 0) { $mdOnly++; continue }
         $nf = @()
@@ -290,7 +296,7 @@ if ($Audit) {
             $blob = & git -C $repo rev-parse -q --verify "${c}:${f}" 2>$null
             if (-not $blob) { continue }
             $found = $false
-            foreach ($m in (G log main --format=%H -- $f)) { if ((& git -C $repo rev-parse -q --verify "${m}:${f}" 2>$null) -eq $blob) { $found = $true; break } }
+            foreach ($m in (G log main --format=%H '--' $f)) { if ((& git -C $repo rev-parse -q --verify "${m}:${f}" 2>$null) -eq $blob) { $found = $true; break } }
             if (-not $found) { $nf += $f }
         }
         if ($nf.Count -eq 0) { $equiv++; continue }
