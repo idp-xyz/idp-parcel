@@ -91,4 +91,16 @@ Blocked by: 02
 
 ## Comments
 
-（合入前非作者评审由通道 1 另派，评完写在这里。）
+### 评审 ← 通道 3 · 钉 e87d31a2 · 11:11
+
+**Standards**（AGENTS.md 红线、parcel-pricing CONTEXT、ADR-0101/0126）
+
+- 阻断：无
+- 非阻断：无
+- 无发现：对照 AGENTS.md 红线、CONTEXT「定价方案与价表版本」、ADR-0101 决定三与决定四、ADR-0126 决定三。`PriceCardDraft` 一版一行，四格对齐生命周期；`ResubmissionOf` 单处判重放、修订与内容已固定，已批准或已发布换内容不改行。草稿与 `price_card_version` 分表，在用读口只查版本册。身份由 `IntakePriceCardDraftSubmission` 取信封，`DecodePriceCardUpload` 拒多余表单格。领域与应用不依赖 HTTP 或 pgx；迁移不种行、不写死审批。注释为中文，跨文件引用无行号。
+
+**Spec**（票面完成判据、判断项）
+
+- 阻断：无
+- 非阻断：无
+- 无发现：`SubmitPriceCardDraft` 问题进草稿、内容进已校验；`TestAFileWithoutAPlanIdentityIsNotAcceptedAndLeavesNoRow` 未受理不调 `SubmitDraft`。`readPriceCardImport` 与预览同一段。两口挂 `operatorRegistries.pricing`。`wroteTheRow` 只让首录与修订带行。`DecodePriceCardDraftQuery` 只认 `status`（页 `priceCardDraftPageSize`）。事务在 `transactionalPriceCardDraftSubmission`。批准发布归票 04，`RehydratePriceCardDraft` 只读回。
