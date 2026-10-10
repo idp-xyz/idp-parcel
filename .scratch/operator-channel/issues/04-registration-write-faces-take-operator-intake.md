@@ -74,3 +74,45 @@ TF 五口：外部承运凭证首登与改变适用关系、有效时间规则�
 - `tfhttp.OperatorRegistryIntake` 五口共用一段「认证 → `decodeClosedPayload` → 载荷译命令」；认证在既有的 `transportfulfillment/adapters/accessidentity` 包里加 `OperatorRegistryAuthenticator`（登记册配置写面、不判准入），答复翻译复用运营决定口的 `answer`。三处接口注释的「就位前本包不带任何实现」改指真实现。
 - **剩余**：隔离名单上的口（商业参与方身份一族 6 口、关务监管凭证）等演示环境走通操作者渠道再换，换口与撤隔离放行同笔（ADR-0150 决定三）；价卡登记口随 price-card-import。
 
+### 收口核查（通道 5，钉 `a8cf12ff`）· 2026-10-10 · 通道 1 派单 `task-050c4117`，非作者独立取证
+
+**结论：不收口，Status 不动。** 六批换下的口与三格测试、装配测试、ADR-0150 决定三都对得上；缺的是身份族 6 口未换、价卡登记口没有票认领，另有网络七口少一层
+http 测试。逐条如下，交通道 1 定。取证全部实测于 `a8cf12ff`（该提交 CI run `38050118343` success）。
+
+**判据逐条**
+
+- ◑ **归类表完整**。端点表此刻挂 `UnconfiguredIntake{}` 的写行逐行对得上表里各类，只漏 `/claims`：它在归类钉的 `8d515c4c` 就已挂
+  `visibilityhttp.UnconfiguredIntake{}`。按 `ClaimIntake` 的接口注释，它是 UC-VE-007 的客户索赔提交面，账户只能来自客户认证结果；ADR-0100 决定五不给客户
+  业务命令面开操作者渠道，所以**不归本票**，本核查补记于此，不另立票。`8d515c4c` 之后端点表只多出 `/pricing-price-card-previews`、`/pricing-price-card-drafts`、
+  `/pricing-price-card-draft-views`（price-card-import/02、03），都直接挂 `operatorRegistries.pricing`，与表里「价卡的在线导入属 price-card-import」一致；
+  没有端点被撤。表里列为「本票，但在隔离放行名单上」的 `/customs-regulatory-credential-registrations` 此刻挂 `integrationClients.customs`（集成客户端族，
+  ADR-0149、ADR-0151 决定四；[11](./11-integration-client-register-and-client-credentials.md) 已 resolved），隔离放行已撤，已不在本票。
+- ◑ **已换各口对合成操作者答业务结果、对三格各答其格（带测试）**。六批各口此刻都挂 `operatorRegistries.*`，且全部列在
+  `cmd/parcel-api/assemble_operator_decisions_test.go` 的 `swappedRegistryFaces` 里，由两条装配测试逐口钉：`TestSwappedRegistryFacesAnswerFromTheOperatorChannel`
+  （不带令牌答 401 `OPERATOR_CREDENTIAL_REJECTED`；授予齐备时走到译装，批文自报租户答 400 `MALFORMED_REQUEST`）与
+  `TestSwappedRegistryFacesMapTheRefusalAndDependencyGrades`（只有查阅授予答 403 `OPERATOR_NOT_GRANTED`；操作者册读不动答 503
+  `IDENTITY_DEPENDENCY_UNAVAILABLE`）。`swappedRegistryFaces` 与端点表上挂 `operatorRegistries.*` 的行只差 `/pricing-price-card-previews` 与
+  `/pricing-price-card-draft-views`，两口属 price-card-import。「认证租户下译出命令」那一层，可见性、关务、计价、商业、TF 五族各有 http 包的
+  `operator_registry_intake_test.go`；**网络七族没有**：`networkhttp.OperatorRegistryIntake`（认证 → 读批文、一兆上限 → `registrationjson` 在线入口）在本包
+  无测试，只由上面两条装配测试与 `registrationjson` 的 `TestNetworkTranslationTakesTheTenantFromItsSource`、
+  `TestOnlineTranslationRefusesASelfReportedTenantOnEveryNetworkFamily` 间接盖住，比另五族少一层。
+- ✅ **装配测试与端点表一一对照**。`cmd/parcel-api/endpoints_test.go` 的 `TestEveryAssembledEndpointAnswersUnconfigured` 拿 `businessEndpointProbes` 与装配点
+  双向对照（多装、重装、漏装各自红）；此刻端点表与探针表逐项对得上，不缺不多。
+- ✅ **ADR-0150 决定三**。换下的各口没有一口在隔离放行名单上：端点表里它们直接挂 `operatorRegistries.*`，不经任何隔离变量；`assemble_isolated_write.go` 与
+  `assemble_isolated_read.go` 也不点它们的名。
+
+**缺口**
+
+1. **商业参与方身份族 6 口未换**：`/commercial-{business-party,legal-entity,customer-account,party-relationship,legal-entity-profile}-registrations` 与
+   `/commercial-party-identity-deactivations` 此刻挂 `isolatedPartyIdentity` 那组变量（ADR-0091 隔离写放行，未启用时是 `UnconfiguredIntake{}`），不是操作者
+   Intake，「做什么」第 2 条对这一族没做完；`.scratch` 里没有别的票认领它们。归属仍是本票。前提与 [15](./15-operation-decision-faces-take-operator-intake.md)
+   余下四口是同一件——演示环境接上发行方与合成操作者授予：[02](./02-oidc-credential-verifier-and-deployment-parameters.md) 的选型记录写明 Dex 接进 compose
+   「随 07 做」，[07](./07-admin-web-login-gate.md) 票面此刻 ready-for-agent。15 已把这一格写进自己的 Blocked by，本票的 Blocked by 还只写着 03。
+2. **价卡登记口 `/pricing-price-card-registrations` 没有票认领**：此刻挂字面量 `pricinghttp.UnconfiguredIntake{}`。本票归类表说它属 price-card-import 那一批；
+   [price-card-import spec](../../price-card-import/spec.md)「本批自决的几格」第 4 格却说换真 Intake 归本票那一族，它 2026-09-25 的更正只管那一批自己的口；
+   [price-card-import/04](../../price-card-import/issues/04-approval-and-publication.md) 的发布在用例层交 `RegisterPriceCard`，不经这一口；而 ADR-0101 决定一让
+   JSON 快照签留作受控批量口的在线镜像，这一口还在用。两头互指，没有票接。price-card-import/04 正由通道 4 在分支 `mcp4-pci04` 上做，本核查未碰。
+3. **网络七口 http 层 intake 少一层测试**（见判据第二条），归本票第三批。
+
+**未改**：Status；父票 [psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 的子票表（该表没有状态栏）。
+
