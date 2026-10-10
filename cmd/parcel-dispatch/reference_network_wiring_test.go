@@ -17,6 +17,8 @@ import (
 	nrapplication "go.idp.xyz/idp-parcel/internal/networkrouting/application"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
+	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
+	ppapplication "go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -209,6 +211,7 @@ func TestADeclaredParcelReachesTheCostSideWhileLegZonesStayUnconfigured(t *testi
 		t.Fatalf("state = %q, want ACCEPTED；pending = %q", result.State(), result.PendingReason())
 	}
 	registerDemoNetworkSeeds(t, fixture.db)
+	registerDemoCostCard(t, fixture.db)
 	seedWiringCustomsCatalog(t, fixture.db, demoTenant, true)
 	evidence := loadWiringEvidence(t, fixture.db, demoTenant)
 	key := wiringRouteKey(t, demoTenant)
@@ -247,6 +250,35 @@ func assertDemoCandidateWaitsForItsCost(t *testing.T, costs nrports.RouteCandida
 	}
 	if len(costs.Citations) != 0 {
 		t.Fatalf("没评价的段不该有出处：%+v", costs.Citations)
+	}
+}
+
+// registerDemoCostCard 照演示种子登记演示网络三段共引的那张 BUY 成本卡，走与 parcel-pricing-register 同一条重建与
+// 登记用例。登了它各段才有评价目标，成本取数侧才走到折区域那一步；不登，各段停在「方案不在册」，同样待判断，却证不到
+// 区域那一格。
+func registerDemoCostCard(t *testing.T, db *bentopg.DB) {
+	t.Helper()
+	raw, err := os.ReadFile(filepath.Join("..", "..", "scripts", "demo-seeds", "data", "pricing", "price-card-cn-sg-cost.json"))
+	if err != nil {
+		t.Fatalf("读演示成本卡：%v", err)
+	}
+	registration, err := ppdomain.RehydratePriceCardRegistration(raw)
+	if err != nil {
+		t.Fatalf("重建演示成本卡：%v", err)
+	}
+	cards, err := pppostgres.NewPriceCards(db)
+	if err != nil {
+		t.Fatalf("构造价卡库：%v", err)
+	}
+	handler := ppapplication.NewRegisterPriceCardHandler(ppapplication.RegisterPriceCardDeps{Catalog: cards})
+	var outcome ppapplication.RegisterPriceCardOutcome
+	err = db.Transactor().WithinTransaction(t.Context(), func(ctx context.Context) error {
+		result, registerErr := handler.Handle(ctx, ppapplication.RegisterPriceCardCommand{Registration: registration})
+		outcome = result
+		return registerErr
+	})
+	if err != nil || outcome != ppapplication.PriceCardRecorded {
+		t.Fatalf("登记演示成本卡：outcome=%s err=%v", outcome, err)
 	}
 }
 
