@@ -185,12 +185,16 @@ func (handler *AcceptCollaborationHandler) Accept(
 		return acceptanceStoreUndecided(command.Item), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedAcceptanceDigest(command)) {
+		case domain.SamePayload:
+			return handler.existingAcceptance(ctx, existing), nil
+		case domain.DifferentPayload:
 			// 同一事项携带不同决定或范围：冲突保留原决定——改主意走事项方的重派，
 			// 不在这里顶替。
 			return CollaborationResult{outcome: CollaborationDecisionConflict}, nil
+		default:
+			return acceptanceStoreUndecided(command.Item), nil
 		}
-		return handler.existingAcceptance(ctx, existing), nil
 	}
 
 	record := ports.CollaborationAcceptanceRecord{
@@ -270,10 +274,14 @@ func (handler *AcceptCollaborationHandler) RecordExecution(
 		return factStoreUndecided(command.Item), nil
 	}
 	if factFound {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedExecutionDigest(command)) {
+		case domain.SamePayload:
+			return handler.existingFact(ctx, existing), nil
+		case domain.DifferentPayload:
 			return CollaborationResult{outcome: ExecutionFactConflict}, nil
+		default:
+			return factStoreUndecided(command.Item), nil
 		}
-		return handler.existingFact(ctx, existing), nil
 	}
 
 	record := ports.ExecutionFactRecord{

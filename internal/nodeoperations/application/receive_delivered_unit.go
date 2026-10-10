@@ -148,12 +148,17 @@ func (handler *ReceiveDeliveredUnitHandler) Handle(
 			continuation: receptionContinuation("RECEPTION_STORE_UNAVAILABLE", command.SourceID)}, nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedDeliveryContentDigest(command)) {
+		case domain.SamePayload:
+			return handler.existingResult(ctx, existing), nil
+		case domain.DifferentPayload:
 			// 同一来源身份携带不同对象、时间或内容：冲突保留原结果，停止自动采用
 			// （AT-NO-017）。
 			return ReceiveDeliveredUnitResult{outcome: ReceptionSourceConflict}, nil
+		default:
+			return ReceiveDeliveredUnitResult{outcome: ReceptionUndecided,
+				continuation: receptionContinuation("RECEPTION_STORE_UNAVAILABLE", command.SourceID)}, nil
 		}
-		return handler.existingResult(ctx, existing), nil
 	}
 
 	switch command.Claim {

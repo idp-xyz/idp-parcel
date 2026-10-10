@@ -6,18 +6,55 @@ import (
 	"encoding/json"
 	"fmt"
 	"slices"
+	"strings"
 	"time"
 )
 
 // 节点作业命令载荷的规范化形状（ADR-0149 决定四；ADR-0014）。版本进文档也进摘要前缀：
-// 已保存摘要必须带着产生它的形状，不带版本的旧摘要与 NOC-1 互不相认。集合先排序再编码，
-// 提交顺序不是内容。不在 NOC-1 上就地扩列。
+// 已保存摘要必须带着产生它的形状。NOC-1 之前入库的摘要不带前缀，比对时按那一版重算本次
+// 命令再比，见 CompareStoredDigest。集合先排序再编码，提交顺序不是内容。不在 NOC-1 上就地扩列。
 
 const payloadCanonicalizationVersion = "NOC-1"
 
 func canonicalPayloadDigest(document []byte) string {
 	sum := sha256.Sum256(document)
 	return payloadCanonicalizationVersion + ":" + hex.EncodeToString(sum[:])
+}
+
+// StoredDigestComparison 是已存摘要与本次命令的比对结论。摘要只在同一形状版本内可比
+// （ADR-0014），所以先按已存摘要的形状重算本次命令，再比。
+type StoredDigestComparison int
+
+const (
+	// SamePayload：同一形状下同串，是重放。
+	SamePayload StoredDigestComparison = iota + 1
+	// DifferentPayload：同一形状下异串，是内容冲突。
+	DifferentPayload
+	// UnknownPayloadShape：已存摘要的版本前缀本口认不出，无从按它重算——不是冲突，也证明不了是重放。
+	// 调用方按该处读失败的既有答复作答：读不懂这份记录与读不出来，同样是此刻判断不了。
+	UnknownPayloadShape
+)
+
+// CompareStoredDigest 按已存摘要选形状：带 NOC-1 前缀的与 current（本次命令的 NOC-1 摘要）比；
+// 不带前缀的是 NOC-1 之前写下的无版本摘要，与 unversioned（本次命令按无版本那一版算出的摘要）比；
+// 其余前缀答 UnknownPayloadShape。存量不回写，所以无版本那一版要一直能算。
+func CompareStoredDigest(stored, current, unversioned string) StoredDigestComparison {
+	shape, _, versioned := strings.Cut(stored, ":")
+	switch {
+	case !versioned:
+		return payloadComparison(stored == unversioned)
+	case shape == payloadCanonicalizationVersion:
+		return payloadComparison(stored == current)
+	default:
+		return UnknownPayloadShape
+	}
+}
+
+func payloadComparison(same bool) StoredDigestComparison {
+	if same {
+		return SamePayload
+	}
+	return DifferentPayload
 }
 
 type acceptancePayloadDocument struct {
