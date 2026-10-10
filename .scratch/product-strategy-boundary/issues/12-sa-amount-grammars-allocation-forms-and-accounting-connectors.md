@@ -1,7 +1,7 @@
 # 12 settlement-accounting：金额文法、分摊与周期费用形态、经营指标方法与账务连接器
 
 Category: enhancement
-Status: in-progress——十项均已进 main。第 10 项 `f9c5192e`（ADR-0170）。此前各项见文末进 main 记录。
+Status: resolved——2026-10-10 通道 5 收口（通道 1 派单 `task-5daed693`）：十项均已进 main，参数登记册五行随收口那一笔收短，收口记录见文末。此前 in-progress——十项均已进 main。第 10 项 `f9c5192e`（ADR-0170）。此前各项见文末进 main 记录。
 Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 行第一项的机制缺口，归[票 16](./16-mechanism-gaps-without-a-ticket.md)；缺它们时本票只能先定文法）
 地盘：settlement-accounting 领域与应用层（金额、分摊、周期费用、指标），账单接入与财务交换的连接器适配器；规则正文若由 party-commercial 声明，PC 侧另开票。
 出处：[票 02](./02-split-parameter-register-and-retriage-deferrals.md)——[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md) `PAR-COM-07`、`PAR-SET-05`、`PAR-SET-06`、`PAR-SET-07`、`PAR-SET-08`、`PAR-SET-09`、`PAR-SET-10`、`PAR-INT-04`、`PAR-INT-05` 行内「〔ADR-0146 拆分〕」点名的部分。[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表 PN-07 行第三项当时记「未核」，本票即其补核。
@@ -225,3 +225,27 @@ Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 
 补完这五行，本票判据即齐。
 
 **未改**：Status；参数登记册。
+
+**收口记录（通道 5，钉 `51bf949e`）· 2026-10-10 · 通道 1 派单 `task-5daed693`**
+
+上一条收口核查唯一的缺口是参数登记册五行没收短。通道 1 裁定归本票自己（用户授权自决），本笔照已收短的 `PAR-SET-06`、`PAR-INT-04`、`PAR-INT-05`、`PAR-SET-09`
+的写法改了这五行，只改各行「〔ADR-0146 拆分〕」那一段，租户取值那一半照旧留空：
+
+- `PAR-COM-07`：「→ 票 12」换成第 1 项的执行器口径（ADR-0161，命令 `amount-grammar`，三项数值没登记答未配置）。
+- `PAR-SET-05`：「越权升级规则」的判断结构换成第 5 项的口径（ADR-0163，命令 `audit-escalation-ceiling`，上限没登记答未配置、不默认放行）；角色模型那半仍指
+  [psb/07](./07-pc-authorization-coordinates-and-role-models.md)。
+- `PAR-SET-07`：「（待核）」按第 3 项结论改写：核过原先没有执行器，三套形态加本期不适用已落（ADR-0165，命令 `periodic-fee`）。
+- `PAR-SET-08`：比例、限额、免赔换成第 1 项（ADR-0161）；金额分配按第 1 项的划分归第 2 项（ADR-0162，命令 `allocation-form`）。
+- `PAR-SET-10`：「（待核）」按第 4 项结论改写：既有执行器按约束栏实现，不另立 ADR；报告币与截至时点由派生命令交入、空白即拒。
+
+**完成判据**
+
+- ✅ **每项有执行器（带测试），或记下了既有执行器的证据**：逐项落点见上一条收口核查的表（钉 `a8cf12ff`）；`a8cf12ff..51bf949e` 之间
+  `internal/settlementaccounting`、`cmd/parcel-settlement-register`、`migrations/settlement_accounting` 与 `cmd/parcel-api` 的两份结算装配文件零改动，表里落点在
+  `51bf949e` 上照样成立。
+- ✅ **登记册对应行同步收短**：本票点名的九行都已收短——`PAR-SET-06`、`PAR-INT-04`、`PAR-INT-05`、`PAR-SET-09` 随各自的代码笔，其余五行随本笔；登记册里已无
+  「→ 票 12」。本笔对登记册的 diff 只有这五行，邻行与列数未变。文末 `[psb-12]` 的链接定义此刻已无行引用，按派单只改五行，未删。
+
+**同步**：[spec](../spec.md) 子票表 12 那一行随本笔改为 resolved。
+
+**未验**：本笔只动文档，没有重跑测试；执行器与测试的证据沿用上一条收口核查。

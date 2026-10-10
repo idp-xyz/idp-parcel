@@ -22,7 +22,7 @@ Status: in-progress——2026-09-24 通道 4 按用户授权自决立 ADR-0146 �
 | [09](./issues/09-tf-fulfillment-judgment-methods-and-connectors.md) | TF：履约判断方法与出入向连接器 | needs-triage |
 | [10](./issues/10-cc-declaration-channel-and-public-regulatory-reference-configuration.md) | CC：申报发送通道与公开监管标准的参考配置 | needs-triage · 参考配置那半 Blocked by 03 |
 | [11](./issues/11-ve-eta-triage-disclosure-methods-and-notification-connector.md) | VE：ETA、分诊、异常目录与披露的判断方法和通知出向连接器 | needs-triage |
-| [12](./issues/12-sa-amount-grammars-allocation-forms-and-accounting-connectors.md) | SA：金额文法、分摊与周期费用形态、经营指标方法与账务连接器 | needs-triage |
+| [12](./issues/12-sa-amount-grammars-allocation-forms-and-accounting-connectors.md) | SA：金额文法、分摊与周期费用形态、经营指标方法与账务连接器 | resolved · 十项已进 main（第 10 项 `f9c5192e`），登记册五行随收口收短；2026-10-10 通道 5 收口，收口记录在票面 |
 | [13](./issues/13-pg-hard-risk-detection-and-evidence-storage-connector.md) | PG：硬风险检测形态、证据存储连接器与回放差异分类 | needs-triage |
 | [14](./issues/14-pp-postal-prefix-granularity-and-public-unit-reference-configuration.md) | PP：邮编前缀匹配形态与公开标准的参考配置 | needs-triage · 参考配置那半 Blocked by 03 |
 | [15](./issues/15-operator-channel-per-adr-0100.md) | 横切：ADR-0100 操作者渠道落地 | in-progress · 跟踪容器，子票在 [`operator-channel/`](../operator-channel/issues/) 01–14（拆法经用户授权自决认可；09 落成 ADR-0149） |
