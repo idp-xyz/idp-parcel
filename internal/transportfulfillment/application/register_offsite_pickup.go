@@ -193,7 +193,10 @@ func (handler *RegisterOffsitePickupHandler) Register(
 	}
 
 	key := ports.OffsitePickupKey{TenantID: command.TenantID, Object: objectRef, Attempt: attemptRef}
-	digest := pickupRegistrationDigest(command)
+	_, digest, err := domain.CanonicalizeOffsitePickupRegistrationPayload(command.Task, command.Place, command.Control, command.ExecutedBy, command.OccurredAt)
+	if err != nil {
+		return RegisterOffsitePickupResult{}, err
+	}
 	existing, found, err := handler.deps.Pickups.FindByKey(ctx, key)
 	if err != nil {
 		return pickupRegistryUndecided(command.Object), nil
@@ -309,7 +312,10 @@ func (handler *RegisterOffsitePickupHandler) Correct(
 		// 没有可更正的登记：更正不出无中生有的揽收。
 		return RegisterOffsitePickupResult{outcome: PickupRegistrationNotAccepted}, nil
 	}
-	digest := pickupRegistrationContentDigest(current.Pickup.Task().String(), command.Place, command.Control, command.ExecutedBy, command.OccurredAt)
+	_, digest, err := domain.CanonicalizeOffsitePickupRegistrationPayload(current.Pickup.Task().String(), command.Place, command.Control, command.ExecutedBy, command.OccurredAt)
+	if err != nil {
+		return RegisterOffsitePickupResult{}, err
+	}
 	if current.Pickup.Version() != predecessor {
 		if current.ContentDigest == digest {
 			return handler.existingResult(ctx, current), nil
@@ -488,24 +494,4 @@ func (handler *RegisterOffsitePickupHandler) handOff(
 func pickupRegistrationContinuation(parts ...string) string {
 	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return "CONT-" + hex.EncodeToString(digest[:8])
-}
-
-// pickupRegistrationDigest 是同一（对象+尝试）首登的内容比对锚：任务、地点、控制、
-// 执行方与业务时间任一不同即是另一份内容。
-func pickupRegistrationDigest(command RegisterOffsitePickupCommand) string {
-	return pickupRegistrationContentDigest(command.Task, command.Place, command.Control, command.ExecutedBy, command.OccurredAt)
-}
-
-// pickupRegistrationContentDigest 让首登与更正版本的记录带同一种内容比对锚——它描述的是这一版**说了什么**，
-// 而不是这一版怎么来的。于是重放与冲突在两个入口上是同一套判据：首登重放对上当前版是已有版本、
-// 对不上是冲突；更正重放同理。
-func pickupRegistrationContentDigest(task, place, control, executedBy string, occurredAt time.Time) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		task,
-		place,
-		control,
-		executedBy,
-		occurredAt.UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
 }

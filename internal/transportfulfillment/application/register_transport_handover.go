@@ -207,7 +207,19 @@ func (handler *RegisterTransportHandoverHandler) Register(
 		Scope:    handover.Scope(),
 		Version:  handover.Version(),
 	}
-	digest := handoverDigest(command)
+	_, digest, err := domain.CanonicalizeHandoverPayload(
+		command.Verdict,
+		command.ReleasedBy,
+		command.ReceivedBy,
+		command.ReleasingEvidence,
+		command.ReceivingEvidence,
+		command.Rule,
+		command.Basis,
+		command.JudgedAt,
+	)
+	if err != nil {
+		return RegisterTransportHandoverResult{}, err
+	}
 	existing, found, err := handler.deps.Handovers.FindByKey(ctx, key)
 	if err != nil {
 		return handoverRegistryUndecided(command.Object), nil
@@ -335,6 +347,18 @@ func (handler *RegisterTransportHandoverHandler) Correct(
 	if err != nil {
 		return RegisterTransportHandoverResult{outcome: HandoverNotAccepted}, nil
 	}
+	_, correctionDigest, err := domain.CanonicalizeHandoverCorrectionPayload(
+		command.Verdict,
+		command.PredecessorVersion,
+		command.ReleasingEvidence,
+		command.ReceivingEvidence,
+		command.Rule,
+		command.Basis,
+		command.CorrectedAt,
+	)
+	if err != nil {
+		return RegisterTransportHandoverResult{}, err
+	}
 
 	result, err := handler.commit(ctx, ports.TransportHandoverRecord{
 		Key: ports.TransportHandoverKey{
@@ -343,7 +367,7 @@ func (handler *RegisterTransportHandoverHandler) Correct(
 			Scope:    corrected.Scope(),
 			Version:  corrected.Version(),
 		},
-		ContentDigest: correctionDigest(command),
+		ContentDigest: correctionDigest,
 		Handover:      corrected,
 		RecordedAt:    handler.deps.Clock.Now(),
 	}, HandoverCorrected)
@@ -531,33 +555,4 @@ func (handler *RegisterTransportHandoverHandler) handOff(
 func handoverRegistrationContinuation(parts ...string) string {
 	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return "CONT-" + hex.EncodeToString(digest[:8])
-}
-
-// handoverDigest 是同一判断版本的内容比对锚：裁决、双方、证据、规则、依据与业务时间
-// 任一不同即是另一份内容。
-func handoverDigest(command RegisterTransportHandoverCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		fmt.Sprintf("%d", command.Verdict),
-		command.ReleasedBy,
-		command.ReceivedBy,
-		command.ReleasingEvidence,
-		command.ReceivingEvidence,
-		command.Rule,
-		command.Basis,
-		command.JudgedAt.UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
-}
-
-func correctionDigest(command CorrectTransportHandoverCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		fmt.Sprintf("%d", command.Verdict),
-		command.PredecessorVersion,
-		command.ReleasingEvidence,
-		command.ReceivingEvidence,
-		command.Rule,
-		command.Basis,
-		command.CorrectedAt.UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
 }

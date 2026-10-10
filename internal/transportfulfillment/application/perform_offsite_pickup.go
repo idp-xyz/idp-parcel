@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -206,7 +205,20 @@ func (handler *PerformOffsitePickupHandler) Handle(
 	}
 
 	key := ports.PickupAttemptKey{TenantID: command.TenantID, SourceID: command.SourceID}
-	digest := pickupContentDigest(command)
+	objects := make([]domain.OffsitePickupObjectContent, len(command.Objects))
+	for i, submission := range command.Objects {
+		objects[i] = domain.OffsitePickupObjectContent{
+			Object:     submission.Object.String(),
+			Outcome:    submission.Outcome,
+			Basis:      submission.Basis.String(),
+			Control:    submission.Control.String(),
+			OccurredAt: submission.OccurredAt,
+		}
+	}
+	_, digest, err := domain.CanonicalizeOffsitePickupPayload(command.Attempt, command.Task, command.ArrivedAt, objects)
+	if err != nil {
+		return PerformOffsitePickupResult{}, err
+	}
 	existing, found, err := handler.deps.Attempts.FindByKey(ctx, key)
 	if err != nil {
 		return storeUndecided(command.SourceID), nil
@@ -467,27 +479,4 @@ func (handler *PerformOffsitePickupHandler) handOff(
 func pickupContinuation(parts ...string) string {
 	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return "CONT-" + hex.EncodeToString(digest[:8])
-}
-
-// pickupContentDigest 是同一来源身份的内容比对锚：尝试身份、任务、到场时间与逐对象
-// 结果（对象、走向、依据、控制、时间）任一不同即是另一份内容。对象行先排序——提交
-// 顺序不构成不同的内容。
-func pickupContentDigest(command PerformOffsitePickupCommand) string {
-	lines := make([]string, 0, len(command.Objects))
-	for _, submission := range command.Objects {
-		lines = append(lines, strings.Join([]string{
-			submission.Object.String(),
-			fmt.Sprintf("%d", submission.Outcome),
-			submission.Basis.String(),
-			submission.Control.String(),
-			submission.OccurredAt.UTC().Format(time.RFC3339Nano),
-		}, "\x1f"))
-	}
-	sort.Strings(lines)
-	digest := sha256.Sum256([]byte(strings.Join(append([]string{
-		command.Attempt,
-		command.Task,
-		command.ArrivedAt.UTC().Format(time.RFC3339Nano),
-	}, lines...), "\x00")))
-	return hex.EncodeToString(digest[:])
 }

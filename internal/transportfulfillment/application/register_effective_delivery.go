@@ -179,7 +179,10 @@ func (handler *RegisterEffectiveDeliveryHandler) Register(
 	if result != nil {
 		return *result, nil
 	}
-	digest := deliveryContentDigest(command)
+	_, digest, err := domain.CanonicalizeEffectiveDeliveryPayload(command.Method, command.Recipient, command.Proof)
+	if err != nil {
+		return RegisterEffectiveDeliveryResult{}, err
+	}
 	existing, found, err := handler.deps.Deliveries.FindByKey(ctx, key)
 	if err != nil {
 		return deliveryStoreUndecided(command.Object), nil
@@ -407,15 +410,4 @@ func (handler *RegisterEffectiveDeliveryHandler) handOff(
 func deliveryContinuation(parts ...string) string {
 	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return "CONT-" + hex.EncodeToString(digest[:8])
-}
-
-// deliveryContentDigest 是同一（对象+尝试）首登的内容比对锚：方式、接收方与 POD 任一
-// 不同即是另一份内容。
-func deliveryContentDigest(command RegisterEffectiveDeliveryCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		command.Method,
-		command.Recipient,
-		command.Proof,
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
 }

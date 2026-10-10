@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -209,7 +208,10 @@ func (handler *CommissionTransportHandler) SubmitCommission(
 	}
 
 	key := ports.TransportCommissionKey{TenantID: command.TenantID, Commission: commission.Commission()}
-	digest := commissionDigest(command)
+	_, digest, err := domain.CanonicalizeCommissionPayload(command.Provider, command.Agreement, command.Conditions, command.Role, command.Responsibility, command.SubmittedAt, command.Members)
+	if err != nil {
+		return CommissionResult{}, err
+	}
 	existing, found, err := handler.deps.Commissions.FindByKey(ctx, key)
 	if err != nil {
 		return commissionUndecided(CommissionStoreUnavailable, command.Commission), nil
@@ -259,7 +261,10 @@ func (handler *CommissionTransportHandler) SubmitBooking(
 	}
 
 	key := ports.BookingKey{TenantID: command.TenantID, Booking: booking.Booking()}
-	digest := bookingDigest(command)
+	_, digest, err := domain.CanonicalizeBookingPayload(command.Commission, command.Quantity, command.Unit, command.RequestedAt)
+	if err != nil {
+		return CommissionResult{}, err
+	}
 	existing, found, err := handler.deps.Bookings.FindByKey(ctx, key)
 	if err != nil {
 		return commissionUndecided(BookingStoreUnavailable, command.Booking), nil
@@ -317,7 +322,10 @@ func (handler *CommissionTransportHandler) AnswerBooking(
 		return CommissionResult{outcome: CommissionNotAccepted}, nil
 	}
 
-	digest := answerDigest(command)
+	_, digest, err := domain.CanonicalizeBookingAnswerPayload(command.Outcome, command.Acceptance, command.Quantity, command.Basis, command.DecidedAt)
+	if err != nil {
+		return CommissionResult{}, err
+	}
 	existingAnswer, answered, err := handler.deps.Answers.FindByKey(ctx, key)
 	if err != nil {
 		return commissionUndecided(AnswerStoreUnavailable, command.Booking), nil
@@ -507,39 +515,4 @@ func (handler *CommissionTransportHandler) handOff(
 func commissionContinuation(parts ...string) string {
 	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return "CONT-" + hex.EncodeToString(digest[:8])
-}
-
-func commissionDigest(command SubmitCommissionCommand) string {
-	members := append([]string(nil), command.Members...)
-	sort.Strings(members)
-	digest := sha256.Sum256([]byte(strings.Join(append([]string{
-		command.Provider,
-		command.Agreement,
-		command.Conditions,
-		command.Role,
-		command.Responsibility,
-		command.SubmittedAt.UTC().Format(time.RFC3339Nano),
-	}, members...), "\x00")))
-	return hex.EncodeToString(digest[:])
-}
-
-func bookingDigest(command SubmitBookingCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		command.Commission,
-		fmt.Sprintf("%d", command.Quantity),
-		command.Unit,
-		command.RequestedAt.UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
-}
-
-func answerDigest(command AnswerBookingCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		fmt.Sprintf("%d", command.Outcome),
-		command.Acceptance,
-		fmt.Sprintf("%d", command.Quantity),
-		command.Basis,
-		command.DecidedAt.UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
 }
