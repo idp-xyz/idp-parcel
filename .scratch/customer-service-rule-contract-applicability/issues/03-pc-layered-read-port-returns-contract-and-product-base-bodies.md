@@ -1,7 +1,7 @@
 # 03 PC 层次读口：一次取回合同版正文、产品底座版正文与各自在场标志
 
 Category: enhancement
-Status: ready-for-agent——2026-10-10 通道 1 发布：拆法作者通道 3（`task-2b404e22`），通道 1 经用户 19:1x 授权认可并裁定拆法清单所附七问
+Status: in-progress——2026-10-10 23:4x 通道 4 认领（单 task-628d9b90，改派自通道 5 `task-96bf9634`），分支 `mcp4-csr03`，基 `70f32c2a`。此前：ready-for-agent——2026-10-10 通道 1 发布：拆法作者通道 3（`task-2b404e22`），通道 1 经用户 19:1x 授权认可并裁定拆法清单所附七问
 Blocked by: [02](02-pc-closure-resolves-contract-tier-service-rule-first.md)——底座必须用 02 抽出的那一处选法，不造第二套口径
 父票：[spec](../spec.md)
 地盘：`internal/partycommercial` 的 ports、application、adapters/postgres；碰 Go / SQL，走并行会话那条路。
