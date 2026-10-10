@@ -16,6 +16,9 @@ var (
 	ErrInvalidPriceCardRegistration = errors.New("parcel pricing: invalid price card registration")
 	// ErrPriceCardRegistrationSnapshotInvalid 表示登记快照解不出一份立得住的登记。
 	ErrPriceCardRegistrationSnapshotInvalid = errors.New("parcel pricing: invalid price card registration snapshot")
+	// ErrPriceCardRegistrationSnapshotCarriesTenant 表示交给 RehydratePriceCardRegistrationForTenant 的快照自带了
+	// tenant 键：租户已由调用方给出，一份登记的租户只能有一个出处。
+	ErrPriceCardRegistrationSnapshotCarriesTenant = errors.New("parcel pricing: price card registration snapshot carries its own tenant")
 )
 
 // sha256HexLength 是 SHA-256 摘要的十六进制长度。仓库只登脱敏标识与证据索引，真实
@@ -137,16 +140,46 @@ func MarshalPriceCardRegistration(registration PriceCardRegistration) ([]byte, e
 // RehydratePriceCardRegistration 从快照重建价卡登记并整图重验。方案部分沿用方案
 // 快照的规范化门：规范化版本不被当前构建支持时拒绝重建，不是内容冲突。
 func RehydratePriceCardRegistration(raw []byte) (PriceCardRegistration, error) {
-	var document priceCardRegistrationSnapshot
-	if err := json.Unmarshal(raw, &document); err != nil {
+	document, err := decodePriceCardRegistrationSnapshot(raw)
+	if err != nil {
+		return PriceCardRegistration{}, err
+	}
+	return document.registration(TenantID{identifier{value: document.Tenant}})
+}
+
+// RehydratePriceCardRegistrationForTenant 是租户由调用方给的那扇重建门：快照与 RehydratePriceCardRegistration 收的
+// 同形、只少 tenant 一格，解码、规范化门与整图重验走同一段。tenant 键在场即拒、不看值（`"tenant": null` 也算）——
+// 读进来再拿调用方的租户顶掉，同一份快照就有了两个租户出处，而答复里看不出用的是哪一个。
+func RehydratePriceCardRegistrationForTenant(raw []byte, tenant TenantID) (PriceCardRegistration, error) {
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &top); err != nil {
 		return PriceCardRegistration{}, fmt.Errorf("%w: %v", ErrPriceCardRegistrationSnapshotInvalid, err)
 	}
+	if _, present := top["tenant"]; present {
+		return PriceCardRegistration{}, ErrPriceCardRegistrationSnapshotCarriesTenant
+	}
+	document, err := decodePriceCardRegistrationSnapshot(raw)
+	if err != nil {
+		return PriceCardRegistration{}, err
+	}
+	return document.registration(tenant)
+}
+
+func decodePriceCardRegistrationSnapshot(raw []byte) (priceCardRegistrationSnapshot, error) {
+	var document priceCardRegistrationSnapshot
+	if err := json.Unmarshal(raw, &document); err != nil {
+		return priceCardRegistrationSnapshot{}, fmt.Errorf("%w: %v", ErrPriceCardRegistrationSnapshotInvalid, err)
+	}
 	if document.Plan.Canonicalization != canonicalizationVersion {
-		return PriceCardRegistration{}, fmt.Errorf("%w: snapshot records %q, this build canonicalizes %q",
+		return priceCardRegistrationSnapshot{}, fmt.Errorf("%w: snapshot records %q, this build canonicalizes %q",
 			ErrCanonicalizationVersionUnsupported, document.Plan.Canonicalization, canonicalizationVersion)
 	}
+	return document, nil
+}
+
+func (document priceCardRegistrationSnapshot) registration(tenant TenantID) (PriceCardRegistration, error) {
 	registration := PriceCardRegistration{
-		tenant: TenantID{identifier{value: document.Tenant}},
+		tenant: tenant,
 		plan:   pricingPlanFrom(document.Plan),
 		source: SourceFileIdentity{
 			name:   document.SourceFileName,

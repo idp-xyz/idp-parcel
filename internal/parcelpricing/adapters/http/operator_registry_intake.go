@@ -46,18 +46,20 @@ type OperatorRegistryAuthenticator interface {
 	AuthenticateRegistryWrite(ctx context.Context, bearerToken string) (OperatorIdentity, error)
 }
 
-// OperatorRegistryIntake 是操作者渠道在本包参考序列登记、预览、复核与参考目录登记各口的 Intake（ADR-0100 决定四；
-// 票 operator-channel/04）。价卡导入那一批的各口也挂它（票 price-card-import/02 起），译法各在该口自己的文件里。
+// OperatorRegistryIntake 是操作者渠道在本包价卡登记、参考序列登记、预览、复核与参考目录登记各口的 Intake（ADR-0100
+// 决定四；票 operator-channel/04）。价卡导入那一批的各口也挂它（票 price-card-import/02 起），译法各在该口自己的文件里。
 //
 // 线格式是本包既有的运营操作者面载荷（ADR-0101 决定一）：序列登记与预览共用 ReferenceSeriesRegistrationPayload，目录
 // 登记用 ReferenceCataloguePayload，它们的注释本就写明「租户与登记责任方从 OperatorEnvelope 来，由 Intake 作为入参交
-// 进来」——本类型就是那个 Intake，登记责任方与复核人都取认证出的提交操作者。价卡登记口不在这里：价卡的在线形态是
-// 导入草稿（ADR-0101，price-card-import 那一批）。先认证、后解载荷。
+// 进来」——本类型就是那个 Intake，登记责任方与复核人都取认证出的提交操作者。价卡登记口收的是受控批量口快照的在线
+// 镜像（同一决定一：JSON 快照签留作高级口，运营配置员的主路径是导入草稿），译法在 IntakePriceCardRegistration。
+// 先认证、后解载荷。
 type OperatorRegistryIntake struct {
 	authenticator OperatorRegistryAuthenticator
 }
 
 var (
+	_ PriceCardRegistrationIntake          = (*OperatorRegistryIntake)(nil)
 	_ ReferenceSeriesRegistrationIntake    = (*OperatorRegistryIntake)(nil)
 	_ ReferenceSeriesPreviewIntake         = (*OperatorRegistryIntake)(nil)
 	_ ReferenceSeriesReviewIntake          = (*OperatorRegistryIntake)(nil)
@@ -69,6 +71,28 @@ func NewOperatorRegistryIntake(authenticator OperatorRegistryAuthenticator) (*Op
 		return nil, errors.New("pricing http: operator registry intake needs an authenticator")
 	}
 	return &OperatorRegistryIntake{authenticator: authenticator}, nil
+}
+
+// IntakePriceCardRegistration 译价卡登记口的 JSON 快照：与受控批量口同形、只少 tenant 一格，重建走领域里租户由调用方
+// 给的那扇门，租户取认证出的身份。发布批准责任方照受控批量口从快照取——它记的是批准人引用，不是提交者；认证出的
+// 提交操作者在登记里没有格（与本票第一批可见性 approvedBy 的判断同）。
+func (intake *OperatorRegistryIntake) IntakePriceCardRegistration(ctx context.Context, request *http.Request) (application.RegisterPriceCardCommand, error) {
+	operator, body, err := intake.authenticate(ctx, request)
+	if err != nil {
+		return application.RegisterPriceCardCommand{}, err
+	}
+	if operator.Tenant.String() == "" {
+		return application.RegisterPriceCardCommand{}, ErrOperatorIdentityMissing
+	}
+	raw, err := io.ReadAll(body)
+	if err != nil {
+		return application.RegisterPriceCardCommand{}, fmt.Errorf("%w: price card registration snapshot: %v", ErrMalformedRequest, err)
+	}
+	registration, err := domain.RehydratePriceCardRegistrationForTenant(raw, operator.Tenant)
+	if err != nil {
+		return application.RegisterPriceCardCommand{}, fmt.Errorf("%w: price card registration snapshot: %v", ErrMalformedRequest, err)
+	}
+	return application.RegisterPriceCardCommand{Registration: registration}, nil
 }
 
 func (intake *OperatorRegistryIntake) IntakeReferenceSeriesRegistration(ctx context.Context, request *http.Request) (application.RegisterReferenceSeriesCommand, error) {

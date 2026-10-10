@@ -14,10 +14,10 @@ const codeUnnamedOutcome = "UNNAMED_OUTCOME"
 
 // PriceCardRegistrationIntake 把一次已认证的接入请求翻译成价卡登记命令。
 //
-// 它是接口而不是本包内的解析代码（ADR-0085 Decision 二，机制同 ADR-0055）：登记
-// 快照的重建门在领域侧已实现（RehydratePriceCardRegistration），但「渠道原始载荷 →
-// 登记快照」的翻译与操作者认证归操作者渠道（ADR-0100），其真 Intake 未就位；采信自报租户会
-// 穿透 ADR-0003 的隔离边界。未决期间本包不带任何实现，包括「开发用」的采信头部版本。
+// 它是接口而不是本包内的解析代码（ADR-0085 Decision 二，机制同 ADR-0055）：租户来自操作者
+// 认证（ADR-0100），采信自报租户会穿透 ADR-0003 的隔离边界，所以本包不带任何采信头部或载荷
+// 身份的「开发用」实现。真 Intake 是 OperatorRegistryIntake（票 operator-channel/04），快照
+// 的重建门在领域侧（RehydratePriceCardRegistrationForTenant）。
 type PriceCardRegistrationIntake interface {
 	IntakePriceCardRegistration(ctx context.Context, request *http.Request) (application.RegisterPriceCardCommand, error)
 }

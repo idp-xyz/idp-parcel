@@ -171,3 +171,58 @@ func TestPriceCardRegistrationSnapshotRefusesForeignCanonicalization(t *testing.
 		t.Fatalf("err = %v, 想要 ErrCanonicalizationVersionUnsupported", err)
 	}
 }
+
+// TestPriceCardRegistrationSnapshotForTenantTakesTheCallersTenant 证租户由调用方给的那扇重建门：快照去掉 tenant 一格
+// 重建，登记带调用方的租户，其余各格与受控批量口那扇门重建出的逐字节同答；快照自带 tenant 键即拒、不看值。
+func TestPriceCardRegistrationSnapshotForTenantTakesTheCallersTenant(t *testing.T) {
+	registration := syntheticRegistration(t)
+	raw, err := domain.MarshalPriceCardRegistration(registration)
+	if err != nil {
+		t.Fatalf("折装登记快照：%v", err)
+	}
+	var document map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &document); err != nil {
+		t.Fatalf("解开登记快照：%v", err)
+	}
+	delete(document, "tenant")
+	withoutTenant, err := json.Marshal(document)
+	if err != nil {
+		t.Fatalf("重封登记快照：%v", err)
+	}
+
+	caller := mustValue(t, domain.NewTenantID, "tenant-2")
+	rebuilt, err := domain.RehydratePriceCardRegistrationForTenant(withoutTenant, caller)
+	if err != nil {
+		t.Fatalf("重建登记：%v", err)
+	}
+	if rebuilt.Tenant().String() != "tenant-2" {
+		t.Fatalf("租户 = %s，想要调用方给的 tenant-2", rebuilt.Tenant())
+	}
+	same, err := domain.RehydratePriceCardRegistrationForTenant(withoutTenant, registration.Tenant())
+	if err != nil {
+		t.Fatalf("以原租户重建：%v", err)
+	}
+	again, err := domain.MarshalPriceCardRegistration(same)
+	if err != nil {
+		t.Fatalf("重建后再折装：%v", err)
+	}
+	if !bytes.Equal(raw, again) {
+		t.Fatalf("两扇门重建不同答\n受控批量口=%s\n调用方给租户=%s", raw, again)
+	}
+
+	for label, value := range map[string]string{
+		"别的租户":   `"tenant-1"`,
+		"调用方的租户": `"tenant-2"`,
+		"null":   `null`,
+		"空串":     `""`,
+	} {
+		document["tenant"] = json.RawMessage(value)
+		carrying, err := json.Marshal(document)
+		if err != nil {
+			t.Fatalf("%s: 重封登记快照：%v", label, err)
+		}
+		if _, err := domain.RehydratePriceCardRegistrationForTenant(carrying, caller); !errors.Is(err, domain.ErrPriceCardRegistrationSnapshotCarriesTenant) {
+			t.Fatalf("%s: err = %v, 想要 ErrPriceCardRegistrationSnapshotCarriesTenant", label, err)
+		}
+	}
+}
