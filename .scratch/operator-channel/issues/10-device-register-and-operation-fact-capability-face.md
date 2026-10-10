@@ -1,7 +1,7 @@
 # 10 设备登记与「作业事实登记」能力面：一线作业事实走操作者渠道族
 
 Category: enhancement
-Status: ready-for-agent——2026-09-24 随 ADR-0149 立（用户授权通道 4 自决）
+Status: in-progress——2026-10-11 00:5x 通道 4 认领（用户 00:5x 令通道 4 独自完整开工：其余通道都已崩溃），分支 `mcp4-oc10`，基 `2603f9ad`。此前：ready-for-agent——2026-09-24 随 ADR-0149 立（用户授权通道 4 自决）
 Blocked by: 01、03
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 丙轨实施
 地盘：`internal/accessidentity`（设备册、能力面授予格、铸造里「操作者主体 + 设备」两件）与其迁移、受控登记 CLI、参数登记册增「作业设备」一行；作业事实命令口的装配留给 13、14 齐了之后逐口换。
