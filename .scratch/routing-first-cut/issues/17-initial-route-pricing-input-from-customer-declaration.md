@@ -1,7 +1,7 @@
 # 17 初始路由的计价输入：预路由用客户声明，逐段折成价卡区域待 PP owner 定
 
 Category: enhancement
-Status: ready-for-agent——2026-10-10 22:2x 通道 1 分诊（用户授权自决）：本票收为机制半边，「逐段折成价卡区域」拆到 [18](18-leg-endpoints-folded-into-price-card-zones.md)（needs-info），见「分诊裁定」。此前 needs-triage——2026-10-10 通道 1 立（用户授权自决），出自 [11](11-demo-network-adopted-as-reference-configuration.md) 的判据一取证
+Status: in-progress——2026-10-10 22:5x 通道 5 认领（单 task-e4c159c7，改派自 task-58320bc4），分支 `mcp5-rfc17` 基 main `5e6cd4b6`。此前：ready-for-agent——2026-10-10 22:2x 通道 1 分诊（用户授权自决）：本票收为机制半边，「逐段折成价卡区域」拆到 [18](18-leg-endpoints-folded-into-price-card-zones.md)（needs-info），见「分诊裁定」。此前 needs-triage——2026-10-10 通道 1 立（用户授权自决），出自 [11](11-demo-network-adopted-as-reference-configuration.md) 的判据一取证
 Blocked by: [15](15-candidate-identifier-minted-with-at-but-cost-adapter-splits-on-slash.md)（已解：15 于 2026-10-10 21:2x 进 main）——计价输入一接上就会撞那条缝；[13](13-customs-applicability-review-tails.md)（已解：13 于 2026-10-10 22:3x 进 main）——不是逻辑依赖，是地盘：13 在 `cmd/parcel-dispatch/assemble.go` 改注释、待评审与重放，等它进 main 再动，免得一个文件两个写入方（[16](16-demo-tenant-pre-acceptance-financial-control-cells.md) 也改同一文件的注释，派单时核）
 归档：不属 [psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md) 的子票集；放在本目录是因为它挡在 11 判据一的路上。
 地盘：`internal/networkrouting` 的计价消费方适配器（`adapters/parcelpricing`）与计价输入端口；`cmd/parcel-dispatch` 的 `routeCosts` 装配。区域折法不在本票（18）。
