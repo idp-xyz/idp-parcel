@@ -315,6 +315,46 @@ func (passthroughCosts) LoadCandidateCosts(
 	return ports.RouteCandidateCosts{Facts: evidence.CandidateCosts}, nil
 }
 
+// unconfiguredCosts 是候选成本取数侧没接计价输入时的如实形态（生产装配今天就是这一格）。
+type unconfiguredCosts struct{}
+
+func (unconfiguredCosts) LoadCandidateCosts(
+	context.Context, domain.InitialRouteJudgmentKey, ports.InitialRouteEvidence,
+) (ports.RouteCandidateCosts, error) {
+	return ports.RouteCandidateCosts{}, ports.ErrRouteCostSourceNotConfigured
+}
+
+// Covers: 证据齐、候选合格，而成本取数侧没接计价输入——包裹形成未决 `COST_SOURCE_NOT_CONFIGURED`：不拿缺依据
+// 的候选出价，不落库，不交下游意图（ADR-0175 Consequences「成本缺席时不能形成计划」）。票 routing-first-cut/11
+// 判据一在生产装配上今天停在这一格。
+func TestAnUnconfiguredCostSourceLeavesTheParcelUndecided(t *testing.T) {
+	fixture := newRouteFixture(t)
+	fixture.handler = application.NewCreateInitialRouteHandler(application.CreateInitialRouteDeps{
+		Applicability: fixture.applicability,
+		Evidence:      fixture.evidence,
+		Costs:         unconfiguredCosts{},
+		Store:         fixture.store,
+		Log:           fixture.log,
+		Downstream:    fixture.downstream,
+		Identities:    &routeIdentityDouble{},
+		Clock:         fixedClock{at: routeJudgedAt},
+	})
+	fixture.evidence.byParcel["parcel-1"] = routableEvidence(t)
+
+	result, err := fixture.handler.Handle(context.Background(), routeCommand(t, "parcel-1"))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	parcels := result.Parcels()
+	if len(parcels) != 1 || parcels[0].Outcome() != application.ParcelRouteUndecided ||
+		parcels[0].UndecidedReason() != application.RouteCostSourceNotConfigured {
+		t.Fatalf("parcels = %+v，想要 UNDECIDED/COST_SOURCE_NOT_CONFIGURED", parcels)
+	}
+	if fixture.store.saved != 0 || len(fixture.downstream.intents) != 0 {
+		t.Fatalf("saved = %d intents = %d：未决不落库、不交意图", fixture.store.saved, len(fixture.downstream.intents))
+	}
+}
+
 // Covers: `AT-NR-012`「同一委托三个包裹分别可路由、确定无路由和依赖未决——三个包裹分别
 // 保留计划、无路由和未决结果；任一结果不回滚或掩盖其他结果」，兼 `AT-NR-001`（计划保留
 // 全部候选依据）与 `AT-NR-005`（无路由保存逐候选淘汰依据）的编排半边。
