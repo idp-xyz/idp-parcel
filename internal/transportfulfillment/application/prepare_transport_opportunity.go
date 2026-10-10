@@ -232,10 +232,15 @@ func (handler *PrepareTransportOpportunityHandler) EstablishSchedule(
 		return opportunityUndecided(ScheduleStoreUnavailable, command.Schedule), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest,
+			unversionedOpportunityDigest(command.Direction, command.DepartsAt.UTC().Format(time.RFC3339Nano))) {
+		case domain.SamePayload:
+			return OpportunityResult{outcome: ScheduleExistingResult, schedule: existing, hasRecord: true}, nil
+		case domain.DifferentPayload:
 			return OpportunityResult{outcome: ScheduleConflict}, nil
+		default:
+			return opportunityUndecided(ScheduleStoreUnavailable, command.Schedule), nil
 		}
-		return OpportunityResult{outcome: ScheduleExistingResult, schedule: existing, hasRecord: true}, nil
 	}
 
 	record := ports.ScheduleRecord{Key: key, ContentDigest: digest, Schedule: schedule, RecordedAt: handler.deps.Clock.Now()}
@@ -289,10 +294,15 @@ func (handler *PrepareTransportOpportunityHandler) EstablishPool(
 		return opportunityUndecided(PoolStoreUnavailable, command.Pool), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest,
+			unversionedOpportunityDigest(command.Schedule, command.Unit, fmt.Sprintf("%d", command.Capacity))) {
+		case domain.SamePayload:
+			return OpportunityResult{outcome: PoolExistingResult, pool: existing, hasRecord: true}, nil
+		case domain.DifferentPayload:
 			return OpportunityResult{outcome: PoolConflict}, nil
+		default:
+			return opportunityUndecided(PoolStoreUnavailable, command.Pool), nil
 		}
-		return OpportunityResult{outcome: PoolExistingResult, pool: existing, hasRecord: true}, nil
 	}
 
 	record := ports.CapacityPoolRecord{Key: key, ContentDigest: digest, Pool: pool, RecordedAt: handler.deps.Clock.Now()}

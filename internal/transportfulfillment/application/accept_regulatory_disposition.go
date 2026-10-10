@@ -170,10 +170,14 @@ func (handler *AcceptRegulatoryDispositionHandler) Handle(
 	if err != nil {
 		return AcceptDispositionResult{outcome: AcceptDispositionUndecided, reason: DispositionAcceptanceStoreUnavailable}, nil
 	}
+	unversioned := unversionedDispositionDigest(command)
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversioned) {
+		case domain.DifferentPayload:
 			// 同一事项携带不同决定内容：改决定走事项方的更正/替代，不经承接入口顶替。
 			return AcceptDispositionResult{outcome: DispositionDecisionConflict}, nil
+		case domain.UnknownPayloadShape:
+			return AcceptDispositionResult{outcome: AcceptDispositionUndecided, reason: DispositionAcceptanceStoreUnavailable}, nil
 		}
 		return AcceptDispositionResult{
 			outcome:    DispositionExistingDecision,
@@ -208,8 +212,11 @@ func (handler *AcceptRegulatoryDispositionHandler) Handle(
 		if err != nil || !found {
 			return AcceptDispositionResult{outcome: AcceptDispositionUndecided, reason: DispositionAcceptanceStoreUnavailable}, nil
 		}
-		if winner.ContentDigest != digest {
+		switch domain.CompareStoredDigest(winner.ContentDigest, digest, unversioned) {
+		case domain.DifferentPayload:
 			return AcceptDispositionResult{outcome: DispositionDecisionConflict}, nil
+		case domain.UnknownPayloadShape:
+			return AcceptDispositionResult{outcome: AcceptDispositionUndecided, reason: DispositionAcceptanceStoreUnavailable}, nil
 		}
 		return AcceptDispositionResult{
 			outcome:    DispositionExistingDecision,

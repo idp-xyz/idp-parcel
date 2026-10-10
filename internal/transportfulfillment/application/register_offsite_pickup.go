@@ -202,11 +202,15 @@ func (handler *RegisterOffsitePickupHandler) Register(
 		return pickupRegistryUndecided(command.Object), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedPickupRegistrationDigest(command)) {
+		case domain.SamePayload:
+			return handler.existingResult(ctx, existing), nil
+		case domain.DifferentPayload:
 			// 同一（对象+尝试）携带不同控制/地点/时间：首登不顶替，来源更正走新版本。
 			return RegisterOffsitePickupResult{outcome: PickupRegistrationConflict}, nil
+		default:
+			return pickupRegistryUndecided(command.Object), nil
 		}
-		return handler.existingResult(ctx, existing), nil
 	}
 
 	spec, badInput := pickupSpecFrom(command)
@@ -317,10 +321,15 @@ func (handler *RegisterOffsitePickupHandler) Correct(
 		return RegisterOffsitePickupResult{}, err
 	}
 	if current.Pickup.Version() != predecessor {
-		if current.ContentDigest == digest {
+		switch domain.CompareStoredDigest(current.ContentDigest, digest, unversionedPickupRegistrationContentDigest(
+			current.Pickup.Task().String(), command.Place, command.Control, command.ExecutedBy, command.OccurredAt)) {
+		case domain.SamePayload:
 			return handler.existingResult(ctx, current), nil
+		case domain.DifferentPayload:
+			return RegisterOffsitePickupResult{outcome: PickupRegistrationConflict}, nil
+		default:
+			return pickupRegistryUndecided(command.Object), nil
 		}
-		return RegisterOffsitePickupResult{outcome: PickupRegistrationConflict}, nil
 	}
 	if command.CorrectedAt.IsZero() || command.CorrectedAt.Before(current.RecordedAt) {
 		// 更正时刻不得早于被更正版本的登记时刻（裁决）。下界取登记时刻不取发生时刻——发生时刻本身

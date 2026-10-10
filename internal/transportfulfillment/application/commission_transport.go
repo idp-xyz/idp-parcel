@@ -217,11 +217,15 @@ func (handler *CommissionTransportHandler) SubmitCommission(
 		return commissionUndecided(CommissionStoreUnavailable, command.Commission), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedCommissionDigest(command)) {
+		case domain.SamePayload:
+			return handler.existingCommission(ctx, existing), nil
+		case domain.DifferentPayload:
 			// 同一委托标识携带不同快照或范围：冲突保留原委托，不按最后到达顶替。
 			return CommissionResult{outcome: CommissionConflict}, nil
+		default:
+			return commissionUndecided(CommissionStoreUnavailable, command.Commission), nil
 		}
-		return handler.existingCommission(ctx, existing), nil
 	}
 
 	record := ports.TransportCommissionRecord{
@@ -270,10 +274,14 @@ func (handler *CommissionTransportHandler) SubmitBooking(
 		return commissionUndecided(BookingStoreUnavailable, command.Booking), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedBookingDigest(command)) {
+		case domain.SamePayload:
+			return CommissionResult{outcome: BookingExistingResult, booking: existing, hasRecord: true}, nil
+		case domain.DifferentPayload:
 			return CommissionResult{outcome: BookingConflict}, nil
+		default:
+			return commissionUndecided(BookingStoreUnavailable, command.Booking), nil
 		}
-		return CommissionResult{outcome: BookingExistingResult, booking: existing, hasRecord: true}, nil
 	}
 
 	record := ports.BookingRecord{
@@ -331,11 +339,15 @@ func (handler *CommissionTransportHandler) AnswerBooking(
 		return commissionUndecided(AnswerStoreUnavailable, command.Booking), nil
 	}
 	if answered {
-		if existingAnswer.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existingAnswer.ContentDigest, digest, unversionedAnswerDigest(command)) {
+		case domain.SamePayload:
+			return CommissionResult{outcome: BookingAnswerExists, answer: existingAnswer, hasRecord: true}, nil
+		case domain.DifferentPayload:
 			// 已接受的订舱不能再被拒绝（反之亦然）：应答不可覆盖，改约走撤回与新订舱。
 			return CommissionResult{outcome: BookingAnswerConflict}, nil
+		default:
+			return commissionUndecided(AnswerStoreUnavailable, command.Booking), nil
 		}
-		return CommissionResult{outcome: BookingAnswerExists, answer: existingAnswer, hasRecord: true}, nil
 	}
 
 	acceptance, err := acceptanceFrom(command, bookingRecord.Booking)
