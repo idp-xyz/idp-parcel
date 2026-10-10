@@ -217,11 +217,15 @@ func (handler *ReceiveExternalResultHandler) Handle(
 		return resultStoreUndecided(command.SourceID), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedExternalResultDigest(command)) {
+		case domain.SamePayload:
+			return handler.existingResult(ctx, existing)
+		case domain.DifferentPayload:
 			// 同一来源响应身份携带不同语义或范围：冲突保留原结果，不按最后到达覆盖。
 			return ReceiveExternalResultResult{outcome: ResultSourceConflict}, nil
+		default:
+			return resultStoreUndecided(command.SourceID), nil
 		}
-		return handler.existingResult(ctx, existing)
 	}
 
 	version, err := domain.NewSubmissionVersionID(command.ClaimedVersion)

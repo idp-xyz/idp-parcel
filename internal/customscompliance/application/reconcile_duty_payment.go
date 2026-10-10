@@ -149,6 +149,9 @@ type DutyReconciliationResult struct {
 	reason     DutyReconciliationReason
 	handoffRef string
 	handoffErr error
+	// verificationKey 是`核对已形成`与`已存在`两格落在册上的那一行的键。`已存在`可能是 CCC-1 之前
+	// 入册的旧行，键上是无版本指纹，不能拿本次命令的 CCC-1 指纹重拼。
+	verificationKey ports.DutyVerificationKey
 }
 
 func (result DutyReconciliationResult) Outcome() DutyReconciliationOutcome {
@@ -476,17 +479,26 @@ func (handler *DutyPaymentReconciliationHandler) VerifyPayment(
 		Verification: verification,
 		Basis:        command.Basis,
 	}
+	// CCC-1 之前入册的核对，键上是无版本指纹：同内容要认作那一行，不能因为 CCC-1 键撞不上就再落一版、
+	// 再铸一封信封（ADR-0014）。
+	unversionedKey := record.Key
+	unversionedKey.Digest = unversionedVerificationDigest(command)
+	if _, found, err := handler.deps.Verifications.FindVerification(ctx, unversionedKey); err != nil {
+		return dutyUndecided(DutyVerificationStoreUnavailable), nil
+	} else if found {
+		return DutyReconciliationResult{outcome: DutyVerificationExisting, verificationKey: unversionedKey}, nil
+	}
 	saved, err := handler.deps.Verifications.SaveVerification(ctx, record)
 	if err != nil {
 		return dutyUndecided(DutyVerificationStoreUnavailable), nil
 	}
 	if saved == ports.CaseConfigurationRegistered {
-		result := DutyReconciliationResult{outcome: DutyVerificationFormed}
+		result := DutyReconciliationResult{outcome: DutyVerificationFormed, verificationKey: record.Key}
 		result.handoffRef, result.handoffErr = handler.handOffVerification(ctx, record.Key, verification)
 		return result, nil
 	}
 	// 指纹里已含三轴、依据、程序与资金版本：撞键即同内容，不必再读回比。
-	return DutyReconciliationResult{outcome: DutyVerificationExisting}, nil
+	return DutyReconciliationResult{outcome: DutyVerificationExisting, verificationKey: record.Key}, nil
 }
 
 // handOffVerification 交结算意图。失败不翻核对，留续办引用指名哪一版没交出去，原始错误一并交出（HandoffError 头注）。
