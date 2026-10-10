@@ -1,6 +1,7 @@
 package domain_test
 
 import (
+	"slices"
 	"testing"
 	"time"
 
@@ -37,6 +38,15 @@ func namesContract(objectID string) map[domain.CommercialObjectKind]string {
 
 func namesProduct(objectID string) map[domain.CommercialObjectKind]string {
 	return map[domain.CommercialObjectKind]string{domain.ServiceProductObject: objectID}
+}
+
+// adoptedKinds 交回闭包的成员次序，即 Adopted() 交出与快照写下的次序。
+func adoptedKinds(closure domain.CommercialClosure) []domain.CommercialObjectKind {
+	kinds := make([]domain.CommercialObjectKind, 0, len(closure.Adopted()))
+	for _, adopted := range closure.Adopted() {
+		kinds = append(kinds, adopted.Kind())
+	}
+	return kinds
 }
 
 // adoptedServiceRule 交回闭包采纳的那一版客户服务规则的对象标识；没采纳就当场失败。
@@ -264,6 +274,10 @@ func TestASingleBasisServiceRuleResolutionOnlyAsksTheProductTier(t *testing.T) {
 // 解析标识是改动前的代码（基 1d67e27c）对同一夹具实算后钉住的：键指纹、视图修订与采用集合三样不变，它就
 // 不变；它一变，既有登记已固定的解析标识与续办引用就跟着改口。两种壳实算是同一个值，因为壳上的 references
 // 不进解析身份。两种声明次序也是同一个值——客户服务规则挪进第二段只改解析先后，不改身份。
+//
+// 成员次序也照改动前，是调用方声明的次序。解析标识先把成员排序再散列，看不出次序；快照却按次序写下，
+// 次序一变内容摘要就变，已固定的解析重解一次即撞`内容冲突`——落库那一层由 postgres 适配器的
+// TestAResolutionFixedWithTheServiceRuleDeclaredFirstReplaysAsRecorded 钉住。
 func TestAnExistingProductOnlyRegistrationResolvesAsBefore(t *testing.T) {
 	const want = "CLO-d89b23824ea8f1bd"
 	for name, names := range map[string]map[domain.CommercialObjectKind]string{
@@ -289,6 +303,9 @@ func TestAnExistingProductOnlyRegistrationResolvesAsBefore(t *testing.T) {
 				}
 				if got := closure.ResolutionID().String(); got != want {
 					t.Fatalf("bases %v: resolution ID = %q, want %q（改动前实算）", bases, got, want)
+				}
+				if got := adoptedKinds(closure); !slices.Equal(got, bases) {
+					t.Fatalf("bases %v: 成员次序 = %v, want %v（改动前按声明次序）", bases, got, bases)
 				}
 			}
 		})
