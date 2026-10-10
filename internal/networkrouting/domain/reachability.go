@@ -46,26 +46,36 @@ func NewCandidateID(value string) (CandidateID, error) {
 // lineCandidateSeparator 隔开首版候选标识里的线路与版本。
 const lineCandidateSeparator = "@"
 
+// ErrInvalidLineCandidate 拒绝立不住的首版候选标识部件：线路编码空白或版本非正。
+var ErrInvalidLineCandidate = errors.New("network routing: invalid line candidate")
+
 // NewLineCandidateID 铸 ADR-0148 首个候选生成形态的候选标识：候选是一条线路的一个适用版本。标识进判断
 // 留痕、进库，形如「线路@版本」。要从标识取回线路版本的一侧只经 LineVersion，不自己约定分隔符——两侧
-// 各写一份时编得过、测得绿，到成本取数那一刻才答不出线路。
+// 各写一份时编得过、测得绿，到成本取数那一刻才答不出线路。线路编码空白或版本非正即拒：那样铸出的标识
+// LineVersion 解不回。
 func NewLineCandidateID(lineCode string, version int32) (CandidateID, error) {
+	if strings.TrimSpace(lineCode) == "" || version < 1 {
+		return CandidateID{}, fmt.Errorf("%w: line %q version %d", ErrInvalidLineCandidate, lineCode, version)
+	}
 	return NewCandidateID(lineCode + lineCandidateSeparator + strconv.FormatInt(int64(version), 10))
 }
 
-// LineVersion 从首版形态的候选标识取回线路与版本。不是这一形态铸的标识答 ok 为假，由调用方按自己的
-// 失败格答，不猜。版本取最后一个分隔符之后的那段，线路编码里即便含分隔符也解得回。
+// LineVersion 从首版形态的候选标识取回线路与版本，与 NewLineCandidateID 往返相等。不是这一形态铸的标识
+// 答 ok 为假，由调用方按自己的失败格答，不猜。版本取最后一个分隔符之后的那段，线路编码里即便含分隔符也
+// 解得回；那一段只认 NewLineCandidateID 写得出的正整数——前导零、正号、零与负数都拒：收下一个写回去不一样
+// 的串，铸与解就又成了两份拼写。
 func (id CandidateID) LineVersion() (lineCode string, version int32, ok bool) {
 	raw := id.String()
 	at := strings.LastIndex(raw, lineCandidateSeparator)
-	if at <= 0 || at == len(raw)-1 {
+	if at < 0 {
 		return "", 0, false
 	}
-	parsed, err := strconv.ParseInt(raw[at+1:], 10, 32)
-	if err != nil {
+	code, rawVersion := raw[:at], raw[at+len(lineCandidateSeparator):]
+	parsed, err := strconv.ParseInt(rawVersion, 10, 32)
+	if err != nil || parsed < 1 || strconv.FormatInt(parsed, 10) != rawVersion || strings.TrimSpace(code) == "" {
 		return "", 0, false
 	}
-	return raw[:at], int32(parsed), true
+	return code, int32(parsed), true
 }
 
 // CandidateReason 是候选被淘汰或留作证据未知的稳定原因。它是引用而非自由文本，这样

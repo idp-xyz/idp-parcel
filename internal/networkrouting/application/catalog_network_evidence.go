@@ -464,7 +464,7 @@ func foldPathExecutability(
 			}
 		}
 		spec := domain.PathExecutabilitySpec{Candidate: candidate.id, Outcome: domain.PathExecutable}
-		schedule := "LINE/" + candidate.id.String()
+		schedule := "LINE/" + versionReference(candidate.line.Code, candidate.line.Version)
 		if len(blocking) > 0 {
 			spec.Outcome = domain.PathNotExecutable
 			schedule = "ADJUSTMENT/" + joinSortedUnique(blocking)
