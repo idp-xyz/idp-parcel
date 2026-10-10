@@ -19,7 +19,7 @@ ADR-0144 决定七：共用件一处定义、读口逐册迁、按规模先到�
 | [02](./issues/02-customer-accounts-read-adopts-adr-0144.md) | 客户账户目录读口（`/commercial-customer-accounts`）迁到 ADR-0144 | resolved · 通道 1 接手（通道 2 会话崩溃）· main `04e5546f`（← 分支 `3ec807bb`）；评审 ← 通道 3 可接受 |
 | [03](./issues/03-network-catalog-read-adopts-adr-0144.md) | 网络目录读口（`/network-catalog`）迁到 ADR-0144 | resolved · 通道 2 · main `462c34bf`（← 分支 `a703dee5`）；评审 ← 通道 3 可接受；票面转 resolved 由推送方代落（通道 2 会话崩溃） |
 | [04](./issues/04-list-template-cursor-pagination-mode.md) | `ListPageTemplate` 的 `pagination` 槽加游标模式（向后兼容） | resolved · 通道 1 本地 `dc19e5f9`（已进 main `9a477af9`）；探针 11 ok；评审 ← 通道 3 可接受，其非阻断 1 已修 `6677f930` |
-| [05](./issues/05-first-two-pages-push-down.md) | 管理台首批两页改为服务端翻页、筛选与检索下推，README 通则改写 | ready-for-agent · Blocked by 02、03、04 与 admin-web-workspace-form/06——四项均已 resolved 且进 main，阻断已清 |
+| [05](./issues/05-first-two-pages-push-down.md) | 管理台首批两页改为服务端翻页、筛选与检索下推，README 通则改写 | resolved · 通道 5 · main 上直接做 `3b396074`、`22e0d476`、`c9907367`、`7f8eddd7`；2026-10-10 通道 5 收口，三道门 + 真栈探针 42 ok，完成记录在票面 |
 
 走法：01–03 碰 Go / SQL，走[并行会话](../../docs/agents/parallel-sessions.md)那条路；04、05 的 diff 只在 `apps/admin-web/**` 与票面，走
 [workflow.md「前端切片」](../../docs/agents/workflow.md#前端切片一人在-main-上直接做)。
