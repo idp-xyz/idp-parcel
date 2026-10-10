@@ -241,9 +241,12 @@ func (handler *AllocateCostsHandler) Allocate(
 		return operatingUndecided(AllocationStoreUnavailable, command.Allocation), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedAllocateDigest(command)) {
+		case domain.DifferentPayload:
 			// 同一分摊标识携带不同份额：冲突保留原分摊——改法走重分摊换版本。
 			return OperatingResult{outcome: AllocationConflict}, nil
+		case domain.UnknownPayloadShape:
+			return operatingUndecided(AllocationStoreUnavailable, command.Allocation), nil
 		}
 		return handler.existingAllocation(ctx, existing), nil
 	}
@@ -341,9 +344,12 @@ func (handler *AllocateCostsHandler) Derive(
 		return operatingUndecided(ResultStoreUnavailable, command.Scope), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedDeriveDigest(command)) {
+		case domain.DifferentPayload:
 			// 同一口径携带不同组成：冲突保留原快照——迟到成本走重派生换版本。
 			return OperatingResult{outcome: ResultConflict}, nil
+		case domain.UnknownPayloadShape:
+			return operatingUndecided(ResultStoreUnavailable, command.Scope), nil
 		}
 		result := OperatingResult{outcome: ResultExistingResult, result: existing, hasRecord: true}
 		result.handoff = handler.handOff(ctx, ports.OperatingIntent{Result: existing}, command.Scope)

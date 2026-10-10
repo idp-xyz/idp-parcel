@@ -274,10 +274,13 @@ func (handler *MapExternalFundsHandler) AdoptFact(
 		return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedAdoptDigest(command)) {
+		case domain.DifferentPayload:
 			// 同一版本字面携带不同金额或时间：冲突保留原引用——外部更正走版本链，
 			// 不在采用处顶替。冲突的那一份没有被采用，无物可交。
 			return FundsResult{outcome: FundsFactConflict}, nil
+		case domain.UnknownPayloadShape:
+			return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
 		}
 		return handler.existingFact(ctx, existing)
 	}
@@ -343,9 +346,12 @@ func (handler *MapExternalFundsHandler) CorrectFact(
 		return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedCorrectDigest(command)) {
+		case domain.DifferentPayload:
 			// 同一新版本字面携带不同金额或回指：冲突保留先到的那一版，不顶替。
 			return FundsResult{outcome: FundsFactConflict}, nil
+		case domain.UnknownPayloadShape:
+			return fundsUndecided(FundsFactStoreUnavailable, command.Fact), nil
 		}
 		return handler.existingFact(ctx, existing)
 	}
@@ -478,8 +484,11 @@ func (handler *MapExternalFundsHandler) Map(
 		return fundsUndecided(FundsMappingStoreUnavailable, command.Mapping), nil
 	}
 	if alreadyMapped {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedMapDigest(command)) {
+		case domain.DifferentPayload:
 			return FundsResult{outcome: FundsMappingConflict}, nil
+		case domain.UnknownPayloadShape:
+			return fundsUndecided(FundsMappingStoreUnavailable, command.Mapping), nil
 		}
 		return FundsResult{outcome: FundsMappingExisting, mapping: existing, hasRecord: true}, nil
 	}
@@ -534,8 +543,11 @@ func (handler *MapExternalFundsHandler) Apply(
 		return fundsUndecided(ApplicationStoreUnavailable, command.Application), nil
 	}
 	if alreadyApplied {
-		if existingApplication.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existingApplication.ContentDigest, digest, unversionedApplyDigest(command)) {
+		case domain.DifferentPayload:
 			return FundsResult{outcome: ApplicationConflict}, nil
+		case domain.UnknownPayloadShape:
+			return fundsUndecided(ApplicationStoreUnavailable, command.Application), nil
 		}
 		return handler.existingApplication(ctx, existingApplication), nil
 	}
@@ -759,10 +771,10 @@ func fundsContinuation(parts ...string) string {
 
 // adoptDigest 把付款人算进内容：同引用换付款人是另一份内容（冲突），不是重放。
 //
-// 付款人自 migrations/settlement_accounting/0018_external_funds_fact_payer.sql 起进摘要（票 sa-cc/03）。
-// 摘要元素一变，变之前落下的行重投同一内容会撞 ContentDigest 答`内容冲突`而不是`已存在`——幂等
-// 不变式在版本边界上断开。0018 之前本上下文的采用没有生产入口、存量为零，故不回算旧行的摘要，
-// 靠的只是这一条（与该迁移头注同一句）。日后再改摘要元素，要么回算存量，要么在这里再记一版起点。
+// 付款人自 migrations/settlement_accounting/0018_external_funds_fact_payer.sql 起进摘要（票 sa-cc/03）；
+// 0018 之前本上下文的采用没有生产入口、存量为零（与该迁移头注同一句）。摘要元素一变，变之前落下的行
+// 重投同一内容就会撞 ContentDigest 答`内容冲突`——所以 SAC-1 起摘要带形状前缀，之前落下的行按
+// unversionedAdoptDigest 那一版比，不回算存量。再改元素就再换形状版本。
 func adoptDigest(command AdoptFundsFactCommand) string {
 	return settlementCanonicalDigest(domain.CanonicalizeAdoptFundsFactPayload(
 		command.Source, command.Payer, int64(command.Kind), command.Currency, command.AmountMinor, command.Version, command.OccurredAt))

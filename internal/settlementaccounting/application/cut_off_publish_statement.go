@@ -264,9 +264,12 @@ func (handler *CutOffPublishStatementHandler) Publish(
 		return statementUndecided(StatementStoreUnavailable, command.Number), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedPublishDigest(command)) {
+		case domain.DifferentPayload:
 			// 同一单号携带不同截单集合或总额：已发布快照不可顶替，替代走作废+新单号。
 			return StatementResult{outcome: StatementConflict}, nil
+		case domain.UnknownPayloadShape:
+			return statementUndecided(StatementStoreUnavailable, command.Number), nil
 		}
 		return handler.existingStatement(ctx, existing), nil
 	}
@@ -423,11 +426,12 @@ func (handler *CutOffPublishStatementHandler) IncludeLateCharge(
 	}
 
 	return handler.commitInclusion(ctx, inclusionCommit{
-		key:       ports.InclusionKey{TenantID: command.TenantID, Inclusion: inclusionRef},
-		digest:    inclusionDigest(command),
-		inclusion: inclusion,
-		subject:   command.Inclusion,
-		formed:    LateChargeIncluded,
+		key:         ports.InclusionKey{TenantID: command.TenantID, Inclusion: inclusionRef},
+		digest:      inclusionDigest(command),
+		unversioned: unversionedInclusionDigest(command),
+		inclusion:   inclusion,
+		subject:     command.Inclusion,
+		formed:      LateChargeIncluded,
 	})
 }
 
@@ -485,11 +489,12 @@ func (handler *CutOffPublishStatementHandler) IncludeAdjustment(
 	}
 
 	return handler.commitInclusion(ctx, inclusionCommit{
-		key:       ports.InclusionKey{TenantID: command.TenantID, Inclusion: inclusionRef},
-		digest:    adjustmentInclusionDigest(command),
-		inclusion: inclusion,
-		subject:   command.Inclusion,
-		formed:    AdjustmentIncluded,
+		key:         ports.InclusionKey{TenantID: command.TenantID, Inclusion: inclusionRef},
+		digest:      adjustmentInclusionDigest(command),
+		unversioned: unversionedAdjustmentInclusionDigest(command),
+		inclusion:   inclusion,
+		subject:     command.Inclusion,
+		formed:      AdjustmentIncluded,
 	})
 }
 
@@ -497,11 +502,12 @@ func (handler *CutOffPublishStatementHandler) IncludeAdjustment(
 // 内容指纹、纳入本体、续办主体与成功时的结果格。两条路在领域门之前各走各的，门之后
 // 的幂等/冲突/并发/意图纪律只有一份。
 type inclusionCommit struct {
-	key       ports.InclusionKey
-	digest    string
-	inclusion domain.SubsequentInclusion
-	subject   string
-	formed    StatementOutcome
+	key         ports.InclusionKey
+	digest      string
+	unversioned string
+	inclusion   domain.SubsequentInclusion
+	subject     string
+	formed      StatementOutcome
 }
 
 // commitInclusion 提交一次纳入：同键重放按内容指纹分重放与冲突（同一纳入标识不得指向
@@ -515,8 +521,11 @@ func (handler *CutOffPublishStatementHandler) commitInclusion(
 		return statementUndecided(InclusionStoreUnavailable, commit.subject), nil
 	}
 	if alreadyIncluded {
-		if existing.ContentDigest != commit.digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, commit.digest, commit.unversioned) {
+		case domain.DifferentPayload:
 			return StatementResult{outcome: InclusionConflict}, nil
+		case domain.UnknownPayloadShape:
+			return statementUndecided(InclusionStoreUnavailable, commit.subject), nil
 		}
 		result := StatementResult{outcome: InclusionExistingResult, inclusion: existing, hasRecord: true}
 		result.handoff = handler.handOff(ctx, ports.StatementIntent{Inclusion: existing}, commit.subject)
@@ -591,8 +600,11 @@ func (handler *CutOffPublishStatementHandler) OpenDispute(
 		return statementUndecided(DisputeStoreUnavailable, command.Dispute), nil
 	}
 	if opened {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedDisputeDigest(command)) {
+		case domain.DifferentPayload:
 			return StatementResult{outcome: DisputeConflict}, nil
+		case domain.UnknownPayloadShape:
+			return statementUndecided(DisputeStoreUnavailable, command.Dispute), nil
 		}
 		return StatementResult{outcome: DisputeExistingResult, dispute: existing, hasRecord: true}, nil
 	}

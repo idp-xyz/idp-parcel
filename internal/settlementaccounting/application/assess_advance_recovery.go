@@ -242,9 +242,12 @@ func (handler *AssessAdvanceRecoveryHandler) Assess(
 		return advanceUndecided(AssessmentStoreUnavailable, command.Assessment), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedAssessDigest(command)) {
+		case domain.DifferentPayload:
 			// 同一评估标识携带不同裁决或引用：冲突保留原判断——重评换新评估标识。
 			return AdvanceResult{outcome: AssessmentConflict}, nil
+		case domain.UnknownPayloadShape:
+			return advanceUndecided(AssessmentStoreUnavailable, command.Assessment), nil
 		}
 		return AdvanceResult{outcome: AssessmentExistingResult, assessment: existing, hasRecord: true}, nil
 	}
@@ -339,8 +342,11 @@ func (handler *AssessAdvanceRecoveryHandler) FormRecovery(
 		return advanceUndecided(RecoveryStoreUnavailable, command.Recovery), nil
 	}
 	if alreadyFormed {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedRecoveryDigest(command)) {
+		case domain.DifferentPayload:
 			return AdvanceResult{outcome: RecoveryConflict}, nil
+		case domain.UnknownPayloadShape:
+			return advanceUndecided(RecoveryStoreUnavailable, command.Recovery), nil
 		}
 		return handler.existingRecovery(ctx, existing), nil
 	}
@@ -401,8 +407,11 @@ func (handler *AssessAdvanceRecoveryHandler) Adjust(
 		return advanceUndecided(AdjustmentStoreUnavailable, command.Adjustment), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedAdjustDigest(command)) {
+		case domain.DifferentPayload:
 			return AdvanceResult{outcome: AdjustmentConflict}, nil
+		case domain.UnknownPayloadShape:
+			return advanceUndecided(AdjustmentStoreUnavailable, command.Adjustment), nil
 		}
 		return handler.existingAdjustment(ctx, existing), nil
 	}
