@@ -6,7 +6,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -554,60 +553,35 @@ func operatingContinuation(parts ...string) string {
 	return "CONT-" + hex.EncodeToString(digest[:8])
 }
 
-func portionsDigestPart(portions []PortionDirective) []string {
-	parts := make([]string, 0, len(portions))
-	for _, portion := range portions {
-		parts = append(parts, fmt.Sprintf("%s|%d", portion.Target, portion.AmountMinor))
+func costPortions(portions []PortionDirective) []domain.CostPortionContent {
+	encoded := make([]domain.CostPortionContent, len(portions))
+	for i, portion := range portions {
+		encoded[i] = domain.CostPortionContent{Target: portion.Target, AmountMinor: portion.AmountMinor}
 	}
-	sort.Strings(parts)
-	return parts
+	return encoded
 }
 
-func componentsDigestPart(components []ComponentDirective) []string {
-	parts := make([]string, 0, len(components))
-	for _, component := range components {
-		parts = append(parts, fmt.Sprintf("%s|%d|%d", component.Source, component.Effect, component.AmountMinor))
+func costComponents(components []ComponentDirective) []domain.CostComponentContent {
+	encoded := make([]domain.CostComponentContent, len(components))
+	for i, component := range components {
+		encoded[i] = domain.CostComponentContent{Source: component.Source, Effect: int64(component.Effect), AmountMinor: component.AmountMinor}
 	}
-	sort.Strings(parts)
-	return parts
+	return encoded
 }
 
 func allocateDigest(command AllocateCostCommand) string {
-	parts := append([]string{
-		command.Source,
-		fmt.Sprintf("%d", command.SourceMinor),
-		command.Currency,
-		command.Version,
-		command.AllocatedAt.UTC().Format(time.RFC3339Nano),
-	}, portionsDigestPart(command.Portions)...)
-	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return settlementCanonicalDigest(domain.CanonicalizeAllocateCostPayload(
+		command.Source, command.SourceMinor, command.Currency, command.Version, command.AllocatedAt, costPortions(command.Portions)))
 }
 
 func reallocateDigest(command ReallocateCommand) string {
-	parts := append([]string{
-		command.NewVersion,
-		command.AllocatedAt.UTC().Format(time.RFC3339Nano),
-	}, portionsDigestPart(command.Portions)...)
-	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return settlementCanonicalDigest(domain.CanonicalizeReallocateCostPayload(command.NewVersion, command.AllocatedAt, costPortions(command.Portions)))
 }
 
 func deriveDigest(command DeriveResultCommand) string {
-	parts := append([]string{
-		command.Currency,
-		command.Version,
-		command.AsOf.UTC().Format(time.RFC3339Nano),
-	}, componentsDigestPart(command.Components)...)
-	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return settlementCanonicalDigest(domain.CanonicalizeDeriveResultPayload(command.Currency, command.Version, command.AsOf, costComponents(command.Components)))
 }
 
 func rederiveDigest(command RederiveResultCommand) string {
-	parts := append([]string{
-		command.NewVersion,
-		command.AsOf.UTC().Format(time.RFC3339Nano),
-	}, componentsDigestPart(command.Components)...)
-	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return settlementCanonicalDigest(domain.CanonicalizeRederiveResultPayload(command.NewVersion, command.AsOf, costComponents(command.Components)))
 }

@@ -6,8 +6,6 @@ package application
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
@@ -332,12 +330,7 @@ func (handler *ReceiveSupplierBillHandler) handOffPayable(
 
 // auditDigest 是同一应付身份的内容比对锚：主张、版本与行任一不同即是另一份内容。
 func auditDigest(command AuditBillLineCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		command.Claim.String(),
-		command.Version.String(),
-		command.Line.String(),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return settlementCanonicalDigest(domain.CanonicalizeAuditBillLinePayload(command.Claim.String(), command.Version.String(), command.Line.String()))
 }
 
 // CreditNoteOutcome 是一次供应商费用贷项形成的应用处理结果。
@@ -548,11 +541,5 @@ func (handler *ReceiveSupplierBillHandler) handOffCreditNote(
 // creditNoteDigest 是同一贷项身份与版本的内容比对锚：原应付、金额、原因与出具时点任一不同
 // 即是另一份内容。
 func creditNoteDigest(command FormSupplierCreditNoteCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		command.Payable.String(),
-		fmt.Sprintf("%d", command.AmountMinor),
-		command.Reason.String(),
-		command.IssuedAt.UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return settlementCanonicalDigest(domain.CanonicalizeSupplierCreditNotePayload(command.Payable.String(), command.AmountMinor, command.Reason.String(), command.IssuedAt))
 }

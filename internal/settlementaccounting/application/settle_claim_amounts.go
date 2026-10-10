@@ -717,55 +717,23 @@ func claimContinuation(parts ...string) string {
 }
 
 func claimAmountDigest(command FormClaimAmountCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		fmt.Sprintf("%d", command.Kind),
-		command.ClaimItem,
-		command.Responsibility,
-		command.LegalEntity,
-		command.OriginalCharge,
-		command.Currency,
-		fmt.Sprintf("%d", command.AmountMinor),
-		command.Period,
-		command.FormedAt.UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return settlementCanonicalDigest(domain.CanonicalizeClaimAmountPayload(
+		int64(command.Kind), command.ClaimItem, command.Responsibility, command.LegalEntity, command.OriginalCharge,
+		command.Currency, command.AmountMinor, command.Period, command.FormedAt))
 }
 
 func receivableDigest(command FormReceivableCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		command.Matter,
-		command.Responsibility,
-		command.Counterparty,
-		command.LegalEntity,
-		command.Currency,
-		fmt.Sprintf("%d", command.AmountMinor),
-		command.FormedAt.UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return settlementCanonicalDigest(domain.CanonicalizeReceivablePayload(
+		command.Matter, command.Responsibility, command.Counterparty, command.LegalEntity, command.Currency, command.AmountMinor, command.FormedAt))
 }
 
 func acknowledgeDigest(command AcknowledgeCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		command.Receivable,
-		command.Response,
-		fmt.Sprintf("%d", command.Standing),
-		fmt.Sprintf("%d", command.AcknowledgedMinor),
-		command.AcknowledgedAt.UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return settlementCanonicalDigest(domain.CanonicalizeAcknowledgeReceivablePayload(
+		command.Receivable, command.Response, int64(command.Standing), command.AcknowledgedMinor, command.AcknowledgedAt))
 }
 
 func claimAdjustDigest(command AdjustClaimAmountCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		fmt.Sprintf("%d", command.TargetKind),
-		command.Target,
-		fmt.Sprintf("%d", command.Reason),
-		command.Basis,
-		fmt.Sprintf("%d", command.Direction),
-		command.Currency,
-		fmt.Sprintf("%d", command.AmountMinor),
-		command.Period,
-		command.FormedAt.UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
+	return settlementCanonicalDigest(domain.CanonicalizeAdjustClaimAmountPayload(
+		int64(command.TargetKind), command.Target, int64(command.Reason), command.Basis, int64(command.Direction),
+		command.Currency, command.AmountMinor, command.Period, command.FormedAt))
 }
