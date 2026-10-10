@@ -144,9 +144,18 @@ Status 行由推送方在两件进 main 时一并改，免得两条分支各改�
   - `TestNetworkOperatorRegistryIntakeAuthenticatesBeforeReadingTheBody`：令牌不过时批文一次未读（`OperatorRegistryIntake` 类型注释的「先认证、后读批文」）。
   - `TestNetworkOperatorRegistryIntakeCapsTheBodyAtOneMebibyte`：恰一兆字节照常译，多一个字节答坏报文（`maxRegistrationBytes`）。
 - 判断项：复用本包既有的 `registrationEndpoints`、`unreachableRegistrar`、`problemCode`，不另造；七族批文只给受理所需几格，身份全用 `SYN-`。
-  七个方法各接哪一族的译装由类型钉死——`translateOnline` 的类型参数由方法的返回类型推出，接错编不过——所以第一条证的是「都走在线那一路、
+  七个方法各接哪一族的译装由类型钉死——`translateOnline` 的类型参数由译装实参推出，接错一族在 return 处类型不符、编不过——所以第一条证的是「都走在线那一路、
   租户取认证结果」，不是接线。
-- 判别力（临时变异 `operator_registry_intake.go`，证完 `git checkout` 还原，未提交）：M1 认证前先读批文——认证顺序那条红（批文读了 1 次），
-  另两条随之红；M2 上限挪过一兆——上限那条红；M3 吞掉认证失败——答复格与认证顺序两条红；M4 租户不取认证结果——第一条红（租户为空）。
+- 判别力（临时变异 `operator_registry_intake.go`，证完 `git checkout` 还原，未提交）：M1 认证前先读批文的一个字节——认证顺序那条红（批文读了 1 次），
+  另两条因批文少了那个字节随之红；M2 上限挪过一兆——上限那条红；M3 吞掉认证失败——答复格与认证顺序两条红；M4 租户不取认证结果——第一条红（租户为空）。
 - 验证（钉 `12653a57`，隔离工作树无未提交）：`go build ./...`、`go vet ./...` 退出 0；新文件 `gofmt -l` 零行；
   `go test -count=1 -p 1 ./internal/networkrouting/adapters/http/ ./internal/architecture/...` 两包 ok。只加测试文件，没有反向依赖要跑，不碰真库。
+
+**评审 ← 通道 3 · 钉 `de01b9af` · 21:1x（`task-70b55252`）**：两轴无阻断；非阻断三条（全文在任务台账）——答复格那条两层循环不用 `t.Run`，
+首个失败即停；自报租户段只带 `tenant_id` 一键，服务日历与可用性调整两族即便不拒自报租户也因缺格答 400，分不出来；完成记录的 M1 没写改法，
+判断项「类型参数由返回类型推出」机制说错。
+
+**非阻断三条的处置 ← 通道 1 · 21:2x（代码 tip `504ddc6b`）**：三条都在本分支改——答复格逐格逐族 `t.Run`（35 个子用例），端点在子用例里各自构造；
+自报租户改用本族合法行加 `tenant_id` 键，M5（`registrationjson` 的 `refuseSelfReportedTenant` 不再拒）下七族子用例全红（证完还原）；上面完成
+记录的 M1 补了改法，判断项的机制按评审更正。验证（钉 `504ddc6b`）：`go build ./...`、`go vet ./...` 退出 0，`gofmt -l` 零行；`go test -count=1 -p 1`
+本包、`registrationjson`、`./internal/architecture/...` 三包 ok。增量复评：交通道 3。
