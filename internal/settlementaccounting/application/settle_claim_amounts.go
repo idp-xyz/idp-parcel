@@ -292,8 +292,11 @@ func (handler *SettleClaimAmountsHandler) FormClaimAmount(
 		return claimUndecided(ClaimAmountStoreUnavailable, command.Amount), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedClaimAmountDigest(command)) {
+		case domain.DifferentPayload:
 			return ClaimSettlementResult{outcome: ClaimAmountConflict}, nil
+		case domain.UnknownPayloadShape:
+			return claimUndecided(ClaimAmountStoreUnavailable, command.Amount), nil
 		}
 		return handler.existingAmount(ctx, existing), nil
 	}
@@ -367,8 +370,11 @@ func (handler *SettleClaimAmountsHandler) FormReceivable(
 		return claimUndecided(ReceivableStoreUnavailable, command.Receivable), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedReceivableDigest(command)) {
+		case domain.DifferentPayload:
 			return ClaimSettlementResult{outcome: ReceivableConflict}, nil
+		case domain.UnknownPayloadShape:
+			return claimUndecided(ReceivableStoreUnavailable, command.Receivable), nil
 		}
 		return ClaimSettlementResult{outcome: ReceivableExisting, receivable: existing, hasRecord: true}, nil
 	}
@@ -440,8 +446,11 @@ func (handler *SettleClaimAmountsHandler) Acknowledge(
 		return claimUndecided(AcknowledgementStoreUnavailable, command.Acknowledgement), nil
 	}
 	if recorded {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedAcknowledgeDigest(command)) {
+		case domain.DifferentPayload:
 			return ClaimSettlementResult{outcome: AcknowledgementConflict}, nil
+		case domain.UnknownPayloadShape:
+			return claimUndecided(AcknowledgementStoreUnavailable, command.Acknowledgement), nil
 		}
 		return ClaimSettlementResult{outcome: AcknowledgementExisting, acknowledgement: existing, hasRecord: true}, nil
 	}
@@ -494,8 +503,11 @@ func (handler *SettleClaimAmountsHandler) Adjust(
 		return claimUndecided(ClaimAdjustmentStoreUnavailable, command.Adjustment), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedClaimAdjustDigest(command)) {
+		case domain.DifferentPayload:
 			return ClaimSettlementResult{outcome: ClaimAdjustmentConflict}, nil
+		case domain.UnknownPayloadShape:
+			return claimUndecided(ClaimAdjustmentStoreUnavailable, command.Adjustment), nil
 		}
 		return ClaimSettlementResult{outcome: ClaimAdjustmentExisting, adjustment: existing, hasRecord: true}, nil
 	}

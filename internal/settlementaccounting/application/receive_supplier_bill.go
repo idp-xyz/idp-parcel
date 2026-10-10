@@ -170,10 +170,13 @@ func (handler *ReceiveSupplierBillHandler) Handle(
 		return billStoreUndecided(command.Claim.Claim.String()), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedBillContentDigest(command)) {
+		case domain.DifferentPayload:
 			// 同一主张身份和版本携带不同金额或范围：版本冲突保留原结果，不按最后到达
 			// 覆盖（AT-SA-093）。
 			return ReceiveSupplierBillResult{outcome: BillVersionConflict}, nil
+		case domain.UnknownPayloadShape:
+			return billStoreUndecided(command.Claim.Claim.String()), nil
 		}
 		// 同一主张重复到达：返回原结果，不重复匹配或审核（AT-SA-092）。
 		return handler.existingResult(ctx, existing), nil

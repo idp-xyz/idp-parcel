@@ -230,3 +230,29 @@ func TestCommandPayloadsRoundTripAsSAC1(t *testing.T) {
 		})
 	}
 }
+
+// Covers: ADR-0014「摘要只在同一规范化版本内可比」——带 SAC-1 前缀的与本次 SAC-1 摘要比，不带前缀的
+// 与无版本那一版比，认不出的前缀既不是重放也不是冲突。
+func TestStoredDigestIsComparedWithinItsOwnShape(t *testing.T) {
+	const current, unversioned = "SAC-1:aa", "bb"
+	cases := []struct {
+		name   string
+		stored string
+		want   domain.StoredDigestComparison
+	}{
+		{"SAC-1 same content", "SAC-1:aa", domain.SamePayload},
+		{"SAC-1 different content", "SAC-1:cc", domain.DifferentPayload},
+		{"unversioned same content", "bb", domain.SamePayload},
+		{"unversioned different content", "cc", domain.DifferentPayload},
+		{"an unversioned digest is not read as SAC-1", "aa", domain.DifferentPayload},
+		{"a later shape", "SAC-2:aa", domain.UnknownPayloadShape},
+		{"another context's shape", "CCC-1:bb", domain.UnknownPayloadShape},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := domain.CompareStoredDigest(testCase.stored, current, unversioned); got != testCase.want {
+				t.Fatalf("CompareStoredDigest(%q) = %d, want %d", testCase.stored, got, testCase.want)
+			}
+		})
+	}
+}

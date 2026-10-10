@@ -163,9 +163,12 @@ func (handler *ReceiveSupplierBillHandler) Audit(
 		return auditUndecided(PayableStoreUnavailable, command.Payable.String()), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedAuditDigest(command)) {
+		case domain.DifferentPayload:
 			// 同一应付身份指向另一行：请求冲突，原应付不被覆盖。
 			return AuditResult{outcome: PayableConflict}, nil
+		case domain.UnknownPayloadShape:
+			return auditUndecided(PayableStoreUnavailable, command.Payable.String()), nil
 		}
 		return handler.existingPayable(ctx, existing), nil
 	}
@@ -445,8 +448,11 @@ func (handler *ReceiveSupplierBillHandler) Credit(
 		return creditUndecided(CreditNoteStoreUnavailable, command.Note.String()), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedCreditNoteDigest(command)) {
+		case domain.DifferentPayload:
 			return CreditNoteResult{outcome: CreditNoteConflict}, nil
+		case domain.UnknownPayloadShape:
+			return creditUndecided(CreditNoteStoreUnavailable, command.Note.String()), nil
 		}
 		return handler.existingCreditNote(ctx, existing), nil
 	}
