@@ -1,7 +1,7 @@
 # 15 候选标识「线路@版本」与成本适配器按「/」切不一致：计价输入一接上，初始路由就落成本来源不可用
 
 Category: bug
-Status: ready-for-agent——2026-10-10 通道 1 立（用户授权自决），出自 [11](11-demo-network-adopted-as-reference-configuration.md) 完工报里通道 2 的探针实测（探针未入库）
+Status: in-progress——2026-10-10 21:0x 通道 1 认领（用户令通道 1 自己完成：通道 3 在派单前已 crash，`task-33e8ef5a` 未执行）；分支 `mcp1-rfc15`，基 `1d67e27c`，隔离工作树 `/home/tops/workspace/idp-parcel-mcp1-rfc15`。此前：ready-for-agent——2026-10-10 通道 1 立（用户授权自决），出自 [11](11-demo-network-adopted-as-reference-configuration.md) 完工报里通道 2 的探针实测（探针未入库）
 Blocked by: 无逻辑依赖——铸标识的一侧随 [09](09-initial-route-evidence-folded-from-catalog.md)、切标识的一侧随 [10](10-candidate-cost-from-leg-buy-evaluations.md)，两侧在 main 上都已存在
 归档：不属 [psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md) 的子票集；放在本目录是因为它是 09 与 10 之间的缝。
 地盘：`internal/networkrouting` 里候选标识的铸造与解析两侧及其用例。
