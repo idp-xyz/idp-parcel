@@ -22,8 +22,8 @@ var ErrMalformedRequest = errors.New("customs compliance http: malformed request
 // 代码：租户归属只能来自通道认证结果（监管回执经集成客户端族进来，ADR-0149；哪家来源送回执是租户取值
 // `PAR-INT-03`；采信报文自称的租户号会穿透 ADR-0003 的隔离边界）；来源标识、层、原文语义与
 // 发生时间照 ADR-0023 的同一条纪律从报文体收——服务端不代铸外部事实的身份与时间。
-// 未决期间本包不带任何真渠道实现，包括「开发用」的采信头部版本；隔离写准入的 IsolatedCommandIntake
-// （ADR-0091）是唯一的实现，它不采信任何自报，租户取注入值。
+// 真渠道是集成客户端族的 IntegrationClientIntake（ADR-0149；票 operator-channel/11）：租户取册上的绑定，
+// 不采信载荷自报。UnconfiguredIntake 仍在，供发行方参数未设时整口答未配置，以及还没换渠道的其他口。
 type ResultIntake interface {
 	IntakeResult(ctx context.Context, request *http.Request) (application.ReceiveExternalResultCommand, error)
 }
@@ -59,15 +59,7 @@ func NewReceiveExternalResultEndpoint(intake ResultIntake, handler ResultHandler
 
 		command, err := intake.IntakeResult(request.Context(), request)
 		if err != nil {
-			if errors.Is(err, ErrAccessChannelNotConfigured) {
-				writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
-				return
-			}
-			if errors.Is(err, ErrMalformedRequest) {
-				writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-				return
-			}
-			writeProblem(response, http.StatusInternalServerError, codeIntakeFailed)
+			writeRegistrationIntakeProblem(response, err)
 			return
 		}
 

@@ -4,11 +4,9 @@ import (
 	"fmt"
 	"strings"
 
-	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	nodeopshttp "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/http"
 	pspilot "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/pilotgovernance"
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
-	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 )
 
@@ -71,11 +69,10 @@ type isolatedWriteAdmission struct {
 	// partyIdentity 是 `/commercial-*` 身份族登记口的隔离 Intake（票 admin-web-group-legal-entities/06）。
 	// 租户格填开关值，行内容只从载荷取；它实现了哪几口的 Intake 接口，装配点就换得了哪几行——编译期锁住。
 	partyIdentity *commercialhttp.IsolatedPartyIdentityIntake
-	// 以下各格是主链命令面各上下文的隔离命令 Intake（票 operator-channel/08），锁法同 partyIdentity。
+	// 以下各格是主链命令面里仍走隔离放行的上下文（票 operator-channel/08）。关务外部结果、监管凭证与外部资金事实
+	// 已换集成客户端 Intake，隔离放行在同一笔撤下（ADR-0150 决定三；票 operator-channel/11）。
 	nodeOperations       *nodeopshttp.IsolatedCommandIntake
 	transportFulfillment *tfhttp.IsolatedCommandIntake
-	customs              *customshttp.IsolatedCommandIntake
-	settlement           *settlementhttp.IsolatedCommandIntake
 }
 
 // isolatedWriteAdmittedCommandLines 是写开关到此刻为止换上隔离 Intake 的命令面，供启动日志出声
@@ -101,9 +98,6 @@ var isolatedWriteAdmittedCommandLines = []string{
 	"/transport-fulfillment/delivery-attempts",
 	"/transport-fulfillment-segment-closures",
 	"/transport-fulfillment-effective-time-judgments",
-	"/customs/external-results",
-	"/customs-regulatory-credential-registrations",
-	"/settlement-external-funds-fact-registrations",
 }
 
 // admittedCommandLines 交回放行名单的副本：日志与测试都不该改得动那份表。
@@ -133,22 +127,6 @@ func (admission *isolatedWriteAdmission) transportFulfillmentIntake() *tfhttp.Is
 		return nil
 	}
 	return admission.transportFulfillment
-}
-
-// customsIntake 对 nil 接收者交回 nil，理由同 partyIdentityIntake。
-func (admission *isolatedWriteAdmission) customsIntake() *customshttp.IsolatedCommandIntake {
-	if admission == nil {
-		return nil
-	}
-	return admission.customs
-}
-
-// settlementIntake 对 nil 接收者交回 nil，理由同 partyIdentityIntake。
-func (admission *isolatedWriteAdmission) settlementIntake() *settlementhttp.IsolatedCommandIntake {
-	if admission == nil {
-		return nil
-	}
-	return admission.settlement
 }
 
 // buildIsolatedWriteAdmission 解析隔离写路径准入的显式输入（ADR-0091 决定四）。
@@ -199,14 +177,6 @@ func buildIsolatedWriteAdmission(getenv func(string) string) (*isolatedWriteAdmi
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: isolated transport fulfillment command intake: %w", err)
 	}
-	customs, err := customshttp.NewIsolatedCommandIntake(customshttp.IsolatedCommandIntakeDeps{Tenant: tenant, Clock: systemClock{}})
-	if err != nil {
-		return nil, fmt.Errorf("parcel-api: isolated customs command intake: %w", err)
-	}
-	settlement, err := settlementhttp.NewIsolatedCommandIntake(tenant)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-api: isolated settlement command intake: %w", err)
-	}
 	return &isolatedWriteAdmission{
 		governanceDirectory:  directory,
 		selfAuthority:        isolatedSelfAuthority,
@@ -214,7 +184,5 @@ func buildIsolatedWriteAdmission(getenv func(string) string) (*isolatedWriteAdmi
 		partyIdentity:        partyIdentity,
 		nodeOperations:       nodeOperations,
 		transportFulfillment: transportFulfillment,
-		customs:              customs,
-		settlement:           settlement,
 	}, nil
 }
