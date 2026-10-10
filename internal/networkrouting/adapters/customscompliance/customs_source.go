@@ -19,6 +19,12 @@ import (
 // 对不齐）：逐格分派不留兜底，认不出就上抛，不折成一个像样的硬约束（ADR-0031）。
 var errUntranslatable = errors.New("network routing: untranslatable customs applicability answer")
 
+// ErrCustomsCatalogUnreadable 说 CC 读不到口岸与申报路径目录。CC 把它答成状态未知（分诊裁定
+// 三把「依赖读不到」收进 CC 的答案代数），到本上下文却是依赖调不通：
+// nrports.CustomsApplicabilitySource 只许它走 error，由应用层形成`未形成判断`；译成缺口，一次
+// 目录故障就进了`资料不足`统计（nrdomain.EvidenceGap）。
+var ErrCustomsCatalogUnreadable = errors.New("network routing: customs applicability: the customs port and path catalog is unreadable")
+
 // Judge 是 customs-compliance 判断服务的窄面：按（租户，时点，候选投影）逐条作答，答案
 // 词形与出处都在提供方 domain 上。装配时把 CC 的应用处理器直接接进来。
 type Judge interface {
@@ -45,8 +51,8 @@ var _ nrports.CustomsApplicabilitySource = (*CustomsApplicabilityAssessor)(nil)
 
 // AssessCustomsApplicability 的映射口径（routing-first-cut/12 分诊裁定三轮次四落定）：
 // 可用 → 满足；不可用 → 适用限制，限制引用指回判断标识与理由（原因链上指得回来源，
-// 「已解除」才核对得了）；状态未知 → 逐类缺口与再次判断条件。出处逐候选带回——判断
-// 标识加目录版本引用，随判断记录留痕。
+// 「已解除」才核对得了）；状态未知 → 逐类缺口与再次判断条件，唯独目录读不到整份交回
+// ErrCustomsCatalogUnreadable。出处逐候选带回——判断标识加目录版本引用，随判断记录留痕。
 func (assessor *CustomsApplicabilityAssessor) AssessCustomsApplicability(
 	ctx context.Context,
 	query nrports.CustomsApplicabilityQuery,
@@ -172,7 +178,8 @@ func translate(
 }
 
 // unknownGap 把状态未知译成缺口与再次判断条件：同类缺口同一对词，缺国家码再指名哪一
-// 端——缺口点名要补的那一格，重判条件点名换了什么再判。
+// 端——缺口点名要补的那一格，重判条件点名换了什么再判。目录读不到没有缺口可译：缺口要指
+// 名一份业务证据，而那里缺的是一个调得通的依赖。
 func unknownGap(
 	judgment ccdomain.CustomsApplicabilityJudgment,
 ) (nrdomain.EvidenceGapReference, nrdomain.ReassessmentCondition, error) {
@@ -189,7 +196,8 @@ func unknownGap(
 	case ccdomain.CatalogEmpty:
 		return gapPair("CUSTOMS_PORT_PATH_CATALOG_EMPTY", "CUSTOMS_PORT_PATH_CATALOG_REGISTERED")
 	case ccdomain.CatalogUnreadable:
-		return gapPair("CUSTOMS_PORT_PATH_CATALOG_UNREADABLE", "CUSTOMS_PORT_PATH_CATALOG_RESTORED")
+		return nrdomain.EvidenceGapReference{}, nrdomain.ReassessmentCondition{},
+			fmt.Errorf("%w: candidate %s", ErrCustomsCatalogUnreadable, judgment.Candidate())
 	default:
 		return nrdomain.EvidenceGapReference{}, nrdomain.ReassessmentCondition{},
 			fmt.Errorf("%w: unknown reason %d", errUntranslatable, judgment.UnknownReason())

@@ -2,6 +2,7 @@ package customscompliance_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -13,8 +14,9 @@ import (
 )
 
 // 本文件钉 routing-first-cut/12 轮次四的映射口径：可用 → 满足；不可用 → 适用限制（指回
-// 判断标识与理由）；状态未知 → 逐类缺口。出处逐候选带回。投影（租户、时点、两端国家）照
-// 样翻译过去，答案缺格或对不齐响亮上抛，不折成一条像样的硬约束。
+// 判断标识与理由）；状态未知 → 逐类缺口，唯独目录读不到是依赖调不通、整份上抛。出处逐候选
+// 带回。投影（租户、时点、两端国家）照样翻译过去，答案缺格或对不齐响亮上抛，不折成一条像
+// 样的硬约束。
 
 var assessAsOf = time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC)
 
@@ -274,14 +276,6 @@ func TestUnknownReasonsMapOntoNamedGaps(t *testing.T) {
 		{"目录为空", "cand-empty-catalog", func(t *testing.T) ccdomain.CustomsApplicabilityJudgment {
 			return foldJudgment(t, tenant, "cand-empty-catalog", "CN", "SG", true, true, ccdomain.CustomsApplicabilityEntries{})
 		}, "CUSTOMS_PORT_PATH_CATALOG_EMPTY", "CUSTOMS_PORT_PATH_CATALOG_REGISTERED"},
-		{"目录读不到", "cand-unreadable", func(t *testing.T) ccdomain.CustomsApplicabilityJudgment {
-			judgment, err := ccdomain.FoldCustomsApplicabilityUnreadable(
-				tenant, customsCandidate(t, "cand-unreadable"), "CN", true, "SG", true, assessAsOf)
-			if err != nil {
-				t.Fatalf("FoldCustomsApplicabilityUnreadable: %v", err)
-			}
-			return judgment
-		}, "CUSTOMS_PORT_PATH_CATALOG_UNREADABLE", "CUSTOMS_PORT_PATH_CATALOG_RESTORED"},
 	}
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
@@ -306,6 +300,32 @@ func TestUnknownReasonsMapOntoNamedGaps(t *testing.T) {
 				t.Fatalf("gap = %+v，想要 %q / %q", gaps, test.missing, test.again)
 			}
 		})
+	}
+}
+
+// Covers: CC 把目录读不到答成状态未知（分诊裁定三），到本上下文却是依赖调不通——
+// CustomsApplicabilitySource 只许它走 error，EvidenceGap 不许它记成缺口：译成缺口会让可达性
+// 形成`资料不足`、初始路由形成候选证据不全，那是向客户要资料的理由。一条候选读不到就整份
+// 上抛，已作答的那条也不交，免得半份事实被当成逐候选都答过。
+func TestAnUnreadableCatalogIsADependencyFailureNotAGap(t *testing.T) {
+	tenant := customsTenant(t)
+	unreadable, err := ccdomain.FoldCustomsApplicabilityUnreadable(
+		tenant, customsCandidate(t, "cand-unreadable"), "CN", true, "SG", true, assessAsOf)
+	if err != nil {
+		t.Fatalf("FoldCustomsApplicabilityUnreadable: %v", err)
+	}
+	judge := &judgeDouble{judgments: map[string]ccdomain.CustomsApplicabilityJudgment{
+		"cand-answered":   foldJudgment(t, tenant, "cand-answered", "CN", "SG", true, true, fullEntries(t)),
+		"cand-unreadable": unreadable,
+	}}
+
+	assessment, err := newAssessor(t, judge).AssessCustomsApplicability(
+		t.Context(), nrQuery(t, "cand-answered", "cand-unreadable"))
+	if !errors.Is(err, adapter.ErrCustomsCatalogUnreadable) {
+		t.Fatalf("err = %v，目录读不到要以依赖调不通上抛", err)
+	}
+	if len(assessment.Findings) != 0 || len(assessment.Citations) != 0 {
+		t.Fatalf("assessment = %+v，依赖调不通时不交事实也不交出处", assessment)
 	}
 }
 

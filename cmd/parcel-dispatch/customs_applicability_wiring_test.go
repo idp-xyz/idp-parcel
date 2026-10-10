@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"slices"
 	"testing"
 	"time"
@@ -11,7 +12,9 @@ import (
 	ccpostgres "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/postgres"
 	ccdomain "go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	ccports "go.idp.xyz/idp-parcel/internal/customscompliance/ports"
+	nrcustoms "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/customscompliance"
 	nrpostgres "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/postgres"
+	nrapplication "go.idp.xyz/idp-parcel/internal/networkrouting/application"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
@@ -154,18 +157,7 @@ func loadWiringEvidence(t *testing.T, db *bentopg.DB, tenant string) nrports.Ini
 	if err != nil {
 		t.Fatalf("构造初始路由证据视图：%v", err)
 	}
-	key := nrdomain.InitialRouteJudgmentKey{
-		TenantID:           mustNR(t, nrdomain.NewTenantID, tenant),
-		CustomerAccountID:  mustNR(t, nrdomain.NewCustomerAccountID, "SYN-ACCOUNT-01"),
-		ShipmentRequestID:  mustNR(t, nrdomain.NewShipmentRequestID, "SYN-REQUEST-01"),
-		AcceptanceBaseline: mustNR(t, nrdomain.NewAcceptanceBaselineReference, "SYN-VER-01"),
-		DeclaredParcelID:   mustNR(t, nrdomain.NewDeclaredParcelID, "SYN-PARCEL-01"),
-		ServicePurpose:     mustNR(t, nrdomain.NewServicePurpose, wiringPurpose),
-	}
-	geo := nrdomain.NewGeoResolutionProjection(
-		nrdomain.NewGeoResolutionSide("CN", true, "", false),
-		nrdomain.NewGeoResolutionSide("SG", true, "", false))
-	got, configured, err := evidence.LoadInitialRouteEvidence(t.Context(), key, nrports.RequestCarriedContent{Geo: geo})
+	got, configured, err := evidence.LoadInitialRouteEvidence(t.Context(), wiringRouteKey(t, tenant), wiringCarried())
 	if err != nil {
 		t.Fatalf("LoadInitialRouteEvidence：%v", err)
 	}
@@ -176,6 +168,59 @@ func loadWiringEvidence(t *testing.T, db *bentopg.DB, tenant string) nrports.Ini
 		t.Fatal("候选空间为空：没有含关务段的候选可证")
 	}
 	return got
+}
+
+func wiringRouteKey(t *testing.T, tenant string) nrdomain.InitialRouteJudgmentKey {
+	t.Helper()
+	return nrdomain.InitialRouteJudgmentKey{
+		TenantID:           mustNR(t, nrdomain.NewTenantID, tenant),
+		CustomerAccountID:  mustNR(t, nrdomain.NewCustomerAccountID, "SYN-ACCOUNT-01"),
+		ShipmentRequestID:  mustNR(t, nrdomain.NewShipmentRequestID, "SYN-REQUEST-01"),
+		AcceptanceBaseline: mustNR(t, nrdomain.NewAcceptanceBaselineReference, "SYN-VER-01"),
+		DeclaredParcelID:   mustNR(t, nrdomain.NewDeclaredParcelID, "SYN-PARCEL-01"),
+		ServicePurpose:     mustNR(t, nrdomain.NewServicePurpose, wiringPurpose),
+	}
+}
+
+func wiringReachabilityKey(t *testing.T, tenant string) nrdomain.ReachabilityJudgmentKey {
+	t.Helper()
+	asOf, err := nrdomain.NewJudgmentAsOf(
+		mustNR(t, nrdomain.NewAsOfSemantic, "ACCEPTANCE_TIME"),
+		time.Date(2026, 9, 1, 0, 0, 0, 0, time.UTC),
+		mustNR(t, nrdomain.NewAsOfStrategyVersion, "asof-strategy/v1"))
+	if err != nil {
+		t.Fatalf("构造 asOf：%v", err)
+	}
+	return nrdomain.ReachabilityJudgmentKey{
+		TenantID:          mustNR(t, nrdomain.NewTenantID, tenant),
+		CustomerAccountID: mustNR(t, nrdomain.NewCustomerAccountID, "SYN-ACCOUNT-01"),
+		ShipmentRequestID: mustNR(t, nrdomain.NewShipmentRequestID, "SYN-REQUEST-01"),
+		SubmissionVersion: mustNR(t, nrdomain.NewSubmissionVersionID, "SYN-VER-01"),
+		DeclaredParcelID:  mustNR(t, nrdomain.NewDeclaredParcelID, "SYN-PARCEL-01"),
+		ServicePurpose:    mustNR(t, nrdomain.NewServicePurpose, wiringPurpose),
+		AsOf:              asOf,
+	}
+}
+
+// wiringCarried 是随请求携带的 CN→SG 地理解析投影。
+func wiringCarried() nrports.RequestCarriedContent {
+	return nrports.RequestCarriedContent{Geo: nrdomain.NewGeoResolutionProjection(
+		nrdomain.NewGeoResolutionSide("CN", true, "", false),
+		nrdomain.NewGeoResolutionSide("SG", true, "", false))}
+}
+
+// unreadableCustomsSource 经生产装配接关务来源，但 CC 两本目录所在那只库的连接池已关：CC 照
+// 分诊裁定三答状态未知·目录读不到。网络目录另从一只活库读，所以证的只是关务这一跳。
+func unreadableCustomsSource(t *testing.T) nrports.CustomsApplicabilitySource {
+	t.Helper()
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	source := customsApplicabilitySource(db)
+	pool.Close()
+	return source
 }
 
 // expectCustomsCitations 核出处逐候选一条、带 CC 的判断标识，且引用含 wantVersions 各条。
@@ -263,4 +308,36 @@ func TestSyntheticNetworkCustomsAnswersFollowTheTenantsCatalog(t *testing.T) {
 		}
 	}
 	expectCustomsCitations(t, noImport, "PATH:SYN-PATH-CN-EXPORT-01@2026-01-01T00:00:00Z")
+}
+
+// Covers: 评审阻断（12 号票 Comments「评审 ← 通道 2」）——CC 目录读不到时，初始路由与可达性两个证据视图经生产装配
+// 都交回依赖调不通，不交一份带关务缺口的证据：缺口会让可达性形成`资料不足`、初始路由形成候选证据不全，而那是向客户
+// 要资料的理由。这条 error 折成`未形成判断`（可达性）与`未决`（初始路由）在应用层，由 networkrouting/application
+// 的用例钉着。
+func TestAnUnreadableCustomsCatalogReachesBothEvidenceViewsAsADependencyFailure(t *testing.T) {
+	db := newWiringDB(t)
+	seedWiringNetwork(t, db, "SYN-TENANT-01")
+	customs := unreadableCustomsSource(t)
+
+	route, err := initialRouteEvidence(db, systemClock{}, customs)
+	if err != nil {
+		t.Fatalf("构造初始路由证据视图：%v", err)
+	}
+	_, _, err = route.LoadInitialRouteEvidence(t.Context(), wiringRouteKey(t, "SYN-TENANT-01"), wiringCarried())
+	if !errors.Is(err, nrcustoms.ErrCustomsCatalogUnreadable) {
+		t.Errorf("初始路由证据：err = %v，CC 目录读不到要以依赖调不通交回", err)
+	}
+
+	catalog, err := nrpostgres.NewNetworkCatalog(db)
+	if err != nil {
+		t.Fatalf("构造网络目录：%v", err)
+	}
+	reachability, err := nrapplication.NewCatalogNetworkEvidence(catalog, customs)
+	if err != nil {
+		t.Fatalf("构造可达性证据视图：%v", err)
+	}
+	_, _, err = reachability.LoadNetworkEvidence(t.Context(), wiringReachabilityKey(t, "SYN-TENANT-01"), wiringCarried())
+	if !errors.Is(err, nrcustoms.ErrCustomsCatalogUnreadable) {
+		t.Errorf("可达性证据：err = %v，CC 目录读不到要以依赖调不通交回", err)
+	}
 }
