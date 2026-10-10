@@ -8,7 +8,6 @@ import (
 	"sort"
 	"strings"
 	"testing"
-	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -19,6 +18,8 @@ import (
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
+	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
 // 票 routing-first-cut/11 判据一的取证：演示租户照 scripts/demo-seeds/data/network 的登记行逐行登记（稳定定义都是
@@ -135,8 +136,8 @@ func mustTranslate(t *testing.T, name string, err error) {
 
 // Covers: 判据一「不再停在路由证据未配置」——演示租户采用演示网络之后，初始路由证据视图经生产装配答已配置：候选
 // SYN-LINE-CN-SG-01@1 三段、策略声明成本单维、带时间投影，按处理器的层次逐层评估仍是合格候选。往下一格是成本：生产
-// 装配的候选成本取数侧答计价输入未配置（初始路由编排据此形成未决 COST_SOURCE_NOT_CONFIGURED），那是 ADR-0148
-// 决定四第 7 条的消费方适配器，不在本票。
+// 装配的候选成本取数侧交回这个候选的成本事实，答待判断（票 routing-first-cut/17）——编排据此形成 CANDIDATE_COSTS_PENDING，
+// 不再整判断停在 COST_SOURCE_NOT_CONFIGURED。
 func TestTheAdoptedDemoNetworkGetsPastRouteEvidenceThroughProductionWiring(t *testing.T) {
 	db := newWiringDB(t)
 	registerDemoNetworkSeeds(t, db)
@@ -179,15 +180,98 @@ func TestTheAdoptedDemoNetworkGetsPastRouteEvidenceThroughProductionWiring(t *te
 		t.Fatalf("合格候选 %d 个，想要 1：%+v", qualified, candidates)
 	}
 
-	_, err = routeCosts(db).LoadCandidateCosts(t.Context(), wiringRouteKey(t, demoTenant), evidence)
-	if !errors.Is(err, nrports.ErrRouteCostSourceNotConfigured) {
-		t.Fatalf("候选成本取数侧：err = %v，今天应答计价输入未配置", err)
+	costs, err := routeCosts(db, systemClock{}).LoadCandidateCosts(t.Context(), wiringRouteKey(t, demoTenant), evidence)
+	if err != nil {
+		t.Fatalf("候选成本取数侧：err = %v，want 交回成本事实", err)
+	}
+	assertDemoCandidateWaitsForItsCost(t, costs)
+}
+
+// Covers: 票 routing-first-cut/17 判据二、三——客户声明了重量的包裹经受理链接受之后，生产装配的包裹事实取数侧读到的是
+// 这份客户声明，事实引用标明来源；同一判断交候选成本取数侧，包裹事实在场而逐段区域未配置，演示候选照旧待判断，不整判断
+// 停下，也不折成零。
+func TestADeclaredParcelReachesTheCostSideWhileLegZonesStayUnconfigured(t *testing.T) {
+	fixture := newSYNVerticalFixture(t)
+	ctx := t.Context()
+	command := fixture.submitCommand(t)
+	command.DeclaredProfiles = []psdomain.DeclaredParcelProfile{declaredProfile(t, "SYN-PARCEL-01", "2.5", "KG")}
+	var submitted psapplication.SubmitOutcome
+	mustWithinTX(t, fixture.transactor, ctx, func(txCtx context.Context) error {
+		result, err := fixture.submitHandler.Handle(txCtx, command)
+		submitted = result.Outcome()
+		return err
+	})
+	if submitted != psapplication.OutcomeSubmitted {
+		t.Fatalf("submit outcome = %q, want SUBMITTED", submitted)
+	}
+	fixture.recordPassingJudgments(t, ctx)
+	if result := fixture.formDecision(t, ctx); result.State() != psdomain.ShipmentRequestAccepted {
+		t.Fatalf("state = %q, want ACCEPTED；pending = %q", result.State(), result.PendingReason())
+	}
+	registerDemoNetworkSeeds(t, fixture.db)
+	seedWiringCustomsCatalog(t, fixture.db, demoTenant, true)
+	evidence := loadWiringEvidence(t, fixture.db, demoTenant)
+	key := wiringRouteKey(t, demoTenant)
+
+	facts, err := routeParcelFacts(fixture.db)
+	if err != nil {
+		t.Fatalf("装配包裹事实取数侧：%v", err)
+	}
+	got, found, err := facts.ParcelFactsFor(ctx, key)
+	if err != nil || !found {
+		t.Fatalf("包裹事实 found=%v err=%v，want 读到客户声明", found, err)
+	}
+	if got.Weight.Value().String() != "2.5" || got.Weight.Unit() != ppdomain.WeightUnitKilogram {
+		t.Fatalf("实重 = %s %s，want 客户声明的 2.5 KG", got.Weight.Value(), got.Weight.Unit())
+	}
+	if len(got.Facts) != 1 || got.Facts[0].Reference().Kind() != ppdomain.ArtifactDeclaredMeasurement ||
+		got.Facts[0].Reference().Version() != "declaration@baseline" {
+		t.Fatalf("事实引用 = %+v，want 一条标明来源是基线上的客户声明", got.Facts)
+	}
+
+	costs, err := routeCosts(fixture.db, systemClock{}).LoadCandidateCosts(ctx, key, evidence)
+	if err != nil {
+		t.Fatalf("候选成本取数侧：err = %v，want 交回成本事实", err)
+	}
+	assertDemoCandidateWaitsForItsCost(t, costs)
+}
+
+// assertDemoCandidateWaitsForItsCost 钉演示候选的成本一格：恰一条事实、答待判断、没有出处——逐段区域未配置的段没评价过。
+func assertDemoCandidateWaitsForItsCost(t *testing.T, costs nrports.RouteCandidateCosts) {
+	t.Helper()
+	if len(costs.Facts) != 1 || costs.Facts[0].Candidate().String() != "SYN-LINE-CN-SG-01@1" {
+		t.Fatalf("成本事实 = %+v，want 演示候选恰一条", costs.Facts)
+	}
+	if fact := costs.Facts[0]; fact.State() != nrdomain.CandidateCostPending {
+		t.Fatalf("演示候选成本 = %s %d minor，want 待判断（缺成本依据不折零）", fact.State(), fact.AmountMinor())
+	}
+	if len(costs.Citations) != 0 {
+		t.Fatalf("没评价的段不该有出处：%+v", costs.Citations)
 	}
 }
 
+// declaredProfile 造一件声明包裹的客户申报画像：只报重量，值与单位原样。
+func declaredProfile(t *testing.T, parcel, weight, unit string) psdomain.DeclaredParcelProfile {
+	t.Helper()
+	declaredWeight, err := psdomain.NewDeclaredWeight(
+		mustPS(t, psdomain.NewMeasurementValue, weight), mustPS(t, psdomain.NewMeasurementUnitReference, unit))
+	if err != nil {
+		t.Fatalf("申报重量：%v", err)
+	}
+	measurement, err := psdomain.NewDeclaredMeasurement(declaredWeight, psdomain.DeclaredDimensions{})
+	if err != nil {
+		t.Fatalf("申报测量：%v", err)
+	}
+	profile, err := psdomain.NewDeclaredParcelProfile(mustPS(t, psdomain.NewDeclaredParcelID, parcel), measurement)
+	if err != nil {
+		t.Fatalf("申报画像：%v", err)
+	}
+	return profile
+}
+
 // Covers: 票 routing-first-cut/15 判据二——目录折叠经生产装配铸出的候选标识原样交候选成本取数侧，取数侧解得回同一条
-// 线路版本并拿它去读逐段依据。计价输入换成已配置的替身，只为越过「计价输入未配置」那一格走到解标识；读依据那一步
-// 截住，之后的评价不在本用例。取数侧若与铸造侧各自约定分隔符，这里在读依据之前就答 carries no line reference。
+// 线路版本并拿它去读逐段依据。读依据那一步截住，之后的评价不在本用例；读依据在问包裹事实之前，所以本用例不必接那一口。
+// 取数侧若与铸造侧各自约定分隔符，这里在读依据之前就答 carries no line reference。
 func TestTheCostSideResolvesTheLineOfACandidateMintedByCatalogFolding(t *testing.T) {
 	db := newWiringDB(t)
 	registerDemoNetworkSeeds(t, db)
@@ -197,7 +281,6 @@ func TestTheCostSideResolvesTheLineOfACandidateMintedByCatalogFolding(t *testing
 	bases := &stoppingLineBases{}
 	costs := nrpricing.NewRouteCandidateCostAdapter(nrpricing.RouteCandidateCostDeps{
 		Bases: bases,
-		Input: configuredRoutePricingInput{snapshot: syntheticPricingInput(t)},
 	})
 	_, err := costs.LoadCandidateCosts(t.Context(), wiringRouteKey(t, demoTenant), evidence)
 	if !errors.Is(err, errStopAtLineBases) {
@@ -223,37 +306,6 @@ func (bases *stoppingLineBases) LoadLineCostBases(
 ) ([]nrports.LineSegmentCostBasis, error) {
 	bases.asked = append(bases.asked, askedLine{code: lineCode, version: version})
 	return nil, errStopAtLineBases
-}
-
-// configuredRoutePricingInput 答已配置。快照须是一份合法输入：判断声明了比较币时取数侧先拿它声明比较币，在解标识之前。
-type configuredRoutePricingInput struct{ snapshot ppdomain.PricingInputSnapshot }
-
-func (input configuredRoutePricingInput) PricingInputFor(
-	context.Context, nrdomain.InitialRouteJudgmentKey,
-) (ppdomain.PricingInputSnapshot, bool, error) {
-	return input.snapshot, true, nil
-}
-
-func syntheticPricingInput(t *testing.T) ppdomain.PricingInputSnapshot {
-	t.Helper()
-	check := func(what string, err error) {
-		t.Helper()
-		if err != nil {
-			t.Fatalf("合成计价输入的%s：%v", what, err)
-		}
-	}
-	tenant, err := ppdomain.NewTenantID(demoTenant)
-	check("租户", err)
-	scope, err := ppdomain.NewPricingScopeID("SYN-SCOPE-01")
-	check("计价范围", err)
-	subject, err := ppdomain.NewEstimateSubject("SYN-ESTIMATE-01")
-	check("估价主体", err)
-	weight, err := ppdomain.NewWeightFromString("1", ppdomain.WeightUnitKilogram)
-	check("重量", err)
-	snapshot, err := ppdomain.NewPricingInputSnapshot(tenant, scope, subject, "Z1", weight, nil,
-		time.Date(2026, time.October, 10, 0, 0, 0, 0, time.UTC))
-	check("快照", err)
-	return snapshot
 }
 
 // Covers: 判据一的反事实——没采用演示网络的租户，初始路由与可达性两个证据视图经生产装配照旧答`未配置`；参考配置随产品

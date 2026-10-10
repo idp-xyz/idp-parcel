@@ -2,10 +2,13 @@ package parcelpricing
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strconv"
 	"strings"
+	"time"
 
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
@@ -47,13 +50,58 @@ type InternalPlanResolver interface {
 	) (string, bool, error)
 }
 
-// PricingInputSource 把一次路由判断折成计价输入快照（实例半边：包裹事实从哪取是消费方的
-// 租户取值路径）。第二个返回值为假即「未配置」：缺席如实交出来，不代拟一份。
-type PricingInputSource interface {
-	PricingInputFor(
+// ParcelFactsSource 交出一次路由判断的包裹事实。预路由取客户声明快照（network-routing CONTEXT，ADR-0148 决定四
+// 第 7 条），来源随事实引用标明。第二个返回值为假即这件包裹此刻没有可用的事实：各段待判断，不代拟一份重量。
+type ParcelFactsSource interface {
+	ParcelFactsFor(
 		ctx context.Context,
 		key nrdomain.InitialRouteJudgmentKey,
-	) (ppdomain.PricingInputSnapshot, bool, error)
+	) (ParcelFacts, bool, error)
+}
+
+// ParcelFacts 是包裹事实：实重、可缺的外廓，以及它们出自哪一份事实。本上下文只转交，计价重量由 parcel-pricing 在
+// 评价里按每张卡自己的体积系数派生。
+type ParcelFacts struct {
+	Weight     ppdomain.Weight
+	Dimensions *ppdomain.Dimensions
+	Facts      []ppdomain.VersionedFactReference
+}
+
+// LegZoneSource 把一个计划段折成价卡的区域。折法归 parcel-pricing（ADR-0148 越权风险点 5，票 routing-first-cut/18
+// 待定），本上下文不自定区域。第二个返回值为假即「未配置」：这一段待判断，候选随之缺成本依据。
+type LegZoneSource interface {
+	ZoneFor(ctx context.Context, query LegZoneQuery) (LegZone, bool, error)
+}
+
+// LegZoneQuery 指名要折区域的那一段。段号从 1 起，与出处里的段号同一口径。
+type LegZoneQuery struct {
+	Key       nrdomain.InitialRouteJudgmentKey
+	Candidate nrdomain.CandidateID
+	Ordinal   int
+	Leg       nrdomain.PlannedLeg
+}
+
+// LegZone 是一段折出的区域。形状照计价输入的两条路（ADR-0109 决定四）：调用方给分区，或给邮编路线交绑了目录的
+// 卡去解；至少一样在场，两样都在时一并交给评价。两条都留着，是因为 18 还没在两种折法之间选。
+type LegZone struct {
+	Zone      string
+	Postal    ppdomain.PostalRoute
+	HasPostal bool
+}
+
+// ReferenceSeriesSource 交出计价时点已解析的序列取值（汇率等）。它不是包裹事实，另成一口；不接即不带读数，要按
+// 序列换算的卡照旧待判断。
+type ReferenceSeriesSource interface {
+	ReferenceSeriesFor(
+		ctx context.Context,
+		key nrdomain.InitialRouteJudgmentKey,
+		at time.Time,
+	) ([]ppdomain.ReferenceSeriesValue, error)
+}
+
+// Clock 给计价时点。与初始路由证据视图同取本上下文的路由判断时点：目录按它选版，价卡与汇率也按它选。
+type Clock interface {
+	Now() time.Time
 }
 
 // PlanVersionLoader 读回引用指名的那一版方案（parcel-pricing 的 PriceCardVersionLoader 窄面）。
@@ -66,12 +114,15 @@ type PlanVersionLoader interface {
 	) (ppdomain.PricingPlanVersion, bool, error)
 }
 
-// RouteCandidateCostDeps 收拢取数侧的四个依赖口。
+// RouteCandidateCostDeps 收拢取数侧的依赖口。Series 可为 nil：不带序列读数。
 type RouteCandidateCostDeps struct {
 	Bases    LineBasisRead
 	Internal InternalPlanResolver
-	Input    PricingInputSource
+	Facts    ParcelFactsSource
+	Zones    LegZoneSource
+	Series   ReferenceSeriesSource
 	Plans    PlanVersionLoader
+	Clock    Clock
 }
 
 // RouteCandidateCostAdapter 把一个判断的逐候选成本单维事实与逐段出处取齐。
@@ -89,6 +140,9 @@ var _ nrports.RouteCandidateCostSource = (*RouteCandidateCostAdapter)(nil)
 // 评价之后携带它的作答。
 type legEvaluation struct {
 	ordinal       int
+	candidate     nrdomain.CandidateID
+	leg           nrdomain.PlannedLeg
+	plan          ppdomain.PricingPlanVersion
 	policyRef     string
 	hasPolicy     bool
 	target        ppdomain.PlanEvaluationTarget
@@ -104,50 +158,29 @@ func (adapter *RouteCandidateCostAdapter) LoadCandidateCosts(
 	evidence nrports.InitialRouteEvidence,
 ) (nrports.RouteCandidateCosts, error) {
 	none := nrports.RouteCandidateCosts{}
-	input, configured, err := adapter.deps.Input.PricingInputFor(ctx, key)
-	if err != nil {
-		return none, fmt.Errorf("form pricing input: %w", err)
-	}
-	if !configured {
-		return none, nrports.ErrRouteCostSourceNotConfigured
-	}
-	snapshot := input
+	var comparison *ppdomain.Currency
 	if evidence.HasComparisonCurrency {
 		currency, err := ppdomain.NewCurrency(evidence.ComparisonCurrency)
 		if err != nil {
 			return none, fmt.Errorf("%w: comparison currency %q: %v",
 				errUntranslatableEvaluation, evidence.ComparisonCurrency, err)
 		}
-		snapshot, err = snapshot.WithComparisonCurrency(currency)
-		if err != nil {
-			return none, fmt.Errorf("declare comparison currency: %w", err)
-		}
+		comparison = &currency
 	}
 
 	legs, err := adapter.resolveLegs(ctx, key, evidence)
 	if err != nil {
 		return none, err
 	}
-
-	// 「逐候选各算各的计费重与体积系数」由批量口保证：同一份输入对全部目标逐份评价。
-	carded := make([]ppdomain.PlanEvaluationTarget, 0)
-	cardedOf := make(map[int]int)
-	for index := range legs {
-		if !legs[index].hasTarget {
-			continue
+	facts, found, err := adapter.deps.Facts.ParcelFactsFor(ctx, key)
+	if err != nil {
+		return none, fmt.Errorf("read parcel facts: %w", err)
+	}
+	// 没有包裹事实时一段都不评价，全部留作待判断：缺的是输入，不是整条取数路径没接。
+	if found {
+		if err := adapter.evaluateLegs(ctx, key, facts, comparison, legs); err != nil {
+			return none, err
 		}
-		cardedOf[index] = len(carded)
-		carded = append(carded, legs[index].target)
-	}
-	evaluations := ppdomain.EvaluatePricingAcrossPlans(snapshot, ppdomain.EvidenceSynthetic, carded)
-	if len(evaluations) != len(carded) {
-		// 批量口的契约是等长对位。它不成立时这一批评价接不回段，只能上抛。
-		return none, fmt.Errorf("%w: %d evaluations for %d targets",
-			errUntranslatableEvaluation, len(evaluations), len(carded))
-	}
-	for index, evaluation := range evaluations {
-		legs[cardedOf[index]].evaluation = evaluation
-		legs[cardedOf[index]].hasEvaluation = true
 	}
 
 	// 合成：逐候选把各段折成三态之一，并记逐段出处。
@@ -211,7 +244,7 @@ func (adapter *RouteCandidateCostAdapter) resolveLegs(
 			return nil, fmt.Errorf("load line cost bases for %s: %w", code, err)
 		}
 		for ordinal := range path.Legs {
-			entry := legEvaluation{ordinal: ordinal + 1}
+			entry := legEvaluation{ordinal: ordinal + 1, candidate: path.Candidate, leg: path.Legs[ordinal]}
 			basis := basisAt(bases, ordinal)
 			if basis == nil {
 				// 段没挂依据：缺依据如实待判断，不以零或邻段顶替。
@@ -258,12 +291,125 @@ func (adapter *RouteCandidateCostAdapter) resolveLegs(
 			if err != nil {
 				return nil, fmt.Errorf("form evaluation target: %w", err)
 			}
+			entry.plan = plan
 			entry.target = target
 			entry.hasTarget = true
 			legs = append(legs, entry)
 		}
 	}
 	return legs, nil
+}
+
+// evaluateLegs 逐段折区域、成一份计价输入、交批量口评价。区域未配置的段不评价，合成时它是待判断。
+//
+// 输入按段成形而不是一次判断一份：各段的区域不同，计价范围也取各段那张卡自己的——评价要求输入与卡同一计价范围，
+// 而一条线路的各段可以引不同范围的卡。「逐段各算各的计费重与体积系数」仍由评价口保证。
+func (adapter *RouteCandidateCostAdapter) evaluateLegs(
+	ctx context.Context,
+	key nrdomain.InitialRouteJudgmentKey,
+	facts ParcelFacts,
+	comparison *ppdomain.Currency,
+	legs []legEvaluation,
+) error {
+	at := adapter.deps.Clock.Now()
+	var series []ppdomain.ReferenceSeriesValue
+	if adapter.deps.Series != nil {
+		values, err := adapter.deps.Series.ReferenceSeriesFor(ctx, key, at)
+		if err != nil {
+			return fmt.Errorf("read reference series: %w", err)
+		}
+		series = values
+	}
+	tenant, err := ppdomain.NewTenantID(key.TenantID.String())
+	if err != nil {
+		return fmt.Errorf("%w: tenant %q is not a parcel-pricing tenant: %v", errUntranslatableEvaluation, key.TenantID, err)
+	}
+	// 选路比价是试算：评价只为排候选，不形成任何费用，下游不得把它变成钱。
+	subject, err := ppdomain.NewEstimateSubject(estimateReference(key))
+	if err != nil {
+		return fmt.Errorf("%w: estimate subject: %v", errUntranslatableEvaluation, err)
+	}
+	for index := range legs {
+		leg := &legs[index]
+		if !leg.hasTarget {
+			continue
+		}
+		zone, configured, err := adapter.deps.Zones.ZoneFor(ctx, LegZoneQuery{
+			Key: key, Candidate: leg.candidate, Ordinal: leg.ordinal, Leg: leg.leg,
+		})
+		if err != nil {
+			return fmt.Errorf("fold leg %d of %s into a zone: %w", leg.ordinal, leg.candidate, err)
+		}
+		if !configured {
+			continue
+		}
+		snapshot, err := legSnapshot(tenant, leg.plan.Scope(), subject, zone, facts, at, series, comparison)
+		if err != nil {
+			return err
+		}
+		evaluations := ppdomain.EvaluatePricingAcrossPlans(snapshot, ppdomain.EvidenceSynthetic, []ppdomain.PlanEvaluationTarget{leg.target})
+		if len(evaluations) != 1 {
+			// 批量口的契约是等长对位。它不成立时评价接不回段，只能上抛。
+			return fmt.Errorf("%w: %d evaluations for one target", errUntranslatableEvaluation, len(evaluations))
+		}
+		leg.evaluation = evaluations[0]
+		leg.hasEvaluation = true
+	}
+	return nil
+}
+
+// legSnapshot 把包裹事实与一段的区域合成那一段的计价输入。走计价输入的哪条路由区域的形状定：有分区走调用方给分区，
+// 只有邮编路线走绑定目录。
+func legSnapshot(
+	tenant ppdomain.TenantID,
+	scope ppdomain.PricingScopeID,
+	subject ppdomain.EvaluationSubject,
+	zone LegZone,
+	facts ParcelFacts,
+	at time.Time,
+	series []ppdomain.ReferenceSeriesValue,
+	comparison *ppdomain.Currency,
+) (ppdomain.PricingInputSnapshot, error) {
+	var snapshot ppdomain.PricingInputSnapshot
+	var err error
+	switch {
+	case zone.Zone != "":
+		snapshot, err = ppdomain.NewPricingInputSnapshot(tenant, scope, subject, zone.Zone, facts.Weight, facts.Dimensions, at, facts.Facts...)
+		if err == nil && zone.HasPostal {
+			snapshot, err = snapshot.WithPostalRoute(zone.Postal)
+		}
+	case zone.HasPostal:
+		snapshot, err = ppdomain.NewPostalPricingInputSnapshot(tenant, scope, subject, zone.Postal, facts.Weight, facts.Dimensions, at, facts.Facts...)
+	default:
+		return ppdomain.PricingInputSnapshot{}, fmt.Errorf("%w: a configured leg zone carries neither a zone nor a postal route",
+			errUntranslatableEvaluation)
+	}
+	if err != nil {
+		return ppdomain.PricingInputSnapshot{}, fmt.Errorf("form leg pricing input: %w", err)
+	}
+	if len(series) > 0 {
+		if snapshot, err = snapshot.WithReferenceSeries(series...); err != nil {
+			return ppdomain.PricingInputSnapshot{}, fmt.Errorf("attach reference series: %w", err)
+		}
+	}
+	if comparison != nil {
+		if snapshot, err = snapshot.WithComparisonCurrency(*comparison); err != nil {
+			return ppdomain.PricingInputSnapshot{}, fmt.Errorf("declare comparison currency: %w", err)
+		}
+	}
+	return snapshot, nil
+}
+
+// estimateReference 由判断键确定性派生试算对象的引用：同一判断重算得到同一试算对象，评价可比对可复算。
+func estimateReference(key nrdomain.InitialRouteJudgmentKey) string {
+	digest := sha256.Sum256([]byte(strings.Join([]string{
+		key.TenantID.String(),
+		key.CustomerAccountID.String(),
+		key.ShipmentRequestID.String(),
+		key.DeclaredParcelID.String(),
+		key.ServicePurpose.String(),
+	}, "\x00")))
+	return "route-cost-" + hex.EncodeToString(digest[:8])
 }
 
 // compose 把一条候选的逐段作答折成出处列表、合成金额（nil 即没合出来）与「是否待判断」。

@@ -93,7 +93,7 @@ func TestAComparisonCurrencyReachesThroughTheLegs(t *testing.T) {
 		},
 		map[string]ppdomain.PricingPlanVersion{"plan-cny/v1": plan},
 	)
-	source.input = withCnyComparison(t, inputSnapshot(t))
+	source.series = []ppdomain.ReferenceSeriesValue{cnyExchangeReading(t)}
 
 	costs, err := source.LoadCandidateCosts(context.Background(), judgmentKey(t), evidenceWithComparison(t, "CNY",
 		pathOf(t, "line-cny", 1)))
@@ -121,7 +121,7 @@ func TestAnUnpriceableLegLeavesTheCandidateUnpriceable(t *testing.T) {
 			"plan-stale/v1": syntheticBuyPlan(t, "plan-stale", "v1", "3"),
 		},
 	)
-	source.input = inputSnapshotAt(t, planPeriod.AddDate(2, 0, 0))
+	source.now = planPeriod.AddDate(2, 0, 0)
 
 	costs, err := source.LoadCandidateCosts(context.Background(), judgmentKey(t), evidenceWithComparison(t, "USD",
 		pathOf(t, "line-stale", 1)))
@@ -210,45 +210,182 @@ func TestAnInternalLegResolvesThroughThePolicy(t *testing.T) {
 	}
 }
 
-// Covers: 取数侧没接计价输入即如实未配置，不编一份空输入。
-func TestAnUnconfiguredPricingInputStopsHonestly(t *testing.T) {
-	source := newAdapter(t, nil, nil)
-	source.configured = false
+// Covers: 票 routing-first-cut/17 判据一——逐段区域未配置时该段待判断，候选随之缺成本依据：取数侧照常交回事实，
+// 不整判断答 ErrRouteCostSourceNotConfigured（那会让编排形成 COST_SOURCE_NOT_CONFIGURED），也不把缺的成本折成零。
+func TestAnUnconfiguredLegZoneLeavesTheCandidatePendingWithoutStoppingTheJudgment(t *testing.T) {
+	source := newAdapter(t,
+		map[string][]nrports.LineSegmentCostBasis{
+			"line-x": {{SegmentIndex: 0, Kind: nrports.SupplierBuyPlanBasis, Reference: "plan-x/v1"}},
+		},
+		map[string]ppdomain.PricingPlanVersion{"plan-x/v1": syntheticBuyPlan(t, "plan-x", "v1", "5")},
+	)
+	source.zonesConfigured = false
 
-	_, err := source.LoadCandidateCosts(context.Background(), judgmentKey(t), evidenceWithComparison(t, "USD",
+	costs, err := source.LoadCandidateCosts(context.Background(), judgmentKey(t), evidenceWithComparison(t, "USD",
 		pathOf(t, "line-x", 1)))
-	if err != nrports.ErrRouteCostSourceNotConfigured {
-		t.Fatalf("err = %v, want ErrRouteCostSourceNotConfigured", err)
+	if err != nil {
+		t.Fatalf("err = %v, want nil——区域未配置是这一段待判断，不是整条取数路径没接", err)
+	}
+	fact := factOf(t, costs.Facts, "line-x")
+	if fact.State().String() != "PENDING" {
+		t.Fatalf("fact = %s %d minor, want PENDING（缺成本依据不折零）", fact.State(), fact.AmountMinor())
+	}
+	if len(costs.Citations) != 0 {
+		t.Fatalf("没评价的段不该有出处：%+v", costs.Citations)
 	}
 }
 
-// testSource 是可调替身的容器：plan 表按「id/version」键取，input 可整体替换。
+// Covers: 没有包裹事实时一段都不评价，候选待判断；同样不整判断停下。
+func TestWithoutParcelFactsEveryLegStaysPending(t *testing.T) {
+	source := newAdapter(t,
+		map[string][]nrports.LineSegmentCostBasis{
+			"line-x": {{SegmentIndex: 0, Kind: nrports.SupplierBuyPlanBasis, Reference: "plan-x/v1"}},
+		},
+		map[string]ppdomain.PricingPlanVersion{"plan-x/v1": syntheticBuyPlan(t, "plan-x", "v1", "5")},
+	)
+	source.hasFacts = false
+
+	costs, err := source.LoadCandidateCosts(context.Background(), judgmentKey(t), evidenceWithComparison(t, "USD",
+		pathOf(t, "line-x", 1)))
+	if err != nil {
+		t.Fatalf("err = %v, want nil", err)
+	}
+	if fact := factOf(t, costs.Facts, "line-x"); fact.State().String() != "PENDING" {
+		t.Fatalf("fact = %s, want PENDING", fact.State())
+	}
+	if len(source.zoneQueries) != 0 {
+		t.Fatalf("没有包裹事实还去折区域：%+v", source.zoneQueries)
+	}
+}
+
+// Covers: 每段按自己的区域计价——段 1 的卡只在 Z1 有档、段 2 的卡只在 Z9 有档，区域逐段问、逐段进输入，两段都出价；
+// 若一次判断只折一个区，总有一段落空档而整条候选不可计价。问区域时带候选与段号（从 1 起）。
+func TestEachLegIsPricedInItsOwnZone(t *testing.T) {
+	source := newAdapter(t,
+		map[string][]nrports.LineSegmentCostBasis{
+			"line-two-zones": {
+				{SegmentIndex: 0, Kind: nrports.SupplierBuyPlanBasis, Reference: "plan-z1/v1"},
+				{SegmentIndex: 1, Kind: nrports.SupplierBuyPlanBasis, Reference: "plan-z9/v1"},
+			},
+		},
+		map[string]ppdomain.PricingPlanVersion{
+			"plan-z1/v1": syntheticBuyPlan(t, "plan-z1", "v1", "5"),
+			"plan-z9/v1": zoneLessBuyPlan(t, "plan-z9", 1),
+		},
+	)
+	source.zoneByOrdinal = map[int]string{1: "Z1", 2: "Z9"}
+
+	costs, err := source.LoadCandidateCosts(context.Background(), judgmentKey(t), evidenceWithComparison(t, "USD",
+		pathOf(t, "line-two-zones", 2)))
+	if err != nil {
+		t.Fatalf("取候选成本：%v", err)
+	}
+	fact := factOf(t, costs.Facts, "line-two-zones")
+	if fact.State().String() != "PRICED" || fact.AmountMinor() != 800 {
+		t.Fatalf("fact = %s %d minor, want PRICED 800（Z1 段 5 + Z9 段 3）", fact.State(), fact.AmountMinor())
+	}
+	want := lineCandidate(t, "line-two-zones")
+	if len(source.zoneQueries) != 2 ||
+		source.zoneQueries[0].Candidate != want || source.zoneQueries[0].Ordinal != 1 ||
+		source.zoneQueries[1].Candidate != want || source.zoneQueries[1].Ordinal != 2 {
+		t.Fatalf("区域之问 = %+v，want 同一候选的第 1、2 段各一问", source.zoneQueries)
+	}
+}
+
+// Covers: 包裹事实进每一段的输入——卡的档位只到 10kg：声明 1kg 时出价；声明 12kg 时落在档外，评价答待判断，候选随之
+// 待判断。两种重量答得不同，说明评价读的是这份声明。
+func TestTheParcelFactsReachEveryLegsEvaluation(t *testing.T) {
+	for name, want := range map[string]struct {
+		weight string
+		state  string
+	}{
+		"档内": {"1", "PRICED"},
+		"超档": {"12", "PENDING"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			source := newAdapter(t,
+				map[string][]nrports.LineSegmentCostBasis{
+					"line-x": {{SegmentIndex: 0, Kind: nrports.SupplierBuyPlanBasis, Reference: "plan-x/v1"}},
+				},
+				map[string]ppdomain.PricingPlanVersion{"plan-x/v1": syntheticBuyPlan(t, "plan-x", "v1", "5")},
+			)
+			source.facts.Weight = weightOf(t, want.weight)
+
+			costs, err := source.LoadCandidateCosts(context.Background(), judgmentKey(t), evidenceWithComparison(t, "USD",
+				pathOf(t, "line-x", 1)))
+			if err != nil {
+				t.Fatalf("取候选成本：%v", err)
+			}
+			if fact := factOf(t, costs.Facts, "line-x"); fact.State().String() != want.state {
+				t.Fatalf("声明 %skg：fact = %s, want %s", want.weight, fact.State(), want.state)
+			}
+		})
+	}
+}
+
+// testSource 是可调替身的容器：plan 表按「id/version」键取；包裹事实、逐段区域、序列读数与计价时点可逐格替换。
 type testSource struct {
 	*adapter.RouteCandidateCostAdapter
-	bases      map[string][]nrports.LineSegmentCostBasis
-	plans      map[string]ppdomain.PricingPlanVersion
-	internal   map[string]string
-	input      ppdomain.PricingInputSnapshot
-	configured bool
+	bases           map[string][]nrports.LineSegmentCostBasis
+	plans           map[string]ppdomain.PricingPlanVersion
+	internal        map[string]string
+	facts           adapter.ParcelFacts
+	hasFacts        bool
+	zonesConfigured bool
+	zoneByOrdinal   map[int]string
+	zoneQueries     []adapter.LegZoneQuery
+	series          []ppdomain.ReferenceSeriesValue
+	now             time.Time
 }
 
 func newAdapter(t *testing.T, bases map[string][]nrports.LineSegmentCostBasis, plans map[string]ppdomain.PricingPlanVersion) *testSource {
 	t.Helper()
 	source := &testSource{
-		bases:      bases,
-		plans:      plans,
-		internal:   map[string]string{},
-		input:      inputSnapshot(t),
-		configured: true,
+		bases:           bases,
+		plans:           plans,
+		internal:        map[string]string{},
+		facts:           adapter.ParcelFacts{Weight: weightOf(t, "1")},
+		hasFacts:        true,
+		zonesConfigured: true,
+		now:             planPeriod.Add(6 * 30 * 24 * time.Hour),
 	}
 	source.RouteCandidateCostAdapter = adapter.NewRouteCandidateCostAdapter(adapter.RouteCandidateCostDeps{
 		Bases:    source,
 		Internal: source,
-		Input:    source,
+		Facts:    source,
+		Zones:    source,
+		Series:   source,
 		Plans:    source,
+		Clock:    source,
 	})
 	return source
 }
+
+func (source *testSource) ParcelFactsFor(
+	_ context.Context, _ nrdomain.InitialRouteJudgmentKey,
+) (adapter.ParcelFacts, bool, error) {
+	return source.facts, source.hasFacts, nil
+}
+
+// ZoneFor 未单列的段一律答 Z1——合成价卡的档位都在 Z1。
+func (source *testSource) ZoneFor(_ context.Context, query adapter.LegZoneQuery) (adapter.LegZone, bool, error) {
+	source.zoneQueries = append(source.zoneQueries, query)
+	if !source.zonesConfigured {
+		return adapter.LegZone{}, false, nil
+	}
+	if zone, listed := source.zoneByOrdinal[query.Ordinal]; listed {
+		return adapter.LegZone{Zone: zone}, true, nil
+	}
+	return adapter.LegZone{Zone: "Z1"}, true, nil
+}
+
+func (source *testSource) ReferenceSeriesFor(
+	context.Context, nrdomain.InitialRouteJudgmentKey, time.Time,
+) ([]ppdomain.ReferenceSeriesValue, error) {
+	return source.series, nil
+}
+
+func (source *testSource) Now() time.Time { return source.now }
 
 func (source *testSource) LoadLineCostBases(
 	_ context.Context, _ nrdomain.TenantID, lineCode string, _ int32,
@@ -261,12 +398,6 @@ func (source *testSource) PlanReferenceForInternalPolicy(
 ) (string, bool, error) {
 	plan, found := source.internal[policyReference]
 	return plan, found, nil
-}
-
-func (source *testSource) PricingInputFor(
-	_ context.Context, _ nrdomain.InitialRouteJudgmentKey,
-) (ppdomain.PricingInputSnapshot, bool, error) {
-	return source.input, source.configured, nil
 }
 
 func (source *testSource) FindByReference(

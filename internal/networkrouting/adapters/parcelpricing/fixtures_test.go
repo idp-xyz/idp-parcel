@@ -2,7 +2,6 @@ package parcelpricing_test
 
 import (
 	"testing"
-	"time"
 
 	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 )
@@ -19,41 +18,9 @@ func value[T any](t *testing.T, constructor func(string) (T, error), raw string)
 	return built
 }
 
-// inputSnapshot 立一份 Z1 分区的逐包裹试算输入（实重 1kg）。汇率读数与比较币种由用例再加。
-func inputSnapshot(t *testing.T) ppdomain.PricingInputSnapshot {
-	t.Helper()
-	return inputSnapshotAt(t, planPeriod.Add(6*30*24*time.Hour))
-}
-
-// inputSnapshotAt 同上，业务时点可指定——过期价卡用例把时点挪到方案适用期之外。
-func inputSnapshotAt(t *testing.T, businessAt time.Time) ppdomain.PricingInputSnapshot {
-	t.Helper()
-	subject, err := ppdomain.NewEstimateSubject("estimate-1")
-	if err != nil {
-		t.Fatalf("subject: %v", err)
-	}
-	weight, err := ppdomain.NewWeightFromString("1", ppdomain.WeightUnitKilogram)
-	if err != nil {
-		t.Fatalf("weight: %v", err)
-	}
-	input, err := ppdomain.NewPricingInputSnapshot(
-		value(t, ppdomain.NewTenantID, "tenant-1"),
-		value(t, ppdomain.NewPricingScopeID, "scope-1"),
-		subject,
-		"Z1",
-		weight,
-		nil,
-		businessAt,
-	)
-	if err != nil {
-		t.Fatalf("input: %v", err)
-	}
-	return input
-}
-
-// withCnyComparison 给输入带上汇率读数：fx-daily@7.2，口径按 fx-caliber 政策报价。方案侧
-// 要有同名汇率绑定才解得出来（syntheticBuyPlan 已带）。
-func withCnyComparison(t *testing.T, input ppdomain.PricingInputSnapshot) ppdomain.PricingInputSnapshot {
+// cnyExchangeReading 是一份汇率读数：fx-daily@7.2，口径按 fx-caliber 政策报价。方案侧要有同名汇率绑定才解得出来
+// （syntheticBuyPlanWithRate 带）。
+func cnyExchangeReading(t *testing.T) ppdomain.ReferenceSeriesValue {
 	t.Helper()
 	fxSeries, err := ppdomain.NewVersionReference(
 		ppdomain.ArtifactReferenceSeries, "fx-daily", "v1", "sha256:syn-fx-1")
@@ -70,11 +37,7 @@ func withCnyComparison(t *testing.T, input ppdomain.PricingInputSnapshot) ppdoma
 	if err != nil {
 		t.Fatalf("quoted series: %v", err)
 	}
-	withSeries, err := input.WithReferenceSeries(quoted)
-	if err != nil {
-		t.Fatalf("attach series: %v", err)
-	}
-	return withSeries
+	return quoted
 }
 
 func decimalOf(t *testing.T, raw string) ppdomain.Decimal {
