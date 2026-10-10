@@ -220,7 +220,7 @@ type InitialRouteEvidenceView interface {
 
 // ErrRouteCostSourceNotConfigured 是候选成本取数侧整条取数路径没接时的如实答复，编排据它形成
 // `COST_SOURCE_NOT_CONFIGURED`：没接就没有依据，不得编一份空输入让每个候选都算出一个看着合法的价格。
-// 只缺某一段的输入（区域、包裹事实）不走这一格——那一段待判断，候选随之缺成本依据。
+// 缺输入不走这一格：只缺某一段的区域，那一段待判断；缺包裹事实，各段都待判断。候选随之缺成本依据。
 var ErrRouteCostSourceNotConfigured = errors.New("network routing: route cost source not configured")
 
 // RouteCandidateCosts 是取数侧为一次判断交回的成本族：逐候选三态事实 + 逐段评价出处。
