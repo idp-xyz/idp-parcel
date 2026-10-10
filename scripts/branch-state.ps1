@@ -53,10 +53,14 @@ if (-not $repo) { Write-Error '不在 git 仓库里'; exit 2 }
 # 只在 Windows 上把 git 给的正斜杠换成反斜杠：Linux（含 WSL）上反斜杠不是分隔符，换了之后 git -C 找不到目录。
 $sep = [System.IO.Path]::DirectorySeparatorChar
 $repo = $repo -replace '/', $sep
-# 经这个函数传参给 git 有两处暗礁，都是 PowerShell 参数绑定吃掉了东西、git 收到的与写的不一样（09-09 复现于 -Classify）：
+# 经这个函数传参给 git 有几处暗礁，都是 PowerShell 参数绑定吃掉了东西、git 收到的与写的不一样：
 #   传数组必须用 @数组 展开（如下方 `'--' @files`）——[string[]] 剩余参数把一个数组实参拼成一个空格连接的串，git 当成
 #   一个文件名报 `Filename too long`；路径分隔符 `--` 必须写成带引号的 `'--'`——裸的 `--` 是绑定器的「参数结束」记号，
-#   进不了 $a，git 于是把后面的路径当修订解析，文件不在工作树里就报 `no such path in the working tree`。
+#   进不了 $a，git 于是把后面的路径当修订解析，文件不在工作树里就报 `no such path in the working tree`（以上 09-09
+#   复现于 -Classify）。单横杠短选项只要是 G 某个参数名的前缀就被绑定器截走，公共参数也算，而公共参数随 PowerShell
+#   版本增减：-d、-v 静默变成 -Debug、-Verbose；-p 在 5.1 绑到 -PipelineVariable 并把下一个实参吞作它的值，7.4 起与
+#   -ProgressAction 撞成歧义报错；-e 报歧义；-a 撞 G 自己的 $a（10-10 于 5.1 与 7.6 实测）。-q、-r、-1 不撞。撞的那些
+#   直接 `& git -C $repo` 调，不经 G。
 function G { param([Parameter(ValueFromRemainingArguments = $true)][string[]]$a) & git -C $repo @a 2>$null }
 
 # 簿记文件：谁的笔在后谁的数字盖前面，比内容时不算它们（同 parallel-sessions「生成物不占号」）。
@@ -279,8 +283,7 @@ if ($Audit) {
     "## 游离提交审计（不在任何 ref 上的提交，两级核：patch-id 对全部 ref → 逐文件 blob 对 main 历史）"
     ""
     $ids = @{}
-    # -p 不能经 G 传：G 是高级函数，-p 会被当成它的公共参数——5.1 里静默绑到 -PipelineVariable、git 收不到，
-    # 7.4 起与 -ProgressAction 撞成歧义直接报错。
+    # -p 是 G 公共参数的前缀，经 G 传会被截走（见 G 的头注），这里直调 git。
     foreach ($l in (& git -C $repo log -p --no-merges --format='commit %H' --all --since=2026-08-01 2>$null | & git -C $repo patch-id --stable)) { $p = $l -split ' '; if ($p.Count -ge 2 -and -not $ids.ContainsKey($p[0])) { $ids[$p[0]] = $p[1] } }
     $un = @(& git -C $repo fsck --unreachable --no-reflogs --no-progress 2>$null | Where-Object { $_ -match 'unreachable commit (\w+)' } | ForEach-Object { $Matches[1] })
     $equiv = 0; $mdOnly = 0; $rest = @()
