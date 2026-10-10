@@ -6,13 +6,11 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	nodeopshttp "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/http"
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/platform/buildinfo"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
-	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 )
 
@@ -252,7 +250,7 @@ func assembleUnconfiguredBusinessEndpoints() []httpapi.BusinessEndpoint {
 // 辅助函数正是隔离读那组用例的入口——它若把读写入参并成一个，那组用例就再也证不了这件事。
 // 写行放行的三态另有 isolated_write_test.go。
 func assembleUnwiredBusinessEndpoints(isolatedRead *isolatedReadIntakes) []httpapi.BusinessEndpoint {
-	return assembleUnwiredBusinessEndpointsWith(isolatedRead, nil, nil, nil, nil, nil, nil)
+	return assembleUnwiredBusinessEndpointsWith(isolatedRead, nil, nil, nil, nil)
 }
 
 func assembleUnwiredBusinessEndpointsWith(
@@ -261,25 +259,23 @@ func assembleUnwiredBusinessEndpointsWith(
 	isolatedPartyIdentity *commercialhttp.IsolatedPartyIdentityIntake,
 	isolatedNodeOperations *nodeopshttp.IsolatedCommandIntake,
 	isolatedTransportFulfillment *tfhttp.IsolatedCommandIntake,
-	isolatedCustoms *customshttp.IsolatedCommandIntake,
-	isolatedSettlement *settlementhttp.IsolatedCommandIntake,
 ) []httpapi.BusinessEndpoint {
 	return assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), unconfiguredOperatorRegistries(),
+		unconfiguredIntegrationClientIntakes(),
 		isolatedRead, isolatedSubmission, isolatedPartyIdentity, isolatedNodeOperations,
-		isolatedTransportFulfillment, isolatedCustoms, isolatedSettlement)
+		isolatedTransportFulfillment)
 }
 
 // assembleUnwiredBusinessEndpointsWithOperatorIntakes 同上，另收操作者渠道各口的 Intake：换口那几行的答复格由它钉。
 func assembleUnwiredBusinessEndpointsWithOperatorIntakes(
 	operatorDecisions operatorDecisionIntakes,
 	operatorRegistries operatorRegistryIntakes,
+	integrationClients integrationClientIntakes,
 	isolatedRead *isolatedReadIntakes,
 	isolatedSubmission shipmenthttp.SubmissionIntake,
 	isolatedPartyIdentity *commercialhttp.IsolatedPartyIdentityIntake,
 	isolatedNodeOperations *nodeopshttp.IsolatedCommandIntake,
 	isolatedTransportFulfillment *tfhttp.IsolatedCommandIntake,
-	isolatedCustoms *customshttp.IsolatedCommandIntake,
-	isolatedSettlement *settlementhttp.IsolatedCommandIntake,
 ) []httpapi.BusinessEndpoint {
 	return assembleBusinessEndpoints(
 		unwiredSubmission{},
@@ -397,10 +393,9 @@ func assembleUnwiredBusinessEndpointsWithOperatorIntakes(
 		isolatedPartyIdentity,
 		isolatedNodeOperations,
 		isolatedTransportFulfillment,
-		isolatedCustoms,
-		isolatedSettlement,
 		operatorDecisions,
 		operatorRegistries,
+		integrationClients,
 	)
 }
 

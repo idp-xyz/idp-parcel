@@ -165,10 +165,9 @@ func assembleBusinessEndpoints(
 	isolatedPartyIdentity *commercialhttp.IsolatedPartyIdentityIntake,
 	isolatedNodeOperations *nodeopshttp.IsolatedCommandIntake,
 	isolatedTransportFulfillment *tfhttp.IsolatedCommandIntake,
-	isolatedCustoms *customshttp.IsolatedCommandIntake,
-	isolatedSettlement *settlementhttp.IsolatedCommandIntake,
 	operatorDecisions operatorDecisionIntakes,
 	operatorRegistries operatorRegistryIntakes,
+	integrationClients integrationClientIntakes,
 ) []httpapi.BusinessEndpoint {
 	// 缺省朝拦：各隔离入参都为 nil 时，下面这组变量全取未配置即拒，整份装配与
 	// ADR-0078/0091 之前逐字节同形。
@@ -266,16 +265,12 @@ func assembleBusinessEndpoints(
 		segmentClosureIntake = isolatedTransportFulfillment
 		effectiveTimeJudgmentIntake = isolatedTransportFulfillment
 	}
-	externalResultIntake := customshttp.ResultIntake(customshttp.UnconfiguredIntake{})
-	regulatoryCredentialRegistrationIntake := customshttp.RegulatoryCredentialRegistrationIntake(customshttp.UnconfiguredIntake{})
-	if isolatedCustoms != nil {
-		externalResultIntake = isolatedCustoms
-		regulatoryCredentialRegistrationIntake = isolatedCustoms
-	}
-	externalFundsFactRegistrationIntake := settlementhttp.ExternalFundsFactRegistrationIntake(settlementhttp.UnconfiguredIntake{})
-	if isolatedSettlement != nil {
-		externalFundsFactRegistrationIntake = isolatedSettlement
-	}
+	// 外部结果、监管凭证与外部资金事实（含更正）走集成客户端族（ADR-0149、ADR-0151 决定四）。发行方参数未设时
+	// 核验方答未配置，与换口之前的 403 同字节；写开关换不了这几行（ADR-0150 决定三）。
+	externalResultIntake := customshttp.ResultIntake(integrationClients.customs)
+	regulatoryCredentialRegistrationIntake := customshttp.RegulatoryCredentialRegistrationIntake(integrationClients.customs)
+	externalFundsFactRegistrationIntake := settlementhttp.ExternalFundsFactRegistrationIntake(integrationClients.settlement)
+	externalFundsFactCorrectionIntake := settlementhttp.ExternalFundsFactCorrectionRegistrationIntake(integrationClients.settlement)
 
 	return []httpapi.BusinessEndpoint{
 		{Pattern: "/shipment-requests", Handler: shipmenthttp.NewSubmitShipmentRequestEndpoint(submissionIntake, submission)},
@@ -506,8 +501,8 @@ func assembleBusinessEndpoints(
 		// 「登记解释规则」，那一半的缺席是页面在替它认账。
 		{Pattern: "/customs-case-requirement-registrations", Handler: customshttp.NewRegisterCaseRequirementEndpoint(operatorRegistries.customs, caseRequirementRegistration)},
 		// 凭证、税费付款协作事项、税费付款核对三册的在线登记口（ADR-0085 决定一，票 sa-cc/07
-		// 步二；裁决「同族一致」三册都开）：写准入不另立形。凭证口经写开关逐口放行（票 operator-channel/08：票面
-		// 与 psb/05 格 11 点名、ADR-0149 决定一归外部结果族），协作与核对两口仍挂字面量 UnconfiguredIntake{}。
+		// 步二；裁决「同族一致」三册都开）：写准入不另立形。凭证口走集成客户端族（ADR-0149；票 operator-channel/11），
+		// 隔离放行已撤。协作与核对两口走操作者渠道的登记写面。
 		// 路径的事物词取登记 CLI 的命令名（regulatory-credential / duty-collaboration /
 		// duty-payment-verification），同一本册在 CLI 与端点两处不换词；不取读口的册名
 		// （/customs-credentials 那组）——读口按册平铺，写口按命令命名，前五个登记口已是这么分的。
@@ -649,14 +644,14 @@ func assembleBusinessEndpoints(
 		{Pattern: "/settlement-funds-applications", Handler: settlementhttp.NewQuerySettlementFundsApplicationsEndpoint(settlementCatalogueIntake, settlementFundsApplications)},
 		{Pattern: "/settlement-operating-results", Handler: settlementhttp.NewQuerySettlementOperatingResultsEndpoint(settlementCatalogueIntake, settlementOperatingResults)},
 		// 外部资金事实采用 / 更正两口的在线登记口（ADR-0085 决定一，票 sa-cc/31；27 裁决 2 第二步）：
-		// 本上下文第一份命令面。写准入不另立形，隔离读放行换不了这两行（编译期）；采用口经写开关逐口放行
-		// （票 operator-channel/08），更正口仍挂字面量 UnconfiguredIntake{}。路径的事物词取登记 CLI
+		// 本上下文第一份命令面。两口都走集成客户端族，更正与首登同一份认证与授予（ADR-0151 决定四；票
+		// operator-channel/11），隔离放行已撤。路径的事物词取登记 CLI
 		// parcel-settlement-register 的命令名（external-funds-fact /
 		// external-funds-fact-correction），同一本册在 CLI 与端点两处不换词；前缀随本上下文读口的 /settlement-。
 		// 两口在生产上是同一只编排的两个方法，端点表仍各收一参：装配测试才盖得住「采用口接了更正编排」。
 		// 外部资金事实进产品只经这一口（ADR-0137 决定四）：CC 那侧没有、也不会有资金事实的在线口。
 		{Pattern: "/settlement-external-funds-fact-registrations", Handler: settlementhttp.NewRegisterExternalFundsFactEndpoint(externalFundsFactRegistrationIntake, externalFundsFactRegistration)},
-		{Pattern: "/settlement-external-funds-fact-correction-registrations", Handler: settlementhttp.NewRegisterExternalFundsFactCorrectionEndpoint(settlementhttp.UnconfiguredIntake{}, externalFundsFactCorrectionRegistration)},
+		{Pattern: "/settlement-external-funds-fact-correction-registrations", Handler: settlementhttp.NewRegisterExternalFundsFactCorrectionEndpoint(externalFundsFactCorrectionIntake, externalFundsFactCorrectionRegistration)},
 		// 治理登记册三册一口（票 admin-skeleton-closure-batch/02）：治理无租户维是
 		// 设计不是缺列（ADR-0083），Intake 因此是本上下文自己的一种准入形——隔离读
 		// 启用与 SYN- 门禁同走一个开关，但开关值里的合成租户不进治理作用域。

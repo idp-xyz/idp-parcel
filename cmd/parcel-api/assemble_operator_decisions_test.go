@@ -199,7 +199,7 @@ func TestSwappedRegistryFacesMapTheRefusalAndDependencyGrades(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), registries, nil, nil, nil, nil, nil, nil, nil))
+		router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), registries, unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil, nil))
 		for _, pattern := range swappedRegistryFaces {
 			request := httptest.NewRequest(http.MethodPost, pattern, strings.NewReader(`{}`))
 			request.Header.Set("Authorization", "Bearer presented.operator.token")
@@ -221,7 +221,7 @@ func TestSwappedRegistryFacesAnswerFromTheOperatorChannel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), registries, nil, nil, nil, nil, nil, nil, nil))
+	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), registries, unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil, nil))
 
 	for _, pattern := range swappedRegistryFaces {
 		cases := map[string]struct {
@@ -271,7 +271,7 @@ func TestSwappedDecisionFacesAnswerFromTheOperatorChannel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(decisions, unconfiguredOperatorRegistries(), nil, nil, nil, nil, nil, nil, nil))
+	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(decisions, unconfiguredOperatorRegistries(), unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil, nil))
 
 	for pattern := range swappedDecisionFaces {
 		cases := map[string]struct {
