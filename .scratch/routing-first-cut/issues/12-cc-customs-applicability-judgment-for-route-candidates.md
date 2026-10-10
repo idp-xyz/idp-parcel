@@ -1,7 +1,7 @@
 # 12 customs-compliance：按路由候选作答的关务适用性判断口
 
 Category: enhancement
-Status: resolved——2026-10-10 16:42 通道 1 重放进 main（`717959d9`…`18be66e8`，清点 `613fdb74`）；评审门当时是推送方自审、不算非作者评审，见文末 Comments 与进 main 记录；19:0x 补得非作者评审（通道 3，钉 `18be66e8`，两轴无阻断），见 Comments「补评审 ← 通道 3」。此前：in-progress · 阻断已修，待复评与重放——2026-10-10 16:07 通道 2（用户令接手通道 1 在途的修复；分支 `mcp3-rfc12`，代码 tip `71ff7440`、其后只动票面，基 `993995e7`；见文末「阻断修复记录」；通道 2 已是这次修复的提交方，复评另派非作者）。此前：完工待评审与重放——2026-10-09 通道 3 收口（派单 `task-5351ee37` ← 通道 1）：代码笔自基线 `993995e7` 至 `0c17d9b5`，清点 `6e441e43`，完成记录见文末；评审由通道 1 另派非作者，作者不自评；通道 2 非作者评审钉 `8b3224d4` 一条阻断（两轴同一件）。此前：in-progress——2026-10-08 TraeCode 会话认领（用户令「开始接下一张票」；阻塞均无，文末分诊裁定即本票口径）。此前：ready-for-agent——2026-10-08 TraeCode 会话按用户令代 CC owner 分诊，「待 CC owner 定」四问裁定见文末「关务适用性判断分诊」。更早的 needs-triage——2026-09-24 通道 3 立（派单 `task-1f910231` ← 通道 1；出自 02 的取证与 [psb/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 格 6）。建在 [ADR-0148](../../../docs/adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md)（Proposed）决定三上，判断口的形状与作答层级归 CC owner（0148 越权风险点 4）：0148 接受、CC owner 在分诊时定下文「待 CC owner 定」各问之后，转 ready-for-agent
+Status: resolved——2026-10-10 16:42 通道 1 重放进 main（`717959d9`…`18be66e8`，清点 `613fdb74`）；评审门当时是推送方自审、不算非作者评审，见文末 Comments 与进 main 记录；19:0x 与 19:2x 先后补得两份非作者评审（通道 3、通道 4，均钉 `18be66e8`，两轴都无阻断），见 Comments「补评审」两条；非阻断与旁注另立 [13](13-customs-applicability-review-tails.md) 与 [14](14-reassessment-carries-no-customs-projection-so-improvement-reroute-is-unreachable.md)。此前：in-progress · 阻断已修，待复评与重放——2026-10-10 16:07 通道 2（用户令接手通道 1 在途的修复；分支 `mcp3-rfc12`，代码 tip `71ff7440`、其后只动票面，基 `993995e7`；见文末「阻断修复记录」；通道 2 已是这次修复的提交方，复评另派非作者）。此前：完工待评审与重放——2026-10-09 通道 3 收口（派单 `task-5351ee37` ← 通道 1）：代码笔自基线 `993995e7` 至 `0c17d9b5`，清点 `6e441e43`，完成记录见文末；评审由通道 1 另派非作者，作者不自评；通道 2 非作者评审钉 `8b3224d4` 一条阻断（两轴同一件）。此前：in-progress——2026-10-08 TraeCode 会话认领（用户令「开始接下一张票」；阻塞均无，文末分诊裁定即本票口径）。此前：ready-for-agent——2026-10-08 TraeCode 会话按用户令代 CC owner 分诊，「待 CC owner 定」四问裁定见文末「关务适用性判断分诊」。更早的 needs-triage——2026-09-24 通道 3 立（派单 `task-1f910231` ← 通道 1；出自 02 的取证与 [psb/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 格 6）。建在 [ADR-0148](../../../docs/adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md)（Proposed）决定三上，判断口的形状与作答层级归 CC owner（0148 越权风险点 4）：0148 接受、CC owner 在分诊时定下文「待 CC owner 定」各问之后，转 ready-for-agent
 Blocked by: 无（原 02、07 均已进 main；接 NR 取数侧那一项的地盘另含 NR owner，轮次 4 前报窗口）
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「演示租户上一票已接受的委托能形成初始路由」那条关键路径上挡路的缝（切片计划的子票表由通道 5 补入）
 归档：psb/04 与 ADR-0148 决定三都写这张票「另立、不在本票族里补」，指的是 NR 取数侧各票不代 CC 补执行器；本票就是那张另立的票，地盘在 CC。放在本目录、编号 12 是派单的归档选择（通道 1 与通道 5 协调）。
@@ -205,3 +205,29 @@ CC 有口岸目录与申报路径目录两本登记册（`ports.PortsPathsRegist
 **验证**（钉 `18be66e8` 只读检出）：`go build ./...` 退 0；`go vet` NR / CC / `cmd/parcel-dispatch` 退 0；带 DSN `-v`：`TestAnUnreadableCatalogIsADependencyFailureNotAGap`、`TestUnknownReasonsMapOntoNamedGaps`、`TestAnUnreadableCustomsCatalogReachesBothEvidenceViewsAsADependencyFailure`（真库 0.78s）、`TestUnavailableNetworkEvidenceIsNotFormedRatherThanInsufficientEvidence`、`TestThreeParcelsKeepThreeIndependentResults` 均 PASS 非 SKIP。只读，未做变异复跑，判别力按代码判。检出已拆（未加 `--force`）。
 
 处置（通道 1）：两轴无阻断，评审门补齐；修复早已在 main，不重放。非阻断三条与旁注要不要另立票，等通道 4 的独立补评审（`task-cc0964db`）到后一并定——那一份是 18:5x 派出的，当时通道 1 还没读到通道 3 的应答，同一份评审因此派重了。
+
+**补评审 ← 通道 4 · 完全独立的非作者 · 钉 `18be66e8` · 19:2x**（派单 `task-cc0964db`；通道 4 没碰过本票任何一笔。隔离检出 `/tmp/idp-review-rfc12-mcp4`，先独立列路径再读 diff；与上一条互不知情。）
+
+先列的路径：与上一条同形——CC `CustomsApplicabilityHandler.Handle` 读快照失败整批走 `FoldCustomsApplicabilityUnreadable`（缺码 → 状态未知·`EndpointCountryMissing`；同国 → 可用；异国 → 状态未知·`CatalogUnreadable`），NR `customs_source.go` 的 `unknownGap` 把后者整份交回 `ErrCustomsCatalogUnreadable`，经 `customsFindings` 上抛到 `CatalogNetworkEvidence.LoadNetworkEvidence` 与 `CatalogInitialRouteEvidence.LoadInitialRouteEvidence`。入口四个：可达性答`未形成判断`，初始路由首读与重校答`未决`；重校与复核/改路（`tryImprovementReroute`、`structuralAutoReroute` 用同一份证据）不携内容，到不了。非测试代码里没有别的读视图入口。
+
+**Standards**
+
+阻断：无。
+
+非阻断：(1) CC CONTEXT 词条「关务适用性判断」的状态未知三格仍与规则节各列一遍，且不带「两端异国」限定，与判断项 1 在规则三改掉的那处相抵，宜同样改为引规则节（与上一条非阻断 ① 同一处）。(2) 低：`ErrCustomsCatalogUnreadable` 的注释只写形成`未形成判断`、进`资料不足`统计，漏了经初始路由视图形成的`未决`（与上一条非阻断 ② 后半同一处）。
+
+无发现：NR 四条约定与 network-routing CONTEXT 未动，修复与之一致；ADR-0148 决定三：适配器只按 CC 给的理由格翻译，不自判跨境；注释中文、写为什么、跨文件只引符号名；无租户取值。
+
+**Spec**
+
+阻断：无。原阻断已解。
+
+非阻断：无。
+
+无发现：缺码、目录为空仍是命名缺口。同国照常作答：CC 读不到时 `foldEndpoints` 先答可用；同一请求的全部候选同一对端点，一批里混不出已答与读不到，适配器用例里的混批在生产上不可达、只钉了策略。裁定三未改，`TestApplicabilityCriterionUnreadableCatalogIsStatusUnknownNotAnError` 与判断项 1 的 `TestApplicabilityCriterionCellsNeedingNoCatalogIgnoreItsReadability` 都 PASS。判别力用 `go test -overlay` 实测：只把那一格换回旧答法（检出未改），两条新用例都红（真库那条初始路由、可达性两处都红），`TestUnknownReasonsMapOntoNamedGaps` 仍绿。
+
+残余风险：日后候选若带逐候选端点，混批成真，一条异国读不到会连带同批同国候选一起`未形成判断`。
+
+**验证**（钉 `18be66e8`）：`go build ./...` 与 `go vet`（NR / CC / `cmd/parcel-dispatch`）退 0，`gofmt -l` 无输出；带 DSN `-v`：`TestAnUnreadableCatalogIsADependencyFailureNotAGap`、`TestAnUnreadableCustomsCatalogReachesBothEvidenceViewsAsADependencyFailure`（真库 0.65s，非 SKIP）、`TestUnavailableNetworkEvidenceIsNotFormedRatherThanInsufficientEvidence`、`TestThreeParcelsKeepThreeIndependentResults` 均 PASS。未跑全仓。检出已拆（未加 `--force`）。
+
+合并处置（通道 1，用户授权自决）：两份独立评审都无阻断，评审门补齐；修复已在 main，不重放。两份对判据的结论一致。Spec 轴「同国照常作答缺 NR 侧用例」一条，通道 3 记为非阻断，通道 4 判为混批在生产上不可达——两者不矛盾：用例防的是日后改坏，以及上面那条残余风险成真的那一天，所以留作尾巴。尾巴立 [13](13-customs-applicability-review-tails.md)（词条改引规则节、两处旧口径注释、NR 侧同国用例；Blocked by 11，与 rfc/11 同一地盘）；通道 3 的旁注立 [14](14-reassessment-carries-no-customs-projection-so-improvement-reroute-is-unreachable.md)（needs-triage）。
