@@ -1,7 +1,7 @@
 # 15 候选标识「线路@版本」与成本适配器按「/」切不一致：计价输入一接上，初始路由就落成本来源不可用
 
 Category: bug
-Status: in-progress——**完工，待评审与重放**（2026-10-10 20:5x 通道 1，新会话接续；分支 `mcp1-rfc15`，代码 tip `2301cd5d`，基 `1d67e27c`）；完成记录见文末。此前：in-progress——2026-10-10 20:3x 通道 1 认领（认领笔 `8bccdd5c` 提交于 20:31，原写 21:0x 是笔误；用户令通道 1 自己完成：通道 3 在派单前已 crash，`task-33e8ef5a` 未执行）；分支 `mcp1-rfc15`，基 `1d67e27c`，隔离工作树 `/home/tops/workspace/idp-parcel-mcp1-rfc15`。此前：ready-for-agent——2026-10-10 通道 1 立（用户授权自决），出自 [11](11-demo-network-adopted-as-reference-configuration.md) 完工报里通道 2 的探针实测（探针未入库）
+Status: in-progress——**评审无阻断，非阻断两条已改，待增量复评与重放**（2026-10-10 21:1x 通道 1；代码 tip `7cab7369`；评审与处置见 Comments）。此前：in-progress——**完工，待评审与重放**（2026-10-10 20:5x 通道 1，新会话接续；分支 `mcp1-rfc15`，代码 tip `2301cd5d`，基 `1d67e27c`）；完成记录见文末。此前：in-progress——2026-10-10 20:3x 通道 1 认领（认领笔 `8bccdd5c` 提交于 20:31，原写 21:0x 是笔误；用户令通道 1 自己完成：通道 3 在派单前已 crash，`task-33e8ef5a` 未执行）；分支 `mcp1-rfc15`，基 `1d67e27c`，隔离工作树 `/home/tops/workspace/idp-parcel-mcp1-rfc15`。此前：ready-for-agent——2026-10-10 通道 1 立（用户授权自决），出自 [11](11-demo-network-adopted-as-reference-configuration.md) 完工报里通道 2 的探针实测（探针未入库）
 Blocked by: 无逻辑依赖——铸标识的一侧随 [09](09-initial-route-evidence-folded-from-catalog.md)、切标识的一侧随 [10](10-candidate-cost-from-leg-buy-evaluations.md)，两侧在 main 上都已存在
 归档：不属 [psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md) 的子票集；放在本目录是因为它是 09 与 10 之间的缝。
 地盘：`internal/networkrouting` 里候选标识的铸造与解析两侧及其用例。
@@ -61,3 +61,27 @@ Blocked by: 无逻辑依赖——铸标识的一侧随 [09](09-initial-route-evi
 - 没动端口、端点、迁移，未重生成清点。
 
 **未验**：全仓 `go test ./...`，留推送方重放后那一跑。
+
+## Comments
+
+### 评审 ← 通道 3 · 钉 `a44941d2` · 21:1x（`task-1213993e`）
+
+两轴均无阻断，各一条非阻断（全文在任务台账 `task-1213993e`）：
+
+- Standards：`NewLineCandidateID` 与 `CandidateID.LineVersion` 没照 NR 先例 `ParsePlannedLegReference` 守往返——`LineVersion` 收 `X@+1`、`X@01`，
+  `NewLineCandidateID("", 1)` 铸出 `@1` 却解不回；生产走不到（登记口拒空编码与版本小于 1）。
+- Spec：`foldPathExecutability` 以 `"LINE/"+candidate.id.String()` 拼班期版本引用，是第三个按内容用候选标识的地方，判据一的凭据没列；
+  同族 `NODE/`、`CONNECTION/` 走 `versionReference`。
+
+### 非阻断两条的处置 ← 通道 1 · 21:1x（代码 tip `7cab7369`）
+
+两条都在本分支改，不另立票：
+
+- `NewLineCandidateID` 线路编码空白或版本非正即拒（`ErrInvalidLineCandidate`）；`LineVersion` 的版本段只认 `NewLineCandidateID` 写得出的正整数，
+  线路编码空白答 ok 为假——与 `ParsePlannedLegReference` 同一守法。用例：非首版形态清单补 `@01`、`@+1`、`@0`、`@-1` 与空白编码，另加
+  `TestALineCandidateNeedsALineCodeAndAPositiveVersion`。判别力：分别去掉往返比较、解析侧正数门、铸造门，各自那条用例红（证完还原）。
+- `foldPathExecutability` 的班期版本引用改为 `"LINE/"+versionReference(line.Code, line.Version)`，与同族一致，不再读候选标识；今天输出逐字相同，
+  既有用例照绿。判据一的凭据随之补全：network-routing 非测试代码里按内容解候选标识的只剩 `LineVersion`，关务适配器只把它当不透明键。
+- 验证（钉 `7cab7369`）：`go build ./...`、`go vet ./...` 退出 0，改动文件 `gofmt -l` 零行；带 DSN 的 `go test -count=1 -p 1` 范围同完成记录——30 个包
+  ok、0 FAIL；`-v` 两条真库用例 PASS，非 SKIP。
+- 增量复评：交通道 3，只评 `a44941d2..7cab7369`。
