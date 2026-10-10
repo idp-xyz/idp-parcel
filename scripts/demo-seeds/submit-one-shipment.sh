@@ -5,6 +5,8 @@
 # 不进 seed.sh。种子灌的是主数据；这一步是运行时命令，重复跑会多一笔委托（跨秒各落一笔）；同一 UTC 秒内再跑撞同一来源键，提交口答 200 EXISTING_RESULT，脚本因要求 201 失败退出、不落第二笔。
 # 列表与详情在读 Intake 未配置时答 403（PAR-INT-01）。本脚本看到 403 就停，不换入口、不写库。
 # 要让查阅答得上来，起 API 的方式与 parcel.sh 相同：隔离读、隔离写都设成 SYN-TENANT-01。
+# 草案带寄 / 收两端的国家 / 地区码（CN、SG，与种子同款）：演示网络的服务区域按国家覆盖，缺了这两格，
+# 服务区域解析在那一侧答资料不足（ADR-0148 决定二）。
 set -euo pipefail
 
 base="${IDP_PARCEL_API_BASE:-}"
@@ -30,8 +32,10 @@ print(json.dumps({
     "requestedServiceProduct": "SYN-PROD-CN-SG-EXPRESS",
     "senderRelation": "SYN-SENDER-01",
     "senderAddress": "合成寄件地址",
+    "senderCountryCode": "CN",
     "recipientRelation": "SYN-RECIPIENT-01",
     "recipientAddress": "合成收件地址",
+    "recipientCountryCode": "SG",
     "destinationServiceScope": "SYN-DEST/SG",
     "parcels": [{
         "customerParcelReference": sys.argv[2],

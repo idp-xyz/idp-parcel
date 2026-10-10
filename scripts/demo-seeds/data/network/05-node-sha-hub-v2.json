@@ -3,5 +3,6 @@
   "code": "SYN-NODE-SHA-HUB",
   "version": 2,
   "business_timezone": "Asia/Shanghai",
-  "effective_from": "2026-06-01T00:00:00Z"
+  "effective_from": "2026-06-01T00:00:00Z",
+  "basis": "SYN-NET-OPS/CHANGE-SHA-HUB-2606"
 }
