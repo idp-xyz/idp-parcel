@@ -1,7 +1,7 @@
 # 11 演示网络作为参考配置，经 psb/03 的采用路径进入演示租户
 
 Category: enhancement
-Status: 完工，待评审与重放——2026-10-10 通道 2 收口（派单 `task-270b3557` ← 通道 1）：分支 `mcp2-rfc11` 基 `b57ff794`，代码 tip `bdee59cd`，清点 `ee2143ad`，完成记录见文末；判据二 ✅，判据一 ◑（初始路由越过了「路由证据未配置」；要形成初始路由，还差两处本票之外的格）；非作者评审预定通道 3，作者不自评；重放进 main 由通道 1 做。此前：in-progress——2026-10-10 通道 2 认领（派单 `task-270b3557` ← 通道 1，重派 18:3x 未执行的 `task-728e2ecb`）；分支 `mcp2-rfc11`，基 `b57ff794`，隔离工作树 `/home/tops/workspace/idp-parcel-mcp2-rfc11`。更早：ready-for-agent
+Status: resolved——2026-10-10 20:3x 通道 1 重放进 main（`9c41f7a2`…`3aeb630b`，清点 `464ea94d`）；评审门是推送方自审、不算非作者评审，见文末 Comments 与进 main 记录；判据一 ◑ 的两处缺口立 [16](16-demo-tenant-pre-acceptance-financial-control-cells.md) 与 [17](17-initial-route-pricing-input-from-customer-declaration.md)，候选标识那条缝立 [15](15-candidate-identifier-minted-with-at-but-cost-adapter-splits-on-slash.md)。此前：完工，待评审与重放——2026-10-10 通道 2 收口（派单 `task-270b3557` ← 通道 1）：分支 `mcp2-rfc11` 基 `b57ff794`，代码 tip `bdee59cd`，清点 `ee2143ad`，完成记录见文末；判据二 ✅，判据一 ◑（初始路由越过了「路由证据未配置」；要形成初始路由，还差两处本票之外的格）；非作者评审预定通道 3，作者不自评；重放进 main 由通道 1 做。此前：in-progress——2026-10-10 通道 2 认领（派单 `task-270b3557` ← 通道 1，重派 18:3x 未执行的 `task-728e2ecb`）；分支 `mcp2-rfc11`，基 `b57ff794`，隔离工作树 `/home/tops/workspace/idp-parcel-mcp2-rfc11`。更早：ready-for-agent
 Blocked by: [psb/03](../../product-strategy-boundary/issues/03-reference-configuration-adoption-pattern.md)、08、10、12
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「演示网络作为参考配置」那一步
 地盘：参考配置的存放处（psb/03 定）与演示种子；[合成演示动线](../../../docs/design/synthetic-demo-journey-script.md)对应一步。
@@ -109,3 +109,33 @@ Blocked by: [psb/03](../../product-strategy-boundary/issues/03-reference-configu
 - `bdee59cd` 只在 `create_initial_route_test.go` 里加一条用例：`./internal/networkrouting/application/...` 与 `./internal/architecture/...` 在它上面重跑全过，全仓 build / vet 退 0，清点在它的干净检出上重生成零差。
 - 判别力：下面每次变异都只改一处，跑完还原、未提交。采用路径不写依据：`TestAnAdoptRowTakesItsContentFromTheReferenceAndCitesIt` 与 `TestEveryReleasedNetworkCatalogReferencePassesTheRegistrationGates` 红。参考配置拿掉末端节点的处理时长并改钉摘要：`TestEveryReleasedNetworkCatalogReferenceHangsTogether` 红。编排把成本来源没配置折成 `RouteCostSourceUnavailable`：`TestAnUnconfiguredCostSourceLeavesTheParcelUndecided` 红。候选标识那次探针不是变异，见上一节。
 - 两次动线取证的一次性库（`090b92af` 一次、`1bbd0f09` 加本票种子一次）都已删。
+
+## Comments
+
+**评审 ← 通道 1 · 推送方自审，不算非作者评审 · 钉 `29b2345e` · 20:2x**（看 `b57ff794..29b2345e`；读分支 tip 的源与 diff、`git grep`，未建检出、未跑全仓——全仓验证见下面进 main 记录。）
+
+为什么是自审：非作者评审先派了通道 3（`task-a9c42cad`），派到时监听 idp-mcp-3 的已换成原通道 4 的会话，上下文已重、退回；通道 4 已 crash，通道 5 在做收口核查，通道 6 离线；workflow.md「本仓不用子代理」。按 parallel-sessions「合入前独立评审」，评审门退到推送方自审并如实标注。通道 1 没写过本票任何一笔代码；票面「开工前取证」一节（钉 `ed662238`）出自通道 1。
+
+**Standards**
+
+阻断：无。
+
+非阻断：① 「引用串只由采用路径写」这道门在 `registrationjson`（`ErrCitationOutsideAdoption`），领域构造 `NewCatalogBasisReference` 收任何打得开已发布版本的引用串。今天在线口与批量口都经 `registrationjson` 译装，所以守得住；日后若有不经它的登记入口，要补同一道门。② 随产品发布的参考配置 `SYN-CN-SG@1` 的线路逐段成本依据引了演示种子里的合成 BUY 成本卡 `SYN-PLAN-CN-SG-COST-01/v1`，产品发出的一份配置因此引了一份种子数据。它本身是显式的合成演示网络，`note` 写明采用方没登这张卡时各段如实待判断，可接受，记在这里。
+
+无发现：参考配置不含租户、修订号与生效时点（ADR-0146 决定三、ADR-0147 决定四）。不开新端口、新表：迁移 0018 只给六张既有版本表各加一列可空 `basis_ref` 与非空白 CHECK，存量不回填，临时调整族不加。network-routing CONTEXT「网络定义与临时可用性」只加一条规则并引 ADR-0147，没有第二处定义。种子与参考配置新增的值除公开国家码、时区名与封闭枚举外全是 `SYN-`。新注释中文、无行号。代裁两问在票面标「越权风险点 · 待 NR owner 复核」。
+
+**Spec**
+
+阻断：无。
+
+非阻断：无。
+
+无发现：采用行只给身份、修订号与生效时点，其余键答 `ErrAdoptedContentGiven`；内容经与直接登记同一个用例、同一套受理门（ADR-0147 决定五）。两个新拒收原因 `CALENDAR_CONTENT_OUT_OF_RANGE`、`COST_BASIS_MALFORMED` 在 `register_network_catalog_test.go` 有表驱动用例（成本依据五例、日历四例）。判断项 3「这几口载荷不进内容摘要」：`registrationjson` 里没有任何摘要计算，属实。判据二 ✅ 的凭据成立。判据一 ◑ 的理由成立：真库用例证了初始路由越过「路由证据未配置」、停在成本来源未配置，动线证了可达性越过格 4；没证的是「已接受的委托」那一段，它卡在格 5。候选标识「线路@版本」与 `resolveLegs` 按「/」切那条缝不是本票引入的（09 与 10 就有），另立 [15](15-candidate-identifier-minted-with-at-but-cost-adapter-splits-on-slash.md)。
+
+### 进 main 记录（推送方 · 通道 1）
+
+- **门**：上一条推送方自审无阻断（不算非作者评审，理由见该条）。
+- **重放**（隔离树 `/tmp/mcp1-land-rfc11`）：先在 main `a8cf12ff` 上 cherry-pick，跳过分支清点 `ee2143ad`，十笔无冲突、`git range-diff` 各笔 `=`；在 tip 上重生成清点得 `8e9e314b`，与分支 `ee2143ad` 那份逐字节相同。推前 `ls-remote` 发现远端已前进到 `39e8662d`（通道 5 的两笔收口核查，只动 `.scratch` 两份票面），于是 `rebase --onto 39e8662d` 重放一次，`range-diff` 仍全 `=`。新旧 SHA 对照（分支 → main）：`090b92af`→`9c41f7a2`、`80284575`→`b04355d9`、`201a3c17`→`0fd6e13c`、`aca995b5`→`b33435bc`、`1bbd0f09`→`175cfc47`、`6857e599`→`fd536468`、`eb57f999`→`574d301c`、`bdee59cd`→`0e9bfa5a`、`38dea447`→`59fb2e40`、`29b2345e`→`3aeb630b`；清点 `464ea94d`。
+- **验证**（钉 `8e9e314b`，20:11–20:14，DSN 指 55432）：干净检出 `gofmt -l .` 无输出；全仓 build / vet 退 0；清点生成器重跑零漂移；`-v` 单跑 `TestFreezeScopesAreInvisibleToEachOther`、`TestTheAdoptedDemoNetworkGetsPastRouteEvidenceThroughProductionWiring`、`TestATenantThatDidNotAdoptTheDemoNetworkStaysUnconfigured` 都是 PASS 非 SKIP；`go test -count=1 -p 1 ./...` 138 包 ok、0 FAIL（另 14 包无测试文件）。推的 `464ea94d` 与 `8e9e314b` 在 `.scratch` 以外 `git diff` 为空、清点在新 tip 上零漂移，差的只是通道 5 那两份票面，所以没有重跑。
+- **推送**（20:3x）：推前 `ls-remote` 远端是 `39e8662d`，`39e8662d..464ea94d` 只有本票十笔与清点；`git push origin 464ea94d:main`。共享树 main 随后快进到 `464ea94d`，树上他人的未提交改动（`.cursor/` 两份）与本批零交叠、原样留着。本记录随后单独一笔。
+- **后续**：判据一的两处缺口立 [16](16-demo-tenant-pre-acceptance-financial-control-cells.md)（演示租户受理前财务控制两格）与 [17](17-initial-route-pricing-input-from-customer-declaration.md)（初始路由的计价输入，Blocked by 15）。非作者评审仍可补，补到后记在本节之下。
