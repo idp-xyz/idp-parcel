@@ -86,7 +86,7 @@ Blocked by: 无。设计决策已全部裁毕，权威记录为 [ADR-0176](../..
 
 | 票 | 标题 | Blocked by | 状态 |
 |---|---|---|---|
-| [02](issues/02-pc-closure-resolves-contract-tier-service-rule-first.md) | PC 闭包：客户服务规则合同优先解析 | 无 | ready-for-agent |
+| [02](issues/02-pc-closure-resolves-contract-tier-service-rule-first.md) | PC 闭包：客户服务规则合同优先解析 | 无 | 完工，待评审与重放 |
 | [03](issues/03-pc-layered-read-port-returns-contract-and-product-base-bodies.md) | PC 层次读口：合同版、产品底座版正文与在场标志 | 02 | ready-for-agent |
 | [04](issues/04-ve-claim-eligibility-checks-contract-and-inherits-rows-from-product-base.md) | VE 索赔资格：按合同点核、按行继承底座 | 03 | ready-for-agent |
 | [05](issues/05-admin-form-contract-tier-empty-means-inherit-and-tighten-only.md) | 管理台表单：空表即继承、只收紧不删减（前端切片） | 04 | ready-for-agent |
