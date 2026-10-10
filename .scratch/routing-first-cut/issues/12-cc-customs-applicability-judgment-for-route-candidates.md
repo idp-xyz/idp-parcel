@@ -1,7 +1,7 @@
 # 12 customs-compliance：按路由候选作答的关务适用性判断口
 
 Category: enhancement
-Status: in-progress · 完工待评审与重放——2026-10-09 通道 3 收口（派单 `task-5351ee37` ← 通道 1）：代码笔自基线 `993995e7` 至 `0c17d9b5`，清点 `6e441e43`，完成记录见文末；评审由通道 1 另派非作者，作者不自评。此前：in-progress——2026-10-08 TraeCode 会话认领（用户令「开始接下一张票」；阻塞均无，文末分诊裁定即本票口径）。此前：ready-for-agent——2026-10-08 TraeCode 会话按用户令代 CC owner 分诊，「待 CC owner 定」四问裁定见文末「关务适用性判断分诊」。更早的 needs-triage——2026-09-24 通道 3 立（派单 `task-1f910231` ← 通道 1；出自 02 的取证与 [psb/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 格 6）。建在 [ADR-0148](../../../docs/adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md)（Proposed）决定三上，判断口的形状与作答层级归 CC owner（0148 越权风险点 4）：0148 接受、CC owner 在分诊时定下文「待 CC owner 定」各问之后，转 ready-for-agent
+Status: in-progress · 阻断已修，待复评与重放——2026-10-10 16:07 通道 2（用户令接手通道 1 在途的修复；分支 `mcp3-rfc12`，代码 tip `71ff7440`、其后只动票面，基 `993995e7`；见文末「阻断修复记录」；通道 2 已是这次修复的提交方，复评另派非作者）。此前：完工待评审与重放——2026-10-09 通道 3 收口（派单 `task-5351ee37` ← 通道 1）：代码笔自基线 `993995e7` 至 `0c17d9b5`，清点 `6e441e43`，完成记录见文末；评审由通道 1 另派非作者，作者不自评；通道 2 非作者评审钉 `8b3224d4` 一条阻断（两轴同一件）。此前：in-progress——2026-10-08 TraeCode 会话认领（用户令「开始接下一张票」；阻塞均无，文末分诊裁定即本票口径）。此前：ready-for-agent——2026-10-08 TraeCode 会话按用户令代 CC owner 分诊，「待 CC owner 定」四问裁定见文末「关务适用性判断分诊」。更早的 needs-triage——2026-09-24 通道 3 立（派单 `task-1f910231` ← 通道 1；出自 02 的取证与 [psb/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 格 6）。建在 [ADR-0148](../../../docs/adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md)（Proposed）决定三上，判断口的形状与作答层级归 CC owner（0148 越权风险点 4）：0148 接受、CC owner 在分诊时定下文「待 CC owner 定」各问之后，转 ready-for-agent
 Blocked by: 无（原 02、07 均已进 main；接 NR 取数侧那一项的地盘另含 NR owner，轮次 4 前报窗口）
 父票：[psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md)「演示租户上一票已接受的委托能形成初始路由」那条关键路径上挡路的缝（切片计划的子票表由通道 5 补入）
 归档：psb/04 与 ADR-0148 决定三都写这张票「另立、不在本票族里补」，指的是 NR 取数侧各票不代 CC 补执行器；本票就是那张另立的票，地盘在 CC。放在本目录、编号 12 是派单的归档选择（通道 1 与通道 5 协调）。
@@ -101,12 +101,37 @@ CC 有口岸目录与申报路径目录两本登记册（`ports.PortsPathsRegist
 
 1. **CONTEXT 规则三、四改写**（`5b81e938`）：分诊原文规则三没限定候选，与规则二「两端同国即可用」在「同国 + 依赖读不到」那一格字面相抵。改为缺码与两端同国两格不靠目录作答、读不到时照常作答，只有两端异国的候选在读不到时答状态未知；规则四补一句：读不到与目录为空的判断标识不得相同。
 2. **申报模式这一维首版不评**：裁定三写「方向与申报模式可各自指」，而裁定二定的候选投影（段链 + 两端国家）不带申报模式，CONTEXT 规则一据此写明首版不评模式维。不可用理由于是只有口岸未登记、口岸未生效、方向对不上三种；要评模式，得先给投影补模式来源，另立票。
-3. **不可用落到 NR 硬约束哪一格**（裁定三留给轮次 4 与 NR owner）：消费方适配器把不可用译成 `RESTRICTION_APPLIES`，限制引用为 `CUSTOMS_APPLICABILITY/<判断标识>/<理由>`；状态未知译成命名缺口（缺国家码指名一端 / 目录为空 / 目录读不到），各带重判触发。NR owner 没有单独复核，评审时眼见为实。
+3. **不可用落到 NR 硬约束哪一格**（裁定三留给轮次 4 与 NR owner）：消费方适配器把不可用译成 `RESTRICTION_APPLIES`，限制引用为 `CUSTOMS_APPLICABILITY/<判断标识>/<理由>`；状态未知里缺国家码（指名一端）与目录为空译成命名缺口，各带重判触发；**目录读不到不译缺口**，适配器整份交回 `ErrCustomsCatalogUnreadable`（依赖调不通），可达性形成`未形成判断`、初始路由形成`未决`（评审阻断后改，见「阻断修复记录」）。NR owner 没有单独复核，评审时眼见为实。
 4. **目录版本引用取该租户两本目录的全量行**（含判断时点未生效的行），不只取作答用到的那几行。好处是出处能复原整份依据（未生效本身就是作答理由）；代价是该租户目录每登一行或换一版，它所有候选的判断标识都跟着换，哪怕那一行与候选无关。
 
 **暂存测试的处置**：`/home/tops/workspace/.hold-mcp3-rfc12/customs_applicability_outcomes_test.go`（12,523 字节，sha256 以 `d79bc644` 开头）**不采用**，文件留在原处。理由：按判据逐格对，它十条用例钉的判据在本分支上都已有同判据的用例（`79614fd8` 的对照检查之外，还有 `4b967223` 的真库用例与领域用例），它独有的两片 red 与对照检查的两片 red 判据相同、已由 `79614fd8` 修掉，并进来只会在同一个包里多一份钉同样判据的文件；字面上只有它有的一格「缺出口路径、指名出口方向」，与已钉的进口一侧走同一个按方向参数化的 `sideCovered`。取证：本会话把它只拷进临时检出带 DSN 各跑一次——在 `0873a719` 上 8 条 `PASS`、2 条 `FAIL`（目录读不到时两端同国被答成 `STATUS_UNKNOWN`/`CATALOG_UNREADABLE`；读不到与目录为空共用判断标识），在 `0c17d9b5` 上 10 条全 `PASS`。
 
 **未验 / 边界**：演示动线没有重走，演示种子那份（线路适用范围 `SYN-SCOPE-01`、服务区域未带覆盖国家）能否越过「墙三」未核，归 psb/05 的重走；初始路由能否落成计划还要看成本排序（rfc/10 已进 main），本票没量；全部取证只记 `S`。评审由通道 1 另派非作者，本会话是作者，不自评。
+
+## 阻断修复记录（2026-10-10，通道 2 接手通道 1；分支 `mcp3-rfc12`；待非作者复评与重放）
+
+**阻断**（通道 2 非作者评审，钉 `8b3224d4`，两轴同一件）：目录读不到被记成资料不足。CC 把快照读取错误折成状态未知·目录读不到；NR 消费方适配器的 `unknownGap` 又把它译成缺口 `CUSTOMS_PORT_PATH_CATALOG_UNREADABLE`，`LoadNetworkEvidence` 当成功交回，可达性形成`资料不足`、初始路由形成 `RouteCandidateEvidenceIncomplete`。
+
+**做法：改在 NR 消费方适配器，不改 CC。** `unknownGap` 遇 `CatalogUnreadable` 交回新导出的 `ErrCustomsCatalogUnreadable`，`AssessCustomsApplicability` 整份上抛，已作答的候选也不交；应用层既有路径把它折成`未形成判断`（可达性，`NetworkEvidenceUnavailable`）与`未决`（初始路由，`RouteEvidenceUnavailable`）。选这一侧：在 CC 的语言里「依赖读不到」是分诊裁定三收进答案代数的状态未知，是 CC 的答案；在 NR 的语言里它是依赖调不通——`CustomsApplicabilitySource` 只许它走 error，`EvidenceGap` 不许它记成缺口。翻译归消费方适配器（ADR-0148 决定三：判断归 CC、适配器只翻译）；NR 那几条约定的注释与 network-routing CONTEXT 一字未动。
+
+**裁定三未改。** CC 仍答「状态未知（目录为空或依赖读不到）」，钉这一答的 `TestApplicabilityCriterionUnreadableCatalogIsStatusUnknownNotAnError` 照旧成立、不改，CC CONTEXT 的规则也不动。缺国家码与目录为空仍是命名缺口（`TestUnknownReasonsMapOntoNamedGaps` 余下各格）；两端同国照常作答（判断项 1，CC 用例未动）。判断项 3 已据此改写。
+
+| 笔 | 内容 |
+|---|---|
+| `209cea4c` | NR 适配器：`ErrCustomsCatalogUnreadable` 与 `unknownGap` 那一格。用例 `TestAnUnreadableCatalogIsADependencyFailureNotAGap`（一条已作答、一条读不到 → 整份上抛，不交事实也不交出处），取代 `TestUnknownReasonsMapOntoNamedGaps` 里目录读不到那一格；`cmd/parcel-dispatch` 真库用例 `TestAnUnreadableCustomsCatalogReachesBothEvidenceViewsAsADependencyFailure`（生产装配，关掉 CC 那只库的连接池，初始路由与可达性两个证据视图都交回 `ErrCustomsCatalogUnreadable`） |
+| `71ff7440` | CC CONTEXT 词条「关务适用性判断」不再自列不可用理由，以规则节为准——评审 Standards 轴的非阻断（词条写申报路径三维，规则写首版不评模式维），卡面顺手项 |
+| 本笔 | 票面：Status、判断项 3、本节 |
+
+`未形成判断`与`未决`两格由 networkrouting/application 的既有用例钉着：`TestUnavailableNetworkEvidenceIsNotFormedRatherThanInsufficientEvidence`（证据视图出错 → `JudgmentNotFormed`/`NetworkEvidenceUnavailable`）与 `TestThreeParcelsKeepThreeIndependentResults`（证据出错的那个包裹 → `ParcelRouteUndecided`/`RouteEvidenceUnavailable`）。新用例证到证据视图交回 error 为止，两段接起来是「目录读不到 → NR 那侧未形成判断」。
+
+**谁写了什么**：`209cea4c` 的代码与用例出自通道 1 会话（先只加哨兵、确认两条用例按行为红，再改行为转绿，记在其会话存档）。通道 1 自 15:52 起无动作，通道 2 按用户令接手：核对工作树改动与读过的那份 diff 逐字节一致后提交，补 `71ff7440` 与本票面，并做下面两项复验。
+
+**验证**（通道 2，带 `IDP_PARCEL_POSTGRES_DSN`，指 55432 门禁库）
+
+- 钉 `71ff7440` 的干净检出，16:04–16:05：`gofmt -l` 两个改动目录无输出；`go build ./...`、`go vet ./...` 全仓退 0；开跑前 `-v` 单跑上面那条真库用例，是 `PASS` 不是 `SKIP`；`go test -count=1 -p 1` 跑 `./internal/customscompliance/...`、`./internal/networkrouting/...`、`./internal/architecture/...`、`./cmd/...`，36 个包 `ok`、1 个无测试文件、0 个 `FAIL`。适配器的生产反向依赖由 `go list` 反查只有 `cmd/parcel-dispatch`，已在其中。机制清点在同一检出上重生成，与已提交的一致，不另成笔。
+- 判别力：在 `209cea4c` 的临时检出上只把目录读不到那一格改回旧答法（哨兵保留），两条新用例都红——实得 `err = <nil>`，适配器那条与真库那条的初始路由、可达性两处都是；`TestUnknownReasonsMapOntoNamedGaps` 照旧绿。复原后拆掉该检出。
+
+**未验 / 边界**：演示动线没有重走（同完成记录）。复评须由非作者来做：`209cea4c` 出自通道 1，提交与本票面出自通道 2，两者都不评。
 
 ## Comments
 
