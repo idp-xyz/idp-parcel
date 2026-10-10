@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
@@ -91,6 +92,18 @@ func TestRecordsStoredBeforeTFC1AreComparedUnderTheirOwnShape(t *testing.T) {
 			rewrite(testCase.unversioned)
 			testCase.replay(t)
 			testCase.conflict(t)
+		})
+	}
+}
+
+// Covers: 新记录写的是 TFC-1 形——无版本那一版只用来比旧记录，误写进新记录时上一例照样绿，
+// 要在这里断。
+func TestNewRecordsAreStoredUnderTFC1(t *testing.T) {
+	for _, testCase := range unversionedDigestCases(t) {
+		t.Run(testCase.name, func(t *testing.T) {
+			if stored, _ := testCase.first(t); !strings.HasPrefix(stored, "TFC-1:") {
+				t.Fatalf("新记录落下的摘要是 %q，want TFC-1 形", stored)
+			}
 		})
 	}
 }
