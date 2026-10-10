@@ -107,3 +107,23 @@ CC 有口岸目录与申报路径目录两本登记册（`ports.PortsPathsRegist
 **暂存测试的处置**：`/home/tops/workspace/.hold-mcp3-rfc12/customs_applicability_outcomes_test.go`（12,523 字节，sha256 以 `d79bc644` 开头）**不采用**，文件留在原处。理由：按判据逐格对，它十条用例钉的判据在本分支上都已有同判据的用例（`79614fd8` 的对照检查之外，还有 `4b967223` 的真库用例与领域用例），它独有的两片 red 与对照检查的两片 red 判据相同、已由 `79614fd8` 修掉，并进来只会在同一个包里多一份钉同样判据的文件；字面上只有它有的一格「缺出口路径、指名出口方向」，与已钉的进口一侧走同一个按方向参数化的 `sideCovered`。取证：本会话把它只拷进临时检出带 DSN 各跑一次——在 `0873a719` 上 8 条 `PASS`、2 条 `FAIL`（目录读不到时两端同国被答成 `STATUS_UNKNOWN`/`CATALOG_UNREADABLE`；读不到与目录为空共用判断标识），在 `0c17d9b5` 上 10 条全 `PASS`。
 
 **未验 / 边界**：演示动线没有重走，演示种子那份（线路适用范围 `SYN-SCOPE-01`、服务区域未带覆盖国家）能否越过「墙三」未核，归 psb/05 的重走；初始路由能否落成计划还要看成本排序（rfc/10 已进 main），本票没量；全部取证只记 `S`。评审由通道 1 另派非作者，本会话是作者，不自评。
+
+## Comments
+
+**评审 ← 通道 2 · 钉 `8b3224d4` · 11:25**（基 `993995e7`，隔离检出；跳过 `6cb57bb9`。非作者。）
+
+**Standards**
+
+阻断：目录读失败被记成资料不足。`internal/networkrouting/adapters/customscompliance/customs_source.go` 的 `unknownGap` 在 `CatalogUnreadable` 时交出 `ConstraintStatusUnknown` 和缺口 `CUSTOMS_PORT_PATH_CATALOG_UNREADABLE`。`internal/customscompliance/application/customs_applicability.go` 的 `Handle` 把快照错误折成这格并返回空错误，`LoadNetworkEvidence` 因此当成功交回。可达性经 `AssessParcelReachability` 形成资料不足，初始路由经 `noRouteRecord` 形成 `RouteCandidateEvidenceIncomplete`，都不是未形成判断。依据：`EvidenceGap` 写明调不通的依赖绝不记成缺口；`HardConstraintOutcome` 写明依赖失败到不了硬约束事实；`NetworkEvidenceView` 禁止把技术故障装扮成证据缺口；network-routing CONTEXT「可达性判断」写明资料不足不是系统错误；`CustomsApplicabilitySource` 写明 error 只表示依赖调不通。
+
+非阻断：词条与规则一不一致。customs-compliance CONTEXT 词条「关务适用性判断」把不可用写成申报路径三维对不上并指名缺哪一维，同文规则一写明首版不评模式维。同一决策两处定义，违 AGENTS.md 红线「单一权威」。`sideCovered` 只核方向，运行跟规则一。
+
+无发现：租户口岸与路径未写死；登记册与种子未改；出处随判断留痕，合 ADR-0148 决定一；判断归 CC、适配器只翻译，合决定三。缺国家码与目录为空进缺口是业务证据不够，不并进阻断。
+
+**Spec**
+
+阻断：判断项 3 眼见为实。缺国家码与目录为空译成命名缺口，符合资料不足表示业务证据不够。目录读不到也译成命名缺口，与票面「不可用落到 NR 硬约束哪一格，由轮次 4 与 NR owner 定，本票不先裁」留给 NR 的既有不变量相反：依赖故障被记成已形成判断。
+
+非阻断：判断项 2。`internal/customscompliance/domain/customs_applicability.go` 的 `sideCovered` 不评申报模式。裁定三写「方向与申报模式可各自指」，裁定二的投影不带模式，判断项 2 已另立票。代码没有默认某种模式。
+
+无发现：判断项 1 对，`foldEndpoints` 与规则三、四一致，缺码与同国不靠目录，只有异国且读不到才状态未知，判断标识与空目录分开。判断项 4 对，`catalogVersionReferences` 取两本目录全量行。判据其余格在：词条与规则已落、同输入带出处、psb/05 格 6 只记 `S`、登记册与种子无改动。未改候选生成、排序、冻结与改路，限制不并入，无参考配置，无新 ADR。不可用译成 `RESTRICTION_APPLIES`，引用带判断标识与理由。
