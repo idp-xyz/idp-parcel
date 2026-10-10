@@ -609,7 +609,7 @@ func resolveCustomerServiceRuleBasis(
 
 // CustomerServiceRuleProductBase 选「同范围挂服务产品、锚点生效」的那一版客户服务规则：恰一版答
 // `唯一解析`并交回它，多版答`适用冲突`，零版答`无适用依据`。闭包在合同层零候选时回落的就是这一层，
-// ADR-0176 决定二的层次读口拿它当行级继承的底座——两处读同一份分层（customerServiceRuleTiers），
+// ADR-0176 决定二的层次读口拿它当行级继承的底座——闭包回落与层次读口读同一份分层（customerServiceRuleTiers），
 // 「哪一版算产品底座」只有一种答法。
 //
 // declaredProduct 是委托声明的服务产品，可缺席；在场时壳上指名了别的服务产品的版本落选，收窄规则同
