@@ -1,7 +1,7 @@
 # 13 各命令口的载荷规范化形状：ADR-0055 决定五第一项逐口解
 
 Category: enhancement
-Status: ready-for-agent——2026-09-24 随 ADR-0149 立（用户授权通道 4 自决）；按上下文拆笔
+Status: in-progress——2026-10-10 11:21 通道 3 认领（分支 `mcp3-oc13` 基 `1121ba61`，工作树 `/home/tops/workspace/idp-parcel-mcp3-oc13`）。此前：ready-for-agent——2026-09-24 随 ADR-0149 立（用户授权通道 4 自决）；按上下文拆笔
 Blocked by: 无
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 丙轨实施
 地盘：各上下文 `domain` 里命令载荷的规范化形状与摘要（NO、TF、CC、SA 各一笔），`adapters/http` 的译装不改答复。
