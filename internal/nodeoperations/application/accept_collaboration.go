@@ -8,7 +8,6 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
-	"sort"
 	"strings"
 	"time"
 
@@ -175,7 +174,12 @@ func (handler *AcceptCollaborationHandler) Accept(
 	}
 
 	key := ports.CollaborationAcceptanceKey{TenantID: command.TenantID, Item: acceptance.Item()}
-	digest := acceptanceDigest(command)
+	_, digest, err := domain.CanonicalizeAcceptancePayload(
+		command.Decision, command.Node, command.Authority, command.Basis, command.AcceptedUnits, command.AcceptedActions,
+	)
+	if err != nil {
+		return CollaborationResult{}, err
+	}
 	existing, found, err := handler.deps.Acceptances.FindByKey(ctx, key)
 	if err != nil {
 		return acceptanceStoreUndecided(command.Item), nil
@@ -257,7 +261,10 @@ func (handler *AcceptCollaborationHandler) RecordExecution(
 	}
 
 	key := ports.ExecutionFactKey{TenantID: command.TenantID, Item: item, Unit: unit, Action: command.Action}
-	digest := executionDigest(command)
+	_, digest, err := domain.CanonicalizeExecutionPayload(command.Evidence, command.PerformedAt)
+	if err != nil {
+		return CollaborationResult{}, err
+	}
 	existing, factFound, err := handler.deps.Facts.FindByKey(ctx, key)
 	if err != nil {
 		return factStoreUndecided(command.Item), nil
@@ -392,33 +399,4 @@ func (handler *AcceptCollaborationHandler) handOffFact(
 func collaborationContinuation(parts ...string) string {
 	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return "CONT-" + hex.EncodeToString(digest[:8])
-}
-
-// acceptanceDigest 是同一事项决定的内容比对锚：决定、范围、授权与依据任一不同即是
-// 另一个决定。范围先排序——提交顺序不构成不同的决定。
-func acceptanceDigest(command AcceptCollaborationCommand) string {
-	units := append([]string(nil), command.AcceptedUnits...)
-	sort.Strings(units)
-	actions := make([]string, 0, len(command.AcceptedActions))
-	for _, action := range command.AcceptedActions {
-		actions = append(actions, fmt.Sprintf("%d", action))
-	}
-	sort.Strings(actions)
-	digest := sha256.Sum256([]byte(strings.Join(append(append([]string{
-		fmt.Sprintf("%d", command.Decision),
-		command.Node,
-		command.Authority,
-		command.Basis,
-	}, units...), actions...), "\x00")))
-	return hex.EncodeToString(digest[:])
-}
-
-// executionDigest 是同一（事项+实物+动作）登记的内容比对锚：证据与业务时间任一不同
-// 即是另一份内容。
-func executionDigest(command RecordExecutionCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		command.Evidence,
-		command.PerformedAt.UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
 }

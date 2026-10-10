@@ -2,12 +2,9 @@ package application
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
@@ -169,8 +166,10 @@ func (handler *ConsolidateParcelsHandler) Open(
 	ctx context.Context,
 	command OpenUnitCommand,
 ) (ConsolidationResult, error) {
-	digest := consolidationDigest(domain.OpenUnitAction, command.Source,
-		command.Unit.String(), command.Asset.String())
+	_, digest, err := domain.CanonicalizeOpenUnitPayload(command.Source, command.Unit, command.Asset)
+	if err != nil {
+		return ConsolidationResult{}, err
+	}
 	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest)
 	if !proceed {
 		return gate.result, nil
@@ -210,8 +209,10 @@ func (handler *ConsolidateParcelsHandler) AddMember(
 	ctx context.Context,
 	command AddMemberCommand,
 ) (ConsolidationResult, error) {
-	digest := consolidationDigest(domain.AddMemberAction, command.Source,
-		command.Unit.String(), command.Member.String())
+	_, digest, err := domain.CanonicalizeAddMemberPayload(command.Source, command.Unit, command.Member)
+	if err != nil {
+		return ConsolidationResult{}, err
+	}
 	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest)
 	if !proceed {
 		return gate.result, nil
@@ -254,8 +255,10 @@ func (handler *ConsolidateParcelsHandler) RemoveMember(
 	ctx context.Context,
 	command RemoveMemberCommand,
 ) (ConsolidationResult, error) {
-	digest := consolidationDigest(domain.RemoveMemberAction, command.Source,
-		command.Unit.String(), command.Member.String())
+	_, digest, err := domain.CanonicalizeRemoveMemberPayload(command.Source, command.Unit, command.Member)
+	if err != nil {
+		return ConsolidationResult{}, err
+	}
 	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest)
 	if !proceed {
 		return gate.result, nil
@@ -288,8 +291,10 @@ func (handler *ConsolidateParcelsHandler) Seal(
 	ctx context.Context,
 	command SealUnitCommand,
 ) (ConsolidationResult, error) {
-	digest := consolidationDigest(domain.SealUnitAction, command.Source,
-		command.Unit.String(), command.Seal.String(), command.Basis.String())
+	_, digest, err := domain.CanonicalizeSealUnitPayload(command.Source, command.Unit, command.Seal, command.Basis)
+	if err != nil {
+		return ConsolidationResult{}, err
+	}
 	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest)
 	if !proceed {
 		return gate.result, nil
@@ -324,8 +329,10 @@ func (handler *ConsolidateParcelsHandler) Unseal(
 	ctx context.Context,
 	command UnsealUnitCommand,
 ) (ConsolidationResult, error) {
-	digest := consolidationDigest(domain.UnsealUnitAction, command.Source,
-		command.Unit.String(), command.Basis.String())
+	_, digest, err := domain.CanonicalizeUnsealUnitPayload(command.Source, command.Unit, command.Basis)
+	if err != nil {
+		return ConsolidationResult{}, err
+	}
 	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest)
 	if !proceed {
 		return gate.result, nil
@@ -356,8 +363,10 @@ func (handler *ConsolidateParcelsHandler) Close(
 	ctx context.Context,
 	command CloseUnitCommand,
 ) (ConsolidationResult, error) {
-	digest := consolidationDigest(domain.CloseUnitAction, command.Source,
-		command.Unit.String(), command.Disposition.String())
+	_, digest, err := domain.CanonicalizeCloseUnitPayload(command.Source, command.Unit, command.Disposition)
+	if err != nil {
+		return ConsolidationResult{}, err
+	}
 	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest)
 	if !proceed {
 		return gate.result, nil
@@ -508,22 +517,4 @@ func (handler *ConsolidateParcelsHandler) handOffSnapshot(
 		return ""
 	}
 	return "CONT-SNAPSHOT/" + id.String() + "/" + snapshot.Seal().String()
-}
-
-// consolidationDigest 是同一来源身份的内容比对锚：来源身份之外的一切都算内容——动作、
-// 对象、这一格特有的参数（载具/成员/封签/依据）、执行方、证据与业务发生时间，任一不同
-// 即是另一份内容，按 AT-NO-043 形成冲突而不是覆盖先到者。
-func consolidationDigest(
-	action domain.ConsolidationActionKind,
-	source domain.WorkFactSource,
-	parts ...string,
-) string {
-	fields := append([]string{
-		action.String(),
-		source.PerformedBy().String(),
-		source.Evidence().String(),
-		source.OccurredAt().UTC().Format(time.RFC3339Nano),
-	}, parts...)
-	digest := sha256.Sum256([]byte(strings.Join(fields, "\x00")))
-	return hex.EncodeToString(digest[:])
 }
