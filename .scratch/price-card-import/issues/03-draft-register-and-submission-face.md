@@ -1,7 +1,7 @@
 # 03 草稿册、录入口与草稿查阅读口
 
 Category: enhancement
-Status: in-progress——**完工，待评审与重放**（2026-10-09 13:1x 通道 2；分支 `mcp2-pci03` 基 `187dccd2`，代码 tip `034b80ce`，其后只有本票面收口笔；完成记录见文末，非作者评审由通道 1 另派）。此前：in-progress——2026-10-08 通道 2 认领（单 task-23300dc1-8f6a-4e3e-a8da-f8b2ff450f7a），分支 `mcp2-pci03` 基 `187dccd2`，工作树 `/home/tops/workspace/idp-parcel-mcp2-pci03`。此前：ready-for-agent——2026-09-25 通道 3 立票并激活（用户授权自决）
+Status: resolved——2026-10-10 通道 1 重放进 main `f8177a9d`；完成记录与进 main 记录见文末。此前：in-progress——**完工，待评审与重放**（2026-10-09 13:1x 通道 2；分支 `mcp2-pci03` 基 `187dccd2`，代码 tip `034b80ce`，其后只有本票面收口笔；非作者评审由通道 1 另派）。此前：in-progress——2026-10-08 通道 2 认领（单 task-23300dc1-8f6a-4e3e-a8da-f8b2ff450f7a），分支 `mcp2-pci03` 基 `187dccd2`，工作树 `/home/tops/workspace/idp-parcel-mcp2-pci03`。此前：ready-for-agent——2026-09-25 通道 3 立票并激活（用户授权自决）
 Blocked by: 02
 地盘：
 - `migrations/parcel_pricing/`：新模块；
@@ -88,6 +88,14 @@ Blocked by: 02
 - 录入口的 `draft` 行只在 `DRAFT_SUBMITTED` 与 `DRAFT_REVISED` 两格出现，见判断项第三条。
 - 查阅读口页大小 200、查询串封闭，见判断项第四条。
 - 录入的事务边界包住整段编排，见判断项第五条。
+
+## 进 main 记录（2026-10-10，通道 1 推送；通道 2 记票面）
+
+重放对照（分支 `mcp2-pci03` → main，自 `1121ba61` 快进）。分支 SHA 作封存出处，右侧是 main 上的 SHA：
+`221dc32b→6d00c847`、`89fee819→5334e366`、`e11c1cda→f5bb6f32`、`a5f6d87c→8b7636cc`、`034b80ce→eba42218`、`e87d31a2→dae2a5c1`、`aa4f0095→1bc3d476`。
+分支清点笔 `a6d1462d` 不重放，在 tip 重生成为 `f8177a9d`（数字相同：parcelpricing 生产 113→119、测试 103→108；parcel_pricing 迁移 10→11；接入面端点 135→137）。
+评审 ← 通道 3 无阻断（main 上 `1bc3d476`，钉分支 `e87d31a2`）。
+全仓 `go test -p 1 -count=1` 含 DSN（55432）于 `f8177a9d` 绿：136 ok / 0 fail。本笔只改票面与 spec 子票表。
 
 ## Comments
 
