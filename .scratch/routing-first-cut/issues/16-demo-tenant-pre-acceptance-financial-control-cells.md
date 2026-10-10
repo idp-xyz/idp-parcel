@@ -1,7 +1,7 @@
 # 16 演示租户受理前财务控制两格：时点采用产品参考配置、种子登结算账户
 
 Category: enhancement
-Status: 完工，待评审与重放——2026-10-10 通道 2 收口（派单 `task-7536ef53` ← 通道 1）：分支 `mcp2-rfc16` 基 `5e6cd4b6`，代码 tip `128239dc`，完成记录见文末；三条判据 ✅，执行器零改；非作者评审另派，作者不自评；重放进 main 由通道 1 做。此前 in-progress——2026-10-10 通道 2 认领，分支 `mcp2-rfc16`、基 `5e6cd4b6`。此前 ready-for-agent——2026-10-10 22:2x 通道 1 分诊（用户授权自决）：收为「两格登上、停点前移」，越过格 5 不是本票判据，见「分诊裁定」。此前 needs-triage——2026-10-10 通道 1 立（用户授权自决），出自 [11](11-demo-network-adopted-as-reference-configuration.md) 的判据一取证：演示动线越过 psb/05 格 4 之后停在格 5
+Status: resolved——2026-10-11 00:00 通道 1 重放进 main：`55b0db4b`…`f84515c2`，机制清点零变化；评审与进 main 记录见文末。此前 完工，待评审与重放——2026-10-10 通道 2 收口（派单 `task-7536ef53` ← 通道 1）：分支 `mcp2-rfc16` 基 `5e6cd4b6`，代码 tip `128239dc`，完成记录见文末；三条判据 ✅，执行器零改；非作者评审另派，作者不自评；重放进 main 由通道 1 做。此前 in-progress——2026-10-10 通道 2 认领，分支 `mcp2-rfc16`、基 `5e6cd4b6`。此前 ready-for-agent——2026-10-10 22:2x 通道 1 分诊（用户授权自决）：收为「两格登上、停点前移」，越过格 5 不是本票判据，见「分诊裁定」。此前 needs-triage——2026-10-10 通道 1 立（用户授权自决），出自 [11](11-demo-network-adopted-as-reference-configuration.md) 的判据一取证：演示动线越过 psb/05 格 4 之后停在格 5
 归档：不属 [psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md) 的子票集；放在本目录是因为它挡在 11 判据一的路上。
 地盘：`scripts/demo-seeds`（演示租户的采用行与账户登记）；另含随种子失真的注释——`cmd/parcel-dispatch/assemble.go` 与 `internal/parcelshipment/adapters/partycommercial/submission_receipt_as_of.go` 里说「演示种子的财务控制格没采用」的那几句（按这句引文搜得到）。执行器不动（分诊已核）。
 出处：[psb/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)「格 5 · 受理前财务控制」两次取证，都写「没找到点名这一格的票」；AGENTS.md「演示租户就是 SYN-TENANT-01，代码按真实租户对待它」；[ADR-0150](../../../docs/adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md)。
@@ -100,3 +100,43 @@ Status: 完工，待评审与重放——2026-10-10 通道 2 收口（派单 `ta
 - 越过格 5：`Amounts` 的估价方法在 [psb/06](../../product-strategy-boundary/issues/06-ps-acceptance-and-label-selection-judgment-methods.md) 第 2 项，不在本票。
 - 两处带日期的文档补记写的仍是本票之前的种子状态，不在本票地盘，没改：[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md) 2026-09-30 补记（票 psb/06 第 1 项）末句「演示种子的可达性格采用了这一形态，财务控制格没有」；[合成演示动线](../../../docs/design/synthetic-demo-journey-script.md)「墙三」下 2026-10-10 那段补记（票 rfc/11）写的停点 `FINANCIAL_CONTROL_AS_OF_NOT_CONFIGURED`。
 - 没碰共享树与 `main`。
+
+## Comments
+
+### 评审 ← 通道 5 · 钉 `2388fb45` · 2026-10-10 23:5x（`task-62f05d89` ← 通道 1；推送方照录）
+
+rfc/16 非作者评审（钉 2388fb45，基 5e6cd4b6，代码 tip 128239dc）：两轴零阻断，各一条非阻断，可重放。
+
+**Standards**
+
+- 阻断：无。
+- 非阻断：`scripts/demo-seeds/seed.sh` 结算账户段头注把五维键指到 `cmd/parcel-dispatch` 的 `acceptanceFinancialControl`，那里只是装配；键在 `RegisteredAccountDirectory.FindSettlementAccount` 拼，权威是 ADR-0158 决定三。改指定义处，「差一维就查不到」才核得到（同文件治理段指 `isolatedGovernance*` 常量是先例）。README 组成表行与数据故事 7 又各复述一遍五维，可改为引 ADR-0158。
+- 无发现：`.go` diff 去注释行为空，执行器零改属实；`SubmissionReceiptAsOf`、`acceptanceChainConsumers`、`acceptanceCommercialBasis` 三处注释只剩机制说法，无行号；「五维」由 ADR-0158 决定一的五格钉住且就地列举，不算计数失守；`SYN-` 只进种子，无生产默认；新段不编号、README 接第 7 条，照治理段/操作者段先例。
+
+**Spec**
+
+- 阻断：无。
+- 非阻断：判据二取证带出一事，完成记录没交回通道 1。作者表中后两行停点是 `dispatch.consumer_undecided`、整笔回滚，任务行与可达性判断零行（原样种子落了一行 `acceptance_processing_attempt` 与一行可达性判断）。所以分诊裁定 4「两停在任务上都记 `FINANCIAL_CONTROL_NOT_FORMED`」的前提不成立：任务上什么都不落，重走动线也不再落 rfc/11 补记所述那条可达性判断。裁定 4 把立不立票留到「下一次走动线」，就是这次；handler 属本票「不做」，请通道 1 定。
+- 无发现：① -v PASS；`DigestReconciliation` 有算出值才比，作者先红报出算出值，重钉值即算出值。② 账户 JSON 五维与 `FindSettlementAccount` 的键、`SYN-SETTLEMENT-PREPAID-01` 正文逐一相符；`SYN-CONTRACT-01` 是该政策所引合同，合 `ResponsibilityBasis` 定义（判断项 2 成立）；`controlStallReasons` 把作用域与金额都折成 `FinancialControlNotFormed`，动线分不出，探针照生产装配逐格消融，取证站得住。③ 零命中。无越票；两处带日期补记在 `docs/`，确不在地盘。
+
+验证（检出 2388fb45，go1.26.8，带 DSN 与代理）：`go build ./...` 退 0；`go vet ./...` 退 0；`gofmt -l` 两改动包无输出；`go test -count=1 -p 1` 跑 cmd/parcel-commercial、cmd/parcel-dispatch、cmd/parcel-pricing-register、internal/parcelpricing/adapters/pricecardtemplate、cmd/parcel-settlement-register、internal/parcelshipment/adapters/partycommercial、./internal/architecture/...，全 ok；-v 单跑 TestDemoSeedClearsTheCitationGateAndItsDeclaredDigests 与 TestTheAdoptedDemoNetworkGetsPastRouteEvidenceThroughProductionWiring 均 `--- PASS`，非 SKIP。没跑全仓，没灌种子。收尾：`git worktree remove /tmp/idp-review-rfc16-mcp5` 已做（未加 --force，树干净）；没改分支、没提交、没推。
+
+### 处置（通道 1 · 2026-10-11 00:0x）
+
+- Standards 非阻断：记，不挡合入，本票未改；要改另起一笔，改指 `RegisteredAccountDirectory.FindSettlementAccount` 与 ADR-0158 决定三。
+- Spec 非阻断：分诊裁定第 4 条「两停在任务上都记 `FINANCIAL_CONTROL_NOT_FORMED`」的前提经判据二取证不成立——越过时点之后，消费方未决整笔回滚，任务行与可达性判断都不落。裁定原文不改，以本条为准。立票 [19](19-financial-control-undecided-leaves-no-trace-on-the-task.md)（needs-triage），「未做 / 边界」里那两处带日期的文档补记一并挂在那里。
+
+## 进 main 记录（通道 1 · 2026-10-11 00:00）
+
+- 重放：上一个通道 1 会话 2026-10-10 23:18 在隔离树 `/home/tops/workspace/idp-parcel-replay-c1b` 上把本票各笔与 [price-card-import/04](../../price-card-import/issues/04-approval-and-publication.md) 各笔叠在 `70f32c2a` 上（零冲突），等评审；本会话比内容后（本票改过的每份文件与作者 tip `2388fb45` 逐文件 `git diff` 为空），只取本票这一段推。
+
+  | 分支 `mcp2-rfc16` | main |
+  |---|---|
+  | `41102335` 认领 | `55b0db4b` |
+  | `d8e72d35` 时点一格 | `b35c821a` |
+  | `128239dc` 账户一格 | `c38cc751` |
+  | `2388fb45` 完成记录 | `f84515c2` |
+
+- 门（隔离检出 `/tmp/idp-land-rfc16` @ `f84515c2`）：gofmt 两改动包无输出；`go build ./...`、`go vet ./...` 退 0；机制清点在同一检出上重生成，与提交件逐字节相同，不另成笔；真库探针 `TestFreezeScopesAreInvisibleToEachOther` 为 PASS 非 SKIP；带 DSN `go test -count=1 -p 1 ./...` 23:56:26→23:59:08，138 ok / 0 FAIL / 14 无测试 / 0 cached；`-v` 单跑 `TestTheAdoptedDemoNetworkGetsPastRouteEvidenceThroughProductionWiring` 为 PASS。
+- 推：23:59:56 `ls-remote` 核 `70f32c2a` 未动 → 00:00:00 `push f84515c2:main` 成，远端 main = `f84515c2`（只有本票这一段，其下无他人提交）；共享树 ff 同 SHA。本笔簿记在其上，纯 .md，推送方自审。
+- 非作者评审：通道 5，两轴零阻断（见上 Comments）。
