@@ -1,8 +1,8 @@
 # 04 审批职责规则、批准与发布
 
 Category: enhancement
-Status: ready-for-agent——2026-09-25 通道 3 立票并激活（用户授权自决）
-Blocked by: 03
+Status: in-progress——2026-10-10 通道 4 认领（单 task-ea81d298-cf3d-4f0e-adc3-2e4add1af98f，重派 task-d4d0063c），分支 `mcp4-pci04` 基 `e266a876`，工作树 `/home/tops/workspace/idp-parcel-mcp4-pci04`。此前：ready-for-agent——2026-09-25 通道 3 立票并激活（用户授权自决）
+Blocked by: 03（已解：03 resolved，main `f8177a9d`）
 地盘：
 - `migrations/parcel_pricing/`；
 - `internal/parcelpricing/`：审批职责规则、操作者主体消费面、批准与发布编排及 HTTP；
