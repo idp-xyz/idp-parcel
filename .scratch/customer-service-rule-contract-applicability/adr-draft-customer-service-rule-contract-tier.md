@@ -1,5 +1,7 @@
 # ADR 草稿：客户服务规则挂合同的一格按「合同优先解析 + 行级继承产品版」接入——同一范围产品版与合同版并存可解，消费侧按合同点核
 
+> 2026-10-10 通道 1 注：本稿已于 2026-10-08 接受并移入 [ADR-0176](../../docs/adr/0176-customer-service-rule-contract-tier-selection-and-inheritance.md)，以该文件为准；下面的正文与 `Status: Proposed` 原样留作采访期记录。
+
 Status: Proposed（2026-10-08 起草；由票 [01](./issues/01-service-rule-keyed-by-product-cannot-express-per-customer-claim-terms.md) 经 `/grill-with-docs` 设计树产生。接受后移入 `docs/adr` 编 0176 并按 README 制度回写 [ADR-0104](../../docs/adr/0104-customer-service-rule-content-is-owned-by-party-commercial-and-first-ships-two-items.md) 的前向指针）
 
 ## Context

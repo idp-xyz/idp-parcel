@@ -2,7 +2,7 @@
 
 Category: enhancement
 Status: ready-for-agent
-Blocked by: 无。设计决策已全部裁毕，权威记录为 [ADR-0176](../../../docs/adr/0176-customer-service-rule-contract-tier-selection-and-inheritance.md)；建模票 [01](issues/01-service-rule-keyed-by-product-cannot-express-per-customer-claim-terms.md)。
+Blocked by: 无。设计决策已全部裁毕，权威记录为 [ADR-0176](../../docs/adr/0176-customer-service-rule-contract-tier-selection-and-inheritance.md)；建模票 [01](issues/01-service-rule-keyed-by-product-cannot-express-per-customer-claim-terms.md)。
 
 ## Problem Statement
 
@@ -48,7 +48,7 @@ Blocked by: 无。设计决策已全部裁毕，权威记录为 [ADR-0176](../..
 
 ## Implementation Decisions
 
-全部以 [ADR-0176](../../../docs/adr/0176-customer-service-rule-contract-tier-selection-and-inheritance.md) 六条 Decision 为准，此处只列落地位与接口形状，不复述判据：
+全部以 [ADR-0176](../../docs/adr/0176-customer-service-rule-contract-tier-selection-and-inheritance.md) 六条 Decision 为准，此处只列落地位与接口形状，不复述判据：
 
 - **PC 域解析**：`resolutionOrder` 把客户服务规则与结算政策同排第二段；新增解析分支（合同优先候选 → 产品回落候选 → 同层多候选`适用冲突` / 两层皆零`无适用依据`）；闭包唯一采纳形态不变；解析键不新增维、不预选合同维（镜像结算政策的既有纪律）。
 - **PC 层次读口（新）**：ports + postgres + application 同族于既有客户服务规则点读口——一次调用按（租户、范围、合同版本、锚点）返回（合同版正文、产品底座版正文、各自在场标志）；底座版在读口内选「同范围挂服务产品、锚点生效」的版本，多候选照`适用冲突`纪律答。既有单版点读口保留（受理时冻结引用仍走它）。

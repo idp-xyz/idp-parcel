@@ -1,7 +1,7 @@
 # 客户服务规则「挂客户合同」的那一格缺选择与回落机制——同一范围挂产品与挂合同的版本无法共存解析，消费侧也不核适用声明
 
 Category: enhancement
-Status: in-progress（2026-10-08 开工：按票面「建议路径」进入 `/grill-with-docs`，设计树逐轮采访中）
+Status: resolved——2026-10-10 通道 1 收口（用户授权自决）：票面「建议路径」末句的收口判据两条都已满足——六格每格有归属（见「诉求」节），机制半边已成交接任务包 [spec](../spec.md)（ready-for-agent）；设计权威是 10-08 接受的 [ADR-0176](../../../docs/adr/0176-customer-service-rule-contract-tier-selection-and-inheritance.md)。下一段 `/to-tickets` 由 spec 承接。此前：in-progress（2026-10-08 开工：按票面「建议路径」进入 `/grill-with-docs`，设计树逐轮采访中）
 Blocked by: 无。本票是建模诉求本身，先于一切实现；机制侧证据见正文「代码事实」。
 
 ## 来处
