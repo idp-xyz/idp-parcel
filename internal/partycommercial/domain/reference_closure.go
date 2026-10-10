@@ -311,8 +311,9 @@ func (closure CommercialClosure) Reason() ResolutionReason {
 // 依据。只有全部唯一解出才算成功。
 //
 // 解析分两段而不是一遍扫过（ADR-0080）：结算政策要按「哪一版客户合同」选，而那一版正是
-// 同一个闭包在解的另一项依据。第一段解其余成员，第二段拿解出的合同版本去解结算政策。
-// 顺序只在这一处，且只朝一个方向——合同不引用结算政策，两段之间不会再折回来。
+// 同一个闭包在解的另一项依据。第一段解其余成员，第二段拿解出的合同版本去解依合同的那几类
+// （resolvesAfterContract）。顺序只在这一处，且只朝一个方向——合同的选择不依赖第二段的任何
+// 一类，两段之间不会再折回来。
 //
 // standingOf 传给计价目的下的价格规则路径（ADR-0034）；其他依据忽略它。
 //
@@ -344,10 +345,14 @@ func ResolveCommercialClosure(
 	adopted := make([]AdoptedBasis, 0, len(key.RequiredBases))
 	for _, kind := range resolutionOrder(key.RequiredBases) {
 		var contract CommercialVersion
-		if resolvesAfterContract(kind) {
-			// 合同没解出来就不去问结算政策。问了也只能得到零候选，而零候选在这条路径上会
-			// 被读成`无适用依据`——那句话的意思是权威说这个范围没有结算约定，与实情（还不
-			// 知道该按哪一版合同去问）不是同一件事。
+		if resolvesAfterContract(kind) && key.requires(CustomerContractObject) {
+			// 合同没解出来就不去问依合同的那几类：还不知道该按哪一版合同去问。结算政策问了也
+			// 只能得到零候选，而零候选在这条路径上会被读成`无适用依据`——那句话的意思是权威说
+			// 这个范围没有结算约定，与实情不是同一件事。客户服务规则问了会回落到产品版，而这一户
+			// 有没有挂合同的那一版此刻无从知道，回落可能静默套上更宽的条款。
+			//
+			// 闭包根本没请求合同时没有这个前提：结算政策立不起那样的键（见 minimumIdentityEstablished），
+			// 客户服务规则只看产品层。
 			resolvedContract, premiseResolved := adoptedContractVersion(adopted)
 			if !premiseResolved {
 				closure.premiseUnresolved = append(closure.premiseUnresolved, kind)
@@ -359,6 +364,10 @@ func ResolveCommercialClosure(
 		switch kind {
 		case SettlementPolicyObject:
 			result = ResolveCommercialBasis(registry, key.settlementBasisKey(contract.QualifiedLabel()), standingOf)
+		case CustomerServiceRuleObject:
+			// 合同不进客户服务规则的解析键，由这里把已采用的那一份交给解析；没请求合同时它是
+			// 零值，解析只看产品层。
+			result = resolveCustomerServiceRuleBasis(registry, key.singleBasisKey(kind), contract.ObjectID())
 		case CreditPolicyObject:
 			result = ResolveCommercialBasis(registry, key.creditBasisKey(), standingOf)
 		default:
@@ -443,10 +452,11 @@ func resolutionOrder(bases []CommercialObjectKind) []CommercialObjectKind {
 }
 
 // resolvesAfterContract 声明依合同解析的第二段由哪几类组成：它们要按本闭包解出的那一版
-// 客户合同去选。排序与解析循环里「前提未解」那一格都读这一处——两处各列一份的话，加一类
+// 客户合同去选——结算政策按它的版本（ADR-0080），客户服务规则先看壳上指名了它的那一版
+// （ADR-0176）。排序与解析循环里「前提未解」那一格都读这一处——两处各列一份的话，加一类
 // 时很容易只改到其中一处。
 func resolvesAfterContract(kind CommercialObjectKind) bool {
-	return kind == SettlementPolicyObject
+	return kind == SettlementPolicyObject || kind == CustomerServiceRuleObject
 }
 
 // adoptedContractVersion 交回本次已采用的那一版客户合同，供依合同解析的那几类据以选择。
