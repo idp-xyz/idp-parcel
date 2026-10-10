@@ -15,8 +15,8 @@ const submissionReceiptReference = "parcel-shipment/as-of-semantics/submission-r
 
 // SubmissionReceiptAsOf 把「提交接收」折成该提交版本已记录的系统接收时间。
 //
-// 只认产品发布的那一版引用。租户在哪一格采用，就在哪一格形成。
-// 演示种子的财务控制格没采用这一形态，所以那一格答未配置。
+// 只认产品发布的那一版引用。租户在哪一格采用，就在哪一格形成，
+// 没采用这一形态的格答未配置。
 // 不用本地时钟，也不用系统接收时间去补 requestEffectiveAt。
 type SubmissionReceiptAsOf struct {
 	requests  shipmentRequestFinder

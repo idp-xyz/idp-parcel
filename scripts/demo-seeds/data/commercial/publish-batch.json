@@ -92,7 +92,7 @@
       "objectId": "SYN-RULEPKG-01",
       "version": "v1",
       "scope": "SYN-SCOPE-01",
-      "contentDigest": "PCC-1:a7c2be09a67fe1e15e696d552bda8bcba02d44b2d7db8fdbe1af8acb39844198",
+      "contentDigest": "PCC-1:17569a7f61978094e40f58f360713acefcaf4ad440fa8bc56f8d24038a621136",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "references": {
         "SERVICE_PRODUCT": "SYN-PROD-CN-SG-EXPRESS"
@@ -160,7 +160,7 @@
           },
           {
             "judgment": "PRE_ACCEPTANCE_FINANCIAL_CONTROL",
-            "semantics": "SYN-ASOF-ACCEPT-TIME",
+            "semantics": "REFCFG-1:parcel-shipment/as-of-semantics/submission-receipt@1",
             "policyVersion": "SYN-ASOF-POLICY-01"
           }
         ],
