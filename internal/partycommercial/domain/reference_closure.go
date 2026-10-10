@@ -343,22 +343,27 @@ func ResolveCommercialClosure(
 	}
 	adopted := make([]AdoptedBasis, 0, len(key.RequiredBases))
 	for _, kind := range resolutionOrder(key.RequiredBases) {
-		single := key.singleBasisKey(kind)
-		if kind == SettlementPolicyObject {
+		var contract CommercialVersion
+		if resolvesAfterContract(kind) {
 			// 合同没解出来就不去问结算政策。问了也只能得到零候选，而零候选在这条路径上会
 			// 被读成`无适用依据`——那句话的意思是权威说这个范围没有结算约定，与实情（还不
 			// 知道该按哪一版合同去问）不是同一件事。
-			contract, premiseResolved := adoptedContractLabel(adopted)
+			resolvedContract, premiseResolved := adoptedContractVersion(adopted)
 			if !premiseResolved {
 				closure.premiseUnresolved = append(closure.premiseUnresolved, kind)
 				continue
 			}
-			single = key.settlementBasisKey(contract)
+			contract = resolvedContract
 		}
-		if kind == CreditPolicyObject {
-			single = key.creditBasisKey()
+		var result Resolution
+		switch kind {
+		case SettlementPolicyObject:
+			result = ResolveCommercialBasis(registry, key.settlementBasisKey(contract.QualifiedLabel()), standingOf)
+		case CreditPolicyObject:
+			result = ResolveCommercialBasis(registry, key.creditBasisKey(), standingOf)
+		default:
+			result = ResolveCommercialBasis(registry, key.singleBasisKey(kind), standingOf)
 		}
-		result := ResolveCommercialBasis(registry, single, standingOf)
 		switch result.Outcome() {
 		case UniquelyResolved:
 			version, _ := result.AdoptedVersion()
@@ -413,21 +418,22 @@ func ResolveCommercialClosure(
 	return closure
 }
 
-// resolutionOrder 把结算政策排到最后，其余成员保持调用方声明的次序。
+// resolutionOrder 把依合同解析的那几类（resolvesAfterContract）排到最后，其余成员保持调用方
+// 声明的次序。
 //
-// 这是本上下文里唯一一条成员间的解析先后（ADR-0080）：结算政策按「哪一版客户合同」选，
+// 这是本上下文里唯一一条成员间的解析先后（ADR-0080）：那几类按「哪一版客户合同」选，
 // 而那一版是同一个闭包在解的另一项。写成一处排序而不是散在解析里的几个 if，是因为「谁在
 // 谁之后」本身就是要被读到的规则；顺序稳定还让 Adopted() 与快照里的成员次序不随声明顺序
 // 摆动。
 //
-// 只挪一类，不做通用拓扑排序：正文指名引用之间的相互约束由 namedReferencesConfirmed 事后
-// 核对，那条路径不需要顺序。真出现第二条依赖时再谈通用解法——现在写一个只有一条边的图算法，
-// 读的人得先证明它没有环才敢信。
+// 只分两段，不做通用拓扑排序：正文指名引用之间的相互约束由 namedReferencesConfirmed 事后
+// 核对，那条路径不需要顺序。真出现不指向合同的第二条依赖时再谈通用解法——现在写一个只有
+// 一条边的图算法，读的人得先证明它没有环才敢信。
 func resolutionOrder(bases []CommercialObjectKind) []CommercialObjectKind {
 	ordered := make([]CommercialObjectKind, 0, len(bases))
 	deferred := make([]CommercialObjectKind, 0, 1)
 	for _, kind := range bases {
-		if kind == SettlementPolicyObject {
+		if resolvesAfterContract(kind) {
 			deferred = append(deferred, kind)
 			continue
 		}
@@ -436,18 +442,24 @@ func resolutionOrder(bases []CommercialObjectKind) []CommercialObjectKind {
 	return append(ordered, deferred...)
 }
 
-// adoptedContractLabel 交回本次已采用的那一版客户合同的两段式指称，供结算政策据以选择。
+// resolvesAfterContract 声明依合同解析的第二段由哪几类组成：它们要按本闭包解出的那一版
+// 客户合同去选。排序与解析循环里「前提未解」那一格都读这一处——两处各列一份的话，加一类
+// 时很容易只改到其中一处。
+func resolvesAfterContract(kind CommercialObjectKind) bool {
+	return kind == SettlementPolicyObject
+}
+
+// adoptedContractVersion 交回本次已采用的那一版客户合同，供依合同解析的那几类据以选择。
 // 合同不在已采用之列时交回 false——它要么冲突、要么无适用依据，两种都不构成一个可以拿去
 // 提问的前提。
-func adoptedContractLabel(adopted []AdoptedBasis) (CommercialVersionLabel, bool) {
+func adoptedContractVersion(adopted []AdoptedBasis) (CommercialVersion, bool) {
 	for _, basis := range adopted {
 		if basis.kind != CustomerContractObject {
 			continue
 		}
-		label := basis.version.QualifiedLabel()
-		return label, label.valid()
+		return basis.version, basis.version.QualifiedLabel().valid()
 	}
-	return CommercialVersionLabel{}, false
+	return CommercialVersion{}, false
 }
 
 // namedReferencesConfirmed 核对每个采用版本在正文里指名的对外引用：凡是本次闭包也在解的
