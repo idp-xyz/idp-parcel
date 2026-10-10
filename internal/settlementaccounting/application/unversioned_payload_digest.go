@@ -13,8 +13,8 @@ import (
 // 不带前缀的摘要，存量不回写（ADR-0014），所以它们只用来跟这类已存摘要比（domain.CompareStoredDigest），
 // 不再写进新记录。函数体一个字节都不能改：改了，同内容的旧记录就会被答成冲突。
 //
-// 重分摊、重派生与供应商预计成本三口没有这一版：前两口换版本走 Replace、从不比已存摘要，
-// 后一口不存摘要，两侧都从领域对象现算。
+// 重分摊、重派生与供应商预计成本没有这一版：重分摊与重派生换版本走 Replace、从不比已存摘要；
+// 供应商预计成本不存摘要，两侧都从领域对象现算。
 
 func unversionedPortionsDigestPart(portions []PortionDirective) []string {
 	parts := make([]string, 0, len(portions))

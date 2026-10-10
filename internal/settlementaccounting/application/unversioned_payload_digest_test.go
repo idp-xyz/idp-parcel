@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -87,7 +88,7 @@ func unversionedDigestCases(t *testing.T) []unversionedDigestCase {
 
 // Covers: ADR-0014「规范化版本不同不是冲突」——SAC-1 之前入库的记录存的是无版本摘要，同一条命令
 // 重放按无版本那一版重算再比，答已有结果；同身份换内容仍是内容冲突。比已存摘要的定形口逐口走一遍；
-// 重分摊、重派生与供应商预计成本三口不比已存摘要，不在此列。
+// 重分摊、重派生与供应商预计成本不比已存摘要，不在此列。
 func TestRecordsStoredBeforeSAC1AreComparedUnderTheirOwnShape(t *testing.T) {
 	for _, testCase := range unversionedDigestCases(t) {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -95,6 +96,18 @@ func TestRecordsStoredBeforeSAC1AreComparedUnderTheirOwnShape(t *testing.T) {
 			rewrite(testCase.unversioned)
 			testCase.replay(t)
 			testCase.conflict(t)
+		})
+	}
+}
+
+// Covers: 新记录写的是 SAC-1 形——无版本那一版只用来比旧记录，误写进新记录时上一例照样绿，
+// 要在这里断。
+func TestNewRecordsAreStoredUnderSAC1(t *testing.T) {
+	for _, testCase := range unversionedDigestCases(t) {
+		t.Run(testCase.name, func(t *testing.T) {
+			if stored, _ := testCase.first(t); !strings.HasPrefix(stored, "SAC-1:") {
+				t.Fatalf("新记录落下的摘要是 %q，want SAC-1 形", stored)
+			}
 		})
 	}
 }
