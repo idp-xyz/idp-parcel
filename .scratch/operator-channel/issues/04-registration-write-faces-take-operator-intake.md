@@ -133,3 +133,20 @@ http 测试。逐条如下，交通道 1 定。取证全部实测于 `a8cf12ff`�
 认领：通道 1，分支 `mcp1-oc04-nrhttp`，基 `1d67e27c`，隔离工作树 `/home/tops/workspace/idp-parcel-mcp1-oc04-nrhttp`。本件原拟派通道 4；
 用户 21:1x 告知通道 4 已 crash，改由通道 1 自己做。第 2 件由通道 2 在 `mcp2-oc04-pcr` 上做（`task-4a593223`）。两件各记在自己那一节；
 Status 行由推送方在两件进 main 时一并改，免得两条分支各改同一行。
+
+**完成记录（通道 1 · 2026-10-10 21:2x · 代码 tip `12653a57`，基 `1d67e27c`）**——完工，待评审与重放
+
+- 各笔：`88bf4845` 认领；`12653a57` 用例。只加 `internal/networkrouting/adapters/http/operator_registry_intake_test.go`，生产代码零改动。
+- 照另五族的 `operator_registry_intake_test.go` 补本包那一层，四条：
+  - `TestOperatorRegistryIntakeTranslatesEveryNetworkFamilyUnderTheAuthenticatedTenant`：七族在线批文各译出本族命令，租户取认证结果。
+  - `TestNetworkOperatorRegistryAnswerGrades`：401 凭证不过、403 未配置、403 未授予、503 身份依赖不可用，逐族经端点答各自的码；批文自报租户答
+    400 坏报文；被拒的登记都走不到登记编排。
+  - `TestNetworkOperatorRegistryIntakeAuthenticatesBeforeReadingTheBody`：令牌不过时批文一次未读（`OperatorRegistryIntake` 类型注释的「先认证、后读批文」）。
+  - `TestNetworkOperatorRegistryIntakeCapsTheBodyAtOneMebibyte`：恰一兆字节照常译，多一个字节答坏报文（`maxRegistrationBytes`）。
+- 判断项：复用本包既有的 `registrationEndpoints`、`unreachableRegistrar`、`problemCode`，不另造；七族批文只给受理所需几格，身份全用 `SYN-`。
+  七个方法各接哪一族的译装由类型钉死——`translateOnline` 的类型参数由方法的返回类型推出，接错编不过——所以第一条证的是「都走在线那一路、
+  租户取认证结果」，不是接线。
+- 判别力（临时变异 `operator_registry_intake.go`，证完 `git checkout` 还原，未提交）：M1 认证前先读批文——认证顺序那条红（批文读了 1 次），
+  另两条随之红；M2 上限挪过一兆——上限那条红；M3 吞掉认证失败——答复格与认证顺序两条红；M4 租户不取认证结果——第一条红（租户为空）。
+- 验证（钉 `12653a57`，隔离工作树无未提交）：`go build ./...`、`go vet ./...` 退出 0；新文件 `gofmt -l` 零行；
+  `go test -count=1 -p 1 ./internal/networkrouting/adapters/http/ ./internal/architecture/...` 两包 ok。只加测试文件，没有反向依赖要跑，不碰真库。
