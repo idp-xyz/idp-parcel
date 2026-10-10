@@ -1,8 +1,8 @@
 # 05 管理台「导入价卡」签
 
 Category: enhancement
-Status: ready-for-agent——2026-09-25 通道 3 立票并激活（用户授权自决）
-Blocked by: 03
+Status: in-progress——2026-10-10 通道 2 在 main 上做（前端切片）。此前：ready-for-agent——2026-09-25 通道 3 立票并激活（用户授权自决）
+Blocked by: 无（03 已进 main `f8177a9d`）
 地盘：`apps/admin-web/src/pages/pricing/`（价卡页、纯逻辑、`api.ts`），以及 01 定下的模板文件存放处（若在管理台内）。
 出处：[spec](../spec.md)；ADR-0101 Consequences 第二条与末条。
 

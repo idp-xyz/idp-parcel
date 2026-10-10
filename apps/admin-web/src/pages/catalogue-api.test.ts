@@ -1,6 +1,6 @@
 import { afterEach, test } from 'node:test';
 import { deepEqual, equal, match, ok } from 'node:assert/strict';
-import { configureMasterDataApi, exchangeMasterData, postMasterData } from './catalogue-api';
+import { configureMasterDataApi, exchangeMasterData, postMasterData, postMasterDataForm } from './catalogue-api';
 
 // 五格结果代数的判读是所有主数据页共用的一道门，期望值取 ADR-0022（HTTP 状态只说答案有没有形成）
 // 与 ADR-0055（接入渠道未配置 = 403 + ACCESS_CHANNEL_NOT_CONFIGURED）的原句，不从实现推。
@@ -155,5 +155,20 @@ test('登记写面撞上未配置同样判为 unconfigured', async () => {
 
   const result = await postMasterData('/commercial-publications', {});
 
+  deepEqual(result, { kind: 'unconfigured' });
+});
+
+test('上传写面不自写 Content-Type，403 未配置与 JSON 写面同一格', async () => {
+  configureMasterDataApi({ basePrefix: '/api' });
+  const captured = stubFetch(() => jsonResponse(403, { error: { code: 'ACCESS_CHANNEL_NOT_CONFIGURED' } }));
+  const form = new FormData();
+  form.append('file', new Blob(['bytes']), 'card.xlsx');
+
+  const result = await postMasterDataForm('/pricing-price-card-previews', form);
+
+  equal(captured[0].url, '/api/pricing-price-card-previews');
+  equal(captured[0].init?.method, 'POST');
+  deepEqual(captured[0].init?.headers, { Accept: 'application/json' });
+  ok(captured[0].init?.body instanceof FormData);
   deepEqual(result, { kind: 'unconfigured' });
 });

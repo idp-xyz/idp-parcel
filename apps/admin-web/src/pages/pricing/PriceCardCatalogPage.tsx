@@ -7,6 +7,7 @@ import {
 } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { RegistrationPanel } from '../../components/registration';
+import { PriceCardImportPanel } from './PriceCardImportPanel';
 import { directionLabels, purposeLabels, labelOf, problemNote } from './presentation';
 import {
   listPriceCards,
@@ -142,8 +143,8 @@ function viewStateOf(
           source: info.source,
           unlock:
             '登记接入渠道认证参数(PAR-INT-01,实例半边)后由装配侧换上真 Intake 即放行;' +
-            '在此之前登记走受控登记口(parcel-pricing-register)。在线登记口本身已建立' +
-            '(见「登记价卡」签,ADR-0085),它挂的是同一堵墙,因此今天同答未配置。',
+            '在此之前登记走受控登记口(parcel-pricing-register)。导入签的预览与存草稿' +
+            '(见「导入价卡」)挂的是操作者渠道,发行方未设时今天同答未配置。',
         },
       };
     case 'callerProblem':
@@ -170,12 +171,11 @@ function viewStateOf(
 }
 
 /**
- * 价卡目录:已登记定价方案版本的查阅/复核面,外加登记签(ADR-0085,票
- * admin-write-faces/01 切片 01b)。
+ * 价卡目录:已登记定价方案版本的查阅面,外加导入签与高级 JSON 签
+ * （ADR-0101，票 price-card-import/05）。
  *
- * 登记签不是「新建按钮」:登记册不可覆盖,更正翻旧插新,停用走状态推进不删行——所以这里
- * 只有一个登记动作,没有行级编辑或删除面。它今天必然答 403「接入渠道未配置」,那是诚实
- * 答案;墙降当天在装配点换真 Intake 即点亮,本页一行不用改。
+ * 导入签今天在发行方未设时答 403「接入渠道未配置」,那是诚实答案,页面不拿演示数据顶替。
+ * JSON 快照签不在运营配置员的主路径上。
  */
 function PriceCardCatalogTable() {
   const [keyword, setKeyword] = useState('');
@@ -207,7 +207,7 @@ function PriceCardCatalogTable() {
   return (
     <ListPageTemplate<PriceCardRecord>
       title={info.title}
-      description={`${info.owner}——本签只查阅;登记走「登记价卡」签或受控登记口,两口消费同一登记用例`}
+      description={`${info.owner}——本签只查阅;导入走「导入价卡」签,JSON 快照在「高级」签,受控登记口仍可用`}
       search={{
         value: keyword,
         onChange: setKeyword,
@@ -230,7 +230,8 @@ export function PriceCardCatalogPage() {
       <Tabs defaultValue="catalog" className="flex-1 flex flex-col overflow-hidden gap-0">
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="catalog">价卡目录</TabsTrigger>
-          <TabsTrigger value="register">登记价卡</TabsTrigger>
+          <TabsTrigger value="import">导入价卡</TabsTrigger>
+          <TabsTrigger value="advanced">高级：JSON 快照</TabsTrigger>
         </TabsList>
         <TabsContent
           value="catalog"
@@ -239,14 +240,20 @@ export function PriceCardCatalogPage() {
           <PriceCardCatalogTable />
         </TabsContent>
         <TabsContent
-          value="register"
+          value="import"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <PriceCardImportPanel />
+        </TabsContent>
+        <TabsContent
+          value="advanced"
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
           <RegistrationPanel
             moduleId="price-card-catalog"
-            title="登记价卡版本"
+            title="高级：价卡 JSON 快照"
             endpoint="POST /pricing-price-card-registrations"
-            snapshotHint="登记快照 JSON 的形状与受控登记口 parcel-pricing-register -kind price-card -file 吃的同一份；本页不逐字段建表单，因为「渠道原始载荷 → 登记快照」的翻译属渠道接入契约，随 PAR-INT-01 提供。"
+            snapshotHint="这不是运营配置员的主路径。形状与受控登记口 parcel-pricing-register -kind price-card -file 同一份，由产品定义（ADR-0101），不是等 PAR-INT-01 才有的渠道契约。主路径在「导入价卡」。"
             submit={registerPriceCard}
             outcomeLabels={registrationOutcomeLabels}
             problemNote={problemNote}

@@ -5,24 +5,22 @@
 // 响应体的 `outcome`。五格判别与全程追踪页同款,传输实现收敛在共享 catalogue-api
 // (装配侧只在 bootstrap 配置那一处前缀),本文件只保留本上下文的类型与查询函数。
 
-import { exchangeMasterData, postMasterData } from '../catalogue-api';
+import { exchangeMasterData, postMasterData, postMasterDataForm } from '../catalogue-api';
 import type { ApiResult } from '../catalogue-api';
 import type { RegistrationResponseBody } from '../../components/registration';
 
 export type { ApiResult } from '../catalogue-api';
 
-// ---- 登记写面（ADR-0085，票 admin-write-faces/01 切片 01b）----
+// ---- 登记写面（ADR-0085，票 admin-write-faces/01 切片 01b；价卡形状改按 ADR-0101）----
 //
-// 两个登记端点已在装配表里，挂的是字面量 `UnconfiguredIntake{}`：写准入不另立形，与其余
-// 命令面同等 `PAR-INT-01` 证据，隔离读准入换不了写行。因此**今天提交必然答 403
-// ACCESS_CHANNEL_NOT_CONFIGURED**，那是诚实答案不是接线缺陷；墙降当天在装配点换真 Intake
-// 即点亮，本目录一行不用改。
+// 参考序列登记口仍挂字面量 `UnconfiguredIntake{}`，今天提交答 403
+// `ACCESS_CHANNEL_NOT_CONFIGURED`。价卡的 JSON 快照口同样仍挂它，今天同答 403。
 //
-// **请求体形状此刻没有契约。** ADR-0085 Decision 三把「渠道原始载荷 → 登记快照」的翻译
-// 划给渠道接入契约，随 `PAR-INT-01` 提供。所以这里不发明字段：页面收的是登记快照 JSON
-// 本体（与受控登记 CLI `parcel-pricing-register -file` 吃的同一份形状，那是有文档的），
-// 原样作为请求体送出。真渠道接线时以渠道契约为准重谈，不得反过来把这里当成已发布的
-// Schema——判据与 shipment-request 草案那节同一条。
+// **价卡这一册的运营面形状由产品定**（ADR-0101 决定一），不再等 `PAR-INT-01` 给「渠道原始
+// 载荷 → 登记快照」的翻译。主路径是导入模板：表单恰一个 `file` 格，预览与存草稿各打一
+// 口、两次送同一份字节，租户与录入者在操作者信封里，载荷不带身份。JSON 快照与受控 CLI
+// `parcel-pricing-register -kind price-card -file` 同一份形状，退为高级口，不在运营配置员
+// 的主路径上。发行方未设时导入两口也答 403，页面照实呈现，不拿演示数据顶替。
 
 // 登记端点的封闭响应形状（`outcome` 取应用结果枚举原名，与登记 CLI 同源）随表单区一起
 // 抽到 components/registration；本上下文的两个登记口不带拒绝理由，只用到 `outcome` 一格。
@@ -49,6 +47,112 @@ export function registerPriceCard(
   return postMasterData<RegistrationResponseBody>('/pricing-price-card-registrations', snapshot);
 }
 
+// ---- 价卡导入（ADR-0101 决定三、四；票 price-card-import/02、03、05）----
+//
+// 形状镜像 internal/parcelpricing/adapters/http 的预览答复与草稿录入答复，此处只镜像不虚构。
+// 预览口始终 200 加 outcome；录入口只有本次写下了那一行（首录、修订）才带 draft 并取 201。
+
+export const priceCardPreviewPath = '/pricing-price-card-previews';
+export const priceCardDraftPath = '/pricing-price-card-drafts';
+
+/** 空白模板。文件名带模板版本，与 `pricecardtemplate.TemplateFileName` 同一份。 */
+export const priceCardTemplateHref = '/templates/price-card-import-template-PPT-1.xlsx';
+export const priceCardTemplateFileName = 'price-card-import-template-PPT-1.xlsx';
+
+/** 表单字段名与 `DecodePriceCardUpload` 认的那一格相同：多一格服务端就拒。 */
+export const priceCardUploadField = 'file';
+
+export interface PriceCardProblem {
+  sheet: string;
+  row: number;
+  column: string;
+  code: string;
+  message: string;
+}
+
+export interface PriceCardPlanReference {
+  id: string;
+  version: string;
+}
+
+export interface PriceCardImportContent {
+  canonicalization: string;
+  contentDigest: string;
+  scope: string;
+  direction: string;
+  purpose: string;
+  aggregation: string;
+  baseChargeCode: string;
+  startsAt: string;
+  endsAt?: string;
+  rateTable: {
+    id: string;
+    version: string;
+    family: string;
+    currency: string;
+    weightUnit: string;
+    rows: number;
+  };
+  weightPolicy: { id: string; version: string; method: string };
+  fixedCharges: number;
+  surcharges: number;
+  directionAuthorization: PriceCardPlanReference;
+}
+
+export interface PriceCardImportReading {
+  outcome: string;
+  templateVersion?: string;
+  sourceFile?: { name: string; sha256: string };
+  plan?: PriceCardPlanReference;
+  content?: PriceCardImportContent;
+  problems?: PriceCardProblem[];
+}
+
+export interface PriceCardDraftRow {
+  plan: PriceCardPlanReference;
+  status: string;
+  sourceFile: { name: string; sha256: string };
+  submitter: string;
+  submittedAt: string;
+  approver?: string;
+  approvedAt?: string;
+  publishedAt?: string;
+  content?: PriceCardImportContent;
+  problems?: PriceCardProblem[];
+}
+
+export interface PriceCardDraftSubmissionBody {
+  outcome: string;
+  reading: PriceCardImportReading;
+  draft?: PriceCardDraftRow;
+}
+
+export function priceCardUploadForm(file: Blob, fileName: string): FormData {
+  const form = new FormData();
+  form.append(priceCardUploadField, file, fileName);
+  return form;
+}
+
+export function previewPriceCardImport(
+  file: Blob,
+  fileName: string,
+): Promise<ApiResult<PriceCardImportReading>> {
+  return postMasterDataForm<PriceCardImportReading>(
+    priceCardPreviewPath,
+    priceCardUploadForm(file, fileName),
+  );
+}
+
+export function submitPriceCardDraft(
+  file: Blob,
+  fileName: string,
+): Promise<ApiResult<PriceCardDraftSubmissionBody>> {
+  return postMasterDataForm<PriceCardDraftSubmissionBody>(
+    priceCardDraftPath,
+    priceCardUploadForm(file, fileName),
+  );
+}
+
 export function registerReferenceSeries(
   snapshot: unknown,
 ): Promise<ApiResult<RegistrationResponseBody>> {
@@ -60,8 +164,7 @@ export function registerReferenceSeries(
 
 // ---- 序列版本复核（ADR-0099 决定二；票 pricing-reference-series-operations/04 切片 04b）----
 //
-// **这一族的载荷形状是产品定的，不是发明的。** 上面登记那一段写着「请求体形状此刻没有
-// 契约」，那句对本族不成立：[ADR-0101](docs/adr/0101-…) 决定一把「翻译属渠道接入契约」
+// **这一族的载荷形状是产品定的，不是发明的。** [ADR-0101](docs/adr/0101-…) 决定一把「翻译属渠道接入契约」
 // 的适用场景收窄为**客户渠道载荷**，并明定运营操作者面的载荷形状由产品定义、属机制半边，
 // 各登记签按「登记频次 × 操作者角色 × 载荷结构」逐册裁形。复核是低频、结构极简（两格）
 // 的治理动作，因此取逐字段表单——不是 JSON 快照口。
@@ -191,8 +294,8 @@ export interface ReferenceSeriesRecord {
 //
 // **这一族的载荷形状是产品定的**（决定一：运营操作者面的载荷由产品定义、属机制半边），镜像
 // `internal/parcelpricing/adapters/http` 的 `ReferenceSeriesRegistrationPayload`，此处只镜像不虚构。
-// 上面登记那一段说的「请求体形状此刻没有契约」对本族不成立；那一段的 JSON 快照口退为受控批量口
-// 的在线镜像（「高级」签），运营配置员的主路径是这里。
+// 本族的载荷由产品定，不走价卡旧口径里那句「等渠道契约」。JSON 快照口退为受控批量口的在线镜像
+// （「高级」签），运营配置员的主路径是这里的逐字段表单。
 //
 // **载荷里只有内容，没有身份。** 租户与登记责任方由接入渠道的操作者信封（ADR-0100）给，表单不收
 // 也不送；送一个上去服务端按未知键拒。今天渠道未配置，预览与登记都必然答 403——那是诚实答案。

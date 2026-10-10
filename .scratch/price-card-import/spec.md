@@ -36,7 +36,7 @@ Status: in-progress——2026-09-25 通道 3 立（用户授权自决）；子�
 | [02](./issues/02-template-decoding-and-preview-face.md) | 模板解码与预览口 | 走并行会话那条路 | 01 | resolved |
 | [03](./issues/03-draft-register-and-submission-face.md) | 草稿册、录入口与草稿查阅读口 | 走并行会话那条路 | 02 | resolved |
 | [04](./issues/04-approval-and-publication.md) | 审批职责规则、批准与发布 | 走并行会话那条路 | 03 | ready-for-agent |
-| [05](./issues/05-admin-import-tab.md) | 管理台「导入价卡」签 | 前端切片 | 03 | ready-for-agent |
+| [05](./issues/05-admin-import-tab.md) | 管理台「导入价卡」签 | 前端切片 | 03 | in-progress |
 | [06](./issues/06-admin-drafts-tab.md) | 管理台「草稿」签 | 前端切片 | 04、05 | ready-for-agent |
 
 ## 不做

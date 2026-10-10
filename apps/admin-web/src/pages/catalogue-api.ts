@@ -85,6 +85,40 @@ export async function postMasterData<Body>(
   return classifyMasterDataResponse<Body>(response, body);
 }
 
+// 上传写面与 JSON 写面分开：价卡导入的表单恰有一个文件格（ADR-0101），Content-Type 必须由
+// 浏览器带上 multipart 边界。这里若写死 application/json，服务端会把整份字节当成坏的表单拒掉，
+// 而页面会把那一格 400 读成「文件有问题」。
+export async function postMasterDataForm<Body>(
+  path: string,
+  body: FormData,
+): Promise<ApiResult<Body>> {
+  let response: Response;
+  try {
+    response = await fetch(requestUrl(path), {
+      method: 'POST',
+      headers: { Accept: 'application/json' },
+      body,
+    });
+  } catch (error) {
+    return {
+      kind: 'transport',
+      message: error instanceof Error ? error.message : String(error),
+    };
+  }
+
+  let payload: unknown;
+  try {
+    payload = await response.json();
+  } catch {
+    return {
+      kind: 'transport',
+      message: `响应不是 JSON（HTTP ${response.status}），请求可能未到达 parcel-api`,
+    };
+  }
+
+  return classifyMasterDataResponse<Body>(response, payload);
+}
+
 function classifyMasterDataResponse<Body>(
   response: Response,
   payload: unknown,
