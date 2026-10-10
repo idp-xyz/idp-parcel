@@ -5,6 +5,9 @@
 // 翻译严格且零默认：未知字段拒收（打错的键静默丢弃，会让登记方以为登进去的比实际多），可选终点用指针表达「不在场」。
 // 两侧只差租户从哪来——受控批量口取批文里的 tenant_id（运维在库网内的治理动作），在线口取操作者信封给的租户、批文
 // 带 tenant_id 即拒（采信自报租户会穿透 ADR-0003 的隔离边界）。
+//
+// 稳定定义各族的一行有两种写法：直接登记行自带内容；采用行带 adopt、内容取自参考配置（见 adopt.go）。两种写法的
+// 内容格由同一段翻译（各族的 *Content 类型）译成同一种行类型，之后走同一个登记用例。
 package registrationjson
 
 import (
@@ -61,6 +64,43 @@ func refuseSelfReportedTenant(raw []byte) error {
 	return nil
 }
 
+// versionHeader 是一版定义行里不属内容的那几格：身份、修订号、生效区间与依据。直接登记行与采用行各自给出。
+type versionHeader struct {
+	code          string
+	version       int32
+	effectiveFrom time.Time
+	effectiveTo   *time.Time
+	basis         domain.CatalogBasisReference
+}
+
+// header 译直接登记行的抬头；依据格经 basisFrom。
+func (fields versionFields) header() (versionHeader, error) {
+	basis, err := basisFrom(fields.Basis)
+	if err != nil {
+		return versionHeader{}, err
+	}
+	return versionHeader{
+		code: fields.Code, version: fields.Version,
+		effectiveFrom: fields.EffectiveFrom, effectiveTo: fields.EffectiveTo, basis: basis,
+	}, nil
+}
+
+// adopted 把采用行解到租户、参考配置原文与抬头；依据格是 adopt 点名那一版的引用串。
+func (row adoptionRow) adopted(tenantSource tenantOf, identity string) (domain.TenantID, networkCatalogReferenceDocument, versionHeader, error) {
+	tenant, err := tenantSource(row.TenantID)
+	if err != nil {
+		return domain.TenantID{}, networkCatalogReferenceDocument{}, versionHeader{}, err
+	}
+	document, basis, err := adoptedReference(row.Adopt)
+	if err != nil {
+		return domain.TenantID{}, networkCatalogReferenceDocument{}, versionHeader{}, err
+	}
+	return tenant, document, versionHeader{
+		code: identity, version: row.Version,
+		effectiveFrom: row.EffectiveFrom, effectiveTo: row.EffectiveTo, basis: basis,
+	}, nil
+}
+
 // NodeVersionFromJSON 是受控批量口那一路：租户取批文里的 tenant_id。
 func NodeVersionFromJSON(raw []byte) (application.RegisterNodeVersionCommand, error) {
 	return nodeVersionFromJSON(raw, tenantFromDocument)
@@ -75,30 +115,35 @@ func NodeVersionFromJSONForTenant(raw []byte, tenant domain.TenantID) (applicati
 }
 
 func nodeVersionFromJSON(raw []byte, tenantSource tenantOf) (application.RegisterNodeVersionCommand, error) {
+	none := application.RegisterNodeVersionCommand{}
+	adoption, adopting, err := adoptionOf(raw, codeAdoptionKeys)
+	if err != nil {
+		return none, err
+	}
+	if adopting {
+		tenant, document, header, err := adoption.adopted(tenantSource, adoption.Code)
+		if err != nil {
+			return none, err
+		}
+		entry, found := document.node(adoption.Code)
+		if !found {
+			return none, notInReference(adoption.Adopt, "节点", adoption.Code)
+		}
+		return application.RegisterNodeVersionCommand{TenantID: tenant, Node: entry.row(header)}, nil
+	}
 	var payload nodePayload
 	if err := decodeStrict(raw, &payload); err != nil {
-		return application.RegisterNodeVersionCommand{}, err
+		return none, err
 	}
 	tenant, err := tenantSource(payload.TenantID)
 	if err != nil {
-		return application.RegisterNodeVersionCommand{}, err
+		return none, err
 	}
-	basis, err := basisFrom(payload.Basis)
+	header, err := payload.header()
 	if err != nil {
-		return application.RegisterNodeVersionCommand{}, err
+		return none, err
 	}
-	return application.RegisterNodeVersionCommand{
-		TenantID: tenant,
-		Node: ports.NodeDefinitionVersion{
-			Code:             payload.Code,
-			Version:          payload.Version,
-			BusinessTimezone: payload.BusinessTimezone,
-			EffectiveFrom:    payload.EffectiveFrom,
-			EffectiveTo:      timeOf(payload.EffectiveTo),
-			HasEffectiveTo:   payload.EffectiveTo != nil,
-			Basis:            basis,
-		},
-	}, nil
+	return application.RegisterNodeVersionCommand{TenantID: tenant, Node: payload.row(header)}, nil
 }
 
 // ConnectionVersionFromJSON 是受控批量口那一路。
@@ -115,32 +160,35 @@ func ConnectionVersionFromJSONForTenant(raw []byte, tenant domain.TenantID) (app
 }
 
 func connectionVersionFromJSON(raw []byte, tenantSource tenantOf) (application.RegisterConnectionVersionCommand, error) {
+	none := application.RegisterConnectionVersionCommand{}
+	adoption, adopting, err := adoptionOf(raw, codeAdoptionKeys)
+	if err != nil {
+		return none, err
+	}
+	if adopting {
+		tenant, document, header, err := adoption.adopted(tenantSource, adoption.Code)
+		if err != nil {
+			return none, err
+		}
+		entry, found := document.connection(adoption.Code)
+		if !found {
+			return none, notInReference(adoption.Adopt, "连接", adoption.Code)
+		}
+		return application.RegisterConnectionVersionCommand{TenantID: tenant, Connection: entry.row(header)}, nil
+	}
 	var payload connectionPayload
 	if err := decodeStrict(raw, &payload); err != nil {
-		return application.RegisterConnectionVersionCommand{}, err
+		return none, err
 	}
 	tenant, err := tenantSource(payload.TenantID)
 	if err != nil {
-		return application.RegisterConnectionVersionCommand{}, err
+		return none, err
 	}
-	basis, err := basisFrom(payload.Basis)
+	header, err := payload.header()
 	if err != nil {
-		return application.RegisterConnectionVersionCommand{}, err
+		return none, err
 	}
-	return application.RegisterConnectionVersionCommand{
-		TenantID: tenant,
-		Connection: ports.ConnectionDefinitionVersion{
-			Code:             payload.Code,
-			Version:          payload.Version,
-			FromNode:         payload.FromNode,
-			ToNode:           payload.ToNode,
-			BusinessTimezone: payload.BusinessTimezone,
-			EffectiveFrom:    payload.EffectiveFrom,
-			EffectiveTo:      timeOf(payload.EffectiveTo),
-			HasEffectiveTo:   payload.EffectiveTo != nil,
-			Basis:            basis,
-		},
-	}, nil
+	return application.RegisterConnectionVersionCommand{TenantID: tenant, Connection: payload.row(header)}, nil
 }
 
 // LineVersionFromJSON 是受控批量口那一路。
@@ -157,37 +205,43 @@ func LineVersionFromJSONForTenant(raw []byte, tenant domain.TenantID) (applicati
 }
 
 func lineVersionFromJSON(raw []byte, tenantSource tenantOf) (application.RegisterLineVersionCommand, error) {
-	var payload linePayload
-	if err := decodeStrict(raw, &payload); err != nil {
-		return application.RegisterLineVersionCommand{}, err
-	}
-	tenant, err := tenantSource(payload.TenantID)
+	none := application.RegisterLineVersionCommand{}
+	adoption, adopting, err := adoptionOf(raw, codeAdoptionKeys)
 	if err != nil {
-		return application.RegisterLineVersionCommand{}, err
+		return none, err
 	}
-	basis, err := basisFrom(payload.Basis)
+	content := lineContent{}
+	var tenant domain.TenantID
+	var header versionHeader
+	if adopting {
+		var document networkCatalogReferenceDocument
+		tenant, document, header, err = adoption.adopted(tenantSource, adoption.Code)
+		if err != nil {
+			return none, err
+		}
+		entry, found := document.line(adoption.Code)
+		if !found {
+			return none, notInReference(adoption.Adopt, "线路", adoption.Code)
+		}
+		content = entry.lineContent
+	} else {
+		var payload linePayload
+		if err := decodeStrict(raw, &payload); err != nil {
+			return none, err
+		}
+		if tenant, err = tenantSource(payload.TenantID); err != nil {
+			return none, err
+		}
+		if header, err = payload.header(); err != nil {
+			return none, err
+		}
+		content = payload.lineContent
+	}
+	line, costBases, err := content.row(header)
 	if err != nil {
-		return application.RegisterLineVersionCommand{}, err
+		return none, err
 	}
-	costBases, err := costBasesFrom(payload.CostBases)
-	if err != nil {
-		return application.RegisterLineVersionCommand{}, err
-	}
-	return application.RegisterLineVersionCommand{
-		TenantID: tenant,
-		Line: ports.LineDefinitionVersion{
-			Code:             payload.Code,
-			Version:          payload.Version,
-			Segments:         payload.Segments,
-			BusinessTimezone: payload.BusinessTimezone,
-			ApplicableScope:  payload.ApplicableScope,
-			EffectiveFrom:    payload.EffectiveFrom,
-			EffectiveTo:      timeOf(payload.EffectiveTo),
-			HasEffectiveTo:   payload.EffectiveTo != nil,
-			Basis:            basis,
-		},
-		CostBases: costBases,
-	}, nil
+	return application.RegisterLineVersionCommand{TenantID: tenant, Line: line, CostBases: costBases}, nil
 }
 
 // costBasesFrom 逐行译线路的成本依据：种类按封闭两类译，集外的词在入库前拒；段号与引用的形状由登记用例的受理门核。
@@ -222,34 +276,35 @@ func ServiceAreaVersionFromJSONForTenant(raw []byte, tenant domain.TenantID) (ap
 }
 
 func serviceAreaVersionFromJSON(raw []byte, tenantSource tenantOf) (application.RegisterServiceAreaVersionCommand, error) {
+	none := application.RegisterServiceAreaVersionCommand{}
+	adoption, adopting, err := adoptionOf(raw, codeAdoptionKeys)
+	if err != nil {
+		return none, err
+	}
+	if adopting {
+		tenant, document, header, err := adoption.adopted(tenantSource, adoption.Code)
+		if err != nil {
+			return none, err
+		}
+		entry, found := document.serviceArea(adoption.Code)
+		if !found {
+			return none, notInReference(adoption.Adopt, "服务区域", adoption.Code)
+		}
+		return application.RegisterServiceAreaVersionCommand{TenantID: tenant, Area: entry.row(header)}, nil
+	}
 	var payload areaPayload
 	if err := decodeStrict(raw, &payload); err != nil {
-		return application.RegisterServiceAreaVersionCommand{}, err
+		return none, err
 	}
 	tenant, err := tenantSource(payload.TenantID)
 	if err != nil {
-		return application.RegisterServiceAreaVersionCommand{}, err
+		return none, err
 	}
-	basis, err := basisFrom(payload.Basis)
+	header, err := payload.header()
 	if err != nil {
-		return application.RegisterServiceAreaVersionCommand{}, err
+		return none, err
 	}
-	area := ports.ServiceAreaDefinitionVersion{
-		Code:           payload.Code,
-		Version:        payload.Version,
-		EffectiveFrom:  payload.EffectiveFrom,
-		EffectiveTo:    timeOf(payload.EffectiveTo),
-		HasEffectiveTo: payload.EffectiveTo != nil,
-		Basis:          basis,
-	}
-	if coverage := payload.Coverage; coverage != nil {
-		area.HasCoverage = true
-		area.CoverageCountry = coverage.Country
-		area.PostalPrefixes = coverage.PostalPrefixes
-		area.OriginNodes = coverage.OriginNodes
-		area.DestinationNodes = coverage.DestinationNodes
-	}
-	return application.RegisterServiceAreaVersionCommand{TenantID: tenant, Area: area}, nil
+	return application.RegisterServiceAreaVersionCommand{TenantID: tenant, Area: payload.row(header)}, nil
 }
 
 // ServiceCalendarVersionFromJSON 是受控批量口那一路。
@@ -266,37 +321,47 @@ func ServiceCalendarVersionFromJSONForTenant(raw []byte, tenant domain.TenantID)
 }
 
 func serviceCalendarVersionFromJSON(raw []byte, tenantSource tenantOf) (application.RegisterServiceCalendarVersionCommand, error) {
+	none := application.RegisterServiceCalendarVersionCommand{}
+	adoption, adopting, err := adoptionOf(raw, calendarAdoptionKeys)
+	if err != nil {
+		return none, err
+	}
+	if adopting {
+		targetKind, err := ports.CatalogTargetKindFrom(adoption.TargetKind)
+		if err != nil {
+			return none, err
+		}
+		tenant, document, header, err := adoption.adopted(tenantSource, adoption.TargetCode)
+		if err != nil {
+			return none, err
+		}
+		entry, found := document.serviceCalendar(adoption.TargetKind, adoption.TargetCode)
+		if !found {
+			return none, notInReference(adoption.Adopt, "日历", adoption.TargetKind+"/"+adoption.TargetCode)
+		}
+		return application.RegisterServiceCalendarVersionCommand{TenantID: tenant, Calendar: entry.row(targetKind, header)}, nil
+	}
 	var payload calendarPayload
 	if err := decodeStrict(raw, &payload); err != nil {
-		return application.RegisterServiceCalendarVersionCommand{}, err
+		return none, err
 	}
 	tenant, err := tenantSource(payload.TenantID)
 	if err != nil {
-		return application.RegisterServiceCalendarVersionCommand{}, err
+		return none, err
 	}
 	targetKind, err := ports.CatalogTargetKindFrom(payload.TargetKind)
 	if err != nil {
-		return application.RegisterServiceCalendarVersionCommand{}, err
+		return none, err
 	}
 	basis, err := basisFrom(payload.Basis)
 	if err != nil {
-		return application.RegisterServiceCalendarVersionCommand{}, err
+		return none, err
 	}
-	return application.RegisterServiceCalendarVersionCommand{
-		TenantID: tenant,
-		Calendar: ports.ServiceCalendarDefinitionVersion{
-			TargetKind:        targetKind,
-			TargetCode:        payload.TargetCode,
-			Version:           payload.Version,
-			EffectiveFrom:     payload.EffectiveFrom,
-			EffectiveTo:       timeOf(payload.EffectiveTo),
-			HasEffectiveTo:    payload.EffectiveTo != nil,
-			CutoffLocalMinute: payload.CutoffLocalMinute,
-			ProcessingMinutes: payload.ProcessingMinutes,
-			BufferMinutes:     payload.BufferMinutes,
-			Basis:             basis,
-		},
-	}, nil
+	header := versionHeader{
+		code: payload.TargetCode, version: payload.Version,
+		effectiveFrom: payload.EffectiveFrom, effectiveTo: payload.EffectiveTo, basis: basis,
+	}
+	return application.RegisterServiceCalendarVersionCommand{TenantID: tenant, Calendar: payload.row(targetKind, header)}, nil
 }
 
 // AvailabilityAdjustmentFromJSON 是受控批量口那一路。
@@ -312,6 +377,7 @@ func AvailabilityAdjustmentFromJSONForTenant(raw []byte, tenant domain.TenantID)
 	return availabilityAdjustmentFromJSON(raw, injectedTenant(tenant))
 }
 
+// availabilityAdjustmentFromJSON 没有采用那一路：临时调整是一条带来源的陈述，不是配置，不随参考配置发。
 func availabilityAdjustmentFromJSON(raw []byte, tenantSource tenantOf) (application.RegisterAvailabilityAdjustmentCommand, error) {
 	var payload adjustmentPayload
 	if err := decodeStrict(raw, &payload); err != nil {
@@ -359,69 +425,43 @@ func RouteStrategyVersionFromJSONForTenant(raw []byte, tenant domain.TenantID) (
 }
 
 func routeStrategyVersionFromJSON(raw []byte, tenantSource tenantOf) (application.RegisterRouteStrategyVersionCommand, error) {
-	var payload strategyPayload
-	if err := decodeStrict(raw, &payload); err != nil {
-		return application.RegisterRouteStrategyVersionCommand{}, err
-	}
-	tenant, err := tenantSource(payload.TenantID)
+	none := application.RegisterRouteStrategyVersionCommand{}
+	adoption, adopting, err := adoptionOf(raw, codeAdoptionKeys)
 	if err != nil {
-		return application.RegisterRouteStrategyVersionCommand{}, err
+		return none, err
 	}
-	form := domain.RankingFormUndeclared
-	if payload.RankingForm != nil {
-		if form, err = domain.RankingFormFrom(*payload.RankingForm); err != nil {
-			return application.RegisterRouteStrategyVersionCommand{}, err
+	content := strategyContent{}
+	var tenant domain.TenantID
+	var header versionHeader
+	if adopting {
+		var document networkCatalogReferenceDocument
+		tenant, document, header, err = adoption.adopted(tenantSource, adoption.Code)
+		if err != nil {
+			return none, err
 		}
+		entry, found := document.routeStrategy(adoption.Code)
+		if !found {
+			return none, notInReference(adoption.Adopt, "路由策略", adoption.Code)
+		}
+		content = entry.strategyContent
+	} else {
+		var payload strategyPayload
+		if err := decodeStrict(raw, &payload); err != nil {
+			return none, err
+		}
+		if tenant, err = tenantSource(payload.TenantID); err != nil {
+			return none, err
+		}
+		if header, err = payload.header(); err != nil {
+			return none, err
+		}
+		content = payload.strategyContent
 	}
-	freeze := domain.FreezeFormUndeclared
-	var freezeLimit *int
-	if payload.FreezeForm != nil || payload.FreezeRemainingSegments != nil {
-		if payload.FreezeForm == nil || payload.FreezeRemainingSegments == nil {
-			return application.RegisterRouteStrategyVersionCommand{}, fmt.Errorf("freeze form and remaining segments must be declared together")
-		}
-		if freeze, err = domain.FreezeFormFrom(*payload.FreezeForm); err != nil {
-			return application.RegisterRouteStrategyVersionCommand{}, err
-		}
-		if *payload.FreezeRemainingSegments < 0 {
-			return application.RegisterRouteStrategyVersionCommand{}, fmt.Errorf("freeze remaining segments must be >= 0")
-		}
-		freezeLimit = payload.FreezeRemainingSegments
-	}
-	autoForm := domain.AutoRerouteFormUndeclared
-	var autoThreshold *int
-	if payload.AutoRerouteForm != nil || payload.AutoRerouteImprovementThresholdMinor != nil {
-		if payload.AutoRerouteForm == nil || payload.AutoRerouteImprovementThresholdMinor == nil {
-			return application.RegisterRouteStrategyVersionCommand{}, fmt.Errorf("auto reroute form and improvement threshold must be declared together")
-		}
-		if autoForm, err = domain.AutoRerouteFormFrom(*payload.AutoRerouteForm); err != nil {
-			return application.RegisterRouteStrategyVersionCommand{}, err
-		}
-		if *payload.AutoRerouteImprovementThresholdMinor < 0 {
-			return application.RegisterRouteStrategyVersionCommand{}, fmt.Errorf("auto reroute improvement threshold must be >= 0")
-		}
-		autoThreshold = payload.AutoRerouteImprovementThresholdMinor
-	}
-	basis, err := basisFrom(payload.Basis)
+	strategy, err := content.row(header)
 	if err != nil {
-		return application.RegisterRouteStrategyVersionCommand{}, err
+		return none, err
 	}
-	return application.RegisterRouteStrategyVersionCommand{
-		TenantID: tenant,
-		Strategy: ports.RouteStrategyDefinitionVersion{
-			Code:                                 payload.Code,
-			Version:                              payload.Version,
-			ApplicableScope:                      payload.ApplicableScope,
-			RankingForm:                          form,
-			FreezeForm:                           freeze,
-			FreezeRemainingSegmentLimit:          freezeLimit,
-			AutoRerouteForm:                      autoForm,
-			AutoRerouteImprovementThresholdMinor: autoThreshold,
-			EffectiveFrom:                        payload.EffectiveFrom,
-			EffectiveTo:                          timeOf(payload.EffectiveTo),
-			HasEffectiveTo:                       payload.EffectiveTo != nil,
-			Basis:                                basis,
-		},
-	}, nil
+	return application.RegisterRouteStrategyVersionCommand{TenantID: tenant, Strategy: strategy}, nil
 }
 
 // decodeStrict 拒未知字段：打错的键静默丢弃，会让登记方以为登进去的比实际多。
@@ -440,42 +480,94 @@ func timeOf(value *time.Time) time.Time {
 }
 
 // 七族登记行的 JSON 形状。可选终点用指针表达「不在场」——零时刻是合法的绝对时刻，不能兼作「没有终点」。
-// 稳定定义各族另有一格可选的 basis：这一版的登记依据，缺席即没给（译法见 basisFrom）。
+// 稳定定义各族另有一格可选的 basis：这一版的登记依据，缺席即没给（译法见 basisFrom）。内容格单列成 *Content，
+// 直接登记行与参考配置的条目嵌同一份。
+
+// versionFields 是直接登记行（日历除外，它的身份是适用对象）的抬头格。
+type versionFields struct {
+	TenantID      string     `json:"tenant_id"`
+	Code          string     `json:"code"`
+	Version       int32      `json:"version"`
+	EffectiveFrom time.Time  `json:"effective_from"`
+	EffectiveTo   *time.Time `json:"effective_to"`
+	Basis         *string    `json:"basis"`
+}
+
+type nodeContent struct {
+	BusinessTimezone string `json:"business_timezone"`
+}
+
+func (content nodeContent) row(header versionHeader) ports.NodeDefinitionVersion {
+	return ports.NodeDefinitionVersion{
+		Code:             header.code,
+		Version:          header.version,
+		BusinessTimezone: content.BusinessTimezone,
+		EffectiveFrom:    header.effectiveFrom,
+		EffectiveTo:      timeOf(header.effectiveTo),
+		HasEffectiveTo:   header.effectiveTo != nil,
+		Basis:            header.basis,
+	}
+}
 
 type nodePayload struct {
-	TenantID         string     `json:"tenant_id"`
-	Code             string     `json:"code"`
-	Version          int32      `json:"version"`
-	BusinessTimezone string     `json:"business_timezone"`
-	EffectiveFrom    time.Time  `json:"effective_from"`
-	EffectiveTo      *time.Time `json:"effective_to"`
-	Basis            *string    `json:"basis"`
+	versionFields
+	nodeContent
+}
+
+type connectionContent struct {
+	FromNode         string `json:"from_node"`
+	ToNode           string `json:"to_node"`
+	BusinessTimezone string `json:"business_timezone"`
+}
+
+func (content connectionContent) row(header versionHeader) ports.ConnectionDefinitionVersion {
+	return ports.ConnectionDefinitionVersion{
+		Code:             header.code,
+		Version:          header.version,
+		FromNode:         content.FromNode,
+		ToNode:           content.ToNode,
+		BusinessTimezone: content.BusinessTimezone,
+		EffectiveFrom:    header.effectiveFrom,
+		EffectiveTo:      timeOf(header.effectiveTo),
+		HasEffectiveTo:   header.effectiveTo != nil,
+		Basis:            header.basis,
+	}
 }
 
 type connectionPayload struct {
-	TenantID         string     `json:"tenant_id"`
-	Code             string     `json:"code"`
-	Version          int32      `json:"version"`
-	FromNode         string     `json:"from_node"`
-	ToNode           string     `json:"to_node"`
-	BusinessTimezone string     `json:"business_timezone"`
-	EffectiveFrom    time.Time  `json:"effective_from"`
-	EffectiveTo      *time.Time `json:"effective_to"`
-	Basis            *string    `json:"basis"`
+	versionFields
+	connectionContent
+}
+
+type lineContent struct {
+	Segments         []string `json:"segments"`
+	BusinessTimezone string   `json:"business_timezone"`
+	ApplicableScope  string   `json:"applicable_scope"`
+	// CostBases 缺席即这一版不挂成本依据；段号对 segments 数组下标。
+	CostBases []costBasisPayload `json:"cost_bases"`
+}
+
+func (content lineContent) row(header versionHeader) (ports.LineDefinitionVersion, []ports.LineSegmentCostBasis, error) {
+	costBases, err := costBasesFrom(content.CostBases)
+	if err != nil {
+		return ports.LineDefinitionVersion{}, nil, err
+	}
+	return ports.LineDefinitionVersion{
+		Code:             header.code,
+		Version:          header.version,
+		Segments:         content.Segments,
+		BusinessTimezone: content.BusinessTimezone,
+		ApplicableScope:  content.ApplicableScope,
+		EffectiveFrom:    header.effectiveFrom,
+		EffectiveTo:      timeOf(header.effectiveTo),
+		HasEffectiveTo:   header.effectiveTo != nil,
+		Basis:            header.basis,
+	}, costBases, nil
 }
 
 type linePayload struct {
-	TenantID         string     `json:"tenant_id"`
-	Code             string     `json:"code"`
-	Version          int32      `json:"version"`
-	Segments         []string   `json:"segments"`
-	BusinessTimezone string     `json:"business_timezone"`
-	ApplicableScope  string     `json:"applicable_scope"`
-	EffectiveFrom    time.Time  `json:"effective_from"`
-	EffectiveTo      *time.Time `json:"effective_to"`
-	Basis            *string    `json:"basis"`
-	// CostBases 缺席即这一版不挂成本依据；段号对 segments 数组下标。
-	CostBases []costBasisPayload `json:"cost_bases"`
+	versionFields
+	lineContent
 }
 
 type costBasisPayload struct {
@@ -484,15 +576,33 @@ type costBasisPayload struct {
 	Reference    string `json:"reference"`
 }
 
-type areaPayload struct {
-	TenantID      string     `json:"tenant_id"`
-	Code          string     `json:"code"`
-	Version       int32      `json:"version"`
-	EffectiveFrom time.Time  `json:"effective_from"`
-	EffectiveTo   *time.Time `json:"effective_to"`
-	Basis         *string    `json:"basis"`
+type areaContent struct {
 	// Coverage 缺席即这版没登覆盖；给了就由受理门按覆盖文法与节点角色逐格核。
 	Coverage *areaCoveragePayload `json:"coverage"`
+}
+
+func (content areaContent) row(header versionHeader) ports.ServiceAreaDefinitionVersion {
+	area := ports.ServiceAreaDefinitionVersion{
+		Code:           header.code,
+		Version:        header.version,
+		EffectiveFrom:  header.effectiveFrom,
+		EffectiveTo:    timeOf(header.effectiveTo),
+		HasEffectiveTo: header.effectiveTo != nil,
+		Basis:          header.basis,
+	}
+	if coverage := content.Coverage; coverage != nil {
+		area.HasCoverage = true
+		area.CoverageCountry = coverage.Country
+		area.PostalPrefixes = coverage.PostalPrefixes
+		area.OriginNodes = coverage.OriginNodes
+		area.DestinationNodes = coverage.DestinationNodes
+	}
+	return area
+}
+
+type areaPayload struct {
+	versionFields
+	areaContent
 }
 
 type areaCoveragePayload struct {
@@ -500,6 +610,28 @@ type areaCoveragePayload struct {
 	PostalPrefixes   []string `json:"postal_prefixes"`
 	OriginNodes      []string `json:"origin_nodes"`
 	DestinationNodes []string `json:"destination_nodes"`
+}
+
+// calendarContent 是日历的三格内容（ADR-0175 决定一），各自可缺：缺席是没登这一格，写 0 才是零分钟。
+type calendarContent struct {
+	CutoffLocalMinute *int `json:"cutoff_local_minute"`
+	ProcessingMinutes *int `json:"processing_minutes"`
+	BufferMinutes     *int `json:"buffer_minutes"`
+}
+
+func (content calendarContent) row(targetKind ports.CatalogTargetKind, header versionHeader) ports.ServiceCalendarDefinitionVersion {
+	return ports.ServiceCalendarDefinitionVersion{
+		TargetKind:        targetKind,
+		TargetCode:        header.code,
+		Version:           header.version,
+		EffectiveFrom:     header.effectiveFrom,
+		EffectiveTo:       timeOf(header.effectiveTo),
+		HasEffectiveTo:    header.effectiveTo != nil,
+		CutoffLocalMinute: content.CutoffLocalMinute,
+		ProcessingMinutes: content.ProcessingMinutes,
+		BufferMinutes:     content.BufferMinutes,
+		Basis:             header.basis,
+	}
 }
 
 type calendarPayload struct {
@@ -510,10 +642,7 @@ type calendarPayload struct {
 	EffectiveFrom time.Time  `json:"effective_from"`
 	EffectiveTo   *time.Time `json:"effective_to"`
 	Basis         *string    `json:"basis"`
-	// 三格内容（ADR-0175 决定一）各自可缺：缺席是没登这一格，写 0 才是零分钟。
-	CutoffLocalMinute *int `json:"cutoff_local_minute"`
-	ProcessingMinutes *int `json:"processing_minutes"`
-	BufferMinutes     *int `json:"buffer_minutes"`
+	calendarContent
 }
 
 type adjustmentPayload struct {
@@ -528,14 +657,8 @@ type adjustmentPayload struct {
 	LiftedAt    *time.Time `json:"lifted_at"`
 }
 
-type strategyPayload struct {
-	TenantID        string     `json:"tenant_id"`
-	Code            string     `json:"code"`
-	Version         int32      `json:"version"`
-	ApplicableScope string     `json:"applicable_scope"`
-	EffectiveFrom   time.Time  `json:"effective_from"`
-	EffectiveTo     *time.Time `json:"effective_to"`
-	Basis           *string    `json:"basis"`
+type strategyContent struct {
+	ApplicableScope string `json:"applicable_scope"`
 	// RankingForm 缺席即这一版没有声明排序形态；给了就必须是族内的词，空词同样拒。
 	RankingForm *string `json:"ranking_form"`
 	// FreezeForm 与 FreezeRemainingSegments 同缺即未声明；只给一半拒。
@@ -544,4 +667,62 @@ type strategyPayload struct {
 	// AutoRerouteForm 与阈值同缺即未声明；只给一半拒。阈值是租户取值。
 	AutoRerouteForm                      *string `json:"auto_reroute_form"`
 	AutoRerouteImprovementThresholdMinor *int    `json:"auto_reroute_improvement_threshold_minor"`
+}
+
+func (content strategyContent) row(header versionHeader) (ports.RouteStrategyDefinitionVersion, error) {
+	none := ports.RouteStrategyDefinitionVersion{}
+	var err error
+	form := domain.RankingFormUndeclared
+	if content.RankingForm != nil {
+		if form, err = domain.RankingFormFrom(*content.RankingForm); err != nil {
+			return none, err
+		}
+	}
+	freeze := domain.FreezeFormUndeclared
+	var freezeLimit *int
+	if content.FreezeForm != nil || content.FreezeRemainingSegments != nil {
+		if content.FreezeForm == nil || content.FreezeRemainingSegments == nil {
+			return none, fmt.Errorf("freeze form and remaining segments must be declared together")
+		}
+		if freeze, err = domain.FreezeFormFrom(*content.FreezeForm); err != nil {
+			return none, err
+		}
+		if *content.FreezeRemainingSegments < 0 {
+			return none, fmt.Errorf("freeze remaining segments must be >= 0")
+		}
+		freezeLimit = content.FreezeRemainingSegments
+	}
+	autoForm := domain.AutoRerouteFormUndeclared
+	var autoThreshold *int
+	if content.AutoRerouteForm != nil || content.AutoRerouteImprovementThresholdMinor != nil {
+		if content.AutoRerouteForm == nil || content.AutoRerouteImprovementThresholdMinor == nil {
+			return none, fmt.Errorf("auto reroute form and improvement threshold must be declared together")
+		}
+		if autoForm, err = domain.AutoRerouteFormFrom(*content.AutoRerouteForm); err != nil {
+			return none, err
+		}
+		if *content.AutoRerouteImprovementThresholdMinor < 0 {
+			return none, fmt.Errorf("auto reroute improvement threshold must be >= 0")
+		}
+		autoThreshold = content.AutoRerouteImprovementThresholdMinor
+	}
+	return ports.RouteStrategyDefinitionVersion{
+		Code:                                 header.code,
+		Version:                              header.version,
+		ApplicableScope:                      content.ApplicableScope,
+		RankingForm:                          form,
+		FreezeForm:                           freeze,
+		FreezeRemainingSegmentLimit:          freezeLimit,
+		AutoRerouteForm:                      autoForm,
+		AutoRerouteImprovementThresholdMinor: autoThreshold,
+		EffectiveFrom:                        header.effectiveFrom,
+		EffectiveTo:                          timeOf(header.effectiveTo),
+		HasEffectiveTo:                       header.effectiveTo != nil,
+		Basis:                                header.basis,
+	}, nil
+}
+
+type strategyPayload struct {
+	versionFields
+	strategyContent
 }
