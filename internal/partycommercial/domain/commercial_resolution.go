@@ -409,6 +409,10 @@ func ResolveCommercialBasis(
 	if key.RequiredBasis == CreditPolicyObject {
 		return resolveCreditPolicyBasis(registry, key)
 	}
+	if key.RequiredBasis == CustomerServiceRuleObject {
+		// 单依据键上没有合同那一维，所以与闭包不请求合同时同一答法：只看产品层。
+		return resolveCustomerServiceRuleBasis(registry, key, CommercialObjectID{})
+	}
 
 	candidates := registry.applicable(key)
 	result := Resolution{
@@ -569,6 +573,104 @@ func resolveCreditPolicyBasis(registry *CommercialRegistry, key ResolutionKey) R
 		// 正文也落在这一格：通用版本解析产不出额度，而缺政策既不是无限信用也不是零额度。
 		result.outcome = NoApplicableBasis
 		return result
+	}
+}
+
+// resolveCustomerServiceRuleBasis 选客户服务规则依据（ADR-0176 决定一）。contract 是闭包解出的那份
+// 客户合同：在场时先看合同层，合同层零候选才回落到产品层；缺席（闭包没请求合同，或单依据解析）只看
+// 产品层。同层多候选是`适用冲突`，两层皆零是`无适用依据`，采纳的始终只有一版。
+//
+// 合同层冲突时不回落：那等于把这一户已经另定的条款静静换回产品标准。
+func resolveCustomerServiceRuleBasis(
+	registry *CommercialRegistry,
+	key ResolutionKey,
+	contract CommercialObjectID,
+) Resolution {
+	result := Resolution{
+		key:          key,
+		anchor:       key.Anchor,
+		viewRevision: registry.ViewRevision(key.TenantID, key.Scope),
+	}
+	contractTier, productTier := registry.customerServiceRuleTiers(key, contract)
+	tier := productTier
+	if len(contractTier) > 0 {
+		tier = contractTier
+	}
+	result.candidateCount = len(tier)
+	version, outcome := soleCandidate(tier)
+	result.outcome = outcome
+	if outcome == UniquelyResolved {
+		result.adopted = version
+		result.hasAdopted = true
+		result.resolutionID = resolutionIdentity(key, result.viewRevision, version)
+	}
+	return result
+}
+
+// CustomerServiceRuleProductBase 选「同范围挂服务产品、锚点生效」的那一版客户服务规则：恰一版答
+// `唯一解析`并交回它，多版答`适用冲突`，零版答`无适用依据`。闭包在合同层零候选时回落的就是这一层，
+// ADR-0176 决定二的层次读口拿它当行级继承的底座——两处读同一份分层（customerServiceRuleTiers），
+// 「哪一版算产品底座」只有一种答法。
+//
+// declaredProduct 是委托声明的服务产品，可缺席；在场时壳上指名了别的服务产品的版本落选，收窄规则同
+// ResolutionKey 同名字段。
+//
+// 租户或范围立不住答`输入未受理`，不去数候选；锚点立不住或权威读不到答`解析未决`。两者都不是「这个
+// 范围没有产品版」，压成`无适用依据`会让一次读不到被当成租户没登记。
+func (registry *CommercialRegistry) CustomerServiceRuleProductBase(
+	tenant TenantID,
+	scope CommercialScopeReference,
+	anchor SelectionAnchor,
+	declaredProduct CommercialObjectID,
+) (CommercialVersion, ResolutionOutcome) {
+	if !tenant.valid() || !scope.valid() {
+		return CommercialVersion{}, InputNotAccepted
+	}
+	if registry == nil || !anchor.valid() {
+		return CommercialVersion{}, ResolutionPending
+	}
+	_, productTier := registry.customerServiceRuleTiers(ResolutionKey{
+		TenantID:       tenant,
+		Scope:          scope,
+		RequiredBasis:  CustomerServiceRuleObject,
+		ServiceProduct: declaredProduct,
+		Anchor:         anchor,
+	}, CommercialObjectID{})
+	return soleCandidate(productTier)
+}
+
+// customerServiceRuleTiers 把同范围、锚点生效的客户服务规则候选按壳上的合同指名分进两层。壳上指名了
+// contract 的进合同层；壳上没指名任何客户合同的进产品层——指名服务产品的与什么都没指名的同在这里，
+// 后者是 ConsistentCustomerServiceRuleApplicability 放行的在册形态，挪出去会让只有它一版的既有登记
+// 从唯一解析变成`无适用依据`；壳上指名了别的合同的两层都不进，那是另一户的条款，回落也不能落到它上面。
+//
+// 分层按壳不按正文，因为解析只看壳。按合同对象认而不按合同版本：合同换版后同一份挂合同规则照旧适用，
+// 条款要随合同改就发新一版规则。contract 缺席时合同层恒空。
+func (registry *CommercialRegistry) customerServiceRuleTiers(
+	key ResolutionKey,
+	contract CommercialObjectID,
+) (contractTier, productTier []CommercialVersion) {
+	for _, version := range registry.applicable(key) {
+		named, namesContract := version.ReferenceTo(CustomerContractObject)
+		switch {
+		case !namesContract:
+			productTier = append(productTier, version)
+		case contract.valid() && named == contract:
+			contractTier = append(contractTier, version)
+		}
+	}
+	return contractTier, productTier
+}
+
+// soleCandidate 把一层候选折成解析的三格答案：恰一版`唯一解析`，多版`适用冲突`，零版`无适用依据`。
+func soleCandidate(tier []CommercialVersion) (CommercialVersion, ResolutionOutcome) {
+	switch len(tier) {
+	case 0:
+		return CommercialVersion{}, NoApplicableBasis
+	case 1:
+		return tier[0], UniquelyResolved
+	default:
+		return CommercialVersion{}, ApplicabilityConflict
 	}
 }
 
