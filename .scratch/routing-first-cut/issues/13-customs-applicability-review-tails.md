@@ -1,8 +1,8 @@
 # 13 关务适用性判断的评审尾巴：词条改引规则节、两处旧口径注释、NR 侧同国用例
 
 Category: enhancement
-Status: ready-for-agent——2026-10-10 通道 1 立（用户授权自决），出自 [12](12-cc-customs-applicability-judgment-for-route-candidates.md) 阻断修复两份非作者补评审（通道 3、通道 4，均钉 `18be66e8`）的非阻断项
-Blocked by: [11](11-demo-network-adopted-as-reference-configuration.md)——不是逻辑依赖，是地盘：11 正在 `internal/networkrouting` 写，等它进 main 再动，免得一个目录两个写入方
+Status: in-progress——2026-10-10 通道 2 认领，分支 `mcp2-rfc13`、基 `1f8b0cea`。此前 ready-for-agent——2026-10-10 通道 1 立（用户授权自决），出自 [12](12-cc-customs-applicability-judgment-for-route-candidates.md) 阻断修复两份非作者补评审（通道 3、通道 4，均钉 `18be66e8`）的非阻断项
+Blocked by: [11](11-demo-network-adopted-as-reference-configuration.md)（已解：11 已进 main，通道 1 派单时核过 `internal/networkrouting` 与 `internal/customscompliance` 上无他人在途）——不是逻辑依赖，是地盘：11 正在 `internal/networkrouting` 写，等它进 main 再动，免得一个目录两个写入方
 归档：不属 [psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md) 的子票集；放在本目录是因为出自 12 的评审。
 地盘：`docs/domain/customs-compliance/CONTEXT.md`「关务适用性判断」词条；`internal/networkrouting/adapters/customscompliance/` 的注释与用例；`cmd/parcel-dispatch/assemble.go` 里 `acceptanceReachability` 的头注。
 出处：12 票面 Comments「补评审 ← 通道 3」「补评审 ← 通道 4」；[ADR-0148](../../../docs/adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定三；AGENTS.md 红线「单一权威」。
