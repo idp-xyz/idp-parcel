@@ -1,7 +1,7 @@
 # 16 演示租户受理前财务控制两格：时点采用产品参考配置、种子登结算账户
 
 Category: enhancement
-Status: ready-for-agent——2026-10-10 22:2x 通道 1 分诊（用户授权自决）：收为「两格登上、停点前移」，越过格 5 不是本票判据，见「分诊裁定」。此前 needs-triage——2026-10-10 通道 1 立（用户授权自决），出自 [11](11-demo-network-adopted-as-reference-configuration.md) 的判据一取证：演示动线越过 psb/05 格 4 之后停在格 5
+Status: in-progress——2026-10-10 通道 2 认领，分支 `mcp2-rfc16`、基 `5e6cd4b6`。此前 ready-for-agent——2026-10-10 22:2x 通道 1 分诊（用户授权自决）：收为「两格登上、停点前移」，越过格 5 不是本票判据，见「分诊裁定」。此前 needs-triage——2026-10-10 通道 1 立（用户授权自决），出自 [11](11-demo-network-adopted-as-reference-configuration.md) 的判据一取证：演示动线越过 psb/05 格 4 之后停在格 5
 归档：不属 [psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md) 的子票集；放在本目录是因为它挡在 11 判据一的路上。
 地盘：`scripts/demo-seeds`（演示租户的采用行与账户登记）；另含随种子失真的注释——`cmd/parcel-dispatch/assemble.go` 与 `internal/parcelshipment/adapters/partycommercial/submission_receipt_as_of.go` 里说「演示种子的财务控制格没采用」的那几句（按这句引文搜得到）。执行器不动（分诊已核）。
 出处：[psb/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)「格 5 · 受理前财务控制」两次取证，都写「没找到点名这一格的票」；AGENTS.md「演示租户就是 SYN-TENANT-01，代码按真实租户对待它」；[ADR-0150](../../../docs/adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md)。
