@@ -12,7 +12,7 @@
 | customscompliance | 104 | 105 | 20 | 42 | 10 | 14 |
 | networkrouting | 71 | 71 | 9 | 13 | 2 | 6 |
 | nodeoperations | 33 | 28 | 4 | 10 | 4 | 6 |
-| parcelpricing | 119 | 108 | 14 | 15 | 1 | 21 |
+| parcelpricing | 124 | 112 | 15 | 16 | 1 | 22 |
 | parcelshipment | 196 | 190 | 20 | 35 | 10 | 18 |
 | partycommercial | 154 | 163 | 12 | 40 | 1 | 37 |
 | pilotgovernance | 22 | 20 | 5 | 6 | 1 | 4 |
@@ -20,7 +20,7 @@
 | settlementaccounting | 162 | 111 | 28 | 54 | 9 | 9 |
 | transportfulfillment | 152 | 139 | 27 | 36 | 11 | 29 |
 | visibilityexception | 100 | 96 | 11 | 30 | 8 | 11 |
-| **合计** | 1178 | 1089 | 154 | 289 | 57 | 158 |
+| **合计** | 1183 | 1093 | 155 | 290 | 57 | 159 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 76、测试 111。
 
@@ -65,7 +65,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：12 个模块共 205 份 SQL
+## 迁移：12 个模块共 206 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -74,7 +74,7 @@
 | customs_compliance | 23 |
 | network_routing | 18 |
 | node_operations | 4 |
-| parcel_pricing | 11 |
+| parcel_pricing | 12 |
 | parcel_shipment | 23 |
 | party_commercial | 36 |
 | pilot_governance | 8 |
@@ -82,7 +82,7 @@
 | transport_fulfillment | 20 |
 | visibility_exception | 26 |
 
-## 接线面：接入面端点 137 个，消费适配器 33 个生产文件，直投路由表 24 条
+## 接线面：接入面端点 139 个，消费适配器 33 个生产文件，直投路由表 24 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -92,14 +92,14 @@
 | customscompliance | 16 |
 | networkrouting | 9 |
 | nodeoperations | 2 |
-| parcelpricing | 15 |
+| parcelpricing | 17 |
 | parcelshipment | 15 |
 | partycommercial | 32 |
 | pilotgovernance | 1 |
 | settlementaccounting | 6 |
 | transportfulfillment | 25 |
 | visibilityexception | 15 |
-| **合计** | 137 |
+| **合计** | 139 |
 
 消费适配器按 `internal/<消费方>/adapters/` 下 `inbox`、`adoptconsume`、`finalconsume`、`veconsume` 四类目录的生产文件数。它与上面的「跨上下文消费缝」是两种东西：那一栏数的是消费方为某个提供方写的防腐层，这一栏数的是接进程内直投信封的消费门。
 
@@ -125,13 +125,14 @@
 | visibilityexception | 8 |
 | **合计** | 24 |
 
-## 端口：声明 457 个；基线口径缺 29，精确口径缺 2
+## 端口：声明 460 个；基线口径缺 30，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
 - `networkrouting.InitialRouteEvidenceView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/networkrouting/application.CatalogInitialRouteEvidence）
 - `networkrouting.NetworkEvidenceView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/networkrouting/application.CatalogNetworkEvidence）
 - `nodeoperations.ParcelIdentityView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/cmd/parcel-api.unconfiguredParcelIdentityView）
+- `parcelpricing.PriceCardApprovalDutyRuleView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres.PriceCardApprovalDutyRules）
 - `parcelshipment.ContinuedAttemptRegisterView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres.ContinuedAttemptRegisters）
 - `parcelshipment.CurrentFinalView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres.FinalOutcomes）
 - `parcelshipment.LabelChannelGateway` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/cmd/parcel-api.unconfiguredLabelChannelGateway）
