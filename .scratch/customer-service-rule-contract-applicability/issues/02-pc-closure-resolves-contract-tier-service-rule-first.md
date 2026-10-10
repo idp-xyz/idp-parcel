@@ -1,7 +1,7 @@
 # 02 PC 闭包：客户服务规则合同优先解析，与结算政策同排第二段
 
 Category: enhancement
-Status: 阻断已修，待 Spec 轴复评与重放——2026-10-10 评审 ← 通道 3（钉 `e2c65894`）Spec 轴阻断一条，通道 5 在同一分支修完并推 origin：代码 `2c386838`，注释 `ae6a87df`，票面是其后一笔；评审与修复见文末 Comments。进 main 时取本票的笔 `a041499b`、`8e859548`、`e03a58fd`、`2c386838`、`ae6a87df` 与两笔票面（`e2c65894` 与修复后这一笔）；认领笔 `9dc2997f` 只改本行。此前：完工，待评审与重放——2026-10-10 通道 5 在分支 `mcp5-csr02`（基 `1d67e27c`）上做完，分支已推 origin：代码 tip `8e859548`，含清点 tip `e03a58fd`。完成记录见文末。此前：in-progress——2026-10-10 通道 5 认领（单 task-b39b287a-4dfa-4c14-9786-0d43264c2aab）。此前：ready-for-agent——2026-10-10 通道 1 发布：拆法作者通道 3（`task-2b404e22`），通道 1 经用户 19:1x 授权认可并裁定拆法清单所附七问
+Status: resolved——2026-10-10 23:1x 通道 1 重放进 main：`41c66134`…`a751d73b`，清点 `2243e878`；复评与进 main 记录见文末。此前 阻断已修，待 Spec 轴复评与重放——2026-10-10 评审 ← 通道 3（钉 `e2c65894`）Spec 轴阻断一条，通道 5 在同一分支修完并推 origin：代码 `2c386838`，注释 `ae6a87df`，票面是其后一笔；评审与修复见文末 Comments。进 main 时取本票的笔 `a041499b`、`8e859548`、`e03a58fd`、`2c386838`、`ae6a87df` 与两笔票面（`e2c65894` 与修复后这一笔）；认领笔 `9dc2997f` 只改本行。此前：完工，待评审与重放——2026-10-10 通道 5 在分支 `mcp5-csr02`（基 `1d67e27c`）上做完，分支已推 origin：代码 tip `8e859548`，含清点 tip `e03a58fd`。完成记录见文末。此前：in-progress——2026-10-10 通道 5 认领（单 task-b39b287a-4dfa-4c14-9786-0d43264c2aab）。此前：ready-for-agent——2026-10-10 通道 1 发布：拆法作者通道 3（`task-2b404e22`），通道 1 经用户 19:1x 授权认可并裁定拆法清单所附七问
 Blocked by: 无
 父票：[spec](../spec.md)
 地盘：`internal/partycommercial/domain` 的闭包解析；碰 Go，走[并行会话](../../../docs/agents/parallel-sessions.md)那条路。
@@ -119,3 +119,31 @@ Blocked by: 无
 **门**（WSL，go1.26.8，DSN 为门禁库 55432；在提交前的工作副本上跑，内容即 `ae6a87df`，提交后 `git status` 为空）：改动的 `.go` `gofmt -l` 无输出，无 CR、无 BOM；`go build ./...` 退 0；`go vet ./internal/partycommercial/...` 退 0。`go list` 反查 `internal/partycommercial/...` 的反向依赖（生产依赖 ∪ 测试二进制依赖，去掉本上下文自己的包）得 14 个，连同 `./internal/partycommercial/...` 与 `./internal/architecture/...` 以 `go test -count=1 -p 1` 带 DSN 跑：退 0，21 ok / 0 FAIL / 1 无测试，55 s。`-v` 单跑 `cmd/parcel-api` 的 `TestTheWiredClaimsReadTheRuleAdoptedAtAcceptanceThroughParcelShipment`：PASS，非 SKIP。机制清点在 `ae6a87df` 的干净树上重生成，与已提交文件逐字节相同（只加了用例函数，没加文件）。全量留给推送方重放后那一跑。
 
 **非阻断处置**：Standards 那条已改（`ae6a87df`）；Spec ① 已补进判断项 1；Spec ② 记在上一条评审里供 03 引用，未改 03 票面与 spec。
+
+### 复评 ← 通道 2 · 钉 `76120b55` · 23:0x（`task-9de81782`；Spec 轴，非作者）
+
+阻断无，非阻断一条，其余无发现。
+
+- 非阻断（Spec）：`reference_closure.go` 的 `memberOrder` 里「结算政策排最后」那半没有用例守——`/tmp` 副本变异（令结算政策留在声明位置）后，
+  结算政策不在最后的几种声明次序下 `Adopted()` 换序而标识不变，正是阻断那一类快照摘要漂移，而 `./internal/partycommercial/...` 带 DSN 全绿；
+  两条新用例都不带结算政策。生产代码现在是对的，缺的是护栏：可在 `TestAnExistingProductOnlyRegistrationResolvesAsBefore` 的成员次序断言里
+  补一格「结算政策先于合同声明」。
+- 无发现：阻断真解——overlay 探针用两版共有的夹具，覆盖规则先 / 后于合同、结算政策在首 / 中 / 末、带受理规则包、只挂产品、只有规则等声明次序，
+  `1d67e27c` 与 `76120b55` 的结局、解析标识、`Adopted()` 成员与次序逐行相同；判别力——两条 red 用例在 `e2c65894` 的生产代码上都红、在
+  `76120b55` 上都 PASS（postgres 那条非 SKIP），postgres 那条在 `1d67e27c` 上也 PASS（钉住的摘要确是旧代码写下的值）；ADR-0176 的解析语义未动
+  （`resolutionOrder` 与解析循环未改，修复只在唯一解析时排 `closure.adopted`）；未越出裁定与票面；red 用例落在 adapters/postgres 测试文件可接受
+  （阻断就在落库层，生产代码只改 domain）；Standards 简核无发现。
+
+## 进 main 记录（通道 1 · 2026-10-10 23:1x）
+
+- 远端 main `5e6cd4b6` → `2243e878`（本记录随其后一笔）：分支 `mcp5-csr02` 的 `9dc2997f`、`a041499b`、`8e859548`、`e2c65894`、`2c386838`、
+  `ae6a87df`、`76120b55` cherry-pick 重放到 tip，SHA 换了，在 main 上依次是 `41c66134`、`5361436f`、`171cda24`、`83905878`、`78bc40f5`、`36f3d3c4`、
+  `a751d73b`。清点笔 `e03a58fd` 不重放——main 上的清点自基 `1d67e27c` 起已被别的票改过——在重放 tip 上重生成为 `2243e878`。重放前核过
+  `1d67e27c..5e6cd4b6` 与本票文件只在清点上重叠；重放后本票其余文件与分支 tip 逐字节一致。
+- 评审：通道 3 `task-1b6c424e`（钉 `e2c65894`）Spec 阻断一条、非阻断三条；通道 5 在同一分支修复（`task-0f877692`）；通道 2 复评 `task-9de81782`
+  （钉 `76120b55`）无阻断，新提的非阻断一条（「结算政策排最后」那半缺用例）随票记、未改，宜随 03 或另立小票补。
+- 验证（推送方，钉合入候选 `2243e878`）：`go build ./...`、`go vet ./...` 退出 0；带 DSN 全仓 `go test -count=1 -p 1 ./...` 138 个包 ok、0 FAIL；
+  带 DSN `-v` 单跑 `TestAResolutionFixedWithTheServiceRuleDeclaredFirstReplaysAsRecorded` 与 `cmd/parcel-api` 的
+  `TestTheWiredClaimsReadTheRuleAdoptedAtAcceptanceThroughParcelShipment` 均 PASS（非 SKIP）。
+- 解锁：[03](03-pc-layered-read-port-returns-contract-and-product-base-bodies.md) 的「Blocked by 02」已解；评审记下供 03 引用的两条
+  （`CustomerServiceRuleProductBase` 的 declaredProduct 须取自冻结闭包键、未决不带原因）见 Comments 里通道 3 那条。
