@@ -39,6 +39,7 @@ type registryDouble struct {
 	calendar   *ports.ServiceCalendarDefinitionVersion
 	strategy   *ports.RouteStrategyDefinitionVersion
 	adjustment *ports.AvailabilityAdjustmentStatement
+	costBases  []ports.LineSegmentCostBasis
 }
 
 func (double *registryDouble) calls() int {
@@ -98,9 +99,9 @@ func (double *registryDouble) RegisterRouteStrategyVersion(
 }
 
 func (double *registryDouble) RegisterLineCostBases(
-	_ context.Context, tenant domain.TenantID, _ string, _ int32, _ []ports.LineSegmentCostBasis,
+	_ context.Context, tenant domain.TenantID, _ string, _ int32, bases []ports.LineSegmentCostBasis,
 ) error {
-	double.lastTenant = tenant
+	double.lastTenant, double.costBases = tenant, bases
 	return double.err
 }
 
@@ -540,6 +541,45 @@ func TestExecuteTranslatesGateRefusals(t *testing.T) {
 	}
 	if double.calls() != 0 {
 		t.Fatal("被拒的登记到达了写入口")
+	}
+}
+
+// Covers: ADR-0147 决定四在本口的那一半——采用行只给身份、修订号与生效时点，内容取自参考配置，依据格是那一版的
+// 引用串；线路的逐段成本依据随版本行一并登入。
+func TestExecuteAdoptsALineFromTheReferenceAndRegistersItsCostBases(t *testing.T) {
+	adopt := []byte(`{"tenant_id":"SYN-TENANT-01","code":"SYN-LINE-CN-SG-01","version":1,
+		"effective_from":"2026-01-01T00:00:00Z","adopt":"network-routing/network-catalog/SYN-CN-SG@1"}`)
+	double := &registryDouble{}
+	message, code := execute(t.Context(), kindLine, adopt, registrarOver(t, double), passthroughTransactor{})
+	if code != exitRegistered || !strings.Contains(message, "REGISTERED") {
+		t.Fatalf("message=%q code=%d, 想要 REGISTERED/0", message, code)
+	}
+	if double.line == nil || double.line.Basis.String() != "REFCFG-1:network-routing/network-catalog/SYN-CN-SG@1" ||
+		double.line.ApplicableScope != "NETWORK_SERVICE" || len(double.line.Segments) == 0 {
+		t.Fatalf("采用的线路行 = %+v", double.line)
+	}
+	if len(double.costBases) != len(double.line.Segments) {
+		t.Fatalf("成本依据 %d 条，段链 %d 段：%+v", len(double.costBases), len(double.line.Segments), double.costBases)
+	}
+}
+
+// Covers: 采用行在译装门拒的两种——自己写了内容格、点名的版本没发布；都不到达写入口，退出码 1。
+func TestExecuteRefusesAdoptRowsAtTheTranslationGate(t *testing.T) {
+	cases := map[string]string{
+		"采用行自写内容": `{"tenant_id":"SYN-TENANT-01","code":"SYN-NODE-SHA-HUB","version":1,
+			"business_timezone":"Asia/Tokyo","effective_from":"2026-01-01T00:00:00Z",
+			"adopt":"network-routing/network-catalog/SYN-CN-SG@1"}`,
+		"版本没发布": `{"tenant_id":"SYN-TENANT-01","code":"SYN-NODE-SHA-HUB","version":1,
+			"effective_from":"2026-01-01T00:00:00Z","adopt":"network-routing/network-catalog/SYN-CN-SG@2"}`,
+	}
+	for name, payload := range cases {
+		t.Run(name, func(t *testing.T) {
+			double := &registryDouble{}
+			message, code := execute(t.Context(), kindNode, []byte(payload), registrarOver(t, double), passthroughTransactor{})
+			if code != exitUsage || !strings.Contains(message, "译装被拒") || double.calls() != 0 {
+				t.Fatalf("message=%q code=%d calls=%d, 想要译装拒绝/1 且写入口零调用", message, code, double.calls())
+			}
+		})
 	}
 }
 
