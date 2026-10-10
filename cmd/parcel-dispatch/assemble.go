@@ -1214,8 +1214,9 @@ func acceptanceCommercialBasis(
 // 编排形成`未形成判断`。
 //
 // 证据视图从版本化网络目录折出（ADR-0148）。关务来源接 customs-compliance 的判断口
-// （routing-first-cut/12）：候选投影翻译过去、三格答案译回硬约束，出处随之留痕；目录
-// 读不到时 CC 如实答状态未知，不冒充满足。
+// （routing-first-cut/12）：候选投影翻译过去、三格答案译回硬约束，出处随之留痕。目录读
+// 不到时，两端异国的件在这条装配上形成`未形成判断`——适配器把 CC 的状态未知·目录读不到
+// 当依赖调不通上抛（nrcustoms.ErrCustomsCatalogUnreadable），不冒充满足，也不记成`资料不足`。
 func acceptanceReachability(
 	db *bentopg.DB,
 	outboxStore *outbox.Store,
