@@ -25,6 +25,7 @@ Status: in-progress——2026-09-25 通道 3 立（用户授权自决）；子�
 3. **原始文件本体不存。** 外置证据库的连接器还没有（`product-strategy-boundary/13`），草稿与现行登记一样只记文件名与 SHA-256。
 4. **端点全部以 `UnconfiguredIntake{}` 进端点表**（ADR-0085 两阶段）。换真 Intake 归 `operator-channel/04`（登记写面换真）那一族，不在本批。
    - **2026-09-25 更正**：operator-channel/04 第四批已把计价登记册 Intake（`OperatorRegistryIntake`）落地，并在它的归类表写明「价卡的在线导入属 price-card-import 那一批」。本批各口因此直接挂这个 Intake，不再先挂 `UnconfiguredIntake{}`；票 02 起照此办。
+   - **2026-10-10 补**：本批之外既有的 JSON 快照登记口 `/pricing-price-card-registrations` 换操作者 Intake 归 [operator-channel/04](../operator-channel/issues/04-registration-write-faces-take-operator-intake.md)（通道 1 裁定，见该票归类表）。
 5. **受控 CLI 与 seed 路径不变**（ADR-0101 Consequences）。
 6. **物理格式与模板规范归子票 01 的设计文档定**，ADR-0101 决定二把它交给了设计文档。
 
