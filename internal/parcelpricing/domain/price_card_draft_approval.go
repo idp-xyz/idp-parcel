@@ -33,8 +33,9 @@ var (
 	ErrInvalidOperatorGrant                    = errors.New("parcel pricing: invalid operator grant")
 )
 
-// OperatorGrant 是操作者持有的一格授予：信封里认证出的生效授予，在本上下文里只以名字出现、只比相等。哪些名字可授
-// 归接入身份能力的授权模型，本上下文不枚举、不解释。
+// OperatorGrant 是操作者持有的一格授予：信封里认证出的生效授予，在领域里只以名字出现、只比相等，领域不枚举、不解释。
+// 哪些名字会出现，由接入身份能力的授权模型与消费侧把信封译成授予集的那一步（adapters/accessidentity 的
+// grantableFaces）一起决定。
 type OperatorGrant struct{ name string }
 
 func NewOperatorGrant(name string) (OperatorGrant, error) {

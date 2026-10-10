@@ -55,6 +55,11 @@ func (authenticator *OperatorRegistryAuthenticator) AuthenticateRegistryWrite(ct
 
 // grantableFaces 是译进授予集的能力面。信封只答「持不持某一格」、不交名单，所以这里逐格问；运营决定那一格按决定种类
 // 另答、不进 Holds，不在这里。接入身份能力的授权模型加了能力面，这里要跟着加一格，否则批准门看不见它。
+//
+// 名字里的 grantable 说的是「译进本上下文的授予集」，不是接入身份能力 checkGrantable 的「可授」（能力面能不能被授出）：
+// 运营决定那一格在那边可授，在这里不译。能力面的原义是操作者能在哪一族端点上做什么，拿它当审批要求的授予格是暂定的
+// 译法：租户自定的等级名经这里永远对不上，批准门恒答批准者不合格；而批准口本身以登记册配置写铸信封，规则若要求的
+// 恰是这一格，到得了批准门的人都持有它，等于不要求。
 var grantableFaces = []identity.CapabilityFace{
 	identity.CapabilityRegistryConfigurationWrite,
 	identity.CapabilityMasterDataAndOperationsRead,
