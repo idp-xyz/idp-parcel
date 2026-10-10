@@ -21,8 +21,9 @@ var errUntranslatable = errors.New("network routing: untranslatable customs appl
 
 // ErrCustomsCatalogUnreadable 说 CC 读不到口岸与申报路径目录。CC 把它答成状态未知（分诊裁定
 // 三把「依赖读不到」收进 CC 的答案代数），到本上下文却是依赖调不通：
-// nrports.CustomsApplicabilitySource 只许它走 error，由应用层形成`未形成判断`；译成缺口，一次
-// 目录故障就进了`资料不足`统计（nrdomain.EvidenceGap）。
+// nrports.CustomsApplicabilitySource 只许它走 error，由应用层据以形成答复——经可达性视图是
+// `未形成判断`，经初始路由视图是`未决`；译成缺口，一次目录故障就进了`资料不足`统计
+// （nrdomain.EvidenceGap）。
 var ErrCustomsCatalogUnreadable = errors.New("network routing: customs applicability: the customs port and path catalog is unreadable")
 
 // Judge 是 customs-compliance 判断服务的窄面：按（租户，时点，候选投影）逐条作答，答案
