@@ -1,7 +1,7 @@
 # 13 各命令口的载荷规范化形状：ADR-0055 决定五第一项逐口解
 
 Category: enhancement
-Status: 阻断已修，待复评与重放——2026-10-10 15:31 通道 3（分支 `mcp3-oc13`，代码 tip `5a33ad14`，基 `1121ba61`，工作树 `/home/tops/workspace/idp-parcel-mcp3-oc13`；评审阻断与通道 2 预评阻断都已修，见下「阻断修复记录」）。此前：阻断已修，待复评与重放——15:21（代码 tip `adf2e0ba`），通道 2 预评钉 `04ff5484` 一条阻断；完工，待评审与重放——2026-10-10 11:43 通道 3（代码 tip `1176721c`），通道 1 非作者评审钉 `44f9c3c9` 一条阻断；in-progress——2026-10-10 11:21 通道 3 认领；ready-for-agent——2026-09-24 随 ADR-0149 立（用户授权通道 4 自决）；按上下文拆笔
+Status: resolved——2026-10-10 16:34 通道 1 推进 main（`2578754c`…`c6ebb7fa`，清点 `bc9ab094`；重放与全仓验证是通道 2 做的，通道 1 接手推送）；评审与进 main 记录见文末。此前：阻断已修，待复评与重放——2026-10-10 15:31 通道 3（分支 `mcp3-oc13`，代码 tip `5a33ad14`，基 `1121ba61`，工作树 `/home/tops/workspace/idp-parcel-mcp3-oc13`；评审阻断与通道 2 预评阻断都已修，见下「阻断修复记录」）。此前：阻断已修，待复评与重放——15:21（代码 tip `adf2e0ba`），通道 2 预评钉 `04ff5484` 一条阻断；完工，待评审与重放——2026-10-10 11:43 通道 3（代码 tip `1176721c`），通道 1 非作者评审钉 `44f9c3c9` 一条阻断；in-progress——2026-10-10 11:21 通道 3 认领；ready-for-agent——2026-09-24 随 ADR-0149 立（用户授权通道 4 自决）；按上下文拆笔
 Blocked by: 无
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 丙轨实施
 地盘：各上下文 `domain` 里命令载荷的规范化形状与摘要（NO、TF、CC、SA 各一笔），`adapters/http` 的译装不改答复。
@@ -100,3 +100,28 @@ Blocked by: 无
 - **非阻断一，做了**（`1c6eb24f`、`ca97e619`、`bd81f6c7`，SA 同形补在 `5a33ad14`）：各上下文加 `TestNewRecordsAreStoredUnder{NOC1,TFC1,CCC1,SAC1}`，逐口断首次提交落下的摘要带本上下文前缀（CC 键口断键上那枚指纹）。另立一例而不塞进定值循环，是为了定值循环仍能原样放到基上跑绿、三方对照照旧成立；新例在基 `1121ba61` 上四个上下文都红，断得住。
 - **非阻断二，未做**：「认不出的形状」仍各上下文只测一口。其余各口的 `UnknownPayloadShape` 分支都答该处读失败的既有未决，预评逐处读过；逐口补用例要给每例添一格未决答复，本轮不做，记在这里。
 - **非阻断三，做了**：注释里数别处的东西改成点名或删数——NO 用例的「九个定形口」「集运六口」、CC `unversioned_payload_digest.go` 文件头与 CC 用例的「键上带指纹的两口」、CC 结果字段注释的「两格」、CC 端口注释的「只在……一处」，SA 文件头与用例的「三口」「前两口」「后一口」同形补齐。
+
+## Comments
+
+**评审 ← 通道 2 · 钉 `0f0b8ef6` · 15:49**（代码 tip `5a33ad14`，基 `1121ba61`；合并预评钉 `04ff5484`、第二段钉 `2e9fe64e` 与追加笔 `2e9fe64e..0f0b8ef6`；隔离检出 `/tmp/idp-review-oc13-mcp2`，评完已 `git worktree remove`。非作者。原文是任务 `task-9e53634e` 的报告，送到时通道 1 无会话在收，过期进了死信；推送方通道 1 照录于此，附的第一段清单（钉 `44f9c3c9`）不重录。）
+
+阻断：无。预评那条已修（`1c6eb24f`）：`verify_disposition.go` 新增 `continuationHash`，截形状前缀之后的 8 位；`VerifyDispositionHandler.handOff` 与 `DutyPaymentReconciliationHandler.handOffVerification` 都改用它。无版本旧键截出与改动前同一串。`TestAContinuationReferenceNamesTheFingerprintNotItsShape` 与 `TestAFailedHandoffLeavesTheVerificationFormedWithAContinuationReference` 放到 `2e9fe64e` 上红（实得 `…/CCC-1:a0`、`…/CCC-1:34`），tip 上绿。
+
+非阻断：
+
+- Spec·1：认不出的形状各上下文仍只测一口（NO `AcceptCollaborationHandler.Accept`、TF `CommissionTransportHandler.SubmitCommission`、CC `ReceiveExternalResultHandler.Handle`、SA `AllocateCostsHandler.Allocate`）。其余各口的 `UnknownPayloadShape` 分支逐处读过，都答该处读失败同一格。通道 1 已定可不做，票面「预评处理」记了。
+- Spec·2：票面第 4 条段写「`origin/main`（`2babd238`）上 oc11 只改了 CC 的 `adapters/http`」：main 上唯一动 CC 的 `187364ff` 还改了 `adapters/accessidentity`。与本分支文件零交叠，结论不变，只是措辞不全。
+- Standards·1：注释按位置指代「上一例」——四份 `TestNewRecordsAreStoredUnder{NOC1,TFC1,CCC1,SAC1}` 的 Covers 注释，以及 `register_credential_test.go` `TestEveryFieldOfTheCredentialShapeSplitsAConflict` 的头注。测试一换序就无声指错，应改点名（`TestRecordsStoredBefore…`、`TestReRegisteringACredentialSplitsReplayFromConflict`）。
+
+无发现（核过）：
+
+- Spec：第一段清单四族各处都修到，每口「旧摘要＋同内容→重放」「旧摘要＋异内容→非重放」两例齐（NO 9、TF 12、CC 7、SA 20）；清单「正确」项未动。CC 键口按无版本键查旧行，`RederiveDutyVerificationsOnFundsFactVersion` 取在册行的键，SA 连锁随之消失。定值确来自旧代码：四份用例放到 `1121ba61` 上 48 个子例全绿、放到 `44f9c3c9` 上全红；41 个 `unversioned*` 与基上原函数逐字相同，调用点传参也同。前缀断言单列的理由成立：塞进定值循环，循环在基上就红，三方对照里证明定值的那一腿就没了；单列的 `TestNewRecordsAreStoredUnder*` 复用同一组 first，逐口覆盖，基上 48/48 红、tip 绿。认不出的前缀不答冲突。第 4 条形状字段即 `sameCredential` 那组，凭证 ID 是 `LoadCredential` 的查找键、不进摘要，没发明字段；新用例放到旧逐字段判据上全绿，答复不变。全程没动 migrations、adapters、cmd。票面两处取舍属实。
+- Standards：注释全中文、无行号；预评所列计数已全改。ADR-0014 三条落在四处 `CompareStoredDigest`；ADR-0149 决定四逐口定形；ADR-0150：演示租户存量照真实租户保全，不回写、不迁移。`go build ./...`、四上下文 `go vet`、改动包与 `internal/architecture` 测试全过（只读，未跑全仓、未连真库）。
+
+### 进 main 记录（推送方 · 通道 1；重放与验证是通道 2 做的）
+
+- **门**：评审 ← 通道 2（非作者）钉 `0f0b8ef6` 无阻断，合 parallel-sessions「推送方只在评审为无阻断时重放」。三条非阻断随票记、不挡合入，没有在本次落地里改。
+- **重放**（通道 2，16:10，隔离树 `/tmp/mcp2-land-oc13`）：`1121ba61..0f0b8ef6` cherry-pick 到 main `2babd238` 之上，无冲突。通道 1 推前复核：`git range-diff` 逐笔全 `=`；本票文件在分支 tip 与重放 tip 上 `git diff` 为空；`1121ba61..2babd238` 的 main 侧改动与本票文件不交。新旧 SHA 对照（分支 → main）：`5fbf3340`→`2578754c`（认领）、`0a1c8a08`→`8e27b717`、`426ec2ed`→`2e477cb4`、`9465ff5b`→`a2404110`、`1176721c`→`d5b67b75`、`44f9c3c9`→`ca0ca40c`（完成记录）、`ccc2a6c3`→`2a1db94b`、`7711027c`→`96605002`、`04ff5484`→`58200ddb`、`02c0f8a3`→`76ddec2e`、`adf2e0ba`→`b4d28563`（第 4 条）、`2e9fe64e`→`f03a4731`（票面）、`1c6eb24f`→`b5de30e2`、`ca97e619`→`69ae197e`、`bd81f6c7`→`c7d5090d`、`5a33ad14`→`ae44d7b7`、`0f0b8ef6`→`c6ebb7fa`（票面）。批 tip 干净检出重生成清点为 `bc9ab094`。
+- **验证**（通道 2，钉 `bc9ab094`，16:11–16:13，DSN 指 55432）：四个上下文与 `internal/architecture` 的 `gofmt -l` 无输出；全仓 build / vet 退 0；先 `-v` 单跑 `TestFreezeScopesAreInvisibleToEachOther` 是 PASS 非 SKIP；清点生成器重跑无漂移；`go test -count=1 -p 1 ./...` 137 包 ok、0 FAIL（另 14 包无测试文件）。
+- **推送**（通道 1，16:34）：用户 16:31 前令通道 1 独立完成后续、不再用其他通道；通道 2 自 16:09 起无 MCP 活动，落地树自 16:13 未动、16:31 查无其进程，16:34 广播接手。推前 `ls-remote` 远端 main 仍是 `2babd238`，`2babd238..bc9ab094` 只有本票重放与清点；`git push origin bc9ab094:main`，CI run `38038382576` success。共享树 main 随后快进到 `bc9ab094`，树上他人的未提交改动与本批文件零交叠、原样留着。本记录随后单独一笔。
+- **顺带关掉的一格**：[11](./11-integration-client-register-and-client-credentials.md) 进 main 记录里「推送后才注意到的一格」——凭证登记口开了集成客户端真渠道而未定形状——由本票第 4 条补了形状（`adf2e0ba`→`b4d28563`，`REGISTER_CREDENTIAL` 按 CCC-1 定形，见上「已定形」）；11 那一格随本笔补了后续。
