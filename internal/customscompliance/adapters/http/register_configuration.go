@@ -240,6 +240,18 @@ func writeRegistrationIntakeProblem(response http.ResponseWriter, err error) {
 		writeProblem(response, http.StatusServiceUnavailable, codeIdentityDependencyUnavailable)
 		return
 	}
+	if errors.Is(err, ErrIntegrationClientCredentialRejected) {
+		writeProblem(response, http.StatusUnauthorized, codeIntegrationClientCredentialRejected)
+		return
+	}
+	if errors.Is(err, ErrIntegrationClientNotGranted) {
+		writeProblem(response, http.StatusForbidden, codeIntegrationClientNotGranted)
+		return
+	}
+	if errors.Is(err, ErrOutsideAdmissionScope) {
+		writeProblem(response, http.StatusForbidden, codeOutsideAdmissionScope)
+		return
+	}
 	if errors.Is(err, ErrMalformedRequest) {
 		writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 		return

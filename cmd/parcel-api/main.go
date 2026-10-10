@@ -91,6 +91,20 @@ func run(logger *slog.Logger) error {
 		logger.Info("Operator channel not configured (ADR-0100): issuer parameters unset, operator family answers ACCESS_CHANNEL_NOT_CONFIGURED")
 	}
 
+	// 集成客户端族的信任锚与操作者族同处开池之前：参数只设了一半要带原因退出，不先连上库再发现发行方配错。
+	integrationClientVerifier, integrationClientChannelConfigured, err := buildIntegrationClientCredentialVerifier(os.Getenv)
+	if err != nil {
+		return err
+	}
+	if integrationClientChannelConfigured {
+		logger.Info("Integration client channel issuer configured (ADR-0149): client tokens verified against the issuer's JWKS",
+			"issuer", os.Getenv(integrationClientIssuerEnv),
+			"jwksURL", os.Getenv(integrationClientJWKSURLEnv),
+			"audience", os.Getenv(integrationClientAudienceEnv))
+	} else {
+		logger.Info("Integration client channel not configured (ADR-0149): issuer parameters unset, integration client family answers ACCESS_CHANNEL_NOT_CONFIGURED")
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -134,6 +148,18 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	operatorRegistries, err := buildOperatorRegistryIntakes(operatorMinter)
+	if err != nil {
+		return err
+	}
+	integrationClientRegistry, err := aipg.NewIntegrationClientRegistry(db)
+	if err != nil {
+		return err
+	}
+	integrationClientMinter, err := buildIntegrationClientMinter(integrationClientVerifier, integrationClientRegistry)
+	if err != nil {
+		return err
+	}
+	integrationClients, err := buildIntegrationClientIntakes(integrationClientMinter)
 	if err != nil {
 		return err
 	}
@@ -610,10 +636,9 @@ func run(logger *slog.Logger) error {
 			isolatedWrite.partyIdentityIntake(),
 			isolatedWrite.nodeOperationsIntake(),
 			isolatedWrite.transportFulfillmentIntake(),
-			isolatedWrite.customsIntake(),
-			isolatedWrite.settlementIntake(),
 			operatorDecisions,
 			operatorRegistries,
+			integrationClients,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,

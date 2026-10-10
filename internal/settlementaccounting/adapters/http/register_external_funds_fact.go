@@ -20,9 +20,9 @@ import (
 // ExternalFundsFactRegistrationIntake 把一次已认证的接入请求翻译成外部资金事实首版的采用命令。
 //
 // 两个 Intake 都是接口而不是本包内的解析代码，判据同 customshttp 的登记口（ADR-0085 决定二）：登记输入本体
-// 的译装在 adapters/registrationjson 已有一份（与受控 CLI 的 -input 同源，本包不得另写），但「渠道原始载荷 →
-// 登记输入」的边界与提交方认证归集成客户端族（ADR-0149），其真 Intake 未就位；采信报文自称的租户会穿透 ADR-0003 的隔离
-// 边界。逐类分设而不合成一个按种类分派的口子：两类命令类型互不相同，合成一个就得在 Intake 里先认种类再定形状。
+// 的译装在 adapters/registrationjson 已有一份（与受控 CLI 的 -input 同源，本包不得另写）。提交方认证归集成客户端族
+// （ADR-0149），真 Intake 是 IntegrationClientIntake：租户取册上的绑定，载荷自报租户即拒。逐类分设而不合成一个按种类
+// 分派的口子：两类命令类型互不相同，合成一个就得在 Intake 里先认种类再定形状。
 type ExternalFundsFactRegistrationIntake interface {
 	IntakeExternalFundsFactRegistration(
 		ctx context.Context,
@@ -77,7 +77,7 @@ func NewRegisterExternalFundsFactCorrectionEndpoint(
 }
 
 // newFundsRegistrationEndpoint 是采用与更正两口共用的端点体：方法门 → Intake 分流 → 编排 → 答案转写。
-// Intake 三格（未配置 / 畸形 / 故障）是接入渠道这一层的状态，与读面同一套映射，不按端点族另立。
+// 接入渠道这一层的状态与读面同一套映射，不按端点族另立：未配置、令牌不过、未授予、不在准入范围、依赖故障、畸形、其余故障。
 func newFundsRegistrationEndpoint[Command any](
 	intake func(context.Context, *http.Request) (Command, error),
 	register func(context.Context, Command) (application.FundsResult, error),
