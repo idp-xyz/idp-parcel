@@ -1,7 +1,7 @@
 # 客户服务规则「挂客户合同」的一格接入：合同优先解析 + 行级继承产品底座
 
 Category: enhancement
-Status: ready-for-agent
+Status: in-progress——2026-10-10 通道 1 按 /to-tickets 发布子票 02–06（拆法作者通道 3，通道 1 经用户授权认可），本 spec 转为跟踪容器，自身不再有可执行工作。此前：ready-for-agent
 Blocked by: 无。设计决策已全部裁毕，权威记录为 [ADR-0176](../../docs/adr/0176-customer-service-rule-contract-tier-selection-and-inheritance.md)；建模票 [01](issues/01-service-rule-keyed-by-product-cannot-express-per-customer-claim-terms.md)。
 
 ## Problem Statement
@@ -79,3 +79,15 @@ Blocked by: 无。设计决策已全部裁毕，权威记录为 [ADR-0176](../..
 - 权威决策记录：ADR-0176（Accepted 2026-10-08）。其对 ADR-0104 的承接按 README「部分停用」制度回写：0104 的 Status 行与 Links 节前向指针已加，正文不改写。
 - 建模票 01 的「代码事实」段是本 spec 的缺口取证记录；「诉求（已磨）」段的六格归宿与本 spec Implementation Decisions 一一对应。
 - 演示对比面（可选收尾，随实现票）：给 SYN-CONTRACT-02 发一版只改首次索赔时限的挂合同规则，账户 02 索赔答定制时限、材料行继承产品版——机制半边的 S 证据。
+
+## 子票
+
+建模票 [01](issues/01-service-rule-keyed-by-product-cannot-express-per-customer-claim-terms.md) 已 resolved；实施票如下。拆票时对七问的裁定写在各子票「判断项」，其中两条标了越权风险点：02 的 Q4（发布面不加门）与 05 的 Q3（只收紧不设比对门），待 PC owner 复核。
+
+| 票 | 标题 | Blocked by | 状态 |
+|---|---|---|---|
+| [02](issues/02-pc-closure-resolves-contract-tier-service-rule-first.md) | PC 闭包：客户服务规则合同优先解析 | 无 | draft |
+| [03](issues/03-pc-layered-read-port-returns-contract-and-product-base-bodies.md) | PC 层次读口：合同版、产品底座版正文与在场标志 | 02 | draft |
+| [04](issues/04-ve-claim-eligibility-checks-contract-and-inherits-rows-from-product-base.md) | VE 索赔资格：按合同点核、按行继承底座 | 03 | draft |
+| [05](issues/05-admin-form-contract-tier-empty-means-inherit-and-tighten-only.md) | 管理台表单：空表即继承、只收紧不删减（前端切片） | 04 | draft |
+| [06](issues/06-demo-contract-02-custom-first-claim-deadline-inherits-materials.md) | 演示对比面：合同 02 定制首次索赔时限（S） | 04 | draft |
