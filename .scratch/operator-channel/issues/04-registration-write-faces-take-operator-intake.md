@@ -1,7 +1,7 @@
 # 04 登记册配置写面逐口换操作者 Intake
 
 Category: enhancement
-Status: in-progress——2026-10-10 通道 2：第 2 件完工，待评审与重放（代码 tip `4b17d139`，完成记录在「剩余工作」第 2 件之下）；本票不收口，第 1 件还等 07。此前 in-progress——2026-10-10 通道 2 认领「剩余工作」第 2 件（价卡登记口 `/pricing-price-card-registrations` 换操作者 Intake），分支 `mcp2-oc04-pcr`、基 `1d67e27c`。此前 in-progress——2026-10-10 通道 5 收口核查（钉 `a8cf12ff`）之后通道 1 裁定（用户授权自决）：价卡登记口归本票，身份族 6 口另等 07；剩余三件见文末「剩余工作」。此前 in-progress——2026-09-25 通道 4 认领（用户令独立完成操作者渠道这条链），逐上下文分批进 main：第一批可见性八口、第二批关务七口、第三批网络七口、第四批计价四口、第五批商业参与方六口、第六批 TF 五口已换（见文末）；不在隔离名单上的口只剩价卡登记（属 price-card-import）。此前 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
+Status: in-progress——2026-10-10 22:3x 通道 1：「剩余工作」第 2、3 件均已进 main（第 3 件 21:2x 至 `3bdf8aad`，第 2 件 21:4x 至 `1253c768`，进 main 记录各在其节）；本票不收口，第 1 件还等 07。此前 in-progress——2026-10-10 通道 2：第 2 件完工，待评审与重放（代码 tip `4b17d139`，完成记录在「剩余工作」第 2 件之下）；本票不收口，第 1 件还等 07。此前 in-progress——2026-10-10 通道 2 认领「剩余工作」第 2 件（价卡登记口 `/pricing-price-card-registrations` 换操作者 Intake），分支 `mcp2-oc04-pcr`、基 `1d67e27c`。此前 in-progress——2026-10-10 通道 5 收口核查（钉 `a8cf12ff`）之后通道 1 裁定（用户授权自决）：价卡登记口归本票，身份族 6 口另等 07；剩余三件见文末「剩余工作」。此前 in-progress——2026-09-25 通道 4 认领（用户令独立完成操作者渠道这条链），逐上下文分批进 main：第一批可见性八口、第二批关务七口、第三批网络七口、第四批计价四口、第五批商业参与方六口、第六批 TF 五口已换（见文末）；不在隔离名单上的口只剩价卡登记（属 price-card-import）。此前 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
 Blocked by: 03（已 resolved）；[07](./07-admin-web-login-gate.md)——只挡身份族 6 口：换口要同笔撤隔离放行（ADR-0150 决定三），前提与 [15](./15-operation-decision-faces-take-operator-intake.md) 余下四口是同一件，演示环境接上发行方与合成操作者授予（2026-10-10 通道 1 补）
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`cmd/parcel-api` 端点表里 ADR-0085 决定一那一族登记端点的装配行及其装配测试。
@@ -179,6 +179,19 @@ http 测试。逐条如下，交通道 1 定。取证全部实测于 `a8cf12ff`�
 
    **未改**：`register_reference_series.go` 的 `ReferenceSeriesRegistrationIntake` 注释仍写「真 Intake 未就位」，端点表序列复核、预览与目录登记几行的注释仍写
    「同挂字面量 `UnconfiguredIntake{}`」——那几口第四批已换，不在本件范围。
+
+   **评审 ← 通道 3 · 钉 `0a918ab0` · 21:36（`task-d17db95b`）**：两轴无阻断，各两条非阻断（全文在任务台账）。Standards：①
+   `RehydratePriceCardRegistrationForTenant` 只查小写 `tenant` 键，而随后解进 `priceCardRegistrationSnapshot` 时 JSON 按字段名不分大小写匹配，
+   `Tenant`、`TENANT` 会被收下、再由调用方租户静默顶掉——租户隔离不破（终归取信封），建议按 `strings.EqualFold` 扫顶层键；NR
+   `registrationjson.refuseSelfReportedTenant` 同形，可一并另立。② 序列复核行与 `register_reference_series.go` 的旧注释（即上面「未改」那条）。
+   Spec：① 没有一条用例把合法在线快照经换好的端点送到业务答复（201），建议补一格；② 判断项 1、2 的后续（管理台 `api.ts` 去 `tenant`、
+   提交操作者落不落册）只写了去向，没指向票、ADR 或用户决定，建议立票。
+
+   **进 main 记录（通道 1 · 21:4x 推出，22:3x 由通道 1 新会话补记）**：远端 main `1f8b0cea` → `1253c768`。本件三笔重放，SHA 换了——分支
+   `mcp2-oc04-pcr` 的 `f98f4acd`、`4b17d139`、`0a918ab0` 在 main 上依次是 `ab712738`、`823c2fc2`、`1253c768`；前两笔 patch-id 相同，票面那笔与
+   第 3 件已在 main 上的记录合流，`scripts/branch-state.ps1 -Branch mcp2-oc04-pcr` 判 ABSORBED。清点：作者在 `4b17d139` 的干净检出上重生成无差，
+   main 上未另成笔。评审见上，非阻断四条随票记、未改。验证：推出那个会话随后中断，推送方的全仓记录没有留下；CI run `38056702191` 在
+   `1253c768` 上 success；其后 routing-first-cut/13 的合入候选 `d32b5e51`（含本件）带 DSN 全仓 138 个包 ok、0 FAIL。
 
 3. **网络七口的 `networkhttp.OperatorRegistryIntake` 补 http 层测试**，照另五族各自的 `operator_registry_intake_test.go`——无阻塞，属第三批，代码活，由通道 1 另派。
 
