@@ -134,6 +134,7 @@ var swappedRegistryFaces = []string{
 	"/network-catalog-service-calendar-registrations",
 	"/network-catalog-availability-adjustment-registrations",
 	"/network-catalog-route-strategy-registrations",
+	"/pricing-price-card-registrations",
 	"/pricing-reference-series-registrations",
 	"/pricing-reference-series-reviews",
 	"/pricing-reference-series-previews",

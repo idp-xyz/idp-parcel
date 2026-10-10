@@ -418,12 +418,12 @@ func assembleBusinessEndpoints(
 		// 查阅与目录查阅同属租户内运营读面，各随本上下文既有的 Intake 变量换值，
 		// 不为事实册另立第二种准入形（裁决在各端点构造函数注释）。
 		{Pattern: "/pricing-evaluations", Handler: pricinghttp.NewQueryEvaluationsEndpoint(pricingCatalogueIntake, pricingEvaluations)},
-		// 价卡与序列登记写面（ADR-0085，票 admin-write-faces/01）：登记是命令行，与
-		// 其余命令面同挂字面量 UnconfiguredIntake{}——写准入不另立形，隔离读准入
+		// 价卡与序列登记写面（ADR-0085，票 admin-write-faces/01）：登记是命令行，挂操作者
+		// 渠道的登记册 Intake（ADR-0100 决定四，票 operator-channel/04）——写准入不另立形，隔离读准入
 		// （ADR-0078）只经查阅行的 Intake 变量换值，写行换不了。两类登记各立端点，
 		// 与其 CLI 命令一一对应（裁决在端点构造函数注释）；登记 CLI 保留为受控批量口，
 		// 两口消费同一登记用例，答案代数一致。
-		{Pattern: "/pricing-price-card-registrations", Handler: pricinghttp.NewRegisterPriceCardEndpoint(pricinghttp.UnconfiguredIntake{}, priceCardRegistration)},
+		{Pattern: "/pricing-price-card-registrations", Handler: pricinghttp.NewRegisterPriceCardEndpoint(operatorRegistries.pricing, priceCardRegistration)},
 		{Pattern: "/pricing-reference-series-registrations", Handler: pricinghttp.NewRegisterReferenceSeriesEndpoint(operatorRegistries.pricing, referenceSeriesRegistration)},
 		// 序列版本复核（ADR-0099 决定二，票 pricing-reference-series-operations/04）：治理
 		// 动作也是命令行，同挂字面量 UnconfiguredIntake{}。**这一口比两个登记口更不能松**
