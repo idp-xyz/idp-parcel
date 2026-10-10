@@ -210,7 +210,10 @@ func (handler *SubmitDeclarationHandler) Handle(
 		Unit:      unit.ID(),
 		Procedure: unit.Procedure(),
 	}
-	digest := declarationDigest(command)
+	_, digest, err := domain.CanonicalizeDeclarationPayload(command.Procedure, command.Dossier, command.Roles, command.Members)
+	if err != nil {
+		return SubmitDeclarationResult{}, err
+	}
 	existing, found, err := handler.deps.Submissions.FindByKey(ctx, key)
 	if err != nil {
 		return submissionStoreUndecided(command.UnitID), nil
@@ -453,17 +456,4 @@ func (handler *SubmitDeclarationHandler) handOff(
 func declarationContinuation(parts ...string) string {
 	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return "CONT-" + hex.EncodeToString(digest[:8])
-}
-
-// declarationDigest 是同一逻辑申报目标的内容比对锚：组成、资料快照与角色快照任一
-// 不同即是另一份内容。成员先排序——提交顺序不构成不同的内容。
-func declarationDigest(command SubmitDeclarationCommand) string {
-	members := append([]string(nil), command.Members...)
-	sort.Strings(members)
-	digest := sha256.Sum256([]byte(strings.Join(append([]string{
-		command.Procedure,
-		command.Dossier,
-		command.Roles,
-	}, members...), "\x00")))
-	return hex.EncodeToString(digest[:])
 }

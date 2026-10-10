@@ -2,11 +2,8 @@ package application
 
 import (
 	"context"
-	"crypto/sha256"
-	"encoding/hex"
 	"errors"
 	"fmt"
-	"strconv"
 	"strings"
 
 	"go.idp.xyz/idp-parcel/internal/customscompliance/domain"
@@ -463,13 +460,18 @@ func (handler *DutyPaymentReconciliationHandler) VerifyPayment(
 	if err != nil {
 		return DutyReconciliationResult{outcome: DutyReconciliationNotAccepted}, nil
 	}
+	_, verificationDigest, err := domain.CanonicalizeDutyVerificationPayload(
+		command.Coverage, command.Delta, command.Validity, command.Basis, command.Procedure.String(), command.FundsVersion.String())
+	if err != nil {
+		return DutyReconciliationResult{}, err
+	}
 	record := ports.DutyVerificationRecord{
 		Key: ports.DutyVerificationKey{
 			TenantID: command.TenantID,
 			Duty:     command.Duty,
 			Funds:    command.Funds,
 			Scope:    command.Scope,
-			Digest:   verificationDigest(command),
+			Digest:   verificationDigest,
 		},
 		Verification: verification,
 		Basis:        command.Basis,
@@ -501,24 +503,4 @@ func (handler *DutyPaymentReconciliationHandler) handOffVerification(
 		return "", nil
 	}
 	return "CONT-DUTY-VERIFICATION/" + key.Scope.String() + "/" + key.Digest[:8], err
-}
-
-// verificationDigest 是核对内容的稳定指纹：三轴、关联依据、监管程序、资金事实版本。三维身份在键上，不进指纹。
-//
-// 拼接顺序写死为 Coverage、Delta、Validity、Basis、Procedure、FundsVersion，以 \x00 分隔后 sha256。它是持久化
-// 主键的一列（0016 `version_digest`）与信封 ID 的一段：任何改动都让已入册的版本对不上自己的指纹，所以只在存量
-// 为零时加维、加在末尾、不换序——程序追在依据之后（票 sa-cc/22 裁决 2，存量由 0022 的守卫保证为零），资金版本
-// 追在程序之后（票 sa-cc/19 裁决 3，存量由 0023 的守卫保证为零），后继再加维度接着往后追。两维进指纹而不进键
-// （裁决「折进指纹、不加主键列」）：同三轴同依据但按不同程序的规则判付款人维、或比的是事实的另一版，都是另一份
-// 判断，各成一行；存着这份键形的几处（0016 主键、0019 门禁读数、SA 采用表、信封）因此一字不动。
-func verificationDigest(command VerifyDutyPaymentCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		strconv.Itoa(int(command.Coverage)),
-		strconv.Itoa(int(command.Delta)),
-		strconv.Itoa(int(command.Validity)),
-		strings.TrimSpace(command.Basis),
-		strings.TrimSpace(command.Procedure.String()),
-		strings.TrimSpace(command.FundsVersion.String()),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
 }

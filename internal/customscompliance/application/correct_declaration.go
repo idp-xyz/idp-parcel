@@ -111,12 +111,10 @@ func (handler *CorrectDeclarationHandler) Handle(
 		return SubmitDeclarationResult{outcome: DeclarationPriorMissing}, nil
 	}
 
-	digest := declarationDigest(SubmitDeclarationCommand{
-		Procedure: command.Procedure,
-		Members:   command.Members,
-		Dossier:   command.Dossier,
-		Roles:     command.Roles,
-	})
+	_, digest, err := domain.CanonicalizeDeclarationPayload(command.Procedure, command.Dossier, command.Roles, command.Members)
+	if err != nil {
+		return SubmitDeclarationResult{}, err
+	}
 	if current.ContentDigest == digest {
 		// 与当前版同内容：重放返原版本，不重复形成，也不消耗版本标识。
 		return handler.replayExisting(ctx, command, unit, current)
