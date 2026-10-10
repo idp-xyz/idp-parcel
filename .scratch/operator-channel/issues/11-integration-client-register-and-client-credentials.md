@@ -1,7 +1,7 @@
 # 11 集成客户端册与客户端凭据校验：外部结果与资金事实的信任入口
 
 Category: enhancement
-Status: 完工，待评审与重放——2026-10-10 通道 4 交卷（接手 task-201a7d4a；代码 tip `a259ffde`）。此前 in-progress——2026-10-09 通道 4 认领（通道 1 派单 task-9c89948b），隔离 worktree `idp-parcel-mcp4-oc11`、分支 `mcp4-oc11`（基 `187dccd2`）。此前 ready-for-agent——2026-09-24 随 ADR-0149 立（用户授权通道 4 自决）
+Status: resolved——2026-10-10 通道 1 重放进 main（`27e82ebf`…`3a995d8e`，清点 `c5f2c485`，集成修复 `7b4f210f`）；完成记录、评审与进 main 记录见文末。此前：完工，待评审与重放——2026-10-10 通道 4 交卷（接手 task-201a7d4a；代码 tip `a259ffde`）。此前 in-progress——2026-10-09 通道 4 认领（通道 1 派单 task-9c89948b），隔离 worktree `idp-parcel-mcp4-oc11`、分支 `mcp4-oc11`（基 `187dccd2`）。此前 ready-for-agent——2026-09-24 随 ADR-0149 立（用户授权通道 4 自决）
 Blocked by: 02
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 丙轨实施
 地盘：`internal/accessidentity`（集成客户端册、客户端凭据令牌校验、集成客户端信封）与其迁移、受控登记 CLI、参数登记册增「集成客户端与凭据」一行。
@@ -54,3 +54,12 @@ Blocked by: 02
 非阻断：无。
 
 无发现：完成判据各格有测试。`a259ffde` 眼见：`isolatedWriteAdmittedCommandLines` 已撤下 `/customs/external-results`、`/customs-regulatory-credential-registrations`、`/settlement-external-funds-fact-registrations`。这三口与更正口都接 `integrationClients`，写开关换不了。更正与首登都走 `AuthenticateExternalFunds`，请求的 `FactType` 是 `FactExternalFunds`。`TestExternalFundsClientWithoutTheGrantIsNotGranted` 用关务外部结果授予打这只认证，答未授予。装配测试里持有资金授予的四口都落到准入未登，而不是未授予。
+
+### 进 main 记录（推送方 · 通道 1）
+
+- **门**：评审 ← 通道 2（非作者）钉 `3de118e7` 两轴无阻断，合 parallel-sessions「推送方只在评审为无阻断时重放」。评审笔 `f6aa6c86` 只在 `origin/mcp4-oc11` 上，本地 `mcp4-oc11` 落后它一笔。
+- **重放**：在 main `5ce9eca5` 之上 cherry-pick 此前通道 1 会话在 `f8177a9d` 上做好、未推的重放 `mcp1-replay-oc11`（`f8177a9d..7d76aeb6`），无冲突。那次重放与作者终版 `f6aa6c86` 在本票文件上只差 `cmd/parcel-api` 下四份共享接线文件，差的恰是 main 在 `187dccd2..f8177a9d` 间对这四份的改动（逐份比加减行）；`f8177a9d..5ce9eca5` 与本票没有重叠文件。新旧 SHA 对照（分支 → main）：`f70a643a`→`27e82ebf`（认领）、`3d3e7442`→`6e535aaf`、`6c15a27a`→`0bff6dad`、`87a14270`→`ba5ff9c9`、`b6825dc2`→`bb9a9300`（封存）、`a259ffde`→`187364ff`、`3de118e7`→`8a720faf`（完工）、`f6aa6c86`→`3a995d8e`（评审）。批 tip 干净检出重生成清点为 `c5f2c485`。
+- **集成修复（推送方补，不属作者笔）**：`7b4f210f`。price-card-import/03 在本票开发期间进 main，新加的 `assemble_pricing_import_test.go` 按旧签名调用 `assembleUnwiredBusinessEndpointsWithOperatorIntakes`，重放后 `go vet ./...` 在这一处编不过（`go build` 不编测试，看不见）。照本票自己改 `assemble_operator_decisions_test.go` 兄弟调用点的写法，第三个实参给 `unconfiguredIntegrationClientIntakes()`。按 parallel-sessions 本该退回作者重验；用户 13:4x 令通道 1 独立完成后续、不再派单，故由推送方补并在此记明，作者可事后复核。
+- **验证**：钉 `7b4f210f`：全仓 build / vet 退 0，改动 `.go` 的 gofmt 无输出，清点生成器重跑无漂移；先单跑真库用例 `TestFreezeScopesAreInvisibleToEachOther` 是 PASS 非 SKIP；带 DSN（55432）`go test -p 1 -count=1 ./...` 137 包 ok、0 FAIL（另 14 包无测试文件）。
+- **推送**：推前 `ls-remote` 远端 main 仍是 `5ce9eca5`，`5ce9eca5..7b4f210f` 只有本票重放八笔、清点一笔与集成修复一笔；`git push origin 7b4f210f:main`，CI run `38028527515` success。本记录随后单独一笔。
+- **推送后才注意到的一格，评审未提**：本票给 `/customs-regulatory-credential-registrations`（`NewRegisterRegulatoryCredentialEndpoint`）开了集成客户端真渠道，而该口不在 [13](./13-command-payload-canonicalization-per-face.md) 分支 `mcp3-oc13` 的 CCC-1 定形清单里、列在它的「未定形状」一节；[ADR-0149](../../../docs/adr/0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md) 决定四写「未定形状的口不开真渠道」。补形状还是关真渠道，待定。
