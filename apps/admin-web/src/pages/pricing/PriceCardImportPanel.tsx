@@ -16,6 +16,7 @@ import {
   type PriceCardProblem,
 } from './api';
 import {
+  draftSubmittable,
   priceCardDraftOutcomeLabels,
   priceCardDraftStatusLabels,
   priceCardPreviewOutcomeLabels,
@@ -92,7 +93,7 @@ export function PriceCardImportPanel() {
             <Button onClick={() => void previewFile()} disabled={!file || phase !== 'idle'}>
               {phase === 'previewing' ? '校验中…' : '校验并预览'}
             </Button>
-            <Button onClick={() => void saveDraft()} disabled={!file || phase !== 'idle' || preview === null}>
+            <Button onClick={() => void saveDraft()} disabled={!file || phase !== 'idle' || !draftSubmittable(preview)}>
               {phase === 'saving' ? '保存中…' : '存为草稿'}
             </Button>
           </div>

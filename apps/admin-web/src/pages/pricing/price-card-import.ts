@@ -1,6 +1,7 @@
 // 价卡导入签的词表与排法（票 price-card-import/05）。词取传输层 outcome 与草稿状态原名，
 // 不自造译法；逐格问题按表、行、列排，才能对回模板里的那一格。
 
+import type { ApiResult } from '../catalogue-api';
 import type { PriceCardProblem } from './api';
 
 export const priceCardPreviewOutcomeLabels: Record<string, string> = {
@@ -23,6 +24,14 @@ export const priceCardDraftStatusLabels: Record<string, string> = {
   APPROVED: '已批准',
   PUBLISHED: '已发布',
 };
+
+/**
+ * 存草稿要先看过这一份文件的读法。未配置、传输失败、未形成答复都没让人看到读法，按「看过预览」
+ * 放行就等于把一份没人读过的文件存进草稿册。
+ */
+export function draftSubmittable(preview: ApiResult<unknown> | null): boolean {
+  return preview?.kind === 'outcome';
+}
 
 /** 按表、行、列排。同一格多条问题保持原顺序，方便对回模板里的那一格。 */
 export function sortPriceCardProblems(problems: readonly PriceCardProblem[]): PriceCardProblem[] {

@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
 import { priceCardUploadField, priceCardUploadForm } from './api';
-import { sortPriceCardProblems } from './price-card-import';
+import { draftSubmittable, sortPriceCardProblems } from './price-card-import';
 import type { PriceCardProblem } from './api';
 
 function problem(over: Partial<PriceCardProblem>): PriceCardProblem {
@@ -27,6 +27,14 @@ test('上传表单只有一个 file 格，文件名原样带上', () => {
   const file = form.get(priceCardUploadField);
   okFile(file);
   equal(file.name, 'card.xlsx');
+});
+
+test('存草稿只在这一份文件的预览形成答案之后才开，未配置与传输失败不算看过预览', () => {
+  equal(draftSubmittable(null), false);
+  equal(draftSubmittable({ kind: 'unconfigured' }), false);
+  equal(draftSubmittable({ kind: 'transport', message: '请求未到达' }), false);
+  equal(draftSubmittable({ kind: 'noAnswer', status: 503, code: 'STORE_UNAVAILABLE' }), false);
+  equal(draftSubmittable({ kind: 'outcome', status: 200, body: { outcome: 'HAS_PROBLEMS' } }), true);
 });
 
 function okFile(value: FormDataEntryValue | null): asserts value is File {
