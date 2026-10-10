@@ -17,10 +17,26 @@ import (
 	"go.idp.xyz/idp-parcel/internal/networkrouting/application"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
+	"go.idp.xyz/idp-parcel/referenceconfig"
 )
 
 // ErrSelfReportedTenant 表示在线口的批文里带了 tenant_id：租户只从认证结果来。
 var ErrSelfReportedTenant = errors.New("network registration: online input must not carry tenant_id; the tenant comes from the operator envelope")
+
+// ErrCitationOutsideAdoption 表示一行直接登记把参考配置的引用串写进了依据格。引用串只由采用路径写（ADR-0147
+// 决定四）：直接行的内容是登记方自己给的，写上引用串就是在声称一次没发生过的采用。
+var ErrCitationOutsideAdoption = errors.New("network registration: only adoption writes a reference configuration citation into the basis")
+
+// basisFrom 译直接登记行上的可选依据格。缺席即没给依据；给了就过领域构造门，空白串是写坏了不是没给。
+func basisFrom(raw *string) (domain.CatalogBasisReference, error) {
+	if raw == nil {
+		return domain.CatalogBasisReference{}, nil
+	}
+	if _, claimed, _ := referenceconfig.OpenCitation(*raw); claimed {
+		return domain.CatalogBasisReference{}, fmt.Errorf("%w: %q", ErrCitationOutsideAdoption, *raw)
+	}
+	return domain.NewCatalogBasisReference(*raw)
+}
 
 // tenantOf 决定一份批文的租户取自哪（两侧的差别只在这一格，理由见包注）。
 type tenantOf func(documentTenant string) (domain.TenantID, error)
@@ -67,6 +83,10 @@ func nodeVersionFromJSON(raw []byte, tenantSource tenantOf) (application.Registe
 	if err != nil {
 		return application.RegisterNodeVersionCommand{}, err
 	}
+	basis, err := basisFrom(payload.Basis)
+	if err != nil {
+		return application.RegisterNodeVersionCommand{}, err
+	}
 	return application.RegisterNodeVersionCommand{
 		TenantID: tenant,
 		Node: ports.NodeDefinitionVersion{
@@ -76,6 +96,7 @@ func nodeVersionFromJSON(raw []byte, tenantSource tenantOf) (application.Registe
 			EffectiveFrom:    payload.EffectiveFrom,
 			EffectiveTo:      timeOf(payload.EffectiveTo),
 			HasEffectiveTo:   payload.EffectiveTo != nil,
+			Basis:            basis,
 		},
 	}, nil
 }
@@ -102,6 +123,10 @@ func connectionVersionFromJSON(raw []byte, tenantSource tenantOf) (application.R
 	if err != nil {
 		return application.RegisterConnectionVersionCommand{}, err
 	}
+	basis, err := basisFrom(payload.Basis)
+	if err != nil {
+		return application.RegisterConnectionVersionCommand{}, err
+	}
 	return application.RegisterConnectionVersionCommand{
 		TenantID: tenant,
 		Connection: ports.ConnectionDefinitionVersion{
@@ -113,6 +138,7 @@ func connectionVersionFromJSON(raw []byte, tenantSource tenantOf) (application.R
 			EffectiveFrom:    payload.EffectiveFrom,
 			EffectiveTo:      timeOf(payload.EffectiveTo),
 			HasEffectiveTo:   payload.EffectiveTo != nil,
+			Basis:            basis,
 		},
 	}, nil
 }
@@ -139,6 +165,14 @@ func lineVersionFromJSON(raw []byte, tenantSource tenantOf) (application.Registe
 	if err != nil {
 		return application.RegisterLineVersionCommand{}, err
 	}
+	basis, err := basisFrom(payload.Basis)
+	if err != nil {
+		return application.RegisterLineVersionCommand{}, err
+	}
+	costBases, err := costBasesFrom(payload.CostBases)
+	if err != nil {
+		return application.RegisterLineVersionCommand{}, err
+	}
 	return application.RegisterLineVersionCommand{
 		TenantID: tenant,
 		Line: ports.LineDefinitionVersion{
@@ -150,8 +184,28 @@ func lineVersionFromJSON(raw []byte, tenantSource tenantOf) (application.Registe
 			EffectiveFrom:    payload.EffectiveFrom,
 			EffectiveTo:      timeOf(payload.EffectiveTo),
 			HasEffectiveTo:   payload.EffectiveTo != nil,
+			Basis:            basis,
 		},
+		CostBases: costBases,
 	}, nil
+}
+
+// costBasesFrom 逐行译线路的成本依据：种类按封闭两类译，集外的词在入库前拒；段号与引用的形状由登记用例的受理门核。
+func costBasesFrom(payloads []costBasisPayload) ([]ports.LineSegmentCostBasis, error) {
+	if len(payloads) == 0 {
+		return nil, nil
+	}
+	bases := make([]ports.LineSegmentCostBasis, 0, len(payloads))
+	for _, payload := range payloads {
+		kind, err := ports.LineCostBasisKindFrom(payload.Kind)
+		if err != nil {
+			return nil, err
+		}
+		bases = append(bases, ports.LineSegmentCostBasis{
+			SegmentIndex: payload.SegmentIndex, Kind: kind, Reference: payload.Reference,
+		})
+	}
+	return bases, nil
 }
 
 // ServiceAreaVersionFromJSON 是受控批量口那一路。
@@ -176,12 +230,17 @@ func serviceAreaVersionFromJSON(raw []byte, tenantSource tenantOf) (application.
 	if err != nil {
 		return application.RegisterServiceAreaVersionCommand{}, err
 	}
+	basis, err := basisFrom(payload.Basis)
+	if err != nil {
+		return application.RegisterServiceAreaVersionCommand{}, err
+	}
 	area := ports.ServiceAreaDefinitionVersion{
 		Code:           payload.Code,
 		Version:        payload.Version,
 		EffectiveFrom:  payload.EffectiveFrom,
 		EffectiveTo:    timeOf(payload.EffectiveTo),
 		HasEffectiveTo: payload.EffectiveTo != nil,
+		Basis:          basis,
 	}
 	if coverage := payload.Coverage; coverage != nil {
 		area.HasCoverage = true
@@ -219,15 +278,23 @@ func serviceCalendarVersionFromJSON(raw []byte, tenantSource tenantOf) (applicat
 	if err != nil {
 		return application.RegisterServiceCalendarVersionCommand{}, err
 	}
+	basis, err := basisFrom(payload.Basis)
+	if err != nil {
+		return application.RegisterServiceCalendarVersionCommand{}, err
+	}
 	return application.RegisterServiceCalendarVersionCommand{
 		TenantID: tenant,
 		Calendar: ports.ServiceCalendarDefinitionVersion{
-			TargetKind:     targetKind,
-			TargetCode:     payload.TargetCode,
-			Version:        payload.Version,
-			EffectiveFrom:  payload.EffectiveFrom,
-			EffectiveTo:    timeOf(payload.EffectiveTo),
-			HasEffectiveTo: payload.EffectiveTo != nil,
+			TargetKind:        targetKind,
+			TargetCode:        payload.TargetCode,
+			Version:           payload.Version,
+			EffectiveFrom:     payload.EffectiveFrom,
+			EffectiveTo:       timeOf(payload.EffectiveTo),
+			HasEffectiveTo:    payload.EffectiveTo != nil,
+			CutoffLocalMinute: payload.CutoffLocalMinute,
+			ProcessingMinutes: payload.ProcessingMinutes,
+			BufferMinutes:     payload.BufferMinutes,
+			Basis:             basis,
 		},
 	}, nil
 }
@@ -334,6 +401,10 @@ func routeStrategyVersionFromJSON(raw []byte, tenantSource tenantOf) (applicatio
 		}
 		autoThreshold = payload.AutoRerouteImprovementThresholdMinor
 	}
+	basis, err := basisFrom(payload.Basis)
+	if err != nil {
+		return application.RegisterRouteStrategyVersionCommand{}, err
+	}
 	return application.RegisterRouteStrategyVersionCommand{
 		TenantID: tenant,
 		Strategy: ports.RouteStrategyDefinitionVersion{
@@ -348,6 +419,7 @@ func routeStrategyVersionFromJSON(raw []byte, tenantSource tenantOf) (applicatio
 			EffectiveFrom:                        payload.EffectiveFrom,
 			EffectiveTo:                          timeOf(payload.EffectiveTo),
 			HasEffectiveTo:                       payload.EffectiveTo != nil,
+			Basis:                                basis,
 		},
 	}, nil
 }
@@ -368,6 +440,7 @@ func timeOf(value *time.Time) time.Time {
 }
 
 // 七族登记行的 JSON 形状。可选终点用指针表达「不在场」——零时刻是合法的绝对时刻，不能兼作「没有终点」。
+// 稳定定义各族另有一格可选的 basis：这一版的登记依据，缺席即没给（译法见 basisFrom）。
 
 type nodePayload struct {
 	TenantID         string     `json:"tenant_id"`
@@ -376,6 +449,7 @@ type nodePayload struct {
 	BusinessTimezone string     `json:"business_timezone"`
 	EffectiveFrom    time.Time  `json:"effective_from"`
 	EffectiveTo      *time.Time `json:"effective_to"`
+	Basis            *string    `json:"basis"`
 }
 
 type connectionPayload struct {
@@ -387,6 +461,7 @@ type connectionPayload struct {
 	BusinessTimezone string     `json:"business_timezone"`
 	EffectiveFrom    time.Time  `json:"effective_from"`
 	EffectiveTo      *time.Time `json:"effective_to"`
+	Basis            *string    `json:"basis"`
 }
 
 type linePayload struct {
@@ -398,6 +473,15 @@ type linePayload struct {
 	ApplicableScope  string     `json:"applicable_scope"`
 	EffectiveFrom    time.Time  `json:"effective_from"`
 	EffectiveTo      *time.Time `json:"effective_to"`
+	Basis            *string    `json:"basis"`
+	// CostBases 缺席即这一版不挂成本依据；段号对 segments 数组下标。
+	CostBases []costBasisPayload `json:"cost_bases"`
+}
+
+type costBasisPayload struct {
+	SegmentIndex int    `json:"segment_index"`
+	Kind         string `json:"kind"`
+	Reference    string `json:"reference"`
 }
 
 type areaPayload struct {
@@ -406,6 +490,7 @@ type areaPayload struct {
 	Version       int32      `json:"version"`
 	EffectiveFrom time.Time  `json:"effective_from"`
 	EffectiveTo   *time.Time `json:"effective_to"`
+	Basis         *string    `json:"basis"`
 	// Coverage 缺席即这版没登覆盖；给了就由受理门按覆盖文法与节点角色逐格核。
 	Coverage *areaCoveragePayload `json:"coverage"`
 }
@@ -424,6 +509,11 @@ type calendarPayload struct {
 	Version       int32      `json:"version"`
 	EffectiveFrom time.Time  `json:"effective_from"`
 	EffectiveTo   *time.Time `json:"effective_to"`
+	Basis         *string    `json:"basis"`
+	// 三格内容（ADR-0175 决定一）各自可缺：缺席是没登这一格，写 0 才是零分钟。
+	CutoffLocalMinute *int `json:"cutoff_local_minute"`
+	ProcessingMinutes *int `json:"processing_minutes"`
+	BufferMinutes     *int `json:"buffer_minutes"`
 }
 
 type adjustmentPayload struct {
@@ -445,6 +535,7 @@ type strategyPayload struct {
 	ApplicableScope string     `json:"applicable_scope"`
 	EffectiveFrom   time.Time  `json:"effective_from"`
 	EffectiveTo     *time.Time `json:"effective_to"`
+	Basis           *string    `json:"basis"`
 	// RankingForm 缺席即这一版没有声明排序形态；给了就必须是族内的词，空词同样拒。
 	RankingForm *string `json:"ranking_form"`
 	// FreezeForm 与 FreezeRemainingSegments 同缺即未声明；只给一半拒。

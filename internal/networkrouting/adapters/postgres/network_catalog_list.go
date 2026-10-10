@@ -132,7 +132,7 @@ var byEffectiveFrom = keyColumn{"effective_from", cataloguepage.Instant}
 var nodeFamily = catalogFamily[ports.NodeDefinitionVersion]{
 	operation: "list node versions",
 	table:     "network_routing.logistics_node_version",
-	selection: "node_code, version, business_timezone, effective_from, effective_to",
+	selection: "node_code, version, business_timezone, effective_from, effective_to, basis_ref",
 	sorts: map[string]keyColumn{
 		"code":          {"node_code", cataloguepage.Text},
 		"effectiveFrom": byEffectiveFrom,
@@ -143,12 +143,15 @@ var nodeFamily = catalogFamily[ports.NodeDefinitionVersion]{
 	scan: func(rows pgx.Rows) (ports.NodeDefinitionVersion, error) {
 		var row ports.NodeDefinitionVersion
 		var effectiveTo *time.Time
+		var basis *string
 		if err := rows.Scan(&row.Code, &row.Version, &row.BusinessTimezone,
-			&row.EffectiveFrom, &effectiveTo); err != nil {
+			&row.EffectiveFrom, &effectiveTo, &basis); err != nil {
 			return row, err
 		}
 		row.EffectiveTo, row.HasEffectiveTo = timeOf(effectiveTo), effectiveTo != nil
-		return row, nil
+		var err error
+		row.Basis, err = basisOf(basis)
+		return row, err
 	},
 	sortValues: func(row ports.NodeDefinitionVersion) map[string]string {
 		return map[string]string{"code": row.Code, "effectiveFrom": cataloguepage.FormatInstant(row.EffectiveFrom)}
@@ -159,7 +162,7 @@ var nodeFamily = catalogFamily[ports.NodeDefinitionVersion]{
 var connectionFamily = catalogFamily[ports.ConnectionDefinitionVersion]{
 	operation: "list connection versions",
 	table:     "network_routing.network_connection_version",
-	selection: "connection_code, version, from_node_code, to_node_code, business_timezone, effective_from, effective_to",
+	selection: "connection_code, version, from_node_code, to_node_code, business_timezone, effective_from, effective_to, basis_ref",
 	sorts: map[string]keyColumn{
 		"code":          {"connection_code", cataloguepage.Text},
 		"fromNode":      {"from_node_code", cataloguepage.Text},
@@ -172,12 +175,15 @@ var connectionFamily = catalogFamily[ports.ConnectionDefinitionVersion]{
 	scan: func(rows pgx.Rows) (ports.ConnectionDefinitionVersion, error) {
 		var row ports.ConnectionDefinitionVersion
 		var effectiveTo *time.Time
+		var basis *string
 		if err := rows.Scan(&row.Code, &row.Version, &row.FromNode, &row.ToNode,
-			&row.BusinessTimezone, &row.EffectiveFrom, &effectiveTo); err != nil {
+			&row.BusinessTimezone, &row.EffectiveFrom, &effectiveTo, &basis); err != nil {
 			return row, err
 		}
 		row.EffectiveTo, row.HasEffectiveTo = timeOf(effectiveTo), effectiveTo != nil
-		return row, nil
+		var err error
+		row.Basis, err = basisOf(basis)
+		return row, err
 	},
 	sortValues: func(row ports.ConnectionDefinitionVersion) map[string]string {
 		return map[string]string{
@@ -191,7 +197,7 @@ var connectionFamily = catalogFamily[ports.ConnectionDefinitionVersion]{
 var lineFamily = catalogFamily[ports.LineDefinitionVersion]{
 	operation: "list line versions",
 	table:     "network_routing.line_version",
-	selection: "line_code, version, segments, business_timezone, applicable_scope, effective_from, effective_to",
+	selection: "line_code, version, segments, business_timezone, applicable_scope, effective_from, effective_to, basis_ref",
 	sorts: map[string]keyColumn{
 		"code":          {"line_code", cataloguepage.Text},
 		"effectiveFrom": byEffectiveFrom,
@@ -203,15 +209,18 @@ var lineFamily = catalogFamily[ports.LineDefinitionVersion]{
 		var row ports.LineDefinitionVersion
 		var segmentsRaw []byte
 		var effectiveTo *time.Time
+		var basis *string
 		if err := rows.Scan(&row.Code, &row.Version, &segmentsRaw, &row.BusinessTimezone,
-			&row.ApplicableScope, &row.EffectiveFrom, &effectiveTo); err != nil {
+			&row.ApplicableScope, &row.EffectiveFrom, &effectiveTo, &basis); err != nil {
 			return row, err
 		}
 		if err := json.Unmarshal(segmentsRaw, &row.Segments); err != nil {
 			return row, fmt.Errorf("译回段链：%w", err)
 		}
 		row.EffectiveTo, row.HasEffectiveTo = timeOf(effectiveTo), effectiveTo != nil
-		return row, nil
+		var err error
+		row.Basis, err = basisOf(basis)
+		return row, err
 	},
 	sortValues: func(row ports.LineDefinitionVersion) map[string]string {
 		return map[string]string{"code": row.Code, "effectiveFrom": cataloguepage.FormatInstant(row.EffectiveFrom)}
@@ -223,7 +232,7 @@ var serviceAreaFamily = catalogFamily[ports.ServiceAreaDefinitionVersion]{
 	operation: "list service area versions",
 	table:     "network_routing.service_area_version",
 	selection: "area_code, version, effective_from, effective_to, " +
-		"coverage_country, coverage_postal_prefixes, origin_node_codes, destination_node_codes",
+		"coverage_country, coverage_postal_prefixes, origin_node_codes, destination_node_codes, basis_ref",
 	sorts: map[string]keyColumn{
 		"code":          {"area_code", cataloguepage.Text},
 		"effectiveFrom": byEffectiveFrom,
@@ -234,8 +243,9 @@ var serviceAreaFamily = catalogFamily[ports.ServiceAreaDefinitionVersion]{
 	scan: func(rows pgx.Rows) (ports.ServiceAreaDefinitionVersion, error) {
 		var row areaVersionRow
 		var prefixes, origin, destination []byte
+		var basis *string
 		if err := rows.Scan(&row.Code, &row.Version, &row.EffectiveFrom, &row.EffectiveTo,
-			&row.CoverageCountry, &prefixes, &origin, &destination); err != nil {
+			&row.CoverageCountry, &prefixes, &origin, &destination, &basis); err != nil {
 			return ports.ServiceAreaDefinitionVersion{}, err
 		}
 		for _, column := range []struct {
@@ -249,7 +259,10 @@ var serviceAreaFamily = catalogFamily[ports.ServiceAreaDefinitionVersion]{
 				return ports.ServiceAreaDefinitionVersion{}, fmt.Errorf("译回服务区域覆盖：%w", err)
 			}
 		}
-		return row.definition(), nil
+		definition := row.definition()
+		var err error
+		definition.Basis, err = basisOf(basis)
+		return definition, err
 	},
 	sortValues: func(row ports.ServiceAreaDefinitionVersion) map[string]string {
 		return map[string]string{"code": row.Code, "effectiveFrom": cataloguepage.FormatInstant(row.EffectiveFrom)}
@@ -260,7 +273,7 @@ var serviceAreaFamily = catalogFamily[ports.ServiceAreaDefinitionVersion]{
 var serviceCalendarFamily = catalogFamily[ports.ServiceCalendarDefinitionVersion]{
 	operation: "list service calendar versions",
 	table:     "network_routing.service_calendar_version",
-	selection: "target_kind, target_code, version, effective_from, effective_to",
+	selection: "target_kind, target_code, version, effective_from, effective_to, basis_ref",
 	sorts: map[string]keyColumn{
 		"targetKind":    {"target_kind", cataloguepage.Text},
 		"targetCode":    {"target_code", cataloguepage.Text},
@@ -275,8 +288,9 @@ var serviceCalendarFamily = catalogFamily[ports.ServiceCalendarDefinitionVersion
 		var row ports.ServiceCalendarDefinitionVersion
 		var kindRaw string
 		var effectiveTo *time.Time
+		var basis *string
 		if err := rows.Scan(&kindRaw, &row.TargetCode, &row.Version,
-			&row.EffectiveFrom, &effectiveTo); err != nil {
+			&row.EffectiveFrom, &effectiveTo, &basis); err != nil {
 			return row, err
 		}
 		kind, err := ports.CatalogTargetKindFrom(kindRaw)
@@ -285,7 +299,8 @@ var serviceCalendarFamily = catalogFamily[ports.ServiceCalendarDefinitionVersion
 		}
 		row.TargetKind = kind
 		row.EffectiveTo, row.HasEffectiveTo = timeOf(effectiveTo), effectiveTo != nil
-		return row, nil
+		row.Basis, err = basisOf(basis)
+		return row, err
 	},
 	sortValues: func(row ports.ServiceCalendarDefinitionVersion) map[string]string {
 		return map[string]string{
@@ -344,7 +359,7 @@ var adjustmentFamily = catalogFamily[ports.AvailabilityAdjustmentStatement]{
 var routeStrategyFamily = catalogFamily[ports.RouteStrategyDefinitionVersion]{
 	operation: "list route strategy versions",
 	table:     "network_routing.route_strategy_version",
-	selection: "strategy_code, version, applicable_scope, effective_from, effective_to, ranking_form, auto_reroute_form, auto_reroute_improvement_threshold_minor",
+	selection: "strategy_code, version, applicable_scope, effective_from, effective_to, ranking_form, auto_reroute_form, auto_reroute_improvement_threshold_minor, basis_ref",
 	sorts: map[string]keyColumn{
 		"code":          {"strategy_code", cataloguepage.Text},
 		"effectiveFrom": byEffectiveFrom,
@@ -358,8 +373,9 @@ var routeStrategyFamily = catalogFamily[ports.RouteStrategyDefinitionVersion]{
 		var form *string
 		var autoForm *string
 		var autoThreshold *int
+		var basis *string
 		if err := rows.Scan(&row.Code, &row.Version, &row.ApplicableScope,
-			&row.EffectiveFrom, &effectiveTo, &form, &autoForm, &autoThreshold); err != nil {
+			&row.EffectiveFrom, &effectiveTo, &form, &autoForm, &autoThreshold, &basis); err != nil {
 			return row, err
 		}
 		row.EffectiveTo, row.HasEffectiveTo = timeOf(effectiveTo), effectiveTo != nil
@@ -369,6 +385,10 @@ var routeStrategyFamily = catalogFamily[ports.RouteStrategyDefinitionVersion]{
 			return row, err
 		}
 		row.AutoRerouteForm, row.AutoRerouteImprovementThresholdMinor, err = autoRerouteOf(autoForm, autoThreshold)
+		if err != nil {
+			return row, err
+		}
+		row.Basis, err = basisOf(basis)
 		return row, err
 	},
 	sortValues: func(row ports.RouteStrategyDefinitionVersion) map[string]string {

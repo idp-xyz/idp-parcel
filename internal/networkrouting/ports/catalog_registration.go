@@ -101,6 +101,10 @@ func AvailabilityAdjustmentKindFrom(raw string) (AvailabilityAdjustmentKind, err
 //
 // HasEffectiveTo 为假即未闭区间（当前版本）。用显式布尔而不是零值判断：零时刻是一个
 // 合法的绝对时刻，拿它兼作「没有终点」会让补历史的区间登不进来。
+//
+// 稳定定义各族（临时调整族除外，它只记来源）的版本行各带一格 Basis：这一版的登记依据
+// （domain.CatalogBasisReference）。选版读口 LoadDefinitionsAt 不取它——折叠证据用不到依据，读它的是
+// 运营查阅上列。
 type NodeDefinitionVersion struct {
 	Code             string
 	Version          int32
@@ -108,6 +112,7 @@ type NodeDefinitionVersion struct {
 	EffectiveFrom    time.Time
 	EffectiveTo      time.Time
 	HasEffectiveTo   bool
+	Basis            domain.CatalogBasisReference
 }
 
 // ConnectionDefinitionVersion 是一条有向网络连接的适用版本行。
@@ -120,9 +125,11 @@ type ConnectionDefinitionVersion struct {
 	EffectiveFrom    time.Time
 	EffectiveTo      time.Time
 	HasEffectiveTo   bool
+	Basis            domain.CatalogBasisReference
 }
 
-// LineDefinitionVersion 是一条线路的适用版本行；Segments 是连接身份的有序数组。
+// LineDefinitionVersion 是一条线路的适用版本行；Segments 是连接身份的有序数组。逐段成本依据是另一张表上
+// 的行，随登记命令到达（RegisterLineVersionCommand.CostBases），不在本行类型里。
 type LineDefinitionVersion struct {
 	Code             string
 	Version          int32
@@ -132,6 +139,7 @@ type LineDefinitionVersion struct {
 	EffectiveFrom    time.Time
 	EffectiveTo      time.Time
 	HasEffectiveTo   bool
+	Basis            domain.CatalogBasisReference
 }
 
 // ServiceAreaDefinitionVersion 是一个服务区域的适用版本行：版本、有效区间与覆盖。覆盖文法首版两种形态
@@ -150,6 +158,7 @@ type ServiceAreaDefinitionVersion struct {
 	PostalPrefixes   []string
 	OriginNodes      []string
 	DestinationNodes []string
+	Basis            domain.CatalogBasisReference
 }
 
 // ServiceCalendarDefinitionVersion 是某适用对象的服务日历适用版本行。
@@ -164,6 +173,7 @@ type ServiceCalendarDefinitionVersion struct {
 	CutoffLocalMinute *int
 	ProcessingMinutes *int
 	BufferMinutes     *int
+	Basis             domain.CatalogBasisReference
 }
 
 // AvailabilityAdjustmentStatement 是一条临时调整陈述——历史链上的一个版本行
@@ -204,6 +214,7 @@ type RouteStrategyDefinitionVersion struct {
 	EffectiveFrom            time.Time
 	EffectiveTo              time.Time
 	HasEffectiveTo           bool
+	Basis                    domain.CatalogBasisReference
 }
 
 // LineCostBasisKind 是线路段成本依据的封闭两类（票 routing-first-cut/10，ADR-0148 决定四）：

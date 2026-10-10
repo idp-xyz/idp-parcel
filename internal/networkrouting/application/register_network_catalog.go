@@ -87,6 +87,12 @@ const (
 	CatalogNodeRoleBlank
 	CatalogNodeRoleDuplicated
 	CatalogNodeRolesWithoutCoverage
+	// CatalogCalendarContentOutOfRange 是日历三格越出迁移 0015 的 CHECK：截单不在本地当日分钟内，或处理时长、
+	// 衔接缓冲为负。要改的是那个数。
+	CatalogCalendarContentOutOfRange
+	// CatalogCostBasisMalformed 是线路的逐段成本依据不成形：段号不在段链内、同一段登两条、种类不在封闭两类，
+	// 或引用空白。要改的是依据那一行，版本行本身没毛病。
+	CatalogCostBasisMalformed
 )
 
 func (reason CatalogRefusalReason) String() string {
@@ -129,6 +135,10 @@ func (reason CatalogRefusalReason) String() string {
 		return "NODE_ROLE_DUPLICATED"
 	case CatalogNodeRolesWithoutCoverage:
 		return "NODE_ROLES_WITHOUT_COVERAGE"
+	case CatalogCalendarContentOutOfRange:
+		return "CALENDAR_CONTENT_OUT_OF_RANGE"
+	case CatalogCostBasisMalformed:
+		return "COST_BASIS_MALFORMED"
 	default:
 		return ""
 	}
@@ -169,9 +179,12 @@ type RegisterConnectionVersionCommand struct {
 	Connection ports.ConnectionDefinitionVersion
 }
 
+// RegisterLineVersionCommand 带一行线路版本与它的逐段成本依据。依据可缺、可只挂部分段：没挂依据的段在取数时
+// 如实答待判断（ADR-0148 决定四），登记口不补。
 type RegisterLineVersionCommand struct {
-	TenantID domain.TenantID
-	Line     ports.LineDefinitionVersion
+	TenantID  domain.TenantID
+	Line      ports.LineDefinitionVersion
+	CostBases []ports.LineSegmentCostBasis
 }
 
 type RegisterServiceAreaVersionCommand struct {
@@ -277,11 +290,39 @@ func (service *NetworkCatalogRegistration) RegisterLineVersion(
 	case !catalogPresent(row.ApplicableScope):
 		return catalogRefused(CatalogApplicableScopeMissing), nil
 	}
+	if !costBasesWellFormed(command.CostBases, len(row.Segments)) {
+		return catalogRefused(CatalogCostBasisMalformed), nil
+	}
 
 	if err := service.registry.RegisterLineVersion(ctx, command.TenantID, row); err != nil {
 		return RegisterCatalogResult{}, fmt.Errorf("register line version: %w", err)
 	}
+	// 依据行外键指向版本行，所以排在它后面；两者同在进程级入口给出的那个事务里。
+	if len(command.CostBases) > 0 {
+		if err := service.registry.RegisterLineCostBases(ctx, command.TenantID, row.Code, row.Version, command.CostBases); err != nil {
+			return RegisterCatalogResult{}, fmt.Errorf("register line cost bases: %w", err)
+		}
+	}
 	return catalogRegistered(), nil
+}
+
+// costBasesWellFormed 与迁移 0016 的 CHECK 与主键同格：段号对段链数组下标、一段至多一条依据、种类在封闭两类里、
+// 引用非空白。撞库上约束会把整个环境事务打进中止态，登记方只拿到一段约束名。
+func costBasesWellFormed(bases []ports.LineSegmentCostBasis, segments int) bool {
+	seen := make(map[int]struct{}, len(bases))
+	for _, basis := range bases {
+		if basis.SegmentIndex < 0 || basis.SegmentIndex >= segments {
+			return false
+		}
+		if _, duplicated := seen[basis.SegmentIndex]; duplicated {
+			return false
+		}
+		seen[basis.SegmentIndex] = struct{}{}
+		if basis.Kind.String() == "" || !catalogPresent(basis.Reference) {
+			return false
+		}
+	}
+	return true
 }
 
 func (service *NetworkCatalogRegistration) RegisterServiceAreaVersion(
@@ -315,6 +356,13 @@ func (service *NetworkCatalogRegistration) RegisterServiceCalendarVersion(
 	if reason := checkVersionRow(command.TenantID, row.TargetCode, row.Version,
 		row.EffectiveFrom, row.EffectiveTo, row.HasEffectiveTo); reason != CatalogRefusalReasonNone {
 		return catalogRefused(reason), nil
+	}
+	// 与迁移 0015 的 CHECK 同格。没登的格是 nil，不在这里补 0（ADR-0175 决定一）。
+	switch {
+	case row.CutoffLocalMinute != nil && (*row.CutoffLocalMinute < 0 || *row.CutoffLocalMinute > 1439),
+		row.ProcessingMinutes != nil && *row.ProcessingMinutes < 0,
+		row.BufferMinutes != nil && *row.BufferMinutes < 0:
+		return catalogRefused(CatalogCalendarContentOutOfRange), nil
 	}
 
 	if err := service.registry.RegisterServiceCalendarVersion(ctx, command.TenantID, row); err != nil {
