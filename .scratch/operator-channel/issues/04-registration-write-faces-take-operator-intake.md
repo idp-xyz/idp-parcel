@@ -1,7 +1,7 @@
 # 04 登记册配置写面逐口换操作者 Intake
 
 Category: enhancement
-Status: in-progress——2026-10-10 通道 2 认领「剩余工作」第 2 件（价卡登记口 `/pricing-price-card-registrations` 换操作者 Intake），分支 `mcp2-oc04-pcr`、基 `1d67e27c`。此前 in-progress——2026-10-10 通道 5 收口核查（钉 `a8cf12ff`）之后通道 1 裁定（用户授权自决）：价卡登记口归本票，身份族 6 口另等 07；剩余三件见文末「剩余工作」。此前 in-progress——2026-09-25 通道 4 认领（用户令独立完成操作者渠道这条链），逐上下文分批进 main：第一批可见性八口、第二批关务七口、第三批网络七口、第四批计价四口、第五批商业参与方六口、第六批 TF 五口已换（见文末）；不在隔离名单上的口只剩价卡登记（属 price-card-import）。此前 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
+Status: in-progress——2026-10-10 通道 2：第 2 件完工，待评审与重放（代码 tip `4b17d139`，完成记录在「剩余工作」第 2 件之下）；本票不收口，第 1 件还等 07。此前 in-progress——2026-10-10 通道 2 认领「剩余工作」第 2 件（价卡登记口 `/pricing-price-card-registrations` 换操作者 Intake），分支 `mcp2-oc04-pcr`、基 `1d67e27c`。此前 in-progress——2026-10-10 通道 5 收口核查（钉 `a8cf12ff`）之后通道 1 裁定（用户授权自决）：价卡登记口归本票，身份族 6 口另等 07；剩余三件见文末「剩余工作」。此前 in-progress——2026-09-25 通道 4 认领（用户令独立完成操作者渠道这条链），逐上下文分批进 main：第一批可见性八口、第二批关务七口、第三批网络七口、第四批计价四口、第五批商业参与方六口、第六批 TF 五口已换（见文末）；不在隔离名单上的口只剩价卡登记（属 price-card-import）。此前 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
 Blocked by: 03（已 resolved）；[07](./07-admin-web-login-gate.md)——只挡身份族 6 口：换口要同笔撤隔离放行（ADR-0150 决定三），前提与 [15](./15-operation-decision-faces-take-operator-intake.md) 余下四口是同一件，演示环境接上发行方与合成操作者授予（2026-10-10 通道 1 补）
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`cmd/parcel-api` 端点表里 ADR-0085 决定一那一族登记端点的装配行及其装配测试。
@@ -126,6 +126,60 @@ http 测试。逐条如下，交通道 1 定。取证全部实测于 `a8cf12ff`�
 1. **商业参与方身份族 6 口换操作者 Intake**，同笔撤下这几口的隔离放行（ADR-0150 决定三）——等 [07](./07-admin-web-login-gate.md)：演示环境接上发行方与合成操作者授予
    之前换口，演示动线与管理台这几页会当场断。
 2. **价卡登记口 `/pricing-price-card-registrations` 换操作者 Intake**，照第四批计价四口办——无阻塞，代码活，由通道 1 另派。
+
+   **完成记录 ← 通道 2 · 2026-10-10**（派单 `task-4a593223`；分支 `mcp2-oc04-pcr`，基 `1d67e27c`；证据层级 `S`：合成替身与 `SYN-` 夹具）
+
+   各笔：`f98f4acd` 票面认领；`4b17d139` 代码（领域重建门、Intake、端点表一行与测试）；本记录随其后一笔。机制清点在 `4b17d139` 的干净检出上重生成无差，
+   不另成笔。
+
+   做法照第四批计价四口：`pricinghttp.OperatorRegistryIntake` 加 `IntakePriceCardRegistration`，端点表这一口由字面量 `pricinghttp.UnconfiguredIntake{}`
+   换成 `operatorRegistries.pricing`，`swappedRegistryFaces` 加这一口。线格式按 ADR-0101 决定一是受控批量口快照的在线镜像：与
+   `parcel-pricing-register -kind price-card` 收的那份同形、只少 `tenant` 一格。快照形状定义在领域（`priceCardRegistrationSnapshot`），所以拒键与换租户
+   都落在领域新增的 `RehydratePriceCardRegistrationForTenant`；解码、规范化门与整图重验与 `RehydratePriceCardRegistration` 共用同一段，后者行为不变
+   ——翻译仍只一份，两口只差租户出处。
+
+   判据逐条（只对本件）：
+   - ✅ **对合成操作者答业务结果、对三格各答其格**。装配层：`TestSwappedRegistryFacesAnswerFromTheOperatorChannel`（无令牌 401
+     `OPERATOR_CREDENTIAL_REJECTED`；授予齐备时走到译装，该用例的批文 `{"tenantId": …}` 不是一份快照，答 400 `MALFORMED_REQUEST`）与
+     `TestSwappedRegistryFacesMapTheRefusalAndDependencyGrades`（只有查阅授予 403 `OPERATOR_NOT_GRANTED`；操作者册读不动 503
+     `IDENTITY_DEPENDENCY_UNAVAILABLE`）现都覆盖这一口。http 层 `TestOnlinePriceCardRegistrationTakesTheTenantFromTheEnvelope`：夹具快照原记
+     `SYN-TENANT-02`，去掉 `tenant` 后译出的登记在认证出的 `SYN-TENANT-01` 下；`tenant` 键在场即拒（别的租户、与信封相同的租户、`null`）；先认证、
+     后读快照；认证交回空身份答 `ErrOperatorIdentityMissing`。领域 `TestPriceCardRegistrationSnapshotForTenantTakesTheCallersTenant`：两扇门重建出的
+     登记除租户外逐字节同答，`tenant` 键在场（含 `null`、空串）即答 `ErrPriceCardRegistrationSnapshotCarriesTenant`。
+   - ✅ **装配测试与端点表仍一一对照**：`TestEveryAssembledEndpointAnswersUnconfigured` 绿；未配置环境里这一口照旧答 403 `ACCESS_CHANNEL_NOT_CONFIGURED`。
+   - ✅ **ADR-0150 决定三**：开工时复核，这一口不在隔离放行名单上——`isolatedWriteAdmittedCommandLines` 里没有它，`assemble_isolated_read.go` 只给
+     查阅行的 `pricingCatalogue` 放行，隔离读 Intake 装不进登记口由 `TestIsolatedReadIntakeCannotServeRegistration` 钉着。无放行可撤。
+
+   **red**：上述装配测试先于实现加这一口，在基 `1d67e27c` 的代码上答 403 `ACCESS_CHANNEL_NOT_CONFIGURED`（应为 401 / 403 `OPERATOR_NOT_GRANTED`）
+   而红；http 与领域两条在基上因方法与重建门不存在编不过。
+   **判别力**（临时变异，证完 `git checkout` 还原、未提交）：① 端点表放回 `pricinghttp.UnconfiguredIntake{}`，上述两条装配测试在这一口红
+   （`read grant only: answer = 403 "ACCESS_CHANNEL_NOT_CONFIGURED"`、`no bearer token: status = 403, want 401`）；② 领域「`tenant` 键在场即拒」那一查
+   改去查一个不存在的键，领域与 http 两条新用例都红——带别的租户的快照被静默收下（`err = <nil>`）。
+
+   **判断项**：
+   1. **快照带 `tenant` 键即拒、不看值，与信封相同的租户也拒**——照本票第一、五批在线口「键在场即拒、`null` 也拒」的惯例。代价：管理台 JSON 快照签
+      今天送的是带 `tenant` 的 CLI 形状（`apps/admin-web/src/pages/pricing/api.ts` 的 `registerPriceCard`，该处注释写「与受控 CLI 同一份形状」），
+      操作者渠道配好之后要去掉这一格才过；留给前端（`apps/admin-web/**` 一人在 main 上做），与第五批记下的那条同办。
+   2. **发布批准责任方照受控批量口从快照取**，不取认证出的提交操作者：它记的是批准人引用，不是提交者，与第一批 `approvedBy` 同一判断；提交操作者在
+      登记里没有格，要不要落册另裁。批准者取自信封的是导入草稿那条主路径（ADR-0101 决定五，price-card-import/04），不经这一口。
+   3. **未知键照受控批量口那扇门的口径放过**：领域重建门本就不拒未知键，没有为在线口另立一套严格解码——那会让同一份快照在两口答出不同的形状口径。
+      租户只从信封来这一条不受影响。
+   4. 读取上限沿用本包登记载荷那一个（`authenticate` 里的 `maxRegistrationBytes`）；合成种子价卡快照 `scripts/demo-seeds/data/pricing/price-card-cn-sg.json`
+      实测 2519 字节（钉 `4b17d139`）。
+   5. 端点表里管这一行的那段注释原写「同挂字面量 `UnconfiguredIntake{}`」，随这一口改为挂操作者渠道的登记册 Intake；那段同时管序列登记一行，序列那一口
+      第四批已换，改后两行都对得上。
+
+   **验证**（钉 `4b17d139`，隔离工作树，含 PG）：
+   - `go build ./...` 退 0；`go vet ./...` 退 0。
+   - `IDP_PARCEL_POSTGRES_DSN=postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable go test -count=1 -p 1 <包>` 退 0。包取 `go list -test`
+     反查依赖 `internal/parcelpricing/domain` 或 `internal/parcelpricing/adapters/http` 的全部包（含只在测试里引用的），加 `./internal/architecture/...`；
+     其中 `cmd/` 下的 `parcel-api`、`parcel-dispatch`、`parcel-pricing-feed`、`parcel-pricing-register`、`parcel-pricing-template` 一律带 DSN。
+   - `-v` 单跑 `cmd/parcel-api` 的 `TestTheWiredPricingRegistrationsRecordAgainstARealDatabase`：`--- PASS`，非 SKIP。
+   - `tools/mechanism-inventory` 在 `4b17d139` 的干净检出上重生成，`docs/product/MECHANISM-INVENTORY.md` 无差。
+
+   **未改**：`register_reference_series.go` 的 `ReferenceSeriesRegistrationIntake` 注释仍写「真 Intake 未就位」，端点表序列复核、预览与目录登记几行的注释仍写
+   「同挂字面量 `UnconfiguredIntake{}`」——那几口第四批已换，不在本件范围。
+
 3. **网络七口的 `networkhttp.OperatorRegistryIntake` 补 http 层测试**，照另五族各自的 `operator_registry_intake_test.go`——无阻塞，属第三批，代码活，由通道 1 另派。
 
 ### 剩余第 3 件 ← 通道 1 · 2026-10-10
