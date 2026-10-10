@@ -275,15 +275,16 @@ func TestASingleBasisServiceRuleResolutionOnlyAsksTheProductTier(t *testing.T) {
 // 不变；它一变，既有登记已固定的解析标识与续办引用就跟着改口。两种壳实算是同一个值，因为壳上的 references
 // 不进解析身份。两种声明次序也是同一个值——客户服务规则挪进第二段只改解析先后，不改身份。
 //
-// 成员次序也照改动前，是调用方声明的次序。解析标识先把成员排序再散列，看不出次序；快照却按次序写下，
-// 次序一变内容摘要就变，已固定的解析重解一次即撞`内容冲突`——落库那一层由 postgres 适配器的
+// 成员次序也照改动前：调用方声明的次序，只把结算政策排到最后。解析标识先把成员排序再散列，看不出次序；快照却
+// 按次序写下，次序一变内容摘要就变，已固定的解析重解一次即撞`内容冲突`——落库那一层由 postgres 适配器的
 // TestAResolutionFixedWithTheServiceRuleDeclaredFirstReplaysAsRecorded 钉住。
 func TestAnExistingProductOnlyRegistrationResolvesAsBefore(t *testing.T) {
 	const want = "CLO-d89b23824ea8f1bd"
-	for name, names := range map[string]map[domain.CommercialObjectKind]string{
+	shells := map[string]map[domain.CommercialObjectKind]string{
 		"壳指名服务产品": namesProduct("product-a"),
 		"壳什么都没指名": nil,
-	} {
+	}
+	for name, names := range shells {
 		t.Run(name, func(t *testing.T) {
 			registry := domain.NewCommercialRegistry()
 			registerContract(t, registry, fixtureContractObjectID)
@@ -307,6 +308,35 @@ func TestAnExistingProductOnlyRegistrationResolvesAsBefore(t *testing.T) {
 				if got := adoptedKinds(closure); !slices.Equal(got, bases) {
 					t.Fatalf("bases %v: 成员次序 = %v, want %v（改动前按声明次序）", bases, got, bases)
 				}
+			}
+		})
+	}
+
+	// 结算政策先于合同声明：结算政策是改动前唯一挪到合同之后的成员，既有快照里它排在最后，其余照声明次序。只有它
+	// 不在最后的声明次序才分得出「保旧次序」与「按解析先后」，上面的声明次序都不带它。各用一份登记册单跑，上面那
+	// 几格先红时这一格照样跑到。
+	for name, names := range shells {
+		t.Run(name+"，结算政策先于合同声明", func(t *testing.T) {
+			registry := domain.NewCommercialRegistry()
+			registerContract(t, registry, fixtureContractObjectID)
+			registerServiceRule(t, registry, "csr-product", "v1", names)
+			registerSettlementPolicyIn(t, registry, "scope-a", "settlement-1", domain.PrepaidMethod)
+			declared := []domain.CommercialObjectKind{
+				domain.SettlementPolicyObject, domain.CustomerContractObject, domain.CustomerServiceRuleObject,
+			}
+			closure := domain.ResolveCommercialClosure(registry, closureKey(t, "scope-a", declared...), nil)
+			if closure.Outcome() != domain.UniquelyResolved {
+				t.Fatalf("bases %v: outcome = %q, want UNIQUELY_RESOLVED（conflicting=%v，unresolved=%v）",
+					declared, closure.Outcome(), closure.ConflictingBases(), closure.UnresolvedBases())
+			}
+			if got := adoptedServiceRule(t, closure); got != "csr-product" {
+				t.Fatalf("bases %v: 采纳的客户服务规则 = %q, want csr-product", declared, got)
+			}
+			wantOrder := []domain.CommercialObjectKind{
+				domain.CustomerContractObject, domain.CustomerServiceRuleObject, domain.SettlementPolicyObject,
+			}
+			if got := adoptedKinds(closure); !slices.Equal(got, wantOrder) {
+				t.Fatalf("bases %v: 成员次序 = %v, want %v（改动前：声明次序，结算政策排最后）", declared, got, wantOrder)
 			}
 		})
 	}
