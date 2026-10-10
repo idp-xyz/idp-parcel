@@ -11,6 +11,11 @@ coverage.out
 *.prof
 /*.exe
 /*.exe~
+# `go build ./cmd/<name>` run at the repository root writes the binary here
+# under the command's name, and on Linux it has no extension for /*.exe to
+# catch. Keep the leading slash: unanchored, the pattern would also ignore the
+# cmd/<name>/ source directories.
+/parcel-*
 
 # Go caches pointed at the repository root. They must never be committed, and
 # they are worth naming here for a second reason: several architecture gates walk
