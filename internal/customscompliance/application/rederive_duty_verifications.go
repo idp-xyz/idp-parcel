@@ -161,18 +161,7 @@ func (handler *DutyPaymentReconciliationHandler) RederiveDutyVerificationsOnFund
 			return rederivationUndecided(DutyVerificationHandoffUnavailable), nil
 		}
 		if lineage.Result.Outcome() == DutyVerificationFormed || lineage.Result.Outcome() == DutyVerificationExisting {
-			_, digest, err := domain.CanonicalizeDutyVerificationPayload(
-				derived.Coverage, derived.Delta, derived.Validity, derived.Basis, derived.Procedure.String(), derived.FundsVersion.String())
-			if err != nil {
-				return DutyVerificationRederivationResult{}, err
-			}
-			lineage.Key = ports.DutyVerificationKey{
-				TenantID: command.TenantID,
-				Duty:     derived.Duty,
-				Funds:    derived.Funds,
-				Scope:    derived.Scope,
-				Digest:   digest,
-			}
+			lineage.Key = lineage.Result.verificationKey
 		}
 		result.lineages = append(result.lineages, lineage)
 	}

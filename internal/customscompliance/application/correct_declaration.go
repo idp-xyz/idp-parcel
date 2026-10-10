@@ -115,9 +115,19 @@ func (handler *CorrectDeclarationHandler) Handle(
 	if err != nil {
 		return SubmitDeclarationResult{}, err
 	}
-	if current.ContentDigest == digest {
+	unversioned := unversionedDeclarationDigest(SubmitDeclarationCommand{
+		Procedure: command.Procedure,
+		Members:   command.Members,
+		Dossier:   command.Dossier,
+		Roles:     command.Roles,
+	})
+	switch domain.CompareStoredDigest(current.ContentDigest, digest, unversioned) {
+	case domain.SamePayload:
 		// 与当前版同内容：重放返原版本，不重复形成，也不消耗版本标识。
 		return handler.replayExisting(ctx, command, unit, current)
+	case domain.UnknownPayloadShape:
+		// 判不出与当前版是否同内容就不往下形成：形成了，同一份更正的重放会落成第二个新版本。
+		return submissionStoreUndecided(command.UnitID), nil
 	}
 
 	stored, unitFound, err := handler.deps.Units.FindByID(ctx, command.TenantID, unit.ID())
@@ -210,10 +220,14 @@ func (handler *CorrectDeclarationHandler) Handle(
 		if err != nil || !winnerFound {
 			return submissionStoreUndecided(command.UnitID), nil
 		}
-		if winner.ContentDigest == digest {
+		switch domain.CompareStoredDigest(winner.ContentDigest, digest, unversioned) {
+		case domain.SamePayload:
 			return handler.existingCorrection(ctx, winner, unit.Case()), nil
+		case domain.DifferentPayload:
+			return SubmitDeclarationResult{outcome: DeclarationCorrectionUnbased}, nil
+		default:
+			return submissionStoreUndecided(command.UnitID), nil
 		}
-		return SubmitDeclarationResult{outcome: DeclarationCorrectionUnbased}, nil
 	default:
 		return SubmitDeclarationResult{}, fmt.Errorf("%w: %d", ErrUnexpectedSubmissionSave, saved)
 	}

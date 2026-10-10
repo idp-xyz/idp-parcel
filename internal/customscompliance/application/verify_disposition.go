@@ -149,6 +149,20 @@ func (handler *VerifyDispositionHandler) Handle(
 	if found {
 		return handler.existingResult(ctx, key, existing), nil
 	}
+	// CCC-1 之前入册的核对，键上是无版本指纹：同一事实集要认作那一版，不能因为 CCC-1 键查不到就再出
+	// 一版、再交一份意图（ADR-0014）。
+	unversionedKey := key
+	unversionedKey.Digest = unversionedFactSetDigest(facts)
+	existing, found, err = handler.deps.Store.FindByKey(ctx, unversionedKey)
+	if err != nil {
+		return VerifyDispositionResult{
+			outcome: VerificationUndecided,
+			reason:  VerificationStoreUnavailable,
+		}, nil
+	}
+	if found {
+		return handler.existingResult(ctx, unversionedKey, existing), nil
+	}
 
 	verification, err := domain.VerifyDispositionExecution(
 		command.Decision, facts, handler.deps.Clock.Now())

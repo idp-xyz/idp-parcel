@@ -146,7 +146,7 @@ var allowedSameExpression = map[string]string{
 	"internal/nodeoperations/adapters/postgres/collaboration_acceptance_handoff.go": annotationNoOrdering +
 		"同一事项只决定一次——AcceptCollaborationHandler.Accept 幂等按（租户+事项），异内容答冲突不顶替",
 	"internal/nodeoperations/adapters/postgres/execution_fact_handoff.go": annotationNoRewrite +
-		"（键取到动作，同一事项的各动作各是一条独立事实；消费侧 CC 的 factSetDigest 先把事实引用排序，装载顺序不构成不同内容）",
+		"（键取到动作，同一事项的各动作各是一条独立事实；消费侧 CC 的 CanonicalizeDispositionFactSetPayload 先把事实引用排序，装载顺序不构成不同内容）",
 	"internal/nodeoperations/adapters/postgres/node_intake_handoff.go": annotationNoOrdering +
 		"同一收寄键只出一份——ReceiveDeliveredUnitHandler.Handle 幂等/冲突按内容指纹分界，且只在收寄判断成立时交意图",
 

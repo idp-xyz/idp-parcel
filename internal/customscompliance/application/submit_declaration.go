@@ -219,11 +219,14 @@ func (handler *SubmitDeclarationHandler) Handle(
 		return submissionStoreUndecided(command.UnitID), nil
 	}
 	if found {
-		if existing.ContentDigest != digest {
+		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedDeclarationDigest(command)) {
+		case domain.DifferentPayload:
 			// 同一逻辑申报目标携带不同组成或快照：已固定版本不可覆盖，不在这里顶替。
 			// 保留单元身份的修订走原案内更正/补充（CorrectDeclarationHandler，要先有
 			// 已形成的后续动作目标）；不保留身份的走撤销重报（新逻辑申报目标）。
 			return SubmitDeclarationResult{outcome: DeclarationSourceConflict}, nil
+		case domain.UnknownPayloadShape:
+			return submissionStoreUndecided(command.UnitID), nil
 		}
 		// 重复提交：返回原版本，不重复形成（CONTEXT「首次实际对外发送前都必须形成不可覆盖的提交版本」）。内容指纹不含案件维（案件属
 		// 单元身份不属提交内容），重放的案件一致性对单元本体核——同单元换案件不是
