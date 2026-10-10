@@ -93,6 +93,8 @@ go run ./cmd/parcel-dispatch
 
 服务区域页的**地理覆盖列刻意不存在**，页面用如实说明交代它属 `PAR-NET-14`、形态定了才以新迁移扩列，并且不为它发请求。这是管理台「骨架有、读面无 → 不上列」通则的先例（见 `apps/admin-web/README.md` 的列表页上列通则），演示时值得点一句：不填假值本身是产品行为。
 
+> 2026-10-10 补记（票 `routing-first-cut/11`）：上两段写于当时，原样保留。这一步的目录今天是演示租户**显式采用**随产品发布的参考配置 `network-routing/network-catalog/SYN-CN-SG@1` 登进去的（[ADR-0147](../adr/0147-reference-configuration-ships-embedded-and-is-adopted-through-ordinary-registration.md)），每一版定义行的依据格是那一版的引用串。网络本身多了几样：线路与路由策略的适用范围是服务目的 `NETWORK_SERVICE`，策略声明成本单维，服务区域带 CN / SG 覆盖与收寄、交付节点，四个节点各一份带处理时长的日历，线路三段挂 BUY 价卡引用。上海枢纽修订 2 是采用后的租户修订，依据换成了演示租户自己的。服务区域覆盖的列已由迁移 `0011` 补上；管理台服务区域页今天怎么显示，本票没核。
+
 ### 第 4 步 · 过关的规则（customs-compliance）
 
 | 看哪页 | 取哪个端点 |
@@ -134,6 +136,7 @@ go run ./cmd/parcel-dispatch
 **墙三 · 路由拿不到证据。** 就算前两堵都过、委托成`已接受`，初始路由会停在 `RouteEvidenceNotConfigured`：三个证据视图只读 `network_routing.network_definition`，而那张表至今零生产写入方（第 3 步登记的是另一套目录表，`bumpRevision` 推的是目录修订锚，长不出这张表的行）。没有路由就没有下游的费用。
 **重启条件**：解析层——把目录折成逐候选事实。被 `PAR-NET-14` 阻断，且 [ADR-0068](../adr/0068-versioned-network-catalog-structure-precedes-rule-content.md) Consequences 已明文接受这段「目录可写可读、尚无人读它产出事实」的时期。
 > 2026-09-24 补记（票 `routing-first-cut/07` 进 main，merge `f2645d86`）：上两段写于当时，原样保留；成因一句自本合入起过时——证据视图不再读 `network_definition`，改读第 3 步登记的那套目录，`未配置`由目录修订锚与适用于服务目的的路由策略版本答（[ADR-0148](../adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定六），阻断也不再归 `PAR-NET-14`（ADR-0146 决定七）。可观察的停点不变：种子策略的适用范围是 `SYN-SCOPE-01`，与调度器的服务目的 `NETWORK_SERVICE` 不一致，种子服务区域也没登覆盖，初始路由照旧停在 `RouteEvidenceNotConfigured`。演示网络经参考配置采用、形成初始路由归 `routing-first-cut/11`。
+> 2026-10-10 补记（票 `routing-first-cut/11`）：演示网络已经由演示租户经参考配置采用，`submit-one-shipment.sh` 的草案也带上了寄 / 收两端国家码。按本脚本重走（实测，只记 `S`），这堵墙在可达性那一段降了：可达性判断形成、答`可达`，受理链往下走到受理前财务控制，停在 `FINANCIAL_CONTROL_AS_OF_NOT_CONFIGURED`。那是 [psb/05](../../.scratch/product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 的格 5，不是网络的事。委托因此还成不了`已接受`，初始路由在动线上没被触发。初始路由本身的现状（证据视图已配置，成本那一格的计价输入还没接）与两次取证的命令、SHA 都记在 `routing-first-cut/11` 票面，这里不复述。
 
 三堵墙对应的机制票都在 `.scratch/syn-wall-door-audit/issues/`（依次为 01、13、04），墙面清单见同目录 `report.md`。
 
