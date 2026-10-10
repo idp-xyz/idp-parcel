@@ -184,6 +184,32 @@ func TestConsolidationPayloadsRoundTripAsNOC1(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0014「摘要只在同一规范化版本内可比」——带 NOC-1 前缀的与本次 NOC-1 摘要比，不带前缀的
+// 与无版本那一版比，认不出的前缀既不是重放也不是冲突。
+func TestStoredDigestIsComparedWithinItsOwnShape(t *testing.T) {
+	const current, unversioned = "NOC-1:aa", "bb"
+	cases := []struct {
+		name   string
+		stored string
+		want   domain.StoredDigestComparison
+	}{
+		{"NOC-1 same content", "NOC-1:aa", domain.SamePayload},
+		{"NOC-1 different content", "NOC-1:cc", domain.DifferentPayload},
+		{"unversioned same content", "bb", domain.SamePayload},
+		{"unversioned different content", "cc", domain.DifferentPayload},
+		{"an unversioned digest is not read as NOC-1", "aa", domain.DifferentPayload},
+		{"a later shape", "NOC-2:aa", domain.UnknownPayloadShape},
+		{"another context's shape", "PSC-1:bb", domain.UnknownPayloadShape},
+	}
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			if got := domain.CompareStoredDigest(testCase.stored, current, unversioned); got != testCase.want {
+				t.Fatalf("CompareStoredDigest(%q) = %d, want %d", testCase.stored, got, testCase.want)
+			}
+		})
+	}
+}
+
 const deliveryPayloadDocument = `{"canonicalization":"NOC-1","face":"RECEIVE_DELIVERED_UNIT","unit":"UNIT-1","mark":"MARK-1","claim":"1","node":"NODE-1","occurred_at":"2026-03-05T02:11:12.345678901Z"}`
 
 func TestDeliveryPayloadRoundTripsAsNOC1(t *testing.T) {

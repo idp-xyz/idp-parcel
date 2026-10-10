@@ -170,7 +170,8 @@ func (handler *ConsolidateParcelsHandler) Open(
 	if err != nil {
 		return ConsolidationResult{}, err
 	}
-	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest)
+	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest,
+		unversionedConsolidationDigest(domain.OpenUnitAction, command.Source, command.Unit.String(), command.Asset.String()))
 	if !proceed {
 		return gate.result, nil
 	}
@@ -213,7 +214,8 @@ func (handler *ConsolidateParcelsHandler) AddMember(
 	if err != nil {
 		return ConsolidationResult{}, err
 	}
-	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest)
+	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest,
+		unversionedConsolidationDigest(domain.AddMemberAction, command.Source, command.Unit.String(), command.Member.String()))
 	if !proceed {
 		return gate.result, nil
 	}
@@ -259,7 +261,8 @@ func (handler *ConsolidateParcelsHandler) RemoveMember(
 	if err != nil {
 		return ConsolidationResult{}, err
 	}
-	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest)
+	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest,
+		unversionedConsolidationDigest(domain.RemoveMemberAction, command.Source, command.Unit.String(), command.Member.String()))
 	if !proceed {
 		return gate.result, nil
 	}
@@ -295,7 +298,8 @@ func (handler *ConsolidateParcelsHandler) Seal(
 	if err != nil {
 		return ConsolidationResult{}, err
 	}
-	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest)
+	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest,
+		unversionedConsolidationDigest(domain.SealUnitAction, command.Source, command.Unit.String(), command.Seal.String(), command.Basis.String()))
 	if !proceed {
 		return gate.result, nil
 	}
@@ -333,7 +337,8 @@ func (handler *ConsolidateParcelsHandler) Unseal(
 	if err != nil {
 		return ConsolidationResult{}, err
 	}
-	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest)
+	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest,
+		unversionedConsolidationDigest(domain.UnsealUnitAction, command.Source, command.Unit.String(), command.Basis.String()))
 	if !proceed {
 		return gate.result, nil
 	}
@@ -367,7 +372,8 @@ func (handler *ConsolidateParcelsHandler) Close(
 	if err != nil {
 		return ConsolidationResult{}, err
 	}
-	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest)
+	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest,
+		unversionedConsolidationDigest(domain.CloseUnitAction, command.Source, command.Unit.String(), command.Disposition.String()))
 	if !proceed {
 		return gate.result, nil
 	}
@@ -394,11 +400,12 @@ func (handler *ConsolidateParcelsHandler) Close(
 // admissionGate 带着一次受理判断的全部上下文，好让四条出口（放行、已有结果、冲突、
 // 未受理复查）共用同一份来源身份与内容指纹，不各自重算一遍。
 type admissionGate struct {
-	tenant domain.TenantID
-	key    ports.ConsolidationFactKey
-	digest string
-	source domain.WorkFactSource
-	result ConsolidationResult
+	tenant      domain.TenantID
+	key         ports.ConsolidationFactKey
+	digest      string
+	unversioned string
+	source      domain.WorkFactSource
+	result      ConsolidationResult
 }
 
 // admit 是六口共用的受理闸：先要求来源表达完整，再按来源身份分流。
@@ -412,8 +419,9 @@ func (handler *ConsolidateParcelsHandler) admit(
 	unit domain.ConsolidationUnitID,
 	source domain.WorkFactSource,
 	digest string,
+	unversioned string,
 ) (admissionGate, bool) {
-	gate := admissionGate{tenant: tenant, digest: digest, source: source}
+	gate := admissionGate{tenant: tenant, digest: digest, unversioned: unversioned, source: source}
 	if strings.TrimSpace(tenant.String()) == "" ||
 		strings.TrimSpace(unit.String()) == "" ||
 		!isSourceExpressed(source) {
@@ -430,11 +438,14 @@ func (handler *ConsolidateParcelsHandler) admit(
 	if !found {
 		return gate, true
 	}
-	if existing.ContentDigest != digest {
+	switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversioned) {
+	case domain.SamePayload:
+		gate.result = handler.existingResult(ctx, tenant, existing.Unit)
+	case domain.DifferentPayload:
 		gate.result = ConsolidationResult{outcome: ConsolidationSourceConflict}
-		return gate, false
+	default:
+		gate.result = ConsolidationResult{outcome: ConsolidationUndecided}
 	}
-	gate.result = handler.existingResult(ctx, tenant, existing.Unit)
 	return gate, false
 }
 
@@ -471,7 +482,8 @@ func (handler *ConsolidateParcelsHandler) rejected(
 	gate admissionGate,
 ) ConsolidationResult {
 	existing, found, err := handler.deps.Facts.FindByKey(ctx, gate.key)
-	if err == nil && found && existing.ContentDigest == gate.digest {
+	if err == nil && found &&
+		domain.CompareStoredDigest(existing.ContentDigest, gate.digest, gate.unversioned) == domain.SamePayload {
 		return handler.existingResult(ctx, gate.tenant, existing.Unit)
 	}
 	return ConsolidationResult{outcome: ConsolidationNotAccepted}
