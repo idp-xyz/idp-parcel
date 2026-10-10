@@ -25,6 +25,7 @@ type PriceCardDrafts struct {
 var (
 	_ ports.PriceCardDraftRegister = (*PriceCardDrafts)(nil)
 	_ ports.PriceCardDraftRead     = (*PriceCardDrafts)(nil)
+	_ ports.PriceCardDraftProgress = (*PriceCardDrafts)(nil)
 )
 
 func NewPriceCardDrafts(db *bentopg.DB) (*PriceCardDrafts, error) {
@@ -187,6 +188,94 @@ func (drafts *PriceCardDrafts) ListPriceCardDrafts(
 		return nil, fmt.Errorf("list price card drafts: %w", err)
 	}
 	return listed, nil
+}
+
+// LoadPriceCardDraft 按键读一版，经重建门读回再与比对列交叉核（票 price-card-import/04）。册上没有即 found=false。
+func (drafts *PriceCardDrafts) LoadPriceCardDraft(
+	ctx context.Context,
+	tenant domain.TenantID,
+	plan domain.VersionReference,
+) (domain.PriceCardDraft, bool, error) {
+	querier, err := drafts.db.ReadExecutor(ctx)
+	if err != nil {
+		return domain.PriceCardDraft{}, false, fmt.Errorf("load price card draft: %w", err)
+	}
+	row, err := scanPriceCardDraftRow(querier.QueryRow(ctx,
+		`SELECT `+priceCardDraftColumns+`
+		   FROM parcel_pricing.price_card_draft
+		  WHERE tenant_id = $1 AND plan_id = $2 AND plan_version = $3`,
+		tenant.String(), plan.ID(), plan.Version(),
+	))
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.PriceCardDraft{}, false, nil
+	}
+	if err != nil {
+		return domain.PriceCardDraft{}, false, fmt.Errorf("load price card draft: %w", err)
+	}
+	draft, err := row.draft(tenant)
+	if err != nil {
+		return domain.PriceCardDraft{}, false, fmt.Errorf("load price card draft: %w", err)
+	}
+	return draft, true, nil
+}
+
+// AdvancePriceCardDraft 把领域推进后的那一份写回：只改状态与批准、发布三格痕迹，不重写内容文档。「还是读到时那一行」
+// 由 WHERE 判——前一格、录入者、录入时刻与内容摘要都对得上，推进成发布时连批准者与批准时刻也要对得上；修订会换掉录入
+// 痕迹，别人先推进会换掉状态，两者都落成`已被替换`、行一字不动。不在这里加锁：批准与发布各在自己的一笔事务里读、判、
+// 写，判不上的那一笔由调用方按答案或回滚处置。
+func (drafts *PriceCardDrafts) AdvancePriceCardDraft(ctx context.Context, draft domain.PriceCardDraft) (ports.PriceCardDraftAdvanceOutcome, error) {
+	executor, err := drafts.db.RequireExecutor(ctx)
+	if err != nil {
+		return ports.PriceCardDraftAdvanceOutcomeInvalid, fmt.Errorf("advance price card draft: %w", err)
+	}
+	var previous domain.PriceCardDraftStatus
+	switch draft.Status() {
+	case domain.PriceCardDraftStatusApproved:
+		previous = domain.PriceCardDraftStatusValidated
+	case domain.PriceCardDraftStatusPublished:
+		previous = domain.PriceCardDraftStatusApproved
+	default:
+		return ports.PriceCardDraftAdvanceOutcomeInvalid, fmt.Errorf("advance price card draft: only an approval or a publication advances a draft, got %q", draft.Status())
+	}
+	content, has := draft.Content()
+	approver, hasApprover := draft.Approver()
+	approvedAt, hasApprovedAt := draft.ApprovedAt()
+	if !has || !hasApprover || !hasApprovedAt {
+		return ports.PriceCardDraftAdvanceOutcomeInvalid, fmt.Errorf("advance price card draft: the advanced draft carries no content or approval traces")
+	}
+	var publishedAt *time.Time
+	if at, published := draft.PublishedAt(); published {
+		publishedAt = &at
+	}
+
+	tag, err := executor.Exec(ctx,
+		`UPDATE parcel_pricing.price_card_draft
+		    SET status = $4, approver = $5, approved_at = $6, published_at = $7
+		  WHERE tenant_id = $1 AND plan_id = $2 AND plan_version = $3
+		    AND status = $8 AND submitter = $9 AND submitted_at = $10 AND content_digest = $11
+		    AND ($8 <> 'APPROVED' OR (approver = $5 AND approved_at = $6))`,
+		draft.Tenant().String(), draft.Plan().ID(), draft.Plan().Version(),
+		draft.Status().String(), approver, approvedAt.UTC(), publishedAt,
+		previous.String(), draft.Submitter(), draft.SubmittedAt().UTC(), content.Plan.ContentDigest(),
+	)
+	if err != nil {
+		return ports.PriceCardDraftAdvanceOutcomeInvalid, fmt.Errorf("advance price card draft: %w", err)
+	}
+	if tag.RowsAffected() == 1 {
+		return ports.PriceCardDraftAdvanced, nil
+	}
+	var present bool
+	if err := executor.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM parcel_pricing.price_card_draft
+		                 WHERE tenant_id = $1 AND plan_id = $2 AND plan_version = $3)`,
+		draft.Tenant().String(), draft.Plan().ID(), draft.Plan().Version(),
+	).Scan(&present); err != nil {
+		return ports.PriceCardDraftAdvanceOutcomeInvalid, fmt.Errorf("advance price card draft: %w", err)
+	}
+	if !present {
+		return ports.PriceCardDraftAdvanceNotFound, nil
+	}
+	return ports.PriceCardDraftAdvanceSuperseded, nil
 }
 
 // draftContentColumns 是已校验起才有的四列比对列；`草稿`四列全空。
