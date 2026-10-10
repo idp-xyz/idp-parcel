@@ -1,7 +1,7 @@
 # 03 PC 层次读口：一次取回合同版正文、产品底座版正文与各自在场标志
 
 Category: enhancement
-Status: 完工，待评审与重放——2026-10-11 00:0x 通道 4 在分支 `mcp4-csr03`（基 `70f32c2a`）上做完，分支已推 origin：本票代码 `4d19cc2c`、`3031a1d2`、`943f1cd7`，另一笔 02 复评补测 `65fdcd20`，清点 tip `ae2a949e`；完成记录见文末。此前：in-progress——2026-10-10 23:4x 通道 4 认领（单 task-628d9b90，改派自通道 5 `task-96bf9634`），分支 `mcp4-csr03`，基 `70f32c2a`。此前：ready-for-agent——2026-10-10 通道 1 发布：拆法作者通道 3（`task-2b404e22`），通道 1 经用户 19:1x 授权认可并裁定拆法清单所附七问
+Status: resolved——2026-10-11 00:5x 通道 4 代推送方重放进 main（用户 00:4x 裁定：其余通道都已崩溃，由通道 4 独自收口）：`835252bd`…`16f27492`，清点 `547908ad`；评审是作者自审（隔离评审子代理两次报认证错误、起不来），不是非作者评审，见文末 Comments 与进 main 记录。此前：完工，待评审与重放——2026-10-11 00:0x 通道 4 在分支 `mcp4-csr03`（基 `70f32c2a`）上做完，分支已推 origin：本票代码 `4d19cc2c`、`3031a1d2`、`943f1cd7`，另一笔 02 复评补测 `65fdcd20`，清点 tip `ae2a949e`；完成记录见文末。此前：in-progress——2026-10-10 23:4x 通道 4 认领（单 task-628d9b90，改派自通道 5 `task-96bf9634`），分支 `mcp4-csr03`，基 `70f32c2a`。此前：ready-for-agent——2026-10-10 通道 1 发布：拆法作者通道 3（`task-2b404e22`），通道 1 经用户 19:1x 授权认可并裁定拆法清单所附七问
 Blocked by: [02](02-pc-closure-resolves-contract-tier-service-rule-first.md)——底座必须用 02 抽出的那一处选法，不造第二套口径
 父票：[spec](../spec.md)
 地盘：`internal/partycommercial` 的 ports、application、adapters/postgres；碰 Go / SQL，走并行会话那条路。
@@ -83,3 +83,20 @@ Blocked by: [02](02-pc-closure-resolves-contract-tier-service-rule-first.md)—�
 - `TestAnExistingProductOnlyRegistrationResolvesAsBefore` 加「结算政策先于合同声明」：两种在册壳各一个子测试，各用一份登记册单跑（原有那几格先红时它照样跑到）；夹具补 `registerSettlementPolicyIn`，`closureKey` 带三维结算选择器；声明次序为结算政策、客户合同、客户服务规则，期望成员次序为客户合同、客户服务规则、结算政策。
 - 判别力（`go test -overlay`，工作副本未动；`reference_closure.go` 自 `78bc40f5` 起无改动）：R1 把它取成 `78bc40f5^` 那一版、即改回修复前，新格两子测试都红，成员次序答 `[CUSTOMER_CONTRACT SETTLEMENT_POLICY CUSTOMER_SERVICE_RULE]`，原有「规则先声明」那格同红；R2 令 `memberOrder` 不再挪结算政策、即复评那次变异，只有新格红，原有两格照绿。现码四个子测试 PASS。
 - 判断项：新格不钉解析标识——键带结算选择器，标识与原有格不同，派单只要成员次序。生产代码未改。
+
+## Comments
+
+### 评审 ← 通道 4（作者自审，不是非作者评审）· 钉 `ec2133b0` · 00:4x
+
+**这一格没守住规矩，如实记下。** [parallel-sessions](../../../docs/agents/parallel-sessions.md)「合入前独立评审」要求代码票进 main 前有一份非作者评审，没有空闲通道时由推送方用 `/code-review` 的隔离子代理跑，不由作者自评。00:4x 用户裁定其余通道都已崩溃、由通道 4 独自决定并收口；通道 4 照那条退路派了两次隔离评审子代理，都以 `Authentication error` 起不来，于是改为作者自审后重放。自审看不到作者自己的盲点，**宜由 PC owner 或下一个空闲会话事后补一份非作者评审**，重点是判断项 2、6 两条越权风险点。
+
+- **Standards**：阻断无。非阻断两条：① `CustomerServiceRuleLayerReader` 自己的租户核与点读口那道同名核重叠，变异时去掉它用例不红，留着是为了「不读任何一层」不依赖点读口排在前面（完成记录已写）；② `ports.CustomerServiceRuleLayers` 是导出字段的结构，「在场为真而选法不是唯一解析」这种不一致的组合在类型上拦不住，与本包各目录行类型同一先例，消费方只能信提供方。无发现：机械核过新增注释——中文、无行号引用、无跨文件计数；ports 只引 domain，application 不引 adapters；迁移、`cmd/` 与共享接线文件零改动；生产文件里没有写死的租户取值。
+- **Spec**：阻断无。非阻断：判断项 6 的风险仍开着——壳空而正文挂合同的那一版会被选作底座，04 接手时须定在哪一侧核。无发现：完成判据三条逐条对过用例；底座只经 `CustomerServiceRuleProductBase` 选，没有第二套口径；单版点读口与 `ports.go` 自基起零改动。
+
+## 进 main 记录（通道 4 代推送方 · 2026-10-11 00:5x）
+
+- 远端 main `4b767047` → `547908ad`（本记录随其后一笔）：分支 `mcp4-csr03` 的 `7e750bbd`、`4d19cc2c`、`3031a1d2`、`943f1cd7`、`65fdcd20`、`ec2133b0` cherry-pick 重放到 tip，SHA 换了，在 main 上依次是 `835252bd`、`abc3cf39`、`03ffad10`、`857cc89c`、`982a0886`、`16f27492`。清点笔 `ae2a949e` 不重放——main 上的清点自基 `70f32c2a` 起已被别的票改过——在重放 tip 上重生成为 `547908ad`。重放前核过 `70f32c2a..4b767047` 与本票文件只在清点上重叠；重放后本票其余文件与分支 tip 逐字节一致。
+- 评审：作者自审（见上条 Comments），非作者评审这道门本次没有过。
+- 验证（推送方，钉合入候选 `547908ad` 的隔离 worktree，WSL，go1.26.8，DSN 为门禁库 55432）：`gofmt -l .` 无输出；`go build ./...`、`go vet ./...` 退出 0；带 DSN 全仓 `go test -count=1 -p 1 ./...` 退 0，138 个包 ok、0 FAIL、0 cached，167 s；带 DSN `-v` 单跑 `TestTheLayeredReadAnswersEachTierPresenceOnItsOwn`、`TestTheLayeredReadIsBoundToItsTenant` 与 `cmd/parcel-api` 的 `TestTheWiredClaimsReadTheRuleAdoptedAtAcceptanceThroughParcelShipment` 均 PASS（非 SKIP）。00:53:45 推前查 `origin/main..547908ad`，只有本票这几笔，其下无他人提交。
+- 解锁：[04](04-ve-claim-eligibility-checks-contract-and-inherits-rows-from-product-base.md) 的「Blocked by 03」已解；照 02 进 main 时的先例记在这里，04 票面未改。
+- 分支 `mcp4-csr03` 本地改名 `merged/mcp4-csr03`、作者树已拆；远端分支照 `mcp5-csr02` 的先例留着。
