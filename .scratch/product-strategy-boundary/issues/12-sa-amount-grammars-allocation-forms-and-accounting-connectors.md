@@ -188,3 +188,40 @@ Blocked by: 无（第 1、5 项的规则登记册与读口是重定级表 PN-07 
 
 重放到 `af0245bb` 之上，零冲突：`5174732f→f9c5192e`。清点在代码链尖重生成为 `b91ceb3f`（`cmd` 生产 73→74、测试 108→109；`settlement_accounting` 迁移份数 31→32，文件号 `0033`）。
 推送方验证：钉 `b91ceb3f`，build 退 0，架构门禁与点名用例 PASS，带 DSN `go test -p 1 -count=1 ./...` 134 ok / 0 FAIL。本记录一笔只多本票面 `.md`。分支作封存出处。票 12 十项到此收口。
+
+**收口核查（通道 5，钉 `a8cf12ff`）· 2026-10-10 · 通道 1 派单 `task-050c4117`，非作者独立取证**
+
+**结论：不收口，Status 不动。** 十项的执行器与测试都在 main 上；缺的是参数登记册五行没有同步收短，交通道 1。取证实测于 `a8cf12ff`（该提交 CI run
+`38050118343` success；第 10 项 `f9c5192e` 是它的祖先），以 `git grep` 在该提交上逐项定位。
+
+- ✅ **每项有执行器（带测试），或记下了既有执行器的证据**：
+
+| 项 | 执行器 / 证据 | 测试 | 登记命令 · 迁移 |
+|---|---|---|---|
+| 1（ADR-0161） | `domain.AmountGrammar.Compose` | `TestClaimAmountsUseTheRegisteredGrammarInsteadOfTheAssertedAmount`；真库 `TestAmountGrammarsRefuseToRunOutsideATransaction`、`TestEmptyAmountGrammarsStayUnconfigured`、`TestAnAmountGrammarRegistersReplaysAndConflicts` | `amount-grammar` · `0024_amount_grammar_parameter.sql` |
+| 2（ADR-0162） | `Apportion`（domain 与 application 的 `allocation_form.go`） | `TestAllocationFormsRefuseToRunOutsideATransaction` | `allocation-form` · `0025_allocation_form_choice.sql` |
+| 3（ADR-0165） | `domain.PeriodicFeeForm`（`domain/periodic_fee.go`） | `TestMinimumSpendShortfallIsTheGapBelowTheFloor`、`TestVolumeFloorChargesTheMissingQuantityAtTheRegisteredRate`、`TestTieredRebateAppliesEachBandOnlyToItsSlice`；真库 `TestEmptyPeriodicFeesStayUnconfigured`、`TestPeriodicFeesRefuseToRunOutsideATransaction` | `periodic-fee` · `0028_periodic_fee_form.sql` |
+| 4（既有执行器） | `domain.ComponentRole.admittedBy`、`domain.DeriveOperatingResult`、`domain.OperatingResult.Rederive`、`application.AllocateCostsHandler.Derive` 与 `.Rederive` | `TestOperatingResultIsDerivedNotEdited`、`TestOperatingResultsDeriveAndRederive` | —（不新造执行器、不立 ADR） |
+| 5（ADR-0163） | `domain.AuditEscalationCeiling`（`domain/audit_escalation.go`） | `TestAnAuditedAmountAboveTheCeilingMustEscalate`、`TestAnAmountWithinTheCeilingStaysInsideAuthority`、`TestARegisteredZeroCeilingIsNotUnconfigured` | `audit-escalation-ceiling` · `0026_audit_escalation_ceiling.sql` |
+| 6（ADR-0168） | `domain.ChargeAttributionForm`（`domain/charge_attribution.go`） | `TestAttributionDateRollsForwardAtCutoff`、`TestJudgeChargeAttributionStaysUnconfiguredWhenTheFeeItemIsNotRegistered`、`TestChargeAttributionsRefuseToRunOutsideATransaction` | `charge-attribution` · `0031_charge_attribution.sql` |
+| 7（ADR-0166） | `domain.AccountingConnectorForm`（`domain/accounting_connector.go`） | `TestAnUnregisteredAccountingConnectorStaysUnconfigured`、`TestAccountingConnectorsRefuseToRunOutsideATransaction`、`TestAccountingConnectorOnlyAcceptsCanonicalExchange` | `accounting-connector` · `0029_accounting_connector.sql` |
+| 8（ADR-0164） | `evaluationRequestOrchestration.Trigger`（`cmd/parcel-api/assemble_evaluation_request.go`） | `TestTheProductionTriggerDoesNotRequestWhenTheReasonIsNotRegistered` | `buy-evaluation-trigger` · `0027_buy_evaluation_trigger.sql` |
+| 9（ADR-0169） | `application.FormSellCustomerChargeHandler` | `TestTheSellGateIgnoresABuyEvaluation`、`TestSellChargeUsesTheEvaluationAmount`、`TestAMissingSellTriggerDoesNotInitiate`、`TestSellEvaluationTriggersRefuseToRunOutsideATransaction` | `sell-evaluation-trigger` · `0032_sell_evaluation_trigger.sql` |
+| 10（ADR-0170） | `buildSettlementOrchestrations`（`cmd/parcel-api/assemble_settlement_orchestrations.go`） | `TestSettlementOrchestrationsStayUnconfiguredWhenTheMomentIsNotRegistered`、`TestSettlementMomentsRefuseToRunOutsideATransaction` | `settlement-moment` · `0033_settlement_moment.sql` |
+
+  登记命令都在 `cmd/parcel-settlement-register`，迁移都在 `migrations/settlement_accounting/`。「顺带」那句 `PricingInputResolver` 旧注释（「三只读口今天都不存在」）
+  在该提交上已无命中。
+- ❌ **登记册对应行同步收短**。随各项代码笔收短了的是 `PAR-SET-06`（第 2 项 `83489825`）、`PAR-INT-04` 与 `PAR-INT-05`（第 7 项 `cab6613c`）、`PAR-SET-09`
+  （第 6 项 `1e3b9f9d`），写法都是「已有执行器（ADR-…）……没登记答未配置」。第 1、3、4、5 项的提交（`161bb646`、`6b3d7d80`、`f8ead9ad`、`9a3b9e9a`）都没碰
+  [参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md)，下面五行还是拆分当时的指向：
+  - `PAR-COM-07`：「限额、比例、免赔怎样组成一个赔付/退款金额是计算方法，归产品策略 → 票 12」——第 1 项已落（ADR-0161）。
+  - `PAR-SET-05`：「『越权升级规则』的判断结构 → 票 12」——第 5 项已落（ADR-0163）。同一格里「审核角色」「申请/决定分权」指向 [psb/07](./07-pc-authorization-coordinates-and-role-models.md)，不归本票。
+  - `PAR-SET-07`：「最低消费、保底量、返利的计算形态归产品策略 → 票 12（待核）」——第 3 项已落（ADR-0165）。
+  - `PAR-SET-08`：「『金额分配、比例/限额/免赔』怎样组成一个回收金额是计算方法，划为产品策略 → 票 12」——比例、限额、免赔由第 1 项落（ADR-0161）；金额分配按本票
+    第 1 项的写法属第 2 项（ADR-0162）。
+  - `PAR-SET-10`：「各阶段的『采用规则』与……如何形成新指标版本是指标方法……→ 票 12（待核）」——第 4 项已核毕：既有执行器按约束栏实现，不立新 ADR。
+
+**缺什么、归哪张**：只缺登记册这五行的文字同步，代码不缺。按本票完成判据它归本票自己，照已收短的四行写法改这五行即可；本核查按派单不改登记册，交通道 1 定由谁补。
+补完这五行，本票判据即齐。
+
+**未改**：Status；参数登记册。
