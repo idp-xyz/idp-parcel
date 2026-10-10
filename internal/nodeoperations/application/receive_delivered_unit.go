@@ -138,7 +138,10 @@ func (handler *ReceiveDeliveredUnitHandler) Handle(
 	}
 
 	key := ports.ReceptionKey{TenantID: command.TenantID, SourceID: command.SourceID}
-	digest := deliveryContentDigest(command)
+	_, digest, err := domain.CanonicalizeDeliveryPayload(command.Unit, command.Mark.Mark, uint8(command.Claim), command.Node, command.OccurredAt)
+	if err != nil {
+		return ReceiveDeliveredUnitResult{}, err
+	}
 	existing, found, err := handler.deps.Receptions.FindByKey(ctx, key)
 	if err != nil {
 		return ReceiveDeliveredUnitResult{outcome: ReceptionUndecided,
@@ -331,17 +334,4 @@ func (handler *ReceiveDeliveredUnitHandler) handOff(
 func receptionContinuation(parts ...string) string {
 	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
 	return "CONT-" + hex.EncodeToString(digest[:8])
-}
-
-// deliveryContentDigest 是同一来源身份的内容比对锚：实物、标识观察、接收观察、节点与
-// 业务时间任一不同即是另一份内容。
-func deliveryContentDigest(command ReceiveDeliveredUnitCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		command.Unit.String(),
-		command.Mark.Mark,
-		fmt.Sprintf("%d", command.Claim),
-		command.Node.String(),
-		command.OccurredAt.UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
 }
