@@ -51,3 +51,37 @@ type PriceCardDraftRegister interface {
 type PriceCardDraftRead interface {
 	ListPriceCardDrafts(ctx context.Context, tenant domain.TenantID, status domain.PriceCardDraftStatus, limit int) ([]domain.PriceCardDraft, error)
 }
+
+// PriceCardDraftAdvanceOutcome 是推进落点的封闭代数（票 price-card-import/04）。
+type PriceCardDraftAdvanceOutcome uint8
+
+const (
+	PriceCardDraftAdvanceOutcomeInvalid PriceCardDraftAdvanceOutcome = iota
+	// PriceCardDraftAdvanced：册上那一行还是读到时的样子，已推进到交来的那一格。
+	PriceCardDraftAdvanced
+	// PriceCardDraftAdvanceNotFound：册上没有这一版。
+	PriceCardDraftAdvanceNotFound
+	// PriceCardDraftAdvanceSuperseded：读与写之间那一行被别的操作者动过（修订、或已被推进），行一字不动。
+	PriceCardDraftAdvanceSuperseded
+)
+
+func (outcome PriceCardDraftAdvanceOutcome) String() string {
+	switch outcome {
+	case PriceCardDraftAdvanced:
+		return "ADVANCED"
+	case PriceCardDraftAdvanceNotFound:
+		return "NOT_FOUND"
+	case PriceCardDraftAdvanceSuperseded:
+		return "SUPERSEDED"
+	default:
+		return ""
+	}
+}
+
+// PriceCardDraftProgress 是批准与发布推进草稿的读写口：按键读一版，把推进后的那一份写回。写回只改状态与批准、发布的
+// 痕迹，不重写内容文档；「还是读到时的那一行」按交来那一份的前一格与录入痕迹判，判不上即`已被替换`。按框架合同无事务
+// 即拒（RequireExecutor）。
+type PriceCardDraftProgress interface {
+	LoadPriceCardDraft(ctx context.Context, tenant domain.TenantID, plan domain.VersionReference) (domain.PriceCardDraft, bool, error)
+	AdvancePriceCardDraft(ctx context.Context, draft domain.PriceCardDraft) (PriceCardDraftAdvanceOutcome, error)
+}
