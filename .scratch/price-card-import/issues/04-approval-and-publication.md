@@ -1,7 +1,7 @@
 # 04 审批职责规则、批准与发布
 
 Category: enhancement
-Status: in-progress——**完工，待评审与重放**（2026-10-10 通道 4；分支 `mcp4-pci04`，代码 tip `f3e79282`，基 `e266a876`；其后是登记册、清点与本票面三笔）；完成记录见文末。此前：in-progress——2026-10-10 通道 4 认领（单 task-ea81d298-cf3d-4f0e-adc3-2e4add1af98f，重派 task-d4d0063c），分支 `mcp4-pci04` 基 `e266a876`，工作树 `/home/tops/workspace/idp-parcel-mcp4-pci04`。此前：ready-for-agent——2026-09-25 通道 3 立票并激活（用户授权自决）
+Status: 阻断已修，待重放——2026-10-11 00:1x 通道 4（单 task-d1ca5f8d）：评审 ← 通道 2（`task-0a040d5e`，钉 `09795163`）Standards 阻断一条（S1）修于 `38e366f6`，S2 注释笔 `303d79cd`，票面是其后一笔；评审照录与逐条处置见文末 Comments。此前：in-progress——**完工，待评审与重放**（2026-10-10 通道 4；分支 `mcp4-pci04`，代码 tip `f3e79282`，基 `e266a876`；其后是登记册、清点与本票面三笔）；完成记录见文末。此前：in-progress——2026-10-10 通道 4 认领（单 task-ea81d298-cf3d-4f0e-adc3-2e4add1af98f，重派 task-d4d0063c），分支 `mcp4-pci04` 基 `e266a876`，工作树 `/home/tops/workspace/idp-parcel-mcp4-pci04`。此前：ready-for-agent——2026-09-25 通道 3 立票并激活（用户授权自决）
 Blocked by: 03（已解：03 resolved，main `f8177a9d`）
 地盘：
 - `migrations/parcel_pricing/`；
@@ -60,9 +60,9 @@ Blocked by: 03（已解：03 resolved，main `f8177a9d`）
 判断项（标「越权风险点 · 待 PP owner 复核」的是照先例自裁、票面没写定的格）：
 
 1. **两口挂 `operatorRegistries.pricing`，不挂票面第 5 条写的 `UnconfiguredIntake{}`。** 依据：spec 自决第 4 格 2026-09-25 更正（「本批各口因此直接挂这个 Intake……票 02 起照此办」）；03 已照此办且通道 1 2026-10-09 同意；operator-channel/04 归类表写明价卡导入这一批的口归 price-card-import、并说 spec 第 4 格与它一致，同票第 2 件判断项 2 也写明批准者取自信封走的是本票这条主路径。批准门要的主体与授予集只有操作者渠道交得出，挂未配置 Intake 则批准门永远走不到。两头只做了这一头。
-2. **授予集的词汇与来源。越权风险点 · 待 PP owner 复核。** PP 的授予是不透明的名字（`OperatorGrant`），只比相等；身份翻译层把信封里持有的能力面逐格译成授予名（`grantableFaces`：登记册配置写、主数据与运营查阅读；运营决定一格按决定种类另答、不进 `Holds`，不在其中）。规则要求的授予若不是能力面名，经操作者渠道恒答`批准者不合格`——要表达 spec 举的「定价主管那一级」这类租户自定等级，得等接入身份能力的授权模型扩到等级，归 ADR-0100 那一族与 ADR-0085 决定四另裁，不在本票。PC 那一条用的是商业权限等级，且其 Intake 译法尚未接；两边词汇不同在 spec 自决第 2 格「形状同、不共用」之内。
-3. **「状态不对」分三格答，且不读规则。越权风险点 · 待 PP owner 复核。** `草稿` → `DRAFT_NOT_VALIDATED`，`已批准` → `DRAFT_ALREADY_APPROVED`，`已发布` → `DRAFT_ALREADY_PUBLISHED`。照 PC `ApprovePublicationDraftHandler` 的分格；PP 多`草稿`一格是因为 PP 生命周期有四态，三种情形恢复动作不同。
-4. **发布的答案代数。越权风险点 · 待 PP owner 复核。** `DRAFT_PUBLISHED`（登记答 `RECORDED` 或 `ALREADY_REGISTERED` 即算落定）/ `PUBLICATION_NOT_LANDED`（其余各格，登记那一格随结果原名交回）/ `DRAFT_NOT_APPROVED` / `DRAFT_ALREADY_PUBLISHED`（不重交登记）/ `DRAFT_NOT_FOUND`。登记 `UNDECIDED` 时编排连原因上抛、整笔回滚，HTTP 答 `NO_ANSWER_FORMED`，同登记口。登记答案代数一格未改（ADR-0101 决定五）。照 PC `PublishPublicationDraftHandler` 的形；PP 没有生效边界那一格。
+2. **授予集的词汇与来源。越权风险点 · 待 PP owner 复核。** PP 的授予是不透明的名字（`OperatorGrant`），只比相等；身份翻译层把信封里持有的能力面逐格译成授予名（`grantableFaces`：登记册配置写、主数据与运营查阅读；运营决定一格按决定种类另答、不进 `Holds`，不在其中）。规则要求的授予若不是能力面名，经操作者渠道恒答`批准者不合格`——要表达 spec 举的「定价主管那一级」这类租户自定等级，得等接入身份能力的授权模型扩到等级，归 ADR-0100 那一族与 ADR-0085 决定四另裁，不在本票。PC 那一条用的是商业权限等级，且其 Intake 译法尚未接；两边词汇不同在 spec 自决第 2 格「形状同、不共用」之内。代价的另一半（评审 ← 通道 2 Spec P1 补记）：两口经 `AuthenticateRegistryWrite` 以登记册配置写（`REGISTRY_CONFIGURATION_WRITE`）铸信封，到得了批准门的人必持这一格——规则要求它与不要求等价，空转放行。能力面的原义是「能在哪一族端点上做什么」，不是审批资格；`grantableFaces` 的 grantable 也不是接入身份能力 `checkGrantable` 的「可授」。两处注释已在 `303d79cd` 写明（评审 S2 后半）；登记册 `PAR-SET-12`「所需证据」原先把本项写成了定论，已改为指向本项（`38e366f6`，评审 S2 前半）。
+3. **「状态不对」分三格答，且不读规则。越权风险点 · 待 PP owner 复核。** `草稿` → `DRAFT_NOT_VALIDATED`，`已批准` → `DRAFT_ALREADY_APPROVED`，`已发布` → `DRAFT_ALREADY_PUBLISHED`。照 PC `ApprovePublicationDraftHandler` 的分格；PP 多`草稿`一格是因为 PP 生命周期有四态，三种情形恢复动作不同。代价（评审 ← 通道 2 Spec P2 补记）：这几个答案名已随批准口上线，06 要逐格接；owner 若要并格，就是改线上契约。
+4. **发布的答案代数。越权风险点 · 待 PP owner 复核。** `DRAFT_PUBLISHED`（登记答 `RECORDED` 或 `ALREADY_REGISTERED` 即算落定）/ `PUBLICATION_NOT_LANDED`（其余各格，登记那一格随结果原名交回）/ `DRAFT_NOT_APPROVED` / `DRAFT_ALREADY_PUBLISHED`（不重交登记）/ `DRAFT_NOT_FOUND`。登记 `UNDECIDED` 时编排连原因上抛、整笔回滚，HTTP 答 `NO_ANSWER_FORMED`，同登记口。登记答案代数一格未改（ADR-0101 决定五）。照 PC `PublishPublicationDraftHandler` 的形；PP 没有生效边界那一格。代价（评审 ← 通道 2 Spec P2 补记）：这些答案名已随发布口上线，06 要逐格接；owner 若要并格，就是改线上契约。
 5. **并发不加锁。** 推进口按「前一格 + 录入者 + 录入时刻 + 内容摘要」做条件 UPDATE，推进成发布时另核批准者与批准时刻；判不上答`已被替换`、行一字不动。批准据此答 `DRAFT_CHANGED`；发布在登记落定后草稿跟不上即上抛，登记写入与草稿推进同一笔事务，整笔回滚。
 6. **批准、发布各一笔事务，时刻取系统时钟。** 判据同 `transactionalPriceCardDraftSubmission`：落点是业务答案就提交，返回错误整笔回滚。
 7. **状态码。** 批准每格 200（改的是已有那一行，不新落行）；发布登记新落一版取 201，其余 200；载荷封闭只收 `planId`、`planVersion`，夹带身份格按未知键拒。
@@ -72,7 +72,7 @@ Blocked by: 03（已解：03 resolved，main `f8177a9d`）
 没做的、留给后续：
 
 - 审批职责规则的登记面（同判断项 8）；租户上线时登 `PAR-SET-12` 那一行是实施的事。
-- parcel-pricing `CONTEXT.md` 没加「价卡发布审批职责规则」词条：地盘不含 CONTEXT，概念权威在 ADR-0101 决定六与 spec 自决第 2 格；PC 那一条在 PC CONTEXT 有词条，要不要对齐由 PP owner 定。
+- parcel-pricing `CONTEXT.md` 没加「价卡发布审批职责规则」词条：地盘不含 CONTEXT，概念权威在 ADR-0101 决定六与 spec 自决第 2 格；PC 那一条在 PC CONTEXT 有词条，要不要对齐由 PP owner 定。评审 ← 通道 2 Spec P3 同指这一格（连同操作者主体词条），由通道 1 另立票接。
 - 06（管理台草稿签）等本票进 main；管理台调这两口时载荷只带 `planId`、`planVersion`。
 
 验证（钉 `3291b79c` 的干净 detached 检出，含 PG）：
@@ -82,3 +82,64 @@ Blocked by: 03（已解：03 resolved，main `f8177a9d`）
 - `-v` 单跑 `cmd/parcel-api` 的 `TestTheWiredPriceCardDraftApprovalAndPublicationRecordAgainstARealDatabase` 与 `adapters/postgres` 的 `TestApprovalAndPublicationAdvanceTheDraftRow`：均 `--- PASS`，非 SKIP。
 - 清点在同一检出上重生成，见 `d8e8bb68`。
 - 未跑全仓 `go test ./...`，留推送方重放后那一跑。
+
+## Comments
+
+### 评审 ← 通道 2 · 钉 `09795163` · 23:5x
+
+（`task-0a040d5e`，非作者评审；通道 1 派修复单 `task-d1ca5f8d` 时整段转来，作者照录。原文的二级标题降为四级，文字不动。）
+
+非作者评审 price-card-import/04（基 e266a876 → 09795163，代码 tip f3e79282）。结论：代码逻辑无阻断；1 条阻断在参数登记册（改一个词即可）；Standards 非阻断 2、Spec 非阻断 3。未修任何东西。
+
+#### Standards
+
+【阻断】
+S1 docs/product/PILOT-PARAMETER-REGISTER.md PAR-SET-12「当前登记」以「未配置（租户取值留空）」开头，违反同文件「登记规则」：当前登记“必须以以下一种状态开头：待提供、待核验、待决策、已确认、本期不适用、已失效”（「参数就绪门槛」再申只能用这六种）。兄弟行 PAR-COM-18 与 ADR-0126 决定五登的都是「待提供」。改成「待提供：未配置……」即合规，后文不动。
+【非阻断】
+S2 adapters/accessidentity/operator_registry_authenticator.go `grantableFaces`：机制没越权（只问 envelope.Holds、用 accessidentity 原名、不另设闸），但把 CapabilityFace（accessidentity 注释：操作者能在哪一族端点上做什么）读成审批资格；PAR-SET-12「所需证据」写死「授予名即操作者信封里持有的能力面」，把标着待 PP owner 复核的判断项 2 先落成登记册口径——票面说待定、登记册说已定（单一权威）。domain `OperatorGrant` 注释「本上下文不枚举」与本上下文这份枚举相抵；`grantableFaces` 与 accessidentity `checkGrantable` 的「可授」同词异义（判断题）。
+S3（判断题·Duplicated Code）cmd/parcel-api/assemble_pricing_import.go 两只新事务包装与既有 transactionalPriceCardDraftSubmission 同形，沿 cmd 先例，可不动。
+【无发现】注释全中文，新增注释无行号与跨文件计数；PP 自立 OperatorSubject / PriceCardApprovalDutyRule，不引 partycommercial（architecture 测试过）；0012 不种行，scripts/ 未动，未配置不给默认。
+
+#### Spec
+
+【阻断】无。
+【非阻断】
+P1 判断项 2 的代价只写了一半：批准口经 AuthenticateRegistryWrite 以 REGISTRY_CONFIGURATION_WRITE 铸信封，到得了批准门的人必持这一格——规则要求它与不要求等价（空转放行）；票面只写了「非能力面名恒答批准者不合格」那一半。
+P2 判断项 3、4 写了理由（照 PC 分格；PP 多一态、无生效边界），没写代价：这些答案名已上线，06 要逐格接，owner 若要并格就是改线上契约。
+P3 parcel-pricing CONTEXT.md 未收「价卡发布审批职责规则」与操作者主体词条；作者已列为留给 owner，地盘不含 CONTEXT，需另票接（AGENTS「改文档」）。
+【无发现】验收三条逐条有测：批准门五格领域与编排双层都有；发布摘要逐字节相等、登记各格原样回（UNDECIDED 上抛→500 NO_ANSWER_FORMED，与 base 上 NewRegisterPriceCardEndpoint 同）；PG 带 DSN、端点表两行、清点重生成。判断项 1 依据确在 spec 自决第 4 格 2026-09-25 更正（本批各口直接挂这个 Intake，票 02 起照此办），第 5 条原句留痕写清。判断项 5：READ COMMITTED 下被挡的 UPDATE 按已提交新行重判 WHERE，0 行即 SUPERSEDED、行一字不动；发布失配上抛，整笔回滚连登记一起撤。NOT_ACCEPTED 未单测理由成立：PriceCardDraft.Registration 经 NewPriceCardRegistration，零租户先以 error 返回，到不了登记用例。无票外改动（OperatorIdentity.Grants 是第 2 条「由 Intake 把信封译成它」所需）。
+
+#### 读 diff 前先列的清单（逐条对 diff 均符合，除上列）
+
+批准门：不在→DRAFT_NOT_FOUND；`草稿`→未校验；`已批准`/`已发布`各答其格且不读规则；只有`已校验`才读规则；未登记→未配置、不放行；要求不同主体且同人→需换人；要求授予而不持→不合格；两格都不要求→放行（含自批）；通过→记批准者与批准时刻（不早于录入）转`已批准`；读写之间被替换→DRAFT_CHANGED、行不动；他租户规则/零值主体/时刻倒挂→error。
+发布交给登记：只接`已批准`；交具体 *RegisterPriceCardHandler 的是 草稿租户 + 方案快照原值 + 源文件身份 + 方向授权引用 + publicationApprover=草稿上记的批准者；RECORDED/ALREADY_REGISTERED 落定转`已发布`，其余草稿留`已批准`、登记格原样带回；无身份格；登记与推进同一事务。
+不能变：登记答案代数六格不增不改名；不调模板读口、不重算摘要；规则未登记答未配置且不放行、不默认单人或双人；草稿四态与 ResubmissionOf 不改；受控 CLI 与 seed 不变。
+
+#### 变异（go test -overlay，副本与 JSON 在 /tmp/mcp2-mut，检出未改）
+
+M1 批准门跳过「主体相同」：杀死——domain TestApprovalIsGatedByTheApprovalDutyRule、application TestApprovalGateAnswersEachCellOfTheRule/主体相同。
+M2 发布把录入者当 publicationApprover：杀死——domain TestTheRegistrationIsTheApprovedDraftItself、application TestPublishingHandsTheApprovedDraftItselfToTheRegistration（cmd 装配测不查 approver，未杀，属预期）。
+M3（加做）条件 UPDATE 去掉录入者/录入时刻/摘要三格：杀死——postgres TestAnAdvanceFromAStaleReadIsSuperseded。
+
+#### 验证（检出 09795163）
+
+go build ./... 与 go vet ./... 退 0；带 DSN go test -count=1 -p 1 ./internal/parcelpricing/... ./internal/architecture/... 全 ok；./cmd/parcel-api/... ok；-v 单跑 TestTheWiredPriceCardDraftApprovalAndPublicationRecordAgainstARealDatabase 与 TestApprovalAndPublicationAdvanceTheDraftRow 均 --- PASS，非 SKIP。git worktree remove /tmp/idp-review-pci04-mcp2 已做（无 --force）。
+
+### 阻断修复记录（2026-10-11 00:1x，通道 4，`task-d1ca5f8d`；同一分支 `mcp4-pci04`，基 `e266a876` 不动、未 rebase）
+
+| 笔 | 做了什么 |
+|---|---|
+| `38e366f6` | 登记册 `PAR-SET-12`：「当前登记」改以「待提供」开头（「待提供：未配置（租户取值留空），……」，后文内容不动）；「所需证据」里「授予名即操作者信封里持有的能力面」改为指向本票判断项「授予集的词汇与来源」 |
+| `303d79cd` | 只改注释：领域 `OperatorGrant` 改说领域不枚举、哪些名字会出现由授权模型与消费侧译法（`grantableFaces`）一起决定；`grantableFaces` 写明此 grantable 非 `checkGrantable` 的「可授」，并写下拿能力面当授予格这一暂定译法的两头代价。代码一字未动 |
+| 本笔 | 票面：评审照录、本修复记录、判断项 2 / 3 / 4 补代价、「没做的」补 P3 去向、Status |
+
+逐条处置：
+
+- **S1（阻断）**：已修，`38e366f6`。写法照同文件「登记规则」与兄弟行 `PAR-COM-18`。
+- **S2（非阻断）**：前半已修，`38e366f6`——登记册不再替待复核的判断项下定论。后半（`OperatorGrant` 注释与 `grantableFaces` 的枚举相抵、「可授」同词异义）派单给的两条路里取「改注释」，`303d79cd`：那句「本上下文不枚举」留在代码里会误导下一个读的人，只记在票面上它照样在那里。判断项 2 也一并补记。
+- **S3（判断题）**：不动。两只事务包装沿 `cmd/parcel-api` 既有 `transactionalPriceCardDraftSubmission` 的先例，评审自注可不动。
+- **P1**：补进判断项 2（本笔）。
+- **P2**：补进判断项 3、4（本笔）。
+- **P3**：只记，见「没做的、留给后续」CONTEXT 那条；由通道 1 另立票。
+
+验证（`mcp4-pci04` 工作树，提交前的工作副本内容即 `303d79cd`，WSL，go1.26.8）：改动的两份 `.go` `gofmt -l` 无输出、无 CR、无 BOM；`git diff -U0` 下增删行全是注释行；`go build ./...`、`go vet ./...` 退 0。只改了 `.md` 与注释，按派单不重跑测试，由通道 1 自审。
