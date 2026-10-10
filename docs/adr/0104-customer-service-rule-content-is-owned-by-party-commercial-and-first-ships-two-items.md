@@ -1,6 +1,6 @@
 # ADR-0104：客户服务规则版本的正文归 `party-commercial`，首发只进「索赔期限」与「最低材料」两项且子行至少一项；VE 既有的通知策略册与索赔资格声明册是 VE 自己的判断参数，不迁移、不改键；VE 对规则的采用只冻版本引用，解析走既有闭包加一个点读口
 
-Status: Accepted（2026-09-03，用户经 IDP 队列通道 3 授权本会话「有全部权限」自决并向各会话派工。裁决能力边界：读过票 [party-commercial-context-gaps/05](../../.scratch/party-commercial-context-gaps/issues/05-customer-service-rule-version-has-no-consuming-seam-into-visibility-exception.md) 全文（含 MCP-2 于 `877444a` 的取证与「待 owner 裁的三处」）、`party-commercial` `CONTEXT.md` 中「客户服务规则版本」词条、Rules 两句与 Boundaries 那一句、`visibility-exception` `CONTEXT.md` 索赔一节中期限与材料的硬句、`internal/partycommercial/domain/customer_service_rule.go`、`internal/visibilityexception/adapters/postgres` 的 `claim_eligibility.go` 与 `notification_policy.go` 头注、`migrations/party_commercial/0014` 头注；未重读 VE `CONTEXT.md` 披露与通知各节全文、`UC-VE-007` 与 `UC-VE-008` 全文、VE 编排代码——本记录因此只裁**正文归谁、首发进几项、VE 怎么采用**三件，不改任何一条 VE 不变量、不动 VE 的表与编排）
+Status: Accepted（2026-09-03，用户经 IDP 队列通道 3 授权本会话「有全部权限」自决并向各会话派工。裁决能力边界：读过票 [party-commercial-context-gaps/05](../../.scratch/party-commercial-context-gaps/issues/05-customer-service-rule-version-has-no-consuming-seam-into-visibility-exception.md) 全文（含 MCP-2 于 `877444a` 的取证与「待 owner 裁的三处」）、`party-commercial` `CONTEXT.md` 中「客户服务规则版本」词条、Rules 两句与 Boundaries 那一句、`visibility-exception` `CONTEXT.md` 索赔一节中期限与材料的硬句、`internal/partycommercial/domain/customer_service_rule.go`、`internal/visibilityexception/adapters/postgres` 的 `claim_eligibility.go` 与 `notification_policy.go` 头注、`migrations/party_commercial/0014` 头注；未重读 VE `CONTEXT.md` 披露与通知各节全文、`UC-VE-007` 与 `UC-VE-008` 全文、VE 编排代码——本记录因此只裁**正文归谁、首发进几项、VE 怎么采用**三件，不改任何一条 VE 不变量、不动 VE 的表与编排）｜**部分停用**：Alternatives「允许显式空版本」条目中「客户服务规则没有对应的回退物——产品没有默认期限」的前提已由 [ADR-0176](./0176-customer-service-rule-contract-tier-selection-and-inheritance.md) 消解，见本文件 Links 节前向指针；其余各条不变
 Date: 2026-09-03
 
 ## Context
@@ -52,6 +52,7 @@ Date: 2026-09-03
 
 ## Links
 
+- 前向指针 [ADR-0176](./0176-customer-service-rule-contract-tier-selection-and-inheritance.md)：其 Decision 二给本记录 Alternatives「允许显式空版本」条目立起了回退物（同范围挂服务产品的版本的那一行），合同版无行语义由「无客户差异」演进为「继承产品版该行」；本记录 Decision 三「子行至少一项、不允许显式空版本」对版本级继续成立。本记录正文不改写，README 条目已按「部分停用」制度标注。
 - 票 [party-commercial-context-gaps/05](../../.scratch/party-commercial-context-gaps/issues/05-customer-service-rule-version-has-no-consuming-seam-into-visibility-exception.md)：四问、前提纠正与「待 owner 裁的三处」的出处
 - [party-commercial CONTEXT](../domain/party-commercial/CONTEXT.md)：「客户服务规则版本」词条、Rules 两句、Boundaries 那一句——本记录 Decision 一的全部依据
 - [visibility-exception CONTEXT](../domain/visibility-exception/CONTEXT.md)：索赔一节「三个独立期限」与「每个期限必须保存适用规则版本、起算事件、业务时区或日历、截止时间和适用范围」——Decision 二的期限形状与 Decision 五的引用/派生分界
