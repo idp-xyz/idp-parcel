@@ -235,6 +235,37 @@ func TestAnUnconfiguredLegZoneLeavesTheCandidatePendingWithoutStoppingTheJudgmen
 	}
 }
 
+// Covers: 票 routing-first-cut/17 判据一的混合段——段 1 有区、出得了价，段 2 区域未配置：候选仍待判断、不带出处。
+// 只合已评价的段，会拿段 1 的价充整条候选的成本，那正是「缺口不折零、不以他段顶替」要拦的。
+func TestAPricedLegDoesNotStandInForALegWhoseZoneIsUnconfigured(t *testing.T) {
+	source := newAdapter(t,
+		map[string][]nrports.LineSegmentCostBasis{
+			"line-half-zoned": {
+				{SegmentIndex: 0, Kind: nrports.SupplierBuyPlanBasis, Reference: "plan-x/v1"},
+				{SegmentIndex: 1, Kind: nrports.SupplierBuyPlanBasis, Reference: "plan-x/v1"},
+			},
+		},
+		map[string]ppdomain.PricingPlanVersion{"plan-x/v1": syntheticBuyPlan(t, "plan-x", "v1", "5")},
+	)
+	source.unzonedOrdinals = map[int]bool{2: true}
+
+	costs, err := source.LoadCandidateCosts(context.Background(), judgmentKey(t), evidenceWithComparison(t, "USD",
+		pathOf(t, "line-half-zoned", 2)))
+	if err != nil {
+		t.Fatalf("err = %v, want nil", err)
+	}
+	if len(source.zoneQueries) != 2 {
+		t.Fatalf("区域之问 = %+v，want 两段各一问", source.zoneQueries)
+	}
+	fact := factOf(t, costs.Facts, "line-half-zoned")
+	if fact.State().String() != "PENDING" {
+		t.Fatalf("fact = %s %d minor, want PENDING（段 2 缺成本依据，不以段 1 的价顶替）", fact.State(), fact.AmountMinor())
+	}
+	if len(costs.Citations) != 0 {
+		t.Fatalf("待判断的候选不该带出处：%+v", costs.Citations)
+	}
+}
+
 // Covers: 没有包裹事实时一段都不评价，候选待判断；同样不整判断停下。
 func TestWithoutParcelFactsEveryLegStaysPending(t *testing.T) {
 	source := newAdapter(t,
@@ -333,6 +364,7 @@ type testSource struct {
 	hasFacts        bool
 	zonesConfigured bool
 	zoneByOrdinal   map[int]string
+	unzonedOrdinals map[int]bool
 	zoneQueries     []adapter.LegZoneQuery
 	series          []ppdomain.ReferenceSeriesValue
 	now             time.Time
@@ -370,7 +402,7 @@ func (source *testSource) ParcelFactsFor(
 // ZoneFor 未单列的段一律答 Z1——合成价卡的档位都在 Z1。
 func (source *testSource) ZoneFor(_ context.Context, query adapter.LegZoneQuery) (adapter.LegZone, bool, error) {
 	source.zoneQueries = append(source.zoneQueries, query)
-	if !source.zonesConfigured {
+	if !source.zonesConfigured || source.unzonedOrdinals[query.Ordinal] {
 		return adapter.LegZone{}, false, nil
 	}
 	if zone, listed := source.zoneByOrdinal[query.Ordinal]; listed {
