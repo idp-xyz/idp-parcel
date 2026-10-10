@@ -2,6 +2,7 @@ package application_test
 
 import (
 	"context"
+	"strings"
 	"testing"
 	"time"
 
@@ -63,7 +64,7 @@ func unversionedDigestCases(t *testing.T) []unversionedDigestCase {
 }
 
 // Covers: ADR-0014「规范化版本不同不是冲突」——NOC-1 之前入库的记录存的是无版本摘要，同一条命令
-// 重放按无版本那一版重算再比，答已有结果；同身份换内容仍是内容冲突。九个定形口逐口走一遍。
+// 重放按无版本那一版重算再比，答已有结果；同身份换内容仍是内容冲突。定形口逐口走一遍。
 func TestRecordsStoredBeforeNOC1AreComparedUnderTheirOwnShape(t *testing.T) {
 	for _, testCase := range unversionedDigestCases(t) {
 		t.Run(testCase.name, func(t *testing.T) {
@@ -71,6 +72,18 @@ func TestRecordsStoredBeforeNOC1AreComparedUnderTheirOwnShape(t *testing.T) {
 			rewrite(testCase.unversioned)
 			testCase.replay(t)
 			testCase.conflict(t)
+		})
+	}
+}
+
+// Covers: 新记录写的是 NOC-1 形——无版本那一版只用来比旧记录，误写进新记录时上一例照样绿，
+// 要在这里断。
+func TestNewRecordsAreStoredUnderNOC1(t *testing.T) {
+	for _, testCase := range unversionedDigestCases(t) {
+		t.Run(testCase.name, func(t *testing.T) {
+			if stored, _ := testCase.first(t); !strings.HasPrefix(stored, "NOC-1:") {
+				t.Fatalf("新记录落下的摘要是 %q，want NOC-1 形", stored)
+			}
 		})
 	}
 }
@@ -159,7 +172,7 @@ func executionUnversionedCase(t *testing.T) unversionedDigestCase {
 	}
 }
 
-// consolidationUnversionedCase 是集运六口共用的形：prepare 把单元推到这一口能做的状态，submit
+// consolidationUnversionedCase 是集运各口共用的形：prepare 把单元推到这一口能做的状态，submit
 // 以来源身份 sourceID 交这一口的命令。replay 与 conflict 在受理闸上就分出去，不再碰单元。
 func consolidationUnversionedCase(
 	t *testing.T,
