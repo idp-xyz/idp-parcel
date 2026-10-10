@@ -1,7 +1,7 @@
 # 13 关务适用性判断的评审尾巴：词条改引规则节、两处旧口径注释、NR 侧同国用例
 
 Category: enhancement
-Status: in-progress——**完工，待评审与重放**（2026-10-10 21:4x 通道 2；分支 `mcp2-rfc13`，代码 tip `ce2e3454`，基 `1f8b0cea`）；完成记录见文末。此前 in-progress——2026-10-10 通道 2 认领，分支 `mcp2-rfc13`、基 `1f8b0cea`。此前 ready-for-agent——2026-10-10 通道 1 立（用户授权自决），出自 [12](12-cc-customs-applicability-judgment-for-route-candidates.md) 阻断修复两份非作者补评审（通道 3、通道 4，均钉 `18be66e8`）的非阻断项
+Status: resolved——2026-10-10 22:3x 通道 1 重放进 main：`f30dc502`…`d32b5e51`，清点重生成无差；评审与进 main 记录见文末。此前 in-progress——**完工，待评审与重放**（2026-10-10 21:4x 通道 2；分支 `mcp2-rfc13`，代码 tip `ce2e3454`，基 `1f8b0cea`）；完成记录见文末。此前 in-progress——2026-10-10 通道 2 认领，分支 `mcp2-rfc13`、基 `1f8b0cea`。此前 ready-for-agent——2026-10-10 通道 1 立（用户授权自决），出自 [12](12-cc-customs-applicability-judgment-for-route-candidates.md) 阻断修复两份非作者补评审（通道 3、通道 4，均钉 `18be66e8`）的非阻断项
 Blocked by: [11](11-demo-network-adopted-as-reference-configuration.md)（已解：11 已进 main，通道 1 派单时核过 `internal/networkrouting` 与 `internal/customscompliance` 上无他人在途）——不是逻辑依赖，是地盘：11 正在 `internal/networkrouting` 写，等它进 main 再动，免得一个目录两个写入方
 归档：不属 [psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md) 的子票集；放在本目录是因为出自 12 的评审。
 地盘：`docs/domain/customs-compliance/CONTEXT.md`「关务适用性判断」词条；`internal/networkrouting/adapters/customscompliance/` 的注释与用例；`cmd/parcel-dispatch/assemble.go` 里 `acceptanceReachability` 的头注。
@@ -65,3 +65,35 @@ Blocked by: [11](11-demo-network-adopted-as-reference-configuration.md)（已解
 - `tools/mechanism-inventory` 在 `ce2e3454` 的干净检出上重生成，`docs/product/MECHANISM-INVENTORY.md` 无差。
 
 **未验**：全仓 `go test ./...`，留推送方重放后那一跑。
+
+## Comments
+
+**评审 ← 通道 3 · 钉 `f65447c1` · 22:2x（`task-3d797e04`；卡在开工后被撤回、已终态，报告经频道交）**：两轴无阻断。
+
+- Standards 非阻断（低）：`cmd/parcel-dispatch/assemble.go` 的 `acceptanceReachability` 头注后半句重述了 `nrcustoms.ErrCustomsCatalogUnreadable`
+  名下的上抛机制（当依赖调不通上抛、不记成`资料不足`），与判断项 4「机制只在那里讲」不符；留「两端异国的件在这条装配上形成`未形成判断`
+  （见 `nrcustoms.ErrCustomsCatalogUnreadable`）」即可。
+- Spec：无非阻断。判别力独立复现：M1、M2 各自让新用例红在 err 断言；M1、M2 配 `1f8b0cea` 的旧测试文件全绿，票面前提属实；
+  加做 M3（处理器把读不到当目录为空）红在出处判断标识，判断项 2 成立。
+- 验证：`f65447c1` 上 build / vet / gofmt 净，CC 与 NR 适配器包 ok；带 DSN `-v` 的 `TestAnUnreadableCustomsCatalogReachesBothEvidenceViewsAsADependencyFailure`
+  PASS，非 SKIP。
+
+**评审 ← 通道 4 · 钉 `f65447c1` · 22:2x（`task-1cbc90cd`）**：两轴无阻断。
+
+- Standards 非阻断（低）：`ErrCustomsCatalogUnreadable` 的注释补了初始路由一侧的`未决`，但「为什么不能译成缺口」仍只写可达性的`资料不足`；
+  初始路由一侧译成缺口同样是`未决`（`RouteCandidateEvidenceIncomplete`），差在未决原因（`RouteEvidenceUnavailable`）。旁注（旧有、不在本票地盘）：
+  `assemble.go` 的 `brokenCustomsSource` 头注仍只写`未形成判断`，而它同时接进初始路由那条。
+- Spec：无非阻断。票面两种改坏之外另加两种（坏在处理器、处理器把读不到折成目录为空），四种下新用例都是该包唯一变红的用例。
+- 验证：同上，带 DSN 用例 PASS，非 SKIP。
+
+## 进 main 记录（通道 1 · 2026-10-10 22:3x）
+
+- 远端 main `e266a876` → `d32b5e51`（本记录随其后一笔）：本票五笔 cherry-pick 重放到 tip，SHA 换了——分支 `mcp2-rfc13` 的 `2c1d9936`、`41bb6348`、
+  `b7b75a2d`、`ce2e3454`、`f65447c1` 在 main 上依次是 `f30dc502`、`ac06188f`、`6b53f51c`、`4d936e55`、`d32b5e51`。重放前核过 `1f8b0cea..e266a876`
+  与本票文件无重叠，重放后本票文件与分支 tip 逐字节一致；清点在 `d32b5e51` 上重生成无差，不另成笔。
+- 评审：通道 3 与通道 4 各自独立评完（通道 3 那张卡撤回未及），两轴均无阻断。两份各一条低优先非阻断见 Comments，随票记、未改，
+  日后碰这两处注释的票顺手处理。
+- 验证（推送方，钉合入候选 `d32b5e51`）：`go build ./...`、`go vet ./...` 退出 0；带 DSN 全仓 `go test -count=1 -p 1 ./...` 138 个包 ok、0 FAIL；
+  `-v` 单跑 `TestASameCountryCandidateIsStillAnsweredWhenTheCatalogIsUnreadable` PASS，带 DSN `-v` 单跑
+  `TestAnUnreadableCustomsCatalogReachesBothEvidenceViewsAsADependencyFailure` PASS（0.48s，非 SKIP）。
+- 解锁：[17](17-initial-route-pricing-input-from-customer-declaration.md) 的「Blocked by 13」（地盘）已解。
