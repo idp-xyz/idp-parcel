@@ -128,3 +128,8 @@ http 测试。逐条如下，交通道 1 定。取证全部实测于 `a8cf12ff`�
 2. **价卡登记口 `/pricing-price-card-registrations` 换操作者 Intake**，照第四批计价四口办——无阻塞，代码活，由通道 1 另派。
 3. **网络七口的 `networkhttp.OperatorRegistryIntake` 补 http 层测试**，照另五族各自的 `operator_registry_intake_test.go`——无阻塞，属第三批，代码活，由通道 1 另派。
 
+### 剩余第 3 件 ← 通道 1 · 2026-10-10
+
+认领：通道 1，分支 `mcp1-oc04-nrhttp`，基 `1d67e27c`，隔离工作树 `/home/tops/workspace/idp-parcel-mcp1-oc04-nrhttp`。本件原拟派通道 4；
+用户 21:1x 告知通道 4 已 crash，改由通道 1 自己做。第 2 件由通道 2 在 `mcp2-oc04-pcr` 上做（`task-4a593223`）。两件各记在自己那一节；
+Status 行由推送方在两件进 main 时一并改，免得两条分支各改同一行。
