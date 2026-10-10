@@ -218,9 +218,9 @@ type InitialRouteEvidenceView interface {
 	) (InitialRouteEvidence, bool, error)
 }
 
-// ErrRouteCostSourceNotConfigured 是候选成本取数侧缺计价输入取数路径时的如实答复
-// （票 routing-first-cut/10）：那半是消费方的实例半边，没接就没有依据，不得编一份空输入
-// 让每个候选都算出一个看着合法的价格。
+// ErrRouteCostSourceNotConfigured 是候选成本取数侧整条取数路径没接时的如实答复，编排据它形成
+// `COST_SOURCE_NOT_CONFIGURED`：没接就没有依据，不得编一份空输入让每个候选都算出一个看着合法的价格。
+// 只缺某一段的输入（区域、包裹事实）不走这一格——那一段待判断，候选随之缺成本依据。
 var ErrRouteCostSourceNotConfigured = errors.New("network routing: route cost source not configured")
 
 // RouteCandidateCosts 是取数侧为一次判断交回的成本族：逐候选三态事实 + 逐段评价出处。
@@ -232,7 +232,8 @@ type RouteCandidateCosts struct {
 // RouteCandidateCostSource 为一次初始路由判断取回候选成本（routing-first-cut/10，ADR-0148
 // 决定四）。事实族在取数侧兑现：逐段向 parcel-pricing 取评价、按比较币种不舍入求和取整一次，
 // 合成每候逐一格三态事实；出处（评价标识、方案引用、内部政策引用与全精度比较金额）随事实
-// 交回，由编排并入计划留痕。计价输入没接时以 ErrRouteCostSourceNotConfigured 如实作答。
+// 交回，由编排并入计划留痕。整条取数路径没接时以 ErrRouteCostSourceNotConfigured 如实作答；
+// 缺某一段的输入只让那一段待判断，不整判断停下。
 type RouteCandidateCostSource interface {
 	LoadCandidateCosts(
 		ctx context.Context,

@@ -2,6 +2,7 @@ package parcelpricing
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
@@ -9,6 +10,10 @@ import (
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
+
+// errUntranslatableParcelFacts 说判断键或客户声明译不进计价输入的词汇（租户、声明包裹、事实引用）。那是两侧词汇表
+// 出了分歧，不是这件包裹没有事实，所以上抛，不答 found=false。
+var errUntranslatableParcelFacts = errors.New("network routing: untranslatable parcel facts")
 
 // DeclaredParcelFacts 是预路由的包裹事实取数侧：按判断键里的声明包裹问 parcel-shipment 的客户声明，译成计价输入要的
 // 实重与外廓（network-routing CONTEXT「预路由使用客户声明快照」，ADR-0148 决定四第 7 条）。来源标在事实引用的版本串
@@ -38,12 +43,12 @@ func (source *DeclaredParcelFacts) ParcelFactsFor(
 	tenant, err := psdomain.NewTenantID(key.TenantID.String())
 	if err != nil {
 		return ParcelFacts{}, false, fmt.Errorf("%w: tenant %q is not a parcel-shipment tenant: %v",
-			errUntranslatableEvaluation, key.TenantID, err)
+			errUntranslatableParcelFacts, key.TenantID, err)
 	}
 	parcel, err := psdomain.NewDeclaredParcelID(key.DeclaredParcelID.String())
 	if err != nil {
 		return ParcelFacts{}, false, fmt.Errorf("%w: parcel %q is not a declared parcel: %v",
-			errUntranslatableEvaluation, key.DeclaredParcelID, err)
+			errUntranslatableParcelFacts, key.DeclaredParcelID, err)
 	}
 	resolution, err := source.declared.LoadDeclaredMeasurement(ctx, tenant, parcel)
 	if err != nil {
@@ -84,7 +89,7 @@ func declarationFact(parcel string, resolution psdomain.DeclaredMeasurementResol
 	}
 	reference, err := ppdomain.NewVersionReferenceIdentity(ppdomain.ArtifactDeclaredMeasurement, parcel, version)
 	if err != nil {
-		return ppdomain.VersionedFactReference{}, fmt.Errorf("%w: declaration fact: %v", errUntranslatableEvaluation, err)
+		return ppdomain.VersionedFactReference{}, fmt.Errorf("%w: declaration fact: %v", errUntranslatableParcelFacts, err)
 	}
 	return ppdomain.NewVersionedFactReference(reference)
 }

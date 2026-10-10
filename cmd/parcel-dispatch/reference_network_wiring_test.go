@@ -253,7 +253,7 @@ func assertDemoCandidateWaitsForItsCost(t *testing.T, costs nrports.RouteCandida
 	}
 }
 
-// registerDemoCostCard 照演示种子登记演示网络三段共引的那张 BUY 成本卡，走与 parcel-pricing-register 同一条重建与
+// registerDemoCostCard 照演示种子登记演示网络各段共引的那张 BUY 成本卡，走与 parcel-pricing-register 同一条重建与
 // 登记用例。登了它各段才有评价目标，成本取数侧才走到折区域那一步；不登，各段停在「方案不在册」，同样待判断，却证不到
 // 区域那一格。
 func registerDemoCostCard(t *testing.T, db *bentopg.DB) {
