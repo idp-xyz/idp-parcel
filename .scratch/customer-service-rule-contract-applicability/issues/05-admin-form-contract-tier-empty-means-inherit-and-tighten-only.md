@@ -1,7 +1,7 @@
 # 05 管理台：客户服务规则表单的合同版——空表即继承、只收紧不删减
 
 Category: enhancement
-Status: draft——2026-10-10 通道 1 发布：拆法作者通道 3（`task-2b404e22`），通道 1 经用户 19:1x 授权认可并裁定拆法清单所附七问
+Status: ready-for-agent——2026-10-10 通道 1 发布：拆法作者通道 3（`task-2b404e22`），通道 1 经用户 19:1x 授权认可并裁定拆法清单所附七问
 Blocked by: [04](04-ve-claim-eligibility-checks-contract-and-inherits-rows-from-product-base.md)——文案不赶在行为前面
 父票：[spec](../spec.md)
 地盘：`apps/admin-web` 的客户服务规则表单；前端切片，在 `main` 上做（[workflow.md「前端切片」](../../../docs/agents/workflow.md#前端切片一人在-main-上直接做)）。

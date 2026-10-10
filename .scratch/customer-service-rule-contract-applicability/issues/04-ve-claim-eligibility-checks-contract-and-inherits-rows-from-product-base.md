@@ -1,7 +1,7 @@
 # 04 VE 索赔资格：采纳合同版时按合同点核、按行继承产品底座
 
 Category: enhancement
-Status: draft——2026-10-10 通道 1 发布：拆法作者通道 3（`task-2b404e22`），通道 1 经用户 19:1x 授权认可并裁定拆法清单所附七问
+Status: ready-for-agent——2026-10-10 通道 1 发布：拆法作者通道 3（`task-2b404e22`），通道 1 经用户 19:1x 授权认可并裁定拆法清单所附七问
 Blocked by: [03](03-pc-layered-read-port-returns-contract-and-product-base-bodies.md)
 父票：[spec](../spec.md)
 地盘：`internal/visibilityexception/adapters/partycommercial` 与 `cmd/parcel-api` 的索赔装配；碰 Go，走并行会话那条路。
