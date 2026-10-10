@@ -421,19 +421,18 @@ func ResolveCommercialClosure(
 			return closurePending(key, NamedReferenceNotConfirmed, key.Anchor, closure.viewRevision)
 		}
 		closure.outcome = UniquelyResolved
-		closure.adopted = adopted
-		closure.resolutionID = closureIdentity(key, closure.viewRevision, adopted)
+		closure.adopted = inMemberOrder(adopted, key.RequiredBases)
+		closure.resolutionID = closureIdentity(key, closure.viewRevision, closure.adopted)
 	}
 	return closure
 }
 
 // resolutionOrder 把依合同解析的那几类（resolvesAfterContract）排到最后，其余成员保持调用方
-// 声明的次序。
+// 声明的次序。它只管解析先后；Adopted() 交出与快照写下的成员次序由 memberOrder 定。
 //
 // 这是本上下文里唯一一条成员间的解析先后（ADR-0080）：那几类按「哪一版客户合同」选，
 // 而那一版是同一个闭包在解的另一项。写成一处排序而不是散在解析里的几个 if，是因为「谁在
-// 谁之后」本身就是要被读到的规则；顺序稳定还让 Adopted() 与快照里的成员次序不随声明顺序
-// 摆动。
+// 谁之后」本身就是要被读到的规则。
 //
 // 只分两段，不做通用拓扑排序：正文指名引用之间的相互约束由 namedReferencesConfirmed 事后
 // 核对，那条路径不需要顺序。真出现不指向合同的第二条依赖时再谈通用解法——现在写一个只有
@@ -449,6 +448,41 @@ func resolutionOrder(bases []CommercialObjectKind) []CommercialObjectKind {
 		ordered = append(ordered, kind)
 	}
 	return append(ordered, deferred...)
+}
+
+// memberOrder 是成员次序：调用方声明的次序，只把结算政策排到最后。
+//
+// 它不跟解析先后（resolutionOrder）走。快照按成员次序写下，解析库撞键时比内容摘要，次序一变，已固定的
+// 解析重解一次就答`内容冲突`；解析标识先排序再散列，看不出这一变化。所以第二段（resolvesAfterContract）
+// 再加一类只改解析先后，成员次序仍是结算政策独占第二段时的样子。
+func memberOrder(bases []CommercialObjectKind) []CommercialObjectKind {
+	ordered := make([]CommercialObjectKind, 0, len(bases))
+	settlement := false
+	for _, kind := range bases {
+		if kind == SettlementPolicyObject {
+			settlement = true
+			continue
+		}
+		ordered = append(ordered, kind)
+	}
+	if settlement {
+		ordered = append(ordered, SettlementPolicyObject)
+	}
+	return ordered
+}
+
+// inMemberOrder 把按解析先后采用的成员排回成员次序。必需依据不重复（minimumIdentityEstablished 拒重复），
+// 唯一解析时每一类恰好采用一项，排完不多不少。
+func inMemberOrder(adopted []AdoptedBasis, bases []CommercialObjectKind) []AdoptedBasis {
+	ordered := make([]AdoptedBasis, 0, len(adopted))
+	for _, kind := range memberOrder(bases) {
+		for _, basis := range adopted {
+			if basis.kind == kind {
+				ordered = append(ordered, basis)
+			}
+		}
+	}
+	return ordered
 }
 
 // resolvesAfterContract 声明依合同解析的第二段由哪几类组成：它们要按本闭包解出的那一版

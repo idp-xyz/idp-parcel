@@ -241,6 +241,34 @@ func TestResolutionReplayAndConflictSplitByContent(t *testing.T) {
 	}
 }
 
+// Covers: 票 customer-service-rule-contract-applicability/02 完成判据「既有登记行为不变」的落库那一层：客户服务规则
+// 先于合同声明、在改动前已固定的那份解析，新代码重解后再固定一次，答`已记录`，不答`内容冲突`。
+//
+// 改动前固定的那一行由重建门按改动前的成员次序造出（声明次序：规则在前、合同在后）。它的内容摘要是改动前的代码
+// （基 1d67e27c）对同一夹具实算后钉住的——夹具若与改动前写下的那一行差一个字节，先红的是第一处断言。
+func TestAResolutionFixedWithTheServiceRuleDeclaredFirstReplaysAsRecorded(t *testing.T) {
+	const fixedBeforeDigest = "05d151b57978ad040ea5389042ba648c7ca3ca3a521f800bf28b72ed2769ccbe"
+	repository, transactor, pool := newResolutions(t)
+	ctx := t.Context()
+	resolved := uniqueClosureDeclaringTheServiceRuleFirst(t)
+
+	fixedBefore := rebuiltInDeclaredOrder(t, resolved)
+	mustSaveResolution(t, transactor, ctx, repository, fixedBefore)
+	if got := storedContentDigest(t, pool, fixedBefore); got != fixedBeforeDigest {
+		t.Fatalf("改动前那一行的内容摘要 = %s, want %s（基 1d67e27c 实算）", got, fixedBeforeDigest)
+	}
+
+	var replay ports.ResolutionSaveOutcome
+	mustWithinResolutionTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		var err error
+		replay, err = repository.Save(txCtx, resolved)
+		return err
+	})
+	if replay != ports.ResolutionAlreadyRecorded {
+		t.Fatalf("重解后再固定 = %s, want ALREADY_RECORDED（重解的成员次序 %v）", replay, memberKinds(resolved))
+	}
+}
+
 func TestResolutionTenantsAreInvisibleToEachOther(t *testing.T) {
 	repository, transactor, _ := newResolutions(t)
 	ctx := t.Context()
@@ -702,6 +730,134 @@ func effectiveRules(t *testing.T, objectID, label, digest string) domain.Commerc
 	})
 	if err != nil {
 		t.Fatalf("重建规则包：%v", err)
+	}
+	return version
+}
+
+// uniqueClosureDeclaringTheServiceRuleFirst 造一份规则先于合同声明的唯一已解析闭包。客户服务规则的壳什么都没指名，
+// 是只有挂产品一版的既有登记在册的形态之一。
+func uniqueClosureDeclaringTheServiceRuleFirst(t *testing.T) domain.CommercialClosure {
+	t.Helper()
+
+	registry := domain.NewCommercialRegistry()
+	if _, err := registry.Register(effectiveContract(t, "contract-1", "v1", "digest-1")); err != nil {
+		t.Fatalf("登记合同：%v", err)
+	}
+	if _, err := registry.Register(effectiveServiceRule(t, "csr-1", "v1", "digest-csr1")); err != nil {
+		t.Fatalf("登记客户服务规则：%v", err)
+	}
+
+	anchor, err := domain.NewSelectionAnchor(effectiveAtRow.Add(24*time.Hour),
+		pcValue(t, domain.NewAnchorPolicyVersion, "anchor-policy-v1"))
+	if err != nil {
+		t.Fatalf("选择锚点：%v", err)
+	}
+	closure := domain.ResolveCommercialClosure(registry, domain.ClosureResolutionKey{
+		TenantID:             pcTenant(t, "tenant-1"),
+		CustomerAccountID:    pcValue(t, domain.NewCustomerAccountID, "customer-1"),
+		LegalEntityCandidate: pcValue(t, domain.NewLegalEntityReference, "legal-1"),
+		Scope:                pcScope(t),
+		Purpose:              domain.AcceptanceControlPurpose,
+		Anchor:               anchor,
+		RequiredBases: []domain.CommercialObjectKind{
+			domain.CustomerServiceRuleObject,
+			domain.CustomerContractObject,
+		},
+	}, nil)
+	if closure.Outcome() != domain.UniquelyResolved {
+		t.Fatalf("outcome = %q, want UNIQUELY_RESOLVED（conflicting=%v，unresolved=%v）",
+			closure.Outcome(), closure.ConflictingBases(), closure.UnresolvedBases())
+	}
+	return closure
+}
+
+// rebuiltInDeclaredOrder 经重建门按调用方声明的次序重造同一份闭包。改动前的代码按这个次序采用成员（只把结算政策
+// 排到最后，本夹具没有它），快照随之按它写下。夹具成员不带服务产品、结算政策与信用额度的快照，重建只要类别与版本。
+func rebuiltInDeclaredOrder(t *testing.T, closure domain.CommercialClosure) domain.CommercialClosure {
+	t.Helper()
+
+	revision, ok := closure.ViewRevision()
+	if !ok {
+		t.Fatal("闭包没有视图修订")
+	}
+	key := closure.ResolutionKey()
+	adopted := make([]domain.RehydrateAdoptedBasisSpec, 0, len(key.RequiredBases))
+	for _, kind := range key.RequiredBases {
+		basis, present := closure.AdoptedFor(kind)
+		if !present {
+			t.Fatalf("闭包没采用 %s", kind)
+		}
+		adopted = append(adopted, domain.RehydrateAdoptedBasisSpec{Kind: kind, Version: basis.Version()})
+	}
+	rebuilt, err := domain.RehydrateCommercialClosure(domain.RehydrateCommercialClosureSpec{
+		Outcome:      closure.Outcome(),
+		ResolutionID: closure.ResolutionID(),
+		Key:          key,
+		Anchor:       closure.Anchor(),
+		ViewRevision: revision,
+		Adopted:      adopted,
+	})
+	if err != nil {
+		t.Fatalf("重建闭包：%v", err)
+	}
+	return rebuilt
+}
+
+func storedContentDigest(t *testing.T, pool *pgxpool.Pool, closure domain.CommercialClosure) string {
+	t.Helper()
+
+	var digest string
+	if err := pool.QueryRow(t.Context(),
+		`SELECT content_digest
+		   FROM party_commercial.commercial_resolution
+		  WHERE tenant_id = $1 AND resolution_id = $2`,
+		closure.ResolutionKey().TenantID.String(),
+		closure.ResolutionID().String(),
+	).Scan(&digest); err != nil {
+		t.Fatalf("读内容摘要：%v", err)
+	}
+	return digest
+}
+
+func memberKinds(closure domain.CommercialClosure) []domain.CommercialObjectKind {
+	kinds := make([]domain.CommercialObjectKind, 0, len(closure.Adopted()))
+	for _, adopted := range closure.Adopted() {
+		kinds = append(kinds, adopted.Kind())
+	}
+	return kinds
+}
+
+// effectiveServiceRule 造一版已生效的客户服务规则，壳上什么都没指名：解析按壳分层，它落在产品层。
+func effectiveServiceRule(t *testing.T, objectID, label, digest string) domain.CommercialVersion {
+	t.Helper()
+
+	interval, err := domain.NewEffectiveInterval(effectiveAtRow, effectiveAtRow.Add(90*24*time.Hour))
+	if err != nil {
+		t.Fatalf("有效区间：%v", err)
+	}
+	approval, err := domain.NewApprovalBasis(
+		pcValue(t, domain.NewApprovalReference, "approval-service-rule"),
+		pcValue(t, domain.NewCommercialSourceReference, "source-service-rule"),
+		approvedAtFixture,
+	)
+	if err != nil {
+		t.Fatalf("批准依据：%v", err)
+	}
+	version, err := domain.RehydrateCommercialVersion(domain.RehydrateCommercialVersionSpec{
+		TenantID:      pcTenant(t, "tenant-1"),
+		Kind:          domain.CustomerServiceRuleObject,
+		ObjectID:      pcValue(t, domain.NewCommercialObjectID, objectID),
+		Version:       pcValue(t, domain.NewCommercialVersionLabel, label),
+		Scope:         pcScope(t),
+		ContentDigest: pcValue(t, domain.NewCommercialContentDigest, digest),
+		Effective:     interval,
+		Status:        domain.CommercialVersionEffective,
+		Approval:      approval,
+		PublishedAt:   publishedAtRow,
+		EffectiveAt:   effectiveAtRow,
+	})
+	if err != nil {
+		t.Fatalf("重建客户服务规则：%v", err)
 	}
 	return version
 }
