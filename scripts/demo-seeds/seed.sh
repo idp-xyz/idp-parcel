@@ -9,7 +9,7 @@
 #
 #   --reset  先 DROP 全部 parcel schema 再重迁重灌（干净库复灌用，破坏性，仅限演示库）。
 #
-# 干净库上全程零报错；六个登记 CLI 的非零退出码会经 set -e 中止脚本并如实透出。
+# 干净库上全程零报错；各登记 CLI 的非零退出码会经 set -e 中止脚本并如实透出。
 set -euo pipefail
 
 cd "$(dirname "$0")/../.."
@@ -35,6 +35,7 @@ go build -o "$BIN/" \
   ./cmd/parcel-collection-register \
   ./cmd/parcel-governance-register \
   ./cmd/parcel-access-register \
+  ./cmd/parcel-settlement-register \
   ./scripts/demo-seeds/migrate
 
 echo "== 1/7 施加迁移计划（${RESET_FLAG:-不重置}） =="
@@ -228,4 +229,12 @@ echo "== 操作者册登记（access-identity：合成操作者主体与能力�
 "$BIN/parcel-access-register" operator-register -input "$SEEDS/access/01-operators.json"
 "$BIN/parcel-access-register" operator-grant -input "$SEEDS/access/02-grants.json"
 
-echo "种子灌入完成：租户 SYN-TENANT-01，七上下文全部落库。"
+echo "== 结算账户登记（settlement-accounting：演示租户货主的应收结算账户；票 routing-first-cut/16） =="
+# 受理前财务控制的作用域从那一次商业解析回显的结算政策派生，账户按（法人、相对方、应收、币种、结算政策）
+# 在结算账户登记册上找（cmd/parcel-dispatch 的 acceptanceFinancialControl）。这一行的五维照发布批里
+# `SYN-SETTLEMENT-PREPAID-01` 的正文配，差一维就查不到，控制停在 `CONTROL_SCOPE_NOT_CONFIGURED`。账户标识与
+# 责任依据是演示租户的合成取值：登记口与执行器都不代拟账户，没登的租户照旧停在那一格。
+"$BIN/parcel-settlement-register" settlement-account \
+  -input "$SEEDS/settlement/01-settlement-account-shipper-01-receivable-cny.json"
+
+echo "种子灌入完成：租户 SYN-TENANT-01，各上下文全部落库。"

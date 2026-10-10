@@ -36,6 +36,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 | `data/customs/` | `cmd/parcel-customs-register` | 十册 26 份：就绪与授权（第三单元先就绪再撤销就绪；第二单元只撤授权）、解释规则（含一次换版）、义务目录+两项（已了结/已承接）、门禁目录+判断（含一份只登目录的空清单格）、建案要求两向（要求/显式不要求）、口岸目录（SZX 含一次换版 + SIN）、申报路径两向（CN 出口 / SG 进口）、监管凭证两版（一版写明次数额度、一版来源未提供额度）、税费付款协作两格（核定税费 / 明确无需付款）。税费付款核对不在包内，见已知边界 |
 | `data/visibility/` | `cmd/parcel-ve-register` | 里程碑映射、分诊规则、通知策略、索赔资格、索赔授权两格（一格空名单）、披露策略、异常披露规则、冲突信号规则、索赔材料收讫两笔（照片留下、发票收讫后撤销） |
 | `data/collection/` | `cmd/parcel-collection-register` | 一条 COD 指令走全程（渠道报收、银行短收、短款、清分进应付客户）+ SGD 分户账只开立；CNY 账两笔回汇批次（已归集 / 已交出汇付主张），SGD 账无批次 |
+| `data/settlement/` | `cmd/parcel-settlement-register settlement-account` | 结算账户登记册（ADR-0158）1 行：货主 `SYN-PARTY-SHIPPER-01` 在法人 `SYN-LE-01` 下的 CNY 应收账户 `SYN-SETTLEMENT-ACCOUNT-01`，结算政策 `SYN-SETTLEMENT-PREPAID-01`，责任依据是该政策所引的客户合同 `SYN-CONTRACT-01`。五维照发布批里那份结算政策的正文配，受理前财务控制的作用域经它找到账户 |
 | `data/access/` | `cmd/parcel-access-register` | 操作者册（ADR-0100 决定二第三条）：两个合成操作者主体绑演示租户，配置员授登记册配置写与主数据与运营查阅读两格，查阅员只授查阅读；发行方是合成值，演示部署接上真 OIDC 发行方后按其标识另登 |
 | `migrate/` | — | 迁移助手（`migrate.Run` 的隔离环境入口；迁移计划刻意没有生产入口） |
 | `seedgen/` | — | 计价快照生成器：价卡、序列与参考目录的登记输入带规范化版本号与内容摘要自校，必须经真领域构造函数折装；PPC/PRS/PRC 规范化版本升级时重跑并提交新产物 |
@@ -86,6 +87,11 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 6. **代收怎么归集**（collection-remittance）：`SYN-ACCOUNT-01` / `SYN-LE-01` / CNY /
    `SYN-CH-SG-POST-STD` 这本账上，`SYN-BATCH-CNY-OPEN` 停在已归集，`SYN-BATCH-CNY-HANDED`
    已交出汇付主张。交出的是主张，不是付款，六个资金位置不因此改数。同客户的 SGD 账仍然没有批次。
+7. **受理前控制占哪个账**（settlement-accounting 与规则包的时点格）：规则包 `SYN-RULEPKG-01` 的受理前财务控制
+   一格与可达性一格一样，采用产品参考配置 `parcel-shipment/as-of-semantics/submission-receipt@1`，判断时点取该提交
+   版本的系统接收时间。控制的作用域从商业解析回显的结算政策 `SYN-SETTLEMENT-PREPAID-01` 派生，按法人、相对方、
+   应收、币种、结算政策五维在结算账户登记册上找到 `SYN-SETTLEMENT-ACCOUNT-01`。控制金额不在种子里：它由估价形成，
+   种子不替它造数。
 
 ## 已知边界（如实记录，不是缺陷）
 
