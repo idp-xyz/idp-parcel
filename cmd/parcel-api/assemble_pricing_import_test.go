@@ -153,7 +153,7 @@ func TestThePriceCardDraftViewsAnswerFromTheOperatorChannel(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), registries, nil, nil, nil, nil, nil, nil, nil))
+		router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), registries, unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil, nil))
 		request := httptest.NewRequest(http.MethodGet, testCase.target, nil)
 		if testCase.token != "" {
 			request.Header.Set("Authorization", "Bearer "+testCase.token)
