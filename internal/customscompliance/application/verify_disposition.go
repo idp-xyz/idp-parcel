@@ -227,5 +227,15 @@ func (handler *VerifyDispositionHandler) handOff(
 	}); err == nil {
 		return ""
 	}
-	return "CONT-VERIFICATION/" + key.Decision.String() + "/" + key.Digest[:8]
+	return "CONT-VERIFICATION/" + key.Decision.String() + "/" + continuationHash(key.Digest)
+}
+
+// continuationHash 取键上指纹的前 8 位哈希。CCC-1 起指纹带「形状:」前缀，直接截前 8 位截到的是
+// 前缀，同一决定或范围下各版的续办引用只剩两位可分，指不出是哪一版没交出去。无版本旧键没有前缀，
+// 截出来与改动前同一串。
+func continuationHash(digest string) string {
+	if _, hash, versioned := strings.Cut(digest, ":"); versioned {
+		digest = hash
+	}
+	return digest[:8]
 }

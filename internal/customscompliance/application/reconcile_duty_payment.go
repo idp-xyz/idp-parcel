@@ -149,7 +149,7 @@ type DutyReconciliationResult struct {
 	reason     DutyReconciliationReason
 	handoffRef string
 	handoffErr error
-	// verificationKey 是`核对已形成`与`已存在`两格落在册上的那一行的键。`已存在`可能是 CCC-1 之前
+	// verificationKey 是`核对已形成`或`已存在`时落在册上的那一行的键。`已存在`可能是 CCC-1 之前
 	// 入册的旧行，键上是无版本指纹，不能拿本次命令的 CCC-1 指纹重拼。
 	verificationKey ports.DutyVerificationKey
 }
@@ -514,5 +514,5 @@ func (handler *DutyPaymentReconciliationHandler) handOffVerification(
 	if err == nil {
 		return "", nil
 	}
-	return "CONT-DUTY-VERIFICATION/" + key.Scope.String() + "/" + key.Digest[:8], err
+	return "CONT-DUTY-VERIFICATION/" + key.Scope.String() + "/" + continuationHash(key.Digest), err
 }

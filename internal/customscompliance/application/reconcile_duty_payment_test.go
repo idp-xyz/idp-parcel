@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
@@ -906,6 +907,10 @@ func TestAFailedHandoffLeavesTheVerificationFormedWithAContinuationReference(t *
 	}
 	if result.HandoffReference() == "" {
 		t.Fatal("交接失败必须留续办引用")
+	}
+	// 末段是键上指纹的前 8 位，不是「CCC-1:」加两位——否则同一范围下各版只剩两位可分。
+	if !regexp.MustCompile(`^CONT-DUTY-VERIFICATION/[^/]+/[0-9a-f]{8}$`).MatchString(result.HandoffReference()) {
+		t.Fatalf("续办引用 = %q：末段该是 8 位指纹", result.HandoffReference())
 	}
 	// 票 sa-cc/29 裁决 2：原始错误随结果交出，重派编排靠它分「依赖不可用」与「信封被拒」两格；人重核路照旧只看引用。
 	if !errors.Is(result.HandoffError(), store.handoffErr) {
