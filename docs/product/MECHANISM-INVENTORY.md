@@ -9,18 +9,18 @@
 | accessidentity | 18 | 12 | 0 | 2 | 0 | 0 |
 | architecture（非业务） | 0 | 13 | 0 | 0 | 0 | 0 |
 | collectionremittance | 22 | 10 | 4 | 6 | 0 | 3 |
-| customscompliance | 98 | 99 | 18 | 41 | 10 | 14 |
+| customscompliance | 100 | 101 | 19 | 41 | 10 | 14 |
 | networkrouting | 67 | 64 | 9 | 13 | 2 | 6 |
-| nodeoperations | 31 | 26 | 3 | 10 | 4 | 6 |
+| nodeoperations | 33 | 28 | 4 | 10 | 4 | 6 |
 | parcelpricing | 119 | 108 | 14 | 15 | 1 | 21 |
 | parcelshipment | 196 | 190 | 20 | 35 | 10 | 18 |
 | partycommercial | 154 | 162 | 12 | 40 | 1 | 37 |
 | pilotgovernance | 22 | 20 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
-| settlementaccounting | 159 | 109 | 26 | 54 | 9 | 9 |
-| transportfulfillment | 150 | 137 | 26 | 36 | 11 | 29 |
+| settlementaccounting | 162 | 111 | 28 | 54 | 9 | 9 |
+| transportfulfillment | 152 | 139 | 27 | 36 | 11 | 29 |
 | visibilityexception | 100 | 96 | 11 | 30 | 8 | 11 |
-| **合计** | 1161 | 1069 | 148 | 288 | 57 | 158 |
+| **合计** | 1170 | 1077 | 153 | 288 | 57 | 158 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 76、测试 109。
 
