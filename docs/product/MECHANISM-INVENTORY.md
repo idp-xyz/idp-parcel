@@ -14,13 +14,13 @@
 | nodeoperations | 33 | 28 | 4 | 10 | 4 | 6 |
 | parcelpricing | 119 | 108 | 14 | 15 | 1 | 21 |
 | parcelshipment | 196 | 190 | 20 | 35 | 10 | 18 |
-| partycommercial | 154 | 163 | 12 | 40 | 1 | 37 |
+| partycommercial | 156 | 164 | 13 | 40 | 1 | 37 |
 | pilotgovernance | 22 | 20 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 162 | 111 | 28 | 54 | 9 | 9 |
 | transportfulfillment | 152 | 139 | 27 | 36 | 11 | 29 |
 | visibilityexception | 100 | 96 | 11 | 30 | 8 | 11 |
-| **合计** | 1178 | 1089 | 154 | 289 | 57 | 158 |
+| **合计** | 1180 | 1090 | 155 | 289 | 57 | 158 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 76、测试 111。
 
@@ -125,7 +125,7 @@
 | visibilityexception | 8 |
 | **合计** | 24 |
 
-## 端口：声明 457 个；基线口径缺 29，精确口径缺 2
+## 端口：声明 458 个；基线口径缺 30，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
@@ -137,6 +137,7 @@
 - `parcelshipment.LabelChannelGateway` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/cmd/parcel-api.unconfiguredLabelChannelGateway）
 - `parcelshipment.ResponsibilityStartView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres.IntakeAdoptions）
 - `partycommercial.ApprovalDutyRuleView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres.ApprovalDutyRules）
+- `partycommercial.CustomerServiceRuleLayerView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/partycommercial/application.CustomerServiceRuleLayerReader）
 - `partycommercial.ServiceProductFormRegistry` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres.CommercialPublications）
 - `settlementaccounting.AmountGrammarRegister` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.AmountGrammars）
 - `settlementaccounting.AmountGrammarView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.AmountGrammars）
