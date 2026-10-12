@@ -282,10 +282,49 @@ func assessmentFor(
 	case saapplication.ControlRequestNotAccepted:
 		return refusedAssessment(psports.PreAcceptanceControlRequestNotAccepted, "SA-REQUEST_NOT_ACCEPTED")
 	case saapplication.ControlNotFormed:
-		return refusedAssessment(psports.PreAcceptanceControlNotFormed, "SA-"+answer.NotFormedReason().String())
+		outcome, err := notFormedOutcomeFor(answer.NotFormedReason())
+		if err != nil {
+			return psports.PreAcceptanceControlAssessment{}, err
+		}
+		return refusedAssessment(outcome, "SA-"+answer.NotFormedReason().String())
 	default:
 		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: control outcome %d",
 			ErrUntranslatableAnswer, answer.Outcome())
+	}
+}
+
+// notFormedOutcomeFor 按恢复动作把提供方的未形成原因分到端口的两格（ADR-0094 决定一、二）：只有运营登记
+// 推得动、且那次登记会发「参数已登记」信封来重驱的落`未配置`，其余落`未形成`，消费门照旧回滚重投。
+// 逐取值列出、default 报错（ADR-0025）：提供方多一个原因时这里先炸，而不是让它静默继承某一格——那一格
+// 决定的是烧不烧失败预算。
+func notFormedOutcomeFor(reason saapplication.NotFormedReason) (psports.PreAcceptanceControlOutcome, error) {
+	switch reason {
+	case saapplication.ControlPolicyNotConfigured:
+		// 合同声明或策略正文没登：两条声明通道发布时都交信封（party-commercial 的
+		// announceOperatorRegistrations）。解析键没要求控制策略那一种来由也报这个码，而键按（租户+客户）
+		// 只有一行、改登即内容冲突，没有登记动作推得动它——在这一格里它是一条查得到的等待，等不来重驱。
+		return psports.PreAcceptanceControlNotConfigured, nil
+	case saapplication.CreditRatioBaseUndecided:
+		// 存量正文没声明比例的基数，要用得上只能发新版信用政策正文，那条通道发布时同样交信封。
+		return psports.PreAcceptanceControlNotConfigured, nil
+	case saapplication.ControlPolicyUnavailable,
+		saapplication.BalanceUnavailable,
+		saapplication.FreezeLedgerUnavailable,
+		saapplication.CreditStandingUnavailable,
+		saapplication.ExposureLedgerUnavailable,
+		saapplication.CreditBasisUnavailable,
+		saapplication.CreditRatioBaseUnavailable:
+		return psports.PreAcceptanceControlNotFormed, nil
+	case saapplication.CreditBasisNotConfigured:
+		// 走到控制这一步时闭包已唯一解析，没采用信用政策只能是解析键没要求它——理由同上，改登即冲突，
+		// 挪到`未配置`只换来一次没人来推的等待。
+		return psports.PreAcceptanceControlNotFormed, nil
+	case saapplication.CreditRatioBaseNotEstablished:
+		// 等的是事实出现（运营余额、有效对账单），不是一次登记。
+		return psports.PreAcceptanceControlNotFormed, nil
+	default:
+		return psports.PreAcceptanceControlOutcomeInvalid, fmt.Errorf("%w: not-formed reason %d",
+			ErrUntranslatableAnswer, uint8(reason))
 	}
 }
 

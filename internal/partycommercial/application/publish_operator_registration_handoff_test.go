@@ -138,6 +138,101 @@ func TestReplayedAsOfPoliciesResendWhileConflictsStaySilent(t *testing.T) {
 	})
 }
 
+// Covers: 票 routing-first-cut/19 拆格那一笔 —— settlement-accounting 控制策略读口问的两半（客户合同上的
+// 接受前控制声明、策略版本上的正文）与信用政策正文，落库时各交一份「参数已登记」：parcel-shipment 停在
+// FinancialControlNotConfigured 的委托靠它们被重驱。种类按通道落，承载版本是本次发布的那一版；客户合同
+// 那一项同时写了正文那一层，正文不属这一族，仍只交一份。
+func TestPublishingControlPolicyAndCreditPolicyDeclarationsHandsOffTheirRegistrations(t *testing.T) {
+	ratio, err := domain.NewCreditRatioLimit(1500, domain.PostedBalanceBase)
+	if err != nil {
+		t.Fatalf("比例额度：%v", err)
+	}
+	creditBody := creditPolicyBody(t, ratio)
+	controlBody := controlPolicyBody(t,
+		controlItemOf(t, domain.PrepaidFreezeControl, "charge-scope-a", 1, domain.RejectOnControlFailure))
+	contract := contractDeclarations(t, "rules-1")
+	cases := map[string]struct {
+		command application.PublishCommercialAuthorityCommand
+		want    ports.OperatorRegistrationKind
+	}{
+		"客户合同上的接受前控制声明": {
+			command: application.PublishCommercialAuthorityCommand{
+				Spec:         customerContractSpec(t, "contract-1", "v1", contract),
+				Approval:     publishApproval(t, "contract-1"),
+				RoleStanding: domain.ApprovalRoleConfirmed,
+				Declarations: contract,
+			},
+			want: ports.PreAcceptanceControlPolicyRegistered,
+		},
+		"接受前财务控制策略正文": {
+			command: application.PublishCommercialAuthorityCommand{
+				Spec:         controlPolicySpec(t, "fcp-1", "v1", controlBody),
+				Approval:     publishApproval(t, "fcp-1"),
+				RoleStanding: domain.ApprovalRoleConfirmed,
+				Declarations: application.CommercialDeclarations{PreAcceptanceFinancialControlPolicyBody: controlBody},
+			},
+			want: ports.PreAcceptanceControlPolicyRegistered,
+		},
+		"信用政策正文": {
+			command: application.PublishCommercialAuthorityCommand{
+				Spec:         creditPolicySpec(t, "credit-1", "v1", creditBody),
+				Approval:     publishApproval(t, "credit-1"),
+				RoleStanding: domain.ApprovalRoleConfirmed,
+				Declarations: application.CommercialDeclarations{CreditPolicyBody: creditBody},
+			},
+			want: ports.CreditPolicyRegistered,
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			registry := &publicationRegistryDouble{}
+			handoff := &operatorRegistrationHandoffDouble{}
+			handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, handoff)
+
+			result, err := handler.Handle(context.Background(), tc.command)
+			if err != nil {
+				t.Fatalf("Handle：%v", err)
+			}
+			if result.Outcome() != application.CommercialVersionPublishedEffective {
+				t.Fatalf("outcome = %q, want PUBLISHED_EFFECTIVE", result.Outcome())
+			}
+			if len(handoff.intents) != 1 {
+				t.Fatalf("交接了 %d 份意图，want 1", len(handoff.intents))
+			}
+			intent := handoff.intents[0]
+			if intent.Kind != tc.want {
+				t.Fatalf("种类 = %q, want %q", intent.Kind, tc.want)
+			}
+			version, _ := result.Version()
+			if intent.Registration.ObjectID() != version.ObjectID() || intent.Registration.Version() != version.Version() {
+				t.Fatalf("承载版本 = %s@%s, want %s@%s",
+					intent.Registration.ObjectID(), intent.Registration.Version(), version.ObjectID(), version.Version())
+			}
+		})
+	}
+}
+
+// Covers: 同一族的冲突照旧不交 —— 策略正文答`内容冲突`时那一行没写进册，下游重驱只会再撞见`未配置`。
+func TestAConflictingControlPolicyBodyHandsOffNothing(t *testing.T) {
+	registry := &publicationRegistryDouble{controlPolicyOutcome: ports.PreAcceptanceFinancialControlPolicyContentConflict}
+	handoff := &operatorRegistrationHandoffDouble{}
+	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, handoff)
+	body := controlPolicyBody(t,
+		controlItemOf(t, domain.PrepaidFreezeControl, "charge-scope-a", 1, domain.RejectOnControlFailure))
+
+	if _, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+		Spec:         controlPolicySpec(t, "fcp-1", "v1", body),
+		Approval:     publishApproval(t, "fcp-1"),
+		RoleStanding: domain.ApprovalRoleConfirmed,
+		Declarations: application.CommercialDeclarations{PreAcceptanceFinancialControlPolicyBody: body},
+	}); err != nil {
+		t.Fatalf("Handle：%v", err)
+	}
+	if len(handoff.intents) != 0 {
+		t.Fatalf("内容冲突却交接了 %d 份意图", len(handoff.intents))
+	}
+}
+
 // Covers: ADR-0094 决定四「否则不许落地」—— 信封入不了队，整项出错让调用方的事务回滚，登记
 // 不得单独落库。
 func TestAFailedHandoffFailsThePublication(t *testing.T) {

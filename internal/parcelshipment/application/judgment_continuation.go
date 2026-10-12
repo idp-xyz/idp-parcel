@@ -151,6 +151,15 @@ const (
 	// 解析换了、旧判断还在。续办引用按原因派生，压进同一格会让两种缺口共用一条引用。
 	ReachabilityJudgmentFormedUnderAnotherResolution
 
+	// FinancialControlNotConfigured 说的是接受前财务控制停在一个只有运营登记推得动的缺口上，而那次
+	// 登记会发信封来重驱（端口的`未配置`格）。它与 FinancialControlNotFormed 只差恢复动作：后者等依赖
+	// 自己回来，回滚重投是对的；这一格重投一万次也长不出一次登记，烧完预算之后委托停在`已提交`、
+	// 再没有东西来推它（ADR-0094 Context 那一幕）。
+	//
+	// 哪一种未配置停在这里由提供方的原因引用分开（作用域、策略、授信各一个），引用随范围参与续办
+	// 派生，所以同一原因下的几种缺口仍各拿一条续办引用。
+	FinancialControlNotConfigured
+
 	// judgmentPendingReasonEnd 不是一个原因，是封闭集合的上界，**必须永远排在最后**。
 	//
 	// 它让「每个取值都有 String()」可以被遍历检查，而那条检查堵的是一条静默链：漏补
@@ -180,7 +189,8 @@ func (reason JudgmentPendingReason) resumePath() domain.ResumePath {
 		WithdrawalAuthorityRulesNotConfigured,
 		SourceDataAmendmentAuthorityRulesNotConfigured,
 		ReachabilityAsOfNotConfigured,
-		FinancialControlAsOfNotConfigured:
+		FinancialControlAsOfNotConfigured,
+		FinancialControlNotConfigured:
 		// 这一族等的是运营企业做一次登记，不是等某个权威恢复（ADR-0094）。它们与同一支上的
 		// *Unavailable 只差一个词而恢复动作相反：权威答不出会自愈，而一个从未登记过的范围
 		// 重试一万次也长不出一条登记。这几个取值自己的注释早写过这句话，此前却落在下面那个
@@ -268,6 +278,8 @@ func (reason JudgmentPendingReason) String() string {
 		return "FINANCIAL_CONTROL_UNAVAILABLE"
 	case FinancialControlNotFormed:
 		return "FINANCIAL_CONTROL_NOT_FORMED"
+	case FinancialControlNotConfigured:
+		return "FINANCIAL_CONTROL_NOT_CONFIGURED"
 	case FinancialControlRequestConflict:
 		return "FINANCIAL_CONTROL_REQUEST_CONFLICT"
 	case FinancialControlRequestNotAccepted:

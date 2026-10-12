@@ -456,10 +456,12 @@ type financialControlDouble struct {
 	t           *testing.T
 	outcome     domain.FinancialControlOutcome
 	portOutcome ports.PreAcceptanceControlOutcome
-	err         error
-	record      func(string)
-	calls       int
-	lastAsOf    domain.JudgmentAsOf
+	// reason 是非`已形成`时提供方交回的原因引用；空串时按端口格造一个。
+	reason   string
+	err      error
+	record   func(string)
+	calls    int
+	lastAsOf domain.JudgmentAsOf
 }
 
 func (double *financialControlDouble) ApplyPreAcceptanceFinancialControl(
@@ -479,9 +481,13 @@ func (double *financialControlDouble) ApplyPreAcceptanceFinancialControl(
 	}
 	if outcome != ports.PreAcceptanceControlFormed {
 		// 非`已形成`一律不带结果：带上一份，一次没能执行的控制会看起来像通过了。
+		reason := double.reason
+		if reason == "" {
+			reason = "SAC-" + outcome.String()
+		}
 		return ports.PreAcceptanceControlAssessment{
 			Outcome: outcome,
-			Reason:  mustValue(double.t, domain.NewCheckReason, "SAC-"+outcome.String()),
+			Reason:  mustValue(double.t, domain.NewCheckReason, reason),
 		}, nil
 	}
 

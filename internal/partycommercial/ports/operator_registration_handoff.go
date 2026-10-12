@@ -26,6 +26,13 @@ const (
 	// 测试调，AuthorizedAction 里也还没有撤回与来源修订这两种动作；格留在封闭集里是为了让消费侧的
 	// 契约一次写全，不是为了现在就有人发。
 	AuthorityGrantRegistered
+	// PreAcceptanceControlPolicyRegistered：受理前财务控制策略（`PAR-COM-15`）的两半之一落库——客户合同
+	// 版本上「要不要」的声明，或策略版本上「控制怎么做」的正文。两半都是 settlement-accounting 控制策略
+	// 读口问的东西，任一半没登它都答`未配置`；对应 parcel-shipment 的 FinancialControlNotConfigured。
+	PreAcceptanceControlPolicyRegistered
+	// CreditPolicyRegistered：信用政策正文落库。存量正文没声明比例的基数时，要用得上只能发新版正文；
+	// 对应 parcel-shipment 的 FinancialControlNotConfigured（提供方原因 CREDIT_RATIO_BASE_UNDECIDED）。
+	CreditPolicyRegistered
 )
 
 // String 交回信封载荷里的原词；集合外交回空串，交接适配器凭它把零值拦在入队之前。
@@ -35,6 +42,10 @@ func (kind OperatorRegistrationKind) String() string {
 		return "AS_OF_POLICY"
 	case AuthorityGrantRegistered:
 		return "AUTHORITY_GRANT"
+	case PreAcceptanceControlPolicyRegistered:
+		return "PRE_ACCEPTANCE_CONTROL_POLICY"
+	case CreditPolicyRegistered:
+		return "CREDIT_POLICY"
 	default:
 		return ""
 	}

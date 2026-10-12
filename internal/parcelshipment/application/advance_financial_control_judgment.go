@@ -61,8 +61,12 @@ var financialControlAsOfReasons = asOfPendingReasons{
 
 // controlStallReasons 与可达性那张表同一机制。这里尤其要紧：一次`请求冲突`若被当成故障
 // 重试，被重试的是一次占用客户资金的请求。
+//
+// `未配置`单独一格而不并进`未形成`：两者的续办方不同，按端口的格折，不按提供方原因的名字折
+// （ADR-0094 决定一）——哪个原因落哪一格是适配器认得的事，这里一个原因串都不解析。
 var controlStallReasons = map[ports.PreAcceptanceControlOutcome]JudgmentPendingReason{
 	ports.PreAcceptanceControlNotFormed:          FinancialControlNotFormed,
+	ports.PreAcceptanceControlNotConfigured:      FinancialControlNotConfigured,
 	ports.PreAcceptanceControlRequestConflict:    FinancialControlRequestConflict,
 	ports.PreAcceptanceControlRequestNotAccepted: FinancialControlRequestNotAccepted,
 }
@@ -79,8 +83,8 @@ type AdvanceFinancialControlJudgmentHandler struct {
 // 时钟只用于处理尝试的发生时间。它与判断时点分开：后者由规则包声明的策略形成，本地时钟
 // 顶替它就是用例禁止的「用一个全局时间代替不同判断」。
 //
-// requests 的用处与可达性那一支相同：只在`判断时点未配置`那一停上把`等待运营登记`落库
-// （ADR-0094 Decision 五），控制结果仍经 recorder 记到任务上。
+// requests 的用处与可达性那一支相同：只在续办路径为`等待运营登记`的那几停上把等待态落库
+// （ADR-0094 Decision 五）——`判断时点未配置`与控制端口答`未配置`——控制结果仍经 recorder 记到任务上。
 //
 // dispositions 只在 settlement-accounting 交回含受限项的结果时被问（ADR-0132 决定三）：读回受限项
 // 在策略正文里登记的失败处置与责任引用，作为采用引用记在受限项上、随控制结果落库。它是形成控制
@@ -159,11 +163,23 @@ func (handler *AdvanceFinancialControlJudgmentHandler) Handle(
 		return handler.undecided(ctx, command, FinancialControlUnavailable), nil
 	}
 	if assessment.Outcome != ports.PreAcceptanceControlFormed {
-		reason, ok := controlStallReasons[assessment.Outcome]
+		stall, ok := controlStallReasons[assessment.Outcome]
 		if !ok {
 			return AdvanceFinancialControlJudgmentResult{}, ErrUnexpectedAssessmentOutcome
 		}
-		return handler.undecided(ctx, command, reason), nil
+		// 与时点那一支同一道护栏：只有续办路径为`等待运营登记`的那一格会在这里落等待态，其余原样交回。
+		reason, err := awaitOperatorRegistration(ctx, handler.requests, command.Identity, stall)
+		if err != nil {
+			return AdvanceFinancialControlJudgmentResult{}, err
+		}
+		// 提供方的原因引用进范围，与商业依据那一支带 resolution.Reason 同一纪律：作用域、金额、策略、
+		// 授信几种停在端口上可以同格，续办引用却各是各的，按引用查回来的就是那一种缺口。
+		scope := []string{assessment.Reason.String()}
+		if reason != stall {
+			// 理由同时点那一支：原因换了，范围随之放下。
+			scope = nil
+		}
+		return handler.undecided(ctx, command, reason, scope...), nil
 	}
 	control := assessment.Result
 	if control.Outcome() == domain.FinancialControlRestricted {
