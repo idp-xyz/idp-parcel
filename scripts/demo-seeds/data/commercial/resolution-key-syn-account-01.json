@@ -9,7 +9,8 @@
     "SERVICE_PRODUCT",
     "ACCEPTANCE_RULE_PACKAGE",
     "CUSTOMER_CONTRACT",
-    "SETTLEMENT_POLICY"
+    "SETTLEMENT_POLICY",
+    "CUSTOMER_SERVICE_RULE"
   ],
   "settlement": {
     "counterparty": "SYN-PARTY-SHIPPER-01",
