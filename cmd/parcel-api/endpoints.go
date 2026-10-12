@@ -166,7 +166,6 @@ func assembleBusinessEndpoints(
 	governanceRegisters governancehttp.GovernanceRegistryReader,
 	isolatedRead *isolatedReadIntakes,
 	isolatedSubmission shipmenthttp.SubmissionIntake,
-	isolatedPartyIdentity *commercialhttp.IsolatedPartyIdentityIntake,
 	isolatedNodeOperations *nodeopshttp.IsolatedCommandIntake,
 	isolatedTransportFulfillment *tfhttp.IsolatedCommandIntake,
 	operatorDecisions operatorDecisionIntakes,
@@ -177,12 +176,12 @@ func assembleBusinessEndpoints(
 	// ADR-0078/0091 之前逐字节同形。
 	//
 	// **读写入参各换各的行，互不顶替**（ADR-0091 决定四把开关也分成了两个）：isolatedRead
-	// 换查阅行，isolatedSubmission 只换 `/shipment-requests` 一行，isolatedPartyIdentity 只换
-	// `/commercial-*` 身份族里已成笔的那几行，各上下文的隔离命令 Intake（isolatedNodeOperations 等）只换
+	// 换查阅行，isolatedSubmission 只换 `/shipment-requests` 一行，各上下文的隔离命令 Intake（isolatedNodeOperations 等）只换
 	// 主链命令面里已成笔的那几行。其余命令面仍挂字面量 `UnconfiguredIntake{}`，
 	// 不经由任何变量——读这段代码就能看出它们两个开关都换不了。这句从前说的是「命令面全都
 	// 换不了」，ADR-0091 让提交那一行成了例外，票 06 又让身份族逐口成为例外，票 operator-channel/08
-	// 再让主链命令面逐口成为例外，因此改成现在这句；剩下那几行的字面量纪律一字未松。
+	// 再让主链命令面逐口成为例外，因此改成现在这句；身份族随后换上操作者渠道、隔离放行同笔撤下（ADR-0150 决定三），
+	// 已不在例外之列。剩下那几行的字面量纪律一字未松。
 	shipmentViewsIntake := shipmenthttp.ShipmentRequestViewsIntake(shipmenthttp.UnconfiguredIntake{})
 	labelTransactionIntake := shipmenthttp.LabelTransactionQueryIntake(shipmenthttp.UnconfiguredIntake{})
 	channelSelectionDecisionIntake := shipmenthttp.ChannelSelectionDecisionQueryIntake(shipmenthttp.UnconfiguredIntake{})
@@ -218,25 +217,6 @@ func assembleBusinessEndpoints(
 	submissionIntake := shipmenthttp.SubmissionIntake(shipmenthttp.UnconfiguredIntake{})
 	if isolatedSubmission != nil {
 		submissionIntake = isolatedSubmission
-	}
-
-	// `/commercial-*` 身份族是 ADR-0091 逐口放行的第二批（票 admin-web-group-legal-entities/06），法人资料登记口随后
-	// 放进同一个类型（票 legal-entity-profile/05）。入参收的是**具体类型**而不是某个 Intake 接口：各口的接口互不相同，
-	// 而放行是一口一笔——这个类型此刻实现了哪几口，下面就只换得了哪几行，多换一行编译期就红。一口一个变量、不并进上面
-	// 任何一个 if：理由同提交口那段。
-	legalEntityRegistrationIntake := commercialhttp.LegalEntityRegistrationIntake(commercialhttp.UnconfiguredIntake{})
-	businessPartyRegistrationIntake := commercialhttp.BusinessPartyRegistrationIntake(commercialhttp.UnconfiguredIntake{})
-	customerAccountRegistrationIntake := commercialhttp.CustomerAccountRegistrationIntake(commercialhttp.UnconfiguredIntake{})
-	partyRelationshipRegistrationIntake := commercialhttp.PartyRelationshipRegistrationIntake(commercialhttp.UnconfiguredIntake{})
-	partyIdentityDeactivationIntake := commercialhttp.PartyIdentityDeactivationIntake(commercialhttp.UnconfiguredIntake{})
-	legalEntityProfileRegistrationIntake := commercialhttp.LegalEntityProfileRegistrationIntake(commercialhttp.UnconfiguredIntake{})
-	if isolatedPartyIdentity != nil {
-		legalEntityRegistrationIntake = isolatedPartyIdentity
-		businessPartyRegistrationIntake = isolatedPartyIdentity
-		customerAccountRegistrationIntake = isolatedPartyIdentity
-		partyRelationshipRegistrationIntake = isolatedPartyIdentity
-		partyIdentityDeactivationIntake = isolatedPartyIdentity
-		legalEntityProfileRegistrationIntake = isolatedPartyIdentity
 	}
 
 	// 主链命令面按 ADR-0091 逐口放行（票 operator-channel/08）：每个上下文一个隔离命令 Intake 类型、每口一个变量，一个
@@ -603,14 +583,14 @@ func assembleBusinessEndpoints(
 		// 入格判据——挂到 commercialCatalogueIntake 上会让 TestIsolatedReadAdmissionSwitchesOnlyOperationsReadLines 的
 		// 二分（放行 → 500 / 不放 → 403）多出一种 200 的形态，要加第三桶并改 ADR-0078 判据措辞，那是另一张票。
 		{Pattern: "/commercial-publication-vocabularies", Handler: commercialhttp.NewQueryPublicationVocabularyEndpoint(operatorRegistries.commercial)},
-		// 身份族五口走各自的 Intake 变量（ADR-0091 逐口放行，票 admin-web-group-legal-entities/06，法人首放、其余四口各自成笔）；
-		// 上一段「一律挂字面量」自此对这五行不再成立。发布口与产品渠道口不在其内——它们有自己的治理（审批职责规则、
-		// ADR-0126 载体路径），不经隔离放行。
-		{Pattern: "/commercial-business-party-registrations", Handler: commercialhttp.NewRegisterBusinessPartyEndpoint(businessPartyRegistrationIntake, partyIdentityRegistration)},
-		{Pattern: "/commercial-legal-entity-registrations", Handler: commercialhttp.NewRegisterLegalEntityEndpoint(legalEntityRegistrationIntake, partyIdentityRegistration)},
-		{Pattern: "/commercial-customer-account-registrations", Handler: commercialhttp.NewRegisterCustomerAccountEndpoint(customerAccountRegistrationIntake, partyIdentityRegistration)},
-		{Pattern: "/commercial-party-relationship-registrations", Handler: commercialhttp.NewRegisterPartyRelationshipEndpoint(partyRelationshipRegistrationIntake, partyIdentityRegistration)},
-		{Pattern: "/commercial-party-identity-deactivations", Handler: commercialhttp.NewDeactivatePartyIdentityEndpoint(partyIdentityDeactivationIntake, partyIdentityRegistration)},
+		// 身份族四类登记加停用挂操作者渠道的登记册 Intake（ADR-0100 决定四，票 operator-channel/04）：租户取认证出的身份，
+		// 写开关换不了这几行——它们曾按 ADR-0091 逐口放行（票 admin-web-group-legal-entities/06），换口同一笔撤下（ADR-0150
+		// 决定三）。上一段「一律挂字面量」对这几行不成立。
+		{Pattern: "/commercial-business-party-registrations", Handler: commercialhttp.NewRegisterBusinessPartyEndpoint(operatorRegistries.commercial, partyIdentityRegistration)},
+		{Pattern: "/commercial-legal-entity-registrations", Handler: commercialhttp.NewRegisterLegalEntityEndpoint(operatorRegistries.commercial, partyIdentityRegistration)},
+		{Pattern: "/commercial-customer-account-registrations", Handler: commercialhttp.NewRegisterCustomerAccountEndpoint(operatorRegistries.commercial, partyIdentityRegistration)},
+		{Pattern: "/commercial-party-relationship-registrations", Handler: commercialhttp.NewRegisterPartyRelationshipEndpoint(operatorRegistries.commercial, partyIdentityRegistration)},
+		{Pattern: "/commercial-party-identity-deactivations", Handler: commercialhttp.NewDeactivatePartyIdentityEndpoint(operatorRegistries.commercial, partyIdentityRegistration)},
 		{Pattern: "/commercial-service-product-form-registrations", Handler: commercialhttp.NewRegisterServiceProductFormEndpoint(operatorRegistries.commercial, productChannelRegistration)},
 		{Pattern: "/commercial-product-channel-mapping-registrations", Handler: commercialhttp.NewRegisterProductChannelMappingEndpoint(operatorRegistries.commercial, productChannelRegistration)},
 		// 注册号类型目录两口（票 legal-entity-profile/01）：登记修订与停用，停用是修订链上的新一笔，
@@ -618,8 +598,8 @@ func assembleBusinessEndpoints(
 		{Pattern: "/commercial-registration-number-type-registrations", Handler: commercialhttp.NewRegisterRegistrationNumberTypeEndpoint(operatorRegistries.commercial, registrationNumberTypeRegistration)},
 		{Pattern: "/commercial-registration-number-type-deactivations", Handler: commercialhttp.NewDeactivateRegistrationNumberTypeEndpoint(operatorRegistries.commercial, registrationNumberTypeRegistration)},
 		// 法人资料登记（ADR-0145 决定三，票 legal-entity-profile/03）只有登记修订一口：资料没有停用，新修订是往修订链上插
-		// 一笔。按 ADR-0091 逐口放进隔离写准入（票 legal-entity-profile/05），走自己的 Intake 变量，与身份族同一个隔离类型。
-		{Pattern: "/commercial-legal-entity-profile-registrations", Handler: commercialhttp.NewRegisterLegalEntityProfileEndpoint(legalEntityProfileRegistrationIntake, legalEntityProfileRegistration)},
+		// 一笔。与身份族挂同一个操作者渠道 Intake（票 operator-channel/04），隔离写放行同笔撤下（ADR-0150 决定三）。
+		{Pattern: "/commercial-legal-entity-profile-registrations", Handler: commercialhttp.NewRegisterLegalEntityProfileEndpoint(operatorRegistries.commercial, legalEntityProfileRegistration)},
 		// 渠道账号使用授权两口（ADR-0093）。撤销不叫 `-deactivations` 也不走 DELETE：它是往
 		// 修订链上追加一条终止事实，册上那一行不会消失，而那两个名字都会让登记方以为会。
 		// 分两口而不带动作字段的理由在端点族注释里：合一口之后载荷里会同时躺着动作与授权

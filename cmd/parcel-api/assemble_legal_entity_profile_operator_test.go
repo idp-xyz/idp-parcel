@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"strings"
 	"testing"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -16,13 +15,13 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// Covers: 票 legal-entity-profile/05 完成判据「真库一条经隔离写 Intake 与生产装配登下一笔资料修订」——开关设 `SYN-TENANT-01`
-// 时资料登记口对合规载荷答 201 且 outcome 为 REGISTERED、对带 tenantId 的载荷答 400；再登一笔未来生效的修订，按时点解析读口
-// 经隔离读 Intake 在今天答第一笔、在未来那一刻答第二笔。Intake 走进程自己那两道门（buildIsolatedWriteAdmission、
-// buildIsolatedReadIntakes），编排走生产装配；解析用例照 main 的接法现造。法人与目录先经同一编排直登。测试输入是隔离合成，只记 `S`。
-func TestIsolatedLegalEntityProfileRegistrationLandsAndResolvesAgainstARealDatabase(t *testing.T) {
-	pool := pgtest.Pool(t)
-	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+// Covers: 票 operator-channel/04 完成判据「已换各口对合成操作者答业务结果」（法人资料登记口）——资料登记口经操作者渠道与
+// 生产装配登下一笔资料修订：持登记册配置写授予的合成操作者对合规载荷答 201 REGISTERED，带 tenantId 答 400、不带令牌答 401，
+// 两者都不落行；再登一笔未来生效的修订，按时点解析读口在今天答第一笔、在未来那一刻答第二笔——资料落在信封给的
+// SYN-TENANT-01 下，读口按同一租户解析得到。解析读口仍挂隔离读 Intake（ADR-0078，本票不换读行），解析用例照 main 的接法
+// 现造；法人与目录先经同一编排直登。测试输入是隔离合成，只记 `S`。
+func TestTheOperatorChannelRegistersALegalEntityProfileThatResolvesAgainstARealDatabase(t *testing.T) {
+	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
@@ -30,38 +29,35 @@ func TestIsolatedLegalEntityProfileRegistrationLandsAndResolvesAgainstARealDatab
 	if err != nil {
 		t.Fatalf("装配商业登记编排：%v", err)
 	}
-	writeAdmission, err := buildIsolatedWriteAdmission(fakeGetenv(map[string]string{isolatedWriteTenantEnv: "SYN-TENANT-01"}))
-	if err != nil {
-		t.Fatalf("构造隔离写准入：%v", err)
-	}
 	readIntakes, err := buildIsolatedReadIntakes(fakeGetenv(map[string]string{isolatedReadTenantEnv: "SYN-TENANT-01"}))
 	if err != nil {
 		t.Fatalf("构造隔离读准入：%v", err)
 	}
 	registerLegalEntityWithIdentityLayer(t, registration, "SYN-TENANT-01", "SYN-PARTY-LEP05", "SYN-LE-LEP05")
 
-	endpoint := commercialhttp.NewRegisterLegalEntityProfileEndpoint(writeAdmission.partyIdentity, registration.legalEntityProfile)
-	post := func(body string) *httptest.ResponseRecorder {
-		t.Helper()
-		recorder := httptest.NewRecorder()
-		endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/commercial-legal-entity-profile-registrations", strings.NewReader(body)))
-		return recorder
-	}
+	const target = "/commercial-legal-entity-profile-registrations"
+	endpoint := commercialhttp.NewRegisterLegalEntityProfileEndpoint(operatorRegistriesForRegistryWriter(t).commercial, registration.legalEntityProfile)
 	current := `{"legalEntityId":"SYN-LE-LEP05","revision":1,"basis":"SYN-PROFILE-BASIS/lep05-r1","effectiveFrom":"2026-02-01T00:00:00Z",` +
 		`"registeredAddress":{"country":"XA","lines":["SYN 合成路 5 号"]},` +
 		`"taxRegistrationNumbers":[{"typeCode":"SYN-XA-TAX","number":"SYN-XA-TAX-0005"}],"invoiceTitle":"SYN 合成抬头"}`
-	if landed := post(`{"profiles":[` + current + `]}`); landed.Code != http.StatusCreated ||
-		registrationOutcome(t, landed) != commercialapp.LegalEntityProfileRegistered.String() {
-		t.Fatalf("合规载荷答 %d %s，want 201 REGISTERED", landed.Code, landed.Body.String())
-	}
-	refused := post(`{"tenantId":"SYN-TENANT-01","profiles":[` + current + `]}`)
+
+	refused := postAsOperator(endpoint, target, presentedOperatorToken, `{"tenantId":"SYN-TENANT-01","profiles":[`+current+`]}`)
 	if refused.Code != http.StatusBadRequest || problemCode(t, refused) != "MALFORMED_REQUEST" {
 		t.Fatalf("带 tenantId 的载荷答 %d %s，want 400 MALFORMED_REQUEST", refused.Code, refused.Body.String())
 	}
-	assertNoOutcome(t, refused, "/commercial-legal-entity-profile-registrations")
+	assertNoOutcome(t, refused, target)
+	anonymous := postAsOperator(endpoint, target, "", `{"profiles":[`+current+`]}`)
+	if anonymous.Code != http.StatusUnauthorized || problemCode(t, anonymous) != "OPERATOR_CREDENTIAL_REJECTED" {
+		t.Fatalf("不带令牌答 %d %s，want 401 OPERATOR_CREDENTIAL_REJECTED", anonymous.Code, anonymous.Body.String())
+	}
+	assertNoOutcome(t, anonymous, target)
+	if landed := postAsOperator(endpoint, target, presentedOperatorToken, `{"profiles":[`+current+`]}`); landed.Code != http.StatusCreated ||
+		registrationOutcome(t, landed) != commercialapp.LegalEntityProfileRegistered.String() {
+		t.Fatalf("合规载荷答 %d %s，want 201 REGISTERED", landed.Code, landed.Body.String())
+	}
 	future := `{"legalEntityId":"SYN-LE-LEP05","revision":2,"basis":"SYN-PROFILE-BASIS/lep05-r2","effectiveFrom":"2030-01-01T00:00:00Z",` +
 		`"registeredAddress":{"country":"XA","lines":["SYN 合成新址"]},"invoiceTitle":"SYN 合成抬头"}`
-	if landed := post(`{"profiles":[` + future + `]}`); landed.Code != http.StatusCreated {
+	if landed := postAsOperator(endpoint, target, presentedOperatorToken, `{"profiles":[`+future+`]}`); landed.Code != http.StatusCreated {
 		t.Fatalf("未来生效的新修订答 %d %s，want 201", landed.Code, landed.Body.String())
 	}
 

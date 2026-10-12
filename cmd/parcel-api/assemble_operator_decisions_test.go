@@ -153,6 +153,12 @@ var swappedRegistryFaces = []string{
 	"/commercial-registration-number-type-deactivations",
 	"/commercial-channel-account-use-registrations",
 	"/commercial-channel-account-use-revocations",
+	"/commercial-business-party-registrations",
+	"/commercial-legal-entity-registrations",
+	"/commercial-customer-account-registrations",
+	"/commercial-party-relationship-registrations",
+	"/commercial-party-identity-deactivations",
+	"/commercial-legal-entity-profile-registrations",
 	"/transport-fulfillment-external-carrier-credential-registrations",
 	"/transport-fulfillment-external-carrier-credential-applicability-changes",
 	"/transport-fulfillment-effective-time-rule-registrations",
@@ -208,7 +214,7 @@ func TestSwappedRegistryFacesMapTheRefusalAndDependencyGrades(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), registries, unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil, nil))
+		router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), registries, unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil))
 		for _, pattern := range swappedRegistryFaces {
 			request := httptest.NewRequest(http.MethodPost, pattern, strings.NewReader(`{}`))
 			request.Header.Set("Authorization", "Bearer presented.operator.token")
@@ -230,7 +236,7 @@ func TestSwappedRegistryFacesAnswerFromTheOperatorChannel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), registries, unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil, nil))
+	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), registries, unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil))
 
 	for _, pattern := range swappedRegistryFaces {
 		cases := map[string]struct {
@@ -280,7 +286,7 @@ func TestSwappedDecisionFacesAnswerFromTheOperatorChannel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(decisions, unconfiguredOperatorRegistries(), unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil, nil))
+	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(decisions, unconfiguredOperatorRegistries(), unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil))
 
 	for pattern := range swappedDecisionFaces {
 		cases := map[string]struct {

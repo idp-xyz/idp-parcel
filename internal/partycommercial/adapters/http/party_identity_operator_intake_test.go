@@ -12,47 +12,115 @@ import (
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 )
 
-// 本文件对隔离写路径准入在身份族的注入式放行（ADR-0091；票 admin-web-group-legal-entities/06）证传输面：
-// 租户格只来自注入、行内容只从载荷取、自报租户即拒、形状错即拒、未放行的口在类型上装不进去。
+// 本文件对操作者渠道在参与方身份族各口的 Intake（ADR-0100 决定四；票 operator-channel/04）证传输面：租户格只来自认证
+// 结果、行内容只从载荷取、自报租户即拒、形状错即拒、令牌不过时载荷一个字节都不读，渠道各格经端点答到线上。
 //
 // 载荷形状照票 02 的表单（`legalEntities[0]` 五格，镜像受控 CLI `register-parties` 的一项、去掉整批的 tenantId）。
 // 期望值取自载荷字面量而不是重算：这里证的是「译装没换字」，不是译装怎么算。
 
-const isolatedIdentityTenant = "SYN-TENANT-01"
+const presentedToken = "presented.operator.token"
 
-func isolatedIdentityIntakeForTest(t *testing.T) *commercialhttp.IsolatedPartyIdentityIntake {
-	t.Helper()
-	intake, err := commercialhttp.NewIsolatedPartyIdentityIntake(isolatedIdentityTenant)
-	if err != nil {
-		t.Fatalf("构造隔离身份 Intake：%v", err)
-	}
-	return intake
+// identityRequest 发一次持令牌的登记请求。请求头与查询串里另带自报租户：它们一律被无视，租户只取认证结果。
+func identityRequest(target, body string) *http.Request {
+	request := httptest.NewRequest(http.MethodPost, target+"?tenant=TENANT-9", strings.NewReader(body))
+	request.Header.Set("Authorization", "Bearer "+presentedToken)
+	request.Header.Set("X-Reported-Tenant", "TENANT-9")
+	return request
 }
 
 func legalEntityRequest(body string) *http.Request {
-	return httptest.NewRequest(http.MethodPost, "/commercial-legal-entity-registrations", strings.NewReader(body))
+	return identityRequest("/commercial-legal-entity-registrations", body)
 }
 
-// Covers: ADR-0091 决定一第二判据 + register_party_identity.go 包注释「真渠道 Intake 要把认证结果填进租户格、
-// 只从载荷取行内容」——隔离形态照办：租户格是开关值，五格行内容逐字来自载荷，请求头与查询串里的自报一律无视。
-func TestIsolatedPartyIdentityIntakeTranslatesLegalEntityRegistrationWithInjectedTenant(t *testing.T) {
-	intake := isolatedIdentityIntakeForTest(t)
-	request := legalEntityRequest(`{"legalEntities":[{
+// identityLine 是身份族的一口：Intake 方法与一份本口合规的外壳正文（不带外层花括号、不带 tenantId）。
+type identityLine struct {
+	target string
+	intake func(*commercialhttp.OperatorRegistryIntake, *http.Request) error
+	fields string
+}
+
+var identityLines = map[string]identityLine{
+	"业务参与方": {
+		target: "/commercial-business-party-registrations",
+		intake: func(intake *commercialhttp.OperatorRegistryIntake, request *http.Request) error {
+			_, err := intake.IntakeBusinessPartyRegistration(context.Background(), request)
+			return err
+		},
+		fields: `"businessParties":[{"partyId":"SYN-PARTY-02","name":"n","revision":1,"basis":"b","effectiveFrom":"2026-09-16T00:00:00Z"}]`,
+	},
+	"责任法人": {
+		target: "/commercial-legal-entity-registrations",
+		intake: func(intake *commercialhttp.OperatorRegistryIntake, request *http.Request) error {
+			_, err := intake.IntakeLegalEntityRegistration(context.Background(), request)
+			return err
+		},
+		fields: `"legalEntities":[{"legalEntityId":"SYN-LE-02","partyId":"SYN-PARTY-02","revision":1,"basis":"b","effectiveFrom":"2026-09-16T00:00:00Z"}]`,
+	},
+	"货主客户账户": {
+		target: "/commercial-customer-account-registrations",
+		intake: func(intake *commercialhttp.OperatorRegistryIntake, request *http.Request) error {
+			_, err := intake.IntakeCustomerAccountRegistration(context.Background(), request)
+			return err
+		},
+		fields: `"customerAccounts":[{"accountId":"SYN-ACCT-02","customerPartyId":"SYN-PARTY-02","revision":1,"basis":"b","effectiveFrom":"2026-09-16T00:00:00Z"}]`,
+	},
+	"参与方关系": {
+		target: "/commercial-party-relationship-registrations",
+		intake: func(intake *commercialhttp.OperatorRegistryIntake, request *http.Request) error {
+			_, err := intake.IntakePartyRelationshipRegistration(context.Background(), request)
+			return err
+		},
+		fields: `"relationships":[{"relationshipId":"SYN-REL-02","revision":1,"holder":"SYN-PARTY-02","counterparty":"SYN-PARTY-03",` +
+			`"role":"CUSTOMER","scope":"s","basis":"b","effectiveStartsAt":"2026-09-01T00:00:00Z"}]`,
+	},
+	"身份停用": {
+		target: "/commercial-party-identity-deactivations",
+		intake: func(intake *commercialhttp.OperatorRegistryIntake, request *http.Request) error {
+			_, err := intake.IntakePartyIdentityDeactivation(context.Background(), request)
+			return err
+		},
+		fields: `"deactivations":[{"kind":"LEGAL_ENTITY","id":"SYN-LE-02","revision":2,"basis":"b","at":"2026-09-17T00:00:00Z"}]`,
+	},
+	"法人资料": {
+		target: "/commercial-legal-entity-profile-registrations",
+		intake: func(intake *commercialhttp.OperatorRegistryIntake, request *http.Request) error {
+			_, err := intake.IntakeLegalEntityProfileRegistration(context.Background(), request)
+			return err
+		},
+		fields: `"profiles":[{"legalEntityId":"SYN-LE-02","revision":1,"basis":"b","effectiveFrom":"2026-09-16T00:00:00Z"}]`,
+	},
+}
+
+// identityEndpoints 以同一个 Intake 装身份族各口的生产端点构造函数；编排是「被调即失败」的替身，资料口的替身由调用方给，
+// 事后查它被调过没有。
+func identityEndpoints(t *testing.T, intake *commercialhttp.OperatorRegistryIntake, profiles commercialhttp.LegalEntityProfileRegistrar) map[string]http.Handler {
+	t.Helper()
+	parties := unreachablePartyRegistrar{t: t}
+	return map[string]http.Handler{
+		"/commercial-business-party-registrations":       commercialhttp.NewRegisterBusinessPartyEndpoint(intake, parties),
+		"/commercial-legal-entity-registrations":         commercialhttp.NewRegisterLegalEntityEndpoint(intake, parties),
+		"/commercial-customer-account-registrations":     commercialhttp.NewRegisterCustomerAccountEndpoint(intake, parties),
+		"/commercial-party-relationship-registrations":   commercialhttp.NewRegisterPartyRelationshipEndpoint(intake, parties),
+		"/commercial-party-identity-deactivations":       commercialhttp.NewDeactivatePartyIdentityEndpoint(intake, parties),
+		"/commercial-legal-entity-profile-registrations": commercialhttp.NewRegisterLegalEntityProfileEndpoint(intake, profiles),
+	}
+}
+
+// Covers: register_party_identity.go 包注释「真渠道 Intake 要把认证结果填进租户格、只从载荷取行内容」——租户格是认证结果，
+// 五格行内容逐字来自载荷，请求头与查询串里的自报一律无视。
+func TestOperatorRegistryIntakeTranslatesLegalEntityRegistrationUnderTheAuthenticatedTenant(t *testing.T) {
+	command, err := operatorIntake(t).IntakeLegalEntityRegistration(context.Background(), legalEntityRequest(`{"legalEntities":[{
 		"legalEntityId":"SYN-LE-02",
 		"partyId":"SYN-PARTY-02",
 		"revision":3,
 		"basis":"SYN-BASIS/le-02-r3",
 		"effectiveFrom":"2026-09-16T08:00:00+08:00"
-	}]}`)
-	request.Header.Set("X-Reported-Tenant", "TENANT-9")
-	request.URL.RawQuery = "tenant=TENANT-9"
-
-	command, err := intake.IntakeLegalEntityRegistration(context.Background(), request)
+	}]}`))
 	if err != nil {
 		t.Fatalf("intake：%v", err)
 	}
-	if got := command.Tenant.String(); got != isolatedIdentityTenant {
-		t.Fatalf("Tenant = %q, want %q（注入值，不是请求里的自报）", got, isolatedIdentityTenant)
+	if got := command.Tenant.String(); got != operatorAuthenticatedTenant {
+		t.Fatalf("Tenant = %q, want %q（认证结果，不是请求里的自报）", got, operatorAuthenticatedTenant)
 	}
 	if got := command.Entity.String(); got != "SYN-LE-02" {
 		t.Fatalf("Entity = %q, want SYN-LE-02", got)
@@ -72,23 +140,77 @@ func TestIsolatedPartyIdentityIntakeTranslatesLegalEntityRegistrationWithInjecte
 	}
 }
 
-// Covers: 票 06 要做的第 1 条——载荷里带 tenantId 即拒（MALFORMED_REQUEST）。在线口不采信自报租户，隔离形态也
-// 不例外：值与开关相同也拒，否则「碰巧相同」的载荷会在别的环境里变成穿透 ADR-0003 隔离边界的第一步。
-func TestIsolatedPartyIdentityIntakeRefusesSelfReportedTenant(t *testing.T) {
-	intake := isolatedIdentityIntakeForTest(t)
-	item := `{"legalEntityId":"SYN-LE-02","partyId":"SYN-PARTY-02","revision":1,"basis":"SYN-BASIS/le-02","effectiveFrom":"2026-09-16T00:00:00Z"}`
-	for name, body := range map[string]string{
-		"另一租户":  `{"tenantId":"SYN-TEN-OTHER","legalEntities":[` + item + `]}`,
-		"与开关同值": `{"tenantId":"` + isolatedIdentityTenant + `","legalEntities":[` + item + `]}`,
-		"空租户":   `{"tenantId":null,"legalEntities":[` + item + `]}`,
-	} {
+// Covers: 身份族各口载荷里带 tenantId 即拒（MALFORMED_REQUEST，理由点名 tenantId）。值与认证结果相同也拒，否则「碰巧相同」的
+// 载荷会在别的环境里变成穿透 ADR-0003 隔离边界的第一步；null 也是自报。同一份载荷去掉那一格照常译出——拒的是那一格，不是这口。
+func TestPartyIdentityLinesRefuseASelfReportedTenant(t *testing.T) {
+	intake := operatorIntake(t)
+	for name, line := range identityLines {
 		t.Run(name, func(t *testing.T) {
-			_, err := intake.IntakeLegalEntityRegistration(context.Background(), legalEntityRequest(body))
-			if !errors.Is(err, commercialhttp.ErrMalformedRequest) {
-				t.Fatalf("err = %v, want ErrMalformedRequest", err)
+			if err := line.intake(intake, identityRequest(line.target, `{`+line.fields+`}`)); err != nil {
+				t.Fatalf("不带 tenantId 的合规载荷：%v", err)
 			}
-			if !strings.Contains(err.Error(), "tenantId") {
-				t.Fatalf("拒绝理由没点名 tenantId，登记方不知道该去掉哪一格：%v", err)
+			for variant, tenant := range map[string]string{
+				"另一租户":    `"SYN-TEN-OTHER"`,
+				"与认证结果同值": `"` + operatorAuthenticatedTenant + `"`,
+				"null":    `null`,
+			} {
+				err := line.intake(intake, identityRequest(line.target, `{"tenantId":`+tenant+`,`+line.fields+`}`))
+				if !errors.Is(err, commercialhttp.ErrMalformedRequest) || !strings.Contains(err.Error(), "tenantId") {
+					t.Fatalf("%s：err = %v, want ErrMalformedRequest 且点名 tenantId", variant, err)
+				}
+			}
+		})
+	}
+}
+
+// Covers: OperatorRegistryIntake 类型注释「先认证、后解载荷」——令牌不过时身份族各口一个字节都不读，答凭证被拒。
+func TestPartyIdentityLinesAuthenticateBeforeReadingThePayload(t *testing.T) {
+	intake := operatorIntake(t)
+	for name, line := range identityLines {
+		probe := &bodyReadProbe{}
+		err := line.intake(intake, httptest.NewRequest(http.MethodPost, line.target, probe))
+		if !errors.Is(err, commercialhttp.ErrOperatorCredentialRejected) || probe.read {
+			t.Fatalf("%s：err = %v（载荷读了：%v），want ErrOperatorCredentialRejected 且一字未读", name, err, probe.read)
+		}
+	}
+}
+
+// Covers: ADR-0100 决定四的三格与未配置格经身份族各口的端点答到线上（writeRegistrationIntakeProblem）——不带令牌 401、
+// 没有登记册配置写授予 403、身份依赖读不动 503、发行方未配置 403 未配置。四格都在读载荷之前定：编排一次也不被调到，
+// 答复不带 outcome。
+func TestPartyIdentityEndpointsAnswerTheOperatorChannelGrades(t *testing.T) {
+	grades := map[string]struct {
+		operators envelopeOperators
+		token     string
+		status    int
+		code      string
+	}{
+		"不带令牌":    {envelopeOperators{}, "", http.StatusUnauthorized, "OPERATOR_CREDENTIAL_REJECTED"},
+		"没有登记写授予": {envelopeOperators{err: commercialhttp.ErrOperatorNotGranted}, presentedToken, http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+		"身份依赖读不动": {envelopeOperators{err: commercialhttp.ErrIdentityDependencyUnavailable}, presentedToken, http.StatusServiceUnavailable, "IDENTITY_DEPENDENCY_UNAVAILABLE"},
+		"发行方未配置":  {envelopeOperators{err: commercialhttp.ErrAccessChannelNotConfigured}, presentedToken, http.StatusForbidden, "ACCESS_CHANNEL_NOT_CONFIGURED"},
+	}
+	for grade, testCase := range grades {
+		t.Run(grade, func(t *testing.T) {
+			profiles := &legalEntityProfileRegistrarDouble{}
+			for target, endpoint := range identityEndpoints(t, publicationOperatorIntake(t, testCase.operators), profiles) {
+				probe := &bodyReadProbe{}
+				request := httptest.NewRequest(http.MethodPost, target, probe)
+				if testCase.token != "" {
+					request.Header.Set("Authorization", "Bearer "+testCase.token)
+				}
+				recorder := httptest.NewRecorder()
+				endpoint.ServeHTTP(recorder, request)
+				if recorder.Code != testCase.status || errorCode(t, recorder) != testCase.code {
+					t.Fatalf("%s：答 %d %s，want %d %s", target, recorder.Code, recorder.Body, testCase.status, testCase.code)
+				}
+				assertNoRegistrationOutcome(t, recorder)
+				if probe.read {
+					t.Fatalf("%s：认证没过却读了载荷", target)
+				}
+			}
+			if profiles.called {
+				t.Fatal("资料登记编排被调到了")
 			}
 		})
 	}
@@ -96,8 +218,8 @@ func TestIsolatedPartyIdentityIntakeRefusesSelfReportedTenant(t *testing.T) {
 
 // Covers: 形状级失败包 ErrMalformedRequest（4xx，重发同样内容不会好），判据同 ADR-0029。一次一笔：本端点一次只收一项，
 // 批走受控 CLI；零项与多项都不是这一口的形状。空标识由领域值对象拒，Intake 不替它放行一个立不住的命令。
-func TestIsolatedPartyIdentityIntakeRefusesMalformedLegalEntityPayloads(t *testing.T) {
-	intake := isolatedIdentityIntakeForTest(t)
+func TestOperatorRegistryIntakeRefusesMalformedLegalEntityPayloads(t *testing.T) {
+	intake := operatorIntake(t)
 	item := func(id string) string {
 		return `{"legalEntityId":"` + id + `","partyId":"SYN-PARTY-02","revision":1,"basis":"SYN-BASIS/le-02","effectiveFrom":"2026-09-16T00:00:00Z"}`
 	}
@@ -120,25 +242,22 @@ func TestIsolatedPartyIdentityIntakeRefusesMalformedLegalEntityPayloads(t *testi
 	}
 }
 
-// Covers: 第二口 business-party（票 06 要做的第 2 条）——`businessParties[0]` 四格 + 生效时刻逐字来自载荷，
-// 租户格来自注入；参与方本体（BusinessParty）由领域构造函数在 Intake 里立起来，用例侧不再重构。
-func TestIsolatedPartyIdentityIntakeTranslatesBusinessPartyRegistrationWithInjectedTenant(t *testing.T) {
-	intake := isolatedIdentityIntakeForTest(t)
-	request := httptest.NewRequest(http.MethodPost, "/commercial-business-party-registrations", strings.NewReader(`{"businessParties":[{
+// Covers: business-party 一口——`businessParties[0]` 四格 + 生效时刻逐字来自载荷，租户格来自认证结果；参与方本体
+// （BusinessParty）由领域构造函数在 Intake 里立起来，用例侧不再重构。
+func TestOperatorRegistryIntakeTranslatesBusinessPartyRegistrationUnderTheAuthenticatedTenant(t *testing.T) {
+	command, err := operatorIntake(t).IntakeBusinessPartyRegistration(context.Background(),
+		identityRequest("/commercial-business-party-registrations", `{"businessParties":[{
 		"partyId":"SYN-PARTY-02",
 		"name":"SYN 合成参与方二号",
 		"revision":2,
 		"basis":"SYN-BASIS/party-02-r2",
 		"effectiveFrom":"2026-09-16T00:00:00Z"
 	}]}`))
-	request.Header.Set("X-Reported-Tenant", "TENANT-9")
-
-	command, err := intake.IntakeBusinessPartyRegistration(context.Background(), request)
 	if err != nil {
 		t.Fatalf("intake：%v", err)
 	}
-	if got := command.Party.Tenant().String(); got != isolatedIdentityTenant {
-		t.Fatalf("Party.Tenant = %q, want %q（注入值）", got, isolatedIdentityTenant)
+	if got := command.Party.Tenant().String(); got != operatorAuthenticatedTenant {
+		t.Fatalf("Party.Tenant = %q, want %q（认证结果）", got, operatorAuthenticatedTenant)
 	}
 	if got := command.Party.ID().String(); got != "SYN-PARTY-02" {
 		t.Fatalf("Party.ID = %q, want SYN-PARTY-02", got)
@@ -157,25 +276,22 @@ func TestIsolatedPartyIdentityIntakeTranslatesBusinessPartyRegistrationWithInjec
 	}
 }
 
-// Covers: 第三口 customer-account——`customerAccounts[0]` 五格逐字来自载荷，租户格来自注入；跨租户绑定由领域构造门
+// Covers: customer-account 一口——`customerAccounts[0]` 五格逐字来自载荷，租户格来自认证结果；跨租户绑定由领域构造门
 // 在用例侧拒（ADR-0041），Intake 不预判。
-func TestIsolatedPartyIdentityIntakeTranslatesCustomerAccountRegistrationWithInjectedTenant(t *testing.T) {
-	intake := isolatedIdentityIntakeForTest(t)
-	request := httptest.NewRequest(http.MethodPost, "/commercial-customer-account-registrations", strings.NewReader(`{"customerAccounts":[{
+func TestOperatorRegistryIntakeTranslatesCustomerAccountRegistrationUnderTheAuthenticatedTenant(t *testing.T) {
+	command, err := operatorIntake(t).IntakeCustomerAccountRegistration(context.Background(),
+		identityRequest("/commercial-customer-account-registrations", `{"customerAccounts":[{
 		"accountId":"SYN-ACCT-02",
 		"customerPartyId":"SYN-PARTY-02",
 		"revision":1,
 		"basis":"SYN-BASIS/acct-02",
 		"effectiveFrom":"2026-09-16T00:00:00Z"
 	}]}`))
-	request.Header.Set("X-Reported-Tenant", "TENANT-9")
-
-	command, err := intake.IntakeCustomerAccountRegistration(context.Background(), request)
 	if err != nil {
 		t.Fatalf("intake：%v", err)
 	}
-	if got := command.Tenant.String(); got != isolatedIdentityTenant {
-		t.Fatalf("Tenant = %q, want %q（注入值）", got, isolatedIdentityTenant)
+	if got := command.Tenant.String(); got != operatorAuthenticatedTenant {
+		t.Fatalf("Tenant = %q, want %q（认证结果）", got, operatorAuthenticatedTenant)
 	}
 	if got := command.Account.String(); got != "SYN-ACCT-02" {
 		t.Fatalf("Account = %q, want SYN-ACCT-02", got)
@@ -194,15 +310,13 @@ func TestIsolatedPartyIdentityIntakeTranslatesCustomerAccountRegistrationWithInj
 	}
 }
 
-// Covers: 第四口 party-relationship——`relationships[0]` 正文沿 domain.PartyRelationshipSpec 逐格来自载荷，租户格来自
-// 注入；批准事实与区间终点两格可缺席：缺席即候选关系 / 开区间，不造假值顶上（CLI 同形）。角色是封闭集的名称镜像，
+// Covers: party-relationship 一口——`relationships[0]` 正文沿 domain.PartyRelationshipSpec 逐格来自载荷，租户格来自认证
+// 结果；批准事实与区间终点两格可缺席：缺席即候选关系 / 开区间，不造假值顶上（CLI 同形）。角色是封闭集的名称镜像，
 // 集合外取值拒收不吸收。
-func TestIsolatedPartyIdentityIntakeTranslatesPartyRelationshipRegistrationWithInjectedTenant(t *testing.T) {
-	intake := isolatedIdentityIntakeForTest(t)
+func TestOperatorRegistryIntakeTranslatesPartyRelationshipRegistrationUnderTheAuthenticatedTenant(t *testing.T) {
+	intake := operatorIntake(t)
 	relationshipRequest := func(body string) *http.Request {
-		request := httptest.NewRequest(http.MethodPost, "/commercial-party-relationship-registrations", strings.NewReader(body))
-		request.Header.Set("X-Reported-Tenant", "TENANT-9")
-		return request
+		return identityRequest("/commercial-party-relationship-registrations", body)
 	}
 
 	approved, err := intake.IntakePartyRelationshipRegistration(context.Background(), relationshipRequest(`{"relationships":[{
@@ -220,8 +334,8 @@ func TestIsolatedPartyIdentityIntakeTranslatesPartyRelationshipRegistrationWithI
 	if err != nil {
 		t.Fatalf("intake（已批准）：%v", err)
 	}
-	if got := approved.Tenant.String(); got != isolatedIdentityTenant {
-		t.Fatalf("Tenant = %q, want %q（注入值）", got, isolatedIdentityTenant)
+	if got := approved.Tenant.String(); got != operatorAuthenticatedTenant {
+		t.Fatalf("Tenant = %q, want %q（认证结果）", got, operatorAuthenticatedTenant)
 	}
 	if got := approved.ID.String(); got != "SYN-REL-02" {
 		t.Fatalf("ID = %q, want SYN-REL-02", got)
@@ -290,15 +404,13 @@ func TestIsolatedPartyIdentityIntakeTranslatesPartyRelationshipRegistrationWithI
 	}
 }
 
-// Covers: 第五口 identity-deactivation——`deactivations[0]` 五格逐字来自载荷，租户格来自注入。停用是往修订链上插一笔
+// Covers: identity-deactivation 一口——`deactivations[0]` 五格逐字来自载荷，租户格来自认证结果。停用是往修订链上插一笔
 // 新修订，Revision 是操作者声明自己看到的册面（= 最新修订 + 1），错位由用例拒；身份种类是封闭集的名称镜像，关系不在
 // 内（关系的终止走撤销/到期/替代，不叫停用）。外壳镜像 CLI `deactivate-party-identity` 的文档、去掉整批的 tenantId。
-func TestIsolatedPartyIdentityIntakeTranslatesDeactivationWithInjectedTenant(t *testing.T) {
-	intake := isolatedIdentityIntakeForTest(t)
+func TestOperatorRegistryIntakeTranslatesDeactivationUnderTheAuthenticatedTenant(t *testing.T) {
+	intake := operatorIntake(t)
 	deactivationRequest := func(body string) *http.Request {
-		request := httptest.NewRequest(http.MethodPost, "/commercial-party-identity-deactivations", strings.NewReader(body))
-		request.Header.Set("X-Reported-Tenant", "TENANT-9")
-		return request
+		return identityRequest("/commercial-party-identity-deactivations", body)
 	}
 
 	command, err := intake.IntakePartyIdentityDeactivation(context.Background(), deactivationRequest(`{"deactivations":[{
@@ -311,8 +423,8 @@ func TestIsolatedPartyIdentityIntakeTranslatesDeactivationWithInjectedTenant(t *
 	if err != nil {
 		t.Fatalf("intake：%v", err)
 	}
-	if got := command.Tenant.String(); got != isolatedIdentityTenant {
-		t.Fatalf("Tenant = %q, want %q（注入值）", got, isolatedIdentityTenant)
+	if got := command.Tenant.String(); got != operatorAuthenticatedTenant {
+		t.Fatalf("Tenant = %q, want %q（认证结果）", got, operatorAuthenticatedTenant)
 	}
 	if got := command.Kind.String(); got != "LEGAL_ENTITY" {
 		t.Fatalf("Kind = %q, want LEGAL_ENTITY", got)
@@ -331,7 +443,6 @@ func TestIsolatedPartyIdentityIntakeTranslatesDeactivationWithInjectedTenant(t *
 	}
 
 	for name, body := range map[string]string{
-		"自报租户":   `{"tenantId":"` + isolatedIdentityTenant + `","deactivations":[{"kind":"LEGAL_ENTITY","id":"SYN-LE-02","revision":2,"basis":"b","at":"2026-09-17T00:00:00Z"}]}`,
 		"关系不叫停用": `{"deactivations":[{"kind":"PARTY_RELATIONSHIP","id":"SYN-REL-02","revision":2,"basis":"b","at":"2026-09-17T00:00:00Z"}]}`,
 		"两项":     `{"deactivations":[{"kind":"LEGAL_ENTITY","id":"SYN-LE-02","revision":2,"basis":"b","at":"2026-09-17T00:00:00Z"},{"kind":"LEGAL_ENTITY","id":"SYN-LE-03","revision":2,"basis":"b","at":"2026-09-17T00:00:00Z"}]}`,
 		"投了登记项":  `{"legalEntities":[{"legalEntityId":"SYN-LE-02","partyId":"SYN-PARTY-02","revision":1,"basis":"b","effectiveFrom":"2026-09-16T00:00:00Z"}]}`,
@@ -349,8 +460,8 @@ func TestIsolatedPartyIdentityIntakeTranslatesDeactivationWithInjectedTenant(t *
 // 的一部分，放过它就是无声丢掉一段输入：与下面 exactlyOne 对「无声丢掉」的立场相反，也与同包发布口对同一形状的答复
 // 相反。两份外壳（登记 / 停用）各投一次：它们各走一遍解码，一处改了另一处未必跟着改。在 HTTP 缝上证，钉的是登记方
 // 看得见的三样：400、MALFORMED_REQUEST、无 outcome；编排一次也不该被调到。
-func TestIsolatedPartyIdentityIntakeRefusesTrailingContentAfterThePayload(t *testing.T) {
-	intake := isolatedIdentityIntakeForTest(t)
+func TestPartyIdentityIntakeRefusesTrailingContentAfterThePayload(t *testing.T) {
+	intake := operatorIntake(t)
 	legalEntity := `{"legalEntities":[{"legalEntityId":"SYN-LE-02","partyId":"SYN-PARTY-02","revision":1,"basis":"b","effectiveFrom":"2026-09-16T00:00:00Z"}]}`
 	deactivation := `{"deactivations":[{"kind":"LEGAL_ENTITY","id":"SYN-LE-02","revision":2,"basis":"b","at":"2026-09-17T00:00:00Z"}]}`
 	for name, testCase := range map[string]struct {
@@ -373,8 +484,7 @@ func TestIsolatedPartyIdentityIntakeRefusesTrailingContentAfterThePayload(t *tes
 		t.Run(name, func(t *testing.T) {
 			registrar := &scriptedPartyRegistrar{}
 			recorder := httptest.NewRecorder()
-			testCase.endpoint(registrar).ServeHTTP(recorder,
-				httptest.NewRequest(http.MethodPost, "/probe", strings.NewReader(testCase.body)))
+			testCase.endpoint(registrar).ServeHTTP(recorder, identityRequest("/probe", testCase.body))
 
 			if recorder.Code != http.StatusBadRequest {
 				t.Fatalf("带尾随内容的载荷答 %d %s，want 400", recorder.Code, recorder.Body.String())
@@ -395,14 +505,14 @@ func TestIsolatedPartyIdentityIntakeRefusesTrailingContentAfterThePayload(t *tes
 // 靶着每一种可能挨个试。判据同 `cause`：detail 是散文，这里只钉「非空且含关键字」，不钉全文——全文属 encoding/json
 // 与本包的措辞自由，改一个字不该让这条变红。哨兵自己的英文原句不该重复进 detail：登记方要读的是哨兵之后那半。
 func TestMalformedRegistrationRefusalCarriesTheReasonAsDetail(t *testing.T) {
-	intake := isolatedIdentityIntakeForTest(t)
+	intake := operatorIntake(t)
 	item := `{"legalEntityId":"SYN-LE-02","partyId":"SYN-PARTY-02","revision":1,"basis":"b","effectiveFrom":"2026-09-16T00:00:00Z"}`
 	for name, testCase := range map[string]struct {
 		body    string
 		keyword string
 	}{
 		"带 tenantId": {
-			body:    `{"tenantId":"` + isolatedIdentityTenant + `","legalEntities":[` + item + `]}`,
+			body:    `{"tenantId":"` + operatorAuthenticatedTenant + `","legalEntities":[` + item + `]}`,
 			keyword: "tenantId",
 		},
 		"未知键": {
@@ -417,12 +527,15 @@ func TestMalformedRegistrationRefusalCarriesTheReasonAsDetail(t *testing.T) {
 			body:    `{"legalEntities":[` + item + `]} {"x":1}`,
 			keyword: "trailing",
 		},
+		"空法人标识": {
+			body:    `{"legalEntities":[{"legalEntityId":"","partyId":"SYN-PARTY-02","revision":1,"basis":"b","effectiveFrom":"2026-09-16T00:00:00Z"}]}`,
+			keyword: "legalEntities[0].legalEntityId",
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			registrar := &scriptedPartyRegistrar{}
 			recorder := httptest.NewRecorder()
-			commercialhttp.NewRegisterLegalEntityEndpoint(intake, registrar).ServeHTTP(recorder,
-				httptest.NewRequest(http.MethodPost, "/probe", strings.NewReader(testCase.body)))
+			commercialhttp.NewRegisterLegalEntityEndpoint(intake, registrar).ServeHTTP(recorder, legalEntityRequest(testCase.body))
 
 			if recorder.Code != http.StatusBadRequest {
 				t.Fatalf("答 %d %s，want 400", recorder.Code, recorder.Body.String())
@@ -467,9 +580,9 @@ func problemDetailOf(t *testing.T, recorder *httptest.ResponseRecorder) (string,
 
 // Covers: 一口只收本口的项。载荷外壳镜像 CLI 的整份文档，因此别的口的数组在这里**解得开**；解得开不等于
 // 可以忽略——一份同时带着法人项与参与方项的载荷投到法人口，参与方那一项会被无声丢掉，登记方以为两样都登了。
-// 五口共用同一份外壳，这条对每一口都成立，这里各口投一次别人的项。
-func TestIsolatedPartyIdentityIntakeRefusesItemsMeantForAnotherLine(t *testing.T) {
-	intake := isolatedIdentityIntakeForTest(t)
+// 四类登记共用同一份外壳，这里各投一次别人的项。
+func TestPartyIdentityIntakeRefusesItemsMeantForAnotherLine(t *testing.T) {
+	intake := operatorIntake(t)
 	legalEntity := `{"legalEntityId":"SYN-LE-02","partyId":"SYN-PARTY-02","revision":1,"basis":"b","effectiveFrom":"2026-09-16T00:00:00Z"}`
 	businessParty := `{"partyId":"SYN-PARTY-02","name":"n","revision":1,"basis":"b","effectiveFrom":"2026-09-16T00:00:00Z"}`
 
@@ -482,49 +595,5 @@ func TestIsolatedPartyIdentityIntakeRefusesItemsMeantForAnotherLine(t *testing.T
 		legalEntityRequest(`{"legalEntities":[`+legalEntity+`]}`))
 	if !errors.Is(err, commercialhttp.ErrMalformedRequest) {
 		t.Fatalf("参与方口收了法人项：err = %v, want ErrMalformedRequest", err)
-	}
-}
-
-// Covers: 立不起来的注入在构造时拒，不等第一个请求（同隔离读 Intake 的纪律）。
-func TestNewIsolatedPartyIdentityIntakeRejectsBlankTenant(t *testing.T) {
-	if _, err := commercialhttp.NewIsolatedPartyIdentityIntake("   "); err == nil {
-		t.Fatal("空租户被接受")
-	}
-}
-
-// Covers: ADR-0091 Consequences「命令面按端点逐口放行，不是一次全开」——本类型此刻只实现放行了的那几口，
-// 未放行的口在类型上就装不进去（编译期），不靠装配点的纪律。每放一口，该口的断言从这里移走、改成放行测试。
-// 发布口与产品渠道口不在本票（票面「不做」），永远不该出现在这里的放行名单里。
-func TestIsolatedPartyIdentityIntakeServesOnlyAdmittedLines(t *testing.T) {
-	var intake any = isolatedIdentityIntakeForTest(t)
-	if _, ok := intake.(commercialhttp.LegalEntityRegistrationIntake); !ok {
-		t.Fatal("责任法人登记口该已放行")
-	}
-	if _, ok := intake.(commercialhttp.BusinessPartyRegistrationIntake); !ok {
-		t.Fatal("业务参与方登记口该已放行")
-	}
-	if _, ok := intake.(commercialhttp.CustomerAccountRegistrationIntake); !ok {
-		t.Fatal("货主客户账户登记口该已放行")
-	}
-	if _, ok := intake.(commercialhttp.PartyRelationshipRegistrationIntake); !ok {
-		t.Fatal("参与方关系登记口该已放行")
-	}
-	if _, ok := intake.(commercialhttp.PartyIdentityDeactivationIntake); !ok {
-		t.Fatal("身份停用口该已放行")
-	}
-	if _, ok := intake.(commercialhttp.CommercialPublicationIntake); ok {
-		t.Fatal("发布口不在本票，隔离身份 Intake 不该装得进")
-	}
-	if _, ok := intake.(commercialhttp.PublicationDraftApprovalIntake); ok {
-		t.Fatal("批准口不在本票，隔离身份 Intake 不该装得进")
-	}
-	if _, ok := intake.(commercialhttp.ServiceProductFormRegistrationIntake); ok {
-		t.Fatal("服务形态登记口不在本票，隔离身份 Intake 不该装得进")
-	}
-	if _, ok := intake.(commercialhttp.ProductChannelMappingRegistrationIntake); ok {
-		t.Fatal("产品渠道映射登记口不在本票，隔离身份 Intake 不该装得进")
-	}
-	if _, ok := intake.(commercialhttp.CommercialCatalogueIntake); ok {
-		t.Fatal("查阅行归隔离读 Intake，写 Intake 不该装得进（两个开关分设，ADR-0091 决定四）")
 	}
 }
