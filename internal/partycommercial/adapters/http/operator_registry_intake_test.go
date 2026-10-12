@@ -14,11 +14,12 @@ import (
 
 type operatorTenant struct{}
 
-func (operatorTenant) AuthenticateRegistryWrite(_ context.Context, token string) (domain.TenantID, error) {
+func (operatorTenant) AuthenticateRegistryWrite(_ context.Context, token string) (commercialhttp.OperatorIdentity, error) {
 	if token == "" {
-		return domain.TenantID{}, commercialhttp.ErrOperatorCredentialRejected
+		return commercialhttp.OperatorIdentity{}, commercialhttp.ErrOperatorCredentialRejected
 	}
-	return domain.NewTenantID("SYN-TENANT-01")
+	tenant, err := domain.NewTenantID("SYN-TENANT-01")
+	return commercialhttp.OperatorIdentity{Tenant: tenant}, err
 }
 
 func operatorRequest(token, body string) *http.Request {

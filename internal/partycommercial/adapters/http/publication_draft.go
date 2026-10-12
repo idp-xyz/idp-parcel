@@ -150,3 +150,49 @@ func writeDraftPublicationAnswer(response http.ResponseWriter, result applicatio
 	}
 	writeJSON(response, status, answer)
 }
+
+var (
+	_ PublicationDraftSubmissionIntake  = (*OperatorRegistryIntake)(nil)
+	_ PublicationDraftApprovalIntake    = (*OperatorRegistryIntake)(nil)
+	_ PublicationDraftPublicationIntake = (*OperatorRegistryIntake)(nil)
+)
+
+// IntakePublicationDraftSubmission 是操作者渠道对录入的译法：先认证、后解载荷，租户与录入者都取认证出的身份。逐格
+// 问题原样交回（判据同预览口），命令面分流据此在 400 里指名哪几格。
+func (intake *OperatorRegistryIntake) IntakePublicationDraftSubmission(ctx context.Context, request *http.Request) (application.SubmitPublicationDraftCommand, error) {
+	operator, err := intake.authenticate(ctx, request)
+	if err != nil {
+		return application.SubmitPublicationDraftCommand{}, err
+	}
+	payload, err := DecodeCommercialPublicationPayload(request.Body)
+	if err != nil {
+		return application.SubmitPublicationDraftCommand{}, err
+	}
+	return payload.SubmitCommand(operator.Tenant, operator.Operator.Reference())
+}
+
+// IntakePublicationDraftApproval 是操作者渠道对批准的译法：批准者是认证出的操作者主体整个，授予集是铸信封那一刻持有
+// 的。审批职责规则没登时答未配置是用例的事，这里不预判、也不替它挑一级。
+func (intake *OperatorRegistryIntake) IntakePublicationDraftApproval(ctx context.Context, request *http.Request) (application.ApprovePublicationDraftCommand, error) {
+	operator, err := intake.authenticate(ctx, request)
+	if err != nil {
+		return application.ApprovePublicationDraftCommand{}, err
+	}
+	payload, err := DecodePublicationDraftReferencePayload(request.Body)
+	if err != nil {
+		return application.ApprovePublicationDraftCommand{}, err
+	}
+	return payload.ApproveCommand(operator.Tenant, operator.Operator)
+}
+
+func (intake *OperatorRegistryIntake) IntakePublicationDraftPublication(ctx context.Context, request *http.Request) (application.PublishPublicationDraftCommand, error) {
+	operator, err := intake.authenticate(ctx, request)
+	if err != nil {
+		return application.PublishPublicationDraftCommand{}, err
+	}
+	payload, err := DecodePublicationDraftReferencePayload(request.Body)
+	if err != nil {
+		return application.PublishPublicationDraftCommand{}, err
+	}
+	return payload.PublishCommand(operator.Tenant)
+}

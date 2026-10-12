@@ -112,3 +112,19 @@ func payloadProblemAnswersOf(problems *PublicationPayloadProblems) []payloadProb
 	}
 	return answers
 }
+
+var _ CommercialPublicationPreviewIntake = (*OperatorRegistryIntake)(nil)
+
+// IntakeCommercialPublicationPreview 是操作者渠道对预览的译法：先认证、后解载荷，租户取认证出的身份——与录入口取的是
+// 同一个，预览过了的壳录入时才是同一份。逐格问题原样交回、不经 malformedUnless 归成散文：端点要认出它，答成一格答案。
+func (intake *OperatorRegistryIntake) IntakeCommercialPublicationPreview(ctx context.Context, request *http.Request) (application.PreviewCommercialPublicationCommand, error) {
+	operator, err := intake.authenticate(ctx, request)
+	if err != nil {
+		return application.PreviewCommercialPublicationCommand{}, err
+	}
+	payload, err := DecodeCommercialPublicationPayload(request.Body)
+	if err != nil {
+		return application.PreviewCommercialPublicationCommand{}, err
+	}
+	return payload.PreviewCommand(operator.Tenant)
+}

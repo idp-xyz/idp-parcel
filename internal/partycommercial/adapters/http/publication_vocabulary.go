@@ -58,8 +58,10 @@ func NewQueryPublicationVocabularyEndpoint(intake PublicationVocabularyIntake) h
 			return
 		}
 
+		// 与发布四口同一族 Intake、同一组答复格（未配置、凭据被拒、未授予、身份依赖不可用），所以用命令面那份分流，
+		// 不用目录查阅那份——后者没有操作者渠道的三格。
 		if err := intake.IntakePublicationVocabularyQuery(request.Context(), request); err != nil {
-			writeCatalogueIntakeProblem(response, err)
+			writeRegistrationIntakeProblem(response, err)
 			return
 		}
 
@@ -97,4 +99,13 @@ func vocabularySetAnswersOf(sets []domain.VocabularySet) []vocabularySetAnswer {
 		answers = append(answers, vocabularySetAnswer{Name: set.Name, Codes: append([]string{}, set.Codes...)})
 	}
 	return answers
+}
+
+var _ PublicationVocabularyIntake = (*OperatorRegistryIntake)(nil)
+
+// IntakePublicationVocabularyQuery 是操作者渠道对词表读口的准入：认证过了就能读，认证出的身份不用——词表没有租户维、
+// 不读存储；授予照登记册配置写那一格认，与发布四口同一个开关（ADR-0151 决定五）。
+func (intake *OperatorRegistryIntake) IntakePublicationVocabularyQuery(ctx context.Context, request *http.Request) error {
+	_, err := intake.authenticate(ctx, request)
+	return err
 }
