@@ -443,9 +443,11 @@ func assembleBusinessEndpoints(
 		// 采信自报身份或替它填证据层级的 Intake 都不能有；路径按动词叫 `-replays`，判据同复核口叫 `-reviews`。
 		// 回放结果不交结算，编排的依赖结构上就没有交付口。
 		{Pattern: "/pricing-evaluation-replays", Handler: pricinghttp.NewReplayEvaluationEndpoint(operatorRegistries.pricing, evaluationReplay)},
-		// 运营试算（ADR-0152 决定六，票 operator-workspace-gaps/05）：命令行，同挂字面量 UnconfiguredIntake{}——租户来自操作者
-		// 信封，真 Intake 与回放同批换；不加隔离放行（ADR-0150）。编排只算不存，依赖结构上没有评价库与交付口。
-		{Pattern: "/pricing-estimates", Handler: pricinghttp.NewEstimateEndpoint(pricinghttp.UnconfiguredIntake{}, pricingEstimate)},
+		// 运营试算（ADR-0152 决定六，票 operator-workspace-gaps/05）：命令行，挂操作者渠道（票 operator-channel/06），能力面是
+		// 主数据与运营查阅读而不是登记册配置写——试算不写任何册、不形成生产事实，所以挂 operatorRegistries.pricingOperationsRead，
+		// 不挂 operatorRegistries.pricing。租户来自认证出的身份；不加隔离放行（ADR-0150）。编排只算不存，依赖结构上没有
+		// 评价库与交付口。
+		{Pattern: "/pricing-estimates", Handler: pricinghttp.NewEstimateEndpoint(operatorRegistries.pricingOperationsRead, pricingEstimate)},
 		// 价卡导入预览（ADR-0101 决定四，票 price-card-import/02）：命令行，挂操作者渠道的登记册 Intake——租户来自认证出的
 		// 身份，与序列预览同一个 Intake；不加隔离放行（ADR-0150）。编排只读上传字节，依赖结构上没有仓储。
 		{Pattern: "/pricing-price-card-previews", Handler: pricinghttp.NewPreviewPriceCardImportEndpoint(operatorRegistries.pricing, priceCardPreview)},
