@@ -180,8 +180,18 @@ export function draftActionNoteOf(
 }
 
 /**
- * 草稿册的页面态：空册、就绪、渠道各格与故障照目录页同一套判读（catalogueViewState），只把未配置那一格的说明换成
- * 草稿册自己的——它挂的是操作者渠道，不是目录读口；答 403 不等于「册上没有草稿」。
+ * 没形成答案时按码换成草稿册自己的说法：目录页那套说明有的点名「目录」，而草稿不进价卡目录，照搬会让人去查一个
+ * 没出问题的读口。没收录的码照目录页原样。
+ */
+const draftRegisterNoAnswerNotes: Record<string, string> = {
+  NO_ANSWER_FORMED: '草稿册读不回（含某一行过不了重建门），这次没有形成答案；这不是「册上没有草稿」，可稍后重试。',
+  INTAKE_FAILED: '接入面未能形成授权查询作用域；服务端没有读草稿册。',
+};
+
+/**
+ * 草稿册的页面态：空册、就绪、渠道各格与故障照目录页同一套判读（catalogueViewState），只把说明里讲成目录读口的
+ * 换成草稿册自己的——未配置那一格它挂的是操作者渠道，答 403 不等于「册上没有草稿」；没形成答案的说明见
+ * draftRegisterNoAnswerNotes。
  */
 export function draftListViewState(
   answer: ApiResult<PriceCardDraftListResponseBody> | null,
@@ -195,6 +205,10 @@ export function draftListViewState(
     emptyDescription:
       '空册是正常业务答案（PRICE_CARD_DRAFTS_LISTED），不是故障；在「导入价卡」签存为草稿之后，这里即可见。',
   });
+  if (answer?.kind === 'noAnswer' && state.kind === 'error') {
+    const description = draftRegisterNoAnswerNotes[answer.code];
+    return description ? { ...state, description } : state;
+  }
   if (state.kind !== 'unconfigured') return state;
   return {
     kind: 'unconfigured',

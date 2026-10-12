@@ -191,3 +191,20 @@ test('草稿册的页面态：空册是空态，未配置说的是草稿查阅�
   equal(draftListViewState({ kind: 'loginRequired' }, retry, pricingModule).kind, 'loginRequired');
   equal(draftListViewState({ kind: 'notGranted' }, retry, pricingModule).kind, 'notGranted');
 });
+
+// Covers: 要做的 3「四态如实」——故障格说的是草稿册读不回，不把它叫成目录（草稿不进价卡目录）；别的码照目录页原样。
+test('草稿册没形成答案时说的是草稿册，不是目录，仍可重试', () => {
+  const retry = () => {};
+  const failed = draftListViewState({ kind: 'noAnswer', status: 500, code: 'NO_ANSWER_FORMED' }, retry, pricingModule);
+  ok(failed.kind === 'error');
+  match(failed.description ?? '', /草稿册读不回/);
+  ok(!/目录/.test(failed.description ?? ''));
+  equal(failed.onRetry, retry);
+  const intake = draftListViewState({ kind: 'noAnswer', status: 500, code: 'INTAKE_FAILED' }, retry, pricingModule);
+  ok(intake.kind === 'error');
+  match(intake.description ?? '', /没有读草稿册/);
+  ok(!/目录/.test(intake.description ?? ''));
+  const identity = draftListViewState({ kind: 'noAnswer', status: 503, code: 'IDENTITY_DEPENDENCY_UNAVAILABLE' }, retry, pricingModule);
+  ok(identity.kind === 'error');
+  equal(identity.description, '服务端问题码：IDENTITY_DEPENDENCY_UNAVAILABLE');
+});
