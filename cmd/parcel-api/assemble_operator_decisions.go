@@ -75,6 +75,9 @@ type operatorRegistryIntakes struct {
 	pricing    *pricinghttp.OperatorRegistryIntake
 	commercial *commercialhttp.OperatorRegistryIntake
 	transport  *tfhttp.OperatorRegistryIntake
+	// pricingOperationsRead 不是登记写面：试算那一口挂主数据与运营查阅读（ADR-0152 决定六；票 operator-channel/06）。
+	// 它与登记写面各口共用同一只铸造器，搭在这里，端点表不必为一口多穿一个参数。
+	pricingOperationsRead *pricinghttp.OperatorOperationsReadIntake
 }
 
 func buildOperatorRegistryIntakes(minter *accessidentity.OperatorMinter) (operatorRegistryIntakes, error) {
@@ -113,6 +116,14 @@ func buildOperatorRegistryIntakes(minter *accessidentity.OperatorMinter) (operat
 	if err != nil {
 		return operatorRegistryIntakes{}, err
 	}
+	pricingReadAuthenticator, err := ppaccess.NewOperatorOperationsReadAuthenticator(minter)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	pricingOperationsRead, err := pricinghttp.NewOperatorOperationsReadIntake(pricingReadAuthenticator)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
 	commercialAuthenticator, err := pcaccess.NewOperatorRegistryAuthenticator(minter)
 	if err != nil {
 		return operatorRegistryIntakes{}, err
@@ -129,5 +140,8 @@ func buildOperatorRegistryIntakes(minter *accessidentity.OperatorMinter) (operat
 	if err != nil {
 		return operatorRegistryIntakes{}, err
 	}
-	return operatorRegistryIntakes{visibility: visibility, customs: customs, network: network, pricing: pricing, commercial: commercial, transport: transport}, nil
+	return operatorRegistryIntakes{
+		visibility: visibility, customs: customs, network: network, pricing: pricing, commercial: commercial, transport: transport,
+		pricingOperationsRead: pricingOperationsRead,
+	}, nil
 }
