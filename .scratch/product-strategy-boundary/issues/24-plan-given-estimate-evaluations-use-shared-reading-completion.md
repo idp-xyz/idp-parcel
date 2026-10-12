@@ -1,7 +1,7 @@
 # 24 给定价卡的试算走共用补齐读数：parcel-pricing 应用层开一个按调用方给的价卡形成试算评价的入口
 
 Category: enhancement
-Status: in-progress——2026-10-12 22:2x 通道 2 按通道 1 派单 `task-705a8770` 认领；隔离树 `/home/tops/workspace/idp-parcel-mcp2-psb24`，分支 `mcp2-psb24` 基远端 main `1e02d2ea`（22:21 `ls-remote` 实测，派单方取证），另起、不接任何半成品。此前 ready-for-agent——2026-10-12 通道 3 随[票 06](./06-ps-acceptance-and-label-selection-judgment-methods.md)第 2 项分诊立（派单 `task-85d7350d` ← 通道 1）。不等 [ADR-0179](../../../docs/adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md)：那篇正文与 Alternatives 里的每一种落法，都要一份对已知价卡走共用补齐读数的试算
+Status: 完工，待评审与重放——2026-10-12 22:5x 通道 2：代码 tip `b41726b6`、清点 `7b11f0a0`（分支 `mcp2-psb24`、基 `1e02d2ea`），完成记录在文末，其中五条判断项待 owner 复核。此前 in-progress——2026-10-12 22:2x 通道 2 按通道 1 派单 `task-705a8770` 认领；隔离树 `/home/tops/workspace/idp-parcel-mcp2-psb24`，分支 `mcp2-psb24` 基远端 main `1e02d2ea`（22:21 `ls-remote` 实测，派单方取证），另起、不接任何半成品。此前 ready-for-agent——2026-10-12 通道 3 随[票 06](./06-ps-acceptance-and-label-selection-judgment-methods.md)第 2 项分诊立（派单 `task-85d7350d` ← 通道 1）。不等 [ADR-0179](../../../docs/adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md)：那篇正文与 Alternatives 里的每一种落法，都要一份对已知价卡走共用补齐读数的试算
 Blocked by: 无
 地盘：`internal/parcelpricing/application`（新入口与其用例）。`readingCompletion` 与 `estimateInput` 已在本包，复用、不改行为。不碰 `internal/parcelshipment`、`internal/settlementaccounting`、`cmd/`。
 出处：票 06「第 2 项分诊」；[ADR-0152](../../../docs/adr/0152-operator-estimate-is-a-pricing-use-case-computed-not-recorded-and-never-handed-to-settlement.md) 决定二、三、五。
@@ -31,3 +31,52 @@ Blocked by: 无
 - 绑分区目录的价卡：给邮编路线时分区由目录解析；只给分区、不给路线时，按 ADR-0152 决定五逐件答缺项。
 - 同一声明同一张卡调两次，得同一评价标识与同一结果；依赖里没有写口与交付口（构造函数签名或编译期断言可证）。
 - `go build ./...`、`go vet ./...` 退 0；本包用例绿；新写的 `.go` 过一遍 `gofmt -w`。
+
+## 完成记录（2026-10-12 通道 2）
+
+通道 1 派单 `task-705a8770`。分支 `mcp2-psb24`、基 `1e02d2ea`，未 rebase。证据层级一律 `S`：合成夹具加替身登记册，没有任何租户实例数据。
+
+各笔：
+
+- `164005d7` 票面认领。
+- `b41726b6` parcel-pricing application：新入口 `FormPlanGivenEstimateEvaluationsHandler`（`form_plan_given_estimate_evaluations.go`）与其用例。调用方交 `FormPlanGivenEstimateEvaluationsCommand`：租户、一张已解析的价卡版本、证据层级、一组 `PlanGivenEstimateDeclaration`。每件声明转述成 `FormEstimateEvaluationsCommand`（计价范围与价格方向取卡自己的），复用 `estimateInput` 造输入、复用它的受理门 `accepted`；评价标识由 `planGivenEstimateIdentity` 在 `estimateIdentity` 外层拼上调用方的试算对象引用派生；补齐读数走 `readingCompletion.complete`，纯函数 `domain.EvaluatePricing` 形成评价。答复三格：`FORMED`（逐件 `PlanGivenEstimate`，答案与缺项码沿用 `EstimateCandidateAnswer` 与 `EstimateMissing*`）、`NOT_ACCEPTED`、`UNDECIDED`。`reading_completion.go` 与 `EstimateCandidateAnswer` 的头注补上新入口，零行为。
+- `7b11f0a0` 机制清点重生成（干净检出钉 `b41726b6`）：parcelpricing 生产 126→127、测试 113→114、应用编排 15→16，端口、端点、迁移零差。
+- 本笔：完成记录与 Status。
+
+`FormEstimateEvaluationsHandler`、`EvaluatePricingHandler`、`readingCompletion`、`estimateInput`、`estimateIdentity` 的代码一行未改，`git diff 1e02d2ea b41726b6` 在 `form_estimate_evaluations.go` 与 `reading_completion.go` 上只有两处头注。`internal/parcelshipment`、`internal/settlementaccounting`、`cmd/`、PP 的 `domain/` 与 `ports/` 未碰。
+
+### 判据逐条
+
+- ✅ 绑燃油序列的卡，序列在用且基准时点有期次时 `COMPLETED`、合计含燃油项：`TestPlanGivenEstimateOnAFuelBoundCardCompletesThroughTheSharedReadingCompletion`。卡绑 `SYN-SERIES-FUEL-01`，燃油附加费按基础运费的当期百分比计收；1 千克一件合计 12 USD（基础运费 10、燃油 2），燃油项在费用行里。在用版本按形成时刻问、期次按计价基准时点解，`SYN-SERIES-FUEL-01@v1` 冻结进版本清单。
+- ✅ 序列没登记或没复核时 `PENDING`，解释里带补齐说明，说明与正式评价同一份：`TestPlanGivenEstimateLeavesAnUnresolvedFuelSeriesPendingWithTheFormalEvaluationsNote` 两格（`SeriesHasNoRegisteredVersion`、`SeriesHasNoApprovedVersion`），问题码 `REFERENCE_SERIES_UNRESOLVED`。同一组替身、同一时钟下，`EvaluatePricingHandler` 交回的 `SeriesResolutionNotes()` 那一条逐字出现在试算评价的 `Explanation()` 里。
+- ✅ 绑分区目录的卡，给邮编路线时分区由目录解析，只给分区时逐件答缺项：`TestPlanGivenEstimateOnAZoneBoundCardAnswersEachDeclarationByItsOwnRoute`。同一次调用两件：给路线的那件 `COMPLETED`，目录按声明的路线解了一次；只给分区的那件 `INPUT_INCOMPLETE`、`Missing` 为 `POSTAL_ROUTE`，没问登记册。反向用例 `TestPlanGivenEstimateOnAnUnboundCardNamesAMissingZone`：没绑目录的卡缺分区，点名 `ZONE`。
+- ✅ 同一声明同一张卡调两次，得同一评价标识与同一结果：`TestPlanGivenEstimateIdentityIsDeterministicInTheDeclarationAndTheCard`。两次的标识与语义摘要相同；评价对象是 `SubjectEstimate`，引用就是调用方给的那个；换引用、换实重、换一张卡，标识各不相同。
+- ✅ 依赖里没有写口与交付口：`FormPlanGivenEstimateEvaluationsDeps` 只有时钟与补齐读数两对，构造函数只收这份依赖。`TestPlanGivenEstimateDependenciesCarryNoEvaluationStoreOrHandoff` 反射逐字段核：没有 `ports.EvaluationStore`、`ports.EvaluationHandoff`，也没有带它们方法集的接口。
+- ✅ `go build ./...`、`go vet ./...` 退 0；本包用例绿；新写的 `.go` 过了 `gofmt -w`。见下「验证」。
+
+「做什么」里判据没单列的几格：
+
+- ✅ 证据层级由调用方声明、不给默认：`TestPlanGivenEstimateCarriesTheEvidenceTheCallerDeclared`（`S`、`R`、`P` 原样落在评价上）；没声明或不在封闭集里答 `NOT_ACCEPTED`（`TestPlanGivenEstimateRefusesAMalformedCommandBeforeAskingAnyRegister`，该用例先证未改动的命令本身受理，再逐格改坏）。
+- ✅ 选卡不在本入口：依赖里没有价卡装载口，卡随命令交进来。
+- ✅ 复用 `estimateInput` 与 `readingCompletion`、不另写一份：见「各笔」；去掉补齐读数那一步，燃油与分区两条判据当场红（见「验证」的变异探针）。
+
+### 判断项（越权风险点 · 待 owner 复核）
+
+1. **一次调用里试算对象引用重名，答未受理。** 票面没写。依据是 PP `CONTEXT`「评价对象」词条：试算对象「只在该次试算内有身份」，两件同名就分不清哪份评价是哪一件的。备选是允许重名、逐件照算，同一声明会得同一标识。
+2. **一件声明都没有，答未受理**，不答一个空的「已形成」。备选是交回空列表，那样消费方合计出零，要靠它自己再判一次。
+3. **评价标识不含证据层级。** 票面要「同一声明、同一张卡得同一标识」，证据层级不在声明里；评价的语义摘要也不含它（`hashPricingEvaluation`），与正式评价按标识判重放的口径一致。后果：同一声明同一张卡分别以 `S` 与 `P` 调用，得同一标识、同一摘要、不同证据层级。
+4. **任一件补齐读数读不回，整份答 `UNDECIDED`，不交回其余几件**，与 UC-PP-001 那条编排的处置相同。
+5. **补齐读数的两对照正式评价那样成对可选**，没有改成必备：两对都不装是合法装配，绑了序列或目录的卡如实落待判断。装配时漏接，表现为评价 `PENDING`，不是构造期错误；接线归票 25。
+
+### 验证（作者那层，钉 `b41726b6`，隔离工作树）
+
+- `go build ./...`、`go vet ./...` 退 0，工作树上与 `b41726b6` 的干净检出上各一次；`gofmt -l` 零行（用 toolchain go1.26.8 自带的 gofmt）；改动与新增的 `.go` 无 CR、无 BOM。
+- 反向依赖由 `go list` 按生产导入与按测试导入反查：`internal/parcelpricing/adapters/` 下的 `accessidentity`、`http`、`settlementaccounting`，以及 `cmd/` 下的 `parcel-api`、`parcel-dispatch`、`parcel-pricing-feed`、`parcel-pricing-register`。
+- 未设 DSN：`internal/parcelpricing/application`、上列三个 adapters 包与 `./internal/architecture/...`，`go test -count=1` 全部 ok，退 0。
+- 含 PG：上列四个 `cmd/*` 包设 `IDP_PARCEL_POSTGRES_DSN`，`go test -count=1 -p 1 -v` 全部 ok，退 0；`--- PASS` 272、`--- SKIP` 0、`--- FAIL` 0。
+- 本包新用例 `-v` 单跑全 PASS。
+- 判别力（临时变异，跑完即还原、与备份字节比对一致，未提交）：把 `handler.completion.complete(ctx, request)` 换成 `err = nil`，燃油那条落 `PENDING`·`REFERENCE_SERIES_UNRESOLVED`（正是票面「现象」那一格），说明对照那条的解释为空，分区那条落 `ZONE_UNRESOLVED`，三条红。
+- 机制清点在 `b41726b6` 的干净检出上重生成（`7b11f0a0`）。
+- 作者不自评：非作者评审由派单方派，重放进 main 由派单方做。
+
+给票 25 的一条取证（不是本票判据）：本包夹具上实测（钉 `b41726b6`），卡上有附加费规则时，缺尺寸的那一件落 `PENDING`·`PACKAGE_FEATURES_UNAVAILABLE`，用例里的燃油夹具因此带了尺寸。演示售价卡 `SYN-PLAN-CN-SG-01` 的重量策略取 `MAX` 且带体积系数（`scripts/demo-seeds/data/pricing/price-card-cn-sg.json`），缺尺寸时它落哪一格未测。
