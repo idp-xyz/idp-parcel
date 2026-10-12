@@ -1,7 +1,7 @@
 # 06 演示对比面：SYN-CONTRACT-02 挂合同规则只改首次索赔时限，账户 02 索赔答定制时限、材料继承产品版
 
 Category: enhancement
-Status: 完工，待重放——2026-10-12 通道 1 在分支 `mcp1-csr06b`（基 `c6c65052`）上做完，分支已推 origin，完成记录见文末。此前：in-progress——2026-10-12 11:3x 通道 1 续做（07 已进 main `c6c65052`）：分支 `mcp1-csr06b` 基 `c6c65052`，种子笔 `2b76eab4` cherry-pick 过来，旧分支 `mcp1-csr06` 的认领笔不带（与 main 上的票面改动冲突）。此前：blocked——2026-10-12 10:5x 通道 1：种子子集在分支 `mcp1-csr06`（基 `8c41be83`，认领 `dfebdb5c`，种子 `2b76eab4`，已推 origin）上做完并灌通干净库，但同范围多一份合同后两户闭包都在 `CUSTOMER_CONTRACT` 上`适用冲突`、账户 01 回退，种子不进 main，见文末「灌库取证」。此前：in-progress（分支上认领）；ready-for-agent——2026-10-10 通道 1 发布：拆法作者通道 3（`task-2b404e22`），通道 1 经用户 19:1x 授权认可并裁定拆法清单所附七问
+Status: resolved——2026-10-12 通道 1 快进进 main（远端 `c6c65052` → `6b203b64`，分支 SHA 原样进 main）；评审是作者自审（用户令独立完成；改动只有种子、README 与票面），见进 main 记录。此前：完工，待重放——2026-10-12 通道 1 在分支 `mcp1-csr06b`（基 `c6c65052`）上做完，分支已推 origin，完成记录见文末。此前：in-progress——2026-10-12 11:3x 通道 1 续做（07 已进 main `c6c65052`）：分支 `mcp1-csr06b` 基 `c6c65052`，种子笔 `2b76eab4` cherry-pick 过来，旧分支 `mcp1-csr06` 的认领笔不带（与 main 上的票面改动冲突）。此前：blocked——2026-10-12 10:5x 通道 1：种子子集在分支 `mcp1-csr06`（基 `8c41be83`，认领 `dfebdb5c`，种子 `2b76eab4`，已推 origin）上做完并灌通干净库，但同范围多一份合同后两户闭包都在 `CUSTOMER_CONTRACT` 上`适用冲突`、账户 01 回退，种子不进 main，见文末「灌库取证」。此前：in-progress（分支上认领）；ready-for-agent——2026-10-10 通道 1 发布：拆法作者通道 3（`task-2b404e22`），通道 1 经用户 19:1x 授权认可并裁定拆法清单所附七问
 Blocked by: 无（[04](04-ve-claim-eligibility-checks-contract-and-inherits-rows-from-product-base.md)、[07](07-closure-does-not-narrow-customer-contract-by-customer-account.md) 均已解）
 父票：[spec](../spec.md)
 地盘：`scripts/demo-seeds` 与取证处；碰种子与真库取证，走并行会话那条路。
@@ -67,3 +67,10 @@ Blocked by: 无（[04](04-ve-claim-eligibility-checks-contract-and-inherits-rows
 2. **合同版只登首次索赔期限一行、取 7 天**：比产品版 14 天更严，符合 ADR-0176 决定三「只收紧」的商务纪律（系统不比对，取值是演示租户的 S 实例）。
 3. **两户的解析键都列 `CUSTOMER_SERVICE_RULE`**：不列，闭包不采用任何客户服务规则版本，两维恒答未登记，对比面无从谈起。账户 01 的答复因此从「未登记」变成「产品版」——这是「账户 01 不受合同 02 影响」的那一面，不是回退。
 4. **走通以探针取证而不补「接受」那一步**：演示停在已提交是 README 写明的现状，补一条接受链是另一件事；探针里除 PS 回指与 VE 自己的册外都是生产件，两处替身已在上面点名。
+
+## 进 main 记录（通道 1 · 2026-10-12）
+
+- 远端 main `c6c65052` → `6b203b64`（本记录随其后一笔）：分支 `mcp1-csr06b` 自基未分叉，快进，`7ef3f934`、`6afca6cd`、`0bf704a3`、`6b203b64` 原样进 main；推前 `ls-remote` 答 `c6c65052`，其下只有本票四笔。
+- 评审：作者自审——改动只有种子 JSON、`seed.sh`、README 与票面，按 parallel-sessions「不评什么」那条推送方自审即可；判断项 1–4 已在完成记录写明。
+- 验证（推送方，钉 `6b203b64` 的隔离 detached worktree，WSL，go1.26.8，DSN 门禁库 55432）：`gofmt -l .` 无输出；`go build ./...`、`go vet ./...` 退 0；清点重跑为空；带 DSN 全仓 `go test -count=1 -p 1 ./...` 退 0，138 ok / 0 FAIL / 0 cached，151 s。
+- 旧分支 `mcp1-csr06` 改名 `merged/mcp1-csr06`（其种子笔经 cherry-pick 进 main，认领笔被本票票面覆盖）；`mcp1-csr06b` 改名 `merged/mcp1-csr06b`；作者树与验证树已拆。演示库照 ADR-0177 决定五 `seed.sh --reset` 重灌。
