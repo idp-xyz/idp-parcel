@@ -291,7 +291,7 @@
       "objectId": "SYN-CONTRACT-02",
       "version": "v1",
       "scope": "SYN-SCOPE-01",
-      "contentDigest": "PCC-1:d0ee6cf9763456ea998fa23fef2dff2f134fe63f4c51e08f85ed39765b29a52a",
+      "contentDigest": "PCC-1:cd213a184768083e89f045616e41cf1d41899411f3ad3f96d4b0136323c14a1c",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "references": {
         "ACCEPTANCE_RULE_PACKAGE": "SYN-RULEPKG-01"
@@ -304,6 +304,7 @@
       "approvalRoleStanding": "CONFIRMED",
       "declarations": {
         "contractContent": {
+          "customerAccount": "SYN-ACCOUNT-02",
           "rulePackage": "SYN-RULEPKG-01",
           "bindings": [
             {
