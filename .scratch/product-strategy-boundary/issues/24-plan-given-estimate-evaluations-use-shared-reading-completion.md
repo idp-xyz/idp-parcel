@@ -1,7 +1,7 @@
 # 24 给定价卡的试算走共用补齐读数：parcel-pricing 应用层开一个按调用方给的价卡形成试算评价的入口
 
 Category: enhancement
-Status: ready-for-agent——2026-10-12 通道 3 随[票 06](./06-ps-acceptance-and-label-selection-judgment-methods.md)第 2 项分诊立（派单 `task-85d7350d` ← 通道 1）。不等 [ADR-0179](../../../docs/adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md)：那篇正文与 Alternatives 里的每一种落法，都要一份对已知价卡走共用补齐读数的试算
+Status: in-progress——2026-10-12 22:2x 通道 2 按通道 1 派单 `task-705a8770` 认领；隔离树 `/home/tops/workspace/idp-parcel-mcp2-psb24`，分支 `mcp2-psb24` 基远端 main `1e02d2ea`（22:21 `ls-remote` 实测，派单方取证），另起、不接任何半成品。此前 ready-for-agent——2026-10-12 通道 3 随[票 06](./06-ps-acceptance-and-label-selection-judgment-methods.md)第 2 项分诊立（派单 `task-85d7350d` ← 通道 1）。不等 [ADR-0179](../../../docs/adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md)：那篇正文与 Alternatives 里的每一种落法，都要一份对已知价卡走共用补齐读数的试算
 Blocked by: 无
 地盘：`internal/parcelpricing/application`（新入口与其用例）。`readingCompletion` 与 `estimateInput` 已在本包，复用、不改行为。不碰 `internal/parcelshipment`、`internal/settlementaccounting`、`cmd/`。
 出处：票 06「第 2 项分诊」；[ADR-0152](../../../docs/adr/0152-operator-estimate-is-a-pricing-use-case-computed-not-recorded-and-never-handed-to-settlement.md) 决定二、三、五。
