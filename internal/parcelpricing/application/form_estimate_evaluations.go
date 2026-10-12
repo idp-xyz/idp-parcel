@@ -81,7 +81,8 @@ func (reason FormEstimateEvaluationsUndecidedReason) String() string {
 	}
 }
 
-// EstimateCandidateAnswer 是「已形成」下逐卡一格。
+// EstimateCandidateAnswer 是「已形成」下一份试算的作答：本编排逐卡一格，给定价卡的入口
+// （FormPlanGivenEstimateEvaluationsHandler）逐件一格。
 type EstimateCandidateAnswer uint8
 
 const (
