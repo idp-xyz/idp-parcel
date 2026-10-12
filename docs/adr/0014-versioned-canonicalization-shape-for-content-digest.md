@@ -2,6 +2,7 @@
 
 Status: Accepted  
 Date: 2026-08-07  
+Partially suspended by: [ADR-0177](./0177-customer-contract-names-its-customer-account-and-the-closure-narrows-by-it.md) 决定三（Consequences「每次变化都要新增一个规范化版本并长期支持它」一句，仅限 PC 客户合同一册加 `customerAccount` 一键那一次，`PCC-1` 不换号；其余各条不变，本记录正文不改写）  
 Amended by: [开发主线的产品就绪里程碑与能力范围判据](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)（限定下文 Alternatives considered 中否决「按行业形态先把三族与分段进位的结构定死」时所用的「在结构层写死未确认内容」这一条理由：该理由对自营系统成立，对面向市场的产品不成立。该替代仍不能取代本记录的 Decision——版本号与建哪些族是两个独立问题。Decision 与 Consequences 不变，本记录正文不改写）
 
 ## Context
