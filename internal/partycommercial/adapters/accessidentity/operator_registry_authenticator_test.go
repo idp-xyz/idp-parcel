@@ -76,9 +76,35 @@ func authenticator(t *testing.T, verifier identity.OperatorCredentialVerifier, r
 func TestRegistryWriterAuthenticatesToTheBoundTenantWithoutAnAdmissionCheck(t *testing.T) {
 	// 准入范围是未配置那一只：登记写面若判了准入，这里就会答不在准入范围。
 	built := authenticator(t, operatorVerifier{}, operatorRegister{faces: []identity.CapabilityFace{identity.CapabilityRegistryConfigurationWrite}})
-	tenant, err := built.AuthenticateRegistryWrite(context.Background(), "presented.operator.token")
-	if err != nil || tenant.String() != operatorTenant {
-		t.Fatalf("tenant = %q, err = %v", tenant.String(), err)
+	operator, err := built.AuthenticateRegistryWrite(context.Background(), "presented.operator.token")
+	if err != nil || operator.Tenant.String() != operatorTenant ||
+		operator.Operator.Reference().String() != "https://id.syn.example/dex#SYN-OPERATOR-01" {
+		t.Fatalf("operator = %+v, err = %v", operator, err)
+	}
+}
+
+// Covers: ADR-0126 决定五与票 operator-channel/06——信封译成本上下文的操作者主体：引用取（发行方、sub）这一对，授予集是信封
+// 持有的能力面逐格译成的等级，没持有的不进。批准门拿的就是这一份。
+func TestTheOperatorSubjectCarriesTheFacesTheEnvelopeHolds(t *testing.T) {
+	levelsOf := func(t *testing.T, faces ...identity.CapabilityFace) []string {
+		t.Helper()
+		operator, err := authenticator(t, operatorVerifier{}, operatorRegister{faces: faces}).
+			AuthenticateRegistryWrite(context.Background(), "presented.operator.token")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var names []string
+		for _, level := range operator.Operator.Levels() {
+			names = append(names, level.String())
+		}
+		return names
+	}
+	both := levelsOf(t, identity.CapabilityRegistryConfigurationWrite, identity.CapabilityMasterDataAndOperationsRead)
+	if len(both) != 2 || both[0] != "REGISTRY_CONFIGURATION_WRITE" || both[1] != "MASTER_DATA_AND_OPERATIONS_READ" {
+		t.Fatalf("levels = %v", both)
+	}
+	if writerOnly := levelsOf(t, identity.CapabilityRegistryConfigurationWrite); len(writerOnly) != 1 || writerOnly[0] != "REGISTRY_CONFIGURATION_WRITE" {
+		t.Fatalf("levels = %v", writerOnly)
 	}
 }
 

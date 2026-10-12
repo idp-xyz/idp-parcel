@@ -29,14 +29,22 @@ const (
 	codeIdentityDependencyUnavailable = "IDENTITY_DEPENDENCY_UNAVAILABLE"
 )
 
-// OperatorRegistryAuthenticator 认证一次登记册配置写出示，交回操作者绑定的租户。失败只交回本包的格；从共享接入身份
+// OperatorIdentity 是一次登记册配置写出示认证出的身份：操作者绑定的租户，与本上下文消费信封的那一个面——操作者主体
+// （主体引用 + 授予集，ADR-0126 决定五）。录入者取它的引用、批准者取它整个；其余各口只认租户。
+type OperatorIdentity struct {
+	Tenant   domain.TenantID
+	Operator domain.OperatorSubject
+}
+
+// OperatorRegistryAuthenticator 认证一次登记册配置写出示，交回认证出的身份。失败只交回本包的格；从共享接入身份
 // 能力译过来的那一层在 adapters/accessidentity（跨上下文翻译的位置，见 internal/architecture 的边界门禁）。
 type OperatorRegistryAuthenticator interface {
-	AuthenticateRegistryWrite(ctx context.Context, bearerToken string) (domain.TenantID, error)
+	AuthenticateRegistryWrite(ctx context.Context, bearerToken string) (OperatorIdentity, error)
 }
 
 // OperatorRegistryIntake 是操作者渠道在本包服务形态、产品—渠道映射、注册号类型目录与渠道账号使用授权六口的 Intake
-// （ADR-0100 决定四；票 operator-channel/04）。
+// （ADR-0100 决定四；票 operator-channel/04）。运营操作者面发布路径的预览、载体三口与词表读口也挂它（票
+// operator-channel/06），译法各在该口自己的文件里。
 //
 // 线格式照本包在线口的既有惯例（IsolatedPartyIdentityIntake 注释）：镜像受控 CLI 的批文，去掉整批的 tenantId——键在场
 // 即拒，本口恰一项、别的口的项拒；租户格填认证结果。前四口的外壳与逐项翻译就是受控 CLI 那一份（registrationjson），
@@ -144,7 +152,7 @@ func authenticateAndDecode[Document any](
 	selfReportedTenant func(Document) []byte,
 ) (domain.TenantID, Document, error) {
 	var none Document
-	tenant, err := intake.authenticator.AuthenticateRegistryWrite(ctx, httpapi.BearerToken(request))
+	operator, err := intake.authenticate(ctx, request)
 	if err != nil {
 		return domain.TenantID{}, none, err
 	}
@@ -155,7 +163,12 @@ func authenticateAndDecode[Document any](
 	if err := refuseSelfReportedTenant(selfReportedTenant(document)); err != nil {
 		return domain.TenantID{}, none, err
 	}
-	return tenant, document, nil
+	return operator.Tenant, document, nil
+}
+
+// authenticate 是各口的第一步：令牌不过的请求，请求体一个字节都不读。
+func (intake *OperatorRegistryIntake) authenticate(ctx context.Context, request *http.Request) (OperatorIdentity, error) {
+	return intake.authenticator.AuthenticateRegistryWrite(ctx, httpapi.BearerToken(request))
 }
 
 func productBatchTenant(document registrationjson.ProductBatchDocument) []byte {
