@@ -60,7 +60,7 @@ Blocked by: 01、03（均已 resolved）；[07](./07-admin-web-login-gate.md)—
 
 **做什么第 1–3 条的落点**：第 1 条——`TestWorkFactRegistrationIsGrantedPerWorkScope`，真库 `TestWorkFactRegistrationGrantRoundTripsItsWorkScope`，CLI `TestWorkFactRegistrationGrantBatchEndToEnd`。第 2 条——真库 `TestDeviceRegistrationRecordsReplaysAndNeverOverwrites`、`TestDeviceDeactivationEndsUseFromItsInstant`、`TestWorkFactAndDeviceTablesGuardTheInvariantsThemselves`、`TestDeviceRegistrationWritesRefuseToRunOutsideATransaction`，CLI `TestDeviceRegisterAndDeactivateEndToEnd` 与触库前拒收 `TestWorkFactAndDeviceBatchTranslationRefusesBeforeTouchingTheDatabase`。第 3 条——见判据第一条，另有 `TestDeviceIsLookedUpOnlyAfterTheGrantAndAdmissionOnlyAfterTheDevice`。
 
-**参数登记册**：`PAR-INT-10` 当前登记以「待提供」开头，是登记规则所列状态之一；格里只写尚无租户、演示租户的合成设备只记 `S`，没有任何租户取值。核过，未改。
+**参数登记册**：`PAR-INT-10` 当前登记以「待提供」开头，是登记规则所列状态之一；格里只写尚无租户、演示租户的合成设备只记 `S`，没有任何租户取值。核过，未改。「已确认约束」格另由评审阻断那一笔改过：非作者评审（通道 2，钉 `9c989d84`）判它把判断项 1、2、4 写成已确认、与本票「待 owner 复核」两处两种状态，违「单一权威」；改后该格只留 ADR-0149 决定二与 ADR-0023 原有的话，暂定实现的几项只点名、指回本票判断项。
 
 **判断项**（票面没写定、由作者一侧替 owner 定了的，标「越权风险点 · 待 owner 复核」）
 
