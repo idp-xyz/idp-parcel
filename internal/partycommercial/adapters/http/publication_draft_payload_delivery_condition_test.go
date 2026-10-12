@@ -38,7 +38,7 @@ const customerContractWithDeliveryConditionsPayload = `{
   "effectiveStartsAt": "2026-08-01T00:00:00Z",
   "references": {"ACCEPTANCE_RULE_PACKAGE": "rules-1"},
   "customerContract": {
-    "contractContent": {"rulePackage": "rules-1"},
+    "contractContent": {"customerAccount": "customer-1", "rulePackage": "rules-1"},
     "deliveryConditions": {
       "tightens": {"objectId": "product-1", "version": "v2"},
       "methods": ["METHOD/in-person"],

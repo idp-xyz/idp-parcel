@@ -74,6 +74,7 @@ const fullBatchJSON = `{
       "declarations": {
         "preAcceptanceControl": {"requirement": "NOT_APPLICABLE", "notApplicableBasis": "CONTRACT-CLAUSE/NO-CONTROL"},
         "contractContent": {
+          "customerAccount": "customer-1",
           "rulePackage": "rules-1",
           "bindings": [
             {"chargeScope": "charge-1", "policy": "control-policy-1"},
@@ -201,7 +202,7 @@ func TestTranslationRefusesUnknownFieldsAndOutOfSetValues(t *testing.T) {
 			"scope": "s", "contentDigest": "d", "effectiveStartsAt": "2026-01-01T00:00:00Z",
 			"approval": {"reference": "a", "source": "s", "approvedAt": "2026-01-02T00:00:00Z"},
 			"approvalRoleStanding": "CONFIRMED",
-			"declarations": {"contractContent": {"rulePackage": "r",
+			"declarations": {"contractContent": {"customerAccount": "customer-1", "rulePackage": "r",
 				"bindings": [{"chargeScope": "x", "policy": "p", "inapplicabilityBasis": "b"}]}}}]}`,
 		"集合外的起算时刻种类": `{"items": [{"tenantId": "t", "kind": "ACCEPTANCE_RULE_PACKAGE", "objectId": "r", "version": "v1",
 			"scope": "s", "contentDigest": "d", "effectiveStartsAt": "2026-01-01T00:00:00Z",

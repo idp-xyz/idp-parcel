@@ -138,8 +138,9 @@ type PreAcceptanceControlInstruction struct {
 // ContractContentDeclaration 是客户合同版本的正文输入：规则包引用与按费用范围的
 // 财务控制约定。Bindings 可为空——「合同已登记但没对任何范围作约定」是合法的显式空。
 type ContractContentDeclaration struct {
-	RulePackage domain.CommercialObjectID
-	Bindings    []domain.FinancialControlBinding
+	CustomerAccount domain.CustomerAccountID
+	RulePackage     domain.CommercialObjectID
+	Bindings        []domain.FinancialControlBinding
 }
 
 // IntakeQualificationDeclaration 是接单规则包的收寄资格声明输入（PAR-COM-16）。
@@ -639,8 +640,9 @@ func publicationContentOf(
 			return content, false
 		}
 		content.CustomerContract = &domain.CustomerContractBody{
-			RulePackage: declarations.ContractContent.RulePackage,
-			Bindings:    declarations.ContractContent.Bindings,
+			CustomerAccount: declarations.ContractContent.CustomerAccount,
+			RulePackage:     declarations.ContractContent.RulePackage,
+			Bindings:        declarations.ContractContent.Bindings,
 		}
 		if declarations.PreAcceptanceControl != nil {
 			content.CustomerContract.Control = &domain.PreAcceptanceControlBody{
@@ -838,8 +840,8 @@ func declarationWrites(
 		if err := domain.ConsistentAcceptanceRulePackage(version, declarations.ContractContent.RulePackage); err != nil {
 			return nil, err
 		}
-		content, err := domain.NewCustomerContract(
-			version, declarations.ContractContent.RulePackage, declarations.ContractContent.Bindings)
+		content, err := domain.NewCustomerContract(version, declarations.ContractContent.CustomerAccount,
+			declarations.ContractContent.RulePackage, declarations.ContractContent.Bindings)
 		if err != nil {
 			return nil, fmt.Errorf("customer contract content: %w", err)
 		}

@@ -46,6 +46,7 @@ func contractContent(t *testing.T, bindings ...domain.FinancialControlBinding) d
 	t.Helper()
 	contract, err := domain.NewCustomerContract(
 		contractVersion(t, "contract-1"),
+		commercialValue(t, domain.NewCustomerAccountID, "customer-1"),
 		commercialValue(t, domain.NewCommercialObjectID, "rules-1"),
 		bindings,
 	)
@@ -121,6 +122,7 @@ func TestNoControlMustBeAnExplicitBasisNotAnOmission(t *testing.T) {
 func TestOneScopeCannotBeBothAppliedAndInapplicable(t *testing.T) {
 	_, err := domain.NewCustomerContract(
 		contractVersion(t, "contract-1"),
+		commercialValue(t, domain.NewCustomerAccountID, "customer-1"),
 		commercialValue(t, domain.NewCommercialObjectID, "rules-1"),
 		[]domain.FinancialControlBinding{
 			appliedControl(t, "charge-express"),
@@ -136,10 +138,27 @@ func TestOneScopeCannotBeBothAppliedAndInapplicable(t *testing.T) {
 func TestContractWithoutARulePackageCannotBeBuilt(t *testing.T) {
 	if _, err := domain.NewCustomerContract(
 		contractVersion(t, "contract-1"),
+		commercialValue(t, domain.NewCustomerAccountID, "customer-1"),
 		domain.CommercialObjectID{},
 		[]domain.FinancialControlBinding{appliedControl(t, "charge-express")},
 	); !errors.Is(err, domain.ErrInvalidCustomerContract) {
 		t.Fatalf("error = %v, want ErrInvalidCustomerContract", err)
+	}
+}
+
+// Covers: CONTEXT「合同版本必须明确关联…货主客户账户」（ADR-0177 决定一）——缺客户账户即建不成内容，不从委派人、
+// 客户关系或范围推；建成的合同如实报出它属于哪一户。
+func TestContractWithoutACustomerAccountCannotBeBuilt(t *testing.T) {
+	if _, err := domain.NewCustomerContract(
+		contractVersion(t, "contract-1"),
+		domain.CustomerAccountID{},
+		commercialValue(t, domain.NewCommercialObjectID, "rules-1"),
+		nil,
+	); !errors.Is(err, domain.ErrInvalidCustomerContract) {
+		t.Fatalf("error = %v, want ErrInvalidCustomerContract", err)
+	}
+	if got := contractContent(t).CustomerAccount().String(); got != "customer-1" {
+		t.Fatalf("customer account = %q, want customer-1", got)
 	}
 }
 
@@ -185,7 +204,7 @@ func TestContractContentNeedsAUsableContractVersion(t *testing.T) {
 
 	t.Run("refuses a draft", func(t *testing.T) {
 		draft := commercialDraft(t, domain.CustomerContractObject, "contract-x", "v1", "sha256:x")
-		if _, err := domain.NewCustomerContract(draft, commercialValue(t, domain.NewCommercialObjectID, "rules-1"), bindings); !errors.Is(err, domain.ErrInvalidCustomerContract) {
+		if _, err := domain.NewCustomerContract(draft, commercialValue(t, domain.NewCustomerAccountID, "customer-1"), commercialValue(t, domain.NewCommercialObjectID, "rules-1"), bindings); !errors.Is(err, domain.ErrInvalidCustomerContract) {
 			t.Fatalf("error = %v, want ErrInvalidCustomerContract", err)
 		}
 	})
@@ -196,7 +215,7 @@ func TestContractContentNeedsAUsableContractVersion(t *testing.T) {
 		if err != nil {
 			t.Fatalf("take effect: %v", err)
 		}
-		if _, err := domain.NewCustomerContract(live, commercialValue(t, domain.NewCommercialObjectID, "rules-1"), bindings); !errors.Is(err, domain.ErrInvalidCustomerContract) {
+		if _, err := domain.NewCustomerContract(live, commercialValue(t, domain.NewCustomerAccountID, "customer-1"), commercialValue(t, domain.NewCommercialObjectID, "rules-1"), bindings); !errors.Is(err, domain.ErrInvalidCustomerContract) {
 			t.Fatalf("error = %v, want ErrInvalidCustomerContract", err)
 		}
 	})

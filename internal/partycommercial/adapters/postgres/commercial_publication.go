@@ -68,7 +68,8 @@ func (repository *CommercialPublications) LoadForScope(
 		        settlement.effective_starts_at, settlement.effective_ends_at,
 		        credit.legal_entity_ref, credit.authority_level_ref, credit.charge_type_ref,
 		        credit.limit_minor, credit.limit_ratio_bps, credit.ratio_base,
-		        credit.effective_starts_at, credit.effective_ends_at
+		        credit.effective_starts_at, credit.effective_ends_at,
+		        contract.customer_account_id
 		   FROM party_commercial.commercial_version AS version
 		   LEFT JOIN party_commercial.service_product_form AS product
 		          ON product.tenant_id     = version.tenant_id
@@ -90,6 +91,11 @@ func (repository *CommercialPublications) LoadForScope(
 		         AND credit.object_kind   = version.object_kind
 		         AND credit.object_id     = version.object_id
 		         AND credit.version_label = version.version_label
+		   LEFT JOIN party_commercial.customer_contract_content AS contract
+		          ON contract.tenant_id     = version.tenant_id
+		         AND contract.object_kind   = version.object_kind
+		         AND contract.object_id     = version.object_id
+		         AND contract.version_label = version.version_label
 		   LEFT JOIN LATERAL (
 		        SELECT COALESCE(
 		                   json_agg(
@@ -128,6 +134,7 @@ func (repository *CommercialPublications) LoadForScope(
 		var price scannedPricePolicy
 		var settlement scannedSettlementPolicy
 		var credit joinedCreditPolicy
+		var contractAccount *string
 		if err := rows.Scan(
 			&raw, &rawForm, &rawCorrections,
 			&price.direction, &price.planRef, &price.planDirection, &price.conversion,
@@ -137,6 +144,7 @@ func (repository *CommercialPublications) LoadForScope(
 			&settlement.startsAt, &settlement.endsAt,
 			&credit.legalEntity, &credit.level, &credit.chargeType,
 			&credit.limitMinor, &credit.limitBps, &credit.ratioBase, &credit.startsAt, &credit.endsAt,
+			&contractAccount,
 		); err != nil {
 			return nil, fmt.Errorf("load publication registry: %w", err)
 		}
@@ -167,6 +175,17 @@ func (repository *CommercialPublications) LoadForScope(
 		}
 		if err := registerCreditPolicy(registry, version, credit); err != nil {
 			return nil, fmt.Errorf("load publication registry: %w", err)
+		}
+		// 合同正文指名的客户账户进选法（ADR-0177 决定二）。没有正文行、或迁移 0037 之前写下的行没有账户，都不登——
+		// 选法照「正文未登记」那一格让它参选，坏的那份由正文点读口报出来，不在这里折成不属于任何人。
+		if contractAccount != nil {
+			account, err := domain.NewCustomerAccountID(*contractAccount)
+			if err != nil {
+				return nil, fmt.Errorf("load publication registry: %w", err)
+			}
+			if err := registry.RegisterCustomerContractAccount(version, account); err != nil {
+				return nil, fmt.Errorf("load publication registry: %w", err)
+			}
 		}
 	}
 	if err := rows.Err(); err != nil {

@@ -127,8 +127,9 @@ type preAcceptanceControlDocument struct {
 }
 
 type contractContentDocument struct {
-	RulePackage string                   `json:"rulePackage"`
-	Bindings    []controlBindingDocument `json:"bindings,omitempty"`
+	CustomerAccount string                   `json:"customerAccount"`
+	RulePackage     string                   `json:"rulePackage"`
+	Bindings        []controlBindingDocument `json:"bindings,omitempty"`
 }
 
 type controlBindingDocument struct {
@@ -514,6 +515,10 @@ func declarationsFrom(document *declarationsDocument) (pcapplication.CommercialD
 	}
 
 	if document.ContractContent != nil {
+		account, err := pcdomain.NewCustomerAccountID(document.ContractContent.CustomerAccount)
+		if err != nil {
+			return declarations, fmt.Errorf("contractContent.customerAccount: %w", err)
+		}
 		rulePackage, err := pcdomain.NewCommercialObjectID(document.ContractContent.RulePackage)
 		if err != nil {
 			return declarations, err
@@ -527,8 +532,9 @@ func declarationsFrom(document *declarationsDocument) (pcapplication.CommercialD
 			bindings = append(bindings, declared)
 		}
 		declarations.ContractContent = &pcapplication.ContractContentDeclaration{
-			RulePackage: rulePackage,
-			Bindings:    bindings,
+			CustomerAccount: account,
+			RulePackage:     rulePackage,
+			Bindings:        bindings,
 		}
 	}
 

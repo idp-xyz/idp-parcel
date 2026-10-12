@@ -2,10 +2,12 @@ package postgres
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -284,11 +286,16 @@ func (repository *CommercialPublications) SaveCustomerContractContent(
 	tenant, kind, objectID, label := ownerColumns(contract.Version())
 
 	var existingRulePackage string
-	present, err := scanSingleText(ctx, executor,
-		`SELECT rule_package_id
+	var existingAccount *string
+	present := true
+	err = executor.QueryRow(ctx,
+		`SELECT rule_package_id, customer_account_id
 		   FROM party_commercial.customer_contract_content
 		  WHERE tenant_id = $1 AND object_kind = $2 AND object_id = $3 AND version_label = $4`,
-		&existingRulePackage, tenant, kind, objectID, label)
+		tenant, kind, objectID, label).Scan(&existingRulePackage, &existingAccount)
+	if errors.Is(err, pgx.ErrNoRows) {
+		present, err = false, nil
+	}
 	if err != nil {
 		return ports.DeclarationSaveOutcomeInvalid, fmt.Errorf("save customer contract content: %w", err)
 	}
@@ -298,7 +305,9 @@ func (repository *CommercialPublications) SaveCustomerContractContent(
 		if err != nil {
 			return ports.DeclarationSaveOutcomeInvalid, fmt.Errorf("save customer contract content: %w", err)
 		}
-		if existingRulePackage != contract.AcceptanceRulePackage().String() || len(existing) != len(incoming) {
+		// 迁移 0037 之前写下的行没有账户：同一版本再登一份带账户的正文不是重放，是内容不同。
+		if existingAccount == nil || *existingAccount != contract.CustomerAccount().String() ||
+			existingRulePackage != contract.AcceptanceRulePackage().String() || len(existing) != len(incoming) {
 			return ports.DeclarationContentConflict, nil
 		}
 		for _, binding := range incoming {
@@ -312,9 +321,9 @@ func (repository *CommercialPublications) SaveCustomerContractContent(
 
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO party_commercial.customer_contract_content
-			(tenant_id, object_kind, object_id, version_label, rule_package_id)
-		 VALUES ($1, $2, $3, $4, $5)`,
-		tenant, kind, objectID, label, contract.AcceptanceRulePackage().String(),
+			(tenant_id, object_kind, object_id, version_label, rule_package_id, customer_account_id)
+		 VALUES ($1, $2, $3, $4, $5, $6)`,
+		tenant, kind, objectID, label, contract.AcceptanceRulePackage().String(), contract.CustomerAccount().String(),
 	); err != nil {
 		return ports.DeclarationSaveOutcomeInvalid, fmt.Errorf("save customer contract content: %w", err)
 	}

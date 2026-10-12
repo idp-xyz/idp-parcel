@@ -733,6 +733,9 @@ func (registry *CommercialRegistry) applicable(key ResolutionKey) []CommercialVe
 		if key.ServiceProduct.valid() && !version.admitsDeclaredServiceProduct(key.ServiceProduct) {
 			continue
 		}
+		if version.kind == CustomerContractObject && !registry.admitsCustomerAccount(version, key.CustomerAccountID) {
+			continue
+		}
 		// 选用区间问登记册：有效性更正不改版本值对象上的原区间（ADR-0038）。
 		if version.status != CommercialVersionEffective {
 			continue

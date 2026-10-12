@@ -20,6 +20,7 @@ import (
 // 交付条件就是没有，不默认「本人签收」也不默认沿用产品层。RulePackage 与约定表不可缺席——它们就是 0012 的正文，
 // 读面「正文未登记」说的正是这一层。
 type CustomerContractBody struct {
+	CustomerAccount    CustomerAccountID
 	RulePackage        CommercialObjectID
 	Bindings           []FinancialControlBinding
 	Control            *PreAcceptanceControlBody
@@ -36,7 +37,7 @@ type PreAcceptanceControlBody struct {
 // declaredBindingsByScope、声明在场时经 preAcceptanceControlDeclared、交付条件在场时经合同层那道门。不另造校验
 // ——各处判的都是同一条规则，而预览要在录入之前就把「恰一」与「不适用必带依据」答给操作者，不能等到发布那一刻。
 func (body CustomerContractBody) validate() error {
-	if !body.RulePackage.valid() {
+	if !body.CustomerAccount.valid() || !body.RulePackage.valid() {
 		return ErrInvalidCustomerContract
 	}
 	if _, err := declaredBindingsByScope(body.Bindings); err != nil {
@@ -62,9 +63,11 @@ type canonicalCustomerContractBody struct {
 	DeliveryConditions   *canonicalDeliveryConditions   `json:"deliveryConditions,omitempty"`
 }
 
+// CustomerAccount 不带 omitempty（ADR-0177 决定三）：这一格恒在场，缺了正文立不住，文档里不留「可缺」的第二种形状。
 type canonicalContractContent struct {
-	RulePackage string                    `json:"rulePackage"`
-	Bindings    []canonicalControlBinding `json:"bindings,omitempty"`
+	CustomerAccount string                    `json:"customerAccount"`
+	RulePackage     string                    `json:"rulePackage"`
+	Bindings        []canonicalControlBinding `json:"bindings,omitempty"`
 }
 
 // canonicalControlBinding 一行只带在场的那一格：指名策略行只有 policy，显式不适用行只有 inapplicabilityBasis
@@ -87,7 +90,10 @@ func canonicalCustomerContractBodyOf(body CustomerContractBody) *canonicalCustom
 		return bindings[left].Scope().String() < bindings[right].Scope().String()
 	})
 	document := &canonicalCustomerContractBody{
-		ContractContent: canonicalContractContent{RulePackage: body.RulePackage.String()},
+		ContractContent: canonicalContractContent{
+			CustomerAccount: body.CustomerAccount.String(),
+			RulePackage:     body.RulePackage.String(),
+		},
 	}
 	for _, binding := range bindings {
 		row := canonicalControlBinding{ChargeScope: binding.Scope().String()}
@@ -113,11 +119,15 @@ func canonicalCustomerContractBodyOf(body CustomerContractBody) *canonicalCustom
 // body 把文档里的一节折回领域正文。每一格过构造门；约定行两格恰一由 financialControlBindingOf 判；同一范围
 // 两行、声明缺依据这类跨格的问题留给 validate——快照是数据，正文立不立得住仍由构造门说。
 func (document canonicalCustomerContractBody) body() (CustomerContractBody, error) {
+	account, err := NewCustomerAccountID(document.ContractContent.CustomerAccount)
+	if err != nil {
+		return CustomerContractBody{}, fmt.Errorf("contractContent.customerAccount: %w", err)
+	}
 	rulePackage, err := NewCommercialObjectID(document.ContractContent.RulePackage)
 	if err != nil {
 		return CustomerContractBody{}, fmt.Errorf("contractContent.rulePackage: %w", err)
 	}
-	body := CustomerContractBody{RulePackage: rulePackage}
+	body := CustomerContractBody{CustomerAccount: account, RulePackage: rulePackage}
 	for _, row := range document.ContractContent.Bindings {
 		binding, err := financialControlBindingOf(row.ChargeScope, row.Policy, row.InapplicabilityBasis)
 		if err != nil {

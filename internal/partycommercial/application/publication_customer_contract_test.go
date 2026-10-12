@@ -34,7 +34,8 @@ func contractDeclarations(t *testing.T, rulePackage string) application.Commerci
 	t.Helper()
 	return application.CommercialDeclarations{
 		ContractContent: &application.ContractContentDeclaration{
-			RulePackage: pcValue(t, domain.NewCommercialObjectID, rulePackage),
+			CustomerAccount: pcValue(t, domain.NewCustomerAccountID, "customer-1"),
+			RulePackage:     pcValue(t, domain.NewCommercialObjectID, rulePackage),
 			Bindings: []domain.FinancialControlBinding{
 				contractBinding(t, "charge-prepaid", "control-policy-1", ""),
 				contractBinding(t, "charge-cod", "", "COD-NA-01"),
@@ -47,8 +48,9 @@ func contractDeclarations(t *testing.T, rulePackage string) application.Commerci
 func customerContractContent(t *testing.T, declarations application.CommercialDeclarations) domain.PublicationContent {
 	t.Helper()
 	body := &domain.CustomerContractBody{
-		RulePackage: declarations.ContractContent.RulePackage,
-		Bindings:    declarations.ContractContent.Bindings,
+		CustomerAccount: declarations.ContractContent.CustomerAccount,
+		RulePackage:     declarations.ContractContent.RulePackage,
+		Bindings:        declarations.ContractContent.Bindings,
 	}
 	if declarations.PreAcceptanceControl != nil {
 		body.Control = &domain.PreAcceptanceControlBody{

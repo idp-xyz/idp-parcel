@@ -63,13 +63,40 @@ type CommercialRegistry struct {
 	settlementPolicies []SettlementPolicy
 	creditPolicies     []CreditPolicy
 	products           []ServiceProduct
+	// contractAccounts 是客户合同正文指名的货主客户账户，按合同版本键存（ADR-0177 决定二）。只进选法、不进
+	// ViewRevision：账户是合同规范化正文的一格，变了合同的内容摘要就变，修订已随版本那一段跟着变。
+	contractAccounts map[commercialVersionKey]CustomerAccountID
 }
 
 func NewCommercialRegistry() *CommercialRegistry {
 	return &CommercialRegistry{
-		versions:    make(map[commercialVersionKey]CommercialVersion),
-		corrections: make(map[commercialVersionKey][]ValidityCorrection),
+		versions:         make(map[commercialVersionKey]CommercialVersion),
+		corrections:      make(map[commercialVersionKey][]ValidityCorrection),
+		contractAccounts: make(map[commercialVersionKey]CustomerAccountID),
 	}
+}
+
+// RegisterCustomerContractAccount 记下一版客户合同正文指名的客户账户，供闭包按键上的客户账户收窄客户合同候选。
+// 只收这一格而不收整份合同：选法只看归属，约定表与规则包另由正文点读口交出，登记册里放一份不全的合同正文会让人
+// 以为它就是那一份。
+func (registry *CommercialRegistry) RegisterCustomerContractAccount(version CommercialVersion, account CustomerAccountID) error {
+	if version.kind != CustomerContractObject || !account.valid() {
+		return ErrInvalidCustomerContract
+	}
+	registry.contractAccounts[commercialVersionKey{
+		tenant: version.tenant, kind: version.kind, objectID: version.objectID, version: version.version,
+	}] = account
+	return nil
+}
+
+// admitsCustomerAccount 答一版客户合同能不能对这一户参选：正文指名了另一个客户账户的落选；正文未登记的照旧参选，
+// 与 admitsDeclaredServiceProduct 同一形状（ADR-0153）——壳单独发布的合同没有可比的一格，它的问题由正文点读答，
+// 不在选法里折成「不属于任何人」。
+func (registry *CommercialRegistry) admitsCustomerAccount(version CommercialVersion, account CustomerAccountID) bool {
+	named, registered := registry.contractAccounts[commercialVersionKey{
+		tenant: version.tenant, kind: version.kind, objectID: version.objectID, version: version.version,
+	}]
+	return !registered || named == account
 }
 
 // Register 接纳一个已发布版本。同内容重复登记是重放；同版本号携带不同内容是需要商业

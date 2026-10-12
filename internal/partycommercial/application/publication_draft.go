@@ -483,7 +483,9 @@ func declarationsOfContent(content domain.PublicationContent) CommercialDeclarat
 	}
 	if content.CustomerContract != nil {
 		body := content.CustomerContract
-		declarations.ContractContent = &ContractContentDeclaration{RulePackage: body.RulePackage, Bindings: body.Bindings}
+		declarations.ContractContent = &ContractContentDeclaration{
+			CustomerAccount: body.CustomerAccount, RulePackage: body.RulePackage, Bindings: body.Bindings,
+		}
 		// 合同级声明缺席就不交这一通道：载体上没说「要不要」，发布用例也不替它说。合同层交付条件同理。
 		if body.Control != nil {
 			declarations.PreAcceptanceControl = &PreAcceptanceControlInstruction{

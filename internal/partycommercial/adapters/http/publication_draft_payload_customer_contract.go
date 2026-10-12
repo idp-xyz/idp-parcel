@@ -20,11 +20,12 @@ type CustomerContractBodyPayload struct {
 	DeliveryConditions   *DeliveryConditionPayload    `json:"deliveryConditions,omitempty"`
 }
 
-// ContractContentPayload 镜像批文 contractContentDocument：接单规则包引用与按费用范围的约定表（可为空——
-// 「已登记，未对任何费用范围作约定」是读面认得的一格）。
+// ContractContentPayload 镜像批文 contractContentDocument：合同属于哪个货主客户账户（必填，ADR-0177 决定一）、接单规则包
+// 引用与按费用范围的约定表（可为空——「已登记，未对任何费用范围作约定」是读面认得的一格）。
 type ContractContentPayload struct {
-	RulePackage string                  `json:"rulePackage"`
-	Bindings    []ControlBindingPayload `json:"bindings,omitempty"`
+	CustomerAccount string                  `json:"customerAccount"`
+	RulePackage     string                  `json:"rulePackage"`
+	Bindings        []ControlBindingPayload `json:"bindings,omitempty"`
 }
 
 // ControlBindingPayload 是一行约定：费用范围 × 「指名策略 / 显式不适用依据」二选一。恰一由解码判并点名这一行；
@@ -49,6 +50,8 @@ func (payload CustomerContractBodyPayload) body(problems *PublicationPayloadProb
 	if payload.ContractContent == nil {
 		problems.add("customerContract.contractContent", fmt.Errorf("合同正文（规则包与按费用范围的约定）须在场"))
 	} else {
+		body.CustomerAccount = requireField(problems, "customerContract.contractContent.customerAccount",
+			domain.NewCustomerAccountID, payload.ContractContent.CustomerAccount)
 		body.RulePackage = requireField(problems, "customerContract.contractContent.rulePackage",
 			domain.NewCommercialObjectID, payload.ContractContent.RulePackage)
 		body.Bindings = make([]domain.FinancialControlBinding, 0, len(payload.ContractContent.Bindings))

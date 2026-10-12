@@ -24,9 +24,10 @@ func notApplicableControl(t *testing.T) *domain.PreAcceptanceControlBody {
 func customerContractBody(t *testing.T, control *domain.PreAcceptanceControlBody, bindings ...domain.FinancialControlBinding) domain.CustomerContractBody {
 	t.Helper()
 	return domain.CustomerContractBody{
-		RulePackage: commercialValue(t, domain.NewCommercialObjectID, "rules-1"),
-		Bindings:    bindings,
-		Control:     control,
+		CustomerAccount: commercialValue(t, domain.NewCustomerAccountID, "customer-1"),
+		RulePackage:     commercialValue(t, domain.NewCommercialObjectID, "rules-1"),
+		Bindings:        bindings,
+		Control:         control,
 	}
 }
 
@@ -91,8 +92,9 @@ func TestCustomerContractDocumentMirrorsTheBatchKeys(t *testing.T) {
 		Kind             string `json:"kind"`
 		CustomerContract struct {
 			ContractContent struct {
-				RulePackage string                       `json:"rulePackage"`
-				Bindings    []map[string]json.RawMessage `json:"bindings"`
+				CustomerAccount string                       `json:"customerAccount"`
+				RulePackage     string                       `json:"rulePackage"`
+				Bindings        []map[string]json.RawMessage `json:"bindings"`
 			} `json:"contractContent"`
 			PreAcceptanceControl map[string]string `json:"preAcceptanceControl"`
 		} `json:"customerContract"`
@@ -104,7 +106,7 @@ func TestCustomerContractDocumentMirrorsTheBatchKeys(t *testing.T) {
 		t.Fatalf("document header = %q / %q", document.Canonicalization, document.Kind)
 	}
 	content := document.CustomerContract.ContractContent
-	if content.RulePackage != "rules-1" || len(content.Bindings) != 2 {
+	if content.CustomerAccount != "customer-1" || content.RulePackage != "rules-1" || len(content.Bindings) != 2 {
 		t.Fatalf("contractContent = %#v", content)
 	}
 	// 排序后 charge-cod 在前：显式不适用那一行只带 inapplicabilityBasis，指名策略那一行只带 policy。
@@ -155,7 +157,11 @@ func TestCustomerContractCanonicalizationRefusesWhatPublicationWouldRefuse(t *te
 		want error
 	}{
 		"规则包缺席": {
-			body: domain.CustomerContractBody{Bindings: []domain.FinancialControlBinding{appliedControl(t, "charge-prepaid")}},
+			body: domain.CustomerContractBody{CustomerAccount: commercialValue(t, domain.NewCustomerAccountID, "customer-1"), Bindings: []domain.FinancialControlBinding{appliedControl(t, "charge-prepaid")}},
+			want: domain.ErrInvalidCustomerContract,
+		},
+		"客户账户缺席（ADR-0177 决定一）": {
+			body: domain.CustomerContractBody{RulePackage: commercialValue(t, domain.NewCommercialObjectID, "rules-1"), Bindings: []domain.FinancialControlBinding{appliedControl(t, "charge-prepaid")}},
 			want: domain.ErrInvalidCustomerContract,
 		},
 		"同一范围约定两次": {

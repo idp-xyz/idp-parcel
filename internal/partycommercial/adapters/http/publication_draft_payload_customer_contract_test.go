@@ -23,6 +23,7 @@ const customerContractPayload = `{
   "references": {"ACCEPTANCE_RULE_PACKAGE": "rules-1"},
   "customerContract": {
     "contractContent": {
+      "customerAccount": "customer-1",
       "rulePackage": "rules-1",
       "bindings": [
         {"chargeScope": "charge-prepaid", "policy": "control-policy-1"},
@@ -76,8 +77,8 @@ func TestCustomerContractPayloadTranslatesBothLayers(t *testing.T) {
 	}
 }
 
-// Covers: 逐格问题收齐——正文缺席、规则包空、约定行两格都给 / 都不给、范围空、集合外的控制要求、依据留白各记在自己
-// 那一格；成立的格不被点名。
+// Covers: 逐格问题收齐——正文缺席、客户账户空（ADR-0177 决定一）、规则包空、约定行两格都给 / 都不给、范围空、集合外的
+// 控制要求、依据留白各记在自己那一格；成立的格不被点名。
 func TestCustomerContractPayloadCollectsEveryFieldProblem(t *testing.T) {
 	raw := `{
 	  "kind": "CUSTOMER_CONTRACT",
@@ -87,6 +88,7 @@ func TestCustomerContractPayloadCollectsEveryFieldProblem(t *testing.T) {
 	  "effectiveStartsAt": "2026-08-01T00:00:00Z",
 	  "customerContract": {
 	    "contractContent": {
+	      "customerAccount": " ",
 	      "rulePackage": " ",
 	      "bindings": [
 	        {"chargeScope": "charge-both", "policy": "control-policy-1", "inapplicabilityBasis": "NA"},
@@ -108,6 +110,7 @@ func TestCustomerContractPayloadCollectsEveryFieldProblem(t *testing.T) {
 		fields[problem.Field] = true
 	}
 	for _, want := range []string{
+		"customerContract.contractContent.customerAccount",
 		"customerContract.contractContent.rulePackage",
 		"customerContract.contractContent.bindings[0]",
 		"customerContract.contractContent.bindings[1]",
@@ -126,6 +129,7 @@ func TestCustomerContractPayloadCollectsEveryFieldProblem(t *testing.T) {
 	}
 
 	absent := strings.Replace(customerContractPayload, `"contractContent": {
+      "customerAccount": "customer-1",
       "rulePackage": "rules-1",
       "bindings": [
         {"chargeScope": "charge-prepaid", "policy": "control-policy-1"},

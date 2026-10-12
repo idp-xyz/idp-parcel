@@ -815,7 +815,8 @@ func TestContractContentMustAgreeWithTheShellReference(t *testing.T) {
 	// 客户合同已接进服务端规范化（票 admin-write-faces/10）：壳上的摘要要是按正文算出的那一个，对账门才放它走到本条要证的那一判。
 	declarations := application.CommercialDeclarations{
 		ContractContent: &application.ContractContentDeclaration{
-			RulePackage: pcValue(t, domain.NewCommercialObjectID, "rules-OTHER"),
+			CustomerAccount: pcValue(t, domain.NewCustomerAccountID, "customer-1"),
+			RulePackage:     pcValue(t, domain.NewCommercialObjectID, "rules-OTHER"),
 		},
 	}
 	spec := customerContractSpec(t, "contract-1", "v1", declarations)

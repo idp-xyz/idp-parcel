@@ -73,24 +73,28 @@ func (binding FinancialControlBinding) InapplicabilityBasis() InapplicabilityBas
 	return binding.basis
 }
 
-// CustomerContract 是一个客户合同版本的正文：它引用哪个接单规则包，以及它按费用
+// CustomerContract 是一个客户合同版本的正文：它属于哪个货主客户账户、引用哪个接单规则包，以及它按费用
 // 范围对财务控制作了什么约定。
 type CustomerContract struct {
-	version     CommercialVersion
-	rulePackage CommercialObjectID
-	bindings    map[ChargeScopeReference]FinancialControlBinding
+	version         CommercialVersion
+	customerAccount CustomerAccountID
+	rulePackage     CommercialObjectID
+	bindings        map[ChargeScopeReference]FinancialControlBinding
 }
 
-// NewCustomerContract 要求在构造时就给出接单规则包引用。缺了它的合同不能用于接受
-// 任何委托，而等到形成接受判断时才发现已经太晚；本上下文规定：规则或策略缺失不得
-// 被解释为允许接受。
+// NewCustomerContract 要求在构造时就给出货主客户账户与接单规则包引用。缺了规则包的合同不能用于接受
+// 任何委托，而等到形成接受判断时才发现已经太晚；本上下文规定：规则或策略缺失不得被解释为允许接受。
+// 缺了客户账户，闭包就答不出这份合同是不是键上那一户的（CONTEXT「合同版本必须明确关联…货主客户账户」，
+// ADR-0177 决定一），不从委派人、客户关系或范围推。
 func NewCustomerContract(
 	version CommercialVersion,
+	customerAccount CustomerAccountID,
 	rulePackage CommercialObjectID,
 	bindings []FinancialControlBinding,
 ) (CustomerContract, error) {
 	if version.kind != CustomerContractObject ||
 		version.status != CommercialVersionEffective ||
+		!customerAccount.valid() ||
 		!rulePackage.valid() {
 		return CustomerContract{}, ErrInvalidCustomerContract
 	}
@@ -99,7 +103,14 @@ func NewCustomerContract(
 	if err != nil {
 		return CustomerContract{}, err
 	}
-	return CustomerContract{version: version, rulePackage: rulePackage, bindings: declared}, nil
+	return CustomerContract{
+		version: version, customerAccount: customerAccount, rulePackage: rulePackage, bindings: declared,
+	}, nil
+}
+
+// CustomerAccount 报出这份合同属于哪个货主客户账户。
+func (contract CustomerContract) CustomerAccount() CustomerAccountID {
+	return contract.customerAccount
 }
 
 // declaredBindingsByScope 是约定表的那两道判：每条都经过了构造门（declared 且范围非零）、同一范围只约定一次。

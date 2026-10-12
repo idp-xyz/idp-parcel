@@ -17,8 +17,9 @@ import (
 // 客户合同版本取回正文。
 //
 // 只读。正文属实例半边，本适配器不提供写口，也不在读不到时代拟任何绑定——无父行
-// 是未配置，有父行零子行才是「明确没约定任何费用范围」。不进 CommercialRegistry /
-// ViewRevision：绑定改动与选择无关。
+// 是未配置，有父行零子行才是「明确没约定任何费用范围」。约定表不进 CommercialRegistry /
+// ViewRevision：绑定改动与选择无关。正文指名的客户账户进选法（ADR-0177 决定二），由
+// CommercialPublications.LoadForScope 另行装进登记册，不经本读口。
 type CustomerContractContents struct {
 	db *bentopg.DB
 }
@@ -61,9 +62,10 @@ func (repository *CustomerContractContents) LoadCustomerContract(
 	// 父 LEFT JOIN 子一次取回：ReadExecutor 不保证两条语句同一快照，分两次会拼出从未
 	// 同时存在的父子状态。无父行 = 零行（found=false）；有父零子 = 一行空 json 数组。
 	var rulePackageID string
+	var accountID *string
 	var bindingsJSON []byte
 	err = querier.QueryRow(ctx,
-		`SELECT parent.rule_package_id,
+		`SELECT parent.rule_package_id, parent.customer_account_id,
 		        COALESCE(
 		            json_agg(
 		                json_build_object(
@@ -86,12 +88,12 @@ func (repository *CustomerContractContents) LoadCustomerContract(
 		    AND parent.object_id     = $3
 		    AND parent.version_label = $4
 		  GROUP BY parent.tenant_id, parent.object_kind, parent.object_id,
-		           parent.version_label, parent.rule_package_id`,
+		           parent.version_label, parent.rule_package_id, parent.customer_account_id`,
 		tenant.String(),
 		uint8(domain.CustomerContractObject),
 		contract.ObjectID().String(),
 		contract.Version().String(),
-	).Scan(&rulePackageID, &bindingsJSON)
+	).Scan(&rulePackageID, &accountID, &bindingsJSON)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return none, false, nil
 	}
@@ -112,7 +114,15 @@ func (repository *CustomerContractContents) LoadCustomerContract(
 		return none, false, fmt.Errorf("load customer contract: %w", err)
 	}
 
-	content, err := domain.NewCustomerContract(contract, rulePackage, bindings)
+	// 迁移 0037 之前写下的行没有账户：报错，不折成「正文未登记」，也不猜一户（ADR-0177 决定一、五）。
+	if accountID == nil {
+		return none, false, fmt.Errorf("load customer contract: the stored content names no customer account; re-register it under ADR-0177")
+	}
+	account, err := domain.NewCustomerAccountID(*accountID)
+	if err != nil {
+		return none, false, fmt.Errorf("load customer contract: %w", err)
+	}
+	content, err := domain.NewCustomerContract(contract, account, rulePackage, bindings)
 	if err != nil {
 		return none, false, fmt.Errorf("load customer contract: %w", err)
 	}

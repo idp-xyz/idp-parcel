@@ -241,7 +241,7 @@ func TestRelationCataloguesApplyTheLimitAndRejectNonPositive(t *testing.T) {
 // 在读面上只有 HasContent 分得开。
 func emptyContractContentOf(t *testing.T, contract domain.CommercialVersion) domain.CustomerContract {
 	t.Helper()
-	content, err := domain.NewCustomerContract(contract,
+	content, err := domain.NewCustomerContract(contract, pcValue(t, domain.NewCustomerAccountID, "customer-1"),
 		pcValue(t, domain.NewCommercialObjectID, "rules-1"), nil)
 	if err != nil {
 		t.Fatalf("组零约定合同正文:%v", err)

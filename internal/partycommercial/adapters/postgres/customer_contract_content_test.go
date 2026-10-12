@@ -229,8 +229,8 @@ func declareContractContent(t *testing.T, pool *pgxpool.Pool, tenant, objectID, 
 	t.Helper()
 	if _, err := pool.Exec(t.Context(),
 		`INSERT INTO party_commercial.customer_contract_content
-			(tenant_id, object_kind, object_id, version_label, rule_package_id)
-		 VALUES ($1, 2, $2, $3, $4)`,
+			(tenant_id, object_kind, object_id, version_label, rule_package_id, customer_account_id)
+		 VALUES ($1, 2, $2, $3, $4, 'customer-1')`,
 		tenant, objectID, label, rulePackage); err != nil {
 		t.Fatalf("登记合同正文：%v", err)
 	}

@@ -213,7 +213,7 @@ func contractContentOf(t *testing.T, contract domain.CommercialVersion, controlP
 	if err != nil {
 		t.Fatalf("不适用控制约定：%v", err)
 	}
-	content, err := domain.NewCustomerContract(contract,
+	content, err := domain.NewCustomerContract(contract, pcValue(t, domain.NewCustomerAccountID, "customer-1"),
 		pcValue(t, domain.NewCommercialObjectID, "rules-1"),
 		[]domain.FinancialControlBinding{applied, inapplicable})
 	if err != nil {
