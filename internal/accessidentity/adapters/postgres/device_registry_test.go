@@ -231,8 +231,9 @@ func TestWorkFactRegistrationGrantRoundTripsItsWorkScope(t *testing.T) {
 	}
 }
 
-// Covers: 票 operator-channel/10「结构与 CHECK 守上面的不变量」——绕过登记口直接写：作业事实登记授予缺作业范围或缺引用、
-// 别的格带作业范围、未知范围种类；设备缺件、未知范围种类；停一台不存在的设备、一台设备停两次、停用空依据——都进不了库。
+// Covers: 票 operator-channel/10 做什么第 1、2 条的表结构一侧，守法同 01 做什么第 2 条「结构与 CHECK 守上面的不变量」——
+// 绕过登记口直接写：作业事实登记授予缺作业范围或缺引用、别的格带作业范围、未知范围种类；设备缺件、未知范围种类；停一台
+// 不存在的设备、一台设备停两次、停用空依据——都进不了库。
 func TestWorkFactAndDeviceTablesGuardTheInvariantsThemselves(t *testing.T) {
 	register := newDeviceRegister(t)
 	pool := register.operators.pool
