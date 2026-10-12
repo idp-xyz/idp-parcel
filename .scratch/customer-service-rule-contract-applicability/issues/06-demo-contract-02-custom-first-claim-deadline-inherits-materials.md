@@ -1,8 +1,8 @@
 # 06 演示对比面：SYN-CONTRACT-02 挂合同规则只改首次索赔时限，账户 02 索赔答定制时限、材料继承产品版
 
 Category: enhancement
-Status: blocked——2026-10-12 10:5x 通道 1：种子子集在分支 `mcp1-csr06`（基 `8c41be83`，认领 `dfebdb5c`，种子 `2b76eab4`，已推 origin）上做完并灌通干净库，但同范围多一份合同后两户闭包都在 `CUSTOMER_CONTRACT` 上`适用冲突`、账户 01 回退，种子不进 main，见文末「灌库取证」。此前：in-progress（分支上认领）；ready-for-agent——2026-10-10 通道 1 发布：拆法作者通道 3（`task-2b404e22`），通道 1 经用户 19:1x 授权认可并裁定拆法清单所附七问
-Blocked by: [07](07-closure-does-not-narrow-customer-contract-by-customer-account.md)（[04](04-ve-claim-eligibility-checks-contract-and-inherits-rows-from-product-base.md) 已解）
+Status: in-progress——2026-10-12 11:3x 通道 1 续做（07 已进 main `c6c65052`）：分支 `mcp1-csr06b` 基 `c6c65052`，种子笔 `2b76eab4` cherry-pick 过来，旧分支 `mcp1-csr06` 的认领笔不带（与 main 上的票面改动冲突）。此前：blocked——2026-10-12 10:5x 通道 1：种子子集在分支 `mcp1-csr06`（基 `8c41be83`，认领 `dfebdb5c`，种子 `2b76eab4`，已推 origin）上做完并灌通干净库，但同范围多一份合同后两户闭包都在 `CUSTOMER_CONTRACT` 上`适用冲突`、账户 01 回退，种子不进 main，见文末「灌库取证」。此前：in-progress（分支上认领）；ready-for-agent——2026-10-10 通道 1 发布：拆法作者通道 3（`task-2b404e22`），通道 1 经用户 19:1x 授权认可并裁定拆法清单所附七问
+Blocked by: 无（[04](04-ve-claim-eligibility-checks-contract-and-inherits-rows-from-product-base.md)、[07](07-closure-does-not-narrow-customer-contract-by-customer-account.md) 均已解）
 父票：[spec](../spec.md)
 地盘：`scripts/demo-seeds` 与取证处；碰种子与真库取证，走并行会话那条路。
 出处：spec「演示对比面」；建模票 [01](01-service-rule-keyed-by-product-cannot-express-per-customer-claim-terms.md)「来处」。
