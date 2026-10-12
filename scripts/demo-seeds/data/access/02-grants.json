@@ -2,28 +2,28 @@
   "tenantId": "SYN-TENANT-01",
   "grants": [
     {
-      "grantId": "SYN-GRANT-CONFIG-WRITE-01",
-      "issuer": "https://syn-issuer-01.example.invalid",
-      "subject": "SYN-OPERATOR-CONFIG-01",
+      "grantId": "SYN-GRANT-DEX-CONFIG-WRITE-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
       "capabilityFace": "REGISTRY_CONFIGURATION_WRITE",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
-      "basis": "SYN-GRANT-BASIS-01"
+      "basis": "SYN-GRANT-BASIS-DEX-01"
     },
     {
-      "grantId": "SYN-GRANT-CONFIG-READ-01",
-      "issuer": "https://syn-issuer-01.example.invalid",
-      "subject": "SYN-OPERATOR-CONFIG-01",
+      "grantId": "SYN-GRANT-DEX-CONFIG-READ-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
       "capabilityFace": "MASTER_DATA_AND_OPERATIONS_READ",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
-      "basis": "SYN-GRANT-BASIS-02"
+      "basis": "SYN-GRANT-BASIS-DEX-02"
     },
     {
-      "grantId": "SYN-GRANT-VIEWER-READ-01",
-      "issuer": "https://syn-issuer-01.example.invalid",
-      "subject": "SYN-OPERATOR-VIEWER-01",
+      "grantId": "SYN-GRANT-DEX-VIEWER-READ-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItVklFV0VSLTAxEgVsb2NhbA",
       "capabilityFace": "MASTER_DATA_AND_OPERATIONS_READ",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
-      "basis": "SYN-GRANT-BASIS-03"
+      "basis": "SYN-GRANT-BASIS-DEX-03"
     }
   ]
 }
