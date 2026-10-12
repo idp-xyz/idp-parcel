@@ -65,6 +65,26 @@ func workFactStanding(t *testing.T, scopes ...accessidentity.WorkScope) accessid
 	return standing
 }
 
+// revokedWorkFactStanding 同 workFactStanding 只在 scope 上登一笔，但那一笔已在 revokedAt 撤销。
+func revokedWorkFactStanding(t *testing.T, scope accessidentity.WorkScope, revokedAt time.Time) accessidentity.OperatorStanding {
+	t.Helper()
+	standing := workFactStanding(t, scope)
+	grant := standing.Grants()[0].Grant()
+	revocation, err := accessidentity.NewGrantRevocation(operatorTenant, grant.GrantID(), revokedAt, "SYN-BASIS-REVOKE")
+	if err != nil {
+		t.Fatal(err)
+	}
+	recorded, err := accessidentity.NewRecordedGrant(grant, &revocation)
+	if err != nil {
+		t.Fatal(err)
+	}
+	revoked, err := accessidentity.NewOperatorStanding(standing.Binding(), []accessidentity.RecordedGrant{recorded})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return revoked
+}
+
 type deviceRegistryFake struct {
 	devices map[string]accessidentity.RecordedDevice
 	err     error
@@ -80,6 +100,16 @@ func (fake deviceRegistryFake) FindDevice(_ context.Context, tenantID, deviceID 
 	}
 	device, found := fake.devices[tenantID+"/"+deviceID]
 	return device, found, nil
+}
+
+// tenantBlindDevices 是一本忘了按租户查的册：问哪个租户都交回同一台设备。按键取的 deviceRegistryFake 碰不到铸造
+// 自己那道租户比对，要靠它证。
+type tenantBlindDevices struct {
+	device accessidentity.RecordedDevice
+}
+
+func (fake tenantBlindDevices) FindDevice(context.Context, string, string) (accessidentity.RecordedDevice, bool, error) {
+	return fake.device, true, nil
 }
 
 // recordedDevice 登一台设备；deactivatedAt 取零值表示未停用。
@@ -263,6 +293,10 @@ func TestWorkFactAnswerGradesDoNotStandInForEachOther(t *testing.T) {
 			operators: registryFake{standing: standingWith(t, accessidentity.CapabilityRegistryConfigurationWrite), found: true},
 			devices:   inUse, want: "not granted",
 		},
+		"work fact grant revoked before the request": {
+			verifier: verifierFake{subject: subject}, operators: registryFake{standing: revokedWorkFactStanding(t, scope, mintAt.Add(-time.Hour)), found: true},
+			devices: inUse, want: "not granted",
+		},
 		"device not registered": {
 			verifier: verifierFake{subject: subject}, operators: granted, devices: devicesWith(), want: "device not in use",
 		},
@@ -281,6 +315,10 @@ func TestWorkFactAnswerGradesDoNotStandInForEachOther(t *testing.T) {
 		"device registered under another tenant": {
 			verifier: verifierFake{subject: subject}, operators: granted,
 			devices: devicesWith(recordedDevice(t, "SYN-TENANT-02", workDeviceID, scope, time.Time{})), want: "device not in use",
+		},
+		"device register hands back another tenant's device": {
+			verifier: verifierFake{subject: subject}, operators: granted,
+			devices: tenantBlindDevices{device: recordedDevice(t, "SYN-TENANT-02", workDeviceID, scope, time.Time{})}, want: "device not in use",
 		},
 		"operator register cannot be read": {
 			verifier: verifierFake{subject: subject}, operators: registryFake{err: errors.New("connection refused")}, devices: inUse,
@@ -322,6 +360,36 @@ func TestDeactivatedDeviceRefusesTheOperatorWhileAnotherRegisteredDeviceStillSer
 	envelope, err := mintWorkFact(minter, operatorTenant, scope, otherWorkDeviceID)
 	if err != nil || envelope.DeviceID() != otherWorkDeviceID || envelope.Subject() != operatorSubject(t) {
 		t.Fatalf("same operator on another registered device: device %q, subject %v, err %v", envelope.DeviceID(), envelope.Subject(), err)
+	}
+}
+
+// 同一操作者、同一台设备，停用时刻之前照常铸，自停用时刻起被拒：在不在用按铸造那一刻判，登在将来的停用到点之前不挡人。
+func TestDeviceServesUntilItsDeactivationInstantAndIsRefusedFromThen(t *testing.T) {
+	scope := nodeScope(t)
+	deactivatedAt := mintAt.Add(time.Hour)
+	operators := registryFake{standing: workFactStanding(t, scope), found: true}
+	devices := devicesWith(recordedDevice(t, operatorTenant, workDeviceID, scope, deactivatedAt))
+	for _, step := range []struct {
+		at     time.Time
+		minted bool
+	}{
+		{at: deactivatedAt.Add(-time.Nanosecond), minted: true},
+		{at: deactivatedAt, minted: false},
+		{at: deactivatedAt.Add(time.Hour), minted: false},
+	} {
+		minter, err := accessidentity.NewWorkFactMinter(verifierFake{subject: operatorSubject(t)}, operators, devices,
+			accessidentity.UnconfiguredAdmissionScope{}, func() time.Time { return step.at })
+		if err != nil {
+			t.Fatal(err)
+		}
+		envelope, err := mintWorkFact(minter, operatorTenant, scope, workDeviceID)
+		if !step.minted {
+			assertWorkFactGrade(t, err, "device not in use")
+			continue
+		}
+		if err != nil || !envelope.Minted() || envelope.DeviceID() != workDeviceID {
+			t.Fatalf("mint at %s, before the deactivation: device %q, minted %v, err %v", step.at, envelope.DeviceID(), envelope.Minted(), err)
+		}
 	}
 }
 
