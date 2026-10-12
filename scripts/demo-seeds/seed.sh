@@ -230,10 +230,13 @@ echo "== 试点治理登记（pilot-governance：权威区间、暂停、恢复�
 # 授予第二条——同一区间再授一次会被冲突预检拦下。
 "$BIN/parcel-governance-register" stage-review -input "$SEEDS/governance/08-stage-review-shipment-intake.json"
 
-echo "== 操作者册登记（access-identity：合成操作者主体与能力面授予；票 operator-channel/01） =="
+echo "== 操作者册登记（access-identity：合成操作者主体与能力面授予；票 operator-channel/01、17） =="
 # 两个合成主体绑演示租户：配置员授两格（登记册配置写、主数据与运营查阅读），查阅员只授查阅读。
-# 证据层级只记 S，不登任何真实操作者。发行方是合成值：演示部署接上真 OIDC 发行方之后，要按那个
-# 发行方的标识另登一批——册上的主体不能改指到新发行方；旧的这批留着无害，不会有令牌带着合成发行方来。
+# 证据层级只记 S，不登任何真实操作者。发行方是演示发行方 Dex（operator-channel/compose.yaml），主体是
+# 它给 dex.yaml 里两个静态用户真签出的令牌里的 sub（operator-token.sh … claims 读出），不按配置推算。
+# 只登演示部署信任的那只发行方签得出的主体：iss 没有任何发行方签得出的主体，在册上与能登录的主体
+# 长得一模一样，却永远登不进来。册上的主体不能改指到新发行方：换发行方就按新发行方的标识另登一批，
+# 授予号与依据也另起。
 "$BIN/parcel-access-register" operator-register -input "$SEEDS/access/01-operators.json"
 "$BIN/parcel-access-register" operator-grant -input "$SEEDS/access/02-grants.json"
 
