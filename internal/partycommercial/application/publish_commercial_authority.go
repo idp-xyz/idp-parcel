@@ -570,7 +570,8 @@ func (handler *PublishCommercialAuthorityHandler) announceOperatorRegistrations(
 
 // reconcileDeclaredDigest 是受控批文那一半的对账门（ADR-0126 Decision 二）。只对已接进规范化的册
 // 开门；已接的册正文缺席时没有可比对象，按今天的样子放行声明的串（那种版本没有正文可读，摘要盖住的
-// 是空；预览与表单路径永远带正文）。正文折不成文档（零值、册与类别不符）与两串不等同归`未受理`，成因
+// 是空；预览与表单路径永远带正文）。客户合同一册放过这道门之后，仍由 Handle 在声明构造之后答`未受理`
+// （ADR-0178 决定一）。正文折不成文档（零值、册与类别不符）与两串不等同归`未受理`，成因
 // 各自随结果交回——它们都是输入自己的问题，与册上的任何一版无关。
 func reconcileDeclaredDigest(command PublishCommercialAuthorityCommand) (bool, PublishCommercialAuthorityResult) {
 	if !domain.IsRegisterCanonicalized(command.Spec.Kind) {
