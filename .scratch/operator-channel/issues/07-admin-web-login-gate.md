@@ -1,7 +1,7 @@
 # 07 管理台登录门：authorization_code + PKCE、Bearer 与三态文案
 
 Category: enhancement
-Status: in-progress——2026-10-12 通道 5：做什么两条与接演示发行方共三笔已落（`d9f02f6c`、`97c1bd47`、`22f0529e`），判据两条都已 ✅（证据 `S`，见文末「进度记录」）；只差 Spec 轴非作者评审（通道 1 派通道 3，`task-4764fef1`，钉 `97c1bd47`），交回照录进 Comments 即转 resolved。此前 in-progress——2026-10-12 通道 5：做什么两条已落（`d9f02f6c`、`97c1bd47`），判据的三态浏览器验收已过；走通那一格等 [17](./17-demo-issuer-dex-and-synthetic-operators.md) 交出演示发行方的取值。再此前 in-progress——2026-10-12 通道 5 认领（通道 1 派单 `task-9c227f05`），前端切片，在共享树 `main` 上做（基 `ff3b01fa`）；更早 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
+Status: resolved——2026-10-12 通道 5 收口进 `main`（通道 1 派单 `task-e6763faa`，接替 `task-9c227f05` 未完的部分）：做什么两条与接演示发行方三笔（`d9f02f6c`、`97c1bd47`、`22f0529e`），评审两条非阻断各一笔（`5b24b32f`、`b5f39fbd`），本笔收口；完成记录见文末，评审原文与处置在 Comments。此前 in-progress——2026-10-12 通道 5：三笔已落、判据两条 ✅，只差 Spec 轴非作者评审（通道 1 派通道 3，`task-4764fef1`，钉 `97c1bd47`）。再此前 in-progress——2026-10-12 通道 5：做什么两条已落（`d9f02f6c`、`97c1bd47`），判据的三态浏览器验收已过；走通那一格等 [17](./17-demo-issuer-dex-and-synthetic-operators.md) 交出演示发行方的取值。再此前 in-progress——2026-10-12 通道 5 认领（通道 1 派单 `task-9c227f05`），前端切片，在共享树 `main` 上做（基 `ff3b01fa`）；更早 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
 Blocked by: 02、03（均已 resolved）；17 已交值（「交给 07」钉 `mcp4-oc17@4c9dc789`），走通那一格不再等它
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`apps/admin-web/**`（前端切片，按 [workflow.md「前端切片」](../../../docs/agents/workflow.md) 一人在 main 上直接做）。
@@ -16,13 +16,15 @@ Blocked by: 02、03（均已 resolved）；17 已交值（「交给 07」钉 `mc
 
 - 在接好发行方的隔离环境里，合成操作者能登进管理台并在 04、05 已换的口上走通；三态文案各有一条浏览器验收。
 
-## 进度记录（通道 5，2026-10-12，钉 `22f0529e`）
+## 完成记录（2026-10-12，通道 5；前端切片，共享树 `main`；证据只记 `S`）
 
 ### 落点
 
 - `d9f02f6c`（做什么第 1 条）：`auth/oidc.ts` 的访问令牌、id_token、refresh_token 只放模块内存（`currentSession`），登录中间态（PKCE verifier、state、nonce、回到哪）仍在 `sessionStorage`，要熬过跳签发方的整页导航；`auth/bearer.ts` 的 `withBearer` 由 `main.tsx` 接 `accessTokenForRequest`，`catalogue-api`、委托、全程追踪各出口经它带 Bearer。
 - `97c1bd47`（做什么第 2 条）：`auth/access-refusal.ts` 按状态码与码名原名判三格（ADR-0100 决定四），各出口的答复代数共用这一份；`components/states/access-state.tsx` 是三态卡，只有需要登录带一颗「重新登录」（`auth/ReloginButton.tsx`，回到此刻这一页），`OperatorRefusalNote` 是行内一句；`TemplateViewState` 加两态；各页的页面态、动作答案区、表单候选与词表判读、抽屉分段、摘要条都接上两格。
 - `22f0529e`（接演示发行方，照 17「交给 07」）：`auth/oidc.ts` 的 `ISSUER` 取 `http://127.0.0.1:5556/dex`（与 `parcel-api` 的 `IDP_PARCEL_OPERATOR_OIDC_ISSUER` 逐字相同），`CLIENT_ID` 取 `idp-parcel-admin-web`（即操作者族受众），授权端点 `<issuer>/auth`；换令牌照旧经同源代理，路径 `/oidc/dex/token`，`vite.config.ts` 的 `/oidc` 目标随之换，系统代理的 agent 只对 https 目标接；登录页不再写死 gk.idp.xyz，示发行方地址，按钮为「前往发行方登录」；`oidc.test.ts` 钉授权端点、客户端标识、回调地址、scope 与换令牌路径。
+- `5b24b32f`（评审 Spec 轴非阻断）：上一版存在 `sessionStorage` 的整份会话（`parcel.oidc.session`，含 refresh_token 原文）改为模块一加载就清，`beginLogin` 里那一处随之删掉——升级后刷新、没再点登录的标签页里它也不再留下。只清这一个键，登录中间态不动。新用例单独成文件 `auth/oidc-legacy-session.test.ts`（要在加载模块之前摆好存储）。
+- `b5f39fbd`（评审 Standards 轴非阻断）：`auth/access-refusal.ts` 讲续办共用的那段 JSDoc 挪到 `operatorRefusalRecovery` 之上，文字一字未改。
 
 ### 判据逐条
 
@@ -49,6 +51,9 @@ Blocked by: 02、03（均已 resolved）；17 已交值（「交给 07」钉 `mc
 - 三道门（Node 22.23.3，钉 `97c1bd47`）：`tsc -b --noEmit` 退 0；`run-tests` 508/508；`vite build` 退 0。新用例的判别力用四处临时变异证过：三格折回未配置、目录页把两格折回未配置、没有授予也给重新登录、挂起评价数并进故障，各自红，已逐字节还原。
 - CI：`d9f02f6c` 的 run 38215973390 success；`97c1bd47` 的 run 38218879934 success（七个 job 全绿，含 `admin-web typecheck, tests, build`）。
 - `22f0529e`：三道门（Node 22.23.3）`tsc -b --noEmit` 退 0、`run-tests` 518/518、`vite build` 退 0；新钉的几格用两处临时变异证过——客户端标识换回旧值、换令牌路径换回旧路径，各自红，已逐字节还原；CI run 38251468923 success。
+- `5b24b32f`：先红后绿——旧实现下新用例红；变异「加载时连登录中间态一起清」也红，已逐字节还原。浏览器：vite dev 上往标签页的 `sessionStorage` 种一份旧键再刷新，不点登录，旧键已无，页面停在登录页。三道门 `tsc` 退 0、`run-tests` 518/518、`vite build` 退 0。
+- `b5f39fbd`：只挪注释，diff 是同样四行一删一加；三道门同上。
+- CI：进度记录那一笔 `dbf58a9e` 的 run 38255774311 success；`5b24b32f` 的 run 38256293148 success；`b5f39fbd` 的 run 38256387112 success（后两次七个 job 全绿，含 `admin-web typecheck, tests, build`）。
 
 ### 判断项
 
@@ -66,4 +71,24 @@ Blocked by: 02、03（均已 resolved）；17 已交值（「交给 07」钉 `mc
 
 ### 评审
 
-本票动到 `components/*` 与 `templates/*`（共享面），按 workflow「前端切片」第 5 步要一份 Spec 轴评审：通道 1 已派通道 3（`task-4764fef1`，钉 `97c1bd47`，范围 `ff3b01fa..97c1bd47` 的 `apps/admin-web`），交回照录进 Comments，有阻断在 `main` 上另提一笔修。`22f0529e` 只动 `auth/*` 与 `vite.config.ts`，不在共享面。
+本票动到 `components/*` 与 `templates/*`（共享面），按 workflow「前端切片」第 5 步要一份 Spec 轴评审：通道 1 派通道 3 做非作者评审（`task-4764fef1`，钉 `97c1bd47`，范围 `ff3b01fa..97c1bd47` 的 `apps/admin-web`），两轴无阻断，非阻断两条都改了（`5b24b32f`、`b5f39fbd`）；原文与处置见 Comments。`22f0529e` 只动 `auth/*` 与 `vite.config.ts`，不在共享面。
+
+## Comments
+
+**评审 ← 通道 3 · 钉 97c1bd47 · 20:50**（`task-4764fef1`；原文经通道 1 转来，下面照录到「处置」之前）
+
+（只读：detached worktree 读 ff3b01fa..97c1bd47 -- apps/admin-web 与 b298cd8f 进度记录；未装依赖、未跑三道门；树已拆——worktree remove 退 0（无 --force）、prune、路径已无、list 无登记。未写票面。）
+
+**Spec**
+- 阻断：无。
+- 非阻断：`auth/oidc.ts` 的 `LEGACY_SESSION_KEY` 只在 `beginLogin` 里清；上一版在这个键下存整份会话（含 refresh_token 原文，ff3b01fa 的 oidc.ts 实看），升级后刷新、未再点登录的标签页里它留到关页，与做什么第 1 条「令牌只在内存，不落本地存储」差这一格；模块加载时清即可。
+- 无发现：令牌只在 `currentSession`，sessionStorage 只放 `PendingLogin`（非令牌），`oidc.test.ts` 钉了登录与续期后两种存储无原文；`git grep '\bfetch\('` 枚举，`catalogue-api.ts` 三处与委托、追踪两个 `exchange` 都经 `withBearer`，余下只有 `oidc.ts` 换令牌（不该带），无 XHR / EventSource / window.open 出口，价卡模板下载是静态资源；`accessRefusalOf` 码与码名同对才认，半对与别族 403（`INTEGRATION_CLIENT_NOT_GRANTED`）不冒充（`access-refusal.test.ts`）；判断项 1–3 只定呈现与续办，没替发行方或授予的 owner 拍板。
+
+**Standards**
+- 阻断：无。
+- 非阻断：`auth/access-refusal.ts` 两段 JSDoc 相邻：讲续办共用的那段（「两格操作者答复的续办……留在各页」）压在 `operatorRefusalSentence` 自己那段之上，只有紧邻那段挂得上，它成了悬空注释，也挂不到它讲的 `operatorRefusalRecovery`；挪到该常量之上即可。
+- 无发现：新注释全中文；diff 加行里没有行号引用，也没有跨文件计数（「三格」「两格」数的是本文件自己定义的格）。
+
+**处置（通道 5，2026-10-12 21:3x）**：两轴无阻断；两条非阻断照通道 1 转评审时的要求都改，各自成笔推 `main`。
+- Spec 非阻断 → `5b24b32f`：`LEGACY_SESSION_KEY` 改为模块加载即清，`beginLogin` 里那一处删掉（留着只剩重复）；用例钉「升级前留下的该键，不点登录也被清掉」，并钉同一下不动登录中间态——回调页加载模块时要靠它。
+- Standards 非阻断 → `b5f39fbd`：那段 JSDoc 挪到 `operatorRefusalRecovery` 之上。
