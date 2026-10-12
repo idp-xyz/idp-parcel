@@ -125,8 +125,11 @@ func TestDeviceRegistrationRecordsReplaysAndNeverOverwrites(t *testing.T) {
 
 	expectDeviceOutcome(t, "首登", register.register(t, device), accessidentity.DeviceRegistrationRecorded)
 	expectDeviceOutcome(t, "重放", register.register(t, device), accessidentity.DeviceRegistrationAlreadyRegistered)
-	expectDeviceOutcome(t, "异作业范围",
+	expectDeviceOutcome(t, "只换范围种类",
 		register.register(t, deviceOf(t, tenantOne, "SYN-DEVICE-01", scopeOf(t, accessidentity.WorkScopeOffsite, "SYN-NODE-SZX-01"), "SYN-DEVICE-BASIS-01")),
+		accessidentity.DeviceRegistrationContentConflict)
+	expectDeviceOutcome(t, "只换范围引用",
+		register.register(t, deviceOf(t, tenantOne, "SYN-DEVICE-01", scopeOf(t, accessidentity.WorkScopeNode, "SYN-NODE-SIN-01"), "SYN-DEVICE-BASIS-01")),
 		accessidentity.DeviceRegistrationContentConflict)
 	expectDeviceOutcome(t, "异依据",
 		register.register(t, deviceOf(t, tenantOne, "SYN-DEVICE-01", node, "SYN-DEVICE-BASIS-02")),
@@ -185,7 +188,7 @@ func TestDeviceDeactivationEndsUseFromItsInstant(t *testing.T) {
 }
 
 // Covers: 票 operator-channel/10 做什么第 1 条——「作业事实登记」授予带着作业范围落册与读回；同内容重放答原结果，同标识
-// 异作业范围答冲突；读回的现状只在授予的那个作业范围上答持有，整格问一律答否。
+// 只换范围种类、只换范围引用各答冲突（两列各自都在比）；读回的现状只在授予的那个作业范围上答持有，整格问一律答否。
 func TestWorkFactRegistrationGrantRoundTripsItsWorkScope(t *testing.T) {
 	register := newDeviceRegister(t).operators
 	subject := subjectOf(t, syntheticIssuer, "SYN-OPERATOR-01")
@@ -207,6 +210,12 @@ func TestWorkFactRegistrationGrantRoundTripsItsWorkScope(t *testing.T) {
 
 	expectOutcome(t, "授予", register.grant(t, workGrant(node)), accessidentity.OperatorRegistrationRecorded)
 	expectOutcome(t, "重放", register.grant(t, workGrant(node)), accessidentity.OperatorRegistrationAlreadyRegistered)
+	expectOutcome(t, "同标识只换范围种类",
+		register.grant(t, workGrant(scopeOf(t, accessidentity.WorkScopeOffsite, "SYN-NODE-SZX-01"))),
+		accessidentity.OperatorRegistrationContentConflict)
+	expectOutcome(t, "同标识只换范围引用",
+		register.grant(t, workGrant(scopeOf(t, accessidentity.WorkScopeNode, "SYN-NODE-SIN-01"))),
+		accessidentity.OperatorRegistrationContentConflict)
 	expectOutcome(t, "同标识异作业范围", register.grant(t, workGrant(offsite)), accessidentity.OperatorRegistrationContentConflict)
 
 	standing := register.standing(t, subject)
