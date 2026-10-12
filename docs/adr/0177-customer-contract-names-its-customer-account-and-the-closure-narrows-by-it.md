@@ -77,6 +77,8 @@ PC [`CONTEXT.md`](../domain/party-commercial/CONTEXT.md) 已经写定合同属�
 
 - 票 [07：PC 闭包不按客户账户收窄客户合同候选](../../.scratch/customer-service-rule-contract-applicability/issues/07-closure-does-not-narrow-customer-contract-by-customer-account.md)（「现象」「分诊」两节）
 - [ADR-0176](./0176-customer-service-rule-contract-tier-selection-and-inheritance.md)：同一范围多户合同版的前提；决定五的 omitempty 先例在本记录决定三被显式偏离
+- [ADR-0014](./0014-versioned-canonicalization-shape-for-content-digest.md)：决定三部分停用其 Consequences「每次变化都要新增一个规范化版本并长期支持它」一句（只限客户合同一册、只限本次加 `customerAccount` 一键）
+- [ADR-0126](./0126-commercial-publication-digest-is-computed-server-side-per-register-and-approval-comes-through-a-pending-carrier.md)：PC 各册接进同一个 `PCC-1`，ADR-0014 那一条经它继承到客户合同一册
 - [ADR-0080](./0080-commercial-closure-resolves-the-contract-first-and-keys-settlement-by-it.md)：闭包先解合同、结算政策按合同选
 - [ADR-0153](./0153-declared-service-product-identity-narrows-commercial-resolution.md)：按键上一维收窄候选的先例形状
 - [ADR-0003](./0003-group-tenant-legal-entity-customer-account.md)：租户、法人、客户账户三级边界

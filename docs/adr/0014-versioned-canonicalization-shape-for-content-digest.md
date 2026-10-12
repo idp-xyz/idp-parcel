@@ -53,3 +53,4 @@ Amended by: [开发主线的产品就绪里程碑与能力范围判据](../produ
 - [参数登记册](../product/PILOT-PARAMETER-REGISTER.md)：`PAR-NET-16` 比价择优、`PAR-SET-03` 价卡取证
 - [ADR-0009：采用 Go 模块化单体并复用版本化 Bento 技术合同](./0009-go-modular-monolith-and-versioned-bento-contracts.md)
 - [ADR-0012：在 idp-parcel 内建立小包计价上下文](./0012-parcel-pricing-context-within-idp-parcel.md)
+- [ADR-0177：客户合同正文指名它的货主客户账户，闭包按解析键上的客户账户收窄客户合同候选](./0177-customer-contract-names-its-customer-account-and-the-closure-narrows-by-it.md)：决定三部分停用本记录 Consequences「每次变化都要新增一个规范化版本并长期支持它」一句——仅限 PC 客户合同一册加 `customerAccount` 一键那一次，`PCC-1` 不换号；其余各条不变
