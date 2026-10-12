@@ -1,7 +1,7 @@
 # 15 委托与履约的运营决定口：操作者渠道增「运营决定」能力面，委托侧五口与 TF 管理台上的决定与判断口换操作者 Intake
 
 Category: enhancement
-Status: in-progress——2026-09-25 通道 4 认领（用户令独立完成 ADR-0151 那件；前置 03、14 均已 resolved），分块逐笔进 main：之一至之四已进 main（见文末进展记录）；余下关段、建派送任务与两个判断口的换口要等演示环境走通操作者渠道（换口同笔撤隔离放行），受控关闭与重开等请求方格与 PS owner 对齐。此前 ready-for-agent——2026-09-24 随 ADR-0151 立（用户同日「同意你的决定，开干」）；2026-09-25 通道 2 按用户「开干前，全面审查，确保确实如此」复核后改定范围、阻塞与完成判据，复核记录见文末 Comments
+Status: in-progress——2026-10-12 通道 4 认领余下四口（通道 1 派单 `task-21973bb2`）：关段、建派送任务、有效时间判断、承运商首次有效收寄判断换「运营决定」操作者 Intake，同笔撤隔离放行（ADR-0150 决定三）；隔离 worktree `/home/tops/workspace/idp-parcel-mcp4-oc15f`、分支 `mcp4-oc15f`（基 `1e02d2ea`）。受控关闭与重开不在这一批，仍等 PS owner。此前 in-progress——2026-09-25 通道 4 认领（用户令独立完成 ADR-0151 那件；前置 03、14 均已 resolved），分块逐笔进 main：之一至之四已进 main（见文末进展记录）；余下关段、建派送任务与两个判断口的换口要等演示环境走通操作者渠道（换口同笔撤隔离放行），受控关闭与重开等请求方格与 PS owner 对齐。此前 ready-for-agent——2026-09-24 随 ADR-0151 立（用户同日「同意你的决定，开干」）；2026-09-25 通道 2 按用户「开干前，全面审查，确保确实如此」复核后改定范围、阻塞与完成判据，复核记录见文末 Comments
 Blocked by: 隔离放行名单上四口（关段、建派送任务、有效时间判断、承运商首次有效收寄判断）的换口——演示环境接上发行方与合成操作者授予（发行方见 [17](./17-demo-issuer-dex-and-synthetic-operators.md)，管理台登录门见 [07](./07-admin-web-login-gate.md)）；受控关闭与重开两口——请求方格与 PS owner 对齐（本票做什么第 3 条）。03、14 已 resolved
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`internal/accessidentity`（能力面授予格「运营决定」）；`cmd/parcel-api` 端点表里下列各口的 Intake 装配与装配测试；`internal/parcelshipment/adapters/http` 与 `internal/transportfulfillment/adapters/http` 各口的操作者 Intake。
