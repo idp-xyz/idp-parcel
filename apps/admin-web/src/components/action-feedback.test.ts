@@ -66,3 +66,15 @@ test('接入渠道未配置映到失败，文案带 403 与错误码原名', () 
     text: '接入渠道未配置（403 ACCESS_CHANNEL_NOT_CONFIGURED）',
   });
 });
+
+// Covers: 需要登录与没有授予同样映到失败（票 operator-channel/07），各报自己的标题、状态码与码名，不并进未配置那句。
+test('需要登录与没有授予各映到失败，文案各带自己的状态码与码名', () => {
+  deepEqual(feedbackFor({ kind: 'loginRequired' }, '登记'), {
+    state: 'failed',
+    text: '需要登录（401 OPERATOR_CREDENTIAL_REJECTED）',
+  });
+  deepEqual(feedbackFor({ kind: 'notGranted' }, '登记'), {
+    state: 'failed',
+    text: '没有授予（403 OPERATOR_NOT_GRANTED）',
+  });
+});

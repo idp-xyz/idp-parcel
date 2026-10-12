@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Timeline } from '@idpxyz/ui-primitives';
-import { SectionError } from '../../components/states';
+import { isOperatorRefusal } from '../../auth/access-refusal';
+import { OperatorRefusalNote, SectionError } from '../../components/states';
 import type { ApiResult } from '../catalogue-api';
 import { problemNote } from './presentation';
 import type { RevisionTimelineItem } from './revision-timeline';
@@ -76,6 +77,9 @@ export function RevisionHistorySection<Body>({
         没有历史」——今天没有问到；配置该上下文的访问通道后再看这一段。
       </p>
     );
+  }
+  if (isOperatorRefusal(answer)) {
+    return <OperatorRefusalNote kind={answer.kind} what="修订历史" className={note} />;
   }
   if (answer.kind === 'callerProblem') {
     return (

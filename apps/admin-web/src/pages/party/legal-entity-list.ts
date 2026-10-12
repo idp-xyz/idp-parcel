@@ -78,7 +78,7 @@ export function effectiveShareOfInUse(counts: LegalEntityCounts): number | null 
 }
 
 /**
- * 工具条右端的计数摘要（票 01 裁决 1）：总数与当前显示数分开报。四态里的空态说的是「登记册为空」，
+ * 工具条右端的计数摘要（票 01 裁决 1）：总数与当前显示数分开报。页面态里的空态说的是「登记册为空」，
  * 筛选筛没了是「当前条件下无匹配」，两者续办不同（前者去登记，后者改条件）——所以筛空时这里照显
  * 「共 N 个，当前显示 0 个」，表格区另显 legalEntityNoMatchNote，不把页面切成空态。
  */

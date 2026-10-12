@@ -26,6 +26,19 @@ test('没问到的三种形态都不是 0，措辞不说「没有」', () => {
   deepEqual(transport, { state: 'unavailable', reason: 'failed' });
 });
 
+// Covers: 需要登录与没有授予各自成格（票 operator-channel/07），不折进「故障」那句——续办不同，措辞同样只说「没问到」。
+test('需要登录与没有授予各报自己那一格，不并进故障', () => {
+  const login = pendingEvaluationsCellOf({ kind: 'loginRequired' });
+  deepEqual(login, { state: 'unavailable', reason: 'loginRequired' });
+  match(pendingEvaluationsNote(login), /需要登录（401 OPERATOR_CREDENTIAL_REJECTED）/);
+  match(pendingEvaluationsNote(login), /没问到/);
+
+  const grant = pendingEvaluationsCellOf({ kind: 'notGranted' });
+  deepEqual(grant, { state: 'unavailable', reason: 'notGranted' });
+  match(pendingEvaluationsNote(grant), /没有授予（403 OPERATOR_NOT_GRANTED）/);
+  match(pendingEvaluationsNote(grant), /没问到/);
+});
+
 // Covers: 服务端作答且空数组才是真零，措辞才允许说「没有」；asOf 随答案带出。
 test('服务端答空数组才是真零', () => {
   const cell = pendingEvaluationsCellOf({

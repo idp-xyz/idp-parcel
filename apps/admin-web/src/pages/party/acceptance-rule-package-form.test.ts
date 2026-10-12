@@ -306,3 +306,10 @@ test('某一集的下拉选项 = 服务端码 × 本页中文，顺序照服务�
   deepEqual(setOptionsOf({ kind: 'unconfigured' }, 'stage'), { kind: 'unconfigured' });
   deepEqual(setOptionsOf({ kind: 'unavailable' }, 'stage'), { kind: 'unavailable' });
 });
+
+test('词表判读：需要登录与没有授予各成一格，传到每一集的下拉，不折成读不到（票 operator-channel/07）', () => {
+  deepEqual(vocabularyStateOf({ kind: 'loginRequired' }), { kind: 'loginRequired' });
+  deepEqual(vocabularyStateOf({ kind: 'notGranted' }), { kind: 'notGranted' });
+  deepEqual(setOptionsOf(vocabularyStateOf({ kind: 'loginRequired' }), 'stage'), { kind: 'loginRequired' });
+  deepEqual(setOptionsOf(vocabularyStateOf({ kind: 'notGranted' }), 'stage'), { kind: 'notGranted' });
+});

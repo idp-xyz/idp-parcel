@@ -141,3 +141,8 @@ test('请求方下拉：未读到是 loading，403 是可辨的未配置，别�
     { kind: 'unavailable' },
   );
 });
+
+test('请求方下拉：需要登录与没有授予各成一格，不并进未配置，也不折成读不到（票 operator-channel/07）', () => {
+  deepEqual(partyOptionsOf({ kind: 'loginRequired' }, {}), { kind: 'loginRequired' });
+  deepEqual(partyOptionsOf({ kind: 'notGranted' }, {}), { kind: 'notGranted' });
+});

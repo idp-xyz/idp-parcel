@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
+import { accessRefusalHeadline, accessRefusalTitle } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import { cancellationPartyLabels } from './presentation';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
@@ -231,7 +232,11 @@ function PartyPicker({
     <>
       <select className={selectClass} value="" disabled>
         <option value="">
-          {parties.kind === 'loading' ? '正在读词表…' : parties.kind === 'unconfigured' ? '词表未就绪（接入渠道未配置）' : '词表读不到'}
+          {parties.kind === 'loading'
+            ? '正在读词表…'
+            : parties.kind === 'unavailable'
+              ? '词表读不到'
+              : `词表未就绪（${accessRefusalTitle(parties.kind)}）`}
         </option>
       </select>
       <span className="block text-[11px] text-idpxyz-textMuted mt-1">
@@ -239,7 +244,9 @@ function PartyPicker({
           ? '请求方的封闭集正在从服务端词表读口读取。'
           : parties.kind === 'unconfigured'
             ? '词表读口在接入渠道未配置那堵墙前（403）；表单不内置任何码顶替，四口同在墙前，此时本表单也提交不了。'
-            : '词表读口未形成答案；表单不内置任何码顶替，稍后重开本签再试。'}
+            : parties.kind === 'unavailable'
+              ? '词表读口未形成答案；表单不内置任何码顶替，稍后重开本签再试。'
+              : `词表读口答${accessRefusalHeadline(parties.kind)}；表单不内置任何码顶替。`}
       </span>
     </>
   );

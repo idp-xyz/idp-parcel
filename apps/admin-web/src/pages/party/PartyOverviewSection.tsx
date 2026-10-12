@@ -1,6 +1,6 @@
 import type { ReactNode } from 'react';
 import { Button } from '@idpxyz/ui-primitives';
-import { SectionError } from '../../components/states';
+import { OperatorRefusalNote, SectionError } from '../../components/states';
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../catalogue-api';
 import {
@@ -64,6 +64,9 @@ function SectionBody<Row>({
           访问通道尚未配置：{endpoint} 当前不可用（403）。这不是「没有」——今天没有问到；配置该上下文的访问通道后重新打开抽屉。
         </p>
       );
+    case 'loginRequired':
+    case 'notGranted':
+      return <OperatorRefusalNote kind={state.kind} what={endpoint} className={note} />;
     case 'callerProblem':
       return (
         <p className={note}>

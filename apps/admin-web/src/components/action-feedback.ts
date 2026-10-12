@@ -1,3 +1,4 @@
+import { accessRefusalHeadline } from '../auth/access-refusal';
 import type { ApiResult } from '../pages/catalogue-api';
 
 /**
@@ -29,8 +30,8 @@ export function pendingText(verb: string): string {
 /**
  * `result` 为 `null` 表示请求在途（还没有结果代数可映）。
  *
- * `unconfigured` 归失败而不是单立一态：对操作者而言这一次动作同样没有形成答案；它「重试不会好」那层
- * 说明各页已各自整段写明，这里只给能与别处对得上的那一句。
+ * 接入那一格的三态（未配置 / 需要登录 / 没有授予）归失败而不是单立一态：对操作者而言这一次动作同样没有形成答案；
+ * 它们「重试不会好」那层说明与续办在各页的答案区，这里只给能与别处对得上的那一句（标题加状态码与码名）。
  */
 export function feedbackFor(result: ApiResult<unknown> | null, verb: string): ActionFeedback {
   if (result === null) return { state: 'pending', text: pendingText(verb) };
@@ -48,7 +49,9 @@ export function feedbackFor(result: ApiResult<unknown> | null, verb: string): Ac
       return { state: 'failed', text: message === '' ? '请求未到达 parcel-api' : result.message };
     }
     case 'unconfigured':
-      return { state: 'failed', text: '接入渠道未配置（403 ACCESS_CHANNEL_NOT_CONFIGURED）' };
+    case 'loginRequired':
+    case 'notGranted':
+      return { state: 'failed', text: accessRefusalHeadline(result.kind) };
   }
 }
 

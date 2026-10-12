@@ -71,3 +71,20 @@ test('带检索或筛选条件答出零行仍是 ready，不带条件的零行�
   deepEqual(catalogueViewState(answer, 3, () => {}, { ...options, narrowed: true }), { kind: 'ready' });
   deepEqual(catalogueViewState(answer, 3, () => {}, options), { kind: 'ready' });
 });
+
+// 票 operator-channel/07：接入那一格拆三态之后，目录页的需要登录与没有授予各成一态，不并进未配置、不当错误重试、
+// 也不当「目录为空」。续办句在状态件里（与哪一册无关），这里只交找谁与依据。
+// Covers: 两格各成同名的一态，事实只带主责上下文与场景出处；未配置照旧是未配置。
+test('需要登录与没有授予各成一态，只带主责上下文与出处', () => {
+  const options = {
+    module: moduleInfo,
+    endpoint: 'GET /pricing-price-cards',
+    emptyTitle: '暂无',
+    emptyDescription: '无',
+  };
+  const facts = { owner: moduleInfo.owner, source: moduleInfo.source };
+
+  deepEqual(catalogueViewState({ kind: 'loginRequired' }, 0, () => {}, options), { kind: 'loginRequired', facts });
+  deepEqual(catalogueViewState({ kind: 'notGranted' }, 0, () => {}, options), { kind: 'notGranted', facts });
+  equal(catalogueViewState({ kind: 'unconfigured' }, 0, () => {}, options).kind, 'unconfigured');
+});

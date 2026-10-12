@@ -214,6 +214,9 @@ function viewStateOf(
             '(见「登记序列」签,ADR-0085),它挂的是同一堵墙,因此今天同答未配置。',
         },
       };
+    case 'loginRequired':
+    case 'notGranted':
+      return { kind: answer.kind, facts: { owner: info.owner, source: info.source } };
     case 'callerProblem':
       return {
         kind: 'error',

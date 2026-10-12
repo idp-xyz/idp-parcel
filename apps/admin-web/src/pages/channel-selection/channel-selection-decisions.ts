@@ -4,6 +4,7 @@
 // 未配置」分不分得开、按标识查不到是终局答案还是故障、出局因由会不会被折成一句笼统的「失败」——而页面
 // 组件要跑起来得有 React 与 DOM。判读是纯函数就能拿测试钉住（同 effective-time-judgment 的先例）。
 
+import type { OperatorRefusal } from '../../auth/access-refusal';
 import type { ModuleInfo } from '../../navigation';
 import type { TemplateViewState } from '../../templates/state-slot';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
@@ -150,6 +151,7 @@ export type DecisionDetailState =
   | { kind: 'decision'; decision: ChannelSelectionDecisionRecord }
   | { kind: 'notVisible'; decisionId: string }
   | { kind: 'unconfigured' }
+  | OperatorRefusal
   | { kind: 'error'; message: string; canRetry: boolean };
 
 export function decisionDetailState(
@@ -161,7 +163,9 @@ export function decisionDetailState(
     case 'outcome':
       return { kind: 'decision', decision: answer.body.decision };
     case 'unconfigured':
-      return { kind: 'unconfigured' };
+    case 'loginRequired':
+    case 'notGranted':
+      return { kind: answer.kind };
     case 'callerProblem':
       if (answer.status === 404 && answer.code === 'CHANNEL_SELECTION_DECISION_NOT_VISIBLE') {
         return { kind: 'notVisible', decisionId };

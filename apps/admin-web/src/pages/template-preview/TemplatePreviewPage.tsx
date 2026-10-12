@@ -39,7 +39,7 @@ import {
 } from '../../templates/demo';
 import { ObjectWorkspaceDemo } from './ObjectWorkspaceDemo';
 
-// 四态切换器的档位。ready 之外四档演示 StateSlot 的各个非就绪态；
+// 状态切换器的档位。ready 之外各档演示 StateSlot 的各个非就绪态；
 // 文案在这里给演示值，真实页面的文案由各自业务场景决定。
 type PreviewStateKind = TemplateViewState['kind'];
 
@@ -49,6 +49,8 @@ const STATE_OPTIONS: { kind: PreviewStateKind; label: string }[] = [
   { kind: 'empty', label: '空态' },
   { kind: 'error', label: '错误' },
   { kind: 'unconfigured', label: '未配置' },
+  { kind: 'loginRequired', label: '需要登录' },
+  { kind: 'notGranted', label: '没有授予' },
 ];
 
 // 演示页自己的下拉样子：与模板过滤条上的控件同高同字号。不从别的页面借类名，也不让模板为演示页导出内部常量。
@@ -169,6 +171,13 @@ export function TemplatePreviewPage() {
             source: '本页为模板验收页，无业务出处',
             unlock: '真实页面的放行条件由各自准入闸门决定',
           },
+        };
+      case 'loginRequired':
+      case 'notGranted':
+        // 续办句用状态件的缺省字（与真实页面同一句），演示只给事实区的长相。
+        return {
+          kind: stateKind,
+          facts: { owner: '演示上下文（synthetic-demo）', source: '本页为模板验收页，无业务出处' },
         };
     }
   }, [stateKind]);
@@ -307,7 +316,7 @@ export function TemplatePreviewPage() {
         </span>
       </div>
 
-      {/* 四态切换器：切换所有模板实例共用的 viewState，演示 StateSlot 各态。 */}
+      {/* 状态切换器：切换所有模板实例共用的 viewState，演示 StateSlot 各态。 */}
       <div className="flex items-center gap-2 border-b border-idpxyz-border px-4 py-1.5 shrink-0">
         <span className="text-[11px] text-idpxyz-textMuted shrink-0">视图状态</span>
         {STATE_OPTIONS.map((option) => (

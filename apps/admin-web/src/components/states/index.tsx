@@ -1,10 +1,18 @@
 import type { ReactNode } from 'react';
-import { AlertTriangle, PlugZap, RotateCw } from 'lucide-react';
+import { AlertTriangle, RotateCw } from 'lucide-react';
 import { TrulyEmptyState } from '@idpxyz/ui-primitives';
 
 export { SectionError, type SectionErrorProps } from './section-error';
+export {
+  OperatorRefusalNote,
+  OperatorRefusalState,
+  UnconfiguredState,
+  type OperatorRefusalStateProps,
+  type UnconfiguredFacts,
+  type UnconfiguredStateProps,
+} from './access-state';
 
-// 页面四态展示组件。命名与 props 是跨会话契约（v2 最终版）：templates/state-slot.tsx
+// 页面状态展示组件。命名与 props 是跨会话契约（v2 最终版）：templates/state-slot.tsx
 // 与 pages/shipment-request 按名导入，改名或收紧必填都会拆到消费方。
 // 全部 props 可选、内置中文兜底文案；样式只用 idpxyz 色 token。
 //
@@ -12,10 +20,10 @@ export { SectionError, type SectionErrorProps } from './section-error';
 // 那条红线；**区块级**在 section-error.tsx（一段区只红那一段）；**动作级**是登记 / 发布口答案区（RegistrationPanel
 // 的 answered 态）；**后台刷新**是 useRegisterList 重取时保留旧答案。后两层已在各自的件里，这里不另出件。
 //
-// 四态各自回答的问题不同——加载=还没答案；空=答案是「没有记录」；错误=这次没形成
-// 答案（可重试）；未配置=接入渠道未配置（实例半边未就绪），改请求或重试都不会好。
-// 把「未配置」与「错误」并档会诱导人反复重试一件人不来配就永远不会好的事，
-// 分档依据 ADR-0022 与 ADR-0055 的「未配置即拒」格。
+// 各态回答的问题不同——加载=还没答案；空=答案是「没有记录」；错误=这次没形成答案（可重试）；接入那一格=请求没过
+// 接入渠道，改请求或重试都不会好，按恢复动作再分三态（票 operator-channel/07，件在 access-state.tsx）：未配置=
+// 渠道或部署参数没就位，需要登录=凭据没被认下，没有授予=缺授予。把接入那一格与「错误」并档会诱导人反复重试一件
+// 人不来配、不来登、不来授就永远不会好的事，分档依据 ADR-0022、ADR-0055 的「未配置即拒」格与 ADR-0100 决定四。
 
 /** 加载态：脉冲骨架块。不承诺进度，只表示「还没答案」。 */
 export function LoadingState({ label }: { label?: string }) {
@@ -92,70 +100,6 @@ export function ErrorState({ title, code, description, onRetry }: ErrorStateProp
           重试
         </button>
       ) : null}
-    </div>
-  );
-}
-
-/**
- * 未配置态的结构化事实。三个字段都是「读的人拿去行动」的信息，不是装饰：
- * 主责上下文说明找谁、场景出处说明依据哪份文档（写文档名，不写行号）、
- * 放行条件说明什么动作会解除本态。全部可选——只给 description 字符串的
- * 既有调用方不受影响。
- */
-export interface UnconfiguredFacts {
-  /** 主责上下文（领域语言名 + 目录名），取 navigation 的 moduleInfoById.owner 原文。 */
-  owner?: string;
-  /** 场景出处：权威文档名与小节说法。 */
-  source?: string;
-  /** 放行条件：哪个闸门或登记动作会解除本态。 */
-  unlock?: string;
-}
-
-export interface UnconfiguredStateProps {
-  title?: string;
-  description?: string;
-  facts?: UnconfiguredFacts;
-}
-
-const unconfiguredFactLabels: ReadonlyArray<[keyof UnconfiguredFacts, string]> = [
-  ['owner', '主责上下文'],
-  ['source', '场景出处'],
-  ['unlock', '放行条件'],
-];
-
-/**
- * 未配置态：403 + ACCESS_CHANNEL_NOT_CONFIGURED 的专属呈现。
- * 这不是故障——接入渠道未配置属实例半边未就绪（等待登记册里的渠道参数），
- * 改请求或重试都不会改变结果，出路是去完成渠道配置。
- */
-export function UnconfiguredState({ title, description, facts }: UnconfiguredStateProps) {
-  const factRows = unconfiguredFactLabels
-    .map(([key, label]) => [label, facts?.[key]] as const)
-    .filter((entry): entry is readonly [string, string] => Boolean(entry[1]));
-
-  return (
-    <div className="text-center max-w-[460px] px-6">
-      <PlugZap className="h-8 w-8 mx-auto mb-3 text-idpxyz-textMuted" aria-hidden />
-      <p className="text-[15px] text-idpxyz-textBright mb-1">{title ?? '接入渠道未配置'}</p>
-      <p className="text-[12px] leading-5 text-idpxyz-textMuted">
-        {description ??
-          '该能力的接入渠道尚未配置（实例参数未就绪），这不是故障：重试不会改变结果，需要先在参数登记册完成渠道配置。'}
-      </p>
-      {factRows.length > 0 ? (
-        <dl className="mt-3 border-t border-idpxyz-border pt-2.5 text-left space-y-1.5">
-          {factRows.map(([label, value]) => (
-            <div key={label} className="flex gap-2">
-              <dt className="shrink-0 w-[64px] text-[11px] leading-4 text-idpxyz-textMuted">
-                {label}
-              </dt>
-              <dd className="text-[11px] leading-4 text-idpxyz-text">{value}</dd>
-            </div>
-          ))}
-        </dl>
-      ) : null}
-      <p className="mt-2 text-[11px] font-mono text-idpxyz-textMuted">
-        ACCESS_CHANNEL_NOT_CONFIGURED
-      </p>
     </div>
   );
 }

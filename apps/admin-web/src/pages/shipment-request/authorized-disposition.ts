@@ -1,3 +1,4 @@
+import { operatorRefusalSentence, type OperatorRefusalKind } from '../../auth/access-refusal';
 import type { ModuleInfo } from '../../navigation';
 import type { TemplateViewState } from '../../templates/state-slot';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
@@ -78,9 +79,13 @@ export function restrictedItemText(item: RestrictedControlItemRecord): string {
   return parts.join(' · ');
 }
 
-/** 处置命令口的一次答复。渠道未配置是今天的预期答案,不是故障,因此单列一格(与复核页同形)。 */
+/**
+ * 处置命令口的一次答复。渠道未配置是今天的预期答案,不是故障,因此单列一格(与复核页同形);需要登录与
+ * 没有授予同理,`refused` 多带那一格,页面据它在「需要登录」时接一颗重新登录。
+ */
 export type DispositionCommandNote =
   | { tone: 'unconfigured'; text: string }
+  | { tone: 'refused'; kind: OperatorRefusalKind; text: string }
   | { tone: 'outcome'; text: string }
   | { tone: 'problem'; text: string };
 
@@ -98,6 +103,9 @@ export function dispositionCommandNoteOf(
         tone: 'unconfigured',
         text: `「${label}」未执行:接入渠道尚未配置(HTTP 403 ACCESS_CHANNEL_NOT_CONFIGURED)。处置人与授权依据要由已认证的操作员身份翻译得出(PAR-INT-01),页面不代签,也不替任何角色决定去向。`,
       };
+    case 'loginRequired':
+    case 'notGranted':
+      return { tone: 'refused', kind: answer.kind, text: operatorRefusalSentence(answer.kind, `「${label}」未执行`) };
     case 'callerProblem':
       return { tone: 'problem', text: `「${label}」被拒(HTTP ${answer.status}):${answer.code}` };
     case 'noAnswer':

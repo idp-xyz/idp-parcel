@@ -5,11 +5,14 @@
 // catalogue-api 传输上,见同目录 catalogue-api.ts(两族读面语义不同,分文件即分口径)。
 //
 // 响应判读按 ADR-0022:HTTP 状态码只回答「服务端有没有形成答案」,业务判别一律在
-// 响应体的 `outcome`,取封闭集合的原字符串,传输层不合并、不改名。五格判别与委托
+// 响应体的 `outcome`,取封闭集合的原字符串,传输层不合并、不改名。分格判别与委托
 // 查阅页同款,每格的下一步动作不同:
 //   outcome        —— 2xx,答案已形成,按 outcome 呈现给操作员;
 //   unconfigured   —— 403 + ACCESS_CHANNEL_NOT_CONFIGURED,接入渠道未配置,改请求
 //                     或重试都不会好,要去登记渠道参数(ADR-0055 的「未配置即拒」格);
+//   loginRequired / notGranted —— 401 + OPERATOR_CREDENTIAL_REJECTED 要重新登录、403 +
+//                     OPERATOR_NOT_GRANTED 要登记授予(ADR-0100 决定四;与上一格同在
+//                     auth/access-refusal.ts 判);
 //   callerProblem  —— 其余 4xx,调用方的错,重发同样内容不会改变结果;
 //   noAnswer       —— 5xx,服务端没形成答案,可退避重试;
 //   transport      —— fetch 未通或响应不是 JSON:parcel-api 一律写 JSON,非 JSON
@@ -18,6 +21,7 @@
 // 作用域与页大小由服务端接入面从认证与授权结果裁决(ADR-0076:运营查阅的授权边界
 // 只有租户,页大小按渠道契约),本目录不送任何自报身份或分页参数。
 
+import { accessRefusalOf, type AccessRefusal } from '../../auth/access-refusal';
 import { withBearer } from '../../auth/bearer';
 
 // 路径前缀与委托查阅同一裁决:前端统一带 /api 发起,开发代理剥前缀转发;由装配侧
@@ -89,7 +93,7 @@ export interface ProjectionDetailResponseBody {
 
 export type ApiResult<Body> =
   | { kind: 'outcome'; status: number; body: Body }
-  | { kind: 'unconfigured' }
+  | AccessRefusal
   | { kind: 'callerProblem'; status: number; code: string }
   | { kind: 'noAnswer'; status: number; code: string }
   | { kind: 'transport'; message: string };
@@ -146,9 +150,8 @@ async function exchange<Body>(path: string, init: RequestShape): Promise<ApiResu
 
   const code =
     (parsed as { error?: { code?: string } } | null)?.error?.code ?? 'UNKNOWN';
-  if (response.status === 403 && code === 'ACCESS_CHANNEL_NOT_CONFIGURED') {
-    return { kind: 'unconfigured' };
-  }
+  const refusal = accessRefusalOf(response.status, code);
+  if (refusal) return refusal;
   if (response.status >= 500) {
     return { kind: 'noAnswer', status: response.status, code };
   }

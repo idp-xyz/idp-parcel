@@ -5,6 +5,7 @@
 // 上去：没选请求方、没填规则、同一请求方写了两行、一行都没有——都由服务端答（逐格问题或预览上的`未受理`带成因），
 // 表单不代判也不静默补齐、不给默认不预选。请求方的封闭集从服务端词表读口取（票 20），这里没有任何一份内置的码。
 
+import { isOperatorRefusal, type OperatorRefusal } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import {
   vocabularyOptions,
@@ -94,13 +95,15 @@ export function authorizationRuleRenderedPaths(draft: AuthorizationRuleDraft): s
 
 /**
  * 请求方下拉的选项来源，由词表读口的答复判读：读到了就是服务端码 × 本页中文词表（vocabularyOptions，集外原样）；
- * 403 是可辨的「未配置」——下拉显占位、不内置任何码顶替；别的失败与「答复里没有 `party` 集」都是读不到，同样只显占位。
+ * 403 是可辨的「未配置」——下拉显占位、不内置任何码顶替；需要登录与没有授予同样可辨、各成一格（票 operator-channel/07），
+ * 续办不同；别的失败与「答复里没有 `party` 集」都是读不到，同样只显占位。
  * 选项里没有任何一项带「选中」：不给默认、不预选归表单硬句。
  */
 export type PartyOptionsState =
   | { kind: 'loading' }
   | { kind: 'options'; options: VocabularyOption[] }
   | { kind: 'unconfigured' }
+  | OperatorRefusal
   | { kind: 'unavailable' };
 
 export function partyOptionsOf(
@@ -109,6 +112,7 @@ export function partyOptionsOf(
 ): PartyOptionsState {
   if (answer === null) return { kind: 'loading' };
   if (answer.kind === 'unconfigured') return { kind: 'unconfigured' };
+  if (isOperatorRefusal(answer)) return { kind: answer.kind };
   if (answer.kind !== 'outcome') return { kind: 'unavailable' };
   const party = answer.body.sets.find((set) => set.name === 'party');
   if (!party) return { kind: 'unavailable' };

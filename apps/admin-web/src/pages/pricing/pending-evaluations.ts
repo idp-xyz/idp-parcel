@@ -4,6 +4,7 @@
 // 摘要条上一个 0 会被读成「今天没有评价被挂起」，而 403 / 传输故障 / 还没回来时它其实是「今天没问到」。
 // 组件只负责摆。
 
+import { accessRefusalHeadline, isOperatorRefusal, type AccessRefusalKind } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import type { PendingSeriesEvaluationsResponseBody } from './api';
 
@@ -11,13 +12,13 @@ import type { PendingSeriesEvaluationsResponseBody } from './api';
  * 三种答案。**三种不是两种**：
  *
  * - `unasked`——请求还没回来。不摆数字，也不摆 0。
- * - `unavailable`——问了但没得到答案（403 未配置 / 服务端无法作答 / 传输故障）。同样不摆 0；`reason`
- *   分开，因为续办动作不同：未配置去登记接入渠道，其余是故障。
+ * - `unavailable`——问了但没得到答案（接入那一格 / 服务端无法作答 / 传输故障）。同样不摆 0；`reason`
+ *   分开，因为续办动作不同：未配置去登记接入渠道，需要登录去重新登录，没有授予去登记授予，其余是故障。
  * - `counted`——服务端作答了。`total` 为 0 时才是真零，措辞才允许说「没有」。
  */
 export type PendingEvaluationsCell =
   | { state: 'unasked' }
-  | { state: 'unavailable'; reason: 'unconfigured' | 'failed' }
+  | { state: 'unavailable'; reason: AccessRefusalKind | 'failed' }
   | {
       state: 'counted';
       asOf: string;
@@ -29,7 +30,9 @@ export function pendingEvaluationsCellOf(
   answer: ApiResult<PendingSeriesEvaluationsResponseBody> | null,
 ): PendingEvaluationsCell {
   if (answer === null) return { state: 'unasked' };
-  if (answer.kind === 'unconfigured') return { state: 'unavailable', reason: 'unconfigured' };
+  if (answer.kind === 'unconfigured' || isOperatorRefusal(answer)) {
+    return { state: 'unavailable', reason: answer.kind };
+  }
   if (answer.kind !== 'outcome') return { state: 'unavailable', reason: 'failed' };
   const byKind = answer.body.counts.map((count) => ({
     kind: count.kind,
@@ -51,9 +54,11 @@ export function pendingEvaluationsNote(cell: PendingEvaluationsCell): string {
     case 'unasked':
       return '挂起评价数：尚未取到。';
     case 'unavailable':
-      return cell.reason === 'unconfigured'
-        ? '挂起评价数未取到：接入渠道未配置（403）。这是「今天没问到」，不是「没有挂起评价」。'
-        : '挂起评价数未取到；这是「今天没问到」，不是「没有挂起评价」。';
+      if (cell.reason === 'unconfigured') {
+        return '挂起评价数未取到：接入渠道未配置（403）。这是「今天没问到」，不是「没有挂起评价」。';
+      }
+      if (cell.reason === 'failed') return '挂起评价数未取到；这是「今天没问到」，不是「没有挂起评价」。';
+      return `挂起评价数未取到：${accessRefusalHeadline(cell.reason)}。这是「今天没问到」，不是「没有挂起评价」。`;
     case 'counted':
       return cell.total === 0
         ? '因序列未解析而待判断的评价：没有。'

@@ -4,6 +4,7 @@ import {
   LoadingState,
   EmptyState,
   ErrorState,
+  OperatorRefusalState,
   UnconfiguredState,
   type UnconfiguredFacts,
 } from '../components/states';
@@ -11,21 +12,26 @@ import { skeletonOf, type LoadingShape } from './loading-shape';
 
 export type { LoadingShape } from './loading-shape';
 
-// 页面四态的判别联合：模板只认 kind，不自己猜「没数据算不算空」——
+// 页面状态的判别联合：模板只认 kind，不自己猜「没数据算不算空」——
 // 空态与未配置态的区分是业务判断（闸门未放行 ≠ 暂无数据），必须由调用方给出。
+// 接入那一格分三态（票 operator-channel/07）：未配置、需要登录、没有授予，各自一格，不并进 unconfigured。
 export type TemplateViewState =
   | { kind: 'ready' }
   | { kind: 'loading'; shape?: LoadingShape; cols?: number; rows?: number }
   | { kind: 'empty'; title?: string; description?: string }
   | { kind: 'error'; title?: string; description?: string; onRetry?: () => void }
-  | { kind: 'unconfigured'; title?: string; description?: string; facts?: UnconfiguredFacts };
+  | { kind: 'unconfigured'; title?: string; description?: string; facts?: UnconfiguredFacts }
+  | { kind: 'loginRequired'; title?: string; description?: string; facts?: UnconfiguredFacts }
+  | { kind: 'notGranted'; title?: string; description?: string; facts?: UnconfiguredFacts };
 
 export type { UnconfiguredFacts } from '../components/states';
 
 export interface StateSlotProps {
   state: Exclude<TemplateViewState, { kind: 'ready' }>;
   /** 逐态覆盖默认渲染；状态组件的默认呈现不合本页需要时，调用方可先用它绕行。 */
-  override?: Partial<Record<'loading' | 'empty' | 'error' | 'unconfigured', () => ReactNode>>;
+  override?: Partial<
+    Record<'loading' | 'empty' | 'error' | 'unconfigured' | 'loginRequired' | 'notGranted', () => ReactNode>
+  >;
 }
 
 /**
@@ -64,7 +70,7 @@ export function LoadingSkeleton({ shape, cols, rows }: { shape?: LoadingShape; c
   }
 }
 
-// 三个页面模板共享的四态渲染槽。状态组件从 ../components/states 按名导入；
+// 页面模板共享的状态渲染槽。状态组件从 ../components/states 按名导入；
 // 集中在这一个文件里，组件契约变动时只改这里。
 export function StateSlot({ state, override }: StateSlotProps) {
   switch (state.kind) {
@@ -116,5 +122,23 @@ export function StateSlot({ state, override }: StateSlotProps) {
           )}
         </>
       );
+    case 'loginRequired':
+    case 'notGranted': {
+      const custom = override?.[state.kind];
+      return (
+        <>
+          {custom ? (
+            custom()
+          ) : (
+            <OperatorRefusalState
+              kind={state.kind}
+              title={state.title}
+              description={state.description}
+              facts={state.facts}
+            />
+          )}
+        </>
+      );
+    }
   }
 }

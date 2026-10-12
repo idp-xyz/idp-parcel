@@ -128,15 +128,20 @@ export function StageAdmissionPage() {
     takeoversAnswer,
   ];
 
-  // 四册合成一个页面态。未配置优先于错误：四册共用同一个 Intake，403 是对整个
-  // 读取入口的确定陈述；错误态只取第一个失败册的事实，重试一次重取四册。
+  // 四册合成一个页面态。接入那一格（未配置、需要登录、没有授予）优先于错误：四册共用同一个 Intake，
+  // 那是对整个读取入口的确定陈述；错误态只取第一个失败册的事实，重试一次重取四册。
   let viewState: TemplateViewState = { kind: 'ready' };
   const unconfigured = answers.find((answer) => answer?.kind === 'unconfigured');
+  const refused = answers.find(
+    (answer) => answer?.kind === 'loginRequired' || answer?.kind === 'notGranted',
+  );
   const failed = answers.find(
     (answer) =>
       answer !== null &&
       answer.kind !== 'outcome' &&
-      answer.kind !== 'unconfigured',
+      answer.kind !== 'unconfigured' &&
+      answer.kind !== 'loginRequired' &&
+      answer.kind !== 'notGranted',
   );
   if (unconfigured) {
     viewState = {
@@ -149,6 +154,8 @@ export function StageAdmissionPage() {
         unlock: '配置该上下文的访问通道后重新查询；页面不会用演示数据代替。',
       },
     };
+  } else if (refused) {
+    viewState = { kind: refused.kind, facts: { owner: info.owner, source: info.source } };
   } else if (failed) {
     viewState =
       failed.kind === 'transport'

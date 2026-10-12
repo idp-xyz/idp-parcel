@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Textarea } from '@idpxyz/ui-primitives';
 import type { ApiResult } from '../catalogue-api';
 import type { RegistrationResponseBody } from '../../components/registration';
+import { OperatorRefusalNote } from '../../components/states';
 import {
   reviewReferenceSeries,
   seriesReviewOutcomeLabels,
@@ -150,6 +151,9 @@ function ReviewAnswerNote({ state }: { state: PanelState }) {
           半边）后由装配侧换上真 Intake 即放行；此前复核仍走受控登记 CLI。
         </p>
       );
+    case 'loginRequired':
+    case 'notGranted':
+      return <OperatorRefusalNote kind={answer.kind} what="复核" />;
     case 'callerProblem':
       return (
         <p className="text-xs text-idpxyz-danger">

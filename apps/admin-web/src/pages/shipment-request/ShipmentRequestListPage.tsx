@@ -171,7 +171,7 @@ function inspectorOf(row: ShipmentRequestSummary): InspectorContent {
   };
 }
 
-// 取数答案 → 模板四态。空列表走空态而不是就绪态的空表格：模板明言不从 rows.length
+// 取数答案 → 模板页面态。空列表走空态而不是就绪态的空表格：模板明言不从 rows.length
 // 推断，「暂无数据」这一业务事实要由本页说出来。
 function viewStateOf(
   answer: ApiResult<ViewsListResponseBody> | null,
@@ -197,6 +197,9 @@ function viewStateOf(
           '查询端点已建立，但接入渠道未配置（403 ACCESS_CHANNEL_NOT_CONFIGURED）。' +
           '恢复动作是提供渠道参数（PAR-INT-01），改请求或重试不会改变结果。',
       };
+    case 'loginRequired':
+    case 'notGranted':
+      return { kind: answer.kind, facts: { owner: info.owner, source: info.source } };
     case 'callerProblem':
       return {
         kind: 'error',

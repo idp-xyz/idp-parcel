@@ -1,8 +1,10 @@
+import { accessRefusalOf, type AccessRefusal } from '../auth/access-refusal';
 import { withBearer } from '../auth/bearer';
 
 export type ApiResult<Body> =
   | { kind: 'outcome'; status: number; body: Body }
-  | { kind: 'unconfigured' }
+  // 接入那一格三态（unconfigured / loginRequired / notGranted），判据与续办在 auth/access-refusal.ts。
+  | AccessRefusal
   // `detail` 是服务端随 4xx 交回的理由散文（票 admin-web-group-legal-entities/11；首例是 party-commercial 写口的
   // 形状拒绝）。散文不是代数：原样示出、不查表、不据此分支——纪律同登记答案的 `cause`。缺席即服务端没给，
   // 不是漏字段；5xx 不带它，那是依赖故障的内部原文。
@@ -131,9 +133,8 @@ function classifyMasterDataResponse<Body>(
 
   const problem = (payload as { error?: { code?: string; detail?: unknown } } | null)?.error;
   const code = problem?.code ?? 'UNKNOWN';
-  if (response.status === 403 && code === 'ACCESS_CHANNEL_NOT_CONFIGURED') {
-    return { kind: 'unconfigured' };
-  }
+  const refusal = accessRefusalOf(response.status, code);
+  if (refusal) return refusal;
   if (response.status >= 500) {
     return { kind: 'noAnswer', status: response.status, code };
   }

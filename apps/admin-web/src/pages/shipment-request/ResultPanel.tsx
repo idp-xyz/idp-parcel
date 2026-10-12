@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { UnconfiguredState } from '../../components/states';
+import { OperatorRefusalState, UnconfiguredState } from '../../components/states';
 import type { ApiResult } from './api';
 import { problemNote } from './presentation';
 import { NoticeCard } from './controls';
@@ -33,6 +33,11 @@ export function ResultPanel<Body>({
       // 403 + ACCESS_CHANNEL_NOT_CONFIGURED:改请求或重试都不会好,要去配置接入
       // 渠道。组件契约归 components/states,这里只按名使用。
       return <UnconfiguredState />;
+
+    case 'loginRequired':
+    case 'notGranted':
+      // 401 要重新登录、403 OPERATOR_NOT_GRANTED 要登记授予:同样不是重发能好的事,与上一格同属接入那一格。
+      return <OperatorRefusalState kind={result.kind} />;
 
     case 'callerProblem':
       // 调用方的错(4xx):答案没形成,但重发同样内容不会改变结果——交给人改,

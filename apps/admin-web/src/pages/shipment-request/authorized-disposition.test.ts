@@ -133,6 +133,21 @@ test('未配置档的处置停点原词直显,不说稍后重试', () => {
   doesNotMatch(note.text, /通过|放行/);
 });
 
+// Covers: 需要登录与没有授予各成一档(票 operator-channel/07):带被拒的动作、状态码与码名,不并进未配置那句,
+// 也不说稍后重试;页面据 kind 在需要登录时接一颗重新登录。
+test('需要登录与没有授予各报自己的停点,不并进未配置那句', () => {
+  const login = dispositionCommandNoteOf('拒绝', { kind: 'loginRequired' });
+  ok(login.tone === 'refused' && login.kind === 'loginRequired');
+  match(login.text, /^「拒绝」未执行：需要登录（401 OPERATOR_CREDENTIAL_REJECTED）。/);
+  doesNotMatch(login.text, /ACCESS_CHANNEL_NOT_CONFIGURED/);
+  doesNotMatch(login.text, /稍后重试/);
+
+  const grant = dispositionCommandNoteOf('拒绝', { kind: 'notGranted' });
+  ok(grant.tone === 'refused' && grant.kind === 'notGranted');
+  match(grant.text, /^「拒绝」未执行：没有授予（403 OPERATOR_NOT_GRANTED）。/);
+  doesNotMatch(grant.text, /稍后重试/);
+});
+
 // Covers: 命令成立时按 outcome 词表呈现,并把去向原词与中文并列;补偿续办引用有才显。
 test('已记录的处置带去向原词与之后的委托状态', () => {
   const note = dispositionCommandNoteOf('交客户补充', {

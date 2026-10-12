@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@idpxyz/ui-primitives';
+import { OperatorRefusalNote } from '../../components/states';
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../catalogue-api';
 import { labelOf, problemNote, directionLabels, purposeLabels } from './presentation';
@@ -247,6 +248,9 @@ function ChannelNote({ title, answer }: { title: string; answer: ApiResult<unkno
           发行方参数到位后由装配侧换上真核验即放行。此前不要拿演示数据填这张表。
         </p>
       );
+    case 'loginRequired':
+    case 'notGranted':
+      return <OperatorRefusalNote kind={answer.kind} what={title} />;
     case 'callerProblem':
       return (
         <p className="text-xs text-idpxyz-danger">

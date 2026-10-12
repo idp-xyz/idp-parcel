@@ -213,7 +213,7 @@ export interface ListPageTemplateProps<Row> {
   /** 不传则不渲染分页条（如队列页一次拉全量）。按 `mode` 分页码形与游标形；不写 `mode` 即页码形，与今天同。 */
   pagination?: ListPaginationProps | ListCursorPaginationProps;
   /**
-   * 四态由调用方注入，模板不从 rows.length 推断空态——
+   * 页面态由调用方注入，模板不从 rows.length 推断空态——
    * 「闸门未放行」与「暂无数据」在本产品是两个必须区分的事实。
    */
   viewState: TemplateViewState;

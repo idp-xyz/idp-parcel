@@ -182,7 +182,7 @@ function FieldRow({ label, value, mono }: { label: string; value: string; mono?:
   );
 }
 
-// 取数答案 → 模板四态。不可见走空态（终局答案、无重试）；其余错误格与列表页同款。
+// 取数答案 → 模板页面态。不可见走空态（终局答案、无重试）；其余错误格与列表页同款。
 function viewStateOf(
   answer: ApiResult<ViewDetailResponseBody> | null,
   retry: () => void,
@@ -199,6 +199,9 @@ function viewStateOf(
           '查询端点已建立，但接入渠道未配置（403 ACCESS_CHANNEL_NOT_CONFIGURED）。' +
           '恢复动作是提供渠道参数（PAR-INT-01），改请求或重试不会改变结果。',
       };
+    case 'loginRequired':
+    case 'notGranted':
+      return { kind: answer.kind };
     case 'callerProblem':
       if (answer.code === REQUEST_NOT_VISIBLE_CODE) {
         return {

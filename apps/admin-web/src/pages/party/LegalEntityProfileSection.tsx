@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, Card, CardContent, Input, Textarea } from '@idpxyz/ui-primitives';
+import { isOperatorRefusal } from '../../auth/access-refusal';
 import { moduleInfoById } from '../../navigation';
 import { RegistrationAnswerNote } from '../../components/registration';
-import { SectionError } from '../../components/states';
+import { OperatorRefusalNote, SectionError } from '../../components/states';
 import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone, formatInstant } from '../moment';
 import {
@@ -160,6 +161,9 @@ function ResolutionAnswer({
         访问通道尚未配置：法人资料按时点解析读口当前不可用（403）。这不是「资料不全」——今天没有问到；配置该上下文的访问通道后重新打开这一页。
       </p>
     );
+  }
+  if (isOperatorRefusal(answer)) {
+    return <OperatorRefusalNote kind={answer.kind} what="法人资料按时点解析" className={note} />;
   }
   if (answer.kind === 'callerProblem') {
     return (

@@ -1,5 +1,11 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
+import {
+  accessRefusalHeadline,
+  accessRefusalStatus,
+  accessRefusalTitle,
+  isOperatorRefusal,
+} from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import {
   vocabularyOptions,
@@ -236,7 +242,9 @@ export function ReferencePickerFor<Body>({
           ? `正在读${readFace}…`
           : answer.kind === 'unconfigured'
             ? `${readFace}读口在接入渠道未配置那堵墙前（403），先手填；引用在不在册由服务端发布时判。`
-            : `${readFace}读不到，先手填；引用在不在册由服务端发布时判。`}
+            : isOperatorRefusal(answer)
+              ? `${readFace}读口答${accessRefusalHeadline(answer.kind)}，先手填；引用在不在册由服务端发布时判。`
+              : `${readFace}读不到，先手填；引用在不在册由服务端发布时判。`}
       </span>
     </Field>
   );
@@ -320,6 +328,9 @@ export function vocabularyPlaceholder(answer: ApiResult<PublicationVocabularyRes
       return `词表未就绪（服务端没有 ${setName} 一集）`;
     case 'unconfigured':
       return '词表未就绪（接入渠道未配置，403）';
+    case 'loginRequired':
+    case 'notGranted':
+      return `词表未就绪（${accessRefusalTitle(answer.kind)}，${accessRefusalStatus(answer.kind)}）`;
     case 'callerProblem':
       return `词表未就绪（调用方式问题，HTTP ${answer.status}）`;
     case 'noAnswer':

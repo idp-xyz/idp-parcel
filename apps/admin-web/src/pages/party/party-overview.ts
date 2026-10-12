@@ -3,6 +3,7 @@
 // 查询参数、不改端点（README 列表页上列通则）；全景只是读取时的组合，不是第二套口径。纯函数，node:test 钉着；组件
 // PartyOverviewSection.tsx 只负责摆。
 
+import type { AccessRefusal } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import type {
   CustomerAccountRecord,
@@ -151,7 +152,7 @@ export type OverviewSectionState<Row> =
   | { kind: 'loading' }
   | { kind: 'answered'; rows: Row[] }
   | { kind: 'mismatch' }
-  | { kind: 'unconfigured' }
+  | AccessRefusal
   | { kind: 'callerProblem'; status: number; code: string; detail?: string }
   | { kind: 'noAnswer'; status: number; code: string }
   | { kind: 'transport'; message: string };

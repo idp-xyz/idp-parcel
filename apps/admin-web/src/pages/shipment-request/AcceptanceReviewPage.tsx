@@ -7,6 +7,8 @@ import {
   type DetailField,
   type ReviewDecisionOption,
 } from '../../templates';
+import { accessRefusalHeadline, type OperatorRefusalKind } from '../../auth/access-refusal';
+import { OperatorRefusalNote } from '../../components/states';
 import { moduleInfoById } from '../../navigation';
 import { catalogueViewState, formatInstant } from '../catalogue-view';
 import {
@@ -53,9 +55,10 @@ const reviewCommands: ReviewDecisionOption<ReviewCommandId>[] = [
   },
 ];
 
-/** 命令口的一次答复。渠道未配置是今天的预期答案，不是故障，因此单列一格。 */
+/** 命令口的一次答复。渠道未配置是今天的预期答案，不是故障，因此单列一格；需要登录与没有授予同理，各带自己的续办。 */
 type CommandNote =
   | { tone: 'unconfigured'; text: string }
+  | { tone: 'refused'; kind: OperatorRefusalKind; label: string }
   | { tone: 'outcome'; text: string }
   | { tone: 'problem'; text: string };
 
@@ -73,6 +76,9 @@ function commandNoteOf<Body extends { outcome: string }>(
         tone: 'unconfigured',
         text: `「${label}」未执行：接入渠道尚未配置（HTTP 403 ACCESS_CHANNEL_NOT_CONFIGURED）。复核人与授权依据要由已认证的操作员身份翻译得出（PAR-INT-01），页面不代签。`,
       };
+    case 'loginRequired':
+    case 'notGranted':
+      return { tone: 'refused', kind: answer.kind, label };
     case 'callerProblem':
       return { tone: 'problem', text: `「${label}」被拒（HTTP ${answer.status}）：${answer.code}` };
     case 'noAnswer':
@@ -107,6 +113,9 @@ function caseFailureText(answer: ApiResult<AcceptanceReviewCaseResponseBody>): s
       return '';
     case 'unconfigured':
       return '接入渠道尚未配置';
+    case 'loginRequired':
+    case 'notGranted':
+      return accessRefusalHeadline(answer.kind);
     case 'transport':
       return answer.message;
     default:
@@ -313,7 +322,13 @@ export function AcceptanceReviewPage() {
               </p>
             )}
             {caseBody && recordedJudgmentsBlock(caseBody.recordedJudgments)}
-            {commandNote && (
+            {commandNote?.tone === 'refused' ? (
+              <OperatorRefusalNote
+                kind={commandNote.kind}
+                what={`「${commandNote.label}」未执行`}
+                className="text-[12px] text-idpxyz-textMuted"
+              />
+            ) : commandNote ? (
               <p
                 className={`text-[12px] ${
                   commandNote.tone === 'outcome' ? 'text-idpxyz-text' : 'text-idpxyz-textMuted'
@@ -321,7 +336,7 @@ export function AcceptanceReviewPage() {
               >
                 {commandNote.text}
               </p>
-            )}
+            ) : null}
           </div>
         }
         decisions={reviewCommands}

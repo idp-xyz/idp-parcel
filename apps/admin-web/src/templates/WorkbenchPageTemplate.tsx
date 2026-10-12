@@ -65,7 +65,7 @@ export interface WorkbenchPageTemplateProps<Row> {
   noMatchText: string;
   onClearFilters?: () => void;
   renderDetail: (key: string) => ReactNode;
-  /** 四态由调用方注入：非 ready 只替换列表区，命令头与工具条保留。 */
+  /** 页面态由调用方注入：非 ready 只替换列表区，命令头与工具条保留。 */
   viewState: TemplateViewState;
   stateOverride?: StateSlotProps['override'];
 }
@@ -89,7 +89,7 @@ function focusOf(target: EventTarget | null): WorkbenchFocus {
  * 可点指标 + 刷新 + 主动作）· 工具条（`/` 聚焦的检索 + 带计数的状态胶囊）· 可拖分隔的主从分栏 · 表头点排序、关注行
  * 橙底、选中行左侧强调条 · ↑/↓ 换行、Esc 收详情。
  *
- * 与参照页的差别都是本仓规矩逼出来的：四态走 StateSlot（未配置 ≠ 暂无数据）；没有批量勾选列与分页位——今天接它的
+ * 与参照页的差别都是本仓规矩逼出来的：页面态走 StateSlot（未配置 ≠ 暂无数据）；没有批量勾选列与分页位——今天接它的
  * 册既没有批量命令端点，读口也不分页，摆出来就是假动作；键盘只在本标签是工作区活动标签时生效，壳层会把非活动标签
  * 留在 DOM 里。行上不接双击：第一击开栏会收列、行跟着重排，第二击可能落到另一行上；开整页对象归详情栏的动作。
  */

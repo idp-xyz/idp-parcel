@@ -9,12 +9,12 @@
 外壳（主题、导航、路由）可用，其上已有四层多会话并行交付的产出：
 
 - `src/domain/status.tsx` — 领域状态词表（47 词，词取权威文档原词）与 `StatusBadgeFor`；
-- `src/components/states/` — 页面四态组件（加载/空/错误/**未配置**），「未配置」专门呈现 403 `ACCESS_CHANNEL_NOT_CONFIGURED`（[ADR-0022](../../docs/adr/0022-http-status-carries-answer-formed-not-business-verdict.md) 语义：HTTP 状态只表示答案是否形成）；
+- `src/components/states/` — 页面状态组件（加载/空/错误/接入那一格），接入那一格按恢复动作分**未配置**（403 `ACCESS_CHANNEL_NOT_CONFIGURED`）、**需要登录**（401 `OPERATOR_CREDENTIAL_REJECTED`，带一颗重新登录）、**没有授予**（403 `OPERATOR_NOT_GRANTED`），判据在 `src/auth/access-refusal.ts`（[ADR-0022](../../docs/adr/0022-http-status-carries-answer-formed-not-business-verdict.md) 语义：HTTP 状态只表示答案是否形成；三态之分见 [ADR-0100](../../docs/adr/0100-operator-identity-is-a-product-owned-access-channel-family.md) 决定四）；
 - `src/templates/` — 列表页/详情页/复核工作流三个页面模板（演示数据隔离在 `demo.ts`，标注合成 `S`，不进桶导出）；
 - `src/pages/shipment-request/` — UC-PS-001 提交、UC-PS-005 决定前撤回、委托查阅（列表/详情，对 `GET /shipment-request-views` 真实查询契约取数，统一不可见结果按 CONTEXT 语义呈现）与 UC-PS-006 取消与收寄后处置（对 `POST /shipment-requests/parcel-cancellations` 逐件受理、逐件呈现，三种已提交走向同为有效业务答案），对 `parcel-api` 真实端点形状；接入渠道未配置时如实呈现「未配置」态；
 - `src/pages/governance/` — 试点治理页（阶段决定）；曾一并放在这里的接受前人工复核、异常分诊、对账单、收付款核销已按 `src/navigation.ts` 声明的主责上下文归位到 `shipment-request/`、`visibility/`、`settlement/`——页面目录按限界上下文分，不按「治理与复核」这个呈现分组分；模板骨架按各自 CONTEXT 语义搭好，数据区以「未配置」态如实呈现，不含合成数据；
 - 导航按 CONTEXT-MAP 业务价值链分区覆盖全部十个限界上下文：全部模块条目均已登记页面（已接线/骨架/演示三档、零规划占位，条目清单与各自档位以 `src/navigation.ts` 与 `src/page-registry.tsx` 为准，不在此复述计数），带主责与出处的 `UnwiredModule` 占位机制保留但当前无消费者——「导航先于页面」的外壳设计行为已走完它的占位期；
-- `src/pages/template-preview/` — 模板预览页（导航「演示」区）：用隔离合成 `S` 数据实例化三套模板并带四态切换器，是 `templates/demo.ts` 的唯一合法消费者。
+- `src/pages/template-preview/` — 模板预览页（导航「演示」区）：用隔离合成 `S` 数据实例化三套模板并带状态切换器，是 `templates/demo.ts` 的唯一合法消费者。
 
 治理页的业务编排接线按 [ADR-0017](../../docs/adr/0017-admission-gates-judged-by-blocking-cause.md) 的闸门推进，页面不含未确认参数的默认值。
 
@@ -27,7 +27,7 @@
 - **骨架有、读面无 → 不上列。** 用如实说明交代它为什么不在，不留空列也不填假值——先例是服务区域的地理覆盖列按 `PAR-NET-14` 说明「尚不存在」，并且不为它发请求。
 - **展示层合成允许。** 并列、截断、`id@version` 这类合显是呈现手法，不构成第二套口径。
 - **筛选与检索：已迁到 [ADR-0144](../../docs/adr/0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md) 的读口下推，未迁的只在已取回的数据上做。** 迁没迁看端点是否经 `cataloguepage` 解码查询参数，这里不列名单。已迁的：检索词（地址上的 `?q=`）与筛选维原样下推，接模板的游标翻页（`pagination` 的 `mode: 'cursor'`，取数走 `pages/use-catalogue-cursor.ts`），不在答回来的那一页上再筛再排——截断之后再筛，答出的「没有」可能是假的；带条件答出零行是「这组条件下没有」，不是册为空（`catalogueViewState` 的 `narrowed`）。未迁的：读口答满一页就停、不校验多给的键，页面照旧只在已取回的数据上筛，不自造查询参数——被静默忽略的参数会让屏上的筛选条件与答出的列表对不上。
-- **计数摘要必须带 outcome 守卫。** 未配置态与错误态下不得显示「0 个版本／0 条」：那与状态区「这不是目录为空」直接矛盾，四态里只有空态配显示零。这条是接线时五页同时踩中后补上的，新页容易原样再犯。
+- **计数摘要必须带 outcome 守卫。** 接入那一格（未配置、需要登录、没有授予）与错误态下不得显示「0 个版本／0 条」：那与状态区「这不是目录为空」直接矛盾，非就绪各态里只有空态配显示零。这条是接线时五页同时踩中后补上的，新页容易原样再犯。
 
 ## 技术栈
 

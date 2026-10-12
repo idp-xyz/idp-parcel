@@ -88,7 +88,7 @@ function buildBasicFields(row: GroupLegalEntityRecord): DetailField[] {
 }
 
 /**
- * 对象页的四态。没有按标识的读口：行从法人册列表里认。册已取回却没有这一标识，
+ * 对象页的页面态。没有按标识的读口：行从法人册列表里认。册已取回却没有这一标识，
  * 答「册上没有这个法人」——不存在与其他租户的对象在这句话里不分，本页也不另发请求去分辨。
  */
 function viewStateOf(

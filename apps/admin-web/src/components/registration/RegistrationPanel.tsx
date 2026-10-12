@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Textarea } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../../pages/catalogue-api';
+import { OperatorRefusalNote } from '../states';
 
 /**
  * 登记写面的表单区（ADR-0085，票 admin-write-faces/01 切片 01b 首落于计价页；票 02
@@ -12,6 +13,8 @@ import type { ApiResult } from '../../pages/catalogue-api';
  *   - 403 `ACCESS_CHANNEL_NOT_CONFIGURED` —— 接入渠道未配置。这是今天必然的答复：登记
  *     端点已在装配表里，但挂的是字面量 `UnconfiguredIntake{}`，写准入与其余命令面同等
  *     `PAR-INT-01` 证据（决定一）。它不是接线缺陷，改请求或重试都不会好。
+ *     已换上操作者 Intake 的口在这一格还会答需要登录（401）或没有授予（403），各带自己的续办（票
+ *     operator-channel/07），同样不是重试能好的事。
  *   - 登记册治理答案 —— 各登记口自己的答案代数（已入册 / 已在册 / 内容冲突 / 受理门
  *     拒绝……），逐格中文由调用页经 `outcomeLabels` 给出。负向答案是**答案不是失败**：
  *     原行不被顶替，续办属登记方或治理裁决。折成一句「提交失败」会让操作者以为重试有用。
@@ -277,6 +280,9 @@ export function RegistrationAnswerNote({
           真 Intake 即放行。此前登记仍走受控登记 CLI。
         </p>
       );
+    case 'loginRequired':
+    case 'notGranted':
+      return <OperatorRefusalNote kind={answer.kind} />;
     case 'callerProblem':
       return (
         <div className="text-xs text-idpxyz-danger">

@@ -264,6 +264,10 @@ test('段状态对应读口的每一种结果', () => {
   });
   const unconfigured: ApiResult<Listed> = { kind: 'unconfigured' };
   deepEqual(sectionOf(unconfigured, itemsOf), { kind: 'unconfigured' });
+  const loginRequired: ApiResult<Listed> = { kind: 'loginRequired' };
+  deepEqual(sectionOf(loginRequired, itemsOf), { kind: 'loginRequired' });
+  const notGranted: ApiResult<Listed> = { kind: 'notGranted' };
+  deepEqual(sectionOf(notGranted, itemsOf), { kind: 'notGranted' });
   const callerProblem: ApiResult<Listed> = { kind: 'callerProblem', status: 400, code: 'MALFORMED_REQUEST' };
   deepEqual(sectionOf(callerProblem, itemsOf), { kind: 'callerProblem', status: 400, code: 'MALFORMED_REQUEST' });
   const noAnswer: ApiResult<Listed> = { kind: 'noAnswer', status: 503, code: 'NO_ANSWER_FORMED' };

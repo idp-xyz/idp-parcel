@@ -1,3 +1,4 @@
+import { isOperatorRefusal } from '../auth/access-refusal';
 import type { ModuleInfo } from '../navigation';
 import type { TemplateViewState } from '../templates/state-slot';
 import type { ApiResult } from './catalogue-api';
@@ -45,6 +46,10 @@ export function catalogueViewState<Body>(
         unlock: '配置该上下文的访问通道后重新查询；页面不会用演示数据代替。',
       },
     };
+  }
+  if (isOperatorRefusal(answer)) {
+    // 续办不随册而异，缺省字在状态件里；这里只交找谁（主责上下文）与依据。同样不是「目录为空」。
+    return { kind: answer.kind, facts: { owner: options.module.owner, source: options.module.source } };
   }
   if (answer.kind === 'callerProblem') {
     return {

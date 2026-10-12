@@ -16,6 +16,7 @@ import {
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { chipClass } from '../../components/registration';
+import { OperatorRefusalNote } from '../../components/states';
 import { formatInstant } from '../catalogue-view';
 import {
   findChannelSelectionDecision,
@@ -241,6 +242,9 @@ function DecisionPanelBody({ state, retry }: { state: DecisionDetailState; retry
           登记，服务端按 ADR-0055 如实拒绝——<strong>这是诚实答案不是尚未实现</strong>。
         </p>
       );
+    case 'loginRequired':
+    case 'notGranted':
+      return <OperatorRefusalNote kind={state.kind} />;
     case 'error':
       return (
         <div className="flex items-center gap-3 text-xs text-idpxyz-danger">

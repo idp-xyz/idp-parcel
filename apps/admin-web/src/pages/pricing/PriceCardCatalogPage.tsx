@@ -147,6 +147,9 @@ function viewStateOf(
             '(见「导入价卡」)挂的是操作者渠道,发行方未设时今天同答未配置。',
         },
       };
+    case 'loginRequired':
+    case 'notGranted':
+      return { kind: answer.kind, facts: { owner: info.owner, source: info.source } };
     case 'callerProblem':
       return {
         kind: 'error',

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { accessRefusalHeadline, isOperatorRefusal } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import {
   countPendingSeriesEvaluations,
@@ -69,12 +70,14 @@ export function CoverageSummaryBar({
 
   if (answer.kind !== 'outcome') {
     // 摘要条取不到不挡目录：下面那张表有自己的三态呈现，这里再铺一遍同样的话是噪声。
-    // 但**未配置要说一句**——静默消失会让人以为这一册没有覆盖问题，而实际上是没问过。
+    // 但**接入那一格（未配置、需要登录、没有授予）要说一句**——静默消失会让人以为这一册没有覆盖问题，而实际上是没问过。
     return (
       <div className="shrink-0 px-4 pt-3 text-xs text-idpxyz-textMuted">
         {answer.kind === 'unconfigured'
           ? '覆盖摘要未取到：接入渠道未配置（403）。这是诚实答案不是「本册无缺口」——今天没有问到。'
-          : '覆盖摘要未取到；下方目录仍如实呈现各版本。'}
+          : isOperatorRefusal(answer)
+            ? `覆盖摘要未取到：${accessRefusalHeadline(answer.kind)}。这是诚实答案不是「本册无缺口」——今天没有问到。`
+            : '覆盖摘要未取到；下方目录仍如实呈现各版本。'}
         <PendingEvaluationsCell answer={pendingAnswer} />
       </div>
     );

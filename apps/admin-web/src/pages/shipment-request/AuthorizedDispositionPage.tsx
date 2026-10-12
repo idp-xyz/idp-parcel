@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react';
 import { Undo2, XCircle } from 'lucide-react';
 import { ConfirmDialog } from '@idpxyz/ui-primitives';
 import { ReviewFlowTemplate, type DetailField, type ReviewDecisionOption } from '../../templates';
+import { accessRefusalHeadline } from '../../auth/access-refusal';
+import { ReloginButton } from '../../auth/ReloginButton';
 import { moduleInfoById } from '../../navigation';
 import { formatInstant } from '../catalogue-view';
 import {
@@ -47,6 +49,9 @@ function caseFailureText(answer: ApiResult<AcceptanceReviewCaseResponseBody>): s
       return '';
     case 'unconfigured':
       return '接入渠道尚未配置';
+    case 'loginRequired':
+    case 'notGranted':
+      return accessRefusalHeadline(answer.kind);
     case 'transport':
       return answer.message;
     default:
@@ -279,6 +284,9 @@ export function AuthorizedDispositionPage() {
                 }`}
               >
                 {commandNote.text}
+                {commandNote.tone === 'refused' && commandNote.kind === 'loginRequired' ? (
+                  <ReloginButton size="inline" />
+                ) : null}
               </p>
             )}
           </div>

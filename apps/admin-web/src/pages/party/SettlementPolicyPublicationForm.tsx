@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
+import { accessRefusalHeadline, isOperatorRefusal } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import {
   listBusinessParties,
@@ -347,7 +348,9 @@ function ContractPicker({
           ? '正在读客户与合同目录…'
           : answer.kind === 'unconfigured'
             ? '客户与合同目录读口在接入渠道未配置那堵墙前（403），先分两格手填；合同在不在册由服务端发布时判。'
-            : '客户与合同目录读不到，先分两格手填；合同在不在册由服务端发布时判。'}
+            : isOperatorRefusal(answer)
+              ? `客户与合同目录读口答${accessRefusalHeadline(answer.kind)}，先分两格手填；合同在不在册由服务端发布时判。`
+              : '客户与合同目录读不到，先分两格手填；合同在不在册由服务端发布时判。'}
       </span>
     </div>
   );

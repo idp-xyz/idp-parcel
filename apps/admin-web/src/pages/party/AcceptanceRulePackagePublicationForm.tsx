@@ -1,5 +1,6 @@
 import { useState, type ReactNode } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
+import { accessRefusalHeadline, accessRefusalTitle } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import { PublicationDraftFlow, type PublicationFormContext } from './PublicationDraftFlow';
 import { fetchPublicationVocabulary, type PublicationVocabularyResponseBody } from './publication-draft-api';
@@ -115,7 +116,9 @@ function VocabularyNotice({ vocabulary }: { vocabulary: VocabularyState }) {
         ? '各节封闭集的码正在从服务端词表读口读取；读到之前下拉不可选。'
         : vocabulary.kind === 'unconfigured'
           ? '词表读口在接入渠道未配置那堵墙前（403）；表单不内置任何码顶替，发布各口同在墙前，此时本表单也提交不了。'
-          : '词表读口未形成答案；表单不内置任何码顶替，稍后重开本签再试。'}
+          : vocabulary.kind === 'unavailable'
+            ? '词表读口未形成答案；表单不内置任何码顶替，稍后重开本签再试。'
+            : `词表读口答${accessRefusalHeadline(vocabulary.kind)}；表单不内置任何码顶替。`}
     </p>
   );
 }
@@ -123,6 +126,8 @@ function VocabularyNotice({ vocabulary }: { vocabulary: VocabularyState }) {
 const setPlaceholder: Record<Exclude<SetOptionsState['kind'], 'options'>, string> = {
   loading: '正在读词表…',
   unconfigured: '词表未就绪（接入渠道未配置）',
+  loginRequired: `词表未就绪（${accessRefusalTitle('loginRequired')}）`,
+  notGranted: `词表未就绪（${accessRefusalTitle('notGranted')}）`,
   unavailable: '词表读不到',
 };
 

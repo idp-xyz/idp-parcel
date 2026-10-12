@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@idpxyz/ui-primitives';
+import { OperatorRefusalNote } from '../../components/states';
 import type { ApiResult } from '../catalogue-api';
 import { publicationOutcomeLabels } from './api';
 import { labelOf, problemNote } from './presentation';
@@ -385,6 +386,9 @@ function FlowAnswerNote<Body>({
           {what}：接入渠道未配置（403 ACCESS_CHANNEL_NOT_CONFIGURED）。{unconfiguredNote}
         </p>
       );
+    case 'loginRequired':
+    case 'notGranted':
+      return <OperatorRefusalNote kind={answer.kind} what={what} />;
     case 'callerProblem':
       return (
         <p className="text-xs text-idpxyz-danger">

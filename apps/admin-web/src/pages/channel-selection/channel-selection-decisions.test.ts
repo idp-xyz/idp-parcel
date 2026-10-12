@@ -161,5 +161,7 @@ test('单份查阅：查不到是终局答案自成一格，未配置与故障�
   ok(noAnswer.kind === 'error' && noAnswer.canRetry);
 
   equal(decisionDetailState({ kind: 'unconfigured' }, 'CSDN-1').kind, 'unconfigured');
+  equal(decisionDetailState({ kind: 'loginRequired' }, 'CSDN-1').kind, 'loginRequired');
+  equal(decisionDetailState({ kind: 'notGranted' }, 'CSDN-1').kind, 'notGranted');
   equal(decisionDetailState(null, 'CSDN-1').kind, 'loading');
 });

@@ -3,6 +3,7 @@ import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { chipClass } from '../../components/registration';
+import { OperatorRefusalNote } from '../../components/states';
 import {
   judgeEffectiveTime,
   listExternalTrackingFacts,
@@ -328,6 +329,9 @@ function JudgmentAnswerNote({ state }: { state: PanelState }) {
           Intake 即放行；此前该事实继续留为待判断、不进客户可见面（ADR-0102 Consequences）。
         </p>
       );
+    case 'loginRequired':
+    case 'notGranted':
+      return <OperatorRefusalNote kind={answer.kind} what="判断" />;
     case 'callerProblem':
       return (
         <p className="text-xs text-idpxyz-danger">

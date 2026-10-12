@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
+import { OperatorRefusalNote } from '../../components/states';
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone } from '../moment';
@@ -204,6 +205,9 @@ function EstimateAnswer({ answer }: { answer: ApiResult<EstimateResponseBody> })
           服务端如实拒绝。这不是「没有价格」，改声明或重试都不会改变结果；操作者渠道接上后由装配侧换真 Intake 即放行。
         </p>
       );
+    case 'loginRequired':
+    case 'notGranted':
+      return <OperatorRefusalNote kind={answer.kind} what="试算" className="text-[12px] text-idpxyz-textMuted" />;
     case 'callerProblem':
       return (
         <p className="text-[12px] text-idpxyz-danger">

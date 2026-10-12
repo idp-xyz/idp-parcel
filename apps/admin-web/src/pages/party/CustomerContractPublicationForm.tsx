@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button, Input } from '@idpxyz/ui-primitives';
+import { accessRefusalHeadline, isOperatorRefusal, type OperatorRefusal } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import { listCommercialPolicies, type CommercialPolicyListResponseBody } from './api';
 import { controlRequirementLabels, labelOf } from './presentation';
@@ -380,6 +381,7 @@ type ObjectCandidates =
   | { kind: 'loading' }
   | { kind: 'listed'; objectIds: string[] }
   | { kind: 'unconfigured' }
+  | OperatorRefusal
   | { kind: 'unavailable' };
 
 // 稳定的函数引用：useLoaded 以它为依赖，写成内联箭头会每次渲染重取。两册各一个，不由 kind 现拼。
@@ -395,6 +397,7 @@ function useObjectCandidates(load: () => Promise<ApiResult<CommercialPolicyListR
   const answer = useLoaded(load);
   if (answer === null) return { kind: 'loading' };
   if (answer.kind === 'unconfigured') return { kind: 'unconfigured' };
+  if (isOperatorRefusal(answer)) return { kind: answer.kind };
   if (answer.kind !== 'outcome') return { kind: 'unavailable' };
   // 本表单只读这两册，两册的行都以 objectId 为对象标识；别的册按 kind 判别子分出去（它们的行形状各异）。
   const policies: { objectId: string }[] =
@@ -453,7 +456,9 @@ function ObjectPicker({
           ? `正在读${registerName}…`
           : candidates.kind === 'unconfigured'
             ? `${registerName}读口在接入渠道未配置那堵墙前（403），先手填；标识是否在册由服务端发布时判。`
-            : `${registerName}读不到，先手填；标识是否在册由服务端发布时判。`}
+            : candidates.kind === 'unavailable'
+              ? `${registerName}读不到，先手填；标识是否在册由服务端发布时判。`
+              : `${registerName}读口答${accessRefusalHeadline(candidates.kind)}，先手填；标识是否在册由服务端发布时判。`}
       </span>
     </>
   );

@@ -4,10 +4,13 @@
 //
 // 响应判读按 ADR-0022:HTTP 状态码只回答「服务端有没有形成答案」,业务判别一律在
 // 响应体的 `outcome`,取应用结果枚举的原字符串,传输层不合并、不改名。因此这里把
-// 一次调用分成五格交给页面,每格的下一步动作不同:
+// 一次调用分格交给页面,每格的下一步动作不同:
 //   outcome        —— 2xx,答案已形成,按 outcome 呈现给操作员(201 表示新建成立);
 //   unconfigured   —— 403 + ACCESS_CHANNEL_NOT_CONFIGURED,接入渠道未配置,改请求
 //                     或重试都不会好,要去提供渠道参数(ADR-0055 的「未配置即拒」格);
+//   loginRequired / notGranted —— 401 + OPERATOR_CREDENTIAL_REJECTED 要重新登录、403 +
+//                     OPERATOR_NOT_GRANTED 要登记授予(ADR-0100 决定四;与上一格同在
+//                     auth/access-refusal.ts 判);
 //   callerProblem  —— 其余 4xx,调用方的错,重发同样内容不会改变结果;
 //   noAnswer       —— 5xx,服务端没形成答案,可退避重试;
 //   transport      —— fetch 未通或响应不是 JSON:parcel-api 一律写 JSON,非 JSON
@@ -17,6 +20,7 @@
 // 答案而不是故障——「统一不可见结果」不区分「不存在」与「越权/他租户对象」,页面按
 // callerProblem 里的这枚 code 专门呈现,不得当错误重试,也不得替它补出第二种说法。
 
+import { accessRefusalOf, type AccessRefusal } from '../../auth/access-refusal';
 import { withBearer } from '../../auth/bearer';
 
 // 路径前缀已裁决:前端统一带 /api 发起,开发代理剥前缀转发;由装配侧在 bootstrap
@@ -544,7 +548,7 @@ export interface AuthorizedDispositionDraft {
 
 export type ApiResult<Body> =
   | { kind: 'outcome'; status: number; body: Body }
-  | { kind: 'unconfigured' }
+  | AccessRefusal
   | { kind: 'callerProblem'; status: number; code: string }
   | { kind: 'noAnswer'; status: number; code: string }
   | { kind: 'transport'; message: string };
@@ -668,9 +672,8 @@ async function exchange<Body>(path: string, init: RequestShape): Promise<ApiResu
 
   const code =
     (parsed as { error?: { code?: string } } | null)?.error?.code ?? 'UNKNOWN';
-  if (response.status === 403 && code === 'ACCESS_CHANNEL_NOT_CONFIGURED') {
-    return { kind: 'unconfigured' };
-  }
+  const refusal = accessRefusalOf(response.status, code);
+  if (refusal) return refusal;
   if (response.status >= 500) {
     return { kind: 'noAnswer', status: response.status, code };
   }

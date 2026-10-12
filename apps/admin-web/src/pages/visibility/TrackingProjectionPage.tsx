@@ -163,7 +163,7 @@ const columns: ListColumn<TrackingProjectionRow>[] = [
   },
 ];
 
-// 取数答案 → 模板四态。空列表走空态而不是就绪态的空表格:模板明言不从 rows.length
+// 取数答案 → 模板页面态。空列表走空态而不是就绪态的空表格:模板明言不从 rows.length
 // 推断,「租户内尚无投影」这一业务事实要由本页说出来。
 function viewStateOf(
   answer: ApiResult<ProjectionListResponseBody> | null,
@@ -197,6 +197,9 @@ function viewStateOf(
             '运营作用域按 ADR-0076 由认证结果铸造,租户级、无客户维,本页不送自报身份。',
         },
       };
+    case 'loginRequired':
+    case 'notGranted':
+      return { kind: answer.kind, facts: { owner: info.owner, source: info.source } };
     case 'callerProblem':
       return {
         kind: 'error',

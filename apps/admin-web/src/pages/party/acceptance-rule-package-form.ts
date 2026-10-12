@@ -8,6 +8,7 @@
 // 没有终局行、未封闭零格，都由服务端答（逐格问题或预览上的`未受理`带成因），表单不代判也不静默补齐、不给默认不预选。
 // 各节封闭集的码从服务端词表读口取（票 20），这里没有任何一份内置的码；下面几张表只是码 → 本页中文，缺词原样示出。
 
+import { isOperatorRefusal, type OperatorRefusal } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import { finalOutcomeLabels, intakeSourceLabels } from './presentation';
 import {
@@ -354,15 +355,17 @@ export type VocabularyState =
   | { kind: 'loading' }
   | { kind: 'listed'; sets: Record<string, string[]> }
   | { kind: 'unconfigured' }
+  | OperatorRefusal
   | { kind: 'unavailable' };
 
 /**
- * 词表读口的答复判读：读到了按集名成表；403 是可辨的「未配置」——下拉显占位、不内置任何码顶替；别的失败是读不到，
- * 同样只显占位。
+ * 词表读口的答复判读：读到了按集名成表；403 是可辨的「未配置」——下拉显占位、不内置任何码顶替；需要登录与没有授予
+ * 同样可辨、各成一格（票 operator-channel/07）；别的失败是读不到，同样只显占位。
  */
 export function vocabularyStateOf(answer: ApiResult<PublicationVocabularyResponseBody> | null): VocabularyState {
   if (answer === null) return { kind: 'loading' };
   if (answer.kind === 'unconfigured') return { kind: 'unconfigured' };
+  if (isOperatorRefusal(answer)) return { kind: answer.kind };
   if (answer.kind !== 'outcome') return { kind: 'unavailable' };
   const sets: Record<string, string[]> = {};
   for (const set of answer.body.sets) sets[set.name] = [...set.codes];
@@ -373,6 +376,7 @@ export type SetOptionsState =
   | { kind: 'loading' }
   | { kind: 'options'; options: VocabularyOption[] }
   | { kind: 'unconfigured' }
+  | OperatorRefusal
   | { kind: 'unavailable' };
 
 /**

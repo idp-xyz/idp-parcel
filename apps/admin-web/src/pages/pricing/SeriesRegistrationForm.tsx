@@ -1,7 +1,9 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Textarea } from '@idpxyz/ui-primitives';
+import { accessRefusalHeadline, isOperatorRefusal } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import type { RegistrationResponseBody } from '../../components/registration';
+import { OperatorRefusalNote } from '../../components/states';
 import {
   listQuoteBasisCandidates,
   previewReferenceSeries,
@@ -383,7 +385,9 @@ function QuoteBasisField({
           ? '正在读商业政策候选…'
           : candidates.kind === 'unconfigured'
             ? '商业政策候选读口在接入渠道未配置那堵墙前（403），先手填；口径是否声明由服务端登记时判。'
-            : '商业政策候选读不到，先手填；口径是否声明由服务端登记时判。'}
+            : isOperatorRefusal(candidates)
+              ? `商业政策候选读口答${accessRefusalHeadline(candidates.kind)}，先手填；口径是否声明由服务端登记时判。`
+              : '商业政策候选读不到，先手填；口径是否声明由服务端登记时判。'}
       </span>
     </div>
   );
@@ -595,6 +599,9 @@ function AnswerNote<Body>({
           接入渠道未配置（403 ACCESS_CHANNEL_NOT_CONFIGURED）。{unconfiguredNote}
         </p>
       );
+    case 'loginRequired':
+    case 'notGranted':
+      return <OperatorRefusalNote kind={answer.kind} what={what} />;
     case 'callerProblem':
       return (
         <p className="text-xs text-idpxyz-danger">
