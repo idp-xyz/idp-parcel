@@ -1,0 +1,59 @@
+# 演示环境操作者族的发行方 Dex（ADR-0100 决定二；选型见票 operator-channel/02 完成记录）。只属隔离演示
+# 环境：客户端、用户与口令全是合成值，证据层级只记 S，不得当作任何部署的默认值抄走。
+#
+# 版本钉在 compose.yaml。这一版对不认得的键一律静静忽略、容器照样健康，拼错的那一格就回到 Dex 的缺省值：
+# 改完对一遍发现文档，再用 operator-token.sh 走一次登录。
+
+# 发行方标识。浏览器跳授权端点与 parcel-api 比 iss 用的是同一串（parcel-api 逐字比较，不折叠末尾斜杠），
+# 所以写回环地址而不写 compose 服务名：服务名只在容器网络里解析得出，浏览器那一侧找不到它。
+issuer: http://127.0.0.1:5556/dex
+
+# 状态只在内存：签名钥（Dex 自己生成，RS256）、授权码与刷新令牌随容器重启作废，parcel-api 见到新 kid 会重取
+# 公钥集。静态用户的 sub 不随重启变，它只由 userID 与连接器标识 local 定。
+storage:
+  type: memory
+
+web:
+  http: 0.0.0.0:5556
+  # 对管理台本地开发源放 CORS，令牌端点因此可以直连；管理台直连还是照旧走开发代理归票 operator-channel/07。
+  allowedOrigins:
+    - http://localhost:5173
+
+oauth2:
+  # 只开管理台用得到的两种。不开 password：那等于让客户端自己收用户口令，绕开登录页。
+  grantTypes:
+    - authorization_code
+    - refresh_token
+  responseTypes:
+    - code
+  # 登录即同意：同意页是给第三方应用的，这里唯一的客户端是产品自己的管理台。
+  skipApprovalScreen: true
+
+staticClients:
+  # 管理台是公共客户端（浏览器里藏不住密钥），授权码只靠 PKCE 绑住发起方。这一版 Dex 没有强制 PKCE 的开关：
+  # 请求带了 code_challenge 它就在换令牌时核 verifier，不带也放行——管理台每次都带 S256（oidc.ts 的 beginLogin）。
+  # 客户端标识同时是 parcel-api 操作者族的受众 IDP_PARCEL_OPERATOR_OIDC_AUDIENCE：Dex 把它写进访问令牌与
+  # ID 令牌的 aud。
+  - id: idp-parcel-admin-web
+    name: 包裹网络管理台（演示）
+    public: true
+    redirectURIs:
+      # vite dev 只监听 ::1，浏览器按 localhost 打开（apps/admin-web/README.md）；路径是 oidc.ts 的 CALLBACK_PATH。
+      - http://localhost:5173/auth/callback
+
+enablePasswordDB: true
+
+# 合成操作者，与操作者册 scripts/demo-seeds/data/access/ 那一批一一对应。两人共用合成口令
+# syn-demo-password（下面是它的 bcrypt 散列）。令牌里的 sub 是 Dex 把 userID 与连接器标识编在一起的
+# 不透明串：操作者册登的是从真令牌里读出的值，不按这里的 userID 推；改 userID 就换了一个主体，册上要另登。
+staticPasswords:
+  - email: syn-operator-config-01@syn-tenant-01.example.invalid
+    hash: "$2b$10$z5eheZlQBaN4/lxe.TdUj.sPSRReYrNiIids1KQPGQYw/XeIcoaBO"
+    username: SYN-OPERATOR-CONFIG-01
+    name: 合成配置员 01
+    userID: SYN-OPERATOR-CONFIG-01
+  - email: syn-operator-viewer-01@syn-tenant-01.example.invalid
+    hash: "$2b$10$z5eheZlQBaN4/lxe.TdUj.sPSRReYrNiIids1KQPGQYw/XeIcoaBO"
+    username: SYN-OPERATOR-VIEWER-01
+    name: 合成查阅员 01
+    userID: SYN-OPERATOR-VIEWER-01

@@ -1,0 +1,34 @@
+# 演示环境操作者族的发行方（票 operator-channel/17）：一只 Dex，签管理台登录换来的令牌，parcel-api 按它
+# 公布的公钥集校验。只为隔离演示环境准备，不是部署描述符。
+#
+# 不并进仓库根的 compose.yaml：那一份只为 PostgreSQL 集成门禁准备，`docker compose up -d` 起门禁库时不该
+# 顺带拉起一只与门禁无关的发行方。演示发行方跟着演示种子走——它签出的主体就登在 ../data/access/ 里。
+#
+# 用法（在仓库根）：
+#   docker compose -f scripts/demo-seeds/operator-channel/compose.yaml up -d --wait
+#   curl -s http://127.0.0.1:5556/dex/.well-known/openid-configuration
+#   docker compose -f scripts/demo-seeds/operator-channel/compose.yaml down
+
+name: idp-parcel-demo-issuer
+
+services:
+  dex:
+    # 钉到精确版本，理由同仓库根 compose.yaml 钉 PostgreSQL 补丁号：浮动 tag 会让同一份取证在不同日期指向
+    # 不同的发行方实现。不用更新的 v2.46.0：本地口令用户一换刷新令牌，它就把存储锁死，此后连 /keys 与登录都
+    # 不答（上游 dexidp/dex#4209，未修；内存与 SQLite 两种存储都实测挂死）。sub 的编法是 Dex 的内部约定，
+    # 换版本后用 operator-token.sh 重读 sub 对一遍操作者册，并走一次刷新。
+    image: ghcr.io/dexidp/dex:v2.45.1
+    container_name: idp-parcel-demo-issuer
+    command: ["dex", "serve", "/etc/dex/dex.yaml"]
+    volumes:
+      - ./dex.yaml:/etc/dex/dex.yaml:ro
+    ports:
+      # 只发布在回环上。浏览器与 parcel-api 都在本机，都经 127.0.0.1:5556 到它，发行方地址因此只有一串。
+      - "127.0.0.1:5556:5556"
+    healthcheck:
+      # 打 /keys 而不打发现文档：发现文档不碰存储，存储锁死时它照答，而那时 Dex 已经签不出也公布不了任何钥。
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1:5556/dex/keys"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+      start_period: 3s
