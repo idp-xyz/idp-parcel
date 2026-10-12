@@ -68,11 +68,6 @@ export function emptyMinimumMaterialsDraft(): MinimumMaterialsDraft {
 }
 
 /**
- * 空草稿：适用对象未选，两张表零行。与 pre-acceptance-financial-control-policy-form 预开一行空行不同：那一册的表至少要
- * 一项，预开的是可填的格；这里两张表各自都可以是空的（无行是正文说出的真话，读法见 serviceRuleEmptyTableNote），预开
- * 一行就替操作者预设了「这张表有内容」，要表达空表还得先删行。
- */
-/**
  * 一张子表零行时那一句提示。无行读作什么看适用对象（ADR-0176 决定二）：挂服务产品的那一版无行，索赔那一维答未登记；
  * 挂客户合同的那一版无行即继承同范围产品版的那一行，产品版也没有才答未登记。未选适用对象时两种都可能，照实说两种。
  * 两张表合起来至少一行由服务端答，这里只说一张表空着意味着什么，不拦。
@@ -98,6 +93,11 @@ export function serviceRuleTightenOnlyNote(appliesTo: ServiceRuleAppliesTo): str
   return '合同版只写与产品版不同的行，且只收紧：期限更严、材料要求更严。没有「删去某一行」的写法——空着就是继承产品版那一行。系统不比对两版孰严，放宽与否由发布人负责。';
 }
 
+/**
+ * 空草稿：适用对象未选，两张表零行。与 pre-acceptance-financial-control-policy-form 预开一行空行不同：那一册的表至少要
+ * 一项，预开的是可填的格；这里两张表各自都可以是空的（无行是正文说出的真话，读法见 serviceRuleEmptyTableNote），预开
+ * 一行就替操作者预设了「这张表有内容」，要表达空表还得先删行。
+ */
 export function emptyServiceRuleDraft(): ServiceRuleDraft {
   return {
     objectId: '',
