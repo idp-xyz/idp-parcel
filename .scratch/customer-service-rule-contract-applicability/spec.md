@@ -91,4 +91,4 @@ Blocked by: 无。设计决策已全部裁毕，权威记录为 [ADR-0176](../..
 | [04](issues/04-ve-claim-eligibility-checks-contract-and-inherits-rows-from-product-base.md) | VE 索赔资格：按合同点核、按行继承底座 | 03 | resolved（2026-10-12 进 main） |
 | [05](issues/05-admin-form-contract-tier-empty-means-inherit-and-tighten-only.md) | 管理台表单：空表即继承、只收紧不删减（前端切片） | 04 | in-progress（文案进 main，浏览器五步未走） |
 | [06](issues/06-demo-contract-02-custom-first-claim-deadline-inherits-materials.md) | 演示对比面：合同 02 定制首次索赔时限（S） | 07（04 已解） | blocked（种子在分支 `mcp1-csr06`） |
-| [07](issues/07-closure-does-not-narrow-customer-contract-by-customer-account.md) | PC 闭包不按客户账户收窄客户合同候选（06 灌库取证出） | 用户决定（ADR） | needs-info |
+| [07](issues/07-closure-does-not-narrow-customer-contract-by-customer-account.md) | PC 闭包不按客户账户收窄客户合同候选（06 灌库取证出；ADR-0177） | 无 | ready-for-agent |
