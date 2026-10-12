@@ -1,7 +1,7 @@
 # 06 演示对比面：SYN-CONTRACT-02 挂合同规则只改首次索赔时限，账户 02 索赔答定制时限、材料继承产品版
 
 Category: enhancement
-Status: ready-for-agent——2026-10-10 通道 1 发布：拆法作者通道 3（`task-2b404e22`），通道 1 经用户 19:1x 授权认可并裁定拆法清单所附七问
+Status: in-progress——2026-10-12 10:4x 通道 1 认领（用户令独立完成），分支 `mcp1-csr06`，基 `8c41be83`；按「开工取证」节的建议另起子集，不重放封存那笔。此前：ready-for-agent——2026-10-10 通道 1 发布：拆法作者通道 3（`task-2b404e22`），通道 1 经用户 19:1x 授权认可并裁定拆法清单所附七问
 Blocked by: [04](04-ve-claim-eligibility-checks-contract-and-inherits-rows-from-product-base.md)
 父票：[spec](../spec.md)
 地盘：`scripts/demo-seeds` 与取证处；碰种子与真库取证，走并行会话那条路。
