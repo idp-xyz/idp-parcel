@@ -29,7 +29,7 @@ Blocked by: 02、03（均已 resolved）；17 已交值（「交给 07」钉 `mc
 ### 判据逐条
 
 - ✅ **合成操作者登进管理台并在 04、05 已换的口上走通**（证据层级 `S`，2026-10-12 21:1x）。
-  - 环境：发行方是通道 4 跑着的 `idp-parcel-demo-issuer`（`ghcr.io/dexidp/dex:v2.45.1`，`127.0.0.1:5556`，配置出自 `mcp4-oc17@88ca1100`，未重启）；库是 55432 上的一次性库 `mcp5_oc07`，在 `mcp4-oc17@88ca1100` 的检出上 `seed.sh --reset` 整套灌，退 0，操作者册就是该分支 `data/access` 的两份批文（Dex 的 issuer 加真 `sub`；配置员有登记册配置写与查阅两格授予，查阅员只有查阅）；`parcel-api` 由 `22f0529e` 构建（与 `88ca1100` 的 Go 代码和迁移零差异），带三件参数起在 `127.0.0.1:19087`；管理台是 `22f0529e` 的 vite dev，`http://localhost:5173`，`PARCEL_API_TARGET` 指 19087。
+  - 环境：发行方是通道 4 跑着的 `idp-parcel-demo-issuer`（`ghcr.io/dexidp/dex:v2.45.1`，`127.0.0.1:5556`，配置出自 `mcp4-oc17@88ca1100`，未重启）；库是 55432 上的一次性库 `mcp5_oc07`，在 `mcp4-oc17@88ca1100` 的检出上 `seed.sh --reset` 整套灌，退 0，操作者册就是该分支 `data/access` 的两份批文（Dex 的 issuer 加真 `sub`；配置员有登记册配置写与查阅两格授予，查阅员只有查阅）；`parcel-api` 由 `22f0529e` 构建（与 `88ca1100` 的 Go 代码和迁移零差异），带三件参数起在 `127.0.0.1:19087`；管理台是 `22f0529e` 的 vite dev，`http://localhost:5173`，`PARCEL_API_TARGET` 指 19087。17 随后于 21:35 重放进 `main`（`d73eb59d..60a1c9b4`），`scripts/demo-seeds` 与 17 票面对 `88ca1100` 零差异，所以这套环境今天从 `main` 起得来。
   - 自检：17 的 `probe-operator-channel.sh` 对这只 `parcel-api` 直连跑两遍、经 vite 的 `/api` 代理跑一遍，三格每遍都答 200 `REFUSED/VERSION_NOT_OVERWRITABLE`、403 `OPERATOR_NOT_GRANTED`、401 `OPERATOR_CREDENTIAL_REJECTED`。
   - 登录：首屏是登录页，示 `http://127.0.0.1:5556/dex`；「前往发行方登录」落到 Dex 的本地口令页，以合成配置员登录后回到原页 `#/disclosure-policies`，顶栏显出它的邮箱；`sessionStorage`、`localStorage` 里查不到 JWT。页内记下此后每个 `/api` 请求：全带 `Authorization: Bearer <JWT>`，解出 `iss` 为 `http://127.0.0.1:5556/dex`、`aud` 为 `idp-parcel-admin-web`、`sub` 为配置员在 Dex 的真 `sub`——访问令牌就是 `parcel-api` 认的那一枚。
   - 04 已换的口，配置员：
@@ -65,7 +65,6 @@ Blocked by: 02、03（均已 resolved）；17 已交值（「交给 07」钉 `mc
 
 ### 未验
 
-- 走通靠的是 17 尚未进 `main` 的内容：Dex 的配置与按 Dex 另登的操作者册种子都在 `mcp4-oc17@88ca1100`。17 进 `main` 时若改了发行方地址、客户端标识或回调地址，`oidc.ts` 与 `vite.config.ts` 要跟着改；`oidc.test.ts` 钉着这几格，不跟会红。
 - refresh_token 续期在真发行方上的行为：演示发行方的 `dex.yaml` 没设 `expiry`，令牌按 Dex 缺省过期，走查时长内等不到续期那一下；仍只有 `oidc.test.ts` 的节点用例钉着。
 - 需要登录那一格在浏览器里的真后端答复：没造无效或过期的令牌（Dex 不重启，令牌也没到期），真后端的 401 只有 probe「不带令牌」那一枪；浏览器那一格是注入的（见三态那条）。
 
