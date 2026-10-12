@@ -193,22 +193,28 @@ export function serviceRuleAppliesToCell(record: CustomerServiceRuleRecord): str
 }
 
 // 两张子表各自三态:未登记正文 / 已登记且有行 / 已登记而空数组。第三态与控制项那一栏相反,**不是坏
-// 数据**:0023 两张子表可各自为空,「这一版对期限无客户差异」是正文说出的真话(两项合起来至少一项由
-// 写入把守,那一条在这里判不出、也不该判),所以那句写成「无客户差异」而不是点名。期限种类没有词表,
+// 数据**:0023 两张子表可各自为空(两项合起来至少一项由写入把守,那一条在这里判不出、也不该判)。空数组
+// 读作什么看正文挂在哪(ADR-0176 决定二):挂服务产品的那一版无行,索赔那一维答未登记;挂客户合同的那一版
+// 无行即继承同范围产品版的那一行。两句分开写,同一个空数组在两种版本上恢复动作不同。期限种类没有词表,
 // 原词直显、不自造译法(票 admin-write-faces/21 判据 1);起算事件、日历、索赔类型与材料都是引用,同样原词。
 export function serviceRuleClaimDeadlinesCell(record: CustomerServiceRuleRecord): string {
   if (!record.contentRegistered) return '未登记正文';
   if (!record.content) return '正文缺失(响应不合契约)';
-  if (record.content.claimDeadlines.length === 0) return '无客户差异';
+  if (record.content.claimDeadlines.length === 0) return serviceRuleEmptyTableCell(record);
   return record.content.claimDeadlines
     .map((item) => `${item.kind} · ${item.startEvent} · ${item.durationDays} 天 · ${item.calendar}`)
     .join(' | ');
 }
 
+function serviceRuleEmptyTableCell(record: CustomerServiceRuleRecord): string {
+  if (record.content?.customerContract !== undefined) return '无行·继承产品版';
+  return '无行·索赔答未登记';
+}
+
 export function serviceRuleMinimumMaterialsCell(record: CustomerServiceRuleRecord): string {
   if (!record.contentRegistered) return '未登记正文';
   if (!record.content) return '正文缺失(响应不合契约)';
-  if (record.content.minimumMaterials.length === 0) return '无客户差异';
+  if (record.content.minimumMaterials.length === 0) return serviceRuleEmptyTableCell(record);
   return record.content.minimumMaterials
     .map((item) => `${item.claimKind}:${item.materials.join('、')}`)
     .join(' | ');

@@ -8,9 +8,11 @@ import { Field, VocabularySelect, momentPlaceholder, selectClass, useLoaded } fr
 import {
   emptyServiceRuleDraft,
   serviceRuleCodesOf,
+  serviceRuleEmptyTableNote,
   serviceRuleFieldPaths,
   serviceRuleLocalProblems,
   serviceRulePayloadOf,
+  serviceRuleTightenOnlyNote,
   withClaimDeadlineRowAdded,
   withClaimDeadlineRowPatched,
   withClaimDeadlineRowRemoved,
@@ -42,8 +44,9 @@ import {
  *
  * **表单不算摘要、不收也不送批准人、不裁任何门**（伞票 07 硬句）：空字段、集外的码、引用在不在册一律送上去，
  * 预览口逐格 problems 回来挂到对应格旁；两项合起来至少一行、每一种期限与每一种索赔类型至多一行是跨行的门，由
- * 构造门在预览上答成成因。本地只拦编不进 JSON 整数的时长文本（localProblems）。两张表起始零行：「这一版对期限
- * 无客户差异」是正文说得出的真话，预开一行会替操作者预设「这张表有内容」。
+ * 构造门在预览上答成成因。本地只拦编不进 JSON 整数的时长文本（localProblems）。两张表起始零行：无行是正文说得出的
+ * 真话，预开一行会替操作者预设「这张表有内容」。无行读作什么随适用对象变（ADR-0176 决定二：挂产品即未登记、挂合同即
+ * 继承产品版），零行提示照选定的那一种说；挂合同时另显「只收紧」提示（决定三），表单不比对两版孰严。
  */
 export interface CustomerServiceRulePublicationFormProps {
   /** 载体到达「发布」那一步时回调，政策页借它切到客户服务规则册并重读。 */
@@ -73,6 +76,7 @@ export function CustomerServiceRulePublicationForm({ onPublished }: CustomerServ
   const sets = vocabulary?.kind === 'outcome' ? vocabulary.body.sets : null;
   const kindCodes = sets === null ? null : serviceRuleCodesOf(sets, 'kind');
   const chosen = appliesToChoices.find((choice) => choice.value === draft.appliesTo) ?? null;
+  const tightenOnly = serviceRuleTightenOnlyNote(draft.appliesTo);
 
   return (
     <PublicationDraftFlow
@@ -200,6 +204,9 @@ export function CustomerServiceRulePublicationForm({ onPublished }: CustomerServ
                 />
               </Field>
             </div>
+            {tightenOnly === null ? null : (
+              <p className="text-[11px] text-idpxyz-text rounded border border-idpxyz-border px-3 py-2">{tightenOnly}</p>
+            )}
 
             <div className="flex items-center justify-between">
               <h4 className="text-[12px] font-medium text-idpxyz-text">索赔期限（{draft.claimDeadlines.length} 行）</h4>
@@ -209,7 +216,7 @@ export function CustomerServiceRulePublicationForm({ onPublished }: CustomerServ
             </div>
             {draft.claimDeadlines.length === 0 ? (
               <p className="text-[11px] text-idpxyz-textMuted">
-                零行。这张表可以是空的——只要下方最低材料表不也是空的；两张都空由服务端在预览上答成因。每一种期限至多一行。
+                {serviceRuleEmptyTableNote(draft.appliesTo, 'claimDeadlines')}每一种期限至多一行。
               </p>
             ) : null}
             {draft.claimDeadlines.map((row, index) => (
@@ -234,7 +241,7 @@ export function CustomerServiceRulePublicationForm({ onPublished }: CustomerServ
             </div>
             {draft.minimumMaterials.length === 0 ? (
               <p className="text-[11px] text-idpxyz-textMuted">
-                零行。这张表可以是空的——只要上方索赔期限表不也是空的。每一种索赔类型至多一行，每行至少一项材料且不重复，都由服务端答。
+                {serviceRuleEmptyTableNote(draft.appliesTo, 'minimumMaterials')}每一种索赔类型至多一行，每行至少一项材料且不重复，都由服务端答。
               </p>
             ) : null}
             {draft.minimumMaterials.map((row, index) => (

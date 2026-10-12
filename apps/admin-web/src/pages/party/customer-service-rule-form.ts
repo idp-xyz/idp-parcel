@@ -69,9 +69,35 @@ export function emptyMinimumMaterialsDraft(): MinimumMaterialsDraft {
 
 /**
  * 空草稿：适用对象未选，两张表零行。与 pre-acceptance-financial-control-policy-form 预开一行空行不同：那一册的表至少要
- * 一项，预开的是可填的格；这里两张表各自都可以是空的（「这一版对期限无客户差异」是正文说出的真话），预开一行就替
- * 操作者预设了「这张表有内容」，要表达空表还得先删行。
+ * 一项，预开的是可填的格；这里两张表各自都可以是空的（无行是正文说出的真话，读法见 serviceRuleEmptyTableNote），预开
+ * 一行就替操作者预设了「这张表有内容」，要表达空表还得先删行。
  */
+/**
+ * 一张子表零行时那一句提示。无行读作什么看适用对象（ADR-0176 决定二）：挂服务产品的那一版无行，索赔那一维答未登记；
+ * 挂客户合同的那一版无行即继承同范围产品版的那一行，产品版也没有才答未登记。未选适用对象时两种都可能，照实说两种。
+ * 两张表合起来至少一行由服务端答，这里只说一张表空着意味着什么，不拦。
+ */
+export function serviceRuleEmptyTableNote(appliesTo: ServiceRuleAppliesTo, table: 'claimDeadlines' | 'minimumMaterials'): string {
+  const other = table === 'claimDeadlines' ? '下方最低材料表' : '上方索赔期限表';
+  const meaning =
+    appliesTo === 'serviceProduct'
+      ? '挂服务产品的这一版无行，索赔时这一维答未登记。'
+      : appliesTo === 'customerContract'
+        ? '挂客户合同的这一版无行即继承：索赔时取同一范围挂服务产品那一版的同一行，产品版也没有才答未登记。'
+        : '挂服务产品时无行即未登记；挂客户合同时无行即继承同一范围产品版的同一行。';
+  return `零行。${meaning}只要${other}不也是空的，这张表可以空着；两张都空由服务端在预览上答成因。`;
+}
+
+/**
+ * 挂客户合同时的「只收紧」提示（ADR-0176 决定三）：合同版的行只能是继承（无行）或收紧（有行且更严）；没有显式空行，
+ * 删减表达不了。表单与服务端都不比对合同版与产品版孰严——底座读时才选，起算事件或日历不同的两行也比不出严宽——收紧是
+ * 商务纪律，由发布人负责。挂产品或未选时没有底座可言，不显。
+ */
+export function serviceRuleTightenOnlyNote(appliesTo: ServiceRuleAppliesTo): string | null {
+  if (appliesTo !== 'customerContract') return null;
+  return '合同版只写与产品版不同的行，且只收紧：期限更严、材料要求更严。没有「删去某一行」的写法——空着就是继承产品版那一行。系统不比对两版孰严，放宽与否由发布人负责。';
+}
+
 export function emptyServiceRuleDraft(): ServiceRuleDraft {
   return {
     objectId: '',

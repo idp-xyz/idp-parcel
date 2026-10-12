@@ -213,7 +213,7 @@ test('客户服务规则册：chip 词表、列集与「谁喂它」都有它，
 // 输入照后端 query_commercial_catalogue_test.go 里
 // TestPoliciesEndpointTranscribesCustomerServiceRuleContentOnlyWhenRegistered 钉住的几种形状各取一行：只有壳、按合同
 // 适用且两张子表都有内容、按产品适用且期限表为空（夹具取形不照抄取值，那边加减行本文件不跟）。适用对象恰一键在场；
-// 无客户差异的子表是空数组不是缺键。
+// 无行的子表是空数组不是缺键。
 const customerServiceRules: CommercialPolicyListResponseBody = {
   outcome: 'COMMERCIAL_POLICIES_LISTED',
   kind: 'CUSTOMER_SERVICE_RULE',
@@ -299,9 +299,21 @@ test('登了正文的客户服务规则按后端顺序逐项列出期限与材�
   equal(full.values.effective, '2026-01-01 00:00:00 UTC → 2026-01-01 01:00:00 UTC');
 
   equal(product.values.appliesTo, '服务产品:product-1');
-  // 空数组是正文说出的真话（这一版对期限无客户差异），不是坏数据，也不是「未登记」。
-  equal(product.values.claimDeadlines, '无客户差异');
+  // 空数组是正文说出的真话，不是坏数据，也不是「未登记正文」；挂产品的那一版无行，索赔那一维答未登记（ADR-0176 决定二）。
+  equal(product.values.claimDeadlines, '无行·索赔答未登记');
   equal(product.values.minimumMaterials, 'claim-damage:material-photo');
+});
+
+// ADR-0176 决定二：挂客户合同的那一版无行即继承同范围产品版那一行——与挂产品的那一版同一个空数组，读法相反。
+test('挂合同的客户服务规则版本子表为空读作继承产品版，不读作未登记', () => {
+  const [, full] = customerServiceRules.policies;
+  const [contractTier] = rowsOf({
+    ...customerServiceRules,
+    policies: [{ ...full, objectId: 'csr-contract-tier', content: { ...full.content!, minimumMaterials: [] } }],
+  } as CommercialPolicyListResponseBody);
+
+  equal(contractTier.values.appliesTo, '客户合同:contract-1');
+  equal(contractTier.values.minimumMaterials, '无行·继承产品版');
 });
 
 test('客户服务规则布尔说已登记而正文节缺了是响应不合契约，如实点名而不是显示成空', () => {

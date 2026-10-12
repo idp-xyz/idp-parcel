@@ -5,9 +5,11 @@ import {
   emptyMinimumMaterialsDraft,
   emptyServiceRuleDraft,
   serviceRuleCodesOf,
+  serviceRuleEmptyTableNote,
   serviceRuleFieldPaths,
   serviceRuleLocalProblems,
   serviceRulePayloadOf,
+  serviceRuleTightenOnlyNote,
   withClaimDeadlineRowAdded,
   withClaimDeadlineRowPatched,
   withClaimDeadlineRowRemoved,
@@ -248,8 +250,8 @@ test('两张表各自加行、删行、改行：加行追加一行空行，删�
   equal(materialsPatched.objectId, filled.objectId);
 });
 
-// 不预选、不给默认：适用对象二选一控件起始未选；两张表起始零行——「这一版对期限无客户差异」是正文说出的真话，
-// 预开一行空行会替操作者预设「这张表有内容」，删行才能表达空表。
+// 不预选、不给默认：适用对象二选一控件起始未选；两张表起始零行——无行是正文说出的真话，预开一行空行会替操作者预设
+// 「这张表有内容」，删行才能表达空表。
 test('空草稿：壳五格与父行三格全空，适用对象未选，两张表零行', () => {
   const draft = emptyServiceRuleDraft();
   equal(Object.keys(draft).length, 11);
@@ -261,4 +263,27 @@ test('空草稿：壳五格与父行三格全空，适用对象未选，两张�
   deepEqual(draft.minimumMaterials, []);
   equal(Object.keys(emptyClaimDeadlineDraft()).length, 4);
   equal(Object.keys(emptyMinimumMaterialsDraft()).length, 2);
+});
+
+// 票 customer-service-rule-contract-applicability/05 做什么 1（ADR-0176 决定二）：零行读作什么随适用对象——挂产品即未登记，
+// 挂合同即继承同范围产品版；未选时两种都说。文案要与 VE 适配器的行为一致（票 04），不能把合同版的空表说成未登记。
+test('零行提示随适用对象：挂产品答未登记、挂合同答继承产品版、未选两种都说', () => {
+  const product = serviceRuleEmptyTableNote('serviceProduct', 'claimDeadlines');
+  ok(product.includes('未登记'));
+  ok(!product.includes('继承'));
+  const contract = serviceRuleEmptyTableNote('customerContract', 'minimumMaterials');
+  ok(contract.includes('继承'));
+  ok(contract.includes('产品版也没有才答未登记'));
+  const unchosen = serviceRuleEmptyTableNote('', 'claimDeadlines');
+  ok(unchosen.includes('未登记') && unchosen.includes('继承'));
+  ok(serviceRuleEmptyTableNote('serviceProduct', 'claimDeadlines').includes('下方最低材料表'));
+  ok(serviceRuleEmptyTableNote('serviceProduct', 'minimumMaterials').includes('上方索赔期限表'));
+});
+
+// 同票做什么 2（ADR-0176 决定三）：只收紧提示只在挂合同时显，并说明没有删减写法、系统不比对两版孰严（判断项 Q3）。
+test('只收紧提示只对挂合同的版本显', () => {
+  equal(serviceRuleTightenOnlyNote(''), null);
+  equal(serviceRuleTightenOnlyNote('serviceProduct'), null);
+  const note = serviceRuleTightenOnlyNote('customerContract');
+  ok(note !== null && note.includes('只收紧') && note.includes('继承') && note.includes('不比对'));
 });
