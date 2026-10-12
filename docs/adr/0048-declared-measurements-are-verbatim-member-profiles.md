@@ -1,6 +1,7 @@
 # ADR-0048: 声明测量是成员级保真画像，不换算不推导
 
 Status: Accepted  
+Partially suspended by: [ADR-0179](./0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 决定一（决定三第三增量的落点：金额缝装配器不再放在 PS 消费侧，受理前控制金额改由结算形成估价；决定一、二与决定三前两个增量不变，本记录正文不改写）  
 Date: 2026-08-12
 
 ## Context
@@ -52,3 +53,4 @@ PS 改写一次数字就成了第二个测量来源；数值只做「合法正�
 - [UC-PS-001](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)：声明包裹输入组
 - [PS CONTEXT](../domain/parcel-shipment/CONTEXT.md)：快照所有权与节点实测/计价重量的边界
 - [ADR-0047](./0047-terms-control-forms-credit-exposure-not-a-freeze.md)：金额缝所在的控制链
+- [ADR-0179](./0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md)：决定一部分停用本记录决定三第三增量的落点——金额缝装配器不再放在 PS 消费侧；决定一、二不变

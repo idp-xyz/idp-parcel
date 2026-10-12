@@ -53,7 +53,7 @@
 - [ADR-0045：同一委托的新提交版本——当前版本单指针加历史追加，判断任务随版本重立](./0045-new-submission-version-keeps-history-and-reestablishes-the-task.md)
 - [ADR-0046：候选评估规则归 network-routing 领域，证据端口退为取数](./0046-route-candidate-evaluation-lives-in-the-domain.md)
 - [ADR-0047：账期方式的接受前控制形成信用暴露，不冒充资金冻结](./0047-terms-control-forms-credit-exposure-not-a-freeze.md)
-- [ADR-0048：声明测量是成员级保真画像，不换算不推导](./0048-declared-measurements-are-verbatim-member-profiles.md)
+- [ADR-0048：声明测量是成员级保真画像，不换算不推导](./0048-declared-measurements-are-verbatim-member-profiles.md)｜**部分停用**：决定三第三增量的落点（金额缝装配器放在 PS 消费侧）已由 [ADR-0179](./0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 决定一停用，受理前控制金额改由结算形成估价；决定一、二不变
 - [ADR-0049：集成事件的发布通道首发采用进程内直投，消息中间件等负载证据](./0049-publish-channel-is-in-process-delivery-until-load-evidence.md)
 - [ADR-0050：服务产品形态随解析闭包可观察](./0050-service-product-form-observable-through-the-resolution-closure.md)
 - [ADR-0051：资格审核答复含等待补充；一次性只约束终局格](./0051-eligibility-screen-awaits-supplement.md)
@@ -182,7 +182,7 @@
 - [ADR-0176：客户服务规则挂合同的一格按「合同优先解析 + 行级继承产品版」接入——同一范围产品版与合同版并存可解，消费侧按合同点核](./0176-customer-service-rule-contract-tier-selection-and-inheritance.md)｜**合同优先判据**：有恰挂这份合同的版本就采纳它、行级无行继承产品版该行，没有才整体落产品版；「未尽事项以产品标准为准」是差异条款合同的通行形态，「整本替换」会让只改一处的合同失真。**适用场景**：同范围挂产品与挂合同的客户服务规则并存时的解析与 VE 索赔资格读取；闭包仍唯一采纳一版，「唯一适用」硬句不破。
 - [ADR-0177：客户合同正文指名它的货主客户账户，闭包按解析键上的客户账户收窄客户合同候选](./0177-customer-contract-names-its-customer-account-and-the-closure-narrows-by-it.md)｜**归属**：合同正文必填客户账户，闭包只让指名键上那一户的合同参选；同一户同范围两份仍是冲突。规范化文档加必填键、PCC-1 摘要随之变，显式偏离 ADR-0176 决定五的 omitempty 先例（今天无生产数据）。2026-10-12。本项是机制，兑现 PC `CONTEXT`「合同版本必须明确关联货主客户账户」。
 - [ADR-0178：客户合同这一册不收只有壳的版本；客户服务规则的壳指名客户合同时正文必须挂同一份合同；合同正文的货主客户账户是开放引用、不核在册](./0178-customer-contract-versions-carry-their-body-and-contract-shells-bind-service-rule-bodies.md)｜**归属**：货主客户账户只在合同正文里，只有壳的客户合同说不出属于哪一户，发布答`未受理`（改批文，与对账门同格）；选法不改，0037 之前的旧行随重灌消失。壳指名合同即合同层，正文挂产品的规则版本发布前与点读后都拒。合同正文的账户与其余参与方引用同一纪律、不核在册，悬空即对任何键不参选、不串户。部分停用 ADR-0126 决定二在客户合同一册的那一句。2026-10-12。本项是机制，兑现 PC `CONTEXT`「合同版本必须明确关联…货主客户账户」。
-- [ADR-0179：受理前控制金额由结算按委托当前提交版本的逐件 SELL 试算合计形成——估价归结算、试算归计价，选卡与正式 SELL 评价同口径，计价范围随采用登记给出，没登记答未配置](./0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md)｜**草案**：Status 为 Proposed，尚非依据，接受与否归用户；草案期间 ADR-0048 一字不动。**归属判据**：SA `CONTEXT` 拥有接受前估价、PS `CONTEXT` 不拥有金额；选卡、选区域、逐件合计一旦是方法就不能留在只翻译的适配器里。**适用场景**：首版形态「逐件 SELL 试算合计」，选卡与正式 SELL·客户费用评价同口径，分区按价卡分区目录与申报邮编，币种取控制作用域；采用登记键（租户、结算账户），空册停在金额未配置，登记发续办信封；估价随控制结果留痕。2026-10-12，票 product-strategy-boundary/06 第 2 项。
+- [ADR-0179：受理前控制金额由结算按委托当前提交版本的逐件 SELL 试算合计形成——估价归结算、试算归计价，选卡与正式 SELL 评价同口径，计价范围随采用登记给出，没登记答未配置](./0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md)｜**已接受**（2026-10-12，用户授权通道 1 代裁；接受时补了「合计币种对不上也答未形成」与留痕带版本清单两处，PP `CONTEXT` 补接受前估价例外句）；部分停用 ADR-0048 决定三第三增量的落点。**归属判据**：SA `CONTEXT` 拥有接受前估价、PS `CONTEXT` 不拥有金额；选卡、选区域、逐件合计一旦是方法就不能留在只翻译的适配器里。**适用场景**：首版形态「逐件 SELL 试算合计」，选卡与正式 SELL·客户费用评价同口径，分区按价卡分区目录与申报邮编，币种取控制作用域；采用登记键（租户、结算账户），空册停在金额未配置，登记发续办信封；估价随控制结果留痕。2026-10-12，票 product-strategy-boundary/06 第 2 项。
 
 ## 已被取代决策
 

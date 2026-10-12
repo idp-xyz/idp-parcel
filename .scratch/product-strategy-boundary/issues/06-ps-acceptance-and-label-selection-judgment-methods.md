@@ -1,7 +1,7 @@
 # 06 parcel-shipment：受理链与面单择优链上被归进实例半边的判断方法
 
 Category: enhancement
-Status: needs-triage——2026-10-12 通道 3 分诊第 2 项（派单 `task-85d7350d` ← 通道 1）：产品策略起草为 ADR-0179（Proposed，接受归用户），立票 24（ready-for-agent）与 25、26（needs-info），见「第 2 项分诊」；第 3–7 项未动。此前：2026-09-24 通道 4 随票 02 立（登记册逐行拆分划出的产品策略，PS 一张）；逐项先核执行器有无，缺的定出内置策略或参考配置形态后转 ready-for-agent。第 1 项只落了「提交接收」一种形态，2026-09-30 随票 23 进 main（`953d748c`，见文末「进 main 记录」）；其余语义与第 2–7 项未动
+Status: needs-triage——2026-10-12 20:4x 通道 1：第 2 项的 ADR-0179 已接受（用户授权通道 1 代裁），25、26 随之转 ready-for-agent；第 3–7 项未动。此前 2026-10-12 通道 3 分诊第 2 项（派单 `task-85d7350d` ← 通道 1）：产品策略起草为 ADR-0179（Proposed，接受归用户），立票 24（ready-for-agent）与 25、26（needs-info），见「第 2 项分诊」；第 3–7 项未动。此前：2026-09-24 通道 4 随票 02 立（登记册逐行拆分划出的产品策略，PS 一张）；逐项先核执行器有无，缺的定出内置策略或参考配置形态后转 ready-for-agent。第 1 项只落了「提交接收」一种形态，2026-09-30 随票 23 进 main（`953d748c`，见文末「进 main 记录」）；其余语义与第 2–7 项未动
 Blocked by: 无（第 4 项里公开承运商接口的参考配置那半等 03）
 地盘：`internal/parcelshipment/adapters/` 下受理链与面单择优链的消费侧适配器，`cmd/parcel-api`、`cmd/parcel-dispatch` 的对应装配点；缝对面的 party-commercial、parcel-pricing、settlement-accounting 只读，要改提供方另开票。
 出处：[票 02](./02-split-parameter-register-and-retriage-deferrals.md) 登记册逐行拆分——[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md) `PAR-COM-13`、`PAR-COM-14`、`PAR-COM-15`、`PAR-COM-17`、`PAR-INT-02`、`PAR-NET-16` 行内「〔ADR-0146 拆分〕」点名的部分；[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定一、二与决定五第三条。已知缺口沿用[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表 PN-02 行的原话，不另立口径。
