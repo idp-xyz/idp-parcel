@@ -344,6 +344,8 @@ export interface CustomerContractBodyPayload {
 }
 
 export interface ContractContentPayload {
+  /** 合同属于哪个货主客户账户（ADR-0177 决定一）：必填，服务端缺即点名 `customerContract.contractContent.customerAccount`。 */
+  customerAccount: string;
   rulePackage: string;
   bindings?: ControlBindingPayload[];
 }

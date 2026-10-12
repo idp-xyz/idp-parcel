@@ -176,6 +176,15 @@ function ContractContentFields({
   return (
     <section className="flex flex-col gap-2">
       <h3 className={sectionTitle}>合同正文：接单规则包与按费用范围的接受前财务控制约定</h3>
+      <Field label="货主客户账户 *" path="customerContract.contractContent.customerAccount" problems={form.problems}>
+        <Input
+          value={draft.customerAccount}
+          disabled={form.locked}
+          className="font-mono text-[13px]"
+          placeholder="这份合同属于哪个货主客户账户（账户标识）；闭包只让键上那一户的合同参选"
+          onChange={(event) => patch({ customerAccount: event.target.value })}
+        />
+      </Field>
       <Field
         label="接单规则包 *"
         path="customerContract.contractContent.rulePackage"

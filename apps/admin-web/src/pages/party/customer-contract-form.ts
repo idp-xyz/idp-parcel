@@ -44,6 +44,11 @@ export interface CustomerContractDraft {
   scope: string;
   effectiveStartsAt: string;
   effectiveEndsAt: string;
+  /**
+   * 货主客户账户标识（ADR-0177 决定一）：只进正文，不进壳上的指名引用——账户是参与方身份，不是商业对象。闭包按解析键上的
+   * 客户账户只让这一户的合同参选；表单不预填、不从别处推。
+   */
+  customerAccount: string;
   /** 接单规则包对象标识：同时进壳上的指名引用与正文，两处必须相等由服务端核（ErrRulePackageReferenceMismatch）。 */
   rulePackage: string;
   bindings: ControlBindingDraft[];
@@ -67,6 +72,7 @@ export function emptyCustomerContractDraft(): CustomerContractDraft {
     scope: '',
     effectiveStartsAt: '',
     effectiveEndsAt: '',
+    customerAccount: '',
     rulePackage: '',
     bindings: [emptyBindingDraft()],
     controlRequirement: '',
@@ -106,7 +112,7 @@ export function payloadOf(draft: CustomerContractDraft): CommercialPublicationPa
     scope: draft.scope,
     effectiveStartsAt: draft.effectiveStartsAt,
     customerContract: {
-      contractContent: { rulePackage: draft.rulePackage },
+      contractContent: { customerAccount: draft.customerAccount, rulePackage: draft.rulePackage },
       preAcceptanceControl: controlPayloadOf(draft),
     },
   };
@@ -132,6 +138,7 @@ export function customerContractFieldPaths(draft: CustomerContractDraft): string
     ...shellPaths,
     'references.ACCEPTANCE_RULE_PACKAGE',
     'customerContract.contractContent',
+    'customerContract.contractContent.customerAccount',
     'customerContract.contractContent.rulePackage',
     'customerContract.preAcceptanceControl.requirement',
     'customerContract.preAcceptanceControl.notApplicableBasis',
@@ -154,6 +161,7 @@ export function customerContractFieldPaths(draft: CustomerContractDraft): string
 export function customerContractRenderedPaths(draft: CustomerContractDraft): string[] {
   const paths: string[] = [
     ...shellPaths,
+    'customerContract.contractContent.customerAccount',
     'customerContract.contractContent.rulePackage',
     'references.ACCEPTANCE_RULE_PACKAGE',
     'customerContract.contractContent',

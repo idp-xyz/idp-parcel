@@ -25,6 +25,7 @@ function filled(over: Partial<CustomerContractDraft> = {}): CustomerContractDraf
     version: 'v1',
     scope: 'SYN-SCOPE-01',
     effectiveStartsAt: '2026-10-01T00:00:00Z',
+    customerAccount: 'SYN-ACCOUNT-02',
     rulePackage: 'SYN-RULEPKG-01',
     bindings: [
       { chargeScope: 'SYN-CHARGE-PREPAID', mode: 'policy', policy: 'SYN-FIN-CONTROL-01', inapplicabilityBasis: '' },
@@ -46,6 +47,7 @@ test('两层齐全的草稿组出的载荷键名镜像 Go 侧 json 标签，规�
     references: { ACCEPTANCE_RULE_PACKAGE: 'SYN-RULEPKG-01' },
     customerContract: {
       contractContent: {
+        customerAccount: 'SYN-ACCOUNT-02',
         rulePackage: 'SYN-RULEPKG-01',
         bindings: [
           { chargeScope: 'SYN-CHARGE-PREPAID', policy: 'SYN-FIN-CONTROL-01' },
@@ -63,6 +65,8 @@ test('可缺的格留空即不进载荷：区间上界、指名引用、约定�
   equal('references' in payload, false);
   equal('bindings' in payload.customerContract!.contractContent, false);
   equal(payload.customerContract!.contractContent.rulePackage, '');
+  // 客户账户是必填格（ADR-0177 决定一）：留空也照送空串，由服务端点名这一格，表单不代填、不从别处推。
+  equal(payloadOf(filled({ customerAccount: '' })).customerContract!.contractContent.customerAccount, '');
   for (const forbidden of ['tenantId', 'submitter', 'contentDigest', 'approval']) {
     equal(forbidden in payload, false, `${forbidden} 不该出现在载荷里`);
   }
@@ -123,6 +127,7 @@ test('表单认领的 JSON 路径随约定行数长：每行三格 + 行本身�
     'effectiveEndsAt',
     'references.ACCEPTANCE_RULE_PACKAGE',
     'customerContract.contractContent',
+    'customerContract.contractContent.customerAccount',
     'customerContract.contractContent.rulePackage',
     'customerContract.contractContent.bindings[0]',
     'customerContract.contractContent.bindings[0].chargeScope',
