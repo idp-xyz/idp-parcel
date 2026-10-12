@@ -21,6 +21,53 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 自票 legal-entity-profile/02 起带身份层（注册国家 `CN` 与合成终身注册号，ADR-0145 决定一）；在那之前
 灌过的库上这一笔是没有身份层的旧形状，重跑会答内容冲突（2），同样用 `--reset`。
 
+## 操作者渠道：演示发行方与起 parcel-api
+
+票 `operator-channel/17`。管理台的登录门与操作者族各口（端点表里挂 `operatorRegistries.*` 的登记写面与运营决定那几口）
+认的是演示发行方 Dex 签的令牌，`parcel-api` 按 Dex 公布的公钥集自己核签名、`iss`、`aud` 与有效期（ADR-0100 决定二）。
+四步，都在仓库根：
+
+1. 起发行方：`docker compose -f scripts/demo-seeds/operator-channel/compose.yaml up -d --wait`。发现文档在
+   `http://127.0.0.1:5556/dex/.well-known/openid-configuration`，公钥集在 `http://127.0.0.1:5556/dex/keys`。
+2. 灌种子：见上面「用法」。操作者册登的就是 Dex 两个静态用户的主体。
+3. 起 `parcel-api`，带操作者族的三件部署参数：
+
+   ```bash
+   IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable' \
+   IDP_PARCEL_HTTP_ADDR=:19080 \
+   IDP_PARCEL_OPERATOR_OIDC_ISSUER=http://127.0.0.1:5556/dex \
+   IDP_PARCEL_OPERATOR_OIDC_JWKS_URL=http://127.0.0.1:5556/dex/keys \
+   IDP_PARCEL_OPERATOR_OIDC_AUDIENCE=idp-parcel-admin-web \
+     go run ./cmd/parcel-api
+   ```
+
+   三件的取值只属这个演示部署，产品侧不给缺省值：三件都不设，操作者族整族答 403 `ACCESS_CHANNEL_NOT_CONFIGURED`；
+   只设一部分，进程启动即拒。发行方地址与 Dex 发现文档里的 `issuer` 逐字相同——`parcel-api` 逐字比较 `iss`，多一个
+   末尾斜杠就一律答 401。受众是管理台的客户端标识，Dex 把它写进访问令牌的 `aud`。`:19080` 是管理台开发代理的缺省
+   目标（`apps/admin-web/vite.config.ts`）。「已知边界」里 `submit-one-shipment.sh` 那条要的隔离读写两件与这三件
+   互不替代，可以一起设。
+4. 取证：`IDP_PARCEL_API_BASE=http://127.0.0.1:19080 scripts/demo-seeds/operator-channel/probe-operator-channel.sh`。
+   对同一个登记写口打三枪、逐格断言：配置员答 200 `REFUSED` / `VERSION_NOT_OVERWRITABLE`（种子在 `SYN-TENANT-01`
+   下登过同一条策略，答得出这一格说明令牌解析出的正是这个租户），查阅员答 403 `OPERATOR_NOT_GRANTED`，不带令牌答
+   401 `OPERATOR_CREDENTIAL_REJECTED`。不往库里多落行，可以反复跑；证据层级只记 S。
+
+两个合成操作者，口令都是合成值 `syn-demo-password`——只配回环上的演示发行方，不是任何环境的密钥：
+
+| 登录邮箱 | 授予（自 2026-01-01 生效，不设终点） |
+|---|---|
+| `syn-operator-config-01@syn-tenant-01.example.invalid` | 登记册配置写、主数据与运营查阅读 |
+| `syn-operator-viewer-01@syn-tenant-01.example.invalid` | 主数据与运营查阅读 |
+
+单要一枚令牌：`scripts/demo-seeds/operator-channel/operator-token.sh <邮箱>` 打印访问令牌，末尾加 `claims` 打印两枚
+令牌的载荷。它与管理台走同一个公共客户端、同一条 authorization_code + PKCE 流，管理台不必在跑。
+
+- Dex 的状态只在内存：容器重启后，此前签出的令牌与刷新令牌全部作废，签名钥也换新。`parcel-api` 见到陌生 `kid`
+  才重取公钥集，且两次取至少隔一分钟，所以 Dex 刚重启时新令牌可能先答 401，过一分钟再试即好。
+- Dex 的版本钉在 `compose.yaml`，不用更新那一版的理由写在镜像那行的注释里。这一版不强制 PKCE：请求不带
+  `code_challenge` 也放行，带了才核 verifier；管理台每次都带 S256。
+- Dex 启动日志开头那一行 `failed to get signing algorithm … no signing key found` 是签名钥还没生成的那一瞬，紧跟着
+  就是 `keys rotated`，不是故障。
+
 ## 组成
 
 | 目录 | 入库通道 | 内容 |
@@ -37,7 +84,8 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 | `data/visibility/` | `cmd/parcel-ve-register` | 里程碑映射、分诊规则、通知策略、索赔资格、索赔授权两格（一格空名单）、披露策略、异常披露规则、冲突信号规则、索赔材料收讫两笔（照片留下、发票收讫后撤销） |
 | `data/collection/` | `cmd/parcel-collection-register` | 一条 COD 指令走全程（渠道报收、银行短收、短款、清分进应付客户）+ SGD 分户账只开立；CNY 账两笔回汇批次（已归集 / 已交出汇付主张），SGD 账无批次 |
 | `data/settlement/` | `cmd/parcel-settlement-register settlement-account` | 结算账户登记册（ADR-0158）1 行：货主 `SYN-PARTY-SHIPPER-01` 在法人 `SYN-LE-01` 下的 CNY 应收账户 `SYN-SETTLEMENT-ACCOUNT-01`，结算政策 `SYN-SETTLEMENT-PREPAID-01`，责任依据是该政策所引的客户合同 `SYN-CONTRACT-01`。五维照发布批里那份结算政策的正文配，受理前财务控制的作用域经它找到账户 |
-| `data/access/` | `cmd/parcel-access-register` | 操作者册（ADR-0100 决定二第三条）：两个合成操作者主体绑演示租户，配置员授登记册配置写与主数据与运营查阅读两格，查阅员只授查阅读；发行方是合成值，演示部署接上真 OIDC 发行方后按其标识另登 |
+| `data/access/` | `cmd/parcel-access-register` | 操作者册（ADR-0100 决定二第三条）：两个合成操作者主体绑演示租户，配置员授登记册配置写与主数据与运营查阅读两格，查阅员只授查阅读；主体是演示发行方 Dex 给 `operator-channel/dex.yaml` 两个静态用户真签出的 `sub`，换发行方就按新发行方的标识另登一批 |
+| `operator-channel/` | — | 演示发行方：Dex 的容器描述（`compose.yaml`，不并进仓库根那份门禁库描述）与配置（`dex.yaml`：管理台公共客户端、两个合成静态用户），取令牌脚本 `operator-token.sh`，操作者渠道取证脚本 `probe-operator-channel.sh`；用法见上面「操作者渠道」一节 |
 | `migrate/` | — | 迁移助手（`migrate.Run` 的隔离环境入口；迁移计划刻意没有生产入口） |
 | `seedgen/` | — | 计价快照生成器：价卡、序列与参考目录的登记输入带规范化版本号与内容摘要自校，必须经真领域构造函数折装；PPC/PRS/PRC 规范化版本升级时重跑并提交新产物 |
 
@@ -95,6 +143,9 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 
 ## 已知边界（如实记录，不是缺陷）
 
+- 早先灌过的库上，挂合成发行方 `https://syn-issuer-01.example.invalid` 的两个主体与三笔授予还在操作者册里。没有
+  哪个发行方签得出那个 `iss`，它们在册上与能登录的主体长得一样，却永远登不进来，所以种子不再登它们。册只增不改，
+  要清掉就 `--reset`。
 - 商业价格政策正文随发布批里的 `PRICE_RULE` 经 `pricePolicyBody` 与口径发布。价卡仍是
   `parcel-pricing` 的登记；两套数字要对上是种子自己的事，发布口不替价卡校对。
   `RehydrateAdoptedBasisSpec` 的快照重建至今缺席，补发布通道不等于补重建（记于票
