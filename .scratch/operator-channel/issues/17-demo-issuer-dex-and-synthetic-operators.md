@@ -1,7 +1,7 @@
 # 17 演示发行方：Dex 接进演示环境，合成操作者按它的标识另登
 
 Category: enhancement
-Status: 完工，待评审与重放——2026-10-12 通道 4：分支 `mcp4-oc17`（基 `00bc85ce`），代码与脚本 tip `968fe8fb`，完成记录见文末。此前 in-progress——2026-10-12 通道 4 认领（通道 1 派单 `task-605064ea`，接替一直未接的 `task-be560cd8`），隔离 worktree `idp-parcel-mcp4-oc17`、分支 `mcp4-oc17`（基 `00bc85ce`）。此前 ready-for-agent——2026-10-12 通道 1 补立：[02](./02-oidc-credential-verifier-and-deployment-parameters.md) 完成记录写「那一步随 07 做」，而 [07](./07-admin-web-login-gate.md) 的地盘只有 `apps/admin-web/**`，这一步于是没有票认领；[04](./04-registration-write-faces-take-operator-intake.md) 第 1 件、[15](./15-operation-decision-faces-take-operator-intake.md) 余下四口、[10](./10-device-register-and-operation-fact-capability-face.md) 换口那半与 07 的完成判据都在等它
+Status: resolved——2026-10-12 通道 1：重放进 main，远端 main = `60a1c9b4`，非作者评审与进 main 记录见文末。此前完工，待评审与重放——2026-10-12 通道 4：分支 `mcp4-oc17`（基 `00bc85ce`），代码与脚本 tip `968fe8fb`，完成记录见文末。此前 in-progress——2026-10-12 通道 4 认领（通道 1 派单 `task-605064ea`，接替一直未接的 `task-be560cd8`），隔离 worktree `idp-parcel-mcp4-oc17`、分支 `mcp4-oc17`（基 `00bc85ce`）。此前 ready-for-agent——2026-10-12 通道 1 补立：[02](./02-oidc-credential-verifier-and-deployment-parameters.md) 完成记录写「那一步随 07 做」，而 [07](./07-admin-web-login-gate.md) 的地盘只有 `apps/admin-web/**`，这一步于是没有票认领；[04](./04-registration-write-faces-take-operator-intake.md) 第 1 件、[15](./15-operation-decision-faces-take-operator-intake.md) 余下四口、[10](./10-device-register-and-operation-fact-capability-face.md) 换口那半与 07 的完成判据都在等它
 Blocked by: 无（02、03 已 resolved）
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：演示发行方的容器描述与 Dex 配置（进 `compose.yaml` 还是另起一份演示用 compose 文件，本票定）；`scripts/demo-seeds/data/access/`、`seed.sh` 里操作者册那一段、`scripts/demo-seeds/README.md`。不碰 `apps/admin-web/**`（07）、`internal/accessidentity` 与参数登记册（10 在改）、`cmd/parcel-api` 的代码。
@@ -77,3 +77,13 @@ Blocked by: 无（02、03 已 resolved）
 - 此刻在跑的演示发行方容器起自本工作树：它挂载的是本树的 `dex.yaml`（与 `968fe8fb` 上那份 sha256 相同）。拆本树之前要从主树重起它，否则下一次容器重启找不到配置。
 
 **评审**：尚无非作者评审，作者未自评。spec 指本票面，基线 `00bc85ce`，代码与脚本 tip `968fe8fb`。
+
+**进 main 记录**：通道 1 在隔离树 `idp-parcel-replay-oc17-mcp1` 把七笔原样重放到 main `b5f39fbd` 之上——`1c5c4653`→`d73eb59d`、`01784385`→`84727f38`、`4c9dc789`→`6cc410ed`、`7eff7028`→`0ff1779f`、`9c851538`→`a27e1a33`、`968fe8fb`→`def35e8f`、`88ca1100`→`60a1c9b4`；分支上的 SHA 作封存出处，分支指针改名 `merged/mcp4-oc17`。本票文件与 `scripts/demo-seeds` 对分支 tip `88ca1100` 逐字相同，两个脚本仍入库为 100755；main 自 `00bc85ce` 起没动过 `.go`、`.sql` 与 `scripts/demo-seeds`。验证在 `60a1c9b4`：清点在该 tip 重生成零差；`go build ./...`、`go vet ./...` 退 0；带 DSN `go test -p 1 -count=1 ./...` 138 ok / 0 FAIL / 14 无测试 / 0 cached（21:36:24→21:39:09）；`-v` 探针 `TestTheWiredCancellationAnswersHonestlyAgainstARealDatabase` PASS 非 SKIP；一次性库 `idp_mcp1_oc17_replay` 上 `seed.sh --reset` 退 0、零错误行，两个 Dex 主体绑 `SYN-TENANT-01`，库已删。21:4x 共享树 ff 到 `60a1c9b4` 后 `push 60a1c9b4:main`，远端 main = `60a1c9b4`。随后演示发行方从主树重起（`docker compose -f scripts/demo-seeds/operator-channel/compose.yaml up -d --wait --force-recreate`）：容器 `idp-parcel-demo-issuer` 改挂主树的 `dex.yaml`，Healthy，发现文档 `issuer` 照旧、`/keys` 答 200；此前签出的令牌随之作废（已告通道 5）。
+
+### 评审 ← 通道 1（非作者）· 钉 `88ca1100` · 基线 `00bc85ce` · 21:32
+
+Standards 阻断 0 / 非阻断 2；Spec 阻断 0 / 非阻断 0。本评审原派通道 3（`task-589ffb0d`，重派 `task-d27061b6`），通道 3 会话 21:2x 崩溃、未交卷；没有空闲的非作者通道，照 parallel-sessions「合入前独立评审」由推送方自跑 `/code-review`。隔离子代理两次都报认证错误起不来，两轴改在通道 1 会话里先 Standards 后 Spec 串行跑、各自成段。通道 1 不是本票作者。
+
+- 无发现（Standards）：产品侧零改动（`cmd`、`internal`、`apps`、`migrations` 与根 `compose.yaml` 对基线 diff 为空），没有多出默认值；镜像钉 `v2.45.1`，不用 v2.46.0 与另起演示 compose 的理由都写在 `compose.yaml` 原处；口令、散列与 `sub` 只在 `scripts/demo-seeds`；两个脚本入库 100755；九份文件无 CR、无 BOM；注释全中文，跨文件引用用符号名（`beginLogin`、`CALLBACK_PATH`、`accessTokenForRequest`、`inFlightRenewal`、`minRefetchInterval`，基线与 main 上都实有），无行号。
+- 无发现（Spec）：做什么 1–4 逐条落地；从在跑的 Dex 实取两枚令牌，`sub` 与种子逐字相同、`aud` 为单串 `idp-parcel-admin-web`；判断项 4 的理由成立——旧批标识只出现在 Go 测试各自的常量与文档里，读 `data/access/` 的只有 `seed.sh`，旧批库上不带 `--reset` 再登新批答 `ALREADY_REGISTERED`、不撞行；README「只设一部分即拒」与 `assemble_operator_credential.go` 头注相符。判据 ①② 评审者重跑：发现文档与 `/keys` 取得到；一次性库上 `seed.sh --reset` 两遍退 0、零错误行，合成发行方 0 行，库已删。③ 的脚本与 README 步骤齐，未重跑（要起 `parcel-api`）。不做四条都没碰。
+- 留票面记、不挡合入，下一张碰 `scripts/demo-seeds` 的票顺手收：**N1**（AGENTS.md「改文档」计数条）`seed.sh` 操作者册头注「dex.yaml 里两个静态用户」、README `data/access/` 那一行与「操作者渠道」一节「灌种子」那步的「两个静态用户」，数的是 `dex.yaml` 的 `staticPasswords`，再加一个用户就会无声变错，去掉数字即可。**N2** `operator-token.sh` 常量上方「四个值都抄自……」，下面实有五个常量（含 `SCOPE`），去掉「四个」。
