@@ -1,7 +1,7 @@
 # 07 PC 闭包不按键上的客户账户收窄客户合同候选：同一范围两户各一份合同即两户都`适用冲突`
 
 Category: bug
-Status: 完工，待重放——2026-10-12 通道 1 在分支 `mcp1-csr07` 上做完，分支已推 origin，完成记录见文末。此前：in-progress——2026-10-12 11:3x 通道 1 认领（用户令「全部独立完成」），分支 `mcp1-csr07`，基 `9ba5d623`。此前：ready-for-agent——2026-10-12 11:2x 用户经 IDP 队列对「分诊」节推荐答「同意」，决定落为 [ADR-0177](../../../docs/adr/0177-customer-contract-names-its-customer-account-and-the-closure-narrows-by-it.md)（Accepted）；实施按其 Consequences 的落地位，走并行会话那条路。此前：needs-info——2026-10-12 11:1x 通道 1 分诊（见文末「分诊」）：是代码没兑现 PC `CONTEXT` 既有不变量的缺口，不是新产品问题；但兑现它要给客户合同的规范化文档加键、动 PCC-1，属难逆转取舍，须先有一篇 ADR。此前：needs-triage——2026-10-12 10:5x 通道 1 立（用户令独立完成），出自 [06](06-demo-contract-02-custom-first-claim-deadline-inherits-materials.md) 灌种子后的真库取证；只读取证，未动 PC 代码。
+Status: resolved——2026-10-12 11:28 通道 1 快进进 main（远端 `9ba5d623` → `26c63e26`，分支 SHA 原样进 main）；评审是作者自审（用户令独立完成），见文末 Comments 与进 main 记录。完成判据二随 06 取证。此前：完工，待重放——2026-10-12 通道 1 在分支 `mcp1-csr07` 上做完，分支已推 origin，完成记录见文末。此前：in-progress——2026-10-12 11:3x 通道 1 认领（用户令「全部独立完成」），分支 `mcp1-csr07`，基 `9ba5d623`。此前：ready-for-agent——2026-10-12 11:2x 用户经 IDP 队列对「分诊」节推荐答「同意」，决定落为 [ADR-0177](../../../docs/adr/0177-customer-contract-names-its-customer-account-and-the-closure-narrows-by-it.md)（Accepted）；实施按其 Consequences 的落地位，走并行会话那条路。此前：needs-info——2026-10-12 11:1x 通道 1 分诊（见文末「分诊」）：是代码没兑现 PC `CONTEXT` 既有不变量的缺口，不是新产品问题；但兑现它要给客户合同的规范化文档加键、动 PCC-1，属难逆转取舍，须先有一篇 ADR。此前：needs-triage——2026-10-12 10:5x 通道 1 立（用户令独立完成），出自 [06](06-demo-contract-02-custom-first-claim-deadline-inherits-materials.md) 灌种子后的真库取证；只读取证，未动 PC 代码。
 Blocked by: 无（用户决定已落 ADR-0177）
 父票：[spec](../spec.md)
 地盘：`internal/partycommercial/domain` 的闭包解析（客户合同那一格的候选选法）；碰 Go，走并行会话那条路。
@@ -56,6 +56,22 @@ Blocked by: 无（用户决定已落 ADR-0177）
 6. **责任法人那一半不做**（ADR-0177 决定四），留作后续另记。
 
 **未做 / 风险**：06 的种子（合同 02 补账户、重灌、两户闭包取证）属 06；管理台表单只加了一格输入，未走浏览器。
+
+## Comments
+
+### 评审 ← 通道 1（作者自审，不是非作者评审）· 钉 `26c63e26` · 11:2x
+
+用户令「全部独立完成」，没有第二个会话可评；自审看不到作者自己的盲点，宜由 PC owner 事后补一份非作者评审，重点是判断项 2、5。
+
+- **Standards**：阻断无。非阻断：判断项 5——ADR-0014 的部分停用是实施时补记的，用户的「同意」没有逐字覆盖它。无发现：新增注释全中文、无行号与跨文件计数；domain 不引 adapters；迁移只加列与 CHECK、不改既有约束；生产代码不写死任何租户取值（演示种子的 `SYN-ACCOUNT-01` 是 S 实例）。
+- **Spec**：阻断无。非阻断：判断项 2 留下的那一格（只有壳的合同与一户合同并存仍冲突）是 ADR-0153 形状的已知代价。无发现：ADR-0177 决定一至五逐条对过落点；完成判据一两格有用例；判据二归 06。
+
+## 进 main 记录（通道 1 · 2026-10-12 11:28）
+
+- 远端 main `9ba5d623` → `26c63e26`：分支 `mcp1-csr07` 自基未分叉，快进，`b6ac8471`、`887bc0ad`、`776ea847`、`31b73af7`、`457e7ebc`、`d59f3a72`、`26c63e26` 原样进 main。11:28:54 推前 `ls-remote` 答 `9ba5d623`，其下只有本票七笔。spec 子票表 07 行随 `796e4610` 先同步，本记录随其后一笔。
+- 验证（推送方，钉 `26c63e26` 的隔离 detached worktree，WSL，go1.26.8，DSN 门禁库 55432）：`gofmt -l .` 无输出；`go build ./...`、`go vet ./...` 退 0；清点重跑 `git status --porcelain` 为空；带 DSN 全仓 `go test -count=1 -p 1 ./...` 退 0，138 ok / 0 FAIL / 0 cached，150 s。
+- 解锁：[06](06-demo-contract-02-custom-first-claim-deadline-inherits-materials.md) 的「Blocked by 07」已解，06 票面未改。
+- 分支 `mcp1-csr07` 本地改名 `merged/mcp1-csr07`、作者树与验证树已拆；远端分支留着。
 
 ## 分诊（2026-10-12 11:1x，通道 1，钉 main `a0aae6a1`；只读）
 
