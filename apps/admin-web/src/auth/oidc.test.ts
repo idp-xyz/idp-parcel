@@ -1,5 +1,5 @@
 import { afterEach, test } from 'node:test';
-import { equal, ok } from 'node:assert/strict';
+import { equal } from 'node:assert/strict';
 import { accessTokenForRequest, beginLogin, completeLogin, currentLocation, ensureSession, logout } from './oidc';
 
 // 票 operator-channel/07「令牌只在内存，不落本地存储」。走的是真的 PKCE 回调路径：beginLogin 写中间态并跳签发方，
@@ -96,17 +96,6 @@ afterEach(() => {
 test('登回来的位置带 hash：页面位置在 hash 里', () => {
   installBrowser();
   equal(currentLocation(), '/#/price-card-catalog');
-});
-
-test('开始登录时清掉上一版存在 sessionStorage 里的整份会话', async () => {
-  const { session } = installBrowser();
-  session.setItem('parcel.oidc.session', JSON.stringify({ accessToken: 'SYN-LEGACY-TOKEN' }));
-
-  await beginLogin(currentLocation());
-
-  equal(session.getItem('parcel.oidc.session'), null);
-  // 登录中间态照旧在：它要熬过跳到签发方再跳回来的整页导航。
-  ok(session.getItem('parcel.oidc.pending'));
 });
 
 // 票 operator-channel/07 接演示发行方：签发方逐字匹配回调地址与客户端标识（票 17「交给 07」），差一个字符就答

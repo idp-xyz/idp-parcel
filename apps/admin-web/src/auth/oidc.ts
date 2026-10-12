@@ -31,9 +31,11 @@ const AUTHORIZE_URL = `${ISSUER}/auth`;
 export const CALLBACK_PATH = '/auth/callback';
 
 const PENDING_KEY = 'parcel.oidc.pending';
-// 上一版把整份会话（含令牌）存在 sessionStorage 的这个键下。升级后同一标签页里那份旧会话不会再被读，却会
-// 一直躺到标签页关掉；开始一次新登录时顺手清掉——升级后头一件事必是重新登录，所以这一处就够。
+// 上一版把整份会话（含 refresh_token 原文）存在 sessionStorage 的这个键下。升级后它不会再被读，却会一直躺到标签页
+// 关掉，刷新后没再点登录的标签页里也一样，所以模块一加载就清，不等开始登录。只清这一个键：回调页加载本模块时，
+// 登录中间态正等着 completeLogin 来读。node 测试进程加载本模块时还没有 sessionStorage。
 const LEGACY_SESSION_KEY = 'parcel.oidc.session';
+if (typeof sessionStorage !== 'undefined') sessionStorage.removeItem(LEGACY_SESSION_KEY);
 
 // 提前量：到期前这么久就当作不可用并续期，避免拿着临界令牌发请求。
 const RENEW_SKEW_MS = 30_000;
@@ -115,7 +117,6 @@ export function currentLocation(): string {
 }
 
 export async function beginLogin(returnTo: string): Promise<void> {
-  sessionStorage.removeItem(LEGACY_SESSION_KEY);
   const verifier = randomUrlSafe(32);
   const pending: PendingLogin = {
     verifier,
