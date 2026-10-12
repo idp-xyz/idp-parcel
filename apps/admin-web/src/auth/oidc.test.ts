@@ -71,14 +71,19 @@ function idTokenWith(claims: Record<string, unknown>): string {
   return `${base64Url(JSON.stringify({ alg: 'RS256', typ: 'JWT' }))}.${base64Url(JSON.stringify(claims))}.SYN-SIGNATURE`;
 }
 
-function stubTokenEndpoint(respond: (form: URLSearchParams) => Record<string, unknown>): URLSearchParams[] {
+function stubTokenEndpoint(respond: (form: URLSearchParams) => Record<string, unknown>): {
+  forms: URLSearchParams[];
+  urls: string[];
+} {
   const forms: URLSearchParams[] = [];
-  globalThis.fetch = (async (_input: RequestInfo | URL, init?: RequestInit) => {
+  const urls: string[] = [];
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
     const form = new URLSearchParams(String(init?.body ?? ''));
     forms.push(form);
+    urls.push(String(input));
     return new Response(JSON.stringify(respond(form)), { status: 200 });
   }) as typeof fetch;
-  return forms;
+  return { forms, urls };
 }
 
 afterEach(() => {
@@ -104,6 +109,19 @@ test('开始登录时清掉上一版存在 sessionStorage 里的整份会话', a
   ok(session.getItem('parcel.oidc.pending'));
 });
 
+// 票 operator-channel/07 接演示发行方：签发方逐字匹配回调地址与客户端标识（票 17「交给 07」），差一个字符就答
+// 400，所以把这几格钉住。
+test('授权跳转对的是演示发行方，回调地址与客户端标识和签发方登记的逐字相同', async () => {
+  const { location } = installBrowser();
+  await beginLogin(currentLocation());
+  const authorize = new URL(location.assigned[location.assigned.length - 1]);
+  equal(`${authorize.origin}${authorize.pathname}`, 'http://127.0.0.1:5556/dex/auth');
+  equal(authorize.searchParams.get('client_id'), 'idp-parcel-admin-web');
+  equal(authorize.searchParams.get('redirect_uri'), 'http://localhost:5173/auth/callback');
+  equal(authorize.searchParams.get('response_type'), 'code');
+  equal(authorize.searchParams.get('scope'), 'openid profile email offline_access');
+});
+
 test('登录与续期换来的令牌只在内存，存储里一枚都找不到；退出即无令牌', async () => {
   const { location, session, local } = installBrowser();
   await beginLogin(currentLocation());
@@ -115,7 +133,7 @@ test('登录与续期换来的令牌只在内存，存储里一枚都找不到�
   location.pathname = '/auth/callback';
   location.search = `?code=SYN-CODE&state=${state}`;
   const idToken = idTokenWith({ sub: 'SYN-OPERATOR-CONFIG-01', nonce });
-  const forms = stubTokenEndpoint((form) =>
+  const { forms, urls } = stubTokenEndpoint((form) =>
     form.get('grant_type') === 'authorization_code'
       // 寿命取 1 秒：落在续期提前量之内，下面 ensureSession 当场续一次，续期那一路也要证。
       ? { access_token: 'SYN-ACCESS-TOKEN-1', id_token: idToken, refresh_token: 'SYN-REFRESH-TOKEN-1', expires_in: 1 }
@@ -127,6 +145,9 @@ test('登录与续期换来的令牌只在内存，存储里一枚都找不到�
   equal(loggedIn.accessToken, 'SYN-ACCESS-TOKEN-1');
   equal(returnTo, '/#/price-card-catalog');
   equal(forms[0].get('code'), 'SYN-CODE');
+  equal(urls[0], '/oidc/dex/token');
+  equal(forms[0].get('client_id'), 'idp-parcel-admin-web');
+  equal(forms[0].get('redirect_uri'), 'http://localhost:5173/auth/callback');
   for (const secret of ['SYN-ACCESS-TOKEN-1', 'SYN-REFRESH-TOKEN-1', idToken]) {
     equal(session.text().includes(secret), false, `sessionStorage 里不该有 ${secret}`);
     equal(local.text().includes(secret), false, `localStorage 里不该有 ${secret}`);
@@ -135,6 +156,7 @@ test('登录与续期换来的令牌只在内存，存储里一枚都找不到�
   equal(await accessTokenForRequest(), 'SYN-ACCESS-TOKEN-2');
   equal(forms[1].get('grant_type'), 'refresh_token');
   equal(forms[1].get('refresh_token'), 'SYN-REFRESH-TOKEN-1');
+  equal(urls[1], '/oidc/dex/token');
   for (const secret of ['SYN-ACCESS-TOKEN-2', 'SYN-REFRESH-TOKEN-2', idToken]) {
     equal(session.text().includes(secret), false, `续期后 sessionStorage 里不该有 ${secret}`);
     equal(local.text().includes(secret), false, `续期后 localStorage 里不该有 ${secret}`);

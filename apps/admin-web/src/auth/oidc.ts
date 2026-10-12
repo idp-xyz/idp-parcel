@@ -1,4 +1,4 @@
-// 管理台登录走 gk.idp.xyz 的 OIDC authorization_code + PKCE 公开客户端流（ADR-0100 决定二第一条）。
+// 管理台登录走操作者族发行方的 OIDC authorization_code + PKCE 公开客户端流（ADR-0100 决定二第一条）。
 //
 // 边界先说清：这里的登录态只决定控制台页面开不开，后端不采信它。访问令牌随 /api 请求以 Bearer 外送
 // （auth/bearer.ts），由 parcel-api 自己校验签名、iss、aud 与有效期（ADR-0100 决定二）；哪些口认它由装配点
@@ -10,19 +10,23 @@
 // 熬过跳到签发方再跳回来的那次整页导航，内存熬不过；它也不是令牌——没有签发方回传的一次性 code，它换不到
 // 任何东西。
 //
-// 令牌交换经 vite 代理 `/oidc` 同源转发：gk.idp.xyz 的 token 端点未对本地开发源
-// 放 CORS（实测预检 204 无 Access-Control-Allow-Origin），顶层跳转不受 CORS 约束，
-// 故只有 XHR 的一段走代理，授权跳转仍直达签发方。
+// 令牌交换经 vite 代理 `/oidc` 同源转发，授权跳转是顶层导航、直达签发方。演示发行方对本地开发源放了 CORS，直连也通；
+// 留着同源转发，换令牌那一下就不依赖签发方放不放 CORS，换到不放的签发方时只改代理目标。
 //
-// 下面两个值是开发部署形态（开发方自己的身份服务与其上注册的公开客户端），不是
-// 租户实例参数；换部署时改这里并同步签发方上的回调白名单。
-const ISSUER = 'https://gk.idp.xyz';
-const CLIENT_ID = 'idp-parcel';
+// 下面的发行方与客户端标识是演示部署形态：票 operator-channel/17 的演示发行方（Dex）与其上登记的公开客户端，不是
+// 租户实例参数，也不是任何部署的默认值。换部署时改这里，同步 vite.config.ts 的代理目标与签发方上的回调白名单。
+// - 发行方地址要与 parcel-api 的 IDP_PARCEL_OPERATOR_OIDC_ISSUER 逐字相同：parcel-api 拿令牌的 iss 逐字比，
+//   不折叠末尾斜杠。
+// - 客户端标识同时是 parcel-api 操作者族的受众（IDP_PARCEL_OPERATOR_OIDC_AUDIENCE），签发方把它写进访问令牌的 aud。
+// - 签发方只登了 http://localhost:5173/auth/callback 这一个回调、逐字匹配，而回调地址取页面的 origin，所以本地
+//   开发要按 localhost 打开管理台，按 127.0.0.1 打开会被签发方拒。
+export const ISSUER = 'http://127.0.0.1:5556/dex';
+const CLIENT_ID = 'idp-parcel-admin-web';
 const SCOPE = 'openid profile email offline_access';
 
-// 同源代理前缀：/oidc/oauth2/token → {ISSUER}/oauth2/token（见 vite.config.ts）。
-const TOKEN_URL = '/oidc/oauth2/token';
-const AUTHORIZE_URL = `${ISSUER}/oauth2/auth`;
+// 同源代理前缀：/oidc/dex/token → http://127.0.0.1:5556/dex/token（见 vite.config.ts）。
+const TOKEN_URL = '/oidc/dex/token';
+const AUTHORIZE_URL = `${ISSUER}/auth`;
 
 export const CALLBACK_PATH = '/auth/callback';
 
@@ -299,8 +303,8 @@ export function millisUntilRenewal(session: OidcSession): number {
   return Math.max(0, session.expiresAt - RENEW_SKEW_MS - Date.now());
 }
 
-// 只清本地会话，不做 RP 发起的签发方登出：签发方上登记的登出回调还是占位值，
-// 跳过去只会落在别人的域名上。签发方侧会话由其自身过期策略结束。
+// 只清本地会话，不做 RP 发起的签发方登出：演示发行方的发现文档里没有 end_session_endpoint，无从发起。
+// 签发方侧会话由其自身过期策略结束。
 export function logout(): void {
   currentSession = null;
   sessionStorage.removeItem(PENDING_KEY);

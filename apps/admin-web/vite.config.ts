@@ -10,6 +10,9 @@ import { HttpsProxyAgent } from 'https-proxy-agent';
 // /api（如 POST /shipment-requests），前缀只属前端侧的转发约定，
 // 这样单条代理规则即可覆盖全部端点，不必逐路径枚举。
 const apiTarget = process.env.PARCEL_API_TARGET || 'http://localhost:19080';
+// 操作者族发行方：与 src/auth/oidc.ts 的 ISSUER 同源，换发行方时两处一起改。
+const oidcTarget = 'http://127.0.0.1:5556';
+const outboundProxy = process.env.https_proxy || process.env.HTTPS_PROXY;
 
 export default defineConfig({
   plugins: [react()],
@@ -39,18 +42,15 @@ export default defineConfig({
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
-      // OIDC 令牌交换同源转发：gk.idp.xyz 的 token 端点不对本地开发源放 CORS
-      // （实测预检无 Access-Control-Allow-Origin），授权跳转是顶层导航不受约束，
-      // 只有换令牌的 XHR 需要借道。目标与 src/auth/oidc.ts 的 ISSUER 同源。
+      // OIDC 令牌交换同源转发（为什么留着它见 src/auth/oidc.ts 文件头）：授权跳转是顶层导航不受 CORS 约束，
+      // 只有换令牌的 XHR 借道。/oidc/dex/token → http://127.0.0.1:5556/dex/token。
       '/oidc': {
-        target: 'https://gk.idp.xyz',
+        target: oidcTarget,
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/oidc/, ''),
-        // 开发环境通常配置系统代理（如 http_proxy），Vite 的 http-proxy 中间件需要明确
-        // 传入 agent 才会使用。检查环境变量，有则创建 agent。
-        agent: process.env.https_proxy || process.env.HTTPS_PROXY
-          ? new HttpsProxyAgent(process.env.https_proxy || process.env.HTTPS_PROXY || '')
-          : undefined,
+        // Vite 的 http-proxy 中间件要显式传 agent 才走系统代理（http_proxy 之类）。只对 https 发行方接它：
+        // 回环上的发行方经系统代理反而到不了。
+        agent: outboundProxy && oidcTarget.startsWith('https:') ? new HttpsProxyAgent(outboundProxy) : undefined,
       },
     },
   },
