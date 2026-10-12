@@ -32,14 +32,15 @@ type grantBatchDocument struct {
 }
 
 type grantItemDocument struct {
-	GrantID           string     `json:"grantId"`
-	Issuer            string     `json:"issuer"`
-	Subject           string     `json:"subject"`
-	CapabilityFace    string     `json:"capabilityFace"`
-	DecisionKind      string     `json:"decisionKind,omitempty"`
-	EffectiveStartsAt time.Time  `json:"effectiveStartsAt"`
-	EffectiveEndsAt   *time.Time `json:"effectiveEndsAt,omitempty"`
-	Basis             string     `json:"basis"`
+	GrantID           string             `json:"grantId"`
+	Issuer            string             `json:"issuer"`
+	Subject           string             `json:"subject"`
+	CapabilityFace    string             `json:"capabilityFace"`
+	DecisionKind      string             `json:"decisionKind,omitempty"`
+	WorkScope         *workScopeDocument `json:"workScope,omitempty"`
+	EffectiveStartsAt time.Time          `json:"effectiveStartsAt"`
+	EffectiveEndsAt   *time.Time         `json:"effectiveEndsAt,omitempty"`
+	Basis             string             `json:"basis"`
 }
 
 type revocationBatchDocument struct {
@@ -120,17 +121,27 @@ func grantFrom(tenantID string, entry grantItemDocument) (accessidentity.Operato
 	if err != nil {
 		return accessidentity.OperatorGrant{}, err
 	}
-	// 决定种类只属「运营决定」一格（ADR-0151 决定一）：那一格缺了要拒，别的格带了也要拒——带着
-	// 种类的登记册配置写授予，读批文的人会以为它只授了某一种决定。
-	if face == accessidentity.CapabilityOperationDecision {
+	// 决定种类只属「运营决定」一格（ADR-0151 决定一），作业范围只属「作业事实登记」一格（ADR-0149 决定二）：该带的缺了
+	// 要拒，别的格带了也要拒——带着种类或范围的登记册配置写授予，读批文的人会以为它只授了某一种决定、某一个节点。
+	if face != accessidentity.CapabilityOperationDecision && entry.DecisionKind != "" {
+		return accessidentity.OperatorGrant{}, fmt.Errorf("decisionKind 只属 OPERATION_DECISION，%s 不带决定种类", face)
+	}
+	if face != accessidentity.CapabilityWorkFactRegistration && entry.WorkScope != nil {
+		return accessidentity.OperatorGrant{}, fmt.Errorf("workScope 只属 WORK_FACT_REGISTRATION，%s 不带作业范围", face)
+	}
+	switch face {
+	case accessidentity.CapabilityOperationDecision:
 		kind, err := accessidentity.ParseDecisionKind(entry.DecisionKind)
 		if err != nil {
 			return accessidentity.OperatorGrant{}, fmt.Errorf("decisionKind %q：%w", entry.DecisionKind, err)
 		}
 		return accessidentity.NewOperationDecisionGrant(tenantID, entry.GrantID, subject, kind, interval, entry.Basis)
-	}
-	if entry.DecisionKind != "" {
-		return accessidentity.OperatorGrant{}, fmt.Errorf("decisionKind 只属 OPERATION_DECISION，%s 不带决定种类", face)
+	case accessidentity.CapabilityWorkFactRegistration:
+		scope, err := workScopeFrom(entry.WorkScope)
+		if err != nil {
+			return accessidentity.OperatorGrant{}, err
+		}
+		return accessidentity.NewWorkFactRegistrationGrant(tenantID, entry.GrantID, subject, scope, interval, entry.Basis)
 	}
 	return accessidentity.NewOperatorGrant(tenantID, entry.GrantID, subject, face, interval, entry.Basis)
 }

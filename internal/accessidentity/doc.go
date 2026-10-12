@@ -17,6 +17,10 @@
 // 集成客户端族（ADR-0149 决定三：外部结果与资金事实的提交方是外部系统）同样不受那道否决——外部系统不是客户
 // 渠道。它有集成客户端册（IntegrationClientRegistry）、客户端凭据令牌校验（adapters/oidc 的 ClientVerifier，
 // 含 RFC 8705 证书绑定）与 IntegrationClientEnvelope 的铸造（IntegrationClientMinter）。
+//
+// 一线作业事实（ADR-0149 决定二：提交方是运营企业的一线人员）走操作者族的「作业事实登记」能力面：授予按作业范围
+// 登在操作者册里，设备单列一本作业设备册（DeviceRegistry），WorkFactEnvelope 由 WorkFactMinter 在令牌、授予、设备
+// 三道都过之后铸出。
 // 本节以下只说客户渠道那一半。
 //
 // ADR-0072 二维持了 ADR-0055 的否决，原句挡的是两件：「登记册**表结构**与**凭据形态**

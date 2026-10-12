@@ -1,10 +1,11 @@
-// parcel-access-register 是 accessidentity 两本册的受控登记口：操作者册（票 operator-channel/01）登记操作者主体、
-// 按能力面授予、撤销授予；集成客户端册（票 operator-channel/11）登记客户端主体、按事实类型授予、撤销授予。
+// parcel-access-register 是 accessidentity 三本册的受控登记口：操作者册（票 operator-channel/01）登记操作者主体、
+// 按能力面授予（「作业事实登记」一格带作业范围，票 operator-channel/10）、撤销授予；集成客户端册（票 operator-channel/11）
+// 登记客户端主体、按事实类型授予、撤销授予；作业设备册（票 operator-channel/10）登记设备、停用设备。
 //
 // 定位是 ADR-0085 决定一的「受控批量口」（ADR-0100 决定六），与将来的在线口消费同一组登记口
-// accessidentity.OperatorRegistrar、accessidentity.IntegrationClientRegistrar，答复代数一致。批文每一格都来自
-// 输入文件，进程不内置任何生产默认。演示租户只经它登 SYN- 合成主体，证据层级只记 S（参数登记册 PAR-INT-08、
-// PAR-INT-09）。
+// accessidentity.OperatorRegistrar、accessidentity.IntegrationClientRegistrar、accessidentity.DeviceRegistrar，答复
+// 代数一致。批文每一格都来自输入文件，进程不内置任何生产默认。演示租户只经它登 SYN- 合成主体与设备，证据层级只记 S
+// （参数登记册 PAR-INT-08、PAR-INT-09、PAR-INT-10）。
 package main
 
 import (
@@ -35,7 +36,8 @@ const (
 )
 
 const usage = "用法：parcel-access-register <operator-register|operator-grant|operator-revoke|" +
-	"integration-client-register|integration-client-grant|integration-client-revoke> -input <file>"
+	"integration-client-register|integration-client-grant|integration-client-revoke|" +
+	"device-register|device-deactivate> -input <file>"
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -62,6 +64,10 @@ func run(ctx context.Context, args []string, getenv func(string) string, out, er
 		translate = integrationClientGrantBatchFromJSON
 	case "integration-client-revoke":
 		translate = integrationClientRevocationBatchFromJSON
+	case "device-register":
+		translate = deviceBatchFromJSON
+	case "device-deactivate":
+		translate = deviceDeactivationBatchFromJSON
 	default:
 		fmt.Fprintf(errOut, "未知子命令 %q；%s\n", args[0], usage)
 		return exitTechnical
@@ -69,13 +75,14 @@ func run(ctx context.Context, args []string, getenv func(string) string, out, er
 	return runBatch(ctx, args[0], args[1:], translate, getenv, out, errOut)
 }
 
-// registers 是一批里各项可能要落的两本册的登记口；每一项只用它那一本。
+// registers 是一批里各项可能要落的三本册的登记口；每一项只用它那一本。
 type registers struct {
 	operators accessidentity.OperatorRegistrar
 	clients   accessidentity.IntegrationClientRegistrar
+	devices   accessidentity.DeviceRegistrar
 }
 
-// outcome 是一项登记的答复名，与它算不算落定。两本册的答复各是各的类型，回显与退出码只要这两样。
+// outcome 是一项登记的答复名，与它算不算落定。三本册的答复各是各的类型，回显与退出码只要这两样。
 type outcome struct {
 	name   string
 	landed bool
@@ -132,7 +139,12 @@ func runBatch(
 		fmt.Fprintf(errOut, "构造集成客户端册：%v\n", err)
 		return exitTechnical
 	}
-	books := registers{operators: operators, clients: clients}
+	devices, err := aipostgres.NewDeviceRegistry(db)
+	if err != nil {
+		fmt.Fprintf(errOut, "构造设备册：%v\n", err)
+		return exitTechnical
+	}
+	books := registers{operators: operators, clients: clients, devices: devices}
 
 	// 批不是聚合：逐项各起事务，某项被拒不撤已落的前项，重跑同一批已落项以重放回答
 	// （AT-PC-011 同款纪律）。后项看得见前项，同一批里先登主体、后授予也成立。
@@ -160,8 +172,8 @@ func runBatch(
 	return exitLanded
 }
 
-// operatorOutcome 与 clientOutcome 只认两格为落定；其余一律抬 attention，包括将来新增而此处没跟上的答复——漏认的
-// 方向是「多请一次人看」，不是「静静退 0」。
+// operatorOutcome、clientOutcome 与 deviceOutcome 只认两格为落定；其余一律抬 attention，包括将来新增而此处没跟上的
+// 答复——漏认的方向是「多请一次人看」，不是「静静退 0」。
 func operatorOutcome(answer accessidentity.OperatorRegistrationOutcome) outcome {
 	switch answer {
 	case accessidentity.OperatorRegistrationRecorded, accessidentity.OperatorRegistrationAlreadyRegistered:
@@ -173,6 +185,14 @@ func operatorOutcome(answer accessidentity.OperatorRegistrationOutcome) outcome 
 func clientOutcome(answer accessidentity.IntegrationClientRegistrationOutcome) outcome {
 	switch answer {
 	case accessidentity.IntegrationClientRegistrationRecorded, accessidentity.IntegrationClientRegistrationAlreadyRegistered:
+		return outcome{name: answer.String(), landed: true}
+	}
+	return outcome{name: answer.String()}
+}
+
+func deviceOutcome(answer accessidentity.DeviceRegistrationOutcome) outcome {
+	switch answer {
+	case accessidentity.DeviceRegistrationRecorded, accessidentity.DeviceRegistrationAlreadyRegistered:
 		return outcome{name: answer.String(), landed: true}
 	}
 	return outcome{name: answer.String()}
