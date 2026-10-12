@@ -82,6 +82,10 @@ const (
 	// CapabilityOperationDecision 是运营决定：委托侧五个运营决定口与 TF 在管理台上作决定或判断的
 	// 各口（ADR-0151 决定一）。它的授予按决定种类登记，只能经 NewOperationDecisionGrant 建。
 	CapabilityOperationDecision CapabilityFace = "OPERATION_DECISION"
+	// CapabilityWorkFactRegistration 是作业事实登记：一线人员在作业端登节点收寄、揽收、交接、移动、派送、交付等
+	// 来源事实（ADR-0149 决定二）。它的授予按作业范围登记，只能经 NewWorkFactRegistrationGrant 建；信封只由
+	// WorkFactMinter 铸，要带已登记且在用的设备。
+	CapabilityWorkFactRegistration CapabilityFace = "WORK_FACT_REGISTRATION"
 )
 
 // reservedGovernanceRegistration 是治理登记那一格：ADR-0100 只预留它，授予模型按 ADR-0085
@@ -102,7 +106,8 @@ func ParseCapabilityFace(value string) (CapabilityFace, error) {
 // 包外转型递进来的值也要在这里被拦下。
 func (face CapabilityFace) checkGrantable() error {
 	switch face {
-	case CapabilityRegistryConfigurationWrite, CapabilityMasterDataAndOperationsRead, CapabilityOperationDecision:
+	case CapabilityRegistryConfigurationWrite, CapabilityMasterDataAndOperationsRead, CapabilityOperationDecision,
+		CapabilityWorkFactRegistration:
 		return nil
 	case reservedGovernanceRegistration:
 		return ErrCapabilityFaceReserved
@@ -156,6 +161,7 @@ type OperatorGrant struct {
 	subject      OperatorSubject
 	face         CapabilityFace
 	decisionKind DecisionKind
+	workScope    WorkScope
 	interval     EffectiveInterval
 	basis        string
 }
@@ -173,6 +179,9 @@ func NewOperatorGrant(
 	}
 	if face == CapabilityOperationDecision {
 		return OperatorGrant{}, ErrDecisionKindRequired
+	}
+	if face == CapabilityWorkFactRegistration {
+		return OperatorGrant{}, ErrWorkScopeRequired
 	}
 	tenant := strings.TrimSpace(tenantID)
 	id := strings.TrimSpace(grantID)
@@ -295,9 +304,10 @@ func (standing OperatorStanding) Grants() []RecordedGrant {
 // HoldsAt 答这个操作者在 at 那一刻是否持有 face：名下有任何一笔该格的授予此刻生效即是。
 //
 // 「运营决定」一格在这里一律答否，要按种类问 HoldsDecisionAt：整格问答「是」，持有复核完成的
-// 人就过得了终止参与的检查。
+// 人就过得了终止参与的检查。「作业事实登记」同理答否、要按作业范围问 HoldsWorkFactAt：整格问答「是」，
+// 在一个节点上有权的人就登得了所有节点；它答否也挡住了 MintOperator 那条路——管理台信封里没有设备。
 func (standing OperatorStanding) HoldsAt(face CapabilityFace, at time.Time) bool {
-	if face == CapabilityOperationDecision {
+	if face == CapabilityOperationDecision || face == CapabilityWorkFactRegistration {
 		return false
 	}
 	for _, recorded := range standing.grants {

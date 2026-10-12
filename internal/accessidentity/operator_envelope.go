@@ -133,6 +133,10 @@ func (minter *OperatorMinter) MintOperator(
 		if !recorded.EffectiveAt(at) {
 			continue
 		}
+		// 作业事实登记按作业范围授予、要带设备才铸（WorkFactMinter）；收进管理台信封的授予集，Holds 就会对整格答「是」。
+		if recorded.grant.face == CapabilityWorkFactRegistration {
+			continue
+		}
 		if recorded.grant.face == CapabilityOperationDecision {
 			if !slices.Contains(decisions, recorded.grant.decisionKind) {
 				decisions = append(decisions, recorded.grant.decisionKind)
