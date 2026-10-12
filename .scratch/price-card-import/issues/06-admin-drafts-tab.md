@@ -1,7 +1,7 @@
 # 06 管理台「草稿」签
 
 Category: enhancement
-Status: ready-for-agent——2026-09-25 通道 3 立票并激活（用户授权自决）
+Status: in-progress——2026-10-12 通道 5 认领（通道 1 派单 `task-9c227f05`），前端切片，在共享树 `main` 上做（基 `b298cd8f`）。此前 ready-for-agent——2026-09-25 通道 3 立票并激活（用户授权自决）
 Blocked by: 04、05
 地盘：`apps/admin-web/src/pages/pricing/`。
 出处：[spec](../spec.md)；ADR-0101 Consequences 第二条。

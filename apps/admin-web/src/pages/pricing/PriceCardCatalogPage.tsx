@@ -7,6 +7,7 @@ import {
 } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { RegistrationPanel } from '../../components/registration';
+import { PriceCardDraftsPanel } from './PriceCardDraftsPanel';
 import { PriceCardImportPanel } from './PriceCardImportPanel';
 import { directionLabels, purposeLabels, labelOf, problemNote } from './presentation';
 import {
@@ -174,10 +175,10 @@ function viewStateOf(
 }
 
 /**
- * 价卡目录:已登记定价方案版本的查阅面,外加导入签与高级 JSON 签
- * （ADR-0101，票 price-card-import/05）。
+ * 价卡目录:已登记定价方案版本的查阅面,外加导入签、草稿签与高级 JSON 签
+ * （ADR-0101，票 price-card-import/05、06）。
  *
- * 导入签今天在发行方未设时答 403「接入渠道未配置」,那是诚实答案,页面不拿演示数据顶替。
+ * 导入签与草稿签今天在发行方未设时答 403「接入渠道未配置」,那是诚实答案,页面不拿演示数据顶替。
  * JSON 快照签不在运营配置员的主路径上。
  */
 function PriceCardCatalogTable() {
@@ -234,6 +235,7 @@ export function PriceCardCatalogPage() {
         <TabsList className="px-4 shrink-0">
           <TabsTrigger value="catalog">价卡目录</TabsTrigger>
           <TabsTrigger value="import">导入价卡</TabsTrigger>
+          <TabsTrigger value="drafts">草稿</TabsTrigger>
           <TabsTrigger value="advanced">高级：JSON 快照</TabsTrigger>
         </TabsList>
         <TabsContent
@@ -247,6 +249,12 @@ export function PriceCardCatalogPage() {
           className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
         >
           <PriceCardImportPanel />
+        </TabsContent>
+        <TabsContent
+          value="drafts"
+          className="flex-1 flex flex-col overflow-hidden data-[state=inactive]:hidden"
+        >
+          <PriceCardDraftsPanel />
         </TabsContent>
         <TabsContent
           value="advanced"

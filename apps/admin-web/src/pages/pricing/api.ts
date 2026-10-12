@@ -153,6 +153,49 @@ export function submitPriceCardDraft(
   );
 }
 
+// ---- 价卡草稿签（ADR-0101 决定五；票 price-card-import/03、04、06）----
+//
+// 形状镜像 internal/parcelpricing/adapters/http 的草稿查阅读口与批准、发布两口，此处只镜像不虚构。三口与导入两口同挂
+// 操作者渠道。批准与发布的载荷只有草稿引用（方案标识与版本）：租户与批准者在操作者信封里，载荷带身份格服务端即拒。
+// 批准口每一格都取 200，只有`已批准`带回推进后的那一行；发布口登记新落一版取 201，`registration` 只在真交给了登记
+// 用例时在场，取登记答案代数原名（与 `registrationOutcomeLabels` 同一张表）。
+
+export const priceCardDraftViewsPath = '/pricing-price-card-draft-views';
+export const priceCardDraftApprovalPath = '/pricing-price-card-draft-approvals';
+export const priceCardDraftPublicationPath = '/pricing-price-card-draft-publications';
+
+export interface PriceCardDraftListResponseBody {
+  outcome: string;
+  drafts: PriceCardDraftRow[];
+}
+
+export interface PriceCardDraftProgressBody {
+  outcome: string;
+  registration?: string;
+  draft?: PriceCardDraftRow;
+}
+
+export interface PriceCardDraftReferencePayload {
+  planId: string;
+  planVersion: string;
+}
+
+export function listPriceCardDrafts(): Promise<ApiResult<PriceCardDraftListResponseBody>> {
+  return exchangeMasterData<PriceCardDraftListResponseBody>(priceCardDraftViewsPath);
+}
+
+export function approvePriceCardDraft(
+  payload: PriceCardDraftReferencePayload,
+): Promise<ApiResult<PriceCardDraftProgressBody>> {
+  return postMasterData<PriceCardDraftProgressBody>(priceCardDraftApprovalPath, payload);
+}
+
+export function publishPriceCardDraft(
+  payload: PriceCardDraftReferencePayload,
+): Promise<ApiResult<PriceCardDraftProgressBody>> {
+  return postMasterData<PriceCardDraftProgressBody>(priceCardDraftPublicationPath, payload);
+}
+
 export function registerReferenceSeries(
   snapshot: unknown,
 ): Promise<ApiResult<RegistrationResponseBody>> {

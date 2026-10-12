@@ -206,7 +206,8 @@ function ContentSummary({ content }: { content: PriceCardImportContent }) {
   );
 }
 
-function ProblemTable({ problems }: { problems: PriceCardProblem[] }) {
+/** 逐格问题表；草稿签展开`草稿`行时用同一张，同一格问题两签摆法一样。 */
+export function ProblemTable({ problems }: { problems: PriceCardProblem[] }) {
   if (problems.length === 0) {
     return <p className="text-idpxyz-textMuted">没有逐格问题。</p>;
   }
