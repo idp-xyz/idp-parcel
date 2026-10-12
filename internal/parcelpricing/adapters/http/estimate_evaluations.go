@@ -15,7 +15,7 @@ import (
 // EstimateIntake 把一次已认证的接入请求翻译成试算命令（UC-PP-001，ADR-0152 决定六）。
 //
 // 它是接口，理由与回放口同源：租户只从 ADR-0100 的 `OperatorEnvelope` 来，后端不采信自报身份；载荷形状由产品定义，
-// 已在 DecodeEstimatePayload。这一口等的是操作者信封接线，与计价回放同批（operator-channel/06），不是渠道契约。
+// 已在 DecodeEstimatePayload。这一口接的是操作者信封，不是渠道契约，译法在 OperatorOperationsReadIntake 上。
 type EstimateIntake interface {
 	IntakeEstimate(ctx context.Context, request *http.Request) (application.FormEstimateEvaluationsCommand, error)
 }
@@ -286,6 +286,22 @@ func (payload EstimatePayload) Command(tenant domain.TenantID) (application.Form
 		command.Settlement = &currency
 	}
 	return command, nil
+}
+
+var _ EstimateIntake = (*OperatorOperationsReadIntake)(nil)
+
+// IntakeEstimate 是操作者渠道对试算的译法：先认证、后解载荷，租户取认证出的身份。授予照主数据与运营查阅读那一格认，
+// 不照登记册配置写（ADR-0152 决定六）。
+func (intake *OperatorOperationsReadIntake) IntakeEstimate(ctx context.Context, request *http.Request) (application.FormEstimateEvaluationsCommand, error) {
+	tenant, body, err := intake.authenticate(ctx, request)
+	if err != nil {
+		return application.FormEstimateEvaluationsCommand{}, err
+	}
+	payload, err := DecodeEstimatePayload(body)
+	if err != nil {
+		return application.FormEstimateEvaluationsCommand{}, err
+	}
+	return payload.Command(tenant)
 }
 
 func (dimensions estimateDimensions) domain() (domain.Dimensions, error) {

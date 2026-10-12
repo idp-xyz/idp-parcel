@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -195,6 +196,75 @@ func TestEstimateEndpointTransportAnswers(t *testing.T) {
 	recorder = postEstimate(t, estimateIntakeDouble{}, &estimateFormerDouble{err: errors.New("boom")})
 	if recorder.Code != http.StatusInternalServerError || !strings.Contains(recorder.Body.String(), "NO_ANSWER_FORMED") {
 		t.Fatalf("依赖故障 status = %d body = %s", recorder.Code, recorder.Body)
+	}
+}
+
+// operationsReader 是查阅读面认证方的替身：带了令牌就认证到 SYN-TENANT-01；err 非空时带令牌的请求一律答它，演认证方的
+// 各格。
+type operationsReader struct{ err error }
+
+func (fake operationsReader) AuthenticateOperationsRead(_ context.Context, token string) (domain.TenantID, error) {
+	if token == "" {
+		return domain.TenantID{}, pricinghttp.ErrOperatorCredentialRejected
+	}
+	if fake.err != nil {
+		return domain.TenantID{}, fake.err
+	}
+	return domain.NewTenantID("SYN-TENANT-01")
+}
+
+// blankTenantReader 认证过了却交回空租户。
+type blankTenantReader struct{}
+
+func (blankTenantReader) AuthenticateOperationsRead(context.Context, string) (domain.TenantID, error) {
+	return domain.TenantID{}, nil
+}
+
+const declaredEstimate = `{"scope":"SYN-SCOPE-01","direction":"SELL","basisAt":"2026-06-01T08:00:00Z","weight":{"value":"1","unit":"KG"},"zone":"Z1"}`
+
+// Covers: ADR-0152 决定六与票 operator-channel/06——试算在操作者渠道上的译法：租户取认证出的身份；载荷里带租户键答请求
+// 畸形；令牌不过或认证方答了别的格时交回那一格，请求体一个字节都不读；认证交回空租户单独一格，不折成坏报文。
+func TestEstimateIntakeTakesTheTenantFromTheAuthenticatedOperator(t *testing.T) {
+	estimate := func(authenticator pricinghttp.OperatorOperationsReadAuthenticator, token string, body io.Reader) (application.FormEstimateEvaluationsCommand, error) {
+		intake, err := pricinghttp.NewOperatorOperationsReadIntake(authenticator)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request := httptest.NewRequest(http.MethodPost, estimateTarget, body)
+		if token != "" {
+			request.Header.Set("Authorization", "Bearer "+token)
+		}
+		return intake.IntakeEstimate(context.Background(), request)
+	}
+
+	command, err := estimate(operationsReader{}, "t", strings.NewReader(declaredEstimate))
+	if err != nil || command.Tenant.String() != "SYN-TENANT-01" || command.Scope.String() != "SYN-SCOPE-01" ||
+		command.Direction != domain.PricingDirectionSell || command.Zone != "Z1" {
+		t.Fatalf("command = %+v, err = %v", command, err)
+	}
+	for _, key := range []string{`"tenant"`, `"tenantId"`} {
+		smuggled := "{" + key + `:"SYN-TENANT-02",` + strings.TrimPrefix(declaredEstimate, "{")
+		if _, err := estimate(operationsReader{}, "t", strings.NewReader(smuggled)); !errors.Is(err, pricinghttp.ErrMalformedRequest) {
+			t.Fatalf("%s smuggled: err = %v, want ErrMalformedRequest", key, err)
+		}
+	}
+	for name, testCase := range map[string]struct {
+		authenticator operationsReader
+		token         string
+		want          error
+	}{
+		"no token":            {operationsReader{}, "", pricinghttp.ErrOperatorCredentialRejected},
+		"not granted":         {operationsReader{err: pricinghttp.ErrOperatorNotGranted}, "t", pricinghttp.ErrOperatorNotGranted},
+		"identity down":       {operationsReader{err: pricinghttp.ErrIdentityDependencyUnavailable}, "t", pricinghttp.ErrIdentityDependencyUnavailable},
+		"issuer unconfigured": {operationsReader{err: pricinghttp.ErrAccessChannelNotConfigured}, "t", pricinghttp.ErrAccessChannelNotConfigured},
+	} {
+		probe := &bodyReadProbe{}
+		if _, err := estimate(testCase.authenticator, testCase.token, probe); !errors.Is(err, testCase.want) || probe.read {
+			t.Fatalf("%s: err = %v (want %v), body read = %v", name, err, testCase.want, probe.read)
+		}
+	}
+	if _, err := estimate(blankTenantReader{}, "t", strings.NewReader(declaredEstimate)); !errors.Is(err, pricinghttp.ErrOperatorIdentityMissing) {
+		t.Fatalf("blank tenant: err = %v, want ErrOperatorIdentityMissing", err)
 	}
 }
 

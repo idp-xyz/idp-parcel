@@ -14,13 +14,14 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
-// 操作者渠道在本包登记写面的三格答复（ADR-0100 决定四），与 ErrAccessChannelNotConfigured 并列，各对一种恢复动作
-// （ADR-0029）。登记写面不判准入范围，所以没有「不在准入范围」那一格。
+// 操作者渠道在本包登记写面与查阅读面的三格答复（ADR-0100 决定四），与 ErrAccessChannelNotConfigured 并列，各对一种恢复
+// 动作（ADR-0029）。两面都不判准入范围，所以没有「不在准入范围」那一格。
 var (
 	// ErrOperatorCredentialRejected：令牌缺失、过期或校验不过（401）——持令牌的人去登录或换令牌。
 	ErrOperatorCredentialRejected = errors.New("pricing http: operator credential rejected")
-	// ErrOperatorNotGranted：令牌有效，但不在册、不绑这个租户或没有登记册配置写的授予（403）——管授予的人去登记。
-	ErrOperatorNotGranted = errors.New("pricing http: operator holds no registry configuration grant")
+	// ErrOperatorNotGranted：令牌有效，但不在册、不绑这个租户或没有该口所要那一格能力面的授予（403）——管授予的人去登记。
+	// 登记写面要的是登记册配置写，查阅读面要的是主数据与运营查阅读；恢复动作相同，所以不按面分设哨兵。
+	ErrOperatorNotGranted = errors.New("pricing http: operator holds no grant for the capability face this endpoint needs")
 	// ErrIdentityDependencyUnavailable：发行方公钥集或操作者册读不动（503）——运维去救依赖。
 	ErrIdentityDependencyUnavailable = errors.New("pricing http: identity dependency unavailable")
 )
@@ -31,7 +32,8 @@ const (
 	codeIdentityDependencyUnavailable = "IDENTITY_DEPENDENCY_UNAVAILABLE"
 )
 
-// maxRegistrationBytes 给一份登记载荷设读取上限：设限只为不让一个坏掉的调用方把整段请求读进内存，超限答坏报文。
+// maxRegistrationBytes 给操作者渠道一口收的一份载荷设读取上限（登记写面与查阅读面同用）：设限只为不让一个坏掉的调用方
+// 把整段请求读进内存，超限答坏报文。
 const maxRegistrationBytes = 1 << 20
 
 // OperatorIdentity 是一次登记册配置写出示认证出的身份：租户与提交操作者的引用（发行方 + sub）。

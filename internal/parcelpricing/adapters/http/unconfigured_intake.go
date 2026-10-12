@@ -66,8 +66,8 @@ func (UnconfiguredIntake) IntakePriceCardDraftQuery(context.Context, *http.Reque
 	return PriceCardDraftQuery{}, ErrAccessChannelNotConfigured
 }
 
-// IntakeEstimate 不读请求，判据同回放口：等的是操作者信封接线（ADR-0100，与回放同批）。从请求里取一个租户就是自报身份，
-// 这一口不能有那种「开发用」版本（ADR-0152 决定六）。
+// IntakeEstimate 不读请求，判据同回放口：租户要从信封来（ADR-0100），操作者渠道的译法在 OperatorOperationsReadIntake 上。
+// 从请求里取一个租户就是自报身份，这一口不能有那种「开发用」版本（ADR-0152 决定六）。
 func (UnconfiguredIntake) IntakeEstimate(context.Context, *http.Request) (application.FormEstimateEvaluationsCommand, error) {
 	return application.FormEstimateEvaluationsCommand{}, ErrAccessChannelNotConfigured
 }
