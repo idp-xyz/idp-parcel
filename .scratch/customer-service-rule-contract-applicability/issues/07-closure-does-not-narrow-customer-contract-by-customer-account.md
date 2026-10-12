@@ -1,8 +1,8 @@
 # 07 PC 闭包不按键上的客户账户收窄客户合同候选：同一范围两户各一份合同即两户都`适用冲突`
 
 Category: bug
-Status: needs-triage——2026-10-12 10:5x 通道 1 立（用户令独立完成），出自 [06](06-demo-contract-02-custom-first-claim-deadline-inherits-materials.md) 灌种子后的真库取证；只读取证，未动 PC 代码。
-Blocked by: 无（分诊时先定「合同凭什么认它是这一户的」，那一步可能要 ADR 或用户决定）
+Status: needs-info——2026-10-12 11:1x 通道 1 分诊（见文末「分诊」）：是代码没兑现 PC `CONTEXT` 既有不变量的缺口，不是新产品问题；但兑现它要给客户合同的规范化文档加键、动 PCC-1，属难逆转取舍，须先有一篇 ADR。此前：needs-triage——2026-10-12 10:5x 通道 1 立（用户令独立完成），出自 [06](06-demo-contract-02-custom-first-claim-deadline-inherits-materials.md) 灌种子后的真库取证；只读取证，未动 PC 代码。
+Blocked by: 用户决定——是否按「分诊」节的推荐写一篇 ADR（客户合同正文显式指名货主客户账户，闭包按键上的客户账户收窄合同候选）
 父票：[spec](../spec.md)
 地盘：`internal/partycommercial/domain` 的闭包解析（客户合同那一格的候选选法）；碰 Go，走并行会话那条路。
 
