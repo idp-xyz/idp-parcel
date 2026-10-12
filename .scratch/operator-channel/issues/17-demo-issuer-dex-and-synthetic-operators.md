@@ -1,7 +1,7 @@
 # 17 演示发行方：Dex 接进演示环境，合成操作者按它的标识另登
 
 Category: enhancement
-Status: ready-for-agent——2026-10-12 通道 1 补立：[02](./02-oidc-credential-verifier-and-deployment-parameters.md) 完成记录写「那一步随 07 做」，而 [07](./07-admin-web-login-gate.md) 的地盘只有 `apps/admin-web/**`，这一步于是没有票认领；[04](./04-registration-write-faces-take-operator-intake.md) 第 1 件、[15](./15-operation-decision-faces-take-operator-intake.md) 余下四口、[10](./10-device-register-and-operation-fact-capability-face.md) 换口那半与 07 的完成判据都在等它
+Status: in-progress——2026-10-12 通道 4 认领（通道 1 派单 `task-605064ea`，接替一直未接的 `task-be560cd8`），隔离 worktree `idp-parcel-mcp4-oc17`、分支 `mcp4-oc17`（基 `00bc85ce`）。此前 ready-for-agent——2026-10-12 通道 1 补立：[02](./02-oidc-credential-verifier-and-deployment-parameters.md) 完成记录写「那一步随 07 做」，而 [07](./07-admin-web-login-gate.md) 的地盘只有 `apps/admin-web/**`，这一步于是没有票认领；[04](./04-registration-write-faces-take-operator-intake.md) 第 1 件、[15](./15-operation-decision-faces-take-operator-intake.md) 余下四口、[10](./10-device-register-and-operation-fact-capability-face.md) 换口那半与 07 的完成判据都在等它
 Blocked by: 无（02、03 已 resolved）
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：演示发行方的容器描述与 Dex 配置（进 `compose.yaml` 还是另起一份演示用 compose 文件，本票定）；`scripts/demo-seeds/data/access/`、`seed.sh` 里操作者册那一段、`scripts/demo-seeds/README.md`。不碰 `apps/admin-web/**`（07）、`internal/accessidentity` 与参数登记册（10 在改）、`cmd/parcel-api` 的代码。
