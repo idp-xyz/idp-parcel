@@ -137,6 +137,7 @@ go run ./cmd/parcel-dispatch
 **重启条件**：解析层——把目录折成逐候选事实。被 `PAR-NET-14` 阻断，且 [ADR-0068](../adr/0068-versioned-network-catalog-structure-precedes-rule-content.md) Consequences 已明文接受这段「目录可写可读、尚无人读它产出事实」的时期。
 > 2026-09-24 补记（票 `routing-first-cut/07` 进 main，merge `f2645d86`）：上两段写于当时，原样保留；成因一句自本合入起过时——证据视图不再读 `network_definition`，改读第 3 步登记的那套目录，`未配置`由目录修订锚与适用于服务目的的路由策略版本答（[ADR-0148](../adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定六），阻断也不再归 `PAR-NET-14`（ADR-0146 决定七）。可观察的停点不变：种子策略的适用范围是 `SYN-SCOPE-01`，与调度器的服务目的 `NETWORK_SERVICE` 不一致，种子服务区域也没登覆盖，初始路由照旧停在 `RouteEvidenceNotConfigured`。演示网络经参考配置采用、形成初始路由归 `routing-first-cut/11`。
 > 2026-10-10 补记（票 `routing-first-cut/11`）：演示网络已经由演示租户经参考配置采用，`submit-one-shipment.sh` 的草案也带上了寄 / 收两端国家码。按本脚本重走（实测，只记 `S`），这堵墙在可达性那一段降了：可达性判断形成、答`可达`，受理链往下走到受理前财务控制，停在 `FINANCIAL_CONTROL_AS_OF_NOT_CONFIGURED`。那是 [psb/05](../../.scratch/product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 的格 5，不是网络的事。委托因此还成不了`已接受`，初始路由在动线上没被触发。初始路由本身的现状（证据视图已配置，成本那一格的计价输入还没接）与两次取证的命令、SHA 都记在 `routing-first-cut/11` 票面，这里不复述。
+> 2026-10-12 补记（票 `routing-first-cut/19`）：上一条原样保留。停点自票 `routing-first-cut/16` 进 main 起前移：演示种子的财务控制时点也采用了「提交接收」，演示租户的结算账户也登了，受理链越过时点与作用域，停在财务控制那一步的 `FINANCIAL_CONTROL_NOT_FORMED`（金额未配置），不再是 `FINANCIAL_CONTROL_AS_OF_NOT_CONFIGURED`。这一停按会自愈的依赖处置：「委托已提交」信封整笔回滚重投，烧完预算落 `ABANDONED`，任务上的判断与处理尝试都不落，委托停在`已提交`。钉 `ff3b01fa` 重走一遍（实测，只记 `S`），命令与逐表计数记在 `routing-first-cut/19` 票面「分诊」节，这里不复述。
 
 三堵墙对应的机制票都在 `.scratch/syn-wall-door-audit/issues/`（依次为 01、13、04），墙面清单见同目录 `report.md`。
 
