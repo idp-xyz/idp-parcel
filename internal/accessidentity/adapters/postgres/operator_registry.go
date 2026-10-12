@@ -108,14 +108,17 @@ func (registry *OperatorRegistry) RegisterGrant(
 	if end, bounded := grant.Interval().EndsAt(); bounded {
 		endsAt = &end
 	}
+	scopeKind, scopeRef := optionalWorkScope(grant)
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO access_identity.operator_grant
 			(tenant_id, grant_id, issuer, subject, capability_face,
-			 effective_starts_at, effective_ends_at, basis_ref, decision_kind)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+			 effective_starts_at, effective_ends_at, basis_ref, decision_kind,
+			 work_scope_kind, work_scope_ref)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
 		 ON CONFLICT DO NOTHING`,
 		grant.TenantID(), grant.GrantID(), subject.Issuer(), subject.Subject(), grant.Face().String(),
 		startsAt, endsAt, grant.Basis(), optionalDecisionKind(grant.DecisionKind()),
+		scopeKind, scopeRef,
 	)
 	if err != nil {
 		return "", fmt.Errorf("%s: %w", operation, err)
@@ -129,13 +132,16 @@ func (registry *OperatorRegistry) RegisterGrant(
 		storedStartsAt                                       time.Time
 		storedEndsAt                                         *time.Time
 		storedKind                                           *string
+		storedScopeKind, storedScopeRef                      *string
 	)
 	err = executor.QueryRow(ctx,
-		`SELECT issuer, subject, capability_face, effective_starts_at, effective_ends_at, basis_ref, decision_kind
+		`SELECT issuer, subject, capability_face, effective_starts_at, effective_ends_at, basis_ref, decision_kind,
+		        work_scope_kind, work_scope_ref
 		   FROM access_identity.operator_grant
 		  WHERE tenant_id = $1 AND grant_id = $2`,
 		grant.TenantID(), grant.GrantID(),
-	).Scan(&storedIssuer, &storedSubject, &storedFace, &storedStartsAt, &storedEndsAt, &storedBasis, &storedKind)
+	).Scan(&storedIssuer, &storedSubject, &storedFace, &storedStartsAt, &storedEndsAt, &storedBasis, &storedKind,
+		&storedScopeKind, &storedScopeRef)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return "", fmt.Errorf("%s: 撞键后读不回既有行", operation)
 	}
@@ -146,6 +152,8 @@ func (registry *OperatorRegistry) RegisterGrant(
 		storedSubject == subject.Subject() &&
 		storedFace == grant.Face().String() &&
 		sameOptionalText(storedKind, optionalDecisionKind(grant.DecisionKind())) &&
+		sameOptionalText(storedScopeKind, scopeKind) &&
+		sameOptionalText(storedScopeRef, scopeRef) &&
 		sameInstant(storedStartsAt, startsAt) &&
 		sameOptionalInstant(storedEndsAt, endsAt) &&
 		storedBasis == grant.Basis()
@@ -230,7 +238,7 @@ func (registry *OperatorRegistry) FindOperator(
 	rows, err := querier.Query(ctx,
 		`SELECT o.tenant_id, o.basis_ref,
 		        g.grant_id, g.capability_face, g.effective_starts_at, g.effective_ends_at, g.basis_ref,
-		        g.decision_kind, r.revoked_at, r.basis_ref
+		        g.decision_kind, g.work_scope_kind, g.work_scope_ref, r.revoked_at, r.basis_ref
 		   FROM access_identity.operator o
 		   LEFT JOIN access_identity.operator_grant g
 		     ON g.issuer = o.issuer AND g.subject = o.subject AND g.tenant_id = o.tenant_id
@@ -256,11 +264,12 @@ func (registry *OperatorRegistry) FindOperator(
 			grantID, face, grantBasis   *string
 			startsAt, endsAt, revokedAt *time.Time
 			decisionKind                *string
+			scopeKind, scopeRef         *string
 			revocationBasis             *string
 		)
 		if err := rows.Scan(&tenant, &basis,
 			&grantID, &face, &startsAt, &endsAt, &grantBasis,
-			&decisionKind, &revokedAt, &revocationBasis,
+			&decisionKind, &scopeKind, &scopeRef, &revokedAt, &revocationBasis,
 		); err != nil {
 			return accessidentity.OperatorStanding{}, false, fmt.Errorf("%s: %w", operation, err)
 		}
@@ -275,7 +284,7 @@ func (registry *OperatorRegistry) FindOperator(
 			continue
 		}
 		recorded, err := recordedGrantFromRow(tenant, subject,
-			*grantID, *face, decisionKind, *startsAt, endsAt, *grantBasis, revokedAt, revocationBasis)
+			*grantID, *face, decisionKind, scopeKind, scopeRef, *startsAt, endsAt, *grantBasis, revokedAt, revocationBasis)
 		if err != nil {
 			return accessidentity.OperatorStanding{}, false, fmt.Errorf("%s: 授予 %s：%w", operation, *grantID, err)
 		}
@@ -301,6 +310,7 @@ func recordedGrantFromRow(
 	subject accessidentity.OperatorSubject,
 	grantID, rawFace string,
 	rawDecisionKind *string,
+	rawScopeKind, rawScopeRef *string,
 	startsAt time.Time,
 	endsAt *time.Time,
 	basis string,
@@ -320,7 +330,8 @@ func recordedGrantFromRow(
 		return accessidentity.RecordedGrant{}, err
 	}
 	var grant accessidentity.OperatorGrant
-	if face == accessidentity.CapabilityOperationDecision {
+	switch face {
+	case accessidentity.CapabilityOperationDecision:
 		kind := ""
 		if rawDecisionKind != nil {
 			kind = *rawDecisionKind
@@ -330,7 +341,16 @@ func recordedGrantFromRow(
 			return accessidentity.RecordedGrant{}, parseErr
 		}
 		grant, err = accessidentity.NewOperationDecisionGrant(tenant, grantID, subject, decision, interval, basis)
-	} else {
+	case accessidentity.CapabilityWorkFactRegistration:
+		if rawScopeKind == nil || rawScopeRef == nil {
+			return accessidentity.RecordedGrant{}, accessidentity.ErrWorkScopeRequired
+		}
+		scope, scopeErr := workScopeFromRow(*rawScopeKind, *rawScopeRef)
+		if scopeErr != nil {
+			return accessidentity.RecordedGrant{}, scopeErr
+		}
+		grant, err = accessidentity.NewWorkFactRegistrationGrant(tenant, grantID, subject, scope, interval, basis)
+	default:
 		grant, err = accessidentity.NewOperatorGrant(tenant, grantID, subject, face, interval, basis)
 	}
 	if err != nil {
@@ -370,6 +390,16 @@ func optionalDecisionKind(kind accessidentity.DecisionKind) *string {
 	}
 	value := kind.String()
 	return &value
+}
+
+// optionalWorkScope 把「无作业范围」写成两个 NULL：列上的 CHECK 以 NULL 表示别的能力面。
+func optionalWorkScope(grant accessidentity.OperatorGrant) (kind, reference *string) {
+	if grant.Face() != accessidentity.CapabilityWorkFactRegistration {
+		return nil, nil
+	}
+	scope := grant.WorkScope()
+	kindValue, referenceValue := scope.Kind().String(), scope.Reference()
+	return &kindValue, &referenceValue
 }
 
 func sameOptionalText(stored, wanted *string) bool {
