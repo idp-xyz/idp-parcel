@@ -64,15 +64,17 @@ type CommercialResolutionReferenceSource interface {
 	) (psdomain.CommercialResolutionID, bool, error)
 }
 
-// ClaimServiceRulesDeps 收拢四个协作方。Rules 是 VE 自己的册（合同责任范围 + 申请人授权目录，
+// ClaimServiceRulesDeps 收拢五个协作方。Rules 是 VE 自己的册（合同责任范围 + 申请人授权目录，
 // adapters/postgres 的两个形状任一），本适配器在它的答案上叠两维；References 是 parcel-shipment 的回指读口，
-// Closures 是 party-commercial 的闭包读口，Contents 是 party-commercial 的正文点读口（ADR-0104 决定四）——
+// Closures 是 party-commercial 的闭包读口，Contents 是 party-commercial 的正文点读口（ADR-0104 决定四），
+// Layers 是 party-commercial 的层次读口（ADR-0176 决定二，闭包采纳合同版时用）——
 // 提供方那几只全是只读半边，本包不持任何写口（判据同 PC ports.CommercialResolutionView 头注）。
 type ClaimServiceRulesDeps struct {
 	Rules      veports.EligibilityRuleView
 	References CommercialResolutionReferenceSource
 	Closures   pcports.CommercialResolutionView
 	Contents   pcports.CustomerServiceRuleContentView
+	Layers     pcports.CustomerServiceRuleLayerView
 }
 
 // ClaimServiceRules 实现 veports.EligibilityRuleView：先让 VE 自己的册作答，声明在场时再把首次
@@ -89,9 +91,10 @@ type ClaimServiceRules struct {
 	references CommercialResolutionReferenceSource
 	closures   pcports.CommercialResolutionView
 	contents   pcports.CustomerServiceRuleContentView
+	layers     pcports.CustomerServiceRuleLayerView
 }
 
-// NewClaimServiceRules 装配。四个协作方一个都不许缺（ADR-0079 决定八：nil 半边在装配期拒）：本适配器
+// NewClaimServiceRules 装配。协作方一个都不许缺（ADR-0079 决定八：nil 半边在装配期拒）：本适配器
 // 一旦装上就是要真去问两个提供方的，缺一半而静默答未登记会让一次装配疏漏与租户没登记长得一样；
 // 「答不出」在读口上会长成 error，日后有人会把它读成提供方坏了。缺件一律包 ErrNilDependency，哪一口缺
 // 在文本里点名。
@@ -108,11 +111,15 @@ func NewClaimServiceRules(deps ClaimServiceRulesDeps) (*ClaimServiceRules, error
 	if deps.Contents == nil {
 		return nil, fmt.Errorf("%w: customer service rule content view", ErrNilDependency)
 	}
+	if deps.Layers == nil {
+		return nil, fmt.Errorf("%w: customer service rule layer view", ErrNilDependency)
+	}
 	return &ClaimServiceRules{
 		rules:      deps.Rules,
 		references: deps.References,
 		closures:   deps.Closures,
 		contents:   deps.Contents,
+		layers:     deps.Layers,
 	}, nil
 }
 
@@ -138,9 +145,12 @@ func (adapter *ClaimServiceRules) RulesForClaim(
 }
 
 // serviceRuleDimensions 分三段（ADR-0136 决定二）：目标包裹 → 回指（parcel-shipment）→ 闭包与已采用的客户
-// 服务规则版本（party-commercial）→ 按选中的版本点读正文并翻译。结果代数按恢复动作分格（ADR-0029），逐格
-// 写在各段上；这一层只剩第三段那一格：规则版本在场而正文未登（found=false）→ 两维未登记，恢复动作是去 PC
-// 登正文（票 03 原格）。
+// 服务规则版本（party-commercial）→ 读正文并翻译。结果代数按恢复动作分格（ADR-0029），逐格写在各段上；这一层
+// 只剩第三段那一格：规则版本在场而正文未登（found=false）→ 两维未登记，恢复动作是去 PC 登正文（票 03 原格）。
+//
+// 第三段按闭包采纳的那一版分两条路，分法与 PC 闭包分层同一（壳上指名客户合同的归合同层）：合同版经层次读口
+// 一次取回合同版与产品底座两份正文、按行拼（ADR-0176 决定二）；其余照旧单版点读。按正文分会让壳空而正文挂合同
+// 的那一版在这里走合同层、在闭包里却是产品层，同一版两种归法。
 func (adapter *ClaimServiceRules) serviceRuleDimensions(
 	ctx context.Context,
 	query veports.EligibilityQuery,
@@ -152,19 +162,112 @@ func (adapter *ClaimServiceRules) serviceRuleDimensions(
 	if err != nil || !present {
 		return unregistered, noMaterials, err
 	}
-	version, adopted, err := adapter.adoptedRuleVersion(ctx, tenant, resolution)
+	adoption, adopted, err := adapter.adoptedRuleVersion(ctx, tenant, resolution)
 	if err != nil || !adopted {
 		return unregistered, noMaterials, err
 	}
+	if _, contractTier := adoption.rule.ReferenceTo(pcdomain.CustomerContractObject); contractTier {
+		return adapter.contractTierDimensions(ctx, tenant, adoption, query)
+	}
 
-	rule, found, err := adapter.contents.LoadCustomerServiceRule(ctx, tenant, version)
+	rule, found, err := adapter.contents.LoadCustomerServiceRule(ctx, tenant, adoption.rule)
 	if err != nil {
 		return unregistered, noMaterials, fmt.Errorf("load customer service rule: %w", err)
 	}
 	if !found {
 		return unregistered, noMaterials, nil
 	}
-	return translateRule(rule, query)
+	if err := tiedToAdoptedContract(rule, adoption.contract); err != nil {
+		return unregistered, noMaterials, err
+	}
+	return translateRule(rule, nil, query)
+}
+
+// contractTierDimensions 是闭包采纳合同版时的第三段（ADR-0176 决定二）：经层次读口按（租户、合同版自己的范围、
+// 闭包采纳的那一版、闭包锚点、闭包键上声明的服务产品）取两层，底座由 PC 选，本包不挑——锚点与产品取冻结闭包上的，
+// 底座与闭包回落层才是同一处选法读同一组键。
+//
+// 合同版正文未登 → 两维未登记，与单版点读「正文未登」同格，不整版拿底座顶：合同版里可能收紧的条款没登上来，拿产品
+// 标准代答会把一次漏登变成一次放宽。两层正文各过一道合同点核（tiedToAdoptedContract）。
+func (adapter *ClaimServiceRules) contractTierDimensions(
+	ctx context.Context,
+	tenant pcdomain.TenantID,
+	adoption adoptedRule,
+	query veports.EligibilityQuery,
+) (veports.FilingDeadlineRule, veports.MinimumMaterialsRule, error) {
+	var unregistered veports.FilingDeadlineRule
+	var noMaterials veports.MinimumMaterialsRule
+
+	layers, err := adapter.layers.LoadCustomerServiceRuleLayers(ctx, tenant, adoption.rule.Scope(), adoption.rule,
+		adoption.closure.Anchor(), adoption.closure.ResolutionKey().ServiceProduct)
+	if err != nil {
+		return unregistered, noMaterials, fmt.Errorf("load customer service rule layers: %w", err)
+	}
+	if !layers.HasContractTier {
+		return unregistered, noMaterials, nil
+	}
+	if err := tiedToAdoptedContract(layers.ContractTier, adoption.contract); err != nil {
+		return unregistered, noMaterials, err
+	}
+	base, err := productBase(layers, adoption.contract)
+	if err != nil {
+		return unregistered, noMaterials, err
+	}
+	return translateRule(layers.ContractTier, base, query)
+}
+
+// productBase 把层次读口的底座各格分派成「可继承的那份正文」或 error，不留兜底（ADR-0025）：
+//
+//   - `唯一解析`且正文在场 → 底座；正文未登 → 没有底座，合同版没写的行未登记（恢复动作是去 PC 登底座正文）。
+//   - `无适用依据` → 没有底座，同上，恢复动作是登一版产品版。
+//   - `适用冲突` → ErrUntranslatableAnswer，与闭包对客户服务规则答`适用冲突`同一格（票 04 判断项 Q5）：恢复动作都是
+//     运营更正登记，折成未登记会把租户支去补一份不缺的东西。
+//   - `解析未决` → error：今天只由权威读不到或锚点立不住造成，冻结闭包的锚点立得住，剩下的是依赖调不通。
+//
+// 底座不随闭包冻结，按锚点读时选；有效性更正改了底座区间时这里会改口（ADR-0176 决定二的已知后果）。合同版有没有
+// 写全两行都先走这一道：底座坏了是登记坏了，不因这一次恰好用不上就不报。
+func productBase(
+	layers pcports.CustomerServiceRuleLayers,
+	contract pcdomain.CommercialObjectID,
+) (*pcdomain.CustomerServiceRuleVersion, error) {
+	switch layers.ProductBaseOutcome {
+	case pcdomain.UniquelyResolved:
+		if !layers.HasProductBase {
+			return nil, nil
+		}
+		if err := tiedToAdoptedContract(layers.ProductBase, contract); err != nil {
+			return nil, err
+		}
+		base := layers.ProductBase
+		return &base, nil
+	case pcdomain.NoApplicableBasis:
+		return nil, nil
+	case pcdomain.ApplicabilityConflict:
+		return nil, fmt.Errorf("%w: the product base of %q is an applicability conflict",
+			ErrUntranslatableAnswer, layers.ContractTier.Version().ObjectID())
+	case pcdomain.ResolutionPending:
+		return nil, fmt.Errorf("load customer service rule layers: the product base of %q is pending",
+			layers.ContractTier.Version().ObjectID())
+	default:
+		return nil, fmt.Errorf("%w: the product base answered outcome %q",
+			ErrUntranslatableAnswer, layers.ProductBaseOutcome)
+	}
+}
+
+// tiedToAdoptedContract 是 ADR-0176 决定四那道点核：正文挂客户合同时，挂的必须是闭包采用的那一份；挂产品的正文不核
+// （解析键与闭包都没有可比的产品维，由解析唯一性保证）。合同版、底座与产品层那一版一律过它——哪一层的正文挂了别的
+// 合同，拼进来就是把别户的条款套给这一户。
+//
+// 比的是闭包采用的客户合同，不是 EligibilityQuery.Contract：后者是 VE 的合同责任范围引用，与 PC 合同对象不是一套词，
+// ADR-0136 决定五也写明两者不核一致。壳 ↔ 正文那一道归点读口里的 ConsistentCustomerServiceRuleApplicability，与这一道
+// 分属两层。
+func tiedToAdoptedContract(rule pcdomain.CustomerServiceRuleVersion, contract pcdomain.CommercialObjectID) error {
+	tied, ok := rule.Applicability().CustomerContract()
+	if !ok || tied == contract {
+		return nil
+	}
+	return fmt.Errorf("%w: customer service rule %q is tied to contract %q, the closure adopted contract %q",
+		ErrUntranslatableAnswer, rule.Version().ObjectID(), tied, contract)
 }
 
 // acceptanceTimeResolution 是第一段：把索赔项的目标范围引用原样作声明包裹身份问 parcel-shipment，交回译成
@@ -234,8 +337,8 @@ func (adapter *ClaimServiceRules) adoptedRuleVersion(
 	ctx context.Context,
 	tenant pcdomain.TenantID,
 	resolution pcdomain.ResolutionID,
-) (pcdomain.CommercialVersion, bool, error) {
-	var none pcdomain.CommercialVersion
+) (adoptedRule, bool, error) {
+	var none adoptedRule
 
 	closure, found, err := adapter.closures.LoadResolution(ctx, tenant, resolution)
 	if err != nil {
@@ -253,7 +356,8 @@ func (adapter *ClaimServiceRules) adoptedRuleVersion(
 			"%w: party commercial answered closure %q of tenant %q for tenant %q resolution %q",
 			ErrUntranslatableAnswer, closure.ResolutionID(), closure.ResolutionKey().TenantID, tenant, resolution)
 	}
-	if _, ok := closure.AdoptedFor(pcdomain.CustomerContractObject); !ok {
+	contract, ok := closure.AdoptedFor(pcdomain.CustomerContractObject)
+	if !ok {
 		return none, false, fmt.Errorf("%w: resolution %q", ErrCustomerContractNotAdopted, resolution)
 	}
 	adopted, ok := closure.AdoptedFor(pcdomain.CustomerServiceRuleObject)
@@ -266,23 +370,33 @@ func (adapter *ClaimServiceRules) adoptedRuleVersion(
 			"%w: the closure adopted %q %q of tenant %q in the customer service rule slot",
 			ErrUntranslatableAnswer, version.Kind(), version.ObjectID(), version.Tenant())
 	}
-	return version, true, nil
+	return adoptedRule{rule: version, contract: contract.Version().ObjectID(), closure: closure}, true, nil
 }
 
-// translateRule 把一版正文翻成 VE 的两条规则。两维各按自己那一行的在场答 Registered；RuleVersion
-// 冻三段版本引用（租户 / 对象 / 版本号，ADR-0104 Decision 五），不冻正文。Scope 取索赔自己固定
-// 的目标范围。截止时刻、补充截止与通知依据留零值，理由见包注释。
+// adoptedRule 是第二段交给第三段的东西：闭包采用的那一版规则、同一份闭包采用的客户合同（合同点核比它），以及闭包
+// 本身（层次读口要它的锚点与键上声明的服务产品）。
+type adoptedRule struct {
+	rule     pcdomain.CommercialVersion
+	contract pcdomain.CommercialObjectID
+	closure  pcdomain.CommercialClosure
+}
+
+// translateRule 把一版正文翻成 VE 的两条规则；base 非 nil 时它是合同版的产品底座，合同版无行的那一维取底座那一行
+// （ADR-0176 决定二），两层皆无照答未登记。两维各按取到的那一行答 Registered，RuleVersion 冻**那一行所在版本**的
+// 三段引用（租户 / 对象 / 版本号，ADR-0104 Decision 五），不冻正文——继承来的一维冻底座，事后才查得到它出自哪一版。
+// Scope 取索赔自己固定的目标范围。截止时刻、补充截止与通知依据留零值，理由见包注释。
+//
+// 只有「有行 / 无行」两格：无行即继承，没有显式空行可表达删减（ADR-0176 决定三）。
 func translateRule(
 	rule pcdomain.CustomerServiceRuleVersion,
+	base *pcdomain.CustomerServiceRuleVersion,
 	query veports.EligibilityQuery,
 ) (veports.FilingDeadlineRule, veports.MinimumMaterialsRule, error) {
-	reference := ruleVersionReference(rule.Version())
-
 	var deadline veports.FilingDeadlineRule
-	if row, registered := rule.ClaimDeadline(pcdomain.FirstClaimDeadline); registered {
+	if row, from, registered := firstClaimDeadline(rule, base); registered {
 		deadline = veports.FilingDeadlineRule{
 			Registered:  true,
-			RuleVersion: reference,
+			RuleVersion: ruleVersionReference(from),
 			StartEvent:  row.StartEvent().String(),
 			Calendar:    row.Calendar().String(),
 			Scope:       query.Target.String(),
@@ -295,18 +409,49 @@ func translateRule(
 		return veports.FilingDeadlineRule{}, veports.MinimumMaterialsRule{}, fmt.Errorf(
 			"%w: claim kind reference: %v", ErrUntranslatableAnswer, err)
 	}
-	if row, registered := rule.MinimumMaterialsFor(claimKind); registered {
+	if row, from, registered := minimumMaterialsFor(rule, base, claimKind); registered {
 		required, err := requiredMaterials(row)
 		if err != nil {
 			return veports.FilingDeadlineRule{}, veports.MinimumMaterialsRule{}, err
 		}
 		materials = veports.MinimumMaterialsRule{
 			Registered:  true,
-			RuleVersion: reference,
+			RuleVersion: ruleVersionReference(from),
 			Required:    required,
 		}
 	}
 	return deadline, materials, nil
+}
+
+func firstClaimDeadline(
+	rule pcdomain.CustomerServiceRuleVersion,
+	base *pcdomain.CustomerServiceRuleVersion,
+) (pcdomain.ClaimDeadlineRule, pcdomain.CommercialVersion, bool) {
+	if row, registered := rule.ClaimDeadline(pcdomain.FirstClaimDeadline); registered {
+		return row, rule.Version(), true
+	}
+	if base != nil {
+		if row, registered := base.ClaimDeadline(pcdomain.FirstClaimDeadline); registered {
+			return row, base.Version(), true
+		}
+	}
+	return pcdomain.ClaimDeadlineRule{}, pcdomain.CommercialVersion{}, false
+}
+
+func minimumMaterialsFor(
+	rule pcdomain.CustomerServiceRuleVersion,
+	base *pcdomain.CustomerServiceRuleVersion,
+	claimKind pcdomain.ClaimKindReference,
+) (pcdomain.MinimumMaterialsRule, pcdomain.CommercialVersion, bool) {
+	if row, registered := rule.MinimumMaterialsFor(claimKind); registered {
+		return row, rule.Version(), true
+	}
+	if base != nil {
+		if row, registered := base.MinimumMaterialsFor(claimKind); registered {
+			return row, base.Version(), true
+		}
+	}
+	return pcdomain.MinimumMaterialsRule{}, pcdomain.CommercialVersion{}, false
 }
 
 // requiredMaterials 逐条把 PC 的材料条目引用译进 VE 的构造门。PC 只校非空，VE 也只校非空，译不进

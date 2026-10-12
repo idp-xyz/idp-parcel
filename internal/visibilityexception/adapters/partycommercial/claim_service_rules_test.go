@@ -276,6 +276,7 @@ func (fixture *fixture) deps() adapter.ClaimServiceRulesDeps {
 		References: fixture.references,
 		Closures:   fixture.closures,
 		Contents:   fixture.contents,
+		Layers:     &layersDouble{},
 	}
 }
 
@@ -657,6 +658,7 @@ func TestClaimServiceRulesRefuseToBeBuiltWithoutTheirCollaborators(t *testing.T)
 		"缺 PS 回指读口":  {func(deps *adapter.ClaimServiceRulesDeps) { deps.References = nil }, "commercial resolution reference source"},
 		"缺 PC 闭包读口":  {func(deps *adapter.ClaimServiceRulesDeps) { deps.Closures = nil }, "commercial resolution view"},
 		"缺 PC 正文点读口": {func(deps *adapter.ClaimServiceRulesDeps) { deps.Contents = nil }, "customer service rule content view"},
+		"缺 PC 层次读口":  {func(deps *adapter.ClaimServiceRulesDeps) { deps.Layers = nil }, "customer service rule layer view"},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {

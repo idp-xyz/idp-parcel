@@ -59,6 +59,7 @@ type resolutionFixture struct {
 	resolutions *resolutionReferenceDouble
 	closures    *heldClosureDouble
 	contents    *contentsDouble
+	layers      *layersDouble
 	contract    pcdomain.CommercialVersion
 	rule        pcdomain.CommercialVersion
 }
@@ -151,6 +152,7 @@ func newResolutionFixture(t *testing.T) *resolutionFixture {
 		resolutions: &resolutionReferenceDouble{reference: value(t, psdomain.NewCommercialResolutionID, "SYN-RES-1"), present: true},
 		closures:    &heldClosureDouble{closure: redClosure(t, "tenant-1", contract, rule), found: true},
 		contents:    &contentsDouble{},
+		layers:      &layersDouble{},
 		contract:    contract,
 		rule:        rule,
 	}
@@ -183,6 +185,7 @@ func (fixture *resolutionFixture) adapter(t *testing.T) *adapter.ClaimServiceRul
 		References: fixture.resolutions,
 		Closures:   fixture.closures,
 		Contents:   fixture.contents,
+		Layers:     fixture.layers,
 	})
 	if err != nil {
 		t.Fatalf("new claim service rules: %v", err)
@@ -351,8 +354,9 @@ func TestClaimServiceRulesPropagateProviderErrors(t *testing.T) {
 func TestNewClaimServiceRulesRefuseNilProviderHalves(t *testing.T) {
 	fixture := newResolutionFixture(t)
 	for name, deps := range map[string]adapter.ClaimServiceRulesDeps{
-		"缺 PS 回指读口": {Rules: fixture.own, Closures: fixture.closures, Contents: fixture.contents},
-		"缺 PC 闭包读口": {Rules: fixture.own, References: fixture.resolutions, Contents: fixture.contents},
+		"缺 PS 回指读口": {Rules: fixture.own, Closures: fixture.closures, Contents: fixture.contents, Layers: fixture.layers},
+		"缺 PC 闭包读口": {Rules: fixture.own, References: fixture.resolutions, Contents: fixture.contents, Layers: fixture.layers},
+		"缺 PC 层次读口": {Rules: fixture.own, References: fixture.resolutions, Closures: fixture.closures, Contents: fixture.contents},
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := adapter.NewClaimServiceRules(deps); err == nil {
