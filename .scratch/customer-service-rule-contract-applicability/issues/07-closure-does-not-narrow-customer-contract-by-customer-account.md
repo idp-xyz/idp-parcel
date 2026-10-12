@@ -1,7 +1,7 @@
 # 07 PC 闭包不按键上的客户账户收窄客户合同候选：同一范围两户各一份合同即两户都`适用冲突`
 
 Category: bug
-Status: ready-for-agent——2026-10-12 11:2x 用户经 IDP 队列对「分诊」节推荐答「同意」，决定落为 [ADR-0177](../../../docs/adr/0177-customer-contract-names-its-customer-account-and-the-closure-narrows-by-it.md)（Accepted）；实施按其 Consequences 的落地位，走并行会话那条路。此前：needs-info——2026-10-12 11:1x 通道 1 分诊（见文末「分诊」）：是代码没兑现 PC `CONTEXT` 既有不变量的缺口，不是新产品问题；但兑现它要给客户合同的规范化文档加键、动 PCC-1，属难逆转取舍，须先有一篇 ADR。此前：needs-triage——2026-10-12 10:5x 通道 1 立（用户令独立完成），出自 [06](06-demo-contract-02-custom-first-claim-deadline-inherits-materials.md) 灌种子后的真库取证；只读取证，未动 PC 代码。
+Status: in-progress——2026-10-12 11:3x 通道 1 认领（用户令「全部独立完成」），分支 `mcp1-csr07`，基 `9ba5d623`。此前：ready-for-agent——2026-10-12 11:2x 用户经 IDP 队列对「分诊」节推荐答「同意」，决定落为 [ADR-0177](../../../docs/adr/0177-customer-contract-names-its-customer-account-and-the-closure-narrows-by-it.md)（Accepted）；实施按其 Consequences 的落地位，走并行会话那条路。此前：needs-info——2026-10-12 11:1x 通道 1 分诊（见文末「分诊」）：是代码没兑现 PC `CONTEXT` 既有不变量的缺口，不是新产品问题；但兑现它要给客户合同的规范化文档加键、动 PCC-1，属难逆转取舍，须先有一篇 ADR。此前：needs-triage——2026-10-12 10:5x 通道 1 立（用户令独立完成），出自 [06](06-demo-contract-02-custom-first-claim-deadline-inherits-materials.md) 灌种子后的真库取证；只读取证，未动 PC 代码。
 Blocked by: 无（用户决定已落 ADR-0177）
 父票：[spec](../spec.md)
 地盘：`internal/partycommercial/domain` 的闭包解析（客户合同那一格的候选选法）；碰 Go，走并行会话那条路。
