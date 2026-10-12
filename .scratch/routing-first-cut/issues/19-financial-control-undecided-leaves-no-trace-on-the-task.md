@@ -1,7 +1,7 @@
 # 19 财务控制未形成时消费方整笔回滚：任务与可达性判断都不落，动线上看不出停在哪一格
 
 Category: enhancement
-Status: ready-for-agent——2026-10-12 通道 3 分诊（派单 `task-85d7350d` ← 通道 1），见文末「分诊」。此前 needs-triage——2026-10-11 通道 1 立（用户授权自决），出自 [16](16-demo-tenant-pre-acceptance-financial-control-cells.md) 判据二的取证与其「评审 ← 通道 5」Spec 非阻断
+Status: in-progress——2026-10-12 通道 3 认领（派单 `task-a95f74d3` ← 通道 1），分支 `mcp3-rfc19` 基 `1e02d2ea`，隔离树 `/home/tops/workspace/idp-parcel-mcp3-rfc19`；按「分诊」裁定分笔。此前 ready-for-agent——2026-10-12 通道 3 分诊（派单 `task-85d7350d` ← 通道 1），见文末「分诊」。此前 needs-triage——2026-10-11 通道 1 立（用户授权自决），出自 [16](16-demo-tenant-pre-acceptance-financial-control-cells.md) 判据二的取证与其「评审 ← 通道 5」Spec 非阻断
 Blocked by: 无
 地盘（按「分诊」裁定分笔）：
 - `internal/parcelshipment`：`ports` 的 `PreAcceptanceControlOutcome` 增「未配置」一格；`application` 的 `controlStallReasons`、新未决原因与 `resumePath()`、控制停那一支经 `awaitOperatorRegistration`、`undecided` 带提供方原因；`adapters/settlementaccounting` 的原因译法；`adapters/inbox` 收结算登记信封的续办门（照 `OperatorRegistrationCompletedConsumer`）。
