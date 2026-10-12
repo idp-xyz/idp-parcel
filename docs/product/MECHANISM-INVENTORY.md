@@ -6,7 +6,7 @@
 
 | 上下文 | 生产 | 测试 | 应用编排 | postgres 适配器 | 其中 Outbox 投递 | http 适配器 |
 |---|---|---|---|---|---|---|
-| accessidentity | 18 | 12 | 0 | 2 | 0 | 0 |
+| accessidentity | 22 | 15 | 0 | 3 | 0 | 0 |
 | architecture（非业务） | 0 | 13 | 0 | 0 | 0 | 0 |
 | collectionremittance | 22 | 10 | 4 | 6 | 0 | 3 |
 | customscompliance | 104 | 105 | 20 | 42 | 10 | 14 |
@@ -20,9 +20,9 @@
 | settlementaccounting | 162 | 111 | 28 | 54 | 9 | 9 |
 | transportfulfillment | 152 | 139 | 27 | 36 | 11 | 29 |
 | visibilityexception | 100 | 97 | 11 | 30 | 8 | 11 |
-| **合计** | 1188 | 1100 | 156 | 290 | 57 | 160 |
+| **合计** | 1192 | 1103 | 156 | 291 | 57 | 160 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 76、测试 114。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 77、测试 115。
 
 ## 跨上下文消费缝：36 组，96 个生产文件
 
@@ -65,11 +65,11 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：12 个模块共 207 份 SQL
+## 迁移：12 个模块共 208 份 SQL
 
 | 模块 | 份数 |
 |---|---|
-| access_identity | 3 |
+| access_identity | 4 |
 | collection_remittance | 1 |
 | customs_compliance | 23 |
 | network_routing | 18 |
