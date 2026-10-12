@@ -1,7 +1,7 @@
 # 客户服务规则「挂客户合同」的一格接入：合同优先解析 + 行级继承产品底座
 
 Category: enhancement
-Status: in-progress——2026-10-10 通道 1 按 /to-tickets 发布子票 02–06（拆法作者通道 3，通道 1 经用户授权认可），本 spec 转为跟踪容器，自身不再有可执行工作。此前：ready-for-agent
+Status: resolved——2026-10-12 12:4x 通道 2：子票 01–07 逐份读过，全部 resolved（issue-tracker「Complete a parent」）；02 Q4、04 判断项 3、05 Q3、07 判断项 5 这几条越权风险点 owner 复核认可（用户授权「请你帮我自决」，通道 2 代裁，记在各票原文旁）；04、07 事后补了非作者评审，均无阻断，非阻断三处归 [contract-tier-binding-followups/01](../contract-tier-binding-followups/issues/01-unbound-contracts-and-contract-shell-with-product-body-pass-unchecked.md)。此前 in-progress——2026-10-10 通道 1 按 /to-tickets 发布子票 02–06（拆法作者通道 3，通道 1 经用户授权认可），本 spec 转为跟踪容器，自身不再有可执行工作。此前：ready-for-agent
 Blocked by: 无。设计决策已全部裁毕，权威记录为 [ADR-0176](../../docs/adr/0176-customer-service-rule-contract-tier-selection-and-inheritance.md)；建模票 [01](issues/01-service-rule-keyed-by-product-cannot-express-per-customer-claim-terms.md)。
 
 ## Problem Statement
@@ -82,7 +82,7 @@ Blocked by: 无。设计决策已全部裁毕，权威记录为 [ADR-0176](../..
 
 ## 子票
 
-建模票 [01](issues/01-service-rule-keyed-by-product-cannot-express-per-customer-claim-terms.md) 已 resolved；实施票如下。拆票时对七问的裁定写在各子票「判断项」，其中两条标了越权风险点：02 的 Q4（发布面不加门）与 05 的 Q3（只收紧不设比对门），待 PC owner 复核。
+建模票 [01](issues/01-service-rule-keyed-by-product-cannot-express-per-customer-claim-terms.md) 已 resolved；实施票如下。拆票时对七问的裁定写在各子票「判断项」，其中两条标了越权风险点：02 的 Q4（发布面不加门）与 05 的 Q3（只收紧不设比对门），待 PC owner 复核——2026-10-12 已 owner 复核认可（通道 2 代裁，记在两票原文旁），实施时新标的 04 判断项 3、07 判断项 5 一并复核。
 
 | 票 | 标题 | Blocked by | 状态 |
 |---|---|---|---|
