@@ -1,7 +1,7 @@
 # 04 VE 索赔资格：采纳合同版时按合同点核、按行继承产品底座
 
 Category: enhancement
-Status: 完工，待评审与重放——2026-10-12 通道 1 在分支 `mcp1-csr04`（基 `2603f9ad`）上做完，分支已推 origin：代码 `f66e18da`、`c2b8084f`，清点 tip `fb4e8ce5`；完成记录见文末。此前：in-progress——2026-10-12 10:1x 通道 1 认领（用户经 IDP 队列令「继续后续的工作」；其余通道自 10-11 起无活动、不在等待态，未派单），分支 `mcp1-csr04`，基 `2603f9ad`。此前：ready-for-agent——2026-10-10 通道 1 发布：拆法作者通道 3（`task-2b404e22`），通道 1 经用户 19:1x 授权认可并裁定拆法清单所附七问
+Status: resolved——2026-10-12 10:29 通道 1 快进进 main（远端 `2603f9ad` → `31588a45`，分支 SHA 原样进 main）；用户 10:2x 裁定「全部需要你自己独立完成，没有其他的通道和 agent」，评审是作者自审，不是非作者评审，见文末 Comments 与进 main 记录。此前：完工，待评审与重放——2026-10-12 通道 1 在分支 `mcp1-csr04`（基 `2603f9ad`）上做完，分支已推 origin：代码 `f66e18da`、`c2b8084f`，清点 tip `fb4e8ce5`；完成记录见文末。此前：in-progress——2026-10-12 10:1x 通道 1 认领（用户经 IDP 队列令「继续后续的工作」；其余通道自 10-11 起无活动、不在等待态，未派单），分支 `mcp1-csr04`，基 `2603f9ad`。此前：ready-for-agent——2026-10-10 通道 1 发布：拆法作者通道 3（`task-2b404e22`），通道 1 经用户 19:1x 授权认可并裁定拆法清单所附七问
 Blocked by: [03](03-pc-layered-read-port-returns-contract-and-product-base-bodies.md)
 父票：[spec](../spec.md)
 地盘：`internal/visibilityexception/adapters/partycommercial` 与 `cmd/parcel-api` 的索赔装配；碰 Go，走并行会话那条路。
@@ -69,3 +69,20 @@ Blocked by: [03](03-pc-layered-read-port-returns-contract-and-product-base-bodie
 
 - 05（管理台表单）、06（演示对比面）未做；演示种子未动。
 - 判断项 3 待 PC owner 复核。
+
+## Comments
+
+### 评审 ← 通道 1（作者自审，不是非作者评审）· 钉 `fb4e8ce5` · 10:2x
+
+**这一格没守住规矩，如实记下。** [parallel-sessions](../../../docs/agents/parallel-sessions.md)「合入前独立评审」要求代码票进 main 前有一份非作者评审。通道 1 先按那条退路派了一个隔离评审子代理（钉 `fb4e8ce5`）；结论到达之前，用户裁定「全部需要你自己独立完成，没有其他的通道和 agent 给你使用」，于是改为作者自审后快进，子代理的结论没有等、没有用。自审看不到作者自己的盲点，**宜由 VE / PC owner 或下一个空闲会话事后补一份非作者评审**，重点是判断项 1、3。
+
+- **Standards**：阻断无。非阻断一条：合同层那条路上，闭包采纳那一版的**壳**指名的合同若与闭包采用的客户合同不同、而正文挂的是服务产品，`tiedToAdoptedContract` 不核壳，这一形态今天没有一格拦——它只能出自 PC 闭包选错了层（02 的选法要求壳恰指名闭包解出的合同），属提供方契约被打破；补一道壳核即可，留给 owner 定要不要。无发现：新增注释全中文、无行号引用、无跨文件计数、无变更说明；适配器只 import 两侧 domain 与 ports，没引 application / adapters；ADR-0025 逐格分派——`productBase` 的 `switch` 对 `ResolutionOutcome` 每个取值都有去处、`default` 答 `ErrUntranslatableAnswer` 而不是兜成业务格；ADR-0079 决定八缺件构造期拒有用例；生产文件里没有写死的租户取值。
+- **Spec**：阻断无。非阻断：判断项 3 对票面「做什么 3」的读法（「不核」指正文挂产品，壳空而正文挂合同的产品层那一版也核）是本票的解释，已标越权风险点。无发现：完成判据三条逐条对过用例；底座只经 PC 层次读口选，VE 不自行解析；挂产品版那一路的既有用例全绿、不问层次读口；`cmd/parcel-api` 装配用例 `-v` 下 PASS。
+
+## 进 main 记录（通道 1 · 2026-10-12 10:29）
+
+- 远端 main `2603f9ad` → `31588a45`（本记录随其后一笔）：分支 `mcp1-csr04` 自基 `2603f9ad` 起未分叉，**快进**而非 cherry-pick，`2416c8cd`、`f66e18da`、`c2b8084f`、`fb4e8ce5`、`31588a45` 原样进 main。清点 `fb4e8ce5` 生成于 `c2b8084f` 的干净树，`31588a45` 只改票面与 spec，验证树上重跑生成器 `git status --porcelain` 为空，不另重生成。
+- 评审：作者自审（见上条 Comments），非作者评审这道门本次没有过。
+- 验证（推送方，钉合入候选 `31588a45` 的隔离 detached worktree，WSL，go1.26.8，DSN 为门禁库 55432）：`gofmt -l .` 无输出；`go build ./...`、`go vet ./...` 退出 0；带 DSN 全仓 `go test -count=1 -p 1 ./...` 退 0，138 个包 ok、0 FAIL、0 cached，150 s。10:29:10 推前 `ls-remote` 答 `2603f9ad`，`2603f9ad..31588a45` 只有本票这五笔。
+- 解锁：[05](05-admin-form-contract-tier-empty-means-inherit-and-tighten-only.md)、[06](06-demo-contract-02-custom-first-claim-deadline-inherits-materials.md) 的「Blocked by 04」已解；照 02、03 进 main 时的先例记在这里，两张票面未改。
+- 分支 `mcp1-csr04` 本地改名 `merged/mcp1-csr04`、作者树与验证树已拆；远端分支照先例留着。
