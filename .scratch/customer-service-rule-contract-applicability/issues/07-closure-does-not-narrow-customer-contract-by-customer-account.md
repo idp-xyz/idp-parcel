@@ -42,7 +42,7 @@ Blocked by: 无（用户决定已落 ADR-0177）
 - ✅ 两户各解各的：领域 `TestEachCustomerAccountResolvesItsOwnContractInASharedScope`；真库 `TestEachAccountResolvesItsOwnContractFromTheStoredScope`（两份合同正文经 `SaveCustomerContractContent` 落库、`LoadForScope` 读回的登记册上各户唯一解出自己那一份，第三户 `无适用依据`，同版本换户再登 `内容冲突`），`-v` 下 PASS。只有一户：`TestAContractWithoutARegisteredBodyStaysACandidate`（只有壳的合同照旧唯一解析）；既有闭包、cmd 各真库用例照绿（它们的合同多为只有壳）。
 - 另钉：别户合同不参选（`无适用依据`）、同一户两份仍冲突、收窄只碰客户合同、登记口拒他类与空账户、构造门与规范化拒缺账户、载荷点名 `customerContract.contractContent.customerAccount`、旧行无账户点读报错（`TestALegacyContractRowWithoutAnAccountIsAnErrorNotAGuess`）。
 
-**red 与判别力**：新用例在实现前（构造门签名先变、选法未改）跑过——领域收窄三格断言失败。`go test -overlay` 临时变异八处：M1 选法不收窄、M2 账户比对恒真（首写编不过，改写后重跑）、M3 `LoadForScope` 不登账户、M5 正文 validate 不要账户、M7 旧行不报错、M8 构造门不要账户——各有用例红；M4 重放不比账户——真库用例红，表现为夹具事务里 120 s 超时而不是断言行；M6 规范化键加 omitempty——等价变异（validate 保证账户非空，omitempty 永不生效），没有用例能分辨，如实记下。
+**red 与判别力**：本票没有先跑 red——选法收窄先写进了 `applicable`，新用例是之后补的。判别力因此只靠变异取证（M1、M2 正是「没有收窄」与「收窄恒放行」两种实现前形态）。`go test -overlay` 临时变异八处：M1 选法不收窄、M2 账户比对恒真（首写编不过，改写后重跑）、M3 `LoadForScope` 不登账户、M5 正文 validate 不要账户、M7 旧行不报错、M8 构造门不要账户——各有用例红；M4 重放不比账户——真库用例红，表现为夹具事务里 120 s 超时而不是断言行；M6 规范化键加 omitempty——等价变异（validate 保证账户非空，omitempty 永不生效），没有用例能分辨，如实记下。
 
 **门**（钉 `31b73af7` 的工作树，WSL，go1.26.8，DSN 门禁库 55432）：改动 `.go` `gofmt -l` 无输出；`go build ./...`、`go vet ./...` 退 0；PC 各包的反向依赖（`go list -test` 反查，21 个包）连同 `./internal/architecture/...` 带 DSN `-p 1 -count=1`：21 ok / 0 FAIL，54 s。admin-web 三道门（Node v22.23.3）：tsc 退 0、487 / 487 pass、vite build 退 0。全量留给推送方重放后那一跑。证据层级 S。
 
