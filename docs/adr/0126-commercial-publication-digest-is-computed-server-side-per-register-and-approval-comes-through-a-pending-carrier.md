@@ -1,6 +1,7 @@
 # ADR-0126：商业发布的内容摘要由服务端按册规范化算出（规范化版本 `PCC-1`，摘要串自带版本）；受控批文仍声明摘要但必须与算出的相等，不等即`未受理`带两串；批准是操作者动作，经一版一行的待批准载体推进，审批职责规则未登记即批准门答未配置；预览与发布走同一份规范化与构造门
 
 Status: Accepted（2026-09-08，用户经 IDP 队列通道 1 派单 `task-cc7313e8` 授权 owner「自决口径：硬句一字不改、每个决定写理由、拿不准或跨上下文归属的点单列越权风险点」，据此对票 [admin-write-faces/08](../../.scratch/admin-write-faces/issues/08-publication-form-path-common-half-server-side-digest-and-envelope-approval.md)「要裁的」三问一次答完。裁决能力边界：读过伞票 [07](../../.scratch/admin-write-faces/issues/07-commercial-publication-operator-main-paths-per-register.md) 硬句与票 08 全文、[ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md)、[ADR-0101](./0101-operator-facing-registration-payload-shape-is-product-defined.md)、[ADR-0014](./0014-versioned-canonicalization-shape-for-content-digest.md)、[ADR-0031](./0031-owned-repository-write-outcome-is-a-closed-algebra-not-an-error.md)、[ADR-0085](./0085-registry-write-faces-enter-the-endpoint-table-with-unconfigured-grade.md) 全文，PC `CONTEXT.md`「商业版本」词条与「商业规则与政策版本」生命周期，`internal/partycommercial/domain` 的 `CommercialVersionSpec` / `NewCommercialContentDigest` / `CommercialObjectKind` / `NewCreditPolicy` / `CreditLimit`，`application/publish_commercial_authority.go` 全文，`cmd/parcel-commercial/translate.go` 的 `publicationItemDocument`，`adapters/http/register_commercial_publication.go`，parcel-pricing 的 `fingerprint.go`（`PPC-5`、`hashCanonical`）与 `preview_reference_series.go` / `reference_series_payload.go`，parcel-shipment 的 `payload_canonicalization.go`（`PSC-1:<sha256>` 摘要串形）；**未重读**十类正文各自的领域构造门（只读了信用政策那一类）、`scripts/demo-seeds` 各批文正文、`internal/accessidentity` 全部——本记录因此只裁**摘要由谁算与摘要串的形、受控批文那一半的对账门、待批准载体的形与批准门、预览口的路径**，不改任何一册正文的形状，不裁其余九册各自的规范化文档（那是各子票逐册接时的事，同一版本号下加册不换号，见决定一））
+Partially suspended by: [ADR-0178](./0178-customer-contract-versions-carry-their-body-and-contract-shells-bind-service-rule-bodies.md) 决定一（决定二「没接的册与正文缺席的版本没有可比对象，按今天的样子登记声明的串」一句，仅限客户合同一册：该册不再收只有壳的版本；其余各册与其余各条不变，本记录正文不改写）
 Date: 2026-09-08
 
 ## Context
@@ -61,6 +62,7 @@ Date: 2026-09-08
 - 票 [admin-write-faces/08](../../.scratch/admin-write-faces/issues/08-publication-form-path-common-half-server-side-digest-and-envelope-approval.md) 与伞票 [07](../../.scratch/admin-write-faces/issues/07-commercial-publication-operator-main-paths-per-register.md)：三问与硬句的出处
 - [PC CONTEXT](../domain/party-commercial/CONTEXT.md)：「商业版本」「发布规范化版本」「待批准发布」词条
 - `internal/parcelpricing/domain/fingerprint.go`、`internal/parcelshipment/domain/payload_canonicalization.go`：规范化与摘要串形的先例
+- [ADR-0178](./0178-customer-contract-versions-carry-their-body-and-contract-shells-bind-service-rule-bodies.md)：决定一部分停用本记录决定二「没接的册与正文缺席的版本没有可比对象，按今天的样子登记声明的串」一句——只限客户合同一册，该册不再收只有壳的版本；其余各册与其余各条不变
 
 ## owner 复核记录
 
