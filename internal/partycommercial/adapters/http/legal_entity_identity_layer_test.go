@@ -13,11 +13,11 @@ import (
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 )
 
-// 票 legal-entity-profile/02 的传输层用例：隔离写 Intake 把身份层三格译进命令（形状不对即 MALFORMED_REQUEST，缺不缺
-// 交给用例判）；目录与修订历史两个读口的答复带出身份层四格，历史修订只带显式的 identityLayerRegistered:false。
+// 票 legal-entity-profile/02 的传输层用例：法人登记口的 Intake（OperatorRegistryIntake）把身份层三格译进命令（形状不对即
+// MALFORMED_REQUEST，缺不缺交给用例判）；目录与修订历史两个读口的答复带出身份层四格，历史修订只带显式的 identityLayerRegistered:false。
 
-func TestIsolatedIntakeTranslatesTheLegalEntityIdentityLayer(t *testing.T) {
-	intake := isolatedIdentityIntakeForTest(t)
+func TestOperatorRegistryIntakeTranslatesTheLegalEntityIdentityLayer(t *testing.T) {
+	intake := operatorIntake(t)
 	command, err := intake.IntakeLegalEntityRegistration(context.Background(), legalEntityRequest(`{"legalEntities":[{
 		"legalEntityId":"SYN-LE-02",
 		"partyId":"SYN-PARTY-02",

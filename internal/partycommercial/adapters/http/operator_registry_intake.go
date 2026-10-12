@@ -42,14 +42,15 @@ type OperatorRegistryAuthenticator interface {
 	AuthenticateRegistryWrite(ctx context.Context, bearerToken string) (OperatorIdentity, error)
 }
 
-// OperatorRegistryIntake 是操作者渠道在本包服务形态、产品—渠道映射、注册号类型目录与渠道账号使用授权六口的 Intake
-// （ADR-0100 决定四；票 operator-channel/04）。运营操作者面发布路径的预览、载体三口与词表读口也挂它（票
-// operator-channel/06），译法各在该口自己的文件里。
+// OperatorRegistryIntake 是操作者渠道在本包登记写面各口的 Intake（ADR-0100 决定四；票 operator-channel/04）：服务形态、
+// 产品—渠道映射、注册号类型目录、渠道账号使用授权，以及参与方身份族（四类登记、停用与法人资料登记）。运营操作者面发布
+// 路径的预览、载体三口与词表读口也挂它（票 operator-channel/06），译法各在该口自己的文件里。
 //
-// 线格式照本包在线口的既有惯例（IsolatedPartyIdentityIntake 注释）：镜像受控 CLI 的批文，去掉整批的 tenantId——键在场
-// 即拒，本口恰一项、别的口的项拒；租户格填认证结果。前四口的外壳与逐项翻译就是受控 CLI 那一份（registrationjson），
-// 两口对同一项译出同一条命令；使用授权族没有受控 CLI，载荷只有在线这一份（channel_account_use_payload.go）。先认证、
-// 后解载荷。
+// 线格式照本包在线口的惯例：镜像受控 CLI 的批文，去掉整批的 tenantId——键在场即拒（理由在
+// partyIdentityBatchDocument.TenantID），本口恰一项、别的口的项拒；租户格填认证结果。服务形态、映射与注册号类型的外壳与
+// 逐项翻译就是受控 CLI 那一份（registrationjson），两口对同一项译出同一条命令；身份族的外壳与逐项翻译在
+// party_identity_payload.go，与受控 CLI 的一项逐字同形；使用授权族没有受控 CLI，载荷只有在线这一份
+// （channel_account_use_payload.go）。先认证、后解载荷。
 type OperatorRegistryIntake struct {
 	authenticator OperatorRegistryAuthenticator
 }
@@ -61,6 +62,12 @@ var (
 	_ RegistrationNumberTypeDeactivationIntake = (*OperatorRegistryIntake)(nil)
 	_ ChannelAccountUseRegistrationIntake      = (*OperatorRegistryIntake)(nil)
 	_ ChannelAccountUseRevocationIntake        = (*OperatorRegistryIntake)(nil)
+	_ BusinessPartyRegistrationIntake          = (*OperatorRegistryIntake)(nil)
+	_ LegalEntityRegistrationIntake            = (*OperatorRegistryIntake)(nil)
+	_ CustomerAccountRegistrationIntake        = (*OperatorRegistryIntake)(nil)
+	_ PartyRelationshipRegistrationIntake      = (*OperatorRegistryIntake)(nil)
+	_ PartyIdentityDeactivationIntake          = (*OperatorRegistryIntake)(nil)
+	_ LegalEntityProfileRegistrationIntake     = (*OperatorRegistryIntake)(nil)
 )
 
 func NewOperatorRegistryIntake(authenticator OperatorRegistryAuthenticator) (*OperatorRegistryIntake, error) {
@@ -143,8 +150,77 @@ func (intake *OperatorRegistryIntake) IntakeChannelAccountUseRevocation(ctx cont
 	return malformedUnless(document.command(tenant))
 }
 
-// authenticateAndDecode 是六口共用的前半段：先认证，再以封闭形状解外壳（decodeClosedDocument），再执行自报租户那道拒
-// （refuseSelfReportedTenant）——两道判据与本包隔离形态同一份，同一形状在本包只有一种答复。
+// 身份族各口的逐项翻译自己就把形状错包成 ErrMalformedRequest 并带上字段路径（party_identity_payload.go），所以下面
+// 不再过 malformedUnless——再包一层，答复的 detail 里会多出一遍哨兵原句。
+
+func (intake *OperatorRegistryIntake) IntakeBusinessPartyRegistration(ctx context.Context, request *http.Request) (application.RegisterBusinessPartyCommand, error) {
+	tenant, document, err := authenticateAndDecode[partyIdentityBatchDocument](ctx, intake, request, partyIdentityBatchTenant)
+	if err != nil {
+		return application.RegisterBusinessPartyCommand{}, err
+	}
+	if err := document.exactlyOne("businessParties", len(document.BusinessParties)); err != nil {
+		return application.RegisterBusinessPartyCommand{}, err
+	}
+	return document.BusinessParties[0].command(tenant)
+}
+
+func (intake *OperatorRegistryIntake) IntakeLegalEntityRegistration(ctx context.Context, request *http.Request) (application.RegisterLegalEntityCommand, error) {
+	tenant, document, err := authenticateAndDecode[partyIdentityBatchDocument](ctx, intake, request, partyIdentityBatchTenant)
+	if err != nil {
+		return application.RegisterLegalEntityCommand{}, err
+	}
+	if err := document.exactlyOne("legalEntities", len(document.LegalEntities)); err != nil {
+		return application.RegisterLegalEntityCommand{}, err
+	}
+	return document.LegalEntities[0].command(tenant)
+}
+
+func (intake *OperatorRegistryIntake) IntakeCustomerAccountRegistration(ctx context.Context, request *http.Request) (application.RegisterCustomerAccountCommand, error) {
+	tenant, document, err := authenticateAndDecode[partyIdentityBatchDocument](ctx, intake, request, partyIdentityBatchTenant)
+	if err != nil {
+		return application.RegisterCustomerAccountCommand{}, err
+	}
+	if err := document.exactlyOne("customerAccounts", len(document.CustomerAccounts)); err != nil {
+		return application.RegisterCustomerAccountCommand{}, err
+	}
+	return document.CustomerAccounts[0].command(tenant)
+}
+
+func (intake *OperatorRegistryIntake) IntakePartyRelationshipRegistration(ctx context.Context, request *http.Request) (application.RegisterPartyRelationshipCommand, error) {
+	tenant, document, err := authenticateAndDecode[partyIdentityBatchDocument](ctx, intake, request, partyIdentityBatchTenant)
+	if err != nil {
+		return application.RegisterPartyRelationshipCommand{}, err
+	}
+	if err := document.exactlyOne("relationships", len(document.Relationships)); err != nil {
+		return application.RegisterPartyRelationshipCommand{}, err
+	}
+	return document.Relationships[0].command(tenant)
+}
+
+func (intake *OperatorRegistryIntake) IntakePartyIdentityDeactivation(ctx context.Context, request *http.Request) (application.DeactivatePartyIdentityCommand, error) {
+	tenant, document, err := authenticateAndDecode[deactivationBatchDocument](ctx, intake, request, deactivationBatchTenant)
+	if err != nil {
+		return application.DeactivatePartyIdentityCommand{}, err
+	}
+	if err := exactlyOneItem("deactivations", len(document.Deactivations), len(document.Deactivations)); err != nil {
+		return application.DeactivatePartyIdentityCommand{}, err
+	}
+	return document.Deactivations[0].command(tenant)
+}
+
+func (intake *OperatorRegistryIntake) IntakeLegalEntityProfileRegistration(ctx context.Context, request *http.Request) (application.RegisterLegalEntityProfileCommand, error) {
+	tenant, document, err := authenticateAndDecode[legalEntityProfileBatchDocument](ctx, intake, request, legalEntityProfileBatchTenant)
+	if err != nil {
+		return application.RegisterLegalEntityProfileCommand{}, err
+	}
+	if err := exactlyOneItem("profiles", len(document.Profiles), len(document.Profiles)); err != nil {
+		return application.RegisterLegalEntityProfileCommand{}, err
+	}
+	return document.Profiles[0].command(tenant)
+}
+
+// authenticateAndDecode 是各口共用的前半段：先认证，再以封闭形状解外壳（decodeClosedDocument），再执行自报租户那道拒
+// （refuseSelfReportedTenant）——各口走同一份判据，同一形状在本包只有一种答复。
 func authenticateAndDecode[Document any](
 	ctx context.Context,
 	intake *OperatorRegistryIntake,
@@ -182,6 +258,14 @@ func numberTypeBatchTenant(document registrationjson.RegistrationNumberTypeBatch
 func channelAccountUseTenant(document channelAccountUseDocument) []byte { return document.TenantID }
 
 func channelAccountUseRevocationTenant(document channelAccountUseRevocationDocument) []byte {
+	return document.TenantID
+}
+
+func partyIdentityBatchTenant(document partyIdentityBatchDocument) []byte { return document.TenantID }
+
+func deactivationBatchTenant(document deactivationBatchDocument) []byte { return document.TenantID }
+
+func legalEntityProfileBatchTenant(document legalEntityProfileBatchDocument) []byte {
 	return document.TenantID
 }
 

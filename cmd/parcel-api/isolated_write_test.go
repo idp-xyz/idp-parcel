@@ -8,7 +8,6 @@ import (
 	"time"
 
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
-	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/platform/buildinfo"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
@@ -79,31 +78,10 @@ func TestBuildIsolatedWriteAdmissionRefusesTenantMismatch(t *testing.T) {
 	}
 }
 
-// Covers: 票 admin-web-group-legal-entities/06 要做的第 3 条 — 合成租户合规时身份族 Intake 一格随两格一起就位。
-// 它不需要库（只收租户），因此与目录、自身权威串同在这道门里构造；缺了它装配点那几行只能挂字面量未配置。
-func TestBuildIsolatedWriteAdmissionGrantsThePartyIdentityIntake(t *testing.T) {
-	admission, err := buildIsolatedWriteAdmission(fakeGetenv(map[string]string{
-		isolatedWriteTenantEnv: "SYN-TENANT-01",
-	}))
-	if err != nil {
-		t.Fatalf("synthetic tenant refused: %v", err)
-	}
-	if admission.partyIdentity == nil {
-		t.Fatal("身份族 Intake 为空——`/commercial-legal-entity-registrations` 会照旧答 403，与「开关没设」不可分辨")
-	}
-}
-
-// expectedWriteAdmittedLines 是 ADR-0091 逐口放行到此刻为止已换上隔离 Intake 的命令面。每放一口
-// 在这里加一行（票 06 各口各自成笔），下面两个用例据此二分：名单内 400、名单外 403。
+// expectedWriteAdmittedLines 是 ADR-0091 逐口放行到此刻为止已换上隔离 Intake 的命令面。每放一口在这里加一行，
+// 某口换上真渠道时同笔删掉它那一行（ADR-0150 决定三），下面两个用例据此二分：名单内 400、名单外 403。
 var expectedWriteAdmittedLines = map[string]bool{
-	"/shipment-requests":                           true,
-	"/commercial-legal-entity-registrations":       true,
-	"/commercial-business-party-registrations":     true,
-	"/commercial-customer-account-registrations":   true,
-	"/commercial-party-relationship-registrations": true,
-	"/commercial-party-identity-deactivations":     true,
-	// 法人资料登记（票 legal-entity-profile/05）：与身份族同一个隔离 Intake 类型，一口一笔地放。
-	"/commercial-legal-entity-profile-registrations": true,
+	"/shipment-requests": true,
 	// 主链命令面（票 operator-channel/08）：各上下文一个隔离命令 Intake 类型，一口一笔地放。
 	"/node-operations/receptions":                                     true,
 	"/transport-fulfillment/offsite-pickups":                          true,
@@ -128,7 +106,7 @@ var expectedWriteAdmittedLines = map[string]bool{
 // 要钉的分界。
 func TestIsolatedWriteAdmissionSwitchesOnlyTheAdmittedCommandLines(t *testing.T) {
 	router := httpapi.NewWithEndpoints(buildinfo.Info{},
-		assembleUnwiredBusinessEndpointsWith(nil, isolatedSubmissionIntakeForTest(t), isolatedPartyIdentityIntakeForTest(t),
+		assembleUnwiredBusinessEndpointsWith(nil, isolatedSubmissionIntakeForTest(t),
 			isolatedWriteAdmissionForTest(t).nodeOperationsIntake(), isolatedWriteAdmissionForTest(t).transportFulfillmentIntake()))
 
 	for pattern, probe := range businessEndpointProbes {
@@ -181,7 +159,7 @@ func TestProductionFormAnswersTheAdmittedCommandLinesByteForByteUnconfigured(t *
 }
 
 // Covers: 票 operator-channel/08 — 合成租户合规时节点作业的隔离命令 Intake 随各格一起就位。它不需要库（租户与合成节点），
-// 因此与身份族同在这道门里构造；缺了它 `/node-operations/receptions` 只能挂字面量未配置，与「开关没设」不可分辨。
+// 因此与目录、自身权威串同在这道门里构造；缺了它 `/node-operations/receptions` 只能挂字面量未配置，与「开关没设」不可分辨。
 func TestBuildIsolatedWriteAdmissionGrantsTheNodeOperationsIntake(t *testing.T) {
 	if isolatedWriteAdmissionForTest(t).nodeOperationsIntake() == nil {
 		t.Fatal("节点作业隔离命令 Intake 为空——收寄口会照旧答 403")
@@ -243,19 +221,6 @@ func TestIsolatedReadAdmissionCannotOpenTheAdmittedCommandLines(t *testing.T) {
 				pattern, response.Code, http.StatusForbidden)
 		}
 	}
-}
-
-// isolatedPartyIdentityIntakeForTest 走进程自己那道门构造身份族 Intake：本用例问的是路由与准入形状，
-// 门禁三态另有上面那组用例。
-func isolatedPartyIdentityIntakeForTest(t *testing.T) *commercialhttp.IsolatedPartyIdentityIntake {
-	t.Helper()
-	admission, err := buildIsolatedWriteAdmission(fakeGetenv(map[string]string{
-		isolatedWriteTenantEnv: "SYN-TENANT-01",
-	}))
-	if err != nil {
-		t.Fatalf("构造隔离写准入：%v", err)
-	}
-	return admission.partyIdentity
 }
 
 // isolatedSubmissionIntakeForTest 用装配点自己的合成常量构造提交 Intake，归属那一侧换

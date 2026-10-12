@@ -11,9 +11,9 @@ import (
 // register-legal-entity-profiles 同源。资料没有停用这一步，只有登记修订一个端点：新修订是往修订链上插一笔，
 // 不是改旧行，所以没有 PATCH/DELETE，方法门只放 POST。
 
-// LegalEntityProfileRegistrationIntake 把一次已认证的接入请求翻译成资料修订登记命令。它是接口而不是本包内的
-// 解析代码，理由同 RegistrationNumberTypeRegistrationIntake：操作者认证属渠道接入契约，未决期间装配点挂
-// UnconfiguredIntake，未配置即拒。
+// LegalEntityProfileRegistrationIntake 把一次已认证的接入请求翻译成资料修订登记命令。它是接口，理由同
+// RegistrationNumberTypeRegistrationIntake：租户格只能来自认证结果。真实现是操作者渠道的 OperatorRegistryIntake
+// （ADR-0100），与参与方身份族同一个；译装在 party_identity_payload.go。
 type LegalEntityProfileRegistrationIntake interface {
 	IntakeLegalEntityProfileRegistration(
 		ctx context.Context,

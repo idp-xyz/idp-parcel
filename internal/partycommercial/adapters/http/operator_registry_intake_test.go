@@ -12,13 +12,16 @@ import (
 	"go.idp.xyz/idp-parcel/internal/partycommercial/domain"
 )
 
+// operatorAuthenticatedTenant 是 operatorTenant 替身认证出的租户：带令牌的请求一律落在它下面。
+const operatorAuthenticatedTenant = "SYN-TENANT-01"
+
 type operatorTenant struct{}
 
 func (operatorTenant) AuthenticateRegistryWrite(_ context.Context, token string) (commercialhttp.OperatorIdentity, error) {
 	if token == "" {
 		return commercialhttp.OperatorIdentity{}, commercialhttp.ErrOperatorCredentialRejected
 	}
-	tenant, err := domain.NewTenantID("SYN-TENANT-01")
+	tenant, err := domain.NewTenantID(operatorAuthenticatedTenant)
 	return commercialhttp.OperatorIdentity{Tenant: tenant}, err
 }
 

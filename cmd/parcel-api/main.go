@@ -644,7 +644,6 @@ func run(logger *slog.Logger) error {
 			governanceRegisters,
 			isolatedRead,
 			isolatedSubmissionIntake,
-			isolatedWrite.partyIdentityIntake(),
 			isolatedWrite.nodeOperationsIntake(),
 			isolatedWrite.transportFulfillmentIntake(),
 			operatorDecisions,
