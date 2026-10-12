@@ -52,6 +52,14 @@ echo "== 2/7 商业权威发布（party-commercial：发布批正文）与消费
 # 巧合要维护，而是本上下文明禁借宽泛客户关系跨维归集。
 "$BIN/parcel-commercial" register-resolution-key \
   -input "$SEEDS/commercial/resolution-key-syn-account-01.json"
+# 第二客户 SYN-ACCOUNT-02 的键：形状照上一行，三维换成它自己的相对方 SYN-PARTY-SHIPPER-02，闭包解出它自己的合同
+# SYN-CONTRACT-02、再与 SYN-SETTLEMENT-PREPAID-02 的六维命中。两户的必需依据都列 CUSTOMER_SERVICE_RULE：
+# 不列，闭包就不采用任何客户服务规则版本，索赔的首次索赔期限与最低材料两维恒答未登记。
+# 同一范围并存两版客户服务规则：挂产品的 SYN-SERVICE-RULE-01（首次索赔 14 天、LOSS 要 POD）与壳指名合同 02 的
+# SYN-SERVICE-RULE-CONTRACT-02（只登首次索赔 7 天）。闭包合同优先（ADR-0176 决定一）：账户 02 采纳合同版，
+# 期限答 7 天、材料行继承产品版的 POD（决定二）；账户 01 的合同层零候选，回落产品版，答复与没有合同版时相同。
+"$BIN/parcel-commercial" register-resolution-key \
+  -input "$SEEDS/commercial/resolution-key-syn-account-02.json"
 # 注册号类型目录（票 legal-entity-profile/01、product-strategy-boundary/03）：身份层显式采用 CN、SG 两份
 # 参考配置（ADR-0147），资料层各一类合成类型，另一类登记后停用。
 # 排在参与方身份之前：责任法人身份登记按注册国家 / 地区在这份目录里判号（ADR-0145 决定一）。

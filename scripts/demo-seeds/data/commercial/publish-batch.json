@@ -286,6 +286,84 @@
     },
     {
       "tenantId": "SYN-TENANT-01",
+      "kind": "CUSTOMER_CONTRACT",
+      "objectId": "SYN-CONTRACT-02",
+      "version": "v1",
+      "scope": "SYN-SCOPE-01",
+      "contentDigest": "PCC-1:d0ee6cf9763456ea998fa23fef2dff2f134fe63f4c51e08f85ed39765b29a52a",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "references": {
+        "ACCEPTANCE_RULE_PACKAGE": "SYN-RULEPKG-01"
+      },
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-015",
+        "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
+        "approvedAt": "2025-12-15T00:00:00Z"
+      },
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {
+        "contractContent": {
+          "rulePackage": "SYN-RULEPKG-01",
+          "bindings": [
+            {
+              "chargeScope": "SYN-CHARGE-PREPAID",
+              "policy": "SYN-FIN-CONTROL-01"
+            },
+            {
+              "chargeScope": "SYN-CHARGE-COD",
+              "inapplicabilityBasis": "SYN-BASIS-COD-NA-02"
+            }
+          ]
+        },
+        "preAcceptanceControl": {
+          "requirement": "REQUIRED"
+        },
+        "contractDelegations": [
+          {
+            "delegatorKind": "CUSTOMER_ACCOUNT",
+            "delegator": "SYN-ACCOUNT-02",
+            "action": "SOURCE_DATA_AMENDMENT",
+            "scope": "SYN-SCOPE-01",
+            "level": "SYN-LEVEL-COMMERCIAL-01",
+            "effectiveStartsAt": "2026-01-01T00:00:00Z"
+          }
+        ]
+      }
+    },
+    {
+      "tenantId": "SYN-TENANT-01",
+      "kind": "SETTLEMENT_POLICY",
+      "objectId": "SYN-SETTLEMENT-PREPAID-02",
+      "version": "v1",
+      "scope": "SYN-SCOPE-01",
+      "contentDigest": "PCC-1:37914752bcbb2cdb3edecd59d398a1a31b49bfe89736c437dc816fc8a37bddbf",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "references": {
+        "CUSTOMER_CONTRACT": "SYN-CONTRACT-02"
+      },
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-016",
+        "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
+        "approvedAt": "2025-12-15T00:00:00Z"
+      },
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {
+        "settlementPolicyBody": {
+          "method": "PREPAID",
+          "legalEntity": "SYN-LE-01",
+          "counterparty": "SYN-PARTY-SHIPPER-02",
+          "contract": {
+            "objectId": "SYN-CONTRACT-02",
+            "version": "v1"
+          },
+          "chargeScope": "SYN-CHARGE-PREPAID",
+          "currency": "CNY",
+          "effectiveStartsAt": "2026-01-01T00:00:00Z"
+        }
+      }
+    },
+    {
+      "tenantId": "SYN-TENANT-01",
       "kind": "SUPPLIER_AGREEMENT",
       "objectId": "SYN-SUPPLIER-TRUNK-CN-SG-01",
       "version": "v1",
@@ -430,6 +508,39 @@
               "materials": [
                 "SYN-DOC-POD-01"
               ]
+            }
+          ]
+        }
+      }
+    },
+    {
+      "tenantId": "SYN-TENANT-01",
+      "kind": "CUSTOMER_SERVICE_RULE",
+      "objectId": "SYN-SERVICE-RULE-CONTRACT-02",
+      "version": "v1",
+      "scope": "SYN-SCOPE-01",
+      "contentDigest": "PCC-1:b40a2cf5b7c81a39704d65fc576e6559f9563286490b8214d31d758747b9998f",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "references": {
+        "CUSTOMER_CONTRACT": "SYN-CONTRACT-02"
+      },
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-019",
+        "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
+        "approvedAt": "2025-12-15T00:00:00Z"
+      },
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {
+        "customerServiceRuleBody": {
+          "customerContract": "SYN-CONTRACT-02",
+          "responsible": "SYN-LE-01",
+          "scope": "SYN-SCOPE-01",
+          "claimDeadlines": [
+            {
+              "kind": "FIRST_CLAIM",
+              "startEvent": "SYN-EVENT-DELIVERED",
+              "days": 7,
+              "calendar": "SYN-CALENDAR-BUSINESS-01"
             }
           ]
         }

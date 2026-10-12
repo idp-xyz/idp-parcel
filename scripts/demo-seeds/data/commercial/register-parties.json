@@ -16,6 +16,13 @@
       "effectiveFrom": "2026-01-01T00:00:00Z"
     },
     {
+      "partyId": "SYN-PARTY-SHIPPER-02",
+      "name": "合成货主二号（演示）",
+      "revision": 1,
+      "basis": "SYN-REG-BASIS-PARTY-SHIPPER-02",
+      "effectiveFrom": "2026-01-01T00:00:00Z"
+    },
+    {
       "partyId": "SYN-PARTY-AGENT-01",
       "name": "合成承运代理一号（演示）",
       "revision": 1,
@@ -71,6 +78,13 @@
       "revision": 1,
       "basis": "SYN-REG-BASIS-ACCOUNT-01",
       "effectiveFrom": "2026-01-02T00:00:00Z"
+    },
+    {
+      "accountId": "SYN-ACCOUNT-02",
+      "customerPartyId": "SYN-PARTY-SHIPPER-02",
+      "revision": 1,
+      "basis": "SYN-REG-BASIS-ACCOUNT-02",
+      "effectiveFrom": "2026-01-02T00:00:00Z"
     }
   ],
   "relationships": [
@@ -85,6 +99,20 @@
       "effectiveStartsAt": "2026-01-05T00:00:00Z",
       "approval": {
         "reference": "SYN-APPROVAL-2026-REL-01",
+        "approvedAt": "2026-01-04T00:00:00Z"
+      }
+    },
+    {
+      "relationshipId": "SYN-REL-CUSTOMER-02",
+      "revision": 1,
+      "holder": "SYN-PARTY-SHIPPER-02",
+      "counterparty": "SYN-PARTY-OPERATOR-01",
+      "role": "CUSTOMER",
+      "scope": "SYN-SCOPE-01",
+      "basis": "SYN-CONTRACT-02",
+      "effectiveStartsAt": "2026-01-05T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-REL-02",
         "approvedAt": "2026-01-04T00:00:00Z"
       }
     },
