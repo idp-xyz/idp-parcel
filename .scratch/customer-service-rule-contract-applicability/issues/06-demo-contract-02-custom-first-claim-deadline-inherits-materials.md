@@ -1,8 +1,8 @@
 # 06 演示对比面：SYN-CONTRACT-02 挂合同规则只改首次索赔时限，账户 02 索赔答定制时限、材料继承产品版
 
 Category: enhancement
-Status: ready-for-agent——2026-10-10 通道 1 发布：拆法作者通道 3（`task-2b404e22`），通道 1 经用户 19:1x 授权认可并裁定拆法清单所附七问
-Blocked by: [04](04-ve-claim-eligibility-checks-contract-and-inherits-rows-from-product-base.md)
+Status: blocked——2026-10-12 10:5x 通道 1：种子子集在分支 `mcp1-csr06`（基 `8c41be83`，认领 `dfebdb5c`，种子 `2b76eab4`，已推 origin）上做完并灌通干净库，但同范围多一份合同后两户闭包都在 `CUSTOMER_CONTRACT` 上`适用冲突`、账户 01 回退，种子不进 main，见文末「灌库取证」。此前：in-progress（分支上认领）；ready-for-agent——2026-10-10 通道 1 发布：拆法作者通道 3（`task-2b404e22`），通道 1 经用户 19:1x 授权认可并裁定拆法清单所附七问
+Blocked by: [07](07-closure-does-not-narrow-customer-contract-by-customer-account.md)（[04](04-ve-claim-eligibility-checks-contract-and-inherits-rows-from-product-base.md) 已解）
 父票：[spec](../spec.md)
 地盘：`scripts/demo-seeds` 与取证处；碰种子与真库取证，走并行会话那条路。
 出处：spec「演示对比面」；建模票 [01](01-service-rule-keyed-by-product-cannot-express-per-customer-claim-terms.md)「来处」。
@@ -33,3 +33,13 @@ Blocked by: [04](04-ve-claim-eligibility-checks-contract-and-inherits-rows-from-
 - **两户的解析键都要列 `CUSTOMER_SERVICE_RULE`**：封存那笔已给账户 01 的键补了这一类、给账户 02 的新键也列了，这一半正是本票走通所需。
 
 据此建议：**不整笔重放，按本票要的子集另起**——第二客户商业主体 + 两户解析键列 `CUSTOMER_SERVICE_RULE` + 一版壳指名 `SYN-CONTRACT-02`、正文只登首次索赔期限的客户服务规则，注释按 ADR-0176 重写；封存那笔的计价 / 代收 / VE 演示面另立票或随各自切片。账户 02 的解析键要 `SETTLEMENT_POLICY`，所以 `SYN-SETTLEMENT-TERMS-02` 与它引的合同 02 绑定（信控政策）要一并带上，带到哪一格为止，开工时以 `seed.sh` 对干净演示库灌通为准、不凭读 JSON 定。走通（做什么 3）要账户 02 的一票委托真接受再提一封索赔，前提是 `submit-one-shipment.sh` 能按账户 02 提交——未核。
+
+## 灌库取证（2026-10-12 10:5x，通道 1，分支 `mcp1-csr06` 的 `2b76eab4`）
+
+**种子子集**（照「开工取证」的建议另起，未重放封存那笔）：参与方登记加 `SYN-PARTY-SHIPPER-02`、`SYN-ACCOUNT-02`、`SYN-REL-CUSTOMER-02`；发布批加 `SYN-CONTRACT-02`（照合同 01 的形状，预付绑 `SYN-FIN-CONTROL-01`，委派人账户 02）、`SYN-SETTLEMENT-PREPAID-02`（相对方货主二号、合同 02、CNY）、`SYN-SERVICE-RULE-CONTRACT-02`（壳指名合同 02，正文只登首次索赔 7 天）；两户解析键都列 `CUSTOMER_SERVICE_RULE`；`seed.sh` 登账户 02 的键并按 ADR-0176 写注释。三项新发布的 `contentDigest` 是先放占位值、由发布批答 `NOT_ACCEPTED` 时交回的算出摘要。
+
+**灌库**：一只新建的空库 `seed.sh` 退 0，发布批 17 项全收。
+
+**闭包**：一次性探针（未提交，跑完即删）按两户解析键成键、交 PC 真解析器解闭包，两户都答 `APPLICABILITY_CONFLICT`，冲突依据 `SERVICE_PRODUCT` 与 `CUSTOMER_CONTRACT`；对 main 原样种子解账户 01 只冲突在 `SERVICE_PRODUCT`（探针没带声明的服务产品，真提交会带）。多出来的 `CUSTOMER_CONTRACT` 是第二份合同带进来的：闭包不按客户账户选合同，立为 [07](07-closure-does-not-narrow-customer-contract-by-customer-account.md)。
+
+**因此**：完成判据一（第二客户商业主体进 main）照原样做会让账户 01 的闭包回退，违反判据二的「账户 01 答复不变」，本票停在这里。07 定了合同按客户账户怎么选之后，分支上的种子按那一选法补齐（多半要给合同 01 / 02 各补一处归属）再灌、再走做什么 3。做什么 3 另有一条与 07 无关的前提仍未核：演示今天停在已提交，没有一步把委托推到已接受（`README` 「运行时只多一步」那段），索赔读的又是接受时固定的闭包——走通要么补那一步，要么只以闭包与层次读口的答复作 `S` 证据，到时再定。
