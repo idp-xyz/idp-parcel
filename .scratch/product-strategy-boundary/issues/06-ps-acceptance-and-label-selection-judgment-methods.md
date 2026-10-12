@@ -1,7 +1,7 @@
 # 06 parcel-shipment：受理链与面单择优链上被归进实例半边的判断方法
 
 Category: enhancement
-Status: needs-triage——2026-09-24 通道 4 随票 02 立（登记册逐行拆分划出的产品策略，PS 一张）；逐项先核执行器有无，缺的定出内置策略或参考配置形态后转 ready-for-agent。第 1 项只落了「提交接收」一种形态，2026-09-30 随票 23 进 main（`953d748c`，见文末「进 main 记录」）；其余语义与第 2–7 项未动
+Status: needs-triage——2026-10-12 通道 3 分诊第 2 项（派单 `task-85d7350d` ← 通道 1）：产品策略起草为 ADR-0179（Proposed，接受归用户），立票 24（ready-for-agent）与 25、26（needs-info），见「第 2 项分诊」；第 3–7 项未动。此前：2026-09-24 通道 4 随票 02 立（登记册逐行拆分划出的产品策略，PS 一张）；逐项先核执行器有无，缺的定出内置策略或参考配置形态后转 ready-for-agent。第 1 项只落了「提交接收」一种形态，2026-09-30 随票 23 进 main（`953d748c`，见文末「进 main 记录」）；其余语义与第 2–7 项未动
 Blocked by: 无（第 4 项里公开承运商接口的参考配置那半等 03）
 地盘：`internal/parcelshipment/adapters/` 下受理链与面单择优链的消费侧适配器，`cmd/parcel-api`、`cmd/parcel-dispatch` 的对应装配点；缝对面的 party-commercial、parcel-pricing、settlement-accounting 只读，要改提供方另开票。
 出处：[票 02](./02-split-parameter-register-and-retriage-deferrals.md) 登记册逐行拆分——[参数登记册](../../../docs/product/PILOT-PARAMETER-REGISTER.md) `PAR-COM-13`、`PAR-COM-14`、`PAR-COM-15`、`PAR-COM-17`、`PAR-INT-02`、`PAR-NET-16` 行内「〔ADR-0146 拆分〕」点名的部分；[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定一、二与决定五第三条。已知缺口沿用[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表 PN-02 行的原话，不另立口径。
@@ -11,7 +11,7 @@ Blocked by: 无（第 4 项里公开承运商接口的参考配置那半等 03�
 每项落一个执行器：内置策略（租户只选形态、填数值）或可显式采用的参考配置。租户没选没填时照旧答`未配置`。
 
 1. **逐项时点语义的折法**（`PAR-COM-14`「锚点语义」「各判断的 `asOf` 语义」）。`AsOfValueSource` 生产为 nil，受理链第二阶段必答`未配置`；其类型注释把「语义如何折成一个时刻」判为实例半边。标准语义怎样折成时刻是方法，租户的截点才是取值。已知缺口：重定级表 PN-02 行第三项「受理链逐项时点 `Values` 为 nil」。
-2. **受理前控制金额的估价方法**（`PAR-COM-15`「账户和价格依据」里价格那半）。`ControlAmountSource` 生产为 nil，其注释写「金额该由估价形成（计价缝），接通前属实例半边」。已知缺口：同表 PN-02 行第三项「受理前控制金额 `Amounts` 为 nil」。
+2. **受理前控制金额的估价方法**（`PAR-COM-15`「账户和价格依据」里价格那半）。`ControlAmountSource` 生产为 nil，其注释写「金额该由估价形成（计价缝），接通前属实例半边」。已知缺口：同表 PN-02 行第三项「受理前控制金额 `Amounts` 为 nil」。**→ 2026-10-12 通道 3 分诊：本项以下方「第 2 项分诊」一节为准。**
 3. **面单择优链的选法与触发面**（`PAR-INT-02` 使用授权、`PAR-NET-16`「自动择优与人工确认的分界」）。缺账号使用授权选法、供应商协议选法与触发面（`cmd/parcel-api/assemble_label_channel.go` 文件头注自称触发面「是产品题」）；渠道约束、计价输入 `PricingInputSource`、BUY 价卡逐口定性。已知缺口：同表 PN-02 行第三项。
 4. **面单出向连接器**（`PAR-INT-02`）。一家都没有（`unconfiguredLabelChannelGateway`）。连接器形态归产品；公开承运商面单接口按参考配置随产品发布，形态等 03。已知缺口：同表 PN-02 行第三项。
 5. **待核：资料修订的并发合并与下游交接**（`PAR-COM-13`「基础版本/并发合并规则」「与制签/收寄/装袋/申报/关闭后续办的交接规则」）。`UC-PS-002` 编排已有资料版本追加与「资料版本已形成」意图；核它们是否就是这两项的执行器，缺哪半补哪半。
@@ -29,6 +29,41 @@ Blocked by: 无（第 4 项里公开承运商接口的参考配置那半等 03�
 ## 完成判据
 
 - 每项要么有执行器（带测试），要么记下已有执行器的证据；登记册对应行「〔ADR-0146 拆分〕」一句同步收短。
+
+## 第 2 项分诊（通道 3 · 2026-10-12 · 钉 main `ff3b01fa` · 派单 `task-85d7350d` ← 通道 1）
+
+只读码与文档，不改 `.go` / `.sql`。演示动线停在格 5 的实跑记在 [routing-first-cut/19](../../routing-first-cut/issues/19-financial-control-undecided-leaves-no-trace-on-the-task.md)「分诊」一节，证据层级 `S`。
+
+**三格**（分界检验见[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「切片的机制半边与实例半边」与 ADR-0146）：
+
+- **机制：在，缺一口。** 控制请求带金额的缝（`ControlAmountSource`）、结算施加控制的编排、计价的纯函数评价与共用补齐读数 `readingCompletion` 都在。缺的是「对给定价卡形成试算并走共用补齐读数」的入口，立[票 24](./24-plan-given-estimate-evaluations-use-shared-reading-completion.md)。
+- **产品策略：没有。** 估价形态、选卡口径、计价范围的来路、分区与币种怎么定，今天都没有执行器：`EstimationBasisSource` 把它们整块当成调用方交进来的参数，至今没有实现。这几格还牵出估价归哪个上下文形成——SA、PS `CONTEXT` 的现行条文与 ADR-0048 决定三的落点相抵——是难逆转的取舍，起草 [ADR-0179](../../../docs/adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md)（Proposed，接受归用户，不代裁）。
+- **租户取值：留空。** 哪个结算账户采用哪种形态、哪个计价范围，价卡费率、分区目录、燃油与汇率序列的取值，都归租户；没登记答`未配置`。演示租户的那几格随种子登 `SYN-` 值，立[票 26](./26-demo-tenant-adopts-the-pre-acceptance-estimate-form.md)。
+
+**现成执行器能复用多少**（读码钉 `ff3b01fa`）：
+
+- `ControlAmountSource` 与 `NewPreAcceptanceControlAdapter` 的金额那一步：缝能用。ADR-0179 现稿让金额改由结算形成，这条缝随实施退场；用户若取那篇 Alternatives 里「留在 PS 消费侧」那一条，它原样可用。
+- `EstimationAmountSource`：逐件合计与缺件即停的停法能搬。但它直接调纯函数 `EvaluatePricing`、不走 `readingCompletion`，卡上绑了序列或分区目录就落 `PENDING`，绑着燃油序列的演示售价卡因此永远形不成金额。`NewEstimationAmountSource` 没有生产调用点，`EstimationBasisSource` 只有测试替身。
+- 计价运营试算 `FormEstimateEvaluationsHandler`（UC-PP-001）：分区给法与共用补齐读数能用；但它按方向、范围、时点取全部适用价卡，证据一律 `S`，既不收「就用这一张卡」，也不收调用方声明的证据层级。票 24 补的就是这一口。
+- 计价正式评价 `FormEvaluationFromRequestHandler`：选卡用的 `PriceCardInForceResolver` 能用，ADR-0179 决定三照它选卡；评价本身入册且交付给结算，整条用不上。
+- psb/20、psb/21 的触发面（已由 ADR-0164、ADR-0169 落地）：都在发生项形成之后。受理前没有发生项，用不上；受理前也就没有预估客户费用可引。
+- ADR-0171 的申报测量与地址要素读口：只经接受基线的声明成员走，受理前答「无」，用不上。按提交版本作答的那一口归[票 25](./25-pre-acceptance-estimate-formed-by-settlement.md)。
+
+**推荐形态**（决定与理由在 ADR-0179，这里不复述）：估价归结算、试算归计价；首版内置「逐件 SELL 试算合计」一种形态；选卡与正式 SELL·客户费用评价同口径，冻结的钱与随后形成的客户费用按同一张卡算，差只来自申报与实测之差；计价范围随（租户、结算账户）的采用登记给出，没登记答`未配置`，不替两侧 owner 猜结算范围与计价范围是不是同一标识空间。号码在落笔前与提交前各查过一次 `docs/adr/README.md`、main 与在途分支，0179 无人占。
+
+**立票**：
+
+- [24](./24-plan-given-estimate-evaluations-use-shared-reading-completion.md)：给定价卡的试算走共用补齐读数。ready-for-agent，Blocked by 无：ADR-0179 正文与 Alternatives 里的每一种落法都要它。
+- [25](./25-pre-acceptance-estimate-formed-by-settlement.md)：受理前估价由结算形成（ADR-0179 的实施）。needs-info，指向 ADR-0179；Blocked by 24。
+- [26](./26-demo-tenant-adopts-the-pre-acceptance-estimate-form.md)：演示租户采用受理前估价形态（种子，证据 `S`）。needs-info，指向 ADR-0179；Blocked by 25。
+
+**等用户**：是否接受 ADR-0179，要紧的是决定一（估价归结算）与决定五（采用登记的键是结算账户）。拿不准的列在那篇「越权风险点」。
+
+**顺带**：
+
+- routing-first-cut/16「分诊裁定」说估价基里的区域与 [routing-first-cut/18](../../routing-first-cut/issues/18-leg-endpoints-folded-into-price-card-zones.md)「同题，宜一起定」。分诊后看不同题：18 问的是网络段起讫怎么折进价卡分区，节点没有邮编；客户委托带申报邮编，估价可经价卡绑定的分区目录解析（ADR-0179 决定四），不等 18。
+- 上文「顺带」点名的 `acceptanceFinancialControl` 那句悬空注释，并进票 25「PS 控制请求去掉金额」那一步，随 `ControlAmountSource` 退场一起改。
+- 开发主线 PN-02 行的补记与登记册 `PAR-COM-15` 行「〔ADR-0146 拆分〕」一句的收短，随票 25 落地时做；本票完成判据对第 2 项的那一条，到时一并满足。
 
 ## Comments
 
