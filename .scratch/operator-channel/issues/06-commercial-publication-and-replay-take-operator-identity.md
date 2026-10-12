@@ -1,7 +1,7 @@
 # 06 商业发布批准链与计价回放端点接上操作者身份
 
 Category: enhancement
-Status: 完工，待评审与重放——2026-10-12 通道 2，代码 tip `095aae46`（分支 `mcp2-oc06`、基 `ff3b01fa`），完成记录在文末（之一、之二）。之一（代码 tip `d678d1a4`）留下的待裁，通道 1 于 20:1x 裁定：`/commercial-publications` 不换、另立 operator-channel/18（判断项 1）；`/pricing-estimates` 归本票，已在之二做完。此前同日完工于代码 tip `d678d1a4`，`/commercial-publications` 与 `/pricing-estimates` 待派单方裁。此前 in-progress——2026-10-12 通道 2 认领（通道 1 派单 `task-e8e757ff`），分支 `mcp2-oc06`、基 `ff3b01fa`。此前 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
+Status: resolved——2026-10-12 通道 1：重放进 main，远端 main = `45fc6685`，进 main 记录与非作者评审见文末。此前完工，待评审与重放——2026-10-12 通道 2，代码 tip `095aae46`（分支 `mcp2-oc06`、基 `ff3b01fa`），完成记录在文末（之一、之二）。之一（代码 tip `d678d1a4`）留下的待裁，通道 1 于 20:1x 裁定：`/commercial-publications` 不换、另立 operator-channel/18（判断项 1）；`/pricing-estimates` 归本票，已在之二做完。此前同日完工于代码 tip `d678d1a4`，`/commercial-publications` 与 `/pricing-estimates` 待派单方裁。此前 in-progress——2026-10-12 通道 2 认领（通道 1 派单 `task-e8e757ff`），分支 `mcp2-oc06`、基 `ff3b01fa`。此前 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
 Blocked by: 04（2026-10-12 通道 1 派单时裁定不挡本票：04 余下的是商业参与方身份族那几口，各走各自的隔离 Intake 变量，本票各口不经它；通道 2 开工时在 `ff3b01fa` 的 `endpoints.go` 上复核成立）
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`cmd/parcel-api` 里商业发布（`/commercial-publications`）与计价回放（`/pricing-evaluation-replays`）两处的 Intake 装配，以及把 `OperatorEnvelope` 译成 party-commercial「操作者主体引用 + 授予集」消费面的那一段。2026-10-12 20:1x 通道 1 派单扩入（之二）：`cmd/parcel-api` 里 `/pricing-estimates` 那一行与它的装配测试，`internal/parcelpricing/adapters` 的 accessidentity 与 http 里查阅读面的认证。
@@ -114,3 +114,15 @@ Blocked by: 04（2026-10-12 通道 1 派单时裁定不挡本票：04 余下的�
   - 去掉空租户那道检查 → `TestEstimateIntakeTakesTheTenantFromTheAuthenticatedOperator` 红。
 - 机制清点在 `095aae46` 的干净检出上重生成（`0d45f3d2`）。
 - 作者不自评：整票（`ff3b01fa..` 新 tip）的非作者评审由派单方一次派出，重放进 main 由派单方做。
+
+## 进 main 记录（2026-10-12 通道 1）
+
+通道 1 在隔离树 `idp-parcel-replay-oc06-mcp1` 把十笔原样重放到 main `28205fd5` 之上——`5f45d17f`→`9ca09405`、`ffb54dc9`→`7c3b5fde`、`c41c79de`→`58364404`、`d678d1a4`→`844be8f2`、`0b4f34c5`→`e264c509`、`f20c7d2e`→`405f5d14`、`7313ac21`→`04c70ee7`、`095aae46`→`a5033adc`、`0d45f3d2`→`9a760503`、`c7832563`→`45fc6685`；分支上的 SHA 作封存出处，分支指针改名 `merged/mcp2-oc06`。main 自 `ff3b01fa` 起没动过 `.go`、`.sql`、`go.mod`、清点与本票面，重放出的各文件对分支 tip `c7832563` 逐字相同。验证在 `45fc6685`：改动的 `.go` 经 `gofmt -l` 无输出；清点在该 tip 重生成零差；`go build ./...`、`go vet ./...` 退 0；带 DSN `go test -p 1 -count=1 ./...` 138 ok / 0 FAIL / 14 无测试 / 0 cached（21:46:14→21:48:59）；`-v` 探针 `TestTheOperatorReadChannelEstimatesForTheEnvelopeTenantAgainstARealDatabase`、`TestTheWiredEvaluationReplayRecordsAgainstARealDatabase`、`TestTheOperatorChannelRecordsEnvelopeSubjectsOnThePublicationCarrier`、`TestEveryAssembledEndpointAnswersUnconfigured` 都 PASS 非 SKIP。21:5x 共享树 ff 到 `45fc6685` 后 `push 45fc6685:main`，远端 main = `45fc6685`。
+
+## Comments
+
+**评审 ← 通道 4（非作者）· 钉 `c7832563` · 基线 `ff3b01fa` · 21:25。** Spec 阻断 0 / 非阻断 2；Standards 阻断 0 / 非阻断 3。全文在任务 `task-4ec72fbf` 的 report_task（原卡 `task-a6541174` 接单后未交，由它接替）。
+
+- 无发现（Spec）：判据两条都有用例钉住——录入者与批准者取自信封（单元与真库读回两主体），审批职责规则未登答 `NOT_CONFIGURED`，回放与试算 401 / 403 / 503 与载荷自报租户 400 各答其格；application 与 domain 未动，未立触发者或发起者格；两口不在 `isolatedWriteAdmittedCommandLines`（ADR-0150）；判断项 3、5、6 各有 ADR-0124 决定六、ADR-0151 决定五、ADR-0152 决定六原句撑，6 正确留待 owner。
+- 无发现（Standards）：租户只从信封来，载荷里的身份格一律按畸形拒，空租户答 `ErrOperatorIdentityMissing`；发行方未配置带不带令牌都 403，无默认租户或等级；改动只在 adapters 与 `cmd`；注释中文、无行号；既有口答复不变（PP `writeProblem` 只上码名，`ErrOperatorNotGranted` 换串不上线；词表换 `writeRegistrationIntakeProblem` 后未配置仍 403）。评审者另以 `-overlay` 变异证判别力：词表读口不认证直接放行，三条用例各红。
+- 留票面记、不挡合入：**Spec N1** `publication_vocabulary.go` 的 `NewQueryPublicationVocabularyEndpoint` 先校 `kind` 后认证，无令牌加集合外 `kind` 答 400 而非 401——次序既有、本票未动、不泄租户数据，票面「401 / 403 / 503 各答其格」只在合法 `kind` 下成立，改不改归 owner。**Spec N2** 判断项 2 的「不合格」一格只有替身用例 `TestPublicationDraftPathTakesSubmitterAndApproverFromTheEnvelope` 钉，真库用例钉的是「等于不要求」那格；照 price-card-import/04 先例且已列判断项，不算越权。**Standards N1–N3**（AGENTS.md「改文档」计数条）`assemble_publication_operator_test.go` 文件头「在 swappedRegistryFaces 那两条里」数另一文件的测试，宜改写两条测试的符号名；`operator_read_intake.go` 的 `OperatorOperationsReadIntake`「今天挂它的只有试算一口」断言 `cmd/parcel-api` 的装配，operator-channel/05 换目录查阅面时会无声变错；`operator_registry_intake.go` 的 `OperatorRegistryIntake`「载体三口」数本包别的文件里的方法，ADR-0126 决定三已预告撤回口。三条随下一张碰这几份文件的票收。
