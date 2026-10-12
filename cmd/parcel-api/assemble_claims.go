@@ -10,6 +10,7 @@ import (
 
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	pcpostgres "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
+	pcapplication "go.idp.xyz/idp-parcel/internal/partycommercial/application"
 	visibilityhttp "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/http"
 	veidentity "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/identity"
 	vepartycommercial "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/partycommercial"
@@ -139,6 +140,10 @@ func buildClaimsOrchestration(db *bentopg.DB) (transactionalClaims, error) {
 // ADR-0136 决定三 / 四），VE 侧没有键登记面。机制接上而登记面尚未让闭包形成时，PS 那一头对每个
 // 对象都答「没有」、两维停在未登记——与本票之前键来源留 nil 的可观察行为一字不变（ADR-0136
 // Consequences）。协作方缺一即装配失败（ADR-0079 决定八），没有可选的一半。
+//
+// 闭包采纳挂合同的那一版时，两维经 PC 层次读口取合同版与产品底座两层、按行拼（ADR-0176 决定二）。层次读口
+// 用闭包解析读的同一份商业权威（发布库之上的 CommercialAuthority）选底座，正文仍经同一只点读口——底座与闭包
+// 回落层是同一处选法读同一份权威，这里不另接一条取底座的路。
 func buildClaimEligibilityRules(db *bentopg.DB) (veports.EligibilityRuleView, error) {
 	own, err := vepostgres.NewMultiTenantClaimEligibilityRules(db)
 	if err != nil {
@@ -156,11 +161,24 @@ func buildClaimEligibilityRules(db *bentopg.DB) (veports.EligibilityRuleView, er
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: customer service rule contents: %w", err)
 	}
+	publications, err := pcpostgres.NewCommercialPublications(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: commercial publications: %w", err)
+	}
+	authority, err := pcpostgres.NewCommercialAuthority(publications)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: commercial authority: %w", err)
+	}
+	layers, err := pcapplication.NewCustomerServiceRuleLayerReader(authority, contents)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: customer service rule layers: %w", err)
+	}
 	eligibility, err := vepartycommercial.NewClaimServiceRules(vepartycommercial.ClaimServiceRulesDeps{
 		Rules:      own,
 		References: references,
 		Closures:   closures,
 		Contents:   contents,
+		Layers:     layers,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: claim service rules: %w", err)
