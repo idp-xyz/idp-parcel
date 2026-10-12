@@ -78,9 +78,9 @@ func (UnconfiguredIntake) IntakePriceCardPreview(context.Context, *http.Request)
 	return application.PreviewPriceCardImportCommand{}, ErrAccessChannelNotConfigured
 }
 
-// IntakeEvaluationReplay 不读请求，判据同复核口：等的是操作者信封接线（ADR-0100），载荷形状已在
-// DecodeEvaluationReplayPayload。**从请求里铸一个触发者、或替它填一个证据层级**，都是这一口
-// 不能有的「开发用」版本——前者是自报身份，后者是把 `S` 写成默认（ADR-0124 决定三）。
+// IntakeEvaluationReplay 不读请求，判据同复核口：租户要从信封来（ADR-0100），载荷形状已在
+// DecodeEvaluationReplayPayload，操作者渠道的译法在 OperatorRegistryIntake 上。**从请求里铸一个触发者、或替它
+// 填一个证据层级**，都是这一口不能有的「开发用」版本——前者是自报身份，后者是把 `S` 写成默认（ADR-0124 决定三）。
 func (UnconfiguredIntake) IntakeEvaluationReplay(context.Context, *http.Request) (application.ReplayPricingEvaluationCommand, error) {
 	return application.ReplayPricingEvaluationCommand{}, ErrAccessChannelNotConfigured
 }

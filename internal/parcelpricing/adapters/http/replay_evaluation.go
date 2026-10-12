@@ -16,7 +16,7 @@ import (
 // 它是接口，理由与序列复核那一口同源、与两个登记口不同：触发者是谁——谁发起了这次争议复核、
 // 谁在 W02 执行——来自 ADR-0100 的 `OperatorEnvelope`，后端不采信自报身份；租户只从信封来。
 // 载荷形状由产品定义、属机制半边（ADR-0101 决定一），已在 DecodeEvaluationReplayPayload；这一口
-// 等的是操作者信封接线，不是渠道契约。
+// 接的是操作者信封，不是渠道契约，译法在 OperatorRegistryIntake 上。
 type EvaluationReplayIntake interface {
 	IntakeEvaluationReplay(ctx context.Context, request *http.Request) (application.ReplayPricingEvaluationCommand, error)
 }
@@ -168,4 +168,21 @@ func (payload EvaluationReplayPayload) Command(tenant domain.TenantID) (applicat
 		ReplayID: replayID,
 		Evidence: evidence,
 	}, nil
+}
+
+var _ EvaluationReplayIntake = (*OperatorRegistryIntake)(nil)
+
+// IntakeEvaluationReplay 是操作者渠道对回放的译法：先认证、后解载荷，租户取认证出的身份。授予照登记册配置写那一格认
+// ——ADR-0124 决定六让本口与其余写面同一批换。触发者过了认证这道门却不进命令：回放命令没有触发者那一格，争议复核由谁
+// 发起归另裁（同一决定），Intake 不替它找地方落。
+func (intake *OperatorRegistryIntake) IntakeEvaluationReplay(ctx context.Context, request *http.Request) (application.ReplayPricingEvaluationCommand, error) {
+	operator, body, err := intake.authenticate(ctx, request)
+	if err != nil {
+		return application.ReplayPricingEvaluationCommand{}, err
+	}
+	payload, err := DecodeEvaluationReplayPayload(body)
+	if err != nil {
+		return application.ReplayPricingEvaluationCommand{}, err
+	}
+	return payload.Command(operator.Tenant)
 }
