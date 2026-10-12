@@ -989,6 +989,11 @@ type FinancialControlRequest struct {
 //
 // 与可达性同一条分界：`请求冲突`与`未受理`是业务答案，提供方明写「调用方必须能据以纠正，而
 // 不是当作故障重试」。译成 error 会让它们并进「依赖答不出」，续办路径变成内部重试。
+//
+// `未配置`与`未形成`按恢复动作分格，不按提供方的原因名字分格（ADR-0094 决定一、ADR-0029）：
+// 前者只有运营做一次登记推得动、且那次登记会发信封来重驱，后者等依赖自己回来。哪几个原因落
+// 前一格由消费侧适配器判——它认得提供方的原因集合，编排不解析原因串；触发还没到位的未配置
+// 原因留在`未形成`，挪过来只会把烧完预算换成一次没人来推的等待（ADR-0094 决定四）。
 type PreAcceptanceControlOutcome uint8
 
 const (
@@ -997,6 +1002,7 @@ const (
 	PreAcceptanceControlNotFormed
 	PreAcceptanceControlRequestConflict
 	PreAcceptanceControlRequestNotAccepted
+	PreAcceptanceControlNotConfigured
 )
 
 func (outcome PreAcceptanceControlOutcome) String() string {
@@ -1009,6 +1015,8 @@ func (outcome PreAcceptanceControlOutcome) String() string {
 		return "REQUEST_CONFLICT"
 	case PreAcceptanceControlRequestNotAccepted:
 		return "REQUEST_NOT_ACCEPTED"
+	case PreAcceptanceControlNotConfigured:
+		return "NOT_CONFIGURED"
 	default:
 		return ""
 	}

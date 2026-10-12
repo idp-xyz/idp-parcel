@@ -183,6 +183,125 @@ func TestFinancialControlAsOfNotConfiguredParksTheRequestToo(t *testing.T) {
 	}
 }
 
+// Covers: 票 routing-first-cut/19 拆格那一笔、ADR-0094 Decision 五 — 控制端口答`未配置`与时点那一支同一
+// 机制：等待态先落库，本轮交回 FinancialControlNotConfigured，处理尝试带`等待运营登记`入账；控制结果一份
+// 不记。ADR-0095 Decision 一要的就是这条留痕：原因、续办路径与续办引用都在任务上，不再随回滚蒸发。
+func TestAControlNotConfiguredParksTheRequestOnOperatorRegistration(t *testing.T) {
+	fixture := newFinancialControlFixture(t)
+	fixture.controller.portOutcome = ports.PreAcceptanceControlNotConfigured
+	fixture.controller.reason = "SA-CONTROL_POLICY_NOT_CONFIGURED"
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.AcceptanceJudgmentUndecided {
+		t.Fatalf("outcome = %q, want UNDECIDED", result.Outcome())
+	}
+	if result.PendingReason() != application.FinancialControlNotConfigured {
+		t.Fatalf("pending reason = %q, want FINANCIAL_CONTROL_NOT_CONFIGURED", result.PendingReason())
+	}
+	saved := fixture.repository.saved
+	if saved == nil {
+		t.Fatal("等待态没有落库——交回`等待运营登记`那一格的原因之前要先 Save")
+	}
+	if waiting, present := saved.AcceptanceDecisionTask().WaitingOn(); !present || waiting != domain.ResumeByOperatorRegistration {
+		t.Fatalf("saved waitingOn = %v/%v, want OPERATOR_REGISTRATION", waiting, present)
+	}
+	if len(fixture.requests.recordedAttempts) != 1 {
+		t.Fatalf("processing attempts = %d, want 1", len(fixture.requests.recordedAttempts))
+	}
+	attempt := fixture.requests.recordedAttempts[0]
+	if attempt.ResumePath() != domain.ResumeByOperatorRegistration {
+		t.Fatalf("attempt resume path = %q, want OPERATOR_REGISTRATION", attempt.ResumePath())
+	}
+	if attempt.Reason().String() != "FINANCIAL_CONTROL_NOT_CONFIGURED" {
+		t.Fatalf("attempt reason = %q, want FINANCIAL_CONTROL_NOT_CONFIGURED", attempt.Reason())
+	}
+	if attempt.ContinuationReference() != result.ContinuationReference() {
+		t.Fatalf("attempt continuation = %q, result continuation = %q——任务上记的不是交回的那一条",
+			attempt.ContinuationReference(), result.ContinuationReference())
+	}
+	if len(fixture.requests.recordedControl) != 0 {
+		t.Fatalf("recorded %d control results for a control that never formed", len(fixture.requests.recordedControl))
+	}
+}
+
+// Covers: 票 routing-first-cut/19 完成判据「作用域停、金额停、策略停三者的续办引用两两不同」—— 提供方原因
+// 进续办派生。作用域与策略同落`未配置`格、同一个未决原因，只靠原因引用分开；金额停在`未形成`，照旧不碰聚合。
+func TestEachControlStallCarriesItsOwnContinuation(t *testing.T) {
+	cases := map[string]struct {
+		outcome   ports.PreAcceptanceControlOutcome
+		reason    string
+		want      application.JudgmentPendingReason
+		wantsWait bool
+	}{
+		"作用域": {ports.PreAcceptanceControlNotConfigured, "CONTROL_SCOPE_NOT_CONFIGURED", application.FinancialControlNotConfigured, true},
+		"策略":  {ports.PreAcceptanceControlNotConfigured, "SA-CONTROL_POLICY_NOT_CONFIGURED", application.FinancialControlNotConfigured, true},
+		"金额":  {ports.PreAcceptanceControlNotFormed, "CONTROL_AMOUNT_NOT_CONFIGURED", application.FinancialControlNotFormed, false},
+	}
+	seen := make(map[string]string, len(cases))
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			fixture := newFinancialControlFixture(t)
+			fixture.controller.portOutcome = tc.outcome
+			fixture.controller.reason = tc.reason
+
+			result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+			if result.PendingReason() != tc.want {
+				t.Fatalf("pending reason = %q, want %q", result.PendingReason(), tc.want)
+			}
+			if parked := fixture.repository.saved != nil; parked != tc.wantsWait {
+				t.Fatalf("parked = %v, want %v——只有`等待运营登记`那一格落等待态", parked, tc.wantsWait)
+			}
+			reference := result.ContinuationReference().String()
+			if clash, exists := seen[reference]; exists {
+				t.Fatalf("%q 与 %q 共用续办引用 %q", name, clash, reference)
+			}
+			seen[reference] = name
+		})
+	}
+}
+
+// Covers: 控制那一支的保存护栏 — 等待态没落库时不交回`未配置`那一格，改交保存那一格自己的原因（内部重试，
+// 照旧回滚重投），范围随原因一起放下：提供方原因说的是控制为何没形成，不是保存为何没落。
+func TestAControlWaitThatDidNotLandFallsBackToInternalRetry(t *testing.T) {
+	fixture := newFinancialControlFixture(t)
+	fixture.controller.portOutcome = ports.PreAcceptanceControlNotConfigured
+	fixture.controller.reason = "CONTROL_SCOPE_NOT_CONFIGURED"
+	fixture.repository.saveErr = errors.New("库不可达")
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.PendingReason() != application.OperatorRegistrationWaitNotSaved {
+		t.Fatalf("pending reason = %q, want OPERATOR_REGISTRATION_WAIT_NOT_SAVED", result.PendingReason())
+	}
+	if len(fixture.requests.recordedAttempts) != 1 {
+		t.Fatalf("processing attempts = %d, want 1", len(fixture.requests.recordedAttempts))
+	}
+	if path := fixture.requests.recordedAttempts[0].ResumePath(); path != domain.ResumeByInternalRetry {
+		t.Fatalf("attempt resume path = %q, want INTERNAL_RETRY", path)
+	}
+
+	other := newFinancialControlFixture(t)
+	other.controller.portOutcome = ports.PreAcceptanceControlNotConfigured
+	other.controller.reason = "SA-CONTROL_POLICY_NOT_CONFIGURED"
+	other.repository.saveErr = errors.New("库不可达")
+	second, err := other.handler.Handle(context.Background(), other.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if second.ContinuationReference() != result.ContinuationReference() {
+		t.Fatalf("保存没落库的两次停顿续办引用不同（%q / %q）——提供方原因没有随原因一起放下",
+			result.ContinuationReference(), second.ContinuationReference())
+	}
+}
+
 // awaitingRequestStore 是两条 as-of 编排的委托仓储替身：默认交回一份`已提交`委托并记下保存的那一份；
 // 三个开关各造一种「没落库」，decided 造一份真经领域形成的已决委托（假状态挡不住领域门）。
 type awaitingRequestStore struct {

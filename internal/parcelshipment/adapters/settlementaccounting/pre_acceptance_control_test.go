@@ -731,6 +731,110 @@ func TestEveryProviderAnswerLandsOnItsOwnConsumerValue(t *testing.T) {
 	})
 }
 
+// Covers: 票 routing-first-cut/19 拆格那一笔 —— 提供方的未形成原因按恢复动作分到端口两格：控制策略未配置与
+// 比例额度没声明基数落`未配置`（各有一条声明通道在发布时交「参数已登记」），授信依据未配置与读口答不出
+// 留在`未形成`。原因引用照旧冠 SA- 原样带回，编排不必认得它也能让几种停各拿一条续办引用。
+func TestNotFormedReasonsLandOnTheCellOfTheirRecoveryAction(t *testing.T) {
+	policyVersion := func(t *testing.T) sadomain.CreditPolicyReference {
+		return value(t, sadomain.NewCreditPolicyReference, "PC-CREDIT-POLICY/v1")
+	}
+	cases := map[string]struct {
+		arrange     func(t *testing.T) *controlFixture
+		wantOutcome psports.PreAcceptanceControlOutcome
+		wantReason  string
+	}{
+		"控制策略未配置": {
+			arrange: func(t *testing.T) *controlFixture {
+				fixture := newControlFixture(t)
+				fixture.policy.unconfigured = true
+				return fixture
+			},
+			wantOutcome: psports.PreAcceptanceControlNotConfigured,
+			wantReason:  "SA-CONTROL_POLICY_NOT_CONFIGURED",
+		},
+		"比例额度没声明基数": {
+			arrange: func(t *testing.T) *controlFixture {
+				basis, err := sadomain.NewUndeclaredCreditRatioBasis(policyVersion(t), 5_000)
+				if err != nil {
+					t.Fatalf("new undeclared credit ratio basis: %v", err)
+				}
+				return termsFixtureWithBasis(t, &creditBasisDouble{basis: basis})
+			},
+			wantOutcome: psports.PreAcceptanceControlNotConfigured,
+			wantReason:  "SA-CREDIT_RATIO_BASE_UNDECIDED",
+		},
+		"授信依据未配置": {
+			arrange: func(t *testing.T) *controlFixture {
+				return termsFixtureWithBasis(t, &creditBasisDouble{unconfigured: true})
+			},
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "SA-CREDIT_BASIS_NOT_CONFIGURED",
+		},
+		"比例基数尚无事实": {
+			arrange: func(t *testing.T) *controlFixture {
+				basis, err := sadomain.NewCreditRatioBasis(policyVersion(t), 5_000, sadomain.PostedBalanceBase)
+				if err != nil {
+					t.Fatalf("new credit ratio basis: %v", err)
+				}
+				return termsFixtureWithBasis(t, &creditBasisDouble{basis: basis})
+			},
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "SA-CREDIT_RATIO_BASE_NOT_ESTABLISHED",
+		},
+		"控制策略读不回": {
+			arrange: func(t *testing.T) *controlFixture {
+				fixture := newControlFixture(t)
+				fixture.policy.err = errors.New("policy view unavailable")
+				return fixture
+			},
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "SA-CONTROL_POLICY_UNAVAILABLE",
+		},
+	}
+	for name, tc := range cases {
+		t.Run(name, func(t *testing.T) {
+			fixture := tc.arrange(t)
+			assessment, err := fixture.adapter.ApplyPreAcceptanceFinancialControl(context.Background(), fixture.request(t))
+			if err != nil {
+				t.Fatalf("apply: %v", err)
+			}
+			if assessment.Outcome != tc.wantOutcome {
+				t.Fatalf("outcome = %q, want %q", assessment.Outcome, tc.wantOutcome)
+			}
+			if assessment.Reason.String() != tc.wantReason {
+				t.Fatalf("reason = %q, want %q", assessment.Reason, tc.wantReason)
+			}
+			if assessment.Result.ResultID().String() != "" {
+				t.Fatal("一次没形成的控制交回了结果")
+			}
+		})
+	}
+}
+
+// termsFixtureWithBasis 把夹具切到只做信用校验的策略，授信依据由用例给：要证的是授信那几格的译法，
+// 状况与暴露账本只为装配齐全。
+func termsFixtureWithBasis(t *testing.T, basis *creditBasisDouble) *controlFixture {
+	t.Helper()
+	fixture := newControlFixture(t)
+	fixture.policy.policy = requiredPolicy(t, sadomain.TermsSettlement, sadomain.CreditCheckControl)
+	exposures := &exposureLedgerDouble{ledger: sadomain.NewCreditExposureLedger()}
+	fixture.adapter = adapter.NewPreAcceptanceControlAdapter(adapter.PreAcceptanceControlAdapterDeps{
+		Apply: mustApplyHandler(t, saapplication.ApplyPreAcceptanceControlDeps{
+			Policy:      fixture.policy,
+			Balance:     fixture.balance,
+			Freezes:     fixture.ledger,
+			Credit:      &creditDouble{},
+			CreditBasis: basis,
+			RatioBases:  ratioBaseDouble{},
+			Exposures:   exposures,
+			Clock:       fixedClock{at: controlledAt},
+		}),
+		Scopes:  fixture.scopes,
+		Amounts: fixture.amounts,
+	})
+	return fixture
+}
+
 // Covers: UC-PS-005/UC-PS-001 的释放补偿经适配器按原关联认领——本上下文记下的结果标识
 // 译回提供方的控制请求身份，原冻结被释放；`无可释放`不是失败，补偿据此收口（AT-PS-074
 // 的 SA 半边）；读不回是可重试错误，补偿续办留在决定那一侧。

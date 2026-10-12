@@ -46,6 +46,16 @@ const operatorRegistrationResumeConsumer = "parcel-shipment/advance-acceptance-c
 
 func newOperatorRegistrationLoopFixture(t *testing.T) *operatorRegistrationLoopFixture {
 	t.Helper()
+	return newOperatorRegistrationLoopFixtureWith(t, synRFinancialAuthority{t: t})
+}
+
+// newOperatorRegistrationLoopFixtureWith 只换财务控制那一口，其余与上面同一份装配：控制那一步停在
+// `等待运营登记`的闭环（financial_control_registration_resume_loop_test.go）用它拨控制端口的答复。
+func newOperatorRegistrationLoopFixtureWith(
+	t *testing.T,
+	financial psports.PreAcceptanceFinancialController,
+) *operatorRegistrationLoopFixture {
+	t.Helper()
 
 	base := newSYNVerticalFixture(t)
 	store, err := outbox.NewStore(base.db)
@@ -76,7 +86,7 @@ func newOperatorRegistrationLoopFixture(t *testing.T) *operatorRegistrationLoopF
 		Reachability: psapplication.NewAdvanceAcceptanceJudgmentHandler(
 			commercial, synRReachabilityAuthority{t: t}, base.judgments, base.requests, systemClock{}),
 		FinancialControl: psapplication.NewAdvanceFinancialControlJudgmentHandler(
-			commercial, synRFinancialAuthority{t: t}, synRControlDispositions{}, base.judgments, base.requests, systemClock{}),
+			commercial, financial, synRControlDispositions{}, base.judgments, base.requests, systemClock{}),
 		Decision: decision,
 	})
 	submittedGate, err := psinbox.NewShipmentRequestSubmittedConsumer(base.transactor, inboxStore, chain)
@@ -342,6 +352,18 @@ var _ psports.CommercialBasisResolver = (*synRSwitchableAsOfCommercialBasis)(nil
 // 认领（租户 + 种类 + 对象/版本）。租户与 PS 侧来源身份同一个串：跨上下文只靠这个字面对上。
 func synRulePackageVersion(t *testing.T, tenant, objectID, label string) pcdomain.CommercialVersion {
 	t.Helper()
+	return synCommercialVersion(t, tenant, pcdomain.AcceptanceRulePackageObject, objectID, label)
+}
+
+// synCommercialVersion 同上，类别由调用方给：信封的主题按承载版本的类别写，拿规则包冒充别的类别会让
+// 主题说错是哪一类对象登记了。
+func synCommercialVersion(
+	t *testing.T,
+	tenant string,
+	kind pcdomain.CommercialObjectKind,
+	objectID, label string,
+) pcdomain.CommercialVersion {
+	t.Helper()
 	publishedAt := time.Date(2026, 9, 1, 10, 0, 0, 0, time.UTC)
 	effectiveAt := time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC)
 	interval, err := pcdomain.NewEffectiveInterval(effectiveAt, effectiveAt.Add(90*24*time.Hour))
@@ -358,7 +380,7 @@ func synRulePackageVersion(t *testing.T, tenant, objectID, label string) pcdomai
 	}
 	version, err := pcdomain.RehydrateCommercialVersion(pcdomain.RehydrateCommercialVersionSpec{
 		TenantID:      mustPS(t, pcdomain.NewTenantID, tenant),
-		Kind:          pcdomain.AcceptanceRulePackageObject,
+		Kind:          kind,
 		ObjectID:      mustPS(t, pcdomain.NewCommercialObjectID, objectID),
 		Version:       mustPS(t, pcdomain.NewCommercialVersionLabel, label),
 		Scope:         mustPS(t, pcdomain.NewCommercialScopeReference, "SYN-SCOPE-R1"),
@@ -370,7 +392,7 @@ func synRulePackageVersion(t *testing.T, tenant, objectID, label string) pcdomai
 		EffectiveAt:   effectiveAt,
 	})
 	if err != nil {
-		t.Fatalf("重建规则包版本：%v", err)
+		t.Fatalf("重建 %s 版本：%v", kind, err)
 	}
 	return version
 }

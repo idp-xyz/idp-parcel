@@ -538,34 +538,58 @@ func (handler *PublishCommercialAuthorityHandler) Handle(
 }
 
 // announceOperatorRegistrations 对本次发布里属于运营登记参数的声明通道，各交一份「参数已登记」
-// 意图（ADR-0094 决定四；票 first-tenant-runway/07 D4）。这一族今天只有时点策略通道——
+// 意图（ADR-0094 决定四；票 first-tenant-runway/07 D4）。哪些通道属这一族见 operatorRegistrationKindOf；
 // 授权规则那一半没有生产编排，见 ports.AuthorityGrantRegistered 的注释。
 //
 // 判据是落点不是通道在不在场：`已保存`与`已登记`都交（重放重发同一份，ADR-0043，认领由适配器按
 // 同一个 ID 去重）；`内容冲突`不交——冲突那一行没写进册，下游重驱只会再次撞见未配置。交接失败
 // 上抛而不是记进报告：信封与登记同一事务，入不了队就整项回滚，不留「登记了却没人知道」的半份。
+//
+// 一次发布里两条通道归同一种类时只交一份：信封 ID 由种类加承载版本认领，第二份是同一封。
 func (handler *PublishCommercialAuthorityHandler) announceOperatorRegistrations(
 	ctx context.Context,
 	version domain.CommercialVersion,
 	registeredAt time.Time,
 	reports []DeclarationReport,
 ) error {
+	announced := map[ports.OperatorRegistrationKind]bool{}
 	for _, report := range reports {
-		if report.Channel != AsOfPolicyChannel {
+		kind, registers := operatorRegistrationKindOf(report.Channel)
+		if !registers || announced[kind] {
 			continue
 		}
 		if report.Outcome != ports.DeclarationSaved && report.Outcome != ports.DeclarationAlreadyRegistered {
 			continue
 		}
 		if err := handler.handoff.HandOffOperatorRegistrationCompleted(ctx, ports.OperatorRegistrationCompletedIntent{
-			Kind:         ports.AsOfPolicyRegistered,
+			Kind:         kind,
 			Registration: version,
 			RegisteredAt: registeredAt,
 		}); err != nil {
-			return fmt.Errorf("announce %s registration: %w", ports.AsOfPolicyRegistered, err)
+			return fmt.Errorf("announce %s registration: %w", kind, err)
 		}
+		announced[kind] = true
 	}
 	return nil
+}
+
+// operatorRegistrationKindOf 说一条声明通道是不是 parcel-shipment 那边`等待运营登记`等的那类登记、是哪一类。
+//
+// 名单按消费侧停在第四格的原因倒推，不按「这条通道是不是租户参数」划——后者几乎条条都是，而一次登记只在
+// 有委托等它时才值一封信：时点策略解开两条判断腿的`判断时点未配置`；合同上的接受前控制声明与策略正文是
+// settlement-accounting 控制策略读口问的两半，解开`未配置`的策略那一种；信用政策正文解开比例额度没声明
+// 基数那一种。其余通道落 false：它们缺席时停在别的格，或者根本不停在受理链上。
+func operatorRegistrationKindOf(channel DeclarationChannel) (ports.OperatorRegistrationKind, bool) {
+	switch channel {
+	case AsOfPolicyChannel:
+		return ports.AsOfPolicyRegistered, true
+	case PreAcceptanceControlChannel, PreAcceptanceFinancialControlPolicyBodyChannel:
+		return ports.PreAcceptanceControlPolicyRegistered, true
+	case CreditPolicyBodyChannel:
+		return ports.CreditPolicyRegistered, true
+	default:
+		return ports.OperatorRegistrationKindInvalid, false
+	}
 }
 
 // reconcileDeclaredDigest 是受控批文那一半的对账门（ADR-0126 Decision 二）。只对已接进规范化的册
