@@ -1,8 +1,8 @@
 # 04 登记册配置写面逐口换操作者 Intake
 
 Category: enhancement
-Status: in-progress——2026-10-10 22:3x 通道 1：「剩余工作」第 2、3 件均已进 main（第 3 件 21:2x 至 `3bdf8aad`，第 2 件 21:4x 至 `1253c768`，进 main 记录各在其节）；本票不收口，第 1 件还等 07。此前 in-progress——2026-10-10 通道 2：第 2 件完工，待评审与重放（代码 tip `4b17d139`，完成记录在「剩余工作」第 2 件之下）；本票不收口，第 1 件还等 07。此前 in-progress——2026-10-10 通道 2 认领「剩余工作」第 2 件（价卡登记口 `/pricing-price-card-registrations` 换操作者 Intake），分支 `mcp2-oc04-pcr`、基 `1d67e27c`。此前 in-progress——2026-10-10 通道 5 收口核查（钉 `a8cf12ff`）之后通道 1 裁定（用户授权自决）：价卡登记口归本票，身份族 6 口另等 07；剩余三件见文末「剩余工作」。此前 in-progress——2026-09-25 通道 4 认领（用户令独立完成操作者渠道这条链），逐上下文分批进 main：第一批可见性八口、第二批关务七口、第三批网络七口、第四批计价四口、第五批商业参与方六口、第六批 TF 五口已换（见文末）；不在隔离名单上的口只剩价卡登记（属 price-card-import）。此前 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
-Blocked by: 03（已 resolved）；[07](./07-admin-web-login-gate.md)——只挡身份族 6 口：换口要同笔撤隔离放行（ADR-0150 决定三），前提与 [15](./15-operation-decision-faces-take-operator-intake.md) 余下四口是同一件，演示环境接上发行方与合成操作者授予（2026-10-10 通道 1 补）；[17](./17-demo-issuer-dex-and-synthetic-operators.md)——同一前提里发行方与合成操作者那半（2026-10-12 通道 1 补）
+Status: in-progress——2026-10-12 通道 5 认领「剩余工作」第 1 件（身份族 6 口换操作者 Intake，同笔撤隔离放行），分支 `mcp5-oc04id`、基 `1e02d2ea`。此前 in-progress——2026-10-10 22:3x 通道 1：「剩余工作」第 2、3 件均已进 main（第 3 件 21:2x 至 `3bdf8aad`，第 2 件 21:4x 至 `1253c768`，进 main 记录各在其节）；本票不收口，第 1 件还等 07。此前 in-progress——2026-10-10 通道 2：第 2 件完工，待评审与重放（代码 tip `4b17d139`，完成记录在「剩余工作」第 2 件之下）；本票不收口，第 1 件还等 07。此前 in-progress——2026-10-10 通道 2 认领「剩余工作」第 2 件（价卡登记口 `/pricing-price-card-registrations` 换操作者 Intake），分支 `mcp2-oc04-pcr`、基 `1d67e27c`。此前 in-progress——2026-10-10 通道 5 收口核查（钉 `a8cf12ff`）之后通道 1 裁定（用户授权自决）：价卡登记口归本票，身份族 6 口另等 07；剩余三件见文末「剩余工作」。此前 in-progress——2026-09-25 通道 4 认领（用户令独立完成操作者渠道这条链），逐上下文分批进 main：第一批可见性八口、第二批关务七口、第三批网络七口、第四批计价四口、第五批商业参与方六口、第六批 TF 五口已换（见文末）；不在隔离名单上的口只剩价卡登记（属 price-card-import）。此前 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
+Blocked by: 03（已 resolved）；[07](./07-admin-web-login-gate.md)——只挡身份族 6 口：换口要同笔撤隔离放行（ADR-0150 决定三），前提与 [15](./15-operation-decision-faces-take-operator-intake.md) 余下四口是同一件，演示环境接上发行方与合成操作者授予（2026-10-10 通道 1 补）；[17](./17-demo-issuer-dex-and-synthetic-operators.md)——同一前提里发行方与合成操作者那半（2026-10-12 通道 1 补）。07 与 17 均已 resolved（2026-10-12 通道 1 派单时告知）
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`cmd/parcel-api` 端点表里 ADR-0085 决定一那一族登记端点的装配行及其装配测试。
 出处：[ADR-0100](../../../docs/adr/0100-operator-identity-is-a-product-owned-access-channel-family.md) 决定四与 Consequences；ADR-0091 Consequences 的逐口纪律。
@@ -125,6 +125,9 @@ http 测试。逐条如下，交通道 1 定。取证全部实测于 `a8cf12ff`�
 
 1. **商业参与方身份族 6 口换操作者 Intake**，同笔撤下这几口的隔离放行（ADR-0150 决定三）——等 [07](./07-admin-web-login-gate.md)：演示环境接上发行方与合成操作者授予
    之前换口，演示动线与管理台这几页会当场断。
+
+   **认领 ← 通道 5 · 2026-10-12 22:3x**（派单 `task-ba9d1ee4`，通道 1 22:2x）：分支 `mcp5-oc04id`，基 `1e02d2ea`（= origin/main，22:2x `ls-remote` 实测），
+   隔离工作树 `/home/tops/workspace/idp-parcel-mcp5-oc04id`。07 与 [17](./17-demo-issuer-dex-and-synthetic-operators.md) 已 resolved，上面那条前提已到位。
 2. **价卡登记口 `/pricing-price-card-registrations` 换操作者 Intake**，照第四批计价四口办——无阻塞，代码活，由通道 1 另派。
 
    **完成记录 ← 通道 2 · 2026-10-10**（派单 `task-4a593223`；分支 `mcp2-oc04-pcr`，基 `1d67e27c`；证据层级 `S`：合成替身与 `SYN-` 夹具）
