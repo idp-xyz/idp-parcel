@@ -1,3 +1,5 @@
+import { withBearer } from '../auth/bearer';
+
 export type ApiResult<Body> =
   | { kind: 'outcome'; status: number; body: Body }
   | { kind: 'unconfigured' }
@@ -24,7 +26,7 @@ export async function exchangeMasterData<Body>(path: string): Promise<ApiResult<
   try {
     response = await fetch(requestUrl(path), {
       method: 'GET',
-      headers: { Accept: 'application/json' },
+      headers: await withBearer({ Accept: 'application/json' }),
     });
   } catch (error) {
     return {
@@ -62,7 +64,7 @@ export async function postMasterData<Body>(
   try {
     response = await fetch(requestUrl(path), {
       method: 'POST',
-      headers: { Accept: 'application/json', 'Content-Type': 'application/json' },
+      headers: await withBearer({ Accept: 'application/json', 'Content-Type': 'application/json' }),
       body: JSON.stringify(payload),
     });
   } catch (error) {
@@ -96,7 +98,7 @@ export async function postMasterDataForm<Body>(
   try {
     response = await fetch(requestUrl(path), {
       method: 'POST',
-      headers: { Accept: 'application/json' },
+      headers: await withBearer({ Accept: 'application/json' }),
       body,
     });
   } catch (error) {

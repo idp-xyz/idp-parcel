@@ -17,6 +17,8 @@
 // 答案而不是故障——「统一不可见结果」不区分「不存在」与「越权/他租户对象」,页面按
 // callerProblem 里的这枚 code 专门呈现,不得当错误重试,也不得替它补出第二种说法。
 
+import { withBearer } from '../../auth/bearer';
+
 // 路径前缀已裁决:前端统一带 /api 发起,开发代理剥前缀转发;由装配侧在 bootstrap
 // 调 configureShipmentRequestApi({ basePrefix: '/api' }) 注入。默认空串只是未装配
 // 时的中性起点,不是第二套前缀约定;本目录其余代码不感知前缀。
@@ -636,10 +638,13 @@ function post<Body>(path: string, payload: unknown): Promise<ApiResult<Body>> {
   });
 }
 
-async function exchange<Body>(path: string, init: RequestInit): Promise<ApiResult<Body>> {
+// 请求头只收普通对象：Bearer 由 withBearer 并进同一个对象（auth/bearer.ts）。
+type RequestShape = Pick<RequestInit, 'method' | 'body'> & { headers?: Record<string, string> };
+
+async function exchange<Body>(path: string, init: RequestShape): Promise<ApiResult<Body>> {
   let response: Response;
   try {
-    response = await fetch(apiBase + path, init);
+    response = await fetch(apiBase + path, { ...init, headers: await withBearer(init.headers ?? {}) });
   } catch (cause) {
     return {
       kind: 'transport',

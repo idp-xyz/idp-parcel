@@ -3,6 +3,8 @@ import { createRoot } from 'react-dom/client';
 import './index.css';
 import App from './App';
 import { AuthGate } from './auth/AuthGate';
+import { configureBearerSource } from './auth/bearer';
+import { accessTokenForRequest } from './auth/oidc';
 // 从各域的 api 模块取，不经 barrel：入口静态引 barrel 会把那个域的页面钉回入口块（懒加载的理由见 page-registry）。
 import { configureShipmentRequestApi } from './pages/shipment-request/api';
 import { configureVisibilityApi } from './pages/visibility/api';
@@ -13,6 +15,8 @@ import { configureDisplayTimeZone } from './pages/moment';
 configureShipmentRequestApi({ basePrefix: '/api' });
 configureVisibilityApi({ basePrefix: '/api' });
 configureMasterDataApi({ basePrefix: '/api' });
+// 各出口的请求都带登录门那份会话的访问令牌（ADR-0100 决定二第一条）。
+configureBearerSource(accessTokenForRequest);
 // 时刻按操作者所在时区显示、带显式偏移；只有浏览器知道这一维，所以只在这里配一次
 // （moment.ts 未配置即 UTC，Node 里的测试因此不随机器时区变）。
 configureDisplayTimeZone(Intl.DateTimeFormat().resolvedOptions().timeZone);

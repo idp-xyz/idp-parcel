@@ -18,6 +18,8 @@
 // 作用域与页大小由服务端接入面从认证与授权结果裁决(ADR-0076:运营查阅的授权边界
 // 只有租户,页大小按渠道契约),本目录不送任何自报身份或分页参数。
 
+import { withBearer } from '../../auth/bearer';
+
 // 路径前缀与委托查阅同一裁决:前端统一带 /api 发起,开发代理剥前缀转发;由装配侧
 // 在 bootstrap 调 configureVisibilityApi({ basePrefix: '/api' }) 注入。
 let apiBase = '';
@@ -114,10 +116,13 @@ export function findProjectionVersion(
   );
 }
 
-async function exchange<Body>(path: string, init: RequestInit): Promise<ApiResult<Body>> {
+// 请求头只收普通对象：Bearer 由 withBearer 并进同一个对象（auth/bearer.ts）。
+type RequestShape = Pick<RequestInit, 'method' | 'body'> & { headers?: Record<string, string> };
+
+async function exchange<Body>(path: string, init: RequestShape): Promise<ApiResult<Body>> {
   let response: Response;
   try {
-    response = await fetch(apiBase + path, init);
+    response = await fetch(apiBase + path, { ...init, headers: await withBearer(init.headers ?? {}) });
   } catch (cause) {
     return {
       kind: 'transport',

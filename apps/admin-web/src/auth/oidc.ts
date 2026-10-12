@@ -1,8 +1,14 @@
-// 管理台登录走 gk.idp.xyz 的 OIDC authorization_code + PKCE 公开客户端流。
+// 管理台登录走 gk.idp.xyz 的 OIDC authorization_code + PKCE 公开客户端流（ADR-0100 决定二第一条）。
 //
-// 边界先说清：这是 UI 登录门（谁能打开控制台页面），不是后端准入形——parcel-api
-// 的查阅准入仍由隔离读独任（ADR-0078），登记写面的准入形另有裁决在途（ADR-0085），
-// 两处都不因本模块存在而改变；本模块取得的令牌今天不随 /api 请求外送。
+// 边界先说清：这里的登录态只决定控制台页面开不开，后端不采信它。访问令牌随 /api 请求以 Bearer 外送
+// （auth/bearer.ts），由 parcel-api 自己校验签名、iss、aud 与有效期（ADR-0100 决定二）；哪些口认它由装配点
+// 逐口定（ADR-0100 决定四），没换口的照旧答未配置或走隔离读（ADR-0078），不因本模块存在而改变。
+//
+// 令牌只在内存（票 operator-channel/07）：访问令牌、id_token、refresh_token 只活在本模块的 currentSession
+// 里，不进 sessionStorage / localStorage。代价是刷新页面或新开标签页都要重走一次登录（签发方那边的会话还在
+// 时只是一次跳转来回）。仍放 sessionStorage 的只有登录中间态（PKCE verifier、state、nonce、回到哪）：它要
+// 熬过跳到签发方再跳回来的那次整页导航，内存熬不过；它也不是令牌——没有签发方回传的一次性 code，它换不到
+// 任何东西。
 //
 // 令牌交换经 vite 代理 `/oidc` 同源转发：gk.idp.xyz 的 token 端点未对本地开发源
 // 放 CORS（实测预检 204 无 Access-Control-Allow-Origin），顶层跳转不受 CORS 约束，
@@ -21,7 +27,9 @@ const AUTHORIZE_URL = `${ISSUER}/oauth2/auth`;
 export const CALLBACK_PATH = '/auth/callback';
 
 const PENDING_KEY = 'parcel.oidc.pending';
-const SESSION_KEY = 'parcel.oidc.session';
+// 上一版把整份会话（含令牌）存在 sessionStorage 的这个键下。升级后同一标签页里那份旧会话不会再被读，却会
+// 一直躺到标签页关掉；开始一次新登录时顺手清掉——升级后头一件事必是重新登录，所以这一处就够。
+const LEGACY_SESSION_KEY = 'parcel.oidc.session';
 
 // 提前量：到期前这么久就当作不可用并续期，避免拿着临界令牌发请求。
 const RENEW_SKEW_MS = 30_000;
@@ -47,6 +55,9 @@ interface PendingLogin {
   nonce: string;
   returnTo: string;
 }
+
+// 会话只在这一个变量里（见文件头「令牌只在内存」）。
+let currentSession: OidcSession | null = null;
 
 function randomUrlSafe(byteLength: number): string {
   const bytes = new Uint8Array(byteLength);
@@ -91,7 +102,16 @@ export function isCallback(): boolean {
   return window.location.pathname === CALLBACK_PATH;
 }
 
+/**
+ * 登录回来要落回的页内位置，交给 beginLogin。带上 hash：页面位置在 hash 里（Layout 的位置权威），丢了它就落回工作台——
+ * 令牌只在内存之后每次刷新都要重新登录，丢 hash 就成了每次刷新都丢页面。
+ */
+export function currentLocation(): string {
+  return window.location.pathname + window.location.search + window.location.hash;
+}
+
 export async function beginLogin(returnTo: string): Promise<void> {
+  sessionStorage.removeItem(LEGACY_SESSION_KEY);
   const verifier = randomUrlSafe(32);
   const pending: PendingLogin = {
     verifier,
@@ -166,11 +186,11 @@ async function doCompleteLogin(): Promise<{ session: OidcSession; returnTo: stri
   // 先要有 id_token 才谈得上核 nonce：没有它就无从判断登录的是谁，此时报
   // 「nonce 不匹配」会把成因指错方向。
   if (!session.idToken) {
-    sessionStorage.removeItem(SESSION_KEY);
+    currentSession = null;
     throw new Error('签发方未返回 id_token，无法确认登录的是谁，请重新登录');
   }
   if (session.claims.nonce !== pending.nonce) {
-    sessionStorage.removeItem(SESSION_KEY);
+    currentSession = null;
     throw new Error('nonce 不匹配，令牌不来自本次登录，请重新登录');
   }
   return { session, returnTo: pending.returnTo || '/' };
@@ -225,20 +245,8 @@ async function exchange(form: Record<string, string>, previous?: OidcSession): P
       (Number.isFinite(lifetimeSeconds) && lifetimeSeconds > 0 ? lifetimeSeconds : FALLBACK_LIFETIME_SECONDS) * 1000,
     claims: decodeJwtPayload(idToken),
   };
-  sessionStorage.setItem(SESSION_KEY, JSON.stringify(session));
+  currentSession = session;
   return session;
-}
-
-function readStoredSession(): OidcSession | null {
-  const raw = sessionStorage.getItem(SESSION_KEY);
-  if (!raw) return null;
-  try {
-    return JSON.parse(raw) as OidcSession;
-  } catch {
-    // 存坏了就当没登录，别让一条坏记录把门永久卡在异常上。
-    sessionStorage.removeItem(SESSION_KEY);
-    return null;
-  }
 }
 
 // 定时续期、页面回到前台、门自己的挂载检查会并发触到续期。轮换型 refresh_token
@@ -248,11 +256,11 @@ let inFlightRenewal: Promise<OidcSession | null> | null = null;
 
 /** 取当前可用会话；临近到期且有 refresh_token 时静默续期，续不动返回 null。 */
 export async function ensureSession(): Promise<OidcSession | null> {
-  const session = readStoredSession();
+  const session = currentSession;
   if (!session) return null;
   if (Date.now() < session.expiresAt - RENEW_SKEW_MS) return session;
   if (!session.refreshToken) {
-    sessionStorage.removeItem(SESSION_KEY);
+    currentSession = null;
     return null;
   }
   inFlightRenewal ??= renew(session).finally(() => {
@@ -272,9 +280,18 @@ async function renew(previous: OidcSession): Promise<OidcSession | null> {
       previous,
     );
   } catch {
-    sessionStorage.removeItem(SESSION_KEY);
+    currentSession = null;
     return null;
   }
+}
+
+/**
+ * 发请求用（main.tsx 把它接到 auth/bearer.ts）：取当前访问令牌，临近到期先静默续期。没有可用会话交回 null——
+ * 请求照发、不带令牌，由服务端答「需要登录」，页面照那一格呈现；不在这里拦请求或替服务端下结论。
+ */
+export async function accessTokenForRequest(): Promise<string | null> {
+  const session = await ensureSession();
+  return session?.accessToken ?? null;
 }
 
 /** 距该会话下次该续期还有多久（毫秒）；已到点返回 0。供登录门排定时器。 */
@@ -285,7 +302,7 @@ export function millisUntilRenewal(session: OidcSession): number {
 // 只清本地会话，不做 RP 发起的签发方登出：签发方上登记的登出回调还是占位值，
 // 跳过去只会落在别人的域名上。签发方侧会话由其自身过期策略结束。
 export function logout(): void {
-  sessionStorage.removeItem(SESSION_KEY);
+  currentSession = null;
   sessionStorage.removeItem(PENDING_KEY);
   window.location.assign('/');
 }

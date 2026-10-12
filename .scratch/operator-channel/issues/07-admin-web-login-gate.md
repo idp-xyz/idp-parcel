@@ -1,7 +1,7 @@
 # 07 管理台登录门：authorization_code + PKCE、Bearer 与三态文案
 
 Category: enhancement
-Status: ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
+Status: in-progress——2026-10-12 通道 5 认领（通道 1 派单 `task-9c227f05`），前端切片，在共享树 `main` 上做（基 `ff3b01fa`）。此前 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
 Blocked by: 02、03
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`apps/admin-web/**`（前端切片，按 [workflow.md「前端切片」](../../../docs/agents/workflow.md) 一人在 main 上直接做）。

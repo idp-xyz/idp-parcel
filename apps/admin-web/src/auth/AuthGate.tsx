@@ -2,6 +2,7 @@ import { useEffect, useState, type ReactNode } from 'react';
 import {
   beginLogin,
   completeLogin,
+  currentLocation,
   ensureSession,
   isCallback,
   millisUntilRenewal,
@@ -118,7 +119,7 @@ function LoginScreen({ error }: { error?: string }) {
         <button
           type="button"
           className="mt-6 w-full rounded-lg bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-500"
-          onClick={() => void beginLogin(window.location.pathname + window.location.search)}
+          onClick={() => void beginLogin(currentLocation())}
         >
           使用 gk.idp.xyz 登录
         </button>
