@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -357,6 +358,60 @@ func TestEvaluationReplayPayloadTranslatesAndRefusesDefaults(t *testing.T) {
 	for name, raw := range structural {
 		if _, err := pricinghttp.DecodeEvaluationReplayPayload(strings.NewReader(raw)); !errors.Is(err, pricinghttp.ErrMalformedRequest) {
 			t.Fatalf("%s：err = %v, want ErrMalformedRequest", name, err)
+		}
+	}
+}
+
+// replayBodyProbe 记请求体有没有被读过。
+type replayBodyProbe struct{ read bool }
+
+func (probe *replayBodyProbe) Read([]byte) (int, error) {
+	probe.read = true
+	return 0, io.EOF
+}
+
+// Covers: 票 operator-channel/06「计价回放端点换操作者 Intake」——租户取认证出的身份；载荷里带身份键（租户、触发者）答
+// 请求畸形；证据层级缺席换了渠道也还是畸形，不补一个 S；令牌不过或认证方答了别的格时交回那一格，请求体一个字节都不读。
+func TestReplayIntakeTakesTheTenantFromTheAuthenticatedOperator(t *testing.T) {
+	replay := func(authenticator registryAuthenticator, token string, body io.Reader) (application.ReplayPricingEvaluationCommand, error) {
+		intake, err := pricinghttp.NewOperatorRegistryIntake(authenticator)
+		if err != nil {
+			t.Fatal(err)
+		}
+		request := httptest.NewRequest(http.MethodPost, replayTarget, body)
+		if token != "" {
+			request.Header.Set("Authorization", "Bearer "+token)
+		}
+		return intake.IntakeEvaluationReplay(context.Background(), request)
+	}
+
+	command, err := replay(registryAuthenticator{}, "t",
+		strings.NewReader(`{"originalEvaluationId":"eval-1","replayEvaluationId":"eval-2","evidence":"R"}`))
+	if err != nil || command.Tenant.String() != "SYN-TENANT-01" || command.Original.String() != "eval-1" ||
+		command.ReplayID.String() != "eval-2" || command.Evidence != domain.EvidenceReplay {
+		t.Fatalf("command = %+v, err = %v", command, err)
+	}
+	for name, body := range map[string]string{
+		"tenant smuggled":  `{"tenant":"SYN-TENANT-02","originalEvaluationId":"eval-1","replayEvaluationId":"eval-2","evidence":"R"}`,
+		"trigger smuggled": `{"trigger":"someone-else","originalEvaluationId":"eval-1","replayEvaluationId":"eval-2","evidence":"R"}`,
+		"evidence absent":  `{"originalEvaluationId":"eval-1","replayEvaluationId":"eval-2"}`,
+	} {
+		if _, err := replay(registryAuthenticator{}, "t", strings.NewReader(body)); !errors.Is(err, pricinghttp.ErrMalformedRequest) {
+			t.Fatalf("%s: err = %v, want ErrMalformedRequest", name, err)
+		}
+	}
+	for name, testCase := range map[string]struct {
+		authenticator registryAuthenticator
+		token         string
+		want          error
+	}{
+		"no token":      {registryAuthenticator{}, "", pricinghttp.ErrOperatorCredentialRejected},
+		"not granted":   {registryAuthenticator{err: pricinghttp.ErrOperatorNotGranted}, "t", pricinghttp.ErrOperatorNotGranted},
+		"identity down": {registryAuthenticator{err: pricinghttp.ErrIdentityDependencyUnavailable}, "t", pricinghttp.ErrIdentityDependencyUnavailable},
+	} {
+		probe := &replayBodyProbe{}
+		if _, err := replay(testCase.authenticator, testCase.token, probe); !errors.Is(err, testCase.want) || probe.read {
+			t.Fatalf("%s: err = %v (want %v), body read = %v", name, err, testCase.want, probe.read)
 		}
 	}
 }
