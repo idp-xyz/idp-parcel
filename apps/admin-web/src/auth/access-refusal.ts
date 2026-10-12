@@ -68,15 +68,15 @@ export function accessRefusalHeadline(kind: AccessRefusalKind): string {
   return `${titles[kind]}（${statuses[kind]} ${codes[kind]}）`;
 }
 
-/**
- * 两格操作者答复的续办：找谁、做什么、重试会不会好。与哪一页无关——授予与登录都不随页面变——所以各页共用这一句，
- * 不各写一份。未配置的续办随口而异（这一口在等什么），留在各页。
- */
 /** 行内整句：「{what}：需要登录（401 …）。续办」。各页答案区与纯逻辑层的命令答复共用这一句。 */
 export function operatorRefusalSentence(kind: OperatorRefusalKind, what?: string): string {
   return `${what ? `${what}：` : ''}${accessRefusalHeadline(kind)}。${operatorRefusalRecovery[kind]}`;
 }
 
+/**
+ * 两格操作者答复的续办：找谁、做什么、重试会不会好。与哪一页无关——授予与登录都不随页面变——所以各页共用这一句，
+ * 不各写一份。未配置的续办随口而异（这一口在等什么），留在各页。
+ */
 export const operatorRefusalRecovery: Record<OperatorRefusalKind, string> = {
   loginRequired:
     '服务端没有认下这次请求带的登录凭据（缺失、过期或校验不过）。重新登录后再试；不换凭据，重试不会改变结果。',
