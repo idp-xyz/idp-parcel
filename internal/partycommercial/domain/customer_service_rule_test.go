@@ -198,7 +198,8 @@ func TestClaimDeadlineAndMinimumMaterialsRulesCheckShapeOnly(t *testing.T) {
 
 // Covers: ADR-0104 Decision 四「消费方点读之后核『这一版挂的是不是我手上这份产品 / 合同』」——
 // 与 ConsistentAcceptanceRulePackage 同一道核对：壳上指名了正文适用对象那一类的引用时必须相等；
-// 壳上没指名、或指名的是另一类，放行。
+// ADR-0178 决定二：壳指名客户合同时正文必须挂同一份合同，挂产品也拒；壳没指名任何引用、或只指名产品
+// 而正文挂合同，放行。
 func TestCustomerServiceRuleApplicabilityIsCheckedAgainstTheShellReference(t *testing.T) {
 	productA := commercialValue(t, domain.NewCommercialObjectID, "product-a")
 	productB := commercialValue(t, domain.NewCommercialObjectID, "product-b")
@@ -218,8 +219,14 @@ func TestCustomerServiceRuleApplicabilityIsCheckedAgainstTheShellReference(t *te
 	if err := domain.ConsistentCustomerServiceRuleApplicability(namesProductA, domain.CustomerServiceRuleAppliesToServiceProduct(productB)); !errors.Is(err, domain.ErrCustomerServiceRuleApplicabilityMismatch) {
 		t.Fatalf("error = %v，壳指产品 A、正文挂产品 B 放行了", err)
 	}
-	if err := domain.ConsistentCustomerServiceRuleApplicability(namesContract, domain.CustomerServiceRuleAppliesToServiceProduct(productB)); err != nil {
-		t.Fatalf("壳只指名合同、正文挂产品，本该无从比对而放行：%v", err)
+	if err := domain.ConsistentCustomerServiceRuleApplicability(namesContract, domain.CustomerServiceRuleAppliesToServiceProduct(productB)); !errors.Is(err, domain.ErrCustomerServiceRuleApplicabilityMismatch) {
+		t.Fatalf("error = %v，壳指名合同即合同层，正文挂产品却放行了", err)
+	}
+	if err := domain.ConsistentCustomerServiceRuleApplicability(namesContract, domain.CustomerServiceRuleAppliesToCustomerContract(contract)); err != nil {
+		t.Fatalf("壳与正文指同一合同却被拒：%v", err)
+	}
+	if err := domain.ConsistentCustomerServiceRuleApplicability(namesProductA, domain.CustomerServiceRuleAppliesToCustomerContract(contract)); err != nil {
+		t.Fatalf("壳只指名产品、正文挂合同，归产品层由消费侧点核，本该放行：%v", err)
 	}
 	if err := domain.ConsistentCustomerServiceRuleApplicability(namesNothing, domain.CustomerServiceRuleAppliesToCustomerContract(contract)); err != nil {
 		t.Fatalf("壳没指名任何引用却被拒：%v", err)

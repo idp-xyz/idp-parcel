@@ -100,7 +100,7 @@ func TestAServiceProductWithDeliveryConditionsIsReconciledAgainstTheCanonicalDig
 }
 
 // Covers: 合同层是合同正文的第三层——带正文的合同项摘要盖住它：与不带这一层的同一份正文不共一个串；按三层算出的串放行且三个
-// 通道各写各的；只带交付条件不带 contractContent 的项没有可比对象，照今天登记声明的串（不改受控批文既有字段语义）。
+// 通道各写各的；只带交付条件不带 contractContent 的项答`未受理`、一个字节不写（ADR-0178 决定一）。
 func TestACustomerContractDeliveryConditionsAreCoveredByTheContractDigest(t *testing.T) {
 	declarations := contractDeclarations(t, "rules-1")
 	tightened := contractDeliveryDeclaration(t, "method-a")
@@ -154,7 +154,7 @@ func TestACustomerContractDeliveryConditionsAreCoveredByTheContractDigest(t *tes
 		}
 	})
 
-	t.Run("delivery conditions without the contract body have nothing to reconcile", func(t *testing.T) {
+	t.Run("delivery conditions without the contract body are not accepted", func(t *testing.T) {
 		registry := &publicationRegistryDouble{}
 		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
@@ -163,11 +163,13 @@ func TestACustomerContractDeliveryConditionsAreCoveredByTheContractDigest(t *tes
 			RoleStanding: domain.ApprovalRoleConfirmed,
 			Declarations: application.CommercialDeclarations{DeliveryConditions: &tightened},
 		})
-		if err != nil || result.Outcome() != application.CommercialVersionPublishedEffective {
-			t.Fatalf("outcome = %q, err = %v; want PUBLISHED_EFFECTIVE", result.Outcome(), err)
+		if err != nil || result.Outcome() != application.CommercialPublicationNotAccepted ||
+			!errors.Is(result.RefusalCause(), domain.ErrInvalidCustomerContract) {
+			t.Fatalf("outcome = %q, cause = %v, err = %v; want NOT_ACCEPTED / ErrInvalidCustomerContract",
+				result.Outcome(), result.RefusalCause(), err)
 		}
-		if strings.Join(registry.declarationLog, ",") != "delivery-conditions" {
-			t.Fatalf("declaration log = %v, want the contract layer alone", registry.declarationLog)
+		if len(registry.savedVersions) != 0 || len(registry.declarationLog) != 0 {
+			t.Fatalf("只有壳的客户合同写了库：versions=%d log=%v", len(registry.savedVersions), registry.declarationLog)
 		}
 	})
 }

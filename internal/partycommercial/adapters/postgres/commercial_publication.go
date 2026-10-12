@@ -177,7 +177,8 @@ func (repository *CommercialPublications) LoadForScope(
 			return nil, fmt.Errorf("load publication registry: %w", err)
 		}
 		// 合同正文指名的客户账户进选法（ADR-0177 决定二）。没有正文行、或迁移 0037 之前写下的行没有账户，都不登——
-		// 选法照「正文未登记」那一格让它参选，坏的那份由正文点读口报出来，不在这里折成不属于任何人。
+		// 选法照「正文未登记」那一格让它参选，坏的那份由正文点读口报出来，不在这里折成不属于任何人。发布用例自
+		// ADR-0178 起不再收只有壳的客户合同，这一格只剩旧数据。
 		if contractAccount != nil {
 			account, err := domain.NewCustomerAccountID(*contractAccount)
 			if err != nil {

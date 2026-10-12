@@ -534,7 +534,8 @@ func TestUnconfirmedRoleAndUnpublishedReferenceStayPending(t *testing.T) {
 		registry := &publicationRegistryDouble{loaded: loaded}
 		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
-		spec := publishSpec(t, domain.CustomerContractObject, "contract-1", "v1")
+		declarations := application.CommercialDeclarations{ContractContent: contractDeclarations(t, "rules-1").ContractContent}
+		spec := customerContractSpec(t, "contract-1", "v1", declarations)
 		spec.References = map[domain.CommercialObjectKind]domain.CommercialObjectID{
 			domain.AcceptanceRulePackageObject: pcValue(t, domain.NewCommercialObjectID, "rules-1"),
 		}
@@ -542,6 +543,7 @@ func TestUnconfirmedRoleAndUnpublishedReferenceStayPending(t *testing.T) {
 			Spec:         spec,
 			Approval:     publishApproval(t, "contract-1"),
 			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: declarations,
 		})
 		if err != nil {
 			t.Fatalf("Handle：%v", err)
@@ -1752,14 +1754,18 @@ func TestContractDelegationsPublishWithTheirContractVersion(t *testing.T) {
 	registry := &publicationRegistryDouble{}
 	handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 
-	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
-		Spec:         publishSpec(t, domain.CustomerContractObject, "contract-1", "v1"),
-		Approval:     publishApproval(t, "contract-1"),
-		RoleStanding: domain.ApprovalRoleConfirmed,
-		Declarations: application.CommercialDeclarations{ContractDelegations: []domain.ContractDelegationDeclaration{
+	declarations := application.CommercialDeclarations{
+		ContractContent: contractDeclarations(t, "rules-1").ContractContent,
+		ContractDelegations: []domain.ContractDelegationDeclaration{
 			delegationDeclarationOf(t, accountDelegatorOf(t, "account-1"), "level-commercial", "scope-a"),
 			delegationDeclarationOf(t, accountDelegatorOf(t, "account-1"), "level-clerk", "scope-a"),
-		}},
+		},
+	}
+	result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+		Spec:         customerContractSpec(t, "contract-1", "v1", declarations),
+		Approval:     publishApproval(t, "contract-1"),
+		RoleStanding: domain.ApprovalRoleConfirmed,
+		Declarations: declarations,
 	})
 	if err != nil {
 		t.Fatalf("Handle：%v", err)
@@ -1780,11 +1786,11 @@ func TestContractDelegationsPublishWithTheirContractVersion(t *testing.T) {
 		t.Fatalf("委派 = %#v，没有原样到达持久化面", delegations)
 	}
 	reports := result.Declarations()
-	if len(reports) != 1 ||
-		reports[0].Channel != application.ContractDelegationChannel ||
-		reports[0].Channel.String() != "CONTRACT_DELEGATION" ||
-		reports[0].Outcome != ports.DeclarationSaved {
-		t.Fatalf("报告 = %#v, want CONTRACT_DELEGATION=SAVED 一条", reports)
+	if len(reports) != 2 ||
+		reports[1].Channel != application.ContractDelegationChannel ||
+		reports[1].Channel.String() != "CONTRACT_DELEGATION" ||
+		reports[1].Outcome != ports.DeclarationSaved {
+		t.Fatalf("报告 = %#v, want 合同正文之后 CONTRACT_DELEGATION=SAVED 一条", reports)
 	}
 }
 
@@ -1831,20 +1837,24 @@ func TestContractDelegationsAreGuardedLikeTheOtherChannels(t *testing.T) {
 	t.Run("a content conflict lands in the report", func(t *testing.T) {
 		registry := &publicationRegistryDouble{declarationOutcome: ports.DeclarationContentConflict}
 		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		declarations := application.CommercialDeclarations{
+			ContractContent: contractDeclarations(t, "rules-1").ContractContent,
+			ContractDelegations: []domain.ContractDelegationDeclaration{
+				delegationDeclarationOf(t, accountDelegatorOf(t, "account-1"), "level-commercial", "scope-a"),
+			},
+		}
 		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
-			Spec:         publishSpec(t, domain.CustomerContractObject, "contract-1", "v1"),
+			Spec:         customerContractSpec(t, "contract-1", "v1", declarations),
 			Approval:     publishApproval(t, "contract-1"),
 			RoleStanding: domain.ApprovalRoleConfirmed,
-			Declarations: application.CommercialDeclarations{ContractDelegations: []domain.ContractDelegationDeclaration{
-				delegationDeclarationOf(t, accountDelegatorOf(t, "account-1"), "level-commercial", "scope-a"),
-			}},
+			Declarations: declarations,
 		})
 		if err != nil {
 			t.Fatalf("Handle：%v——内容冲突不是 error", err)
 		}
 		reports := result.Declarations()
-		if len(reports) != 1 || reports[0].Channel != application.ContractDelegationChannel || reports[0].Outcome != ports.DeclarationContentConflict {
-			t.Fatalf("报告 = %#v, want CONTRACT_DELEGATION=CONTENT_CONFLICT 一条", reports)
+		if len(reports) != 2 || reports[1].Channel != application.ContractDelegationChannel || reports[1].Outcome != ports.DeclarationContentConflict {
+			t.Fatalf("报告 = %#v, want 合同正文之后 CONTRACT_DELEGATION=CONTENT_CONFLICT 一条", reports)
 		}
 	})
 }

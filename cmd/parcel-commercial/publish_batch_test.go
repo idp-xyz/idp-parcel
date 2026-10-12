@@ -150,7 +150,7 @@ func TestPublishBatchKeepsEarlierItemWhenALaterItemConflicts(t *testing.T) {
 // settlementBatchBody 造一份两项批：先发客户合同，再发结算政策连同它的六维正文。
 // 合同在前是必需的——结算政策的版本壳指名它，指名引用未发布时发布停在未决。
 // 结算政策项的 contentDigest 是 CanonicalizePublicationContent 对这份正文算出的：本册接进 PCC-1 后对账门对带正文的项
-// 开门，随手写的占位串答`未受理`；改正文任一格都要重算这个串。
+// 开门，随手写的占位串答`未受理`；改正文任一格都要重算这个串。合同项也带正文（ADR-0178 决定一），它的串同样按正文算出。
 const settlementBatchBody = `{"items": [
     {
       "tenantId": "tenant-1",
@@ -158,10 +158,11 @@ const settlementBatchBody = `{"items": [
       "objectId": "contract-1",
       "version": "v1",
       "scope": "scope-1",
-      "contentDigest": "sha256:contract-1",
+      "contentDigest": "PCC-1:a40b442d890d4d40635f3d230a763000acf3e2ee3839d55cdac83aee5b4480f4",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "approval": {"reference": "approval-contract-1", "source": "source-1", "approvedAt": "2025-12-15T00:00:00Z"},
-      "approvalRoleStanding": "CONFIRMED"
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {"contractContent": {"customerAccount": "customer-1", "rulePackage": "rules-1"}}
     },
     {
       "tenantId": "tenant-1",
@@ -423,6 +424,7 @@ func controlPolicyBatchBody() string {
 // 「写进库的两张表读回来还是那一版策略」。
 // contractDelegationBatchBody 发一份客户合同版本，随行两条合同委派：客户账户委派资料修订给商务等级、
 // 责任法人委派给文员等级。合同不指名规则包也能发——委派是这份合同说的话，不依赖合同其它正文。
+// 合同项带正文（ADR-0178 决定一：客户合同这一册不收只有壳的版本），contentDigest 是按正文算出的；委派不进摘要。
 func contractDelegationBatchBody() string {
 	return `{"items": [
     {
@@ -431,11 +433,12 @@ func contractDelegationBatchBody() string {
       "objectId": "contract-1",
       "version": "v1",
       "scope": "scope-1",
-      "contentDigest": "sha256:contract-1",
+      "contentDigest": "PCC-1:4edf9dacd449aef1a2a80071bd92205db659be6b08b592b21be9b0743b3dc9c4",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "approval": {"reference": "approval-contract-1", "source": "source-1", "approvedAt": "2025-12-15T00:00:00Z"},
       "approvalRoleStanding": "CONFIRMED",
       "declarations": {
+        "contractContent": {"customerAccount": "account-1", "rulePackage": "rules-1"},
         "contractDelegations": [
           {"delegatorKind": "CUSTOMER_ACCOUNT", "delegator": "account-1", "action": "SOURCE_DATA_AMENDMENT",
            "scope": "scope-1", "level": "level-commercial", "effectiveStartsAt": "2026-01-01T00:00:00Z"},
@@ -611,7 +614,7 @@ func TestAPublishedSourceDataAmendmentAllowanceIsReadBackByTheContentView(t *tes
 //
 // 产品项的 contentDigest 是 CanonicalizePublicationContent 对这份产品层正文算出的：交付条件折进 PCC-1 后（票
 // admin-write-faces/25）对账门对带交付条件的服务产品项开门，旧式 sha256: 串会答 NOT_ACCEPTED；改正文任一格要重算。
-// 合同项不带 contractContent，仍「不在场」、门不开，声明串照旧。
+// 合同项带 contractContent（ADR-0178 决定一：客户合同这一册不收只有壳的版本），摘要按正文连同合同层交付条件算出。
 func deliveryConditionBatchBody() string {
 	return `{"items": [
     {
@@ -626,10 +629,10 @@ func deliveryConditionBatchBody() string {
     },
     {
       "tenantId": "tenant-1", "kind": "CUSTOMER_CONTRACT", "objectId": "contract-1", "version": "v1",
-      "scope": "scope-1", "contentDigest": "sha256:contract-1", "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "scope": "scope-1", "contentDigest": "PCC-1:7dccd4bebf6c6a76e0e0c2e3ff16411e2dcf8825b620c2a3655bc27a082d70cb", "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "approval": {"reference": "approval-contract-1", "source": "source-1", "approvedAt": "2025-12-15T00:00:00Z"},
       "approvalRoleStanding": "CONFIRMED",
-      "declarations": {"deliveryConditions": {
+      "declarations": {"contractContent": {"customerAccount": "customer-1", "rulePackage": "rules-1"}, "deliveryConditions": {
         "tightens": {"objectId": "product-1", "version": "v1"},
         "methods": ["METHOD/in-person"],
         "recipientScopeRule": "RULE/recipient-scope-1", "proofOfDeliveryRule": "RULE/proof-contract-1"

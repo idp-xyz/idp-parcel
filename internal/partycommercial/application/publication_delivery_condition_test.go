@@ -104,14 +104,18 @@ func TestDeliveryConditionsPublishWithTheirOwningVersion(t *testing.T) {
 	t.Run("合同层指名所收紧的产品版本", func(t *testing.T) {
 		registry := &publicationRegistryDouble{}
 		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
-		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
-			Spec:         publishSpec(t, domain.CustomerContractObject, "contract-1", "v1"),
-			Approval:     publishApproval(t, "contract-1"),
-			RoleStanding: domain.ApprovalRoleConfirmed,
-			Declarations: application.CommercialDeclarations{DeliveryConditions: &application.DeliveryConditionDeclaration{
+		declarations := application.CommercialDeclarations{
+			ContractContent: contractDeclarations(t, "rules-1").ContractContent,
+			DeliveryConditions: &application.DeliveryConditionDeclaration{
 				Tightens: tightensProduct(t, "product-1", "v3"),
 				Terms:    deliveryTermsFor(t, "method-a"),
-			}},
+			},
+		}
+		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         customerContractSpec(t, "contract-1", "v1", declarations),
+			Approval:     publishApproval(t, "contract-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: declarations,
 		})
 		if err != nil {
 			t.Fatalf("Handle：%v", err)
@@ -125,8 +129,8 @@ func TestDeliveryConditionsPublishWithTheirOwningVersion(t *testing.T) {
 			target.ObjectID().String() != "product-1" || target.Version().String() != "v3" || len(saved.Methods()) != 1 {
 			t.Fatalf("合同层没有原样到达持久化面：owner=%s tightens=%+v/%v methods=%d", saved.Owner().Kind(), target, tightening, len(saved.Methods()))
 		}
-		if reports := result.Declarations(); len(reports) != 1 || reports[0].Channel != application.DeliveryConditionChannel {
-			t.Fatalf("报告 = %#v, want DELIVERY_CONDITION 一条", reports)
+		if reports := result.Declarations(); len(reports) != 2 || reports[1].Channel != application.DeliveryConditionChannel {
+			t.Fatalf("报告 = %#v, want 合同正文之后 DELIVERY_CONDITION 一条", reports)
 		}
 	})
 

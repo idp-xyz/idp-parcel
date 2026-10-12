@@ -480,6 +480,16 @@ func (handler *PublishCommercialAuthorityHandler) Handle(
 		return PublishCommercialAuthorityResult{}, fmt.Errorf("publish commercial authority: %w", err)
 	}
 
+	// 客户合同这一册不收只有壳的版本（ADR-0178 决定一）：货主客户账户只在正文里，只有壳的合同说不出属于哪一户。
+	// 排在声明构造之后，挂错拥有者、重复键这些输入问题先答各自的格；排在写入之前，一行不写。答`未受理`而不是
+	// error：恢复动作是改批文补正文，与对账门同一格（ADR-0029），答成 error 会被批文工具读成技术失败、叫运维重试。
+	if version.Kind() == domain.CustomerContractObject && command.Declarations.ContractContent == nil {
+		return PublishCommercialAuthorityResult{
+			outcome:      CommercialPublicationNotAccepted,
+			refusalCause: fmt.Errorf("%w: a customer contract version must carry its body, where its customer account is named", domain.ErrInvalidCustomerContract),
+		}, nil
+	}
+
 	saveOutcome, err := handler.registry.SaveVersion(ctx, version)
 	if err != nil {
 		return PublishCommercialAuthorityResult{}, fmt.Errorf("publish commercial authority: %w", err)
@@ -591,7 +601,8 @@ func reconcileDeclaredDigest(command PublishCommercialAuthorityCommand) (bool, P
 
 // publicationContentOf 把命令里属于该册的声明正文折成领域的正文输入面。首例是信用政策一格，其余各册
 // 由各自的子票在此加一分支；declarationsOfContent 是它的反向，两处同笔改。第二个返回值答「正文在不在场」
-// ——不在场是合法的（壳可以单独发布），交给调用方决定要不要对账。
+// ——不在场是合法的（壳可以单独发布；客户合同一册除外，由 Handle 在声明构造之后答`未受理`，ADR-0178 决定一），
+// 交给调用方决定要不要对账。
 func publicationContentOf(
 	kind domain.CommercialObjectKind,
 	declarations CommercialDeclarations,

@@ -83,7 +83,7 @@ func customerContractSpec(t *testing.T, objectID, label string, declarations app
 
 // Covers: ADR-0126 Decision 二在本册的落法——受控批文的客户合同项带正文时，声明的摘要必须与按两层算出的相等：
 // 相等即发布并把两层各写各的通道；旧式 `sha256:` 串不等即`未受理`带两串、一个字节不写整册不读；只带合同级
-// 声明不带正文的项没有可比对象，照今天登记声明的串（不改批文既有语义）。
+// 声明不带正文的项答`未受理`、一个字节不写（ADR-0178 决定一：客户合同这一册不收只有壳的版本）。
 func TestACustomerContractBodyIsReconciledAgainstTheCanonicalDigest(t *testing.T) {
 	declarations := contractDeclarations(t, "rules-1")
 
@@ -135,7 +135,7 @@ func TestACustomerContractBodyIsReconciledAgainstTheCanonicalDigest(t *testing.T
 		}
 	})
 
-	t.Run("a contract-level declaration without the body has nothing to reconcile", func(t *testing.T) {
+	t.Run("a contract-level declaration without the body is not accepted", func(t *testing.T) {
 		registry := &publicationRegistryDouble{}
 		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
 		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
@@ -145,10 +145,13 @@ func TestACustomerContractBodyIsReconciledAgainstTheCanonicalDigest(t *testing.T
 			Declarations: application.CommercialDeclarations{PreAcceptanceControl: declarations.PreAcceptanceControl},
 		})
 		if err != nil {
-			t.Fatalf("Handle：%v", err)
+			t.Fatalf("Handle：%v——未受理不是 error", err)
 		}
-		if result.Outcome() != application.CommercialVersionPublishedEffective || strings.Join(registry.declarationLog, ",") != "pre-acceptance-control" {
-			t.Fatalf("outcome = %q, log = %v", result.Outcome(), registry.declarationLog)
+		if result.Outcome() != application.CommercialPublicationNotAccepted || !errors.Is(result.RefusalCause(), domain.ErrInvalidCustomerContract) {
+			t.Fatalf("outcome = %q, cause = %v; want NOT_ACCEPTED / ErrInvalidCustomerContract", result.Outcome(), result.RefusalCause())
+		}
+		if len(registry.savedVersions) != 0 || len(registry.declarationLog) != 0 {
+			t.Fatalf("只有壳的客户合同写了库：versions=%d log=%v", len(registry.savedVersions), registry.declarationLog)
 		}
 	})
 }

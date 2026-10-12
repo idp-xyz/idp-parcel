@@ -60,8 +60,10 @@ func (applicability CustomerServiceRuleApplicability) valid() bool {
 	return applicability.product.valid() != applicability.contract.valid()
 }
 
-// ConsistentCustomerServiceRuleApplicability 核版本壳与正文的适用声明：壳上指名了正文所挂那一类
-// （产品或合同）的引用时，两处必须是同一个对象；壳上没指名、或只指名了另一类，无从比对而放行。
+// ConsistentCustomerServiceRuleApplicability 核版本壳与正文的适用声明。壳上指名了客户合同时，正文必须挂同一份
+// 合同——壳指名合同就是合同层（ADR-0176），正文挂产品的这一版自相矛盾（ADR-0178 决定二）；壳上指名了服务产品而
+// 正文也挂产品时，两处必须是同一个。壳上什么都没指名，或只指名服务产品而正文挂合同，无从比对而放行：那一版归
+// 产品层，正文挂的合同由消费侧点核对到闭包采用的那一份（ADR-0176 决定四）。
 //
 // 与 ConsistentAcceptanceRulePackage 同一道核对，也放在同样的两处：发布写入前与点读之后
 // （ADR-0104 Decision 四）。解析按范围与锚点选版本壳、不看正文，所以「这一版挂的是不是我手上
@@ -70,13 +72,13 @@ func ConsistentCustomerServiceRuleApplicability(
 	version CommercialVersion,
 	applicability CustomerServiceRuleApplicability,
 ) error {
-	if product, applies := applicability.ServiceProduct(); applies {
-		if named, present := version.ReferenceTo(ServiceProductObject); present && named != product {
+	if named, present := version.ReferenceTo(CustomerContractObject); present {
+		if contract, applies := applicability.CustomerContract(); !applies || contract != named {
 			return ErrCustomerServiceRuleApplicabilityMismatch
 		}
 	}
-	if contract, applies := applicability.CustomerContract(); applies {
-		if named, present := version.ReferenceTo(CustomerContractObject); present && named != contract {
+	if product, applies := applicability.ServiceProduct(); applies {
+		if named, present := version.ReferenceTo(ServiceProductObject); present && named != product {
 			return ErrCustomerServiceRuleApplicabilityMismatch
 		}
 	}

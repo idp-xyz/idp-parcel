@@ -319,6 +319,8 @@ func (repository *CommercialPublications) SaveCustomerContractContent(
 		return ports.DeclarationAlreadyRegistered, nil
 	}
 
+	// 账户是开放引用，不核在册（ADR-0178 决定三）：悬空的账户让这份合同对任何键都不参选，不会串户。迁移 0037 头注
+	// 「账户在不在册由写入用例把门」不成立，迁移按字节校验改不得，以 ADR-0178 为准。
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO party_commercial.customer_contract_content
 			(tenant_id, object_kind, object_id, version_label, rule_package_id, customer_account_id)
