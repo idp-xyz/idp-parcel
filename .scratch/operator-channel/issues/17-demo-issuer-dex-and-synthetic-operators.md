@@ -26,3 +26,21 @@ Blocked by: 无（02、03 已 resolved）
 - 一条命令起得来演示发行方；发现文档与 `<issuer>/keys` 取得到。
 - 干净库上 `seed.sh --reset` 全程零报错；操作者册里有按 Dex 的 issuer 加真 `sub` 登记的配置员与查阅员。
 - 设了三件参数的 `parcel-api` 上，挑端点表里挂 `operatorRegistries.*` 的一个写口取证：配置员的 Dex 令牌答业务结果；查阅员的令牌答 403 `OPERATOR_NOT_GRANTED`；不带令牌答 401 `OPERATOR_CREDENTIAL_REJECTED`。取令牌与打口的步骤可重跑（脚本或 README 步骤），证据层级只记 `S`。
+
+## 交给 07
+
+2026-10-12 通道 4 写，钉分支 `mcp4-oc17` 的 `01784385`（发行方的容器描述与配置在 `scripts/demo-seeds/operator-channel/`）。下面每一格都是对 Dex v2.45.1 实签令牌与实际答复量出来的，证据层级 `S`。管理台怎么接、开发代理怎么配仍归 07。
+
+- **发行方地址**：`http://127.0.0.1:5556/dex`（发现文档的 `issuer` 逐字如此，不带末尾斜杠）。
+- **授权端点**：`http://127.0.0.1:5556/dex/auth`；**令牌端点**：`http://127.0.0.1:5556/dex/token`；**JWKS**：`http://127.0.0.1:5556/dex/keys`（RS256，一把签名钥）。
+- **客户端标识**：`idp-parcel-admin-web`，公共客户端，无密钥。
+- **回调地址**：`http://localhost:5173/auth/callback`，只登这一个、逐字匹配；`http://127.0.0.1:5173/auth/callback` 实测答 400「Unregistered redirect_uri.」。
+- **`parcel-api` 三件参数**：`IDP_PARCEL_OPERATOR_OIDC_ISSUER=http://127.0.0.1:5556/dex`、`IDP_PARCEL_OPERATOR_OIDC_JWKS_URL=http://127.0.0.1:5556/dex/keys`、`IDP_PARCEL_OPERATOR_OIDC_AUDIENCE=idp-parcel-admin-web`。
+- **该带哪一枚令牌：访问令牌。** Dex 签的访问令牌本身就是 RS256 JWT：`iss` 为上面那串，`aud` 为单串 `idp-parcel-admin-web`，`sub` 与 ID 令牌相同（两个合成用户的两枚令牌逐项对过）。管理台 `accessTokenForRequest` 今天带的就是它，不必换。有效期 24 小时（`expires_in` 86399）。
+- **scope**：管理台现用的 `openid profile email offline_access` 在发现文档里全有。`offline_access` 换来刷新令牌：刷新答 200 并轮换，被轮换掉的旧刷新令牌再用答 400 `invalid_request`——`oidc.ts` 的 `inFlightRenewal` 把并发续期收成一次，防的正是这一格。
+- **PKCE**：S256 实测——verifier 错答 400 `invalid_grant`（`Invalid code_verifier.`），带了 challenge 却不带 verifier 同样答 400。这一版 Dex 不强制 PKCE（不带 challenge 也放行，发现文档列 `S256` 与 `plain`），管理台每次都带 S256，不受影响。
+- **CORS**：令牌端点对 `http://localhost:5173` 答 `Access-Control-Allow-Origin: http://localhost:5173`，对别的源不答。所以令牌端点可以直连；若保留 `/oidc` 代理，目标换成 `http://127.0.0.1:5556`，`TOKEN_URL` 随之为 `/oidc/dex/token`。
+- **登出**：发现文档里没有 `end_session_endpoint`，与 `oidc.ts` 只清本地会话的做法相合。
+- **合成操作者**（口令都是合成值 `syn-demo-password`）：配置员 `syn-operator-config-01@syn-tenant-01.example.invalid`，`sub` 为 `ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA`，授登记册配置写与主数据与运营查阅读；查阅员 `syn-operator-viewer-01@syn-tenant-01.example.invalid`，`sub` 为 `ChZTWU4tT1BFUkFUT1ItVklFV0VSLTAxEgVsb2NhbA`，只授查阅读。两人进操作者册随本票改过的种子（`seed.sh` 操作者册那段）。
+- **起法**：在仓库根 `docker compose -f scripts/demo-seeds/operator-channel/compose.yaml up -d --wait`（本票进 main 之前文件只在分支 `mcp4-oc17` 上）。Dex 的状态只在内存：重启后此前签出的令牌与刷新令牌全部作废，要重新登录。`parcel-api` 只在见到陌生 `kid` 时重取公钥集，且两次取至少隔一分钟（校验器的 `minRefetchInterval`）：Dex 重启时若 `parcel-api` 一分钟内刚取过钥，新令牌会先答 401，过了这一分钟再试即好。
+- **别升 v2.46.0**：本地口令用户一刷新令牌它就把存储锁死，之后 `/keys` 与登录都不答（上游 dexidp/dex#4209，未修），`compose.yaml` 的镜像那行注释有记。
