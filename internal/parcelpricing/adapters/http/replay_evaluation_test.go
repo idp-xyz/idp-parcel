@@ -362,10 +362,10 @@ func TestEvaluationReplayPayloadTranslatesAndRefusesDefaults(t *testing.T) {
 	}
 }
 
-// replayBodyProbe 记请求体有没有被读过。
-type replayBodyProbe struct{ read bool }
+// bodyReadProbe 记请求体有没有被读过。
+type bodyReadProbe struct{ read bool }
 
-func (probe *replayBodyProbe) Read([]byte) (int, error) {
+func (probe *bodyReadProbe) Read([]byte) (int, error) {
 	probe.read = true
 	return 0, io.EOF
 }
@@ -409,7 +409,7 @@ func TestReplayIntakeTakesTheTenantFromTheAuthenticatedOperator(t *testing.T) {
 		"not granted":   {registryAuthenticator{err: pricinghttp.ErrOperatorNotGranted}, "t", pricinghttp.ErrOperatorNotGranted},
 		"identity down": {registryAuthenticator{err: pricinghttp.ErrIdentityDependencyUnavailable}, "t", pricinghttp.ErrIdentityDependencyUnavailable},
 	} {
-		probe := &replayBodyProbe{}
+		probe := &bodyReadProbe{}
 		if _, err := replay(testCase.authenticator, testCase.token, probe); !errors.Is(err, testCase.want) || probe.read {
 			t.Fatalf("%s: err = %v (want %v), body read = %v", name, err, testCase.want, probe.read)
 		}
