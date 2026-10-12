@@ -439,10 +439,10 @@ func assembleBusinessEndpoints(
 		// 同挂字面量 UnconfiguredIntake{}，判据同两个登记口。
 		{Pattern: "/pricing-reference-catalogue-registrations", Handler: pricinghttp.NewRegisterReferenceCatalogueEndpoint(operatorRegistries.pricing, referenceCatalogueRegistration)},
 		// 评价回放的治理触发面（ADR-0124 决定一，票 wiring-baseline-remainder/06）：治理动作也是命令行，
-		// 同挂字面量 UnconfiguredIntake{}——触发者来自操作者信封，任何采信自报身份或替它填证据层级的
-		// Intake 都不能有；路径按动词叫 `-replays`，判据同复核口叫 `-reviews`。回放结果不交结算，
-		// 编排的依赖结构上就没有交付口。
-		{Pattern: "/pricing-evaluation-replays", Handler: pricinghttp.NewReplayEvaluationEndpoint(pricinghttp.UnconfiguredIntake{}, evaluationReplay)},
+		// 挂操作者渠道的登记册 Intake（同一 ADR 决定六，票 operator-channel/06）——租户来自认证出的身份，任何
+		// 采信自报身份或替它填证据层级的 Intake 都不能有；路径按动词叫 `-replays`，判据同复核口叫 `-reviews`。
+		// 回放结果不交结算，编排的依赖结构上就没有交付口。
+		{Pattern: "/pricing-evaluation-replays", Handler: pricinghttp.NewReplayEvaluationEndpoint(operatorRegistries.pricing, evaluationReplay)},
 		// 运营试算（ADR-0152 决定六，票 operator-workspace-gaps/05）：命令行，同挂字面量 UnconfiguredIntake{}——租户来自操作者
 		// 信封，真 Intake 与回放同批换；不加隔离放行（ADR-0150）。编排只算不存，依赖结构上没有评价库与交付口。
 		{Pattern: "/pricing-estimates", Handler: pricinghttp.NewEstimateEndpoint(pricinghttp.UnconfiguredIntake{}, pricingEstimate)},
@@ -580,25 +580,30 @@ func assembleBusinessEndpoints(
 		// 停用口叫 `-deactivations` 而不是 `-registrations`：它是往修订链上插一笔新修订的
 		// 状态推进，不是登记一个新身份。名字照实说，是因为「登记」与「停用」在这本册上的
 		// 续办动作不同，路径是登记方看见的第一样东西。
+		//
+		// 它仍挂字面量（票 operator-channel/06 判断项）：收的是受控批文的在线镜像，批准三格与角色确认都从批文取，而
+		// 操作者的批准路径是下面的载体（ADR-0126 决定三）；换操作者 Intake 先要把批文译装从 cmd/parcel-commercial 下沉，
+		// 在线口不另写一份平行解码。
 		{Pattern: "/commercial-publications", Handler: commercialhttp.NewPublishCommercialAuthorityEndpoint(commercialhttp.UnconfiguredIntake{}, commercialPublication)},
 		// 运营操作者面发布路径四口（ADR-0126 Decision 三、四；票 admin-write-faces/08）：预览 + 载体录入 / 批准 / 发布。
-		// 预览不落库，但拟录的壳要信封里的租户才立得住，等的与三个命令口是同一样东西，所以同挂字面量
-		// UnconfiguredIntake{}、不走查阅行的 Intake 变量——隔离读放行装不进它（编译期，同 PP 预览口）。**批准那一口
-		// 比其余更不能松**：批准者是审批职责规则的一半，任何采信自报身份的 Intake 都等于把那道门拆了。发布口不并进
-		// `/commercial-publications`：那一口收受控批文（声明摘要 + 批准三格），这一口收载体引用，两口消费的用例不同。
-		{Pattern: "/commercial-publication-previews", Handler: commercialhttp.NewPreviewCommercialPublicationEndpoint(commercialhttp.UnconfiguredIntake{}, commercialPublicationPreview)},
-		{Pattern: "/commercial-publication-drafts", Handler: commercialhttp.NewSubmitPublicationDraftEndpoint(commercialhttp.UnconfiguredIntake{}, commercialPublicationDrafts)},
-		{Pattern: "/commercial-publication-draft-approvals", Handler: commercialhttp.NewApprovePublicationDraftEndpoint(commercialhttp.UnconfiguredIntake{}, commercialPublicationDrafts)},
-		{Pattern: "/commercial-publication-draft-publications", Handler: commercialhttp.NewPublishPublicationDraftEndpoint(commercialhttp.UnconfiguredIntake{}, commercialPublicationDrafts)},
+		// 四口挂操作者渠道的登记册 Intake（同一 ADR 决定五，票 operator-channel/06）：租户、录入者与批准者（主体引用 +
+		// 授予集）都取认证出的身份。预览不落库，但拟录的壳要信封里的租户才立得住，所以与三个命令口同一个 Intake、不走
+		// 查阅行的 Intake 变量——隔离读放行装不进它（编译期，同 PP 预览口）。**批准那一口比其余更不能松**：批准者是审批
+		// 职责规则的一半，任何采信自报身份的 Intake 都等于把那道门拆了。发布口不并进 `/commercial-publications`：那一口
+		// 收受控批文（声明摘要 + 批准三格），这一口收载体引用，两口消费的用例不同。
+		{Pattern: "/commercial-publication-previews", Handler: commercialhttp.NewPreviewCommercialPublicationEndpoint(operatorRegistries.commercial, commercialPublicationPreview)},
+		{Pattern: "/commercial-publication-drafts", Handler: commercialhttp.NewSubmitPublicationDraftEndpoint(operatorRegistries.commercial, commercialPublicationDrafts)},
+		{Pattern: "/commercial-publication-draft-approvals", Handler: commercialhttp.NewApprovePublicationDraftEndpoint(operatorRegistries.commercial, commercialPublicationDrafts)},
+		{Pattern: "/commercial-publication-draft-publications", Handler: commercialhttp.NewPublishPublicationDraftEndpoint(operatorRegistries.commercial, commercialPublicationDrafts)},
 		// 商业发布词表读口（票 admin-write-faces/20）：按 kind 答该册正文各封闭集的码，表单据此供下拉。它不要租户，
-		// 却与四口同挂字面量 UnconfiguredIntake{}，理由不是预览口那条：它唯一的消费者是四口喂的表单，四口开不了时
-		// 它单独开只让一张提交不了的表单多几行下拉；且它不读任何存储读面，不满足隔离读放行（ADR-0078）的入格判据
-		// ——挂到 commercialCatalogueIntake 上会让 TestIsolatedReadAdmissionSwitchesOnlyOperationsReadLines 的二分
-		// （放行 → 500 / 不放 → 403）多出一种 200 的形态，要加第三桶并改 ADR-0078 判据措辞，那是另一张票。
-		{Pattern: "/commercial-publication-vocabularies", Handler: commercialhttp.NewQueryPublicationVocabularyEndpoint(commercialhttp.UnconfiguredIntake{})},
+		// 却与四口同挂操作者渠道的登记册 Intake（ADR-0151 决定五），理由不是预览口那条：它唯一的消费者是四口喂的表单，
+		// 四口开不了时它单独开只让一张提交不了的表单多几行下拉；且它不读任何存储读面，不满足隔离读放行（ADR-0078）的
+		// 入格判据——挂到 commercialCatalogueIntake 上会让 TestIsolatedReadAdmissionSwitchesOnlyOperationsReadLines 的
+		// 二分（放行 → 500 / 不放 → 403）多出一种 200 的形态，要加第三桶并改 ADR-0078 判据措辞，那是另一张票。
+		{Pattern: "/commercial-publication-vocabularies", Handler: commercialhttp.NewQueryPublicationVocabularyEndpoint(operatorRegistries.commercial)},
 		// 身份族五口走各自的 Intake 变量（ADR-0091 逐口放行，票 admin-web-group-legal-entities/06，法人首放、其余四口各自成笔）；
 		// 上一段「一律挂字面量」自此对这五行不再成立。发布口与产品渠道口不在其内——它们有自己的治理（审批职责规则、
-		// ADR-0126 载体路径），仍挂字面量，另票。
+		// ADR-0126 载体路径），不经隔离放行。
 		{Pattern: "/commercial-business-party-registrations", Handler: commercialhttp.NewRegisterBusinessPartyEndpoint(businessPartyRegistrationIntake, partyIdentityRegistration)},
 		{Pattern: "/commercial-legal-entity-registrations", Handler: commercialhttp.NewRegisterLegalEntityEndpoint(legalEntityRegistrationIntake, partyIdentityRegistration)},
 		{Pattern: "/commercial-customer-account-registrations", Handler: commercialhttp.NewRegisterCustomerAccountEndpoint(customerAccountRegistrationIntake, partyIdentityRegistration)},
