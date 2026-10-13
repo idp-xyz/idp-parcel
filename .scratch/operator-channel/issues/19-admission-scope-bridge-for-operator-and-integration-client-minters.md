@@ -1,7 +1,7 @@
 # 19 准入范围桥：操作者与集成客户端铸造器的 `AdmissionScope` 由「租户对照 + `AuthorityCoverage`」实现，接进生产装配，演示租户登 `SYN-` 对照
 
 Category: enhancement
-Status: needs-triage——2026-10-13 通道 4 立（通道 1 派单 `task-40698906`，照裁定 A：[15](./15-operation-decision-faces-take-operator-intake.md) 余下四口不换，桥另立）。桥的骨架有出处：ADR-0149 决定四第二条定了按（租户、对象范围、能力、事实类型）读生产权威区间，[14](./14-admission-scope-read-and-grade.md) 交了读口 `AuthorityCoverage` 与「不在准入范围」一格。没有出处的是对照本身——行住在哪、按什么键、本产品的权威串从哪来；第一件定了就要落迁移，见「要裁的问题」。
+Status: in-progress——2026-10-13 22:07 通道 2 分诊认领（派单 `task-f2fa6dc4` ← 通道 1），分支 `mcp2-oc19t`，基 `b3c8bd46`（开工前 ls-remote 核过远端 main 未变）。此前 needs-triage——2026-10-13 通道 4 立（通道 1 派单 `task-40698906`，照裁定 A：[15](./15-operation-decision-faces-take-operator-intake.md) 余下四口不换，桥另立）。桥的骨架有出处：ADR-0149 决定四第二条定了按（租户、对象范围、能力、事实类型）读生产权威区间，[14](./14-admission-scope-read-and-grade.md) 交了读口 `AuthorityCoverage` 与「不在准入范围」一格。没有出处的是对照本身——行住在哪、按什么键、本产品的权威串从哪来；第一件定了就要落迁移，见「要裁的问题」。
 Blocked by: 无——要裁的是本票自己的形状，裁完转 ready-for-agent
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 丙轨实施
 地盘（裁完按形状收窄）：`AdmissionScope` 的生产实现与对照的读口（落点随问题一）；`cmd/parcel-api` 的 `buildOperatorMinter`、`buildIntegrationClientMinter` 与 `main.go` 里建它们的那几行；演示种子 `scripts/demo-seeds/data/governance/` 的区间、对照的那份种子、`seed.sh` 相应一段与 `scripts/demo-seeds/README.md`；对照若是新的一类实例值，参数登记册增一行。
