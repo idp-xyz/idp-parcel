@@ -12,9 +12,6 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
-// operationDecisionCapability 是运营决定口在治理登记册上的能力格；事实类型取各口的决定种类（票 operator-channel/15）。
-const operationDecisionCapability = "OPERATION_DECISION"
-
 // Minter 是本适配器对铸造操作者信封的最小依赖，identity.OperatorMinter 满足它。
 type Minter interface {
 	MintOperator(ctx context.Context, credential identity.OperatorCredential, request identity.OperatorRequest) (identity.OperatorEnvelope, error)
@@ -47,7 +44,7 @@ func (authenticator *OperatorAuthenticator) AuthenticateOperatorDecision(
 	envelope, err := authenticator.minter.MintOperator(ctx, identity.NewOperatorCredential(bearerToken), identity.OperatorRequest{
 		Face:         identity.CapabilityOperationDecision,
 		DecisionKind: kind,
-		Admission:    &identity.AdmissionRequirement{Capability: operationDecisionCapability, FactKind: kind.String()},
+		Admission:    &identity.AdmissionRequirement{Capability: identity.CapabilityOperationDecision.String(), FactKind: kind.String()},
 	})
 	if err != nil {
 		return shipmenthttp.OperatorIdentity{}, answer(err)

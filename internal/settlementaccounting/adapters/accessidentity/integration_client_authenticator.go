@@ -10,10 +10,6 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 )
 
-// externalFactCapability 是集成客户端生产写在治理登记册上的能力格；事实类型取外部资金事实。
-// 能力词是 EXTERNAL_FACT：关务外部结果与监管凭证用的也是这一个，治理登记册上才是同一格能力。
-const externalFactCapability = "EXTERNAL_FACT"
-
 // ClientMinter 是本适配器对铸造集成客户端信封的最小依赖。
 type ClientMinter interface {
 	MintIntegrationClient(ctx context.Context, credential identity.IntegrationClientCredential, request identity.IntegrationClientRequest) (identity.IntegrationClientEnvelope, error)
@@ -42,7 +38,7 @@ func (authenticator *IntegrationClientAuthenticator) AuthenticateExternalFunds(
 		identity.IntegrationClientRequest{
 			FactType: identity.FactExternalFunds,
 			Admission: &identity.AdmissionRequirement{
-				Capability: externalFactCapability,
+				Capability: identity.ExternalFactAdmissionCapability,
 				FactKind:   identity.FactExternalFunds.String(),
 			},
 		})

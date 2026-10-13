@@ -21,6 +21,12 @@ type AdmissionRequirement struct {
 	FactKind   string
 }
 
+// ExternalFactAdmissionCapability 是外部结果与资金事实各口在治理登记册上的能力词，事实类型逐口取 ExternalFactType 的值
+// （ADR-0180 决定四）。集成客户端族的授予按事实类型登、没有能力面，这个词只在准入要求里用；运营决定口的能力词就是
+// 操作者能力面 CapabilityOperationDecision 那一个串。各认证方引用这两处，不另抄字面量：抄的那一份改了，登在旧词下的
+// 区间对改过的那一边无声失效。
+const ExternalFactAdmissionCapability = "EXTERNAL_FACT"
+
 // AdmissionScope 答某租户在 at 那一刻的一笔生产写落不落在准入范围内；读不动时交回错误，不答假。
 type AdmissionScope interface {
 	Admits(ctx context.Context, tenantID string, requirement AdmissionRequirement, at time.Time) (bool, error)
