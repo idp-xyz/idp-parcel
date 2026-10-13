@@ -18,6 +18,24 @@
       "basis": "SYN-GRANT-BASIS-DEX-02"
     },
     {
+      "grantId": "SYN-GRANT-DEX-CONFIG-LOAD-ASSIGNMENT-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "LOAD_ASSIGNMENT",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-04"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-PARTICIPATION-TERMINATION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "PARTICIPATION_TERMINATION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-05"
+    },
+    {
       "grantId": "SYN-GRANT-DEX-VIEWER-READ-01",
       "issuer": "http://127.0.0.1:5556/dex",
       "subject": "ChZTWU4tT1BFUkFUT1ItVklFV0VSLTAxEgVsb2NhbA",

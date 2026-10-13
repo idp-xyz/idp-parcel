@@ -1,0 +1,69 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "mappings": [
+    {
+      "mappingId": "SYN-MAP-OD-MANUAL-REVIEW-COMPLETION-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "MANUAL_REVIEW_COMPLETION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
+      "mappingId": "SYN-MAP-OD-ACTIVE-REJECTION-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "ACTIVE_REJECTION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
+      "mappingId": "SYN-MAP-OD-AUTHORIZED-DISPOSITION-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "AUTHORIZED_DISPOSITION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
+      "mappingId": "SYN-MAP-OD-LOAD-ASSIGNMENT-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "LOAD_ASSIGNMENT",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
+      "mappingId": "SYN-MAP-OD-PARTICIPATION-TERMINATION-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "PARTICIPATION_TERMINATION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
+      "mappingId": "SYN-MAP-EF-CUSTOMS-EXTERNAL-RESULT-01",
+      "capability": "EXTERNAL_FACT",
+      "factKind": "CUSTOMS_EXTERNAL_RESULT",
+      "objectScope": "SYN-PILOT-SCOPE/external-facts@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-02"
+    },
+    {
+      "mappingId": "SYN-MAP-EF-REGULATORY-CREDENTIAL-01",
+      "capability": "EXTERNAL_FACT",
+      "factKind": "REGULATORY_CREDENTIAL",
+      "objectScope": "SYN-PILOT-SCOPE/external-facts@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-02"
+    },
+    {
+      "mappingId": "SYN-MAP-EF-EXTERNAL-FUNDS-FACT-01",
+      "capability": "EXTERNAL_FACT",
+      "factKind": "EXTERNAL_FUNDS_FACT",
+      "objectScope": "SYN-PILOT-SCOPE/external-facts@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-02"
+    }
+  ]
+}

@@ -4,6 +4,8 @@
 #   配置员    → 200 REFUSED / VERSION_NOT_OVERWRITABLE（业务结果，见下）
 #   查阅员    → 403 OPERATOR_NOT_GRANTED（令牌有效、主体在册，但没有登记册配置写的授予）
 #   不带令牌  → 401 OPERATOR_CREDENTIAL_REJECTED
+# 另打一个运营决定口（票 operator-channel/19）：配置员持终止参与的授予、演示租户登了对照与区间，越过准入范围到编排，
+# 答 200 SEGMENT_NOT_FOUND（段号是不存在的那一个，不落行）；查阅员没有这一种决定的授予，答 403 OPERATOR_NOT_GRANTED。
 #
 # 写口取 POST /visibility-catalogue-notification-policy-registrations（端点表里挂 operatorRegistries.visibility）。
 # 批文是种子里那条通知策略去掉 tenantId：在线口的租户取认证结果，批文带 tenantId 即拒。种子已在 SYN-TENANT-01
@@ -68,6 +70,7 @@ if status != want_status or got != want:
         "IDENTITY_DEPENDENCY_UNAVAILABLE": "parcel-api 取不到发行方公钥集，或读不动操作者册",
         "OPERATOR_NOT_GRANTED": "令牌过了，但册上没有这个主体的那一格授予：库按 seed.sh 灌过吗？",
         "OPERATOR_CREDENTIAL_REJECTED": "令牌没过：发行方地址或受众与 parcel-api 的三件参数对不上，或 Dex 刚重启、钥还没重取",
+        "OUTSIDE_ADMISSION_SCOPE": "授予过了，准入范围没过：parcel-api 没带 IDP_PARCEL_GOVERNANCE_SELF_AUTHORITY，或库里没灌准入范围对照与区间",
     }
     hint = hints.get((body.get("error") or {}).get("code"), "")
     sys.exit(f"{label}：答 {status} {got}，要 {want_status} {want}。{hint}\n应答：{raw}")
@@ -78,3 +81,8 @@ PY
 probe '配置员' "$config_token" 200 'REFUSED/VERSION_NOT_OVERWRITABLE'
 probe '查阅员' "$viewer_token" 403 'OPERATOR_NOT_GRANTED'
 probe '不带令牌' '' 401 'OPERATOR_CREDENTIAL_REJECTED'
+
+endpoint="${base}/transport-fulfillment-participation-terminations"
+body='{"segment": "SYN-SEGMENT-PROBE-NONE", "object": "SYN-PARCEL-PROBE-NONE", "basis": "SYN-BASIS-PROBE", "endedAt": "2026-01-02T00:00:00Z"}'
+probe '配置员 · 终止参与' "$config_token" 200 'SEGMENT_NOT_FOUND'
+probe '查阅员 · 终止参与' "$viewer_token" 403 'OPERATOR_NOT_GRANTED'
