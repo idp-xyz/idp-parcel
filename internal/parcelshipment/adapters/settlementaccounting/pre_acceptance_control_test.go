@@ -203,9 +203,9 @@ var (
 )
 
 type scopeSourceDouble struct {
-	scope  adapter.ControlScope
-	formed bool
-	err    error
+	scope adapter.ControlScope
+	gap   adapter.ControlScopeGap
+	err   error
 }
 
 func (double *scopeSourceDouble) FormControlScope(
@@ -213,8 +213,8 @@ func (double *scopeSourceDouble) FormControlScope(
 	_ psdomain.SourceIdentity,
 	_ psdomain.ShipmentRequestID,
 	_ psdomain.SubmissionVersionID,
-) (adapter.ControlScope, bool, error) {
-	return double.scope, double.formed, double.err
+) (adapter.ControlScope, adapter.ControlScopeGap, error) {
+	return double.scope, double.gap, double.err
 }
 
 type amountSourceDouble struct {
@@ -301,7 +301,7 @@ func newControlFixture(t *testing.T) *controlFixture {
 		policy:  &policyDouble{policy: policy},
 		balance: &balanceDouble{balance: balance},
 		ledger:  &ledgerDouble{ledger: sadomain.NewFreezeLedger()},
-		scopes:  &scopeSourceDouble{scope: controlScope(t, scope), formed: true},
+		scopes:  &scopeSourceDouble{scope: controlScope(t, scope), gap: adapter.ControlScopeFormed},
 		amounts: &amountSourceDouble{amount: 4_000, formed: true},
 	}
 	exposures := &exposureLedgerDouble{ledger: sadomain.NewCreditExposureLedger()}
@@ -618,12 +618,15 @@ func TestATermsControlTranslatesToCreditExposedNotHeld(t *testing.T) {
 	}
 }
 
-// Covers: 实例半边纪律——作用域与金额未配置停在`未形成`且不问提供方：作用域该来自结算
-// 政策（ADR-0044）、金额该来自估价，代拟任何一个都是拿别人的钱做实验。
+// Covers: 实例半边纪律——作用域与金额没形成时停下且不问提供方：作用域该来自结算政策（ADR-0044）、
+// 金额该来自估价，代拟任何一个都是拿别人的钱做实验。停在哪一格按恢复动作分（票 routing-first-cut/19）：
+// 账户没登记（含作用域源没接）落`未配置`，登记结算账户会发信封来重驱；解析没采用结算政策与金额未配置
+// 留在`未形成`。
 func TestUnconfiguredSourcesStopAtNotFormedWithoutAskingTheProvider(t *testing.T) {
 	cases := map[string]struct {
-		arrange    func(*controlFixture) *adapter.PreAcceptanceControlAdapter
-		wantReason string
+		arrange     func(*controlFixture) *adapter.PreAcceptanceControlAdapter
+		wantOutcome psports.PreAcceptanceControlOutcome
+		wantReason  string
 	}{
 		"no scope source": {
 			arrange: func(fixture *controlFixture) *adapter.PreAcceptanceControlAdapter {
@@ -641,21 +644,32 @@ func TestUnconfiguredSourcesStopAtNotFormedWithoutAskingTheProvider(t *testing.T
 					Amounts: fixture.amounts,
 				})
 			},
-			wantReason: "CONTROL_SCOPE_NOT_CONFIGURED",
+			wantOutcome: psports.PreAcceptanceControlNotConfigured,
+			wantReason:  "CONTROL_SCOPE_NOT_CONFIGURED",
 		},
-		"scope source cannot form": {
+		"settlement account not registered": {
 			arrange: func(fixture *controlFixture) *adapter.PreAcceptanceControlAdapter {
-				fixture.scopes.formed = false
+				fixture.scopes.gap = adapter.ControlScopeAccountNotRegistered
 				return fixture.adapter
 			},
-			wantReason: "CONTROL_SCOPE_NOT_CONFIGURED",
+			wantOutcome: psports.PreAcceptanceControlNotConfigured,
+			wantReason:  "CONTROL_SCOPE_NOT_CONFIGURED",
+		},
+		"resolution adopted no settlement policy": {
+			arrange: func(fixture *controlFixture) *adapter.PreAcceptanceControlAdapter {
+				fixture.scopes.gap = adapter.ControlScopeSettlementPolicyNotAdopted
+				return fixture.adapter
+			},
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "CONTROL_SCOPE_SETTLEMENT_POLICY_NOT_ADOPTED",
 		},
 		"amount source cannot form": {
 			arrange: func(fixture *controlFixture) *adapter.PreAcceptanceControlAdapter {
 				fixture.amounts.formed = false
 				return fixture.adapter
 			},
-			wantReason: "CONTROL_AMOUNT_NOT_CONFIGURED",
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "CONTROL_AMOUNT_NOT_CONFIGURED",
 		},
 	}
 
@@ -669,8 +683,8 @@ func TestUnconfiguredSourcesStopAtNotFormedWithoutAskingTheProvider(t *testing.T
 				t.Fatalf("apply pre-acceptance financial control: %v", err)
 			}
 
-			if assessment.Outcome != psports.PreAcceptanceControlNotFormed {
-				t.Fatalf("outcome = %q, want NOT_FORMED", assessment.Outcome)
+			if assessment.Outcome != testCase.wantOutcome {
+				t.Fatalf("outcome = %q, want %q", assessment.Outcome, testCase.wantOutcome)
 			}
 			if assessment.Reason.String() != testCase.wantReason {
 				t.Fatalf("reason = %q, want %q", assessment.Reason, testCase.wantReason)

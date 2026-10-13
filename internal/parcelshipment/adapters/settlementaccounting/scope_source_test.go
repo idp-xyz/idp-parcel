@@ -130,15 +130,15 @@ func TestAControlScopeIsDerivedFromTheAdoptedSettlementPolicy(t *testing.T) {
 	}
 	source := adapter.NewPolicyBackedControlScopeSource(resolver, directory)
 
-	scope, formed, err := source.FormControlScope(context.Background(), scopeIdentity(t),
+	scope, gap, err := source.FormControlScope(context.Background(), scopeIdentity(t),
 		value(t, psdomain.NewShipmentRequestID, "request-1"),
 		value(t, psdomain.NewSubmissionVersionID, "version-1"))
 	if err != nil {
 		t.Fatalf("form control scope: %v", err)
 	}
 
-	if !formed {
-		t.Fatal("回显与目录都在，作用域却没形成")
+	if gap != adapter.ControlScopeFormed {
+		t.Fatalf("gap = %d; 回显与目录都在，作用域却没形成", gap)
 	}
 	settlement := scope.Settlement
 	if settlement.LegalEntity().String() != "legal-1" ||
@@ -156,9 +156,9 @@ func TestAControlScopeIsDerivedFromTheAdoptedSettlementPolicy(t *testing.T) {
 	}
 }
 
-// Covers: 停在未形成的三格——解析未含结算政策、目录未配置（nil）、映射查无。三者都是
-// 「显式未配置」不是错误：编排把它记成 CONTROL_SCOPE_NOT_CONFIGURED 等配置补齐，而不是
-// 当故障重试。解析器答不出才是错误（依赖失败另有续办路径）。
+// Covers: 没形成的三种样子各报各的缺口——解析未含结算政策是一格，目录未配置（nil）与映射查无是另一格
+// （票 routing-first-cut/19 结算账户那一笔）。都是「显式未配置」不是错误，但恢复动作不同：后一格登一行
+// 结算账户就推得动，前一格要改的是解析键。解析器答不出才是错误（依赖失败另有续办路径）。
 func TestAScopeWithoutPolicyDirectoryOrMappingStaysUnformed(t *testing.T) {
 	requestID := value(t, psdomain.NewShipmentRequestID, "request-1")
 	versionID := value(t, psdomain.NewSubmissionVersionID, "version-1")
@@ -168,9 +168,9 @@ func TestAScopeWithoutPolicyDirectoryOrMappingStaysUnformed(t *testing.T) {
 		directory := &directoryDouble{found: true}
 		source := adapter.NewPolicyBackedControlScopeSource(resolver, directory)
 
-		_, formed, err := source.FormControlScope(context.Background(), scopeIdentity(t), requestID, versionID)
-		if err != nil || formed {
-			t.Fatalf("formed = %v err = %v, want unformed without error", formed, err)
+		_, gap, err := source.FormControlScope(context.Background(), scopeIdentity(t), requestID, versionID)
+		if err != nil || gap != adapter.ControlScopeSettlementPolicyNotAdopted {
+			t.Fatalf("gap = %d err = %v, want SETTLEMENT_POLICY_NOT_ADOPTED without error", gap, err)
 		}
 		if directory.asked != 0 {
 			t.Fatal("没有回显还去问了目录")
@@ -183,9 +183,9 @@ func TestAScopeWithoutPolicyDirectoryOrMappingStaysUnformed(t *testing.T) {
 		}}
 		source := adapter.NewPolicyBackedControlScopeSource(resolver, nil)
 
-		_, formed, err := source.FormControlScope(context.Background(), scopeIdentity(t), requestID, versionID)
-		if err != nil || formed {
-			t.Fatalf("formed = %v err = %v, want unformed without error", formed, err)
+		_, gap, err := source.FormControlScope(context.Background(), scopeIdentity(t), requestID, versionID)
+		if err != nil || gap != adapter.ControlScopeAccountNotRegistered {
+			t.Fatalf("gap = %d err = %v, want ACCOUNT_NOT_REGISTERED without error", gap, err)
 		}
 		if resolver.asked != 0 {
 			t.Fatal("目录未配置还消耗了一次解析")
@@ -198,9 +198,9 @@ func TestAScopeWithoutPolicyDirectoryOrMappingStaysUnformed(t *testing.T) {
 		}}
 		source := adapter.NewPolicyBackedControlScopeSource(resolver, &directoryDouble{})
 
-		_, formed, err := source.FormControlScope(context.Background(), scopeIdentity(t), requestID, versionID)
-		if err != nil || formed {
-			t.Fatalf("formed = %v err = %v, want unformed without error", formed, err)
+		_, gap, err := source.FormControlScope(context.Background(), scopeIdentity(t), requestID, versionID)
+		if err != nil || gap != adapter.ControlScopeAccountNotRegistered {
+			t.Fatalf("gap = %d err = %v, want ACCOUNT_NOT_REGISTERED without error", gap, err)
 		}
 	})
 
@@ -208,9 +208,9 @@ func TestAScopeWithoutPolicyDirectoryOrMappingStaysUnformed(t *testing.T) {
 		resolver := &resolverDouble{err: errors.New("commercial authority down")}
 		source := adapter.NewPolicyBackedControlScopeSource(resolver, &directoryDouble{found: true})
 
-		_, formed, err := source.FormControlScope(context.Background(), scopeIdentity(t), requestID, versionID)
-		if err == nil || formed {
-			t.Fatalf("formed = %v err = %v, want a propagated error——依赖失败不是未配置", formed, err)
+		_, gap, err := source.FormControlScope(context.Background(), scopeIdentity(t), requestID, versionID)
+		if err == nil || gap == adapter.ControlScopeFormed {
+			t.Fatalf("gap = %d err = %v, want a propagated error——依赖失败不是未配置", gap, err)
 		}
 	})
 }

@@ -31,7 +31,7 @@ type PolicyBackedControlScopeSource struct {
 	directory  SettlementAccountDirectory
 }
 
-// NewPolicyBackedControlScopeSource 装配两半。directory 为 nil 时作用域停在未形成，
+// NewPolicyBackedControlScopeSource 装配两半。directory 为 nil 时作用域停在账户没登记那一格，
 // 留给还没接目录的测试；生产装配传入登记册，空册与没登记的应收行都答未找到。
 func NewPolicyBackedControlScopeSource(
 	commercial psports.CommercialBasisResolver,
@@ -42,9 +42,9 @@ func NewPolicyBackedControlScopeSource(
 
 var _ ControlScopeSource = (*PolicyBackedControlScopeSource)(nil)
 
-// FormControlScope 分三段：解析取回显 → 目录换账户 → 拼作用域。任何一段答「没有」都是
-// 未形成而不是错误——解析未含结算政策、目录未配置、映射查无，三者都要停在
-// `CONTROL_SCOPE_NOT_CONFIGURED` 等配置或商业依据补齐，而不是让编排把它当故障重试。
+// FormControlScope 分三段：解析取回显 → 目录换账户 → 拼作用域。两种「没有」都不是错误，但各报
+// 各的缺口：解析没带回结算政策是一格，目录查无（或没接）是另一格——两格的恢复动作不同，见
+// ControlScopeGap。
 //
 // 解析标识与作用域同出这一次解析，一并交回。译不动它是编程错误不是未形成：解析既然成了，
 // 标识就在快照的构造期受过护（NewCommercialBasisSnapshot 拒无标识），此处译不过去只可能是
@@ -54,9 +54,12 @@ func (source *PolicyBackedControlScopeSource) FormControlScope(
 	identity psdomain.SourceIdentity,
 	shipmentRequestID psdomain.ShipmentRequestID,
 	submissionVersion psdomain.SubmissionVersionID,
-) (ControlScope, bool, error) {
-	if source.commercial == nil || source.directory == nil {
-		return ControlScope{}, false, nil
+) (ControlScope, ControlScopeGap, error) {
+	if source.commercial == nil {
+		return ControlScope{}, ControlScopeSettlementPolicyNotAdopted, nil
+	}
+	if source.directory == nil {
+		return ControlScope{}, ControlScopeAccountNotRegistered, nil
 	}
 
 	resolution, err := source.commercial.ResolveCommercialBasis(ctx, psports.CommercialBasisQuery{
@@ -65,39 +68,39 @@ func (source *PolicyBackedControlScopeSource) FormControlScope(
 		SubmissionVersion: submissionVersion,
 	})
 	if err != nil {
-		return ControlScope{}, false, fmt.Errorf("resolve commercial basis for control scope: %w", err)
+		return ControlScope{}, ControlScopeGapInvalid, fmt.Errorf("resolve commercial basis for control scope: %w", err)
 	}
 	terms, present := resolution.Snapshot.SettlementTerms()
 	if !present {
-		// 解析没成或成了但不含结算政策：两者下都推不出作用域。不在这里区分——该由谁
-		// 补什么，判断编排在商业解析那一步早已答过。
-		return ControlScope{}, false, nil
+		// 解析没成或成了但不含结算政策：两者下都推不出作用域。走到控制这一步时商业解析已经成了，
+		// 剩下的只有登记的解析键没要求结算政策这一种。
+		return ControlScope{}, ControlScopeSettlementPolicyNotAdopted, nil
 	}
 
 	account, found, err := source.directory.FindSettlementAccount(ctx, identity, terms)
 	if err != nil {
-		return ControlScope{}, false, fmt.Errorf("find settlement account: %w", err)
+		return ControlScope{}, ControlScopeGapInvalid, fmt.Errorf("find settlement account: %w", err)
 	}
 	if !found {
-		return ControlScope{}, false, nil
+		return ControlScope{}, ControlScopeAccountNotRegistered, nil
 	}
 
 	legalEntity, err := sadomain.NewLegalEntityReference(terms.LegalEntity().String())
 	if err != nil {
-		return ControlScope{}, false, fmt.Errorf("%w: legal entity: %v", ErrUntranslatableAnswer, err)
+		return ControlScope{}, ControlScopeGapInvalid, fmt.Errorf("%w: legal entity: %v", ErrUntranslatableAnswer, err)
 	}
 	currency, err := sadomain.NewCurrencyCode(terms.Currency().String())
 	if err != nil {
-		return ControlScope{}, false, fmt.Errorf("%w: currency: %v", ErrUntranslatableAnswer, err)
+		return ControlScope{}, ControlScopeGapInvalid, fmt.Errorf("%w: currency: %v", ErrUntranslatableAnswer, err)
 	}
 	scope, err := sadomain.NewSettlementScope(legalEntity, account, currency)
 	if err != nil {
-		return ControlScope{}, false, fmt.Errorf("%w: settlement scope: %v", ErrUntranslatableAnswer, err)
+		return ControlScope{}, ControlScopeGapInvalid, fmt.Errorf("%w: settlement scope: %v", ErrUntranslatableAnswer, err)
 	}
 	reference, err := sadomain.NewCommercialResolutionReference(resolution.Snapshot.ResolutionID().String())
 	if err != nil {
-		return ControlScope{}, false, fmt.Errorf("%w: commercial resolution reference: %v",
+		return ControlScope{}, ControlScopeGapInvalid, fmt.Errorf("%w: commercial resolution reference: %v",
 			ErrUntranslatableAnswer, err)
 	}
-	return ControlScope{Settlement: scope, Resolution: reference}, true, nil
+	return ControlScope{Settlement: scope, Resolution: reference}, ControlScopeFormed, nil
 }
