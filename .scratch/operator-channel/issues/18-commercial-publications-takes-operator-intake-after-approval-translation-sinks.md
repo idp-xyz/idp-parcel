@@ -1,7 +1,7 @@
 # 18 批文译装下沉后 `/commercial-publications` 换操作者 Intake
 
 Category: enhancement
-Status: 完工，待评审与重放——2026-10-13 22:2x 通道 3，代码 tip `07bfa7ee`（分支 `mcp3-oc18`、基 `b3c8bd46`），清点 `c55b2c12`，完成记录在文末。此前 in-progress——2026-10-13 22:06 通道 3 认领（派单本卡 ← 通道 1，`task-42392427`），分支 `mcp3-oc18`，基 `b3c8bd46`（开工前 `ls-remote` 核远端 main 仍是它）。此前 ready-for-agent——2026-10-12 20:2x 通道 1 立（派单方裁定），出自 [06](./06-commercial-publication-and-replay-take-operator-identity.md) 完成记录判断项 1：06 把发布路径四口、词表读口与计价回放口换上了操作者渠道，`/commercial-publications` 留在字面量 `UnconfiguredIntake{}` 上，作者报「另立下沉票，或扩本票地盘」待裁，派单方裁另立，即本票。
+Status: resolved——2026-10-13 22:34 通道 3：重放进 main，远端 main = `c38c9307`，进 main 记录见文末（用户裁定本票免非作者评审、作者直接重放）。此前完工，待评审与重放——2026-10-13 22:2x 通道 3，代码 tip `07bfa7ee`（分支 `mcp3-oc18`、基 `b3c8bd46`），清点 `c55b2c12`，完成记录在文末。此前 in-progress——2026-10-13 22:06 通道 3 认领（派单本卡 ← 通道 1，`task-42392427`），分支 `mcp3-oc18`，基 `b3c8bd46`（开工前 `ls-remote` 核远端 main 仍是它）。此前 ready-for-agent——2026-10-12 20:2x 通道 1 立（派单方裁定），出自 [06](./06-commercial-publication-and-replay-take-operator-identity.md) 完成记录判断项 1：06 把发布路径四口、词表读口与计价回放口换上了操作者渠道，`/commercial-publications` 留在字面量 `UnconfiguredIntake{}` 上，作者报「另立下沉票，或扩本票地盘」待裁，派单方裁另立，即本票。
 Blocked by: 06（本票接在 06 的 `OperatorRegistryIntake` 与认证适配器交回的 `OperatorIdentity` 上；06 进 main 之前不开工）
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`cmd/parcel-commercial` 里把受控批文译成 party-commercial 命令的那一段（下沉出去、受控 CLI 改调下沉后的那一份）；下沉的落点在 party-commercial 的适配器包里，照 [04](./04-registration-write-faces-take-operator-intake.md) 第三、五批「译装先下沉成 `registrationjson`、在线口不另写平行解码」的先例定；`cmd/parcel-api` 端点表里 `/commercial-publications` 那一行与它的装配测试。
@@ -73,4 +73,12 @@ Blocked by: 06（本票接在 06 的 `OperatorRegistryIntake` 与认证适配器
   - 不再拒项上的 `tenantId` → `TestPublicationMirrorRefusesSelfReportedTenantsAndAnythingButOneItem` 与上面那条真库用例红；
   - 端点表这一行退回字面量 `UnconfiguredIntake{}` → `TestSwappedRegistryFacesAnswerFromTheOperatorChannel`、`TestSwappedRegistryFacesMapTheRefusalAndDependencyGrades` 红。
 - 机制清点在 `07bfa7ee` 的干净检出上重生成（`c55b2c12`）。
-- 作者不自评：非作者评审由通道 1 另派，重放进 main 由通道 1 做。
+- 作者不自评：非作者评审由通道 1 另派，重放进 main 由通道 1 做。（完工报之后用户改裁，见下节。）
+
+## 进 main 记录（2026-10-13 通道 3）
+
+用户 22:2x 裁定（回复本通道的原生提问）：全部由本通道独立完成，本票无需评审，直接重放。据此本票没有非作者评审记录，[parallel-sessions.md](../../../docs/agents/parallel-sessions.md)「合入前独立评审」那道门按用户裁定免去，重放由作者通道自做。
+
+通道 3 在隔离树 `idp-parcel-replay-oc18-mcp3` 把七笔原样重放到 main `8a096657` 之上——`76c4a957`→`a349c053`、`65df0720`→`6999eac1`、`43b98da4`→`9fec5ebb`、`04ab97c6`→`6b7d5b93`、`07bfa7ee`→`c52537cd`、`c55b2c12`→`9c9f6bca`、`90ebce1a`→`c38c9307`；分支上的 SHA 作封存出处，本地分支指针改名 `merged/mcp3-oc18`。main 自 `b3c8bd46` 起只多 `8a096657` 一笔纯 `.md`（psb/29 立票），与本票各文件不重叠；重放出的各文件对分支 tip `90ebce1a` 逐字相同（`git diff 90ebce1a c38c9307` 只剩那份 `.md`）。
+
+验证在 `c38c9307`：改动的 `.go` 经 `gofmt -l` 无输出；清点在该 tip 重生成零差；`go build ./...`、`go vet ./...` 退 0；带 DSN `go test -p 1 -count=1 ./...` 139 ok / 0 FAIL / 14 无测试 / 0 cached（22:31:17→22:33:51）；`-v` 探针 `TestTheOperatorChannelPublishesTheControlledDocumentMirrorAgainstARealDatabase`、`TestSwappedRegistryFacesAnswerFromTheOperatorChannel`、`TestSwappedRegistryFacesMapTheRefusalAndDependencyGrades`、`TestEveryAssembledEndpointAnswersUnconfigured`、`TestTheOperatorChannelRecordsEnvelopeSubjectsOnThePublicationCarrier`、`TestTheControlledPublishAnswersTheDemoSeedAlike`、`TestTheControlledPublishRefusesTheSameApprovalDocumentsAlike` 都 PASS 非 SKIP。22:34 共享树 ff 到 `c38c9307`（`.cursor/` 两份改动与未跟踪的 `Untitled` 原样未动）后 `push c38c9307:main`，远端 main = `c38c9307`。
