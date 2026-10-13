@@ -563,10 +563,10 @@ func assembleBusinessEndpoints(
 		// 状态推进，不是登记一个新身份。名字照实说，是因为「登记」与「停用」在这本册上的
 		// 续办动作不同，路径是登记方看见的第一样东西。
 		//
-		// 它仍挂字面量（票 operator-channel/06 判断项）：收的是受控批文的在线镜像，批准三格与角色确认都从批文取，而
-		// 操作者的批准路径是下面的载体（ADR-0126 决定三）；换操作者 Intake 先要把批文译装从 cmd/parcel-commercial 下沉，
-		// 在线口不另写一份平行解码。
-		{Pattern: "/commercial-publications", Handler: commercialhttp.NewPublishCommercialAuthorityEndpoint(commercialhttp.UnconfiguredIntake{}, commercialPublication)},
+		// 它收受控批文的在线镜像，挂操作者渠道的登记册 Intake（票 operator-channel/18）：外壳与逐项翻译就是受控 CLI
+		// publish 那一份（registrationjson），租户取认证出的身份、项上的 tenantId 在场即拒。批准三格与角色确认照旧从批文
+		// 取，不从信封来——操作者自己的批准路径是下面的载体（ADR-0126 决定三）。
+		{Pattern: "/commercial-publications", Handler: commercialhttp.NewPublishCommercialAuthorityEndpoint(operatorRegistries.commercial, commercialPublication)},
 		// 运营操作者面发布路径四口（ADR-0126 Decision 三、四；票 admin-write-faces/08）：预览 + 载体录入 / 批准 / 发布。
 		// 四口挂操作者渠道的登记册 Intake（同一 ADR 决定五，票 operator-channel/06）：租户、录入者与批准者（主体引用 +
 		// 授予集）都取认证出的身份。预览不落库，但拟录的壳要信封里的租户才立得住，所以与三个命令口同一个 Intake、不走

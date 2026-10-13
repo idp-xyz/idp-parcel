@@ -20,9 +20,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// 本文件钉运营操作者面发布路径换上操作者渠道之后装配点那一半（票 operator-channel/06）。四个 POST 口与回放口的拒绝格、
-// 未带令牌与自报租户在 swappedRegistryFaces 那两条里；这里是 GET 的词表口、仍挂字面量的受控批文镜像，以及真库载体上
-// 记下的录入者与批准者。
+// 本文件钉运营操作者面发布路径换上操作者渠道之后装配点那一半（票 operator-channel/06、18）。各 POST 口的拒绝格、未带令牌
+// 与自报租户由 TestSwappedRegistryFacesMapTheRefusalAndDependencyGrades 与 TestSwappedRegistryFacesAnswerFromTheOperatorChannel
+// 逐口钉；这里是 GET 的词表口、受控批文镜像在真库上的业务结果，以及真库载体上记下的录入者与批准者。
 
 func serveThroughOperatorRegistries(t *testing.T, register accessidentity.OperatorRegistry, method, target, token, body string) *httptest.ResponseRecorder {
 	t.Helper()
@@ -81,14 +81,64 @@ func TestThePublicationVocabularyAnswersFromTheOperatorChannel(t *testing.T) {
 	}
 }
 
-// Covers: 票 operator-channel/06 判断项——`/commercial-publications` 不随发布路径四口换：操作者渠道配好、授予齐备，它仍答
-// 403 未配置，带不带令牌都一样（未配置的 Intake 不读请求）。
-func TestCommercialPublicationsStaysUnconfiguredOnTheOperatorChannel(t *testing.T) {
-	for _, token := range []string{"", "presented.operator.token"} {
-		response := serveThroughOperatorRegistries(t, registryWriterRegister{}, http.MethodPost, "/commercial-publications", token, `{}`)
-		if response.Code != http.StatusForbidden || problemCode(t, response) != "ACCESS_CHANNEL_NOT_CONFIGURED" {
-			t.Fatalf("token %q: answer = %d %q, want 403 ACCESS_CHANNEL_NOT_CONFIGURED", token, response.Code, problemCode(t, response))
+// controlledRulePackageItem 是受控批文里的一项、不带 tenantId：在线镜像就是这一形。
+const controlledRulePackageItem = `{"kind": "ACCEPTANCE_RULE_PACKAGE", "objectId": "SYN-OC18-RULES", "version": "v1",
+  "scope": "SYN-OC18-SCOPE", "contentDigest": "sha256:SYN-OC18-RULES", "effectiveStartsAt": "2026-01-01T00:00:00Z",
+  "approval": {"reference": "SYN-OC18-APPROVAL", "source": "SYN-OC18-SOURCE", "approvedAt": "2026-01-02T00:00:00Z"},
+  "approvalRoleStanding": "CONFIRMED"}`
+
+// Covers: 票 operator-channel/18 完成判据二的业务结果那一格——真铸造、真 PC 认证适配器、操作者 Intake 与真库发布编排连起来：
+// 授予齐备时受控批文的一项发在信封绑的租户下（201 已发布已生效），同一份再发答重放；项上自报租户答请求畸形，库里一行
+// 不写。三格与发行方未配置在 swappedRegistryFaces 与 TestEveryAssembledEndpointAnswersUnconfigured 里。测试输入是隔离合成，
+// 只记 `S`。
+func TestTheOperatorChannelPublishesTheControlledDocumentMirrorAgainstARealDatabase(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	registration, err := buildCommercialRegistrationOrchestration(db)
+	if err != nil {
+		t.Fatalf("装配商业登记编排：%v", err)
+	}
+	minter, err := buildOperatorMinter(acceptingVerifier{}, registryWriterRegister{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	registries, err := buildOperatorRegistryIntakes(minter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	publish := commercialhttp.NewPublishCommercialAuthorityEndpoint(registries.commercial, registration.publication)
+	post := func(body string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodPost, "/commercial-publications", strings.NewReader(body))
+		request.Header.Set("Authorization", "Bearer presented.operator.token")
+		response := httptest.NewRecorder()
+		publish.ServeHTTP(response, request)
+		return response
+	}
+	versions := func(tenant string) int {
+		var count int
+		if err := pool.QueryRow(t.Context(),
+			`SELECT count(*) FROM party_commercial.commercial_version WHERE tenant_id = $1 AND object_id = $2`,
+			tenant, "SYN-OC18-RULES").Scan(&count); err != nil {
+			t.Fatalf("统计版本行：%v", err)
 		}
+		return count
+	}
+
+	selfReported := strings.Replace(controlledRulePackageItem, `{`, `{"tenantId": "SYN-TENANT-02", `, 1)
+	if response := post(`{"items": [` + selfReported + `]}`); response.Code != http.StatusBadRequest || problemCode(t, response) != "MALFORMED_REQUEST" {
+		t.Fatalf("项上自报租户 = %d %s", response.Code, response.Body.Bytes())
+	}
+	if response := post(`{"items": [` + controlledRulePackageItem + `]}`); response.Code != http.StatusCreated || answeredOutcome(t, response) != "PUBLISHED_EFFECTIVE" {
+		t.Fatalf("首发 = %d %s", response.Code, response.Body.Bytes())
+	}
+	if response := post(`{"items": [` + controlledRulePackageItem + `]}`); response.Code != http.StatusOK || answeredOutcome(t, response) != "REPLAYED" {
+		t.Fatalf("重放 = %d %s", response.Code, response.Body.Bytes())
+	}
+	if inEnvelopeTenant, inSelfReported := versions("SYN-TENANT-01"), versions("SYN-TENANT-02"); inEnvelopeTenant != 1 || inSelfReported != 0 {
+		t.Fatalf("版本行：信封租户 %d、自报租户 %d，want 1、0", inEnvelopeTenant, inSelfReported)
 	}
 }
 

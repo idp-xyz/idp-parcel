@@ -143,6 +143,7 @@ var swappedRegistryFaces = []string{
 	"/pricing-price-card-draft-approvals",
 	"/pricing-price-card-draft-publications",
 	"/pricing-evaluation-replays",
+	"/commercial-publications",
 	"/commercial-publication-previews",
 	"/commercial-publication-drafts",
 	"/commercial-publication-draft-approvals",
