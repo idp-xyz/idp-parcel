@@ -17,10 +17,10 @@
 | partycommercial | 156 | 167 | 13 | 40 | 1 | 37 |
 | pilotgovernance | 22 | 20 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
-| settlementaccounting | 174 | 121 | 29 | 58 | 11 | 9 |
+| settlementaccounting | 174 | 122 | 29 | 58 | 11 | 9 |
 | transportfulfillment | 152 | 139 | 27 | 36 | 11 | 29 |
 | visibilityexception | 100 | 97 | 11 | 30 | 8 | 11 |
-| **合计** | 1212 | 1119 | 159 | 296 | 59 | 160 |
+| **合计** | 1212 | 1120 | 159 | 296 | 59 | 160 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 77、测试 121。
 
