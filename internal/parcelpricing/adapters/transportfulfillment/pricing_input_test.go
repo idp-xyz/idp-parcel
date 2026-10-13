@@ -110,6 +110,20 @@ func TestAnUnknownDeclaredUnitIsUnavailable(t *testing.T) {
 	}
 }
 
+// 正式 SELL·客户费用评价按原词认单位，小写 kg 与 TON 同为表外。受理前试算（parcelshipment 适配器的 measurementOf）对同一份
+// 申报同样当没有测量：两条路共用计价的封闭单位表，谁折叠谁不折叠一变，就会出现受理前冻得出、受理后评不出的那一份。
+func TestALowercaseDeclaredUnitIsOutsideTheTableForTheCustomerCharge(t *testing.T) {
+	resolver := resolverWith(t, membersOf(t, objectRef), declaredUnit(t, "1.25", "kg"), destinationPostal(t, "100115"), nil)
+
+	resolved, err := resolver.ResolvePricingInput(context.Background(), inputQuery(t, ppdomain.PricingPurposeCustomerCharge))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if resolved.Outcome != ppports.PricingInputUnavailable || !names(resolved.Missing, "kg") {
+		t.Fatalf("outcome=%s missing=%v, 想要小写 kg 当表外单位停", resolved.Outcome, resolved.Missing)
+	}
+}
+
 func TestAMissingDestinationPostalCodeIsUnavailable(t *testing.T) {
 	resolver := resolverWith(t, membersOf(t, objectRef), declaredKG(t, "1.25"), psdomain.NewShipmentAddressElements(
 		psdomain.AddressElementsNotProvidedResolution(),

@@ -183,11 +183,11 @@ func newAdapter(t *testing.T, view *declarationViewDouble) *parcelshipment.Submi
 	return adapter
 }
 
-// 逐件译、与声明成员同序：报了测量的那件带重量与外廓，单位折进计价单位表（小写 kg、cm 是同一单位的另一种写法）；没报的那件
-// 重量为空、不拿别件顶。两段邮编拼成一条路线，各件共用。
+// 逐件译、与声明成员同序：报了测量的那件带重量与外廓，单位按原词进计价单位表；没报的那件重量为空、不拿别件顶。两段邮编拼成
+// 一条路线，各件共用。
 func TestASubmissionDeclarationTranslatesEachParcelAndTheRoute(t *testing.T) {
 	request := submittedRequest(t, []string{"parcel-1", "parcel-2"}, postalCodes(t, "200000", "90210"),
-		profileFor(t, "parcel-1", "1.50", "kg", "20", "15", "10", "cm"))
+		profileFor(t, "parcel-1", "1.50", "KG", "20", "15", "10", "CM"))
 	adapter := newAdapter(t, &declarationViewDouble{request: request})
 
 	declaration, found, err := adapter.LoadSubmissionDeclaration(context.Background(),
@@ -214,11 +214,15 @@ func TestASubmissionDeclarationTranslatesEachParcelAndTheRoute(t *testing.T) {
 	}
 }
 
-// 单位不在计价单位表内不猜：整件当没有测量交回。重量单位与外廓单位任一在表外都是这一格。
+// 单位不在计价单位表内不猜：整件当没有测量交回。重量单位与外廓单位任一在表外都是这一格。表按原词认，小写的 kg、cm 也在表外：
+// 正式 SELL 评价的输入解析（transportfulfillment 适配器的 weightUnit / lengthUnit）同样按原词认、对小写答表外，受理前若折叠，
+// 同一份申报在受理前估得出冻结额、受理后却评不出客户费用。
 func TestAnUntranslatableUnitLeavesTheParcelUnmeasured(t *testing.T) {
 	for name, profile := range map[string]psdomain.DeclaredParcelProfile{
 		"重量单位在表外": profileFor(t, "parcel-1", "3", "STONE"),
 		"外廓单位在表外": profileFor(t, "parcel-1", "3", "KG", "1", "1", "1", "FATHOM"),
+		"重量单位小写":  profileFor(t, "parcel-1", "3", "kg"),
+		"外廓单位小写":  profileFor(t, "parcel-1", "3", "KG", "1", "1", "1", "cm"),
 	} {
 		t.Run(name, func(t *testing.T) {
 			request := submittedRequest(t, []string{"parcel-1"}, postalCodes(t, "200000", "90210"), profile)

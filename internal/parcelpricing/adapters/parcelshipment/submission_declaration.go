@@ -1,11 +1,10 @@
 // Package parcelshipment 是 parcel-pricing 消费 parcel-shipment 的一侧（ADR-0025 消费方侧）：受理前试算按提交版本读申报
-// （ADR-0179 决定四）。只翻译不判断——单位符号折进计价单位表、两段邮编拼成邮编路线；哪张卡要哪一格、缺了怎么停，归入口。
+// （ADR-0179 决定四）。只翻译不判断——单位符号按原词进计价单位表、两段邮编拼成邮编路线；哪张卡要哪一格、缺了怎么停，归入口。
 package parcelshipment
 
 import (
 	"context"
 	"fmt"
-	"strings"
 
 	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	ppports "go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
@@ -72,11 +71,12 @@ func (adapter *SubmissionDeclarations) LoadSubmissionDeclaration(
 	return translated, true, nil
 }
 
-// measurementOf 把一份申报测量译成计价的重量与外廓。单位符号折大写后进计价的封闭单位表（kg 与 KG 是同一单位的两种写法，折叠是
-// 翻译）；表外的单位不猜，整件当没有测量交回——猜错单位估错的是要占用客户的那笔钱。
+// measurementOf 把一份申报测量译成计价的重量与外廓。单位符号按原词进计价的封闭单位表，不折大小写：正式 SELL 评价的输入解析
+// （transportfulfillment 适配器的 weightUnit / lengthUnit）按原词认，受理前若折叠，同一份申报会在受理前估出冻结额、受理后却评不出
+// 客户费用，那笔冻结就没有费用可转。表外的单位不猜，整件当没有测量交回——猜错单位估错的是要占用客户的那笔钱。
 func measurementOf(measurement psdomain.DeclaredMeasurement) (*ppdomain.Weight, *ppdomain.Dimensions) {
 	declared := measurement.Weight()
-	unit, err := ppdomain.NewWeightUnit(strings.ToUpper(declared.Unit().String()))
+	unit, err := ppdomain.NewWeightUnit(declared.Unit().String())
 	if err != nil {
 		return nil, nil
 	}
@@ -88,7 +88,7 @@ func measurementOf(measurement psdomain.DeclaredMeasurement) (*ppdomain.Weight, 
 	if !present {
 		return &weight, nil
 	}
-	lengthUnit, err := ppdomain.NewLengthUnit(strings.ToUpper(sides.Unit().String()))
+	lengthUnit, err := ppdomain.NewLengthUnit(sides.Unit().String())
 	if err != nil {
 		return nil, nil
 	}
