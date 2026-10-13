@@ -1,6 +1,6 @@
 # ADR-0180：准入范围的租户对照是接入身份的一本册——按（租户、能力、事实类型）对至多一个对象范围，带生效区间与依据；本产品在治理登记册里的权威串是 `parcel-api` 的一件部署形态参数，准入范围桥与 parcel-shipment 生产归属同读这一处；登记册上的能力与事实类型词表归产品策略
 
-Status: Proposed（**草案**，2026-10-13 起草：通道 2 随票 [operator-channel/19](../../.scratch/operator-channel/issues/19-admission-scope-bridge-for-operator-and-integration-client-minters.md) 分诊，派单 `task-f2fa6dc4` ← 通道 1。**接受与否归用户**，接受前不是依据；草案期间 ADR-0083、ADR-0149 一字不动。起草方裁决能力边界：读过[开发主线](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「产品就绪与试点就绪」「切片的机制半边与实例半边」两节，[ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)、[ADR-0083](./0083-pilot-governance-read-face-carries-registry-dimensions-only.md)、[ADR-0149](./0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md)、[ADR-0150](./0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 全文，[ADR-0151](./0151-unassigned-command-faces-get-their-families.md) 的 Context 后半与决定一至五，[ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md) 决定二信任锚那一条与 Context 里信任锚那一句（按关键词取句，非全文）；票 operator-channel/14、19 全文，10 的做什么、完成判据与完成记录判断项，15 判断项 3 与进展记录里改挡点的那两句；[参数登记册](../product/PILOT-PARAMETER-REGISTER.md) `PAR-GOV-03` 整行，`PAR-INT-08..10` 与 `PAR-GOV-04..07` 各行的开头一段（截取，非整行）；`migrations/pilot_governance/0001` 抬头注，`migrations/access_identity/0001` 抬头注与授予、撤销两表的生效与撤销列（按列名取）、`0002` 的能力面约束、`0003` 抬头注与键。代码读过 `internal/accessidentity` 的 `AdmissionScope` 一族、`WorkFactMinter`、包注释、操作者能力面常量与 `DecisionKind`、`ExternalFactType` 两组词；`internal/pilotgovernance` 的 `AuthorityCoverage` 与领域 `AuthorityInterval`；parcel-shipment `adapters/pilotgovernance` 生产归属适配器的端口、依赖与 `governanceScope`；`cmd/parcel-api` 的 `buildOperatorMinter`、`buildIntegrationClientMinter`、`buildSubmissionOrchestration`、`buildProductionOwnership`、`buildIsolatedWriteAdmission` 与隔离形态的治理常量；各认证方取 `AdmissionRequirement` 的那一句；`internal/architecture` 的跨模块门禁；演示种子 `data/governance/` 各文件的对象范围、能力、事实类型与权威串（区间 01、02、03、07 读过全文，其余按键取），`seed.sh` 治理一段（按关键词）。2026-10-13 22:4x 通道 3 接手（通道 2 会话中断、用户转派）逐条复核引证，改正处记在票 19 分诊节末「接手核对」。没读：ADR-0025、ADR-0091、ADR-0100 全文，ADR-0078，`OperatorMinter` 与 `IntegrationClientMinter` 全文，`access_identity` 0002、0004 迁移，`cmd/parcel-access-register` 各子命令实现，`cmd/parcel-api` 各装配测试正文，`probe-operator-channel.sh`，CONTEXT-MAP 与 GLOSSARY 全文，`PILOT-SCOPE`，登记册其余各行。拿不准的列在文末「越权风险点」。）
+Status: Accepted（2026-10-13 22:5x，用户经 IDP 队列授权通道 3 自决，原话「你是系统和业务专家，你来自决吧」；接受时不改决定原文，接受方的读取边界与逐条理由见文末「接受记录」。此前 Proposed——**草案**，2026-10-13 起草：通道 2 随票 [operator-channel/19](../../.scratch/operator-channel/issues/19-admission-scope-bridge-for-operator-and-integration-client-minters.md) 分诊，派单 `task-f2fa6dc4` ← 通道 1。**接受与否归用户**，接受前不是依据；草案期间 ADR-0083、ADR-0149 一字不动。起草方裁决能力边界：读过[开发主线](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「产品就绪与试点就绪」「切片的机制半边与实例半边」两节，[ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)、[ADR-0083](./0083-pilot-governance-read-face-carries-registry-dimensions-only.md)、[ADR-0149](./0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md)、[ADR-0150](./0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 全文，[ADR-0151](./0151-unassigned-command-faces-get-their-families.md) 的 Context 后半与决定一至五，[ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md) 决定二信任锚那一条与 Context 里信任锚那一句（按关键词取句，非全文）；票 operator-channel/14、19 全文，10 的做什么、完成判据与完成记录判断项，15 判断项 3 与进展记录里改挡点的那两句；[参数登记册](../product/PILOT-PARAMETER-REGISTER.md) `PAR-GOV-03` 整行，`PAR-INT-08..10` 与 `PAR-GOV-04..07` 各行的开头一段（截取，非整行）；`migrations/pilot_governance/0001` 抬头注，`migrations/access_identity/0001` 抬头注与授予、撤销两表的生效与撤销列（按列名取）、`0002` 的能力面约束、`0003` 抬头注与键。代码读过 `internal/accessidentity` 的 `AdmissionScope` 一族、`WorkFactMinter`、包注释、操作者能力面常量与 `DecisionKind`、`ExternalFactType` 两组词；`internal/pilotgovernance` 的 `AuthorityCoverage` 与领域 `AuthorityInterval`；parcel-shipment `adapters/pilotgovernance` 生产归属适配器的端口、依赖与 `governanceScope`；`cmd/parcel-api` 的 `buildOperatorMinter`、`buildIntegrationClientMinter`、`buildSubmissionOrchestration`、`buildProductionOwnership`、`buildIsolatedWriteAdmission` 与隔离形态的治理常量；各认证方取 `AdmissionRequirement` 的那一句；`internal/architecture` 的跨模块门禁；演示种子 `data/governance/` 各文件的对象范围、能力、事实类型与权威串（区间 01、02、03、07 读过全文，其余按键取），`seed.sh` 治理一段（按关键词）。2026-10-13 22:4x 通道 3 接手（通道 2 会话中断、用户转派）逐条复核引证，改正处记在票 19 分诊节末「接手核对」。没读：ADR-0025、ADR-0091、ADR-0100 全文，ADR-0078，`OperatorMinter` 与 `IntegrationClientMinter` 全文，`access_identity` 0002、0004 迁移，`cmd/parcel-access-register` 各子命令实现，`cmd/parcel-api` 各装配测试正文，`probe-operator-channel.sh`，CONTEXT-MAP 与 GLOSSARY 全文，`PILOT-SCOPE`，登记册其余各行。拿不准的列在文末「越权风险点」。）
 Date: 2026-10-13
 
 ## Context
@@ -78,6 +78,30 @@ Date: 2026-10-13
 6. **PS 生产归属的能力与事实类型词不在本记录内。** 隔离形态今天取 `SYN-CAP/shipment-intake` 与 `SYN-FACT/shipment-request`，那是合成坐标，随隔离形态退场；PS 生产目录立起时要的词同属决定四这一类，归 PS 生产归属那一票定。
 7. **决定四第三项越出票 19 的原地盘**，要动 PS、TF、CC、SA 的认证方各一行；派单方可拆成先行的一小笔。运营决定的能力词取操作者能力面那一个常量，等于认下「准入要求里的能力就是授予所在的能力面」；集成客户端族没有能力面（授予按事实类型登），外部事实那个词因此是新立的。owner 若要治理登记册另有一套与能力面分开的能力词，改的是决定四第三项与认证方各一行。
 8. **对照册的列与子命令照授予的样子推**，而 `access_identity` 0002、0004 迁移与 `parcel-access-register` 的实现没读；与那几处既有纪律有出入的，以实施时核对为准。
+
+## 接受记录（2026-10-13 通道 3）
+
+用户经 IDP 队列授权通道 3 自决，原话「你是系统和业务专家，你来自决吧」。接受方与接手复核引证的是同一通道，读过：本记录全文；票 operator-channel/19 全文；ADR-0100 Context 里信任锚那一句与决定二；ADR-0149 决定四、候选丁与越权风险点 3；ADR-0083 决定一至三；ADR-0150 决定一至三；ADR-0146 决定二；ADR-0151 决定一、三；票 14 判断项 1、2、4，票 15 判断项 3。代码与迁移只按符号与关键词取，取证钉 `b3c8bd46`：`internal/accessidentity` 的 `AdmissionScope` 与 `UnconfiguredAdmissionScope`、操作者能力面常量、三只铸造器判 `Admission` 的那一句、包注释；`NewAuthorityCoverage` 头注；PS 生产归属适配器的 `governanceScope` 与 `SelfAuthority` 头注；`cmd/parcel-api` 两只铸造器、`buildSubmissionOrchestration`、`buildIsolatedWriteAdmission` 的头注与隔离形态常量；`access_identity` `0001` 抬头注与授予、撤销两表的列，`0002` 的能力面约束，`0003` 抬头注；`pilot_governance` `0001` 抬头注；参数登记册 `PAR-GOV-03` 整行；演示种子治理区间的各键。起草方列为「没读」的几项，接受方同样没读。
+
+四个决定逐条：
+
+- 决定一认可。带租户的行落在本就按租户绑定的 `access_identity`，治理登记册照旧没有租户维，ADR-0083 一字不动；对照只换坐标，「谁在写生产」的唯一权威仍是治理区间，ADR-0149 否决候选丁的理由原样成立。丙没有依据、生效区间与历史，PN-08 要的记录能力在它那里答不出。
+- 决定二认可。`Admits` 看不见对象，「一键多范围、任一覆盖即放行」会把试点范围外对象上的写放进来；「至多一个对象范围」是在今天的接口里唯一不越权的键。
+- 决定三认可。权威串回答「本产品是谁」，与发行方、受众同属随部署走的那一类；做成常量就没有「未配置」一态，逐行带串等于让租户的对照决定谁是本产品。PS 只跟参数来源，生产分支的目录照旧为空，答复不变。
+- 决定四认可，含接手复核时随取证改的第三项：ADR-0149 决定四第二条读的维度里那个「能力」，就是 ADR-0151 决定一新增的能力面「运营决定」，PS、TF 认证方今天取的也是同一个串；另立一套治理用的能力词只会多出一张两套词之间的对照。
+
+越权风险点逐条：
+
+1. 认可。对照里的对象范围是不透明引用，与操作者册里的作业范围引用同等地位，本册不解释它。日后 PN-01 若要给试点范围登参与方，由那一票另出记录迁移，本记录不预设。
+2. 认可首版。粒度约束写进登记指引与 `parcel-access-register` 登记子命令的帮助文本（随票 19 做什么第 1 件）。按对象分要改 14 的接口，等首个按线路或客户分批上线、且一行对照装不下的租户出现时另立；首版没有这类形态证据，现在加就是替租户猜（ADR-0146 越权风险点 1）。
+3. 认可。错开的那一段朝拦不朝放；演示种子两本册同一笔登（票 19 做什么第 3 件）。
+4. 照原文保留，不在本记录裁。暂停接不接进准入范围是 PN-08 owner 的事，本记录只照 ADR-0149 决定四第二条读区间；这一格不挡票 19。
+5. 认可。ADR-0150 决定三列为「一字不变」的是缺省朝拦、`SYN-` 前缀门禁、读写两个开关与放行出声，这一条一样不碰，只拒一种自相矛盾的装配，与读写两开关取值不一即拒同形。
+6. 认可。
+7. 认可。能力词一处定义可拆成票 19 里先行的一小笔，派单方定。
+8. 认可，以实施时核对为准：实施方先读 `access_identity` `0002`、`0004` 与 `parcel-access-register` 的授予、撤销子命令，再定对照册的列与子命令。
+
+接受时的改动：决定原文不改。接受之前的引证改正在票 19「分诊」节末「接手核对」。指针：ADR 索引本记录一行；票 operator-channel/19 转 ready-for-agent，头部地盘照「分诊」收窄；票 product-strategy-boundary/15 子票表里 19 那一行。
 
 ## Links
 
