@@ -94,6 +94,7 @@ func newCustomerSupplementLoopFixture(t *testing.T) *customerSupplementLoopFixtu
 		Clock:        systemClock{},
 	})
 	chain := psapplication.NewAdvanceAcceptanceChainHandler(psapplication.AdvanceAcceptanceChainDeps{
+		Requests: base.requests,
 		Reachability: psapplication.NewAdvanceAcceptanceJudgmentHandler(
 			commercial, reachability, base.judgments, base.requests, systemClock{}),
 		FinancialControl: psapplication.NewAdvanceFinancialControlJudgmentHandler(

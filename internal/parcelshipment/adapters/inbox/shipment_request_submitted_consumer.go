@@ -111,9 +111,9 @@ func (consumer *ShipmentRequestSubmittedConsumer) Consume(
 	return consumer.gate.Consume(ctx, envelope)
 }
 
-// advanceAcceptanceChainThrough 把编排的三值结果折成消费门认的两格：形成决定即本份投递
-// 处理完毕，未决即整笔回滚等重投。编排上抛的错误原样上抛——那是端口交回了集合外的答复
-// 或装配缺件，重投改不了它，不该混进未决。
+// advanceAcceptanceChainThrough 把编排的结果折成消费门认的两格：形成决定与版本已换代即本份
+// 投递处理完毕，未决按续办路径折（undecidedDisposition）。编排上抛的错误原样上抛——那是端口
+// 交回了集合外的答复或装配缺件，重投改不了它，不该混进未决。
 //
 // 它是包级函数而不是某个消费者的方法：「委托已提交」与「复核已完成」两个门转交同一个
 // 编排（ADR-0086：两类信封是同一次驱动的两个触发时机），折法各抄一份就会有漂开的那一天，
@@ -128,6 +128,11 @@ func advanceAcceptanceChainThrough(
 		}
 		switch result.Outcome() {
 		case psapplication.AcceptanceChainDecided:
+			return nil
+		case psapplication.AcceptanceChainVersionSuperseded:
+			// 信封指名的版本已被换代：旧任务随新版本转`已停止`（ADR-0045），新版本由「新提交版本已形成」
+			// 信封另行驱动（ADR-0106 Decision 三）。重投一万次版本也不会换回来，回滚只会烧完失败预算——按
+			// 本份投递处理完毕入账，链上什么也没记。
 			return nil
 		case psapplication.AcceptanceChainUndecided:
 			if err := undecidedDisposition(result.ResumePath()); err != nil {

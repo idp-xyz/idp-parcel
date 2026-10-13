@@ -5,6 +5,7 @@ import (
 	"errors"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
 // ErrAcceptanceChainNotAssembled 说明三步里有一步没接上。它与未决分开：未决等的是一个
@@ -40,15 +41,20 @@ func (stage AcceptanceChainStage) String() string {
 	}
 }
 
-// AcceptanceChainOutcome 是推进一整条接受链的处理结果。取值只有两个，与形成决定那一步
-// 同义：本轮形成了决定，或者没形成。链停在哪一步由 Stage 单独交回，不折进结果取值——
-// 折进去就得为每一步各造一个「未决」，而调用方对三者的处置完全相同（回滚重投）。
+// AcceptanceChainOutcome 是推进一整条接受链的处理结果：本轮形成了决定，或者没形成（与形成
+// 决定那一步同义），或者信封指名的提交版本已被换代、这一版没有可判断的了。链停在哪一步由
+// Stage 单独交回，不折进结果取值——折进去就得为每一步各造一个「未决」，而调用方对三者的处置
+// 完全相同（回滚重投）。
+//
+// `版本已换代`单列而不折进未决：未决等的是一个会回来的依赖，旧版本等多久也不会再成为当前
+// 版本，折进未决，消费门会对它回滚重投到失败预算耗尽。
 type AcceptanceChainOutcome uint8
 
 const (
 	AcceptanceChainOutcomeInvalid AcceptanceChainOutcome = iota
 	AcceptanceChainDecided
 	AcceptanceChainUndecided
+	AcceptanceChainVersionSuperseded
 )
 
 func (outcome AcceptanceChainOutcome) String() string {
@@ -57,6 +63,8 @@ func (outcome AcceptanceChainOutcome) String() string {
 		return "DECIDED"
 	case AcceptanceChainUndecided:
 		return "UNDECIDED"
+	case AcceptanceChainVersionSuperseded:
+		return "VERSION_SUPERSEDED"
 	default:
 		return ""
 	}
@@ -123,6 +131,8 @@ func (result AdvanceAcceptanceChainResult) ContinuationReference() domain.Owners
 // AdvanceAcceptanceChainDeps 收拢三步编排。用结构体而不是位置参数，理由与
 // FormAcceptanceDecisionDeps 同：一排同族的处理器在调用点认不出谁是谁。
 type AdvanceAcceptanceChainDeps struct {
+	// Requests 只用来核信封指名的提交版本还是不是委托的当前版本（见 Handle）。
+	Requests         ports.ShipmentRequestRepository
 	Reachability     *AdvanceAcceptanceJudgmentHandler
 	FinancialControl *AdvanceFinancialControlJudgmentHandler
 	Decision         *FormAcceptanceDecisionHandler
@@ -148,19 +158,36 @@ func NewAdvanceAcceptanceChainHandler(deps AdvanceAcceptanceChainDeps) *AdvanceA
 // 判断，缺一条它只会再答一次`尚未决定`，代价是多记一次处理尝试，还把停顿原因换成了
 // 下游那一步的措辞——运维据此会去查决定，而实际停的是上游那条腿。
 //
-// 装配缺件（三步任缺一个）在此响亮报错而不是当作未决：未决是「等一个依赖」，而少接一个
+// 装配缺件（三步与委托仓储任缺一个）在此响亮报错而不是当作未决：未决是「等一个依赖」，而少接一个
 // 编排等着也不会长出来。
 func (handler *AdvanceAcceptanceChainHandler) Handle(
 	ctx context.Context,
 	command AdvanceAcceptanceChainCommand,
 ) (AdvanceAcceptanceChainResult, error) {
-	if handler.deps.Reachability == nil ||
+	if handler.deps.Requests == nil ||
+		handler.deps.Reachability == nil ||
 		handler.deps.FinancialControl == nil ||
 		handler.deps.Decision == nil {
 		return AdvanceAcceptanceChainResult{}, ErrAcceptanceChainNotAssembled
 	}
 	if len(command.DeclaredParcelIDs) == 0 {
 		return AdvanceAcceptanceChainResult{}, ErrAcceptanceChainHasNoMembers
+	}
+
+	// 只判委托的当前提交版本（ADR-0179 决定二、四；ADR-0045「新版本成为唯一待判断版本」）。信封指名的版本
+	// 由发布侧铸信封时定下，委托在`已提交`、未形成决定时却可以换代，于是旧版本那一封重投或迟到时三步都不该走：
+	// 可达性与财务控制会为一个旧任务已`已停止`的版本记判断、占资金；形成决定按命令里的版本读回判断，决定与接受
+	// 基线却落在当前版本上，新版本的申报一次都没判过就可能被接受。
+	//
+	// 读不回委托时不在这里替它作答，照旧往下走：没有委托就谈不上换代，而读不回委托那一格下游各步各有答法
+	// （等待运营登记那一支答`委托读不到`、形成决定那一步报委托查不到）——在这里另答一次，同一种读失败就有了
+	// 两种停法。
+	request, found, err := handler.deps.Requests.FindBySourceIdentity(ctx, command.Identity)
+	if err == nil && found && request.CurrentSubmissionVersion().VersionID() != command.SubmissionVersion {
+		return AdvanceAcceptanceChainResult{
+			outcome: AcceptanceChainVersionSuperseded,
+			state:   request.State(),
+		}, nil
 	}
 
 	// 逐成员推进可达性：命令按成员发起（AdvanceAcceptanceJudgmentCommand 带

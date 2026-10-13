@@ -87,6 +87,7 @@ func newOperatorRegistrationLoopFixtureWith(
 		Clock:        systemClock{},
 	})
 	chain := psapplication.NewAdvanceAcceptanceChainHandler(psapplication.AdvanceAcceptanceChainDeps{
+		Requests: base.requests,
 		Reachability: psapplication.NewAdvanceAcceptanceJudgmentHandler(
 			commercial, synRReachabilityAuthority{t: t}, base.judgments, base.requests, systemClock{}),
 		FinancialControl: psapplication.NewAdvanceFinancialControlJudgmentHandler(

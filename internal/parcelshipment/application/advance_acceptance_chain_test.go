@@ -5,6 +5,7 @@ import (
 	"errors"
 	"slices"
 	"testing"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -56,6 +57,44 @@ func TestTheChainAssessesEachMemberThenControlsThenDecides(t *testing.T) {
 	}
 	if revalidate < firstControl {
 		t.Fatalf("calls = %v；形成决定早于财务控制", fixture.calls)
+	}
+}
+
+// Covers: 票 product-strategy-boundary/27、ADR-0179 决定二与决定四「委托当前提交版本」、ADR-0045「新版本成为唯一
+// 待判断版本」— 提交信封重投按信封里的版本走，委托在其间换了代：旧版本那一封在第一步之前就停下，三步都不走、
+// 一个权威都不问、什么也不记，答`版本已换代`。
+//
+// 走下去的代价是实的：控制会为一个旧任务已`已停止`的版本占客户的资金；形成决定读回的是旧版本记下的判断，决定与
+// 接受基线却落在当前版本上——新版本的申报一次都没判过，委托就可能被接受。
+func TestASupersededVersionIsNotJudgedAgain(t *testing.T) {
+	fixture := newChainFixture(t)
+	superseded := supersededRequest(t)
+	fixture.requests.saved, fixture.requests.sticky = &superseded, true
+
+	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+
+	if result.Outcome() != application.AcceptanceChainVersionSuperseded {
+		t.Fatalf("outcome = %q stage = %q reason = %q, want VERSION_SUPERSEDED",
+			result.Outcome(), result.Stage(), result.PendingReason())
+	}
+	if len(fixture.calls) != 0 {
+		t.Fatalf("calls = %v；为已换代的版本问了权威", fixture.calls)
+	}
+	if fixture.reachability.calls != 0 || fixture.controller.calls != 0 {
+		t.Fatalf("为已换代的版本判了 %d 个成员的可达性、发起了 %d 次资金占用",
+			fixture.reachability.calls, fixture.controller.calls)
+	}
+	if len(fixture.downstream.intents) != 0 {
+		t.Fatal("已换代的版本交出了一份接受决定意图")
+	}
+	if fixture.requests.saved != &superseded {
+		t.Fatal("已换代的版本把委托聚合保存了一遍")
+	}
+	if result.State() != domain.ShipmentRequestSubmitted {
+		t.Fatalf("state = %q；换代不是决定", result.State())
 	}
 }
 
@@ -171,6 +210,7 @@ func TestAnOrchestrationErrorIsRaisedRatherThanFoldedIntoUndecided(t *testing.T)
 // 一路重投到失败预算耗尽，现场看到的是「一直在等」而不是「接线漏了」。
 func TestAnUnassembledChainFailsLoudlyInsteadOfWaiting(t *testing.T) {
 	for name, drop := range map[string]func(*application.AdvanceAcceptanceChainDeps){
+		"requests":          func(deps *application.AdvanceAcceptanceChainDeps) { deps.Requests = nil },
 		"reachability":      func(deps *application.AdvanceAcceptanceChainDeps) { deps.Reachability = nil },
 		"financial control": func(deps *application.AdvanceAcceptanceChainDeps) { deps.FinancialControl = nil },
 		"decision":          func(deps *application.AdvanceAcceptanceChainDeps) { deps.Decision = nil },
@@ -267,6 +307,7 @@ func newChainFixture(t *testing.T) *chainFixture {
 	recorder := &judgmentRequestStore{}
 	clock := fixedClock{at: handlerClockAt}
 	value.deps = application.AdvanceAcceptanceChainDeps{
+		Requests: value.requests,
 		Reachability: application.NewAdvanceAcceptanceJudgmentHandler(
 			value.commercial, value.reachability, recorder, value.requests, clock),
 		FinancialControl: application.NewAdvanceFinancialControlJudgmentHandler(
@@ -319,4 +360,34 @@ func lastCallIndex(calls []string, name string) int {
 		}
 	}
 	return last
+}
+
+// supersededRequest 在 submittedRequest 上经受控补充形成第二版 version-2：成员不变，来源身份换了请求键——补充
+// 必须以自己的来源身份到达，沿用原身份在来源保全层是重放或冲突（ADR-0045）。命令里的 version-1 因此成了旧版本。
+func supersededRequest(t *testing.T) domain.ShipmentRequest {
+	t.Helper()
+	supplementedAt := time.Date(2026, 8, 7, 12, 0, 0, 0, time.UTC)
+	supplement, err := domain.NewSourceSubmissionFingerprint(
+		sourceIdentity(t, "tenant-1", "customer-1", "source-a", "supplement-key-1"),
+		mustValue(t, domain.NewPayloadDigest, "digest-2"),
+		supplementedAt,
+		supplementedAt.Add(time.Second),
+	)
+	if err != nil {
+		t.Fatalf("new supplement fingerprint: %v", err)
+	}
+	superseded, err := submittedRequest(t).FormNewSubmissionVersion(domain.NewSubmissionVersionSpec{
+		VersionID:        mustValue(t, domain.NewSubmissionVersionID, "version-2"),
+		TaskID:           mustValue(t, domain.NewAcceptanceDecisionTaskID, "task-2"),
+		SourceSubmission: supplement,
+		DeclaredParcelIDs: []domain.DeclaredParcelID{
+			mustValue(t, domain.NewDeclaredParcelID, "parcel-1"),
+			mustValue(t, domain.NewDeclaredParcelID, "parcel-2"),
+		},
+		EstablishedAt: supplementedAt.Add(time.Second),
+	})
+	if err != nil {
+		t.Fatalf("form new submission version: %v", err)
+	}
+	return superseded
 }
