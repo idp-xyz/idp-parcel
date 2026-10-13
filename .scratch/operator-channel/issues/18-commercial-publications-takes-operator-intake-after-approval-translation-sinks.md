@@ -1,7 +1,7 @@
 # 18 批文译装下沉后 `/commercial-publications` 换操作者 Intake
 
 Category: enhancement
-Status: ready-for-agent——2026-10-12 20:2x 通道 1 立（派单方裁定），出自 [06](./06-commercial-publication-and-replay-take-operator-identity.md) 完成记录判断项 1：06 把发布路径四口、词表读口与计价回放口换上了操作者渠道，`/commercial-publications` 留在字面量 `UnconfiguredIntake{}` 上，作者报「另立下沉票，或扩本票地盘」待裁，派单方裁另立，即本票。
+Status: in-progress——2026-10-13 22:06 通道 3 认领（派单本卡 ← 通道 1，`task-42392427`），分支 `mcp3-oc18`，基 `b3c8bd46`（开工前 `ls-remote` 核远端 main 仍是它）。此前 ready-for-agent——2026-10-12 20:2x 通道 1 立（派单方裁定），出自 [06](./06-commercial-publication-and-replay-take-operator-identity.md) 完成记录判断项 1：06 把发布路径四口、词表读口与计价回放口换上了操作者渠道，`/commercial-publications` 留在字面量 `UnconfiguredIntake{}` 上，作者报「另立下沉票，或扩本票地盘」待裁，派单方裁另立，即本票。
 Blocked by: 06（本票接在 06 的 `OperatorRegistryIntake` 与认证适配器交回的 `OperatorIdentity` 上；06 进 main 之前不开工）
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`cmd/parcel-commercial` 里把受控批文译成 party-commercial 命令的那一段（下沉出去、受控 CLI 改调下沉后的那一份）；下沉的落点在 party-commercial 的适配器包里，照 [04](./04-registration-write-faces-take-operator-intake.md) 第三、五批「译装先下沉成 `registrationjson`、在线口不另写平行解码」的先例定；`cmd/parcel-api` 端点表里 `/commercial-publications` 那一行与它的装配测试。
