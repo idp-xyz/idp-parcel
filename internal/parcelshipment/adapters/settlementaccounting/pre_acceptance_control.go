@@ -95,9 +95,10 @@ type PreAcceptanceControlAdapterDeps struct {
 	Amounts ControlAmountSource
 }
 
-// NewPreAcceptanceControlAdapter 装配两侧。Scopes 与 Amounts 允许为 nil：Scopes 为 nil 是装配缺口
-// （生产装配总接作用域源），Amounts 为 nil 是「显式未配置」的诚实表达，两者都停在`未形成`，释放报
-// 可重试错误。
+// NewPreAcceptanceControlAdapter 装配两侧。Scopes 与 Amounts 允许为 nil：Scopes 为 nil 是装配缺口，
+// Amounts 为 nil 是「显式未配置」的诚实表达，施加都停在`未形成`；Scopes 为 nil 时释放报可重试错误。
+// 施加那一径的生产装配接作用域源；只接释放半边的装配（cmd/parcel-api）今天留空 Scopes，那里的释放
+// 总报装配缺口，由编排留补偿续办。
 func NewPreAcceptanceControlAdapter(deps PreAcceptanceControlAdapterDeps) *PreAcceptanceControlAdapter {
 	return &PreAcceptanceControlAdapter{
 		apply:   deps.Apply,
