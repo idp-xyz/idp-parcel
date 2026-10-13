@@ -31,8 +31,8 @@ type PolicyBackedControlScopeSource struct {
 	directory  SettlementAccountDirectory
 }
 
-// NewPolicyBackedControlScopeSource 装配两半。directory 为 nil 时作用域停在账户没登记那一格，
-// 留给还没接目录的测试；生产装配传入登记册，空册与没登记的应收行都答未找到。
+// NewPolicyBackedControlScopeSource 装配两半。任一半为 nil 时作用域停在装配缺口那一格，留给还没接
+// 目录的测试；生产装配两半都接，空册与没登记的应收行都答未找到。
 func NewPolicyBackedControlScopeSource(
 	commercial psports.CommercialBasisResolver,
 	directory SettlementAccountDirectory,
@@ -42,9 +42,8 @@ func NewPolicyBackedControlScopeSource(
 
 var _ ControlScopeSource = (*PolicyBackedControlScopeSource)(nil)
 
-// FormControlScope 分三段：解析取回显 → 目录换账户 → 拼作用域。两种「没有」都不是错误，但各报
-// 各的缺口：解析没带回结算政策是一格，目录查无（或没接）是另一格——两格的恢复动作不同，见
-// ControlScopeGap。
+// FormControlScope 分三段：解析取回显 → 目录换账户 → 拼作用域。几种「没有」都不是错误，但各报
+// 各的缺口：解析没带回结算政策、目录查无、两半没接上，恢复动作各不相同，见 ControlScopeGap。
 //
 // 解析标识与作用域同出这一次解析，一并交回。译不动它是编程错误不是未形成：解析既然成了，
 // 标识就在快照的构造期受过护（NewCommercialBasisSnapshot 拒无标识），此处译不过去只可能是
@@ -55,11 +54,8 @@ func (source *PolicyBackedControlScopeSource) FormControlScope(
 	shipmentRequestID psdomain.ShipmentRequestID,
 	submissionVersion psdomain.SubmissionVersionID,
 ) (ControlScope, ControlScopeGap, error) {
-	if source.commercial == nil {
-		return ControlScope{}, ControlScopeSettlementPolicyNotAdopted, nil
-	}
-	if source.directory == nil {
-		return ControlScope{}, ControlScopeAccountNotRegistered, nil
+	if source.commercial == nil || source.directory == nil {
+		return ControlScope{}, ControlScopeNotAssembled, nil
 	}
 
 	resolution, err := source.commercial.ResolveCommercialBasis(ctx, psports.CommercialBasisQuery{
