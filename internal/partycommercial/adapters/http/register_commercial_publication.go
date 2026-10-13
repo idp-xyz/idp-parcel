@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 
+	"go.idp.xyz/idp-parcel/internal/partycommercial/adapters/registrationjson"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/application"
 )
 
@@ -26,15 +27,43 @@ import (
 // CommercialPublicationIntake 把一次已认证的接入请求翻译成发布命令。
 //
 // 它是接口而不是本包内的解析代码（ADR-0085 Decision 二，机制同 ADR-0055）：折叠、批准
-// 角色核对与声明构造门在用例侧已实现，但「渠道原始载荷 → 发布批文项」的翻译与操作者
-// 认证归操作者渠道（ADR-0100），其真 Intake 未就位。受控登记口的译装尤其不能照抄——那一份从
-// 批文里读 tenantId，运维在库网内手跑时那是治理动作，搬到在线口上就是采信自报租户，
-// 穿透 ADR-0003 的隔离边界。未决期间本包不带任何实现，包括「开发用」的采信头部版本。
+// 角色核对与声明构造门在用例侧已实现，「渠道原始载荷 → 发布批文项」的翻译与操作者认证归
+// 操作者渠道（ADR-0100）。真译法是 OperatorRegistryIntake.IntakeCommercialPublication：批文
+// 外壳与逐项翻译就是受控登记口那一份（registrationjson），但租户取认证结果——受控登记口从
+// 批文里读 tenantId，运维在库网内手跑时那是治理动作，搬到在线口上就是采信自报租户，穿透
+// ADR-0003 的隔离边界，所以在线口见那一格在场即拒。
 type CommercialPublicationIntake interface {
 	IntakeCommercialPublication(
 		ctx context.Context,
 		request *http.Request,
 	) (application.PublishCommercialAuthorityCommand, error)
+}
+
+// IntakeCommercialPublication 是操作者渠道在发布口的译法（票 operator-channel/18）。线格式是受控批文的在线镜像：
+// registrationjson 那一份外壳，恰一项，项上不带 tenantId（null 也算自报）。先认证、后解载荷，租户格填认证结果。
+//
+// 批准三格与角色确认照旧从批文取，不从信封来：本口收的是已在别处批准过的批文，认证出的操作者是送件人，不是批准者——
+// 操作者自己的批准路径是待批准载体（ADR-0126 决定三，票 operator-channel/06 判断项 1）。把信封里的主体填进批准格，
+// 等于让送件人替批文上签字的人作证。
+func (intake *OperatorRegistryIntake) IntakeCommercialPublication(ctx context.Context, request *http.Request) (application.PublishCommercialAuthorityCommand, error) {
+	var none application.PublishCommercialAuthorityCommand
+	tenant, document, err := authenticateAndDecode[registrationjson.PublicationBatchDocument](ctx, intake, request, publicationItemTenant)
+	if err != nil {
+		return none, err
+	}
+	if err := exactlyOneItem("items", len(document.Items), len(document.Items)); err != nil {
+		return none, err
+	}
+	return malformedUnless(registrationjson.PublicationCommandForTenant(tenant, document.Items[0]))
+}
+
+// publicationItemTenant 取的是首项上的 tenantId：发布批文的租户在每一项上，外壳没有那一格。多于一项的批文随后被
+// exactlyOneItem 拒，后几项上自报与否不改答复。
+func publicationItemTenant(document registrationjson.PublicationBatchDocument) []byte {
+	if len(document.Items) == 0 {
+		return nil
+	}
+	return document.Items[0].TenantID
 }
 
 // CommercialAuthorityPublisher 是本端点转交的发布编排。事务边界在编排侧给出（版本与

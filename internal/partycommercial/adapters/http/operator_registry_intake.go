@@ -44,7 +44,8 @@ type OperatorRegistryAuthenticator interface {
 
 // OperatorRegistryIntake 是操作者渠道在本包登记写面各口的 Intake（ADR-0100 决定四；票 operator-channel/04）：服务形态、
 // 产品—渠道映射、注册号类型目录、渠道账号使用授权，以及参与方身份族（四类登记、停用与法人资料登记）。运营操作者面发布
-// 路径的预览、载体三口与词表读口也挂它（票 operator-channel/06），译法各在该口自己的文件里。
+// 路径的预览、载体的录入、批准与发布口与词表读口也挂它（票 operator-channel/06），受控批文的在线发布口同（票
+// operator-channel/18），译法各在该口自己的文件里。
 //
 // 线格式照本包在线口的惯例：镜像受控 CLI 的批文，去掉整批的 tenantId——键在场即拒（理由在
 // partyIdentityBatchDocument.TenantID），本口恰一项、别的口的项拒；租户格填认证结果。服务形态、映射与注册号类型的外壳与
@@ -56,6 +57,7 @@ type OperatorRegistryIntake struct {
 }
 
 var (
+	_ CommercialPublicationIntake              = (*OperatorRegistryIntake)(nil)
 	_ ServiceProductFormRegistrationIntake     = (*OperatorRegistryIntake)(nil)
 	_ ProductChannelMappingRegistrationIntake  = (*OperatorRegistryIntake)(nil)
 	_ RegistrationNumberTypeRegistrationIntake = (*OperatorRegistryIntake)(nil)
