@@ -89,10 +89,11 @@ func newCreditBasisHandler(
 	basis ports.CreditBasisView,
 	credit ports.CreditStandingView,
 	exposures ports.CreditExposureLedgerRepository,
+	trials ports.PreAcceptanceTrialSource,
 ) *application.ApplyPreAcceptanceControlHandler {
 	t.Helper()
 	// 金额额度的用例不问基数：零值替身答「有事实、0」，被问到即是测试该失败的信号（下面各用例断言 asked）。
-	return newCreditBasisHandlerOn(t, basis, &ratioBaseDouble{}, credit, exposures)
+	return newCreditBasisHandlerOn(t, basis, &ratioBaseDouble{}, credit, exposures, trials)
 }
 
 func newCreditBasisHandlerOn(
@@ -101,10 +102,14 @@ func newCreditBasisHandlerOn(
 	ratioBases ports.CreditRatioBaseView,
 	credit ports.CreditStandingView,
 	exposures ports.CreditExposureLedgerRepository,
+	trials ports.PreAcceptanceTrialSource,
 ) *application.ApplyPreAcceptanceControlHandler {
 	t.Helper()
 	return mustHandler(t, application.ApplyPreAcceptanceControlDeps{
 		Policy:      &policyDouble{policy: methodPolicy(t, domain.TermsSettlement)},
+		Adoptions:   adopted(t),
+		Trials:      trials,
+		Traces:      &traceDouble{},
 		Balance:     &balanceDouble{},
 		Freezes:     &ledgerDouble{ledger: domain.NewFreezeLedger()},
 		Credit:      credit,
@@ -124,9 +129,9 @@ func TestTheAuthorizedLimitComesFromTheCreditBasisNotTheRegisteredStanding(t *te
 	ratioBases := &ratioBaseDouble{}
 	credit := &creditDouble{standing: standingWith(t, 1_000, 0, false)}
 	exposures := &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()}
-	handler := newCreditBasisHandlerOn(t, basis, ratioBases, credit, exposures)
+	handler := newCreditBasisHandlerOn(t, basis, ratioBases, credit, exposures, estimating(t, 4_000))
 
-	result, err := handler.Handle(context.Background(), command(t, 4_000))
+	result, err := handler.Handle(context.Background(), command(t))
 	if err != nil {
 		t.Fatalf("handle: %v", err)
 	}
@@ -162,9 +167,9 @@ func TestTheExposedAmountStaysWithThisContextsLedger(t *testing.T) {
 	handler := newCreditBasisHandler(t,
 		&creditBasisDouble{basis: amountBasis(t, "credit-1/v1", 10_000)},
 		&creditDouble{standing: standingWith(t, 100_000, 8_000, false)},
-		&exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()})
+		&exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()}, estimating(t, 4_000))
 
-	result, err := handler.Handle(context.Background(), command(t, 4_000))
+	result, err := handler.Handle(context.Background(), command(t))
 	if err != nil {
 		t.Fatalf("handle: %v", err)
 	}
@@ -186,9 +191,10 @@ func TestARatioLimitFoldsOntoTheDeclaredBaseFromThisContextsLedger(t *testing.T)
 	ratioBases := &ratioBaseDouble{minor: 100_000}
 	credit := &creditDouble{standing: standingWith(t, 1, 0, false)}
 	exposures := &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()}
-	handler := newCreditBasisHandlerOn(t, basis, ratioBases, credit, exposures)
+	trials := estimating(t, 4_000)
+	handler := newCreditBasisHandlerOn(t, basis, ratioBases, credit, exposures, trials)
 
-	recorded, err := handler.Handle(context.Background(), command(t, 4_000))
+	recorded, err := handler.Handle(context.Background(), command(t))
 	if err != nil {
 		t.Fatalf("handle: %v", err)
 	}
@@ -206,7 +212,8 @@ func TestARatioLimitFoldsOntoTheDeclaredBaseFromThisContextsLedger(t *testing.T)
 		t.Fatalf("基数被问 %d 次、问的是 %s，want 1 次 POSTED_BALANCE——按政策声明的那一格取数", ratioBases.asked, ratioBases.askedFor)
 	}
 
-	restricted, err := handler.Handle(context.Background(), commandFor(t, "control-2", 30_000))
+	trials.set(t, 30_000)
+	restricted, err := handler.Handle(context.Background(), commandFor(t, "control-2"))
 	if err != nil {
 		t.Fatalf("handle: %v", err)
 	}
@@ -224,9 +231,9 @@ func TestANegativeBaseFoldsToAZeroLimitAndRestricts(t *testing.T) {
 		&creditBasisDouble{basis: ratioBasis(t, "credit-r/v1", 2_500, domain.PostedBalanceBase)},
 		&ratioBaseDouble{minor: -500_000},
 		&creditDouble{standing: standingWith(t, 1, 0, false)},
-		&exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()})
+		&exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()}, estimating(t, 1))
 
-	result, err := handler.Handle(context.Background(), command(t, 1))
+	result, err := handler.Handle(context.Background(), command(t))
 	if err != nil {
 		t.Fatalf("handle: %v", err)
 	}
@@ -264,9 +271,9 @@ func TestCreditBasisGradesEachHaltBeforeReadingTheStanding(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			credit := &creditDouble{standing: standingWith(t, 100_000, 0, false)}
 			exposures := &exposureLedgerDouble{ledger: domain.NewCreditExposureLedger()}
-			handler := newCreditBasisHandlerOn(t, testCase.view, testCase.ratioBases, credit, exposures)
+			handler := newCreditBasisHandlerOn(t, testCase.view, testCase.ratioBases, credit, exposures, estimating(t, 4_000))
 
-			result, err := handler.Handle(context.Background(), command(t, 4_000))
+			result, err := handler.Handle(context.Background(), command(t))
 			if err != nil {
 				t.Fatalf("授信依据那一格被当成技术错误抛出: %v", err)
 			}
@@ -314,6 +321,9 @@ func TestAnyNilDependencyIsRefusedAtConstruction(t *testing.T) {
 	complete := func() application.ApplyPreAcceptanceControlDeps {
 		return application.ApplyPreAcceptanceControlDeps{
 			Policy:      &policyDouble{policy: methodPolicy(t, domain.TermsSettlement)},
+			Adoptions:   adopted(t),
+			Trials:      estimating(t, 4_000),
+			Traces:      &traceDouble{},
 			Balance:     &balanceDouble{},
 			Freezes:     &ledgerDouble{ledger: domain.NewFreezeLedger()},
 			Credit:      &creditDouble{standing: standingWith(t, 10_000, 0, false)},
@@ -325,6 +335,9 @@ func TestAnyNilDependencyIsRefusedAtConstruction(t *testing.T) {
 	}
 	strip := map[string]func(*application.ApplyPreAcceptanceControlDeps){
 		"policy":       func(deps *application.ApplyPreAcceptanceControlDeps) { deps.Policy = nil },
+		"adoptions":    func(deps *application.ApplyPreAcceptanceControlDeps) { deps.Adoptions = nil },
+		"trials":       func(deps *application.ApplyPreAcceptanceControlDeps) { deps.Trials = nil },
+		"traces":       func(deps *application.ApplyPreAcceptanceControlDeps) { deps.Traces = nil },
 		"balance":      func(deps *application.ApplyPreAcceptanceControlDeps) { deps.Balance = nil },
 		"freezes":      func(deps *application.ApplyPreAcceptanceControlDeps) { deps.Freezes = nil },
 		"credit":       func(deps *application.ApplyPreAcceptanceControlDeps) { deps.Credit = nil },

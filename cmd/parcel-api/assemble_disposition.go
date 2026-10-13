@@ -54,8 +54,8 @@ func (disposition transactionalDisposition) Handle(
 // 释放编排与真两账本。处置授权那一格如实是**未配置**：party-commercial 的授权动作词汇今天没有「授权处置」
 // 一格（ADR-0132 越权风险点 2，归 PC 另票），一份处置授权规则登记不出来，翻译适配器的动作守卫也无物可比
 // 对——装配 UnconfiguredAuthorizedDispositionAuthorizer，编排对每一次处置答`授权规则未配置`、什么也不落库，
-// 不判处置人越权也不放行。PC 那一格立起之后在这里换成翻译适配器，其余不动。释放的作用域与金额映射
-// （账户/估价缝）照主动拒绝那一路留 nil：真有占用要释放时适配器报装配缺口 `CONTROL_SCOPE_NOT_ASSEMBLED`、
+// 不判处置人越权也不放行。PC 那一格立起之后在这里换成翻译适配器，其余不动。释放的作用域映射
+// （账户）照主动拒绝那一路留 nil：真有占用要释放时适配器报装配缺口 `CONTROL_SCOPE_NOT_ASSEMBLED`、
 // 编排留补偿续办，不凭空认领别人的钱。
 func buildDispositionOrchestration(db *bentopg.DB) (shipmenthttp.AuthorizedDispositionHandler, error) {
 	requests, err := pspostgres.NewShipmentRequests(db)
@@ -82,7 +82,7 @@ func buildDispositionOrchestration(db *bentopg.DB) (shipmenthttp.AuthorizedDispo
 
 	release := pssettlement.NewPreAcceptanceControlAdapter(pssettlement.PreAcceptanceControlAdapterDeps{
 		Release: saapplication.NewReleasePreAcceptanceControlHandler(freezes, exposures, clock),
-		// Apply 留空：处置只消费释放半边；Scopes/Amounts 留空：实例半边，见函数注释。
+		// Apply 留空：处置只消费释放半边；Scopes 留空：实例半边，见函数注释。
 	})
 
 	handler := shipmentapp.NewDisposeShipmentRequestHandler(shipmentapp.DisposeShipmentRequestDeps{

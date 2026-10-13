@@ -29,7 +29,6 @@ const (
 	reasonScopeNotConfigured              = "CONTROL_SCOPE_NOT_CONFIGURED"
 	reasonScopeSettlementPolicyNotAdopted = "CONTROL_SCOPE_SETTLEMENT_POLICY_NOT_ADOPTED"
 	reasonScopeNotAssembled               = "CONTROL_SCOPE_NOT_ASSEMBLED"
-	reasonAmountNotConfigured             = "CONTROL_AMOUNT_NOT_CONFIGURED"
 )
 
 // ControlScope 是一次控制请求的资金坐标连同它的商业来路。两者装在一个值里而不是分两个
@@ -73,37 +72,27 @@ const (
 	ControlScopeNotAssembled
 )
 
-// ControlAmountSource 形成本次控制要占用的金额（最小币单位）。金额该由估价形成（计价缝），
-// 接通前属实例半边；未配置停在`未形成`，绝不拿零或一个拍脑袋的数去占客户资金。
-type ControlAmountSource interface {
-	FormControlAmount(ctx context.Context, request psports.FinancialControlRequest) (int64, bool, error)
-}
-
 // PreAcceptanceControlAdapter 把 parcel-shipment 的接受前财务控制两个端口接到
 // settlement-accounting 的应用编排上（施加与释放各一个，端口分开的理由在 PS ports 里）。
 type PreAcceptanceControlAdapter struct {
 	apply   *saapplication.ApplyPreAcceptanceControlHandler
 	release *saapplication.ReleasePreAcceptanceControlHandler
 	scopes  ControlScopeSource
-	amounts ControlAmountSource
 }
 
 type PreAcceptanceControlAdapterDeps struct {
 	Apply   *saapplication.ApplyPreAcceptanceControlHandler
 	Release *saapplication.ReleasePreAcceptanceControlHandler
 	Scopes  ControlScopeSource
-	Amounts ControlAmountSource
 }
 
-// NewPreAcceptanceControlAdapter 装配两侧。Scopes 与 Amounts 允许为 nil：Scopes 为 nil 是装配缺口，
-// 施加停在`未形成`、报 CONTROL_SCOPE_NOT_ASSEMBLED，释放同码交可重试错误；Amounts 为 nil 时施加停在
-// `未形成`、报 CONTROL_AMOUNT_NOT_CONFIGURED，释放不问金额。
+// NewPreAcceptanceControlAdapter 装配两侧。Scopes 允许为 nil：那是装配缺口，施加停在`未形成`、报
+// CONTROL_SCOPE_NOT_ASSEMBLED，释放同码交可重试错误。
 func NewPreAcceptanceControlAdapter(deps PreAcceptanceControlAdapterDeps) *PreAcceptanceControlAdapter {
 	return &PreAcceptanceControlAdapter{
 		apply:   deps.Apply,
 		release: deps.Release,
 		scopes:  deps.Scopes,
-		amounts: deps.Amounts,
 	}
 }
 
@@ -124,8 +113,9 @@ func controlRequestIdentity(
 	return shipmentRequestID.String() + "/" + submissionVersion.String()
 }
 
-// ApplyPreAcceptanceFinancialControl 执行施加半边：作用域与金额由消费方形成（实例半边），
-// 交提供方执行控制，再把封闭答复译回本上下文的两层代数。
+// ApplyPreAcceptanceFinancialControl 执行施加半边：作用域由消费方形成，交提供方执行控制，再把封闭
+// 答复译回本上下文的两层代数。金额不在这一侧：提供方按它的采用登记形成估价（ADR-0179 决定一），本侧
+// 只交委托与提交版本。
 func (adapter *PreAcceptanceControlAdapter) ApplyPreAcceptanceFinancialControl(
 	ctx context.Context,
 	request psports.FinancialControlRequest,
@@ -153,18 +143,7 @@ func (adapter *PreAcceptanceControlAdapter) ApplyPreAcceptanceFinancialControl(
 			ErrUntranslatableAnswer, uint8(gap))
 	}
 
-	if adapter.amounts == nil {
-		return notFormed(reasonAmountNotConfigured)
-	}
-	amount, formedAmount, err := adapter.amounts.FormControlAmount(ctx, request)
-	if err != nil {
-		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("form control amount: %w", err)
-	}
-	if !formedAmount {
-		return notFormed(reasonAmountNotConfigured)
-	}
-
-	command, err := applyCommandFor(request, controlScope, amount)
+	command, err := applyCommandFor(request, controlScope)
 	if err != nil {
 		return psports.PreAcceptanceControlAssessment{}, err
 	}
@@ -235,14 +214,14 @@ func (adapter *PreAcceptanceControlAdapter) ReleasePreAcceptanceControl(
 func applyCommandFor(
 	request psports.FinancialControlRequest,
 	scope ControlScope,
-	amount int64,
 ) (saapplication.ApplyPreAcceptanceControlCommand, error) {
 	identity := controlRequestIdentity(request.ShipmentRequestID, request.SubmissionVersion)
 	command := saapplication.ApplyPreAcceptanceControlCommand{
-		TenantID:    tenantFor(request.Identity),
-		Scope:       scope.Settlement,
-		AmountMinor: amount,
-		Resolution:  scope.Resolution,
+		TenantID:          tenantFor(request.Identity),
+		Scope:             scope.Settlement,
+		ShipmentRequest:   request.ShipmentRequestID.String(),
+		SubmissionVersion: request.SubmissionVersion.String(),
+		Resolution:        scope.Resolution,
 	}
 	if requestID, err := sadomain.NewControlRequestID(identity); err == nil {
 		command.RequestID = requestID
@@ -362,6 +341,24 @@ func notFormedOutcomeFor(reason saapplication.NotFormedReason) (psports.PreAccep
 		return psports.PreAcceptanceControlNotFormed, nil
 	case saapplication.CreditRatioBaseNotEstablished:
 		// 等的是事实出现（运营余额、有效对账单），不是一次登记。
+		return psports.PreAcceptanceControlNotFormed, nil
+	case saapplication.ControlAmountNotConfigured:
+		// 采用册上没有这一户。登记采用行时同一事务交信封，续办门已在；挪进`未配置`与纵向用例同一笔落（票
+		// product-strategy-boundary/25 第 6 条后半）。
+		return psports.PreAcceptanceControlNotFormed, nil
+	case saapplication.EstimateAdoptionUnavailable,
+		saapplication.EstimateTrialsUnavailable,
+		saapplication.EstimateTraceUnavailable:
+		return psports.PreAcceptanceControlNotFormed, nil
+	case saapplication.EstimatePriceCardNotConfigured,
+		saapplication.EstimatePriceCardConflict,
+		saapplication.EstimateSubmissionNotVisible,
+		saapplication.EstimateDeclarationIncomplete,
+		saapplication.EstimateHasNoTrial,
+		saapplication.EstimateTrialWithoutTotal,
+		saapplication.EstimateCurrencyMismatch,
+		saapplication.EstimateNotPositive:
+		// 补价卡、补件或改卡都推得动它们，但没有一样会发信封来重驱这份委托：挪到`未配置`只换来一次没人来推的等待。
 		return psports.PreAcceptanceControlNotFormed, nil
 	default:
 		return psports.PreAcceptanceControlOutcomeInvalid, fmt.Errorf("%w: not-formed reason %d",

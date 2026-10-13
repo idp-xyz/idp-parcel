@@ -57,7 +57,7 @@ func (withdrawal transactionalWithdrawal) Handle(
 //
 //   - 撤回授权的请求映射（法人/权限等级/商业范围/时点，`PAR-COM-14`）nil——适配器答
 //     未形成，编排如实停在`撤回授权不可用`，不代拟坐标也不冒充`授权规则未配置`；
-//   - 释放的作用域与金额映射（账户/估价缝）nil——今天判断册上不存在`已冻结`结果，释放
+//   - 释放的作用域映射（账户）nil——今天判断册上不存在`已冻结`结果，释放
 //     根本不会被发起；真有旧冻结要释放时适配器报装配缺口 `CONTROL_SCOPE_NOT_ASSEMBLED`、
 //     编排留补偿续办，不凭空认领别人的钱。
 //
@@ -101,7 +101,7 @@ func buildWithdrawalOrchestration(db *bentopg.DB) (shipmenthttp.WithdrawalHandle
 	release := pssettlement.NewPreAcceptanceControlAdapter(pssettlement.PreAcceptanceControlAdapterDeps{
 		Release: saapplication.NewReleasePreAcceptanceControlHandler(freezes, exposures, clock),
 		// Apply 留空：撤回只消费释放半边，本装配不把施加口交给任何人；
-		// Scopes/Amounts 留空：实例半边，见函数注释。
+		// Scopes 留空：实例半边，见函数注释。
 	})
 
 	handler := shipmentapp.NewWithdrawShipmentRequestHandler(shipmentapp.WithdrawShipmentRequestDeps{

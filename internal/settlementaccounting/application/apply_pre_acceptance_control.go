@@ -74,6 +74,22 @@ const (
 	// 两格不并成一格：并了就答不出该等谁。
 	CreditRatioBaseUnavailable
 	CreditRatioBaseNotEstablished
+	// 以下是估价那一口（ADR-0179 决定一、二、五）。ControlAmountNotConfigured 是采用册上没有这一户：等运营登记一行采用，登记与
+	// 登记行同一事务交信封来重驱；不默认形态，不拿零顶。三个 *Unavailable 是采用册、试算与留痕读写不通，等重试。
+	ControlAmountNotConfigured
+	EstimateAdoptionUnavailable
+	EstimateTrialsUnavailable
+	EstimateTraceUnavailable
+	// 试算答了、估价没形成，按停在哪一格分开：选卡两格、提交版本不可见、缺件，以及决定二的四种合计停法。恢复动作多半相同（补
+	// 价卡、补件或改卡），分开是为了留下停在哪里——不拿零、部分合计或换算顶替哪一格。
+	EstimatePriceCardNotConfigured
+	EstimatePriceCardConflict
+	EstimateSubmissionNotVisible
+	EstimateDeclarationIncomplete
+	EstimateHasNoTrial
+	EstimateTrialWithoutTotal
+	EstimateCurrencyMismatch
+	EstimateNotPositive
 )
 
 func (reason NotFormedReason) String() string {
@@ -100,6 +116,30 @@ func (reason NotFormedReason) String() string {
 		return "CREDIT_RATIO_BASE_UNAVAILABLE"
 	case CreditRatioBaseNotEstablished:
 		return "CREDIT_RATIO_BASE_NOT_ESTABLISHED"
+	case ControlAmountNotConfigured:
+		return "CONTROL_AMOUNT_NOT_CONFIGURED"
+	case EstimateAdoptionUnavailable:
+		return "ESTIMATE_ADOPTION_UNAVAILABLE"
+	case EstimateTrialsUnavailable:
+		return "ESTIMATE_TRIALS_UNAVAILABLE"
+	case EstimateTraceUnavailable:
+		return "ESTIMATE_TRACE_UNAVAILABLE"
+	case EstimatePriceCardNotConfigured:
+		return "ESTIMATE_PRICE_CARD_NOT_CONFIGURED"
+	case EstimatePriceCardConflict:
+		return "ESTIMATE_PRICE_CARD_CONFLICT"
+	case EstimateSubmissionNotVisible:
+		return "ESTIMATE_SUBMISSION_NOT_VISIBLE"
+	case EstimateDeclarationIncomplete:
+		return "ESTIMATE_DECLARATION_INCOMPLETE"
+	case EstimateHasNoTrial:
+		return "ESTIMATE_HAS_NO_TRIAL"
+	case EstimateTrialWithoutTotal:
+		return "ESTIMATE_TRIAL_WITHOUT_TOTAL"
+	case EstimateCurrencyMismatch:
+		return "ESTIMATE_CURRENCY_MISMATCH"
+	case EstimateNotPositive:
+		return "ESTIMATE_NOT_POSITIVE"
 	default:
 		return ""
 	}
@@ -113,21 +153,24 @@ func (reference ContinuationReference) String() string {
 	return reference.value
 }
 
+// ApplyPreAcceptanceControlCommand 不带金额：金额由本上下文按采用登记形成估价（ADR-0179 决定一），调用方交的是要为哪份委托的
+// 哪一版控制。ShipmentRequest 与 SubmissionVersion 是 parcel-shipment 的标识原样，本上下文不解释，只拿去向计价要试算。
 type ApplyPreAcceptanceControlCommand struct {
-	TenantID    domain.TenantID
-	RequestID   domain.ControlRequestID
-	Scope       domain.SettlementScope
-	AmountMinor int64
-	Association domain.BusinessAssociationReference
-	AsOf        domain.ControlAsOf
+	TenantID          domain.TenantID
+	RequestID         domain.ControlRequestID
+	Scope             domain.SettlementScope
+	ShipmentRequest   string
+	SubmissionVersion string
+	Association       domain.BusinessAssociationReference
+	AsOf              domain.ControlAsOf
 	// Resolution 回指调用方那次商业解析，控制策略视图凭它向商业侧提问
 	// （sa-preacceptance-policy-view/01 裁决）。作用域与它同源：作用域正是从这次解析的
 	// 结算政策回显派生的，所以要求调用方一并带上不是多一次索取，是把已有的那一份写明。
 	Resolution domain.CommercialResolutionReference
 }
 
-// minimumIdentityEstablished 在读任何权威之前判断该不该读。金额算在受理条件里而不留给
-// 领域构造期：非正数金额的请求根本不该去读这个客户的余额，而一次已经发出的读取收不回来。
+// minimumIdentityEstablished 在读任何权威之前判断该不该读。委托与提交版本算在受理条件里：少了它们
+// 试算无从问起，估价那一口答出的任何一格都会是假话，而那时控制策略与采用册已经读过了。
 //
 // 商业解析回指同理算在受理条件里，而且理由更硬：少了它，控制策略视图根本无从提问，
 // 而它答出的任何一格都会是假话——`未登记`会把「没问成」说成「商业侧没登记过」，等来的
@@ -138,14 +181,17 @@ func (command ApplyPreAcceptanceControlCommand) minimumIdentityEstablished() boo
 		command.Scope.LegalEntity().String() != "" &&
 		command.Scope.Account().String() != "" &&
 		command.Scope.Currency().String() != "" &&
+		strings.TrimSpace(command.ShipmentRequest) != "" &&
+		strings.TrimSpace(command.SubmissionVersion) != "" &&
 		command.Association.String() != "" &&
 		command.AsOf.Valid() &&
-		command.AmountMinor > 0 &&
 		command.Resolution.String() != ""
 }
 
 type ApplyPreAcceptanceControlResult struct {
 	outcome       ControlOutcome
+	estimate      domain.PreAcceptanceEstimate
+	hasEstimate   bool
 	freeze        domain.FundsFreeze
 	hasFreeze     bool
 	exposure      domain.CreditExposure
@@ -186,6 +232,12 @@ func (executed ExecutedControl) Restricted() bool {
 
 func (result ApplyPreAcceptanceControlResult) Outcome() ControlOutcome {
 	return result.outcome
+}
+
+// Estimate 是本次各控制项共用的那一份估价（ADR-0179 决定一、六），只在`已执行`时给出：冻结与暴露的金额都出自它，它也已随
+// 控制结果留痕。`无控制`不形成估价——合同不要求控制时连客户的申报都不该读。
+func (result ApplyPreAcceptanceControlResult) Estimate() (domain.PreAcceptanceEstimate, bool) {
+	return result.estimate, result.hasEstimate
 }
 
 // Freeze 只在 PREPAID_FREEZE 那一项实际执行过时给出，`无控制`、冲突、未受理与待判断一律没有。
@@ -261,6 +313,9 @@ func (result ApplyPreAcceptanceControlResult) ContinuationReference() Continuati
 
 type ApplyPreAcceptanceControlHandler struct {
 	policy      ports.PreAcceptanceControlPolicyView
+	adoptions   ports.PreAcceptanceEstimateAdoptionView
+	trials      ports.PreAcceptanceTrialSource
+	traces      ports.PreAcceptanceEstimateTraces
 	balance     ports.OperationalBalanceView
 	ledger      ports.FreezeLedgerRepository
 	credit      ports.CreditStandingView
@@ -274,9 +329,13 @@ type ApplyPreAcceptanceControlHandler struct {
 // 要求两项控制（ADR-0115 允许的组合），装配时不知道租户会登记哪一种，缺任何一件都会在第一笔命中
 // 那条路的委托到达时 panic。CreditBasis 是账期分支的授信额度来源（ADR-0127 决定四）；RatioBases 是
 // 比例额度的基数在本上下文账本里的取值（ADR-0129 决定三）——额度是比例时没有它折不出金额，与别的
-// 依赖同一道构造门。
+// 依赖同一道构造门。Adoptions、Trials、Traces 是估价那一口（ADR-0179）：两条路都要金额，金额只从
+// 估价来。
 type ApplyPreAcceptanceControlDeps struct {
 	Policy      ports.PreAcceptanceControlPolicyView
+	Adoptions   ports.PreAcceptanceEstimateAdoptionView
+	Trials      ports.PreAcceptanceTrialSource
+	Traces      ports.PreAcceptanceEstimateTraces
 	Balance     ports.OperationalBalanceView
 	Freezes     ports.FreezeLedgerRepository
 	Credit      ports.CreditStandingView
@@ -300,6 +359,9 @@ func NewApplyPreAcceptanceControlHandler(deps ApplyPreAcceptanceControlDeps) (*A
 		missing bool
 	}{
 		{"control policy view", deps.Policy == nil},
+		{"pre-acceptance estimate adoption view", deps.Adoptions == nil},
+		{"pre-acceptance trial source", deps.Trials == nil},
+		{"pre-acceptance estimate traces", deps.Traces == nil},
 		{"operational balance view", deps.Balance == nil},
 		{"freeze ledger repository", deps.Freezes == nil},
 		{"credit standing view", deps.Credit == nil},
@@ -314,6 +376,9 @@ func NewApplyPreAcceptanceControlHandler(deps ApplyPreAcceptanceControlDeps) (*A
 	}
 	return &ApplyPreAcceptanceControlHandler{
 		policy:      deps.Policy,
+		adoptions:   deps.Adoptions,
+		trials:      deps.Trials,
+		traces:      deps.Traces,
 		balance:     deps.Balance,
 		ledger:      deps.Freezes,
 		credit:      deps.Credit,
@@ -368,8 +433,21 @@ func (handler *ApplyPreAcceptanceControlHandler) Handle(
 
 	// 一次请求的所有控制项共用一个控制时刻：它们是同一次接受前控制的几步，不是几次控制。
 	controlledAt := handler.clock.Now()
+
+	// 金额先于任何一项控制形成，且只形成一次：本次各控制项占的是同一个金额（ADR-0179 决定一）。估价在策略之后——合同不要求
+	// 控制时连客户的申报都不该读——在两本账之前：估价没形成，哪本账都不该碰。
+	estimate, halted, err := handler.formEstimate(ctx, command, controlledAt)
+	if err != nil {
+		return ApplyPreAcceptanceControlResult{}, err
+	}
+	if halted != nil {
+		return *halted, nil
+	}
+	amountMinor := estimate.TotalMinor()
 	result := ApplyPreAcceptanceControlResult{
 		outcome:       ControlApplied,
+		estimate:      estimate,
+		hasEstimate:   true,
 		jointPass:     policy.JointPassCondition(),
 		controlPolicy: policy.ControlPolicy(),
 		method:        policy.Method(),
@@ -387,9 +465,9 @@ func (handler *ApplyPreAcceptanceControlHandler) Handle(
 		var err error
 		switch item.Kind() {
 		case domain.PrepaidFreezeControl:
-			step, halted, err = handler.freezeFunds(ctx, command, controlledAt)
+			step, halted, err = handler.freezeFunds(ctx, command, amountMinor, controlledAt)
 		case domain.CreditCheckControl:
-			step, halted, err = handler.exposeCredit(ctx, command, controlledAt)
+			step, halted, err = handler.exposeCredit(ctx, command, amountMinor, controlledAt)
 		default:
 			return ApplyPreAcceptanceControlResult{}, fmt.Errorf(
 				"pre-acceptance control: unhandled control kind %d", uint8(item.Kind()))
@@ -433,11 +511,127 @@ type controlStep struct {
 	restricted   bool
 }
 
+// formEstimate 按本户的采用行形成本次控制金额并留痕（ADR-0179 决定二、五、六）。第二个返回值非 nil 表示整个请求停在这一步。
+//
+// 采用行按（租户、作用域账户）查：册上没有这一户答金额未配置，不默认形态、不拿零顶。试算按采用行的计价范围、作用域的币种与控制
+// 判断时点要；合计与停法在领域。留痕先于两本账写、与它们同一事务：一次落了库的冻结或暴露，必有说得出它金额来历的那一行。同一
+// 请求身份带另一份估价是冲突，与两本账同一条判据——那一次控制的金额已经有了出处，不拿第二份出处顶它。
+func (handler *ApplyPreAcceptanceControlHandler) formEstimate(
+	ctx context.Context,
+	command ApplyPreAcceptanceControlCommand,
+	controlledAt time.Time,
+) (domain.PreAcceptanceEstimate, *ApplyPreAcceptanceControlResult, error) {
+	none := domain.PreAcceptanceEstimate{}
+	adoption, adopted, err := handler.adoptions.FindAdoption(ctx, command.TenantID, command.Scope.Account())
+	if err != nil {
+		return none, handler.haltNotFormed(command, EstimateAdoptionUnavailable), nil
+	}
+	if !adopted {
+		return none, handler.haltNotFormed(command, ControlAmountNotConfigured), nil
+	}
+
+	at := command.AsOf.At()
+	answer, err := handler.trials.FormPreAcceptanceTrials(ctx, ports.PreAcceptanceTrialQuery{
+		Tenant:            command.TenantID,
+		PricingScope:      adoption.PricingScope(),
+		ShipmentRequest:   command.ShipmentRequest,
+		SubmissionVersion: command.SubmissionVersion,
+		At:                at,
+		Currency:          command.Scope.Currency(),
+	})
+	if err != nil {
+		if errors.Is(err, ports.ErrPreAcceptanceTrialsUnavailable) {
+			return none, handler.haltNotFormed(command, EstimateTrialsUnavailable), nil
+		}
+		// 端口只约定「读不回」这一种可重试错误，别的都是消费侧适配器译坏了。
+		return none, nil, fmt.Errorf("form pre-acceptance estimate: %w", err)
+	}
+	reason, stopped, err := trialStopReason(answer.Outcome)
+	if err != nil {
+		return none, nil, err
+	}
+	if stopped {
+		return none, handler.haltNotFormed(command, reason), nil
+	}
+
+	estimate, gap, err := domain.FormPerParcelSellTrialSum(adoption, answer.PriceCard, command.Scope.Currency(), answer.Trials)
+	if err != nil {
+		// 采用行过了构造门、价卡引用在已形成那一格必有值，走到这里是编程错误。
+		return none, nil, fmt.Errorf("form pre-acceptance estimate: %w", err)
+	}
+	reason, stopped, err = estimateGapReason(gap)
+	if err != nil {
+		return none, nil, err
+	}
+	if stopped {
+		return none, handler.haltNotFormed(command, reason), nil
+	}
+
+	effect, err := handler.traces.RecordEstimate(ctx, ports.PreAcceptanceEstimateTrace{
+		Tenant:            command.TenantID,
+		Scope:             command.Scope,
+		Request:           command.RequestID,
+		ShipmentRequest:   command.ShipmentRequest,
+		SubmissionVersion: command.SubmissionVersion,
+		At:                at,
+		Estimate:          estimate,
+		RecordedAt:        controlledAt,
+	})
+	if err != nil {
+		return none, handler.haltNotFormed(command, EstimateTraceUnavailable), nil
+	}
+	switch effect {
+	case ports.PreAcceptanceEstimateTraceRecorded, ports.PreAcceptanceEstimateTraceReplay:
+		return estimate, nil, nil
+	case ports.PreAcceptanceEstimateTraceConflict:
+		return none, &ApplyPreAcceptanceControlResult{outcome: ControlRequestConflict}, nil
+	default:
+		return none, nil, fmt.Errorf("form pre-acceptance estimate: unhandled trace effect %d", effect)
+	}
+}
+
+// trialStopReason 把试算那一侧的格逐一落到未形成原因上；已形成交回 stopped=false。逐取值列出、default 报错（ADR-0025）。
+func trialStopReason(outcome ports.PreAcceptanceTrialOutcome) (NotFormedReason, bool, error) {
+	switch outcome {
+	case ports.PreAcceptanceTrialsFormed:
+		return NotFormedReasonNone, false, nil
+	case ports.PreAcceptanceTrialsIncomplete:
+		return EstimateDeclarationIncomplete, true, nil
+	case ports.PreAcceptanceTrialPriceCardNotConfigured:
+		return EstimatePriceCardNotConfigured, true, nil
+	case ports.PreAcceptanceTrialPriceCardConflict:
+		return EstimatePriceCardConflict, true, nil
+	case ports.PreAcceptanceTrialSubmissionNotVisible:
+		return EstimateSubmissionNotVisible, true, nil
+	default:
+		return NotFormedReasonNone, false, fmt.Errorf("form pre-acceptance estimate: unhandled trial outcome %d", outcome)
+	}
+}
+
+// estimateGapReason 同上，落的是领域合计那一步的停法。
+func estimateGapReason(gap domain.PreAcceptanceEstimateGap) (NotFormedReason, bool, error) {
+	switch gap {
+	case domain.PreAcceptanceEstimateFormed:
+		return NotFormedReasonNone, false, nil
+	case domain.PreAcceptanceEstimateHasNoTrial:
+		return EstimateHasNoTrial, true, nil
+	case domain.PreAcceptanceEstimateTrialWithoutTotal:
+		return EstimateTrialWithoutTotal, true, nil
+	case domain.PreAcceptanceEstimateCurrencyMismatch:
+		return EstimateCurrencyMismatch, true, nil
+	case domain.PreAcceptanceEstimateNotPositive:
+		return EstimateNotPositive, true, nil
+	default:
+		return NotFormedReasonNone, false, fmt.Errorf("form pre-acceptance estimate: unhandled estimate gap %d", gap)
+	}
+}
+
 // freezeFunds 执行 PREPAID_FREEZE 一项：读运营余额、在冻结账本上占用金额。第二个返回值非 nil
 // 表示整个请求要停在这一步（待判断 / 冲突 / 未受理），调用方原样交回。
 func (handler *ApplyPreAcceptanceControlHandler) freezeFunds(
 	ctx context.Context,
 	command ApplyPreAcceptanceControlCommand,
+	amountMinor int64,
 	controlledAt time.Time,
 ) (controlStep, *ApplyPreAcceptanceControlResult, error) {
 	balance, err := handler.balance.LoadBalance(ctx, command.TenantID, command.Scope)
@@ -453,7 +647,7 @@ func (handler *ApplyPreAcceptanceControlHandler) freezeFunds(
 	request, err := domain.NewFreezeRequest(
 		command.RequestID,
 		command.Scope,
-		command.AmountMinor,
+		amountMinor,
 		command.Association,
 		controlledAt,
 	)
@@ -489,6 +683,7 @@ func (handler *ApplyPreAcceptanceControlHandler) freezeFunds(
 func (handler *ApplyPreAcceptanceControlHandler) exposeCredit(
 	ctx context.Context,
 	command ApplyPreAcceptanceControlCommand,
+	amountMinor int64,
 	controlledAt time.Time,
 ) (controlStep, *ApplyPreAcceptanceControlResult, error) {
 	basis, configured, err := handler.creditBasis.LoadCreditBasis(
@@ -526,7 +721,7 @@ func (handler *ApplyPreAcceptanceControlHandler) exposeCredit(
 	request, err := domain.NewExposureRequest(
 		command.RequestID,
 		command.Scope,
-		command.AmountMinor,
+		amountMinor,
 		command.Association,
 		controlledAt,
 	)
@@ -608,8 +803,9 @@ func (handler *ApplyPreAcceptanceControlHandler) notFormed(
 	}
 }
 
-// continuationFor 由请求身份、作用域、金额与原因共同派生，因此同一请求因同一原因停滞时拿到
-// 的引用始终相同——这正是调用方能查询原次尝试而不必靠猜的原因。
+// continuationFor 由请求身份、作用域、委托与提交版本和原因共同派生，因此同一请求因同一原因停滞时
+// 拿到的引用始终相同——这正是调用方能查询原次尝试而不必靠猜的原因。金额不在摘要里：它是本上下文
+// 按这几格形成的，停下的请求多半还没有金额。
 //
 // 商业解析回指也在摘要里：它决定策略视图问到的是哪一份合同，换了回指就是换了一次问答，
 // 两者共用一条续办引用会让续办方按引用查回来的是另一份商业依据下的停摆。
@@ -621,7 +817,8 @@ func continuationFor(command ApplyPreAcceptanceControlCommand, reason NotFormedR
 		command.Scope.LegalEntity().String(),
 		command.Scope.Account().String(),
 		command.Scope.Currency().String(),
-		fmt.Sprint(command.AmountMinor),
+		command.ShipmentRequest,
+		command.SubmissionVersion,
 		command.Association.String(),
 		command.AsOf.Semantic().String(),
 		command.AsOf.StrategyVersion().String(),

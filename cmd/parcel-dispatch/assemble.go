@@ -30,6 +30,7 @@ import (
 	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
 	ppidentity "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/identity"
 	ppinbox "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/inbox"
+	ppshipment "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/parcelshipment"
 	pppostgres "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres"
 	ppsettlement "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/settlementaccounting"
 	pptransport "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/transportfulfillment"
@@ -1039,8 +1040,8 @@ const operatorRegistrationRedrivePageSize = 200
 //     租户在哪格采用就在哪格形成，没采用的格答`未配置`；
 //   - 可达性闭包标识从本轮已采用的商业解析回指（ADR-0156）；
 //   - 结算账户目录读结算账户登记册：册上没有与这次解析回显相符的应收账户时，控制停在
-//     `CONTROL_SCOPE_NOT_CONFIGURED`，不代拟账户。控制金额源（ControlAmountSource）仍为 nil
-//     ——停在 `CONTROL_AMOUNT_NOT_CONFIGURED`，不拿零去占客户资金。
+//     `CONTROL_SCOPE_NOT_CONFIGURED`，不代拟账户。控制金额由结算按受理前估价采用册形成（ADR-0179）：
+//     册上没有这一户时停在 `SA-CONTROL_AMOUNT_NOT_CONFIGURED`，不拿零去占客户资金。
 //
 // 解析键登记面（Keys）反而接真：它是本上下文自己的登记表，`parcel-commercial
 // register-resolution-key` 已经能往里写，空册时按「显式未配置」答`解析未决`。接上它与留
@@ -1295,7 +1296,9 @@ func acceptanceReachability(
 //
 // 作用域源接 PolicyBackedControlScopeSource。账户目录是结算账户登记册：空册与「这一组
 // 应收账户没登记」都答 `CONTROL_SCOPE_NOT_CONFIGURED`，差别只在租户有没有登过别的账户。
-// 控制金额源仍留 nil，不得为验它造一份估价。
+//
+// 控制金额是 SA 施加编排自己形成的估价（ADR-0179 决定一）：采用册读口、受理前试算口（preAcceptanceTrials）
+// 与估价留痕册三件都接真。采用册空着就停在金额未配置——那一行是租户取值，这里不登，也不为验它造一份。
 //
 // 它与三条判断腿共用同一个商业依据适配器：作用域从**那一次**解析的结算政策回显派生
 // （ADR-0044/0047 接通的缝），另建一个解析入口会给出第二次解析的机会，而施加与释放两径
@@ -1347,8 +1350,23 @@ func acceptanceFinancialControl(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: credit ratio bases: %w", err)
 	}
+	adoptions, err := sapostgres.NewPreAcceptanceEstimateAdoptions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance estimate adoptions: %w", err)
+	}
+	trials, err := preAcceptanceTrials(db, clock)
+	if err != nil {
+		return nil, err
+	}
+	traces, err := sapostgres.NewPreAcceptanceEstimateTraces(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance estimate traces: %w", err)
+	}
 	apply, err := saapplication.NewApplyPreAcceptanceControlHandler(saapplication.ApplyPreAcceptanceControlDeps{
 		Policy:      policy,
+		Adoptions:   adoptions,
+		Trials:      trials,
+		Traces:      traces,
 		Balance:     balances,
 		Freezes:     freezes,
 		Credit:      standings,
@@ -1375,8 +1393,70 @@ func acceptanceFinancialControl(
 			commercial,
 			directory,
 		),
-		// Amounts 留空：估价缝属实例半边，见 acceptanceChainConsumer 的注释。
 	}), nil
+}
+
+// preAcceptanceTrialEvidence 是受理前试算评价的证据层级，由装配声明（ADR-0179 决定四）。取 S 的理由与
+// evaluationRequestFormationEvidence 同一条，将来要改的也是同一处：让证据层级按租户实例从登记册取，而不是把常量翻成 P。
+const preAcceptanceTrialEvidence = ppdomain.EvidenceSynthetic
+
+// preAcceptanceTrials 接结算的受理前试算口（ADR-0179 决定一、三、四）：SA 的 PP 消费侧适配器 → PP「按委托提交版本形成受理前
+// 试算」入口 → 在用 SELL·客户费用价卡解析、PS 提交版本申报读口（经 PP 的 PS 消费侧适配器）与对给定价卡形成试算的入口。补齐读数
+// 那两对与正式评价（formEvaluationOnEvaluationRequestConsumer）同源同形：估价与随后的客户费用按同一版本清单作答，靠的就是这一点。
+// 这条链上没有评价库写口与交付口：试算只算不存、不交付（ADR-0152 决定二）。
+func preAcceptanceTrials(db *bentopg.DB, clock systemClock) (*sapricing.PreAcceptanceTrials, error) {
+	cards, err := pppostgres.NewPriceCards(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance price card in-force resolver: %w", err)
+	}
+	shipments, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance submission version declarations: %w", err)
+	}
+	declarations, err := ppshipment.NewSubmissionDeclarations(shipments)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance submission declaration view: %w", err)
+	}
+	seriesVersions, err := pppostgres.NewReferenceSeriesVersions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance reference series register: %w", err)
+	}
+	seriesReviews, err := pppostgres.NewReferenceSeriesReviews(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance reference series in-force resolver: %w", err)
+	}
+	catalogueVersions, err := pppostgres.NewReferenceCatalogueVersions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance reference catalogue register: %w", err)
+	}
+	catalogueReviews, err := pppostgres.NewReferenceCatalogueReviews(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance reference catalogue in-force resolver: %w", err)
+	}
+	planGiven, err := ppapplication.NewFormPlanGivenEstimateEvaluationsHandler(ppapplication.FormPlanGivenEstimateEvaluationsDeps{
+		Clock:            clock,
+		SeriesInForce:    seriesReviews,
+		SeriesVersions:   seriesVersions,
+		CatalogueInForce: catalogueReviews,
+		Catalogues:       catalogueVersions,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: plan-given estimate evaluations: %w", err)
+	}
+	estimates, err := ppapplication.NewFormPreAcceptanceEstimatesHandler(ppapplication.FormPreAcceptanceEstimatesDeps{
+		PriceCards:   cards,
+		Declarations: declarations,
+		Estimates:    planGiven,
+		Evidence:     preAcceptanceTrialEvidence,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance estimates: %w", err)
+	}
+	trials, err := sapricing.NewPreAcceptanceTrials(estimates)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance trials: %w", err)
+	}
+	return trials, nil
 }
 
 // acceptanceConsumer 接 UC-NR-001 那条线：PS 接受决定信封 → 消费门 → 初始路由编排。

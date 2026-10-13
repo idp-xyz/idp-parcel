@@ -6,6 +6,8 @@ import (
 	"strings"
 	"testing"
 
+	bentopg "go.idp.xyz/idp-bento-go/postgres"
+
 	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
 	pssettlement "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/settlementaccounting"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -13,6 +15,7 @@ import (
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	saapplication "go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
 	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
+	saports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
 // 本文件对真实 PostgreSQL 16 证票 routing-first-cut/19 结算账户那一笔的闭环：结算账户册上没有这一户时，接受前财务
@@ -21,8 +24,10 @@ import (
 // 账户已登记」信封，结算账户那一份登记续办门按租户重驱，同一条链越过作用域、停到金额那一格。
 //
 // 控制那一口装的是生产的 PS 适配器、生产的作用域源与生产的账户目录，账户目录读的是真 SA 账户册——登记那一行与
-// 重驱时作用域问到的是同一张表；只把金额那一口换成计数替身（金额格不在本票，随 psb/25 挪），商业解析换成带结算
-// 政策回显的替身。金额那一格照旧是`未形成`、回滚重投，所以重驱那一轮整封交回未决哨兵，账本无痕等重投。
+// 重驱时作用域问到的是同一张表。SA 施加编排也是生产的那一只，两本账、采用册与留痕册都是真库；只把三个权威口换成
+// 替身：商业解析带结算政策回显，SA 的控制策略视图恒答「要求预付冻结」，试算口计数（见 synRSettlementControl）。
+// 采用册空着，金额那一格停在 SA-CONTROL_AMOUNT_NOT_CONFIGURED；它照旧是`未形成`、回滚重投，所以重驱那一轮整封交回
+// 未决哨兵，账本无痕等重投。
 
 // Covers: 票 routing-first-cut/19 完成判据一（作用域未配置：入账留痕、信封不落 ABANDONED；登记结算账户之后信封到达，
 // 重驱同一委托越过作用域、停到金额）。
@@ -41,12 +46,14 @@ func TestAScopeWaitIsResumedByTheSettlementAccountRegistrationEnvelope(t *testin
 	if err != nil {
 		t.Fatalf("构造账户目录：%v", err)
 	}
-	amounts := &synRCountingControlAmounts{}
+	settlement := newSynRSettlementControl(t, fixture.db)
 	control.inner = pssettlement.NewPreAcceptanceControlAdapter(pssettlement.PreAcceptanceControlAdapterDeps{
+		Apply: settlement.apply,
 		Scopes: pssettlement.NewPolicyBackedControlScopeSource(
 			&synRSettledCommercialBasis{synRSwitchableAsOfCommercialBasis: fixture.commercial}, directory),
-		Amounts: amounts,
 	})
+	// 金额那一格的第一问是采用册：问到它即越过了作用域。
+	amounts := settlement.adoptions
 
 	fixture.submit(t, ctx)
 	request := fixture.mustLoadRequest(t, ctx)
@@ -113,6 +120,9 @@ func TestAScopeWaitIsResumedByTheSettlementAccountRegistrationEnvelope(t *testin
 	if amounts.asked == 0 {
 		t.Fatal("重驱没有问到金额——作用域那一格没有越过")
 	}
+	if settlement.trials.asked != 0 {
+		t.Fatalf("采用册空着却问了 %d 次试算——金额那一格没有停住", settlement.trials.asked)
+	}
 	if n := fixture.countInbox(t, "parcel-shipment/advance-acceptance-chain-on-settlement-account-registration",
 		string(accountDelivery.Envelope.ID)); n != 0 {
 		t.Fatalf("未决必须让账本无痕等重投，实际 inbox 行数 = %d", n)
@@ -140,16 +150,129 @@ func (control *synRLateBoundControl) ApplyPreAcceptanceFinancialControl(
 
 var _ psports.PreAcceptanceFinancialController = (*synRLateBoundControl)(nil)
 
-// synRCountingControlAmounts 是金额那一口的替身（隔离合成 `S`）：恒答未配置并计数。被问到即证作用域已形成——
-// 适配器只在作用域形成之后才问金额。
-type synRCountingControlAmounts struct{ asked int }
+// synRSettlementControl 是 SA 施加编排那一侧的装配（隔离合成 `S`）：编排、两本账、采用册与留痕册都是生产实现、读写
+// 夹具自己的库；控制策略视图换成恒答「要求预付冻结」的替身，试算口换成计数替身。采用册包一层计数：被问到即证
+// 作用域已形成、控制策略要求了控制——编排只在那之后才问采用行。
+type synRSettlementControl struct {
+	apply     *saapplication.ApplyPreAcceptanceControlHandler
+	adoptions *synRCountingAdoptions
+	trials    *synRCountingTrials
+}
 
-func (amounts *synRCountingControlAmounts) FormControlAmount(
+func newSynRSettlementControl(t *testing.T, db *bentopg.DB) *synRSettlementControl {
+	t.Helper()
+	adoptions, err := sapostgres.NewPreAcceptanceEstimateAdoptions(db)
+	if err != nil {
+		t.Fatalf("构造采用册：%v", err)
+	}
+	traces, err := sapostgres.NewPreAcceptanceEstimateTraces(db)
+	if err != nil {
+		t.Fatalf("构造留痕册：%v", err)
+	}
+	freezes, err := sapostgres.NewFreezeLedgers(db)
+	if err != nil {
+		t.Fatalf("构造冻结账本：%v", err)
+	}
+	exposures, err := sapostgres.NewCreditExposureLedgers(db)
+	if err != nil {
+		t.Fatalf("构造暴露账本：%v", err)
+	}
+	balances, err := sapostgres.NewOperationalBalances(db, freezes)
+	if err != nil {
+		t.Fatalf("构造运营余额：%v", err)
+	}
+	standings, err := sapostgres.NewCreditStandings(db, exposures)
+	if err != nil {
+		t.Fatalf("构造信用状况：%v", err)
+	}
+	ratioBases, err := sapostgres.NewCreditRatioBases(db)
+	if err != nil {
+		t.Fatalf("构造比例基数：%v", err)
+	}
+	control := &synRSettlementControl{
+		adoptions: &synRCountingAdoptions{inner: adoptions},
+		trials:    &synRCountingTrials{},
+	}
+	control.apply, err = saapplication.NewApplyPreAcceptanceControlHandler(saapplication.ApplyPreAcceptanceControlDeps{
+		Policy:      synRRequiredControlPolicy{t: t},
+		Adoptions:   control.adoptions,
+		Trials:      control.trials,
+		Traces:      traces,
+		Balance:     balances,
+		Freezes:     freezes,
+		Credit:      standings,
+		CreditBasis: synRNoCreditBasis{},
+		RatioBases:  ratioBases,
+		Exposures:   exposures,
+		Clock:       systemClock{},
+	})
+	if err != nil {
+		t.Fatalf("构造 SA 施加编排：%v", err)
+	}
+	return control
+}
+
+// synRCountingAdoptions 给真采用册读口计数。
+type synRCountingAdoptions struct {
+	inner saports.PreAcceptanceEstimateAdoptionView
+	asked int
+}
+
+func (adoptions *synRCountingAdoptions) FindAdoption(
+	ctx context.Context,
+	tenant sadomain.TenantID,
+	account sadomain.SettlementAccountID,
+) (sadomain.PreAcceptanceEstimateAdoption, bool, error) {
+	adoptions.asked++
+	return adoptions.inner.FindAdoption(ctx, tenant, account)
+}
+
+// synRCountingTrials 是试算口的替身：恒答「这一时点没有在用的售价卡」并计数。被问到即证金额那一格的采用行已找到。
+type synRCountingTrials struct{ asked int }
+
+func (trials *synRCountingTrials) FormPreAcceptanceTrials(
 	context.Context,
-	psports.FinancialControlRequest,
-) (int64, bool, error) {
-	amounts.asked++
-	return 0, false, nil
+	saports.PreAcceptanceTrialQuery,
+) (saports.PreAcceptanceTrialAnswer, error) {
+	trials.asked++
+	return saports.PreAcceptanceTrialAnswer{Outcome: saports.PreAcceptanceTrialPriceCardNotConfigured}, nil
+}
+
+// synRRequiredControlPolicy 是 SA 控制策略视图的替身：恒答要求一项预付冻结。
+type synRRequiredControlPolicy struct{ t *testing.T }
+
+func (policy synRRequiredControlPolicy) LoadControlPolicy(
+	context.Context,
+	sadomain.TenantID,
+	sadomain.SettlementScope,
+	sadomain.CommercialResolutionReference,
+) (sadomain.PreAcceptanceControlPolicy, bool, error) {
+	t := policy.t
+	t.Helper()
+	item, err := sadomain.NewControlItem(sadomain.PrepaidFreezeControl, 1)
+	if err != nil {
+		return sadomain.PreAcceptanceControlPolicy{}, false, err
+	}
+	required, err := sadomain.NewRequiredControlPolicy(
+		[]sadomain.ControlItem{item},
+		sadomain.AllControlsPass,
+		mustPS(t, sadomain.NewControlPolicyReference, "SYN-CONTROL-POLICY-R1/v1"),
+		sadomain.PrepaidSettlement,
+		mustPS(t, sadomain.NewAdoptedPolicyReference, synRSettlementPolicy),
+	)
+	return required, err == nil, err
+}
+
+// synRNoCreditBasis 是授信依据口的替身：本夹具的策略只要求预付冻结，这一口不会被问到。
+type synRNoCreditBasis struct{}
+
+func (synRNoCreditBasis) LoadCreditBasis(
+	context.Context,
+	sadomain.TenantID,
+	sadomain.SettlementScope,
+	sadomain.CommercialResolutionReference,
+) (sadomain.CreditBasis, bool, error) {
+	return sadomain.CreditBasis{}, false, nil
 }
 
 // synRSettledCommercialBasis 在时点可拨的商业依据替身之上，让解析带回已采用结算政策的回显——作用域源据它向

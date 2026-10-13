@@ -1,3 +1,5 @@
+// Package parcelpricing 是 parcel-shipment 消费 parcel-pricing 的适配器（ADR-0025 消费方侧）：渠道择优按候选的 `BUY` 价卡要
+// 成本，并把评价答复译成成本单维上的取值。只翻译不判断。
 package parcelpricing
 
 import (

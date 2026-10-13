@@ -218,26 +218,113 @@ func (double *scopeSourceDouble) FormControlScope(
 	return double.scope, double.gap, double.err
 }
 
-type amountSourceDouble struct {
-	amount int64
-	formed bool
+// adoptionViewDouble 替 SA 采用册读口（ADR-0179 决定五）：零值答「这一户采用了逐件 SELL 试算合计」，missing 答册上没有，err 答
+// 读不回。金额自 ADR-0179 起由 SA 形成，本夹具要拨的金额那几格都在这三只替身上，不在本适配器。
+type adoptionViewDouble struct {
+	missing bool
+	err     error
+}
+
+func (double *adoptionViewDouble) FindAdoption(
+	_ context.Context,
+	_ sadomain.TenantID,
+	account sadomain.SettlementAccountID,
+) (sadomain.PreAcceptanceEstimateAdoption, bool, error) {
+	if double.err != nil {
+		return sadomain.PreAcceptanceEstimateAdoption{}, false, double.err
+	}
+	if double.missing {
+		return sadomain.PreAcceptanceEstimateAdoption{}, false, nil
+	}
+	scope, err := sadomain.NewEstimatePricingScope("SCOPE-SELL-1")
+	if err != nil {
+		return sadomain.PreAcceptanceEstimateAdoption{}, false, err
+	}
+	adoption, err := sadomain.NewPreAcceptanceEstimateAdoption(account, sadomain.PerParcelSellTrialSum, scope)
+	return adoption, err == nil, err
+}
+
+// trialSourceDouble 替 SA 的受理前试算口：交回 answer 或 err。
+type trialSourceDouble struct {
+	answer saports.PreAcceptanceTrialAnswer
+	err    error
+	asked  int
+	// askedWith 记下最后一次的问法：本适配器交的委托与提交版本有没有原样到达试算那一口，只有到这一层才看得见。
+	askedWith saports.PreAcceptanceTrialQuery
+}
+
+func (double *trialSourceDouble) FormPreAcceptanceTrials(
+	_ context.Context,
+	query saports.PreAcceptanceTrialQuery,
+) (saports.PreAcceptanceTrialAnswer, error) {
+	double.asked++
+	double.askedWith = query
+	if double.err != nil {
+		return saports.PreAcceptanceTrialAnswer{}, double.err
+	}
+	return double.answer, nil
+}
+
+// set 让试算交回一件、合计 minor（CNY）：控制金额就是它。
+func (double *trialSourceDouble) set(t *testing.T, minor int64) {
+	t.Helper()
+	trial, err := sadomain.NewPreAcceptanceTrial("P-1", "EST-P-1", []string{"PRICE_CARD:SYN-PLAN-SELL@v1"}, minor,
+		value(t, sadomain.NewCurrencyCode, "CNY"))
+	if err != nil {
+		t.Fatalf("new pre-acceptance trial: %v", err)
+	}
+	double.answer = saports.PreAcceptanceTrialAnswer{
+		Outcome:   saports.PreAcceptanceTrialsFormed,
+		PriceCard: "PRICE_CARD:SYN-PLAN-SELL@v1",
+		Trials:    []sadomain.PreAcceptanceTrial{trial},
+	}
+}
+
+// traceDouble 替 SA 留痕写口：按请求身份首写记下，同一请求换了金额再来答冲突。
+type traceDouble struct {
+	totals map[string]int64
 	err    error
 }
 
-func (double *amountSourceDouble) FormControlAmount(
+func (double *traceDouble) RecordEstimate(
 	_ context.Context,
-	_ psports.FinancialControlRequest,
-) (int64, bool, error) {
-	return double.amount, double.formed, double.err
+	trace saports.PreAcceptanceEstimateTrace,
+) (saports.PreAcceptanceEstimateTraceEffect, error) {
+	if double.err != nil {
+		return 0, double.err
+	}
+	if double.totals == nil {
+		double.totals = map[string]int64{}
+	}
+	total, found := double.totals[trace.Request.String()]
+	switch {
+	case !found:
+		double.totals[trace.Request.String()] = trace.Estimate.TotalMinor()
+		return saports.PreAcceptanceEstimateTraceRecorded, nil
+	case total == trace.Estimate.TotalMinor():
+		return saports.PreAcceptanceEstimateTraceReplay, nil
+	default:
+		return saports.PreAcceptanceEstimateTraceConflict, nil
+	}
 }
 
 type controlFixture struct {
-	adapter *adapter.PreAcceptanceControlAdapter
-	policy  *policyDouble
-	balance *balanceDouble
-	ledger  *ledgerDouble
-	scopes  *scopeSourceDouble
-	amounts *amountSourceDouble
+	adapter   *adapter.PreAcceptanceControlAdapter
+	policy    *policyDouble
+	balance   *balanceDouble
+	ledger    *ledgerDouble
+	scopes    *scopeSourceDouble
+	adoptions *adoptionViewDouble
+	trials    *trialSourceDouble
+	traces    *traceDouble
+}
+
+// estimateViews 把夹具的三只估价替身交给 SA 的依赖：几个夹具变体共用同一组，用例拨的是夹具上那三只。
+func (fixture *controlFixture) estimateViews(deps saapplication.ApplyPreAcceptanceControlDeps) saapplication.ApplyPreAcceptanceControlDeps {
+	deps.Adoptions = fixture.adoptions
+	deps.Trials = fixture.trials
+	deps.Traces = fixture.traces
+	return deps
 }
 
 func settlementScope(t *testing.T) sadomain.SettlementScope {
@@ -299,15 +386,18 @@ func newControlFixture(t *testing.T) *controlFixture {
 	}
 
 	fixture := &controlFixture{
-		policy:  &policyDouble{policy: policy},
-		balance: &balanceDouble{balance: balance},
-		ledger:  &ledgerDouble{ledger: sadomain.NewFreezeLedger()},
-		scopes:  &scopeSourceDouble{scope: controlScope(t, scope), gap: adapter.ControlScopeFormed},
-		amounts: &amountSourceDouble{amount: 4_000, formed: true},
+		policy:    &policyDouble{policy: policy},
+		balance:   &balanceDouble{balance: balance},
+		ledger:    &ledgerDouble{ledger: sadomain.NewFreezeLedger()},
+		scopes:    &scopeSourceDouble{scope: controlScope(t, scope), gap: adapter.ControlScopeFormed},
+		adoptions: &adoptionViewDouble{},
+		trials:    &trialSourceDouble{},
+		traces:    &traceDouble{},
 	}
+	fixture.trials.set(t, 4_000)
 	exposures := &exposureLedgerDouble{ledger: sadomain.NewCreditExposureLedger()}
 	fixture.adapter = adapter.NewPreAcceptanceControlAdapter(adapter.PreAcceptanceControlAdapterDeps{
-		Apply: mustApplyHandler(t, saapplication.ApplyPreAcceptanceControlDeps{
+		Apply: mustApplyHandler(t, fixture.estimateViews(saapplication.ApplyPreAcceptanceControlDeps{
 			Policy:  fixture.policy,
 			Balance: fixture.balance,
 			Freezes: fixture.ledger,
@@ -317,11 +407,10 @@ func newControlFixture(t *testing.T) *controlFixture {
 			RatioBases:  ratioBaseDouble{},
 			Exposures:   exposures,
 			Clock:       fixedClock{at: controlledAt},
-		}),
+		})),
 		Release: saapplication.NewReleasePreAcceptanceControlHandler(
 			fixture.ledger, exposures, fixedClock{at: controlledAt.Add(time.Hour)}),
-		Scopes:  fixture.scopes,
-		Amounts: fixture.amounts,
+		Scopes: fixture.scopes,
 	})
 	return fixture
 }
@@ -431,11 +520,33 @@ func TestTheAdapterCarriesTheResolutionEchoThroughToThePolicyView(t *testing.T) 
 	}
 }
 
+// Covers: ADR-0179 决定一——本适配器不再交金额，交的是委托与提交版本；两者原样到达 SA 的试算那一口，判断时点按请求带的那一个。
+// 断言落在试算口收到什么上，理由同上一条：命令是中间物，钉住口上的值才证明这两格走完了全程。
+func TestTheAdapterHandsTheShipmentRequestAndVersionThroughToTheTrials(t *testing.T) {
+	fixture := newControlFixture(t)
+
+	assessment, err := fixture.adapter.ApplyPreAcceptanceFinancialControl(context.Background(), fixture.request(t))
+	if err != nil {
+		t.Fatalf("apply pre-acceptance financial control: %v", err)
+	}
+	if assessment.Outcome != psports.PreAcceptanceControlFormed || assessment.Result.Outcome() != psdomain.FinancialControlHeld {
+		t.Fatalf("outcome = %q / %q, want FORMED / HELD", assessment.Outcome, assessment.Result.Outcome())
+	}
+	query := fixture.trials.askedWith
+	if fixture.trials.asked != 1 || query.ShipmentRequest != "request-1" || query.SubmissionVersion != "version-1" ||
+		!query.At.Equal(controlAsOfAt) {
+		t.Fatalf("试算被问 %d 次、问法 %+v, want 委托 request-1、版本 version-1、时点取请求的判断时点", fixture.trials.asked, query)
+	}
+	if held := fixture.ledger.ledger.HeldMinor(); held != 4_000 {
+		t.Fatalf("held = %d, want 4000——冻结的是 SA 形成的估价", held)
+	}
+}
+
 // Covers: `AT-PS-035` 依赖的「业务限制」一格——余额不足是已执行的控制，带限制依据与结果
 // 标识译回。`业务限制`在提供方没有冻结标识，请求身份作标识让这一格不再缺标识。
 func TestARestrictedFreezeCarriesItsLimitBasisAndAnIdentity(t *testing.T) {
 	fixture := newControlFixture(t)
-	fixture.amounts.amount = 50_000
+	fixture.trials.set(t, 50_000)
 
 	assessment, err := fixture.adapter.ApplyPreAcceptanceFinancialControl(context.Background(), fixture.request(t))
 	if err != nil {
@@ -493,7 +604,7 @@ func termsFixture(t *testing.T, standing sadomain.CreditStanding) *controlFixtur
 	fixture.policy.policy = requiredPolicy(t, sadomain.TermsSettlement, sadomain.CreditCheckControl)
 	exposures := &exposureLedgerDouble{ledger: sadomain.NewCreditExposureLedger()}
 	fixture.adapter = adapter.NewPreAcceptanceControlAdapter(adapter.PreAcceptanceControlAdapterDeps{
-		Apply: mustApplyHandler(t, saapplication.ApplyPreAcceptanceControlDeps{
+		Apply: mustApplyHandler(t, fixture.estimateViews(saapplication.ApplyPreAcceptanceControlDeps{
 			Policy:      fixture.policy,
 			Balance:     fixture.balance,
 			Freezes:     fixture.ledger,
@@ -502,11 +613,10 @@ func termsFixture(t *testing.T, standing sadomain.CreditStanding) *controlFixtur
 			RatioBases:  ratioBaseDouble{},
 			Exposures:   exposures,
 			Clock:       fixedClock{at: controlledAt},
-		}),
+		})),
 		Release: saapplication.NewReleasePreAcceptanceControlHandler(
 			fixture.ledger, exposures, fixedClock{at: controlledAt.Add(time.Hour)}),
-		Scopes:  fixture.scopes,
-		Amounts: fixture.amounts,
+		Scopes: fixture.scopes,
 	})
 	return fixture
 }
@@ -619,10 +729,10 @@ func TestATermsControlTranslatesToCreditExposedNotHeld(t *testing.T) {
 	}
 }
 
-// Covers: 实例半边纪律——作用域与金额没形成时停下且不问提供方：作用域该来自结算政策（ADR-0044）、
-// 金额该来自估价，代拟任何一个都是拿别人的钱做实验。这几格登记都推不动（票 routing-first-cut/19）：
-// 作用域源或它的解析口、账户目录没接上是装配缺口，解析没采用结算政策要改解析键，金额未配置随 psb/25 才有登记口，
-// 都留在`未形成`。账户没登记那一格推得动，另见下一条用例。
+// Covers: 实例半边纪律——作用域没形成时停下且不问提供方：作用域该来自结算政策（ADR-0044），代拟一个就是
+// 拿别人的钱做实验。这几格登记都推不动（票 routing-first-cut/19）：作用域源或它的解析口、账户目录没接上是
+// 装配缺口，解析没采用结算政策要改解析键，都留在`未形成`。账户没登记那一格推得动，另见下一条用例。金额那几格
+// 自 ADR-0179 起在提供方，见 TestNotFormedReasonsLandOnTheCellOfTheirRecoveryAction。
 func TestUnconfiguredSourcesStopAtNotFormedWithoutAskingTheProvider(t *testing.T) {
 	cases := map[string]struct {
 		arrange     func(*controlFixture) *adapter.PreAcceptanceControlAdapter
@@ -632,7 +742,7 @@ func TestUnconfiguredSourcesStopAtNotFormedWithoutAskingTheProvider(t *testing.T
 		"no scope source": {
 			arrange: func(fixture *controlFixture) *adapter.PreAcceptanceControlAdapter {
 				return adapter.NewPreAcceptanceControlAdapter(adapter.PreAcceptanceControlAdapterDeps{
-					Apply: mustApplyHandler(t, saapplication.ApplyPreAcceptanceControlDeps{
+					Apply: mustApplyHandler(t, fixture.estimateViews(saapplication.ApplyPreAcceptanceControlDeps{
 						Policy:      fixture.policy,
 						Balance:     fixture.balance,
 						Freezes:     fixture.ledger,
@@ -641,8 +751,7 @@ func TestUnconfiguredSourcesStopAtNotFormedWithoutAskingTheProvider(t *testing.T
 						RatioBases:  ratioBaseDouble{},
 						Exposures:   &exposureLedgerDouble{ledger: sadomain.NewCreditExposureLedger()},
 						Clock:       fixedClock{at: controlledAt},
-					}),
-					Amounts: fixture.amounts,
+					})),
 				})
 			},
 			wantOutcome: psports.PreAcceptanceControlNotFormed,
@@ -664,14 +773,6 @@ func TestUnconfiguredSourcesStopAtNotFormedWithoutAskingTheProvider(t *testing.T
 			wantOutcome: psports.PreAcceptanceControlNotFormed,
 			wantReason:  "CONTROL_SCOPE_SETTLEMENT_POLICY_NOT_ADOPTED",
 		},
-		"amount source cannot form": {
-			arrange: func(fixture *controlFixture) *adapter.PreAcceptanceControlAdapter {
-				fixture.amounts.formed = false
-				return fixture.adapter
-			},
-			wantOutcome: psports.PreAcceptanceControlNotFormed,
-			wantReason:  "CONTROL_AMOUNT_NOT_CONFIGURED",
-		},
 	}
 
 	for name, testCase := range cases {
@@ -690,7 +791,7 @@ func TestUnconfiguredSourcesStopAtNotFormedWithoutAskingTheProvider(t *testing.T
 			if assessment.Reason.String() != testCase.wantReason {
 				t.Fatalf("reason = %q, want %q", assessment.Reason, testCase.wantReason)
 			}
-			if fixture.policy.asked != 0 {
+			if fixture.policy.asked != 0 || fixture.trials.asked != 0 {
 				t.Fatal("实例半边未配置仍去问了提供方")
 			}
 		})
@@ -726,7 +827,7 @@ func TestEveryProviderAnswerLandsOnItsOwnConsumerValue(t *testing.T) {
 		if _, err := fixture.adapter.ApplyPreAcceptanceFinancialControl(context.Background(), fixture.request(t)); err != nil {
 			t.Fatalf("first apply: %v", err)
 		}
-		fixture.amounts.amount = 5_000
+		fixture.trials.set(t, 5_000)
 
 		assessment, err := fixture.adapter.ApplyPreAcceptanceFinancialControl(context.Background(), fixture.request(t))
 		if err != nil {
@@ -738,8 +839,9 @@ func TestEveryProviderAnswerLandsOnItsOwnConsumerValue(t *testing.T) {
 	})
 
 	t.Run("not accepted", func(t *testing.T) {
+		// 作用域源交回一个立不起来的作用域：命令按零值交过去，由提供方短路作答`未受理`（applyCommandFor 的纪律）。
 		fixture := newControlFixture(t)
-		fixture.amounts.amount = 0
+		fixture.scopes.scope.Settlement = sadomain.SettlementScope{}
 
 		assessment, err := fixture.adapter.ApplyPreAcceptanceFinancialControl(context.Background(), fixture.request(t))
 		if err != nil {
@@ -770,16 +872,125 @@ func TestEveryProviderAnswerLandsOnItsOwnConsumerValue(t *testing.T) {
 // Covers: 票 routing-first-cut/19 拆格那一笔 —— 提供方的未形成原因按恢复动作分到端口两格：控制策略未配置与
 // 比例额度没声明基数落`未配置`（发布对应声明时交「参数已登记」），授信依据未配置、基数尚无事实与各读口答
 // 不出（`*_UNAVAILABLE` 一族逐个列）留在`未形成`。原因引用照旧冠 SA- 原样带回，编排不必认得它也能让几种停
-// 各拿一条续办引用。
+// 各拿一条续办引用。估价那一口（ADR-0179）的各格同表：选卡、不可见、缺件与合计停法都没有登记会来重驱，
+// 留在`未形成`。
 func TestNotFormedReasonsLandOnTheCellOfTheirRecoveryAction(t *testing.T) {
 	policyVersion := func(t *testing.T) sadomain.CreditPolicyReference {
 		return value(t, sadomain.NewCreditPolicyReference, "PC-CREDIT-POLICY/v1")
+	}
+	trialsAnswering := func(t *testing.T, outcome saports.PreAcceptanceTrialOutcome) *controlFixture {
+		fixture := newControlFixture(t)
+		fixture.trials.answer = saports.PreAcceptanceTrialAnswer{Outcome: outcome, PriceCard: "PRICE_CARD:SYN-PLAN-SELL@v1"}
+		return fixture
+	}
+	withSecondTrial := func(t *testing.T, second func() (sadomain.PreAcceptanceTrial, error)) *controlFixture {
+		fixture := newControlFixture(t)
+		trial, err := second()
+		if err != nil {
+			t.Fatalf("second trial: %v", err)
+		}
+		fixture.trials.answer.Trials = append(fixture.trials.answer.Trials, trial)
+		return fixture
 	}
 	cases := map[string]struct {
 		arrange     func(t *testing.T) *controlFixture
 		wantOutcome psports.PreAcceptanceControlOutcome
 		wantReason  string
 	}{
+		"金额未配置": {
+			arrange: func(t *testing.T) *controlFixture {
+				fixture := newControlFixture(t)
+				fixture.adoptions.missing = true
+				return fixture
+			},
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "SA-CONTROL_AMOUNT_NOT_CONFIGURED",
+		},
+		"采用册读不回": {
+			arrange: func(t *testing.T) *controlFixture {
+				fixture := newControlFixture(t)
+				fixture.adoptions.err = errors.New("adoption register unavailable")
+				return fixture
+			},
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "SA-ESTIMATE_ADOPTION_UNAVAILABLE",
+		},
+		"试算读不回": {
+			arrange: func(t *testing.T) *controlFixture {
+				fixture := newControlFixture(t)
+				fixture.trials.err = saports.ErrPreAcceptanceTrialsUnavailable
+				return fixture
+			},
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "SA-ESTIMATE_TRIALS_UNAVAILABLE",
+		},
+		"留痕写不进": {
+			arrange: func(t *testing.T) *controlFixture {
+				fixture := newControlFixture(t)
+				fixture.traces.err = errors.New("trace register unavailable")
+				return fixture
+			},
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "SA-ESTIMATE_TRACE_UNAVAILABLE",
+		},
+		"选卡未配置": {
+			arrange: func(t *testing.T) *controlFixture {
+				return trialsAnswering(t, saports.PreAcceptanceTrialPriceCardNotConfigured)
+			},
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "SA-ESTIMATE_PRICE_CARD_NOT_CONFIGURED",
+		},
+		"选卡适用冲突": {
+			arrange: func(t *testing.T) *controlFixture {
+				return trialsAnswering(t, saports.PreAcceptanceTrialPriceCardConflict)
+			},
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "SA-ESTIMATE_PRICE_CARD_CONFLICT",
+		},
+		"提交版本不可见": {
+			arrange: func(t *testing.T) *controlFixture {
+				return trialsAnswering(t, saports.PreAcceptanceTrialSubmissionNotVisible)
+			},
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "SA-ESTIMATE_SUBMISSION_NOT_VISIBLE",
+		},
+		"缺件": {
+			arrange:     func(t *testing.T) *controlFixture { return trialsAnswering(t, saports.PreAcceptanceTrialsIncomplete) },
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "SA-ESTIMATE_DECLARATION_INCOMPLETE",
+		},
+		"一份试算都没有": {
+			arrange:     func(t *testing.T) *controlFixture { return trialsAnswering(t, saports.PreAcceptanceTrialsFormed) },
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "SA-ESTIMATE_HAS_NO_TRIAL",
+		},
+		"一份没有合计": {
+			arrange: func(t *testing.T) *controlFixture {
+				return withSecondTrial(t, func() (sadomain.PreAcceptanceTrial, error) {
+					return sadomain.NewUntotaledPreAcceptanceTrial("P-2", "EST-P-2", nil)
+				})
+			},
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "SA-ESTIMATE_TRIAL_WITHOUT_TOTAL",
+		},
+		"币种不是作用域的": {
+			arrange: func(t *testing.T) *controlFixture {
+				return withSecondTrial(t, func() (sadomain.PreAcceptanceTrial, error) {
+					return sadomain.NewPreAcceptanceTrial("P-2", "EST-P-2", nil, 100, value(t, sadomain.NewCurrencyCode, "USD"))
+				})
+			},
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "SA-ESTIMATE_CURRENCY_MISMATCH",
+		},
+		"合计不是正数": {
+			arrange: func(t *testing.T) *controlFixture {
+				fixture := newControlFixture(t)
+				fixture.trials.set(t, 0)
+				return fixture
+			},
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "SA-ESTIMATE_NOT_POSITIVE",
+		},
 		"控制策略未配置": {
 			arrange: func(t *testing.T) *controlFixture {
 				fixture := newControlFixture(t)
@@ -941,7 +1152,7 @@ func termsFixtureWithViews(t *testing.T, views creditViews) *controlFixture {
 	fixture := newControlFixture(t)
 	fixture.policy.policy = requiredPolicy(t, sadomain.TermsSettlement, sadomain.CreditCheckControl)
 	fixture.adapter = adapter.NewPreAcceptanceControlAdapter(adapter.PreAcceptanceControlAdapterDeps{
-		Apply: mustApplyHandler(t, saapplication.ApplyPreAcceptanceControlDeps{
+		Apply: mustApplyHandler(t, fixture.estimateViews(saapplication.ApplyPreAcceptanceControlDeps{
 			Policy:      fixture.policy,
 			Balance:     fixture.balance,
 			Freezes:     fixture.ledger,
@@ -950,9 +1161,8 @@ func termsFixtureWithViews(t *testing.T, views creditViews) *controlFixture {
 			RatioBases:  views.ratioBases,
 			Exposures:   views.exposures,
 			Clock:       fixedClock{at: controlledAt},
-		}),
-		Scopes:  fixture.scopes,
-		Amounts: fixture.amounts,
+		})),
+		Scopes: fixture.scopes,
 	})
 	return fixture
 }
