@@ -2,7 +2,7 @@
 
 Category: enhancement
 Status: ready-for-agent——2026-10-12 20:4x 通道 1：[ADR-0179](../../../docs/adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 已接受（用户授权通道 1 代裁），决定一没改，三格照旧。此前 needs-info——2026-10-12 通道 3 随[票 06](./06-ps-acceptance-and-label-selection-judgment-methods.md)第 2 项分诊立（派单 `task-85d7350d` ← 通道 1），等用户决定是否接受 ADR-0179
-Blocked by: [25](./25-pre-acceptance-estimate-formed-by-settlement.md)（ADR-0179 已于 2026-10-12 接受）
+Blocked by: [27](./27-pre-acceptance-control-reads-only-the-current-submission-version.md)（2026-10-13 19:3x 通道 1 补：票 25 第二段评审 Standards 1 写明灌采用行之前须守住提交版本换代）。[25](./25-pre-acceptance-estimate-formed-by-settlement.md) 已于 2026-10-13 resolved（main `6e4d9a1d`）
 地盘：`scripts/demo-seeds`（`seedgen` 的售价卡结构、注释与重生成的价卡快照、`submit-one-shipment.sh` 的草案、`data/settlement/` 新增一份采用行、`seed.sh` 结算段与参考目录那句注释、README 组成表与数据故事）；[合成演示动线](../../../docs/design/synthetic-demo-journey-script.md)「墙三」下一条带日期的补记。执行器不动。
 出处：票 06「第 2 项分诊」；ADR-0179 Consequences 演示租户那一条；AGENTS.md「演示租户就是 `SYN-TENANT-01`，代码按真实租户对待它」；[ADR-0150](../../../docs/adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md)。
 
