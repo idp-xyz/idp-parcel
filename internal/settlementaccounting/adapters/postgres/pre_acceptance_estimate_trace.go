@@ -35,7 +35,8 @@ type estimateTrialRow struct {
 }
 
 // RecordEstimate 插一行；键撞上即在库里逐列比内容，分重放与冲突，不覆盖。比较放在 SQL 里做：时点按同一种编码落库与比较，
-// trials 按 jsonb 的相等比，Go 侧不必再猜库里那份截到了哪一位。
+// trials 按 jsonb 的相等比，Go 侧不必再猜库里那份截到了哪一位。trial_at 在比较之列、recorded_at 不在：跨重驱是重放靠的是判断时点
+// 不动（端口 PreAcceptanceEstimateTraces 的头注写了这个前提）。
 func (repository *PreAcceptanceEstimateTraces) RecordEstimate(
 	ctx context.Context,
 	trace ports.PreAcceptanceEstimateTrace,

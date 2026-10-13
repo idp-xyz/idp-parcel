@@ -139,3 +139,60 @@ func TestAPreAcceptanceEstimateTraceIsWrittenOnceAndReproducible(t *testing.T) {
 		t.Fatalf("按留痕逐件加回得 %d（%d 件）, 想要 %d", recomputed, len(trials), total)
 	}
 }
+
+// Covers: 票 product-strategy-boundary/28 第 3 条、ADR-0179 决定六——同一次控制请求跨重驱再写留痕是重放，前提是判断时点不随重驱移动。
+// 「提交接收」折成该提交版本已记录的系统接收时间（PS partycommercial 的 SubmissionReceiptAsOf，不读本地时钟），几轮重驱之间只有
+// 落库时刻不同，答重放。换成会随重驱移动的时点（这里拿重驱那一刻顶上）时，同一请求答冲突、已落那一行的时点不动：施加编排据此停在
+// `请求冲突`，而两本账对同额是重放——前一轮已提交了留痕的那份委托就推不动了。
+func TestARedriveUnderTheSubmissionReceiptAsOfIsAReplayWhileAMovingAsOfConflicts(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	traces, err := adapter.NewPreAcceptanceEstimateTraces(db)
+	if err != nil {
+		t.Fatalf("构造留痕册：%v", err)
+	}
+	ctx := t.Context()
+	const request = "SHR-SYN-REDRIVE/SV-SYN-01"
+	receivedAt := time.Date(2026, 10, 13, 8, 0, 0, 123456789, time.UTC)
+	firstPass := time.Date(2026, 10, 13, 9, 0, 0, 0, time.UTC)
+	traceAt := func(at, recordedAt time.Time) ports.PreAcceptanceEstimateTrace {
+		trace := estimateTrace(t, request, estimateOf(t, 1250, 800), recordedAt)
+		trace.At = at
+		return trace
+	}
+
+	for _, step := range []struct {
+		name   string
+		trace  ports.PreAcceptanceEstimateTrace
+		effect ports.PreAcceptanceEstimateTraceEffect
+	}{
+		{"首轮：账期那一项停在未配置、事务照样提交", traceAt(receivedAt, firstPass), ports.PreAcceptanceEstimateTraceRecorded},
+		{"登记后重驱：提交接收不动", traceAt(receivedAt, firstPass.Add(2*time.Hour)), ports.PreAcceptanceEstimateTraceReplay},
+		{"隔天再驱：提交接收仍不动", traceAt(receivedAt, firstPass.Add(26*time.Hour)), ports.PreAcceptanceEstimateTraceReplay},
+		{"时点随重驱移动", traceAt(firstPass.Add(2*time.Hour), firstPass.Add(2*time.Hour)), ports.PreAcceptanceEstimateTraceConflict},
+	} {
+		var effect ports.PreAcceptanceEstimateTraceEffect
+		err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+			var recordErr error
+			effect, recordErr = traces.RecordEstimate(txCtx, step.trace)
+			return recordErr
+		})
+		if err != nil || effect != step.effect {
+			t.Fatalf("%s：effect = %d err = %v, 想要 %d", step.name, effect, err, step.effect)
+		}
+	}
+
+	var stored time.Time
+	if err := pool.QueryRow(ctx,
+		`SELECT trial_at FROM settlement_accounting.pre_acceptance_estimate_trace
+		  WHERE tenant_id = 'tenant-a' AND control_request_id = $1`, request,
+	).Scan(&stored); err != nil {
+		t.Fatalf("读回留痕：%v", err)
+	}
+	if !stored.Equal(receivedAt.Truncate(time.Microsecond)) {
+		t.Fatalf("留痕的判断时点 = %s, 想要首轮那一刻 %s——冲突不覆盖", stored.UTC(), receivedAt)
+	}
+}
