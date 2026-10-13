@@ -580,20 +580,29 @@ func problemDetailOf(t *testing.T, recorder *httptest.ResponseRecorder) (string,
 
 // Covers: 一口只收本口的项。载荷外壳镜像 CLI 的整份文档，因此别的口的数组在这里**解得开**；解得开不等于
 // 可以忽略——一份同时带着法人项与参与方项的载荷投到法人口，参与方那一项会被无声丢掉，登记方以为两样都登了。
-// 四类登记共用同一份外壳，这里各投一次别人的项。
+// 共用 partyIdentityBatchDocument 这份外壳的每一口各投一次：本口一项合规、另带别的口一项。本口那一项不能省——只投
+// 别的口的项时，拦下它的是「本口恰一项」那道门，本条要证的这道门坏了也照样绿。
 func TestPartyIdentityIntakeRefusesItemsMeantForAnotherLine(t *testing.T) {
 	intake := operatorIntake(t)
-	legalEntity := `{"legalEntityId":"SYN-LE-02","partyId":"SYN-PARTY-02","revision":1,"basis":"b","effectiveFrom":"2026-09-16T00:00:00Z"}`
-	businessParty := `{"partyId":"SYN-PARTY-02","name":"n","revision":1,"basis":"b","effectiveFrom":"2026-09-16T00:00:00Z"}`
-
-	_, err := intake.IntakeLegalEntityRegistration(context.Background(),
-		legalEntityRequest(`{"legalEntities":[`+legalEntity+`],"businessParties":[`+businessParty+`]}`))
-	if !errors.Is(err, commercialhttp.ErrMalformedRequest) {
-		t.Fatalf("法人口收了参与方项：err = %v, want ErrMalformedRequest", err)
-	}
-	_, err = intake.IntakeBusinessPartyRegistration(context.Background(),
-		legalEntityRequest(`{"legalEntities":[`+legalEntity+`]}`))
-	if !errors.Is(err, commercialhttp.ErrMalformedRequest) {
-		t.Fatalf("参与方口收了法人项：err = %v, want ErrMalformedRequest", err)
+	for line, stray := range map[string]string{
+		"业务参与方":  "责任法人",
+		"责任法人":   "业务参与方",
+		"货主客户账户": "参与方关系",
+		"参与方关系":  "货主客户账户",
+	} {
+		t.Run(line, func(t *testing.T) {
+			own, ownKnown := identityLines[line]
+			other, otherKnown := identityLines[stray]
+			if !ownKnown || !otherKnown {
+				t.Fatalf("用例自身写错：%q 或 %q 不在 identityLines 里", line, stray)
+			}
+			if err := own.intake(intake, identityRequest(own.target, `{`+own.fields+`}`)); err != nil {
+				t.Fatalf("只带本口一项的载荷：%v", err)
+			}
+			err := own.intake(intake, identityRequest(own.target, `{`+own.fields+`,`+other.fields+`}`))
+			if !errors.Is(err, commercialhttp.ErrMalformedRequest) {
+				t.Fatalf("%s口收下了%s的项：err = %v, want ErrMalformedRequest", line, stray, err)
+			}
+		})
 	}
 }
