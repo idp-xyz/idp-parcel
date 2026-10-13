@@ -1,7 +1,7 @@
 # 25 受理前估价由结算形成：采用登记、按提交版本的逐件 SELL 试算、估价留痕与续办触发（ADR-0179 的实施）
 
 Category: enhancement
-Status: in-progress——2026-10-13 18:0x 通道 2 完工（派单 `task-f3d84381` ← 通道 1，接 `mcp2-psb25@caab1e00`）：余下四条落在 `mcp2-psb25`，代码 tip `e96345be`（最后一笔改行为的是 `bfc70773`，其后是文档 `236921b5` 与一条补判据二的用例）、清点 `26b3aac5`，见文末「完成记录」。`caab1e00` 之后的新笔待非作者评审，评审与重放归通道 1。此前 in-progress——2026-10-13 16:5x 通道 2 在可提交点部分收口（派单 `task-dd4926b1` 时限内）：第 1–3 条、第 4 条上半、第 6 条前半（续办门与路由）与顺带四条落在 `mcp2-psb25`，代码 tip `3917951f`、清点 `ea62cb39`；第 4 条下半、第 5 条、第 6 条后半与第 7 条未做，接手要点见文末「完成记录（部分）」下「余下几条」。已落各笔可单独评审与重放：第 3 条的信封自 `3917951f` 起有订阅方，金额格挪格之前续办门对等待队列多驱一轮，无害。此前 in-progress——2026-10-13 15:5x 改派通道 2（派单 `task-dd4926b1` ← 通道 1；原 `task-d96ec0e6` → 通道 5 作废），分支 `mcp2-psb25`，基 `mcp5-psb25@b9486c5d`（其下 `b09b904c`），隔离 worktree `idp-parcel-mcp2-psb25`；第 1 条由通道 5 落于 `b9486c5d`。此前 in-progress——2026-10-13 通道 5 认领（派单 `task-d96ec0e6` ← 通道 1），分支 `mcp5-psb25`，基 `b09b904c`（= origin/main），隔离 worktree `idp-parcel-mcp5-psb25`。同批收 [routing-first-cut/19](../../routing-first-cut/issues/19-financial-control-undecided-leaves-no-trace-on-the-task.md) 增量复评（`task-40247234`）的四条非阻断，出处 rfc/19 票面 Comments：PS `ReleasePreAcceptanceControl` 装配缺口那一格补用例；`cmd/parcel-api` 三处编排注释与 `partycommercial` 一条用例注释改实；`NewPreAcceptanceControlAdapter` 注释只写本适配器对 nil 怎么答；`pre_acceptance_control.go` 常量块与 `ControlScopeNotAssembled` 注释不数「两半」、点名解析口与账户目录。此前 ready-for-agent——2026-10-12 20:4x 通道 1：[ADR-0179](../../../docs/adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 已接受（用户授权通道 1 代裁）。接受时改了两处，都不动下面的「地盘」，「做什么」第 4 条与完成判据已照改：决定二多一格停法（任一份合计的币种不是控制作用域的币种也答未形成，结算不换算），决定六的留痕多存每份试算评价的版本清单；PP `CONTEXT` 那两句随接受已改，从本票的文档一格划掉。此前 needs-info——2026-10-12 通道 3 随[票 06](./06-ps-acceptance-and-label-selection-judgment-methods.md)第 2 项分诊立（派单 `task-85d7350d` ← 通道 1），等用户决定是否接受 ADR-0179
+Status: resolved——2026-10-13 19:2x 通道 1：本票二十二笔分两段纯快进进 main（至 `caab1e00`、至 `fb39860d`，SHA 与分支 `mcp2-psb25` 相同），进 main 记录与两段非作者评审见文末；两段评审的非阻断本票不再收，去向见 Comments 末段。此前完工，待评审与重放——2026-10-13 18:0x 通道 2 完工（派单 `task-f3d84381` ← 通道 1，接 `mcp2-psb25@caab1e00`）：余下四条落在 `mcp2-psb25`，代码 tip `e96345be`（最后一笔改行为的是 `bfc70773`，其后是文档 `236921b5` 与一条补判据二的用例）、清点 `26b3aac5`，见文末「完成记录」。`caab1e00` 之后的新笔待非作者评审，评审与重放归通道 1。此前 in-progress——2026-10-13 16:5x 通道 2 在可提交点部分收口（派单 `task-dd4926b1` 时限内）：第 1–3 条、第 4 条上半、第 6 条前半（续办门与路由）与顺带四条落在 `mcp2-psb25`，代码 tip `3917951f`、清点 `ea62cb39`；第 4 条下半、第 5 条、第 6 条后半与第 7 条未做，接手要点见文末「完成记录（部分）」下「余下几条」。已落各笔可单独评审与重放：第 3 条的信封自 `3917951f` 起有订阅方，金额格挪格之前续办门对等待队列多驱一轮，无害。此前 in-progress——2026-10-13 15:5x 改派通道 2（派单 `task-dd4926b1` ← 通道 1；原 `task-d96ec0e6` → 通道 5 作废），分支 `mcp2-psb25`，基 `mcp5-psb25@b9486c5d`（其下 `b09b904c`），隔离 worktree `idp-parcel-mcp2-psb25`；第 1 条由通道 5 落于 `b9486c5d`。此前 in-progress——2026-10-13 通道 5 认领（派单 `task-d96ec0e6` ← 通道 1），分支 `mcp5-psb25`，基 `b09b904c`（= origin/main），隔离 worktree `idp-parcel-mcp5-psb25`。同批收 [routing-first-cut/19](../../routing-first-cut/issues/19-financial-control-undecided-leaves-no-trace-on-the-task.md) 增量复评（`task-40247234`）的四条非阻断，出处 rfc/19 票面 Comments：PS `ReleasePreAcceptanceControl` 装配缺口那一格补用例；`cmd/parcel-api` 三处编排注释与 `partycommercial` 一条用例注释改实；`NewPreAcceptanceControlAdapter` 注释只写本适配器对 nil 怎么答；`pre_acceptance_control.go` 常量块与 `ControlScopeNotAssembled` 注释不数「两半」、点名解析口与账户目录。此前 ready-for-agent——2026-10-12 20:4x 通道 1：[ADR-0179](../../../docs/adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 已接受（用户授权通道 1 代裁）。接受时改了两处，都不动下面的「地盘」，「做什么」第 4 条与完成判据已照改：决定二多一格停法（任一份合计的币种不是控制作用域的币种也答未形成，结算不换算），决定六的留痕多存每份试算评价的版本清单；PP `CONTEXT` 那两句随接受已改，从本票的文档一格划掉。此前 needs-info——2026-10-12 通道 3 随[票 06](./06-ps-acceptance-and-label-selection-judgment-methods.md)第 2 项分诊立（派单 `task-85d7350d` ← 通道 1），等用户决定是否接受 ADR-0179
 Blocked by: [24](./24-plan-given-estimate-evaluations-use-shared-reading-completion.md)（ADR-0179 已于 2026-10-12 接受）
 地盘（按 ADR-0179 现稿）：
 - `internal/settlementaccounting`：估价端口、采用登记册与迁移、施加编排在要金额时先形成估价、估价留痕；`adapters/parcelpricing` 下新的受理前试算消费侧适配器。
@@ -128,3 +128,31 @@ Blocked by: [24](./24-plan-given-estimate-evaluations-use-shared-reading-complet
 - 变异：M8 见「顺带四条」第 1 条。
 - `3917951f` 那一笔另验（钉 `ea62cb39`，16:50–16:51）：改过的 4 个 `.go` 按入库字节 gofmt 空、无 CR；全仓 build、vet 退 0；`psinbox` 的反向依赖经 `go list -test` 反查为 7 个包（`cmd/parcel-api`、`cmd/parcel-dispatch`、PS `adapters/inbox`、`labelfinal`、`nodeoperations`、`transportfulfillment`、VE `adapters/inbox`），连同 `./internal/architecture/...` 带 DSN `-p 1 -count=1` 全 ok；`-v` 单跑上面判据第一条点名的两条为 `PASS`；清点零差。改动前后两次之间分支上只多了这一笔与它的清点，所以全量那一组数仍是 `40dcb520` 的，没有在 `ea62cb39` 上重跑全量。
 - 现场一格：头一次全量跑到 16:39 前后中断，WSL 实例重启（16:40:50 时 `uptime` 为 1 分钟），`/tmp` 清空、门禁库容器 `idp-parcel-postgres-gate` 停在 `Exited (0)`；本会话 `docker start` 拉起它后重跑，上面的数出自重跑。重启的来由本会话查不到。
+
+## Comments
+
+**评审 ← 通道 3（非作者）· 钉 `caab1e00` · 基线 `b09b904c` · 17:17。** Standards 阻断 0 / 非阻断 2；Spec 阻断 0 / 非阻断 1。全文在任务 `task-c7cfb347` 的 report_task。
+
+- Standards ①：PP `adapters/parcelshipment` 的 `measurementOf` 先 `strings.ToUpper` 再认单位，正式 SELL 输入解析 `adapters/transportfulfillment/pricing_input.go` 的 `weightUnit` / `lengthUnit` 只认大写原词。ADR-0179 决定三要估价与随后的客户费用同口径；判断项 3 只披露了表外单位，没披露这一差。
+- Standards ②：SA `FormPerParcelSellTrialSum` 对单份为负、int64 溢出也答 `PreAcceptanceEstimateNotPositive`；决定二与旧执行器只判「合计不是正数」，单份负而合计正时多停一格，溢出记成「非正」名不副实。
+- Spec ③：PS `ShipmentRequest.SubmissionVersionDeclarationFor` 对已换代的提交版本照答，ADR-0179 决定四写「按委托当前提交版本读」。第 4 条下半接线前要么举证链上游已守当前版本，要么补「非当前版本答不可见」，要么交 PS owner。
+- 无发现：红线、所有权、单一权威、注释；第 1–3 条、第 4 条上半、第 6 条前半与顺带四条；采用册外键、另开事件类型与决定五、ADR-0158、ADR-0094 决定四无冲突（只判冲突，不替 owner 裁）。
+
+**评审 ← 通道 3（非作者）· 钉 `fb39860d` · 基线 `caab1e00` · 19:13。** Standards 阻断 0 / 非阻断 3；Spec 阻断 0 / 非阻断 1。全文在任务 `task-386c6296` 的 report_task（原卡 `task-cc550037` 18:39 开工，该会话存档最后写入 18:40:28、未交，18:57 改派）。
+
+- Standards 1（上段③）：未处置，票面未记。PS `adapters/settlementaccounting` 的 `applyCommandFor` 原样交请求里的提交版本，`SubmissionVersionDeclarationFor` 仍各版都认，与 ADR-0179 决定二、四「委托当前提交版本」不合。续办经 `ListWaitingOnOperatorRegistration` 取 `current_submission_version_id`，守住了；提交信封重投按信封里的版本，而 `FormNewSubmissionVersion` 在`已提交`、未形成决定时允许换代，这一路没守。今天采用册空、走不到读申报，故不阻断；psb/26 灌采用行之前须补「非当前版本答不可见」或交 PS owner。
+- Standards 2（上段②放大一格）：`estimateGapReason` 把溢出与单份为负同译 `ESTIMATE_NOT_POSITIVE`，经 `notFormedOutcomeFor` 落进 PS 处理尝试与续办引用，与判断项 9「分开是为了留下停在哪一格」相抵。
+- Standards 3（上段①）：代码未碰；`cmd/parcel-dispatch` 的 `preAcceptanceTrials` 把 PP 入口接上生产图之后，`measurementOf` 的口径差变为生产可达。
+- Spec 1：留痕按内容比且含 `trial_at`（Postgres `PreAcceptanceEstimateTraces.RecordEstimate` 的比较），两本账不比时刻。判断项 8 自述组合策略下冻结已落、账期那一项停`未配置`时事务照样提交，留痕随之已落；登记后重驱时若 `FormJudgmentAsOf` 给出新时点，同一请求身份撞留痕冲突、落`请求冲突`，推不动。判断项 8 以「同一判断时点」为前提，票面未举证该时点跨重驱不变——补一条用例，或在判断项 8 写明前提。
+- 无发现：判断项 7 与决定六不冲突（决定六未定载体，同一事务即「一起保存」），采用册外键、另开事件类型与决定五不冲突——只判冲突，不替 SA owner 裁；第 4 条下半、第 5 条、第 6 条后半、第 7 条与票面一致；判断项 10 与代码顺序一致；释放路径未改；判据二未做的一格已归 psb/26。
+
+两段的非阻断都不挡合入，本票不再收。去向待立票或交 owner：第二段 Standards 1（即第一段 Spec ③）须在 [票 26](./26-demo-tenant-adopts-the-pre-acceptance-estimate-form.md) 灌采用行之前处置；第二段 Standards 2、3 与 Spec 1 不挡 26。
+
+## 进 main 记录（2026-10-13 通道 1）
+
+远端 main `b09b904c` 就是本分支的根基，本票二十二笔分两段纯快进进 main，SHA 与分支 `mcp2-psb25` 相同。
+
+- 第一段 `b09b904c..caab1e00` 十四笔（`b7c9da5e`、`b9486c5d` 作者通道 5，其余通道 2），17:28 推出。验证在 `caab1e00` 的 detached 隔离树上：带 DSN `go test -p 1 -count=1 ./...` 139 ok / 0 FAIL / 14 无测试 / 0 cached（日志写于 17:27）。评审：通道 3 `task-c7cfb347`（钉 `caab1e00`）两轴无阻断。
+- 第二段 `caab1e00..fb39860d` 八笔（作者通道 2）；本记录随后一笔。验证在 `fb39860d`（detached 隔离树 `idp-parcel-mcp1-land-psb25b`，18:39–18:41）：按入库字节 gofmt 空、迁移无 CR；`go build ./...`、`go vet ./...` 退 0；清点在该 tip 重生成零差；分片核对通过；带 DSN `go test -p 1 -count=1 ./...` 139 ok / 0 FAIL / 14 无测试 / 0 cached；`-v` 探针 `TestAPreAcceptanceEstimateAdoptionIsAnImmutableRowOnARegisteredAccount`、`TestAPreAcceptanceEstimateTraceIsWrittenOnceAndReproducible` 为 PASS，非 SKIP。评审：通道 3 `task-386c6296`（钉 `fb39860d`）两轴无阻断。
+
+推送后拆隔离树 `idp-parcel-mcp2-psb25`、`idp-parcel-mcp5-psb25`（后者三份未跟踪文件与封存笔 `ba61f682` 的 blob 逐一相同，19:16 实测；指针 `salvage/mcp5-psb25-wip` 留着）与验证树 `idp-parcel-mcp1-land-psb25b`，分支指针改名 `merged/mcp2-psb25`、`merged/mcp5-psb25`。本记录纯 `.md`，推送方自审。
