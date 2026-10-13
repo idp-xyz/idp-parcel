@@ -1,7 +1,7 @@
 # 27 受理前控制只认委托当前提交版本：已换代的版本不读申报、不形成冻结
 
 Category: bug
-Status: 完工，待评审与重放——2026-10-13 20:5x 通道 1：做什么三条落在 `mcp1-psb27`，代码 tip `0005d4e0`（21:1x 收评审非阻断那一笔）、清点 `f47173d2`，见文末「完成记录」。第 1、2 条的代码是上一个通道 1 会话留下的未提交现场（八个文件 mtime 停在 20:22:56），本会话 20:4x 接手，自审后补了消费门那一格的纵向用例，分两笔提交。用户 20:4x 告知通道 2–5 空闲，评审门改为派非作者通道，认领时写的「推送方自审」作废；重放进 main 归通道 1。此前 in-progress——2026-10-13 20:1x 通道 1 认领（用户 20:0x 经队列告知「现在只有你可以工作了，请你自己独立全部完成」；此前两张派单 `task-28bd6f8c` → 通道 2、`task-3e3a24ac` → 通道 3 均作废，两边都没留下提交），分支 `mcp1-psb27`，基 `cd728610`（= origin/main），隔离 worktree `idp-parcel-mcp1-psb27`。作者与推送方同为通道 1，评审门照 [workflow.md](../../../docs/agents/workflow.md)「本仓不用子代理」那条由推送方自审，不算非作者评审。此前 ready-for-agent——2026-10-13 19:3x 通道 1 立（用户 19:2x 经队列点头「按你的建议开始吧」），出自[票 25](./25-pre-acceptance-estimate-formed-by-settlement.md)两段非作者评审：第一段 Spec ③（`task-c7cfb347`）与第二段 Standards 1（`task-386c6296`），原文摘在票 25 的 Comments。
+Status: resolved——2026-10-13 21:2x 通道 1：本票七笔纯快进进 main（至 `c5dd5b64`，SHA 与分支 `mcp1-psb27` 相同），进 main 记录与非作者评审见文末；判断项 1、2 两条越权风险点待 PS owner 复核。此前完工，待评审与重放——2026-10-13 20:5x 通道 1：做什么三条落在 `mcp1-psb27`，代码 tip `0005d4e0`（21:1x 收评审非阻断那一笔）、清点 `f47173d2`，见文末「完成记录」。第 1、2 条的代码是上一个通道 1 会话留下的未提交现场（八个文件 mtime 停在 20:22:56），本会话 20:4x 接手，自审后补了消费门那一格的纵向用例，分两笔提交。用户 20:4x 告知通道 2–5 空闲，评审门改为派非作者通道，认领时写的「推送方自审」作废；重放进 main 归通道 1。此前 in-progress——2026-10-13 20:1x 通道 1 认领（用户 20:0x 经队列告知「现在只有你可以工作了，请你自己独立全部完成」；此前两张派单 `task-28bd6f8c` → 通道 2、`task-3e3a24ac` → 通道 3 均作废，两边都没留下提交），分支 `mcp1-psb27`，基 `cd728610`（= origin/main），隔离 worktree `idp-parcel-mcp1-psb27`。作者与推送方同为通道 1，评审门照 [workflow.md](../../../docs/agents/workflow.md)「本仓不用子代理」那条由推送方自审，不算非作者评审。此前 ready-for-agent——2026-10-13 19:3x 通道 1 立（用户 19:2x 经队列点头「按你的建议开始吧」），出自[票 25](./25-pre-acceptance-estimate-formed-by-settlement.md)两段非作者评审：第一段 Spec ③（`task-c7cfb347`）与第二段 Standards 1（`task-386c6296`），原文摘在票 25 的 Comments。
 Blocked by: 无
 地盘：`internal/parcelshipment/domain`（`SubmissionVersionDeclarationFor` 与其用例；`FormNewSubmissionVersion` 只读不改）、`internal/parcelshipment/adapters/postgres` 的提交版本申报读口（`submission_version_declaration_view.go` 与其用例）、`internal/parcelshipment/application`（守卫若落在编排一层，只动受理判断里发起财务控制的那一段与其用例）、`cmd/parcel-dispatch` 的纵向用例（只新增）。**不碰** `internal/parcelshipment/adapters/settlementaccounting/`——那是[票 28](./28-psb25-review-tails-estimate-gaps-unit-folding-and-trace-as-of.md)的地盘，真要动先报通道 1。
 出处：[ADR-0179](../../../docs/adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 决定二「对委托当前提交版本的每一件声明包裹」、决定四「按委托当前提交版本读」；ADR-0045（新版本成为唯一待判断版本）；ADR-0094 决定一、二（`未形成`与`未配置`的恢复动作）。
@@ -82,3 +82,22 @@ Blocked by: 无
 - 机制清点在 `03e8de14` 上重跑生成器（`tools/mechanism-inventory`），差一行，成笔 `f47173d2`。
 - 收评审非阻断那一笔 `0005d4e0`（21:15）：两个文件无 CR、`gofmt -l` 空；`go build ./...`、`go vet ./...` 退 0；带 DSN 跑 PS `application`、`adapters/inbox`、`cmd/parcel-dispatch` 3 ok / 0 FAIL；纵向用例 `-v` 为 `PASS`；清点重生成零差。只改了注释、删了一段断言，反向依赖里其余包没有重跑。
 - 全量不在作者这层跑（[parallel-sessions.md](../../../docs/agents/parallel-sessions.md)「全量只跑一次」），由推送方在 tip 上跑。
+
+## Comments
+
+**评审 ← 通道 4（非作者）· 钉 `81987dfb` · 基线 `cd728610` · 21:10。** Standards 阻断 0 / 非阻断 2；Spec 阻断 0 / 非阻断 3。派单 `task-d48bcda4` ← 通道 1。原文摘录：
+
+- Standards 非阻断 ①：`AcceptanceChainOutcome` 头注改写后，「调用方对三者的处置完全相同（回滚重投）」紧跟在三个结果取值之后，读成三个结果就是假话（`AcceptanceChainDecided` 与 `AcceptanceChainVersionSuperseded` 都入账）；未决按 `ResumePath` 折、四格三格入账（ADR-0094 决定一、ADR-0106 决定一），这半句本已过时，这一段既已改到，该一并修。
+- Standards 非阻断 ②：`superseded_submission_envelope_test.go` 文件头「只有三个权威口换成替身」数的是另一文件 `newCustomerSupplementLoopFixture` 里的替身，按 AGENTS「改文档」计数与行号同构，数不是论点，去掉数字即可。
+- Standards 无发现：守卫与 ADR-0179 决定二、四，ADR-0045 决定三，PS CONTEXT「新版本成为唯一待判断版本」一致；`版本已换代`沿用 `ManualReviewVersionSuperseded` / `AuthorizedDispositionVersionSuperseded` 的既有用词；注释中文、无行号；证据只记 `S`；不碰租户取值。
+- Spec 非阻断 ①：判断项 4，`Handle` 对 `err != nil` 不留痕地吞掉。读错若出在消费门事务内，PG 事务已 aborted，下游见到的是 25P02 而非「同一种读失败」，停顿原因改由下游第一步措辞，正是 `Handle` 头注警告的「换成下游措辞」。正确性无损（照旧回滚、写不进账），代价在诊断，判断项没写到。
+- Spec 非阻断 ②：判断项 6 只数三处：链头守卫本身也在票面 application 地盘「只动发起财务控制的那一段」之外（判断项 1 已披露，没计入）；那三处都是接线必需，无顺手改动。
+- Spec 非阻断 ③：纵向用例「同一封再投由账本跳过」一段平凡通过：链重跑同样零写账，分不出两者。
+- Spec 无发现：判断项 1–3 与所引 ADR 无冲突（守卫在编排、消费门只折结果，合 ADR-0106 Alternatives；换代无恢复动作，不入 `ResumePath` 成立；头注不改的理由成立，读口改答会落`未形成`内部重试）；纵向其余三段钉住票面判据。
+- 评审者验证（钉 `81987dfb` 隔离检出，21:07–21:08）：带 DSN 跑 PS `application`、`adapters/inbox`、`cmd/parcel-dispatch` 3 ok / 0 FAIL；`-v` 单跑本票四条相关用例均 `PASS`，无 `SKIP`；改过的 `.go` 无 CR、`gofmt -l` 空；清点只差 `cmd/` 测试 121 → 122 一行。变异 m1 / m2 未复跑。
+
+去向：Standards ①②、Spec ③ 由 `0005d4e0` 收；Spec ①② 补进判断项 4、6（`c5dd5b64`）。这两笔只改注释、删一段断言与票面文字，没有回评审复评，推送方自审。
+
+## 进 main 记录（2026-10-13 通道 1）
+
+远端 main `cd728610` 就是本分支的基，本票七笔纯快进进 main，SHA 与分支 `mcp1-psb27` 相同：`9608ed40`、`b0d80f15`、`03e8de14`、`f47173d2`、`81987dfb`、`0005d4e0`、`c5dd5b64`；本记录随后一笔。验证在 `c5dd5b64`（detached 隔离树 `idp-parcel-mcp1-land-psb27`，21:17–21:19）：自 `cd728610` 起改过的 `.go` 按入库字节 gofmt 空、无 CR；`go build ./...`、`go vet ./...` 退 0；清点在该 tip 重生成零差；分片核对通过；带 DSN `go test -p 1 -count=1 ./...` 139 ok / 0 FAIL / 14 无测试 / 0 cached；`-v` 探针 `TestALateSubmittedEnvelopeOfASupersededVersionSettlesWithoutJudging`、`TestACustomerSupplementWaitIsResumedByTheNewSubmissionVersionEnvelope` 为 `PASS`，非 `SKIP`。全量跑了两次：评审钉的 `81987dfb` 上先验过一次（20:57–20:59，同为 139 ok / 0 FAIL / 0 cached），收非阻断之后 SHA 变了，推出去的必须是验过的那一个。评审：通道 4 非作者，两轴无阻断，见 Comments。推送后拆作者树 `idp-parcel-mcp1-psb27` 与验证树，分支指针改名 `merged/mcp1-psb27`。本记录纯 `.md`，推送方自审。
