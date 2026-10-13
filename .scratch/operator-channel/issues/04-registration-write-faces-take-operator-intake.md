@@ -1,7 +1,7 @@
 # 04 登记册配置写面逐口换操作者 Intake
 
 Category: enhancement
-Status: in-progress——2026-10-12 通道 5 认领「剩余工作」第 1 件（身份族 6 口换操作者 Intake，同笔撤隔离放行），分支 `mcp5-oc04id`、基 `1e02d2ea`。此前 in-progress——2026-10-10 22:3x 通道 1：「剩余工作」第 2、3 件均已进 main（第 3 件 21:2x 至 `3bdf8aad`，第 2 件 21:4x 至 `1253c768`，进 main 记录各在其节）；本票不收口，第 1 件还等 07。此前 in-progress——2026-10-10 通道 2：第 2 件完工，待评审与重放（代码 tip `4b17d139`，完成记录在「剩余工作」第 2 件之下）；本票不收口，第 1 件还等 07。此前 in-progress——2026-10-10 通道 2 认领「剩余工作」第 2 件（价卡登记口 `/pricing-price-card-registrations` 换操作者 Intake），分支 `mcp2-oc04-pcr`、基 `1d67e27c`。此前 in-progress——2026-10-10 通道 5 收口核查（钉 `a8cf12ff`）之后通道 1 裁定（用户授权自决）：价卡登记口归本票，身份族 6 口另等 07；剩余三件见文末「剩余工作」。此前 in-progress——2026-09-25 通道 4 认领（用户令独立完成操作者渠道这条链），逐上下文分批进 main：第一批可见性八口、第二批关务七口、第三批网络七口、第四批计价四口、第五批商业参与方六口、第六批 TF 五口已换（见文末）；不在隔离名单上的口只剩价卡登记（属 price-card-import）。此前 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
+Status: 完工，待评审与重放——2026-10-13 通道 5：「剩余工作」第 1 件完工（代码 tip `ad1e332b`，完成记录在该件之下），第 2、3 件已进 main，三件齐。此前 in-progress——2026-10-12 通道 5 认领「剩余工作」第 1 件（身份族 6 口换操作者 Intake，同笔撤隔离放行），分支 `mcp5-oc04id`、基 `1e02d2ea`。此前 in-progress——2026-10-10 22:3x 通道 1：「剩余工作」第 2、3 件均已进 main（第 3 件 21:2x 至 `3bdf8aad`，第 2 件 21:4x 至 `1253c768`，进 main 记录各在其节）；本票不收口，第 1 件还等 07。此前 in-progress——2026-10-10 通道 2：第 2 件完工，待评审与重放（代码 tip `4b17d139`，完成记录在「剩余工作」第 2 件之下）；本票不收口，第 1 件还等 07。此前 in-progress——2026-10-10 通道 2 认领「剩余工作」第 2 件（价卡登记口 `/pricing-price-card-registrations` 换操作者 Intake），分支 `mcp2-oc04-pcr`、基 `1d67e27c`。此前 in-progress——2026-10-10 通道 5 收口核查（钉 `a8cf12ff`）之后通道 1 裁定（用户授权自决）：价卡登记口归本票，身份族 6 口另等 07；剩余三件见文末「剩余工作」。此前 in-progress——2026-09-25 通道 4 认领（用户令独立完成操作者渠道这条链），逐上下文分批进 main：第一批可见性八口、第二批关务七口、第三批网络七口、第四批计价四口、第五批商业参与方六口、第六批 TF 五口已换（见文末）；不在隔离名单上的口只剩价卡登记（属 price-card-import）。此前 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
 Blocked by: 03（已 resolved）；[07](./07-admin-web-login-gate.md)——只挡身份族 6 口：换口要同笔撤隔离放行（ADR-0150 决定三），前提与 [15](./15-operation-decision-faces-take-operator-intake.md) 余下四口是同一件，演示环境接上发行方与合成操作者授予（2026-10-10 通道 1 补）；[17](./17-demo-issuer-dex-and-synthetic-operators.md)——同一前提里发行方与合成操作者那半（2026-10-12 通道 1 补）。07 与 17 均已 resolved（2026-10-12 通道 1 派单时告知）
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`cmd/parcel-api` 端点表里 ADR-0085 决定一那一族登记端点的装配行及其装配测试。
@@ -128,6 +128,77 @@ http 测试。逐条如下，交通道 1 定。取证全部实测于 `a8cf12ff`�
 
    **认领 ← 通道 5 · 2026-10-12 22:3x**（派单 `task-ba9d1ee4`，通道 1 22:2x）：分支 `mcp5-oc04id`，基 `1e02d2ea`（= origin/main，22:2x `ls-remote` 实测），
    隔离工作树 `/home/tops/workspace/idp-parcel-mcp5-oc04id`。07 与 [17](./17-demo-issuer-dex-and-synthetic-operators.md) 已 resolved，上面那条前提已到位。
+
+   **完成记录 ← 通道 5 · 2026-10-13 13:0x**（卡 `task-01263bb3`，接替 `task-ba9d1ee4`：前一会话提了认领与代码两笔、没留记录；本会话无在途记忆，
+   验证与取证都在干净检出上重做。证据层级 `S`：合成替身、`SYN-` 夹具与演示租户）——完工，待评审与重放
+
+   各笔：`5acb2796` 票面认领；`c2ad1d26` 代码（六口改挂 `operatorRegistries.commercial`，同笔撤隔离写放行，隔离用例改写）；`ad1e332b` 评审 N1
+   补测（只改测试）；本记录随其后一笔。机制清点在 `c2ad1d26`、`ad1e332b` 的干净检出上各按 `ci.yml`「Mechanism inventory is current」那步重生成一次，
+   `docs/product/MECHANISM-INVENTORY.md` 都无差，不另成笔。
+
+   判据逐条（只对这六口）：
+   - ✅ **归类表完整**。这六口就是归类表「本票，但在隔离放行名单上」那一格余下的全部（`/customs-regulatory-credential-registrations` 收口核查时已归 11），
+     本件换完那一格即空。钉 `c2ad1d26`，端点表 `/commercial-*` 行里仍挂字面量 `UnconfiguredIntake{}` 的只剩 `/commercial-publications`，归 06 / 18。
+   - ✅ **已换各口对合成操作者答业务结果、对三格各答其格（带测试）**。装配层：六口进了 `swappedRegistryFaces`，
+     `TestSwappedRegistryFacesAnswerFromTheOperatorChannel` 与 `TestSwappedRegistryFacesMapTheRefusalAndDependencyGrades` 逐口钉不带令牌 401
+     `OPERATOR_CREDENTIAL_REJECTED`、授予齐备时自报租户 400 `MALFORMED_REQUEST`、只有查阅授予 403 `OPERATOR_NOT_GRANTED`、操作者册读不动 503
+     `IDENTITY_DEPENDENCY_UNAVAILABLE`。http 层：`TestPartyIdentityEndpointsAnswerTheOperatorChannelGrades`（六个端点各答 401、403 未授予、503、
+     403 未配置，载荷一字未读、编排一次未调）、`TestPartyIdentityLinesRefuseASelfReportedTenant`、`TestPartyIdentityLinesAuthenticateBeforeReadingThePayload`，
+     加各口「租户取认证结果」的译装用例。真库：`TestTheOperatorChannelRegistersThePartyIdentityFamilyAgainstARealDatabase`（四类登记、停用与重放，
+     册上读回落在信封给的租户下）与 `TestTheOperatorChannelRegistersALegalEntityProfileThatResolvesAgainstARealDatabase`（资料口），`-v` 下 `PASS`
+     非 `SKIP`。演示环境见下。「做什么」第 2 条余下两句：这六口此前测的是隔离放行二分（`expectedWriteAdmittedLines` 名单内 400、名单外 403），
+     同笔从二分表删掉、改由上面的三格用例接；未换的口答复不变由 `TestEveryAssembledEndpointAnswersUnconfigured` 钉。隔离读放行表与 `SYN-` 写开关
+     零改动：`git diff 1e02d2ea c2ad1d26` 不碰 `assemble_isolated_read.go`；`assemble_isolated_write.go` 的改行里 `isolatedWriteTenantEnv`、`HasPrefix`、
+     `SYN-` 零命中，前缀门与开关原样。
+   - ✅ **装配测试与端点表仍一一对照**：`TestEveryAssembledEndpointAnswersUnconfigured` 绿（`cmd/parcel-api` 包 ok，钉 `c2ad1d26` 与 `ad1e332b`）。
+   - ✅ **ADR-0150 决定三**：同一笔 `c2ad1d26` 里，`IsolatedPartyIdentityIntake` 换口后一个方法都不剩、整个类型删除；`isolatedWriteAdmittedCommandLines`
+     删这六行，`isolatedWriteAdmission.partyIdentity` 与 `assembleBusinessEndpoints` 的 `isolatedPartyIdentity` 入参随之撤下；隔离放行用例改写为
+     真渠道答复格用例（`isolated_write_identity_test.go` 删、另立 `assemble_party_identity_operator_test.go`，资料口那份与 http 层两份改名改写）。
+     钉 `c2ad1d26`，全仓 `.go` 里 `IsolatedPartyIdentityIntake`、`partyIdentityIntake`、`isolatedPartyIdentity` 零命中（`git grep`）。
+
+   **演示环境取证**（`S`；钉 `ad1e332b` 的干净检出，与 `c2ad1d26` 只差一份测试文件）：55432 上一次性库 `mcp5_oc04id_probe` 经 `seed.sh` 灌全；
+   `parcel-api` 照 README「操作者渠道」带三件参数起在 `127.0.0.1:19585`，隔离读写两个开关都不设；`probe-operator-channel.sh` 原样三格对上。
+   六口各打三枪拒绝格——不带令牌 401 `OPERATOR_CREDENTIAL_REJECTED`、查阅员 403 `OPERATOR_NOT_GRANTED`、配置员带 `tenantId` 400
+   `MALFORMED_REQUEST`——之后册上本探针的行数为零；配置员按引用顺序登参与方、法人、客户账户、关系、停用该账户、法人资料，各答 201 `REGISTERED`
+   （停用答 `DEACTIVATED`），重放首笔答 200 `ALREADY_REGISTERED`；回读这几行（账户两笔修订）租户全是 `SYN-TENANT-01`，即 Dex 令牌解析出的操作者
+   所绑的租户。走完停进程、删库。管理台 party 那几页没在浏览器里走，只静态核了：每个 `/api` 请求经 `withBearer` 带令牌（`auth/bearer.ts`，票 07），
+   身份族表单的载荷不带 `tenantId`（`business-party-form.test.ts` 钉着）。
+
+   **评审 N1 的处置**（通道 2 非作者评审钉 `c2ad1d26`、阻断 0，全文在卡 `task-bb75c532`；本会话据通道 1 转来的三条非阻断办）：
+   `TestPartyIdentityIntakeRefusesItemsMeantForAnotherLine` 原先只对法人口投「本口一项 + 别的口一项」；参与方那格只投了法人项、不带本口一项，拦它的是
+   「本口恰一项」那道门；客户账户与关系两口没投。`ad1e332b` 改为业务参与方、责任法人、货主客户账户、参与方关系各投一次：本口一项合规另带别的口一项
+   即拒，只带本口一项照常译出作对照；头注去掉「四类」这个跨文件计数。判别力（临时变异 `operator_registry_intake.go`，该口的
+   `document.exactlyOne(line, own)` 换成 `exactlyOneItem(line, own, own)`，证完 `git checkout` 还原、未提交；看
+   `go test -count=1 ./internal/partycommercial/adapters/http/` 的退出码）：钉 `c2ad1d26`，客户账户（评审 M4）0、业务参与方 0、参与方关系 0、
+   责任法人 1；钉 `ad1e332b`，四个变异都退 1，各只红自己那一口的子用例。
+
+   **判断项**：
+   1. **N2 不改**：停用口与资料口调 `exactlyOneItem(line, n, n)`，同一长度传两遍。这两份外壳（`deactivationBatchDocument`、
+      `legalEntityProfileBatchDocument`）只装本口一个数组，别的口的项在 `decodeClosedDocument` 那一步已作未知键拒掉、走不到这道门（停用口的
+      「投了登记项」、资料口的「未知键」两格钉着），`total` 恒等于 `own`——传两遍是如实写，不是漏数。
+   2. **N1 换掉了参与方那格的旧形状**（只投别的口的项）：那一形走的是「本口恰一项」那道门，由法人口的「零项」「两项」与各口的对照步盖着，不因此少一格。
+   3. **授予格**：六口挂 `operatorRegistries.commercial`，认证走 `AuthenticateRegistryWrite`（登记册配置写，ADR-0100 决定四），与第五批商业各口同一格；
+      演示种子里配置员已有，`02-grants.json` 未改——演示取证里查阅员 403、配置员 201 即此。
+   4. **越界报备**（前一会话 10-12 22:40 发给通道 1，过期进了死信）：照 oc/11 先例 `187364ff` 删 `IsolatedPartyIdentityIntake` 整个类型；
+      `cmd/parcel-api/main.go` 删一行；`assemble_pricing_import_test.go`、`assemble_publication_operator_test.go`、`assemble_integration_client_test.go`
+      的装配调用各少一个 `nil`，`assemble_operator_decisions_test.go` 三处。通道 1 于 10-13 11:5x 派本卡时追认为机械改动、照先例成立；通道 4 的
+      oc/15 四口本轮不换（裁定 A），不在同几行上撞。
+   5. 本件没有替 owner 定的格。
+
+   **验证**（作者那层；两次都在 `/home/tops/workspace/idp-parcel-verify-oc04id` 的干净 detached 检出上，含 PG）：
+   - 钉 `c2ad1d26`：`go build ./...`、`go vet ./...` 退 0；toolchain 自带的 `gofmt`（go1.26.8）`-l .` 零行；
+     `IDP_PARCEL_POSTGRES_DSN=postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable go test -count=1 -p 1 <包>` 退 0。包取本笔改过的
+     `cmd/parcel-api`、`internal/partycommercial/adapters/http` 及 `go list -test` 反查的反向依赖，加 `./internal/architecture/...`，实得
+     `cmd/parcel-api`、`internal/architecture`、`internal/partycommercial/adapters/accessidentity`、`internal/partycommercial/adapters/http`，四行 `ok`、
+     零 `FAIL`；反向依赖里的 `cmd/*` 只有 `cmd/parcel-api`，带 DSN。`-v` 单跑上面两条真库用例：两条 `--- PASS`、零 `--- SKIP`。
+   - 钉 `ad1e332b`：同一套逐项同上（包集合相同，四行 `ok`，两条 `PASS`）。
+
+   **未改，留给前端**（`apps/admin-web/**` 一人在 main 上做）：`apps/admin-web/src/pages/party/` 下这几处注释仍引旧文件名 `isolated_write_intake.go`
+   ——`identity-deactivation-form.ts` 与 `identity-deactivation-form.test.ts`（「isolated_write_intake.go 停用口注释」）、`business-party-form.ts`
+   （「与服务端一致：isolated_write_intake.go 的」）、`business-party-form.test.ts`（「逐字镜像 isolated_write_intake.go 的 businessPartyDocument」）、
+   `presentation.ts`（「isolated_write_intake.go 里包 ErrMalformedRequest 的那几道门」）；那份外壳与逐项翻译现在是 `party_identity_payload.go`。
+   与第五批记下的 `api.ts` 在线登记口注释清扫同一张前端票办。
+
 2. **价卡登记口 `/pricing-price-card-registrations` 换操作者 Intake**，照第四批计价四口办——无阻塞，代码活，由通道 1 另派。
 
    **完成记录 ← 通道 2 · 2026-10-10**（派单 `task-4a593223`；分支 `mcp2-oc04-pcr`，基 `1d67e27c`；证据层级 `S`：合成替身与 `SYN-` 夹具）
