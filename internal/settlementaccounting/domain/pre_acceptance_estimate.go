@@ -55,8 +55,12 @@ const (
 	PreAcceptanceEstimateTrialWithoutTotal
 	// PreAcceptanceEstimateCurrencyMismatch：任一份合计的币种不是控制作用域的币种——结算不换算。
 	PreAcceptanceEstimateCurrencyMismatch
-	// PreAcceptanceEstimateNotPositive：合计不是正数，或加不进 int64。
+	// PreAcceptanceEstimateNotPositive：合计不是正数。
 	PreAcceptanceEstimateNotPositive
+	// PreAcceptanceEstimateTrialNegative：任一份合计为负，哪怕各件加起来仍是正数（见 FormPerParcelSellTrialSum）。
+	PreAcceptanceEstimateTrialNegative
+	// PreAcceptanceEstimateSumOverflow：各件合计加不进 int64。
+	PreAcceptanceEstimateSumOverflow
 )
 
 func (gap PreAcceptanceEstimateGap) String() string {
@@ -71,6 +75,10 @@ func (gap PreAcceptanceEstimateGap) String() string {
 		return "CURRENCY_MISMATCH"
 	case PreAcceptanceEstimateNotPositive:
 		return "NOT_POSITIVE"
+	case PreAcceptanceEstimateTrialNegative:
+		return "TRIAL_NEGATIVE"
+	case PreAcceptanceEstimateSumOverflow:
+		return "SUM_OVERFLOW"
 	default:
 		return ""
 	}
@@ -99,6 +107,10 @@ func (estimate PreAcceptanceEstimate) Trials() []PreAcceptanceTrial {
 // FormPerParcelSellTrialSum 按「逐件 SELL 试算合计」形态把各件试算合成控制金额（ADR-0179 决定二）。停法照搬旧执行器：任一份没有
 // 合计、任一份合计的币种不是控制作用域的币种、合计不是正数，都答未形成并指名停在哪一格；不拿零、部分合计或换算顶替。缺件那一格
 // 在试算那一侧就答了，到不了这里。
+//
+// 任一份为负也停，哪怕合计仍是正数——决定二没有这一格，它是本形态的取舍：一件的 SELL 试算为负是价卡对那一件给了一笔返还，加进
+// 合计会让冻结少于其余各件试算之和，等于拿这一件的负数去抵另几件该占的资金。合计加不进 int64 同样停，不绕回。两格各自指名，不并
+// 进「合计不是正数」：并了，处理尝试上就分不出是价卡给了负数、合计太大，还是本就合出零。
 func FormPerParcelSellTrialSum(
 	adoption PreAcceptanceEstimateAdoption,
 	priceCard string,
@@ -123,8 +135,11 @@ func FormPerParcelSellTrialSum(
 		if trialCurrency.String() != currency.String() {
 			return PreAcceptanceEstimate{}, PreAcceptanceEstimateCurrencyMismatch, nil
 		}
-		if minor < 0 || total > maxEstimateMinor-minor {
-			return PreAcceptanceEstimate{}, PreAcceptanceEstimateNotPositive, nil
+		if minor < 0 {
+			return PreAcceptanceEstimate{}, PreAcceptanceEstimateTrialNegative, nil
+		}
+		if total > maxEstimateMinor-minor {
+			return PreAcceptanceEstimate{}, PreAcceptanceEstimateSumOverflow, nil
 		}
 		total += minor
 	}

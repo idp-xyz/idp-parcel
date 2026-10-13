@@ -290,7 +290,8 @@ func TestAnUnadoptedAccountStopsAtAmountNotConfiguredBeforeAnyLedger(t *testing.
 }
 
 // Covers: ADR-0179 决定二、三的停法与 UC-SA-002「非正数金额」——估价那一口的每一格各落一个原因、都答未形成：采用册与试算读不回、
-// 选卡未配置与适用冲突、提交版本不可见、缺件、一份试算都没有、任一份没有合计、币种不是作用域的币种、合计不是正数、留痕写不进。
+// 选卡未配置与适用冲突、提交版本不可见、缺件、一份试算都没有、任一份没有合计、币种不是作用域的币种、合计不是正数、一份为负、合计加
+// 不进 int64、留痕写不进。
 // 每一格都在碰两本账之前停下，不拿零、部分合计或换算顶替；原因两两不同。
 func TestEveryEstimateCellStopsBeforeTouchingEitherLedger(t *testing.T) {
 	answerOf := func(outcome ports.PreAcceptanceTrialOutcome) *trialSourceDouble {
@@ -328,15 +329,17 @@ func TestEveryEstimateCellStopsBeforeTouchingEitherLedger(t *testing.T) {
 		"试算读不回": {trials: func(*testing.T) *trialSourceDouble {
 			return &trialSourceDouble{err: errors.Join(ports.ErrPreAcceptanceTrialsUnavailable, errors.New("series register down"))}
 		}, reason: application.EstimateTrialsUnavailable},
-		"选卡未配置":    {trials: func(*testing.T) *trialSourceDouble { return answerOf(ports.PreAcceptanceTrialPriceCardNotConfigured) }, reason: application.EstimatePriceCardNotConfigured},
-		"选卡适用冲突":   {trials: func(*testing.T) *trialSourceDouble { return answerOf(ports.PreAcceptanceTrialPriceCardConflict) }, reason: application.EstimatePriceCardConflict},
-		"提交版本不可见":  {trials: func(*testing.T) *trialSourceDouble { return answerOf(ports.PreAcceptanceTrialSubmissionNotVisible) }, reason: application.EstimateSubmissionNotVisible},
-		"缺件":       {trials: func(*testing.T) *trialSourceDouble { return answerOf(ports.PreAcceptanceTrialsIncomplete) }, reason: application.EstimateDeclarationIncomplete},
-		"一份试算都没有":  {trials: func(*testing.T) *trialSourceDouble { return answerOf(ports.PreAcceptanceTrialsFormed) }, reason: application.EstimateHasNoTrial},
-		"一份没有合计":   {trials: untotaled, reason: application.EstimateTrialWithoutTotal},
-		"币种不是作用域的": {trials: foreign, reason: application.EstimateCurrencyMismatch},
-		"合计不是正数":   {trials: func(t *testing.T) *trialSourceDouble { return estimating(t, 0) }, reason: application.EstimateNotPositive},
-		"留痕写不进":    {traces: &traceDouble{err: errors.New("trace register down")}, reason: application.EstimateTraceUnavailable},
+		"选卡未配置":       {trials: func(*testing.T) *trialSourceDouble { return answerOf(ports.PreAcceptanceTrialPriceCardNotConfigured) }, reason: application.EstimatePriceCardNotConfigured},
+		"选卡适用冲突":      {trials: func(*testing.T) *trialSourceDouble { return answerOf(ports.PreAcceptanceTrialPriceCardConflict) }, reason: application.EstimatePriceCardConflict},
+		"提交版本不可见":     {trials: func(*testing.T) *trialSourceDouble { return answerOf(ports.PreAcceptanceTrialSubmissionNotVisible) }, reason: application.EstimateSubmissionNotVisible},
+		"缺件":          {trials: func(*testing.T) *trialSourceDouble { return answerOf(ports.PreAcceptanceTrialsIncomplete) }, reason: application.EstimateDeclarationIncomplete},
+		"一份试算都没有":     {trials: func(*testing.T) *trialSourceDouble { return answerOf(ports.PreAcceptanceTrialsFormed) }, reason: application.EstimateHasNoTrial},
+		"一份没有合计":      {trials: untotaled, reason: application.EstimateTrialWithoutTotal},
+		"币种不是作用域的":    {trials: foreign, reason: application.EstimateCurrencyMismatch},
+		"合计不是正数":      {trials: func(t *testing.T) *trialSourceDouble { return estimating(t, 0) }, reason: application.EstimateNotPositive},
+		"一份为负":        {trials: func(t *testing.T) *trialSourceDouble { return estimating(t, 500, -1) }, reason: application.EstimateTrialNegative},
+		"合计加不进 int64": {trials: func(t *testing.T) *trialSourceDouble { return estimating(t, 1<<62, 1<<62) }, reason: application.EstimateSumOverflow},
+		"留痕写不进":       {traces: &traceDouble{err: errors.New("trace register down")}, reason: application.EstimateTraceUnavailable},
 	}
 	seen := map[application.NotFormedReason]string{}
 	for name, tc := range cases {

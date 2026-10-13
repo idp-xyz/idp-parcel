@@ -357,7 +357,9 @@ func notFormedOutcomeFor(reason saapplication.NotFormedReason) (psports.PreAccep
 		saapplication.EstimateHasNoTrial,
 		saapplication.EstimateTrialWithoutTotal,
 		saapplication.EstimateCurrencyMismatch,
-		saapplication.EstimateNotPositive:
+		saapplication.EstimateNotPositive,
+		saapplication.EstimateTrialNegative,
+		saapplication.EstimateSumOverflow:
 		// 补价卡、补件或改卡都推得动它们，但没有一样会发信封来重驱这份委托：挪到`未配置`只换来一次没人来推的等待。
 		return psports.PreAcceptanceControlNotFormed, nil
 	default:

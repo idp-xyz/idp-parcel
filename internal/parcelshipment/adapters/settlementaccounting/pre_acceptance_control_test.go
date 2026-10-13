@@ -991,6 +991,24 @@ func TestNotFormedReasonsLandOnTheCellOfTheirRecoveryAction(t *testing.T) {
 			wantOutcome: psports.PreAcceptanceControlNotFormed,
 			wantReason:  "SA-ESTIMATE_NOT_POSITIVE",
 		},
+		"一份为负": {
+			arrange: func(t *testing.T) *controlFixture {
+				return withSecondTrial(t, func() (sadomain.PreAcceptanceTrial, error) {
+					return sadomain.NewPreAcceptanceTrial("P-2", "EST-P-2", nil, -1, value(t, sadomain.NewCurrencyCode, "CNY"))
+				})
+			},
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "SA-ESTIMATE_TRIAL_NEGATIVE",
+		},
+		"合计加不进 int64": {
+			arrange: func(t *testing.T) *controlFixture {
+				return withSecondTrial(t, func() (sadomain.PreAcceptanceTrial, error) {
+					return sadomain.NewPreAcceptanceTrial("P-2", "EST-P-2", nil, 1<<63-1, value(t, sadomain.NewCurrencyCode, "CNY"))
+				})
+			},
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "SA-ESTIMATE_SUM_OVERFLOW",
+		},
 		"控制策略未配置": {
 			arrange: func(t *testing.T) *controlFixture {
 				fixture := newControlFixture(t)

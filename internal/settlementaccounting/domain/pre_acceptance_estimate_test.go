@@ -60,7 +60,8 @@ func TestAPerParcelSellTrialSumAddsEveryParcelAndKeepsItsProvenance(t *testing.T
 }
 
 // Covers: ADR-0179 决定二的停法——任一份没有合计、任一份合计的币种不是控制作用域的币种、合计不是正数、一份试算都没有，都答未形成并
-// 指名停在哪一格；不拿零、部分合计或换算顶替。
+// 指名停在哪一格；不拿零、部分合计或换算顶替。单份为负与合计加不进 int64 各占一格，不并进「合计不是正数」：格是为了留下停在哪里，
+// 三种停法并成一格，处理尝试上就分不出是价卡给了负数、合计太大还是本就合出零。
 func TestAPerParcelSellTrialSumStopsInsteadOfFillingAGap(t *testing.T) {
 	untotaled, err := domain.NewUntotaledPreAcceptanceTrial("P-2", "EST-P-2", nil)
 	if err != nil {
@@ -70,12 +71,12 @@ func TestAPerParcelSellTrialSumStopsInsteadOfFillingAGap(t *testing.T) {
 		trials []domain.PreAcceptanceTrial
 		want   domain.PreAcceptanceEstimateGap
 	}{
-		"一份试算都没有":   {want: domain.PreAcceptanceEstimateHasNoTrial},
-		"一份没有合计":    {trials: []domain.PreAcceptanceTrial{totaledTrial(t, "P-1", 1250, "CNY"), untotaled}, want: domain.PreAcceptanceEstimateTrialWithoutTotal},
-		"一份币种不对":    {trials: []domain.PreAcceptanceTrial{totaledTrial(t, "P-1", 1250, "CNY"), totaledTrial(t, "P-2", 100, "USD")}, want: domain.PreAcceptanceEstimateCurrencyMismatch},
-		"合计为零":      {trials: []domain.PreAcceptanceTrial{totaledTrial(t, "P-1", 0, "CNY")}, want: domain.PreAcceptanceEstimateNotPositive},
-		"一份为负":      {trials: []domain.PreAcceptanceTrial{totaledTrial(t, "P-1", 500, "CNY"), totaledTrial(t, "P-2", -1, "CNY")}, want: domain.PreAcceptanceEstimateNotPositive},
-		"加不进 int64": {trials: []domain.PreAcceptanceTrial{totaledTrial(t, "P-1", 1<<62, "CNY"), totaledTrial(t, "P-2", 1<<62, "CNY")}, want: domain.PreAcceptanceEstimateNotPositive},
+		"一份试算都没有":    {want: domain.PreAcceptanceEstimateHasNoTrial},
+		"一份没有合计":     {trials: []domain.PreAcceptanceTrial{totaledTrial(t, "P-1", 1250, "CNY"), untotaled}, want: domain.PreAcceptanceEstimateTrialWithoutTotal},
+		"一份币种不对":     {trials: []domain.PreAcceptanceTrial{totaledTrial(t, "P-1", 1250, "CNY"), totaledTrial(t, "P-2", 100, "USD")}, want: domain.PreAcceptanceEstimateCurrencyMismatch},
+		"合计为零":       {trials: []domain.PreAcceptanceTrial{totaledTrial(t, "P-1", 0, "CNY")}, want: domain.PreAcceptanceEstimateNotPositive},
+		"一份为负而合计仍为正": {trials: []domain.PreAcceptanceTrial{totaledTrial(t, "P-1", 500, "CNY"), totaledTrial(t, "P-2", -1, "CNY")}, want: domain.PreAcceptanceEstimateTrialNegative},
+		"加不进 int64":  {trials: []domain.PreAcceptanceTrial{totaledTrial(t, "P-1", 1<<62, "CNY"), totaledTrial(t, "P-2", 1<<62, "CNY")}, want: domain.PreAcceptanceEstimateSumOverflow},
 	} {
 		t.Run(name, func(t *testing.T) {
 			estimate, gap, err := domain.FormPerParcelSellTrialSum(perParcelAdoption(t), "PRICE_CARD:SYN-PLAN@v1",
@@ -84,6 +85,17 @@ func TestAPerParcelSellTrialSumStopsInsteadOfFillingAGap(t *testing.T) {
 				t.Fatalf("gap = %s total = %d err = %v, 想要停在 %s、不出金额", gap, estimate.TotalMinor(), err, tc.want)
 			}
 		})
+	}
+	named := map[string]domain.PreAcceptanceEstimateGap{}
+	for _, gap := range []domain.PreAcceptanceEstimateGap{
+		domain.PreAcceptanceEstimateHasNoTrial, domain.PreAcceptanceEstimateTrialWithoutTotal,
+		domain.PreAcceptanceEstimateCurrencyMismatch, domain.PreAcceptanceEstimateNotPositive,
+		domain.PreAcceptanceEstimateTrialNegative, domain.PreAcceptanceEstimateSumOverflow,
+	} {
+		if other, clash := named[gap.String()]; clash || gap.String() == "" {
+			t.Fatalf("停格 %d 的名字 %q 空着或与 %d 撞名——停在哪一格分不出来", gap, gap.String(), other)
+		}
+		named[gap.String()] = gap
 	}
 
 	if _, _, err := domain.FormPerParcelSellTrialSum(domain.PreAcceptanceEstimateAdoption{}, "PRICE_CARD:SYN-PLAN@v1",

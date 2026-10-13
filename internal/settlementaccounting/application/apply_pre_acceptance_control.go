@@ -80,8 +80,8 @@ const (
 	EstimateAdoptionUnavailable
 	EstimateTrialsUnavailable
 	EstimateTraceUnavailable
-	// 试算答了、估价没形成，按停在哪一格分开：选卡两格、提交版本不可见、缺件，以及决定二的四种合计停法。恢复动作多半相同（补
-	// 价卡、补件或改卡），分开是为了留下停在哪里——不拿零、部分合计或换算顶替哪一格。
+	// 试算答了、估价没形成，按停在哪一格分开：选卡两格、提交版本不可见、缺件，以及合计那一步的各格（决定二的停法，外加单份为负与
+	// 合计加不进 int64）。恢复动作多半相同（补价卡、补件或改卡），分开是为了留下停在哪里——不拿零、部分合计或换算顶替哪一格。
 	EstimatePriceCardNotConfigured
 	EstimatePriceCardConflict
 	EstimateSubmissionNotVisible
@@ -90,6 +90,8 @@ const (
 	EstimateTrialWithoutTotal
 	EstimateCurrencyMismatch
 	EstimateNotPositive
+	EstimateTrialNegative
+	EstimateSumOverflow
 )
 
 func (reason NotFormedReason) String() string {
@@ -140,6 +142,10 @@ func (reason NotFormedReason) String() string {
 		return "ESTIMATE_CURRENCY_MISMATCH"
 	case EstimateNotPositive:
 		return "ESTIMATE_NOT_POSITIVE"
+	case EstimateTrialNegative:
+		return "ESTIMATE_TRIAL_NEGATIVE"
+	case EstimateSumOverflow:
+		return "ESTIMATE_SUM_OVERFLOW"
 	default:
 		return ""
 	}
@@ -621,6 +627,10 @@ func estimateGapReason(gap domain.PreAcceptanceEstimateGap) (NotFormedReason, bo
 		return EstimateCurrencyMismatch, true, nil
 	case domain.PreAcceptanceEstimateNotPositive:
 		return EstimateNotPositive, true, nil
+	case domain.PreAcceptanceEstimateTrialNegative:
+		return EstimateTrialNegative, true, nil
+	case domain.PreAcceptanceEstimateSumOverflow:
+		return EstimateSumOverflow, true, nil
 	default:
 		return NotFormedReasonNone, false, fmt.Errorf("form pre-acceptance estimate: unhandled estimate gap %d", gap)
 	}
