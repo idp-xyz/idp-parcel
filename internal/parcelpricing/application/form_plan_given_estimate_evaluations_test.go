@@ -189,8 +189,8 @@ func newPlanGivenHandler(
 	return handler
 }
 
-// 判据一前半：绑燃油序列的卡，序列在用且基准时点有期次——经共用补齐读数取到取值，评价完成，合计含燃油项。纯函数直调时这一格
-// 落 PENDING（缺序列取值），本入口要补的正是这一格。
+// 判据「绑燃油序列的价卡：序列在用且基准时点有期次时，评价 `COMPLETED`，合计含燃油项」：取值经共用补齐读数取到。纯函数直调时
+// 这一格落 PENDING（缺序列取值），本入口要补的正是这一格。
 func TestPlanGivenEstimateOnAFuelBoundCardCompletesThroughTheSharedReadingCompletion(t *testing.T) {
 	inForce, register := fuelCompletion(t)
 	handler := newPlanGivenHandler(t, application.FormPlanGivenEstimateEvaluationsDeps{SeriesInForce: inForce, SeriesVersions: register})
@@ -240,8 +240,8 @@ func TestPlanGivenEstimateOnAFuelBoundCardCompletesThroughTheSharedReadingComple
 	}
 }
 
-// 判据一后半：序列没登记、或登记了没复核——不编造取值，评价落 PENDING，解释里带补齐说明。说明与正式评价同一份：同一组登记册
-// 状态、同一形成时刻下，正式评价编排交回的那条说明逐字出现在试算评价的解释里（ADR-0152 决定三：补齐读数只有一处实现）。
+// 判据「序列没登记或没复核时落 `PENDING`，解释里带补齐说明，说明与正式评价同一份」：不编造取值；「同一份」指同一组登记册状态、
+// 同一形成时刻下，正式评价编排交回的那条说明逐字出现在试算评价的解释里（ADR-0152 决定三：补齐读数只有一处实现）。
 func TestPlanGivenEstimateLeavesAnUnresolvedFuelSeriesPendingWithTheFormalEvaluationsNote(t *testing.T) {
 	for name, outcome := range map[string]ports.InForceOutcome{
 		"没登记": ports.SeriesHasNoRegisteredVersion,
@@ -298,8 +298,9 @@ func TestPlanGivenEstimateLeavesAnUnresolvedFuelSeriesPendingWithTheFormalEvalua
 	}
 }
 
-// 判据二：绑分区目录的卡——给了邮编路线的那一件由共用补齐读数按路线从目录解出分区；只给分区、不给路线的那一件单独答输入不全、
-// 点名邮编路线，不拿声明的分区顶替（ADR-0152 决定五）。逐件作答，按声明顺序交回；缺项那一件一口登记册都不问。
+// 判据「绑分区目录的价卡：给邮编路线时分区由目录解析；只给分区、不给路线时，按 ADR-0152 决定五逐件答缺项」：给了路线的那一件
+// 由共用补齐读数按路线从目录解出分区；只给分区的那一件单独答输入不全、点名邮编路线，不拿声明的分区顶替。逐件作答，按声明顺序
+// 交回；缺项那一件一口登记册都不问。
 func TestPlanGivenEstimateOnAZoneBoundCardAnswersEachDeclarationByItsOwnRoute(t *testing.T) {
 	catalogueInForce := &catalogueInForceDouble{reference: catalogueVersion(t, "v2"), outcome: ports.CatalogueVersionInForce}
 	catalogues := &catalogueReadingDouble{registrations: map[string]domain.ReferenceCatalogueRegistration{"v2": zoneChartVersion(t, "v2")}}
@@ -354,7 +355,7 @@ func TestPlanGivenEstimateOnAnUnboundCardNamesAMissingZone(t *testing.T) {
 	}
 }
 
-// 判据三前半：标识由调用方给的试算对象引用与声明确定性派生——同一声明同一张卡调两次，得同一标识与同一结果；评价对象就是调用方
+// 判据「同一声明同一张卡调两次，得同一评价标识与同一结果」：标识由调用方给的试算对象引用与声明确定性派生；评价对象就是调用方
 // 给的那个引用。换引用、换一格声明、换一张卡，标识各自不同。
 func TestPlanGivenEstimateIdentityIsDeterministicInTheDeclarationAndTheCard(t *testing.T) {
 	handler := newPlanGivenHandler(t, application.FormPlanGivenEstimateEvaluationsDeps{})
@@ -391,7 +392,8 @@ func TestPlanGivenEstimateIdentityIsDeterministicInTheDeclarationAndTheCard(t *t
 	}
 }
 
-// 判据三后半（ADR-0152 决定二的手法）：依赖里没有评价库写口与交付口，装配点装不进去——结构上不入册、不交付。
+// ADR-0152 决定二的手法：依赖里没有评价库写口（ports.EvaluationStore）与交付口（ports.EvaluationHandoff），装配点装不进去——
+// 结构上不入册、不交付。
 func TestPlanGivenEstimateDependenciesCarryNoEvaluationStoreOrHandoff(t *testing.T) {
 	store := reflect.TypeOf((*ports.EvaluationStore)(nil)).Elem()
 	handoff := reflect.TypeOf((*ports.EvaluationHandoff)(nil)).Elem()
@@ -407,7 +409,8 @@ func TestPlanGivenEstimateDependenciesCarryNoEvaluationStoreOrHandoff(t *testing
 	}
 }
 
-// 证据层级由调用方声明、原样落在评价上：受理前估价的输入是客户申报，不是假设包裹，UC-PP-001 那一格「一律 S」不扩用到这里。
+// 证据层级由调用方声明、原样落在评价上：受理前估价的输入是客户申报，不是假设包裹，UC-PP-001 那一格「证据层级记 `S`」不扩用
+// 到这里。
 func TestPlanGivenEstimateCarriesTheEvidenceTheCallerDeclared(t *testing.T) {
 	handler := newPlanGivenHandler(t, application.FormPlanGivenEstimateEvaluationsDeps{})
 	for _, evidence := range []domain.EvidenceKind{domain.EvidenceSynthetic, domain.EvidenceReplay, domain.EvidenceProduction} {

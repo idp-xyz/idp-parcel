@@ -117,7 +117,7 @@ func NewFormPlanGivenEstimateEvaluationsHandler(deps FormPlanGivenEstimateEvalua
 }
 
 // Handle 把一次调用推进到答案：受理 → 逐件造输入、补齐读数、纯函数评价。任一件补齐读数读不回即整份未决，与 UC-PP-001 同一处置：
-// 只交回其余几件，一份缺件的答复会被当成完整的来用。
+// 若只交回其余几件，一份缺件的答复会被当成完整的来用。
 func (handler *FormPlanGivenEstimateEvaluationsHandler) Handle(
 	ctx context.Context,
 	command FormPlanGivenEstimateEvaluationsCommand,
