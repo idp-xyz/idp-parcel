@@ -1,13 +1,14 @@
 # 19 财务控制未形成时消费方整笔回滚：任务与可达性判断都不落，动线上看不出停在哪一格
 
 Category: enhancement
-Status: in-progress——2026-10-12 通道 3 认领（派单 `task-a95f74d3` ← 通道 1），分支 `mcp3-rfc19` 基 `1e02d2ea`，隔离树 `/home/tops/workspace/idp-parcel-mcp3-rfc19`；按「分诊」裁定分笔。此前 ready-for-agent——2026-10-12 通道 3 分诊（派单 `task-85d7350d` ← 通道 1），见文末「分诊」。此前 needs-triage——2026-10-11 通道 1 立（用户授权自决），出自 [16](16-demo-tenant-pre-acceptance-financial-control-cells.md) 判据二的取证与其「评审 ← 通道 5」Spec 非阻断
+Status: 完工，待评审与重放——2026-10-13 通道 3 接续会话收口（派单 `task-6ebd4303` ← 通道 1，接替 `task-a95f74d3`），代码 tip `8dce3223`、清点 `344e6b2d`，见文末「完成记录」。此前 in-progress——2026-10-12 通道 3 认领（派单 `task-a95f74d3` ← 通道 1），分支 `mcp3-rfc19` 基 `1e02d2ea`，隔离树 `/home/tops/workspace/idp-parcel-mcp3-rfc19`；按「分诊」裁定分笔。此前 ready-for-agent——2026-10-12 通道 3 分诊（派单 `task-85d7350d` ← 通道 1），见文末「分诊」。此前 needs-triage——2026-10-11 通道 1 立（用户授权自决），出自 [16](16-demo-tenant-pre-acceptance-financial-control-cells.md) 判据二的取证与其「评审 ← 通道 5」Spec 非阻断
 Blocked by: 无
 地盘（按「分诊」裁定分笔）：
 - `internal/parcelshipment`：`ports` 的 `PreAcceptanceControlOutcome` 增「未配置」一格；`application` 的 `controlStallReasons`、新未决原因与 `resumePath()`、控制停那一支经 `awaitOperatorRegistration`、`undecided` 带提供方原因；`adapters/settlementaccounting` 的原因译法；`adapters/inbox` 收结算登记信封的续办门（照 `OperatorRegistrationCompletedConsumer`）。
 - `internal/partycommercial`：`announceOperatorRegistrations` 扩通道，`ports.OperatorRegistrationKind` 增格。
 - `internal/settlementaccounting`：结算账户登记与登记行同一事务交信封的交接口与 Outbox 适配器。
 - 装配：`cmd/parcel-dispatch`、`cmd/parcel-settlement-register`；做可选那一笔时加 `cmd/parcel-commercial` 的解析键登记。
+- 架构门禁：`internal/architecture/partition_subject_registry_test.go` 只加本票的行——SA 新交接口一行、PC「参数已登记」那行加裁段（2026-10-12 开工核码时报出、通道 1 认可，见「分诊」下「开工核码更正」）。
 - 文档：两处带日期的补记（见「现象」末条）；CONTEXT-MAP 补 SA → PS「参数已登记」类信封那条关系。
 出处：16「分诊裁定」第 4 条（「要不要立票，留到下一次走动线时定」）；16 完成记录判据二的三行对照表；16 Comments「评审 ← 通道 5」与通道 1 处置。
 
@@ -96,3 +97,58 @@ Blocked by: 无
 - 会自愈的 `*_UNAVAILABLE` 与金额未配置照旧回滚重投，既有用例绿；`TestEveryPendingReasonHasAStringAndAResumePath` 绿。
 - 两条补记在现行文档里。
 - 架构门禁绿；机制清点重生成并提交；带 DSN `go test -p 1 -count=1 ./...` 绿。
+
+### 开工核码更正（通道 3 · 2026-10-12 · 钉 `1e02d2ea`；2026-10-13 接续会话补记）
+
+开工时对着代码复核二问那张表，三处与上文不符。上文不改，更正记在这里；当晚已分两条报通道 1，第二条收回了第一条里的「可选笔改为必做」。
+
+1. **漏的那一格。** 表里 `SA-CONTROL_POLICY_NOT_CONFIGURED` 只写了「商业侧登记受理前财务控制策略」一种恢复动作。它还有一种来由：登记的解析键没要求 `PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY`——闭包只采用键里要求的类，settlement-accounting `adapters/partycommercial` 的 `requiredPolicyFrom` 在「闭包没采用接受前财务控制策略」那一格同样答未配置。作用域那一行「前一种归商业侧补结算政策」同理：解析不含结算政策是键没要求 `SETTLEMENT_POLICY`，补登一份结算政策推不动它。
+2. **可选那一笔不做。** 解析键按（租户 + 客户）只有一行，改登一律答内容冲突、不覆盖（parcel-shipment `adapters/postgres` 的 `CommercialResolutionKeyStore.RegisterResolutionKey`），所以「键没要求某类依据」这一来由没有任何登记动作推得动，给解析键登记发信封没有受益者。`SA-CREDIT_BASIS_NOT_CONFIGURED` 因此留在`未形成`：走到控制这一步时闭包已唯一解析，没采用信用政策只能是键没要求它。
+3. **拆码口径。** 适配器分得开的拆出新码、留原格，只挪触发已到位的那一种（ADR-0094 决定四）。作用域停拆成两码：`CONTROL_SCOPE_NOT_CONFIGURED` 只留给账户没登记（[ADR-0158](../../../docs/adr/0158-settlement-account-register-is-an-immutable-tuple.md) 决定三钉的就是这个码），挪`未配置`，触发是结算账户一笔；解析未采用结算政策换新码 `CONTROL_SCOPE_SETTLEMENT_POLICY_NOT_ADOPTED`，留`未形成`。`SA-CONTROL_POLICY_NOT_CONFIGURED` 在 PS 适配器分不开，整格照裁定挪（合同声明、策略正文两条触发到位），键那一来由记「越权风险点 · 待 owner 复核」，分不开的理由写在完成记录。
+
+地盘因此只多出 `internal/architecture/partition_subject_registry_test.go` 一处，已补进票头。
+
+## 完成记录（通道 3 · 2026-10-13 · 分支 `mcp3-rfc19` 基 `1e02d2ea`，代码 tip `8dce3223`）
+
+推送方自审不算非作者评审；评审与重放归通道 1。
+
+### 各笔
+
+| SHA | 内容 |
+|---|---|
+| `e130fd22` | 认领 |
+| `afc162e5` | 只动文档的一笔：开发主线与动线「墙三」各补一条 2026-10-12 补记 |
+| `716d3d5e` | 拆格一笔：端口增`未配置`格，`FinancialControlNotConfigured` 落`等待运营登记`，续办引用带提供方原因；PC 增 `PRE_ACCEPTANCE_CONTROL_POLICY`、`CREDIT_POLICY` 两类「参数已登记」 |
+| `eca14e52` | 结算账户一笔的 PS 半边：作用域停拆码（前任会话未成笔的现场，接续前原样成笔） |
+| `8dce3223` | 结算账户一笔：SA 登记同事务交「结算账户已登记」，PS 新登记续办门与路由，分区登记表两行，CONTEXT-MAP 一条 |
+| `344e6b2d` | 机制清点在 `8dce3223` 干净检出上重生成 |
+
+可选那一笔不做，理由见「开工核码更正」第 2 条。重放进 main 时 `eca14e52` 与 `8dce3223` 要一起进：前者把账户没登记挪进`未配置`，它的续办触发在后者。
+
+### 完成判据
+
+- ✅ 作用域未配置（结算账户没登记）。`cmd/parcel-dispatch` 的 `TestAScopeWaitIsResumedByTheSettlementAccountRegistrationEnvelope`：控制那一口装生产的 PS 适配器、作用域源与账户目录，账户目录读真 SA 账户册，只有金额那一口是计数替身。提交门 inbox 1 行；`acceptance_processing_attempt` 落 `FINANCIAL_CONTROL_NOT_CONFIGURED` / `OPERATOR_REGISTRATION` / `CONT-` 续办引用 1 行；委托列在`等待运营登记`队列里。真 SA 登记编排铸出 `settlement-accounting.settlement-account.registered` 1 封，结算账户那一份登记续办门重驱同一委托：问到了金额（作用域已形成），停在 `FINANCIAL_CONTROL_NOT_FORMED`，整封交回未决哨兵、账本无痕等重投。带 DSN `-v` 为 `PASS`，不是 `SKIP`。登记口装配另由 `cmd/parcel-settlement-register` 的 `TestSettlementAccountRegistrationHandsOffItsEnvelopeInTheSameTransaction` 真库证：一行一封、重放不翻倍、冲突不交、超长账户归用法格且行不落。
+- ✅ 控制策略未配置。`TestAControlPolicyWaitIsResumedByTheControlPolicyRegistrationEnvelope`（`716d3d5e`；控制端口为替身，PC 交接适配器为真；本会话带 DSN `-v` 复跑 `PASS`）。PC 发布编排对两条控制策略通道交 `PRE_ACCEPTANCE_CONTROL_POLICY`：`TestPublishingControlPolicyAndCreditPolicyDeclarationsHandsOffTheirRegistrations`；SA 原因译进`未配置`格：`TestNotFormedReasonsLandOnTheCellOfTheirRecoveryAction`。
+- ✅ 作用域停、金额停、策略停三者的续办引用两两不同：`TestEachControlStallCarriesItsOwnContinuation`。作用域与策略同落`未配置`、同一个未决原因，只靠提供方原因引用分开；金额落`未形成`。
+- ✅ 会自愈的 `*_UNAVAILABLE` 与金额未配置照旧回滚重投，既有用例绿。`*_UNAVAILABLE` 落`未形成`由 `TestNotFormedReasonsLandOnTheCellOfTheirRecoveryAction` 证；金额未配置回滚重投见第一条那条用例的重驱一拍；`TestEveryPendingReasonHasAStringAndAResumePath` `-v` 为 `PASS`。
+- ✅ 两条补记在现行文档里：`afc162e5`。
+- ◑ 架构门禁绿、机制清点重生成并提交：`./internal/architecture/...` 带 DSN 绿，分区主体登记两查、PBC-08 无事务证据、生产接线棘轮都过；清点 `344e6b2d`。带 DSN `go test -p 1 -count=1 ./...` 归推送方重放后那一次，本会话跑的是动过的包及其反向依赖（见下）。
+
+### 验证（作者那层，go1.26.8，证据层级 `S`）
+
+- 改过的 `.go` 经 `gofmt -w` 后 `gofmt -l` 空，无 CR、无 BOM；`go build ./...` 退 0；`go vet ./...` 退 0。
+- 带 `IDP_PARCEL_POSTGRES_DSN=postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable`，在成笔前的工作树上（内容即 `8dce3223`）跑 `go test -count=1 -p 1`：分支自 `1e02d2ea` 起动过的 12 个包及其反向依赖，用 `go list -test` 的 `Deps` 反查，共 52 包，含 `cmd/parcel-api`、`cmd/parcel-commercial`、`cmd/parcel-dispatch`、`cmd/parcel-settlement-register` 与 `internal/architecture`。48 ok / 0 FAIL / 4 无测试文件，退 0。
+- `-v` 单跑上面判据里点名的真库用例与 `8dce3223` 新增的用例，全为 `PASS`，无 `SKIP`。
+
+### 判断项
+
+1. **两条新码的去处。**
+   - `CONTROL_SCOPE_SETTLEMENT_POLICY_NOT_ADOPTED`（PS 适配器自有码，`eca14e52`）：停在`未形成`，即 `FINANCIAL_CONTROL_NOT_FORMED` / `等待内部续办`，回滚重投、烧完预算落 `ABANDONED`，与拆码之前同一格。推得动它的只有让解析键要求 `SETTLEMENT_POLICY`，而键改登即内容冲突——今天没有产品动作推得动它，要不要开一条归 owner。
+   - `FINANCIAL_CONTROL_NOT_CONFIGURED`（编排新未决原因，`716d3d5e`）：停在`等待运营登记`，提交入账、处理尝试留痕。推得动它的是三类登记信封，都按租户重驱整张队列、消费门不认原因名字：PC「参数已登记」的 `PRE_ACCEPTANCE_CONTROL_POLICY`（合同上的接受前控制声明、策略正文两条通道）与 `CREDIT_POLICY`（信用政策正文），以及 SA「结算账户已登记」（`8dce3223`）。落进这一格的提供方原因是 `CONTROL_SCOPE_NOT_CONFIGURED`、`SA-CONTROL_POLICY_NOT_CONFIGURED`、`SA-CREDIT_RATIO_BASE_UNDECIDED`。
+2. **「结算账户已登记」契约**（两边各写各的字面，原文记在这里）：类型 `settlement-accounting.settlement-account.registered`，来源 `idp-parcel/settlement-accounting`；ID 为 `outboxintent.FingerprintEventID("settlement-account", 租户, 账户)`；Scope 与分区键为租户；Subject 为 `SETTLEMENT_ACCOUNT/<账户>`；载荷只两键 `tenantId`、`registrationKind`（取 `SETTLEMENT_ACCOUNT`），与 PC「参数已登记」同形，PS 两份登记续办门共用一份译码。`已登记`与`已存在`都交、`冲突`不交；账户标识长到主题过不了框架上限时包成 `ErrSettlementAccountHandoffRejected`，登记口归用法格（同 sa-cc/32 裁决 2）。
+3. **登了账户之后那一封可能烧完预算。** 重驱越过作用域之后停在金额那一格，那一格仍是内部重试，所以「结算账户已登记」那一封会整封回滚重投到预算耗尽、落 `ABANDONED`；委托留在`等待运营登记`队列里不受影响，下一封登记信封照样驱得到它。金额格随 psb/25 挪进`未配置`之后这一封会入账。演示种子先登账户再提交，今天的动线不经过这一幕。
+
+### 越权风险点 · 待 owner 复核
+
+1. **`SA-CONTROL_POLICY_NOT_CONFIGURED` 整格挪进`等待运营登记`**（`716d3d5e`；本会话按通道 1 的口径提醒复核，分不开，不改）。SA 的 party-commercial 适配器（`PreAcceptanceControlPolicy.LoadControlPolicy` 与 `requiredPolicyFrom`，钉 `8dce3223`）在五种情形下答未配置：合同声明未登记、策略正文未登记——这两种有触发；闭包没采用接受前财务控制策略（解析键没要求该类，或合同没绑）、正文对本费用范围一项控制都没写（同版本正文改登答 `PreAcceptanceFinancialControlPolicyContentConflict`）——这两种推不动；合同要求控制而闭包没采用结算政策——生产路径上走不到，作用域那一步先停在 `CONTROL_SCOPE_SETTLEMENT_POLICY_NOT_ADOPTED`。**分不开的理由**：PS 适配器只看得到 SA 的封闭原因 `CONTROL_POLICY_NOT_CONFIGURED`。SA 的读口 `PreAcceptanceControlPolicyView.LoadControlPolicy` 把五种情形交成同一个 `configured=false`，`ApplyPreAcceptanceControlHandler` 再折成同一个 `ControlPolicyNotConfigured`；PS 的 `CommercialBasisSnapshot` 也不带「闭包采用了哪几类依据」，PS 适配器没有第二个来源可分。要分开，得把 SA 读口的布尔换成按恢复动作分格的落点（形照 `eca14e52` 的 `ControlScopeGap`），并给 SA 的 `NotFormedReason` 增格——那是 settlement-accounting 的语言与端口，不在本票地盘。取舍：不挪，推得动的两种来由照旧烧完预算落 `ABANDONED`、任务上什么都不落；挪了，推不动的两种成了查得到、等不来重驱的等待（ADR-0094 决定四说的那一种）。要 owner 定：接受这个取舍，还是另立 SA 票把读口拆开。
+2. **分区主体同队**（`8dce3223`）：SA「结算账户已登记」与 PC「参数已登记」同取租户字符串，进同一条队，让同一租户的重驱一轮接一轮、不并发去推同一份委托。分区登记表两行按显式待裁写，没有裁定记录。
