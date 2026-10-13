@@ -112,6 +112,22 @@ func fuelCompletion(t *testing.T) (*inForceDouble, *seriesReadingDouble) {
 		&seriesReadingDouble{readings: map[string]domain.ResolvedSeriesReading{"v1": fuelSeriesReading(t, "v1", "20")}}
 }
 
+// inForceUnreachableAfterFirst 头一问照内层替身答，此后读不回：一次调用里头一件补齐得了，后面几件补不了。
+type inForceUnreachableAfterFirst struct{ *inForceDouble }
+
+func (double inForceUnreachableAfterFirst) ResolveInForce(
+	ctx context.Context,
+	tenant domain.TenantID,
+	kind domain.ReferenceSeriesKind,
+	seriesID string,
+	at time.Time,
+) (domain.VersionReference, ports.InForceOutcome, error) {
+	if double.calls > 0 {
+		double.err = errors.New("register unreachable")
+	}
+	return double.inForceDouble.ResolveInForce(ctx, tenant, kind, seriesID, at)
+}
+
 // planGivenDeclaration 是一件 1 千克、给了分区 Z1、没给尺寸、路线与结算币种的声明。
 func planGivenDeclaration(t *testing.T, subject string) application.PlanGivenEstimateDeclaration {
 	t.Helper()
@@ -478,6 +494,27 @@ func TestPlanGivenEstimateIsUndecidedWhenTheReadingCompletionCannotRead(t *testi
 	}
 	if result.Outcome != application.PlanGivenEstimatesUndecided || len(result.Estimates) != 0 {
 		t.Fatalf("result = %+v, 想要未决且一件都不交回", result)
+	}
+}
+
+// 判断项「整份答 `UNDECIDED`，不交回其余几件」：头一件补齐读数读得回、评价已形成，第二件读不回——整份答未决，已形成的那一件
+// 也不交回。TestPlanGivenEstimateIsUndecidedWhenTheReadingCompletionCannotRead 只有一件声明，钉不住这一格：没有其余几件可交。
+func TestPlanGivenEstimateIsUndecidedAsAWholeWhenALaterDeclarationCannotRead(t *testing.T) {
+	inForce, register := fuelCompletion(t)
+	handler := newPlanGivenHandler(t, application.FormPlanGivenEstimateEvaluationsDeps{
+		SeriesInForce: inForceUnreachableAfterFirst{inForce}, SeriesVersions: register,
+	})
+
+	result, err := handler.Handle(context.Background(), planGivenCommand(t, fuelBoundPlan(t),
+		fuelDeclaration(t, "SYN-DECL-01/1"), fuelDeclaration(t, "SYN-DECL-01/2")))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if inForce.calls != 2 {
+		t.Fatalf("in-force calls = %d, 想要两件各问一次：头一件读得回，第二件读不回", inForce.calls)
+	}
+	if result.Outcome != application.PlanGivenEstimatesUndecided || len(result.Estimates) != 0 {
+		t.Fatalf("result = %+v, 想要整份未决，已形成的头一件也不交回", result)
 	}
 }
 
