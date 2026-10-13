@@ -652,6 +652,10 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: settlement account resume undecided translation: %w", err)
 	}
+	routedEstimateAdoption, err := dispatch.WithUndecidedSentinels(chainGates.estimateAdoptionRegistration, acceptanceChainUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance estimate adoption resume undecided translation: %w", err)
+	}
 	// 受控补充续办门同一份哨兵，理由同复核续办门：同一条链、同一张未决面（ADR-0106 Decision 三）。
 	routedSupplement, err := dispatch.WithUndecidedSentinels(chainGates.submissionVersionFormed, acceptanceChainUndecidedSentinels...)
 	if err != nil {
@@ -945,6 +949,9 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 			veinbox.CustomsCaseEstablishedEventType:                veCustomsCaseRouted,
 			veinbox.DeclarationSubmissionFormedEventType:           veDeclarationSubmissionRouted,
 			veinbox.TrackingProjectionDerivedEventType:             veCustomerViewRouted,
+
+			// 键比上面各行都长，单起一段：并进去 gofmt 会重排整块的对齐，共享接线文件上多出一片别人的行。
+			psinbox.PreAcceptanceEstimateAdoptionRegisteredEventType: routedEstimateAdoption,
 		},
 		settings.deliveryTimeout,
 		settings.config,
@@ -1000,6 +1007,7 @@ type acceptanceChainGates struct {
 	reviewCompleted               dispatch.Consumer
 	operatorRegistration          dispatch.Consumer
 	settlementAccountRegistration dispatch.Consumer
+	estimateAdoptionRegistration  dispatch.Consumer
 	submissionVersionFormed       dispatch.Consumer
 }
 
@@ -1138,6 +1146,13 @@ func acceptanceChainConsumers(
 	if err != nil {
 		return none, fmt.Errorf("parcel-dispatch: settlement account resume consumer: %w", err)
 	}
+	// 「受理前估价采用已登记」那一份：发布侧是 cmd/parcel-settlement-register 采用登记的事务边界壳（票
+	// product-strategy-boundary/25）。队列读口同上。
+	estimateAdoptionRegistration, err := psinbox.NewPreAcceptanceEstimateAdoptionRegisteredConsumer(
+		db.Transactor(), inboxStore, requests, chain, operatorRegistrationRedrivePageSize)
+	if err != nil {
+		return none, fmt.Errorf("parcel-dispatch: pre-acceptance estimate adoption resume consumer: %w", err)
+	}
 	// ADR-0106 Decision 三的续办门：PS「新提交版本已形成」信封 → 同一条链拿新版本的任务再驱一拍，
 	// 停在`等待受控补充`的那一版已随入账留在库里。发布侧是 cmd/parcel-api 受控补充的事务边界壳。
 	submissionVersionFormed, err := psinbox.NewSubmissionVersionFormedConsumer(db.Transactor(), inboxStore, chain)
@@ -1149,6 +1164,7 @@ func acceptanceChainConsumers(
 		reviewCompleted:               reviewCompleted,
 		operatorRegistration:          operatorRegistration,
 		settlementAccountRegistration: settlementAccountRegistration,
+		estimateAdoptionRegistration:  estimateAdoptionRegistration,
 		submissionVersionFormed:       submissionVersionFormed,
 	}, nil
 }
