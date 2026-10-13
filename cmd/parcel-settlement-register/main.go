@@ -19,11 +19,12 @@
 // 载荷，`internal` 导不进 `cmd`。本口不因端点长出而退场，它是同一能力的受控批量口。
 //
 // 环境事务由本入口给出，一次调用一笔事务：采用 / 更正的版本行与向 CC 交的采用信封落在同一只 db 的同一笔里
-// （Outbox 意图与登记同生同灭），写口无环境事务即拒。
+// （Outbox 意图与登记同生同灭），结算账户行与向 parcel-shipment 交的「结算账户已登记」信封同理；写口无环境
+// 事务即拒。
 //
 // 退出码按恢复动作分四格（ADR-0029 判据；归格见 fundsAnswer）：0 = 已采用 / 幂等重放（重放不是错误，无恢复
 // 动作）；1 = 用法或输入不合法（含用例的`未受理`——回指非链头、更正未采用的事实、构造门拒——改请求，不是重试；
-// 也含采用信封被框架确定性校验拒收那一格——什么都没登记、要改的是引用的长度或形，见 execute）；
+// 也含采用信封或结算账户已登记信封被框架确定性校验拒收那一格——什么都没登记、要改的是引用的长度或形，见 execute）；
 // 2 = 内容冲突（同版本字面异内容、同事实第二个首版：绝不覆盖，人工核对既有登记再续办）；3 = 未决（依赖故障，
 // 登记与否未知；也含「行已落、信封未出」那一格——它需要人重跑同一命令补发同一封，不能与已登记同格）。
 package main
@@ -198,7 +199,13 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造结算账户登记册：%w", err)
 	}
-	accountHandler, err := application.NewRegisterSettlementAccountHandler(accounts, systemClock{})
+	// 「结算账户已登记」交接口与登记册同一只 db、同一只 Outbox Store，账户行与信封因此落在同一笔环境事务里：
+	// 停在作用域那一格的委托等的就是这封信（ADR-0094 决定四，票 routing-first-cut/19）。
+	accountHandoff, err := sapostgres.NewOutboxSettlementAccountRegisteredHandoff(db, outboxStore, systemClock{})
+	if err != nil {
+		return none, fmt.Errorf("构造结算账户已登记交接口：%w", err)
+	}
+	accountHandler, err := application.NewRegisterSettlementAccountHandler(accounts, accountHandoff, systemClock{})
 	if err != nil {
 		return none, fmt.Errorf("构造结算账户登记：%w", err)
 	}
@@ -321,6 +328,10 @@ func execute(ctx context.Context, command string, raw []byte, registrar registra
 		// 未决，按 ADR-0029 的恢复动作判：同一份输入重投永远同一个结果，要改的是引用的长度或形，不是重试——归 3
 		// 会让人按未决那句「重跑补发」重跑到预算耗尽。答复点名框架给的原因，操作者据此改输入。
 		return fmt.Sprintf("%s: 未登记——采用信封被框架确定性拒收，要改的是输入引用的长度或形，同一份再交仍会被拒：%v", command, err), exitUsage
+	}
+	if errors.Is(err, ports.ErrSettlementAccountHandoffRejected) {
+		// 归格理由同上一格：账户行随信封一起回滚，同一份输入再交仍会被拒，要改的是账户标识的长度。
+		return fmt.Sprintf("%s: 未登记——结算账户已登记信封被框架确定性拒收，要改的是账户标识的长度或形，同一份再交仍会被拒：%v", command, err), exitUsage
 	}
 	if errors.Is(err, sadomain.ErrCatalogueTargetMissing) {
 		return fmt.Sprintf("%s: 未登记——指向的结算账户还不在账户册上，先登记账户再交这一行：%v", command, err), exitUsage

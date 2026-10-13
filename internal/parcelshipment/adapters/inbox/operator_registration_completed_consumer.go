@@ -48,7 +48,14 @@ type operatorRegistrationCompleted struct {
 // 那一行随之回滚，派发器按重投节奏再送同一封，下一轮只会列出仍在等的那几份（已决的已不在
 // 队列里，已入账等待的各自续办），于是这封信就是那几份的重投驱动，重投不重做已提交的工作。
 // 全部落定即入账。装配或编程错误（集合外结果、缺件）不折进未决，响亮上抛让整封 publish_failed。
+//
+// 「参数已登记」类信封不止一个发布方：party-commercial 发声明通道那几类，settlement-accounting 发结算账户那一类
+// （NewSettlementAccountRegisteredConsumer）。几封信的契约同为两键、重驱同一张队列，所以是同一扇门的几份实例，
+// 各认各的类型、各记各的账本名——共名会让 inbox 键在两个来源之间互相吞没。
 type OperatorRegistrationCompletedConsumer struct {
+	name       string
+	eventType  eventing.EventType
+	verb       string
 	transactor bentoapp.Transactor
 	store      *inbox.Store
 	queue      ports.OperatorRegistrationQueue
@@ -56,10 +63,28 @@ type OperatorRegistrationCompletedConsumer struct {
 	pageSize   int
 }
 
-// NewOperatorRegistrationCompletedConsumer 装配本门。pageSize 是每次向队列读口要多少行；读口
-// 要求正数，本门按页反复取直到没有新的委托可驱（已驱过的不再驱，停住的那几份下一页仍会
-// 出现，靠「本页有没有新面孔」终止）。
+// NewOperatorRegistrationCompletedConsumer 装配收 party-commercial「参数已登记」的那一份。pageSize 是每次
+// 向队列读口要多少行；读口要求正数，本门按页反复取直到没有新的委托可驱（已驱过的不再驱，停住的那几份
+// 下一页仍会出现，靠「本页有没有新面孔」终止）。
 func NewOperatorRegistrationCompletedConsumer(
+	transactor bentoapp.Transactor,
+	store *inbox.Store,
+	queue ports.OperatorRegistrationQueue,
+	advancer AcceptanceChainAdvancer,
+	pageSize int,
+) (*OperatorRegistrationCompletedConsumer, error) {
+	return newRegistrationResumeConsumer(
+		operatorRegistrationResumeConsumerName,
+		OperatorRegistrationCompletedEventType,
+		"advance acceptance chain on operator registration",
+		transactor, store, queue, advancer, pageSize,
+	)
+}
+
+func newRegistrationResumeConsumer(
+	name string,
+	eventType eventing.EventType,
+	verb string,
 	transactor bentoapp.Transactor,
 	store *inbox.Store,
 	queue ports.OperatorRegistrationQueue,
@@ -82,6 +107,9 @@ func NewOperatorRegistrationCompletedConsumer(
 		return nil, fmt.Errorf("parcel shipment inbox: operator registration page size must be positive, got %d", pageSize)
 	}
 	return &OperatorRegistrationCompletedConsumer{
+		name:       name,
+		eventType:  eventType,
+		verb:       verb,
 		transactor: transactor,
 		store:      store,
 		queue:      queue,
@@ -101,14 +129,14 @@ func (consumer *OperatorRegistrationCompletedConsumer) Consume(
 	gate, err := inboxconsume.New(inboxconsume.Spec[operatorRegistrationCompleted]{
 		Transactor: consumer.transactor,
 		Store:      consumer.store,
-		Name:       operatorRegistrationResumeConsumerName,
-		EventType:  OperatorRegistrationCompletedEventType,
+		Name:       consumer.name,
+		EventType:  consumer.eventType,
 		Decode:     decodeOperatorRegistrationCompleted,
 		Handle: func(_ context.Context, registration operatorRegistrationCompleted) error {
 			return consumer.redriveWaitingRequests(ctx, registration.tenant)
 		},
 		UnexpectedType: "parcel shipment inbox",
-		HandleVerb:     "advance acceptance chain on operator registration",
+		HandleVerb:     consumer.verb,
 	})
 	if err != nil {
 		return err

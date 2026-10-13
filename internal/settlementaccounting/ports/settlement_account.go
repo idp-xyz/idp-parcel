@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
@@ -35,4 +36,30 @@ type SettlementAccountRegister interface {
 		account domain.SettlementAccount,
 		at time.Time,
 	) (SettlementAccountRegistrationEffect, error)
+}
+
+// SettlementAccountRegisteredIntent 是一笔结算账户登记落库后要通知下游的最小事实：哪个租户的哪一户。
+//
+// 下游是 parcel-shipment 停在`等待运营登记`的接受前财务控制——作用域那一停（`CONTROL_SCOPE_NOT_CONFIGURED`）
+// 等的正是这一行。信封只说「这个租户的账户册上有新一户落库了，去重驱」，账户的法人、相对方、币种与结算
+// 政策都不进载荷：重驱时作用域照旧向本上下文的账户册读口问，信封里再抄一份就成了第二处权威。
+// RegisteredAt 是登记落库时刻，入队时刻由适配器的时钟另记。
+type SettlementAccountRegisteredIntent struct {
+	Tenant       domain.TenantID
+	Account      domain.SettlementAccountID
+	RegisteredAt time.Time
+}
+
+// ErrSettlementAccountHandoffRejected 表示交接口铸出的信封被框架的**确定性**校验拒收：账户标识长度归实例
+// 半边、构造门只查非空，超长时主题过不了上限，同一份输入重投永远同一个结果。理由与形同
+// ErrFundsFactHandoffRejected：编排整笔不作答、让事务壳回滚，登记口据此归用法格——归未决会让人照
+// 「重跑」重跑到底，而账户行与信封一样都没落。
+var ErrSettlementAccountHandoffRejected = errors.New("settlement accounting: settlement account registered envelope rejected by envelope validation")
+
+// SettlementAccountRegisteredHandoff 把「结算账户已登记」写入 Outbox，与登记行同一事务（ADR-0094 决定四：
+// `等待运营登记`那一格必须与它的续办触发同笔落地）。入队失败整项出错让事务回滚：行落了而信封没出，停在
+// 作用域那一格的委托就再也没有投递来推它。信封被确定性拒收时交回的错误 errors.Is
+// ErrSettlementAccountHandoffRejected；别的失败都是依赖不可用。
+type SettlementAccountRegisteredHandoff interface {
+	HandOffSettlementAccountRegistered(ctx context.Context, intent SettlementAccountRegisteredIntent) error
 }

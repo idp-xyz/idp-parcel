@@ -1430,6 +1430,24 @@ func TestACompletedOperatorRegistrationWithNobodyWaitingSettlesOnTheProductionGr
 	}
 }
 
+// Covers: 路由表结算账户那一份登记续办门（票 routing-first-cut/19），且它在生产依赖图上接得起来：两键齐全的载荷
+// 穿过译码去问真队列读口，该租户没有委托在等，本封入账定稿。漏挂的话，结算账户登记事务铸出的每一封都撞
+// dispatch.no_subscriber——停在作用域那一格的委托从此没人续办。
+func TestARegisteredSettlementAccountReachesItsResumeGateOnTheProductionGraph(t *testing.T) {
+	beat, db, store := wiredBeat(t)
+	enqueueForBeat(t, db, store, "settlement-account-1", psinbox.SettlementAccountRegisteredEventType,
+		`{"tenantId":"SYN-TENANT-01","registrationKind":"SETTLEMENT_ACCOUNT"}`)
+
+	published, err := beat.DispatchOnce(t.Context())
+	if err != nil {
+		t.Fatalf("一拍：%v", err)
+	}
+	if published != 1 {
+		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把结算账户已登记投给它的续办门",
+			published, recordedFailureCode(t, db, "settlement-account-1"))
+	}
+}
+
 // Covers: 路由表第四扇门——PS「新提交版本已形成」投给接受判断链的受控补充续办门（ADR-0106
 // Decision 三）。手法同前几条：毒丸载荷（各维皆空）让消费门显式拒收入账并交回 nil，因此这一条
 // 会被定稿。漏挂的话，受控补充事务铸出的每一封都撞 dispatch.no_subscriber——停在`等待受控补充`
