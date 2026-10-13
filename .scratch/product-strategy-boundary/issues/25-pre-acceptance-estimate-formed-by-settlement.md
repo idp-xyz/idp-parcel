@@ -1,7 +1,7 @@
 # 25 受理前估价由结算形成：采用登记、按提交版本的逐件 SELL 试算、估价留痕与续办触发（ADR-0179 的实施）
 
 Category: enhancement
-Status: in-progress——2026-10-13 16:5x 通道 2 在可提交点部分收口（派单 `task-dd4926b1` 时限内）：第 1–3 条、第 4 条上半、第 6 条前半（续办门与路由）与顺带四条落在 `mcp2-psb25`，代码 tip `3917951f`、清点 `ea62cb39`；第 4 条下半、第 5 条、第 6 条后半与第 7 条未做，接手要点见文末「完成记录（部分）」下「余下几条」。已落各笔可单独评审与重放：第 3 条的信封自 `3917951f` 起有订阅方，金额格挪格之前续办门对等待队列多驱一轮，无害。此前 in-progress——2026-10-13 15:5x 改派通道 2（派单 `task-dd4926b1` ← 通道 1；原 `task-d96ec0e6` → 通道 5 作废），分支 `mcp2-psb25`，基 `mcp5-psb25@b9486c5d`（其下 `b09b904c`），隔离 worktree `idp-parcel-mcp2-psb25`；第 1 条由通道 5 落于 `b9486c5d`。此前 in-progress——2026-10-13 通道 5 认领（派单 `task-d96ec0e6` ← 通道 1），分支 `mcp5-psb25`，基 `b09b904c`（= origin/main），隔离 worktree `idp-parcel-mcp5-psb25`。同批收 [routing-first-cut/19](../../routing-first-cut/issues/19-financial-control-undecided-leaves-no-trace-on-the-task.md) 增量复评（`task-40247234`）的四条非阻断，出处 rfc/19 票面 Comments：PS `ReleasePreAcceptanceControl` 装配缺口那一格补用例；`cmd/parcel-api` 三处编排注释与 `partycommercial` 一条用例注释改实；`NewPreAcceptanceControlAdapter` 注释只写本适配器对 nil 怎么答；`pre_acceptance_control.go` 常量块与 `ControlScopeNotAssembled` 注释不数「两半」、点名解析口与账户目录。此前 ready-for-agent——2026-10-12 20:4x 通道 1：[ADR-0179](../../../docs/adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 已接受（用户授权通道 1 代裁）。接受时改了两处，都不动下面的「地盘」，「做什么」第 4 条与完成判据已照改：决定二多一格停法（任一份合计的币种不是控制作用域的币种也答未形成，结算不换算），决定六的留痕多存每份试算评价的版本清单；PP `CONTEXT` 那两句随接受已改，从本票的文档一格划掉。此前 needs-info——2026-10-12 通道 3 随[票 06](./06-ps-acceptance-and-label-selection-judgment-methods.md)第 2 项分诊立（派单 `task-85d7350d` ← 通道 1），等用户决定是否接受 ADR-0179
+Status: in-progress——2026-10-13 18:0x 通道 2 完工（派单 `task-f3d84381` ← 通道 1，接 `mcp2-psb25@caab1e00`）：余下四条落在 `mcp2-psb25`，代码 tip `e96345be`（最后一笔改行为的是 `bfc70773`，其后是文档 `236921b5` 与一条补判据二的用例）、清点 `26b3aac5`，见文末「完成记录」。`caab1e00` 之后的新笔待非作者评审，评审与重放归通道 1。此前 in-progress——2026-10-13 16:5x 通道 2 在可提交点部分收口（派单 `task-dd4926b1` 时限内）：第 1–3 条、第 4 条上半、第 6 条前半（续办门与路由）与顺带四条落在 `mcp2-psb25`，代码 tip `3917951f`、清点 `ea62cb39`；第 4 条下半、第 5 条、第 6 条后半与第 7 条未做，接手要点见文末「完成记录（部分）」下「余下几条」。已落各笔可单独评审与重放：第 3 条的信封自 `3917951f` 起有订阅方，金额格挪格之前续办门对等待队列多驱一轮，无害。此前 in-progress——2026-10-13 15:5x 改派通道 2（派单 `task-dd4926b1` ← 通道 1；原 `task-d96ec0e6` → 通道 5 作废），分支 `mcp2-psb25`，基 `mcp5-psb25@b9486c5d`（其下 `b09b904c`），隔离 worktree `idp-parcel-mcp2-psb25`；第 1 条由通道 5 落于 `b9486c5d`。此前 in-progress——2026-10-13 通道 5 认领（派单 `task-d96ec0e6` ← 通道 1），分支 `mcp5-psb25`，基 `b09b904c`（= origin/main），隔离 worktree `idp-parcel-mcp5-psb25`。同批收 [routing-first-cut/19](../../routing-first-cut/issues/19-financial-control-undecided-leaves-no-trace-on-the-task.md) 增量复评（`task-40247234`）的四条非阻断，出处 rfc/19 票面 Comments：PS `ReleasePreAcceptanceControl` 装配缺口那一格补用例；`cmd/parcel-api` 三处编排注释与 `partycommercial` 一条用例注释改实；`NewPreAcceptanceControlAdapter` 注释只写本适配器对 nil 怎么答；`pre_acceptance_control.go` 常量块与 `ControlScopeNotAssembled` 注释不数「两半」、点名解析口与账户目录。此前 ready-for-agent——2026-10-12 20:4x 通道 1：[ADR-0179](../../../docs/adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 已接受（用户授权通道 1 代裁）。接受时改了两处，都不动下面的「地盘」，「做什么」第 4 条与完成判据已照改：决定二多一格停法（任一份合计的币种不是控制作用域的币种也答未形成，结算不换算），决定六的留痕多存每份试算评价的版本清单；PP `CONTEXT` 那两句随接受已改，从本票的文档一格划掉。此前 needs-info——2026-10-12 通道 3 随[票 06](./06-ps-acceptance-and-label-selection-judgment-methods.md)第 2 项分诊立（派单 `task-85d7350d` ← 通道 1），等用户决定是否接受 ADR-0179
 Blocked by: [24](./24-plan-given-estimate-evaluations-use-shared-reading-completion.md)（ADR-0179 已于 2026-10-12 接受）
 地盘（按 ADR-0179 现稿）：
 - `internal/settlementaccounting`：估价端口、采用登记册与迁移、施加编排在要金额时先形成估价、估价留痕；`adapters/parcelpricing` 下新的受理前试算消费侧适配器。
@@ -35,9 +35,9 @@ Blocked by: [24](./24-plan-given-estimate-evaluations-use-shared-reading-complet
 - 释放路径的既有用例绿。
 - 架构门禁绿；机制清点重生成并提交；带 DSN `go test -p 1 -count=1 ./...` 绿。
 
-## 完成记录（部分）（通道 2 · 2026-10-13 · 派单 `task-dd4926b1` ← 通道 1 · 分支 `mcp2-psb25` 基 `mcp5-psb25@b9486c5d`（其下 `b09b904c`），代码 tip `3917951f`，清点 `ea62cb39`）
+## 完成记录（通道 2 · 2026-10-13 · 两次派单 ← 通道 1：`task-dd4926b1` 做到 `caab1e00`，`task-f3d84381` 自 `caab1e00` 接着做 · 分支 `mcp2-psb25` 基 `mcp5-psb25@b9486c5d`（其下 `b09b904c`），代码 tip `e96345be`，清点 `26b3aac5`）
 
-时限内在可提交点收口：第 1–3 条、第 4 条上半、第 6 条前半与顺带四条落地，第 4 条下半、第 5 条、第 6 条后半与第 7 条未做。推送方自审不算非作者评审；评审与重放归通道 1。证据层级一律 `S`。
+做什么七条与顺带四条全部落地。第一次派单在时限内收口于 `caab1e00`（第 1–3 条、第 4 条上半、第 6 条前半与顺带四条），通道 3 在评 `b09b904c..caab1e00`；第二次派单落余下四条，`caab1e00` 之后的新笔另评。推送方自审不算非作者评审；评审与重放归通道 1。证据层级一律 `S`。
 
 ### 各笔
 
@@ -56,20 +56,28 @@ Blocked by: [24](./24-plan-given-estimate-evaluations-use-shared-reading-complet
 | `c5ab5fb9` | 本完成记录的首版 |
 | `3917951f` | 第 6 条前半：PS 收「受理前估价采用已登记」的登记续办门（与另两份同一份代码、账本名各占一个），`cmd/parcel-dispatch` 构造、套同一份未决哨兵、路由表加一行（单起一段，`assemble.go` 只有新增） |
 | `ea62cb39` | 机制清点在 `3917951f` 上重生成 |
+| `caab1e00` | 本完成记录跟上第 6 条前半（第一次派单收口于此） |
+| `2f4df44f` | 第 4 条下半之一：估价留痕册——迁移 `0035`、端口 `PreAcceptanceEstimateTrace` / `PreAcceptanceEstimateTraces`、Postgres 册（同键同内容答重放、异内容答冲突、不覆盖，比较在 SQL 里做）；类型可达性基线剪 `PreAcceptanceEstimate`。取舍见判断项 7 |
+| `44cb67cf` | 第 4 条下半之二与第 5 条（一笔：命令去掉 `AmountMinor` 之后，PS 那一侧的金额源没有去处，分两笔要么留一个算了不交的中间态，要么有一笔编不过）：SA 施加编排按采用行要试算、合计、先留痕再逐项控制，同一金额用于各控制项；新原因十二格；结果加 `Estimate()`。PS 适配器 `ControlAmountSource` 退场、命令交委托与提交版本，`estimation_amount.go` 与其用例删。`cmd/parcel-dispatch` 接采用册、留痕册与 `preAcceptanceTrials`（PP 受理前试算入口一整条），「Amounts 留空……」那句与两处「控制金额源仍为 nil」改成机制说法；`cmd/parcel-api` 三处注释只剩 Scopes。两份棘轮基线恢复成 `b09b904c` 的内容 |
+| `bfc70773` | 第 6 条后半：`SA-CONTROL_AMOUNT_NOT_CONFIGURED` 落`未配置`；新纵向用例 `TestAnAmountWaitIsResumedByTheEstimateAdoptionEnvelope`，作用域那条闭环的末段随之改；闭环夹具加估价采用续办门 |
+| `ffbb3890` | 机制清点在 `bfc70773` 上重生成，覆盖 `2f4df44f`、`44cb67cf`、`bfc70773` |
+| `236921b5` | 第 7 条：UC-SA-002 输入表、CONTEXT-MAP 两条关系、开发主线 PN-02 补记、`PAR-COM-15` 收短 |
+| `e96345be` | 完成判据二的用例：燃油 + 分区卡、两件委托，施加编排、SA 适配器与 PP 受理前试算入口接成一条（只加一份 `_test.go`） |
+| `26b3aac5` | 机制清点在 `e96345be` 上重生成（detached 检出） |
 
 ### 完成判据
 
-- ❌ 空册停在金额未配置、进`等待运营登记`、登记后信封重驱越过金额格。未做：要第 4 条下半（施加编排问采用册）、第 5 条（PS 不再交金额）与第 6 条后半（挪格）。已落的两段：一是信封那一端到续办门——SA 真交接适配器铸出的那一封经路由表投给 PS 新续办门、空队列入账定稿（`cmd/parcel-dispatch` 的 `TestARegisteredEstimateAdoptionReachesItsResumeGateOnTheProductionGraph`，带 DSN `-v` 为 `PASS`），续办门对该租户等待队列逐份再驱、账本记在自己名下（PS inbox 的 `TestAnEstimateAdoptionEnvelopeRedrivesTheTenantQueueUnderItsOwnLedgerName`）；二是采用行与「受理前估价采用已登记」信封同一事务，`cmd/parcel-settlement-register` 的 `TestPreAcceptanceEstimateAdoptionHandsOffItsEnvelopeInTheSameTransaction` 带 DSN `-v` 为 `PASS`（账户不在册上行与信封都不落、词表外形态事务前拒、首登一行一封、重放不翻倍、冲突不交）；「冲突不交」由应用层替身数调用证（`TestAnAdoptionRegistrationHandsOffByItsEffectAndAConflictHandsOffNothing`），理由同 rfc/19 评审回修第 3 条。
-- ◑ 冻结金额等于逐件试算合计、四种停法。合计与停法在 SA 领域：`TestAPerParcelSellTrialSumAddsEveryParcelAndKeepsItsProvenance`、`TestAPerParcelSellTrialSumStopsInsteadOfFillingAGap`（无试算、无合计、币种不对、合计为零、一份为负、溢出）；缺测量 / 缺邮编 / 卡没绑分区目录在 PP 入口逐件点名（`TestPreAcceptanceEstimatesNameEachMissingCellWithoutFillingIt`），经 SA 适配器译成「缺件」格（`TestPricingCellsStaySeparateAndUndecidedIsUnavailable`）；SA 适配器经真入口与真补齐读数把两件 12.50 CNY 译成 1250、合计 2500（`TestPreAcceptanceTrialsCarryMinorUnitTotalsAndTheirVersionManifest`）。**还没冻结过任何一笔**：施加编排未接。绑燃油序列那一格由 psb/24 的入口证（`TestPlanGivenEstimateOnAFuelBoundCardCompletesThroughTheSharedReadingCompletion`），本票入口交的是同一个 handler，没有另写「燃油 + 多件」的纵向用例。
-- ◑ 估价留痕可复算。留痕值 `PreAcceptanceEstimate` 带形态、计价范围、价卡版本引用、逐件评价标识与版本清单、合计，按留痕复算得同一合计（上面第一条领域用例）；PP 侧同一委托同一版本得同一组评价标识、换版本即不同（`TestPreAcceptanceEstimatesAreReproducibleForTheSameSubmissionVersion`）；SA 适配器带回的版本清单含价卡与分区目录。**留痕落库未做**（第 4 条下半）。
+- ✅ 空册停在金额未配置、进`等待运营登记`、处理尝试落库、信封入账而不是 `ABANDONED`；登记采用行之后信封重驱同一委托、越过金额格。`cmd/parcel-dispatch` 的 `TestAnAmountWaitIsResumedByTheEstimateAdoptionEnvelope`（带 DSN `-v` 为 `PASS`）：结算账户先登好、采用册空着——提交门入账，委托落`等待运营登记`，处理尝试带 `FINANCIAL_CONTROL_NOT_CONFIGURED` 与续办引用一行，两本账与留痕册一行不落；经真登记编排与真交接适配器登记采用行，恰好一封「受理前估价采用已登记」，估价采用续办门重驱同一委托，按登记的计价范围问到试算（试算替身答没有在用的售价卡 → `未形成`、整封回滚、账本无痕、处理尝试仍一行）。SA 施加编排、两本账、采用册与留痕册是生产实现、真库，替身只在控制策略与试算两口。作用域那条闭环 `TestAScopeWaitIsResumedByTheSettlementAccountRegistrationEnvelope` 越过作用域之后停在同一格、本封入账、处理尝试两行。变异 M1（金额未配置挪回`未形成`，`go test -overlay`，副本在本机 `/tmp/mcp2-m1/`）下两条转红、基线绿。第一次派单已落的两段照旧绿：一是信封那一端到续办门——SA 真交接适配器铸出的那一封经路由表投给 PS 新续办门、空队列入账定稿（`cmd/parcel-dispatch` 的 `TestARegisteredEstimateAdoptionReachesItsResumeGateOnTheProductionGraph`，带 DSN `-v` 为 `PASS`），续办门对该租户等待队列逐份再驱、账本记在自己名下（PS inbox 的 `TestAnEstimateAdoptionEnvelopeRedrivesTheTenantQueueUnderItsOwnLedgerName`）；二是采用行与「受理前估价采用已登记」信封同一事务，`cmd/parcel-settlement-register` 的 `TestPreAcceptanceEstimateAdoptionHandsOffItsEnvelopeInTheSameTransaction` 带 DSN `-v` 为 `PASS`（账户不在册上行与信封都不落、词表外形态事务前拒、首登一行一封、重放不翻倍、冲突不交）；「冲突不交」由应用层替身数调用证（`TestAnAdoptionRegistrationHandsOffByItsEffectAndAConflictHandsOffNothing`），理由同 rfc/19 评审回修第 3 条。
+- ✅ 冻结金额等于逐件试算合计、四种停法。接成一条的是 `adapters/parcelpricing` 的 `TestAFuelBoundCardOnTwoParcelsFreezesTheSumOfTheirTrials`（`e96345be`）：绑燃油序列与分区目录的售价卡、两件 1 千克，计价真入口与真补齐读数算出每件 12.50 + 20% 燃油 = 15.00 CNY，SA 真施加编排冻结 3000，留痕逐件的版本清单含价卡、分区目录与燃油序列；同包 `TestAFuelBoundCardStopsBeforeFreezingWhenAnyParcelCannotBeEstimated` 证同一张卡下一件没报测量（`ESTIMATE_DECLARATION_INCOMPLETE`）、一件超出费率表即那一份没有合计（`ESTIMATE_TRIAL_WITHOUT_TOTAL`）、卡的币种不是作用域的（同样没有合计：卡上没有汇率序列时计价不出别的币种的合计）都不冻结、账本与留痕不写。全在内存，替身只在读数源与结算的几本账上。以下是各段自己的用例。合计与停法在 SA 领域：`TestAPerParcelSellTrialSumAddsEveryParcelAndKeepsItsProvenance`、`TestAPerParcelSellTrialSumStopsInsteadOfFillingAGap`（无试算、无合计、币种不对、合计为零、一份为负、溢出）；缺测量 / 缺邮编 / 卡没绑分区目录在 PP 入口逐件点名（`TestPreAcceptanceEstimatesNameEachMissingCellWithoutFillingIt`），经 SA 适配器译成「缺件」格（`TestPricingCellsStaySeparateAndUndecidedIsUnavailable`）；SA 适配器经真入口与真补齐读数把两件 12.50 CNY 译成 1250、合计 2500（`TestPreAcceptanceTrialsCarryMinorUnitTotalsAndTheirVersionManifest`）。施加编排上冻结的就是那个合计：`TestTheFrozenAmountIsTheEstimateFormedFromTheAdoptedRow`（两件 1250 + 800 → 冻结 2050；试算按采用行的计价范围、作用域币种、控制判断时点与委托版本原样去问），`TestACombinedPolicyOccupiesOneEstimateOnBothLedgers`（冻结与暴露同一金额，试算只问一次、留痕一份），`TestEveryEstimateCellStopsBeforeTouchingEitherLedger`（缺件、任一份无合计、币种不是作用域的、合计非正、一份都没有，连同读不回三格、选卡两格、不可见，各落一个原因，都在碰两本账之前停）；PS 适配器 `TestNotFormedReasonsLandOnTheCellOfTheirRecoveryAction` 逐格译回。没有的一格：真库上「燃油卡 + 多件 + 冻结」走到底的纵向——生产装配的 PP 那一串在 `cmd/parcel-dispatch` 整图构造的用例里接得起来，但真价卡、分区目录与带邮编的委托是演示租户的取值（psb/26），本票不造。
+- ✅ 估价留痕可复算。`TestAPreAcceptanceEstimateTraceIsWrittenOnceAndReproducible`（带 DSN `-v` 为 `PASS`）：一行带形态、计价范围、价卡、逐件评价标识与版本清单、合计，按 `trials` 列逐件加回得同一合计；同一请求同一份再写是重放（落库时刻换了、判断时点带纳秒尾数也是），同合计异逐件与换合计都是冲突，不覆盖。编排侧：同一请求第二次带另一份估价停在`请求冲突`、不碰两本账（`TestTheSameRequestWithAnotherEstimateIsAConflictBeforeEitherLedger`）。PP 侧同一委托同一版本得同一组评价标识（第一次派单的 `TestPreAcceptanceEstimatesAreReproducibleForTheSameSubmissionVersion`）。
 - ✅ 释放路径的既有用例绿；另补释放那一径四格的新用例（顺带①）。
-- ✅ 架构门禁绿、机制清点重生成并提交、带 DSN `go test -p 1 -count=1 ./...` 绿——钉在本会话的 tip，不是本票完工的 tip，见「验证」。
+- ✅ 架构门禁绿、机制清点重生成并提交（`26b3aac5`）、带 DSN `go test -p 1 -count=1 ./...` 绿——全量钉 `236921b5`，`e96345be` 只多一份 `_test.go`，另验，见「验证」。
 
 ### 顺带四条（rfc/19 增量复评 `task-40247234` 的非阻断，`87058cf9`）
 
 1. **Spec ②**：`TestAReleaseWithoutAFormedScopeNamesItsGapAndClaimsNothing` 钉释放那一径四格——没接作用域源、解析口或账户目录没接各报 `CONTROL_SCOPE_NOT_ASSEMBLED`，账户没登记报 `CONTROL_SCOPE_NOT_CONFIGURED`，解析没采用结算政策报 `CONTROL_SCOPE_SETTLEMENT_POLICY_NOT_ADOPTED`，都是可重试错误、原冻结原样占着。M8（释放改回 `CONTROL_SCOPE_NOT_CONFIGURED`，`go test -overlay`，副本在本机 `/tmp/mcp2-m8/`）下装配缺口两格转红、基线绿。Standards ③（释放那份 switch 没有用例守）同一条用例收。
 2. **Spec ③**：`cmd/parcel-api` 的 `buildRejectionOrchestration`、`buildDispositionOrchestration`、`buildWithdrawalOrchestration` 注释改为「适配器报装配缺口 `CONTROL_SCOPE_NOT_ASSEMBLED`、编排留补偿续办」；`partycommercial` 的 `TestARegisteredSettlementBasisFormsAThreeDimensionSelector` 注释改为停在 `CONTROL_SCOPE_SETTLEMENT_POLICY_NOT_ADOPTED`、与账户没登记分码。只动注释；「实例半边」的定性与给释放半边接作用域源归 owner 另票，未碰。
-3. **Standards ①**：`NewPreAcceptanceControlAdapter` 注释只写本适配器对两个 nil 怎么答，不复述 `cmd/parcel-api` 的装配。第 5 条落地时 `Amounts` 那半句随 `ControlAmountSource` 一起走。
+3. **Standards ①**：`NewPreAcceptanceControlAdapter` 注释只写本适配器对两个 nil 怎么答，不复述 `cmd/parcel-api` 的装配。第 5 条落地时 `Amounts` 那半句随 `ControlAmountSource` 一起走（`44cb67cf`，现在只剩 Scopes 那一个 nil）。
 4. **Standards ②**：常量块与 `ControlScopeNotAssembled` 注释不数「两半」，点名解析口、账户目录；同包用例 `TestUnconfiguredSourcesStopAtNotFormedWithoutAskingTheProvider` 头注同一处一并改。
 
 ### 判断项与越权风险点
@@ -80,15 +88,35 @@ Blocked by: [24](./24-plan-given-estimate-evaluations-use-shared-reading-complet
 4. 判断项：评价合计的小数位多于币种的 ISO 4217 位数时，SA 适配器不截断、当这一份没有合计，估价答未形成。旧执行器在同一格报 `ErrUntranslatableAnswer`（编程错误）；这里降为业务停，因为位数由价卡的取整策略定，不是适配器译坏了。
 5. 判断项：PP 入口的试算对象引用由委托、提交版本与件带长度前缀派生（取自 `ba61f682`），不直接用声明包裹标识——后者在委托之间未必唯一，同一标识的两件会撞出同一评价标识。
 6. 判断项：选卡未配置、适用冲突、解析口读不回三格都不读客户申报（`TestPreAcceptanceEstimatesStopAtEachCardCellWithoutReadingTheDeclaration`）。
+7. **越权风险点 · 待 owner 复核（SA）**：留痕落库另开一张表 `settlement_accounting.pre_acceptance_estimate_trace`（迁移 `0035`），不给冻结、信用暴露两本账加列。ADR-0179 决定六写的是「跟冻结与信用暴露的结果一起保存」，本票读作同一事务、另一张表，键与两本账同形（租户 + 结算作用域 + 控制请求标识）。理由：`业务限制`从不入两本账（迁移 `0001` 原话「`业务限制`从不入账本」，`FreezeLedger.Freeze` 与 `CreditExposureLedger.Expose` 对超额只交回结果不登记），加列的话受限那一次的估价无处可存；组合策略两项共用一个金额，加列要存两份；两本账的领域对象与重建规格都不用动。迁移只增不删，选错了要靠下一份迁移收，所以标在这里。
+8. 判断项：留痕先于两本账写、与它们同一事务，同一请求身份带另一份估价答冲突 → `请求冲突`，与两本账「同一请求身份携带不同内容」同一条判据。先写的理由：一次落了库的冻结或暴露必有说得出金额来历的那一行——账期那一项停在`未配置`时事务照样提交，前一项的冻结已经落了。代价是同一请求在同一判断时点上估出了另一份（比如有人补登了一份在那个时点之前生效的价卡）时停在冲突，而不是悄悄换一个金额；那正是两本账对异金额的答复。
+9. 判断项：估价那一口每格各一个未形成原因（`CONTROL_AMOUNT_NOT_CONFIGURED`、三个 `*_UNAVAILABLE`、选卡两格、不可见、缺件、四种合计停法），PS 侧只有金额未配置落`未配置`，其余落`未形成`：补价卡、补件或改卡都推得动它们，但没有一样会发「参数已登记」类信封来重驱这份委托。分开是为了续办引用与处理尝试里留下停在哪一格。
+10. 判断项：估价在控制策略之后、两本账之前形成，`无控制`不形成估价——合同不要求控制时连客户的申报都不该读，与「控制策略先于余额」同一条顺序纪律。命令上的委托与提交版本是 PS 字面原样的字符串，与 `PreAcceptanceTrialQuery` 同形，SA 不为它们立值对象。
+11. 判断项：`cmd/parcel-dispatch` 把受理前试算评价的证据层级装配成 `S`（`preAcceptanceTrialEvidence`），理由与 `evaluationRequestFormationEvidence` 同一条：本仓尚无租户，价卡登记册里只有合成实例。
+12. 范围一句：CONTEXT-MAP 只补了地盘列的两条（SA → PP 受理前试算、PP → PS 提交版本申报）。「受理前估价采用已登记」那条 SA → PS 的交接与「结算账户已登记的交接」同形，没有单列。PS 应用层「三停续办引用两两不同」那条用例只改了用例里的原因串与格（`bfc70773`），应用层代码一行没动。
 
-### 余下几条（接手要点；与之相关的既有代码本会话一行没改）
+### 余下几条
+
+无。第一次派单收口时写的接手要点原样留在下面，第二次派单照它办：第 4 条下半落在 `2f4df44f` 与 `44cb67cf`，第 5 条随 `44cb67cf`，第 6 条后半在 `bfc70773`，第 7 条在 `236921b5`；与要点不同的只有两处——留痕取了另开一张表（判断项 7），第 4 条下半与第 5 条并成一笔（理由见「各笔」那一行）。
 
 - **第 4 条下半**：`ApplyPreAcceptanceControlHandler` 加两件依赖——`ports.PreAcceptanceEstimateAdoptionView`（`328478ef`）与 `ports.PreAcceptanceTrialSource`（`7458bdb3`）；命令去掉 `AmountMinor`、加委托与提交版本两个原样引用。策略要求控制时按（租户、作用域账户）查采用行：没有行答新的未形成原因（金额未配置）；有行按（采用行计价范围、作用域币种、`AsOf.At()`）要试算，用 `FormPerParcelSellTrialSum` 合计，同一金额用于各控制项。`continuationFor` 摘要里的金额那一格换成委托与版本。估价留痕随冻结 / 暴露落库（决定六）：给两本账加列，还是另开一张以控制请求身份为键、与冻结同事务的留痕表，要定（倾向后者，重放按请求身份吞）。既有 SA 应用层、PS 适配器、cmd 用例里交 `AmountMinor` 的都要跟。新原因先在 PS `notFormedOutcomeFor` 落`未形成`，第 6 条再挪。两份棘轮基线里本票加的三行随之剪掉。
 - **第 5 条**：PS `ControlAmountSource`、`EstimationAmountSource`、`EstimationBasisSource` 退场（`estimation_amount.go` 与其用例删；它的造单夹具已搬进 PP 适配器用例），适配器把委托与提交版本交给 SA 命令。`cmd/parcel-dispatch` 的 `acceptanceFinancialControl` 装 SA 采用册读口与 `PreAcceptanceTrials`：后者要 PP `FormPreAcceptanceEstimatesHandler`（在用价卡解析口、PP `adapters/parcelshipment` 包 PS 申报读口、plan-given 入口的四只补齐口、装配声明的证据层级）。那句「Amounts 留空……」与头注里「接通前属实例半边」随之消失。
 - **第 6 条后半**：续办门与路由已落（`3917951f`）。余下的是挪格——PS `notFormedOutcomeFor` 把第 4 条下半新加的「金额未配置」原因落`未配置`（ADR-0094 决定四：触发已在，可以同笔挪）——和纵向真库用例，照 `TestAScopeWaitIsResumedByTheSettlementAccountRegistrationEnvelope`：空册 → `等待运营登记`、处理尝试落库、提交信封入账；登记采用行 → 信封重驱同一委托、越过金额格。
 - **第 7 条**：地盘里列的文档，随第 4–6 条落。
 
-### 验证（作者那层，go1.26.8，证据层级 `S`）
+### 验证（第二次派单，作者那层，go1.26.8，证据层级 `S`）
+
+钉 `236921b5`（隔离 worktree `idp-parcel-mcp2-psb25`，`git status --porcelain --untracked-files=all` 为空），17:49–17:52：
+
+- 分支自 `b09b904c` 起新增或改过的 52 个 `.go`，按入库字节（`git cat-file blob HEAD:<path>`）过 toolchain `gofmt -l` 为空、无 CR、无 BOM；迁移 `0034`、`0035` 无 CR。
+- `go build ./...`、`go vet ./...` 全仓退 0。
+- 带 DSN 跑 `go test -count=1 -p 1 ./...`：139 ok / 0 FAIL / 14 无测试文件 / 0 cached，退 0（17:49:34→17:51:49）。动了迁移，反向依赖就是全部真库包，所以跑全量，不另列包组。各笔提交前另跑过的局部：`2f4df44f` 前是留痕与采用两条真库用例、`./internal/architecture/...`、`./migrations/...`、`./internal/platform/migrate/...`；`44cb67cf` 前是 SA 全部包、PS 两个适配器与应用层、`cmd/parcel-api`、`cmd/parcel-dispatch`、`cmd/parcel-settlement-register` 与架构门禁（带 DSN `-p 1`）；`bfc70773` 前是两条纵向用例与两条译格用例的 `-v` 单跑。都 ok，数不另记。
+- `-v` 单跑：`TestAPreAcceptanceEstimateTraceIsWrittenOnceAndReproducible`、`TestAnAmountWaitIsResumedByTheEstimateAdoptionEnvelope`、`TestAScopeWaitIsResumedByTheSettlementAccountRegistrationEnvelope`、`TestARegisteredEstimateAdoptionReachesItsResumeGateOnTheProductionGraph` 全为 `PASS`，无 `SKIP`。
+- 机制清点在 `236921b5` 上重跑生成器，`git status --porcelain -- docs/product/MECHANISM-INVENTORY.md` 为空（`ffbb3890` 生成于 `bfc70773`，其后只有文档一笔）。
+- 变异：M1 见完成判据第一条。
+- `e96345be` 另验（钉 `26b3aac5`）：自 `236921b5` 起动过的 `.go` / `.sql` 只有 `internal/settlementaccounting/adapters/parcelpricing/pre_acceptance_control_estimate_test.go` 一份，按入库字节 gofmt 空、无 CR；全仓 build、vet 退 0；该包与 `./internal/architecture/...` `-count=1` 全 ok，新两条 `-v` 为 `PASS`。纯用例、不碰真库，没有在它上面重跑全量。清点 `26b3aac5` 在 `e96345be` 的 detached 检出上生成。
+
+### 验证（第一次派单，作者那层，go1.26.8，证据层级 `S`）
 
 除另注的一条外钉在 `40dcb520`（隔离 worktree `idp-parcel-mcp2-psb25`，工作树只多本票面这一份未提交改动）：
 
