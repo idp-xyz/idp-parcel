@@ -1,6 +1,6 @@
-// Package registrationjson 是商业上下文服务形态、产品—渠道映射与注册号类型目录三类登记的 JSON 译装：受控批量口
-// （cmd/parcel-commercial 的 register-products 与 register-registration-number-types）与操作者渠道在线口共用这一份
-// 批文外壳与逐项翻译，两口对同一项译出同一条命令（票 operator-channel/04）。
+// Package registrationjson 是商业上下文服务形态、产品—渠道映射与注册号类型目录三类登记，以及商业权威依据发布批文的
+// JSON 译装：受控批量口（cmd/parcel-commercial 的 register-products、register-registration-number-types 与 publish）与
+// 操作者渠道在线口共用这一份批文外壳与逐项翻译，两口对同一项译出同一条命令（票 operator-channel/04、18）。
 //
 // 分工：整批的回显与逐项事务留在受控批量口；在线口一次只收一项，租户由认证结果注入，外壳里的 tenantId 键在场即拒、
 // 本口恰一项——那两道门在在线口一侧（commercialhttp），本包只给形状与翻译。

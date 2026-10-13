@@ -561,7 +561,7 @@ internal/networkrouting/domain ArbitrateLoadingConcurrency
 # （`BD-PS-009` / `PAR-COM-14`），编排如实停在授权未形成；PS 两只既有适配器（撤回、拒绝）仍走不带请求方的旧构造器
 # （三步法，迁完删旧，不在本票）。同票的 NewAuthorizationRequestBy / NewContractDelegation / NewContractDelegationContent /
 # NewOperatorRoleReference 按名字被门禁跳过（`New` 前缀）；DelegatedByCustomerAccount /
-# DelegatedByLegalEntity 由受控批文 cmd/parcel-commercial/translate.go 与 postgres 读适配器调用，是生产路径。
+# DelegatedByLegalEntity 由发布批文译装 internal/partycommercial/adapters/registrationjson（受控 CLI publish 调它）与 postgres 读适配器调用，是生产路径。
 # **party-commercial 这一组至此清空**——留着这一段是为了让下一个往本组加条目的人看见这段历史。
 
 
