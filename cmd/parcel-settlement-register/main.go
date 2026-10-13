@@ -76,6 +76,7 @@ type registrar struct {
 	attributions *application.RegisterChargeAttributionHandler
 	sellTriggers *application.RegisterSellEvaluationTriggerHandler
 	moments      *application.RegisterSettlementMomentHandler
+	adoptions    *application.RegisterPreAcceptanceEstimateAdoptionHandler
 	transactor   bentoapp.Transactor
 }
 
@@ -290,6 +291,20 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造结算触发登记：%w", err)
 	}
+	adoptionStore, err := sapostgres.NewPreAcceptanceEstimateAdoptions(db)
+	if err != nil {
+		return none, fmt.Errorf("构造受理前估价采用册：%w", err)
+	}
+	// 「受理前估价采用已登记」交接口同上：采用行与信封落在同一笔环境事务里，停在金额那一格的委托等的就是这封信
+	// （ADR-0179 决定五、ADR-0094 决定四）。
+	adoptionHandoff, err := sapostgres.NewOutboxPreAcceptanceEstimateAdoptionRegisteredHandoff(db, outboxStore, systemClock{})
+	if err != nil {
+		return none, fmt.Errorf("构造受理前估价采用已登记交接口：%w", err)
+	}
+	adoptionHandler, err := application.NewRegisterPreAcceptanceEstimateAdoptionHandler(adoptionStore, adoptionHandoff, systemClock{})
+	if err != nil {
+		return none, fmt.Errorf("构造受理前估价采用登记：%w", err)
+	}
 	return registrar{
 		funds:        funds,
 		accounts:     accountHandler,
@@ -303,6 +318,7 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 		attributions: attributionHandler,
 		sellTriggers: sellTriggerHandler,
 		moments:      momentHandler,
+		adoptions:    adoptionHandler,
 		transactor:   db.Transactor(),
 	}, nil
 }
@@ -332,6 +348,9 @@ func execute(ctx context.Context, command string, raw []byte, registrar registra
 	if errors.Is(err, ports.ErrSettlementAccountHandoffRejected) {
 		// 归格理由同上一格：账户行随信封一起回滚，同一份输入再交仍会被拒，要改的是账户标识的长度。
 		return fmt.Sprintf("%s: 未登记——结算账户已登记信封被框架确定性拒收，要改的是账户标识的长度或形，同一份再交仍会被拒：%v", command, err), exitUsage
+	}
+	if errors.Is(err, ports.ErrPreAcceptanceEstimateAdoptionHandoffRejected) {
+		return fmt.Sprintf("%s: 未登记——受理前估价采用已登记信封被框架确定性拒收，要改的是账户标识的长度或形，同一份再交仍会被拒：%v", command, err), exitUsage
 	}
 	if errors.Is(err, sadomain.ErrCatalogueTargetMissing) {
 		return fmt.Sprintf("%s: 未登记——指向的结算账户还不在账户册上，先登记账户再交这一行：%v", command, err), exitUsage
@@ -404,6 +423,19 @@ func accountAnswer(command string, effect ports.SettlementAccountRegistrationEff
 		return command + ": 已存在（" + accountID + "）", exitRegistered
 	case ports.SettlementAccountConflict:
 		return command + ": 冲突（" + accountID + "，同键已在册且内容不同——绝不覆盖，先核对既有登记）", exitConflict
+	default:
+		return fmt.Sprintf("%s: 未知应用结果 %d", command, effect), exitUndecided
+	}
+}
+
+func adoptionAnswer(command string, effect ports.PreAcceptanceEstimateAdoptionEffect, accountID string) (string, int) {
+	switch effect {
+	case ports.PreAcceptanceEstimateAdoptionRegistered:
+		return command + ": 已登记（" + accountID + "）", exitRegistered
+	case ports.PreAcceptanceEstimateAdoptionReplay:
+		return command + ": 已存在（" + accountID + "）", exitRegistered
+	case ports.PreAcceptanceEstimateAdoptionConflict:
+		return command + ": 冲突（" + accountID + "，这一户已有采用且内容不同——采用册不设修订，绝不覆盖）", exitConflict
 	default:
 		return fmt.Sprintf("%s: 未知应用结果 %d", command, effect), exitUndecided
 	}

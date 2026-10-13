@@ -160,6 +160,8 @@ var declaredPartitionSubjects = map[string]string{
 	// 「结算账户已登记」与 party-commercial「参数已登记」同主体同字符串（票 routing-first-cut/19），同队的理由写在
 	// operator_registration_completed_handoff.go 那一行的裁段里。
 	"internal/settlementaccounting/adapters/postgres/settlement_account_registered_handoff.go": partitionSubjectPrefix + "租户（运营登记续办）" + partitionRulingMark + "待裁——与 party-commercial 参数已登记口同队有意（理由在 operator_registration_completed_handoff.go 那一行），无裁定记录",
+	// 「受理前估价采用已登记」同上一行（票 product-strategy-boundary/25）。
+	"internal/settlementaccounting/adapters/postgres/pre_acceptance_estimate_adoption_registered_handoff.go": partitionSubjectPrefix + "租户（运营登记续办）" + partitionRulingMark + "待裁——与 party-commercial 参数已登记口、结算账户已登记口同队有意（理由在 operator_registration_completed_handoff.go 那一行），无裁定记录",
 
 	// —— transport-fulfillment ——
 	"internal/transportfulfillment/adapters/postgres/capacity_consumption_handoff.go":            partitionPerEnvelopePrefix + "键即信封 ID（各消耗事实互不相干）",
