@@ -207,6 +207,8 @@ PN-08 是产品级试点治理与跨上下文应用编排，不是新的限界�
 
 2026-10-12 补记（票 `routing-first-cut/19`）：上表单元格与上一条都不改写。上一条末句「财务控制格没有」自票 `routing-first-cut/16` 进 main 起过时：演示种子财务控制那一格的时点也采用了「提交接收」，种子还登了演示租户的结算账户。钉 `ff3b01fa` 重走动线（实测，只记 `S`），越过时点之后停在控制金额未配置（`CONTROL_AMOUNT_NOT_CONFIGURED`）。控制金额源仍是 PN-02 未满足的部分。
 
+2026-10-13 补记（票 `product-strategy-boundary/25`，[ADR-0179](../adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md)）：上表单元格与上两条都不改写。PN-02 第三项里「受理前控制金额 `Amounts` 为 nil，缺估价方法（`ControlAmountSource`）」与上一条末句已过时：金额改由结算形成。施加编排按结算账户查受理前估价采用册，按采用行的计价范围向计价要委托当前提交版本的逐件 `SELL` 试算，合计成控制金额，随控制结果留痕；`ControlAmountSource` 已删，小包托运的控制请求不带金额。采用册空着时停在 `SA-CONTROL_AMOUNT_NOT_CONFIGURED`，委托落`等待运营登记`；登记采用行（`parcel-settlement-register pre-acceptance-estimate-adoption`）时同一事务交信封重驱。演示租户的采用行、售价卡绑分区目录与演示委托带邮编归票 `product-strategy-boundary/26`，本条不替动线定级。证据层级 `S`。
+
 2026-09-30 补记（票 `product-strategy-boundary/16` 第 1 项，ADR-0156）：上表单元格不改写。PN-02 第一项里「可达性资格视图的闭包标识生产为 nil」已过时：闭包标识从本轮已采用的商业解析回指，装配不再传入空映射。网络定义登记册的写入方、结算账户登记册、面单择优链的接受时解析回指仍是本行未满足的部分。
 
 2026-09-30 补记（票 `product-strategy-boundary/16` 第 4 项，ADR-0159）：上表单元格不改写。PN-02 第一项里「面单择优链的接受时解析回指」已过时：择优查询带来源身份与声明包裹，解析标识从该成员的接受决定读，装配不再把这个源留空。网络定义登记册的写入方、结算账户登记册仍是本行未满足的部分。账号使用授权与供应商协议的选法不在本项。
