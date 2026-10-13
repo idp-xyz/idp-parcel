@@ -240,12 +240,17 @@ echo "== 操作者册登记（access-identity：合成操作者主体与能力�
 "$BIN/parcel-access-register" operator-register -input "$SEEDS/access/01-operators.json"
 "$BIN/parcel-access-register" operator-grant -input "$SEEDS/access/02-grants.json"
 
-echo "== 结算账户登记（settlement-accounting：演示租户货主的应收结算账户；票 routing-first-cut/16） =="
+echo "== 结算账户与受理前估价采用登记（settlement-accounting：演示租户货主的应收结算账户与它采用的估价形态；票 routing-first-cut/16、product-strategy-boundary/26） =="
 # 受理前财务控制的作用域从那一次商业解析回显的结算政策派生，账户按（法人、相对方、应收、币种、结算政策）
 # 在结算账户登记册上找（cmd/parcel-dispatch 的 acceptanceFinancialControl）。这一行的五维照发布批里
 # `SYN-SETTLEMENT-PREPAID-01` 的正文配，差一维就查不到，控制停在 `CONTROL_SCOPE_NOT_CONFIGURED`。账户标识与
 # 责任依据是演示租户的合成取值：登记口与执行器都不代拟账户，没登的租户照旧停在那一格。
 "$BIN/parcel-settlement-register" settlement-account \
   -input "$SEEDS/settlement/01-settlement-account-shipper-01-receivable-cny.json"
+# 受理前估价采用（ADR-0179 决定五）：这一户采用「逐件 SELL 试算合计」，计价范围与售价卡 SYN-PLAN-CN-SG-01 的
+# 范围同值——估价按（租户、计价范围、SELL、客户费用、判断时点）解析在用售价卡（决定三），范围对不上就解不出卡。
+# 采用册对账户册设外键，所以排在账户之后。没登这一行的户，控制停在金额未配置；形态与范围是演示租户的合成取值。
+"$BIN/parcel-settlement-register" pre-acceptance-estimate-adoption \
+  -input "$SEEDS/settlement/02-pre-acceptance-estimate-adoption-account-01.json"
 
 echo "种子灌入完成：租户 SYN-TENANT-01，各上下文全部落库。"
