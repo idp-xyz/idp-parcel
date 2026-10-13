@@ -1,7 +1,7 @@
 # 27 受理前控制只认委托当前提交版本：已换代的版本不读申报、不形成冻结
 
 Category: bug
-Status: ready-for-agent——2026-10-13 19:3x 通道 1 立（用户 19:2x 经队列点头「按你的建议开始吧」），出自[票 25](./25-pre-acceptance-estimate-formed-by-settlement.md)两段非作者评审：第一段 Spec ③（`task-c7cfb347`）与第二段 Standards 1（`task-386c6296`），原文摘在票 25 的 Comments。
+Status: in-progress——2026-10-13 20:1x 通道 1 认领（用户 20:0x 经队列告知「现在只有你可以工作了，请你自己独立全部完成」；此前两张派单 `task-28bd6f8c` → 通道 2、`task-3e3a24ac` → 通道 3 均作废，两边都没留下提交），分支 `mcp1-psb27`，基 `cd728610`（= origin/main），隔离 worktree `idp-parcel-mcp1-psb27`。作者与推送方同为通道 1，评审门照 [workflow.md](../../../docs/agents/workflow.md)「本仓不用子代理」那条由推送方自审，不算非作者评审。此前 ready-for-agent——2026-10-13 19:3x 通道 1 立（用户 19:2x 经队列点头「按你的建议开始吧」），出自[票 25](./25-pre-acceptance-estimate-formed-by-settlement.md)两段非作者评审：第一段 Spec ③（`task-c7cfb347`）与第二段 Standards 1（`task-386c6296`），原文摘在票 25 的 Comments。
 Blocked by: 无
 地盘：`internal/parcelshipment/domain`（`SubmissionVersionDeclarationFor` 与其用例；`FormNewSubmissionVersion` 只读不改）、`internal/parcelshipment/adapters/postgres` 的提交版本申报读口（`submission_version_declaration_view.go` 与其用例）、`internal/parcelshipment/application`（守卫若落在编排一层，只动受理判断里发起财务控制的那一段与其用例）、`cmd/parcel-dispatch` 的纵向用例（只新增）。**不碰** `internal/parcelshipment/adapters/settlementaccounting/`——那是[票 28](./28-psb25-review-tails-estimate-gaps-unit-folding-and-trace-as-of.md)的地盘，真要动先报通道 1。
 出处：[ADR-0179](../../../docs/adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 决定二「对委托当前提交版本的每一件声明包裹」、决定四「按委托当前提交版本读」；ADR-0045（新版本成为唯一待判断版本）；ADR-0094 决定一、二（`未形成`与`未配置`的恢复动作）。
