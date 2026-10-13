@@ -1,8 +1,8 @@
 # 19 准入范围桥：操作者与集成客户端铸造器的 `AdmissionScope` 由「租户对照 + `AuthorityCoverage`」实现，接进生产装配，演示租户登 `SYN-` 对照
 
 Category: enhancement
-Status: in-progress——2026-10-13 22:07 通道 2 分诊认领（派单 `task-f2fa6dc4` ← 通道 1），分支 `mcp2-oc19t`，基 `b3c8bd46`（开工前 ls-remote 核过远端 main 未变）。此前 needs-triage——2026-10-13 通道 4 立（通道 1 派单 `task-40698906`，照裁定 A：[15](./15-operation-decision-faces-take-operator-intake.md) 余下四口不换，桥另立）。桥的骨架有出处：ADR-0149 决定四第二条定了按（租户、对象范围、能力、事实类型）读生产权威区间，[14](./14-admission-scope-read-and-grade.md) 交了读口 `AuthorityCoverage` 与「不在准入范围」一格。没有出处的是对照本身——行住在哪、按什么键、本产品的权威串从哪来；第一件定了就要落迁移，见「要裁的问题」。
-Blocked by: 无——要裁的是本票自己的形状，裁完转 ready-for-agent
+Status: needs-info——2026-10-13 22:2x 通道 2 分诊完（派单 `task-f2fa6dc4` ← 通道 1，分支 `mcp2-oc19t`，基 `b3c8bd46`）：三问与词表一格都有推荐；问题一、三一定就要落迁移、定参数来源，起草成 [ADR-0180](../../../docs/adr/0180-admission-scope-tenant-mapping-is-an-access-identity-register-and-self-authority-is-a-deployment-parameter.md)（Proposed），待用户接受。归类、推荐、做什么各件落点与收窄后的地盘见文末「分诊」。此前 in-progress——2026-10-13 22:07 通道 2 分诊认领（派单 `task-f2fa6dc4` ← 通道 1），分支 `mcp2-oc19t`，基 `b3c8bd46`（开工前 ls-remote 核过远端 main 未变）。此前 needs-triage——2026-10-13 通道 4 立（通道 1 派单 `task-40698906`，照裁定 A：[15](./15-operation-decision-faces-take-operator-intake.md) 余下四口不换，桥另立）。桥的骨架有出处：ADR-0149 决定四第二条定了按（租户、对象范围、能力、事实类型）读生产权威区间，[14](./14-admission-scope-read-and-grade.md) 交了读口 `AuthorityCoverage` 与「不在准入范围」一格。没有出处的是对照本身——行住在哪、按什么键、本产品的权威串从哪来；第一件定了就要落迁移，见「要裁的问题」。
+Blocked by: [ADR-0180](../../../docs/adr/0180-admission-scope-tenant-mapping-is-an-access-identity-register-and-self-authority-is-a-deployment-parameter.md)（Proposed，待用户接受）——接受即转 ready-for-agent，地盘照「分诊」收窄（2026-10-13 通道 2 改）。此前：无——要裁的是本票自己的形状，裁完转 ready-for-agent
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 丙轨实施
 地盘（裁完按形状收窄）：`AdmissionScope` 的生产实现与对照的读口（落点随问题一）；`cmd/parcel-api` 的 `buildOperatorMinter`、`buildIntegrationClientMinter` 与 `main.go` 里建它们的那几行；演示种子 `scripts/demo-seeds/data/governance/` 的区间、对照的那份种子、`seed.sh` 相应一段与 `scripts/demo-seeds/README.md`；对照若是新的一类实例值，参数登记册增一行。
 出处：[ADR-0149](../../../docs/adr/0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md) 决定四第二条、越权风险点 3；[ADR-0151](../../../docs/adr/0151-unassigned-command-faces-get-their-families.md) 决定三；[ADR-0150](../../../docs/adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 决定一；[ADR-0083](../../../docs/adr/0083-pilot-governance-read-face-carries-registry-dimensions-only.md) 决定一；14 判断项 1、2、4；`cmd/parcel-api/assemble_operator_decisions.go` 的 `buildOperatorMinter` 头注。
@@ -53,3 +53,54 @@ Blocked by: 无——要裁的是本票自己的形状，裁完转 ready-for-age
 - 对照已登且区间覆盖 → 铸成；对照未登，或登了而区间不覆盖（别的权威、已关、未始、别的对象范围）→ 不在准入范围；对照读不动、区间读不动 → 依赖故障格，且不被「不在准入范围」认出（带测试）。
 - 生产装配：selfAuthority 未配时，`TestSwappedDecisionFacesAnswerFromTheOperatorChannel` 与 `TestIntegrationClientFacesAnswerTheChannelGrades` 的准入那一格照旧；配了且对照与区间齐备时，装载分配与终止参与答业务结果（`cmd/parcel-api` 装配测试带 DSN）。
 - 演示环境灌完种子后，带运营决定授予的合成操作者在装载分配或终止参与上不再答 `OUTSIDE_ADMISSION_SCOPE`（`scripts/demo-seeds/operator-channel/probe-operator-channel.sh` 那一套取一次证据，证据层级 `S`）。
+
+## 分诊（2026-10-13 通道 2；派单 `task-f2fa6dc4` ← 通道 1；取证钉 `b3c8bd46`）
+
+**结论**：三问与词表一格逐条过了分界检验（[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md#切片的机制半边与实例半边)「切片的机制半边与实例半边」、ADR-0146 决定二）。问题一、三一定就要落迁移、定参数来源，难逆转，起草成 [ADR-0180](../../../docs/adr/0180-admission-scope-tenant-mapping-is-an-access-identity-register-and-self-authority-is-a-deployment-parameter.md)（Proposed，接受归用户）；问题二与词表一格随它写进同一篇。都不落在已接受 ADR 的原话里——ADR-0149 决定四第二条只说「按（租户、对象范围、能力、事实类型）读」，没说租户那一维住哪；14 判断项 1、2 只说「由 `AdmissionScope` 的实现去换」「两处将来装配时应取同一个值」——所以不直接转 ready-for-agent。理由与否决的候选都在 ADR-0180，这里只记归类、推荐与落点。
+
+### 归类与推荐
+
+| 格 | 归类 | 推荐 |
+|---|---|---|
+| 问题一 · 对照住哪 | 册的存在、列、落点与答复格是机制；行是租户取值 | 甲：`access_identity` 另立对照册（ADR-0180 决定一） |
+| 问题二 · 键 | 机制 | （租户、能力、事实类型），任一时刻至多对一个对象范围；同键区间重叠在登记时拒（决定二） |
+| 问题三 · 权威串 | 参数这一格是机制，值是部署取值 | `parcel-api` 一件部署形态参数，桥与 PS 生产分支同读；PS 跟，只跟参数来源；隔离分支不动，两值不等拒启动（决定三） |
+| 词表 | 产品策略 | 认 `OPERATION_DECISION` + 决定种类、`EXTERNAL_FACT` + 外部事实类型，不带 `SYN-`；能力词一处定义（决定四） |
+
+### 问题一：甲、乙、丙逐条核
+
+| 出处 | 甲 · 接入身份对照册 | 乙 · 治理侧带租户的表 | 丙 · 部署参数 |
+|---|---|---|---|
+| ADR-0083 决定一 | 相容：治理册照旧没有租户维，带租户的行落在本就按租户绑定的 `access_identity` | 相抵：给治理上下文添租户维，要另出记录部分停用，还掀掉决定三「唯一隔离边界是产品实例」的前提 | 相容：不落库 |
+| ADR-0149 决定四第二条 | 相容：铸信封前读一次，区间仍是「谁在写生产」的唯一权威，对照只换坐标 | 相容 | 形式相容：「按租户读」的那一维成了进程参数 |
+| ADR-0149 越权风险点 3 | 相容：没对照、没区间都答不在准入范围 | 相容 | 相容：未设即不在准入范围 |
+| ADR-0150 决定一 | 相容：演示租户登一行普通对照，与真实租户同一条路（决定二「走普通登记，不另造旁路」） | 相容：经 `parcel-governance-register` 登 | 代码路径相容；演示与真实租户都靠部署参数进来，没有登记轨迹 |
+| 14 判断项 1 | 兑现：「租户随试点登记」，换在 `AdmissionScope` 的实现里 | 相容 | 相抵：参数不是登记——没依据、没生效区间，改一次要重启 |
+| 14 判断项 2 | 不涉及：权威串另由问题三定 | 不涉及 | 不涉及 |
+| 14 判断项 4 | 兑现：桥随第一个消费者（15 之四、11）立；各口准入要求已在认证方里 | 同甲 | 同甲 |
+
+**问题二的理由**：`Admits` 看得见的只有（租户、能力与事实类型、时刻）；粗一档的键表达不了已分属不同对象范围的能力和分批进生产的决定种类；一键多范围而任一覆盖即放行，会把试点范围外对象上的写放进来。按对象分要改 14 的接口，照本票「不做」另立；在那之前登记指引的约束见 ADR-0180 越权风险点 2。
+
+**问题三的理由**：对照是租户取值，权威串是部署取值，两者不同类（ADR-0100 决定二的分界）；做成产品常量就没有「未配置」一态。PS 不跟，桥与 PS 各有一处来源，14 判断项 2 只能靠约定守；跟的代价只在 `cmd/parcel-api`——PS 生产分支的目录照旧为空，`governanceScope` 先于读册早退，答复不变。
+
+### 做什么四件：ADR-0180 接受后的落点
+
+1. **`AdmissionScope` 的生产实现**
+   - 对照册：`internal/accessidentity` 的对照类型与读写端口；`migrations/access_identity/` 下一号迁移（钉 `b3c8bd46` 时最高是 `0004`）；`internal/accessidentity/adapters/postgres` 的读写适配器，带真库测试；`cmd/parcel-access-register` 登记、结束两个子命令，照操作者授予与撤销的样子。
+   - 桥：新包 `internal/accessidentity/adapters/pilotgovernance/` 实现 `accessidentity.AdmissionScope`——读对照 → `AuthorityCoordinates` → `AuthorityCoverage.Covers`。跨模块翻译只能落在 `internal/<consumer>/adapters/<provider>/`（`internal/architecture` 的 `TestBusinessModulesDoNotReachIntoEachOther`），所以不放 `cmd/`，也不放 `accessidentity` 根包。分格照本票「做什么」原第 1 条。
+   - 能力词一处定义（ADR-0180 决定四第三项）：`internal/accessidentity` 导出两个能力词，PS、TF、CC、SA 的认证方各改一行去引用。越出原地盘，可拆成先行的一小笔。
+2. **生产装配**：`cmd/parcel-api` 的 `buildOperatorMinter`、`buildIntegrationClientMinter` 改收桥，`main.go` 建它（区间读口取 `pgpostgres.NewAuthorityIntervals`，对照读口接真库）。权威串参数在 `cmd/parcel-api` 解析一次，交 `NewAuthorityCoverage` 与 `buildProductionOwnership` 的生产分支；`buildIsolatedWriteAdmission` 那一侧加两值不等即拒。头注随改：两只铸造器头注里「换成桥」那句，`buildSubmissionOrchestration` 头注「生产形态下留空的两样」改为只剩目录，`buildProductionOwnership` 里 Directory 与 SelfAuthority 那句。10 接 `WorkFactMinter` 时取同一只，不在本票。
+3. **演示租户**：对照种子进 `scripts/demo-seeds/data/access/`，与操作者、授予的种子同处——对照住接入身份，不进 `data/governance/`。`OPERATION_DECISION`、`EXTERNAL_FACT` 下所需各词的区间进 `data/governance/`，对象范围带 `SYN-`，权威串取 `SYN-AUTH/idp-parcel-pilot`。`seed.sh` 的接入身份与治理两段；`scripts/demo-seeds/README.md` 的演示部署加权威串参数。取证要用的授予若缺，进 `data/access/02-grants.json`，只加自己那几条。
+4. **参数登记册**：增「准入范围对照」一行，编号取下一个 `PAR-INT-*`（钉 `b3c8bd46` 时最高是 `PAR-INT-10`），格里只写尚无租户；`PAR-GOV-03` 加 ADR-0180 拆分注——「能力、事实类型」两项的词表归产品策略，登哪几格归租户取值。
+
+**收窄后的地盘**（ADR-0180 接受后替换本票头部那行）：`internal/accessidentity` 的对照类型与端口、`adapters/postgres` 的对照适配器、新包 `adapters/pilotgovernance`；`migrations/access_identity/` 下一号；`cmd/parcel-access-register` 两个子命令；`cmd/parcel-api` 的 `buildOperatorMinter`、`buildIntegrationClientMinter`、`buildProductionOwnership`、`buildIsolatedWriteAdmission`、权威串解析与 `main.go` 相应几行；`scripts/demo-seeds/data/access/`、`data/governance/`、`seed.sh` 两段与 `README.md`；参数登记册新的一行与 `PAR-GOV-03`。能力词一处定义若随本票做，另加 PS、TF、CC、SA 认证方各一行。
+
+**并行**（22:1x 取证，只作此刻）：在途分支 `mcp5-psb26` 改了 `scripts/demo-seeds/seed.sh` 与 `scripts/demo-seeds/README.md`（计价与结算段），与第 3 件同文件不同段；实施方开工前看它进没进 main。
+
+### 顺带的事实：10 余下那一半接 `WorkFactMinter`，是否与 15 余下四口同一处境
+
+只报事实，取证钉 `b3c8bd46`：
+
+- `NewWorkFactMinter`、`MintWorkFact` 没有非测试调用点，`WorkFactEnvelope` 只出现在 `internal/accessidentity` 里。`internal/transportfulfillment/adapters/accessidentity/` 只有操作者认证方（运营决定的 `operator_authenticator.go`、登记写面的 `operator_registry_authenticator.go`）；`internal/nodeoperations/adapters/` 下没有 `accessidentity` 适配器。作业事实请求的防腐认证方在 TF 与 NO 都还不存在，没有任何代码给作业事实请求带 `AdmissionRequirement`。
+- 非测试代码里构造 `AdmissionRequirement` 的只有 PS、TF 的操作者认证方（`OPERATION_DECISION` + 决定种类）与 CC、SA 的集成客户端认证方（`EXTERNAL_FACT` + 外部事实类型）；作业事实登记面没有能力词。
+- `MintWorkFact` 只在 `request.Admission` 非空时判准入范围。所以同一处境是有条件的：认证方带上准入要求（ADR-0149 决定四第二条对生产写的要求），装配取 `UnconfiguredAdmissionScope` 时，就与 15 余下四口一样答 `403 OUTSIDE_ADMISSION_SCOPE`，换成本票的桥后同样越过。比 15 余下四口多一件：作业事实登记面的能力词与事实类型词还没有（ADR-0180 决定四末项把它们归同一张词表、随 10 定），演示区间也要等这组词定了才登得了。另外 10 余下各口分在 TF 与 NO 两个上下文，认证方两边各要立一只。
