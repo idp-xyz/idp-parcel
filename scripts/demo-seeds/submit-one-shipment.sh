@@ -7,6 +7,9 @@
 # 要让查阅答得上来，起 API 的方式与 parcel.sh 相同：隔离读、隔离写都设成 SYN-TENANT-01。
 # 草案带寄 / 收两端的国家 / 地区码（CN、SG，与种子同款）：演示网络的服务区域按国家覆盖，缺了这两格，
 # 服务区域解析在那一侧答资料不足（ADR-0148 决定二）。
+# 两端邮编与这一件的尺寸是给受理前估价的（ADR-0179 决定二、四）：售价卡绑分区目录 SYN-CAT-ZONE-CN-SG，收件邮编落在
+# 目录条目前缀 018（Z1）上、寄件邮编落在目录的始发覆盖 200 里，分区由这条邮编路线解析；卡按 MAX 计费重，缺尺寸那一件
+# 估价答缺件。邮编不加 SYN- 前缀：目录按数字前缀匹配，它们是这笔演示委托的内容，不是任何租户的取值。
 set -euo pipefail
 
 base="${IDP_PARCEL_API_BASE:-}"
@@ -32,15 +35,21 @@ print(json.dumps({
     "requestedServiceProduct": "SYN-PROD-CN-SG-EXPRESS",
     "senderRelation": "SYN-SENDER-01",
     "senderAddress": "合成寄件地址",
+    "senderPostalCode": "200000",
     "senderCountryCode": "CN",
     "recipientRelation": "SYN-RECIPIENT-01",
     "recipientAddress": "合成收件地址",
+    "recipientPostalCode": "018000",
     "recipientCountryCode": "SG",
     "destinationServiceScope": "SYN-DEST/SG",
     "parcels": [{
         "customerParcelReference": sys.argv[2],
         "declaredWeightValue": "1.50",
         "declaredWeightUnit": "KG",
+        "declaredLength": "20",
+        "declaredWidth": "15",
+        "declaredHeight": "10",
+        "declaredDimensionsUnit": "CM",
     }],
 }, ensure_ascii=False))
 PY

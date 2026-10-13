@@ -183,7 +183,8 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
   因余额不足中止，批次与交出这两步本身重放走 0。
 - 运行时只多一步，而且**不在** `seed.sh` 里：`submit-one-shipment.sh` 对已经在跑的
   `parcel-api` 打 `POST /shipment-requests`（草案带寄 / 收两端国家码 `CN` / `SG`，演示网络的服务区域
-  按国家覆盖），断言 `201` / `SUBMITTED`，再从
+  按国家覆盖；另带两端邮编 `200000` / `018000` 与这一件的尺寸，受理前估价按邮编路线经分区目录解出 Z1、
+  按 MAX 计费重算体积重），断言 `201` / `SUBMITTED`，再从
   `GET /shipment-request-views` 把同一笔读回来。起进程要与 `parcel.sh` 一样同时设
   `IDP_PARCEL_ISOLATED_READ_TENANT` 与 `IDP_PARCEL_ISOLATED_WRITE_TENANT`，都是
   `SYN-TENANT-01`。只开写、不开读时提交能落成已提交，列表和详情仍答 `403`
