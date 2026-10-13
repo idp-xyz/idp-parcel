@@ -921,7 +921,12 @@ type creditViews struct {
 func termsFixtureWithViews(t *testing.T, views creditViews) *controlFixture {
 	t.Helper()
 	if views.credit == nil {
-		views.credit = &creditDouble{}
+		// 零值状况过不了 SA 的 CreditStanding.WithAuthorizedLimit：信用校验停在套额度那一步，问不到暴露账本。
+		standing, err := sadomain.NewCreditStanding(settlementScope(t), 10_000, 0, false)
+		if err != nil {
+			t.Fatalf("new credit standing: %v", err)
+		}
+		views.credit = &creditDouble{standing: standing}
 	}
 	if views.basis == nil {
 		views.basis = authorizedBasis(t, 10_000)
