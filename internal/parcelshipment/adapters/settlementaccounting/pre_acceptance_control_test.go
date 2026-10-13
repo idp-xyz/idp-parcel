@@ -619,9 +619,9 @@ func TestATermsControlTranslatesToCreditExposedNotHeld(t *testing.T) {
 }
 
 // Covers: 实例半边纪律——作用域与金额没形成时停下且不问提供方：作用域该来自结算政策（ADR-0044）、
-// 金额该来自估价，代拟任何一个都是拿别人的钱做实验。停在哪一格按恢复动作分（票 routing-first-cut/19）：
-// 账户没登记（含作用域源没接）落`未配置`，登记结算账户会发信封来重驱；解析没采用结算政策与金额未配置
-// 留在`未形成`。
+// 金额该来自估价，代拟任何一个都是拿别人的钱做实验。这几格登记都推不动（票 routing-first-cut/19）：
+// 作用域源或它的两半没接上是装配缺口，解析没采用结算政策要改解析键，金额未配置随 psb/25 才有登记口，
+// 都留在`未形成`。账户没登记那一格推得动，另见下一条用例。
 func TestUnconfiguredSourcesStopAtNotFormedWithoutAskingTheProvider(t *testing.T) {
 	cases := map[string]struct {
 		arrange     func(*controlFixture) *adapter.PreAcceptanceControlAdapter
@@ -644,16 +644,16 @@ func TestUnconfiguredSourcesStopAtNotFormedWithoutAskingTheProvider(t *testing.T
 					Amounts: fixture.amounts,
 				})
 			},
-			wantOutcome: psports.PreAcceptanceControlNotConfigured,
-			wantReason:  "CONTROL_SCOPE_NOT_CONFIGURED",
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "CONTROL_SCOPE_NOT_ASSEMBLED",
 		},
-		"settlement account not registered": {
+		"scope source halves not assembled": {
 			arrange: func(fixture *controlFixture) *adapter.PreAcceptanceControlAdapter {
-				fixture.scopes.gap = adapter.ControlScopeAccountNotRegistered
+				fixture.scopes.gap = adapter.ControlScopeNotAssembled
 				return fixture.adapter
 			},
-			wantOutcome: psports.PreAcceptanceControlNotConfigured,
-			wantReason:  "CONTROL_SCOPE_NOT_CONFIGURED",
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "CONTROL_SCOPE_NOT_ASSEMBLED",
 		},
 		"resolution adopted no settlement policy": {
 			arrange: func(fixture *controlFixture) *adapter.PreAcceptanceControlAdapter {
@@ -693,6 +693,27 @@ func TestUnconfiguredSourcesStopAtNotFormedWithoutAskingTheProvider(t *testing.T
 				t.Fatal("实例半边未配置仍去问了提供方")
 			}
 		})
+	}
+}
+
+// Covers: 账户没登记是作用域那几格里唯一推得动的一格——登记结算账户会发信封来重驱，所以落`未配置`，原因
+// 照 ADR-0158 决定三报 CONTROL_SCOPE_NOT_CONFIGURED；同样不问提供方。
+func TestAnUnregisteredSettlementAccountStopsAtNotConfiguredWithoutAskingTheProvider(t *testing.T) {
+	fixture := newControlFixture(t)
+	fixture.scopes.gap = adapter.ControlScopeAccountNotRegistered
+
+	assessment, err := fixture.adapter.ApplyPreAcceptanceFinancialControl(context.Background(), fixture.request(t))
+	if err != nil {
+		t.Fatalf("apply pre-acceptance financial control: %v", err)
+	}
+	if assessment.Outcome != psports.PreAcceptanceControlNotConfigured {
+		t.Fatalf("outcome = %q, want NOT_CONFIGURED", assessment.Outcome)
+	}
+	if assessment.Reason.String() != "CONTROL_SCOPE_NOT_CONFIGURED" {
+		t.Fatalf("reason = %q, want CONTROL_SCOPE_NOT_CONFIGURED", assessment.Reason)
+	}
+	if fixture.policy.asked != 0 {
+		t.Fatal("账户没登记仍去问了提供方")
 	}
 }
 
@@ -746,8 +767,9 @@ func TestEveryProviderAnswerLandsOnItsOwnConsumerValue(t *testing.T) {
 }
 
 // Covers: 票 routing-first-cut/19 拆格那一笔 —— 提供方的未形成原因按恢复动作分到端口两格：控制策略未配置与
-// 比例额度没声明基数落`未配置`（各有一条声明通道在发布时交「参数已登记」），授信依据未配置与读口答不出
-// 留在`未形成`。原因引用照旧冠 SA- 原样带回，编排不必认得它也能让几种停各拿一条续办引用。
+// 比例额度没声明基数落`未配置`（发布对应声明时交「参数已登记」），授信依据未配置、基数尚无事实与各读口答
+// 不出（`*_UNAVAILABLE` 一族逐个列）留在`未形成`。原因引用照旧冠 SA- 原样带回，编排不必认得它也能让几种停
+// 各拿一条续办引用。
 func TestNotFormedReasonsLandOnTheCellOfTheirRecoveryAction(t *testing.T) {
 	policyVersion := func(t *testing.T) sadomain.CreditPolicyReference {
 		return value(t, sadomain.NewCreditPolicyReference, "PC-CREDIT-POLICY/v1")
@@ -804,6 +826,61 @@ func TestNotFormedReasonsLandOnTheCellOfTheirRecoveryAction(t *testing.T) {
 			wantOutcome: psports.PreAcceptanceControlNotFormed,
 			wantReason:  "SA-CONTROL_POLICY_UNAVAILABLE",
 		},
+		"余额读不回": {
+			arrange: func(t *testing.T) *controlFixture {
+				fixture := newControlFixture(t)
+				fixture.balance.err = errors.New("balance view unavailable")
+				return fixture
+			},
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "SA-BALANCE_UNAVAILABLE",
+		},
+		"冻结账本读不回": {
+			arrange: func(t *testing.T) *controlFixture {
+				fixture := newControlFixture(t)
+				fixture.ledger.loadErr = errors.New("freeze ledger unavailable")
+				return fixture
+			},
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "SA-FREEZE_LEDGER_UNAVAILABLE",
+		},
+		"信用状况读不回": {
+			arrange: func(t *testing.T) *controlFixture {
+				return termsFixtureWithViews(t, creditViews{credit: &creditDouble{err: errors.New("credit standing unavailable")}})
+			},
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "SA-CREDIT_STANDING_UNAVAILABLE",
+		},
+		"暴露账本读不回": {
+			arrange: func(t *testing.T) *controlFixture {
+				return termsFixtureWithViews(t, creditViews{
+					exposures: &exposureLedgerDouble{loadErr: errors.New("exposure ledger unavailable")},
+				})
+			},
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "SA-EXPOSURE_LEDGER_UNAVAILABLE",
+		},
+		"授信依据读不回": {
+			arrange: func(t *testing.T) *controlFixture {
+				return termsFixtureWithBasis(t, &creditBasisDouble{err: errors.New("credit basis unavailable")})
+			},
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "SA-CREDIT_BASIS_UNAVAILABLE",
+		},
+		"比例基数读不回": {
+			arrange: func(t *testing.T) *controlFixture {
+				basis, err := sadomain.NewCreditRatioBasis(policyVersion(t), 5_000, sadomain.PostedBalanceBase)
+				if err != nil {
+					t.Fatalf("new credit ratio basis: %v", err)
+				}
+				return termsFixtureWithViews(t, creditViews{
+					basis:      &creditBasisDouble{basis: basis},
+					ratioBases: failingRatioBaseDouble{err: errors.New("ratio base unavailable")},
+				})
+			},
+			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantReason:  "SA-CREDIT_RATIO_BASE_UNAVAILABLE",
+		},
 	}
 	for name, tc := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -829,24 +906,61 @@ func TestNotFormedReasonsLandOnTheCellOfTheirRecoveryAction(t *testing.T) {
 // 状况与暴露账本只为装配齐全。
 func termsFixtureWithBasis(t *testing.T, basis *creditBasisDouble) *controlFixture {
 	t.Helper()
+	return termsFixtureWithViews(t, creditViews{basis: basis})
+}
+
+// creditViews 是信用校验那条路上 SA 要问的几口。零值格取装配齐全的默认：状况与暴露账本答得出、授信依据是
+// 一份金额额度、基数口不会被问到——用例只拨它要证的那一口。
+type creditViews struct {
+	credit     *creditDouble
+	basis      *creditBasisDouble
+	ratioBases saports.CreditRatioBaseView
+	exposures  *exposureLedgerDouble
+}
+
+func termsFixtureWithViews(t *testing.T, views creditViews) *controlFixture {
+	t.Helper()
+	if views.credit == nil {
+		views.credit = &creditDouble{}
+	}
+	if views.basis == nil {
+		views.basis = authorizedBasis(t, 10_000)
+	}
+	if views.ratioBases == nil {
+		views.ratioBases = ratioBaseDouble{}
+	}
+	if views.exposures == nil {
+		views.exposures = &exposureLedgerDouble{ledger: sadomain.NewCreditExposureLedger()}
+	}
 	fixture := newControlFixture(t)
 	fixture.policy.policy = requiredPolicy(t, sadomain.TermsSettlement, sadomain.CreditCheckControl)
-	exposures := &exposureLedgerDouble{ledger: sadomain.NewCreditExposureLedger()}
 	fixture.adapter = adapter.NewPreAcceptanceControlAdapter(adapter.PreAcceptanceControlAdapterDeps{
 		Apply: mustApplyHandler(t, saapplication.ApplyPreAcceptanceControlDeps{
 			Policy:      fixture.policy,
 			Balance:     fixture.balance,
 			Freezes:     fixture.ledger,
-			Credit:      &creditDouble{},
-			CreditBasis: basis,
-			RatioBases:  ratioBaseDouble{},
-			Exposures:   exposures,
+			Credit:      views.credit,
+			CreditBasis: views.basis,
+			RatioBases:  views.ratioBases,
+			Exposures:   views.exposures,
 			Clock:       fixedClock{at: controlledAt},
 		}),
 		Scopes:  fixture.scopes,
 		Amounts: fixture.amounts,
 	})
 	return fixture
+}
+
+// failingRatioBaseDouble 替基数取值那一口答「读不回」，好让比例额度那条路停在 CREDIT_RATIO_BASE_UNAVAILABLE。
+type failingRatioBaseDouble struct{ err error }
+
+func (double failingRatioBaseDouble) LoadCreditRatioBase(
+	_ context.Context,
+	_ sadomain.TenantID,
+	_ sadomain.SettlementScope,
+	_ sadomain.CreditRatioBase,
+) (int64, bool, error) {
+	return 0, false, double.err
 }
 
 // Covers: UC-PS-005/UC-PS-001 的释放补偿经适配器按原关联认领——本上下文记下的结果标识

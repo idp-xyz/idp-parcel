@@ -156,9 +156,9 @@ func TestAControlScopeIsDerivedFromTheAdoptedSettlementPolicy(t *testing.T) {
 	}
 }
 
-// Covers: 没形成的三种样子各报各的缺口——解析未含结算政策是一格，目录未配置（nil）与映射查无是另一格
-// （票 routing-first-cut/19 结算账户那一笔）。都是「显式未配置」不是错误，但恢复动作不同：后一格登一行
-// 结算账户就推得动，前一格要改的是解析键。解析器答不出才是错误（依赖失败另有续办路径）。
+// Covers: 没形成的几种样子各报各的缺口（票 routing-first-cut/19 结算账户那一笔）：解析未含结算政策、映射
+// 查无、两半没接上。都不是错误，但恢复动作不同：映射查无登一行结算账户就推得动，解析未含结算政策要改的
+// 是解析键，没接上要改的是装配。解析器答不出才是错误（依赖失败另有续办路径）。
 func TestAScopeWithoutPolicyDirectoryOrMappingStaysUnformed(t *testing.T) {
 	requestID := value(t, psdomain.NewShipmentRequestID, "request-1")
 	versionID := value(t, psdomain.NewSubmissionVersionID, "version-1")
@@ -184,11 +184,24 @@ func TestAScopeWithoutPolicyDirectoryOrMappingStaysUnformed(t *testing.T) {
 		source := adapter.NewPolicyBackedControlScopeSource(resolver, nil)
 
 		_, gap, err := source.FormControlScope(context.Background(), scopeIdentity(t), requestID, versionID)
-		if err != nil || gap != adapter.ControlScopeAccountNotRegistered {
-			t.Fatalf("gap = %d err = %v, want ACCOUNT_NOT_REGISTERED without error", gap, err)
+		if err != nil || gap != adapter.ControlScopeNotAssembled {
+			t.Fatalf("gap = %d err = %v, want NOT_ASSEMBLED without error", gap, err)
 		}
 		if resolver.asked != 0 {
-			t.Fatal("目录未配置还消耗了一次解析")
+			t.Fatal("目录没接还消耗了一次解析")
+		}
+	})
+
+	t.Run("nil resolver", func(t *testing.T) {
+		directory := &directoryDouble{found: true}
+		source := adapter.NewPolicyBackedControlScopeSource(nil, directory)
+
+		_, gap, err := source.FormControlScope(context.Background(), scopeIdentity(t), requestID, versionID)
+		if err != nil || gap != adapter.ControlScopeNotAssembled {
+			t.Fatalf("gap = %d err = %v, want NOT_ASSEMBLED without error——解析口没接不是解析没采用结算政策", gap, err)
+		}
+		if directory.asked != 0 {
+			t.Fatal("解析口没接还去问了目录")
 		}
 	})
 

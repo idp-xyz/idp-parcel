@@ -21,13 +21,15 @@ var ErrUntranslatableAnswer = errors.New("parcel shipment settlementaccounting a
 // 本适配器自有的停摆原因引用。都是消费方这一侧没形成的东西，不冠 SA- 前缀；提供方状态
 // 译过来的引用冠 SA-（见 assessmentFor）。
 //
-// 作用域那两条按恢复动作分开：CONTROL_SCOPE_NOT_CONFIGURED 只说账户映射没登（ADR-0158 决定三钉的
+// 作用域那几条按恢复动作分开：CONTROL_SCOPE_NOT_CONFIGURED 只说账户映射没登（ADR-0158 决定三钉的
 // 就是这个码），登一行结算账户就推得动，而那次登记会发信封来重驱；解析没采用结算政策要改的是解析
-// 键，没有登记动作推得动它，另报一个码、留在`未形成`。
+// 键，没有登记动作推得动它，另报一个码、留在`未形成`；作用域源或它的两半没接上是装配缺口，要改的是
+// 装配，同样留在`未形成`，也另报一个码——借账户那个码会让同一个码落进两格。
 const (
-	reasonScopeNotConfigured               = "CONTROL_SCOPE_NOT_CONFIGURED"
-	reasonScopeSettlementPolicyNotAdopted  = "CONTROL_SCOPE_SETTLEMENT_POLICY_NOT_ADOPTED"
-	reasonAmountNotConfigured              = "CONTROL_AMOUNT_NOT_CONFIGURED"
+	reasonScopeNotConfigured              = "CONTROL_SCOPE_NOT_CONFIGURED"
+	reasonScopeSettlementPolicyNotAdopted = "CONTROL_SCOPE_SETTLEMENT_POLICY_NOT_ADOPTED"
+	reasonScopeNotAssembled               = "CONTROL_SCOPE_NOT_ASSEMBLED"
+	reasonAmountNotConfigured             = "CONTROL_AMOUNT_NOT_CONFIGURED"
 )
 
 // ControlScope 是一次控制请求的资金坐标连同它的商业来路。两者装在一个值里而不是分两个
@@ -67,6 +69,8 @@ const (
 	ControlScopeAccountNotRegistered
 	// ControlScopeSettlementPolicyNotAdopted：解析没带回已采用的结算政策，推不出法人与币种。
 	ControlScopeSettlementPolicyNotAdopted
+	// ControlScopeNotAssembled：作用域源的解析口或账户目录没接上。生产装配两半都接，落到这里是装配缺口。
+	ControlScopeNotAssembled
 )
 
 // ControlAmountSource 形成本次控制要占用的金额（最小币单位）。金额该由估价形成（计价缝），
@@ -91,9 +95,9 @@ type PreAcceptanceControlAdapterDeps struct {
 	Amounts ControlAmountSource
 }
 
-// NewPreAcceptanceControlAdapter 装配两侧。Scopes 与 Amounts 允许为 nil，nil 是「显式未配置」的
-// 诚实表达：Scopes 为 nil 与账户没登记同一格（`未配置`），Amounts 为 nil 停在`未形成`，释放报可
-// 重试错误。
+// NewPreAcceptanceControlAdapter 装配两侧。Scopes 与 Amounts 允许为 nil：Scopes 为 nil 是装配缺口
+// （生产装配总接作用域源），Amounts 为 nil 是「显式未配置」的诚实表达，两者都停在`未形成`，释放报
+// 可重试错误。
 func NewPreAcceptanceControlAdapter(deps PreAcceptanceControlAdapterDeps) *PreAcceptanceControlAdapter {
 	return &PreAcceptanceControlAdapter{
 		apply:   deps.Apply,
@@ -127,7 +131,7 @@ func (adapter *PreAcceptanceControlAdapter) ApplyPreAcceptanceFinancialControl(
 	request psports.FinancialControlRequest,
 ) (psports.PreAcceptanceControlAssessment, error) {
 	if adapter.scopes == nil {
-		return refusedAssessment(psports.PreAcceptanceControlNotConfigured, reasonScopeNotConfigured)
+		return notFormed(reasonScopeNotAssembled)
 	}
 	controlScope, gap, err := adapter.scopes.FormControlScope(
 		ctx, request.Identity, request.ShipmentRequestID, request.SubmissionVersion)
@@ -142,6 +146,8 @@ func (adapter *PreAcceptanceControlAdapter) ApplyPreAcceptanceFinancialControl(
 		return refusedAssessment(psports.PreAcceptanceControlNotConfigured, reasonScopeNotConfigured)
 	case ControlScopeSettlementPolicyNotAdopted:
 		return notFormed(reasonScopeSettlementPolicyNotAdopted)
+	case ControlScopeNotAssembled:
+		return notFormed(reasonScopeNotAssembled)
 	default:
 		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: control scope gap %d",
 			ErrUntranslatableAnswer, uint8(gap))
@@ -177,7 +183,7 @@ func (adapter *PreAcceptanceControlAdapter) ReleasePreAcceptanceControl(
 	request psports.ControlReleaseRequest,
 ) error {
 	if adapter.scopes == nil {
-		return fmt.Errorf("release pre-acceptance control: %s", reasonScopeNotConfigured)
+		return fmt.Errorf("release pre-acceptance control: %s", reasonScopeNotAssembled)
 	}
 	controlScope, gap, err := adapter.scopes.FormControlScope(
 		ctx, request.Identity, request.ShipmentRequestID, request.SubmissionVersion)
@@ -190,6 +196,8 @@ func (adapter *PreAcceptanceControlAdapter) ReleasePreAcceptanceControl(
 		return fmt.Errorf("release pre-acceptance control: %s", reasonScopeNotConfigured)
 	case ControlScopeSettlementPolicyNotAdopted:
 		return fmt.Errorf("release pre-acceptance control: %s", reasonScopeSettlementPolicyNotAdopted)
+	case ControlScopeNotAssembled:
+		return fmt.Errorf("release pre-acceptance control: %s", reasonScopeNotAssembled)
 	default:
 		return fmt.Errorf("%w: control scope gap %d", ErrUntranslatableAnswer, uint8(gap))
 	}
@@ -333,8 +341,7 @@ func assessmentFor(
 func notFormedOutcomeFor(reason saapplication.NotFormedReason) (psports.PreAcceptanceControlOutcome, error) {
 	switch reason {
 	case saapplication.ControlPolicyNotConfigured:
-		// 合同声明或策略正文没登：两条声明通道发布时都交信封（party-commercial 的
-		// announceOperatorRegistrations）。解析键没要求控制策略那一种来由也报这个码，而键按（租户+客户）
+		// 合同声明或策略正文没登：发布其中任一样时 party-commercial 都交信封（announceOperatorRegistrations）。解析键没要求控制策略那一种来由也报这个码，而键按（租户+客户）
 		// 只有一行、改登即内容冲突，没有登记动作推得动它——在这一格里它是一条查得到的等待，等不来重驱。
 		return psports.PreAcceptanceControlNotConfigured, nil
 	case saapplication.CreditRatioBaseUndecided:
