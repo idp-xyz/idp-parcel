@@ -1,7 +1,7 @@
 # 19 准入范围桥：操作者与集成客户端铸造器的 `AdmissionScope` 由「租户对照 + `AuthorityCoverage`」实现，接进生产装配，演示租户登 `SYN-` 对照
 
 Category: enhancement
-Status: in-progress——2026-10-13 22:56 通道 3 认领实施（用户「开工」；照用户此前裁定免非作者评审、作者自重放），分支 `mcp3-oc19`，基 `00c899fe`。此前 ready-for-agent——2026-10-13 22:5x [ADR-0180](../../../docs/adr/0180-admission-scope-tenant-mapping-is-an-access-identity-register-and-self-authority-is-a-deployment-parameter.md) 已接受（用户授权通道 3 自决，接受记录在该 ADR 文末），头部地盘照「分诊」收窄；照「分诊」节「做什么四件」拆笔。此前 needs-info——2026-10-13 22:4x 分诊与 ADR-0180 草案进 main（重放 tip `7e7b6863`，用户裁定免评审、通道 3 直接重放，记录在「接手核对」末）；本票仍等 ADR-0180 接受。此前 needs-info——2026-10-13 22:4x 通道 3 接手（通道 2 会话中断，用户转派）：逐条复核 ADR-0180 与「分诊」节的引证，改正处见「分诊」节末「接手核对」；推荐与归类不变，只有词表一格的落法随取证改。此前 needs-info——2026-10-13 22:2x 通道 2 分诊完（派单 `task-f2fa6dc4` ← 通道 1，分支 `mcp2-oc19t`，基 `b3c8bd46`）：三问与词表一格都有推荐；问题一、三一定就要落迁移、定参数来源，起草成 [ADR-0180](../../../docs/adr/0180-admission-scope-tenant-mapping-is-an-access-identity-register-and-self-authority-is-a-deployment-parameter.md)（Proposed），待用户接受。归类、推荐、做什么各件落点与收窄后的地盘见文末「分诊」。此前 in-progress——2026-10-13 22:07 通道 2 分诊认领（派单 `task-f2fa6dc4` ← 通道 1），分支 `mcp2-oc19t`，基 `b3c8bd46`（开工前 ls-remote 核过远端 main 未变）。此前 needs-triage——2026-10-13 通道 4 立（通道 1 派单 `task-40698906`，照裁定 A：[15](./15-operation-decision-faces-take-operator-intake.md) 余下四口不换，桥另立）。桥的骨架有出处：ADR-0149 决定四第二条定了按（租户、对象范围、能力、事实类型）读生产权威区间，[14](./14-admission-scope-read-and-grade.md) 交了读口 `AuthorityCoverage` 与「不在准入范围」一格。没有出处的是对照本身——行住在哪、按什么键、本产品的权威串从哪来；第一件定了就要落迁移，见「要裁的问题」。
+Status: 完工——2026-10-13 23:3x 通道 3，代码 tip `65f7ea9d`（分支 `mcp3-oc19`、基 `00c899fe`），清点 `b80720b7`，完成记录在文末；照用户裁定免非作者评审、作者自重放。此前 in-progress——2026-10-13 22:56 通道 3 认领实施（用户「开工」；照用户此前裁定免非作者评审、作者自重放），分支 `mcp3-oc19`，基 `00c899fe`。此前 ready-for-agent——2026-10-13 22:5x [ADR-0180](../../../docs/adr/0180-admission-scope-tenant-mapping-is-an-access-identity-register-and-self-authority-is-a-deployment-parameter.md) 已接受（用户授权通道 3 自决，接受记录在该 ADR 文末），头部地盘照「分诊」收窄；照「分诊」节「做什么四件」拆笔。此前 needs-info——2026-10-13 22:4x 分诊与 ADR-0180 草案进 main（重放 tip `7e7b6863`，用户裁定免评审、通道 3 直接重放，记录在「接手核对」末）；本票仍等 ADR-0180 接受。此前 needs-info——2026-10-13 22:4x 通道 3 接手（通道 2 会话中断，用户转派）：逐条复核 ADR-0180 与「分诊」节的引证，改正处见「分诊」节末「接手核对」；推荐与归类不变，只有词表一格的落法随取证改。此前 needs-info——2026-10-13 22:2x 通道 2 分诊完（派单 `task-f2fa6dc4` ← 通道 1，分支 `mcp2-oc19t`，基 `b3c8bd46`）：三问与词表一格都有推荐；问题一、三一定就要落迁移、定参数来源，起草成 [ADR-0180](../../../docs/adr/0180-admission-scope-tenant-mapping-is-an-access-identity-register-and-self-authority-is-a-deployment-parameter.md)（Proposed），待用户接受。归类、推荐、做什么各件落点与收窄后的地盘见文末「分诊」。此前 in-progress——2026-10-13 22:07 通道 2 分诊认领（派单 `task-f2fa6dc4` ← 通道 1），分支 `mcp2-oc19t`，基 `b3c8bd46`（开工前 ls-remote 核过远端 main 未变）。此前 needs-triage——2026-10-13 通道 4 立（通道 1 派单 `task-40698906`，照裁定 A：[15](./15-operation-decision-faces-take-operator-intake.md) 余下四口不换，桥另立）。桥的骨架有出处：ADR-0149 决定四第二条定了按（租户、对象范围、能力、事实类型）读生产权威区间，[14](./14-admission-scope-read-and-grade.md) 交了读口 `AuthorityCoverage` 与「不在准入范围」一格。没有出处的是对照本身——行住在哪、按什么键、本产品的权威串从哪来；第一件定了就要落迁移，见「要裁的问题」。
 Blocked by: 无——ADR-0180 已接受（2026-10-13 通道 3 改）。此前：ADR-0180（Proposed，待用户接受，2026-10-13 通道 2 改）；再此前：无——要裁的是本票自己的形状，裁完转 ready-for-agent
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 丙轨实施
 地盘（ADR-0180 接受后照「分诊」收窄，2026-10-13 通道 3 换）：`internal/accessidentity` 的对照类型与端口、`adapters/postgres` 的对照适配器、新包 `adapters/pilotgovernance`；`migrations/access_identity/` 下一号；`cmd/parcel-access-register` 两个子命令；`cmd/parcel-api` 的 `buildOperatorMinter`、`buildIntegrationClientMinter`、`buildProductionOwnership`、`buildIsolatedWriteAdmission`、权威串解析与 `main.go` 相应几行；`scripts/demo-seeds/data/access/`、`data/governance/`、`seed.sh` 两段与 `README.md`；参数登记册新的一行与 `PAR-GOV-03`。能力词一处定义若随本票做，另加 PS、TF、CC、SA 认证方各一行。此前（裁前）：`AdmissionScope` 的生产实现与对照的读口、两只铸造器与 `main.go` 那几行、演示种子治理区间与对照种子、参数登记册一行。
@@ -120,3 +120,56 @@ Blocked by: 无——ADR-0180 已接受（2026-10-13 通道 3 改）。此前：
 核对成立、未改的各条，取证命令与输出不入票：`AdmissionScope` 非测试实现只有 `UnconfiguredAdmissionScope`，两只铸造器在生产装配里都取它，`NewAuthorityCoverage` 没有生产调用点；`Admits` 的签名；两条被点名的装配测试与其 "granted, admission not registered" 一格；`AuthorityCoverage` 与 PS 生产归属适配器两处头注都写「全册一个约定」；`governanceScope` 在目录缺席或权威串为空时先于读册返回；隔离形态的三个合成常量与种子里委托受理那条区间的权威串；读写两开关取值不一即拒启动；`IDP_PARCEL_*` 的命名；非测试代码里构造 `AdmissionRequirement` 的只有 PS、TF 的操作者认证方与 CC、SA 的集成客户端认证方，操作者、集成客户端与作业事实的铸造器都只在 `Admission` 非空时判；`WorkFactMinter` 一族没有非测试调用点，TF 的 `accessidentity` 适配器只有操作者认证方、NO 没有 `accessidentity` 适配器；跨模块门禁的测试名、`NewAuthorityIntervals` 的落点；`access_identity` 迁移最高 `0004`、登记册最高 `PAR-INT-10`；演示种子里路由、计价、委托受理分属不同对象范围，没有 `OPERATION_DECISION` 或 `EXTERNAL_FACT` 的区间。
 
 **进 main**（2026-10-13 22:4x 通道 3）：用户裁定免非作者评审、由通道 3 直接重放；改动只有本票、ADR-0180 与 `docs/adr/README.md` 一行，纯 `.md`。在隔离树 `idp-parcel-replay-oc19t-mcp3` 把分支四笔原样重放到 main `aefbcaa4` 之上——`90f0ef3c`→`60eee1a0`、`27671572`→`466d297f`、`2d7c4ab3`→`32bd3f80`、`d88780ed`→`7e7b6863`；分支上的 SHA 作封存出处，本地分支指针改名 `merged/mcp2-oc19t`。main 自 `b3c8bd46` 起动过的文件与本分支不重叠，main 上没有别的 `0180`；清点在重放 tip 上重生成零差。本票不收口：ADR-0180 接受前停在 needs-info。
+
+## 完成记录（2026-10-13 通道 3）
+
+分支 `mcp3-oc19`，基 `00c899fe`，代码 tip `65f7ea9d`，清点 `b80720b7`。证据层级一律 `S`（隔离合成：演示租户 `SYN-TENANT-01` 与 `SYN-*` 夹具）。各笔单独编得过、各自推过分支，未 rebase。
+
+各笔：
+
+- `7eb64903` 认领。
+- `84288958` 能力词一处定义（做什么第 1 件的先行一笔，ADR-0180 决定四第三项）：PS、TF 操作者认证方改引 `CapabilityOperationDecision`；`internal/accessidentity` 与 `AdmissionRequirement` 同处新导出 `ExternalFactAdmissionCapability`，CC、SA 集成客户端认证方改引它。串值不变。
+- `623a8046` 对照册：领域类型 `AdmissionScopeMapping`（能力与事实类型只认两族认证方会提的那几组）、结束 `AdmissionScopeMappingEnd`、`OverlapsWith`、`ResolveAdmissionObjectScope`、读口与登记口；`migrations/access_identity/0005`；postgres 读写适配器，同键生效期重叠在写入侧判、按键取事务级咨询锁。
+- `28f213f9` `parcel-access-register` 两个子命令 `admission-scope-mapping-register`、`admission-scope-mapping-end`，用法里写明登对照的前提（ADR-0180 越权风险点 2 与其接受记录）。
+- `68019537` 桥：新包 `internal/accessidentity/adapters/pilotgovernance` 实现 `AdmissionScope`——读对照取此刻生效的对象范围，换坐标问 `AuthorityCoverage`。
+- `39b58766` 生产装配：`IDP_PARCEL_GOVERNANCE_SELF_AUTHORITY` 在 `main` 解析、启动日志出声；`buildAdmissionScope` 未设即 `UnconfiguredAdmissionScope`、设了接桥；两只铸造器改收它；同一个值进 `buildProductionOwnership` 的生产分支；隔离写开关开着而两值不等启动即拒；头注随改。
+- `1777a0ec` 演示种子：对照（`data/access/03`）、区间（`data/governance/09`–`16`）、配置员两笔运营决定授予、`seed.sh` 两段、README 演示部署加权威串、`probe-operator-channel.sh` 加终止参与两枪。
+- `65f7ea9d` 参数登记册 `PAR-INT-11`「准入范围对照」，`PAR-GOV-03` 加 ADR-0180 拆分注。
+- `b80720b7` 机制清点重生成（干净检出钉 `65f7ea9d`）。
+- 本笔：完成记录与 Status。
+
+### 完成判据逐条
+
+- ✅ 对照已登且区间覆盖 → 铸成；对照未登，或登了而区间不覆盖（别的权威、已关、未始、别的对象范围）→ 不在准入范围；对照读不动、区间读不动 → 依赖故障格，且不被「不在准入范围」认出（带测试）。
+  - 桥：`TestTheBridgeAdmitsOnlyWhereTheMappingAndTheIntervalBothHold`——区间那一半用真的 `AuthorityCoverage`、只换内存登记册；对照未登或已结束时区间一行都不读；别的租户借不到这一行。`TestTheBridgeFailuresReachTheMinterAsDependencyFaults`——经真铸造器，对照读不动、同键两行同时生效、区间读不动都是 `ErrAdmissionScopeUnavailable`，且 `errors.Is(…, ErrOutsideAdmissionScope)` 为假。
+  - 对照册：领域 `TestAnAdmissionScopeMappingTakesOnlyRequirementsAFaceAsksFor`、`TestAdmissionScopeMappingsOverlapOnlyWhereBothAreEffective`、`TestTheEffectiveMappingResolvesTheObjectScope`；真库 `TestTheMappingRegisterRecordsReplaysAndNeverOverwrites`、`TestOverlappingMappingsOnOneKeyAreRefusedAndASwitchoverIsNot`、`TestMappingRegistrationWritesRefuseToRunOutsideATransaction`、`TestTheMappingTablesKeepTheirInvariants`；受控登记口 `TestAdmissionScopeMappingRegisterAndEndEndToEnd`、`TestAdmissionScopeMappingTranslationRefusesBeforeTouchingTheDatabase`、`TestTheUsageStatesWhenAMappingMayBeRegistered`。
+- ✅ 生产装配：selfAuthority 未配时 `TestSwappedDecisionFacesAnswerFromTheOperatorChannel` 与 `TestIntegrationClientFacesAnswerTheChannelGrades` 的准入那一格照旧；配了且对照与区间齐备时，装载分配与终止参与答业务结果（`cmd/parcel-api` 装配测试带 DSN）。
+  - 两条既有装配测试的铸造器经 `admissionScopeUnset`（即 `buildAdmissionScope(nil, "")`）取准入范围，"granted, admission not registered" 一格照旧答 403 `OUTSIDE_ADMISSION_SCOPE`；`TestTheAdmissionScopeIsUnconfiguredWithoutASelfAuthority` 钉未设与空白都是未配置那一只、库一行不读。
+  - `TestTheWiredAdmissionScopeLetsLoadAssignmentAndTerminationThrough`（真库，`-v` PASS 非 SKIP）：对照与区间齐备、权威串对得上时，装载分配 201 `LOAD_ASSIGNMENT_FORMED`，终止参与 200 `SEGMENT_NOT_FOUND`；同一组对照与区间、权威串换成别的产品，两口答 403 `OUTSIDE_ADMISSION_SCOPE`。
+  - ADR-0180 决定三的另两格：`TestTheGovernanceSelfAuthorityLeavesProductionOwnershipUnresolved`（PS 生产分支设了权威串、册上也有该串的区间，提交仍停在 `OWNERSHIP_UNRESOLVED`）、`TestBuildIsolatedWriteAdmissionRefusesASecondSelfAuthority`（两值不等拒启动，相等照常，写开关没开不判）。
+- ✅ 演示环境灌完种子后，带运营决定授予的合成操作者在终止参与上不再答 `OUTSIDE_ADMISSION_SCOPE`（`probe-operator-channel.sh` 取一次证据，证据层级 `S`）。钉 `1777a0ec` 的代码与种子，在本机另起一套、不碰共享演示库：Dex 按 `operator-channel/compose.yaml` 起；新建空库 `oc19_demo_mcp3`，`seed.sh` 灌入退 0（五笔授予与八行对照都 `RECORDED`）；`parcel-api` 带操作者族三件参数与 `IDP_PARCEL_GOVERNANCE_SELF_AUTHORITY=SYN-AUTH/idp-parcel-pilot` 起在 `127.0.0.1:19380`。probe 五枪全过：配置员 200 `REFUSED/VERSION_NOT_OVERWRITABLE`、查阅员 403 `OPERATOR_NOT_GRANTED`、不带令牌 401 `OPERATOR_CREDENTIAL_REJECTED`、配置员 · 终止参与 200 `SEGMENT_NOT_FOUND`、查阅员 · 终止参与 403 `OPERATOR_NOT_GRANTED`。对照：同库不带权威串再起一次，配置员同一枪答 403 `OUTSIDE_ADMISSION_SCOPE`。取证完 Dex 下线、演示库删掉。
+
+### 判断项（越权风险点 · 待 owner 复核）
+
+1. **演示种子只登今天已换口的那几种。** 对照与区间登了五种运营决定（复核完成、主动拒绝、授权处置、装载分配、终止参与）与三类外部事实（关务外部结果、监管凭证、外部资金事实）。15 余下四口、受控关闭与重开、承运商轨迹与首次有效收寄证据还没换口，它们的对照与区间随各自换口那一笔补；做什么第 3 件的「各种类」按「这些口今天会问的那几种」读。
+2. **对照的能力与事实类型在领域构造门上收紧**（`checkAdmissionRequirement`），库里不另设 CHECK：词表归产品策略（ADR-0180 决定四），在 SQL 里再抄一份封闭集就是两处要同笔改；绕过登记口的直插由读侧经领域门重建时报错。
+3. **同键重叠在登记口判，按键取事务级咨询锁串行**（先例：可见性目录登记）。键锁管不到「同一个对照标识登在另一个键上」的并发，那一笔撞主键时按同标识的行答重放或冲突，不报技术错。
+4. **权威串一个解析函数（`governanceSelfAuthority`），进程里读两次**：`main` 一次，`buildIsolatedWriteAdmission` 的一致性检查一次，读的是同一个环境变量。把值穿进隔离写那道门要改它的签名与一串测试，没做。
+5. **`buildOperatorMinter`、`buildIntegrationClientMinter` 多了准入范围参数，`buildSubmissionOrchestration`、`buildProductionOwnership` 多了权威串参数**，`cmd/parcel-api` 里调它们的测试随改。在途分支若在这几处新加调用，会编不过，改法是加一个参数。
+6. **配置员多了两笔运营决定授予**（装载分配、终止参与），只为 probe 取证。
+
+### 验证（钉 `b80720b7`，隔离工作树 `idp-parcel-mcp3-oc19`）
+
+- 改动与新增的 `.go` 经 toolchain `gofmt -l` 零行；改动文件无 CR、无 BOM。
+- `go build ./...` 退 0；`go vet ./...` 退 0。
+- 带 DSN `go test -p 1 -count=1 ./...`：140 ok / 0 FAIL / 14 无测试 / 0 cached（23:30:32→23:33:04），退 0。`cmd/parcel-api` 与 `cmd/parcel-access-register` 整包 `-v` 零 `--- SKIP`。
+- `-v` 单跑上列真库用例均 PASS，不是 SKIP。
+- 判别力（`go test -overlay`，副本放 `/tmp/c3-oc19-ov`，工作树不动）：
+  - 桥不问区间、找到对照即放行 → `TestTheBridgeAdmitsOnlyWhereTheMappingAndTheIntervalBothHold` 与 `TestTheWiredAdmissionScopeLetsLoadAssignmentAndTerminationThrough` 红；
+  - 桥把对照读不动折成不在准入范围 → `TestTheBridgeFailuresReachTheMinterAsDependencyFaults` 红；
+  - 装配永不接桥 → `TestTheWiredAdmissionScopeLetsLoadAssignmentAndTerminationThrough` 红；
+  - 登记口不判重叠 → `TestOverlappingMappingsOnOneKeyAreRefusedAndASwitchoverIsNot` 与 `TestAdmissionScopeMappingRegisterAndEndEndToEnd` 红；
+  - 重叠判定无视结束 → `TestAdmissionScopeMappingsOverlapOnlyWhereBothAreEffective` 与 `TestOverlappingMappingsOnOneKeyAreRefusedAndASwitchoverIsNot` 红；
+  - 对照收任意能力与事实类型 → `TestAnAdmissionScopeMappingTakesOnlyRequirementsAFaceAsksFor` 与 `TestAdmissionScopeMappingTranslationRefusesBeforeTouchingTheDatabase` 红；
+  - 两个权威串并存不拒 → `TestBuildIsolatedWriteAdmissionRefusesASecondSelfAuthority` 红。
+- 机制清点在 `65f7ea9d` 的干净检出上重生成（`b80720b7`）。
