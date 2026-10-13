@@ -18,11 +18,16 @@ import (
 // 答案，理由同 partycommercial 适配器的同名哨兵。
 var ErrUntranslatableAnswer = errors.New("parcel shipment settlementaccounting adapter: untranslatable answer")
 
-// 本适配器自有的停摆原因引用。两条都是消费方实例半边未配置，不冠 SA- 前缀；提供方状态
-// 译过来的引用冠 SA-（见 reasonFor）。
+// 本适配器自有的停摆原因引用。都是消费方这一侧没形成的东西，不冠 SA- 前缀；提供方状态
+// 译过来的引用冠 SA-（见 assessmentFor）。
+//
+// 作用域那两条按恢复动作分开：CONTROL_SCOPE_NOT_CONFIGURED 只说账户映射没登（ADR-0158 决定三钉的
+// 就是这个码），登一行结算账户就推得动，而那次登记会发信封来重驱；解析没采用结算政策要改的是解析
+// 键，没有登记动作推得动它，另报一个码、留在`未形成`。
 const (
-	reasonScopeNotConfigured  = "CONTROL_SCOPE_NOT_CONFIGURED"
-	reasonAmountNotConfigured = "CONTROL_AMOUNT_NOT_CONFIGURED"
+	reasonScopeNotConfigured               = "CONTROL_SCOPE_NOT_CONFIGURED"
+	reasonScopeSettlementPolicyNotAdopted  = "CONTROL_SCOPE_SETTLEMENT_POLICY_NOT_ADOPTED"
+	reasonAmountNotConfigured              = "CONTROL_AMOUNT_NOT_CONFIGURED"
 )
 
 // ControlScope 是一次控制请求的资金坐标连同它的商业来路。两者装在一个值里而不是分两个
@@ -36,9 +41,9 @@ type ControlScope struct {
 
 // ControlScopeSource 为一份委托解析资金作用域（责任法人/结算账户/币种）与商业解析回指。
 //
-// 作用域该从已解析的结算政策来（ADR-0044 已让方式与六维范围可观察），接通那条缝之前它是
-// 实例半边：没有租户就没有账户映射。nil 或第二个返回值为 false 都是「显式未配置」，本适配
-// 器据以停在`未形成`——停下，不代拟一个账户去冻别人的钱。
+// 作用域该从已解析的结算政策来（ADR-0044 已让方式与六维范围可观察），账户映射是实例半边：没有
+// 租户就没有映射。没形成时第二个返回值说缺的是哪一样，本适配器据以停下——不代拟一个账户去冻
+// 别人的钱。
 //
 // 回指是 SA 控制策略视图向商业侧提问的键（sa-preacceptance-policy-view/01 裁决）：SA 不得
 // 自行从资金作用域反查合同，那会成为账户映射的第二处定义。
@@ -48,8 +53,21 @@ type ControlScopeSource interface {
 		identity psdomain.SourceIdentity,
 		shipmentRequestID psdomain.ShipmentRequestID,
 		submissionVersion psdomain.SubmissionVersionID,
-	) (ControlScope, bool, error)
+	) (ControlScope, ControlScopeGap, error)
 }
+
+// ControlScopeGap 是作用域形成的落点。没形成的两格按恢复动作分（ADR-0029），不并成一个「没有」：
+// 并了，一次登记推得动的缺口与一次登记推不动的缺口就只能落进同一个端口格。
+type ControlScopeGap uint8
+
+const (
+	ControlScopeGapInvalid ControlScopeGap = iota
+	ControlScopeFormed
+	// ControlScopeAccountNotRegistered：结算账户册上没有与这次解析回显相符的应收行，或目录没接。
+	ControlScopeAccountNotRegistered
+	// ControlScopeSettlementPolicyNotAdopted：解析没带回已采用的结算政策，推不出法人与币种。
+	ControlScopeSettlementPolicyNotAdopted
+)
 
 // ControlAmountSource 形成本次控制要占用的金额（最小币单位）。金额该由估价形成（计价缝），
 // 接通前属实例半边；未配置停在`未形成`，绝不拿零或一个拍脑袋的数去占客户资金。
@@ -73,9 +91,9 @@ type PreAcceptanceControlAdapterDeps struct {
 	Amounts ControlAmountSource
 }
 
-// NewPreAcceptanceControlAdapter 装配两侧。Scopes 与 Amounts 允许为 nil：今天既没有账户
-// 映射也没有估价，nil 是「显式未配置」的诚实表达，届时施加停在`未形成`、释放报可重试错误
-// ——那正是首发要停下的地方。
+// NewPreAcceptanceControlAdapter 装配两侧。Scopes 与 Amounts 允许为 nil，nil 是「显式未配置」的
+// 诚实表达：Scopes 为 nil 与账户没登记同一格（`未配置`），Amounts 为 nil 停在`未形成`，释放报可
+// 重试错误。
 func NewPreAcceptanceControlAdapter(deps PreAcceptanceControlAdapterDeps) *PreAcceptanceControlAdapter {
 	return &PreAcceptanceControlAdapter{
 		apply:   deps.Apply,
@@ -109,15 +127,24 @@ func (adapter *PreAcceptanceControlAdapter) ApplyPreAcceptanceFinancialControl(
 	request psports.FinancialControlRequest,
 ) (psports.PreAcceptanceControlAssessment, error) {
 	if adapter.scopes == nil {
-		return notFormed(reasonScopeNotConfigured)
+		return refusedAssessment(psports.PreAcceptanceControlNotConfigured, reasonScopeNotConfigured)
 	}
-	controlScope, formedScope, err := adapter.scopes.FormControlScope(
+	controlScope, gap, err := adapter.scopes.FormControlScope(
 		ctx, request.Identity, request.ShipmentRequestID, request.SubmissionVersion)
 	if err != nil {
 		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("form control scope: %w", err)
 	}
-	if !formedScope {
-		return notFormed(reasonScopeNotConfigured)
+	switch gap {
+	case ControlScopeFormed:
+	case ControlScopeAccountNotRegistered:
+		// 结算账户登记与登记行同一事务交「参数已登记」类信封（settlement-accounting 的
+		// RegisterSettlementAccountHandler），这一格因此有人来推。
+		return refusedAssessment(psports.PreAcceptanceControlNotConfigured, reasonScopeNotConfigured)
+	case ControlScopeSettlementPolicyNotAdopted:
+		return notFormed(reasonScopeSettlementPolicyNotAdopted)
+	default:
+		return psports.PreAcceptanceControlAssessment{}, fmt.Errorf("%w: control scope gap %d",
+			ErrUntranslatableAnswer, uint8(gap))
 	}
 
 	if adapter.amounts == nil {
@@ -152,13 +179,19 @@ func (adapter *PreAcceptanceControlAdapter) ReleasePreAcceptanceControl(
 	if adapter.scopes == nil {
 		return fmt.Errorf("release pre-acceptance control: %s", reasonScopeNotConfigured)
 	}
-	controlScope, formed, err := adapter.scopes.FormControlScope(
+	controlScope, gap, err := adapter.scopes.FormControlScope(
 		ctx, request.Identity, request.ShipmentRequestID, request.SubmissionVersion)
 	if err != nil {
 		return fmt.Errorf("form control scope: %w", err)
 	}
-	if !formed {
+	switch gap {
+	case ControlScopeFormed:
+	case ControlScopeAccountNotRegistered:
 		return fmt.Errorf("release pre-acceptance control: %s", reasonScopeNotConfigured)
+	case ControlScopeSettlementPolicyNotAdopted:
+		return fmt.Errorf("release pre-acceptance control: %s", reasonScopeSettlementPolicyNotAdopted)
+	default:
+		return fmt.Errorf("%w: control scope gap %d", ErrUntranslatableAnswer, uint8(gap))
 	}
 
 	// 释放命令不带商业解析回指：释放不问控制策略，它按原请求身份在冻结账本上认领
