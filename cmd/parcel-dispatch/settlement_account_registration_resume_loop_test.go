@@ -2,8 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
-	"strings"
 	"testing"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -26,8 +24,8 @@ import (
 // 控制那一口装的是生产的 PS 适配器、生产的作用域源与生产的账户目录，账户目录读的是真 SA 账户册——登记那一行与
 // 重驱时作用域问到的是同一张表。SA 施加编排也是生产的那一只，两本账、采用册与留痕册都是真库；只把三个权威口换成
 // 替身：商业解析带结算政策回显，SA 的控制策略视图恒答「要求预付冻结」，试算口计数（见 synRSettlementControl）。
-// 采用册空着，金额那一格停在 SA-CONTROL_AMOUNT_NOT_CONFIGURED；它照旧是`未形成`、回滚重投，所以重驱那一轮整封交回
-// 未决哨兵，账本无痕等重投。
+// 采用册空着，金额那一格停在 SA-CONTROL_AMOUNT_NOT_CONFIGURED，与作用域那一停同落`未配置`：重驱那一轮把等待态换成
+// 金额那一停，本封入账。
 
 // Covers: 票 routing-first-cut/19 完成判据一（作用域未配置：入账留痕、信封不落 ABANDONED；登记结算账户之后信封到达，
 // 重驱同一委托越过作用域、停到金额）。
@@ -108,14 +106,12 @@ func TestAScopeWaitIsResumedByTheSettlementAccountRegistrationEnvelope(t *testin
 		t.Fatalf("「结算账户已登记」信封 = %d 封, want 恰好 1——消费侧认的类型串与发布侧写的不是同一个", n)
 	}
 
-	// 结算账户那一份续办门：按租户取队列再驱一拍——作用域形成、问到金额，金额那一格`未形成`照旧回滚重投。
+	// 结算账户那一份续办门：按租户取队列再驱一拍——作用域形成、问到金额。采用册空着，金额那一格同样是`未配置`
+	// （票 product-strategy-boundary/25 第 6 条）：等待态换成金额那一停再落库，本封入账，处理尝试多一行、续办引用
+	// 与作用域那一停不同。金额那一停怎么被采用登记解开，见 estimate_adoption_registration_resume_loop_test.go。
 	accountDelivery := fixture.claimDeliveryOfType(t, string(psinbox.SettlementAccountRegisteredEventType))
-	err = fixture.settlementAccountGate.Consume(ctx, accountDelivery.Envelope)
-	if !errors.Is(err, psinbox.ErrAcceptanceChainUndecided) {
-		t.Fatalf("越过作用域之后停在金额那一格，整封应交回未决哨兵等重投，实际 err = %v", err)
-	}
-	if !strings.Contains(err.Error(), "FINANCIAL_CONTROL_NOT_FORMED") {
-		t.Fatalf("重驱停在的不是`未形成`那一格：%v", err)
+	if err := fixture.settlementAccountGate.Consume(ctx, accountDelivery.Envelope); err != nil {
+		t.Fatalf("越过作用域之后停在金额那一格的`未配置`，本封应按处理完毕入账：%v", err)
 	}
 	if amounts.asked == 0 {
 		t.Fatal("重驱没有问到金额——作用域那一格没有越过")
@@ -124,15 +120,16 @@ func TestAScopeWaitIsResumedByTheSettlementAccountRegistrationEnvelope(t *testin
 		t.Fatalf("采用册空着却问了 %d 次试算——金额那一格没有停住", settlement.trials.asked)
 	}
 	if n := fixture.countInbox(t, "parcel-shipment/advance-acceptance-chain-on-settlement-account-registration",
-		string(accountDelivery.Envelope.ID)); n != 0 {
-		t.Fatalf("未决必须让账本无痕等重投，实际 inbox 行数 = %d", n)
+		string(accountDelivery.Envelope.ID)); n != 1 {
+		t.Fatalf("结算账户续办门 inbox 行数 = %d, want 1", n)
 	}
 	still := fixture.mustLoadRequest(t, ctx)
-	if still.State() != psdomain.ShipmentRequestSubmitted {
-		t.Fatalf("重驱后状态 = %q, want SUBMITTED", still.State())
+	if waitingOn, present := still.AcceptanceDecisionTask().WaitingOn(); still.State() != psdomain.ShipmentRequestSubmitted ||
+		!present || waitingOn != psdomain.ResumeByOperatorRegistration {
+		t.Fatalf("重驱后状态 = %q、等待 %v（present=%v）, want SUBMITTED、仍在等运营登记", still.State(), waitingOn, present)
 	}
-	if n := fixture.countSQL(t, attemptsOnTheNewReason); n != 1 {
-		t.Fatalf("重驱那一轮回滚之后处理尝试 = %d 行, want 仍为 1", n)
+	if n := fixture.countSQL(t, attemptsOnTheNewReason); n != 2 {
+		t.Fatalf("处理尝试 = %d 行, want 2——作用域那一停与金额那一停各留一行、续办引用各是各的", n)
 	}
 }
 
@@ -227,14 +224,19 @@ func (adoptions *synRCountingAdoptions) FindAdoption(
 	return adoptions.inner.FindAdoption(ctx, tenant, account)
 }
 
-// synRCountingTrials 是试算口的替身：恒答「这一时点没有在用的售价卡」并计数。被问到即证金额那一格的采用行已找到。
-type synRCountingTrials struct{ asked int }
+// synRCountingTrials 是试算口的替身：恒答「这一时点没有在用的售价卡」并计数、记下最后一次的问法。被问到即证金额那一格的
+// 采用行已找到；问法里的计价范围就是那一行登的。
+type synRCountingTrials struct {
+	asked int
+	query saports.PreAcceptanceTrialQuery
+}
 
 func (trials *synRCountingTrials) FormPreAcceptanceTrials(
-	context.Context,
-	saports.PreAcceptanceTrialQuery,
+	_ context.Context,
+	query saports.PreAcceptanceTrialQuery,
 ) (saports.PreAcceptanceTrialAnswer, error) {
 	trials.asked++
+	trials.query = query
 	return saports.PreAcceptanceTrialAnswer{Outcome: saports.PreAcceptanceTrialPriceCardNotConfigured}, nil
 }
 

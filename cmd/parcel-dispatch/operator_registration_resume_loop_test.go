@@ -40,8 +40,10 @@ type operatorRegistrationLoopFixture struct {
 	registrationGate *psinbox.OperatorRegistrationCompletedConsumer
 	// settlementAccountGate 是同一条链上收 settlement-accounting「结算账户已登记」的那一份登记续办门。
 	settlementAccountGate *psinbox.OperatorRegistrationCompletedConsumer
-	submittedHandoff      *pspostgres.OutboxShipmentRequestSubmittedHandoff
-	registration          *pcpostgres.OutboxOperatorRegistrationCompletedHandoff
+	// estimateAdoptionGate 是同一条链上收「受理前估价采用已登记」的那一份。
+	estimateAdoptionGate *psinbox.OperatorRegistrationCompletedConsumer
+	submittedHandoff     *pspostgres.OutboxShipmentRequestSubmittedHandoff
+	registration         *pcpostgres.OutboxOperatorRegistrationCompletedHandoff
 }
 
 const operatorRegistrationResumeConsumer = "parcel-shipment/advance-acceptance-chain-on-operator-registration"
@@ -106,6 +108,11 @@ func newOperatorRegistrationLoopFixtureWith(
 	if err != nil {
 		t.Fatalf("构造结算账户续办门：%v", err)
 	}
+	estimateAdoptionGate, err := psinbox.NewPreAcceptanceEstimateAdoptionRegisteredConsumer(
+		base.transactor, inboxStore, base.requests, chain, operatorRegistrationRedrivePageSize)
+	if err != nil {
+		t.Fatalf("构造估价采用续办门：%v", err)
+	}
 	submittedHandoff, err := pspostgres.NewOutboxShipmentRequestSubmittedHandoff(base.db, store, systemClock{})
 	if err != nil {
 		t.Fatalf("构造提交交接：%v", err)
@@ -123,6 +130,7 @@ func newOperatorRegistrationLoopFixtureWith(
 		submittedGate:         submittedGate,
 		registrationGate:      registrationGate,
 		settlementAccountGate: settlementAccountGate,
+		estimateAdoptionGate:  estimateAdoptionGate,
 		submittedHandoff:      submittedHandoff,
 		registration:          registration,
 	}

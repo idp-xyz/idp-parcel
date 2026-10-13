@@ -327,6 +327,10 @@ func notFormedOutcomeFor(reason saapplication.NotFormedReason) (psports.PreAccep
 	case saapplication.CreditRatioBaseUndecided:
 		// 存量正文没声明比例的基数，要用得上只能发新版信用政策正文，那条通道发布时同样交信封。
 		return psports.PreAcceptanceControlNotConfigured, nil
+	case saapplication.ControlAmountNotConfigured:
+		// 采用册上没有这一户：登记采用行时 settlement-accounting 同一事务交「受理前估价采用已登记」，那一份登记续办门按租户
+		// 重驱（ADR-0179 决定五、ADR-0094 决定四）。
+		return psports.PreAcceptanceControlNotConfigured, nil
 	case saapplication.ControlPolicyUnavailable,
 		saapplication.BalanceUnavailable,
 		saapplication.FreezeLedgerUnavailable,
@@ -341,10 +345,6 @@ func notFormedOutcomeFor(reason saapplication.NotFormedReason) (psports.PreAccep
 		return psports.PreAcceptanceControlNotFormed, nil
 	case saapplication.CreditRatioBaseNotEstablished:
 		// 等的是事实出现（运营余额、有效对账单），不是一次登记。
-		return psports.PreAcceptanceControlNotFormed, nil
-	case saapplication.ControlAmountNotConfigured:
-		// 采用册上没有这一户。登记采用行时同一事务交信封，续办门已在；挪进`未配置`与纵向用例同一笔落（票
-		// product-strategy-boundary/25 第 6 条后半）。
 		return psports.PreAcceptanceControlNotFormed, nil
 	case saapplication.EstimateAdoptionUnavailable,
 		saapplication.EstimateTrialsUnavailable,

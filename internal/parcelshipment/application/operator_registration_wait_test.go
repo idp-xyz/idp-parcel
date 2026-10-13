@@ -228,7 +228,8 @@ func TestAControlNotConfiguredParksTheRequestOnOperatorRegistration(t *testing.T
 }
 
 // Covers: 票 routing-first-cut/19 完成判据「作用域停、金额停、策略停三者的续办引用两两不同」—— 提供方原因
-// 进续办派生。作用域与策略同落`未配置`格、同一个未决原因，只靠原因引用分开；金额停在`未形成`，照旧不碰聚合。
+// 进续办派生。作用域、策略与金额（票 product-strategy-boundary/25 起）同落`未配置`格、同一个未决原因，只靠原因
+// 引用分开；停在`未形成`的那一格（这里取试算读不回）照旧不碰聚合。
 func TestEachControlStallCarriesItsOwnContinuation(t *testing.T) {
 	cases := map[string]struct {
 		outcome   ports.PreAcceptanceControlOutcome
@@ -236,9 +237,10 @@ func TestEachControlStallCarriesItsOwnContinuation(t *testing.T) {
 		want      application.JudgmentPendingReason
 		wantsWait bool
 	}{
-		"作用域": {ports.PreAcceptanceControlNotConfigured, "CONTROL_SCOPE_NOT_CONFIGURED", application.FinancialControlNotConfigured, true},
-		"策略":  {ports.PreAcceptanceControlNotConfigured, "SA-CONTROL_POLICY_NOT_CONFIGURED", application.FinancialControlNotConfigured, true},
-		"金额":  {ports.PreAcceptanceControlNotFormed, "CONTROL_AMOUNT_NOT_CONFIGURED", application.FinancialControlNotFormed, false},
+		"作用域":   {ports.PreAcceptanceControlNotConfigured, "CONTROL_SCOPE_NOT_CONFIGURED", application.FinancialControlNotConfigured, true},
+		"策略":    {ports.PreAcceptanceControlNotConfigured, "SA-CONTROL_POLICY_NOT_CONFIGURED", application.FinancialControlNotConfigured, true},
+		"金额":    {ports.PreAcceptanceControlNotConfigured, "SA-CONTROL_AMOUNT_NOT_CONFIGURED", application.FinancialControlNotConfigured, true},
+		"试算读不回": {ports.PreAcceptanceControlNotFormed, "SA-ESTIMATE_TRIALS_UNAVAILABLE", application.FinancialControlNotFormed, false},
 	}
 	seen := make(map[string]string, len(cases))
 	for name, tc := range cases {

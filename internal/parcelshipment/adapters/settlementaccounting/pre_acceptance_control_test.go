@@ -872,8 +872,8 @@ func TestEveryProviderAnswerLandsOnItsOwnConsumerValue(t *testing.T) {
 // Covers: 票 routing-first-cut/19 拆格那一笔 —— 提供方的未形成原因按恢复动作分到端口两格：控制策略未配置与
 // 比例额度没声明基数落`未配置`（发布对应声明时交「参数已登记」），授信依据未配置、基数尚无事实与各读口答
 // 不出（`*_UNAVAILABLE` 一族逐个列）留在`未形成`。原因引用照旧冠 SA- 原样带回，编排不必认得它也能让几种停
-// 各拿一条续办引用。估价那一口（ADR-0179）的各格同表：选卡、不可见、缺件与合计停法都没有登记会来重驱，
-// 留在`未形成`。
+// 各拿一条续办引用。估价那一口（ADR-0179）的各格同表：金额未配置落`未配置`（登记采用行时交信封，票
+// product-strategy-boundary/25 第 6 条）；选卡、不可见、缺件与合计停法都没有登记会来重驱，留在`未形成`。
 func TestNotFormedReasonsLandOnTheCellOfTheirRecoveryAction(t *testing.T) {
 	policyVersion := func(t *testing.T) sadomain.CreditPolicyReference {
 		return value(t, sadomain.NewCreditPolicyReference, "PC-CREDIT-POLICY/v1")
@@ -903,7 +903,7 @@ func TestNotFormedReasonsLandOnTheCellOfTheirRecoveryAction(t *testing.T) {
 				fixture.adoptions.missing = true
 				return fixture
 			},
-			wantOutcome: psports.PreAcceptanceControlNotFormed,
+			wantOutcome: psports.PreAcceptanceControlNotConfigured,
 			wantReason:  "SA-CONTROL_AMOUNT_NOT_CONFIGURED",
 		},
 		"采用册读不回": {
