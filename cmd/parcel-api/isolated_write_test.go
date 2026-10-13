@@ -62,6 +62,32 @@ func TestBuildIsolatedWriteAdmissionGrantsBothGrids(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0180 决定三 — 隔离写开关开着、本产品的权威串也设了而两值不等，启动即拒：一个进程里不许有两个「本产品」。
+// 两值相等照常启用；写开关没开时不判，权威串单独设着是生产形态的正常配置。
+func TestBuildIsolatedWriteAdmissionRefusesASecondSelfAuthority(t *testing.T) {
+	admission, err := buildIsolatedWriteAdmission(fakeGetenv(map[string]string{
+		isolatedWriteTenantEnv:     "SYN-TENANT-01",
+		governanceSelfAuthorityEnv: "SYN-AUTH/another-product",
+	}))
+	if err == nil {
+		t.Fatalf("两个权威串并存：admission = %+v, want 启动即拒", admission)
+	}
+	if !strings.Contains(err.Error(), governanceSelfAuthorityEnv) {
+		t.Fatalf("拒因没点名参数：%v", err)
+	}
+	if admission, err := buildIsolatedWriteAdmission(fakeGetenv(map[string]string{
+		isolatedWriteTenantEnv:     "SYN-TENANT-01",
+		governanceSelfAuthorityEnv: isolatedSelfAuthority,
+	})); err != nil || admission == nil {
+		t.Fatalf("两值相等：admission = %+v, err = %v", admission, err)
+	}
+	if admission, err := buildIsolatedWriteAdmission(fakeGetenv(map[string]string{
+		governanceSelfAuthorityEnv: "SYN-AUTH/another-product",
+	})); err != nil || admission != nil {
+		t.Fatalf("写开关没开：admission = %+v, err = %v, want 未启用且不拒", admission, err)
+	}
+}
+
 // Covers: ADR-0091 决定四 — 两开关都设时取值必须相同。取值不同时写下的委托挂在一个
 // 读面不过滤的租户上，页面看不见它，而那个症状看起来像缺陷不像配置错。
 func TestBuildIsolatedWriteAdmissionRefusesTenantMismatch(t *testing.T) {

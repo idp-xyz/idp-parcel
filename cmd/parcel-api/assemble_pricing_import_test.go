@@ -222,7 +222,7 @@ func TestThePriceCardDraftViewsAnswerFromTheOperatorChannel(t *testing.T) {
 		"granted":                       {registryWriterRegister{}, "presented.operator.token", views, http.StatusInternalServerError, "NO_ANSWER_FORMED"},
 	}
 	for name, testCase := range cases {
-		minter, err := buildOperatorMinter(acceptingVerifier{}, testCase.register)
+		minter, err := buildOperatorMinter(acceptingVerifier{}, testCase.register, admissionScopeUnset())
 		if err != nil {
 			t.Fatal(err)
 		}

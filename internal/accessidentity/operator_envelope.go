@@ -73,7 +73,8 @@ type OperatorMinter struct {
 	now       func() time.Time
 }
 
-// NewOperatorMinter 的 admission 不许缺：没登对照时传 UnconfiguredAdmissionScope，答不在准入范围。
+// NewOperatorMinter 的 admission 不许缺：本产品的权威串没配时传 UnconfiguredAdmissionScope，答不在准入范围；配了传
+// adapters/pilotgovernance 的准入范围桥，对照没登的租户在那里照样答不在准入范围。
 // 允许缺席就得替缺席挑一个答案，而放行与拦截都不是该由构造器挑的。
 func NewOperatorMinter(
 	verifier OperatorCredentialVerifier,

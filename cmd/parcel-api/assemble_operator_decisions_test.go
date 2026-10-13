@@ -80,7 +80,7 @@ func unconfiguredOperatorRegistries() operatorRegistryIntakes {
 }
 
 func unconfiguredOperatorMinter() *accessidentity.OperatorMinter {
-	minter, err := buildOperatorMinter(accessidentity.UnconfiguredOperatorCredentialVerifier{}, decisionRegister{})
+	minter, err := buildOperatorMinter(accessidentity.UnconfiguredOperatorCredentialVerifier{}, decisionRegister{}, admissionScopeUnset())
 	if err != nil {
 		panic(err)
 	}
@@ -207,7 +207,7 @@ func TestSwappedRegistryFacesMapTheRefusalAndDependencyGrades(t *testing.T) {
 		"register is down": {failingRegister{}, http.StatusServiceUnavailable, "IDENTITY_DEPENDENCY_UNAVAILABLE"},
 	}
 	for name, testCase := range registers {
-		minter, err := buildOperatorMinter(acceptingVerifier{}, testCase.register)
+		minter, err := buildOperatorMinter(acceptingVerifier{}, testCase.register, admissionScopeUnset())
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -229,7 +229,7 @@ func TestSwappedRegistryFacesMapTheRefusalAndDependencyGrades(t *testing.T) {
 }
 
 func TestSwappedRegistryFacesAnswerFromTheOperatorChannel(t *testing.T) {
-	minter, err := buildOperatorMinter(acceptingVerifier{}, registryWriterRegister{})
+	minter, err := buildOperatorMinter(acceptingVerifier{}, registryWriterRegister{}, admissionScopeUnset())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -279,7 +279,7 @@ func TestSwappedDecisionFacesAnswerFromTheOperatorChannel(t *testing.T) {
 	for _, kind := range swappedDecisionFaces {
 		kinds = append(kinds, kind)
 	}
-	minter, err := buildOperatorMinter(acceptingVerifier{}, decisionRegister{kinds: kinds})
+	minter, err := buildOperatorMinter(acceptingVerifier{}, decisionRegister{kinds: kinds}, admissionScopeUnset())
 	if err != nil {
 		t.Fatal(err)
 	}

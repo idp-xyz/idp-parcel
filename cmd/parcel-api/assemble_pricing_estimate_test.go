@@ -112,7 +112,7 @@ func TestTheOperatorReadChannelEstimatesForTheEnvelopeTenantAgainstARealDatabase
 	}
 	post := func(register accessidentity.OperatorRegistry) *httptest.ResponseRecorder {
 		t.Helper()
-		minter, err := buildOperatorMinter(acceptingVerifier{}, register)
+		minter, err := buildOperatorMinter(acceptingVerifier{}, register, admissionScopeUnset())
 		if err != nil {
 			t.Fatal(err)
 		}

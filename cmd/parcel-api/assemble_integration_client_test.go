@@ -85,7 +85,7 @@ func (register clientFactRegister) FindIntegrationClient(context.Context, access
 }
 
 func unconfiguredIntegrationClientIntakes() integrationClientIntakes {
-	minter, err := buildIntegrationClientMinter(accessidentity.UnconfiguredIntegrationClientCredentialVerifier{}, absentClientRegister{})
+	minter, err := buildIntegrationClientMinter(accessidentity.UnconfiguredIntegrationClientCredentialVerifier{}, absentClientRegister{}, admissionScopeUnset())
 	if err != nil {
 		panic(err)
 	}
@@ -98,7 +98,7 @@ func unconfiguredIntegrationClientIntakes() integrationClientIntakes {
 
 func integrationClientRouter(t *testing.T, verifier accessidentity.IntegrationClientCredentialVerifier, registry accessidentity.IntegrationClientRegistry) http.Handler {
 	t.Helper()
-	minter, err := buildIntegrationClientMinter(verifier, registry)
+	minter, err := buildIntegrationClientMinter(verifier, registry, admissionScopeUnset())
 	if err != nil {
 		t.Fatal(err)
 	}

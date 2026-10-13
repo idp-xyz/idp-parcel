@@ -136,6 +136,14 @@ func buildIsolatedWriteAdmission(getenv func(string) string) (*isolatedWriteAdmi
 			isolatedWriteTenantEnv, tenant, isolatedReadTenantEnv, readTenant,
 		)
 	}
+	// 一个进程里不许有两个「本产品」（ADR-0180 决定三）：隔离分支的归属认 isolatedSelfAuthority，准入范围桥认部署参数，
+	// 两值不等，同一个进程就会认领两种权威串的区间。隔离写开关删去的那一笔，这条检查随之删去。
+	if selfAuthority := governanceSelfAuthority(getenv); selfAuthority != "" && selfAuthority != isolatedSelfAuthority {
+		return nil, fmt.Errorf(
+			"%s=%q and the isolated write admission's self authority %q disagree: one process cannot hold two self authorities on the governance register (ADR-0180); refusing to start",
+			governanceSelfAuthorityEnv, selfAuthority, isolatedSelfAuthority,
+		)
+	}
 
 	directory, err := pspilot.NewIsolatedGovernanceScopeDirectory(
 		isolatedGovernanceObjectScope,

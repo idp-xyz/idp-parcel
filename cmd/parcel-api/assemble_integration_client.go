@@ -51,16 +51,18 @@ func buildIntegrationClientCredentialVerifier(getenv func(string) string) (acces
 	return verifier, true, nil
 }
 
-// buildIntegrationClientMinter 建本进程唯一一只集成客户端铸造器。准入范围取 UnconfiguredAdmissionScope：租户到治理坐标的
-// 对照还没有任何租户登过，一切生产写答「不在准入范围」（ADR-0149 越权风险点 3）。发行方参数没设时核验方就是未配置那一只。
+// buildIntegrationClientMinter 建本进程唯一一只集成客户端铸造器。准入范围与操作者铸造器同一只（buildAdmissionScope，
+// ADR-0180）：权威串没设、或租户的对照没登时，一切生产写答「不在准入范围」（ADR-0149 越权风险点 3）。发行方参数没设时
+// 核验方就是未配置那一只。
 func buildIntegrationClientMinter(
 	verifier accessidentity.IntegrationClientCredentialVerifier,
 	registry accessidentity.IntegrationClientRegistry,
+	admission accessidentity.AdmissionScope,
 ) (*accessidentity.IntegrationClientMinter, error) {
-	if verifier == nil || registry == nil {
-		return nil, fmt.Errorf("integration client minter needs a verifier and a client registry")
+	if verifier == nil || registry == nil || admission == nil {
+		return nil, fmt.Errorf("integration client minter needs a verifier, a client registry and an admission scope")
 	}
-	return accessidentity.NewIntegrationClientMinter(verifier, registry, accessidentity.UnconfiguredAdmissionScope{}, time.Now)
+	return accessidentity.NewIntegrationClientMinter(verifier, registry, admission, time.Now)
 }
 
 func buildIntegrationClientIntakes(minter *accessidentity.IntegrationClientMinter) (integrationClientIntakes, error) {

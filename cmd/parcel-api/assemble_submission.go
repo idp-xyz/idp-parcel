@@ -189,18 +189,19 @@ func (boundary submissionBoundary) Save(
 // 携 OutboxShipmentRequestSubmittedHandoff，事件类型 `parcel-shipment.shipment-request.submitted`，
 // 消费门在 cmd/parcel-dispatch（接受判断链由它推进，本编排不判接受）。
 //
-// 治理桥的三个读口（权威区间、暂停、接管）接真库；GovernanceScopeDirectory 与
-// SelfAuthority 是范围缝的实例半边——没有租户就没有目录，缺席即适配器的「显式未配置」，
-// 归属如实答`权威未确定`，提交停在 OWNERSHIP_UNRESOLVED。
+// 治理桥的三个读口（权威区间、暂停、接管）接真库；GovernanceScopeDirectory 是范围缝的
+// 实例半边——没有租户就没有目录，缺席即适配器的「显式未配置」，归属如实答`权威未确定`，
+// 提交停在 OWNERSHIP_UNRESOLVED。SelfAuthority 取 selfAuthority：本产品在治理登记册里的
+// 权威串是一件部署形态参数，与准入范围桥同读那一处（ADR-0180 决定三）。
 //
 // 与接线前的区别不在结果，在结果的来源，但这句话只对那三个读口成立：它们的恢复动作
 // 已从「写代码」变成「登记」（ADR-0063 的「显式未配置」讲的就是这个差别）。**生产形态
-// 下留空的两样不在其内**——`governanceScope` 在目录缺席或自身权威串为空时先于读登记册
-// 就早退，因此往 authority_interval 里登记多少行都不会改变答案，那两格的恢复动作仍是
-// 「写一个目录实现并说出自己的权威串」。把它们读成「登记一条区间就好」会让人登完仍撞
-// OWNERSHIP_UNRESOLVED 而不知道为什么。
+// 下留空的目录不在其内**——`governanceScope` 在目录缺席时先于读登记册就早退，因此设了
+// 权威串、往 authority_interval 里登记多少行都不会改变答案，那一格的恢复动作仍是「写一个
+// 目录实现」。把它读成「登记一条区间就好」会让人登完仍撞 OWNERSHIP_UNRESOLVED 而不知道
+// 为什么。
 //
-// `isolated` 为 nil 即生产形态，那两格照旧留空，整份装配与 ADR-0091 之前逐字节同形；
+// `isolated` 为 nil 即生产形态，目录照旧留空，归属的答复与 ADR-0091 之前逐字节相同；
 // 非 nil 时按隔离形态注入合成坐标与合成权威串（ADR-0091 决定二、五），恢复动作这才
 // 变成「往登记册里登一条匹配的区间」——注入的只是坐标，归属仍要读册后才有答案。
 //
@@ -210,6 +211,7 @@ func (boundary submissionBoundary) Save(
 func buildSubmissionOrchestration(
 	db *bentopg.DB,
 	isolated *isolatedWriteAdmission,
+	selfAuthority string,
 ) (shipmenthttp.SubmissionHandler, error) {
 	sources, err := pspostgres.NewSourceSubmissions(db)
 	if err != nil {
@@ -220,7 +222,7 @@ func buildSubmissionOrchestration(
 		return nil, fmt.Errorf("parcel-api: shipment requests: %w", err)
 	}
 	clock := systemClock{}
-	ownership, err := buildProductionOwnership(db, isolated)
+	ownership, err := buildProductionOwnership(db, isolated, selfAuthority)
 	if err != nil {
 		return nil, err
 	}
@@ -247,16 +249,18 @@ func buildSubmissionOrchestration(
 	return handler, nil
 }
 
-// buildProductionOwnership 装配治理桥的三个读口与两格实例半边。
+// buildProductionOwnership 装配治理桥的三个读口、目录与本产品的权威串。
 //
 // 它被提交编排与隔离形态的提交 Intake 各调一次，因此两处**读的是同一本登记册**——
 // 那正是门禁要的：Intake 预取的修订与编排提交时点重判出的修订，只在登记册真的变过时
 // 才该不同。两处各建一个适配器实例不影响这一点（三个读口都是无状态读，修订由登记内容
 // 派生，不由实例派生）；共用一个实例要把它穿过生产装配路径，而生产形态根本没有 Intake
-// 这一侧。
+// 这一侧。selfAuthority 只进生产分支；隔离分支照旧取 isolatedSelfAuthority（ADR-0150
+// 决定三），两值不等的装配在 buildIsolatedWriteAdmission 就被拒了。
 func buildProductionOwnership(
 	db *bentopg.DB,
 	isolated *isolatedWriteAdmission,
+	selfAuthority string,
 ) (*pspilot.ProductionOwnershipAdapter, error) {
 	intervals, err := pgpostgres.NewAuthorityIntervals(db)
 	if err != nil {
@@ -274,8 +278,9 @@ func buildProductionOwnership(
 		Intervals:   intervals,
 		Suspensions: suspensions,
 		Handoffs:    takeovers,
-		// Directory 与 SelfAuthority 生产形态留空：实例半边，租户随试点登记后在此
-		// 填上；在那之前适配器对缺席的回答就是`权威未确定`，不代拟任何坐标。
+		// Directory 生产形态留空：实例半边，目录归 PS 生产归属那一票；在那之前适配器对
+		// 缺席的回答就是`权威未确定`，不代拟任何坐标，设没设权威串都一样（ADR-0180 决定三）。
+		SelfAuthority:  selfAuthority,
 		Clock:          systemClock{},
 		AnswerValidity: submissionOwnershipAnswerValidity,
 	}
@@ -299,7 +304,7 @@ func buildIsolatedSubmissionIntake(
 	if isolated == nil {
 		return nil, nil
 	}
-	ownership, err := buildProductionOwnership(db, isolated)
+	ownership, err := buildProductionOwnership(db, isolated, isolated.selfAuthority)
 	if err != nil {
 		return nil, err
 	}

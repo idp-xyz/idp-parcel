@@ -64,7 +64,7 @@ type WorkFactMinter struct {
 	now       func() time.Time
 }
 
-// NewWorkFactMinter 的 admission 不许缺，理由同 NewOperatorMinter：没登对照时传 UnconfiguredAdmissionScope。
+// NewWorkFactMinter 的 admission 不许缺，取法同 NewOperatorMinter。
 func NewWorkFactMinter(
 	verifier OperatorCredentialVerifier,
 	operators OperatorRegistry,

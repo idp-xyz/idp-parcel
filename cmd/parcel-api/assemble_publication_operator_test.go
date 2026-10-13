@@ -26,7 +26,7 @@ import (
 
 func serveThroughOperatorRegistries(t *testing.T, register accessidentity.OperatorRegistry, method, target, token, body string) *httptest.ResponseRecorder {
 	t.Helper()
-	minter, err := buildOperatorMinter(acceptingVerifier{}, register)
+	minter, err := buildOperatorMinter(acceptingVerifier{}, register, admissionScopeUnset())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -101,7 +101,7 @@ func TestTheOperatorChannelPublishesTheControlledDocumentMirrorAgainstARealDatab
 	if err != nil {
 		t.Fatalf("装配商业登记编排：%v", err)
 	}
-	minter, err := buildOperatorMinter(acceptingVerifier{}, registryWriterRegister{})
+	minter, err := buildOperatorMinter(acceptingVerifier{}, registryWriterRegister{}, admissionScopeUnset())
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -181,7 +181,7 @@ func TestTheOperatorChannelRecordsEnvelopeSubjectsOnThePublicationCarrier(t *tes
 	if err != nil {
 		t.Fatalf("装配商业登记编排：%v", err)
 	}
-	minter, err := buildOperatorMinter(tokenSubjects{}, registryWriterRegister{})
+	minter, err := buildOperatorMinter(tokenSubjects{}, registryWriterRegister{}, admissionScopeUnset())
 	if err != nil {
 		t.Fatal(err)
 	}

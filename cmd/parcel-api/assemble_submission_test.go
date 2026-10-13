@@ -44,7 +44,7 @@ func TestTheWiredSubmissionAnswersHonestlyAgainstARealDatabase(t *testing.T) {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
 
-	submission, err := buildSubmissionOrchestration(db, nil)
+	submission, err := buildSubmissionOrchestration(db, nil, "")
 	if err != nil {
 		t.Fatalf("装配提交编排：%v", err)
 	}
@@ -70,6 +70,29 @@ func TestTheWiredSubmissionAnswersHonestlyAgainstARealDatabase(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0180 决定三「PS 跟，只跟参数来源」——生产形态里设了本产品的权威串、登记册里也有一条该串的区间，归属照旧
+// 答`权威未确定`：目录照旧为空，governanceScope 先于读册早退，PS 的答复不因权威串改变。
+func TestTheGovernanceSelfAuthorityLeavesProductionOwnershipUnresolved(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	appendIsolatedAuthorityInterval(t, db)
+
+	submission, err := buildSubmissionOrchestration(db, nil, isolatedSelfAuthority)
+	if err != nil {
+		t.Fatalf("装配提交编排：%v", err)
+	}
+	first, err := submission.Handle(t.Context(), submissionCommand(t))
+	if err != nil {
+		t.Fatalf("提交：%v", err)
+	}
+	if got := first.Outcome(); got != shipmentapp.OutcomeOwnershipUnresolved {
+		t.Fatalf("outcome = %v, want OWNERSHIP_UNRESOLVED——生产形态没有目录，设了权威串也只能答未确定", got)
+	}
+}
+
 // Covers: 两段事务边界的第一段（简报「事务边界」；ADR-0081）——来源保全在自己的事务里
 // 独立提交，编排随后给出业务性拒绝也动不了它，重放因此答`已有结果`。「被拒的提交也
 // 保全来源」由 preservationBoundary 的边界位置兑现，不再依赖「答案即提交」的大事务。
@@ -83,7 +106,7 @@ func TestARefusedSubmissionStillPreservesItsSource(t *testing.T) {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
 
-	submission, err := buildSubmissionOrchestration(db, nil)
+	submission, err := buildSubmissionOrchestration(db, nil, "")
 	if err != nil {
 		t.Fatalf("装配提交编排：%v", err)
 	}
@@ -249,7 +272,7 @@ func TestIsolatedSubmissionCrossesOwnershipOnceTheRegisterHasAMatchingInterval(t
 	}
 	appendIsolatedAuthorityInterval(t, db)
 
-	submission, err := buildSubmissionOrchestration(db, isolatedWriteAdmissionForTest(t))
+	submission, err := buildSubmissionOrchestration(db, isolatedWriteAdmissionForTest(t), isolatedSelfAuthority)
 	if err != nil {
 		t.Fatalf("装配隔离形态提交编排：%v", err)
 	}
@@ -288,7 +311,7 @@ func TestIsolatedSubmissionStillAnswersUnresolvedOnAnEmptyRegister(t *testing.T)
 		t.Fatalf("构造框架 DB：%v", err)
 	}
 
-	submission, err := buildSubmissionOrchestration(db, isolatedWriteAdmissionForTest(t))
+	submission, err := buildSubmissionOrchestration(db, isolatedWriteAdmissionForTest(t), isolatedSelfAuthority)
 	if err != nil {
 		t.Fatalf("装配隔离形态提交编排：%v", err)
 	}

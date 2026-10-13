@@ -61,7 +61,7 @@ type IntegrationClientMinter struct {
 	now       func() time.Time
 }
 
-// NewIntegrationClientMinter 的 admission 不许缺，理由同 NewOperatorMinter：没登对照时传 UnconfiguredAdmissionScope。
+// NewIntegrationClientMinter 的 admission 不许缺，取法同 NewOperatorMinter。
 func NewIntegrationClientMinter(
 	verifier IntegrationClientCredentialVerifier,
 	registry IntegrationClientRegistry,

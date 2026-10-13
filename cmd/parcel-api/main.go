@@ -74,6 +74,17 @@ func run(logger *slog.Logger) error {
 			"admittedCommandLines", isolatedWrite.admittedCommandLines())
 	}
 
+	// 本产品在治理登记册里的权威串（ADR-0180 决定三）与两道隔离开关同处最早：隔离写开关开着而两值不等，上面那道门已经
+	// 带原因退出了。配没配都出声——没配时运营决定与外部事实各口答 OUTSIDE_ADMISSION_SCOPE，与「配了但租户的对照或区间
+	// 没登」在页面上一样进不去，启动日志是分辨两者的第一处。
+	selfAuthority := governanceSelfAuthority(os.Getenv)
+	if selfAuthority != "" {
+		logger.Info("Governance self authority configured (ADR-0180): admission scope reads tenant mappings and this product's authority intervals",
+			"selfAuthority", selfAuthority)
+	} else {
+		logger.Info("Governance self authority not configured (ADR-0180): production writes through the operator and integration client channels answer OUTSIDE_ADMISSION_SCOPE")
+	}
+
 	// 操作者渠道的信任锚（ADR-0100 决定二）与两道隔离开关同处最早：参数只设了一半要在开池之前
 	// 带原因退出。配没配都出声——操作者族未配置时整族答 403，而那与「配了但授予没登」在页面上同样
 	// 进不去，启动日志是分辨两者的第一处。核验方交给运营决定口的操作者铸造器（票 operator-channel/15），
@@ -117,7 +128,7 @@ func run(logger *slog.Logger) error {
 	}
 	defer closeDB()
 
-	submission, err := buildSubmissionOrchestration(db, isolatedWrite)
+	submission, err := buildSubmissionOrchestration(db, isolatedWrite, selfAuthority)
 	if err != nil {
 		return err
 	}
@@ -139,7 +150,12 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	operatorMinter, err := buildOperatorMinter(operatorVerifier, operatorRegistry)
+	// 准入范围操作者与集成客户端两族共用一只（ADR-0180）：权威串没设时是未配置那一只，对照与区间一行都不读。
+	admission, err := buildAdmissionScope(db, selfAuthority)
+	if err != nil {
+		return err
+	}
+	operatorMinter, err := buildOperatorMinter(operatorVerifier, operatorRegistry, admission)
 	if err != nil {
 		return err
 	}
@@ -155,7 +171,7 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	integrationClientMinter, err := buildIntegrationClientMinter(integrationClientVerifier, integrationClientRegistry)
+	integrationClientMinter, err := buildIntegrationClientMinter(integrationClientVerifier, integrationClientRegistry, admission)
 	if err != nil {
 		return err
 	}

@@ -32,7 +32,8 @@ type AdmissionScope interface {
 	Admits(ctx context.Context, tenantID string, requirement AdmissionRequirement, at time.Time) (bool, error)
 }
 
-// UnconfiguredAdmissionScope 对一切生产写答不在准入范围：租户到治理坐标的对照没登之前就是这一格，
+// UnconfiguredAdmissionScope 对一切生产写答不在准入范围，对照与区间一行都不读：本产品在治理登记册里的权威串没配时，
+// 装配点交给铸造器的就是这一只（ADR-0180 决定三）；配了换成 adapters/pilotgovernance 的准入范围桥。
 // 首个租户登记区间之前任何生产写都答「不在准入范围」是设计（ADR-0149 越权风险点 3）。
 type UnconfiguredAdmissionScope struct{}
 

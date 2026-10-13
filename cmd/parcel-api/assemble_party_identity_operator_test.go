@@ -24,7 +24,7 @@ const presentedOperatorToken = "presented.operator.token"
 // 是替身：带了令牌就是同一个合成操作者，绑 SYN-TENANT-01、持登记册配置写的授予（registryWriterRegister）。
 func operatorRegistriesForRegistryWriter(t *testing.T) operatorRegistryIntakes {
 	t.Helper()
-	minter, err := buildOperatorMinter(acceptingVerifier{}, registryWriterRegister{})
+	minter, err := buildOperatorMinter(acceptingVerifier{}, registryWriterRegister{}, admissionScopeUnset())
 	if err != nil {
 		t.Fatal(err)
 	}

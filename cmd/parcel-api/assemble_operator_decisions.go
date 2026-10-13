@@ -30,16 +30,19 @@ type operatorDecisionIntakes struct {
 
 // buildOperatorMinter 建本进程唯一一只操作者铸造器：运营决定与登记写面各口共用它。
 //
-// 准入范围取 UnconfiguredAdmissionScope：租户到治理坐标（对象范围 × 能力 × 事实类型）的对照是租户随试点登记的实例
-// 半边，还没有任何租户登过，一切运营决定答「不在准入范围」——首个租户登记区间之前任何生产写都不在准入范围，是
-// ADR-0149 越权风险点 3 写明的设计。对照登进来的那一笔，把这里换成「对照 + pilot-governance 的 AuthorityCoverage」桥。
-// 登记写面的请求不带准入要求，这一格对它们不起作用。发行方参数没设时核验方就是未配置那一只，各口照旧答
-// ACCESS_CHANNEL_NOT_CONFIGURED，与换口之前逐字节相同。
-func buildOperatorMinter(verifier accessidentity.OperatorCredentialVerifier, registry accessidentity.OperatorRegistry) (*accessidentity.OperatorMinter, error) {
-	if verifier == nil || registry == nil {
-		return nil, errors.New("operator minter needs a verifier and an operator registry")
+// 准入范围由 buildAdmissionScope 给，与集成客户端铸造器同一只（ADR-0180）：本产品的权威串没设时是未配置那一只，一切运营
+// 决定答「不在准入范围」；设了是「对照 + pilot-governance 的 AuthorityCoverage」桥，对照没登的租户照旧答不在准入范围——
+// 首个租户登记区间之前任何生产写都不在准入范围，是 ADR-0149 越权风险点 3 写明的设计。登记写面的请求不带准入要求，这一格
+// 对它们不起作用。发行方参数没设时核验方就是未配置那一只，各口照旧答 ACCESS_CHANNEL_NOT_CONFIGURED，与换口之前逐字节相同。
+func buildOperatorMinter(
+	verifier accessidentity.OperatorCredentialVerifier,
+	registry accessidentity.OperatorRegistry,
+	admission accessidentity.AdmissionScope,
+) (*accessidentity.OperatorMinter, error) {
+	if verifier == nil || registry == nil || admission == nil {
+		return nil, errors.New("operator minter needs a verifier, an operator registry and an admission scope")
 	}
-	return accessidentity.NewOperatorMinter(verifier, registry, accessidentity.UnconfiguredAdmissionScope{}, time.Now)
+	return accessidentity.NewOperatorMinter(verifier, registry, admission, time.Now)
 }
 
 // buildOperatorDecisionIntakes 装两边运营决定口的防腐认证方与 Intake。
