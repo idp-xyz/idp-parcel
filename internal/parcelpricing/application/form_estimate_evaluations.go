@@ -104,10 +104,12 @@ func (answer EstimateCandidateAnswer) String() string {
 	}
 }
 
-// 输入缺项的封闭码：稳定、机器可读，页面自译成中文。
+// 输入缺项的封闭码：稳定、机器可读，页面自译成中文。EstimateMissingMeasurement 只出自受理前试算：那里的测量取客户申报，
+// 可以没报；UC-PP-001 的声明在受理门上就要重量。
 const (
 	EstimateMissingZone        = "ZONE"
 	EstimateMissingPostalRoute = "POSTAL_ROUTE"
+	EstimateMissingMeasurement = "MEASUREMENT"
 )
 
 // EstimateCandidate 是一张适用价卡的结果。
