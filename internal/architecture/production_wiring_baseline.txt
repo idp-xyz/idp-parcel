@@ -481,6 +481,16 @@ internal/networkrouting/domain ArbitrateLoadingConcurrency
 # 说明里「已随 616646d 入库」是误判，成因见本笔提交信）。**至此 settlement-accounting 这一组清空**——本票
 # （mechanism-executor-triage/06）开工时它有 4 条。名单清空只判名单清空：本门禁只量导出工厂，
 # UC-SA-002 步 2「结算提交主要范围…请求评价」那条编排今天仍不存在，它不是工厂，这里量不到。
+#
+# 2026-10-13 随 product-strategy-boundary/25 第 4 条上半新增 FormPerParcelSellTrialSum（ADR-0179 决定二：逐件 SELL 试算合计的
+# 停法与合计，连同决定六的留痕值）。它该有的调用方是 application/apply_pre_acceptance_control.go 的
+# ApplyPreAcceptanceControlHandler——策略要求冻结或信用校验时按采用行经 ports.PreAcceptanceTrialSource 要试算、用它合计，
+# 同一金额用于本次各控制项。那一层是同票第 4 条下半，与第 5 条（PS 控制请求去掉金额）同批落，落地那天这一行出名单。
+# 同笔的 NewPreAcceptanceTrial / NewUntotaledPreAcceptanceTrial 按名字被门禁跳过（`New` 前缀），且由
+# adapters/parcelpricing/pre_acceptance_trials.go 调用。量在隔离 worktree `idp-parcel-mcp2-psb25` 上：动手前
+# `git status -- internal/architecture/` 为空，父提交 `0e7d22fe` 未碰本文件；**加前实测 2、加后实测 3**（逐行滤非空非注释），
+# 两个数只对该检出成立。
+internal/settlementaccounting/domain FormPerParcelSellTrialSum
 
 
 # —— customs-compliance ——

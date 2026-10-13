@@ -156,3 +156,11 @@ internal/customscompliance/domain ComplianceJudgmentSpec
 internal/customscompliance/domain ComplianceRuleVersionReference
 internal/customscompliance/domain ComplianceTopicReference
 internal/customscompliance/domain JudgmentMode
+
+# ---- settlement-accounting ----
+
+# 一类：经 FormPerParcelSellTrialSum 取得，它在函数名棘轮基线里（票 product-strategy-boundary/25 第 4 条上半）。等同票第 4 条
+# 下半把它接进 ApplyPreAcceptanceControlHandler 的施加编排，随它出名单。动手前在父提交 `0e7d22fe` 上数得本文件 16 条（本文件
+# 无未提交改动）；加上这两条后是 18。只对这一加成立。
+internal/settlementaccounting/domain PreAcceptanceEstimate
+internal/settlementaccounting/domain PreAcceptanceEstimateGap
