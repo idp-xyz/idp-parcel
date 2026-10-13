@@ -1,7 +1,7 @@
 # 19 财务控制未形成时消费方整笔回滚：任务与可达性判断都不落，动线上看不出停在哪一格
 
 Category: enhancement
-Status: 完工，待评审与重放——2026-10-13 通道 3 评审回修收口（派单 `task-343ace0b` ← 通道 1，接替未交卷的 `task-3da48c83`；评审 `task-f3cf7015` ← 通道 4），代码 tip `197eac4a`、清点 `a675abb7`，见文末「完成记录」下「评审回修」。此前同一状态——2026-10-13 通道 3 接续会话收口（派单 `task-6ebd4303` ← 通道 1，接替 `task-a95f74d3`），代码 tip `8dce3223`、清点 `344e6b2d`。此前 in-progress——2026-10-12 通道 3 认领（派单 `task-a95f74d3` ← 通道 1），分支 `mcp3-rfc19` 基 `1e02d2ea`，隔离树 `/home/tops/workspace/idp-parcel-mcp3-rfc19`；按「分诊」裁定分笔。此前 ready-for-agent——2026-10-12 通道 3 分诊（派单 `task-85d7350d` ← 通道 1），见文末「分诊」。此前 needs-triage——2026-10-11 通道 1 立（用户授权自决），出自 [16](16-demo-tenant-pre-acceptance-financial-control-cells.md) 判据二的取证与其「评审 ← 通道 5」Spec 非阻断
+Status: resolved——2026-10-13 通道 1：本票十一笔重放进 main（至 `23dc9146`），清点在重放 tip 上重生成（`bbb838dc`）；进 main 记录与两份非作者评审见文末，评审非阻断随票记、未改。此前完工，待评审与重放——2026-10-13 通道 3 评审回修收口（派单 `task-343ace0b` ← 通道 1，接替未交卷的 `task-3da48c83`；评审 `task-f3cf7015` ← 通道 4），代码 tip `197eac4a`、清点 `a675abb7`，见文末「完成记录」下「评审回修」。此前同一状态——2026-10-13 通道 3 接续会话收口（派单 `task-6ebd4303` ← 通道 1，接替 `task-a95f74d3`），代码 tip `8dce3223`、清点 `344e6b2d`。此前 in-progress——2026-10-12 通道 3 认领（派单 `task-a95f74d3` ← 通道 1），分支 `mcp3-rfc19` 基 `1e02d2ea`，隔离树 `/home/tops/workspace/idp-parcel-mcp3-rfc19`；按「分诊」裁定分笔。此前 ready-for-agent——2026-10-12 通道 3 分诊（派单 `task-85d7350d` ← 通道 1），见文末「分诊」。此前 needs-triage——2026-10-11 通道 1 立（用户授权自决），出自 [16](16-demo-tenant-pre-acceptance-financial-control-cells.md) 判据二的取证与其「评审 ← 通道 5」Spec 非阻断
 Blocked by: 无
 地盘（按「分诊」裁定分笔）：
 - `internal/parcelshipment`：`ports` 的 `PreAcceptanceControlOutcome` 增「未配置」一格；`application` 的 `controlStallReasons`、新未决原因与 `resumePath()`、控制停那一支经 `awaitOperatorRegistration`、`undecided` 带提供方原因；`adapters/settlementaccounting` 的原因译法；`adapters/inbox` 收结算登记信封的续办门（照 `OperatorRegistrationCompletedConsumer`）。
@@ -193,3 +193,27 @@ Blocked by: 无
 | 无（基线） | `TestARegistrationHandsOffByItsEffectAndAConflictHandsOffNothing` | 0 |
 | M3：`RegisterSettlementAccountHandler.Register` 冲突也交 | 同上 | 1 |
 | M3，对照 | `TestSettlementAccountRegistrationHandsOffItsEnvelopeInTheSameTransaction`（带 DSN，`-v` 为 `PASS`） | 0 |
+
+## Comments
+
+**评审 ← 通道 4（非作者）· 钉 `c1e9a957` · 基线 `1e02d2ea` · 13:38。** Spec 阻断 0 / 非阻断 3；Standards 阻断 1 / 非阻断 2。全文在任务 `task-f3cf7015` 的 report_task。
+
+- 无发现：挪进`未配置`的只有账户没登记、`SA-CONTROL_POLICY_NOT_CONFIGURED`、`SA-CREDIT_RATIO_BASE_UNDECIDED`，金额与 `*_UNAVAILABLE` 留原格；越权风险点 1 两句属实；判断项 1「键改登即冲突」属实；`TestEveryPendingReasonHasAStringAndAResumePath` 覆盖新码；信封 ID 确定、`RecordedAt` 不进 ID、拒收时行不落；两份共享接线文件只动本票的行。
+- 阻断与非阻断都回作者在同一分支收（派单 `task-3da48c83` 未交卷，由 `task-343ace0b` 接替），逐条见上文「评审回修」。
+
+**增量复评 ← 通道 4（非作者）· `c1e9a957..1e9e3b00` · 14:52。** Spec 阻断 0 / 非阻断 3；Standards 阻断 0 / 非阻断 3。全文在任务 `task-40247234` 的 report_task。
+
+- 无发现：前评各条收住——SA `NotFormedReason` 的 `*_UNAVAILABLE` 逐个列全，M1、M3 复核各退 1，换回旧版用例或真库纵向用例各退 0；装配缺口三处落`未形成`报新码，加测变异 M6、M7 各退 1；`d5b60bec` 只换夹具默认信用状况、没碰断言；释放报错都折 `ControlReleasePending`、不读报错文字，「行为不变」属实；toolchain `gofmt -l` 对分支自 `1e02d2ea` 改过的 `.go` 为空。
+- 非阻断，随票记、本票未改：
+  - Spec ①：判断项第 4 条后半句（续办引用「分不出『等登记』与『等装配』」）不实。`judgmentContinuation` 的摘要以未决原因打头，`controlStallReasons` 已把两格映到 `FinancialControlNotConfigured` 与 `FinancialControlNotFormed`；`未形成`整笔回滚，引用本不落库。另起码凭前半句（一码两格，ADR-0158 决定三）成立。
+  - Spec ②：新码在释放那一径没有用例。变异 M8（`ReleasePreAcceptanceControl` 改回 `CONTROL_SCOPE_NOT_CONFIGURED`）在 PS 适配器、应用两包都存活，而生产上只有这一径走得到新码；编排调用点都丢弃报错文字，危害低。
+  - Spec ③：地盘外两处注释随改码失真。`cmd/parcel-api` 的 `buildRejectionOrchestration`、`buildDispositionOrchestration`、`buildWithdrawalOrchestration` 函数注释「答未配置留补偿」自 `92338ab7`（main 上 `9fe10310`）起不实；`internal/parcelshipment/adapters/partycommercial` 的 `TestARegisteredSettlementBasisFormsAThreeDimensionSelector` 注释「缺 `SettlementTerms` 一律停在 `CONTROL_SCOPE_NOT_CONFIGURED`」自 `eca14e52`（main 上 `1eba8072`）起不实。评审意见是只动注释、补地盘即可收；给释放半边接作用域源与「实例半边」的定性是行为与归类，归 owner 另票。
+  - Standards ①：`NewPreAcceptanceControlAdapter` 注释复述 `cmd/parcel-api` 的装配，已与对面注释相抵（AGENTS.md「写代码注释」：复述的那半会变旧）；只写本适配器对 nil 怎么答即可。
+  - Standards ②：`pre_acceptance_control.go` 常量块与 `ControlScopeNotAssembled` 注释「它的两半」数的是 `scope_source.go` 里 `PolicyBackedControlScopeSource` 的依赖（AGENTS.md「改文档」计数条）；点名「解析口、账户目录」即可。
+  - Standards ③：`ControlScopeGap` 到原因码的 switch 在 `ApplyPreAcceptanceFinancialControl` 与 `ReleasePreAcceptanceControl` 各一份，释放那份没有用例守，同 Spec ②。
+
+**通道 1 处置（14:5x）。** 增量复评无阻断，照 `parallel-sessions.md`「合入前独立评审」那道门重放，非阻断随票记、不挡合入，用户认可直接重放。Spec ②③ 与 Standards ①② 落在同一组注释与释放那一径的用例上，宜合成一张小票另立；Spec ① 是本票判断项的措辞，随那张票一并更正。
+
+## 进 main 记录（2026-10-13 通道 1）
+
+远端 main `dbc1f382` → 本记录那一笔。本票十一笔原样重放到 `dbc1f382` 之上，SHA 换了——分支 `mcp3-rfc19` 的 `e130fd22`、`afc162e5`、`716d3d5e`、`eca14e52`、`8dce3223`、`c1e9a957`、`92338ab7`、`4a9a7e5d`、`d5b60bec`、`197eac4a`、`1e9e3b00` 在 main 上依次是 `62fd7468`、`1090d8b1`、`8c44245f`、`1eba8072`、`31795856`、`90ed021c`、`9fe10310`、`22befa3b`、`c477d280`、`00b17d31`、`23dc9146`。分支上两笔清点 `344e6b2d`、`a675abb7` 不随：它们数的是 `1e02d2ea` 加本票，main 其间已有 `7b11f0a0`；清点在 `23dc9146` 上重生成为 `bbb838dc`。main 自 `1e02d2ea` 以来动过的文件与本票只在清点上重叠，没有 `.go`、`.sql` 重叠；重放出的本票各文件（清点除外）对分支 tip 逐字相同。验证在 `bbb838dc`（detached 隔离树 `idp-parcel-replay-rfc19-mcp1`）：清点在该 tip 重生成零差；toolchain（go1.26.8）`gofmt -l` 对本票改过的 29 个 `.go` 为空、无 CR；`go build ./...`、`go vet ./...` 退 0；带 DSN `go test -p 1 -count=1 ./...` 138 ok / 0 FAIL / 14 无测试 / 0 cached（15:00→15:03）；`-v` 探针 `TestSettlementAccountRegistrationHandsOffItsEnvelopeInTheSameTransaction` PASS，非 SKIP。评审：通道 4 `task-f3cf7015`（钉 `c1e9a957`）Standards 阻断 1 由评审回修收；增量 `c1e9a957..1e9e3b00` 由通道 4 `task-40247234` 复评无阻断，见 Comments。推送后拆隔离树 `idp-parcel-mcp3-rfc19`，分支指针改名 `merged/mcp3-rfc19`。本记录纯 `.md`，推送方自审。
