@@ -1,7 +1,7 @@
 # 28 票 25 评审尾巴：估价停格分清溢出与负数、申报单位与正式评价同口径、留痕时点跨重驱的前提
 
 Category: enhancement
-Status: 完工，待评审与重放——2026-10-13 19:4x 通道 3（派单 `task-5b451348` ← 通道 1）：做什么三条落在 `mcp3-psb28`，代码 tip `d819231f`；没有增删文件，机制清点在 `d819231f` 上重生成零差，无清点笔。见文末「完成记录」。不自评、不推 main，非作者评审与重放归通道 1。此前 in-progress——2026-10-13 19:31 通道 3 认领（派单 `task-5b451348` ← 通道 1），分支 `mcp3-psb28`，基 `d4a3779c`（= origin/main），隔离 worktree `idp-parcel-mcp3-psb28`。此前 ready-for-agent——2026-10-13 19:3x 通道 1 立（用户 19:2x 经队列点头「按你的建议开始吧」），出自[票 25](./25-pre-acceptance-estimate-formed-by-settlement.md)两段非作者评审的非阻断：第二段 Standards 2、3 与 Spec 1（`task-386c6296`），其中 Standards 2、3 即第一段 Standards ②、①（`task-c7cfb347`），原文摘在票 25 的 Comments。
+Status: resolved——2026-10-13 20:0x 通道 1：本票五笔纯快进进 main（至 `83d410bb`，SHA 与分支 `mcp3-psb28` 相同），进 main 记录与非作者评审见文末。此前完工，待评审与重放——2026-10-13 19:4x 通道 3（派单 `task-5b451348` ← 通道 1）：做什么三条落在 `mcp3-psb28`，代码 tip `d819231f`；没有增删文件，机制清点在 `d819231f` 上重生成零差，无清点笔。见文末「完成记录」。不自评、不推 main，非作者评审与重放归通道 1。此前 in-progress——2026-10-13 19:31 通道 3 认领（派单 `task-5b451348` ← 通道 1），分支 `mcp3-psb28`，基 `d4a3779c`（= origin/main），隔离 worktree `idp-parcel-mcp3-psb28`。此前 ready-for-agent——2026-10-13 19:3x 通道 1 立（用户 19:2x 经队列点头「按你的建议开始吧」），出自[票 25](./25-pre-acceptance-estimate-formed-by-settlement.md)两段非作者评审的非阻断：第二段 Standards 2、3 与 Spec 1（`task-386c6296`），其中 Standards 2、3 即第一段 Standards ②、①（`task-c7cfb347`），原文摘在票 25 的 Comments。
 Blocked by: 无
 地盘：`internal/settlementaccounting/domain`（`FormPerParcelSellTrialSum` 与停格）、`internal/settlementaccounting/application`（`NotFormedReason` 与停格到原因的映射）、`internal/parcelshipment/adapters/settlementaccounting/pre_acceptance_control.go`（只动 `notFormedOutcomeFor` 跟新原因）、`internal/parcelpricing/adapters/parcelshipment`（`measurementOf`）、必要时 `internal/parcelpricing/adapters/transportfulfillment/pricing_input.go` 的 `weightUnit` / `lengthUnit`、`internal/settlementaccounting/adapters/postgres` 估价留痕册的用例与头注、`cmd/parcel-dispatch` 的纵向用例；各处用例随改。不碰 PS 领域、PS 提交版本申报读口与 PS 编排（[票 27](./27-pre-acceptance-control-reads-only-the-current-submission-version.md)的地盘）。
 出处：[ADR-0179](../../../docs/adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 决定二（停法）、决定三（与正式 SELL 评价同口径）、决定六（留痕）；票 25 判断项 8、9。
@@ -70,3 +70,15 @@ Blocked by: 无
 - `-v` 单跑：`TestARedriveUnderTheSubmissionReceiptAsOfIsAReplayWhileAMovingAsOfConflicts`、`TestAPreAcceptanceEstimateTraceIsWrittenOnceAndReproducible` 为 `PASS`，无 `SKIP`。
 - 机制清点在 `d819231f` 上重跑生成器（`tools/mechanism-inventory`），`git status` 为空：三笔没有增删文件。
 - 变异：见完成判据各条。
+
+## Comments
+
+**评审 ← 通道 1（推送方，非作者）· 钉 `83d410bb` · 基线 `d4a3779c` · 20:0x。** Standards 阻断 0 / 非阻断 1；Spec 阻断 0 / 非阻断 0。由推送方评，是因为原定评审方通道 2 于 19:5x 崩溃（评审卡 `task-e19fda66` 作废），通道 3 是作者，没有别的空闲非作者通道（[parallel-sessions.md](../../../docs/agents/parallel-sessions.md)「合入前独立评审」）。读了 `d4a3779c..83d410bb` 的全部代码差异与本票完成记录；没读 SA、PP 的 `CONTEXT` 全文，越权风险点只判与 ADR-0179 决定二的字面有无冲突。
+
+- Standards 非阻断：「判断时点跨重驱不动」这个前提跨了上下文，只写在 SA 一侧。端口 `PreAcceptanceEstimateTraces` 的头注点名 PS `SubmissionReceiptAsOf`，PS 由 `TestSubmissionReceiptAsOfUsesTheRecordedReceiveTime` 钉住今天的行为；但 PS 的 `AsOfValueSource` 若新增一种会随重驱移动的时点语义，改的人读不到 SA 这句约束，也没有任何东西会变红。可在 PS `AsOfValueSource` 头注补一句指回 SA 端口，或另立票。
+- Standards 无发现：红线（无写死的租户取值，夹具用 `SYN-`，证据 `S`）；注释中文、跨文件只引符号名；新停格与新原因都追加在常量块末尾，既有取值不重编号；PS `notFormedOutcomeFor` 只在既有那一格的取值列表里加两项，`default` 照旧报错（ADR-0025）；判断项 1 的越权风险点与决定二字面不冲突（决定二列的是必停格，没说别处不许停），停不停归 SA owner；`apps/`、`docs/` 里没有要跟着改的原因码清单（`83d410bb` 上 `git grep` 零命中）。
+- Spec 无发现：第 1 条三处同笔（`8704376e`），三层各有用例，PS 落`未形成`；第 2 条选不折叠，正式评价的生产代码未动，两路各一条用例钉住小写 `kg` 答表外；演示种子与价卡写的都是大写 `KG` / `CM`，PS 接入不折大小写（`83d410bb` 上 `git grep`），这一改不伤演示动线；第 3 条用例与头注齐，落 SA 适配器层的理由（判断项 5）成立；「不做」三条未越，`git diff --stat d4a3779c 83d410bb` 列出的文件全在地盘内。
+
+## 进 main 记录（2026-10-13 通道 1）
+
+远端 main `d4a3779c` 就是本分支的基，本票五笔纯快进进 main，SHA 与分支 `mcp3-psb28` 相同：`93b5287b`、`8704376e`、`d5d0d1bb`、`d819231f`、`83d410bb`；本记录随后一笔。验证在 `83d410bb`（detached 隔离树 `idp-parcel-mcp1-land-psb28`，20:00–20:03）：自 `d4a3779c` 起改过的 `.go` 按入库字节 gofmt 空、无 CR；`go build ./...`、`go vet ./...` 退 0；清点在该 tip 重生成零差；分片核对通过；带 DSN `go test -p 1 -count=1 ./...` 139 ok / 0 FAIL / 14 无测试 / 0 cached；`-v` 探针 `TestARedriveUnderTheSubmissionReceiptAsOfIsAReplayWhileAMovingAsOfConflicts`、`TestAPreAcceptanceEstimateTraceIsWrittenOnceAndReproducible` 为 PASS，非 SKIP。评审：通道 1 推送方自评两轴无阻断，见 Comments。推送后拆隔离树 `idp-parcel-mcp3-psb28` 与验证树，分支指针改名 `merged/mcp3-psb28`。本记录纯 `.md`，推送方自审。
