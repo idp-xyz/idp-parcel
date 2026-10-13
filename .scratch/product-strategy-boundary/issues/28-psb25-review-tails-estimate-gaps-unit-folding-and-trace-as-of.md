@@ -1,7 +1,7 @@
 # 28 票 25 评审尾巴：估价停格分清溢出与负数、申报单位与正式评价同口径、留痕时点跨重驱的前提
 
 Category: enhancement
-Status: ready-for-agent——2026-10-13 19:3x 通道 1 立（用户 19:2x 经队列点头「按你的建议开始吧」），出自[票 25](./25-pre-acceptance-estimate-formed-by-settlement.md)两段非作者评审的非阻断：第二段 Standards 2、3 与 Spec 1（`task-386c6296`），其中 Standards 2、3 即第一段 Standards ②、①（`task-c7cfb347`），原文摘在票 25 的 Comments。
+Status: in-progress——2026-10-13 19:31 通道 3 认领（派单 `task-5b451348` ← 通道 1），分支 `mcp3-psb28`，基 `d4a3779c`（= origin/main），隔离 worktree `idp-parcel-mcp3-psb28`。此前 ready-for-agent——2026-10-13 19:3x 通道 1 立（用户 19:2x 经队列点头「按你的建议开始吧」），出自[票 25](./25-pre-acceptance-estimate-formed-by-settlement.md)两段非作者评审的非阻断：第二段 Standards 2、3 与 Spec 1（`task-386c6296`），其中 Standards 2、3 即第一段 Standards ②、①（`task-c7cfb347`），原文摘在票 25 的 Comments。
 Blocked by: 无
 地盘：`internal/settlementaccounting/domain`（`FormPerParcelSellTrialSum` 与停格）、`internal/settlementaccounting/application`（`NotFormedReason` 与停格到原因的映射）、`internal/parcelshipment/adapters/settlementaccounting/pre_acceptance_control.go`（只动 `notFormedOutcomeFor` 跟新原因）、`internal/parcelpricing/adapters/parcelshipment`（`measurementOf`）、必要时 `internal/parcelpricing/adapters/transportfulfillment/pricing_input.go` 的 `weightUnit` / `lengthUnit`、`internal/settlementaccounting/adapters/postgres` 估价留痕册的用例与头注、`cmd/parcel-dispatch` 的纵向用例；各处用例随改。不碰 PS 领域、PS 提交版本申报读口与 PS 编排（[票 27](./27-pre-acceptance-control-reads-only-the-current-submission-version.md)的地盘）。
 出处：[ADR-0179](../../../docs/adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md) 决定二（停法）、决定三（与正式 SELL 评价同口径）、决定六（留痕）；票 25 判断项 8、9。
