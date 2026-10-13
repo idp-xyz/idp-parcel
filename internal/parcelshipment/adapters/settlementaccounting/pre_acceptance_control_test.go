@@ -3,6 +3,7 @@ package settlementaccounting_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -620,7 +621,7 @@ func TestATermsControlTranslatesToCreditExposedNotHeld(t *testing.T) {
 
 // Covers: 实例半边纪律——作用域与金额没形成时停下且不问提供方：作用域该来自结算政策（ADR-0044）、
 // 金额该来自估价，代拟任何一个都是拿别人的钱做实验。这几格登记都推不动（票 routing-first-cut/19）：
-// 作用域源或它的两半没接上是装配缺口，解析没采用结算政策要改解析键，金额未配置随 psb/25 才有登记口，
+// 作用域源或它的解析口、账户目录没接上是装配缺口，解析没采用结算政策要改解析键，金额未配置随 psb/25 才有登记口，
 // 都留在`未形成`。账户没登记那一格推得动，另见下一条用例。
 func TestUnconfiguredSourcesStopAtNotFormedWithoutAskingTheProvider(t *testing.T) {
 	cases := map[string]struct {
@@ -1009,4 +1010,70 @@ func TestAReleaseByTheRecordedResultIdentityFreesTheOriginalFreeze(t *testing.T)
 			t.Fatal("账本读不回却答成功，补偿会按一笔其实还占着的资金收口")
 		}
 	})
+}
+
+// Covers: 释放那一径作用域没形成时按缺口报码、交可重试错误，不去账本上认领（票 routing-first-cut/19 增量复评 Spec ②、
+// Standards ③）：装配缺口报 CONTROL_SCOPE_NOT_ASSEMBLED，与账户没登记的 CONTROL_SCOPE_NOT_CONFIGURED 是两个码——只接释放
+// 半边、留空作用域源的装配走得到的正是前者，借后者就是一个码落进两格。
+func TestAReleaseWithoutAFormedScopeNamesItsGapAndClaimsNothing(t *testing.T) {
+	cases := map[string]struct {
+		arrange func(*controlFixture) *adapter.PreAcceptanceControlAdapter
+		want    string
+	}{
+		"no scope source": {
+			arrange: func(fixture *controlFixture) *adapter.PreAcceptanceControlAdapter {
+				return adapter.NewPreAcceptanceControlAdapter(adapter.PreAcceptanceControlAdapterDeps{
+					Release: saapplication.NewReleasePreAcceptanceControlHandler(fixture.ledger,
+						&exposureLedgerDouble{ledger: sadomain.NewCreditExposureLedger()}, fixedClock{at: controlledAt.Add(time.Hour)}),
+				})
+			},
+			want: "CONTROL_SCOPE_NOT_ASSEMBLED",
+		},
+		"scope source halves not assembled": {
+			arrange: func(fixture *controlFixture) *adapter.PreAcceptanceControlAdapter {
+				fixture.scopes.gap = adapter.ControlScopeNotAssembled
+				return fixture.adapter
+			},
+			want: "CONTROL_SCOPE_NOT_ASSEMBLED",
+		},
+		"account not registered": {
+			arrange: func(fixture *controlFixture) *adapter.PreAcceptanceControlAdapter {
+				fixture.scopes.gap = adapter.ControlScopeAccountNotRegistered
+				return fixture.adapter
+			},
+			want: "CONTROL_SCOPE_NOT_CONFIGURED",
+		},
+		"resolution adopted no settlement policy": {
+			arrange: func(fixture *controlFixture) *adapter.PreAcceptanceControlAdapter {
+				fixture.scopes.gap = adapter.ControlScopeSettlementPolicyNotAdopted
+				return fixture.adapter
+			},
+			want: "CONTROL_SCOPE_SETTLEMENT_POLICY_NOT_ADOPTED",
+		},
+	}
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			fixture := newControlFixture(t)
+			assessment, err := fixture.adapter.ApplyPreAcceptanceFinancialControl(context.Background(), fixture.request(t))
+			if err != nil {
+				t.Fatalf("apply: %v", err)
+			}
+			request := fixture.request(t)
+			release := psports.ControlReleaseRequest{
+				Identity:          request.Identity,
+				ShipmentRequestID: request.ShipmentRequestID,
+				SubmissionVersion: request.SubmissionVersion,
+				ControlResultID:   assessment.Result.ResultID(),
+			}
+
+			err = testCase.arrange(fixture).ReleasePreAcceptanceControl(context.Background(), release)
+			if err == nil || !strings.Contains(err.Error(), testCase.want) || errors.Is(err, adapter.ErrUntranslatableAnswer) {
+				t.Fatalf("err = %v, 想要报 %s 的可重试错误", err, testCase.want)
+			}
+			freeze, found := fixture.ledger.ledger.FindByRequest(value(t, sadomain.NewControlRequestID, "request-1/version-1"))
+			if !found || freeze.Status() != sadomain.FreezeHeld {
+				t.Fatalf("freeze = %#v found = %v, 想要作用域没形成时原冻结原样占着", freeze, found)
+			}
+		})
+	}
 }

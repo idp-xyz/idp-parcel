@@ -222,8 +222,8 @@ func TestARegisteredCustomerServiceRuleBasisFormsAKeyRequiringIt(t *testing.T) {
 // 成立，合同维留空等闭包解出的合同来填。
 //
 // 这是接受前控制链上游那一段：没有它，闭包里就没有已采用结算政策，PS 的商业依据快照缺
-// `SettlementTerms`，编排一律停在 `CONTROL_SCOPE_NOT_CONFIGURED`——与「账户映射未配置」同码
-// 不同因。
+// `SettlementTerms`，作用域那一步停在 `CONTROL_SCOPE_SETTLEMENT_POLICY_NOT_ADOPTED`——与账户没登记
+// 的 `CONTROL_SCOPE_NOT_CONFIGURED` 分码，因为两者的恢复动作不同。
 func TestARegisteredSettlementBasisFormsAThreeDimensionSelector(t *testing.T) {
 	keys, transactor := newResolutionKeys(t)
 	mustRegisterKey(t, transactor, keys,

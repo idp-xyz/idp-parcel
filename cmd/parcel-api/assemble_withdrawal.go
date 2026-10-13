@@ -58,7 +58,8 @@ func (withdrawal transactionalWithdrawal) Handle(
 //   - 撤回授权的请求映射（法人/权限等级/商业范围/时点，`PAR-COM-14`）nil——适配器答
 //     未形成，编排如实停在`撤回授权不可用`，不代拟坐标也不冒充`授权规则未配置`；
 //   - 释放的作用域与金额映射（账户/估价缝）nil——今天判断册上不存在`已冻结`结果，释放
-//     根本不会被发起；真有旧冻结要释放时它答未配置留补偿续办，不凭空认领别人的钱。
+//     根本不会被发起；真有旧冻结要释放时适配器报装配缺口 `CONTROL_SCOPE_NOT_ASSEMBLED`、
+//     编排留补偿续办，不凭空认领别人的钱。
 //
 // 接线前后的区别不在结果在来源：恢复动作从「写代码」变成「登记参数」（ADR-0063）。
 func buildWithdrawalOrchestration(db *bentopg.DB) (shipmenthttp.WithdrawalHandler, error) {

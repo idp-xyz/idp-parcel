@@ -23,8 +23,8 @@ var ErrUntranslatableAnswer = errors.New("parcel shipment settlementaccounting a
 //
 // 作用域那几条按恢复动作分开：CONTROL_SCOPE_NOT_CONFIGURED 只说账户映射没登（ADR-0158 决定三钉的
 // 就是这个码），登一行结算账户就推得动，而那次登记会发信封来重驱；解析没采用结算政策要改的是解析
-// 键，没有登记动作推得动它，另报一个码、留在`未形成`；作用域源或它的两半没接上是装配缺口，要改的是
-// 装配，同样留在`未形成`，也另报一个码——借账户那个码会让同一个码落进两格。
+// 键，没有登记动作推得动它，另报一个码、留在`未形成`；作用域源没接、或它的解析口与账户目录任一没接是
+// 装配缺口，要改的是装配，同样留在`未形成`，也另报一个码——借账户那个码会让同一个码落进两格。
 const (
 	reasonScopeNotConfigured              = "CONTROL_SCOPE_NOT_CONFIGURED"
 	reasonScopeSettlementPolicyNotAdopted = "CONTROL_SCOPE_SETTLEMENT_POLICY_NOT_ADOPTED"
@@ -69,7 +69,7 @@ const (
 	ControlScopeAccountNotRegistered
 	// ControlScopeSettlementPolicyNotAdopted：解析没带回已采用的结算政策，推不出法人与币种。
 	ControlScopeSettlementPolicyNotAdopted
-	// ControlScopeNotAssembled：作用域源的解析口或账户目录没接上。生产装配两半都接，落到这里是装配缺口。
+	// ControlScopeNotAssembled：作用域源的解析口或账户目录没接上。恢复动作是补装配，登记推不动它。
 	ControlScopeNotAssembled
 )
 
@@ -96,9 +96,8 @@ type PreAcceptanceControlAdapterDeps struct {
 }
 
 // NewPreAcceptanceControlAdapter 装配两侧。Scopes 与 Amounts 允许为 nil：Scopes 为 nil 是装配缺口，
-// Amounts 为 nil 是「显式未配置」的诚实表达，施加都停在`未形成`；Scopes 为 nil 时释放报可重试错误。
-// 施加那一径的生产装配接作用域源；只接释放半边的装配（cmd/parcel-api）今天留空 Scopes，那里的释放
-// 总报装配缺口，由编排留补偿续办。
+// 施加停在`未形成`、报 CONTROL_SCOPE_NOT_ASSEMBLED，释放同码交可重试错误；Amounts 为 nil 时施加停在
+// `未形成`、报 CONTROL_AMOUNT_NOT_CONFIGURED，释放不问金额。
 func NewPreAcceptanceControlAdapter(deps PreAcceptanceControlAdapterDeps) *PreAcceptanceControlAdapter {
 	return &PreAcceptanceControlAdapter{
 		apply:   deps.Apply,

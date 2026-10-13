@@ -194,8 +194,8 @@ func (rejection transactionalRejection) Handle(
 //
 //   - 拒绝授权的请求映射（法人/权限等级/商业范围/时点，`PAR-COM-14`）nil——适配器答
 //     未形成，编排如实停在`拒绝授权不可用`，不代拟坐标也不冒充`授权规则未配置`；
-//   - 释放的作用域与金额映射（账户/估价缝）nil——真有冻结要释放时它答未配置留补偿
-//     续办，不凭空认领别人的钱。
+//   - 释放的作用域与金额映射（账户/估价缝）nil——真有冻结要释放时适配器报装配缺口
+//     `CONTROL_SCOPE_NOT_ASSEMBLED`、编排留补偿续办，不凭空认领别人的钱。
 func buildRejectionOrchestration(db *bentopg.DB) (shipmenthttp.ActiveRejectionHandler, error) {
 	requests, err := pspostgres.NewShipmentRequests(db)
 	if err != nil {
