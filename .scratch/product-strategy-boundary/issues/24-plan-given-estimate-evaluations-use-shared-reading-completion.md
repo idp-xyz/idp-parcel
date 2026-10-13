@@ -1,7 +1,7 @@
 # 24 给定价卡的试算走共用补齐读数：parcel-pricing 应用层开一个按调用方给的价卡形成试算评价的入口
 
 Category: enhancement
-Status: 完工，待评审与重放——2026-10-12 22:5x 通道 2：代码 tip `b41726b6`、清点 `7b11f0a0`（分支 `mcp2-psb24`、基 `1e02d2ea`），完成记录在文末，其中五条判断项待 owner 复核。此前 in-progress——2026-10-12 22:2x 通道 2 按通道 1 派单 `task-705a8770` 认领；隔离树 `/home/tops/workspace/idp-parcel-mcp2-psb24`，分支 `mcp2-psb24` 基远端 main `1e02d2ea`（22:21 `ls-remote` 实测，派单方取证），另起、不接任何半成品。此前 ready-for-agent——2026-10-12 通道 3 随[票 06](./06-ps-acceptance-and-label-selection-judgment-methods.md)第 2 项分诊立（派单 `task-85d7350d` ← 通道 1）。不等 [ADR-0179](../../../docs/adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md)：那篇正文与 Alternatives 里的每一种落法，都要一份对已知价卡走共用补齐读数的试算
+Status: resolved——2026-10-13 通道 1：本票七笔纯快进进 main（至 `a9eb1a75`，SHA 与分支相同），进 main 记录与非作者评审见文末。此前完工，待评审与重放——2026-10-13 12:5x 通道 2 按派单 `task-c8009875` 收评审非阻断四条（`9b6e79fd`、`2826ad94`、`a9eb1a75`）；2026-10-12 22:5x 通道 2：代码 tip `b41726b6`、清点 `7b11f0a0`（分支 `mcp2-psb24`、基 `1e02d2ea`），完成记录在文末，其中五条判断项待 owner 复核。此前 in-progress——2026-10-12 22:2x 通道 2 按通道 1 派单 `task-705a8770` 认领；隔离树 `/home/tops/workspace/idp-parcel-mcp2-psb24`，分支 `mcp2-psb24` 基远端 main `1e02d2ea`（22:21 `ls-remote` 实测，派单方取证），另起、不接任何半成品。此前 ready-for-agent——2026-10-12 通道 3 随[票 06](./06-ps-acceptance-and-label-selection-judgment-methods.md)第 2 项分诊立（派单 `task-85d7350d` ← 通道 1）。不等 [ADR-0179](../../../docs/adr/0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md)：那篇正文与 Alternatives 里的每一种落法，都要一份对已知价卡走共用补齐读数的试算
 Blocked by: 无
 地盘：`internal/parcelpricing/application`（新入口与其用例）。`readingCompletion` 与 `estimateInput` 已在本包，复用、不改行为。不碰 `internal/parcelshipment`、`internal/settlementaccounting`、`cmd/`。
 出处：票 06「第 2 项分诊」；[ADR-0152](../../../docs/adr/0152-operator-estimate-is-a-pricing-use-case-computed-not-recorded-and-never-handed-to-settlement.md) 决定二、三、五。
@@ -80,3 +80,17 @@ Blocked by: 无
 - 作者不自评：非作者评审由派单方派，重放进 main 由派单方做。
 
 给票 25 的一条取证（不是本票判据）：本包夹具上实测（钉 `b41726b6`），卡上有附加费规则时，缺尺寸的那一件落 `PENDING`·`PACKAGE_FEATURES_UNAVAILABLE`，用例里的燃油夹具因此带了尺寸。演示售价卡 `SYN-PLAN-CN-SG-01` 的重量策略取 `MAX` 且带体积系数（`scripts/demo-seeds/data/pricing/price-card-cn-sg.json`），缺尺寸时它落哪一格未测。
+
+## Comments
+
+**评审 ← 通道 4（非作者）· 钉 `6b6a0cc6` · 基线 `1e02d2ea` · 12:08。** Spec 阻断 0 / 非阻断 2；Standards 阻断 0 / 非阻断 3。全文在任务 `task-8bd4e155` 的 report_task。
+
+- 无发现：四条判据都有用例且有判别力——变异去掉补齐读数红五个顶层用例，去重名检查、证据层级写死 `S`、标识去掉引用、零件受理各红；「不做」三条未越；判断项 1–5 与 ADR-0152 决定二、三、五及 PP `CONTEXT`「评价对象」无相抵。判断项 3 的后果是同一声明分别以 `S` 与 `P` 调用得同一标识、同一摘要，票 25 不要按标识去重。
+- 本票收了四条（通道 2，派单 `task-c8009875`）：Spec ① 判断项 4 后半没有用例、变异 M3（未决分支带上已形成的几件）存活，`9b6e79fd` 补 `TestPlanGivenEstimateIsUndecidedAsAWholeWhenALaterDeclarationCannotRead`，M3 转红；Spec ② 完成记录依赖那格说多了，`a9eb1a75` 写窄；Standards ② `Handle` 头注缺「若」、Standards ③ 本票用例头注按票面位置指认判据且 UC-PP-001 引文与原文不符，`2826ad94` 改。
+- 不收、待立票：Standards ① `reading_completion.go` 包头注称「只读：这几口全是解析与读取，没有写口」，而补齐读数的读口型 `ports.ReferenceSeriesRegister`、`ports.ReferenceCatalogueRegister` 带 `Register`；同包 `ApplicablePriceCards` 已为挡登记写口收窄成单方法，本票新 `Deps` 与正式评价、运营试算同形，都没收窄。先于本票，宜另立票收窄。Standards ③ 那种按位置指认判据的写法别的文件里还有，也不在本票收。
+
+**增量复评 ← 通道 1（非作者）· `6b6a0cc6..a9eb1a75` · 13:0x。** 阻断 0 / 非阻断 0。替身 `inForceUnreachableAfterFirst` 头一问照答、此后读不回，新用例另核在用解析问了两次，场景确实成立；四处判据引文与判断项 4 的引文对票面逐字相同，UC-PP-001 那句与其原文相同；`Handle` 头注只加了「若」。
+
+## 进 main 记录（2026-10-13 通道 1）
+
+远端 main `1e02d2ea` 就是本分支的基，本票七笔纯快进进 main，SHA 与分支 `mcp2-psb24` 相同：`164005d7`、`b41726b6`、`7b11f0a0`、`6b6a0cc6`、`9b6e79fd`、`2826ad94`、`a9eb1a75`；本记录随后一笔。推送后拆隔离树 `idp-parcel-mcp2-psb24`，分支指针改名 `merged/mcp2-psb24`。验证在 `a9eb1a75`（detached 隔离树 `idp-parcel-verify-psb24`）：清点在该 tip 重生成零差；`go build ./...`、`go vet ./...` 退 0；带 DSN `go test -p 1 -count=1 ./...` 138 ok / 0 FAIL / 14 无测试 / 0 cached（13:00→13:03）；`-v` 探针 `TestTheOperatorReadChannelEstimatesForTheEnvelopeTenantAgainstARealDatabase` PASS，非 SKIP。评审：通道 4 `task-8bd4e155`（钉 `6b6a0cc6`）两轴无阻断；增量 `6b6a0cc6..a9eb1a75` 由通道 1 复评无阻断，见 Comments。本记录纯 `.md`，推送方自审。
