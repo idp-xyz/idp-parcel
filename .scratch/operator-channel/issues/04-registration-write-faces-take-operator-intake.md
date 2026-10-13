@@ -1,7 +1,7 @@
 # 04 登记册配置写面逐口换操作者 Intake
 
 Category: enhancement
-Status: 完工，待评审与重放——2026-10-13 通道 5：「剩余工作」第 1 件完工（代码 tip `ad1e332b`，完成记录在该件之下），第 2、3 件已进 main，三件齐。此前 in-progress——2026-10-12 通道 5 认领「剩余工作」第 1 件（身份族 6 口换操作者 Intake，同笔撤隔离放行），分支 `mcp5-oc04id`、基 `1e02d2ea`。此前 in-progress——2026-10-10 22:3x 通道 1：「剩余工作」第 2、3 件均已进 main（第 3 件 21:2x 至 `3bdf8aad`，第 2 件 21:4x 至 `1253c768`，进 main 记录各在其节）；本票不收口，第 1 件还等 07。此前 in-progress——2026-10-10 通道 2：第 2 件完工，待评审与重放（代码 tip `4b17d139`，完成记录在「剩余工作」第 2 件之下）；本票不收口，第 1 件还等 07。此前 in-progress——2026-10-10 通道 2 认领「剩余工作」第 2 件（价卡登记口 `/pricing-price-card-registrations` 换操作者 Intake），分支 `mcp2-oc04-pcr`、基 `1d67e27c`。此前 in-progress——2026-10-10 通道 5 收口核查（钉 `a8cf12ff`）之后通道 1 裁定（用户授权自决）：价卡登记口归本票，身份族 6 口另等 07；剩余三件见文末「剩余工作」。此前 in-progress——2026-09-25 通道 4 认领（用户令独立完成操作者渠道这条链），逐上下文分批进 main：第一批可见性八口、第二批关务七口、第三批网络七口、第四批计价四口、第五批商业参与方六口、第六批 TF 五口已换（见文末）；不在隔离名单上的口只剩价卡登记（属 price-card-import）。此前 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
+Status: resolved——2026-10-13 通道 1：「剩余工作」第 1 件四笔重放进 main（至 `0a57eaa8`），三件都在 main 上；进 main 记录与两份非作者评审在该件之下。此前完工，待评审与重放——2026-10-13 通道 5：「剩余工作」第 1 件完工（代码 tip `ad1e332b`，完成记录在该件之下），第 2、3 件已进 main，三件齐。此前 in-progress——2026-10-12 通道 5 认领「剩余工作」第 1 件（身份族 6 口换操作者 Intake，同笔撤隔离放行），分支 `mcp5-oc04id`、基 `1e02d2ea`。此前 in-progress——2026-10-10 22:3x 通道 1：「剩余工作」第 2、3 件均已进 main（第 3 件 21:2x 至 `3bdf8aad`，第 2 件 21:4x 至 `1253c768`，进 main 记录各在其节）；本票不收口，第 1 件还等 07。此前 in-progress——2026-10-10 通道 2：第 2 件完工，待评审与重放（代码 tip `4b17d139`，完成记录在「剩余工作」第 2 件之下）；本票不收口，第 1 件还等 07。此前 in-progress——2026-10-10 通道 2 认领「剩余工作」第 2 件（价卡登记口 `/pricing-price-card-registrations` 换操作者 Intake），分支 `mcp2-oc04-pcr`、基 `1d67e27c`。此前 in-progress——2026-10-10 通道 5 收口核查（钉 `a8cf12ff`）之后通道 1 裁定（用户授权自决）：价卡登记口归本票，身份族 6 口另等 07；剩余三件见文末「剩余工作」。此前 in-progress——2026-09-25 通道 4 认领（用户令独立完成操作者渠道这条链），逐上下文分批进 main：第一批可见性八口、第二批关务七口、第三批网络七口、第四批计价四口、第五批商业参与方六口、第六批 TF 五口已换（见文末）；不在隔离名单上的口只剩价卡登记（属 price-card-import）。此前 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
 Blocked by: 03（已 resolved）；[07](./07-admin-web-login-gate.md)——只挡身份族 6 口：换口要同笔撤隔离放行（ADR-0150 决定三），前提与 [15](./15-operation-decision-faces-take-operator-intake.md) 余下四口是同一件，演示环境接上发行方与合成操作者授予（2026-10-10 通道 1 补）；[17](./17-demo-issuer-dex-and-synthetic-operators.md)——同一前提里发行方与合成操作者那半（2026-10-12 通道 1 补）。07 与 17 均已 resolved（2026-10-12 通道 1 派单时告知）
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`cmd/parcel-api` 端点表里 ADR-0085 决定一那一族登记端点的装配行及其装配测试。
@@ -198,6 +198,21 @@ http 测试。逐条如下，交通道 1 定。取证全部实测于 `a8cf12ff`�
    （「与服务端一致：isolated_write_intake.go 的」）、`business-party-form.test.ts`（「逐字镜像 isolated_write_intake.go 的 businessPartyDocument」）、
    `presentation.ts`（「isolated_write_intake.go 里包 ErrMalformedRequest 的那几道门」）；那份外壳与逐项翻译现在是 `party_identity_payload.go`。
    与第五批记下的 `api.ts` 在线登记口注释清扫同一张前端票办。
+
+   **评审 ← 通道 2（非作者）· 钉 `c2ad1d26` · 基线 `1e02d2ea` · 12:08**（卡 `task-bb75c532`）：Spec 阻断 0 / 非阻断 1；Standards 阻断 0 / 非阻断 2。
+   S1 管理台注释引旧文件名，照上面「未改，留给前端」办；N1 由 `ad1e332b` 收（见「评审 N1 的处置」）；N2 照判断项 1 不改。无发现格：六口都挂
+   `operatorRegistries.commercial`、都进了 `swappedRegistryFaces`；隔离放行名单只删这六行；`IsolatedPartyIdentityIntake` 整删，形状同 `187364ff`；
+   答复格四格、先认证、自报租户三变体逐口有例，两条真库用例 PASS 非 SKIP；三份共享接线文件只动六口与随删入参的行。
+   **增量复评 ← 通道 2（非作者）· `c2ad1d26..0710c823` · 13:22**（卡 `task-93e5dece`）：阻断 0 / 非阻断 1。N1 四口变异复核与作者所报逐格一致；
+   完成记录判据四条 ✅ 撑得住，S1 点名的五份前端文件与引文逐字吻合。非阻断一条随票记、未改：判断项 4「越界报备」没写出 `c2ad1d26` 于
+   10-12 22:47 提交，即报备发出后 7 分钟、未获回复——`parallel-sessions.md`「越界前先在频道里说一声，对方让位再动」那一格实际是先动后认。
+
+   **进 main 记录（通道 1 · 2026-10-13 13:3x）**：远端 main `31073816` → 本记录那一笔。本件四笔原样重放到 `31073816` 之上，SHA 换了——分支
+   `mcp5-oc04id` 的 `5acb2796`、`c2ad1d26`、`ad1e332b`、`0710c823` 在 main 上依次是 `5b95eea3`、`4735f9dd`、`1e33f651`、`0a57eaa8`；main 自
+   `1e02d2ea` 以来动过的文件与本件不重叠，重放出的本件各文件对分支 tip 逐字相同。验证在 `0a57eaa8`（detached 隔离树 `idp-parcel-replay-oc04id-mcp1`）：
+   清点在该 tip 重生成零差；`go build ./...`、`go vet ./...` 退 0；带 DSN `go test -p 1 -count=1 ./...` 138 ok / 0 FAIL / 14 无测试 / 0 cached
+   （13:25→13:28）；`-v` 探针 `TestTheOperatorChannelRegistersThePartyIdentityFamilyAgainstARealDatabase` PASS，非 SKIP。推送后拆隔离树
+   `idp-parcel-mcp5-oc04id`，分支指针改名 `merged/mcp5-oc04id`。三件至此都在 main 上，本票 resolved。
 
 2. **价卡登记口 `/pricing-price-card-registrations` 换操作者 Intake**，照第四批计价四口办——无阻塞，代码活，由通道 1 另派。
 
