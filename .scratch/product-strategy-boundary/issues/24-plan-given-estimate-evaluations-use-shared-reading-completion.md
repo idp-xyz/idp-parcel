@@ -51,7 +51,7 @@ Blocked by: 无
 - ✅ 序列没登记或没复核时 `PENDING`，解释里带补齐说明，说明与正式评价同一份：`TestPlanGivenEstimateLeavesAnUnresolvedFuelSeriesPendingWithTheFormalEvaluationsNote` 两格（`SeriesHasNoRegisteredVersion`、`SeriesHasNoApprovedVersion`），问题码 `REFERENCE_SERIES_UNRESOLVED`。同一组替身、同一时钟下，`EvaluatePricingHandler` 交回的 `SeriesResolutionNotes()` 那一条逐字出现在试算评价的 `Explanation()` 里。
 - ✅ 绑分区目录的卡，给邮编路线时分区由目录解析，只给分区时逐件答缺项：`TestPlanGivenEstimateOnAZoneBoundCardAnswersEachDeclarationByItsOwnRoute`。同一次调用两件：给路线的那件 `COMPLETED`，目录按声明的路线解了一次；只给分区的那件 `INPUT_INCOMPLETE`、`Missing` 为 `POSTAL_ROUTE`，没问登记册。反向用例 `TestPlanGivenEstimateOnAnUnboundCardNamesAMissingZone`：没绑目录的卡缺分区，点名 `ZONE`。
 - ✅ 同一声明同一张卡调两次，得同一评价标识与同一结果：`TestPlanGivenEstimateIdentityIsDeterministicInTheDeclarationAndTheCard`。两次的标识与语义摘要相同；评价对象是 `SubjectEstimate`，引用就是调用方给的那个；换引用、换实重、换一张卡，标识各不相同。
-- ✅ 依赖里没有写口与交付口：`FormPlanGivenEstimateEvaluationsDeps` 只有时钟与补齐读数两对，构造函数只收这份依赖。`TestPlanGivenEstimateDependenciesCarryNoEvaluationStoreOrHandoff` 反射逐字段核：没有 `ports.EvaluationStore`、`ports.EvaluationHandoff`，也没有带它们方法集的接口。
+- ✅ 依赖里没有评价库写口与 `EvaluationHandoff`：`FormPlanGivenEstimateEvaluationsDeps` 只有时钟与补齐读数两对，构造函数只收这份依赖。`TestPlanGivenEstimateDependenciesCarryNoEvaluationStoreOrHandoff` 反射逐字段核：没有 `ports.EvaluationStore`、`ports.EvaluationHandoff`，也没有带它们方法集的接口。判据原句「依赖里没有写口与交付口」只在照「做什么」把写口读作评价库写口时成立：补齐读数那两对里，`SeriesVersions`、`Catalogues` 的接口型（`ports.ReferenceSeriesRegister`、`ports.ReferenceCatalogueRegister`）带 `Register`。
 - ✅ `go build ./...`、`go vet ./...` 退 0；本包用例绿；新写的 `.go` 过了 `gofmt -w`。见下「验证」。
 
 「做什么」里判据没单列的几格：
