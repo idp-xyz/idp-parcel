@@ -139,9 +139,9 @@ var declaredPartitionSubjects = map[string]string{
 
 	// —— party-commercial ——
 	// 「参数已登记」（ADR-0094 决定四的续办触发）按租户排队：消费门对该租户的重驱一轮接一轮，
-	// 不同租户互不阻塞；ID 带承载版本维管幂等，与分区键不同源。主体名只到租户，仓内其余口没有
-	// 同名主体，跨上下文那道裁段不适用。
-	"internal/partycommercial/adapters/postgres/operator_registration_completed_handoff.go": partitionSubjectPrefix + "租户（运营登记续办）",
+	// 不同租户互不阻塞；ID 带承载版本维管幂等，与分区键不同源。settlement-accounting 的「结算账户已登记」
+	// 取同一个主体、同一个字符串（票 routing-first-cut/19），两行因此都带裁段。
+	"internal/partycommercial/adapters/postgres/operator_registration_completed_handoff.go": partitionSubjectPrefix + "租户（运营登记续办）" + partitionRulingMark + "待裁——与 settlement-accounting 结算账户已登记口同队是有意的：两口的信封驱 PS 同一张等待运营登记队列，同一租户的重驱一轮接一轮、不并发去推同一份委托（票 routing-first-cut/19），无裁定记录",
 
 	// —— pilot-governance ——
 	// 治理两形的键今天都不带租户段，如实转录；要不要补租户维归 PG 地盘，不在本表定。
@@ -157,6 +157,9 @@ var declaredPartitionSubjects = map[string]string{
 	"internal/settlementaccounting/adapters/postgres/settlement_application_handoff.go": partitionSubjectPrefix + "租户/核销申请（/application/ 段）",
 	"internal/settlementaccounting/adapters/postgres/statement_handoff.go":              partitionSubjectPrefix + "租户/对账单（发布与作废同区，/statement/ 段）",
 	"internal/settlementaccounting/adapters/postgres/supplier_bill_handoff.go":          partitionSubjectPrefix + "租户/账单主张（/bill/ 段）",
+	// 「结算账户已登记」与 party-commercial「参数已登记」同主体同字符串（票 routing-first-cut/19），同队的理由写在
+	// operator_registration_completed_handoff.go 那一行的裁段里。
+	"internal/settlementaccounting/adapters/postgres/settlement_account_registered_handoff.go": partitionSubjectPrefix + "租户（运营登记续办）" + partitionRulingMark + "待裁——与 party-commercial 参数已登记口同队有意（理由在 operator_registration_completed_handoff.go 那一行），无裁定记录",
 
 	// —— transport-fulfillment ——
 	"internal/transportfulfillment/adapters/postgres/capacity_consumption_handoff.go":            partitionPerEnvelopePrefix + "键即信封 ID（各消耗事实互不相干）",

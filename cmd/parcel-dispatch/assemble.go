@@ -647,6 +647,11 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: operator registration resume undecided translation: %w", err)
 	}
+	// 结算账户那一份登记续办门同一份哨兵：同一段重驱代码、同一条链（票 routing-first-cut/19）。
+	routedSettlementAccount, err := dispatch.WithUndecidedSentinels(chainGates.settlementAccountRegistration, acceptanceChainUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: settlement account resume undecided translation: %w", err)
+	}
 	// 受控补充续办门同一份哨兵，理由同复核续办门：同一条链、同一张未决面（ADR-0106 Decision 三）。
 	routedSupplement, err := dispatch.WithUndecidedSentinels(chainGates.submissionVersionFormed, acceptanceChainUndecidedSentinels...)
 	if err != nil {
@@ -918,6 +923,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 			psinbox.ShipmentRequestSubmittedEventType:              routedChain,
 			psinbox.ManualReviewCompletedEventType:                 routedResume,
 			psinbox.OperatorRegistrationCompletedEventType:         routedRegistration,
+			psinbox.SettlementAccountRegisteredEventType:           routedSettlementAccount,
 			psinbox.SubmissionVersionFormedEventType:               routedSupplement,
 			nrinbox.AcceptedDecisionEventType:                      acceptanceFan,
 			nrinbox.AdoptedNetworkIntakeEventType:                  routedIntakes,
@@ -990,10 +996,11 @@ func logDeliveryFailure(logger *slog.Logger) dispatch.DeliveryFailureObserver {
 // 重驱）。三扇门各占各的 inbox 名与事件类型，但依赖图必须同一份，所以由同一个装配函数
 // 一次建成。
 type acceptanceChainGates struct {
-	submitted               dispatch.Consumer
-	reviewCompleted         dispatch.Consumer
-	operatorRegistration    dispatch.Consumer
-	submissionVersionFormed dispatch.Consumer
+	submitted                     dispatch.Consumer
+	reviewCompleted               dispatch.Consumer
+	operatorRegistration          dispatch.Consumer
+	settlementAccountRegistration dispatch.Consumer
+	submissionVersionFormed       dispatch.Consumer
 }
 
 // operatorRegistrationRedrivePageSize 是登记续办门每次向`等待运营登记`队列要多少行。它不是
@@ -1124,6 +1131,13 @@ func acceptanceChainConsumers(
 	if err != nil {
 		return none, fmt.Errorf("parcel-dispatch: operator registration resume consumer: %w", err)
 	}
+	// 「结算账户已登记」那一份：发布侧是 cmd/parcel-settlement-register 结算账户登记的事务边界壳，解开的是控制
+	// 那一步停在作用域`未配置`的等待。队列读口同上。
+	settlementAccountRegistration, err := psinbox.NewSettlementAccountRegisteredConsumer(
+		db.Transactor(), inboxStore, requests, chain, operatorRegistrationRedrivePageSize)
+	if err != nil {
+		return none, fmt.Errorf("parcel-dispatch: settlement account resume consumer: %w", err)
+	}
 	// ADR-0106 Decision 三的续办门：PS「新提交版本已形成」信封 → 同一条链拿新版本的任务再驱一拍，
 	// 停在`等待受控补充`的那一版已随入账留在库里。发布侧是 cmd/parcel-api 受控补充的事务边界壳。
 	submissionVersionFormed, err := psinbox.NewSubmissionVersionFormedConsumer(db.Transactor(), inboxStore, chain)
@@ -1131,10 +1145,11 @@ func acceptanceChainConsumers(
 		return none, fmt.Errorf("parcel-dispatch: submission version formed resume consumer: %w", err)
 	}
 	return acceptanceChainGates{
-		submitted:               submitted,
-		reviewCompleted:         reviewCompleted,
-		operatorRegistration:    operatorRegistration,
-		submissionVersionFormed: submissionVersionFormed,
+		submitted:                     submitted,
+		reviewCompleted:               reviewCompleted,
+		operatorRegistration:          operatorRegistration,
+		settlementAccountRegistration: settlementAccountRegistration,
+		submissionVersionFormed:       submissionVersionFormed,
 	}, nil
 }
 

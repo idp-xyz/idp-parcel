@@ -38,8 +38,10 @@ type operatorRegistrationLoopFixture struct {
 	commercial       *synRSwitchableAsOfCommercialBasis
 	submittedGate    *psinbox.ShipmentRequestSubmittedConsumer
 	registrationGate *psinbox.OperatorRegistrationCompletedConsumer
-	submittedHandoff *pspostgres.OutboxShipmentRequestSubmittedHandoff
-	registration     *pcpostgres.OutboxOperatorRegistrationCompletedHandoff
+	// settlementAccountGate 是同一条链上收 settlement-accounting「结算账户已登记」的那一份登记续办门。
+	settlementAccountGate *psinbox.OperatorRegistrationCompletedConsumer
+	submittedHandoff      *pspostgres.OutboxShipmentRequestSubmittedHandoff
+	registration          *pcpostgres.OutboxOperatorRegistrationCompletedHandoff
 }
 
 const operatorRegistrationResumeConsumer = "parcel-shipment/advance-acceptance-chain-on-operator-registration"
@@ -99,6 +101,11 @@ func newOperatorRegistrationLoopFixtureWith(
 	if err != nil {
 		t.Fatalf("构造登记续办门：%v", err)
 	}
+	settlementAccountGate, err := psinbox.NewSettlementAccountRegisteredConsumer(
+		base.transactor, inboxStore, base.requests, chain, operatorRegistrationRedrivePageSize)
+	if err != nil {
+		t.Fatalf("构造结算账户续办门：%v", err)
+	}
 	submittedHandoff, err := pspostgres.NewOutboxShipmentRequestSubmittedHandoff(base.db, store, systemClock{})
 	if err != nil {
 		t.Fatalf("构造提交交接：%v", err)
@@ -110,13 +117,14 @@ func newOperatorRegistrationLoopFixtureWith(
 		t.Fatalf("构造登记交接：%v", err)
 	}
 	return &operatorRegistrationLoopFixture{
-		synVerticalFixture: base,
-		store:              store,
-		commercial:         commercial,
-		submittedGate:      submittedGate,
-		registrationGate:   registrationGate,
-		submittedHandoff:   submittedHandoff,
-		registration:       registration,
+		synVerticalFixture:    base,
+		store:                 store,
+		commercial:            commercial,
+		submittedGate:         submittedGate,
+		registrationGate:      registrationGate,
+		settlementAccountGate: settlementAccountGate,
+		submittedHandoff:      submittedHandoff,
+		registration:          registration,
 	}
 }
 

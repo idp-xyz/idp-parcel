@@ -6,6 +6,7 @@ import (
 	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	adapter "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/settlementaccounting"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -24,7 +25,7 @@ func (clock accountClock) Now() time.Time { return clock.at }
 func TestTheProductionDirectoryFindsOnlyTheRegisteredReceivableAccount(t *testing.T) {
 	db := openSettlementDB(t)
 	accounts := mustAccounts(t, db)
-	handler := mustAccountHandler(t, accounts)
+	handler := mustAccountHandler(t, db, accounts)
 	directory := mustDirectory(t, accounts)
 	ctx := t.Context()
 
@@ -58,7 +59,7 @@ func TestTheProductionDirectoryFindsOnlyTheRegisteredReceivableAccount(t *testin
 func TestAPayableRowDoesNotAnswerTheReceivableDirectory(t *testing.T) {
 	db := openSettlementDB(t)
 	accounts := mustAccounts(t, db)
-	handler := mustAccountHandler(t, accounts)
+	handler := mustAccountHandler(t, db, accounts)
 	directory := mustDirectory(t, accounts)
 	registerAccount(t, handler, db, "ACCT-P", sadomain.ChargePayable, "CNY", "legal-1", "counterparty-1", "settlement-policy-1", "CONTRACT-1")
 
@@ -71,7 +72,7 @@ func TestAPayableRowDoesNotAnswerTheReceivableDirectory(t *testing.T) {
 func TestAPolicyObjectRegisteredOnceAnswersBothAdoptedVersions(t *testing.T) {
 	db := openSettlementDB(t)
 	accounts := mustAccounts(t, db)
-	handler := mustAccountHandler(t, accounts)
+	handler := mustAccountHandler(t, db, accounts)
 	directory := mustDirectory(t, accounts)
 	registerAccount(t, handler, db, "ACCT-R", sadomain.ChargeReceivable, "CNY", "legal-1", "counterparty-1", "settlement-policy-1", "CONTRACT-1")
 
@@ -88,7 +89,7 @@ func TestAPolicyObjectRegisteredOnceAnswersBothAdoptedVersions(t *testing.T) {
 func TestTheDirectoryKeepsTenantLegalEntityAndCounterpartyApart(t *testing.T) {
 	db := openSettlementDB(t)
 	accounts := mustAccounts(t, db)
-	handler := mustAccountHandler(t, accounts)
+	handler := mustAccountHandler(t, db, accounts)
 	directory := mustDirectory(t, accounts)
 	registerAccount(t, handler, db, "ACCT-R", sadomain.ChargeReceivable, "CNY", "legal-1", "counterparty-1", "settlement-policy-1", "CONTRACT-1")
 
@@ -121,7 +122,7 @@ func TestTheDirectoryKeepsTenantLegalEntityAndCounterpartyApart(t *testing.T) {
 func TestRegisteringTheSameAccountReplaysAndADifferentBodyConflicts(t *testing.T) {
 	db := openSettlementDB(t)
 	accounts := mustAccounts(t, db)
-	handler := mustAccountHandler(t, accounts)
+	handler := mustAccountHandler(t, db, accounts)
 
 	registerAccount(t, handler, db, "ACCT-R", sadomain.ChargeReceivable, "CNY", "legal-1", "counterparty-1", "settlement-policy-1", "CONTRACT-1")
 	replay := registerAccountEffect(t, handler, db, "ACCT-R", sadomain.ChargeReceivable, "CNY", "legal-1", "counterparty-1", "settlement-policy-1", "CONTRACT-1")
@@ -195,11 +196,22 @@ func mustAccounts(t *testing.T, db *bentopg.DB) *sapostgres.SettlementAccounts {
 	return accounts
 }
 
-func mustAccountHandler(t *testing.T, accounts *sapostgres.SettlementAccounts) *saapplication.RegisterSettlementAccountHandler {
+func mustAccountHandler(
+	t *testing.T,
+	db *bentopg.DB,
+	accounts *sapostgres.SettlementAccounts,
+) *saapplication.RegisterSettlementAccountHandler {
 	t.Helper()
-	handler, err := saapplication.NewRegisterSettlementAccountHandler(accounts, accountClock{
-		at: time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC),
-	})
+	clock := accountClock{at: time.Date(2026, 9, 30, 12, 0, 0, 0, time.UTC)}
+	store, err := outbox.NewStore(db)
+	if err != nil {
+		t.Fatalf("outbox store: %v", err)
+	}
+	handoff, err := sapostgres.NewOutboxSettlementAccountRegisteredHandoff(db, store, clock)
+	if err != nil {
+		t.Fatalf("handoff: %v", err)
+	}
+	handler, err := saapplication.NewRegisterSettlementAccountHandler(accounts, handoff, clock)
 	if err != nil {
 		t.Fatalf("handler: %v", err)
 	}
