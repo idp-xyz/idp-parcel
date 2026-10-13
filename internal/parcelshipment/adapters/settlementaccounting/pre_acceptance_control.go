@@ -58,14 +58,14 @@ type ControlScopeSource interface {
 	) (ControlScope, ControlScopeGap, error)
 }
 
-// ControlScopeGap 是作用域形成的落点。没形成的两格按恢复动作分（ADR-0029），不并成一个「没有」：
+// ControlScopeGap 是作用域形成的落点。没形成时按恢复动作分格（ADR-0029），不并成一个「没有」：
 // 并了，一次登记推得动的缺口与一次登记推不动的缺口就只能落进同一个端口格。
 type ControlScopeGap uint8
 
 const (
 	ControlScopeGapInvalid ControlScopeGap = iota
 	ControlScopeFormed
-	// ControlScopeAccountNotRegistered：结算账户册上没有与这次解析回显相符的应收行，或目录没接。
+	// ControlScopeAccountNotRegistered：结算账户册上没有与这次解析回显相符的应收行。
 	ControlScopeAccountNotRegistered
 	// ControlScopeSettlementPolicyNotAdopted：解析没带回已采用的结算政策，推不出法人与币种。
 	ControlScopeSettlementPolicyNotAdopted
@@ -341,7 +341,8 @@ func assessmentFor(
 func notFormedOutcomeFor(reason saapplication.NotFormedReason) (psports.PreAcceptanceControlOutcome, error) {
 	switch reason {
 	case saapplication.ControlPolicyNotConfigured:
-		// 合同声明或策略正文没登：发布其中任一样时 party-commercial 都交信封（announceOperatorRegistrations）。解析键没要求控制策略那一种来由也报这个码，而键按（租户+客户）
+		// 合同声明或策略正文没登：发布其中任一样时 party-commercial 都交信封
+		// （announceOperatorRegistrations）。解析键没要求控制策略那一种来由也报这个码，而键按（租户+客户）
 		// 只有一行、改登即内容冲突，没有登记动作推得动它——在这一格里它是一条查得到的等待，等不来重驱。
 		return psports.PreAcceptanceControlNotConfigured, nil
 	case saapplication.CreditRatioBaseUndecided:
