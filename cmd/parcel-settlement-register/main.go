@@ -185,6 +185,10 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造核销交接口：%w", err)
 	}
+	postings, err := sapostgres.NewCustomerReceiptPostings(db)
+	if err != nil {
+		return none, fmt.Errorf("构造客户收款余额重算：%w", err)
+	}
 	funds, err := application.NewMapExternalFundsHandler(application.MapExternalFundsDeps{
 		Facts:        facts,
 		Mappings:     mappings,
@@ -192,6 +196,8 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 		Downstream:   downstream,
 		FactHandoff:  factHandoff,
 		Clock:        systemClock{},
+		Books:        postings,
+		Balances:     postings,
 	})
 	if err != nil {
 		return none, fmt.Errorf("构造外部资金采用编排：%w", err)

@@ -291,6 +291,28 @@ type fundsTestClock struct{}
 
 func (fundsTestClock) Now() time.Time { return time.Date(2026, 9, 15, 7, 0, 0, 0, time.UTC) }
 
+type idleReceiptBooks struct{}
+
+func (idleReceiptBooks) CustomerStatementScope(
+	context.Context, domain.TenantID, string,
+) (domain.SettlementScope, bool, error) {
+	return domain.SettlementScope{}, false, nil
+}
+
+func (idleReceiptBooks) CustomerDirectionNets(
+	context.Context, domain.TenantID, domain.SettlementScope,
+) (int64, int64, int64, error) {
+	return 0, 0, 0, nil
+}
+
+type idleBalanceAdvance struct{}
+
+func (idleBalanceAdvance) AdvanceOperationalBalance(
+	context.Context, domain.TenantID, domain.SettlementScope, int64, int64, time.Time,
+) (ports.OperationalBalanceAdvanceOutcome, error) {
+	return ports.OperationalBalanceAdvanced, nil
+}
+
 func fundsValue[T any](t *testing.T, construct func(string) (T, error), raw string) T {
 	t.Helper()
 	value, err := construct(raw)
@@ -310,6 +332,8 @@ func fundsHandlerOver(t *testing.T, stub *fundsStoreStub) *application.MapExtern
 		Downstream:   unreachableApplicationStore{t: t},
 		FactHandoff:  stub,
 		Clock:        fundsTestClock{},
+		Books:        idleReceiptBooks{},
+		Balances:     idleBalanceAdvance{},
 	})
 	if err != nil {
 		t.Fatalf("构造编排：%v", err)

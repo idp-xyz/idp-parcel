@@ -225,6 +225,10 @@ type MapExternalFundsDeps struct {
 	// FactHandoff 把采用成功的资金事实交出去（票 sa-cc/02）——CC 的税费付款核对等的正是这封。
 	FactHandoff ports.ExternalFundsFactHandoff
 	Clock       ports.Clock
+	// Books 与 Balances 是客户收款映射及其资金退回在同一事务里重算入账余额的两口（ADR-0181 决定六）。
+	// 核销与确认费用不从这里挂。
+	Books    ports.CustomerReceiptBooks
+	Balances ports.OperationalBalanceAdvance
 }
 
 type MapExternalFundsHandler struct {
@@ -247,6 +251,8 @@ func NewMapExternalFundsHandler(deps MapExternalFundsDeps) (*MapExternalFundsHan
 		{"settlement application downstream", deps.Downstream == nil},
 		{"external funds fact handoff", deps.FactHandoff == nil},
 		{"clock", deps.Clock == nil},
+		{"customer receipt books", deps.Books == nil},
+		{"operational balance advance", deps.Balances == nil},
 	} {
 		if dependency.missing {
 			return nil, fmt.Errorf("%w: %s", ErrNilDependency, dependency.name)
@@ -500,6 +506,9 @@ func (handler *MapExternalFundsHandler) Map(
 	}
 	switch saved {
 	case ports.FundsMappingSaved:
+		if err := handler.advanceCustomerReceipt(ctx, command, factRecord.Fact); err != nil {
+			return FundsResult{}, err
+		}
 		return FundsResult{outcome: FundsMapped, mapping: record, hasRecord: true}, nil
 	case ports.FundsMappingAlreadyRecorded:
 		winner, found, err := handler.deps.Mappings.FindByKey(ctx, key)
@@ -762,6 +771,40 @@ func (handler *MapExternalFundsHandler) handOff(
 		return ""
 	}
 	return fundsContinuation("SETTLEMENT_APPLICATION_HANDOFF", record.Key.TenantID.String(), record.Key.Application.String())
+}
+
+// advanceCustomerReceipt 只在客户对账单上的确认到账与资金退回之后重算。
+// 供应商应付、贷项、核销与确认费用都不从这里进。对账单收不成应收作用域时映射照旧成立，
+// 余额不动——那不是这一支。已确认未结求出为负则整笔失败，调用方的事务一起回滚。
+func (handler *MapExternalFundsHandler) advanceCustomerReceipt(
+	ctx context.Context,
+	command MapFundsCommand,
+	fact domain.ExternalFundsFact,
+) error {
+	if command.TargetKind != domain.TargetStatement {
+		return nil
+	}
+	switch fact.Kind() {
+	case domain.FundsReceiptConfirmed, domain.FundsReturned:
+	default:
+		return nil
+	}
+
+	scope, found, err := handler.deps.Books.CustomerStatementScope(ctx, command.TenantID, command.Target)
+	if err != nil || !found {
+		return err
+	}
+	postedNet, writeoffNet, confirmed, err := handler.deps.Books.CustomerDirectionNets(ctx, command.TenantID, scope)
+	if err != nil {
+		return err
+	}
+	posted, unsettled, err := domain.PostedAndUnsettled(postedNet, writeoffNet, confirmed)
+	if err != nil {
+		return err
+	}
+	_, err = handler.deps.Balances.AdvanceOperationalBalance(
+		ctx, command.TenantID, scope, posted, unsettled, handler.deps.Clock.Now())
+	return err
 }
 
 func fundsContinuation(parts ...string) string {
