@@ -191,6 +191,22 @@ func TestWorkFactFacesAnswerOnTheOperatorChannel(t *testing.T) {
 			}
 		}
 	}
+
+	// 节点上在用的设备、种类 NODE：认证能过，但运输履约不收这一格。漏了种类门会答 500，而不是 400。
+	granted := workFactOperatorRouter(t, acceptingVerifier{}, workFactOperators{}, workFactDevices{})
+	for _, face := range workFactOperatorFaces {
+		if face.scopeKind != "OFFSITE" {
+			continue
+		}
+		face.scopeKind = "NODE"
+		face.scopeRef = "SYN-NODE-SHA-HUB"
+		face.device = "SYN-DEVICE-NODE"
+		response := postWorkFactFace(granted, face, token, "", true)
+		if response.Code != http.StatusBadRequest || problemCode(t, response) != "MALFORMED_REQUEST" {
+			t.Fatalf("%s, transport fulfillment rejects NODE: answer = %d %q, want 400 MALFORMED_REQUEST; body %s",
+				face.pattern, response.Code, problemCode(t, response), response.Body.String())
+		}
+	}
 }
 
 func TestWorkFactChannelLeavesOperationDecisionFacesUnconfigured(t *testing.T) {

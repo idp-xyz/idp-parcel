@@ -67,6 +67,10 @@ func (intake *WorkFactCommandIntake) tenantFrom(ctx context.Context, request *ht
 	if device == "" || kind == "" || reference == "" {
 		return domain.TenantID{}, fmt.Errorf("%w: %s, %s and %s are required", ErrMalformedRequest, headerWorkDevice, headerWorkScopeKind, headerWorkScopeRef)
 	}
+	// 收寄口只认 NODE。这一面若也认 NODE，登在节点上的设备就能拿节点授予打揽收、交接和交付。
+	if kind != "OFFSITE" {
+		return domain.TenantID{}, fmt.Errorf("%w: transport fulfillment work facts require Parcel-Work-Scope-Kind OFFSITE", ErrMalformedRequest)
+	}
 	return intake.authenticator.AuthenticateWorkFact(ctx, httpapi.BearerToken(request), device, kind, reference)
 }
 
