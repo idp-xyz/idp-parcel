@@ -1,7 +1,7 @@
 # 10 设备登记与「作业事实登记」能力面：一线作业事实走操作者渠道族
 
 Category: enhancement
-Status: 完工，待评审与重放——2026-10-14 通道 4（派单 task-8bac0ead ← 通道 1），分支 `mcp4-oc10c`，基 `a3187272`，代码 `ec00b795`，清点 `5a04d050`，评审回修 `e02ef00f`。此前 in-progress——2026-10-14 14:12 通道 4 认领余下半边（派单 task-8bac0ead ← 通道 1），分支 `mcp4-oc10c`，基 `a3187272`。此前 ready-for-agent——2026-10-12 通道 1：机制半边重放进 main，远端 main = `ebe16137`，进 main 记录与非作者评审见文末；余下做什么第 4 条与完成判据第二条可派——Blocked by 里只挡这一半的 07、17 均已 resolved。此前机制半边完工，待评审与重放——2026-10-12 20:2x 通道 3 接续通道 1 前一会话（通道 1 派单 task-cf472ccc）：判据第一条补三处用例，代码 tip `d0361b21`；做什么第 4 条与完成判据第二条留待 07、17，完成记录见文末。此前 in-progress——2026-10-12 14:5x 通道 1 接手认领：通道 1 派单 task-caef2c2f 给通道 4，其新会话列完计划即 crash（用户报；14:52 实测工作树 `/home/tops/workspace/idp-parcel-mcp4-oc10b` 与分支 `mcp4-oc10b` 已建、停在 `ff3b01fa`、零提交零改动），用户令通道 1 接手。分支 `mcp4-oc10b`、基 `ff3b01fa`；从 `mcp4-oc10@382c4efb` 接着做（通道 4 前一会话的未提交现场原样封存，非集成候选），先写自己第一片 red 再对照取用。本轮只做机制半边——做什么第 1–3 条与完成判据第一条；第 4 条更正口与完成判据第二条「换口同笔撤隔离放行」与 [04](./04-registration-write-faces-take-operator-intake.md) 第 1 件同一前提（演示环境接上发行方与合成操作者授予），等 [07](./07-admin-web-login-gate.md)。此前 in-progress——2026-10-11 01:00 通道 4 认领（`2d90f548`，只在分支 `mcp4-oc10` 上，基 `2603f9ad`）。此前 ready-for-agent——2026-09-24 随 ADR-0149 立（用户授权通道 4 自决）
+Status: resolved——2026-10-14 通道 1 重放进 main：`mcp4-oc10c` 自 `a3187272` 快进，SHA 不改（`64dd2dd1` 认领、`ec00b795` 代码、`5a04d050` 清点、`22825cf2` 完成记录、`e02ef00f` 回修、`8b9fec9b` 回修记录）。评审回修后无阻断。此前：完工，待评审与重放——2026-10-14 通道 4（派单 task-8bac0ead ← 通道 1），分支 `mcp4-oc10c`，基 `a3187272`，代码 `ec00b795`，清点 `5a04d050`，评审回修 `e02ef00f`。此前 in-progress——2026-10-14 14:12 通道 4 认领余下半边（派单 task-8bac0ead ← 通道 1），分支 `mcp4-oc10c`，基 `a3187272`。此前 ready-for-agent——2026-10-12 通道 1：机制半边重放进 main，远端 main = `ebe16137`，进 main 记录与非作者评审见文末；余下做什么第 4 条与完成判据第二条可派——Blocked by 里只挡这一半的 07、17 均已 resolved。此前机制半边完工，待评审与重放——2026-10-12 20:2x 通道 3 接续通道 1 前一会话（通道 1 派单 task-cf472ccc）：判据第一条补三处用例，代码 tip `d0361b21`；做什么第 4 条与完成判据第二条留待 07、17，完成记录见文末。此前 in-progress——2026-10-12 14:5x 通道 1 接手认领：通道 1 派单 task-caef2c2f 给通道 4，其新会话列完计划即 crash（用户报；14:52 实测工作树 `/home/tops/workspace/idp-parcel-mcp4-oc10b` 与分支 `mcp4-oc10b` 已建、停在 `ff3b01fa`、零提交零改动），用户令通道 1 接手。分支 `mcp4-oc10b`、基 `ff3b01fa`；从 `mcp4-oc10@382c4efb` 接着做（通道 4 前一会话的未提交现场原样封存，非集成候选），先写自己第一片 red 再对照取用。本轮只做机制半边——做什么第 1–3 条与完成判据第一条；第 4 条更正口与完成判据第二条「换口同笔撤隔离放行」与 [04](./04-registration-write-faces-take-operator-intake.md) 第 1 件同一前提（演示环境接上发行方与合成操作者授予），等 [07](./07-admin-web-login-gate.md)。此前 in-progress——2026-10-11 01:00 通道 4 认领（`2d90f548`，只在分支 `mcp4-oc10` 上，基 `2603f9ad`）。此前 ready-for-agent——2026-09-24 随 ADR-0149 立（用户授权通道 4 自决）
 Blocked by: 01、03、07、17 均已 resolved（07、17 两条原文留作出处）；[07](./07-admin-web-login-gate.md)——只挡做什么第 4 条与完成判据第二条：换口要同笔撤隔离放行（ADR-0150 决定三），前提与 [04](./04-registration-write-faces-take-operator-intake.md) 第 1 件是同一件，演示环境接上发行方与合成操作者授予（2026-10-12 通道 3 补）；[17](./17-demo-issuer-dex-and-synthetic-operators.md)——同一前提里发行方与合成操作者那半（2026-10-12 通道 3 补）
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 丙轨实施
 地盘：`internal/accessidentity`（设备册、能力面授予格、铸造里「操作者主体 + 设备」两件）与其迁移、受控登记 CLI、参数登记册增「作业设备」一行；作业事实命令口的装配留给 13、14 齐了之后逐口换。
@@ -69,6 +69,30 @@ Blocked by: 01、03、07、17 均已 resolved（07、17 两条原文留作出处
 **评审**：非作者评审另派；作者一侧（通道 4）不自评。
 
 **评审回修**（通道 1，钉 `22825cf2`）：Spec 阻断一条——运输履约 `tenantFrom` 不看种类，登在节点上的设备能打揽收、交接和交付。`e02ef00f` 补上只收 `OFFSITE`，`TestWorkFactFacesAnswerOnTheOperatorChannel` 用在用的节点设备打运输履约各口，答 400 `MALFORMED_REQUEST`。`go test -count=1 -run TestWorkFactFacesAnswerOnTheOperatorChannel` 退 0。未推 main。
+
+## Comments
+
+**评审 ← 通道 1 · 钉 `8b9fec9b` · 回修后**（基 `a3187272`。作者是通道 4。第一轮钉 `22825cf2` 有 Spec 阻断，回修后再评。）
+
+**Standards**
+
+阻断：无。非阻断：无。
+
+无发现：发生时间仍从载荷取，服务端不重签。作业事实铸造不带准入要求，越权风险点已写明，不挡。
+
+**Spec**
+
+阻断：无。
+
+非阻断：无。
+
+无发现：`WorkFactCommandIntake.tenantFrom` 在铸造前拒绝非 `OFFSITE`，答 400 `MALFORMED_REQUEST`。节点收寄仍只收 `NODE`。三更正口与首登共用这一份接入。关段、建派送任务、有效时间判断、承运商首次有效收寄判断仍在隔离写名单。
+
+### 进 main 记录（推送方 · 通道 1）
+
+- **门**：回修后两轴无阻断。
+- **重放**：分支自 `a3187272` 起，远端 main 仍是它时快进，SHA 不改：`64dd2dd1`、`ec00b795`、`5a04d050`、`22825cf2`、`e02ef00f`、`8b9fec9b`。
+- **验证**：钉 `8b9fec9b`。`gofmt -l` 对回修的两份 `.go` 无输出。带 DSN 单跑 `TestWorkFactFacesAnswerOnTheOperatorChannel` 为 PASS、非 SKIP。带 DSN `go test -p 1 -count=1 ./...` 退 0：140 个包 `ok`、0 FAIL、15 个包无测试文件，没有 `(cached)`。本笔只改票面。推送条件：远端 main 仍是 `a3187272`。
 
 ## 完成记录（2026-10-12，机制半边；分支 `mcp4-oc10b`，基 `ff3b01fa`；作者一侧为通道 1 前一会话与通道 3；待非作者评审与重放；证据只记 `S`）
 
