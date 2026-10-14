@@ -163,6 +163,10 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	workDeviceCatalogue, err := buildWorkDeviceCatalogue(operatorMinter, deviceRegistry)
+	if err != nil {
+		return err
+	}
 	workFactReception, workFactTransport, err := buildWorkFactIntakes(operatorVerifier, operatorRegistry, deviceRegistry, admission)
 	if err != nil {
 		return err
@@ -674,6 +678,7 @@ func run(logger *slog.Logger) error {
 			integrationClients,
 			workFactReception,
 			workFactTransport,
+			workDeviceCatalogue,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,

@@ -1,5 +1,6 @@
-// 作业设备册查阅的传输形状，镜像 internal/accessidentity/adapters/http 的查阅答复。
-// 端点表那一行还没接上 parcel-api：路径字面量不写在管理台源码里，避免一条未上表的请求被看成已接线。
+// 作业设备册查阅（GET /work-devices）。形状镜像 internal/accessidentity/adapters/http 的查阅答复。
+
+import { exchangeMasterData, type ApiResult } from '../catalogue-api';
 
 export type { ApiResult } from '../catalogue-api';
 
@@ -18,4 +19,8 @@ export interface WorkDeviceRecord {
 export interface WorkDeviceListResponseBody {
   outcome: 'WORK_DEVICES_LISTED';
   devices: WorkDeviceRecord[];
+}
+
+export function listWorkDevices(): Promise<ApiResult<WorkDeviceListResponseBody>> {
+  return exchangeMasterData<WorkDeviceListResponseBody>('/work-devices');
 }

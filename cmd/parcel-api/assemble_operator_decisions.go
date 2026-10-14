@@ -2,9 +2,11 @@ package main
 
 import (
 	"errors"
+	"net/http"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
+	identityhttp "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/http"
 	ccaccess "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/accessidentity"
 	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	nraccess "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/accessidentity"
@@ -77,6 +79,18 @@ func buildWorkFactIntakes(
 		return nil, nil, err
 	}
 	return reception, transport, nil
+}
+
+// buildWorkDeviceCatalogue 装作业设备册查阅：主数据与运营查阅读，不判准入范围。设备册就是登记用的那一本。
+func buildWorkDeviceCatalogue(minter *accessidentity.OperatorMinter, devices accessidentity.DeviceCatalogue) (http.Handler, error) {
+	if minter == nil || devices == nil {
+		return nil, errors.New("work device catalogue needs a minter and a device catalogue")
+	}
+	authenticator, err := identityhttp.NewOperatorCatalogueAuthenticator(minter)
+	if err != nil {
+		return nil, err
+	}
+	return identityhttp.NewQueryWorkDevicesEndpoint(authenticator, devices)
 }
 
 // buildOperatorDecisionIntakes 装两边运营决定口的防腐认证方与 Intake。

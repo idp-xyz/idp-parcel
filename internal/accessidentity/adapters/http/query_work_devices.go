@@ -11,8 +11,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
-// WorkDeviceCataloguePath 是作业设备册查阅的路径。端点表那一行等 operator-channel/10 余下半边进 main 再接，
-// 本包只提供处理器，不往 parcel-api 的端点表上登记。
+// WorkDeviceCataloguePath 是作业设备册查阅的路径。parcel-api 端点表挂这一行。
 const WorkDeviceCataloguePath = "/work-devices"
 
 // outcomeWorkDevicesListed 是本端点唯一的业务成格。空册也是这一格：空列表不是未配置。
@@ -66,6 +65,27 @@ func (authenticator catalogueAuthenticator) AuthenticateCatalogueRead(ctx contex
 		return "", errors.New("access identity http: minted envelope has no tenant")
 	}
 	return envelope.TenantID(), nil
+}
+
+// WorkDeviceCatalogueHandler 把已装好的查阅处理器交回端点表。没装时答未配置：装配测试不建铸造器，
+// 仍要这一行在表上，答复与发行方未设同一格。生产装配传 NewQueryWorkDevicesEndpoint 的结果。
+func WorkDeviceCatalogueHandler(wired http.Handler) http.Handler {
+	if wired == nil {
+		return UnconfiguredWorkDeviceCatalogue()
+	}
+	return wired
+}
+
+// UnconfiguredWorkDeviceCatalogue 在这一口还没接上操作者铸造器时答未配置。
+func UnconfiguredWorkDeviceCatalogue() http.Handler {
+	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		if request.Method != http.MethodGet {
+			response.Header().Set("Allow", http.MethodGet)
+			writeProblem(response, http.StatusMethodNotAllowed, codeMethodNotAllowed)
+			return
+		}
+		writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
+	})
 }
 
 // NewQueryWorkDevicesEndpoint 交回作业设备册查阅的 HTTP 入口。只接受 GET。租户只来自认证结果。

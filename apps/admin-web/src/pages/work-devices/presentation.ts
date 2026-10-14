@@ -32,7 +32,7 @@ export function workDeviceViewState(
 ): TemplateViewState {
   return catalogueViewState(answer, rowCount, retry, {
     module,
-    endpoint: '作业设备册查阅',
+    endpoint: 'GET /work-devices',
     emptyTitle: '当前租户的作业设备册是空的',
     emptyDescription:
       '空列表是册上没有已登记设备，不是渠道未配置。登记与停用走受控登记口，本页不登记、不停用。',

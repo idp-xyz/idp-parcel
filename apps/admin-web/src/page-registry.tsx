@@ -149,6 +149,7 @@ export const liveIds: ReadonlySet<string> = new Set([
   'authorized-disposition',
   'label-transactions',
   'channel-selection-decisions',
+  'work-devices',
   // 「我的工作」：来源是本机 localStorage 而非 parcel-api，理由见上方头注。
   'recent-objects',
   'saved-views',

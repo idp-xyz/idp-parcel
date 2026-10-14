@@ -1,6 +1,7 @@
 package main
 
 import (
+	identityhttp "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/http"
 	collectionhttp "go.idp.xyz/idp-parcel/internal/collectionremittance/adapters/http"
 	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	networkhttp "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/http"
@@ -9,6 +10,8 @@ import (
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
 	governancehttp "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/http"
+	"net/http"
+
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
@@ -172,6 +175,7 @@ func assembleBusinessEndpoints(
 	integrationClients integrationClientIntakes,
 	workFactReception nodeopshttp.ReceptionIntake,
 	workFactTransport *tfhttp.WorkFactCommandIntake,
+	workDevices http.Handler,
 ) []httpapi.BusinessEndpoint {
 	// 缺省朝拦：各隔离入参都为 nil 时，下面这组变量全取未配置即拒，整份装配与
 	// ADR-0078/0091 之前逐字节同形。
@@ -678,5 +682,9 @@ func assembleBusinessEndpoints(
 		// 设计不是缺列（ADR-0083），Intake 因此是本上下文自己的一种准入形——隔离读
 		// 启用与 SYN- 门禁同走一个开关，但开关值里的合成租户不进治理作用域。
 		{Pattern: "/governance-registers", Handler: governancehttp.NewQueryGovernanceRegistersEndpoint(governanceRegistryIntake, governanceRegisters)},
+		// 作业设备册（ADR-0149 决定二、越权风险点 2；票 operator-channel/21）：只查阅已登记的行。
+		// 能力面是主数据与运营查阅读，不形成作业事实，所以不挂作业事实那一组 Intake。
+		// 路径写成字面量：管理台路径门禁只认端点表上的字符串，不认常量引用。与 WorkDeviceCataloguePath 同一条。
+		{Pattern: "/work-devices", Handler: identityhttp.WorkDeviceCatalogueHandler(workDevices)},
 	}
 }
