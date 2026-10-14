@@ -1,7 +1,7 @@
 # 12 签名 webhook 入向：只能推送的外部源经签名校验后以集成客户端身份进入
 
 Category: enhancement
-Status: resolved——2026-10-14 13:14 通道 1 重放进 main：远端 main 仍是 `210eafac`，`mcp4-oc12` 是它的快进，作者五笔 SHA 原样进入（`f13d344b` 认领、`f185673c`、`13f34a33` 代码、`ab88fb41` 清点、`1b1d4460` 完成记录）。评审无阻断。此前：完工，待评审与重放——2026-10-14 通道 4。分支 `mcp4-oc12`，基 `210eafac`（派单写的 `b3c8bd46` 在续做时已不是远端 main，照派单自新 tip 起），代码 tip `13f34a33`，清点 `ab88fb41`。认领与此前 ready-for-agent 见完成记录。
+Status: resolved——2026-10-14 通道 1 把补笔重放到已进 main 的 `a1360371` 之上：`1ad7721a`→`79acc46f`、`4f488979`→`7b09abb9`，代码仍是 `13f34a33`。此前：2026-10-14 13:14 通道 1 重放进 main：远端 main 仍是 `210eafac`，`mcp4-oc12` 是它的快进，作者五笔 SHA 原样进入（`f13d344b` 认领、`f185673c`、`13f34a33` 代码、`ab88fb41` 清点、`1b1d4460` 完成记录）。评审无阻断。此前：完工，待评审与重放——2026-10-14 通道 4。分支 `mcp4-oc12`，基 `210eafac`（派单写的 `b3c8bd46` 在续做时已不是远端 main，照派单自新 tip 起），代码 tip `13f34a33`，清点 `ab88fb41`。认领与此前 ready-for-agent 见完成记录。
 Blocked by: 11
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 丙轨实施
 地盘：入向连接器的签名校验件（平台件或 `internal/accessidentity`，本票定落点）；各上下文入向连接器接它的那一处归 psb/09、10、12 的连接器项。
@@ -108,4 +108,28 @@ Blocked by: 11
 - **门**：上面这份评审两轴无阻断。
 - **重放**：`git merge-base --is-ancestor 210eafac 1b1d4460` 成立，远端 main 仍是 `210eafac`。不 cherry-pick、不改 SHA。作者五笔原样快进。对照（分支 = main）：`f13d344b`、`f185673c`、`13f34a33`、`ab88fb41`、`1b1d4460`。
 - **清点**：在这份检出上重跑 `tools/mechanism-inventory`，`MECHANISM-INVENTORY.md` 相对 `ab88fb41` 无漂移，不另立清点笔。
-- **验证**：Go 与 SQL 与 `1b1d4460` 相同，本笔只改票面。`go build ./...` 与 `go vet ./...` 退 0。自 `210eafac` 起改动的 `.go`，`gofmt -l` 无输出。带 DSN 单跑 `TestPushReceiptRecognisesTheSameSignedContentOnce` 与 `TestPushSourceWritesRefuseToRunOutsideATransaction` 为 PASS、非 SKIP。带 DSN `go test -p 1 -count=1 ./...` 退 0：140 个包 `ok`、0 FAIL、14 个包无测试文件，输出里没有 `(cached)`。`0006_push_source_register.sql` 无 CR、无 BOM。推送条件：远端 main 仍是 `210eafac`，且其上只多作者五笔与本笔。
+- **验证**：Go 与 SQL 与 `1b1d4460` 相同，本笔只改票面。`go build ./...` 与 `go vet ./...` 退 0。自 `210eafac` 起改动的 `.go`，`gofmt -l` 无输出。带 DSN 单跑 `TestPushReceiptRecognisesTheSameSignedContentOnce` 与 `TestPushSourceWritesRefuseToRunOutsideATransaction` 为 PASS、非 SKIP。带 DSN `go test -p 1 -count=1 ./...` 退 0：140 个包 `ok`、0 FAIL、14 个包无测试文件，输出里没有 `(cached)`。`0006_push_source_register.sql` 无 CR、无 BOM。推送条件：远端 main 仍是 `210eafac`，且其上只多作者五笔与本笔。已推，远端 main 曾到 `a1360371`。
+
+**评审 ← 通道 3 · 钉 `13f34a33` · 13:08**（非作者，只读。完成记录在 `1b1d4460`。到达时 `1b1d4460` 已在 main。）
+
+**Standards**
+
+阻断：无。
+
+非阻断：`ErrPushSignatureRejected` 头注写几种情形同答、不说哪一半不对。`MintSignedPush` 未登记时包装文案是 `push source is not registered`，`verifySignature` 验不过时是 `no signature verifies under a key effective at receipt`。哨兵相同；连接器若把 `Error()` 交回推送方，就能分出源在不在册。本票没有在线口。不挡合入，不改生产码。
+
+**Spec**
+
+阻断：无。非阻断：无。无发现：判据三条都有用例，连接器不接与票面「不做」一致。
+
+**评审 ← 通道 1 · 钉 `4f488979` · 补笔**（基 `1b1d4460`，只看 `1ad7721a` 与 `4f488979`。生产码不动。）
+
+**Standards** 阻断：无。非阻断：无。无发现：两格都是测试，不新增缺省，不碰密钥本体。
+
+**Spec** 阻断：无。非阻断：无。无发现：`TestAnEd25519SignatureFromAnotherKeyIsRejected` 钉另一把私钥签的同一份原文答签名不过；`TestALaterKeyOfTheSameFormStillVerifiesWhenTheEarlierOneDoesNotMatch` 钉同形态前一把对不上时后一把仍验得过。票面只补变异自证，清点仍是 `ab88fb41`。
+
+### 补笔进 main（推送方 · 通道 1）
+
+- **重放**：main 已是 `a1360371`（`1b1d4460` 的子提交）。cherry-pick 到其上，SHA 换了：`1ad7721a`→`79acc46f`，`4f488979`→`7b09abb9`。无冲突。
+- **门**：通道 3 与通道 1 对 `13f34a33` 都是无阻断；通道 1 对补笔无阻断。通道 3 的非阻断不挡。
+- **验证**：钉 `7b09abb9`。两格新用例 PASS、非 SKIP。`gofmt -l` 对 `signed_push_test.go` 无输出。带 DSN `go test -p 1 -count=1 ./...` 退 0：140 个包 `ok`、0 FAIL、14 个包无测试文件，没有 `(cached)`。本笔只改票面。
