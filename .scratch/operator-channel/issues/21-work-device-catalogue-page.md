@@ -70,4 +70,13 @@ Blocked by: 无
 
 **评审**：不自评。不推 main。
 
+## 端点表已接（2026-10-14，通道 2；代码 `c7d176ef`）
+
+`origin/main` 已到 `fd458298`（operator-channel/10 余下半边已进 main）。本分支先合并该 tip（`b39bba7d`），再把查阅行接到端点表。用户说现在可以接。
+
+- `GET /work-devices` 进 `assembleBusinessEndpoints`。生产装配用 `buildWorkDeviceCatalogue`：同一只操作者铸造器、同一本设备册。没把处理器交进来时答未配置，装配测试因此仍能钉「端点在」。
+- 管理台改为真请求，页进 `liveIds`。空册、未配置、未授予仍走查阅页那套状态。
+- `TestWorkDeviceCatalogueAnswersFromTheOperatorChannel`：发行方未配置、无令牌、只有登记写授予、册读失败、空册五格都过。`TestEveryAssembledEndpointAnswersUnconfigured` 含这一行，PASS。
+- 验证：`go build ./...` 退 0；`go vet` 动过的 `cmd/parcel-api` 与 `internal/accessidentity/...` 退 0；带 DSN `go test -count=1 -p 1 ./cmd/parcel-api/ ./internal/architecture/` 退 0。管理台 `tsc`、`run-tests.mjs`（fail 0）、`vite build` 退 0。清点重生成，接入面端点 140，这一行归 accessidentity。证据只记 `S`。
+
 ## Comments
