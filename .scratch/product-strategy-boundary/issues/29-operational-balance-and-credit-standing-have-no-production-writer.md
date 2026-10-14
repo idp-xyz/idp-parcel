@@ -1,7 +1,7 @@
 # 29 运营余额与信用状况没有生产写入方：演示委托的预付冻结停在`余额不可用`
 
 Category: enhancement
-Status: needs-triage——2026-10-13 22:1x 通道 1 立，出自 [26](./26-demo-tenant-adopts-the-pre-acceptance-estimate-form.md) 判据 1：通道 5 开工取证报「冻结要读运营余额、而它没有生产写入方」，通道 1 在 main `b3c8bd46` 上核实属实。是机制缺口，不是租户取值；要裁的是写入方的形状，见「要裁的问题」，裁完照「做什么」拆笔转 ready-for-agent。
+Status: 2026-10-14 17:48 通道 2 分诊认领（派单本卡 ← 通道 1），分支 mcp2-psb29t，基 0715ace33a942261c13821405962c6a0945ab660。此前：needs-triage——2026-10-13 22:1x 通道 1 立，出自 [26](./26-demo-tenant-adopts-the-pre-acceptance-estimate-form.md) 判据 1：通道 5 开工取证报「冻结要读运营余额、而它没有生产写入方」，通道 1 在 main `b3c8bd46` 上核实属实。是机制缺口，不是租户取值；要裁的是写入方的形状，见「要裁的问题」，裁完照「做什么」拆笔转 ready-for-agent。
 Blocked by: 无——要裁的是本票自己的形状
 挡着：26 判据 1 的冻结那一半（26 照实标 ◑，不扩地盘）；[合成演示动线](../../../docs/design/synthetic-demo-journey-script.md)墙三之后的预付冻结一格，以及账期委托的信用暴露一格。
 地盘（裁完按形状收窄）：`internal/settlementaccounting`——余额与信用状况的写端口、UC-SA-005 映射编排（`MapExternalFundsHandler`）与问题二、三裁到的那几处编排、postgres 适配器 `operational_position.go`；它们的生产装配（`cmd/parcel-api` 的 `buildSettlementRegistrationOrchestration`、`cmd/parcel-settlement-register`、`cmd/parcel-dispatch`）；演示种子 `scripts/demo-seeds/data/settlement/` 与 `seed.sh` 结算段。
