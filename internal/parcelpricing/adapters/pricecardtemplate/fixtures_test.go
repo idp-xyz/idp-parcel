@@ -137,7 +137,8 @@ func sellCard() filled {
 			},
 			sheetFixedCharges: {{"ruleId": "SYN-RULE-REMOTE-AREA", "chargeCode": "REMOTE_AREA_SURCHARGE",
 				"description": "SYN 偏远区域附加（合成演示值）", "effect": "ADD", "amount": "5", "order": "1"}},
-			sheetReferenceSeries: {{"kind": "FUEL_RATE", "seriesId": "SYN-SERIES-FUEL-01"}},
+			sheetReferenceSeries:     {{"kind": "FUEL_RATE", "seriesId": "SYN-SERIES-FUEL-01"}},
+			sheetReferenceCatalogues: {{"kind": "ZONE", "catalogueId": "SYN-CAT-ZONE-CN-SG"}},
 		},
 	}
 }

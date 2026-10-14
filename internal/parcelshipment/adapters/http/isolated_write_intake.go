@@ -216,6 +216,12 @@ func (intake *IsolatedSubmissionIntake) IntakeSubmission(
 	if err != nil {
 		return application.SubmitShipmentRequestCommand{}, err
 	}
+	// 画像挂在现签的内部成员上，不挂客户包裹参考：版本按内部标识取成员，估价也按它取画像。
+	// 挂错一侧，重量只留在摘要的服务条目里，受理前试算读到的仍是没报测量。
+	profiles, err := declaredProfiles(draft, internalParcels)
+	if err != nil {
+		return application.SubmitShipmentRequestCommand{}, err
+	}
 
 	// 归属权威调不通时上抛裸错：那是依赖故障，不是这次请求的形状问题。
 	decision, err := intake.ownership.DecideProductionOwnership(ctx, intake.admissionScope)
@@ -234,9 +240,92 @@ func (intake *IsolatedSubmissionIntake) IntakeSubmission(
 		DeclaredParcelIDs:       internalParcels,
 		AdmissionScope:          intake.admissionScope,
 		ExpectedRevision:        decision.Revision(),
+		DeclaredProfiles:        profiles,
 		DeclaredElements:        canonical.DeclaredElements(),
 		RequestedServiceProduct: canonical.RequestedServiceProduct(),
 	}, nil
+}
+
+// declaredProfiles 把草案上已经声明的重量编成成员画像。重量两格都空就不立这一件的画像，
+// 也不补一份默认测量：没报是真话，补上会让估价按一份客户没说过的重量去冻结。
+// 外廓只在草案报了尺寸时带上；只报重量、不报尺寸的画像合法。尺寸报了一半则形状不完整，
+// 按畸形请求拒，不把半截外廓当成没报。
+func declaredProfiles(
+	draft submissionDraft,
+	members []domain.DeclaredParcelID,
+) ([]domain.DeclaredParcelProfile, error) {
+	if len(draft.Parcels) != len(members) {
+		return nil, fmt.Errorf("isolated submission intake: %d draft parcels and %d minted members",
+			len(draft.Parcels), len(members))
+	}
+	profiles := make([]domain.DeclaredParcelProfile, 0, len(draft.Parcels))
+	for index, parcel := range draft.Parcels {
+		if !weightDeclared(parcel) {
+			continue
+		}
+		measurement, err := declaredMeasurement(parcel)
+		if err != nil {
+			return nil, fmt.Errorf("%w: parcel measurement: %v", ErrMalformedRequest, err)
+		}
+		profile, err := domain.NewDeclaredParcelProfile(members[index], measurement)
+		if err != nil {
+			return nil, fmt.Errorf("%w: parcel profile: %v", ErrMalformedRequest, err)
+		}
+		profiles = append(profiles, profile)
+	}
+	return profiles, nil
+}
+
+func weightDeclared(parcel declaredParcelDraft) bool {
+	return strings.TrimSpace(parcel.DeclaredWeightValue) != "" ||
+		strings.TrimSpace(parcel.DeclaredWeightUnit) != ""
+}
+
+func declaredMeasurement(parcel declaredParcelDraft) (domain.DeclaredMeasurement, error) {
+	value, err := domain.NewMeasurementValue(parcel.DeclaredWeightValue)
+	if err != nil {
+		return domain.DeclaredMeasurement{}, err
+	}
+	unit, err := domain.NewMeasurementUnitReference(strings.TrimSpace(parcel.DeclaredWeightUnit))
+	if err != nil {
+		return domain.DeclaredMeasurement{}, err
+	}
+	weight, err := domain.NewDeclaredWeight(value, unit)
+	if err != nil {
+		return domain.DeclaredMeasurement{}, err
+	}
+	dimensions, err := declaredDimensions(parcel)
+	if err != nil {
+		return domain.DeclaredMeasurement{}, err
+	}
+	return domain.NewDeclaredMeasurement(weight, dimensions)
+}
+
+func declaredDimensions(parcel declaredParcelDraft) (domain.DeclaredDimensions, error) {
+	length := strings.TrimSpace(parcel.DeclaredLength)
+	width := strings.TrimSpace(parcel.DeclaredWidth)
+	height := strings.TrimSpace(parcel.DeclaredHeight)
+	unit := strings.TrimSpace(parcel.DeclaredDimensionsUnit)
+	if length == "" && width == "" && height == "" && unit == "" {
+		return domain.DeclaredDimensions{}, nil
+	}
+	lengthValue, err := domain.NewMeasurementValue(length)
+	if err != nil {
+		return domain.DeclaredDimensions{}, err
+	}
+	widthValue, err := domain.NewMeasurementValue(width)
+	if err != nil {
+		return domain.DeclaredDimensions{}, err
+	}
+	heightValue, err := domain.NewMeasurementValue(height)
+	if err != nil {
+		return domain.DeclaredDimensions{}, err
+	}
+	unitRef, err := domain.NewMeasurementUnitReference(unit)
+	if err != nil {
+		return domain.DeclaredDimensions{}, err
+	}
+	return domain.NewDeclaredDimensions(lengthValue, widthValue, heightValue, unitRef)
 }
 
 // sourceIdentity 铸来源信封。租户、客户账户与来源整组来自注入；**来源请求键是唯一从

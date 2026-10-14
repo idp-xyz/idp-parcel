@@ -55,6 +55,8 @@ echo "== 2/7 商业权威发布（party-commercial：发布批正文）与消费
 # 第二客户 SYN-ACCOUNT-02 的键：形状照上一行，三维换成它自己的相对方 SYN-PARTY-SHIPPER-02，闭包解出它自己的合同
 # SYN-CONTRACT-02、再与 SYN-SETTLEMENT-PREPAID-02 的六维命中。两户的必需依据都列 CUSTOMER_SERVICE_RULE：
 # 不列，闭包就不采用任何客户服务规则版本，索赔的首次索赔期限与最低材料两维恒答未登记。
+# 两户的必需依据也都列 PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY：不列，闭包就不采用合同上绑的
+# SYN-FIN-CONTROL-01，受理前财务控制答策略未配置（票 product-strategy-boundary/26 实跑停在这一格）。
 # 同一范围并存两版客户服务规则：挂产品的 SYN-SERVICE-RULE-01（首次索赔 14 天、LOSS 要 POD）与壳指名合同 02 的
 # SYN-SERVICE-RULE-CONTRACT-02（只登首次索赔 7 天）。闭包合同优先（ADR-0176 决定一）：账户 02 采纳合同版，
 # 期限答 7 天、材料行继承产品版的 POD（决定二）；账户 01 的合同层零候选，回落产品版，答复与没有合同版时相同。
@@ -88,7 +90,7 @@ echo "== 3/7 计价登记（parcel-pricing：价卡 + 参考序列 + 序列复�
 # 序列版本经复核通过才在用（ADR-0099）：先登记再复核，复核责任方与登记责任方不同。
 "$BIN/parcel-pricing-register" -kind reference-series-review -file "$SEEDS/pricing/reference-series-fuel-review.json"
 "$BIN/parcel-pricing-register" -kind reference-series-review -file "$SEEDS/pricing/reference-series-fx-cny-sgd-review.json"
-# 参考目录同一条纪律（ADR-0109）：先登记再复核。价卡不绑这本目录，评价仍走调用方给值。
+# 参考目录同一条纪律（ADR-0109）：先登记再复核。售价卡绑这本目录，分区由委托申报的邮编路线经它解析。
 "$BIN/parcel-pricing-register" -kind reference-catalogue -file "$SEEDS/pricing/reference-catalogue-zone-cn-sg.json"
 "$BIN/parcel-pricing-register" -kind reference-catalogue-review -file "$SEEDS/pricing/reference-catalogue-zone-cn-sg-review.json"
 
@@ -258,12 +260,17 @@ echo "== 操作者册登记（access-identity：合成操作者主体与能力�
 # 决定，供 probe-operator-channel.sh 取证。
 "$BIN/parcel-access-register" admission-scope-mapping-register -input "$SEEDS/access/03-admission-scope-mappings.json"
 
-echo "== 结算账户登记（settlement-accounting：演示租户货主的应收结算账户；票 routing-first-cut/16） =="
+echo "== 结算账户与受理前估价采用登记（settlement-accounting：演示租户货主的应收结算账户与它采用的估价形态；票 routing-first-cut/16、product-strategy-boundary/26） =="
 # 受理前财务控制的作用域从那一次商业解析回显的结算政策派生，账户按（法人、相对方、应收、币种、结算政策）
 # 在结算账户登记册上找（cmd/parcel-dispatch 的 acceptanceFinancialControl）。这一行的五维照发布批里
 # `SYN-SETTLEMENT-PREPAID-01` 的正文配，差一维就查不到，控制停在 `CONTROL_SCOPE_NOT_CONFIGURED`。账户标识与
 # 责任依据是演示租户的合成取值：登记口与执行器都不代拟账户，没登的租户照旧停在那一格。
 "$BIN/parcel-settlement-register" settlement-account \
   -input "$SEEDS/settlement/01-settlement-account-shipper-01-receivable-cny.json"
+# 受理前估价采用（ADR-0179 决定五）：这一户采用「逐件 SELL 试算合计」，计价范围与售价卡 SYN-PLAN-CN-SG-01 的
+# 范围同值——估价按（租户、计价范围、SELL、客户费用、判断时点）解析在用售价卡（决定三），范围对不上就解不出卡。
+# 采用册对账户册设外键，所以排在账户之后。没登这一行的户，控制停在金额未配置；形态与范围是演示租户的合成取值。
+"$BIN/parcel-settlement-register" pre-acceptance-estimate-adoption \
+  -input "$SEEDS/settlement/02-pre-acceptance-estimate-adoption-account-01.json"
 
 echo "种子灌入完成：租户 SYN-TENANT-01，各上下文全部落库。"

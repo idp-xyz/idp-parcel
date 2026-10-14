@@ -80,17 +80,17 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 | 目录 | 入库通道 | 内容 |
 |---|---|---|
 | `data/commercial/` | `cmd/parcel-commercial publish` | 发布批：两份服务产品（各带交付条件）、接受前财务控制策略正文、接单规则包（五类规则正文+受理内容+收寄资格+时点锚+终局规则+资料修订允许）、客户合同（正文+受理前控制+合同委派+收紧交付条件）、结算政策（预付，六维范围对齐解析键）、两份供应商协议正文、价格规则（价格政策正文+口径）、信用政策、客户服务规则、三份授权规则（方向两份仍是壳，取消授权带正文） |
-| `data/commercial/resolution-key-*.json` | `cmd/parcel-commercial register-resolution-key` | 消费方（parcel-shipment）的解析键登记 2 行（`SYN-ACCOUNT-01`、`SYN-ACCOUNT-02` 各一）：五项必需依据（含客户服务规则）加结算三维——它不是商业权威发布，只是与发布共用一个 CLI |
+| `data/commercial/resolution-key-*.json` | `cmd/parcel-commercial register-resolution-key` | 消费方（parcel-shipment）的解析键登记 2 行（`SYN-ACCOUNT-01`、`SYN-ACCOUNT-02` 各一）：六项必需依据（含客户服务规则与接受前财务控制策略）加结算三维——它不是商业权威发布，只是与发布共用一个 CLI。不把 `PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY` 列进键，闭包就不采用合同上绑的 `SYN-FIN-CONTROL-01`，受理前财务控制答策略未配置 |
 | `data/commercial/register-products.json` | `cmd/parcel-commercial register-products` | 服务形态两笔（EXPRESS/ECON 均网络服务）+ 产品—渠道映射两笔：EXPRESS 配两个渠道标识引用，ECON 显式登记「未配置」（该产品尚无可用渠道候选）——渠道本体不预造（ADR-0072） |
 | `data/commercial/register-registration-number-types.json` | `cmd/parcel-commercial register-registration-number-types` | 注册号类型目录（ADR-0145 决定一）：身份层由演示租户显式采用 CN（统一社会信用代码）、SG（UEN）两份参考配置（ADR-0147，批文 `adopt` 格，依据格随之写成 `REFCFG-1:…@1`），资料层 CN、SG 各登一类 `SYN-` 合成税务登记号，另有一类 SG 资料层旧类型登记后停用，让目录状态的「已停用」有实例可显。产品本身不带任何国家 / 地区的目录条目：参考配置不采用就不进任何租户的目录 |
 | `data/commercial/register-parties.json` | `cmd/parcel-commercial register-parties` | 参与方身份：业务参与方（含合成干线承运方 `SYN-PARTY-CARRIER-TRUNK-01`、合成末端承运方 `SYN-PARTY-CARRIER-LM-01`，供两份供应商协议引用）、关系、责任法人、客户账户 |
 | `data/commercial/register-legal-entity-profiles.json` | `cmd/parcel-commercial register-legal-entity-profiles` | 法人资料（ADR-0145 决定三）：`SYN-LE-01` 两笔修订——修订 1 不带开票资料（按它生效的时段解析答「资料不全」），修订 2 自 3 月起补上开票抬头；注册地址在 `CN`，与法人身份层的注册国家一致，税号取目录里 `CN` 的资料层合成类型。排在参与方身份之后：资料引用已登记的责任法人 |
-| `data/pricing/` | `cmd/parcel-pricing-register` | 两张价卡（SELL 首重续重 / BUY 重量段）+ 两条参考序列（燃油、汇率）+ 两份序列复核 + 一份分区参考目录与其复核（不复核不在用，ADR-0099 / ADR-0109）——由 `seedgen` 生成，勿手改 |
+| `data/pricing/` | `cmd/parcel-pricing-register` | 两张价卡（SELL 首重续重 / BUY 重量段）+ 两条参考序列（燃油、汇率）+ 两份序列复核 + 一份分区参考目录与其复核（不复核不在用，ADR-0099 / ADR-0109）；售价卡绑燃油序列与这本分区目录——由 `seedgen` 生成，勿手改 |
 | `data/network/` | `cmd/parcel-network-register` | 稳定定义由演示租户显式采用参考配置 `network-routing/network-catalog/SYN-CN-SG@1`（ADR-0147，登记行 `adopt` 格，依据格随之写成 `REFCFG-1:…@1`）：4 节点、3 连接、1 线路（三段成本依据引 BUY 卡）、2 服务区（CN 收寄 / SG 交付覆盖）、7 份日历（4 节点的处理时长与截单、3 连接的衔接缓冲）、1 路由策略（成本单维）；上海枢纽修订 2 是采用后的租户修订，依据换成租户自己的。另直接登记 1 条台风停运调整与 1 行自动改路事实（判断键对齐 `SYN-ACCOUNT-01` 与 `SYN-RS-CN-SG-01`，不是一笔已受理委托的运行时产物）。产品本身不带任何网络：参考配置不采用就不进任何租户的目录 |
 | `data/customs/` | `cmd/parcel-customs-register` | 十册 26 份：就绪与授权（第三单元先就绪再撤销就绪；第二单元只撤授权）、解释规则（含一次换版）、义务目录+两项（已了结/已承接）、门禁目录+判断（含一份只登目录的空清单格）、建案要求两向（要求/显式不要求）、口岸目录（SZX 含一次换版 + SIN）、申报路径两向（CN 出口 / SG 进口）、监管凭证两版（一版写明次数额度、一版来源未提供额度）、税费付款协作两格（核定税费 / 明确无需付款）。税费付款核对不在包内，见已知边界 |
 | `data/visibility/` | `cmd/parcel-ve-register` | 里程碑映射、分诊规则、通知策略、索赔资格、索赔授权两格（一格空名单）、披露策略、异常披露规则、冲突信号规则、索赔材料收讫两笔（照片留下、发票收讫后撤销） |
 | `data/collection/` | `cmd/parcel-collection-register` | 一条 COD 指令走全程（渠道报收、银行短收、短款、清分进应付客户）+ SGD 分户账只开立；CNY 账两笔回汇批次（已归集 / 已交出汇付主张），SGD 账无批次 |
-| `data/settlement/` | `cmd/parcel-settlement-register settlement-account` | 结算账户登记册（ADR-0158）1 行：货主 `SYN-PARTY-SHIPPER-01` 在法人 `SYN-LE-01` 下的 CNY 应收账户 `SYN-SETTLEMENT-ACCOUNT-01`，结算政策 `SYN-SETTLEMENT-PREPAID-01`，责任依据是该政策所引的客户合同 `SYN-CONTRACT-01`。五维照发布批里那份结算政策的正文配，受理前财务控制的作用域经它找到账户 |
+| `data/settlement/` | `cmd/parcel-settlement-register settlement-account` / `pre-acceptance-estimate-adoption` | 结算账户登记册（ADR-0158）1 行：货主 `SYN-PARTY-SHIPPER-01` 在法人 `SYN-LE-01` 下的 CNY 应收账户 `SYN-SETTLEMENT-ACCOUNT-01`，结算政策 `SYN-SETTLEMENT-PREPAID-01`，责任依据是该政策所引的客户合同 `SYN-CONTRACT-01`。五维照发布批里那份结算政策的正文配，受理前财务控制的作用域经它找到账户。受理前估价采用册（ADR-0179 决定五）1 行：这一户采用「逐件 SELL 试算合计」（`PER_PARCEL_SELL_TRIAL_SUM`），计价范围 `SYN-SCOPE-01`，与售价卡 `SYN-PLAN-CN-SG-01` 的范围同值，估价按它解析在用售价卡 |
 | `data/access/` | `cmd/parcel-access-register` | 操作者册（ADR-0100 决定二第三条）：两个合成操作者主体绑演示租户，配置员授登记册配置写与主数据与运营查阅读两格，查阅员只授查阅读；主体是演示发行方 Dex 给 `operator-channel/dex.yaml` 两个静态用户真签出的 `sub`，换发行方就按新发行方的标识另登一批 |
 | `operator-channel/` | — | 演示发行方：Dex 的容器描述（`compose.yaml`，不并进仓库根那份门禁库描述）与配置（`dex.yaml`：管理台公共客户端、两个合成静态用户），取令牌脚本 `operator-token.sh`，操作者渠道取证脚本 `probe-operator-channel.sh`；用法见上面「操作者渠道」一节 |
 | `migrate/` | — | 迁移助手（`migrate.Run` 的隔离环境入口；迁移计划刻意没有生产入口） |
@@ -109,11 +109,11 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
    以新修订配置绑定，历史修订保留。
 2. **配价**（parcel-pricing）：售价卡 `SYN-PLAN-CN-SG-01`（首重 0.5kg ¥55 续重 ¥18/0.5kg，
    Z1/Z2 两区，MAX 计费重体积系数 5000）方向授权引商业授权对象 `SYN-AUTH-PRICE-DIR-01`，
-   方案结构绑燃油序列 `SYN-SERIES-FUEL-01`；成本卡 `SYN-PLAN-CN-SG-COST-01`（BUY）引
+   方案结构绑燃油序列 `SYN-SERIES-FUEL-01` 与分区目录 `SYN-CAT-ZONE-CN-SG`；成本卡 `SYN-PLAN-CN-SG-COST-01`（BUY）引
    `SYN-AUTH-COST-DIR-01`，两份供应商协议（干线、末端）都采购这一份买入方案；汇率序列 `SYN-SERIES-FX-CNY-SGD` 的口径引价格规则
    `SYN-PRICE-RULE-CN-SG`（汇率不收裸值）。该价格规则同时带卖出方向的价格政策正文与口径，口径与卖出价卡同一套（未税、材积除数 5000、提交时点汇率）。信用政策挂在同一法人与预付费用上，客户服务规则挂在同一法人与产品 `SYN-PROD-CN-SG-EXPRESS` 上（不引预付费用）。 分区目录 `SYN-CAT-ZONE-CN-SG` 用合成 3 位前缀
-   把 `018`/`238` 映到同名的 Z1/Z2，始发覆盖 `200` 与 `510`；价卡不绑这本目录，评价仍走
-   调用方给值。
+   把 `018`/`238` 映到同名的 Z1/Z2，始发覆盖 `200` 与 `510`；售价卡绑这本目录，分区由
+   委托申报的邮编路线经它解析，不收调用方给的分区。
 3. **一单会走的网**（network-routing）：演示租户采用随产品发布的演示网络
    `network-routing/network-catalog/SYN-CN-SG@1`——上海枢纽→深圳口岸→新加坡枢纽→新加坡末端四节点
    三连接成线路 `SYN-LINE-CN-SG-01`，线路与路由策略 `SYN-RS-CN-SG-01` 的适用范围都是服务目的
@@ -145,8 +145,9 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 7. **受理前控制占哪个账**（settlement-accounting 与规则包的时点格）：规则包 `SYN-RULEPKG-01` 的受理前财务控制
    一格与可达性一格一样，采用产品参考配置 `parcel-shipment/as-of-semantics/submission-receipt@1`，判断时点取该提交
    版本的系统接收时间。控制的作用域从商业解析回显的结算政策 `SYN-SETTLEMENT-PREPAID-01` 派生，按法人、相对方、
-   应收、币种、结算政策五维在结算账户登记册上找到 `SYN-SETTLEMENT-ACCOUNT-01`。控制金额不在种子里：它由估价形成，
-   种子不替它造数。
+   应收、币种、结算政策五维在结算账户登记册上找到 `SYN-SETTLEMENT-ACCOUNT-01`。控制金额不在种子里，它由估价形成：
+   种子只登这一户采用的形态「逐件 SELL 试算合计」与计价范围 `SYN-SCOPE-01`（ADR-0179 决定五），结算按委托当前提交
+   版本逐件申报的测量与邮编路线，用该范围里在用的售价卡逐件试算、合计成控制金额。
 
 ## 已知边界（如实记录，不是缺陷）
 
@@ -190,7 +191,8 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
   因余额不足中止，批次与交出这两步本身重放走 0。
 - 运行时只多一步，而且**不在** `seed.sh` 里：`submit-one-shipment.sh` 对已经在跑的
   `parcel-api` 打 `POST /shipment-requests`（草案带寄 / 收两端国家码 `CN` / `SG`，演示网络的服务区域
-  按国家覆盖），断言 `201` / `SUBMITTED`，再从
+  按国家覆盖；另带两端邮编 `200000` / `018000` 与这一件的尺寸，受理前估价按邮编路线经分区目录解出 Z1、
+  按 MAX 计费重算体积重），断言 `201` / `SUBMITTED`，再从
   `GET /shipment-request-views` 把同一笔读回来。起进程要与 `parcel.sh` 一样同时设
   `IDP_PARCEL_ISOLATED_READ_TENANT` 与 `IDP_PARCEL_ISOLATED_WRITE_TENANT`，都是
   `SYN-TENANT-01`。只开写、不开读时提交能落成已提交，列表和详情仍答 `403`

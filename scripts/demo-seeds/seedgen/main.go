@@ -47,7 +47,7 @@ func main() {
 	// 复核责任方与登记责任方不是同一个合成身份——四眼门在种子里也照守。
 	write(outDir, "reference-series-fuel-review.json", seriesReviewDocument("SYN-SERIES-FUEL-01", "v1"))
 	write(outDir, "reference-series-fx-cny-sgd-review.json", seriesReviewDocument("SYN-SERIES-FX-CNY-SGD", "v1"))
-	// 分区目录与价卡上的 Z1/Z2 对齐，但是另一本册：卡不绑目录标识，评价仍走调用方给值。
+	// 售价卡绑这本分区目录（见 sellCardSnapshot），分区由委托申报的邮编路线经它解析。
 	// 不复核就不在用，与序列同一条纪律。
 	write(outDir, "reference-catalogue-zone-cn-sg.json", zoneCatalogueSnapshot())
 	write(outDir, "reference-catalogue-zone-cn-sg-review.json", catalogueReviewDocument("SYN-CAT-ZONE-CN-SG", "v1"))
@@ -73,8 +73,8 @@ func catalogueReviewDocument(catalogueID, version string) []byte {
 
 // zoneCatalogueSnapshot 折装分区目录 SYN-CAT-ZONE-CN-SG v1。目的侧粒度由这一版自己
 // 声明为 3 位（ADR-0109：机制只给槽，不预拟真实表的粒度）；前缀与分区都是合成值，
-// 证据只记 S，不是任何承运商的真分区表。Z1/Z2 与售价卡 SYN-PLAN-CN-SG-01 的区号同名，
-// 方便目录页和价卡页对得上；卡本身不绑这本目录。
+// 证据只记 S，不是任何承运商的真分区表。售价卡 SYN-PLAN-CN-SG-01 绑这本目录，解出的
+// 分区要在卡的费率表里查得到，所以条目值 Z1/Z2 必须与卡上费率行的区号同名。
 func zoneCatalogueSnapshot() []byte {
 	origin, err := domain.NewPostalPrefixCatalogueOrigin([]string{"200", "510"})
 	must("分区目录始发", err)
@@ -118,8 +118,8 @@ func seriesReviewDocument(seriesID, version string) []byte {
 }
 
 // sellCardSnapshot 折装售价卡 SYN-PLAN-CN-SG-01 v1：华东/华南→新加坡的首重+续重
-// 客户计费卡，MAX 计费重（体积系数 5000），一条偏远附加固定规则，并把燃油序列绑进
-// 方案结构——「建产品→配价」那半个故事里价卡引用序列的那根线。
+// 客户计费卡，MAX 计费重（体积系数 5000），一条偏远附加固定规则，并把燃油序列与分区
+// 目录绑进方案结构——「建产品→配价」那半个故事里价卡引用序列与目录的那两根线。
 func sellCardSnapshot() []byte {
 	cny := currency("CNY")
 	kilogram := domain.WeightUnitKilogram
@@ -167,6 +167,12 @@ func sellCardSnapshot() []byte {
 	must("燃油序列绑定", err)
 	structures, err := domain.NewPricingPlanStructures(nil, nil, []domain.ReferenceSeriesBinding{fuelBinding})
 	must("方案结构", err)
+	// 分区目录同样只绑标识（ADR-0109 决定三）。绑了它，分区由委托申报的邮编路线解析，不读调用方给的分区；
+	// 受理前估价对没绑分区目录的卡答未形成（ADR-0179 决定四）。
+	zoneLink, err := domain.NewReferenceCatalogueLink(domain.CatalogueKindZone, "SYN-CAT-ZONE-CN-SG")
+	must("分区目录绑定", err)
+	structures, err = structures.WithReferenceCatalogues(zoneLink)
+	must("方案结构绑分区目录", err)
 
 	plan, err := domain.NewPricingPlanVersion(
 		reference(domain.ArtifactPricingPlan, "SYN-PLAN-CN-SG-01", "v1"),
