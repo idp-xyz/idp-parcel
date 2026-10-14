@@ -9,29 +9,29 @@
 | accessidentity | 28 | 20 | 0 | 5 | 0 | 0 |
 | architecture（非业务） | 0 | 13 | 0 | 0 | 0 | 0 |
 | collectionremittance | 22 | 10 | 4 | 6 | 0 | 3 |
-| customscompliance | 104 | 105 | 20 | 42 | 10 | 14 |
-| networkrouting | 72 | 72 | 9 | 13 | 2 | 6 |
+| customscompliance | 106 | 105 | 20 | 42 | 10 | 15 |
+| networkrouting | 74 | 72 | 9 | 13 | 2 | 7 |
 | nodeoperations | 33 | 28 | 4 | 10 | 4 | 6 |
-| parcelpricing | 130 | 116 | 17 | 16 | 1 | 23 |
+| parcelpricing | 130 | 117 | 17 | 16 | 1 | 23 |
 | parcelshipment | 200 | 193 | 20 | 36 | 10 | 18 |
-| partycommercial | 157 | 169 | 13 | 40 | 1 | 37 |
+| partycommercial | 159 | 169 | 13 | 40 | 1 | 38 |
 | pilotgovernance | 22 | 20 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 174 | 122 | 29 | 58 | 11 | 9 |
 | transportfulfillment | 152 | 139 | 27 | 36 | 11 | 29 |
 | visibilityexception | 100 | 97 | 11 | 30 | 8 | 11 |
-| **合计** | 1219 | 1127 | 159 | 298 | 59 | 160 |
+| **合计** | 1225 | 1128 | 159 | 298 | 59 | 163 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 80、测试 126。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 80、测试 127。
 
-## 跨上下文消费缝：38 组，98 个生产文件
+## 跨上下文消费缝：38 组，101 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
 | accessidentity | pilotgovernance | 1 |
-| customscompliance | accessidentity | 2 |
+| customscompliance | accessidentity | 3 |
 | customscompliance | settlementaccounting | 2 |
-| networkrouting | accessidentity | 1 |
+| networkrouting | accessidentity | 2 |
 | networkrouting | customscompliance | 1 |
 | networkrouting | parcelpricing | 2 |
 | networkrouting | parcelshipment | 3 |
@@ -50,7 +50,7 @@
 | parcelshipment | pilotgovernance | 2 |
 | parcelshipment | settlementaccounting | 3 |
 | parcelshipment | transportfulfillment | 5 |
-| partycommercial | accessidentity | 1 |
+| partycommercial | accessidentity | 2 |
 | settlementaccounting | accessidentity | 1 |
 | settlementaccounting | customscompliance | 2 |
 | settlementaccounting | parcelpricing | 5 |
