@@ -307,3 +307,65 @@ func TestDeviceRegistrationWritesRefuseToRunOutsideATransaction(t *testing.T) {
 		t.Fatalf("无事务登记之后：found %v, err %v; want 未落册", found, err)
 	}
 }
+
+// Covers: 票 operator-channel/21 做什么第 1 条——按租户列出已登记设备，含已停用的；别的租户的同名设备不在其中；
+// 空册答空切片；空租户拒绝。查阅行不带依据。
+func TestListDevicesReturnsOnlyThatTenantsRows(t *testing.T) {
+	register := newDeviceRegister(t)
+	node := scopeOf(t, accessidentity.WorkScopeNode, "SYN-NODE-SZX-01")
+	offsite := scopeOf(t, accessidentity.WorkScopeOffsite, "SYN-OFFSITE-SZX-01")
+	expectDeviceOutcome(t, "后登的标识",
+		register.register(t, deviceOf(t, tenantOne, "SYN-DEVICE-B", offsite, "SYN-DEVICE-BASIS-B")),
+		accessidentity.DeviceRegistrationRecorded)
+	expectDeviceOutcome(t, "先序的标识",
+		register.register(t, deviceOf(t, tenantOne, "SYN-DEVICE-A", node, "SYN-DEVICE-BASIS-A")),
+		accessidentity.DeviceRegistrationRecorded)
+	deactivatedAt := grantStartsAt.Add(48 * time.Hour)
+	expectDeviceOutcome(t, "停用 B",
+		register.deactivate(t, deactivationOf(t, tenantOne, "SYN-DEVICE-B", deactivatedAt, "SYN-DEVICE-OFF-B")),
+		accessidentity.DeviceRegistrationRecorded)
+	expectDeviceOutcome(t, "乙租户同名",
+		register.register(t, deviceOf(t, tenantTwo, "SYN-DEVICE-A", node, "SYN-DEVICE-BASIS-OTHER")),
+		accessidentity.DeviceRegistrationRecorded)
+
+	rows, err := register.registry.ListDevices(t.Context(), tenantOne)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(rows) != 2 || rows[0].DeviceID() != "SYN-DEVICE-A" || rows[1].DeviceID() != "SYN-DEVICE-B" {
+		t.Fatalf("甲租户的册 = %d 行，首尾 %v", len(rows), deviceIDs(rows))
+	}
+	if rows[0].Status() != accessidentity.DeviceCatalogueRegistered || rows[0].WorkScope() != node {
+		t.Fatalf("A = %s %s", rows[0].Status(), rows[0].WorkScope().Kind())
+	}
+	if _, ok := rows[0].DeactivatedAt(); ok {
+		t.Fatal("登记行带着停用时刻")
+	}
+	at, ok := rows[1].DeactivatedAt()
+	if rows[1].Status() != accessidentity.DeviceCatalogueDeactivated || !ok || !at.Equal(deactivatedAt.Truncate(time.Microsecond)) {
+		t.Fatalf("B 停用 = %s %s ok %v", rows[1].Status(), at, ok)
+	}
+	if rows[1].WorkScope() != offsite {
+		t.Fatalf("B 的作业范围 = %s %s", rows[1].WorkScope().Kind(), rows[1].WorkScope().Reference())
+	}
+
+	other, err := register.registry.ListDevices(t.Context(), tenantTwo)
+	if err != nil || len(other) != 1 || other[0].DeviceID() != "SYN-DEVICE-A" || other[0].Status() != accessidentity.DeviceCatalogueRegistered {
+		t.Fatalf("乙租户的册 = %v, err %v", deviceIDs(other), err)
+	}
+	empty, err := register.registry.ListDevices(t.Context(), "SYN-TENANT-EMPTY")
+	if err != nil || len(empty) != 0 || empty == nil {
+		t.Fatalf("空册 = %#v, err %v; want 空切片", empty, err)
+	}
+	if _, err := register.registry.ListDevices(t.Context(), " "); !errors.Is(err, accessidentity.ErrDeviceCatalogueTenantRequired) {
+		t.Fatalf("空租户 err = %v", err)
+	}
+}
+
+func deviceIDs(rows []accessidentity.DeviceCatalogueRow) []string {
+	ids := make([]string, len(rows))
+	for i, row := range rows {
+		ids[i] = row.DeviceID()
+	}
+	return ids
+}

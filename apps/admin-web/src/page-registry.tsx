@@ -16,6 +16,7 @@ const loadCollection = () => import('./pages/collection');
 const loadVisibility = () => import('./pages/visibility');
 const loadCustoms = () => import('./pages/customs');
 const loadParty = () => import('./pages/party');
+const loadWorkDevices = () => import('./pages/work-devices');
 
 const domainLoaders = [
   loadMyWork,
@@ -31,6 +32,7 @@ const domainLoaders = [
   loadVisibility,
   loadCustoms,
   loadParty,
+  loadWorkDevices,
 ];
 
 // 导出名经属性访问取（`(m) => m.XxxPage`），拼错仍是 tsc 错误——不用字符串名查表。
@@ -94,6 +96,7 @@ export const pageById: Record<string, ComponentType> = {
   'service-products': page(loadParty, (m) => m.ServiceProductsPage),
   'channel-product-catalog': page(loadParty, (m) => m.ChannelProductCatalogPage),
   'commercial-policies': page(loadParty, (m) => m.CommercialPoliciesPage),
+  'work-devices': page(loadWorkDevices, (m) => m.WorkDeviceCataloguePage),
 };
 
 /**

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -28,6 +29,7 @@ func NewDeviceRegistry(db *bentopg.DB) (*DeviceRegistry, error) {
 var (
 	_ accessidentity.DeviceRegistry  = (*DeviceRegistry)(nil)
 	_ accessidentity.DeviceRegistrar = (*DeviceRegistry)(nil)
+	_ accessidentity.DeviceCatalogue = (*DeviceRegistry)(nil)
 )
 
 func (registry *DeviceRegistry) RegisterDevice(
@@ -166,6 +168,63 @@ func (registry *DeviceRegistry) FindDevice(
 		return accessidentity.RecordedDevice{}, false, fmt.Errorf("%s: 设备 %s：%w", operation, deviceID, err)
 	}
 	return device, true, nil
+}
+
+// ListDevices 按租户列出已登记设备，含已停用的。空册答空切片。别的租户的行不在结果里。
+//
+// 查询仍取出依据，只为经领域构造门重建登记行；查阅行再把依据留在登记行上，不带出去。次序按设备标识，
+// 两次读回才对得上，不表示业务优先级。
+func (registry *DeviceRegistry) ListDevices(
+	ctx context.Context,
+	tenantID string,
+) ([]accessidentity.DeviceCatalogueRow, error) {
+	const operation = "list devices"
+	tenant := strings.TrimSpace(tenantID)
+	if tenant == "" {
+		return nil, fmt.Errorf("%s: %w", operation, accessidentity.ErrDeviceCatalogueTenantRequired)
+	}
+	querier, err := registry.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", operation, err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT d.device_id, d.work_scope_kind, d.work_scope_ref, d.basis_ref, x.deactivated_at, x.basis_ref
+		   FROM access_identity.device d
+		   LEFT JOIN access_identity.device_deactivation x
+		     ON x.tenant_id = d.tenant_id AND x.device_id = d.device_id
+		  WHERE d.tenant_id = $1
+		  ORDER BY d.device_id`,
+		tenant,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", operation, err)
+	}
+	defer rows.Close()
+
+	listed := make([]accessidentity.DeviceCatalogueRow, 0)
+	for rows.Next() {
+		var (
+			deviceID, kind, reference, basis string
+			deactivatedAt                    *time.Time
+			deactivationBasis                *string
+		)
+		if err := rows.Scan(&deviceID, &kind, &reference, &basis, &deactivatedAt, &deactivationBasis); err != nil {
+			return nil, fmt.Errorf("%s: %w", operation, err)
+		}
+		device, err := recordedDeviceFromRow(tenant, deviceID, kind, reference, basis, deactivatedAt, deactivationBasis)
+		if err != nil {
+			return nil, fmt.Errorf("%s: 设备 %s：%w", operation, deviceID, err)
+		}
+		row, err := device.CatalogueRow()
+		if err != nil {
+			return nil, fmt.Errorf("%s: 设备 %s：%w", operation, deviceID, err)
+		}
+		listed = append(listed, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: %w", operation, err)
+	}
+	return listed, nil
 }
 
 // recordedDeviceFromRow 经领域构造门重建一台设备，理由同 recordedGrantFromRow。

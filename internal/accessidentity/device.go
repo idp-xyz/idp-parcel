@@ -96,6 +96,82 @@ func (device RecordedDevice) InUseAt(at time.Time) bool {
 	return !device.deactivated || at.Before(device.deactivation.deactivatedAt)
 }
 
+// ErrDeviceCatalogueTenantRequired 表示按租户列设备时没给出租户。空租户不能列成「全部租户的设备」。
+var ErrDeviceCatalogueTenantRequired = errors.New("access identity: device catalogue list needs a tenant")
+
+// DeviceCatalogueStatus 是查阅行上的状态词。登记与停用由停用导出，不另存一份状态。
+type DeviceCatalogueStatus string
+
+const (
+	// DeviceCatalogueRegistered 是尚未停用的一行。
+	DeviceCatalogueRegistered DeviceCatalogueStatus = "REGISTERED"
+	// DeviceCatalogueDeactivated 是已经停用的一行。
+	DeviceCatalogueDeactivated DeviceCatalogueStatus = "DEACTIVATED"
+)
+
+func (status DeviceCatalogueStatus) String() string { return string(status) }
+
+// DeviceCatalogueRow 是设备册查阅交回的一行。只有设备标识、作业范围、登记还是停用；停用了的带停用时刻。
+// 不出型号、序列号、使用人、健康状态，也不出依据——依据留在登记行上（ADR-0149 越权风险点 2，票 operator-channel/21）。
+type DeviceCatalogueRow struct {
+	deviceID      string
+	scope         WorkScope
+	deactivatedAt time.Time
+	deactivated   bool
+}
+
+// NewDeviceCatalogueRow 的 deactivatedAt 取 nil 表示登记、未停用。零值时刻不是停用时刻。
+func NewDeviceCatalogueRow(deviceID string, scope WorkScope, deactivatedAt *time.Time) (DeviceCatalogueRow, error) {
+	device := strings.TrimSpace(deviceID)
+	if device == "" || !scope.valid() {
+		return DeviceCatalogueRow{}, ErrIncompleteDeviceRegistration
+	}
+	if deactivatedAt == nil {
+		return DeviceCatalogueRow{deviceID: device, scope: scope}, nil
+	}
+	if deactivatedAt.IsZero() {
+		return DeviceCatalogueRow{}, ErrIncompleteDeviceRegistration
+	}
+	return DeviceCatalogueRow{
+		deviceID:      device,
+		scope:         scope,
+		deactivatedAt: *deactivatedAt,
+		deactivated:   true,
+	}, nil
+}
+
+func (row DeviceCatalogueRow) DeviceID() string     { return row.deviceID }
+func (row DeviceCatalogueRow) WorkScope() WorkScope { return row.scope }
+func (row DeviceCatalogueRow) Status() DeviceCatalogueStatus {
+	if row.deactivated {
+		return DeviceCatalogueDeactivated
+	}
+	return DeviceCatalogueRegistered
+}
+
+// DeactivatedAt 只在这一行已停用时交回时刻。登记行没有停用时刻，不是零值时刻。
+func (row DeviceCatalogueRow) DeactivatedAt() (time.Time, bool) {
+	return row.deactivatedAt, row.deactivated
+}
+
+// CatalogueRow 从册上的一台设备投影出查阅行，依据停在登记行里，不进入这一行。
+func (device RecordedDevice) CatalogueRow() (DeviceCatalogueRow, error) {
+	registration := device.registration
+	if deactivation, deactivated := device.Deactivation(); deactivated {
+		at := deactivation.DeactivatedAt()
+		return NewDeviceCatalogueRow(registration.DeviceID(), registration.WorkScope(), &at)
+	}
+	return NewDeviceCatalogueRow(registration.DeviceID(), registration.WorkScope(), nil)
+}
+
+// DeviceCatalogue 按租户列出已登记设备。空册答空切片，不答未配置；读不动才答 error。
+//
+// 与 DeviceRegistry 分列：FindDevice 的替身只为一台设备的铸造服务，列册是查阅。塞进同一个接口会让那些替身空实现
+// 一个它们碰不到的方法。postgres 的 DeviceRegistry 两者都实现，册仍是一本。
+type DeviceCatalogue interface {
+	ListDevices(ctx context.Context, tenantID string) ([]DeviceCatalogueRow, error)
+}
+
 // DeviceRegistry 是设备册的装载口：按（租户、设备标识）取一台设备，连同它的停用。
 //
 // 租户在键上：铸造时它取自操作者册上的绑定，所以别的租户登的同名设备在这里查不到。不在册时答 found=false 而不返回

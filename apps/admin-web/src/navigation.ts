@@ -39,6 +39,7 @@ import {
   Split,
   Stamp,
   Star,
+  TabletSmartphone,
   Ticket,
   TrendingUp,
   Truck,
@@ -96,6 +97,8 @@ export const navigationSections: NavigationSection[] = [
       { id: 'tracking-judgment-rules', label: '追踪判断规则', icon: 'tracking-judgment-rules' },
       { id: 'disclosure-policies', label: '披露与通知策略', icon: 'disclosure-policies' },
       { id: 'claim-prerequisites', label: '索赔资格与授权', icon: 'claim-prerequisites' },
+      // 作业设备册是登记式目录，不是现场作业，也不做设备管理（ADR-0149 越权风险点 2）。
+      { id: 'work-devices', label: '作业设备册', icon: 'work-devices' },
     ],
   },
   {
@@ -216,6 +219,7 @@ export const sidebarIconMap: Record<string, ElementType> = {
   'tracking-judgment-rules': Milestone,
   'disclosure-policies': Eye,
   'claim-prerequisites': BadgeCheck,
+  'work-devices': TabletSmartphone,
   'tracking-projection': Radar,
   'exception-triage': AlertTriangle,
   'exception-cases': FolderOpen,
@@ -366,6 +370,14 @@ export const moduleInfoById: Record<string, ModuleInfo> = {
     title: '路由计划与改路',
     owner: '网络与路由（network-routing）',
     source: 'docs/domain/network-routing/CONTEXT.md 包裹级路由计划、路由指令、路由偏离判断与受控改路历史',
+  },
+
+  // —— 作业设备册（共享接入身份；不是限界上下文）——
+  'work-devices': {
+    title: '作业设备册',
+    owner: '共享接入身份（access identity）',
+    source:
+      'docs/adr/0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md 决定二与越权风险点 2',
   },
 
   // —— 作业与履约（node-operations / transport-fulfillment，管理台只做治理查阅面）——
