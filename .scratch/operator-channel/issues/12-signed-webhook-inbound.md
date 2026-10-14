@@ -1,7 +1,7 @@
 # 12 签名 webhook 入向：只能推送的外部源经签名校验后以集成客户端身份进入
 
 Category: enhancement
-Status: 完工，待评审与重放——2026-10-14 通道 4。分支 `mcp4-oc12`，基 `210eafac`（派单写的 `b3c8bd46` 在续做时已不是远端 main，照派单自新 tip 起），代码 tip `13f34a33`，清点 `ab88fb41`。认领与此前 ready-for-agent 见完成记录。
+Status: resolved——2026-10-14 13:14 通道 1 重放进 main：远端 main 仍是 `210eafac`，`mcp4-oc12` 是它的快进，作者五笔 SHA 原样进入（`f13d344b` 认领、`f185673c`、`13f34a33` 代码、`ab88fb41` 清点、`1b1d4460` 完成记录）。评审无阻断。此前：完工，待评审与重放——2026-10-14 通道 4。分支 `mcp4-oc12`，基 `210eafac`（派单写的 `b3c8bd46` 在续做时已不是远端 main，照派单自新 tip 起），代码 tip `13f34a33`，清点 `ab88fb41`。认领与此前 ready-for-agent 见完成记录。
 Blocked by: 11
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 丙轨实施
 地盘：入向连接器的签名校验件（平台件或 `internal/accessidentity`，本票定落点）；各上下文入向连接器接它的那一处归 psb/09、10、12 的连接器项。
@@ -69,3 +69,30 @@ Blocked by: 11
 1. **签名原文与算法封闭集。** ADR-0149 决定三第三条只写「HMAC 或对方公钥」，没有点名 Standard Webhooks、Ed25519，也没有点名原文怎么拼。本票把这两形和 `id.timestamp.body` 收成产品的封闭集（`ParseStandardWebhook` 与 `push_signing_key` 的 `CHECK` 同笔）。owner 若要别的公钥算法或另一种原文，要改这一处，不能只加配置。
 2. **推送路径不看证书绑定要求。** 册上 `certificateBoundTokenRequired` 为真的客户端，经签名推送进来时不因「没有绑定令牌」被拒。高保证在这条入口上只靠签名密钥。若 owner 认为只能推送的源也必须另有传输层客户端证书，那是本票没做的一格。
 3. **重放账还没有生产调用方。** 接口要求与业务写同一事务，但本票按派单不接各上下文连接器，也不改 `cmd/parcel-api` 端点表。在那些接线落地之前，这份账不会被生产请求写到。
+
+## Comments
+
+**评审 ← 通道 1 · 钉 `1b1d4460` · 13:14**（基 `210eafac`，隔离检出 `/tmp/idp-review-oc12-mcp1`。作者是通道 4。用户令通道 1 直接评审，不另派。）
+
+**Standards**
+
+阻断：无。
+
+非阻断：无。
+
+无发现：密钥只存引用。`PushSigningKeyMaterial` 的 `String`、`GoString`、`LogValue` 只交替身。窗口与时钟偏差在 `NewPushSourceBinding` 不代填；批文 `WindowSeconds`、`ClockSkewSeconds` 用指针，缺席拒收。`0006_push_source_register.sql` 两列无 DEFAULT、不种行、不放密钥本体。`PAR-INT-12` 保持待提供。领域包不引 `pgx`。令牌与推送共用 `admitIntegrationClient`，证书绑定留在 `MintIntegrationClient`。
+
+**Spec**
+
+阻断：无。
+
+非阻断：无。
+
+无发现：判据三格有名。`TestHMACSignedPushIsMintedAsTheBoundIntegrationClient`、`TestEd25519SignedPushIsMintedAsTheBoundIntegrationClient`、`TestTheSamePushReplayedIsRecognisedButARetrySignedAfreshIsNot`、`TestKeyRotationAcceptsOldAndNewKeysExactlyWhileBothAreEffective`。签名不过、越窗、重放与依赖故障互不折进，见 `TestSignedPushAnswerGradesDoNotStandInForEachOther`。`MintSignedPush` 先验签、再判窗、再入账。diff 没有各上下文连接器，也没有 `cmd/parcel-api`。`//go:embed all:access_identity` 已含 0006，不改 `migrations.go` 与 `plan.go` 与模块已接线一致。
+
+### 进 main 记录（推送方 · 通道 1 · 2026-10-14 13:14）
+
+- **门**：上面这份评审两轴无阻断。
+- **重放**：`git merge-base --is-ancestor 210eafac 1b1d4460` 成立，远端 main 仍是 `210eafac`。不 cherry-pick、不改 SHA。作者五笔原样快进。对照（分支 = main）：`f13d344b`、`f185673c`、`13f34a33`、`ab88fb41`、`1b1d4460`。
+- **清点**：在这份检出上重跑 `tools/mechanism-inventory`，`MECHANISM-INVENTORY.md` 相对 `ab88fb41` 无漂移，不另立清点笔。
+- **验证**：Go 与 SQL 与 `1b1d4460` 相同，本笔只改票面。`go build ./...` 与 `go vet ./...` 退 0。自 `210eafac` 起改动的 `.go`，`gofmt -l` 无输出。带 DSN 单跑 `TestPushReceiptRecognisesTheSameSignedContentOnce` 与 `TestPushSourceWritesRefuseToRunOutsideATransaction` 为 PASS、非 SKIP。带 DSN `go test -p 1 -count=1 ./...` 退 0：140 个包 `ok`、0 FAIL、14 个包无测试文件，输出里没有 `(cached)`。`0006_push_source_register.sql` 无 CR、无 BOM。推送条件：远端 main 仍是 `210eafac`，且其上只多作者五笔与本笔。
