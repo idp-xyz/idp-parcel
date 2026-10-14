@@ -1,7 +1,7 @@
 # 05 主数据与运营目录查阅面逐口换操作者 Intake
 
 Category: enhancement
-Status: 完工，待评审与重放——2026-10-14 通道 4。分支 `mcp4-oc05`，基 `da788a3b`，代码 tip `caec812a`，清点 `7b7ce47c`。认领见完成记录。
+Status: resolved——2026-10-14 通道 1 重放进 main：`mcp4-oc05` 自 `da788a3b` 快进，SHA 不改（`4a7e0e63` 认领、`caec812a` 代码、`7b7ce47c` 清点、`605e0743` 完成记录）。评审无阻断，Spec 非阻断一条不挡。此前：完工，待评审与重放——2026-10-14 通道 4。分支 `mcp4-oc05`，基 `da788a3b`，代码 tip `caec812a`，清点 `7b7ce47c`。认领见完成记录。
 Blocked by: 03
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`cmd/parcel-api` 端点表里 ADR-0077 那一族目录查阅端点的装配行及其装配测试。
@@ -53,4 +53,30 @@ Blocked by: 03
 
 1. **页大小与作用域引用写成产品常量。** owner 若要把页大小或审计引用收成租户取值，要改 `operatorCatalogueReadLimit` 与 `operatorCatalogueScopeReference`，四包同形。
 2. **「答查阅结果」没有真库空册。** 装配用例只证授予齐备的请求到达读口。读口自己的空目录成格不在本票重跑。
+
+## Comments
+
+**评审 ← 通道 1 · 钉 `605e0743` · 13:42**（基 `da788a3b`，隔离检出 `/tmp/idp-review-oc05-mcp1`。作者是通道 4。用户此前令通道 1 直接评审，本票照办，不另派。）
+
+**Standards**
+
+阻断：无。
+
+非阻断：无。
+
+无发现：四族都铸 `CapabilityMasterDataAndOperationsRead`，不带准入要求。页大小 200 与作用域引用是产品常量，判断项 2 写明不共享类型。租户取自信封，`TestOperatorCatalogueQueryTakesTheTenantFromTheEnvelope` 钉请求体不读。证据只记 `S`。
+
+**Spec**
+
+阻断：无。
+
+非阻断：完成判据「答查阅结果」票面自标 ◑。`TestSwappedCatalogueReadFacesAnswerFromTheOperatorChannel` 里授予齐备到达未接线读口，答 `NO_ANSWER_FORMED`，不是查阅结果。空目录 2xx 没有用新 Intake 再跑。读口仍是各端点原有的第二参，不挡合入。越权风险点 2 已记下。
+
+无发现：三格与撤隔离读放行有名。`TestSwappedCatalogueReadFacesAnswerFromTheOperatorChannel` 钉未配置、无令牌、无查阅读授予，以及隔离读打开时这几口仍走操作者渠道。`endpoints.go` 不再把隔离读的计价、网络、关务、商业四格盖上查阅变量。未做 operator-channel/10。
+
+### 进 main 记录（推送方 · 通道 1）
+
+- **门**：上面这份评审无阻断。非阻断不挡。
+- **重放**：分支自 `da788a3b` 起，远端 main 仍是它时快进，SHA 不改：`4a7e0e63`、`caec812a`、`7b7ce47c`、`605e0743`。
+- **验证**：钉 `605e0743` 的 Go。`gofmt -l` 对改动的 `.go` 无输出。带 DSN 单跑 `TestSwappedCatalogueReadFacesAnswerFromTheOperatorChannel` 为 PASS、非 SKIP。带 DSN `go test -p 1 -count=1 ./...` 退 0：140 个包 `ok`、0 FAIL、14 个包无测试文件，没有 `(cached)`。本笔只改票面。推送条件：远端 main 仍是 `da788a3b`。
 
