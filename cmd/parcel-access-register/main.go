@@ -1,12 +1,13 @@
 // parcel-access-register 是 accessidentity 各本册的受控登记口：操作者册（票 operator-channel/01）登记操作者主体、
 // 按能力面授予（「作业事实登记」一格带作业范围，票 operator-channel/10）、撤销授予；集成客户端册（票 operator-channel/11）
 // 登记客户端主体、按事实类型授予、撤销授予；作业设备册（票 operator-channel/10）登记设备、停用设备；准入范围对照册
-// （票 operator-channel/19，ADR-0180）登记对照、结束对照。
+// （票 operator-channel/19，ADR-0180）登记对照、结束对照；推送源册（票 operator-channel/12）登记推送源、签名密钥与停用。
 //
 // 定位是 ADR-0085 决定一的「受控批量口」（ADR-0100 决定六），与将来的在线口消费同一组登记口
 // accessidentity.OperatorRegistrar、accessidentity.IntegrationClientRegistrar、accessidentity.DeviceRegistrar、
-// accessidentity.AdmissionScopeMappingRegistrar，答复代数一致。批文每一格都来自输入文件，进程不内置任何生产默认。演示
-// 租户只经它登 SYN- 合成主体、设备与对照，证据层级只记 S（参数登记册 PAR-INT-08、PAR-INT-09、PAR-INT-10、PAR-INT-11）。
+// accessidentity.AdmissionScopeMappingRegistrar、accessidentity.PushSourceRegistrar，答复代数一致。批文每一格都来自输入
+// 文件，进程不内置任何生产默认。演示租户只经它登 SYN- 合成主体、设备、对照与推送源，证据层级只记 S（参数登记册
+// PAR-INT-08、PAR-INT-09、PAR-INT-10、PAR-INT-11、PAR-INT-12）。密钥本体不进批文。
 package main
 
 import (
@@ -38,7 +39,8 @@ const (
 
 const usage = "用法：parcel-access-register <operator-register|operator-grant|operator-revoke|" +
 	"integration-client-register|integration-client-grant|integration-client-revoke|" +
-	"device-register|device-deactivate|admission-scope-mapping-register|admission-scope-mapping-end> -input <file>\n" +
+	"device-register|device-deactivate|admission-scope-mapping-register|admission-scope-mapping-end|" +
+	"push-source-register|push-signing-key-register|push-signing-key-retire> -input <file>\n" +
 	admissionScopeMappingGuidance
 
 // admissionScopeMappingGuidance 是登对照之前要知道的那一条（ADR-0180 越权风险点 2 与其接受记录）：Admits 看不到这笔写改的
@@ -80,6 +82,12 @@ func run(ctx context.Context, args []string, getenv func(string) string, out, er
 		translate = admissionScopeMappingBatchFromJSON
 	case "admission-scope-mapping-end":
 		translate = admissionScopeMappingEndBatchFromJSON
+	case "push-source-register":
+		translate = pushSourceBatchFromJSON
+	case "push-signing-key-register":
+		translate = pushSigningKeyBatchFromJSON
+	case "push-signing-key-retire":
+		translate = pushSigningKeyRetirementBatchFromJSON
 	default:
 		fmt.Fprintf(errOut, "未知子命令 %q；%s\n", args[0], usage)
 		return exitTechnical
@@ -89,10 +97,11 @@ func run(ctx context.Context, args []string, getenv func(string) string, out, er
 
 // registers 是一批里各项可能要落的各本册的登记口；每一项只用它那一本。
 type registers struct {
-	operators accessidentity.OperatorRegistrar
-	clients   accessidentity.IntegrationClientRegistrar
-	devices   accessidentity.DeviceRegistrar
-	mappings  accessidentity.AdmissionScopeMappingRegistrar
+	operators   accessidentity.OperatorRegistrar
+	clients     accessidentity.IntegrationClientRegistrar
+	devices     accessidentity.DeviceRegistrar
+	mappings    accessidentity.AdmissionScopeMappingRegistrar
+	pushSources accessidentity.PushSourceRegistrar
 }
 
 // outcome 是一项登记的答复名，与它算不算落定。各本册的答复各是各的类型，回显与退出码只要这两样。
@@ -162,7 +171,12 @@ func runBatch(
 		fmt.Fprintf(errOut, "构造准入范围对照册：%v\n", err)
 		return exitTechnical
 	}
-	books := registers{operators: operators, clients: clients, devices: devices, mappings: mappings}
+	pushSources, err := aipostgres.NewPushSourceRegistry(db)
+	if err != nil {
+		fmt.Fprintf(errOut, "构造推送源册：%v\n", err)
+		return exitTechnical
+	}
+	books := registers{operators: operators, clients: clients, devices: devices, mappings: mappings, pushSources: pushSources}
 
 	// 批不是聚合：逐项各起事务，某项被拒不撤已落的前项，重跑同一批已落项以重放回答
 	// （AT-PC-011 同款纪律）。后项看得见前项，同一批里先登主体、后授予也成立。
@@ -211,6 +225,14 @@ func clientOutcome(answer accessidentity.IntegrationClientRegistrationOutcome) o
 func deviceOutcome(answer accessidentity.DeviceRegistrationOutcome) outcome {
 	switch answer {
 	case accessidentity.DeviceRegistrationRecorded, accessidentity.DeviceRegistrationAlreadyRegistered:
+		return outcome{name: answer.String(), landed: true}
+	}
+	return outcome{name: answer.String()}
+}
+
+func pushSourceOutcome(answer accessidentity.PushSourceRegistrationOutcome) outcome {
+	switch answer {
+	case accessidentity.PushSourceRegistrationRecorded, accessidentity.PushSourceRegistrationAlreadyRegistered:
 		return outcome{name: answer.String(), landed: true}
 	}
 	return outcome{name: answer.String()}
