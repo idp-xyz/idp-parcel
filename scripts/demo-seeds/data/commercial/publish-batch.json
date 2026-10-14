@@ -92,7 +92,7 @@
       "objectId": "SYN-RULEPKG-01",
       "version": "v1",
       "scope": "SYN-SCOPE-01",
-      "contentDigest": "PCC-1:17569a7f61978094e40f58f360713acefcaf4ad440fa8bc56f8d24038a621136",
+      "contentDigest": "PCC-1:266a5536a9c475f5d3a5c5ad0c33f7becc12931d1fdbacd141f1ddda0f691d68",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "references": {
         "SERVICE_PRODUCT": "SYN-PROD-CN-SG-EXPRESS"
@@ -138,7 +138,6 @@
             "CUSTOMER_RELATIONSHIP",
             "LEGAL_ENTITY_AND_CONTRACT",
             "PRODUCT_AND_SERVICE",
-            "REQUIRED_DOCUMENT",
             "NETWORK_REACHABILITY"
           ],
           "manualReview": "NOT_REQUIRED"
