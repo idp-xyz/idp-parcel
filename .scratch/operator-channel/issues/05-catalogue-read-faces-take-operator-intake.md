@@ -1,7 +1,7 @@
 # 05 主数据与运营目录查阅面逐口换操作者 Intake
 
 Category: enhancement
-Status: ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
+Status: in-progress——2026-10-14 13:36 通道 4 认领（派单 task-fc4339a6 ← 通道 1），分支 `mcp4-oc05`，基 `da788a3b`。此前 ready-for-agent——2026-09-24 拆法经用户授权通道 4 自决认可
 Blocked by: 03
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`cmd/parcel-api` 端点表里 ADR-0077 那一族目录查阅端点的装配行及其装配测试。
