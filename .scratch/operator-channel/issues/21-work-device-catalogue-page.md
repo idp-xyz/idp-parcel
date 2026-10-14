@@ -1,7 +1,7 @@
 # 21 作业设备册查阅页：只看已登记的行
 
 Category: enhancement
-Status: 完工，待评审与重放——2026-10-14 15:39 通道 2。此前 2026-10-14 15:13 通道 2 认领（用户指定 ← 通道 1），分支 mcp2-oc21，基 a3187272
+Status: resolved——2026-10-14 通道 1 重放进 main：`mcp2-oc21` 含 `origin/main` `fd458298`，可以快进。代码 `08bbd3bf`，端点表 `c7d176ef`，票面 `9ac3aeef`。评审无阻断。此前：完工，待评审与重放——2026-10-14 15:39 通道 2。此前 2026-10-14 15:13 通道 2 认领（用户指定 ← 通道 1），分支 mcp2-oc21，基 a3187272
 Blocked by: 无
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 丙轨实施
 地盘：`internal/accessidentity` 的设备册查阅行与其 postgres 读口、`internal/accessidentity/adapters/http` 的只读查阅处理器、`apps/admin-web` 的作业设备册页。不改 `cmd/parcel-api/endpoints.go` 与 `assemble_*.go`。
@@ -80,3 +80,24 @@ Blocked by: 无
 - 验证：`go build ./...` 退 0；`go vet` 动过的 `cmd/parcel-api` 与 `internal/accessidentity/...` 退 0；带 DSN `go test -count=1 -p 1 ./cmd/parcel-api/ ./internal/architecture/` 退 0。管理台 `tsc`、`run-tests.mjs`（fail 0）、`vite build` 退 0。清点重生成，接入面端点 140，这一行归 accessidentity。证据只记 `S`。
 
 ## Comments
+
+**评审 ← 通道 1 · 钉 `9ac3aeef`**（基 `fd458298`。作者是通道 2。）
+
+**Standards**
+
+阻断：无。非阻断：无。
+
+无发现：查阅行只有设备标识、作业范围、登记或停用、停用时刻。依据留在登记行上。租户只取自信封。空册答 `WORK_DEVICES_LISTED`，不答未配置。证据只记 `S`。
+
+**Spec**
+
+阻断：无。非阻断：无。
+
+无发现：`ListDevices` 按 `tenant_id` 过滤，含已停用。`GET /work-devices` 是追加，作业事实换口的装配参数还在。能力面是主数据与运营查阅读，不带准入要求。
+
+### 进 main 记录（推送方 · 通道 1）
+
+- **门**：两轴无阻断。
+- **重放**：`main` 是 `mcp2-oc21` 的祖先，快进到 `9ac3aeef`，SHA 不改。其后本笔只改票面。
+- **验证**：钉 `9ac3aeef`。改动的 `.go` `gofmt -l` 无输出。带 DSN `TestListDevicesReturnsOnlyThatTenantsRows` 为 PASS、非 SKIP。带 DSN `go test -p 1 -count=1 ./...` 退 0：141 个包 `ok`、0 FAIL、15 个包无测试文件，没有 `(cached)`。推送条件：远端 main 仍是 `fd458298`。
+
