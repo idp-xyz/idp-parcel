@@ -105,12 +105,25 @@ func (minter *IntegrationClientMinter) MintIntegrationClient(
 	if standing.binding.certificateBoundTokenRequired && !verified.certificateBound {
 		return IntegrationClientEnvelope{}, fmt.Errorf("%w: this client requires a certificate-bound token", ErrCredentialRejected)
 	}
-	at := minter.now()
+	return admitIntegrationClient(ctx, minter.admission, standing, verified.subject, request, minter.now())
+}
+
+// admitIntegrationClient 核授予、判准入范围，并铸信封。客户端凭据令牌与签名推送两条入口铸的是同一个
+// IntegrationClientEnvelope，这一段只写一次：分叉之后，一条改了授予或准入的答法，另一条不会跟着改。
+// 证书绑定只属令牌那条（推送不出示令牌），不进这里。
+func admitIntegrationClient(
+	ctx context.Context,
+	admission AdmissionScope,
+	standing IntegrationClientStanding,
+	subject IntegrationClientSubject,
+	request IntegrationClientRequest,
+	at time.Time,
+) (IntegrationClientEnvelope, error) {
 	if !standing.HoldsAt(request.FactType, at) {
 		return IntegrationClientEnvelope{}, ErrIntegrationClientNotGranted
 	}
 	if request.Admission != nil {
-		admitted, err := minter.admission.Admits(ctx, standing.binding.tenantID, *request.Admission, at)
+		admitted, err := admission.Admits(ctx, standing.binding.tenantID, *request.Admission, at)
 		if err != nil {
 			return IntegrationClientEnvelope{}, fmt.Errorf("%w: %w", ErrAdmissionScopeUnavailable, err)
 		}
@@ -126,7 +139,7 @@ func (minter *IntegrationClientMinter) MintIntegrationClient(
 	}
 	return IntegrationClientEnvelope{
 		tenantID:       standing.binding.tenantID,
-		client:         verified.subject,
+		client:         subject,
 		sourceIdentity: standing.binding.sourceIdentity,
 		factTypes:      facts,
 	}, nil
