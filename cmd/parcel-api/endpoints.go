@@ -166,18 +166,19 @@ func assembleBusinessEndpoints(
 	governanceRegisters governancehttp.GovernanceRegistryReader,
 	isolatedRead *isolatedReadIntakes,
 	isolatedSubmission shipmenthttp.SubmissionIntake,
-	isolatedNodeOperations *nodeopshttp.IsolatedCommandIntake,
 	isolatedTransportFulfillment *tfhttp.IsolatedCommandIntake,
 	operatorDecisions operatorDecisionIntakes,
 	operatorRegistries operatorRegistryIntakes,
 	integrationClients integrationClientIntakes,
+	workFactReception nodeopshttp.ReceptionIntake,
+	workFactTransport *tfhttp.WorkFactCommandIntake,
 ) []httpapi.BusinessEndpoint {
 	// 缺省朝拦：各隔离入参都为 nil 时，下面这组变量全取未配置即拒，整份装配与
 	// ADR-0078/0091 之前逐字节同形。
 	//
 	// **读写入参各换各的行，互不顶替**（ADR-0091 决定四把开关也分成了两个）：isolatedRead
-	// 换查阅行，isolatedSubmission 只换 `/shipment-requests` 一行，各上下文的隔离命令 Intake（isolatedNodeOperations 等）只换
-	// 主链命令面里已成笔的那几行。其余命令面仍挂字面量 `UnconfiguredIntake{}`，
+	// 换查阅行，isolatedSubmission 只换 `/shipment-requests` 一行，isolatedTransportFulfillment 只换仍归运营决定的四口。
+	// 作业事实各口走 workFactReception / workFactTransport，不经隔离写。其余命令面仍挂字面量 `UnconfiguredIntake{}`，
 	// 不经由任何变量——读这段代码就能看出它们两个开关都换不了。这句从前说的是「命令面全都
 	// 换不了」，ADR-0091 让提交那一行成了例外，票 06 又让身份族逐口成为例外，票 operator-channel/08
 	// 再让主链命令面逐口成为例外，因此改成现在这句；身份族随后换上操作者渠道、隔离放行同笔撤下（ADR-0150 决定三），
@@ -232,30 +233,40 @@ func assembleBusinessEndpoints(
 	// 主链命令面按 ADR-0091 逐口放行（票 operator-channel/08）：每个上下文一个隔离命令 Intake 类型、每口一个变量，一个
 	// 上下文一个 if，不并进上面任何一个 if——理由同提交口那段。入参是具体类型：它此刻实现了哪几口，下面就只换得了哪几行。
 	receptionIntake := nodeopshttp.ReceptionIntake(nodeopshttp.UnconfiguredIntake{})
-	if isolatedNodeOperations != nil {
-		receptionIntake = isolatedNodeOperations
+	if workFactReception != nil {
+		receptionIntake = workFactReception
 	}
 	pickupRegistrationIntake := tfhttp.PickupRegistrationIntake(tfhttp.UnconfiguredIntake{})
 	pickupAttemptIntake := tfhttp.PickupAttemptIntake(tfhttp.UnconfiguredIntake{})
+	pickupCorrectionIntake := tfhttp.PickupCorrectionIntake(tfhttp.UnconfiguredIntake{})
 	carrierPickupJudgmentIntake := tfhttp.CarrierPickupJudgmentIntake(tfhttp.UnconfiguredIntake{})
 	handoverRegistrationIntake := tfhttp.HandoverRegistrationIntake(tfhttp.UnconfiguredIntake{})
+	handoverCorrectionIntake := tfhttp.HandoverCorrectionIntake(tfhttp.UnconfiguredIntake{})
 	movementFactIntake := tfhttp.MovementFactIntake(tfhttp.UnconfiguredIntake{})
 	dispatchTaskIntake := tfhttp.DispatchTaskIntake(tfhttp.UnconfiguredIntake{})
 	deliveryDispatchTriggerIntake := tfhttp.DeliveryDispatchTriggerIntake(tfhttp.UnconfiguredIntake{})
 	deliveryRegistrationIntake := tfhttp.DeliveryRegistrationIntake(tfhttp.UnconfiguredIntake{})
+	deliveryCorrectionIntake := tfhttp.DeliveryProofCorrectionIntake(tfhttp.UnconfiguredIntake{})
 	deliveryAttemptIntake := tfhttp.DeliveryAttemptIntake(tfhttp.UnconfiguredIntake{})
 	segmentClosureIntake := tfhttp.SegmentClosureIntake(tfhttp.UnconfiguredIntake{})
 	effectiveTimeJudgmentIntake := tfhttp.EffectiveTimeJudgmentIntake(tfhttp.UnconfiguredIntake{})
+	// 作业事实各口（含三个更正口）换操作者渠道，隔离写放行同笔撤下（ADR-0150 决定三；票 operator-channel/10 余下半边）。
+	// 关段、建派送任务、有效时间判断、承运商首次有效收寄判断仍归运营决定，继续走隔离写开关。
+	if workFactTransport != nil {
+		pickupRegistrationIntake = workFactTransport
+		pickupAttemptIntake = workFactTransport
+		pickupCorrectionIntake = workFactTransport
+		handoverRegistrationIntake = workFactTransport
+		handoverCorrectionIntake = workFactTransport
+		movementFactIntake = workFactTransport
+		deliveryDispatchTriggerIntake = workFactTransport
+		deliveryRegistrationIntake = workFactTransport
+		deliveryCorrectionIntake = workFactTransport
+		deliveryAttemptIntake = workFactTransport
+	}
 	if isolatedTransportFulfillment != nil {
-		pickupRegistrationIntake = isolatedTransportFulfillment
-		pickupAttemptIntake = isolatedTransportFulfillment
 		carrierPickupJudgmentIntake = isolatedTransportFulfillment
-		handoverRegistrationIntake = isolatedTransportFulfillment
-		movementFactIntake = isolatedTransportFulfillment
 		dispatchTaskIntake = isolatedTransportFulfillment
-		deliveryDispatchTriggerIntake = isolatedTransportFulfillment
-		deliveryRegistrationIntake = isolatedTransportFulfillment
-		deliveryAttemptIntake = isolatedTransportFulfillment
 		segmentClosureIntake = isolatedTransportFulfillment
 		effectiveTimeJudgmentIntake = isolatedTransportFulfillment
 	}
@@ -320,7 +331,7 @@ func assembleBusinessEndpoints(
 		// 隔离读准入（ADR-0078）启用时只换查阅行，命令行换不了。
 		{Pattern: "/node-operations-records", Handler: nodeopshttp.NewQueryNodeOperationsRecordsEndpoint(nodeOperationsCatalogueIntake, nodeOperationsRecords)},
 		{Pattern: "/transport-fulfillment/deliveries", Handler: tfhttp.NewRegisterEffectiveDeliveryEndpoint(deliveryRegistrationIntake, delivery)},
-		{Pattern: "/transport-fulfillment/delivery-proof-corrections", Handler: tfhttp.NewCorrectDeliveryProofEndpoint(tfhttp.UnconfiguredIntake{}, delivery)},
+		{Pattern: "/transport-fulfillment/delivery-proof-corrections", Handler: tfhttp.NewCorrectDeliveryProofEndpoint(deliveryCorrectionIntake, delivery)},
 		// 派送尝试登记（票 product-strategy-boundary/19）：执行方报来的每次到场与逐对象结果，交付生效只引用它登下的事实。
 		// 作业事实，生产渠道归操作者渠道的「作业事实登记」能力面（ADR-0149，operator-channel/10）；在那之前生产形态如实答
 		// 未配置，隔离形态经写开关逐口放行。
@@ -334,9 +345,9 @@ func assembleBusinessEndpoints(
 		// 揽收更正口（票 tf-segment-lifecycle-closure/08）落新版本回指前版、重交 PS 采认，不进段——段侧
 		// 重派生另立票；它接的是自己那一格装配（assemble_offsite_pickup_correction.go），与首登共用一册。
 		{Pattern: "/transport-fulfillment/handovers", Handler: tfhttp.NewRegisterTransportHandoverEndpoint(handoverRegistrationIntake, handover)},
-		{Pattern: "/transport-fulfillment/handover-corrections", Handler: tfhttp.NewCorrectTransportHandoverEndpoint(tfhttp.UnconfiguredIntake{}, handover)},
+		{Pattern: "/transport-fulfillment/handover-corrections", Handler: tfhttp.NewCorrectTransportHandoverEndpoint(handoverCorrectionIntake, handover)},
 		{Pattern: "/transport-fulfillment/offsite-pickups", Handler: tfhttp.NewRegisterOffsitePickupEndpoint(pickupRegistrationIntake, pickupRegistration)},
-		{Pattern: "/transport-fulfillment/offsite-pickup-corrections", Handler: tfhttp.NewCorrectOffsitePickupEndpoint(tfhttp.UnconfiguredIntake{}, pickupCorrection)},
+		{Pattern: "/transport-fulfillment/offsite-pickup-corrections", Handler: tfhttp.NewCorrectOffsitePickupEndpoint(pickupCorrectionIntake, pickupCorrection)},
 		{Pattern: "/transport-fulfillment/offsite-pickup-attempts", Handler: tfhttp.NewPerformOffsitePickupEndpoint(pickupAttemptIntake, pickupAttempt)},
 		// 移动事实口（票 tf-segment-lifecycle-closure/05）：只收自营执行方的出发 / 移动 / 到达；外部承运
 		// 轨迹**不从这里进**，走 TrackingSource 入站口的采纳执行器（label-channel/16 已落）。谁是自营

@@ -34,7 +34,7 @@ func serveThroughOperatorRegistries(t *testing.T, register accessidentity.Operat
 	if err != nil {
 		t.Fatal(err)
 	}
-	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), registries, unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil))
+	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), registries, unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil, nil))
 	request := httptest.NewRequest(method, target, strings.NewReader(body))
 	if token != "" {
 		request.Header.Set("Authorization", "Bearer "+token)

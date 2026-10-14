@@ -1,21 +1,26 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	"go.idp.xyz/idp-parcel/internal/accessidentity"
+	nodeopsaccess "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/accessidentity"
 	nodeopshttp "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
+	tfaccess "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/accessidentity"
+	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 )
 
-// Covers: 票 operator-channel/08 完成判据「隔离环境里上列各口对合成写答业务结果而不是 ACCESS_CHANNEL_NOT_CONFIGURED」——
-// 节点收寄口。Intake 走进程自己那道门（buildIsolatedWriteAdmission），编排走生产装配（buildReceptionOrchestration），中间是
-// 生产的端点构造函数：三件都是 main 交给路由的那一份。
+// Covers: 票 operator-channel/10 完成判据第二条——节点收寄口改走作业事实渠道。编排走生产装配（buildReceptionOrchestration），
+// 中间是生产的端点构造函数。作业范围种类必须是 NODE，节点引用取作业范围的引用。
 //
 // 明确拒收不经身份核对，真实落库答`未收寄`；明确接收撞上身份核对缝显式未配置，如实答`收寄待确认`——两格都是编排形成的
 // 业务答案（ADR-0022：2xx 带 outcome），不是渠道层的 403。带 tenantId 的载荷在 Intake 就拒，编排一次也不该被调到。
@@ -30,11 +35,13 @@ func TestIsolatedReceptionAnswersBusinessOutcomesAgainstARealDatabase(t *testing
 	if err != nil {
 		t.Fatalf("装配收寄编排：%v", err)
 	}
-	endpoint := nodeopshttp.NewReceiveDeliveredUnitEndpoint(isolatedWriteAdmissionForTest(t).nodeOperationsIntake(), reception)
+	endpoint := nodeopshttp.NewReceiveDeliveredUnitEndpoint(workFactReceptionForTest(t), reception)
 	post := func(body string) *httptest.ResponseRecorder {
 		t.Helper()
 		recorder := httptest.NewRecorder()
-		endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, "/node-operations/receptions", strings.NewReader(body)))
+		request := httptest.NewRequest(http.MethodPost, "/node-operations/receptions", strings.NewReader(body))
+		stampWorkFact(request, "NODE", "SYN-NODE-SHA-HUB", "SYN-DEVICE-NODE")
+		endpoint.ServeHTTP(recorder, request)
 		return recorder
 	}
 
@@ -56,4 +63,112 @@ func TestIsolatedReceptionAnswersBusinessOutcomesAgainstARealDatabase(t *testing
 		t.Fatalf("带 tenantId 的载荷答 %d %s，want 400 MALFORMED_REQUEST", selfReported.Code, selfReported.Body.String())
 	}
 	assertNoOutcome(t, selfReported, "/node-operations/receptions")
+}
+
+func stampWorkFact(request *http.Request, kind, reference, device string) {
+	request.Header.Set("Authorization", "Bearer presented.operator.token")
+	request.Header.Set("Parcel-Work-Scope-Kind", kind)
+	request.Header.Set("Parcel-Work-Scope-Reference", reference)
+	request.Header.Set("Parcel-Device-Id", device)
+}
+
+type workFactVerifier struct{}
+
+func (workFactVerifier) VerifyOperatorCredential(_ context.Context, credential accessidentity.OperatorCredential) (accessidentity.OperatorSubject, error) {
+	if credential.Token() == "" {
+		return accessidentity.OperatorSubject{}, accessidentity.ErrCredentialRejected
+	}
+	return accessidentity.NewOperatorSubject("https://id.syn.example/dex", "SYN-OPERATOR-01")
+}
+
+type workFactOperators struct{}
+
+func (workFactOperators) FindOperator(_ context.Context, subject accessidentity.OperatorSubject) (accessidentity.OperatorStanding, bool, error) {
+	binding, err := accessidentity.NewOperatorBinding(subject, "SYN-TENANT-01", "SYN-BASIS")
+	if err != nil {
+		return accessidentity.OperatorStanding{}, false, err
+	}
+	interval, err := accessidentity.NewEffectiveInterval(time.Now().Add(-time.Hour), time.Time{})
+	if err != nil {
+		return accessidentity.OperatorStanding{}, false, err
+	}
+	var grants []accessidentity.RecordedGrant
+	for _, scope := range []accessidentity.WorkScope{mustScope("OFFSITE", "SYN-OFFSITE-01"), mustScope("NODE", "SYN-NODE-SHA-HUB")} {
+		grant, err := accessidentity.NewWorkFactRegistrationGrant("SYN-TENANT-01", "SYN-GRANT-"+scope.Reference(), subject, scope, interval, "SYN-BASIS")
+		if err != nil {
+			return accessidentity.OperatorStanding{}, false, err
+		}
+		recorded, err := accessidentity.NewRecordedGrant(grant, nil)
+		if err != nil {
+			return accessidentity.OperatorStanding{}, false, err
+		}
+		grants = append(grants, recorded)
+	}
+	standing, err := accessidentity.NewOperatorStanding(binding, grants)
+	return standing, err == nil, err
+}
+
+type workFactDevices struct{}
+
+func (workFactDevices) FindDevice(_ context.Context, tenantID, deviceID string) (accessidentity.RecordedDevice, bool, error) {
+	var scope accessidentity.WorkScope
+	switch deviceID {
+	case "SYN-DEVICE-OFFSITE":
+		scope = mustScope("OFFSITE", "SYN-OFFSITE-01")
+	case "SYN-DEVICE-NODE":
+		scope = mustScope("NODE", "SYN-NODE-SHA-HUB")
+	default:
+		return accessidentity.RecordedDevice{}, false, nil
+	}
+	device, err := accessidentity.NewDeviceRegistration(tenantID, deviceID, scope, "SYN-BASIS")
+	if err != nil {
+		return accessidentity.RecordedDevice{}, false, err
+	}
+	recorded, err := accessidentity.NewRecordedDevice(device, nil)
+	if err != nil {
+		return accessidentity.RecordedDevice{}, false, err
+	}
+	return recorded, true, nil
+}
+
+func mustScope(kind, reference string) accessidentity.WorkScope {
+	scope, err := accessidentity.NewWorkScope(accessidentity.WorkScopeKind(kind), reference)
+	if err != nil {
+		panic(err)
+	}
+	return scope
+}
+
+func workFactReceptionForTest(t *testing.T) nodeopshttp.ReceptionIntake {
+	t.Helper()
+	minter, err := accessidentity.NewWorkFactMinter(workFactVerifier{}, workFactOperators{}, workFactDevices{}, accessidentity.UnconfiguredAdmissionScope{}, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authenticator, err := nodeopsaccess.NewWorkFactAuthenticator(minter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	intake, err := nodeopshttp.NewWorkFactReceptionIntake(authenticator)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return intake
+}
+
+func workFactTransportForTest(t *testing.T) *tfhttp.WorkFactCommandIntake {
+	t.Helper()
+	minter, err := accessidentity.NewWorkFactMinter(workFactVerifier{}, workFactOperators{}, workFactDevices{}, accessidentity.UnconfiguredAdmissionScope{}, time.Now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	authenticator, err := tfaccess.NewWorkFactAuthenticator(minter)
+	if err != nil {
+		t.Fatal(err)
+	}
+	intake, err := tfhttp.NewWorkFactCommandIntake(authenticator, frontlineMovementSource)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return intake
 }

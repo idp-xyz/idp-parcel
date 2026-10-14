@@ -140,6 +140,22 @@ func endpoint(
 					writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
 					return
 				}
+				if errors.Is(err, ErrOperatorCredentialRejected) {
+					writeProblem(response, http.StatusUnauthorized, codeOperatorCredentialRejected)
+					return
+				}
+				if errors.Is(err, ErrOperatorNotGranted) {
+					writeProblem(response, http.StatusForbidden, codeOperatorNotGranted)
+					return
+				}
+				if errors.Is(err, ErrDeviceNotInUse) {
+					writeProblem(response, http.StatusForbidden, codeDeviceNotInUse)
+					return
+				}
+				if errors.Is(err, ErrIdentityDependencyUnavailable) {
+					writeProblem(response, http.StatusServiceUnavailable, codeIdentityDependencyUnavailable)
+					return
+				}
 				if errors.Is(err, ErrMalformedRequest) {
 					writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 					return

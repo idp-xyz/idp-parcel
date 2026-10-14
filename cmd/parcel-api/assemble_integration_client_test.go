@@ -107,7 +107,7 @@ func integrationClientRouter(t *testing.T, verifier accessidentity.IntegrationCl
 		t.Fatal(err)
 	}
 	return httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(
-		unconfiguredOperatorDecisions(), unconfiguredOperatorRegistries(), intakes, nil, nil, nil, nil))
+		unconfiguredOperatorDecisions(), unconfiguredOperatorRegistries(), intakes, nil, nil, nil, nil, nil))
 }
 
 func TestIntegrationClientChannelWithoutIssuerParametersAnswersNotConfigured(t *testing.T) {

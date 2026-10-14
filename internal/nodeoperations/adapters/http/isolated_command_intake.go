@@ -71,6 +71,11 @@ func (intake *IsolatedCommandIntake) IntakeReception(
 	_ context.Context,
 	request *http.Request,
 ) (application.ReceiveDeliveredUnitCommand, error) {
+	return receptionCommand(intake.tenant, intake.node, request)
+}
+
+// receptionCommand 把收寄载荷译成命令。租户与节点由调用方从认证结果交入，不从载荷收。
+func receptionCommand(tenant domain.TenantID, node domain.NodeReference, request *http.Request) (application.ReceiveDeliveredUnitCommand, error) {
 	none := application.ReceiveDeliveredUnitCommand{}
 	var document receptionDocument
 	if err := decodeClosedDocument(request, &document); err != nil {
@@ -92,9 +97,9 @@ func (intake *IsolatedCommandIntake) IntakeReception(
 		return none, fmt.Errorf("%w: occurredAt is not an RFC 3339 instant: %v", ErrMalformedRequest, err)
 	}
 	command := application.ReceiveDeliveredUnitCommand{
-		TenantID:    intake.tenant,
+		TenantID:    tenant,
 		SourceID:    document.SourceID,
-		Node:        intake.node,
+		Node:        node,
 		DeliveredBy: deliveredBy,
 		Unit:        unit,
 		Mark:        ports.ExternalMarkObservation{Mark: document.Mark},

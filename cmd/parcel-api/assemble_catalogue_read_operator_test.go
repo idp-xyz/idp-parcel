@@ -107,7 +107,7 @@ func TestSwappedCatalogueReadFacesAnswerFromTheOperatorChannel(t *testing.T) {
 	for _, testCase := range cases {
 		router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(
 			unconfiguredOperatorDecisions(), testCase.registries, unconfiguredIntegrationClientIntakes(),
-			isolated, nil, nil, nil))
+			isolated, nil, nil, nil, nil))
 		for _, pattern := range swappedCatalogueReadPatterns {
 			probe, ok := businessEndpointProbes[pattern]
 			if !ok {

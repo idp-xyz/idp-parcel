@@ -9,6 +9,8 @@ import (
 	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	nraccess "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/accessidentity"
 	networkhttp "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/http"
+	noaccess "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/accessidentity"
+	nodeopshttp "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/http"
 	ppaccess "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/accessidentity"
 	pricinghttp "go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/http"
 	psaccess "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/accessidentity"
@@ -43,6 +45,38 @@ func buildOperatorMinter(
 		return nil, errors.New("operator minter needs a verifier, an operator registry and an admission scope")
 	}
 	return accessidentity.NewOperatorMinter(verifier, registry, admission, time.Now)
+}
+
+// frontlineMovementSource 是一线作业端登移动事实时的来源格：自营，由作业事实登记这一面说，不从载荷收。
+const frontlineMovementSource = "SELF_OPERATED"
+
+func buildWorkFactIntakes(
+	verifier accessidentity.OperatorCredentialVerifier,
+	operators accessidentity.OperatorRegistry,
+	devices accessidentity.DeviceRegistry,
+	admission accessidentity.AdmissionScope,
+) (nodeopshttp.ReceptionIntake, *tfhttp.WorkFactCommandIntake, error) {
+	minter, err := accessidentity.NewWorkFactMinter(verifier, operators, devices, admission, time.Now)
+	if err != nil {
+		return nil, nil, err
+	}
+	transportAuthenticator, err := tfaccess.NewWorkFactAuthenticator(minter)
+	if err != nil {
+		return nil, nil, err
+	}
+	transport, err := tfhttp.NewWorkFactCommandIntake(transportAuthenticator, frontlineMovementSource)
+	if err != nil {
+		return nil, nil, err
+	}
+	receptionAuthenticator, err := noaccess.NewWorkFactAuthenticator(minter)
+	if err != nil {
+		return nil, nil, err
+	}
+	reception, err := nodeopshttp.NewWorkFactReceptionIntake(receptionAuthenticator)
+	if err != nil {
+		return nil, nil, err
+	}
+	return reception, transport, nil
 }
 
 // buildOperatorDecisionIntakes 装两边运营决定口的防腐认证方与 Intake。

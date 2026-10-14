@@ -65,10 +65,8 @@ type isolatedWriteAdmission struct {
 	// tenant 是开关的值本身。归属那一格用不到它（治理登记册无租户维），提交口用得到：
 	// 来源信封的租户维就是它。
 	tenant string
-	// 以下各格是主链命令面里仍走隔离放行的上下文（票 operator-channel/08）。关务外部结果、监管凭证与外部资金事实
-	// 已换集成客户端 Intake，隔离放行在同一笔撤下（ADR-0150 决定三；票 operator-channel/11）；`/commercial-*` 身份族
-	// 与法人资料登记口换操作者渠道 Intake 时同样（票 operator-channel/04）。每格实现了哪几口的 Intake 接口，装配点就
-	// 换得了哪几行——编译期锁住。
+	// 运输履约这一格只还换运营决定四口（票 operator-channel/10 余下半边、票 15）。节点作业这一格仍在门里构造：
+	// 收寄口已换作业事实渠道，装配不再读它；删构造会连带改这道门的测试，而这只本身不再换任何一行。
 	nodeOperations       *nodeopshttp.IsolatedCommandIntake
 	transportFulfillment *tfhttp.IsolatedCommandIntake
 }
@@ -78,16 +76,8 @@ type isolatedWriteAdmission struct {
 // 里换的那几行同步——两处对不上由装配测试拦（isolated_write_test.go 的二分表）。
 var isolatedWriteAdmittedCommandLines = []string{
 	"/shipment-requests",
-	"/node-operations/receptions",
-	"/transport-fulfillment/offsite-pickups",
-	"/transport-fulfillment/offsite-pickup-attempts",
 	"/transport-fulfillment-carrier-first-effective-pickup-judgments",
-	"/transport-fulfillment/handovers",
-	"/transport-fulfillment/movement-facts",
 	"/transport-fulfillment-dispatch-task-registrations",
-	"/transport-fulfillment-delivery-dispatch-triggers",
-	"/transport-fulfillment/deliveries",
-	"/transport-fulfillment/delivery-attempts",
 	"/transport-fulfillment-segment-closures",
 	"/transport-fulfillment-effective-time-judgments",
 }
