@@ -195,6 +195,20 @@ func assembleBusinessEndpoints(
 	collectionCatalogueIntake := collectionhttp.CatalogueQueryIntake(collectionhttp.UnconfiguredIntake{})
 	settlementCatalogueIntake := settlementhttp.CatalogueQueryIntake(settlementhttp.UnconfiguredIntake{})
 	governanceRegistryIntake := governancehttp.RegistryQueryIntake(governancehttp.UnconfiguredIntake{})
+	// ADR-0077 那一族目录查阅已换操作者查阅读，隔离读放行同笔撤下（ADR-0150 决定三；票 operator-channel/05）。
+	// 发行方未配置时这四只 Intake 仍在，答的是未配置，与换口前的 403 同码。
+	if operatorRegistries.pricingOperationsRead != nil {
+		pricingCatalogueIntake = operatorRegistries.pricingOperationsRead
+	}
+	if operatorRegistries.networkOperationsRead != nil {
+		networkCatalogIntake = operatorRegistries.networkOperationsRead
+	}
+	if operatorRegistries.customsOperationsRead != nil {
+		complianceRulesIntake = operatorRegistries.customsOperationsRead
+	}
+	if operatorRegistries.commercialOperationsRead != nil {
+		commercialCatalogueIntake = operatorRegistries.commercialOperationsRead
+	}
 	if isolatedRead != nil {
 		shipmentViewsIntake = isolatedRead.shipmentRequestViews
 		labelTransactionIntake = isolatedRead.labelTransactions
@@ -202,10 +216,6 @@ func assembleBusinessEndpoints(
 		nodeOperationsCatalogueIntake = isolatedRead.nodeOperationsCatalogue
 		transportCatalogueIntake = isolatedRead.transportCatalogue
 		trackingProjectionsIntake = isolatedRead.trackingProjections
-		pricingCatalogueIntake = isolatedRead.pricingCatalogue
-		networkCatalogIntake = isolatedRead.networkCatalog
-		complianceRulesIntake = isolatedRead.complianceRules
-		commercialCatalogueIntake = isolatedRead.commercialCatalogue
 		collectionCatalogueIntake = isolatedRead.collectionCatalogue
 		settlementCatalogueIntake = isolatedRead.settlementCatalogue
 		governanceRegistryIntake = isolatedRead.governanceRegisters
@@ -460,7 +470,7 @@ func assembleBusinessEndpoints(
 		{Pattern: "/network-catalog-route-strategy-registrations", Handler: networkhttp.NewRegisterRouteStrategyVersionEndpoint(operatorRegistries.network, networkCatalogRegistration)},
 		{Pattern: "/customs-compliance-rules", Handler: customshttp.NewQueryComplianceRulesEndpoint(complianceRulesIntake, complianceRules)},
 		// 案件配置册、门禁条件册与规则库查阅同属关务租户内运营读面，共用同一个
-		// CatalogueQueryIntake 变量：隔离读准入（ADR-0078）启用时它们随该变量一起换值，
+		// CatalogueQueryIntake 变量：已换操作者查阅读，不再随隔离读准入换值（票 operator-channel/05）。
 		// 判据同为那三条（消费所属上下文存储读面、零持久化、作用域为运营侧授权结果）。
 		//
 		// 门禁条件不并进 /customs-case-registers 的 registry 分派：那三册归 customs-cases
@@ -527,14 +537,14 @@ func assembleBusinessEndpoints(
 		{Pattern: "/commercial-group-legal-entities", Handler: commercialhttp.NewQueryGroupLegalEntitiesEndpoint(commercialCatalogueIntake, partyIdentities)},
 		// 责任法人修订历史（票 admin-web-group-legal-entities/03）：法人册那一页详情抽屉的供数面，按路径里的法人展开
 		// 整条修订链。同读口参数、同 Intake 变量（读同一张表、同一租户作用域、供同一页——裁决在 ports.LegalEntityRevisionHistoryRead）；
-		// 隔离读准入启用时随 commercialCatalogue 一格一起换值，不另加开关。{legalEntityId} 由 chi 填进 PathValue，端点按同名取。
+		// 已换操作者查阅读，不再随隔离读准入换值（票 operator-channel/05）。{legalEntityId} 由 chi 填进 PathValue，端点按同名取。
 		{Pattern: "/commercial-group-legal-entities/{legalEntityId}/revisions", Handler: commercialhttp.NewQueryLegalEntityRevisionsEndpoint(commercialCatalogueIntake, partyIdentities)},
 		// 法人资料修订历史（ADR-0145 决定三，票 legal-entity-profile/03）：法人资料页的供数面，按路径里的法人展开资料修订链。
-		// 同 Intake 变量，隔离读准入启用时随 commercialCatalogue 一格一起换值；读口参数另立——资料修订在自己的登记册上，
+		// 同 Intake 变量，已换操作者查阅读（票 operator-channel/05）；读口参数另立——资料修订在自己的登记册上，
 		// 生产装配交入的是资料登记册适配器而不是商业目录适配器。本口只交修订事实，此刻有效的是哪一笔由按时点解析回答。
 		{Pattern: "/commercial-group-legal-entities/{legalEntityId}/profile-revisions", Handler: commercialhttp.NewQueryLegalEntityProfileRevisionsEndpoint(commercialCatalogueIntake, legalEntityProfiles)},
 		// 法人资料按时点解析（ADR-0145 决定五、六，票 legal-entity-profile/05）：给定时点答那一刻有效的是哪一笔、能不能开立。
-		// 同 Intake 变量，隔离读准入启用时随 commercialCatalogue 一格一起换值；第二参是应用读用例而不是读口——哪一笔有效只能由
+		// 同 Intake 变量，已换操作者查阅读（票 operator-channel/05）；第二参是应用读用例而不是读口——哪一笔有效只能由
 		// 领域对时点判出，在装配点预先挑一遍就等于为同一判断立第二个口径。
 		{Pattern: "/commercial-group-legal-entities/{legalEntityId}/profile-resolution", Handler: commercialhttp.NewQueryLegalEntityProfileResolutionEndpoint(commercialCatalogueIntake, legalEntityProfileResolver)},
 		{Pattern: "/commercial-party-relationships", Handler: commercialhttp.NewQueryPartyRelationshipsEndpoint(commercialCatalogueIntake, partyIdentities)},

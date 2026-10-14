@@ -20,9 +20,8 @@ type OperatorOperationsReadAuthenticator interface {
 	AuthenticateOperationsRead(ctx context.Context, bearerToken string) (domain.TenantID, error)
 }
 
-// OperatorOperationsReadIntake 是操作者渠道在本包主数据与运营查阅读面的 Intake（ADR-0100 决定四）。今天挂它的只有试算
-// 一口（ADR-0152 决定六）：试算不写任何册、不形成生产事实，能力面按语义归查阅读、不按 HTTP 方法归，所以不挂
-// OperatorRegistryIntake。译法各在该口自己的文件里；先认证、后解载荷。
+// OperatorOperationsReadIntake 是操作者渠道在本包主数据与运营查阅读面的 Intake（ADR-0100 决定四）。试算与目录查阅都挂它：
+// 两口都不写册、不形成生产事实，能力面按语义归查阅读。译法各在该口自己的文件里。目录查阅先认证、不读请求体——租户只取自信封。
 type OperatorOperationsReadIntake struct {
 	authenticator OperatorOperationsReadAuthenticator
 }
@@ -47,4 +46,30 @@ func (intake *OperatorOperationsReadIntake) authenticate(ctx context.Context, re
 		return domain.TenantID{}, nil, fmt.Errorf("%w: empty body", ErrMalformedRequest)
 	}
 	return tenant, io.LimitReader(request.Body, maxRegistrationBytes), nil
+}
+
+// 目录查阅的作用域引用是授权结果的审计引用，不参与行过滤（ADR-0077 决定二）。取能力面的名字，不取合成前缀。
+// 页大小是这一渠道的产品策略，不采信请求自报，也不随租户变。
+const (
+	operatorCatalogueScopeReference = "MASTER_DATA_AND_OPERATIONS_READ"
+	operatorCatalogueReadLimit      = 200
+)
+
+var _ PricingCatalogueIntake = (*OperatorOperationsReadIntake)(nil)
+
+// IntakeCatalogueQuery 不读请求体。租户只来自操作者信封；作用域引用与页大小是产品常量。
+func (intake *OperatorOperationsReadIntake) IntakeCatalogueQuery(ctx context.Context, request *http.Request) (CatalogueQuery, error) {
+	tenant, err := intake.authenticator.AuthenticateOperationsRead(ctx, httpapi.BearerToken(request))
+	if err != nil {
+		return CatalogueQuery{}, err
+	}
+	reference, err := domain.NewOperationsScopeReference(operatorCatalogueScopeReference)
+	if err != nil {
+		return CatalogueQuery{}, err
+	}
+	scope, err := domain.NewOperationsQueryScope(reference, tenant)
+	if err != nil {
+		return CatalogueQuery{}, err
+	}
+	return CatalogueQuery{Scope: scope, Limit: operatorCatalogueReadLimit}, nil
 }

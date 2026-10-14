@@ -84,43 +84,20 @@ var isolatedReadAdmittedPatterns = map[string]bool{
 	// admin-skeleton-closure-batch/08）。它照样满足那三条判据：消费本上下文自己的存储
 	// 读面、零持久化、作用域来自运营侧授权结果——查阅一笔面单交易不触发任何判断、派生
 	// 或披露，渠道墙未降前它读到的还是空册。
-	"/label-transactions":                  true,
-	"/node-operations-records":             true,
-	"/transport-fulfillment-records":       true,
-	"/tracking-projections":                true,
-	"/pricing-price-cards":                 true,
-	"/pricing-reference-series":            true,
-	"/pricing-reference-series-coverage":   true,
-	"/pricing-pending-series-evaluations":  true,
-	"/pricing-evaluations":                 true,
-	"/network-catalog":                     true,
-	"/route-plans":                         true,
-	"/governance-registers":                true,
-	"/customs-compliance-rules":            true,
-	"/customs-case-registers":              true,
-	"/customs-gate-conditions":             true,
-	"/customs-ports-paths":                 true,
-	"/customs-credentials":                 true,
-	"/customs-duty-collaborations":         true,
-	"/customs-duty-verifications":          true,
-	"/commercial-business-parties":         true,
-	"/commercial-service-products":         true,
-	"/commercial-policies":                 true,
-	"/commercial-customer-contracts":       true,
-	"/commercial-supplier-agreements":      true,
-	"/commercial-group-legal-entities":     true,
-	"/commercial-party-relationships":      true,
-	"/commercial-customer-accounts":        true,
-	"/commercial-product-channel-mappings": true,
-	"/visibility-catalogues":               true,
-	"/exception-triage-records":            true,
-	"/exception-case-records":              true,
-	"/claims-recovery-records":             true,
-	"/collection-subledgers":               true,
-	"/settlement-charges":                  true,
-	"/settlement-statements":               true,
-	"/settlement-funds-applications":       true,
-	"/settlement-operating-results":        true,
+	"/label-transactions":            true,
+	"/node-operations-records":       true,
+	"/transport-fulfillment-records": true,
+	"/tracking-projections":          true,
+	"/governance-registers":          true,
+	"/visibility-catalogues":         true,
+	"/exception-triage-records":      true,
+	"/exception-case-records":        true,
+	"/claims-recovery-records":       true,
+	"/collection-subledgers":         true,
+	"/settlement-charges":            true,
+	"/settlement-statements":         true,
+	"/settlement-funds-applications": true,
+	"/settlement-operating-results":  true,
 	// 交接范围汇总（票 admin-web-audit-followups/06）与运输履约查阅共用同一个 Intake 变量，
 	// 因此启用态必然随它一起放行——漏了这一行等于断言「同一个 Intake 会给出两种答案」，
 	// 那是装不出来的形状。它照样满足那三条判据：消费本上下文自己的存储读面、零持久化、
@@ -142,30 +119,6 @@ var isolatedReadAdmittedPatterns = map[string]bool{
 	// 满足：消费本上下文自己的存储读面、零持久化、作用域来自运营侧授权结果——列并列冲突不触发任何判断，人工裁决
 	// 不在这一口。单列在表尾的理由同上两行。
 	"/channel-selection-decisions": true,
-	// 责任法人修订历史（票 admin-web-group-legal-entities/03）与商业目录查阅共用同一个 Intake 变量，启用态必然随
-	// 它一起放行。三条判据逐条满足：消费本上下文自己的存储读面（同一张 legal_entity_registration 表，只是不取
-	// DISTINCT ON）、零持久化、作用域来自运营侧授权结果——法人标识在路径上、租户仍只从注入作用域取。本用例经真
-	// 路由打到它并期待 500 而不是 400，顺带钉住 chi 把 {legalEntityId} 填进了 PathValue。单列在表尾的理由同上。
-	"/commercial-group-legal-entities/{legalEntityId}/revisions": true,
-	// 业务参与方修订历史（票 admin-web-group-legal-entities/12）与商业目录查阅共用同一个 Intake 变量，启用态必然随
-	// 它一起放行。三条判据逐条满足：消费本上下文自己的存储读面（同一张 business_party_registration 表，只是不取
-	// DISTINCT ON）、零持久化、作用域来自运营侧授权结果——参与方标识在路径上、租户仍只从注入作用域取。本用例经真
-	// 路由打到它并期待 500 而不是 400，顺带钉住 chi 把 {partyId} 填进了 PathValue。单列在表尾的理由同上。
-	"/commercial-business-parties/{partyId}/revisions": true,
-	// 注册号类型目录（票 legal-entity-profile/01）与商业目录查阅共用同一个 Intake 变量，启用态必然随它一起放行。
-	// 三条判据逐条满足：消费本上下文自己的存储读面、零持久化、作用域来自运营侧授权结果——上列不判号，判号走
-	// ports.RegistrationNumberTypeLookup；登记与停用两条写行挂的是字面量 UnconfiguredIntake{}。单列在表尾的理由同上。
-	"/commercial-registration-number-types": true,
-	// 法人资料修订历史（票 legal-entity-profile/03）与商业目录查阅共用同一个 Intake 变量，启用态必然随它一起放行。
-	// 三条判据逐条满足：消费本上下文自己的存储读面（0036 的资料修订表）、零持久化、作用域来自运营侧授权结果——法人标识
-	// 在路径上、租户仍只从注入作用域取；只列修订事实，不做按时点解析。登记写行挂的是字面量 UnconfiguredIntake{}。
-	// 经真路由期待 500 而不是 400，同样钉住 chi 把 {legalEntityId} 填进了 PathValue。单列在表尾的理由同上。
-	"/commercial-group-legal-entities/{legalEntityId}/profile-revisions": true,
-	// 法人资料按时点解析（票 legal-entity-profile/05）与商业目录查阅共用同一个 Intake 变量，启用态必然随它一起放行。三条
-	// 判据逐条满足：消费本上下文自己的存储读面（法人登记册与资料修订链，解析用例只读不写）、零持久化、作用域来自运营侧授权
-	// 结果——法人在路径上、时点在查询串上、租户仍只从注入作用域取。探针带合法的 `at`，启用态才走得到未接线读口答 500
-	// 而不是停在 400。单列在表尾的理由同上。
-	"/commercial-group-legal-entities/{legalEntityId}/profile-resolution": true,
 }
 
 // Covers: ADR-0078 Decision 一、二 — 启用态只放运营查阅行。unwired* 读口交回稳定
@@ -219,9 +172,9 @@ func TestIsolatedReadAdmissionIgnoresSelfReportedIdentity(t *testing.T) {
 	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpoints(intakes))
 
 	baseline := httptest.NewRecorder()
-	router.ServeHTTP(baseline, httptest.NewRequest(http.MethodGet, "/pricing-price-cards", nil))
+	router.ServeHTTP(baseline, httptest.NewRequest(http.MethodGet, "/tracking-projections", nil))
 
-	reported := httptest.NewRequest(http.MethodGet, "/pricing-price-cards", nil)
+	reported := httptest.NewRequest(http.MethodGet, "/tracking-projections", nil)
 	reported.Header.Set("X-Reported-Tenant", "TENANT-9")
 	reported.Header.Set("Authorization", "Bearer whatever")
 	response := httptest.NewRecorder()
