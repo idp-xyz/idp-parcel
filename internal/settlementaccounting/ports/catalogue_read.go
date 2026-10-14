@@ -217,7 +217,7 @@ type StatementCatalogueRead interface {
 }
 
 // FundsMappingEntry 是一条真实收付映射：把某笔外部资金事实指向一个未结项，照
-// funds_mapping 转写。目标种类是封闭集（STATEMENT / PAYABLE / CREDIT_NOTE）。
+// funds_mapping 转写。目标种类是封闭集（STATEMENT / PAYABLE / CREDIT_NOTE / ACCOUNT）。
 // 映射不是核销——事实接收、金额责任确认、真实到账与核销是不同结果（CONTEXT
 // 「真实收付映射」词条），所以映射与核销分两个列上列，不合成一格。
 type FundsMappingEntry struct {

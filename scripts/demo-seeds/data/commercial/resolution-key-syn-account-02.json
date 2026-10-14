@@ -11,11 +11,16 @@
     "CUSTOMER_CONTRACT",
     "SETTLEMENT_POLICY",
     "PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY",
+    "CREDIT_POLICY",
     "CUSTOMER_SERVICE_RULE"
   ],
   "settlement": {
     "counterparty": "SYN-PARTY-SHIPPER-02",
     "chargeScope": "SYN-CHARGE-PREPAID",
     "currency": "CNY"
+  },
+  "credit": {
+    "level": "SYN-LEVEL-COMMERCIAL-01",
+    "chargeType": "SYN-CHARGE-PREPAID"
   }
 }

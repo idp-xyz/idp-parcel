@@ -145,6 +145,91 @@ func TestANegativeUnsettledRollsTheMappingBack(t *testing.T) {
 	}
 }
 
+func TestMappingAReceiptToTheReceivableAccountWritesBalanceAndStanding(t *testing.T) {
+	db, pool := receiptPostingDB(t)
+	ctx := t.Context()
+	seedCustomerReceiptScope(t, pool)
+	clock := &movingClock{at: time.Date(2026, 10, 14, 8, 0, 0, 0, time.UTC)}
+	postings := mustReceiptPostings(t, db)
+	handler := mustFundsHandler(t, mustFundsFacts(t, db), mustFundsMappings(t, db), mustApplications(t, db), postings, clock)
+	tenant := receiptTenant(t)
+
+	saWithin(t, db.Transactor(), ctx, func(txCtx context.Context) error {
+		if _, err := handler.AdoptFact(txCtx, receiptFact(tenant, "receipt-acct", domain.FundsReceiptConfirmed, 10_000, "v1")); err != nil {
+			return err
+		}
+		mapped, err := handler.Map(txCtx, receiptMap(tenant, "map-acct", "receipt-acct", domain.TargetAccount, "acct-1"))
+		if err != nil {
+			return err
+		}
+		if mapped.Outcome() != application.FundsMapped {
+			t.Errorf("账户映射 = %s", mapped.Outcome())
+		}
+		return nil
+	})
+	assertPosted(t, pool, 10_000, 0, 0)
+	assertStanding(t, pool, 0, false)
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO settlement_accounting.customer_charge
+			(tenant_id, charge_id, fee_item, evaluation_ref, original_currency,
+			 original_minor, settlement_currency, settlement_minor,
+			 stage, confirmation_basis, formed_at, confirmed_at, recorded_at,
+			 responsible_entity, counterparty_ref, charge_direction,
+			 settlement_account_id, contract_basis, primary_charging_scope,
+			 source_fact_ref)
+		 VALUES ('tenant-receipt', 'charge-1', 'BASE_FREIGHT', 'eval-1', 'CNY', 100, 'CNY', 100,
+		         'CONFIRMED', 'basis-1', now(), now(), now(),
+		         'le-1', 'shipper-1', 'RECEIVABLE', 'acct-1', 'contract-1', 'scope-1', 'fact-1')`); err != nil {
+		t.Fatalf("预置缺到期日的已确认费用：%v", err)
+	}
+	clock.at = clock.at.Add(time.Hour)
+	saWithin(t, db.Transactor(), ctx, func(txCtx context.Context) error {
+		if _, err := handler.AdoptFact(txCtx, receiptFact(tenant, "receipt-acct-2", domain.FundsReceiptConfirmed, 1_000, "v1")); err != nil {
+			return err
+		}
+		_, err := handler.Map(txCtx, receiptMap(tenant, "map-acct-2", "receipt-acct-2", domain.TargetAccount, "acct-1"))
+		return err
+	})
+	assertPosted(t, pool, 11_000, 0, 100)
+	assertStanding(t, pool, 0, false)
+	var asOf time.Time
+	if err := pool.QueryRow(ctx,
+		`SELECT as_of FROM settlement_accounting.credit_standing
+		  WHERE tenant_id = 'tenant-receipt' AND account_id = 'acct-1'`).Scan(&asOf); err != nil {
+		t.Fatalf("读信用状况时点：%v", err)
+	}
+	if !asOf.Equal(time.Date(2026, 10, 14, 8, 0, 0, 0, time.UTC)) {
+		t.Fatalf("缺到期日仍改写了信用状况时点：%s", asOf)
+	}
+}
+
+func TestAPayableAccountMappingDoesNotStand(t *testing.T) {
+	db, pool := receiptPostingDB(t)
+	ctx := t.Context()
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO settlement_accounting.settlement_account
+			(tenant_id, account_id, legal_entity_id, counterparty_id, direction, currency,
+			 settlement_policy_id, responsibility_basis, registered_at)
+		 VALUES ('tenant-receipt', 'acct-pay', 'le-1', 'shipper-1', 'PAYABLE', 'CNY',
+		         'policy-1', 'contract-1', now())`); err != nil {
+		t.Fatalf("应付账户：%v", err)
+	}
+	handler := mustFundsHandler(t, mustFundsFacts(t, db), mustFundsMappings(t, db), mustApplications(t, db),
+		mustReceiptPostings(t, db), &movingClock{at: time.Date(2026, 10, 14, 8, 0, 0, 0, time.UTC)})
+	tenant := receiptTenant(t)
+	err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
+		if _, err := handler.AdoptFact(txCtx, receiptFact(tenant, "receipt-pay", domain.FundsReceiptConfirmed, 100, "v1")); err != nil {
+			return err
+		}
+		_, err := handler.Map(txCtx, receiptMap(tenant, "map-pay", "receipt-pay", domain.TargetAccount, "acct-pay"))
+		return err
+	})
+	if !errors.Is(err, domain.ErrNotReceivableAccount) {
+		t.Fatalf("err = %v，want 不是应收账户", err)
+	}
+}
+
 type movingClock struct{ at time.Time }
 
 func (clock *movingClock) Now() time.Time { return clock.at }
@@ -257,6 +342,7 @@ func mustFundsHandler(
 		Clock:        clock,
 		Books:        postings,
 		Balances:     postings,
+		Standings:    postings,
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -337,5 +423,21 @@ func assertPosted(t *testing.T, pool *pgxpool.Pool, posted, credit, unsettled in
 	}
 	if gotPosted != posted || gotCredit != credit || gotUnsettled != unsettled {
 		t.Fatalf("入账/额度/未结 = %d/%d/%d，want %d/%d/%d", gotPosted, gotCredit, gotUnsettled, posted, credit, unsettled)
+	}
+}
+
+func assertStanding(t *testing.T, pool *pgxpool.Pool, limit int64, overdue bool) {
+	t.Helper()
+	var gotLimit int64
+	var gotOverdue bool
+	err := pool.QueryRow(t.Context(),
+		`SELECT limit_minor, overdue
+		   FROM settlement_accounting.credit_standing
+		  WHERE tenant_id = 'tenant-receipt' AND account_id = 'acct-1'`).Scan(&gotLimit, &gotOverdue)
+	if err != nil {
+		t.Fatalf("读信用状况：%v", err)
+	}
+	if gotLimit != limit || gotOverdue != overdue {
+		t.Fatalf("额度/逾期 = %d/%v，want %d/%v", gotLimit, gotOverdue, limit, overdue)
 	}
 }

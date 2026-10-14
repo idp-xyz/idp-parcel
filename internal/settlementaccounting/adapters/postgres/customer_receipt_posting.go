@@ -29,6 +29,7 @@ func NewCustomerReceiptPostings(db *bentopg.DB) (*CustomerReceiptPostings, error
 var (
 	_ ports.CustomerReceiptBooks      = (*CustomerReceiptPostings)(nil)
 	_ ports.OperationalBalanceAdvance = (*CustomerReceiptPostings)(nil)
+	_ ports.CreditStandingAdvance     = (*CustomerReceiptPostings)(nil)
 )
 
 func (repository *CustomerReceiptPostings) CustomerStatementScope(
@@ -69,6 +70,40 @@ func (repository *CustomerReceiptPostings) CustomerStatementScope(
 	return scope, true, nil
 }
 
+func (repository *CustomerReceiptPostings) ReceivableAccountScope(
+	ctx context.Context,
+	tenant domain.TenantID,
+	account string,
+) (domain.SettlementScope, bool, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return domain.SettlementScope{}, false, fmt.Errorf("receivable account scope: %w", err)
+	}
+
+	var legalEntity, accountID, currency string
+	err = querier.QueryRow(ctx,
+		`SELECT legal_entity_id, account_id, currency
+		   FROM settlement_accounting.settlement_account
+		  WHERE tenant_id = $1
+		    AND account_id = $2
+		    AND direction = 'RECEIVABLE'`,
+		tenant.String(),
+		account,
+	).Scan(&legalEntity, &accountID, &currency)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return domain.SettlementScope{}, false, nil
+	}
+	if err != nil {
+		return domain.SettlementScope{}, false, fmt.Errorf("receivable account scope: %w", err)
+	}
+
+	scope, err := scopeFrom(legalEntity, accountID, currency)
+	if err != nil {
+		return domain.SettlementScope{}, false, fmt.Errorf("receivable account scope: %w", err)
+	}
+	return scope, true, nil
+}
+
 func (repository *CustomerReceiptPostings) CustomerDirectionNets(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -105,6 +140,34 @@ func (repository *CustomerReceiptPostings) CustomerDirectionNets(
 		           AND a.account_id = $3
 		           AND a.currency = $4
 		           AND s.currency = a.currency
+		           AND v.currency = a.currency
+		           AND NOT EXISTS (
+		               SELECT 1
+		                 FROM settlement_accounting.external_funds_fact_version AS newer
+		                WHERE newer.tenant_id = v.tenant_id
+		                  AND newer.fact_id = v.fact_id
+		                  AND newer.corrects = v.version)
+		    ), 0)
+		    + COALESCE((
+		        SELECT SUM(
+		            CASE v.kind
+		                WHEN 'RECEIPT_CONFIRMED' THEN v.amount_minor
+		                WHEN 'FUNDS_RETURNED' THEN -v.amount_minor
+		                ELSE 0
+		            END)
+		          FROM settlement_accounting.funds_mapping AS m
+		          JOIN settlement_accounting.settlement_account AS a
+		            ON a.tenant_id = m.tenant_id
+		           AND a.account_id = m.target_ref
+		          JOIN settlement_accounting.external_funds_fact_version AS v
+		            ON v.tenant_id = m.tenant_id
+		           AND v.fact_id = m.fact_id
+		         WHERE m.tenant_id = $1
+		           AND m.target_kind = 'ACCOUNT'
+		           AND a.direction = 'RECEIVABLE'
+		           AND a.legal_entity_id = $2
+		           AND a.account_id = $3
+		           AND a.currency = $4
 		           AND v.currency = a.currency
 		           AND NOT EXISTS (
 		               SELECT 1
@@ -221,6 +284,89 @@ func (repository *CustomerReceiptPostings) AdvanceOperationalBalance(
 		return ports.OperationalBalanceNotAdvanced, nil
 	}
 	return ports.OperationalBalanceAdvanced, nil
+}
+
+func (repository *CustomerReceiptPostings) ConfirmedChargeAging(
+	ctx context.Context,
+	tenant domain.TenantID,
+	scope domain.SettlementScope,
+	asOf time.Time,
+) (ports.ChargeDuePicture, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.ChargeDuePicture{}, fmt.Errorf("confirmed charge aging: %w", err)
+	}
+
+	var picture ports.ChargeDuePicture
+	var missing int64
+	err = querier.QueryRow(ctx,
+		`SELECT COUNT(*)::bigint,
+		        COUNT(*) FILTER (WHERE due_date IS NULL)::bigint,
+		        COALESCE(BOOL_OR(
+		            due_date IS NOT NULL
+		            AND (due_date::timestamp AT TIME ZONE 'UTC') < $5
+		        ), false)
+		   FROM settlement_accounting.customer_charge
+		  WHERE tenant_id = $1
+		    AND stage = 'CONFIRMED'
+		    AND charge_direction = 'RECEIVABLE'
+		    AND responsible_entity = $2
+		    AND settlement_account_id = $3
+		    AND settlement_currency = $4`,
+		tenant.String(),
+		scope.LegalEntity().String(),
+		scope.Account().String(),
+		scope.Currency().String(),
+		asOf.UTC(),
+	).Scan(&picture.ConfirmedCount, &missing, &picture.Overdue)
+	if err != nil {
+		return ports.ChargeDuePicture{}, fmt.Errorf("confirmed charge aging: %w", err)
+	}
+	picture.MissingDueDate = missing > 0
+	return picture, nil
+}
+
+// AdvanceCreditStanding 插入时登记额度列写 0，冲突更新不碰该列。
+// 同键只准往前：截至时点不更新则交回未推进。
+func (repository *CustomerReceiptPostings) AdvanceCreditStanding(
+	ctx context.Context,
+	tenant domain.TenantID,
+	scope domain.SettlementScope,
+	overdue bool,
+	asOf time.Time,
+) (ports.CreditStandingAdvanceOutcome, error) {
+	if asOf.IsZero() {
+		return ports.CreditStandingAdvanceInvalid, errors.New(
+			"advance credit standing: 信用状况登记必须带截至时点，否则先后无从判断")
+	}
+
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return ports.CreditStandingAdvanceInvalid, fmt.Errorf("advance credit standing: %w", err)
+	}
+
+	tag, err := executor.Exec(ctx,
+		`INSERT INTO settlement_accounting.credit_standing
+			(tenant_id, legal_entity, account_id, currency, limit_minor, overdue, as_of)
+		 VALUES ($1, $2, $3, $4, 0, $5, $6)
+		 ON CONFLICT ON CONSTRAINT credit_standing_pkey DO UPDATE
+		    SET overdue = EXCLUDED.overdue,
+		        as_of = EXCLUDED.as_of
+		  WHERE EXCLUDED.as_of > settlement_accounting.credit_standing.as_of`,
+		tenant.String(),
+		scope.LegalEntity().String(),
+		scope.Account().String(),
+		scope.Currency().String(),
+		overdue,
+		asOf.UTC(),
+	)
+	if err != nil {
+		return ports.CreditStandingAdvanceInvalid, fmt.Errorf("advance credit standing: %w", err)
+	}
+	if tag.RowsAffected() == 0 {
+		return ports.CreditStandingNotAdvanced, nil
+	}
+	return ports.CreditStandingAdvanced, nil
 }
 
 func scopeFrom(legalEntity, account, currency string) (domain.SettlementScope, error) {

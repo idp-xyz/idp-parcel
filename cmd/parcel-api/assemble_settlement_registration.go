@@ -133,6 +133,7 @@ func buildSettlementRegistrationOrchestration(db *bentopg.DB) (settlementRegistr
 		Clock:        systemClock{},
 		Books:        postings,
 		Balances:     postings,
+		Standings:    postings,
 	})
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: settlement external funds orchestration: %w", err)

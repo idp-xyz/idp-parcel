@@ -267,6 +267,13 @@ echo "== 结算账户与受理前估价采用登记（settlement-accounting：�
 # 责任依据是演示租户的合成取值：登记口与执行器都不代拟账户，没登的租户照旧停在那一格。
 "$BIN/parcel-settlement-register" settlement-account \
   -input "$SEEDS/settlement/01-settlement-account-shipper-01-receivable-cny.json"
+# 账户级预收（ADR-0182 决定五）：第一张对账单之前没有可映射的对账单，收款映射到应收账户本身。
+# 金额是这一件演示委托的合成事实，按售价卡粗算（1.50kg、Z1：首重 ¥55 + 两档续重 ¥36，再加约一成燃油）
+# 后留出余量到 200.00 CNY；不够盖住试算合计时只调这一笔，不写进生产默认。
+"$BIN/parcel-settlement-register" external-funds-fact \
+  -input "$SEEDS/settlement/03-external-funds-receipt-account-01.json"
+"$BIN/parcel-settlement-register" funds-mapping \
+  -input "$SEEDS/settlement/04-funds-mapping-account-01.json"
 # 受理前估价采用（ADR-0179 决定五）：这一户采用「逐件 SELL 试算合计」，计价范围与售价卡 SYN-PLAN-CN-SG-01 的
 # 范围同值——估价按（租户、计价范围、SELL、客户费用、判断时点）解析在用售价卡（决定三），范围对不上就解不出卡。
 # 采用册对账户册设外键，所以排在账户之后。没登这一行的户，控制停在金额未配置；形态与范围是演示租户的合成取值。

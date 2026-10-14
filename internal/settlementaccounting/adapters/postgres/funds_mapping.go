@@ -131,6 +131,8 @@ func settlementTargetKindFrom(raw string) (domain.SettlementTargetKind, error) {
 		return domain.TargetPayable, nil
 	case domain.TargetCreditNote.String():
 		return domain.TargetCreditNote, nil
+	case domain.TargetAccount.String():
+		return domain.TargetAccount, nil
 	default:
 		return 0, fmt.Errorf("unknown settlement target kind %q", raw)
 	}

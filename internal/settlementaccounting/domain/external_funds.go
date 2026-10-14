@@ -216,9 +216,10 @@ func (fact ExternalFundsFact) CorrectAmount(
 	return corrected, nil
 }
 
-// SettlementTargetKind 是资金可映射目标的封闭三值：客户对账单、供应商审核应付、
-// 供应商费用贷项。费用、赔付金额与追偿认可本体不在其中——映射与核销改不了那些金额
-// （AT-SA-116/121）。
+// SettlementTargetKind 是资金可映射目标的封闭四值：客户对账单、供应商审核应付、
+// 供应商费用贷项、应收结算账户。费用、赔付金额与追偿认可本体不在其中——映射与核销
+// 改不了那些金额（AT-SA-116/121）。账户这一格只指名结算账户身份；是不是应收方向由
+// 映射事务去账户册上核对（ADR-0182 决定一）。
 type SettlementTargetKind uint8
 
 const (
@@ -226,10 +227,11 @@ const (
 	TargetStatement
 	TargetPayable
 	TargetCreditNote
+	TargetAccount
 )
 
 func (kind SettlementTargetKind) valid() bool {
-	return kind >= TargetStatement && kind <= TargetCreditNote
+	return kind >= TargetStatement && kind <= TargetAccount
 }
 
 func (kind SettlementTargetKind) String() string {
@@ -240,6 +242,8 @@ func (kind SettlementTargetKind) String() string {
 		return "PAYABLE"
 	case TargetCreditNote:
 		return "CREDIT_NOTE"
+	case TargetAccount:
+		return "ACCOUNT"
 	default:
 		return ""
 	}

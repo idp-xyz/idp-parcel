@@ -198,6 +198,7 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 		Clock:        systemClock{},
 		Books:        postings,
 		Balances:     postings,
+		Standings:    postings,
 	})
 	if err != nil {
 		return none, fmt.Errorf("构造外部资金采用编排：%w", err)
@@ -376,7 +377,7 @@ func subjectOf(result application.FundsResult) string {
 	return record.Key.Fact.String() + " 版本 " + record.Fact.Version().String()
 }
 
-// fundsAnswer 把 `application.FundsOutcome` 的封闭各格译成退出码，不增不减。一族一张表：映射与核销那几格本口没有
+// fundsAnswer 把 `application.FundsOutcome` 的封闭各格译成退出码，不增不减。一族一张表：核销那几格本口没有
 // 命令能交回，仍在表上——同一格不因来自哪条命令而换退出码（parcel-customs-register 的 dutyReconciliationAnswer
 // 同一条纪律）。归格只看恢复动作（裁决 5）：
 //   - 已采用 / 已存在 / 已映射 / 已核销 / 已撤销 / 重放各格 → 0。重放不是错误，无恢复动作。

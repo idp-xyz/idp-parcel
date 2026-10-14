@@ -299,10 +299,22 @@ func (idleReceiptBooks) CustomerStatementScope(
 	return domain.SettlementScope{}, false, nil
 }
 
+func (idleReceiptBooks) ReceivableAccountScope(
+	context.Context, domain.TenantID, string,
+) (domain.SettlementScope, bool, error) {
+	return domain.SettlementScope{}, false, nil
+}
+
 func (idleReceiptBooks) CustomerDirectionNets(
 	context.Context, domain.TenantID, domain.SettlementScope,
 ) (int64, int64, int64, error) {
 	return 0, 0, 0, nil
+}
+
+func (idleReceiptBooks) ConfirmedChargeAging(
+	context.Context, domain.TenantID, domain.SettlementScope, time.Time,
+) (ports.ChargeDuePicture, error) {
+	return ports.ChargeDuePicture{}, nil
 }
 
 type idleBalanceAdvance struct{}
@@ -311,6 +323,14 @@ func (idleBalanceAdvance) AdvanceOperationalBalance(
 	context.Context, domain.TenantID, domain.SettlementScope, int64, int64, time.Time,
 ) (ports.OperationalBalanceAdvanceOutcome, error) {
 	return ports.OperationalBalanceAdvanced, nil
+}
+
+type idleCreditStanding struct{}
+
+func (idleCreditStanding) AdvanceCreditStanding(
+	context.Context, domain.TenantID, domain.SettlementScope, bool, time.Time,
+) (ports.CreditStandingAdvanceOutcome, error) {
+	return ports.CreditStandingAdvanced, nil
 }
 
 func fundsValue[T any](t *testing.T, construct func(string) (T, error), raw string) T {
@@ -334,6 +354,7 @@ func fundsHandlerOver(t *testing.T, stub *fundsStoreStub) *application.MapExtern
 		Clock:        fundsTestClock{},
 		Books:        idleReceiptBooks{},
 		Balances:     idleBalanceAdvance{},
+		Standings:    idleCreditStanding{},
 	})
 	if err != nil {
 		t.Fatalf("构造编排：%v", err)

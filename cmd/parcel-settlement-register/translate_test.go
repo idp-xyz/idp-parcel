@@ -9,7 +9,7 @@ import (
 
 // TestCommandForRejectsUnknownCommand 证命令集封闭：CC 那本的核对命令与不存在的名字都拒。
 func TestCommandForRejectsUnknownCommand(t *testing.T) {
-	for _, command := range []string{"duty-payment-verification", "funds-mapping", ""} {
+	for _, command := range []string{"duty-payment-verification", "funds-apply", ""} {
 		if _, err := commandFor(command, []byte(`{}`)); err == nil {
 			t.Fatalf("集合外命令 %q 没拒", command)
 		}

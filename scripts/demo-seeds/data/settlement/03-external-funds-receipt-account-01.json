@@ -1,0 +1,11 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "factRef": "SYN-FUNDS-RECEIPT-01",
+  "sourceRef": "SYN-FUNDS-SOURCE-01",
+  "payerRef": "SYN-PARTY-SHIPPER-01",
+  "kind": "RECEIPT_CONFIRMED",
+  "currency": "CNY",
+  "amountMinor": 20000,
+  "version": "v1",
+  "occurredAt": "2026-10-01T00:00:00Z"
+}

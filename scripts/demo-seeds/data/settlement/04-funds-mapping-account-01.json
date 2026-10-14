@@ -1,0 +1,9 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "mappingRef": "SYN-FUNDS-MAP-01",
+  "factRef": "SYN-FUNDS-RECEIPT-01",
+  "targetKind": "ACCOUNT",
+  "targetRef": "SYN-SETTLEMENT-ACCOUNT-01",
+  "basis": "SYN-PREPAY-INSTRUCTION-01",
+  "mappedAt": "2026-10-01T00:00:01Z"
+}

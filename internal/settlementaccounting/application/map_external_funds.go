@@ -225,10 +225,11 @@ type MapExternalFundsDeps struct {
 	// FactHandoff 把采用成功的资金事实交出去（票 sa-cc/02）——CC 的税费付款核对等的正是这封。
 	FactHandoff ports.ExternalFundsFactHandoff
 	Clock       ports.Clock
-	// Books 与 Balances 是客户收款映射及其资金退回在同一事务里重算入账余额的两口（ADR-0181 决定六）。
-	// 核销与确认费用不从这里挂。
-	Books    ports.CustomerReceiptBooks
-	Balances ports.OperationalBalanceAdvance
+	// Books、Balances、Standings 是客户收款映射及其资金退回在同一事务里重算的三口
+	// （ADR-0181 决定二、ADR-0182 决定一与决定三）。核销与确认费用不从这里挂。
+	Books     ports.CustomerReceiptBooks
+	Balances  ports.OperationalBalanceAdvance
+	Standings ports.CreditStandingAdvance
 }
 
 type MapExternalFundsHandler struct {
@@ -253,6 +254,7 @@ func NewMapExternalFundsHandler(deps MapExternalFundsDeps) (*MapExternalFundsHan
 		{"clock", deps.Clock == nil},
 		{"customer receipt books", deps.Books == nil},
 		{"operational balance advance", deps.Balances == nil},
+		{"credit standing advance", deps.Standings == nil},
 	} {
 		if dependency.missing {
 			return nil, fmt.Errorf("%w: %s", ErrNilDependency, dependency.name)
@@ -773,27 +775,44 @@ func (handler *MapExternalFundsHandler) handOff(
 	return fundsContinuation("SETTLEMENT_APPLICATION_HANDOFF", record.Key.TenantID.String(), record.Key.Application.String())
 }
 
-// advanceCustomerReceipt 只在客户对账单上的确认到账与资金退回之后重算。
+// advanceCustomerReceipt 在客户对账单或应收结算账户上的确认到账与资金退回之后重算。
 // 供应商应付、贷项、核销与确认费用都不从这里进。对账单收不成应收作用域时映射照旧成立，
-// 余额不动——那不是这一支。已确认未结求出为负则整笔失败，调用方的事务一起回滚。
+// 余额不动——那不是这一支。账户目标收不成应收作用域则整笔失败。已确认未结求出为负则整笔失败，
+// 调用方的事务一起回滚。信用状况只在账户级映射上重算。
 func (handler *MapExternalFundsHandler) advanceCustomerReceipt(
 	ctx context.Context,
 	command MapFundsCommand,
 	fact domain.ExternalFundsFact,
 ) error {
-	if command.TargetKind != domain.TargetStatement {
-		return nil
-	}
 	switch fact.Kind() {
 	case domain.FundsReceiptConfirmed, domain.FundsReturned:
 	default:
 		return nil
 	}
 
-	scope, found, err := handler.deps.Books.CustomerStatementScope(ctx, command.TenantID, command.Target)
-	if err != nil || !found {
-		return err
+	var (
+		scope domain.SettlementScope
+		found bool
+		err   error
+	)
+	switch command.TargetKind {
+	case domain.TargetStatement:
+		scope, found, err = handler.deps.Books.CustomerStatementScope(ctx, command.TenantID, command.Target)
+		if err != nil || !found {
+			return err
+		}
+	case domain.TargetAccount:
+		scope, found, err = handler.deps.Books.ReceivableAccountScope(ctx, command.TenantID, command.Target)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return domain.ErrNotReceivableAccount
+		}
+	default:
+		return nil
 	}
+
 	postedNet, writeoffNet, confirmed, err := handler.deps.Books.CustomerDirectionNets(ctx, command.TenantID, scope)
 	if err != nil {
 		return err
@@ -802,8 +821,37 @@ func (handler *MapExternalFundsHandler) advanceCustomerReceipt(
 	if err != nil {
 		return err
 	}
-	_, err = handler.deps.Balances.AdvanceOperationalBalance(
-		ctx, command.TenantID, scope, posted, unsettled, handler.deps.Clock.Now())
+	asOf := handler.deps.Clock.Now()
+	if _, err = handler.deps.Balances.AdvanceOperationalBalance(
+		ctx, command.TenantID, scope, posted, unsettled, asOf); err != nil {
+		return err
+	}
+	if command.TargetKind != domain.TargetAccount {
+		return nil
+	}
+	return handler.advanceCreditStanding(ctx, command.TenantID, scope, asOf)
+}
+
+// advanceCreditStanding 按已确认费用的到期画像决定这次写不写信用状况。
+// 没有已确认费用则逾期为假并写行。已有已确认费用却缺到期日则这次不写。
+func (handler *MapExternalFundsHandler) advanceCreditStanding(
+	ctx context.Context,
+	tenant domain.TenantID,
+	scope domain.SettlementScope,
+	asOf time.Time,
+) error {
+	picture, err := handler.deps.Books.ConfirmedChargeAging(ctx, tenant, scope, asOf)
+	if err != nil {
+		return err
+	}
+	if picture.ConfirmedCount > 0 && picture.MissingDueDate {
+		return nil
+	}
+	overdue := false
+	if picture.ConfirmedCount > 0 {
+		overdue = picture.Overdue
+	}
+	_, err = handler.deps.Standings.AdvanceCreditStanding(ctx, tenant, scope, overdue, asOf)
 	return err
 }
 

@@ -239,10 +239,22 @@ func (idleReceiptBooks) CustomerStatementScope(
 	return domain.SettlementScope{}, false, nil
 }
 
+func (idleReceiptBooks) ReceivableAccountScope(
+	context.Context, domain.TenantID, string,
+) (domain.SettlementScope, bool, error) {
+	return domain.SettlementScope{}, false, nil
+}
+
 func (idleReceiptBooks) CustomerDirectionNets(
 	context.Context, domain.TenantID, domain.SettlementScope,
 ) (int64, int64, int64, error) {
 	return 0, 0, 0, nil
+}
+
+func (idleReceiptBooks) ConfirmedChargeAging(
+	context.Context, domain.TenantID, domain.SettlementScope, time.Time,
+) (ports.ChargeDuePicture, error) {
+	return ports.ChargeDuePicture{}, nil
 }
 
 type idleBalanceAdvance struct{}
@@ -251,6 +263,14 @@ func (idleBalanceAdvance) AdvanceOperationalBalance(
 	context.Context, domain.TenantID, domain.SettlementScope, int64, int64, time.Time,
 ) (ports.OperationalBalanceAdvanceOutcome, error) {
 	return ports.OperationalBalanceAdvanced, nil
+}
+
+type idleCreditStanding struct{}
+
+func (idleCreditStanding) AdvanceCreditStanding(
+	context.Context, domain.TenantID, domain.SettlementScope, bool, time.Time,
+) (ports.CreditStandingAdvanceOutcome, error) {
+	return ports.CreditStandingAdvanced, nil
 }
 
 type fundsFixture struct {
@@ -280,9 +300,10 @@ func newFundsFixture(t *testing.T) *fundsFixture {
 		Clock:        fundsClock{at: fundsNowAt},
 		Books:        idleReceiptBooks{},
 		Balances:     idleBalanceAdvance{},
+		Standings:    idleCreditStanding{},
 	})
 	if err != nil {
-		t.Fatalf("八口全接替身仍被构造门拒：%v", err)
+		t.Fatalf("九口全接替身仍被构造门拒：%v", err)
 	}
 	fixture.handler = handler
 	return fixture
@@ -302,10 +323,11 @@ func TestTheFundsHandlerRefusesANilDependencyAtConstruction(t *testing.T) {
 			Clock:        fundsClock{at: fundsNowAt},
 			Books:        idleReceiptBooks{},
 			Balances:     idleBalanceAdvance{},
+			Standings:    idleCreditStanding{},
 		}
 	}
 	if _, err := application.NewMapExternalFundsHandler(complete()); err != nil {
-		t.Fatalf("八口齐全被拒：%v", err)
+		t.Fatalf("九口齐全被拒：%v", err)
 	}
 
 	missing := map[string]func(*application.MapExternalFundsDeps){
@@ -317,6 +339,7 @@ func TestTheFundsHandlerRefusesANilDependencyAtConstruction(t *testing.T) {
 		"clock":                             func(deps *application.MapExternalFundsDeps) { deps.Clock = nil },
 		"customer receipt books":            func(deps *application.MapExternalFundsDeps) { deps.Books = nil },
 		"operational balance advance":       func(deps *application.MapExternalFundsDeps) { deps.Balances = nil },
+		"credit standing advance":           func(deps *application.MapExternalFundsDeps) { deps.Standings = nil },
 	}
 	for name, remove := range missing {
 		deps := complete()
