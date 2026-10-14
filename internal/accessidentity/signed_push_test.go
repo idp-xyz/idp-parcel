@@ -276,6 +276,15 @@ func TestEd25519SignedPushIsMintedAsTheBoundIntegrationClient(t *testing.T) {
 	assertPushMintedAsTheBoundClient(t, envelope, err)
 }
 
+// Covers: 对方公钥一形验的是这一把公钥，不是「头里有一项 v1a」。另一把私钥签的同一份原文答签名不过。
+func TestAnEd25519SignatureFromAnotherKeyIsRejected(t *testing.T) {
+	key := newEd25519PushKey(t, "SYN-PUSH-KEY-ED25519-01")
+	stranger := newEd25519PushKey(t, "SYN-PUSH-KEY-ED25519-02")
+	minter := newPushMinter(t, grantedPushParts(t, pushStandingWith(t, openKey(key)), key))
+	_, err := mintPush(t, minter, pushOf(t, "msg_SYN01", pushReceivedAt, stranger))
+	assertPushGrade(t, err, "signature rejected")
+}
+
 // pushGrades 是签名推送答复代数的各格，外加它会交回的集成客户端族各格。每一格只许被自己那个哨兵认出：签名不过不是
 // 令牌不过，越窗不是签名不过，重放不是越窗，依赖故障不折进任何一格业务答复。
 var pushGrades = map[string]error{
@@ -420,6 +429,15 @@ func TestAMissingOldKeyDoesNotBlockTheNewKeyOfTheSameForm(t *testing.T) {
 	parts.keys = keyStoreOf()
 	_, err = mintPush(t, newPushMinter(t, parts), push)
 	assertPushGrade(t, err, "signing key unavailable")
+}
+
+// Covers: 同形态两把钥都在册时，前一把对不上这份签名，后一把仍验得过。轮换期新旧都是共享密钥时靠这一格，不靠「形态不同所以前一把被跳过」。
+func TestALaterKeyOfTheSameFormStillVerifiesWhenTheEarlierOneDoesNotMatch(t *testing.T) {
+	oldKey := newHMACPushKey(t, "SYN-PUSH-KEY-OLD")
+	newKey := newHMACPushKey(t, "SYN-PUSH-KEY-NEW")
+	parts := grantedPushParts(t, pushStandingWith(t, openKey(oldKey), openKey(newKey)), oldKey, newKey)
+	envelope, err := mintPush(t, newPushMinter(t, parts), pushOf(t, "msg_SYN01", pushReceivedAt, newKey))
+	assertPushMintedAsTheBoundClient(t, envelope, err)
 }
 
 // Covers: 准入范围照集成客户端铸造器走——请求带了准入要求时，权威串没配答不在准入范围，读不动答依赖故障且不折进
