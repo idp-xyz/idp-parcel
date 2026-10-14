@@ -52,6 +52,19 @@ Blocked by: 11
 
 未跑全仓 `go test ./...`（作者那层按 parallel-sessions「全量只跑一次」，全量留给推送方）。
 
+变异自证（`1ad7721a`，副本在 `/tmp/oc12-mut`，`go test -overlay`）：九处都退 1。M2、M7 第一轮存活，补了 `TestAnEd25519SignatureFromAnotherKeyIsRejected` 与 `TestALaterKeyOfTheSameFormStillVerifiesWhenTheEarlierOneDoesNotMatch` 之后再跑退 1。
+
+- M1 HMAC 验签失败仍当通过 → `TestSignedPushAnswerGradesDoNotStandInForEachOther` 退 1
+- M2 Ed25519 验签失败仍当通过 → `TestAnEd25519SignatureFromAnotherKeyIsRejected` 退 1
+- M3 重放不答 `ErrPushReplayed` → `TestTheSamePushReplayedIsRecognisedButARetrySignedAfreshIsNot` 退 1
+- M4 去掉窗口判断 → 同上分格用例退 1
+- M5 停用仍当有效 → 分格用例与 `TestKeyRotationAcceptsOldAndNewKeysExactlyWhileBothAreEffective` 退 1
+- M6 取不回密钥折成签名不过 → 分格用例与 `TestAMissingOldKeyDoesNotBlockTheNewKeyOfTheSameForm` 退 1
+- M7 第一把对不上就不再试后面的 → `TestALaterKeyOfTheSameFormStillVerifiesWhenTheEarlierOneDoesNotMatch` 退 1
+- M8 推送源册读不动折成签名不过 → 分格用例退 1
+- M9 异内容答 `ALREADY_REGISTERED`（带 DSN）→ `TestPushSourceRegistrationRecordsReplaysAndNeverOverwrites` 退 1
+
+
 ## 判断项
 
 1. **落点在 `internal/accessidentity`。** 校验通过要铸的是本上下文的 `IntegrationClientEnvelope`，并读集成客户端册。另起一个只答「签名成立」的平台件，每个连接器还得再铸一次信封。令牌入口与推送入口共用 `admitIntegrationClient`，授予与准入范围只写一处。
