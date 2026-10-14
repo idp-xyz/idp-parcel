@@ -16,7 +16,7 @@ import (
 // isolatedTransportLine 是运输履约主链一口的真库取证：怎么用生产装配拼出这一口的端点、一份合成载荷、该答的状态与 outcome。
 // 每放一口在下面的表里加一行。
 type isolatedTransportLine struct {
-	endpoint func(t *testing.T, db *bentopg.DB, intake *tfhttp.IsolatedCommandIntake) http.Handler
+	endpoint func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler
 	body     string
 	status   int
 	outcome  string
@@ -25,12 +25,12 @@ type isolatedTransportLine struct {
 var isolatedTransportLines = map[string]isolatedTransportLine{
 	// 单对象场外揽收登记：控制证据齐、不指名段——落一版揽收，201 PICKUP_REGISTERED。
 	"/transport-fulfillment/offsite-pickups": {
-		endpoint: func(t *testing.T, db *bentopg.DB, intake *tfhttp.IsolatedCommandIntake) http.Handler {
+		endpoint: func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
 			controlFacts, err := buildControlFactOrchestrations(db)
 			if err != nil {
 				t.Fatalf("装配控制事实编排：%v", err)
 			}
-			return tfhttp.NewRegisterOffsitePickupEndpoint(intake, controlFacts.pickupRegistration)
+			return tfhttp.NewRegisterOffsitePickupEndpoint(work, controlFacts.pickupRegistration)
 		},
 		body: `{"object":"SYN-PARCEL-08-01","task":"SYN-TASK-08-01","attempt":"SYN-ATTEMPT-08-01","place":"SYN-PLACE/shipper-dock-01",` +
 			`"control":"SYN-CONTROL/signed-pickup-01","executedBy":"SYN-COURIER-08","occurredAt":"2026-09-24T08:30:00+08:00"}`,
@@ -39,12 +39,12 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 	},
 	// 一次到访多对象揽收执行：一件揽到手带控制依据、不指名段——落一次到访结果，201 ATTEMPT_RECORDED。
 	"/transport-fulfillment/offsite-pickup-attempts": {
-		endpoint: func(t *testing.T, db *bentopg.DB, intake *tfhttp.IsolatedCommandIntake) http.Handler {
+		endpoint: func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
 			controlFacts, err := buildControlFactOrchestrations(db)
 			if err != nil {
 				t.Fatalf("装配控制事实编排：%v", err)
 			}
-			return tfhttp.NewPerformOffsitePickupEndpoint(intake, controlFacts.pickupAttempt)
+			return tfhttp.NewPerformOffsitePickupEndpoint(work, controlFacts.pickupAttempt)
 		},
 		body: `{"sourceId":"SYN-DEVICE-08/attempt-01","task":"SYN-TASK-08-02","attempt":"SYN-ATTEMPT-08-02","executedBy":"SYN-COURIER-08",` +
 			`"place":"SYN-PLACE/shipper-dock-02","plannedFrom":"2026-09-24T08:00:00+08:00","plannedTo":"2026-09-24T10:00:00+08:00",` +
@@ -56,12 +56,12 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 	// 承运商首次有效收寄的显式判断：承运商揽收扫描一条、表达取得控制、承运主体给引用。生产装配的承运主体目录读 PC 的真
 	// 身份登记册，合成承运方没在册，判断如实落成`待确认`（IDENTITY_NOT_REGISTERED）——形成了的业务答案，200。
 	"/transport-fulfillment-carrier-first-effective-pickup-judgments": {
-		endpoint: func(t *testing.T, db *bentopg.DB, intake *tfhttp.IsolatedCommandIntake) http.Handler {
+		endpoint: func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
 			judge, _, err := buildCarrierPickupJudgment(db)
 			if err != nil {
 				t.Fatalf("装配承运商收寄判断编排：%v", err)
 			}
-			return tfhttp.NewJudgeCarrierFirstEffectivePickupEndpoint(intake, judge)
+			return tfhttp.NewJudgeCarrierFirstEffectivePickupEndpoint(isolated, judge)
 		},
 		body: `{"object":"SYN-PARCEL-08-04","source":"CARRIER_PICKUP_SCAN","evidenceReference":"SYN-SCAN-08-04","evidenceVersion":"v1",` +
 			`"expressesControl":true,"occurredAt":"2026-09-24T11:00:00+08:00","carrierKind":"EXTERNAL_PARTY","carrierReference":"SYN-PARTY/carrier-08"}`,
@@ -71,12 +71,12 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 	// 交接判断首登：结论已交接、两侧证据与规则齐、不带依据（依据只属拒收与待确认）、不指名段——落一版交接，
 	// 201 HANDOVER_REGISTERED。
 	"/transport-fulfillment/handovers": {
-		endpoint: func(t *testing.T, db *bentopg.DB, intake *tfhttp.IsolatedCommandIntake) http.Handler {
+		endpoint: func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
 			controlFacts, err := buildControlFactOrchestrations(db)
 			if err != nil {
 				t.Fatalf("装配控制事实编排：%v", err)
 			}
-			return tfhttp.NewRegisterTransportHandoverEndpoint(intake, controlFacts.handover)
+			return tfhttp.NewRegisterTransportHandoverEndpoint(work, controlFacts.handover)
 		},
 		body: `{"object":"SYN-PARCEL-08-05","scope":"SYN-SCOPE/hub-dock-05","releasedBy":"SYN-PARTY/hub-08","receivedBy":"SYN-PARTY/linehaul-08",` +
 			`"verdict":"HANDED_OVER","releasingEvidence":"SYN-EVIDENCE/release-05","receivingEvidence":"SYN-EVIDENCE/receive-05",` +
@@ -85,14 +85,14 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 		outcome: "HANDOVER_REGISTERED",
 	},
 	// 自营执行方的到达事实：到达不受门禁管（门禁只约束装载出发），不带 gateRequired / gateClearance——落一条移动事实，201 MOVEMENT_FACT_RECORDED。
-	// 来源格是装配点注入的合成来源，不在载荷里。
+	// 来源格是作业事实这一面注入的产品常量 SELF_OPERATED，不在载荷里。
 	"/transport-fulfillment/movement-facts": {
-		endpoint: func(t *testing.T, db *bentopg.DB, intake *tfhttp.IsolatedCommandIntake) http.Handler {
+		endpoint: func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
 			movement, err := buildMovementFactOrchestration(db)
 			if err != nil {
 				t.Fatalf("装配移动事实编排：%v", err)
 			}
-			return tfhttp.NewRecordMovementFactEndpoint(intake, movement)
+			return tfhttp.NewRecordMovementFactEndpoint(work, movement)
 		},
 		body: `{"fact":"SYN-MOVE-08-06","schedule":"SYN-SCHEDULE/linehaul-06","kind":"ARRIVAL","location":"SYN-NODE-SIN-HUB",` +
 			`"version":"v1","occurredAt":"2026-09-24T18:00:00+08:00"}`,
@@ -101,12 +101,12 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 	},
 	// 授权角色建立派送任务：工作范围齐——立一个任务，201 DISPATCH_TASK_OPENED。
 	"/transport-fulfillment-dispatch-task-registrations": {
-		endpoint: func(t *testing.T, db *bentopg.DB, intake *tfhttp.IsolatedCommandIntake) http.Handler {
+		endpoint: func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
 			segmentOps, err := buildSegmentOperations(db)
 			if err != nil {
 				t.Fatalf("装配段运营编排：%v", err)
 			}
-			return tfhttp.NewOpenDispatchTaskEndpoint(intake, segmentOps.opener)
+			return tfhttp.NewOpenDispatchTaskEndpoint(isolated, segmentOps.opener)
 		},
 		body: `{"task":"SYN-DISPATCH-08-07","kind":"DELIVERY","objects":["SYN-PARCEL-08-07"],"place":"SYN-PLACE/consignee-07",` +
 			`"windowFrom":"2026-09-25T09:00:00+08:00","windowTo":"2026-09-25T12:00:00+08:00","conditions":"SYN-CONDITION/signature-required",` +
@@ -116,12 +116,12 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 	},
 	// 派送发起的一拍：段不在册——执行器如实答`不是触发事实`（SEGMENT_NOT_FOUND），形成了的业务答案，200。
 	"/transport-fulfillment-delivery-dispatch-triggers": {
-		endpoint: func(t *testing.T, db *bentopg.DB, intake *tfhttp.IsolatedCommandIntake) http.Handler {
+		endpoint: func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
 			trigger, err := buildDeliveryDispatchTrigger(db)
 			if err != nil {
 				t.Fatalf("装配派送发起执行器：%v", err)
 			}
-			return tfhttp.NewTriggerDeliveryDispatchEndpoint(intake, trigger)
+			return tfhttp.NewTriggerDeliveryDispatchEndpoint(work, trigger)
 		},
 		body:    `{"segment":"SYN-SEGMENT-08-09","object":"SYN-PARCEL-08-09","occurredAt":"2026-09-25T07:00:00+08:00"}`,
 		status:  http.StatusOK,
@@ -131,12 +131,12 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 	// 就没有东西拦得住先声称到过场再声称交付成功」），编排如实答`未受理`，200。尝试登记之后交付走得过去，见
 	// TestARecordedDeliveryAttemptLetsTheEffectiveDeliveryThrough。
 	"/transport-fulfillment/deliveries": {
-		endpoint: func(t *testing.T, db *bentopg.DB, intake *tfhttp.IsolatedCommandIntake) http.Handler {
+		endpoint: func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
 			delivery, err := buildDeliveryOrchestration(db)
 			if err != nil {
 				t.Fatalf("装配交付编排：%v", err)
 			}
-			return tfhttp.NewRegisterEffectiveDeliveryEndpoint(intake, delivery)
+			return tfhttp.NewRegisterEffectiveDeliveryEndpoint(work, delivery)
 		},
 		body: `{"attempt":"SYN-ATTEMPT-08-10","object":"SYN-PARCEL-08-10","method":"HANDED_TO_RECIPIENT",` +
 			`"recipient":"SYN-RECIPIENT/consignee-10","proof":"SYN-POD/signature-10"}`,
@@ -146,12 +146,12 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 	// 派送尝试登记（票 product-strategy-boundary/19）：指名的派送任务不在册——编排如实答 DELIVERY_TASK_NOT_OPEN，形成了的
 	// 业务答案，200。表里各行互不依赖、顺序不定，所以这一行不借上面建任务那一行；任务在册时的首登见下面那条链。
 	"/transport-fulfillment/delivery-attempts": {
-		endpoint: func(t *testing.T, db *bentopg.DB, intake *tfhttp.IsolatedCommandIntake) http.Handler {
+		endpoint: func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
 			attempts, err := buildDeliveryAttemptOrchestration(db)
 			if err != nil {
 				t.Fatalf("装配派送尝试编排：%v", err)
 			}
-			return tfhttp.NewRecordDeliveryAttemptEndpoint(intake, attempts)
+			return tfhttp.NewRecordDeliveryAttemptEndpoint(work, attempts)
 		},
 		body: `{"task":"SYN-DISPATCH-08-13","attempt":"SYN-DELIVERY-ATTEMPT-08-13","executedBy":"SYN-COURIER-08",` +
 			`"place":"SYN-PLACE/consignee-13","plannedFrom":"2026-09-25T09:00:00+08:00","plannedTo":"2026-09-25T12:00:00+08:00",` +
@@ -162,12 +162,12 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 	},
 	// 关段声明：段不在册——编排如实答 SEGMENT_NOT_FOUND，形成了的业务答案，200。
 	"/transport-fulfillment-segment-closures": {
-		endpoint: func(t *testing.T, db *bentopg.DB, intake *tfhttp.IsolatedCommandIntake) http.Handler {
+		endpoint: func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
 			segmentOps, err := buildSegmentOperations(db)
 			if err != nil {
 				t.Fatalf("装配段运营编排：%v", err)
 			}
-			return tfhttp.NewCloseFulfillmentSegmentEndpoint(intake, segmentOps.closer)
+			return tfhttp.NewCloseFulfillmentSegmentEndpoint(isolated, segmentOps.closer)
 		},
 		body:    `{"segment":"SYN-SEGMENT-08-11","closedAt":"2026-09-25T20:00:00+08:00"}`,
 		status:  http.StatusOK,
@@ -176,12 +176,12 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 	// 有效时间显式判断：指名的轨迹事实不在册（外部轨迹只经 TrackingSource 入站口进，隔离形态不开那条路）——编排如实答
 	// `未受理`，形成了的业务答案，200。
 	"/transport-fulfillment-effective-time-judgments": {
-		endpoint: func(t *testing.T, db *bentopg.DB, intake *tfhttp.IsolatedCommandIntake) http.Handler {
+		endpoint: func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
 			judge, err := buildEffectiveTimeJudgment(db)
 			if err != nil {
 				t.Fatalf("装配有效时间判断编排：%v", err)
 			}
-			return tfhttp.NewJudgeEffectiveTimeEndpoint(intake, judge)
+			return tfhttp.NewJudgeEffectiveTimeEndpoint(isolated, judge)
 		},
 		body:    `{"fact":"SYN-TRACKING-FACT-08-12","effectiveAt":"2026-09-24T16:00:00+08:00"}`,
 		status:  http.StatusOK,
@@ -189,9 +189,8 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 	},
 }
 
-// Covers: 票 operator-channel/08 完成判据「隔离环境里上列各口对合成写答业务结果而不是 ACCESS_CHANNEL_NOT_CONFIGURED」——
-// 运输履约主链各口。Intake 走进程自己那道门（buildIsolatedWriteAdmission），编排走生产装配，中间是生产的端点构造函数：
-// 三件都是 main 交给路由的那一份。每口另投一份带 tenantId 的载荷，Intake 就拒、不带 outcome。测试输入是隔离合成，只记 `S`。
+// Covers: 票 operator-channel/10 完成判据第二条——作业事实各口改走操作者渠道（作业事实登记授予 + 在用设备），运营决定四口仍走隔离写。
+// 编排走生产装配，中间是生产的端点构造函数。每口另投一份带 tenantId 的载荷，Intake 就拒、不带 outcome。测试输入是隔离合成，只记 `S`。
 func TestIsolatedTransportFulfillmentLinesAnswerBusinessOutcomesAgainstARealDatabase(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -199,13 +198,16 @@ func TestIsolatedTransportFulfillmentLinesAnswerBusinessOutcomesAgainstARealData
 		t.Fatalf("构造框架 DB：%v", err)
 	}
 	intake := isolatedWriteAdmissionForTest(t).transportFulfillmentIntake()
+	work := workFactTransportForTest(t)
 
 	for pattern, line := range isolatedTransportLines {
 		t.Run(pattern, func(t *testing.T) {
-			endpoint := line.endpoint(t, db, intake)
+			endpoint := line.endpoint(t, db, intake, work)
 			post := func(body string) *httptest.ResponseRecorder {
 				recorder := httptest.NewRecorder()
-				endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, pattern, strings.NewReader(body)))
+				request := httptest.NewRequest(http.MethodPost, pattern, strings.NewReader(body))
+				stampWorkFact(request, "OFFSITE", "SYN-OFFSITE-01", "SYN-DEVICE-OFFSITE")
+				endpoint.ServeHTTP(recorder, request)
 				return recorder
 			}
 
@@ -223,15 +225,16 @@ func TestIsolatedTransportFulfillmentLinesAnswerBusinessOutcomesAgainstARealData
 	}
 }
 
-// Covers: 票 product-strategy-boundary/19 完成判据「隔离形态下登记一次妥投结果后，交付不再答 SOURCE_NOT_ACCEPTED」——
-// psb/05 格 12 的停点。建任务、登记派送尝试、交付生效三口都走生产装配与进程自己的隔离 Intake：尝试登记之前交付答`未受理`，
-// 登记一次妥投之后同一份交付落成 DELIVERY_REGISTERED。测试输入是隔离合成，只记 `S`。
+// Covers: 票 product-strategy-boundary/19 完成判据「登记一次妥投结果后，交付不再答 SOURCE_NOT_ACCEPTED」——
+// psb/05 格 12 的停点。建任务仍走隔离写（运营决定）；登记派送尝试与交付生效走作业事实渠道，租户都是 SYN-TENANT-01。
+// 尝试登记之前交付答`未受理`，登记一次妥投之后同一份交付落成 DELIVERY_REGISTERED。测试输入是隔离合成，只记 `S`。
 func TestARecordedDeliveryAttemptLetsTheEffectiveDeliveryThrough(t *testing.T) {
 	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
 	intake := isolatedWriteAdmissionForTest(t).transportFulfillmentIntake()
+	work := workFactTransportForTest(t)
 	segmentOps, err := buildSegmentOperations(db)
 	if err != nil {
 		t.Fatalf("装配段运营编排：%v", err)
@@ -245,8 +248,10 @@ func TestARecordedDeliveryAttemptLetsTheEffectiveDeliveryThrough(t *testing.T) {
 		t.Fatalf("装配交付编排：%v", err)
 	}
 	post := func(endpoint http.Handler, pattern, body string) *httptest.ResponseRecorder {
+		request := httptest.NewRequest(http.MethodPost, pattern, strings.NewReader(body))
+		stampWorkFact(request, "OFFSITE", "SYN-OFFSITE-01", "SYN-DEVICE-OFFSITE")
 		recorder := httptest.NewRecorder()
-		endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodPost, pattern, strings.NewReader(body)))
+		endpoint.ServeHTTP(recorder, request)
 		return recorder
 	}
 	step := func(name string, answered *httptest.ResponseRecorder, status int, outcome string) {
@@ -255,7 +260,7 @@ func TestARecordedDeliveryAttemptLetsTheEffectiveDeliveryThrough(t *testing.T) {
 			t.Fatalf("%s：答 %d %s，want %d %s", name, answered.Code, answered.Body.String(), status, outcome)
 		}
 	}
-	deliveryEndpoint := tfhttp.NewRegisterEffectiveDeliveryEndpoint(intake, delivery)
+	deliveryEndpoint := tfhttp.NewRegisterEffectiveDeliveryEndpoint(work, delivery)
 	const deliveryBody = `{"attempt":"SYN-DELIVERY-ATTEMPT-19-01","object":"SYN-PARCEL-19-01","method":"HANDED_TO_RECIPIENT",` +
 		`"recipient":"SYN-RECIPIENT/consignee-19","proof":"SYN-POD/signature-19"}`
 
@@ -271,7 +276,7 @@ func TestARecordedDeliveryAttemptLetsTheEffectiveDeliveryThrough(t *testing.T) {
 		http.StatusCreated, "DISPATCH_TASK_OPENED")
 
 	step("登记一次妥投",
-		post(tfhttp.NewRecordDeliveryAttemptEndpoint(intake, attempts), "/transport-fulfillment/delivery-attempts",
+		post(tfhttp.NewRecordDeliveryAttemptEndpoint(work, attempts), "/transport-fulfillment/delivery-attempts",
 			`{"task":"SYN-DISPATCH-19-01","attempt":"SYN-DELIVERY-ATTEMPT-19-01","executedBy":"SYN-COURIER-19",`+
 				`"place":"SYN-PLACE/consignee-19","plannedFrom":"2026-09-25T09:00:00+08:00","plannedTo":"2026-09-25T12:00:00+08:00",`+
 				`"arrivedAt":"2026-09-25T10:00:00+08:00","evidence":"SYN-EVIDENCE/arrival-19",`+

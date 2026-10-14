@@ -40,6 +40,10 @@ func commandEndpoint[R any](
 					writeProblem(response, http.StatusForbidden, codeOperatorNotGranted)
 					return
 				}
+				if errors.Is(err, ErrDeviceNotInUse) {
+					writeProblem(response, http.StatusForbidden, codeDeviceNotInUse)
+					return
+				}
 				if errors.Is(err, ErrOutsideAdmissionScope) {
 					writeProblem(response, http.StatusForbidden, codeOutsideAdmissionScope)
 					return

@@ -253,19 +253,17 @@ func assembleUnconfiguredBusinessEndpoints() []httpapi.BusinessEndpoint {
 // 辅助函数正是隔离读那组用例的入口——它若把读写入参并成一个，那组用例就再也证不了这件事。
 // 写行放行的三态另有 isolated_write_test.go。
 func assembleUnwiredBusinessEndpoints(isolatedRead *isolatedReadIntakes) []httpapi.BusinessEndpoint {
-	return assembleUnwiredBusinessEndpointsWith(isolatedRead, nil, nil, nil)
+	return assembleUnwiredBusinessEndpointsWith(isolatedRead, nil, nil)
 }
 
 func assembleUnwiredBusinessEndpointsWith(
 	isolatedRead *isolatedReadIntakes,
 	isolatedSubmission shipmenthttp.SubmissionIntake,
-	isolatedNodeOperations *nodeopshttp.IsolatedCommandIntake,
 	isolatedTransportFulfillment *tfhttp.IsolatedCommandIntake,
 ) []httpapi.BusinessEndpoint {
 	return assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), unconfiguredOperatorRegistries(),
 		unconfiguredIntegrationClientIntakes(),
-		isolatedRead, isolatedSubmission, isolatedNodeOperations,
-		isolatedTransportFulfillment)
+		isolatedRead, isolatedSubmission, isolatedTransportFulfillment, nil, nil)
 }
 
 // assembleUnwiredBusinessEndpointsWithOperatorIntakes 同上，另收操作者渠道各口的 Intake：换口那几行的答复格由它钉。
@@ -275,8 +273,9 @@ func assembleUnwiredBusinessEndpointsWithOperatorIntakes(
 	integrationClients integrationClientIntakes,
 	isolatedRead *isolatedReadIntakes,
 	isolatedSubmission shipmenthttp.SubmissionIntake,
-	isolatedNodeOperations *nodeopshttp.IsolatedCommandIntake,
 	isolatedTransportFulfillment *tfhttp.IsolatedCommandIntake,
+	workFactReception nodeopshttp.ReceptionIntake,
+	workFactTransport *tfhttp.WorkFactCommandIntake,
 ) []httpapi.BusinessEndpoint {
 	return assembleBusinessEndpoints(
 		unwiredSubmission{},
@@ -395,11 +394,12 @@ func assembleUnwiredBusinessEndpointsWithOperatorIntakes(
 		unwiredGovernanceRegisters{},
 		isolatedRead,
 		isolatedSubmission,
-		isolatedNodeOperations,
 		isolatedTransportFulfillment,
 		operatorDecisions,
 		operatorRegistries,
 		integrationClients,
+		workFactReception,
+		workFactTransport,
 	)
 }
 

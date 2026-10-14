@@ -159,6 +159,14 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	deviceRegistry, err := aipg.NewDeviceRegistry(db)
+	if err != nil {
+		return err
+	}
+	workFactReception, workFactTransport, err := buildWorkFactIntakes(operatorVerifier, operatorRegistry, deviceRegistry, admission)
+	if err != nil {
+		return err
+	}
 	operatorDecisions, err := buildOperatorDecisionIntakes(operatorMinter, requestViews)
 	if err != nil {
 		return err
@@ -660,11 +668,12 @@ func run(logger *slog.Logger) error {
 			governanceRegisters,
 			isolatedRead,
 			isolatedSubmissionIntake,
-			isolatedWrite.nodeOperationsIntake(),
 			isolatedWrite.transportFulfillmentIntake(),
 			operatorDecisions,
 			operatorRegistries,
 			integrationClients,
+			workFactReception,
+			workFactTransport,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,

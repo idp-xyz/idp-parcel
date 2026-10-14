@@ -108,20 +108,10 @@ func TestBuildIsolatedWriteAdmissionRefusesTenantMismatch(t *testing.T) {
 // 某口换上真渠道时同笔删掉它那一行（ADR-0150 决定三），下面两个用例据此二分：名单内 400、名单外 403。
 var expectedWriteAdmittedLines = map[string]bool{
 	"/shipment-requests": true,
-	// 主链命令面（票 operator-channel/08）：各上下文一个隔离命令 Intake 类型，一口一笔地放。
-	"/node-operations/receptions":                                     true,
-	"/transport-fulfillment/offsite-pickups":                          true,
-	"/transport-fulfillment/offsite-pickup-attempts":                  true,
 	"/transport-fulfillment-carrier-first-effective-pickup-judgments": true,
-	"/transport-fulfillment/handovers":                                true,
-	"/transport-fulfillment/movement-facts":                           true,
 	"/transport-fulfillment-dispatch-task-registrations":              true,
-	"/transport-fulfillment-delivery-dispatch-triggers":               true,
-	"/transport-fulfillment/deliveries":                               true,
-	// 派送尝试登记（票 product-strategy-boundary/19）：同一个隔离命令 Intake 类型，一口一笔地放。
-	"/transport-fulfillment/delivery-attempts":        true,
-	"/transport-fulfillment-segment-closures":         true,
-	"/transport-fulfillment-effective-time-judgments": true,
+	"/transport-fulfillment-segment-closures":                         true,
+	"/transport-fulfillment-effective-time-judgments":                 true,
 }
 
 // Covers: ADR-0091 Consequences「命令面按端点逐口放行，不是一次全开」 — 写面放行只及名单里那几行，其余命令面
@@ -133,7 +123,7 @@ var expectedWriteAdmittedLines = map[string]bool{
 func TestIsolatedWriteAdmissionSwitchesOnlyTheAdmittedCommandLines(t *testing.T) {
 	router := httpapi.NewWithEndpoints(buildinfo.Info{},
 		assembleUnwiredBusinessEndpointsWith(nil, isolatedSubmissionIntakeForTest(t),
-			isolatedWriteAdmissionForTest(t).nodeOperationsIntake(), isolatedWriteAdmissionForTest(t).transportFulfillmentIntake()))
+			isolatedWriteAdmissionForTest(t).transportFulfillmentIntake()))
 
 	for pattern, probe := range businessEndpointProbes {
 		response := httptest.NewRecorder()
@@ -184,11 +174,11 @@ func TestProductionFormAnswersTheAdmittedCommandLinesByteForByteUnconfigured(t *
 	}
 }
 
-// Covers: 票 operator-channel/08 — 合成租户合规时节点作业的隔离命令 Intake 随各格一起就位。它不需要库（租户与合成节点），
-// 因此与目录、自身权威串同在这道门里构造；缺了它 `/node-operations/receptions` 只能挂字面量未配置，与「开关没设」不可分辨。
+// Covers: 票 operator-channel/08 — 合成租户合规时节点作业的隔离命令 Intake 仍随各格构造。收寄口已换作业事实渠道
+// （票 operator-channel/10 余下半边），装配不再把这一只挂上 `/node-operations/receptions`。未启用时交回 nil。
 func TestBuildIsolatedWriteAdmissionGrantsTheNodeOperationsIntake(t *testing.T) {
 	if isolatedWriteAdmissionForTest(t).nodeOperationsIntake() == nil {
-		t.Fatal("节点作业隔离命令 Intake 为空——收寄口会照旧答 403")
+		t.Fatal("节点作业隔离命令 Intake 为空")
 	}
 	var disabled *isolatedWriteAdmission
 	if disabled.nodeOperationsIntake() != nil {
@@ -196,10 +186,11 @@ func TestBuildIsolatedWriteAdmissionGrantsTheNodeOperationsIntake(t *testing.T) 
 	}
 }
 
-// Covers: 票 operator-channel/08 — 运输履约的隔离命令 Intake 同上一格：只收租户，随各格一起就位，未启用时交回 nil。
+// Covers: 票 operator-channel/08 — 运输履约的隔离命令 Intake 仍随各格构造。作业事实各口已换操作者渠道；这一只只还换
+// 运营决定那四口。未启用时交回 nil。
 func TestBuildIsolatedWriteAdmissionGrantsTheTransportFulfillmentIntake(t *testing.T) {
 	if isolatedWriteAdmissionForTest(t).transportFulfillmentIntake() == nil {
-		t.Fatal("运输履约隔离命令 Intake 为空——主链 TF 各口会照旧答 403")
+		t.Fatal("运输履约隔离命令 Intake 为空——运营决定四口会照旧答 403")
 	}
 	var disabled *isolatedWriteAdmission
 	if disabled.transportFulfillmentIntake() != nil {
