@@ -250,6 +250,64 @@ func TestIsolatedSubmissionIntakeRefusesDraftsThatCannotFormACommand(t *testing.
 	}
 }
 
+// Covers: 票 product-strategy-boundary/26——草案上已声明的重量编成成员画像，成员是同一下标现签的内部包裹标识。
+// 重量缺席不立画像、不补默认测量。尺寸在场才带外廓。服务条目仍进摘要：拿掉重量摘要要变。
+func TestIsolatedSubmissionIntakeCarriesAProfileOnlyWhenWeightIsDeclared(t *testing.T) {
+	intake := newIsolatedIntake(t, &permittingOwnershipDouble{revision: "SYN-REV-1"})
+
+	command, err := intake.IntakeSubmission(context.Background(), draftRequest(isolatedDraft))
+	if err != nil {
+		t.Fatalf("接入带重量的草案：%v", err)
+	}
+	if len(command.DeclaredProfiles) != 1 {
+		t.Fatalf("画像 %d 份, want 1", len(command.DeclaredProfiles))
+	}
+	profile := command.DeclaredProfiles[0]
+	if len(command.DeclaredParcelIDs) != 1 || profile.Parcel() != command.DeclaredParcelIDs[0] {
+		t.Fatalf("画像成员 = %s, 现签成员 = %v——画像必须挂在同一下标的内部标识上",
+			profile.Parcel(), command.DeclaredParcelIDs)
+	}
+	weight := profile.Measurement().Weight()
+	if weight.Value().String() != "1.50" || weight.Unit().String() != "KG" {
+		t.Fatalf("重量 = %s %s, want 1.50 KG", weight.Value(), weight.Unit())
+	}
+	if _, present := profile.Measurement().Dimensions(); present {
+		t.Fatal("没报尺寸的草案带出了外廓")
+	}
+
+	sized := strings.Replace(isolatedDraft, `"declaredWeightUnit": "KG"`,
+		`"declaredWeightUnit": "KG", "declaredLength": "20", "declaredWidth": "15", "declaredHeight": "10", "declaredDimensionsUnit": "CM"`, 1)
+	withSize, err := intake.IntakeSubmission(context.Background(), draftRequest(sized))
+	if err != nil {
+		t.Fatalf("接入带尺寸的草案：%v", err)
+	}
+	if len(withSize.DeclaredProfiles) != 1 {
+		t.Fatalf("带尺寸的画像 %d 份, want 1", len(withSize.DeclaredProfiles))
+	}
+	dimensions, present := withSize.DeclaredProfiles[0].Measurement().Dimensions()
+	if !present || dimensions.Length().String() != "20" || dimensions.Width().String() != "15" ||
+		dimensions.Height().String() != "10" || dimensions.Unit().String() != "CM" {
+		t.Fatalf("外廓 = %s×%s×%s %s present=%v, want 20×15×10 CM",
+			dimensions.Length(), dimensions.Width(), dimensions.Height(), dimensions.Unit(), present)
+	}
+	if withSize.PayloadDigest == command.PayloadDigest {
+		t.Fatal("报了尺寸摘要没变——尺寸仍要留在服务条目里")
+	}
+
+	unweighed := strings.Replace(isolatedDraft,
+		`,`+"\n"+`      "declaredWeightValue": "1.50",`+"\n"+`      "declaredWeightUnit": "KG"`, ``, 1)
+	plain, err := intake.IntakeSubmission(context.Background(), draftRequest(unweighed))
+	if err != nil {
+		t.Fatalf("接入没报重量的草案：%v", err)
+	}
+	if len(plain.DeclaredProfiles) != 0 {
+		t.Fatalf("没报重量却交出 %d 份画像", len(plain.DeclaredProfiles))
+	}
+	if plain.PayloadDigest == command.PayloadDigest {
+		t.Fatal("拿掉重量摘要没变——服务条目不该跟着画像一起消失")
+	}
+}
+
 func newIsolatedIntake(t *testing.T, authority *permittingOwnershipDouble) *shipmenthttp.IsolatedSubmissionIntake {
 	t.Helper()
 	intake, err := shipmenthttp.NewIsolatedSubmissionIntake(shipmenthttp.IsolatedSubmissionIntakeDeps{
