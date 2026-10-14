@@ -73,7 +73,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 | 目录 | 入库通道 | 内容 |
 |---|---|---|
 | `data/commercial/` | `cmd/parcel-commercial publish` | 发布批：两份服务产品（各带交付条件）、接受前财务控制策略正文、接单规则包（五类规则正文+受理内容+收寄资格+时点锚+终局规则+资料修订允许）、客户合同（正文+受理前控制+合同委派+收紧交付条件）、结算政策（预付，六维范围对齐解析键）、两份供应商协议正文、价格规则（价格政策正文+口径）、信用政策、客户服务规则、三份授权规则（方向两份仍是壳，取消授权带正文） |
-| `data/commercial/resolution-key-*.json` | `cmd/parcel-commercial register-resolution-key` | 消费方（parcel-shipment）的解析键登记 2 行（`SYN-ACCOUNT-01`、`SYN-ACCOUNT-02` 各一）：五项必需依据（含客户服务规则）加结算三维——它不是商业权威发布，只是与发布共用一个 CLI |
+| `data/commercial/resolution-key-*.json` | `cmd/parcel-commercial register-resolution-key` | 消费方（parcel-shipment）的解析键登记 2 行（`SYN-ACCOUNT-01`、`SYN-ACCOUNT-02` 各一）：六项必需依据（含客户服务规则与接受前财务控制策略）加结算三维——它不是商业权威发布，只是与发布共用一个 CLI。不把 `PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY` 列进键，闭包就不采用合同上绑的 `SYN-FIN-CONTROL-01`，受理前财务控制答策略未配置 |
 | `data/commercial/register-products.json` | `cmd/parcel-commercial register-products` | 服务形态两笔（EXPRESS/ECON 均网络服务）+ 产品—渠道映射两笔：EXPRESS 配两个渠道标识引用，ECON 显式登记「未配置」（该产品尚无可用渠道候选）——渠道本体不预造（ADR-0072） |
 | `data/commercial/register-registration-number-types.json` | `cmd/parcel-commercial register-registration-number-types` | 注册号类型目录（ADR-0145 决定一）：身份层由演示租户显式采用 CN（统一社会信用代码）、SG（UEN）两份参考配置（ADR-0147，批文 `adopt` 格，依据格随之写成 `REFCFG-1:…@1`），资料层 CN、SG 各登一类 `SYN-` 合成税务登记号，另有一类 SG 资料层旧类型登记后停用，让目录状态的「已停用」有实例可显。产品本身不带任何国家 / 地区的目录条目：参考配置不采用就不进任何租户的目录 |
 | `data/commercial/register-parties.json` | `cmd/parcel-commercial register-parties` | 参与方身份：业务参与方（含合成干线承运方 `SYN-PARTY-CARRIER-TRUNK-01`、合成末端承运方 `SYN-PARTY-CARRIER-LM-01`，供两份供应商协议引用）、关系、责任法人、客户账户 |

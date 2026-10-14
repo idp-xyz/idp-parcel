@@ -55,6 +55,8 @@ echo "== 2/7 商业权威发布（party-commercial：发布批正文）与消费
 # 第二客户 SYN-ACCOUNT-02 的键：形状照上一行，三维换成它自己的相对方 SYN-PARTY-SHIPPER-02，闭包解出它自己的合同
 # SYN-CONTRACT-02、再与 SYN-SETTLEMENT-PREPAID-02 的六维命中。两户的必需依据都列 CUSTOMER_SERVICE_RULE：
 # 不列，闭包就不采用任何客户服务规则版本，索赔的首次索赔期限与最低材料两维恒答未登记。
+# 两户的必需依据也都列 PRE_ACCEPTANCE_FINANCIAL_CONTROL_POLICY：不列，闭包就不采用合同上绑的
+# SYN-FIN-CONTROL-01，受理前财务控制答策略未配置（票 product-strategy-boundary/26 实跑停在这一格）。
 # 同一范围并存两版客户服务规则：挂产品的 SYN-SERVICE-RULE-01（首次索赔 14 天、LOSS 要 POD）与壳指名合同 02 的
 # SYN-SERVICE-RULE-CONTRACT-02（只登首次索赔 7 天）。闭包合同优先（ADR-0176 决定一）：账户 02 采纳合同版，
 # 期限答 7 天、材料行继承产品版的 POD（决定二）；账户 01 的合同层零候选，回落产品版，答复与没有合同版时相同。
