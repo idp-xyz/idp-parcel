@@ -85,4 +85,15 @@ func TestRemainingSettlementWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := costs.Save(ctx, domain.TenantID{}, domain.SupplierExpectedCost{}, asOf); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务保存预计成本应返回 ErrTransactionRequired，实得：%v", err)
 	}
+
+	receiptPostings, err := adapter.NewCustomerReceiptPostings(db)
+	if err != nil {
+		t.Fatalf("构造客户收款账本：%v", err)
+	}
+	if _, err := receiptPostings.AdvanceOperationalBalance(ctx, domain.TenantID{}, domain.SettlementScope{}, 0, 0, asOf); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务推进运营余额应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	if _, err := receiptPostings.AdvanceCreditStanding(ctx, domain.TenantID{}, domain.SettlementScope{}, false, asOf); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务推进信用状况应返回 ErrTransactionRequired，实得：%v", err)
+	}
 }
