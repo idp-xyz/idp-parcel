@@ -1,7 +1,7 @@
 # 29 运营余额与信用状况没有生产写入方：演示委托的预付冻结停在`余额不可用`
 
 Category: enhancement
-Status: ready-for-agent——2026-10-14 通道 1 接受 [ADR-0181](../../../docs/adr/0181-posted-balance-is-recomputed-in-the-funds-mapping-transaction.md)。下一张实现票只做决定六：客户收款映射及其撤销，同一事务重算并推进入账余额与已确认未结。核销、确认费用调用点、信用状况与逾期另拆，不并进这一张。2026-10-14 17:48 通道 2 分诊认领（派单本卡 ← 通道 1），分支 mcp2-psb29t，基 0715ace33a942261c13821405962c6a0945ab660。此前：needs-info，指向当时仍为 Proposed 的 ADR-0181。立票：needs-triage——2026-10-13 22:1x 通道 1 立，出自 [26](./26-demo-tenant-adopts-the-pre-acceptance-estimate-form.md) 判据 1：通道 5 开工取证报「冻结要读运营余额、而它没有生产写入方」，通道 1 在 main `b3c8bd46` 上核实属实。是机制缺口，不是租户取值。
+Status: resolved——2026-10-15：本票 19 笔纯快进进 main（至 `f1a3e932`），回放验证与修复见文末「进 main 记录」。此前：ready-for-agent——2026-10-14 通道 1 接受 [ADR-0181](../../../docs/adr/0181-posted-balance-is-recomputed-in-the-funds-mapping-transaction.md)。下一张实现票只做决定六：客户收款映射及其撤销，同一事务重算并推进入账余额与已确认未结。核销、确认费用调用点、信用状况与逾期另拆，不并进这一张。2026-10-14 17:48 通道 2 分诊认领（派单本卡 ← 通道 1），分支 mcp2-psb29t，基 0715ace33a942261c13821405962c6a0945ab660。此前：needs-info，指向当时仍为 Proposed 的 ADR-0181。立票：needs-triage——2026-10-13 22:1x 通道 1 立，出自 [26](./26-demo-tenant-adopts-the-pre-acceptance-estimate-form.md) 判据 1：通道 5 开工取证报「冻结要读运营余额、而它没有生产写入方」，通道 1 在 main `b3c8bd46` 上核实属实。是机制缺口，不是租户取值。
 Blocked by: 无——要裁的是本票自己的形状
 挡着：26 判据 1 的冻结那一半（26 照实标 ◑，不扩地盘）；[合成演示动线](../../../docs/design/synthetic-demo-journey-script.md)墙三之后的预付冻结一格，以及账期委托的信用暴露一格。
 地盘（裁完按形状收窄）：`internal/settlementaccounting`——余额与信用状况的写端口、UC-SA-005 映射编排（`MapExternalFundsHandler`）与问题二、三裁到的那几处编排、postgres 适配器 `operational_position.go`；它们的生产装配（`cmd/parcel-api` 的 `buildSettlementRegistrationOrchestration`、`cmd/parcel-settlement-register`、`cmd/parcel-dispatch`）；演示种子 `scripts/demo-seeds/data/settlement/` 与 `seed.sh` 结算段。
@@ -66,3 +66,12 @@ Blocked by: 无——要裁的是本票自己的形状
 - 已采用并映射的外部收款推进该作用域的入账余额，迟到的快照不盖新值；核销与撤销各推进一格（带测试，真库带 DSN）。
 - 受理前控制对有入账余额的作用域冻结成立，对从未推进过的作用域照旧答`余额不可用`（带测试）。
 - 演示环境灌完种子后，演示委托越过格 5、冻结一笔，金额等于这一件的试算合计（`S`）。
+
+## 进 main 记录（2026-10-15，用户直令回放，无派单评审）
+
+- 远端 main `0715ace3` 就是分支的基，本票 19 笔纯快进进 main（至 `f1a3e932`），其中 11 笔是吸收 branch `mcp5-psb26` 的合并半程——回放带上 26 的画像与种子落地；本票自身 8 笔（ADR-0181 接受、两笔 feat、规则包与停点记录、负向证据修复）。
+- 首次验证在 `6ead1624`：gofmt 空、build/vet 退 0、分片核对通过；带 DSN 全量红 1 包——`internal/architecture` 的 PBC-08 行为证据门报 `CustomerReceiptPostings.AdvanceOperationalBalance` 与 `AdvanceCreditStanding` 缺无事务负向证据。推送侧补 `f1a3e932`：扩 `transaction_guard_test.go` 的漏网写口聚合用例（+11 行，只加证据不动实现）。
+- 终验在 `f1a3e932`（detached 隔离树 `/tmp/idp-replay-psb29t`）：gofmt 空、`go build ./...` 与 `go vet ./...` 退 0；带 DSN `go test -p 1 -count=1 ./...` 141 ok / 0 FAIL / 15 无测试 / 0 cached；`-v` 探针 `TestMappingACustomerReceiptAdvancesThePostedBalance`、`TestMappingAReceiptToTheReceivableAccountWritesBalanceAndStanding`、`TestAPayableAccountMappingDoesNotStand`、`TestANegativeUnsettledRollsTheMappingBack` 均 `PASS`；机制清点在 tip 重生成差 5 行（settlementaccounting 声明 174→178、测试 122→124、迁移 34→35，合计行随动），成笔 `01a4b8fa`。
+- 评审：未派非作者评审单，本窗口直接回放；PBC-08 兜住的缺口由回放侧修复，修复只补证据。评审门是否补派由用户裁量。
+- 收尾待办（待用户令）：推 origin/main；`mcp2-psb29t`、`mcp5-psb26`（已全吸收）改名 `merged/` 并拆隔离树；26 的分支内容本次已随带进 main，其停点记录照 26 票面继续。
+- 本记录纯 `.md`。
