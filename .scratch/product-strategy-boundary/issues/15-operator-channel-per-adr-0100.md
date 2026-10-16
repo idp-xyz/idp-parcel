@@ -57,7 +57,7 @@ Blocked by: 无——ADR-0100 已接受，这一格不等任何决定
 | [17](../../operator-channel/issues/17-demo-issuer-dex-and-synthetic-operators.md) | 演示发行方：Dex 接进演示环境，合成操作者按它的标识另登（2026-10-12 补立：02 写「随 07 做」，07 的地盘不含它） | 无 |
 | [18](../../operator-channel/issues/18-commercial-publications-takes-operator-intake-after-approval-translation-sinks.md) | 批文译装下沉后 `/commercial-publications` 换操作者 Intake（2026-10-12 补立：06 判断项 1，派单方裁另立） | 06 |
 | [19](../../operator-channel/issues/19-admission-scope-bridge-for-operator-and-integration-client-minters.md) | 准入范围桥：操作者与集成客户端铸造器的 `AdmissionScope` 由「租户对照 + `AuthorityCoverage`」实现，接进生产装配（2026-10-13 补立：15 余下四口照裁定 A 不换，桥另立） | 无（2026-10-13 分诊起草 ADR-0180，同日用户授权通道 3 自决接受；同日通道 3 实施，resolved，进 main 至 `8e1e9777`） |
-| [20](../../operator-channel/issues/20-tf-closure-dispatch-task-and-pickup-judgment-canonicalization.md) | TF 关段、建派送任务、承运商首次有效收寄判断三口的规范化形状与「同身份异内容」格（2026-10-13 补立：同上，改 TF 领域代数，归 TF owner） | 无（2026-10-16 逐口裁毕转 ready-for-agent：关段只核对并补答复回显，建派送任务只核对，承运商首次有效收寄判断补 TFC-1 + `CONTENT_CONFLICT`） |
+| [20](../../operator-channel/issues/20-tf-closure-dispatch-task-and-pickup-judgment-canonicalization.md) | TF 关段、建派送任务、承运商首次有效收寄判断三口的规范化形状与「同身份异内容」格（2026-10-13 补立：同上，改 TF 领域代数，归 TF owner） | 无（2026-10-16 逐口裁毕：关段只核对并补答复回显，建派送任务只核对，承运商首次有效收寄判断补 TFC-1 + `CONTENT_CONFLICT`；同日完工于分支 `claude-oc20` @ `857453d8`，待进 main） |
 
 **前沿**：01、02、08、13、14。要最早让隔离环境里的主链命令面答业务结果，走 08；要最早让合成操作者在登记写面与目录查阅面上走通，走 01 + 02 → 03 → 04 / 05；生产上的主链命令面要 10 或 11（外加 12）与 13、14 都到位，按口逐步开。
 

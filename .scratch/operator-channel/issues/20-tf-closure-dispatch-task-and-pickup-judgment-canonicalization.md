@@ -1,7 +1,7 @@
 # 20 TF 关段、建派送任务、承运商首次有效收寄判断三口的规范化形状与「同身份异内容」格
 
 Category: enhancement
-Status: in-progress——2026-10-16 Claude Code 会话认领（用户令「直接认领票 20 开始实施」），隔离 worktree `/home/tops/workspace/idp-parcel-claude-oc20`、分支 `claude-oc20`。此前 ready-for-agent——2026-10-16 TF owner（用户）逐口裁毕：关段裁现有格够用、答复补回显在册关闭时刻；建派送任务裁现有格够用（只核对）；承运商首次有效收寄判断裁补 TFC-1 形状、同依据异内容新增 `CONTENT_CONFLICT`。裁定与理由见「裁定记录」，实施见「做什么」。同日先提交过一版三口全裁「现有格够用」并转 resolved 的票面（`11d42fbe`），按本裁定改正，见 Comments。此前 needs-triage——2026-10-13 通道 4 立（通道 1 派单 `task-40698906`，照裁定 A：[15](./15-operation-decision-faces-take-operator-intake.md) 余下四口不换）。三口的重放分支只认身份、不比内容；补形状改的是 TF 领域代数，归 TF owner 逐口裁。现有代数、拟议形状（TFC-1）与要裁的那一问见「逐口」。
+Status: in-progress——2026-10-16 完工，代码 `857453d8`（分支 `claude-oc20`），待进 main；评审只有作者自审，不算非作者评审，见「完成记录」。此前 in-progress——2026-10-16 Claude Code 会话认领（用户令「直接认领票 20 开始实施」），隔离 worktree `/home/tops/workspace/idp-parcel-claude-oc20`、分支 `claude-oc20`。此前 ready-for-agent——2026-10-16 TF owner（用户）逐口裁毕：关段裁现有格够用、答复补回显在册关闭时刻；建派送任务裁现有格够用（只核对）；承运商首次有效收寄判断裁补 TFC-1 形状、同依据异内容新增 `CONTENT_CONFLICT`。裁定与理由见「裁定记录」，实施见「做什么」。同日先提交过一版三口全裁「现有格够用」并转 resolved 的票面（`11d42fbe`），按本裁定改正，见 Comments。此前 needs-triage——2026-10-13 通道 4 立（通道 1 派单 `task-40698906`，照裁定 A：[15](./15-operation-decision-faces-take-operator-intake.md) 余下四口不换）。三口的重放分支只认身份、不比内容；补形状改的是 TF 领域代数，归 TF owner 逐口裁。现有代数、拟议形状（TFC-1）与要裁的那一问见「逐口」。
 Blocked by: 无
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 丙轨实施
 地盘（裁完后）：`internal/transportfulfillment/domain/payload_canonicalization.go`（裁为补形状的口各一个 `Canonicalize…Payload`）；`internal/transportfulfillment/application` 里 `CloseFulfillmentSegmentHandler.Close`、`OpenDispatchTaskHandler.Open`、`JudgeCarrierFirstEffectivePickupHandler.Judge` 的重放分支；新增答复格时 `internal/transportfulfillment/adapters/http` 三口的答复映射。
@@ -71,6 +71,46 @@ Blocked by: 无
    - **判断项（实施时定，须守的约束）**：命令以名称素材而非主体引用指名承运主体、链尾经「待确认 → 身份登记后形成」到了已形成——同一条命令原样重放必须仍答 `ALREADY_RECORDED`。命令一侧此时给不出主体两键，主体轴怎样比（按本次解析出的主体比，或该轴不参与）由实施方择一并在完成记录写明理由。
 
 完成判据见「完成判据（按裁定）」。不做的照「不做」。
+
+## 完成记录（2026-10-16，Claude Code 会话，分支 `claude-oc20`）
+
+**基线**：分支基 `e558c66e`（本地 main，改裁与认领那一笔，未推）。代码一笔 `857453d8`；本记录一笔在其后。
+
+**落点**（`857453d8`）
+
+- `domain/payload_canonicalization.go`：`CanonicalizeCarrierFirstEffectivePickupPayload`，face `JUDGE_CARRIER_FIRST_EFFECTIVE_PICKUP`。表达控制时为读法 + `subject_kind` / `subject_reference` + `occurred_at`；不表达时只有读法。
+- `application/judge_carrier_first_effective_pickup.go`：新格 `CarrierPickupContentConflict`（`CONTENT_CONFLICT`）；`Judge` 的同依据、非待确认链尾分支改走 `replayOrConflictOnTheSameBasis`，两侧从本体现算再比，异串答冲突、带回链尾、不动链、不发意图。待确认链尾仍走 `reconsiderPending`。
+- `application/close_fulfillment_segment.go`：`CloseFulfillmentSegmentResult.ClosedAt()` 只在`早已关闭`时给出；领域判已关那路取读回段的时刻，并发下窄口答已关那路读回赢家，读回不通答未决。
+- `adapters/http`：关段响应加 `closedAt`（RFC 3339 UTC，只随`早已关闭`）；承运商判断那一口的映射是通用的（枚举原名、带链尾、非新落版本 200），只补 ADR-0022 那段注释。
+
+**判断项**：命令以名称素材指名、链尾经「待确认 → 身份登记后形成」到了已形成——取「主体轴不参与」，命令一侧取链尾在册主体。理由：已形成版本上没有素材，素材对应哪个在册身份归 party-commercial，本上下文现算不出；票面给的另一条「按本次解析出的主体比」在这一格上无物可比——`resolveSubject` 只解析引用，只给素材时交回的是空主体，照比就是把原命令重放判成冲突。变异取证：把这一格改成照比（命令一侧取空主体），`TestTheOriginalNameMaterialCommandStillReplaysAfterThePendingChainForms` 转红，恢复后绿。
+
+**实施中量到的，票面没写到**
+
+- **业务时间按微秒取，不照 `canonicalInstant` 原样取纳秒**（偏离「做什么」第 2 条的字面，理由是它的前提不成立）。对真库实测（临时探针，未提交）：收寄登记册存 `…09:00:00.123456789Z`，读回 `…09:00:00.123456Z`。这一口两侧都从本体现算，按纳秒比，同一条带纳秒时刻的命令原样重放会被判成冲突——来源不是轨迹事实时业务时间由命令给，HTTP 层 `time.RFC3339` 解析接受小数秒。别的口存的是落库前算好的摘要，不受影响，`canonicalInstant` 本身因此不改。`TestCarrierPickupJudgmentBusinessTimeIsComparedToTheMicrosecond` 钉住。
+- 同一依据重放时命令带了主体引用而分支词不在封闭集内，现在答`未受理`，此前答`已在册`；与首判那条路（`resolveSubject`）同答。HTTP 层分支词不合法本就先答 400，这一格只在编排直调时出现。
+- 有效时间改判会签新的事实版本（`JudgeEffectiveTimeHandler.Judge`），所以同一依据下轨迹事实来源的业务时间按构造相同，原样重放不会因有效时间改判而被判冲突。
+
+**完成判据**（钉 `857453d8`；Linux（WSL2），go1.26.8，真库为 55432 门禁库）
+
+- ✅ 承运商判断 · TFC-1 往返：`TestCommandPayloadsRoundTripAsTFC1` 两格（表达 / 不表达），期望摘要由字面量文档经 `sha256sum` 另算，不取代码输出。
+- ✅ 承运商判断 · 同身份同内容答重放、同身份异内容答 `CONTENT_CONFLICT`：`TestASameBasisWithDifferentContentAnswersContentConflict`——同内容、异读法、异承运主体、异业务时间（扫描来源由命令给时刻）、失效链尾上原样重放与改读法，五格；判断项 `TestTheOriginalNameMaterialCommandStillReplaysAfterThePendingChainForms`；传输层 `TestAContentConflictAnswers200WithTheRecordedTail`（一写即绿：映射通用，不是先红后绿）。
+- ✅ 关段 · `SEGMENT_ALREADY_CLOSED` 两条来路各一例带回在册时刻：`TestClosingAnAlreadyClosedSegmentIsItsOwnAnswer`（领域判已关）、`TestAConcurrentlyClosedSegmentEchoesTheWinnersClosingTime`（并发输家读回赢家；读回不通答未决、不带时刻）；传输层 `TestAnAlreadyClosedSegmentEchoesItsRecordedClosingTime`（重投给 `+08:00` 的另一时刻，回显在册的 `13:00:00Z`；首次关段不带 `closedAt`）。
+- ✅ 建派送任务：裁为现有格够用，裁定与理由在「裁定记录」，代码未动。
+- ✅ 三口结论回写 15 进展记录：随改裁那一笔 `e558c66e` 已写。
+- 除传输层承运商那一例外，各新用例都先红后绿，红落在行为上（先加枚举格 / 访问器、不填值），不是只停在编译错。
+
+**门**（作者自验）
+
+- 全仓 `go build ./...`、`go vet ./...` 退 0；动过的 `.go` `gofmt -l` 无输出（一个测试文件的结构体标签对齐经 `gofmt -w` 修过）；改动文件无 CR、无 BOM。
+- 动过三包（TF `domain`、`application`、`adapters/http`）的反向依赖经 `go list` 反查，连同 `./internal/architecture/...`，带 DSN `go test -p 1 -count=1` 全 ok；`-v` 下 TF `adapters/postgres` 与 `cmd/parcel-api` 为 `--- SKIP` 0、`--- FAIL` 0。分支树隔离且提交后干净，这一跑验的就是 `857453d8` 的提交状态。未跑全仓全量——按 parallel-sessions「全量只跑一次」，那一跑归推送方。
+- `tools/mechanism-inventory` 在 `857453d8` 上重生成，与 `docs/product/MECHANISM-INVENTORY.md` 逐字相同，不需清点笔。
+
+**评审**：作者自审，两轴串行（本仓不用子代理）：Standards 对 AGENTS 注释与引用规矩、TF 分层、ADR-0014 / ADR-0022；Spec 对本票「裁定记录」「做什么」「完成判据」。自审拿住一条并已修：上面那条微秒精度。**不算非作者评审**——进 main 前按 parallel-sessions「合入前独立评审」，有空闲通道就派非作者评，没有则由推送方如实记录。
+
+**证据层级**：全部为合成夹具与门禁库上的 `S`。
+
+**未做**：「不做」节原样未做；`cmd/parcel-api` 的承运商判断口换操作者 Intake 归 15，本票实施完即解除 15 对它的形状前置。
 
 ## Comments
 
