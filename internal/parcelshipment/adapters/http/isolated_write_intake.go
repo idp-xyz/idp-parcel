@@ -222,6 +222,10 @@ func (intake *IsolatedSubmissionIntake) IntakeSubmission(
 	if err != nil {
 		return application.SubmitShipmentRequestCommand{}, err
 	}
+	customerNumbers, err := customerParcelNumbers(customerParcels, internalParcels)
+	if err != nil {
+		return application.SubmitShipmentRequestCommand{}, err
+	}
 
 	// 归属权威调不通时上抛裸错：那是依赖故障，不是这次请求的形状问题。
 	decision, err := intake.ownership.DecideProductionOwnership(ctx, intake.admissionScope)
@@ -243,7 +247,33 @@ func (intake *IsolatedSubmissionIntake) IntakeSubmission(
 		DeclaredProfiles:        profiles,
 		DeclaredElements:        canonical.DeclaredElements(),
 		RequestedServiceProduct: canonical.RequestedServiceProduct(),
+		CustomerParcelNumbers:   customerNumbers,
 	}, nil
+}
+
+// customerParcelNumbers 把逐件的客户包裹参考与现签的内部标识按次序配成客户包裹件号（ADR-0184 决定四）。
+// 次序就是配对依据：内部标识按草案包裹的次序现签，与画像挂到内部成员上同一个口径。号码照客户给的原样
+// （customerDeclaredReferences 只去两端空白，那是草案的形状纪律，不是条码折算）。
+func customerParcelNumbers(
+	customerParcels, members []domain.DeclaredParcelID,
+) ([]domain.CustomerParcelNumberDeclaration, error) {
+	if len(customerParcels) != len(members) {
+		return nil, fmt.Errorf("isolated submission intake: %d customer parcel references and %d minted members",
+			len(customerParcels), len(members))
+	}
+	declarations := make([]domain.CustomerParcelNumberDeclaration, 0, len(members))
+	for index, member := range members {
+		number, err := domain.NewExternalIdentifierNumber(customerParcels[index].String())
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
+		}
+		declaration, err := domain.DeclareCustomerParcelNumber(member, number)
+		if err != nil {
+			return nil, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
+		}
+		declarations = append(declarations, declaration)
+	}
+	return declarations, nil
 }
 
 // declaredProfiles 把草案上已经声明的重量编成成员画像。重量两格都空就不立这一件的画像，

@@ -1,7 +1,7 @@
 # 02 外部标识关联册落地，客户包裹件号随委托接受形成，节点身份核对接真
 
 Category: enhancement
-Status: ready-for-agent——2026-10-16 Claude Code 会话立（[ADR-0184](../../../docs/adr/0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md) 决定一至六）
+Status: in-progress——2026-10-16 Claude Code 会话认领，分支 `claude-psxm`，基线 `d01e4309`。此前 ready-for-agent——2026-10-16 Claude Code 会话立（[ADR-0184](../../../docs/adr/0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md) 决定一至六）
 Blocked by: 无
 父票：[01](./01-external-mark-relations-have-no-model-in-parcel-shipment.md)
 
@@ -9,7 +9,7 @@ Blocked by: 无
 
 1. **PS 领域**：外部标识关联的值类型——号码、标识类型（本票只有客户包裹件号一类有来源；渠道包裹件号随 03 进）、分配方、被标识对象、适用范围、形成依据——与关联本身；委托上的（声明包裹，客户包裹件号）配对，每件至多一个号，指着成员集合外即立不起来；已接受委托交出它该形成的关联（形成依据为接受决定）。
 2. **提交路径**：`SubmitShipmentRequestCommand` 带配对；`IsolatedSubmissionIntake` 按逐件 `customerParcelReference` 与现签内部标识一一配上。配对立不起来答`输入未受理`。快照存、重建带回；新提交版本不重报。
-3. **PS 持久化**：迁移建关联表与适用变化表、按（租户，号码）查的索引；`ShipmentRequests.Save` 保存已接受委托时与快照同一条事务写入它的关联，按键幂等。
+3. **PS 持久化**：迁移建关联表与按（租户，号码）查的索引（适用变化表随 03：客户包裹件号没有作废或替代的来源事实）；`ShipmentRequests.Save` 保存已接受委托时与快照同一条事务写入它的关联，按键幂等。
 4. **核对读口**：PS 端口按（租户，号码）答此刻适用、标识包裹的关联所指的包裹，逐字比对、去重；真库实现。
 5. **NO 防腐适配器**：`internal/nodeoperations/adapters/parcelshipment` 实现 NO 的 `ParcelIdentityView`，包裹译成 `ParcelAssociationReference`；空号码答零个候选。
 6. **装配**：`cmd/parcel-api` 与 `cmd/parcel-frontline-import` 换掉 `unconfiguredParcelIdentityView`，两处未配置替身与前线导入开工前那句提示一并退场。

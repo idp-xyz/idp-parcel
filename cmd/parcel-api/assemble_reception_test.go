@@ -9,18 +9,19 @@ import (
 	nodeopsapp "go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	nodomain "go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	noports "go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
+	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
 var receptionDeliveredAt = time.Date(2026, 8, 24, 10, 0, 0, 0, time.UTC)
 
-// Covers: `/node-operations/receptions` 的第二参是真编排——收寄库、结果版本签发与
-// Outbox 意图交付在真实 PostgreSQL 上装得起来；身份核对缝显式未配置时，明确接收支
-// 如实停在`收寄待确认`（未决带续办，不留记录），绝不冒充`待识别`那格业务答案——
-// 后者是「查过了，查无此标识」，会真实建立收寄与控制；不经身份核对的明确拒收支
-// 真实落库——重放同一份输入走已有结果，证明首笔事务真的提交了。测试输入是隔离
-// 合成，只记 `S`，不进生产装配。
+// Covers: `/node-operations/receptions` 的第二参是真编排——收寄库、结果版本签发、
+// Outbox 意图交付与身份核对（ADR-0184）在真实 PostgreSQL 上装得起来：号码不在关联册
+// 里时明确接收答`待识别`，那是「查过了，查无此号」的业务答案，真实建立收寄与控制；
+// 不经身份核对的明确拒收支真实落库——重放同一份输入走已有结果，证明首笔事务真的提交
+// 了。测试输入是隔离合成，只记 `S`，不进生产装配。
 func TestTheWiredReceptionAnswersHonestlyAgainstARealDatabase(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -33,19 +34,17 @@ func TestTheWiredReceptionAnswersHonestlyAgainstARealDatabase(t *testing.T) {
 		t.Fatalf("装配收寄编排：%v", err)
 	}
 
-	explicit := receptionCommand(t, "SYN-DELIVERY-EXPLICIT-1", nodeopsapp.ExplicitReception)
-	undecided, err := reception.Handle(t.Context(), explicit)
+	// 号码不在关联册里：身份核对查过了、零个候选，答待识别——真实建立收寄与控制，不是停下。
+	unknown := receptionCommand(t, "SYN-DELIVERY-EXPLICIT-1", nodeopsapp.ExplicitReception)
+	pending, err := reception.Handle(t.Context(), unknown)
 	if err != nil {
 		t.Fatalf("明确接收：%v", err)
 	}
-	if got := undecided.Outcome(); got != nodeopsapp.ReceptionUndecided {
-		t.Fatalf("outcome = %v, want RECEPTION_UNDECIDED——身份视图未配置时明确接收只能停下", got)
+	if got := pending.Outcome(); got != nodeopsapp.UnitPendingIdentification {
+		t.Fatalf("outcome = %v, want PENDING_IDENTIFICATION——查无此号是业务答案", got)
 	}
-	if _, has := undecided.Record(); has {
-		t.Fatal("身份视图未配置的未决不该留下收寄记录——那会把「没核对」记成已判断")
-	}
-	if undecided.ContinuationReference() == "" {
-		t.Fatal("未决没带续办引用，调用方无从查询原次尝试")
+	if record, has := pending.Record(); !has || !record.Control.Active() {
+		t.Fatal("待识别没有留下收寄与控制")
 	}
 
 	refusal := receptionCommand(t, "SYN-DELIVERY-REFUSED-1", nodeopsapp.ExplicitRefusal)
@@ -54,7 +53,7 @@ func TestTheWiredReceptionAnswersHonestlyAgainstARealDatabase(t *testing.T) {
 		t.Fatalf("明确拒收：%v", err)
 	}
 	if got := first.Outcome(); got != nodeopsapp.NodeIntakeNotFormed {
-		t.Fatalf("outcome = %v, want INTAKE_NOT_FORMED——拒收不经身份核对，未配置缝拦不到它", got)
+		t.Fatalf("outcome = %v, want INTAKE_NOT_FORMED——拒收不经身份核对", got)
 	}
 
 	replay, err := reception.Handle(t.Context(), refusal)
@@ -89,4 +88,61 @@ func receptionCommand(
 		command.Refusal = "SYN-REFUSED-DAMAGED"
 	}
 	return command
+}
+
+// Covers: 票 ps-external-mark-relations/02 完成判据第一条的真库面——委托经真提交编排带着客户包裹件号建单、经真仓储
+// 接受落库之后，生产装配的收寄编排按这个号码唯一识别出那一件：`节点收寄已形成`、关联到 PS 的那件包裹、控制建立。
+// 接受之前同一个号码答`待识别`。夹具全为合成（S 级）。
+func TestTheWiredReceptionIdentifiesAnAcceptedParcelByItsCustomerNumber(t *testing.T) {
+	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	reception, err := buildReceptionOrchestration(db)
+	if err != nil {
+		t.Fatalf("装配收寄编排：%v", err)
+	}
+	command := submissionCommand(t)
+	declaration, err := domain.DeclareCustomerParcelNumber(command.DeclaredParcelIDs[0],
+		mustValue(t, domain.NewExternalIdentifierNumber, "SYN-CUSTOMER-PARCEL-0001"))
+	if err != nil {
+		t.Fatalf("配对：%v", err)
+	}
+	command.CustomerParcelNumbers = []domain.CustomerParcelNumberDeclaration{declaration}
+
+	submitOnRealAssembly(t, db, command)
+	early := receptionCommand(t, "SYN-DELIVERY-EARLY-1", nodeopsapp.ExplicitReception)
+	early.Mark = noports.ExternalMarkObservation{Mark: "SYN-CUSTOMER-PARCEL-0001"}
+	before, err := reception.Handle(t.Context(), early)
+	if err != nil {
+		t.Fatalf("接受前收寄：%v", err)
+	}
+	if got := before.Outcome(); got != nodeopsapp.UnitPendingIdentification {
+		t.Fatalf("接受前 outcome = %v, want PENDING_IDENTIFICATION——接受前的声明包裹不是正式包裹", got)
+	}
+
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		t.Fatalf("构造委托仓储：%v", err)
+	}
+	request, found, err := requests.FindBySourceIdentity(t.Context(), command.Identity)
+	if err != nil || !found {
+		t.Fatalf("读回委托：err=%v found=%v", err, found)
+	}
+	acceptAndSave(t, db, requests, command, request)
+
+	arrived := receptionCommand(t, "SYN-DELIVERY-IDENTIFIED-1", nodeopsapp.ExplicitReception)
+	arrived.Unit = mustValue(t, nodomain.NewHandlingUnitID, "SYN-UNIT-2")
+	arrived.Mark = noports.ExternalMarkObservation{Mark: "SYN-CUSTOMER-PARCEL-0001"}
+	formed, err := reception.Handle(t.Context(), arrived)
+	if err != nil {
+		t.Fatalf("接受后收寄：%v", err)
+	}
+	if got := formed.Outcome(); got != nodeopsapp.NodeIntakeFormed {
+		t.Fatalf("接受后 outcome = %v, want INTAKE_FORMED", got)
+	}
+	record, has := formed.Record()
+	if !has || !record.Control.Active() || len(record.Candidates) != 1 || record.Candidates[0].String() != "syn-parcel-1" {
+		t.Fatalf("收寄记录 = %+v, want 唯一候选 syn-parcel-1 且控制建立", record)
+	}
 }

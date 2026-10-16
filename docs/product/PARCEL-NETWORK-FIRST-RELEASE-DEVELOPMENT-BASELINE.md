@@ -245,6 +245,8 @@ PN-08 是产品级试点治理与跨上下文应用编排，不是新的限界�
 
 2026-09-24 补记（票 `routing-first-cut/07` 进 main，merge `f2645d86`）：上表按所钉 SHA 如实定级，原样保留；其中 PN-02 与 PN-03 两行提到 `NetworkDefinitions` / `ErrNetworkDefinitionUnresolvable` 的几句自本合入起部分过时——可达性证据视图已从版本化网络目录折出事实（候选生成、服务区域解析、含临时调整的可执行性；关务一格在 `routing-first-cut/12` 之前如实答状态未知），`NetworkDefinitions` 已删，`未配置`改由目录修订锚与适用于服务目的的路由策略版本答（[ADR-0148](../adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定六）；初始路由证据视图用同一判法答`未配置`，对已配置范围在 `routing-first-cut/09`、`10` 之前照旧响亮上抛。两格是否转满足留给下一次按四项判据的重定级，本条不替它下结论。
 
+2026-10-16 补记（票 `ps-external-mark-relations/02`，[ADR-0184](../adr/0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md)）：上表单元格不改写。PN-03 第一项里「节点收寄的身份核对缝是未配置桩，PS 侧外部标识关联模型不存在」已过时：外部标识关联册落地，客户包裹件号随委托接受形成，`parcel-api` 与 `parcel-frontline-import` 的身份核对改读这本册，两处未配置替身退场。委托接受之后客户送站，节点按号码唯一识别、形成收寄与控制；接受前送站答待识别。渠道包裹件号一类随票 `ps-external-mark-relations/03`。本条只记这一格，PN-03 第一项其余格的现状不在此复核。
+
 #### 2026-09-02 裁决：生产接线棘轮那 32 条计入差量，「可派机制工作清零」不再成立
 
 上表各行的差量格与紧接其上那句「**无一张可派的机制工作票**」，**在本节范围内已被本条更正**。

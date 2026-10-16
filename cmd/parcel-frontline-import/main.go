@@ -20,10 +20,9 @@
 //     用例；判定与缺口写在 .scratch/frontline-transition-import/fact-to-usecase-mapping.md，
 //     不在这里复述第二份。
 //
-// 收寄子命令今天接的身份核对缝是显式未配置替身（同 parcel-api 的处置，见
-// unconfiguredParcelIdentityView）：`RECEIVED` 行必然答未决且不落库，本口开工前把这一点
-// 打印出来。不是缺参数，是 PS 侧机制未建，恢复动作在那一侧。集运子命令没有这条缝：成员是
-// 作业实物号，不经 PS 侧解析，模板行按顺序推进六口即可。
+// 收寄子命令的身份核对读 PS 的外部标识关联册（ADR-0184，与 parcel-api 同一只适配器）：`RECEIVED` 行
+// 的号码属于一份已接受委托的包裹就关联收寄，查无此号答待识别——两格都真实落库。集运子命令没有这条缝：
+// 成员是作业实物号，不经 PS 侧解析，模板行按顺序推进六口即可。
 //
 // 输入是一份 CSV 模板（-file），租户由 -tenant 给出（ADR-0003：租户是最高隔离边界，由受控
 // 运维给出，不让文件自报）。模板整体不合格整批不开工；合格后一行一笔事务，部分成功是
@@ -39,7 +38,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -81,31 +79,6 @@ var allCommands = []string{commandIntake, commandConsolidation}
 type systemClock struct{}
 
 func (systemClock) Now() time.Time { return time.Now() }
-
-// errParcelIdentityViewNotConfigured 见 unconfiguredParcelIdentityView 的注释。
-var errParcelIdentityViewNotConfigured = errors.New("parcel-frontline-import: parcel identity view is not configured")
-
-// unconfiguredParcelIdentityView 是身份核对缝的「显式未配置」，与 parcel-api 装配点的同名
-// 替身同形同理：PS 侧的外部标识关联模型还不存在（.scratch/ps-external-mark-relations），
-// 这条缝今天没有可接的提供方机制。端口合同写着「依赖调不通作为错误返回」，据此它对
-// 每次核对如实报错，编排停在收寄待确认并携续办引用、不落库。
-//
-// 绝不交回空候选顶替：零候选是「查过了，查无此标识」的业务答案（走待识别、真实建立
-// 收寄与控制），拿它顶「没查」会把一件没核对过身份的实物记成已核对。也绝不让内勤在
-// 模板里自报正式包裹身份——「现场人员不得……决定正式包裹身份」是 CONTEXT 硬句。PS 侧
-// 提供方落地后这里换真适配器，本口其余一格不动（buildIntakeImporter 的 identity 参数
-// 就是那个换点）。
-type unconfiguredParcelIdentityView struct{}
-
-var _ ports.ParcelIdentityView = unconfiguredParcelIdentityView{}
-
-func (unconfiguredParcelIdentityView) ResolveParcelIdentity(
-	context.Context,
-	domain.TenantID,
-	ports.ExternalMarkObservation,
-) ([]domain.ParcelAssociationReference, error) {
-	return nil, errParcelIdentityViewNotConfigured
-}
 
 func main() {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
@@ -209,7 +182,12 @@ func planImport(command string, tenant domain.TenantID, raw []byte, clock ports.
 			return nil, err
 		}
 		return func(ctx context.Context, db *bentopg.DB, errOut io.Writer) int {
-			importer, err := buildIntakeImporter(db, clock, unconfiguredParcelIdentityView{})
+			identity, err := parcelIdentityViewOf(db)
+			if err != nil {
+				fmt.Fprintf(errOut, "装配身份核对：%v\n", err)
+				return exitUndecided
+			}
+			importer, err := buildIntakeImporter(db, clock, identity)
 			if err != nil {
 				fmt.Fprintf(errOut, "装配导入口：%v\n", err)
 				return exitUndecided

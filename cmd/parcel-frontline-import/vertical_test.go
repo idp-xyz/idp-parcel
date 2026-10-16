@@ -17,13 +17,12 @@ import (
 // 本文件对真实 PostgreSQL 证 buildIntakeImporter 装配的整条链（隔离合成 S）：模板译装 →
 // 既有收寄用例 → 真库，来源标记两格真落库，重放与来源冲突在真库上分得开。
 //
-// 两个用例分别钉住身份核对缝的两侧，因为那一格是本口今天唯一的运行期阻断：接显式未配置
-// 替身时 `RECEIVED` 行必须**什么都不落库**（而不是留个半成品），换能解析的替身时同一份
-// 模板必须整行落地。缺了后者，「PS 侧提供方到位后只换这一格」就只是注释里的一句话。
+// 两个用例分别钉住身份核对的两走向：生产装配的关联册读口查无此号时 `RECEIVED` 行答待识别、
+// 真实落库（建立收寄与控制）；换能解析的替身时同一份模板关联收寄、整行落地。
 
-// resolvingParcelIdentityView 是身份核对缝的能解析替身，只在本用例存在。它答唯一候选，
-// 因此走的是 AT-NO-015 关联收寄那一格——生产上这一格要等 PS 侧的外部标识关联模型，
-// 见票 ps-external-mark-relations/01。
+// resolvingParcelIdentityView 是身份核对的能解析替身，只在本用例存在。它答唯一候选，因此走的是
+// AT-NO-015 关联收寄那一格；生产上这一格由 PS 的外部标识关联册答（ADR-0184），真库那一路证在
+// cmd/parcel-api 的收寄装配用例里。
 type resolvingParcelIdentityView struct {
 	association domain.ParcelAssociationReference
 }
@@ -46,6 +45,7 @@ const (
 	sourceIDScanOnly = "FTI/INTAKE-1/SYN-BATCH-20260908-AM/SYN-SLIP-0003"
 )
 
+// verticalImporter 装整条导入链。identity 为 nil 即生产形状：身份核对接 parcelIdentityViewOf 装的关联册读口。
 func verticalImporter(
 	t *testing.T,
 	identity ports.ParcelIdentityView,
@@ -55,6 +55,12 @@ func verticalImporter(
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
 		t.Fatalf("构造框架 DB：%v", err)
+	}
+	if identity == nil {
+		identity, err = parcelIdentityViewOf(db)
+		if err != nil {
+			t.Fatalf("装配身份核对：%v", err)
+		}
 	}
 	// 记录时刻用固定钟，业务时间来自模板——用例据此证两者不是同一个来源。
 	importer, err := buildIntakeImporter(db, fixedClock{at: mustInstant(t, "2026-09-08T12:00:00+08:00")}, identity)
@@ -96,36 +102,31 @@ func findReception(t *testing.T, receptions *nopostgres.Receptions, sourceID str
 	return record, found
 }
 
-// TestFrontlineImportVerticalOnRealPostgres 是生产形状：身份核对缝接显式未配置替身。
-// 证三件——两支不经身份核对的行真落库并读得回；`RECEIVED` 行答未决且**一行都不落**；
-// 同一份文件重跑答重放，同一行事实号换了业务时间答来源冲突且原行不被顶替。
+// TestFrontlineImportVerticalOnRealPostgres 是生产形状：身份核对接 PS 的外部标识关联册，册里没有
+// 模板上的号码。证三件——`RECEIVED` 行答待识别并真实落库（建立控制、不关联包裹）；两支不经身份核对
+// 的行真落库并读得回；同一份文件重跑答重放，同一行事实号换了业务时间答来源冲突且原行不被顶替。
 func TestFrontlineImportVerticalOnRealPostgres(t *testing.T) {
-	importer, receptions := verticalImporter(t, unconfiguredParcelIdentityView{})
-	if importer.identityConfigured {
-		t.Fatal("生产形状下 identityConfigured 应为假——开工提示靠它")
-	}
+	importer, receptions := verticalImporter(t, nil)
 
 	results := importTemplate(t, importer, sampleTemplate(t))
 	if len(results) != 3 {
 		t.Fatalf("结果行数 = %d，要 3", len(results))
 	}
-	assertDisposition(t, results, 0, rowUndecided, "RECEPTION_UNDECIDED")
+	assertDisposition(t, results, 0, rowLanded, "PENDING_IDENTIFICATION")
 	assertDisposition(t, results, 1, rowLanded, "INTAKE_NOT_FORMED")
 	assertDisposition(t, results, 2, rowLanded, "RECEPTION_UNDECIDED")
-
-	// 未决行必须带续办引用：重跑靠它，而不是靠内勤记得自己跑过。
-	if !strings.Contains(results[0].Detail, "未落库；续办引用 CONT-") {
-		t.Fatalf("RECEIVED 行未决没带续办引用：%q", results[0].Detail)
-	}
-	// 只要还有未决，退出码就是 3——「重跑同一文件」仍是必要动作。
-	if code := exitCodeFor(results); code != exitUndecided {
-		t.Fatalf("退出码 = %d，要 %d", code, exitUndecided)
+	if code := exitCodeFor(results); code != exitLanded {
+		t.Fatalf("退出码 = %d，要 %d", code, exitLanded)
 	}
 
-	// 身份核对不通的那一行什么都没留：拿一件没核对过身份的实物记成已核对，是这条断言
-	// 要挡住的事。
-	if _, found := findReception(t, receptions, sourceIDReceived); found {
-		t.Fatal("RECEIVED 行在身份核对缝不通时落库了——本该整笔回滚")
+	// 查无此号是业务答案：实物真实被接收、控制建立，只是关联不到正式包裹。
+	pending, found := findReception(t, receptions, sourceIDReceived)
+	if !found {
+		t.Fatalf("RECEIVED 行没落库：%s", sourceIDReceived)
+	}
+	if pending.Kind != ports.RecordPendingIdentification || !pending.Control.Active() || len(pending.Candidates) != 0 {
+		t.Fatalf("RECEIVED 行 = %s / 控制 %v / 候选 %v，要待识别、控制建立、零候选",
+			pending.Kind, pending.Control.Active(), pending.Candidates)
 	}
 
 	refused, found := findReception(t, receptions, sourceIDRefused)
@@ -152,9 +153,9 @@ func TestFrontlineImportVerticalOnRealPostgres(t *testing.T) {
 		t.Fatal("SCAN_ONLY 行不该建立控制")
 	}
 
-	// 重放：同一份文件重跑，已落地的两行答已有结果，未决那行仍未决。
+	// 重放：同一份文件重跑，三行都答已有结果。
 	replayed := importTemplate(t, importer, sampleTemplate(t))
-	assertDisposition(t, replayed, 0, rowUndecided, "RECEPTION_UNDECIDED")
+	assertDisposition(t, replayed, 0, rowReplayed, "EXISTING_RESULT")
 	assertDisposition(t, replayed, 1, rowReplayed, "EXISTING_RESULT")
 	assertDisposition(t, replayed, 2, rowReplayed, "EXISTING_RESULT")
 
@@ -164,8 +165,8 @@ func TestFrontlineImportVerticalOnRealPostgres(t *testing.T) {
 		"SYN-REASON-PACKAGING-DAMAGED,2026-09-08T10:20:00+08:00", 1)
 	conflicted := importTemplate(t, importer, []byte(conflicting))
 	assertDisposition(t, conflicted, 1, rowRejected, "SOURCE_CONFLICT")
-	if code := exitCodeFor(conflicted); code != exitUndecided {
-		t.Fatalf("未决压过被拒：退出码 = %d，要 %d", code, exitUndecided)
+	if code := exitCodeFor(conflicted); code != exitRejected {
+		t.Fatalf("有行被拒：退出码 = %d，要 %d", code, exitRejected)
 	}
 
 	after, found := findReception(t, receptions, sourceIDRefused)
@@ -175,8 +176,7 @@ func TestFrontlineImportVerticalOnRealPostgres(t *testing.T) {
 	}
 }
 
-// TestFrontlineImportLandsReceivedRowOnceIdentityResolves 换能解析的替身跑同一份模板，
-// 证 buildIntakeImporter 的 identity 参数就是 PS 侧提供方到位后唯一要换的那一格：
+// TestFrontlineImportLandsReceivedRowOnceIdentityResolves 换能解析的替身跑同一份模板，证关联收寄那一格：
 // `RECEIVED` 行整行落地，两处来源标记真落库，业务时间来自模板而记录时刻来自时钟。
 func TestFrontlineImportLandsReceivedRowOnceIdentityResolves(t *testing.T) {
 	association, err := domain.NewParcelAssociationReference("SYN-PARCEL-0001")
@@ -184,9 +184,6 @@ func TestFrontlineImportLandsReceivedRowOnceIdentityResolves(t *testing.T) {
 		t.Fatalf("构造包裹关联：%v", err)
 	}
 	importer, receptions := verticalImporter(t, resolvingParcelIdentityView{association: association})
-	if !importer.identityConfigured {
-		t.Fatal("换真替身后 identityConfigured 应为真——开工提示不该再打印")
-	}
 
 	results := importTemplate(t, importer, sampleTemplate(t))
 	assertDisposition(t, results, 0, rowLanded, "INTAKE_FORMED")

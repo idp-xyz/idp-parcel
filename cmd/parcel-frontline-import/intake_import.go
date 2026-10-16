@@ -24,15 +24,11 @@ import (
 type intakeImporter struct {
 	handler    *application.ReceiveDeliveredUnitHandler
 	transactor bentoapp.Transactor
-	// identityConfigured 为假时身份核对缝接的是显式未配置替身：RECEIVED 行必然答未决且
-	// 不落库。本口在开工前把这一点打印出来，而不是让内勤从一列 CONT- 引用里自己猜。
-	identityConfigured bool
 }
 
 // buildIntakeImporter 装配真实收寄链：收寄库、收寄结果版本签发、Outbox 意图交付走 NO
-// 真库口，与 parcel-api 的 buildReceptionOrchestration 同一套件。身份核对缝由参数给出：
-// 生产传显式未配置替身，测试传能解析的替身证整条链会落库——也就是 PS 侧提供方到位后
-// 唯一要换的那一格。
+// 真库口，与 parcel-api 的 buildReceptionOrchestration 同一套件。身份核对由参数给出：生产传
+// parcelIdentityViewOf 装的 PS 关联册读口，测试可传能解析的替身直证关联收寄那一格。
 func buildIntakeImporter(db *bentopg.DB, clock ports.Clock, identity ports.ParcelIdentityView) (intakeImporter, error) {
 	receptions, err := nopostgres.NewReceptions(db)
 	if err != nil {
@@ -63,7 +59,6 @@ func buildIntakeImporter(db *bentopg.DB, clock ports.Clock, identity ports.Parce
 	if err != nil {
 		return intakeImporter{}, fmt.Errorf("服务结果读口：%w", err)
 	}
-	_, unconfigured := identity.(unconfiguredParcelIdentityView)
 	handler := application.NewReceiveDeliveredUnitHandler(application.ReceiveDeliveredUnitDeps{
 		Identity:       identity,
 		ServiceResults: serviceResults,
@@ -73,18 +68,27 @@ func buildIntakeImporter(db *bentopg.DB, clock ports.Clock, identity ports.Parce
 		Clock:          clock,
 	})
 	return intakeImporter{
-		handler:            handler,
-		transactor:         db.Transactor(),
-		identityConfigured: !unconfigured,
+		handler:    handler,
+		transactor: db.Transactor(),
 	}, nil
 }
 
-// executeIntake 开工前先把身份核对缝的状态说清，再逐行推进、打报告、算退出码。
-func executeIntake(ctx context.Context, batch intakeBatch, importer intakeImporter, out io.Writer) int {
-	if !importer.identityConfigured {
-		fmt.Fprintf(out, "注意：身份核对缝未配置（.scratch/ps-external-mark-relations/01）——%s 行将答 RECEPTION_UNDECIDED 且不落库；%s / %s 行不经身份核对，照常落库\n",
-			claimReceived, claimRefused, claimScanOnly)
+// parcelIdentityViewOf 装生产的身份核对读口：PS 的外部标识关联册经 NO 的防腐适配器读（ADR-0184 决定五），
+// 与 parcel-api 的 buildParcelIdentityView 同一套件。
+func parcelIdentityViewOf(db *bentopg.DB) (ports.ParcelIdentityView, error) {
+	identifiers, err := pspostgres.NewExternalIdentifiers(db)
+	if err != nil {
+		return nil, fmt.Errorf("外部标识关联册：%w", err)
 	}
+	view, err := noparcel.NewParcelIdentityView(identifiers)
+	if err != nil {
+		return nil, fmt.Errorf("身份核对读口：%w", err)
+	}
+	return view, nil
+}
+
+// executeIntake 逐行推进、打报告、算退出码。
+func executeIntake(ctx context.Context, batch intakeBatch, importer intakeImporter, out io.Writer) int {
 	results := importIntake(ctx, batch, importer)
 	writeImportReport(out, batch.BatchRef, intakeTemplateVersion, results)
 	return exitCodeFor(results)

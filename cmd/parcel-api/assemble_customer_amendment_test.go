@@ -88,8 +88,15 @@ func amendmentCommandFor(
 // 两个诚实停点都在编排读到委托之后、改写委托之前，`已提交`就够用；接受那一段不在本包装配点内。
 func submittedOnRealAssembly(t *testing.T, db *bentopg.DB) {
 	t.Helper()
+	submitOnRealAssembly(t, db, submissionCommand(t))
+}
+
+// submitOnRealAssembly 是 submittedOnRealAssembly 吃命令的形：调用方在 submissionCommand 上多带一段（如客户包裹件号）
+// 再走同一条真提交编排。
+func submitOnRealAssembly(t *testing.T, db *bentopg.DB, command shipmentapp.SubmitShipmentRequestCommand) {
+	t.Helper()
 	submission, _ := envelopeMintingSubmission(t, db)
-	submitted, err := submission.Handle(t.Context(), submissionCommand(t))
+	submitted, err := submission.Handle(t.Context(), command)
 	if err != nil {
 		t.Fatalf("首次提交：%v", err)
 	}
@@ -240,17 +247,34 @@ func TestTheHonestStopIsObservableAtTheAmendmentEndpoint(t *testing.T) {
 // 就得有一份已接受委托在库里；本包没有走完整接受链的夹具，直接落决定是取证捷径，不是生产路径。
 func acceptedOnRealAssembly(t *testing.T, db *bentopg.DB) {
 	t.Helper()
-	submittedOnRealAssembly(t, db)
+	acceptOnRealAssembly(t, db, submissionCommand(t))
+}
+
+// acceptOnRealAssembly 是 acceptedOnRealAssembly 吃命令的形，配方同上。
+func acceptOnRealAssembly(t *testing.T, db *bentopg.DB, command shipmentapp.SubmitShipmentRequestCommand) {
+	t.Helper()
+	submitOnRealAssembly(t, db, command)
 
 	requests, err := pspostgres.NewShipmentRequests(db)
 	if err != nil {
 		t.Fatalf("构造委托仓储：%v", err)
 	}
-	command := submissionCommand(t)
 	request, found, err := requests.FindBySourceIdentity(t.Context(), command.Identity)
 	if err != nil || !found {
 		t.Fatalf("读回委托：err=%v found=%v", err, found)
 	}
+	acceptAndSave(t, db, requests, command, request)
+}
+
+// acceptAndSave 把一份读回的`已提交`委托经领域 Decide 推到`已接受`，再经真仓储 Save 落库（配方见 acceptedOnRealAssembly）。
+func acceptAndSave(
+	t *testing.T,
+	db *bentopg.DB,
+	requests *pspostgres.ShipmentRequests,
+	command shipmentapp.SubmitShipmentRequestCommand,
+	request domain.ShipmentRequest,
+) {
+	t.Helper()
 	applicable, err := domain.NewApplicableCheckGroups(domain.NetworkReachabilityCheck)
 	if err != nil {
 		t.Fatalf("new applicable check groups: %v", err)

@@ -183,6 +183,11 @@ func (repository *ShipmentRequests) Save(
 	if tag.RowsAffected() == 0 {
 		return ports.ShipmentRequestRevisionConflict, nil
 	}
+	// 已接受委托的客户包裹件号与快照同一条事务写进外部标识关联册（ADR-0184 决定三），与上面那两列投影
+	// 同一先例：分两次写，就有一个时刻委托已接受而节点认不出它的包裹。未接受交空，按键幂等。
+	if err := insertExternalIdentifierRelations(ctx, executor, request.ExternalIdentifierRelationsFormedByAcceptance(identity)); err != nil {
+		return ports.ShipmentRequestSaveOutcomeInvalid, fmt.Errorf("save shipment request: %w", err)
+	}
 	return ports.ShipmentRequestSaved, nil
 }
 
@@ -223,6 +228,13 @@ type requestDocument struct {
 	Baseline           *acceptanceBaselineDocument `json:"baseline,omitempty"`
 	Commitment         *expectedCommitmentDocument `json:"commitment,omitempty"`
 	SourceDataVersions []sourceDataVersionDocument `json:"sourceDataVersions,omitempty"`
+	// CustomerParcelNumbers 是委托上的客户包裹件号（ADR-0184 决定四）。未给号即 omitempty 不写，旧形快照读回为空。
+	CustomerParcelNumbers []customerParcelNumberDocument `json:"customerParcelNumbers,omitempty"`
+}
+
+type customerParcelNumberDocument struct {
+	Parcel string `json:"parcel"`
+	Number string `json:"number"`
 }
 
 type acceptanceDecisionDocument struct {
@@ -409,6 +421,12 @@ func documentOf(request domain.ShipmentRequest) requestDocument {
 	}
 	for _, version := range request.CustomerSourceDataVersions() {
 		document.SourceDataVersions = append(document.SourceDataVersions, sourceDataVersionDocumentOf(version))
+	}
+	for _, declaration := range request.CustomerParcelNumbers() {
+		document.CustomerParcelNumbers = append(document.CustomerParcelNumbers, customerParcelNumberDocument{
+			Parcel: declaration.Parcel().String(),
+			Number: declaration.Number().String(),
+		})
 	}
 	return document
 }
@@ -646,7 +664,26 @@ func (document requestDocument) rehydrationSpec(
 		}
 		spec.SourceDataVersions = append(spec.SourceDataVersions, version)
 	}
+	for _, raw := range document.CustomerParcelNumbers {
+		declaration, err := raw.declaration()
+		if err != nil {
+			return domain.RehydrateShipmentRequestSpec{}, err
+		}
+		spec.CustomerParcelNumbers = append(spec.CustomerParcelNumbers, declaration)
+	}
 	return spec, nil
+}
+
+func (document customerParcelNumberDocument) declaration() (domain.CustomerParcelNumberDeclaration, error) {
+	parcel, err := domain.NewDeclaredParcelID(document.Parcel)
+	if err != nil {
+		return domain.CustomerParcelNumberDeclaration{}, err
+	}
+	number, err := domain.NewExternalIdentifierNumber(document.Number)
+	if err != nil {
+		return domain.CustomerParcelNumberDeclaration{}, err
+	}
+	return domain.DeclareCustomerParcelNumber(parcel, number)
 }
 
 func (document versionDocument) spec() (domain.RehydrateSubmissionVersionSpec, error) {

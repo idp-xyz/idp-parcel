@@ -22,8 +22,8 @@ import (
 // Covers: 票 operator-channel/10 完成判据第二条——节点收寄口改走作业事实渠道。编排走生产装配（buildReceptionOrchestration），
 // 中间是生产的端点构造函数。作业范围种类必须是 NODE，节点引用取作业范围的引用。
 //
-// 明确拒收不经身份核对，真实落库答`未收寄`；明确接收撞上身份核对缝显式未配置，如实答`收寄待确认`——两格都是编排形成的
-// 业务答案（ADR-0022：2xx 带 outcome），不是渠道层的 403。带 tenantId 的载荷在 Intake 就拒，编排一次也不该被调到。
+// 明确拒收不经身份核对，真实落库答`未收寄`；明确接收的号码不在 PS 的外部标识关联册里，答`待识别`（ADR-0184：查过了、
+// 查无此号，真实建立收寄与控制）——两格都是编排形成的业务答案（ADR-0022：2xx 带 outcome），不是渠道层的 403。带 tenantId 的载荷在 Intake 就拒，编排一次也不该被调到。
 // 测试输入是隔离合成，只记 `S`。
 func TestIsolatedReceptionAnswersBusinessOutcomesAgainstARealDatabase(t *testing.T) {
 	pool := pgtest.Pool(t)
@@ -53,8 +53,8 @@ func TestIsolatedReceptionAnswersBusinessOutcomesAgainstARealDatabase(t *testing
 
 	received := post(`{"sourceId":"SYN-DEVICE-08/000002","deliveredBy":"SYN-COURIER-08","handlingUnit":"SYN-HU-08-0002",` +
 		`"mark":"SYN-MARK-08-0002","claim":"RECEIVED","evidenceRef":"SYN-EVIDENCE/tally-08-0002","occurredAt":"2026-09-24T09:05:00+08:00"}`)
-	if received.Code != http.StatusOK || registrationOutcome(t, received) != "RECEPTION_UNDECIDED" {
-		t.Fatalf("明确接收答 %d %s，want 200 RECEPTION_UNDECIDED（身份核对缝显式未配置）", received.Code, received.Body.String())
+	if received.Code != http.StatusOK || registrationOutcome(t, received) != "PENDING_IDENTIFICATION" {
+		t.Fatalf("明确接收答 %d %s，want 200 PENDING_IDENTIFICATION（号码不在关联册里）", received.Code, received.Body.String())
 	}
 
 	selfReported := post(`{"tenantId":"SYN-TENANT-01","sourceId":"SYN-DEVICE-08/000003","deliveredBy":"SYN-COURIER-08",` +

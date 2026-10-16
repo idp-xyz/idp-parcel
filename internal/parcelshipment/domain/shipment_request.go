@@ -234,6 +234,8 @@ type SubmitShipmentRequestSpec struct {
 	Elements DeclaredAddressElements
 	// RequestedProduct 是随首个提交版本声明的服务产品（票 psb/17），出处与 Elements 同一次规范化，允许缺席。
 	RequestedProduct DeclaredServiceProduct
+	// CustomerParcelNumbers 是客户为声明包裹给出的包裹件号（ADR-0184 决定四），允许缺席或只给部分成员。
+	CustomerParcelNumbers []CustomerParcelNumberDeclaration
 }
 
 type ShipmentRequest struct {
@@ -270,6 +272,9 @@ type ShipmentRequest struct {
 	// priorLink 是这份委托的关联出处（零值即首次委托）。它指回一份已拒绝、已接受或
 	// 已撤回的原委托——出处在新委托这边，原委托不动（`AT-PS-036`）。
 	priorLink PriorRequestLink
+	// customerParcelNumbers 挂在委托上而不在提交版本上：号码标识的是成员，新版本的成员集合必须与当前版本相等，
+	// 所以它首次提交时固定、不随版本重报（ADR-0184 决定四）。接受时据它形成外部标识关联。
+	customerParcelNumbers []CustomerParcelNumberDeclaration
 }
 
 // SubmitShipmentRequest 在放行的建单门禁之后建立一份`已提交`委托。它不形成接受或
@@ -299,6 +304,10 @@ func SubmitShipmentRequest(spec SubmitShipmentRequestSpec) (ShipmentRequest, err
 	if err != nil {
 		return ShipmentRequest{}, err
 	}
+	customerNumbers, err := customerParcelNumbersFor(spec.CustomerParcelNumbers, spec.Candidate.DeclaredParcelIDs())
+	if err != nil {
+		return ShipmentRequest{}, err
+	}
 
 	return ShipmentRequest{
 		shipmentRequestID: spec.Candidate.ShipmentRequestID(),
@@ -319,8 +328,9 @@ func SubmitShipmentRequest(spec SubmitShipmentRequestSpec) (ShipmentRequest, err
 			establishedAt:       spec.SubmittedAt,
 			state:               AcceptanceTaskRunning,
 		},
-		submittedAt: spec.SubmittedAt,
-		priorLink:   spec.Link,
+		submittedAt:           spec.SubmittedAt,
+		priorLink:             spec.Link,
+		customerParcelNumbers: customerNumbers,
 	}, nil
 }
 

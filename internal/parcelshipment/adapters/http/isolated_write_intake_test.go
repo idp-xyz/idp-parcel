@@ -380,3 +380,29 @@ func (double *permittingOwnershipDouble) DecideProductionOwnership(
 		DecisionAt:       at,
 	})
 }
+
+// Covers: ADR-0184 决定四——逐件的客户包裹参考按次序与现签的内部成员配成客户包裹件号带进命令：号码是客户给的
+// 那个，包裹是本包现签的那个，不是反过来（客户参考号不得变成内部标识）。
+func TestIsolatedSubmissionIntakePairsCustomerParcelReferencesWithMintedMembers(t *testing.T) {
+	intake := newIsolatedIntake(t, &permittingOwnershipDouble{revision: "SYN-REV-1"})
+	twoParcels := strings.Replace(isolatedDraft, `"parcels": [`, `"parcels": [
+    {"customerParcelReference": "SYN-PCLREF-0000"},`, 1)
+
+	command, err := intake.IntakeSubmission(context.Background(), draftRequest(twoParcels))
+	if err != nil {
+		t.Fatalf("接入草案：%v", err)
+	}
+	if len(command.CustomerParcelNumbers) != 2 || len(command.DeclaredParcelIDs) != 2 {
+		t.Fatalf("配对 %d 组、成员 %d 件，want 各 2", len(command.CustomerParcelNumbers), len(command.DeclaredParcelIDs))
+	}
+	for index, want := range []string{"SYN-PCLREF-0000", "SYN-PCLREF-0001"} {
+		declaration := command.CustomerParcelNumbers[index]
+		if declaration.Number().String() != want || declaration.Parcel() != command.DeclaredParcelIDs[index] {
+			t.Fatalf("第 %d 组 = (%s, %s)，want (%s, %s)", index,
+				declaration.Parcel(), declaration.Number(), command.DeclaredParcelIDs[index], want)
+		}
+		if declaration.Parcel().String() == want {
+			t.Fatalf("第 %d 组的包裹就是客户参考——内部标识被客户参考顶替了", index)
+		}
+	}
+}

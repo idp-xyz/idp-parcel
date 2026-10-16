@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
@@ -14,33 +13,9 @@ import (
 	noparcel "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/parcelshipment"
 	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
 	nodeopsapp "go.idp.xyz/idp-parcel/internal/nodeoperations/application"
-	nodomain "go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	noports "go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 )
-
-// errParcelIdentityViewNotConfigured 见 unconfiguredParcelIdentityView 的注释。
-var errParcelIdentityViewNotConfigured = errors.New("parcel-api: parcel identity view is not configured")
-
-// unconfiguredParcelIdentityView 是身份核对缝的「显式未配置」：PS 侧的外部标识关联
-// 模型还不存在（缺口记录在 `.scratch/ps-external-mark-relations`），这条缝今天没有
-// 可接的提供方机制。端口合同本身写着「依赖调不通作为错误返回」，据此它对每次核对
-// 如实报错，编排停在`收寄待确认`并携续办引用。
-//
-// 绝不交回空候选顶替：零候选是「查过了，查无此标识」的业务答案（走`待识别`、真实
-// 建立收寄与控制），拿它顶「没查」会把一件没核对过身份的实物记成已核对。明确拒收与
-// 仅扫描两支不经身份核对，不受本缝影响。PS 侧模型落地后这里换真跨上下文适配器。
-type unconfiguredParcelIdentityView struct{}
-
-var _ noports.ParcelIdentityView = unconfiguredParcelIdentityView{}
-
-func (unconfiguredParcelIdentityView) ResolveParcelIdentity(
-	context.Context,
-	nodomain.TenantID,
-	noports.ExternalMarkObservation,
-) ([]nodomain.ParcelAssociationReference, error) {
-	return nil, errParcelIdentityViewNotConfigured
-}
 
 // transactionalReception 把收寄编排包进一笔事务，理由随 transactionalCancellation：收寄
 // 库的写口按框架合同无事务即拒（收寄判断落库与同一步的意图发布必须同生共死），事务
@@ -76,10 +51,8 @@ func (reception transactionalReception) Handle(
 // buildReceptionOrchestration 装配 `/node-operations/receptions` 的真编排（UC-NO-002；
 // 接线票 `.scratch/parcel-api-remaining-endpoint-wiring/issues/01`）。
 //
-// 机制半边接真：收寄库、收寄结果版本签发、Outbox 意图交付走 NO 真库口；服务结果读口读 PS 的取消与终局两册（票
-// operator-channel/25），与收寄同一笔事务读。身份核对缝
-// 是唯一的「显式未配置」，理由与形状见 unconfiguredParcelIdentityView——它不是实例
-// 半边（不等租户参数），是提供方机制未建，恢复动作在 PS 侧建模，不在登记参数。
+// 机制半边全部接真：收寄库、收寄结果版本签发、Outbox 意图交付走 NO 真库口；身份核对读 PS 的外部标识关联册
+// （ADR-0184），服务结果读口读 PS 的取消与终局两册（票 operator-channel/25），都与收寄同一笔事务读。
 func buildReceptionOrchestration(db *bentopg.DB) (nodeopshttp.ReceptionHandler, error) {
 	receptions, err := nopostgres.NewReceptions(db)
 	if err != nil {
@@ -98,12 +71,16 @@ func buildReceptionOrchestration(db *bentopg.DB) (nodeopshttp.ReceptionHandler, 
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: node intake handoff: %w", err)
 	}
+	identity, err := buildParcelIdentityView(db)
+	if err != nil {
+		return nil, err
+	}
 	serviceResults, err := buildParcelServiceResultView(db)
 	if err != nil {
 		return nil, err
 	}
 	handler := nodeopsapp.NewReceiveDeliveredUnitHandler(nodeopsapp.ReceiveDeliveredUnitDeps{
-		Identity:       unconfiguredParcelIdentityView{},
+		Identity:       identity,
 		ServiceResults: serviceResults,
 		Receptions:     receptions,
 		Versions:       versions,
@@ -113,8 +90,20 @@ func buildReceptionOrchestration(db *bentopg.DB) (nodeopshttp.ReceptionHandler, 
 	return transactionalReception{transactor: db.Transactor(), inner: handler}, nil
 }
 
+// buildParcelIdentityView 装收寄编排的身份核对读口：PS 的外部标识关联册经 NO 的防腐适配器读（ADR-0184 决定五）。
+func buildParcelIdentityView(db *bentopg.DB) (noports.ParcelIdentityView, error) {
+	identifiers, err := pspostgres.NewExternalIdentifiers(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: external identifiers: %w", err)
+	}
+	view, err := noparcel.NewParcelIdentityView(identifiers)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: parcel identity view: %w", err)
+	}
+	return view, nil
+}
+
 // buildParcelServiceResultView 装收寄编排的服务结果读口：PS 的取消决定册与终局册经 NO 的防腐适配器读（票 operator-channel/25）。
-// 身份核对缝接真之前，编排走不到问它那一步；接真之后标记随之生效，这里不用再改。
 func buildParcelServiceResultView(db *bentopg.DB) (noports.ParcelServiceResultView, error) {
 	cancellations, err := pspostgres.NewParcelCancellations(db)
 	if err != nil {

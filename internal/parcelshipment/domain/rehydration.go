@@ -44,6 +44,9 @@ type RehydrateShipmentRequestSpec struct {
 	// 有出处而不带回，一份关联新委托重建后看起来像首次委托——「保留原版本或原决定」的
 	// 那条线索就断在重建这一步。
 	PriorLink RehydratePriorRequestLinkSpec
+	// CustomerParcelNumbers 是委托上的客户包裹件号（ADR-0184 决定四），收成品类型：包外只能经
+	// DeclareCustomerParcelNumber 造它。它在`已提交`下就有值；漏带回，接受时就形成不出外部标识关联。
+	CustomerParcelNumbers []CustomerParcelNumberDeclaration
 	// 以下四项在`已提交`下必然缺席；`已接受`下决定、基线、承诺必须在场，资料版本可空。
 	Decision           RehydrateAcceptanceDecisionSpec
 	DecisionFormed     bool
@@ -201,6 +204,7 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 			prior: snapshot.PriorLink.PriorRequestID,
 			kind:  snapshot.PriorLink.Kind,
 		},
+		customerParcelNumbers: append([]CustomerParcelNumberDeclaration(nil), snapshot.CustomerParcelNumbers...),
 		decision: AcceptanceDecision{
 			decisionID:   snapshot.Decision.DecisionID,
 			accepted:     snapshot.Decision.Accepted,
@@ -285,6 +289,10 @@ func (request ShipmentRequest) validForRehydration() error {
 	}
 	if err := request.linkValidForRehydration(); err != nil {
 		return err
+	}
+	// 客户包裹件号与建单同一条校验：指着成员集合外或一件两个号，接受时就会给一件不存在的包裹形成关联。
+	if _, err := customerParcelNumbersFor(request.customerParcelNumbers, request.currentVersion.declaredParcelIDs); err != nil {
+		return rehydrationRefusal("客户包裹件号指着成员集合外，或一件包裹带两个号")
 	}
 	return request.historyValidForRehydration()
 }

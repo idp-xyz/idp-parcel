@@ -976,3 +976,43 @@ var (
 	_ ports.SubmissionIdentityFactory       = (*identityFactoryDouble)(nil)
 	_ ports.Clock                           = fixedClock{}
 )
+
+// Covers: ADR-0184 决定四——接单入口配好的客户包裹件号随委托落下；配对指着成员集合外与画像不贴合同格，
+// 答`输入未受理`、不建单、来源照常保全。
+func TestCustomerParcelNumbersRideTheRequestAndAStrayOneIsNotAccepted(t *testing.T) {
+	ctx := context.Background()
+	number := func(parcel, value string) domain.CustomerParcelNumberDeclaration {
+		declaration, err := domain.DeclareCustomerParcelNumber(
+			mustValue(t, domain.NewDeclaredParcelID, parcel), mustValue(t, domain.NewExternalIdentifierNumber, value))
+		if err != nil {
+			t.Fatalf("配对：%v", err)
+		}
+		return declaration
+	}
+
+	fixture := newFixture(t)
+	command := fixture.command(t)
+	command.CustomerParcelNumbers = []domain.CustomerParcelNumberDeclaration{number("parcel-1", "CUST-0001")}
+	result, err := fixture.handler.Handle(ctx, command)
+	if err != nil || result.Outcome() != application.OutcomeSubmitted {
+		t.Fatalf("outcome = %q, err = %v, want SUBMITTED", result.Outcome(), err)
+	}
+	stored, _ := fixture.requests.stored(t, fixture.identity(t))
+	if got := stored.CustomerParcelNumbers(); len(got) != 1 || got[0].Number().String() != "CUST-0001" {
+		t.Fatalf("委托上的客户包裹件号 = %+v", got)
+	}
+
+	stray := newFixture(t)
+	command = stray.command(t)
+	command.CustomerParcelNumbers = []domain.CustomerParcelNumberDeclaration{number("parcel-9", "CUST-0009")}
+	result, err = stray.handler.Handle(ctx, command)
+	if err != nil || result.Outcome() != application.OutcomeInputNotAccepted {
+		t.Fatalf("outcome = %q, err = %v, want INPUT_NOT_ACCEPTED", result.Outcome(), err)
+	}
+	if stray.requests.insertCount != 0 {
+		t.Fatal("配对立不起来也建了单")
+	}
+	if _, found := stray.sources.stored(t, stray.identity(t)); !found {
+		t.Fatal("来源没保全")
+	}
+}

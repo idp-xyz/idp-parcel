@@ -107,6 +107,9 @@ type SubmitShipmentRequestCommand struct {
 	DeclaredElements domain.DeclaredAddressElements
 	// RequestedServiceProduct 随首个提交版本声明的服务产品（票 psb/17），出处与 DeclaredElements 同一次规范化，允许缺席。
 	RequestedServiceProduct domain.DeclaredServiceProduct
+	// CustomerParcelNumbers 是客户为声明包裹给出的包裹件号（ADR-0184 决定四），由接单入口与现签的内部标识配好带入，
+	// 允许缺席。委托接受时据它形成外部标识关联。
+	CustomerParcelNumbers []domain.CustomerParcelNumberDeclaration
 }
 
 // SubmitShipmentRequestResult 携带调用方可以据以行动的内容。委托与归属决定各自可选、
@@ -255,18 +258,19 @@ func (handler *SubmitShipmentRequestHandler) Handle(
 	}
 
 	request, err := domain.SubmitShipmentRequest(domain.SubmitShipmentRequestSpec{
-		Candidate:        candidate,
-		Gate:             gate,
-		VersionID:        versionID,
-		TaskID:           taskID,
-		SubmittedAt:      decidedAt,
-		Link:             link,
-		Profiles:         command.DeclaredProfiles,
-		Elements:         command.DeclaredElements,
-		RequestedProduct: command.RequestedServiceProduct,
+		Candidate:             candidate,
+		Gate:                  gate,
+		VersionID:             versionID,
+		TaskID:                taskID,
+		SubmittedAt:           decidedAt,
+		Link:                  link,
+		Profiles:              command.DeclaredProfiles,
+		Elements:              command.DeclaredElements,
+		RequestedProduct:      command.RequestedServiceProduct,
+		CustomerParcelNumbers: command.CustomerParcelNumbers,
 	})
-	if errors.Is(err, domain.ErrInvalidDeclaredMeasurement) {
-		// 画像不贴合成员集合（指着不存在的成员、一员两张、半截测量）与候选立不起来同格：
+	if errors.Is(err, domain.ErrInvalidDeclaredMeasurement) || errors.Is(err, domain.ErrInvalidCustomerParcelNumber) {
+		// 画像或客户包裹件号不贴合成员集合（指着不存在的成员、一员两张或两个号、半截测量）与候选立不起来同格：
 		// 客户输入的问题，答`输入未受理`让他改请求，不是本方的故障。
 		return SubmitShipmentRequestResult{outcome: OutcomeInputNotAccepted}, nil
 	}
