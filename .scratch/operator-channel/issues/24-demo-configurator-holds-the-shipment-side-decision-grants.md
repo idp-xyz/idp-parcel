@@ -1,7 +1,7 @@
 # 24 演示配置员补委托侧五种运营决定的授予
 
 Category: enhancement
-Status: in-progress——2026-10-16 完工（`e8673ac1`，分支 `claude-oc21`），待进 main；见「完成记录」。此前 in-progress——2026-10-16 Claude Code 会话立并认领（用户「针对上面的问题，你能自决，全部解决吗」），分支 `claude-oc21`。
+Status: resolved——2026-10-16 进 main（`e8673ac1`，分支 `claude-oc21` 快进，远端 main 含 `efc84d87`）；见「进 main 记录」。此前 in-progress——2026-10-16 完工，待进 main；见「完成记录」。此前 in-progress——2026-10-16 Claude Code 会话立并认领（用户「针对上面的问题，你能自决，全部解决吗」），分支 `claude-oc21`。
 Blocked by: 无
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 丙轨实施（收口后的清扫）
 地盘：`scripts/demo-seeds/data/access/02-grants.json`、`seed.sh` 与 `README.md` 里授予那几句。
@@ -25,3 +25,9 @@ Blocked by: 无
 - **落点**：`data/access/02-grants.json` 加五条（依据 `SYN-GRANT-BASIS-DEX-10`–`14`）；`seed.sh` 授予与对照两段注释、README 授予表同步。
 - **判据**：✅ 一次性库 `oc24_seed_check` 上 `seed.sh` 整跑退 0，五种授予各一行查得到，库已删；✅ README 与注释同步。
 - **评审**：纯种子与文档，作者自审。证据层级 `S`。
+
+### 进 main 记录（2026-10-16）
+
+- 分支 `claude-oc21` 五笔 `7ec601ab` / `9c551dc4` / `e8673ac1` / `c7a462cd` / `efc84d87` 叠在远端 main `f33d849d` 之上，快进进 main、SHA 未改写；`efc84d87` 是远端 main 的祖先（其后另一会话叠了 `43309fa5`，只动 `.scratch/group-legal-entities-uiux/`，与本票无交集）。
+- 推送方全量一次：钉 `efc84d87` 的全新 detached 检出，带 DSN，`go test -p 1 -count=1 -v ./...` 退 0——有测试的包 141 个 ok、0 FAIL，`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）；同一检出上全仓 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0。
+- 评审：只有作者自审，没有非作者评审（本机无别的会话可派；仓规 2026-09-16 不用子代理）。

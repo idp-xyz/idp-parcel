@@ -1,7 +1,7 @@
 # 23 节点作业隔离命令 Intake 退场：共享译装挪出，用例迁到作业事实收寄 Intake，删类型与门里的构造
 
 Category: enhancement
-Status: in-progress——2026-10-16 完工（`9c551dc4`，分支 `claude-oc21`），待进 main；见「完成记录」。此前 in-progress——2026-10-16 Claude Code 会话立并认领（用户「针对上面的问题，你能自决，全部解决吗」），分支 `claude-oc21`。
+Status: resolved——2026-10-16 进 main（`9c551dc4`，分支 `claude-oc21` 快进，远端 main 含 `efc84d87`）；见「进 main 记录」。此前 in-progress——2026-10-16 完工，待进 main；见「完成记录」。此前 in-progress——2026-10-16 Claude Code 会话立并认领（用户「针对上面的问题，你能自决，全部解决吗」），分支 `claude-oc21`。
 Blocked by: 无
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 丙轨实施（收口后的清扫）
 地盘：`internal/nodeoperations/adapters/http` 的 `isolated_command_intake*.go`、`work_fact_intake*.go`、`receive_delivered_unit.go` 头注；`cmd/parcel-api/assemble_isolated_write.go` 与 `isolated_write_test.go` 里节点作业那一格。
@@ -32,3 +32,9 @@ Blocked by: 无
 - **补的格**：`TestWorkFactReceptionIntakeTakesDeviceAndScopeFromHeadersAndAuthenticatesFirst`（三个头缺一即 400、`OFFSITE` 作用域即 400、认证方被问头里那一份、先认证后解载荷）；`TestNewWorkFactReceptionIntakeRejectsAMissingAuthenticator`；类型锁 `TestWorkFactReceptionIntakeServesOnlyTheReceptionLine`。
 - **判据**：✅ 原隔离用例每一格都有对应用例；✅ 全仓无 `IsolatedCommandIntake` 引用（两上下文都已退场，隔离写门只剩提交口那一行）；✅ NO `adapters/http` 与 `cmd/parcel-api` 测试绿。
 - **评审**：作者自审，不算非作者评审。证据层级 `S`。实施中量到的缺口见上节，立为 25。
+
+### 进 main 记录（2026-10-16）
+
+- 分支 `claude-oc21` 五笔 `7ec601ab` / `9c551dc4` / `e8673ac1` / `c7a462cd` / `efc84d87` 叠在远端 main `f33d849d` 之上，快进进 main、SHA 未改写；`efc84d87` 是远端 main 的祖先（其后另一会话叠了 `43309fa5`，只动 `.scratch/group-legal-entities-uiux/`，与本票无交集）。
+- 推送方全量一次：钉 `efc84d87` 的全新 detached 检出，带 DSN，`go test -p 1 -count=1 -v ./...` 退 0——有测试的包 141 个 ok、0 FAIL，`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）；同一检出上全仓 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0。
+- 评审：只有作者自审，没有非作者评审（本机无别的会话可派；仓规 2026-09-16 不用子代理）。

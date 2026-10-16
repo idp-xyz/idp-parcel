@@ -59,9 +59,9 @@ Blocked by: 无——ADR-0100 已接受，这一格不等任何决定
 | [19](../../operator-channel/issues/19-admission-scope-bridge-for-operator-and-integration-client-minters.md) | 准入范围桥：操作者与集成客户端铸造器的 `AdmissionScope` 由「租户对照 + `AuthorityCoverage`」实现，接进生产装配（2026-10-13 补立：15 余下四口照裁定 A 不换，桥另立） | 无（2026-10-13 分诊起草 ADR-0180，同日用户授权通道 3 自决接受；同日通道 3 实施，resolved，进 main 至 `8e1e9777`） |
 | [20](../../operator-channel/issues/20-tf-closure-dispatch-task-and-pickup-judgment-canonicalization.md) | TF 关段、建派送任务、承运商首次有效收寄判断三口的规范化形状与「同身份异内容」格（2026-10-13 补立：同上，改 TF 领域代数，归 TF owner） | 无（2026-10-16 逐口裁毕：关段只核对并补答复回显，建派送任务只核对，承运商首次有效收寄判断补 TFC-1 + `CONTENT_CONFLICT`；同日 resolved，进 main 至 `2d84eb2c`） |
 | [21](../../operator-channel/issues/21-work-device-catalogue-page.md) | 作业设备册查阅页：只看已登记的行（2026-10-14 立，父票行指本票；2026-10-16 补进本表） | 无（2026-10-14 resolved） |
-| [22](../../operator-channel/issues/22-tf-isolated-command-intake-retires.md) | 运输履约隔离命令 Intake 退场：译装用例迁到作业事实 Intake，删类型（2026-10-16 收口后清扫） | 无 |
-| [23](../../operator-channel/issues/23-node-operations-isolated-command-intake-retires.md) | 节点作业隔离命令 Intake 退场：共享译装挪出，用例迁到作业事实收寄 Intake，删类型与门里的构造（2026-10-16 收口后清扫） | 无 |
-| [24](../../operator-channel/issues/24-demo-configurator-holds-the-shipment-side-decision-grants.md) | 演示配置员补委托侧五种运营决定的授予（2026-10-16 收口后清扫） | 无 |
+| [22](../../operator-channel/issues/22-tf-isolated-command-intake-retires.md) | 运输履约隔离命令 Intake 退场：译装用例迁到作业事实 Intake，删类型（2026-10-16 收口后清扫） | 无（2026-10-16 resolved，进 main 至 `efc84d87`） |
+| [23](../../operator-channel/issues/23-node-operations-isolated-command-intake-retires.md) | 节点作业隔离命令 Intake 退场：共享译装挪出，用例迁到作业事实收寄 Intake，删类型与门里的构造（2026-10-16 收口后清扫） | 无（2026-10-16 resolved，进 main 至 `efc84d87`） |
+| [24](../../operator-channel/issues/24-demo-configurator-holds-the-shipment-side-decision-grants.md) | 演示配置员补委托侧五种运营决定的授予（2026-10-16 收口后清扫） | 无（2026-10-16 resolved，进 main 至 `efc84d87`） |
 
 **前沿**：01、02、08、13、14。要最早让隔离环境里的主链命令面答业务结果，走 08；要最早让合成操作者在登记写面与目录查阅面上走通，走 01 + 02 → 03 → 04 / 05；生产上的主链命令面要 10 或 11（外加 12）与 13、14 都到位，按口逐步开。
 
