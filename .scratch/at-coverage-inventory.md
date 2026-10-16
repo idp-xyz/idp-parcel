@@ -18,8 +18,8 @@
 
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 289 |
-| ② 机制候选 | 226 |
+| ① 已钉住 | 290 |
+| ② 机制候选 | 225 |
 | ③ 实例/闸门 | 143 |
 | ④ 机制未落地 | 425 |
 | 合计 | 1083 |
@@ -27,7 +27,7 @@
 | 前缀 | 总数 | ① | ② | ③ | ④ |
 |---|---|---|---|---|---|
 | CC | 410 | 20 | 0 | 89 | 301 |
-| NO | 46 | 16 | 23 | 7 | 0 |
+| NO | 46 | 17 | 22 | 7 | 0 |
 | NR | 53 | 24 | 28 | 1 | 0 |
 | PC | 36 | 35 | 1 | 0 | 0 |
 | PS | 93 | 66 | 25 | 2 | 0 |
@@ -67,7 +67,8 @@
 | `AT-NO-017` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestReplayConflictAndFailedIntentStayDisciplined |
 | `AT-NO-018` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestUnknownAndConflictedIdentitiesStayPending |
 | `AT-NO-019` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestUnknownAndConflictedIdentitiesStayPending |
-| `AT-NO-020` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestAnExplicitReceptionFormsIntakeAndControl |
+| `AT-NO-020` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestAUniquelyIdentifiedReceptionCarriesTheParcelShipmentServiceResults |
+| `AT-NO-021` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestAUniquelyIdentifiedReceptionCarriesTheParcelShipmentServiceResults |
 | `AT-NO-023` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestScanOnlyAndRefusalDoNotEstablishControl |
 | `AT-NO-024` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestScanOnlyAndRefusalDoNotEstablishControl |
 | `AT-NO-025` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestABatchKeepsPerUnitResultsIndependent |
@@ -342,7 +343,6 @@
 | `AT-NO-011` | 协作事项在部分不可逆执行后取消或缩小范围 | UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md |
 | `AT-NO-013` | 跨客户合报事项只允许节点处理 C2/P2 | UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md |
 | `AT-NO-014` | 事实已保存，但任务派生或发布发生技术失败 | UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md |
-| `AT-NO-021` | 已终局包裹仍实际到站 | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
 | `AT-NO-026` | 身份后来被 `parcel-shipment` 确认 | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
 | `AT-NO-029` | 已控制包裹完成扫描、称重和量方 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-030` | 新测量使路由资格变化 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |

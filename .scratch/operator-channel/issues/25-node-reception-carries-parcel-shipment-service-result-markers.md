@@ -1,7 +1,7 @@
 # 25 节点收寄带上 parcel-shipment 的服务结果标记：生产渠道上这一查没人做
 
 Category: bug
-Status: in-progress——2026-10-16 Claude Code 会话裁三问并认领（用户「yes, do」），分支 `claude-oc25`；裁定见「裁定」。生产上的效果要等身份核对缝接真（[ps-external-mark-relations/01](../../ps-external-mark-relations/issues/01-external-mark-relations-have-no-model-in-parcel-shipment.md)，needs-info，缺排期决定）：那之前明确接收停在`收寄待确认`，走不到取标记这一步。此前 needs-triage——2026-10-16 Claude Code 会话立（票 23 实施中量到）。
+Status: in-progress——2026-10-16 完工，待进 main；见「完成记录」。此前 in-progress——2026-10-16 Claude Code 会话裁三问并认领（用户「yes, do」），分支 `claude-oc25`；裁定见「裁定」。生产上的效果要等身份核对缝接真（[ps-external-mark-relations/01](../../ps-external-mark-relations/issues/01-external-mark-relations-have-no-model-in-parcel-shipment.md)，needs-info，缺排期决定）：那之前明确接收停在`收寄待确认`，走不到取标记这一步。此前 needs-triage——2026-10-16 Claude Code 会话立（票 23 实施中量到）。
 Blocked by: 无——机制半边不挡；生产效果挂在 ps-external-mark-relations/01 上（见 Status）
 父票：无——不属 [psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 的完成判据（那一票只管渠道换真 Intake），是票 10 换口时带过来的业务缺口；不挡任何票
 出处：`internal/nodeoperations/application` 的 `ReceiveDeliveredUnitCommand.ServiceMarkers` 头注；UC-NO-002 的「服务结果引用」一行与 `AT-NO-020`–`022`；[08](./08-isolated-release-of-main-chain-command-faces.md) 的「收寄的服务结果标记留空」；[23](./23-node-operations-isolated-command-intake-retires.md)「实施中量到的」。
@@ -36,3 +36,13 @@ Blocked by: 无——机制半边不挡；生产效果挂在 ps-external-mark-re
 - 待识别、身份冲突、明确拒收、仅扫描四支不问读口。
 - 防腐适配器逐格翻译、读口错误原样交回；生产装配接上 PS 真库读口。
 - 架构门禁绿（跨上下文翻译只在 `adapters/parcelshipment`）。
+
+## 完成记录（2026-10-16，Claude Code 会话，分支 `claude-oc25`，代码 `0214a62a`）
+
+- **落点**：NO `ports` 加 `ParcelServiceResults` 与 `ParcelServiceResultView`；`ReceiveDeliveredUnitDeps.ServiceResults`，编排在恰一个候选时、签发版本之前问一次，`serviceMarkersOf` 落封闭词表；命令的 `ServiceMarkers` 删去，明确拒收与仅扫描两支的记录不再带标记；防腐适配器 `internal/nodeoperations/adapters/parcelshipment`（`ServiceResultView`，读 PS `ParcelCancellationView` 与 `CurrentFinalView`，终局只认已定案）；`cmd/parcel-api` 的 `buildParcelServiceResultView` 与 `cmd/parcel-frontline-import` 的收寄导入装配都接 PS 真库两册。
+- **补的格**：编排——取消与终局各落一枚标记且收寄、控制、意图照常；读不动答`收寄待确认`带续办引用、不落册、不交意图；装配缺读口同样停下；待识别、身份冲突、明确拒收、仅扫描都不问读口。适配器——逐格翻译且两读口各被问一次同一（租户，包裹）；无取消、无终局、终局在册未定案都答空；读口错误原样交回、构造期拒缺件。真库 `TestTheWiredServiceResultViewReadsParcelShipmentCancellationAndFinal`——经 PS 生产写口登一份取消决定与一份已定案终局，生产装配的读口在一笔事务里读回两枚的原料，另一件包裹答空。旧的「命令 `ServiceMarkers` 为空」断言在作业事实 Intake 与前线导入模板两处删去，改注一句为何不再有这一格。
+- **判据**：✅ 身份唯一成立时取消 / 终局 / 皆无 / 读不动各有其答；✅ 待识别、身份冲突、明确拒收、仅扫描不问读口；✅ 适配器逐格翻译、错误原样交回、生产装配接真库；✅ `internal/architecture` 绿（跨上下文 import 只在 `adapters/parcelshipment` 与 `cmd/`），机制清点多出一组消费缝 `nodeoperations → parcelshipment`（`0e31b9f3`）。NO、PS、`cmd/parcel-api`、`cmd/parcel-frontline-import`、`internal/architecture` 带 DSN 全绿；`go build ./...`、`go vet ./...` 退 0。
+- **生产效果仍挂在身份核对缝上**：`cmd/parcel-api` 的 `unconfiguredParcelIdentityView` 对每一次明确接收答依赖未配置，编排停在`收寄待确认`、走不到取标记这一步；前线导入在身份未配置时开工先提示，`RECEIVED` 行答`收寄待确认`不落库，拒收与仅扫描行照常落库（这两支本来就不取标记）。缝接真之后标记随之生效，这里不用再改。恢复动作在 [ps-external-mark-relations/01](../../ps-external-mark-relations/issues/01-external-mark-relations-have-no-model-in-parcel-shipment.md)，缺排期决定。
+- **标记今天没有消费方**：NO 唯一的方向性作业编排是集运（UC-NO-003），它加成员时只核单元在不在、成员是否已在别的袋里，不读收寄标记，也不核路由、兼容与身份；「标记限制后续方向性作业」此刻只体现在记录与复核目录（管理台节点作业复核页的「服务标记」列照原样显示）。立为 [no-directional-basis/01](../../no-directional-basis/issues/01-consolidation-adds-members-without-any-directional-basis.md)，needs-triage。
+- **AT 盘点**：`.scratch/at-coverage-inventory.md` 的 `AT-NO-020` 改指新用例（原指的用例不再引它），`AT-NO-021` 由②迁①。
+- **评审**：作者自审，不算非作者评审。证据层级 `S`。
