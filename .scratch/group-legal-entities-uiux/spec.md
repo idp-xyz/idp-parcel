@@ -1,7 +1,7 @@
 # 集团与法人页 UI/UX 评估与跟进
 
 Category: enhancement
-Status: in-progress
+Status: resolved
 
 出处：2026-10-16，用户在会话里要求「作为 UI/UX 专家评估集团与法人的 UI/UX」，并按 `/to-tickets` 拆了票。拆分、主色范围、集团显示和父 spec 这几项都由用户在 Step 4 认可。
 
@@ -81,5 +81,5 @@ axe 在 `858280a2` 上的实测（只计 WCAG 2 AA 违规节点数）：
 | 08 | [本页可访问性](issues/08-page-accessibility.md) | — | resolved |
 | 09 | [对象页与详情栏同一套结构](issues/09-object-page-matches-detail-panel.md) | 01、06 | resolved |
 | 10 | [1024 宽下不折坏](issues/10-narrow-width-layout.md) | 06、08 | resolved |
-| 11 | [本会话租户读口：顶栏作用域与本页页头接上](issues/11-session-tenant-read-face.md) | — | in-progress |
+| 11 | [本会话租户读口：顶栏作用域与本页页头接上](issues/11-session-tenant-read-face.md) | — | resolved |
 | 12 | [其余页面主动作改用主色](issues/12-primary-action-style-on-remaining-pages.md) | 05 | resolved |

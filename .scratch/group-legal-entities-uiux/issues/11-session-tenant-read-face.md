@@ -20,7 +20,7 @@
 
 **Category:** enhancement
 
-**Status:** in-progress
+**Status:** resolved
 
 - [x] 带有效操作者令牌请求读口，答出该主体绑定的租户；拒绝各态与其他操作者口同口径（ADR-0100 决定四）
 - [x] 顶栏作用域 chip 显示租户标识；读口未配置或拒绝时，退回现有的兜底句
@@ -53,3 +53,10 @@
   - ADR-0100 决定四的同答纪律守住了；租户只取自操作者册；端点表与门禁都已补上；注释合规。
   - ADR-0140 是草案、尚未接受，不算依据；它本身也写着操作者 API 不带版本前缀，与 `/work-devices` 的先例一致。
   - 自审 0 阻断。
+
+### 进 main 记录（2026-10-16）
+
+- 分支 `claude-glu11` 的三笔 `bf26ecf3` / `16fb624c` / `99d406df` 叠在远端 main `ccacf21a` 之上，没有别人的提交插进来。快进进 main，推的就是 `99d406df`，分支 SHA 原样进 main。
+- 推送方全量：在 `99d406df` 的干净 detached 检出上，带 DSN 跑 `go test -p 1 -count=1 -v ./...`，退 0。有测试的包 142 个 ok、0 FAIL；`--- SKIP` 1 个（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上，全仓 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，重生成机制清点与提交的那份一致。管理台三道门在作者 worktree 的同一内容上跑过（见完成记录）。
+- 推之前贴着 push 核过：`ls-remote` 答 `ccacf21a` 未动，`origin/main..99d406df` 只有本分支三笔。
+- 评审：只有作者自审，没有非作者评审（本仓不用子代理，本机也没有空闲通道可派）。
