@@ -21,7 +21,7 @@
 
 **Category:** enhancement
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
 - [ ] 主动作样式在浅色和深色两套主题下，文字与背景的对比度都 ≥ 4.5:1，悬停、聚焦、禁用三种状态能区分开
 - [ ] 上面列出的本页主动作都改用这个样式，次要动作不变

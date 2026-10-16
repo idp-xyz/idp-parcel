@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button, Card, CardContent, Input, Textarea } from '@idpxyz/ui-primitives';
 import { isOperatorRefusal } from '../../auth/access-refusal';
 import { moduleInfoById } from '../../navigation';
+import { primaryActionClass } from '../../components/primary-action';
 import { RegistrationAnswerNote } from '../../components/registration';
 import { OperatorRefusalNote, SectionError } from '../../components/states';
 import type { ApiResult } from '../catalogue-api';
@@ -431,7 +432,12 @@ function ProfileRegistrationForm({ legalEntityId, onLanded }: { legalEntityId: s
         </AdvancedGroup>
 
         <div className="flex items-start gap-3 border-t border-idpxyz-border pt-4">
-          <Button onClick={form.send} disabled={locked || !form.canSend}>
+          <Button
+            variant="default"
+            className={primaryActionClass}
+            onClick={form.send}
+            disabled={locked || !form.canSend}
+          >
             {locked ? '提交中…' : '提交资料修订'}
           </Button>
           <RegistrationAnswerNote

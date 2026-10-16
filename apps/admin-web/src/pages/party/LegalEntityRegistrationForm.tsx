@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
+import { primaryActionClass } from '../../components/primary-action';
 import { RegistrationAnswerNote, RegistrationPanel } from '../../components/registration';
 import {
   commercialRegistrationEndpoints,
@@ -277,7 +278,12 @@ export function LegalEntityRegistrationForm({
           </AdvancedGroup>
 
           <div className="flex items-start gap-3 border-t border-idpxyz-border pt-4">
-            <Button onClick={form.send} disabled={locked || !form.canSend}>
+            <Button
+              variant="default"
+              className={primaryActionClass}
+              onClick={form.send}
+              disabled={locked || !form.canSend}
+            >
               {locked ? '提交中…' : '提交登记'}
             </Button>
             <RegistrationAnswerNote

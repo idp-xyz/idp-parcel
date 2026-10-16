@@ -10,6 +10,7 @@ import {
   TabsList,
   TabsTrigger,
 } from '@idpxyz/ui-primitives';
+import { primaryActionClass } from '../../components/primary-action';
 import type { GroupLegalEntityRecord } from './api';
 import {
   identityLayerAbsentNote,
@@ -165,7 +166,7 @@ export function LegalEntityDetailPanel({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <Button size="sm" onClick={openProfileForm}>
+            <Button size="sm" variant="default" className={primaryActionClass} onClick={openProfileForm}>
               <FileText className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
               登记资料修订
             </Button>

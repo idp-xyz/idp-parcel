@@ -11,6 +11,7 @@ import {
   type WorkbenchSort,
 } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import { primaryActionClass } from '../../components/primary-action';
 import { catalogueViewState } from '../catalogue-view';
 import { listGroupLegalEntities, type GroupLegalEntityRecord } from './api';
 import { groupLegalEntitiesViewOf, registerViewHash } from './group-legal-entities-address';
@@ -346,7 +347,7 @@ export function GroupLegalEntitiesPage() {
       onRefresh={retry}
       refreshing={pending}
       primaryAction={
-        <Button onClick={openRegister}>
+        <Button variant="default" className={primaryActionClass} onClick={openRegister}>
           <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
           登记责任法人
         </Button>
