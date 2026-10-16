@@ -1,7 +1,7 @@
 # 23 节点作业隔离命令 Intake 退场：共享译装挪出，用例迁到作业事实收寄 Intake，删类型与门里的构造
 
 Category: enhancement
-Status: in-progress——2026-10-16 Claude Code 会话立并认领（用户「针对上面的问题，你能自决，全部解决吗」），分支 `claude-oc21`。
+Status: in-progress——2026-10-16 完工（`9c551dc4`，分支 `claude-oc21`），待进 main；见「完成记录」。此前 in-progress——2026-10-16 Claude Code 会话立并认领（用户「针对上面的问题，你能自决，全部解决吗」），分支 `claude-oc21`。
 Blocked by: 无
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 丙轨实施（收口后的清扫）
 地盘：`internal/nodeoperations/adapters/http` 的 `isolated_command_intake*.go`、`work_fact_intake*.go`、`receive_delivered_unit.go` 头注；`cmd/parcel-api/assemble_isolated_write.go` 与 `isolated_write_test.go` 里节点作业那一格。
@@ -25,3 +25,10 @@ Blocked by: 无
 ## 实施中量到的（不在本票做）
 
 收寄命令的 `ServiceMarkers`（PS 服务结果引用：已取消 / 终局 / 无路由 / 受限）按 `ReceiveDeliveredUnitCommand` 的契约「由接入层查好带入」，它不阻止接收、只限制后续方向性作业（UC-NO-002 的 `AT-NO-020`–`022`）。票 08 当时记过「隔离形态没有那道查询，留空」；票 10 换上作业事实渠道之后，`WorkFactReceptionIntake` 同样不查——生产上已取消或已终局的包裹到站收寄时不带标记。立为 [25](./25-node-reception-carries-parcel-shipment-service-result-markers.md)。
+
+## 完成记录（2026-10-16，Claude Code 会话，分支 `claude-oc21`，代码 `9c551dc4`）
+
+- **落点**：收寄载荷译装原样挪到 `reception_payload.go`；删 `isolated_command_intake.go`；`isolated_command_intake_test.go` 改名 `work_fact_intake_test.go`、改挂 `WorkFactReceptionIntake`（替身认证方交回合成租户与节点），原用例逐格保留；`receive_delivered_unit.go` 的 Intake 契约头注改指真渠道实现；`cmd/parcel-api` 隔离写门删节点作业那一格（字段、访问器、构造、合成节点常量）与「随门构造」用例。
+- **补的格**：`TestWorkFactReceptionIntakeTakesDeviceAndScopeFromHeadersAndAuthenticatesFirst`（三个头缺一即 400、`OFFSITE` 作用域即 400、认证方被问头里那一份、先认证后解载荷）；`TestNewWorkFactReceptionIntakeRejectsAMissingAuthenticator`；类型锁 `TestWorkFactReceptionIntakeServesOnlyTheReceptionLine`。
+- **判据**：✅ 原隔离用例每一格都有对应用例；✅ 全仓无 `IsolatedCommandIntake` 引用（两上下文都已退场，隔离写门只剩提交口那一行）；✅ NO `adapters/http` 与 `cmd/parcel-api` 测试绿。
+- **评审**：作者自审，不算非作者评审。证据层级 `S`。实施中量到的缺口见上节，立为 25。

@@ -1,7 +1,7 @@
 # 15 横切：ADR-0100 操作者渠道落地——操作者册、凭据校验、`OperatorEnvelope` 与端点逐个换真 Intake
 
 Category: enhancement
-Status: resolved——2026-10-16 Claude Code 会话收口：子票表 operator-channel/01–20 逐份读过、全部 resolved（最后一张 15 进 main 至 `58626ca1`）；完成判据三项逐条核过——主链命令面对合成操作者走真渠道答业务结果、未登记或授予不覆盖的主体照旧被拒（各子票装配测试），票 05 格 7、11、12、22 各有实测去处（psb/05 那四格的「08 重走」与其后 10、11、15 换真渠道），登记册 `PAR-INT-08` 一行已增。此前 in-progress——跟踪容器：2026-09-24 通道 4 按通道 1 派单 task-2a0f590d（/to-tickets）拆为 [`.scratch/operator-channel/`](../../operator-channel/issues/) 下子票 01–14：拆法经用户授权通道 4 自决认可（01–08 转 ready-for-agent），丙轨决策 09 落成 ADR-0149 并续编实施票 10–14，切片计划见文末。此前：拆法待用户认可（01–09 draft）；needs-triage——2026-09-24 通道 4 经用户授权自决立（票 02 遗留：开发主线「按四项判据重定级」表「横切」行第一项与票 05 格 7、11、12、22，全仓没有实施票）；体量大，开工第一步是拆子票
+Status: resolved——2026-10-16 Claude Code 会话收口：子票 operator-channel/01–21 逐份读过、全部 resolved（最后一张 15 进 main 至 `58626ca1`；21 不在下表、父票行指本票，同日补进表）；收口后的清扫 22–24 同日补立并随 `claude-oc21` 进 main（两只闲置的隔离命令 Intake 退场、演示配置员补委托侧授予）；量到的业务缺口立为 operator-channel/25，不属本票判据、不挂本票；完成判据三项逐条核过——主链命令面对合成操作者走真渠道答业务结果、未登记或授予不覆盖的主体照旧被拒（各子票装配测试），票 05 格 7、11、12、22 各有实测去处（psb/05 那四格的「08 重走」与其后 10、11、15 换真渠道），登记册 `PAR-INT-08` 一行已增。此前 in-progress——跟踪容器：2026-09-24 通道 4 按通道 1 派单 task-2a0f590d（/to-tickets）拆为 [`.scratch/operator-channel/`](../../operator-channel/issues/) 下子票 01–14：拆法经用户授权通道 4 自决认可（01–08 转 ready-for-agent），丙轨决策 09 落成 ADR-0149 并续编实施票 10–14，切片计划见文末。此前：拆法待用户认可（01–09 draft）；needs-triage——2026-09-24 通道 4 经用户授权自决立（票 02 遗留：开发主线「按四项判据重定级」表「横切」行第一项与票 05 格 7、11、12、22，全仓没有实施票）；体量大，开工第一步是拆子票
 Blocked by: 无——ADR-0100 已接受，这一格不等任何决定
 地盘：`internal/accessidentity`（操作者册、凭据校验、信封铸造）与其迁移、`cmd/parcel-api` 端点表的 Intake 装配；各上下文的授予格按[票 07](./07-pc-authorization-coordinates-and-role-models.md) 的角色模型读。
 出处：[ADR-0100](../../../docs/adr/0100-operator-identity-is-a-product-owned-access-channel-family.md)；[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表「横切」行第一项原话：`internal/accessidentity` 没有操作者册、OIDC 校验与 `OperatorEnvelope`，端点表的命令行与目录读口在隔离开关之外一律挂 `UnconfiguredIntake{}`；[票 05](./05-demo-journey-criterion-evidence.md) 格 7、11、12、22 与「不在主路径上的命令面」实测全部答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`。开发主线结论句把它列为机制缺口的头一件，「它挡着全部运营面」。
@@ -58,6 +58,10 @@ Blocked by: 无——ADR-0100 已接受，这一格不等任何决定
 | [18](../../operator-channel/issues/18-commercial-publications-takes-operator-intake-after-approval-translation-sinks.md) | 批文译装下沉后 `/commercial-publications` 换操作者 Intake（2026-10-12 补立：06 判断项 1，派单方裁另立） | 06 |
 | [19](../../operator-channel/issues/19-admission-scope-bridge-for-operator-and-integration-client-minters.md) | 准入范围桥：操作者与集成客户端铸造器的 `AdmissionScope` 由「租户对照 + `AuthorityCoverage`」实现，接进生产装配（2026-10-13 补立：15 余下四口照裁定 A 不换，桥另立） | 无（2026-10-13 分诊起草 ADR-0180，同日用户授权通道 3 自决接受；同日通道 3 实施，resolved，进 main 至 `8e1e9777`） |
 | [20](../../operator-channel/issues/20-tf-closure-dispatch-task-and-pickup-judgment-canonicalization.md) | TF 关段、建派送任务、承运商首次有效收寄判断三口的规范化形状与「同身份异内容」格（2026-10-13 补立：同上，改 TF 领域代数，归 TF owner） | 无（2026-10-16 逐口裁毕：关段只核对并补答复回显，建派送任务只核对，承运商首次有效收寄判断补 TFC-1 + `CONTENT_CONFLICT`；同日 resolved，进 main 至 `2d84eb2c`） |
+| [21](../../operator-channel/issues/21-work-device-catalogue-page.md) | 作业设备册查阅页：只看已登记的行（2026-10-14 立，父票行指本票；2026-10-16 补进本表） | 无（2026-10-14 resolved） |
+| [22](../../operator-channel/issues/22-tf-isolated-command-intake-retires.md) | 运输履约隔离命令 Intake 退场：译装用例迁到作业事实 Intake，删类型（2026-10-16 收口后清扫） | 无 |
+| [23](../../operator-channel/issues/23-node-operations-isolated-command-intake-retires.md) | 节点作业隔离命令 Intake 退场：共享译装挪出，用例迁到作业事实收寄 Intake，删类型与门里的构造（2026-10-16 收口后清扫） | 无 |
+| [24](../../operator-channel/issues/24-demo-configurator-holds-the-shipment-side-decision-grants.md) | 演示配置员补委托侧五种运营决定的授予（2026-10-16 收口后清扫） | 无 |
 
 **前沿**：01、02、08、13、14。要最早让隔离环境里的主链命令面答业务结果，走 08；要最早让合成操作者在登记写面与目录查阅面上走通，走 01 + 02 → 03 → 04 / 05；生产上的主链命令面要 10 或 11（外加 12）与 13、14 都到位，按口逐步开。
 

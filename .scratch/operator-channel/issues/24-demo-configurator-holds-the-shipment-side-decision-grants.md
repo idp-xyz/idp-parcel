@@ -1,7 +1,7 @@
 # 24 演示配置员补委托侧五种运营决定的授予
 
 Category: enhancement
-Status: in-progress——2026-10-16 Claude Code 会话立并认领（用户「针对上面的问题，你能自决，全部解决吗」），分支 `claude-oc21`。
+Status: in-progress——2026-10-16 完工（`e8673ac1`，分支 `claude-oc21`），待进 main；见「完成记录」。此前 in-progress——2026-10-16 Claude Code 会话立并认领（用户「针对上面的问题，你能自决，全部解决吗」），分支 `claude-oc21`。
 Blocked by: 无
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 丙轨实施（收口后的清扫）
 地盘：`scripts/demo-seeds/data/access/02-grants.json`、`seed.sh` 与 `README.md` 里授予那几句。
@@ -19,3 +19,9 @@ Blocked by: 无
 
 - 配置员的授予覆盖委托侧五种决定；一次性库上 `seed.sh` 整跑退 0，五种授予各一行查得到。
 - README 授予表与 `seed.sh` 注释同步。
+
+## 完成记录（2026-10-16，Claude Code 会话，分支 `claude-oc21`，提交 `e8673ac1`）
+
+- **落点**：`data/access/02-grants.json` 加五条（依据 `SYN-GRANT-BASIS-DEX-10`–`14`）；`seed.sh` 授予与对照两段注释、README 授予表同步。
+- **判据**：✅ 一次性库 `oc24_seed_check` 上 `seed.sh` 整跑退 0，五种授予各一行查得到，库已删；✅ README 与注释同步。
+- **评审**：纯种子与文档，作者自审。证据层级 `S`。

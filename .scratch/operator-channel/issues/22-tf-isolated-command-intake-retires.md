@@ -1,7 +1,7 @@
 # 22 运输履约隔离命令 Intake 退场：译装用例迁到作业事实 Intake，删类型
 
 Category: enhancement
-Status: in-progress——2026-10-16 Claude Code 会话立并认领（用户「针对上面的问题，你能自决，全部解决吗」），分支 `claude-oc21`。
+Status: in-progress——2026-10-16 完工（`7ec601ab`，分支 `claude-oc21`），待进 main；见「完成记录」。此前 in-progress——2026-10-16 Claude Code 会话立并认领（用户「针对上面的问题，你能自决，全部解决吗」），分支 `claude-oc21`。
 Blocked by: 无
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 丙轨实施（收口后的清扫）
 地盘：`internal/transportfulfillment/adapters/http` 的 `isolated_command_intake*.go`、`record_delivery_attempt_test.go`、`work_fact_intake*.go` 与几处头注。
@@ -20,3 +20,10 @@ Blocked by: 无
 
 - 原隔离用例的每一格在作业事实 Intake 上都有对应用例（自报租户、尾随内容、未知键、词表外的词、时刻缺席与解不出、各口逐字译装）。
 - 全仓无 `tfhttp.IsolatedCommandIntake` 的引用；本包与 `cmd/parcel-api` 测试绿。
+
+## 完成记录（2026-10-16，Claude Code 会话，分支 `claude-oc21`，代码 `7ec601ab`）
+
+- **落点**：`isolated_command_intake_test.go` 改名 `work_fact_intake_test.go`、改挂 `WorkFactCommandIntake`（替身认证方），原用例逐格保留、期望值不变；`record_delivery_attempt_test.go` 改用合规的作业事实出示；删 `isolated_command_intake.go`；交付、交接两口的 Intake 契约头注与运营决定 Intake 头注改指真渠道实现。
+- **补的格**：`TestWorkFactCommandIntakeTakesDeviceAndScopeFromHeadersAndAuthenticatesFirst`（三个头缺一即 400、`NODE` 作用域即 400、认证方被问头里那一份、设备不在用时答认证方的格而不是载荷校验）；`TestNewWorkFactCommandIntakeRejectsABlankMovementSourceOrNoAuthenticator`；类型锁 `TestWorkFactCommandIntakeServesOnlyWorkFactLines`（首登与更正十口在、运营决定 / 登记写面 / 查阅行装不进）。
+- **判据**：✅ 原隔离用例每一格在作业事实 Intake 上都有对应用例；✅ 全仓无 `tfhttp.IsolatedCommandIntake` 引用；✅ TF `adapters/http` 与 `cmd/parcel-api` 测试绿。迁来的用例是对已有路径的取证、一写即绿；端点层派送尝试用例改挂之后先红（不带出示答 400）再改用合规出示转绿——红是真的，用例跟着渠道改。
+- **评审**：作者自审，不算非作者评审。证据层级 `S`。

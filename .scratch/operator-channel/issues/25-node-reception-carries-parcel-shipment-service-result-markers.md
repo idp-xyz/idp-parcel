@@ -3,7 +3,7 @@
 Category: bug
 Status: needs-triage——2026-10-16 Claude Code 会话立（票 23 实施中量到）。要先裁三问（见下）再转 ready-for-agent。
 Blocked by: 无
-父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 之后的遗留；不挡任何票
+父票：无——不属 [psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 的完成判据（那一票只管渠道换真 Intake），是票 10 换口时带过来的业务缺口；不挡任何票
 出处：`internal/nodeoperations/application` 的 `ReceiveDeliveredUnitCommand.ServiceMarkers` 头注；UC-NO-002 的「服务结果引用」一行与 `AT-NO-020`–`022`；[08](./08-isolated-release-of-main-chain-command-faces.md) 的「收寄的服务结果标记留空」；[23](./23-node-operations-isolated-command-intake-retires.md)「实施中量到的」。
 
 ## 现象
