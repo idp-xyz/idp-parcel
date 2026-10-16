@@ -1,8 +1,8 @@
 # 15 委托与履约的运营决定口：操作者渠道增「运营决定」能力面，委托侧五口与 TF 管理台上的决定与判断口换操作者 Intake
 
 Category: enhancement
-Status: in-progress——2026-10-13 通道 4（通道 1 派单 `task-40698906`，接替裁定未送达的 `task-21973bb2`）：余下四口照裁定 A **本轮没换**，仍挂隔离放行；两条发现记在文末进展记录，四口改挡在 [19](./19-admission-scope-bridge-for-operator-and-integration-client-minters.md)（准入范围桥）；[20](./20-tf-closure-dispatch-task-and-pickup-judgment-canonicalization.md)（TF 三口规范化形状）已 resolved（只核对、不补形状）。分支 `mcp4-oc15f` 上只有票面几笔。受控关闭与重开仍等 PS owner。此前 in-progress——2026-10-12 通道 4 认领余下四口（通道 1 派单 `task-21973bb2`）：关段、建派送任务、有效时间判断、承运商首次有效收寄判断换「运营决定」操作者 Intake，同笔撤隔离放行（ADR-0150 决定三）；隔离 worktree `/home/tops/workspace/idp-parcel-mcp4-oc15f`、分支 `mcp4-oc15f`（基 `1e02d2ea`）。受控关闭与重开不在这一批，仍等 PS owner。此前 in-progress——2026-09-25 通道 4 认领（用户令独立完成 ADR-0151 那件；前置 03、14 均已 resolved），分块逐笔进 main：之一至之四已进 main（见文末进展记录）；余下关段、建派送任务与两个判断口的换口要等演示环境走通操作者渠道（换口同笔撤隔离放行），受控关闭与重开等请求方格与 PS owner 对齐。此前 ready-for-agent——2026-09-24 随 ADR-0151 立（用户同日「同意你的决定，开干」）；2026-09-25 通道 2 按用户「开干前，全面审查，确保确实如此」复核后改定范围、阻塞与完成判据，复核记录见文末 Comments
-Blocked by: 隔离放行名单上四口（关段、建派送任务、有效时间判断、承运商首次有效收寄判断）的换口——[19](./19-admission-scope-bridge-for-operator-and-integration-client-minters.md)（准入范围桥：撤放行之后演示租户要靠它越过「不在准入范围」，四口都挡）。[20](./20-tf-closure-dispatch-task-and-pickup-judgment-canonicalization.md)（三口规范化形状）已 resolved（2026-10-16 只核对、不补形状），不再挡。2026-10-13 通道 4 照裁定 A 改指，原挡的 [17](./17-demo-issuer-dex-and-synthetic-operators.md)、[07](./07-admin-web-login-gate.md) 均已 resolved；受控关闭与重开两口——请求方格与 PS owner 对齐（本票做什么第 3 条）。03、14 已 resolved
+Status: in-progress——2026-10-13 通道 4（通道 1 派单 `task-40698906`，接替裁定未送达的 `task-21973bb2`）：余下四口照裁定 A **本轮没换**，仍挂隔离放行；两条发现记在文末进展记录，四口改挡在 [19](./19-admission-scope-bridge-for-operator-and-integration-client-minters.md)（准入范围桥）；[20](./20-tf-closure-dispatch-task-and-pickup-judgment-canonicalization.md)（TF 三口规范化形状）2026-10-16 裁毕转 ready-for-agent，只剩承运商首次有效收寄判断一口挡在它的实施上。分支 `mcp4-oc15f` 上只有票面几笔。受控关闭与重开仍等 PS owner。此前 in-progress——2026-10-12 通道 4 认领余下四口（通道 1 派单 `task-21973bb2`）：关段、建派送任务、有效时间判断、承运商首次有效收寄判断换「运营决定」操作者 Intake，同笔撤隔离放行（ADR-0150 决定三）；隔离 worktree `/home/tops/workspace/idp-parcel-mcp4-oc15f`、分支 `mcp4-oc15f`（基 `1e02d2ea`）。受控关闭与重开不在这一批，仍等 PS owner。此前 in-progress——2026-09-25 通道 4 认领（用户令独立完成 ADR-0151 那件；前置 03、14 均已 resolved），分块逐笔进 main：之一至之四已进 main（见文末进展记录）；余下关段、建派送任务与两个判断口的换口要等演示环境走通操作者渠道（换口同笔撤隔离放行），受控关闭与重开等请求方格与 PS owner 对齐。此前 ready-for-agent——2026-09-24 随 ADR-0151 立（用户同日「同意你的决定，开干」）；2026-09-25 通道 2 按用户「开干前，全面审查，确保确实如此」复核后改定范围、阻塞与完成判据，复核记录见文末 Comments
+Blocked by: 隔离放行名单上四口（关段、建派送任务、有效时间判断、承运商首次有效收寄判断）的换口——[19](./19-admission-scope-bridge-for-operator-and-integration-client-minters.md)（准入范围桥：撤放行之后演示租户要靠它越过「不在准入范围」，四口都挡）。承运商首次有效收寄判断另挡在 [20](./20-tf-closure-dispatch-task-and-pickup-judgment-canonicalization.md) 的实施上（2026-10-16 裁补 TFC-1 形状 + `CONTENT_CONFLICT`）；关段与建派送任务在 20 裁为现有格够用，规范化已核完，不挡。2026-10-13 通道 4 照裁定 A 改指，原挡的 [17](./17-demo-issuer-dex-and-synthetic-operators.md)、[07](./07-admin-web-login-gate.md) 均已 resolved；受控关闭与重开两口——请求方格与 PS owner 对齐（本票做什么第 3 条）。03、14 已 resolved
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`internal/accessidentity`（能力面授予格「运营决定」）；`cmd/parcel-api` 端点表里下列各口的 Intake 装配与装配测试；`internal/parcelshipment/adapters/http` 与 `internal/transportfulfillment/adapters/http` 各口的操作者 Intake。
 出处：[ADR-0151](../../../docs/adr/0151-unassigned-command-faces-get-their-families.md) 决定一、二、三、六；[ADR-0100](../../../docs/adr/0100-operator-identity-is-a-product-owned-access-channel-family.md) 决定二、四；[ADR-0149](../../../docs/adr/0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md) 决定四。
@@ -102,7 +102,11 @@ Blocked by: 隔离放行名单上四口（关段、建派送任务、有效时�
 - 建派送任务 ❌：`OpenDispatchTaskHandler.Open` 同任务再投答 `DISPATCH_TASK_ALREADY_OPEN` 并回显原任务，工作范围与 `OpenedAt` 不比。
 - 承运商首次有效收寄判断 ❌：`JudgeCarrierFirstEffectivePickupHandler.Judge` 同一依据在非待确认链尾上答 `ALREADY_RECORDED`，读法、承运主体、业务时间不比。
 - 后三口都在 13「未定形状」清单的 TF 一行里（`CloseFulfillmentSegment`、`OpenDispatchTask`、`JudgeCarrierFirstEffectivePickup`）→ 20，归 TF owner。
-- **回写（2026-10-16）**：[20](./20-tf-closure-dispatch-task-and-pickup-judgment-canonicalization.md) resolved——三口都裁「现有格够用（只核对）」，与有效时间判断同列、不补形状、不新增冲突格、`adapters/http` 答复集不变。四口换口的形状前置随之解除，余下前置只有 19（准入范围桥）。
+- **回写（2026-10-16）**：[20](./20-tf-closure-dispatch-task-and-pickup-judgment-canonicalization.md) 逐口裁毕（TF owner = 用户），转 ready-for-agent：
+  - 关段 ✅ **只核对**：`SEGMENT_ALREADY_CLOSED` 够用，不补形状；20 另补答复回显在册关闭时刻，那是答复形状的事，不挡换口。
+  - 建派送任务 ✅ **只核对**：`DISPATCH_TASK_ALREADY_OPEN` 回显原任务够用。
+  - 承运商首次有效收寄判断 ❌→20：补 TFC-1 形状，同依据异内容答 `CONTENT_CONFLICT`；20 实施完之前这一口不换。
+  - 四口换口的形状前置只剩承运商判断一口。
 
 **更正**上一节「余下两格与判断项」第 1 条与「之四」所说的挡点：07、17 都已 resolved，演示环境有了发行方与合成操作者；四口换口还缺的是合成租户的准入对照、区间与它们背后的桥（19），以及三口的规范化形状（20）。给配置员补这四种决定的授予，仍随换口那一笔做。
 
