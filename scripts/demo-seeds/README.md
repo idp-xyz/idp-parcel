@@ -64,7 +64,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 
 | 登录邮箱 | 授予（自 2026-01-01 生效，不设终点） |
 |---|---|
-| `syn-operator-config-01@syn-tenant-01.example.invalid` | 登记册配置写、主数据与运营查阅读、运营决定（装载分配、终止参与、关段、建派送任务、有效时间判断、承运商首次有效收寄判断） |
+| `syn-operator-config-01@syn-tenant-01.example.invalid` | 登记册配置写、主数据与运营查阅读、运营决定（装载分配、终止参与、关段、建派送任务、有效时间判断、承运商首次有效收寄判断；复核完成、主动拒绝、授权处置、受控关闭、受控重开——委托侧五口越过 Intake 后停在各自的授权缺口上） |
 | `syn-operator-viewer-01@syn-tenant-01.example.invalid` | 主数据与运营查阅读 |
 
 单要一枚令牌：`scripts/demo-seeds/operator-channel/operator-token.sh <邮箱>` 打印访问令牌，末尾加 `claims` 打印两枚

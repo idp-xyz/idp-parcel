@@ -72,6 +72,51 @@
       "basis": "SYN-GRANT-BASIS-DEX-09"
     },
     {
+      "grantId": "SYN-GRANT-DEX-CONFIG-MANUAL-REVIEW-COMPLETION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "MANUAL_REVIEW_COMPLETION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-10"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-ACTIVE-REJECTION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "ACTIVE_REJECTION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-11"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-AUTHORIZED-DISPOSITION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "AUTHORIZED_DISPOSITION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-12"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-CONTROLLED-CLOSURE-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "CONTROLLED_CLOSURE",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-13"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-CONTROLLED-REOPENING-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "CONTROLLED_REOPENING",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-14"
+    },
+    {
       "grantId": "SYN-GRANT-DEX-VIEWER-READ-01",
       "issuer": "http://127.0.0.1:5556/dex",
       "subject": "ChZTWU4tT1BFUkFUT1ItVklFV0VSLTAxEgVsb2NhbA",
