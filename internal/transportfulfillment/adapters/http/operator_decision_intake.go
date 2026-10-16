@@ -51,9 +51,8 @@ type OperatorAuthenticator interface {
 
 // OperatorDecisionIntake 是操作者渠道「运营决定」能力面在本包各口的 Intake（ADR-0151 决定一）。
 //
-// 它与 IsolatedCommandIntake 走同一套线格式：各口文件里的 `…Payload` 与它的 Command，载荷只有内容、没有身份；两者只差
-// 租户从哪来——隔离形态是装配点注入的合成值，这里是认证结果。先认证、后解载荷：令牌不过的调用方看不到载荷校验的
-// 结果。每口按自己的决定种类认证，持有关段授予的人建不了派送任务。
+// 线格式是各口文件里的 `…Payload` 与它的 Command，载荷只有内容、没有身份；租户只取认证结果。先认证、后解载荷：
+// 令牌不过的调用方看不到载荷校验的结果。每口按自己的决定种类认证，持有关段授予的人建不了派送任务。
 type OperatorDecisionIntake struct {
 	authenticator OperatorAuthenticator
 }

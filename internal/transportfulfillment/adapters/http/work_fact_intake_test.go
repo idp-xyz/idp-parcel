@@ -10,149 +10,178 @@ import (
 	"time"
 
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
-// 本文件对隔离写路径准入在运输履约主链命令面的注入式放行（ADR-0091；票 operator-channel/08）证传输面：租户格只来自
-// 注入、事实内容与发生时间照 ADR-0023 从载荷如实收、自报租户即拒、形状错即拒、未放行的口在类型上装不进去。
-// 期望值取自载荷字面量而不是重算：这里证的是「译装没换字」。成形与否（对象引用立不立得住、控制证据缺不缺）不在这里证
-// ——那是编排答`未受理`的格，本 Intake 不预判。
+// 本文件证作业事实各口的操作者渠道 Intake（ADR-0149 决定二；票 operator-channel/10）的传输面：租户只来自认证结果、
+// 设备与作业范围只从三个头来且种类只认 OFFSITE、先认证后解载荷、事实内容与发生时间照 ADR-0023 从载荷如实收、自报租户
+// 即拒、形状错即拒、运营决定与登记写面的口在类型上装不进去。这组译装用例原挂在隔离命令 Intake 上，随它退场迁来（票 22；
+// ADR-0150 决定三），期望值不变。期望值取自载荷字面量而不是重算：这里证的是「译装没换字」。成形与否（对象引用立不立得住、
+// 控制证据缺不缺）不在这里证——那是编排答`未受理`的格，本 Intake 不预判。
 
 const (
-	isolatedCommandTenant         = "SYN-TENANT-01"
-	isolatedCommandMovementSource = "SYN-SOURCE/self-operated-executor"
+	workFactTenant         = "SYN-TENANT-01"
+	workFactMovementSource = "SELF_OPERATED"
 )
 
-func isolatedCommandIntakeForTest(t *testing.T) *tfhttp.IsolatedCommandIntake {
+// workFactAuthenticatorFake 替身认证方：记下被问的设备与作业范围；带了令牌答合成租户，没带答令牌不过，err 非空时答它。
+type workFactAuthenticatorFake struct {
+	err   error
+	asked *[]string
+}
+
+func (fake workFactAuthenticatorFake) AuthenticateWorkFact(_ context.Context, token, device, kind, reference string) (domain.TenantID, error) {
+	if fake.asked != nil {
+		*fake.asked = append(*fake.asked, device+"|"+kind+"|"+reference)
+	}
+	if token == "" {
+		return domain.TenantID{}, tfhttp.ErrOperatorCredentialRejected
+	}
+	if fake.err != nil {
+		return domain.TenantID{}, fake.err
+	}
+	return domain.NewTenantID(workFactTenant)
+}
+
+func workFactIntakeForTest(t *testing.T) *tfhttp.WorkFactCommandIntake {
 	t.Helper()
-	intake, err := tfhttp.NewIsolatedCommandIntake(tfhttp.IsolatedCommandIntakeDeps{
-		Tenant:         isolatedCommandTenant,
-		MovementSource: isolatedCommandMovementSource,
-	})
+	return workFactIntakeWith(t, workFactAuthenticatorFake{})
+}
+
+func workFactIntakeWith(t *testing.T, authenticator tfhttp.WorkFactAuthenticator) *tfhttp.WorkFactCommandIntake {
+	t.Helper()
+	intake, err := tfhttp.NewWorkFactCommandIntake(authenticator, workFactMovementSource)
 	if err != nil {
-		t.Fatalf("构造隔离命令 Intake：%v", err)
+		t.Fatalf("构造作业事实 Intake：%v", err)
 	}
 	return intake
 }
 
+// commandRequest 带一份合规的作业事实出示（令牌、在用设备、OFFSITE 作业范围），另在头与查询串里夹带自报租户——它们一律
+// 无视，租户只来自认证结果。
 func commandRequest(body string) *http.Request {
 	request := httptest.NewRequest(http.MethodPost, "/probe", strings.NewReader(body))
+	request.Header.Set("Authorization", "Bearer presented.operator.token")
+	request.Header.Set("Parcel-Device-Id", "SYN-DEVICE-OFFSITE")
+	request.Header.Set("Parcel-Work-Scope-Kind", "OFFSITE")
+	request.Header.Set("Parcel-Work-Scope-Reference", "SYN-OFFSITE-01")
 	request.Header.Set("X-Reported-Tenant", "TENANT-9")
 	request.URL.RawQuery = "tenant=TENANT-9"
 	return request
 }
 
-// isolatedLine 是一口已放行的线：怎么调它的 Intake、一份合规载荷。自报租户、尾随内容与类型锁三条对每一口都成立，
-// 表驱动逐口跑——每放一口在这里加一行。
-type isolatedLine struct {
-	intake func(*tfhttp.IsolatedCommandIntake, *http.Request) error
+// workFactLine 是作业事实的一口：怎么调它的 Intake、一份合规载荷。自报租户、尾随内容与类型锁三条对每一口都成立，
+// 表驱动逐口跑。
+type workFactLine struct {
+	intake func(*tfhttp.WorkFactCommandIntake, *http.Request) error
 	valid  string
 }
 
-var isolatedLines = map[string]isolatedLine{
+var workFactLines = map[string]workFactLine{
 	"/transport-fulfillment/offsite-pickups": {
-		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
+		intake: func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) error {
 			_, err := intake.IntakePickupRegistration(context.Background(), request)
 			return err
 		},
 		valid: offsitePickupRegistrationBody,
 	},
 	"/transport-fulfillment/offsite-pickup-attempts": {
-		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
+		intake: func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) error {
 			_, err := intake.IntakePickupAttempt(context.Background(), request)
 			return err
 		},
 		valid: offsitePickupAttemptBody,
 	},
 	"/transport-fulfillment/handovers": {
-		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
+		intake: func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) error {
 			_, err := intake.IntakeHandoverRegistration(context.Background(), request)
 			return err
 		},
 		valid: handoverRegistrationBody,
 	},
 	"/transport-fulfillment/movement-facts": {
-		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
+		intake: func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) error {
 			_, err := intake.IntakeMovementFact(context.Background(), request)
 			return err
 		},
-		valid: isolatedMovementFactBody,
+		valid: workFactMovementFactBody,
 	},
 	"/transport-fulfillment-delivery-dispatch-triggers": {
-		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
+		intake: func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) error {
 			_, err := intake.IntakeDeliveryDispatchTrigger(context.Background(), request)
 			return err
 		},
-		valid: isolatedDeliveryDispatchTriggerBody,
+		valid: workFactDeliveryDispatchTriggerBody,
 	},
 	"/transport-fulfillment/deliveries": {
-		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
+		intake: func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) error {
 			_, err := intake.IntakeRegistration(context.Background(), request)
 			return err
 		},
-		valid: isolatedEffectiveDeliveryBody,
+		valid: workFactEffectiveDeliveryBody,
 	},
 	"/transport-fulfillment/delivery-attempts": {
-		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
+		intake: func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) error {
 			_, err := intake.IntakeDeliveryAttempt(context.Background(), request)
 			return err
 		},
-		valid: isolatedDeliveryAttemptBody,
+		valid: workFactDeliveryAttemptBody,
 	},
 }
 
-const isolatedEffectiveDeliveryBody = `{"attempt":"SYN-ATTEMPT-08-10","object":"SYN-PARCEL-08-10","method":"HANDED_TO_RECIPIENT",` +
+const workFactEffectiveDeliveryBody = `{"attempt":"SYN-ATTEMPT-08-10","object":"SYN-PARCEL-08-10","method":"HANDED_TO_RECIPIENT",` +
 	`"recipient":"SYN-RECIPIENT/consignee-10","proof":"SYN-POD/signature-10"}`
 
 // Covers: DeliveryIntake 契约「事实内容必须从请求体收（ADR-0023）：对象、尝试、POD 证据引用都是派送端记录的事实」——
-// 各格逐字来自载荷，租户来自注入。
-func TestIsolatedCommandIntakeTranslatesEffectiveDeliveryWithInjectedTenant(t *testing.T) {
-	command, err := isolatedCommandIntakeForTest(t).IntakeRegistration(context.Background(), commandRequest(isolatedEffectiveDeliveryBody))
+// 各格逐字来自载荷，租户来自认证结果。
+func TestWorkFactCommandIntakeTranslatesEffectiveDeliveryWithTheAuthenticatedTenant(t *testing.T) {
+	command, err := workFactIntakeForTest(t).IntakeRegistration(context.Background(), commandRequest(workFactEffectiveDeliveryBody))
 	if err != nil {
 		t.Fatalf("intake：%v", err)
 	}
-	if command.TenantID.String() != isolatedCommandTenant || command.Attempt != "SYN-ATTEMPT-08-10" || command.Object != "SYN-PARCEL-08-10" ||
+	if command.TenantID.String() != workFactTenant || command.Attempt != "SYN-ATTEMPT-08-10" || command.Object != "SYN-PARCEL-08-10" ||
 		command.Method != "HANDED_TO_RECIPIENT" || command.Recipient != "SYN-RECIPIENT/consignee-10" || command.Proof != "SYN-POD/signature-10" {
-		t.Fatalf("command = %+v，与注入与载荷不符", command)
+		t.Fatalf("command = %+v，与认证结果与载荷不符", command)
 	}
 }
 
-const isolatedDeliveryDispatchTriggerBody = `{"segment":"SYN-SEGMENT-08-09","object":"SYN-PARCEL-08-09","occurredAt":"2026-09-25T07:00:00+08:00"}`
+const workFactDeliveryDispatchTriggerBody = `{"segment":"SYN-SEGMENT-08-09","object":"SYN-PARCEL-08-09","occurredAt":"2026-09-25T07:00:00+08:00"}`
 
 // Covers: DeliveryDispatchTriggerIntake 契约「租户从信封给，段、对象与这一拍的业务时间从请求收」——请求里没有任何地点、
 // 时间窗或条件（ADR-0114 决定三），载荷形状只有段、对象与业务时间。
-func TestIsolatedCommandIntakeTranslatesDeliveryDispatchTriggerWithInjectedTenant(t *testing.T) {
-	command, err := isolatedCommandIntakeForTest(t).IntakeDeliveryDispatchTrigger(context.Background(), commandRequest(isolatedDeliveryDispatchTriggerBody))
+func TestWorkFactCommandIntakeTranslatesDeliveryDispatchTriggerWithTheAuthenticatedTenant(t *testing.T) {
+	command, err := workFactIntakeForTest(t).IntakeDeliveryDispatchTrigger(context.Background(), commandRequest(workFactDeliveryDispatchTriggerBody))
 	if err != nil {
 		t.Fatalf("intake：%v", err)
 	}
-	if command.TenantID.String() != isolatedCommandTenant || command.Segment != "SYN-SEGMENT-08-09" || command.Object != "SYN-PARCEL-08-09" {
-		t.Fatalf("command = %+v，与注入与载荷不符", command)
+	if command.TenantID.String() != workFactTenant || command.Segment != "SYN-SEGMENT-08-09" || command.Object != "SYN-PARCEL-08-09" {
+		t.Fatalf("command = %+v，与认证结果与载荷不符", command)
 	}
 	if want := time.Date(2026, 9, 24, 23, 0, 0, 0, time.UTC); !command.OccurredAt.Equal(want) {
 		t.Fatalf("OccurredAt = %s, want %s", command.OccurredAt, want)
 	}
-	_, err = isolatedCommandIntakeForTest(t).IntakeDeliveryDispatchTrigger(context.Background(),
+	_, err = workFactIntakeForTest(t).IntakeDeliveryDispatchTrigger(context.Background(),
 		commandRequest(`{"segment":"s","object":"o","place":"SYN-PLACE/x"}`))
 	if !errors.Is(err, tfhttp.ErrMalformedRequest) {
 		t.Fatalf("带地点的触发：err = %v, want ErrMalformedRequest——地点由执行器向所有者取，调用方给不了也不该给", err)
 	}
 }
 
-const isolatedMovementFactBody = `{"fact":"SYN-MOVE-08-06","schedule":"SYN-SCHEDULE/linehaul-06","kind":"DEPARTURE","location":"SYN-NODE-SHA-HUB",` +
+const workFactMovementFactBody = `{"fact":"SYN-MOVE-08-06","schedule":"SYN-SCHEDULE/linehaul-06","kind":"DEPARTURE","location":"SYN-NODE-SHA-HUB",` +
 	`"version":"v1","occurredAt":"2026-09-24T14:00:00+08:00","gateRequired":true,"gateClearance":"SYN-GATE/release-06"}`
 
-// Covers: MovementFactIntake 契约「这个口只收自营执行方的事实；『自营还是外部』由 Intake 的认证结果说」——隔离形态的认证
-// 结果是装配点给定的合成来源，事实本体与门禁两格（gateRequired / gateClearance 必须收）逐字来自载荷。
-func TestIsolatedCommandIntakeTranslatesMovementFactWithInjectedTenantAndSource(t *testing.T) {
-	command, err := isolatedCommandIntakeForTest(t).IntakeMovementFact(context.Background(), commandRequest(isolatedMovementFactBody))
+// Covers: MovementFactIntake 契约「这个口只收自营执行方的事实；『自营还是外部』由 Intake 的认证结果说」——作业事实的认证
+// 结果是这一面构造时给定的来源（自营），事实本体与门禁两格（gateRequired / gateClearance 必须收）逐字来自载荷。
+func TestWorkFactCommandIntakeTranslatesMovementFactWithTheAuthenticatedTenantAndSource(t *testing.T) {
+	command, err := workFactIntakeForTest(t).IntakeMovementFact(context.Background(), commandRequest(workFactMovementFactBody))
 	if err != nil {
 		t.Fatalf("intake：%v", err)
 	}
-	if got := command.TenantID.String(); got != isolatedCommandTenant {
-		t.Fatalf("TenantID = %q, want %q", got, isolatedCommandTenant)
+	if got := command.TenantID.String(); got != workFactTenant {
+		t.Fatalf("TenantID = %q, want %q", got, workFactTenant)
 	}
-	if command.Source != isolatedCommandMovementSource {
-		t.Fatalf("Source = %q, want %q（注入值——外部轨迹不从这个口进，来源不由请求自报）", command.Source, isolatedCommandMovementSource)
+	if command.Source != workFactMovementSource {
+		t.Fatalf("Source = %q, want %q（作业事实这一面说自营——外部轨迹不从这个口进，来源不由请求自报）", command.Source, workFactMovementSource)
 	}
 	if command.Fact != "SYN-MOVE-08-06" || command.Schedule != "SYN-SCHEDULE/linehaul-06" || command.Kind.String() != "DEPARTURE" ||
 		command.Location != "SYN-NODE-SHA-HUB" || command.Version != "v1" || !command.GateRequired ||
@@ -164,11 +193,11 @@ func TestIsolatedCommandIntakeTranslatesMovementFactWithInjectedTenantAndSource(
 	}
 }
 
-// Covers: 载荷里带 source 即拒——来源只来自注入，放它进来就是让外部轨迹冒充自营事实从这个口进。事实种类取封闭词，
+// Covers: 载荷里带 source 即拒——来源只来自作业事实这一面，放它进来就是让外部轨迹冒充自营事实从这个口进。事实种类取封闭词，
 // 词表外是用法错误（400）。
-func TestIsolatedCommandIntakeRefusesSelfReportedMovementSourceAndUnknownKinds(t *testing.T) {
-	intake := isolatedCommandIntakeForTest(t)
-	_, err := intake.IntakeMovementFact(context.Background(), commandRequest(`{"source":"SYN-SOURCE/carrier-feed",`+strings.TrimPrefix(isolatedMovementFactBody, "{")))
+func TestWorkFactCommandIntakeRefusesSelfReportedMovementSourceAndUnknownKinds(t *testing.T) {
+	intake := workFactIntakeForTest(t)
+	_, err := intake.IntakeMovementFact(context.Background(), commandRequest(`{"source":"SYN-SOURCE/carrier-feed",`+strings.TrimPrefix(workFactMovementFactBody, "{")))
 	if !errors.Is(err, tfhttp.ErrMalformedRequest) || !strings.Contains(err.Error(), "source") {
 		t.Fatalf("自报来源：err = %v, want 点名 source 的 ErrMalformedRequest", err)
 	}
@@ -178,10 +207,42 @@ func TestIsolatedCommandIntakeRefusesSelfReportedMovementSourceAndUnknownKinds(t
 	}
 }
 
-// Covers: 立不起来的合成来源在构造时拒（同租户那一格）。
-func TestNewIsolatedCommandIntakeRejectsBlankMovementSource(t *testing.T) {
-	if _, err := tfhttp.NewIsolatedCommandIntake(tfhttp.IsolatedCommandIntakeDeps{Tenant: isolatedCommandTenant, MovementSource: " "}); err == nil {
+// Covers: 立不起来的来源格与缺席的认证方在构造时拒，不等第一个请求。
+func TestNewWorkFactCommandIntakeRejectsABlankMovementSourceOrNoAuthenticator(t *testing.T) {
+	if _, err := tfhttp.NewWorkFactCommandIntake(workFactAuthenticatorFake{}, " "); err == nil {
 		t.Fatal("空来源被接受")
+	}
+	if _, err := tfhttp.NewWorkFactCommandIntake(nil, workFactMovementSource); err == nil {
+		t.Fatal("没有认证方也装得起来")
+	}
+}
+
+// Covers: 作业事实的设备与作业范围只从三个头来，缺一即坏报文；这一面只认 OFFSITE——认了 NODE，登在节点上的设备就能拿
+// 节点授予打揽收、交接与交付。先认证、后解载荷：认证方的答复原样交回，令牌不过的调用方看不到载荷校验的结果。
+func TestWorkFactCommandIntakeTakesDeviceAndScopeFromHeadersAndAuthenticatesFirst(t *testing.T) {
+	var asked []string
+	intake := workFactIntakeWith(t, workFactAuthenticatorFake{asked: &asked})
+	if _, err := intake.IntakeRegistration(context.Background(), commandRequest(workFactEffectiveDeliveryBody)); err != nil {
+		t.Fatalf("合规出示被拒：%v", err)
+	}
+	if len(asked) != 1 || asked[0] != "SYN-DEVICE-OFFSITE|OFFSITE|SYN-OFFSITE-01" {
+		t.Fatalf("认证方被问 %v，want 三个头里的设备与作业范围", asked)
+	}
+	for name, mutate := range map[string]func(*http.Request){
+		"缺设备":     func(request *http.Request) { request.Header.Del("Parcel-Device-Id") },
+		"缺作业范围种类": func(request *http.Request) { request.Header.Del("Parcel-Work-Scope-Kind") },
+		"缺作业范围引用": func(request *http.Request) { request.Header.Del("Parcel-Work-Scope-Reference") },
+		"节点作业范围":  func(request *http.Request) { request.Header.Set("Parcel-Work-Scope-Kind", "NODE") },
+	} {
+		request := commandRequest(workFactEffectiveDeliveryBody)
+		mutate(request)
+		if _, err := intake.IntakeRegistration(context.Background(), request); !errors.Is(err, tfhttp.ErrMalformedRequest) {
+			t.Fatalf("%s：err = %v, want ErrMalformedRequest", name, err)
+		}
+	}
+	refused := workFactIntakeWith(t, workFactAuthenticatorFake{err: tfhttp.ErrDeviceNotInUse})
+	if _, err := refused.IntakeRegistration(context.Background(), commandRequest("!!not-json!!")); !errors.Is(err, tfhttp.ErrDeviceNotInUse) {
+		t.Fatalf("设备不在用：err = %v, want 认证方的答复，而不是载荷校验的结果", err)
 	}
 }
 
@@ -193,13 +254,13 @@ const handoverRegistrationBody = `{"object":"SYN-PARCEL-08-05","scope":"SYN-SCOP
 
 // Covers: HandoverIntake 契约「`Segment` 与 `PlannedSegment` 是命令的一部分，Intake 必须收」——交接判断各格逐字来自
 // 载荷，判断时刻照 ADR-0023 不由服务端补。
-func TestIsolatedCommandIntakeTranslatesHandoverRegistrationWithInjectedTenant(t *testing.T) {
-	command, err := isolatedCommandIntakeForTest(t).IntakeHandoverRegistration(context.Background(), commandRequest(handoverRegistrationBody))
+func TestWorkFactCommandIntakeTranslatesHandoverRegistrationWithTheAuthenticatedTenant(t *testing.T) {
+	command, err := workFactIntakeForTest(t).IntakeHandoverRegistration(context.Background(), commandRequest(handoverRegistrationBody))
 	if err != nil {
 		t.Fatalf("intake：%v", err)
 	}
-	if got := command.TenantID.String(); got != isolatedCommandTenant {
-		t.Fatalf("TenantID = %q, want %q", got, isolatedCommandTenant)
+	if got := command.TenantID.String(); got != workFactTenant {
+		t.Fatalf("TenantID = %q, want %q", got, workFactTenant)
 	}
 	for name, pair := range map[string][2]string{
 		"object":               {command.Object, "SYN-PARCEL-08-05"},
@@ -226,8 +287,8 @@ func TestIsolatedCommandIntakeTranslatesHandoverRegistrationWithInjectedTenant(t
 }
 
 // Covers: 交接结论取 domain.HandoverVerdict 的封闭词——词表外是用法错误（400）。
-func TestIsolatedCommandIntakeRefusesAnUnknownHandoverVerdict(t *testing.T) {
-	_, err := isolatedCommandIntakeForTest(t).IntakeHandoverRegistration(context.Background(),
+func TestWorkFactCommandIntakeRefusesAnUnknownHandoverVerdict(t *testing.T) {
+	_, err := workFactIntakeForTest(t).IntakeHandoverRegistration(context.Background(),
 		commandRequest(`{"object":"o","scope":"s","verdict":"MAYBE"}`))
 	if !errors.Is(err, tfhttp.ErrMalformedRequest) {
 		t.Fatalf("err = %v, want ErrMalformedRequest", err)
@@ -244,13 +305,13 @@ const offsitePickupAttemptBody = `{"sourceId":"SYN-DEVICE-08/attempt-01","task":
 
 // Covers: PickupAttemptIntake 契约「段引用两层都要收」——整次到访一个 segment、逐对象各自的 plannedSegment；事实身份
 // sourceId 与各时刻照 ADR-0023 从载荷如实收，逐对象成败与依据逐字进命令，传输层不替它汇总。
-func TestIsolatedCommandIntakeTranslatesOffsitePickupAttemptWithInjectedTenant(t *testing.T) {
-	command, err := isolatedCommandIntakeForTest(t).IntakePickupAttempt(context.Background(), commandRequest(offsitePickupAttemptBody))
+func TestWorkFactCommandIntakeTranslatesOffsitePickupAttemptWithTheAuthenticatedTenant(t *testing.T) {
+	command, err := workFactIntakeForTest(t).IntakePickupAttempt(context.Background(), commandRequest(offsitePickupAttemptBody))
 	if err != nil {
 		t.Fatalf("intake：%v", err)
 	}
-	if got := command.TenantID.String(); got != isolatedCommandTenant {
-		t.Fatalf("TenantID = %q, want %q", got, isolatedCommandTenant)
+	if got := command.TenantID.String(); got != workFactTenant {
+		t.Fatalf("TenantID = %q, want %q", got, workFactTenant)
 	}
 	for name, pair := range map[string][2]string{
 		"sourceId":        {command.SourceID, "SYN-DEVICE-08/attempt-01"},
@@ -292,8 +353,8 @@ func TestIsolatedCommandIntakeTranslatesOffsitePickupAttemptWithInjectedTenant(t
 }
 
 // Covers: 对象成败取封闭词表——词表外的词是用法错误（400），不留到编排去答成`未受理`；空着则交给编排判。
-func TestIsolatedCommandIntakeRefusesAnUnknownAttemptObjectOutcome(t *testing.T) {
-	_, err := isolatedCommandIntakeForTest(t).IntakePickupAttempt(context.Background(), commandRequest(
+func TestWorkFactCommandIntakeRefusesAnUnknownAttemptObjectOutcome(t *testing.T) {
+	_, err := workFactIntakeForTest(t).IntakePickupAttempt(context.Background(), commandRequest(
 		`{"sourceId":"s","attempt":"a","objects":[{"object":"o","outcome":"LOST","occurredAt":"2026-09-24T08:45:00+08:00"}]}`))
 	if !errors.Is(err, tfhttp.ErrMalformedRequest) {
 		t.Fatalf("err = %v, want ErrMalformedRequest", err)
@@ -306,14 +367,14 @@ const offsitePickupRegistrationBody = `{"object":"SYN-PARCEL-08-01","task":"SYN-
 	`"segmentServiceAction":"OFFSITE_PICKUP"}`
 
 // Covers: PickupRegistrationIntake 契约「租户只能来自认证结果、事实内容从请求体收」+ `Segment`/`PlannedSegment` 必须收——
-// 隔离形态的认证结果是开关值；各格逐字来自载荷，请求头与查询串里的自报一律无视。
-func TestIsolatedCommandIntakeTranslatesOffsitePickupRegistrationWithInjectedTenant(t *testing.T) {
-	command, err := isolatedCommandIntakeForTest(t).IntakePickupRegistration(context.Background(), commandRequest(offsitePickupRegistrationBody))
+// 认证结果是作业事实信封；各格逐字来自载荷，请求头与查询串里的自报一律无视。
+func TestWorkFactCommandIntakeTranslatesOffsitePickupRegistrationWithTheAuthenticatedTenant(t *testing.T) {
+	command, err := workFactIntakeForTest(t).IntakePickupRegistration(context.Background(), commandRequest(offsitePickupRegistrationBody))
 	if err != nil {
 		t.Fatalf("intake：%v", err)
 	}
-	if got := command.TenantID.String(); got != isolatedCommandTenant {
-		t.Fatalf("TenantID = %q, want %q（注入值，不是请求里的自报）", got, isolatedCommandTenant)
+	if got := command.TenantID.String(); got != workFactTenant {
+		t.Fatalf("TenantID = %q, want %q（认证结果，不是请求里的自报）", got, workFactTenant)
 	}
 	for name, pair := range map[string][2]string{
 		"object":               {command.Object, "SYN-PARCEL-08-01"},
@@ -336,8 +397,8 @@ func TestIsolatedCommandIntakeTranslatesOffsitePickupRegistrationWithInjectedTen
 }
 
 // Covers: 时刻缺席交给编排答`未受理`（200，形成了的业务答案），解不出才是坏报文（400）——同本包判断载荷的分格。
-func TestIsolatedCommandIntakeLeavesAnAbsentPickupInstantToTheOrchestration(t *testing.T) {
-	command, err := isolatedCommandIntakeForTest(t).IntakePickupRegistration(context.Background(),
+func TestWorkFactCommandIntakeLeavesAnAbsentPickupInstantToTheOrchestration(t *testing.T) {
+	command, err := workFactIntakeForTest(t).IntakePickupRegistration(context.Background(),
 		commandRequest(`{"object":"SYN-PARCEL-08-01","attempt":"SYN-ATTEMPT-08-01"}`))
 	if err != nil {
 		t.Fatalf("缺时刻被当成坏报文：%v", err)
@@ -348,11 +409,11 @@ func TestIsolatedCommandIntakeLeavesAnAbsentPickupInstantToTheOrchestration(t *t
 }
 
 // Covers: 载荷里带 tenantId 即拒（MALFORMED_REQUEST），值与开关相同也拒——每一口都一样。
-func TestIsolatedCommandIntakeRefusesSelfReportedTenantOnEveryAdmittedLine(t *testing.T) {
-	intake := isolatedCommandIntakeForTest(t)
-	for pattern, line := range isolatedLines {
+func TestWorkFactCommandIntakeRefusesSelfReportedTenantOnEveryLine(t *testing.T) {
+	intake := workFactIntakeForTest(t)
+	for pattern, line := range workFactLines {
 		t.Run(pattern, func(t *testing.T) {
-			body := `{"tenantId":"` + isolatedCommandTenant + `",` + strings.TrimPrefix(line.valid, "{")
+			body := `{"tenantId":"` + workFactTenant + `",` + strings.TrimPrefix(line.valid, "{")
 			err := line.intake(intake, commandRequest(body))
 			if !errors.Is(err, tfhttp.ErrMalformedRequest) {
 				t.Fatalf("err = %v, want ErrMalformedRequest", err)
@@ -365,9 +426,9 @@ func TestIsolatedCommandIntakeRefusesSelfReportedTenantOnEveryAdmittedLine(t *te
 }
 
 // Covers: 一份载荷只许一个文档、只许认识的键——尾随的第二个 JSON 值与未知键都拒，放过它们就是无声丢掉一段输入。
-func TestIsolatedCommandIntakeRefusesTrailingContentAndUnknownKeysOnEveryAdmittedLine(t *testing.T) {
-	intake := isolatedCommandIntakeForTest(t)
-	for pattern, line := range isolatedLines {
+func TestWorkFactCommandIntakeRefusesTrailingContentAndUnknownKeysOnEveryLine(t *testing.T) {
+	intake := workFactIntakeForTest(t)
+	for pattern, line := range workFactLines {
 		t.Run(pattern, func(t *testing.T) {
 			for name, body := range map[string]string{
 				"尾随内容":    line.valid + ` {"x":1}`,
@@ -384,60 +445,48 @@ func TestIsolatedCommandIntakeRefusesTrailingContentAndUnknownKeysOnEveryAdmitte
 }
 
 // Covers: 时刻给了却解不出是坏报文（400）。
-func TestIsolatedCommandIntakeRefusesAnUnparsablePickupInstant(t *testing.T) {
-	_, err := isolatedCommandIntakeForTest(t).IntakePickupRegistration(context.Background(),
+func TestWorkFactCommandIntakeRefusesAnUnparsablePickupInstant(t *testing.T) {
+	_, err := workFactIntakeForTest(t).IntakePickupRegistration(context.Background(),
 		commandRequest(`{"object":"SYN-PARCEL-08-01","attempt":"SYN-ATTEMPT-08-01","occurredAt":"昨天"}`))
 	if !errors.Is(err, tfhttp.ErrMalformedRequest) {
 		t.Fatalf("err = %v, want ErrMalformedRequest", err)
 	}
 }
 
-// Covers: 立不起来的注入在构造时拒，不等第一个请求（同隔离读 Intake 的纪律）。
-func TestNewIsolatedCommandIntakeRejectsBlankTenant(t *testing.T) {
-	if _, err := tfhttp.NewIsolatedCommandIntake(tfhttp.IsolatedCommandIntakeDeps{Tenant: "   ", MovementSource: isolatedCommandMovementSource}); err == nil {
-		t.Fatal("空租户被接受")
-	}
-}
-
-// Covers: ADR-0091 Consequences「命令面按端点逐口放行，不是一次全开」——本类型只实现放行了的口；更正口、登记册配置口与
-// 查阅行在类型上就装不进去。每放一口，该口的断言从「装不进」挪到「该已放行」；每随真渠道撤一口，挪回「装不进」（ADR-0150 决定三）。
-func TestIsolatedCommandIntakeServesOnlyAdmittedLines(t *testing.T) {
-	var intake any = isolatedCommandIntakeForTest(t)
-	if _, ok := intake.(tfhttp.PickupRegistrationIntake); !ok {
-		t.Fatal("场外揽收登记口该已放行")
-	}
-	if _, ok := intake.(tfhttp.PickupAttemptIntake); !ok {
-		t.Fatal("场外揽收尝试口该已放行")
-	}
-	if _, ok := intake.(tfhttp.HandoverRegistrationIntake); !ok {
-		t.Fatal("交接首登口该已放行")
-	}
-	if _, ok := intake.(tfhttp.MovementFactIntake); !ok {
-		t.Fatal("移动事实口该已放行")
-	}
-	if _, ok := intake.(tfhttp.DeliveryDispatchTriggerIntake); !ok {
-		t.Fatal("派送发起口该已放行")
-	}
-	if _, ok := intake.(tfhttp.DeliveryRegistrationIntake); !ok {
-		t.Fatal("交付生效首登口该已放行")
+// Covers: ADR-0149 决定二——作业事实这一面实现首登与更正各口；运营决定（ADR-0151）、登记写面（ADR-0100 决定四）与查阅行
+// 各有自己的能力面，在类型上就装不进本类型。
+func TestWorkFactCommandIntakeServesOnlyWorkFactLines(t *testing.T) {
+	var intake any = workFactIntakeForTest(t)
+	for name, served := range map[string]bool{
+		"场外揽收登记口": isA[tfhttp.PickupRegistrationIntake](intake),
+		"场外揽收尝试口": isA[tfhttp.PickupAttemptIntake](intake),
+		"揽收更正口":   isA[tfhttp.PickupCorrectionIntake](intake),
+		"交接首登口":   isA[tfhttp.HandoverRegistrationIntake](intake),
+		"交接更正口":   isA[tfhttp.HandoverCorrectionIntake](intake),
+		"移动事实口":   isA[tfhttp.MovementFactIntake](intake),
+		"派送发起口":   isA[tfhttp.DeliveryDispatchTriggerIntake](intake),
+		"交付生效首登口": isA[tfhttp.DeliveryRegistrationIntake](intake),
+		"交付更正口":   isA[tfhttp.DeliveryProofCorrectionIntake](intake),
+		"派送尝试登记口": isA[tfhttp.DeliveryAttemptIntake](intake),
+	} {
+		if !served {
+			t.Fatalf("%s 是作业事实，这一面该实现它", name)
+		}
 	}
 	for name, refused := range map[string]bool{
-		"关段口（已换操作者渠道）":      isA[tfhttp.SegmentClosureIntake](intake),
-		"建派送任务口（已换操作者渠道）":   isA[tfhttp.DispatchTaskIntake](intake),
-		"有效时间判断口（已换操作者渠道）":  isA[tfhttp.EffectiveTimeJudgmentIntake](intake),
-		"承运商收寄判断口（已换操作者渠道）": isA[tfhttp.CarrierPickupJudgmentIntake](intake),
-		"揽收更正口（同族未列）":       isA[tfhttp.PickupCorrectionIntake](intake),
-		"交接更正口（同族未列）":       isA[tfhttp.HandoverCorrectionIntake](intake),
-		"交付更正口（同族未列）":       isA[tfhttp.DeliveryProofCorrectionIntake](intake),
-		"装载分配口（票面未列）":       isA[tfhttp.LoadAssignmentIntake](intake),
-		"终止参与口（票面未列）":       isA[tfhttp.ParticipationTerminationIntake](intake),
-		"承运凭证登记口（04 那族）":    isA[tfhttp.CredentialIntake](intake),
-		"有效时间规则登记口（04 那族）":  isA[tfhttp.EffectiveTimeRuleIntake](intake),
-		"总单登记口（04 那族）":      isA[tfhttp.MasterDocumentIntake](intake),
-		"查阅行（归隔离读 Intake）":  isA[tfhttp.CatalogueQueryIntake](intake),
+		"关段口（运营决定）":       isA[tfhttp.SegmentClosureIntake](intake),
+		"建派送任务口（运营决定）":    isA[tfhttp.DispatchTaskIntake](intake),
+		"有效时间判断口（运营决定）":   isA[tfhttp.EffectiveTimeJudgmentIntake](intake),
+		"承运商收寄判断口（运营决定）":  isA[tfhttp.CarrierPickupJudgmentIntake](intake),
+		"装载分配口（运营决定）":     isA[tfhttp.LoadAssignmentIntake](intake),
+		"终止参与口（运营决定）":     isA[tfhttp.ParticipationTerminationIntake](intake),
+		"承运凭证登记口（登记写面）":   isA[tfhttp.CredentialIntake](intake),
+		"有效时间规则登记口（登记写面）": isA[tfhttp.EffectiveTimeRuleIntake](intake),
+		"总单登记口（登记写面）":     isA[tfhttp.MasterDocumentIntake](intake),
+		"查阅行（查阅读）":        isA[tfhttp.CatalogueQueryIntake](intake),
 	} {
 		if refused {
-			t.Fatalf("%s 不在放行名单，隔离命令 Intake 不该装得进", name)
+			t.Fatalf("%s 不归作业事实，这一面不该装得进", name)
 		}
 	}
 }

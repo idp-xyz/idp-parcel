@@ -16,26 +16,26 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// 本文件证派送尝试登记口的传输面（票 product-strategy-boundary/19）：线格式逐格译进命令、租户只来自注入，
+// 本文件证派送尝试登记口的传输面（票 product-strategy-boundary/19）：线格式逐格译进命令、租户只来自认证结果，
 // 以及端点把编排的答案按对象透出——201 只给新落的一次尝试，重放是形成了的答案（200）。
 
-const isolatedDeliveryAttemptBody = `{"task":"SYN-DISPATCH-08-07","attempt":"SYN-DELIVERY-ATTEMPT-08-07",` +
+const workFactDeliveryAttemptBody = `{"task":"SYN-DISPATCH-08-07","attempt":"SYN-DELIVERY-ATTEMPT-08-07",` +
 	`"executedBy":"SYN-COURIER/07","place":"SYN-PLACE/consignee-07",` +
 	`"plannedFrom":"2026-09-25T09:00:00+08:00","plannedTo":"2026-09-25T12:00:00+08:00",` +
 	`"arrivedAt":"2026-09-25T10:00:00+08:00","evidence":"SYN-EVIDENCE/arrival-07",` +
 	`"objects":[{"object":"SYN-PARCEL-08-07","outcome":"DELIVERED","occurredAt":"2026-09-25T10:05:00+08:00"},` +
 	`{"object":"SYN-PARCEL-08-08","outcome":"NO_ONE_TO_RECEIVE","basis":"SYN-BASIS/no-one-home","occurredAt":"2026-09-25T10:06:00+08:00"}]}`
 
-// Covers: 事实内容与业务时间照 ADR-0023 逐字从载荷收，租户来自注入；成败词不在封闭集里是坏报文。
-func TestIsolatedCommandIntakeTranslatesDeliveryAttemptWithInjectedTenant(t *testing.T) {
-	command, err := isolatedCommandIntakeForTest(t).IntakeDeliveryAttempt(context.Background(), commandRequest(isolatedDeliveryAttemptBody))
+// Covers: 事实内容与业务时间照 ADR-0023 逐字从载荷收，租户来自认证结果；成败词不在封闭集里是坏报文。
+func TestWorkFactCommandIntakeTranslatesDeliveryAttemptWithTheAuthenticatedTenant(t *testing.T) {
+	command, err := workFactIntakeForTest(t).IntakeDeliveryAttempt(context.Background(), commandRequest(workFactDeliveryAttemptBody))
 	if err != nil {
 		t.Fatalf("intake：%v", err)
 	}
-	if command.TenantID.String() != isolatedCommandTenant || command.Task != "SYN-DISPATCH-08-07" ||
+	if command.TenantID.String() != workFactTenant || command.Task != "SYN-DISPATCH-08-07" ||
 		command.Attempt != "SYN-DELIVERY-ATTEMPT-08-07" || command.ExecutedBy != "SYN-COURIER/07" ||
 		command.Place != "SYN-PLACE/consignee-07" || command.Evidence != "SYN-EVIDENCE/arrival-07" {
-		t.Fatalf("command = %+v，与注入与载荷不符", command)
+		t.Fatalf("command = %+v，与认证结果与载荷不符", command)
 	}
 	if want := time.Date(2026, 9, 25, 2, 0, 0, 0, time.UTC); !command.ArrivedAt.Equal(want) {
 		t.Fatalf("ArrivedAt = %s, want %s", command.ArrivedAt, want)
@@ -46,8 +46,8 @@ func TestIsolatedCommandIntakeTranslatesDeliveryAttemptWithInjectedTenant(t *tes
 		t.Fatalf("objects = %+v，与载荷不符", command.Objects)
 	}
 
-	_, err = isolatedCommandIntakeForTest(t).IntakeDeliveryAttempt(context.Background(),
-		commandRequest(strings.Replace(isolatedDeliveryAttemptBody, `"DELIVERED"`, `"PICKED_UP"`, 1)))
+	_, err = workFactIntakeForTest(t).IntakeDeliveryAttempt(context.Background(),
+		commandRequest(strings.Replace(workFactDeliveryAttemptBody, `"DELIVERED"`, `"PICKED_UP"`, 1)))
 	if !errors.Is(err, tfhttp.ErrMalformedRequest) {
 		t.Fatalf("揽收侧的成败词：err = %v, want ErrMalformedRequest", err)
 	}
@@ -55,14 +55,14 @@ func TestIsolatedCommandIntakeTranslatesDeliveryAttemptWithInjectedTenant(t *tes
 
 // Covers: 端点接真编排走一遍——首登 201 且逐对象透出成败与依据，同一份再投 200 EXISTING_RESULT。
 func TestADeliveryAttemptPostedToTheEndpointIsRecordedAndAnsweredPerObject(t *testing.T) {
-	endpoint := tfhttp.NewRecordDeliveryAttemptEndpoint(isolatedCommandIntakeForTest(t),
+	endpoint := tfhttp.NewRecordDeliveryAttemptEndpoint(workFactIntakeForTest(t),
 		application.NewRecordDeliveryAttemptHandler(application.RecordDeliveryAttemptDeps{
 			Attempts: &httpDeliveryAttemptStore{records: map[string]ports.DeliveryAttemptRecord{}},
 			Tasks:    openDeliveryTaskFor(t, "SYN-DISPATCH-08-07", "SYN-PARCEL-08-07", "SYN-PARCEL-08-08"),
 			Clock:    httpFixedClock{at: time.Date(2026, 9, 25, 2, 30, 0, 0, time.UTC)},
 		}))
 
-	first := postDeliveryAttempt(endpoint, isolatedDeliveryAttemptBody)
+	first := postDeliveryAttempt(endpoint, workFactDeliveryAttemptBody)
 	if first.Code != http.StatusCreated {
 		t.Fatalf("status = %d, want 201; body=%s", first.Code, first.Body.String())
 	}
@@ -78,7 +78,7 @@ func TestADeliveryAttemptPostedToTheEndpointIsRecordedAndAnsweredPerObject(t *te
 		t.Fatalf("objects = %v, want each object's outcome and basis", perObject)
 	}
 
-	replay := postDeliveryAttempt(endpoint, isolatedDeliveryAttemptBody)
+	replay := postDeliveryAttempt(endpoint, workFactDeliveryAttemptBody)
 	if replay.Code != http.StatusOK {
 		t.Fatalf("replay status = %d, want 200", replay.Code)
 	}
@@ -100,9 +100,10 @@ type deliveryAttemptAnswer struct {
 	} `json:"objects"`
 }
 
+// postDeliveryAttempt 带一份合规的作业事实出示投递（commandRequest 那一份）。
 func postDeliveryAttempt(endpoint http.Handler, body string) *httptest.ResponseRecorder {
 	response := httptest.NewRecorder()
-	endpoint.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/transport-fulfillment/delivery-attempts", strings.NewReader(body)))
+	endpoint.ServeHTTP(response, commandRequest(body))
 	return response
 }
 
@@ -164,7 +165,7 @@ func openDeliveryTaskFor(t *testing.T, task string, objects ...string) httpDeliv
 			t.Fatalf("build dispatch task: %v", err)
 		}
 	}
-	tenant, err := domain.NewTenantID(isolatedCommandTenant)
+	tenant, err := domain.NewTenantID(workFactTenant)
 	must(err)
 	taskRef, err := domain.NewDispatchTaskReference(task)
 	must(err)
