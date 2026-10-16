@@ -359,7 +359,8 @@ func (fixture channelFixture) parcelsOf(t *testing.T, number string) []string {
 	return values
 }
 
-// replacementOf 照 establishedLabelTransactionFixture 的固定依据造一笔前序关系为替代的新交易，渠道服务方按参数给。
+// replacementOf 照 establishedLabelTransactionFixture 的固定依据造一笔前序关系为替代的新交易。provider 为空即沿用夹具的
+// 渠道服务方——「同一分配方」这个前提跟着夹具走，不靠两处字面值碰巧相等。
 func (fixture channelFixture) replacementOf(
 	t *testing.T,
 	priorID, transactionID, provider string,
@@ -372,10 +373,14 @@ func (fixture channelFixture) replacementOf(
 		t.Fatalf("前序关系：%v", err)
 	}
 	template := establishedLabelTransactionFixture(t, "tenant-a", transactionID, parcels...)
+	serviceProvider := template.ServiceProvider()
+	if provider != "" {
+		serviceProvider = mustBuild(t, domain.NewChannelServiceProviderReference, provider)
+	}
 	established, err := domain.EstablishLabelTransaction(domain.EstablishLabelTransactionSpec{
 		Tenant: template.Tenant(), ID: template.ID(), CoveredParcels: template.CoveredParcels(),
 		ChannelAccount: template.ChannelAccount(), AccountHolder: template.AccountHolder(),
-		ServiceProvider:        mustBuild(t, domain.NewChannelServiceProviderReference, provider),
+		ServiceProvider:        serviceProvider,
 		SettlementCounterparty: template.SettlementCounterparty(), Contract: template.Contract(), Rate: template.Rate(),
 		ResponsibilityBasis: template.ResponsibilityBasis(), EstablishedAt: establishedAt, PriorLink: link,
 	})
@@ -510,7 +515,7 @@ func TestReSigningTheSameNumberFormsANewRelation(t *testing.T) {
 		t.Fatalf("作废后 CH-SAME-2 仍查得 %v", got)
 	}
 
-	established := fixture.replacementOf(t, "label-txn-1", "label-txn-2", "party-channel-1", observed.Add(time.Hour), "parcel-1", "parcel-2")
+	established := fixture.replacementOf(t, "label-txn-1", "label-txn-2", "", observed.Add(time.Hour), "parcel-1", "parcel-2")
 	fixture.recordChannel(t, established, observed.Add(3*time.Hour),
 		acceptedChannelResult(t, "parcel-1", "CH-SAME-1"), acceptedChannelResult(t, "parcel-2", "CH-SAME-2"))
 

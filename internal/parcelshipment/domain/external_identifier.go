@@ -250,14 +250,14 @@ type ExternalIdentifierChangeCause struct{ requiredValue }
 // 由形成它的交易与包裹唯一确定，替代那一笔手里没有原交易的号，所以按选择而不是按号码指名。终态一次：已有终态的
 // 关联不再变（PS CONTEXT「已作废、已被替代、已失效都是终态，不回到适用」）。
 type ExternalIdentifierChange struct {
-	tenant    TenantID
-	kind      ExternalIdentifierKind
-	formedBy  ExternalIdentifierBasis
-	parcel    DeclaredParcelID
-	terminal  ExternalIdentifierChangeKind
-	successor ExternalIdentifierRelation
-	cause     ExternalIdentifierChangeCause
-	changedAt time.Time
+	tenant         TenantID
+	identifierKind ExternalIdentifierKind
+	formedBy       ExternalIdentifierBasis
+	parcel         DeclaredParcelID
+	terminal       ExternalIdentifierChangeKind
+	successor      ExternalIdentifierRelation
+	cause          ExternalIdentifierChangeCause
+	changedAt      time.Time
 }
 
 func (change ExternalIdentifierChange) Tenant() TenantID {
@@ -266,7 +266,7 @@ func (change ExternalIdentifierChange) Tenant() TenantID {
 
 // IdentifierKind 是被改那条关联的标识类型；它变成的终态见 ChangeKind。
 func (change ExternalIdentifierChange) IdentifierKind() ExternalIdentifierKind {
-	return change.kind
+	return change.identifierKind
 }
 
 // FormedBy 是被改那条关联的形成依据。
@@ -315,13 +315,13 @@ func (transaction LabelTransaction) ExternalIdentifierChanges() []ExternalIdenti
 		}
 		if voidedAt, _, voided := transaction.voidSpan(result.parcel); voided {
 			changes = append(changes, ExternalIdentifierChange{
-				tenant:    transaction.tenant,
-				kind:      ChannelParcelNumber,
-				formedBy:  ExternalIdentifierBasis{requiredValue{value: transaction.id.String()}},
-				parcel:    result.parcel,
-				terminal:  ExternalIdentifierVoided,
-				cause:     cause,
-				changedAt: voidedAt,
+				tenant:         transaction.tenant,
+				identifierKind: ChannelParcelNumber,
+				formedBy:       ExternalIdentifierBasis{requiredValue{value: transaction.id.String()}},
+				parcel:         result.parcel,
+				terminal:       ExternalIdentifierVoided,
+				cause:          cause,
+				changedAt:      voidedAt,
 			})
 		}
 	}
@@ -331,14 +331,14 @@ func (transaction LabelTransaction) ExternalIdentifierChanges() []ExternalIdenti
 				continue
 			}
 			changes = append(changes, ExternalIdentifierChange{
-				tenant:    transaction.tenant,
-				kind:      ChannelParcelNumber,
-				formedBy:  ExternalIdentifierBasis{requiredValue{value: link.PriorTransactionID().String()}},
-				parcel:    result.parcel,
-				terminal:  ExternalIdentifierReplaced,
-				successor: transaction.channelRelationOf(result),
-				cause:     cause,
-				changedAt: transaction.resultObservedAt,
+				tenant:         transaction.tenant,
+				identifierKind: ChannelParcelNumber,
+				formedBy:       ExternalIdentifierBasis{requiredValue{value: link.PriorTransactionID().String()}},
+				parcel:         result.parcel,
+				terminal:       ExternalIdentifierReplaced,
+				successor:      transaction.channelRelationOf(result),
+				cause:          cause,
+				changedAt:      transaction.resultObservedAt,
 			})
 		}
 	}

@@ -287,3 +287,25 @@ func TestLabelServiceFinalRefusesInputsAboutAnotherParcel(t *testing.T) {
 		t.Fatalf("error = %v，want ErrInvalidLabelServiceFinalInput", err)
 	}
 }
+
+// Covers: 同一笔交易上两次作废都作用到本包裹时，关闭路径的终局按较晚那次作废生效——终局要的是「全部条件都成立」
+// 的时刻，较早那次作废之后条件仍在等第二次之前的状态，取最早会把终局提前到证据还不完整的时刻。
+func TestTheClosureOutcomeTakesEffectAtTheLatestVoid(t *testing.T) {
+	accepted := resultedLabelTransaction(t, "label-txn-1", domain.LabelTransactionSucceeded,
+		acceptedParcelResult(t, "parcel-1", "CHN-1"))
+	again, err := voided(t, accepted).AppendFollowUpAction(domain.FollowUpActionSpec{
+		Kind:       domain.ChannelVoidAction,
+		Reason:     mustValue(t, domain.NewChannelResultReasonReference, "VOIDED_AGAIN"),
+		OccurredAt: labelServiceClosureAt.Add(6 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("second void: %v", err)
+	}
+	verdict := judge(t, labelServiceInput(t, closedRegister(t), again))
+	if verdict.Judgment() != domain.LabelServiceFinalOutcomeByClosure {
+		t.Fatalf("judgment = %s，want FINAL_OUTCOME_BY_CLOSURE", verdict.Judgment())
+	}
+	if !verdict.EffectiveAt().Equal(labelServiceClosureAt.Add(6 * time.Hour)) {
+		t.Fatalf("effective at = %s，want 较晚那次作废 %s", verdict.EffectiveAt(), labelServiceClosureAt.Add(6*time.Hour))
+	}
+}
