@@ -53,10 +53,17 @@ axe 在 `858280a2` 上的实测（只计 WCAG 2 AA 违规节点数）：
 - **KPI、状态胶囊和右端计数数的是同一件事**：这是票 [admin-web-group-legal-entities/15](../admin-web-group-legal-entities/issues/15-legal-entities-follow-purchase-order-workbench.md) 按用户令「完全参考采购订单」做的形态，不动。06 也只在这套形态里面去重。
 - **列表时间每格都带秒和 UTC+8**：时间呈现是各册页共用的取舍，不在本页单独改。
 
-## 后续（不在本批，外壳或上游）
+## 后续（不在本批，外壳、上游或全应用共用件）
 
 - 标签页关闭按钮 × 没有可访问名称（axe button-name）。
 - 底部状态栏「Comfortable」字样的对比度只有 1.05:1。
+- **次要文字令牌 `text.tertiary`**（textMuted）在浅色画布上只有 4.47:1，在深色卡片上只有 4.15:1。上游 `Button` 的 ghost / outline / secondary 变体、`Tabs` 未选中态、`Timeline`、`components/states`、`components/registration` 都在用它。根治要在上游 ui-tokens 调深这一格。本批只在集团与法人页的调用处改用 breadcrumb（票 08）。
+- **状态徽章**（上游 `StatusBadge`，经 `src/domain/status.tsx` 全应用共用）：10px 字配 400 色阶，浅色下只有 1.3–1.8:1。
+- **共用详情页模板**（对象页的 `dt`、标识、副题）：textMuted 加 11px；复制标识按钮没有可访问名称。
+- **上游 `Timeline`**：描述和时间戳用 textMuted，时间戳 11px；没有逐项传 className 的口子。
+- **工作台 KPI 悬停态**：warning 语气字落在 hover 底上只有 4.47:1。
+- **上游 `Button` / `ConfirmDialog`**：缺一个实底 primary 变体；default 变体和基类聚焦环用的透明度类在本仓生不出来（见票 05 完成记录里的上游建议）。
+- **序列复核面板的结论切换键**：用 `variant="default"` 表示「已选中」，同一个根因让选中态只剩强调色字（票 12 发现）。
 
 ## 子票
 
@@ -71,7 +78,7 @@ axe 在 `858280a2` 上的实测（只计 WCAG 2 AA 违规节点数）：
 | 05 | [主动作用主色（本页）](issues/05-primary-action-style-on-this-page.md) | — | resolved |
 | 06 | [详情栏头部瘦身](issues/06-detail-panel-header-slimmed.md) | — | resolved |
 | 07 | [资料表单展开后滚进视野](issues/07-profile-form-scrolls-into-view.md) | — | resolved |
-| 08 | [本页可访问性](issues/08-page-accessibility.md) | — | in-progress |
+| 08 | [本页可访问性](issues/08-page-accessibility.md) | — | resolved |
 | 09 | [对象页与详情栏同一套结构](issues/09-object-page-matches-detail-panel.md) | 01、06 | ready-for-agent |
 | 10 | [1024 宽下不折坏](issues/10-narrow-width-layout.md) | 06、08 | ready-for-agent |
 | 11 | [本会话租户读口：顶栏作用域与本页页头接上](issues/11-session-tenant-read-face.md) | — | ready-for-agent |
