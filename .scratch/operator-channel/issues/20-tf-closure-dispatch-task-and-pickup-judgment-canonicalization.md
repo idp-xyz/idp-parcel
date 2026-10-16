@@ -1,8 +1,8 @@
 # 20 TF 关段、建派送任务、承运商首次有效收寄判断三口的规范化形状与「同身份异内容」格
 
 Category: enhancement
-Status: needs-triage——2026-10-13 通道 4 立（通道 1 派单 `task-40698906`，照裁定 A：[15](./15-operation-decision-faces-take-operator-intake.md) 余下四口不换）。三口的重放分支只认身份、不比内容；补形状改的是 TF 领域代数，归 TF owner 逐口裁。现有代数、拟议形状（TFC-1）与要裁的那一问见「逐口」。
-Blocked by: 无——等 TF owner 逐口裁
+Status: resolved——2026-10-16 逐口裁毕：三口都裁「现有格够用（只核对）」，不补形状、不新增冲突格、`adapters/http` 答复集不变；裁定与理由见「裁定记录」。此前 needs-triage——2026-10-13 通道 4 立（通道 1 派单 `task-40698906`，照裁定 A：[15](./15-operation-decision-faces-take-operator-intake.md) 余下四口不换）。三口的重放分支只认身份、不比内容；补形状改的是 TF 领域代数，归 TF owner 逐口裁。现有代数、拟议形状（TFC-1）与要裁的那一问见「逐口」。
+Blocked by: 无
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 丙轨实施
 地盘（裁完后）：`internal/transportfulfillment/domain/payload_canonicalization.go`（裁为补形状的口各一个 `Canonicalize…Payload`）；`internal/transportfulfillment/application` 里 `CloseFulfillmentSegmentHandler.Close`、`OpenDispatchTaskHandler.Open`、`JudgeCarrierFirstEffectivePickupHandler.Judge` 的重放分支；新增答复格时 `internal/transportfulfillment/adapters/http` 三口的答复映射。
 出处：[ADR-0151](../../../docs/adr/0151-unassigned-command-faces-get-their-families.md) 决定三（逐口核载荷规范化，未核完的口不开真渠道）；[ADR-0149](../../../docs/adr/0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md) 决定四第一条、越权风险点 5；[ADR-0014](../../../docs/adr/0014-versioned-canonicalization-shape-for-content-digest.md)；[13](./13-command-payload-canonicalization-per-face.md)（TFC-1；三口都在它「未定形状」清单的 TF 一行里）；15 做什么第 5 条。
@@ -46,3 +46,13 @@ Blocked by: 无——等 TF owner 逐口裁
 - 裁为补形状的口：TFC-1 往返用例；同身份同内容答重放、同身份异内容答裁定的那一格，各一例。
 - 裁为现有格够用的口：本票记下裁定与理由。
 - 三口的结论回写 15 进展记录里逐口核载荷规范化那一格。
+
+## 裁定记录（2026-10-16）
+
+三口都裁「现有格够用（只核对）」：不补形状、不新增冲突格、`adapters/http` 答复集不变。理由逐口：
+
+- **关段**：现有 `SEGMENT_ALREADY_CLOSED` 够用。`ClosedAt` 是记录事实不是工作范围；关段单向（「不再接受新对象」），再关一次改变不了段的状态，异 `closedAt` 没有后果可答——补形状只会为无后果的区别增加摘要机件。
+- **建派送任务**：现有 `DISPATCH_TASK_ALREADY_OPEN` 回显原任务够用。该格已交回在册任务（`Record`），差异调用方自己比得出；改工作范围不经此口表达——`DispatchTaskRegistry` 只有首登、没有演进写口，「冲突」格没有可指的更正口。
+- **承运商首次有效收寄判断**：现有 `ALREADY_RECORDED` 带回链尾够用。同依据异读法、异承运主体或异业务时间是来源更正，走 `CorrectsSourceVersion` 更正路（rederive 按读法与主体换代），不是重放；这一格带回链尾那一版，读法由结果反推可核对。
+
+结论：三口与有效时间判断同列，都是**只核对**（凭现有同身份重放代数，不补形状）。`payload_canonicalization.go` 不动。
