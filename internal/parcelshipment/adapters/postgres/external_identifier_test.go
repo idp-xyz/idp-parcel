@@ -359,6 +359,32 @@ func (fixture channelFixture) parcelsOf(t *testing.T, number string) []string {
 	return values
 }
 
+// replacementOf 照 establishedLabelTransactionFixture 的固定依据造一笔前序关系为替代的新交易，渠道服务方按参数给。
+func (fixture channelFixture) replacementOf(
+	t *testing.T,
+	priorID, transactionID, provider string,
+	establishedAt time.Time,
+	parcels ...string,
+) domain.LabelTransaction {
+	t.Helper()
+	link, err := domain.EstablishPriorLabelTransactionLink(fixture.reload(t, priorID), domain.LabelTransactionReplacement)
+	if err != nil {
+		t.Fatalf("前序关系：%v", err)
+	}
+	template := establishedLabelTransactionFixture(t, "tenant-a", transactionID, parcels...)
+	established, err := domain.EstablishLabelTransaction(domain.EstablishLabelTransactionSpec{
+		Tenant: template.Tenant(), ID: template.ID(), CoveredParcels: template.CoveredParcels(),
+		ChannelAccount: template.ChannelAccount(), AccountHolder: template.AccountHolder(),
+		ServiceProvider:        mustBuild(t, domain.NewChannelServiceProviderReference, provider),
+		SettlementCounterparty: template.SettlementCounterparty(), Contract: template.Contract(), Rate: template.Rate(),
+		ResponsibilityBasis: template.ResponsibilityBasis(), EstablishedAt: establishedAt, PriorLink: link,
+	})
+	if err != nil {
+		t.Fatalf("建立替代交易：%v", err)
+	}
+	return established
+}
+
 func acceptedChannelResult(t *testing.T, parcel, number string) domain.LabelTransactionParcelResultSpec {
 	t.Helper()
 	return domain.LabelTransactionParcelResultSpec{
@@ -444,25 +470,10 @@ func TestAReplacementSupersedesThePriorNumberAndATerminalStateIsFinal(t *testing
 		acceptedChannelResult(t, "parcel-1", "CH-OLD-1"), acceptedChannelResult(t, "parcel-2", "CH-OLD-2"))
 	fixture.appendFollowUp(t, "label-txn-1", domain.ChannelVoidAction, observed.Add(time.Minute), "parcel-2")
 
-	link, err := domain.EstablishPriorLabelTransactionLink(fixture.reload(t, "label-txn-1"), domain.LabelTransactionReplacement)
-	if err != nil {
-		t.Fatalf("前序关系：%v", err)
-	}
 	if prior.State() != domain.LabelTransactionSucceeded {
 		t.Fatalf("原交易 state = %s", prior.State())
 	}
-	replacing := establishedLabelTransactionFixture(t, "tenant-a", "label-txn-2", "parcel-1", "parcel-2")
-	spec := domain.EstablishLabelTransactionSpec{
-		Tenant: replacing.Tenant(), ID: replacing.ID(), CoveredParcels: replacing.CoveredParcels(),
-		ChannelAccount: replacing.ChannelAccount(), AccountHolder: replacing.AccountHolder(),
-		ServiceProvider:        mustBuild(t, domain.NewChannelServiceProviderReference, "party-channel-2"),
-		SettlementCounterparty: replacing.SettlementCounterparty(), Contract: replacing.Contract(), Rate: replacing.Rate(),
-		ResponsibilityBasis: replacing.ResponsibilityBasis(), EstablishedAt: observed.Add(time.Hour), PriorLink: link,
-	}
-	established, err := domain.EstablishLabelTransaction(spec)
-	if err != nil {
-		t.Fatalf("建立替代交易：%v", err)
-	}
+	established := fixture.replacementOf(t, "label-txn-1", "label-txn-2", "party-channel-2", observed.Add(time.Hour), "parcel-1", "parcel-2")
 	fixture.recordChannel(t, established, observed.Add(3*time.Hour),
 		acceptedChannelResult(t, "parcel-1", "CH-NEW-1"), acceptedChannelResult(t, "parcel-2", "CH-NEW-2"))
 
@@ -499,21 +510,7 @@ func TestReSigningTheSameNumberFormsANewRelation(t *testing.T) {
 		t.Fatalf("作废后 CH-SAME-2 仍查得 %v", got)
 	}
 
-	link, err := domain.EstablishPriorLabelTransactionLink(fixture.reload(t, "label-txn-1"), domain.LabelTransactionReplacement)
-	if err != nil {
-		t.Fatalf("前序关系：%v", err)
-	}
-	template := establishedLabelTransactionFixture(t, "tenant-a", "label-txn-2", "parcel-1", "parcel-2")
-	established, err := domain.EstablishLabelTransaction(domain.EstablishLabelTransactionSpec{
-		Tenant: template.Tenant(), ID: template.ID(), CoveredParcels: template.CoveredParcels(),
-		ChannelAccount: template.ChannelAccount(), AccountHolder: template.AccountHolder(),
-		ServiceProvider: template.ServiceProvider(), SettlementCounterparty: template.SettlementCounterparty(),
-		Contract: template.Contract(), Rate: template.Rate(), ResponsibilityBasis: template.ResponsibilityBasis(),
-		EstablishedAt: observed.Add(time.Hour), PriorLink: link,
-	})
-	if err != nil {
-		t.Fatalf("建立替代交易：%v", err)
-	}
+	established := fixture.replacementOf(t, "label-txn-1", "label-txn-2", "party-channel-1", observed.Add(time.Hour), "parcel-1", "parcel-2")
 	fixture.recordChannel(t, established, observed.Add(3*time.Hour),
 		acceptedChannelResult(t, "parcel-1", "CH-SAME-1"), acceptedChannelResult(t, "parcel-2", "CH-SAME-2"))
 

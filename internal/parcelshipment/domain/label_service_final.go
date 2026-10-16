@@ -261,7 +261,7 @@ func JudgeLabelServiceFinal(input LabelServiceFinalInput) (LabelServiceFinalVerd
 			continue
 		}
 		everAccepted = true
-		voidedAt, voided := transaction.voidCovering(input.Parcel)
+		_, voidedAt, voided := transaction.voidSpan(input.Parcel)
 		if !voided && !lapsed[transaction.id] {
 			return LabelServiceFinalVerdict{judgment: LabelServiceNotFinal, reason: UsableLabelResultOutstanding}, nil
 		}
@@ -280,24 +280,4 @@ func JudgeLabelServiceFinal(input LabelServiceFinalInput) (LabelServiceFinalVerd
 		verdict.judgment = LabelServiceFinalOutcomeByClosure
 	}
 	return verdict, nil
-}
-
-// voidCovering 说这笔交易上有没有一条渠道作废作用到该包裹（整笔范围或点名该包裹），并交回
-// 最后一条的业务时间。作废是追加式后续动作，不改原结果——所以这里读动作清单，不读结果。
-func (transaction LabelTransaction) voidCovering(parcel DeclaredParcelID) (time.Time, bool) {
-	var latest time.Time
-	voided := false
-	for _, action := range transaction.followUpActions {
-		if action.kind != ChannelVoidAction {
-			continue
-		}
-		if !action.covers(parcel) {
-			continue
-		}
-		voided = true
-		if action.occurredAt.After(latest) {
-			latest = action.occurredAt
-		}
-	}
-	return latest, voided
 }

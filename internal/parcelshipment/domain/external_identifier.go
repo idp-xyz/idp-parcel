@@ -254,7 +254,7 @@ type ExternalIdentifierChange struct {
 	kind      ExternalIdentifierKind
 	formedBy  ExternalIdentifierBasis
 	parcel    DeclaredParcelID
-	change    ExternalIdentifierChangeKind
+	terminal  ExternalIdentifierChangeKind
 	successor ExternalIdentifierRelation
 	cause     ExternalIdentifierChangeCause
 	changedAt time.Time
@@ -264,7 +264,8 @@ func (change ExternalIdentifierChange) Tenant() TenantID {
 	return change.tenant
 }
 
-func (change ExternalIdentifierChange) Kind() ExternalIdentifierKind {
+// IdentifierKind 是被改那条关联的标识类型；它变成的终态见 ChangeKind。
+func (change ExternalIdentifierChange) IdentifierKind() ExternalIdentifierKind {
 	return change.kind
 }
 
@@ -279,12 +280,12 @@ func (change ExternalIdentifierChange) Parcel() DeclaredParcelID {
 
 // ChangeKind 是这次变化把关联带到的终态。
 func (change ExternalIdentifierChange) ChangeKind() ExternalIdentifierChangeKind {
-	return change.change
+	return change.terminal
 }
 
 // Successor 交回已被替代那一格的后继关联；作废没有后继。
 func (change ExternalIdentifierChange) Successor() (ExternalIdentifierRelation, bool) {
-	return change.successor, change.change == ExternalIdentifierReplaced
+	return change.successor, change.terminal == ExternalIdentifierReplaced
 }
 
 func (change ExternalIdentifierChange) Cause() ExternalIdentifierChangeCause {
@@ -295,10 +296,11 @@ func (change ExternalIdentifierChange) ChangedAt() time.Time {
 	return change.changedAt
 }
 
-// ExternalIdentifierChanges 交回这笔交易带来的适用状态变化（ADR-0184 决定七），每件受理包裹至多一条：
-//   - 有渠道作废作用到它（整笔或点名，读法同终局判断，见 LabelTransactionFollowUpAction.covers），本交易给它形成的
-//     那条关联转已作废，时刻取最早那条作废——号从第一次作废起就不再算数；终局判断要的是生效时刻，取最晚那条，两处
-//     问的不是同一件事；
+// ExternalIdentifierChanges 交回这笔交易带来的适用状态变化（ADR-0184 决定七）。每件受理包裹在作废与替代上各至多
+// 一条，两条作用于不同的关联（作废作用于本交易形成的那条，替代作用于原交易形成的那条）：
+//   - 有渠道作废作用到它（整笔或点名，与终局判断同一读法，见 voidSpan），本交易给它形成的那条关联转已作废，时刻取
+//     最早那条作废——号从第一次作废起就不再算数。库里落下的是先写入的那一行（终态一次、只插不改），之后补进一条
+//     更早的作废不回头改写它，ADR-0185 后果节记为已知局限；
 //   - 前序关系为替代时，原交易给它形成的那条关联转已被替代，后继是本交易的新关联，时刻是结果观察时刻。原交易必然
 //     已定案（EstablishPriorLabelTransactionLink 只认已定案的原交易），它的关联此时已在册里。沿用原号也是新的一条
 //     关联（形成依据不同，ADR-0185），后继因此不会指回被替代者自己。
@@ -311,13 +313,13 @@ func (transaction LabelTransaction) ExternalIdentifierChanges() []ExternalIdenti
 		if !result.accepted {
 			continue
 		}
-		if voidedAt, voided := transaction.firstVoidCovering(result.parcel); voided {
+		if voidedAt, _, voided := transaction.voidSpan(result.parcel); voided {
 			changes = append(changes, ExternalIdentifierChange{
 				tenant:    transaction.tenant,
 				kind:      ChannelParcelNumber,
 				formedBy:  ExternalIdentifierBasis{requiredValue{value: transaction.id.String()}},
 				parcel:    result.parcel,
-				change:    ExternalIdentifierVoided,
+				terminal:  ExternalIdentifierVoided,
 				cause:     cause,
 				changedAt: voidedAt,
 			})
@@ -333,7 +335,7 @@ func (transaction LabelTransaction) ExternalIdentifierChanges() []ExternalIdenti
 				kind:      ChannelParcelNumber,
 				formedBy:  ExternalIdentifierBasis{requiredValue{value: link.PriorTransactionID().String()}},
 				parcel:    result.parcel,
-				change:    ExternalIdentifierReplaced,
+				terminal:  ExternalIdentifierReplaced,
 				successor: transaction.channelRelationOf(result),
 				cause:     cause,
 				changedAt: transaction.resultObservedAt,
@@ -341,20 +343,4 @@ func (transaction LabelTransaction) ExternalIdentifierChanges() []ExternalIdenti
 		}
 	}
 	return changes
-}
-
-// firstVoidCovering 交回作用到该包裹的最早一条渠道作废的业务时间。
-func (transaction LabelTransaction) firstVoidCovering(parcel DeclaredParcelID) (time.Time, bool) {
-	var first time.Time
-	voided := false
-	for _, action := range transaction.followUpActions {
-		if action.kind != ChannelVoidAction || !action.covers(parcel) {
-			continue
-		}
-		if !voided || action.occurredAt.Before(first) {
-			first = action.occurredAt
-		}
-		voided = true
-	}
-	return first, voided
 }

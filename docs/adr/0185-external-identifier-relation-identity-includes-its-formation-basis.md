@@ -1,6 +1,6 @@
 # ADR-0185：外部标识关联的身份含形成依据——同一分配方对同一对象再签同一个号是新的一条关联
 
-Status: Accepted（2026-10-16，修订 [ADR-0184](./0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md) 决定一的键，其余各条不动。由票 [ps-external-mark-relations/03](../../.scratch/ps-external-mark-relations/issues/03-channel-parcel-numbers-from-label-results-void-and-replacement.md) 的两轴评审揭出——Standards 轴报阻断、Spec 轴报非阻断，评审者是 `/code-review` 的隔离子代理（用户 2026-10-16 改裁允许子代理）。Claude Code 会话在用户「你帮我做决定吧」「开始」的同一授权下代 PS owner 裁定。）
+Status: Accepted（2026-10-16，部分停用 [ADR-0184](./0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md) 决定一的键，其余各条不变。由票 [ps-external-mark-relations/03](../../.scratch/ps-external-mark-relations/issues/03-channel-parcel-numbers-from-label-results-void-and-replacement.md) 的两轴评审揭出——Standards 轴报阻断、Spec 轴报非阻断，评审者是 `/code-review` 的隔离子代理（用户 2026-10-16 改裁允许子代理）。Claude Code 会话在用户「你帮我做决定吧」「开始」的同一授权下代 PS owner 裁定。）
 
 Date: 2026-10-16
 
@@ -23,7 +23,7 @@ ADR-0184 决定一把关联的键定为（租户，标识类型，分配方，�
 
 - 迁移 0025（票 03 同笔）把关联表主键加一列、适用变化表的主键与外键随之加一列、后继多一列形成依据；0024 落下的行键值不变。
 - 读口照旧按号码去重交回包裹：同一件包裹因再签同号挂着两条适用关联时仍是一个候选。
-- 不在本记录：同一条关联同时收到作废与替代时按写入先后立住终态，而不是按业务时间比先后——读口的答案不受影响（两者都让它不再算数），只是记下的终态种类可能与业务先后不符。票 03 的完成记录如实记为已知局限。
+- 不在本记录：终态按写入先后立住，而不是按业务时间比先后。两格：同一条关联先后收到作废与替代时，先写入的那种立住；同一笔交易上后补一条业务时间更早的作废时，库里的终态时刻仍是先写入的那一条（领域交出的是最早那条，变化行只插不改，不回头改写）。读口的答案都不受影响——两种终态都让号不再算数——只是记下的终态种类或时刻可能与业务先后不符。票 03 的完成记录如实记为已知局限。
 
 ## 越权风险点
 

@@ -501,7 +501,7 @@ func (action LabelTransactionFollowUpAction) CoversWholeTransaction() bool {
 	return len(action.parcels) == 0
 }
 
-// covers 说这条动作作用不作用到该包裹：整笔范围或点名了它。终局判断与外部标识关联的作废共用这一处读法。
+// covers 说这条动作作用不作用到该包裹：整笔范围或点名了它。
 func (action LabelTransactionFollowUpAction) covers(parcel DeclaredParcelID) bool {
 	if action.CoversWholeTransaction() {
 		return true
@@ -512,6 +512,25 @@ func (action LabelTransactionFollowUpAction) covers(parcel DeclaredParcelID) boo
 		}
 	}
 	return false
+}
+
+// voidSpan 说这笔交易上有没有渠道作废作用到该包裹，并交回其中最早与最晚两条的业务时间。作废是追加式后续动作，
+// 不改原结果——所以这里读动作清单，不读结果。两头各有用处：终局判断要的是生效时刻，取最晚；外部标识关联要的是
+// 号从何时不再算数，取最早。
+func (transaction LabelTransaction) voidSpan(parcel DeclaredParcelID) (first, last time.Time, voided bool) {
+	for _, action := range transaction.followUpActions {
+		if action.kind != ChannelVoidAction || !action.covers(parcel) {
+			continue
+		}
+		if !voided || action.occurredAt.Before(first) {
+			first = action.occurredAt
+		}
+		if !voided || action.occurredAt.After(last) {
+			last = action.occurredAt
+		}
+		voided = true
+	}
+	return first, last, voided
 }
 
 // Parcels 交回指名包裹范围的副本，整笔范围为空。

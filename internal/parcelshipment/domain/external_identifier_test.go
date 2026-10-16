@@ -238,7 +238,7 @@ func TestAChannelVoidRetiresTheRelationsItCoversAndARefundDoesNot(t *testing.T) 
 	changes := byParcel.ExternalIdentifierChanges()
 	if len(changes) != 1 || changes[0].ChangeKind() != domain.ExternalIdentifierVoided ||
 		changes[0].Parcel().String() != "parcel-2" || changes[0].FormedBy().String() != "label-txn-1" ||
-		changes[0].Kind() != domain.ChannelParcelNumber || !changes[0].ChangedAt().Equal(labelTransactionAt.Add(time.Hour)) {
+		changes[0].IdentifierKind() != domain.ChannelParcelNumber || !changes[0].ChangedAt().Equal(labelTransactionAt.Add(time.Hour)) {
 		t.Fatalf("逐件作废 changes = %+v", changes)
 	}
 	if _, present := changes[0].Successor(); present {

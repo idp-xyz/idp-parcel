@@ -2,7 +2,7 @@
 
 Status: Accepted（2026-10-16，用户原话「这些需要确定的事情……你帮我做决定吧」与「开始」。Claude Code 会话据此代 PS owner 裁定下面七条，落在票 [ps-external-mark-relations/01](../../.scratch/ps-external-mark-relations/issues/01-external-mark-relations-have-no-model-in-parcel-shipment.md) 那一格。裁决能力边界：读过 PS CONTEXT「外部标识」「面单交易包裹结果」的定义、Rules 里外部标识两条与面单交易各条、`委托` 与 `包裹身份与服务` 两节生命周期，GLOSSARY「外部标识」「包裹内部标识」，CONTEXT-MAP `parcel-shipment → node-operations` 一条，UC-NO-002 的流程表、控制与身份一节和验收表；代码读过 `IsolatedSubmissionIntake` 的译装、`SubmitShipmentRequestHandler`、`ShipmentRequests.Save` 与 `FindCurrentAcceptedByParcel`、`LabelTransactionParcelResult`、NO 的 `ParcelIdentityView` 与两处 `unconfiguredParcelIdentityView`。**没读** UC-PS-001 全文与面单交易各编排的全部分支。）
 
-决定一的键已由 [ADR-0185](./0185-external-identifier-relation-identity-includes-its-formation-basis.md) 修订：键加入形成依据。下文原样保留。
+Partially suspended by: [ADR-0185](./0185-external-identifier-relation-identity-includes-its-formation-basis.md)（被停条款：决定一「键（租户，标识类型，分配方，号码，被标识对象）」——键加入形成依据；其余各条不变，本记录正文不改写）
 
 Date: 2026-10-16
 
@@ -59,3 +59,4 @@ PS CONTEXT 把「外部标识关系」列为本上下文所管，定义要求记
 - PS CONTEXT「外部标识」「外部标识关联」与 Lifecycles「外部标识关联」：[../domain/parcel-shipment/CONTEXT.md](../domain/parcel-shipment/CONTEXT.md)
 - [ADR-0060](./0060-parcel-lookup-uses-current-snapshot-projection.md)（委托当前投影列）、[ADR-0084](./0084-label-transaction-is-an-independent-aggregate-with-two-level-results.md)（面单交易两层结果）、[ADR-0113](./0113-carrier-master-document-is-an-independent-register-keyed-by-declared-reference-and-version.md)（外部号码立册、版本链只插不改的先例）
 - 票：[ps-external-mark-relations/01](../../.scratch/ps-external-mark-relations/issues/01-external-mark-relations-have-no-model-in-parcel-shipment.md)
+- [ADR-0185](./0185-external-identifier-relation-identity-includes-its-formation-basis.md)：部分停用本记录决定一的键——键加入形成依据；其余各条不变

@@ -145,7 +145,7 @@ func insertExternalIdentifierChanges(
 			    AND relation.object_ref = $4
 			 ON CONFLICT (tenant_id, identifier_kind, allocator, identifier_number, object_ref, basis) DO NOTHING`,
 			change.Tenant().String(),
-			change.Kind().String(),
+			change.IdentifierKind().String(),
 			change.FormedBy().String(),
 			change.Parcel().String(),
 			change.ChangeKind().String(),
