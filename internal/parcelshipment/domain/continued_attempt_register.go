@@ -27,34 +27,6 @@ type ContinuedAttemptRegister struct {
 //
 // 空册是**有意义的状态**而不是「还没建」：CONTEXT 说无生效关闭且无当前有效终局时派生为`开放`，
 // 空册正是那一格的常见来源。读面要分辨「没有人作过决定」与「最近适用决定为重开」，靠的是
-// ContinuedAttemptRequest 是一份关闭或重开请求带来的内容。决定标识、权威业务截断边界由本上下文签发，决定方、授权角色
-// 与授权依据快照由授权答复给出——都不是请求的内容，不在其中。
-type ContinuedAttemptRequest struct {
-	Kind                        ContinuedAttemptDecisionKind
-	Requester                   RequesterReference
-	Reason                      ContinuedAttemptReasonReference
-	EffectiveAt                 time.Time
-	ClosureResponsibilitySource ClosureResponsibilitySourceReference
-	RelatedPriorClosure         ContinuedAttemptDecisionID
-}
-
-// RecordedRequest 交回册上与这份请求逐格相同的那条决定（票 operator-channel/28）。找得到就是同一次请求的重放：生效时间
-// 由请求带来，重投必然带着同一个；而另一次真正的请求不会与某条已登决定逐格相同——内容不同的第二条关闭（例如另一责任
-// 来源）照旧经 Append 追加，CONTEXT 允许关闭生效期间再登一条。
-func (register ContinuedAttemptRegister) RecordedRequest(request ContinuedAttemptRequest) (ContinuedAttemptDecision, bool) {
-	for _, decision := range register.decisions {
-		if decision.kind == request.Kind &&
-			decision.requester == request.Requester &&
-			decision.reason == request.Reason &&
-			decision.effectiveAt.Equal(request.EffectiveAt) &&
-			decision.closureResponsibilitySource == request.ClosureResponsibilitySource &&
-			decision.relatedPriorClosure == request.RelatedPriorClosure {
-			return decision, true
-		}
-	}
-	return ContinuedAttemptDecision{}, false
-}
-
 // HasAnyDecision，不是给判断加一格。
 func OpenContinuedAttemptRegister(tenant TenantID, parcel DeclaredParcelID) (ContinuedAttemptRegister, error) {
 	if !tenant.valid() || !parcel.valid() {
@@ -89,6 +61,34 @@ func (register ContinuedAttemptRegister) Decisions() []ContinuedAttemptDecision 
 // 了」，两者派生出同一格而现场处置完全不同。判断本身不加格（那是新造领域语言），区别由这里交代。
 func (register ContinuedAttemptRegister) HasAnyDecision() bool {
 	return len(register.decisions) != 0
+}
+
+// ContinuedAttemptRequest 是一份关闭或重开请求带来的内容。决定标识、权威业务截断边界由本上下文签发，决定方、授权角色
+// 与授权依据快照由授权答复给出——都不是请求的内容，不在其中。
+type ContinuedAttemptRequest struct {
+	Kind                        ContinuedAttemptDecisionKind
+	Requester                   RequesterReference
+	Reason                      ContinuedAttemptReasonReference
+	EffectiveAt                 time.Time
+	ClosureResponsibilitySource ClosureResponsibilitySourceReference
+	RelatedPriorClosure         ContinuedAttemptDecisionID
+}
+
+// RecordedRequest 交回册上与这份请求逐格相同的那条决定（票 operator-channel/28）。找得到就是同一次请求的重放：生效时间
+// 由请求带来，重投必然带着同一个；而另一次真正的请求不会与某条已登决定逐格相同——内容不同的第二条关闭（例如另一责任
+// 来源）照旧经 Append 追加，CONTEXT 允许关闭生效期间再登一条。
+func (register ContinuedAttemptRegister) RecordedRequest(request ContinuedAttemptRequest) (ContinuedAttemptDecision, bool) {
+	for _, decision := range register.decisions {
+		if decision.kind == request.Kind &&
+			decision.requester == request.Requester &&
+			decision.reason == request.Reason &&
+			decision.effectiveAt.Equal(request.EffectiveAt) &&
+			decision.closureResponsibilitySource == request.ClosureResponsibilitySource &&
+			decision.relatedPriorClosure == request.RelatedPriorClosure {
+			return decision, true
+		}
+	}
+	return ContinuedAttemptDecision{}, false
 }
 
 // Append 追加一条决定。

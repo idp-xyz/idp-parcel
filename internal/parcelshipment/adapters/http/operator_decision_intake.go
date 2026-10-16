@@ -93,6 +93,9 @@ func NewOperatorDecisionIntake(
 
 // controlledClosurePayload 是受控关闭的线格式（ADR-0183）：只指名包裹，不收委托标识与请求方。责任主体只在运营操作与
 // 外部限制两种来源上由载荷给；货主指令的主体就是请求方，由服务端取。
+//
+// effectiveAt 由调用方在形成请求时固定、重投原样带上：同一次请求的重投靠它与其余几格认出（ADR-0183 复核记录二），
+// 重提交时重算生效时间就是另一次请求。
 type controlledClosurePayload struct {
 	Parcel                string `json:"parcel"`
 	Reason                string `json:"reason"`
@@ -103,6 +106,8 @@ type controlledClosurePayload struct {
 
 // reopeningPayload 是重开的线格式（ADR-0183）：货主账户与请求方都不在载荷里；货主重授权证据是一份证据的引用，由操作者
 // 如实记下。
+//
+// effectiveAt 的纪律同受控关闭：调用方形成请求时固定、重投原样带上。
 type reopeningPayload struct {
 	Parcel                       string `json:"parcel"`
 	Reason                       string `json:"reason"`
@@ -202,8 +207,8 @@ func (intake *OperatorDecisionIntake) IntakeReopening(ctx context.Context, reque
 		ShipperAccount:               shipper,
 		ShipperAuthorizationEvidence: payload.ShipperAuthorizationEvidence,
 	}
-	// 全空白的证据与没带同读，与编排那道门（去两端空白再判）同一口径：否则请求方被记成客户，门却当作没带证据。
-	if strings.TrimSpace(payload.ShipperAuthorizationEvidence) != "" {
+	// 「带了证据」与编排那道门同一判据：否则全空白的证据会让请求方记成客户，门却当作没带。
+	if application.HasShipperAuthorizationEvidence(payload.ShipperAuthorizationEvidence) {
 		command.Requester = shipper
 	}
 	return command, nil

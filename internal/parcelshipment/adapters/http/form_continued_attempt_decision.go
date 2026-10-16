@@ -78,8 +78,8 @@ func continuedAttemptDecisionEndpoint(
 	})
 }
 
-// continuedAttemptDecisionResponse 是两个端点共用的封闭响应形状。`outcome` 取应用结果枚举的原名；`已形成`时带决定的
-// 身份几格（标识、种类、生效时间、关闭的截断边界或重开所解的关闭）；`未决`带等的是哪个依赖；`输入未受理`带哪一格
+// continuedAttemptDecisionResponse 是两个端点共用的封闭响应形状。`outcome` 取应用结果枚举的原名；`已形成`与`已有结果`
+// 时带决定的身份几格（标识、种类、生效时间、关闭的截断边界或重开所解的关闭）——后者带的是重放对应的那条原决定；`未决`带等的是哪个依赖；`输入未受理`带哪一格
 // 立不起来。决定方 / 授权角色 / 授权依据快照不在响应里：它们是审计面（票 label-channel/10 读面派生）要读的，
 // 写面回执只需让调用方知道形成了哪一条。
 type continuedAttemptDecisionResponse struct {
