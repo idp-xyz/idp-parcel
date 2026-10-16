@@ -1,7 +1,7 @@
 # 25 节点收寄带上 parcel-shipment 的服务结果标记：生产渠道上这一查没人做
 
 Category: bug
-Status: in-progress——2026-10-16 完工，待进 main；见「完成记录」。此前 in-progress——2026-10-16 Claude Code 会话裁三问并认领（用户「yes, do」），分支 `claude-oc25`；裁定见「裁定」。生产上的效果要等身份核对缝接真（[ps-external-mark-relations/01](../../ps-external-mark-relations/issues/01-external-mark-relations-have-no-model-in-parcel-shipment.md)，needs-info，缺排期决定）：那之前明确接收停在`收寄待确认`，走不到取标记这一步。此前 needs-triage——2026-10-16 Claude Code 会话立（票 23 实施中量到）。
+Status: resolved——2026-10-16 进 main（`0214a62a`，分支 `claude-oc25` 快进，远端 main 含 `2c540468`）；见「进 main 记录」。此前 in-progress——2026-10-16 完工，待进 main；见「完成记录」。此前 in-progress——2026-10-16 Claude Code 会话裁三问并认领（用户「yes, do」），分支 `claude-oc25`；裁定见「裁定」。生产上的效果要等身份核对缝接真（[ps-external-mark-relations/01](../../ps-external-mark-relations/issues/01-external-mark-relations-have-no-model-in-parcel-shipment.md)，needs-info，缺排期决定）：那之前明确接收停在`收寄待确认`，走不到取标记这一步。此前 needs-triage——2026-10-16 Claude Code 会话立（票 23 实施中量到）。
 Blocked by: 无——机制半边不挡；生产效果挂在 ps-external-mark-relations/01 上（见 Status）
 父票：无——不属 [psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 的完成判据（那一票只管渠道换真 Intake），是票 10 换口时带过来的业务缺口；不挡任何票
 出处：`internal/nodeoperations/application` 的 `ReceiveDeliveredUnitCommand.ServiceMarkers` 头注；UC-NO-002 的「服务结果引用」一行与 `AT-NO-020`–`022`；[08](./08-isolated-release-of-main-chain-command-faces.md) 的「收寄的服务结果标记留空」；[23](./23-node-operations-isolated-command-intake-retires.md)「实施中量到的」。
@@ -46,3 +46,9 @@ Blocked by: 无——机制半边不挡；生产效果挂在 ps-external-mark-re
 - **标记今天没有消费方**：NO 唯一的方向性作业编排是集运（UC-NO-003），它加成员时只核单元在不在、成员是否已在别的袋里，不读收寄标记，也不核路由、兼容与身份；「标记限制后续方向性作业」此刻只体现在记录与复核目录（管理台节点作业复核页的「服务标记」列照原样显示）。立为 [no-directional-basis/01](../../no-directional-basis/issues/01-consolidation-adds-members-without-any-directional-basis.md)，needs-triage。
 - **AT 盘点**：`.scratch/at-coverage-inventory.md` 的 `AT-NO-020` 改指新用例（原指的用例不再引它），`AT-NO-021` 由②迁①。
 - **评审**：作者自审，不算非作者评审。证据层级 `S`。
+
+### 进 main 记录（2026-10-16）
+
+- 分支 `claude-oc25` 三笔 `0214a62a` / `0e31b9f3` / `2c540468` 叠在远端 main `7a8f56e5` 之上，快进进 main、推的就是这个 SHA。等全量期间另一会话两度推了管理台的票（group-legal-entities-uiux/05–07），本分支两度重放到新 main 上，每次重放后机制清点重生成、与上一版逐字相同。
+- 推送方全量：钉 `d646c334`（本分支重放到 `64e78c82` 上的那一版）的干净 detached 检出，带 DSN，`go test -p 1 -count=1 -v ./...` 退 0——有测试的包 142 个 ok、0 FAIL，`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）；同一检出上全仓 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0。`2c540468` 与 `d646c334` 在 `apps/admin-web/` 与 `.scratch/` 之外逐字相同；这两处之外唯一读管理台源码的 Go 门禁在 `internal/architecture`，在 `2c540468` 上与 NO、`cmd/parcel-api`、`cmd/parcel-frontline-import` 一起带 DSN 重跑全绿，`go build ./...`、`go vet ./...` 退 0。
+- 评审：只有作者自审，没有非作者评审（本机无别的会话可派；仓规 2026-09-16 不用子代理）。
