@@ -1,7 +1,7 @@
 # 27 承运商首次有效收寄判断：失效命令带引用、不带种类时，原样重放答 `INPUT_NOT_ACCEPTED` 而不是 `ALREADY_RECORDED`
 
 Category: bug
-Status: ready-for-agent——2026-10-16 会话 `idp-parcel-9b` 立（票 26 序 3 评审阻断；作者会话在 main `4dd937eb` 上复现）
+Status: in-progress——2026-10-16 作者会话（票 20 的代码作者，Claude Code 会话）认领，分支 `claude-oc27`，基线 `d3caf1b0`；评审照改裁走非作者通道或 `/code-review` 的隔离子代理。此前 ready-for-agent——2026-10-16 会话 `idp-parcel-9b` 立（票 26 序 3 评审阻断；作者会话在 main `4dd937eb` 上复现）
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)（评审欠账；本票是它点名的「有阻断的，各立修复票」）。被评的是 [20](./20-tf-closure-dispatch-task-and-pickup-judgment-canonicalization.md)，代码 `857453d8`。
 出处：票 20 的 Comments「评审 ← 会话 idp-parcel-9b 起的隔离子代理」那一条，Spec 轴阻断 1。
