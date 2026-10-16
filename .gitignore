@@ -72,3 +72,7 @@ apps/*/dist/
 # every session sees it dirty, so it is deliberately not under version control.
 # A fresh clone has no MCP channels until the sidebar writes this file.
 /.cursor/mcp.json
+# 本机 MCP 会话绑定标识（instanceId）与 messenger 协议随侧栏/主机各自维护，
+# 不入版本控制；这两份此前误入库，现转为本地忽略。
+/.cursor/idp-mcp.settings.json
+/.cursor/rules/idp-mcp-messenger.mdc
