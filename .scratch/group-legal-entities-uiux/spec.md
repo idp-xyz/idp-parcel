@@ -70,7 +70,7 @@ axe 在 `858280a2` 上的实测（只计 WCAG 2 AA 违规节点数）：
 | 04 | [登记视图有自己的地址](issues/04-registration-view-is-addressable.md) | — | resolved |
 | 05 | [主动作用主色（本页）](issues/05-primary-action-style-on-this-page.md) | — | resolved |
 | 06 | [详情栏头部瘦身](issues/06-detail-panel-header-slimmed.md) | — | resolved |
-| 07 | [资料表单展开后滚进视野](issues/07-profile-form-scrolls-into-view.md) | — | in-progress |
+| 07 | [资料表单展开后滚进视野](issues/07-profile-form-scrolls-into-view.md) | — | resolved |
 | 08 | [本页可访问性](issues/08-page-accessibility.md) | — | ready-for-agent |
 | 09 | [对象页与详情栏同一套结构](issues/09-object-page-matches-detail-panel.md) | 01、06 | ready-for-agent |
 | 10 | [1024 宽下不折坏](issues/10-narrow-width-layout.md) | 06、08 | ready-for-agent |
