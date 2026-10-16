@@ -78,7 +78,9 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
           aria-hidden="true"
         />
         {/* 标识取主题的链接色 text.link.hover：强调色 #007acc 落在画布与选中行上只有 3.7–4.2:1。 */}
-        <span className="truncate font-mono font-medium text-[color:var(--ds-text-link-hover)]">{row.legalEntityId}</span>
+        <span className="truncate font-mono font-medium text-[color:var(--ds-text-link-hover)]" title={row.legalEntityId}>
+          {row.legalEntityId}
+        </span>
         <span className="shrink-0 font-mono text-[12px] text-idpxyz-breadcrumb">{identityRevisionLabel(row.revision)}</span>
         {legalEntityNeedsAttention(row) && (
           <AlertTriangle className={`h-3 w-3 shrink-0 ${statusToneText.warning}`} aria-label="待补" />
@@ -110,7 +112,7 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
     header: '状态',
     // 已停用行标出停用时点：停用只自其时点起不再支持新的商业决定，时点是这格状态的内容而不是装饰。
     render: (row) => (
-      <div className="flex flex-col items-start gap-1">
+      <div className="flex flex-col items-start gap-1 whitespace-nowrap">
         {statusBadge(identityStatusLabels, row.status)}
         {row.deactivatedAt ? (
           <span className="font-mono text-[12px] text-idpxyz-breadcrumb">

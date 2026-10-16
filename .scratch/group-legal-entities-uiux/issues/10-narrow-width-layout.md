@@ -18,7 +18,7 @@
 
 **Category:** bug
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
 - [ ] 在 1024 和 1280 宽下，列表和详情栏都没有上面列的断行，全部 KPI 可见或可以滚到
 - [ ] 1440 宽下的布局不回退

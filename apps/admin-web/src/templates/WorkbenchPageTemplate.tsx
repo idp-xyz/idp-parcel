@@ -291,15 +291,17 @@ export function WorkbenchPageTemplate<Row>({
 
   return (
     <div className="relative flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
-      <div className="flex shrink-0 items-center gap-5 border-b border-idpxyz-border px-6 py-3">
+      {/* 命令头可换行（票 group-legal-entities-uiux/10）：指标组在 2xl 以下独占第二行、组内再按需换行，不横向裁切——
+          此前是一行 overflow-x-auto，窄一点就把后面几格裁掉、不给任何提示，md 以下更是整组藏起。 */}
+      <div className="flex shrink-0 flex-wrap items-center gap-x-5 gap-y-2 border-b border-idpxyz-border px-6 py-3">
         <div className="min-w-0 shrink-0">
           <h1 className="text-[16px] font-semibold leading-tight text-idpxyz-textBright">{title}</h1>
           {subtitle && <p className="truncate text-[12px] text-idpxyz-breadcrumb">{subtitle}</p>}
         </div>
         {kpis && kpis.length > 0 && (
           <>
-            <div className="hidden h-7 w-px shrink-0 bg-idpxyz-border md:block" />
-            <div className="hidden min-w-0 items-center gap-4 overflow-x-auto md:flex">
+            <div className="hidden h-7 w-px shrink-0 bg-idpxyz-border 2xl:block" />
+            <div className="order-last flex min-w-0 basis-full flex-wrap items-center gap-x-4 gap-y-1 2xl:order-none 2xl:basis-auto">
               {kpis.map((kpi) =>
                 kpi.custom != null ? (
                   <div key={kpi.label} className="flex flex-col gap-0.5 px-1">

@@ -39,7 +39,7 @@ function RefChip({
       onClick={() => onCopy(title, value)}
       className="inline-flex max-w-full items-center gap-1 rounded border border-idpxyz-border bg-idpxyz-sidebar px-1.5 py-0.5 text-[12px] hover:border-idpxyz-accent"
     >
-      <span className="text-idpxyz-breadcrumb">{label}</span>
+      <span className="shrink-0 whitespace-nowrap text-idpxyz-breadcrumb">{label}</span>
       <span className="truncate font-mono text-idpxyz-text">{value}</span>
     </button>
   );
@@ -101,7 +101,8 @@ export function LegalEntityDetailPanel({
               {statusBadge(identityStatusLabels, row.status)}
             </div>
             <p className="mt-0.5 text-[12px] text-idpxyz-breadcrumb">
-              {row.partyNameKnown ? row.partyName : <UnknownPartyName />} · <span className="font-mono">{row.partyId}</span>
+              {row.partyNameKnown ? row.partyName : <UnknownPartyName />} ·{' '}
+              <span className="whitespace-nowrap font-mono">{row.partyId}</span>
             </p>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <RefChip label="国家" value={identity?.country} title="注册国家 / 地区" onCopy={copy} />
@@ -133,7 +134,10 @@ export function LegalEntityDetailPanel({
         <LegalEntityBanners row={row} />
       </div>
 
-      <div className="grid grid-cols-4 gap-2.5 border-b border-idpxyz-border px-5 py-3">
+      {/* 事实条按栏宽在四列与两列之间二选一（票 group-legal-entities-uiux/10）：固定四列在窄栏里把「08:00:00」这样一个词拆成
+          两半；按最小格宽自动分列又会在中间宽度排出三格加一格。minmax 的下限用 clamp 夹：栏宽过 32rem 时中间项为负、取下界
+          25%，排四列；不到时中间项极大、取上界 50%，排两列——四格放得下每个词时才排四列。 */}
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(clamp(calc(25%_-_0.625rem),calc((32rem_-_100%)_*_999),calc(50%_-_0.625rem)),1fr))] gap-2.5 border-b border-idpxyz-border px-5 py-3">
         <Fact label="当前修订">{identityRevisionLabel(row.revision)}</Fact>
         <Fact label="生效自">
           <Instant value={row.effectiveFrom} />
