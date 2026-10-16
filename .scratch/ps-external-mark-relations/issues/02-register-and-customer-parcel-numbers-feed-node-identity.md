@@ -1,7 +1,7 @@
 # 02 外部标识关联册落地，客户包裹件号随委托接受形成，节点身份核对接真
 
 Category: enhancement
-Status: in-progress——2026-10-16 Claude Code 会话认领，分支 `claude-psxm`，基线 `d01e4309`。此前 ready-for-agent——2026-10-16 Claude Code 会话立（[ADR-0184](../../../docs/adr/0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md) 决定一至六）
+Status: in-progress——2026-10-16 完工，待进 main；见「完成记录」。此前 in-progress——2026-10-16 Claude Code 会话认领，分支 `claude-psxm`，基线 `d01e4309`。此前 ready-for-agent——2026-10-16 Claude Code 会话立（[ADR-0184](../../../docs/adr/0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md) 决定一至六）
 Blocked by: 无
 父票：[01](./01-external-mark-relations-have-no-model-in-parcel-shipment.md)
 
@@ -29,3 +29,13 @@ Blocked by: 无
 - 提交时配对指着成员集合外、或一件两个号 → `输入未受理`。
 - 真库用例：经生产仓储走「提交 → 接受 → 按号码核对」一条；`cmd/parcel-api` 装配的收寄编排对一件已接受包裹答`节点收寄已形成`。
 - 架构门禁绿；机制清点重生成。
+
+## 完成记录（2026-10-16，Claude Code 会话，分支 `claude-psxm`，代码 `cc52e9b6`）
+
+- **落点**：PS 领域 `external_identifier.go`（号码、类型、分配方、适用范围、形成依据、关联、客户包裹件号配对；委托的 `ExternalIdentifierRelationsFormedByAcceptance`）；委托与重建面各带一格 `customerParcelNumbers`，重建门禁反射名单同笔登记；提交命令与 `IsolatedSubmissionIntake` 带配对；迁移 `0024` 关联表；`ShipmentRequests.Save` 同笔写关联；读面 `ExternalIdentifiers.FindParcelsByExternalIdentifier`；PS 端口 `ParcelExternalIdentifierView`；NO 适配器 `ParcelIdentityView`；`cmd/parcel-api` 的 `buildParcelIdentityView` 与 `cmd/parcel-frontline-import` 的 `parcelIdentityViewOf` 换掉两处未配置替身。
+- **补的格**：领域——接受时每件给了号的成员形成一条（类型、分配方、范围、依据、形成时刻逐格对）；已提交与已拒绝不形成；配对指着成员外或一件两号即拒、两件同号不拒；号码逐字；新提交版本带过配对；重建带回、坏配对拒收。应用——配对随委托落下，坏配对答`输入未受理`、不建单、来源照常保全。Intake——客户参考按次序配上现签内部成员，内部标识不被客户参考顶替。真库——接受那一笔才写、再保存不重复成行；跨客户同号交回两件、大小写不同与他租户查不到；拒绝不留行；关联写失败接受整笔回滚。NO 适配器——号码原样交 PS、多件即多候选、空号码零候选不问 PS、读不动原样交回。装配——`cmd/parcel-api` 经真提交编排带号建单、接受前同号答待识别、经真仓储接受后同号唯一识别并形成收寄与控制。
+- **改了预期的旧用例**：`TestTheWiredReceptionAnswersHonestlyAgainstARealDatabase`、`TestIsolatedReceptionAnswersBusinessOutcomesAgainstARealDatabase`、前线导入两条纵向用例——号码不在册里时明确接收答待识别并真实落库（原断言是未配置缝下停在`收寄待确认`、不落库）；前线导入因此三行全落、退出码 0，冲突那一轮退出码 2。
+- **判据**：✅ 接受后逐字识别出那一件，收寄形成、控制建立（服务结果读口在同一编排里被问，读得动才走得到`节点收寄已形成`）；✅ 接受前与已拒绝零候选——已撤回只能发生在决定之前、从未接受过，结构上不会形成关联，没有另立用例；✅ 同号两件交回两件（三分支据此答身份冲突，由 NO 编排既有用例覆盖）；✅ 反复保存不重复；✅ 坏配对`输入未受理`；✅ 真库「提交 → 接受 → 核对」一条；✅ `internal/architecture` 绿，机制清点 `d270ad1e`（消费缝 `nodeoperations → parcelshipment` 由一个文件变两个，`ParcelIdentityView` 退出虚低名单）。PS、NO、`cmd/parcel-api`、`cmd/parcel-frontline-import`、`cmd/parcel-dispatch`、`tests/`、`internal/platform` 带 DSN 全绿；`go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出。
+- **评审中改的**：关联访问器改成包内惯用的多行写法；ADR-0184 后果节与票 02、03 对齐「适用变化表随 03 进来」——本票没有任何来源事实会产生作废或替代，先建表只会让读口对一张永远空的表做排除。
+- **开发主线**：补记一条「PN-03 第一项身份核对缝这一格已过时」，上表单元格不改写。
+- **评审**：作者自审，不算非作者评审——已登进 [operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md) 的同类欠账（本票代码进 main 后补一行）。证据层级 `S`。
