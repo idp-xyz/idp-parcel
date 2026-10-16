@@ -236,7 +236,7 @@ func TestAChannelVoidRetiresTheRelationsItCoversAndARefundDoesNot(t *testing.T) 
 
 	byParcel := appendFollowUp(t, recorded, domain.ChannelVoidAction, "parcel-2")
 	changes := byParcel.ExternalIdentifierChanges()
-	if len(changes) != 1 || changes[0].Change() != domain.ExternalIdentifierVoided ||
+	if len(changes) != 1 || changes[0].ChangeKind() != domain.ExternalIdentifierVoided ||
 		changes[0].Parcel().String() != "parcel-2" || changes[0].FormedBy().String() != "label-txn-1" ||
 		changes[0].Kind() != domain.ChannelParcelNumber || !changes[0].ChangedAt().Equal(labelTransactionAt.Add(time.Hour)) {
 		t.Fatalf("逐件作废 changes = %+v", changes)
@@ -289,7 +289,7 @@ func TestAReplacementTransactionSupersedesThePriorNumberOfTheSameParcel(t *testi
 	}
 
 	changes := replacing(domain.LabelTransactionReplacement).ExternalIdentifierChanges()
-	if len(changes) != 1 || changes[0].Change() != domain.ExternalIdentifierReplaced ||
+	if len(changes) != 1 || changes[0].ChangeKind() != domain.ExternalIdentifierReplaced ||
 		changes[0].FormedBy().String() != "label-txn-1" || changes[0].Parcel().String() != "parcel-1" ||
 		changes[0].Cause().String() != "label-txn-2" {
 		t.Fatalf("替代 changes = %+v", changes)
@@ -300,5 +300,23 @@ func TestAReplacementTransactionSupersedesThePriorNumberOfTheSameParcel(t *testi
 	}
 	if got := replacing(domain.LabelTransactionRetry).ExternalIdentifierChanges(); len(got) != 0 {
 		t.Fatalf("重试也交出了替代：%+v", got)
+	}
+}
+
+// Covers: 同一件包裹被作废两次（先点名、后整笔）只交出一条已作废，时刻取最早那条——号从第一次作废起就不再算数。
+func TestRepeatedVoidsYieldOneChangeAtTheFirstVoid(t *testing.T) {
+	recorded := recordedLabelTransaction(t, domain.LabelTransactionSucceeded, acceptedParcelResult(t, "parcel-1", "CH-0001"))
+	first := appendFollowUp(t, recorded, domain.ChannelVoidAction, "parcel-1")
+	again, err := first.AppendFollowUpAction(domain.FollowUpActionSpec{
+		Kind:       domain.ChannelVoidAction,
+		Reason:     mustValue(t, domain.NewChannelResultReasonReference, "SYN-REASON"),
+		OccurredAt: labelTransactionAt.Add(2 * time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("整笔作废：%v", err)
+	}
+	changes := again.ExternalIdentifierChanges()
+	if len(changes) != 1 || !changes[0].ChangedAt().Equal(labelTransactionAt.Add(time.Hour)) {
+		t.Fatalf("changes = %+v, want 一条、时刻是第一次作废", changes)
 	}
 }

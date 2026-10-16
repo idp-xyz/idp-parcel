@@ -501,6 +501,19 @@ func (action LabelTransactionFollowUpAction) CoversWholeTransaction() bool {
 	return len(action.parcels) == 0
 }
 
+// covers 说这条动作作用不作用到该包裹：整笔范围或点名了它。终局判断与外部标识关联的作废共用这一处读法。
+func (action LabelTransactionFollowUpAction) covers(parcel DeclaredParcelID) bool {
+	if action.CoversWholeTransaction() {
+		return true
+	}
+	for _, scoped := range action.parcels {
+		if scoped == parcel {
+			return true
+		}
+	}
+	return false
+}
+
 // Parcels 交回指名包裹范围的副本，整笔范围为空。
 func (action LabelTransactionFollowUpAction) Parcels() []DeclaredParcelID {
 	parcels := make([]DeclaredParcelID, len(action.parcels))

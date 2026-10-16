@@ -242,6 +242,10 @@ func (kind ExternalIdentifierChangeKind) String() string {
 	}
 }
 
+// ExternalIdentifierChangeCause 是带来一次适用状态变化的来源事实：作废是被作废的交易本身，替代是新交易。它与形成依据
+// 分成两个类型——一个说关联从哪来，一个说它为何终结，混用一个类型就读不出这一格说的是哪件事。
+type ExternalIdentifierChangeCause struct{ requiredValue }
+
 // ExternalIdentifierChange 是一次适用状态变化：作用于（租户，类型，形成依据，包裹）选出的那条关联——渠道包裹件号
 // 由形成它的交易与包裹唯一确定，替代那一笔手里没有原交易的号，所以按选择而不是按号码指名。终态一次：已有终态的
 // 关联不再变（PS CONTEXT「已作废、已被替代、已失效都是终态，不回到适用」）。
@@ -252,7 +256,7 @@ type ExternalIdentifierChange struct {
 	parcel    DeclaredParcelID
 	change    ExternalIdentifierChangeKind
 	successor ExternalIdentifierRelation
-	cause     ExternalIdentifierBasis
+	cause     ExternalIdentifierChangeCause
 	changedAt time.Time
 }
 
@@ -273,7 +277,8 @@ func (change ExternalIdentifierChange) Parcel() DeclaredParcelID {
 	return change.parcel
 }
 
-func (change ExternalIdentifierChange) Change() ExternalIdentifierChangeKind {
+// ChangeKind 是这次变化把关联带到的终态。
+func (change ExternalIdentifierChange) ChangeKind() ExternalIdentifierChangeKind {
 	return change.change
 }
 
@@ -282,8 +287,7 @@ func (change ExternalIdentifierChange) Successor() (ExternalIdentifierRelation, 
 	return change.successor, change.change == ExternalIdentifierReplaced
 }
 
-// Cause 是带来这次变化的那笔交易：作废是被作废的交易本身，替代是新交易。
-func (change ExternalIdentifierChange) Cause() ExternalIdentifierBasis {
+func (change ExternalIdentifierChange) Cause() ExternalIdentifierChangeCause {
 	return change.cause
 }
 
@@ -291,35 +295,31 @@ func (change ExternalIdentifierChange) ChangedAt() time.Time {
 	return change.changedAt
 }
 
-// ExternalIdentifierChanges 交回这笔交易带来的适用状态变化（ADR-0184 决定七）：
-//   - 渠道作废覆盖的每件受理包裹（逐件或整笔），本交易形成的那条关联转已作废，时刻是作废发生时刻；
-//   - 前序关系为替代时，本交易受理的每件包裹，原交易给它形成的那条关联转已被替代，后继是本交易的新号，时刻是结果
-//     观察时刻。原交易必然已定案（EstablishPriorLabelTransactionLink 只认已定案的原交易），它的关联此时已在册里。
+// ExternalIdentifierChanges 交回这笔交易带来的适用状态变化（ADR-0184 决定七），每件受理包裹至多一条：
+//   - 有渠道作废作用到它（整笔或点名，读法同终局判断，见 LabelTransactionFollowUpAction.covers），本交易给它形成的
+//     那条关联转已作废，时刻取最早那条作废——号从第一次作废起就不再算数；终局判断要的是生效时刻，取最晚那条，两处
+//     问的不是同一件事；
+//   - 前序关系为替代时，原交易给它形成的那条关联转已被替代，后继是本交易的新关联，时刻是结果观察时刻。原交易必然
+//     已定案（EstablishPriorLabelTransactionLink 只认已定案的原交易），它的关联此时已在册里。沿用原号也是新的一条
+//     关联（形成依据不同，ADR-0185），后继因此不会指回被替代者自己。
 //
 // 渠道退款不改适用状态——退款不等于号作废；原交易上的替代痕迹不在这里起作用，替代由新交易出生时的前序关系表达。
 func (transaction LabelTransaction) ExternalIdentifierChanges() []ExternalIdentifierChange {
 	var changes []ExternalIdentifierChange
-	for _, action := range transaction.followUpActions {
-		if action.kind != ChannelVoidAction {
+	cause := ExternalIdentifierChangeCause{requiredValue{value: transaction.id.String()}}
+	for _, result := range transaction.parcelResults {
+		if !result.accepted {
 			continue
 		}
-		scope := action.parcels
-		if len(scope) == 0 {
-			scope = transaction.coveredParcels
-		}
-		for _, parcel := range scope {
-			result, found := transaction.ParcelResult(parcel)
-			if !found || !result.accepted {
-				continue
-			}
+		if voidedAt, voided := transaction.firstVoidCovering(result.parcel); voided {
 			changes = append(changes, ExternalIdentifierChange{
 				tenant:    transaction.tenant,
 				kind:      ChannelParcelNumber,
 				formedBy:  ExternalIdentifierBasis{requiredValue{value: transaction.id.String()}},
-				parcel:    parcel,
+				parcel:    result.parcel,
 				change:    ExternalIdentifierVoided,
-				cause:     ExternalIdentifierBasis{requiredValue{value: transaction.id.String()}},
-				changedAt: action.occurredAt,
+				cause:     cause,
+				changedAt: voidedAt,
 			})
 		}
 	}
@@ -335,10 +335,26 @@ func (transaction LabelTransaction) ExternalIdentifierChanges() []ExternalIdenti
 				parcel:    result.parcel,
 				change:    ExternalIdentifierReplaced,
 				successor: transaction.channelRelationOf(result),
-				cause:     ExternalIdentifierBasis{requiredValue{value: transaction.id.String()}},
+				cause:     cause,
 				changedAt: transaction.resultObservedAt,
 			})
 		}
 	}
 	return changes
+}
+
+// firstVoidCovering 交回作用到该包裹的最早一条渠道作废的业务时间。
+func (transaction LabelTransaction) firstVoidCovering(parcel DeclaredParcelID) (time.Time, bool) {
+	var first time.Time
+	voided := false
+	for _, action := range transaction.followUpActions {
+		if action.kind != ChannelVoidAction || !action.covers(parcel) {
+			continue
+		}
+		if !voided || action.occurredAt.Before(first) {
+			first = action.occurredAt
+		}
+		voided = true
+	}
+	return first, voided
 }

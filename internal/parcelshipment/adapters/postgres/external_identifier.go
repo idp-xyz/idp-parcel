@@ -31,8 +31,8 @@ func NewExternalIdentifiers(db *bentopg.DB) (*ExternalIdentifiers, error) {
 // FindParcelsByExternalIdentifier 逐字比对号码，交回此刻适用、标识包裹的关联所指的包裹，去重。已有终态（已作废、
 // 已被替代）的关联不算——它的号只留历史，不再标识谁。
 //
-// 不按委托状态过滤：关联只在委托接受时形成，接受后的取消、终局也不改它的适用状态（PS CONTEXT Rules）——
-// 已取消的包裹到站仍要被认出来，节点才落得下`已取消`标记。ORDER BY 只为候选次序稳定，不表示谁优先。
+// 不按委托状态过滤：关联只随它的来源事实写下（客户包裹件号随委托接受，渠道包裹件号随面单交易包裹结果受理），接受
+// 后的取消、终局也不改它的适用状态（PS CONTEXT Rules）——已取消的包裹到站仍要被认出来，节点才落得下`已取消`标记。ORDER BY 只为候选次序稳定，不表示谁优先。
 func (view *ExternalIdentifiers) FindParcelsByExternalIdentifier(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -58,7 +58,8 @@ func (view *ExternalIdentifiers) FindParcelsByExternalIdentifier(
 		           AND change.identifier_kind = relation.identifier_kind
 		           AND change.allocator = relation.allocator
 		           AND change.identifier_number = relation.identifier_number
-		           AND change.object_ref = relation.object_ref)
+		           AND change.object_ref = relation.object_ref
+		           AND change.basis = relation.basis)
 		  ORDER BY relation.object_ref`,
 		tenant.String(),
 		number.String(),
@@ -85,8 +86,9 @@ func (view *ExternalIdentifiers) FindParcelsByExternalIdentifier(
 	return parcels, nil
 }
 
-// insertExternalIdentifierRelations 在调用方的事务里写下一组关联。ON CONFLICT DO NOTHING 是重放语义：
-// 已接受委托每次经仓储保存都会把同一组关联再交来一次，同键即同一条关联，不是冲突。
+// insertExternalIdentifierRelations 在调用方的事务里写下一组关联。键含形成依据（ADR-0185）：别的来源事实再签同一个
+// 号是另一条关联。ON CONFLICT DO NOTHING 是重放语义：来源事实每次经仓储保存都会把同一组关联再交来一次，同键即同一
+// 条关联，不是冲突。
 func insertExternalIdentifierRelations(
 	ctx context.Context,
 	executor bentopg.Executor,
@@ -98,7 +100,7 @@ func insertExternalIdentifierRelations(
 			     (tenant_id, identifier_kind, allocator, identifier_number,
 			      object_kind, object_ref, scope, basis, formed_at)
 			 VALUES ($1, $2, $3, $4, 'PARCEL', $5, $6, $7, $8)
-			 ON CONFLICT (tenant_id, identifier_kind, allocator, identifier_number, object_ref) DO NOTHING`,
+			 ON CONFLICT (tenant_id, identifier_kind, allocator, identifier_number, object_ref, basis) DO NOTHING`,
 			relation.Tenant().String(),
 			relation.Kind().String(),
 			relation.Allocator().String(),
@@ -124,31 +126,32 @@ func insertExternalIdentifierChanges(
 	changes []domain.ExternalIdentifierChange,
 ) error {
 	for _, change := range changes {
-		var successorAllocator, successorNumber *string
+		var successorAllocator, successorNumber, successorBasis *string
 		if successor, present := change.Successor(); present {
-			allocator, number := successor.Allocator().String(), successor.Number().String()
-			successorAllocator, successorNumber = &allocator, &number
+			allocator, number, basis := successor.Allocator().String(), successor.Number().String(), successor.Basis().String()
+			successorAllocator, successorNumber, successorBasis = &allocator, &number, &basis
 		}
 		if _, err := executor.Exec(ctx,
 			`INSERT INTO parcel_shipment.external_identifier_relation_change
-			     (tenant_id, identifier_kind, allocator, identifier_number, object_ref,
-			      change_kind, successor_allocator, successor_number, cause, changed_at)
+			     (tenant_id, identifier_kind, allocator, identifier_number, object_ref, basis,
+			      change_kind, successor_allocator, successor_number, successor_basis, cause, changed_at)
 			 SELECT relation.tenant_id, relation.identifier_kind, relation.allocator,
-			        relation.identifier_number, relation.object_ref,
-			        $5, $6, $7, $8, $9
+			        relation.identifier_number, relation.object_ref, relation.basis,
+			        $5, $6, $7, $8, $9, $10
 			   FROM parcel_shipment.external_identifier_relation AS relation
 			  WHERE relation.tenant_id = $1
 			    AND relation.identifier_kind = $2
 			    AND relation.basis = $3
 			    AND relation.object_ref = $4
-			 ON CONFLICT (tenant_id, identifier_kind, allocator, identifier_number, object_ref) DO NOTHING`,
+			 ON CONFLICT (tenant_id, identifier_kind, allocator, identifier_number, object_ref, basis) DO NOTHING`,
 			change.Tenant().String(),
 			change.Kind().String(),
 			change.FormedBy().String(),
 			change.Parcel().String(),
-			change.Change().String(),
+			change.ChangeKind().String(),
 			successorAllocator,
 			successorNumber,
+			successorBasis,
 			change.Cause().String(),
 			change.ChangedAt().UTC(),
 		); err != nil {

@@ -291,13 +291,7 @@ func (transaction LabelTransaction) voidCovering(parcel DeclaredParcelID) (time.
 		if action.kind != ChannelVoidAction {
 			continue
 		}
-		applies := action.CoversWholeTransaction()
-		for _, scoped := range action.parcels {
-			if scoped == parcel {
-				applies = true
-			}
-		}
-		if !applies {
+		if !action.covers(parcel) {
 			continue
 		}
 		voided = true

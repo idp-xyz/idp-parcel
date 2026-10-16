@@ -486,3 +486,50 @@ func TestAReplacementSupersedesThePriorNumberAndATerminalStateIsFinal(t *testing
 		t.Fatalf("后继 = %s / %s", successorAllocator, successorNumber)
 	}
 }
+
+// Covers: ADR-0185——同一渠道服务方对同一件包裹再签同一个号是新的一条关联。换单沿用原号：原关联转已被替代，后继是
+// 新交易那一条（不是它自己），号照常识别出那一件；作废之后由下一笔交易再签同号：形成新关联，号重新算数，旧的不复活。
+func TestReSigningTheSameNumberFormsANewRelation(t *testing.T) {
+	fixture := newChannelFixture(t)
+	observed := labelEstablishedAt.Add(2 * time.Minute)
+	fixture.recordChannel(t, establishedLabelTransactionFixture(t, "tenant-a", "label-txn-1", "parcel-1", "parcel-2"), observed,
+		acceptedChannelResult(t, "parcel-1", "CH-SAME-1"), acceptedChannelResult(t, "parcel-2", "CH-SAME-2"))
+	fixture.appendFollowUp(t, "label-txn-1", domain.ChannelVoidAction, observed.Add(time.Minute), "parcel-2")
+	if got := fixture.parcelsOf(t, "CH-SAME-2"); len(got) != 0 {
+		t.Fatalf("作废后 CH-SAME-2 仍查得 %v", got)
+	}
+
+	link, err := domain.EstablishPriorLabelTransactionLink(fixture.reload(t, "label-txn-1"), domain.LabelTransactionReplacement)
+	if err != nil {
+		t.Fatalf("前序关系：%v", err)
+	}
+	template := establishedLabelTransactionFixture(t, "tenant-a", "label-txn-2", "parcel-1", "parcel-2")
+	established, err := domain.EstablishLabelTransaction(domain.EstablishLabelTransactionSpec{
+		Tenant: template.Tenant(), ID: template.ID(), CoveredParcels: template.CoveredParcels(),
+		ChannelAccount: template.ChannelAccount(), AccountHolder: template.AccountHolder(),
+		ServiceProvider: template.ServiceProvider(), SettlementCounterparty: template.SettlementCounterparty(),
+		Contract: template.Contract(), Rate: template.Rate(), ResponsibilityBasis: template.ResponsibilityBasis(),
+		EstablishedAt: observed.Add(time.Hour), PriorLink: link,
+	})
+	if err != nil {
+		t.Fatalf("建立替代交易：%v", err)
+	}
+	fixture.recordChannel(t, established, observed.Add(3*time.Hour),
+		acceptedChannelResult(t, "parcel-1", "CH-SAME-1"), acceptedChannelResult(t, "parcel-2", "CH-SAME-2"))
+
+	for _, number := range []string{"CH-SAME-1", "CH-SAME-2"} {
+		want := map[string]string{"CH-SAME-1": "parcel-1", "CH-SAME-2": "parcel-2"}[number]
+		if got := fixture.parcelsOf(t, number); !slices.Equal(got, []string{want}) {
+			t.Fatalf("再签同号后 %s 查得 %v, want [%s]", number, got, want)
+		}
+	}
+	var successorBasis string
+	if err := fixture.pool.QueryRow(t.Context(),
+		`SELECT successor_basis FROM parcel_shipment.external_identifier_relation_change
+		  WHERE identifier_number = 'CH-SAME-1' AND basis = 'label-txn-1'`).Scan(&successorBasis); err != nil {
+		t.Fatalf("读替代行：%v", err)
+	}
+	if successorBasis != "label-txn-2" {
+		t.Fatalf("后继依据 = %q, want label-txn-2", successorBasis)
+	}
+}
