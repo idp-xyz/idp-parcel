@@ -74,9 +74,9 @@ type ContinuedAttemptRequest struct {
 	RelatedPriorClosure         ContinuedAttemptDecisionID
 }
 
-// RecordedRequest 交回册上与这份请求逐格相同的那条决定（票 operator-channel/28）。找得到就是同一次请求的重放：生效时间
-// 由请求带来，重投必然带着同一个；而另一次真正的请求不会与某条已登决定逐格相同——内容不同的第二条关闭（例如另一责任
-// 来源）照旧经 Append 追加，CONTEXT 允许关闭生效期间再登一条。
+// RecordedRequest 交回册上与这份请求逐格相同的那条决定。找得到就是同一次请求的重放，认法以 ADR-0183「复核记录二」
+// 为准：生效时间由请求带来，原样重投必然带同一个；内容不同的第二条关闭照旧经 Append 追加，CONTEXT 允许关闭生效期间
+// 再登一条。
 func (register ContinuedAttemptRegister) RecordedRequest(request ContinuedAttemptRequest) (ContinuedAttemptDecision, bool) {
 	for _, decision := range register.decisions {
 		if decision.kind == request.Kind &&

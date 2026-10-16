@@ -47,7 +47,7 @@ const (
 	// ContinuedAttemptDecisionWriteConflict：开册撞上别人刚开的、或追加时预期版本对不上。版本冲突是业务答案（ADR-0031），
 	// 调用方重读再重放；本层不代猜库里此刻是什么。
 	ContinuedAttemptDecisionWriteConflict
-	// ContinuedAttemptDecisionExistingResult：册上已有同类同内容的决定，这是同一次请求的重放（票 operator-channel/28）。
+	// ContinuedAttemptDecisionExistingResult：册上已有同类同内容的决定，这是同一次请求的重放（ADR-0183「复核记录二」）。
 	// 交回那条原决定；什么都没写、没签标识、没发意图。与委托提交口的`已有结果`同名同义，不复用`已形成`——那会让调用方
 	// 把一次重投读成又形成了一条。
 	ContinuedAttemptDecisionExistingResult
@@ -330,15 +330,6 @@ func (handler *FormContinuedAttemptDecisionHandler) FormControlledClosure(
 			EffectiveAt:                 command.EffectiveAt,
 			ClosureResponsibilitySource: source,
 		},
-		spec: func(request domain.ContinuedAttemptRequest, id domain.ContinuedAttemptDecisionID, granted ports.ContinuedAttemptDecisionAuthorization) (domain.ContinuedAttemptDecisionSpec, error) {
-			boundary, err := domain.NewAuthoritativeCutoffBoundary(id.String())
-			if err != nil {
-				return domain.ContinuedAttemptDecisionSpec{}, err
-			}
-			spec := decisionSpecOf(request, id, granted)
-			spec.CutoffBoundary = boundary
-			return spec, nil
-		},
 	})
 }
 
@@ -371,14 +362,11 @@ func (handler *FormContinuedAttemptDecisionHandler) FormReopening(
 		beforeIdentity: func(register domain.ContinuedAttemptRegister) ContinuedAttemptDecisionResult {
 			return handler.shipperReauthorizationGate(register, command)
 		},
-		spec: func(request domain.ContinuedAttemptRequest, id domain.ContinuedAttemptDecisionID, granted ports.ContinuedAttemptDecisionAuthorization) (domain.ContinuedAttemptDecisionSpec, error) {
-			return decisionSpecOf(request, id, granted), nil
-		},
 	})
 }
 
 // HasShipperAuthorizationEvidence 说一份货主重授权证据算不算带了：全空白与没带同读。接入层据它决定请求方在不在场
-// （ADR-0183 决定四），本编排据它开货主重授权那道门——两处同一口径，只在这里定义。
+// （ADR-0183 决定四），本编排据它开货主重授权那道门——判据只在这里定义。
 func HasShipperAuthorizationEvidence(evidence string) bool {
 	return strings.TrimSpace(evidence) != ""
 }
@@ -431,16 +419,16 @@ type formation struct {
 	requiresRegister bool
 	// beforeIdentity 在读回册之后、签发标识之前开口；交回非零结果即在此停下。
 	beforeIdentity func(domain.ContinuedAttemptRegister) ContinuedAttemptDecisionResult
-	spec           func(domain.ContinuedAttemptRequest, domain.ContinuedAttemptDecisionID, ports.ContinuedAttemptDecisionAuthorization) (domain.ContinuedAttemptDecisionSpec, error)
 }
 
-// decisionSpecOf 把请求内容、本上下文签发的标识与授权答复给出的三件合成决定规格；关闭再补截断边界。
+// decisionSpecOf 把请求内容、本上下文签发的标识与授权答复给出的三件合成决定规格。关闭再补权威业务截断边界，它的值
+// 就是本次关闭决定的标识（见 FormControlledClosure 头注）；重开没有这一格。
 func decisionSpecOf(
 	request domain.ContinuedAttemptRequest,
 	id domain.ContinuedAttemptDecisionID,
 	granted ports.ContinuedAttemptDecisionAuthorization,
-) domain.ContinuedAttemptDecisionSpec {
-	return domain.ContinuedAttemptDecisionSpec{
+) (domain.ContinuedAttemptDecisionSpec, error) {
+	spec := domain.ContinuedAttemptDecisionSpec{
 		ID:                          id,
 		Kind:                        request.Kind,
 		Requester:                   request.Requester,
@@ -452,11 +440,19 @@ func decisionSpecOf(
 		ClosureResponsibilitySource: request.ClosureResponsibilitySource,
 		RelatedPriorClosure:         request.RelatedPriorClosure,
 	}
+	if request.Kind == domain.ControlledClosureDecision {
+		boundary, err := domain.NewAuthoritativeCutoffBoundary(id.String())
+		if err != nil {
+			return domain.ContinuedAttemptDecisionSpec{}, err
+		}
+		spec.CutoffBoundary = boundary
+	}
+	return spec, nil
 }
 
 // form 是两条命令共用的路径：授权 → 当前有效终局 → 册 → 认重放 → 标识 → Append → Insert / Save → 交出判断意图。
 //
-// 重放认在授权之后、签发标识之前（票 operator-channel/28）：没有授权的操作者不能拿重放探册，重放也不消耗标识。
+// 重放认在授权之后、签发标识之前（ADR-0183「复核记录二」）：没有授权的操作者不能拿重放探册，重放也不消耗标识。
 //
 // 读那几步失败答`未决`（什么都没写，重投会改变结果）；写那几步失败原样上抛（整步随事务回滚）；版本冲突是业务答案。
 func (handler *FormContinuedAttemptDecisionHandler) form(ctx context.Context, plan formation) (ContinuedAttemptDecisionResult, error) {
@@ -522,7 +518,7 @@ func (handler *FormContinuedAttemptDecisionHandler) form(ctx context.Context, pl
 	if err != nil {
 		return continuedAttemptUndecided(ContinuedAttemptDecisionIdentityUnavailable), nil
 	}
-	spec, err := plan.spec(plan.request, id, granted)
+	spec, err := decisionSpecOf(plan.request, id, granted)
 	if err != nil {
 		return continuedAttemptNotAccepted(ContinuedAttemptDecisionInvalid), nil
 	}
