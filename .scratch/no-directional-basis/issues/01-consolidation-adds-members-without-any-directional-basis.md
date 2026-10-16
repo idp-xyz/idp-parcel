@@ -1,8 +1,8 @@
 # 集运加成员不核任何方向性依据：已取消、已终局、无路由、身份未定的实物都装得进袋
 
 Category: bug
-Status: ready-for-agent——2026-10-16 分诊并裁四问（用户「你帮我做决定吧」授权 Claude Code 会话代决），见「裁定」；排在 [ps-external-mark-relations/01](../../ps-external-mark-relations/issues/01-external-mark-relations-have-no-model-in-parcel-shipment.md) 之后。此前 needs-triage——2026-10-16 Claude Code 会话立（票 [operator-channel/25](../../operator-channel/issues/25-node-reception-carries-parcel-shipment-service-result-markers.md) 实施中量到）
-Blocked by: 无——机制半边不挡；生产效果挂在 ps-external-mark-relations/01（身份）与 [02](./02-network-routing-has-no-routing-instruction-or-consolidation-compatibility-judgment.md)（路由依据）上
+Status: needs-info——2026-10-16 开工前核实时推翻了自己的裁定第 1 条，见「裁定修订」：门不该放在写口，该放在作业端动作之前的读面；读面唯一的消费方是一线作业端，而作业端还没排进开发主线（ADR-0021「两个端都等真实落地时才建」）。此前 ready-for-agent——2026-10-16 分诊并裁四问（用户「你帮我做决定吧」授权 Claude Code 会话代决），见「裁定」；排在 [ps-external-mark-relations/01](../../ps-external-mark-relations/issues/01-external-mark-relations-have-no-model-in-parcel-shipment.md) 之后。此前 needs-triage——2026-10-16 Claude Code 会话立（票 [operator-channel/25](../../operator-channel/issues/25-node-reception-carries-parcel-shipment-service-result-markers.md) 实施中量到）
+Blocked by: 一线作业端排期（用户决定）——读面与作业端同排；偏离标记那一半可以先做，见「裁定修订」第 3 条
 出处：UC-NO-003 的业务规则「方向性作业必须取得当前有效路由指令；集运还必须取得成员级集运兼容判断」、输入表「包裹与服务」一行（`parcel-shipment` 的当前取消/终局结果）、`AT-NO-031` 与 `AT-NO-042`；NO CONTEXT「候选尚未确认时不得据此执行方向性作业」与「已取消、已经终局或当前无有效路由的包裹仍然到站时……」两条。
 
 取证于 `0214a62a`（2026-10-16）。
@@ -41,6 +41,22 @@ Blocked by: 无——机制半边不挡；生产效果挂在 ps-external-mark-re
    - **路由与集运兼容**：NR 今天没有路由指令与成员级集运兼容判断的模型，也没有按包裹答当前有效路由的读口（计划适用性按计划版本存取）。NO 开一个路由依据端口，生产装配显式未配置，答受阻、缺少依据「路由依据未配置」，续办指向 [02](./02-network-routing-has-no-routing-instruction-or-consolidation-compatibility-judgment.md)。**不跳过这一格**：跳过就是替 NR 默认「兼容」，红线「不写死为生产默认」禁的正是这个；也不在 NO 里自己比下一节点，那是 NR 的判断。
 3. **挡下来答什么。** 新的一格`方向性作业受阻`（`DIRECTIONAL_WORK_BLOCKED`），与`未受理`（输入或不变量不成立）、`未决`（依赖读不动）分开——依赖读不动仍答`未决`，依据明确不成立才答`受阻`。按 UC-NO-003 结果契约落册：对象、拟执行动作（加成员与目标单元）、缺少依据（封闭词表，可多项并列）、当前允许的安全作业、续办入口。同一来源重投返回同一结果，幂等与现有集运事实同口。不形成成员关系。
 4. **已取消或终局实物的处置授权不在本票。** 授权来自 PS 的收寄后服务处置决定（UC-PS-006），NO 承接它要 PS → NO 的处置交接，今天不存在，另立票。本票只做「等待授权」那一半：挡住。
+
+## 裁定修订（2026-10-16，同一会话，开工前核实；上面「裁定」原文不动）
+
+开工前核了两件事实，第 1 条站不住：
+
+- **今天没有实时集运入口。** `ConsolidateParcelsHandler` 在生产上只在 `cmd/parcel-frontline-import` 里构造，搬的是旧系统里已经发生的成员事实——按第 1 条本就不过门。所谓「实时扫描入袋」没有一个调用方。
+- **[ADR-0021](../../../docs/adr/0021-frontline-operations-client-is-part-of-the-product.md) 已接受：离线与弱网容忍是一线作业端的固有要求**，并且「离线容忍……会反过来约束业务端点的形状」。离线设备回网后交来的每一条加成员，都是已经发生的物理动作，服务端答「受阻」时件早已进袋。同一份 ADR 还写了「后端能拒绝非法写入，给不出替代动作」——方向性作业的门属于作业端的流程，不属于写口。
+
+修订如下：
+
+1. **门是读面，不是写口。** 服务端按作业实物答「此刻能不能做方向性作业、缺哪几样依据」（身份、服务结果、路由依据，取法照原裁定第 2 条），作业端在动作之前查：在线时现问，离线时用缓存的参考数据把方向性动作灰掉并标出缺的依据。加成员照收照记，不因依据缺而拒。
+2. **已发生而缺依据的加成员照记，并留偏离。** UC-NO-003「已经发生的错误分拣保留为事实并形成偏离，不回写为未发生」：作业事实落册时，同一笔把当时的依据判断记在旁边（缺哪几样），供复核目录与前线导入报告呈现。偏离的判断与追责归 NR 的路由偏离判断与 VE 的异常，NO 只留事实与当时的依据快照。
+3. **排期。** 读面唯一的消费方是作业端，而作业端还没排进开发主线（ADR-0021「两个端都等真实落地时才建」）——读面随作业端一起建，不先建一个没人问的端点。偏离标记那一半今天就有消费方：前线导入搬进来的历史成员里若有已取消、已终局或身份未确认的件，运营现在就该在复核页上看得见。它可以先做，要不要先做由用户排。
+4. 原裁定第 3 条「挡下来答什么」随第 1 条作废：写口不再有「方向性作业受阻」一格；那一格的语义挪到读面上作答。第 4 条（处置授权另立）不变。
+
+本票因此转 `needs-info`，等两件用户决定：一线作业端何时排进开发主线；偏离标记要不要先于作业端做。
 
 ## 完成判据
 
