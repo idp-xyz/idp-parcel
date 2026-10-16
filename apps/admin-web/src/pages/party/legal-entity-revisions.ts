@@ -5,7 +5,7 @@
 
 import type { LegalEntityRevisionRecord } from './api';
 import { identityLayerCellsOf } from './legal-entity-identity';
-import { identityLayerAbsentNote } from './presentation';
+import { identityLayerAbsentNote, identityRevisionLabel } from './presentation';
 import {
   identityRevisionHistoryNote,
   identityRevisionTimeline,
@@ -23,7 +23,7 @@ export function legalEntityRevisionTimeline(
   revisions: readonly LegalEntityRevisionRecord[],
   format: (iso: string) => string,
 ): RevisionTimelineItem[] {
-  return identityRevisionTimeline(revisions, format, legalEntityRevisionContent);
+  return identityRevisionTimeline(revisions, format, legalEntityRevisionContent, identityRevisionLabel);
 }
 
 /**
@@ -41,5 +41,5 @@ function legalEntityRevisionContent(row: LegalEntityRevisionRecord): string {
 }
 
 export function revisionHistoryNote(count: number): string {
-  return identityRevisionHistoryNote(count, '法人');
+  return identityRevisionHistoryNote(count, '法人', '身份修订');
 }

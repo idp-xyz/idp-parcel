@@ -14,6 +14,7 @@ import type {
   TaxRegistrationNumberRecord,
 } from './api';
 import { wallTimeToRfc3339 } from '../moment';
+import { profileRevisionLabel } from './presentation';
 import { revisionOf } from './registration-form';
 import type { RevisionTimelineItem } from './revision-timeline';
 
@@ -195,7 +196,7 @@ export function profileRevisionTimeline(
     .sort((left, right) => right.revision - left.revision)
     .map((row) => ({
       id: `r${row.revision}`,
-      title: `r${row.revision} · 生效自 ${format(row.effectiveFrom)}`,
+      title: `${profileRevisionLabel(row.revision)} · 生效自 ${format(row.effectiveFrom)}`,
       description: [
         ...profileContentLines(row).map((line) => `${line.label} ${line.value}`),
         `依据 ${row.basis}`,

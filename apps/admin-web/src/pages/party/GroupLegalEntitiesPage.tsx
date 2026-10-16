@@ -14,7 +14,7 @@ import {
 import { moduleInfoById } from '../../navigation';
 import { catalogueViewState } from '../catalogue-view';
 import { listGroupLegalEntities, type GroupLegalEntityRecord } from './api';
-import { identityLayerAbsentNote, identityStatusLabels } from './presentation';
+import { identityLayerAbsentNote, identityRevisionLabel, identityStatusLabels } from './presentation';
 import { LegalEntityRegistrationForm } from './LegalEntityRegistrationForm';
 import { identityLayerCellsOf } from './legal-entity-identity';
 import { LegalEntityDetailPage } from './LegalEntityDetailPage';
@@ -75,7 +75,7 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
           aria-hidden="true"
         />
         <span className="truncate font-mono font-medium text-idpxyz-accent">{row.legalEntityId}</span>
-        <span className="shrink-0 font-mono text-[9px] text-idpxyz-textMuted">r{row.revision}</span>
+        <span className="shrink-0 font-mono text-[9px] text-idpxyz-textMuted">{identityRevisionLabel(row.revision)}</span>
         {legalEntityNeedsAttention(row) && (
           <AlertTriangle className="h-3 w-3 shrink-0 text-orange-400" aria-label="待补" />
         )}

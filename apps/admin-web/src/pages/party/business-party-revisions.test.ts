@@ -89,4 +89,6 @@ test('空修订链交回空项，注释句分得开「没有」与「没问到�
   equal(/法人/.test(businessPartyRevisionHistoryNote(0)), false);
   match(businessPartyRevisionHistoryNote(1), /1 笔/);
   match(businessPartyRevisionHistoryNote(2), /2 笔/);
+  // 参与方只有一条修订轴，不跟着法人册点名「身份修订」（票 group-legal-entities-uiux/01 只给法人册加名）。
+  equal(/身份修订/.test(businessPartyRevisionHistoryNote(2)), false);
 });

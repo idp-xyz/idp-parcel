@@ -48,17 +48,18 @@ const chain: LegalEntityRevisionRecord[] = [
   }),
 ];
 
-// Covers: 一笔一项、序不动；标题带修订号，停用那一笔标出`已停用`（CONTEXT 原词）且色调换成 warning，
-// 其余两笔标题不带停用字样、色调 default。
+// Covers: 一笔一项、序不动；标题带修订号且点名是身份修订——法人身上还有资料修订一条轴，同一屏两条都写裸 rN 就分不清
+// （票 group-legal-entities-uiux/01）；停用那一笔标出`已停用`（CONTEXT 原词）且色调换成 warning，其余两笔标题
+// 不带停用字样、色调 default。条目 id 不带名：它只作键。
 test('每笔修订一项，停用那笔标出', () => {
   const items = legalEntityRevisionTimeline(chain, tagged);
   deepEqual(
     items.map((item) => item.id),
     ['r1', 'r2', 'r3'],
   );
-  equal(items[0].title, 'r1');
-  equal(items[1].title, 'r2');
-  equal(items[2].title, 'r3 · 已停用');
+  equal(items[0].title, '身份 r1');
+  equal(items[1].title, '身份 r2');
+  equal(items[2].title, '身份 r3 · 已停用');
   deepEqual(
     items.map((item) => item.variant),
     ['default', 'default', 'warning'],
@@ -129,6 +130,6 @@ test('身份两格逐笔示出，旧笔如实写尚无此格，更正依据只�
 test('空修订链交回空项，注释句分得开「没有」与「没问到」', () => {
   deepEqual(legalEntityRevisionTimeline([], tagged), []);
   match(revisionHistoryNote(0), /没有.*修订/);
-  match(revisionHistoryNote(1), /1 笔/);
-  match(revisionHistoryNote(3), /3 笔/);
+  match(revisionHistoryNote(1), /1 笔身份修订/);
+  match(revisionHistoryNote(3), /3 笔身份修订/);
 });

@@ -11,7 +11,14 @@ import {
   TabsTrigger,
 } from '@idpxyz/ui-primitives';
 import type { GroupLegalEntityRecord } from './api';
-import { identityLayerAbsentNote, identityStatusLabels, labelOf, legalEntityKindLabels, partyNameUnknownNote } from './presentation';
+import {
+  identityLayerAbsentNote,
+  identityRevisionLabel,
+  identityStatusLabels,
+  labelOf,
+  legalEntityKindLabels,
+  partyNameUnknownNote,
+} from './presentation';
 import { identityLayerCellsOf } from './legal-entity-identity';
 import { legalEntityLifecycle, lifecycleConnectorReached, type LifecycleStageState } from './legal-entity-lifecycle';
 import { LegalEntityProfileSection } from './LegalEntityProfileSection';
@@ -143,7 +150,9 @@ export function LegalEntityDetailPanel({
               <h2 className="truncate font-mono text-[16px] font-semibold text-idpxyz-textBright">{row.legalEntityId}</h2>
               <span className="rounded bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium text-sky-400">{kind}</span>
               {statusBadge(identityStatusLabels, row.status)}
-              <span className="rounded bg-gray-500/10 px-1.5 py-0.5 font-mono text-[10px] text-gray-400">r{row.revision}</span>
+              <span className="rounded bg-gray-500/10 px-1.5 py-0.5 font-mono text-[10px] text-gray-400">
+                {identityRevisionLabel(row.revision)}
+              </span>
             </div>
             <p className="mt-0.5 text-[11px] text-idpxyz-textMuted">
               {row.partyNameKnown ? row.partyName : <UnknownPartyName />} · <span className="font-mono">{row.partyId}</span> · 登记于{' '}
@@ -226,7 +235,7 @@ export function LegalEntityDetailPanel({
       </div>
 
       <div className="grid grid-cols-4 gap-2.5 border-b border-idpxyz-border px-5 py-3">
-        <Fact label="当前修订">r{row.revision}</Fact>
+        <Fact label="当前修订">{identityRevisionLabel(row.revision)}</Fact>
         <Fact label="生效自">
           <Instant value={row.effectiveFrom} />
         </Fact>
@@ -248,7 +257,7 @@ export function LegalEntityDetailPanel({
           </TabsTrigger>
           <TabsTrigger value="history">
             <History className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
-            修订历史
+            身份修订
           </TabsTrigger>
         </TabsList>
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">

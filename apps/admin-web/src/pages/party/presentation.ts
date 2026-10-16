@@ -211,6 +211,17 @@ export const legalEntityKindLabels: Record<string, string> = {
   RESPONSIBLE_LEGAL_ENTITY: '责任法人',
 };
 
+// 责任法人身上有两条修订轴——身份登记修订与法人资料修订（ADR-0145 决定三），各自从 1 编号，同一屏常常一起出现；
+// 写成裸 rN 时「r1」与「生效修订 r2」读不出哪个是当前。法人页上凡显修订号都经这两个函数带上轴名。业务参与方
+// 只有身份一条轴，那几页照旧写裸 rN，不用这两个。
+export function identityRevisionLabel(revision: number): string {
+  return `身份 r${revision}`;
+}
+
+export function profileRevisionLabel(revision: number): string {
+  return `资料 r${revision}`;
+}
+
 // 可停用的身份种类封闭集（application.PartyIdentityKind 的名称镜像 identityKindFromName），中文取 CONTEXT 原词。
 // 关系不在内：关系的终止走撤销 / 到期 / 替代，不叫停用（DeactivatePartyIdentityCommand 注释）。停用表单的种类
 // 下拉只从这里派生，不另抄一份封闭集。

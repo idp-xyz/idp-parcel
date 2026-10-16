@@ -15,7 +15,13 @@ import {
   type LegalEntityProfileRevisionListResponseBody,
   type LegalEntityProfileRevisionRecord,
 } from './api';
-import { labelOf, problemNote, profileIncompleteCauseLabels, profileResolutionOutcomeLabels } from './presentation';
+import {
+  labelOf,
+  problemNote,
+  profileIncompleteCauseLabels,
+  profileResolutionOutcomeLabels,
+  profileRevisionLabel,
+} from './presentation';
 import { Field, Problems, fieldLabel } from './PublicationFormFields';
 import { RevisionField, WallTimeField, useRegistrationForm } from './party-registration-fields';
 import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
@@ -200,7 +206,7 @@ function ResolutionAnswer({
         <dl className="mt-2 grid grid-cols-[6rem_1fr] gap-x-3 gap-y-1">
           <dt className="text-idpxyz-textMuted">生效修订</dt>
           <dd className="font-mono">
-            r{effective.revision} · 生效自 {formatInstant(effective.effectiveFrom)} · 依据 {effective.basis}
+            {profileRevisionLabel(effective.revision)} · 生效自 {formatInstant(effective.effectiveFrom)} · 依据 {effective.basis}
           </dd>
           {profileContentLines(effective).map((line) => (
             <FragmentRow key={line.label} label={line.label} value={line.value} />
@@ -265,6 +271,7 @@ function ProfileRegistrationForm({ legalEntityId, onLanded }: { legalEntityId: s
         </p>
         <div className="grid grid-cols-2 gap-3">
           <RevisionField
+            label="资料修订号 *"
             path="profiles[0].revision"
             problems={problems}
             {...form.revisionField}

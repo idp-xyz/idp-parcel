@@ -110,6 +110,7 @@ export function useRegistrationForm<Draft extends RevisionedDraft>(spec: Registr
  * 翻册，连续性（登记）或错位（停用）仍由服务端按册面判——这一句就显在格下，不让人把建议读成校验。
  */
 export function RevisionField({
+  label = '修订号 *',
   path,
   problems,
   value,
@@ -120,6 +121,8 @@ export function RevisionField({
   onUseSuggestion,
   note,
 }: {
+  /** 一册有两条修订轴时点名是哪一条（法人页的身份 / 资料）；只有一条轴的册用缺省。 */
+  label?: string;
   path: string;
   problems: Record<string, string[]>;
   value: string;
@@ -131,7 +134,7 @@ export function RevisionField({
   note: string;
 }) {
   return (
-    <Field label="修订号 *" path={path} problems={problems}>
+    <Field label={label} path={path} problems={problems}>
       <div className="flex items-center gap-2">
         <Input
           value={value}

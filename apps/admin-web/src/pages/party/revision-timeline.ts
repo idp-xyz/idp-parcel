@@ -43,11 +43,15 @@ export interface IdentityRevisionRecord {
  * 纯函数不该自己去碰那个全局），一格也不原样漏 ISO 串。
  *
  * `content` 交回这一笔本册特有的那段描述（不含分隔符），拼在「依据 · 生效自」之后、停用两件之前。
+ *
+ * `revisionLabel` 是标题里修订号的写法，缺省裸 rN。法人册另有资料修订一条轴，传进来的写法带轴名；条目 id
+ * 只作键，不跟着变。
  */
 export function identityRevisionTimeline<Row extends IdentityRevisionRecord>(
   revisions: readonly Row[],
   format: (iso: string) => string,
   content: (row: Row) => string,
+  revisionLabel: (revision: number) => string = (revision) => `r${revision}`,
 ): RevisionTimelineItem[] {
   return revisions.map((row) => {
     const deactivated = row.deactivatedAt !== undefined;
@@ -57,9 +61,10 @@ export function identityRevisionTimeline<Row extends IdentityRevisionRecord>(
       const basis = row.deactivationBasis !== undefined ? `（依据 ${row.deactivationBasis}）` : '';
       description += ` · 停用于 ${format(row.deactivatedAt as string)}${basis}`;
     }
+    const label = revisionLabel(row.revision);
     return {
       id: `r${row.revision}`,
-      title: deactivated ? `r${row.revision} · 已停用` : `r${row.revision}`,
+      title: deactivated ? `${label} · 已停用` : label,
       description,
       timestamp: `登记于 ${format(row.registeredAt)}`,
       variant: deactivated ? 'warning' : 'default',
@@ -70,9 +75,10 @@ export function identityRevisionTimeline<Row extends IdentityRevisionRecord>(
 /**
  * 历史区头上的计数句。零笔说的是「册上没有这个 <主语> 的修订」——那是读口交回的如实答案（两册都裁
  * 200 + []），与「没问到」（未配置 / 出错，页面另显）分得开；抽屉只对列表里的行开，所以零笔在正常数据下
- * 不会出现，出现了就该去查写侧。主语由适配方交进来：判读能共用，句子里点名的册不能共用。
+ * 不会出现，出现了就该去查写侧。主语由适配方交进来：判读能共用，句子里点名的册不能共用。修订名同理——法人册
+ * 要点名「身份修订」，与资料修订分开；参与方册只有一条轴，用缺省。
  */
-export function identityRevisionHistoryNote(count: number, subject: string): string {
+export function identityRevisionHistoryNote(count: number, subject: string, revisionNoun = '修订'): string {
   if (count === 0) return `登记册上没有这个${subject}的修订。`;
-  return `共 ${count} 笔修订，按修订号从早到晚。`;
+  return `共 ${count} 笔${revisionNoun}，按修订号从早到晚。`;
 }

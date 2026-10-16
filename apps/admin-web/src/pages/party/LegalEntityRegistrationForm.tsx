@@ -10,7 +10,7 @@ import {
   type GroupLegalEntityRecord,
   type RegistrationNumberTypeListResponseBody,
 } from './api';
-import { problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
+import { identityRevisionLabel, problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
 import { Field, Problems, ReferencePicker, ReferencePickerFor, fieldLabel, useLoaded } from './PublicationFormFields';
 import {
   RevisionField,
@@ -112,12 +112,13 @@ export function LegalEntityRegistrationForm({ knownEntities, onRegistered }: Leg
               />
               <span className="block text-[11px] text-idpxyz-textMuted mt-1">
                 {known
-                  ? `已取回列表里有这一法人，最新修订 r${known.revision}；本次登记是它的新修订。`
+                  ? `已取回列表里有这一法人，最新修订 ${identityRevisionLabel(known.revision)}；本次登记是它的新修订。`
                   : '已取回列表里没有这一标识；本次登记是首笔修订（列表可能已陈旧，连续性仍由服务端判）。'}
               </span>
             </Field>
 
             <RevisionField
+              label="身份修订号 *"
               path="legalEntities[0].revision"
               problems={problems}
               {...form.revisionField}

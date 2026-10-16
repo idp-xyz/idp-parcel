@@ -9,7 +9,13 @@ import {
   type GroupLegalEntityRecord,
   type LegalEntityRevisionListResponseBody,
 } from './api';
-import { identityLayerAbsentNote, identityStatusLabels, labelOf, legalEntityKindLabels } from './presentation';
+import {
+  identityLayerAbsentNote,
+  identityRevisionLabel,
+  identityStatusLabels,
+  labelOf,
+  legalEntityKindLabels,
+} from './presentation';
 import { LegalEntityProfileSection } from './LegalEntityProfileSection';
 import { identityLayerCellsOf } from './legal-entity-identity';
 import { legalEntityRevisionTimeline, revisionHistoryNote } from './legal-entity-revisions';
@@ -20,7 +26,7 @@ import { Instant, UnknownPartyName, statusBadge } from './detail-primitives';
 const info = moduleInfoById['group-legal-entities'];
 
 /**
- * 对象页「时间线」签与工作台详情栏「修订历史」签交给修订历史区的那几样。判读在 legal-entity-revisions.ts。
+ * 对象页「时间线」签与工作台详情栏「身份修订」签交给修订历史区的那几样。判读在 legal-entity-revisions.ts。
  * 模块级常量——load 进 effect 依赖。
  */
 export const legalEntityRevisionHistory: RevisionHistoryRegister<LegalEntityRevisionListResponseBody> = {
@@ -42,7 +48,7 @@ function identityCells(row: GroupLegalEntityRecord) {
 
 function buildMeta(row: GroupLegalEntityRecord): DetailMeta[] {
   return [
-    { label: '修订', value: <span className="font-mono">r{row.revision}</span> },
+    { label: '修订', value: <span className="font-mono">{identityRevisionLabel(row.revision)}</span> },
     { label: '种类', value: labelOf(legalEntityKindLabels, row.kind) },
     { label: '生效自', value: <Instant value={row.effectiveFrom} /> },
   ];
@@ -52,7 +58,7 @@ function buildBasicFields(row: GroupLegalEntityRecord): DetailField[] {
   const identity = identityCells(row);
   return [
     { label: '法人标识', value: <span className="font-mono">{row.legalEntityId}</span> },
-    { label: '修订', value: <span className="font-mono">r{row.revision}</span> },
+    { label: '修订', value: <span className="font-mono">{identityRevisionLabel(row.revision)}</span> },
     { label: '种类', value: labelOf(legalEntityKindLabels, row.kind) },
     { label: '业务参与方身份', value: <span className="font-mono">{row.partyId}</span> },
     { label: '参与方名称', value: row.partyNameKnown ? row.partyName : <UnknownPartyName /> },

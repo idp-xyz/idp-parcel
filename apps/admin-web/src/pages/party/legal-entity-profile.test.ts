@@ -151,7 +151,8 @@ test('资料内容转写', () => {
   );
 });
 
-// Covers: 历史从新到旧；标题带生效时点，未来生效的那笔看标题就分得出。
+// Covers: 历史从新到旧；标题点名是资料修订（与身份修订分得开，票 group-legal-entities-uiux/01）并带生效时点，
+// 未来生效的那笔看标题就分得出。
 test('资料修订历史从新到旧、标题带生效时点', () => {
   const items = profileRevisionTimeline(
     [revision({}), revision({ revision: 2, effectiveFrom: '2027-01-01T00:00:00Z' })],
@@ -159,7 +160,7 @@ test('资料修订历史从新到旧、标题带生效时点', () => {
   );
   deepEqual(
     items.map((item) => item.title),
-    ['r2 · 生效自 <2027-01-01T00:00:00Z>', 'r1 · 生效自 <2026-01-01T00:00:00Z>'],
+    ['资料 r2 · 生效自 <2027-01-01T00:00:00Z>', '资料 r1 · 生效自 <2026-01-01T00:00:00Z>'],
   );
   equal(items[1].timestamp, '<2026-01-01T00:00:00Z>');
 });
