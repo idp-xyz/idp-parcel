@@ -5,6 +5,7 @@ import {
   emptyLegalEntityDraft,
   identityCountryOptions,
   identityTypeOptions,
+  legalEntityDraftUnsaved,
   legalEntityFieldPaths,
   legalEntityLocalProblems,
   legalEntityPayloadOf,
@@ -218,4 +219,20 @@ test('类型候选：按国家列身份层，停用照列并括注', () => {
     { value: 'SYN-OLD', label: 'SYN-OLD · 旧号（已停用）' },
   ]);
   deepEqual(identityTypeOptions(types, ''), []);
+});
+
+// Covers: 「有没有没提交的输入」（票 group-legal-entities-uiux/04 离开前确认用）：空表单、只有空白、只有空的注册号行都不算；
+// 任一格填了就算。落册之后（landed 是送出的那份）内容没再动就不算——修订号格不比，送出那份带的是建议值；落册后再改任一格又算。
+test('未提交草稿：空与空白不算，落册后未改不算', () => {
+  const empty = emptyLegalEntityDraft();
+  equal(legalEntityDraftUnsaved(empty, null), false);
+  equal(legalEntityDraftUnsaved({ ...empty, basis: '   ' }, null), false);
+  equal(legalEntityDraftUnsaved({ ...empty, lifetimeNumbers: [{ typeCode: '', number: '' }, { typeCode: ' ', number: '' }] }, null), false);
+  equal(legalEntityDraftUnsaved({ ...empty, legalEntityId: 'LE-01' }, null), true);
+  equal(legalEntityDraftUnsaved({ ...empty, lifetimeNumbers: [{ typeCode: '', number: '9100' }] }, null), true);
+  equal(legalEntityDraftUnsaved({ ...empty, revision: '3' }, null), true);
+
+  const filled = { ...empty, legalEntityId: 'LE-01', basis: 'B-1' };
+  equal(legalEntityDraftUnsaved(filled, { ...filled, revision: '1' }), false);
+  equal(legalEntityDraftUnsaved({ ...filled, basis: 'B-2' }, { ...filled, revision: '1' }), true);
 });

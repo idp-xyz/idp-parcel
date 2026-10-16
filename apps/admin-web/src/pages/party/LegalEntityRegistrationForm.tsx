@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { RegistrationAnswerNote, RegistrationPanel } from '../../components/registration';
@@ -26,6 +26,7 @@ import {
   emptyLegalEntityDraft,
   identityCountryOptions,
   identityTypeOptions,
+  legalEntityDraftUnsaved,
   legalEntityLocalProblems,
   legalEntityPayloadOf,
   suggestedRevision,
@@ -57,6 +58,8 @@ export interface LegalEntityRegistrationFormProps {
   knownEntities: readonly GroupLegalEntityRecord[] | null;
   /** 登记册答 `REGISTERED` 时回调，页面借它重取列表让新行在「集团与法人」签立刻可见。 */
   onRegistered: () => void;
+  /** 草稿有没有没提交的输入（legalEntityDraftUnsaved）；页面据此决定离开登记视图前要不要先确认。卸载时报 false。 */
+  onUnsavedChange?: (unsaved: boolean) => void;
 }
 
 const info = moduleInfoById['group-legal-entities'];
@@ -65,7 +68,13 @@ const endpoint = `POST ${commercialRegistrationEndpoints[kind]}`;
 // 收在高级组里的两格；组里有问题时组一律展开，问题不被收起藏住。
 const advancedPaths = ['legalEntities[0].revision', 'legalEntities[0].identityCorrectionBasis'];
 
-export function LegalEntityRegistrationForm({ knownEntities, onRegistered }: LegalEntityRegistrationFormProps) {
+export function LegalEntityRegistrationForm({
+  knownEntities,
+  onRegistered,
+  onUnsavedChange,
+}: LegalEntityRegistrationFormProps) {
+  // 最近一次逐字段落册时送出的那份；JSON 镜像那条路落册交 null，与这份草稿无关，不动它。
+  const [landedDraft, setLandedDraft] = useState<LegalEntityDraft | null>(null);
   const form = useRegistrationForm<LegalEntityDraft>({
     kind,
     empty: emptyLegalEntityDraft,
@@ -74,9 +83,18 @@ export function LegalEntityRegistrationForm({ knownEntities, onRegistered }: Leg
     payloadOf: legalEntityPayloadOf,
     // 答 `REGISTERED`（PartyRegistryOutcome 里 PartyIdentityRegistered 的线上名）才重取列表。
     landedOutcome: 'REGISTERED',
-    onLanded: onRegistered,
+    onLanded: (sent) => {
+      if (sent !== null) setLandedDraft(sent);
+      onRegistered();
+    },
   });
   const { draft, patch, problems, locked, timeZone } = form;
+  const unsaved = legalEntityDraftUnsaved(draft, landedDraft);
+  useEffect(() => {
+    onUnsavedChange?.(unsaved);
+  }, [onUnsavedChange, unsaved]);
+  useEffect(() => () => onUnsavedChange?.(false), [onUnsavedChange]);
+
   // 国家与号类型的候选读一次：一张表单里国家格与每一行的类型格共用这一份目录答案。
   const typeCatalogue = useLoaded(listRegistrationNumberTypes);
 

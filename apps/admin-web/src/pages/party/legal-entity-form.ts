@@ -65,6 +65,35 @@ export function emptyLegalEntityDraft(): LegalEntityDraft {
   };
 }
 
+/**
+ * 草稿里有没有还没提交的输入——登记视图离开前要不要先确认（票 group-legal-entities-uiux/04）。只有空白或只有空的注册号行
+ * 不算输入，免得空表单也拦人。`landed` 是最近一次落册时送出的那份：内容没再动就不算没提交；修订号格不比，送出那份
+ * 带的是建议值，草稿里那一格可能还是空的。
+ */
+export function legalEntityDraftUnsaved(draft: LegalEntityDraft, landed: LegalEntityDraft | null): boolean {
+  if (!draftHasInput(draft)) return false;
+  return landed === null || contentKey(draft) !== contentKey(landed);
+}
+
+function draftHasInput(draft: LegalEntityDraft): boolean {
+  const cells = [
+    draft.legalEntityId,
+    draft.partyId,
+    draft.revision,
+    draft.basis,
+    draft.effectiveFrom,
+    draft.registrationCountry,
+    draft.identityCorrectionBasis,
+    ...draft.lifetimeNumbers.flatMap((row) => [row.typeCode, row.number]),
+  ];
+  return cells.some((cell) => cell.trim() !== '');
+}
+
+function contentKey(draft: LegalEntityDraft): string {
+  const { revision: _revision, ...content } = draft;
+  return JSON.stringify(content);
+}
+
 /** 表单认领的 JSON 路径，服务端逐格问题按它点名；一项一批，下标固定 0。 */
 export const legalEntityFieldPaths = [
   'legalEntities[0].legalEntityId',

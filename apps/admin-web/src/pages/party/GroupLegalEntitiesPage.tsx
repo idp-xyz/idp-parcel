@@ -1,9 +1,8 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ArrowLeft, Plus } from 'lucide-react';
-import { Button, Progress } from '@idpxyz/ui-primitives';
+import { Button, ConfirmDialog, Progress } from '@idpxyz/ui-primitives';
 import {
   WorkbenchPageTemplate,
-  decodeHashSegment,
   toggleWorkbenchSort,
   useTabReturn,
   type WorkbenchChip,
@@ -14,6 +13,7 @@ import {
 import { moduleInfoById } from '../../navigation';
 import { catalogueViewState } from '../catalogue-view';
 import { listGroupLegalEntities, type GroupLegalEntityRecord } from './api';
+import { groupLegalEntitiesViewOf, registerViewHash } from './group-legal-entities-address';
 import { identityLayerAbsentNote, identityRevisionLabel, identityStatusLabels } from './presentation';
 import { LegalEntityRegistrationForm } from './LegalEntityRegistrationForm';
 import { identityLayerCellsOf } from './legal-entity-identity';
@@ -151,13 +151,6 @@ function detailHash(legalEntityId: string): string {
   return `#/group-legal-entities/${encodeURIComponent(legalEntityId)}`;
 }
 
-/** 查询串不进对象标识：`?q=` 是列表检索词，粘在第二段上会认错行。 */
-function selectedIdFromHash(): string | null {
-  const path = window.location.hash.replace(/^#\/?/, '').split('?')[0];
-  const [moduleId, objectId] = path.split('/');
-  return moduleId === 'group-legal-entities' && objectId ? decodeHashSegment(objectId) : null;
-}
-
 /**
  * 集团与法人（party-commercial）。行对象是责任法人的最新登记修订：法人钉在稳定的业务参与方身份上
  * （ADR-0003 三级边界的第二级），名称从参与方册转写；身份登记按修订版本化不可覆盖，停用形成新修订而不是删除。
@@ -175,13 +168,22 @@ function selectedIdFromHash(): string | null {
  * 服务端没有的约束。墙降之前登记必然答 403「接入渠道未配置」，那是诚实答案。
  *
  * 列表状态（检索、筛选、排序、选中行）挂在页面上：进登记视图再回来还在。
+ *
+ * 登记视图住在地址上（`?register=1`，判读在 group-legal-entities-address.ts；票 group-legal-entities-uiux/04）：刷新仍停在
+ * 登记视图，浏览器后退回列表。草稿有没提交的输入时，页内「返回列表」先确认，刷新与关页由 beforeunload 拦；浏览器后退
+ * 不拦——拦它得改写历史栈，壳层按 hashchange 记每张标签的地址，改写会让两边对不上。
  */
 export function GroupLegalEntitiesPage() {
   const { answer, retry, pending } = useRegisterList(listGroupLegalEntities);
   const tabReturn = useTabReturn();
-  // 渲列表还是对象页由 hash 二段定：对象地址在壳层是自己的一张标签，本组件在那张标签里渲对象页。
-  const [objectId, setObjectId] = useState<string | null>(selectedIdFromHash);
-  const [view, setView] = useState<'list' | 'register'>('list');
+  // 渲列表、登记视图还是对象页由地址定：对象地址在壳层是自己的一张标签，本组件在那张标签里渲对象页。
+  const [hash, setHash] = useState(() => window.location.hash);
+  const view = groupLegalEntitiesViewOf(hash);
+  // 本次挂载里是不是从列表压进登记视图的：是就用后退回列表，不再压一条；刷新或从别的标签回来直接落在登记视图时不是，
+  // 那时后退一格不一定是列表，改用替换。
+  const pushedRegister = useRef(false);
+  const [registerUnsaved, setRegisterUnsaved] = useState(false);
+  const [confirmingLeave, setConfirmingLeave] = useState(false);
   const [search, setSearch] = useState('');
   const [status, setStatus] = useState<LegalEntityStatusFilter>('ALL');
   const [attentionOnly, setAttentionOnly] = useState(false);
@@ -189,20 +191,47 @@ export function GroupLegalEntitiesPage() {
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
   useEffect(() => {
-    const onHashChange = () => setObjectId(selectedIdFromHash());
+    const onHashChange = () => setHash(window.location.hash);
     window.addEventListener('hashchange', onHashChange);
     return () => window.removeEventListener('hashchange', onHashChange);
   }, []);
+
+  // 刷新与关页时浏览器自己弹确认；只在登记视图且草稿有没提交的输入时挂。
+  const guardUnload = view.kind === 'register' && registerUnsaved;
+  useEffect(() => {
+    if (!guardUnload) return;
+    const onBeforeUnload = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', onBeforeUnload);
+    return () => window.removeEventListener('beforeunload', onBeforeUnload);
+  }, [guardUnload]);
+
+  const openRegister = () => {
+    pushedRegister.current = true;
+    window.location.hash = registerViewHash(window.location.hash, true);
+  };
+  const leaveRegister = () => {
+    setConfirmingLeave(false);
+    if (pushedRegister.current) {
+      pushedRegister.current = false;
+      window.history.back();
+      return;
+    }
+    window.location.replace(registerViewHash(window.location.hash, false));
+  };
+  const requestLeaveRegister = () => (registerUnsaved ? setConfirmingLeave(true) : leaveRegister());
 
   // 列表没取到（加载中 / 未配置 / 出错）传 null：登记表单那边建议修订号一律为 1，不拿空数组冒充「册上没有」。
   const knownEntities = answer?.kind === 'outcome' ? answer.body.entities : null;
   const entities = knownEntities ?? [];
 
-  if (objectId !== null) {
-    const row = entities.find((entity) => entity.legalEntityId === objectId) ?? null;
+  if (view.kind === 'object') {
+    const row = entities.find((entity) => entity.legalEntityId === view.legalEntityId) ?? null;
     return (
       <LegalEntityDetailPage
-        legalEntityId={objectId}
+        legalEntityId={view.legalEntityId}
         row={row}
         listAnswer={answer}
         retry={retry}
@@ -211,11 +240,11 @@ export function GroupLegalEntitiesPage() {
     );
   }
 
-  if (view === 'register') {
+  if (view.kind === 'register') {
     return (
       <div className="flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
         <div className="flex shrink-0 items-center gap-4 border-b border-idpxyz-border px-6 py-3">
-          <Button variant="ghost" size="sm" onClick={() => setView('list')}>
+          <Button variant="ghost" size="sm" onClick={requestLeaveRegister}>
             <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden="true" />
             返回列表
           </Button>
@@ -226,7 +255,21 @@ export function GroupLegalEntitiesPage() {
             </p>
           </div>
         </div>
-        <LegalEntityRegistrationForm knownEntities={knownEntities} onRegistered={retry} />
+        <LegalEntityRegistrationForm
+          knownEntities={knownEntities}
+          onRegistered={retry}
+          onUnsavedChange={setRegisterUnsaved}
+        />
+        <ConfirmDialog
+          open={confirmingLeave}
+          tone="warning"
+          title="离开登记视图？"
+          message="这份登记还没有提交，离开后填写的内容不会保留。"
+          confirmLabel="离开"
+          cancelLabel="继续填写"
+          onConfirm={leaveRegister}
+          onCancel={() => setConfirmingLeave(false)}
+        />
       </div>
     );
   }
@@ -303,7 +346,7 @@ export function GroupLegalEntitiesPage() {
       onRefresh={retry}
       refreshing={pending}
       primaryAction={
-        <Button onClick={() => setView('register')}>
+        <Button onClick={openRegister}>
           <Plus className="mr-1.5 h-4 w-4" aria-hidden="true" />
           登记责任法人
         </Button>

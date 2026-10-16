@@ -19,7 +19,7 @@
 
 **Category:** enhancement
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
 - [ ] 登记视图有能直接打开的地址；刷新后仍在登记视图
 - [ ] 浏览器后退回到列表，列表状态都保留
