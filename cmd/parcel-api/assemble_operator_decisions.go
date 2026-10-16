@@ -93,10 +93,15 @@ func buildWorkDeviceCatalogue(minter *accessidentity.OperatorMinter, devices acc
 	return identityhttp.NewQueryWorkDevicesEndpoint(authenticator, devices)
 }
 
-// buildOperatorDecisionIntakes 装两边运营决定口的防腐认证方与 Intake。
-func buildOperatorDecisionIntakes(minter *accessidentity.OperatorMinter, targets psports.OperatorDecisionTargets) (operatorDecisionIntakes, error) {
-	if minter == nil || targets == nil {
-		return operatorDecisionIntakes{}, errors.New("operator decision intakes need a minter and a shipment request lookup")
+// buildOperatorDecisionIntakes 装两边运营决定口的防腐认证方与 Intake。委托侧按委托标识寻址的三口用 targets，受控关闭与
+// 重开两口按包裹寻址、用 parcels（ADR-0183 决定一）。
+func buildOperatorDecisionIntakes(
+	minter *accessidentity.OperatorMinter,
+	targets psports.OperatorDecisionTargets,
+	parcels psports.CurrentAcceptedParcelTargetView,
+) (operatorDecisionIntakes, error) {
+	if minter == nil || targets == nil || parcels == nil {
+		return operatorDecisionIntakes{}, errors.New("operator decision intakes need a minter, a shipment request lookup and a parcel lookup")
 	}
 	shipmentAuthenticator, err := psaccess.NewOperatorAuthenticator(minter)
 	if err != nil {
@@ -106,7 +111,7 @@ func buildOperatorDecisionIntakes(minter *accessidentity.OperatorMinter, targets
 	if err != nil {
 		return operatorDecisionIntakes{}, err
 	}
-	shipment, err := shipmenthttp.NewOperatorDecisionIntake(shipmentAuthenticator, targets)
+	shipment, err := shipmenthttp.NewOperatorDecisionIntake(shipmentAuthenticator, targets, parcels)
 	if err != nil {
 		return operatorDecisionIntakes{}, err
 	}

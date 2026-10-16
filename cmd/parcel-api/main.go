@@ -145,7 +145,12 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	// 运营决定口的操作者 Intake（ADR-0151；票 operator-channel/15）：委托侧的寻址读口就是委托查阅适配器
-	// （ports.OperatorDecisionTargets 在其上补齐，同表、整租户可见）。
+	// （ports.OperatorDecisionTargets 在其上补齐，同表、整租户可见）。受控关闭与重开按包裹寻址，读口是委托仓储上
+	// 那只按包裹反查当前已接受委托的口（ADR-0183 决定一）。
+	parcelTargets, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return err
+	}
 	operatorRegistry, err := aipg.NewOperatorRegistry(db)
 	if err != nil {
 		return err
@@ -171,7 +176,7 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	operatorDecisions, err := buildOperatorDecisionIntakes(operatorMinter, requestViews)
+	operatorDecisions, err := buildOperatorDecisionIntakes(operatorMinter, requestViews, parcelTargets)
 	if err != nil {
 		return err
 	}

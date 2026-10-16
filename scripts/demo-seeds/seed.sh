@@ -248,6 +248,9 @@ echo "== 试点治理登记（pilot-governance：权威区间、暂停、恢复�
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/18-authority-interval-operation-decision-dispatch-task-registration.json"
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/19-authority-interval-operation-decision-effective-time-judgment.json"
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/20-authority-interval-operation-decision-carrier-first-effective-pickup-judgment.json"
+# 委托侧受控关闭与重开随换口补（票 operator-channel/15；ADR-0183）。同委托侧另三口，只登区间与对照、不给配置员授予。
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/21-authority-interval-operation-decision-controlled-closure.json"
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/22-authority-interval-operation-decision-controlled-reopening.json"
 
 echo "== 操作者册登记（access-identity：合成操作者主体与能力面授予；票 operator-channel/01、17） =="
 # 两个合成主体绑演示租户：配置员授登记册配置写、主数据与运营查阅读两格，另授 TF 六种运营决定（装载分配、终止参与、

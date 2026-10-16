@@ -2,12 +2,18 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	"go.idp.xyz/idp-parcel/internal/accessidentity"
+	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	psparty "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
@@ -258,9 +264,128 @@ func envelopeCountForDecision(t *testing.T, db *bentopg.DB, decision domain.Cont
 	return count
 }
 
+// operatorChannelParcels 是按包裹反查当前已接受委托的替身：任何包裹都落在 SYN-CUSTOMER-OC15 名下的那份委托上，租户随信封。
+// 委托查阅与包裹投影的真库往返另有 parcel-shipment 的 postgres 用例；这里证的是渠道到编排这一段。
+type operatorChannelParcels struct{}
+
+func (operatorChannelParcels) FindCurrentAcceptedByParcel(_ context.Context, tenant domain.TenantID, parcel domain.DeclaredParcelID) (domain.CurrentAcceptedParcelTarget, bool, error) {
+	identity, err := domain.NewSourceIdentity(tenant,
+		mustValueNoT(domain.NewCustomerAccountID, "SYN-CUSTOMER-OC15"),
+		mustValueNoT(domain.NewSource, "SYN-SOURCE-OC15"),
+		mustValueNoT(domain.NewSourceRequestKey, "SYN-SUBMIT-KEY-OC15-"+parcel.String()))
+	if err != nil {
+		return domain.CurrentAcceptedParcelTarget{}, false, err
+	}
+	target, err := domain.NewCurrentAcceptedParcelTarget(identity,
+		mustValueNoT(domain.NewShipmentRequestID, "SYN-REQ-OC15"), mustValueNoT(domain.NewSubmissionVersionID, "SYN-VERSION-OC15"))
+	return target, err == nil, err
+}
+
+func mustValueNoT[T any](construct func(string) (T, error), raw string) T {
+	value, err := construct(raw)
+	if err != nil {
+		panic(err)
+	}
+	return value
+}
+
+// Covers: 票 operator-channel/15 完成判据第三条在受控关闭与重开上的形，与 ADR-0183 决定一至四（真库）。经操作者渠道走到编排：
+// 生产装配授权请求映射未配置，关闭答 200 `UNDECIDED / AUTHORITY_UNAVAILABLE`、册上无行；配上合成映射、真授权册登了关闭与重开
+// 两条 grant 之后，货主指令的关闭 201 形成，册上的请求方与责任来源都是服务端从包裹所属委托推出的客户账户；不带货主重授权
+// 证据的重开被编排那道门拦下（`SHIPPER_REAUTHORIZATION_MISSING`），带了证据的重开 201 形成——渠道推出的货主账户与原关闭的
+// 请求方对得上。测试输入是合成数据，只记 `S`。
+func TestClosureAndReopeningThroughTheOperatorChannelAgainstARealDatabase(t *testing.T) {
+	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	kinds := []accessidentity.DecisionKind{accessidentity.DecisionControlledClosure, accessidentity.DecisionControlledReopening}
+	registerOperationDecisionAdmission(t, db, isolatedSelfAuthority, kinds...)
+	admission, err := buildAdmissionScope(db, isolatedSelfAuthority)
+	if err != nil {
+		t.Fatal(err)
+	}
+	minter, err := buildOperatorMinter(acceptingVerifier{}, decisionRegister{kinds: kinds}, admission)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decisions, err := buildOperatorDecisionIntakes(minter, unwiredDecisionTargets{}, operatorChannelParcels{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	type answer struct {
+		Outcome, DecisionID, PendingReason, Refusal string
+	}
+	post := func(t *testing.T, endpoint http.Handler, body string, status int, want answer) answer {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodPost, "/", strings.NewReader(body))
+		request.Header.Set("Authorization", "Bearer presented.operator.token")
+		response := httptest.NewRecorder()
+		endpoint.ServeHTTP(response, request)
+		var got answer
+		if err := json.Unmarshal(response.Body.Bytes(), &got); err != nil {
+			t.Fatalf("译响应：%v（%s）", err, response.Body.String())
+		}
+		if response.Code != status || got.Outcome != want.Outcome || got.PendingReason != want.PendingReason || got.Refusal != want.Refusal {
+			t.Fatalf("答 %d %s，want %d %+v", response.Code, response.Body.String(), status, want)
+		}
+		return got
+	}
+	closureBody := func(parcel string) string {
+		return `{"parcel": "` + parcel + `", "reason": "SYN-REASON-SHIPPER-STOP", "effectiveAt": "2026-08-24T10:00:00Z", "responsibilitySource": "SHIPPER-INSTRUCTION"}`
+	}
+	tenant := mustValue(t, domain.NewTenantID, "SYN-TENANT-01")
+
+	production, err := buildContinuedAttemptDecisionOrchestration(db)
+	if err != nil {
+		t.Fatalf("装配关闭 / 重开编排：%v", err)
+	}
+	post(t, shipmenthttp.NewFormControlledClosureEndpoint(decisions.shipment, production), closureBody("SYN-PARCEL-OC15-UNCONFIGURED"),
+		http.StatusOK, answer{Outcome: "UNDECIDED", PendingReason: "AUTHORITY_UNAVAILABLE"})
+	if _, found := continuedAttemptRegisterOf(t, db, tenant, mustValue(t, domain.NewDeclaredParcelID, "SYN-PARCEL-OC15-UNCONFIGURED")); found {
+		t.Fatal("未决却开了册")
+	}
+
+	seedSYNContinuedAttemptGrantFor(t, db, "SYN-TENANT-01", pcdomain.ControlledClosureAction, "SYN-AUTH-CLOSE-OC15")
+	seedSYNContinuedAttemptGrantFor(t, db, "SYN-TENANT-01", pcdomain.ReopeningAction, "SYN-AUTH-REOPEN-OC15")
+	orchestration, err := buildContinuedAttemptDecisionOrchestrationWith(db, continuedAttemptDecisionSeams{Requests: synContinuedAttemptRequestSource{t: t}})
+	if err != nil {
+		t.Fatalf("装配关闭 / 重开编排：%v", err)
+	}
+	closed := post(t, shipmenthttp.NewFormControlledClosureEndpoint(decisions.shipment, orchestration.Shell), closureBody("SYN-PARCEL-OC15-1"),
+		http.StatusCreated, answer{Outcome: "FORMED"})
+	parcel := mustValue(t, domain.NewDeclaredParcelID, "SYN-PARCEL-OC15-1")
+	register, found := continuedAttemptRegisterOf(t, db, tenant, parcel)
+	if !found || len(register.Decisions()) != 1 {
+		t.Fatalf("册 found=%v decisions=%d", found, len(register.Decisions()))
+	}
+	closure := register.Decisions()[0]
+	if closure.ID().String() != closed.DecisionID || closure.Requester().String() != "CUSTOMER-ACCOUNT/SYN-CUSTOMER-OC15" ||
+		closure.ClosureResponsibilitySource().String() != "SHIPPER-INSTRUCTION/SYN-CUSTOMER-OC15" {
+		t.Fatalf("关闭 = 标识 %q / 请求方 %q / 责任来源 %q，不是从包裹所属委托推出的", closure.ID(), closure.Requester(), closure.ClosureResponsibilitySource())
+	}
+
+	reopen := shipmenthttp.NewFormReopeningEndpoint(decisions.shipment, orchestration.Shell)
+	post(t, reopen, `{"parcel": "SYN-PARCEL-OC15-1", "reason": "SYN-REASON-RESUME", "effectiveAt": "2026-08-24T11:00:00Z", "relatedPriorClosure": "`+closed.DecisionID+`"}`,
+		http.StatusOK, answer{Outcome: "INPUT_NOT_ACCEPTED", Refusal: "SHIPPER_REAUTHORIZATION_MISSING"})
+	post(t, reopen, `{"parcel": "SYN-PARCEL-OC15-1", "reason": "SYN-REASON-RESUME", "effectiveAt": "2026-08-24T11:00:00Z", "relatedPriorClosure": "`+closed.DecisionID+`", "shipperAuthorizationEvidence": "SYN-EVIDENCE/shipper-reauth-oc15"}`,
+		http.StatusCreated, answer{Outcome: "FORMED"})
+	register, _ = continuedAttemptRegisterOf(t, db, tenant, parcel)
+	if len(register.Decisions()) != 2 || register.Judge(false) != domain.ContinuedAttemptOpen ||
+		register.Decisions()[1].Requester().String() != "CUSTOMER-ACCOUNT/SYN-CUSTOMER-OC15" {
+		t.Fatalf("册 decisions=%d judge=%v", len(register.Decisions()), register.Judge(false))
+	}
+}
+
 // seedSYNContinuedAttemptGrant 往真授权册里登记一条覆盖合成坐标的关闭或重开授权（照 seedSYNReviewGrant）：
 // 经 PC 领域的重建门与 SaveGrant 走生产写口，租户取命令身份上的那一个——跨上下文只靠这个字面对上。
 func seedSYNContinuedAttemptGrant(t *testing.T, db *bentopg.DB, action pcdomain.AuthorizedAction, objectID string) {
+	t.Helper()
+	seedSYNContinuedAttemptGrantFor(t, db, synContinuedAttemptTenant, action, objectID)
+}
+
+// seedSYNContinuedAttemptGrantFor 同上，租户由调用方给：经操作者渠道走的用例里，租户是信封绑定的那一个。
+func seedSYNContinuedAttemptGrantFor(t *testing.T, db *bentopg.DB, tenant string, action pcdomain.AuthorizedAction, objectID string) {
 	t.Helper()
 	approvedAt := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
 	interval, err := pcdomain.NewEffectiveInterval(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{})
@@ -276,7 +401,7 @@ func seedSYNContinuedAttemptGrant(t *testing.T, db *bentopg.DB, action pcdomain.
 		t.Fatalf("批准依据：%v", err)
 	}
 	version, err := pcdomain.RehydrateCommercialVersion(pcdomain.RehydrateCommercialVersionSpec{
-		TenantID:      mustValue(t, pcdomain.NewTenantID, synContinuedAttemptTenant),
+		TenantID:      mustValue(t, pcdomain.NewTenantID, tenant),
 		Kind:          pcdomain.AuthorizationRuleObject,
 		ObjectID:      mustValue(t, pcdomain.NewCommercialObjectID, objectID),
 		Version:       mustValue(t, pcdomain.NewCommercialVersionLabel, "v1"),

@@ -128,7 +128,7 @@ func TestTheWiredAdmissionScopeLetsLoadAssignmentAndTerminationThrough(t *testin
 		if err != nil {
 			t.Fatal(err)
 		}
-		decisions, err := buildOperatorDecisionIntakes(minter, unwiredDecisionTargets{})
+		decisions, err := buildOperatorDecisionIntakes(minter, unwiredDecisionTargets{}, unwiredDecisionTargets{})
 		if err != nil {
 			t.Fatal(err)
 		}

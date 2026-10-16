@@ -44,7 +44,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 
    最后一件是本产品在治理登记册里的权威串（ADR-0180 决定三），运营决定与外部事实各口铸信封前拿它认区间：不设，
    这几口授予齐备也答 403 `OUTSIDE_ADMISSION_SCOPE`；设了，种子里演示租户的准入范围对照（`data/access/03`）与
-   权威区间（`data/governance/09`–`20`）才认得上。取值与隔离形态的权威串同串，隔离写开关开着而两值不等进程启动即拒。
+   权威区间（`data/governance/09`–`22`）才认得上。取值与隔离形态的权威串同串，隔离写开关开着而两值不等进程启动即拒。
    管理台上的关段、建派送任务、有效时间判断与承运商首次有效收寄判断四口走的也是这一条（票 operator-channel/15 起不再经
    隔离写开关）：不设这一件，配置员登录后在这几页上答的是 `OUTSIDE_ADMISSION_SCOPE`。
 

@@ -275,11 +275,12 @@ func assembleBusinessEndpoints(
 		{Pattern: "/shipment-requests", Handler: shipmenthttp.NewSubmitShipmentRequestEndpoint(submissionIntake, submission)},
 		{Pattern: "/shipment-requests/withdrawals", Handler: shipmenthttp.NewWithdrawShipmentRequestEndpoint(shipmenthttp.UnconfiguredIntake{}, withdrawal)},
 		{Pattern: "/shipment-requests/parcel-cancellations", Handler: shipmenthttp.NewCancelParcelEndpoint(shipmenthttp.UnconfiguredIntake{}, cancellation)},
-		// 受控关闭 / 重开决定两个命令口（票 label-channel/30）：同一只编排两条命令，运营侧写行，同挂字面量
-		// UnconfiguredIntake{}，隔离读准入换不了写行。生产渠道是操作者渠道的「运营决定」能力面（ADR-0151）：
-		// 提交操作者只作操作证据、不进命令，决定方与授权角色由授权答复给出。
-		{Pattern: "/shipment-requests/continued-attempt-closures", Handler: shipmenthttp.NewFormControlledClosureEndpoint(shipmenthttp.UnconfiguredIntake{}, continuedAttemptDecisions)},
-		{Pattern: "/shipment-requests/continued-attempt-reopenings", Handler: shipmenthttp.NewFormReopeningEndpoint(shipmenthttp.UnconfiguredIntake{}, continuedAttemptDecisions)},
+		// 受控关闭 / 重开决定两个命令口（票 label-channel/30）：同一只编排两条命令，运营侧写行，挂操作者渠道的「运营决定」
+		// 能力面（ADR-0151；票 operator-channel/15）。按包裹寻址、请求方与货主账户取包裹所属已接受委托的客户账户（ADR-0183）；
+		// 提交操作者不进命令，决定方与授权角色由授权答复给出。授权请求映射未配置（`PAR-COM-13` / `PAR-COM-14`）时越过
+		// Intake 答`未决 · 授权口不可用`。
+		{Pattern: "/shipment-requests/continued-attempt-closures", Handler: shipmenthttp.NewFormControlledClosureEndpoint(operatorDecisions.shipment, continuedAttemptDecisions)},
+		{Pattern: "/shipment-requests/continued-attempt-reopenings", Handler: shipmenthttp.NewFormReopeningEndpoint(operatorDecisions.shipment, continuedAttemptDecisions)},
 		// 复核完成与主动拒绝两个命令口（票 09；ADR-0081 的命令面保留条款、ADR-0086）：
 		// 与其余命令面同挂字面量 UnconfiguredIntake{}，隔离读准入换不了写行。生产渠道是操作者渠道的
 		// 「运营决定」能力面（ADR-0151）：复核人与决定人取认证出的提交操作者，有没有权由编排问 party-commercial。

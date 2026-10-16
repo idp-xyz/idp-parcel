@@ -15,7 +15,8 @@ import (
 // ContinuedAttemptDecisionIntake 把一次已认证的接入请求翻译成关闭或重开命令。它是接口而非解析代码：委托来源
 // 身份、请求方与货主账户都不采信自报——采信了就是让任何调用方替任何货主签字；登录操作人的身份只作操作证据、
 // 不进任何一格（CONTEXT「登录操作人可以作为操作证据，但不能替代实际决定方和授权角色」），决定方由授权答复给出。
-// 生产渠道是操作者渠道的「运营决定」能力面（ADR-0151），真渠道 Intake 就位前本包不带任何实现。
+// 生产渠道是操作者渠道的「运营决定」能力面（ADR-0151），实现是 OperatorDecisionIntake：按包裹寻址，请求方与货主账户取
+// 包裹所属已接受委托的客户账户（ADR-0183）。
 type ContinuedAttemptDecisionIntake interface {
 	IntakeControlledClosure(ctx context.Context, request *http.Request) (application.FormControlledClosureCommand, error)
 	IntakeReopening(ctx context.Context, request *http.Request) (application.FormReopeningCommand, error)

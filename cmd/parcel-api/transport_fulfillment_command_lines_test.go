@@ -213,7 +213,7 @@ func operatorDecisionTransportForTest(t *testing.T, db *bentopg.DB) *tfhttp.Oper
 	if err != nil {
 		t.Fatal(err)
 	}
-	decisions, err := buildOperatorDecisionIntakes(minter, unwiredDecisionTargets{})
+	decisions, err := buildOperatorDecisionIntakes(minter, unwiredDecisionTargets{}, unwiredDecisionTargets{})
 	if err != nil {
 		t.Fatal(err)
 	}

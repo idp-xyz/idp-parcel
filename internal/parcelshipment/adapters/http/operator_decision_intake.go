@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -42,6 +43,8 @@ const (
 	OperatorDecisionManualReviewCompletion OperatorDecision = "MANUAL_REVIEW_COMPLETION"
 	OperatorDecisionActiveRejection        OperatorDecision = "ACTIVE_REJECTION"
 	OperatorDecisionAuthorizedDisposition  OperatorDecision = "AUTHORIZED_DISPOSITION"
+	OperatorDecisionControlledClosure      OperatorDecision = "CONTROLLED_CLOSURE"
+	OperatorDecisionControlledReopening    OperatorDecision = "CONTROLLED_REOPENING"
 )
 
 // OperatorIdentity 是一次运营决定出示认证出的身份：租户与提交操作者的引用（发行方 + sub）。
@@ -56,29 +59,205 @@ type OperatorAuthenticator interface {
 	AuthenticateOperatorDecision(ctx context.Context, bearerToken string, decision OperatorDecision) (OperatorIdentity, error)
 }
 
-// OperatorDecisionIntake 是操作者渠道「运营决定」能力面在委托侧复核完成、主动拒绝、授权处置三口的 Intake
-// （ADR-0151 决定一、二）。受控关闭与重开不在这里：它们命令里的请求方格在操作者渠道上怎么形成，要先与 PS owner
-// 对齐（票 operator-channel/15 做什么第 3 条），定之前那两口的 Intake 不换。
+// OperatorDecisionIntake 是操作者渠道「运营决定」能力面在委托侧五口的 Intake（ADR-0151 决定一、二）：复核完成、主动拒绝、
+// 授权处置三口，与受控关闭、重开两口（ADR-0183）。
 //
 // 线格式是管理台今天送出的草案：复核完成与主动拒绝只有委托标识与理由，授权处置另带它审的那个提交版本与去向。
 // 载荷只有内容、没有身份：来源身份由服务端按信封的租户与委托标识查出（ADR-0151 决定二「委托寻址」），复核人、
-// 决定人、处置人取认证出的提交操作者；载荷里出现任何身份格即拒（封闭解码）。先认证、后解载荷。
+// 决定人、处置人取认证出的提交操作者；载荷里出现任何身份格即拒（封闭解码）。先认证、后解载荷。受控关闭与重开改按
+// 包裹寻址、请求方与货主账户取那份委托的客户账户，提交操作者不进命令（ADR-0183）。
 type OperatorDecisionIntake struct {
 	authenticator OperatorAuthenticator
 	targets       ports.OperatorDecisionTargets
+	parcels       ports.CurrentAcceptedParcelTargetView
 }
 
 var (
-	_ ManualReviewCompletionIntake = (*OperatorDecisionIntake)(nil)
-	_ ActiveRejectionIntake        = (*OperatorDecisionIntake)(nil)
-	_ AuthorizedDispositionIntake  = (*OperatorDecisionIntake)(nil)
+	_ ManualReviewCompletionIntake   = (*OperatorDecisionIntake)(nil)
+	_ ActiveRejectionIntake          = (*OperatorDecisionIntake)(nil)
+	_ AuthorizedDispositionIntake    = (*OperatorDecisionIntake)(nil)
+	_ ContinuedAttemptDecisionIntake = (*OperatorDecisionIntake)(nil)
 )
 
-func NewOperatorDecisionIntake(authenticator OperatorAuthenticator, targets ports.OperatorDecisionTargets) (*OperatorDecisionIntake, error) {
-	if authenticator == nil || targets == nil {
-		return nil, errors.New("parcel shipment http: operator decision intake needs an authenticator and a target lookup")
+func NewOperatorDecisionIntake(
+	authenticator OperatorAuthenticator,
+	targets ports.OperatorDecisionTargets,
+	parcels ports.CurrentAcceptedParcelTargetView,
+) (*OperatorDecisionIntake, error) {
+	if authenticator == nil || targets == nil || parcels == nil {
+		return nil, errors.New("parcel shipment http: operator decision intake needs an authenticator, a target lookup and a parcel lookup")
 	}
-	return &OperatorDecisionIntake{authenticator: authenticator, targets: targets}, nil
+	return &OperatorDecisionIntake{authenticator: authenticator, targets: targets, parcels: parcels}, nil
+}
+
+// controlledClosurePayload 是受控关闭的线格式（ADR-0183）：只指名包裹，不收委托标识与请求方。责任主体只在运营操作与
+// 外部限制两种来源上由载荷给；货主指令的主体就是请求方，由服务端取。
+type controlledClosurePayload struct {
+	Parcel                string `json:"parcel"`
+	Reason                string `json:"reason"`
+	EffectiveAt           string `json:"effectiveAt"`
+	ResponsibilitySource  string `json:"responsibilitySource"`
+	ResponsibilitySubject string `json:"responsibilitySubject"`
+}
+
+// reopeningPayload 是重开的线格式（ADR-0183）：货主账户与请求方都不在载荷里；货主重授权证据是一份证据的引用，由操作者
+// 如实记下。
+type reopeningPayload struct {
+	Parcel                       string `json:"parcel"`
+	Reason                       string `json:"reason"`
+	EffectiveAt                  string `json:"effectiveAt"`
+	RelatedPriorClosure          string `json:"relatedPriorClosure"`
+	ShipperAuthorizationEvidence string `json:"shipperAuthorizationEvidence"`
+}
+
+// IntakeControlledClosure 译受控关闭（`/shipment-requests/continued-attempt-closures`）。按包裹寻址到它当前已接受的委托，
+// 来源身份取那一份（ADR-0183 决定一）；请求方由责任来源推出——货主指令才有，且只能是那份委托的客户账户（决定二、三）。
+// 提交操作者不进命令：决定方、授权角色与授权依据快照由授权答复给出（ADR-0151 决定二）。
+func (intake *OperatorDecisionIntake) IntakeControlledClosure(ctx context.Context, request *http.Request) (application.FormControlledClosureCommand, error) {
+	operator, err := intake.authenticator.AuthenticateOperatorDecision(ctx, httpapi.BearerToken(request), OperatorDecisionControlledClosure)
+	if err != nil {
+		return application.FormControlledClosureCommand{}, err
+	}
+	var payload controlledClosurePayload
+	if err := decodeDecisionPayload(request.Body, &payload); err != nil {
+		return application.FormControlledClosureCommand{}, err
+	}
+	kind, err := parseClosureResponsibilitySource(payload.ResponsibilitySource)
+	if err != nil {
+		return application.FormControlledClosureCommand{}, err
+	}
+	reason, effectiveAt, err := continuedAttemptFacts(payload.Reason, payload.EffectiveAt)
+	if err != nil {
+		return application.FormControlledClosureCommand{}, err
+	}
+	parcel, identity, err := intake.locateParcel(ctx, operator.Tenant, payload.Parcel)
+	if err != nil {
+		return application.FormControlledClosureCommand{}, err
+	}
+	command := application.FormControlledClosureCommand{
+		Identity:                 identity,
+		Parcel:                   parcel,
+		Reason:                   reason,
+		EffectiveAt:              effectiveAt,
+		ResponsibilitySourceKind: kind,
+	}
+	if kind == application.ShipperInstructionResponsibilitySource {
+		if payload.ResponsibilitySubject != "" {
+			return application.FormControlledClosureCommand{}, fmt.Errorf(
+				"%w: responsibilitySubject: a shipper instruction's subject is the request's own customer account", ErrMalformedRequest)
+		}
+		if command.Requester, err = shipperOf(identity); err != nil {
+			return application.FormControlledClosureCommand{}, err
+		}
+		command.ResponsibilitySourceSubject = identity.CustomerAccountID().String()
+		return command, nil
+	}
+	if payload.ResponsibilitySubject == "" {
+		return application.FormControlledClosureCommand{}, fmt.Errorf("%w: responsibilitySubject is required for %s", ErrMalformedRequest, kind)
+	}
+	command.ResponsibilitySourceSubject = payload.ResponsibilitySubject
+	return command, nil
+}
+
+// IntakeReopening 译重开（`/shipment-requests/continued-attempt-reopenings`）。寻址同受控关闭；货主账户恒取那份委托的客户
+// 账户，载荷带了货主重授权证据时请求方同取它（ADR-0183 决定四）。原关闭是不是货主指令形成的、证据够不够，归编排那道门。
+func (intake *OperatorDecisionIntake) IntakeReopening(ctx context.Context, request *http.Request) (application.FormReopeningCommand, error) {
+	operator, err := intake.authenticator.AuthenticateOperatorDecision(ctx, httpapi.BearerToken(request), OperatorDecisionControlledReopening)
+	if err != nil {
+		return application.FormReopeningCommand{}, err
+	}
+	var payload reopeningPayload
+	if err := decodeDecisionPayload(request.Body, &payload); err != nil {
+		return application.FormReopeningCommand{}, err
+	}
+	reason, effectiveAt, err := continuedAttemptFacts(payload.Reason, payload.EffectiveAt)
+	if err != nil {
+		return application.FormReopeningCommand{}, err
+	}
+	var related domain.ContinuedAttemptDecisionID
+	if payload.RelatedPriorClosure != "" {
+		if related, err = domain.NewContinuedAttemptDecisionID(payload.RelatedPriorClosure); err != nil {
+			return application.FormReopeningCommand{}, fmt.Errorf("%w: relatedPriorClosure: %v", ErrMalformedRequest, err)
+		}
+	}
+	parcel, identity, err := intake.locateParcel(ctx, operator.Tenant, payload.Parcel)
+	if err != nil {
+		return application.FormReopeningCommand{}, err
+	}
+	shipper, err := shipperOf(identity)
+	if err != nil {
+		return application.FormReopeningCommand{}, err
+	}
+	command := application.FormReopeningCommand{
+		Identity:                     identity,
+		Parcel:                       parcel,
+		Reason:                       reason,
+		EffectiveAt:                  effectiveAt,
+		RelatedPriorClosure:          related,
+		ShipperAccount:               shipper,
+		ShipperAuthorizationEvidence: payload.ShipperAuthorizationEvidence,
+	}
+	if payload.ShipperAuthorizationEvidence != "" {
+		command.Requester = shipper
+	}
+	return command, nil
+}
+
+// locateParcel 按信封的租户与请求指名的包裹查出它当前已接受的委托，交回来源身份（ADR-0183 决定一）。查不到与越权探针同答；
+// 有歧义（多于一份）原样上抛——那是数据不一致，任选一份等于替运营企业挑了委托。
+func (intake *OperatorDecisionIntake) locateParcel(ctx context.Context, tenant domain.TenantID, rawParcel string) (domain.DeclaredParcelID, domain.SourceIdentity, error) {
+	parcel, err := domain.NewDeclaredParcelID(rawParcel)
+	if err != nil {
+		return domain.DeclaredParcelID{}, domain.SourceIdentity{}, fmt.Errorf("%w: parcel: %v", ErrMalformedRequest, err)
+	}
+	target, found, err := intake.parcels.FindCurrentAcceptedByParcel(ctx, tenant, parcel)
+	if err != nil {
+		return domain.DeclaredParcelID{}, domain.SourceIdentity{}, fmt.Errorf("parcel shipment http: locate parcel: %w", err)
+	}
+	if !found {
+		return domain.DeclaredParcelID{}, domain.SourceIdentity{}, ErrOperatorNotGranted
+	}
+	return parcel, target.Identity(), nil
+}
+
+// shipperOf 是操作者渠道上唯一可能的「代货主」请求方：包裹所属委托的客户账户，带种类段（ADR-0183 决定二）。
+func shipperOf(identity domain.SourceIdentity) (domain.RequesterReference, error) {
+	requester, err := domain.NewRequesterReference("CUSTOMER-ACCOUNT/" + identity.CustomerAccountID().String())
+	if err != nil {
+		return domain.RequesterReference{}, fmt.Errorf("parcel shipment http: shipper requester: %w", err)
+	}
+	return requester, nil
+}
+
+// continuedAttemptFacts 收关闭与重开共有的两件事实：原因必填（立不起来是坏报文，同本包别的决定口）；生效时间给了却解不出是
+// 坏报文，缺席交给编排答`输入未受理`——生效时间是决定的一部分，服务端不补。
+func continuedAttemptFacts(rawReason, rawEffectiveAt string) (domain.ContinuedAttemptReasonReference, time.Time, error) {
+	reason, err := domain.NewContinuedAttemptReasonReference(rawReason)
+	if err != nil {
+		return domain.ContinuedAttemptReasonReference{}, time.Time{}, fmt.Errorf("%w: reason: %v", ErrMalformedRequest, err)
+	}
+	if rawEffectiveAt == "" {
+		return reason, time.Time{}, nil
+	}
+	effectiveAt, err := time.Parse(time.RFC3339Nano, rawEffectiveAt)
+	if err != nil {
+		return domain.ContinuedAttemptReasonReference{}, time.Time{}, fmt.Errorf("%w: effectiveAt: %v", ErrMalformedRequest, err)
+	}
+	return reason, effectiveAt.UTC(), nil
+}
+
+// parseClosureResponsibilitySource 认关闭责任来源的封闭词；认不出是坏报文，不默认任何一格（票 label-channel/30 裁决 ②）。
+func parseClosureResponsibilitySource(raw string) (application.ClosureResponsibilitySourceKind, error) {
+	for _, kind := range []application.ClosureResponsibilitySourceKind{
+		application.ShipperInstructionResponsibilitySource,
+		application.OperatorActionResponsibilitySource,
+		application.ExternalRestrictionResponsibilitySource,
+	} {
+		if kind.String() == raw {
+			return kind, nil
+		}
+	}
+	return application.ClosureResponsibilitySourceKindInvalid, fmt.Errorf("%w: responsibilitySource %q is not a closure responsibility source", ErrMalformedRequest, raw)
 }
 
 type decisionReasonPayload struct {

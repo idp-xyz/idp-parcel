@@ -24,6 +24,11 @@ func (unwiredDecisionTargets) FindOperatorDecisionTarget(context.Context, psdoma
 	return psports.OperatorDecisionTarget{}, false, errors.New("unwired: operator decision target lookup")
 }
 
+// FindCurrentAcceptedByParcel 是受控关闭与重开按包裹寻址那一口的占位，理由同上。
+func (unwiredDecisionTargets) FindCurrentAcceptedByParcel(context.Context, psdomain.TenantID, psdomain.DeclaredParcelID) (psdomain.CurrentAcceptedParcelTarget, bool, error) {
+	return psdomain.CurrentAcceptedParcelTarget{}, false, errors.New("unwired: current accepted parcel target lookup")
+}
+
 // decisionRegister 是操作者册的替身：主体绑在 SYN-TENANT-01 上，持有 kinds 里每一种运营决定的授予。
 type decisionRegister struct{ kinds []accessidentity.DecisionKind }
 
@@ -64,7 +69,7 @@ func (acceptingVerifier) VerifyOperatorCredential(_ context.Context, credential 
 
 // unconfiguredOperatorDecisions 是发行方参数未设时的运营决定 Intake：与生产装配在未配置环境里的那一套同形。
 func unconfiguredOperatorDecisions() operatorDecisionIntakes {
-	decisions, err := buildOperatorDecisionIntakes(unconfiguredOperatorMinter(), unwiredDecisionTargets{})
+	decisions, err := buildOperatorDecisionIntakes(unconfiguredOperatorMinter(), unwiredDecisionTargets{}, unwiredDecisionTargets{})
 	if err != nil {
 		panic(err)
 	}
@@ -277,6 +282,9 @@ var swappedDecisionFaces = map[string]accessidentity.DecisionKind{
 	"/transport-fulfillment-dispatch-task-registrations":              accessidentity.DecisionDispatchTaskRegistration,
 	"/transport-fulfillment-effective-time-judgments":                 accessidentity.DecisionEffectiveTimeJudgment,
 	"/transport-fulfillment-carrier-first-effective-pickup-judgments": accessidentity.DecisionCarrierFirstEffectivePickupJudgment,
+	// 受控关闭与重开：按包裹寻址、请求方由服务端推出（ADR-0183），此前没有隔离放行。
+	"/shipment-requests/continued-attempt-closures":   accessidentity.DecisionControlledClosure,
+	"/shipment-requests/continued-attempt-reopenings": accessidentity.DecisionControlledReopening,
 }
 
 // Covers: 票 operator-channel/15 完成判据第一条「无此决定种类的授予」那一格——授予按决定种类各自成立：持有别的每一种
@@ -293,7 +301,7 @@ func TestSwappedDecisionFacesRefuseAGrantOfAnotherDecisionKind(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		decisions, err := buildOperatorDecisionIntakes(minter, unwiredDecisionTargets{})
+		decisions, err := buildOperatorDecisionIntakes(minter, unwiredDecisionTargets{}, unwiredDecisionTargets{})
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -318,7 +326,7 @@ func TestSwappedDecisionFacesAnswerFromTheOperatorChannel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	decisions, err := buildOperatorDecisionIntakes(minter, unwiredDecisionTargets{})
+	decisions, err := buildOperatorDecisionIntakes(minter, unwiredDecisionTargets{}, unwiredDecisionTargets{})
 	if err != nil {
 		t.Fatal(err)
 	}

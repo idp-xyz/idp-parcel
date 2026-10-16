@@ -1,0 +1,54 @@
+# ADR-0183：操作者渠道上受控关闭与重开按包裹寻址，请求方与货主账户取包裹所属已接受委托的客户账户，不从载荷收
+
+Status: Accepted（2026-10-16，用户原话「你作为业务和系统超级专家，你自己全部独立完成吧」。Claude Code 会话据此代 PS owner 裁定下面六条，落在票 [operator-channel/15](../../.scratch/operator-channel/issues/15-operation-decision-faces-take-operator-intake.md) 做什么第 3 条那一格。裁决能力边界：读过 [ADR-0151](./0151-unassigned-command-faces-get-their-families.md) 决定二、七与越权风险点 4，PS CONTEXT「面单继续尝试决定」的定义、Rules 里受控关闭与重开各条与「面单继续尝试」生命周期，`FormContinuedAttemptDecisionHandler` 两条命令与重开那道货主重授权门，`ports.ContinuedAttemptDecisionAuthorizationQuery` 头注，`adapters/partycommercial` 的关闭 / 重开授权适配器头注（pc-gaps/13 裁决 ③），`ports.CurrentAcceptedParcelTargetView`，PS 已换口三口的操作者 Intake。没读：pc-gaps/13 票面原文、label-channel/30 票面原文、UC-PS 各篇。拿不准的列在文末「越权风险点」。）
+
+Date: 2026-10-16
+
+## Context
+
+ADR-0151 决定二把受控关闭与重开的身份格定成：提交操作者只作操作证据、不进命令；决定方、授权角色与授权依据快照由授权答复给出；**请求方（如有）与重开时的货主账户不采信自报**，它们在操作者渠道上怎么形成留给票 operator-channel/15 与 PS owner 对齐，定之前 Intake 不收这两格。这两口因此一直挂字面量 `UnconfiguredIntake{}`。
+
+这两格要守的是同一件事。重开那道门核「原关闭因货主指令形成时，重开要同一货主账户新的有效授权」（PS CONTEXT），比的是命令里的货主账户与原关闭的请求方。两格若都从载荷收，一个操作者就能先以「某货主要求」关闭一个包裹，再以同一个账户把它重开——货主的指令被冒用了两次，这道门也形同虚设。
+
+另有两件事实决定了解法的形状：
+
+- 编排不核「包裹属于命令里的那份委托」。登记册以租户 + 包裹为键，授权询问却按命令里的委托来源身份代客户账户问 party-commercial（`formContinuedAttemptDecisionRequest`）。载荷若同时指名委托与包裹，就可能代 A 委托的客户问 B 委托的包裹。
+- 受控关闭只作用于有面单交易的包裹，面单交易只在已接受的委托上发生；按包裹反查当前已接受委托的读口已经在册（`ports.CurrentAcceptedParcelTargetView`，多于一份答歧义、不任选）。
+
+这一格是产品策略（ADR-0146 的第二类）：操作者渠道上这两格怎么形成是产品对所有租户一致的判断方法，不是某个租户的取值。
+
+## Decision
+
+**一、按包裹寻址。** 两口的载荷只指名包裹（`parcel`），不收委托标识。Intake 按信封的租户与这个包裹查出它当前已接受的委托，委托来源身份取自那一份。查不到与越权探针同答（`403 OPERATOR_NOT_GRANTED`，同 PS 已换口三口的委托寻址）；查出多于一份是数据不一致，答服务端失败，不任选一份。
+
+**二、请求方与货主账户只取那份委托的客户账户。** 操作者渠道上，代货主提出的那一方只可能是这个包裹所属委托的客户；操作者不能在载荷里指名任何一方。请求方写成 `CUSTOMER-ACCOUNT/<客户账户标识>`——带种类段，与`关闭责任来源`的 `<种类>/<主体>` 同形，日后渠道服务方或代理商作请求方另有来处时审计分得开。
+
+**三、关闭：请求方由责任来源推出，不另设格。** 载荷带`关闭责任来源`的种类（`SHIPPER-INSTRUCTION` / `OPERATOR-ACTION` / `EXTERNAL-RESTRICTION`，封闭词）：
+
+- `SHIPPER-INSTRUCTION`：请求方与责任来源的主体都取第二条那个客户账户；载荷带责任主体即坏报文（`400`）——主体就是请求方，给第二个来源就有了冒名的口子。
+- `OPERATOR-ACTION` 与 `EXTERNAL-RESTRICTION`：请求方缺席（CONTEXT「请求方（如有）」——运营企业自己发起的关闭、外部硬限制都没有代货主的请求方）；责任主体由载荷给，必填。它是运营案件或限制来源的业务引用，由操作者如实记下，不是身份。
+
+**四、重开：货主账户恒取那份委托的客户账户，请求方随货主重授权证据出现。** 载荷可带货主重授权证据的引用（`shipperAuthorizationEvidence`，一份新的有效授权的证据引用，由操作者如实记下）。命令的货主账户恒取第二条的客户账户；载荷带了证据时，请求方同取它，没带时请求方缺席。重开那道门照旧由编排核：原关闭是货主指令形成的，就要证据非空、且货主账户等于原关闭的请求方——经本渠道形成的关闭天然满足后一条，这一条守的是册上别的来路。
+
+**五、提交操作者不进命令。** 照 ADR-0151 决定二，两条命令没有提交操作者的格；本记录不给它们加格。决定方、授权角色与授权依据快照仍全由授权答复给出。
+
+**六、授权缺口照旧如实停。** 授权请求映射在生产装配里是 nil（`PAR-COM-13` / `PAR-COM-14` 待提供），两口越过 Intake 之后答`未决 · 授权口不可用`（`UNDECIDED` / `AUTHORITY_UNAVAILABLE`），不代拟商业坐标；装配测试以合成授权器证已授权时答业务结果（票 operator-channel/15 完成判据第三条）。
+
+## Consequences
+
+- 两口换上操作者渠道的「运营决定」能力面（决定种类 `CONTROLLED_CLOSURE` / `CONTROLLED_REOPENING`），票 operator-channel/15 余下的「受控关闭与重开」两口据此实施。
+- 操作者渠道上不开「渠道服务方或代理商作请求方」的路。它们要提出关闭请求，另有来处时另行裁定；今天的载荷形状里没有指名它们的格。
+- 货主若不经运营企业、自己经客户渠道请求关闭或重开，那是 ADR-0139 客户侧各口的事，本记录不涉及。
+
+## 越权风险点
+
+1. **代 PS owner 裁定。** 这是 ADR-0151 明写留给 PS owner 的一格，本记录由会话据用户的全权授权代裁。PS owner 若认为操作者应能指名委托之外的请求方（例如代理商），推翻的是决定二与三，载荷要多一格、还要给那一格一个不采信自报的来处。
+2. **责任主体由载荷给。** `OPERATOR-ACTION` 与 `EXTERNAL-RESTRICTION` 的主体是操作者记下的业务引用，本渠道核不了它真不真；它只进审计、不进任何授权判断。若日后硬限制的「来源责任方有效解除」要按这个主体去读来源，主体的形状要先与那个来源对齐。
+3. **请求方的种类段。** `CUSTOMER-ACCOUNT/` 前缀是本记录新定的写法；册上若已有别的来路写下的、不带前缀的请求方，重开那道门会把它与本渠道写的判为不同账户（答货主账户对不上），那是如实的，不是误拒——但要知道它会这样答。
+4. **没读 pc-gaps/13 与 label-channel/30 票面原文。** 两张票的裁决只经代码头注转述读到；若原文对请求方在操作者渠道上的形成另有说法，以原文为准、本记录让位。
+
+## Links
+
+- [ADR-0151：未归族的命令口各归其族](./0151-unassigned-command-faces-get-their-families.md)：本记录补上它决定二与越权风险点 4 留给 PS owner 的那一格，不改它任何一条
+- [ADR-0146：产品策略是机制与租户取值之间的第三类](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)：本记录裁的是产品策略
+- [ADR-0150：合成租户当真实租户对待，隔离形态逐口退场](./0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md)：两口今天没有隔离放行，换口不涉及撤放行

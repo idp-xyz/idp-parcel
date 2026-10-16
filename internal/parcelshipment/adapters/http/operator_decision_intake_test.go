@@ -8,6 +8,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
+	"time"
 
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
@@ -64,11 +65,154 @@ func (fake decisionTargets) FindOperatorDecisionTarget(_ context.Context, tenant
 
 func decisionIntake(t *testing.T, authenticator shipmenthttp.OperatorAuthenticator, targets ports.OperatorDecisionTargets) *shipmenthttp.OperatorDecisionIntake {
 	t.Helper()
-	intake, err := shipmenthttp.NewOperatorDecisionIntake(authenticator, targets)
+	return decisionIntakeWithParcels(t, authenticator, targets, parcelTargets{})
+}
+
+func decisionIntakeWithParcels(t *testing.T, authenticator shipmenthttp.OperatorAuthenticator, targets ports.OperatorDecisionTargets, parcels ports.CurrentAcceptedParcelTargetView) *shipmenthttp.OperatorDecisionIntake {
+	t.Helper()
+	intake, err := shipmenthttp.NewOperatorDecisionIntake(authenticator, targets, parcels)
 	if err != nil {
 		t.Fatal(err)
 	}
 	return intake
+}
+
+// parcelTargets 是按包裹反查当前已接受委托的替身：查得到时交回 SYN-ACCOUNT-01 名下的那份委托，并记下被问的租户与包裹。
+type parcelTargets struct {
+	missing bool
+	err     error
+	asked   *[]string
+}
+
+func (fake parcelTargets) FindCurrentAcceptedByParcel(_ context.Context, tenant domain.TenantID, parcel domain.DeclaredParcelID) (domain.CurrentAcceptedParcelTarget, bool, error) {
+	if fake.asked != nil {
+		*fake.asked = append(*fake.asked, tenant.String()+"|"+parcel.String())
+	}
+	if fake.err != nil {
+		return domain.CurrentAcceptedParcelTarget{}, false, fake.err
+	}
+	if fake.missing {
+		return domain.CurrentAcceptedParcelTarget{}, false, nil
+	}
+	account, _ := domain.NewCustomerAccountID("SYN-ACCOUNT-01")
+	source, _ := domain.NewSource("SYN-SOURCE")
+	key, _ := domain.NewSourceRequestKey("SYN-KEY-01")
+	identity, err := domain.NewSourceIdentity(tenant, account, source, key)
+	if err != nil {
+		return domain.CurrentAcceptedParcelTarget{}, false, err
+	}
+	requestID, _ := domain.NewShipmentRequestID("SYN-REQ-01")
+	version, _ := domain.NewSubmissionVersionID("SYN-VERSION-02")
+	target, err := domain.NewCurrentAcceptedParcelTarget(identity, requestID, version)
+	return target, err == nil, err
+}
+
+// Covers: ADR-0183 决定一、二、三——受控关闭按包裹寻址、委托来源身份由服务端反查；货主指令的关闭，请求方与责任主体都取那份
+// 委托的客户账户，载荷给不了；运营操作与外部限制的关闭没有请求方，责任主体由载荷给、必填。提交操作者不进命令（决定五）。
+func TestControlledClosureTakesTheShipperFromTheAcceptedRequestOfTheParcel(t *testing.T) {
+	var asked []string
+	intake := decisionIntakeWithParcels(t, decisionAuthenticator{}, decisionTargets{}, parcelTargets{asked: &asked})
+	ctx := context.Background()
+
+	byShipper, err := intake.IntakeControlledClosure(ctx, decisionRequest("t",
+		`{"parcel": "SYN-PARCEL-01", "reason": "SYN-REASON-SHIPPER-HOLD", "effectiveAt": "2026-10-16T09:00:00+08:00", "responsibilitySource": "SHIPPER-INSTRUCTION"}`))
+	if err != nil {
+		t.Fatalf("closure on shipper instruction: %v", err)
+	}
+	if len(asked) != 1 || asked[0] != decisionTenant+"|SYN-PARCEL-01" {
+		t.Fatalf("parcel lookup asked %v, want the envelope tenant and the named parcel", asked)
+	}
+	if byShipper.Identity.CustomerAccountID().String() != "SYN-ACCOUNT-01" || byShipper.Parcel.String() != "SYN-PARCEL-01" ||
+		byShipper.Requester.String() != "CUSTOMER-ACCOUNT/SYN-ACCOUNT-01" ||
+		byShipper.ResponsibilitySourceKind != application.ShipperInstructionResponsibilitySource ||
+		byShipper.ResponsibilitySourceSubject != "SYN-ACCOUNT-01" ||
+		byShipper.Reason.String() != "SYN-REASON-SHIPPER-HOLD" || !byShipper.EffectiveAt.Equal(time.Date(2026, 10, 16, 1, 0, 0, 0, time.UTC)) {
+		t.Fatalf("closure on shipper instruction = %+v", byShipper)
+	}
+
+	for source, subject := range map[string]string{"OPERATOR-ACTION": "SYN-OPS-CASE-01", "EXTERNAL-RESTRICTION": "SYN-RESTRICTION/embargo-01"} {
+		closure, err := intake.IntakeControlledClosure(ctx, decisionRequest("t",
+			`{"parcel": "SYN-PARCEL-01", "reason": "SYN-REASON-HOLD", "effectiveAt": "2026-10-16T01:00:00Z", "responsibilitySource": "`+source+`", "responsibilitySubject": "`+subject+`"}`))
+		if err != nil {
+			t.Fatalf("%s closure: %v", source, err)
+		}
+		if closure.Requester.String() != "" || closure.ResponsibilitySourceKind.String() != source || closure.ResponsibilitySourceSubject != subject {
+			t.Fatalf("%s closure = requester %q, source %s/%q", source, closure.Requester.String(), closure.ResponsibilitySourceKind, closure.ResponsibilitySourceSubject)
+		}
+	}
+
+	for name, body := range map[string]string{
+		"shipper subject given twice":   `{"parcel": "SYN-PARCEL-01", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION", "responsibilitySubject": "SYN-ACCOUNT-09"}`,
+		"operator action without topic": `{"parcel": "SYN-PARCEL-01", "reason": "r", "responsibilitySource": "OPERATOR-ACTION"}`,
+		"unknown responsibility source": `{"parcel": "SYN-PARCEL-01", "reason": "r", "responsibilitySource": "CUSTOMER-WHIM", "responsibilitySubject": "x"}`,
+		"requester smuggled":            `{"parcel": "SYN-PARCEL-01", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION", "requester": "CUSTOMER-ACCOUNT/SYN-ACCOUNT-09"}`,
+		"request id smuggled":           `{"parcel": "SYN-PARCEL-01", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION", "shipmentRequestId": "SYN-REQ-09"}`,
+		"tenant smuggled":               `{"parcel": "SYN-PARCEL-01", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION", "tenantId": "SYN-TENANT-02"}`,
+		"instant garbled":               `{"parcel": "SYN-PARCEL-01", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION", "effectiveAt": "tomorrow"}`,
+		"parcel missing":                `{"reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION"}`,
+	} {
+		if _, err := intake.IntakeControlledClosure(ctx, decisionRequest("t", body)); !errors.Is(err, shipmenthttp.ErrMalformedRequest) {
+			t.Fatalf("%s: err = %v, want ErrMalformedRequest", name, err)
+		}
+	}
+}
+
+// Covers: ADR-0183 决定四——重开的货主账户恒取包裹所属委托的客户账户；载荷带了货主重授权证据，请求方同取它，没带则请求方缺席。
+// 核「原关闭因货主指令形成时要同一账户的新授权」那道门仍在编排，本 Intake 不预判。
+func TestReopeningTakesTheShipperAccountFromTheAcceptedRequestOfTheParcel(t *testing.T) {
+	intake := decisionIntake(t, decisionAuthenticator{}, decisionTargets{})
+	ctx := context.Background()
+
+	reauthorized, err := intake.IntakeReopening(ctx, decisionRequest("t",
+		`{"parcel": "SYN-PARCEL-01", "reason": "SYN-REASON-RESUME", "effectiveAt": "2026-10-17T01:00:00Z", "relatedPriorClosure": "SYN-CAD-01", "shipperAuthorizationEvidence": "SYN-EVIDENCE/shipper-letter-02"}`))
+	if err != nil {
+		t.Fatalf("reopening with shipper reauthorization: %v", err)
+	}
+	if reauthorized.Identity.CustomerAccountID().String() != "SYN-ACCOUNT-01" || reauthorized.Parcel.String() != "SYN-PARCEL-01" ||
+		reauthorized.ShipperAccount.String() != "CUSTOMER-ACCOUNT/SYN-ACCOUNT-01" || reauthorized.Requester.String() != "CUSTOMER-ACCOUNT/SYN-ACCOUNT-01" ||
+		reauthorized.ShipperAuthorizationEvidence != "SYN-EVIDENCE/shipper-letter-02" || reauthorized.RelatedPriorClosure.String() != "SYN-CAD-01" ||
+		reauthorized.Reason.String() != "SYN-REASON-RESUME" || !reauthorized.EffectiveAt.Equal(time.Date(2026, 10, 17, 1, 0, 0, 0, time.UTC)) {
+		t.Fatalf("reopening with shipper reauthorization = %+v", reauthorized)
+	}
+
+	byOperator, err := intake.IntakeReopening(ctx, decisionRequest("t",
+		`{"parcel": "SYN-PARCEL-01", "reason": "SYN-REASON-RESUME", "effectiveAt": "2026-10-17T01:00:00Z", "relatedPriorClosure": "SYN-CAD-01"}`))
+	if err != nil {
+		t.Fatalf("reopening without shipper reauthorization: %v", err)
+	}
+	if byOperator.ShipperAccount.String() != "CUSTOMER-ACCOUNT/SYN-ACCOUNT-01" || byOperator.Requester.String() != "" || byOperator.ShipperAuthorizationEvidence != "" {
+		t.Fatalf("reopening without shipper reauthorization = %+v", byOperator)
+	}
+
+	for name, body := range map[string]string{
+		"shipper account smuggled": `{"parcel": "SYN-PARCEL-01", "reason": "r", "relatedPriorClosure": "SYN-CAD-01", "shipperAccount": "CUSTOMER-ACCOUNT/SYN-ACCOUNT-09"}`,
+		"requester smuggled":       `{"parcel": "SYN-PARCEL-01", "reason": "r", "relatedPriorClosure": "SYN-CAD-01", "requester": "CUSTOMER-ACCOUNT/SYN-ACCOUNT-09"}`,
+		"parcel missing":           `{"reason": "r", "relatedPriorClosure": "SYN-CAD-01"}`,
+		"trailing content":         `{"parcel": "SYN-PARCEL-01", "reason": "r", "relatedPriorClosure": "SYN-CAD-01"} {"x": 1}`,
+	} {
+		if _, err := intake.IntakeReopening(ctx, decisionRequest("t", body)); !errors.Is(err, shipmenthttp.ErrMalformedRequest) {
+			t.Fatalf("%s: err = %v, want ErrMalformedRequest", name, err)
+		}
+	}
+}
+
+// Covers: ADR-0183 决定一——包裹查不到当前已接受委托与越权探针同答；反查读不动是依赖故障，不是拒绝。
+func TestClosureAndReopeningOnAnUnknownParcelAnswerLikeAProbe(t *testing.T) {
+	ctx := context.Background()
+	const closure = `{"parcel": "SYN-PARCEL-99", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION"}`
+	const reopening = `{"parcel": "SYN-PARCEL-99", "reason": "r", "relatedPriorClosure": "SYN-CAD-01"}`
+
+	missing := decisionIntakeWithParcels(t, decisionAuthenticator{}, decisionTargets{}, parcelTargets{missing: true})
+	if _, err := missing.IntakeControlledClosure(ctx, decisionRequest("t", closure)); !errors.Is(err, shipmenthttp.ErrOperatorNotGranted) {
+		t.Fatalf("closure on an unknown parcel: err = %v, want the same answer as an unauthorized probe", err)
+	}
+	if _, err := missing.IntakeReopening(ctx, decisionRequest("t", reopening)); !errors.Is(err, shipmenthttp.ErrOperatorNotGranted) {
+		t.Fatalf("reopening on an unknown parcel: err = %v, want the same answer as an unauthorized probe", err)
+	}
+	ambiguous := decisionIntakeWithParcels(t, decisionAuthenticator{}, decisionTargets{}, parcelTargets{err: domain.ErrAmbiguousParcelTarget})
+	if _, err := ambiguous.IntakeControlledClosure(ctx, decisionRequest("t", closure)); err == nil || errors.Is(err, shipmenthttp.ErrOperatorNotGranted) || errors.Is(err, shipmenthttp.ErrMalformedRequest) {
+		t.Fatalf("ambiguous parcel: err = %v, want a server-side failure, never picking one", err)
+	}
 }
 
 func decisionRequest(token, body string) *http.Request {
@@ -166,6 +310,14 @@ func TestEachPSDecisionFaceAuthenticatesForItsOwnDecision(t *testing.T) {
 		}},
 		{shipmenthttp.OperatorDecisionAuthorizedDisposition, func() error {
 			_, err := intake.IntakeAuthorizedDisposition(ctx, decisionRequest("t", `{}`))
+			return err
+		}},
+		{shipmenthttp.OperatorDecisionControlledClosure, func() error {
+			_, err := intake.IntakeControlledClosure(ctx, decisionRequest("t", `{}`))
+			return err
+		}},
+		{shipmenthttp.OperatorDecisionControlledReopening, func() error {
+			_, err := intake.IntakeReopening(ctx, decisionRequest("t", `{}`))
 			return err
 		}},
 	}

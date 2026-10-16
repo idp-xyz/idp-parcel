@@ -74,6 +74,22 @@
       "basis": "SYN-MAP-BASIS-01"
     },
     {
+      "mappingId": "SYN-MAP-OD-CONTROLLED-CLOSURE-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "CONTROLLED_CLOSURE",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
+      "mappingId": "SYN-MAP-OD-CONTROLLED-REOPENING-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "CONTROLLED_REOPENING",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
       "mappingId": "SYN-MAP-EF-CUSTOMS-EXTERNAL-RESULT-01",
       "capability": "EXTERNAL_FACT",
       "factKind": "CUSTOMS_EXTERNAL_RESULT",
