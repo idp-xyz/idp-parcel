@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useId, useState, type ReactNode } from 'react';
+import { ChevronDown, ChevronRight } from 'lucide-react';
 import { Button, Input } from '@idpxyz/ui-primitives';
 import {
   RegistrationPanel,
@@ -154,7 +155,10 @@ export function RevisionField({
   );
 }
 
-/** 墙钟时刻一格：按操作者本地时刻填，送出时由纯逻辑换成 RFC 3339 UTC；这一句显在格下，免得有人按 UTC 填。 */
+/**
+ * 墙钟时刻一格：按操作者本地时刻填，送出时由纯逻辑换成 RFC 3339 UTC。格下那句只说按哪个时区填，免得有人按 UTC 填；
+ * 换成什么格式送是实现，读表单的运营配置员用不上（票 group-legal-entities-uiux/03）。
+ */
 export function WallTimeField({
   label,
   path,
@@ -186,7 +190,7 @@ export function WallTimeField({
         onChange={(event) => onChange(event.target.value)}
       />
       <span className="block text-[11px] text-idpxyz-textMuted mt-1">
-        {note ? `${note} ` : ''}按操作者本地时刻（{timeZone}）填，送出时换成 RFC 3339 UTC。
+        {note ? `${note} ` : ''}按本地时刻（{timeZone}）填。
       </span>
     </Field>
   );
@@ -248,5 +252,57 @@ export function SnapshotJsonDetails({
         problemNote={problemNote}
       />
     </details>
+  );
+}
+
+/** 表单里的一组格：组名、一句说明、两列格。组只管排版，不管哪格必填——必填由格名上的「*」说。 */
+export function FormGroup({ title, description, children }: { title: string; description?: string; children: ReactNode }) {
+  return (
+    <section className="flex flex-col gap-3">
+      <div>
+        <h3 className="text-[13px] font-semibold text-idpxyz-text">{title}</h3>
+        {description ? <p className="mt-1 text-xs text-idpxyz-textMuted">{description}</p> : null}
+      </div>
+      <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{children}</div>
+    </section>
+  );
+}
+
+/**
+ * 「高级」一组：收着时只显一行摘要，说清这一笔会带着什么送出去（修订号取的是建议值还是手填的），不让收起变成看不见。
+ * 展开与否由调用方按 registration-form.ts 的 advancedGroupOpen 算好交进来。
+ */
+export function AdvancedGroup({
+  open,
+  onToggle,
+  summary,
+  children,
+}: {
+  open: boolean;
+  onToggle: () => void;
+  summary: string;
+  children: ReactNode;
+}) {
+  const bodyId = useId();
+  const Chevron = open ? ChevronDown : ChevronRight;
+  return (
+    <section className="rounded-md border border-idpxyz-border">
+      <button
+        type="button"
+        aria-expanded={open}
+        aria-controls={bodyId}
+        onClick={onToggle}
+        className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-idpxyz-hover"
+      >
+        <Chevron className="h-4 w-4 shrink-0 text-idpxyz-textMuted" aria-hidden="true" />
+        <span className="shrink-0 text-[13px] font-semibold text-idpxyz-text">高级</span>
+        <span className="min-w-0 truncate text-xs text-idpxyz-textMuted">{summary}</span>
+      </button>
+      {open ? (
+        <div id={bodyId} className="grid grid-cols-1 gap-3 border-t border-idpxyz-border p-3 md:grid-cols-2">
+          {children}
+        </div>
+      ) : null}
+    </section>
   );
 }

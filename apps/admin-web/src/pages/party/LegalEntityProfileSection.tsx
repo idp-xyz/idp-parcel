@@ -7,7 +7,6 @@ import { OperatorRefusalNote, SectionError } from '../../components/states';
 import type { ApiResult } from '../catalogue-api';
 import { currentDisplayTimeZone, formatInstant } from '../moment';
 import {
-  commercialRegistrationEndpoints,
   legalEntityProfileOutcomeLabels,
   listLegalEntityProfileRevisions,
   resolveLegalEntityProfile,
@@ -23,7 +22,8 @@ import {
   profileRevisionLabel,
 } from './presentation';
 import { Field, Problems, fieldLabel } from './PublicationFormFields';
-import { RevisionField, WallTimeField, useRegistrationForm } from './party-registration-fields';
+import { AdvancedGroup, FormGroup, RevisionField, WallTimeField, useRegistrationForm } from './party-registration-fields';
+import { advancedGroupOpen } from './registration-form';
 import { RevisionHistorySection, type RevisionHistoryRegister } from './RevisionHistorySection';
 import {
   emptyLegalEntityProfileDraft,
@@ -46,8 +46,9 @@ import {
 
 const info = moduleInfoById['group-legal-entities'];
 const kind = 'legal-entity-profile';
-const endpoint = `POST ${commercialRegistrationEndpoints[kind]}`;
 const note = 'mt-1 text-[12px] text-idpxyz-textMuted';
+// 资料表单收在高级组里的那一格；组里有问题时组一律展开。
+const profileAdvancedPaths = ['profiles[0].revision'];
 
 const profileRevisionHistory: RevisionHistoryRegister<LegalEntityProfileRevisionListResponseBody> = {
   subject: '法人',
@@ -229,6 +230,9 @@ function FragmentRow({ label, value }: { label: string; value: string }) {
 /**
  * 登记新修订的逐字段表单。本地只拦编码层的三件（legalEntityProfileLocalProblems）；地址国家与身份对不对得上、税号合不合
  * 目录、修订连不连续都由服务端答，答复原样示出。修订号建议取这个法人已登的资料修订，落册后重取。
+ *
+ * 分组与措辞同登记责任法人那张表单（票 group-legal-entities-uiux/03）：资料内容 / 登记 / 高级三组，资料修订号有建议值，
+ * 收进高级组；这里法人是钉死的，没有「在册对象的下一修订」可判，高级组只在组里有问题时自己展开。
  */
 function ProfileRegistrationForm({ legalEntityId, onLanded }: { legalEntityId: string; onLanded: () => void }) {
   const [known, setKnown] = useState<LegalEntityProfileRevisionRecord[] | null>(null);
@@ -262,21 +266,140 @@ function ProfileRegistrationForm({ legalEntityId, onLanded }: { legalEntityId: s
   const setContact = (index: number, change: Partial<ContactDraft>) =>
     patch({ contacts: draft.contacts.map((row, at) => (at === index ? { ...row, ...change } : row)) });
 
+  const [advancedChoice, setAdvancedChoice] = useState<boolean | null>(null);
+  const advancedOpen = advancedGroupOpen(advancedChoice, problems, profileAdvancedPaths, false);
+  const advancedSummary = `资料修订号 ${form.revisionField.value.trim() || '未填'}${
+    form.revisionField.edited ? '（手填）' : '（建议值）'
+  }`;
+
   return (
     <Card>
-      <CardContent className="flex flex-col gap-3 pt-4">
-        <p className="text-xs text-idpxyz-textMuted">
-          一笔登记一个修订，修订号连续；新修订自其生效时点起取代前一修订，可以登记未来生效的修订，登过的不被覆盖。
-          注册地址的国家 / 地区须与身份上的注册国家 / 地区一致——由服务端判。提交打到 <span className="font-mono">{endpoint}</span>。
-        </p>
-        <div className="grid grid-cols-2 gap-3">
-          <RevisionField
-            label="资料修订号 *"
-            path="profiles[0].revision"
-            problems={problems}
-            {...form.revisionField}
-            note="建议值取这个法人已登资料修订的最新一笔 + 1（没有为 1）；连续性由服务端按册面判。"
-          />
+      <CardContent className="flex flex-col gap-5 pt-4">
+        <div className="rounded-md border border-idpxyz-border bg-idpxyz-sidebar p-3">
+          <p className="text-[13px] font-medium text-idpxyz-text">登记说明</p>
+          <ul className="mt-1 list-disc pl-4 text-xs leading-5 text-idpxyz-textMuted">
+            <li>一笔登记形成一个资料修订，登记过的不被覆盖；新修订自其生效时点起取代前一修订，可以登记未来生效的修订。</li>
+            <li>注册地址的国家 / 地区须与身份上的注册国家 / 地区一致。</li>
+            <li>不带开票抬头的修订生效后，按时点解析答「资料不全」，开票会被拒。</li>
+            <li>表单只检查格式；地址与身份对不对得上、税号合不合目录、修订是否连续，由登记册判定，答复显示在提交按钮旁。</li>
+          </ul>
+        </div>
+
+        <FormGroup title="资料内容" description="对外开票、签约与通知用的注册地址、开票抬头、税务登记号与联系人。">
+          <Field label="注册地址国家 / 地区 *" path="profiles[0].registeredAddress" problems={problems}>
+            <Input
+              value={draft.addressCountry}
+              readOnly={locked}
+              className="font-mono text-[13px]"
+              placeholder="如 CN、SG"
+              onChange={(event) => patch({ addressCountry: event.target.value })}
+            />
+          </Field>
+          <Field label="开票抬头" path="profiles[0].invoiceTitle" problems={problems}>
+            <Input
+              value={draft.invoiceTitle}
+              readOnly={locked}
+              placeholder="开票用的法人名称"
+              onChange={(event) => patch({ invoiceTitle: event.target.value })}
+            />
+            <span className="block text-[11px] text-idpxyz-textMuted mt-1">留空即这一笔不带开票资料。</span>
+          </Field>
+          <div className="md:col-span-2">
+            <Field label="注册地址（一行一段） *" path="profiles[0].registeredAddress.lines" problems={problems}>
+              <Textarea
+                value={draft.addressLines}
+                readOnly={locked}
+                rows={3}
+                onChange={(event) => patch({ addressLines: event.target.value })}
+              />
+            </Field>
+          </div>
+
+          <div className="md:col-span-2">
+            <p className={fieldLabel}>税务登记号</p>
+            {draft.taxNumbers.map((row, index) => (
+              <div key={index} className="mb-2 grid grid-cols-[1fr_1fr_auto] gap-3">
+                <Input
+                  value={row.typeCode}
+                  readOnly={locked}
+                  className="font-mono text-[13px]"
+                  placeholder="类型码"
+                  onChange={(event) => setTax(index, { typeCode: event.target.value })}
+                />
+                <Input
+                  value={row.number}
+                  readOnly={locked}
+                  className="font-mono text-[13px]"
+                  placeholder="号"
+                  onChange={(event) => setTax(index, { number: event.target.value })}
+                />
+                <Button
+                  variant="ghost"
+                  disabled={locked}
+                  onClick={() => patch({ taxNumbers: draft.taxNumbers.filter((_, at) => at !== index) })}
+                >
+                  移除
+                </Button>
+              </div>
+            ))}
+            <Problems lines={problems['profiles[0].taxRegistrationNumbers']} />
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                disabled={locked}
+                onClick={() => patch({ taxNumbers: [...draft.taxNumbers, { typeCode: '', number: '' }] })}
+              >
+                添加税务登记号
+              </Button>
+              <span className="text-[11px] text-idpxyz-textMuted">类型码取自注册号类型目录的资料层。</span>
+            </div>
+          </div>
+
+          <div className="md:col-span-2">
+            <p className={fieldLabel}>联系人</p>
+            {draft.contacts.map((row, index) => (
+              <div key={index} className="mb-2 grid grid-cols-[1fr_1fr_1fr_auto] gap-3">
+                <Input
+                  value={row.name}
+                  readOnly={locked}
+                  placeholder="姓名"
+                  onChange={(event) => setContact(index, { name: event.target.value })}
+                />
+                <Input
+                  value={row.email}
+                  readOnly={locked}
+                  placeholder="邮箱（可空）"
+                  onChange={(event) => setContact(index, { email: event.target.value })}
+                />
+                <Input
+                  value={row.phone}
+                  readOnly={locked}
+                  placeholder="电话（可空）"
+                  onChange={(event) => setContact(index, { phone: event.target.value })}
+                />
+                <Button
+                  variant="ghost"
+                  disabled={locked}
+                  onClick={() => patch({ contacts: draft.contacts.filter((_, at) => at !== index) })}
+                >
+                  移除
+                </Button>
+              </div>
+            ))}
+            <div className="flex items-center gap-3">
+              <Button
+                variant="outline"
+                disabled={locked}
+                onClick={() => patch({ contacts: [...draft.contacts, { name: '', email: '', phone: '' }] })}
+              >
+                添加联系人
+              </Button>
+              <span className="text-[11px] text-idpxyz-textMuted">联系人可以不登。</span>
+            </div>
+          </div>
+        </FormGroup>
+
+        <FormGroup title="登记" description="这一笔资料修订的依据与生效时点；生效时点可以在未来。">
           <Field label="登记依据 *" path="profiles[0].basis" problems={problems}>
             <Input
               value={draft.basis}
@@ -287,7 +410,7 @@ function ProfileRegistrationForm({ legalEntityId, onLanded }: { legalEntityId: s
             />
           </Field>
           <WallTimeField
-            label="生效自（可在未来；留空由服务端点名）"
+            label="生效自 *"
             path="profiles[0].effectiveFrom"
             problems={problems}
             value={draft.effectiveFrom}
@@ -295,114 +418,19 @@ function ProfileRegistrationForm({ legalEntityId, onLanded }: { legalEntityId: s
             timeZone={timeZone}
             onChange={(effectiveFrom) => patch({ effectiveFrom })}
           />
-          <Field label="注册地址国家 / 地区 *" path="profiles[0].registeredAddress" problems={problems}>
-            <Input
-              value={draft.addressCountry}
-              readOnly={locked}
-              className="font-mono text-[13px]"
-              placeholder="如 CN、SG"
-              onChange={(event) => patch({ addressCountry: event.target.value })}
-            />
-          </Field>
-          <Field label="注册地址（一行一段） *" path="profiles[0].registeredAddress.lines" problems={problems}>
-            <Textarea
-              value={draft.addressLines}
-              readOnly={locked}
-              rows={3}
-              onChange={(event) => patch({ addressLines: event.target.value })}
-            />
-          </Field>
-          <Field label="开票抬头" path="profiles[0].invoiceTitle" problems={problems}>
-            <Input
-              value={draft.invoiceTitle}
-              readOnly={locked}
-              placeholder="开票用的法人名称；留空即这笔不带开票资料"
-              onChange={(event) => patch({ invoiceTitle: event.target.value })}
-            />
-            <span className="block text-[11px] text-idpxyz-textMuted mt-1">
-              不带开票资料的那笔生效后，按时点解析答「资料不全」，开立方据此拒开。
-            </span>
-          </Field>
-        </div>
+        </FormGroup>
 
-        <div>
-          <p className={fieldLabel}>税务登记号（类型码取注册号类型目录的资料层，由服务端判）</p>
-          {draft.taxNumbers.map((row, index) => (
-            <div key={index} className="mb-2 grid grid-cols-[1fr_1fr_auto] gap-3">
-              <Input
-                value={row.typeCode}
-                readOnly={locked}
-                className="font-mono text-[13px]"
-                placeholder="类型码"
-                onChange={(event) => setTax(index, { typeCode: event.target.value })}
-              />
-              <Input
-                value={row.number}
-                readOnly={locked}
-                className="font-mono text-[13px]"
-                placeholder="号"
-                onChange={(event) => setTax(index, { number: event.target.value })}
-              />
-              <Button
-                variant="ghost"
-                disabled={locked}
-                onClick={() => patch({ taxNumbers: draft.taxNumbers.filter((_, at) => at !== index) })}
-              >
-                移除
-              </Button>
-            </div>
-          ))}
-          <Problems lines={problems['profiles[0].taxRegistrationNumbers']} />
-          <Button
-            variant="outline"
-            disabled={locked}
-            onClick={() => patch({ taxNumbers: [...draft.taxNumbers, { typeCode: '', number: '' }] })}
-          >
-            添加税务登记号
-          </Button>
-        </div>
+        <AdvancedGroup open={advancedOpen} onToggle={() => setAdvancedChoice(!advancedOpen)} summary={advancedSummary}>
+          <RevisionField
+            label="资料修订号 *"
+            path="profiles[0].revision"
+            problems={problems}
+            {...form.revisionField}
+            note="建议值取这个法人最新资料修订 + 1，没有为 1。"
+          />
+        </AdvancedGroup>
 
-        <div>
-          <p className={fieldLabel}>联系人（可空）</p>
-          {draft.contacts.map((row, index) => (
-            <div key={index} className="mb-2 grid grid-cols-[1fr_1fr_1fr_auto] gap-3">
-              <Input
-                value={row.name}
-                readOnly={locked}
-                placeholder="姓名"
-                onChange={(event) => setContact(index, { name: event.target.value })}
-              />
-              <Input
-                value={row.email}
-                readOnly={locked}
-                placeholder="邮箱（可空）"
-                onChange={(event) => setContact(index, { email: event.target.value })}
-              />
-              <Input
-                value={row.phone}
-                readOnly={locked}
-                placeholder="电话（可空）"
-                onChange={(event) => setContact(index, { phone: event.target.value })}
-              />
-              <Button
-                variant="ghost"
-                disabled={locked}
-                onClick={() => patch({ contacts: draft.contacts.filter((_, at) => at !== index) })}
-              >
-                移除
-              </Button>
-            </div>
-          ))}
-          <Button
-            variant="outline"
-            disabled={locked}
-            onClick={() => patch({ contacts: [...draft.contacts, { name: '', email: '', phone: '' }] })}
-          >
-            添加联系人
-          </Button>
-        </div>
-
-        <div className="flex items-start gap-3">
+        <div className="flex items-start gap-3 border-t border-idpxyz-border pt-4">
           <Button onClick={form.send} disabled={locked || !form.canSend}>
             {locked ? '提交中…' : '提交资料修订'}
           </Button>

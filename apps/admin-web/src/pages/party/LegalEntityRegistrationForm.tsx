@@ -1,3 +1,4 @@
+import { useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
 import { moduleInfoById } from '../../navigation';
 import { RegistrationAnswerNote, RegistrationPanel } from '../../components/registration';
@@ -13,11 +14,14 @@ import {
 import { identityRevisionLabel, problemNote, registrationSnapshotHints, registrationTitles } from './presentation';
 import { Field, Problems, ReferencePicker, ReferencePickerFor, fieldLabel, useLoaded } from './PublicationFormFields';
 import {
+  AdvancedGroup,
+  FormGroup,
   RevisionField,
   WallTimeField,
   businessPartyPickerOptions,
   useRegistrationForm,
 } from './party-registration-fields';
+import { advancedGroupOpen } from './registration-form';
 import {
   emptyLegalEntityDraft,
   identityCountryOptions,
@@ -43,6 +47,10 @@ import {
  *
  * JSON 快照签降为底部折叠区「高级：粘贴登记快照 JSON」——它是受控批量口的在线镜像（ADR-0101 决定一），不是运营
  * 配置员的主路径，但仍要在：CLI 那份形状能原样粘进来核对，是两口锁到同一登记用例的可见证据。
+ *
+ * **分组与措辞照读者来**（票 group-legal-entities-uiux/03）：读表单的是运营配置员，所以格按「法人是谁 / 这一笔的依据
+ * 与时点 / 高级」分三组，修订号与身份更正依据这两格平时用不上（修订号有建议值，更正依据只在更正那一笔填），收进高级组；
+ * 端点、「由服务端判」这类实现交代不进格下，「登记册判定」只在说明里说一次。
  */
 export interface LegalEntityRegistrationFormProps {
   /** 已取回的法人列表（给修订号建议用）；列表没取到（未配置 / 出错 / 加载中）传 null，建议一律为 1。 */
@@ -54,6 +62,8 @@ export interface LegalEntityRegistrationFormProps {
 const info = moduleInfoById['group-legal-entities'];
 const kind = 'legal-entity';
 const endpoint = `POST ${commercialRegistrationEndpoints[kind]}`;
+// 收在高级组里的两格；组里有问题时组一律展开，问题不被收起藏住。
+const advancedPaths = ['legalEntities[0].revision', 'legalEntities[0].identityCorrectionBasis'];
 
 export function LegalEntityRegistrationForm({ knownEntities, onRegistered }: LegalEntityRegistrationFormProps) {
   const form = useRegistrationForm<LegalEntityDraft>({
@@ -71,13 +81,32 @@ export function LegalEntityRegistrationForm({ knownEntities, onRegistered }: Leg
   const typeCatalogue = useLoaded(listRegistrationNumberTypes);
 
   // 本册的载荷裁空白（legalEntityPayloadOf），在册提示按裁过的标识找，与送出的是同一个对象。
-  const known = knownEntities?.find((row) => row.legalEntityId === draft.legalEntityId.trim());
+  const identifier = draft.legalEntityId.trim();
+  const known = knownEntities?.find((row) => row.legalEntityId === identifier);
+  // 列表没取到时说没取到，不说「不在册」：那时每个标识看起来都像首笔，提示会骗人。
+  const identifierNote =
+    identifier === ''
+      ? '法人的稳定标识，登记后不变。'
+      : known !== undefined
+        ? `已在册，最新修订 ${identityRevisionLabel(known.revision)}：本次登记形成它的下一修订。`
+        : knownEntities === null
+          ? '法人列表没取到，提示不了这一标识在不在册。'
+          : '已取回的列表里没有这一标识：本次登记是首笔修订。';
+
+  // 高级组：null 即操作者还没点过，按 advancedGroupOpen 的缺省走。
+  const [advancedChoice, setAdvancedChoice] = useState<boolean | null>(null);
 
   const setNumberRow = (index: number, change: Partial<LifetimeNumberDraft>) =>
     patch({ lifetimeNumbers: draft.lifetimeNumbers.map((row, at) => (at === index ? { ...row, ...change } : row)) });
   const addNumberRow = () => patch({ lifetimeNumbers: [...draft.lifetimeNumbers, { typeCode: '', number: '' }] });
   const removeNumberRow = (index: number) =>
     patch({ lifetimeNumbers: draft.lifetimeNumbers.filter((_, at) => at !== index) });
+
+  const advancedOpen = advancedGroupOpen(advancedChoice, problems, advancedPaths, known !== undefined);
+  const correctionBasis = draft.identityCorrectionBasis.trim();
+  const advancedSummary =
+    `身份修订号 ${form.revisionField.value.trim() || '未填'}${form.revisionField.edited ? '（手填）' : '（建议值）'}` +
+    ` · 身份更正依据${correctionBasis === '' ? '不带' : ` ${correctionBasis}`}`;
 
   return (
     <div className="flex-1 overflow-auto p-4 flex flex-col gap-4">
@@ -86,22 +115,17 @@ export function LegalEntityRegistrationForm({ knownEntities, onRegistered }: Leg
           <CardTitle>{registrationTitles[kind]}</CardTitle>
         </CardHeader>
         <CardContent className="flex flex-col gap-6">
-          <div className="rounded-md border border-idpxyz-border bg-idpxyz-sidebar/60 p-3">
+          <div className="rounded-md border border-idpxyz-border bg-idpxyz-sidebar p-3">
             <p className="text-[13px] font-medium text-idpxyz-text">登记说明</p>
-            <p className="mt-1 text-xs leading-5 text-idpxyz-textMuted">
-              一笔登记一个修订。首笔修订从 1 起、此后必须连续；更正占下一个修订号翻旧插新，不覆盖。参与方必须已在册且在法人生效时点已生效——这些都由服务端按册面判，表单只负责把格编对。
-            </p>
-            <p className="mt-1 text-xs leading-5 text-idpxyz-textMuted">
-              提交打到 <span className="font-mono">{endpoint}</span>；租户不在表单上，由接入渠道的认证结果填入。
-            </p>
+            <ul className="mt-1 list-disc pl-4 text-xs leading-5 text-idpxyz-textMuted">
+              <li>一笔登记形成一个身份修订，登记过的不被覆盖。首笔修订从 1 起，此后必须连续。</li>
+              <li>录错了就登记同一法人的下一修订；改正注册国家 / 地区或终身注册号时写明身份更正依据。</li>
+              <li>注册国家 / 地区与终身注册号不作变更：号变了就是另一个法人，停用旧身份、登记新身份。</li>
+              <li>表单只检查格式；参与方是否在册且已生效、修订是否连续，由登记册判定，答复显示在提交按钮旁。</li>
+            </ul>
           </div>
 
-          <section className="flex flex-col gap-3">
-            <div>
-              <h3 className="text-[13px] font-semibold text-idpxyz-text">法人身份</h3>
-              <p className="mt-1 text-xs text-idpxyz-textMuted">先确定稳定的法人身份，再登记其生效时间与依据。</p>
-            </div>
-            <div className="grid grid-cols-1 gap-3 md:grid-cols-2">
+          <FormGroup title="法人身份" description="法人是谁：稳定标识、所钉的业务参与方身份、注册国家 / 地区与终身注册号。">
             <Field label="法人标识 *" path="legalEntities[0].legalEntityId" problems={problems}>
               <Input
                 value={draft.legalEntityId}
@@ -110,20 +134,8 @@ export function LegalEntityRegistrationForm({ knownEntities, onRegistered }: Leg
                 placeholder="如 LE-SHA-01"
                 onChange={(event) => patch({ legalEntityId: event.target.value })}
               />
-              <span className="block text-[11px] text-idpxyz-textMuted mt-1">
-                {known
-                  ? `已取回列表里有这一法人，最新修订 ${identityRevisionLabel(known.revision)}；本次登记是它的新修订。`
-                  : '已取回列表里没有这一标识；本次登记是首笔修订（列表可能已陈旧，连续性仍由服务端判）。'}
-              </span>
+              <span className="block text-[11px] text-idpxyz-textMuted mt-1">{identifierNote}</span>
             </Field>
-
-            <RevisionField
-              label="身份修订号 *"
-              path="legalEntities[0].revision"
-              problems={problems}
-              {...form.revisionField}
-              note="建议值取已取回列表里该法人的最新修订 + 1（不在册为 1）；只是省一次翻册，连续性仍由服务端按册面判。"
-            />
 
             <ReferencePicker<BusinessPartyListResponseBody>
               label="业务参与方身份 *"
@@ -134,29 +146,9 @@ export function LegalEntityRegistrationForm({ knownEntities, onRegistered }: Leg
               onChange={(partyId) => patch({ partyId })}
               load={listBusinessParties}
               optionsOf={businessPartyPickerOptions}
-              emptyNote="参与方册今天为空；先在「业务参与方」页登记参与方身份，或手填标识由服务端判。"
+              emptyNote="参与方册还没有身份：先到「业务参与方」页登记参与方身份。"
               readFace="参与方册"
-              optionsNote="候选不按状态过滤：法人生效时点上参与方是否已生效由服务端判。"
-            />
-
-            <Field label="登记依据 *" path="legalEntities[0].basis" problems={problems}>
-              <Input
-                value={draft.basis}
-                readOnly={locked}
-                className="font-mono text-[13px]"
-                placeholder="登记依据引用（如董事会决议编号）"
-                onChange={(event) => patch({ basis: event.target.value })}
-              />
-            </Field>
-
-            <WallTimeField
-              label="生效自（留空由服务端点名）"
-              path="legalEntities[0].effectiveFrom"
-              problems={problems}
-              value={draft.effectiveFrom}
-              locked={locked}
-              timeZone={timeZone}
-              onChange={(effectiveFrom) => patch({ effectiveFrom })}
+              optionsNote="候选列出参与方册上的全部身份并标出状态；参与方须在法人生效时点已生效。"
             />
 
             <ReferencePickerFor<RegistrationNumberTypeListResponseBody>
@@ -168,26 +160,13 @@ export function LegalEntityRegistrationForm({ knownEntities, onRegistered }: Leg
               locked={locked}
               onChange={(registrationCountry) => patch({ registrationCountry })}
               optionsOf={(body) => identityCountryOptions(body.registrationNumberTypes)}
-              emptyNote="注册号类型目录今天没有身份层类型；先登记注册号类型，或手填国家码由服务端判。"
+              emptyNote="注册号类型目录里还没有身份层类型：先登记注册号类型。"
               readFace="注册号类型目录"
               manualPlaceholder="国家 / 地区码（如 CN、SG）"
-              optionsNote="候选是目录里登过身份层类型的国家 / 地区；目录里没有该国家的类型时服务端拒登，不以默认格式代替。"
+              optionsNote="候选是注册号类型目录里登过身份层类型的国家 / 地区。"
             />
 
-            <Field label="身份更正依据（只在更正修订上填）" path="legalEntities[0].identityCorrectionBasis" problems={problems}>
-              <Input
-                value={draft.identityCorrectionBasis}
-                readOnly={locked}
-                className="font-mono text-[13px]"
-                placeholder="更正依据引用；留空即不带"
-                onChange={(event) => patch({ identityCorrectionBasis: event.target.value })}
-              />
-              <span className="block text-[11px] text-idpxyz-textMuted mt-1">
-                首笔修订不收更正依据；改正国家或号时要不要依据、依据够不够，由服务端判。
-              </span>
-            </Field>
-
-            <div className="col-span-2">
+            <div className="md:col-span-2">
               <p className={fieldLabel}>终身注册号 *</p>
               <div className="flex flex-col gap-2">
                 {draft.lifetimeNumbers.map((row, index) => (
@@ -201,7 +180,7 @@ export function LegalEntityRegistrationForm({ knownEntities, onRegistered }: Leg
                       locked={locked}
                       onChange={(typeCode) => setNumberRow(index, { typeCode })}
                       optionsOf={(body) => identityTypeOptions(body.registrationNumberTypes, draft.registrationCountry)}
-                      emptyNote="目录里这一国家 / 地区没有身份层类型（先选国家）；也可手填类型码由服务端判。"
+                      emptyNote="先选注册国家 / 地区；目录里该国家 / 地区还没有身份层类型时，先登记注册号类型。"
                       readFace="注册号类型目录"
                       manualPlaceholder="类型码（如 USCC、UEN）"
                     />
@@ -229,13 +208,55 @@ export function LegalEntityRegistrationForm({ knownEntities, onRegistered }: Leg
                 <Button variant="outline" disabled={locked} onClick={addNumberRow}>
                   添加一个终身注册号
                 </Button>
-                <span className="text-[11px] text-idpxyz-textMuted">
-                  一个法人可按类型登多个终身注册号；号的格式与所属层由服务端按目录判。
-                </span>
+                <span className="text-[11px] text-idpxyz-textMuted">一个法人可按类型登记多个终身注册号。</span>
               </div>
             </div>
-            </div>
-          </section>
+          </FormGroup>
+
+          <FormGroup title="登记" description="这一笔修订的依据与生效时点。">
+            <Field label="登记依据 *" path="legalEntities[0].basis" problems={problems}>
+              <Input
+                value={draft.basis}
+                readOnly={locked}
+                className="font-mono text-[13px]"
+                placeholder="登记依据引用（如董事会决议编号）"
+                onChange={(event) => patch({ basis: event.target.value })}
+              />
+            </Field>
+
+            <WallTimeField
+              label="生效自 *"
+              path="legalEntities[0].effectiveFrom"
+              problems={problems}
+              value={draft.effectiveFrom}
+              locked={locked}
+              timeZone={timeZone}
+              onChange={(effectiveFrom) => patch({ effectiveFrom })}
+            />
+          </FormGroup>
+
+          <AdvancedGroup open={advancedOpen} onToggle={() => setAdvancedChoice(!advancedOpen)} summary={advancedSummary}>
+            <RevisionField
+              label="身份修订号 *"
+              path="legalEntities[0].revision"
+              problems={problems}
+              {...form.revisionField}
+              note="建议值取该法人最新修订 + 1，不在册为 1。"
+            />
+
+            <Field label="身份更正依据" path="legalEntities[0].identityCorrectionBasis" problems={problems}>
+              <Input
+                value={draft.identityCorrectionBasis}
+                readOnly={locked}
+                className="font-mono text-[13px]"
+                placeholder="更正依据引用；留空即不带"
+                onChange={(event) => patch({ identityCorrectionBasis: event.target.value })}
+              />
+              <span className="block text-[11px] text-idpxyz-textMuted mt-1">
+                只在更正修订上填：改正录错的注册国家 / 地区或终身注册号时，写明依据。首笔修订不填。
+              </span>
+            </Field>
+          </AdvancedGroup>
 
           <div className="flex items-start gap-3 border-t border-idpxyz-border pt-4">
             <Button onClick={form.send} disabled={locked || !form.canSend}>

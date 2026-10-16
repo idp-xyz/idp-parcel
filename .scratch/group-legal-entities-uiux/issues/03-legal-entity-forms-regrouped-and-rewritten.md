@@ -27,7 +27,7 @@
 
 **Category:** enhancement
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
 - [ ] 两张表单按上述三组呈现。高级组默认收起，法人标识对上在册法人时自动展开
 - [ ] 说明框里没有 HTTP 方法、端点路径或实现交代；业务规则句用 CONTEXT 原词

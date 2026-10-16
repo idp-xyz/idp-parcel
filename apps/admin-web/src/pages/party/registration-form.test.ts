@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import { deepEqual, equal } from 'node:assert/strict';
 import type { ApiResult } from '../catalogue-api';
 import type { RegistrationResponseBody } from '../../components/registration';
-import { effectiveDraftOf, registrationLanded, revisionOf, suggestedNextRevision } from './registration-form';
+import { advancedGroupOpen, effectiveDraftOf, registrationLanded, revisionOf, suggestedNextRevision } from './registration-form';
 
 // 本文件钉的是参与方模块各登记表单共用的规则（票 admin-web-group-legal-entities/13 第 1 / 3 条抬出）：修订号格的编码
 // 层判据、建议值何时顶进草稿、登记册答什么才算落地。各份表单（法人 / 参与方 / 关系 / 停用……）同一判，不各留一份。
@@ -73,4 +73,18 @@ test('登记册答落册线上名才算落地', () => {
   equal(registrationLanded({ kind: 'callerProblem', status: 400, code: 'MALFORMED_REQUEST' }, 'REGISTERED'), false);
   equal(registrationLanded({ kind: 'noAnswer', status: 500, code: 'NO_ANSWER_FORMED' }, 'REGISTERED'), false);
   equal(registrationLanded({ kind: 'transport', message: 'ECONNREFUSED' }, 'REGISTERED'), false);
+});
+
+// Covers: 「高级」一组（修订号、身份更正依据）默认收起；这一笔是在册对象的下一修订时自动展开；操作者点过就按他点的；
+// 组里任一格有问题时一律展开，压过操作者的收起——收着的组里藏着问题，等于不让人看见为什么送不出去
+// （票 group-legal-entities-uiux/03）。组外的问题不牵动这一组。
+test('高级组：默认收起，在册下一修订展开，问题压过操作者的收起', () => {
+  const paths = ['legalEntities[0].revision', 'legalEntities[0].identityCorrectionBasis'];
+  equal(advancedGroupOpen(null, {}, paths, false), false);
+  equal(advancedGroupOpen(null, {}, paths, true), true);
+  equal(advancedGroupOpen(false, {}, paths, true), false);
+  equal(advancedGroupOpen(true, {}, paths, false), true);
+  equal(advancedGroupOpen(false, { 'legalEntities[0].revision': ['修订号要是正整数'] }, paths, false), true);
+  equal(advancedGroupOpen(null, { 'legalEntities[0].basis': ['依据不能为空'] }, paths, false), false);
+  equal(advancedGroupOpen(null, { 'legalEntities[0].revision': [] }, paths, false), false);
 });

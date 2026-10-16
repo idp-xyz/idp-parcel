@@ -65,3 +65,18 @@ export function effectiveDraftOf<Draft extends RevisionedDraft>(
 export function registrationLanded(answer: ApiResult<RegistrationResponseBody>, landedOutcome: string): boolean {
   return answer.kind === 'outcome' && answer.body.outcome === landedOutcome;
 }
+
+/**
+ * 表单「高级」一组（修订号与更正依据这类有建议值或只在少数场合要填的格）展开没有。默认收起；这一笔是在册对象的
+ * 下一修订（`nextOfKnown`，按已取回的册判，册可能陈旧，所以只是展开、不锁不藏）时自动展开；操作者点过就按他点的。
+ * 组里任一格有问题时一律展开，压过操作者的收起：问题挂在格下，格收着就等于把「为什么送不出去」藏了起来。
+ */
+export function advancedGroupOpen(
+  choice: boolean | null,
+  problems: Record<string, readonly string[]>,
+  groupPaths: readonly string[],
+  nextOfKnown: boolean,
+): boolean {
+  if (groupPaths.some((path) => (problems[path]?.length ?? 0) > 0)) return true;
+  return choice ?? nextOfKnown;
+}
