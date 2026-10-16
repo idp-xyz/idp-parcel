@@ -1,7 +1,7 @@
 # 20 TF 关段、建派送任务、承运商首次有效收寄判断三口的规范化形状与「同身份异内容」格
 
 Category: enhancement
-Status: in-progress——2026-10-16 完工，代码 `857453d8`（分支 `claude-oc20`），待进 main；评审只有作者自审，不算非作者评审，见「完成记录」。此前 in-progress——2026-10-16 Claude Code 会话认领（用户令「直接认领票 20 开始实施」），隔离 worktree `/home/tops/workspace/idp-parcel-claude-oc20`、分支 `claude-oc20`。此前 ready-for-agent——2026-10-16 TF owner（用户）逐口裁毕：关段裁现有格够用、答复补回显在册关闭时刻；建派送任务裁现有格够用（只核对）；承运商首次有效收寄判断裁补 TFC-1 形状、同依据异内容新增 `CONTENT_CONFLICT`。裁定与理由见「裁定记录」，实施见「做什么」。同日先提交过一版三口全裁「现有格够用」并转 resolved 的票面（`11d42fbe`），按本裁定改正，见 Comments。此前 needs-triage——2026-10-13 通道 4 立（通道 1 派单 `task-40698906`，照裁定 A：[15](./15-operation-decision-faces-take-operator-intake.md) 余下四口不换）。三口的重放分支只认身份、不比内容；补形状改的是 TF 领域代数，归 TF owner 逐口裁。现有代数、拟议形状（TFC-1）与要裁的那一问见「逐口」。
+Status: resolved——2026-10-16 进 main：`e558c66e` / `857453d8` / `2d84eb2c` 三笔快进进 main 并推，远端 main = `2d84eb2c`，SHA 未改写；见「进 main 记录」。此前 in-progress——2026-10-16 完工，代码 `857453d8`（分支 `claude-oc20`），待进 main；评审只有作者自审，不算非作者评审，见「完成记录」。此前 in-progress——2026-10-16 Claude Code 会话认领（用户令「直接认领票 20 开始实施」），隔离 worktree `/home/tops/workspace/idp-parcel-claude-oc20`、分支 `claude-oc20`。此前 ready-for-agent——2026-10-16 TF owner（用户）逐口裁毕：关段裁现有格够用、答复补回显在册关闭时刻；建派送任务裁现有格够用（只核对）；承运商首次有效收寄判断裁补 TFC-1 形状、同依据异内容新增 `CONTENT_CONFLICT`。裁定与理由见「裁定记录」，实施见「做什么」。同日先提交过一版三口全裁「现有格够用」并转 resolved 的票面（`11d42fbe`），按本裁定改正，见 Comments。此前 needs-triage——2026-10-13 通道 4 立（通道 1 派单 `task-40698906`，照裁定 A：[15](./15-operation-decision-faces-take-operator-intake.md) 余下四口不换）。三口的重放分支只认身份、不比内容；补形状改的是 TF 领域代数，归 TF owner 逐口裁。现有代数、拟议形状（TFC-1）与要裁的那一问见「逐口」。
 Blocked by: 无
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 丙轨实施
 地盘（裁完后）：`internal/transportfulfillment/domain/payload_canonicalization.go`（裁为补形状的口各一个 `Canonicalize…Payload`）；`internal/transportfulfillment/application` 里 `CloseFulfillmentSegmentHandler.Close`、`OpenDispatchTaskHandler.Open`、`JudgeCarrierFirstEffectivePickupHandler.Judge` 的重放分支；新增答复格时 `internal/transportfulfillment/adapters/http` 三口的答复映射。
@@ -111,6 +111,12 @@ Blocked by: 无
 **证据层级**：全部为合成夹具与门禁库上的 `S`。
 
 **未做**：「不做」节原样未做；`cmd/parcel-api` 的承运商判断口换操作者 Intake 归 15，本票实施完即解除 15 对它的形状前置。
+
+### 进 main 记录（2026-10-16，Claude Code 会话自落，用户令「需要」）
+
+- 分支 `claude-oc20` 三笔 `e558c66e` / `857453d8` / `2d84eb2c` 直接叠在远端 main `11d42fbe` 之上，**快进**进 main，不重放、SHA 未改写；推送前紧贴 push 再 fetch，远端仍为 `11d42fbe`，`origin/main..2d84eb2c` 只有这三笔、底下无他人提交。`git push origin 2d84eb2c:main` 退 0，`ls-remote` 为 `2d84eb2c`。
+- 推送方全量一次：钉 `2d84eb2c` 的全新 detached 检出，带 DSN，`go test -p 1 -count=1 -v ./...` 退 0——有测试的包 141 个 ok、0 FAIL；`--- FAIL` 0、`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，助手进程用例，不作为助手启动时照设计跳过）。同一检出上全仓 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0。
+- 评审：只有作者自审（见完成记录「评审」），**没有非作者评审**——落地时本机无其他会话可派（`/list-agents` 实测），用户令照落。parallel-sessions「合入前独立评审」这一格本票未满足，如实记下；补评可钉 `e558c66e..857453d8` 另做。
 
 ## Comments
 
