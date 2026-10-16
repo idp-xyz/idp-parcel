@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
@@ -130,6 +131,17 @@ func (intake *OperatorDecisionIntake) IntakeControlledClosure(ctx context.Contex
 	if err != nil {
 		return application.FormControlledClosureCommand{}, err
 	}
+	// 责任主体的两道校验只看载荷，排在按包裹寻址之前：坏载荷答 400（ADR-0183 决定三），不因包裹查不到先落进「与越权
+	// 探针同答」那一格。全空白与没给同读，与编排合成关闭责任来源时去两端空白同一口径。
+	shipperInstruction := kind == application.ShipperInstructionResponsibilitySource
+	subject := strings.TrimSpace(payload.ResponsibilitySubject)
+	if shipperInstruction && subject != "" {
+		return application.FormControlledClosureCommand{}, fmt.Errorf(
+			"%w: responsibilitySubject: a shipper instruction's subject is the request's own customer account", ErrMalformedRequest)
+	}
+	if !shipperInstruction && subject == "" {
+		return application.FormControlledClosureCommand{}, fmt.Errorf("%w: responsibilitySubject is required for %s", ErrMalformedRequest, kind)
+	}
 	parcel, identity, err := intake.locateParcel(ctx, operator.Tenant, payload.Parcel)
 	if err != nil {
 		return application.FormControlledClosureCommand{}, err
@@ -141,21 +153,14 @@ func (intake *OperatorDecisionIntake) IntakeControlledClosure(ctx context.Contex
 		EffectiveAt:              effectiveAt,
 		ResponsibilitySourceKind: kind,
 	}
-	if kind == application.ShipperInstructionResponsibilitySource {
-		if payload.ResponsibilitySubject != "" {
-			return application.FormControlledClosureCommand{}, fmt.Errorf(
-				"%w: responsibilitySubject: a shipper instruction's subject is the request's own customer account", ErrMalformedRequest)
-		}
+	if shipperInstruction {
 		if command.Requester, err = shipperOf(identity); err != nil {
 			return application.FormControlledClosureCommand{}, err
 		}
 		command.ResponsibilitySourceSubject = identity.CustomerAccountID().String()
 		return command, nil
 	}
-	if payload.ResponsibilitySubject == "" {
-		return application.FormControlledClosureCommand{}, fmt.Errorf("%w: responsibilitySubject is required for %s", ErrMalformedRequest, kind)
-	}
-	command.ResponsibilitySourceSubject = payload.ResponsibilitySubject
+	command.ResponsibilitySourceSubject = subject
 	return command, nil
 }
 
@@ -197,7 +202,8 @@ func (intake *OperatorDecisionIntake) IntakeReopening(ctx context.Context, reque
 		ShipperAccount:               shipper,
 		ShipperAuthorizationEvidence: payload.ShipperAuthorizationEvidence,
 	}
-	if payload.ShipperAuthorizationEvidence != "" {
+	// 全空白的证据与没带同读，与编排那道门（去两端空白再判）同一口径：否则请求方被记成客户，门却当作没带证据。
+	if strings.TrimSpace(payload.ShipperAuthorizationEvidence) != "" {
 		command.Requester = shipper
 	}
 	return command, nil

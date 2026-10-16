@@ -47,6 +47,10 @@ const (
 	// ContinuedAttemptDecisionWriteConflict：开册撞上别人刚开的、或追加时预期版本对不上。版本冲突是业务答案（ADR-0031），
 	// 调用方重读再重放；本层不代猜库里此刻是什么。
 	ContinuedAttemptDecisionWriteConflict
+	// ContinuedAttemptDecisionExistingResult：册上已有同类同内容的决定，这是同一次请求的重放（票 operator-channel/28）。
+	// 交回那条原决定；什么都没写、没签标识、没发意图。与委托提交口的`已有结果`同名同义，不复用`已形成`——那会让调用方
+	// 把一次重投读成又形成了一条。
+	ContinuedAttemptDecisionExistingResult
 )
 
 func (outcome ContinuedAttemptDecisionOutcome) String() string {
@@ -63,6 +67,8 @@ func (outcome ContinuedAttemptDecisionOutcome) String() string {
 		return "UNDECIDED"
 	case ContinuedAttemptDecisionWriteConflict:
 		return "REVISION_CONFLICT"
+	case ContinuedAttemptDecisionExistingResult:
+		return "EXISTING_RESULT"
 	default:
 		return ""
 	}
@@ -315,12 +321,13 @@ func (handler *FormContinuedAttemptDecisionHandler) FormControlledClosure(
 	}
 
 	return handler.form(ctx, formation{
-		identity:  command.Identity,
-		parcel:    command.Parcel,
-		kind:      domain.ControlledClosureDecision,
-		requester: command.Requester,
-		reason:    command.Reason,
-		at:        command.EffectiveAt,
+		identity:      command.Identity,
+		parcel:        command.Parcel,
+		kind:          domain.ControlledClosureDecision,
+		requester:     command.Requester,
+		reason:        command.Reason,
+		at:            command.EffectiveAt,
+		closureSource: source,
 		spec: func(id domain.ContinuedAttemptDecisionID, granted ports.ContinuedAttemptDecisionAuthorization) (domain.ContinuedAttemptDecisionSpec, error) {
 			boundary, err := domain.NewAuthoritativeCutoffBoundary(id.String())
 			if err != nil {
@@ -356,12 +363,13 @@ func (handler *FormContinuedAttemptDecisionHandler) FormReopening(
 		return continuedAttemptNotAccepted(ContinuedAttemptDecisionInvalid), nil
 	}
 	return handler.form(ctx, formation{
-		identity:  command.Identity,
-		parcel:    command.Parcel,
-		kind:      domain.ReopeningDecision,
-		requester: command.Requester,
-		reason:    command.Reason,
-		at:        command.EffectiveAt,
+		identity:       command.Identity,
+		parcel:         command.Parcel,
+		kind:           domain.ReopeningDecision,
+		requester:      command.Requester,
+		reason:         command.Reason,
+		at:             command.EffectiveAt,
+		relatedClosure: command.RelatedPriorClosure,
 		// 没开过册的包裹没有任何东西可重开：这不是重复领域规则（领域说的是「指不到生效关闭」），是「没有册可追加」
 		// 这一层的事实——为它开一册空的再让 Append 拒，会为一次注定不成立的重开消耗一个决定标识。
 		requiresRegister: true,
@@ -425,19 +433,24 @@ func (handler *FormContinuedAttemptDecisionHandler) shipperReauthorizationGate(
 
 // formation 是两条命令在共同路径上各自不同的那几格。
 type formation struct {
-	identity         domain.SourceIdentity
-	parcel           domain.DeclaredParcelID
-	kind             domain.ContinuedAttemptDecisionKind
-	requester        domain.RequesterReference
-	reason           domain.ContinuedAttemptReasonReference
-	at               time.Time
+	identity  domain.SourceIdentity
+	parcel    domain.DeclaredParcelID
+	kind      domain.ContinuedAttemptDecisionKind
+	requester domain.RequesterReference
+	reason    domain.ContinuedAttemptReasonReference
+	at        time.Time
+	// closureSource 与 relatedClosure 各只在一种决定上有值（关闭 / 重开），与上面四格合成重放比对的请求内容。
+	closureSource    domain.ClosureResponsibilitySourceReference
+	relatedClosure   domain.ContinuedAttemptDecisionID
 	requiresRegister bool
 	// beforeIdentity 在读回册之后、签发标识之前开口；交回非零结果即在此停下。
 	beforeIdentity func(domain.ContinuedAttemptRegister) ContinuedAttemptDecisionResult
 	spec           func(domain.ContinuedAttemptDecisionID, ports.ContinuedAttemptDecisionAuthorization) (domain.ContinuedAttemptDecisionSpec, error)
 }
 
-// form 是两条命令共用的路径：授权 → 当前有效终局 → 册 → 标识 → Append → Insert / Save → 交出判断意图。
+// form 是两条命令共用的路径：授权 → 当前有效终局 → 册 → 认重放 → 标识 → Append → Insert / Save → 交出判断意图。
+//
+// 重放认在授权之后、签发标识之前（票 operator-channel/28）：没有授权的操作者不能拿重放探册，重放也不消耗标识。
 //
 // 读那几步失败答`未决`（什么都没写，重投会改变结果）；写那几步失败原样上抛（整步随事务回滚）；版本冲突是业务答案。
 func (handler *FormContinuedAttemptDecisionHandler) form(ctx context.Context, plan formation) (ContinuedAttemptDecisionResult, error) {
@@ -486,6 +499,18 @@ func (handler *FormContinuedAttemptDecisionHandler) form(ctx context.Context, pl
 		register, err = domain.OpenContinuedAttemptRegister(tenant, plan.parcel)
 		if err != nil {
 			return continuedAttemptNotAccepted(ContinuedAttemptDecisionInvalid), nil
+		}
+	}
+	if found {
+		if prior, replayed := register.RecordedRequest(domain.ContinuedAttemptRequest{
+			Kind:                        plan.kind,
+			Requester:                   plan.requester,
+			Reason:                      plan.reason,
+			EffectiveAt:                 plan.at,
+			ClosureResponsibilitySource: plan.closureSource,
+			RelatedPriorClosure:         plan.relatedClosure,
+		}); replayed {
+			return ContinuedAttemptDecisionResult{outcome: ContinuedAttemptDecisionExistingResult, decision: prior, hasDecision: true}, nil
 		}
 	}
 	if plan.beforeIdentity != nil {

@@ -364,12 +364,24 @@ func TestClosureAndReopeningThroughTheOperatorChannelAgainstARealDatabase(t *tes
 		closure.ClosureResponsibilitySource().String() != "SHIPPER-INSTRUCTION/SYN-CUSTOMER-OC15" {
 		t.Fatalf("关闭 = 标识 %q / 请求方 %q / 责任来源 %q，不是从包裹所属委托推出的", closure.ID(), closure.Requester(), closure.ClosureResponsibilitySource())
 	}
+	// 票 operator-channel/28：同一个关闭 POST 重投，答 200 `EXISTING_RESULT` 交回原决定，册上仍是一条。
+	retried := post(t, shipmenthttp.NewFormControlledClosureEndpoint(decisions.shipment, orchestration.Shell), closureBody("SYN-PARCEL-OC15-1"),
+		http.StatusOK, answer{Outcome: "EXISTING_RESULT"})
+	if retried.DecisionID != closed.DecisionID {
+		t.Fatalf("重投交回 %q，want 原决定 %q", retried.DecisionID, closed.DecisionID)
+	}
+	if register, _ = continuedAttemptRegisterOf(t, db, tenant, parcel); len(register.Decisions()) != 1 {
+		t.Fatalf("重投后册上 %d 条，want 1", len(register.Decisions()))
+	}
 
 	reopen := shipmenthttp.NewFormReopeningEndpoint(decisions.shipment, orchestration.Shell)
 	post(t, reopen, `{"parcel": "SYN-PARCEL-OC15-1", "reason": "SYN-REASON-RESUME", "effectiveAt": "2026-08-24T11:00:00Z", "relatedPriorClosure": "`+closed.DecisionID+`"}`,
 		http.StatusOK, answer{Outcome: "INPUT_NOT_ACCEPTED", Refusal: "SHIPPER_REAUTHORIZATION_MISSING"})
-	post(t, reopen, `{"parcel": "SYN-PARCEL-OC15-1", "reason": "SYN-REASON-RESUME", "effectiveAt": "2026-08-24T11:00:00Z", "relatedPriorClosure": "`+closed.DecisionID+`", "shipperAuthorizationEvidence": "SYN-EVIDENCE/shipper-reauth-oc15"}`,
-		http.StatusCreated, answer{Outcome: "FORMED"})
+	reopeningBody := `{"parcel": "SYN-PARCEL-OC15-1", "reason": "SYN-REASON-RESUME", "effectiveAt": "2026-08-24T11:00:00Z", "relatedPriorClosure": "` + closed.DecisionID + `", "shipperAuthorizationEvidence": "SYN-EVIDENCE/shipper-reauth-oc15"}`
+	reopened := post(t, reopen, reopeningBody, http.StatusCreated, answer{Outcome: "FORMED"})
+	if again := post(t, reopen, reopeningBody, http.StatusOK, answer{Outcome: "EXISTING_RESULT"}); again.DecisionID != reopened.DecisionID {
+		t.Fatalf("重投重开交回 %q，want 原重开 %q", again.DecisionID, reopened.DecisionID)
+	}
 	register, _ = continuedAttemptRegisterOf(t, db, tenant, parcel)
 	if len(register.Decisions()) != 2 || register.Judge(false) != domain.ContinuedAttemptOpen ||
 		register.Decisions()[1].Requester().String() != "CUSTOMER-ACCOUNT/SYN-CUSTOMER-OC15" {

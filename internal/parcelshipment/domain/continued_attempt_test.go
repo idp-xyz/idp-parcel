@@ -310,3 +310,45 @@ func TestRehydrationAcceptsAHistoryThatEndedUnderAFinalOutcome(t *testing.T) {
 		t.Errorf("终局在场时不该派生开放，实得 %q", got)
 	}
 }
+
+// Covers: 票 operator-channel/28——册认得出同一次请求的重放：同类、请求方、原因、生效时间、关闭责任来源、所指关闭逐格相同
+// 才算；决定方、授权角色、授权依据快照与决定标识不是请求的内容，不比。任一请求格不同就不是重放。
+func TestARegisterRecognisesTheSameRequestOnlyWhenEveryRequestCellMatches(t *testing.T) {
+	t.Parallel()
+
+	at := time.Date(2026, 10, 16, 9, 0, 0, 0, time.UTC)
+	register, err := emptyRegister(t).Append(closureSpec(t, "closure-1", at), false)
+	if err != nil {
+		t.Fatalf("关闭：%v", err)
+	}
+	closure := closureSpec(t, "closure-1", at)
+	same := domain.ContinuedAttemptRequest{
+		Kind: closure.Kind, Requester: closure.Requester, Reason: closure.Reason, EffectiveAt: at,
+		ClosureResponsibilitySource: closure.ClosureResponsibilitySource,
+	}
+	if decision, found := register.RecordedRequest(same); !found || decision.ID().String() != "closure-1" {
+		t.Fatalf("同内容没认出：%+v / %v", decision, found)
+	}
+	for name, mutate := range map[string]func(*domain.ContinuedAttemptRequest){
+		"类别": func(request *domain.ContinuedAttemptRequest) { request.Kind = domain.ReopeningDecision },
+		"请求方": func(request *domain.ContinuedAttemptRequest) {
+			request.Requester = mustValue(t, domain.NewRequesterReference, "SHIPPER-9")
+		},
+		"原因": func(request *domain.ContinuedAttemptRequest) {
+			request.Reason = mustValue(t, domain.NewContinuedAttemptReasonReference, "OTHER")
+		},
+		"生效时间": func(request *domain.ContinuedAttemptRequest) { request.EffectiveAt = at.Add(time.Second) },
+		"关闭责任来源": func(request *domain.ContinuedAttemptRequest) {
+			request.ClosureResponsibilitySource = mustValue(t, domain.NewClosureResponsibilitySourceReference, "OTHER-SOURCE")
+		},
+		"所指关闭": func(request *domain.ContinuedAttemptRequest) {
+			request.RelatedPriorClosure = mustValue(t, domain.NewContinuedAttemptDecisionID, "closure-0")
+		},
+	} {
+		request := same
+		mutate(&request)
+		if _, found := register.RecordedRequest(request); found {
+			t.Errorf("%s不同也认成了重放", name)
+		}
+	}
+}

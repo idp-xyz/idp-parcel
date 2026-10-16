@@ -858,3 +858,62 @@ func assertNothingAppendedAfterClosure(t *testing.T, fixture *continuedAttemptFi
 		t.Fatalf("交接 %d 封, want 1", len(fixture.handoff.intents))
 	}
 }
+
+// Covers: 票 operator-channel/28 裁定——同一个关闭请求重投（网络超时重试），册上已有同类同内容的决定：答`已有结果`并交回
+// 原决定，不签新标识、不追加、不写册、不发意图；之后指名原决定的重开照常形成。
+func TestARetriedClosureAnswersTheExistingDecisionAndTheReopeningStillFindsIt(t *testing.T) {
+	fixture := newContinuedAttemptFixture(t)
+	original := fixture.closed(t)
+	identities, saves, intents := fixture.identities.next, fixture.registers.saves, len(fixture.handoff.intents)
+
+	retried, err := fixture.handler.FormControlledClosure(t.Context(), fixture.closureCommand(t))
+	if err != nil {
+		t.Fatalf("重投关闭：%v", err)
+	}
+	if retried.Outcome() != application.ContinuedAttemptDecisionExistingResult || retried.Outcome().String() != "EXISTING_RESULT" {
+		t.Fatalf("outcome = %v, want EXISTING_RESULT", retried.Outcome())
+	}
+	if decision, present := retried.Decision(); !present || decision.ID() != original.ID() {
+		t.Fatalf("重放没交回原决定：%+v / %v", decision, present)
+	}
+	if fixture.identities.next != identities || fixture.registers.saves != saves || len(fixture.handoff.intents) != intents {
+		t.Fatal("重放签了标识、写了册或发了意图")
+	}
+	if decisions := fixture.registers.decisions(fixture.identity.TenantID(), fixture.parcel); len(decisions) != 1 {
+		t.Fatalf("册上 %d 条, want 1", len(decisions))
+	}
+
+	reopened, err := fixture.handler.FormReopening(t.Context(), fixture.reopeningCommand(t, original.ID()))
+	if err != nil || reopened.Outcome() != application.ContinuedAttemptDecisionFormed {
+		t.Fatalf("指名原关闭的重开 = %v / %v, want FORMED", reopened.Outcome(), err)
+	}
+	again, err := fixture.handler.FormReopening(t.Context(), fixture.reopeningCommand(t, original.ID()))
+	if err != nil || again.Outcome() != application.ContinuedAttemptDecisionExistingResult {
+		t.Fatalf("重投重开 = %v / %v, want EXISTING_RESULT", again.Outcome(), err)
+	}
+	if first, _ := reopened.Decision(); func() bool { d, _ := again.Decision(); return d.ID() != first.ID() }() {
+		t.Fatal("重开重放没交回原重开")
+	}
+}
+
+// Covers: 只截住同内容的那一种——关闭生效期间换一个责任来源再来一条关闭，照旧追加（CONTEXT 允许）；重放仍先过授权：
+// 授权被拒时答`未获授权`，不拿重放探册。
+func TestOnlyTheSameContentIsAReplayAndAuthorizationStillComesFirst(t *testing.T) {
+	fixture := newContinuedAttemptFixture(t)
+	fixture.closed(t)
+
+	other := fixture.closureCommand(t)
+	other.Requester = domain.RequesterReference{}
+	other.ResponsibilitySourceKind = application.ExternalRestrictionResponsibilitySource
+	other.ResponsibilitySourceSubject = "SYN-RESTRICTION-7"
+	formed, err := fixture.handler.FormControlledClosure(t.Context(), other)
+	if err != nil || formed.Outcome() != application.ContinuedAttemptDecisionFormed {
+		t.Fatalf("换来源的关闭 = %v / %v, want FORMED", formed.Outcome(), err)
+	}
+
+	fixture.authorizer.answer = ports.ContinuedAttemptDecisionAuthorization{Outcome: ports.AuthorizationRefused}
+	refused, err := fixture.handler.FormControlledClosure(t.Context(), fixture.closureCommand(t))
+	if err != nil || refused.Outcome() != application.ContinuedAttemptDecisionNotAuthorized {
+		t.Fatalf("未获授权的重放 = %v / %v, want NOT_AUTHORIZED", refused.Outcome(), err)
+	}
+}

@@ -368,3 +368,33 @@ func TestOperatorAnswerGradesOnTheDecisionEndpoints(t *testing.T) {
 		})
 	}
 }
+
+// Covers: ADR-0183 决定三与票 operator-channel/28「一并看」——两道纯载荷的责任主体校验先于按包裹寻址：坏载荷在包裹查不到时
+// 也答 400，不先落到「与越权探针同答」那一格；全空白的主体与没给同读。
+func TestABadClosurePayloadAnswers400EvenWhenTheParcelIsUnknown(t *testing.T) {
+	ctx := context.Background()
+	missing := decisionIntakeWithParcels(t, decisionAuthenticator{}, decisionTargets{}, parcelTargets{missing: true})
+	for name, body := range map[string]string{
+		"shipper instruction with a subject": `{"parcel": "SYN-PARCEL-99", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION", "responsibilitySubject": "SYN-OTHER"}`,
+		"operator action without a subject":  `{"parcel": "SYN-PARCEL-99", "reason": "r", "responsibilitySource": "OPERATOR-ACTION"}`,
+		"operator action with a blank one":   `{"parcel": "SYN-PARCEL-99", "reason": "r", "responsibilitySource": "OPERATOR-ACTION", "responsibilitySubject": "   "}`,
+	} {
+		if _, err := missing.IntakeControlledClosure(ctx, decisionRequest("t", body)); !errors.Is(err, shipmenthttp.ErrMalformedRequest) {
+			t.Fatalf("%s: err = %v, want ErrMalformedRequest", name, err)
+		}
+	}
+}
+
+// Covers: ADR-0183 决定四「没带时请求方缺席」与票 operator-channel/28「一并看」——全空白的货主重授权证据与没带同读，和编排
+// 那道门同一口径；否则请求方被记成客户，门却当作没带证据。
+func TestABlankShipperAuthorizationEvidenceLeavesTheRequesterAbsent(t *testing.T) {
+	intake := decisionIntake(t, decisionAuthenticator{}, decisionTargets{})
+	blank, err := intake.IntakeReopening(context.Background(), decisionRequest("t",
+		`{"parcel": "SYN-PARCEL-01", "reason": "SYN-REASON-RESUME", "effectiveAt": "2026-10-17T01:00:00Z", "relatedPriorClosure": "SYN-CAD-01", "shipperAuthorizationEvidence": "   "}`))
+	if err != nil {
+		t.Fatalf("reopening with blank evidence: %v", err)
+	}
+	if blank.Requester.String() != "" {
+		t.Fatalf("requester = %q, want absent", blank.Requester.String())
+	}
+}
