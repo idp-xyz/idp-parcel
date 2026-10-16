@@ -159,6 +159,7 @@ var businessEndpointProbes = map[string]businessEndpointProbe{
 	"/claims-recovery-records":                                                 {method: http.MethodGet, target: "/claims-recovery-records?registry=customer-notification"},
 	"/collection-subledgers":                                                   {method: http.MethodGet, target: "/collection-subledgers"},
 	"/work-devices":                                                            {method: http.MethodGet, target: "/work-devices"},
+	"/operator-binding":                                                        {method: http.MethodGet, target: "/operator-binding"},
 	"/settlement-charges":                                                      {method: http.MethodGet, target: "/settlement-charges?registry=customer-charge"},
 	"/settlement-statements":                                                   {method: http.MethodGet, target: "/settlement-statements?registry=customer-statement"},
 	"/settlement-funds-applications":                                           {method: http.MethodGet, target: "/settlement-funds-applications"},
@@ -398,6 +399,7 @@ func assembleUnwiredBusinessEndpointsWithOperatorIntakes(
 		integrationClients,
 		workFactReception,
 		workFactTransport,
+		nil,
 		nil,
 	)
 }

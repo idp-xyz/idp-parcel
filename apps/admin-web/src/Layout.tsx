@@ -21,6 +21,7 @@ import { CommandPaletteHost } from './shell/CommandPaletteHost';
 import { WorkspaceStatusBar } from './shell/WorkspaceStatusBar';
 import { isOpenCommandPaletteShortcut } from './shell/command-actions';
 import { useSessionPrincipal } from './shell/session';
+import { useBoundTenant } from './pages/use-operator-binding';
 import { logout } from './auth/oidc';
 import {
   listRecentObjects,
@@ -72,7 +73,7 @@ import {
 // 不占宽。栏顶是收起按钮而不是 ×：常驻位折起来内容还在，× 的通行语义是丢弃。myshop-web 的 RightSidebar 按对象种类在壳层分派渲染器，
 // 这里反过来让**页面**给内容、壳层只渲染契约（templates/inspector.ts）——对象长什么样归拥有它的页，壳层不认识任何业务对象。
 //
-// 顶栏是 shell/TopBar 自己的件（手册「顶栏规范」的全局位），这里只喂它当前页名、会话主体名与登出动作；
+// 顶栏是 shell/TopBar 自己的件（手册「顶栏规范」的全局位），这里只喂它当前页名、会话主体名、本会话绑定的集团与登出动作；
 // 登出仍是 auth/oidc.ts 那一个，外壳不另起一套会话处置。
 // 页面映射在 page-registry：没登记的 id 落 UnwiredModule 诚实占位——导航条目先于页面出现时，缺的是页面不是路由。
 //
@@ -213,6 +214,8 @@ export function Layout() {
 
   const { density } = useDensity();
   const principal = useSessionPrincipal();
+  // 作用域 chip 显本会话绑定的集团（票 group-legal-entities-uiux/11）；答不出时 TopBar 照旧显兜底句。
+  const boundTenant = useBoundTenant();
 
   const activeTab = workspace.tabs.find((tab) => tab.id === workspace.activeTabId) ?? null;
   const activeModuleId = activeTab ? moduleIdOfTab(activeTab.id) : WORKBENCH_MODULE_ID;
@@ -307,6 +310,7 @@ export function Layout() {
       <TopBar
         moduleTitle={pageTitleById[activeModuleId] || activeModuleId}
         principal={principal}
+        tenantName={boundTenant}
         onSignOut={logout}
         onOpenCommandPalette={openCommandPalette}
       />

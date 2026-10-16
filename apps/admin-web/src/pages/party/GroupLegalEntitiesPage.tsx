@@ -16,6 +16,7 @@ import { primaryActionClass } from '../../components/primary-action';
 import { statusToneSurface, statusToneText } from '../../components/status-tone';
 import { catalogueViewState } from '../catalogue-view';
 import { listGroupLegalEntities, type GroupLegalEntityRecord } from './api';
+import { useBoundTenant } from '../use-operator-binding';
 import { groupLegalEntitiesViewOf, registerViewHash } from './group-legal-entities-address';
 import { identityLayerAbsentNote, identityRevisionLabel, identityStatusLabels } from './presentation';
 import { LegalEntityRegistrationForm } from './LegalEntityRegistrationForm';
@@ -207,6 +208,9 @@ function detailHash(legalEntityId: string): string {
  */
 export function GroupLegalEntitiesPage() {
   const { answer, retry, pending } = useRegisterList(listGroupLegalEntities);
+  // 页名里的「集团」是 ADR-0003 三级边界的第一级，即本会话绑定的租户（票 group-legal-entities-uiux/11）。答不出就不显，
+  // 不拿列表行上的 tenantId 顶：空册时那一格根本没有，有时有、有时没有的页头比不显更让人疑惑。
+  const boundTenant = useBoundTenant();
   const tabReturn = useTabReturn();
   // 渲列表、登记视图还是对象页由地址定：对象地址在壳层是自己的一张标签，本组件在那张标签里渲对象页。
   const [hash, setHash] = useState(() => window.location.hash);
@@ -375,7 +379,7 @@ export function GroupLegalEntitiesPage() {
   return (
     <WorkbenchPageTemplate<GroupLegalEntityRecord>
       title={info.title}
-      subtitle="责任法人是对外签约、开票与结算的经营主体 · 每次登记形成新修订，历史不可覆盖"
+      subtitle={`${boundTenant ? `集团 ${boundTenant} · ` : ''}责任法人是对外签约、开票与结算的经营主体 · 每次登记形成新修订，历史不可覆盖`}
       kpis={kpis}
       onRefresh={retry}
       refreshing={pending}

@@ -93,6 +93,19 @@ func buildWorkDeviceCatalogue(minter *accessidentity.OperatorMinter, devices acc
 	return identityhttp.NewQueryWorkDevicesEndpoint(authenticator, devices)
 }
 
+// buildOperatorBinding 装操作者绑定查阅（票 group-legal-entities-uiux/11）：与作业设备册同一个认证件——主数据与运营查阅读，
+// 不判准入范围，答的只是信封上的绑定租户。
+func buildOperatorBinding(minter *accessidentity.OperatorMinter) (http.Handler, error) {
+	if minter == nil {
+		return nil, errors.New("operator binding needs a minter")
+	}
+	authenticator, err := identityhttp.NewOperatorCatalogueAuthenticator(minter)
+	if err != nil {
+		return nil, err
+	}
+	return identityhttp.NewQueryOperatorBindingEndpoint(authenticator)
+}
+
 // buildOperatorDecisionIntakes 装两边运营决定口的防腐认证方与 Intake。委托侧按委托标识寻址的三口用 targets，受控关闭与
 // 重开两口按包裹寻址、用 parcels（ADR-0183 决定一）。
 func buildOperatorDecisionIntakes(

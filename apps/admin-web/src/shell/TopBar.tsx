@@ -40,8 +40,9 @@ export interface TopBarProps {
   /** 会话主体的显示名。auth/oidc.ts 的读口是异步的，读到之前为 undefined，触发按钮那一段就先不显。 */
   principal?: string;
   /**
-   * 可显示的租户名。今天没有任何读口告诉前端本会话绑的是哪个租户——ADR-0100 把绑定放在服务端的操作者册，id_token 不带
-   * 租户声明——Layout 因此不传，chip 显「由服务端按会话判定」。位与文案已就位，等读口。
+   * 本会话绑定的租户标识。ADR-0100 把绑定放在服务端的操作者册，id_token 不带租户声明，Layout 经 `GET /operator-binding`
+   * 取（pages/use-operator-binding.ts，票 group-legal-entities-uiux/11）；产品没有登记租户显示名的地方，显的是标识。
+   * 答出之前与答不出（未配置、拒绝、依赖故障）时为 undefined，chip 显「由服务端按会话判定」。
    */
   tenantName?: string;
   /** 「退出」走 auth/oidc.ts 既有的 logout，这里不自己清会话。 */

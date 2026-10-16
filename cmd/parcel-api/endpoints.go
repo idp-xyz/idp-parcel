@@ -175,6 +175,7 @@ func assembleBusinessEndpoints(
 	workFactReception nodeopshttp.ReceptionIntake,
 	workFactTransport *tfhttp.WorkFactCommandIntake,
 	workDevices http.Handler,
+	operatorBinding http.Handler,
 ) []httpapi.BusinessEndpoint {
 	// 缺省朝拦：各隔离入参都为 nil 时，下面这组变量全取未配置即拒，整份装配与
 	// ADR-0078/0091 之前逐字节同形。
@@ -676,5 +677,8 @@ func assembleBusinessEndpoints(
 		// 能力面是主数据与运营查阅读，不形成作业事实，所以不挂作业事实那一组 Intake。
 		// 路径写成字面量：管理台路径门禁只认端点表上的字符串，不认常量引用。与 WorkDeviceCataloguePath 同一条。
 		{Pattern: "/work-devices", Handler: identityhttp.WorkDeviceCatalogueHandler(workDevices)},
+		// 操作者绑定（票 group-legal-entities-uiux/11）：这个会话的操作者在操作者册上绑的那一个租户，管理台顶栏作用域与
+		// 集团与法人页头靠它显示当前集团。主数据与运营查阅读守口，认证件同作业设备册。路径写成字面量，理由同上一行。
+		{Pattern: "/operator-binding", Handler: identityhttp.OperatorBindingHandler(operatorBinding)},
 	}
 }

@@ -78,6 +78,11 @@ func WorkDeviceCatalogueHandler(wired http.Handler) http.Handler {
 
 // UnconfiguredWorkDeviceCatalogue 在这一口还没接上操作者铸造器时答未配置。
 func UnconfiguredWorkDeviceCatalogue() http.Handler {
+	return unconfiguredOperatorRead()
+}
+
+// unconfiguredOperatorRead 是本包各查阅口没接铸造器时的同一个答复：只收 GET，答未配置，与发行方未设同一格。
+func unconfiguredOperatorRead() http.Handler {
 	return http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
 		if request.Method != http.MethodGet {
 			response.Header().Set("Allow", http.MethodGet)
