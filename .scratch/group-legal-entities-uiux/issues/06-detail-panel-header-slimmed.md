@@ -12,7 +12,7 @@
 
 **Category:** enhancement
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
 - [ ] 详情栏首屏上，每个事实只出现一次（复制入口除外）
 - [ ] 生命周期条没有编号，「已停用」是旁支，未停用时不点亮；判读改动有 node:test

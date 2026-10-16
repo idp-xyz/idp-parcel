@@ -68,8 +68,8 @@ axe 在 `858280a2` 上的实测（只计 WCAG 2 AA 违规节点数）：
 | 02 | [表单标签不再挂载荷路径](issues/02-form-labels-drop-payload-paths.md) | — | resolved |
 | 03 | [法人两张表单重排、说明改写](issues/03-legal-entity-forms-regrouped-and-rewritten.md) | 02 | resolved |
 | 04 | [登记视图有自己的地址](issues/04-registration-view-is-addressable.md) | — | resolved |
-| 05 | [主动作用主色（本页）](issues/05-primary-action-style-on-this-page.md) | — | in-progress |
-| 06 | [详情栏头部瘦身](issues/06-detail-panel-header-slimmed.md) | — | ready-for-agent |
+| 05 | [主动作用主色（本页）](issues/05-primary-action-style-on-this-page.md) | — | resolved |
+| 06 | [详情栏头部瘦身](issues/06-detail-panel-header-slimmed.md) | — | in-progress |
 | 07 | [资料表单展开后滚进视野](issues/07-profile-form-scrolls-into-view.md) | — | ready-for-agent |
 | 08 | [本页可访问性](issues/08-page-accessibility.md) | — | ready-for-agent |
 | 09 | [对象页与详情栏同一套结构](issues/09-object-page-matches-detail-panel.md) | 01、06 | ready-for-agent |
