@@ -1,8 +1,8 @@
 # NR 没有路由指令与成员级集运兼容判断：节点的方向性作业无路由依据可取
 
 Category: enhancement
-Status: needs-info——2026-10-16 随 [01](./01-consolidation-adds-members-without-any-directional-basis.md) 的裁定修订转：本票唯一的消费方是 01 的方向性依据读面，那个读面随一线作业端一起建。此前 ready-for-agent——2026-10-16 Claude Code 会话立并排期（用户「你帮我做决定吧」授权代决）：排在 [ps-external-mark-relations/01](../../ps-external-mark-relations/issues/01-external-mark-relations-have-no-model-in-parcel-shipment.md) 与本目录 [01](./01-consolidation-adds-members-without-any-directional-basis.md) 之后；起步按 `/domain-modeling`
-Blocked by: 01（随一线作业端排期，用户决定）
+Status: needs-info——2026-10-16 排期已由 Claude Code 会话代决（用户授权，见 01「排期代决」）：随一线作业端，在演示动线走通之后排。此前 needs-info——2026-10-16 随 [01](./01-consolidation-adds-members-without-any-directional-basis.md) 的裁定修订转：本票唯一的消费方是 01 的方向性依据读面，那个读面随一线作业端一起建。此前 ready-for-agent——2026-10-16 Claude Code 会话立并排期（用户「你帮我做决定吧」授权代决）：排在 [ps-external-mark-relations/01](../../ps-external-mark-relations/issues/01-external-mark-relations-have-no-model-in-parcel-shipment.md) 与本目录 [01](./01-consolidation-adds-members-without-any-directional-basis.md) 之后；起步按 `/domain-modeling`
+Blocked by: 01 的读面——随一线作业端进开发主线（排期已代决：演示动线走通之后）
 出处：本目录 01 裁定第 2 条「路由与集运兼容」；UC-NO-003 输入表「路由与指令」「集运兼容」两行与启动条件「方向性作业必须取得当前有效路由指令；集运还必须取得成员级集运兼容判断」；NR CONTEXT 的「路由指令」定义与「身份变化、集运与现场指令」一节。
 
 取证于 `9c855316`（2026-10-16）。
