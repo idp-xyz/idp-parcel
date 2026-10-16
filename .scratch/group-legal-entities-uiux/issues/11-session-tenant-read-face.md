@@ -20,9 +20,16 @@
 
 **Category:** enhancement
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
 - [ ] 带有效操作者令牌请求读口，答出该主体绑定的租户；拒绝各态与其他操作者口同口径（ADR-0100 决定四）
 - [ ] 顶栏作用域 chip 显示租户标识；读口未配置或拒绝时，退回现有的兜底句
 - [ ] 集团与法人页的页头显示当前集团
 - [ ] Go 测试和三道门都过；演示环境截图，证据记 `S`
+
+## 裁定（2026-10-16，作者会话认领；机制，没有租户取值）
+
+1. **路径与归属：** `GET /operator-binding`，归 accessidentity（操作者册的拥有者）。实现放在 `internal/accessidentity/adapters/http`，与作业设备册查阅同一个包、同一个认证件。
+2. **用哪一面守口：** 「主数据与运营查阅读」，复用 `AuthenticateCatalogueRead`：以这一面铸操作者信封，交回的是信封上的绑定租户。这样不越过 ADR-0100 决定四的同答纪律：没有这一面授予的人，与不在册、不绑这个租户的人同答 403 `OPERATOR_NOT_GRANTED`，看不出自己绑在哪；有这一面授予的人，本来就能从任一册的行上读到 `tenantId`，把它回给他不多泄露任何东西。
+3. **答什么：** `{"outcome":"OPERATOR_BINDING_RESOLVED","tenantId":"…"}`。只答标识；产品没有登记租户显示名的地方，不编名称。
+4. **走哪条路：** 改 Go 与端点表，按[并行会话](../../../docs/agents/parallel-sessions.md)办：在 worktree 分支 `claude-glu11` 上做，作者自验受影响的包，进 main 前在干净检出上带 DSN 跑一次全量，按 SHA 推。本仓不用子代理，本机也没有空闲通道可派评审，所以评审记为作者自审，不算非作者评审。
