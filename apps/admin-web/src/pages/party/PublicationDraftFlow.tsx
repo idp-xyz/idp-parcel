@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@idpxyz/ui-primitives';
+import { primaryActionClass } from '../../components/primary-action';
 import { OperatorRefusalNote } from '../../components/states';
 import type { ApiResult } from '../catalogue-api';
 import { publicationOutcomeLabels } from './api';
@@ -191,6 +192,8 @@ export function PublicationDraftFlow({
         <div className="flex items-center gap-3 flex-wrap">
           {action !== null ? (
             <Button
+              variant="default"
+              className={primaryActionClass}
               onClick={() => run(action)}
               disabled={actionDisabled}
               title={

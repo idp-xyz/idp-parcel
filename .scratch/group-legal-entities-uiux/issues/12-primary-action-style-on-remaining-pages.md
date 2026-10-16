@@ -10,7 +10,7 @@
 
 **Category:** enhancement
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
 - [ ] 每个页面视图里，最多一个按钮用主动作样式，而且就是这个视图的主动作
 - [ ] 两套主题各截图抽验，在完成记录里说明

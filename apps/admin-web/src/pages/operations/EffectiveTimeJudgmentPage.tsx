@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
+import { primaryActionClass } from '../../components/primary-action';
 import { ListPageTemplate, type ListColumn } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { chipClass } from '../../components/registration';
@@ -283,7 +284,12 @@ function JudgmentPanel({
           </label>
         </div>
         <div className="flex items-center gap-3">
-          <Button onClick={send} disabled={!ready || state.kind === 'submitting'}>
+          <Button
+            variant="default"
+            className={primaryActionClass}
+            onClick={send}
+            disabled={!ready || state.kind === 'submitting'}
+          >
             {state.kind === 'submitting' ? '提交中…' : '提交判断'}
           </Button>
           <Button variant="outline" onClick={onClose}>

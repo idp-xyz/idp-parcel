@@ -15,6 +15,7 @@ import {
 } from './presentation';
 import { DetailRow, Field, inputClass, NoticeCard, Section } from './controls';
 import { ResultPanel } from './ResultPanel';
+import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 
 // UC-PS-006 接受后取消入口:取消已接受委托中的明确包裹,或协调收寄后服务处置。
 //
@@ -290,6 +291,7 @@ export function CancelParcelPage() {
 
         {/* 取消包裹是高风险动作,按下之后再拦一道;确认即逐件发请求,进行中与逐件结果仍由上面的按钮与逐件卡呈现。 */}
         <ConfirmDialog
+          renderFooter={confirmDialogFooter}
           open={confirming}
           tone="danger"
           title="逐件请求取消列出的包裹"

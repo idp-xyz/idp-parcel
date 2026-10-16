@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Textarea } from '@idpxyz/ui-primitives';
+import { primaryActionClass } from '../../components/primary-action';
 import type { ApiResult } from '../catalogue-api';
 import type { RegistrationResponseBody } from '../../components/registration';
 import { OperatorRefusalNote } from '../../components/states';
@@ -113,7 +114,12 @@ export function SeriesReviewPanel({
         />
 
         <div className="flex items-center gap-3">
-          <Button onClick={send} disabled={!ready || state.kind === 'submitting'}>
+          <Button
+            variant="default"
+            className={primaryActionClass}
+            onClick={send}
+            disabled={!ready || state.kind === 'submitting'}
+          >
             {state.kind === 'submitting' ? '提交中…' : '提交复核'}
           </Button>
           <Button variant="outline" onClick={onClose}>

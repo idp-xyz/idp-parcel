@@ -75,4 +75,4 @@ axe 在 `858280a2` 上的实测（只计 WCAG 2 AA 违规节点数）：
 | 09 | [对象页与详情栏同一套结构](issues/09-object-page-matches-detail-panel.md) | 01、06 | ready-for-agent |
 | 10 | [1024 宽下不折坏](issues/10-narrow-width-layout.md) | 06、08 | ready-for-agent |
 | 11 | [本会话租户读口：顶栏作用域与本页页头接上](issues/11-session-tenant-read-face.md) | — | ready-for-agent |
-| 12 | [其余页面主动作改用主色](issues/12-primary-action-style-on-remaining-pages.md) | 05 | ready-for-agent |
+| 12 | [其余页面主动作改用主色](issues/12-primary-action-style-on-remaining-pages.md) | 05 | in-progress |

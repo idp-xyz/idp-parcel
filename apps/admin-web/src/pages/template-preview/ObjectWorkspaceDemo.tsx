@@ -29,6 +29,7 @@ import {
   demoWorkspaceRelated,
   demoWorkspaceSummary,
 } from '../../templates/demo';
+import { primaryActionClass } from '../../components/primary-action';
 
 // 对象工作区演示（票 admin-web-ux-alignment/04 第 6 条）：同一份合成申报单换成手册「对象工作区」的排布——
 // 头区两行 + 指标带 + 稳定命名的签 + 右侧上下文。抽成独立组件而不写进预览页，是让一次性的
@@ -129,7 +130,12 @@ export function ObjectWorkspaceDemo({
           >
             次要动作（演示）
           </Button>
-          <Button size="sm" onClick={() => onDemoAction('演示动作', '头区主快速动作占位，无实际行为。')}>
+          <Button
+            variant="default"
+            className={primaryActionClass}
+            size="sm"
+            onClick={() => onDemoAction('演示动作', '头区主快速动作占位，无实际行为。')}
+          >
             主动作（演示）
           </Button>
         </>

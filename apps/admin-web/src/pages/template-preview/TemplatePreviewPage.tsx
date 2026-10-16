@@ -38,6 +38,7 @@ import {
   type DemoShipmentRow,
 } from '../../templates/demo';
 import { ObjectWorkspaceDemo } from './ObjectWorkspaceDemo';
+import { primaryActionClass } from '../../components/primary-action';
 
 // 状态切换器的档位。ready 之外各档演示 StateSlot 的各个非就绪态；
 // 文案在这里给演示值，真实页面的文案由各自业务场景决定。
@@ -359,6 +360,8 @@ export function TemplatePreviewPage() {
             moduleId="template-preview"
             headerActions={
               <Button
+                variant="default"
+                className={primaryActionClass}
                 size="sm"
                 onClick={() =>
                   addToast({ type: 'info', title: '演示动作', message: '页头动作区占位，无实际行为。' })
@@ -464,6 +467,8 @@ export function TemplatePreviewPage() {
             status={<StatusBadge status="warning">待人工复核</StatusBadge>}
             headerActions={
               <Button
+                variant="default"
+                className={primaryActionClass}
                 size="sm"
                 onClick={() =>
                   addToast({ type: 'info', title: '演示动作', message: '详情页动作区占位，无实际行为。' })

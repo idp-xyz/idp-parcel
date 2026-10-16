@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle } from '@idpxyz/ui-primitives';
+import { primaryActionClass } from '../../components/primary-action';
 import { OperatorRefusalNote } from '../../components/states';
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../catalogue-api';
@@ -94,7 +95,12 @@ export function PriceCardImportPanel() {
             <Button onClick={() => void previewFile()} disabled={!file || phase !== 'idle'}>
               {phase === 'previewing' ? '校验中…' : '校验并预览'}
             </Button>
-            <Button onClick={() => void saveDraft()} disabled={!file || phase !== 'idle' || !draftSubmittable(preview)}>
+            <Button
+              variant="default"
+              className={primaryActionClass}
+              onClick={() => void saveDraft()}
+              disabled={!file || phase !== 'idle' || !draftSubmittable(preview)}
+            >
               {phase === 'saving' ? '保存中…' : '存为草稿'}
             </Button>
           </div>

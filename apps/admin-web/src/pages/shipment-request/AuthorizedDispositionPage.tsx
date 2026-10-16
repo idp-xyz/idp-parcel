@@ -25,6 +25,7 @@ import {
   type DispositionCommandNote,
 } from './authorized-disposition';
 import { recordedJudgmentsBlock } from './recorded-judgments';
+import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['authorized-disposition'];
@@ -298,6 +299,7 @@ export function AuthorizedDispositionPage() {
       />
       {/* 「拒绝」是不可逆去向，按下之后再拦一道；确认即发命令，进行中由模板禁用按钮、结果由上面的 commandNote 呈现。 */}
       <ConfirmDialog
+        renderFooter={confirmDialogFooter}
         open={pendingRejection !== null}
         tone="danger"
         title="按策略拒绝委托"

@@ -1,4 +1,5 @@
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
+import { primaryActionClass } from '../../components/primary-action';
 import { moduleInfoById } from '../../navigation';
 import { RegistrationAnswerNote } from '../../components/registration';
 import type { ApiResult } from '../catalogue-api';
@@ -232,7 +233,12 @@ export function PartyRelationshipRegistrationForm({
           </div>
 
           <div className="flex items-start gap-3">
-            <Button onClick={form.send} disabled={locked || !form.canSend}>
+            <Button
+              variant="default"
+              className={primaryActionClass}
+              onClick={form.send}
+              disabled={locked || !form.canSend}
+            >
               {locked ? '提交中…' : '提交登记'}
             </Button>
             <RegistrationAnswerNote

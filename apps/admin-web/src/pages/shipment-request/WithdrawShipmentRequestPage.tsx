@@ -16,6 +16,7 @@ import {
 } from './presentation';
 import { DetailRow, Field, inputClass, NoticeCard, Section } from './controls';
 import { ResultPanel } from './ResultPanel';
+import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 
 // UC-PS-005 决定前撤回入口。撤回只终止整份尚未决定的委托:已接受后的包裹取消
 // 走 UC-PS-006,不在本页;部分成员的删改走新提交版本,也不在本页——放一个
@@ -213,6 +214,7 @@ export function WithdrawShipmentRequestPage() {
 
         {/* 撤回是高风险动作(终止整份委托),按下之后再拦一道;确认即发请求,进行中与结果仍由上面的按钮与 ResultPanel 呈现。 */}
         <ConfirmDialog
+          renderFooter={confirmDialogFooter}
           open={confirming}
           tone="danger"
           title="撤回整份委托"

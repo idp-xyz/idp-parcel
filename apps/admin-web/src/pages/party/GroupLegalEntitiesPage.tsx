@@ -11,6 +11,7 @@ import {
   type WorkbenchSort,
 } from '../../templates';
 import { moduleInfoById } from '../../navigation';
+import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 import { primaryActionClass } from '../../components/primary-action';
 import { statusToneSurface, statusToneText } from '../../components/status-tone';
 import { catalogueViewState } from '../catalogue-view';
@@ -290,6 +291,7 @@ export function GroupLegalEntitiesPage() {
           onUnsavedChange={setRegisterUnsaved}
         />
         <ConfirmDialog
+          renderFooter={confirmDialogFooter}
           open={confirmingLeave}
           tone="warning"
           title="离开登记视图？"

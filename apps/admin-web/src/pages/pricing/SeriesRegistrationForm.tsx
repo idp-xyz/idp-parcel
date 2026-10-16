@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input, Textarea } from '@idpxyz/ui-primitives';
+import { primaryActionClass } from '../../components/primary-action';
 import { accessRefusalHeadline, isOperatorRefusal } from '../../auth/access-refusal';
 import type { ApiResult } from '../catalogue-api';
 import type { RegistrationResponseBody } from '../../components/registration';
@@ -256,6 +257,8 @@ export function SeriesRegistrationForm({ initialDraft, onRecorded, onClose }: Se
             {preview.kind === 'previewing' ? '预览中…' : currentPreview ? '重新预览' : '预览'}
           </Button>
           <Button
+            variant="default"
+            className={primaryActionClass}
             onClick={runRegister}
             disabled={!previewAccepted || registration.kind === 'submitting' || recorded}
             title={previewAccepted ? undefined : '先预览；预览过的必须就是眼前这一份'}

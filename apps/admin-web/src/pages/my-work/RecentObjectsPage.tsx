@@ -11,6 +11,7 @@ import {
   type RecentObject,
 } from './recent-objects';
 import { InstantCell, ModuleChips, moduleTitleOf } from './shared';
+import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 
 // 页面标题与出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['recent-objects'];
@@ -96,6 +97,7 @@ export function RecentObjectsPage() {
         }
       />
       <ConfirmDialog
+        renderFooter={confirmDialogFooter}
         open={confirmingClear}
         title="清空最近对象"
         message={`将删除这台浏览器上的 ${list.length} 条打开历史。删的只是历史记录，对象本身不受影响。`}

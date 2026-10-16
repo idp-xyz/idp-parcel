@@ -12,6 +12,7 @@ import {
   type SavedView,
 } from './saved-views';
 import { InstantCell, ModuleChips, moduleTitleOf } from './shared';
+import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 
 // 页面标题与出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['saved-views'];
@@ -113,6 +114,7 @@ export function SavedViewsPage() {
         }
       />
       <ConfirmDialog
+        renderFooter={confirmDialogFooter}
         open={removing !== null}
         title="删除保存视图"
         message={

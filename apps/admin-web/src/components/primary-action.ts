@@ -22,3 +22,19 @@ export const primaryActionClass = [
   'focus-visible:ring-offset-1',
   'focus-visible:ring-offset-idpxyz-bg',
 ].join(' ');
+
+// 危险动作（确认对话框 danger 语气的确认键）的一份类名（票 group-legal-entities-uiux/12），用法同上。上游 danger 变体是
+// `bg-red-500/20 text-red-400`，淡红底配 400 红字在浅色主题下读不清。这里用色板的实底：白字对 red-700 是 6.47:1，
+// 这一对对比只发生在按钮自己里面，与画布深浅无关，所以不必像状态字色那样走主题令牌（components/status-tone.ts）。
+// 浅色主题的 status.danger.bg 是一层淡粉，配不了白字，也当不了这里的底。
+export const dangerActionClass = [
+  'bg-red-700',
+  'text-white',
+  'font-medium',
+  'hover:bg-red-800',
+  'hover:text-white',
+  'focus-visible:ring-2',
+  'focus-visible:ring-red-700',
+  'focus-visible:ring-offset-1',
+  'focus-visible:ring-offset-idpxyz-bg',
+].join(' ');

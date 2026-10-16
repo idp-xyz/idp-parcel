@@ -1,5 +1,6 @@
 import { useEffect, useState, type ReactNode } from 'react';
 import { Button, Card, CardContent, CardHeader, CardTitle, Input } from '@idpxyz/ui-primitives';
+import { primaryActionClass } from '../../components/primary-action';
 import { OperatorRefusalNote } from '../../components/states';
 import { moduleInfoById } from '../../navigation';
 import type { ApiResult } from '../catalogue-api';
@@ -177,7 +178,12 @@ export function PricingEstimatePage() {
             </Field>
           </div>
           <div className="mt-4 flex items-center gap-3">
-            <Button onClick={submit} disabled={submitting || Object.keys(problems).length > 0}>
+            <Button
+              variant="default"
+              className={primaryActionClass}
+              onClick={submit}
+              disabled={submitting || Object.keys(problems).length > 0}
+            >
               {submitting ? '试算中…' : '试算'}
             </Button>
             <span className="text-[12px] text-idpxyz-textMuted">必需格空着也能送：服务端逐格点名缺什么，页面不另拦。</span>
