@@ -11,20 +11,20 @@
 | collectionremittance | 22 | 10 | 4 | 6 | 0 | 3 |
 | customscompliance | 106 | 105 | 20 | 42 | 10 | 15 |
 | networkrouting | 74 | 72 | 9 | 13 | 2 | 7 |
-| nodeoperations | 36 | 29 | 4 | 10 | 4 | 7 |
+| nodeoperations | 37 | 30 | 4 | 10 | 4 | 7 |
 | parcelpricing | 130 | 117 | 17 | 16 | 1 | 23 |
-| parcelshipment | 200 | 193 | 20 | 36 | 10 | 18 |
+| parcelshipment | 203 | 195 | 20 | 37 | 10 | 18 |
 | partycommercial | 159 | 169 | 13 | 40 | 1 | 38 |
 | pilotgovernance | 22 | 20 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 178 | 124 | 29 | 59 | 11 | 9 |
 | transportfulfillment | 153 | 139 | 27 | 36 | 11 | 29 |
 | visibilityexception | 100 | 97 | 11 | 30 | 8 | 11 |
-| **合计** | 1235 | 1134 | 159 | 299 | 59 | 166 |
+| **合计** | 1239 | 1137 | 159 | 300 | 59 | 166 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 80、测试 131。
 
-## 跨上下文消费缝：40 组，104 个生产文件
+## 跨上下文消费缝：40 组，105 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -37,7 +37,7 @@
 | networkrouting | parcelshipment | 3 |
 | networkrouting | partycommercial | 4 |
 | nodeoperations | accessidentity | 1 |
-| nodeoperations | parcelshipment | 1 |
+| nodeoperations | parcelshipment | 2 |
 | nodeoperations | transportfulfillment | 1 |
 | parcelpricing | accessidentity | 2 |
 | parcelpricing | parcelshipment | 1 |
@@ -69,7 +69,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：12 个模块共 213 份 SQL
+## 迁移：12 个模块共 214 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -79,7 +79,7 @@
 | network_routing | 18 |
 | node_operations | 4 |
 | parcel_pricing | 12 |
-| parcel_shipment | 23 |
+| parcel_shipment | 24 |
 | party_commercial | 37 |
 | pilot_governance | 8 |
 | settlement_accounting | 35 |
@@ -130,13 +130,12 @@
 | visibilityexception | 8 |
 | **合计** | 26 |
 
-## 端口：声明 473 个；基线口径缺 29，精确口径缺 2
+## 端口：声明 474 个；基线口径缺 28，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
 - `networkrouting.InitialRouteEvidenceView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/networkrouting/application.CatalogInitialRouteEvidence）
 - `networkrouting.NetworkEvidenceView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/networkrouting/application.CatalogNetworkEvidence）
-- `nodeoperations.ParcelIdentityView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/cmd/parcel-api.unconfiguredParcelIdentityView）
 - `parcelpricing.PriceCardApprovalDutyRuleView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres.PriceCardApprovalDutyRules）
 - `parcelshipment.ContinuedAttemptRegisterView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres.ContinuedAttemptRegisters）
 - `parcelshipment.LabelChannelGateway` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/cmd/parcel-api.unconfiguredLabelChannelGateway）
