@@ -56,3 +56,13 @@ test('lifecycleConnectorReached 不把跳过的那段画成走过', () => {
 test('词表之外的状态码答 null', () => {
   equal(legalEntityLifecycle(record({ status: 'SOMETHING_NEW' })), null);
 });
+
+// Covers: 已停用是旁支终态，不是主线上「已生效」之后的下一步（票 group-legal-entities-uiux/06）——主数据身份的停用是例外
+// 分支；主线只有已登记 → 已生效两段。未停用时那一段不点亮（pending），停用了才是 current。
+test('已停用是旁支终态，主线只有两段', () => {
+  const terminals = (row: GroupLegalEntityRecord) => legalEntityLifecycle(row)?.map((stage) => stage.terminal) ?? null;
+  deepEqual(terminals(record({ status: 'EFFECTIVE' })), [false, false, true]);
+  deepEqual(terminals(record({ status: 'REGISTERED' })), [false, false, true]);
+  equal(legalEntityLifecycle(record({ status: 'EFFECTIVE' }))![2].state, 'pending');
+  equal(legalEntityLifecycle(record({ status: 'DEACTIVATED', deactivatedAt: '2026-06-01T00:00:00Z' }))![2].state, 'current');
+});

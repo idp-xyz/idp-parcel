@@ -1,5 +1,8 @@
 // 法人详情栏生命周期条的判读（票 admin-web-group-legal-entities/15）。三段取 CONTEXT 的身份生命周期原词
-// （已登记 → 已生效 → 已停用），纯函数，node:test 钉着；详情栏只负责摆。
+// （已登记、已生效、已停用），纯函数，node:test 钉着；详情栏只负责摆。
+//
+// 主线只有已登记 → 已生效两段；已停用是旁支终态（票 group-legal-entities-uiux/06）。主数据身份的停用是例外分支，
+// 画成主线上的第三步，读的人会把它当成每个法人迟早要走到的下一步。
 
 import type { GroupLegalEntityRecord } from './api';
 import type { IdentityStatusCode } from './presentation';
@@ -9,7 +12,11 @@ export type LifecycleStageState = 'done' | 'current' | 'skipped' | 'pending';
 export interface LifecycleStage {
   code: IdentityStatusCode;
   state: LifecycleStageState;
+  /** 旁支终态（已停用）：不在主线上，没停用时不点亮。 */
+  terminal: boolean;
 }
+
+const TERMINAL: IdentityStatusCode = 'DEACTIVATED';
 
 const STAGES: readonly IdentityStatusCode[] = ['REGISTERED', 'EFFECTIVE', 'DEACTIVATED'];
 
@@ -23,12 +30,13 @@ export function legalEntityLifecycle(row: GroupLegalEntityRecord): LifecycleStag
   const current = STAGES.indexOf(row.status as IdentityStatusCode);
   if (current === -1) return null;
   return STAGES.map((code, index) => {
-    if (index === current) return { code, state: 'current' };
-    if (index > current) return { code, state: 'pending' };
+    const terminal = code === TERMINAL;
+    if (index === current) return { code, state: 'current', terminal };
+    if (index > current) return { code, state: 'pending', terminal };
     if (code === 'EFFECTIVE' && row.status === 'DEACTIVATED' && !effectiveBeforeDeactivation(row)) {
-      return { code, state: 'skipped' };
+      return { code, state: 'skipped', terminal };
     }
-    return { code, state: 'done' };
+    return { code, state: 'done', terminal };
   });
 }
 

@@ -21,7 +21,12 @@ import {
   partyNameUnknownNote,
 } from './presentation';
 import { identityLayerCellsOf } from './legal-entity-identity';
-import { legalEntityLifecycle, lifecycleConnectorReached, type LifecycleStageState } from './legal-entity-lifecycle';
+import {
+  legalEntityLifecycle,
+  lifecycleConnectorReached,
+  type LifecycleStage,
+  type LifecycleStageState,
+} from './legal-entity-lifecycle';
 import { LegalEntityProfileSection } from './LegalEntityProfileSection';
 import { legalEntityRevisionHistory } from './LegalEntityDetailPage';
 import { RevisionHistorySection } from './RevisionHistorySection';
@@ -72,44 +77,75 @@ const stageDotClass: Record<LifecycleStageState, string> = {
   pending: 'border-idpxyz-border bg-idpxyz-inputBg text-idpxyz-textMuted',
 };
 
+// 旁支终态（已停用）只有两态：没停用时一圈虚线不点亮，停用了才亮成警示色。
+const terminalDotClass = (reached: boolean) =>
+  reached
+    ? 'border-red-500/60 bg-red-500/15 text-red-400'
+    : 'border-dashed border-idpxyz-border bg-transparent text-idpxyz-textMuted';
+
+/** 一段的圆点与名字。圆点不编号：编号会把三段读成一条必经的流程。 */
+function StageMark({ stage }: { stage: LifecycleStage }) {
+  const dotClass = stage.terminal ? terminalDotClass(stage.state === 'current') : stageDotClass[stage.state];
+  const reached = stage.state === 'current' || stage.state === 'done';
+  return (
+    <div className="flex flex-col items-center gap-1" aria-current={stage.state === 'current' ? 'step' : undefined}>
+      <span
+        className={`flex h-5 w-5 items-center justify-center rounded-full border text-[9px] font-semibold ${dotClass}`}
+        aria-hidden="true"
+      >
+        {stage.state === 'done' ? '✓' : stage.state === 'skipped' ? '–' : reached ? '●' : ''}
+      </span>
+      <span
+        className={`text-[9px] leading-none ${stage.state === 'current' ? 'font-medium text-idpxyz-textBright' : 'text-idpxyz-textMuted'}`}
+      >
+        {labelOf(identityStatusLabels, stage.code)}
+        {stage.state === 'skipped' ? '（未经过）' : ''}
+      </span>
+    </div>
+  );
+}
+
+/**
+ * 主线（已登记 → 已生效）一条，已停用隔一道虚线摆在右侧作旁支终态（票 group-legal-entities-uiux/06）：停用是例外分支，
+ * 不是每个法人迟早走到的下一步。分段判读在 legal-entity-lifecycle.ts。
+ */
 function Lifecycle({ row }: { row: GroupLegalEntityRecord }) {
   const stages = legalEntityLifecycle(row);
   if (stages === null) return null;
+  const main = stages.filter((stage) => !stage.terminal);
+  const terminal = stages.find((stage) => stage.terminal);
   return (
-    <ol className="flex items-center" aria-label="身份生命周期">
-      {stages.map((stage, index) => (
-        <li key={stage.code} className="flex flex-1 items-center last:flex-none">
-          <div className="flex flex-col items-center gap-1">
-            <span
-              className={`flex h-5 w-5 items-center justify-center rounded-full border text-[9px] font-semibold ${stageDotClass[stage.state]}`}
-              aria-hidden="true"
-            >
-              {stage.state === 'done' ? '✓' : stage.state === 'skipped' ? '–' : index + 1}
-            </span>
-            <span
-              className={`text-[9px] leading-none ${stage.state === 'current' ? 'font-medium text-idpxyz-textBright' : 'text-idpxyz-textMuted'}`}
-            >
-              {labelOf(identityStatusLabels, stage.code)}
-              {stage.state === 'skipped' ? '（未经过）' : ''}
-            </span>
-          </div>
-          {index < stages.length - 1 && (
-            <span
-              className={`mx-1.5 mb-3.5 h-px flex-1 ${
-                lifecycleConnectorReached(stage, stages[index + 1]) ? 'bg-emerald-500/40' : 'bg-idpxyz-border'
-              }`}
-              aria-hidden="true"
-            />
-          )}
-        </li>
-      ))}
-    </ol>
+    <div className="flex items-center gap-3" role="group" aria-label="身份生命周期">
+      <ol className="flex flex-1 items-center">
+        {main.map((stage, index) => (
+          <li key={stage.code} className="flex flex-1 items-center last:flex-none">
+            <StageMark stage={stage} />
+            {index < main.length - 1 && (
+              <span
+                className={`mx-1.5 mb-3.5 h-px flex-1 ${
+                  lifecycleConnectorReached(stage, main[index + 1]) ? 'bg-emerald-500/40' : 'bg-idpxyz-border'
+                }`}
+                aria-hidden="true"
+              />
+            )}
+          </li>
+        ))}
+      </ol>
+      {terminal ? (
+        <div className="border-l border-dashed border-idpxyz-border pl-3">
+          <StageMark stage={terminal} />
+        </div>
+      ) : null}
+    </div>
   );
 }
 
 /**
  * 集团与法人工作台的详情栏（票 admin-web-group-legal-entities/15）：形态照 idp-prism 采购订单的 PODetailPanel——
- * 头部（标识 + 种类 / 状态 / 修订徽章 + 一行副题 + 引用签）· 主动作 + 「更多」菜单 + 关闭 · 生命周期条 · 关键事实条 · 页签。
+ * 头部（标识 + 种类 / 状态徽章 + 一行副题 + 引用签）· 主动作 + 「更多」菜单 + 关闭 · 生命周期条 · 关键事实条 · 页签。
+ *
+ * 一个事实在首屏只出现一处（票 group-legal-entities-uiux/06）：修订号与登记时间归事实条，国家、注册号与依据归引用签，
+ * 参与方名称归副题；概要签只列这几处都没有的格，参与方身份那一行留着是因为它带复制。
  *
  * 内容只取行上已有的与两个既有区块（法人资料、修订历史各自取数），不为详情栏另开读口。动作只摆本产品真有的：
  * 登记资料修订在「法人资料」签里；停用照页头注释的分工留在业务参与方页。去那一页时把参与方标识放进地址的
@@ -151,13 +187,9 @@ export function LegalEntityDetailPanel({
               <h2 className="truncate font-mono text-[16px] font-semibold text-idpxyz-textBright">{row.legalEntityId}</h2>
               <span className="rounded bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium text-sky-400">{kind}</span>
               {statusBadge(identityStatusLabels, row.status)}
-              <span className="rounded bg-gray-500/10 px-1.5 py-0.5 font-mono text-[10px] text-gray-400">
-                {identityRevisionLabel(row.revision)}
-              </span>
             </div>
             <p className="mt-0.5 text-[11px] text-idpxyz-textMuted">
-              {row.partyNameKnown ? row.partyName : <UnknownPartyName />} · <span className="font-mono">{row.partyId}</span> · 登记于{' '}
-              <Instant value={row.registeredAt} />
+              {row.partyNameKnown ? row.partyName : <UnknownPartyName />} · <span className="font-mono">{row.partyId}</span>
             </p>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
               <RefChip label="国家" value={identity?.country} title="注册国家 / 地区" onCopy={copy} />
@@ -264,25 +296,11 @@ export function LegalEntityDetailPanel({
         <div className="min-h-0 flex-1 overflow-y-auto px-5 py-4">
           <TabsContent value="overview" className="mt-0">
             <dl>
-              <DetailRow label="法人标识" mono onCopy={() => copy('法人标识', row.legalEntityId)}>
-                {row.legalEntityId}
-              </DetailRow>
-              <DetailRow label="种类">{kind}</DetailRow>
               <DetailRow label="业务参与方身份" mono onCopy={() => copy('参与方身份', row.partyId)}>
                 {row.partyId}
               </DetailRow>
-              <DetailRow label="参与方名称">{row.partyNameKnown ? row.partyName : <UnknownPartyName />}</DetailRow>
-              <DetailRow label="注册国家 / 地区" mono>
-                {identity ? identity.country : <span className="text-idpxyz-textMuted">{identityLayerAbsentNote}</span>}
-              </DetailRow>
-              <DetailRow label="终身注册号" mono>
-                {identity ? identity.numbers : <span className="text-idpxyz-textMuted">{identityLayerAbsentNote}</span>}
-              </DetailRow>
               <DetailRow label="身份更正依据" mono>
                 {row.identityCorrectionBasis ?? <span className="text-idpxyz-textMuted">—</span>}
-              </DetailRow>
-              <DetailRow label="登记依据" mono>
-                {row.basis}
               </DetailRow>
               <DetailRow label="停用依据" mono>
                 {row.deactivationBasis ?? <span className="text-idpxyz-textMuted">—</span>}
