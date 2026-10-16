@@ -263,9 +263,7 @@ function ConditionalField({
   }
   return (
     <div className="block">
-      <span className={fieldLabel}>
-        {label} <span className="font-mono text-[10px]">{path}</span>
-      </span>
+      <span className={fieldLabel}>{label}</span>
       {value.trim() === '' ? (
         <span className={`${noteClass} block mt-1.5`}>{hiddenNote}。</span>
       ) : (

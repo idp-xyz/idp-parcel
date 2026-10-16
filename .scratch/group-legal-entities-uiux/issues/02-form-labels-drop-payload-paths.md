@@ -14,7 +14,7 @@
 
 **Category:** enhancement
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
 - [ ] `pages/party` 下所有表单的格子标签都不含载荷路径或内部键名
 - [ ] 服务端点名的问题照旧挂在对应格子下；对不上任何格子的问题仍带路径显示

@@ -211,9 +211,7 @@ function ControlRow({
   return (
     <div className="rounded border border-idpxyz-border p-3 flex flex-col gap-2">
       <div className="flex items-center justify-between">
-        <span className="text-[12px] text-idpxyz-textMuted">
-          第 {index + 1} 行 <span className="font-mono text-[10px]">{rowPath}</span>
-        </span>
+        <span className="text-[12px] text-idpxyz-textMuted">第 {index + 1} 行</span>
         <Button variant="outline" disabled={locked} onClick={onRemove}>
           删这一行
         </Button>

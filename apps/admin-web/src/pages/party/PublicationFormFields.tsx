@@ -54,7 +54,10 @@ export function PathProblems({ problems, paths }: { problems: Record<string, str
 }
 
 /**
- * 一格：标签（带路径）、控件、服务端点名到这条路径（及 `alsoPaths` 里各别名路径）的问题。
+ * 一格：标签、控件、服务端点名到这条路径（及 `alsoPaths` 里各别名路径）的问题。
+ *
+ * 路径只用来认领问题，不显在标签上：读表单的是运营配置员，`legalEntities[0].revision` 一类实现名对他没有信息。
+ * 服务端点名了一条没有任何一格认领的路径时，路径才是定位信息，那时由各表单的未认领问题区连路径一起显。
  *
  * `as="div"`：几格的控件是一组按钮时用 div 不用 label——label 会把点标题读成点第一个按钮。`silent`：给「格就是行」的那种，
  * 问题已由外层 RowFrame 显在行上，这里不再显一遍；认领仍在行那条路径上，不因此少一处渲染。
@@ -80,9 +83,7 @@ export function Field({
   const Wrapper = as;
   return (
     <Wrapper className="block">
-      <span className={fieldLabel}>
-        {label} <span className="font-mono text-[10px]">{path}</span>
-      </span>
+      <span className={fieldLabel}>{label}</span>
       {children}
       <Problems lines={lines} />
     </Wrapper>
