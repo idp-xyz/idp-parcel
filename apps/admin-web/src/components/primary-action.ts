@@ -9,7 +9,8 @@
 //
 // 白字配强调色实底：演示部署两套主题的强调色都是 #007acc，白字对比 4.51:1，过 AA 的 4.5:1；悬停压暗到 85%，约 5.9:1。
 // 强调色换掉（ui-tokens 给 parcel 登记 productAccent 时）要重算这一格——更浅的强调色配白字可能掉到 4.5 以下。
-// 聚焦环同理：上游基类的 `focus-visible:ring-idpxyz-accent/35` 也生不出来，这里另给一圈实色环，外隔一圈页面底色。
+// 聚焦环同理：上游基类的 `focus-visible:ring-idpxyz-accent/35` 也生不出来，这里另给一圈实色环，环与按钮之间隔一圈
+// 页面画布色（ring-offset）。按钮在卡片里时那一圈仍是画布色而不是卡片色，两者在两套主题下都只差一两级灰，环照样分明。
 export const primaryActionClass = [
   'bg-idpxyz-accent',
   'text-white',
