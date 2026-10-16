@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"strings"
 
-	nodeopshttp "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/http"
 	pspilot "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/pilotgovernance"
 )
 
@@ -41,11 +40,6 @@ const (
 	isolatedSubmissionCustomerAcct = isolatedReadCustomerAccount
 )
 
-// isolatedReceptionNode 是节点收寄口注入的合成节点（票 operator-channel/08）。ReceptionIntake 的契约把节点身份与租户并列为
-// 「只能来自认证结果」，隔离形态没有设备登记册可查，认证结果就是这一个合成常量——载荷里带节点即拒。取种子网络的始发枢纽，
-// 让动线里的收寄落在网络定义认得的节点上；要在别的合成节点上收寄，改的是这一格，不是去采信请求。
-const isolatedReceptionNode = "SYN-NODE-SHA-HUB"
-
 // isolatedWriteAdmission 携带 ADR-0091 放行的写路径几格。nil 表示未启用——各装配函数
 // 对 nil 的处理与本记录之前逐字节同形。
 //
@@ -58,9 +52,7 @@ type isolatedWriteAdmission struct {
 	// tenant 是开关的值本身。归属那一格用不到它（治理登记册无租户维），提交口用得到：
 	// 来源信封的租户维就是它。
 	tenant string
-	// 节点作业这一格仍在门里构造：收寄口已换作业事实渠道，装配不再读它；删构造会连带改这道门的测试，而这只本身不再换
-	// 任何一行。运输履约那一格随运营决定四口换操作者渠道撤下（票 operator-channel/15）——它已一行都不换。
-	nodeOperations *nodeopshttp.IsolatedCommandIntake
+	// 主链各上下文的隔离命令 Intake 已随真渠道逐口撤下：运输履约那一格随票 operator-channel/15、节点作业那一格随票 23。
 }
 
 // isolatedWriteAdmittedCommandLines 是写开关到此刻为止换上隔离 Intake 的命令面，供启动日志出声
@@ -73,14 +65,6 @@ var isolatedWriteAdmittedCommandLines = []string{
 // admittedCommandLines 交回放行名单的副本：日志与测试都不该改得动那份表。
 func (admission *isolatedWriteAdmission) admittedCommandLines() []string {
 	return append([]string(nil), isolatedWriteAdmittedCommandLines...)
-}
-
-// nodeOperationsIntake 对 nil 接收者交回 nil：装配点那一行随之挂字面量未配置即拒，与启用前逐字节同形。
-func (admission *isolatedWriteAdmission) nodeOperationsIntake() *nodeopshttp.IsolatedCommandIntake {
-	if admission == nil {
-		return nil
-	}
-	return admission.nodeOperations
 }
 
 // buildIsolatedWriteAdmission 解析隔离写路径准入的显式输入（ADR-0091 决定四）。
@@ -124,14 +108,9 @@ func buildIsolatedWriteAdmission(getenv func(string) string) (*isolatedWriteAdmi
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: isolated governance scope: %w", err)
 	}
-	nodeOperations, err := nodeopshttp.NewIsolatedCommandIntake(tenant, isolatedReceptionNode)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-api: isolated node operations command intake: %w", err)
-	}
 	return &isolatedWriteAdmission{
 		governanceDirectory: directory,
 		selfAuthority:       isolatedSelfAuthority,
 		tenant:              tenant,
-		nodeOperations:      nodeOperations,
 	}, nil
 }

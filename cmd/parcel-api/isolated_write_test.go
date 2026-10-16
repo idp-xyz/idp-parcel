@@ -169,18 +169,6 @@ func TestProductionFormAnswersTheAdmittedCommandLinesByteForByteUnconfigured(t *
 	}
 }
 
-// Covers: 票 operator-channel/08 — 合成租户合规时节点作业的隔离命令 Intake 仍随各格构造。收寄口已换作业事实渠道
-// （票 operator-channel/10 余下半边），装配不再把这一只挂上 `/node-operations/receptions`。未启用时交回 nil。
-func TestBuildIsolatedWriteAdmissionGrantsTheNodeOperationsIntake(t *testing.T) {
-	if isolatedWriteAdmissionForTest(t).nodeOperationsIntake() == nil {
-		t.Fatal("节点作业隔离命令 Intake 为空")
-	}
-	var disabled *isolatedWriteAdmission
-	if disabled.nodeOperationsIntake() != nil {
-		t.Fatal("未启用时交回了非 nil 的 Intake——装配点那一行会被换掉，生产形态就变了")
-	}
-}
-
 // Covers: ADR-0078 决定三 / ADR-0091 决定四「放行必须出声」 — 启动日志要说得出放行了哪几口，且说的与装配点换的
 // 是同一份名单。日志里的名单与上面那张二分表对不上，就是有人换了一行没出声、或出了声没换行。
 func TestIsolatedWriteAdmissionNamesTheAdmittedCommandLines(t *testing.T) {

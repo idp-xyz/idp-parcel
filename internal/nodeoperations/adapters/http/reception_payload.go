@@ -1,7 +1,6 @@
 package nodeopshttp
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,39 +14,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 )
 
-// IsolatedCommandIntake 是隔离写路径准入（ADR-0091）在节点作业命令面的注入式放行（票 operator-channel/08）。
-//
-// 它与本包的 IsolatedOperationsReadIntake 同层同款：租户与节点两格在构造时由装配点给定，进请求路径后不读任何授权
-// 输入——ReceptionIntake 的契约点名这两格「只能来自认证结果」，隔离形态的认证结果就是开关值与装配点的合成常量。与读面
-// 不同的是它会构造命令、命令会落行：ADR-0078 的「零持久化」论证在这里不成立，可分辨物由租户维的 `SYN-` 前缀承担
-// （ADR-0091 决定三）；前缀门禁、启用与否与启动日志都在 cmd/parcel-api，本类型只收立得住的值。
-//
-// 事实身份与发生时间照 ADR-0023 从载荷如实收：sourceId 是设备签发的幂等身份、occurredAt 是设备记录的业务时间，本类型
-// 不拿服务端时钟或随机数顶替任何一样——代铸了，离线补传的重放就会被判成新事实。
-//
-// 逐口放行（ADR-0091 Consequences）：本类型只实现已成笔的口的 Intake 接口，未成笔的口在装配点仍挂字面量
-// UnconfiguredIntake{}，且在类型上就装不进本类型——每放一口在这里多一个方法，装配点多换一行，两处都看得见。
-type IsolatedCommandIntake struct {
-	tenant domain.TenantID
-	node   domain.NodeReference
-}
-
-// 已成笔的口。每放一口在这里多一行断言、多一个方法，装配点多换一行。
-var _ ReceptionIntake = (*IsolatedCommandIntake)(nil)
-
-// NewIsolatedCommandIntake 由装配点以显式合成值构造。立不起来的租户与节点在这里拒：装配错误要在启动时暴露，不该等到
-// 第一个请求。
-func NewIsolatedCommandIntake(tenant, node string) (*IsolatedCommandIntake, error) {
-	tenantID, err := domain.NewTenantID(tenant)
-	if err != nil {
-		return nil, fmt.Errorf("node operations http: isolated command intake: %w", err)
-	}
-	nodeReference, err := domain.NewNodeReference(node)
-	if err != nil {
-		return nil, fmt.Errorf("node operations http: isolated command intake: %w", err)
-	}
-	return &IsolatedCommandIntake{tenant: tenantID, node: nodeReference}, nil
-}
+// 本文件是节点收寄口的线格式与译装：租户与节点由调用方从认证结果交入，载荷只有设备签发的事实内容（ADR-0023）。
+// 它原住在隔离命令 Intake 的文件里，随那只 Intake 退场挪出（票 operator-channel/23），行为一字未改。
 
 // receptionDocument 是收寄口的载荷：一次一件实物（批量交付由调用方逐件分发，见 ReceiveDeliveredUnitCommand）。键名与
 // 接收观察词表同受控批量口（parcel-frontline-import 的收寄模板）逐字一致——两口消费同一用例，同一件事在两处不换词；
@@ -61,17 +29,6 @@ type receptionDocument struct {
 	EvidenceRef   string `json:"evidenceRef"`
 	RefusalReason string `json:"refusalReason"`
 	OccurredAt    string `json:"occurredAt"`
-}
-
-// IntakeReception 把一次隔离形态的收寄请求译成收寄命令。形状级失败包 ErrMalformedRequest（4xx，重发同样内容不会好）。
-//
-// 服务结果标记（ServiceMarkers）不从载荷收：命令注释写明它「由接入层查好带入」，隔离形态没有那道查询，收了就是采信
-// 调用方自报的 PS 结论。留空的后果照实说：已取消或已终局的包裹在隔离环境里收寄时不带标记。
-func (intake *IsolatedCommandIntake) IntakeReception(
-	_ context.Context,
-	request *http.Request,
-) (application.ReceiveDeliveredUnitCommand, error) {
-	return receptionCommand(intake.tenant, intake.node, request)
 }
 
 // receptionCommand 把收寄载荷译成命令。租户与节点由调用方从认证结果交入，不从载荷收。
