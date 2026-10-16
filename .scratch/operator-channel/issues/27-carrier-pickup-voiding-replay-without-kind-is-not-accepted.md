@@ -1,7 +1,7 @@
 # 27 承运商首次有效收寄判断：失效命令带引用、不带种类时，原样重放答 `INPUT_NOT_ACCEPTED` 而不是 `ALREADY_RECORDED`
 
 Category: bug
-Status: in-progress——2026-10-16 完工，待进 main；见「完成记录」。此前 in-progress——2026-10-16 作者会话（票 20 的代码作者，Claude Code 会话）认领，分支 `claude-oc27`，基线 `d3caf1b0`；评审照改裁走非作者通道或 `/code-review` 的隔离子代理。此前 ready-for-agent——2026-10-16 会话 `idp-parcel-9b` 立（票 26 序 3 评审阻断；评审会话在 main `4dd937eb` 上复现）
+Status: resolved——2026-10-16 进 main（`1fcd01c6` 起，分支 `claude-oc27` 快进，远端 main 含 `b395fbb3`）；见「进 main 记录」。此前 in-progress——2026-10-16 完工，待进 main；见「完成记录」。此前 in-progress——2026-10-16 作者会话（票 20 的代码作者，Claude Code 会话）认领，分支 `claude-oc27`，基线 `d3caf1b0`；评审照改裁走非作者通道或 `/code-review` 的隔离子代理。此前 ready-for-agent——2026-10-16 会话 `idp-parcel-9b` 立（票 26 序 3 评审阻断；评审会话在 main `4dd937eb` 上复现）
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)（评审欠账；本票是它点名的「有阻断的，各立修复票」）。被评的是 [20](./20-tf-closure-dispatch-task-and-pickup-judgment-canonicalization.md)，代码 `857453d8`。
 出处：票 20 的 Comments「评审 ← 会话 idp-parcel-9b 起的隔离子代理」那一条，Spec 轴阻断 1。
@@ -39,7 +39,7 @@ Blocked by: 无
 - [x] 「现象」里第 3 步答 200 `ALREADY_RECORDED` 并带回链尾，首判仍答 201 `PICKUP_VOIDED`。
 - [x] 应用层与 HTTP 层各有一条回归用例，覆盖「失效命令带引用、不带种类」的首判与原样重放。
 - [x] 票 20 的既有用例照过；改动包 `go vet` 与 `go test -count=1` 绿。
-- [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审（空闲通道或 `/code-review` 的隔离子代理）、推送方在干净检出上带 DSN 跑全量。
+- [x] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审（空闲通道或 `/code-review` 的隔离子代理）、推送方在干净检出上带 DSN 跑全量。
 
 ## 完成记录（2026-10-16，作者会话，分支 `claude-oc27`，代码 `1fcd01c6` / `11709736` / `c8768fd0`）
 
@@ -52,3 +52,8 @@ Blocked by: 无
   - 第一轮（钉 `2b68b588`，重放前 SHA）——两轴都无阻断。Standards 非阻断两条：三处同形的指名判别靠手抄对齐，以及测试注释写了变更经过——都已修。Spec 非阻断三条：一并修的取舍要写进本票、票 20 那句要指明已收窄、推送方全量待做——前两条见上，第三条见进 main 记录。
   - 第二轮（Standards，钉 `b992860a`，重放前 SHA）——无阻断。实际承运商判断 `resolveSubject` 七格逐一核过，与改前一致。非阻断一条：头注里有对调用方的计数，已修于 `c8768fd0`。
 - 证据层级 `S`。
+
+### 进 main 记录（2026-10-16）
+
+- 分支 `claude-oc27` 五笔 `1fcd01c6` / `11709736` / `c8768fd0`（代码）/ `021812e5`（清点）/ `b395fbb3`（记录）叠在远端 main `1f9e1821` 之上，快进进 main、推的就是这个 SHA。完工后远端前进了三笔纯票面（立票 28、本票措辞更正、票 26 收口），本分支重放了一次；两轮评审钉的是重放前的 `2b68b588`、`b992860a`，与 `1fcd01c6`、`11709736` 内容相同。
+- 推送方全量：钉 `b395fbb3` 的干净 detached 检出，带 DSN，`go test -p 1 -count=1 -v ./...` 退 0——有测试的包 142 个 ok、0 FAIL，`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）；同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0。
