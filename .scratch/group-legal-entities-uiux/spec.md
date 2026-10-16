@@ -64,7 +64,7 @@ axe 在 `858280a2` 上的实测（只计 WCAG 2 AA 违规节点数）：
 
 | # | 票 | 阻塞于 | 状态 |
 |---|---|---|---|
-| 01 | [身份修订与资料修订分开命名](issues/01-identity-and-profile-revisions-named-apart.md) | — | in-progress |
+| 01 | [身份修订与资料修订分开命名](issues/01-identity-and-profile-revisions-named-apart.md) | — | resolved |
 | 02 | [表单标签不再挂载荷路径](issues/02-form-labels-drop-payload-paths.md) | — | ready-for-agent |
 | 03 | [法人两张表单重排、说明改写](issues/03-legal-entity-forms-regrouped-and-rewritten.md) | 02 | ready-for-agent |
 | 04 | [登记视图有自己的地址](issues/04-registration-view-is-addressable.md) | — | ready-for-agent |
