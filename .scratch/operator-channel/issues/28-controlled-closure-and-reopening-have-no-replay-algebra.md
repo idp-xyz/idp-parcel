@@ -1,7 +1,7 @@
 # 28 受控关闭与重开两口没核重放代数就开了真渠道：同一个关闭 POST 重试会再追加一条关闭
 
 Category: bug
-Status: in-progress——2026-10-16 完工，待进 main；见「完成记录」。此前 in-progress——2026-10-16 作者会话（票 15 之六的代码作者，Claude Code 会话）分诊并认领：「要裁的一问」裁 (b)，见「裁定」；分支 `claude-oc28`。此前 needs-triage——2026-10-16 会话 `idp-parcel-9b` 立（票 26 序 1 评审阻断；评审会话在 main `4dd937eb` 上复核）。要先裁一问（见「要裁的一问」），裁完转 ready-for-agent。
+Status: resolved——2026-10-16 进 main（`6c9f4886` 起，分支 `claude-oc28` 快进，远端 main 含 `fcf9b4ea`）；见「进 main 记录」。此前 in-progress——2026-10-16 完工，待进 main；见「完成记录」。此前 in-progress——2026-10-16 作者会话（票 15 之六的代码作者，Claude Code 会话）分诊并认领：「要裁的一问」裁 (b)，见「裁定」；分支 `claude-oc28`。此前 needs-triage——2026-10-16 会话 `idp-parcel-9b` 立（票 26 序 1 评审阻断；评审会话在 main `4dd937eb` 上复核）。要先裁一问（见「要裁的一问」），裁完转 ready-for-agent。
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)（评审欠账；本票是它点名的「有阻断的，各立修复票」）。被评的是 [15](./15-operation-decision-faces-take-operator-intake.md) 之六，代码 `0e3bb7df`，裁定见 [ADR-0183](../../../docs/adr/0183-operator-channel-addresses-controlled-closure-and-reopening-by-parcel-and-derives-the-shipper-from-the-accepted-request.md)。
 出处：票 15 的 Comments「评审 ← 会话 idp-parcel-9b 起的隔离子代理」钉 `0e3bb7df` 那一条，Spec 轴阻断 1。
@@ -46,7 +46,7 @@ Blocked by: 无
 - [x] 「要裁的一问」已裁，裁定写进本票，难逆转的进 ADR。
 - [x] 同一个关闭请求原样重放，不再追加第二条关闭，答复带回原决定；重开同理。领域、编排、HTTP 各有回归用例。
 - [x] 票 15 补记这两口凭哪条代数。
-- [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审（空闲通道或 `/code-review` 的隔离子代理）、推送方在干净检出上带 DSN 跑全量。
+- [x] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审（空闲通道或 `/code-review` 的隔离子代理）、推送方在干净检出上带 DSN 跑全量。
 
 ## 完成记录（2026-10-16，作者会话，分支 `claude-oc28`，代码 `6c9f4886` / `312b8b54` / `752b03e9`）
 
@@ -59,4 +59,10 @@ Blocked by: 无
   - 第二轮（钉 `312b8b54`）——Standards 阻断 1：新证据判据的头注在数调用方；非阻断：三处头注仍指票 28、一句断言与已接受取舍相左、`spec` 钩子只转发。修于 `752b03e9`。Spec 无阻断，非阻断两条（票 15 补记的写法要点、DSN 缺失时的准确说法）收在本记录与票 15 补记里。
   - 第三轮（Standards，钉 `752b03e9`）——无阻断、无非阻断；关闭仍带截断边界（值即决定标识）、重开不带，与改前逐格一致。
 - 证据层级 `S`。
+
+### 进 main 记录（2026-10-16）
+
+- 分支 `claude-oc28` 四笔 `6c9f4886` / `312b8b54` / `752b03e9`（代码与 ADR-0183 复核记录二）/ `fcf9b4ea`（记录与票 15 补记）直接叠在远端 main `8d22729f` 之上，快进进 main、推的就是这个 SHA，未重放。机制清点重生成无差异，没有清点那一笔。
+- 推送方全量：钉 `fcf9b4ea` 的干净 detached 检出，带 DSN，`go test -p 1 -count=1 -v ./...` 退 0——有测试的包 142 个 ok、0 FAIL，`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）；同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0。
+- 生产上仍潜伏：两口的授权映射为空、停在 `UNDECIDED / AUTHORITY_UNAVAILABLE`（现象节原话），授权缺口补上之后重放代数已就位。
 
