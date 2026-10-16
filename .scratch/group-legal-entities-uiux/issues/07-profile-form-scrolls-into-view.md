@@ -15,7 +15,7 @@
 
 **Category:** bug
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
 - [ ] 从这三种起点点主动作，表单顶部都在详情栏的可视区内：上面的复现路径、从未打开过法人资料签、本来就停在法人资料签
 - [ ] 用真浏览器验证，完成记录写明是怎么验的。happy-dom 没有布局，dom-probe 证不了滚动

@@ -72,11 +72,19 @@ export function LegalEntityProfileSection({
   const [landed, setLanded] = useState(0);
   const [formOpen, setFormOpen] = useState(formOpenRequest > 0);
   const formRef = useRef<HTMLElement>(null);
+  // 展开与滚动分两拍（票 group-legal-entities-uiux/07）：同一拍里先 setFormOpen 再滚，滚的时候表单还没渲染，内容不够高，
+  // 滚动距离被截断，表单停在视野底边外。只有区块挂载时就带着「已请求」初值那一回碰巧对。这里请求只记一笔「要滚」，
+  // 等展开那次提交之后再由下一个 effect 去滚。
+  const [scrollRequest, setScrollRequest] = useState(0);
   useEffect(() => {
     if (formOpenRequest === 0) return;
     setFormOpen(true);
-    formRef.current?.scrollIntoView({ block: 'start' });
+    setScrollRequest(formOpenRequest);
   }, [formOpenRequest]);
+  useEffect(() => {
+    if (scrollRequest === 0) return;
+    formRef.current?.scrollIntoView({ block: 'start' });
+  }, [scrollRequest]);
   return (
     <div className="flex flex-col gap-5">
       <section>
