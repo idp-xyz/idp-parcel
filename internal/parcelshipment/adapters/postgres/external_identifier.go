@@ -10,10 +10,11 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
-// 本文件是外部标识关联册（ADR-0184，迁移 0024）的真库面：写入随来源事实同笔发生，读面按号码答包裹。
+// 本文件是外部标识关联册（ADR-0184，迁移 0024、0025）的真库面：写入随来源事实同笔发生，读面按号码答包裹。
 
-// ExternalIdentifiers 是关联册的读面。写入不在这里：关联随它的来源事实形成，写入方是那件事实的仓储
-// （今天是委托仓储保存已接受委托那一笔），见 insertExternalIdentifierRelations。
+// ExternalIdentifiers 是关联册的读面。写入不在这里：关联与适用变化随它的来源事实形成，写入方是那件事实的仓储
+// （委托仓储保存已接受委托、面单交易仓储保存交易），见 insertExternalIdentifierRelations 与
+// insertExternalIdentifierChanges。
 type ExternalIdentifiers struct {
 	db *bentopg.DB
 }
@@ -27,7 +28,8 @@ func NewExternalIdentifiers(db *bentopg.DB) (*ExternalIdentifiers, error) {
 	return &ExternalIdentifiers{db: db}, nil
 }
 
-// FindParcelsByExternalIdentifier 逐字比对号码，交回此刻适用、标识包裹的关联所指的包裹，去重。
+// FindParcelsByExternalIdentifier 逐字比对号码，交回此刻适用、标识包裹的关联所指的包裹，去重。已有终态（已作废、
+// 已被替代）的关联不算——它的号只留历史，不再标识谁。
 //
 // 不按委托状态过滤：关联只在委托接受时形成，接受后的取消、终局也不改它的适用状态（PS CONTEXT Rules）——
 // 已取消的包裹到站仍要被认出来，节点才落得下`已取消`标记。ORDER BY 只为候选次序稳定，不表示谁优先。
@@ -44,12 +46,20 @@ func (view *ExternalIdentifiers) FindParcelsByExternalIdentifier(
 		return nil, fmt.Errorf("find parcels by external identifier: %w", err)
 	}
 	rows, err := querier.Query(ctx,
-		`SELECT DISTINCT object_ref
-		   FROM parcel_shipment.external_identifier_relation
-		  WHERE tenant_id = $1
-		    AND identifier_number = $2
-		    AND object_kind = 'PARCEL'
-		  ORDER BY object_ref`,
+		`SELECT DISTINCT relation.object_ref
+		   FROM parcel_shipment.external_identifier_relation AS relation
+		  WHERE relation.tenant_id = $1
+		    AND relation.identifier_number = $2
+		    AND relation.object_kind = 'PARCEL'
+		    AND NOT EXISTS (
+		        SELECT 1
+		          FROM parcel_shipment.external_identifier_relation_change AS change
+		         WHERE change.tenant_id = relation.tenant_id
+		           AND change.identifier_kind = relation.identifier_kind
+		           AND change.allocator = relation.allocator
+		           AND change.identifier_number = relation.identifier_number
+		           AND change.object_ref = relation.object_ref)
+		  ORDER BY relation.object_ref`,
 		tenant.String(),
 		number.String(),
 	)
@@ -99,6 +109,50 @@ func insertExternalIdentifierRelations(
 			relation.FormedAt().UTC(),
 		); err != nil {
 			return fmt.Errorf("insert external identifier relation: %w", err)
+		}
+	}
+	return nil
+}
+
+// insertExternalIdentifierChanges 在调用方的事务里写下一组适用状态变化。每一格按（租户，类型，形成依据，包裹）选中
+// 原关联再写变化行：替代那一笔手里没有原交易的号。选不中（原交易那件包裹没受理、没形成关联）就什么都不写。
+// ON CONFLICT DO NOTHING 让终态一次：交易每次保存都把同一组变化再交来，同键即同一次变化；先作废、后又被替代的
+// 那条关联，先到的终态立住。
+func insertExternalIdentifierChanges(
+	ctx context.Context,
+	executor bentopg.Executor,
+	changes []domain.ExternalIdentifierChange,
+) error {
+	for _, change := range changes {
+		var successorAllocator, successorNumber *string
+		if successor, present := change.Successor(); present {
+			allocator, number := successor.Allocator().String(), successor.Number().String()
+			successorAllocator, successorNumber = &allocator, &number
+		}
+		if _, err := executor.Exec(ctx,
+			`INSERT INTO parcel_shipment.external_identifier_relation_change
+			     (tenant_id, identifier_kind, allocator, identifier_number, object_ref,
+			      change_kind, successor_allocator, successor_number, cause, changed_at)
+			 SELECT relation.tenant_id, relation.identifier_kind, relation.allocator,
+			        relation.identifier_number, relation.object_ref,
+			        $5, $6, $7, $8, $9
+			   FROM parcel_shipment.external_identifier_relation AS relation
+			  WHERE relation.tenant_id = $1
+			    AND relation.identifier_kind = $2
+			    AND relation.basis = $3
+			    AND relation.object_ref = $4
+			 ON CONFLICT (tenant_id, identifier_kind, allocator, identifier_number, object_ref) DO NOTHING`,
+			change.Tenant().String(),
+			change.Kind().String(),
+			change.FormedBy().String(),
+			change.Parcel().String(),
+			change.Change().String(),
+			successorAllocator,
+			successorNumber,
+			change.Cause().String(),
+			change.ChangedAt().UTC(),
+		); err != nil {
+			return fmt.Errorf("insert external identifier change: %w", err)
 		}
 	}
 	return nil

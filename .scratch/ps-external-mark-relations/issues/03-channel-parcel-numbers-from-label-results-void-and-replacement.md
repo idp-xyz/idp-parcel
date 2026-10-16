@@ -1,7 +1,7 @@
 # 03 渠道包裹件号随面单交易包裹结果受理形成，渠道作废与换单改适用状态
 
 Category: enhancement
-Status: ready-for-agent——2026-10-16 Claude Code 会话立（[ADR-0184](../../../docs/adr/0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md) 决定三第二项与决定七）
+Status: in-progress——2026-10-16 Claude Code 会话认领，分支 `claude-psxm`，基线 `6c919d63`。此前 ready-for-agent——2026-10-16 Claude Code 会话立（[ADR-0184](../../../docs/adr/0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md) 决定三第二项与决定七）
 Blocked by: 02
 父票：[01](./01-external-mark-relations-have-no-model-in-parcel-shipment.md)
 

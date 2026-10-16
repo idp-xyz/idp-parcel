@@ -3,6 +3,7 @@ package domain_test
 import (
 	"errors"
 	"testing"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
@@ -171,5 +172,133 @@ func TestRehydrationCarriesCustomerParcelNumbersAndRefusesAStrayOne(t *testing.T
 	snapshot.CustomerParcelNumbers = []domain.CustomerParcelNumberDeclaration{customerNumber(t, "parcel-9", "CUST-0009")}
 	if _, err := domain.RehydrateShipmentRequest(snapshot); !errors.Is(err, domain.ErrInvalidRehydratedShipmentRequest) {
 		t.Fatalf("err = %v, want ErrInvalidRehydratedShipmentRequest", err)
+	}
+}
+
+// 以下证渠道包裹件号一类（票 ps-external-mark-relations/03，ADR-0184 决定三第二项与决定七）。
+
+func channelRelationsOf(t *testing.T, transaction domain.LabelTransaction) map[string]domain.ExternalIdentifierRelation {
+	t.Helper()
+	relations := map[string]domain.ExternalIdentifierRelation{}
+	for _, relation := range transaction.ExternalIdentifierRelationsFormedByChannelResults() {
+		relations[relation.Parcel().String()] = relation
+	}
+	return relations
+}
+
+// Covers: 面单交易包裹结果受理时形成渠道包裹件号的关联——分配方与适用范围是交易的渠道服务方，依据是这笔交易，
+// 形成时刻是结果观察时刻；未受理的不形成；结果回来之前一条都没有。
+func TestAcceptedChannelResultsFormChannelParcelNumberRelations(t *testing.T) {
+	if got := submittedLabelTransaction(t, "parcel-1").ExternalIdentifierRelationsFormedByChannelResults(); len(got) != 0 {
+		t.Fatalf("结果回来之前形成了 %d 条", len(got))
+	}
+	recorded := recordedLabelTransaction(t, domain.LabelTransactionPartiallySucceeded,
+		acceptedParcelResult(t, "parcel-1", "CH-0001"), refusedParcelResult(t, "parcel-2", "ADDRESS_UNSUPPORTED"))
+	relations := channelRelationsOf(t, recorded)
+	if len(relations) != 1 {
+		t.Fatalf("relations = %d, want 1（parcel-2 未受理）", len(relations))
+	}
+	relation := relations["parcel-1"]
+	if relation.Tenant().String() != "tenant-1" ||
+		relation.Kind() != domain.ChannelParcelNumber ||
+		relation.Allocator().String() != "party-channel-1" ||
+		relation.Scope().String() != "party-channel-1" ||
+		relation.Number().String() != "CH-0001" ||
+		relation.Basis().String() != "label-txn-1" ||
+		!relation.FormedAt().Equal(recorded.ResultObservedAt()) {
+		t.Fatalf("relation = %+v", relation)
+	}
+}
+
+func appendFollowUp(t *testing.T, transaction domain.LabelTransaction, kind domain.FollowUpActionKind, parcels ...string) domain.LabelTransaction {
+	t.Helper()
+	scope := make([]domain.DeclaredParcelID, 0, len(parcels))
+	for _, parcel := range parcels {
+		scope = append(scope, mustValue(t, domain.NewDeclaredParcelID, parcel))
+	}
+	appended, err := transaction.AppendFollowUpAction(domain.FollowUpActionSpec{
+		Kind:       kind,
+		Parcels:    scope,
+		Reason:     mustValue(t, domain.NewChannelResultReasonReference, "SYN-REASON"),
+		OccurredAt: labelTransactionAt.Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("后续动作：%v", err)
+	}
+	return appended
+}
+
+// Covers: PS CONTEXT「适用 → 已作废：渠道作废覆盖了形成该关联的那笔交易结果（逐件作废或整笔作废）」；渠道退款不改
+// 适用状态；原交易上的替代痕迹不在这里起作用——替代由新交易出生时的前序关系表达。
+func TestAChannelVoidRetiresTheRelationsItCoversAndARefundDoesNot(t *testing.T) {
+	recorded := recordedLabelTransaction(t, domain.LabelTransactionSucceeded,
+		acceptedParcelResult(t, "parcel-1", "CH-0001"), acceptedParcelResult(t, "parcel-2", "CH-0002"))
+
+	byParcel := appendFollowUp(t, recorded, domain.ChannelVoidAction, "parcel-2")
+	changes := byParcel.ExternalIdentifierChanges()
+	if len(changes) != 1 || changes[0].Change() != domain.ExternalIdentifierVoided ||
+		changes[0].Parcel().String() != "parcel-2" || changes[0].FormedBy().String() != "label-txn-1" ||
+		changes[0].Kind() != domain.ChannelParcelNumber || !changes[0].ChangedAt().Equal(labelTransactionAt.Add(time.Hour)) {
+		t.Fatalf("逐件作废 changes = %+v", changes)
+	}
+	if _, present := changes[0].Successor(); present {
+		t.Fatal("作废带了后继")
+	}
+
+	whole := appendFollowUp(t, recorded, domain.ChannelVoidAction)
+	if got := whole.ExternalIdentifierChanges(); len(got) != 2 {
+		t.Fatalf("整笔作废 changes = %d, want 2", len(got))
+	}
+	for _, kind := range []domain.FollowUpActionKind{domain.ChannelRefundAction, domain.ChannelReplacementAction} {
+		if got := appendFollowUp(t, recorded, kind).ExternalIdentifierChanges(); len(got) != 0 {
+			t.Fatalf("%s 改了适用状态：%+v", kind, got)
+		}
+	}
+}
+
+// Covers: PS CONTEXT「适用 → 已被替代：换单形成的新交易对同一包裹取得新的渠道包裹件号；原关联回指它的后继」——
+// 前序关系为替代的新交易受理出新号时，交出一条作用于原交易那件包裹关联的已被替代，后继就是新号的关联；重试不算替代。
+func TestAReplacementTransactionSupersedesThePriorNumberOfTheSameParcel(t *testing.T) {
+	prior := recordedLabelTransaction(t, domain.LabelTransactionSucceeded, acceptedParcelResult(t, "parcel-1", "CH-OLD"))
+	replacing := func(kind domain.LabelTransactionLinkKind) domain.LabelTransaction {
+		link, err := domain.EstablishPriorLabelTransactionLink(prior, kind)
+		if err != nil {
+			t.Fatalf("前序关系：%v", err)
+		}
+		spec := labelTransactionSpec(t, "parcel-1")
+		spec.ID = mustValue(t, domain.NewLabelTransactionID, "label-txn-2")
+		spec.ServiceProvider = mustValue(t, domain.NewChannelServiceProviderReference, "party-channel-2")
+		spec.PriorLink = link
+		established, err := domain.EstablishLabelTransaction(spec)
+		if err != nil {
+			t.Fatalf("建立新交易：%v", err)
+		}
+		submitted, err := established.SubmitToChannel(labelTransactionAt.Add(3 * time.Hour))
+		if err != nil {
+			t.Fatalf("提交渠道：%v", err)
+		}
+		recorded, err := submitted.RecordChannelResult(domain.RecordChannelResultSpec{
+			Outcome:       domain.LabelTransactionSucceeded,
+			ParcelResults: []domain.LabelTransactionParcelResultSpec{acceptedParcelResult(t, "parcel-1", "CH-NEW")},
+			ObservedAt:    labelTransactionAt.Add(4 * time.Hour),
+		})
+		if err != nil {
+			t.Fatalf("记录结果：%v", err)
+		}
+		return recorded
+	}
+
+	changes := replacing(domain.LabelTransactionReplacement).ExternalIdentifierChanges()
+	if len(changes) != 1 || changes[0].Change() != domain.ExternalIdentifierReplaced ||
+		changes[0].FormedBy().String() != "label-txn-1" || changes[0].Parcel().String() != "parcel-1" ||
+		changes[0].Cause().String() != "label-txn-2" {
+		t.Fatalf("替代 changes = %+v", changes)
+	}
+	successor, present := changes[0].Successor()
+	if !present || successor.Number().String() != "CH-NEW" || successor.Allocator().String() != "party-channel-2" {
+		t.Fatalf("后继 = %+v, present = %v", successor, present)
+	}
+	if got := replacing(domain.LabelTransactionRetry).ExternalIdentifierChanges(); len(got) != 0 {
+		t.Fatalf("重试也交出了替代：%+v", got)
 	}
 }

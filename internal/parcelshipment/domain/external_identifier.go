@@ -28,12 +28,17 @@ const (
 	ExternalIdentifierKindInvalid ExternalIdentifierKind = iota
 	// CustomerParcelNumber 是客户在委托里为声明包裹给出的包裹件号：分配方是该委托的客户账户，标识包裹。
 	CustomerParcelNumber
+	// ChannelParcelNumber 是渠道在面单交易包裹结果里签发的包裹级标识（件号、尾程号一类）：分配方是该交易的渠道
+	// 服务方，标识包裹。
+	ChannelParcelNumber
 )
 
 func (kind ExternalIdentifierKind) String() string {
 	switch kind {
 	case CustomerParcelNumber:
 		return "CUSTOMER_PARCEL_NUMBER"
+	case ChannelParcelNumber:
+		return "CHANNEL_PARCEL_NUMBER"
 	default:
 		return ""
 	}
@@ -186,4 +191,154 @@ func (request ShipmentRequest) ExternalIdentifierRelationsFormedByAcceptance(ide
 		})
 	}
 	return relations
+}
+
+// ExternalIdentifierRelationsFormedByChannelResults 交回这笔面单交易的包裹结果形成的外部标识关联：受理的每件
+// 包裹一条渠道包裹件号，分配方与适用范围都是交易的渠道服务方，依据是这笔交易，形成时刻是结果观察时刻；未受理的
+// 不形成，结果回来之前交空（ADR-0184 决定三第二项）。
+func (transaction LabelTransaction) ExternalIdentifierRelationsFormedByChannelResults() []ExternalIdentifierRelation {
+	var relations []ExternalIdentifierRelation
+	for _, result := range transaction.parcelResults {
+		if !result.accepted {
+			continue
+		}
+		relations = append(relations, transaction.channelRelationOf(result))
+	}
+	return relations
+}
+
+func (transaction LabelTransaction) channelRelationOf(result LabelTransactionParcelResult) ExternalIdentifierRelation {
+	provider := transaction.serviceProvider.String()
+	return ExternalIdentifierRelation{
+		tenant:    transaction.tenant,
+		kind:      ChannelParcelNumber,
+		allocator: ExternalIdentifierAllocator{requiredValue{value: provider}},
+		scope:     ExternalIdentifierScope{requiredValue{value: provider}},
+		number:    ExternalIdentifierNumber{requiredValue{value: result.identifier.String()}},
+		parcel:    result.parcel,
+		basis:     ExternalIdentifierBasis{requiredValue{value: transaction.id.String()}},
+		formedAt:  transaction.resultObservedAt,
+	}
+}
+
+// ExternalIdentifierChangeKind 是外部标识关联适用状态的终态。已失效不在其中：有效期规则今天没有登记处，没有
+// 执行器会形成它（ADR-0184 决定七）。
+type ExternalIdentifierChangeKind uint8
+
+const (
+	ExternalIdentifierChangeKindInvalid ExternalIdentifierChangeKind = iota
+	ExternalIdentifierVoided
+	ExternalIdentifierReplaced
+)
+
+func (kind ExternalIdentifierChangeKind) String() string {
+	switch kind {
+	case ExternalIdentifierVoided:
+		return "VOIDED"
+	case ExternalIdentifierReplaced:
+		return "REPLACED"
+	default:
+		return ""
+	}
+}
+
+// ExternalIdentifierChange 是一次适用状态变化：作用于（租户，类型，形成依据，包裹）选出的那条关联——渠道包裹件号
+// 由形成它的交易与包裹唯一确定，替代那一笔手里没有原交易的号，所以按选择而不是按号码指名。终态一次：已有终态的
+// 关联不再变（PS CONTEXT「已作废、已被替代、已失效都是终态，不回到适用」）。
+type ExternalIdentifierChange struct {
+	tenant    TenantID
+	kind      ExternalIdentifierKind
+	formedBy  ExternalIdentifierBasis
+	parcel    DeclaredParcelID
+	change    ExternalIdentifierChangeKind
+	successor ExternalIdentifierRelation
+	cause     ExternalIdentifierBasis
+	changedAt time.Time
+}
+
+func (change ExternalIdentifierChange) Tenant() TenantID {
+	return change.tenant
+}
+
+func (change ExternalIdentifierChange) Kind() ExternalIdentifierKind {
+	return change.kind
+}
+
+// FormedBy 是被改那条关联的形成依据。
+func (change ExternalIdentifierChange) FormedBy() ExternalIdentifierBasis {
+	return change.formedBy
+}
+
+func (change ExternalIdentifierChange) Parcel() DeclaredParcelID {
+	return change.parcel
+}
+
+func (change ExternalIdentifierChange) Change() ExternalIdentifierChangeKind {
+	return change.change
+}
+
+// Successor 交回已被替代那一格的后继关联；作废没有后继。
+func (change ExternalIdentifierChange) Successor() (ExternalIdentifierRelation, bool) {
+	return change.successor, change.change == ExternalIdentifierReplaced
+}
+
+// Cause 是带来这次变化的那笔交易：作废是被作废的交易本身，替代是新交易。
+func (change ExternalIdentifierChange) Cause() ExternalIdentifierBasis {
+	return change.cause
+}
+
+func (change ExternalIdentifierChange) ChangedAt() time.Time {
+	return change.changedAt
+}
+
+// ExternalIdentifierChanges 交回这笔交易带来的适用状态变化（ADR-0184 决定七）：
+//   - 渠道作废覆盖的每件受理包裹（逐件或整笔），本交易形成的那条关联转已作废，时刻是作废发生时刻；
+//   - 前序关系为替代时，本交易受理的每件包裹，原交易给它形成的那条关联转已被替代，后继是本交易的新号，时刻是结果
+//     观察时刻。原交易必然已定案（EstablishPriorLabelTransactionLink 只认已定案的原交易），它的关联此时已在册里。
+//
+// 渠道退款不改适用状态——退款不等于号作废；原交易上的替代痕迹不在这里起作用，替代由新交易出生时的前序关系表达。
+func (transaction LabelTransaction) ExternalIdentifierChanges() []ExternalIdentifierChange {
+	var changes []ExternalIdentifierChange
+	for _, action := range transaction.followUpActions {
+		if action.kind != ChannelVoidAction {
+			continue
+		}
+		scope := action.parcels
+		if len(scope) == 0 {
+			scope = transaction.coveredParcels
+		}
+		for _, parcel := range scope {
+			result, found := transaction.ParcelResult(parcel)
+			if !found || !result.accepted {
+				continue
+			}
+			changes = append(changes, ExternalIdentifierChange{
+				tenant:    transaction.tenant,
+				kind:      ChannelParcelNumber,
+				formedBy:  ExternalIdentifierBasis{requiredValue{value: transaction.id.String()}},
+				parcel:    parcel,
+				change:    ExternalIdentifierVoided,
+				cause:     ExternalIdentifierBasis{requiredValue{value: transaction.id.String()}},
+				changedAt: action.occurredAt,
+			})
+		}
+	}
+	if link, linked := transaction.PriorLink(); linked && link.Kind() == LabelTransactionReplacement {
+		for _, result := range transaction.parcelResults {
+			if !result.accepted {
+				continue
+			}
+			changes = append(changes, ExternalIdentifierChange{
+				tenant:    transaction.tenant,
+				kind:      ChannelParcelNumber,
+				formedBy:  ExternalIdentifierBasis{requiredValue{value: link.PriorTransactionID().String()}},
+				parcel:    result.parcel,
+				change:    ExternalIdentifierReplaced,
+				successor: transaction.channelRelationOf(result),
+				cause:     ExternalIdentifierBasis{requiredValue{value: transaction.id.String()}},
+				changedAt: transaction.resultObservedAt,
+			})
+		}
+	}
+	return changes
 }

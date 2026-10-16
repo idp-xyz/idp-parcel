@@ -231,6 +231,15 @@ func (repository *LabelTransactions) Save(
 	if err != nil {
 		return none, fmt.Errorf("save label transaction: %w", err)
 	}
+	// 渠道包裹件号与它的适用变化随交易快照同一条事务写进外部标识关联册（ADR-0184 决定三、七）：结果与作废落了库
+	// 而号没进册（或作废了的号仍在册里答身份），是同一种半截。关联先写、变化后写——作废选中的正是本交易刚形成的
+	// 那一条。只在 Save 里写：新建立的交易还没有结果，Insert 没有可写的。两者都按键幂等。
+	if err := insertExternalIdentifierRelations(ctx, executor, transaction.ExternalIdentifierRelationsFormedByChannelResults()); err != nil {
+		return none, fmt.Errorf("save label transaction: %w", err)
+	}
+	if err := insertExternalIdentifierChanges(ctx, executor, transaction.ExternalIdentifierChanges()); err != nil {
+		return none, fmt.Errorf("save label transaction: %w", err)
+	}
 	return ports.LabelTransactionSaveResult{Outcome: ports.LabelTransactionSaved, Revision: revision}, nil
 }
 
