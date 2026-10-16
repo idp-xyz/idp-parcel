@@ -1,7 +1,7 @@
 # 15 横切：ADR-0100 操作者渠道落地——操作者册、凭据校验、`OperatorEnvelope` 与端点逐个换真 Intake
 
 Category: enhancement
-Status: in-progress——跟踪容器：2026-09-24 通道 4 按通道 1 派单 task-2a0f590d（/to-tickets）拆为 [`.scratch/operator-channel/`](../../operator-channel/issues/) 下子票 01–14：拆法经用户授权通道 4 自决认可（01–08 转 ready-for-agent），丙轨决策 09 落成 ADR-0149 并续编实施票 10–14，切片计划见文末。此前：拆法待用户认可（01–09 draft）；needs-triage——2026-09-24 通道 4 经用户授权自决立（票 02 遗留：开发主线「按四项判据重定级」表「横切」行第一项与票 05 格 7、11、12、22，全仓没有实施票）；体量大，开工第一步是拆子票
+Status: resolved——2026-10-16 Claude Code 会话收口：子票表 operator-channel/01–20 逐份读过、全部 resolved（最后一张 15 进 main 至 `58626ca1`）；完成判据三项逐条核过——主链命令面对合成操作者走真渠道答业务结果、未登记或授予不覆盖的主体照旧被拒（各子票装配测试），票 05 格 7、11、12、22 各有实测去处（psb/05 那四格的「08 重走」与其后 10、11、15 换真渠道），登记册 `PAR-INT-08` 一行已增。此前 in-progress——跟踪容器：2026-09-24 通道 4 按通道 1 派单 task-2a0f590d（/to-tickets）拆为 [`.scratch/operator-channel/`](../../operator-channel/issues/) 下子票 01–14：拆法经用户授权通道 4 自决认可（01–08 转 ready-for-agent），丙轨决策 09 落成 ADR-0149 并续编实施票 10–14，切片计划见文末。此前：拆法待用户认可（01–09 draft）；needs-triage——2026-09-24 通道 4 经用户授权自决立（票 02 遗留：开发主线「按四项判据重定级」表「横切」行第一项与票 05 格 7、11、12、22，全仓没有实施票）；体量大，开工第一步是拆子票
 Blocked by: 无——ADR-0100 已接受，这一格不等任何决定
 地盘：`internal/accessidentity`（操作者册、凭据校验、信封铸造）与其迁移、`cmd/parcel-api` 端点表的 Intake 装配；各上下文的授予格按[票 07](./07-pc-authorization-coordinates-and-role-models.md) 的角色模型读。
 出处：[ADR-0100](../../../docs/adr/0100-operator-identity-is-a-product-owned-access-channel-family.md)；[开发主线](../../../docs/product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)「按四项判据重定级」表「横切」行第一项原话：`internal/accessidentity` 没有操作者册、OIDC 校验与 `OperatorEnvelope`，端点表的命令行与目录读口在隔离开关之外一律挂 `UnconfiguredIntake{}`；[票 05](./05-demo-journey-criterion-evidence.md) 格 7、11、12、22 与「不在主路径上的命令面」实测全部答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`。开发主线结论句把它列为机制缺口的头一件，「它挡着全部运营面」。
@@ -52,7 +52,7 @@ Blocked by: 无——ADR-0100 已接受，这一格不等任何决定
 | [12](../../operator-channel/issues/12-signed-webhook-inbound.md) | 签名 webhook 入向 | 11 |
 | [13](../../operator-channel/issues/13-command-payload-canonicalization-per-face.md) | 各命令口的载荷规范化形状（逐口） | 无 |
 | [14](../../operator-channel/issues/14-admission-scope-read-and-grade.md) | 准入范围读口与「不在准入范围」一格 | 无（接进铸造随 10、11） |
-| [15](../../operator-channel/issues/15-operation-decision-faces-take-operator-intake.md) | 「运营决定」能力面：委托侧五个运营决定口与 TF 管理台上的决定与判断口换操作者 Intake（2026-09-24 随 ADR-0151 补立，2026-09-25 复核改定并补两个判断口） | 03、14 |
+| [15](../../operator-channel/issues/15-operation-decision-faces-take-operator-intake.md) | 「运营决定」能力面：委托侧五个运营决定口与 TF 管理台上的决定与判断口换操作者 Intake（2026-09-24 随 ADR-0151 补立，2026-09-25 复核改定并补两个判断口） | 03、14（2026-10-16 resolved，进 main 至 `58626ca1`：TF 余下四口换口撤隔离放行，受控关闭与重开按 ADR-0183 换口） |
 | [16](../../operator-channel/issues/16-stale-par-int-01-comments-on-operator-faces.md) | 过期注释：运营侧接入面的认证不再写「属 `PAR-INT-01` 待提供」（2026-09-25 随 ADR-0151 补立并做完；管理台前端注释记为后续） | 无 |
 | [17](../../operator-channel/issues/17-demo-issuer-dex-and-synthetic-operators.md) | 演示发行方：Dex 接进演示环境，合成操作者按它的标识另登（2026-10-12 补立：02 写「随 07 做」，07 的地盘不含它） | 无 |
 | [18](../../operator-channel/issues/18-commercial-publications-takes-operator-intake-after-approval-translation-sinks.md) | 批文译装下沉后 `/commercial-publications` 换操作者 Intake（2026-10-12 补立：06 判断项 1，派单方裁另立） | 06 |
