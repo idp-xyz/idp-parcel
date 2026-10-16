@@ -1,7 +1,7 @@
 # 03 渠道包裹件号随面单交易包裹结果受理形成，渠道作废与换单改适用状态
 
 Category: enhancement
-Status: in-progress——2026-10-16 完工，待进 main；见「完成记录」。此前 in-progress——2026-10-16 Claude Code 会话认领，分支 `claude-psxm`，基线 `6c919d63`。此前 ready-for-agent——2026-10-16 Claude Code 会话立（[ADR-0184](../../../docs/adr/0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md) 决定三第二项与决定七）
+Status: resolved——2026-10-16 进 main（`d8e60661` 起七笔，分支 `claude-psxm` 快进，远端 main 含 `0f5b4293`）；见「进 main 记录」。此前 in-progress——2026-10-16 完工，待进 main；见「完成记录」。此前 in-progress——2026-10-16 Claude Code 会话认领，分支 `claude-psxm`，基线 `6c919d63`。此前 ready-for-agent——2026-10-16 Claude Code 会话立（[ADR-0184](../../../docs/adr/0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md) 决定三第二项与决定七）
 Blocked by: 02
 父票：[01](./01-external-mark-relations-have-no-model-in-parcel-shipment.md)
 
@@ -35,3 +35,9 @@ Blocked by: 02
   - 第三轮（Standards，钉 `83ca983b`）——无阻断，五条处置成立，`voidSpan` 与原 `voidCovering` 在终局判断上等价；非阻断三条（字段 `kind` 改名、替代夹具不写死服务方、取最晚一侧补用例）修于 `3fc6fee4`。
 - **已知局限**（ADR-0185 后果节）：终态按写入先后立住，不按业务时间——同一条关联先作废后被替代，先写入的那种立住；同一笔交易后补一条更早的作废，库里时刻仍是先写入那条。核对答案不受影响。
 - 证据层级 `S`。
+
+### 进 main 记录（2026-10-16）
+
+- 分支 `claude-psxm` 七笔叠在远端 main `49ae7568` 之上，快进进 main、推的就是这个 SHA：`d8e60661`（实现）/ `58c4c496`（第一轮修补，ADR-0185）/ `d8030e69`（第二轮修补）/ `83ca983b`（ADR-0184 复核记录）/ `3fc6fee4`（第三轮修补）/ `c9a3f800`（清点）/ `0f5b4293`（记录）。完工之后远端前进了三笔纯文档（子代理改裁、票 26 认领、立票 27），本分支重放了一次，内容一字未改；三轮评审钉的是重放前的 `11f9f84b`、`d671cb6e`、`466b8abf`，与上面对应各笔内容相同，上文完成记录里的 SHA 已换成重放后的。
+- 推送方全量：钉 `0f5b4293` 的干净 detached 检出，带 DSN，`go test -p 1 -count=1 -v ./...` 退 0——有测试的包 142 个 ok、0 FAIL，`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）；同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0。
+- 评审：三轮隔离子代理两轴评审（见完成记录），末轮无阻断。

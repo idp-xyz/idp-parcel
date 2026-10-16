@@ -1,7 +1,7 @@
 # 外部标识关系在 parcel-shipment 无任何模型，NO 的 ParcelIdentityView 因此无实现
 
 Category: enhancement
-Status: in-progress——2026-10-16 Claude Code 会话起步：建模落进 PS CONTEXT 与 [ADR-0184](../../../docs/adr/0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md)，拆为子票 02、03（见「子票」）；分支 `claude-psxm`。此前 ready-for-agent——2026-10-16 排进开发主线，作 PN-03 的下一张后端切片（用户「你帮我做决定吧」授权 Claude Code 会话代决）；起步按 `/domain-modeling`，切法见 Comments 首条。此前 needs-info——缺排期决定。
+Status: resolved——2026-10-16 两张子票都已 resolved（02 `cc52e9b6`、03 `d8e60661` 起），外部标识关联册、客户与渠道两类包裹件号、作废与替代、节点身份核对接真全部进 main；建模取舍见 ADR-0184 与部分停用它决定一的 ADR-0185。此前 in-progress——2026-10-16 Claude Code 会话起步：建模落进 PS CONTEXT 与 [ADR-0184](../../../docs/adr/0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md)，拆为子票 02、03（见「子票」）；分支 `claude-psxm`。此前 ready-for-agent——2026-10-16 排进开发主线，作 PN-03 的下一张后端切片（用户「你帮我做决定吧」授权 Claude Code 会话代决）；起步按 `/domain-modeling`，切法见 Comments 首条。此前 needs-info——缺排期决定。
 
 发现于接 `node-operations` 的 `ports.ParcelIdentityView` 时。该端口按外部标识核对正式包裹
 身份，注释写明是「PS 侧只读引用」，`node-operations` 不得自建。核对结果：**PS 确实拥有这个
@@ -72,7 +72,7 @@ TrackingNumber / 运单」，生产代码只一处命中，而且是条否定：
 | 票 | 内容 | Blocked by | 状态 |
 |---|---|---|---|
 | [02](./02-register-and-customer-parcel-numbers-feed-node-identity.md) | 关联册落地，客户包裹件号随委托接受形成，节点身份核对接真 | 无 | resolved（`cc52e9b6`） |
-| [03](./03-channel-parcel-numbers-from-label-results-void-and-replacement.md) | 渠道包裹件号随面单交易包裹结果受理形成，作废与换单改适用状态 | 02 | ready-for-agent |
+| [03](./03-channel-parcel-numbers-from-label-results-void-and-replacement.md) | 渠道包裹件号随面单交易包裹结果受理形成，作废与换单改适用状态 | 02 | resolved（`d8e60661` 起，含 ADR-0185） |
 
 本票在两张子票都 resolved 后收口。
 
