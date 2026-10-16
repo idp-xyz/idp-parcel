@@ -208,7 +208,7 @@ func writeCarrierPickupJudgmentOutcome(response http.ResponseWriter, result appl
 		body.Pickup = &pickup
 	}
 	// ADR-0022：状态码只报有没有新落一版收寄。已形成 / 替代 / 失效是新落的收寄版本用 201；待确认、不构成、非首次、
-	// 依据不可用、已在册、未受理、未决都是形成了的答案（200）。
+	// 依据不可用、已在册、内容冲突、未受理、未决都是形成了的答案（200）。
 	status := http.StatusOK
 	switch result.Outcome() {
 	case application.CarrierPickupFormedOutcome, application.CarrierPickupSupersededOutcome, application.CarrierPickupVoidedOutcome:

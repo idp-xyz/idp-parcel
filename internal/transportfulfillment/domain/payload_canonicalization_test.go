@@ -119,6 +119,32 @@ func TestCommandPayloadsRoundTripAsTFC1(t *testing.T) {
 				return domain.CanonicalizeEstablishPoolPayload("SCH", "KG", 3)
 			},
 		},
+		{
+			// 业务时间按微秒取：在册那一份只到微秒，纳秒尾巴不构成内容。
+			name:     "carrier pickup judgment expressing control",
+			document: `{"canonicalization":"TFC-1","face":"JUDGE_CARRIER_FIRST_EFFECTIVE_PICKUP","expresses_control":true,"subject_kind":"EXTERNAL_PARTY","subject_reference":"party/carrier-x","occurred_at":"2026-03-05T02:11:12.345678Z"}`,
+			digest:   "TFC-1:f64576e6564cc143749941be44df070728636a5cd9ade39a40dbde90106fb6c5",
+			call: func() ([]byte, string, error) {
+				subject, err := domain.NewCarrierSubject(domain.ExternalCarrierParty, "party/carrier-x")
+				if err != nil {
+					return nil, "", err
+				}
+				return domain.CanonicalizeCarrierFirstEffectivePickupPayload(true, subject, at)
+			},
+		},
+		{
+			// 不表达时主体与时间不构成内容：给了也不进文档（失效版本上没有这两格可比）。
+			name:     "carrier pickup judgment not expressing control",
+			document: `{"canonicalization":"TFC-1","face":"JUDGE_CARRIER_FIRST_EFFECTIVE_PICKUP","expresses_control":false}`,
+			digest:   "TFC-1:81475c1acecee9af095e266aee2bd6156b8efe61979354f5857e389823186131",
+			call: func() ([]byte, string, error) {
+				subject, err := domain.NewCarrierSubject(domain.ExternalCarrierParty, "party/carrier-x")
+				if err != nil {
+					return nil, "", err
+				}
+				return domain.CanonicalizeCarrierFirstEffectivePickupPayload(false, subject, at)
+			},
+		},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -140,6 +166,31 @@ func TestCommandPayloadsRoundTripAsTFC1(t *testing.T) {
 				t.Fatalf("canonicalization %v", roundTrip["canonicalization"])
 			}
 		})
+	}
+}
+
+// Covers: 票 operator-channel/20——承运商首次有效收寄判断两侧都从本体现算，而在册的业务时间只到微秒（对真库实测：
+// 存 …00.123456789Z 读回 …00.123456Z）。按纳秒比，同一条带纳秒时刻的命令原样重放会被判成内容冲突；按微秒比则同，
+// 跨过一微秒才异。
+func TestCarrierPickupJudgmentBusinessTimeIsComparedToTheMicrosecond(t *testing.T) {
+	subject, err := domain.NewCarrierSubject(domain.ExternalCarrierParty, "party/carrier-x")
+	if err != nil {
+		t.Fatalf("承运主体：%v", err)
+	}
+	given := time.Date(2026, 9, 10, 9, 0, 0, 123456789, time.UTC)
+	digest := func(at time.Time) string {
+		t.Helper()
+		_, digest, err := domain.CanonicalizeCarrierFirstEffectivePickupPayload(true, subject, at)
+		if err != nil {
+			t.Fatalf("canonicalize: %v", err)
+		}
+		return digest
+	}
+	if digest(given) != digest(given.Truncate(time.Microsecond)) {
+		t.Fatal("纳秒尾巴不应构成另一份内容")
+	}
+	if digest(given) == digest(given.Add(time.Microsecond)) {
+		t.Fatal("相差一微秒应是另一份内容")
 	}
 }
 

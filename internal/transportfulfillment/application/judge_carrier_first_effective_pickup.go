@@ -21,7 +21,8 @@ var ErrUnexpectedCarrierPickupSave = errors.New("transport fulfillment: unexpect
 // 各格按恢复动作分（ADR-0029）：`已形成` / `已替代` / `已失效`是落了新版本；`待确认`是判过了但不够（等身份登记或
 // 人裁）；`不构成`是读法说证据不表达取得控制且没有可失效的东西——什么都不留；`非首次`是对象已有当前有效参与，
 // 证据去实际承运商判断那条路；`依据不可用`是轨迹事实有效时间待判断，先去判它；`依据不是当前依据`是更正指名的
-// 前代不是链尾依据，改指名再来；`已在册`是同一依据重放；`未受理`改输入；`未决`等依赖恢复重试同一份。
+// 前代不是链尾依据，改指名再来；`已在册`是同一依据同内容重放；`内容冲突`是同一依据带来另一份读法、承运主体或
+// 业务时间——链尾那一版不动，换判断要凭新的来源版本走更正；`未受理`改输入；`未决`等依赖恢复重试同一份。
 type CarrierPickupJudgmentOutcome uint8
 
 const (
@@ -35,6 +36,7 @@ const (
 	CarrierPickupBasisUnavailable
 	CarrierPickupBasisNotCurrent
 	CarrierPickupAlreadyRecorded
+	CarrierPickupContentConflict
 	CarrierPickupNotAccepted
 	CarrierPickupUndecided
 )
@@ -59,6 +61,8 @@ func (outcome CarrierPickupJudgmentOutcome) String() string {
 		return "BASIS_NOT_CURRENT"
 	case CarrierPickupAlreadyRecorded:
 		return "ALREADY_RECORDED"
+	case CarrierPickupContentConflict:
+		return "CONTENT_CONFLICT"
 	case CarrierPickupNotAccepted:
 		return "INPUT_NOT_ACCEPTED"
 	case CarrierPickupUndecided:
@@ -151,7 +155,7 @@ func (result JudgeCarrierFirstEffectivePickupResult) ContinuationReference() str
 	return result.continuation
 }
 
-// Record 在落了新版本、答`待确认`或`已在册`时带回链尾那一版。
+// Record 在落了新版本、答`待确认`、`已在册`或`内容冲突`时带回链尾那一版。
 func (result JudgeCarrierFirstEffectivePickupResult) Record() (ports.CarrierFirstEffectivePickupRecord, bool) {
 	return result.record, result.hasRecord
 }
@@ -241,8 +245,9 @@ func (handler *JudgeCarrierFirstEffectivePickupHandler) Judge(
 	}
 	if found && current.Pickup.BasedOn(input.basis.Reference(), input.basis.SourceVersion()) {
 		if current.Pickup.Result() != domain.CarrierPickupPending {
-			// 同一依据重放：链尾已经是按这一代判出来的版本。
-			return JudgeCarrierFirstEffectivePickupResult{outcome: CarrierPickupAlreadyRecorded, record: current, hasRecord: true}, nil
+			// 链尾已经是按这一代判出来的版本：同内容是重放，异内容是另一份判断。同一依据走不到下面更正那条路
+			// （更正要带新的来源版本），所以异内容只能答冲突、链尾不动。
+			return replayOrConflictOnTheSameBasis(command, current, input)
 		}
 		// 链尾待确认、同一依据再来：身份此刻若已在册，就是「PC 登记之后凭同一份证据形成新版本」（CONTEXT 生命周期）；
 		// 仍未在册则链尾不动——同一依据不长第二版待确认。
@@ -346,6 +351,42 @@ func (handler *JudgeCarrierFirstEffectivePickupHandler) formOrHold(
 		return JudgeCarrierFirstEffectivePickupResult{outcome: CarrierPickupNotAccepted}, nil
 	}
 	return handler.persist(ctx, command, next, now, found)
+}
+
+// replayOrConflictOnTheSameBasis 按 TFC-1 形状比同一依据上的两份判断（票 operator-channel/20）。册上不存摘要，两侧都从
+// 本体现算，同 customs-compliance 凭证登记口的 CCC-1 先例，没有无版本的旧摘要要认。链尾一侧的读法由结果反推（已形成 ↔
+// 表达，失效 ↔ 不表达），主体与业务时间取版本上的。
+//
+// 命令只给名称素材时主体轴不参与，命令一侧取链尾的在册主体：已形成版本上没有素材，素材对应哪个在册身份归
+// party-commercial，本上下文现算不出——若照比，「待确认 → 身份登记后凭同一依据形成」之后那条原命令的重放会被判成冲突。
+func replayOrConflictOnTheSameBasis(
+	command JudgeCarrierFirstEffectivePickupCommand,
+	current ports.CarrierFirstEffectivePickupRecord,
+	input pickupBasisInput,
+) (JudgeCarrierFirstEffectivePickupResult, error) {
+	recordedCarrier, _ := current.Pickup.Carrier()
+	recordedAt, _ := current.Pickup.OccurredAt()
+	_, recorded, err := domain.CanonicalizeCarrierFirstEffectivePickupPayload(current.Pickup.Formed(), recordedCarrier, recordedAt)
+	if err != nil {
+		return JudgeCarrierFirstEffectivePickupResult{}, err
+	}
+	requestedCarrier := recordedCarrier
+	if strings.TrimSpace(command.SubjectReference) != "" {
+		claimed, err := domain.NewCarrierSubject(command.SubjectKind, command.SubjectReference)
+		if err != nil {
+			return JudgeCarrierFirstEffectivePickupResult{outcome: CarrierPickupNotAccepted}, nil
+		}
+		requestedCarrier = claimed
+	}
+	_, requested, err := domain.CanonicalizeCarrierFirstEffectivePickupPayload(command.ExpressesControl, requestedCarrier, input.occurredAt)
+	if err != nil {
+		return JudgeCarrierFirstEffectivePickupResult{}, err
+	}
+	outcome := CarrierPickupAlreadyRecorded
+	if requested != recorded {
+		outcome = CarrierPickupContentConflict
+	}
+	return JudgeCarrierFirstEffectivePickupResult{outcome: outcome, record: current, hasRecord: true}, nil
 }
 
 // reconsiderPending 在链尾待确认、同一依据再来时只问一件事：承运主体身份此刻在册了没有。在册 → 已形成版本回指

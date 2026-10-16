@@ -332,6 +332,123 @@ func TestAReplayAnswersAlreadyRecordedAndAMissingSegmentReferenceStillRegistersA
 	}
 }
 
+// Covers: 票 operator-channel/20 裁定——同一依据落在非待确认链尾上按 TFC-1 内容比：同内容答`已在册`，读法、承运主体或
+// 业务时间不同答`内容冲突`，带回链尾、不动链、不发意图。同一依据走不到更正那条路（更正要带新的来源版本），
+// 所以这一格不能交给更正去表达。
+func TestASameBasisWithDifferentContentAnswersContentConflict(t *testing.T) {
+	assertConflictLeavesTheChain := func(t *testing.T, fixture *carrierPickupFixture, result application.JudgeCarrierFirstEffectivePickupResult, tail ports.CarrierFirstEffectivePickupRecord) {
+		t.Helper()
+		if result.Outcome() != application.CarrierPickupContentConflict {
+			t.Fatalf("outcome = %s，期望 CONTENT_CONFLICT", result.Outcome())
+		}
+		record, present := result.Record()
+		if !present || record.Key != tail.Key {
+			t.Fatalf("内容冲突应带回链尾那一版：%v %+v", present, record.Key)
+		}
+		if len(fixture.pickups.rows) != len(fixture.handoff.intents) || result.HandoffReference() != "" {
+			t.Fatalf("内容冲突不落版本、不发意图：行数 %d，意图 %d", len(fixture.pickups.rows), len(fixture.handoff.intents))
+		}
+	}
+	formOnTrackingFact := func(t *testing.T) (*carrierPickupFixture, ports.CarrierFirstEffectivePickupRecord) {
+		t.Helper()
+		fixture := newCarrierPickupFixture(t, carrierX(t), mustSubject(t, domain.ExternalCarrierParty, "party/carrier-y"))
+		fixture.addTrackingFact(t, "EXTF-1", "EXTV-1", "PCL-1", carrierPickupEffectiveAt, "")
+		formed := fixture.judge(t, trackingPickupCommand(t))
+		tail, _ := formed.Record()
+		if formed.Outcome() != application.CarrierPickupFormedOutcome {
+			t.Fatalf("前置：outcome = %s，期望 PICKUP_FORMED", formed.Outcome())
+		}
+		return fixture, tail
+	}
+
+	t.Run("the same content replays", func(t *testing.T) {
+		fixture, tail := formOnTrackingFact(t)
+		replay := fixture.judge(t, trackingPickupCommand(t))
+		if record, _ := replay.Record(); replay.Outcome() != application.CarrierPickupAlreadyRecorded || record.Key != tail.Key || len(fixture.pickups.rows) != 1 {
+			t.Fatalf("同内容 = %s，行数 %d", replay.Outcome(), len(fixture.pickups.rows))
+		}
+	})
+
+	t.Run("a different reading", func(t *testing.T) {
+		fixture, tail := formOnTrackingFact(t)
+		command := trackingPickupCommand(t)
+		command.ExpressesControl = false
+		assertConflictLeavesTheChain(t, fixture, fixture.judge(t, command), tail)
+	})
+
+	t.Run("a different carrier", func(t *testing.T) {
+		fixture, tail := formOnTrackingFact(t)
+		command := trackingPickupCommand(t)
+		command.SubjectReference = "party/carrier-y"
+		assertConflictLeavesTheChain(t, fixture, fixture.judge(t, command), tail)
+	})
+
+	t.Run("a different business time given with the evidence", func(t *testing.T) {
+		// 业务时间只在来源不是轨迹事实时由命令给；轨迹事实那一代的有效时间改判会签新版本，同一依据下按构造相同。
+		fixture := newCarrierPickupFixture(t, carrierX(t))
+		scan := trackingPickupCommand(t)
+		scan.Source, scan.EvidenceReference, scan.EvidenceVersion = domain.CarrierDirectPickupScan, "SCAN-1", "v1"
+		scan.OccurredAt = carrierPickupEffectiveAt
+		formed := fixture.judge(t, scan)
+		tail, _ := formed.Record()
+		if formed.Outcome() != application.CarrierPickupFormedOutcome {
+			t.Fatalf("前置：outcome = %s，期望 PICKUP_FORMED", formed.Outcome())
+		}
+		if same := fixture.judge(t, scan); same.Outcome() != application.CarrierPickupAlreadyRecorded {
+			t.Fatalf("同一时刻 = %s，期望 ALREADY_RECORDED", same.Outcome())
+		}
+		later := scan
+		later.OccurredAt = carrierPickupEffectiveAt.Add(time.Minute)
+		assertConflictLeavesTheChain(t, fixture, fixture.judge(t, later), tail)
+	})
+
+	t.Run("on a voided tail", func(t *testing.T) {
+		fixture := newCarrierPickupFixture(t, carrierX(t))
+		fixture.addTrackingFact(t, "EXTF-1", "EXTV-1", "PCL-1", carrierPickupEffectiveAt, "")
+		fixture.judge(t, trackingPickupCommand(t))
+		fixture.addTrackingFact(t, "EXTF-1", "EXTV-2", "PCL-1", carrierPickupEffectiveAt, "EXTV-1")
+		voiding := trackingPickupCommand(t)
+		voiding.EvidenceVersion = "EXTV-2"
+		voiding.ExpressesControl = false
+		voided := fixture.judge(t, voiding)
+		tail, _ := voided.Record()
+		if voided.Outcome() != application.CarrierPickupVoidedOutcome {
+			t.Fatalf("前置：outcome = %s，期望 PICKUP_VOIDED", voided.Outcome())
+		}
+		if replay := fixture.judge(t, voiding); replay.Outcome() != application.CarrierPickupAlreadyRecorded {
+			t.Fatalf("失效那条原样重放 = %s，期望 ALREADY_RECORDED", replay.Outcome())
+		}
+		reread := voiding
+		reread.ExpressesControl = true
+		assertConflictLeavesTheChain(t, fixture, fixture.judge(t, reread), tail)
+	})
+}
+
+// Covers: 票 operator-channel/20 判断项——命令以名称素材指名承运主体、链尾经「待确认 → 身份登记后凭同一依据形成」到了
+// 已形成，那条原命令原样重放仍答`已在册`。已形成版本上没有名称素材（它只在待确认版本上），素材与在册身份的对应归
+// party-commercial，本上下文现算不出来；所以命令只给素材时主体轴不参与比对，读法与业务时间照比。
+func TestTheOriginalNameMaterialCommandStillReplaysAfterThePendingChainForms(t *testing.T) {
+	fixture := newCarrierPickupFixture(t, carrierX(t))
+	fixture.addTrackingFact(t, "EXTF-1", "EXTV-1", "PCL-1", carrierPickupEffectiveAt, "")
+	byName := trackingPickupCommand(t)
+	byName.SubjectKind, byName.SubjectReference, byName.NameMaterial = domain.CarrierSubjectKindInvalid, "", "Carrier X Ltd"
+	if pending := fixture.judge(t, byName); pending.Outcome() != application.CarrierPickupPendingOutcome {
+		t.Fatalf("前置：outcome = %s，期望 PICKUP_PENDING", pending.Outcome())
+	}
+	if formed := fixture.judge(t, trackingPickupCommand(t)); formed.Outcome() != application.CarrierPickupFormedOutcome {
+		t.Fatalf("前置：凭在册引用再来 = %s，期望 PICKUP_FORMED", formed.Outcome())
+	}
+
+	if replay := fixture.judge(t, byName); replay.Outcome() != application.CarrierPickupAlreadyRecorded || len(fixture.pickups.rows) != 2 {
+		t.Fatalf("素材原命令重放 = %s，行数 %d，期望 ALREADY_RECORDED", replay.Outcome(), len(fixture.pickups.rows))
+	}
+	reread := byName
+	reread.ExpressesControl = false
+	if conflict := fixture.judge(t, reread); conflict.Outcome() != application.CarrierPickupContentConflict {
+		t.Fatalf("素材命令改读法 = %s，期望 CONTENT_CONFLICT", conflict.Outcome())
+	}
+}
+
 // Covers: ADR-0135 决定四「非首次」——对象已凭场外揽收进段时，新到的承运证据不构成首次有效收寄、不落版本、不发意图。
 func TestEvidenceForAnObjectAlreadyUnderControlIsNotAFirstPickup(t *testing.T) {
 	fixture := newCarrierPickupFixture(t, carrierX(t))

@@ -1,12 +1,14 @@
 package application_test
 
 import (
+	"context"
 	"errors"
 	"testing"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
 // closureFixture 在结束参与那套夹具上多挂一个关段编排：关段的前提正是那套夹具造得出来的
@@ -153,6 +155,70 @@ func TestClosingAnAlreadyClosedSegmentIsItsOwnAnswer(t *testing.T) {
 	if !closedAt.Equal(segmentClosureDeclaredAt) {
 		t.Fatalf("第二次声明改写了第一次的关闭时刻：%v", closedAt)
 	}
+	// 票 operator-channel/20：`早已关闭`带回在册的关闭时刻，异时刻重投的调用方自己比得出差异。
+	if echoed, present := result.ClosedAt(); !present || !echoed.Equal(segmentClosureDeclaredAt) {
+		t.Fatalf("早已关闭应带回在册关闭时刻 %v，实得 %v（%v）", segmentClosureDeclaredAt, echoed, present)
+	}
+}
+
+// racingCloser 在窄口落库那一刻让另一方先关上同一个段：编排读回时段还开着、领域判得过，窄口却答`早已关闭`。
+// 赢家的关闭时刻按 winnerAt 落库；readBackErr 非空时赢家落库之后读口随即不通。
+type racingCloser struct {
+	*segmentRegistryDouble
+	winnerAt    time.Time
+	readBackErr error
+}
+
+func (double *racingCloser) CloseSegment(ctx context.Context, key ports.FulfillmentSegmentKey, closedAt time.Time) (ports.SegmentCloseOutcome, error) {
+	if _, err := double.segmentRegistryDouble.CloseSegment(ctx, key, double.winnerAt); err != nil {
+		return ports.SegmentCloseOutcomeInvalid, err
+	}
+	double.findErr = double.readBackErr
+	return double.segmentRegistryDouble.CloseSegment(ctx, key, closedAt)
+}
+
+// 票 operator-channel/20：并发下窄口答`早已关闭`时照建派送任务口并发输家的先例读回赢家，带回的是赢家的时刻，
+// 不是本次命令的；读回不通按该处读失败的既有答复作答（未决）。
+func TestAConcurrentlyClosedSegmentEchoesTheWinnersClosingTime(t *testing.T) {
+	winnerAt := segmentClosureDeclaredAt.Add(-time.Minute)
+	newRacing := func(t *testing.T, readBackErr error) (*closureFixture, *application.CloseFulfillmentSegmentHandler) {
+		t.Helper()
+		fixture := newClosureFixture(t)
+		fixture.twoMemberSegment(t)
+		fixture.endBoth(t)
+		closer := application.NewCloseFulfillmentSegmentHandler(application.CloseFulfillmentSegmentDeps{
+			Segments: &racingCloser{segmentRegistryDouble: fixture.segments, winnerAt: winnerAt, readBackErr: readBackErr},
+		})
+		return fixture, closer
+	}
+
+	t.Run("the winner is read back", func(t *testing.T) {
+		_, closer := newRacing(t, nil)
+		result, err := closer.Close(t.Context(), closeCommand(t))
+		if err != nil {
+			t.Fatalf("关段：%v", err)
+		}
+		if got := result.Outcome(); got != application.SegmentAlreadyClosed {
+			t.Fatalf("outcome = %s, want SegmentAlreadyClosed", got)
+		}
+		if echoed, present := result.ClosedAt(); !present || !echoed.Equal(winnerAt) {
+			t.Fatalf("应带回赢家的关闭时刻 %v，实得 %v（%v）", winnerAt, echoed, present)
+		}
+	})
+
+	t.Run("reading the winner back fails", func(t *testing.T) {
+		_, closer := newRacing(t, errors.New("registry down"))
+		result, err := closer.Close(t.Context(), closeCommand(t))
+		if err != nil {
+			t.Fatalf("关段：%v", err)
+		}
+		if got := result.Outcome(); got != application.SegmentCloseUndecided || result.ContinuationReference() == "" {
+			t.Fatalf("outcome = %s / %q, want SegmentCloseUndecided 带续办引用", got, result.ContinuationReference())
+		}
+		if _, present := result.ClosedAt(); present {
+			t.Fatal("未决不应带关闭时刻")
+		}
+	})
 }
 
 func TestClosingASegmentThatWasNeverEstablishedIsRefused(t *testing.T) {

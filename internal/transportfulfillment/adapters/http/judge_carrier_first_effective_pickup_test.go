@@ -204,6 +204,28 @@ func TestPendingAndNotAPickupAnswer200WithDistinctOutcomes(t *testing.T) {
 	}
 }
 
+// Covers: 票 operator-channel/20——同一依据改读法再来是`内容冲突`：形成了的答案（200，不新落版本），`pickup` 带回链尾那一版。
+func TestAContentConflictAnswers200WithTheRecordedTail(t *testing.T) {
+	_, judge, _ := newCarrierPickupHTTPFixture(t, true)
+	if recorder := postCarrierPickupJudgment(t, judge, scanPickupBody); recorder.Code != http.StatusCreated {
+		t.Fatalf("前置：status = %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	recorder := postCarrierPickupJudgment(t, judge, strings.Replace(scanPickupBody, `"expressesControl":true`, `"expressesControl":false`, 1))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("status = %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	var body struct {
+		Outcome string                                     `json:"outcome"`
+		Pickup  *struct{ Result, CarrierReference string } `json:"pickup"`
+	}
+	if err := json.Unmarshal(recorder.Body.Bytes(), &body); err != nil {
+		t.Fatalf("译响应：%v", err)
+	}
+	if body.Outcome != "CONTENT_CONFLICT" || body.Pickup == nil || body.Pickup.Result != "FORMED" || body.Pickup.CarrierReference != "party/carrier-x" {
+		t.Fatalf("内容冲突响应：%+v", body)
+	}
+}
+
 // Covers: 载荷严格解码——未知键（含自报租户）拒 400、来源词集外拒 400、时刻解不出拒 400；GET 用 POST 405；未配置 Intake 403 不读体。
 func TestCarrierPickupJudgmentTransportDiscipline(t *testing.T) {
 	_, judge, _ := newCarrierPickupHTTPFixture(t, true)

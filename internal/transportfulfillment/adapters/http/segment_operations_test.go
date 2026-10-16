@@ -338,6 +338,33 @@ func TestSegmentClosureRunsTheLifecycleSequence(t *testing.T) {
 	}
 }
 
+// Covers: 票 operator-channel/20——带着另一个时刻重投关段，`SEGMENT_ALREADY_CLOSED` 回显在册的关闭时刻（RFC 3339 UTC），
+// 不回显本次给的；真把段关上的那一次不带这一格。
+func TestAnAlreadyClosedSegmentEchoesItsRecordedClosingTime(t *testing.T) {
+	fixture := newSegmentOperationsFixture(t, "parcel-1", "parcel-2")
+	fixture.segments.endAllParticipations(t, "tenant-1", "segment-1", time.Date(2026, 9, 5, 12, 30, 0, 0, time.UTC))
+	closed := postTo(t, fixture.close, "/transport-fulfillment-segment-closures", map[string]any{"segment": "segment-1", "closedAt": "2026-09-05T13:00:00Z"})
+	var first map[string]any
+	if err := json.Unmarshal(closed.Body.Bytes(), &first); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if _, echoed := first["closedAt"]; closed.Code != http.StatusCreated || echoed {
+		t.Fatalf("首次关段：status = %d body = %s，want 201 且不带 closedAt", closed.Code, closed.Body.String())
+	}
+
+	replay := postTo(t, fixture.close, "/transport-fulfillment-segment-closures", map[string]any{"segment": "segment-1", "closedAt": "2026-09-05T16:00:00+08:00"})
+	var view struct {
+		Outcome  string `json:"outcome"`
+		ClosedAt string `json:"closedAt"`
+	}
+	if err := json.Unmarshal(replay.Body.Bytes(), &view); err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if replay.Code != http.StatusOK || view.Outcome != "SEGMENT_ALREADY_CLOSED" || view.ClosedAt != "2026-09-05T13:00:00Z" {
+		t.Fatalf("status = %d body = %s，want 200 SEGMENT_ALREADY_CLOSED closedAt=2026-09-05T13:00:00Z", replay.Code, replay.Body.String())
+	}
+}
+
 // Covers: 明确终止参与是三来源里唯一走写面的一路——201 PARTICIPATION_ENDED；重放 PARTICIPATION_ALREADY_ENDED；
 // 对象不在段内 OBJECT_NOT_IN_SEGMENT。
 func TestParticipationTerminationEndsOneObjectOnly(t *testing.T) {

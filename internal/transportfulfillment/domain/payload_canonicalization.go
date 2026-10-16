@@ -360,6 +360,42 @@ func CanonicalizeRegulatoryDispositionPayload(basis string, movementAction strin
 	})
 }
 
+// CanonicalizeCarrierFirstEffectivePickupPayload 定形「判断实际承运商首次有效收寄」（票 operator-channel/20 的裁定）。
+// 读法表达取得控制时，承运主体两键与业务时间连同读法构成内容；不表达时只有读法——失效版本上没有主体与时间，
+// 命令里给了也不构成内容。租户、对象与依据是身份，进段三格同 CanonicalizeHandoverPayload 不进摘要；名称素材也不进：
+// 它只在待确认版本上，而重放比对只发生在非待确认链尾上，已形成版本上没有它可算。
+//
+// 业务时间按微秒取，与别的口照 canonicalInstant 取纳秒不同：这一口不存摘要、两侧都从本体现算，而在册那一份只到微秒
+// （对真库实测），按纳秒比会把同一条带纳秒时刻的命令的重放判成冲突。别的口存的是落库前算好的摘要，不受此影响，
+// 也因此 canonicalInstant 本身不能改——改了就与已存摘要对不上。
+func CanonicalizeCarrierFirstEffectivePickupPayload(expressesControl bool, subject CarrierSubject, occurredAt time.Time) ([]byte, string, error) {
+	if !expressesControl {
+		return marshalPayload(struct {
+			Canonicalization string `json:"canonicalization"`
+			Face             string `json:"face"`
+			ExpressesControl bool   `json:"expresses_control"`
+		}{
+			Canonicalization: payloadCanonicalizationVersion,
+			Face:             "JUDGE_CARRIER_FIRST_EFFECTIVE_PICKUP",
+		})
+	}
+	return marshalPayload(struct {
+		Canonicalization string `json:"canonicalization"`
+		Face             string `json:"face"`
+		ExpressesControl bool   `json:"expresses_control"`
+		SubjectKind      string `json:"subject_kind"`
+		SubjectReference string `json:"subject_reference"`
+		OccurredAt       string `json:"occurred_at"`
+	}{
+		Canonicalization: payloadCanonicalizationVersion,
+		Face:             "JUDGE_CARRIER_FIRST_EFFECTIVE_PICKUP",
+		ExpressesControl: true,
+		SubjectKind:      subject.Kind().String(),
+		SubjectReference: subject.Reference(),
+		OccurredAt:       canonicalInstant(occurredAt.Truncate(time.Microsecond)),
+	})
+}
+
 // CanonicalizeEstablishSchedulePayload 定形「建立班期」。
 func CanonicalizeEstablishSchedulePayload(direction string, departsAt time.Time) ([]byte, string, error) {
 	return marshalPayload(struct {

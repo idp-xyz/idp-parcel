@@ -3,6 +3,7 @@ package tfhttp
 import (
 	"context"
 	"net/http"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
@@ -71,9 +72,12 @@ func NewCloseFulfillmentSegmentEndpoint(intake SegmentClosureIntake, closer Segm
 // segmentClosureResponse 是关段口的封闭响应形状。`SEGMENT_STILL_ACTIVE` 与 `INPUT_NOT_ACCEPTED`、
 // `SEGMENT_ALREADY_CLOSED` 与 `SEGMENT_CLOSED` 各自成格：续办动作两两不同（去结束剩下的参与 / 改输入 /
 // 什么都不做 / 无事），传输层不合并。
+//
+// `closedAt` 只随`早已关闭`出现，是在册那一份的关闭时刻、不是本次命令给的（票 operator-channel/20），RFC 3339 UTC。
 type segmentClosureResponse struct {
 	Outcome               string `json:"outcome"`
 	Segment               string `json:"segment,omitempty"`
+	ClosedAt              string `json:"closedAt,omitempty"`
 	ContinuationReference string `json:"continuationReference,omitempty"`
 }
 
@@ -89,6 +93,9 @@ func writeSegmentClosureOutcome(response http.ResponseWriter, answer segmentClos
 	}
 	if answer.result.Outcome() != application.SegmentCloseNotAccepted {
 		body.Segment = answer.segment
+	}
+	if closedAt, present := answer.result.ClosedAt(); present {
+		body.ClosedAt = closedAt.UTC().Format(time.RFC3339)
 	}
 	// ADR-0022：只有这次声明真把段关上了用 201；早已关闭、仍有在场、不在册、未受理、未决都是形成了的答案（200）。
 	status := http.StatusOK

@@ -65,10 +65,17 @@ type CloseFulfillmentSegmentCommand struct {
 type CloseFulfillmentSegmentResult struct {
 	outcome      SegmentCloseOutcome
 	continuation string
+	closedAt     time.Time
 }
 
 func (result CloseFulfillmentSegmentResult) Outcome() SegmentCloseOutcome {
 	return result.outcome
+}
+
+// ClosedAt 只在`早已关闭`时给出在册的关闭时刻（票 operator-channel/20）。段是单向的，第二个时刻没有落点，所以这一格
+// 不设冲突；回显它是让带着另一个时刻重投的调用方自己比得出差异——与建派送任务口交回原任务同理。
+func (result CloseFulfillmentSegmentResult) ClosedAt() (time.Time, bool) {
+	return result.closedAt, !result.closedAt.IsZero()
 }
 
 // ContinuationReference 只在`未决`时非空。
@@ -118,7 +125,7 @@ func (handler *CloseFulfillmentSegmentHandler) Close(
 	closed, err := record.Segment.CloseSegment(command.ClosedAt)
 	switch {
 	case errors.Is(err, domain.ErrSegmentClosed):
-		return CloseFulfillmentSegmentResult{outcome: SegmentAlreadyClosed}, nil
+		return segmentAlreadyClosed(record.Segment), nil
 	case errors.Is(err, domain.ErrSegmentStillActive):
 		// 一个仍在控制中的对象足以让段继续存在；这是正当结果，登记册一动不动。
 		return CloseFulfillmentSegmentResult{outcome: SegmentStillHasActiveParticipations}, nil
@@ -135,11 +142,21 @@ func (handler *CloseFulfillmentSegmentHandler) Close(
 	case ports.SegmentClosed:
 		return CloseFulfillmentSegmentResult{outcome: SegmentClosedNow}, nil
 	case ports.SegmentAlreadyClosed:
-		// 并发下另一方先关：业务答案，不是本次失败。
-		return CloseFulfillmentSegmentResult{outcome: SegmentAlreadyClosed}, nil
+		// 并发下另一方先关：业务答案，不是本次失败。读回赢家带回它的关闭时刻，不拿本次命令的时刻冒充在册那一份
+		// （同 OpenDispatchTaskHandler.Open 的并发输家）。
+		winner, found, err := handler.deps.Segments.FindByKey(ctx, key)
+		if err != nil || !found {
+			return segmentCloseUndecided(command), nil
+		}
+		return segmentAlreadyClosed(winner.Segment), nil
 	default:
 		return segmentCloseUndecided(command), nil
 	}
+}
+
+func segmentAlreadyClosed(segment domain.ActualFulfillmentSegment) CloseFulfillmentSegmentResult {
+	closedAt, _ := segment.ClosedAt()
+	return CloseFulfillmentSegmentResult{outcome: SegmentAlreadyClosed, closedAt: closedAt}
 }
 
 func segmentCloseUndecided(command CloseFulfillmentSegmentCommand) CloseFulfillmentSegmentResult {
