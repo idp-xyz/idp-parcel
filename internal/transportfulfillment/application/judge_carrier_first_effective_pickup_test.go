@@ -820,3 +820,52 @@ func TestUnavailableDependenciesAnswerUndecided(t *testing.T) {
 		t.Fatalf("身份读口不可用 = %s / %s", result.Outcome(), result.UndecidedReason())
 	}
 }
+
+// Covers: 票 operator-channel/27——读法为不表达的失效命令带了承运主体引用、没带种类：首判走更正那条路只看读法，答
+// `已失效`；原样重放落在同一依据的失效链尾上，比的也只该是读法（票 20 裁定「读法为不表达时只有读法……命令里给了也
+// 不构成内容」），答`已在册`带回链尾，不因命令一侧的主体立不起来而答`输入未受理`。
+func TestAVoidingCommandWithAReferenceButNoKindReplaysAsAlreadyRecorded(t *testing.T) {
+	fixture := newCarrierPickupFixture(t, carrierX(t))
+	fixture.addTrackingFact(t, "EXTF-1", "EXTV-1", "PCL-1", carrierPickupEffectiveAt, "")
+	fixture.judge(t, trackingPickupCommand(t))
+	fixture.addTrackingFact(t, "EXTF-1", "EXTV-2", "PCL-1", carrierPickupEffectiveAt, "EXTV-1")
+	voiding := trackingPickupCommand(t)
+	voiding.EvidenceVersion = "EXTV-2"
+	voiding.ExpressesControl = false
+	voiding.SubjectKind = domain.CarrierSubjectKindInvalid
+
+	first := fixture.judge(t, voiding)
+	tail, _ := first.Record()
+	if first.Outcome() != application.CarrierPickupVoidedOutcome {
+		t.Fatalf("首判 = %s，期望 PICKUP_VOIDED", first.Outcome())
+	}
+	replay := fixture.judge(t, voiding)
+	record, present := replay.Record()
+	if replay.Outcome() != application.CarrierPickupAlreadyRecorded || !present || record.Key != tail.Key {
+		t.Fatalf("原样重放 = %s（带链尾 %v），期望 ALREADY_RECORDED 带回失效链尾", replay.Outcome(), present)
+	}
+	if len(fixture.pickups.rows) != 2 || len(fixture.handoff.intents) != 2 {
+		t.Fatalf("重放不落版本、不发意图：行数 %d，意图 %d", len(fixture.pickups.rows), len(fixture.handoff.intents))
+	}
+}
+
+// Covers: 票 operator-channel/27 一并修的非阻断——主体轴免比只限「以名称素材指名」（票 20 判断项）。表达控制却引用与
+// 素材都不给的命令，首判答`输入未受理`；落在同一依据的已形成链尾上也答`输入未受理`，不因链尾在册就读成重放。
+func TestAControlCommandWithNoSubjectAtAllIsNotAcceptedOnTheSameBasisEither(t *testing.T) {
+	fixture := newCarrierPickupFixture(t, carrierX(t))
+	fixture.addTrackingFact(t, "EXTF-1", "EXTV-1", "PCL-1", carrierPickupEffectiveAt, "")
+	bare := trackingPickupCommand(t)
+	bare.SubjectKind, bare.SubjectReference, bare.NameMaterial = domain.CarrierSubjectKindInvalid, "", ""
+	if first := fixture.judge(t, bare); first.Outcome() != application.CarrierPickupNotAccepted {
+		t.Fatalf("首判 = %s，期望 INPUT_NOT_ACCEPTED", first.Outcome())
+	}
+	if formed := fixture.judge(t, trackingPickupCommand(t)); formed.Outcome() != application.CarrierPickupFormedOutcome {
+		t.Fatalf("前置：outcome = %s，期望 PICKUP_FORMED", formed.Outcome())
+	}
+	if again := fixture.judge(t, bare); again.Outcome() != application.CarrierPickupNotAccepted {
+		t.Fatalf("同一依据上 = %s，期望 INPUT_NOT_ACCEPTED", again.Outcome())
+	}
+	if len(fixture.pickups.rows) != 1 {
+		t.Fatalf("链不该动：行数 %d", len(fixture.pickups.rows))
+	}
+}

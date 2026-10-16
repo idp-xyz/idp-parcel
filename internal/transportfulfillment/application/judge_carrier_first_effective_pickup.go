@@ -357,8 +357,11 @@ func (handler *JudgeCarrierFirstEffectivePickupHandler) formOrHold(
 // 本体现算，同 customs-compliance 凭证登记口的 CCC-1 先例，没有无版本的旧摘要要认。链尾一侧的读法由结果反推（已形成 ↔
 // 表达，失效 ↔ 不表达），主体与业务时间取版本上的。
 //
-// 命令只给名称素材时主体轴不参与，命令一侧取链尾的在册主体：已形成版本上没有素材，素材对应哪个在册身份归
-// party-commercial，本上下文现算不出——若照比，「待确认 → 身份登记后凭同一依据形成」之后那条原命令的重放会被判成冲突。
+// 命令一侧的主体与首判 resolveSubject 同一口径，只在读法表达控制时才立（票 operator-channel/27）：读法不表达时 TFC-1 本就
+// 只有读法，命令里给了主体也不构成内容——若照样去立，失效命令带引用不带种类时首判过得去（更正那条路只看读法）、重放
+// 却答未受理。表达控制时：给了引用按引用立；只给名称素材时主体轴不参与，命令一侧取链尾的在册主体——已形成版本上没有
+// 素材，素材对应哪个在册身份归 party-commercial，本上下文现算不出，若照比，「待确认 → 身份登记后凭同一依据形成」之后
+// 那条原命令的重放会被判成冲突；引用与素材都不给，首判答未受理，这里也答未受理。
 func replayOrConflictOnTheSameBasis(
 	command JudgeCarrierFirstEffectivePickupCommand,
 	current ports.CarrierFirstEffectivePickupRecord,
@@ -371,12 +374,17 @@ func replayOrConflictOnTheSameBasis(
 		return JudgeCarrierFirstEffectivePickupResult{}, err
 	}
 	requestedCarrier := recordedCarrier
-	if strings.TrimSpace(command.SubjectReference) != "" {
-		claimed, err := domain.NewCarrierSubject(command.SubjectKind, command.SubjectReference)
-		if err != nil {
+	if command.ExpressesControl {
+		switch {
+		case strings.TrimSpace(command.SubjectReference) != "":
+			claimed, err := domain.NewCarrierSubject(command.SubjectKind, command.SubjectReference)
+			if err != nil {
+				return JudgeCarrierFirstEffectivePickupResult{outcome: CarrierPickupNotAccepted}, nil
+			}
+			requestedCarrier = claimed
+		case strings.TrimSpace(command.NameMaterial) == "":
 			return JudgeCarrierFirstEffectivePickupResult{outcome: CarrierPickupNotAccepted}, nil
 		}
-		requestedCarrier = claimed
 	}
 	_, requested, err := domain.CanonicalizeCarrierFirstEffectivePickupPayload(command.ExpressesControl, requestedCarrier, input.occurredAt)
 	if err != nil {

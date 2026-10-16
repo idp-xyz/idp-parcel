@@ -252,3 +252,21 @@ func TestCarrierPickupJudgmentTransportDiscipline(t *testing.T) {
 		t.Fatalf("未配置 Intake 应 403，实得 %d", recorder.Code)
 	}
 }
+
+// Covers: 票 operator-channel/27 的线上那一格——失效载荷带 carrierReference、不带 carrierKind：首判 201 PICKUP_VOIDED，
+// 原样重放 200 ALREADY_RECORDED（不是 INPUT_NOT_ACCEPTED）。载荷译装把引用无条件写进命令，这一格因此从 HTTP 可达。
+func TestAVoidingPayloadWithAReferenceButNoKindReplaysAsAlreadyRecorded(t *testing.T) {
+	_, judge, _ := newCarrierPickupHTTPFixture(t, true)
+	if recorder := postCarrierPickupJudgment(t, judge, scanPickupBody); recorder.Code != http.StatusCreated {
+		t.Fatalf("前置：status = %d body=%s", recorder.Code, recorder.Body.String())
+	}
+	voiding := `{"object":"PCL-1","source":"CARRIER_PICKUP_SCAN","evidenceReference":"SCAN-1","evidenceVersion":"v2","correctsSourceVersion":"v1","expressesControl":false,"occurredAt":"2026-09-10T09:00:00Z","carrierReference":"party/carrier-x"}`
+	first := postCarrierPickupJudgment(t, judge, voiding)
+	if first.Code != http.StatusCreated || !strings.Contains(first.Body.String(), `"outcome":"PICKUP_VOIDED"`) {
+		t.Fatalf("首判：%d %s", first.Code, first.Body.String())
+	}
+	replay := postCarrierPickupJudgment(t, judge, voiding)
+	if replay.Code != http.StatusOK || !strings.Contains(replay.Body.String(), `"outcome":"ALREADY_RECORDED"`) || !strings.Contains(replay.Body.String(), `"pickup"`) {
+		t.Fatalf("原样重放：%d %s", replay.Code, replay.Body.String())
+	}
+}
