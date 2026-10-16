@@ -11,7 +11,7 @@
 | collectionremittance | 22 | 10 | 4 | 6 | 0 | 3 |
 | customscompliance | 106 | 105 | 20 | 42 | 10 | 15 |
 | networkrouting | 74 | 72 | 9 | 13 | 2 | 7 |
-| nodeoperations | 35 | 28 | 4 | 10 | 4 | 7 |
+| nodeoperations | 36 | 29 | 4 | 10 | 4 | 7 |
 | parcelpricing | 130 | 117 | 17 | 16 | 1 | 23 |
 | parcelshipment | 200 | 193 | 20 | 36 | 10 | 18 |
 | partycommercial | 159 | 169 | 13 | 40 | 1 | 38 |
@@ -20,11 +20,11 @@
 | settlementaccounting | 178 | 124 | 29 | 59 | 11 | 9 |
 | transportfulfillment | 153 | 139 | 27 | 36 | 11 | 29 |
 | visibilityexception | 100 | 97 | 11 | 30 | 8 | 11 |
-| **合计** | 1233 | 1132 | 159 | 299 | 59 | 165 |
+| **合计** | 1234 | 1133 | 159 | 299 | 59 | 165 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 80、测试 129。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 80、测试 130。
 
-## 跨上下文消费缝：39 组，103 个生产文件
+## 跨上下文消费缝：40 组，104 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -37,6 +37,7 @@
 | networkrouting | parcelshipment | 3 |
 | networkrouting | partycommercial | 4 |
 | nodeoperations | accessidentity | 1 |
+| nodeoperations | parcelshipment | 1 |
 | nodeoperations | transportfulfillment | 1 |
 | parcelpricing | accessidentity | 2 |
 | parcelpricing | parcelshipment | 1 |
@@ -129,7 +130,7 @@
 | visibilityexception | 8 |
 | **合计** | 26 |
 
-## 端口：声明 472 个；基线口径缺 30，精确口径缺 2
+## 端口：声明 473 个；基线口径缺 29，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
@@ -138,7 +139,6 @@
 - `nodeoperations.ParcelIdentityView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/cmd/parcel-api.unconfiguredParcelIdentityView）
 - `parcelpricing.PriceCardApprovalDutyRuleView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/parcelpricing/adapters/postgres.PriceCardApprovalDutyRules）
 - `parcelshipment.ContinuedAttemptRegisterView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres.ContinuedAttemptRegisters）
-- `parcelshipment.CurrentFinalView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres.FinalOutcomes）
 - `parcelshipment.LabelChannelGateway` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/cmd/parcel-api.unconfiguredLabelChannelGateway）
 - `parcelshipment.ResponsibilityStartView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres.IntakeAdoptions）
 - `partycommercial.ApprovalDutyRuleView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres.ApprovalDutyRules）
