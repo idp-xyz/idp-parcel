@@ -84,9 +84,7 @@ func TestDecodeSampleTemplateLandsMarkersAndClaims(t *testing.T) {
 	if scanOnly.Command.Claim != application.ScanOnlyObservation || scanOnly.Operator != "SYN-CLERK-B" {
 		t.Fatalf("SCAN_ONLY 行失真：%+v", scanOnly)
 	}
-	if len(scanOnly.Command.ServiceMarkers) != 0 {
-		t.Fatalf("模板不得往 ServiceMarkers 里放东西：%v", scanOnly.Command.ServiceMarkers)
-	}
+	// 模板不可能往命令里放服务结果标记：命令上没有那一格，标记由收寄编排在身份唯一成立时向 PS 取（票 operator-channel/25）。
 }
 
 // TestDecodeTemplateToleratesBOMAndColumnOrder 证 Excel「CSV UTF-8」的 BOM 不算进第一列名，

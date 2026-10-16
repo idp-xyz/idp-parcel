@@ -74,10 +74,7 @@ type ReceiveDeliveredUnitCommand struct {
 	Claim       ReceptionClaimKind
 	Evidence    domain.ReceptionEvidenceReference
 	Refusal     string
-	// ServiceMarkers 是 PS 服务结果引用（已取消/终局/无路由/受限），由接入层查好带入。
-	// 编排原样标记不判断——它们不阻止接收，只限制后续方向性作业（AT-NO-020/021/022）。
-	ServiceMarkers []string
-	OccurredAt     time.Time
+	OccurredAt  time.Time
 }
 
 type ReceiveDeliveredUnitResult struct {
@@ -106,11 +103,13 @@ func (result ReceiveDeliveredUnitResult) IntakeHandoffReference() string {
 }
 
 type ReceiveDeliveredUnitDeps struct {
-	Identity   ports.ParcelIdentityView
-	Receptions ports.ReceptionStore
-	Versions   ports.IntakeIdentityFactory
-	Downstream ports.NodeIntakeHandoff
-	Clock      ports.Clock
+	Identity ports.ParcelIdentityView
+	// ServiceResults 在身份唯一成立时被问一次，答出的取消与终局落成收寄记录上的服务结果标记（票 operator-channel/25）。
+	ServiceResults ports.ParcelServiceResultView
+	Receptions     ports.ReceptionStore
+	Versions       ports.IntakeIdentityFactory
+	Downstream     ports.NodeIntakeHandoff
+	Clock          ports.Clock
 }
 
 type ReceiveDeliveredUnitHandler struct {
@@ -168,23 +167,21 @@ func (handler *ReceiveDeliveredUnitHandler) Handle(
 		// 明确拒收且未取得控制：未收寄结果带原因，不形成委托拒绝、取消或终局
 		// （AT-NO-024）。
 		record := ports.ReceptionRecord{
-			Key:            key,
-			ContentDigest:  digest,
-			Kind:           ports.RecordIntakeNotFormed,
-			RefusalReason:  command.Refusal,
-			ServiceMarkers: command.ServiceMarkers,
-			RecordedAt:     handler.deps.Clock.Now(),
+			Key:           key,
+			ContentDigest: digest,
+			Kind:          ports.RecordIntakeNotFormed,
+			RefusalReason: command.Refusal,
+			RecordedAt:    handler.deps.Clock.Now(),
 		}
 		return handler.commit(ctx, record)
 	case ScanOnlyObservation:
 		// 只有到站扫描，没有明确接收或控制证据：判断待确认、不建立控制；扫描来源
 		// 已随记录保全（AT-NO-023）。
 		record := ports.ReceptionRecord{
-			Key:            key,
-			ContentDigest:  digest,
-			Kind:           ports.RecordReceptionUndecided,
-			ServiceMarkers: command.ServiceMarkers,
-			RecordedAt:     handler.deps.Clock.Now(),
+			Key:           key,
+			ContentDigest: digest,
+			Kind:          ports.RecordReceptionUndecided,
+			RecordedAt:    handler.deps.Clock.Now(),
 		}
 		return handler.commit(ctx, record)
 	default:
@@ -204,6 +201,22 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 	if err != nil {
 		return ReceiveDeliveredUnitResult{outcome: ReceptionUndecided,
 			continuation: receptionContinuation("IDENTITY_VIEW_UNAVAILABLE", command.SourceID)}, nil
+	}
+	// 身份唯一成立才有可问的包裹：向 PS 取它此刻的服务结果，落成标记（UC-NO-002 第 7 步；票 operator-channel/25）。
+	// 读不动与身份核对读不动同一种处理——停在待确认、不落册；问在签发版本之前，免得一次注定不落册的尝试消耗版本号。
+	var markers []string
+	if len(candidates) == 1 {
+		if handler.deps.ServiceResults == nil {
+			// 装配缺件不是「没有限制」：停下说清楚，不把没问过的包裹记成不带标记。
+			return ReceiveDeliveredUnitResult{outcome: ReceptionUndecided,
+				continuation: receptionContinuation("SERVICE_RESULT_VIEW_UNCONFIGURED", command.SourceID)}, nil
+		}
+		results, err := handler.deps.ServiceResults.FindParcelServiceResults(ctx, command.TenantID, candidates[0])
+		if err != nil {
+			return ReceiveDeliveredUnitResult{outcome: ReceptionUndecided,
+				continuation: receptionContinuation("SERVICE_RESULT_VIEW_UNAVAILABLE", command.SourceID)}, nil
+		}
+		markers = serviceMarkersOf(results)
 	}
 	version, err := handler.deps.Versions.NextIntakeResultVersion(ctx)
 	if err != nil {
@@ -262,7 +275,7 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 		Control:          control,
 		Candidates:       candidates,
 		IdentityConflict: conflict,
-		ServiceMarkers:   command.ServiceMarkers,
+		ServiceMarkers:   markers,
 		RecordedAt:       handler.deps.Clock.Now(),
 	}
 	return handler.commit(ctx, record)
@@ -334,6 +347,21 @@ func (handler *ReceiveDeliveredUnitHandler) handOff(
 		return ""
 	}
 	return receptionContinuation("NODE_INTAKE_HANDOFF", record.Key.TenantID.String(), record.Key.SourceID)
+}
+
+// serviceMarkersOf 是收寄记录上服务结果标记的封闭词表（票 operator-channel/25 裁定第 2 条）：`CANCELLED/<取消决定>` 与
+// `FINAL/<终局种类>/<终局版本>`，带结果引用与版本（UC-NO-002「服务结果引用」）。「无路由」「受限」不是 PS 的服务结果，
+// 不在这里。顺序固定先取消后终局，同一答复落成同一组标记。可供程序分辨的只有首个 `/` 之前的前缀：终局种类是租户
+// 配置的引用、版本也是引用，两者都可能自带 `/`，尾部是给人与审计看的结果引用，不能再拆回种类与版本。
+func serviceMarkersOf(results ports.ParcelServiceResults) []string {
+	var markers []string
+	if results.Cancellation != "" {
+		markers = append(markers, "CANCELLED/"+results.Cancellation)
+	}
+	if results.FinalKind != "" || results.FinalVersion != "" {
+		markers = append(markers, "FINAL/"+results.FinalKind+"/"+results.FinalVersion)
+	}
+	return markers
 }
 
 func receptionContinuation(parts ...string) string {

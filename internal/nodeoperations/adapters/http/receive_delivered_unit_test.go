@@ -157,6 +157,13 @@ func (intake *bodyIntake) IntakeReception(
 	return command, nil
 }
 
+// noServiceResults 是服务结果读口的替身：PS 对任何包裹都没有取消与终局。本文件证的是传输面，标记的取法另有编排的用例。
+type noServiceResults struct{}
+
+func (noServiceResults) FindParcelServiceResults(context.Context, domain.TenantID, domain.ParcelAssociationReference) (ports.ParcelServiceResults, error) {
+	return ports.ParcelServiceResults{}, nil
+}
+
 type adapterFixture struct {
 	intake   *bodyIntake
 	identity *identityViewDouble
@@ -180,11 +187,12 @@ func newAdapterFixture(t *testing.T) *adapterFixture {
 		handoff: &downstreamDouble{},
 	}
 	handler := application.NewReceiveDeliveredUnitHandler(application.ReceiveDeliveredUnitDeps{
-		Identity:   fixture.identity,
-		Receptions: fixture.store,
-		Versions:   &versionFactoryDouble{},
-		Downstream: fixture.handoff,
-		Clock:      adapterClock{at: time.Date(2026, 9, 5, 10, 0, 0, 0, time.UTC)},
+		Identity:       fixture.identity,
+		ServiceResults: noServiceResults{},
+		Receptions:     fixture.store,
+		Versions:       &versionFactoryDouble{},
+		Downstream:     fixture.handoff,
+		Clock:          adapterClock{at: time.Date(2026, 9, 5, 10, 0, 0, 0, time.UTC)},
 	})
 	fixture.endpoint = nodeopshttp.NewReceiveDeliveredUnitEndpoint(fixture.intake, handler)
 	return fixture

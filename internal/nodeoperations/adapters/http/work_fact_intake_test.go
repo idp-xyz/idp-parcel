@@ -120,9 +120,7 @@ func TestWorkFactReceptionIntakeTranslatesReceptionWithTheAuthenticatedTenantAnd
 	if got := command.Evidence.String(); got != "SYN-EVIDENCE/tally-0001" {
 		t.Fatalf("Evidence = %q, want SYN-EVIDENCE/tally-0001", got)
 	}
-	if len(command.ServiceMarkers) != 0 {
-		t.Fatalf("ServiceMarkers = %v, want 空——服务结果标记不从载荷收，采信它就是采信调用方自报的 PS 结论", command.ServiceMarkers)
-	}
+	// 服务结果标记不从载荷收，也不在命令上：由收寄编排在身份唯一成立时向 PS 取（票 operator-channel/25）。
 }
 
 // Covers: 接收观察的明确拒收与仅扫描——前者带原因、后者带标识，都不带接收证据（与受控批量口同一组形状）。

@@ -1,8 +1,8 @@
 # 25 节点收寄带上 parcel-shipment 的服务结果标记：生产渠道上这一查没人做
 
 Category: bug
-Status: needs-triage——2026-10-16 Claude Code 会话立（票 23 实施中量到）。要先裁三问（见下）再转 ready-for-agent。
-Blocked by: 无
+Status: in-progress——2026-10-16 Claude Code 会话裁三问并认领（用户「yes, do」），分支 `claude-oc25`；裁定见「裁定」。生产上的效果要等身份核对缝接真（[ps-external-mark-relations/01](../../ps-external-mark-relations/issues/01-external-mark-relations-have-no-model-in-parcel-shipment.md)，needs-info，缺排期决定）：那之前明确接收停在`收寄待确认`，走不到取标记这一步。此前 needs-triage——2026-10-16 Claude Code 会话立（票 23 实施中量到）。
+Blocked by: 无——机制半边不挡；生产效果挂在 ps-external-mark-relations/01 上（见 Status）
 父票：无——不属 [psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 的完成判据（那一票只管渠道换真 Intake），是票 10 换口时带过来的业务缺口；不挡任何票
 出处：`internal/nodeoperations/application` 的 `ReceiveDeliveredUnitCommand.ServiceMarkers` 头注；UC-NO-002 的「服务结果引用」一行与 `AT-NO-020`–`022`；[08](./08-isolated-release-of-main-chain-command-faces.md) 的「收寄的服务结果标记留空」；[23](./23-node-operations-isolated-command-intake-retires.md)「实施中量到的」。
 
@@ -18,7 +18,21 @@ Blocked by: 无
 2. **标记词表。** 节点作业这边今天是不透明串数组，没有封闭词表；PS 侧「已取消 / 终局 / 无路由 / 受限」各对应哪个 PS 事实与版本，要在 PS 与 NO 的 CONTEXT 里各写一句。
 3. **读口形状。** PS 今天没有按外部标识答服务结果的读口；新读口归 PS 拥有、NO 经防腐适配器消费，查不动时收寄照常保全、标记格答「未查到」而不是空——空与「查过了、没有限制」要分得开。
 
+## 裁定（2026-10-16，Claude Code 会话；产品策略，没有租户取值）
+
+1. **按什么键查 → 取 (b)，在编排里、身份唯一成立时按包裹查。** 收寄编排本身就经 `ParcelIdentityView` 向 PS 核对身份；恰一个候选时它已经知道是哪一件正式包裹，就在同一步经新端口向 PS 取这件包裹此刻的服务结果。不在 Intake（接入层）查：Intake 只做认证与译装，跨上下文读放进编排，与身份核对同一处、同一种失败处理。待识别（零候选）与身份冲突（多候选）不查——没有可问的包裹；明确拒收与仅扫描两支不经身份核对，也不查。身份后来确认时的补标记归身份关联那一步，本票不做。
+2. **标记词表 → 封闭两种，带结果引用与版本。** `CANCELLED/<取消决定标识>`（PS 有已成立的取消决定）与 `FINAL/<终局种类>/<终局版本>`（PS 有当前有效终局）。UC-NO-002 要的是「结果及版本」的引用，这两种都给得出。「无路由」「受限」不是 PS 的服务结果——UC-NO-002 把它们归「当前限制与路由」那一行（network-routing 与各限制源），不进本票。已接受不是限制，不标。可供程序分辨的只有首个 `/` 之前的前缀：终局种类是租户配置的引用（管理台占位例就带 `/`），版本也可能带，尾部只作结果引用、不再拆回种类与版本。两边 CONTEXT 不用另写：PS 已定义「取消决定」「终局服务结果」两词，NO 已有「已取消、已经终局或当前无有效路由的包裹仍然到站时，节点必须如实保存接收、控制和其他已发生事实」那条不变量；本词表只是那句话在收寄记录上的表示，不是新的领域语言。
+3. **读口形状 → NO 端口 `ParcelServiceResultView`，PS 侧由消费方防腐适配器实现。** 端口归 NO（消费方），实现放 `internal/nodeoperations/adapters/parcelshipment`，读 PS 已有的 `ParcelCancellationView` 与 `CurrentFinalView`，包裹按既有约定 `ParcelAssociationReference.String()` = PS `DeclaredParcelID` 译。**读不动答`收寄待确认`、带续办引用、不落册**——与身份核对读不动同一种处理：设备照常重投，物理事实在重投那一次落；票面原写「标记格答未查到」不取，那会多造一种既不是「没有限制」也不是「有限制」的第三态，而现有代数里「依赖读不动」就是`待确认`。
+4. **命令上的 `ServiceMarkers` 字段删去。** 它的契约是「由接入层查好带入」，可生产上没有任何调用方填它；标记改由编排一处取，留着这个字段就是第二个来源。
+
 ## 不做
 
 - 不改「标记不阻止接收」的规则（UC-NO-002）。
 - 不从载荷收标记。
+
+## 完成判据
+
+- 身份唯一成立时：PS 有取消决定 → 收寄记录带 `CANCELLED/<标识>`；有当前有效终局 → 带 `FINAL/<种类>/<版本>`；两者都无 → 不带；读口读不动 → `收寄待确认` 带续办引用、不落册。
+- 待识别、身份冲突、明确拒收、仅扫描四支不问读口。
+- 防腐适配器逐格翻译、读口错误原样交回；生产装配接上 PS 真库读口。
+- 架构门禁绿（跨上下文翻译只在 `adapters/parcelshipment`）。

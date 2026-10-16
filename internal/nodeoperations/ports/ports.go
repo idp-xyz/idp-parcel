@@ -62,9 +62,29 @@ func (kind ReceptionRecordKind) String() string {
 	}
 }
 
+// ParcelServiceResults 是 PS 对一件正式包裹此刻服务结果的只读答复（UC-NO-002「服务结果引用」；票 operator-channel/25）：
+// 已成立的取消决定与当前有效终局，各只在存在时有值。两样都不阻止接收，只限制后续方向性作业。
+type ParcelServiceResults struct {
+	// Cancellation 是已成立取消决定的标识；空即 PS 没有取消决定。
+	Cancellation string
+	// FinalKind / FinalVersion 是当前有效终局的种类与版本；两格同空即 PS 没有当前有效终局。
+	FinalKind    string
+	FinalVersion string
+}
+
+// ParcelServiceResultView 按（租户，正式包裹关联）读 PS 的当前服务结果（PS 侧只读引用，同 ParcelIdentityView）。
+// 依赖读不动作为错误返回：「没有限制」与「没查到」是两件事，空答复只表示前者。
+type ParcelServiceResultView interface {
+	FindParcelServiceResults(
+		ctx context.Context,
+		tenant domain.TenantID,
+		parcel domain.ParcelAssociationReference,
+	) (ParcelServiceResults, error)
+}
+
 // ReceptionRecord 是一次收寄判断留下的东西。收寄与控制只在形成/待识别两格在场；
-// 候选与身份冲突只在待识别格有意义；服务结果标记（已取消/终局/无路由）原样保全——
-// 它们不阻止接收，只限制后续方向性作业。
+// 候选与身份冲突只在待识别格有意义；服务结果标记（已取消 / 终局，编排在身份唯一成立时向 PS 取，
+// 词表见 application 的 serviceMarkersOf）原样保全——它们不阻止接收，只限制后续方向性作业。
 type ReceptionRecord struct {
 	Key              ReceptionKey
 	ContentDigest    string

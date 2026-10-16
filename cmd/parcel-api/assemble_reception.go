@@ -11,10 +11,12 @@ import (
 
 	nodeopshttp "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/http"
 	noidentity "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/identity"
+	noparcel "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/parcelshipment"
 	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
 	nodeopsapp "go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	nodomain "go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	noports "go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
+	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 )
 
 // errParcelIdentityViewNotConfigured 见 unconfiguredParcelIdentityView 的注释。
@@ -74,7 +76,8 @@ func (reception transactionalReception) Handle(
 // buildReceptionOrchestration 装配 `/node-operations/receptions` 的真编排（UC-NO-002；
 // 接线票 `.scratch/parcel-api-remaining-endpoint-wiring/issues/01`）。
 //
-// 机制半边接真：收寄库、收寄结果版本签发、Outbox 意图交付走 NO 真库口。身份核对缝
+// 机制半边接真：收寄库、收寄结果版本签发、Outbox 意图交付走 NO 真库口；服务结果读口读 PS 的取消与终局两册（票
+// operator-channel/25），与收寄同一笔事务读。身份核对缝
 // 是唯一的「显式未配置」，理由与形状见 unconfiguredParcelIdentityView——它不是实例
 // 半边（不等租户参数），是提供方机制未建，恢复动作在 PS 侧建模，不在登记参数。
 func buildReceptionOrchestration(db *bentopg.DB) (nodeopshttp.ReceptionHandler, error) {
@@ -95,12 +98,35 @@ func buildReceptionOrchestration(db *bentopg.DB) (nodeopshttp.ReceptionHandler, 
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: node intake handoff: %w", err)
 	}
+	serviceResults, err := buildParcelServiceResultView(db)
+	if err != nil {
+		return nil, err
+	}
 	handler := nodeopsapp.NewReceiveDeliveredUnitHandler(nodeopsapp.ReceiveDeliveredUnitDeps{
-		Identity:   unconfiguredParcelIdentityView{},
-		Receptions: receptions,
-		Versions:   versions,
-		Downstream: downstream,
-		Clock:      clock,
+		Identity:       unconfiguredParcelIdentityView{},
+		ServiceResults: serviceResults,
+		Receptions:     receptions,
+		Versions:       versions,
+		Downstream:     downstream,
+		Clock:          clock,
 	})
 	return transactionalReception{transactor: db.Transactor(), inner: handler}, nil
+}
+
+// buildParcelServiceResultView 装收寄编排的服务结果读口：PS 的取消决定册与终局册经 NO 的防腐适配器读（票 operator-channel/25）。
+// 身份核对缝接真之前，编排走不到问它那一步；接真之后标记随之生效，这里不用再改。
+func buildParcelServiceResultView(db *bentopg.DB) (noports.ParcelServiceResultView, error) {
+	cancellations, err := pspostgres.NewParcelCancellations(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: parcel cancellations: %w", err)
+	}
+	finals, err := pspostgres.NewFinalOutcomes(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: final outcomes: %w", err)
+	}
+	view, err := noparcel.NewServiceResultView(cancellations, finals)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: parcel service result view: %w", err)
+	}
+	return view, nil
 }

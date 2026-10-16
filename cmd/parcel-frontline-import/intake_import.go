@@ -11,9 +11,11 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	noidentity "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/identity"
+	noparcel "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/parcelshipment"
 	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
+	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 )
 
 // intakeImporter 是收寄子命令的全部依赖。事务由本层给出（收寄库写口无事务即拒），一行
@@ -48,13 +50,27 @@ func buildIntakeImporter(db *bentopg.DB, clock ports.Clock, identity ports.Parce
 	if err != nil {
 		return intakeImporter{}, fmt.Errorf("收寄意图交付：%w", err)
 	}
+	// 服务结果读口（票 operator-channel/25）：身份唯一成立的行向 PS 取取消与当前终局，落成标记；与收寄同一笔事务读。
+	cancellations, err := pspostgres.NewParcelCancellations(db)
+	if err != nil {
+		return intakeImporter{}, fmt.Errorf("取消决定册：%w", err)
+	}
+	finals, err := pspostgres.NewFinalOutcomes(db)
+	if err != nil {
+		return intakeImporter{}, fmt.Errorf("终局册：%w", err)
+	}
+	serviceResults, err := noparcel.NewServiceResultView(cancellations, finals)
+	if err != nil {
+		return intakeImporter{}, fmt.Errorf("服务结果读口：%w", err)
+	}
 	_, unconfigured := identity.(unconfiguredParcelIdentityView)
 	handler := application.NewReceiveDeliveredUnitHandler(application.ReceiveDeliveredUnitDeps{
-		Identity:   identity,
-		Receptions: receptions,
-		Versions:   versions,
-		Downstream: downstream,
-		Clock:      clock,
+		Identity:       identity,
+		ServiceResults: serviceResults,
+		Receptions:     receptions,
+		Versions:       versions,
+		Downstream:     downstream,
+		Clock:          clock,
 	})
 	return intakeImporter{
 		handler:            handler,

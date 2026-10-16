@@ -91,11 +91,28 @@ type fixedClock struct{ at time.Time }
 
 func (clock fixedClock) Now() time.Time { return clock.at }
 
+// serviceResultViewDouble 记下被问的（租户，包裹），交回预设的答复或错误。
+type serviceResultViewDouble struct {
+	results ports.ParcelServiceResults
+	err     error
+	asked   []string
+}
+
+func (double *serviceResultViewDouble) FindParcelServiceResults(
+	_ context.Context,
+	tenant domain.TenantID,
+	parcel domain.ParcelAssociationReference,
+) (ports.ParcelServiceResults, error) {
+	double.asked = append(double.asked, tenant.String()+"|"+parcel.String())
+	return double.results, double.err
+}
+
 type receptionFixture struct {
-	handler    *application.ReceiveDeliveredUnitHandler
-	identity   *identityViewDouble
-	receptions *receptionStoreDouble
-	downstream *downstreamDouble
+	handler        *application.ReceiveDeliveredUnitHandler
+	identity       *identityViewDouble
+	serviceResults *serviceResultViewDouble
+	receptions     *receptionStoreDouble
+	downstream     *downstreamDouble
 }
 
 func newReceptionFixture(t *testing.T) *receptionFixture {
@@ -104,15 +121,17 @@ func newReceptionFixture(t *testing.T) *receptionFixture {
 		identity: &identityViewDouble{candidates: []domain.ParcelAssociationReference{
 			mustValue(t, domain.NewParcelAssociationReference, "parcel-1"),
 		}},
-		receptions: newReceptionStore(),
-		downstream: &downstreamDouble{},
+		serviceResults: &serviceResultViewDouble{},
+		receptions:     newReceptionStore(),
+		downstream:     &downstreamDouble{},
 	}
 	fixture.handler = application.NewReceiveDeliveredUnitHandler(application.ReceiveDeliveredUnitDeps{
-		Identity:   fixture.identity,
-		Receptions: fixture.receptions,
-		Versions:   &versionFactoryDouble{},
-		Downstream: fixture.downstream,
-		Clock:      fixedClock{at: deliveredAt.Add(time.Minute)},
+		Identity:       fixture.identity,
+		ServiceResults: fixture.serviceResults,
+		Receptions:     fixture.receptions,
+		Versions:       &versionFactoryDouble{},
+		Downstream:     fixture.downstream,
+		Clock:          fixedClock{at: deliveredAt.Add(time.Minute)},
 	})
 	return fixture
 }
@@ -134,12 +153,10 @@ func receiveCommand(t *testing.T) application.ReceiveDeliveredUnitCommand {
 
 // Covers: `AT-NO-015`「已接受网络服务包裹由客户直接送达适用节点——形成节点收寄、节点
 // 控制和来源证据；不直接形成正式承诺」——唯一身份关联收寄，控制以收寄为成立依据；
-// 交给 PS 的只是发布意图，本编排不造承诺。`AT-NO-020/021/022` 的标记面：服务结果引用
-// 原样保全，不阻止接收。
+// 交给 PS 的只是发布意图，本编排不造承诺。PS 对这件包裹没有取消与终局时不带标记。
 func TestAnExplicitReceptionFormsIntakeAndControl(t *testing.T) {
 	fixture := newReceptionFixture(t)
 	command := receiveCommand(t)
-	command.ServiceMarkers = []string{"CANCELLED/decision-9"}
 
 	result, err := fixture.handler.Handle(context.Background(), command)
 	if err != nil {
@@ -160,11 +177,117 @@ func TestAnExplicitReceptionFormsIntakeAndControl(t *testing.T) {
 	if !record.Intake.ReceivedAt().Equal(deliveredAt) {
 		t.Fatalf("received at = %s", record.Intake.ReceivedAt())
 	}
-	if len(record.ServiceMarkers) != 1 || record.ServiceMarkers[0] != "CANCELLED/decision-9" {
-		t.Fatal("服务结果标记没有原样保全")
+	if len(record.ServiceMarkers) != 0 {
+		t.Fatalf("PS 没有取消与终局，却带了标记：%v", record.ServiceMarkers)
+	}
+	if len(fixture.serviceResults.asked) != 1 || fixture.serviceResults.asked[0] != "tenant-1|parcel-1" {
+		t.Fatalf("服务结果读口被问 %v，want 恰一次、问的是身份核对出的那一件", fixture.serviceResults.asked)
 	}
 	if len(fixture.downstream.intents) != 1 {
 		t.Fatalf("intents = %d, want 1", len(fixture.downstream.intents))
+	}
+}
+
+// Covers: `AT-NO-020`「包裹已经取消但仍实际到站——如实保存接收和控制」与 `AT-NO-021`「已终局包裹仍实际到站——保留
+// 终局并记录物理事实」（票 operator-channel/25）：身份唯一成立时编排向 PS 取这件包裹此刻的服务结果，取消落成
+// `CANCELLED/<取消决定>`、终局落成 `FINAL/<种类>/<版本>`；标记不阻止接收——收寄与控制照常成立、意图照常交出。
+func TestAUniquelyIdentifiedReceptionCarriesTheParcelShipmentServiceResults(t *testing.T) {
+	fixture := newReceptionFixture(t)
+	fixture.serviceResults.results = ports.ParcelServiceResults{Cancellation: "cancel-9", FinalKind: "SERVICE_FAILED", FinalVersion: "final-3"}
+
+	result, err := fixture.handler.Handle(context.Background(), receiveCommand(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.NodeIntakeFormed {
+		t.Fatalf("outcome = %q, want INTAKE_FORMED——标记不阻止接收", result.Outcome())
+	}
+	record, _ := result.Record()
+	if len(record.ServiceMarkers) != 2 || record.ServiceMarkers[0] != "CANCELLED/cancel-9" || record.ServiceMarkers[1] != "FINAL/SERVICE_FAILED/final-3" {
+		t.Fatalf("service markers = %v, want [CANCELLED/cancel-9 FINAL/SERVICE_FAILED/final-3]", record.ServiceMarkers)
+	}
+	if !record.Control.Active() || len(fixture.downstream.intents) != 1 {
+		t.Fatal("带了标记就不建控制或不交意图——标记只限制后续方向性作业")
+	}
+}
+
+// Covers: 票 operator-channel/25 裁定第 3 条——服务结果读不动是依赖故障：答`收寄待确认`带续办引用，不落册、不交意图，
+// 与身份核对读不动同一种处理；设备照常重投，物理事实在重投那一次落。不把「没查到」记成「没有限制」。
+func TestAnUnreachableServiceResultViewLeavesTheReceptionUndecided(t *testing.T) {
+	fixture := newReceptionFixture(t)
+	fixture.serviceResults.err = errors.New("parcel shipment unreachable")
+
+	result, err := fixture.handler.Handle(context.Background(), receiveCommand(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.ReceptionUndecided || result.ContinuationReference() == "" {
+		t.Fatalf("outcome = %q / %q, want RECEPTION_UNDECIDED 带续办引用", result.Outcome(), result.ContinuationReference())
+	}
+	if fixture.receptions.saved != 0 || len(fixture.downstream.intents) != 0 {
+		t.Fatalf("读不动却落了册（%d）或交了意图（%d）", fixture.receptions.saved, len(fixture.downstream.intents))
+	}
+}
+
+// Covers: 装配漏了服务结果读口是装配缺件，不是「没有限制」：身份唯一成立时如实停在`收寄待确认`、带续办引用、不落册，
+// 不 panic、也不把没问过的包裹记成不带标记。
+func TestAMissingServiceResultViewStopsHonestlyInsteadOfRecordingNoMarkers(t *testing.T) {
+	fixture := newReceptionFixture(t)
+	handler := application.NewReceiveDeliveredUnitHandler(application.ReceiveDeliveredUnitDeps{
+		Identity:   fixture.identity,
+		Receptions: fixture.receptions,
+		Versions:   &versionFactoryDouble{},
+		Downstream: fixture.downstream,
+		Clock:      fixedClock{at: deliveredAt.Add(time.Minute)},
+	})
+	result, err := handler.Handle(context.Background(), receiveCommand(t))
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.ReceptionUndecided || result.ContinuationReference() == "" || fixture.receptions.saved != 0 {
+		t.Fatalf("outcome = %q / %q / saved %d, want RECEPTION_UNDECIDED 带续办引用且不落册", result.Outcome(), result.ContinuationReference(), fixture.receptions.saved)
+	}
+}
+
+// Covers: 票 operator-channel/25 裁定第 1 条——只在身份唯一成立时问：待识别（零候选）与身份冲突（多候选）没有可问的包裹，
+// 明确拒收与仅扫描不经身份核对，四支都不问服务结果读口、也不带标记。
+func TestTheServiceResultViewIsAskedOnlyForAUniquelyIdentifiedParcel(t *testing.T) {
+	cases := map[string]struct {
+		candidates []string
+		mutate     func(*application.ReceiveDeliveredUnitCommand)
+	}{
+		"待识别":  {candidates: nil},
+		"身份冲突": {candidates: []string{"parcel-1", "parcel-2"}},
+		"明确拒收": {candidates: []string{"parcel-1"}, mutate: func(command *application.ReceiveDeliveredUnitCommand) {
+			command.Claim, command.Evidence, command.Refusal = application.ExplicitRefusal, domain.ReceptionEvidenceReference{}, "破损拒收"
+		}},
+		"仅扫描": {candidates: []string{"parcel-1"}, mutate: func(command *application.ReceiveDeliveredUnitCommand) {
+			command.Claim, command.Evidence = application.ScanOnlyObservation, domain.ReceptionEvidenceReference{}
+		}},
+	}
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			fixture := newReceptionFixture(t)
+			fixture.identity.candidates = nil
+			for _, raw := range testCase.candidates {
+				fixture.identity.candidates = append(fixture.identity.candidates, mustValue(t, domain.NewParcelAssociationReference, raw))
+			}
+			fixture.serviceResults.results = ports.ParcelServiceResults{Cancellation: "cancel-9"}
+			command := receiveCommand(t)
+			if testCase.mutate != nil {
+				testCase.mutate(&command)
+			}
+			result, err := fixture.handler.Handle(context.Background(), command)
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+			if len(fixture.serviceResults.asked) != 0 {
+				t.Fatalf("服务结果读口被问了 %v，这一支没有可问的包裹", fixture.serviceResults.asked)
+			}
+			if record, recorded := result.Record(); recorded && len(record.ServiceMarkers) != 0 {
+				t.Fatalf("这一支不该带标记：%v", record.ServiceMarkers)
+			}
+		})
 	}
 }
 
