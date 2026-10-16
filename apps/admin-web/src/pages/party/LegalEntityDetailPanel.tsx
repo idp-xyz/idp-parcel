@@ -11,6 +11,7 @@ import {
   TabsTrigger,
 } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
+import { statusToneBanner } from '../../components/status-tone';
 import type { GroupLegalEntityRecord } from './api';
 import {
   identityLayerAbsentNote,
@@ -53,9 +54,9 @@ function RefChip({
       type="button"
       title={`${title}（点击复制）`}
       onClick={() => onCopy(title, value)}
-      className="inline-flex max-w-full items-center gap-1 rounded border border-idpxyz-border bg-idpxyz-sidebar px-1.5 py-0.5 text-[10px] hover:border-idpxyz-accent"
+      className="inline-flex max-w-full items-center gap-1 rounded border border-idpxyz-border bg-idpxyz-sidebar px-1.5 py-0.5 text-[12px] hover:border-idpxyz-accent"
     >
-      <span className="text-idpxyz-textMuted">{label}</span>
+      <span className="text-idpxyz-breadcrumb">{label}</span>
       <span className="truncate font-mono text-idpxyz-text">{value}</span>
     </button>
   );
@@ -64,24 +65,24 @@ function RefChip({
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0 rounded-md border border-idpxyz-border bg-idpxyz-sidebar px-3 py-2">
-      <p className="text-[10px] text-idpxyz-textMuted">{label}</p>
+      <p className="text-[12px] text-idpxyz-breadcrumb">{label}</p>
       <p className="mt-0.5 break-words font-mono text-[12px] font-semibold leading-snug text-idpxyz-textBright">{children}</p>
     </div>
   );
 }
 
 const stageDotClass: Record<LifecycleStageState, string> = {
-  done: 'border-emerald-500/50 bg-emerald-500/20 text-emerald-400',
+  done: statusToneBanner.success,
   current: 'border-idpxyz-accent bg-idpxyz-activeItem text-idpxyz-accent',
-  skipped: 'border-dashed border-idpxyz-border bg-transparent text-idpxyz-textMuted',
-  pending: 'border-idpxyz-border bg-idpxyz-inputBg text-idpxyz-textMuted',
+  skipped: 'border-dashed border-idpxyz-border bg-transparent text-idpxyz-breadcrumb',
+  pending: 'border-idpxyz-border bg-idpxyz-inputBg text-idpxyz-breadcrumb',
 };
 
 // 旁支终态（已停用）只有两态：没停用时一圈虚线不点亮，停用了才亮成警示色。
 const terminalDotClass = (reached: boolean) =>
   reached
-    ? 'border-red-500/60 bg-red-500/15 text-red-400'
-    : 'border-dashed border-idpxyz-border bg-transparent text-idpxyz-textMuted';
+    ? statusToneBanner.danger
+    : 'border-dashed border-idpxyz-border bg-transparent text-idpxyz-breadcrumb';
 
 /** 一段的圆点与名字。圆点不编号：编号会把三段读成一条必经的流程。 */
 function StageMark({ stage }: { stage: LifecycleStage }) {
@@ -90,13 +91,13 @@ function StageMark({ stage }: { stage: LifecycleStage }) {
   return (
     <div className="flex flex-col items-center gap-1" aria-current={stage.state === 'current' ? 'step' : undefined}>
       <span
-        className={`flex h-5 w-5 items-center justify-center rounded-full border text-[9px] font-semibold ${dotClass}`}
+        className={`flex h-5 w-5 items-center justify-center rounded-full border text-[12px] font-semibold ${dotClass}`}
         aria-hidden="true"
       >
         {stage.state === 'done' ? '✓' : stage.state === 'skipped' ? '–' : reached ? '●' : ''}
       </span>
       <span
-        className={`text-[9px] leading-none ${stage.state === 'current' ? 'font-medium text-idpxyz-textBright' : 'text-idpxyz-textMuted'}`}
+        className={`text-[12px] leading-none ${stage.state === 'current' ? 'font-medium text-idpxyz-textBright' : 'text-idpxyz-breadcrumb'}`}
       >
         {labelOf(identityStatusLabels, stage.code)}
         {stage.state === 'skipped' ? '（未经过）' : ''}
@@ -185,10 +186,10 @@ export function LegalEntityDetailPanel({
           <div className="min-w-0">
             <div className="flex flex-wrap items-center gap-2">
               <h2 className="truncate font-mono text-[16px] font-semibold text-idpxyz-textBright">{row.legalEntityId}</h2>
-              <span className="rounded bg-sky-500/10 px-1.5 py-0.5 text-[10px] font-medium text-sky-400">{kind}</span>
+              <span className="rounded bg-idpxyz-hover px-1.5 py-0.5 text-[12px] font-medium text-idpxyz-breadcrumb">{kind}</span>
               {statusBadge(identityStatusLabels, row.status)}
             </div>
-            <p className="mt-0.5 text-[11px] text-idpxyz-textMuted">
+            <p className="mt-0.5 text-[12px] text-idpxyz-breadcrumb">
               {row.partyNameKnown ? row.partyName : <UnknownPartyName />} · <span className="font-mono">{row.partyId}</span>
             </p>
             <div className="mt-1.5 flex flex-wrap items-center gap-1.5">
@@ -198,7 +199,7 @@ export function LegalEntityDetailPanel({
             </div>
           </div>
           <div className="flex shrink-0 items-center gap-1.5">
-            <Button size="sm" variant="default" className={primaryActionClass} onClick={openProfileForm}>
+            <Button size="sm" variant="default" className={`${primaryActionClass} text-[12px]`} onClick={openProfileForm}>
               <FileText className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
               登记资料修订
             </Button>
@@ -229,7 +230,7 @@ export function LegalEntityDetailPanel({
                 }}
               >
                 <Users className="mr-2 h-3.5 w-3.5" aria-hidden="true" />
-                到业务参与方页停用 <span className="ml-1 font-mono text-idpxyz-textMuted">{row.partyId}</span>
+                到业务参与方页停用 <span className="ml-1 font-mono text-idpxyz-breadcrumb">{row.partyId}</span>
               </MenuItem>
             </DropdownMenu>
             <Button variant="ghost" size="icon" onClick={onClose} aria-label="关闭详情" title="关闭（Esc）">
@@ -241,7 +242,7 @@ export function LegalEntityDetailPanel({
         <Lifecycle row={row} />
 
         {row.deactivatedAt && (
-          <div className="flex items-center gap-2 rounded border border-red-500/30 bg-red-500/10 px-2.5 py-1.5 text-[11px] text-red-400">
+          <div className={`flex items-center gap-2 rounded border px-2.5 py-1.5 text-[12px] ${statusToneBanner.danger}`}>
             <Ban className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span>
               自 <Instant value={row.deactivatedAt} /> 起停用，不再支持新的商业决定
@@ -252,13 +253,13 @@ export function LegalEntityDetailPanel({
         {/* 两件待补各报各的处置（判据在 legal-entity-list.ts legalEntityNeedsAttention）：身份层缺格登下一修订能补；
             参与方悬空是写入门失败留下的，登新修订补不上。 */}
         {!row.identityLayerRegistered && (
-          <div className="flex items-center gap-2 rounded border border-orange-500/30 bg-orange-500/10 px-2.5 py-1.5 text-[11px] text-orange-400">
+          <div className={`flex items-center gap-2 rounded border px-2.5 py-1.5 text-[12px] ${statusToneBanner.warning}`}>
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span>待补：身份层两格{identityLayerAbsentNote}。登记同一法人的下一修订补齐（列表页头「登记责任法人」）。</span>
           </div>
         )}
         {!row.partyNameKnown && (
-          <div className="flex items-center gap-2 rounded border border-orange-500/30 bg-orange-500/10 px-2.5 py-1.5 text-[11px] text-orange-400">
+          <div className={`flex items-center gap-2 rounded border px-2.5 py-1.5 text-[12px] ${statusToneBanner.warning}`}>
             <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
             <span>
               待查：{partyNameUnknownNote}（{row.partyId}）。这是写入门失败留下的悬空，登记新修订补不上，需到业务参与方页核对参与方册。
@@ -300,10 +301,10 @@ export function LegalEntityDetailPanel({
                 {row.partyId}
               </DetailRow>
               <DetailRow label="身份更正依据" mono>
-                {row.identityCorrectionBasis ?? <span className="text-idpxyz-textMuted">—</span>}
+                {row.identityCorrectionBasis ?? <span className="text-idpxyz-breadcrumb">—</span>}
               </DetailRow>
               <DetailRow label="停用依据" mono>
-                {row.deactivationBasis ?? <span className="text-idpxyz-textMuted">—</span>}
+                {row.deactivationBasis ?? <span className="text-idpxyz-breadcrumb">—</span>}
               </DetailRow>
               <DetailRow label="租户" mono>
                 {row.tenantId}

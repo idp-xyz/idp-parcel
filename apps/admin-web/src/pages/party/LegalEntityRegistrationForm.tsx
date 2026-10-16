@@ -136,7 +136,7 @@ export function LegalEntityRegistrationForm({
         <CardContent className="flex flex-col gap-6">
           <div className="rounded-md border border-idpxyz-border bg-idpxyz-sidebar p-3">
             <p className="text-[13px] font-medium text-idpxyz-text">登记说明</p>
-            <ul className="mt-1 list-disc pl-4 text-xs leading-5 text-idpxyz-textMuted">
+            <ul className="mt-1 list-disc pl-4 text-xs leading-5 text-idpxyz-breadcrumb">
               <li>一笔登记形成一个身份修订，登记过的不被覆盖。首笔修订从 1 起，此后必须连续。</li>
               <li>录错了就登记同一法人的下一修订；改正注册国家 / 地区或终身注册号时写明身份更正依据。</li>
               <li>注册国家 / 地区与终身注册号不作变更：号变了就是另一个法人，停用旧身份、登记新身份。</li>
@@ -153,7 +153,7 @@ export function LegalEntityRegistrationForm({
                 placeholder="如 LE-SHA-01"
                 onChange={(event) => patch({ legalEntityId: event.target.value })}
               />
-              <span className="block text-[11px] text-idpxyz-textMuted mt-1">{identifierNote}</span>
+              <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">{identifierNote}</span>
             </Field>
 
             <ReferencePicker<BusinessPartyListResponseBody>
@@ -227,7 +227,7 @@ export function LegalEntityRegistrationForm({
                 <Button variant="outline" disabled={locked} onClick={addNumberRow}>
                   添加一个终身注册号
                 </Button>
-                <span className="text-[11px] text-idpxyz-textMuted">一个法人可按类型登记多个终身注册号。</span>
+                <span className="text-[12px] text-idpxyz-breadcrumb">一个法人可按类型登记多个终身注册号。</span>
               </div>
             </div>
           </FormGroup>
@@ -271,7 +271,7 @@ export function LegalEntityRegistrationForm({
                 placeholder="更正依据引用；留空即不带"
                 onChange={(event) => patch({ identityCorrectionBasis: event.target.value })}
               />
-              <span className="block text-[11px] text-idpxyz-textMuted mt-1">
+              <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">
                 只在更正修订上填：改正录错的注册国家 / 地区或终身注册号时，写明依据。首笔修订不填。
               </span>
             </Field>
@@ -298,7 +298,7 @@ export function LegalEntityRegistrationForm({
 
       {/* 受控批量口的在线镜像，折起来放底部：主路径是上面那几格（ADR-0101 决定一原句）。 */}
       <details className="rounded border border-idpxyz-border">
-        <summary className="cursor-pointer select-none px-4 py-2 text-[13px] text-idpxyz-textMuted">
+        <summary className="cursor-pointer select-none px-4 py-2 text-[13px] text-idpxyz-breadcrumb">
           高级：粘贴登记快照 JSON（受控批量口 parcel-commercial register-parties 的在线镜像）
         </summary>
         <RegistrationPanel

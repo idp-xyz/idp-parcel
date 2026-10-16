@@ -65,7 +65,7 @@ export function RevisionHistorySection<Body>({
   }, [load, subjectId, revision, reloadKey]);
 
   const retry = () => setReloadKey((value) => value + 1);
-  const note = 'mt-1 text-[12px] text-idpxyz-textMuted';
+  const note = 'mt-1 text-[12px] text-idpxyz-breadcrumb';
 
   if (answer === null) {
     return <p className={note}>正在读取修订历史…</p>;

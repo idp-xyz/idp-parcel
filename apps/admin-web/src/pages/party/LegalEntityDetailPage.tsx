@@ -39,7 +39,7 @@ export const legalEntityRevisionHistory: RevisionHistoryRegister<LegalEntityRevi
 };
 
 function muted(text: string): ReactNode {
-  return <span className="text-idpxyz-textMuted">{text}</span>;
+  return <span className="text-idpxyz-breadcrumb">{text}</span>;
 }
 
 function identityCells(row: GroupLegalEntityRecord) {
@@ -150,7 +150,7 @@ export function LegalEntityDetailPage({
         <button
           type="button"
           onClick={onBack}
-          className="rounded border border-idpxyz-border px-3 py-1.5 text-[12px] text-idpxyz-textMuted hover:bg-idpxyz-hover"
+          className="rounded border border-idpxyz-border px-3 py-1.5 text-[12px] text-idpxyz-breadcrumb hover:bg-idpxyz-hover"
         >
           返回列表
         </button>

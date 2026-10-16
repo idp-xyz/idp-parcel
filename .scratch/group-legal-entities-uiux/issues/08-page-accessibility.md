@@ -15,7 +15,7 @@
 
 **Category:** enhancement
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
 - [ ] 在列表、详情栏、对象页、登记视图上跑 axe（WCAG 2 AA）：color-contrast、aria-progressbar-name、scrollable-region-focusable 三类违规里，归属本页或工作台模板的节点为零
 - [ ] 本页和工作台模板里不再有小于 12px 的文字

@@ -145,12 +145,12 @@ export function RevisionField({
           onChange={(event) => onChange(event.target.value)}
         />
         {edited ? (
-          <Button variant="outline" size="sm" disabled={locked} onClick={onUseSuggestion}>
+          <Button variant="outline" size="sm" className="text-[12px]" disabled={locked} onClick={onUseSuggestion}>
             用建议值 {suggestion}
           </Button>
         ) : null}
       </div>
-      <span className="block text-[11px] text-idpxyz-textMuted mt-1">{note}</span>
+      <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">{note}</span>
     </Field>
   );
 }
@@ -189,7 +189,7 @@ export function WallTimeField({
         className="font-mono text-[13px]"
         onChange={(event) => onChange(event.target.value)}
       />
-      <span className="block text-[11px] text-idpxyz-textMuted mt-1">
+      <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">
         {note ? `${note} ` : ''}按本地时刻（{timeZone}）填。
       </span>
     </Field>
@@ -239,7 +239,7 @@ export function SnapshotJsonDetails({
 }) {
   return (
     <details className="rounded border border-idpxyz-border">
-      <summary className="cursor-pointer select-none px-4 py-2 text-[13px] text-idpxyz-textMuted">
+      <summary className="cursor-pointer select-none px-4 py-2 text-[13px] text-idpxyz-breadcrumb">
         高级：粘贴登记快照 JSON（受控批量口 parcel-commercial 的在线镜像）
       </summary>
       <RegistrationPanel
@@ -261,7 +261,7 @@ export function FormGroup({ title, description, children }: { title: string; des
     <section className="flex flex-col gap-3">
       <div>
         <h3 className="text-[13px] font-semibold text-idpxyz-text">{title}</h3>
-        {description ? <p className="mt-1 text-xs text-idpxyz-textMuted">{description}</p> : null}
+        {description ? <p className="mt-1 text-xs text-idpxyz-breadcrumb">{description}</p> : null}
       </div>
       <div className="grid grid-cols-1 gap-3 md:grid-cols-2">{children}</div>
     </section>
@@ -294,9 +294,9 @@ export function AdvancedGroup({
         onClick={onToggle}
         className="flex w-full items-center gap-2 px-3 py-2 text-left hover:bg-idpxyz-hover"
       >
-        <Chevron className="h-4 w-4 shrink-0 text-idpxyz-textMuted" aria-hidden="true" />
+        <Chevron className="h-4 w-4 shrink-0 text-idpxyz-breadcrumb" aria-hidden="true" />
         <span className="shrink-0 text-[13px] font-semibold text-idpxyz-text">高级</span>
-        <span className="min-w-0 truncate text-xs text-idpxyz-textMuted">{summary}</span>
+        <span className="min-w-0 truncate text-xs text-idpxyz-breadcrumb">{summary}</span>
       </button>
       {open ? (
         <div id={bodyId} className="grid grid-cols-1 gap-3 border-t border-idpxyz-border p-3 md:grid-cols-2">

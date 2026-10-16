@@ -21,7 +21,7 @@ export function statusBadge(table: Record<string, string>, code: string): ReactN
 
 /** 名称转写不到（悬空引用）时那一格的话，弱化显示；句子只在 presentation.ts 一处。 */
 export function UnknownPartyName() {
-  return <span className="text-idpxyz-textMuted">{partyNameUnknownNote}</span>;
+  return <span className="text-idpxyz-breadcrumb">{partyNameUnknownNote}</span>;
 }
 
 /**
@@ -87,11 +87,11 @@ export function DetailRow({
 }) {
   return (
     <div className="flex flex-col gap-0.5 py-2 border-b border-idpxyz-border last:border-b-0">
-      <dt className="text-[11px] text-idpxyz-textMuted">{label}</dt>
+      <dt className="text-[12px] text-idpxyz-breadcrumb">{label}</dt>
       <dd className={`flex items-start justify-between gap-2 text-[13px] text-idpxyz-text ${mono ? 'font-mono' : ''}`}>
         <span className="break-all">{children}</span>
         {onCopy ? (
-          <Button variant="ghost" size="sm" className="shrink-0" onClick={onCopy}>
+          <Button variant="ghost" size="sm" className="shrink-0 text-[12px]" onClick={onCopy}>
             复制
           </Button>
         ) : null}

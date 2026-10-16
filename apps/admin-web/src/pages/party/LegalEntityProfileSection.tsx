@@ -47,7 +47,7 @@ import {
 
 const info = moduleInfoById['group-legal-entities'];
 const kind = 'legal-entity-profile';
-const note = 'mt-1 text-[12px] text-idpxyz-textMuted';
+const note = 'mt-1 text-[12px] text-idpxyz-breadcrumb';
 // 资料表单收在高级组里的那一格；组里有问题时组一律展开。
 const profileAdvancedPaths = ['profiles[0].revision'];
 
@@ -91,7 +91,7 @@ export function LegalEntityProfileSection({
         <div className="flex items-start justify-between gap-3">
           <div>
             <h4 className="text-[13px] font-semibold text-idpxyz-text">当前有效资料</h4>
-            <p className="mt-1 text-xs text-idpxyz-textMuted">按生效时点读取法人资料；未来生效的修订不会覆盖历史。</p>
+            <p className="mt-1 text-xs text-idpxyz-breadcrumb">按生效时点读取法人资料；未来生效的修订不会覆盖历史。</p>
           </div>
         </div>
         <CurrentProfile legalEntityId={legalEntityId} landed={landed} />
@@ -99,7 +99,7 @@ export function LegalEntityProfileSection({
       <section className="border-t border-idpxyz-border pt-5">
         <div>
           <h4 className="text-[13px] font-semibold text-idpxyz-text">资料修订历史</h4>
-          <p className="mt-1 text-xs text-idpxyz-textMuted">每次登记形成新的资料修订，已登记内容不可覆盖。</p>
+          <p className="mt-1 text-xs text-idpxyz-breadcrumb">每次登记形成新的资料修订，已登记内容不可覆盖。</p>
         </div>
         <RevisionHistorySection register={profileRevisionHistory} subjectId={legalEntityId} revision={landed} />
       </section>
@@ -210,11 +210,11 @@ function ResolutionAnswer({
       <p>
         {labelOf(profileResolutionOutcomeLabels, body.outcome)}
         {body.incompleteCause !== undefined ? `：${labelOf(profileIncompleteCauseLabels, body.incompleteCause)}` : ''}
-        <span className="ml-2 text-idpxyz-textMuted">问的时刻 {formatInstant(body.at)}</span>
+        <span className="ml-2 text-idpxyz-breadcrumb">问的时刻 {formatInstant(body.at)}</span>
       </p>
       {effective !== undefined ? (
         <dl className="mt-2 grid grid-cols-[6rem_1fr] gap-x-3 gap-y-1">
-          <dt className="text-idpxyz-textMuted">生效修订</dt>
+          <dt className="text-idpxyz-breadcrumb">生效修订</dt>
           <dd className="font-mono">
             {profileRevisionLabel(effective.revision)} · 生效自 {formatInstant(effective.effectiveFrom)} · 依据 {effective.basis}
           </dd>
@@ -230,7 +230,7 @@ function ResolutionAnswer({
 function FragmentRow({ label, value }: { label: string; value: string }) {
   return (
     <>
-      <dt className="text-idpxyz-textMuted">{label}</dt>
+      <dt className="text-idpxyz-breadcrumb">{label}</dt>
       <dd className="font-mono">{value}</dd>
     </>
   );
@@ -286,7 +286,7 @@ function ProfileRegistrationForm({ legalEntityId, onLanded }: { legalEntityId: s
       <CardContent className="flex flex-col gap-5 pt-4">
         <div className="rounded-md border border-idpxyz-border bg-idpxyz-sidebar p-3">
           <p className="text-[13px] font-medium text-idpxyz-text">登记说明</p>
-          <ul className="mt-1 list-disc pl-4 text-xs leading-5 text-idpxyz-textMuted">
+          <ul className="mt-1 list-disc pl-4 text-xs leading-5 text-idpxyz-breadcrumb">
             <li>一笔登记形成一个资料修订，登记过的不被覆盖；新修订自其生效时点起取代前一修订，可以登记未来生效的修订。</li>
             <li>注册地址的国家 / 地区须与身份上的注册国家 / 地区一致。</li>
             <li>不带开票抬头的修订生效后，按时点解析答「资料不全」，开票会被拒。</li>
@@ -311,7 +311,7 @@ function ProfileRegistrationForm({ legalEntityId, onLanded }: { legalEntityId: s
               placeholder="开票用的法人名称"
               onChange={(event) => patch({ invoiceTitle: event.target.value })}
             />
-            <span className="block text-[11px] text-idpxyz-textMuted mt-1">留空即这一笔不带开票资料。</span>
+            <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">留空即这一笔不带开票资料。</span>
           </Field>
           <div className="md:col-span-2">
             <Field label="注册地址（一行一段） *" path="profiles[0].registeredAddress.lines" problems={problems}>
@@ -360,7 +360,7 @@ function ProfileRegistrationForm({ legalEntityId, onLanded }: { legalEntityId: s
               >
                 添加税务登记号
               </Button>
-              <span className="text-[11px] text-idpxyz-textMuted">类型码取自注册号类型目录的资料层。</span>
+              <span className="text-[12px] text-idpxyz-breadcrumb">类型码取自注册号类型目录的资料层。</span>
             </div>
           </div>
 
@@ -403,7 +403,7 @@ function ProfileRegistrationForm({ legalEntityId, onLanded }: { legalEntityId: s
               >
                 添加联系人
               </Button>
-              <span className="text-[11px] text-idpxyz-textMuted">联系人可以不登。</span>
+              <span className="text-[12px] text-idpxyz-breadcrumb">联系人可以不登。</span>
             </div>
           </div>
         </FormGroup>

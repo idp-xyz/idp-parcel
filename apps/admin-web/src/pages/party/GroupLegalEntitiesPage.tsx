@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { AlertTriangle, ArrowLeft, Plus } from 'lucide-react';
-import { Button, ConfirmDialog, Progress } from '@idpxyz/ui-primitives';
+import { Button, ConfirmDialog } from '@idpxyz/ui-primitives';
 import {
   WorkbenchPageTemplate,
   toggleWorkbenchSort,
@@ -12,6 +12,7 @@ import {
 } from '../../templates';
 import { moduleInfoById } from '../../navigation';
 import { primaryActionClass } from '../../components/primary-action';
+import { statusToneSurface, statusToneText } from '../../components/status-tone';
 import { catalogueViewState } from '../catalogue-view';
 import { listGroupLegalEntities, type GroupLegalEntityRecord } from './api';
 import { groupLegalEntitiesViewOf, registerViewHash } from './group-legal-entities-address';
@@ -50,11 +51,11 @@ const statusDotClass: Record<string, string> = {
 // 身份两格照答复原样示出，国家在上、号在下；最新修订登记于身份层落地之前时如实写 identityLayerAbsentNote。
 function IdentityLayerCell({ row }: { row: GroupLegalEntityRecord }) {
   const cells = identityLayerCellsOf(row);
-  if (cells === null) return <span className="text-idpxyz-textMuted">{identityLayerAbsentNote}</span>;
+  if (cells === null) return <span className="text-idpxyz-breadcrumb">{identityLayerAbsentNote}</span>;
   return (
     <div className="min-w-40">
       <p>{cells.country}</p>
-      <p className="mt-0.5 text-idpxyz-textMuted">{cells.numbers}</p>
+      <p className="mt-0.5 text-idpxyz-breadcrumb">{cells.numbers}</p>
     </div>
   );
 }
@@ -75,10 +76,11 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
           }`}
           aria-hidden="true"
         />
-        <span className="truncate font-mono font-medium text-idpxyz-accent">{row.legalEntityId}</span>
-        <span className="shrink-0 font-mono text-[9px] text-idpxyz-textMuted">{identityRevisionLabel(row.revision)}</span>
+        {/* 标识用链接色（text.link.hover，经 --idpxyz-statusHover 映射进来）：强调色 #007acc 落在画布与选中行上只有 3.7–4.2:1。 */}
+        <span className="truncate font-mono font-medium text-idpxyz-statusHover">{row.legalEntityId}</span>
+        <span className="shrink-0 font-mono text-[12px] text-idpxyz-breadcrumb">{identityRevisionLabel(row.revision)}</span>
         {legalEntityNeedsAttention(row) && (
-          <AlertTriangle className="h-3 w-3 shrink-0 text-orange-400" aria-label="待补" />
+          <AlertTriangle className={`h-3 w-3 shrink-0 ${statusToneText.warning}`} aria-label="待补" />
         )}
       </div>
     ),
@@ -92,7 +94,7 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
     render: (row) => (
       <div>
         <div className="text-idpxyz-textBright">{row.partyNameKnown ? row.partyName : <UnknownPartyName />}</div>
-        <div className="font-mono text-[10px] text-idpxyz-textMuted">{row.partyId}</div>
+        <div className="font-mono text-[12px] text-idpxyz-breadcrumb">{row.partyId}</div>
       </div>
     ),
   },
@@ -110,7 +112,7 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
       <div className="flex flex-col items-start gap-1">
         {statusBadge(identityStatusLabels, row.status)}
         {row.deactivatedAt ? (
-          <span className="font-mono text-[10px] text-idpxyz-textMuted">
+          <span className="font-mono text-[12px] text-idpxyz-breadcrumb">
             自 <Instant value={row.deactivatedAt} />
           </span>
         ) : null}
@@ -123,7 +125,7 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
     sortKey: 'effective-from',
     // 已登记即还没到生效时点，时刻标琥珀色——与参照页「预计到货」临近那一格同一个提示。
     render: (row) => (
-      <span className={`font-mono ${row.status === 'REGISTERED' ? 'font-medium text-amber-400' : 'text-idpxyz-text'}`}>
+      <span className={`font-mono ${row.status === 'REGISTERED' ? `font-medium ${statusToneText.warning}` : 'text-idpxyz-text'}`}>
         <Instant value={row.effectiveFrom} />
       </span>
     ),
@@ -132,7 +134,7 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
     key: 'basis',
     header: '登记依据',
     hideWhenDetailOpen: true,
-    render: (row) => <span className="font-mono text-idpxyz-textMuted">{row.basis}</span>,
+    render: (row) => <span className="font-mono text-idpxyz-breadcrumb">{row.basis}</span>,
   },
   {
     key: 'registered-at',
@@ -140,12 +142,34 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
     sortKey: 'registered-at',
     hideWhenDetailOpen: true,
     render: (row) => (
-      <span className="font-mono text-idpxyz-textMuted">
+      <span className="font-mono text-idpxyz-breadcrumb">
         <Instant value={row.registeredAt} />
       </span>
     ),
   },
 ];
+
+/**
+ * 「在用中已生效」的占比条。不用上游 Progress：它不转发 aria-*，进度条起不了名字（axe aria-progressbar-name），轨道的
+ * `bg-idpxyz-border/50` 在本仓也生不出来（主题色是裸 CSS 变量，见 components/primary-action.ts）。
+ */
+function EffectiveShareBar({ share }: { share: number }) {
+  return (
+    <div
+      role="progressbar"
+      aria-label="在用法人中已生效的占比"
+      aria-valuenow={share}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      className="h-1 w-24 overflow-hidden rounded-full bg-idpxyz-border"
+    >
+      <div
+        className={`h-full rounded-full ${share >= 100 ? statusToneSurface.success : 'bg-idpxyz-accent'}`}
+        style={{ width: `${share}%` }}
+      />
+    </div>
+  );
+}
 
 /** 详情地址：hash 二段。壳层拿前两段作标签 id，对象页因此另开一张标签，列表留在原处。 */
 function detailHash(legalEntityId: string): string {
@@ -245,13 +269,13 @@ export function GroupLegalEntitiesPage() {
     return (
       <div className="flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
         <div className="flex shrink-0 items-center gap-4 border-b border-idpxyz-border px-6 py-3">
-          <Button variant="ghost" size="sm" onClick={requestLeaveRegister}>
+          <Button variant="ghost" size="sm" className="text-[12px]" onClick={requestLeaveRegister}>
             <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden="true" />
             返回列表
           </Button>
           <div className="min-w-0">
             <h1 className="text-[16px] font-semibold leading-tight text-idpxyz-textBright">登记责任法人</h1>
-            <p className="truncate text-[11px] text-idpxyz-textMuted">
+            <p className="truncate text-[12px] text-idpxyz-breadcrumb">
               每次登记形成新修订，历史不可覆盖；更正身份就登记同一法人的下一修订号
             </p>
           </div>
@@ -287,22 +311,23 @@ export function GroupLegalEntitiesPage() {
         {
           label: '待补',
           value: counts.attention,
-          tone: counts.attention > 0 ? 'text-orange-400' : undefined,
-          icon: counts.attention > 0 ? <AlertTriangle className="h-3 w-3 text-orange-400" aria-hidden="true" /> : undefined,
+          tone: counts.attention > 0 ? statusToneText.warning : undefined,
+          icon:
+            counts.attention > 0 ? <AlertTriangle className={`h-3 w-3 ${statusToneText.warning}`} aria-hidden="true" /> : undefined,
           active: attentionOnly,
           onClick: () => setAttentionOnly(!attentionOnly),
         },
         {
           label: '已登记未生效',
           value: counts.byStatus.REGISTERED,
-          tone: counts.byStatus.REGISTERED > 0 ? 'text-amber-400' : undefined,
+          tone: counts.byStatus.REGISTERED > 0 ? statusToneText.warning : undefined,
           active: status === 'REGISTERED',
           onClick: () => toggleStatus('REGISTERED'),
         },
         {
           label: '已生效',
           value: counts.byStatus.EFFECTIVE,
-          tone: 'text-sky-400',
+          tone: statusToneText.info,
           active: status === 'EFFECTIVE',
           onClick: () => toggleStatus('EFFECTIVE'),
         },
@@ -311,10 +336,10 @@ export function GroupLegalEntitiesPage() {
           value: '',
           custom:
             effectiveShare === null ? (
-              <span className="text-[12px] font-semibold leading-none text-idpxyz-textMuted">—</span>
+              <span className="text-[12px] font-semibold leading-none text-idpxyz-breadcrumb">—</span>
             ) : (
               <div className="flex items-center gap-1.5">
-                <Progress value={effectiveShare} size="sm" variant={effectiveShare >= 100 ? 'success' : 'default'} className="w-24" />
+                <EffectiveShareBar share={effectiveShare} />
                 <span className="text-[12px] font-semibold leading-none text-idpxyz-textBright">{effectiveShare}%</span>
               </div>
             ),

@@ -31,7 +31,7 @@ import {
  * 中文词表只作装饰；ReferencePicker 的候选只由读面生成，读不到退回手填。不预选：「未选」是一个空值状态，不是默认值。
  */
 
-export const fieldLabel = 'block text-[12px] text-idpxyz-textMuted mb-1';
+export const fieldLabel = 'block text-[12px] text-idpxyz-breadcrumb mb-1';
 export const selectClass =
   'w-full rounded border border-idpxyz-border bg-idpxyz-inputBg px-2 py-1.5 text-[13px] ' +
   'text-idpxyz-text focus:outline-none focus:border-idpxyz-accent disabled:opacity-60';
@@ -41,7 +41,7 @@ export const momentPlaceholder = 'RFC 3339 或 YYYY-MM-DD（只到天补成当�
 export function Problems({ lines }: { lines?: readonly string[] }) {
   if (!lines || lines.length === 0) return null;
   return (
-    <ul className="text-[11px] text-idpxyz-danger list-disc ml-4 mt-1">
+    <ul className="text-[12px] text-idpxyz-danger list-disc ml-4 mt-1">
       {lines.map((line) => (
         <li key={line}>{line}</li>
       ))}
@@ -226,7 +226,7 @@ export function ReferencePickerFor<Body>({
             </option>
           ))}
         </select>
-        {note !== undefined ? <span className="block text-[11px] text-idpxyz-textMuted mt-1">{note}</span> : null}
+        {note !== undefined ? <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">{note}</span> : null}
       </Field>
     );
   }
@@ -240,7 +240,7 @@ export function ReferencePickerFor<Body>({
         placeholder={manualPlaceholder}
         onChange={(event) => onChange(event.target.value)}
       />
-      <span className="block text-[11px] text-idpxyz-textMuted mt-1">
+      <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">
         {answer === null
           ? `正在读${readFace}…`
           : answer.kind === 'unconfigured'
@@ -303,7 +303,7 @@ export function VocabularySelect({
           ))}
         </select>
         {options.length === 0 ? (
-          <span className="block text-[11px] text-idpxyz-textMuted mt-1">服务端词表 {setName} 一集今天没有码；表单不自造。</span>
+          <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">服务端词表 {setName} 一集今天没有码；表单不自造。</span>
         ) : null}
       </Field>
     );
@@ -314,7 +314,7 @@ export function VocabularySelect({
       <select className={selectClass} value="" disabled>
         <option value="">{vocabularyPlaceholder(vocabulary, setName)}</option>
       </select>
-      <span className="block text-[11px] text-idpxyz-textMuted mt-1">
+      <span className="block text-[12px] text-idpxyz-breadcrumb mt-1">
         {/* 句中那个半角空格是此前两张表单里 JSX 折行留下的渲染结果，照原样保留——本票不改一字显示文案。 */}
         {unavailableNote ??
           `码只从服务端词表读口取（GET /commercial-publication-vocabularies?kind=${kind}）， 表单不内置枚举、不自造码；词表就绪前这一格选不了，送预览会由服务端点名。`}
