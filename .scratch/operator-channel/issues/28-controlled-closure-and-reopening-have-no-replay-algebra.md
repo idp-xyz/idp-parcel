@@ -1,7 +1,7 @@
 # 28 受控关闭与重开两口没核重放代数就开了真渠道：同一个关闭 POST 重试会再追加一条关闭
 
 Category: bug
-Status: in-progress——2026-10-16 作者会话（票 15 之六的代码作者，Claude Code 会话）分诊并认领：「要裁的一问」裁 (b)，见「裁定」；分支 `claude-oc28`。此前 needs-triage——2026-10-16 会话 `idp-parcel-9b` 立（票 26 序 1 评审阻断；评审会话在 main `4dd937eb` 上复核）。要先裁一问（见「要裁的一问」），裁完转 ready-for-agent。
+Status: in-progress——2026-10-16 完工，待进 main；见「完成记录」。此前 in-progress——2026-10-16 作者会话（票 15 之六的代码作者，Claude Code 会话）分诊并认领：「要裁的一问」裁 (b)，见「裁定」；分支 `claude-oc28`。此前 needs-triage——2026-10-16 会话 `idp-parcel-9b` 立（票 26 序 1 评审阻断；评审会话在 main `4dd937eb` 上复核）。要先裁一问（见「要裁的一问」），裁完转 ready-for-agent。
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)（评审欠账；本票是它点名的「有阻断的，各立修复票」）。被评的是 [15](./15-operation-decision-faces-take-operator-intake.md) 之六，代码 `0e3bb7df`，裁定见 [ADR-0183](../../../docs/adr/0183-operator-channel-addresses-controlled-closure-and-reopening-by-parcel-and-derives-the-shipper-from-the-accepted-request.md)。
 出处：票 15 的 Comments「评审 ← 会话 idp-parcel-9b 起的隔离子代理」钉 `0e3bb7df` 那一条，Spec 轴阻断 1。
@@ -43,7 +43,20 @@ Blocked by: 无
 
 ## 完成判据
 
-- [ ] 「要裁的一问」已裁，裁定写进本票，难逆转的进 ADR。
-- [ ] 同一个关闭请求原样重放，不再追加第二条关闭，答复带回原决定；重开同理。领域、编排、HTTP 各有回归用例。
-- [ ] 票 15 补记这两口凭哪条代数。
+- [x] 「要裁的一问」已裁，裁定写进本票，难逆转的进 ADR。
+- [x] 同一个关闭请求原样重放，不再追加第二条关闭，答复带回原决定；重开同理。领域、编排、HTTP 各有回归用例。
+- [x] 票 15 补记这两口凭哪条代数。
 - [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审（空闲通道或 `/code-review` 的隔离子代理）、推送方在干净检出上带 DSN 跑全量。
+
+## 完成记录（2026-10-16，作者会话，分支 `claude-oc28`，代码 `6c9f4886` / `312b8b54` / `752b03e9`）
+
+- **落点**：领域 `ContinuedAttemptRequest` 与 `ContinuedAttemptRegister.RecordedRequest`；编排 `FormContinuedAttemptDecisionHandler.form` 在授权与终局之后、货主重授权那道门与签发标识之前认重放，新结果格 `ContinuedAttemptDecisionExistingResult`（`EXISTING_RESULT`，HTTP 200 带回原决定）；`formation.request` 直接带请求内容，`decisionSpecOf` 一处合成规格。Intake：关闭两道纯载荷校验挪到按包裹寻址之前，主体与证据全空白与没给同读；证据判据 `application.HasShipperAuthorizationEvidence` 一处定义。规则全文在 ADR-0183「复核记录二」。
+- **补的格**：领域 `TestARegisterRecognisesTheSameRequestOnlyWhenEveryRequestCellMatches`（任一请求格不同都不是重放）；编排 `TestARetriedClosureAnswersTheExistingDecisionAndTheReopeningStillFindsIt`（关闭重投与重开重投各答已有结果、不签标识不写册不发意图，指名原关闭的重开照常形成）、`TestOnlyTheSameContentIsAReplayAndAuthorizationStillComesFirst`（换责任来源的第二条关闭照旧追加；未获授权的重放答未获授权）；Intake `TestABadClosurePayloadAnswers400EvenWhenTheParcelIsUnknown`、`TestABlankShipperAuthorizationEvidenceLeavesTheRequesterAbsent`；真库操作者渠道用例 `TestClosureAndReopeningThroughTheOperatorChannelAgainstARealDatabase` 补关闭与重开两次重投（200 `EXISTING_RESULT`、同一决定标识、册上不多一条）。
+- **HTTP 映射为什么只有带库用例守**：`adapters/http` 测试文件头注定的分工——带业务结果的响应体逐格钉由 `cmd/parcel-api` 真库装配用例做，结果字段未导出是刻意的（传输层不该能捏造业务结果）。缺 DSN 时这些用例在 CI 上 `t.Fatal`（`pgtest.AdminDSN` 在设了 `CI` 时如此），本地缺 DSN 则跳过。
+- **判据**：前三条见上方勾选（票 15 补记在其文末「补记」节）；第四条见「进 main 记录」。`internal/parcelshipment/...`、`cmd/parcel-api`、`cmd/parcel-dispatch`、`tests/`、`internal/architecture` 带 DSN 全绿，`go vet ./...` 退 0，`gofmt -l .` 无输出。机制清点重生成无差异。
+- **评审**（非作者通道 `idp-parcel-9b` 在忙，用 `/code-review` 的隔离子代理，两轴分开）：
+  - 第一轮（钉 `6c9f4886`）——Standards 阻断 1：请求内容类型插进了另一段头注中间，两段注释都成了假话；非阻断：编排逐格重拼请求内容、「空白与没给同读」两份、重放规则票与 ADR 各一份且对不上、两处头注过时。Spec 无阻断，非阻断：票 15 补记待做、头注过时、HTTP 映射只有带库用例守、调用方须固定生效时间、头注被劈开。全部修于 `312b8b54`。
+  - 第二轮（钉 `312b8b54`）——Standards 阻断 1：新证据判据的头注在数调用方；非阻断：三处头注仍指票 28、一句断言与已接受取舍相左、`spec` 钩子只转发。修于 `752b03e9`。Spec 无阻断，非阻断两条（票 15 补记的写法要点、DSN 缺失时的准确说法）收在本记录与票 15 补记里。
+  - 第三轮（Standards，钉 `752b03e9`）——无阻断、无非阻断；关闭仍带截断边界（值即决定标识）、重开不带，与改前逐格一致。
+- 证据层级 `S`。
+

@@ -182,3 +182,7 @@ Blocked by: 无——2026-10-16 核得 19 已 resolved（进 main 至 `8e1e9777`
 - 推送方全量一次：钉 `58626ca1` 的全新 detached 检出，带 DSN，`go test -p 1 -count=1 -v ./...` 退 0——有测试的包 141 个 ok、0 FAIL；`--- FAIL` 0、`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上全仓 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0。
 - 评审：只有作者自审，**没有非作者评审**——本机无其他会话可派，用户令独立完成。parallel-sessions「合入前独立评审」这一格未满足，如实记下；补评可钉 `858280a2..0e3bb7df` 另做，ADR-0183 的越权风险点 1 一并请 PS owner 过目。
 
+### 补记（2026-10-16，票 operator-channel/28）：受控关闭与重开两口凭哪条重放代数
+
+本票做什么第 2 条要逐口记下凭哪条代数，这两口当时漏记、也确实没有（票 28 现象节）。现在凭 ADR-0183「复核记录二」与 `domain.ContinuedAttemptRegister.RecordedRequest`：册上已有同类、请求内容逐格相同的决定即同一次请求的重放，答 `EXISTING_RESULT` 交回原决定。与 TFC-1 / CCC-1 一类「同键同内容是重放、同键异内容是冲突」不同属，三点要分清：**异内容即新决定**，照旧经领域追加；**没有内容冲突那一支**；**比对扫全册**，不只看生效中的那一条。
+
