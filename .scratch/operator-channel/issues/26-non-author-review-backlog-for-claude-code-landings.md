@@ -1,11 +1,13 @@
 # 26 补非作者评审：票 15 后两笔、20、22–25 与 ps-external-mark-relations/02 进 main 时只有作者自审
 
 Category: task
-Status: ready-for-agent——2026-10-16 Claude Code 会话立（用户「你帮我做决定吧」授权代决：维持 2026-09-16「本仓不用子代理」裁定，评审欠账集中到本票，由非作者通道领）
+Status: in-progress——2026-10-16 会话 `idp-parcel-9b` 认领（非作者会话；用户「需要」）：用户同日改裁「本仓允许子代理」（`docs/agents/workflow.md`「本机环境」那条，`ae29b3c2`），本会话起隔离子代理逐行评。此前 ready-for-agent——2026-10-16 Claude Code 会话立（用户「你帮我做决定吧」授权代决：维持 2026-09-16「本仓不用子代理」裁定，评审欠账集中到本票，由非作者通道领）
 Blocked by: 无
 领票条件：评审者不得是作者会话。下表全部代码出自同一个 Claude Code 会话（2026-10-16，会话名 `idp-parcel-c8`，分支 `claude-oc15` / `claude-oc20` / `claude-oc21` / `claude-oc25`）。照 [parallel-sessions](../../../docs/agents/parallel-sessions.md)「合入前独立评审」办：隔离检出、`/code-review <基线>`、两轴、只读、不跑全仓，结论写进各自票面 Comments「评审 ← 通道 N · 钉 `<SHA>`」。
 
 ## 为什么维持裁定，不放开子代理
+
+> 本节已被用户 2026-10-16 改裁取代（「本仓允许子代理」，见 `docs/agents/workflow.md`「本机环境」）。下面四条保留作立票时的理由，不再是现行依据；「评审出阻断就在新票上修，不回滚已进 main 的提交」那一句仍照办。
 
 - 2026-09-16 裁定写明「裁定不随宿主变」。换到子代理能用的宿主，正是那句话预见过的情形，用户当时选了不随之翻案。
 - 并行会话可能跑在不同宿主上。一条随宿主变的规矩，会让两边各守一套。
