@@ -216,7 +216,7 @@ export function LegalEntityRegistrationForm({
                         onChange={(event) => setNumberRow(index, { number: event.target.value })}
                       />
                     </Field>
-                    <Button variant="ghost" className="mt-5" disabled={locked} onClick={() => removeNumberRow(index)}>
+                    <Button variant="ghost" className="mt-5 text-idpxyz-breadcrumb" disabled={locked} onClick={() => removeNumberRow(index)}>
                       移除
                     </Button>
                   </div>
@@ -224,7 +224,7 @@ export function LegalEntityRegistrationForm({
               </div>
               <Problems lines={problems['legalEntities[0].lifetimeRegistrationNumbers']} />
               <div className="mt-2 flex items-center gap-3">
-                <Button variant="outline" disabled={locked} onClick={addNumberRow}>
+                <Button className="text-idpxyz-breadcrumb" variant="outline" disabled={locked} onClick={addNumberRow}>
                   添加一个终身注册号
                 </Button>
                 <span className="text-[12px] text-idpxyz-breadcrumb">一个法人可按类型登记多个终身注册号。</span>

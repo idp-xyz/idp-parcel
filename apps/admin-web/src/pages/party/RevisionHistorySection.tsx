@@ -107,7 +107,7 @@ export function RevisionHistorySection<Body>({
     return (
       <p className={note}>
         答案回显的{register.subject}（{echoed}）与所问（{subjectId}）不符，已丢弃。
-        <Button variant="ghost" size="sm" className="ml-2" onClick={retry}>
+        <Button variant="ghost" size="sm" className="ml-2 text-[12px] text-idpxyz-breadcrumb" onClick={retry}>
           重试
         </Button>
       </p>

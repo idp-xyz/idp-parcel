@@ -208,7 +208,7 @@ export function WorkbenchPageTemplate<Row>({
         <Inbox className="mb-3 h-8 w-8 opacity-50" aria-hidden="true" />
         <p className="text-[13px]">{noMatchText}</p>
         {onClearFilters && (
-          <Button variant="ghost" size="sm" className="mt-2 text-[12px]" onClick={onClearFilters}>
+          <Button variant="ghost" size="sm" className="mt-2 text-[12px] text-idpxyz-breadcrumb" onClick={onClearFilters}>
             清除筛选
           </Button>
         )}
@@ -325,7 +325,11 @@ export function WorkbenchPageTemplate<Row>({
                       {kpi.label}
                     </span>
                     <span
-                      className={`text-[16px] font-semibold leading-none ${kpi.tone ?? 'text-idpxyz-textBright'} ${
+                      // 激活态的底色上语气字色不足 4.5:1（票 group-legal-entities-uiux/08 评审），激活时数值改用正文亮色，
+                      // 语气由图标与激活描边承载。
+                      className={`text-[16px] font-semibold leading-none ${
+                        kpi.active ? 'text-idpxyz-textBright' : (kpi.tone ?? 'text-idpxyz-textBright')
+                      } ${
                         kpi.pulse ? 'animate-pulse' : ''
                       }`}
                     >
@@ -340,6 +344,7 @@ export function WorkbenchPageTemplate<Row>({
         <div className="ml-auto flex shrink-0 items-center gap-2">
           {onRefresh && (
             <Button
+              className="text-idpxyz-breadcrumb"
               variant="ghost"
               size="icon"
               onClick={handleRefresh}
@@ -364,7 +369,7 @@ export function WorkbenchPageTemplate<Row>({
             onChange={(event) => search.onChange(event.target.value)}
             placeholder={search.placeholder ?? '搜索…'}
             aria-label={search.placeholder ?? '搜索'}
-            className="min-w-0 flex-1 bg-transparent text-idpxyz-text placeholder-idpxyz-textMuted outline-none"
+            className="min-w-0 flex-1 bg-transparent text-idpxyz-text placeholder-idpxyz-breadcrumb outline-none"
             onKeyDown={(event) => event.key === 'Escape' && event.currentTarget.blur()}
           />
           <kbd className="rounded border border-idpxyz-border px-1 text-[12px] text-idpxyz-breadcrumb">/</kbd>

@@ -11,7 +11,7 @@ import {
   TabsTrigger,
 } from '@idpxyz/ui-primitives';
 import { primaryActionClass } from '../../components/primary-action';
-import { statusToneBanner } from '../../components/status-tone';
+import { statusToneBanner, statusToneText } from '../../components/status-tone';
 import type { GroupLegalEntityRecord } from './api';
 import {
   identityLayerAbsentNote,
@@ -206,7 +206,7 @@ export function LegalEntityDetailPanel({
             <DropdownMenu
               align="right"
               trigger={
-                <Button variant="outline" size="sm" className="px-2" aria-label="更多动作">
+                <Button variant="outline" size="sm" className="px-2 text-idpxyz-breadcrumb" aria-label="更多动作">
                   <MoreHorizontal className="h-4 w-4" aria-hidden="true" />
                 </Button>
               }
@@ -233,7 +233,7 @@ export function LegalEntityDetailPanel({
                 到业务参与方页停用 <span className="ml-1 font-mono text-idpxyz-breadcrumb">{row.partyId}</span>
               </MenuItem>
             </DropdownMenu>
-            <Button variant="ghost" size="icon" onClick={onClose} aria-label="关闭详情" title="关闭（Esc）">
+            <Button className="text-idpxyz-breadcrumb" variant="ghost" size="icon" onClick={onClose} aria-label="关闭详情" title="关闭（Esc）">
               <X className="h-4 w-4" aria-hidden="true" />
             </Button>
           </div>
@@ -243,7 +243,7 @@ export function LegalEntityDetailPanel({
 
         {row.deactivatedAt && (
           <div className={`flex items-center gap-2 rounded border px-2.5 py-1.5 text-[12px] ${statusToneBanner.danger}`}>
-            <Ban className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <Ban className={`h-3.5 w-3.5 shrink-0 ${statusToneText.danger}`} aria-hidden="true" />
             <span>
               自 <Instant value={row.deactivatedAt} /> 起停用，不再支持新的商业决定
               {row.deactivationBasis ? ` — 依据 ${row.deactivationBasis}` : ''}
@@ -254,13 +254,13 @@ export function LegalEntityDetailPanel({
             参与方悬空是写入门失败留下的，登新修订补不上。 */}
         {!row.identityLayerRegistered && (
           <div className={`flex items-center gap-2 rounded border px-2.5 py-1.5 text-[12px] ${statusToneBanner.warning}`}>
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${statusToneText.warning}`} aria-hidden="true" />
             <span>待补：身份层两格{identityLayerAbsentNote}。登记同一法人的下一修订补齐（列表页头「登记责任法人」）。</span>
           </div>
         )}
         {!row.partyNameKnown && (
           <div className={`flex items-center gap-2 rounded border px-2.5 py-1.5 text-[12px] ${statusToneBanner.warning}`}>
-            <AlertTriangle className="h-3.5 w-3.5 shrink-0" aria-hidden="true" />
+            <AlertTriangle className={`h-3.5 w-3.5 shrink-0 ${statusToneText.warning}`} aria-hidden="true" />
             <span>
               待查：{partyNameUnknownNote}（{row.partyId}）。这是写入门失败留下的悬空，登记新修订补不上，需到业务参与方页核对参与方册。
             </span>
@@ -281,15 +281,15 @@ export function LegalEntityDetailPanel({
 
       <Tabs value={tab} onValueChange={(value) => selectTab(value as PanelTab)} className="flex min-h-0 flex-1 flex-col">
         <TabsList className="mx-5 mt-3 shrink-0">
-          <TabsTrigger value="overview">
+          <TabsTrigger value="overview" className="text-idpxyz-breadcrumb">
             <IdCard className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
             概要
           </TabsTrigger>
-          <TabsTrigger value="profile">
+          <TabsTrigger value="profile" className="text-idpxyz-breadcrumb">
             <FileText className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
             法人资料
           </TabsTrigger>
-          <TabsTrigger value="history">
+          <TabsTrigger value="history" className="text-idpxyz-breadcrumb">
             <History className="mr-1.5 h-3.5 w-3.5" aria-hidden="true" />
             身份修订
           </TabsTrigger>

@@ -107,7 +107,7 @@ export function LegalEntityProfileSection({
         {formOpen ? (
           <ProfileRegistrationForm legalEntityId={legalEntityId} onLanded={() => setLanded((count) => count + 1)} />
         ) : (
-          <Button variant="outline" onClick={() => setFormOpen(true)}>
+          <Button className="text-idpxyz-breadcrumb" variant="outline" onClick={() => setFormOpen(true)}>
             登记新的资料修订
           </Button>
         )}
@@ -145,7 +145,7 @@ function CurrentProfile({ legalEntityId, landed }: { legalEntityId: string; land
   const retry = () => setReloadKey((value) => value + 1);
   return (
     <div className="mt-1 flex flex-col gap-2">
-      <div className="mt-3 max-w-80 rounded-md border border-idpxyz-border bg-idpxyz-sidebar/60 p-3">
+      <div className="mt-3 max-w-80 rounded-md border border-idpxyz-border bg-idpxyz-sidebar p-3">
         <WallTimeField
           label="按时点查看（留空即此刻）"
           path="at"
@@ -343,6 +343,7 @@ function ProfileRegistrationForm({ legalEntityId, onLanded }: { legalEntityId: s
                   onChange={(event) => setTax(index, { number: event.target.value })}
                 />
                 <Button
+                  className="text-idpxyz-breadcrumb"
                   variant="ghost"
                   disabled={locked}
                   onClick={() => patch({ taxNumbers: draft.taxNumbers.filter((_, at) => at !== index) })}
@@ -354,6 +355,7 @@ function ProfileRegistrationForm({ legalEntityId, onLanded }: { legalEntityId: s
             <Problems lines={problems['profiles[0].taxRegistrationNumbers']} />
             <div className="flex items-center gap-3">
               <Button
+                className="text-idpxyz-breadcrumb"
                 variant="outline"
                 disabled={locked}
                 onClick={() => patch({ taxNumbers: [...draft.taxNumbers, { typeCode: '', number: '' }] })}
@@ -387,6 +389,7 @@ function ProfileRegistrationForm({ legalEntityId, onLanded }: { legalEntityId: s
                   onChange={(event) => setContact(index, { phone: event.target.value })}
                 />
                 <Button
+                  className="text-idpxyz-breadcrumb"
                   variant="ghost"
                   disabled={locked}
                   onClick={() => patch({ contacts: draft.contacts.filter((_, at) => at !== index) })}
@@ -397,6 +400,7 @@ function ProfileRegistrationForm({ legalEntityId, onLanded }: { legalEntityId: s
             ))}
             <div className="flex items-center gap-3">
               <Button
+                className="text-idpxyz-breadcrumb"
                 variant="outline"
                 disabled={locked}
                 onClick={() => patch({ contacts: [...draft.contacts, { name: '', email: '', phone: '' }] })}

@@ -145,7 +145,7 @@ export function RevisionField({
           onChange={(event) => onChange(event.target.value)}
         />
         {edited ? (
-          <Button variant="outline" size="sm" className="text-[12px]" disabled={locked} onClick={onUseSuggestion}>
+          <Button variant="outline" size="sm" className="text-[12px] text-idpxyz-breadcrumb" disabled={locked} onClick={onUseSuggestion}>
             用建议值 {suggestion}
           </Button>
         ) : null}

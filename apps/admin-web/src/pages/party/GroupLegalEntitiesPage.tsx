@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { AlertTriangle, ArrowLeft, Plus } from 'lucide-react';
+import { AlertTriangle, ArrowLeft, Clock, Plus } from 'lucide-react';
 import { Button, ConfirmDialog } from '@idpxyz/ui-primitives';
 import {
   WorkbenchPageTemplate,
@@ -76,8 +76,8 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
           }`}
           aria-hidden="true"
         />
-        {/* 标识用链接色（text.link.hover，经 --idpxyz-statusHover 映射进来）：强调色 #007acc 落在画布与选中行上只有 3.7–4.2:1。 */}
-        <span className="truncate font-mono font-medium text-idpxyz-statusHover">{row.legalEntityId}</span>
+        {/* 标识取主题的链接色 text.link.hover：强调色 #007acc 落在画布与选中行上只有 3.7–4.2:1。 */}
+        <span className="truncate font-mono font-medium text-[color:var(--ds-text-link-hover)]">{row.legalEntityId}</span>
         <span className="shrink-0 font-mono text-[12px] text-idpxyz-breadcrumb">{identityRevisionLabel(row.revision)}</span>
         {legalEntityNeedsAttention(row) && (
           <AlertTriangle className={`h-3 w-3 shrink-0 ${statusToneText.warning}`} aria-label="待补" />
@@ -123,9 +123,13 @@ const columns: WorkbenchColumn<GroupLegalEntityRecord>[] = [
     key: 'effective-from',
     header: '生效自',
     sortKey: 'effective-from',
-    // 已登记即还没到生效时点，时刻标琥珀色——与参照页「预计到货」临近那一格同一个提示。
+    // 已登记即还没到生效时点，与参照页「预计到货」临近那一格同一个提示。参照页把时刻本身标琥珀色，这里改配一个琥珀色
+    // 时钟：琥珀色字落在选中行与关注行的底色上不足 4.5:1（票 group-legal-entities-uiux/08 评审），图标是非文字，门槛 3:1。
     render: (row) => (
-      <span className={`font-mono ${row.status === 'REGISTERED' ? `font-medium ${statusToneText.warning}` : 'text-idpxyz-text'}`}>
+      <span className="inline-flex items-center gap-1 font-mono text-idpxyz-text">
+        {row.status === 'REGISTERED' ? (
+          <Clock className={`h-3 w-3 shrink-0 ${statusToneText.warning}`} aria-label="尚未生效" />
+        ) : null}
         <Instant value={row.effectiveFrom} />
       </span>
     ),
@@ -269,7 +273,7 @@ export function GroupLegalEntitiesPage() {
     return (
       <div className="flex flex-1 flex-col overflow-hidden bg-idpxyz-editor">
         <div className="flex shrink-0 items-center gap-4 border-b border-idpxyz-border px-6 py-3">
-          <Button variant="ghost" size="sm" className="text-[12px]" onClick={requestLeaveRegister}>
+          <Button variant="ghost" size="sm" className="text-[12px] text-idpxyz-breadcrumb" onClick={requestLeaveRegister}>
             <ArrowLeft className="mr-1.5 h-4 w-4" aria-hidden="true" />
             返回列表
           </Button>

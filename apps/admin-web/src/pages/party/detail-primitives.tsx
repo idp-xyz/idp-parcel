@@ -91,7 +91,7 @@ export function DetailRow({
       <dd className={`flex items-start justify-between gap-2 text-[13px] text-idpxyz-text ${mono ? 'font-mono' : ''}`}>
         <span className="break-all">{children}</span>
         {onCopy ? (
-          <Button variant="ghost" size="sm" className="shrink-0 text-[12px]" onClick={onCopy}>
+          <Button variant="ghost" size="sm" className="shrink-0 text-[12px] text-idpxyz-breadcrumb" onClick={onCopy}>
             复制
           </Button>
         ) : null}
