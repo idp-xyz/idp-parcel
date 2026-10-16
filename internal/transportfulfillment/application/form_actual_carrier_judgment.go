@@ -224,29 +224,26 @@ func (handler *FormActualCarrierJudgmentHandler) resolveSubject(
 	ctx context.Context,
 	command FormActualCarrierJudgmentCommand,
 ) (domain.CarrierSubject, string, CarrierJudgmentOutcome) {
-	material := strings.TrimSpace(command.NameMaterial)
-	if strings.TrimSpace(command.SubjectReference) == "" {
-		if material == "" {
-			return domain.CarrierSubject{}, "", CarrierJudgmentNotAccepted
-		}
-		return domain.CarrierSubject{}, material, CarrierJudgmentOutcomeInvalid
-	}
-	claimed, err := domain.NewCarrierSubject(command.SubjectKind, command.SubjectReference)
-	if err != nil {
+	naming, named := readCarrierNaming(command.SubjectKind, command.SubjectReference, command.NameMaterial)
+	if !named {
 		return domain.CarrierSubject{}, "", CarrierJudgmentNotAccepted
+	}
+	if !naming.byReference {
+		return domain.CarrierSubject{}, naming.material, CarrierJudgmentOutcomeInvalid
 	}
 	if handler.deps.Identities == nil {
 		return domain.CarrierSubject{}, "", CarrierJudgmentUndecided
 	}
-	registered, err := handler.deps.Identities.IdentityRegistered(ctx, command.TenantID, claimed)
+	registered, err := handler.deps.Identities.IdentityRegistered(ctx, command.TenantID, naming.claimed)
 	if err != nil {
 		return domain.CarrierSubject{}, "", CarrierJudgmentUndecided
 	}
 	if registered {
-		return claimed, "", CarrierJudgmentOutcomeInvalid
+		return naming.claimed, "", CarrierJudgmentOutcomeInvalid
 	}
+	material := naming.material
 	if material == "" {
-		material = claimed.Reference()
+		material = naming.claimed.Reference()
 	}
 	return domain.CarrierSubject{}, material, CarrierJudgmentOutcomeInvalid
 }

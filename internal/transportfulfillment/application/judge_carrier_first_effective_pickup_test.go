@@ -849,8 +849,8 @@ func TestAVoidingCommandWithAReferenceButNoKindReplaysAsAlreadyRecorded(t *testi
 	}
 }
 
-// Covers: 票 operator-channel/27 一并修的非阻断——主体轴免比只限「以名称素材指名」（票 20 判断项）。表达控制却引用与
-// 素材都不给的命令，首判答`输入未受理`；落在同一依据的已形成链尾上也答`输入未受理`，不因链尾在册就读成重放。
+// Covers: 主体轴免比只限「以名称素材指名」（票 operator-channel/20 判断项）。表达控制却引用与素材都不给的命令，首判答
+// `输入未受理`；落在同一依据的已形成链尾上也答`输入未受理`，不因链尾在册就读成重放。
 func TestAControlCommandWithNoSubjectAtAllIsNotAcceptedOnTheSameBasisEither(t *testing.T) {
 	fixture := newCarrierPickupFixture(t, carrierX(t))
 	fixture.addTrackingFact(t, "EXTF-1", "EXTV-1", "PCL-1", carrierPickupEffectiveAt, "")

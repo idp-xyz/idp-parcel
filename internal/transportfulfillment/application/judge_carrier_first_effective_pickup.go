@@ -375,15 +375,12 @@ func replayOrConflictOnTheSameBasis(
 	}
 	requestedCarrier := recordedCarrier
 	if command.ExpressesControl {
-		switch {
-		case strings.TrimSpace(command.SubjectReference) != "":
-			claimed, err := domain.NewCarrierSubject(command.SubjectKind, command.SubjectReference)
-			if err != nil {
-				return JudgeCarrierFirstEffectivePickupResult{outcome: CarrierPickupNotAccepted}, nil
-			}
-			requestedCarrier = claimed
-		case strings.TrimSpace(command.NameMaterial) == "":
+		naming, named := readCarrierNaming(command.SubjectKind, command.SubjectReference, command.NameMaterial)
+		if !named {
 			return JudgeCarrierFirstEffectivePickupResult{outcome: CarrierPickupNotAccepted}, nil
+		}
+		if naming.byReference {
+			requestedCarrier = naming.claimed
 		}
 	}
 	_, requested, err := domain.CanonicalizeCarrierFirstEffectivePickupPayload(command.ExpressesControl, requestedCarrier, input.occurredAt)
@@ -677,29 +674,26 @@ func (handler *JudgeCarrierFirstEffectivePickupHandler) resolveSubject(
 	ctx context.Context,
 	command JudgeCarrierFirstEffectivePickupCommand,
 ) (domain.CarrierSubject, string, CarrierPickupJudgmentOutcome) {
-	material := strings.TrimSpace(command.NameMaterial)
-	if strings.TrimSpace(command.SubjectReference) == "" {
-		if material == "" {
-			return domain.CarrierSubject{}, "", CarrierPickupNotAccepted
-		}
-		return domain.CarrierSubject{}, material, CarrierPickupJudgmentOutcomeInvalid
-	}
-	claimed, err := domain.NewCarrierSubject(command.SubjectKind, command.SubjectReference)
-	if err != nil {
+	naming, named := readCarrierNaming(command.SubjectKind, command.SubjectReference, command.NameMaterial)
+	if !named {
 		return domain.CarrierSubject{}, "", CarrierPickupNotAccepted
+	}
+	if !naming.byReference {
+		return domain.CarrierSubject{}, naming.material, CarrierPickupJudgmentOutcomeInvalid
 	}
 	if handler.deps.Directory == nil {
 		return domain.CarrierSubject{}, "", CarrierPickupUndecided
 	}
-	registered, err := handler.deps.Directory.IdentityRegistered(ctx, command.TenantID, claimed)
+	registered, err := handler.deps.Directory.IdentityRegistered(ctx, command.TenantID, naming.claimed)
 	if err != nil {
 		return domain.CarrierSubject{}, "", CarrierPickupUndecided
 	}
 	if registered {
-		return claimed, "", CarrierPickupJudgmentOutcomeInvalid
+		return naming.claimed, "", CarrierPickupJudgmentOutcomeInvalid
 	}
+	material := naming.material
 	if material == "" {
-		material = claimed.Reference()
+		material = naming.claimed.Reference()
 	}
 	return domain.CarrierSubject{}, material, CarrierPickupJudgmentOutcomeInvalid
 }
