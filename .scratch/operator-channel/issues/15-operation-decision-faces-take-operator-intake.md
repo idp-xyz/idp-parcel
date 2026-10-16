@@ -1,8 +1,8 @@
 # 15 委托与履约的运营决定口：操作者渠道增「运营决定」能力面，委托侧五口与 TF 管理台上的决定与判断口换操作者 Intake
 
 Category: enhancement
-Status: in-progress——2026-10-13 通道 4（通道 1 派单 `task-40698906`，接替裁定未送达的 `task-21973bb2`）：余下四口照裁定 A **本轮没换**，仍挂隔离放行；两条发现记在文末进展记录，四口改挡在 [19](./19-admission-scope-bridge-for-operator-and-integration-client-minters.md)（准入范围桥）；[20](./20-tf-closure-dispatch-task-and-pickup-judgment-canonicalization.md)（TF 三口规范化形状）2026-10-16 resolved（进 main 至 `2d84eb2c`），不再挡。分支 `mcp4-oc15f` 上只有票面几笔。受控关闭与重开仍等 PS owner。此前 in-progress——2026-10-12 通道 4 认领余下四口（通道 1 派单 `task-21973bb2`）：关段、建派送任务、有效时间判断、承运商首次有效收寄判断换「运营决定」操作者 Intake，同笔撤隔离放行（ADR-0150 决定三）；隔离 worktree `/home/tops/workspace/idp-parcel-mcp4-oc15f`、分支 `mcp4-oc15f`（基 `1e02d2ea`）。受控关闭与重开不在这一批，仍等 PS owner。此前 in-progress——2026-09-25 通道 4 认领（用户令独立完成 ADR-0151 那件；前置 03、14 均已 resolved），分块逐笔进 main：之一至之四已进 main（见文末进展记录）；余下关段、建派送任务与两个判断口的换口要等演示环境走通操作者渠道（换口同笔撤隔离放行），受控关闭与重开等请求方格与 PS owner 对齐。此前 ready-for-agent——2026-09-24 随 ADR-0151 立（用户同日「同意你的决定，开干」）；2026-09-25 通道 2 按用户「开干前，全面审查，确保确实如此」复核后改定范围、阻塞与完成判据，复核记录见文末 Comments
-Blocked by: 隔离放行名单上四口（关段、建派送任务、有效时间判断、承运商首次有效收寄判断）的换口——[19](./19-admission-scope-bridge-for-operator-and-integration-client-minters.md)（准入范围桥：撤放行之后演示租户要靠它越过「不在准入范围」，四口都挡）。[20](./20-tf-closure-dispatch-task-and-pickup-judgment-canonicalization.md) 已 resolved（2026-10-16 进 main 至 `2d84eb2c`：关段只核对并补答复回显、建派送任务只核对、承运商首次有效收寄判断补 TFC-1 + `CONTENT_CONFLICT`），四口的规范化前置都已解除。2026-10-13 通道 4 照裁定 A 改指，原挡的 [17](./17-demo-issuer-dex-and-synthetic-operators.md)、[07](./07-admin-web-login-gate.md) 均已 resolved；受控关闭与重开两口——请求方格与 PS owner 对齐（本票做什么第 3 条）。03、14 已 resolved
+Status: in-progress——2026-10-16 Claude Code 会话接手并完工（用户「你作为业务和系统超级专家，你自己全部独立完成吧」；通道 4 自 10-13 起无在途），分支 `claude-oc15`：余下四口换口同笔撤隔离放行 `60244fa6`，受控关闭与重开按 [ADR-0183](../../../docs/adr/0183-operator-channel-addresses-controlled-closure-and-reopening-by-parcel-and-derives-the-shipper-from-the-accepted-request.md) 换口 `0e3bb7df`；待进 main，见文末「完成记录」。此前 in-progress——2026-10-13 通道 4（通道 1 派单 `task-40698906`，接替裁定未送达的 `task-21973bb2`）：余下四口照裁定 A **本轮没换**，仍挂隔离放行；两条发现记在文末进展记录，四口改挡在 [19](./19-admission-scope-bridge-for-operator-and-integration-client-minters.md)（准入范围桥）；[20](./20-tf-closure-dispatch-task-and-pickup-judgment-canonicalization.md)（TF 三口规范化形状）2026-10-16 resolved（进 main 至 `2d84eb2c`），不再挡。分支 `mcp4-oc15f` 上只有票面几笔。受控关闭与重开仍等 PS owner。此前 in-progress——2026-10-12 通道 4 认领余下四口（通道 1 派单 `task-21973bb2`）：关段、建派送任务、有效时间判断、承运商首次有效收寄判断换「运营决定」操作者 Intake，同笔撤隔离放行（ADR-0150 决定三）；隔离 worktree `/home/tops/workspace/idp-parcel-mcp4-oc15f`、分支 `mcp4-oc15f`（基 `1e02d2ea`）。受控关闭与重开不在这一批，仍等 PS owner。此前 in-progress——2026-09-25 通道 4 认领（用户令独立完成 ADR-0151 那件；前置 03、14 均已 resolved），分块逐笔进 main：之一至之四已进 main（见文末进展记录）；余下关段、建派送任务与两个判断口的换口要等演示环境走通操作者渠道（换口同笔撤隔离放行），受控关闭与重开等请求方格与 PS owner 对齐。此前 ready-for-agent——2026-09-24 随 ADR-0151 立（用户同日「同意你的决定，开干」）；2026-09-25 通道 2 按用户「开干前，全面审查，确保确实如此」复核后改定范围、阻塞与完成判据，复核记录见文末 Comments
+Blocked by: 无——2026-10-16 核得 19 已 resolved（进 main 至 `8e1e9777`）、20 已 resolved（至 `2d84eb2c`），受控关闭与重开的请求方格由 ADR-0183 代 PS owner 裁定。此前：隔离放行名单上四口（关段、建派送任务、有效时间判断、承运商首次有效收寄判断）的换口——[19](./19-admission-scope-bridge-for-operator-and-integration-client-minters.md)（准入范围桥：撤放行之后演示租户要靠它越过「不在准入范围」，四口都挡）。[20](./20-tf-closure-dispatch-task-and-pickup-judgment-canonicalization.md) 已 resolved（2026-10-16 进 main 至 `2d84eb2c`：关段只核对并补答复回显、建派送任务只核对、承运商首次有效收寄判断补 TFC-1 + `CONTENT_CONFLICT`），四口的规范化前置都已解除。2026-10-13 通道 4 照裁定 A 改指，原挡的 [17](./17-demo-issuer-dex-and-synthetic-operators.md)、[07](./07-admin-web-login-gate.md) 均已 resolved；受控关闭与重开两口——请求方格与 PS owner 对齐（本票做什么第 3 条）。03、14 已 resolved
 父票：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 甲轨
 地盘：`internal/accessidentity`（能力面授予格「运营决定」）；`cmd/parcel-api` 端点表里下列各口的 Intake 装配与装配测试；`internal/parcelshipment/adapters/http` 与 `internal/transportfulfillment/adapters/http` 各口的操作者 Intake。
 出处：[ADR-0151](../../../docs/adr/0151-unassigned-command-faces-get-their-families.md) 决定一、二、三、六；[ADR-0100](../../../docs/adr/0100-operator-identity-is-a-product-owned-access-channel-family.md) 决定二、四；[ADR-0149](../../../docs/adr/0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md) 决定四。
@@ -114,4 +114,34 @@ Blocked by: 隔离放行名单上四口（关段、建派送任务、有效时�
 ### 进 main 记录（2026-10-13 通道 1）
 
 分支 `mcp4-oc15f` 四笔纯 `.md`，原样重放到 main `ee48fa54` 之上：`3ee62f2e`→`f3ec4448`、`749c6f90`→`eaa255b8`、`aca18256`→`584d20b9`、`af5a83a6`→`d4590c66`，四份文件对分支 tip 逐字相同；分支上的 SHA 作封存出处。推送后拆隔离树 `idp-parcel-mcp4-oc15f`，分支指针改名 `merged/mcp4-oc15f`。纯 `.md`，推送方自审。本票仍 in-progress。
+
+## 完成记录（2026-10-16，Claude Code 会话，分支 `claude-oc15`）
+
+**基线**：分支基 `858280a2`（= 远端 main）。代码两笔：`60244fa6`（余下四口）、`0e3bb7df`（受控关闭与重开 + ADR-0183）；本记录一笔在其后。接手理由：通道 4 自 2026-10-13 起无在途（分支 `mcp4-oc15f` 已 `merged/`），本机 `/list-agents` 无别的会话；用户令独立完成。
+
+**之五 · 余下四口**（`60244fa6`）。前置：19（准入范围桥，`8e1e9777`）、20（三口规范化，`857453d8`）都已进 main。
+- 关段、建派送任务、有效时间判断、承运商首次有效收寄判断四个端点行直接挂 `operatorDecisions.transport`；同笔撤隔离写放行（ADR-0150 决定三）：放行名单删这四行（写开关只剩 `/shipment-requests`），`isolatedWriteAdmission` 的运输履约那一格与 `assembleBusinessEndpoints` 的 `isolatedTransportFulfillment` 入参删去，`IsolatedCommandIntake` 上这四口的方法撤下，四口的译装用例迁到 `OperatorDecisionIntake`，自报租户 / 尾随内容 / 未知键对 TF 六个运营决定口逐口跑。
+- 演示种子：配置员加这四种决定的授予，准入对照四行，治理区间 17–20。
+- 管理台已经统一经 `withBearer` 带令牌（`postMasterData`），前端不用改；不设 `IDP_PARCEL_GOVERNANCE_SELF_AUTHORITY` 时这几页答 `OUTSIDE_ADMISSION_SCOPE`，README 写明。
+
+**之六 · 受控关闭与重开**（`0e3bb7df`）。做什么第 3 条要「与 PS owner 对齐」的那一格，由 [ADR-0183](../../../docs/adr/0183-operator-channel-addresses-controlled-closure-and-reopening-by-parcel-and-derives-the-shipper-from-the-accepted-request.md) 代 PS owner 裁定（越权风险点见该记录）：载荷只指名包裹，服务端反查当前已接受委托取来源身份；请求方只可能是那份委托的客户账户（`CUSTOMER-ACCOUNT/<标识>`），关闭由责任来源推出、重开随货主重授权证据出现，货主账户恒取委托客户；提交操作者不进命令。演示种子补两种决定的对照与区间 21、22（同委托侧另三口，不给配置员授予）。
+
+**完成判据**（钉 `0e3bb7df`；Linux（WSL2），go1.26.8，真库为 55432 门禁库）
+
+- ✅ 上列各口四格各答其格，装配测试与端点表一一对照：发行方未配置——`TestEveryAssembledEndpointAnswersUnconfigured`；令牌缺失 401 与不在准入范围 403——`TestSwappedDecisionFacesAnswerFromTheOperatorChannel`；无此决定种类的授予——新增 `TestSwappedDecisionFacesRefuseAGrantOfAnotherDecisionKind`（只缺这一种授予即答 `OPERATOR_NOT_GRANTED`）。两表都已含本票全部十一口。
+- ✅ 租户、提交操作者与委托来源身份不从请求体收，带即 400：TF 四口 `TestEveryDecisionFaceRefusesSelfReportedTenantTrailingContentAndUnknownKeys` 与真库表的自报租户格；受控关闭与重开 `TestControlledClosureTakesTheShipperFromTheAcceptedRequestOfTheParcel`、`TestReopeningTakesTheShipperAccountFromTheAcceptedRequestOfTheParcel`（夹带请求方、委托标识、租户、货主账户各一格）。复核人等三口在之三已证。受控关闭与重开的命令没有提交操作者格，运营操作关闭的请求方为空（同上用例）。
+- ✅ 越过 Intake 之后：TF 四口答业务结果——`TestTransportFulfillmentCommandLinesAnswerBusinessOutcomesAgainstARealDatabase`（四种决定各登对照与本产品区间，经生产的准入范围桥越过准入）；受控关闭与重开在生产装配上停在 `UNDECIDED / AUTHORITY_UNAVAILABLE`、合成授权下答业务结果——`TestClosureAndReopeningThroughTheOperatorChannelAgainstARealDatabase`（令牌 → Intake → 编排 → 册；货主指令关闭 201，册上请求方与责任来源由服务端推出；不带证据的重开 `SHIPPER_REAUTHORIZATION_MISSING`，带证据的重开 201）。
+- ✅ 四口隔离放行已撤，隔离用例改写为真渠道答复格用例（之五）；隔离写二分表只剩 `/shipment-requests`。
+- 先红后绿：已换口表与只缺一种授予两条在装配换口前跑红（四口答 `ACCESS_CHANNEL_NOT_CONFIGURED`）；PS Intake 四条先挂骨架跑出行为红。受控关闭与重开那两行的装配用例写在换口之后，补做变异取证（端点行退回 `UnconfiguredIntake{}` 即红）。真库表与端到端用例、TF 译装迁移用例是对已有路径的取证，一写即绿。
+
+**门**（作者自验）：两笔各自在其上跑过全仓 `go build` / `go vet`（退 0）、改动 `.go` 的 `gofmt`（无输出）与 CR / BOM 检查；`cmd/parcel-api`、TF / PS 的 `adapters/accessidentity` 与 `adapters/http`、`./internal/architecture/...` 带 DSN `go test -p 1 -count=1` 全 ok；一次性库上 `seed.sh` 整跑退 0、新登的授予 / 对照 / 区间逐行查得到，库已删；机制清点重生成两次都与现行文档逐字相同。全仓全量归推送方那一跑。
+
+**评审**：作者自审，两轴串行（本仓不用子代理）。不算非作者评审。
+
+**证据层级**：全部 `S`。
+
+**发现，不做（另立票）**
+- `tfhttp.IsolatedCommandIntake` 已无装配使用者：余下作业事实各口的方法是票 10 换口时没有同笔撤的（ADR-0150 决定三）。它的译装用例是那几口线格式的主要覆盖，`WorkFactCommandIntake` 在本包没有解码用例；要撤得先把用例迁过去。`register_effective_delivery.go` 与 `register_transport_handover.go` 头注说它是「唯一的实现」，同属过期。
+- `nodeopshttp.IsolatedCommandIntake` 同样已无装配使用者（`isolatedWriteAdmission` 头注自承），同一处理。
+- 演示配置员没有委托侧五种决定的授予（区间与对照都在）：管理台在这五口上答 `OPERATOR_NOT_GRANTED`。授权缺口（psb/07）补上之前给了授予也只会停在各自的授权未决格；补授予随 psb/07 那一笔做更合适。
 
