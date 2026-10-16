@@ -1,7 +1,7 @@
 # 02 外部标识关联册落地，客户包裹件号随委托接受形成，节点身份核对接真
 
 Category: enhancement
-Status: in-progress——2026-10-16 完工，待进 main；见「完成记录」。此前 in-progress——2026-10-16 Claude Code 会话认领，分支 `claude-psxm`，基线 `d01e4309`。此前 ready-for-agent——2026-10-16 Claude Code 会话立（[ADR-0184](../../../docs/adr/0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md) 决定一至六）
+Status: resolved——2026-10-16 进 main（`cc52e9b6`，分支 `claude-psxm` 快进，远端 main 含 `3e5f7c6f`）；见「进 main 记录」。此前 in-progress——2026-10-16 完工，待进 main；见「完成记录」。此前 in-progress——2026-10-16 Claude Code 会话认领，分支 `claude-psxm`，基线 `d01e4309`。此前 ready-for-agent——2026-10-16 Claude Code 会话立（[ADR-0184](../../../docs/adr/0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md) 决定一至六）
 Blocked by: 无
 父票：[01](./01-external-mark-relations-have-no-model-in-parcel-shipment.md)
 
@@ -38,4 +38,10 @@ Blocked by: 无
 - **判据**：✅ 接受后逐字识别出那一件，收寄形成、控制建立（服务结果读口在同一编排里被问，读得动才走得到`节点收寄已形成`）；✅ 接受前与已拒绝零候选——已撤回只能发生在决定之前、从未接受过，结构上不会形成关联，没有另立用例；✅ 同号两件交回两件（三分支据此答身份冲突，由 NO 编排既有用例覆盖）；✅ 反复保存不重复；✅ 坏配对`输入未受理`；✅ 真库「提交 → 接受 → 核对」一条；✅ `internal/architecture` 绿，机制清点 `d270ad1e`（消费缝 `nodeoperations → parcelshipment` 由一个文件变两个，`ParcelIdentityView` 退出虚低名单）。PS、NO、`cmd/parcel-api`、`cmd/parcel-frontline-import`、`cmd/parcel-dispatch`、`tests/`、`internal/platform` 带 DSN 全绿；`go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出。
 - **评审中改的**：关联访问器改成包内惯用的多行写法；ADR-0184 后果节与票 02、03 对齐「适用变化表随 03 进来」——本票没有任何来源事实会产生作废或替代，先建表只会让读口对一张永远空的表做排除。
 - **开发主线**：补记一条「PN-03 第一项身份核对缝这一格已过时」，上表单元格不改写。
-- **评审**：作者自审，不算非作者评审——已登进 [operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md) 的同类欠账（本票代码进 main 后补一行）。证据层级 `S`。
+- **评审**：作者自审，不算非作者评审——已登进 [operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md) 的评审清单。证据层级 `S`。
+
+### 进 main 记录（2026-10-16）
+
+- 分支 `claude-psxm` 四笔 `5714a137`（建模与 ADR-0184）/ `cc52e9b6`（代码）/ `d270ad1e`（清点）/ `3e5f7c6f`（记录）叠在远端 main `98934a17` 之上，快进进 main、推的就是这个 SHA。等全量期间另一会话两度推了管理台与 `/operator-binding` 的票，本分支两度重放；第二次重放之前核过对方改动的文件，与本票只在生成物 `MECHANISM-INVENTORY.md` 上重叠（重放后重生成），但对方动了同一个 Go 包 `cmd/parcel-api`，所以在新 tip 上重跑了全量，没有沿用上一次的结果。
+- 推送方全量：钉 `3e5f7c6f` 的干净 detached 检出，带 DSN，`go test -p 1 -count=1 -v ./...` 退 0——有测试的包 142 个 ok、0 FAIL，`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）；同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0。
+- 评审：只有作者自审，没有非作者评审（本机无空闲的非作者通道；仓规 2026-09-16 不用子代理），已登进 operator-channel/26。

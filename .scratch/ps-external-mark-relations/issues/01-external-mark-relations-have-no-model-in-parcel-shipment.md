@@ -71,7 +71,7 @@ TrackingNumber / 运单」，生产代码只一处命中，而且是条否定：
 
 | 票 | 内容 | Blocked by | 状态 |
 |---|---|---|---|
-| [02](./02-register-and-customer-parcel-numbers-feed-node-identity.md) | 关联册落地，客户包裹件号随委托接受形成，节点身份核对接真 | 无 | ready-for-agent |
+| [02](./02-register-and-customer-parcel-numbers-feed-node-identity.md) | 关联册落地，客户包裹件号随委托接受形成，节点身份核对接真 | 无 | resolved（`cc52e9b6`） |
 | [03](./03-channel-parcel-numbers-from-label-results-void-and-replacement.md) | 渠道包裹件号随面单交易包裹结果受理形成，作废与换单改适用状态 | 02 | ready-for-agent |
 
 本票在两张子票都 resolved 后收口。
