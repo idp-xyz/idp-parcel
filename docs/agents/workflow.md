@@ -86,7 +86,7 @@ flowchart TD
  **完成**：三道门退 0；判据逐条标 ✅ / ◑ / ❌ 并附证据。
 4. **CI 是第二双眼睛**：push 后看 `gh run list -b main -L 1`；红了在 `main` 上再提一笔修。 
  **完成**：最新 run `success`。
-5. **评审只在碰共享面时要**——`templates/*`、`shell/*`、`components/*`：一份 Spec 轴，非作者优先，无人就自审并在票面写「自审」。业务页（`pages/**`）自查判据即可。 
+5. **评审只在碰共享面时要**——`templates/*`、`shell/*`、`components/*`：一份 Spec 轴，非作者优先：空闲通道，没有就用 `/code-review` 的隔离子代理（本文「本机环境」里「本仓允许子代理」那条）；都起不来才自审并在票面写「自审」。业务页（`pages/**`）自查判据即可。 
  **完成**：共享面票的 Comments 有评审或「自审」两字。
 6. **收工**：票面 Status → resolved + 一段完成记录（落点 / 判据逐条 / 未验），spec 子票表同步，随最后一笔提。台账就是 `git log`。 
  **完成**：票面与子票表状态一致。
@@ -174,7 +174,7 @@ git rev-list --count origin/main~3..HEAD              # → 3   对，裸字面�
 - `~/.cursor/skills` 那 37 个里有 22 个在 `SKILL.md` 前置声明了 `disable-model-invocation: true`，**只在你显式打 `/name` 时才跑，agent 不会自主拾取**，因此不出现在 agent 的可用技能列表里。上方路由表提到的 `/which-skill`、`/ubiquitous-language`、`/implement`、`/triage`、`/to-spec`、`/to-tickets`、`/wayfinder`、`/handoff`、`/grill-with-docs`、`/improve-codebase-architecture`、`/wizard` 都属这一类：装了、能用、但看不见。看不见不等于没装，别去重装。
 - **Cursor 同时扫三个技能根**：`~/.cursor/skills-cursor`（Cursor 自带）、`~/.cursor/skills`（上面那 37 个）、`~/.codex/skills`（Codex CLI 的目录，跨工具互通一并读取）。同名技能存在于多个根时去重会挑中 `.codex` 那份，而本机 `~/.codex/skills` 磁盘上只剩六个 `.system` 技能，`domain-modeling`、`grilling`、`grill-with-docs` 的 `.codex` 副本早已删除。结果是 **agent 拿到的技能路径指向不存在的文件，读取失败**，容易误判成「这个技能没装」。两份副本内容还可能不同，`.codex` 那份是旧版。读不到时去 `~/.cursor/skills/<name>/SKILL.md` 找同名的；新开会话通常也能让路径指回 `.cursor`。
 - 技能变更**要新开会话才加载**。当前会话的技能列表是会话开始时的快照。
-- **本仓不用子代理（用户 2026-09-16 裁定）。** 起因在上一宿主：Cursor 的子代理（`Task` 工具，`/code-review` 的隔离评审子代理走的就是它）自 2026-09-14 起一律 `Authentication error`，几张票的评审门因此退到推送方自审。裁定不随宿主变，不必再去修它、也不要拿它烟测。skill 正文里凡写「起隔离子代理」的步骤（`/code-review` 两轴、`/implement` 的评审段、`/research` 的独立 worker）都改在主会话里串行做；评审门按[并行会话](./parallel-sessions.md)办——有空闲通道就点名派非作者通道评，没有就推送方自审并在票面如实写「推送方自审，不算非作者评审」。
+- **本仓允许子代理（用户 2026-10-16 裁定，取代 2026-09-16 的「本仓不用子代理」）。** 旧裁定的起因在上一宿主：Cursor 的子代理（`Task` 工具）自 2026-09-14 起一律 `Authentication error`，几张票的评审门因此退到推送方自审，当时定为不随宿主变；10-16 同日稍早，票 operator-channel/26 立票时还据它维持过一次，用户随后改裁为后续都允许。现在：skill 正文里「起隔离子代理」的步骤（`/code-review` 两轴、`/implement` 的评审段、`/research` 的独立 worker）照原文做；评审门回到[并行会话](./parallel-sessions.md)「合入前独立评审」的原样——有空闲通道先派非作者通道，没有就用 `/code-review` 的隔离子代理评，不由作者自评；子代理也起不来（宿主报错、额度用尽）才自审，并在票面如实写「自审，不算非作者评审」。两次裁定之间落下的票面评审记录照当时的规矩写成，不回改。
 - **PostgreSQL 集成用例默认不跑，而那个包照样显示 `ok`。** `internal/platform/migrate` 的用例要真实 PostgreSQL 16，未设 `IDP_PARCEL_POSTGRES_DSN` 时它们 `t.Skip`；而包级默认输出里，全部跳过与全部通过同样只是一行 `ok`，只有 `-v` 才看得见 `SKIP`。所以本机默认状态下的「全仓 go test 绿」对这些证据是**零覆盖**，不是少盖一块；包数同理，只说明没红，说明不了验了多少。**报构建状态时写明含不含 PG**——「绿（含 PG）」与「绿（未设 DSN，PG 用例跳过）」是两个强度不同的断言，别让读的人以为证据已被重现。要真跑：`docker compose up -d`（仓库根 `compose.yaml`，一次性库，镜像钉 `postgres:16.14`），再 `$env:IDP_PARCEL_POSTGRES_DSN = "postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable"`；端口错开 55432 是因为宿主机 5432 已被占。CI 里缺 DSN 是 `t.Fatal` 而不是跳过，所以门禁不会因为某次 workflow 被改坏而静默蒸发。
 - **`gofmt -l` 列出文件时退出码仍是 0。** 它把待格式化的文件名打到 stdout，不拿退出码表达「有活要干」——实测在只有一个未格式化文件的目录上跑，列出了该文件而 `$LASTEXITCODE` 为 0。所以自验若写成 `gofmt -l ./...` 再判退出码，**永远抓不到任何东西**；要判就判有没有输出。这条要紧是因为 `gofmt` 是 BOM 的唯一哨兵：带 BOM 的 `.go` 文件实测 `go build` 退 0、`go vet` 也退 0，只有 `gofmt -l` 点名，而它自己又不用退出码说话——两处都按退出码判的话，BOM 可以一路穿过本地自验。
 - **量法自己内嵌的假设同样不出声，而它比工具默认值难防一格：换个工具换不掉。** 与「当前宿主」一节「工具的默认值不出声」那条**不同属**——这里没有任何默认值参与，错的是**你交给工具去数的那个问题里预设了一句恒为真的话**。实测于 `305d372`（普查 `.scratch/production-wiring-ratchet-gate/census-d5e5d20.md`，基线 `d5e5d20`）：判「某构造函数有没有非测试调用点」时用的是「全仓命中数 ≤ 1 即零调用点，那一次命中是声明本身」，而 **Go 的构造函数名跨包可重**，另一个包里的 `func` 声明于是被读成一次调用，三个真正的零调用点被判成已接线。改法是按**包 + 名**定位并扣除该名的**全部**声明——**名字不是唯一键**。
