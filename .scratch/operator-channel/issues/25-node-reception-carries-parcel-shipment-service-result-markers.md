@@ -52,3 +52,16 @@ Blocked by: 无——机制半边不挡；生产效果挂在 ps-external-mark-re
 - 分支 `claude-oc25` 三笔 `0214a62a` / `0e31b9f3` / `2c540468` 叠在远端 main `7a8f56e5` 之上，快进进 main、推的就是这个 SHA。等全量期间另一会话两度推了管理台的票（group-legal-entities-uiux/05–07），本分支两度重放到新 main 上，每次重放后机制清点重生成、与上一版逐字相同。
 - 推送方全量：钉 `d646c334`（本分支重放到 `64e78c82` 上的那一版）的干净 detached 检出，带 DSN，`go test -p 1 -count=1 -v ./...` 退 0——有测试的包 142 个 ok、0 FAIL，`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）；同一检出上全仓 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0。`2c540468` 与 `d646c334` 在 `apps/admin-web/` 与 `.scratch/` 之外逐字相同；这两处之外唯一读管理台源码的 Go 门禁在 `internal/architecture`，在 `2c540468` 上与 NO、`cmd/parcel-api`、`cmd/parcel-frontline-import` 一起带 DSN 重跑全绿，`go build ./...`、`go vet ./...` 退 0。
 - 评审：只有作者自审，没有非作者评审（本机无别的会话可派；仓规 2026-09-16 不用子代理）。
+
+## Comments
+
+- **评审 ← 会话 idp-parcel-9b 起的隔离子代理 · 钉 `0214a62a`（基线 `7a8f56e5`）· 2026-10-16 10:0x–10:2x UTC**（票 [26](./26-non-author-review-backlog-for-claude-code-landings.md) 序 2 补评。非作者：代码出自会话 `idp-parcel-c8`。一个子代理在隔离只读 detached 检出上按 `/code-review` 两轴串行，先写完 Spec 再做 Standards；由会话 `idp-parcel-9b` 代落。）评审侧验证（无 DSN）：改动涉及的各包 `go vet` 退 0；`go test -count=1` 跑 NO `application`、`adapters/parcelshipment`、`adapters/http` 与 `internal/architecture` 全 ok；改动文件 `gofmt -l` 无输出。
+  - **Spec**：**阻断 无**。已核：封闭词表只认前缀；拒收、仅扫描、待识别、身份冲突四支都不问读口；读不动不会落成空标记。**非阻断 2**：
+    (1) `cmd/parcel-api/assemble_reception.go` · `transactionalReception`（前线导入的 `importIntake` 同形）：PS 的两次读跑在收寄那一笔事务里，注释原话是「与收寄同一笔事务读」。PS 读报 SQL 级错误时，PG 事务进入中止态；编排照常答`收寄待确认`、返回 nil，bento `WithinTransaction` 提交时拿到 `pgx.ErrTxCommitRollback`，端点答 500 `NO_ANSWER_FORMED`，不带续办引用。于是完成判据「读口读不动 → `收寄待确认` 带续办引用、不落册」到了真库只剩「不落册」一半；单测用替身，真库测只走成功路径，所以测试全绿。不升阻断：既有的 `RECEPTION_STORE_UNAVAILABLE` 是同一个形。`cc52e9b6` 把身份核对也接成了同事务读 PS，这个失败面更大了。这条结论来自读代码（bento 的 `WithinTransaction` 对提交错误原样返回，pgx v5.10.0 的 `Commit` 在 PG 回 ROLLBACK 时返回 `ErrTxCommitRollback`），没有起库实测。复核方法：真库测里给 `NewServiceResultView` 塞一个经同一 db 执行 `SELECT 1/0` 的读口，经 `transactionalReception` 打一次身份唯一的收寄，看到的应是 err，不是`收寄待确认`。
+    (2) `internal/nodeoperations/application/receive_delivered_unit.go` · `receive`：代码照本票裁定「读不动答`收寄待确认`、带续办引用、不落册」实现，这让服务结果能否读到成了落册的前提。对照 UC-NO-002 那一行「只决定后续交接语义，不允许删除物理事实」、结果表「收寄判断待确认｜物理事实已保存」，以及本票「要裁的三问」原文「查不动时收寄照常保全」。代码本身没偏离裁定，矛盾在裁定与 UC 之间，请用户裁。
+  - **Standards**：**阻断 无**。**非阻断 3**：
+    (1) `cmd/parcel-api/assemble_reception_service_results_test.go` · `seedParcelShipmentServiceResults`，以及 `TestTheWiredServiceResultViewReadsParcelShipmentCancellationAndFinal` 里的 read 闭包：在 `WithinTransaction` 回调里调了 `mustValue(t, …)`，它内部是 `t.Fatalf`。`internal/architecture/transaction_closure_gate_test.go` 头注的规矩是「断言不进闭包」，并自承「mustXxx(t, ...) 那种它看不出来」；门禁绿不等于守住了这条规矩。
+    (2) 同一测试文件里的「完成判据第三条」（票面完成判据是无编号列表），以及 application 和它的测试里的「裁定第 1/2/3 条」：违反「改文档」的「一律不用行号，也不用计数」，Go 注释同样受约束，应改用引文。
+    (3) 判断题（Primitive Obsession）：`serviceMarkersOf` 的「封闭两种」只靠唯一生产者里的两个字面量 `"CANCELLED/"`、`"FINAL/"` 撑着；`ReceptionRecord.ServiceMarkers` 仍是 `[]string`，库里只校验它是数组，响应原样透出。no-directional-basis/01 的消费方只能再抄一份前缀，有违「单一权威」的风险。
+  - **无发现**：端口在 NO `ports`；跨上下文翻译只在 `adapters/parcelshipment`；领域包不依赖 HTTP/pgx；注释是中文；红线五条都没碰。
+  - **结论**：两轴 0 阻断，不立修复票。各条在 main `4dd937eb` 上都没改。待用户裁：Spec (2) 裁定与 UC-NO-002 的矛盾；Spec (1) 怎么修随这一裁一起定——若读不动仍答`收寄待确认`，就得让 PS 读的失败不毁掉收寄那笔事务。

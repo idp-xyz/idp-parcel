@@ -115,6 +115,37 @@ Blocked by: 无——2026-10-16 核得 19 已 resolved（进 main 至 `8e1e9777`
 
 分支 `mcp4-oc15f` 四笔纯 `.md`，原样重放到 main `ee48fa54` 之上：`3ee62f2e`→`f3ec4448`、`749c6f90`→`eaa255b8`、`aca18256`→`584d20b9`、`af5a83a6`→`d4590c66`，四份文件对分支 tip 逐字相同；分支上的 SHA 作封存出处。推送后拆隔离树 `idp-parcel-mcp4-oc15f`，分支指针改名 `merged/mcp4-oc15f`。纯 `.md`，推送方自审。本票仍 in-progress。
 
+### 评审 ← 会话 idp-parcel-9b 起的隔离子代理 · 钉 `60244fa6`（基线 `858280a2`；之五 · 余下四口）· 2026-10-16 10:0x–10:2x UTC
+
+票 [26](./26-non-author-review-backlog-for-claude-code-landings.md) 序 4 补评。非作者：代码出自会话 `idp-parcel-c8`。一个子代理在隔离只读 detached 检出上按 `/code-review` 两轴串行（先写完 Spec 再做 Standards，两轴不互相改判）；由会话 `idp-parcel-9b` 代落。评审侧验证（无 DSN）：`cmd/parcel-api` 与 TF `adapters/http` 的 `go vet` 退 0、`gofmt -l` 无输出；`go test -count=1` 下 `cmd/parcel-api`、TF `adapters/http`、TF `adapters/accessidentity` 全 ok。真库用例 `TestTransportFulfillmentCommandLinesAnswerBusinessOutcomesAgainstARealDatabase` 与 `TestARecordedDeliveryAttemptLetsTheEffectiveDeliveryThrough` 因无 DSN 而 SKIP，「越过 Intake 后答业务结果」这一格本次没有独立证实，依据的是作者带 DSN 跑的记录。
+
+- **Spec**：**阻断 无**。已核：四口的端点行直接挂 `operatorDecisions.transport`，它在生产装配里始终非 nil；`assembleBusinessEndpoints` 删掉了隔离 TF 入参，写开关在结构上换不动这四行；被删的 `if isolatedTransportFulfillment` 只换这四口，没有别的口因为撤放行而失去入口；完成判据要的各格由 `TestEveryAssembledEndpointAnswersUnconfigured`、`TestSwappedDecisionFacesAnswerFromTheOperatorChannel` 和新增的 `…RefuseAGrantOfAnotherDecisionKind` 钉住；方法、名单行、隔离用例在同一笔里撤掉，符合 ADR-0150 决定三「撤下该口的隔离放行」。
+  **非阻断 1**：`scripts/demo-seeds/README.md` 的 `IDP_PARCEL_GOVERNANCE_SELF_AUTHORITY` 说明段称「管理台上的关段、建派送任务、有效时间判断与承运商首次有效收寄判断四口……在这几页上答的是 `OUTSIDE_ADMISSION_SCOPE`」，与事实不符：`apps/admin-web/src` 里只有 `effective-time-judgment-api.ts` 调用其中一口，另外三口在换口前后都没有管理台页面，只能走 API；本票 10-13 的取证也只提到这一页。`seed.sh` 对照段的注释同病。
+- **Standards**：**阻断 无**。**非阻断 3**：
+  (1) 本笔让这些注释和命名与代码不再相符：TF `OperatorDecisionIntake` 头注「它与 IsolatedCommandIntake 走同一套线格式……两者只差租户从哪来」，四个方法撤掉后两个类型已没有一口重合（`7ec601ab` 已改）；`operationDecisionFacesLeftOnIsolatedWrite` 意为「还留在隔离写上」，本笔之后已不成立；`assembleBusinessEndpoints` 头注新写了「写开关此刻只剩这一行可换」，同一函数里派送发起、派送尝试、交接、节点作业查阅几处的行注仍说「经写开关放行」（票 10 遗留，本笔改了旁边几行却没清）。
+  (2) 变更说明，违反「写代码注释」的「不写变更说明」：`isolatedWriteAdmission` 的字段注释「运输履约那一格随运营决定四口换操作者渠道撤下」描述的是本笔删掉的字段；`assembleBusinessEndpoints` 里「这段原是 ADR-0091 的逐口隔离放行……各口已随真渠道撤下放行」。
+  (3) 计数与序号引用，违反「改文档」「一律不用行号，也不用计数」：`decisionLines` 头注「本包六个运营决定口」；`TestTransportFulfillmentCommandLines…` 头注「票 15 完成判据第三、四条」，按位置指一个没有编号的列表，也没有引原文。
+  判断题 Duplicated Code 不成立：四口的认证件共用 `tfaccess.OperatorAuthenticator.AuthenticateOperatorDecision` 与 `tenantFor`，按决定种类参数化；本笔反而删掉了隔离侧同形的译装代码。重复只出现在测试里：同一组四口分列在几张表中，(1) 里那个过时的表名正是这几张表没有同步的结果。
+- **无发现**：Spec「已核」所列各格。
+- **结论**：两轴 0 阻断，不立修复票。除 (1) 里 `OperatorDecisionIntake` 头注那处已由 `7ec601ab` 改掉，其余各条在 main `4dd937eb` 上都还在，随下一笔碰到这些文件时清。
+
+### 评审 ← 会话 idp-parcel-9b 起的隔离子代理 · 钉 `0e3bb7df`（基线 `60244fa6`；之六 · 受控关闭与重开）· 2026-10-16 10:0x–10:2x UTC
+
+票 [26](./26-non-author-review-backlog-for-claude-code-landings.md) 序 1 补评。非作者：代码出自会话 `idp-parcel-c8`。一个子代理在隔离只读 detached 检出上按 `/code-review` 两轴串行（先写完 Spec 再做 Standards，两轴不互相改判）；由会话 `idp-parcel-9b` 代落。评审侧验证（无 DSN）：经 `go test -overlay` 挂领域与 HTTP 两份探针（不提交）取证；http 包与 `cmd/parcel-api` 相关用例绿；gofmt、vet、CR/BOM 干净。
+
+- **Spec**：**阻断 1**。`cmd/parcel-api/endpoints.go` · `assembleBusinessEndpoints` 里 continued-attempt 两行已接上真渠道，而本票「做什么」要求「逐口记下凭哪条代数……未核完的口不开真渠道」（ADR-0151 决定三）；「之六」与 ADR-0183 里都查不到这两口的核对记录。补核也过不了：决定标识由本上下文现铸，命令里没有请求键，关闭也不拒已经在关闭中的册。同一个 POST 重试一次就会追加第二条关闭，生效关闭换成新标识；之后指名第一条关闭的重开答 `NOT_ADMITTED`。评审会话在 main `4dd937eb` 上复核属实：领域探针以同样的关闭内容、同一生效时刻、新铸的标识再 `Append` 一次，返回 nil，`StandingClosure()` 换成第二条。生产装配上这两口的授权映射为空，停在 `UNDECIDED / AUTHORITY_UNAVAILABLE`，形成不了决定，潜伏未发作；授权映射接上之前必须修。→ 修复票 [28](./28-controlled-closure-and-reopening-have-no-replay-algebra.md)。子代理顺带提到之三那三口也查不到逐口核对记录；之三不在票 26 的表里，本次未复核。
+  **非阻断 3**：
+  (1) `internal/parcelshipment/adapters/http/operator_decision_intake.go` · `locateParcel` / `shipperOf`：客户授权边界没有越过——来源身份取自包裹所属的已接受委托，PC 代问的就是这个客户账户，跨委托代问的口子已经堵上。残余：ADR-0183 Context 自己提出的「货主的指令被冒用了两次」没有堵住，决定二只防住冒用别的账户；操作者选 `SHIPPER-INSTRUCTION` 就得到请求方，重开时写任意非空串就能过门。货主重授权证据过门后「不落册」（`FormReopeningCommand` 头注），操作者也不进命令，所以册上的请求方无据可查，PS CONTEXT「parcel-shipment 拥有……包裹级关闭或重开请求证据」在这里落空。证据落不落册，请 PS owner 一并裁。
+  (2) `IntakeReopening`：Intake 用 `!= ""` 判断「带了证据」，编排那道门用 `TrimSpace`。全空白的证据会让请求方记成客户，门却当作没带，与决定四「没带时请求方缺席」不符（探针实测）。
+  (3) `IntakeControlledClosure`：两道纯载荷的责任主体校验排在 `locateParcel` 之后，包裹查不到时答 403，而决定三要求这种载荷答 400（探针实测）。
+  (2)(3) 已记进票 28「一并看」。
+- **Standards**：**阻断 无**。**非阻断 3**：
+  (1) `cmd/parcel-api/assemble_operator_decisions.go` · `buildOperatorDecisionIntakes` 头注「委托侧按委托标识寻址的三口用 targets，受控关闭与重开两口……」数的是 `shipmenthttp` 包里的口，违反「改文档」「计数与行号同构」与「Go 注释里的跨文件引用同受此约束」，应改用符号名。
+  (2) `shipperOf` 在 HTTP 适配器里拼请求方种类段 `CUSTOMER-ACCOUNT/`，靠它判相等的门 `shipperReauthorizationGate` 却在 application。同性质的 `<种类>/<主体>` 按 label-channel/30 裁决 ② 放在 application，「合成与解析收在相邻一对」。ADR-0183 复核记录（`c7a462cd`）要求客户渠道日后「照决定二写同一种带种类段的引用」，到时就会出现第二处拼串，碰「一决策一处定义」（判断题：Primitive Obsession / Shotgun Surgery）。
+  (3) `parseClosureResponsibilitySource` 在适配器里又列了一遍责任来源，和 application 的 `closureResponsibilitySourceKindOf` 是同一份封闭词表（判断题：Repeated Switches）。
+- **无发现**：红线其余几条（只用 `SYN-` 取值、证据记 `S`、所有权、敏感实例外置）；领域包不依赖 HTTP/`pgx`；注释中文。
+- **结论**：Spec 1 阻断，按票 26 立修复票 28，不回滚已进 main 的提交。main `4dd937eb` 上相关代码未变。
+
 ## 完成记录（2026-10-16，Claude Code 会话，分支 `claude-oc15`）
 
 **基线**：分支基 `858280a2`（= 远端 main）。代码两笔：`60244fa6`（余下四口）、`0e3bb7df`（受控关闭与重开 + ADR-0183）；本记录一笔在其后。接手理由：通道 4 自 2026-10-13 起无在途（分支 `mcp4-oc15f` 已 `merged/`），本机 `/list-agents` 无别的会话；用户令独立完成。

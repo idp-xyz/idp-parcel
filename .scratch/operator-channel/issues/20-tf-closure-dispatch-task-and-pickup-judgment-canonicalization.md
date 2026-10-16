@@ -123,3 +123,16 @@ Blocked by: 无
 **2026-10-16 · 票面改正。** 同日先有一版票面把三口都裁成「现有格够用（只核对）」并转 resolved（`11d42fbe`），用户随后逐口改裁为上文「裁定记录」。被替下的那版有两处与代码不符，记下以免再写回：
 - 关段那条说 `ClosedAt`「是记录事实」：它是受领域校验的业务时间，见 `ActualFulfillmentSegment.CloseSegment`。
 - 承运商判断那条说同依据异读法「是来源更正，走 `CorrectsSourceVersion` 更正路」：`Judge` 里同依据在非待确认链尾上先答 `ALREADY_RECORDED`，更正那条路只在依据不同（新来源版本回指链尾那一代）时才走得到。
+
+- **评审 ← 会话 idp-parcel-9b 起的隔离子代理 · 钉 `857453d8`（基线 `e558c66e`）· 2026-10-16 10:0x–10:2x UTC**（票 [26](./26-non-author-review-backlog-for-claude-code-landings.md) 序 3 补评。非作者：代码出自会话 `idp-parcel-c8`。一个子代理在隔离只读 detached 检出上按 `/code-review` 两轴串行，先写完 Spec 再做 Standards；由会话 `idp-parcel-9b` 代落。）评审侧验证（无 DSN）：改动的 TF `domain`、`application`、`adapters/http` 三包 `go vet`、`go test -count=1`、`gofmt -l` 全过。
+  - **Spec**：**阻断 1**：`internal/transportfulfillment/application/judge_carrier_first_effective_pickup.go` · `replayOrConflictOnTheSameBasis` 不论读法，命令只要带了引用就先调 `NewCarrierSubject`。一条失效命令（`expressesControl:false`）带了 `carrierReference`、没带 `carrierKind` 时，首判经 `rederive` 走 `Void`、不看主体，答 201 `PICKUP_VOIDED`；原样重放却答 200 `INPUT_NOT_ACCEPTED`。这违反本票裁定「同串答 `ALREADY_RECORDED` 带回链尾（不变）」与「读法为不表达时只有读法……命令里给了也不构成内容」。完成记录说「这一格只在编排直调时出现」，前提不成立：`CarrierPickupJudgmentPayload.Command` 只在 `carrierKind` 非空时解析种类，引用照写进命令，然后放行到编排。评审会话复核：在 main `4dd937eb` 的隔离检出上用包内夹具 `newCarrierPickupHTTPFixture` 实跑——先 POST `scanPickupBody`，再把载荷改成 `evidenceVersion:"v2"`、加 `correctsSourceVersion:"v1"`、`expressesControl:false`、删去 `carrierKind`，连续 POST 两次：第一次 201 `PICKUP_VOIDED`，第二次 200 `INPUT_NOT_ACCEPTED`，复现。线上可达：生产入口 `OperatorDecisionIntake.IntakeCarrierPickupJudgment` 同样调 `payload.Command(tenant)`，`60244fa6` 起挂在操作者真渠道上。→ 修复票 [27](./27-carrier-pickup-voiding-replay-without-kind-is-not-accepted.md)。
+    **非阻断 2**：
+    (1) 同一函数里，免比主体轴的条件写成了「没给引用」，而本票判断项只限于「以名称素材指名」。后果：表达控制、但引用与素材都不给的命令，首判答 `INPUT_NOT_ACCEPTED`，落在同依据已形成的链尾上却答 `ALREADY_RECORDED`（探针实测），正是裁定要避免的「把未被采纳的判断读成成功」。不是本笔引入的回归；已记进票 27「修复方向」。
+    (2) 关段 `closedAt` 与链尾 `occurredAt` 都按 `time.RFC3339` 回显，只到秒；入口却接受小数秒，收寄比对又精确到微秒，调用方因此比不出亚秒级的差异。回显格式是票面定的，记作票面内部的张力。
+  - **Standards**：**阻断 无**。**非阻断 4**：
+    (1) `domain/payload_canonicalization.go` · `CanonicalizeCarrierFirstEffectivePickupPayload` 头注「进段三格同 CanonicalizeHandoverPayload 不进摘要」数的是 application 包里命令结构体的字段，违反「改文档」「一律不用行号，也不用计数……Go 注释里的跨文件引用同受此约束」，应点名 `Segment` / `PlannedSegment` / `SegmentServiceAction`。`replayOrConflictOnTheSameBasis` 头注引「凭证登记口的 CCC-1 先例」，按「优先用符号名」应改成 `CanonicalizeCredentialRegistrationPayload`。
+    (2) 单一权威：「在册时刻只到微秒」是持久化事实，仓里的先例放在 PG 适配器（`accessidentity` 的 `sameInstant`），本笔却写进 TF 领域形状，而且只管这一口。同上下文里 `RegisterExternalCarrierCredentialHandler.replayAgainstCurrent`（`changedAt.Equal(command.At.UTC())`）与 `ExternalCarrierCredential.Equal` 仍按纳秒比，有同类重放被误判为冲突的风险（既有问题），宜另立票给 TF 定一处精度规则。
+    (3) 判断题（Duplicated Code）：`replayOrConflictOnTheSameBasis` 手抄了 `resolveSubject` 的前半段（空引用判断 + `NewCarrierSubject` 失败答未受理），两处口径会各自漂移。评审会话注：Spec 那条阻断就出在这段手抄里。
+    (4) `assertConflictLeavesTheChain` 用「行数 == 意图数」断言没动链：冲突路若误落一版并发出意图，两边同时加一，测试照样绿。应断言绝对行数，同一用例的重放分支就是这么写的。
+  - **无发现**：截到微秒的截法正确（pgx v5.10.0 二进制编码向下取整，与 `Truncate(time.Microsecond)` 一致，两条往返摘要另算相符）；`CONTENT_CONFLICT` 映射 200 带链尾符合 ADR-0022；关段两条来路都带回在册关闭时刻，读回失败答未决，与 `OpenDispatchTaskHandler.Open` 同形。
+  - **结论**：Spec 1 阻断，按票 26 立修复票 27，不回滚已进 main 的提交；27 已由本票的代码作者会话认领（分支 `claude-oc27`）。其余各条在 main `4dd937eb` 上都未修；Standards (2) 的精度规则未另立票，交 TF owner 定。
