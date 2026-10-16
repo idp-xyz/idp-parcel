@@ -94,6 +94,13 @@ export interface DetailPageTemplateProps {
    */
   tabs?: DetailWorkspaceTab[];
   /**
+   * 当前签（可选受控）。不传由模板自己记，与此前一致；传了由调用方记，签切换经 onActiveTabChange 报回。要它的是
+   * 「页头动作要把人带到某一签」那种页面——法人对象页的「登记资料修订」要先回到概要签再展开表单（票
+   * group-legal-entities-uiux/09），模板自己记的话调用方够不着。传进来的签此刻没有内容时照旧退回第一签。
+   */
+  activeTab?: WorkspaceTabId;
+  onActiveTabChange?: (tab: WorkspaceTabId) => void;
+  /**
    * 可选右侧上下文（手册「可选右侧上下文」）：关联对象、说明一类由调用方组装的内容，宽 280px，
    * 只在 xl 及以上显示——窄屏上它会把主列挤没，藏起来比挤着好。不传不占位。
    * 放进来的东西在窄屏上看不见，所以只放「看不见也不缺」的辅助内容，正文归签。
@@ -120,6 +127,8 @@ export function DetailPageTemplate({
   auditTrail,
   auditTitle = '审计留痕',
   tabs,
+  activeTab,
+  onActiveTabChange,
   aside,
   viewState,
   stateOverride,
@@ -237,6 +246,8 @@ export function DetailPageTemplate({
               tabs.filter((tab) => hasRenderableContent(tab.content)),
             )}
             aside={aside}
+            activeTab={activeTab}
+            onActiveTabChange={onActiveTabChange}
           />
         ) : (
           <div className="flex-1 overflow-auto">
@@ -283,17 +294,25 @@ function ContentColumns({ aside, children }: { aside: ReactNode; children: React
 function WorkspaceTabs({
   tabs,
   aside,
+  activeTab,
+  onActiveTabChange,
 }: {
   tabs: ResolvedWorkspaceTab<ReactNode>[];
   aside: ReactNode;
+  activeTab?: WorkspaceTabId;
+  onActiveTabChange?: (tab: WorkspaceTabId) => void;
 }) {
-  const [active, setActive] = useState<WorkspaceTabId | undefined>(undefined);
+  const [ownActive, setOwnActive] = useState<WorkspaceTabId | undefined>(undefined);
+  const active = activeTab ?? ownActive;
   if (tabs.length === 0) return <div className="flex-1 overflow-auto" />;
   const value = active !== undefined && tabs.some((tab) => tab.id === active) ? active : tabs[0].id;
   return (
     <Tabs
       value={value}
-      onValueChange={(next) => setActive(next as WorkspaceTabId)}
+      onValueChange={(next) => {
+        setOwnActive(next as WorkspaceTabId);
+        onActiveTabChange?.(next as WorkspaceTabId);
+      }}
       className="flex-1 flex flex-col overflow-hidden gap-0"
     >
       <TabsList className="px-4 shrink-0">

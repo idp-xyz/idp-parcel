@@ -19,7 +19,7 @@
 
 **Category:** enhancement
 
-**Status:** ready-for-agent
+**Status:** in-progress
 
 - [ ] 对象页与详情栏的签内容、签序和主动作一致；签名取模板固定词表里对应的词
 - [ ] 在对象页上可以直接登记资料修订
