@@ -250,21 +250,20 @@ func assembleUnconfiguredBusinessEndpoints() []httpapi.BusinessEndpoint {
 // assembleUnwiredBusinessEndpoints 以 unwired* 占位读口与编排装配全部端点，隔离读面
 // 输入由调用方给：nil 钉「未配置面」，非 nil 钉「放行只及运营查阅行」（isolated_read_test.go）。
 //
-// 写行的两个隔离 Intake 恒为 nil：**读开关换不了写行**是 ADR-0091 决定四的形状，而这个
+// 写行的隔离 Intake 恒为 nil：**读开关换不了写行**是 ADR-0091 决定四的形状，而这个
 // 辅助函数正是隔离读那组用例的入口——它若把读写入参并成一个，那组用例就再也证不了这件事。
 // 写行放行的三态另有 isolated_write_test.go。
 func assembleUnwiredBusinessEndpoints(isolatedRead *isolatedReadIntakes) []httpapi.BusinessEndpoint {
-	return assembleUnwiredBusinessEndpointsWith(isolatedRead, nil, nil)
+	return assembleUnwiredBusinessEndpointsWith(isolatedRead, nil)
 }
 
 func assembleUnwiredBusinessEndpointsWith(
 	isolatedRead *isolatedReadIntakes,
 	isolatedSubmission shipmenthttp.SubmissionIntake,
-	isolatedTransportFulfillment *tfhttp.IsolatedCommandIntake,
 ) []httpapi.BusinessEndpoint {
 	return assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), unconfiguredOperatorRegistries(),
 		unconfiguredIntegrationClientIntakes(),
-		isolatedRead, isolatedSubmission, isolatedTransportFulfillment, nil, nil)
+		isolatedRead, isolatedSubmission, nil, nil)
 }
 
 // assembleUnwiredBusinessEndpointsWithOperatorIntakes 同上，另收操作者渠道各口的 Intake：换口那几行的答复格由它钉。
@@ -274,7 +273,6 @@ func assembleUnwiredBusinessEndpointsWithOperatorIntakes(
 	integrationClients integrationClientIntakes,
 	isolatedRead *isolatedReadIntakes,
 	isolatedSubmission shipmenthttp.SubmissionIntake,
-	isolatedTransportFulfillment *tfhttp.IsolatedCommandIntake,
 	workFactReception nodeopshttp.ReceptionIntake,
 	workFactTransport *tfhttp.WorkFactCommandIntake,
 ) []httpapi.BusinessEndpoint {
@@ -395,7 +393,6 @@ func assembleUnwiredBusinessEndpointsWithOperatorIntakes(
 		unwiredGovernanceRegisters{},
 		isolatedRead,
 		isolatedSubmission,
-		isolatedTransportFulfillment,
 		operatorDecisions,
 		operatorRegistries,
 		integrationClients,

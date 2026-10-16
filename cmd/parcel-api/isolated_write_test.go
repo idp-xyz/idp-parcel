@@ -108,10 +108,6 @@ func TestBuildIsolatedWriteAdmissionRefusesTenantMismatch(t *testing.T) {
 // 某口换上真渠道时同笔删掉它那一行（ADR-0150 决定三），下面两个用例据此二分：名单内 400、名单外 403。
 var expectedWriteAdmittedLines = map[string]bool{
 	"/shipment-requests": true,
-	"/transport-fulfillment-carrier-first-effective-pickup-judgments": true,
-	"/transport-fulfillment-dispatch-task-registrations":              true,
-	"/transport-fulfillment-segment-closures":                         true,
-	"/transport-fulfillment-effective-time-judgments":                 true,
 }
 
 // Covers: ADR-0091 Consequences「命令面按端点逐口放行，不是一次全开」 — 写面放行只及名单里那几行，其余命令面
@@ -122,8 +118,7 @@ var expectedWriteAdmittedLines = map[string]bool{
 // 要钉的分界。
 func TestIsolatedWriteAdmissionSwitchesOnlyTheAdmittedCommandLines(t *testing.T) {
 	router := httpapi.NewWithEndpoints(buildinfo.Info{},
-		assembleUnwiredBusinessEndpointsWith(nil, isolatedSubmissionIntakeForTest(t),
-			isolatedWriteAdmissionForTest(t).transportFulfillmentIntake()))
+		assembleUnwiredBusinessEndpointsWith(nil, isolatedSubmissionIntakeForTest(t)))
 
 	for pattern, probe := range businessEndpointProbes {
 		response := httptest.NewRecorder()
@@ -183,18 +178,6 @@ func TestBuildIsolatedWriteAdmissionGrantsTheNodeOperationsIntake(t *testing.T) 
 	var disabled *isolatedWriteAdmission
 	if disabled.nodeOperationsIntake() != nil {
 		t.Fatal("未启用时交回了非 nil 的 Intake——装配点那一行会被换掉，生产形态就变了")
-	}
-}
-
-// Covers: 票 operator-channel/08 — 运输履约的隔离命令 Intake 仍随各格构造。作业事实各口已换操作者渠道；这一只只还换
-// 运营决定那四口。未启用时交回 nil。
-func TestBuildIsolatedWriteAdmissionGrantsTheTransportFulfillmentIntake(t *testing.T) {
-	if isolatedWriteAdmissionForTest(t).transportFulfillmentIntake() == nil {
-		t.Fatal("运输履约隔离命令 Intake 为空——运营决定四口会照旧答 403")
-	}
-	var disabled *isolatedWriteAdmission
-	if disabled.transportFulfillmentIntake() != nil {
-		t.Fatal("未启用时交回了非 nil 的 Intake——装配点那几行会被换掉，生产形态就变了")
 	}
 }
 

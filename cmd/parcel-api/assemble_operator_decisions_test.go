@@ -215,7 +215,7 @@ func TestSwappedRegistryFacesMapTheRefusalAndDependencyGrades(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), registries, unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil, nil))
+		router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), registries, unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil))
 		for _, pattern := range swappedRegistryFaces {
 			request := httptest.NewRequest(http.MethodPost, pattern, strings.NewReader(`{}`))
 			request.Header.Set("Authorization", "Bearer presented.operator.token")
@@ -237,7 +237,7 @@ func TestSwappedRegistryFacesAnswerFromTheOperatorChannel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), registries, unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil, nil))
+	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(unconfiguredOperatorDecisions(), registries, unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil))
 
 	for _, pattern := range swappedRegistryFaces {
 		cases := map[string]struct {
@@ -272,6 +272,41 @@ var swappedDecisionFaces = map[string]accessidentity.DecisionKind{
 	"/shipment-requests/authorized-dispositions":           accessidentity.DecisionAuthorizedDisposition,
 	"/transport-fulfillment-load-assignment-registrations": accessidentity.DecisionLoadAssignment,
 	"/transport-fulfillment-participation-terminations":    accessidentity.DecisionParticipationTermination,
+	// 下面四口换口时同笔撤下隔离写放行（ADR-0150 决定三；票 operator-channel/15 余下四口）。
+	"/transport-fulfillment-segment-closures":                         accessidentity.DecisionSegmentClosure,
+	"/transport-fulfillment-dispatch-task-registrations":              accessidentity.DecisionDispatchTaskRegistration,
+	"/transport-fulfillment-effective-time-judgments":                 accessidentity.DecisionEffectiveTimeJudgment,
+	"/transport-fulfillment-carrier-first-effective-pickup-judgments": accessidentity.DecisionCarrierFirstEffectivePickupJudgment,
+}
+
+// Covers: 票 operator-channel/15 完成判据第一条「无此决定种类的授予」那一格——授予按决定种类各自成立：持有别的每一种
+// 运营决定、唯独没有这一口那一种的操作者，在这一口答 403 OPERATOR_NOT_GRANTED，走不到准入范围那一格，也不进编排。
+func TestSwappedDecisionFacesRefuseAGrantOfAnotherDecisionKind(t *testing.T) {
+	for pattern, kind := range swappedDecisionFaces {
+		var others []accessidentity.DecisionKind
+		for _, other := range swappedDecisionFaces {
+			if other != kind {
+				others = append(others, other)
+			}
+		}
+		minter, err := buildOperatorMinter(acceptingVerifier{}, decisionRegister{kinds: others}, admissionScopeUnset())
+		if err != nil {
+			t.Fatal(err)
+		}
+		decisions, err := buildOperatorDecisionIntakes(minter, unwiredDecisionTargets{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(decisions, unconfiguredOperatorRegistries(), unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil))
+		request := httptest.NewRequest(http.MethodPost, pattern, strings.NewReader(`{}`))
+		request.Header.Set("Authorization", "Bearer presented.operator.token")
+		response := httptest.NewRecorder()
+		router.ServeHTTP(response, request)
+		if response.Code != http.StatusForbidden || problemCode(t, response) != "OPERATOR_NOT_GRANTED" {
+			t.Fatalf("%s 只缺 %s 的授予：答 %d %q，want 403 OPERATOR_NOT_GRANTED", pattern, kind, response.Code, problemCode(t, response))
+		}
+		assertNoOutcome(t, response, pattern)
+	}
 }
 
 func TestSwappedDecisionFacesAnswerFromTheOperatorChannel(t *testing.T) {
@@ -287,7 +322,7 @@ func TestSwappedDecisionFacesAnswerFromTheOperatorChannel(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(decisions, unconfiguredOperatorRegistries(), unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil, nil))
+	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(decisions, unconfiguredOperatorRegistries(), unconfiguredIntegrationClientIntakes(), nil, nil, nil, nil))
 
 	for pattern := range swappedDecisionFaces {
 		cases := map[string]struct {

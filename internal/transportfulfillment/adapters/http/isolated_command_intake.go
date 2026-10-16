@@ -19,8 +19,10 @@ import (
 // 事实内容与发生时间照 ADR-0023 从载荷如实收，本类型不拿服务端时钟或随机数顶替任何一样。每口的线格式是该口文件里的
 // `…Payload`，翻译走它的 Command——载荷只有内容没有身份，本类型只负责把注入的那几格交进去。
 //
-// 逐口放行（ADR-0091 Consequences）：本类型只实现已成笔的口的 Intake 接口，未成笔的口在装配点仍挂字面量
-// UnconfiguredIntake{}，且在类型上就装不进本类型——每放一口在这里多一个方法，装配点多换一行，两处都看得见。
+// 逐口放行（ADR-0091 Consequences），又随真渠道逐口退场（ADR-0150 决定三）：某口换上真渠道的同一笔，撤下本类型上对应的方法。
+// 运营决定四口（关段、建派送任务、有效时间判断、承运商首次有效收寄判断）已随票 operator-channel/15 撤下。**装配点此刻已不挂
+// 本类型**：下面余下的作业事实各口早随票 operator-channel/10 换了作业事实渠道，方法当时没有同笔撤下；它们的译装用例是本包
+// 这几口线格式的主要覆盖，要撤得先把用例迁到真渠道 Intake 上，另立票做。
 type IsolatedCommandIntake struct {
 	tenant domain.TenantID
 	// movementSource 是移动事实口的来源格。MovementFactIntake 的契约把「自营还是外部」交给认证结果说，隔离形态的认证结果
@@ -28,19 +30,15 @@ type IsolatedCommandIntake struct {
 	movementSource string
 }
 
-// 已成笔的口。每放一口在这里多一行断言、多一个方法，装配点多换一行。
+// 仍在类型上的口。每撤一口在这里删一行断言、删一个方法。
 var (
 	_ PickupRegistrationIntake      = (*IsolatedCommandIntake)(nil)
 	_ PickupAttemptIntake           = (*IsolatedCommandIntake)(nil)
-	_ CarrierPickupJudgmentIntake   = (*IsolatedCommandIntake)(nil)
 	_ HandoverRegistrationIntake    = (*IsolatedCommandIntake)(nil)
 	_ MovementFactIntake            = (*IsolatedCommandIntake)(nil)
-	_ DispatchTaskIntake            = (*IsolatedCommandIntake)(nil)
 	_ DeliveryDispatchTriggerIntake = (*IsolatedCommandIntake)(nil)
 	_ DeliveryRegistrationIntake    = (*IsolatedCommandIntake)(nil)
 	_ DeliveryAttemptIntake         = (*IsolatedCommandIntake)(nil)
-	_ SegmentClosureIntake          = (*IsolatedCommandIntake)(nil)
-	_ EffectiveTimeJudgmentIntake   = (*IsolatedCommandIntake)(nil)
 )
 
 // IsolatedCommandIntakeDeps 是构造本 Intake 的全部输入，全部是装配点给定的合成值。
@@ -85,20 +83,6 @@ func (intake *IsolatedCommandIntake) IntakePickupAttempt(
 	return payload.Command(intake.tenant)
 }
 
-// IntakeCarrierPickupJudgment 译实际承运商首次有效收寄的显式判断（`/transport-fulfillment-carrier-first-effective-pickup-judgments`）。
-// 线格式是本包既有的 CarrierPickupJudgmentPayload；解码走封闭门而不是 DecodeCarrierPickupJudgmentPayload——后者不拒尾随内容，
-// 而本类型各口对同一种畸形要答同一格。
-func (intake *IsolatedCommandIntake) IntakeCarrierPickupJudgment(
-	_ context.Context,
-	request *http.Request,
-) (application.JudgeCarrierFirstEffectivePickupCommand, error) {
-	var payload CarrierPickupJudgmentPayload
-	if err := decodeClosedPayload(request.Body, &payload); err != nil {
-		return application.JudgeCarrierFirstEffectivePickupCommand{}, err
-	}
-	return payload.Command(intake.tenant)
-}
-
 // IntakeHandoverRegistration 译交接判断首登（`/transport-fulfillment/handovers`）。更正口不在本票，本类型不实现它。
 func (intake *IsolatedCommandIntake) IntakeHandoverRegistration(
 	_ context.Context,
@@ -121,18 +105,6 @@ func (intake *IsolatedCommandIntake) IntakeMovementFact(
 		return application.RecordMovementFactCommand{}, err
 	}
 	return payload.Command(intake.tenant, intake.movementSource)
-}
-
-// IntakeDispatchTask 译授权角色建立派送任务（`/transport-fulfillment-dispatch-task-registrations`）。
-func (intake *IsolatedCommandIntake) IntakeDispatchTask(
-	_ context.Context,
-	request *http.Request,
-) (application.OpenDispatchTaskCommand, error) {
-	var payload DispatchTaskPayload
-	if err := decodeClosedPayload(request.Body, &payload); err != nil {
-		return application.OpenDispatchTaskCommand{}, err
-	}
-	return payload.Command(intake.tenant)
 }
 
 // IntakeDeliveryDispatchTrigger 译末端派送任务内部触发的一拍（`/transport-fulfillment-delivery-dispatch-triggers`）。谁按拍调、
@@ -169,31 +141,6 @@ func (intake *IsolatedCommandIntake) IntakeDeliveryAttempt(
 	var payload DeliveryAttemptPayload
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.RecordDeliveryAttemptCommand{}, err
-	}
-	return payload.Command(intake.tenant)
-}
-
-// IntakeSegmentClosure 译关段声明（`/transport-fulfillment-segment-closures`）。
-func (intake *IsolatedCommandIntake) IntakeSegmentClosure(
-	_ context.Context,
-	request *http.Request,
-) (application.CloseFulfillmentSegmentCommand, error) {
-	var payload SegmentClosurePayload
-	if err := decodeClosedPayload(request.Body, &payload); err != nil {
-		return application.CloseFulfillmentSegmentCommand{}, err
-	}
-	return payload.Command(intake.tenant)
-}
-
-// IntakeEffectiveTimeJudgment 译外部承运轨迹事实有效时间的显式判断（`/transport-fulfillment-effective-time-judgments`）。线格式是
-// 本包既有的 EffectiveTimeJudgmentPayload；解码走封闭门，理由同 IntakeCarrierPickupJudgment。
-func (intake *IsolatedCommandIntake) IntakeEffectiveTimeJudgment(
-	_ context.Context,
-	request *http.Request,
-) (application.JudgeEffectiveTimeCommand, error) {
-	var payload EffectiveTimeJudgmentPayload
-	if err := decodeClosedPayload(request.Body, &payload); err != nil {
-		return application.JudgeEffectiveTimeCommand{}, err
 	}
 	return payload.Command(intake.tenant)
 }

@@ -672,7 +672,6 @@ func run(logger *slog.Logger) error {
 			governanceRegisters,
 			isolatedRead,
 			isolatedSubmissionIntake,
-			isolatedWrite.transportFulfillmentIntake(),
 			operatorDecisions,
 			operatorRegistries,
 			integrationClients,

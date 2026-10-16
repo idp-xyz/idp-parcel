@@ -63,13 +63,6 @@ var isolatedLines = map[string]isolatedLine{
 		},
 		valid: offsitePickupAttemptBody,
 	},
-	"/transport-fulfillment-carrier-first-effective-pickup-judgments": {
-		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
-			_, err := intake.IntakeCarrierPickupJudgment(context.Background(), request)
-			return err
-		},
-		valid: carrierPickupJudgmentBody,
-	},
 	"/transport-fulfillment/handovers": {
 		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
 			_, err := intake.IntakeHandoverRegistration(context.Background(), request)
@@ -83,13 +76,6 @@ var isolatedLines = map[string]isolatedLine{
 			return err
 		},
 		valid: isolatedMovementFactBody,
-	},
-	"/transport-fulfillment-dispatch-task-registrations": {
-		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
-			_, err := intake.IntakeDispatchTask(context.Background(), request)
-			return err
-		},
-		valid: isolatedDispatchTaskBody,
 	},
 	"/transport-fulfillment-delivery-dispatch-triggers": {
 		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
@@ -112,53 +98,6 @@ var isolatedLines = map[string]isolatedLine{
 		},
 		valid: isolatedDeliveryAttemptBody,
 	},
-	"/transport-fulfillment-segment-closures": {
-		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
-			_, err := intake.IntakeSegmentClosure(context.Background(), request)
-			return err
-		},
-		valid: isolatedSegmentClosureBody,
-	},
-	"/transport-fulfillment-effective-time-judgments": {
-		intake: func(intake *tfhttp.IsolatedCommandIntake, request *http.Request) error {
-			_, err := intake.IntakeEffectiveTimeJudgment(context.Background(), request)
-			return err
-		},
-		valid: isolatedEffectiveTimeJudgmentBody,
-	},
-}
-
-const isolatedEffectiveTimeJudgmentBody = `{"fact":"SYN-TRACKING-FACT-08-12","effectiveAt":"2026-09-24T16:00:00+08:00"}`
-
-// Covers: 判断口的线格式是本包既有的 EffectiveTimeJudgmentPayload（指名的事实与所有者给出的有效时间），隔离 Intake 只把注入的
-// 租户交进它的 Command。
-func TestIsolatedCommandIntakeTranslatesEffectiveTimeJudgmentWithInjectedTenant(t *testing.T) {
-	command, err := isolatedCommandIntakeForTest(t).IntakeEffectiveTimeJudgment(context.Background(), commandRequest(isolatedEffectiveTimeJudgmentBody))
-	if err != nil {
-		t.Fatalf("intake：%v", err)
-	}
-	if command.TenantID.String() != isolatedCommandTenant || command.Fact != "SYN-TRACKING-FACT-08-12" {
-		t.Fatalf("command = %+v，与注入与载荷不符", command)
-	}
-	if want := time.Date(2026, 9, 24, 8, 0, 0, 0, time.UTC); !command.EffectiveAt.Equal(want) {
-		t.Fatalf("EffectiveAt = %s, want %s", command.EffectiveAt, want)
-	}
-}
-
-const isolatedSegmentClosureBody = `{"segment":"SYN-SEGMENT-08-11","closedAt":"2026-09-25T20:00:00+08:00"}`
-
-// Covers: SegmentClosureIntake——关段声明是运营决定，段与关段时刻两格逐字来自载荷，租户来自注入。
-func TestIsolatedCommandIntakeTranslatesSegmentClosureWithInjectedTenant(t *testing.T) {
-	command, err := isolatedCommandIntakeForTest(t).IntakeSegmentClosure(context.Background(), commandRequest(isolatedSegmentClosureBody))
-	if err != nil {
-		t.Fatalf("intake：%v", err)
-	}
-	if command.TenantID.String() != isolatedCommandTenant || command.Segment != "SYN-SEGMENT-08-11" {
-		t.Fatalf("command = %+v，与注入与载荷不符", command)
-	}
-	if want := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC); !command.ClosedAt.Equal(want) {
-		t.Fatalf("ClosedAt = %s, want %s", command.ClosedAt, want)
-	}
 }
 
 const isolatedEffectiveDeliveryBody = `{"attempt":"SYN-ATTEMPT-08-10","object":"SYN-PARCEL-08-10","method":"HANDED_TO_RECIPIENT",` +
@@ -196,43 +135,6 @@ func TestIsolatedCommandIntakeTranslatesDeliveryDispatchTriggerWithInjectedTenan
 		commandRequest(`{"segment":"s","object":"o","place":"SYN-PLACE/x"}`))
 	if !errors.Is(err, tfhttp.ErrMalformedRequest) {
 		t.Fatalf("带地点的触发：err = %v, want ErrMalformedRequest——地点由执行器向所有者取，调用方给不了也不该给", err)
-	}
-}
-
-const isolatedDispatchTaskBody = `{"task":"SYN-DISPATCH-08-07","kind":"DELIVERY","objects":["SYN-PARCEL-08-07","SYN-PARCEL-08-08"],` +
-	`"place":"SYN-PLACE/consignee-07","windowFrom":"2026-09-25T09:00:00+08:00","windowTo":"2026-09-25T12:00:00+08:00",` +
-	`"conditions":"SYN-CONDITION/signature-required","openedAt":"2026-09-24T20:00:00+08:00"}`
-
-// Covers: DispatchTaskIntake 契约「工作范围七件全从请求收」——任务、种类、对象范围、地点、时间窗、条件与建立时刻逐字来自载荷。
-func TestIsolatedCommandIntakeTranslatesDispatchTaskWithInjectedTenant(t *testing.T) {
-	command, err := isolatedCommandIntakeForTest(t).IntakeDispatchTask(context.Background(), commandRequest(isolatedDispatchTaskBody))
-	if err != nil {
-		t.Fatalf("intake：%v", err)
-	}
-	if got := command.TenantID.String(); got != isolatedCommandTenant {
-		t.Fatalf("TenantID = %q, want %q", got, isolatedCommandTenant)
-	}
-	if command.Task != "SYN-DISPATCH-08-07" || command.Kind.String() != "DELIVERY" || len(command.Objects) != 2 ||
-		command.Objects[0] != "SYN-PARCEL-08-07" || command.Objects[1] != "SYN-PARCEL-08-08" ||
-		command.Place != "SYN-PLACE/consignee-07" || command.Conditions != "SYN-CONDITION/signature-required" {
-		t.Fatalf("command = %+v，与载荷不符", command)
-	}
-	for name, pair := range map[string][2]time.Time{
-		"windowFrom": {command.WindowFrom, time.Date(2026, 9, 25, 1, 0, 0, 0, time.UTC)},
-		"windowTo":   {command.WindowTo, time.Date(2026, 9, 25, 4, 0, 0, 0, time.UTC)},
-		"openedAt":   {command.OpenedAt, time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)},
-	} {
-		if !pair[0].Equal(pair[1]) {
-			t.Fatalf("%s = %s, want %s", name, pair[0], pair[1])
-		}
-	}
-}
-
-// Covers: 任务种类取 domain.DispatchTaskKind 的封闭词——词表外是用法错误（400）。
-func TestIsolatedCommandIntakeRefusesAnUnknownDispatchTaskKind(t *testing.T) {
-	_, err := isolatedCommandIntakeForTest(t).IntakeDispatchTask(context.Background(), commandRequest(`{"task":"t","kind":"RETURN"}`))
-	if !errors.Is(err, tfhttp.ErrMalformedRequest) {
-		t.Fatalf("err = %v, want ErrMalformedRequest", err)
 	}
 }
 
@@ -329,31 +231,6 @@ func TestIsolatedCommandIntakeRefusesAnUnknownHandoverVerdict(t *testing.T) {
 		commandRequest(`{"object":"o","scope":"s","verdict":"MAYBE"}`))
 	if !errors.Is(err, tfhttp.ErrMalformedRequest) {
 		t.Fatalf("err = %v, want ErrMalformedRequest", err)
-	}
-}
-
-const carrierPickupJudgmentBody = `{"object":"SYN-PARCEL-08-04","source":"CARRIER_PICKUP_SCAN","evidenceReference":"SYN-SCAN-08-04",` +
-	`"evidenceVersion":"v1","expressesControl":true,"occurredAt":"2026-09-24T11:00:00+08:00","carrierKind":"EXTERNAL_PARTY",` +
-	`"carrierReference":"SYN-PARTY/carrier-08","segment":"SYN-SEGMENT-08-04"}`
-
-// Covers: 判断口的线格式是本包既有的 CarrierPickupJudgmentPayload，隔离 Intake 只把注入的租户交进它的 Command——读法本体
-// （expressesControl）、证据来源与业务发生时间逐字来自载荷。
-func TestIsolatedCommandIntakeTranslatesCarrierPickupJudgmentWithInjectedTenant(t *testing.T) {
-	command, err := isolatedCommandIntakeForTest(t).IntakeCarrierPickupJudgment(context.Background(), commandRequest(carrierPickupJudgmentBody))
-	if err != nil {
-		t.Fatalf("intake：%v", err)
-	}
-	if got := command.TenantID.String(); got != isolatedCommandTenant {
-		t.Fatalf("TenantID = %q, want %q", got, isolatedCommandTenant)
-	}
-	if command.Object != "SYN-PARCEL-08-04" || command.Source.String() != "CARRIER_PICKUP_SCAN" ||
-		command.EvidenceReference != "SYN-SCAN-08-04" || command.EvidenceVersion != "v1" || !command.ExpressesControl ||
-		command.SubjectKind.String() != "EXTERNAL_PARTY" || command.SubjectReference != "SYN-PARTY/carrier-08" ||
-		command.Segment != "SYN-SEGMENT-08-04" {
-		t.Fatalf("command = %+v，与载荷不符", command)
-	}
-	if want := time.Date(2026, 9, 24, 3, 0, 0, 0, time.UTC); !command.OccurredAt.Equal(want) {
-		t.Fatalf("OccurredAt = %s, want %s", command.OccurredAt, want)
 	}
 }
 
@@ -523,7 +400,7 @@ func TestNewIsolatedCommandIntakeRejectsBlankTenant(t *testing.T) {
 }
 
 // Covers: ADR-0091 Consequences「命令面按端点逐口放行，不是一次全开」——本类型只实现放行了的口；更正口、登记册配置口与
-// 查阅行在类型上就装不进去。每放一口，该口的断言从「装不进」挪到「该已放行」。
+// 查阅行在类型上就装不进去。每放一口，该口的断言从「装不进」挪到「该已放行」；每随真渠道撤一口，挪回「装不进」（ADR-0150 决定三）。
 func TestIsolatedCommandIntakeServesOnlyAdmittedLines(t *testing.T) {
 	var intake any = isolatedCommandIntakeForTest(t)
 	if _, ok := intake.(tfhttp.PickupRegistrationIntake); !ok {
@@ -532,17 +409,11 @@ func TestIsolatedCommandIntakeServesOnlyAdmittedLines(t *testing.T) {
 	if _, ok := intake.(tfhttp.PickupAttemptIntake); !ok {
 		t.Fatal("场外揽收尝试口该已放行")
 	}
-	if _, ok := intake.(tfhttp.CarrierPickupJudgmentIntake); !ok {
-		t.Fatal("承运商首次有效收寄判断口该已放行")
-	}
 	if _, ok := intake.(tfhttp.HandoverRegistrationIntake); !ok {
 		t.Fatal("交接首登口该已放行")
 	}
 	if _, ok := intake.(tfhttp.MovementFactIntake); !ok {
 		t.Fatal("移动事实口该已放行")
-	}
-	if _, ok := intake.(tfhttp.DispatchTaskIntake); !ok {
-		t.Fatal("派送任务登记口该已放行")
 	}
 	if _, ok := intake.(tfhttp.DeliveryDispatchTriggerIntake); !ok {
 		t.Fatal("派送发起口该已放行")
@@ -550,22 +421,20 @@ func TestIsolatedCommandIntakeServesOnlyAdmittedLines(t *testing.T) {
 	if _, ok := intake.(tfhttp.DeliveryRegistrationIntake); !ok {
 		t.Fatal("交付生效首登口该已放行")
 	}
-	if _, ok := intake.(tfhttp.SegmentClosureIntake); !ok {
-		t.Fatal("段关闭口该已放行")
-	}
-	if _, ok := intake.(tfhttp.EffectiveTimeJudgmentIntake); !ok {
-		t.Fatal("有效时间判断口该已放行")
-	}
 	for name, refused := range map[string]bool{
-		"揽收更正口（同族未列）":      isA[tfhttp.PickupCorrectionIntake](intake),
-		"交接更正口（同族未列）":      isA[tfhttp.HandoverCorrectionIntake](intake),
-		"交付更正口（同族未列）":      isA[tfhttp.DeliveryProofCorrectionIntake](intake),
-		"装载分配口（票面未列）":      isA[tfhttp.LoadAssignmentIntake](intake),
-		"终止参与口（票面未列）":      isA[tfhttp.ParticipationTerminationIntake](intake),
-		"承运凭证登记口（04 那族）":   isA[tfhttp.CredentialIntake](intake),
-		"有效时间规则登记口（04 那族）": isA[tfhttp.EffectiveTimeRuleIntake](intake),
-		"总单登记口（04 那族）":     isA[tfhttp.MasterDocumentIntake](intake),
-		"查阅行（归隔离读 Intake）": isA[tfhttp.CatalogueQueryIntake](intake),
+		"关段口（已换操作者渠道）":      isA[tfhttp.SegmentClosureIntake](intake),
+		"建派送任务口（已换操作者渠道）":   isA[tfhttp.DispatchTaskIntake](intake),
+		"有效时间判断口（已换操作者渠道）":  isA[tfhttp.EffectiveTimeJudgmentIntake](intake),
+		"承运商收寄判断口（已换操作者渠道）": isA[tfhttp.CarrierPickupJudgmentIntake](intake),
+		"揽收更正口（同族未列）":       isA[tfhttp.PickupCorrectionIntake](intake),
+		"交接更正口（同族未列）":       isA[tfhttp.HandoverCorrectionIntake](intake),
+		"交付更正口（同族未列）":       isA[tfhttp.DeliveryProofCorrectionIntake](intake),
+		"装载分配口（票面未列）":       isA[tfhttp.LoadAssignmentIntake](intake),
+		"终止参与口（票面未列）":       isA[tfhttp.ParticipationTerminationIntake](intake),
+		"承运凭证登记口（04 那族）":    isA[tfhttp.CredentialIntake](intake),
+		"有效时间规则登记口（04 那族）":  isA[tfhttp.EffectiveTimeRuleIntake](intake),
+		"总单登记口（04 那族）":      isA[tfhttp.MasterDocumentIntake](intake),
+		"查阅行（归隔离读 Intake）":  isA[tfhttp.CatalogueQueryIntake](intake),
 	} {
 		if refused {
 			t.Fatalf("%s 不在放行名单，隔离命令 Intake 不该装得进", name)

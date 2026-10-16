@@ -36,6 +36,42 @@
       "basis": "SYN-GRANT-BASIS-DEX-05"
     },
     {
+      "grantId": "SYN-GRANT-DEX-CONFIG-SEGMENT-CLOSURE-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "SEGMENT_CLOSURE",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-06"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-DISPATCH-TASK-REGISTRATION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "DISPATCH_TASK_REGISTRATION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-07"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-EFFECTIVE-TIME-JUDGMENT-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "EFFECTIVE_TIME_JUDGMENT",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-08"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-CARRIER-FIRST-EFFECTIVE-PICKUP-JUDGMENT-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "CARRIER_FIRST_EFFECTIVE_PICKUP_JUDGMENT",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-09"
+    },
+    {
       "grantId": "SYN-GRANT-DEX-VIEWER-READ-01",
       "issuer": "http://127.0.0.1:5556/dex",
       "subject": "ChZTWU4tT1BFUkFUT1ItVklFV0VSLTAxEgVsb2NhbA",

@@ -138,6 +138,155 @@ func TestLoadAssignmentAndParticipationTerminationDecodeTheirPayloadsUnderTheAut
 	}
 }
 
+// 以下四口的解码用例随换口从隔离命令 Intake 迁来（ADR-0150 决定三；票 operator-channel/15）：线格式没变，只是租户的来处从
+// 注入值换成认证结果。期望值取自载荷字面量而不是重算——这里证的是「译装没换字」。
+
+const decisionEffectiveTimeJudgmentBody = `{"fact":"SYN-TRACKING-FACT-08-12","effectiveAt":"2026-09-24T16:00:00+08:00"}`
+
+// Covers: 有效时间判断口的线格式是本包既有的 EffectiveTimeJudgmentPayload（指名的事实与所有者给出的有效时间），租户来自认证结果。
+func TestOperatorDecisionIntakeTranslatesEffectiveTimeJudgment(t *testing.T) {
+	command, err := operatorIntake(t, authenticatorFake{}).IntakeEffectiveTimeJudgment(context.Background(), bearerRequest("t", decisionEffectiveTimeJudgmentBody))
+	if err != nil {
+		t.Fatalf("intake：%v", err)
+	}
+	if command.TenantID.String() != operatorTenant || command.Fact != "SYN-TRACKING-FACT-08-12" {
+		t.Fatalf("command = %+v，与认证结果与载荷不符", command)
+	}
+	if want := time.Date(2026, 9, 24, 8, 0, 0, 0, time.UTC); !command.EffectiveAt.Equal(want) {
+		t.Fatalf("EffectiveAt = %s, want %s", command.EffectiveAt, want)
+	}
+}
+
+const decisionSegmentClosureBody = `{"segment":"SYN-SEGMENT-08-11","closedAt":"2026-09-25T20:00:00+08:00"}`
+
+// Covers: SegmentClosureIntake——关段声明是运营决定，段与关段时刻两格逐字来自载荷，租户来自认证结果。
+func TestOperatorDecisionIntakeTranslatesSegmentClosure(t *testing.T) {
+	command, err := operatorIntake(t, authenticatorFake{}).IntakeSegmentClosure(context.Background(), bearerRequest("t", decisionSegmentClosureBody))
+	if err != nil {
+		t.Fatalf("intake：%v", err)
+	}
+	if command.TenantID.String() != operatorTenant || command.Segment != "SYN-SEGMENT-08-11" {
+		t.Fatalf("command = %+v，与认证结果与载荷不符", command)
+	}
+	if want := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC); !command.ClosedAt.Equal(want) {
+		t.Fatalf("ClosedAt = %s, want %s", command.ClosedAt, want)
+	}
+}
+
+const decisionDispatchTaskBody = `{"task":"SYN-DISPATCH-08-07","kind":"DELIVERY","objects":["SYN-PARCEL-08-07","SYN-PARCEL-08-08"],` +
+	`"place":"SYN-PLACE/consignee-07","windowFrom":"2026-09-25T09:00:00+08:00","windowTo":"2026-09-25T12:00:00+08:00",` +
+	`"conditions":"SYN-CONDITION/signature-required","openedAt":"2026-09-24T20:00:00+08:00"}`
+
+// Covers: DispatchTaskIntake 契约「工作范围七件全从请求收」——任务、种类、对象范围、地点、时间窗、条件与建立时刻逐字来自载荷；
+// 任务种类取 domain.DispatchTaskKind 的封闭词，词表外是用法错误（400）。
+func TestOperatorDecisionIntakeTranslatesDispatchTask(t *testing.T) {
+	intake := operatorIntake(t, authenticatorFake{})
+	command, err := intake.IntakeDispatchTask(context.Background(), bearerRequest("t", decisionDispatchTaskBody))
+	if err != nil {
+		t.Fatalf("intake：%v", err)
+	}
+	if got := command.TenantID.String(); got != operatorTenant {
+		t.Fatalf("TenantID = %q, want %q", got, operatorTenant)
+	}
+	if command.Task != "SYN-DISPATCH-08-07" || command.Kind.String() != "DELIVERY" || len(command.Objects) != 2 ||
+		command.Objects[0] != "SYN-PARCEL-08-07" || command.Objects[1] != "SYN-PARCEL-08-08" ||
+		command.Place != "SYN-PLACE/consignee-07" || command.Conditions != "SYN-CONDITION/signature-required" {
+		t.Fatalf("command = %+v，与载荷不符", command)
+	}
+	for name, pair := range map[string][2]time.Time{
+		"windowFrom": {command.WindowFrom, time.Date(2026, 9, 25, 1, 0, 0, 0, time.UTC)},
+		"windowTo":   {command.WindowTo, time.Date(2026, 9, 25, 4, 0, 0, 0, time.UTC)},
+		"openedAt":   {command.OpenedAt, time.Date(2026, 9, 24, 12, 0, 0, 0, time.UTC)},
+	} {
+		if !pair[0].Equal(pair[1]) {
+			t.Fatalf("%s = %s, want %s", name, pair[0], pair[1])
+		}
+	}
+	if _, err := intake.IntakeDispatchTask(context.Background(), bearerRequest("t", `{"task":"t","kind":"RETURN"}`)); !errors.Is(err, tfhttp.ErrMalformedRequest) {
+		t.Fatalf("词表外任务种类：err = %v, want ErrMalformedRequest", err)
+	}
+}
+
+const decisionCarrierPickupJudgmentBody = `{"object":"SYN-PARCEL-08-04","source":"CARRIER_PICKUP_SCAN","evidenceReference":"SYN-SCAN-08-04",` +
+	`"evidenceVersion":"v1","expressesControl":true,"occurredAt":"2026-09-24T11:00:00+08:00","carrierKind":"EXTERNAL_PARTY",` +
+	`"carrierReference":"SYN-PARTY/carrier-08","segment":"SYN-SEGMENT-08-04"}`
+
+// Covers: 承运商判断口的线格式是本包既有的 CarrierPickupJudgmentPayload——读法本体（expressesControl）、证据来源与业务发生
+// 时间逐字来自载荷，租户来自认证结果。
+func TestOperatorDecisionIntakeTranslatesCarrierPickupJudgment(t *testing.T) {
+	command, err := operatorIntake(t, authenticatorFake{}).IntakeCarrierPickupJudgment(context.Background(), bearerRequest("t", decisionCarrierPickupJudgmentBody))
+	if err != nil {
+		t.Fatalf("intake：%v", err)
+	}
+	if got := command.TenantID.String(); got != operatorTenant {
+		t.Fatalf("TenantID = %q, want %q", got, operatorTenant)
+	}
+	if command.Object != "SYN-PARCEL-08-04" || command.Source.String() != "CARRIER_PICKUP_SCAN" ||
+		command.EvidenceReference != "SYN-SCAN-08-04" || command.EvidenceVersion != "v1" || !command.ExpressesControl ||
+		command.SubjectKind.String() != "EXTERNAL_PARTY" || command.SubjectReference != "SYN-PARTY/carrier-08" ||
+		command.Segment != "SYN-SEGMENT-08-04" {
+		t.Fatalf("command = %+v，与载荷不符", command)
+	}
+	if want := time.Date(2026, 9, 24, 3, 0, 0, 0, time.UTC); !command.OccurredAt.Equal(want) {
+		t.Fatalf("OccurredAt = %s, want %s", command.OccurredAt, want)
+	}
+}
+
+// decisionLines 是本包六个运营决定口：怎么调它的 Intake、一份合规载荷。自报租户与封闭解码两条对每一口都成立，表驱动逐口跑。
+var decisionLines = map[string]struct {
+	intake func(*tfhttp.OperatorDecisionIntake, *http.Request) error
+	valid  string
+}{
+	"/transport-fulfillment-segment-closures": {func(intake *tfhttp.OperatorDecisionIntake, request *http.Request) error {
+		_, err := intake.IntakeSegmentClosure(context.Background(), request)
+		return err
+	}, decisionSegmentClosureBody},
+	"/transport-fulfillment-dispatch-task-registrations": {func(intake *tfhttp.OperatorDecisionIntake, request *http.Request) error {
+		_, err := intake.IntakeDispatchTask(context.Background(), request)
+		return err
+	}, decisionDispatchTaskBody},
+	"/transport-fulfillment-effective-time-judgments": {func(intake *tfhttp.OperatorDecisionIntake, request *http.Request) error {
+		_, err := intake.IntakeEffectiveTimeJudgment(context.Background(), request)
+		return err
+	}, decisionEffectiveTimeJudgmentBody},
+	"/transport-fulfillment-carrier-first-effective-pickup-judgments": {func(intake *tfhttp.OperatorDecisionIntake, request *http.Request) error {
+		_, err := intake.IntakeCarrierPickupJudgment(context.Background(), request)
+		return err
+	}, decisionCarrierPickupJudgmentBody},
+	"/transport-fulfillment-load-assignment-registrations": {func(intake *tfhttp.OperatorDecisionIntake, request *http.Request) error {
+		_, err := intake.IntakeLoadAssignment(context.Background(), request)
+		return err
+	}, `{"assignment":"SYN-LA-01","schedule":"SYN-SCHED-01","members":["SYN-OBJ-01"],"version":"v1","assignedAt":"2026-09-25T01:00:00Z"}`},
+	"/transport-fulfillment-participation-terminations": {func(intake *tfhttp.OperatorDecisionIntake, request *http.Request) error {
+		_, err := intake.IntakeParticipationTermination(context.Background(), request)
+		return err
+	}, `{"segment":"SYN-SEG-01","object":"SYN-OBJ-01","basis":"SYN-DISPOSITION-01","endedAt":"2026-09-25T01:30:00Z"}`},
+}
+
+// Covers: 载荷里带 tenantId 即拒（MALFORMED_REQUEST），值与认证出的租户相同也拒；一份载荷只许一个文档、只许认识的键——尾随的
+// 第二个 JSON 值与未知键都拒，放过它们就是无声丢掉一段输入。六口都一样。
+func TestEveryDecisionFaceRefusesSelfReportedTenantTrailingContentAndUnknownKeys(t *testing.T) {
+	intake := operatorIntake(t, authenticatorFake{})
+	for pattern, line := range decisionLines {
+		t.Run(pattern, func(t *testing.T) {
+			if err := line.intake(intake, bearerRequest("t", line.valid)); err != nil {
+				t.Fatalf("合规载荷被拒：%v", err)
+			}
+			for name, body := range map[string]string{
+				"自报租户":    `{"tenantId":"` + operatorTenant + `",` + strings.TrimPrefix(line.valid, "{"),
+				"尾随内容":    line.valid + ` {"x":1}`,
+				"未知键":     `{"unknownKey":"x",` + strings.TrimPrefix(line.valid, "{"),
+				"不是 JSON": "!!not-json!!",
+				"空载荷":     "",
+			} {
+				if err := line.intake(intake, bearerRequest("t", body)); !errors.Is(err, tfhttp.ErrMalformedRequest) {
+					t.Fatalf("%s：err = %v, want ErrMalformedRequest", name, err)
+				}
+			}
+		})
+	}
+}
+
 type closerMustNotRun struct{ t *testing.T }
 
 func (closer closerMustNotRun) Close(context.Context, application.CloseFulfillmentSegmentCommand) (application.CloseFulfillmentSegmentResult, error) {

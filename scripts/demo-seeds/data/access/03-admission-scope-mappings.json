@@ -42,6 +42,38 @@
       "basis": "SYN-MAP-BASIS-01"
     },
     {
+      "mappingId": "SYN-MAP-OD-SEGMENT-CLOSURE-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "SEGMENT_CLOSURE",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
+      "mappingId": "SYN-MAP-OD-DISPATCH-TASK-REGISTRATION-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "DISPATCH_TASK_REGISTRATION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
+      "mappingId": "SYN-MAP-OD-EFFECTIVE-TIME-JUDGMENT-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "EFFECTIVE_TIME_JUDGMENT",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
+      "mappingId": "SYN-MAP-OD-CARRIER-FIRST-EFFECTIVE-PICKUP-JUDGMENT-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "CARRIER_FIRST_EFFECTIVE_PICKUP_JUDGMENT",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
       "mappingId": "SYN-MAP-EF-CUSTOMS-EXTERNAL-RESULT-01",
       "capability": "EXTERNAL_FACT",
       "factKind": "CUSTOMS_EXTERNAL_RESULT",

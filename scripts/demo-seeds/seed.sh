@@ -243,10 +243,15 @@ echo "== 试点治理登记（pilot-governance：权威区间、暂停、恢复�
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/14-authority-interval-external-fact-customs-external-result.json"
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/15-authority-interval-external-fact-regulatory-credential.json"
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/16-authority-interval-external-fact-external-funds-fact.json"
+# TF 余下四种运营决定随换口补（票 operator-channel/15）：关段、建派送任务、有效时间判断、承运商首次有效收寄判断。
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/17-authority-interval-operation-decision-segment-closure.json"
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/18-authority-interval-operation-decision-dispatch-task-registration.json"
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/19-authority-interval-operation-decision-effective-time-judgment.json"
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/20-authority-interval-operation-decision-carrier-first-effective-pickup-judgment.json"
 
 echo "== 操作者册登记（access-identity：合成操作者主体与能力面授予；票 operator-channel/01、17） =="
-# 两个合成主体绑演示租户：配置员授登记册配置写、主数据与运营查阅读两格，另授装载分配与终止参与两种运营决定；
-# 查阅员只授查阅读。
+# 两个合成主体绑演示租户：配置员授登记册配置写、主数据与运营查阅读两格，另授 TF 六种运营决定（装载分配、终止参与、
+# 关段、建派送任务、有效时间判断、承运商首次有效收寄判断）；查阅员只授查阅读。
 # 证据层级只记 S，不登任何真实操作者。发行方是演示发行方 Dex（operator-channel/compose.yaml），主体是
 # 它给 dex.yaml 里两个静态用户真签出的令牌里的 sub（operator-token.sh … claims 读出），不按配置推算。
 # 只登演示部署信任的那只发行方签得出的主体：iss 没有任何发行方签得出的主体，在册上与能登录的主体
@@ -256,8 +261,8 @@ echo "== 操作者册登记（access-identity：合成操作者主体与能力�
 "$BIN/parcel-access-register" operator-grant -input "$SEEDS/access/02-grants.json"
 # 准入范围对照（ADR-0180 决定一、二；票 operator-channel/19）：演示租户在上面那几种（能力、事实类型）上的生产写
 # 落在哪个治理对象范围。对照住接入身份、与操作者授予同处，不进 data/governance/；它只换坐标，区间才答「谁在写
-# 生产」。演示租户越过准入范围只有这一条普通登记的路（ADR-0150 决定一）。配置员另授装载分配与终止参与两种
-# 决定，供 probe-operator-channel.sh 取证。
+# 生产」。演示租户越过准入范围只有这一条普通登记的路（ADR-0150 决定一）。配置员的六种 TF 运营决定都在这里有对照：
+# 管理台上的关段、建派送任务与两个判断口经它走，终止参与另供 probe-operator-channel.sh 取证。
 "$BIN/parcel-access-register" admission-scope-mapping-register -input "$SEEDS/access/03-admission-scope-mappings.json"
 
 echo "== 结算账户与受理前估价采用登记（settlement-accounting：演示租户货主的应收结算账户与它采用的估价形态；票 routing-first-cut/16、product-strategy-boundary/26） =="

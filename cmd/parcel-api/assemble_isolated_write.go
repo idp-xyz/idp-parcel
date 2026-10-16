@@ -6,7 +6,6 @@ import (
 
 	nodeopshttp "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/http"
 	pspilot "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/pilotgovernance"
-	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 )
 
 // isolatedWriteTenantEnv 是隔离写路径准入（ADR-0091）的显式输入。它与隔离读面的开关
@@ -47,39 +46,28 @@ const (
 // 让动线里的收寄落在网络定义认得的节点上；要在别的合成节点上收寄，改的是这一格，不是去采信请求。
 const isolatedReceptionNode = "SYN-NODE-SHA-HUB"
 
-// isolatedMovementSource 是移动事实口注入的合成来源（票 operator-channel/08）。MovementFactIntake 的契约把「自营还是外部」
-// 交给认证结果说，隔离形态的认证结果就是这一个常量：它说自营执行方，外部承运轨迹照旧只走 TrackingSource 入站口。
-// 带 `SYN-` 前缀：来源维是事后分辨隔离行的两维之一（ADR-0091 决定三）。
-const isolatedMovementSource = "SYN-SOURCE/self-operated-executor"
-
 // isolatedWriteAdmission 携带 ADR-0091 放行的写路径几格。nil 表示未启用——各装配函数
 // 对 nil 的处理与本记录之前逐字节同形。
 //
 // 提交口的命令面 Intake（墙一）不在本结构里：它要先经库装归属权威，由 buildIsolatedSubmissionIntake
-// 在开池之后构造。主链各上下文的隔离命令 Intake 在本结构里，因为它们只收租户与合成常量、不碰库，与目录、
-// 自身权威串同在这道门里就位。命令面按端点逐口放行（Consequences）：设了写开关而某一口仍答 403，是那个分批的
-// 中间态，不是配置没生效——哪几口已放行由 admittedCommandLines 说，启动日志照它出声。
+// 在开池之后构造。命令面按端点逐口放行（Consequences），又随真渠道逐口撤下（ADR-0150 决定三）：哪几口此刻仍经
+// 写开关放行由 admittedCommandLines 说，启动日志照它出声。
 type isolatedWriteAdmission struct {
 	governanceDirectory pspilot.GovernanceScopeDirectory
 	selfAuthority       string
 	// tenant 是开关的值本身。归属那一格用不到它（治理登记册无租户维），提交口用得到：
 	// 来源信封的租户维就是它。
 	tenant string
-	// 运输履约这一格只还换运营决定四口（票 operator-channel/10 余下半边、票 15）。节点作业这一格仍在门里构造：
-	// 收寄口已换作业事实渠道，装配不再读它；删构造会连带改这道门的测试，而这只本身不再换任何一行。
-	nodeOperations       *nodeopshttp.IsolatedCommandIntake
-	transportFulfillment *tfhttp.IsolatedCommandIntake
+	// 节点作业这一格仍在门里构造：收寄口已换作业事实渠道，装配不再读它；删构造会连带改这道门的测试，而这只本身不再换
+	// 任何一行。运输履约那一格随运营决定四口换操作者渠道撤下（票 operator-channel/15）——它已一行都不换。
+	nodeOperations *nodeopshttp.IsolatedCommandIntake
 }
 
 // isolatedWriteAdmittedCommandLines 是写开关到此刻为止换上隔离 Intake 的命令面，供启动日志出声
-// （ADR-0078 决定三、ADR-0091 决定四「放行必须出声」）。每放一口在这里加一行，与 assembleBusinessEndpoints
-// 里换的那几行同步——两处对不上由装配测试拦（isolated_write_test.go 的二分表）。
+// （ADR-0078 决定三、ADR-0091 决定四「放行必须出声」）。每放一口在这里加一行、每撤一口删一行（ADR-0150 决定三），
+// 与 assembleBusinessEndpoints 里换的那几行同步——两处对不上由装配测试拦（isolated_write_test.go 的二分表）。
 var isolatedWriteAdmittedCommandLines = []string{
 	"/shipment-requests",
-	"/transport-fulfillment-carrier-first-effective-pickup-judgments",
-	"/transport-fulfillment-dispatch-task-registrations",
-	"/transport-fulfillment-segment-closures",
-	"/transport-fulfillment-effective-time-judgments",
 }
 
 // admittedCommandLines 交回放行名单的副本：日志与测试都不该改得动那份表。
@@ -93,14 +81,6 @@ func (admission *isolatedWriteAdmission) nodeOperationsIntake() *nodeopshttp.Iso
 		return nil
 	}
 	return admission.nodeOperations
-}
-
-// transportFulfillmentIntake 对 nil 接收者交回 nil，理由同 nodeOperationsIntake。
-func (admission *isolatedWriteAdmission) transportFulfillmentIntake() *tfhttp.IsolatedCommandIntake {
-	if admission == nil {
-		return nil
-	}
-	return admission.transportFulfillment
 }
 
 // buildIsolatedWriteAdmission 解析隔离写路径准入的显式输入（ADR-0091 决定四）。
@@ -148,18 +128,10 @@ func buildIsolatedWriteAdmission(getenv func(string) string) (*isolatedWriteAdmi
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: isolated node operations command intake: %w", err)
 	}
-	transportFulfillment, err := tfhttp.NewIsolatedCommandIntake(tfhttp.IsolatedCommandIntakeDeps{
-		Tenant:         tenant,
-		MovementSource: isolatedMovementSource,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("parcel-api: isolated transport fulfillment command intake: %w", err)
-	}
 	return &isolatedWriteAdmission{
-		governanceDirectory:  directory,
-		selfAuthority:        isolatedSelfAuthority,
-		tenant:               tenant,
-		nodeOperations:       nodeOperations,
-		transportFulfillment: transportFulfillment,
+		governanceDirectory: directory,
+		selfAuthority:       isolatedSelfAuthority,
+		tenant:              tenant,
+		nodeOperations:      nodeOperations,
 	}, nil
 }

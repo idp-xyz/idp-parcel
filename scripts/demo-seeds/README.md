@@ -44,7 +44,9 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 
    最后一件是本产品在治理登记册里的权威串（ADR-0180 决定三），运营决定与外部事实各口铸信封前拿它认区间：不设，
    这几口授予齐备也答 403 `OUTSIDE_ADMISSION_SCOPE`；设了，种子里演示租户的准入范围对照（`data/access/03`）与
-   权威区间（`data/governance/09`–`16`）才认得上。取值与隔离形态的权威串同串，隔离写开关开着而两值不等进程启动即拒。
+   权威区间（`data/governance/09`–`20`）才认得上。取值与隔离形态的权威串同串，隔离写开关开着而两值不等进程启动即拒。
+   管理台上的关段、建派送任务、有效时间判断与承运商首次有效收寄判断四口走的也是这一条（票 operator-channel/15 起不再经
+   隔离写开关）：不设这一件，配置员登录后在这几页上答的是 `OUTSIDE_ADMISSION_SCOPE`。
 
    三件的取值只属这个演示部署，产品侧不给缺省值：三件都不设，操作者族整族答 403 `ACCESS_CHANNEL_NOT_CONFIGURED`；
    只设一部分，进程启动即拒。发行方地址与 Dex 发现文档里的 `issuer` 逐字相同——`parcel-api` 逐字比较 `iss`，多一个
@@ -62,7 +64,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 
 | 登录邮箱 | 授予（自 2026-01-01 生效，不设终点） |
 |---|---|
-| `syn-operator-config-01@syn-tenant-01.example.invalid` | 登记册配置写、主数据与运营查阅读、运营决定（装载分配、终止参与） |
+| `syn-operator-config-01@syn-tenant-01.example.invalid` | 登记册配置写、主数据与运营查阅读、运营决定（装载分配、终止参与、关段、建派送任务、有效时间判断、承运商首次有效收寄判断） |
 | `syn-operator-viewer-01@syn-tenant-01.example.invalid` | 主数据与运营查阅读 |
 
 单要一枚令牌：`scripts/demo-seeds/operator-channel/operator-token.sh <邮箱>` 打印访问令牌，末尾加 `claims` 打印两枚

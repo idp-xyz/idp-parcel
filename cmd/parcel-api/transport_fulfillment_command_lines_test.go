@@ -8,24 +8,26 @@ import (
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 )
 
-// isolatedTransportLine 是运输履约主链一口的真库取证：怎么用生产装配拼出这一口的端点、一份合成载荷、该答的状态与 outcome。
-// 每放一口在下面的表里加一行。
-type isolatedTransportLine struct {
-	endpoint func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler
+// transportCommandLine 是运输履约主链一口的真库取证：怎么用生产装配拼出这一口的端点、一份合成载荷、该答的状态与 outcome。
+// 作业事实各口走作业事实渠道（work），运营决定四口走操作者渠道的「运营决定」能力面（decisions）——两者都是真渠道，
+// 表里已没有经隔离写放行的行（ADR-0150 决定三；票 operator-channel/10 余下半边、票 15 余下四口）。
+type transportCommandLine struct {
+	endpoint func(t *testing.T, db *bentopg.DB, decisions *tfhttp.OperatorDecisionIntake, work *tfhttp.WorkFactCommandIntake) http.Handler
 	body     string
 	status   int
 	outcome  string
 }
 
-var isolatedTransportLines = map[string]isolatedTransportLine{
+var transportCommandLines = map[string]transportCommandLine{
 	// 单对象场外揽收登记：控制证据齐、不指名段——落一版揽收，201 PICKUP_REGISTERED。
 	"/transport-fulfillment/offsite-pickups": {
-		endpoint: func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
+		endpoint: func(t *testing.T, db *bentopg.DB, decisions *tfhttp.OperatorDecisionIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
 			controlFacts, err := buildControlFactOrchestrations(db)
 			if err != nil {
 				t.Fatalf("装配控制事实编排：%v", err)
@@ -39,7 +41,7 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 	},
 	// 一次到访多对象揽收执行：一件揽到手带控制依据、不指名段——落一次到访结果，201 ATTEMPT_RECORDED。
 	"/transport-fulfillment/offsite-pickup-attempts": {
-		endpoint: func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
+		endpoint: func(t *testing.T, db *bentopg.DB, decisions *tfhttp.OperatorDecisionIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
 			controlFacts, err := buildControlFactOrchestrations(db)
 			if err != nil {
 				t.Fatalf("装配控制事实编排：%v", err)
@@ -56,12 +58,12 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 	// 承运商首次有效收寄的显式判断：承运商揽收扫描一条、表达取得控制、承运主体给引用。生产装配的承运主体目录读 PC 的真
 	// 身份登记册，合成承运方没在册，判断如实落成`待确认`（IDENTITY_NOT_REGISTERED）——形成了的业务答案，200。
 	"/transport-fulfillment-carrier-first-effective-pickup-judgments": {
-		endpoint: func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
+		endpoint: func(t *testing.T, db *bentopg.DB, decisions *tfhttp.OperatorDecisionIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
 			judge, _, err := buildCarrierPickupJudgment(db)
 			if err != nil {
 				t.Fatalf("装配承运商收寄判断编排：%v", err)
 			}
-			return tfhttp.NewJudgeCarrierFirstEffectivePickupEndpoint(isolated, judge)
+			return tfhttp.NewJudgeCarrierFirstEffectivePickupEndpoint(decisions, judge)
 		},
 		body: `{"object":"SYN-PARCEL-08-04","source":"CARRIER_PICKUP_SCAN","evidenceReference":"SYN-SCAN-08-04","evidenceVersion":"v1",` +
 			`"expressesControl":true,"occurredAt":"2026-09-24T11:00:00+08:00","carrierKind":"EXTERNAL_PARTY","carrierReference":"SYN-PARTY/carrier-08"}`,
@@ -71,7 +73,7 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 	// 交接判断首登：结论已交接、两侧证据与规则齐、不带依据（依据只属拒收与待确认）、不指名段——落一版交接，
 	// 201 HANDOVER_REGISTERED。
 	"/transport-fulfillment/handovers": {
-		endpoint: func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
+		endpoint: func(t *testing.T, db *bentopg.DB, decisions *tfhttp.OperatorDecisionIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
 			controlFacts, err := buildControlFactOrchestrations(db)
 			if err != nil {
 				t.Fatalf("装配控制事实编排：%v", err)
@@ -87,7 +89,7 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 	// 自营执行方的到达事实：到达不受门禁管（门禁只约束装载出发），不带 gateRequired / gateClearance——落一条移动事实，201 MOVEMENT_FACT_RECORDED。
 	// 来源格是作业事实这一面注入的产品常量 SELF_OPERATED，不在载荷里。
 	"/transport-fulfillment/movement-facts": {
-		endpoint: func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
+		endpoint: func(t *testing.T, db *bentopg.DB, decisions *tfhttp.OperatorDecisionIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
 			movement, err := buildMovementFactOrchestration(db)
 			if err != nil {
 				t.Fatalf("装配移动事实编排：%v", err)
@@ -101,12 +103,12 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 	},
 	// 授权角色建立派送任务：工作范围齐——立一个任务，201 DISPATCH_TASK_OPENED。
 	"/transport-fulfillment-dispatch-task-registrations": {
-		endpoint: func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
+		endpoint: func(t *testing.T, db *bentopg.DB, decisions *tfhttp.OperatorDecisionIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
 			segmentOps, err := buildSegmentOperations(db)
 			if err != nil {
 				t.Fatalf("装配段运营编排：%v", err)
 			}
-			return tfhttp.NewOpenDispatchTaskEndpoint(isolated, segmentOps.opener)
+			return tfhttp.NewOpenDispatchTaskEndpoint(decisions, segmentOps.opener)
 		},
 		body: `{"task":"SYN-DISPATCH-08-07","kind":"DELIVERY","objects":["SYN-PARCEL-08-07"],"place":"SYN-PLACE/consignee-07",` +
 			`"windowFrom":"2026-09-25T09:00:00+08:00","windowTo":"2026-09-25T12:00:00+08:00","conditions":"SYN-CONDITION/signature-required",` +
@@ -116,7 +118,7 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 	},
 	// 派送发起的一拍：段不在册——执行器如实答`不是触发事实`（SEGMENT_NOT_FOUND），形成了的业务答案，200。
 	"/transport-fulfillment-delivery-dispatch-triggers": {
-		endpoint: func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
+		endpoint: func(t *testing.T, db *bentopg.DB, decisions *tfhttp.OperatorDecisionIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
 			trigger, err := buildDeliveryDispatchTrigger(db)
 			if err != nil {
 				t.Fatalf("装配派送发起执行器：%v", err)
@@ -131,7 +133,7 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 	// 就没有东西拦得住先声称到过场再声称交付成功」），编排如实答`未受理`，200。尝试登记之后交付走得过去，见
 	// TestARecordedDeliveryAttemptLetsTheEffectiveDeliveryThrough。
 	"/transport-fulfillment/deliveries": {
-		endpoint: func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
+		endpoint: func(t *testing.T, db *bentopg.DB, decisions *tfhttp.OperatorDecisionIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
 			delivery, err := buildDeliveryOrchestration(db)
 			if err != nil {
 				t.Fatalf("装配交付编排：%v", err)
@@ -146,7 +148,7 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 	// 派送尝试登记（票 product-strategy-boundary/19）：指名的派送任务不在册——编排如实答 DELIVERY_TASK_NOT_OPEN，形成了的
 	// 业务答案，200。表里各行互不依赖、顺序不定，所以这一行不借上面建任务那一行；任务在册时的首登见下面那条链。
 	"/transport-fulfillment/delivery-attempts": {
-		endpoint: func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
+		endpoint: func(t *testing.T, db *bentopg.DB, decisions *tfhttp.OperatorDecisionIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
 			attempts, err := buildDeliveryAttemptOrchestration(db)
 			if err != nil {
 				t.Fatalf("装配派送尝试编排：%v", err)
@@ -162,26 +164,26 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 	},
 	// 关段声明：段不在册——编排如实答 SEGMENT_NOT_FOUND，形成了的业务答案，200。
 	"/transport-fulfillment-segment-closures": {
-		endpoint: func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
+		endpoint: func(t *testing.T, db *bentopg.DB, decisions *tfhttp.OperatorDecisionIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
 			segmentOps, err := buildSegmentOperations(db)
 			if err != nil {
 				t.Fatalf("装配段运营编排：%v", err)
 			}
-			return tfhttp.NewCloseFulfillmentSegmentEndpoint(isolated, segmentOps.closer)
+			return tfhttp.NewCloseFulfillmentSegmentEndpoint(decisions, segmentOps.closer)
 		},
 		body:    `{"segment":"SYN-SEGMENT-08-11","closedAt":"2026-09-25T20:00:00+08:00"}`,
 		status:  http.StatusOK,
 		outcome: "SEGMENT_NOT_FOUND",
 	},
-	// 有效时间显式判断：指名的轨迹事实不在册（外部轨迹只经 TrackingSource 入站口进，隔离形态不开那条路）——编排如实答
+	// 有效时间显式判断：指名的轨迹事实不在册（外部轨迹只经 TrackingSource 入站口进，本表不开那条路）——编排如实答
 	// `未受理`，形成了的业务答案，200。
 	"/transport-fulfillment-effective-time-judgments": {
-		endpoint: func(t *testing.T, db *bentopg.DB, isolated *tfhttp.IsolatedCommandIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
+		endpoint: func(t *testing.T, db *bentopg.DB, decisions *tfhttp.OperatorDecisionIntake, work *tfhttp.WorkFactCommandIntake) http.Handler {
 			judge, err := buildEffectiveTimeJudgment(db)
 			if err != nil {
 				t.Fatalf("装配有效时间判断编排：%v", err)
 			}
-			return tfhttp.NewJudgeEffectiveTimeEndpoint(isolated, judge)
+			return tfhttp.NewJudgeEffectiveTimeEndpoint(decisions, judge)
 		},
 		body:    `{"fact":"SYN-TRACKING-FACT-08-12","effectiveAt":"2026-09-24T16:00:00+08:00"}`,
 		status:  http.StatusOK,
@@ -189,23 +191,55 @@ var isolatedTransportLines = map[string]isolatedTransportLine{
 	},
 }
 
-// Covers: 票 operator-channel/10 完成判据第二条——作业事实各口改走操作者渠道（作业事实登记授予 + 在用设备），运营决定四口仍走隔离写。
-// 编排走生产装配，中间是生产的端点构造函数。每口另投一份带 tenantId 的载荷，Intake 就拒、不带 outcome。测试输入是隔离合成，只记 `S`。
-func TestIsolatedTransportFulfillmentLinesAnswerBusinessOutcomesAgainstARealDatabase(t *testing.T) {
+// operationDecisionTransportFaces 是本表里走「运营决定」的四口各自的决定种类。
+var operationDecisionTransportFaces = []accessidentity.DecisionKind{
+	accessidentity.DecisionSegmentClosure,
+	accessidentity.DecisionDispatchTaskRegistration,
+	accessidentity.DecisionEffectiveTimeJudgment,
+	accessidentity.DecisionCarrierFirstEffectivePickupJudgment,
+}
+
+// operatorDecisionTransportForTest 装 TF 运营决定口的操作者渠道 Intake，准入走生产的准入范围桥（ADR-0180）：四种决定
+// 各登一行对照与本产品的权威区间（与演示种子同一种登法），合成操作者持有这四种授予。与生产装配的差别只在核验方与操作者册
+// 是替身——令牌签发归演示发行方，操作者册的真库往返另有 accessidentity 的用例。
+func operatorDecisionTransportForTest(t *testing.T, db *bentopg.DB) *tfhttp.OperatorDecisionIntake {
+	t.Helper()
+	registerOperationDecisionAdmission(t, db, isolatedSelfAuthority, operationDecisionTransportFaces...)
+	admission, err := buildAdmissionScope(db, isolatedSelfAuthority)
+	if err != nil {
+		t.Fatal(err)
+	}
+	minter, err := buildOperatorMinter(acceptingVerifier{}, decisionRegister{kinds: operationDecisionTransportFaces}, admission)
+	if err != nil {
+		t.Fatal(err)
+	}
+	decisions, err := buildOperatorDecisionIntakes(minter, unwiredDecisionTargets{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return decisions.transport
+}
+
+// Covers: 票 operator-channel/10 完成判据第二条与票 15 完成判据第三、四条——作业事实各口走作业事实渠道（作业事实登记授予 +
+// 在用设备），运营决定四口走操作者渠道（决定授予 + 准入对照 + 本产品区间），越过 Intake 都答业务结果；四口的隔离写放行已撤，
+// 这几行就是改写后的真渠道答复格用例（ADR-0150 决定三）。编排走生产装配，中间是生产的端点构造函数。每口另投一份带 tenantId
+// 的载荷，Intake 就拒、不带 outcome。测试输入是合成数据，只记 `S`。
+func TestTransportFulfillmentCommandLinesAnswerBusinessOutcomesAgainstARealDatabase(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
-	intake := isolatedWriteAdmissionForTest(t).transportFulfillmentIntake()
+	decisions := operatorDecisionTransportForTest(t, db)
 	work := workFactTransportForTest(t)
 
-	for pattern, line := range isolatedTransportLines {
+	for pattern, line := range transportCommandLines {
 		t.Run(pattern, func(t *testing.T) {
-			endpoint := line.endpoint(t, db, intake, work)
+			endpoint := line.endpoint(t, db, decisions, work)
 			post := func(body string) *httptest.ResponseRecorder {
 				recorder := httptest.NewRecorder()
 				request := httptest.NewRequest(http.MethodPost, pattern, strings.NewReader(body))
+				// 作业事实口要的作用域与设备头，运营决定口不读；两种口共用一份出示，令牌是同一个合成操作者的。
 				stampWorkFact(request, "OFFSITE", "SYN-OFFSITE-01", "SYN-DEVICE-OFFSITE")
 				endpoint.ServeHTTP(recorder, request)
 				return recorder
@@ -226,14 +260,14 @@ func TestIsolatedTransportFulfillmentLinesAnswerBusinessOutcomesAgainstARealData
 }
 
 // Covers: 票 product-strategy-boundary/19 完成判据「登记一次妥投结果后，交付不再答 SOURCE_NOT_ACCEPTED」——
-// psb/05 格 12 的停点。建任务仍走隔离写（运营决定）；登记派送尝试与交付生效走作业事实渠道，租户都是 SYN-TENANT-01。
-// 尝试登记之前交付答`未受理`，登记一次妥投之后同一份交付落成 DELIVERY_REGISTERED。测试输入是隔离合成，只记 `S`。
+// psb/05 格 12 的停点。建任务走操作者渠道（运营决定）；登记派送尝试与交付生效走作业事实渠道，租户都是 SYN-TENANT-01。
+// 尝试登记之前交付答`未受理`，登记一次妥投之后同一份交付落成 DELIVERY_REGISTERED。测试输入是合成数据，只记 `S`。
 func TestARecordedDeliveryAttemptLetsTheEffectiveDeliveryThrough(t *testing.T) {
 	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
-	intake := isolatedWriteAdmissionForTest(t).transportFulfillmentIntake()
+	decisions := operatorDecisionTransportForTest(t, db)
 	work := workFactTransportForTest(t)
 	segmentOps, err := buildSegmentOperations(db)
 	if err != nil {
@@ -269,7 +303,7 @@ func TestARecordedDeliveryAttemptLetsTheEffectiveDeliveryThrough(t *testing.T) {
 		http.StatusOK, "SOURCE_NOT_ACCEPTED")
 
 	step("建派送任务",
-		post(tfhttp.NewOpenDispatchTaskEndpoint(intake, segmentOps.opener), "/transport-fulfillment-dispatch-task-registrations",
+		post(tfhttp.NewOpenDispatchTaskEndpoint(decisions, segmentOps.opener), "/transport-fulfillment-dispatch-task-registrations",
 			`{"task":"SYN-DISPATCH-19-01","kind":"DELIVERY","objects":["SYN-PARCEL-19-01"],"place":"SYN-PLACE/consignee-19",`+
 				`"windowFrom":"2026-09-25T09:00:00+08:00","windowTo":"2026-09-25T12:00:00+08:00",`+
 				`"conditions":"SYN-CONDITION/signature-required","openedAt":"2026-09-24T20:00:00+08:00"}`),

@@ -111,7 +111,7 @@ func workFactOperatorRouter(
 	}
 	return httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(
 		unconfiguredOperatorDecisions(), unconfiguredOperatorRegistries(), unconfiguredIntegrationClientIntakes(),
-		nil, nil, nil, reception, transport))
+		nil, nil, reception, transport))
 }
 
 func postWorkFactFace(router http.Handler, face workFactOperatorFace, token, device string, withHeaders bool) *httptest.ResponseRecorder {
