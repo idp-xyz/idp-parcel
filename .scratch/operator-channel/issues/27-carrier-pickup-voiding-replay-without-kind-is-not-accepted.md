@@ -14,7 +14,7 @@ Blocked by: 无
 2. 再提交一份失效判断：`evidenceVersion:"v2"`、`correctsSourceVersion:"v1"`、`expressesControl:false`，带着 `carrierReference`，但删掉 `carrierKind`。首判答 201 `PICKUP_VOIDED`，正确。
 3. 把第 2 步的载荷原样再提交一次：答 200 `INPUT_NOT_ACCEPTED`。
 
-作者会话在 main `4dd937eb` 的隔离检出上，用包内夹具 `newCarrierPickupHTTPFixture` 实跑过，结果同上。
+评审会话（`idp-parcel-9b`）在 main `4dd937eb` 的隔离检出上，用包内夹具 `newCarrierPickupHTTPFixture` 实跑过，结果同上。
 
 线上可达：生产入口 `OperatorDecisionIntake.IntakeCarrierPickupJudgment` 同样调 `CarrierPickupJudgmentPayload.Command`；`60244fa6` 起这一口挂在操作者真渠道上，持有这一种运营决定授予的操作者就能踩到。票 20 完成记录里「这一格只在编排直调时出现」的前提不成立。
 
@@ -22,7 +22,7 @@ Blocked by: 无
 
 票 20 的裁定原句：同串重放「答 `ALREADY_RECORDED` 带回链尾（不变）」；「读法为不表达时只有读法……命令里给了也不构成内容」。第 3 步应答 200 `ALREADY_RECORDED` 并带回链尾。
 
-## 根因（评审给出，作者会话读过代码）
+## 根因（子代理评审给出，评审会话读过代码）
 
 - `internal/transportfulfillment/application/judge_carrier_first_effective_pickup.go` 的 `replayOrConflictOnTheSameBasis` 不论读法，只要命令带了引用就先调 `NewCarrierSubject`；没有种类时构造失败，答未受理。
 - 首判走 `rederive` 到 `Void`，根本不看主体，所以首判过得去、重放过不去。
