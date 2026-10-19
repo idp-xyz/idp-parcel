@@ -18,7 +18,7 @@ Blocked by: [64](./64-route-plan-carries-a-delivery-leg.md)（`legs` 一键随�
 
 ## 做什么
 
-- `api.ts`：`InitialRouteRecord` 加可缺席的 `legs`，段行类型八个字符串键；`kind` 按封闭两格原词。
+- `api.ts`：`InitialRouteRecord` 加可缺席的 `legs`，段行类型照端点 `plannedLegBody` 的键逐个列，值都是字符串；`kind` 按封闭两格原词。
 - 契约：Go 侧钉夹具那条用例的成计划行带两段（一段节点间、一段交付），重写夹具；前端 `KeyShape` 加 `legs` 的行形状。两侧同一笔。
 - 路由计划页：成计划行可展开逐段显示引用、种类、起讫、窗口与依据。交付段的终点标作交付范围，不当节点显示。段引用原样可复制：末端交接声明计划段时照抄它。
 

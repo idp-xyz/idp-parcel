@@ -39,9 +39,9 @@ L
 ### 做了什么
 
 - 迁移 `migrations/network_routing/0020_service_calendar_delivery_minutes.sql`：日历加可空的 `delivery_minutes`，CHECK 不为负。
-- NR 领域 `domain/initial_route_plan.go`：`PlannedLegKind`（`BetweenNodesLeg` 零值、`DeliveryLeg`）、`PlannedLegKindFrom`、`NewDeliveryLeg`、`PlannedLeg.Kind/DeliveryScope`、`InitialRoutePlan.NodeLegs`；`FormInitialRoutePlan` 立交付段三条不变量（只在末尾、至多一段、起于末个节点；首段必须是节点间段）；`Nodes()` 只由节点间段推。`domain/route_freeze.go` 的 `PlanNodes` 遇交付段答不出。
+- NR 领域 `domain/initial_route_plan.go`：`PlannedLegKind`（`BetweenNodesLeg` 零值、`DeliveryLeg`）、`PlannedLegKindFrom`、`NewDeliveryLeg`、`PlannedLeg.Kind/DeliveryScope`、`InitialRoutePlan.NodeLegs`；`FormInitialRoutePlan` 立交付段的不变量（只在末尾、至多一段、起于末个节点；首段必须是节点间段）；`Nodes()` 只由节点间段推。`domain/route_freeze.go` 的 `PlanNodes` 遇交付段答不出。
 - NR 端口：`ServiceCalendarDefinitionVersion.DeliveryMinutes`；`CandidatePath.Delivery/HasDelivery` 与 `PlanLegs()`；`RoutePlanLegCatalogueRow` 与 `InitialRouteCatalogueRow.Legs`。
-- NR 应用：`calendar_projection.go` 在末个节点登了派送时长且候选有交付范围时成交付段、投影延到交付段终点（`deliveryLeg`）；`catalog_initial_route_evidence.go` 按区域解析取交付范围（`deliveryScopes`）；初始路由与复核形成计划取 `PlanLegs()`；复核两处已执行前缀改取 `NodeLegs()`；登记门派送时长为负答日历内容越界。
+- NR 应用：`calendar_projection.go` 在末个节点登了派送时长且候选有交付范围时成交付段、投影延到交付段终点（`deliveryLeg`）；`catalog_initial_route_evidence.go` 按区域解析取交付范围（`deliveryScopes`）；初始路由与复核形成计划取 `PlanLegs()`；复核的已执行前缀改取 `NodeLegs()`；登记门派送时长为负答日历内容越界。
 - NR 适配器：`registrationjson` 日历载荷加 `delivery_minutes`；postgres 目录日历读写带派送时长；计划 jsonb 段行加可缺的 `kind`（只给交付段写，交付段的 `to` 写交付范围），读回无 `kind` 即节点间段、带 opaque 的交付段判坏；`route_plan_catalogue.go` 成计划行重建整份计划后逐段列出；HTTP `query_route_plans.go` 成计划行加 `legs`。
 - TF：`planned_leg_source.go` 只译 `NodeLegs()`；`delivery_window_source.go` 注明不按段种类分支。
 - 种子：`scripts/demo-seeds/data/network/24-calendar-node-sin-lm-v2.json`（处理 240、派送 240 分钟，2026-06-01 起，依据 `SYN-NET-OPS/CHANGE-SIN-LM-DELIVERY-2606`），`seed.sh` 追加一行，README 组成表追加一行。
@@ -67,18 +67,18 @@ L
 
 ### 越权风险点
 
-ADR-0217 文末八条原样成立：总窗口变长、责任暂指服务区域版本、派送时长挂节点不挂区域、交付段不进比价、交付段没有不透明形、查阅口重建整份计划、管理台契约夹具不含 `legs`、段种类不推派送段。另加落地时的三条：
+ADR-0217 文末各条原样成立：总窗口变长、责任暂指服务区域版本、派送时长挂节点不挂区域、交付段不进比价、交付段没有不透明形、查阅口重建整份计划、管理台契约夹具不含 `legs`、段种类不推派送段。另加落地时的几条：
 
-1. **误用 `PlanNodes` 表现为冻结未配置**（NR owner）：把整条段链交给它，复核会落「冻结形态未配置」的未决而不是报错；生产两处已改取 `NodeLegs()`，真库与应用用例钉住。
+1. **误用 `PlanNodes` 表现为冻结未配置**（NR owner）：把整条段链交给它，复核会落「冻结形态未配置」的未决而不是报错；生产调用已改取 `NodeLegs()`，真库与应用用例钉住。
 2. **派送时长登错对象静默无效**（NR owner）：登在连接或线路日历上不拒、也不被读。
-3. **停用范围自判**（NR、TF owner）：代决 10 的两条停用不在方案里，owner 若认为 ADR-0175 应整份由新记录取代或不算停用，改 adr/README 两行即可，代码不动。
+3. **停用范围自判**（NR、TF owner）：代决 10 的停用不在方案里，owner 若认为 ADR-0175 应整份由新记录取代或不算停用，改 adr/README 两行即可，代码不动。
 
 ### 用例
 
-- 领域 `domain/delivery_leg_test.go`：交付段在末尾、种类与交付范围、节点序列不含范围、`LegAt` 越过交付段答没有、`PlanNodes` 遇交付段答不出、剩余段数不含交付段（`AT-NR-054`、`AT-NR-059` 领域半边）；四种错位不成计划（`AT-NR-056`）；缺交付范围拒、0 分钟零长窗口、种类词封闭（`AT-NR-063` 领域半边）。
+- 领域 `domain/delivery_leg_test.go`：交付段在末尾、种类与交付范围、节点序列不含范围、`LegAt` 越过交付段答没有、`PlanNodes` 遇交付段答不出、剩余段数不含交付段（`AT-NR-054`、`AT-NR-059` 领域半边）；错位的交付段不成计划（`AT-NR-056`）；缺交付范围拒、0 分钟零长窗口、种类词封闭（`AT-NR-063` 领域半边）。
 - 应用 `application/delivery_leg_test.go`：选中候选的交付段进计划；带交付段的计划在起点节点复核、冻结段数 1 即越过边界不改路（`AT-NR-059`）；改路新计划带上候选的交付段。`register_network_catalog_test.go` 派送时长为负拒（`AT-NR-063`）；`translate_test.go` 派送时长缺席为 nil、登 0 为 0。
 - 真库 `adapters/postgres/delivery_leg_test.go`：修订 2 登派送时长、接续闭合修订 1，证据带交付段（`node-lax → area-us@1`，12:30Z 起 180 分钟，依据 `NODE/node-lax@2`），投影延到 15:30Z（`AT-NR-054`、`AT-NR-057`）；没登不成段（`AT-NR-055`）；负值被 CHECK 挡（`AT-NR-063`）；带交付段的计划落库读回、`#3` 答交付段窗口、`#4` 未找到、jsonb 只有交付段带 `kind`（`AT-NR-060`）；直插旧形状行读回全是节点间段（`AT-NR-061`）；查阅口逐段列出、末段 `DELIVERY` 终点 `area-sg@1`（`AT-NR-062`）。`route_plan_catalogue_test.go` 成计划行带段、无路可走行无段。
-- HTTP `query_route_plans_test.go`：`legs` 八键逐键转写、无路可走行没有 `legs`；契约夹具字节不变。
+- HTTP `query_route_plans_test.go`：`legs` 逐键转写、无路可走行没有 `legs`；契约夹具字节不变。
 - TF `planned_leg_source_test.go`：交付段不译、两段节点间段序位不变（`AT-TF-201` 翻译半边）；真库 `delivery_window_source_db_test.go`：NR 落带交付段的计划，窗口缝 `#2`（交付段）`RESOLVED` 带交付段窗口、`#3` `MISSING`、`#1` 照答（`AT-NR-060` TF 一侧）。
 - 派发真库：`transport_preparation_skips_delivery_leg_test.go` 末段为交付段的初始路由经生产路由表只备 `#1`、信封定稿、TF 与 VE inbox 各一行（`AT-TF-201`）；`reference_network_wiring_test.go` 演示种子经生产装配的证据带交付段（`SYN-NODE-SIN-LM → SYN-AREA-SG@1`、240 分钟、`NODE/SYN-NODE-SIN-LM@2`），带交付段时出价照旧三段 25500（`AT-NR-058`）。
 
