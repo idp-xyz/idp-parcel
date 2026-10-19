@@ -28,6 +28,7 @@ type RehydrateTransportHandoverSpec struct {
 	Basis             HandoverBasisReference
 	Version           HandoverResultVersion
 	JudgedAt          time.Time
+	Nodes             HandoverNodeDeclarations
 	Corrects          HandoverResultVersion
 	CorrectedAt       time.Time
 }
@@ -77,6 +78,7 @@ func RehydrateTransportHandover(spec RehydrateTransportHandoverSpec) (TransportH
 		basis:             spec.Basis,
 		version:           spec.Version,
 		judgedAt:          spec.JudgedAt.UTC(),
+		nodes:             spec.Nodes,
 		corrects:          spec.Corrects,
 		correctedAt:       spec.CorrectedAt.UTC(),
 	}, nil

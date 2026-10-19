@@ -16,9 +16,18 @@ import (
 // 不在这里发明形状。
 const payloadCanonicalizationVersion = "TFC-1"
 
+// handoverNodeCanonicalizationVersion 是交接首登加节点声明（ADR-0213）那一形：只有至少声明了一个节点的首登写成这一版；
+// 一个都没声明的首登与其余各口仍按 TFC-1 写，字节不变（先例 PC 的 PCC-2）。按内容分版而不是让交接整口换号：
+// 不声明节点的首登与节点进文法之前登下的首登是同一种内容，换号会让同一内容在库里有两种摘要。
+const handoverNodeCanonicalizationVersion = "TFC-2"
+
 func canonicalPayloadDigest(document []byte) string {
+	return versionedPayloadDigest(payloadCanonicalizationVersion, document)
+}
+
+func versionedPayloadDigest(version string, document []byte) string {
 	sum := sha256.Sum256(document)
-	return payloadCanonicalizationVersion + ":" + hex.EncodeToString(sum[:])
+	return version + ":" + hex.EncodeToString(sum[:])
 }
 
 // StoredDigestComparison 是已存摘要与本次命令的比对结论。摘要只在同一形状版本内可比
@@ -48,6 +57,24 @@ func CompareStoredDigest(stored, current, unversioned string) StoredDigestCompar
 	default:
 		return UnknownPayloadShape
 	}
+}
+
+// CompareStoredHandoverDigest 是交接口的比对：在 CompareStoredDigest 之上认 TFC-2。
+//
+// 带 TFC-2 前缀的已存摘要与 current 逐串比——本次命令没声明节点时 current 是 TFC-1，两串必然不同，答冲突：在册那一版
+// 声明了节点而这一份没有，缺席也是一种答案。反过来，本次命令声明了节点（current 是 TFC-2）而已存摘要是 TFC-1 或无版本
+// 那一形时，也答冲突：那两形里没有节点一格，命令在它们之下没有写法；若照 ADR-0014 字面把节点丢掉再按旧形比，同键
+// 补报节点就会被认作重放、声明被静默吞掉（PC 拒绝把 PCC-2 的条件按 PCC-1 静默丢掉，同一理由）。
+func CompareStoredHandoverDigest(stored, current, unversioned string) StoredDigestComparison {
+	storedShape, _, storedVersioned := strings.Cut(stored, ":")
+	if storedVersioned && storedShape == handoverNodeCanonicalizationVersion {
+		return payloadComparison(stored == current)
+	}
+	comparison := CompareStoredDigest(stored, current, unversioned)
+	if currentShape, _, _ := strings.Cut(current, ":"); comparison == SamePayload && currentShape == handoverNodeCanonicalizationVersion {
+		return DifferentPayload
+	}
+	return comparison
 }
 
 func payloadComparison(same bool) StoredDigestComparison {
@@ -84,7 +111,13 @@ func sortedCopy(values []string) []string {
 }
 
 // CanonicalizeHandoverPayload 定形「登记运输交接」。范围、段与对象身份不进摘要。
-func CanonicalizeHandoverPayload(verdict HandoverVerdict, releasedBy, receivedBy, releasingEvidence, receivingEvidence, rule, basis string, judgedAt time.Time) ([]byte, string, error) {
+//
+// 节点声明是交接内容（ADR-0213）：至少声明了一个节点时文档写成 TFC-2，三格都写、没声明的写 null——哪一格缺席本身是
+// 内容。一个都没声明时写 TFC-1、文档里没有节点键，与节点进文法之前算出的摘要逐字节相同，存量行照原内容重放仍答重放。
+func CanonicalizeHandoverPayload(verdict HandoverVerdict, releasedBy, receivedBy, releasingEvidence, receivingEvidence, rule, basis string, judgedAt time.Time, nodes HandoverNodeDeclarations) ([]byte, string, error) {
+	if nodes.Declared() {
+		return canonicalizeHandoverWithNodes(verdict, releasedBy, receivedBy, releasingEvidence, receivingEvidence, rule, basis, judgedAt, nodes)
+	}
 	return marshalPayload(struct {
 		Canonicalization  string `json:"canonicalization"`
 		Face              string `json:"face"`
@@ -110,8 +143,51 @@ func CanonicalizeHandoverPayload(verdict HandoverVerdict, releasedBy, receivedBy
 	})
 }
 
+func canonicalizeHandoverWithNodes(verdict HandoverVerdict, releasedBy, receivedBy, releasingEvidence, receivingEvidence, rule, basis string, judgedAt time.Time, nodes HandoverNodeDeclarations) ([]byte, string, error) {
+	declared := func(node NetworkNodeReference) *string {
+		if !node.valid() {
+			return nil
+		}
+		code := node.String()
+		return &code
+	}
+	document, err := json.Marshal(struct {
+		Canonicalization  string  `json:"canonicalization"`
+		Face              string  `json:"face"`
+		Verdict           string  `json:"verdict"`
+		ReleasedBy        string  `json:"released_by"`
+		ReceivedBy        string  `json:"received_by"`
+		ReleasingEvidence string  `json:"releasing_evidence"`
+		ReceivingEvidence string  `json:"receiving_evidence"`
+		Rule              string  `json:"rule"`
+		Basis             string  `json:"basis"`
+		JudgedAt          string  `json:"judged_at"`
+		ReleasingNode     *string `json:"releasing_node"`
+		ReceivingNode     *string `json:"receiving_node"`
+		OnwardNode        *string `json:"onward_node"`
+	}{
+		Canonicalization:  handoverNodeCanonicalizationVersion,
+		Face:              "REGISTER_TRANSPORT_HANDOVER",
+		Verdict:           verdict.String(),
+		ReleasedBy:        releasedBy,
+		ReceivedBy:        receivedBy,
+		ReleasingEvidence: releasingEvidence,
+		ReceivingEvidence: receivingEvidence,
+		Rule:              rule,
+		Basis:             basis,
+		JudgedAt:          canonicalInstant(judgedAt),
+		ReleasingNode:     declared(nodes.Releasing),
+		ReceivingNode:     declared(nodes.Receiving),
+		OnwardNode:        declared(nodes.Onward),
+	})
+	if err != nil {
+		return nil, "", fmt.Errorf("transport fulfillment: canonicalize command payload: %w", err)
+	}
+	return document, versionedPayloadDigest(handoverNodeCanonicalizationVersion, document), nil
+}
+
 // CanonicalizeHandoverCorrectionPayload 定形「更正运输交接」。前版引用在摘要里，
-// 用来区分同一裁决内容落在不同前版上。
+// 用来区分同一裁决内容落在不同前版上。节点声明不在：更正照前版承继，不是这一份更正说的内容。
 func CanonicalizeHandoverCorrectionPayload(verdict HandoverVerdict, predecessorVersion, releasingEvidence, receivingEvidence, rule, basis string, correctedAt time.Time) ([]byte, string, error) {
 	return marshalPayload(struct {
 		Canonicalization   string `json:"canonicalization"`

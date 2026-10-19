@@ -91,6 +91,32 @@ func NewHandoverResultVersion(value string) (HandoverResultVersion, error) {
 	return HandoverResultVersion{required}, err
 }
 
+// HandoverNodeDeclarations 是登记方为一次交接声明的三个网络节点：交出节点（对象在哪个节点交出）、接收节点（对象交进
+// 哪个节点）、去向节点（交出之后对象往哪个节点去）。三格各自可缺席，缺席是一种答案——「没有声明」，不是「待补」：
+// 取位置的各方（节点控制转移、路由复核、交出与交付门禁）按声明取，没声明的那一格由各方各答各的（ADR-0213）。
+//
+// 节点只能声明，不从交出方、接收方或交接范围解析：那几格是不透明的参与方与范围引用，从中解析出节点就是推导，同
+// ADR-0096 不推导段身份的理由。所以声明错了本上下文核不出来——不核 network-routing 的节点目录，也不核登记设备的
+// 作业范围；与交出方、接收方两套指称并存，两者不一致时不裁谁对。
+type HandoverNodeDeclarations struct {
+	Releasing NetworkNodeReference
+	Receiving NetworkNodeReference
+	Onward    NetworkNodeReference
+}
+
+// Declared 答三格里是否至少声明了一格。一格都没声明的交接，与节点声明进文法之前登下的交接是同一种内容，摘要也
+// 同形（见 CanonicalizeHandoverPayload）。
+func (nodes HandoverNodeDeclarations) Declared() bool {
+	return nodes.Releasing.valid() || nodes.Receiving.valid() || nodes.Onward.valid()
+}
+
+func declaredNode(node NetworkNodeReference) (NetworkNodeReference, bool) {
+	if !node.valid() {
+		return NetworkNodeReference{}, false
+	}
+	return node, true
+}
+
 // TransportHandoverSpec 是形成一个对象级交接判断所需的全部输入。
 type TransportHandoverSpec struct {
 	TenantID          TenantID
@@ -105,6 +131,8 @@ type TransportHandoverSpec struct {
 	Basis             HandoverBasisReference
 	Version           HandoverResultVersion
 	JudgedAt          time.Time
+	// Nodes 不随裁决的完备性要求变：拒收与待确认同样发生在某个节点上。
+	Nodes HandoverNodeDeclarations
 }
 
 // TransportHandover 是针对明确载运对象、依据双方证据与适用规则形成的唯一权威控制转移
@@ -125,6 +153,7 @@ type TransportHandover struct {
 	basis             HandoverBasisReference
 	version           HandoverResultVersion
 	judgedAt          time.Time
+	nodes             HandoverNodeDeclarations
 	corrects          HandoverResultVersion
 	correctedAt       time.Time
 }
@@ -168,6 +197,7 @@ func FormTransportHandover(spec TransportHandoverSpec) (TransportHandover, error
 		basis:             spec.Basis,
 		version:           spec.Version,
 		judgedAt:          spec.JudgedAt.UTC(),
+		nodes:             spec.Nodes,
 	}, nil
 }
 
@@ -233,6 +263,24 @@ func (handover TransportHandover) JudgedAt() time.Time {
 	return handover.judgedAt
 }
 
+// Nodes 交回登记方声明的三个节点，未声明的格是零值。
+func (handover TransportHandover) Nodes() HandoverNodeDeclarations {
+	return handover.nodes
+}
+
+// ReleasingNode、ReceivingNode 与 OnwardNode 各自可缺席；缺席即登记方没有声明，本上下文不补。
+func (handover TransportHandover) ReleasingNode() (NetworkNodeReference, bool) {
+	return declaredNode(handover.nodes.Releasing)
+}
+
+func (handover TransportHandover) ReceivingNode() (NetworkNodeReference, bool) {
+	return declaredNode(handover.nodes.Receiving)
+}
+
+func (handover TransportHandover) OnwardNode() (NetworkNodeReference, bool) {
+	return declaredNode(handover.nodes.Onward)
+}
+
 // Corrects 交回本版本更正的前一版本（若本版本由更正产生）。
 func (handover TransportHandover) Corrects() (HandoverResultVersion, bool) {
 	if !handover.corrects.valid() {
@@ -248,8 +296,8 @@ func (handover TransportHandover) CorrectedAt() (time.Time, bool) {
 	return handover.correctedAt, true
 }
 
-// HandoverCorrection 携带一次更正给出的新裁决与新证据。对象、范围、双方与业务时间不在
-// 其中——更正改的是判断，不是那次交接发生过什么。
+// HandoverCorrection 携带一次更正给出的新裁决与新证据。对象、范围、双方、节点声明与业务时间
+// 不在其中——更正改的是判断，不是那次交接发生过什么；新版本照前版承继它们。
 type HandoverCorrection struct {
 	Verdict           HandoverVerdict
 	ReleasingEvidence HandoverEvidenceReference
@@ -295,6 +343,7 @@ func (handover TransportHandover) Correct(correction HandoverCorrection) (Transp
 		Basis:             correction.Basis,
 		Version:           correction.Version,
 		JudgedAt:          handover.judgedAt,
+		Nodes:             handover.nodes,
 	})
 	if err != nil {
 		return TransportHandover{}, err

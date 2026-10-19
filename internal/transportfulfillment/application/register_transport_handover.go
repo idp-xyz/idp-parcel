@@ -91,6 +91,11 @@ type RegisterTransportHandoverCommand struct {
 	// OFFSITE_PICKUP / LINEHAUL / FINAL_DELIVERY），可缺席。段由这次交接成立时随之固定；加入既有段时只核对。
 	// 声明为 FINAL_DELIVERY 的段是派送段——末端派送任务的内部触发只认「对象凭已交接进入派送段」。
 	SegmentServiceAction string
+	// ReleasingNode、ReceivingNode 与 OnwardNode 是登记方声明的交出、接收与去向节点（NR 节点代码，ADR-0213），各自
+	// 可缺席，空白即没有声明。它们是交接内容：进摘要，同键换节点是冲突。
+	ReleasingNode string
+	ReceivingNode string
+	OnwardNode    string
 }
 
 // CorrectTransportHandoverCommand 携带更正入口的全部输入：指名被更正的前版，更正走
@@ -216,6 +221,7 @@ func (handler *RegisterTransportHandoverHandler) Register(
 		command.Rule,
 		command.Basis,
 		command.JudgedAt,
+		handover.Nodes(),
 	)
 	if err != nil {
 		return RegisterTransportHandoverResult{}, err
@@ -467,7 +473,7 @@ func (handler *RegisterTransportHandoverHandler) answerOccupiedKey(
 	digest string,
 	unversioned string,
 ) RegisterTransportHandoverResult {
-	switch domain.CompareStoredDigest(occupant.ContentDigest, digest, unversioned) {
+	switch domain.CompareStoredHandoverDigest(occupant.ContentDigest, digest, unversioned) {
 	case domain.SamePayload:
 		return handler.existingResult(ctx, occupant)
 	case domain.DifferentPayload:
@@ -516,6 +522,21 @@ func handoverFrom(command RegisterTransportHandoverCommand) (domain.TransportHan
 	}
 	if strings.TrimSpace(command.Basis) != "" {
 		if spec.Basis, err = domain.NewHandoverBasisReference(command.Basis); err != nil {
+			return domain.TransportHandover{}, err
+		}
+	}
+	for _, declared := range []struct {
+		raw  string
+		node *domain.NetworkNodeReference
+	}{
+		{command.ReleasingNode, &spec.Nodes.Releasing},
+		{command.ReceivingNode, &spec.Nodes.Receiving},
+		{command.OnwardNode, &spec.Nodes.Onward},
+	} {
+		if strings.TrimSpace(declared.raw) == "" {
+			continue
+		}
+		if *declared.node, err = domain.NewNetworkNodeReference(declared.raw); err != nil {
 			return domain.TransportHandover{}, err
 		}
 	}

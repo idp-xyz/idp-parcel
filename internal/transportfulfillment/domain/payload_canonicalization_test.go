@@ -25,7 +25,7 @@ func TestCommandPayloadsRoundTripAsTFC1(t *testing.T) {
 			document: `{"canonicalization":"TFC-1","face":"REGISTER_TRANSPORT_HANDOVER","verdict":"HANDED_OVER","released_by":"REL","received_by":"RCV","releasing_evidence":"RE","receiving_evidence":"VE","rule":"RULE","basis":"BASIS","judged_at":"2026-03-05T02:11:12.345678901Z"}`,
 			digest:   "TFC-1:133a3202db0aa795dfe9d4ee4d1a46e1c68b4e34230ea4c05daa3f9681e24990",
 			call: func() ([]byte, string, error) {
-				return domain.CanonicalizeHandoverPayload(domain.ObjectHandedOver, "REL", "RCV", "RE", "VE", "RULE", "BASIS", at)
+				return domain.CanonicalizeHandoverPayload(domain.ObjectHandedOver, "REL", "RCV", "RE", "VE", "RULE", "BASIS", at, domain.HandoverNodeDeclarations{})
 			},
 		},
 		{
@@ -338,7 +338,7 @@ func TestStoredDigestIsComparedWithinItsOwnShape(t *testing.T) {
 		{"unversioned same content", "bb", domain.SamePayload},
 		{"unversioned different content", "cc", domain.DifferentPayload},
 		{"an unversioned digest is not read as TFC-1", "aa", domain.DifferentPayload},
-		{"a later shape", "TFC-2:aa", domain.UnknownPayloadShape},
+		{"TFC-2 is read only by the handover face", "TFC-2:aa", domain.UnknownPayloadShape},
 		{"another context's shape", "NOC-1:bb", domain.UnknownPayloadShape},
 	}
 	for _, testCase := range cases {
