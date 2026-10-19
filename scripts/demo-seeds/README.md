@@ -247,6 +247,13 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
    来源写 `{"kind": "OPERATOR_DECLARATION", "reference": "SYN-DEMAND-DECL-01/v1"}`，判断时点与有效期由声明方给。新预占
    答 201 `CAPACITY_RESERVED`，原样重交答 200 已有；超出余量答 200 `CAPACITY_EXCEEDED` 并带余量，没有任何审批能越过。
    需求量与来源是演示租户的声明值，证据只记 `S`。
+   装载分配要带预占（ADR-0203 决定一、二，票 demo-chain-gaps/21）：班次挂了池，分配就要对每个池各带一行、引用那个池上
+   一份当前有效的预占。干线 2026-10-21 那一班挂重量（`KG`）与件数（`PCS`）两池，先在两池上各预占一份，再经
+   `POST /transport-fulfillment-load-assignment-registrations` 分配：`allocations` 每池一行，写 `pool`、`reservation`、`unit`、
+   `source`，重量池给 `quantity`，件数池可以写 `"quantityFromMembers": true` 取成员数；分配时刻要落在预占的判断时点与有效期
+   之间。新分配答 201 并回显逐池的分配量；超出那份预占剩下的量答 200 `ALLOCATION_EXCEEDED` 并带余量；少带一个池答 200
+   `CAPACITY_RESERVATION_REQUIRED`。已分配的那一段释放不出来（释放答 `RESERVATION_OVERDRAWN`，回显的预占带 `allocated`）。
+   种子不登任何分配；分配量与来源是演示租户的声明值，证据只记 `S`。
 
    提交一单、初始路由形成之后，运输履约逐段形成准备结果（ADR-0201 决定六至八，票 demo-chain-gaps/18）：`GET
    /transport-fulfillment-records?registry=transport-preparation` 列出这一件的三段，各带结论、段窗口、按申报取的需求量
