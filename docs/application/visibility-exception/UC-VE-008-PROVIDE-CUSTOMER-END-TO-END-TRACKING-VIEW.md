@@ -76,6 +76,8 @@
 
 `PAR-VIS-01/03/09`、`PAR-COM-07`、`PAR-NFR-06` 未确认，或 `VIS-11 P+S` 未完成时，只能使用隔离账户进行回放或影子验证，不开放生产客户查询。真实来源覆盖、对客里程碑、地点粒度、ETA 门槛、终局展示、更正规则、客户账户与对象授权和查询新鲜度必须由业务责任方提供，不能以样例默认值替代。
 
+查询的接入归首方客户渠道（[ADR-0139](../../adr/0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md) 决定四）。上段「隔离账户」所指的隔离形态，照 [ADR-0150](../../adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 决定三逐口退场。上列租户取值未确认时，挡住查询的是两处：客户渠道册上的查阅授予（`PAR-INT-13`），以及投影与视图派生所读的里程碑映射与披露策略。查询口本身不另设开关。
+
 | ID | 场景 | 预期结果 |
 |---|---|---|
 | `AT-VE-150` | C1 授权用户按本账户包裹查询 | 只返回 C1 当前有效客户视图和采用版本 |
