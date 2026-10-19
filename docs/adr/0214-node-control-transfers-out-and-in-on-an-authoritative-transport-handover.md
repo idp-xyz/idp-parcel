@@ -1,6 +1,6 @@
 # ADR-0214：节点控制按权威运输交接转出与转入——交接对象按正式包裹身份经节点自己的当前关联对上作业实物，转移记在只追加的节点控制转移册上、读控制时折叠，`已交接`转出此刻唯一在身的控制，撤回控制的更正入账待重算（UC-NO-005）
 
-Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/61，统一代决见 `.scratch/demo-chain-gaps/handover-dispatch-plan.md`「代决」C2–C7 与「需要的 ADR」ADR-0214。决定七（转入）由票 demo-chain-gaps/62 实现。越权风险点见文末，待 NO owner 复核，TF owner 会签。） 决定七与决定四末条落地时的补充裁定见文末「补记：票 62 落决定七时的补充裁定」（2026-10-19）。
+Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/61，统一代决见 `.scratch/demo-chain-gaps/handover-dispatch-plan.md`「代决」C2–C7 与「需要的 ADR」ADR-0214。决定七（转入）由票 demo-chain-gaps/62 实现。越权风险点见文末，待 NO owner 复核，TF owner 会签。） 决定七与决定四末条落地时的补充裁定见文末「补记：票 62 落决定七时的补充裁定」（2026-10-19）。 **部分停用**（2026-10-19）：决定五「同链认法：同一（对象，范围）的各版。」一句已由 [ADR-0220](./0220-node-control-reads-the-handover-correction-chain-by-the-transport-fulfillment-back-pointer.md) 停用——更正链只按运输履约的更正回指认，正文与文末补记凡说「同链」的各格都按它读；其余各条不变。
 Date: 2026-10-19
 
 ## Context
@@ -127,6 +127,7 @@ Date: 2026-10-19
 - 票 `.scratch/demo-chain-gaps/issues/61-node-control-transfers-out-on-an-authoritative-handover.md`、`62-node-control-is-established-by-handover-in.md`、`04-handover-does-not-move-node-control-or-trigger-reassessment.md`；勘察 `.scratch/no-control-transfer-out/report.md`
 - [ADR-0213](./0213-a-transport-handover-declares-its-releasing-receiving-and-onward-nodes.md)：交出、接收节点的声明；文末补记里的转入与信息格读它们
 - 票 62 立的后继：`.scratch/demo-chain-gaps/issues/91-a-handover-in-that-names-no-unit-has-no-node-reconciliation.md`、`92-a-node-intake-does-not-see-a-control-established-by-handover-in.md`
+- [ADR-0220](./0220-node-control-reads-the-handover-correction-chain-by-the-transport-fulfillment-back-pointer.md)：决定五「同链认法」一句由它停用，越权风险点「同链按（对象，范围）认」与文末补记的越权风险点「一次交接不转出它自己立起的控制，靠的仍是同链按（对象，范围）认」由它回答（票 demo-chain-gaps/95）
 
 ## 补记：票 62 落决定七时的补充裁定（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」，待 NO owner 复核，TF owner 会签）
 
