@@ -51,6 +51,10 @@ export interface ReceptionRecord {
    */
   identityCheck?: string;
   recordedAt: string;
+  /** 交付范围核对态三键（ADR-0212 决定五），与收寄答复同名同值；这一版没记时三键都缺席。读法在 delivery-scope-check。 */
+  deliveryScopeCheck?: string;
+  deliveryScopeUnverifiedReason?: string;
+  deliveryScopeInapplicability?: string;
 }
 
 /**
@@ -87,6 +91,17 @@ export interface UnidentifiedItemRecord {
    * 来由时出现。记冲突却整键缺席的是来由这一格落地之前的行，读法见 identity-conflict-cause。类型留 string，理由同上。
    */
   identityConflictCause?: string;
+  /**
+   * 交付范围核对态（ADR-0212 决定五）：VERIFIED / UNVERIFIED / UNCONFIGURED，未证另带原因，依据不适用再带细分；这一版没做范围推导（未核对、
+   * 追加给先到那件的冲突版、处置版与这一格落地之前的行）三键都缺席。类型留 string，理由同 serviceResultCheck。读法在 delivery-scope-check。
+   */
+  deliveryScopeCheck?: string;
+  deliveryScopeUnverifiedReason?: string;
+  deliveryScopeInapplicability?: string;
+  /** 这一版来源里上报的交付范围依据引用，与收寄载荷同一个形；来源没带（或来源未保全）即缺席。 */
+  deliveryScopeBasis?: { kind: string; id: string };
+  /** 这件实物此刻最后归入的送站交接单；没归入过即缺席。 */
+  assignedHandoverNote?: string;
 }
 
 /**

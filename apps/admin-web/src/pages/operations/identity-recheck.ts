@@ -8,6 +8,7 @@
 import { formatInstant } from '../catalogue-view';
 import type { IdentityRecheckResponseBody } from './identity-recheck-api';
 import { identityCheckCellOf } from './identity-check';
+import { deliveryScopeBasisCellOf, deliveryScopeCheckCellOf, deliveryScopeRecoveryOf, pendingCauseOf } from './delivery-scope-check';
 import {
   ambiguityOnlyCause,
   conflictReleasableByRecheck,
@@ -28,6 +29,7 @@ export const recheckOutcomeLabels: Record<string, string> = {
   SOURCE_NOT_PRESERVED: '不重核：来源未保全',
   NOT_PENDING_IDENTIFICATION: '不重核：指名的那一版不是待识别实物',
   STILL_AMBIGUOUS: '仍有未决的同号声明——暂不能关联，判断不变',
+  AMBIGUITY_GONE_SCOPE_UNVERIFIED: '同号声明已不在，但没有可验证交付范围——追加一版待识别 · 范围未证',
 };
 
 /** 「重核」动作此刻能不能发起；不能时带一句为什么，页面照列，不让人去点一个必然答「不重核」的按钮。 */
@@ -84,6 +86,9 @@ export function unidentifiedRowOf(record: UnidentifiedItemRecord): UnidentifiedR
       association: record.association ?? '',
       judgmentVersion: record.judgmentVersion ?? '',
       identityCheck: identityCheckCellOf(record),
+      pendingCause: pendingCauseOf(record).label,
+      deliveryScope: withRecovery(deliveryScopeCheckCellOf(record), deliveryScopeRecoveryOf(record)),
+      deliveryScopeBasis: deliveryScopeBasisCellOf(record),
     },
     recheck: recheckAvailabilityOf(record),
   };
@@ -113,6 +118,7 @@ export function describeRecheckAnswer(body: IdentityRecheckResponseBody): Rechec
           `新版本 ${body.judgmentVersion ?? '—'} 接续${rechecked}，关联包裹 ${body.association ?? '—'}`,
           '业务时间沿用原收寄时刻，控制起点不另起；原待识别记录照留',
           serviceResultLine(body),
+          scopeLine(body),
           '收寄意图已随新版本交 parcel-shipment',
         ],
       };
@@ -135,6 +141,18 @@ export function describeRecheckAnswer(body: IdentityRecheckResponseBody): Rechec
         details: [
           `新版本 ${body.judgmentVersion ?? '—'} 接续${rechecked}：parcel-shipment 这回答复了，仍没有标识这个号的包裹`,
           '那一件原先身份未核对（当时没问到），从此记为已核对、查无此号；收寄事实与控制照旧，原记录照留',
+        ],
+      };
+    case 'AMBIGUITY_GONE_SCOPE_UNVERIFIED':
+      // 冲突解开了，剩下的只是缺证据（ADR-0212 决定六「只因歧义信号的冲突重核后只缺范围」）：不记冲突的待识别，候选照记，等补证据再重核。
+      return {
+        tone: 'answered',
+        landed: true,
+        headline,
+        details: [
+          `新版本 ${body.judgmentVersion ?? '—'} 接续${rechecked}：不记冲突，候选 ${(body.candidates ?? []).join('、') || '—'} 照记`,
+          scopeLine(body),
+          '缺的是可验证交付范围：补证据（交接单确认绑定，或归入一张开放的交接单）后再重核；没交收寄意图',
         ],
       };
     case 'STILL_UNIDENTIFIED':
@@ -216,12 +234,20 @@ export function recheckProblemNote(code: string): string {
   }
 }
 
+function withRecovery(cell: string, recovery: string): string {
+  return recovery ? `${cell}——${recovery}` : cell;
+}
+
 /** 追加了冲突版之后那一句「怎么解」：随这一版记下的来由走（ADR-0211 决定二）。 */
 function conflictReleaseLine(cause: string | undefined): string {
   if (cause === ambiguityOnlyCause) {
     return '来由只因歧义信号：声明同号的那份委托被拒绝或撤回之后，服务端会自动再核；也可用下方「处置」直接定。';
   }
   return `这一来由（${identityConflictCauseShortOf(cause)}）只经下方「处置」解除，再重核不会解开。`;
+}
+
+function scopeLine(body: IdentityRecheckResponseBody): string {
+  return `交付范围核对：${deliveryScopeCheckCellOf(body)}`;
 }
 
 function serviceResultLine(body: IdentityRecheckResponseBody): string {

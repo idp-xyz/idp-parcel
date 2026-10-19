@@ -18,7 +18,7 @@ export interface IdentityRecheckRequest {
 /**
  * 重核口的封闭响应形状。`outcome` 取重核结果枚举原名（INTAKE_FORMED / IDENTITY_CONFLICT / IDENTITY_NOW_CHECKED /
  * STILL_UNIDENTIFIED / EXISTING_RESULT / IDENTITY_CONFLICT_RECORDED / SOURCE_NOT_PRESERVED / NOT_PENDING_IDENTIFICATION /
- * STILL_AMBIGUOUS，最后一格见 ADR-0211 决定二）。
+ * STILL_AMBIGUOUS，见 ADR-0211 决定二；AMBIGUITY_GONE_SCOPE_UNVERIFIED，见 ADR-0212 决定六）。
  * recheckedVersion 恒在场；judgmentVersion 只随追加了一版的各格出现；currentVersion 与 recordedOutcome 只随已有结果
  * 出现。其余几格说的是答复所指的那一版，identityCheck 只在那一版是待识别时出现（ADR-0199 决定五），identityConflictCause 只在
  * 那一版记了身份冲突、且记了来由时出现（ADR-0211 决定一）。
@@ -38,6 +38,10 @@ export interface IdentityRecheckResponseBody {
   serviceMarkers?: string[];
   serviceResultCheck?: string;
   identityCheck?: string;
+  /** 答复所指那一版的交付范围核对态三键（ADR-0212 决定五），读法同 records-api 的同名三格；那一版没记时都缺席。 */
+  deliveryScopeCheck?: string;
+  deliveryScopeUnverifiedReason?: string;
+  deliveryScopeInapplicability?: string;
 }
 
 export function recheckPendingIdentity(

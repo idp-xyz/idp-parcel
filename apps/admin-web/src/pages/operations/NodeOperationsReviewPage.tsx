@@ -21,6 +21,8 @@ import {
   type RecheckAvailability,
 } from './identity-recheck';
 import { IdentityDispositionPanel } from './IdentityDispositionPanel';
+import { DeliveryPreAdvicesSection } from './DeliveryPreAdvicesSection';
+import { DeliveryHandoverNotesSection } from './DeliveryHandoverNotesSection';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['node-operations-review'];
@@ -38,6 +40,10 @@ const info = moduleInfoById['node-operations-review'];
  * 登记册——服务端的册名封闭集刻意不含那两格（没有表就没有读法，票 05 Comments），
  * 两区不发请求、如实呈现「无登记册」，不显示会被 400 拒掉的查询结果，也不把
  * 「无处可登」演成「登记册为空」。
+ *
+ * 送站预报与送站交接单两区各走自己的读口（GET /node-operations-delivery-pre-advices、/node-operations-delivery-handover-notes，
+ * 票 ps-external-mark-relations/13），筛选与详情各在自己的组件里；交接单详情上的「确认」是第三样运营决定（送站交接确认，UC-NO-006
+ * 步骤 5B），依授权交付关系确认一个账户的绑定，不确认身份。
  */
 interface ReviewRow {
   key: string;
@@ -70,7 +76,16 @@ type SectionId =
   | 'consolidation-units'
   | 'measurements'
   | 'handover-evidence'
-  | 'unidentified-items';
+  | 'unidentified-items'
+  | DeliverySectionId;
+
+/** 不走 /node-operations-records 的两区：各有自己的读口、筛选与详情，区内容交给各自的组件。 */
+type DeliverySectionId = 'delivery-pre-advices' | 'delivery-handover-notes';
+
+const deliverySections: { id: DeliverySectionId; word: string }[] = [
+  { id: 'delivery-pre-advices', word: '送站预报' },
+  { id: 'delivery-handover-notes', word: '送站交接单' },
+];
 
 interface ReviewSection {
   id: SectionId;
@@ -183,15 +198,21 @@ const sections: ReviewSection[] = [
     // 拿去问的那一格,原样示出;判断版本一列是重核指名的那一版。记身份冲突的行只有来由是
     // 「只因歧义信号」的给「重核」(ADR-0211 决定二:声明同号的委托被拒绝或撤回后再问就是唯一命中),
     // 其余来由与来由未记的只给下方「处置」;冲突来由一列说的就是这一分别。
+    //
+    // 「为何待识别」把缺范围、范围成立但冲突、零候选与未核对分开写（ADR-0212 决定五）：四者候选列与冲突列可以一样，出路却各不相同。
+    // 交付范围核对一列是这一版判断时记下的推导，附恢复动作；依据一列是来源里上报的依据与此刻最后归入的交接单。
     columns: [
       col('unit', '内部作业标签', { mono: true }),
       col('node', '登记节点', { mono: true }),
+      col('pendingCause', '为何待识别'),
       col('externalMark', '外部标识观察（来源原样）', { mono: true }),
       col('candidates', '身份候选'),
       // 身份核对一列紧挨候选：未核对那一行候选是空的，这一列说它是没问到、不是查无此号（ADR-0199 决定五）。
       col('identityCheck', '身份核对'),
       col('identityConflict', '身份冲突', { className: 'w-[88px]' }),
       col('identityConflictCause', '冲突来由'),
+      col('deliveryScope', '交付范围核对'),
+      col('deliveryScopeBasis', '范围依据 · 此刻归入', { mono: true }),
       col('receivedAt', '收到时间', { mono: true }),
       col('association', '正式包裹关联（引用）', { mono: true }),
       col('judgmentVersion', '判断版本', { mono: true }),
@@ -266,8 +287,10 @@ export function NodeOperationsReviewPage() {
     registry: NodeOperationsRegistry;
     answer: ApiResult<NodeOperationsListResponseBody>;
   } | null>(null);
+  const delivery = deliverySections.find((candidate) => candidate.id === sectionId);
   const section = sections.find((candidate) => candidate.id === sectionId) ?? sections[0];
-  const registry = section.registry;
+  // 送站两区不读 /node-operations-records：落空的 section 回退到第一区，不能让它顺带发一次收寄册的请求。
+  const registry = delivery ? undefined : section.registry;
 
   useEffect(() => {
     // 无册区不发请求：服务端册名封闭集没有那两格，发了只会收 400。
@@ -304,6 +327,23 @@ export function NodeOperationsReviewPage() {
       ? [...section.columns, recheckColumn(startRecheck, recheck?.kind === 'submitting' ? recheck.judgmentVersion : null)]
       : section.columns;
 
+  const chips = (
+    <>
+      {[...sections, ...deliverySections].map((candidate) => (
+        <button
+          key={candidate.id}
+          type="button"
+          className={chipClass(candidate.id === sectionId)}
+          onClick={() => setSectionId(candidate.id)}
+        >
+          {candidate.word}
+        </button>
+      ))}
+    </>
+  );
+  if (delivery?.id === 'delivery-pre-advices') return <DeliveryPreAdvicesSection chips={chips} />;
+  if (delivery?.id === 'delivery-handover-notes') return <DeliveryHandoverNotesSection chips={chips} />;
+
   const viewState: TemplateViewState = section.absence
     ? {
         kind: 'unconfigured',
@@ -329,20 +369,7 @@ export function NodeOperationsReviewPage() {
           onChange: setKeyword,
           placeholder: '按作业实物或节点检索',
         }}
-        filters={
-          <>
-            {sections.map((candidate) => (
-              <button
-                key={candidate.id}
-                type="button"
-                className={chipClass(candidate.id === sectionId)}
-                onClick={() => setSectionId(candidate.id)}
-              >
-                {candidate.word}
-              </button>
-            ))}
-          </>
-        }
+        filters={chips}
         filterSummary={
           // 计数只在拿到业务答案后显示,未配置/无册态不报「0 行」。
           body ? `${section.word} ${visibleRows.length} 行` : undefined
