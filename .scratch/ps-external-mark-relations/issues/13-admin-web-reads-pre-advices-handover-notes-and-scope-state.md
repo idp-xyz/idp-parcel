@@ -1,7 +1,7 @@
 # 13 管理台读面：送站预报与送站交接单的查阅，待识别实物显示交付范围核对态，交接单详情带「确认绑定」动作
 
 Category: enhancement
-Status: ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（09、11、12 已进 main），分支 `claude-psxm13`，走 Go 那条路。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
 Blocked by:
 - [09](./09-pre-advice-submission-on-the-first-party-customer-channel.md) 进 main：预报要先有来路，读面才有东西可看。
 - [11](./11-identity-check-judges-the-verifiable-delivery-scope.md) 进 main：交付范围核对态落册之后，复核目录才带得出它。
