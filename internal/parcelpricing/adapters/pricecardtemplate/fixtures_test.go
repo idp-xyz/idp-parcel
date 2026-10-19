@@ -121,6 +121,7 @@ func sellCard() filled {
 			"weightPolicyId": "SYN-WEIGHT-CN-SG-01", "weightPolicyVersion": "v1", "weightMethod": "MAX",
 			"volumetricDivisor": "5000", "volumetricLengthUnit": "CM",
 			"directionAuthorizationId": "SYN-AUTH-PRICE-DIR-01", "directionAuthorizationVersion": "v1",
+			"amountRoundingMode": "HALF_UP", "amountRoundingIncrement": "0.01", "amountRoundingPoints": "TOTAL",
 		},
 		data: map[string]rows{
 			sheetTables: {{"tableId": "SYN-TABLE-CN-SG-01", "tableVersion": "v1", "family": "FIRST_CONTINUE",
