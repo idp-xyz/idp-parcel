@@ -54,6 +54,15 @@ const (
 	DecisionCapacityRelease     DecisionKind = "CAPACITY_RELEASE"
 )
 
+// 履约段采用运输委托、取消运输委托、取消订舱（ADR-0202 决定一、ADR-0204）：三者都是运营人员作出的生产决定，各成一种。
+// 采用把一个在册的实际履约段声明为在一份已提交委托下履约，并随之登记委托下的运输已开始——之后这份委托就取消不了；
+// 能提交委托的不因此能取消它，能取消的也不因此能把它挂到段上，授予的粒度等于权力的粒度。
+const (
+	DecisionFulfillmentSegmentCommissionAdoption DecisionKind = "FULFILLMENT_SEGMENT_COMMISSION_ADOPTION"
+	DecisionTransportCommissionCancellation      DecisionKind = "TRANSPORT_COMMISSION_CANCELLATION"
+	DecisionBookingRequestCancellation           DecisionKind = "BOOKING_REQUEST_CANCELLATION"
+)
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -65,6 +74,7 @@ var decisionKinds = []DecisionKind{
 	DecisionTransportChargeOccurrenceRegistration,
 	DecisionCapacityReservation, DecisionCapacityRelease,
 	DecisionBookingRequestSubmission,
+	DecisionFulfillmentSegmentCommissionAdoption, DecisionTransportCommissionCancellation, DecisionBookingRequestCancellation,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。
