@@ -1,7 +1,7 @@
 # 12 装载分配：在变化版上撤回会照抄前版的修订时刻，存库撞 revision_xor_withdrawal
 
 Category: bug
-Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-tfa121310`（与 13、10 同一分支）。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立（tf-face-algebra/02 实施中发现，票外未改）
+Status: resolved——2026-10-19 进 main（12、13、10 同批，代码验证钉 `b09876bf`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-tfa121310`（与 13、10 同一分支）。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立（tf-face-algebra/02 实施中发现，票外未改）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：tf-face-algebra/02 实施子代理的「本票外的发现」，经其非作者评审确认。
@@ -19,10 +19,10 @@ Blocked by: 无
 
 ## 完成判据
 
-- [ ] 领域用例：在变化版上撤回，撤回版不带修订时刻。
-- [ ] 真库用例：同一条撤回版经 `LoadAssignments.Save` 落库成功、读回一致。
-- [ ] 排在 tf-unwired-seven/05 接撤回入口之前修好。
-- [ ] Go 门禁照常。
+- [x] 领域用例：在变化版上撤回，撤回版不带修订时刻。
+- [x] 真库用例：同一条撤回版经 `LoadAssignments.Save` 落库成功、读回一致。
+- [x] 排在 tf-unwired-seven/05 接撤回入口之前修好。
+- [x] Go 门禁照常。
 
 ## 完成记录（2026-10-19，会话 idp-parcel-9b 的实施子代理，分支 claude-tfa121310）
 
@@ -61,3 +61,8 @@ Blocked by: 无
 
 - **Spec**：撤回版在值拷贝后清掉修订时刻，分配时刻与成员照前版，回指前版；领域用例与经 `LoadAssignments.Save` 的真库往返（含 `FindChainHead` 取到撤回版）各一条，真库红在 `load_assignment_revision_xor_withdrawal`，正是票面现象。
 - **Standards**：注释写为什么（重建门与库面 CHECK 都会拒），不写经过。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-tfa121310`（12、13、10 同批）rebase 到远端 main 之上快进推送；rebase 只撞机制清点，在新树上重生成解决（cmd 测试文件 148）。验证钉之后远端只前进了一笔 `apps/admin-web/**`（operator-channel/44）与纯票面，再 rebase 一次，`git diff b09876bf HEAD -- . ':!.scratch' ':!apps/admin-web'` 为空，未重跑。
+- 推送方全量一次：钉 `b09876bf` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 143 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。

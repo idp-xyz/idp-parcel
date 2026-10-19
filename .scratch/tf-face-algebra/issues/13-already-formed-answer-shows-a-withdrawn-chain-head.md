@@ -1,7 +1,7 @@
 # 13 装载分配：链头是撤回版时，「分配已形成」的答复看不出分配已撤回
 
 Category: bug
-Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-tfa121310`（与 12、10 同一分支）。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立（tf-face-algebra/02 实施中发现，票外未改）
+Status: resolved——2026-10-19 进 main（12、13、10 同批，代码验证钉 `b09876bf`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-tfa121310`（与 12、10 同一分支）。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立（tf-face-algebra/02 实施中发现，票外未改）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：tf-face-algebra/02 实施子代理的「本票外的发现」，经其非作者评审确认。
@@ -19,8 +19,8 @@ tf-face-algebra/02 之后，分配已有版本时答 `LOAD_ASSIGNMENT_ALREADY_FO
 
 ## 完成判据
 
-- [ ] HTTP 用例：链头为撤回版时答复带撤回标记；非撤回链头答复形状不变。
-- [ ] Go 门禁照常。
+- [x] HTTP 用例：链头为撤回版时答复带撤回标记；非撤回链头答复形状不变。
+- [x] Go 门禁照常。
 
 ## 完成记录（2026-10-19，会话 idp-parcel-9b 的实施子代理，分支 claude-tfa121310）
 
@@ -65,3 +65,8 @@ tf-face-algebra/02 之后，分配已有版本时答 `LOAD_ASSIGNMENT_ALREADY_FO
 - **Spec**：`withdrawn` / `withdrawnAt` 成对，撤回版在场、非撤回版整键缺席；非撤回链头答复逐字节不变（守形用例修前即绿，作守护）；时刻走本包 `rfc3339()`，夹具带纳秒尾巴证了登记册精度。编排不动。
 - **Standards**：头注给了缺席而不答 false 的理由与本包先例。
 - **非阻断（不另立票）**：真渠道 `TestTheLoadAssignmentFaceAnswersAlreadyFormedAfterAWithdrawnChain` 没断言两新键，该文件在本票地盘外；撤回入口（tf-unwired-seven/05）接上时随那张票补真渠道断言即可。`VERSION_EXISTS` 回显撤回版也会带两键，无专门用例，形状由同一处写出。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-tfa121310`（12、13、10 同批）rebase 到远端 main 之上快进推送；rebase 只撞机制清点，在新树上重生成解决（cmd 测试文件 148）。验证钉之后远端只前进了一笔 `apps/admin-web/**`（operator-channel/44）与纯票面，再 rebase 一次，`git diff b09876bf HEAD -- . ':!.scratch' ':!apps/admin-web'` 为空，未重跑。
+- 推送方全量一次：钉 `b09876bf` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 143 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。

@@ -1,7 +1,7 @@
 # 10 建派送任务的答复不回显 conditions：票 20 判「回显让调用方自己比」够用，所凭的回显缺一格
 
 Category: bug
-Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 代决并认领：照「修复方向（机制）」办，无取舍（答复形状补一格，不动编排）；分支 `claude-tfa121310`（与 12、13 同一分支，先 12、13 后 10）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: resolved——2026-10-19 进 main（12、13、10 同批，代码验证钉 `b09876bf`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 代决并认领：照「修复方向（机制）」办，无取舍（答复形状补一格，不动编排）；分支 `claude-tfa121310`（与 12、13 同一分支，先 12、13 后 10）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment-dispatch-task-registrations
@@ -37,11 +37,11 @@ Blocked by: 无
 已可触发：运营决定渠道上，演示配置员持有建派送任务的授予、准入对照与对应区间。
 
 ## 完成判据
-- [ ] HTTP 单测：201 与 `DISPATCH_TASK_ALREADY_OPEN` 两种答复都带 `conditions`；整秒时刻格式逐字节不变。
-- [ ] 真渠道真库回归（`cmd/parcel-api` 新测试文件，`buildOperatorDecisionIntakes` + 生产准入桥 + `buildSegmentOperations`）：以 conditions=A 建任务；同一任务以 conditions=B 重投，答 200 `DISPATCH_TASK_ALREADY_OPEN`，回显 conditions=A，库不变。
-- [ ] `go build ./...`、`go vet ./...` 退出码 0，`gofmt -l .` 无输出；带 DSN 跑 `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/...`，全部 ok。
-- [ ] 票 15 补记下追加回写行（只加行）。
-- [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：作者自验，非作者评审（两轴分开），推送方在干净检出上带 DSN 跑全量。
+- [x] HTTP 单测：201 与 `DISPATCH_TASK_ALREADY_OPEN` 两种答复都带 `conditions`；整秒时刻格式逐字节不变。
+- [x] 真渠道真库回归（`cmd/parcel-api` 新测试文件，`buildOperatorDecisionIntakes` + 生产准入桥 + `buildSegmentOperations`）：以 conditions=A 建任务；同一任务以 conditions=B 重投，答 200 `DISPATCH_TASK_ALREADY_OPEN`，回显 conditions=A，库不变。
+- [x] `go build ./...`、`go vet ./...` 退出码 0，`gofmt -l .` 无输出；带 DSN 跑 `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/...`，全部 ok。
+- [x] 票 15 补记下追加回写行（只加行）。
+- [x] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：作者自验，非作者评审（两轴分开），推送方在干净检出上带 DSN 跑全量。
 
 ## 完成记录（2026-10-19，会话 idp-parcel-9b 的实施子代理，分支 claude-tfa121310）
 
@@ -83,3 +83,9 @@ Blocked by: 无
 - **Spec**：`conditions` 从在册任务取，201 与 `DISPATCH_TASK_ALREADY_OPEN` 同形；格序与派送发起口的任务那几格一致。HTTP 单测逐字节比对（含整秒时刻格式）；真渠道真库以 A 建、以 B 重投答 200 回显 A、库里一行仍是 A。编排不动。
 - **Standards**：头注写为什么（少一格调用方比不出差异）。
 - 票 15 回写行由推送方在进 main 时补。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-tfa121310`（12、13、10 同批）rebase 到远端 main 之上快进推送；rebase 只撞机制清点，在新树上重生成解决（cmd 测试文件 148）。验证钉之后远端只前进了一笔 `apps/admin-web/**`（operator-channel/44）与纯票面，再 rebase 一次，`git diff b09876bf HEAD -- . ':!.scratch' ':!apps/admin-web'` 为空，未重跑。
+- 票 15 补记下的回写行由推送方随本笔追加。
+- 推送方全量一次：钉 `b09876bf` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 143 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
