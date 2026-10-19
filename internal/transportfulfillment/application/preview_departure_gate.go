@@ -3,7 +3,6 @@ package application
 import (
 	"context"
 	"errors"
-	"strings"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
@@ -83,7 +82,7 @@ func (handler *PreviewDepartureGateHandler) Preview(
 	ctx context.Context,
 	command PreviewDepartureGateCommand,
 ) (PreviewDepartureGateResult, error) {
-	intent, accepted := departureGateIntentFrom(command)
+	intent, accepted := departureGateIntentOf(command.TenantID, command.Schedule, command.Segment, command.DepartsAt)
 	if !accepted {
 		return PreviewDepartureGateResult{outcome: DepartureGatePreviewNotAccepted}, nil
 	}
@@ -92,23 +91,4 @@ func (handler *PreviewDepartureGateHandler) Preview(
 		return PreviewDepartureGateResult{}, err
 	}
 	return PreviewDepartureGateResult{outcome: DepartureGatePreviewed, reading: reading}, nil
-}
-
-// departureGateIntentFrom 用 movementFactSpecFrom 那几个构造器过同名三格：同一个输入在两口受理与否一致，出发那边不受理的
-// 这边也不答一格读数。时点的判据同出发构造门（domain.RecordMovementFact）：按登记精度为零即不受理。
-func departureGateIntentFrom(command PreviewDepartureGateCommand) (departureGateIntent, bool) {
-	if strings.TrimSpace(command.TenantID.String()) == "" || domain.AtRegistryPrecision(command.DepartsAt).IsZero() {
-		return departureGateIntent{}, false
-	}
-	schedule, err := domain.NewScheduleReference(command.Schedule)
-	if err != nil {
-		return departureGateIntent{}, false
-	}
-	intent := departureGateIntent{tenant: command.TenantID, schedule: schedule, at: command.DepartsAt}
-	if strings.TrimSpace(command.Segment) != "" {
-		if intent.segment, err = domain.NewFulfillmentSegmentReference(command.Segment); err != nil {
-			return departureGateIntent{}, false
-		}
-	}
-	return intent, true
 }

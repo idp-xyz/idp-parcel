@@ -237,14 +237,11 @@ func movementFactSpecFrom(
 	command RecordMovementFactCommand,
 ) (domain.MovementFactSpec, ports.MovementFactKey, bool) {
 	none := ports.MovementFactKey{}
-	if strings.TrimSpace(command.TenantID.String()) == "" {
+	schedule, segment, accepted := gateReferencesFrom(command.TenantID, command.Schedule, command.Segment)
+	if !accepted {
 		return domain.MovementFactSpec{}, none, false
 	}
 	fact, err := domain.NewMovementFactReference(command.Fact)
-	if err != nil {
-		return domain.MovementFactSpec{}, none, false
-	}
-	schedule, err := domain.NewScheduleReference(command.Schedule)
 	if err != nil {
 		return domain.MovementFactSpec{}, none, false
 	}
@@ -264,16 +261,12 @@ func movementFactSpecFrom(
 		TenantID:   command.TenantID,
 		Fact:       fact,
 		Schedule:   schedule,
+		Segment:    segment,
 		Kind:       command.Kind,
 		Location:   location,
 		Source:     source,
 		Version:    version,
 		OccurredAt: command.OccurredAt,
-	}
-	if strings.TrimSpace(command.Segment) != "" {
-		if spec.Segment, err = domain.NewFulfillmentSegmentReference(command.Segment); err != nil {
-			return domain.MovementFactSpec{}, none, false
-		}
 	}
 	if strings.TrimSpace(command.Resource) != "" {
 		if spec.Resource, err = domain.NewTransportResourceReference(command.Resource); err != nil {

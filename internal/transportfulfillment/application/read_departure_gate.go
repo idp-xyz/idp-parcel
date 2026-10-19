@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
@@ -49,25 +50,62 @@ func NewDepartureGateReader(deps DepartureGateReadDeps) (*DepartureGateReader, e
 // 未受理）。问不问关务不看设备自报：设门与否由关务按对象与起讫判（ADR-0205 决定三）。
 func (reader *DepartureGateReader) Read(ctx context.Context, command RecordMovementFactCommand) (domain.DepartureGateReading, error) {
 	spec, _, accepted := movementFactSpecFrom(command)
-	if !accepted || spec.Kind != domain.DepartureFact || domain.AtRegistryPrecision(spec.OccurredAt).IsZero() {
+	if !accepted || spec.Kind != domain.DepartureFact {
 		return domain.DepartureGateReading{}, nil
 	}
-	return reader.readIntent(ctx, departureGateIntent{
-		tenant:   spec.TenantID,
-		schedule: spec.Schedule,
-		segment:  spec.Segment,
-		at:       spec.OccurredAt,
-	})
+	intent, accepted := departureGateIntentOf(command.TenantID, command.Schedule, command.Segment, command.OccurredAt)
+	if !accepted {
+		return domain.DepartureGateReading{}, nil
+	}
+	return reader.readIntent(ctx, intent)
 }
 
 // departureGateIntent 是读数从输入里只取的那四样：租户、班次、声明的段（零值即没声明）与出发时点；其余取决于此刻的段册、
-// 班次册与关务。出发登记与出发前问询（ADR-0219）各自把输入收成它，再走同一个 readIntent——「同参同读数」靠的是只有这一条
-// 路，不靠两边各写一遍再比对。
+// 班次册与关务。出发登记与出发前问询（ADR-0219）都经 departureGateIntentOf 把输入收成它，再走同一个 readIntent——「同参
+// 同读数」靠的是只有这一条路，不靠两边各写一遍再比对。
 type departureGateIntent struct {
 	tenant   domain.TenantID
 	schedule domain.ScheduleReference
 	segment  domain.FulfillmentSegmentReference
 	at       time.Time
+}
+
+// departureGateIntentOf 是两口把输入收成 departureGateIntent 的唯一一处：出发登记的 Read 与出发前问询的 Preview 都调它，
+// 同名三格加时点在两口受理与否一致由结构保证，不靠两份判据各自跟着改。时点的判据同出发构造门（domain.RecordMovementFact）：
+// 按登记精度为零即不受理——不拿服务端时钟补（ADR-0023）。
+func departureGateIntentOf(tenant domain.TenantID, schedule, segment string, at time.Time) (departureGateIntent, bool) {
+	if domain.AtRegistryPrecision(at).IsZero() {
+		return departureGateIntent{}, false
+	}
+	scheduleRef, segmentRef, accepted := gateReferencesFrom(tenant, schedule, segment)
+	if !accepted {
+		return departureGateIntent{}, false
+	}
+	return departureGateIntent{tenant: tenant, schedule: scheduleRef, segment: segmentRef, at: at}, true
+}
+
+// gateReferencesFrom 过读数取决于的租户、班次与段：段可缺，空串读作没有声明，给了就得立得起来。movementFactSpecFrom 也过
+// 这一处——日后给班次或段加判据，出发登记、出发读数与问询三处一起变。
+func gateReferencesFrom(
+	tenant domain.TenantID,
+	schedule, segment string,
+) (domain.ScheduleReference, domain.FulfillmentSegmentReference, bool) {
+	none := domain.FulfillmentSegmentReference{}
+	if strings.TrimSpace(tenant.String()) == "" {
+		return domain.ScheduleReference{}, none, false
+	}
+	scheduleRef, err := domain.NewScheduleReference(schedule)
+	if err != nil {
+		return domain.ScheduleReference{}, none, false
+	}
+	if strings.TrimSpace(segment) == "" {
+		return scheduleRef, none, true
+	}
+	segmentRef, err := domain.NewFulfillmentSegmentReference(segment)
+	if err != nil {
+		return domain.ScheduleReference{}, none, false
+	}
+	return scheduleRef, segmentRef, true
 }
 
 // readIntent 先在本上下文这一侧找齐问关务要的东西：段里出发那一刻在控的对象、班次的方向。缺哪样就停在哪样、不问关务——
