@@ -3,6 +3,8 @@ package application_test
 import (
 	"context"
 	"errors"
+	"slices"
+	"strings"
 	"testing"
 	"time"
 
@@ -45,6 +47,8 @@ type receptionStoreDouble struct {
 	lostRace    bool
 	readBackErr error
 	saveAsked   bool
+	// othersErr 让按包裹读别的作业实物收寄那一次报错。
+	othersErr error
 }
 
 func newReceptionStore() *receptionStoreDouble {
@@ -79,6 +83,43 @@ func (double *receptionStoreDouble) Save(
 	double.byKey[record.Key] = record
 	double.saved++
 	return ports.ReceptionSaved, nil
+}
+
+// FindOtherUnitIntakes 照真库的问法在内存里筛：同租户、收寄关联到这件包裹、作业实物不是 unit，按来源标识定序。
+func (double *receptionStoreDouble) FindOtherUnitIntakes(
+	_ context.Context,
+	tenant domain.TenantID,
+	parcel domain.ParcelAssociationReference,
+	unit domain.HandlingUnitID,
+) ([]ports.ReceptionRecord, error) {
+	if double.othersErr != nil {
+		return nil, double.othersErr
+	}
+	found := []ports.ReceptionRecord{}
+	for key, record := range double.byKey {
+		association, present := record.Intake.Association()
+		if key.TenantID == tenant && present && association == parcel && record.Intake.Unit() != unit {
+			found = append(found, record)
+		}
+	}
+	slices.SortFunc(found, func(left, right ports.ReceptionRecord) int {
+		return strings.Compare(left.Key.SourceID, right.Key.SourceID)
+	})
+	return found, nil
+}
+
+// recordsOfUnit 交回收寄库里这件作业实物的各行带收寄的记录。
+func (double *receptionStoreDouble) recordsOfUnit(unit string) []ports.ReceptionRecord {
+	found := []ports.ReceptionRecord{}
+	for _, record := range double.byKey {
+		if !record.Intake.ReceivedAt().IsZero() && record.Intake.Unit().String() == unit {
+			found = append(found, record)
+		}
+	}
+	slices.SortFunc(found, func(left, right ports.ReceptionRecord) int {
+		return strings.Compare(left.Key.SourceID, right.Key.SourceID)
+	})
+	return found
 }
 
 type versionFactoryDouble struct {
@@ -318,8 +359,9 @@ func TestDependencyFailuresFormNoAnswer(t *testing.T) {
 		"并发读回赢家报错": func(fixture *receptionFixture) {
 			fixture.receptions.lostRace, fixture.receptions.readBackErr = true, failure
 		},
-		"并发读回读不到赢家": func(fixture *receptionFixture) { fixture.receptions.lostRace = true },
-		"版本签发报错":    func(fixture *receptionFixture) { fixture.versions.err = failure },
+		"并发读回读不到赢家":    func(fixture *receptionFixture) { fixture.receptions.lostRace = true },
+		"版本签发报错":       func(fixture *receptionFixture) { fixture.versions.err = failure },
+		"按包裹读别的实物收寄报错": func(fixture *receptionFixture) { fixture.receptions.othersErr = failure },
 	}
 	for name, arrange := range cases {
 		t.Run(name, func(t *testing.T) {
@@ -461,8 +503,9 @@ func TestTheServiceResultViewIsAskedOnlyForAUniquelyIdentifiedParcel(t *testing.
 }
 
 // Covers: `AT-NO-018`「实物无法可靠识别——建立待识别实物，保存控制、位置、状况和候选，
-// 不创建正式包裹」与 `AT-NO-019`「同一外部条码出现在两件实物——保持独立，形成身份冲突
-// 并暂停方向性作业」——两格都真实成立收寄与控制，都不交 PS 意图（没有可采用的关联）。
+// 不创建正式包裹」与 `AT-NO-019` 半边（只钉「形成身份冲突、不猜身份」的记法，场景是一件实物的号码在册里标识多件
+// 包裹；两件实物贴同一个号的字面场景见 TestOneMarkOnTwoUnitsFormsAnIdentityConflict）——两格都真实成立收寄与控制，
+// 都不交 PS 意图（没有可采用的关联）。
 func TestUnknownAndConflictedIdentitiesStayPending(t *testing.T) {
 	t.Run("unknown identity", func(t *testing.T) {
 		fixture := newReceptionFixture(t)
@@ -659,5 +702,154 @@ func TestABatchKeepsPerUnitResultsIndependent(t *testing.T) {
 		ports.ReceptionKey{TenantID: mustValue(t, domain.NewTenantID, "tenant-1"), SourceID: "delivery-1"})
 	if err != nil || !found || survivor.Kind != ports.RecordIntakeFormed {
 		t.Fatalf("survivor = %#v; 先成的收寄被回滚了", survivor)
+	}
+}
+
+func oneMarkCommand(t *testing.T, sourceID, unit string) application.ReceiveDeliveredUnitCommand {
+	t.Helper()
+	return application.ReceiveDeliveredUnitCommand{
+		TenantID:    mustValue(t, domain.NewTenantID, "SYN-TENANT-01"),
+		SourceID:    sourceID,
+		Node:        mustValue(t, domain.NewNodeReference, "SYN-NODE-NRI01"),
+		DeliveredBy: mustValue(t, domain.NewDeliveringPartyReference, "SYN-CUSTOMER-NRI01"),
+		Unit:        mustValue(t, domain.NewHandlingUnitID, unit),
+		Mark:        ports.ExternalMarkObservation{Mark: "SYN-BARCODE-NRI01"},
+		Claim:       application.ExplicitReception,
+		Evidence:    mustValue(t, domain.NewReceptionEvidenceReference, "SYN-SIGN-"+unit),
+		OccurredAt:  deliveredAt,
+	}
+}
+
+func oneMarkFixture(t *testing.T) (*receptionFixture, domain.ParcelAssociationReference) {
+	t.Helper()
+	fixture := newReceptionFixture(t)
+	parcel := mustValue(t, domain.NewParcelAssociationReference, "SYN-PARCEL-NRI01")
+	fixture.identity.candidates = []domain.ParcelAssociationReference{parcel}
+	return fixture, parcel
+}
+
+func identityReasonsOf(t *testing.T, records []ports.ReceptionRecord) []domain.DirectionalBasisReason {
+	t.Helper()
+	observations := make([]domain.IntakeIdentityObservation, 0, len(records))
+	for _, record := range records {
+		observation := domain.IntakeIdentityObservation{
+			SourceID:         record.Key.SourceID,
+			Version:          record.Intake.Version(),
+			IdentityConflict: record.IdentityConflict,
+			ReceivedAt:       record.Intake.ReceivedAt(),
+		}
+		if association, present := record.Intake.Association(); present {
+			observation.Association = association
+		}
+		observations = append(observations, observation)
+	}
+	basis, err := domain.JudgeIdentityBasis(observations)
+	if err != nil {
+		t.Fatalf("判身份：%v", err)
+	}
+	return basis.Cell().Reasons()
+}
+
+// Covers: `AT-NO-019`「同一外部条码出现在两件实物——两件实物保持独立，形成身份冲突并暂停方向性作业」的字面场景
+// （票 no-reception-identity/01、ADR-0196）：号码在册里只标识一件包裹，两件作业实物先后贴着它送站。后到那件答待识别、
+// 记身份冲突、候选是那件包裹，不向 PS 问服务结果、不交意图；先到那件的原判断照留，另追加一版身份冲突判断；两件的控制
+// 各自成立；两件在方向依据的身份一格里都落成身份冲突。
+func TestOneMarkOnTwoUnitsFormsAnIdentityConflict(t *testing.T) {
+	fixture, parcel := oneMarkFixture(t)
+	first := oneMarkCommand(t, "SYN-DELIVERY-NRI01-A", "SYN-UNIT-NRI01-A")
+	formed, err := fixture.handler.Handle(context.Background(), first)
+	if err != nil || formed.Outcome() != application.NodeIntakeFormed {
+		t.Fatalf("先到那件：outcome = %q err = %v, want INTAKE_FORMED", formed.Outcome(), err)
+	}
+	original, _ := formed.Record()
+
+	second := oneMarkCommand(t, "SYN-DELIVERY-NRI01-B", "SYN-UNIT-NRI01-B")
+	result, err := fixture.handler.Handle(context.Background(), second)
+	if err != nil {
+		t.Fatalf("后到那件：%v", err)
+	}
+	if result.Outcome() != application.UnitPendingIdentification {
+		t.Fatalf("后到那件 outcome = %q, want PENDING_IDENTIFICATION——同一个号已关联到另一件实物", result.Outcome())
+	}
+	late, _ := result.Record()
+	if _, identified := late.Intake.Association(); identified {
+		t.Fatal("后到那件被关联到了正式包裹")
+	}
+	if !late.IdentityConflict || len(late.Candidates) != 1 || late.Candidates[0] != parcel {
+		t.Fatalf("后到那件 conflict = %v candidates = %v, want 身份冲突且候选是那件包裹", late.IdentityConflict, late.Candidates)
+	}
+	if !late.Control.Active() || late.ServiceResultCheck != ports.ServiceResultCheckAbsent {
+		t.Fatalf("后到那件 control = %v check = %q, want 控制成立、不带核对态", late.Control.Active(), late.ServiceResultCheck)
+	}
+	if len(fixture.serviceResults.asked) != 1 || len(fixture.downstream.intents) != 1 {
+		t.Fatalf("问 PS %d 次、意图 %d 份, want 都只为先到那件", len(fixture.serviceResults.asked), len(fixture.downstream.intents))
+	}
+
+	firstRows := fixture.receptions.recordsOfUnit("SYN-UNIT-NRI01-A")
+	if len(firstRows) != 2 {
+		t.Fatalf("先到那件在册 %d 行, want 原判断加追加的一版", len(firstRows))
+	}
+	kept := fixture.receptions.byKey[ports.ReceptionKey{TenantID: first.TenantID, SourceID: first.SourceID}]
+	if kept.Kind != ports.RecordIntakeFormed || kept.IdentityConflict || kept.Intake != original.Intake {
+		t.Fatalf("先到那件的原判断被改了：%+v", kept)
+	}
+	var appended ports.ReceptionRecord
+	for _, row := range firstRows {
+		if row.Key != kept.Key {
+			appended = row
+		}
+	}
+	if !appended.IdentityConflict || appended.Kind != ports.RecordPendingIdentification {
+		t.Fatalf("追加的一版 = %+v, want 待识别且记身份冲突", appended)
+	}
+	if _, identified := appended.Intake.Association(); identified || appended.Intake.Version() == original.Intake.Version() {
+		t.Fatalf("追加的一版带了关联或沿用了原版本：%+v", appended.Intake)
+	}
+	if len(appended.Candidates) != 1 || appended.Candidates[0] != parcel || appended.Control != original.Control {
+		t.Fatalf("追加的一版 candidates = %v control = %+v, want 候选是那件包裹、控制照原判断", appended.Candidates, appended.Control)
+	}
+
+	for _, unit := range []string{"SYN-UNIT-NRI01-A", "SYN-UNIT-NRI01-B"} {
+		reasons := identityReasonsOf(t, fixture.receptions.recordsOfUnit(unit))
+		if !slices.Contains(reasons, domain.ReasonIdentityConflict) {
+			t.Fatalf("%s 的身份一格 = %v, want 含身份冲突", unit, reasons)
+		}
+	}
+}
+
+// Covers: 票 no-reception-identity/01 裁定「同一作业实物的重投仍是重放」——同一份送站重投走已有结果，同一件实物换个来源
+// 再收一次照常形成收寄，都不认成一码多物；冲突形成之后重放后到那件，也不再追加。
+func TestTheSameUnitDeliveredAgainIsNotAnIdentityConflict(t *testing.T) {
+	fixture, _ := oneMarkFixture(t)
+	first := oneMarkCommand(t, "SYN-DELIVERY-NRI01-A", "SYN-UNIT-NRI01-A")
+	if _, err := fixture.handler.Handle(context.Background(), first); err != nil {
+		t.Fatalf("首投：%v", err)
+	}
+	replay, err := fixture.handler.Handle(context.Background(), first)
+	if err != nil || replay.Outcome() != application.ReceptionExistingResult {
+		t.Fatalf("重投 outcome = %q err = %v, want EXISTING_RESULT", replay.Outcome(), err)
+	}
+
+	again := oneMarkCommand(t, "SYN-DELIVERY-NRI01-A2", "SYN-UNIT-NRI01-A")
+	again.OccurredAt = deliveredAt.Add(time.Hour)
+	result, err := fixture.handler.Handle(context.Background(), again)
+	if err != nil || result.Outcome() != application.NodeIntakeFormed {
+		t.Fatalf("同一件实物再收 outcome = %q err = %v, want INTAKE_FORMED", result.Outcome(), err)
+	}
+	if record, _ := result.Record(); record.IdentityConflict {
+		t.Fatal("同一件实物再收被记成了身份冲突")
+	}
+
+	second := oneMarkCommand(t, "SYN-DELIVERY-NRI01-B", "SYN-UNIT-NRI01-B")
+	if _, err := fixture.handler.Handle(context.Background(), second); err != nil {
+		t.Fatalf("后到那件：%v", err)
+	}
+	saved := fixture.receptions.saved
+	replayed, err := fixture.handler.Handle(context.Background(), second)
+	if err != nil || replayed.Outcome() != application.ReceptionExistingResult {
+		t.Fatalf("重放后到那件 outcome = %q err = %v, want EXISTING_RESULT", replayed.Outcome(), err)
+	}
+	if fixture.receptions.saved != saved {
+		t.Fatalf("重放又落了 %d 行", fixture.receptions.saved-saved)
 	}
 }

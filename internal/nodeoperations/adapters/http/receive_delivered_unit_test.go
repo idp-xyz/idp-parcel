@@ -68,6 +68,16 @@ func (double *receptionStoreDouble) Save(
 	return ports.ReceptionSaved, nil
 }
 
+// FindOtherUnitIntakes：本文件钉的是 HTTP 面的翻译，不送一码多物，册上没有别的实物可答。
+func (double *receptionStoreDouble) FindOtherUnitIntakes(
+	context.Context,
+	domain.TenantID,
+	domain.ParcelAssociationReference,
+	domain.HandlingUnitID,
+) ([]ports.ReceptionRecord, error) {
+	return []ports.ReceptionRecord{}, nil
+}
+
 type versionFactoryDouble struct{ next int }
 
 func (double *versionFactoryDouble) NextIntakeResultVersion(context.Context) (domain.IntakeResultVersion, error) {

@@ -56,8 +56,7 @@ type controlRow struct {
 // FindByKey 按（租户+来源标识）取回已保存的收寄判断。
 //
 // 走 ReadExecutor：事务内读得到本事务刚写的行，事务外用显式注入的连接池。否定结果
-// 只回 false，不区分「不存在」与「属于另一个租户」。读回的一切经领域构造函数重建：
-// 一次坏写入在这里暴露，而不是变成一个看起来合法的收寄结果。
+// 只回 false，不区分「不存在」与「属于另一个租户」。
 func (repository *Receptions) FindByKey(
 	ctx context.Context,
 	key ports.ReceptionKey,
@@ -67,41 +66,99 @@ func (repository *Receptions) FindByKey(
 		return ports.ReceptionRecord{}, false, fmt.Errorf("find reception: %w", err)
 	}
 
-	var (
-		digest, kindName, refusal   string
-		intakeJSON, controlJSON     []byte
-		candidatesJSON, markersJSON []byte
-		identityConflict            bool
-		checkName                   *string
-		recordedAt                  time.Time
-	)
-	err = querier.QueryRow(ctx,
-		`SELECT content_digest, kind, intake, control, candidates,
-		        identity_conflict, refusal_reason, service_markers, service_result_check, recorded_at
+	row := querier.QueryRow(ctx,
+		`SELECT `+receptionColumns+`
 		   FROM node_operations.reception
 		  WHERE tenant_id = $1
 		    AND source_id = $2`,
 		key.TenantID.String(),
 		key.SourceID,
-	).Scan(&digest, &kindName, &intakeJSON, &controlJSON, &candidatesJSON,
-		&identityConflict, &refusal, &markersJSON, &checkName, &recordedAt)
+	)
+	record, err := scanReception(row, key.TenantID)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.ReceptionRecord{}, false, nil
 	}
 	if err != nil {
 		return ports.ReceptionRecord{}, false, fmt.Errorf("find reception: %w", err)
 	}
+	return record, true, nil
+}
+
+// FindOtherUnitIntakes 按（租户+正式包裹关联）取回别的作业实物的收寄记录（ADR-0196），走索引 reception_intake_association_idx。
+//
+// 走 ReadExecutor：编排在同一笔事务里先读这里、再写收寄，事务内读得到本事务先写的行。只认收寄本身带的关联——待识别行的
+// 候选不是关联，不在此列。
+func (repository *Receptions) FindOtherUnitIntakes(
+	ctx context.Context,
+	tenant domain.TenantID,
+	parcel domain.ParcelAssociationReference,
+	unit domain.HandlingUnitID,
+) ([]ports.ReceptionRecord, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("find other unit intakes: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT `+receptionColumns+`
+		   FROM node_operations.reception
+		  WHERE tenant_id = $1
+		    AND (intake ->> 'association') = $2
+		    AND (intake ->> 'unit') <> $3
+		  ORDER BY source_id`,
+		tenant.String(),
+		parcel.String(),
+		unit.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find other unit intakes: %w", err)
+	}
+	defer rows.Close()
+
+	records := []ports.ReceptionRecord{}
+	for rows.Next() {
+		record, err := scanReception(rows, tenant)
+		if err != nil {
+			return nil, fmt.Errorf("find other unit intakes: %w", err)
+		}
+		records = append(records, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("find other unit intakes: %w", err)
+	}
+	return records, nil
+}
+
+// receptionColumns 与 scanReception 的扫描顺序是同一份约定，两处一起改。
+const receptionColumns = `source_id, content_digest, kind, intake, control, candidates,
+		        identity_conflict, refusal_reason, service_markers, service_result_check, recorded_at`
+
+// scanReception 把一行收寄册读回成记录：读回的一切经领域构造函数重建，一次坏写入在这里暴露，而不是变成一个看起来
+// 合法的收寄结果。
+func scanReception(row pgx.Row, tenant domain.TenantID) (ports.ReceptionRecord, error) {
+	var (
+		sourceID, digest, kindName  string
+		refusal                     string
+		intakeJSON, controlJSON     []byte
+		candidatesJSON, markersJSON []byte
+		identityConflict            bool
+		checkName                   *string
+		recordedAt                  time.Time
+	)
+	if err := row.Scan(&sourceID, &digest, &kindName, &intakeJSON, &controlJSON, &candidatesJSON,
+		&identityConflict, &refusal, &markersJSON, &checkName, &recordedAt); err != nil {
+		return ports.ReceptionRecord{}, err
+	}
 
 	kind, err := receptionKindFrom(kindName)
 	if err != nil {
-		return ports.ReceptionRecord{}, false, fmt.Errorf("find reception: %w", err)
+		return ports.ReceptionRecord{}, err
 	}
 	check, err := serviceResultCheckFrom(checkName)
 	if err != nil {
-		return ports.ReceptionRecord{}, false, fmt.Errorf("find reception: %w", err)
+		return ports.ReceptionRecord{}, err
 	}
 	record := ports.ReceptionRecord{
-		Key:                key,
+		Key:                ports.ReceptionKey{TenantID: tenant, SourceID: sourceID},
 		ContentDigest:      digest,
 		Kind:               kind,
 		IdentityConflict:   identityConflict,
@@ -111,35 +168,35 @@ func (repository *Receptions) FindByKey(
 	}
 
 	if len(intakeJSON) > 0 {
-		intake, err := rebuildIntake(key.TenantID, intakeJSON)
+		intake, err := rebuildIntake(tenant, intakeJSON)
 		if err != nil {
-			return ports.ReceptionRecord{}, false, fmt.Errorf("find reception: %w", err)
+			return ports.ReceptionRecord{}, err
 		}
 		record.Intake = intake
 	}
 	if len(controlJSON) > 0 {
-		control, err := rebuildControl(key.TenantID, controlJSON)
+		control, err := rebuildControl(tenant, controlJSON)
 		if err != nil {
-			return ports.ReceptionRecord{}, false, fmt.Errorf("find reception: %w", err)
+			return ports.ReceptionRecord{}, err
 		}
 		record.Control = control
 	}
 
 	var candidateRefs []string
 	if err := json.Unmarshal(candidatesJSON, &candidateRefs); err != nil {
-		return ports.ReceptionRecord{}, false, fmt.Errorf("find reception: %w", err)
+		return ports.ReceptionRecord{}, err
 	}
 	for _, raw := range candidateRefs {
 		candidate, err := domain.NewParcelAssociationReference(raw)
 		if err != nil {
-			return ports.ReceptionRecord{}, false, fmt.Errorf("find reception: %w", err)
+			return ports.ReceptionRecord{}, err
 		}
 		record.Candidates = append(record.Candidates, candidate)
 	}
 	if err := json.Unmarshal(markersJSON, &record.ServiceMarkers); err != nil {
-		return ports.ReceptionRecord{}, false, fmt.Errorf("find reception: %w", err)
+		return ports.ReceptionRecord{}, err
 	}
-	return record, true, nil
+	return record, nil
 }
 
 // Save 写下一次收寄判断。同（租户+来源标识）已有记录时答`已有记录`——业务答案不是

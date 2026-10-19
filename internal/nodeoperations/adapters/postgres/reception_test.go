@@ -259,6 +259,46 @@ func TestOtherTenantsAreInvisible(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0196 收寄库按包裹的读口——只交回同租户、收寄关联到这件包裹、作业实物不是来问那件的记录，原样读回；
+// 待识别行的候选不是关联，另一个租户的同一个关联不可见。
+func TestOtherUnitIntakesAreFoundByTheirParcelAssociation(t *testing.T) {
+	repository, transactor := newReceptions(t)
+	ctx := t.Context()
+
+	formed := formedRecord(t, "SYN-TENANT-A", "SYN-SCAN-1")
+	pending := pendingRecord(t, "SYN-TENANT-A", "SYN-SCAN-2")
+	elsewhere := formedRecord(t, "SYN-TENANT-B", "SYN-SCAN-1")
+	inTx(t, transactor, ctx, func(txCtx context.Context) error {
+		for _, record := range []ports.ReceptionRecord{formed, pending, elsewhere} {
+			if _, err := repository.Save(txCtx, record); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	tenant := formed.Key.TenantID
+	parcel, _ := formed.Intake.Association()
+	asking := ref(t, domain.NewHandlingUnitID, "SYN-UNIT-9")
+	found, err := repository.FindOtherUnitIntakes(ctx, tenant, parcel, asking)
+	if err != nil {
+		t.Fatalf("按包裹读：%v", err)
+	}
+	if len(found) != 1 || found[0].Key != formed.Key || found[0].Kind != formed.Kind ||
+		found[0].Intake != formed.Intake || found[0].Control != formed.Control {
+		t.Fatalf("按包裹读到 %+v, want 只有同租户那条关联收寄且原样读回", found)
+	}
+
+	sameUnit, err := repository.FindOtherUnitIntakes(ctx, tenant, parcel, formed.Intake.Unit())
+	if err != nil || len(sameUnit) != 0 {
+		t.Fatalf("同一件实物来问读到 %d 条 err = %v, want 0——自己的收寄不是别的实物", len(sameUnit), err)
+	}
+	candidateOnly, err := repository.FindOtherUnitIntakes(ctx, tenant, pending.Candidates[0], asking)
+	if err != nil || len(candidateOnly) != 0 {
+		t.Fatalf("按候选读到 %d 条 err = %v, want 0——候选不是关联", len(candidateOnly), err)
+	}
+}
+
 // TestWritesRefuseToRunOutsideATransaction 证写入不会在缺少事务时改用连接池。
 func TestWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	repository, _ := newReceptions(t)

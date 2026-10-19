@@ -218,12 +218,24 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 	if err != nil {
 		return ReceiveDeliveredUnitResult{}, fmt.Errorf("resolve parcel identity: %w", err)
 	}
+	// 号码唯一指向一件包裹，还要问这件包裹是否已关联到另一件作业实物：是，就是「同一外部条码出现在多个实物」（NO
+	// CONTEXT「实物身份与事实完整性」、ADR-0196）。按关联到的包裹认而不按号码认，不论先到那件此刻是否仍在节点控制下；
+	// 同一作业实物再来不在此列，同一份送站重投在上面按幂等键走已有结果。读不动与身份核对读不动同样不形成答案。
+	var others []ports.ReceptionRecord
+	if len(candidates) == 1 {
+		others, err = handler.deps.Receptions.FindOtherUnitIntakes(ctx, command.TenantID, candidates[0], command.Unit)
+		if err != nil {
+			return ReceiveDeliveredUnitResult{}, fmt.Errorf("find other units associated with the parcel: %w", err)
+		}
+	}
+	identified := len(candidates) == 1 && len(others) == 0
+
 	// 身份唯一成立才有可问的包裹：向 PS 取它此刻的服务结果，落成标记（UC-NO-002「对已取消、终局、无路由或受限实物
 	// 标记相应引用」）。读不动不挡已经发生的物理事实——照常落册，核对态记读不动、标记留空，不补查（ADR-0186）；空标记
 	// 因此只在已查时才说「没有取消与终局」。
 	var markers []string
 	check := ports.ServiceResultCheckAbsent
-	if len(candidates) == 1 {
+	if identified {
 		results, err := handler.deps.ServiceResults.FindParcelServiceResults(ctx, command.TenantID, candidates[0])
 		if err != nil {
 			check = ports.ServiceResultsUnreadable
@@ -248,15 +260,16 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 	}
 	kind := ports.RecordPendingIdentification
 	conflict := false
-	switch len(candidates) {
-	case 1:
+	switch {
+	case identified:
 		// 唯一且证据充分：关联正式包裹，形成可交 PS 采用的收寄（AT-NO-015）。
 		spec.Association = candidates[0]
 		kind = ports.RecordIntakeFormed
-	case 0:
+	case len(candidates) == 0:
 		// 未知：待识别实物——收寄与控制真实成立，正式身份等版本化识别（AT-NO-018）。
 	default:
-		// 一码多物或多候选：各实物独立、身份冲突暂停方向性作业；不猜身份（AT-NO-019）。
+		// 号码在册里标识多件包裹，或唯一指向的那件包裹已关联到另一件作业实物（一码多物，AT-NO-019）：各实物独立、
+		// 身份冲突暂停方向性作业；不猜身份，候选照记。
 		conflict = true
 	}
 
@@ -292,7 +305,89 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 		ServiceResultCheck: check,
 		RecordedAt:         handler.deps.Clock.Now(),
 	}
-	return handler.commit(ctx, record)
+	result, err := handler.commit(ctx, record)
+	// 只在本次真落了册时追加：并发里输给另一方的那次读回的是赢家，赢家已经追加过。
+	if err != nil || len(others) == 0 || result.Outcome() != UnitPendingIdentification {
+		return result, err
+	}
+	if err := handler.appendIdentityConflicts(ctx, record, others); err != nil {
+		return ReceiveDeliveredUnitResult{}, err
+	}
+	return result, nil
+}
+
+// appendIdentityConflicts 给关联到同一件包裹的先到实物各追加一版身份冲突判断（ADR-0196）。原判断照留——它可能已被 PS
+// 采用，那次采用不在这里回滚，交 VE 协调；只追加、不覆盖（CONTEXT：更正与冲突必须关联原事实和原判断，不能通过覆盖历史
+// 整理出单一结果）。方向依据的身份一格读到这一版就落成身份冲突。
+//
+// 追加的一版是那件实物的又一行待识别收寄：收寄事实与控制照原判断，换一个结果版本、去掉关联、候选记那件包裹、记身份
+// 冲突。它不交 PS 意图（待识别没有可采用的关联）。来源标识由后到那次送站与先到那件实物派生：同一次送站重放不会再追加，
+// 第三件再来时各追加各的。
+func (handler *ReceiveDeliveredUnitHandler) appendIdentityConflicts(
+	ctx context.Context,
+	late ports.ReceptionRecord,
+	others []ports.ReceptionRecord,
+) error {
+	latest := map[domain.HandlingUnitID]ports.ReceptionRecord{}
+	var order []domain.HandlingUnitID
+	for _, other := range others {
+		unit := other.Intake.Unit()
+		current, seen := latest[unit]
+		if !seen {
+			order = append(order, unit)
+		}
+		// 同一件先到实物收过多次时，依后一次追加——与方向依据取所依收寄的次序同一个口径（domain.JudgeIdentityBasis）。
+		if !seen || other.Intake.ReceivedAt().After(current.Intake.ReceivedAt()) {
+			latest[unit] = other
+		}
+	}
+	for _, unit := range order {
+		earlier := latest[unit]
+		version, err := handler.deps.Versions.NextIntakeResultVersion(ctx)
+		if err != nil {
+			return fmt.Errorf("next intake result version for identity conflict: %w", err)
+		}
+		intake, err := domain.FormNodeIntake(domain.NodeIntakeSpec{
+			TenantID:    late.Key.TenantID,
+			Unit:        unit,
+			Node:        earlier.Intake.Node(),
+			DeliveredBy: earlier.Intake.DeliveredBy(),
+			Evidence:    earlier.Intake.Evidence(),
+			Version:     version,
+			ReceivedAt:  earlier.Intake.ReceivedAt(),
+		})
+		if err != nil {
+			return fmt.Errorf("form identity conflict version: %w", err)
+		}
+		record := ports.ReceptionRecord{
+			Key: ports.ReceptionKey{
+				TenantID: late.Key.TenantID,
+				SourceID: identityConflictSourceID(late.Key.SourceID, unit),
+			},
+			// 摘要沿用后到那次送站的：这一版由那次送站引起；万一有设备撞上派生的来源标识，指纹对不上，答来源冲突而不是重放。
+			ContentDigest:    late.ContentDigest,
+			Kind:             ports.RecordPendingIdentification,
+			Intake:           intake,
+			Control:          earlier.Control,
+			Candidates:       late.Candidates,
+			IdentityConflict: true,
+			RecordedAt:       late.RecordedAt,
+		}
+		saved, err := handler.deps.Receptions.Save(ctx, record)
+		if err != nil {
+			return fmt.Errorf("record identity conflict version: %w", err)
+		}
+		// 后到那件这次才真落册，派生键不该已经在册；在册就说明派生键被占了，不拿占位的那一行顶替这一版冲突。
+		if saved != ports.ReceptionSaved {
+			return fmt.Errorf("%w: identity conflict version %q", ErrUnexpectedReceptionSave, record.Key.SourceID)
+		}
+	}
+	return nil
+}
+
+// identityConflictSourceID 派生追加版的来源标识。前缀把它与设备和导入送来的来源标识分开（风险见 ADR-0196）。
+func identityConflictSourceID(lateSource string, earlierUnit domain.HandlingUnitID) string {
+	return "IDENTITY-CONFLICT/" + lateSource + "/" + earlierUnit.String()
 }
 
 // commit 提交判断并交发布意图；并发下另一方先提交时读回赢家。
