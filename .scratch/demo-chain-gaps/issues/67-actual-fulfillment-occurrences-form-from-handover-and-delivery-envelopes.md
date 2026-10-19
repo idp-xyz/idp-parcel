@@ -1,7 +1,7 @@
 # 67 实际履约发生项随交接与有效交付信封自动形成
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg67（2026-10-19 作者子代理，见文末「完成记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
+Status: resolved——2026-10-19 进 main（全量钉 `9d1dff03`：153 ok / 0 FAIL；见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg67（2026-10-19 作者子代理，见文末「完成记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
 Blocked by: [25](./25-segment-adopts-transport-commission-and-cancellation-faces.md)、[28](./28-booking-and-cancellation-occurrences-and-procurement-context-from-adoption.md)
 地盘：TF 新 `application/form_actual_fulfillment_on_participation_end.go`、新 inbox 消费者两只（交接、有效交付，inbox 名各自分家）；`cmd/parcel-dispatch/assemble.go`（交接 FanOut 与 `deliveryFan` 各加一路）+ 新装配文件 + 新真库用例；文档 ADR-0218（ADR-0207 Links 加后继指针、README 状态格注明部分停用）、UC-TF-005「应用流程」步 9 与 AT、演示脚本（干线成本那一步改为自动）。
 出处：[tf-chain-plan](../tf-chain-plan.md)「等 peer 的」TF 自消费交接 / 有效交付信封；方案「复核」等 peer 各项现状，「代决」C15，「需要的 ADR」ADR-0218。
@@ -155,3 +155,9 @@ ADR-0218 的 Status 写明待 TF owner 复核，第 2、3 点同时待 SA owner�
 - `go build ./...` 退 0；`go vet ./cmd/parcel-dispatch/ ./internal/transportfulfillment/...` 退 0；`gofmt -l cmd internal scripts` 无输出。
 - 带 DSN 跑 `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-dispatch/ ./internal/architecture/`，全 ok。
 - 没跑全量，没重生成机制清点，没动演示种子。
+
+## 进 main 记录（2026-10-19）
+
+- 单独一批，叠在 61、63、65、69 之后，快进推送，与本记录同一次推送。交接信封那一行的 FanOut 合成五路（VE 投影、TF 派送发起、NO 控制转出、NR 复核、实际履约发生项），头注改成各路不靠位置，另补一句：位置不影响记账，但发生项那一路停住时同样挡同一分区后面的信封（ADR-0218 越权风险点 8）。有效交付那一张扇出照本票原样追加。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `9d1dff03`：153 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。
