@@ -111,9 +111,15 @@ const (
 	FactExternalFunds                       ExternalFactType = "EXTERNAL_FUNDS_FACT"
 )
 
+// FactCarrierBookingAnswer 是承运方对一次订舱的答复（ADR-0202 决定二）：提交方是承运系统，不是运营人员，所以归本族而不归
+// 运营决定。客户端绑定的来源身份要等于那次订舱所属委托的服务提供方，这一核对在运输履约的编排里做——本册只知道客户端代表
+// 谁，不知道哪次订舱是谁的。
+const FactCarrierBookingAnswer ExternalFactType = "CARRIER_BOOKING_ANSWER"
+
 var externalFactTypes = []ExternalFactType{
 	FactCustomsExternalResult, FactRegulatoryCredential, FactCarrierTracking,
 	FactCarrierFirstEffectivePickupEvidence, FactExternalFunds,
+	FactCarrierBookingAnswer,
 }
 
 // ParseExternalFactType 按字面取值认事实类型，大小写不折叠：册里存的就是这些字面量。

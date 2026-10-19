@@ -39,6 +39,10 @@ const (
 	DecisionTransportCommissionSubmission       DecisionKind = "TRANSPORT_COMMISSION_SUBMISSION"
 )
 
+// DecisionBookingRequestSubmission 是订舱提交（ADR-0202 决定一、五）：运营人员针对一份已提交的运输委托，向它的服务提供方
+// 就一个在册的具体班次申请舱位。它与委托提交分开授予：能提交委托的不因此能替任何班次订舱。
+const DecisionBookingRequestSubmission DecisionKind = "BOOKING_REQUEST_SUBMISSION"
+
 // DecisionTransportChargeOccurrenceRegistration 是运输收费发生项登记（ADR-0207 决定六）：对已发生的履约事实作一次
 // 采购判断——断言采用协议的发生条件已满足、指名服务方与协议版本。它不是现场作业事实，所以归运营决定而不归作业事实面。
 const DecisionTransportChargeOccurrenceRegistration DecisionKind = "TRANSPORT_CHARGE_OCCURRENCE_REGISTRATION"
@@ -60,6 +64,7 @@ var decisionKinds = []DecisionKind{
 	DecisionTransportCommissionSubmission,
 	DecisionTransportChargeOccurrenceRegistration,
 	DecisionCapacityReservation, DecisionCapacityRelease,
+	DecisionBookingRequestSubmission,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。
