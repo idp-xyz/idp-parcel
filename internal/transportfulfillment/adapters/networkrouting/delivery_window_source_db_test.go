@@ -56,14 +56,13 @@ func TestTheDeliveryWindowSeamResolvesTheDeliveryLegOnARealPlan(t *testing.T) {
 		legOn(t, "CONNECTION/SYN-CONN-SIN-LM@1", "SYN-NODE-SIN-HUB", "SYN-NODE-SIN-LM", 4*time.Hour),
 		delivery,
 	)
+	var outcome nrports.InitialRouteSaveOutcome
 	if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
-		outcome, err := routes.Save(txCtx, record)
-		if err == nil && outcome != nrports.InitialRouteSaved {
-			t.Fatalf("落计划：%v", outcome)
-		}
-		return err
-	}); err != nil {
-		t.Fatalf("落计划：%v", err)
+		var saveErr error
+		outcome, saveErr = routes.Save(txCtx, record)
+		return saveErr
+	}); err != nil || outcome != nrports.InitialRouteSaved {
+		t.Fatalf("落计划：outcome=%v err=%v", outcome, err)
 	}
 
 	tenant, err := tfdomain.NewTenantID(formedRoute.TenantID)
