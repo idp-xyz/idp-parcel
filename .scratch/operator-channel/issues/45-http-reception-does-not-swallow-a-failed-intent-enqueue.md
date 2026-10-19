@@ -1,7 +1,7 @@
 # 45 HTTP 收寄路上，意图入队失败被吞成续办引用后照常提交：设备拿到 201 就出队，没人会重发
 
 Category: bug
-Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（operator-channel/29 已进 main），分支 `claude-no4503`（与 no-reception-identity/03 同一分支，先 45 后 03）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 2 研判中发现；用户授权代决）
+Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（operator-channel/29 已进 main），分支 `claude-no4503`（与 no-reception-identity/03 同一分支，先 45 后 03）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 2 研判中发现；用户授权代决）
 Blocked by: operator-channel/29 进 main（同改 cmd/parcel-api/assemble_reception.go 与收寄编排）
 父票：[26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)（票 26 评审遗留的后续）
 出处：
@@ -98,3 +98,14 @@ Blocked by: operator-channel/29 进 main（同改 cmd/parcel-api/assemble_recept
 
 - 前线导入的来源标识（`FTI/…/批次/行事实号`）同样原样进 Subject：超过 512 字节时信封被确定性拒收，报告却写「重跑同一文件会重发同一份」，而重跑仍会失败。票面「前线导入路照旧」，没动，记此一句。
 - 「走 Go 那条路」的评审与推送方全量未到。
+
+## Comments
+
+### 评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审；2026-10-19，钉 `32b14c73`）
+
+两轴合审，0 阻断。
+
+- **Spec**：裁定三条落到。编排吞错的写法不变，只把入队错随结果交出（`IntakeHandoffError`，与续办引用同在场同缺席，形状同 sa-cc/29 的 `HandoffError()`）；`transactionalReception` 见错整笔回滚、答 500 `NO_ANSWER_FORMED`，入队恢复后同一来源重投 201、一行、一封意图；前线导入路照旧留续办（守护用例）。重放路 `existingResult` 的补发同样受这道门：补发失败也回滚答 5xx，设备留队重发。
+- **作者自定的两格认可**：不另起哨兵，以 `%w` 包住真因；信封确定性拒收不另成一格——NO 信封 ID 是定长指纹，随设备而变的只有 Subject 里的来源标识，接入时按 `eventing.MaxSubjectLength` 与控制字符拒成 400（ADR-0023 来源标识由设备签发），上限与信封同源，真库用例钉了最长可受理的那一个照常交出。
+- **Standards**：头注重写只写为什么；装配拆成 `buildReceptionDeps` / `receptionWithin`，理由是用例只换一只依赖、不另抄装配。
+- **非阻断（另立票）**：前线导入铸出的来源标识没有同一道门，超长时报告说「重跑会重发」而重跑永远交不出去 → operator-channel/54。

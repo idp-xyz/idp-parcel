@@ -1,7 +1,7 @@
 # 03 一码两物并发送站：两笔事务互相看不到对方未提交的关联，两件可能都关联成立
 
 Category: bug
-Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（no-reception-identity/01 已进 main），分支 `claude-no4503`（与 operator-channel/45 同一分支，先 45 后 03）。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立并代决（票 no-reception-identity/01 评审遗留）
+Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（no-reception-identity/01 已进 main），分支 `claude-no4503`（与 operator-channel/45 同一分支，先 45 后 03）。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立并代决（票 no-reception-identity/01 评审遗留）
 Blocked by: no-reception-identity/01 进 main
 父票：[01](./01-one-barcode-on-two-units-forms-an-identity-conflict.md)
 出处：ADR-0196「越权风险点」中「并发未串行」那一条；票 01 实施子代理回报与评审记录。
@@ -78,3 +78,13 @@ Blocked by: no-reception-identity/01 进 main
 - 锁不管绕过本读口的写入（直插收寄册），与 access_identity、visibilityexception 两处咨询锁同一边界。
 - 零候选、多候选两格不取锁，裁定写明，不读别的实物关联。
 - 「走 Go 那条路」的评审与推送方全量未到。
+
+## Comments
+
+### 评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审；2026-10-19，钉 `32b14c73`）
+
+两轴合审，0 阻断。
+
+- **Spec**：锁取在 `FindOtherUnitIntakes` 查询之前，键为（租户、包裹关联），口径同 access_identity 的 `lockMappingKey`；改走 `RequireExecutor`，事务外调用报 `ErrTransactionRequired` 而不是静默失去串行（作者自定，认可——两条接线都在事务里，全仓无事务外调用方）。真库并发用例修前红在「另一方没被挡住」与两件都 `INTAKE_FORMED`，修后观察到等在包裹锁上；适配器用例以 `lock_timeout` 证不同包裹、不同租户互不阻塞，同包裹撞 55P03 作正对照。连跑五次绿。
+- **Standards**：端口头注写明须在收寄事务里调；ADR-0196 文末追加复核记录，决定原文不动。
+- 零候选与多候选两格不取锁，裁定越权风险点已写。
