@@ -276,7 +276,8 @@ func TestADispositionAnswersCreatedThenTheRecordedOne(t *testing.T) {
 	}
 }
 
-// Covers: 业务拒绝各格答 200 带 outcome（ADR-0022）：漏列连带实物答 `ASSOCIATED_ELSEWHERE` 并回显此刻关联到 X 的实物与它的当前有效
+// Covers: `AT-NO-055`、`AT-NO-056`、`AT-NO-057` 的答复面与 `AT-NO-058`「跨租户与查无此物同答」的那一格。业务拒绝各格答 200 带
+// outcome（ADR-0022）：漏列连带实物答 `ASSOCIATED_ELSEWHERE` 并回显此刻关联到 X 的实物与它的当前有效
 // 版本；候选之外答 `NOT_A_CANDIDATE` 回显处置候选；没有冲突的实物答 `NO_IDENTITY_CONFLICT`；所处置的版本已不是链头答
 // `VERSION_SUPERSEDED` 回显当前有效版本。指名的实物或版本查不到答 404 `JUDGMENT_NOT_VISIBLE`，不带 outcome。都不落版。
 func TestDispositionRefusalsAreFormedAnswers(t *testing.T) {
@@ -319,7 +320,7 @@ func TestDispositionRefusalsAreFormedAnswers(t *testing.T) {
 	}
 }
 
-// Covers: 命令口的传输层各格——只收 POST；Intake 的接入格逐格映射（未配置 403、令牌不过 401、无授予 403、不在准入范围 403、身份
+// Covers: `AT-NO-058` 的命令口半边：命令口的传输层各格——只收 POST；Intake 的接入格逐格映射（未配置 403、令牌不过 401、无授予 403、不在准入范围 403、身份
 // 依赖读不动 503、载荷坏 400），都不带 outcome、不进编排；未配置 Intake 不读请求体。
 func TestTheDispositionEndpointMapsIntakeRefusals(t *testing.T) {
 	fixture := newDispositionEndpointFixture(t)
@@ -388,7 +389,8 @@ func dispositionRequest(token, body string) *http.Request {
 	return built
 }
 
-// Covers: 「运营决定」能力面在本口的 Intake（ADR-0151 决定一、二；ADR-0210 决定六）：按`身份冲突处置`这一种决定认证，租户与提交
+// Covers: `AT-NO-058`「请求自带租户或操作者」与「未持授予」的 Intake 半边——「运营决定」能力面在本口的 Intake（ADR-0151 决定一、
+// 二；ADR-0210 决定六）：按`身份冲突处置`这一种决定认证，租户与提交
 // 操作者只取认证结果，操作者写作 `OPERATOR/<发行方>#<sub>`；依据引用去两端空白；先认证、后解载荷。
 func TestTheDispositionIntakeTakesTenantAndOperatorFromTheEnvelope(t *testing.T) {
 	var asked []nodeopshttp.OperatorDecision
@@ -428,7 +430,7 @@ func TestTheDispositionIntakeTakesTenantAndOperatorFromTheEnvelope(t *testing.T)
 	}
 }
 
-// Covers: ADR-0210 决定六坏载荷各种都答 MALFORMED_REQUEST：缺格、空白、带 NUL、未知字段（含自报租户与操作者）、甲不带 X、乙带 X 或
+// Covers: `AT-NO-058` 的坏载荷半边——ADR-0210 决定六坏载荷各种都答 MALFORMED_REQUEST：缺格、空白、带 NUL、未知字段（含自报租户与操作者）、甲不带 X、乙带 X 或
 // 连带实物、连带实物重复、连带实物就是主实物或缺版本、结果不在词表里、不是 JSON、尾随内容。
 func TestMalformedDispositionPayloadsAreRefused(t *testing.T) {
 	intake, err := nodeopshttp.NewOperatorDecisionIntake(dispositionAuthenticatorFake{})

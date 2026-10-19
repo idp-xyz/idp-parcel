@@ -314,3 +314,58 @@ func TestADispositionAndAnotherUnitsReceptionSerializeOnTheParcel(t *testing.T) 
 		t.Fatalf("A 又被追加了冲突版：链头 %s err %v", head, err)
 	}
 }
+
+// Covers: `AT-NO-058` 的装配面：处置口挂的是生产那一只运营决定 Intake，信封一层各答其格、都拒在编排之前（编排是一碰就 panic 的
+// 占位）——发行方未配置 403、没带令牌 401、只持别的决定种类 403 无授予、授予齐备而准入对照没登 403 不在准入范围；授予与准入都
+// 齐备时，请求体自带租户或操作者答 400。
+func TestTheWiredDispositionAnswersTheChannelGrades(t *testing.T) {
+	db, _ := identityRecheckDB(t)
+	registerDispositionAdmission(t, db)
+	admitted, err := buildAdmissionScope(db, isolatedSelfAuthority)
+	if err != nil {
+		t.Fatal(err)
+	}
+	endpointWith := func(register accessidentity.OperatorRegistry, admission accessidentity.AdmissionScope) http.Handler {
+		minter, err := buildOperatorMinter(acceptingVerifier{}, register, admission)
+		if err != nil {
+			t.Fatal(err)
+		}
+		decisions, err := buildOperatorDecisionIntakes(minter, unwiredDecisionTargets{}, unwiredDecisionTargets{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return nodeopshttp.NewDisposeIdentityConflictEndpoint(decisions.nodeOperations, unwiredIdentityDisposition{})
+	}
+	const valid = `{"unit":"SYN-UNIT-NRI06-B","disposedVersion":"SYN-V-B1","result":"NONE_OF_CANDIDATES","basis":"SYN-BASIS"}`
+	cases := map[string]struct {
+		endpoint http.Handler
+		token    string
+		body     string
+		status   int
+		code     string
+	}{
+		"发行方未配置": {nodeopshttp.NewDisposeIdentityConflictEndpoint(unconfiguredOperatorDecisions().nodeOperations, unwiredIdentityDisposition{}),
+			"presented.operator.token", valid, http.StatusForbidden, "ACCESS_CHANNEL_NOT_CONFIGURED"},
+		"没带令牌": {endpointWith(dispositionGrantRegister{}, admitted), "", valid, http.StatusUnauthorized, "OPERATOR_CREDENTIAL_REJECTED"},
+		"只持别的决定种类": {endpointWith(decisionRegister{kinds: []accessidentity.DecisionKind{accessidentity.DecisionPendingIdentityRecheck}}, admitted),
+			"presented.operator.token", valid, http.StatusForbidden, "OPERATOR_NOT_GRANTED"},
+		"准入对照没登": {endpointWith(dispositionGrantRegister{}, admissionScopeUnset()), "presented.operator.token", valid, http.StatusForbidden, "OUTSIDE_ADMISSION_SCOPE"},
+		"自带租户": {endpointWith(dispositionGrantRegister{}, admitted), "presented.operator.token",
+			`{"unit":"SYN-UNIT-NRI06-B","disposedVersion":"SYN-V-B1","result":"NONE_OF_CANDIDATES","basis":"SYN-BASIS","tenantId":"SYN-TENANT-02"}`,
+			http.StatusBadRequest, "MALFORMED_REQUEST"},
+		"自带操作者": {endpointWith(dispositionGrantRegister{}, admitted), "presented.operator.token",
+			`{"unit":"SYN-UNIT-NRI06-B","disposedVersion":"SYN-V-B1","result":"NONE_OF_CANDIDATES","basis":"SYN-BASIS","operator":"SYN-OPERATOR-02"}`,
+			http.StatusBadRequest, "MALFORMED_REQUEST"},
+	}
+	for name, testCase := range cases {
+		request := httptest.NewRequest(http.MethodPost, "/node-operations/identity-dispositions", strings.NewReader(testCase.body))
+		if testCase.token != "" {
+			request.Header.Set("Authorization", "Bearer "+testCase.token)
+		}
+		response := httptest.NewRecorder()
+		testCase.endpoint.ServeHTTP(response, request)
+		if response.Code != testCase.status || problemCode(t, response) != testCase.code {
+			t.Fatalf("%s：答 %d %q, want %d %q", name, response.Code, problemCode(t, response), testCase.status, testCase.code)
+		}
+	}
+}

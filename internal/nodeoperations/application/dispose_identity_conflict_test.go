@@ -550,7 +550,8 @@ func TestDisposingASupersededVersionAnswersVersionSuperseded(t *testing.T) {
 }
 
 // Covers: `AT-NO-057`：指定处置候选之外的包裹答不在候选之内、回显处置候选；没有身份冲突的实物（关联成立的、零候选待识别的）答无可
-// 处置的冲突。都不落版。指名的实物或版本在本租户查不到（别的租户、实物与版本对不上）交回 ErrDispositionSubjectNotFound。
+// 处置的冲突。都不落版。`AT-NO-058` 的编排半边：指名的实物或版本在本租户查不到（别的租户、实物与版本对不上）交回
+// ErrDispositionSubjectNotFound，跨租户与查无此物同答。
 func TestRejectedDispositionsLandNothing(t *testing.T) {
 	fixture := newDispositionFixture(t)
 	early, conflict, late := fixture.oneMarkOnTwoUnits(t)
