@@ -85,12 +85,15 @@ var workFactOperatorFaces = []workFactOperatorFace{
 	},
 }
 
-// 这四口归运营决定（票 15），作业事实渠道就位之后仍答未配置。
-var operationDecisionFacesLeftOnIsolatedWrite = []string{
+// transportOperationDecisionFaces 是运输履约归「运营决定」能力面的各口（ADR-0151 决定一）：作业事实渠道装不进它们，
+// 路由只装作业事实渠道时它们答未配置。
+var transportOperationDecisionFaces = []string{
 	"/transport-fulfillment-carrier-first-effective-pickup-judgments",
 	"/transport-fulfillment-dispatch-task-registrations",
 	"/transport-fulfillment-segment-closures",
 	"/transport-fulfillment-effective-time-judgments",
+	"/transport-fulfillment-load-assignment-registrations",
+	"/transport-fulfillment-participation-terminations",
 }
 
 type unavailableWorkFactDevices struct{}
@@ -212,7 +215,7 @@ func TestWorkFactFacesAnswerOnTheOperatorChannel(t *testing.T) {
 
 func TestWorkFactChannelLeavesOperationDecisionFacesUnconfigured(t *testing.T) {
 	router := workFactOperatorRouter(t, acceptingVerifier{}, workFactOperators{}, workFactDevices{})
-	for _, pattern := range operationDecisionFacesLeftOnIsolatedWrite {
+	for _, pattern := range transportOperationDecisionFaces {
 		request := httptest.NewRequest(http.MethodPost, pattern, strings.NewReader(`{}`))
 		request.Header.Set("Authorization", "Bearer presented.operator.token")
 		stampWorkFact(request, "OFFSITE", "SYN-OFFSITE-01", "SYN-DEVICE-OFFSITE")
