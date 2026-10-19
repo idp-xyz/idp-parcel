@@ -45,21 +45,21 @@ func (repository *ChargeOccurrences) FindByKey(
 	}
 
 	var journey, legalEntity, provider, agreement, reason, factBasis, scope, unit, conditionBasis string
-	var conditionAssertion, correctsVersion, revisionKind, revisionBasis *string
+	var conditionAssertedBy, conditionAssertion, correctsVersion, revisionKind, revisionBasis *string
 	var quantity int64
 	var occurredAt, recordedAt time.Time
 	var revisedAt *time.Time
 	err = querier.QueryRow(ctx,
 		`SELECT journey_ref, legal_entity_ref, provider_ref, agreement_ref, reason,
 		        fact_basis, scope_ref, quantity, unit_ref, occurred_at,
-		        condition_basis, condition_assertion,
+		        condition_basis, condition_asserted_by, condition_assertion,
 		        corrects_version, revision_kind, revision_basis, revised_at, recorded_at
 		   FROM transport_fulfillment.transport_charge_occurrence
 		  WHERE tenant_id = $1 AND occurrence_ref = $2 AND validity_version = $3`,
 		key.TenantID.String(), key.Occurrence.String(), key.Validity.String(),
 	).Scan(&journey, &legalEntity, &provider, &agreement, &reason,
 		&factBasis, &scope, &quantity, &unit, &occurredAt,
-		&conditionBasis, &conditionAssertion,
+		&conditionBasis, &conditionAssertedBy, &conditionAssertion,
 		&correctsVersion, &revisionKind, &revisionBasis, &revisedAt, &recordedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.ChargeOccurrenceRecord{}, false, nil
@@ -105,7 +105,7 @@ func (repository *ChargeOccurrences) FindByKey(
 	if spec.Unit, err = domain.NewQuantityUnitReference(unit); err != nil {
 		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find charge occurrence: %w", err)
 	}
-	if spec.Condition, err = occurrenceConditionFrom(conditionBasis, conditionAssertion); err != nil {
+	if spec.Condition, err = occurrenceConditionFrom(conditionBasis, conditionAssertedBy, conditionAssertion); err != nil {
 		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find charge occurrence: %w", err)
 	}
 	if err := applyOccurrenceRevision(&spec, correctsVersion, revisionKind, revisionBasis, revisedAt); err != nil {
@@ -353,9 +353,13 @@ func (repository *ChargeOccurrences) Save(
 	occurrence := record.Occurrence
 	quantity, unit := occurrence.Quantity()
 	condition := occurrence.Condition()
-	var conditionAssertion *string
+	var conditionAssertedBy, conditionAssertion *string
 	if assertion, asserted := condition.Assertion(); asserted {
 		conditionAssertion = &assertion
+	}
+	if registrant, asserted := condition.AssertedBy(); asserted {
+		value := registrant.String()
+		conditionAssertedBy = &value
 	}
 
 	var correctsVersion *string
@@ -376,8 +380,8 @@ func (repository *ChargeOccurrences) Save(
 		      journey_ref, legal_entity_ref, provider_ref, agreement_ref, reason,
 		      fact_basis, scope_ref, quantity, unit_ref, occurred_at,
 		      corrects_version, revision_kind, revision_basis, revised_at, recorded_at,
-		      condition_basis, condition_assertion)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
+		      condition_basis, condition_asserted_by, condition_assertion)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Occurrence.String(),
@@ -398,6 +402,7 @@ func (repository *ChargeOccurrences) Save(
 		revisedAt,
 		record.RecordedAt.UTC(),
 		condition.Basis().String(),
+		conditionAssertedBy,
 		conditionAssertion,
 	)
 	if err != nil {
@@ -438,15 +443,19 @@ func chargeOccurrenceReasonFrom(raw string) (domain.ChargeOccurrenceReason, erro
 	}
 }
 
-// occurrenceConditionFrom 把库面两列装回发生条件的依据。依据一格是封闭集合，库面多出一格是坏行，不在这里替它
+// occurrenceConditionFrom 把库面三列装回发生条件的依据。依据一格是封闭集合，库面多出一格是坏行，不在这里替它
 // 挑一个近似的读法。
-func occurrenceConditionFrom(basis string, assertion *string) (domain.OccurrenceCondition, error) {
+func occurrenceConditionFrom(basis string, assertedBy, assertion *string) (domain.OccurrenceCondition, error) {
 	switch basis {
 	case domain.ConditionAssertedByRegistrant.String():
-		if assertion == nil {
-			return domain.OccurrenceCondition{}, fmt.Errorf("occurrence condition %q carries no assertion", basis)
+		if assertedBy == nil || assertion == nil {
+			return domain.OccurrenceCondition{}, fmt.Errorf("occurrence condition %q carries no registrant or assertion", basis)
 		}
-		return domain.NewAssertedOccurrenceCondition(*assertion)
+		registrant, err := domain.NewRegistrantReference(*assertedBy)
+		if err != nil {
+			return domain.OccurrenceCondition{}, err
+		}
+		return domain.NewAssertedOccurrenceCondition(registrant, *assertion)
 	default:
 		return domain.OccurrenceCondition{}, fmt.Errorf("unknown occurrence condition basis %q", basis)
 	}

@@ -13,7 +13,7 @@ import (
 
 // 运输收费发生项登记的在线写面（票 demo-chain-gaps/27，ADR-0207）。它是一次运营决定（ADR-0151 定族判据：操作者做出
 // 的生产决定），挂操作者渠道「运营决定」能力面的「运输收费发生项登记」一种，不挂作业事实——发生项不是现场发生的物理
-// 事实，是对已发生事实的一次采购判断。载荷只有内容没有身份：租户从信封来。
+// 事实，是对已发生事实的一次采购判断。载荷只有内容没有身份：租户与登记者（断言人）都从信封来。
 //
 // 面上不判任何业务结果：事实是否满足、协议是否在册、是不是自营，都由编排作答，这里只转交与映射。
 
@@ -51,10 +51,10 @@ type ChargeOccurrenceRegistrationPayload struct {
 	ConditionAssertion  string   `json:"conditionAssertion"`
 }
 
-// Command 把载荷连同信封给的租户翻成登记命令。原因词不在封闭集内是坏报文（400）；其余成形与否留给编排答未受理
-// （200，形成了的业务答案）——两者的续办不同，不折成一格。
-func (payload ChargeOccurrenceRegistrationPayload) Command(tenant domain.TenantID) (application.RegisterChargeOccurrenceCommand, error) {
-	if tenant.String() == "" {
+// Command 把载荷连同信封给的租户与操作者翻成登记命令。原因词不在封闭集内是坏报文（400）；其余成形与否留给编排答
+// 未受理（200，形成了的业务答案）——两者的续办不同，不折成一格。
+func (payload ChargeOccurrenceRegistrationPayload) Command(operator OperatorIdentity) (application.RegisterChargeOccurrenceCommand, error) {
+	if operator.Tenant.String() == "" || strings.TrimSpace(operator.Operator) == "" {
 		return application.RegisterChargeOccurrenceCommand{}, ErrOperatorIdentityMissing
 	}
 	reason, err := domain.ParseChargeOccurrenceReason(strings.TrimSpace(payload.Reason))
@@ -62,7 +62,8 @@ func (payload ChargeOccurrenceRegistrationPayload) Command(tenant domain.TenantI
 		return application.RegisterChargeOccurrenceCommand{}, fmt.Errorf("%w: reason is not a charge occurrence reason word", ErrMalformedRequest)
 	}
 	return application.RegisterChargeOccurrenceCommand{
-		TenantID:            tenant,
+		TenantID:            operator.Tenant,
+		Registrant:          operator.Operator,
 		Reason:              reason,
 		PickupAttemptSource: payload.PickupAttemptSource,
 		DeliveryAttempt:     payload.DeliveryAttempt,
@@ -103,22 +104,23 @@ type chargeOccurrenceResponse struct {
 
 // chargeOccurrenceBody 逐字段透出一个发生项版本。occurredAt 是业务时间，recordedAt 是登记时刻，两者归属不同不合并。
 type chargeOccurrenceBody struct {
-	Occurrence         string   `json:"occurrence"`
-	Version            string   `json:"version"`
-	Reason             string   `json:"reason"`
-	Journey            string   `json:"journey"`
-	LegalEntity        string   `json:"legalEntity"`
-	Provider           string   `json:"provider"`
-	Agreement          string   `json:"agreement"`
-	FactBasis          string   `json:"factBasis"`
-	Scope              string   `json:"scope"`
-	Members            []string `json:"members"`
-	Quantity           int64    `json:"quantity"`
-	Unit               string   `json:"unit"`
-	OccurredAt         string   `json:"occurredAt"`
-	ConditionBasis     string   `json:"conditionBasis"`
-	ConditionAssertion string   `json:"conditionAssertion,omitempty"`
-	RecordedAt         string   `json:"recordedAt"`
+	Occurrence          string   `json:"occurrence"`
+	Version             string   `json:"version"`
+	Reason              string   `json:"reason"`
+	Journey             string   `json:"journey"`
+	LegalEntity         string   `json:"legalEntity"`
+	Provider            string   `json:"provider"`
+	Agreement           string   `json:"agreement"`
+	FactBasis           string   `json:"factBasis"`
+	Scope               string   `json:"scope"`
+	Members             []string `json:"members"`
+	Quantity            int64    `json:"quantity"`
+	Unit                string   `json:"unit"`
+	OccurredAt          string   `json:"occurredAt"`
+	ConditionBasis      string   `json:"conditionBasis"`
+	ConditionAssertedBy string   `json:"conditionAssertedBy,omitempty"`
+	ConditionAssertion  string   `json:"conditionAssertion,omitempty"`
+	RecordedAt          string   `json:"recordedAt"`
 }
 
 func chargeOccurrenceBodyOf(record ports.ChargeOccurrenceRecord) chargeOccurrenceBody {
@@ -146,6 +148,9 @@ func chargeOccurrenceBodyOf(record ports.ChargeOccurrenceRecord) chargeOccurrenc
 	}
 	if assertion, asserted := occurrence.Condition().Assertion(); asserted {
 		body.ConditionAssertion = assertion
+	}
+	if registrant, asserted := occurrence.Condition().AssertedBy(); asserted {
+		body.ConditionAssertedBy = registrant.String()
 	}
 	return body
 }

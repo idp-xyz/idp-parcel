@@ -36,9 +36,17 @@ func occurrenceSpec(t *testing.T, occurrence, journey string) domain.TransportCh
 	}
 }
 
+// conditionRegistrant 是夹具里的断言人：操作者主体写成「发行方#sub」。
+const conditionRegistrant = "https://dex.syn.example#SYN-OPERATOR-CONFIG-01"
+
 func assertedCondition(t *testing.T, assertion string) domain.OccurrenceCondition {
 	t.Helper()
-	condition, err := domain.NewAssertedOccurrenceCondition(assertion)
+	return assertedConditionBy(t, conditionRegistrant, assertion)
+}
+
+func assertedConditionBy(t *testing.T, registrant, assertion string) domain.OccurrenceCondition {
+	t.Helper()
+	condition, err := domain.NewAssertedOccurrenceCondition(mustValue(t, domain.NewRegistrantReference, registrant), assertion)
 	if err != nil {
 		t.Fatalf("断言夹具：%v", err)
 	}
@@ -415,10 +423,15 @@ func TestTheDerivedOccurrenceReferenceIsDeterministicAndBounded(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0207 决定三——发生条件必须有人作答：断言缺席的规格立不起发生项；断言原话原样留在发生项上。
+// Covers: ADR-0207 决定三——发生条件必须有人作答：断言人或原话缺一的规格立不起发生项；断言人与原话原样留在
+// 发生项上。
 func TestAnOccurrenceCarriesTheAssertedCondition(t *testing.T) {
-	if _, err := domain.NewAssertedOccurrenceCondition("  "); err == nil {
+	registrant := mustValue(t, domain.NewRegistrantReference, conditionRegistrant)
+	if _, err := domain.NewAssertedOccurrenceCondition(registrant, "  "); err == nil {
 		t.Fatal("空断言立起来了")
+	}
+	if _, err := domain.NewAssertedOccurrenceCondition(domain.RegistrantReference{}, "agreement clause met"); err == nil {
+		t.Fatal("没有断言人的断言立起来了")
 	}
 	spec := occurrenceSpec(t, "occurrence-1", "journey-1")
 	spec.Condition = domain.OccurrenceCondition{}
@@ -433,6 +446,9 @@ func TestAnOccurrenceCarriesTheAssertedCondition(t *testing.T) {
 	if assertion, asserted := condition.Assertion(); condition.Basis() != domain.ConditionAssertedByRegistrant || !asserted ||
 		assertion != "agreement-snapshot-1 booking clause met" {
 		t.Fatalf("条件 = %q %q %v", condition.Basis(), assertion, asserted)
+	}
+	if by, asserted := condition.AssertedBy(); !asserted || by != registrant {
+		t.Fatalf("断言人 = %q %v", by, asserted)
 	}
 }
 
@@ -459,6 +475,17 @@ func TestSameContentComparesEveryFieldAndMembersAsASet(t *testing.T) {
 	}
 	if original.SameContentAs(other) {
 		t.Fatal("数量不同被判成同内容")
+	}
+	reworded := occurrenceSpec(t, "occurrence-1", "journey-1")
+	reworded.Condition = assertedCondition(t, "agreement-snapshot-1 booking clause met, reworded")
+	if rewordedOccurrence, err := domain.FormTransportChargeOccurrence(reworded); err != nil || original.SameContentAs(rewordedOccurrence) {
+		t.Fatalf("断言原话不同被判成同内容（err = %v）", err)
+	}
+	// 断言人是这一次登记决定的出处，不是发生项的内容：另一位操作者照原样再报，仍是同一件事。
+	byAnother := occurrenceSpec(t, "occurrence-1", "journey-1")
+	byAnother.Condition = assertedConditionBy(t, "https://dex.syn.example#SYN-OPERATOR-CONFIG-02", "agreement-snapshot-1 booking clause met")
+	if anotherOccurrence, err := domain.FormTransportChargeOccurrence(byAnother); err != nil || !original.SameContentAs(anotherOccurrence) {
+		t.Fatalf("断言人不同被判成异内容（err = %v）", err)
 	}
 }
 

@@ -83,11 +83,12 @@ func authenticator(t *testing.T, verifier identity.OperatorCredentialVerifier, r
 	return built
 }
 
+// 认出的身份带租户与操作者；操作者是（发行方、sub）一对，发生项登记把它记作断言人。
 func TestGrantedOperatorAuthenticatesToTheBoundTenant(t *testing.T) {
 	built := authenticator(t, operatorVerifier{}, operatorRegister{kinds: []identity.DecisionKind{identity.DecisionSegmentClosure}}, operatorAdmission{admitted: true})
-	tenant, err := built.AuthenticateOperatorDecision(context.Background(), "presented.operator.token", tfhttp.OperatorDecisionSegmentClosure)
-	if err != nil || tenant.String() != operatorTenant {
-		t.Fatalf("tenant = %q, err = %v", tenant.String(), err)
+	operator, err := built.AuthenticateOperatorDecision(context.Background(), "presented.operator.token", tfhttp.OperatorDecisionSegmentClosure)
+	if err != nil || operator.Tenant.String() != operatorTenant || operator.Operator != "https://id.syn.example/dex#SYN-OPERATOR-01" {
+		t.Fatalf("tenant = %q operator = %q, err = %v", operator.Tenant.String(), operator.Operator, err)
 	}
 }
 
@@ -100,6 +101,7 @@ func TestEveryTFDecisionMapsToItsOwnDecisionKind(t *testing.T) {
 		tfhttp.OperatorDecisionEffectiveTimeJudgment:               identity.DecisionEffectiveTimeJudgment,
 		tfhttp.OperatorDecisionCarrierFirstEffectivePickupJudgment: identity.DecisionCarrierFirstEffectivePickupJudgment,
 		tfhttp.OperatorDecisionTransportCommissionSubmission:       identity.DecisionTransportCommissionSubmission,
+		tfhttp.OperatorDecisionChargeOccurrenceRegistration:        identity.DecisionTransportChargeOccurrenceRegistration,
 	}
 	for decision, kind := range decisions {
 		for other, otherKind := range decisions {

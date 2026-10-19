@@ -153,9 +153,13 @@ func (detail ChargeOccurrenceDetail) String() string {
 //
 // 旅程、数量与单位由登记方声明（ADR-0207 决定四、三）：旅程没有本上下文的权威来源，数量形在协议能声明之前由断言
 // 一并给出。SelfOperated 为真是一种声明，此时服务方与协议必须留空——两者同时给出是自相矛盾，不替登记方挑一个。
+//
+// Registrant 与租户一样取自认证结果，不来自载荷：它是做出这一次登记决定的操作者，断言落册时就是断言人
+// （ADR-0207 决定三）。
 type RegisterChargeOccurrenceCommand struct {
-	TenantID domain.TenantID
-	Reason   domain.ChargeOccurrenceReason
+	TenantID   domain.TenantID
+	Registrant string
+	Reason     domain.ChargeOccurrenceReason
 
 	PickupAttemptSource string
 	DeliveryAttempt     string
@@ -238,7 +242,7 @@ func (handler *RegisterChargeOccurrenceHandler) Register(
 	ctx context.Context,
 	command RegisterChargeOccurrenceCommand,
 ) (RegisterChargeOccurrenceResult, error) {
-	if strings.TrimSpace(command.TenantID.String()) == "" {
+	if strings.TrimSpace(command.TenantID.String()) == "" || strings.TrimSpace(command.Registrant) == "" {
 		return chargeNotAccepted(ChargeRequestMalformed), nil
 	}
 
@@ -540,7 +544,11 @@ func chargeOccurrenceSpecFrom(
 	if spec.Unit, err = domain.NewQuantityUnitReference(command.Unit); err != nil {
 		return none, domain.SupplierAgreementVersion{}, err
 	}
-	if spec.Condition, err = domain.NewAssertedOccurrenceCondition(command.ConditionAssertion); err != nil {
+	registrant, err := domain.NewRegistrantReference(command.Registrant)
+	if err != nil {
+		return none, domain.SupplierAgreementVersion{}, err
+	}
+	if spec.Condition, err = domain.NewAssertedOccurrenceCondition(registrant, command.ConditionAssertion); err != nil {
 		return none, domain.SupplierAgreementVersion{}, err
 	}
 	agreement, err := domain.NewSupplierAgreementVersion(command.AgreementObject, command.AgreementVersion)

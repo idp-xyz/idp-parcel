@@ -142,7 +142,11 @@ func insertChargeOccurrence(t *testing.T, db *bentopg.DB, tenant, id string, rea
 	if spec.Validity, err = tfdomain.NewOccurrenceValidityVersion("V1"); err != nil {
 		t.Fatal(err)
 	}
-	if spec.Condition, err = tfdomain.NewAssertedOccurrenceCondition("SYN 断言：" + agreement + " 的发生条件已满足"); err != nil {
+	registrant, err := tfdomain.NewRegistrantReference("https://dex.syn.example#SYN-OPERATOR-CONFIG-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if spec.Condition, err = tfdomain.NewAssertedOccurrenceCondition(registrant, "SYN 断言："+agreement+" 的发生条件已满足"); err != nil {
 		t.Fatal(err)
 	}
 	occurrence, err := tfdomain.FormTransportChargeOccurrence(spec)

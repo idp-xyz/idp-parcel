@@ -54,6 +54,11 @@ func TestAChargeOccurrenceRoundTripsWithItsMembers(t *testing.T) {
 	if !found.Occurrence.SameContentAs(record.Occurrence) {
 		t.Fatal("读回的发生项与落册的那一份内容不同（发生条件的依据与原话也要原样带回）")
 	}
+	// 断言人不进内容比对，单独核它原样带回：审计要问的正是「这一项是谁判的」。
+	wantBy, _ := record.Occurrence.Condition().AssertedBy()
+	if by, asserted := found.Occurrence.Condition().AssertedBy(); !asserted || by != wantBy {
+		t.Fatalf("断言人没有原样带回：%q %v, want %q", by, asserted, wantBy)
+	}
 }
 
 // TestARevisionLandsAsANewVersionAndTheOriginalStays 证 CONTEXT「保留原发生项……不删除
@@ -162,15 +167,15 @@ func TestOccurrenceCheckConstraintsRejectRowsTheDomainCannotProduce(t *testing.T
 	ctx := t.Context()
 	mustSaveOccurrence(t, transactor, ctx, repository, occurrenceRecord(t, "OCC-0006", "v1", "parcel-1"))
 
-	// 每条非法行只坏它要证的那一格，其余各列都合法——尤其发生条件两列带齐：缺了它们，每一行都会先撞非空，
+	// 每条非法行只坏它要证的那一格，其余各列都合法——尤其发生条件三列带齐：缺了它们，每一行都会先撞非空，
 	// 各条用例就全成了空过。
 	base := `INSERT INTO transport_fulfillment.transport_charge_occurrence
 	    (tenant_id, occurrence_ref, validity_version, journey_ref, legal_entity_ref,
 	     provider_ref, agreement_ref, reason, fact_basis, scope_ref, quantity, unit_ref,
 	     occurred_at, corrects_version, revision_kind, revision_basis, revised_at, recorded_at,
-	     condition_basis, condition_assertion)
+	     condition_basis, condition_asserted_by, condition_assertion)
 	 VALUES `
-	const asserted = `,'REGISTRANT_ASSERTED','a')`
+	const asserted = `,'REGISTRANT_ASSERTED','iss#op','a')`
 	for name, values := range map[string]string{
 		"集外发生原因": `('tenant-1','BAD-1','v1','j','le','pr','ag','SCANNED','fb','sc',1,'u',now(),NULL,NULL,NULL,NULL,now()` + asserted,
 		"数量非正":   `('tenant-1','BAD-2','v1','j','le','pr','ag','BOOKING','fb','sc',0,'u',now(),NULL,NULL,NULL,NULL,now()` + asserted,
@@ -179,10 +184,12 @@ func TestOccurrenceCheckConstraintsRejectRowsTheDomainCannotProduce(t *testing.T
 		"集外修订走向": `('tenant-1','BAD-5','v2','j','le','pr','ag','BOOKING','fb','sc',1,'u',now(),'v1','GAVE_UP','rb',now(),now()` + asserted,
 		"自指的修订":  `('tenant-1','BAD-6','v2','j','le','pr','ag','BOOKING','fb','sc',1,'u',now(),'v2','SUPERSEDED','rb',now(),now()` + asserted,
 		"修订早于发生": `('tenant-1','BAD-7','v2','j','le','pr','ag','BOOKING','fb','sc',1,'u',now(),'v1','SUPERSEDED','rb',now() - interval '1 day',now()` + asserted,
-		"集外条件依据": `('tenant-1','BAD-8','v1','j','le','pr','ag','BOOKING','fb','sc',1,'u',now(),NULL,NULL,NULL,NULL,now(),'GUESSED','a')`,
-		"断言缺原话":  `('tenant-1','BAD-9','v1','j','le','pr','ag','BOOKING','fb','sc',1,'u',now(),NULL,NULL,NULL,NULL,now(),'REGISTRANT_ASSERTED',' ')`,
-		"断言原话为空": `('tenant-1','BAD-10','v1','j','le','pr','ag','BOOKING','fb','sc',1,'u',now(),NULL,NULL,NULL,NULL,now(),'REGISTRANT_ASSERTED',NULL)`,
-		"没有条件依据": `('tenant-1','BAD-11','v1','j','le','pr','ag','BOOKING','fb','sc',1,'u',now(),NULL,NULL,NULL,NULL,now(),NULL,'a')`,
+		"集外条件依据": `('tenant-1','BAD-8','v1','j','le','pr','ag','BOOKING','fb','sc',1,'u',now(),NULL,NULL,NULL,NULL,now(),'GUESSED','iss#op','a')`,
+		"断言缺原话":  `('tenant-1','BAD-9','v1','j','le','pr','ag','BOOKING','fb','sc',1,'u',now(),NULL,NULL,NULL,NULL,now(),'REGISTRANT_ASSERTED','iss#op',' ')`,
+		"断言原话为空": `('tenant-1','BAD-10','v1','j','le','pr','ag','BOOKING','fb','sc',1,'u',now(),NULL,NULL,NULL,NULL,now(),'REGISTRANT_ASSERTED','iss#op',NULL)`,
+		"没有条件依据": `('tenant-1','BAD-11','v1','j','le','pr','ag','BOOKING','fb','sc',1,'u',now(),NULL,NULL,NULL,NULL,now(),NULL,'iss#op','a')`,
+		"断言缺断言人": `('tenant-1','BAD-12','v1','j','le','pr','ag','BOOKING','fb','sc',1,'u',now(),NULL,NULL,NULL,NULL,now(),'REGISTRANT_ASSERTED',' ','a')`,
+		"断言人为空":  `('tenant-1','BAD-13','v1','j','le','pr','ag','BOOKING','fb','sc',1,'u',now(),NULL,NULL,NULL,NULL,now(),'REGISTRANT_ASSERTED',NULL,'a')`,
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := pool.Exec(ctx, base+values); err == nil {
@@ -373,10 +380,21 @@ func occurrenceRecord(t *testing.T, occurrence, validity string, objects ...stri
 		Unit:        occurrenceRef(t, domain.NewQuantityUnitReference, "attempt"),
 		OccurredAt:  occurredAtFixture,
 		Validity:    key.Validity,
-		Condition:   occurrenceRef(t, domain.NewAssertedOccurrenceCondition, "agreement-1/v1 failed attempt clause met"),
+		Condition:   assertedOccurrenceCondition(t, "agreement-1/v1 failed attempt clause met"),
 	})
 	if err != nil {
 		t.Fatalf("构造发生项夹具 %s/%s：%v", occurrence, validity, err)
 	}
 	return ports.ChargeOccurrenceRecord{Key: key, Occurrence: built, RecordedAt: occurredAtFixture}
+}
+
+// assertedOccurrenceCondition 是夹具里一份登记者断言：断言人写成操作者主体的「发行方#sub」。
+func assertedOccurrenceCondition(t *testing.T, assertion string) domain.OccurrenceCondition {
+	t.Helper()
+	condition, err := domain.NewAssertedOccurrenceCondition(
+		occurrenceRef(t, domain.NewRegistrantReference, "https://dex.syn.example#SYN-OPERATOR-CONFIG-01"), assertion)
+	if err != nil {
+		t.Fatalf("断言夹具：%v", err)
+	}
+	return condition
 }

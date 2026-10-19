@@ -76,7 +76,9 @@ func trunkOccurrence(t *testing.T) tfdomain.TransportChargeOccurrence {
 		Unit:        must[tfdomain.QuantityUnitReference](t)(tfdomain.NewQuantityUnitReference("SEGMENT")),
 		OccurredAt:  occurredAt,
 		Validity:    must[tfdomain.OccurrenceValidityVersion](t)(tfdomain.NewOccurrenceValidityVersion("V1")),
-		Condition:   must[tfdomain.OccurrenceCondition](t)(tfdomain.NewAssertedOccurrenceCondition("SYN 断言：干线协议 v1 的实际履约条件已满足")),
+		Condition: must[tfdomain.OccurrenceCondition](t)(tfdomain.NewAssertedOccurrenceCondition(
+			must[tfdomain.RegistrantReference](t)(tfdomain.NewRegistrantReference("https://dex.syn.example#SYN-OPERATOR-CONFIG-01")),
+			"SYN 断言：干线协议 v1 的实际履约条件已满足")),
 	}))
 }
 

@@ -32,14 +32,16 @@ func NewOperatorAuthenticator(minter Minter) (*OperatorAuthenticator, error) {
 	return &OperatorAuthenticator{minter: minter}, nil
 }
 
+// AuthenticateOperatorDecision 交回信封上的租户与主体。主体取（发行方、sub）这一对，写成「发行方#sub」，与 PS、NO 的
+// 运营决定认证方同一个写法：发生项登记把它记作断言人（ADR-0207 决定三）。
 func (authenticator *OperatorAuthenticator) AuthenticateOperatorDecision(
 	ctx context.Context,
 	bearerToken string,
 	decision tfhttp.OperatorDecision,
-) (domain.TenantID, error) {
+) (tfhttp.OperatorIdentity, error) {
 	kind, err := identity.ParseDecisionKind(string(decision))
 	if err != nil {
-		return domain.TenantID{}, fmt.Errorf("transport fulfillment accessidentity: decision %q: %w", decision, err)
+		return tfhttp.OperatorIdentity{}, fmt.Errorf("transport fulfillment accessidentity: decision %q: %w", decision, err)
 	}
 	envelope, err := authenticator.minter.MintOperator(ctx, identity.NewOperatorCredential(bearerToken), identity.OperatorRequest{
 		Face:         identity.CapabilityOperationDecision,
@@ -47,9 +49,14 @@ func (authenticator *OperatorAuthenticator) AuthenticateOperatorDecision(
 		Admission:    &identity.AdmissionRequirement{Capability: identity.CapabilityOperationDecision.String(), FactKind: kind.String()},
 	})
 	if err != nil {
-		return domain.TenantID{}, answer(err)
+		return tfhttp.OperatorIdentity{}, answer(err)
 	}
-	return domain.NewTenantID(envelope.TenantID())
+	tenant, err := domain.NewTenantID(envelope.TenantID())
+	if err != nil {
+		return tfhttp.OperatorIdentity{}, fmt.Errorf("transport fulfillment accessidentity: tenant: %w", err)
+	}
+	subject := envelope.Subject()
+	return tfhttp.OperatorIdentity{Tenant: tenant, Operator: subject.Issuer() + "#" + subject.Subject()}, nil
 }
 
 // answer 把共享接入身份能力的格译成 tfhttp 的格：处理器只认本上下文的哨兵。

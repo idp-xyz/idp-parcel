@@ -45,11 +45,19 @@ const (
 	OperatorDecisionChargeOccurrenceRegistration        OperatorDecision = "TRANSPORT_CHARGE_OCCURRENCE_REGISTRATION"
 )
 
-// OperatorAuthenticator 认证一次运营决定出示，交回出示者的租户。失败只交回本包的格：ErrAccessChannelNotConfigured、
+// OperatorIdentity 是一次运营决定出示认证出的身份：租户与做出决定的操作者。操作者写成「发行方#sub」：sub 只在它的
+// 发行方之内唯一，单拿 sub 会让两个发行方的同一个 sub 在留痕里读成一个人（ADR-0100 决定二第三条）；与 PS、NO 的
+// 运营决定认证方同一个写法。多数口只取租户；发生项登记把操作者记作断言人（ADR-0207 决定三）。
+type OperatorIdentity struct {
+	Tenant   domain.TenantID
+	Operator string
+}
+
+// OperatorAuthenticator 认证一次运营决定出示，交回出示者的身份。失败只交回本包的格：ErrAccessChannelNotConfigured、
 // ErrOperatorCredentialRejected、ErrOperatorNotGranted、ErrOutsideAdmissionScope、ErrIdentityDependencyUnavailable；
 // 从共享接入身份能力译过来的那一层在 adapters/accessidentity（跨上下文翻译的位置，见 internal/architecture 的边界门禁）。
 type OperatorAuthenticator interface {
-	AuthenticateOperatorDecision(ctx context.Context, bearerToken string, decision OperatorDecision) (domain.TenantID, error)
+	AuthenticateOperatorDecision(ctx context.Context, bearerToken string, decision OperatorDecision) (OperatorIdentity, error)
 }
 
 // OperatorDecisionIntake 是操作者渠道「运营决定」能力面在本包各口的 Intake（ADR-0151 决定一）。
@@ -170,8 +178,9 @@ func (intake *OperatorDecisionIntake) IntakeTransportCommissionSubmission(ctx co
 }
 
 // IntakeChargeOccurrenceRegistration 译运输收费发生项登记（`/transport-fulfillment-charge-occurrence-registrations`）。
+// 登记者取认证出的操作者：发生项的断言人就是做出这一次登记决定的人（ADR-0207 决定三），载荷里不收。
 func (intake *OperatorDecisionIntake) IntakeChargeOccurrenceRegistration(ctx context.Context, request *http.Request) (application.RegisterChargeOccurrenceCommand, error) {
-	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionChargeOccurrenceRegistration)
+	operator, err := intake.identityFor(ctx, request, OperatorDecisionChargeOccurrenceRegistration)
 	if err != nil {
 		return application.RegisterChargeOccurrenceCommand{}, err
 	}
@@ -179,10 +188,16 @@ func (intake *OperatorDecisionIntake) IntakeChargeOccurrenceRegistration(ctx con
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.RegisterChargeOccurrenceCommand{}, err
 	}
-	return payload.Command(tenant)
+	return payload.Command(operator)
 }
 
 // tenantFor 交回出示者在这一种决定上的租户。租户只取自认证结果（ADR-0003），载荷里不收租户。
 func (intake *OperatorDecisionIntake) tenantFor(ctx context.Context, request *http.Request, decision OperatorDecision) (domain.TenantID, error) {
+	operator, err := intake.identityFor(ctx, request, decision)
+	return operator.Tenant, err
+}
+
+// identityFor 交回出示者在这一种决定上的整份身份：租户与操作者。
+func (intake *OperatorDecisionIntake) identityFor(ctx context.Context, request *http.Request, decision OperatorDecision) (OperatorIdentity, error) {
 	return intake.authenticator.AuthenticateOperatorDecision(ctx, httpapi.BearerToken(request), decision)
 }

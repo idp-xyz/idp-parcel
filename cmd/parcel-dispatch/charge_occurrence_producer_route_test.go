@@ -125,6 +125,7 @@ func registerTrunkOccurrence(t *testing.T, db *bentopg.DB, store *outbox.Store, 
 	mustWithinTX(t, db.Transactor(), t.Context(), func(txCtx context.Context) error {
 		result, err = handler.Register(txCtx, tfapp.RegisterChargeOccurrenceCommand{
 			TenantID:           tenantID,
+			Registrant:         "https://dex.syn.example#SYN-OPERATOR-CONFIG-01",
 			Reason:             tfdomain.ActualFulfillmentOccurrence,
 			Segment:            "SYN-SEG-SZX-SIN-01",
 			Objects:            []string{"SYN-PARCEL-01"},

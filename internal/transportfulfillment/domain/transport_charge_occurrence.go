@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"time"
@@ -186,20 +187,35 @@ func (basis OccurrenceConditionBasis) String() string {
 	}
 }
 
-// OccurrenceCondition 是一个发生项满足发生条件的依据。断言是登记者的原话（引哪一版协议的哪一条、凭什么事实），
-// 不是布尔：只记「断言过」等于让日后复核的人无从知道当时断言的是什么。
-type OccurrenceCondition struct {
-	basis     OccurrenceConditionBasis
-	assertion requiredValue
+// RegistrantReference 指名做出这一次登记决定的操作者：取自操作者信封的主体，发行方与 sub 成对（ADR-0100 决定二
+// 第三条）——sub 只在它的发行方之内唯一，单拿 sub 会让两个发行方的同一个 sub 在留痕里读成一个人。本上下文不解析它，
+// 只原样留痕。
+type RegistrantReference struct{ requiredValue }
+
+func NewRegistrantReference(value string) (RegistrantReference, error) {
+	required, err := newRequiredValue("registrant reference", value)
+	return RegistrantReference{required}, err
 }
 
-// NewAssertedOccurrenceCondition 立一份登记者断言。断言缺席即拒：没有人为条件作答，就没有发生项可形成。
-func NewAssertedOccurrenceCondition(assertion string) (OccurrenceCondition, error) {
+// OccurrenceCondition 是一个发生项满足发生条件的依据。断言那一格带两件：断言人与原话（引哪一版协议的哪一条、凭
+// 什么事实）。不是布尔：只记「断言过」，日后复核的人既不知道当时断言的是什么，也不知道是谁断言的——断言期内条件
+// 由人判断，判断的人就是这一格的出处（方案 D07-1「断言记在运营决定上」）。
+type OccurrenceCondition struct {
+	basis      OccurrenceConditionBasis
+	registrant RegistrantReference
+	assertion  requiredValue
+}
+
+// NewAssertedOccurrenceCondition 立一份登记者断言。断言人或原话缺一即拒：没有人为条件作答，就没有发生项可形成。
+func NewAssertedOccurrenceCondition(registrant RegistrantReference, assertion string) (OccurrenceCondition, error) {
+	if !registrant.valid() {
+		return OccurrenceCondition{}, fmt.Errorf("%w: registrant reference", ErrBlankValue)
+	}
 	statement, err := newRequiredValue("occurrence condition assertion", assertion)
 	if err != nil {
 		return OccurrenceCondition{}, err
 	}
-	return OccurrenceCondition{basis: ConditionAssertedByRegistrant, assertion: statement}, nil
+	return OccurrenceCondition{basis: ConditionAssertedByRegistrant, registrant: registrant, assertion: statement}, nil
 }
 
 func (condition OccurrenceCondition) Basis() OccurrenceConditionBasis {
@@ -214,8 +230,22 @@ func (condition OccurrenceCondition) Assertion() (string, bool) {
 	return condition.assertion.String(), true
 }
 
+// AssertedBy 交回断言人；只在断言那一格上给出。
+func (condition OccurrenceCondition) AssertedBy() (RegistrantReference, bool) {
+	if condition.basis != ConditionAssertedByRegistrant {
+		return RegistrantReference{}, false
+	}
+	return condition.registrant, true
+}
+
+// sameJudgmentAs 判两份条件判的是不是同一件事：依据与原话同。断言人不比——它是这一次登记决定的出处，不是发生项的
+// 内容；另一位操作者照原样再报一次，说的仍是册上那一项，答已存在并回显原断言人，而不是冲突。
+func (condition OccurrenceCondition) sameJudgmentAs(other OccurrenceCondition) bool {
+	return condition.basis == other.basis && condition.assertion == other.assertion
+}
+
 func (condition OccurrenceCondition) valid() bool {
-	return condition.basis == ConditionAssertedByRegistrant && condition.assertion.valid()
+	return condition.basis == ConditionAssertedByRegistrant && condition.registrant.valid() && condition.assertion.valid()
 }
 
 // TransportChargeOccurrenceSpec 是形成一个发生项所需的全部输入。
@@ -561,7 +591,7 @@ func (occurrence TransportChargeOccurrence) SameContentAs(other TransportChargeO
 		occurrence.unit != other.unit ||
 		!sameOnRegistry(occurrence.occurredAt, other.occurredAt) ||
 		occurrence.validity != other.validity ||
-		occurrence.condition != other.condition ||
+		!occurrence.condition.sameJudgmentAs(other.condition) ||
 		occurrence.corrects != other.corrects ||
 		occurrence.revisionKind != other.revisionKind ||
 		occurrence.revisionBasis != other.revisionBasis ||

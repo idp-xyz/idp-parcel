@@ -33,6 +33,7 @@ const (
 	trunkParcel        = "SYN-PARCEL-01"
 	trunkSecondParcel  = "SYN-PARCEL-02"
 	conditionAssertion = "干线协议 v1：段到段运输一次计一段，已在 SIN-HUB 交接"
+	registrant         = "https://dex.syn.example#SYN-OPERATOR-CONFIG-01"
 )
 
 func occurrenceValue[T any](t *testing.T, construct func(string) (T, error), raw string) T {
@@ -287,6 +288,7 @@ func actualFulfillmentCommand(t *testing.T, objects ...string) application.Regis
 	}
 	return application.RegisterChargeOccurrenceCommand{
 		TenantID:           occurrenceValue(t, domain.NewTenantID, occurrenceTenant),
+		Registrant:         registrant,
 		Reason:             domain.ActualFulfillmentOccurrence,
 		Segment:            trunkSegment,
 		Objects:            objects,
@@ -335,6 +337,9 @@ func TestAnEndedTrunkParticipationRegistersAnActualFulfillmentOccurrence(t *test
 	}
 	if assertion, asserted := occurrence.Condition().Assertion(); !asserted || assertion != conditionAssertion {
 		t.Fatalf("断言没有原样留痕：%q %v", assertion, asserted)
+	}
+	if by, asserted := occurrence.Condition().AssertedBy(); !asserted || by.String() != registrant {
+		t.Fatalf("断言人没有留痕：%q %v，应是做出这一次登记决定的操作者", by, asserted)
 	}
 	if record.Key.Validity.String() != "V1" || record.Key.Occurrence != occurrence.Occurrence() {
 		t.Fatalf("键 = %+v", record.Key)
@@ -551,6 +556,19 @@ func TestReRegisteringAnswersExistingOrConflict(t *testing.T) {
 		t.Fatalf("重放应重交同一份意图：%d 份", len(rig.handoff.intents))
 	}
 
+	// 另一位操作者照原样再报：断言人是登记决定的出处、不是内容，仍答已存在，回显的是原断言人。
+	byAnother := actualFulfillmentCommand(t)
+	byAnother.Registrant = "https://dex.syn.example#SYN-OPERATOR-CONFIG-02"
+	again := rig.register(t, byAnother)
+	if again.Outcome() != application.ChargeOccurrenceExisting {
+		t.Fatalf("另一位操作者重报 outcome = %q, want EXISTING", again.Outcome())
+	}
+	if echoed, _ := again.Record(); echoed.Key != original.Key {
+		t.Fatal("另一位操作者重报没有回显原项")
+	} else if by, _ := echoed.Occurrence.Condition().AssertedBy(); by.String() != registrant {
+		t.Fatalf("回显的断言人 = %q，应仍是原断言人", by)
+	}
+
 	changed := actualFulfillmentCommand(t)
 	changed.Quantity = 2
 	conflict := rig.register(t, changed)
@@ -560,7 +578,7 @@ func TestReRegisteringAnswersExistingOrConflict(t *testing.T) {
 	if echoed, _ := conflict.Record(); echoed.Key != original.Key {
 		t.Fatal("冲突没有回显原项")
 	}
-	if rig.registry.saves != 1 || len(rig.handoff.intents) != 2 {
+	if rig.registry.saves != 1 || len(rig.handoff.intents) != 3 {
 		t.Fatalf("冲突不该落第二条也不该交意图：落 %d 条，交 %d 份", rig.registry.saves, len(rig.handoff.intents))
 	}
 }
@@ -670,6 +688,15 @@ func TestReasonsWithoutAFactPathAndUnassertedConditionsAreNotAccepted(t *testing
 	if result := rig.register(t, command); result.Outcome() != application.ChargeOccurrenceInputNotAccepted ||
 		result.Detail() != application.ConditionNotAsserted {
 		t.Fatalf("未断言 outcome/detail = %q/%q", result.Outcome(), result.Detail())
+	}
+	assertNothingWritten(t, rig)
+
+	// 没有断言人就没有人为条件作答：操作者取自认证结果，缺了是入口漏了一道，答坏请求。
+	anonymous := actualFulfillmentCommand(t)
+	anonymous.Registrant = " "
+	if result := rig.register(t, anonymous); result.Outcome() != application.ChargeOccurrenceInputNotAccepted ||
+		result.Detail() != application.ChargeRequestMalformed {
+		t.Fatalf("无断言人 outcome/detail = %q/%q", result.Outcome(), result.Detail())
 	}
 	assertNothingWritten(t, rig)
 }

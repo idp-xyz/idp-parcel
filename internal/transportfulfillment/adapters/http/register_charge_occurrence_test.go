@@ -16,8 +16,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// 本文件证运输收费发生项登记口的线格式与响应（票 demo-chain-gaps/27）：载荷逐格译成命令、租户只来自认证结果、原因词
-// 集外是坏报文；新落一项答 201 并逐字段回显，其余各格答 200；响应里没有任何金额或币种键。夹具全是合成串，证据只记 S。
+// 本文件证运输收费发生项登记口的线格式与响应（票 demo-chain-gaps/27）：载荷逐格译成命令、租户与登记者只来自认证
+// 结果、原因词集外是坏报文；新落一项答 201 并逐字段回显（断言人与原话都在），其余各格答 200；响应里没有任何金额或
+// 币种键。夹具全是合成串，证据只记 S。
 
 const decisionChargeOccurrenceBody = `{"reason":"ACTUAL_FULFILLMENT","segment":"SYN-SEG-SZX-SIN-01","objects":["SYN-PARCEL-01"],` +
 	`"journey":"SYN-JRN-SYN-PARCEL-01","provider":"SYN-PARTY-CARRIER-TRUNK-01","agreement":"SYN-SUPPLIER-TRUNK-CN-SG-01",` +
@@ -29,7 +30,8 @@ func TestChargeOccurrenceRegistrationTranslatesItsPayloadUnderTheAuthenticatedTe
 	if err != nil {
 		t.Fatalf("合规载荷：%v", err)
 	}
-	if command.TenantID.String() != operatorTenant || command.Reason != domain.ActualFulfillmentOccurrence ||
+	if command.TenantID.String() != operatorTenant || command.Registrant != operatorSubject ||
+		command.Reason != domain.ActualFulfillmentOccurrence ||
 		command.Segment != "SYN-SEG-SZX-SIN-01" || len(command.Objects) != 1 || command.Objects[0] != "SYN-PARCEL-01" ||
 		command.Journey != "SYN-JRN-SYN-PARCEL-01" || command.Provider != "SYN-PARTY-CARRIER-TRUNK-01" ||
 		command.AgreementObject != "SYN-SUPPLIER-TRUNK-CN-SG-01" || command.AgreementVersion != "v1" ||
@@ -43,6 +45,7 @@ func TestChargeOccurrenceRegistrationTranslatesItsPayloadUnderTheAuthenticatedTe
 		"数量不是整数":  strings.Replace(decisionChargeOccurrenceBody, `"quantity":1`, `"quantity":"one"`, 1),
 		"自带业务时间":  `{"occurredAt":"2026-10-19T06:00:00Z",` + strings.TrimPrefix(decisionChargeOccurrenceBody, "{"),
 		"自带发生项引用": `{"occurrence":"OCC-1",` + strings.TrimPrefix(decisionChargeOccurrenceBody, "{"),
+		"自带断言人":   `{"registrant":"SYN-OPERATOR-99",` + strings.TrimPrefix(decisionChargeOccurrenceBody, "{"),
 	} {
 		if _, err := intake.IntakeChargeOccurrenceRegistration(context.Background(), bearerRequest("t", body)); !errors.Is(err, tfhttp.ErrMalformedRequest) {
 			t.Fatalf("%s：err = %v, want ErrMalformedRequest", name, err)
@@ -122,7 +125,8 @@ func TestChargeOccurrenceEndpointAnswers201OnlyForANewOccurrenceAndCarriesNoAmou
 		occurrence["agreement"] != "SYN-SUPPLIER-TRUNK-CN-SG-01/v1" || occurrence["legalEntity"] != "SYN-LE-01" ||
 		occurrence["factBasis"] != "FULFILLMENT-SEGMENT/SYN-SEG-SZX-SIN-01" || occurrence["version"] != "V1" ||
 		occurrence["occurredAt"] != "2026-10-19T06:00:00Z" || occurrence["recordedAt"] != "2026-10-19T08:00:00Z" ||
-		occurrence["conditionBasis"] != "REGISTRANT_ASSERTED" || occurrence["conditionAssertion"] != "干线协议 v1 段到段计一段" {
+		occurrence["conditionBasis"] != "REGISTRANT_ASSERTED" || occurrence["conditionAssertion"] != "干线协议 v1 段到段计一段" ||
+		occurrence["conditionAssertedBy"] != operatorSubject {
 		t.Fatalf("响应 = %s", recorder.Body.String())
 	}
 	for key := range occurrence {
@@ -147,8 +151,9 @@ func answeredWithoutRecord(t *testing.T) application.RegisterChargeOccurrenceRes
 	t.Helper()
 	handler := application.NewRegisterChargeOccurrenceHandler(application.RegisterChargeOccurrenceDeps{})
 	result, err := handler.Register(context.Background(), application.RegisterChargeOccurrenceCommand{
-		TenantID: mustTF(t, domain.NewTenantID, operatorTenant),
-		Reason:   domain.BookingOccurrence,
+		TenantID:   mustTF(t, domain.NewTenantID, operatorTenant),
+		Registrant: operatorSubject,
+		Reason:     domain.BookingOccurrence,
 	})
 	if err != nil {
 		t.Fatal(err)

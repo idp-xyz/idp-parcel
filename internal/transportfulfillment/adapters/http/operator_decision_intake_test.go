@@ -15,25 +15,29 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
-const operatorTenant = "SYN-TENANT-01"
+const (
+	operatorTenant  = "SYN-TENANT-01"
+	operatorSubject = "https://id.syn.example/dex#SYN-OPERATOR-01"
+)
 
-// authenticatorFake 替身认证方：记下每次被问的决定种类；没带令牌答令牌不过，否则答 err 或租户。
+// authenticatorFake 替身认证方：记下每次被问的决定种类；没带令牌答令牌不过，否则答 err 或租户与操作者。
 type authenticatorFake struct {
 	err   error
 	asked *[]tfhttp.OperatorDecision
 }
 
-func (fake authenticatorFake) AuthenticateOperatorDecision(_ context.Context, token string, decision tfhttp.OperatorDecision) (domain.TenantID, error) {
+func (fake authenticatorFake) AuthenticateOperatorDecision(_ context.Context, token string, decision tfhttp.OperatorDecision) (tfhttp.OperatorIdentity, error) {
 	if fake.asked != nil {
 		*fake.asked = append(*fake.asked, decision)
 	}
 	if token == "" {
-		return domain.TenantID{}, tfhttp.ErrOperatorCredentialRejected
+		return tfhttp.OperatorIdentity{}, tfhttp.ErrOperatorCredentialRejected
 	}
 	if fake.err != nil {
-		return domain.TenantID{}, fake.err
+		return tfhttp.OperatorIdentity{}, fake.err
 	}
-	return domain.NewTenantID(operatorTenant)
+	tenant, err := domain.NewTenantID(operatorTenant)
+	return tfhttp.OperatorIdentity{Tenant: tenant, Operator: operatorSubject}, err
 }
 
 func operatorIntake(t *testing.T, authenticator tfhttp.OperatorAuthenticator) *tfhttp.OperatorDecisionIntake {

@@ -156,6 +156,7 @@ func chargeCommandFor(t *testing.T, agreementVersion string) tfapp.RegisterCharg
 	t.Helper()
 	return tfapp.RegisterChargeOccurrenceCommand{
 		TenantID:           chargeValue(t, tfdomain.NewTenantID, chargeTenant),
+		Registrant:         "https://dex.syn.example#SYN-OPERATOR-CONFIG-01",
 		Reason:             tfdomain.ActualFulfillmentOccurrence,
 		Segment:            chargeSegment,
 		Objects:            []string{chargeParcel},
