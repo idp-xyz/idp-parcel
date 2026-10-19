@@ -1,7 +1,7 @@
 # 14 TF 其余构造门：判零仍按纳秒、三处自由文本不拒 NUL
 
 Category: bug
-Status: in-progress——2026-10-19 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-tfa14`）。此前 needs-triage——2026-10-19 会话 `idp-parcel-9b` 立（tf-face-algebra/01 实施中清点出的地盘外同病，未逐口实测）
+Status: resolved——2026-10-19 进 main（代码验证钉 `63106e28`），见「进 main 记录」。此前 in-progress——2026-10-19 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-tfa14`）。此前 needs-triage——2026-10-19 会话 `idp-parcel-9b` 立（tf-face-algebra/01 实施中清点出的地盘外同病，未逐口实测）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：tf-face-algebra/01 完成记录「同形门清点」。
@@ -89,3 +89,8 @@ Blocked by: 无
   - **Spec**：阻断无。领域里各口落 timestamptz 且重建复用构造门的时刻非零门改按 `AtRegistryPrecision` 判零，存值不变；外部跟踪发生时间恰为零仍答「源未给」、登记册上为零点的归形状错；三处自由文本拒 NUL；`TransportMovementFact.Correct` 补拒「更正时刻早于发生时刻」，与重建门一致。不改的口（改约与预占调用时刻不入册、规则锚点、访问器、形状不变量）逐处写了理由。
   - **Standards**：阻断无。越出地盘的一处：tf-face-algebra/01 一条领域用例原照常格那一对正是新更正门要拒的，改了用例，认可。
   - **留作后续**：凭证终点落在零点后不足一微秒时写进去有终点、读回成开放区间（不属非零门），只记录未改；`join`、`rederive` 领域层无独立入口未单测。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-tfa14` rebase 到远端 main 之上快进推送；评审钉的是 rebase 前的提交，代码内容未变（rebase 只撞机制清点，在新树上重生成解决）。验证钉 `63106e28` 之后远端只前进了一笔纯票面（票 50、39 认领），再 rebase 一次，`git diff 63106e28 HEAD -- . ':!.scratch'` 为空，未重跑。
+- 推送方全量一次：钉 `63106e28` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 143 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
