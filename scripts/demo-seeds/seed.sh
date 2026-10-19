@@ -25,7 +25,7 @@ SEEDS=scripts/demo-seeds/data
 BIN="$(mktemp -d)"
 trap 'rm -rf "$BIN"' EXIT
 
-echo "== 0/7 编译登记 CLI 与迁移助手 =="
+echo "== 编译登记 CLI 与迁移助手 =="
 go build -o "$BIN/" \
   ./cmd/parcel-pricing-register \
   ./cmd/parcel-network-register \
@@ -38,10 +38,10 @@ go build -o "$BIN/" \
   ./cmd/parcel-settlement-register \
   ./scripts/demo-seeds/migrate
 
-echo "== 1/7 施加迁移计划（${RESET_FLAG:-不重置}） =="
+echo "== 施加迁移计划（${RESET_FLAG:-不重置}） =="
 "$BIN/migrate" $RESET_FLAG
 
-echo "== 2/7 商业权威发布（party-commercial：发布批正文）与消费方解析键登记 =="
+echo "== 商业权威发布（party-commercial：发布批正文）与消费方解析键登记 =="
 "$BIN/parcel-commercial" publish -input "$SEEDS/commercial/publish-batch.json"
 # 解析键属消费方（parcel-shipment）的实例半边，与上一行的商业权威发布不是同一件事，
 # 只因同一个 CLI 承两个入口才挨在一起。键上要结算依据、因而也要客户合同——结算政策按
@@ -82,7 +82,7 @@ echo "== 2/7 商业权威发布（party-commercial：发布批正文）与消费
 # 渠道本体不预造（ADR-0072），引用等 PAR-INT-01 的接入证据。
 "$BIN/parcel-commercial" register-products -input "$SEEDS/commercial/register-products.json"
 
-echo "== 3/7 计价登记（parcel-pricing：价卡 + 参考序列 + 序列复核 + 参考目录） =="
+echo "== 计价登记（parcel-pricing：价卡 + 参考序列 + 序列复核 + 参考目录） =="
 "$BIN/parcel-pricing-register" -kind price-card -file "$SEEDS/pricing/price-card-cn-sg.json"
 "$BIN/parcel-pricing-register" -kind price-card -file "$SEEDS/pricing/price-card-cn-sg-cost.json"
 "$BIN/parcel-pricing-register" -kind reference-series -file "$SEEDS/pricing/reference-series-fuel.json"
@@ -94,7 +94,7 @@ echo "== 3/7 计价登记（parcel-pricing：价卡 + 参考序列 + 序列复�
 "$BIN/parcel-pricing-register" -kind reference-catalogue -file "$SEEDS/pricing/reference-catalogue-zone-cn-sg.json"
 "$BIN/parcel-pricing-register" -kind reference-catalogue-review -file "$SEEDS/pricing/reference-catalogue-zone-cn-sg-review.json"
 
-echo "== 4/7 网络目录登记（network-routing：演示租户采用参考配置 network-routing/network-catalog/SYN-CN-SG@1） =="
+echo "== 网络目录登记（network-routing：演示租户采用参考配置 network-routing/network-catalog/SYN-CN-SG@1） =="
 # 演示网络随产品发布为参考配置（票 routing-first-cut/11，ADR-0147）。下面每一行稳定定义都是一笔采用：
 # 登记行只给身份、修订号与生效时点，内容取自那一版参考配置，依据格写成 REFCFG-1 引用串。登记行不点名
 # adopt，参考配置就不进任何租户的目录。日历是四个节点各一份（处理时长与截单）加三条连接各一份（衔接
@@ -126,7 +126,7 @@ echo "== 4/7 网络目录登记（network-routing：演示租户采用参考配�
 # 已灌过的库重跑本节请用 --reset。
 "$BIN/parcel-network-register" -kind auto-reroute-facts -file "$SEEDS/network/21-auto-reroute-facts-cn-sg-v1.json"
 
-echo "== 5/7 关务案件配置登记（customs-compliance：就绪/授权/规则/义务/门禁/建案/口岸/路径/凭证/协作） =="
+echo "== 关务案件配置登记（customs-compliance：就绪/授权/规则/义务/门禁/建案/口岸/路径/凭证/协作） =="
 "$BIN/parcel-customs-register" readiness-register -input "$SEEDS/customs/01-readiness-cn-export.json"
 "$BIN/parcel-customs-register" authority-grant -input "$SEEDS/customs/02-authority-grant.json"
 # 第二单元灌出「就绪仍有效、授权已撤销」——0006 迁移自注点名必须表达得出的那一格，
@@ -166,7 +166,7 @@ echo "== 5/7 关务案件配置登记（customs-compliance：就绪/授权/规�
 "$BIN/parcel-customs-register" duty-collaboration -input "$SEEDS/customs/25-duty-collaboration-assessed.json"
 "$BIN/parcel-customs-register" duty-collaboration -input "$SEEDS/customs/26-duty-collaboration-not-required.json"
 
-echo "== 6/7 追踪与异常目录登记（visibility-exception：目录册 + 材料收讫） =="
+echo "== 追踪与异常目录登记（visibility-exception：目录册 + 材料收讫） =="
 "$BIN/parcel-ve-register" milestone-mapping -input "$SEEDS/visibility/01-milestone-mapping-v1.json"
 "$BIN/parcel-ve-register" triage-rules -input "$SEEDS/visibility/02-triage-rules-v1.json"
 "$BIN/parcel-ve-register" notification-policy -input "$SEEDS/visibility/03-notification-policy-disclose-v1.json"
@@ -183,7 +183,7 @@ echo "== 6/7 追踪与异常目录登记（visibility-exception：目录册 + �
 "$BIN/parcel-ve-register" claim-material-receipt -input "$SEEDS/visibility/11-claim-material-receipt-invoice.json"
 "$BIN/parcel-ve-register" claim-material-receipt-revocation -input "$SEEDS/visibility/12-claim-material-receipt-invoice-revocation.json"
 
-echo "== 7/7 代收与清分登记（collection-remittance：分户账、指令、事实与记账） =="
+echo "== 代收与清分登记（collection-remittance：分户账、指令、事实与记账） =="
 # 一条 COD 指令走全程（票 admin-remainder-mechanism-batch/04）：渠道报收全额入账
 # `渠道在途`；银行实际到账少于渠道报收，到账部分凭该到账事实搬进`待清分`，差额先登
 # 短款差异事项、再凭它落进`短款`——差额不自动落账；到账部分凭 ALLOCATION（指向代收
@@ -194,7 +194,7 @@ echo "== 7/7 代收与清分登记（collection-remittance：分户账、指令�
 #
 # 已灌过的库上重放本节会在记账处以 UNDERFUNDED（退出码 4）中止：写口的重放判定排在
 # 余额守卫之后，来源位置被原记账清空后守卫先答余额不足，轮不到「已在册」（实测于
-# d340014 对演示库重放）。非干净库复灌一律走 --reset，别指望本节像前六步那样幂等。
+# d340014 对演示库重放）。非干净库复灌一律走 --reset，别指望本节重放幂等。
 "$BIN/parcel-collection-register" subledger -input "$SEEDS/collection/01-subledger-account-01-cny.json"
 "$BIN/parcel-collection-register" subledger -input "$SEEDS/collection/02-subledger-account-01-sgd.json"
 "$BIN/parcel-collection-register" instruction -input "$SEEDS/collection/03-instruction-parcel-01.json"
