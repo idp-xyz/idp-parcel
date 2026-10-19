@@ -31,12 +31,18 @@ type DispatchTaskPayload struct {
 	OpenedAt   string   `json:"openedAt"`
 }
 
-// Command 把载荷连同信封给的租户翻成建立命令。种类词不在封闭集内、时刻解不出是坏报文（400）；种类空着照零值交进去，
-// 工作范围齐不齐由编排答`输入未受理`。
+// Command 把载荷连同信封给的租户翻成建立命令。种类词不在封闭集内、时刻解不出、任务引用落在派送发起执行器的保留起头下，
+// 都是坏报文（400）；种类空着照零值交进去，工作范围齐不齐由编排答`输入未受理`。
+//
+// 保留起头在这里拒而不在编排里拒：执行器形成任务走的也是那条编排，拒在那里会把执行器自己挡住。存量里已经指名过保留引用
+// 的手工任务不动，执行器认在册时核种类与对象集兜住它们（票 tf-face-algebra/09 裁定第 2、4 条）。
 func (payload DispatchTaskPayload) Command(tenant domain.TenantID) (application.OpenDispatchTaskCommand, error) {
 	none := application.OpenDispatchTaskCommand{}
 	if tenant.String() == "" {
 		return none, ErrOperatorIdentityMissing
+	}
+	if application.IsReservedDeliveryDispatchTaskReference(payload.Task) {
+		return none, fmt.Errorf("%w: task=%q names a reference reserved for the delivery dispatch trigger", ErrMalformedRequest, payload.Task)
 	}
 	command := application.OpenDispatchTaskCommand{
 		TenantID:   tenant,

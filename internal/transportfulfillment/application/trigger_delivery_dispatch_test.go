@@ -103,6 +103,7 @@ func newDispatchTriggerFixture(t *testing.T) *dispatchTriggerFixture {
 	}
 	fixture.deps = application.TriggerDeliveryDispatchDeps{
 		Segments:   fixture.handovers.segments,
+		Tasks:      fixture.tasks,
 		Places:     fixture.places,
 		Windows:    fixture.windows,
 		Conditions: fixture.conditions,

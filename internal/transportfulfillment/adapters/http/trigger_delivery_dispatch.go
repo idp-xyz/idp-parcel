@@ -11,8 +11,8 @@ import (
 // 票 tf-segment-lifecycle-closure/12「生产入口」节：末端派送任务**内部触发执行器**的生产入口（ADR-0114 决定二末句
 // 「执行器的生产入口随第一条派送要求缝的实施票立」）。形照 ADR-0106 决定四 / ADR-0124 与本包既有的
 // `/transport-fulfillment-dispatch-task-registrations`：触发面是端点不是进程内循环。**谁按拍调、拍频多大属调用方**
-// （实例半边，随租户运营节拍配置，仓内不写默认）；机制半边是这一口 + 装配点接真执行器；Intake 以 UnconfiguredIntake{}
-// 起步，如实答未配置——不猜一个拍频、不在进程里空转。
+// （实例半边，随租户运营节拍配置，仓内不写默认）；机制半边是这一口 + 装配点接真执行器；Intake 由装配点给，渠道没配时
+// 如实答未配置——不猜一个拍频、不在进程里空转。
 //
 // 与 `-dispatch-task-registrations` 那口是两件事：那口是授权角色手工建立任务（工作范围七件全从请求收）；本口只报
 // 「哪个对象凭`已交接`进了哪个段」这一触发事实，七件由执行器按派送要求向各所有者取，请求里没有任何地点、时间窗或
@@ -77,8 +77,8 @@ func NewTriggerDeliveryDispatchEndpoint(intake DeliveryDispatchTriggerIntake, tr
 }
 
 // deliveryDispatchTriggerResponse 是触发口的封闭响应形状：结果代数逐格逐字透出，`不是触发事实`带 refusal、`要求缺失`
-// 带 missing 名单、`未决`带 undecidedReason 与续办引用，`已形成`/`已在册`带任务。任务的 Place 就是所有者交回的引用串
-// ——这里照抄不解析（ADR-0130 决定一「TF 只当不透明串」）。
+// 带 missing 名单、`未决`带 undecidedReason 与续办引用，`已形成`/`已在册`带任务，`引用被占`带占用者——调用方据此看得出
+// 键被哪一项任务占着。任务的 Place 就是所有者交回的引用串——这里照抄不解析（ADR-0130 决定一「TF 只当不透明串」）。
 type deliveryDispatchTriggerResponse struct {
 	Outcome               string   `json:"outcome"`
 	Refusal               string   `json:"refusal,omitempty"`
@@ -123,7 +123,7 @@ func writeDeliveryDispatchTriggerOutcome(response http.ResponseWriter, result ap
 		body.Conditions = record.Task.Conditions().String()
 		body.OpenedAt = rfc3339(record.Task.OpenedAt())
 	}
-	// ADR-0022：只有这一拍新形成了任务用 201；已在册、不是触发事实、要求缺失、未受理、未决都是形成了的答案（200）。
+	// ADR-0022：只有这一拍新形成了任务用 201；已在册、引用被占、不是触发事实、要求缺失、未受理、未决都是形成了的答案（200）。
 	status := http.StatusOK
 	if result.Outcome() == application.DeliveryDispatchTaskFormed {
 		status = http.StatusCreated

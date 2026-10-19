@@ -1,6 +1,7 @@
 package tfhttp_test
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 	"testing"
@@ -38,5 +39,33 @@ func TestOpenDispatchTaskAnswersEchoTheRegisteredConditions(t *testing.T) {
 	replay := postTo(t, endpoint, "/transport-fulfillment-dispatch-task-registrations", body)
 	if want := `{"outcome":"DISPATCH_TASK_ALREADY_OPEN",` + registered; replay.Code != http.StatusOK || strings.TrimSpace(replay.Body.String()) != want {
 		t.Fatalf("换 conditions 重投 %d\n got %s\nwant %s", replay.Code, strings.TrimSpace(replay.Body.String()), want)
+	}
+}
+
+// Covers: 票 tf-face-algebra/09 裁定第 4 条——`DELIVERY-DISPATCH/` 起头的任务引用归派送发起执行器铸，手工建任务口指名它
+// 就是坏输入，照该口现行坏报文答法拒（400 MALFORMED_REQUEST，不进编排）。只认这一个起头：只是长得像的引用照常翻译，
+// 它们与执行器铸出的串字面上不可能相同。
+func TestTheDispatchTaskPayloadRefusesTheDeliveryDispatchReservedReference(t *testing.T) {
+	tenant := httpValue(t, domain.NewTenantID, "SYN-TENANT-01")
+	payload := tfhttp.DispatchTaskPayload{
+		Kind: "DELIVERY", Objects: []string{"SYN-PARCEL-1"}, Place: "SYN-PLACE-1", Conditions: "SYN-CONDITION/A",
+		WindowFrom: "2026-09-06T09:00:00Z", WindowTo: "2026-09-06T12:00:00Z", OpenedAt: "2026-09-05T12:00:00Z",
+	}
+	for _, reserved := range []string{
+		"DELIVERY-DISPATCH/v2/9:segment-1/8:parcel-1/46:TRANSPORT-HANDOVER/handover-result/parcel-1/v1",
+		"DELIVERY-DISPATCH/segment-1/parcel-1/TRANSPORT-HANDOVER/handover-result/parcel-1/v1",
+		"DELIVERY-DISPATCH/",
+	} {
+		payload.Task = reserved
+		if _, err := payload.Command(tenant); !errors.Is(err, tfhttp.ErrMalformedRequest) {
+			t.Errorf("task=%q：err = %v, want ErrMalformedRequest", reserved, err)
+		}
+	}
+	for _, lookalike := range []string{"delivery-dispatch/x", "SYN-DELIVERY-DISPATCH/x", "DELIVERY-DISPATCH", " DELIVERY-DISPATCH/x"} {
+		payload.Task = lookalike
+		command, err := payload.Command(tenant)
+		if err != nil || command.Task != lookalike {
+			t.Errorf("task=%q：err = %v task = %q, want 照常翻译", lookalike, err, command.Task)
+		}
 	}
 }

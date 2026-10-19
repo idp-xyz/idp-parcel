@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -18,10 +19,12 @@ var ErrUnexpectedDispatchTaskOutcome = errors.New("transport fulfillment: unexpe
 
 // DeliveryDispatchTriggerOutcome 是「对象凭`已交接`进入派送段 → 形成末端派送任务」这一拍的结果代数（ADR-0114 决定二）。
 //
-// `已形成`与`已在册`分开：后者是同一拍重跑，任务引用确定性铸出撞上既有任务，交回它而不重建。`不是触发事实`是领域答案
-// ——段不是派送段、对象不在段里或已不在场、进段凭的不是`已交接`，重跑不会变，哪一格由 DeliveryTriggerRefusal 点名。
-// `要求缺失`是所有者答「没有」：任务保持待形成，不填默认（ADR-0114 决定三）。`未决`是缝没接或读不到：原样重跑本拍就
-// 可能过，理由里点名是哪一条缝。
+// `已形成`与`已在册`分开：后者是本拍要的那一项任务已经在册——同一拍重跑，任务引用确定性铸出撞上它——交回它而不重建。
+// `引用被占`是本拍的任务引用上立着的不是本拍那一项（种类不是末端派送，或对象集不恰为本对象）：交回占用者，不写、不另铸；
+// 它不并进`已在册`，因为那一格对调用方说的是「这个对象已经有派送任务了」，而占用者并不是（票 tf-face-algebra/09 裁定
+// 第 2 条）。`不是触发事实`是领域答案——段不是派送段、对象不在段里或已不在场、进段凭的不是`已交接`，重跑不会变，哪一格由
+// DeliveryTriggerRefusal 点名。`要求缺失`是所有者答「没有」：任务保持待形成，不填默认（ADR-0114 决定三）。`未决`是缝没接
+// 或读不到：原样重跑本拍就可能过，理由里点名是哪一条缝。
 type DeliveryDispatchTriggerOutcome uint8
 
 const (
@@ -32,6 +35,7 @@ const (
 	DeliveryDispatchRequirementMissing
 	DeliveryDispatchNotAccepted
 	DeliveryDispatchUndecided
+	DeliveryDispatchTaskReferenceTaken
 )
 
 func (outcome DeliveryDispatchTriggerOutcome) String() string {
@@ -48,6 +52,8 @@ func (outcome DeliveryDispatchTriggerOutcome) String() string {
 		return "INPUT_NOT_ACCEPTED"
 	case DeliveryDispatchUndecided:
 		return "DISPATCH_UNDECIDED"
+	case DeliveryDispatchTaskReferenceTaken:
+		return "DISPATCH_TASK_REFERENCE_TAKEN"
 	default:
 		return ""
 	}
@@ -198,7 +204,7 @@ func (result TriggerDeliveryDispatchResult) UndecidedReason() DeliveryDispatchUn
 	return result.reason
 }
 
-// Record 在`已形成`与`已在册`时给出那项任务。
+// Record 在`已形成`与`已在册`时给出那项任务，在`引用被占`时给出占用者。
 func (result TriggerDeliveryDispatchResult) Record() (ports.DispatchTaskRecord, bool) {
 	return result.record, result.hasRecord
 }
@@ -214,9 +220,12 @@ type DispatchTaskOpener interface {
 }
 
 // TriggerDeliveryDispatchDeps 的三条派送要求端口**可缺席**：缝没接时编排答`未决`并点名那条缝，不造替身、不填默认
-// （ADR-0114 决定三）。段登记册与任务口必备。没有时钟：本编排不铸任何时间，成立时间由命令带、登记时刻由任务口取。
+// （ADR-0114 决定三）。段登记册、任务登记册读口与任务口必备。读口与任务口分开给：查在册只读，在册了就停在这里，走不到
+// 任务口落库那一步；装配点交的必须是任务口写的那一张登记册。没有时钟：本编排不铸任何时间，成立时间由命令带、登记时刻
+// 由任务口取。
 type TriggerDeliveryDispatchDeps struct {
 	Segments   ports.ActualFulfillmentSegmentRegistry
+	Tasks      ports.DispatchTaskReader
 	Places     ports.DeliveryPlaceSource
 	Windows    ports.DeliveryWindowSource
 	Conditions ports.DeliveryConditionSource
@@ -235,8 +244,12 @@ func NewTriggerDeliveryDispatchHandler(deps TriggerDeliveryDispatchDeps) *Trigge
 	return &TriggerDeliveryDispatchHandler{deps: deps}
 }
 
-// Trigger 跑一拍：受理形状 → 读回段（必须是派送段、对象必须是凭`已交接`在场的当前参与）→ 三条缝都接了才去问 →
-// 三件各取一次、缺的逐件点名 → 调任务口。
+// Trigger 跑一拍：受理形状 → 读回段（必须是派送段、对象在段里有未失效的参与、链尾凭`已交接`入场）→ 按本拍的键查在册
+// → 参与在场 → 三条缝都接了才去问 → 三件各取一次、缺的逐件点名 → 调任务口。
+//
+// 查在册排在参与在场之前、读回段与确认链尾之后（票 tf-face-algebra/09 裁定第 3 条）。键由段、对象与链尾的入场依据定，
+// 前两步省不掉；在册了就是同一拍的重放：答复不随所有者后来的改答漂移，也不白读所有者。参与离场之后的重放同样交回在册
+// 那一项，它不形成新任务，ADR-0114 决定二「已离场的参与不触发」照样成立。
 func (handler *TriggerDeliveryDispatchHandler) Trigger(
 	ctx context.Context,
 	command TriggerDeliveryDispatchCommand,
@@ -264,11 +277,16 @@ func (handler *TriggerDeliveryDispatchHandler) Trigger(
 	if !present || participation.Voided() {
 		return deliveryDispatchRefused(DeliveryTriggerRefusedObjectNotInSegment), nil
 	}
-	if !participation.Active() {
-		return deliveryDispatchRefused(DeliveryTriggerRefusedParticipationNotActive), nil
-	}
 	if participation.EntryKind() != domain.EnteredByTransportHandover {
 		return deliveryDispatchRefused(DeliveryTriggerRefusedEntryNotByHandover), nil
+	}
+	reference := deliveryDispatchTaskReference(segmentReference, object, participation.EntryBasis())
+	if registered, answered := handler.registeredTask(ctx, command, object, reference,
+		legacyDeliveryDispatchTaskReference(segmentReference, object, participation.EntryBasis())); answered {
+		return registered, nil
+	}
+	if !participation.Active() {
+		return deliveryDispatchRefused(DeliveryTriggerRefusedParticipationNotActive), nil
 	}
 
 	// 缝没接是装配事实不是这一拍的事实：三条先一并核过，第一条没接的点名出去；不为没接的缝问已接的缝——问了也
@@ -284,10 +302,9 @@ func (handler *TriggerDeliveryDispatchHandler) Trigger(
 		return TriggerDeliveryDispatchResult{outcome: DeliveryDispatchRequirementMissing, missing: requirements.missing}, nil
 	}
 
-	// 任务引用按（段，对象，入场依据）确定性铸出：同一拍重跑撞`已在册`而不重建（ADR-0114 决定二）。
 	opened, err := handler.deps.Dispatch.Open(ctx, OpenDispatchTaskCommand{
 		TenantID:   command.TenantID,
-		Task:       deliveryDispatchTaskReference(segmentReference, object, participation.EntryBasis()),
+		Task:       reference,
 		Kind:       domain.DeliveryDispatch,
 		Objects:    []string{object.String()},
 		Place:      requirements.place,
@@ -304,8 +321,9 @@ func (handler *TriggerDeliveryDispatchHandler) Trigger(
 		task, _ := opened.Record()
 		return TriggerDeliveryDispatchResult{outcome: DeliveryDispatchTaskFormed, record: task, hasRecord: true}, nil
 	case DispatchTaskAlreadyRegistered:
+		// 查在册之后、落库之前另一笔先提交了这个键（典型是并发的同一拍）：读回的赢家照样要核，占键的未必是本拍那一项。
 		task, _ := opened.Record()
-		return TriggerDeliveryDispatchResult{outcome: DeliveryDispatchTaskAlreadyFormed, record: task, hasRecord: true}, nil
+		return deliveryDispatchRegisteredAnswer(task, object), nil
 	case DispatchTaskUndecided:
 		return TriggerDeliveryDispatchResult{
 			outcome:      DeliveryDispatchUndecided,
@@ -403,15 +421,142 @@ func requirementFault(resolution ports.RequirementResolution, err error) bool {
 	return resolution != ports.RequirementResolved && resolution != ports.RequirementMissing
 }
 
-// deliveryDispatchTaskReference 是任务身份的铸法：段、对象、入场依据三件定一拍（ADR-0114 决定二）。入场依据在键里
-// 是因为同一对象经来源更正后替代入场（ADR-0112）是另一版参与——它的任务要不要另立由那一拍自己判，这里不让它撞上
-// 前一版的任务；照 ADR 字面铸，是否该按（段，对象）铸以免更正后重开任务列为越权风险点供 owner 复核。
+// registeredTask 按本拍的键查在册，answered 为真时 result 就是这一拍的答复。
+//
+// 先查新铸法的键，查不到再查旧拼法的键（票 tf-face-algebra/09 裁定第 1 条）：旧拼法铸下的任务留在原键上，已落库的身份
+// 不追溯改写（ADR-0014 同一纪律），演示租户的存量也照此（ADR-0150 决定一）。新键上有任务就以它为准，核得过答`已在册`，
+// 核不过答`引用被占`。旧键上的任务只有核得过才算本拍那一项；核不过说明它是别的任务（手工建任务口指名过这一串，或别的段
+// 与对象在斜杠直拼下撞上了它），本拍不算在册，照新键往下走——旧键只是兼认的去处，不是本拍的身份。读不回答未决：在不在册
+// 还没定，不去问所有者。
+func (handler *TriggerDeliveryDispatchHandler) registeredTask(
+	ctx context.Context,
+	command TriggerDeliveryDispatchCommand,
+	object domain.CarriedObjectReference,
+	reference, legacy string,
+) (result TriggerDeliveryDispatchResult, answered bool) {
+	task, found, err := handler.findTask(ctx, command.TenantID, reference)
+	if err != nil {
+		return deliveryDispatchUndecided(DeliveryDispatchTaskUndecided, command), true
+	}
+	if found {
+		return deliveryDispatchRegisteredAnswer(task, object), true
+	}
+	// 段与入场依据是调用方给的不透明串，旧拼法串因此可能恰好合新形状；那样的串上若有任务，是新铸法下另一组（段，对象，
+	// 入场依据）的，同一对象跨段时种类与对象集都对得上，核对拦不住。新旧两种拼法字面上不得相同（裁定第 1 条），在这里守。
+	if _, newShape := parseDeliveryDispatchTaskReference(legacy); newShape {
+		return TriggerDeliveryDispatchResult{}, false
+	}
+	task, found, err = handler.findTask(ctx, command.TenantID, legacy)
+	if err != nil {
+		return deliveryDispatchUndecided(DeliveryDispatchTaskUndecided, command), true
+	}
+	if found && isThisObjectsDeliveryTask(task, object) {
+		return TriggerDeliveryDispatchResult{outcome: DeliveryDispatchTaskAlreadyFormed, record: task, hasRecord: true}, true
+	}
+	return TriggerDeliveryDispatchResult{}, false
+}
+
+// findTask 按租户与引用串取任务。串过不了引用的构造门答「不在册」：段、对象与入场依据都过了各自的构造门，拼出来的串
+// 不会过不了；真过不了，任务口会对同一串答`未受理`，那才是该给的答复。
+func (handler *TriggerDeliveryDispatchHandler) findTask(
+	ctx context.Context,
+	tenant domain.TenantID,
+	raw string,
+) (ports.DispatchTaskRecord, bool, error) {
+	task, err := domain.NewDispatchTaskReference(raw)
+	if err != nil {
+		return ports.DispatchTaskRecord{}, false, nil
+	}
+	return handler.deps.Tasks.FindByKey(ctx, ports.DispatchTaskKey{TenantID: tenant, Task: task})
+}
+
+// deliveryDispatchRegisteredAnswer 核本拍键上那一项是不是本拍要的任务（裁定第 2 条）：种类须是末端派送，对象集须恰为
+// 本对象。单靠这道核对拦不住同一对象跨段撞键，主修是单射铸法；它是第二道防线，兜住存量里指名执行器引用的手工任务。
+func deliveryDispatchRegisteredAnswer(task ports.DispatchTaskRecord, object domain.CarriedObjectReference) TriggerDeliveryDispatchResult {
+	if isThisObjectsDeliveryTask(task, object) {
+		return TriggerDeliveryDispatchResult{outcome: DeliveryDispatchTaskAlreadyFormed, record: task, hasRecord: true}
+	}
+	return TriggerDeliveryDispatchResult{outcome: DeliveryDispatchTaskReferenceTaken, record: task, hasRecord: true}
+}
+
+func isThisObjectsDeliveryTask(task ports.DispatchTaskRecord, object domain.CarriedObjectReference) bool {
+	objects := task.Task.Objects()
+	return task.Task.Kind() == domain.DeliveryDispatch && len(objects) == 1 && objects[0] == object
+}
+
+const (
+	// deliveryDispatchTaskReferenceRoot 起头的任务引用归本执行器铸，手工建任务口拒指名它（裁定第 4 条）。新旧两种拼法
+	// 都以它起头，所以挡它一处就把两种都挡住了。
+	deliveryDispatchTaskReferenceRoot = "DELIVERY-DISPATCH/"
+	// deliveryDispatchTaskReferenceShape 是形状标记。旧拼法没有标记，段紧跟在起头之后。
+	deliveryDispatchTaskReferenceShape = "v2"
+)
+
+// IsReservedDeliveryDispatchTaskReference 答一个任务引用是不是落在派送发起执行器的保留起头下。手工建任务口据此拒指名：
+// 那一口能写任意引用，而执行器认在册只认键——手工任务一旦占了执行器要铸的那一串，就会被读成别的对象的派送任务。
+func IsReservedDeliveryDispatchTaskReference(task string) bool {
+	return strings.HasPrefix(task, deliveryDispatchTaskReferenceRoot)
+}
+
+// deliveryDispatchTaskReference 是任务身份的铸法：段、对象、入场依据三件定一拍（ADR-0114 决定二）。起头之后是形状标记，
+// 再把三件依次写成「/字节长度:原串」，例如
+// `DELIVERY-DISPATCH/v2/9:segment-1/8:parcel-1/46:TRANSPORT-HANDOVER/handover-result/parcel-1/v1`。
+//
+// 三件都是只拒空白的不透明串，可以含斜杠，交接版本跨对象还可以相同；以斜杠直拼时不同的三件能拼出同一串，后到的对象首拍
+// 就被答成「已形成」。写上长度之后每一件在哪里结束是定的，读回唯一，铸法单射（parseDeliveryDispatchTaskReference 就是那个
+// 读回）。不取摘要：引用出现在答复、日志与管理台上，人要读得出它指的是哪个段哪个对象（票 tf-face-algebra/09 裁定第 1 条）。
+//
+// 入场依据在键里是因为同一对象经来源更正后替代入场（ADR-0112）是另一版参与——它的任务要不要另立由那一拍自己判，这里
+// 不让它撞上前一版的任务；照 ADR 字面铸，是否该按（段，对象）铸以免更正后重开任务列为越权风险点供 owner 复核。
 func deliveryDispatchTaskReference(
 	segment domain.FulfillmentSegmentReference,
 	object domain.CarriedObjectReference,
 	entryBasis domain.ParticipationBasisReference,
 ) string {
-	return "DELIVERY-DISPATCH/" + segment.String() + "/" + object.String() + "/" + entryBasis.String()
+	var reference strings.Builder
+	reference.WriteString(deliveryDispatchTaskReferenceRoot)
+	reference.WriteString(deliveryDispatchTaskReferenceShape)
+	for _, part := range []string{segment.String(), object.String(), entryBasis.String()} {
+		reference.WriteByte('/')
+		reference.WriteString(strconv.Itoa(len(part)))
+		reference.WriteByte(':')
+		reference.WriteString(part)
+	}
+	return reference.String()
+}
+
+// parseDeliveryDispatchTaskReference 按新铸法把引用读回段、对象、入场依据三件；串不合新形状答 false。长度只认不带前导
+// 零的十进制：一组三件只有一种写法，读回才与铸法一一对应。
+func parseDeliveryDispatchTaskReference(reference string) ([3]string, bool) {
+	var parts [3]string
+	rest, ok := strings.CutPrefix(reference, deliveryDispatchTaskReferenceRoot+deliveryDispatchTaskReferenceShape)
+	if !ok {
+		return parts, false
+	}
+	for index := range parts {
+		if rest, ok = strings.CutPrefix(rest, "/"); !ok {
+			return parts, false
+		}
+		digits, after, found := strings.Cut(rest, ":")
+		if !found || digits == "" || (len(digits) > 1 && digits[0] == '0') || strings.Trim(digits, "0123456789") != "" {
+			return parts, false
+		}
+		length, err := strconv.Atoi(digits)
+		if err != nil || length > len(after) {
+			return parts, false
+		}
+		parts[index], rest = after[:length], after[length:]
+	}
+	return parts, rest == ""
+}
+
+// legacyDeliveryDispatchTaskReference 是旧拼法：三件以斜杠直拼，不单射。只用来兼认停在它上面的存量，不拿它铸新任务。
+func legacyDeliveryDispatchTaskReference(
+	segment domain.FulfillmentSegmentReference,
+	object domain.CarriedObjectReference,
+	entryBasis domain.ParticipationBasisReference,
+) string {
+	return deliveryDispatchTaskReferenceRoot + segment.String() + "/" + object.String() + "/" + entryBasis.String()
 }
 
 func deliveryTriggerTargetFrom(

@@ -162,6 +162,7 @@ func newTriggerFixture(t *testing.T, members ...string) *triggerFixture {
 	}
 	fixture.deps = application.TriggerDeliveryDispatchDeps{
 		Segments:   deliverySegmentRegistry{fixture.segments},
+		Tasks:      fixture.tasks,
 		Places:     places,
 		Windows:    resolvedWindow{from: time.Date(2026, 9, 6, 9, 0, 0, 0, time.UTC), to: time.Date(2026, 9, 6, 12, 0, 0, 0, time.UTC)},
 		Conditions: resolvedConditions{reference: "delivery-conditions/contract-1/v3"},
@@ -229,6 +230,36 @@ func TestTriggeringADeliveryDispatchFormsTheTaskWithTheOwnersPlaceReference(t *t
 	}
 	if again := decodeTrigger(t, replay); again.Outcome != "DISPATCH_TASK_ALREADY_FORMED" || again.Task != view.Task {
 		t.Fatalf("replay view = %+v, want the same task already formed", again)
+	}
+}
+
+// Covers: 票 tf-face-algebra/09 裁定第 2 条在传输层——本拍的任务引用上已是别的任务（这里是一项揽收任务，对象也不同）：
+// 200 `DISPATCH_TASK_REFERENCE_TAKEN`，任务那几格回显的是占用者，调用方据此看得出键被谁占着；不是 201，也不冒充已形成。
+func TestATakenTaskReferenceIsAFormedAnswerEchoingTheOccupant(t *testing.T) {
+	fixture := newTriggerFixture(t, "parcel-1")
+	seedHandoverParticipation(t, fixture.segments, "parcel-1")
+	const reference = "DELIVERY-DISPATCH/v2/9:segment-1/8:parcel-1/46:TRANSPORT-HANDOVER/handover-result/parcel-1/v1"
+	opener := application.NewOpenDispatchTaskHandler(application.OpenDispatchTaskDeps{Tasks: fixture.tasks, Clock: tfClock{at: time.Date(2026, 9, 5, 8, 0, 0, 0, time.UTC)}})
+	occupied, err := opener.Open(t.Context(), application.OpenDispatchTaskCommand{
+		TenantID: tenantOne(t), Task: reference, Kind: domain.PickupDispatch, Objects: []string{"parcel-other-9"}, Place: "place-elsewhere",
+		WindowFrom: time.Date(2026, 9, 4, 9, 0, 0, 0, time.UTC), WindowTo: time.Date(2026, 9, 4, 12, 0, 0, 0, time.UTC),
+		Conditions: "conditions-elsewhere", OpenedAt: time.Date(2026, 9, 3, 20, 0, 0, 0, time.UTC),
+	})
+	if err != nil || occupied.Outcome() != application.DispatchTaskOpened {
+		t.Fatalf("立占用者：%v %q", err, occupied.Outcome())
+	}
+
+	response := postTo(t, fixture.endpoint(t), "/transport-fulfillment-delivery-dispatch-triggers", triggerBody("segment-1", "parcel-1"))
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", response.Code, response.Body.String())
+	}
+	view := decodeTrigger(t, response)
+	if view.Outcome != "DISPATCH_TASK_REFERENCE_TAKEN" || view.Task != reference || view.Kind != "PICKUP" ||
+		len(view.Objects) != 1 || view.Objects[0] != "parcel-other-9" || view.Place != "place-elsewhere" || view.Conditions != "conditions-elsewhere" {
+		t.Fatalf("view = %+v, want 引用被占并回显占用者", view)
+	}
+	if view.ContinuationReference != "" {
+		t.Fatal("引用被占是形成了的答案，不该留续办引用")
 	}
 }
 

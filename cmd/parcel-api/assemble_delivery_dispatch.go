@@ -16,6 +16,7 @@ import (
 	tfpartycommercial "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/partycommercial"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	tfapp "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
+	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
 // transactionalDeliveryDispatchTrigger 把末端派送任务的内部触发执行器包进一笔事务，理由随本目录其余命令包装：
@@ -57,19 +58,11 @@ func (trigger transactionalDeliveryDispatchTrigger) Trigger(
 // `Conditions` 是 adapters/partycommercial 的真适配器（票 tf-segment-lifecycle-closure/14），两只窄口都给——PS 同一只委托
 // 仓储（它也兼实现按包裹身份答商业解析回指的读口）与 PC 的交付条件读口（按回指取闭包、读两层声明），缺一只装配期拒
 // （判据同 NewCarrierIdentityDirectory）。自此执行器不再有 *_SOURCE_NOT_WIRED 的停点，每条缝的所有者答什么就是什么
-// （ADR-0114 决定三：所有者答「没有」任务保持待形成，不填默认）。任务口不包事务：本函数交出的包装已在事务里，同一 ctx
-// 带着同一笔（判据同 buildParticipationEnder）。
+// （ADR-0114 决定三：所有者答「没有」任务保持待形成，不填默认）。
 //
-// 谁按拍调这一口、拍频多大，是租户运营节拍的实例半边：端点挂 UnconfiguredIntake{} 起步，未配置即如实拒（ADR-0055）。
+// 谁按拍调这一口、拍频多大，是租户运营节拍的实例半边，仓内不写默认。端点挂作业事实渠道的 Intake（ADR-0149 决定二；
+// 派送发起口为何留在那一族，见 ADR-0151 越权风险点 7），渠道没配时那一口如实答未配置（ADR-0055）。
 func buildDeliveryDispatchTrigger(db *bentopg.DB) (transactionalDeliveryDispatchTrigger, error) {
-	segments, err := tfpostgres.NewFulfillmentSegments(db)
-	if err != nil {
-		return transactionalDeliveryDispatchTrigger{}, fmt.Errorf("parcel-api: fulfillment segments: %w", err)
-	}
-	tasks, err := tfpostgres.NewDispatchTasks(db)
-	if err != nil {
-		return transactionalDeliveryDispatchTrigger{}, fmt.Errorf("parcel-api: dispatch tasks: %w", err)
-	}
 	shipmentRequests, err := pspostgres.NewShipmentRequests(db)
 	if err != nil {
 		return transactionalDeliveryDispatchTrigger{}, fmt.Errorf("parcel-api: shipment requests: %w", err)
@@ -94,8 +87,31 @@ func buildDeliveryDispatchTrigger(db *bentopg.DB) (transactionalDeliveryDispatch
 	if err != nil {
 		return transactionalDeliveryDispatchTrigger{}, fmt.Errorf("parcel-api: delivery condition source: %w", err)
 	}
+	return deliveryDispatchTriggerOver(db, places, windows, conditions)
+}
+
+// deliveryDispatchTriggerOver 把段登记册与任务登记册接到给定的三条派送要求缝上，包进事务交出。三条缝之外的接线只有
+// 这一处：生产装配交真适配器，真库回归交替身，两边的段、任务与事务是同一份接法。
+//
+// 查在册的读口与任务口落库用的是同一只任务登记册：执行器先按本拍的键查在册、查到就不再向所有者取件，读的必须就是
+// 任务口写的那张表。任务口不包事务：本函数交出的包装已在事务里，同一 ctx 带着同一笔（判据同 buildParticipationEnder）。
+func deliveryDispatchTriggerOver(
+	db *bentopg.DB,
+	places tfports.DeliveryPlaceSource,
+	windows tfports.DeliveryWindowSource,
+	conditions tfports.DeliveryConditionSource,
+) (transactionalDeliveryDispatchTrigger, error) {
+	segments, err := tfpostgres.NewFulfillmentSegments(db)
+	if err != nil {
+		return transactionalDeliveryDispatchTrigger{}, fmt.Errorf("parcel-api: fulfillment segments: %w", err)
+	}
+	tasks, err := tfpostgres.NewDispatchTasks(db)
+	if err != nil {
+		return transactionalDeliveryDispatchTrigger{}, fmt.Errorf("parcel-api: dispatch tasks: %w", err)
+	}
 	handler := tfapp.NewTriggerDeliveryDispatchHandler(tfapp.TriggerDeliveryDispatchDeps{
 		Segments:   segments,
+		Tasks:      tasks,
 		Places:     places,
 		Windows:    windows,
 		Conditions: conditions,
