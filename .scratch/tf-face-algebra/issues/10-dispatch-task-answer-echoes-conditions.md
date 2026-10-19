@@ -1,7 +1,7 @@
 # 10 建派送任务的答复不回显 conditions：票 20 判「回显让调用方自己比」够用，所凭的回显缺一格
 
 Category: bug
-Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 代决并认领：照「修复方向（机制）」办，无取舍（答复形状补一格，不动编排）；分支 `claude-tfa121310`（与 12、13 同一分支，先 12、13 后 10）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 代决并认领：照「修复方向（机制）」办，无取舍（答复形状补一格，不动编排）；分支 `claude-tfa121310`（与 12、13 同一分支，先 12、13 后 10）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment-dispatch-task-registrations
@@ -42,3 +42,34 @@ Blocked by: 无
 - [ ] `go build ./...`、`go vet ./...` 退出码 0，`gofmt -l .` 无输出；带 DSN 跑 `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/...`，全部 ok。
 - [ ] 票 15 补记下追加回写行（只加行）。
 - [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：作者自验，非作者评审（两轴分开），推送方在干净检出上带 DSN 跑全量。
+
+## 完成记录（2026-10-19，会话 idp-parcel-9b 的实施子代理，分支 claude-tfa121310）
+
+基线 `a2d6a4bf`（叠在票 12、13 之上）。提交：`087ceb95`（修复与用例）、`c256ac7e`（机制清点，12、13、10 合一笔）。
+
+### 落点
+- `internal/transportfulfillment/adapters/http/open_dispatch_task.go`：`dispatchTaskResponse` 加 `conditions`（`omitempty`，格序与 `deliveryDispatchTriggerResponse` 的任务那几格一致：windowTo 之后、openedAt 之前）；`writeDispatchTaskOutcome` 从 `record.Task.Conditions()` 取。201 取刚登记的那一份、200 已在册取读回的在册任务，同走一个回显块，两种答复同形。编排未动。
+- 时刻：本改动不碰时刻格，仍经 `rfc3339()`；整秒值逐字节不变由 HTTP 单测的整体比对钉住。
+
+### 各格对应用例
+- HTTP 单测：`internal/transportfulfillment/adapters/http/open_dispatch_task_test.go`（新文件）的 `TestOpenDispatchTaskAnswersEchoTheRegisteredConditions`——conditions=A 建任务答 201，整个答复体逐字节比对（含 `"conditions":"SYN-CONDITION/A"` 与 `2026-09-06T09:00:00Z` 一类整秒时刻）；同一任务 conditions=B 重投答 200 `DISPATCH_TASK_ALREADY_OPEN`，答复体除 outcome 外与首答逐字节相同、回显 A。
+- 真渠道真库：`cmd/parcel-api/dispatch_task_conditions_echo_test.go`（新文件）的 `TestTheDispatchTaskFaceEchoesTheRegisteredConditionsOnAReplay`——装配照判据：`registerOperationDecisionAdmission` + `buildAdmissionScope`（生产准入桥）+ `buildOperatorMinter` + `buildOperatorDecisionIntakes` + `buildSegmentOperations`，端点 `tfhttp.NewOpenDispatchTaskEndpoint(decisions.transport, operations.opener)`。A 建答 201 回显 A；B 重投答 200 `DISPATCH_TASK_ALREADY_OPEN` 回显 A；`transport_fulfillment.dispatch_task` 里该任务仍 1 行、`conditions_ref` 仍是 A。
+
+### 先红后绿
+- 复现：票面「复现」节引的 overlay 未用，改由新写的真渠道真库用例先红。
+- 红（票 13 之后、本票改代码之前 + 新用例）：`/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/tfa10-red.log`。HTTP 单测首答 got 为 `{"outcome":"DISPATCH_TASK_OPENED",…,"windowTo":"2026-09-06T12:00:00Z","openedAt":"2026-09-05T12:00:00Z"}`，没有 conditions；真渠道真库原话：「以 A 建任务：201 {"outcome":"DISPATCH_TASK_OPENED","task":"SYN-DISPATCH-COND-ECHO",…,"windowTo":"2026-10-19T12:00:00Z","openedAt":"2026-10-18T20:00:00Z"} , want 201 DISPATCH_TASK_OPENED 回显 conditions A」。两条都红在 201 首答（Fatal 之后重投那段没跑到）；重投那段由同一用例在修复后走通，「同任务换 conditions 重投」这一格由此实跑。
+- 绿：`/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/tfa10-green.log`。
+
+### 门
+- 钉 `087ceb95`：改动的 `.go` 跑 `gofmt -l` 无输出（整树 `gofmt -l .` 同样无输出）；`go build ./...`、`go vet ./...` 退 0（`/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/tfa-gates-build.log`）。
+- 带 DSN `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/... ./internal/architecture/...` 全 ok（`/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/tfa-gates-test.log`）。未跑全仓全量（属推送方）。
+- 机制清点重生成：只有测试文件计数变（`c256ac7e`，`cmd/` 测试 +1），生产文件不变。
+
+### 越出地盘
+无。
+
+证据层级：`S`（`SYN-` 值；真渠道走隔离合成的准入对照与区间）。
+
+### 未做
+- 「票 15 补记下追加回写行」：**留给推送方**（票 15 正在另一条分支改，合并时补）。
+- 「走 Go 那条路」的非作者评审与推送方干净检出全量：属会话与推送方。
