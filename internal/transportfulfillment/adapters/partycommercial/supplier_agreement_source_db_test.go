@@ -31,6 +31,7 @@ import (
 const (
 	trunkAgreement    = "SYN-SUPPLIER-TRUNK-CN-SG-01/v1"
 	trunkAgreementV2  = "SYN-SUPPLIER-TRUNK-CN-SG-01/v2"
+	trunkAgreementV3  = "SYN-SUPPLIER-TRUNK-CN-SG-01/v3"
 	lastMileAgreement = "SYN-SUPPLIER-LASTMILE-SG-01/v1"
 )
 
@@ -121,7 +122,8 @@ func publishSeededAgreement(
 
 // Covers: 票 demo-chain-gaps/22 完成判据——SYN 干线与末端协议各按自己的供应商在册，交回种子里的责任法人与 PC 拼出的快照；
 // 干线协议填末端承运商答服务方不符（票 23 的演示停点）；生效前答未生效；没发布的版本与他租户答未在册。票 29：干线 v2
-// 经真库交回种子里声明的收费发生条件（实际履约按件计、失败尝试不计费），v1 与末端协议没有条件。
+// 经真库交回种子里声明的收费发生条件（实际履约按件计、失败尝试不计费），v1 与末端协议没有条件。票 28：干线 v3 另声明
+// 订舱与取消按订舱计。
 func TestTheSyntheticSupplierAgreementsAreCheckedThroughTheRealPointRead(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -136,7 +138,7 @@ func TestTheSyntheticSupplierAgreementsAreCheckedThroughTheRealPointRead(t *test
 	handler := pcapplication.NewPublishCommercialAuthorityHandler(registry, publishClock{at: decisionAt}, silentRegistrationHandoff{})
 
 	seeded := seededSupplierAgreements(t)
-	for _, object := range []string{trunkAgreement, trunkAgreementV2, lastMileAgreement} {
+	for _, object := range []string{trunkAgreement, trunkAgreementV2, trunkAgreementV3, lastMileAgreement} {
 		item, present := seeded[object]
 		if !present {
 			t.Fatalf("演示发布批里没有 %s", object)
@@ -170,7 +172,7 @@ func TestTheSyntheticSupplierAgreementsAreCheckedThroughTheRealPointRead(t *test
 		return answer
 	}
 
-	for _, key := range []string{trunkAgreement, trunkAgreementV2, lastMileAgreement} {
+	for _, key := range []string{trunkAgreement, trunkAgreementV2, trunkAgreementV3, lastMileAgreement} {
 		item := seeded[key]
 		object := item.ObjectID
 		body := item.Declarations.SupplierAgreementBody
@@ -188,14 +190,26 @@ func TestTheSyntheticSupplierAgreementsAreCheckedThroughTheRealPointRead(t *test
 		}
 		fulfillment, declared := registered.ChargeConditions.For(tfdomain.ActualFulfillmentOccurrence)
 		attempt, attemptDeclared := registered.ChargeConditions.For(tfdomain.FailedAttemptOccurrence)
-		if key == trunkAgreementV2 {
+		booking, bookingDeclared := registered.ChargeConditions.For(tfdomain.BookingOccurrence)
+		cancellation, cancellationDeclared := registered.ChargeConditions.For(tfdomain.CancellationOccurrence)
+		if key == trunkAgreementV2 || key == trunkAgreementV3 {
 			if form, charged := fulfillment.QuantityForm(); !declared || !charged || form != tfdomain.PerPieceQuantity {
 				t.Fatalf("%s：实际履约条件 = %+v（声明 %v），want 按件计", key, fulfillment, declared)
 			}
 			if !attemptDeclared || attempt.Charged() {
 				t.Fatalf("%s：失败尝试条件 = %+v（声明 %v），want 不计费", key, attempt, attemptDeclared)
 			}
-		} else if declared || attemptDeclared {
+			if key == trunkAgreementV2 && (bookingDeclared || cancellationDeclared) {
+				t.Fatalf("%s：v2 不声明订舱与取消，却读出了条件", key)
+			}
+			if key == trunkAgreementV3 {
+				for reason, condition := range map[string]tfdomain.AgreementChargeCondition{"订舱": booking, "取消": cancellation} {
+					if form, charged := condition.QuantityForm(); !bookingDeclared || !cancellationDeclared || !charged || form != tfdomain.PerBookingQuantity {
+						t.Fatalf("%s：%s条件 = %+v，want 按订舱计", key, reason, condition)
+					}
+				}
+			}
+		} else if declared || attemptDeclared || bookingDeclared || cancellationDeclared {
 			t.Fatalf("%s：没声明条件的协议读出了条件", key)
 		}
 
