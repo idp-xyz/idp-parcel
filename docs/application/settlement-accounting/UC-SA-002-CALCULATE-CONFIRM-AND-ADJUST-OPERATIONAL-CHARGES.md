@@ -94,7 +94,7 @@
 | 步骤 | 责任方 | 处理 | 结果 |
 |---:|---|---|---|
 | 1 | `settlement-accounting` | 校验租户、责任法人、客户账户、主要范围、权限和请求身份 | 已受理或未受理 |
-| 2 | `settlement-accounting` / `parcel-pricing` | 发生项原因已登记「发生项形成」时，结算才提交主要范围、计算目的和合格来源引用；没登记则待判断，不发起请求。SELL·客户费用另有按包裹计费时点发起的一路：结算账户采用的时点到来时，结算提交包裹、计价范围与计价基准时点（[ADR-0190](../../adr/0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md)）。`parcel-pricing` 采用测量、运输收费发生项、其他履约、面单及已解析商业依据形成不可变计价输入快照 | 计价输入版本或待判断 |
+| 2 | `settlement-accounting` / `parcel-pricing` | 发生项原因已登记「发生项形成」时，结算才提交主要范围、计算目的和合格来源引用；没登记则待判断，不发起请求。运输履约交出发生项已形成信封时，结算按引用回读那一份发生项，发生项与供应商协议取自它、费用项目取 BUY 触发册那一行、主要范围取协议的商业范围；没登原因或没登费用项目答未配置（[ADR-0208](../../adr/0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md)）。SELL·客户费用另有按包裹计费时点发起的一路：结算账户采用的时点到来时，结算提交包裹、计价范围与计价基准时点（[ADR-0190](../../adr/0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md)）。`parcel-pricing` 采用测量、运输收费发生项、其他履约、面单及已解析商业依据形成不可变计价输入快照 | 计价输入版本或待判断 |
 | 3 | `parcel-pricing` | 按价格方向和固定版本清单执行客户/供应商评价，分别形成计价重量、基础价、附加费、折扣和取整结果 | 评价完成、待判断、冲突、不可计价或未形成 |
 | 4 | `settlement-accounting` | 校验评价与费用项目、责任法人、主要范围、确认条件和结算账户的映射。包裹计费时点那一路按评价回指读回 SELL 请求，结论记在请求上（[ADR-0190](../../adr/0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 决定五、[ADR-0198](../../adr/0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md)）。BUY·供应商成本评价按回指读回 BUY 评价请求，取请求上的合格来源引用，结论不记在请求上（[ADR-0200](../../adr/0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md)） | 可采用的结算依据或待判断 |
 | 5 | `settlement-accounting` | 保存评价引用、结算采用快照、责任/范围解释和金额展开；原币与合同结算币不同时，直接采用评价内的原币金额、汇率序列版本和换算步骤作为换算依据 | 预估或暂估费用 |
@@ -187,6 +187,9 @@
 | `AT-SA-182` | BUY·供应商成本评价已完成，回指一份在册的 BUY 评价请求 | 以请求上的发生项、费用项目、供应商协议与评价形成供应商预期成本首版，版本标识由请求标识派生；同一封重投或另一封指同一份评价都不多形成（[ADR-0200](../../adr/0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md) 决定一、二） |
 | `AT-SA-183` | 回指在册请求的 BUY 评价不可计价、冲突、待判断、失败、跨币种没带换算步骤，或价卡没声明金额取整 | 不形成任何成本行，不换写金额，入账不重投；BUY 请求册不记状态。生命周期表「待判断/冲突/未受理/未形成」一行要求的缺口、冲突、失败阶段和续办入口，以及 `AT-SA-175` 保存排除依据、`AT-SA-177` 记录缺口，在本路都是例外（[ADR-0200](../../adr/0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md) 决定三与越权风险点 1、2） |
 | `AT-SA-184` | BUY 评价回指的请求不在 BUY 请求册上，派生版本上已有另一份内容，或评价已完成而形成时未受理（例如合计为零） | 不形成成本，作两侧矛盾上抛为可见的发布失败，不按不归本路静默入账（[ADR-0200](../../adr/0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md) 决定四） |
+| `AT-SA-185` | 运输履约交出一份首版发生项已形成信封，原因在 BUY 触发册上登了「发生项形成」与费用项目 | 按引用回读发生项，以发生项、它固定的供应商协议、触发册的费用项目和协议的商业范围登记恰一份 BUY 评价请求并交信封；同一封重投答已存在，不登第二份（[ADR-0208](../../adr/0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md) 决定一至四） |
+| `AT-SA-186` | 同上，但原因没登、或登了没登费用项目，或这一版是有效性修订产生的 | 不发起请求、不问协议，入账不重投；未配置点名缺哪一格，补登之后这一份不回补（[ADR-0208](../../adr/0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md) 决定三、五） |
+| `AT-SA-187` | 同上，但发生项读不回、触发册或协议范围读口读不动，或发生项上的协议在参与方与商业查无 | 前几种是未决，整笔回滚重投；协议查无是两侧矛盾，上抛为可见的发布失败，不替它挑一个范围（[ADR-0208](../../adr/0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md) 决定四、五） |
 
 ## 生产参数与待决风险
 

@@ -1,6 +1,6 @@
 # ADR-0164：BUY 评价请求的触发面是发生项形成，原因没登记就不发起
 
-Status: Accepted（2026-09-30。本项是产品策略，接受依据是 ADR-0146 决定一「机制与产品策略同属产品交付轨道，开发方现在就做」与决定二的分界检验：不看任何一个租户的合同，就能回答发生项形成时怎样决定要不要发起一次 BUY 评价请求。）
+Status: Accepted（2026-09-30。本项是产品策略，接受依据是 ADR-0146 决定一「机制与产品策略同属产品交付轨道，开发方现在就做」与决定二的分界检验：不看任何一个租户的合同，就能回答发生项形成时怎样决定要不要发起一次 BUY 评价请求。**部分停用**：决定一末句「不从运输履约登记册推导三件来源引用」已由 [ADR-0208](./0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md) 决定二在发生项已形成信封那一路停用，其余各条不变。）
 Date: 2026-09-30
 
 ## Context
@@ -42,3 +42,4 @@ Date: 2026-09-30
 - 票 `.scratch/product-strategy-boundary/issues/12-sa-amount-grammars-allocation-forms-and-accounting-connectors.md` 第 8 项
 - [ADR-0169](./0169-sell-evaluation-forms-a-customer-charge.md)：SELL 评价到客户费用
 - [ADR-0200](./0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md)：后继，按本记录发起的请求形成的 BUY 评价，按回指形成供应商预期成本
+- [ADR-0208](./0208-buy-evaluation-is-requested-from-the-charge-occurrence-formed-envelope.md)：后继，发生项已形成信封发起 BUY 评价；**其决定二部分停用本记录决定一末句「不从运输履约登记册推导三件来源引用」**，适用场景仅限那条信封路径——按引用回读的是那一份发生项自己固定的事实（含协议），不是按当前伙伴、线路或报表分组去配。本记录那条由调用方交齐三件引用的触发面照旧不读运输履约；正文保留原样不改写，此处只作前向指引
