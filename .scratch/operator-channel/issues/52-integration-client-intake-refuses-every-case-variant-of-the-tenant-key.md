@@ -1,7 +1,7 @@
 # 52 集成客户端 Intake 拒自报租户只认精确键：载荷带 `tenantid` 一类大小写变体即改写认证租户——跨租户登凭证与资金事实、探询他租户在册内容、给他租户植入毒行
 
 Category: bug
-Status: in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（操作者与集成客户端渠道逐口核代数时发现；跨租户写入，已可触发，优先；用户授权代决）；分支 `claude-oc52`
+Status: in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（操作者与集成客户端渠道逐口核代数时发现；跨租户写入，已可触发，优先；用户授权代决）；分支 `claude-oc52`
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)（票 26 评审遗留研判的逐口核）
 出处：逐口核代数研判（workflow review26-face-algebra-sweep）监管凭证登记口一行，探针与日志路径见「复现」。
@@ -73,3 +73,40 @@ Blocked by: 无
 - [ ] Go 门禁：`go build ./...`、`go vet ./...` 退出码 0，`gofmt -l .` 无输出；带 DSN 跑 `go test -p 1 -count=1 ./internal/customscompliance/... ./internal/settlementaccounting/... ./cmd/parcel-api/... ./internal/architecture/...` 全 ok。
 - [ ] 票 15 补记下追加回写行（只加行）。
 - [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：作者自验；非作者评审，两轴分开，Spec 轴含租户隔离；推送方在干净检出上带 DSN 跑全量。
+
+## 完成记录（2026-10-18，会话 idp-parcel-9b 的实施子代理，分支 claude-oc52）
+
+基线 `c783151b`。四笔：`1e946778` 红（Intake 单测与真库回归）→ `2b8a5883` CC、SA 修复与译装单测 → `6ee6d48b` VE 操作者在线口拒自报改同折叠 → `782d8add` 机制清点重生成。
+
+落点：
+- 两份 `snapshotWithAuthenticatedTenant` 删去；CC、SA 的 `IntegrationClientIntake` 改用 `readSinglePayload` 收原文（单个 JSON 对象、无尾随），交给在线译装。
+- CC `registrationjson` 加 `RegulatoryCredentialFromJSONForTenant`（走 `injectedTenant`）；SA `registrationjson` 加 `ExternalFundsFactFromJSONForTenant`、`ExternalFundsFactCorrectionFromJSONForTenant`。在线口解不含租户格的内容类型（`regulatoryCredentialContent`、`externalFundsFactContent`、`externalFundsFactCorrectionContent`），受控批量口的文档类型嵌同一份内容类型，形状仍一份口径。
+- 拒自报保留专门提示 `ErrSelfReportedTenant`（SA 新立），判定改 `strings.EqualFold(key, "tenantId")`。CC 操作者在线登记各口共用这一道，随之收紧。
+- 「不做」一节的 CC、VE 操作者在线口：会话指派「代价小则一并改」。CC 随上一条收紧；VE 的 `refuseSelfReportedTenant` 同样改了（越出地盘，单独一笔 `6ee6d48b`）。红时实测：VE 例外披露规则口带 `TenantId` 键整份照登，租户仍是注入那一个。
+
+完成判据逐格：
+- ✅ 译装单测：CC `TestOnlineRegulatoryCredentialTranslationRefusesEveryLetterCaseOfTheTenantKey`、`TestOnlineRegulatoryCredentialTranslationTakesTheInjectedTenant`，另有 `TestOnlineTranslationRefusesEveryLetterCaseOfTheTenantKeyOnOperatorFaces`；SA `online_tenant_test.go` 的 `TestOnlineFundsTranslationRefusesEveryLetterCaseOfTheTenantKey`、`TestOnlineFundsTranslationTakesTheInjectedTenant`。六个变体都答 `ErrSelfReportedTenant`；`tenantİd` 按未知字段拒。
+- ✅ Intake 单测：CC `TestIntegrationClientIntakeRefusesEveryLetterCaseOfASelfReportedTenantOnCredentials`，SA `TestIntegrationClientIntakeRefusesEveryLetterCaseOfASelfReportedTenantOnFundsFacts`（采用、更正两口），六个变体都答 `ErrMalformedRequest`。不带租户键时取认证租户，由原有的 `…UnderTheAuthenticatedTenant` 证。
+- ✅ 真渠道真库回归：`cmd/parcel-api/assemble_integration_client_tenant_key_test.go`。链路是 `buildIntegrationClientMinter` → `buildAdmissionScope`（真库对照与区间）→ `buildIntegrationClientIntakes` → 生产编排（`buildCustomsRegistrationOrchestration`、`buildSettlementRegistrationOrchestration` 配 `intakes.settlement`）。断言：
+  - 六个变体都答 400 `MALFORMED_REQUEST`，两个租户的册上都是零行；
+  - 他租户在册凭证，猜中与猜错额度都答 400，册上仍只有他租户那一行；
+  - SA 更正各变体答 400，对照事实仍是一版；
+  - 不带租户键的对照登记答 201，落在认证租户。
+- ✅ 变异自检：
+  - Intake 改回快照往返（取 `1e946778` 的两份 Intake）：CC、SA 的 Intake 单测与两条真库回归转红。
+  - 拒自报改回精确键：只有三条译装单测转红，Intake 与真库仍绿——不含租户格的严格解码是真正的门，前置判定只管提示。
+- ✅ Go 门禁：`gofmt -l` 无输出，`go build ./...`、`go vet ./...` 退 0。带 DSN 跑 `go test -p 1 -count=1`，包含 `./internal/customscompliance/... ./internal/settlementaccounting/... ./internal/visibilityexception/adapters/... ./cmd/parcel-api/... ./cmd/parcel-customs-register/... ./cmd/parcel-settlement-register/... ./cmd/parcel-ve-register/... ./internal/architecture/...`，结果 38 个包 ok、0 FAIL。未跑全仓全量。
+- ⬜ 票 15 补记回写行：未加。票 15 补记记的是操作者决定面的重放代数，集成客户端口不在其中；票 34、36 的同类行都附进 main 的 SHA，本票还没进 main。这一格是否适用、何时写，留给会话或合入方定。
+- ⬜ Go 那条路：作者自验已做。非作者评审与推送方全量未做。
+
+先红后绿证据（S）：
+- 红：`1e946778` 上真库回归，`tenantid`、`tenantiD` 把凭证登进 SYN-TENANT-OTHER，SA 资金事实也一样（SA 落库首次实测）；`TenantId`、`tenantID`、`TENANTID` 答 201，落在认证租户；探询答 200。日志 /tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/oc52-red-realdb.log
+- 绿：/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/oc52-green-realdb.log
+- 变异：/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/oc52-mut/mutation-snapshot.log、/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/oc52-mut/mutation-exactkey.log
+- 门：/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/oc52-gate.log
+
+证据层级：S（隔离合成，SYN- 值，演示租户与 SYN-TENANT-OTHER）。
+
+顺带看到，未动：`internal/networkrouting/adapters/registrationjson` 的拒自报只认 `tenant_id` 精确键，`internal/parcelpricing/domain/registered_price_card.go` 只认 `tenant` 精确键。是否走注入、会不会越租户，都没核。
+
+评审：待会话读 diff 审。
