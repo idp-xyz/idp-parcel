@@ -57,13 +57,16 @@ func NewDisposeShipmentRequestEndpoint(
 }
 
 // authorizedDispositionResponse 是本端点的封闭响应形状。`已记录`带去向与之后的委托状态；撞上既有
-// 处置时带先到那一份的去向；`任务已完结`带既有决定视图——处置人要知道输给了什么；`版本已换代`带
+// 处置时带先到那一份的去向；`任务已完结`带既有决定视图——处置人要知道输给了什么，决定带主动拒绝留痕
+// （处置`拒绝`形成的决定也带）时再带实际决定方与结构化原因，回显与主动拒绝口同一份；`版本已换代`带
 // 当前版本供重读队列；处置成立而随附释放未确定完成时带补偿续办引用。
 type authorizedDispositionResponse struct {
 	Outcome               string `json:"outcome"`
 	RequestState          string `json:"requestState,omitempty"`
 	DispositionChoice     string `json:"dispositionChoice,omitempty"`
 	DecisionKind          string `json:"decisionKind,omitempty"`
+	Decider               string `json:"decider,omitempty"`
+	RejectionReason       string `json:"rejectionReason,omitempty"`
 	CurrentVersion        string `json:"currentVersion,omitempty"`
 	CompensationReference string `json:"compensationReference,omitempty"`
 }
@@ -86,11 +89,7 @@ func writeAuthorizedDispositionOutcome(
 		body.DispositionChoice = disposition.Choice().String()
 	}
 	if decision, present := result.AcceptanceDecision(); present {
-		if decision.Accepted() {
-			body.DecisionKind = "ACCEPTED"
-		} else {
-			body.DecisionKind = "REJECTED"
-		}
+		body.DecisionKind, body.Decider, body.RejectionReason = decisionEcho(decision)
 	}
 	if version := result.CurrentVersion().String(); version != "" {
 		body.CurrentVersion = version

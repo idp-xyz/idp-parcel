@@ -13,6 +13,7 @@ import (
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	pssettlement "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/settlementaccounting"
 	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
+	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	saapplication "go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
 )
@@ -58,6 +59,15 @@ func (disposition transactionalDisposition) Handle(
 // （账户）照主动拒绝那一路留 nil：真有占用要释放时适配器报装配缺口 `CONTROL_SCOPE_NOT_ASSEMBLED`、
 // 编排留补偿续办，不凭空认领别人的钱。
 func buildDispositionOrchestration(db *bentopg.DB) (shipmenthttp.AuthorizedDispositionHandler, error) {
+	return dispositionOrchestrationWith(db, psparty.UnconfiguredAuthorizedDispositionAuthorizer{})
+}
+
+// dispositionOrchestrationWith 是 buildDispositionOrchestration 的全部实现，处置授权器作入参：PC 那一格立起之前
+// 真授权册登记不出处置授权，装配测试要证已授权之后那一段，只能从这一格递进合成授权器。生产入口只传未配置授权器。
+func dispositionOrchestrationWith(
+	db *bentopg.DB,
+	authorizer psports.AuthorizedDispositionAuthorizer,
+) (shipmenthttp.AuthorizedDispositionHandler, error) {
 	requests, err := pspostgres.NewShipmentRequests(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: shipment requests: %w", err)
@@ -82,12 +92,12 @@ func buildDispositionOrchestration(db *bentopg.DB) (shipmenthttp.AuthorizedDispo
 
 	release := pssettlement.NewPreAcceptanceControlAdapter(pssettlement.PreAcceptanceControlAdapterDeps{
 		Release: saapplication.NewReleasePreAcceptanceControlHandler(freezes, exposures, clock),
-		// Apply 留空：处置只消费释放半边；Scopes 留空：实例半边，见函数注释。
+		// Apply 留空：处置只消费释放半边；Scopes 留空：实例半边，见 buildDispositionOrchestration 的注释。
 	})
 
 	handler := shipmentapp.NewDisposeShipmentRequestHandler(shipmentapp.DisposeShipmentRequestDeps{
 		Requests:   requests,
-		Authorizer: psparty.UnconfiguredAuthorizedDispositionAuthorizer{},
+		Authorizer: authorizer,
 		Judgments:  judgments,
 		Release:    release,
 		Identities: identities,
