@@ -1,7 +1,7 @@
 # 09 派送发起的确定性任务引用不是忠实身份：键可被手工建任务口占用、拼接不单射，对象首拍就答「已形成」而它并没有派送任务
 
 Category: bug
-Status: ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 代决（见「裁定」）；排在 tf-face-algebra/10 进 main 之后（同碰手工建任务口）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（tf-face-algebra/10 已进 main），分支 `claude-tfa09`。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 代决（见「裁定」）；排在 tf-face-algebra/10 进 main 之后（同碰手工建任务口）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment-delivery-dispatch-triggers, /transport-fulfillment-dispatch-task-registrations
