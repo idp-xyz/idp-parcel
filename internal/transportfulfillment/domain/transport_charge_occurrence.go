@@ -615,6 +615,8 @@ func CancellationOccurrenceGrounds(
 	if !cancelled {
 		return OccurrenceBasisReference{}, OccurrenceScopeReference{}, time.Time{}, ErrBookingNotCancelled
 	}
+	// 已取消而还没定局，照订舱费一样答未定局、不答未被接受：取消不封答复口（答复只核不早于申请），承运方在取消之前作出、
+	// 取消之后才送达的接受仍会落册，那时取消停的就是一份已成约的舱位。等来的若是取消之后才作出的接受，下一格照样不形成。
 	if err := acceptedBooking(fact); err != nil {
 		return OccurrenceBasisReference{}, OccurrenceScopeReference{}, time.Time{}, err
 	}

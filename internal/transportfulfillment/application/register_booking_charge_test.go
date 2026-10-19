@@ -334,7 +334,8 @@ func TestACancellationOfAnUnstartedBookingRegistersBesideTheBookingOccurrence(t 
 
 // Covers: AT-TF-209——取消发生项只认尚未开始范围的取消，按业务时间判，与 ADR-0204 决定三同一边界：订舱没取消；取消那一刻还
 // 没接受（接受晚于取消）；委托下的运输已经开始、这次订舱在开始之前提出、取消不早于开始（同一刻算开始在先），都答未受理。
-// 开始之后才为剩余范围提出的订舱、或取消早于开始，照常形成。
+// 开始之后才为剩余范围提出的订舱、或取消早于开始，照常形成。已取消而还没定局（没有答复或只有候补）答未定局，不答未被接受：
+// 取消不封答复口，取消之前作出、之后送达的接受仍会落册。
 func TestACancellationOccurrenceOnlyStopsAnUnstartedScopeByBusinessTime(t *testing.T) {
 	startedAfterCancel := bkCancelledAt.Add(time.Hour)
 	startedBeforeCancel := bkCancelledAt.Add(-30 * time.Minute)
@@ -363,6 +364,19 @@ func TestACancellationOccurrenceOnlyStopsAnUnstartedScopeByBusinessTime(t *testi
 			}
 			if result.Outcome() != application.ChargeOccurrenceInputNotAccepted || result.Detail() != testCase.detail {
 				t.Fatalf("outcome/detail = %q/%q, want INPUT_NOT_ACCEPTED/%q", result.Outcome(), result.Detail(), testCase.detail)
+			}
+			assertNothingWritten(t, rig)
+		})
+	}
+
+	cancelled := trunkBooking(t, bkRequestedAt, bkCancelledAt)
+	waitlisted := trunkAnswer(t, cancelled, domain.BookingWaitlisted, bkAcceptedAt)
+	for name, answer := range map[string]*ports.BookingAnswerRecord{"已取消、没有答复": nil, "已取消、只有候补": &waitlisted} {
+		t.Run(name, func(t *testing.T) {
+			rig := bookingRig(t, trunkCommission(t, commissionShape{}), cancelled, answer)
+			result := rig.register(t, bookingCommand(t, domain.CancellationOccurrence))
+			if result.Outcome() != application.ChargeOccurrenceInputNotAccepted || result.Detail() != application.BookingNotAnswered {
+				t.Fatalf("outcome/detail = %q/%q, want INPUT_NOT_ACCEPTED/%q", result.Outcome(), result.Detail(), application.BookingNotAnswered)
 			}
 			assertNothingWritten(t, rig)
 		})
@@ -498,8 +512,8 @@ func TestACommissionsAgreementIsCheckedAtBusinessTimeAndByItsDeclaredConditions(
 }
 
 // Covers: AT-TF-213——委托没记下协议对象与版本（迁移 TF 0038 之前提交的）：服务方仍取委托的，协议要登记方给出，缺了答缺
-// 采购上下文；给出而核回的快照不是委托上那一份，答冲突回显委托；是同一份照常登记。委托记着那一版时，核回的快照不是委托上
-// 那一份是两边数据走岔了，上抛。
+// 采购上下文；给出而核回的快照不是委托上那一份、或那一版不在册、或约定的供应商不是委托的服务方，都答冲突回显委托；未生效
+// 照协议否定格答；是同一份照常登记。委托记着那一版时，核回别的快照、不在册或供应商不符都是两边数据走岔了，上抛。
 func TestALegacyCommissionNeedsTheRegistrantToNameItsAgreement(t *testing.T) {
 	booking := trunkBooking(t, bkRequestedAt, time.Time{})
 	answer := trunkAnswer(t, booking, domain.BookingAccepted, bkAcceptedAt)
@@ -523,6 +537,42 @@ func TestALegacyCommissionNeedsTheRegistrantToNameItsAgreement(t *testing.T) {
 		t.Fatalf("另一版 outcome/detail = %q/%q", result.Outcome(), result.Detail())
 	}
 	assertNothingWritten(t, otherVersion)
+
+	for standing, want := range map[ports.SupplierAgreementStanding]application.ChargeOccurrenceOutcome{
+		ports.SupplierAgreementNotRegistered:    application.ChargeOccurrenceConflict,
+		ports.SupplierAgreementProviderMismatch: application.ChargeOccurrenceConflict,
+		ports.SupplierAgreementNotEffective:     application.ChargeOccurrenceAgreementNotEffective,
+	} {
+		t.Run("报的那一版答 "+standing.String(), func(t *testing.T) {
+			rig := bookingRig(t, legacy, booking, &answer)
+			rig.agreements.check = ports.SupplierAgreementCheck{Standing: standing}
+			result := rig.register(t, named)
+			if result.Outcome() != want {
+				t.Fatalf("outcome = %q, want %q", result.Outcome(), want)
+			}
+			if want == application.ChargeOccurrenceConflict {
+				if result.Detail() != application.ProcurementContextConflict {
+					t.Fatalf("detail = %q", result.Detail())
+				}
+				if echoed, ok := result.Commission(); !ok || echoed.Key != legacy.Key {
+					t.Fatalf("冲突没回显委托：%+v/%v", echoed.Key, ok)
+				}
+			}
+			assertNothingWritten(t, rig)
+		})
+	}
+
+	for _, standing := range []ports.SupplierAgreementStanding{
+		ports.SupplierAgreementNotRegistered, ports.SupplierAgreementProviderMismatch,
+	} {
+		rig := acceptedBookingRig(t)
+		rig.agreements.check = ports.SupplierAgreementCheck{Standing: standing}
+		if _, err := rig.handler().Register(t.Context(), bookingCommand(t, domain.BookingOccurrence)); err == nil ||
+			!strings.Contains(err.Error(), standing.String()) {
+			t.Fatalf("委托记着的那一版答 %s err = %v，want 上抛", standing, err)
+		}
+		assertNothingWritten(t, rig)
+	}
 
 	drifted := acceptedBookingRig(t)
 	drifted.agreements.check.Snapshot = occurrenceValue(t, domain.NewAgreementSnapshotReference, trunkAgreement+"/v9")

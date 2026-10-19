@@ -397,6 +397,21 @@ func (handler *RegisterChargeOccurrenceHandler) Register(
 	if err != nil {
 		return chargeUndecided(ChargeSupplierAgreementUnavailable, continuation), nil
 	}
+	if fact.hasCommission && (check.Standing == ports.SupplierAgreementNotRegistered ||
+		check.Standing == ports.SupplierAgreementProviderMismatch) {
+		// 委托提交时核过它那一版在册、约定的供应商就是委托的服务方（CommissionTransportHandler.SubmitCommission），版本一经
+		// 发布不可变，所以这两格不会是委托那一版的如实答案。委托记着那一版时，是两边数据走岔了，同下面的快照走岔一样上抛；
+		// 委托没记下时问的是登记方报的那一版，这两格说明他报的不是委托采用的那一版，同快照不同一样答冲突、摆出委托——照协议
+		// 否定格答「不在册」会叫他去 PC 发布，答「供应商不符」更说不通，服务方是从委托取的，他没报。未生效、已终止可能就是
+		// 委托那一版在业务时间的如实答案，照常答。
+		commission := fact.commission.Commission
+		if _, recorded := commission.AgreementVersion(); recorded {
+			return RegisterChargeOccurrenceResult{}, fmt.Errorf(
+				"register charge occurrence: the agreement check answered %s for %s/%s, which commission %s was submitted under",
+				check.Standing, agreement.Object(), agreement.Version(), commission.Commission())
+		}
+		return procurementConflict(fact.commission), nil
+	}
 	switch check.Standing {
 	case ports.SupplierAgreementRegistered:
 	case ports.SupplierAgreementNotRegistered:
@@ -654,6 +669,10 @@ var ErrAdoptionWithoutCommission = errors.New("transport fulfillment: segment ad
 
 // commissionAdoptedBy 按段读采用连线，有就读那份委托（ADR-0204 决定二末条）。没有连线答 adopted=false：没有连线的段不读作
 // 自营也不读作外包（ADR-0204 决定四），采购上下文照旧由登记方给。
+//
+// 读连线不加锁，以登记这一刻读到的为准：采用不看发生项登记了没有，早于或晚于登记都合法，采用晚到时已形成的项不回头
+// 重判，与并发时读到「没有连线」是同一种情形，锁住也只是把并发改成先后。两边可能就此不一致——发生项按登记方报的上下文、
+// 段随即挂上委托——去处同委托开始前移后的取消项，是发生项修订入口（ADR-0207 文末补记越权风险点）。
 func (handler *RegisterChargeOccurrenceHandler) commissionAdoptedBy(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -722,7 +741,7 @@ func chargeOccurrenceSpecFrom(
 // procurementOf 定这一次登记问协议的服务方与那一版协议。missing 为真答未受理「缺采购上下文」，err 非空答坏请求。
 //
 // 事实带着委托时，服务方取委托的，协议取委托提交时记下的那一版；委托没记下（迁移 0038 之前提交的）就要登记方给出协议
-// 对象与版本，核过之后按快照与委托比（Register 里那一步）。服务方与协议不从快照串里拆：快照是 PC 一处拼出的指称
+// 对象与版本，核过之后在 Register 里与委托比（答不在册、供应商不符或快照不同都是报的不是委托那一版）。服务方与协议不从快照串里拆：快照是 PC 一处拼出的指称
 // （domain.SupplierAgreementVersion 头注）。与委托不一致的报值在此之前已答冲突，走到这里给了的都与委托相同。
 //
 // 事实不带委托时三格都由登记方给，缺一格答缺采购上下文（ADR-0207 决定二）。
