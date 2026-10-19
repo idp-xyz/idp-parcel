@@ -1,7 +1,7 @@
 # 48 cmd/parcel-api 测试与注释照实写：隔离形态残名改名、去变更说明、序号引用改引文
 
 Category: chore
-Status: in-progress——2026-10-19 作者子代理完工，待评审（见文末「完成记录」）。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 续做并扩范围（见「裁定补」）：分支 `claude-oc48` 上的四笔先 rebase 到最新 main 并核一遍。此前 ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-oc48`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-oc48`）上留有4 笔（隔离形态残名、Covers、作业事实装配表、isolatedWriteAdmission 头注），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 4、序 6、序 2 评审遗留；用户授权代决）；分支 `claude-oc48`
+Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审（见文末「完成记录」）。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 续做并扩范围（见「裁定补」）：分支 `claude-oc48` 上的四笔先 rebase 到最新 main 并核一遍。此前 ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-oc48`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-oc48`）上留有4 笔（隔离形态残名、Covers、作业事实装配表、isolatedWriteAdmission 头注），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 4、序 6、序 2 评审遗留；用户授权代决）；分支 `claude-oc48`
 Blocked by: 无
 父票：[26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)（票 26 评审遗留的后续）
 出处：票 [15](./15-operation-decision-faces-take-operator-intake.md) Comments「钉 `60244fa6`」那条评审 Standards 非阻断 1–3（cmd 部分）；票 [23](./23-node-operations-isolated-command-intake-retires.md) Comments 评审 Standards 非阻断 3；票 [25](./25-node-reception-carries-parcel-shipment-service-result-markers.md) Comments 评审 Standards 非阻断 2 的同类横扫。
@@ -285,3 +285,14 @@ Go 注释与测试头注，用序号去指别处的条目。常见两种：
 - 总判据「改动包及反向依赖」：只跑了上面那组；反向依赖没有单独跑（本票只改注释，编译产物不变），留推送方全量。
 - 三节里列为「本轮没动、留待另议」的两类：UC-PC-003「第四项」两处、裸编号标签 343 行（另圈码 40 行）。
 - 横扫中看到但不属本类、没动的：`main.go` 结算编排入口「七个构造」（数的是紧接其下同一处的构造，本地计数）；`unconfigured_source_data_amendment_test.go`「已随票 02 余段接真退场」是变更说明；`accessidentity` 测试里还有几处不带序号的「票面完成判据「…」」没补命名空间。
+
+## Comments
+
+### 评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审；2026-10-19，钉 `ed3200c9`）
+
+两轴合审，0 阻断。
+
+- **Spec**：原票三节逐格落到或注明由票 35 达成；「裁定补」的全仓序号引用横扫两笔（cmd、internal）用脚本核过：所有改动行都是 `//` 注释，引文逐字取自所点名的票面。动到行为的只有作业事实装配用例的表（改名并补上装载分配、终止参与两口），是原票二节的要求。
+- **Standards**：没写命名空间的「票 04」一类都补全了；同段里顺带的计数说法一并改掉。
+- **作者代决认可**：`endpoints.go` 两行注释照「裁定补」的全仓范围改了。推送方已就此更正先前对另一会话说的「48 不碰 endpoints.go」。
+- **留待另议，不立票**：不带「第…条」的裸编号标签（「判据 3」「裁定 2」一类）与圈码，存量较多、跨多个上下文与在途会话。照 AGENTS.md「改文档」，这一类结构上守不了、只能靠不写，新写的由各票评审拦；存量在各文件下次被改时顺手改，不另起横扫。
