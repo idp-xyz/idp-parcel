@@ -1,7 +1,7 @@
 # 05 第三期：身份核对读不动翻成`待识别实物已建立` + 身份核对态「未核对」——ADR-0186 决定二（草案 C1-T1）身份支的 5xx 由本票翻转
 
 Category: enhancement
-Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（04 已进 main），分支 `claude-nrs05`；与 no-reception-identity/06 并行，后者先进 main 时本分支 rebase。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）；Blocked by 里原挂的用户决定已于 2026-10-19 由会话 idp-parcel-9b 代决
+Status: resolved——2026-10-19 进 main（代码验证钉 `e2c6f836`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（04 已进 main），分支 `claude-nrs05`；与 no-reception-identity/06 并行，后者先进 main 时本分支 rebase。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）；Blocked by 里原挂的用户决定已于 2026-10-19 由会话 idp-parcel-9b 代决
 Blocked by:
 - 04 进 main（前提「挡住同一作业实物重复形成控制起点」）；02、03 经它已在 main。
 - ~~用户决定~~ 已解：未核对行由什么续上，2026-10-19 会话 idp-parcel-9b 代决取「落未核对行的同一笔事务自投重核门铃」，见 ADR-0199 决定三与越权风险点「未核对行由自投门铃续上」。
@@ -65,7 +65,7 @@ ADR-0199 决定五列的前提，缺一个都不翻：
 - [x] ADR-0186 文末复核记录已追加、adr/README 0186 一行已加部分停用注；`git diff` 对 ADR-0186 只有追加行。
 - [x] admin-web 三道门退 0（口径见 [workflow 本机环境](../../../docs/agents/workflow.md#本机环境)）。
 - [x] Go 门禁：`go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出；带 DSN 跑 `internal/nodeoperations/...`、`cmd/parcel-api`、`cmd/parcel-dispatch`、`cmd/parcel-frontline-import`、`internal/architecture/...`、`migrations/...` 全绿；机制清点在本笔的干净检出上重生成。
-- [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
+- [x] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
 
 ## 完成记录（2026-10-19，会话 idp-parcel-9b 的作者子代理，分支 `claude-nrs05`）
 
@@ -157,3 +157,8 @@ ADR-0186 名下改钉的用例：`TestDependencyFailuresFormNoAnswer` 去掉身�
 - **作者偏离票面一处，认可**：首答 200 而非票面写的 201——待识别今天就答 200，ADR-0199 决定五说未核对与已核对的待识别对设备是同一种处置，状态码不随核对态分叉。
 - **Standards**：注释写为什么；新件另起文件，共享文件只追加。
 - **评审修补（已做）**：UC-NO-002 `AT-NO-051` 一行末尾「翻转前提齐备之前，照 ADR-0186 不形成答案」随本票落地已过时，改为指 ADR-0199 决定五。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-nrs05`（作者开工时已 rebase 到 no-reception-identity/06 之上）加评审修补一笔，直接叠在远端 main 之上快进推送；机制清点重生成零差。
+- 推送方全量一次：钉 `e2c6f836` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 147 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
