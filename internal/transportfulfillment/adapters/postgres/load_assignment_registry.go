@@ -162,7 +162,7 @@ func (repository *LoadAssignments) FindChainHead(
 // Save 登记一个版本连同它的对象范围。撞键答`已登记`（ADR-0031），编排据此读回原版本或链头。
 //
 // 撞键只看版本那一行：成员挂在它下面，版本行没落就一个成员也不写。版本行撞的可以是主键（同一版本已在册），
-// 也可以是 0021 的首版唯一索引（同一分配已有首版）；ON CONFLICT 不写冲突目标，两道都折成同一格。
+// 也可以是 0021 的首版唯一索引（同一分配已有首版）；ON CONFLICT 不写冲突目标，撞哪道唯一都折成这一格，编排先按本次键读、读不回再按分配读链头。
 func (repository *LoadAssignments) Save(
 	ctx context.Context,
 	record ports.LoadAssignmentRecord,

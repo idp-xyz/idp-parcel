@@ -260,6 +260,11 @@ func TestALosingConcurrentFirstVersionAnswersAlreadyFormedWithTheWinner(t *testi
 
 	winner := chainFaceRoot(t, assignment, "vA")
 	held, release, committed := make(chan struct{}), make(chan struct{}), make(chan error, 1)
+	// 放行登记进清理：放行之前任何一处 Fatal，赢家都会一直占着连接，连接池清理挂到 go test 超时，报不出干净的红。
+	// 后登记的清理先跑，排在连接池关闭之前。
+	var releaseOnce sync.Once
+	releaseWinner := func() { releaseOnce.Do(func() { close(release) }) }
+	t.Cleanup(releaseWinner)
 	go func() {
 		committed <- fixture.db.Transactor().WithinTransaction(context.Background(), func(txCtx context.Context) error {
 			saved, saveErr := fixture.repository.Save(txCtx, winner)
@@ -306,7 +311,7 @@ func TestALosingConcurrentFirstVersionAnswersAlreadyFormedWithTheWinner(t *testi
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	close(release)
+	releaseWinner()
 	if err := <-committed; err != nil {
 		t.Fatalf("赢家提交：%v", err)
 	}
