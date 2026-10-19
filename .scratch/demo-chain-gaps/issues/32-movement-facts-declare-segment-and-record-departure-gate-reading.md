@@ -106,12 +106,13 @@ L
 - `IDP_PARCEL_POSTGRES_DSN=… go test -p 1 -count=1` 全绿：`./internal/architecture/`（接线棘轮、类型可达、前缀、事务闭包、边界）、`./internal/transportfulfillment/...`、`./internal/customscompliance/...`、`./cmd/parcel-api/`、`./migrations/`、`./scripts/demo-seeds/...`。
 - 演示种子未改，没有重灌；演示判据由生产装配上的真库用例取证（只记 `S`），没有起进程按演示脚本重走。
 - 未跑全量，未重生成机制清点。
+- 续做复核（作者被用量上限中断后接手，工作树干净、五笔提交齐全，未另改代码）：于 `78d8c216` 重跑 `go build ./...`、`go vet`、`gofmt -l` 与上列 `./internal/architecture/`、`./internal/transportfulfillment/...`、`./internal/customscompliance/...`、`./cmd/parcel-api/`、`./migrations/`，全绿。
 
 ### 偏离与待裁
 
 - **地盘外的改动**：`assemble_customs_admission.go` 一句头注（票 31 的文件，「今天只有装配测试在用」随本票过时）；GLOSSARY 一条；演示脚本一条补记；AT 覆盖盘点。没碰 `work_fact_intake*.go`、`assemble_operator_decisions.go`、`main.go`、`endpoints.go`。
 - **号**：迁移 TF `0026` 照票面；`AT-TF-105`–`111` 若与同波票 23、27 撞号，进 main 时随 UC-TF-005 与盘点一并改号。
-- **合并预检**：对 `origin/main`（`8e1307d6`）`git merge-tree` 只有 `.scratch/at-coverage-inventory.md` 一处冲突（计数表与追记，与 no-reception-source/03、/04 的追记九、十并行），按惯例两边都留、计数重算。`docs/adr/README.md` 自动合入。
+- **合并预检**：对 `origin/main`（`8e1307d6`）`git merge-tree` 只有 `.scratch/at-coverage-inventory.md` 一处冲突（计数表与追记，与 no-reception-source/03、/04 的追记九、十并行），按惯例两边都留、计数重算。`docs/adr/README.md` 自动合入。对 `1167b4d9` 重做一次，结果相同。
 - **发现但没改**：`docs/adr/README.md` 在 main 上有两行 ADR-0206（前一行是评审前的措辞），属票 31 合批的遗留，热点文件只追加，留给协调方删旧行。
 - **文档令牌**：方案的文档令牌次序是 16 → 23 → 20 → 25 → 32 → 27，本票先于 23、20、25 完成；TF CONTEXT 与 UC-TF-005 都是追加段落与表行，进 main 时按令牌 rebase。
 - **后续**（方案「等 peer 的」与票 33）：
