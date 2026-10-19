@@ -367,17 +367,18 @@ type recheckAuthenticatorFake struct {
 	asked *[]nodeopshttp.OperatorDecision
 }
 
-func (fake recheckAuthenticatorFake) AuthenticateOperatorDecision(_ context.Context, token string, decision nodeopshttp.OperatorDecision) (domain.TenantID, error) {
+func (fake recheckAuthenticatorFake) AuthenticateOperatorDecision(_ context.Context, token string, decision nodeopshttp.OperatorDecision) (nodeopshttp.OperatorIdentity, error) {
 	if fake.asked != nil {
 		*fake.asked = append(*fake.asked, decision)
 	}
 	if token == "" {
-		return domain.TenantID{}, nodeopshttp.ErrOperatorCredentialRejected
+		return nodeopshttp.OperatorIdentity{}, nodeopshttp.ErrOperatorCredentialRejected
 	}
 	if fake.err != nil {
-		return domain.TenantID{}, fake.err
+		return nodeopshttp.OperatorIdentity{}, fake.err
 	}
-	return domain.NewTenantID(recheckTenant)
+	tenant, err := domain.NewTenantID(recheckTenant)
+	return nodeopshttp.OperatorIdentity{Tenant: tenant, Operator: "https://id.syn.example/dex#SYN-OPERATOR-NRS03"}, err
 }
 
 type bodyProbe struct {

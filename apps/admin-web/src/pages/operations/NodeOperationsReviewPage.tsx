@@ -20,6 +20,7 @@ import {
   unidentifiedRowOf,
   type RecheckAvailability,
 } from './identity-recheck';
+import { IdentityDispositionPanel } from './IdentityDispositionPanel';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['node-operations-review'];
@@ -27,9 +28,10 @@ const info = moduleInfoById['node-operations-review'];
 /**
  * 节点作业的治理查阅面。五区栏目取 node-operations CONTEXT.md 原词。实时现场作业
  * （扫描/点验/装卸）属一线作业端（ADR-0021），本页只查阅已发生的作业事实，不下发
- * 任务、不录事实、不确认身份。唯一的写动作是待识别实物区的「重核」（POST
- * /node-operations/identity-rechecks，ADR-0199 决定三）：运营决定，叫服务端按存下的号
- * 再问 parcel-shipment 一次，身份照旧由那边答。
+ * 任务、不录事实、不确认身份。写动作只在待识别实物区，两样都是运营决定：「重核」（POST
+ * /node-operations/identity-rechecks，ADR-0199 决定三）叫服务端按存下的号再问 parcel-shipment 一次，身份照旧由那边答；
+ * 「处置」（POST /node-operations/identity-dispositions，UC-NO-004）在一件判身份冲突的实物的处置候选里指定一件或确认都不是，
+ * 候选都出自 parcel-shipment 的身份核对答复，不改正式包裹身份。
  *
  * 三区接真（GET /node-operations-records，票 admin-skeleton-closure-batch/05）：
  * 节点收寄、集运单元、待识别实物。实际测量与节点侧交接证据两区在存储上还没有
@@ -168,10 +170,13 @@ const sections: ReviewSection[] = [
     id: 'unidentified-items',
     word: '待识别实物',
     registry: 'unidentified-item',
-    // 待识别实物与实物身份候选、冲突是本上下文拥有的对象(CONTEXT)。本区无任何
-    // 「确认身份/选一个为准」动作——身份确认由 parcel-shipment 以版本化关联形成,
-    // 「正式包裹关联」一列只放登记时已有的关联引用;识别成功不回写本行(行是永久作业
-    // 记录),缺席说的是「登记那一刻还没有」。
+    // 待识别实物与实物身份候选、冲突是本上下文拥有的对象(CONTEXT)。正式包裹及其身份由
+    // parcel-shipment 给出,「正式包裹关联」一列只放登记时已有的关联引用;识别成功不回写本行
+    // (行是永久作业记录),缺席说的是「登记那一刻还没有」。
+    //
+    // 本区下方按实物列的那一块有「处置」(UC-NO-004):只在一件判身份冲突的实物的处置候选里
+    // 指定一件或确认都不是——候选都出自 parcel-shipment 的身份核对答复,页面不收候选之外的
+    // 包裹;它定的是实物与哪一件包裹关联(ADR-0210 越权风险点 2),不创建或替换正式包裹身份。
     //
     // 「重核」也不确认身份:它只叫服务端拿来源里存下的号再问一次 parcel-shipment
     // (ADR-0199 决定三),结果唯一才追加一版关联收寄,原行照留。外部标识观察一列是重核
@@ -313,7 +318,7 @@ export function NodeOperationsReviewPage() {
     <div className="flex-1 flex flex-col overflow-hidden bg-idpxyz-editor">
       <ListPageTemplate<ReviewRow>
         title={info.title}
-        description={`${info.owner} · 实时现场作业属一线作业端（ADR-0021），本页为治理查阅面，只读已发生的作业事实；待识别实物可指名重核（按存下的号再问 parcel-shipment）。`}
+        description={`${info.owner} · 实时现场作业属一线作业端（ADR-0021），本页为治理查阅面，只读已发生的作业事实；待识别实物可指名重核（按存下的号再问 parcel-shipment），判身份冲突的实物可处置（在候选里指定一件或确认都不是）。`}
         search={{
           value: keyword,
           onChange: setKeyword,
@@ -344,6 +349,9 @@ export function NodeOperationsReviewPage() {
       />
       {section.id === 'unidentified-items' && recheck?.kind === 'answered' ? (
         <RecheckAnswerNote judgmentVersion={recheck.judgmentVersion} answer={recheck.answer} />
+      ) : null}
+      {section.id === 'unidentified-items' && body?.outcome === 'UNIDENTIFIED_ITEMS_LISTED' ? (
+        <IdentityDispositionPanel units={body.units ?? []} onLanded={retry} />
       ) : null}
     </div>
   );

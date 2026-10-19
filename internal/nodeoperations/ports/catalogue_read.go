@@ -85,6 +85,30 @@ type UnidentifiedItemCatalogueRow struct {
 	SucceededBy      string
 }
 
+// IdentityReviewUnitRow 是待识别实物页按实物列的一行（ADR-0210 决定八末项、越权风险点 8）：一件有过待识别那一格的作业实物，连同
+// 它各条判断链此刻的当前有效版本。身份冲突处置逐链追加、可能写到操作者没看过的链上，复核页因此要把一件实物的各链列在一起；处置
+// 命令要指名的「所处置的版本」与处置候选也都从这几版来。
+type IdentityReviewUnitRow struct {
+	Unit  string
+	Heads []IdentityReviewHead
+}
+
+// IdentityReviewHead 是一条判断链的当前有效版本：Kind 是收寄判断的封闭词（INTAKE_FORMED / PENDING_IDENTIFICATION），候选、冲突
+// 标记与关联照行转写。Disposition 只在这一版是身份冲突处置版时在场，经领域读回门重建——一份坏文档要让整页答不出，而不是悄悄
+// 显示成「没处置过」。
+type IdentityReviewHead struct {
+	SourceID         string
+	Kind             string
+	Node             string
+	JudgmentVersion  string
+	Association      string
+	Candidates       []string
+	IdentityConflict bool
+	ReceivedAt       time.Time
+	RecordedAt       time.Time
+	Disposition      domain.IdentityDisposition
+}
+
 // ConsolidationUnitCatalogueRow 是集运单元登记册上列的一行：实例阶段是三相封闭词
 // （OPEN / SEALED / CLOSED，domain.ConsolidationPhase*）。
 //
@@ -156,4 +180,10 @@ type ReviewCatalogueRead interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]ConsolidationMemberCatalogueRow, error)
+	// ListIdentityReviewUnits 按实物上列待识别实物页（IdentityReviewUnitRow）：limit 数的是实物，不是版本。
+	ListIdentityReviewUnits(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]IdentityReviewUnitRow, error)
 }

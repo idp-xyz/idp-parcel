@@ -252,6 +252,20 @@ func JudgeIdentityBasis(observations []IntakeIdentityObservation) (IdentityBasis
 	return identityBasisOf(BasisEstablished, nil, basedOn.Association, basedOn.SourceID, basedOn.Version)
 }
 
+// JudgmentChainHeads 交回组里各条判断链的当前有效版本，读法与验法同 JudgeIdentityBasis：身份冲突处置（ADR-0210 决定二、三）在这几
+// 版上判冲突、算处置候选并逐链追加，与身份一格认的必须是同一组链头——两处各算一遍，处置解开的就可能不是身份一格判冲突的那几版。
+func JudgmentChainHeads(observations []IntakeIdentityObservation) ([]IntakeIdentityObservation, error) {
+	heads, err := judgmentChainHeads(observations)
+	if err != nil {
+		return nil, err
+	}
+	copied := make([]IntakeIdentityObservation, 0, len(heads))
+	for _, head := range heads {
+		copied = append(copied, *head)
+	}
+	return copied, nil
+}
+
 // judgmentChainHeads 交回组里没有后继的各行，并验链的形状。
 func judgmentChainHeads(observations []IntakeIdentityObservation) ([]*IntakeIdentityObservation, error) {
 	successorOf := map[IntakeResultVersion]int{}

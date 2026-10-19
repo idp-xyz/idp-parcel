@@ -3,6 +3,7 @@ package application
 import (
 	"context"
 	"fmt"
+	"slices"
 
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
@@ -30,11 +31,14 @@ func (judgment identityJudgment) conflict() bool {
 	return !judgment.identified && len(judgment.candidates) > 0
 }
 
-// identityJudge 持身份判断要问的三个口。
+// identityJudge 持身份判断要问的三个口。excluded 只在被重核的是身份冲突处置确认过「不是」的那一版时有值（ADR-0210 决定九）：PS 唯一
+// 命中其中一件时照零候选办，不据此关联——关联回去，那件包裹若此刻关联在别的实物上，一码两物还会给那件追加冲突版，推翻对它的处置。
+// 收寄不带它：新的一次送站是新的判断，没有处置过的排除可依。
 type identityJudge struct {
 	identity   ports.ParcelIdentityView
 	services   ports.ParcelServiceResultView
 	receptions ports.ReceptionStore
+	excluded   []domain.ParcelAssociationReference
 }
 
 // judge 拿一次外部标识观察问 PS，判这件作业实物的身份。须在落册那一笔事务里调：唯一命中那一支按（租户、包裹）取锁（见
@@ -60,6 +64,9 @@ func (judge identityJudge) judge(
 	parcel, unique := answer.Unique()
 	if !unique {
 		return judgment, nil
+	}
+	if slices.Contains(judge.excluded, parcel) {
+		return identityJudgment{}, nil
 	}
 	judgment.others, err = judge.receptions.FindOtherUnitIntakes(ctx, tenant, parcel, unit)
 	if err != nil {

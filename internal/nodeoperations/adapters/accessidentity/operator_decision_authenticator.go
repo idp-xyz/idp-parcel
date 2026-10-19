@@ -11,7 +11,8 @@ import (
 )
 
 // OperatorDecisionAuthenticator 实现 nodeopshttp.OperatorDecisionAuthenticator：按本口的决定种类铸「运营决定」信封，并判准入
-// 范围——重核可能形成一版关联收寄、交 PS 采用，是生产事实（ADR-0151 决定三）。
+// 范围——重核与身份冲突处置都可能形成一版关联收寄、交 PS 采用，是生产事实（ADR-0151 决定三）。提交操作者取信封上的主体，带发行方，
+// 与 PS 的运营决定认证方同一个写法。
 type OperatorDecisionAuthenticator struct {
 	minter Minter
 }
@@ -29,10 +30,10 @@ func (authenticator *OperatorDecisionAuthenticator) AuthenticateOperatorDecision
 	ctx context.Context,
 	bearerToken string,
 	decision nodeopshttp.OperatorDecision,
-) (domain.TenantID, error) {
+) (nodeopshttp.OperatorIdentity, error) {
 	kind, err := identity.ParseDecisionKind(string(decision))
 	if err != nil {
-		return domain.TenantID{}, fmt.Errorf("node operations accessidentity: decision %q: %w", decision, err)
+		return nodeopshttp.OperatorIdentity{}, fmt.Errorf("node operations accessidentity: decision %q: %w", decision, err)
 	}
 	envelope, err := authenticator.minter.MintOperator(ctx, identity.NewOperatorCredential(bearerToken), identity.OperatorRequest{
 		Face:         identity.CapabilityOperationDecision,
@@ -40,13 +41,14 @@ func (authenticator *OperatorDecisionAuthenticator) AuthenticateOperatorDecision
 		Admission:    &identity.AdmissionRequirement{Capability: identity.CapabilityOperationDecision.String(), FactKind: kind.String()},
 	})
 	if err != nil {
-		return domain.TenantID{}, answerOperatorDecision(err)
+		return nodeopshttp.OperatorIdentity{}, answerOperatorDecision(err)
 	}
 	tenant, err := domain.NewTenantID(envelope.TenantID())
 	if err != nil {
-		return domain.TenantID{}, fmt.Errorf("node operations accessidentity: tenant: %w", err)
+		return nodeopshttp.OperatorIdentity{}, fmt.Errorf("node operations accessidentity: tenant: %w", err)
 	}
-	return tenant, nil
+	subject := envelope.Subject()
+	return nodeopshttp.OperatorIdentity{Tenant: tenant, Operator: subject.Issuer() + "#" + subject.Subject()}, nil
 }
 
 // answerOperatorDecision 把操作者铸造的格译成 nodeopshttp 的格。与 answerOperationsRead 分开：运营决定判准入范围，多一格「不在

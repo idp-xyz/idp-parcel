@@ -276,6 +276,11 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 身份冲突处置编排（UC-NO-004）：同上，接真不等授予——谁持有「身份冲突处置」授予是租户取值，生产装配不配任何默认。
+	identityDisposition, err := buildIdentityDispositionOrchestration(db)
+	if err != nil {
+		return err
+	}
 	delivery, err := buildDeliveryOrchestration(db)
 	if err != nil {
 		return err
@@ -705,6 +710,7 @@ func run(logger *slog.Logger) error {
 			operatorBinding,
 			customsAdmission.nodeZoneRegistration,
 			identityRecheck,
+			identityDisposition,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,

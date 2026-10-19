@@ -126,6 +126,15 @@
       "basis": "SYN-GRANT-BASIS-DEX-15"
     },
     {
+      "grantId": "SYN-GRANT-DEX-CONFIG-IDENTITY-CONFLICT-DISPOSITION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "IDENTITY_CONFLICT_DISPOSITION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-IDENTITY-CONFLICT-DISPOSITION"
+    },
+    {
       "grantId": "SYN-GRANT-DEX-VIEWER-READ-01",
       "issuer": "http://127.0.0.1:5556/dex",
       "subject": "ChZTWU4tT1BFUkFUT1ItVklFV0VSLTAxEgVsb2NhbA",

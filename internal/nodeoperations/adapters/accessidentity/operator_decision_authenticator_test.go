@@ -78,9 +78,9 @@ func TestARecheckOperatorAuthenticatesForThePendingIdentityRecheckDecision(t *te
 	var asked []identity.AdmissionRequirement
 	granted := decisionRegister{kinds: []identity.DecisionKind{identity.DecisionPendingIdentityRecheck}}
 	built := decisionAuthenticator(t, operatorVerifier{}, granted, decisionAdmission{admitted: true, asked: &asked})
-	tenant, err := built.AuthenticateOperatorDecision(context.Background(), "presented.operator.token", nodeopshttp.OperatorDecisionPendingIdentityRecheck)
-	if err != nil || tenant.String() != operatorTenant {
-		t.Fatalf("tenant = %q, err = %v", tenant, err)
+	operator, err := built.AuthenticateOperatorDecision(context.Background(), "presented.operator.token", nodeopshttp.OperatorDecisionPendingIdentityRecheck)
+	if err != nil || operator.Tenant.String() != operatorTenant {
+		t.Fatalf("operator = %+v, err = %v", operator, err)
 	}
 	if len(asked) != 1 || asked[0].Capability != "OPERATION_DECISION" || asked[0].FactKind != "PENDING_IDENTITY_RECHECK" {
 		t.Fatalf("准入范围被问 %+v, want 运营决定 × 待识别重核", asked)
@@ -126,5 +126,26 @@ func TestOperatorDecisionGradesTranslateIntoNodeOperationsGrades(t *testing.T) {
 	}
 	if _, err := noaccess.NewOperatorDecisionAuthenticator(nil); err == nil {
 		t.Fatal("缺铸造器却构造成功")
+	}
+}
+
+// Covers: 身份冲突处置口归「运营决定」能力面（ADR-0210 决定一、六）：持`身份冲突处置`授予的操作者认证到绑定的租户与带发行方的
+// 提交操作者引用（`<发行方>#<sub>`，处置文档里写作 `OPERATOR/<发行方>#<sub>`），准入范围按（运营决定，身份冲突处置）判；只持
+// 待识别重核授予答无授予——授予按决定种类各自成立。
+func TestADispositionOperatorAuthenticatesForTheIdentityConflictDispositionDecision(t *testing.T) {
+	var asked []identity.AdmissionRequirement
+	granted := decisionRegister{kinds: []identity.DecisionKind{identity.DecisionIdentityConflictDisposition}}
+	built := decisionAuthenticator(t, operatorVerifier{}, granted, decisionAdmission{admitted: true, asked: &asked})
+	operator, err := built.AuthenticateOperatorDecision(context.Background(), "presented.operator.token", nodeopshttp.OperatorDecisionIdentityConflictDisposition)
+	if err != nil || operator.Tenant.String() != operatorTenant || operator.Operator != "https://id.syn.example/dex#SYN-OPERATOR-01" {
+		t.Fatalf("operator = %+v, err = %v", operator, err)
+	}
+	if len(asked) != 1 || asked[0].Capability != "OPERATION_DECISION" || asked[0].FactKind != "IDENTITY_CONFLICT_DISPOSITION" {
+		t.Fatalf("准入范围被问 %+v, want 运营决定 × 身份冲突处置", asked)
+	}
+	recheckOnly := decisionRegister{kinds: []identity.DecisionKind{identity.DecisionPendingIdentityRecheck}}
+	if _, err := decisionAuthenticator(t, operatorVerifier{}, recheckOnly, decisionAdmission{admitted: true}).
+		AuthenticateOperatorDecision(context.Background(), "t", nodeopshttp.OperatorDecisionIdentityConflictDisposition); !errors.Is(err, nodeopshttp.ErrOperatorNotGranted) {
+		t.Fatalf("只持待识别重核授予：err = %v, want ErrOperatorNotGranted", err)
 	}
 }

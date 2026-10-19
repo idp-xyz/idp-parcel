@@ -144,15 +144,22 @@ type OperatorDecision string
 // OperatorDecisionPendingIdentityRecheck 是复核页人工重核一件待识别实物。
 const OperatorDecisionPendingIdentityRecheck OperatorDecision = "PENDING_IDENTITY_RECHECK"
 
-// OperatorDecisionAuthenticator 认证一次运营决定出示，交回出示者的租户。失败只交回本包的格：ErrAccessChannelNotConfigured、
+// OperatorIdentity 是一次运营决定出示认证出的身份：租户与提交操作者的引用（`<发行方>#<sub>`）。身份冲突处置把操作者写进处置
+// 文档（ADR-0210 决定二），重核只用租户。
+type OperatorIdentity struct {
+	Tenant   domain.TenantID
+	Operator string
+}
+
+// OperatorDecisionAuthenticator 认证一次运营决定出示，交回出示者的租户与操作者。失败只交回本包的格：ErrAccessChannelNotConfigured、
 // ErrOperatorCredentialRejected、ErrOperatorNotGranted、ErrOutsideAdmissionScope、ErrIdentityDependencyUnavailable；从共享
 // 接入身份能力译过来的那一层在 adapters/accessidentity。
 type OperatorDecisionAuthenticator interface {
-	AuthenticateOperatorDecision(ctx context.Context, bearerToken string, decision OperatorDecision) (domain.TenantID, error)
+	AuthenticateOperatorDecision(ctx context.Context, bearerToken string, decision OperatorDecision) (OperatorIdentity, error)
 }
 
 // OperatorDecisionIntake 是操作者渠道「运营决定」能力面在本包的 Intake（ADR-0151 决定一）。先认证、后解载荷：授予不过的调用方
-// 看不到载荷校验的结果。载荷封闭，只有判断版本。
+// 看不到载荷校验的结果。载荷封闭：重核只有判断版本，身份冲突处置的各格见 identityDispositionPayload。
 type OperatorDecisionIntake struct {
 	authenticator OperatorDecisionAuthenticator
 }
@@ -174,7 +181,7 @@ type identityRecheckPayload struct {
 // IntakeIdentityRecheck 译人工重核（`/node-operations/identity-rechecks`）。
 func (intake *OperatorDecisionIntake) IntakeIdentityRecheck(ctx context.Context, request *http.Request) (application.RecheckPendingIdentityCommand, error) {
 	none := application.RecheckPendingIdentityCommand{}
-	tenant, err := intake.authenticator.AuthenticateOperatorDecision(ctx, httpapi.BearerToken(request), OperatorDecisionPendingIdentityRecheck)
+	operator, err := intake.authenticator.AuthenticateOperatorDecision(ctx, httpapi.BearerToken(request), OperatorDecisionPendingIdentityRecheck)
 	if err != nil {
 		return none, err
 	}
@@ -189,7 +196,7 @@ func (intake *OperatorDecisionIntake) IntakeIdentityRecheck(ctx context.Context,
 	if err != nil {
 		return none, fmt.Errorf("%w: judgmentVersion: %v", ErrMalformedRequest, err)
 	}
-	return application.RecheckPendingIdentityCommand{TenantID: tenant, Version: version}, nil
+	return application.RecheckPendingIdentityCommand{TenantID: operator.Tenant, Version: version}, nil
 }
 
 var _ IdentityRecheckIntake = UnconfiguredIntake{}

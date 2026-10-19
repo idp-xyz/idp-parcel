@@ -21,6 +21,8 @@ import (
 //     筛 kind 是为了让语义落在结果契约的那一格上，而不是依赖「反正是空的」。
 //   - 容纳索引 containment_current 只收未关闭单元的当前成员（0002 自注），所以 JOIN 到它就是
 //     「此刻在未关闭单元里」，不必再看单元的 phase；关闭时适配器删行，这一路自然读不到。
+//   - 两路都不算被身份冲突处置版接续过的行（ADR-0210 决定八，谓词见 succeededByDisposition）：被处置为「不是它」的实物不再
+//     算作那件包裹，处置版自己带的关联照算。还没处置过的照旧逐行读，不改读链头。
 //
 // 只读，走 ReadExecutor。
 type ParcelContainmentView struct {
@@ -59,6 +61,7 @@ func (view *ParcelContainmentView) LoadParcelContainment(
 		            AND c.member_id = (r.intake ->> 'unit')
 		          WHERE r.tenant_id = $1
 		            AND (r.intake ->> 'association') = $2
+		            AND NOT `+succeededByDisposition("r")+`
 		     ) AS identified_contained,
 		     EXISTS (
 		         SELECT 1
@@ -69,6 +72,7 @@ func (view *ParcelContainmentView) LoadParcelContainment(
 		          WHERE r.tenant_id = $1
 		            AND r.kind = $3
 		            AND r.candidates @> jsonb_build_array($2::text)
+		            AND NOT `+succeededByDisposition("r")+`
 		     ) AS candidate_contained`,
 		tenant.String(), parcel.String(), ports.RecordPendingIdentification.String(),
 	).Scan(&identifiedContained, &candidateContained)

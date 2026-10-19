@@ -186,6 +186,10 @@ type ReceptionRecord struct {
 	ServiceMarkers     []string
 	ServiceResultCheck ServiceResultCheck
 	RecordedAt         time.Time
+	// Disposition 只在身份冲突处置版上在场（ADR-0210 决定三），零值即这一版不是处置版。处置版的 ContentDigest 是这次处置比对格的
+	// 摘要（domain.CanonicalizeIdentityDispositionComparison），同一次处置的各版同一个；文档本身不进摘要：依据引用、操作者与形成时刻
+	// 不进比对（ADR-0210 决定六）。
+	Disposition domain.IdentityDisposition
 }
 
 type ReceptionSaveOutcome uint8
@@ -207,6 +211,9 @@ type ReceptionStore interface {
 	// 这个读要在收寄落册所在的事务里调：从这次读到那笔事务结束，同一租户同一件包裹上的另一次读等着（票
 	// no-reception-identity/03），否则两笔并发送站各自读不到对方未提交的关联，两件都关联成立。只在单线程里跑的替身不必
 	// 模拟这一格。
+	//
+	// 被身份冲突处置版接续过的行（沿后继走，后面有一版处置版）不交回：它的关联已由人处置过，不再算那件实物的关联；处置版自己带
+	// 的关联照算（ADR-0210 决定八）。还没处置过的照旧逐行读——冲突版接续之后，原判断上的关联仍算。
 	FindOtherUnitIntakes(
 		ctx context.Context,
 		tenant domain.TenantID,
@@ -263,6 +270,26 @@ type PendingIdentityLookup interface {
 		ctx context.Context,
 		tenant domain.TenantID,
 		mark string,
+	) ([]ReceptionRecord, error)
+}
+
+// IdentityDispositionRegister 是身份冲突处置要问收寄册的两问（ADR-0210 决定二至四）。与 ReceptionStore 分立，理由同
+// PendingIdentityLookup；生产上三者是同一只收寄库适配器。处置要取的包裹锁不另开口：它就是 ReceptionStore.FindOtherUnitIntakes 那一
+// 把，处置照收寄与重核同一个问法去取，同一件包裹上的三条路才串在同一把锁上。
+type IdentityDispositionRegister interface {
+	// FindByJudgmentVersion 同 PendingIdentityLookup 的同名一问：指名的所处置的版本、链上的前版都按它取。
+	FindByJudgmentVersion(
+		ctx context.Context,
+		tenant domain.TenantID,
+		version domain.IntakeResultVersion,
+	) (ReceptionRecord, bool, error)
+	// FindUnitIntakes 交回本租户收寄册上这件作业实物带收寄的各行（形成与待识别两格，各条链、被接续的与链头都在），按来源标识定序；
+	// 查无此物交回空切片。哪几行是链头由领域在这一组里认（domain.JudgmentChainHeads），与方向依据的身份一格同一个读法。读不动作为
+	// 错误返回。
+	FindUnitIntakes(
+		ctx context.Context,
+		tenant domain.TenantID,
+		unit domain.HandlingUnitID,
 	) ([]ReceptionRecord, error)
 }
 

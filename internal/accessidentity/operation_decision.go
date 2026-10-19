@@ -17,6 +17,7 @@ var ErrDecisionKindRequired = errors.New("access identity: operation decision gr
 //
 // 种类是册的列，由产品的角色模型定；某租户把哪位操作者授予哪一种决定，才是租户取值。待识别重核是复核页上对指名的一件待识别
 // 实物按存下的号再问一次 PS（ADR-0199 决定三），管理台上作判断的口照决定一归这一面。
+// 身份冲突处置是复核页上对一件判身份冲突的作业实物指定一件候选或确认都不是（ADR-0210 决定一）；授予就是它全部的授权门。
 type DecisionKind string
 
 const (
@@ -32,6 +33,7 @@ const (
 	DecisionEffectiveTimeJudgment               DecisionKind = "EFFECTIVE_TIME_JUDGMENT"
 	DecisionCarrierFirstEffectivePickupJudgment DecisionKind = "CARRIER_FIRST_EFFECTIVE_PICKUP_JUDGMENT"
 	DecisionPendingIdentityRecheck              DecisionKind = "PENDING_IDENTITY_RECHECK"
+	DecisionIdentityConflictDisposition         DecisionKind = "IDENTITY_CONFLICT_DISPOSITION"
 )
 
 var decisionKinds = []DecisionKind{
@@ -40,6 +42,7 @@ var decisionKinds = []DecisionKind{
 	DecisionSegmentClosure, DecisionDispatchTaskRegistration, DecisionLoadAssignment, DecisionParticipationTermination,
 	DecisionEffectiveTimeJudgment, DecisionCarrierFirstEffectivePickupJudgment,
 	DecisionPendingIdentityRecheck,
+	DecisionIdentityConflictDisposition,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。

@@ -1,0 +1,7 @@
+{
+  "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+  "capability": "OPERATION_DECISION",
+  "factKind": "IDENTITY_CONFLICT_DISPOSITION",
+  "authority": "SYN-AUTH/idp-parcel-pilot",
+  "fromAt": "2026-01-01T00:00:00Z"
+}

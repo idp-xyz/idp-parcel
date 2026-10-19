@@ -31,6 +31,11 @@ type ReviewCatalogueReader interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]ports.ConsolidationMemberCatalogueRow, error)
+	ListIdentityReviewUnits(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ports.IdentityReviewUnitRow, error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
@@ -164,9 +169,15 @@ func serveUnidentifiedItems(
 		}
 		bodies = append(bodies, body)
 	}
+	units, err := identityReviewUnitBodies(request, reader, tenant, limit)
+	if err != nil {
+		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+		return
+	}
 	writeJSON(response, http.StatusOK, unidentifiedItemListResponse{
 		Outcome: outcomeUnidentifiedItemsListed,
 		Items:   bodies,
+		Units:   units,
 	})
 }
 
@@ -242,9 +253,12 @@ type receptionCatalogueBody struct {
 	RecordedAt           string   `json:"recordedAt"`
 }
 
+// units 是同一页按实物列的那一半（票 no-reception-identity/06）：items 逐行列待识别，分不出哪一版仍是当前有效版本、冲突处置过没有；
+// units 把一件实物各条链的当前有效版本列在一起，处置版带处置文档。两者同一次查询答出，页面不必为处置动作另发一次请求。
 type unidentifiedItemListResponse struct {
-	Outcome string                 `json:"outcome"`
-	Items   []unidentifiedItemBody `json:"items"`
+	Outcome string                   `json:"outcome"`
+	Items   []unidentifiedItemBody   `json:"items"`
+	Units   []identityReviewUnitBody `json:"units"`
 }
 
 // unidentifiedItemBody 逐字段透出一行待识别实物登记。

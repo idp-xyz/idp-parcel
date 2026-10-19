@@ -214,12 +214,13 @@ func (handler *RecheckPendingIdentityHandler) recheck(
 		identity:   handler.deps.Identity,
 		services:   handler.deps.ServiceResults,
 		receptions: handler.deps.Receptions,
+		excluded:   record.Disposition.ExcludedFor(record.Intake.Unit()),
 	}.judge(ctx, tenant, ports.ExternalMarkObservation{Mark: record.Source.Mark}, record.Intake.Unit())
 	if err != nil {
 		return RecheckPendingIdentityResult{}, err
 	}
 	if !judgment.identified && !judgment.conflict() {
-		// 零候选（带不带歧义信号）：判断不变、不追加（ADR-0199 决定三）。
+		// 零候选（带不带歧义信号）：判断不变、不追加（ADR-0199 决定三）。唯一命中身份冲突处置排除过的那件也落在这里（ADR-0210 决定九）。
 		return answered(RecheckStillUnidentified, record), nil
 	}
 

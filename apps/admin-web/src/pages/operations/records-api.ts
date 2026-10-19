@@ -75,6 +75,43 @@ export interface UnidentifiedItemRecord {
 }
 
 /**
+ * 一份身份冲突处置文档（ADR-0210 决定三；票 no-reception-identity/06）。result 是 DESIGNATED（指定一件）或 NONE_OF_CANDIDATES
+ * （确认都不是）；parcel 与 coDisposedUnits 只在指定一件时出现，excluded 只在确认都不是时出现。operator 写作
+ * `OPERATOR/<发行方>#<sub>`；disposedAt 是服务端的形成时刻。
+ */
+export interface IdentityDispositionRecord {
+  disposedVersion: string;
+  unit: string;
+  result: string;
+  parcel?: string;
+  excluded?: string[];
+  coDisposedUnits?: { unit: string; version: string }[];
+  basis: string;
+  operator: string;
+  disposedAt: string;
+}
+
+/** 一条判断链此刻的当前有效版本。disposition 只在这一版是身份冲突处置版时出现。 */
+export interface IdentityReviewHead {
+  sourceId: string;
+  kind: string;
+  node: string;
+  judgmentVersion: string;
+  association?: string;
+  candidates: string[];
+  identityConflict: boolean;
+  receivedAt: string;
+  recordedAt: string;
+  disposition?: IdentityDispositionRecord;
+}
+
+/** 待识别实物页按实物列的一件：各条判断链的当前有效版本列在一起（ADR-0210 越权风险点 8）。 */
+export interface IdentityReviewUnit {
+  unit: string;
+  heads: IdentityReviewHead[];
+}
+
+/**
  * 一个集运单元实例。phase 三相封闭词（OPEN / SEALED / CLOSED）；memberCount 是
  * 当前成员数不是成员清单；latestSeal 两键成对缺席即从未封装过，sealCount 把
  * 「从未封装」与「重新封装过」分开。
@@ -101,7 +138,7 @@ export interface ConsolidationUnitRecord {
 
 export type NodeOperationsListResponseBody =
   | { outcome: 'RECEPTIONS_LISTED'; receptions: ReceptionRecord[] }
-  | { outcome: 'UNIDENTIFIED_ITEMS_LISTED'; items: UnidentifiedItemRecord[] }
+  | { outcome: 'UNIDENTIFIED_ITEMS_LISTED'; items: UnidentifiedItemRecord[]; units?: IdentityReviewUnit[] }
   | { outcome: 'CONSOLIDATION_UNITS_LISTED'; units: ConsolidationUnitRecord[] };
 
 interface NodeBodyByRegistry {

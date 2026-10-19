@@ -93,6 +93,9 @@ func (repository *Receptions) FindByKey(
 // 提交的关联，两件都关联成立。后到的一方等在锁上，先到的提交后才查；READ COMMITTED 下这条查询另取快照，读得到刚提交的
 // 关联。锁随事务释放，所以走 RequireExecutor：没有事务时锁在取锁那条语句结束就放掉，读完到落册之间不再串行，静默放过
 // 比报错更糟。锁键各维以 chr(31) 分隔后取 hashtext，口径同 access_identity 的 lockMappingKey；哈希撞上只多等一会儿，不错判。
+//
+// 被身份冲突处置版接续过的行不交回（ADR-0210 决定八），谓词见 succeededByDisposition；截断在取锁之后的同一条查询里判，处置版与
+// 它截断的那几行在同一把锁下落册，读到的不会是半截处置。
 func (repository *Receptions) FindOtherUnitIntakes(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -115,6 +118,7 @@ func (repository *Receptions) FindOtherUnitIntakes(
 		  WHERE tenant_id = $1
 		    AND (intake ->> 'association') = $2
 		    AND (intake ->> 'unit') <> $3
+		    AND NOT `+succeededByDisposition("reception")+`
 		  ORDER BY source_id`,
 		tenant.String(),
 		parcel.String(),
@@ -181,7 +185,7 @@ func (repository *Receptions) CurrentVersion(
 // receptionColumns 与 scanReception 的扫描顺序是同一份约定，两处一起改。
 const receptionColumns = `source_id, content_digest, kind, intake, control, candidates,
 		        identity_conflict, refusal_reason, service_markers, service_result_check, recorded_at,
-		        judgment_version, predecessor_version, source_document, merged_version`
+		        judgment_version, predecessor_version, source_document, merged_version, disposition_document`
 
 // scanReception 把一行收寄册读回成记录：读回的一切经领域构造函数重建，一次坏写入在这里暴露，而不是变成一个看起来
 // 合法的收寄结果。
@@ -197,10 +201,11 @@ func scanReception(row pgx.Row, tenant domain.TenantID) (ports.ReceptionRecord, 
 		judgment, predecessor       *string
 		sourceJSON                  []byte
 		merged                      *string
+		dispositionJSON             []byte
 	)
 	if err := row.Scan(&sourceID, &digest, &kindName, &intakeJSON, &controlJSON, &candidatesJSON,
 		&identityConflict, &refusal, &markersJSON, &checkName, &recordedAt,
-		&judgment, &predecessor, &sourceJSON, &merged); err != nil {
+		&judgment, &predecessor, &sourceJSON, &merged, &dispositionJSON); err != nil {
 		return ports.ReceptionRecord{}, err
 	}
 
@@ -234,6 +239,12 @@ func scanReception(row pgx.Row, tenant domain.TenantID) (ports.ReceptionRecord, 
 	// 来源文档为空是来源保全之前的行，读回零值即「来源未保全」，不是坏行。
 	if len(sourceJSON) > 0 {
 		if record.Source, err = domain.ParseDeliverySource(sourceJSON); err != nil {
+			return ports.ReceptionRecord{}, err
+		}
+	}
+
+	if len(dispositionJSON) > 0 {
+		if record.Disposition, err = domain.ParseIdentityDisposition(dispositionJSON); err != nil {
 			return ports.ReceptionRecord{}, err
 		}
 	}
@@ -315,12 +326,19 @@ func (repository *Receptions) Save(
 		}
 	}
 
+	var dispositionJSON []byte
+	if record.Disposition.Recorded() {
+		if dispositionJSON, err = domain.CanonicalizeIdentityDisposition(record.Disposition); err != nil {
+			return ports.ReceptionSaveOutcomeInvalid, fmt.Errorf("save reception: %w", err)
+		}
+	}
+
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO node_operations.reception
 			(tenant_id, source_id, content_digest, kind, intake, control,
 			 candidates, identity_conflict, refusal_reason, service_markers, service_result_check, recorded_at,
-			 judgment_version, predecessor_version, source_document, merged_version)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+			 judgment_version, predecessor_version, source_document, merged_version, disposition_document)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 		 ON CONFLICT (tenant_id, source_id) DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.SourceID,
@@ -338,6 +356,7 @@ func (repository *Receptions) Save(
 		versionColumn(record.Predecessor),
 		sourceJSON,
 		versionColumn(record.MergedInto),
+		dispositionJSON,
 	)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "reception_predecessor_unique" {
