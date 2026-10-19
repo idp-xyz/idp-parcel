@@ -1,7 +1,7 @@
 # 01 同一外部条码出现在两件实物：第二件也唯一关联到同一包裹，不形成身份冲突（AT-NO-019 字面场景没有实现）
 
 Category: bug
-Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-nri01`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 0 研判）
+Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-nri01`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 0 研判）
 Blocked by: 无（operator-channel/29 已进 main）
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C2 第三张草案（AT-NO-019）
@@ -64,3 +64,41 @@ no-directional-basis/01 当前裁定的身份判断是「恰好关联到一个�
 - [ ] `AT-NO-019` 的点名与实际覆盖一致。
 - [ ] Go 门禁：`go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出；带 DSN 跑 `internal/nodeoperations/...`、`cmd/parcel-api`、`internal/architecture` 全绿；机制清点在本笔的干净检出上重生成。
 - [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
+
+## 完成记录（2026-10-19，会话 idp-parcel-9b 的实施子代理，分支 claude-nri01）
+
+**落点**
+
+- 编排：`internal/nodeoperations/application/receive_delivered_unit.go`——`receive` 在身份核对唯一指向一件包裹时，经收寄库问这件包裹是否已关联到同租户另一件作业实物；是则后到那件答`待识别`、记身份冲突、候选记那件包裹，不问 PS、不交意图；本次真落册后由 `appendIdentityConflicts` 给先到那件各追加一版待识别收寄（新结果版本、去关联、控制照原判断、记身份冲突），原判断不动。`default` 分支注释照实写成「多候选，或唯一指向的包裹已关联到另一件作业实物」。
+- 端口与适配器：`ports.ReceptionStore.FindOtherUnitIntakes`；PG 适配器 `Receptions.FindOtherUnitIntakes`（行扫描抽成 `scanReception`，`FindByKey` 同用）。
+- 点名：`TestUnknownAndConflictedIdentitiesStayPending` 头注改成 `AT-NO-019` 半边（一件实物多候选）；`.scratch/at-coverage-inventory.md` 的 `AT-NO-019` 一行照扫描口径列出新用例与半边。
+
+**各格对应用例**
+
+| 格 | 用例 |
+|---|---|
+| 一码两物：后到答冲突、先到追加冲突版、原判断照留、两件身份一格都含身份冲突 | 编排 `TestOneMarkOnTwoUnitsFormsAnIdentityConflict`；真库 `cmd/parcel-api/reception_one_mark_two_units_test.go::TestTheWiredReceptionTurnsOneMarkOnTwoUnitsIntoAnIdentityConflict`（生产装配 + `IntakeIdentities` + `JudgeIdentityBasis`） |
+| 同一实物重投仍是重放；同一实物换来源再收不算冲突；冲突后重放后到那件不再追加 | 编排 `TestTheSameUnitDeliveredAgainIsNotAnIdentityConflict`；真库用例末段 |
+| 新读口读不动不形成答案 | `TestDependencyFailuresFormNoAnswer/按包裹读别的实物收寄报错` |
+| 读口只认同租户关联、排除自身实物、候选不算关联 | `adapters/postgres/reception_test.go::TestOtherUnitIntakesAreFoundByTheirParcelAssociation` |
+| 零候选、多候选、唯一命中既有用例 | 照旧绿 |
+
+**先红后绿**（基线 `7c42f850` 上先写用例）
+
+- 编排：`TestOneMarkOnTwoUnitsFormsAnIdentityConflict` 红于「后到那件 outcome = "INTAKE_FORMED", want PENDING_IDENTIFICATION」；读口报错格红于「outcome = "INTAKE_FORMED", want error」。重放格修前即绿（守护格）。
+- 真库：红于「后到那件 outcome = INTAKE_FORMED, want PENDING_IDENTIFICATION」——研判现象就此复现。
+- 适配器读口用例与实现同写（新方法，修前只有编译红）。实现后全绿。
+
+**复现不了的格**：无。
+
+**没做（记在 ADR-0196 越权风险点）**：两件并发送站在两笔事务里互相看不到、可能都关联成立，未加锁；PS 已采用的那次不回滚，VE 侧协调未实现。
+
+**ADR 与迁移**：ADR-0196（adr/README 已加行）。无迁移——按关联查的索引 `reception_intake_association_idx` 迁移 0004 已有。
+
+**地盘外**：`internal/nodeoperations/adapters/http/receive_delivered_unit_test.go` 的收寄库替身补新读口方法（端口加方法所必需）；`docs/product/MECHANISM-INVENTORY.md` 重生成（cmd 测试 145→146）。
+
+**门**：`gofmt -l` 无输出；`go build ./...`、`go vet ./...` 退 0；带 DSN `go test -p 1 -count=1` 跑 `./internal/nodeoperations/...`、`./cmd/parcel-api`、`./cmd/parcel-frontline-import`、`./internal/architecture/...`、`./migrations/...` 全 ok；机制清点已重生成并单独提交。
+
+**证据层级**：`S`（隔离合成夹具，`SYN-` 值）。
+
+评审：待会话读 diff 审
