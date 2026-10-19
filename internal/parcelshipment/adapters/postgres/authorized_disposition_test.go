@@ -96,8 +96,8 @@ func TestACustomerSupplementDispositionRoundTripsOnTheTask(t *testing.T) {
 	}
 }
 
-// Covers: `拒绝`去向记下后委托转`已拒绝`并落库、投影列清零。读回那一半今天由重建门挡在门外（`已拒绝`尚未
-// 开门，ADR-0030），本条只证写入成功与投影——与主动拒绝落库的既有证据同一深度。
+// Covers: `拒绝`去向记下后委托转`已拒绝`并落库、投影列清零。本条只证写入与投影；读回带回主动拒绝留痕
+// 那一半归 shipment_request_test.go 里`已拒绝`的往返用例（ADR-0188）。
 func TestARejectionDispositionIsSavedWithItsWaitStateCleared(t *testing.T) {
 	repository, transactor, pool := newShipmentRequests(t)
 	ctx := t.Context()
