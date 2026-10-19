@@ -13,7 +13,9 @@
 // 首方客户族（ADR-0139 决定二、三：货主客户的系统经本产品自定的 API 交客户命令）不受下面那道否决：ADR-0139 决定一把
 // ADR-0072 决定二再收窄到租户既有渠道的适配。它有客户渠道册（CustomerClientRegistry，客户端主体绑定唯一的租户与客户
 // 账户，授予按客户面能力登记）、复用集成客户端族凭据机制的令牌校验（adapters/oidc 的 CustomerClientVerifier）与按命令
-// 分型的 SourceEnvelope 的铸造（CustomerClientMinter，信封仍只经 seal 产生）。
+// 分型的 SourceEnvelope 的铸造（CustomerClientMinter，信封仍只经 seal 产生）。同一只铸造器在客户查阅面另铸查阅身份
+// （如 CustomerTrackingViewQueryEnvelope，只带册上的租户与客户账户）：它不是 SourceEnvelope、不经 seal，理由见该类型头注。
+// 它不是绕过 seal 的第二条路——查阅不形成来源请求，查阅身份在编译期就递不进任何收来源信封的写口。
 //
 // 操作者渠道不受下面那道否决：ADR-0100 决定一把 ADR-0072 决定二的适用场景收窄为客户接入渠道。
 // 操作者那一半已有操作者册（migrations/access_identity/，OperatorRegistry）、OIDC 令牌校验
