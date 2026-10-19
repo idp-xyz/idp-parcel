@@ -34,7 +34,7 @@ L
 
 票面成立：NR `calendar_projection.go` 只按连接成段，演示计划三段止于 `SYN-NODE-SIN-LM`；TF `planned_leg_source.go` 对不指名连接的段答 `ErrUntranslatableAnswer`（不在哨兵名单），交付段一进计划信封就成毒丸。票面没提、实现时要一并管的两处：候选成本取数侧（NR `adapters/parcelpricing`）按线路段号逐段取成本依据，交付段若混进候选路径的 `Legs`，候选会停在待判断、演示停在 `CANDIDATE_COSTS_PENDING`；路由计划查阅口此前只上检索列面，看不到段。
 
-号段（`origin/main 3f7b2b48` 上核过）：UC-NR 现有最大 `AT-NR-053`，本票用 `AT-NR-054` 至 `AT-NR-063`；`AT-TF-201`；NR 迁移现有最大 `0019`，本票 `0020`；ADR-0217；新立票 72（73 未用）。
+号段（`origin/main 3f7b2b48` 上核过）：UC-NR 现有最大 `AT-NR-053`，本票用 `AT-NR-054` 至 `AT-NR-063`；`AT-TF-201`；NR 迁移现有最大 `0019`，本票 `0020`；ADR-0217；新立票 72，评审后立 73。
 
 ### 做了什么
 
@@ -45,7 +45,7 @@ L
 - NR 适配器：`registrationjson` 日历载荷加 `delivery_minutes`；postgres 目录日历读写带派送时长；计划 jsonb 段行加可缺的 `kind`（只给交付段写，交付段的 `to` 写交付范围），读回无 `kind` 即节点间段、带 opaque 的交付段判坏；`route_plan_catalogue.go` 成计划行重建整份计划后逐段列出；HTTP `query_route_plans.go` 成计划行加 `legs`。
 - TF：`planned_leg_source.go` 只译 `NodeLegs()`；`delivery_window_source.go` 注明不按段种类分支。
 - 种子：`scripts/demo-seeds/data/network/24-calendar-node-sin-lm-v2.json`（处理 240、派送 240 分钟，2026-06-01 起，依据 `SYN-NET-OPS/CHANGE-SIN-LM-DELIVERY-2606`），`seed.sh` 追加一行，README 组成表追加一行。
-- 文档：ADR-0217；ADR-0131 后继指针，ADR-0175 决定一、决定四各一句与 ADR-0201 决定二末句部分停用（Status 行、Links、adr/README 各该行），adr/README 追加 0217 一行；NR CONTEXT「服务日历」与「路由形成与选择」；GLOSSARY「路由计划」一行；UC-NR-001 `AT-NR-054`–`058`、`060`–`063`，UC-NR-003 `AT-NR-059`，UC-TF-003 `AT-TF-201`；`PAR-NET-14` 一句；演示脚本第 5 步补记。
+- 文档：ADR-0217；ADR-0131 后继指针（只在 Links 与 adr/README 该行，Status 行不动），ADR-0175 决定一、决定四各一句与 ADR-0201 决定二末句部分停用（Status 行、Links、adr/README 各该行），adr/README 追加 0217 一行；NR CONTEXT「服务日历」与「路由形成与选择」；GLOSSARY「路由计划」一行；UC-NR-001 `AT-NR-054`–`058`、`060`–`063`，UC-NR-003 `AT-NR-059`，UC-TF-003 `AT-TF-201`；`PAR-NET-14` 一句；演示脚本第 5 步补记。
 - 新立票 [72](./72-admin-web-route-plans-shows-planned-legs.md)：管理台路由计划页列段，契约夹具补 `legs`。
 
 ### 代决（用户授权「你作为业务和系统专家自决……解决所有的问题」）
@@ -56,7 +56,7 @@ L
 2. **交付范围取区域解析的那一格版本引用**：覆盖收件地址的区域版本，多版并列照解析依据的「+」连写；责任引用同串。
 3. **交付段窗口依据写 `NODE/<节点>@<日历修订>`**，与节点日历在候选投影依据里的写法同形；TF 不据依据认交付段，按种类跳过。
 4. **候选投影延到交付段终点**（方案 C11 越权风险点「总窗口变长」）：交付段成段才延，没成段时投影与此前相同。
-5. **`PlanNodes` 遇交付段答不出而不是跳过**：调用方该交 `NodeLegs()`；跳过会把误用藏起来。
+5. **`PlanNodes` 遇交付段答不出而不是跳过**：调用方该交 `NodeLegs()`；跳过会把误用藏起来。复核经 `planNodesOf` 取节点序列，答不出就返回 error，不折成「冻结形态未配置」（评审后改，见评审记录）。
 6. **种类缺席即节点间段**：计划 jsonb 只给交付段写 `kind`，节点间段与旧行同形，不迁移、不回填。
 7. **查阅口逐段列出要重建整份计划**：与段窗口窄读口同一读法；坏行让整页答不出，不跳过。为此把 `route_plan_catalogue_test.go` 的成计划夹具行换成能过构造门的单段计划（无 `kind`，即旧行形状）。
 8. **`legs` 只在有段时出现，契约夹具暂不含它**：放进夹具，管理台契约测试当场红，而 `apps/admin-web` 是别的会话的地盘；票 72 收口。
@@ -69,7 +69,7 @@ L
 
 ADR-0217 文末各条原样成立：总窗口变长、责任暂指服务区域版本、派送时长挂节点不挂区域、交付段不进比价、交付段没有不透明形、查阅口重建整份计划、管理台契约夹具不含 `legs`、段种类不推派送段。另加落地时的几条：
 
-1. **误用 `PlanNodes` 表现为冻结未配置**（NR owner）：把整条段链交给它，复核会落「冻结形态未配置」的未决而不是报错；生产调用已改取 `NodeLegs()`，真库与应用用例钉住。
+1. **答不出的节点序列让复核这一拍报错**（NR owner）：只有绕过构造门的计划才走得到，复核返回 error 而不是落未决；这一支经构造门走不到，没有用例钉它，生产调用取 `NodeLegs()` 由真库与应用用例钉住。
 2. **派送时长登错对象静默无效**（NR owner）：登在连接或线路日历上不拒、也不被读。
 3. **停用范围自判**（NR、TF owner）：代决 10 的停用不在方案里，owner 若认为 ADR-0175 应整份由新记录取代或不算停用，改 adr/README 两行即可，代码不动。
 
@@ -96,3 +96,24 @@ ADR-0217 文末各条原样成立：总窗口变长、责任暂指服务区域�
 - 种子令牌：本票进 main 后由协调方把种子那一笔的 SHA 通知 idp-parcel-9b（方案「波次与令牌」）。
 - 机制清点未重生成（进 main 时统一做）。
 - ADR-0217 越权风险点待 NR owner 复核、TF owner 会签。
+
+## 评审记录（2026-10-19，隔离评审一轮，作者子代理修订）
+
+阻断 0 项；非阻断 7 项，其中 3 项标了进 main 前修。7 项都已处理：5 项改了，2 项按评审建议的去向登记，没有不采纳的。
+
+1. **ADR-0131 改了 Status 行**（进 main 前修）——已修。Status 行恢复 `Accepted`。ADR-0131 没有被停条款，照 adr/README 顶部规则不改 Status 行，只保留 Links 节的后继指针与 adr/README 该行的「后继」注（`2d2a7903`）。
+2. **演示取值写了多处**（进 main 前修）——已修。ADR-0217 决定六、`seed.sh` 注释、演示脚本补记改指种子 README 组成表 `24-calendar-node-sin-lm-v2.json` 那一行，不写数值。README 那一行照 transport 行的先例补「不复述，都指到这里」，行内「加 240 分钟」改「加派送时长」。演示脚本里实测的窗口时刻是取证，保留。本票完成记录里的取值是落地记录，不改（`2d2a7903`、`9d482b8e`）。
+3. **计数与变更叙述**（进 main 前修）——已修。
+   - ADR-0217 Consequences 删掉「三条」，改为直接写不变量本身。
+   - `route_plan_read.go` 与 `query_route_plans.go` 的种类词改指 `domain.PlannedLegKind`。
+   - `register_network_catalog_test.go` 直接写出截单、处理时长、衔接缓冲。
+   - freezeOf 的理由改成一般表述（交付段计入剩余段数会让冻结边界整体提前一个节点），不再引用演示取值，挪进 `planNodesOf` 的注释。
+   - `calendar_projection.go` 删去「与这一格出现之前相同」。
+   - `route_plan_read.go` 超长的那一行重新折行，适用性一段另起。
+   - 评审没点、属同一类的几处一并改了：domain 测试里的「封闭两格」，迁移 0020 注释里的「0015 的三格」（改为写出格名），UC-NR-001 `AT-NR-055` 的「与没有这一格之前相同」，票 72 的「封闭两格原词」（`5b374b77`、`2d2a7903`、`e7bf1b1e`）。
+4. **freezeOf 把编程错误折成未配置**——已修。新增 `planNodesOf`：`PlanNodes(plan.NodeLegs())` 答不出时返回 error。`freezeOf` 与 `structuralAutoReroute` 都改走它，把 error 往上交，复核 `Handle` 随之返回 error。`structuralAutoReroute` 原先静默把 `onlyUnexecuted` 当作假，也一并改掉。本票代决 5、越权风险点 1 与 ADR-0217 Consequences 随之改写。没有补用例：经构造门成形的计划走不到这一支，零值计划在适用性比对的 `Nodes()` 里会先出错。
+5. **契约夹具不含 `legs`**——去向票 [72](./72-admin-web-route-plans-shows-planned-legs.md)，票面已写明两侧同一笔补齐，本轮没改。
+6. **复核册不列段**——立票 [73](./73-route-reassessments-register-lists-the-new-plan-legs.md)。ADR-0217 越权风险点 6 写明复核册暂不列段；adr/README 0217 行的风险摘要补了这一条。读码与评审描述有一处出入：复核册连新计划版本也不给（检索列只有被复核的原计划 `reviewed_plan`），不是「只给 new_plan 的版本」。风险点与票 73 都照读码写，并把复核时首次形成计划（`FIRST_PLAN_FORMED`）那一路也算在内。
+7. **CONTEXT 不透明段写到「交付范围」**——已修。ADR-0217 越权风险点 5 点明：CONTEXT 词条里止于交付范围的不透明段当前没有实现形状，留给末端外包另行裁决，CONTEXT 不改。
+
+修订后验证：`go build ./...`、`go vet`（`./internal/networkrouting/...`、`./internal/transportfulfillment/adapters/networkrouting/...`、`./cmd/parcel-dispatch/`）、`gofmt -l` 都干净。真库测试（`-p 1 -count=1`）全绿，跑了 `./internal/networkrouting/...`、`./internal/transportfulfillment/adapters/networkrouting/...`、`./internal/architecture/`、`./cmd/parcel-dispatch/`、`./migrations/...`、`./scripts/demo-seeds/...`。`seed.sh` 过了 `bash -n`；在一次性库 `rv64b_seed` 上灌入退 0，`SYN-NODE-SIN-LM` 修订 1 闭合于 2026-06-01，修订 2 处理与派送时长与种子文件一致、无终点，查完已 `DROP … WITH (FORCE)`。
