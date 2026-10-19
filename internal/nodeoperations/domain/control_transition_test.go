@@ -42,6 +42,7 @@ func judgeOut(t *testing.T, active []domain.PhysicalControl, at time.Time) domai
 		active,
 		handoverRef(t, "v1"),
 		mustValue(t, domain.NewTransferOutReference, "TRANSPORT-HANDOVER/v1"),
+		domain.NodeReference{},
 		at,
 	)
 	if err != nil {

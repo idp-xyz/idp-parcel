@@ -48,16 +48,20 @@ func (double *objectResolverDouble) ResolveHandoverObject(
 	return double.resolution, nil
 }
 
-// controlRegisterDouble 在内存里扮转移册：按（对象，范围，版本，方向）存行，按（对象，范围，方向）认更正链。advanceUnderLock 扮
-// 「同链前版在锁外刚提交」：取实物锁那一刻才出现在册上。lostRace 让 Save 答已在册而不落行，winner 是另一方先落的那一行。
+// controlRegisterDouble 在内存里扮转移册：按（对象，范围，版本，方向）存行，按（对象，范围，方向）认更正链。active 是收寄成立的那几份
+// 控制（成立时的样子），released 是此前已转出、册外带来的几份；读控制时与真库一样折叠：册上推进了的转入行补进来，推进了的转出行按
+// 控制依据把那一份换成已转出的。advanceUnderLock 扮「同链前版在锁外刚提交」：转出一半取实物锁那一刻才出现在册上；advanceInUnderLock
+// 同此，只在转入一半取锁时出现。lostRace 让 Save 答已在册而不落行，winner 是另一方先落的那一行。
 type controlRegisterDouble struct {
-	rows             map[string]ports.ControlTransitionRecord
-	active           []domain.PhysicalControl
-	locked           []string
-	saves            int
-	advanceUnderLock *ports.ControlTransitionRecord
-	lostRace         bool
-	winner           ports.ControlTransitionRecord
+	rows               map[string]ports.ControlTransitionRecord
+	active             []domain.PhysicalControl
+	released           []domain.PhysicalControl
+	locked             []string
+	saves              int
+	advanceUnderLock   *ports.ControlTransitionRecord
+	advanceInUnderLock *ports.ControlTransitionRecord
+	lostRace           bool
+	winner             ports.ControlTransitionRecord
 }
 
 func newControlRegister() *controlRegisterDouble {
@@ -95,11 +99,44 @@ func (double *controlRegisterDouble) FindAdvancedInHandoverChain(
 func (double *controlRegisterDouble) FindActiveControls(
 	_ context.Context, _ domain.TenantID, unit domain.HandlingUnitID,
 ) ([]domain.PhysicalControl, error) {
-	double.locked = append(double.locked, unit.String())
-	if double.advanceUnderLock != nil {
-		double.put(*double.advanceUnderLock)
+	active := []domain.PhysicalControl{}
+	for _, control := range double.lockAndFold(unit, double.advanceUnderLock) {
+		if control.Active() {
+			active = append(active, control)
+		}
 	}
-	return double.active, nil
+	return active, nil
+}
+
+func (double *controlRegisterDouble) FindUnitControls(
+	_ context.Context, _ domain.TenantID, unit domain.HandlingUnitID,
+) ([]domain.PhysicalControl, error) {
+	return double.lockAndFold(unit, double.advanceInUnderLock), nil
+}
+
+func (double *controlRegisterDouble) lockAndFold(unit domain.HandlingUnitID, underLock *ports.ControlTransitionRecord) []domain.PhysicalControl {
+	double.locked = append(double.locked, unit.String())
+	if underLock != nil {
+		double.put(*underLock)
+	}
+	known := append(append([]domain.PhysicalControl{}, double.active...), double.released...)
+	for _, record := range double.rows {
+		if transition := record.Transition; transition.Direction() == domain.ControlTransitionIn && transition.Outcome() == domain.ControlAdvanced {
+			control, _ := transition.Control()
+			known = append(known, control)
+		}
+	}
+	for index, control := range known {
+		for _, record := range double.rows {
+			transition := record.Transition
+			released, carries := transition.Control()
+			if transition.Direction() == domain.ControlTransitionOut && transition.Outcome() == domain.ControlAdvanced &&
+				carries && released.Basis() == control.Basis() {
+				known[index] = released
+			}
+		}
+	}
+	return known
 }
 
 func (double *controlRegisterDouble) Save(_ context.Context, record ports.ControlTransitionRecord) (ports.ControlTransitionSaveOutcome, error) {
@@ -182,14 +219,21 @@ func (fixture *transferFixture) refused(t *testing.T, version string) {
 	fixture.handovers.answers[version] = ports.AuthoritativeHandover{Reference: handoverVersion(t, version), JudgedAt: transferJudgedAt}
 }
 
+// transfer 跑一版、交回转出一半。本文件的交接都不声明接收节点，转入一半零写入，不碰替身——转入各格见
+// establish_control_on_handover_test.go。
 func (fixture *transferFixture) transfer(t *testing.T, version string) application.TransferControlOnHandoverResult {
 	t.Helper()
-	result, err := fixture.handler.Transfer(context.Background(), application.TransferControlOnHandoverCommand{
+	return fixture.advance(t, version).Out()
+}
+
+func (fixture *transferFixture) advance(t *testing.T, version string) application.AdvanceControlOnHandoverResult {
+	t.Helper()
+	result, err := fixture.handler.Advance(context.Background(), application.TransferControlOnHandoverCommand{
 		TenantID: mustValue(t, domain.NewTenantID, "tenant-1"),
 		Handover: handoverVersion(t, version),
 	})
 	if err != nil {
-		t.Fatalf("转出 %s：%v", version, err)
+		t.Fatalf("推进 %s：%v", version, err)
 	}
 	return result
 }
@@ -422,7 +466,7 @@ func TestUndecidedAndLostRacesAnswerWithoutAWrite(t *testing.T) {
 	t.Run("译不过来不是未决", func(t *testing.T) {
 		fixture := newTransferFixture(t)
 		fixture.handovers.err = errors.New("the provider record is broken")
-		if _, err := fixture.handler.Transfer(context.Background(), application.TransferControlOnHandoverCommand{
+		if _, err := fixture.handler.Advance(context.Background(), application.TransferControlOnHandoverCommand{
 			TenantID: mustValue(t, domain.NewTenantID, "tenant-1"), Handover: handoverVersion(t, "v1"),
 		}); err == nil {
 			t.Fatal("坏记录该原样交回错误，而不是答未决让它一直重投")

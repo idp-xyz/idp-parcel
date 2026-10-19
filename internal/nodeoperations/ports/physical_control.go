@@ -20,12 +20,18 @@ var ErrAuthoritativeHandoverUnreadable = errors.New("node operations: authoritat
 // HandedOver 只在`已交接`时为真，TransferOut 只随它在场——拒收与待确认给不出转出引用。JudgedAt 是交接判断的业务时间，已折到
 // 节点控制转移册的存储精度：转出前比较的与读回时折叠比较的是同一个时刻。Superseded 说这一版已被同链的后一版更正：晚到的前版
 // 不再是这个对象的交接结果。
+//
+// ReleasingNode 与 ReceivingNode 是这一版声明的交出与接收节点（ADR-0213 决定一），零值即没有声明——缺席是一种答案，本上下文不补。
+// 接收节点决定转入在哪个节点立控制；交出节点只用来与被转出那一份控制的节点比，不是转出的前提。更正承继前版的声明，同一条更正链上
+// 各版的节点相同。
 type AuthoritativeHandover struct {
-	Reference   domain.AuthoritativeHandoverReference
-	HandedOver  bool
-	TransferOut domain.TransferOutReference
-	JudgedAt    time.Time
-	Superseded  bool
+	Reference     domain.AuthoritativeHandoverReference
+	HandedOver    bool
+	TransferOut   domain.TransferOutReference
+	JudgedAt      time.Time
+	Superseded    bool
+	ReleasingNode domain.NodeReference
+	ReceivingNode domain.NodeReference
 }
 
 // AuthoritativeHandoverSource 按（租户，交接键）读回一版权威运输交接；没有交回 false。读不动的错误包 ErrAuthoritativeHandoverUnreadable。
@@ -116,26 +122,36 @@ type PhysicalControlRegister interface {
 		tenant domain.TenantID,
 		unit domain.HandlingUnitID,
 	) ([]domain.PhysicalControl, error)
+	// FindUnitControls 交回这件作业实物在本上下文有过的各份控制，在身的与已转出的都算，同样折进转出、按控制依据去重；没有交回空
+	// 切片。转入要看最近一次转出落在什么时刻，只读在身的看不到（ADR-0214 决定七落地补记）。取锁与事务要求同 FindActiveControls：
+	// 同一把实物锁，转入与同一件实物的收寄、转出串在一起。
+	FindUnitControls(
+		ctx context.Context,
+		tenant domain.TenantID,
+		unit domain.HandlingUnitID,
+	) ([]domain.PhysicalControl, error)
 	// Save 落一行。同一（租户，交接键，方向）已在册答 ControlTransitionAlreadyRecorded，不覆盖先到者。
 	Save(ctx context.Context, record ControlTransitionRecord) (ControlTransitionSaveOutcome, error)
 }
 
 // PhysicalControlTransitionCatalogueRow 是节点控制转移册上列的一行（registry=physical-control），照行转写。Direction、Outcome、Reason
-// 与 ControlKind 是封闭词原样透出；控制几格只在这一行带控制时在场，转出两格只在转出与待重算两种行上在场。
+// 与 ControlKind 是封闭词原样透出；控制几格只在这一行带控制时在场，转出两格只在推进了的转出与转出一侧的待重算上在场。
+// MismatchedReleasingNode 是推进了的转出上的信息格：交接声明的交出节点与被转出那一份控制的节点不符时，记声明的那一个。
 type PhysicalControlTransitionCatalogueRow struct {
-	HandoverObject       string
-	HandoverScope        string
-	HandoverVersion      string
-	Direction            string
-	Outcome              string
-	Reason               string
-	Unit                 string
-	Node                 string
-	ControlKind          string
-	ControlBasis         string
-	ControlEstablishedAt *time.Time
-	TransferReference    string
-	TransferredAt        *time.Time
-	OccurredAt           time.Time
-	RecordedAt           time.Time
+	HandoverObject          string
+	HandoverScope           string
+	HandoverVersion         string
+	Direction               string
+	Outcome                 string
+	Reason                  string
+	Unit                    string
+	Node                    string
+	ControlKind             string
+	ControlBasis            string
+	ControlEstablishedAt    *time.Time
+	TransferReference       string
+	TransferredAt           *time.Time
+	MismatchedReleasingNode string
+	OccurredAt              time.Time
+	RecordedAt              time.Time
 }

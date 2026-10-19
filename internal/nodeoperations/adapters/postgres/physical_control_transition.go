@@ -14,7 +14,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 )
 
-// 本文件是节点控制转移册（ADR-0214 决定三，迁移 0017）的适配器：读写转移、答一件作业实物此刻在身的各份控制、认交接对象。
+// 本文件是节点控制转移册（ADR-0214 决定三、七，迁移 0017、0018）的适配器：读写转移、答一件作业实物的各份控制、认交接对象。
 
 // foldedControl 是读控制时的折叠（ADR-0214 决定三）：收寄行的 control 列不改写，控制是否已转出要把转移册上的转出折进去读。折叠由
 // 迁移 0017 的 SQL 函数做，凡读收寄控制的语句都经这一格读，收寄按键读回、认当前收寄与查阅目录才答得一致。
@@ -41,7 +41,7 @@ func NewPhysicalControlTransitions(db *bentopg.DB) (*PhysicalControlTransitions,
 // transitionColumns 与 scanTransition 的扫描顺序是同一份约定，两处一起改。
 const transitionColumns = `handover_object, handover_scope, handover_version, direction, outcome, reason,
 		        unit, node, control_kind, control_basis, control_established_at,
-		        transfer_reference, transferred_at, occurred_at, recorded_at`
+		        transfer_reference, transferred_at, occurred_at, recorded_at, mismatched_releasing_node`
 
 // FindTransition 按主键取一行。走 ReadExecutor：事务内读得到本事务刚落的那一行。
 func (register *PhysicalControlTransitions) FindTransition(
@@ -122,28 +122,59 @@ func (register *PhysicalControlTransitions) FindAdvancedInHandoverChain(
 	}
 }
 
-// FindActiveControls 先取实物锁，再读这件实物此刻在身的各份控制。
-//
-// 锁空间名与键口径必须与 Receptions.FindCurrentJudgmentsAtNode 逐字相同：转出与同一件实物的收寄要串在同一把锁上，否则一次送站
-// 在转出提交之前读到仍在身的控制，就会并进一条正被转出的收寄。走 RequireExecutor，理由同那一问：锁随事务释放，没有事务时锁在
-// 取锁那条语句结束就放掉。
-//
-// 两处来源都经同一个折叠读：收寄行上的控制（各条判断链照抄同一份，按控制依据去重），与转移册上转入成立的控制（票
-// demo-chain-gaps/62 起才有行）。折叠之后只留在身的。
+// FindActiveControls 先取实物锁，再读这件实物此刻在身的各份控制。读法见 unitControls，折叠之后只留在身的。
 func (register *PhysicalControlTransitions) FindActiveControls(
+	ctx context.Context,
+	tenant domain.TenantID,
+	unit domain.HandlingUnitID,
+) ([]domain.PhysicalControl, error) {
+	controls, err := register.unitControls(ctx, tenant, unit)
+	if err != nil {
+		return nil, fmt.Errorf("find active controls: %w", err)
+	}
+	active := []domain.PhysicalControl{}
+	for _, control := range controls {
+		if control.Active() {
+			active = append(active, control)
+		}
+	}
+	return active, nil
+}
+
+// FindUnitControls 先取实物锁，再读这件实物有过的各份控制，在身的与已转出的都交回。读法见 unitControls。
+func (register *PhysicalControlTransitions) FindUnitControls(
+	ctx context.Context,
+	tenant domain.TenantID,
+	unit domain.HandlingUnitID,
+) ([]domain.PhysicalControl, error) {
+	controls, err := register.unitControls(ctx, tenant, unit)
+	if err != nil {
+		return nil, fmt.Errorf("find unit controls: %w", err)
+	}
+	return controls, nil
+}
+
+// unitControls 先取实物锁，再读这件实物的各份控制。
+//
+// 锁空间名与键口径必须与 Receptions.FindCurrentJudgmentsAtNode 逐字相同：转出、转入与同一件实物的收寄要串在同一把锁上，否则一次
+// 送站在转出提交之前读到仍在身的控制，就会并进一条正被转出的收寄。走 RequireExecutor，理由同那一问：锁随事务释放，没有事务时锁在
+// 取锁那条语句结束就放掉。同一笔事务里先转出、后转入各取一次，咨询锁可重入，不自己等自己。
+//
+// 两处来源都经同一个折叠读：收寄行上的控制（各条判断链照抄同一份，按控制依据去重），与转移册上转入成立的控制。
+func (register *PhysicalControlTransitions) unitControls(
 	ctx context.Context,
 	tenant domain.TenantID,
 	unit domain.HandlingUnitID,
 ) ([]domain.PhysicalControl, error) {
 	executor, err := register.db.RequireExecutor(ctx)
 	if err != nil {
-		return nil, fmt.Errorf("find active controls: %w", err)
+		return nil, err
 	}
 	if _, err := executor.Exec(ctx,
 		`SELECT pg_advisory_xact_lock(hashtext('node_operations.reception.handling_unit'), hashtext($1 || chr(31) || $2))`,
 		tenant.String(), unit.String(),
 	); err != nil {
-		return nil, fmt.Errorf("find active controls: 取实物锁：%w", err)
+		return nil, fmt.Errorf("取实物锁：%w", err)
 	}
 	rows, err := executor.Query(ctx,
 		`SELECT `+foldedControl+`
@@ -163,30 +194,30 @@ func (register *PhysicalControlTransitions) FindActiveControls(
 		tenant.String(), unit.String(),
 	)
 	if err != nil {
-		return nil, fmt.Errorf("find active controls: %w", err)
+		return nil, err
 	}
 	defer rows.Close()
-	active := []domain.PhysicalControl{}
+	controls := []domain.PhysicalControl{}
 	seen := map[string]bool{}
 	for rows.Next() {
 		var raw []byte
 		if err := rows.Scan(&raw); err != nil {
-			return nil, fmt.Errorf("find active controls: %w", err)
+			return nil, err
 		}
 		control, err := rebuildControl(tenant, raw)
 		if err != nil {
-			return nil, fmt.Errorf("find active controls: %w", err)
+			return nil, err
 		}
-		if !control.Active() || seen[control.Basis().String()] {
+		if seen[control.Basis().String()] {
 			continue
 		}
 		seen[control.Basis().String()] = true
-		active = append(active, control)
+		controls = append(controls, control)
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("find active controls: %w", err)
+		return nil, err
 	}
-	return active, nil
+	return controls, nil
 }
 
 // Save 落一行。撞主键答已在册（ON CONFLICT 只认主键，理由同 Receptions.Save：撞键的 INSERT 会把整个事务打进中止态，而编排拿到
@@ -203,10 +234,13 @@ func (register *PhysicalControlTransitions) Save(
 	transition := record.Transition
 	handover := transition.Handover()
 	var (
-		reason, unit, node, kind, basis, reference *string
-		establishedAt, transferredAt               *time.Time
+		reason, unit, node, kind, basis, reference, mismatched *string
+		establishedAt, transferredAt                           *time.Time
 	)
 	reason = nameColumn(transition.Reason().String())
+	if declared, present := transition.ReleasingNodeMismatch(); present {
+		mismatched = nameColumn(declared.String())
+	}
 	if handlingUnit, present := transition.Unit(); present {
 		unit = nameColumn(handlingUnit.String())
 	}
@@ -226,13 +260,13 @@ func (register *PhysicalControlTransitions) Save(
 		`INSERT INTO node_operations.physical_control_transition
 			(tenant_id, handover_object, handover_scope, handover_version, direction, outcome, reason,
 			 unit, node, control_kind, control_basis, control_established_at,
-			 transfer_reference, transferred_at, occurred_at, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+			 transfer_reference, transferred_at, occurred_at, recorded_at, mismatched_releasing_node)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 		 ON CONFLICT (tenant_id, handover_object, handover_scope, handover_version, direction) DO NOTHING`,
 		transition.TenantID().String(), handover.Object(), handover.Scope(), handover.Version(),
 		transition.Direction().String(), transition.Outcome().String(), reason,
 		unit, node, kind, basis, establishedAt,
-		reference, transferredAt, transition.OccurredAt().UTC(), record.RecordedAt.UTC(),
+		reference, transferredAt, transition.OccurredAt().UTC(), record.RecordedAt.UTC(), mismatched,
 	)
 	if err != nil {
 		return ports.ControlTransitionSaveOutcomeInvalid, fmt.Errorf("save control transition: %w", err)
@@ -311,12 +345,12 @@ func scanTransition(row pgx.Row, tenant domain.TenantID) (ports.ControlTransitio
 		object, scope, version, directionName, outcomeName  string
 		reasonName, unitName, nodeName, kindName, basisName *string
 		establishedAt, transferredAt                        *time.Time
-		referenceName                                       *string
+		referenceName, mismatchedName                       *string
 		occurredAt, recordedAt                              time.Time
 	)
 	if err := row.Scan(&object, &scope, &version, &directionName, &outcomeName, &reasonName,
 		&unitName, &nodeName, &kindName, &basisName, &establishedAt,
-		&referenceName, &transferredAt, &occurredAt, &recordedAt); err != nil {
+		&referenceName, &transferredAt, &occurredAt, &recordedAt, &mismatchedName); err != nil {
 		return ports.ControlTransitionRecord{}, err
 	}
 	handover, err := domain.NewAuthoritativeHandoverReference(object, scope, version)
@@ -337,6 +371,11 @@ func scanTransition(row pgx.Row, tenant domain.TenantID) (ports.ControlTransitio
 	}
 	if unitName != nil {
 		if spec.Unit, err = domain.NewHandlingUnitID(*unitName); err != nil {
+			return ports.ControlTransitionRecord{}, err
+		}
+	}
+	if mismatchedName != nil {
+		if spec.MismatchedReleasingNode, err = domain.NewNodeReference(*mismatchedName); err != nil {
 			return ports.ControlTransitionRecord{}, err
 		}
 	}

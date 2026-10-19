@@ -143,7 +143,7 @@ func (fixture *controlFixture) transferOut(t *testing.T, unit, version string) p
 		if err != nil {
 			return err
 		}
-		transition, err := domain.JudgeTransferOut(tenant, handlingUnit, active, handover, reference, controlHandedOverAt)
+		transition, err := domain.JudgeTransferOut(tenant, handlingUnit, active, handover, reference, domain.NodeReference{}, controlHandedOverAt)
 		if err != nil {
 			return err
 		}

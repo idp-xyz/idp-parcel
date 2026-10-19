@@ -1,6 +1,6 @@
 // Package transportfulfillment 是 node-operations 消费 transport-fulfillment 权威运输交接结果的适配器（ADR-0025 消费方侧）。它按交接
-// 信封的键读回那一版交接、译成本上下文的语言，再交给节点控制的转出编排（ADR-0214，UC-NO-005）。它只翻译不判断：交接对象怎样对上
-// 作业实物、转出哪一份控制，都是编排与领域的事。
+// 信封的键读回那一版交接、译成本上下文的语言，再交给节点控制的推进编排（ADR-0214，UC-NO-005）。它只翻译不判断：交接对象怎样对上
+// 作业实物、转出哪一份控制、在哪个节点立控制，都是编排与领域的事。
 package transportfulfillment
 
 import (
@@ -56,7 +56,8 @@ func NewAuthoritativeHandoverSource(handovers TransportHandoverReader) (*Authori
 // 必须带版本读：按三维读「当前版」会把更正与原判断叠成一次查找，晚到的前版就会被当成后一版处理。转出依据只取 TF 给的
 // TransferOutBasis——那一格只有`已交接`给得出，拒收与待确认在源头就没有转出引用。对象只当不透明的引用传下去，它是包裹还是集运单元
 // 由本上下文自己的册子认，不在这里拿字符串去比作业实物。业务时间折到微秒：转移册把它落在 timestamptz 上，转出前与控制成立时刻比较
-// 的、与读回时折叠重放比较的必须是同一个时刻。
+// 的、与读回时折叠重放比较的必须是同一个时刻。交出与接收节点照 TF 的声明原样译过来，没声明的格留零值；TF 存的是 network-routing
+// 的节点代码，与本上下文收寄所在的节点是同一套指称，所以拿来比、拿来立控制都不另换算。
 func (source *AuthoritativeHandoverSource) FindAuthoritativeHandover(
 	ctx context.Context,
 	tenant nodomain.TenantID,
@@ -94,6 +95,16 @@ func (source *AuthoritativeHandoverSource) FindAuthoritativeHandover(
 		}
 		answer.HandedOver = true
 	}
+	if node, declared := handover.ReleasingNode(); declared {
+		if answer.ReleasingNode, err = nodomain.NewNodeReference(node.String()); err != nil {
+			return ports.AuthoritativeHandover{}, false, fmt.Errorf("%w: releasing node: %v", ErrUntranslatableAnswer, err)
+		}
+	}
+	if node, declared := handover.ReceivingNode(); declared {
+		if answer.ReceivingNode, err = nodomain.NewNodeReference(node.String()); err != nil {
+			return ports.AuthoritativeHandover{}, false, fmt.Errorf("%w: receiving node: %v", ErrUntranslatableAnswer, err)
+		}
+	}
 	return answer, true, nil
 }
 
@@ -118,16 +129,16 @@ func handoverKeyFor(tenant nodomain.TenantID, reference nodomain.AuthoritativeHa
 	return tfports.TransportHandoverKey{TenantID: tfTenant, Object: object, Scope: scope, Version: version}, nil
 }
 
-// ControlTransfer 是节点控制转出编排那一口，application.TransferControlOnHandoverHandler 满足它。
+// ControlTransfer 是节点控制推进编排那一口（先转出、后转入），application.TransferControlOnHandoverHandler 满足它。
 type ControlTransfer interface {
-	Transfer(
+	Advance(
 		ctx context.Context,
 		command application.TransferControlOnHandoverCommand,
-	) (application.TransferControlOnHandoverResult, error)
+	) (application.AdvanceControlOnHandoverResult, error)
 }
 
 // TransferControlOnHandoverAdapter 是 noinbox.TransportHandoverRegisteredConsumer 的真实处理方：把信封的四维译成本上下文的命令交给
-// 转出编排，再按编排答出的处置落成 inbox 的三种动作。
+// 推进编排，再按编排答出的处置落成 inbox 的三种动作。
 type TransferControlOnHandoverAdapter struct {
 	transfer ControlTransfer
 }
@@ -141,8 +152,9 @@ func NewTransferControlOnHandoverAdapter(transfer ControlTransfer) (*TransferCon
 	return &TransferControlOnHandoverAdapter{transfer: transfer}, nil
 }
 
-// HandleRegisteredTransportHandover 跑一版。入账的各格（转出了、入账不推进、零写入的几格）交回 nil；停在交接登记册上交回未决哨兵；
-// 封闭集合以外交回缺陷哨兵。编排自己的错误（转移册读写、实物锁）原样交回，落发布失败：那几格要运维看的是本上下文自己的存储。
+// HandleRegisteredTransportHandover 跑一版。两半都入账（推进了、入账不推进、零写入的几格）交回 nil；停在交接登记册上交回未决哨兵；
+// 任一半落在封闭集合以外交回缺陷哨兵。编排自己的错误（转移册读写、实物锁）原样交回，落发布失败：那几格要运维看的是本上下文自己的
+// 存储。
 func (adapter *TransferControlOnHandoverAdapter) HandleRegisteredTransportHandover(
 	ctx context.Context,
 	registered noinbox.RegisteredTransportHandover,
@@ -155,19 +167,21 @@ func (adapter *TransferControlOnHandoverAdapter) HandleRegisteredTransportHandov
 	if err != nil {
 		return fmt.Errorf("%w: handover key: %v", ErrControlTransferDefect, err)
 	}
-	result, err := adapter.transfer.Transfer(ctx, application.TransferControlOnHandoverCommand{
+	result, err := adapter.transfer.Advance(ctx, application.TransferControlOnHandoverCommand{
 		TenantID: tenant,
 		Handover: reference,
 	})
 	if err != nil {
 		return err
 	}
+	out, in := result.Out(), result.In()
 	switch result.Disposition() {
 	case application.ControlOnHandoverSettled:
 		return nil
 	case application.ControlOnHandoverRetry:
-		return fmt.Errorf("%w: %s %s", ErrControlTransferUndecided, result.Outcome(), result.UndecidedReason())
+		return fmt.Errorf("%w: out %s %s, in %s %s", ErrControlTransferUndecided,
+			out.Outcome(), out.UndecidedReason(), in.Outcome(), in.UndecidedReason())
 	default:
-		return fmt.Errorf("%w: %s", ErrControlTransferDefect, result.Outcome())
+		return fmt.Errorf("%w: out %s, in %s", ErrControlTransferDefect, out.Outcome(), in.Outcome())
 	}
 }

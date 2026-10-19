@@ -37,8 +37,8 @@ type RegisteredTransportHandoverHandler interface {
 	HandleRegisteredTransportHandover(ctx context.Context, registered RegisteredTransportHandover) error
 }
 
-// TransportHandoverRegisteredConsumer 把交接登记信封推进消费门，交给节点控制的转出（UC-NO-005）。处理方交回错误整笔回滚，inbox
-// 无账，信封退避重投。
+// TransportHandoverRegisteredConsumer 把交接登记信封推进消费门，交给节点控制的转出与转入（UC-NO-005）。处理方交回错误整笔回滚，
+// inbox 无账，信封退避重投。
 type TransportHandoverRegisteredConsumer struct {
 	gate *inboxconsume.Gate[RegisteredTransportHandover]
 }

@@ -206,6 +206,12 @@ func (register *recordingRegister) FindActiveControls(
 	return nil, nil
 }
 
+func (register *recordingRegister) FindUnitControls(
+	context.Context, nodomain.TenantID, nodomain.HandlingUnitID,
+) ([]nodomain.PhysicalControl, error) {
+	return nil, nil
+}
+
 func (register *recordingRegister) Save(_ context.Context, record ports.ControlTransitionRecord) (ports.ControlTransitionSaveOutcome, error) {
 	register.saved = append(register.saved, record)
 	return ports.ControlTransitionSaved, nil
