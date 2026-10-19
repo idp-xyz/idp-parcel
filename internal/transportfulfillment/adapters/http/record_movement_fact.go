@@ -17,8 +17,8 @@ import (
 // （ADR-0102），本端点若顺手替它做判断，两条来源就并成一个口、两套口径就并成一套。「自营还是
 // 外部」由 Intake 的认证结果说（自营走作业事实登记能力面、外部走集成客户端族，ADR-0149），本包不写任何判定。
 //
-// `GateRequired` / `GateClearance` 必须收：门禁约束的是装载出发动作，是不是要门禁、放行依据是什么
-// 由请求给，领域按种类判它该不该在场；Intake 漏收这两格，一条该被门禁挡住的出发就登上了。
+// `segment` / `resource` 是登记方声明的段与资源，可缺（ADR-0205 决定四）。`gateClearance` 是设备出示的放行凭据，原样收作
+// 证据；`gateRequired` 照收不读——设门与否由关务按对象与起讫判（ADR-0205 决定三），一线入口仍按原形透传它。
 type MovementFactIntake interface {
 	IntakeMovementFact(ctx context.Context, request *http.Request) (application.RecordMovementFactCommand, error)
 }
@@ -32,12 +32,14 @@ type MovementFactPayload struct {
 	Location      string `json:"location"`
 	Version       string `json:"version"`
 	OccurredAt    string `json:"occurredAt"`
+	Segment       string `json:"segment,omitempty"`
+	Resource      string `json:"resource,omitempty"`
 	GateRequired  bool   `json:"gateRequired"`
 	GateClearance string `json:"gateClearance,omitempty"`
 }
 
 // Command 把载荷连同信封给的租户与来源翻成登记命令。种类词不在封闭集内、时刻解不出是坏报文（400）；种类空着照零值交进去，
-// 门禁该不该在场、其余格成不成形都留给编排答（`门禁未放行`与`未受理`各自成格）。
+// 其余格成不成形都留给编排答。
 func (payload MovementFactPayload) Command(tenant domain.TenantID, source string) (application.RecordMovementFactCommand, error) {
 	none := application.RecordMovementFactCommand{}
 	if tenant.String() == "" {
@@ -50,6 +52,8 @@ func (payload MovementFactPayload) Command(tenant domain.TenantID, source string
 		Location:      payload.Location,
 		Source:        source,
 		Version:       payload.Version,
+		Segment:       payload.Segment,
+		Resource:      payload.Resource,
 		GateRequired:  payload.GateRequired,
 		GateClearance: payload.GateClearance,
 	}
@@ -95,21 +99,65 @@ func NewRecordMovementFactEndpoint(intake MovementFactIntake, handler MovementFa
 	}, writeMovementFactOutcome)
 }
 
-// movementFactResponse 是移动事实口的封闭响应形状。`outcome` 取应用枚举原名，`DEPARTURE_GATE_BLOCKED`
-// 与 `INPUT_NOT_ACCEPTED` 各自成格不合并——前者去取放行结果，后者去改输入（理由在
-// application.MovementFactOutcome）。`gateClearance` 只在出发那一格有意义，照实透出不做判断。`SOURCE_CONFLICT` 只有 `outcome`：
-// 编排不交回在册那一份，它可能是另一作业范围登的。
+// movementFactResponse 是移动事实口的封闭响应形状。`outcome` 取应用枚举原名。`gateClearance` 是设备出示的凭据，照实透出；
+// `gateReading` 只在出发上有，是登记那一刻向关务问来的读数——重放交回的是首次登记时那一份，不是此刻重问的。`SOURCE_CONFLICT`
+// 只有 `outcome`：编排不交回在册那一份，它可能是另一作业范围登的。
 type movementFactResponse struct {
-	Outcome               string `json:"outcome"`
-	Fact                  string `json:"fact,omitempty"`
-	Schedule              string `json:"schedule,omitempty"`
-	Kind                  string `json:"kind,omitempty"`
-	Location              string `json:"location,omitempty"`
-	Version               string `json:"version,omitempty"`
-	OccurredAt            string `json:"occurredAt,omitempty"`
-	GateClearance         string `json:"gateClearance,omitempty"`
-	Corrects              string `json:"corrects,omitempty"`
-	ContinuationReference string `json:"continuationReference,omitempty"`
+	Outcome               string                    `json:"outcome"`
+	Fact                  string                    `json:"fact,omitempty"`
+	Schedule              string                    `json:"schedule,omitempty"`
+	Kind                  string                    `json:"kind,omitempty"`
+	Location              string                    `json:"location,omitempty"`
+	Version               string                    `json:"version,omitempty"`
+	OccurredAt            string                    `json:"occurredAt,omitempty"`
+	Segment               string                    `json:"segment,omitempty"`
+	Resource              string                    `json:"resource,omitempty"`
+	GateClearance         string                    `json:"gateClearance,omitempty"`
+	GateReading           *departureGateReadingView `json:"gateReading,omitempty"`
+	Corrects              string                    `json:"corrects,omitempty"`
+	ContinuationReference string                    `json:"continuationReference,omitempty"`
+}
+
+// departureGateReadingView 是出发门禁读数的线格式：整格、问关务时的起讫、本上下文这一侧的停点、逐对象的那一格与关务依据
+// 原文。逐对象列出而不只给整格：被阻断的是哪一件、凭哪条限制，运营要据此去处置那一件，不是整车。
+type departureGateReadingView struct {
+	Answer  string                    `json:"answer"`
+	From    string                    `json:"from,omitempty"`
+	To      string                    `json:"to,omitempty"`
+	Stops   []string                  `json:"stops,omitempty"`
+	Objects []departureGateObjectView `json:"objects,omitempty"`
+}
+
+type departureGateObjectView struct {
+	Object    string                   `json:"object"`
+	Answer    string                   `json:"answer"`
+	Judgement string                   `json:"judgement,omitempty"`
+	Bases     []departureGateBasisView `json:"bases"`
+}
+
+type departureGateBasisView struct {
+	Action  string   `json:"action,omitempty"`
+	Cause   string   `json:"cause"`
+	Sources []string `json:"sources,omitempty"`
+}
+
+func departureGateReadingViewOf(reading domain.DepartureGateReading) *departureGateReadingView {
+	view := &departureGateReadingView{Answer: reading.Answer().String()}
+	if from, to, directed := reading.Direction(); directed {
+		view.From, view.To = from.String(), to.String()
+	}
+	for _, stop := range reading.Stops() {
+		view.Stops = append(view.Stops, stop.String())
+	}
+	for _, finding := range reading.Findings() {
+		object := departureGateObjectView{Object: finding.Object().String(), Answer: finding.Answer().String()}
+		object.Judgement, _ = finding.Judgement()
+		for _, basis := range finding.Bases() {
+			object.Bases = append(object.Bases, departureGateBasisView{Action: basis.Action, Cause: basis.Cause, Sources: basis.Sources})
+		}
+		view.Objects = append(view.Objects, object)
+	}
+	return view
 }
 
 func writeMovementFactOutcome(response http.ResponseWriter, result application.RecordMovementFactResult) {
@@ -130,15 +178,25 @@ func writeMovementFactOutcome(response http.ResponseWriter, result application.R
 		body.Location = record.Fact.Location().String()
 		body.Version = record.Fact.Version().String()
 		body.OccurredAt = rfc3339(record.Fact.OccurredAt())
+		if segment, declared := record.Fact.Segment(); declared {
+			body.Segment = segment.String()
+		}
+		if resource, declared := record.Fact.Resource(); declared {
+			body.Resource = resource.String()
+		}
 		if clearance, present := record.Fact.GateClearance(); present {
 			body.GateClearance = clearance.String()
+		}
+		if reading, read := record.Fact.GateReading(); read {
+			body.GateReading = departureGateReadingViewOf(reading)
 		}
 		if predecessor, corrected := record.Fact.Corrects(); corrected {
 			body.Corrects = predecessor.String()
 		}
 	}
 
-	// ADR-0022：只有新落一版用 201；重放、内容冲突、门禁未放行、未受理、未决都是形成了的答案（200）。
+	// ADR-0022：只有新落一版用 201；重放、内容冲突、未受理、未决都是形成了的答案（200）。门禁读数是阻断也照样 201：
+	// 出发落册了，读数是记录里的一格，不是这一次登记的答复（ADR-0205 决定一）。
 	status := http.StatusOK
 	if result.Outcome() == application.MovementFactRecorded {
 		status = http.StatusCreated

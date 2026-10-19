@@ -257,6 +257,11 @@ func TestMovementFactCollisionLoserIsComparedOnARealDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// 输家沿用生产装配的那只读数编排：到达不问它，换的只是登记册的首读。
+	wired, ok := winner.(transactionalMovementFact)
+	if !ok {
+		t.Fatalf("生产装配交回的是 %T", winner)
+	}
 	facts, err := tfpostgres.NewMovementFacts(db)
 	if err != nil {
 		t.Fatal(err)
@@ -287,6 +292,7 @@ func TestMovementFactCollisionLoserIsComparedOnARealDatabase(t *testing.T) {
 	} {
 		loser := transactionalMovementFact{
 			transactor: db.Transactor(),
+			gate:       wired.gate,
 			inner: tfapp.NewRecordMovementFactHandler(tfapp.RecordMovementFactDeps{
 				Facts: &staleFirstReadFacts{MovementFactRegistry: facts},
 				Clock: systemClock{},

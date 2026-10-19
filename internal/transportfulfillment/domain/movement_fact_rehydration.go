@@ -4,9 +4,8 @@ import "time"
 
 // RehydrateMovementFactSpec 是一条实际移动事实某一个版本在库面的样子。
 //
-// **没有 GateRequired。** 它是判断的输入而不是事实的属性：一条已经成立的出发要么带着放行依据、
-// 要么本来就不受门禁管，两者的区别就是 GateClearance 在不在场。把它也装回来等于把判断过程当成
-// 事实存着，而下一次规则变了那一格就开始说谎。
+// 设备自报的「要不要门禁」从来不进来：它不是事实的属性，而且已不决定是否设门（ADR-0205 决定三）。出发要装回的是
+// 登记那一刻问来的门禁读数，读数由它自己的重建门装好再交进来。
 type RehydrateMovementFactSpec struct {
 	TenantID      TenantID
 	Fact          MovementFactReference
@@ -16,7 +15,10 @@ type RehydrateMovementFactSpec struct {
 	Source        MovementSourceReference
 	Version       MovementFactVersion
 	OccurredAt    time.Time
+	Segment       FulfillmentSegmentReference
+	Resource      TransportResourceReference
 	GateClearance GateClearanceReference
+	GateReading   DepartureGateReading
 
 	Corrects    MovementFactVersion
 	CorrectedAt time.Time
@@ -25,8 +27,7 @@ type RehydrateMovementFactSpec struct {
 // RehydrateMovementFact 从库面重建一条实际移动事实的一个版本。
 func RehydrateMovementFact(spec RehydrateMovementFactSpec) (TransportMovementFact, error) {
 	// 本体那一半的判据与构造门同一套，复用它而不是抄一遍——抄一遍就是为同一形状立第二个口径，
-	// 构造门改一次判据这里会悄悄漂移。GateRequired 传 false：装回时门禁那一问已经有答案了，
-	// 答案就是 GateClearance 在不在场；再问一遍会把一条早已成立的出发判成「被门禁挡住」。
+	// 构造门改一次判据这里会悄悄漂移。
 	fact, err := RecordMovementFact(MovementFactSpec{
 		TenantID:      spec.TenantID,
 		Fact:          spec.Fact,
@@ -36,7 +37,10 @@ func RehydrateMovementFact(spec RehydrateMovementFactSpec) (TransportMovementFac
 		Source:        spec.Source,
 		Version:       spec.Version,
 		OccurredAt:    spec.OccurredAt,
+		Segment:       spec.Segment,
+		Resource:      spec.Resource,
 		GateClearance: spec.GateClearance,
+		GateReading:   spec.GateReading,
 	})
 	if err != nil {
 		return TransportMovementFact{}, err

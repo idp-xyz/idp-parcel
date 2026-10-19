@@ -30,9 +30,10 @@ func assignmentSpec(t *testing.T) domain.LoadAssignmentSpec {
 	}
 }
 
+// movementSpec 交回一份成形的事实输入。出发带一份读数——出发必带；没声明段，读数就停在「段未声明」，两者对得上。
 func movementSpec(t *testing.T, kind domain.MovementFactKind) domain.MovementFactSpec {
 	t.Helper()
-	return domain.MovementFactSpec{
+	spec := domain.MovementFactSpec{
 		TenantID:   mustValue(t, domain.NewTenantID, "tenant-1"),
 		Fact:       mustValue(t, domain.NewMovementFactReference, "movement-1"),
 		Schedule:   mustValue(t, domain.NewScheduleReference, "schedule-1"),
@@ -42,6 +43,10 @@ func movementSpec(t *testing.T, kind domain.MovementFactKind) domain.MovementFac
 		Version:    mustValue(t, domain.NewMovementFactVersion, "movement/v1"),
 		OccurredAt: movementSeenAt,
 	}
+	if kind == domain.DepartureFact {
+		spec.GateReading = stoppedReading(t, domain.DepartureSegmentNotDeclared)
+	}
+	return spec
 }
 
 // Covers: CONTEXT「装载分配」词条与 208「装载分配形成、变化或撤回时保存版本和对象范围；
@@ -253,35 +258,65 @@ func TestMovementFactsRecordWithoutEndingControl(t *testing.T) {
 	})
 }
 
-// Covers: CONTEXT「本上下文只对受明确监管门禁约束的装载出发……等动作执行限制」——受
-// 门禁约束的出发没有放行依据立不成（可阻断），放行依据随事实保全；门禁只约束出发，
-// 移动与到达挂放行依据被拒。
-func TestAGatedDepartureIsBlockedWithoutClearance(t *testing.T) {
-	spec := movementSpec(t, domain.DepartureFact)
-	spec.GateRequired = true
-
-	t.Run("without clearance the departure cannot form", func(t *testing.T) {
-		if _, err := domain.RecordMovementFact(spec); !errors.Is(err, domain.ErrDepartureGateBlocked) {
-			t.Fatalf("error = %v, want ErrDepartureGateBlocked", err)
-		}
-	})
-
-	t.Run("with clearance the departure records its basis", func(t *testing.T) {
-		cleared := spec
-		cleared.GateClearance = mustValue(t, domain.NewGateClearanceReference, "GUARDED-ACTION/loading-departure-1")
-		departure, err := domain.RecordMovementFact(cleared)
+// Covers: AT-TF-106 领域半边——出发一律立得成：读数阻断也照记，读数原样随事实（ADR-0205 决定一）；设备出示的放行凭据只作证据
+// 原样保全（决定三）。门禁只约束装载出发：移动与到达挂放行凭据被拒，带读数是接错。
+func TestADepartureAlwaysRecordsWithItsGateReading(t *testing.T) {
+	t.Run("a blocked reading is recorded, not refused", func(t *testing.T) {
+		spec := movementSpec(t, domain.DepartureFact)
+		spec.Segment = mustValue(t, domain.NewFulfillmentSegmentReference, "segment-1")
+		spec.GateReading = askedReading(t, domain.DepartureGateBlocked)
+		departure, err := domain.RecordMovementFact(spec)
 		if err != nil {
-			t.Fatalf("record gated departure: %v", err)
+			t.Fatalf("阻断读数的出发立不成：%v", err)
 		}
-		clearance, present := departure.GateClearance()
-		if !present || clearance.String() != "GUARDED-ACTION/loading-departure-1" {
-			t.Fatal("放行依据没有随出发事实保全")
+		reading, read := departure.GateReading()
+		if !read || reading.Answer() != domain.DepartureGateBlocked {
+			t.Fatalf("读数没有随出发保全：%v read=%v", reading.Answer(), read)
+		}
+		if segment, declared := departure.Segment(); !declared || segment.String() != "segment-1" {
+			t.Fatalf("声明的段没有随出发保全：%q declared=%v", segment, declared)
 		}
 	})
 
-	t.Run("an ungated departure needs no clearance", func(t *testing.T) {
-		if _, err := domain.RecordMovementFact(movementSpec(t, domain.DepartureFact)); err != nil {
-			t.Fatalf("record ungated departure: %v", err)
+	t.Run("a presented clearance is kept as evidence", func(t *testing.T) {
+		spec := movementSpec(t, domain.DepartureFact)
+		spec.GateClearance = mustValue(t, domain.NewGateClearanceReference, "GUARDED-ACTION/loading-departure-1")
+		departure, err := domain.RecordMovementFact(spec)
+		if err != nil {
+			t.Fatalf("带凭据的出发：%v", err)
+		}
+		if clearance, present := departure.GateClearance(); !present || clearance.String() != "GUARDED-ACTION/loading-departure-1" {
+			t.Fatal("设备出示的凭据没有随出发保全")
+		}
+	})
+
+	t.Run("a departure without a reading is a wiring error", func(t *testing.T) {
+		spec := movementSpec(t, domain.DepartureFact)
+		spec.GateReading = domain.DepartureGateReading{}
+		if _, err := domain.RecordMovementFact(spec); !errors.Is(err, domain.ErrDepartureGateReadingMisplaced) {
+			t.Fatalf("error = %v, want ErrDepartureGateReadingMisplaced", err)
+		}
+	})
+
+	t.Run("the reading must agree with the declared segment", func(t *testing.T) {
+		declared := movementSpec(t, domain.DepartureFact)
+		declared.Segment = mustValue(t, domain.NewFulfillmentSegmentReference, "segment-1")
+		if _, err := domain.RecordMovementFact(declared); !errors.Is(err, domain.ErrDepartureGateReadingMisplaced) {
+			t.Fatalf("声明了段、读数却说没声明：error = %v", err)
+		}
+		undeclared := movementSpec(t, domain.DepartureFact)
+		undeclared.GateReading = askedReading(t, domain.DepartureGateNotGuarded)
+		if _, err := domain.RecordMovementFact(undeclared); !errors.Is(err, domain.ErrDepartureGateReadingMisplaced) {
+			t.Fatalf("没声明段、读数却问到了对象：error = %v", err)
+		}
+	})
+
+	t.Run("a body that does not form is not accepted before the reading is looked at", func(t *testing.T) {
+		spec := movementSpec(t, domain.DepartureFact)
+		spec.GateReading = domain.DepartureGateReading{}
+		spec.OccurredAt = time.Time{}
+		if _, err := domain.RecordMovementFact(spec); !errors.Is(err, domain.ErrInvalidMovementFact) {
+			t.Fatalf("error = %v, want ErrInvalidMovementFact——本体不成形先答未受理", err)
 		}
 	})
 
@@ -289,16 +324,16 @@ func TestAGatedDepartureIsBlockedWithoutClearance(t *testing.T) {
 		"in-transit": domain.InTransitFact,
 		"arrival":    domain.ArrivalFact,
 	} {
-		t.Run(name+" cannot carry a gate", func(t *testing.T) {
-			gated := movementSpec(t, kind)
-			gated.GateRequired = true
-			if _, err := domain.RecordMovementFact(gated); !errors.Is(err, domain.ErrInvalidMovementFact) {
-				t.Fatalf("error = %v; 门禁只约束装载出发", err)
-			}
+		t.Run(name+" carries neither clearance nor reading", func(t *testing.T) {
 			withClearance := movementSpec(t, kind)
 			withClearance.GateClearance = mustValue(t, domain.NewGateClearanceReference, "GUARDED-ACTION/x")
 			if _, err := domain.RecordMovementFact(withClearance); !errors.Is(err, domain.ErrInvalidMovementFact) {
-				t.Fatalf("error = %v; 移动/到达挂上了放行依据", err)
+				t.Fatalf("error = %v; 移动/到达挂上了放行凭据", err)
+			}
+			withReading := movementSpec(t, kind)
+			withReading.GateReading = stoppedReading(t, domain.DepartureSegmentNotDeclared)
+			if _, err := domain.RecordMovementFact(withReading); !errors.Is(err, domain.ErrDepartureGateReadingMisplaced) {
+				t.Fatalf("error = %v; 移动/到达带上了门禁读数", err)
 			}
 		})
 	}

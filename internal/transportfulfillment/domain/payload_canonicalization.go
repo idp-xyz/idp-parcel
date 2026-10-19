@@ -557,17 +557,28 @@ func CanonicalizeEstablishPoolPayload(pool CapacityPool) ([]byte, string, error)
 	})
 }
 
-// CanonicalizeMovementFactPayload 定形「登记实际移动事实」（票 tf-face-algebra/08 的裁定）：班次、种类、地点与放行引用构成内容。
-// 租户、事实与版本是身份；来源不进，它由这一面注入而不是调用方报的，隔离写时期的存量行带的是合成来源；GateRequired 不进，
-// 它是门禁判断的输入、不是事实的属性（见 RehydrateMovementFactSpec），在册本体上也没有它可算；登记时刻不进。
+// CanonicalizeMovementFactPayload 定形「登记实际移动事实」（票 tf-face-algebra/08 的裁定）：班次、种类、地点、声明的段与资源、
+// 设备出示的放行凭据构成内容——都是登记方报的。租户、事实与版本是身份；来源不进，它由这一面注入而不是调用方报的，隔离写时期的
+// 存量行带的是合成来源；设备自报的「要不要门禁」不进，它不是事实的属性、也已不决定设不设门（ADR-0205 决定三）；出发门禁读数不进，
+// 它是本上下文登记时问来的判断，不是登记方报的内容——同一条出发重投时关务答得不同，不能因此把重放判成冲突。登记时刻不进。
 // 业务时间照 ADR-0023「发生时间与接收时间……两者都不进入内容摘要」也不进：只差发生时间的同身份重投读作重放。
 //
-// 放行缺席写 null：零值引用就是「没有门禁依据」，与 RecordMovementFact 判在场的口径同一。这一口不存摘要、两侧都从本体现算。
-func CanonicalizeMovementFactPayload(schedule ScheduleReference, kind MovementFactKind, location MovementLocationReference, gateClearance GateClearanceReference) ([]byte, string, error) {
-	var clearance *string
-	if gateClearance.valid() {
-		reference := gateClearance.String()
-		clearance = &reference
+// 可缺的几格缺席写 null：零值引用就是「没有声明」，与 RecordMovementFact 判在场的口径同一。这一口不存摘要、两侧都从本体现算，
+// 所以加格不换形状版本：没有任何已存摘要要按旧形状回放（ADR-0014 的代价前提不成立）。
+func CanonicalizeMovementFactPayload(
+	schedule ScheduleReference,
+	kind MovementFactKind,
+	location MovementLocationReference,
+	segment FulfillmentSegmentReference,
+	resource TransportResourceReference,
+	gateClearance GateClearanceReference,
+) ([]byte, string, error) {
+	present := func(value requiredValue) *string {
+		if !value.valid() {
+			return nil
+		}
+		reference := value.String()
+		return &reference
 	}
 	return marshalPayload(struct {
 		Canonicalization string  `json:"canonicalization"`
@@ -575,6 +586,8 @@ func CanonicalizeMovementFactPayload(schedule ScheduleReference, kind MovementFa
 		Schedule         string  `json:"schedule"`
 		Kind             string  `json:"kind"`
 		Location         string  `json:"location"`
+		Segment          *string `json:"segment"`
+		Resource         *string `json:"resource"`
 		GateClearance    *string `json:"gate_clearance"`
 	}{
 		Canonicalization: payloadCanonicalizationVersion,
@@ -582,6 +595,8 @@ func CanonicalizeMovementFactPayload(schedule ScheduleReference, kind MovementFa
 		Schedule:         schedule.String(),
 		Kind:             kind.String(),
 		Location:         location.String(),
-		GateClearance:    clearance,
+		Segment:          present(segment.requiredValue),
+		Resource:         present(resource.requiredValue),
+		GateClearance:    present(gateClearance.requiredValue),
 	})
 }

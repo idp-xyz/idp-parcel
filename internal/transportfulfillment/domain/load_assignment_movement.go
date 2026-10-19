@@ -10,10 +10,6 @@ var (
 	// ErrLoadAssignmentWithdrawn：已撤回的分配没有可变化的意图；再动它只能是新的分配。
 	ErrLoadAssignmentWithdrawn = errors.New("transport fulfillment: the load assignment is withdrawn")
 	ErrInvalidMovementFact     = errors.New("transport fulfillment: invalid movement fact")
-	// ErrDepartureGateBlocked：受监管门禁约束的装载出发动作在没有放行依据时立不成出发
-	// ——门禁判断本身属 customs-compliance（GuardedAction 的 LOADING_DEPARTURE 格），
-	// 这里只认它的放行引用，不重建门禁机制。
-	ErrDepartureGateBlocked = errors.New("transport fulfillment: the gated departure has no clearance basis")
 )
 
 // LoadAssignmentVersion 是装载分配的版本标识：变化或撤回形成新版本，不修改分配历史
@@ -252,8 +248,8 @@ func NewMovementFactVersion(value string) (MovementFactVersion, error) {
 	return MovementFactVersion{required}, err
 }
 
-// GateClearanceReference 指名受监管门禁约束的装载出发所依据的放行结果（CC 侧
-// GuardedAction 的 LOADING_DEPARTURE 格）。
+// GateClearanceReference 指名设备在出发时出示的放行凭据。它只是设备出示的证据，原样保存（ADR-0205 决定三）：
+// 门禁读数由本上下文在登记时向关务问来，设备不能凭自报一个引用把门关掉，也不能凭不报把门绕开。
 type GateClearanceReference struct{ requiredValue }
 
 func NewGateClearanceReference(value string) (GateClearanceReference, error) {
@@ -261,8 +257,19 @@ func NewGateClearanceReference(value string) (GateClearanceReference, error) {
 	return GateClearanceReference{required}, err
 }
 
-// MovementFactSpec 是记录一条实际运输事实所需的全部输入。GateRequired 只对出发有意义：
-// 门禁约束的是装载出发动作，移动与到达不受它管。
+// TransportResourceReference 指名事实所用的运输资源（车辆、航班、舱位……）。由登记方声明、可缺；实际使用的资源
+// 依据事实确定，不拿资源分配去覆盖它（CONTEXT「班次与运输资源」）。
+type TransportResourceReference struct{ requiredValue }
+
+func NewTransportResourceReference(value string) (TransportResourceReference, error) {
+	required, err := newRequiredValue("transport resource reference", value)
+	return TransportResourceReference{required}, err
+}
+
+// MovementFactSpec 是记录一条实际运输事实所需的全部输入。
+//
+// Segment 是登记方声明的实际履约段，可缺、不核在册（ADR-0205 决定四）：事实可以先于段的登记到达，那时照实记下
+// 事实，不是拒收它。GateReading 只属出发，且出发必带——门禁约束的是装载出发动作，移动与到达不受它管。
 type MovementFactSpec struct {
 	TenantID      TenantID
 	Fact          MovementFactReference
@@ -272,15 +279,18 @@ type MovementFactSpec struct {
 	Source        MovementSourceReference
 	Version       MovementFactVersion
 	OccurredAt    time.Time
-	GateRequired  bool
+	Segment       FulfillmentSegmentReference
+	Resource      TransportResourceReference
 	GateClearance GateClearanceReference
+	GateReading   DepartureGateReading
 }
 
 // TransportMovementFact 是出发、移动或到达的事实记录（CONTEXT：「出发、移动、到达、
 // 中断、折返和结束属于实际事实」，与执行准备判断「不得共用一个可覆盖状态」）。
 //
 // 它不等于交接、不结束控制——控制转移只随权威交接或有效交付成立，本类型上没有任何
-// 控制或交接字段；迟到与更正形成新版本，原记录与其派生历史不被改写。
+// 控制或交接字段；迟到与更正形成新版本，原记录与其派生历史不被改写。段只是声明的引用，
+// 不是状态机：移动不结束段，段也不因移动而成立。
 type TransportMovementFact struct {
 	tenantID      TenantID
 	fact          MovementFactReference
@@ -290,11 +300,16 @@ type TransportMovementFact struct {
 	source        MovementSourceReference
 	version       MovementFactVersion
 	occurredAt    time.Time
+	segment       FulfillmentSegmentReference
+	resource      TransportResourceReference
 	gateClearance GateClearanceReference
+	gateReading   DepartureGateReading
 	corrects      MovementFactVersion
 	correctedAt   time.Time
 }
 
+// RecordMovementFact 立一条实际运输事实。出发一律立得成：门禁读数是随事实保存的一格，阻断、读不动也照记
+// （ADR-0205 决定一）——拒收一条已经发生的出发，只会让它从记录里消失，挡不回那辆已经开走的车。
 func RecordMovementFact(spec MovementFactSpec) (TransportMovementFact, error) {
 	if !spec.TenantID.valid() ||
 		!spec.Fact.valid() ||
@@ -306,12 +321,17 @@ func RecordMovementFact(spec MovementFactSpec) (TransportMovementFact, error) {
 		AtRegistryPrecision(spec.OccurredAt).IsZero() {
 		return TransportMovementFact{}, ErrInvalidMovementFact
 	}
-	if spec.Kind != DepartureFact && (spec.GateRequired || spec.GateClearance.valid()) {
-		// 门禁只约束装载出发；把放行依据挂到移动或到达上，等于造了一个不存在的门。
+	if spec.Kind != DepartureFact && spec.GateClearance.valid() {
+		// 门禁只约束装载出发；把放行凭据挂到移动或到达上，等于造了一个不存在的门。
 		return TransportMovementFact{}, ErrInvalidMovementFact
 	}
-	if spec.Kind == DepartureFact && spec.GateRequired && !spec.GateClearance.valid() {
-		return TransportMovementFact{}, ErrDepartureGateBlocked
+	if (spec.Kind == DepartureFact) != spec.GateReading.formed() {
+		return TransportMovementFact{}, ErrDepartureGateReadingMisplaced
+	}
+	if spec.GateReading.formed() && !spec.GateReading.recordedBeforeGateReading() &&
+		spec.GateReading.segmentNotDeclared() == spec.Segment.valid() {
+		// 读数说「没声明段」与事实上声明了段，两者只能有一边为真；对不上说明读数不是为这一条问的。
+		return TransportMovementFact{}, ErrDepartureGateReadingMisplaced
 	}
 	return TransportMovementFact{
 		tenantID:      spec.TenantID,
@@ -322,7 +342,10 @@ func RecordMovementFact(spec MovementFactSpec) (TransportMovementFact, error) {
 		source:        spec.Source,
 		version:       spec.Version,
 		occurredAt:    spec.OccurredAt.UTC(),
+		segment:       spec.Segment,
+		resource:      spec.Resource,
 		gateClearance: spec.GateClearance,
+		gateReading:   spec.GateReading,
 	}, nil
 }
 
@@ -359,12 +382,27 @@ func (fact TransportMovementFact) OccurredAt() time.Time {
 	return fact.occurredAt
 }
 
-// GateClearance 交回出发所依据的门禁放行（若该出发受门禁约束）。
+// Segment 交回登记方声明的实际履约段（若声明了）。
+func (fact TransportMovementFact) Segment() (FulfillmentSegmentReference, bool) {
+	return fact.segment, fact.segment.valid()
+}
+
+// Resource 交回登记方声明的运输资源（若声明了）。
+func (fact TransportMovementFact) Resource() (TransportResourceReference, bool) {
+	return fact.resource, fact.resource.valid()
+}
+
+// GateClearance 交回设备在出发时出示的放行凭据（若出示了）。它是证据，不是门禁读数。
 func (fact TransportMovementFact) GateClearance() (GateClearanceReference, bool) {
 	if !fact.gateClearance.valid() {
 		return GateClearanceReference{}, false
 	}
 	return fact.gateClearance, true
+}
+
+// GateReading 交回出发登记时问来的门禁读数；移动与到达答 false。
+func (fact TransportMovementFact) GateReading() (DepartureGateReading, bool) {
+	return fact.gateReading, fact.gateReading.formed()
 }
 
 // Corrects 交回本版本更正的前一版本（若本版本由更正产生）。
@@ -384,7 +422,9 @@ func (fact TransportMovementFact) CorrectedAt() (time.Time, bool) {
 
 // Correct 依据更正来源形成新版本：保留原事实和原判断（值语义，接收者不动），新版本
 // 回指被更正版本；沿用原版本号就是覆盖，构造期拒绝。位置或业务时间可被更正——被更正
-// 的是记录，不是让实物倒回去重新出发。
+// 的是记录，不是让实物倒回去重新出发。声明的段、资源与出发门禁读数随原版带过来：读数
+// 是原登记那一刻问来的，更正入口落地时要不要按更正后的时点重问，由那一票定（ADR-0205
+// 越权风险点）。
 func (fact TransportMovementFact) Correct(
 	location MovementLocationReference,
 	occurredAt time.Time,

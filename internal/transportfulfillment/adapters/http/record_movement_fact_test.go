@@ -53,6 +53,91 @@ func (double *movementFactRegistryDouble) Save(
 	return ports.MovementFactSaved, nil
 }
 
+// ---- 出发读数那三口的替身：段 segment-1 里有 parcel-1，班次 schedule-1 自 NODE-SHA 到 NODE-SZX，关务按预设作答 ----
+
+type movementSegmentsDouble struct {
+	segment domain.ActualFulfillmentSegment
+}
+
+func (double movementSegmentsDouble) FindByKey(_ context.Context, key ports.FulfillmentSegmentKey) (ports.FulfillmentSegmentRecord, bool, error) {
+	if key.Segment != double.segment.Segment() {
+		return ports.FulfillmentSegmentRecord{}, false, nil
+	}
+	return ports.FulfillmentSegmentRecord{Key: key, Segment: double.segment}, true, nil
+}
+
+type movementSchedulesDouble struct{ schedule domain.TransportSchedule }
+
+func (double movementSchedulesDouble) FindByKey(_ context.Context, key ports.ScheduleKey) (ports.ScheduleRecord, bool, error) {
+	if key.Schedule != double.schedule.Schedule() {
+		return ports.ScheduleRecord{}, false, nil
+	}
+	return ports.ScheduleRecord{Key: key, Schedule: double.schedule}, true, nil
+}
+
+type movementCustomsDouble struct{ answer domain.DepartureGateAnswer }
+
+func (double *movementCustomsDouble) ReadDepartureGate(_ context.Context, query ports.DepartureGateQuery) (domain.DepartureGateFinding, error) {
+	return domain.NewDepartureGateFinding(query.Object, double.answer, "AADJ-1",
+		[]domain.DepartureGateBasis{{Action: "LOADING_DEPARTURE", Cause: "SOME_CAUSE", Sources: []string{"SRC-1"}}})
+}
+
+// readThenRecord 照组合根的次序：先问读数，再登记。这里没有事务——事务边界归 cmd 的装配点，本包只验线格式与答法。
+type readThenRecord struct {
+	gate  *application.DepartureGateReader
+	inner *application.RecordMovementFactHandler
+}
+
+func (composed readThenRecord) Record(ctx context.Context, command application.RecordMovementFactCommand) (application.RecordMovementFactResult, error) {
+	reading, err := composed.gate.Read(ctx, command)
+	if err != nil {
+		return application.RecordMovementFactResult{}, err
+	}
+	return composed.inner.Record(ctx, command, reading)
+}
+
+func movementGateReader(t *testing.T, customs *movementCustomsDouble) *application.DepartureGateReader {
+	t.Helper()
+	tenant := httpValue(t, domain.NewTenantID, "tenant-1")
+	segment, err := domain.RehydrateActualFulfillmentSegment(domain.RehydrateActualFulfillmentSegmentSpec{
+		TenantID: tenant,
+		Segment:  httpValue(t, domain.NewFulfillmentSegmentReference, "segment-1"),
+		Participations: []domain.RehydrateParticipationSpec{{
+			Object:     httpValue(t, domain.NewCarriedObjectReference, "parcel-1"),
+			EntryKind:  domain.EnteredByTransportHandover,
+			EntryBasis: httpValue(t, domain.NewParticipationBasisReference, "HO/parcel-1"),
+			EnteredAt:  time.Date(2026, 9, 5, 9, 0, 0, 0, time.UTC),
+		}},
+	})
+	if err != nil {
+		t.Fatalf("立段：%v", err)
+	}
+	direction, err := domain.NewScheduleDirection("CONN-SHA-SZX", "NODE-SHA", "NODE-SZX")
+	if err != nil {
+		t.Fatalf("方向：%v", err)
+	}
+	schedule, err := domain.FormTransportSchedule(domain.TransportScheduleSpec{
+		TenantID:     tenant,
+		Schedule:     httpValue(t, domain.NewScheduleReference, "schedule-1"),
+		Direction:    direction,
+		DepartsAt:    time.Date(2026, 9, 5, 10, 0, 0, 0, time.UTC),
+		ArrivesAt:    time.Date(2026, 9, 5, 20, 0, 0, 0, time.UTC),
+		ServiceScope: httpValue(t, domain.NewScheduleServiceScopeReference, "SCOPE-1"),
+	})
+	if err != nil {
+		t.Fatalf("班次：%v", err)
+	}
+	reader, err := application.NewDepartureGateReader(application.DepartureGateReadDeps{
+		Segments:  movementSegmentsDouble{segment: segment},
+		Schedules: movementSchedulesDouble{schedule: schedule},
+		Customs:   customs,
+	})
+	if err != nil {
+		t.Fatalf("装读数编排：%v", err)
+	}
+	return reader
+}
+
 // ---- 请求体与 intake 替身 ----
 
 type movementFactBody struct {
@@ -63,6 +148,8 @@ type movementFactBody struct {
 	Source        string `json:"source"`
 	Version       string `json:"version"`
 	OccurredAt    string `json:"occurredAt"`
+	Segment       string `json:"segment"`
+	Resource      string `json:"resource"`
 	GateRequired  bool   `json:"gateRequired"`
 	GateClearance string `json:"gateClearance"`
 }
@@ -109,6 +196,8 @@ func (intake *movementFactIntakeDouble) IntakeMovementFact(
 		Source:        body.Source,
 		Version:       body.Version,
 		OccurredAt:    occurredAt,
+		Segment:       body.Segment,
+		Resource:      body.Resource,
 		GateRequired:  body.GateRequired,
 		GateClearance: body.GateClearance,
 	}, nil
@@ -117,6 +206,7 @@ func (intake *movementFactIntakeDouble) IntakeMovementFact(
 type movementFactFixture struct {
 	intake   *movementFactIntakeDouble
 	registry *movementFactRegistryDouble
+	customs  *movementCustomsDouble
 	record   http.Handler
 }
 
@@ -125,12 +215,14 @@ func newMovementFactFixture(t *testing.T) *movementFactFixture {
 	fixture := &movementFactFixture{
 		intake:   &movementFactIntakeDouble{tenant: httpValue(t, domain.NewTenantID, "tenant-1")},
 		registry: newMovementFactRegistry(),
+		customs:  &movementCustomsDouble{answer: domain.DepartureGateNotGuarded},
 	}
 	handler := application.NewRecordMovementFactHandler(application.RecordMovementFactDeps{
 		Facts: fixture.registry,
 		Clock: tfClock{at: time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)},
 	})
-	fixture.record = tfhttp.NewRecordMovementFactEndpoint(fixture.intake, handler)
+	fixture.record = tfhttp.NewRecordMovementFactEndpoint(fixture.intake,
+		readThenRecord{gate: movementGateReader(t, fixture.customs), inner: handler})
 	return fixture
 }
 
@@ -147,14 +239,32 @@ func defaultMovementFactBody() movementFactBody {
 }
 
 type movementFactView struct {
-	Outcome               string `json:"outcome"`
-	Fact                  string `json:"fact"`
-	Schedule              string `json:"schedule"`
-	Kind                  string `json:"kind"`
-	Location              string `json:"location"`
-	Version               string `json:"version"`
-	OccurredAt            string `json:"occurredAt"`
-	GateClearance         string `json:"gateClearance"`
+	Outcome       string `json:"outcome"`
+	Fact          string `json:"fact"`
+	Schedule      string `json:"schedule"`
+	Kind          string `json:"kind"`
+	Location      string `json:"location"`
+	Version       string `json:"version"`
+	OccurredAt    string `json:"occurredAt"`
+	Segment       string `json:"segment"`
+	Resource      string `json:"resource"`
+	GateClearance string `json:"gateClearance"`
+	GateReading   *struct {
+		Answer  string   `json:"answer"`
+		From    string   `json:"from"`
+		To      string   `json:"to"`
+		Stops   []string `json:"stops"`
+		Objects []struct {
+			Object    string `json:"object"`
+			Answer    string `json:"answer"`
+			Judgement string `json:"judgement"`
+			Bases     []struct {
+				Action  string   `json:"action"`
+				Cause   string   `json:"cause"`
+				Sources []string `json:"sources"`
+			} `json:"bases"`
+		} `json:"objects"`
+	} `json:"gateReading"`
 	ContinuationReference string `json:"continuationReference"`
 }
 
@@ -187,36 +297,76 @@ func TestRecordMovementFactReportsCreatedWithTheReportedFact(t *testing.T) {
 	}
 }
 
-// Covers: 票 05 专钉——`gateRequired` / `gateClearance` 原样到编排。判据不是看命令镜像，而是看门禁那道
-// 领域门真的被触到：出发要门禁而没带放行是 DEPARTURE_GATE_BLOCKED（200，形成了的答案），带了放行
-// 就登上并把放行引用透出。传输层若漏收这两格，前者会变成一条登上了的出发。
-func TestRecordMovementFactCarriesTheDepartureGateThroughToTheOrchestration(t *testing.T) {
+// Covers: AT-TF-106 线格式半边——出发一律 201：关务那一格答阻断也照样落册，响应带出读数（整格、问关务时的起讫、逐对象的那一格
+// 与依据原文）以及声明的段与资源。设备自报 gateRequired=true 而不带凭据不再挡（ADR-0205 决定三）。
+func TestRecordMovementFactAnswersCreatedForEveryDepartureAndShowsItsGateReading(t *testing.T) {
 	fixture := newMovementFactFixture(t)
+	fixture.customs.answer = domain.DepartureGateBlocked
 	departure := defaultMovementFactBody()
 	departure.Kind = "DEPARTURE"
 	departure.Fact = "movement-fact-dep-1"
+	departure.Segment = "segment-1"
+	departure.Resource = "truck-1"
 	departure.GateRequired = true
 
-	blocked := postTo(t, fixture.record, "/transport-fulfillment/movement-facts", departure)
-	if blocked.Code != http.StatusOK {
-		t.Fatalf("status = %d, want 200（门禁未放行是形成了的答案）; body = %s", blocked.Code, blocked.Body.String())
+	response := postTo(t, fixture.record, "/transport-fulfillment/movement-facts", departure)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201（读数阻断也落册）; body = %s", response.Code, response.Body.String())
 	}
-	if view := decodeMovementFact(t, blocked); view.Outcome != "DEPARTURE_GATE_BLOCKED" {
-		t.Fatalf("outcome = %q, want DEPARTURE_GATE_BLOCKED", view.Outcome)
-	}
-
-	departure.GateClearance = "gate-clearance-1"
-	cleared := postTo(t, fixture.record, "/transport-fulfillment/movement-facts", departure)
-	if cleared.Code != http.StatusCreated {
-		t.Fatalf("status = %d, want 201; body = %s", cleared.Code, cleared.Body.String())
-	}
-	if view := decodeMovementFact(t, cleared); view.Outcome != "MOVEMENT_FACT_RECORDED" || view.GateClearance != "gate-clearance-1" {
+	view := decodeMovementFact(t, response)
+	if view.Outcome != "MOVEMENT_FACT_RECORDED" || view.Segment != "segment-1" || view.Resource != "truck-1" {
 		t.Fatalf("view = %+v", view)
+	}
+	reading := view.GateReading
+	if reading == nil || reading.Answer != "BLOCKED" || reading.From != "NODE-SHA" || reading.To != "NODE-SZX" || len(reading.Stops) != 0 {
+		t.Fatalf("gateReading = %+v", reading)
+	}
+	if len(reading.Objects) != 1 || reading.Objects[0].Object != "parcel-1" || reading.Objects[0].Answer != "BLOCKED" ||
+		reading.Objects[0].Judgement != "AADJ-1" || len(reading.Objects[0].Bases) != 1 ||
+		reading.Objects[0].Bases[0].Cause != "SOME_CAUSE" || reading.Objects[0].Bases[0].Sources[0] != "SRC-1" {
+		t.Fatalf("逐对象那一格 = %+v", reading.Objects)
 	}
 }
 
-// Covers: ADR-0022——重放、门禁未放行、未受理、未决都是 200 的形成答案，`outcome` 区分；
-// `DEPARTURE_GATE_BLOCKED` 与 `INPUT_NOT_ACCEPTED` 两格不合并（续办动作不同）。
+// Covers: AT-TF-109 线格式半边——没声明段的出发照记：读数停在「段未声明」答未决，没有逐对象那一格；到达不带读数。
+func TestRecordMovementFactShowsTheStopWhenNoSegmentIsDeclared(t *testing.T) {
+	fixture := newMovementFactFixture(t)
+	departure := defaultMovementFactBody()
+	departure.Kind = "DEPARTURE"
+	departure.GateClearance = "gate-clearance-1"
+
+	response := postTo(t, fixture.record, "/transport-fulfillment/movement-facts", departure)
+	if response.Code != http.StatusCreated {
+		t.Fatalf("status = %d, want 201; body = %s", response.Code, response.Body.String())
+	}
+	view := decodeMovementFact(t, response)
+	if view.GateClearance != "gate-clearance-1" || view.GateReading == nil || view.GateReading.Answer != "UNDECIDED" ||
+		len(view.GateReading.Stops) != 1 || view.GateReading.Stops[0] != "SEGMENT_NOT_DECLARED" || len(view.GateReading.Objects) != 0 {
+		t.Fatalf("view = %+v reading = %+v", view, view.GateReading)
+	}
+
+	arrival := postTo(t, fixture.record, "/transport-fulfillment/movement-facts", defaultMovementFactBody())
+	if view := decodeMovementFact(t, arrival); view.GateReading != nil {
+		t.Fatalf("到达带了读数：%+v", view.GateReading)
+	}
+}
+
+// Covers: MovementFactPayload 的线格式——声明的段与资源逐字到命令，gateRequired 照收（字段暂留，编排不读）。
+func TestMovementFactPayloadCarriesTheDeclaredSegmentAndResource(t *testing.T) {
+	command, err := tfhttp.MovementFactPayload{
+		Fact: "f", Schedule: "s", Kind: "DEPARTURE", Location: "l", Version: "1", OccurredAt: "2026-09-05T10:00:00Z",
+		Segment: "segment-1", Resource: "truck-1", GateRequired: true, GateClearance: "g",
+	}.Command(httpValue(t, domain.NewTenantID, "tenant-1"), "SELF_OPERATED")
+	if err != nil {
+		t.Fatalf("command: %v", err)
+	}
+	if command.Segment != "segment-1" || command.Resource != "truck-1" || !command.GateRequired || command.GateClearance != "g" ||
+		command.Source != "SELF_OPERATED" {
+		t.Fatalf("command = %+v", command)
+	}
+}
+
+// Covers: ADR-0022——重放、未受理、未决都是 200 的形成答案，`outcome` 区分。
 func TestRecordMovementFactReportsOKForEveryAnswerThatRecordedNothing(t *testing.T) {
 	cases := map[string]struct {
 		arrange          func(*movementFactFixture) movementFactBody

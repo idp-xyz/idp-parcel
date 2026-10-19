@@ -199,29 +199,39 @@ func TestCommandPayloadsRoundTripAsTFC1(t *testing.T) {
 			},
 		},
 		{
-			// 票 tf-face-algebra/08：业务时间照 ADR-0023 不进摘要；来源与 GateRequired 不是参数，文档上也就没有这几格。
-			name:     "movement fact with gate clearance",
-			document: `{"canonicalization":"TFC-1","face":"RECORD_MOVEMENT_FACT","schedule":"SCH","kind":"DEPARTURE","location":"LOC","gate_clearance":"GATE"}`,
-			digest:   "TFC-1:ebe62f9cff78fc476f8f342b665cf3c5e4cb8bc57599a6901bf02a06c4831e60",
+			// 票 tf-face-algebra/08：业务时间照 ADR-0023 不进摘要；来源与 GateRequired 不是参数，文档上也就没有这几格。声明的段与资源
+			// 是登记方报的内容，进文档；出发门禁读数是登记时问来的判断，不是参数（ADR-0205）。
+			name:     "movement fact with segment, resource and gate clearance",
+			document: `{"canonicalization":"TFC-1","face":"RECORD_MOVEMENT_FACT","schedule":"SCH","kind":"DEPARTURE","location":"LOC","segment":"SEG","resource":"RES","gate_clearance":"GATE"}`,
+			digest:   "TFC-1:668b7af4210d7694ef4eb66c9c06320b08f863c5562283ff078a45b4781ecfbd",
 			call: func() ([]byte, string, error) {
 				schedule, location, clearance, err := movementFactContent("SCH", "LOC", "GATE")
 				if err != nil {
 					return nil, "", err
 				}
-				return domain.CanonicalizeMovementFactPayload(schedule, domain.DepartureFact, location, clearance)
+				segment, err := domain.NewFulfillmentSegmentReference("SEG")
+				if err != nil {
+					return nil, "", err
+				}
+				resource, err := domain.NewTransportResourceReference("RES")
+				if err != nil {
+					return nil, "", err
+				}
+				return domain.CanonicalizeMovementFactPayload(schedule, domain.DepartureFact, location, segment, resource, clearance)
 			},
 		},
 		{
-			// 放行缺席写 null 而不写空串：「没有门禁依据」是一格内容，不是一个空的引用。
-			name:     "movement fact without gate clearance",
-			document: `{"canonicalization":"TFC-1","face":"RECORD_MOVEMENT_FACT","schedule":"SCH","kind":"ARRIVAL","location":"LOC","gate_clearance":null}`,
-			digest:   "TFC-1:d8a427cf3f95a44bbefcdfaff188584b6e06d44adec6e9572b3d81489a7ce390",
+			// 可缺各格缺席写 null 而不写空串：「没有声明」是一格内容，不是一个空的引用。
+			name:     "movement fact without the optional references",
+			document: `{"canonicalization":"TFC-1","face":"RECORD_MOVEMENT_FACT","schedule":"SCH","kind":"ARRIVAL","location":"LOC","segment":null,"resource":null,"gate_clearance":null}`,
+			digest:   "TFC-1:d2cfe5c0447f0e6772f03222313cde885a203524d957b33a7af2661f38b0b5e9",
 			call: func() ([]byte, string, error) {
 				schedule, location, _, err := movementFactContent("SCH", "LOC", "GATE")
 				if err != nil {
 					return nil, "", err
 				}
-				return domain.CanonicalizeMovementFactPayload(schedule, domain.ArrivalFact, location, domain.GateClearanceReference{})
+				return domain.CanonicalizeMovementFactPayload(schedule, domain.ArrivalFact, location,
+					domain.FulfillmentSegmentReference{}, domain.TransportResourceReference{}, domain.GateClearanceReference{})
 			},
 		},
 	}

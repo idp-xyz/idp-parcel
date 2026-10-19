@@ -123,7 +123,7 @@ func (fixture *storableFixture) factCommand(fact, location string, at time.Time)
 func (fixture *storableFixture) recordFact(command application.RecordMovementFactCommand) application.MovementFactOutcome {
 	fixture.t.Helper()
 	return inTransaction(fixture.t, fixture.transactor, func(ctx context.Context) (application.RecordMovementFactResult, error) {
-		return fixture.record.Record(ctx, command)
+		return fixture.record.Record(ctx, command, domain.DepartureGateReading{})
 	}).Outcome()
 }
 

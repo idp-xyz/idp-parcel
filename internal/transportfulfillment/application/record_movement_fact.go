@@ -14,8 +14,8 @@ import (
 
 // MovementFactOutcome 是登记一条实际移动事实的结果代数。
 //
-// **`门禁未放行`与`输入未受理`分开，因为续办动作相反**：前者要去取放行结果（门禁判断本身属
-// customs-compliance），后者要去改输入。并成一格会让调用方读不出该做哪一件。
+// 没有「门禁未放行」一格：出发一律落册，门禁读数是随事实保存的一格，不是登记的答复（ADR-0205 决定一）。拒收一条已经
+// 发生的出发不会让车回来，只会让离线队列把它出队丢掉。
 type MovementFactOutcome uint8
 
 const (
@@ -23,7 +23,6 @@ const (
 	MovementFactRecorded
 	MovementFactVersionExists
 	MovementFactSourceConflict
-	MovementFactGateBlocked
 	MovementFactNotAccepted
 	MovementFactUndecided
 )
@@ -36,8 +35,6 @@ func (outcome MovementFactOutcome) String() string {
 		return "MOVEMENT_FACT_VERSION_EXISTS"
 	case MovementFactSourceConflict:
 		return "SOURCE_CONFLICT"
-	case MovementFactGateBlocked:
-		return "DEPARTURE_GATE_BLOCKED"
 	case MovementFactNotAccepted:
 		return "INPUT_NOT_ACCEPTED"
 	case MovementFactUndecided:
@@ -49,8 +46,9 @@ func (outcome MovementFactOutcome) String() string {
 
 // RecordMovementFactCommand 携带登记一条实际移动事实的全部输入。
 //
-// GateRequired 只对出发有意义：门禁约束的是装载出发动作，移动与到达不受它管。把放行依据挂到
-// 后两者上等于造了一个不存在的门，领域构造门会拒。
+// Segment、Resource 是登记方声明的段与资源，可缺（ADR-0205 决定四）。GateClearance 是设备出示的放行凭据，只作证据原样
+// 保存，挂到移动或到达上领域构造门会拒。GateRequired 收而不读（ADR-0205 决定三）：设门与否由关务按对象与起讫判，设备
+// 不能凭自报把门关掉；字段暂留，是因为一线入口仍按原形透传它，删它要随那一侧一起改。
 type RecordMovementFactCommand struct {
 	TenantID      domain.TenantID
 	Fact          string
@@ -60,6 +58,8 @@ type RecordMovementFactCommand struct {
 	Source        string
 	Version       string
 	OccurredAt    time.Time
+	Segment       string
+	Resource      string
 	GateRequired  bool
 	GateClearance string
 }
@@ -97,28 +97,35 @@ func NewRecordMovementFactHandler(deps RecordMovementFactDeps) *RecordMovementFa
 	return &RecordMovementFactHandler{deps: deps}
 }
 
-// Record 登记一条实际移动事实：受理（八件由 RecordMovementFact 构造门把门，门禁那一格单独分出来）→ 按（租户 + 事实 + 版本）
-// 查册，在册则按内容分重放与 SOURCE_CONFLICT → 登记。
+// Record 登记一条实际移动事实：受理（各件由 RecordMovementFact 构造门把门）→ 按（租户 + 事实 + 版本）查册，在册则按内容分
+// 重放与 SOURCE_CONFLICT → 登记。出发连同 reading 同一笔落册。
 //
-// **身份在册时先比内容、后判门禁**（票 tf-face-algebra/08 的裁定）：在册那一版早已成立，同身份再到只问内容同不同；先判门禁会把
-// 一条只多声称「要门禁」的重放支去取放行。所以门禁挡着时也先查册，查不了册就答未决——此刻判断不了它是不是重放。
+// reading 是组合根在写事务之前用 DepartureGateReader 问好的门禁读数，只属出发：移动与到达交零值。重放与冲突用不上它——
+// 在册那一版早已带着它首次登记时问来的读数，同身份再到只比内容（票 tf-face-algebra/08），不另记一份读数。
 //
-// **移动是段内的事实，不是段的成立或结束依据。** CONTEXT 逐项列举过扫描、车辆到场、物理装载
-// 都不能替代控制边界，所以这里既不读段也不写段——两者的关系是引用不是状态机。
+// **移动是段内的事实，不是段的成立或结束依据。** CONTEXT 逐项列举过扫描、车辆到场、物理装载都不能替代控制边界，所以这里
+// 既不写段也不核段在不在册——段是登记方声明的引用，不是状态机（ADR-0205 决定四）；读段只发生在读数那一侧，为的是知道问
+// 关务哪几件。
 func (handler *RecordMovementFactHandler) Record(
 	ctx context.Context,
 	command RecordMovementFactCommand,
+	reading domain.DepartureGateReading,
 ) (RecordMovementFactResult, error) {
 	spec, key, accepted := movementFactSpecFrom(command)
 	if !accepted {
 		return RecordMovementFactResult{outcome: MovementFactNotAccepted}, nil
 	}
+	spec.GateReading = reading
 	fact, err := domain.RecordMovementFact(spec)
-	gateBlocked := errors.Is(err, domain.ErrDepartureGateBlocked)
-	if err != nil && !gateBlocked {
+	if errors.Is(err, domain.ErrDepartureGateReadingMisplaced) {
+		// 构造门先判本体、后判读数：本体不成形的那一条仍答未受理；走到这里说明本体成形而读数不在该在的地方——
+		// 组合根没在写事务之前问，或把读数交给了移动与到达。那是接线错误，上抛，不答一格。
+		return RecordMovementFactResult{}, err
+	}
+	if err != nil {
 		return RecordMovementFactResult{outcome: MovementFactNotAccepted}, nil
 	}
-	_, requested, err := domain.CanonicalizeMovementFactPayload(spec.Schedule, spec.Kind, spec.Location, spec.GateClearance)
+	_, requested, err := canonicalMovementFact(fact)
 	if err != nil {
 		return RecordMovementFactResult{}, err
 	}
@@ -129,9 +136,6 @@ func (handler *RecordMovementFactHandler) Record(
 	}
 	if found {
 		return movementFactReplayOrConflict(existing, requested)
-	}
-	if gateBlocked {
-		return RecordMovementFactResult{outcome: MovementFactGateBlocked}, nil
 	}
 
 	record := ports.MovementFactRecord{Key: key, Fact: fact, RecordedAt: handler.deps.Clock.Now()}
@@ -150,14 +154,20 @@ func (handler *RecordMovementFactHandler) Record(
 	return RecordMovementFactResult{outcome: MovementFactRecorded, record: record, hasRecord: true}, nil
 }
 
+func canonicalMovementFact(fact domain.TransportMovementFact) ([]byte, string, error) {
+	segment, _ := fact.Segment()
+	resource, _ := fact.Resource()
+	clearance, _ := fact.GateClearance()
+	return domain.CanonicalizeMovementFactPayload(fact.Schedule(), fact.Kind(), fact.Location(), segment, resource, clearance)
+}
+
 // movementFactReplayOrConflict 按 TFC-1 形状比在册版本与本次命令。册上不存摘要，在册一侧从本体现算，照票 operator-channel/20
-// 承运商判断口的做法，不加摘要列、不动迁移。
+// 承运商判断口的做法，不加摘要列。
 //
 // 冲突不带记录：身份键不含设备与作业范围，在册那一份可能是另一作业范围登的，回显就把它的内容交给了这一方。作业事实族的调用方
 // 是离线队列、2xx 即出队（ADR-0022），答成已有版本会让这份异内容被静默吞掉（ADR-0023 后果节）。
 func movementFactReplayOrConflict(current ports.MovementFactRecord, requested string) (RecordMovementFactResult, error) {
-	clearance, _ := current.Fact.GateClearance()
-	_, recorded, err := domain.CanonicalizeMovementFactPayload(current.Fact.Schedule(), current.Fact.Kind(), current.Fact.Location(), clearance)
+	_, recorded, err := canonicalMovementFact(current.Fact)
 	if err != nil {
 		return RecordMovementFactResult{}, err
 	}
@@ -167,9 +177,8 @@ func movementFactReplayOrConflict(current ports.MovementFactRecord, requested st
 	return RecordMovementFactResult{outcome: MovementFactVersionExists, record: current, hasRecord: true}, nil
 }
 
-// movementFactSpecFrom 逐件过构造器。**门禁放行引用是唯一可缺席的一件**——CONTEXT 说门禁出发
-// 可阻断，但不是每次移动都经门禁；空串在这里读作「没有门禁依据」，交给领域按种类与 GateRequired
-// 去判它该不该在场，本函数不重判一遍。
+// movementFactSpecFrom 逐件过构造器。**段、资源与放行凭据是可缺的三件**：段可以先于事实登记、也可以不声明（ADR-0205
+// 决定四），资源同理，放行凭据只是设备出示的证据。空串在这里读作「没有声明」；门禁读数不从命令来，由编排另行交入。
 func movementFactSpecFrom(
 	command RecordMovementFactCommand,
 ) (domain.MovementFactSpec, ports.MovementFactKey, bool) {
@@ -198,15 +207,24 @@ func movementFactSpecFrom(
 		return domain.MovementFactSpec{}, none, false
 	}
 	spec := domain.MovementFactSpec{
-		TenantID:     command.TenantID,
-		Fact:         fact,
-		Schedule:     schedule,
-		Kind:         command.Kind,
-		Location:     location,
-		Source:       source,
-		Version:      version,
-		OccurredAt:   command.OccurredAt,
-		GateRequired: command.GateRequired,
+		TenantID:   command.TenantID,
+		Fact:       fact,
+		Schedule:   schedule,
+		Kind:       command.Kind,
+		Location:   location,
+		Source:     source,
+		Version:    version,
+		OccurredAt: command.OccurredAt,
+	}
+	if strings.TrimSpace(command.Segment) != "" {
+		if spec.Segment, err = domain.NewFulfillmentSegmentReference(command.Segment); err != nil {
+			return domain.MovementFactSpec{}, none, false
+		}
+	}
+	if strings.TrimSpace(command.Resource) != "" {
+		if spec.Resource, err = domain.NewTransportResourceReference(command.Resource); err != nil {
+			return domain.MovementFactSpec{}, none, false
+		}
 	}
 	if strings.TrimSpace(command.GateClearance) != "" {
 		if spec.GateClearance, err = domain.NewGateClearanceReference(command.GateClearance); err != nil {

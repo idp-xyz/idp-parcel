@@ -83,9 +83,8 @@ func (judge transactionalActionAdmissionJudge) Handle(
 // 任何东西要落库。回滚之后认出它，交回编排那一份答复。
 var errActionAdmissionUnreadable = errors.New("parcel-api: action admission unreadable; transaction rolled back")
 
-// customsAdmissionOrchestration 收拢本文件装的两格。actionAdmission 今天只有装配测试在用：它的生产消费者是运输履约
-// 出发登记的消费侧端口（票 demo-chain-gaps/32），那一格接上之前，这里先把判断编排连同真库依赖装齐、在进程启动时
-// 炸出装配疏漏。
+// customsAdmissionOrchestration 收拢本文件装的两格。actionAdmission 的生产消费者是运输履约出发登记的消费侧端口，
+// 由 buildMovementFactOrchestration 自己调本函数取用（ADR-0205）。
 type customsAdmissionOrchestration struct {
 	nodeZoneRegistration transactionalNodeCustomsZoneRegistration
 	actionAdmission      transactionalActionAdmissionJudge
