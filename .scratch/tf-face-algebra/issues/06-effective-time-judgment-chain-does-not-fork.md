@@ -1,7 +1,7 @@
 # 06 有效时间判断：同一事实并发判断时版本链分叉且不自愈——回指列缺「一版至多被回指一次」，撞键一律答未决
 
 Category: bug
-Status: in-progress——2026-10-19 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-tfa06`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: resolved——2026-10-19 进 main（代码验证钉 `42a208dc`），见「进 main 记录」。此前 in-progress——2026-10-19 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-tfa06`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment-effective-time-judgments
@@ -116,3 +116,8 @@ Blocked by: 无
   - **Spec**：阻断无。迁移 0023 给 `external_carrier_tracking_fact` 加「一版至多被回指一次」部分唯一索引，存量分叉整笔失败并列出、不删行；判断口 Save 答已登记时重读当前版再判（同值答 `ALREADY_JUDGED_AS_GIVEN` 回显赢家，异值在赢家之上改判，有界重试后答未决带续办）；收编更正撞键先按（源，源事件）读回、读不到再重新解析当前版。`ON CONFLICT DO NOTHING` 不让事务进中止态，同一笔事务里的有界重试安全。lc/20 的 Blocked by 只加一行。
   - **Standards**：阻断无，非阻断无。
   - **未做的格**：VE 侧派生管线的替代关系线性没单独写用例（TF 链线性后译过去即线性）；端点层 201/200 未断言（HTTP 映射未改）。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-tfa06` rebase 到远端 main `ccbab34f` 之上并在那里验证（机制清点在重放后的树上重生成），推送前远端只多一笔纯 `.md`（`c4c89a8c`），再 rebase 后代码与已验那份逐字相同，未重跑；迁移用 `transport_fulfillment/0023`。
+- 推送方全量一次：钉 `42a208dc` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 143 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
