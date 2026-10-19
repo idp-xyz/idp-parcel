@@ -1,7 +1,7 @@
 # 集运加成员不核任何方向性依据：已取消、已终局、无路由、身份未定的实物都装得进袋
 
 Category: bug
-Status: in-progress——2026-10-16 用户令「你作为业务和系统专家自决……解决所有的问题，直到全部解决」，Claude Code 会话据此代决「裁定修订」末段两问，见「排期代决」：偏离标记半边先于作业端做，本笔认领，分支 `claude-ndb01dev` 基 `c68e4342`；读面仍随作业端排。此前 needs-info——2026-10-16 开工前核实时推翻了自己的裁定第 1 条，见「裁定修订」：门不该放在写口，该放在作业端动作之前的读面；读面唯一的消费方是一线作业端，而作业端还没排进开发主线（ADR-0021「两个端都等真实落地时才建」）。此前 ready-for-agent——2026-10-16 分诊并裁四问（用户「你帮我做决定吧」授权 Claude Code 会话代决），见「裁定」；排在 [ps-external-mark-relations/01](../../ps-external-mark-relations/issues/01-external-mark-relations-have-no-model-in-parcel-shipment.md) 之后。此前 needs-triage——2026-10-16 Claude Code 会话立（票 [operator-channel/25](../../operator-channel/issues/25-node-reception-carries-parcel-shipment-service-result-markers.md) 实施中量到）
+Status: 完工，待第二轮评审与进 main——2026-10-18 Claude Code 会话，见「完成记录（偏离标记半边）」；读面那一半仍随作业端排。此前 in-progress——2026-10-16 用户令「你作为业务和系统专家自决……解决所有的问题，直到全部解决」，Claude Code 会话据此代决「裁定修订」末段两问，见「排期代决」：偏离标记半边先于作业端做，本笔认领，分支 `claude-ndb01dev` 基 `c68e4342`；读面仍随作业端排。此前 needs-info——2026-10-16 开工前核实时推翻了自己的裁定第 1 条，见「裁定修订」：门不该放在写口，该放在作业端动作之前的读面；读面唯一的消费方是一线作业端，而作业端还没排进开发主线（ADR-0021「两个端都等真实落地时才建」）。此前 ready-for-agent——2026-10-16 分诊并裁四问（用户「你帮我做决定吧」授权 Claude Code 会话代决），见「裁定」；排在 [ps-external-mark-relations/01](../../ps-external-mark-relations/issues/01-external-mark-relations-have-no-model-in-parcel-shipment.md) 之后。此前 needs-triage——2026-10-16 Claude Code 会话立（票 [operator-channel/25](../../operator-channel/issues/25-node-reception-carries-parcel-shipment-service-result-markers.md) 实施中量到）
 Blocked by: 偏离标记这一半不挡；读面那一半挡在一线作业端进开发主线（排期已代决，见「排期代决」）
 出处：UC-NO-003 的业务规则「方向性作业必须取得当前有效路由指令；集运还必须取得成员级集运兼容判断」、输入表「包裹与服务」一行（`parcel-shipment` 的当前取消/终局结果）、`AT-NO-031` 与 `AT-NO-042`；NO CONTEXT「候选尚未确认时不得据此执行方向性作业」与「已取消、已经终局或当前无有效路由的包裹仍然到站时……」两条。
 
@@ -140,3 +140,47 @@ Blocked by: 偏离标记这一半不挡；读面那一半挡在一线作业端�
 - 移出、开封、封装、关闭的行为不变。
 - 生产装配：身份走 NO 收寄库，服务结果走票 25 的读口，路由依据显式未配置。
 - `AT-NO-042` 的「阻止」半边有用例点名。`AT-NO-031`（无当前有效路由）在 02 落地前只证到「路由依据未配置即挡」，算不上整条，随 02 再点名。
+
+## 完成记录（偏离标记半边；2026-10-18，Claude Code 会话，分支 `claude-ndb01dev`，rebase 后基 `5959fd08`）
+
+用词：本节起按 CONTEXT 原词称「移入」（`ADD_MEMBER`）。上面裁定与设计代决里的「加成员」是当时的写法，原文不改，指的是同一件事。
+
+各笔：
+
+- `4408f33a` 领域方向依据记录、`DirectionalBasisJudge`、移入事实同笔落记录、按作业实物读收寄册、路由依据端口（生产显式未配置）、迁移 `0005`、前线导入判在写事务之前与报告
+- `7275fe7b` 领域、真库与导入垂直用例
+- `df8ea79b` 节点作业查阅增「集运成员关系」册
+- `960235fb` CONTEXT「方向依据记录」术语与规则、UC-NO-003 点名、前线导入模板「导入之后」
+- `5156ac6e` 第一轮评审修补（处置见下）
+
+### 判据
+
+- 移入落册同一笔带方向依据记录，各格照常 `MEMBER_ADDED` ✅ `TestAddMemberRecordsEveryKindOfBasisAsTheFactHappened`（身份三种缺少、收寄册读不动、已取消、已终局、两者并列、依据齐备）；判断器各格 `TestDirectionalBasis*`；身份不成立时另两格未判、PS 与路由都不问。
+- PS 读口在 SQL 层出错事实照落 ✅ `TestAServiceResultReadFailureStillLandsTheMember`（真库，把 `parcel_cancellation` 改名使查询报错；服务结果记`读不动`，本行照常落地）。
+- 重投交回原记录、两份指纹钉值不变 ✅ `TestAddMemberRecordsTheJudgedBasisWithTheFactAndReplaysTheStoredOne`、撞键两例；`unversioned_payload_digest_test` 与 NOC-1 钉值用例未改钉值。
+- 迁移 ✅ `consolidation_fact.directional_basis` 只许移入行带、形状 CHECK（`TestDirectionalBasisColumnRejectsImpossibleRows` 按约束名断言）；旧行读作`未记录`；收寄册按作业实物的表达式索引。号 `0005`：进 main 前 fetch 核过无人占用（与 `idp-parcel-9b` 约定：先进 main 先用）。
+- 前线导入报告与「集运成员关系」查阅册 ✅ 报告逐行写缺少依据与读不动、重投行写当时的判断时刻，汇总行说路由依据未配置与身份不成立未判；查阅册 `GET /node-operations-records?registry=consolidation-member`（`TestConsolidationMemberRegistryTranscribesRows`、真库 `TestConsolidationMemberCatalogueListsAddAndRemoveFacts`）。
+- UC-NO-003「已经发生的错误分拣保留为事实」点名 ✅ 同上首条用例与导入垂直用例。
+
+证据层级只记 `S`。全量用例在干净检出上跑，结果写在进 main 记录。
+
+### 评审与处置（第 1 轮，隔离子代理，Spec 与 Standards 各一）
+
+Spec 轴（BLOCK，阻断 1）：
+
+1. 模板与报告注释说路由依据`未配置`「对每一件都成立」，身份不成立的件实为`未判` —— **已修**：改「身份成立的每一件」，汇总另说「身份不成立 N 行……未判」。
+2. 完成判据各格只端到端验了三格 —— **已修**：补各格经 `AddMember` 落册的用例。
+3. 重投行仍先判一遍再丢弃 —— **不改**：重跑大批次多读一遍 PS 与收寄册是可接受的代价；`Judge` 只在记录拼不出来（实现缺陷）时报错，不会因依赖故障把重投变成未决。
+4. 新册的 403 与 500 路径没进用例 —— **已修**：两处册名循环加 `consolidation-member`。
+5. 注释里的符号名与计数失准 —— **已修**：迁移注释改指 `IntakeIdentities.FindIntakeIdentities`；「三本册子」改「各本册子」；`endpoints.go` 那句「NO 三册」在 [operator-channel/35](../../operator-channel/issues/35-remaining-operations-read-faces-take-operator-intake.md) 里改（`endpoints.go` 归那张票）；「两条 CHECK」改说「这一列的 CHECK」。
+6. 模板缺「读不动同样不重判」，报告不带判断时刻 —— **已修**：模板补一条；重投行说明带当时的判断时刻。
+7. 撞键读回赢家没比内容指纹 —— **已修**：同一来源异内容答来源冲突，补用例。
+
+Standards 轴（BLOCK，阻断 4）：
+
+- B1 另造「加成员」—— **已修**：CONTEXT、UC-NO-003、报告输出与注释一律用「移入」。
+- B2 目录注释写「不经领域重建门」，新方法反其道 —— **已修**：`ports/catalogue_read.go` 文件头与 `ReviewCatalogue` 注释点名这一例外与理由（`未记录`不得读成依据齐全）。
+- B3 「三册」计数失真、用例循环漏新册 —— **已修**，同 Spec 4、5。
+- B4 新注释数别处的东西 —— **已修**：「样例九行」「两条 CHECK」「三处」「集运六口」（本笔新写那一处）都改掉。
+- N1 `DirectionalBasis` 注释前后打架 —— 已修。N2 「读在写事务之前」理由写了四处 —— 已修，只留在 `DirectionalBasisJudge`，其余引符号名。N3 报告带票号、「未判」混用 —— 已修。N5 迁移注释说错 0004 —— 已修。N6 用例吞错误 —— 已修。N7 CHECK 用例不核约束名 —— 已修。
+- N4 `buildDirectionalBasisJudge` 与 `intake_import.go` 各装一遍服务结果读口 —— **不改**：`intake_import.go` 归 `idp-parcel-9b` 会话，已告知它；它若抽共用函数，本侧跟着改调用。
