@@ -339,9 +339,9 @@ func TestFormEvaluationFromRequestRelaysTheResolverMissingList(t *testing.T) {
 	}
 }
 
-// Covers: 受理门——租户 / 回指 / 范围 / 时点 / 证据层级缺一即未受理，方向与目的不配对同样未受理；发生项引用
-// （身份或版本）缺席也未受理——它是步 ② 唯一能拿去键事实的来源引用，业务时点也从它上面来，一份没有发生项的
-// 请求形成不了任何评价；零依赖调用。
+// Covers: 受理门——租户 / 回指 / 范围 / 时点 / 证据层级缺一即未受理，方向与目的不配对同样未受理；BUY 请求的发生项
+// 引用（身份或版本）缺席也未受理——它不点名包裹，发生项是它在步 ② 唯一能拿去键事实的来源引用；零依赖调用。只点名
+// 包裹的那一格见 TestTheGateTakesEitherAnOccurrenceOrAParcel。
 func TestFormEvaluationFromRequestRejectsAnUnformedCommand(t *testing.T) {
 	fixture := newFormFixture(t, resolvedInputs(t))
 

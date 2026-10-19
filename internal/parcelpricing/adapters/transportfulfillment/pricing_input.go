@@ -1,11 +1,15 @@
-// Package transportfulfillment 是计价消费运输履约的一侧（ADR-0025）。这一只编排器同时问
-// 小包托运的申报测量与地址要素：问话的键是运输收费发生项，所以目录落在 transportfulfillment，
-// 不另拆三只只为通过「adapters/<提供方>」那条路径。节点实测登记册不在这里实现。
+// Package transportfulfillment 是计价消费运输履约的一侧（ADR-0025）。造计价输入快照的两只编排器都在这里：
+// 按包裹的那一只只问小包托运的申报测量与地址要素，SELL 请求点名包裹时直接用它（ADR-0190 决定四）；按发生项的
+// 那一只问话的键是运输收费发生项（目录名由此来），经运输履约找到成员包裹之后整段交给前者。按包裹的那一只不放
+// adapters/parcelshipment：按发生项那一只组合它，同包才不必为组合导出「从包裹到快照」那一步，实测优先、缺席取
+// 申报的取源规则（ADR-0171 决定二）也就只有一个入口。目录名的复核随 ADR-0171 越权风险点 1 归 PP owner。节点
+// 实测登记册不在这里实现。
 package transportfulfillment
 
 import (
 	"context"
 	"fmt"
+	"time"
 
 	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 	ppports "go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
@@ -25,6 +29,7 @@ const (
 	missingLengthUnit     = "parcel-shipment: declared dimension unit is outside the pricing unit table"
 	missingDestination    = "parcel-shipment: destination postal code is absent"
 	missingBusinessTime   = "transport-fulfillment: charge occurrence has no business time"
+	missingParcel         = "settlement-accounting: the evaluation request names no parcel"
 )
 
 // ActualMeasurement 是节点仍有效实测交来的原始量。本卡不造那本登记册；读口缺席时解析器改走申报。
@@ -44,55 +49,46 @@ type ActualMeasurementView interface {
 	) (ActualMeasurement, bool, error)
 }
 
-// ResolverDeps 是三只提供方口。Measured 可以为 nil：没有实测读口。
-type ResolverDeps struct {
-	Members   tfports.ChargeOccurrenceMemberView
+// ParcelResolverDeps 是按包裹那一只的提供方口。Measured 可以为 nil：没有实测读口。
+type ParcelResolverDeps struct {
 	Declared  psports.DeclaredMeasurementView
 	Addresses psports.AddressElementsView
 	Measured  ActualMeasurementView
 }
 
-// Resolver 实现 PricingInputResolver。它不 import 提供方 application。
-type Resolver struct {
-	deps ResolverDeps
+// ParcelResolver 按一件已受理包裹造快照：实重尺寸实测优先、缺席取申报，邮编路线取小包托运的寄件到收件。它实现
+// PricingInputResolver，键是请求点名的包裹，业务时点取请求的计价基准时点。不 import 提供方 application。
+type ParcelResolver struct {
+	deps ParcelResolverDeps
 }
 
-func NewResolver(deps ResolverDeps) (*Resolver, error) {
-	if deps.Members == nil || deps.Declared == nil || deps.Addresses == nil {
+func NewParcelResolver(deps ParcelResolverDeps) (*ParcelResolver, error) {
+	if deps.Declared == nil || deps.Addresses == nil {
 		return nil, fmt.Errorf("parcel pricing: pricing input resolver is missing a provider port")
 	}
-	return &Resolver{deps: deps}, nil
+	return &ParcelResolver{deps: deps}, nil
 }
 
-func (resolver *Resolver) ResolvePricingInput(
+// ResolvePricingInput 只认包裹引用。发生项在这里不是钥匙：经发生项找包裹是 Resolver 的事，这一只收到只带发生项的
+// 请求就是装错了路，如实答不可得。
+func (resolver *ParcelResolver) ResolvePricingInput(
 	ctx context.Context,
 	query ppports.PricingInputQuery,
 ) (ppports.PricingInputResolution, error) {
-	if !query.Sources.OccurrenceReferenced() {
-		return unavailable(missingMembers), nil
+	if !query.Sources.ParcelReferenced() {
+		return unavailable(missingParcel), nil
 	}
-	key, err := occurrenceKey(query)
-	if err != nil {
-		return unavailable(missingMembers), nil
-	}
-	members, found, err := resolver.deps.Members.LoadMembers(ctx, key)
-	if err != nil {
-		return ppports.PricingInputResolution{}, err
-	}
-	if !found {
-		return unavailable(missingMembers), nil
-	}
-	if members.OccurredAt.IsZero() {
-		return unavailable(missingBusinessTime), nil
-	}
-	switch len(members.Members) {
-	case 0:
-		return unavailable(missingMemberCount), nil
-	case 1:
-	default:
-		return unavailable(missingSingleMember), nil
-	}
-	object := members.Members[0].String()
+	return resolver.resolve(ctx, query, query.Sources.Parcel, query.BasisAt)
+}
+
+// resolve 是两只共用的那一段：从一件包裹到一份快照。businessAt 由调用方给——按发生项时是发生项的业务时间，按包裹
+// 时是请求的计价基准时点。请求带了结算币种就随快照进去，评价按它输出。
+func (resolver *ParcelResolver) resolve(
+	ctx context.Context,
+	query ppports.PricingInputQuery,
+	object string,
+	businessAt time.Time,
+) (ppports.PricingInputResolution, error) {
 	parcel, err := psdomain.NewDeclaredParcelID(object)
 	if err != nil {
 		return unavailable(missingNotAParcel), nil
@@ -102,7 +98,8 @@ func (resolver *Resolver) ResolvePricingInput(
 		return unavailable(missingNotAParcel), nil
 	}
 
-	// 计算目的不参与选源：某一目的是否拒用申报仍未决，这里不预设。
+	// 计算目的不参与选源：某一目的是否拒用申报仍未决，这里不预设。SELL·客户费用预估那一格 ADR-0190 决定四答了
+	// 「不拒用」，与这里不看目的是同一个结果，所以仍不看。
 	_ = query.Purpose
 	weight, dimensions, facts, missing, err := resolver.weightAndDimensions(ctx, query.Tenant, psTenant, parcel, object)
 	if err != nil {
@@ -126,14 +123,83 @@ func (resolver *Resolver) ResolvePricingInput(
 		return unavailable(missingNotAParcel), nil
 	}
 	input, err := ppdomain.NewPostalPricingInputSnapshot(
-		query.Tenant, query.Scope, subject, route, weight, dimensions, members.OccurredAt, facts...)
+		query.Tenant, query.Scope, subject, route, weight, dimensions, businessAt, facts...)
 	if err != nil {
 		return ppports.PricingInputResolution{}, err
+	}
+	if settlement, declared := query.SettlementCurrency(); declared {
+		if input, err = input.WithSettlementCurrency(settlement); err != nil {
+			return ppports.PricingInputResolution{}, err
+		}
 	}
 	return ppports.PricingInputResolution{Outcome: ppports.PricingInputResolved, Input: input}, nil
 }
 
-func (resolver *Resolver) weightAndDimensions(
+// ResolverDeps 是按发生项那一只的提供方口：成员走运输履约，其余照原样交给按包裹的那一只。Measured 可以为 nil：
+// 没有实测读口。
+type ResolverDeps struct {
+	Members   tfports.ChargeOccurrenceMemberView
+	Declared  psports.DeclaredMeasurementView
+	Addresses psports.AddressElementsView
+	Measured  ActualMeasurementView
+}
+
+// Resolver 按运输收费发生项造快照：找到唯一的成员包裹之后，取数整段交给 ParcelResolver。它实现
+// PricingInputResolver。不 import 提供方 application。
+type Resolver struct {
+	members tfports.ChargeOccurrenceMemberView
+	parcels *ParcelResolver
+}
+
+func NewResolver(deps ResolverDeps) (*Resolver, error) {
+	if deps.Members == nil {
+		return nil, fmt.Errorf("parcel pricing: pricing input resolver is missing a provider port")
+	}
+	parcels, err := NewParcelResolver(ParcelResolverDeps{
+		Declared:  deps.Declared,
+		Addresses: deps.Addresses,
+		Measured:  deps.Measured,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return &Resolver{members: deps.Members, parcels: parcels}, nil
+}
+
+// ResolvePricingInput 只认发生项引用。业务时点取运输履约答的发生项业务时间，不取请求上的计价基准时点：前者是提供方
+// 一侧的权威，后者是 SA 转抄的同一刻。
+func (resolver *Resolver) ResolvePricingInput(
+	ctx context.Context,
+	query ppports.PricingInputQuery,
+) (ppports.PricingInputResolution, error) {
+	if !query.Sources.OccurrenceReferenced() {
+		return unavailable(missingMembers), nil
+	}
+	key, err := occurrenceKey(query)
+	if err != nil {
+		return unavailable(missingMembers), nil
+	}
+	members, found, err := resolver.members.LoadMembers(ctx, key)
+	if err != nil {
+		return ppports.PricingInputResolution{}, err
+	}
+	if !found {
+		return unavailable(missingMembers), nil
+	}
+	if members.OccurredAt.IsZero() {
+		return unavailable(missingBusinessTime), nil
+	}
+	switch len(members.Members) {
+	case 0:
+		return unavailable(missingMemberCount), nil
+	case 1:
+	default:
+		return unavailable(missingSingleMember), nil
+	}
+	return resolver.parcels.resolve(ctx, query, members.Members[0].String(), members.OccurredAt)
+}
+
+func (resolver *ParcelResolver) weightAndDimensions(
 	ctx context.Context,
 	tenant ppdomain.TenantID,
 	psTenant psdomain.TenantID,
@@ -183,7 +249,7 @@ func (resolver *Resolver) weightAndDimensions(
 	return weight, dimensions, []ppdomain.VersionedFactReference{fact}, nil, nil
 }
 
-func (resolver *Resolver) postalRoute(
+func (resolver *ParcelResolver) postalRoute(
 	ctx context.Context,
 	tenant psdomain.TenantID,
 	parcel psdomain.DeclaredParcelID,

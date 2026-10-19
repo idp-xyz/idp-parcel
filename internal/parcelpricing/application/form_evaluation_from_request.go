@@ -96,19 +96,24 @@ func (reason FormEvaluationFromRequestUndecidedReason) String() string {
 	}
 }
 
-// FormEvaluationFromRequestCommand 是一份 SA 评价请求在本上下文词汇里的转述：全部来自 SA 评价请求读口，由消费侧
-// 适配器按信封所指那一份取回并译成这里的类型。方向与目的成对交进来（SA 的 BUY_SUPPLIER_COST 译成 BUY +
-// SUPPLIER_COST）；计价基准时点是发生项的业务时间——它既定在用价卡的选版，也进快照的 businessAt。证据层级由
-// 装配方声明、不给默认：它是来源数据的属性，编排不知道来源是什么。金额、币种、换算一格都没有（ADR-0107）。
+// FormEvaluationFromRequestCommand 是一份 SA 评价请求在本上下文词汇里的转述：全部来自 SA 的请求读口，由消费侧
+// 适配器按信封所指那一份取回并译成这里的类型。BUY 与 SELL 两种请求共用这一形（ADR-0190 决定四「复用由请求形成
+// 评价的编排」）：方向与目的成对交进来（SA 的 BUY_SUPPLIER_COST 译成 BUY + SUPPLIER_COST，SELL 请求译成 SELL +
+// CUSTOMER_CHARGE）；计价基准时点既定在用价卡的选版，也进快照的 businessAt——BUY 取发生项的业务时间，SELL 取
+// 包裹计费时点给的那一刻。证据层级由装配方声明、不给默认：它是来源数据的属性，编排不知道来源是什么。
+//
+// 金额、换算一格都没有（ADR-0107）。Settlement 不是金额：它是 SELL 请求上快照的结算币种，评价必须按它输出
+// （ADR-0013），所以照原样交给输入读口进快照；BUY 请求不带，零值。
 type FormEvaluationFromRequestCommand struct {
-	Tenant    domain.TenantID
-	Request   domain.EvaluationRequestReference
-	Scope     domain.PricingScopeID
-	Direction domain.PricingDirection
-	Purpose   domain.PricingPurpose
-	BasisAt   time.Time
-	Sources   ports.EligibleSourceReferences
-	Evidence  domain.EvidenceKind
+	Tenant     domain.TenantID
+	Request    domain.EvaluationRequestReference
+	Scope      domain.PricingScopeID
+	Direction  domain.PricingDirection
+	Purpose    domain.PricingPurpose
+	BasisAt    time.Time
+	Sources    ports.EligibleSourceReferences
+	Settlement domain.Currency
+	Evidence   domain.EvidenceKind
 }
 
 // FormEvaluationFromRequestResult 是入口的答复。字段导出、不设访问器，形状随 ReplayPricingEvaluationResult：
@@ -263,11 +268,12 @@ func (handler *FormEvaluationFromRequestHandler) resolveInput(
 		}, true
 	}
 	resolved, err := handler.deps.Inputs.ResolvePricingInput(ctx, ports.PricingInputQuery{
-		Tenant:  command.Tenant,
-		Scope:   command.Scope,
-		Purpose: command.Purpose,
-		BasisAt: command.BasisAt,
-		Sources: command.Sources,
+		Tenant:     command.Tenant,
+		Scope:      command.Scope,
+		Purpose:    command.Purpose,
+		BasisAt:    command.BasisAt,
+		Sources:    command.Sources,
+		Settlement: command.Settlement,
 	})
 	if err != nil {
 		return domain.PricingInputSnapshot{}, undecidedFormation(RequestPricingInputResolutionUnavailable), true
@@ -287,15 +293,16 @@ func (handler *FormEvaluationFromRequestHandler) resolveInput(
 }
 
 // accepted 是受理门：每一格都要在，方向与目的要配对——配错的一对不该被译成「未配置」（那会让人去登记一张本就
-// 不该存在的卡），配对表由领域一处持有。三件来源引用里只查发生项（身份 + 版本）：它是步 ② 唯一能拿去键
-// 事实的引用，业务时点也从它上面来；费用项目与供应商协议是 SA 那一侧的钥匙，本入口不读它们的内容，缺了由
-// 输入读口按自己的需要点名。
+// 不该存在的卡），配对表由领域一处持有。来源引用里只查能拿去键事实的那一件：发生项（身份 + 版本）或包裹，二者
+// 有一即可（ADR-0190 决定四）——BUY 请求经发生项找到成员，SELL 请求直接点名包裹，各带各的那一件。两者都没有的
+// 请求，步 ② 无从键任何事实。费用项目与供应商协议是 SA 那一侧的钥匙，本入口不读它们的内容，缺了由输入读口按
+// 自己的需要点名。
 func (command FormEvaluationFromRequestCommand) accepted() bool {
 	if command.Tenant.String() == "" || command.Request.String() == "" || command.Scope.String() == "" ||
 		command.BasisAt.IsZero() {
 		return false
 	}
-	if !command.Sources.OccurrenceReferenced() {
+	if !command.Sources.OccurrenceReferenced() && !command.Sources.ParcelReferenced() {
 		return false
 	}
 	if !command.Purpose.PairsWithDirection(command.Direction) {
