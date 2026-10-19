@@ -188,7 +188,7 @@ func TestACrossAccountProbeIsIndistinguishableFromAMissingParcel(t *testing.T) {
 }
 
 // Covers: 坏请求那一格的映射——Intake 构造不出查询即 400 MALFORMED_REQUEST，不带 outcome。没有账户授权的请求不落这一格，
-// 答认证那几格；AT-VE-153 点在 cmd/parcel-api 的 TestCustomerTrackingViewLineRefusesOtherFamiliesAndClientsWithoutTheGrant 上。
+// 答认证那几格，见 cmd/parcel-api 的 TestCustomerTrackingViewLineRefusesOtherFamiliesAndClientsWithoutTheGrant。
 func TestAMalformedQueryIsBadRequestWithoutOutcome(t *testing.T) {
 	recorder := serve(t, intakeDouble{err: visibilityhttp.ErrMalformedRequest}, readerDouble{}, http.MethodGet)
 
