@@ -118,6 +118,9 @@ const (
 	// CustomerCapabilityDeliveryHandoverConfirmation 是送站交接确认（`/node-operations/delivery-handover-conclusions`，UC-NO-006；ADR-0212
 	// 决定三）：客户账户对声称了自己的已关闭送站交接单确认或否认。
 	CustomerCapabilityDeliveryHandoverConfirmation CustomerCapability = "DELIVERY_HANDOVER_CONFIRMATION"
+	// CustomerCapabilityTrackingViewQuery 是客户追踪视图查阅（`/customer-tracking-view`，UC-VE-008；ADR-0139 决定四）。查阅口不判准入
+	// 范围（ADR-0139 决定八），所以它不进 customerCapabilitiesAdmittedAtMint。
+	CustomerCapabilityTrackingViewQuery CustomerCapability = "CUSTOMER_TRACKING_VIEW_QUERY"
 )
 
 var customerCapabilities = []CustomerCapability{
@@ -125,6 +128,7 @@ var customerCapabilities = []CustomerCapability{
 	CustomerCapabilityDeliveryPreAdviceSubmission,
 	CustomerCapabilityDeliveryPreAdviceWithdrawal,
 	CustomerCapabilityDeliveryHandoverConfirmation,
+	CustomerCapabilityTrackingViewQuery,
 }
 
 // ParseCustomerCapability 按字面取值认能力，大小写不折叠：册里存的就是这些字面量。
