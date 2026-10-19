@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"math"
 	"time"
 )
 
@@ -179,8 +180,15 @@ type RegulatoryCredential struct {
 	uses      int
 }
 
+// maxRegistryCredentialUses 是登记册额度列存得下的最大额度：那一列是 integer。超出它的额度永远存不进去，构造期就拒，
+// 不留给库面在事务里失败。
+const maxRegistryCredentialUses = math.MaxInt32
+
 // RegisterCredential 登记一版凭证。uses 为负是矛盾输入；零表示来源未提供次数额度
 // ——未提供必须明确记录，不猜测补齐（与监管决定的数量维度同一条纪律）。
+//
+// 有效期的「非零」与「终点晚于起点」按 AtRegistryPrecision 判：按纳秒放行的同一微秒区间会撞上库面的严格先后约束，
+// 零时刻之后不足一微秒的起点会读回成零时刻、整张凭证重建不出来。存的仍是原值。
 func RegisterCredential(
 	id CredentialID,
 	issuer RegulatoryAuthorityReference,
@@ -190,8 +198,10 @@ func RegisterCredential(
 	validTo time.Time,
 	uses int,
 ) (RegulatoryCredential, error) {
+	storedFrom, storedTo := AtRegistryPrecision(validFrom), AtRegistryPrecision(validTo)
 	if !id.valid() || !issuer.valid() || !holder.valid() || !procedure.valid() ||
-		validFrom.IsZero() || validTo.IsZero() || !validTo.After(validFrom) || uses < 0 {
+		storedFrom.IsZero() || storedTo.IsZero() || !storedTo.After(storedFrom) ||
+		uses < 0 || uses > maxRegistryCredentialUses {
 		return RegulatoryCredential{}, ErrInvalidCredential
 	}
 	return RegulatoryCredential{

@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"math"
 	"testing"
 	"time"
 
@@ -117,5 +118,50 @@ func TestCredentialApplicabilityIsAThreeWayJudgment(t *testing.T) {
 		0,
 	); !errors.Is(err, domain.ErrInvalidCredential) {
 		t.Fatalf("err = %v; 有效期倒置被收下了", err)
+	}
+}
+
+// Covers: 凭证登记按登记册存得下的值判（AtRegistryPrecision 与额度上限）——按纳秒放行的那几格入册后要么撞上库面的
+// 有效期严格先后约束，要么读回成零时刻、整张凭证重建不出来；额度超出额度列 integer 的上限存不进去。
+func TestCredentialRegistrationJudgesTheValuesTheRegistryCanStore(t *testing.T) {
+	register := func(from, to time.Time, uses int) error {
+		_, err := domain.RegisterCredential(
+			mustValue(t, domain.NewCredentialID, "SYN-CRED-TFA11"),
+			mustValue(t, domain.NewRegulatoryAuthorityReference, "SYN-AUTHORITY-TFA11"),
+			mustValue(t, domain.NewCredentialHolderReference, "SYN-HOLDER-TFA11"),
+			mustValue(t, domain.NewCustomsProcedureReference, "SYN-PROC-TFA11"),
+			from, to, uses)
+		return err
+	}
+	type input struct {
+		from, to time.Time
+		uses     int
+	}
+	base := time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC)
+	year := base.AddDate(1, 0, 0)
+	for name, given := range map[string]input{
+		"有效期两端落在同一微秒":   {base.Add(100 * time.Nanosecond), base.Add(900 * time.Nanosecond), 3},
+		"起点在零时刻之后不足一微秒": {time.Time{}.Add(100 * time.Nanosecond), year, 3},
+		"额度超出额度列的上限":    {base, year, math.MaxInt32 + 1},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := register(given.from, given.to, given.uses); !errors.Is(err, domain.ErrInvalidCredential) {
+				t.Fatalf("err = %v，want ErrInvalidCredential——这一份永远存不进登记册", err)
+			}
+		})
+	}
+	for name, given := range map[string]input{
+		"整秒":          {base, year, 3},
+		"微秒":          {base.Add(123456 * time.Microsecond), year, 3},
+		"两端跨一微秒":      {base.Add(100 * time.Nanosecond), base.Add(1100 * time.Nanosecond), 3},
+		"起点恰在零时刻后一微秒": {time.Time{}.Add(time.Microsecond), year, 3},
+		"额度恰在上限":      {base, year, math.MaxInt32},
+		"额度未提供":       {base, year, 0},
+	} {
+		t.Run(name, func(t *testing.T) {
+			if err := register(given.from, given.to, given.uses); err != nil {
+				t.Fatalf("err = %v，want 照常登记", err)
+			}
+		})
 	}
 }
