@@ -1,7 +1,7 @@
 # 26 SA 消费发生项已形成信封，发起 BUY 评价（收 10 的 BUY 半）
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg26（与 [30](./30-buy-cost-card-declares-amount-rounding.md) 同一分支，30 先落）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
+Status: in-progress——完工、评审已修订，待进 main，分支 claude-dcg26（与 [30](./30-buy-cost-card-declares-amount-rounding.md) 同一分支，30 先落）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
 Blocked by: 无
 地盘：SA 新 `adapters/transportfulfillment/`、PC 范围读、新 inbox 消费者；触发册加费用项目（domain、ports、postgres、迁移 SA 新号）；`cmd/parcel-settlement-register`；`cmd/parcel-dispatch/assemble.go`(+_test)；种子 settlement BUY 行；ADR-0208（ADR-0164 加后继指针）、UC-SA-002、SA CONTEXT。
 出处：[10](./10-demo-tenant-buy-and-sell-trigger-registers-are-empty.md)、[07](./07-transport-charge-occurrences-have-no-production-path.md)；方案「BUY 发起（接 08，收 10）」D08-1、D10-1，「跨票通则」X3、X6，「需要的 ADR」ADR-0208。
@@ -84,3 +84,48 @@ M
 - 「PC 范围读」落成新开的窄读口，不借 22 的点读口，见代决 8。
 - 端到端演示证据随 [27](./27-transport-charge-occurrences-are-registered-and-handed-off.md)。走到供应商预期成本之前还有一处读码看到的缺口：演示成本卡没绑分区目录，按发生项造的快照不带分区，BUY 评价会停在分区解不出。详见 [30](./30-buy-cost-card-declares-amount-rounding.md) 完成记录的待裁。
 - `cmd/parcel-api/assemble_evaluation_request.go` 头注「三件合格来源引用仍由调用方交进来，不从 TF 登记册推」对那条触发面仍然成立，所以没改。那个目录有 operator-channel/48 在改注释，也避开了。
+
+## 评审记录（2026-10-19，隔离评审一轮；修订提交 `329fcd94` 至 `6005e30d`）
+
+阻断 1 项，已修；非阻断 7 项，修 5 项，1 项立票，1 项按任务口径留到进 main。
+
+### 阻断（已修）
+
+- **CONTEXT-MAP 的 `settlement-accounting → parcel-pricing` 一条与 ADR-0208 字面矛盾**（`329fcd94`）。它不加限定地写「由结算作业或上游编排交进来，结算不从来源上下文的登记册推导」。现在这半句限到 ADR-0164 那条由调用方交齐的触发面。发生项已形成那一路注明不在此限：发生项与协议按引用回读发生项自身固定的事实，主要范围取协议的商业范围。注里链 ADR-0208，并按条目名指向「运输履约 → 结算（发生项已形成的交接）」一条。只改文档，代码没动。
+
+### 非阻断
+
+1. **协议范围读口的确定性错误被折成未决**（已修，`2da04f9a`、`59869497`）。按评审给的第一条路改：
+   - PC `ports.ErrSupplierAgreementLabelAmbiguous`：一份指称比中不止一版协议时报它。
+   - SA `ports.ErrSupplierAgreementScopeUntranslatable`：SA→PC 适配器把租户、指称、范围译不过去和指称歧义都包进它。
+   - 触发编排见到这枚哨兵就原样上抛，落 `publish_failed`。只有读不动才答未决。
+   - 派发哨兵名单的注释补了「不在名单里」一条。ADR-0208 决定四、五与 Consequences 把这件事写明，`AT-SA-187` 同步。
+   - 新用例三条：PC 真库 `TestAQualifiedLabelNamingTwoAgreementVersionsIsAmbiguous`；SA 适配器 `TestAnAmbiguousAgreementLabelIsDeterministic`；编排 `TestAnUntranslatableAgreementScopeIsRaisedNotLeftUndecided`。读不动那条用例加一个断言：错误里不带确定性哨兵。
+2. **领域层两条头注与 ADR-0208 矛盾**（已修，`a9bd35c9`）。`PrimaryScopeReference` 与 `EligibleSourceReferences` 的来源改为按发起路径分别写，两条路都不许的「按当前伙伴、线路或报表分组去配」保留为红线。
+3. **方案 D10-1 仍写「以新版本重发」**（已修，`ceca1dec`）。D10-1 下追加一条改判，指向票 30 完成记录；票 30 的「做什么」「完成判据」注明已改判。
+4. **ADR-0208 有两处遗漏**（已修，`59869497`）。
+   - 「候选与反方」加一条：主要范围取版本壳上的 `scope_ref`，否决，并写明理由。
+   - 决定四写明取的是正文上的适用范围；越权风险点 2 补一句两者分家时由 owner 另裁。
+   - 「三类」一行补「七是机制」。
+5. **注释里写了「生产方还没上线」这类时点状态**（已修，`5fad4ee0`）。改了三处：
+   - 消费门 `ChargeOccurrenceFormedEventType` 头注、派发用例文件头、`assemble.go` 路由说明，都改成只陈述 ADR-0049 和「谁钉得住两串相等」；ADR-0208 Consequences 那一句也一并改。
+   - 「测试改用真交接口入队并钉两串相等」写进票 [27](./27-transport-charge-occurrences-are-registered-and-handed-off.md) 的完成判据，同一条带上 `agreement_ref` 照 ADR-0208 决定六写。
+6. **BUY 请求交接口没有确定性拒收哨兵**（未修，立票 [38](./38-buy-evaluation-request-handoff-does-not-separate-deterministic-rejection.md)，`6005e30d`）。
+   - 不在本票修的理由：哨兵要从 `RequestBuyEvaluationHandler` 透出来。这只编排同时服务 ADR-0164 那条触发面和 `cmd/parcel-api` 的评价请求端点，两处今天对任何交信封失败都答「已请求、留续办引用」。改了会动那两处的答法，属 SA owner 的形状问题；`cmd/parcel-api` 目录也有别的会话在改注释。
+   - ADR-0208 越权风险点 6 已指向票 38。
+7. **机制清点没有重生成**（未做）。任务口径规定进 main 时统一重生成，分支上不做。本分支多了迁移 SA 0040，进 main 时须带上。
+
+### 代决与越权风险点（评审修订新增）
+
+- **确定性哨兵立在两侧 ports，没有选择收窄 ADR**。收窄就是承认 PC 一侧的坏答案可以按未决重投，等于把坏数据藏进失败预算；ADR-0208 决定五的本意是词汇表外即上抛。
+- **PC 一侧只把「指称歧义」立成哨兵**。
+  - PC 存储行译不回领域值（对象标识、版本、范围的构造失败）仍走普通 error，到 SA 按未决重投。
+  - 越权风险点（PC owner）：这几种同样是确定性的，属 PC 存储不变量已破，但 PC 读口头注把「读取失败与坏数据」并作一格，那是 PC 的既有口径。要不要拆开归 PC owner；表上的非空白 CHECK 已经挡掉最常见的一种。
+- **改了票 27 的完成判据**（越权风险点，归 27 的认领者与 TF owner）：追加的一条只钉两串相等与 `agreement_ref` 形状，两件都出自已写进 ADR-0208 的约定。
+- **票 38 立为 `needs-triage`**，不标 `ready-for-agent`：哨兵从哪一层透出来，会改变 ADR-0164 触发面和 parcel-api 端点的答法，要先裁。
+
+### 验证（修订后）
+
+- `go build ./...`、`go vet ./cmd/... ./internal/... ./scripts/... ./migrations/...`、`gofmt -l` 干净。
+- 带真库 `go test -p 1 -count=1` 全绿：`./internal/architecture/`、`./internal/settlementaccounting/...`、`./internal/partycommercial/...`（含 `adapters/postgres`）、`./cmd/parcel-dispatch/`（整包，含 `TestAFormedChargeOccurrenceFiresABuyEvaluationRequestThroughTheRouteTable` 与 `TestADeclaredParcelOnZonedLegsIsPricedThroughProductionWiring`）。
+- 本轮没动种子与迁移，没有重跑 `seed.sh`。

@@ -1,7 +1,7 @@
 # 30 BUY 成本卡声明金额取整（09 余半）
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg26（与 [26](./26-settlement-consumes-charge-occurrence-formed-to-request-buy-evaluation.md) 同一分支，本票先落）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
+Status: in-progress——完工、评审已修订，待进 main，分支 claude-dcg26（与 [26](./26-settlement-consumes-charge-occurrence-formed-to-request-buy-evaluation.md) 同一分支，本票先落）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
 Blocked by: 无
 地盘：`scripts/demo-seeds/data/pricing/` 成本卡新版本、`seed.sh` 一行。
 出处：[09](./09-demo-price-cards-declare-no-amount-rounding.md)；方案「BUY 发起（接 08，收 10）」D10-1，「已不成立或已修」09。
