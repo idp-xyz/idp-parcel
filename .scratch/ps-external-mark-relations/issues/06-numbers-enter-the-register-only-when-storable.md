@@ -1,7 +1,7 @@
 # 06 外部标识号码进册前没有「存得下」的门：超长号码撞索引上限答 500，NUL 撞库面答 500；按号核对遇到不可能在册的号也答错误
 
 Category: bug
-Status: in-progress——2026-10-19 评审两条阻断由作者子代理修完（rebase 到 origin/main `38916b00`），待复核。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 立并代决、认领，分支 `claude-psxm06`
+Status: in-progress——2026-10-19 裁定补由作者子代理实施完（NO 对超长号照常问 PS），待复核。此前 in-progress——2026-10-19 评审两条阻断由作者子代理修完（rebase 到 origin/main `38916b00`），待复核。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 立并代决、认领，分支 `claude-psxm06`
 Blocked by: 无
 父票：[05](./05-a-unique-hit-in-someone-elses-number-space-is-not-enough.md)
 出处：no-reception-source/03 完成记录「发现」（PS 关联册按号码建的 btree 索引有长度上限，号码进册前无长度门）；本会话复核。
@@ -28,6 +28,17 @@ Blocked by: 无
 4. 难逆转的那一半（号码的存得下界）在 ADR-0184 文末追加复核记录，决定原文不动。
 
 越权风险点：代 PS owner 定了 512 字节这一界。owner 复核时看有没有渠道的号码可能更长（例如把整段二维码内容当号码交来）。
+
+## 裁定补（2026-10-19，会话 idp-parcel-9b 代决，授权同上；改的是裁定三的读法，裁定三原文不动）
+
+裁定三写的是：号过不了构造门，就直接答零候选。它的前提是「这样的号确定不在册」。评审阻断二修完之后，这条前提对超长号不成立：门立起来之前已进委托快照的超长客户包裹件号照样读得回，接受时照常进册；门前已接受的委托，号也早在册里。照裁定三的字面，NO 在构造那一步就答零候选，册里那一件查不到，本该唯一关联的落成待识别。这与阻断二是同一类回归，只是在读的一侧。
+
+改为：
+
+- **入册门只管写，读的一侧不拿它挡已在册的号。**
+- **带 NUL 的号**：NO 适配器直接答零候选，不问 PS。Postgres 的 text 存不下 NUL，它确定不在册，去问反倒在库面报错。
+- **只是超长的号**：照常去问 PS。读口按号比较、不构造索引行，长号不报错，查不到照常答零候选。
+- 不报错、不落未核对、不响永远续不上的门铃，这几条照裁定三原样成立。
 
 ## 完成判据
 
@@ -180,7 +191,7 @@ Blocked by: 无
 - `internal/architecture/rehydration_gate_test.go`：受限名单加一行。
 - `internal/parcelshipment/adapters/postgres/shipment_request.go`：派活时点名的那一处调用。
 
-**发现，需裁定（未改）**
+**发现（已裁，见「裁定补」，实施见下节）**
 
 门落地之前已经进册的超长号，NO 查不到。阻断二让门前进了快照的超长号读得回，接受时号照常进册，上面的真库用例就是这样走的；门前已接受的委托，号也早在册里。但现场扫到同一个号时，NO 的 `ParcelIdentityView` 照裁定三，构造失败就答零个候选、不去问 PS，册里那一件于是查不到：本该唯一关联，结果落待识别。这与阻断二是同一类回归，只是在读的一侧。
 
@@ -190,3 +201,56 @@ Blocked by: 无
 - 只是超长的号仍去问 PS。读口按号比较、不构造索引行，长号不报错：本票修前的红日志里，513 字节与 4000 字节的号经真库都答零候选、已核对。
 
 这改的是裁定三「过不了构造门就直接答零候选」的字面，所以没有自行改，留给会话裁定。ADR-0184 复核记录第 2 条「留给 PS owner 与 NO owner」已写明这一问。
+
+## 裁定补实施（2026-10-19，会话 idp-parcel-9b 的作者子代理，分支 `claude-psxm06`）
+
+**提交**
+
+| 提交 | 内容 |
+|---|---|
+| `c000a4d5` | 核对用号的类型、端口与读口改收它、NO 适配器的判断，各层用例 |
+| `d646588a` | ADR-0184 复核记录第 2 条照新读法改写。改的是本分支新加、尚未进 main 的行，对 origin/main 该文件仍是 8 增 0 删 |
+| 本笔 | 本节、「裁定补」一节、Status 前缀；「发现，需裁定」改记已裁 |
+
+机制清点在 `d646588a` 的干净检出上重生成过，与已提交的那份无差，所以没有单独一笔。
+
+**构造查询用的号怎么走**：没用 `RehydrateExternalIdentifierNumber`，另立了一个类型。
+
+- `RehydrateExternalIdentifierNumber` 在 `internal/architecture` 的重建面门禁里是受限入口，只对 PS 的 postgres 适配器开放，NO 适配器调它，门禁就红。把它挪进开放名单，等于让任何写入方都能拿它绕过入册门。
+- 所以按「或同等」另立了核对用的号码类型 `ExternalIdentifierLookupNumber`，构造器是 `NewExternalIdentifierLookupNumber`：只拒全空白与带 NUL 的号，长度不设界，逐字不折算。
+  - NUL 那一格与入册门共用 `refuseNUL`，拒因同一个哨兵 `ErrExternalIdentifierNumberNotStorable`。
+  - 它与入册的 `ExternalIdentifierNumber` 是两个类型：核对用的号交不进任何写入方，也就绕不过入册门。
+- 端口 `ParcelExternalIdentifierView.FindParcelsByExternalIdentifier` 与 postgres 读口改收它。头注写明三点：入册门只管写，读的一侧不拿它挡已在册的号；读口按号比较、不构造索引行；门前进册的超长号照样查得到。
+- 读口的实现者只有 postgres 读口与 NO 用例里的替身。调用方只有 NO 适配器与 PS postgres 包里的几处用例，都随这一笔改了。
+
+**NO 适配器**：`ResolveParcelIdentity` 改用 `NewExternalIdentifierLookupNumber` 构造。
+
+- 构造失败带 `ErrExternalIdentifierNumberNotStorable` 的，只剩带 NUL 这一种：答零候选、无信号、不报错、不问 PS。这就是「NUL 先在适配器挡掉」：挡在适配器里、交给 PS 之前，判据用领域那一处的 NUL 判断，适配器不另写一份。
+- 超长的号原样问 PS，PS 答什么就译什么。
+- `RehydrateExternalIdentifierNumber` 仍只给委托仓储还原快照用。
+
+**用例**
+
+| 格 | 用例 |
+|---|---|
+| 门前进册的 600 字节号经生产收寄装配唯一关联 | `cmd/parcel-api/external_identifier_number_gate_test.go::TestTheWiredReceptionAssociatesAnOverlongNumberRegisteredBeforeTheGate`。做法照旧快照用例：经真提交编排建单，`jsonb_set` 直写成 600 字节，经仓储接受进册（册里一行）；设备送来同号，答 201 `INTAKE_FORMED`、关联那一件、控制照建、不是 `UNCHECKED`，重核门铃零封 |
+| 带 NUL 的号经读口答零候选、不报错 | 设备收寄口（`nodeopshttp` 的 `receptionCommand`）早已对 NUL 答坏报文，送不到收寄编排，所以钉在适配器层。真库：`TestANulMarkIsAnsweredWithoutAskingTheRealRegister`，NO 适配器接真库上的 PS 读口，答零候选、无信号、不报错。单元：`internal/nodeoperations/adapters/parcelshipment/identity_test.go::TestANulMarkIsNotAskedAndAnOverlongMarkIsStillAsked`，带 NUL 的不问；513 字节的原样问一次，替身答的候选与信号照转 |
+| 册里没有的超长号 | `TestTheWiredReceptionAnswersAMarkTheRegisterCannotHoldAsCheckedPending` 原样留着（513 与 4000 字节答待识别、已核对、门铃零封），头注改成「册里没有、读口不报错」 |
+| 领域 | `TestALookupNumberIsNotHeldToTheEntryLimit`（600 字节照收、带 NUL 拒、全空白拒） |
+
+原裁定三的适配器用例 `TestAMarkTheRegisterCannotHoldHasNoCandidatesAndIsNotAnError` 断言超长号不问 PS，与裁定补相反，由上表那条单元用例替换。
+
+**先红后绿**：原红日志 `/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/psxm06-red.log` 末尾追加了「红（裁定补，修前）」一段，基于 `f08e5b7d`、改代码之前。原话：
+
+- 「513 字节：answer = {Candidates:[] Ambiguous:false} err = <nil>, want PS 答的候选与信号照转」
+- 「送站答 200 {"outcome":"PENDING_IDENTIFICATION",…,"identityCheck":"CHECKED"} , want 201 INTAKE_FORMED 关联 SYN-PARCEL-LEGACY-1」
+
+NUL 那条真库用例修前已绿：原裁定三下带 NUL 的号本就答零候选。领域用例要用新符号，没进红那一段。修后全绿。
+
+**门**（在 `c000a4d5` 的 Go 内容上跑，之后的提交不碰 Go 文件）：
+
+- `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0。
+- 带 DSN `-p 1 -count=1` 跑 `./internal/parcelshipment/...`、`./internal/nodeoperations/...`、`./internal/accessidentity/...`、`./cmd/parcel-api/...`、`./internal/architecture/...`、`./cmd/parcel-dispatch/...`、`./cmd/parcel-frontline-import/...`，37 个包全 ok。日志 `/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/psxm06-gate-ruling.log`。
+- 全量 `./...` 没跑。
+
+**越出地盘的改动（本节新增）**：`internal/parcelshipment/ports/external_identifier.go` 的端口签名改了参数类型。实现者与调用方见上，都在 PS 与 NO 适配器内，没碰 NO 重核编排与 `shipment_request.go`。
