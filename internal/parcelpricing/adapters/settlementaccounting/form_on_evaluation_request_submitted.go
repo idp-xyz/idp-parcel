@@ -28,8 +28,9 @@ var (
 	// ErrPriceCardApplicabilityConflict 是入口的「适用冲突」：多于一版价卡同时适用。恢复动作是人裁——不种任何选择规则。
 	ErrPriceCardApplicabilityConflict = errors.New(
 		"parcel pricing settlementaccounting adapter: more than one price card applies to the evaluation request")
-	// ErrPricingInputUnavailable 是入口的「输入不可得」（裁决 4）：造不出计价输入快照，缺哪几只读口随消息点名。恢复
-	// 动作是等提供方那一侧（TF / NO / PS）的只读口接上——后继票，不是传输。
+	// ErrPricingInputUnavailable 是入口的「输入不可得」（裁决 4）：造不出计价输入快照，缺哪几只读口或哪一格事实随消息
+	// 点名。恢复动作在提供方那一侧：BUY 那一路多半是等 TF / NO / PS 的只读口接上；SELL 那一路多半是包裹事实本身缺
+	// （不在已接受委托上、没有申报重量、单位在表外、没有收件邮编），要小包托运补正，不是传输。
 	ErrPricingInputUnavailable = errors.New(
 		"parcel pricing settlementaccounting adapter: the pricing input for the evaluation request is not obtainable")
 	// ErrEvaluationFormationUndecided 是入口的「未决」：依赖故障，形成与否未知，停在哪一口随消息带出。

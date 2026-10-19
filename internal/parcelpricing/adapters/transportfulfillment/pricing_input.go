@@ -98,8 +98,8 @@ func (resolver *ParcelResolver) resolve(
 		return unavailable(missingNotAParcel), nil
 	}
 
-	// 计算目的不参与选源：某一目的是否拒用申报仍未决，这里不预设。SELL·客户费用预估那一格 ADR-0190 决定四答了
-	// 「不拒用」，与这里不看目的是同一个结果，所以仍不看。
+	// 计算目的不参与选源：某一目的是否拒用申报仍未决，这里不预设。SELL·客户费用预估那一格 ADR-0190 决定四答的是
+	// 「不拒用」，结果与不看目的相同，所以这里不看。
 	_ = query.Purpose
 	weight, dimensions, facts, missing, err := resolver.weightAndDimensions(ctx, query.Tenant, psTenant, parcel, object)
 	if err != nil {

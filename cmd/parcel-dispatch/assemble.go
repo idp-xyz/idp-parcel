@@ -601,7 +601,8 @@ var sellEvaluationOnFinalOutcomeUndecidedSentinels = []error{
 //     取值；登了卡之后重投就形成，本组合根不替它配、不种默认卡。
 //   - ErrPriceCardApplicabilityConflict——多于一版同时在用，交人裁，不挑。
 //   - ErrPricingInputUnavailable——按包裹造不出快照：包裹不在已接受委托上、没有申报重量、单位在计价单位表外、没有
-//     收件邮编。缺的是小包托运那一侧的事实，补正之后重投会变。
+//     收件邮编。缺的是小包托运那一侧的事实，多半不会自愈；重投只在补正赶在失败预算耗尽之前时才会变，耗尽之后
+//     信封留着原因，SA 那份请求停在「已提交」。
 //   - ErrEvaluationFormationUndecided——依赖故障，形成与否未知。
 //
 // 落 publish_failed 的与 BUY 那一路同：引用坏了、SELL 请求记录译不成命令（例如结算币种不在计价的币种形里）、入口答

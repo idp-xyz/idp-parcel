@@ -22,11 +22,11 @@ Blocked by: [01](./01-sell-request-identity-and-registers.md)、[02](./02-reques
 
 2026-10-19 Claude Code 作者会话在分支 `claude-sell-03`（基于 `claude-sell-01`）落地。代码三笔，派发接线单独压在最后一笔：
 
-- `90e0310b` 受理门收发生项或包裹，按包裹的解析器拆出并带结算币种（只动 `internal/parcelpricing`）。
-- `453d3ef1` SELL 评价请求译成形成命令，收 SELL 请求信封的消费者（只动 `internal/parcelpricing`）。
-- `0951fe0c` 派发路由接 SELL 评价请求消费者（只动 `cmd/parcel-dispatch`：`assemble.go` 与新用例文件）。票 02 同改路由表，合并冲突落在这一笔里。
+- `0bf2373e` 受理门收发生项或包裹，按包裹的解析器拆出并带结算币种（只动 `internal/parcelpricing`）。
+- `5517504e` SELL 评价请求译成形成命令，收 SELL 请求信封的消费者（只动 `internal/parcelpricing`）。
+- `d694d157` 派发路由接 SELL 评价请求消费者（只动 `cmd/parcel-dispatch`：`assemble.go` 与新用例文件）。票 02 同改路由表，合并冲突落在这一笔里。
 
-另有 `b87dbd31` 机制清点重生成（含票 01 与本票的新增文件；票 01 那条分支没重生成）。证据级别：隔离合成，只记 `S`。
+另有 `（rebase 前的 tip）` 机制清点重生成（含票 01 与本票的新增文件；票 01 那条分支没重生成）。证据级别：隔离合成，只记 `S`。
 
 ### 做了什么
 
@@ -57,7 +57,7 @@ Blocked by: [01](./01-sell-request-identity-and-registers.md)、[02](./02-reques
 
 ### 验证
 
-在 `b87dbd31` 上，DSN `postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable`：`go test -p 1 -count=1 ./internal/parcelpricing/... ./internal/settlementaccounting/... ./cmd/parcel-dispatch/ ./internal/architecture/` 全部 `ok`，本票新增真库用例逐条 `PASS`、无 `SKIP`。`go vet` 两处地盘退 0，`gofmt -l` 空，`go build ./...` 退 0。两笔中间提交各自检出后 build、vet 与包内用例也都过。
+在 `（rebase 前的 tip）` 上，DSN `postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable`：`go test -p 1 -count=1 ./internal/parcelpricing/... ./internal/settlementaccounting/... ./cmd/parcel-dispatch/ ./internal/architecture/` 全部 `ok`，本票新增真库用例逐条 `PASS`、无 `SKIP`。`go vet` 两处地盘退 0，`gofmt -l` 空，`go build ./...` 退 0。两笔中间提交各自检出后 build、vet 与包内用例也都过。
 
 ### 偏离与取舍
 
@@ -68,3 +68,8 @@ Blocked by: [01](./01-sell-request-identity-and-registers.md)、[02](./02-reques
 - 入口没装 Inputs 时，「缺哪几只读口」那一组点名仍是 BUY 的。生产两路都装了，没为 SELL 另写一组。
 - 没改 `docs/`。ADR-0190 Consequences 列的文档同步归协调方。另：PP `CONTEXT`「计价输入快照」里「某一计算目的是否拒用申报…不预设」那句，可补指 ADR-0190 决定四对 SELL·客户费用预估那一格的作答。
 
+## 评审记录（2026-10-19，隔离子代理一次过两轴，判 PASS）
+
+- 已修的非阻断：完成记录的 SHA；带变更叙述的注释；共用哨兵 `ErrPricingInputUnavailable` 的头注补上 SELL 那一路的恢复动作；派发里「补正之后重投会变」改成如实说明预算耗尽之后的终态。机制清点在落地时于 tip 上重生成。
+- 落地次序：02、03、04 合成一批一起进 main，免得 03 先落时 SELL 评价被 BUY 消费门入账、之后再也投不到 SELL 那只消费者。
+- 留给后续：受理门可按方向配对来源键（BUY 带发生项、SELL 带包裹且带结算币种），今天两只翻译器各自守着；按包裹的解析器住在 `adapters/transportfulfillment` 归 ADR-0171 越权风险点 1，交 PP owner 复核。

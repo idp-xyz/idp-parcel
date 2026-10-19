@@ -39,7 +39,7 @@ func trimmedNonEmpty(value string) bool {
 // 引用。
 //
 // Settlement 是请求上快照的结算币种（ADR-0190 决定四）：SELL 请求登记时从不可变的结算账户行抄下，评价按它输出，
-// 所以随快照进来，不另去读账户册。零值即请求没带——BUY 请求今天不带，快照照旧只按卡币种计价。
+// 所以随快照进来，不另去读账户册。零值即请求没带：BUY 请求不带这一格，快照只按卡币种计价。
 type PricingInputQuery struct {
 	Tenant     domain.TenantID
 	Scope      domain.PricingScopeID
