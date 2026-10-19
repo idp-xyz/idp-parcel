@@ -22,6 +22,10 @@ Blocked by: [66](./66-effective-delivery-records-a-final-delivery-gate-reading.m
 - 读数为未决、读不动、放行或不受门禁不形成信号；POD 更正不重复形成。
 - 真库用例；演示租户的采用（若有）证据记 `S`。
 
+## 要裁的
+
+- 停点 `ENTRY_HANDOVER_NOT_ON_REGISTER`（未决）说的是段册与交接册对不上，是库面不一致而不是关务的答复（ADR-0213 文末补记越权风险点 23）。它要不要也派生一条「数据坏了」的信号，还是只留给运营查库，随本票一起裁；`ENTRY_HANDOVER_AMBIGUOUS` 是登记方版本口径撞了，与它分开看。
+
 ## 规模
 
 M
