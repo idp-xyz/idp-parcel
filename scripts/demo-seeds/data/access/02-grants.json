@@ -117,6 +117,15 @@
       "basis": "SYN-GRANT-BASIS-DEX-14"
     },
     {
+      "grantId": "SYN-GRANT-DEX-CONFIG-PENDING-IDENTITY-RECHECK-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "PENDING_IDENTITY_RECHECK",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-15"
+    },
+    {
       "grantId": "SYN-GRANT-DEX-VIEWER-READ-01",
       "issuer": "http://127.0.0.1:5556/dex",
       "subject": "ChZTWU4tT1BFUkFUT1ItVklFV0VSLTAxEgVsb2NhbA",
