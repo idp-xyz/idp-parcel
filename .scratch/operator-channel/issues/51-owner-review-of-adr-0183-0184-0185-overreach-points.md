@@ -1,7 +1,7 @@
 # 51 ADR-0183、0184、0185 越权风险点的 owner 复核（代决）
 
 Category: task
-Status: ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 研判完整性批评点出）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc51`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 研判完整性批评点出）
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判轮完整性批评：三份 ADR 的越权风险点至今没有 owner 复核行

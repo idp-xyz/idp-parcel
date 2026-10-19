@@ -1,8 +1,8 @@
 # 37 受控关闭与重开：「代货主」那一对与关闭责任来源词表收归 application 一处，装配头注去计数，票 28 遗留头注改口
 
 Category: enhancement
-Status: ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 1 评审遗留；用户授权代决）
-Blocked by: operator-channel/34 进 main（同改 internal/parcelshipment/adapters/http/operator_decision_intake.go 及其测试，串行免撞）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc37`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 1 评审遗留；用户授权代决）
+Blocked by: 无（operator-channel/34 已进 main）
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)。被评的是 [15](./15-operation-decision-faces-take-operator-intake.md) 之六（代码 `0e3bb7df`），规则出处是 [ADR-0183](../../../docs/adr/0183-operator-channel-addresses-controlled-closure-and-reopening-by-parcel-and-derives-the-shipper-from-the-accepted-request.md)。
 出处：
 - 票 15 Comments「评审 ← 会话 idp-parcel-9b 起的隔离子代理 · 钉 `0e3bb7df`」那一条的 Standards 非阻断 (1)(2)(3)；
