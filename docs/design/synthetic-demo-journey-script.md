@@ -12,7 +12,8 @@
 |---|---|---|
 | 演示库 | `postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable` | 本机隔离库；**任何一步都不得指向生产库** |
 | 种子 | `scripts/demo-seeds/seed.sh` | 合成 `SYN-` 主数据，四条登记 CLI 灌入；复灌用 `--reset` |
-| 后端 | `cmd/parcel-api` | 需 `IDP_PARCEL_ISOLATED_READ_TENANT=SYN-TENANT-01`；要演示委托提交另加 `IDP_PARCEL_ISOLATED_WRITE_TENANT`，同值（ADR-0091） |
+| 演示发行方 | `scripts/demo-seeds/operator-channel/compose.yaml` | Dex；`docker compose -f … up -d --wait`，用法见 `scripts/demo-seeds/README.md`「操作者渠道」一节 |
+| 后端 | `cmd/parcel-api` | 运营查阅各口走操作者渠道：发行方三件加治理自授权，请求带配置员令牌；委托查阅三口另需 `IDP_PARCEL_ISOLATED_READ_TENANT=SYN-TENANT-01`（票 operator-channel/53 之前）；要演示委托提交另加 `IDP_PARCEL_ISOLATED_WRITE_TENANT`，同值（ADR-0091） |
 | 管理台 | `apps/admin-web` | dev 服务器**从 WSL 起**（本机 `node_modules` 是 WSL 侧 pnpm 装的 POSIX 链接农场，Windows 进程解析不到属预期），用 `PARCEL_API_TARGET` 指向后端；原样命令见「取证」页面层一节 |
 
 起后端（本机 8080 被 Windows 服务占用，换端口，见 admin-web README 的暗礁一节）：
@@ -20,19 +21,34 @@
 ```powershell
 $env:IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable'
 $env:IDP_PARCEL_HTTP_ADDR=':19080'
+# 操作者渠道（ADR-0100）：运营查阅各口与运营决定各口都走它；治理自授权与种子里权威区间的权威串逐字相同（ADR-0180）
+$env:IDP_PARCEL_OPERATOR_OIDC_ISSUER='http://127.0.0.1:5556/dex'
+$env:IDP_PARCEL_OPERATOR_OIDC_JWKS_URL='http://127.0.0.1:5556/dex/keys'
+$env:IDP_PARCEL_OPERATOR_OIDC_AUDIENCE='idp-parcel-admin-web'
+$env:IDP_PARCEL_GOVERNANCE_SELF_AUTHORITY='SYN-AUTH/idp-parcel-pilot'
+# 委托查阅三口仍走隔离读（票 operator-channel/53 之前）
 $env:IDP_PARCEL_ISOLATED_READ_TENANT='SYN-TENANT-01'
 # 要演示委托提交才需要下面这行；只看主数据各页时不设它（ADR-0091，两值必须相同）
 $env:IDP_PARCEL_ISOLATED_WRITE_TENANT='SYN-TENANT-01'
 go run ./cmd/parcel-api
 ```
 
-启动日志必须出现这一行，否则后面每一页都会是`未配置`态：
+运营查阅各口要带配置员令牌（WSL 内取，脚本走一次 Dex 登录）：
 
-```json
-{"level":"INFO","msg":"Isolated read admission enabled (ADR-0078): operations query endpoints answer with injected synthetic scope","tenant":"SYN-TENANT-01"}
+```bash
+TOKEN=$(./scripts/demo-seeds/operator-channel/operator-token.sh syn-operator-config-01@syn-tenant-01.example.invalid)
+curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:19080/network-catalog?family=node
 ```
 
-放行必须出声是 [ADR-0078](../adr/0078-isolated-environment-operations-reads-admit-by-assembly-injection.md) 的要求，不是日志噪音：隔离读面把八条运营查阅端点从`未配置`切成可答，这件事要在事后可查。设了写开关时另有一行 ADR-0091 的同款声明，带 `selfAuthority`。
+启动日志必须出现这几行，否则对应各页会是`未配置`态：
+
+```json
+{"level":"INFO","msg":"Operator channel issuer configured (ADR-0100): operator tokens verified against the issuer's JWKS"}
+{"level":"INFO","msg":"Governance self authority configured (ADR-0180): admission scope reads tenant mappings and this product's authority intervals"}
+{"level":"INFO","msg":"Isolated read admission enabled (ADR-0078): shipment request views answer with injected synthetic scope","tenant":"SYN-TENANT-01"}
+```
+
+放行必须出声是 [ADR-0078](../adr/0078-isolated-environment-operations-reads-admit-by-assembly-injection.md) 的要求，不是日志噪音：隔离读面把委托查阅三口从`未配置`切成可答，这件事要在事后可查。设了写开关时另有一行 ADR-0091 的同款声明，带 `selfAuthority`。不带令牌打运营查阅各口答 `401 OPERATOR_CREDENTIAL_REJECTED`，持令牌但授予不足答 `403 OPERATOR_NOT_GRANTED`。
 
 ### 起 dispatch（只在演示委托提交时需要）
 
@@ -173,6 +189,8 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 `--reset` 是破坏性动作（DROP 全部 parcel schema → 重迁 → 重灌），**只属于隔离演示库**。对已灌过的库不要用不带 `--reset` 的重跑：四条 CLI 各自幂等，但网络目录的版本行撞主键会答未决。
 
 ## 取证
+
+**2026-10-18 起（票 operator-channel/35）**：运营查阅各口挂操作者查阅读。下表的 `200` 今天只在带配置员令牌时成立；只设隔离读开关、不带令牌时，除委托查阅三口外全答 `403`（目录四族那一半 2026-10-16 在 `c68e4342` 上重走已实测）。下表锚在 `627d339`，保留为当时的取证。
 
 以下断言实测于 `627d339`，演示库为本机 `idp-parcel-postgres-gate`（`postgres:16.14`，`127.0.0.1:55432`），种子为票 `master-data-wiring/08` 的合成包。行数写在这里是因为**数本身就是论点**——「这一格有数据」与「这一格是空的」的分界正是动线第 5 步要讲的东西；它们锚在上述 SHA 与那一份种子上，换一份种子就要重取。
 
