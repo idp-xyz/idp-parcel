@@ -45,10 +45,11 @@ func occurrenceValue[T any](t *testing.T, construct func(string) (T, error), raw
 }
 
 type occurrenceRegistryDouble struct {
-	records map[ports.ChargeOccurrenceKey]ports.ChargeOccurrenceRecord
-	saveErr error
-	findErr error
-	saves   int
+	records     map[ports.ChargeOccurrenceKey]ports.ChargeOccurrenceRecord
+	saveErr     error
+	findErr     error
+	coverageErr error
+	saves       int
 }
 
 func newOccurrenceRegistry() *occurrenceRegistryDouble {
@@ -63,6 +64,32 @@ func (double *occurrenceRegistryDouble) FindByKey(
 	}
 	record, found := double.records[key]
 	return record, found, nil
+}
+
+// FindCovering 照真册的读法：同租户、同原因、同事实依据、不是同一身份、成员有交集。替身里没有修订版，当前版即首版。
+func (double *occurrenceRegistryDouble) FindCovering(
+	_ context.Context, query ports.ChargeOccurrenceCoverageQuery,
+) (ports.ChargeOccurrenceRecord, bool, error) {
+	if double.coverageErr != nil {
+		return ports.ChargeOccurrenceRecord{}, false, double.coverageErr
+	}
+	asked := map[domain.CarriedObjectReference]bool{}
+	for _, member := range query.Members {
+		asked[member] = true
+	}
+	for key, record := range double.records {
+		occurrence := record.Occurrence
+		if key.TenantID != query.TenantID || key.Occurrence == query.Except ||
+			occurrence.Reason() != query.Reason || occurrence.FactBasis() != query.FactBasis {
+			continue
+		}
+		for _, member := range occurrence.Members() {
+			if asked[member] {
+				return record, true, nil
+			}
+		}
+	}
+	return ports.ChargeOccurrenceRecord{}, false, nil
 }
 
 func (double *occurrenceRegistryDouble) Save(
@@ -536,6 +563,63 @@ func TestReRegisteringAnswersExistingOrConflict(t *testing.T) {
 	if rig.registry.saves != 1 || len(rig.handoff.intents) != 2 {
 		t.Fatalf("冲突不该落第二条也不该交意图：落 %d 条，交 %d 份", rig.registry.saves, len(rig.handoff.intents))
 	}
+}
+
+// Covers: AT-TF-125——同一段上先登了一个成员范围，再登一个与它有交集的另一范围：身份不同，却答冲突、带
+// MEMBERS_ALREADY_COVERED、回显先登的那一项，不落第二条；没有交集的另一范围照常登成。声明自营的范围与已登的
+// 外部发生项有交集，同样答冲突而不答不适用。交集读不动答未决。
+func TestMembersAlreadyChargedOnTheSameFactAreAConflict(t *testing.T) {
+	twoParcels := func(t *testing.T) *occurrenceRig {
+		rig := newOccurrenceRig(t)
+		rig.segments = trunkSegmentWith(t, participationRow(t, trunkParcel, true), participationRow(t, trunkSecondParcel, true))
+		return rig
+	}
+
+	t.Run("an overlapping member set", func(t *testing.T) {
+		rig := twoParcels(t)
+		first := rig.register(t, actualFulfillmentCommand(t, trunkParcel))
+		original, _ := first.Record()
+		result := rig.register(t, actualFulfillmentCommand(t, trunkParcel, trunkSecondParcel))
+		if result.Outcome() != application.ChargeOccurrenceConflict || result.Detail() != application.MembersAlreadyCovered {
+			t.Fatalf("outcome/detail = %q/%q, want CONFLICT/MEMBERS_ALREADY_COVERED", result.Outcome(), result.Detail())
+		}
+		if echoed, present := result.Record(); !present || echoed.Key != original.Key {
+			t.Fatal("冲突没有回显先登的那一项")
+		}
+		if rig.registry.saves != 1 || len(rig.handoff.intents) != 1 {
+			t.Fatalf("不该落第二条也不该交第二份意图：落 %d 条，交 %d 份", rig.registry.saves, len(rig.handoff.intents))
+		}
+	})
+
+	t.Run("a disjoint member set", func(t *testing.T) {
+		rig := twoParcels(t)
+		rig.register(t, actualFulfillmentCommand(t, trunkParcel))
+		if outcome := rig.register(t, actualFulfillmentCommand(t, trunkSecondParcel)).Outcome(); outcome != application.ChargeOccurrenceRegistered {
+			t.Fatalf("outcome = %q, want REGISTERED", outcome)
+		}
+	})
+
+	t.Run("declaring self operation over a covered member", func(t *testing.T) {
+		rig := twoParcels(t)
+		rig.register(t, actualFulfillmentCommand(t, trunkParcel, trunkSecondParcel))
+		declared := actualFulfillmentCommand(t, trunkParcel)
+		declared.SelfOperated, declared.Provider, declared.AgreementObject, declared.AgreementVersion = true, "", "", ""
+		result := rig.register(t, declared)
+		if result.Outcome() != application.ChargeOccurrenceConflict || result.Detail() != application.MembersAlreadyCovered {
+			t.Fatalf("outcome/detail = %q/%q, want CONFLICT/MEMBERS_ALREADY_COVERED", result.Outcome(), result.Detail())
+		}
+	})
+
+	t.Run("an unreadable coverage", func(t *testing.T) {
+		rig := twoParcels(t)
+		rig.registry.coverageErr = errors.New("registry down")
+		result := rig.register(t, actualFulfillmentCommand(t))
+		if result.Outcome() != application.ChargeOccurrenceUndecided || result.Detail() != application.OccurrenceRegistryUnavailable ||
+			result.Continuation() == "" {
+			t.Fatalf("outcome/detail/continuation = %q/%q/%q", result.Outcome(), result.Detail(), result.Continuation())
+		}
+		assertNothingWritten(t, rig)
+	})
 }
 
 // Covers: ADR-0207 决定五——落册或交意图任一答不出都答未决：装配点据此整笔回滚，不留一份落了册而结算等不到的发生项。

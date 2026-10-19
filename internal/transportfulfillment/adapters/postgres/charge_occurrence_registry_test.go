@@ -143,6 +143,17 @@ func TestChargeOccurrenceWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务登记应返回 ErrTransactionRequired，实得：%v", err)
 	}
+	// 交集一问带事务级锁：事务外的锁在语句结束即放，查完到 Save 之间别的登记照样插得进来。
+	_, _, err = repository.FindCovering(t.Context(), ports.ChargeOccurrenceCoverageQuery{
+		TenantID:  occurrenceRef(t, domain.NewTenantID, "tenant-1"),
+		Reason:    domain.FailedAttemptOccurrence,
+		FactBasis: occurrenceRef(t, domain.NewOccurrenceBasisReference, "ATTEMPT-RESULT/a-1/parcel-1"),
+		Members:   []domain.CarriedObjectReference{occurrenceRef(t, domain.NewCarriedObjectReference, "parcel-1")},
+		Except:    occurrenceRef(t, domain.NewChargeOccurrenceReference, "OCC-0005"),
+	})
+	if !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务的交集一问应返回 ErrTransactionRequired，实得：%v", err)
+	}
 }
 
 // TestOccurrenceCheckConstraintsRejectRowsTheDomainCannotProduce 证库内 CHECK 是第二道门。
@@ -195,6 +206,83 @@ func TestOccurrenceCheckConstraintsRejectRowsTheDomainCannotProduce(t *testing.T
 			t.Fatal("发生项表上出现了金额列——金额归 settlement-accounting")
 		}
 	})
+}
+
+// Covers: AT-TF-125 与 ADR-0207 决定四的册面——同租户、同原因、同事实依据上另一项仍有效、成员有交集才算计过：交回
+// 那一项的当前版（被替代的旧版不算，失效的那一项不算）；同一身份、无交集、别的依据、别的租户都答没有。无事务即拒
+// 由 TestChargeOccurrenceWritesRefuseToRunOutsideATransaction 证。
+func TestCoverageFindsAnotherLiveOccurrenceSharingAMemberOnTheSameFact(t *testing.T) {
+	repository, transactor, _ := newChargeOccurrences(t)
+	ctx := t.Context()
+
+	covering := occurrenceRecord(t, "OCC-COVER-1", "v1", "parcel-1", "parcel-2")
+	mustSaveOccurrence(t, transactor, ctx, repository, covering)
+	invalidated := occurrenceRecord(t, "OCC-COVER-3", "v1", "parcel-3")
+	mustSaveOccurrence(t, transactor, ctx, repository, invalidated)
+	revise := func(record ports.ChargeOccurrenceRecord, kind domain.OccurrenceRevisionKind) ports.ChargeOccurrenceRecord {
+		t.Helper()
+		revised, err := record.Occurrence.ReviseValidity(kind,
+			occurrenceRef(t, domain.NewOccurrenceValidityVersion, "v2"),
+			occurrenceRef(t, domain.NewOccurrenceBasisReference, "CORRECTION/cover-1"),
+			occurredAtFixture.Add(time.Hour))
+		if err != nil {
+			t.Fatalf("形成修订：%v", err)
+		}
+		next := ports.ChargeOccurrenceRecord{
+			Key:        ports.ChargeOccurrenceKey{TenantID: record.Key.TenantID, Occurrence: record.Key.Occurrence, Validity: revised.Validity()},
+			Occurrence: revised,
+			RecordedAt: occurredAtFixture.Add(time.Hour),
+		}
+		mustSaveOccurrence(t, transactor, ctx, repository, next)
+		return next
+	}
+	revise(invalidated, domain.OccurrenceInvalidated)
+
+	query := func(tenant, basis, except string, objects ...string) ports.ChargeOccurrenceCoverageQuery {
+		members := make([]domain.CarriedObjectReference, 0, len(objects))
+		for _, object := range objects {
+			members = append(members, occurrenceRef(t, domain.NewCarriedObjectReference, object))
+		}
+		return ports.ChargeOccurrenceCoverageQuery{
+			TenantID:  occurrenceRef(t, domain.NewTenantID, tenant),
+			Reason:    domain.FailedAttemptOccurrence,
+			FactBasis: occurrenceRef(t, domain.NewOccurrenceBasisReference, basis),
+			Members:   members,
+			Except:    occurrenceRef(t, domain.NewChargeOccurrenceReference, except),
+		}
+	}
+	find := func(q ports.ChargeOccurrenceCoverageQuery) (ports.ChargeOccurrenceRecord, bool) {
+		t.Helper()
+		var record ports.ChargeOccurrenceRecord
+		var found bool
+		mustWithinOccurrenceTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+			var err error
+			record, found, err = repository.FindCovering(txCtx, q)
+			return err
+		})
+		return record, found
+	}
+	const basis = "ATTEMPT-RESULT/a-1/parcel-1"
+
+	if record, found := find(query("tenant-1", basis, "OCC-NEW", "parcel-2", "parcel-9")); !found || record.Key != covering.Key {
+		t.Fatalf("有交集的另一项没找到：found=%v key=%+v", found, record.Key)
+	}
+	for name, q := range map[string]ports.ChargeOccurrenceCoverageQuery{
+		"同一身份":   query("tenant-1", basis, "OCC-COVER-1", "parcel-1"),
+		"无交集":    query("tenant-1", basis, "OCC-NEW", "parcel-9"),
+		"别的事实依据": query("tenant-1", "ATTEMPT-RESULT/a-2/parcel-1", "OCC-NEW", "parcel-1"),
+		"别的租户":   query("tenant-2", basis, "OCC-NEW", "parcel-1"),
+		"失效的那一项": query("tenant-1", basis, "OCC-NEW", "parcel-3"),
+	} {
+		if _, found := find(q); found {
+			t.Fatalf("%s：不该算计过", name)
+		}
+	}
+
+	head := revise(covering, domain.OccurrenceSuperseded)
+	if record, found := find(query("tenant-1", basis, "OCC-NEW", "parcel-1")); !found || record.Key != head.Key {
+		t.Fatalf("被替代之后应交回当前版 v2：found=%v key=%+v", found, record.Key)
+	}
 }
 
 // —— 夹具 ——

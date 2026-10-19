@@ -197,6 +197,10 @@ func (*emptyOccurrences) Save(context.Context, ports.ChargeOccurrenceRecord) (po
 	return ports.ChargeOccurrenceSaved, nil
 }
 
+func (*emptyOccurrences) FindCovering(context.Context, ports.ChargeOccurrenceCoverageQuery) (ports.ChargeOccurrenceRecord, bool, error) {
+	return ports.ChargeOccurrenceRecord{}, false, nil
+}
+
 type discardHandoff struct{}
 
 func (discardHandoff) HandOffChargeOccurrence(context.Context, ports.ChargeOccurrenceIntent) error {

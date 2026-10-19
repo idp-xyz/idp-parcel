@@ -228,6 +228,86 @@ func (repository *ChargeOccurrences) LoadMembers(
 	return members, true, nil
 }
 
+// FindCovering 先取（租户、原因、事实依据）这一组的事务级咨询锁，再找另一项仍有效、成员与查询有交集的发生项。
+//
+// 「仍有效」读每一项的当前版：没有别的版本以 corrects_version 回指它的那一版，且它不是失效版——被替代的旧版已由
+// 新版接替，失效的那一项说的是「那个范围不成立」，其成员可以另登。多于一项有交集时回显最早登记的那一项：登记方
+// 要去改的是先到的那一份。锁键各维以 chr(31) 分隔后取 hashtext，口径同 node_operations 收寄那把锁；哈希撞上只
+// 多等一会儿，不错判。锁随事务释放，不在事务里调用由 RequireExecutor 拒——无锁的查答不了「此刻没有」。
+func (repository *ChargeOccurrences) FindCovering(
+	ctx context.Context,
+	query ports.ChargeOccurrenceCoverageQuery,
+) (ports.ChargeOccurrenceRecord, bool, error) {
+	if query.TenantID.String() == "" || query.Reason.String() == "" || query.FactBasis.String() == "" ||
+		query.Except.String() == "" || len(query.Members) == 0 {
+		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find covering charge occurrence: query is incomplete")
+	}
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find covering charge occurrence: %w", err)
+	}
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('transport_fulfillment.charge_occurrence.fact_basis'), hashtext($1 || chr(31) || $2 || chr(31) || $3))`,
+		query.TenantID.String(), query.Reason.String(), query.FactBasis.String(),
+	); err != nil {
+		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find covering charge occurrence: 取事实依据锁：%w", err)
+	}
+	members := make([]string, 0, len(query.Members))
+	for _, member := range query.Members {
+		members = append(members, member.String())
+	}
+	var occurrenceRef, version string
+	err = executor.QueryRow(ctx,
+		`SELECT head.occurrence_ref, head.validity_version
+		   FROM transport_fulfillment.transport_charge_occurrence AS head
+		  WHERE head.tenant_id = $1
+		    AND head.reason = $2
+		    AND head.fact_basis = $3
+		    AND head.occurrence_ref <> $4
+		    AND head.revision_kind IS DISTINCT FROM $5
+		    AND NOT EXISTS (
+		        SELECT 1
+		          FROM transport_fulfillment.transport_charge_occurrence AS successor
+		         WHERE successor.tenant_id = head.tenant_id
+		           AND successor.occurrence_ref = head.occurrence_ref
+		           AND successor.corrects_version = head.validity_version)
+		    AND EXISTS (
+		        SELECT 1
+		          FROM transport_fulfillment.transport_charge_occurrence_member AS member
+		         WHERE member.tenant_id = head.tenant_id
+		           AND member.occurrence_ref = head.occurrence_ref
+		           AND member.validity_version = head.validity_version
+		           AND member.object_ref = ANY($6))
+		  ORDER BY head.recorded_at, head.occurrence_ref
+		  LIMIT 1`,
+		query.TenantID.String(), query.Reason.String(), query.FactBasis.String(), query.Except.String(),
+		domain.OccurrenceInvalidated.String(), members,
+	).Scan(&occurrenceRef, &version)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.ChargeOccurrenceRecord{}, false, nil
+	}
+	if err != nil {
+		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find covering charge occurrence: %w", err)
+	}
+	key := ports.ChargeOccurrenceKey{TenantID: query.TenantID}
+	if key.Occurrence, err = domain.NewChargeOccurrenceReference(occurrenceRef); err != nil {
+		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find covering charge occurrence: %w", err)
+	}
+	if key.Validity, err = domain.NewOccurrenceValidityVersion(version); err != nil {
+		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find covering charge occurrence: %w", err)
+	}
+	record, found, err := repository.FindByKey(ctx, key)
+	if err != nil {
+		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find covering charge occurrence: %w", err)
+	}
+	if !found {
+		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf(
+			"find covering charge occurrence: %s/%s/%s vanished within the same transaction",
+			key.TenantID.String(), key.Occurrence.String(), key.Validity.String())
+	}
+	return record, true, nil
+}
+
 // applyOccurrenceRevision 把库面四列装回规格。四件的成对判定留给重建门——这里只负责
 // 逐列过构造门，不在适配器里复刻那条不变量。
 func applyOccurrenceRevision(

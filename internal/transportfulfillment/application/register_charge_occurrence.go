@@ -73,8 +73,9 @@ func (outcome ChargeOccurrenceOutcome) String() string {
 	}
 }
 
-// ChargeOccurrenceDetail 指名不适用、未决或未受理各自落在哪一格。登记方据它决定下一步：不适用的两格说为什么本来
-// 就不该有外部成本，未决的各格说哪一口答不出、重试哪一次，未受理的各格说请求哪里要改。
+// ChargeOccurrenceDetail 指名不适用、冲突、未决或未受理各自落在哪一格。登记方据它决定下一步：不适用的两格说为什么
+// 本来就不该有外部成本，冲突那一格说撞的不是同一身份而是成员已被另一项计过，未决的各格说哪一口答不出、重试哪一次，
+// 未受理的各格说请求哪里要改。
 type ChargeOccurrenceDetail uint8
 
 const (
@@ -82,6 +83,8 @@ const (
 	// 不适用：两格都是正确答案，不是缺席（ADR-0098 决定三）。
 	SelfOperatedDeclared
 	ActualCarrierJudgedSelfOperated
+	// 冲突：同一身份异内容不带细格；成员与同一事实上另一项仍有效的发生项有交集带这一格（ADR-0207 决定四）。
+	MembersAlreadyCovered
 	// 未决：依赖读不动，原样重试。
 	FactSourceUnavailable
 	CarrierJudgmentUnavailable
@@ -106,6 +109,8 @@ func (detail ChargeOccurrenceDetail) String() string {
 		return "SELF_OPERATED_DECLARED"
 	case ActualCarrierJudgedSelfOperated:
 		return "ACTUAL_CARRIER_JUDGED_SELF_OPERATED"
+	case MembersAlreadyCovered:
+		return "MEMBERS_ALREADY_COVERED"
 	case FactSourceUnavailable:
 		return "FACT_SOURCE_UNAVAILABLE"
 	case CarrierJudgmentUnavailable:
@@ -224,7 +229,7 @@ type chargeOccurrenceFact struct {
 	form       func(domain.TransportChargeOccurrenceSpec) (domain.TransportChargeOccurrence, error)
 }
 
-// Register 取事实 → 派生身份 → 判自营 → 核协议 → 形成 → 落册并交意图。
+// Register 取事实 → 派生身份 → 判自营 → 核协议 → 形成 → 查成员交集 → 落册并交意图。
 //
 // 身份在采购上下文之前派生：自营的两格也要先问册上有没有同一件事已经登成了外包，否则同一件事会同时被答成
 // 「有外部成本」与「不适用」。协议按业务时间核——协议在那一刻是否支持采购，后来到期或终止不改写已发生的事实。
@@ -263,6 +268,13 @@ func (handler *RegisterChargeOccurrenceHandler) Register(
 		Validity:   domain.FirstOccurrenceValidity(),
 	}
 	continuation := chargeOccurrenceContinuation(command.TenantID.String(), reference.String())
+	coverage := ports.ChargeOccurrenceCoverageQuery{
+		TenantID:  command.TenantID,
+		Reason:    command.Reason,
+		FactBasis: fact.basis,
+		Members:   fact.members,
+		Except:    reference,
+	}
 
 	procurementGiven := strings.TrimSpace(command.Provider) != "" ||
 		strings.TrimSpace(command.AgreementObject) != "" ||
@@ -271,7 +283,7 @@ func (handler *RegisterChargeOccurrenceHandler) Register(
 		if procurementGiven {
 			return chargeNotAccepted(SelfOperationContradicted), nil
 		}
-		return handler.selfOperated(ctx, key, continuation, SelfOperatedDeclared)
+		return handler.selfOperated(ctx, key, coverage, continuation, SelfOperatedDeclared)
 	}
 
 	if fact.hasSegment {
@@ -280,7 +292,7 @@ func (handler *RegisterChargeOccurrenceHandler) Register(
 			return chargeUndecided(CarrierJudgmentUnavailable, continuation), nil
 		}
 		if judgedSelf {
-			return handler.selfOperated(ctx, key, continuation, ActualCarrierJudgedSelfOperated)
+			return handler.selfOperated(ctx, key, coverage, continuation, ActualCarrierJudgedSelfOperated)
 		}
 	}
 
@@ -325,6 +337,11 @@ func (handler *RegisterChargeOccurrenceHandler) Register(
 	if err != nil {
 		return chargeNotAccepted(ChargeRequestMalformed), nil
 	}
+	if covering, covered, err := handler.deps.Occurrences.FindCovering(ctx, coverage); err != nil {
+		return chargeUndecided(OccurrenceRegistryUnavailable, continuation), nil
+	} else if covered {
+		return membersCovered(covering), nil
+	}
 	record := ports.ChargeOccurrenceRecord{
 		Key:        key,
 		Occurrence: occurrence,
@@ -343,12 +360,14 @@ func (handler *RegisterChargeOccurrenceHandler) Register(
 	return RegisterChargeOccurrenceResult{outcome: ChargeOccurrenceRegistered, record: record, hasRecord: true}, nil
 }
 
-// selfOperated 答自营的两格（声明自营、实际承运商判为自营）。册上已有同一件事的发生项时答冲突并回显它：同一件事
-// 不能既有外部成本又不适用，要改的是先前那一次登记（更正走有效性修订），不是这一次答复。判断那一格同样先问册：
-// 承运商判断可以在登记之后才改判成自营法人，那时直接答不适用，就把册上那一份外部成本静默地说成了没有。
+// selfOperated 答自营的两格（声明自营、实际承运商判为自营）。册上已有同一件事的发生项（同一身份，或同一事实上含
+// 同一成员的另一项）时答冲突并回显它：同一件事不能既有外部成本又不适用，要改的是先前那一次登记（更正走有效性
+// 修订），不是这一次答复。判断那一格同样先问册：承运商判断可以在登记之后才改判成自营法人，那时直接答不适用，就把
+// 册上那一份外部成本静默地说成了没有。
 func (handler *RegisterChargeOccurrenceHandler) selfOperated(
 	ctx context.Context,
 	key ports.ChargeOccurrenceKey,
+	coverage ports.ChargeOccurrenceCoverageQuery,
 	continuation string,
 	detail ChargeOccurrenceDetail,
 ) (RegisterChargeOccurrenceResult, error) {
@@ -359,7 +378,25 @@ func (handler *RegisterChargeOccurrenceHandler) selfOperated(
 	if found {
 		return RegisterChargeOccurrenceResult{outcome: ChargeOccurrenceConflict, record: existing, hasRecord: true}, nil
 	}
+	covering, covered, err := handler.deps.Occurrences.FindCovering(ctx, coverage)
+	if err != nil {
+		return chargeUndecided(OccurrenceRegistryUnavailable, continuation), nil
+	}
+	if covered {
+		return membersCovered(covering), nil
+	}
 	return RegisterChargeOccurrenceResult{outcome: ChargeOccurrenceNotApplicable, detail: detail}, nil
+}
+
+// membersCovered 答成员已被同一事实上另一项仍有效的发生项计过：那一项回显，登记方要改的是它（失效之后再登），
+// 不是这一次换个成员组合重报——身份按成员集合派生，组合一换就是另一项，同一成员的成本便被算了两遍。
+func membersCovered(covering ports.ChargeOccurrenceRecord) RegisterChargeOccurrenceResult {
+	return RegisterChargeOccurrenceResult{
+		outcome:   ChargeOccurrenceConflict,
+		detail:    MembersAlreadyCovered,
+		record:    covering,
+		hasRecord: true,
+	}
 }
 
 // segmentJudgedSelfOperated 问这一段当前的实际承运商判断是不是自营法人（ADR-0098 决定三的第二种读法）。没有判断、

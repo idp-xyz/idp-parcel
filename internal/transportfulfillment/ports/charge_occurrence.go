@@ -52,6 +52,20 @@ type FailedAttemptSource interface {
 type ChargeOccurrenceRegistry interface {
 	FindByKey(ctx context.Context, key ChargeOccurrenceKey) (ChargeOccurrenceRecord, bool, error)
 	Save(ctx context.Context, record ChargeOccurrenceRecord) (ChargeOccurrenceSaveOutcome, error)
+	// FindCovering 找同一（租户、原因、事实依据）下另一项仍有效、且成员与查询有交集的发生项，交回它的当前版
+	// （ADR-0207 决定四）。实现须在调用方的事务里对这一组（租户、原因、事实依据）串行化，直到事务结束：查与
+	// 随后的 Save 之间若容另一笔插进来，两笔各自看不见对方，同一成员照样被算进两项。
+	FindCovering(ctx context.Context, query ChargeOccurrenceCoverageQuery) (ChargeOccurrenceRecord, bool, error)
+}
+
+// ChargeOccurrenceCoverageQuery 问「这些成员在同一件事实上是不是已经被另一项计过」。Except 是本次派生的身份：同一
+// 身份的各版本是同一项，不算另一项。
+type ChargeOccurrenceCoverageQuery struct {
+	TenantID  domain.TenantID
+	Reason    domain.ChargeOccurrenceReason
+	FactBasis domain.OccurrenceBasisReference
+	Members   []domain.CarriedObjectReference
+	Except    domain.ChargeOccurrenceReference
 }
 
 // ChargeOccurrenceIntent 把一个已登记的发生项版本交给消费方（ADR-0207 决定五）。意图由发生项键认领：重放重发同一份，

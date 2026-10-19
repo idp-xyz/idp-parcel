@@ -1,4 +1,5 @@
--- 运输收费发生项记下它凭什么满足了采用协议的发生条件（票 demo-chain-gaps/27，ADR-0207 决定三）。
+-- 运输收费发生项记下它凭什么满足了采用协议的发生条件（票 demo-chain-gaps/27，ADR-0207 决定三），并为登记前的
+-- 成员交集一问立索引（决定四，见文末）。
 --
 -- CONTEXT 只许满足采用协议所需事实条件的明确范围形成发生项。协议正文还没有声明发生条件的文法，首版由登记者断言
 -- 条件已满足：断言是登记者的原话，与发生项同一行落库，日后复核的人才查得到「这一项当时是谁凭什么判的」。依据一格
@@ -30,3 +31,8 @@ ALTER TABLE transport_fulfillment.transport_charge_occurrence
     ADD CONSTRAINT transport_charge_occurrence_condition_assertion_not_blank
         CHECK (condition_basis <> 'REGISTRANT_ASSERTED'
                OR (condition_assertion IS NOT NULL AND btrim(condition_assertion) <> ''));
+
+-- 登记前要问「这些成员在同一件事实上是否已被另一项计过」（ADR-0207 决定四）：按（租户、原因、事实依据）取一组，
+-- 再逐项看成员。主键从发生项身份起头，答不了这一问；没有这条索引，每次登记都扫全册。
+CREATE INDEX transport_charge_occurrence_fact_basis_idx
+    ON transport_fulfillment.transport_charge_occurrence (tenant_id, reason, fact_basis);
