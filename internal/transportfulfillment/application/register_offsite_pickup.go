@@ -91,8 +91,9 @@ type RegisterOffsitePickupCommand struct {
 }
 
 // CorrectOffsitePickupCommand 携带更正入口的全部输入：指名被更正的前版（租户+对象+尝试+前版版本号），
-// 更正只带「证据说了什么」四格与更正时刻（票 tf-segment-lifecycle-closure/08 裁决）。没有 Segment——
-// 段侧「来源更正 → 参与关系重派生」另立票，本编排不进段。新版本号不由调用方指名：它是本上下文签发的
+// 更正只带「证据说了什么」四格与更正时刻（票 tf-segment-lifecycle-closure/08 裁决）。没有 Segment：更正不改
+// 对象进的是哪一段，段上那条参与由 rederiveFulfillmentParticipation 按前版的入场依据找到并接替（ADR-0112
+// 决定一、二）。新版本号不由调用方指名：它是本上下文签发的
 // 号，同首登（交接那一侧的版本由裁决过程指名，是另一种身份）。
 type CorrectOffsitePickupCommand struct {
 	TenantID           domain.TenantID
