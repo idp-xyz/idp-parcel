@@ -27,7 +27,7 @@ Date: 2026-10-19
 
 **五、引用与读面（机制）。** 计划履约段引用的序位按整条段链数，交付段是末段，仍是 ADR-0131 决定一的「版本＋序位」。NR 的段窗口窄读口照答交付段的窗口。TF 派送窗口缝不按种类分支：声明交付段答交付段的窗口，声明节点间段答那一段的窗口。路由计划查阅口的成计划行逐段列出引用、种类、起讫、责任、窗口与依据，列之前按判断口的装载纪律把整份计划过构造门重建，不从 jsonb 里抠字段。登记方要声明哪一段，得先看得见有哪几段。
 
-**六、演示租户（租户取值，证据 `S`）。** 新加坡末端日历修订 2 照修订 1 重登处理时长 240 分钟，另登派送时长 240 分钟，合成值。演示末端交接声明交付段 `#4`，派送任务窗口取它。
+**六、演示租户（租户取值，证据 `S`）。** 新加坡末端日历登一版新修订，照前一版重登处理时长，另登派送时长，都是合成值；取值只登在种子 README 组成表 `24-calendar-node-sin-lm-v2.json` 那一行，本记录不复述。演示末端交接声明计划末段即交付段的引用，派送任务窗口取它。
 
 三类：决定一、三、四、五与决定二的窗口折法是机制；派送时长的取值是租户取值，生产不登就不成段；决定六是演示租户取值。
 
@@ -44,7 +44,7 @@ Date: 2026-10-19
 
 ## Consequences
 
-- 代码：NR 领域 `PlannedLegKind`（`BetweenNodesLeg`、`DeliveryLeg`）、`NewDeliveryLeg`、`PlannedLeg.DeliveryScope`、`InitialRoutePlan.NodeLegs`；`FormInitialRoutePlan` 立交付段的三条不变量；`PlanNodes` 遇交付段答不出。端口 `ServiceCalendarDefinitionVersion.DeliveryMinutes`、`CandidatePath.Delivery` 与 `PlanLegs`、`RoutePlanLegCatalogueRow`。应用层 `projectCandidateTime` 成交付段并延长投影；`foldTimeAndPaths` 按区域解析取交付范围；初始路由与复核形成计划取 `PlanLegs`；复核的已执行前缀取 `NodeLegs`。postgres 计划 jsonb 段行加可缺的 `kind`；目录日历读写带派送时长；`RoutePlanCatalogue.ListInitialRoutes` 重建计划后逐段列出。HTTP `GET /route-plans?register=initial-route` 成计划行多一键 `legs`。TF `PrepareOnInitialRoute` 只译 `NodeLegs`。
+- 代码：NR 领域 `PlannedLegKind`（`BetweenNodesLeg`、`DeliveryLeg`）、`NewDeliveryLeg`、`PlannedLeg.DeliveryScope`、`InitialRoutePlan.NodeLegs`；`FormInitialRoutePlan` 立交付段只在末尾、起于末个计划节点，且首段必须是节点间段；`PlanNodes` 遇交付段答不出，复核拿到答不出的节点序列响亮报错，不落「冻结形态未配置」。端口 `ServiceCalendarDefinitionVersion.DeliveryMinutes`、`CandidatePath.Delivery` 与 `PlanLegs`、`RoutePlanLegCatalogueRow`。应用层 `projectCandidateTime` 成交付段并延长投影；`foldTimeAndPaths` 按区域解析取交付范围；初始路由与复核形成计划取 `PlanLegs`；复核的已执行前缀取 `NodeLegs`。postgres 计划 jsonb 段行加可缺的 `kind`；目录日历读写带派送时长；`RoutePlanCatalogue.ListInitialRoutes` 重建计划后逐段列出。HTTP `GET /route-plans?register=initial-route` 成计划行多一键 `legs`。TF `PrepareOnInitialRoute` 只译 `NodeLegs`。
 - 迁移：`network_routing/0020_service_calendar_delivery_minutes.sql`。计划 jsonb 不迁移。
 - 演示种子：`scripts/demo-seeds/data/network/24-calendar-node-sin-lm-v2.json` 与 `seed.sh` 一行。
 - 文档：NR CONTEXT「服务日历」与「路由形成与选择」；GLOSSARY「路由计划」；UC-NR-001 补 `AT-NR-054` 至 `AT-NR-058`、`AT-NR-060` 至 `AT-NR-063`，UC-NR-003 补 `AT-NR-059`；UC-TF-003 补 `AT-TF-201`；参数登记册 `PAR-NET-14`；演示脚本。
@@ -56,8 +56,8 @@ Date: 2026-10-19
 2. **交付段责任方暂指服务区域版本**（NR、TF owner）。末端外包时责任方应是末端伙伴，目录有末端责任方列之后另裁。
 3. **派送时长挂在交付节点日历上**（NR owner）。一个交付节点服务多个区域、派送距离差得多时，一个时长装不下；要按区域分，另立一格。
 4. **交付段不进候选比价**（NR owner）。各候选交付节点不同时，末端成本的差别不进排序。
-5. **交付段没有不透明形**（NR、TF owner）。末端外包且内部不可观察时，交付段要的是已知交接点与返回控制边界，今天没有来源说它。
-6. **路由计划查阅口重建整份计划**（NR owner）。这一册查阅口此前只上检索列，现在成计划行要过构造门；一行坏计划让整页答不出，不跳过那一行。
+5. **交付段没有不透明形**（NR、TF owner）。末端外包且内部不可观察时，交付段要的是已知交接点与返回控制边界，今天没有来源说它。NR CONTEXT「外部不透明履约段」词条写的「预期返回控制点或交付范围」里，止于交付范围的那一种当前没有实现形状：不透明段只止于返回控制点，交付段不能不透明。外包末端怎样表达留给末端外包另行裁决，CONTEXT 词条不改——它说的是可以有的能力。
+6. **路由计划查阅口重建整份计划，复核册暂不列段**（NR owner）。这一册查阅口此前只上检索列，现在成计划行要过构造门；一行坏计划让整页答不出，不跳过那一行。只有初始路由册列段：复核形成的新计划（改路，或复核时首次成计划）换了版本，改路时序位也可能变，而复核册的行只给被复核的原计划版本，不给新计划版本，登记方看不见新计划交付段的引用，决定五「先看得见有哪几段」在这两条路上还没兑现。演示走不到；补法见票 [demo-chain-gaps/73](../../.scratch/demo-chain-gaps/issues/73-route-reassessments-register-lists-the-new-plan-legs.md)。
 7. **管理台契约夹具不含 `legs`**（前端 owner）。管理台的响应类型还不认这一键，进夹具会让前端契约测试当场红；类型与夹具随票 [demo-chain-gaps/72](../../.scratch/demo-chain-gaps/issues/72-admin-web-route-plans-shows-planned-legs.md) 一起补。在那之前「改任一侧两侧都红」对这一键不成立。
 8. **段种类留在 NR，TF 不据它推派送段**（TF owner）。登记方声明错了段，任务就照那一段的窗口形成，没人核；与 ADR-0131 越权风险点 2「悬空引用同答缺失」同一代价。
 

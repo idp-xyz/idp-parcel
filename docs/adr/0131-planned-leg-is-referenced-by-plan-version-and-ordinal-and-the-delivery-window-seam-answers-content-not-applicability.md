@@ -1,6 +1,6 @@
 # ADR-0131: 计划履约段对外以「路由计划版本 + 段序位」引用、没有独立段身份；派送时间窗口缝按该引用取**引用所钉那一版**的段内容，计划适用性四态不折进窗口答案；没有计划段的对象答`要求缺失`，`network-routing` 不给兜底窗口
 
-Status: Accepted（后继：[ADR-0217](./0217-route-plan-carries-a-delivery-leg-after-the-delivery-node.md) 在决定一的引用形之内给计划末尾加一段交付段，序位按整条段链数，派送窗口缝不按段种类分支；Context「NR 计划里没有服务动作一格」仍成立——段种类不是服务动作。本记录各条不变。）
+Status: Accepted
 Date: 2026-09-09
 
 ## Context
