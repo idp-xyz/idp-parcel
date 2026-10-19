@@ -290,7 +290,8 @@ func mustValueNoT[T any](construct func(string) (T, error), raw string) T {
 	return value
 }
 
-// Covers: 票 operator-channel/15 完成判据第三条在受控关闭与重开上的形，与 ADR-0183 决定一至四（真库）。经操作者渠道走到编排：
+// Covers: 票 operator-channel/15 完成判据「委托侧五口到达编排，在各自的授权缺口补上之前，生产装配如实停在该口今天的格」
+// 在受控关闭与重开上的形，与 ADR-0183 决定一至四（真库）。经操作者渠道走到编排：
 // 生产装配授权请求映射未配置，关闭答 200 `UNDECIDED / AUTHORITY_UNAVAILABLE`、册上无行；配上合成映射、真授权册登了关闭与重开
 // 两条 grant 之后，货主指令的关闭 201 形成，册上的请求方与责任来源都是服务端从包裹所属委托推出的客户账户；不带货主重授权
 // 证据的重开被编排那道门拦下（`SHIPPER_REAUTHORIZATION_MISSING`），带了证据的重开 201 形成——渠道推出的货主账户与原关闭的

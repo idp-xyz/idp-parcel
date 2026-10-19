@@ -19,9 +19,10 @@ import (
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 )
 
-// 本文件钉准入范围桥接进生产装配之后的那一半（票 operator-channel/19 完成判据第二条）。本产品的权威串没设时，两只铸造器
-// 拿到的是未配置那一只：TestSwappedDecisionFacesAnswerFromTheOperatorChannel 与 TestIntegrationClientFacesAnswerTheChannelGrades
-// 经 admissionScopeUnset 取它，准入那一格照旧。设了且对照与区间齐备时，装载分配与终止参与越过准入范围、到达真编排。
+// 本文件钉准入范围桥接进生产装配之后的那一半（票 operator-channel/19 完成判据「生产装配：selfAuthority 未配时」）。
+// 本产品的权威串没设时，两只铸造器拿到的是未配置那一只：TestSwappedDecisionFacesAnswerFromTheOperatorChannel 与
+// TestIntegrationClientFacesAnswerTheChannelGrades 经 admissionScopeUnset 取它，准入那一格照旧。设了且对照与区间齐备时，
+// 装载分配与终止参与越过准入范围、到达真编排。
 
 // admissionScopeUnset 是权威串未设时生产装配交给两只铸造器的那一只：经 buildAdmissionScope 取，不在测试里另拼。
 func admissionScopeUnset() accessidentity.AdmissionScope {
@@ -101,7 +102,7 @@ func registerOperationDecisionAdmission(t *testing.T, db *bentopg.DB, authority 
 	}
 }
 
-// Covers: 票 operator-channel/19 完成判据第二条「配了且对照与区间齐备时，装载分配与终止参与答业务结果」（真库）：权威串设成
+// Covers: 票 operator-channel/19 完成判据「配了且对照与区间齐备时，装载分配与终止参与答业务结果」（真库）：权威串设成
 // 区间上那个串，两口越过准入范围、到达真编排——装载分配形成一版，终止参与答空库上的段不在册；同一组对照与区间、权威串
 // 换成别的产品，两口照旧答 403 OUTSIDE_ADMISSION_SCOPE——区间不是本产品的。测试输入是隔离合成，只记 `S`。
 func TestTheWiredAdmissionScopeLetsLoadAssignmentAndTerminationThrough(t *testing.T) {

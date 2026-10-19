@@ -408,12 +408,12 @@ func assembleBusinessEndpoints(
 		{Pattern: "/customs/external-results", Handler: customshttp.NewReceiveExternalResultEndpoint(externalResultIntake, results)},
 		{Pattern: "/pricing-price-cards", Handler: pricinghttp.NewQueryPriceCardsEndpoint(pricingCatalogueIntake, priceCards)},
 		{Pattern: "/pricing-reference-series", Handler: pricinghttp.NewQueryReferenceSeriesEndpoint(pricingCatalogueIntake, referenceSeries)},
-		// 覆盖地平线（票 pricing-reference-series-operations/05 第 1 项）：一条序列一行，
+		// 覆盖地平线（票 pricing-reference-series-operations/05「伴生读口 `ReferenceSeriesCoverageRead`」）：一条序列一行，
 		// 答的是「还盖得住多久、谁欠一个动作」。时刻源在此处选定——组合根就是挑具体依赖
 		// 的地方，端点自己收 CoverageClock 以便传输层测试注入固定时钟。
 		{Pattern: "/pricing-reference-series-coverage", Handler: pricinghttp.NewQueryReferenceSeriesCoverageEndpoint(pricingCatalogueIntake, referenceSeriesCoverage, systemClock{})},
-		// 被挂起评价联动（ADR-0105 Decision 五；票 05 第 2 项）：因序列未解析而待判断的评价数按序列种类分组，
-		// 只读问题项子表；与覆盖地平线共用同一时刻源，摘要条并排两格说的才是同一刻。
+		// 被挂起评价联动（ADR-0105 Decision 五；票 pricing-reference-series-operations/05「被挂起评价联动」）：
+		// 因序列未解析而待判断的评价数按序列种类分组，只读问题项子表；与覆盖地平线共用同一时刻源，摘要条并排两格说的才是同一刻。
 		{Pattern: "/pricing-pending-series-evaluations", Handler: pricinghttp.NewQueryPendingSeriesEvaluationsEndpoint(pricingCatalogueIntake, pendingSeriesEvaluations, systemClock{})},
 		// 评价册与路由判断两册（票 admin-skeleton-closure-batch/03）：业务事实册的
 		// 查阅与目录查阅同属租户内运营读面，各随本上下文既有的 Intake 变量换值，

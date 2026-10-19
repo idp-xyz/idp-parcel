@@ -13,8 +13,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 )
 
-// 本文件证作业设备册的受控登记口与「作业事实登记」授予批（票 operator-channel/10 做什么第 1、2 条）：翻译纪律——作业范围
-// 缺席、种类未知、别的格带作业范围、设备缺件、停用缺时刻在触库前拒收，一格不代填；批推进——对真库端到端跑
+// 本文件证作业设备册的受控登记口与「作业事实登记」授予批（票 operator-channel/10 做什么「授予按租户 × 作业范围」与
+// 「受控 CLI 登记」）：翻译纪律——作业范围缺席、种类未知、别的格带作业范围、设备缺件、停用缺时刻在触库前拒收，一格不代填；
+// 批推进——对真库端到端跑
 // device-register → device-deactivate 与带作业范围的 operator-grant，证落定、整批重放、停用生效，以及别的租户停同一
 // 标识、同标识异作业范围各报请人看且册上不变。
 
@@ -64,7 +65,7 @@ func recordedDeviceOf(t *testing.T, dsn, tenant, deviceID string) accessidentity
 	return device
 }
 
-// Covers: 票 operator-channel/10 做什么第 2 条「受控 CLI 登记」——两个子命令在真库上登设备、停用，整批重放以原结果回答；
+// Covers: 票 operator-channel/10 做什么「受控 CLI 登记」——两个子命令在真库上登设备、停用，整批重放以原结果回答；
 // 停用自停用时刻起生效；别的租户停同一标识、同标识异作业范围，各报请人看（退出码 2、答复名如实回显），册上不因它们变。
 func TestDeviceRegisterAndDeactivateEndToEnd(t *testing.T) {
 	dsn := freshMigratedDSN(t)
@@ -114,8 +115,8 @@ func TestDeviceRegisterAndDeactivateEndToEnd(t *testing.T) {
 	}
 }
 
-// Covers: 票 operator-channel/10 做什么第 1 条——带作业范围的「作业事实登记」授予经 operator-grant 落册，读回只在那个作业范围上
-// 持有，整格问一律答否。
+// Covers: 票 operator-channel/10 做什么「授予按租户 × 作业范围」——带作业范围的「作业事实登记」授予经 operator-grant 落册，
+// 读回只在那个作业范围上持有，整格问一律答否。
 func TestWorkFactRegistrationGrantBatchEndToEnd(t *testing.T) {
 	dsn := freshMigratedDSN(t)
 	if code, _ := runCLI(t, dsn, "operator-register", "-input", batchFile(t, operatorBatch)); code != exitLanded {

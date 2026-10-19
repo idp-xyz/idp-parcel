@@ -13,8 +13,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 )
 
-// 本文件证集成客户端册受控登记口的两半（票 operator-channel/11 做什么第 1 条）：翻译纪律——批文逐字段过领域构造门，
-// 未知字段、缺件、未知事实类型、倒置区间在触库前拒收，「要不要求证书绑定令牌」缺席同样拒、不代填；批推进——对真库
+// 本文件证集成客户端册受控登记口的两半（票 operator-channel/11 做什么「集成客户端册：客户端标识绑定唯一租户与一个来源身份」）：
+// 翻译纪律——批文逐字段过领域构造门，未知字段、缺件、未知事实类型、倒置区间在触库前拒收，「要不要求证书绑定令牌」缺席同样拒、
+// 不代填；批推进——对真库
 // 端到端跑 integration-client-register → integration-client-grant → integration-client-revoke。
 
 func clientStandingOf(t *testing.T, dsn, sub string) accessidentity.IntegrationClientStanding {
@@ -73,9 +74,10 @@ const integrationClientRevocationBatch = `{
   ]
 }`
 
-// Covers: 票 operator-channel/11 做什么第 1 条——三个子命令在真库上登记客户端、按事实类型授予、撤销，整批重放以原结果
-// 回答；授予只在区间内、撤销时刻前生效；乙租户登甲的客户端、授未登记的客户端、撤不存在的授予、同标识异内容，各报请人看
-// （退出码 2、答复名如实回显），册上不因它们变。操作者册的撤销批撤不动集成客户端册的授予：两本册各认各的授予标识。
+// Covers: 票 operator-channel/11 做什么「集成客户端册：客户端标识绑定唯一租户与一个来源身份」——三个子命令在真库上登记客户端、
+// 按事实类型授予、撤销，整批重放以原结果回答；授予只在区间内、撤销时刻前生效；乙租户登甲的客户端、授未登记的客户端、
+// 撤不存在的授予、同标识异内容，各报请人看（退出码 2、答复名如实回显），册上不因它们变。操作者册的撤销批撤不动集成客户端册的
+// 授予：两本册各认各的授予标识。
 func TestIntegrationClientRegisterGrantRevokeEndToEnd(t *testing.T) {
 	dsn := freshMigratedDSN(t)
 	for _, step := range []struct {

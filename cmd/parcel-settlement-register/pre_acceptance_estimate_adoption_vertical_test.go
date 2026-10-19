@@ -11,7 +11,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// 本文件对真实 PostgreSQL 16 证 buildRegistrar 装的受理前估价采用登记（隔离合成 S；票 product-strategy-boundary/25 第 3 条）：采用行
+// 本文件对真实 PostgreSQL 16 证 buildRegistrar 装的受理前估价采用登记（隔离合成 S；票 product-strategy-boundary/25「SA 采用登记」）：采用行
 // 与向 parcel-shipment 交的「受理前估价采用已登记」信封在同一笔里同生同灭——首登一行一封、重放不翻倍、冲突不交；账户不在册上
 // 归用法格、行与信封都不落；词表外的形态在事务之前就拒。
 

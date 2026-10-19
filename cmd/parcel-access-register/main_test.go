@@ -21,7 +21,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
-// 本文件证操作者册受控登记口的两半（票 operator-channel/01 做什么第 3 条）：翻译纪律——批文逐字段过领域
+// 本文件证操作者册受控登记口的两半（票 operator-channel/01 做什么「受控 CLI 登记口（登记主体、授予、撤销）」）：翻译纪律——批文逐字段过领域
 // 构造门，未知字段、缺件、预留格与未知格、倒置区间在触库前拒收，一格不代填；批推进——对真库端到端跑
 // operator-register → operator-grant → operator-revoke，证落定、整批重放、撤销生效，以及跨租户主体、
 // 未登记主体、不存在的授予、同标识异内容各报请人看且册上不变。

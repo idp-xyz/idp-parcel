@@ -255,7 +255,7 @@ func run(logger *slog.Logger) error {
 	if _, err := buildEvaluationRequestOrchestration(db); err != nil {
 		return err
 	}
-	// 结算编排入口（票 psb/12 第 10 项）：七个构造接在这里。确认与截单没登记答未配置。
+	// 结算编排入口（票 product-strategy-boundary/12「结算编排的生产入口与触发面」）：七个构造接在这里。确认与截单没登记答未配置。
 	if _, err := buildSettlementOrchestrations(db); err != nil {
 		return err
 	}
@@ -354,8 +354,8 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
-	// 覆盖地平线读口（票 pricing-reference-series-operations/05 第 1 项）：与目录读面
-	// 同库，但它要连版本与复核两张表，且在用版本由领域按时刻挑，故自成一只适配器。
+	// 覆盖地平线读口（票 pricing-reference-series-operations/05「伴生读口 `ReferenceSeriesCoverageRead`」）：
+	// 与目录读面同库，但它要连版本与复核两张表，且在用版本由领域按时刻挑，故自成一只适配器。
 	referenceSeriesCoverage, err := pppostgres.NewReferenceSeriesCoverage(db)
 	if err != nil {
 		return err

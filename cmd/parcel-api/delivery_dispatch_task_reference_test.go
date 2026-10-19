@@ -256,9 +256,10 @@ func stockTask(t *testing.T, db *bentopg.DB, task string, kind tfdomain.Dispatch
 	}
 }
 
-// Covers: 票 tf-face-algebra/09 完成判据「真渠道真库回归：手工口占用：答新格并回显占用者」与裁定第 2、4 条。手工建任务口
-// 指名执行器的引用（新拼法、旧拼法都算）答 400 MALFORMED_REQUEST、不带 outcome、库里不落行；存量里若有一项手工任务恰好
-// 占着本拍的键，派送发起答 200 `DISPATCH_TASK_REFERENCE_TAKEN` 并回显占用者——不写、不另铸、不向所有者取件。
+// Covers: 票 tf-face-algebra/09 完成判据「真渠道真库回归」下「手工口占用：答新格并回显占用者」，与裁定
+// 「在册核对作第二道防线」「手工建任务口拒执行器的保留前缀」。手工建任务口指名执行器的引用（新拼法、旧拼法都算）答 400
+// MALFORMED_REQUEST、不带 outcome、库里不落行；存量里若有一项手工任务恰好占着本拍的键，派送发起答 200
+// `DISPATCH_TASK_REFERENCE_TAKEN` 并回显占用者——不写、不另铸、不向所有者取件。
 func TestTheManualFaceCannotTakeTheExecutorsReferenceAndAStockOccupantIsAnsweredAsTaken(t *testing.T) {
 	rig := newTaskReferenceRig(t)
 	const object, segment, version = "SYN-PARCEL-09-01", "SYN-DELIVERY-SEGMENT-09-01", "SYN-HANDOVER-RESULT/09-01/v1"
@@ -301,9 +302,9 @@ func TestTheManualFaceCannotTakeTheExecutorsReferenceAndAStockOccupantIsAnswered
 	}
 }
 
-// Covers: 票 09 裁定第 1 条在真库上——旧拼法兼认、存量不回写。旧拼法键上是本拍那一项（执行器按旧拼法铸的），答已在册并
-// 回显它、不另立；旧拼法键上是别的任务（手工口指名过那一串），不算在册，对象照新键形成自己的任务，不会在入场依据
-// 不变期间一直形成不了派送任务。
+// Covers: 票 tf-face-algebra/09 裁定「单射铸法：取长度前缀，带形状标记」在真库上——旧拼法兼认、存量不回写。
+// 旧拼法键上是本拍那一项（执行器按旧拼法铸的），答已在册并回显它、不另立；旧拼法键上是别的任务（手工口指名过那一串），
+// 不算在册，对象照新键形成自己的任务，不会在入场依据不变期间一直形成不了派送任务。
 func TestStockTasksOnTheLegacySpellingAreRecognisedOrStepAround(t *testing.T) {
 	rig := newTaskReferenceRig(t)
 	const formedObject, blockedObject = "SYN-PARCEL-09-02", "SYN-PARCEL-09-03"
@@ -331,8 +332,8 @@ func TestStockTasksOnTheLegacySpellingAreRecognisedOrStepAround(t *testing.T) {
 	}
 }
 
-// Covers: 票 09 完成判据「真渠道真库回归：拼接撞键：两个对象各自形成任务」。段 `…/A` 加对象 `SYN-CU-77` 与段 `…` 加对象
-// `A/SYN-CU-77`，交接版本同为 v1（交接键含对象，不同对象同版本合法）。
+// Covers: 票 tf-face-algebra/09 完成判据「真渠道真库回归」下「拼接撞键：两个对象各自形成任务」。段 `…/A` 加对象
+// `SYN-CU-77` 与段 `…` 加对象 `A/SYN-CU-77`，交接版本同为 v1（交接键含对象，不同对象同版本合法）。
 func TestConcatenationCollidingObjectsEachFormTheirOwnTask(t *testing.T) {
 	rig := newTaskReferenceRig(t)
 	rig.enter(t, "SYN-CU-77", "SYN-SEG-09/A", "SYN-HANDOVER-SCOPE-CAT", "v1", tfdomain.SegmentServesFinalDelivery)
@@ -351,8 +352,8 @@ func TestConcatenationCollidingObjectsEachFormTheirOwnTask(t *testing.T) {
 	}
 }
 
-// Covers: 票 09 完成判据「真渠道真库回归：生产形状对象撞键：两个对象各自形成任务」。对象取不含斜杠的生产形状，只靠精心
-// 构造的段引用与交接版本让旧拼法撞上：第二段的引用嵌第一个对象，第一次交接的版本嵌第二个对象。
+// Covers: 票 tf-face-algebra/09 完成判据「真渠道真库回归」下「生产形状对象撞键：两个对象各自形成任务」。对象取不含
+// 斜杠的生产形状，只靠精心构造的段引用与交接版本让旧拼法撞上：第二段的引用嵌第一个对象，第一次交接的版本嵌第二个对象。
 func TestProductionShapedObjectsCraftedToCollideEachFormTheirOwnTask(t *testing.T) {
 	rig := newTaskReferenceRig(t)
 	const first, second = "SYN-DPCL-0901", "SYN-DPCL-0902"
@@ -374,8 +375,8 @@ func TestProductionShapedObjectsCraftedToCollideEachFormTheirOwnTask(t *testing.
 	}
 }
 
-// Covers: 票 09 完成判据「真渠道真库回归：同对象跨段：在第二段形成自己的任务」。同一对象换到第二个派送段，段与第一次
-// 交接的版本经构造后让旧拼法撞上第一段那项任务——那时在册任务的种类与对象集都对得上，只核这两样拦不住，靠的是单射铸法。
+// Covers: 票 tf-face-algebra/09 完成判据「真渠道真库回归」下「同对象跨段：在第二段形成自己的任务」。同一对象换到第二个
+// 派送段，段与第一次交接的版本经构造后让旧拼法撞上第一段那项任务——那时在册任务的种类与对象集都对得上，只核这两样拦不住，靠的是单射铸法。
 func TestTheSameObjectInASecondDeliverySegmentFormsItsOwnTask(t *testing.T) {
 	rig := newTaskReferenceRig(t)
 	const parcel = "SYN-DPCL-0903"
@@ -397,9 +398,10 @@ func TestTheSameObjectInASecondDeliverySegmentFormsItsOwnTask(t *testing.T) {
 	}
 }
 
-// Covers: 票 09 完成判据「真渠道真库回归：所有者改答后原样重放：答已在册并回显」与裁定第 3 条。首拍形成之后，地点所有者
-// 改答没有、时间窗所有者读不到、条件所有者换了引用、对象凭下一次交接离开派送段——原样重放一律 200
-// `DISPATCH_TASK_ALREADY_FORMED`，回显与首拍逐格相同，不再向所有者取件，库里仍只有那一行。
+// Covers: 票 tf-face-algebra/09 完成判据「真渠道真库回归」下「所有者改答后原样重放：答已在册并回显」，与裁定
+// 「先查在册再取件：查在册放在参与 `Active` 判断之前」。首拍形成之后，地点所有者改答没有、时间窗所有者读不到、
+// 条件所有者换了引用、对象凭下一次交接离开派送段——原样重放一律 200 `DISPATCH_TASK_ALREADY_FORMED`，回显与首拍逐格相同，
+// 不再向所有者取件，库里仍只有那一行。
 func TestAReplayAfterTheOwnersChangeTheirAnswersEchoesTheRegisteredTask(t *testing.T) {
 	rig := newTaskReferenceRig(t)
 	const object, segment = "SYN-PARCEL-09-04", "SYN-DELIVERY-SEGMENT-09-04"
@@ -431,8 +433,8 @@ func TestAReplayAfterTheOwnersChangeTheirAnswersEchoesTheRegisteredTask(t *testi
 	replay("对象离开派送段")
 }
 
-// Covers: 票 09 完成判据「并发首拍真库回归照过：一笔 201，另一笔读回赢家答已在册」。两拍都查过在册、都没查到，在问条件
-// 那一刻会合后各自去任务口落库：先提交的那笔 201，另一笔撞键读回赢家，种类与对象集核得过，答 200 已在册、回显同一项。
+// Covers: 票 tf-face-algebra/09 完成判据「并发首拍真库回归照过：一笔 201，另一笔读回赢家答已在册」。两拍都查过在册、
+// 都没查到，在问条件那一刻会合后各自去任务口落库：先提交的那笔 201，另一笔撞键读回赢家，种类与对象集核得过，答 200 已在册、回显同一项。
 func TestConcurrentFirstTicksFormOneTaskAndTheOtherReadsTheWinner(t *testing.T) {
 	rig := newTaskReferenceRig(t)
 	const object, segment = "SYN-PARCEL-09-06", "SYN-DELIVERY-SEGMENT-09-06"

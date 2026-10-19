@@ -13,7 +13,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
 
-// workFactOperatorFace 是换上作业事实登记能力面的一口：首登与三个更正口同一份认证与授予（票 operator-channel/10 第 4 条）。
+// workFactOperatorFace 是换上作业事实登记能力面的一口：首登与更正口同一份认证与授予（票 operator-channel/10 做什么
+// 「主链事实的更正口随原事实归本能力面」）。
 type workFactOperatorFace struct {
 	pattern   string
 	scopeKind string
@@ -136,8 +137,9 @@ func postWorkFactFace(router http.Handler, face workFactOperatorFace, token, dev
 	return response
 }
 
-// Covers: 票 operator-channel/10 做什么第 4 条与完成判据第二条——作业事实各口（含三个更正口）在装配好的路由上答操作者渠道的格，
-// 发行方未配置、无令牌、授予不对、设备不在用、设备册读不动各是一格；授予齐备才走到未接线的编排（500）。运营决定四口不在这一面。
+// Covers: 票 operator-channel/10 做什么「主链事实的更正口随原事实归本能力面」与完成判据「隔离放行用例改写为真渠道答复格用例」——
+// 作业事实各口（含更正口）在装配好的路由上答操作者渠道的格，发行方未配置、无令牌、授予不对、设备不在用、设备册读不动各是
+// 一格；授予齐备才走到未接线的编排（500）。运营决定各口（transportOperationDecisionFaces）不在这一面。
 // 测试输入是隔离合成，只记 `S`。
 func TestWorkFactFacesAnswerOnTheOperatorChannel(t *testing.T) {
 	const token = "presented.operator.token"

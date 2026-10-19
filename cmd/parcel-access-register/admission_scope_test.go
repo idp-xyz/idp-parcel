@@ -15,8 +15,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 )
 
-// 本文件证准入范围对照册受控登记口的两半（票 operator-channel/19 做什么第 1 件）：翻译纪律——集合外的能力或事实类型、
-// 带 SYN- 前缀的能力词、缺件与倒置区间在触库前拒收，一格不代填；批推进——对真库端到端跑
+// 本文件证准入范围对照册受控登记口的两半（票 operator-channel/19 做什么「`cmd/parcel-access-register` 登记、结束两个子命令」）：
+// 翻译纪律——集合外的能力或事实类型、带 SYN- 前缀的能力词、缺件与倒置区间在触库前拒收，一格不代填；批推进——对真库端到端跑
 // admission-scope-mapping-register → admission-scope-mapping-end，同键重叠请人看，换版首尾相接登得进去。
 
 const admissionScopeMappingBatch = `{

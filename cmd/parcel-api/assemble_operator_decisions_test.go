@@ -287,7 +287,7 @@ var swappedDecisionFaces = map[string]accessidentity.DecisionKind{
 	"/shipment-requests/continued-attempt-reopenings": accessidentity.DecisionControlledReopening,
 }
 
-// Covers: 票 operator-channel/15 完成判据第一条「无此决定种类的授予」那一格——授予按决定种类各自成立：持有别的每一种
+// Covers: 票 operator-channel/15 完成判据「无此决定种类的授予」那一格——授予按决定种类各自成立：持有别的每一种
 // 运营决定、唯独没有这一口那一种的操作者，在这一口答 403 OPERATOR_NOT_GRANTED，走不到准入范围那一格，也不进编排。
 func TestSwappedDecisionFacesRefuseAGrantOfAnotherDecisionKind(t *testing.T) {
 	for pattern, kind := range swappedDecisionFaces {
