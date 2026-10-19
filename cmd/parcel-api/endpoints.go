@@ -243,9 +243,9 @@ func assembleBusinessEndpoints(
 		shipmentViewsIntake = isolatedRead.shipmentRequestViews
 	}
 
-	// 提交口挂首方客户渠道的 Intake（ADR-0139 决定四；票 first-party-api/00），隔离写放行随之撤下（ADR-0150 决定三）。它
-	// 单独一个变量，与上面那组查阅变量分开，免得日后有人顺手把它并进 isolatedRead 那个 if 里——读开关开不了写行。发行方
-	// 参数未设时 Intake 仍在，答的是未配置，与换口之前的 403 同字节。
+	// 提交口挂首方客户渠道的 Intake（ADR-0139 决定四；票 first-party-api/00），两个隔离开关都换不了它（ADR-0150 决定三）。
+	// 它单独一个变量，与上面那组查阅变量分开，免得日后有人顺手把它并进 isolatedRead 那个 if 里——读开关开不了写行。发行方
+	// 参数未设时 Intake 仍在，答的是未配置，与字面量未配置即拒同字节。
 	submissionIntake := shipmenthttp.SubmissionIntake(shipmenthttp.UnconfiguredIntake{})
 	if customerSubmission != nil {
 		submissionIntake = customerSubmission

@@ -80,8 +80,8 @@ type CustomerClientMinter struct {
 	now       func() time.Time
 }
 
-// NewCustomerClientMinter 的 admission 不许缺，取法同 NewIntegrationClientMinter：今天换上的提交口不在铸造侧判准入，
-// 余下各口换上来时判，装配点只给一只。
+// NewCustomerClientMinter 的 admission 不许缺，取法同 NewIntegrationClientMinter：提交口不在铸造侧判准入，余下客户面各口
+// 换上首方 Intake 时判，装配点只给一只。
 func NewCustomerClientMinter(
 	verifier CustomerClientCredentialVerifier,
 	registry CustomerClientRegistry,

@@ -102,9 +102,9 @@ var ErrCustomerCapabilityUnknown = errors.New("access identity: customer capabil
 
 // CustomerCapability 是首方客户族授予的单位：一个客户系统能在哪一个客户面口上做什么（ADR-0139 决定二）。
 //
-// 词表是册的列，归产品策略；某个租户给哪个客户端授了哪几项才是行。一口一词、随换口的那一笔加：今天只有提交口换上了
-// 首方 Intake，词表就只有它一项。粒度（按口还是按用例归并）归票 first-party-api/01——它若归并，改的是这张表与迁移里
-// 那条 CHECK，两处同笔。
+// 词表是册的列，归产品策略；某个租户给哪个客户端授了哪几项才是行。一口一词，随那一口换上首方 Intake 的那一笔加：还没换口
+// 的客户面各口不进词表——授一个用不上的能力，只会让人以为那一口已经通了。粒度（按口还是按用例归并）归票
+// first-party-api/01——它若归并，改的是这张表与迁移里那条 CHECK，两处同笔。
 type CustomerCapability string
 
 const (

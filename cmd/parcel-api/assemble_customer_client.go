@@ -56,8 +56,8 @@ func buildCustomerClientCredentialVerifier(getenv func(string) string) (accessid
 	return verifier, true, nil
 }
 
-// buildCustomerClientMinter 建本进程唯一一只首方铸造器。准入范围与另两族同一只（buildAdmissionScope，ADR-0180）：今天换上
-// 的提交口不在铸造侧判它，余下各口换上来时判。发行方参数没设时核验方就是未配置那一只。
+// buildCustomerClientMinter 建本进程唯一一只首方铸造器。准入范围与另两族同一只（buildAdmissionScope，ADR-0180）：提交口
+// 不在铸造侧判它，余下客户面各口换上首方 Intake 时判。发行方参数没设时核验方就是未配置那一只。
 func buildCustomerClientMinter(
 	verifier accessidentity.CustomerClientCredentialVerifier,
 	registry accessidentity.CustomerClientRegistry,

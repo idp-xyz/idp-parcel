@@ -66,8 +66,8 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	if isolatedWrite != nil {
-		// 放行什么也要出声（ADR-0078 决定三、ADR-0091 决定四）：提交口换上首方客户渠道之后，写开关只剩委托受理的归属坐标，
-		// 不放行任何命令面（ADR-0150 决定三）——提交要带首方客户端的令牌。
+		// 放行什么也要出声（ADR-0078 决定三、ADR-0091 决定四）：写开关只剩委托受理的归属坐标，不放行任何命令面——提交口走
+		// 首方客户渠道，要带首方客户端的令牌（ADR-0150 决定三）。
 		logger.Info("Isolated write admission enabled (ADR-0091): production ownership resolves against the governance register with injected synthetic coordinates; no command line is admitted, submissions go through the first-party customer channel",
 			"tenant", os.Getenv(isolatedWriteTenantEnv),
 			"selfAuthority", isolatedWrite.selfAuthority)

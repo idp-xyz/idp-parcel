@@ -81,7 +81,8 @@ type CustomerSubmissionIntake struct {
 
 var _ SubmissionIntake = (*CustomerSubmissionIntake)(nil)
 
-// 本包现签内部标识用的前缀。值沿用隔离提交口那一组：同一类标识换了入口不该换前缀，库里已有的标识与此后签出的仍是同一类。
+// 本包现签内部标识用的前缀。前缀属标识的类、不属入口：委托、批次与声明包裹从哪个接入口进来都是同一类标识，按入口另起前缀，
+// 库里就有同一类标识的两种写法。
 const (
 	submissionRequestPrefix = "SHR"
 	submissionBatchPrefix   = "SBAT"

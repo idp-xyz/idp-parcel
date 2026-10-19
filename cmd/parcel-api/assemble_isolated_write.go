@@ -31,10 +31,10 @@ const isolatedSelfAuthority = "SYN-AUTH/idp-parcel-pilot"
 // isolatedWriteAdmission 携带 ADR-0091 放行的写路径那一格：委托受理的生产归属范围目录（墙二）与隔离形态的自身权威串。
 // nil 表示未启用——各装配函数对 nil 的处理与本记录之前逐字节同形。
 //
-// 墙一（提交口的命令面 Intake）已随首方客户渠道退场（ADR-0150 决定三，票 first-party-api/00）：提交口挂首方 Intake，写开关
-// 不再放行任何命令面，也不再进 assembleBusinessEndpoints。墙二的真形态是 PS 的生产归属目录，未立；在它立起之前，演示部署
-// 靠这一格让提交编排读得到合成坐标，生产形态下目录照旧留空、归属答`权威未确定`。写开关随读开关在最后一口换完的那一笔一起
-// 删（ADR-0150 决定三），删之前要有生产目录接手这一格，否则演示提交停在 OWNERSHIP_UNRESOLVED。
+// 墙一（提交口的命令面 Intake）不在这里：提交口挂首方客户渠道的 Intake（ADR-0150 决定三，票 first-party-api/00），写开关
+// 不放行任何命令面，也不进 assembleBusinessEndpoints。墙二的真形态是 PS 的生产归属目录，未立；在它立起之前，演示部署靠这
+// 一格让提交编排读得到合成坐标，生产形态下目录照旧留空、归属答`权威未确定`。写开关随读开关在最后一口换完的那一笔一起删
+// （ADR-0150 决定三），删之前要有生产目录接手这一格，否则演示提交停在 OWNERSHIP_UNRESOLVED。
 type isolatedWriteAdmission struct {
 	governanceDirectory pspilot.GovernanceScopeDirectory
 	selfAuthority       string
