@@ -678,10 +678,11 @@ var chargeOccurrenceFormedUndecidedSentinels = []error{
 // AT-VE-169，再 NR 初始路由 UC-NR-001）、PS 有效网络收寄采用结果 → FanOut（先 NR 路由复核
 // UC-PS-003 步骤 8 → UC-NR-003，再 SA 发起 SELL 评价 ADR-0190）、NO 节点收寄形成 → FanOut（先 VE 投影 UC-VE-002，
 // 再 PS 来源采用）、TF 对象级场外揽收登记 → FanOut（先 VE 投影，再 PS 来源采用）、
-// TF 有效交付登记 → FanOut（先 VE 投影，再 PS 终局 UC-PS-004）、
+// TF 有效交付登记 → FanOut（先 VE 投影，再 PS 终局 UC-PS-004，再 TF 实际履约发生项自动形成 ADR-0218）、
 // TF 实际承运商首次有效收寄登记 → 只投 PS 面单渠道终局判断（lc/25，ADR-0135；不 FanOut：
 // VE 侧今天没有它的消费者，登记接不住的比不登记更糟）、
-// TF 权威交接登记 → FanOut（先 VE 投影，再 TF 派送发起 ADR-0216；不投 PS：终局只认有效交付）、
+// TF 权威交接登记 → FanOut（先 VE 投影，再 TF 派送发起 ADR-0216，再 TF 实际履约发生项自动形成 ADR-0218；不投 PS：
+// 终局只认有效交付）、
 // PS 包裹服务终局形成 → FanOut（先 VE 投影，再 SA 发起 SELL 评价 ADR-0190；不投 PS：终局是 PS 自家事实，
 // 让它经调度器消费自己等于把一份事实记两遍）、NR 包裹级初始路由判断 → FanOut（先 VE 投影，再 TF 逐段运输
 // 准备 ADR-0201 决定七；应消费方里的 NO 今天仍没有消费者，不登）、TF 替代/退运旅程启动 → 只投 VE 投影（不 FanOut：一封信带全体成员，
@@ -697,7 +698,7 @@ var chargeOccurrenceFormedUndecidedSentinels = []error{
 // 两路各认一个方向，另一个方向的评价在各自那一路入账走掉）。
 // TF 运输收费发生项已形成 → 只投 SA 发起 BUY 评价（ADR-0208）。消费者可以先于生产方登进路由表（ADR-0049）；没有生产方
 // 交出这一类信封时，本路一封也收不到，不是接不住。
-// 各类 FanOut 同一 EventType 各投两个独立消费者，顺序一律先 VE 后 PS/NR/TF，避免把投影或
+// 各类 FanOut 同一 EventType 各投各的独立消费者，顺序一律先 VE 后 PS/NR/TF，避免把投影或
 // 补派生堵在资格墙、终局规则墙或路由证据墙上；SA 发起 SELL 评价那一路排在既有那一路之后，
 // 计费不挡履约与追踪。
 // 「TF 有效交付登记」只接 `effective-delivery.registered`，不接 `offsite-pickup.formed`。
@@ -890,7 +891,17 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: delivery projection undecided translation: %w", err)
 	}
-	deliveryFan, err := dispatch.FanOut(veDeliveryRouted, routedFinals)
+	tfActualOnDelivery, err := formActualFulfillmentOnDeliveryConsumer(db, outboxStore, inboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	tfActualOnDeliveryRouted, err := dispatch.WithUndecidedSentinels(
+		tfActualOnDelivery, actualFulfillmentOnDeliveryUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: actual fulfillment on delivery undecided translation: %w", err)
+	}
+	// 先 VE、再 PS 终局，TF 实际履约发生项（ADR-0218）殿后：它停在未决重投时，前两路按 inbox 跳过，不重复投影与终局。
+	deliveryFan, err := dispatch.FanOut(veDeliveryRouted, routedFinals, tfActualOnDeliveryRouted)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: effective delivery fan-out: %w", err)
 	}
@@ -1026,9 +1037,18 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: reassess on handover undecided translation: %w", err)
 	}
+	tfActualOnHandover, err := formActualFulfillmentOnHandoverConsumer(db, outboxStore, inboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	tfActualOnHandoverRouted, err := dispatch.WithUndecidedSentinels(
+		tfActualOnHandover, actualFulfillmentOnHandoverUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: actual fulfillment on handover undecided translation: %w", err)
+	}
 	// 先 VE 后 TF，沿路由表先 VE 的惯例：派送发起停在未决重投时，VE 那一路按 inbox 跳过，不重复投影；反过来也不让投影等派送。
-	// NO 节点控制转出（ADR-0214 决定一）与 NR 路由复核（ADR-0215）不靠它们在扇出里的位置：FanOut 每一路都调，各路各记 inbox 账，谁停在未决都不让别路重做。
-	handoverFan, err := dispatch.FanOut(veHandoverRouted, tfHandoverRouted, noHandoverRouted, nrHandoverRouted)
+	// NO 节点控制转出（ADR-0214 决定一）、NR 路由复核（ADR-0215）与实际履约发生项（ADR-0218）不靠它们在扇出里的位置：FanOut 每一路都调，各路各记 inbox 账，谁停在未决都不让别路重做。
+	handoverFan, err := dispatch.FanOut(veHandoverRouted, tfHandoverRouted, noHandoverRouted, nrHandoverRouted, tfActualOnHandoverRouted)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: transport handover fan-out: %w", err)
 	}
