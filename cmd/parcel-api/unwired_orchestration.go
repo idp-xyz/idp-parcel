@@ -324,6 +324,16 @@ func (unwiredCapacityPoolRegistration) EstablishPool(
 	return tfapp.OpportunityResult{}, errOrchestrationNotWired
 }
 
+// unwiredTransportCommissionSubmission 是运输委托提交口的占位（ADR-0202 决定一）。
+type unwiredTransportCommissionSubmission struct{}
+
+func (unwiredTransportCommissionSubmission) SubmitCommission(
+	context.Context,
+	tfapp.SubmitCommissionCommand,
+) (tfapp.CommissionResult, error) {
+	return tfapp.CommissionResult{}, errOrchestrationNotWired
+}
+
 // unwiredEffectiveTimeRuleRegistration 是轨迹源有效时间规则登记口的占位（票 label-channel/19）。
 type unwiredEffectiveTimeRuleRegistration struct{}
 

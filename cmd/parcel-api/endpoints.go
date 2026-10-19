@@ -92,6 +92,7 @@ func assembleBusinessEndpoints(
 	masterDocumentRegistration tfhttp.MasterDocumentRegistrar,
 	transportScheduleRegistration tfhttp.TransportScheduleRegistrar,
 	capacityPoolRegistration tfhttp.CapacityPoolRegistrar,
+	transportCommissionSubmission tfhttp.TransportCommissionSubmitter,
 	trackingViews visibilityhttp.TrackingViewReader,
 	projectionViews visibilityhttp.OperationsProjectionReader,
 	claims visibilityhttp.ClaimReceiver,
@@ -415,6 +416,10 @@ func assembleBusinessEndpoints(
 		// 容量池登记口（ADR-0201 决定一）：在一个已登记的班次上登一个维度的池，族与周期安排、具体班次登记口同；
 		// 池身份由班次与维度派生，不由登记方起名。受控 CLI parcel-transport-register 的 capacity-pool 命令调的是同一个编排。
 		{Pattern: "/transport-fulfillment-capacity-pool-registrations", Handler: tfhttp.NewRegisterCapacityPoolEndpoint(operatorRegistries.transport, capacityPoolRegistration)},
+		// 运输委托提交口（ADR-0202 决定一、三）：运营人员向外部服务提供方提出运输范围与条件，是管理台上作出的生产决定，挂操作者
+		// 渠道的「运营决定」能力面、按自己的决定种类认证（ADR-0151 定族判据）；协议在提交时点经 party-commercial 核过，快照与
+		// 采购责任法人取自核对结果。
+		{Pattern: "/transport-fulfillment-transport-commission-submissions", Handler: tfhttp.NewSubmitTransportCommissionEndpoint(operatorDecisions.transport, transportCommissionSubmission)},
 		{Pattern: "/transport-fulfillment-records", Handler: tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(transportCatalogueIntake, transportFulfillmentRecords)},
 		// 交接范围汇总（票 admin-web-audit-followups/06，读面来自 tf-unwired-seven/03）。
 		// 它是本装配表上第一行第二参不是读口而是**应用读用例**的查阅端点：汇总是派生量，

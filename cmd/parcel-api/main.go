@@ -324,6 +324,7 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	capacityPoolRegistration, err := buildCapacityPoolRegistration(db)
+	transportCommissionSubmission, err := buildTransportCommissionSubmission(db)
 	if err != nil {
 		return err
 	}
@@ -628,6 +629,7 @@ func run(logger *slog.Logger) error {
 			masterDocumentRegistration,
 			transportScheduleRegistration,
 			capacityPoolRegistration,
+			transportCommissionSubmission,
 			trackingViews,
 			projectionViews,
 			claims,
