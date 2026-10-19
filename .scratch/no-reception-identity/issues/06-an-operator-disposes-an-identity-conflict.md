@@ -1,7 +1,7 @@
 # 06 身份冲突处置（UC-NO-004）：运营决定「身份冲突处置」逐链追加处置版、连带指明，按包裹的读面认处置截断，重核跳过被排除的包裹；管理台复核页加处置动作
 
 Category: enhancement
-Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-nri06`，NO 迁移号 0010、access_identity 迁移号 0011、治理种子 governance/27；与 no-reception-source/04 并行。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 04 拆出（代决，用户 2026-10-16 授权「你作为业务和系统专家你来自决」）
+Status: resolved——2026-10-19 进 main（代码验证钉 `a13ec9d1`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-nri06`，NO 迁移号 0010、access_identity 迁移号 0011、治理种子 governance/27；与 no-reception-source/04 并行。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 04 拆出（代决，用户 2026-10-16 授权「你作为业务和系统专家你来自决」）
 Blocked by:
 - no-reception-source/03 进 main。处置之后可再经重核，决定九改的正是它落下的重核分格；它还同改收寄库 PG 适配器、复核目录与管理台待识别实物页。
 - 05 进 main。处置要靠身份一格读链头才解得开，`AT-NO-053`、`AT-NO-054` 断言的就是解开之后的身份一格。
@@ -71,7 +71,7 @@ Blocked by:
 - [x] 并发：处置与同一包裹上又一件实物的收寄并发，经包裹锁串行，不出现一版两个后继。
 - [x] admin-web 三道门退 0；待识别实物页的处置动作有组件用例。
 - [x] Go 门禁：`go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出；带 DSN 跑 `internal/accessidentity/...`、`internal/nodeoperations/...`、`cmd/parcel-api`、`cmd/parcel-dispatch`、`cmd/parcel-frontline-import`、`internal/architecture/...`、`migrations/...` 全绿；机制清点在本笔的干净检出上重生成。
-- [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
+- [x] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
 
 ## 完成记录（2026-10-19，会话 idp-parcel-9b 的作者子代理，分支 `claude-nri06`；在 `claude-nrs03` tip `3d6d971c` 上写成，收口前 rebase 到 main `1167b4d9`，含 no-reception-source/03、04）
 
@@ -208,3 +208,8 @@ Blocked by:
 - **Standards**：新读面与写面另起文件，共享文件只追加；对既有函数的改动收在 `receptionColumns`、`scanReception`、`Save` 各加一格与两条截断谓词。
 - **评审修补（已做，`0c85a204`）**：access_identity 迁移 0011 重建决定种类 CHECK 时，全集预先列上另一组票 0008、0009 要加的两种——那两份编号在前却会更晚进 main，新库按编号施加时 0011 在后，只取本基线全集会把它们删掉；头注写明。ADR-0210 文末追加复核记录记落成的线上名，与 ADR-0199 同一处置。
 - **留给 no-reception-source/05**：处置版里不带关联的那几版也是「已核对」，05 回填与写入核对态时照此（作者已在完成记录留提醒）。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-nri06`（作者已 rebase 到 no-reception-source/03、04 之上并跟进锁次序与并入）加评审修补一笔，直接叠在远端 main 之上快进推送；机制清点重生成零差。
+- 推送方全量一次：钉 `a13ec9d1` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 147 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
