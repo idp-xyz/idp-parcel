@@ -22,7 +22,7 @@
 - [ADR-0010：以小包网络运营闭环作为首发核心](./0010-parcel-network-operations-as-product-core.md)
 - [ADR-0012：在 idp-parcel 内建立小包计价上下文](./0012-parcel-pricing-context-within-idp-parcel.md)
 - [ADR-0013：由计价拥有版本化的外部数值序列并在评价内完成币种换算](./0013-pricing-owns-versioned-external-reference-series.md)
-- [ADR-0014：为内容摘要的规范化形状引入版本号](./0014-versioned-canonicalization-shape-for-content-digest.md)｜**部分停用**：其 Consequences「每次变化都要新增一个规范化版本并长期支持它」一句已由 [ADR-0177](./0177-customer-contract-names-its-customer-account-and-the-closure-narrows-by-it.md) 决定三停用。**适用场景**：仅限 PC 客户合同一册加 `customerAccount` 一键那一次，`PCC-1` 不换号——理由是该册没有需要回放的已保存摘要，与本记录「代价在此刻支付最低」同一前提；此后任何一册再改规范化形状照本记录换号，其余各条不变
+- [ADR-0014：为内容摘要的规范化形状引入版本号](./0014-versioned-canonicalization-shape-for-content-digest.md)｜**部分停用**：其 Consequences「每次变化都要新增一个规范化版本并长期支持它」一句已由 [ADR-0177](./0177-customer-contract-names-its-customer-account-and-the-closure-narrows-by-it.md) 决定三停用。**适用场景**：仅限 PC 客户合同一册加 `customerAccount` 一键那一次，`PCC-1` 不换号——理由是该册没有需要回放的已保存摘要，与本记录「代价在此刻支付最低」同一前提；同一句又由 [ADR-0201](./0201-schedule-templates-materialize-concrete-schedules-by-date-and-preparation-answers-not-configured-on-an-empty-register.md) 文末补记「迁移 0027」一条停用，**适用场景**：仅限 TF 容量池一册加维度一键那一次，`TFC-1` 不换号——迁移 0027 在池表有行时拒绝施加，库里没有需要回放的池摘要，与上一次同一前提；此后任何一册再改规范化形状照本记录换号，其余各条不变
 - [ADR-0015：以封闭文法与开放词汇实现多承运商通用计价](./0015-closed-grammar-open-vocabulary-for-multi-carrier-rating.md)
 - [ADR-0016：产品交付与租户试点作为两条并行验收轨道](./0016-product-delivery-and-tenant-pilot-as-parallel-tracks.md)
 - [ADR-0017：实现准入闸门按阻断理由分别裁决](./0017-admission-gates-judged-by-blocking-cause.md)

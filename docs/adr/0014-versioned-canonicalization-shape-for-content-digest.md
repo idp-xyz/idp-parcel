@@ -2,7 +2,7 @@
 
 Status: Accepted  
 Date: 2026-08-07  
-Partially suspended by: [ADR-0177](./0177-customer-contract-names-its-customer-account-and-the-closure-narrows-by-it.md) 决定三（Consequences「每次变化都要新增一个规范化版本并长期支持它」一句，仅限 PC 客户合同一册加 `customerAccount` 一键那一次，`PCC-1` 不换号；其余各条不变，本记录正文不改写）  
+Partially suspended by: [ADR-0177](./0177-customer-contract-names-its-customer-account-and-the-closure-narrows-by-it.md) 决定三（Consequences「每次变化都要新增一个规范化版本并长期支持它」一句，仅限 PC 客户合同一册加 `customerAccount` 一键那一次，`PCC-1` 不换号；其余各条不变，本记录正文不改写）；[ADR-0201](./0201-schedule-templates-materialize-concrete-schedules-by-date-and-preparation-answers-not-configured-on-an-empty-register.md) 文末补记「迁移 0027」一条（同一句，仅限 TF 容量池一册加维度一键那一次，`TFC-1` 不换号；其余各条不变，本记录正文不改写）  
 Amended by: [开发主线的产品就绪里程碑与能力范围判据](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)（限定下文 Alternatives considered 中否决「按行业形态先把三族与分段进位的结构定死」时所用的「在结构层写死未确认内容」这一条理由：该理由对自营系统成立，对面向市场的产品不成立。该替代仍不能取代本记录的 Decision——版本号与建哪些族是两个独立问题。Decision 与 Consequences 不变，本记录正文不改写）
 
 ## Context
@@ -54,3 +54,4 @@ Amended by: [开发主线的产品就绪里程碑与能力范围判据](../produ
 - [ADR-0009：采用 Go 模块化单体并复用版本化 Bento 技术合同](./0009-go-modular-monolith-and-versioned-bento-contracts.md)
 - [ADR-0012：在 idp-parcel 内建立小包计价上下文](./0012-parcel-pricing-context-within-idp-parcel.md)
 - [ADR-0177：客户合同正文指名它的货主客户账户，闭包按解析键上的客户账户收窄客户合同候选](./0177-customer-contract-names-its-customer-account-and-the-closure-narrows-by-it.md)：决定三部分停用本记录 Consequences「每次变化都要新增一个规范化版本并长期支持它」一句——仅限 PC 客户合同一册加 `customerAccount` 一键那一次，`PCC-1` 不换号；其余各条不变
+- [ADR-0201：运输机会——周期安排按日期物化成班次，初始路由形成后逐段准备，空册答未配置](./0201-schedule-templates-materialize-concrete-schedules-by-date-and-preparation-answers-not-configured-on-an-empty-register.md)：文末补记「迁移 0027」一条部分停用同一句——仅限 TF 容量池一册加维度一键那一次，`TFC-1` 不换号；其余各条不变
