@@ -187,9 +187,9 @@ func TestACrossAccountProbeIsIndistinguishableFromAMissingParcel(t *testing.T) {
 	}
 }
 
-// Covers: UC-VE-008 `AT-VE-153` 的翻译半边「只有外部运单号但没有客户账户授权→不受理
-// 查询，标识本身不作为访问凭证」——构造不出带账户的查询即 400，无 outcome。
-func TestAQueryWithoutAccountAuthorityIsMalformed(t *testing.T) {
+// Covers: 坏请求那一格的映射——Intake 构造不出查询即 400 MALFORMED_REQUEST，不带 outcome。没有账户授权的请求不落这一格，
+// 答认证那几格；AT-VE-153 点在 cmd/parcel-api 的 TestCustomerTrackingViewLineRefusesOtherFamiliesAndClientsWithoutTheGrant 上。
+func TestAMalformedQueryIsBadRequestWithoutOutcome(t *testing.T) {
 	recorder := serve(t, intakeDouble{err: visibilityhttp.ErrMalformedRequest}, readerDouble{}, http.MethodGet)
 
 	if recorder.Code != http.StatusBadRequest {
@@ -206,6 +206,7 @@ func TestAQueryWithoutAccountAuthorityIsMalformed(t *testing.T) {
 	if body.Error.Code != "MALFORMED_REQUEST" {
 		t.Fatalf("code = %q, want MALFORMED_REQUEST", body.Error.Code)
 	}
+	assertNoOutcome(t, recorder)
 }
 
 // Covers: UC-VE-008 `AT-VE-168` 的读侧半边「授权或视图结果保存失败→……不伪装为无

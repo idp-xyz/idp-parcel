@@ -119,6 +119,8 @@ func (register trackingViewGrantRegister) FindCustomerClient(_ context.Context, 
 // Covers: 票 demo-chain-gaps/96 完成判据「操作者令牌答 401 CUSTOMER_CLIENT_CREDENTIAL_REJECTED；没有这一格授予答 403
 // CUSTOMER_CLIENT_NOT_GRANTED」与 AT-VE-172——同一个发行方签的操作者令牌、集成客户端令牌答令牌不过；首方受众的令牌、主体不在册答
 // 未授予；只持委托提交与送站预报授予的客户端也答未授予。各格都不带 outcome，视图库一次都没读。
+// 也证 AT-VE-153「只有外部运单号但没有客户账户授权→不受理查询，标识本身不作为访问凭证」：不带令牌、或只持别口授予的请求，带着
+// 包裹定位也答认证那一格（401、403），不是坏请求，也不读视图。
 func TestCustomerTrackingViewLineRefusesOtherFamiliesAndClientsWithoutTheGrant(t *testing.T) {
 	issuer := newCustomerIssuerDouble(t)
 	verifier, configured, err := buildCustomerClientCredentialVerifier(fakeGetenv(issuer.environment()))

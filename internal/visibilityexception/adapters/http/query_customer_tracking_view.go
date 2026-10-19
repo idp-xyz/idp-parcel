@@ -19,7 +19,7 @@ import (
 
 // ErrMalformedRequest 表示这次请求构造不出查询，且重发同样的内容不会改变结果。
 // 外部运单号或其他标识只能定位候选对象，不能单独证明查询权限（UC-VE-008）——账户
-// 只来自认证结果，请求自报账户、缺包裹定位或多带别的格，查询都立不起来，落在这一格；
+// 只来自认证结果，请求自报账户、缺包裹定位、多带别的格或查询串解不开，查询都立不起来，落在这一格；
 // 没有凭据或没有授予的请求答认证那几格，不落这里。
 var ErrMalformedRequest = errors.New("visibility exception http: malformed request")
 
