@@ -86,7 +86,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 登法见下面「数据故事」第 8 步的补记。
 
 配置员另持运营决定「订舱提交」（ADR-0202 决定一、五；`data/access/02` 的授予、`03` 的对照与 `data/governance/30` 那份运营决定
-区间各一行），承运答复口另认合成干线承运商的集成客户端（`data/access/05`、`06` 各一行，`03` 的对照与 `data/governance/30` 那份
+区间各一行），承运答复口另认合成干线承运商的集成客户端（`data/access/05`、`06` 各一行，`03` 的对照与 `data/governance/31` 那份
 外部事实区间各一行）。种子不登任何订舱或答复：订舱要先有干线委托，订在 `data/transport/04` 物化登记的
 `SYN-SCHED-SZX-SIN-DAILY/2026-10-21` 那一班上，再由合成干线承运商用自己的令牌答复，走法见
 `docs/design/synthetic-demo-journey-script.md` 的第 3 步。

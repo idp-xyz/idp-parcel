@@ -277,7 +277,7 @@ echo "== 试点治理登记（pilot-governance：权威区间、暂停、恢复�
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/28-authority-interval-operation-decision-capacity-reservation.json"
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/29-authority-interval-operation-decision-capacity-release.json"
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/30-authority-interval-operation-decision-booking-request-submission.json"
-"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/30-authority-interval-external-fact-carrier-booking-answer.json"
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/31-authority-interval-external-fact-carrier-booking-answer.json"
 
 echo "== 操作者册登记（access-identity：合成操作者主体与能力面授予；票 operator-channel/01、17） =="
 # 合成主体绑演示租户：配置员扮运营主管，持有全部运营决定（票 operator-channel/24「裁定」）——授登记册配置写、主数据与
