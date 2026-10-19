@@ -84,9 +84,11 @@ func (result RecordMovementFactResult) ContinuationReference() string {
 	return result.continuation
 }
 
+// RecordMovementFactDeps 的 Handoff 交移动事实已形成信封（ADR-0205 决定五），与事实同一笔入队。
 type RecordMovementFactDeps struct {
-	Facts ports.MovementFactRegistry
-	Clock ports.Clock
+	Facts   ports.MovementFactRegistry
+	Handoff ports.MovementFactHandoff
+	Clock   ports.Clock
 }
 
 type RecordMovementFactHandler struct {
@@ -98,7 +100,7 @@ func NewRecordMovementFactHandler(deps RecordMovementFactDeps) *RecordMovementFa
 }
 
 // Record 登记一条实际移动事实：受理（各件由 RecordMovementFact 构造门把门）→ 按（租户 + 事实 + 版本）查册，在册则按内容分
-// 重放与 SOURCE_CONFLICT → 登记。出发连同 reading 同一笔落册。
+// 重放与 SOURCE_CONFLICT → 登记 → 交已形成信封。出发连同 reading 同一笔落册，信封也在这一笔里入队。
 //
 // reading 是组合根在写事务之前用 DepartureGateReader 问好的门禁读数，只属出发：移动与到达交零值。重放与冲突用不上它——
 // 在册那一版早已带着它首次登记时问来的读数，同身份再到只比内容（票 tf-face-algebra/08），不另记一份读数。
@@ -132,24 +134,28 @@ func (handler *RecordMovementFactHandler) Record(
 
 	existing, found, err := handler.deps.Facts.FindByKey(ctx, key)
 	if err != nil {
-		return movementFactUndecided(command), nil
+		return movementFactUndecided(command, movementFactRegistryUnavailable), nil
 	}
 	if found {
-		return movementFactReplayOrConflict(existing, requested)
+		return handler.replayOrConflict(ctx, command, existing, requested)
 	}
 
 	record := ports.MovementFactRecord{Key: key, Fact: fact, RecordedAt: handler.deps.Clock.Now()}
 	saved, err := handler.deps.Facts.Save(ctx, record)
 	if err != nil {
-		return movementFactUndecided(command), nil
+		return movementFactUndecided(command, movementFactRegistryUnavailable), nil
 	}
 	if saved == ports.MovementFactVersionAlreadyRegistered {
 		// 并发下另一方先登记：读回赢家而不是宣称自己记下了它，再照在册那一支比内容——输家带的可能是另一份作业。
 		winner, found, err := handler.deps.Facts.FindByKey(ctx, key)
 		if err != nil || !found {
-			return movementFactUndecided(command), nil
+			return movementFactUndecided(command, movementFactRegistryUnavailable), nil
 		}
-		return movementFactReplayOrConflict(winner, requested)
+		return handler.replayOrConflict(ctx, command, winner, requested)
+	}
+	if err := handler.deps.Handoff.HandOffMovementFact(ctx, ports.MovementFactIntent{Record: record}); err != nil {
+		// 答未决而不上抛：调用方（离线队列）按续办重投同一份，重投走在册那一支重交同一份意图，把这一次没落成的补上。
+		return movementFactUndecided(command, movementFactHandoffUnavailable), nil
 	}
 	return RecordMovementFactResult{outcome: MovementFactRecorded, record: record, hasRecord: true}, nil
 }
@@ -195,18 +201,29 @@ func canonicalMovementFact(fact domain.TransportMovementFact) ([]byte, string, e
 	return domain.CanonicalizeMovementFactPayload(fact.Schedule(), fact.Kind(), fact.Location(), segment, resource, clearance)
 }
 
-// movementFactReplayOrConflict 按 TFC-1 形状比在册版本与本次命令。册上不存摘要，在册一侧从本体现算，照票 operator-channel/20
-// 承运商判断口的做法，不加摘要列。
+// replayOrConflict 按 TFC-1 形状比在册版本与本次命令。册上不存摘要，在册一侧从本体现算，照票 operator-channel/20 承运商判断口
+// 的做法，不加摘要列。
 //
 // 冲突不带记录：身份键不含设备与作业范围，在册那一份可能是另一作业范围登的，回显就把它的内容交给了这一方。作业事实族的调用方
 // 是离线队列、2xx 即出队（ADR-0022），答成已有版本会让这份异内容被静默吞掉（ADR-0023 后果节）。
-func movementFactReplayOrConflict(current ports.MovementFactRecord, requested string) (RecordMovementFactResult, error) {
+//
+// 已有版本那一格重交同一份意图：意图按信封 ID 认领（ADR-0043），已入队的那一封不会多出第二封；先前若有一次交出没落成，或这
+// 一版落册早于信封上线，这一次把它补上。冲突那一格不交：异内容的这一份没有落册，在册那一份的信封归它自己那一次登记。
+func (handler *RecordMovementFactHandler) replayOrConflict(
+	ctx context.Context,
+	command RecordMovementFactCommand,
+	current ports.MovementFactRecord,
+	requested string,
+) (RecordMovementFactResult, error) {
 	_, recorded, err := canonicalMovementFact(current.Fact)
 	if err != nil {
 		return RecordMovementFactResult{}, err
 	}
 	if recorded != requested {
 		return RecordMovementFactResult{outcome: MovementFactSourceConflict}, nil
+	}
+	if err := handler.deps.Handoff.HandOffMovementFact(ctx, ports.MovementFactIntent{Record: current}); err != nil {
+		return movementFactUndecided(command, movementFactHandoffUnavailable), nil
 	}
 	return RecordMovementFactResult{outcome: MovementFactVersionExists, record: current, hasRecord: true}, nil
 }
@@ -268,9 +285,15 @@ func movementFactSpecFrom(
 	return spec, ports.MovementFactKey{TenantID: command.TenantID, Fact: fact, Version: version}, true
 }
 
-func movementFactUndecided(command RecordMovementFactCommand) RecordMovementFactResult {
+// 未决停在哪一口：续办引用按它分开，运维据此知道该查登记册还是 Outbox 下游。
+const (
+	movementFactRegistryUnavailable = "MOVEMENT_FACT_REGISTRY_UNAVAILABLE"
+	movementFactHandoffUnavailable  = "MOVEMENT_FACT_HANDOFF_UNAVAILABLE"
+)
+
+func movementFactUndecided(command RecordMovementFactCommand, cause string) RecordMovementFactResult {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
-		"MOVEMENT_FACT_REGISTRY_UNAVAILABLE",
+		cause,
 		command.TenantID.String(),
 		command.Fact,
 		command.Version,

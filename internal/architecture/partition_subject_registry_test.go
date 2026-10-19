@@ -181,6 +181,7 @@ var declaredPartitionSubjects = map[string]string{
 	"internal/transportfulfillment/adapters/postgres/effective_delivery_handoff.go":              partitionSubjectPrefix + "租户/载运对象/口名" + partitionRulingMark + "ADR-0074 决定二、五（本口段 /effective-delivery）",
 	"internal/transportfulfillment/adapters/postgres/exception_journey_handoff.go":               partitionPerEnvelopePrefix + "键即信封 ID（与处置执行同键，靠类型段错开）",
 	"internal/transportfulfillment/adapters/postgres/external_tracking_fact_handoff.go":          partitionSubjectPrefix + "租户/载运对象/口名" + partitionRulingMark + "ADR-0074 决定二、五（本口段 /external-carrier-tracking）",
+	"internal/transportfulfillment/adapters/postgres/movement_fact_handoff.go":                   partitionSubjectPrefix + "租户/移动事实（版本只进 ID，更正版同首版一区排队；/movement-fact/ 段）",
 	"internal/transportfulfillment/adapters/postgres/offsite_pickup_handoff.go":                  partitionPerEnvelopePrefix + "键即信封 ID（揽收尝试）",
 	"internal/transportfulfillment/adapters/postgres/offsite_pickup_registration_handoff.go":     partitionSubjectPrefix + "租户/载运对象/口名" + partitionRulingMark + "ADR-0074 决定二、五（本口段 /offsite-pickup-registration）",
 	"internal/transportfulfillment/adapters/postgres/regulatory_acceptance_handoff.go":           partitionPerEnvelopePrefix + "键即信封 ID（监管处置承接）",

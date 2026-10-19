@@ -17,6 +17,7 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	aipostgres "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/postgres"
@@ -266,6 +267,14 @@ func TestMovementFactCollisionLoserIsComparedOnARealDatabase(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	store, err := outbox.NewStore(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	handoff, err := tfpostgres.NewOutboxMovementFactHandoff(db, store, systemClock{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	command := tfapp.RecordMovementFactCommand{
 		TenantID:   mustValue(t, tfdomain.NewTenantID, "SYN-TENANT-01"),
 		Fact:       "SYN-MOVE-08-20",
@@ -294,8 +303,9 @@ func TestMovementFactCollisionLoserIsComparedOnARealDatabase(t *testing.T) {
 			transactor: db.Transactor(),
 			gate:       wired.gate,
 			inner: tfapp.NewRecordMovementFactHandler(tfapp.RecordMovementFactDeps{
-				Facts: &staleFirstReadFacts{MovementFactRegistry: facts},
-				Clock: systemClock{},
+				Facts:   &staleFirstReadFacts{MovementFactRegistry: facts},
+				Handoff: handoff,
+				Clock:   systemClock{},
 			}),
 		}
 		lost, err := loser.Record(t.Context(), testCase.command)

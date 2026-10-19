@@ -8,6 +8,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
@@ -75,13 +76,21 @@ func newStorableFixture(t *testing.T) *storableFixture {
 		t.Fatalf("夹具班次没有登进去：%v", saved)
 	}
 	clock := credentialClock{at: credentialNow}
+	store, err := outbox.NewStore(db)
+	if err != nil {
+		t.Fatalf("Outbox Store：%v", err)
+	}
+	handoff, err := adapter.NewOutboxMovementFactHandoff(db, store, clock)
+	if err != nil {
+		t.Fatalf("移动事实信封：%v", err)
+	}
 	tenant := segmentRef(t, domain.NewTenantID, "SYN-TENANT-01")
 	return &storableFixture{
 		t: t, pool: pool, transactor: transactor, tenant: tenant, assignments: assignments, facts: facts,
 		form: application.NewFormLoadAssignmentHandler(application.FormLoadAssignmentDeps{
 			Assignments: assignments, Schedules: schedules, Clock: clock,
 		}),
-		record: application.NewRecordMovementFactHandler(application.RecordMovementFactDeps{Facts: facts, Clock: clock}),
+		record: application.NewRecordMovementFactHandler(application.RecordMovementFactDeps{Facts: facts, Handoff: handoff, Clock: clock}),
 		delivery: &deliveryPrecisionFixture{
 			t: t, transactor: transactor, tenant: tenant,
 			tasks:    application.NewOpenDispatchTaskHandler(application.OpenDispatchTaskDeps{Tasks: tasks, Clock: clock}),

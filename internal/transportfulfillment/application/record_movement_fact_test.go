@@ -69,10 +69,32 @@ func (double *movementFactRegistryDouble) only(t *testing.T) (ports.MovementFact
 	return ports.MovementFactRecord{}, false
 }
 
+// movementFactHandoffDouble 记下交出的每一份意图；err 非空时交出失败。
+type movementFactHandoffDouble struct {
+	intents []ports.MovementFactIntent
+	err     error
+}
+
+func (double *movementFactHandoffDouble) HandOffMovementFact(_ context.Context, intent ports.MovementFactIntent) error {
+	if double.err != nil {
+		return double.err
+	}
+	double.intents = append(double.intents, intent)
+	return nil
+}
+
 func newMovementFactHandler(registry *movementFactRegistryDouble) *application.RecordMovementFactHandler {
+	return newMovementFactHandlerHandingOffTo(registry, &movementFactHandoffDouble{})
+}
+
+func newMovementFactHandlerHandingOffTo(
+	registry ports.MovementFactRegistry,
+	handoff *movementFactHandoffDouble,
+) *application.RecordMovementFactHandler {
 	return application.NewRecordMovementFactHandler(application.RecordMovementFactDeps{
-		Facts: registry,
-		Clock: dispatchTaskClock{at: movementRecordedAt},
+		Facts:   registry,
+		Handoff: handoff,
+		Clock:   dispatchTaskClock{at: movementRecordedAt},
 	})
 }
 
@@ -162,6 +184,75 @@ func TestRecordingAMovementFactRegistersIt(t *testing.T) {
 	}
 	if !record.RecordedAt.Equal(movementRecordedAt) {
 		t.Fatalf("登记时刻 = %s, want %s", record.RecordedAt, movementRecordedAt)
+	}
+}
+
+// Covers: AT-TF-156 编排半边——登记成立即交已形成信封，交出的是落册那一份；同内容重投重交同一份（入队那一步按信封 ID 吞掉
+// 重复），先前没交成的由此补上；内容冲突不交——异内容那一份没有落册。
+func TestARecordedMovementFactIsHandedOffAndAReplayHandsItOffAgain(t *testing.T) {
+	registry := newMovementFactRegistry()
+	handoff := &movementFactHandoffDouble{}
+	handler := newMovementFactHandlerHandingOffTo(registry, handoff)
+	departure := recordMovementCommand(t)
+	departure.Kind = domain.DepartureFact
+	departure.Segment = "segment-1"
+
+	result, err := handler.Record(t.Context(), departure, readingFor(t, departure, domain.DepartureGateBlocked))
+	if err != nil || result.Outcome() != application.MovementFactRecorded {
+		t.Fatalf("首登：outcome=%q err=%v", result.Outcome(), err)
+	}
+	saved, _ := registry.only(t)
+	if len(handoff.intents) != 1 || handoff.intents[0].Record.Key != saved.Key || !handoff.intents[0].Record.RecordedAt.Equal(saved.RecordedAt) {
+		t.Fatalf("交出的意图 = %+v, want 恰一份、就是落册那一份", handoff.intents)
+	}
+
+	if result, err := handler.Record(t.Context(), departure, readingFor(t, departure, domain.DepartureGateBlocked)); err != nil ||
+		result.Outcome() != application.MovementFactVersionExists {
+		t.Fatalf("重投：outcome=%q err=%v", result.Outcome(), err)
+	}
+	if len(handoff.intents) != 2 || handoff.intents[1].Record.Key != saved.Key {
+		t.Fatalf("重投后交出的意图 = %+v, want 重交在册那一份", handoff.intents)
+	}
+
+	conflicting := departure
+	conflicting.Location = "hub-9"
+	if result, err := handler.Record(t.Context(), conflicting, readingFor(t, conflicting, domain.DepartureGateBlocked)); err != nil ||
+		result.Outcome() != application.MovementFactSourceConflict {
+		t.Fatalf("异内容：outcome=%q err=%v", result.Outcome(), err)
+	}
+	if len(handoff.intents) != 2 {
+		t.Fatalf("内容冲突也交了意图：%d 份", len(handoff.intents))
+	}
+}
+
+// Covers: AT-TF-156 编排半边（交出失败）——事实落了册而信封没交成，答未决带续办引用，不上抛：续办引用与登记册读不动的那一格
+// 分得开；同一份重投走在册那一支，把信封补上。
+func TestAFailedHandoffAnswersUndecidedAndTheReplayCompletesIt(t *testing.T) {
+	registry := newMovementFactRegistry()
+	handoff := &movementFactHandoffDouble{err: errors.New("outbox 不可用")}
+	handler := newMovementFactHandlerHandingOffTo(registry, handoff)
+	command := recordMovementCommand(t)
+
+	result, err := record(t, handler, command)
+	if err != nil {
+		t.Fatalf("交出失败不该上抛：%v", err)
+	}
+	if result.Outcome() != application.MovementFactUndecided || result.ContinuationReference() == "" {
+		t.Fatalf("outcome = %q continuation=%q, want 未决带续办引用", result.Outcome(), result.ContinuationReference())
+	}
+	down := newMovementFactRegistry()
+	down.findErr = movementRegistryDown
+	registryDown, _ := record(t, newMovementFactHandler(down), command)
+	if registryDown.ContinuationReference() == result.ContinuationReference() {
+		t.Fatal("交出失败与登记册读不动给了同一个续办引用，运维分不清该查哪一口")
+	}
+
+	handoff.err = nil
+	if replay, err := record(t, handler, command); err != nil || replay.Outcome() != application.MovementFactVersionExists {
+		t.Fatalf("续办重投：outcome=%q err=%v", replay.Outcome(), err)
+	}
+	if len(handoff.intents) != 1 {
+		t.Fatalf("续办重投后交出的意图 %d 份, want 1", len(handoff.intents))
 	}
 }
 
@@ -451,10 +542,7 @@ func TestACollisionLoserIsComparedWithTheWinner(t *testing.T) {
 			if _, err := record(t, newMovementFactHandler(registry), recordMovementCommand(t)); err != nil {
 				t.Fatalf("赢家：%v", err)
 			}
-			loser := application.NewRecordMovementFactHandler(application.RecordMovementFactDeps{
-				Facts: &staleFirstReadRegistry{movementFactRegistryDouble: registry},
-				Clock: dispatchTaskClock{at: movementRecordedAt},
-			})
+			loser := newMovementFactHandlerHandingOffTo(&staleFirstReadRegistry{movementFactRegistryDouble: registry}, &movementFactHandoffDouble{})
 			command := recordMovementCommand(t)
 			testCase.change(&command)
 

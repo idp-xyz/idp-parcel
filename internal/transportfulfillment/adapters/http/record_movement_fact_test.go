@@ -83,6 +83,13 @@ func (double *movementCustomsDouble) ReadDepartureGate(_ context.Context, query 
 		[]domain.DepartureGateBasis{{Action: "LOADING_DEPARTURE", Cause: "SOME_CAUSE", Sources: []string{"SRC-1"}}})
 }
 
+// movementHandoffDouble 收下已形成信封的意图、什么也不做：本包只验线格式与答法，信封入队由 postgres 与 cmd 两层的用例证。
+type movementHandoffDouble struct{}
+
+func (movementHandoffDouble) HandOffMovementFact(context.Context, ports.MovementFactIntent) error {
+	return nil
+}
+
 // readThenRecord 照组合根的次序：同内容重放取在册那一份读数，否则先问读数，再登记。这里没有事务——事务边界归 cmd 的装配点，本包只验线格式与答法。
 type readThenRecord struct {
 	gate  *application.DepartureGateReader
@@ -222,8 +229,9 @@ func newMovementFactFixture(t *testing.T) *movementFactFixture {
 		customs:  &movementCustomsDouble{answer: domain.DepartureGateNotGuarded},
 	}
 	handler := application.NewRecordMovementFactHandler(application.RecordMovementFactDeps{
-		Facts: fixture.registry,
-		Clock: tfClock{at: time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)},
+		Facts:   fixture.registry,
+		Handoff: movementHandoffDouble{},
+		Clock:   tfClock{at: time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)},
 	})
 	fixture.record = tfhttp.NewRecordMovementFactEndpoint(fixture.intake,
 		readThenRecord{gate: movementGateReader(t, fixture.customs), inner: handler})

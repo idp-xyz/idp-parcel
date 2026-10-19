@@ -6,6 +6,7 @@ import (
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	tfcustoms "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/customscompliance"
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
@@ -54,8 +55,8 @@ func (movement transactionalMovementFact) Record(
 }
 
 // buildMovementFactOrchestration 装配 `/transport-fulfillment/movement-facts` 背后的真编排（票 tf-segment-lifecycle-closure/05、
-// demo-chain-gaps/32）。登记那一半的缝是移动事实登记册与时钟；出发读数那一半问本上下文的段册与班次册，再经消费侧适配器问
-// 关务的动作准入判断——全接真。仍不向任何下游交意图：移动事实信封与它的消费者同一个变更上线（ADR-0205 决定五）。
+// demo-chain-gaps/32、33）。登记那一半的缝是移动事实登记册、已形成信封与时钟；出发读数那一半问本上下文的段册与班次册，再经
+// 消费侧适配器问关务的动作准入判断——全接真。信封与事实同一笔入队，消费它的是派发进程里全程追踪的投影派生（ADR-0205 决定五）。
 //
 // 关务那一口在这里另装一份，不从 main 的 customsAdmission 传进来：两份接的是同一批真适配器、同一个库，无状态；传进来就要
 // 改 main 里既有几行的次序。
@@ -88,9 +89,18 @@ func buildMovementFactOrchestration(db *bentopg.DB) (tfhttp.MovementFactHandler,
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: movement facts: %w", err)
 	}
+	store, err := outbox.NewStore(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: movement facts: outbox store: %w", err)
+	}
+	handoff, err := tfpostgres.NewOutboxMovementFactHandoff(db, store, systemClock{})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: movement facts: %w", err)
+	}
 	handler := tfapp.NewRecordMovementFactHandler(tfapp.RecordMovementFactDeps{
-		Facts: facts,
-		Clock: systemClock{},
+		Facts:   facts,
+		Handoff: handoff,
+		Clock:   systemClock{},
 	})
 	return transactionalMovementFact{transactor: db.Transactor(), gate: gate, inner: handler}, nil
 }
