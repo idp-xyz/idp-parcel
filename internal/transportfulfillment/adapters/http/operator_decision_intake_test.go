@@ -129,6 +129,18 @@ func TestEachTFDecisionFaceAuthenticatesForItsOwnDecision(t *testing.T) {
 			_, err := intake.IntakeBookingRequestSubmission(ctx, bearerRequest("t", "!!not-json!!"))
 			return err
 		}},
+		{tfhttp.OperatorDecisionSegmentCommissionAdoption, func() error {
+			_, err := intake.IntakeSegmentCommissionAdoption(ctx, bearerRequest("t", "!!not-json!!"))
+			return err
+		}},
+		{tfhttp.OperatorDecisionTransportCommissionCancellation, func() error {
+			_, err := intake.IntakeTransportCommissionCancellation(ctx, bearerRequest("t", "!!not-json!!"))
+			return err
+		}},
+		{tfhttp.OperatorDecisionBookingRequestCancellation, func() error {
+			_, err := intake.IntakeBookingRequestCancellation(ctx, bearerRequest("t", "!!not-json!!"))
+			return err
+		}},
 	}
 	for _, face := range faces {
 		asked = nil
@@ -307,6 +319,18 @@ var decisionLines = map[string]struct {
 		_, err := intake.IntakeBookingRequestSubmission(context.Background(), request)
 		return err
 	}, bookingRequestBody},
+	"/transport-fulfillment-segment-commission-adoptions": {func(intake *tfhttp.OperatorDecisionIntake, request *http.Request) error {
+		_, err := intake.IntakeSegmentCommissionAdoption(context.Background(), request)
+		return err
+	}, segmentCommissionAdoptionBody},
+	"/transport-fulfillment-transport-commission-cancellations": {func(intake *tfhttp.OperatorDecisionIntake, request *http.Request) error {
+		_, err := intake.IntakeTransportCommissionCancellation(context.Background(), request)
+		return err
+	}, commissionCancellationBody},
+	"/transport-fulfillment-booking-request-cancellations": {func(intake *tfhttp.OperatorDecisionIntake, request *http.Request) error {
+		_, err := intake.IntakeBookingRequestCancellation(context.Background(), request)
+		return err
+	}, bookingCancellationBody},
 }
 
 // Covers: 载荷里带 tenantId 即拒（MALFORMED_REQUEST），值与认证出的租户相同也拒；一份载荷只许一个文档、只许认识的键——尾随的

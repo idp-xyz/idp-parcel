@@ -52,6 +52,14 @@ const (
 	OperatorDecisionCapacityRelease     OperatorDecision = "CAPACITY_RELEASE"
 )
 
+// 履约段采用运输委托、取消运输委托、取消订舱各是一种决定（ADR-0202 决定一、ADR-0204）：能提交的不因此能取消，能取消的
+// 也不因此能把委托挂到段上。
+const (
+	OperatorDecisionSegmentCommissionAdoption       OperatorDecision = "FULFILLMENT_SEGMENT_COMMISSION_ADOPTION"
+	OperatorDecisionTransportCommissionCancellation OperatorDecision = "TRANSPORT_COMMISSION_CANCELLATION"
+	OperatorDecisionBookingRequestCancellation      OperatorDecision = "BOOKING_REQUEST_CANCELLATION"
+)
+
 // OperatorIdentity 是一次运营决定出示认证出的身份：租户与做出决定的操作者。操作者写成「发行方#sub」：sub 只在它的
 // 发行方之内唯一，单拿 sub 会让两个发行方的同一个 sub 在留痕里读成一个人（ADR-0100 决定二第三条）；与 PS、NO 的
 // 运营决定认证方同一个写法。多数口只取租户；发生项登记把操作者记作断言人（ADR-0207 决定三）。
@@ -88,6 +96,10 @@ var (
 	_ CapacityReservationIntake      = (*OperatorDecisionIntake)(nil)
 	_ CapacityReleaseIntake          = (*OperatorDecisionIntake)(nil)
 	_ BookingRequestSubmissionIntake = (*OperatorDecisionIntake)(nil)
+
+	_ SegmentCommissionAdoptionIntake       = (*OperatorDecisionIntake)(nil)
+	_ TransportCommissionCancellationIntake = (*OperatorDecisionIntake)(nil)
+	_ BookingRequestCancellationIntake      = (*OperatorDecisionIntake)(nil)
 )
 
 func NewOperatorDecisionIntake(authenticator OperatorAuthenticator) (*OperatorDecisionIntake, error) {
@@ -211,6 +223,45 @@ func (intake *OperatorDecisionIntake) IntakeBookingRequestSubmission(ctx context
 	var payload BookingRequestSubmissionPayload
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.SubmitBookingCommand{}, err
+	}
+	return payload.Command(tenant)
+}
+
+// IntakeSegmentCommissionAdoption 译履约段采用运输委托（`/transport-fulfillment-segment-commission-adoptions`）。
+func (intake *OperatorDecisionIntake) IntakeSegmentCommissionAdoption(ctx context.Context, request *http.Request) (application.AdoptSegmentCommissionCommand, error) {
+	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionSegmentCommissionAdoption)
+	if err != nil {
+		return application.AdoptSegmentCommissionCommand{}, err
+	}
+	var payload SegmentCommissionAdoptionPayload
+	if err := decodeClosedPayload(request.Body, &payload); err != nil {
+		return application.AdoptSegmentCommissionCommand{}, err
+	}
+	return payload.Command(tenant)
+}
+
+// IntakeTransportCommissionCancellation 译取消运输委托（`/transport-fulfillment-transport-commission-cancellations`）。
+func (intake *OperatorDecisionIntake) IntakeTransportCommissionCancellation(ctx context.Context, request *http.Request) (application.CancelCommissionCommand, error) {
+	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionTransportCommissionCancellation)
+	if err != nil {
+		return application.CancelCommissionCommand{}, err
+	}
+	var payload TransportCommissionCancellationPayload
+	if err := decodeClosedPayload(request.Body, &payload); err != nil {
+		return application.CancelCommissionCommand{}, err
+	}
+	return payload.Command(tenant)
+}
+
+// IntakeBookingRequestCancellation 译取消订舱（`/transport-fulfillment-booking-request-cancellations`）。
+func (intake *OperatorDecisionIntake) IntakeBookingRequestCancellation(ctx context.Context, request *http.Request) (application.CancelBookingCommand, error) {
+	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionBookingRequestCancellation)
+	if err != nil {
+		return application.CancelBookingCommand{}, err
+	}
+	var payload BookingRequestCancellationPayload
+	if err := decodeClosedPayload(request.Body, &payload); err != nil {
+		return application.CancelBookingCommand{}, err
 	}
 	return payload.Command(tenant)
 }
