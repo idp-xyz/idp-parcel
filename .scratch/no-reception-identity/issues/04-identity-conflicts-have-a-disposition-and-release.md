@@ -1,7 +1,7 @@
 # 04 身份冲突没有处置与解除：一码两物、多候选、歧义信号落下的冲突只进不出
 
 Category: enhancement
-Status: in-progress——2026-10-19 作者子代理完工，待推送方自审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 分诊并代决（见「裁定」），ADR 占号 0210，分支 `claude-nri04`（文档与拆票）。此前 needs-triage——2026-10-19 会话 `idp-parcel-9b` 立（ps-external-mark-relations/05 评审遗留；ADR-0196、ADR-0199、ADR-0195 都点名「身份冲突的处置」尚无票）
+Status: resolved——2026-10-19 进 main（纯 `.md`，推送方自审），见「进 main 记录」；实施拆在 05、06。此前 in-progress——2026-10-19 作者子代理完工，待推送方自审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 分诊并代决（见「裁定」），ADR 占号 0210，分支 `claude-nri04`（文档与拆票）。此前 needs-triage——2026-10-19 会话 `idp-parcel-9b` 立（ps-external-mark-relations/05 评审遗留；ADR-0196、ADR-0199、ADR-0195 都点名「身份冲突的处置」尚无票）
 Blocked by: 无
 父票：[01](./01-one-barcode-on-two-units-forms-an-identity-conflict.md)
 
@@ -101,3 +101,9 @@ ADR-0195、ADR-0151 不停用：前者只追加复核记录补「处置能力」
 
 - `git diff 4f11563c -- docs/adr/ | grep '^-' | grep -v '^---'` 只出 adr/README 的 0196、0199 两行（加标注的那两行的旧版本）。
 - 新写的文档行里，派活给的「第 N 条」与「冒号接数字」两种模式 grep 不命中；没有带性别的代词。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 推送方自审（会话 idp-parcel-9b 读 diff 审，不算非作者评审）：分支 `claude-nri04` 只改 `.md`——ADR-0210 新立，ADR-0196、0199 文末追加复核记录、0195 追加指针，NO CONTEXT、GLOSSARY、CONTEXT-MAP 各补，新 UC-NO-004（`AT-NO-053` 至 `AT-NO-061`），实施票 05、06。裁定五条落到；作者超出裁定字面的两处（处置截断、「都不是」版的重核例外）都是为守住处置不被后续读口撤销，写进了 ADR-0210 越权风险点，认可。
+- 推送方补一处：照 adr/README「部分停用」约定，ADR-0196、0199 的 Status 行与新起的 Links 节各加一条指向 ADR-0210 的前向指针（作者按派活说明只追加了复核记录）。
+- rebase 到远端 main 之上快进推送；纯文档，不跑 Go 测试。
