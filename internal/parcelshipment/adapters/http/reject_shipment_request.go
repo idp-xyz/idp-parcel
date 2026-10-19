@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
 // ActiveRejectionIntake 把一次已认证的接入请求翻译成主动拒绝命令。它是接口而非解析代码，
@@ -57,13 +58,16 @@ func NewRejectShipmentRequestEndpoint(
 	})
 }
 
-// activeRejectionResponse 是本端点的封闭响应形状。`已形成`带决定视图——撞上既有决定时
-// 交回的是先到那一个（可能是接受），操作员要知道输给了什么；未决带原因与续办引用；拒绝
-// 成立而随附释放未确定完成时带补偿续办引用，与判断续办分开。
+// activeRejectionResponse 是本端点的封闭响应形状。`已形成`与`任务已完结`带决定视图——后者交回
+// 的是先到那一个（可能是接受），操作员要知道输给了什么：决定带主动拒绝留痕时再带实际决定方与
+// 结构化原因，后到者凭它们自己比出是重放还是输给了别人；未决带原因与续办引用；拒绝成立而随附
+// 释放未确定完成时带补偿续办引用，与判断续办分开。
 type activeRejectionResponse struct {
 	Outcome               string `json:"outcome"`
 	RequestState          string `json:"requestState,omitempty"`
 	DecisionKind          string `json:"decisionKind,omitempty"`
+	Decider               string `json:"decider,omitempty"`
+	RejectionReason       string `json:"rejectionReason,omitempty"`
 	PendingReason         string `json:"pendingReason,omitempty"`
 	ContinuationReference string `json:"continuationReference,omitempty"`
 	CompensationReference string `json:"compensationReference,omitempty"`
@@ -84,11 +88,7 @@ func writeActiveRejectionOutcome(
 		body.RequestState = state
 	}
 	if decision, present := result.AcceptanceDecision(); present {
-		if decision.Accepted() {
-			body.DecisionKind = "ACCEPTED"
-		} else {
-			body.DecisionKind = "REJECTED"
-		}
+		body.DecisionKind, body.Decider, body.RejectionReason = decisionEcho(decision)
 	}
 	if reason := result.PendingReason().String(); reason != "" {
 		body.PendingReason = reason
@@ -105,4 +105,18 @@ func writeActiveRejectionOutcome(
 		status = http.StatusCreated
 	}
 	writeJSON(response, status, body)
+}
+
+// decisionEcho 是主动拒绝口与授权处置口共用的决定回显：决定种类，以及决定带主动拒绝留痕时的实际决定方与结构化
+// 原因。两口撞上同一份在册决定时说的必须是同一句话，分写两份日后多回显一格时必然走散。规则形成的拒绝与接受没有
+// 留痕，后两格留空。
+func decisionEcho(decision domain.AcceptanceDecision) (kind, decider, reason string) {
+	kind = "REJECTED"
+	if decision.Accepted() {
+		kind = "ACCEPTED"
+	}
+	if rejection, active := decision.ActiveRejection(); active {
+		decider, reason = rejection.Decider().String(), rejection.Reason().String()
+	}
+	return kind, decider, reason
 }

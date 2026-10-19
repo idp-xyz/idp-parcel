@@ -197,6 +197,16 @@ func (rejection transactionalRejection) Handle(
 //   - 释放的作用域映射（账户）nil——真有冻结要释放时适配器报装配缺口
 //     `CONTROL_SCOPE_NOT_ASSEMBLED`、编排留补偿续办，不凭空认领别人的钱。
 func buildRejectionOrchestration(db *bentopg.DB) (shipmenthttp.ActiveRejectionHandler, error) {
+	return rejectionOrchestrationWith(db, nil)
+}
+
+// rejectionOrchestrationWith 是 buildRejectionOrchestration 的全部实现，拒绝授权的请求映射作入参，理由同
+// manualReviewOrchestrationWith：装配测试要在真授权册上证已授权之后那一段，只能从这一格把合成映射递进来。
+// 生产入口只传 nil。
+func rejectionOrchestrationWith(
+	db *bentopg.DB,
+	rejectionRequests psparty.ActiveRejectionRequestSource,
+) (shipmenthttp.ActiveRejectionHandler, error) {
 	requests, err := pspostgres.NewShipmentRequests(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: shipment requests: %w", err)
@@ -225,12 +235,12 @@ func buildRejectionOrchestration(db *bentopg.DB) (shipmenthttp.ActiveRejectionHa
 
 	authorizer := psparty.NewActiveRejectionAdapter(
 		pcapplication.NewAdjudicateCommercialAuthorizationHandler(grants),
-		// RequestSource 留空：实例半边，见函数注释。
-		nil,
+		// 生产入口传 nil：实例半边，见 buildRejectionOrchestration 的注释。
+		rejectionRequests,
 	)
 	release := pssettlement.NewPreAcceptanceControlAdapter(pssettlement.PreAcceptanceControlAdapterDeps{
 		Release: saapplication.NewReleasePreAcceptanceControlHandler(freezes, exposures, clock),
-		// Apply 留空：主动拒绝只消费释放半边；Scopes 留空：实例半边，见函数注释。
+		// Apply 留空：主动拒绝只消费释放半边；Scopes 留空：实例半边，见 buildRejectionOrchestration 的注释。
 	})
 
 	handler := shipmentapp.NewRejectShipmentRequestHandler(shipmentapp.RejectShipmentRequestDeps{

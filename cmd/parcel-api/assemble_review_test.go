@@ -85,6 +85,14 @@ var _ psparty.ManualReviewAuthorizationRequestSource = synRReviewRequestSource{}
 // 来源身份的租户——跨上下文只靠这个字面对上。经 PC 领域的重建门与 SaveGrant 走生产写口。
 func seedSYNReviewGrant(t *testing.T, db *bentopg.DB) {
 	t.Helper()
+	seedSYNGrant(t, db, pcdomain.ManualReviewAction, synReviewLevel, synReviewScope, synReviewRuleObject)
+}
+
+// seedSYNGrant 是 seedSYNReviewGrant 的配方按动作展开：哪一种运营决定的授权规则都按同一条生产写口登记，
+// 只有动作、权限等级、商业范围与规则对象各自不同，法人与版本沿用复核那一组合成坐标。
+func seedSYNGrant(t *testing.T, db *bentopg.DB, action pcdomain.AuthorizedAction, level, scope, ruleObject string) {
+	t.Helper()
+	label := strings.TrimPrefix(ruleObject, "SYN-")
 
 	approvedAt := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
 	interval, err := pcdomain.NewEffectiveInterval(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{})
@@ -92,8 +100,8 @@ func seedSYNReviewGrant(t *testing.T, db *bentopg.DB) {
 		t.Fatalf("有效区间：%v", err)
 	}
 	approval, err := pcdomain.NewApprovalBasis(
-		mustValue(t, pcdomain.NewApprovalReference, "SYN-APPROVAL-REVIEW-RULE-1"),
-		mustValue(t, pcdomain.NewCommercialSourceReference, "SYN-SOURCE-REVIEW-RULE-1"),
+		mustValue(t, pcdomain.NewApprovalReference, "SYN-APPROVAL-"+label),
+		mustValue(t, pcdomain.NewCommercialSourceReference, "SYN-SOURCE-"+label),
 		approvedAt,
 	)
 	if err != nil {
@@ -102,10 +110,10 @@ func seedSYNReviewGrant(t *testing.T, db *bentopg.DB) {
 	version, err := pcdomain.RehydrateCommercialVersion(pcdomain.RehydrateCommercialVersionSpec{
 		TenantID:      mustValue(t, pcdomain.NewTenantID, submissionCommand(t).Identity.TenantID().String()),
 		Kind:          pcdomain.AuthorizationRuleObject,
-		ObjectID:      mustValue(t, pcdomain.NewCommercialObjectID, synReviewRuleObject),
+		ObjectID:      mustValue(t, pcdomain.NewCommercialObjectID, ruleObject),
 		Version:       mustValue(t, pcdomain.NewCommercialVersionLabel, synReviewRuleVersion),
-		Scope:         mustValue(t, pcdomain.NewCommercialScopeReference, synReviewScope),
-		ContentDigest: mustValue(t, pcdomain.NewCommercialContentDigest, "sha256:SYN-REVIEW-RULE-1"),
+		Scope:         mustValue(t, pcdomain.NewCommercialScopeReference, scope),
+		ContentDigest: mustValue(t, pcdomain.NewCommercialContentDigest, "sha256:"+ruleObject),
 		Effective:     interval,
 		Status:        pcdomain.CommercialVersionEffective,
 		Approval:      approval,
@@ -117,10 +125,10 @@ func seedSYNReviewGrant(t *testing.T, db *bentopg.DB) {
 	}
 	grant, err := pcdomain.NewAuthorityGrant(
 		version,
-		pcdomain.ManualReviewAction,
+		action,
 		mustValue(t, pcdomain.NewLegalEntityReference, synReviewLegalEntity),
-		mustValue(t, pcdomain.NewAuthorityLevel, synReviewLevel),
-		mustValue(t, pcdomain.NewCommercialScopeReference, synReviewScope),
+		mustValue(t, pcdomain.NewAuthorityLevel, level),
+		mustValue(t, pcdomain.NewCommercialScopeReference, scope),
 		interval,
 	)
 	if err != nil {
@@ -140,7 +148,7 @@ func seedSYNReviewGrant(t *testing.T, db *bentopg.DB) {
 		return nil
 	})
 	if err != nil {
-		t.Fatalf("登记合成复核授权：%v", err)
+		t.Fatalf("登记合成授权：%v", err)
 	}
 	if saved != pcports.GrantSaved {
 		t.Fatalf("登记授权 = %v, want SAVED", saved)
@@ -308,12 +316,15 @@ func TestTheProductionReviewAssemblyStopsWithoutAnAuthorityMapping(t *testing.T)
 	assertNoReviewCompletionRecorded(t, db)
 }
 
-// reviewOperatorAuthenticator 是操作者渠道认证那一段的替身：令牌即操作者 sub，租户取提交夹具那份委托的租户。令牌、
-// 操作者册与准入范围那一段与复核完成的版本代数无关，它们的答复格另由 TestSwappedDecisionFacesAnswerFromTheOperatorChannel
-// 一类用例在真装配上取证；这里要证的是 Intake 之后那一段。
-type reviewOperatorAuthenticator struct{ tenant domain.TenantID }
+// channelOperatorAuthenticator 是操作者渠道认证那一段的替身：令牌即操作者 sub，租户取提交夹具那份委托的租户，只放行
+// 构造时指名的那一种运营决定。令牌、操作者册与准入范围那一段与各口的答复代数无关，它们的答复格另由
+// TestSwappedDecisionFacesAnswerFromTheOperatorChannel 一类用例在真装配上取证；这里要证的是 Intake 之后那一段。
+type channelOperatorAuthenticator struct {
+	tenant   domain.TenantID
+	decision shipmenthttp.OperatorDecision
+}
 
-func (fake reviewOperatorAuthenticator) AuthenticateOperatorDecision(
+func (fake channelOperatorAuthenticator) AuthenticateOperatorDecision(
 	_ context.Context,
 	token string,
 	decision shipmenthttp.OperatorDecision,
@@ -321,7 +332,7 @@ func (fake reviewOperatorAuthenticator) AuthenticateOperatorDecision(
 	if token == "" {
 		return shipmenthttp.OperatorIdentity{}, shipmenthttp.ErrOperatorCredentialRejected
 	}
-	if decision != shipmenthttp.OperatorDecisionManualReviewCompletion {
+	if decision != fake.decision {
 		return shipmenthttp.OperatorIdentity{}, shipmenthttp.ErrOperatorNotGranted
 	}
 	return shipmenthttp.OperatorIdentity{Tenant: fake.tenant, Operator: "https://id.syn.example/dex#" + token}, nil
@@ -351,7 +362,8 @@ func TestAReviewNamingASupersededVersionIsNotSignedOntoTheNewVersionThroughTheOp
 	}
 	command := submissionCommand(t)
 	intake, err := shipmenthttp.NewOperatorDecisionIntake(
-		reviewOperatorAuthenticator{tenant: command.Identity.TenantID()}, views, unwiredDecisionTargets{})
+		channelOperatorAuthenticator{tenant: command.Identity.TenantID(), decision: shipmenthttp.OperatorDecisionManualReviewCompletion},
+		views, unwiredDecisionTargets{})
 	if err != nil {
 		t.Fatalf("构造操作者 Intake：%v", err)
 	}
@@ -420,6 +432,219 @@ func TestAReviewNamingASupersededVersionIsNotSignedOntoTheNewVersionThroughTheOp
 	if completion, done := task.ManualReviewCompletion(); done {
 		t.Fatalf("V2 的任务上落了完成（复核人 %q，证据 %q）——V1 的复核签到了 V2 头上", completion.Reviewer(), completion.Evidence())
 	}
+}
+
+// 拒绝授权的合成坐标（`PAR-COM-14` 实例半边），法人沿用复核那一组。
+const (
+	synRejectionLevel      = "SYN-LEVEL-REJECTION"
+	synRejectionScope      = "SYN-SCOPE-REJECTION-1"
+	synRejectionRuleObject = "SYN-REJECTION-RULE-1"
+)
+
+// synRRejectionRequestSource 把拒绝授权询问折成一份 PC 授权请求，形照 synRReviewRequestSource。询问不带证据，证据格取
+// 合成条目。
+type synRRejectionRequestSource struct{ t *testing.T }
+
+func (source synRRejectionRequestSource) FormAuthorizationRequest(
+	_ context.Context,
+	query psports.ActiveRejectionAuthorizationQuery,
+) (pcdomain.AuthorizationRequest, bool, error) {
+	source.t.Helper()
+	request, err := pcdomain.NewAuthorizationRequest(
+		pcdomain.ActiveRejectionAction,
+		mustValue(source.t, pcdomain.NewLegalEntityReference, synReviewLegalEntity),
+		mustValue(source.t, pcdomain.NewAuthorityLevel, synRejectionLevel),
+		mustValue(source.t, pcdomain.NewCommercialScopeReference, synRejectionScope),
+		mustValue(source.t, pcdomain.NewStructuredReason, query.Reason.String()),
+		mustValue(source.t, pcdomain.NewEvidenceReference, "SYN-REJECTION-EVIDENCE-1"),
+		synReviewAt,
+	)
+	if err != nil {
+		return pcdomain.AuthorizationRequest{}, false, err
+	}
+	return request, true, nil
+}
+
+var _ psparty.ActiveRejectionRequestSource = synRRejectionRequestSource{}
+
+func seedSYNRejectionGrant(t *testing.T, db *bentopg.DB) {
+	t.Helper()
+	seedSYNGrant(t, db, pcdomain.ActiveRejectionAction, synRejectionLevel, synRejectionScope, synRejectionRuleObject)
+}
+
+// decisionAnswer 是运营决定各口响应里本组用例要读的那几格。
+type decisionAnswer struct {
+	Outcome         string `json:"outcome"`
+	DecisionKind    string `json:"decisionKind"`
+	Decider         string `json:"decider"`
+	RejectionReason string `json:"rejectionReason"`
+	PendingReason   string `json:"pendingReason"`
+}
+
+// postDecision 以 token 为操作者向 endpoint 投一份运营决定，交回状态码与读出的答复。
+func postDecision(t *testing.T, endpoint http.Handler, path, token, body string) (int, decisionAnswer) {
+	t.Helper()
+	request := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
+	request.Header.Set("Authorization", "Bearer "+token)
+	response := httptest.NewRecorder()
+	endpoint.ServeHTTP(response, request)
+	var got decisionAnswer
+	if err := json.Unmarshal(response.Body.Bytes(), &got); err != nil {
+		t.Fatalf("译响应：%v（%s）", err, response.Body.String())
+	}
+	return response.Code, got
+}
+
+// rejectionEndpointOnRealAssembly 经生产的操作者 Intake 与真寻址接上主动拒绝口，拒绝授权只有请求映射是合成替身。
+func rejectionEndpointOnRealAssembly(t *testing.T, db *bentopg.DB) http.Handler {
+	t.Helper()
+	rejection, err := rejectionOrchestrationWith(db, synRRejectionRequestSource{t: t})
+	if err != nil {
+		t.Fatalf("装配主动拒绝编排：%v", err)
+	}
+	views, err := pspostgres.NewShipmentRequestViews(db)
+	if err != nil {
+		t.Fatalf("构造委托查阅读口：%v", err)
+	}
+	intake, err := shipmenthttp.NewOperatorDecisionIntake(
+		channelOperatorAuthenticator{tenant: submissionCommand(t).Identity.TenantID(), decision: shipmenthttp.OperatorDecisionActiveRejection},
+		views, unwiredDecisionTargets{})
+	if err != nil {
+		t.Fatalf("构造操作者 Intake：%v", err)
+	}
+	return shipmenthttp.NewRejectShipmentRequestEndpoint(intake, rejection)
+}
+
+func rejectionBody(t *testing.T, reason string) string {
+	t.Helper()
+	return `{"shipmentRequestId": "` + submissionCommand(t).ShipmentRequestID.String() + `", "reason": "` + reason + `"}`
+}
+
+const rejectionPath = "/shipment-requests/rejections"
+
+// synFirstDecider 是令牌 SYN-OPERATOR-01 经 channelOperatorAuthenticator 认出的操作者，Intake 把它记作实际决定方。
+const synFirstDecider = "https://id.syn.example/dex#SYN-OPERATOR-01"
+
+// Covers: 票 operator-channel/36 与 ADR-0132 决定二「撞上已成立的决定答`任务已完结`并交回那一个」、ADR-0022「新建了用
+// `201`，其余已形成的答案用 `200`」——经生产的操作者 Intake 与真库，同一拒绝原样重放、换人换原因的后到者都答 200
+// `TASK_ALREADY_CLOSED`，回显先到那一份的决定方与原因，`acceptance_processing_attempt` 不增加；复核完成撞上这份已拒绝的
+// 委托同样答`任务已完结`并交回那份决定。此前后到者答 201 `FORMED`，把没被采纳的拒绝读成成功。测试输入是合成数据，只记 `S`。
+func TestARejectionReplayAnswersTaskAlreadyClosedThroughTheOperatorIntake(t *testing.T) {
+	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	version := submittedRequestOnRealAssembly(t, db)
+	seedSYNRejectionGrant(t, db)
+	endpoint := rejectionEndpointOnRealAssembly(t, db)
+
+	status, first := postDecision(t, endpoint, rejectionPath, "SYN-OPERATOR-01", rejectionBody(t, "SYN-REJECTION-REASON-1"))
+	if status != http.StatusCreated || first.Outcome != "FORMED" || first.DecisionKind != "REJECTED" {
+		t.Fatalf("首次拒绝答 %d %+v，want 201 FORMED REJECTED", status, first)
+	}
+	attempts := processingAttemptCount(t, db)
+
+	for name, replay := range map[string]struct{ token, reason string }{
+		"原样重放":  {"SYN-OPERATOR-01", "SYN-REJECTION-REASON-1"},
+		"换人换原因": {"SYN-OPERATOR-02", "SYN-REJECTION-REASON-2"},
+	} {
+		status, got := postDecision(t, endpoint, rejectionPath, replay.token, rejectionBody(t, replay.reason))
+		if status != http.StatusOK || got.Outcome != "TASK_ALREADY_CLOSED" || got.DecisionKind != "REJECTED" {
+			t.Fatalf("%s答 %d %+v，want 200 TASK_ALREADY_CLOSED REJECTED", name, status, got)
+		}
+		if got.Decider != synFirstDecider || got.RejectionReason != "SYN-REJECTION-REASON-1" {
+			t.Fatalf("%s回显决定方 %q 原因 %q，want 先到那一份 %q / SYN-REJECTION-REASON-1", name, got.Decider, got.RejectionReason, synFirstDecider)
+		}
+	}
+	if got := processingAttemptCount(t, db); got != attempts {
+		t.Fatalf("重放之后处理尝试 %d 行，want 仍是 %d——读回既有决定不是一轮未决", got, attempts)
+	}
+
+	seedSYNReviewGrant(t, db)
+	review, err := manualReviewOrchestrationWith(db, synRReviewRequestSource{t: t})
+	if err != nil {
+		t.Fatalf("装配复核完成编排：%v", err)
+	}
+	completed, err := review.Handle(t.Context(), reviewCompletionCommand(t, version, "1"))
+	if err != nil {
+		t.Fatalf("完成复核：%v", err)
+	}
+	decision, present := completed.AcceptanceDecision()
+	if completed.Outcome() != shipmentapp.ManualReviewTaskAlreadyClosed || !present || decision.Accepted() {
+		t.Fatalf("复核撞上已拒绝委托 = %q（decision present=%v），want TASK_ALREADY_CLOSED 并交回那份拒绝", completed.Outcome(), present)
+	}
+}
+
+// Covers: 票 operator-channel/36——自动接受先越过决定边界之后的主动拒绝，经生产的操作者 Intake 答 200 `TASK_ALREADY_CLOSED`
+// 并交回那份接受；接受没有主动拒绝留痕，不回显决定方与原因。此前这一投答 201 `FORMED`。测试输入是合成数据，只记 `S`。
+func TestARejectionAfterAnAutomaticAcceptanceAnswersTaskAlreadyClosed(t *testing.T) {
+	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	acceptedOnRealAssembly(t, db)
+	seedSYNRejectionGrant(t, db)
+	endpoint := rejectionEndpointOnRealAssembly(t, db)
+
+	status, got := postDecision(t, endpoint, rejectionPath, "SYN-OPERATOR-01", rejectionBody(t, "SYN-REJECTION-REASON-1"))
+	if status != http.StatusOK || got.Outcome != "TASK_ALREADY_CLOSED" || got.DecisionKind != "ACCEPTED" {
+		t.Fatalf("接受之后的拒绝答 %d %+v，want 200 TASK_ALREADY_CLOSED ACCEPTED", status, got)
+	}
+	if got.Decider != "" || got.RejectionReason != "" {
+		t.Fatalf("接受上回显了拒绝留痕：决定方 %q 原因 %q", got.Decider, got.RejectionReason)
+	}
+	if n := processingAttemptCount(t, db); n != 0 {
+		t.Fatalf("处理尝试 %d 行，want 0", n)
+	}
+}
+
+// Covers: 票 15 完成判据「生产装配如实停在该口今天的格」——拒绝授权映射为 nil 时授权仍排最前：对一份已拒绝的委托，生产
+// 装配照旧答`未决`/`REJECTION_AUTHORITY_UNAVAILABLE`，不因委托已决就绕过授权去交回决定。没有授权的操作者不能拿重放探册
+// （ADR-0183 复核记录二）。
+func TestTheProductionRejectionAssemblyStaysUndecidedOnARejectedRequest(t *testing.T) {
+	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	version := submittedRequestOnRealAssembly(t, db)
+	seedSYNRejectionGrant(t, db)
+	endpoint := rejectionEndpointOnRealAssembly(t, db)
+	if status, got := postDecision(t, endpoint, rejectionPath, "SYN-OPERATOR-01", rejectionBody(t, "SYN-REJECTION-REASON-1")); status != http.StatusCreated {
+		t.Fatalf("前提不成立：首次拒绝答 %d %+v", status, got)
+	}
+
+	production, err := buildRejectionOrchestration(db)
+	if err != nil {
+		t.Fatalf("装配主动拒绝编排：%v", err)
+	}
+	command := submissionCommand(t)
+	result, err := production.Handle(t.Context(), shipmentapp.RejectShipmentRequestCommand{
+		Identity:          command.Identity,
+		ShipmentRequestID: command.ShipmentRequestID,
+		SubmissionVersion: version,
+		Decider:           mustValue(t, domain.NewDeciderReference, "SYN-OPERATOR-02"),
+		Reason:            mustValue(t, domain.NewRejectionReasonReference, "SYN-REJECTION-REASON-2"),
+		Evidence:          mustValue(t, domain.NewRejectionEvidenceReference, "SYN-REJECTION-EVIDENCE-2"),
+	})
+	if err != nil {
+		t.Fatalf("拒绝：%v", err)
+	}
+	if result.Outcome() != shipmentapp.ActiveRejectionUndecided || result.PendingReason() != shipmentapp.RejectionAuthorityUnavailable {
+		t.Fatalf("生产装配答 %q / %q，want UNDECIDED / REJECTION_AUTHORITY_UNAVAILABLE", result.Outcome(), result.PendingReason())
+	}
+}
+
+func processingAttemptCount(t *testing.T, db *bentopg.DB) int {
+	t.Helper()
+	querier, err := db.ReadExecutor(t.Context())
+	if err != nil {
+		t.Fatalf("取读执行器：%v", err)
+	}
+	var count int
+	if err := querier.QueryRow(t.Context(), `SELECT count(*) FROM parcel_shipment.acceptance_processing_attempt`).Scan(&count); err != nil {
+		t.Fatalf("统计处理尝试行数：%v", err)
+	}
+	return count
 }
 
 func assertNoReviewCompletionRecorded(t *testing.T, db *bentopg.DB) {
