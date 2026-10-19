@@ -308,8 +308,8 @@ func TestAnUnregisteredMappingOrNoChargeLinesLeaveTheRequestPendingJudgment(t *t
 	empty.assertPendingWithoutCharge(t, result, err)
 }
 
-// Covers: 卡没声明金额取整（租户取值缺席，ADR-0107）记`待判断`，不重投；评价结算币种对不上请求快照是计价侧没守住
-// ADR-0190 决定四，上抛、零写入。
+// Covers: AT-SA-179、AT-SA-181——卡没声明金额取整（租户取值缺席，ADR-0107）记`待判断`，不重投；评价结算币种对不上请求
+// 快照是计价侧没守住 ADR-0190 决定四，上抛、零写入。
 func TestAnUndeclaredAmountPrecisionLeavesThePendingJudgmentAndAForeignSettlementCurrencyIsAnError(t *testing.T) {
 	undeclared := newEstimatedChargeFixture(t, map[string]string{
 		"BASE_FREIGHT": "SYN-FEE-FREIGHT", "REMOTE_AREA_SURCHARGE": "SYN-FEE-FREIGHT",
@@ -331,7 +331,7 @@ func TestAnUndeclaredAmountPrecisionLeavesThePendingJudgmentAndAForeignSettlemen
 	}
 }
 
-// Covers: ADR-0190 决定五——评价待判断、不可计价、冲突各照记一格，入账不重投，不形成任何费用（AT-SA-175）；
+// Covers: AT-SA-180——ADR-0190 决定五：评价待判断、不可计价、冲突各照记一格，入账不重投，不形成任何费用（AT-SA-175）；
 // 评价失败时请求停在`已提交`、不改记（请求册不设「未形成」那一格）。
 func TestPendingUnratableAndConflictEvaluationsAreRecordedAndAFailedOneLeavesTheRequestSubmitted(t *testing.T) {
 	for outcome, want := range map[ports.SellEvaluationOutcome]domain.SellEvaluationRequestState{
@@ -363,8 +363,8 @@ func TestPendingUnratableAndConflictEvaluationsAreRecordedAndAFailedOneLeavesThe
 	}
 }
 
-// Covers: 没有回指的评价不是为包裹计费时点形成的，零写入、入账；回指的标识不在 SELL 请求册上（例如一份 BUY 请求标识）
-// 是两侧矛盾，上抛、同样零写入。
+// Covers: AT-SA-181——没有回指的评价不是为包裹计费时点形成的，零写入、入账；回指的标识不在 SELL 请求册上（例如一份
+// BUY 请求标识）是两侧矛盾，上抛、同样零写入。
 func TestAnUnreferencedEvaluationIsSkippedAndAnUnknownReferenceIsAnError(t *testing.T) {
 	unreferenced := newEstimatedChargeFixture(t, map[string]string{"BASE_FREIGHT": "SYN-FEE-FREIGHT"})
 	unreferenced.adoption.Request = domain.SellEvaluationRequestID{}

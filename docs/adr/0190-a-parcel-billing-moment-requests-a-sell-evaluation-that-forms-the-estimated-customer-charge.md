@@ -80,3 +80,4 @@ Date: 2026-10-19
 - [ADR-0098：失败尝试费发生项不在揽收编排里形成](./0098-a-failed-attempt-charge-occurrence-is-not-formed-inside-the-pickup-orchestration.md)：决定三
 - [ADR-0164：BUY 评价请求的触发面是发生项形成，原因没登记就不发起](./0164-buy-evaluation-request-trigger-is-occurrence-formed.md)：BUY 那一半不动
 - 票：[sell-customer-charge](../../.scratch/sell-customer-charge/issues/)
+- [ADR-0198：包裹计费时点那一路，SELL 请求怎样下结论，矛盾怎样上抛](./0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md)：决定五没裁的几格（评价失败、金额未声明、矛盾格、无回指）在那里作答

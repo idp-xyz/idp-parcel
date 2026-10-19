@@ -96,7 +96,7 @@
 | 1 | `settlement-accounting` | 校验租户、责任法人、客户账户、主要范围、权限和请求身份 | 已受理或未受理 |
 | 2 | `settlement-accounting` / `parcel-pricing` | 发生项原因已登记「发生项形成」时，结算才提交主要范围、计算目的和合格来源引用；没登记则待判断，不发起请求。SELL·客户费用另有按包裹计费时点发起的一路：结算账户采用的时点到来时，结算提交包裹、计价范围与计价基准时点（[ADR-0190](../../adr/0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md)）。`parcel-pricing` 采用测量、运输收费发生项、其他履约、面单及已解析商业依据形成不可变计价输入快照 | 计价输入版本或待判断 |
 | 3 | `parcel-pricing` | 按价格方向和固定版本清单执行客户/供应商评价，分别形成计价重量、基础价、附加费、折扣和取整结果 | 评价完成、待判断、冲突、不可计价或未形成 |
-| 4 | `settlement-accounting` | 校验评价与费用项目、责任法人、主要范围、确认条件和结算账户的映射 | 可采用的结算依据或待判断 |
+| 4 | `settlement-accounting` | 校验评价与费用项目、责任法人、主要范围、确认条件和结算账户的映射。包裹计费时点那一路按评价回指读回 SELL 请求，结论记在请求上（[ADR-0190](../../adr/0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 决定五、[ADR-0198](../../adr/0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md)） | 可采用的结算依据或待判断 |
 | 5 | `settlement-accounting` | 保存评价引用、结算采用快照、责任/范围解释和金额展开；原币与合同结算币不同时，直接采用评价内的原币金额、汇率序列版本和换算步骤作为换算依据 | 预估或暂估费用 |
 | 6 | `settlement-accounting` | 按费用类型确认条件形成确认费用，或保持暂估 | 确认费用、待判断或不成立范围 |
 | 7 | `settlement-accounting` | 按已唯一解析的结算政策范围和商业策略形成估价、冻结、信用暴露或限制；不适用时保存依据 | 独立财务控制结果 |
@@ -181,6 +181,9 @@
 | `AT-SA-176` | BUY 价卡为美元、合同结算币为人民币，评价已在内部完成换算并携带换算步骤 | 采用评价内的原币金额、汇率序列版本和换算步骤作为换算依据形成结算币金额，不重算也不改用其他汇率；报告币金额另行派生且不覆盖原币或结算币 |
 | `AT-SA-177` | 原币与合同结算币不同，但评价未携带换算步骤或汇率序列版本 | 保持待判断并记录缺口，不自行取汇率补算，也不以原币金额直接充当结算币金额 |
 | `AT-SA-178` | 评价所引用的汇率序列期次事后被更正 | 由 `parcel-pricing` 以新序列版本形成新评价，本用例据其追加计价纠错；原费用与原换算依据保留，不改写已保存的汇率序列版本 |
+| `AT-SA-179` | 包裹计费时点那一路，SELL·客户费用评价已完成，但价卡没声明金额取整 | SELL 请求记待判断，不形成费用、不换写金额，入账不重投；补登声明之后这一份也不回补（[ADR-0198](../../adr/0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md) 决定二） |
+| `AT-SA-180` | 包裹计费时点那一路，SELL·客户费用评价失败 | SELL 请求停在已提交、不改记，入账不重投。这是生命周期表「未形成」一行要求失败阶段和续办入口的例外（[ADR-0198](../../adr/0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md) 决定一与越权风险点 1） |
+| `AT-SA-181` | 包裹计费时点那一路，评价回指的 SELL 请求不在册上，或评价结算币种与请求快照不同 | 不形成费用、不改记请求，作两侧矛盾上抛为可见的发布失败，不按待判断或不归本路静默入账（[ADR-0198](../../adr/0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md) 决定四） |
 
 ## 生产参数与待决风险
 

@@ -1,6 +1,6 @@
 # ADR-0169：SELL 评价形成客户费用，何时发起另册登记
 
-Status: Accepted（2026-09-30。消费门与形成编排是机制，触发时点是产品策略。接受依据是 ADR-0146 决定一「机制与产品策略同属产品交付轨道，开发方现在就做」。）
+Status: Accepted（2026-09-30。消费门与形成编排是机制，触发时点是产品策略。接受依据是 ADR-0146 决定一「机制与产品策略同属产品交付轨道，开发方现在就做」。部分停用：决定四「信封上还没有费用项目时，消费门指名缺这一引用」在包裹计费时点那一路由 [ADR-0198](./0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md) 决定三停用。）
 Date: 2026-09-30
 
 ## Context
@@ -44,3 +44,4 @@ BUY 评价请求的触发面已经单独登记（ADR-0164）。那条身份不�
 - [UC-SA-002](../application/settlement-accounting/UC-SA-002-CALCULATE-CONFIRM-AND-ADJUST-OPERATIONAL-CHARGES.md)
 - 票 `.scratch/product-strategy-boundary/issues/12-sa-amount-grammars-allocation-forms-and-accounting-connectors.md` 第 9 项
 - [ADR-0190](./0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md)：后继，补包裹计费时点与独立的 SELL 请求身份，取代 Consequences「形成编排不进 `cmd/parcel-dispatch`」与决定四「也不在本记录里把形成编排接进进程」；「不把 BUY 请求编排接过来」与「消费门指名缺这一引用，不发明费用项目」照旧
+- [ADR-0198](./0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md)：部分停用决定四「消费门指名缺这一引用」，限包裹计费时点那一路；那一路映射不全记`待判断`、缺口不落库。「不发明费用项目」照旧

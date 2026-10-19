@@ -172,7 +172,7 @@
 - [ADR-0165：周期费用的计算形态是最低消费、保底量、阶梯返利](./0165-periodic-fees-are-minimum-spend-volume-floor-and-tiered-rebate.md)｜**形态**：补差、不足数量乘单价、分档返利。数值另册登记，空册不形成周期费用。2026-09-30。本项是产品策略，接受依据是 ADR-0146 决定一、决定二。
 - [ADR-0166：账单与财务交换的内置连接器形态是规范文书，没登记就不交换](./0166-accounting-exchange-uses-a-canonical-document.md)｜**连接器**：只认已经是产品主张或事实的载荷。空册答未配置。2026-09-30。本项是产品策略，接受依据是 ADR-0146 决定一、决定二。
 - [ADR-0168：费用归属日按已登记形态判定，没登记就不形成](./0168-charge-attribution-date-is-a-registered-form.md)｜**归属日**：来源发生或费用确认，达到截单时刻归到下一日。空册不形成归属日。2026-09-30。本项是产品策略，接受依据是 ADR-0146 决定一、决定二。
-- [ADR-0169：SELL 评价形成客户费用，何时发起另册登记](./0169-sell-evaluation-forms-a-customer-charge.md)｜**部分被 ADR-0190 取代**（「不进派发」那几句）。**消费门**：只认 SELL·客户费用。触发空册不发起。不使用 BUY 请求身份。2026-09-30。本项是机制加产品策略，接受依据是 ADR-0146 决定一。
+- [ADR-0169：SELL 评价形成客户费用，何时发起另册登记](./0169-sell-evaluation-forms-a-customer-charge.md)｜**部分被 ADR-0190 取代**（「不进派发」那几句）；**部分停用**：决定四「信封上还没有费用项目时，消费门指名缺这一引用」已由 [ADR-0198](./0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md) 决定三停用，**适用场景**仅限包裹计费时点那一路（回指 SELL 请求的评价），其余各条不变。**消费门**：只认 SELL·客户费用。触发空册不发起。不使用 BUY 请求身份。2026-09-30。本项是机制加产品策略，接受依据是 ADR-0146 决定一。
 - [ADR-0170：结算编排从 parcel-api 进入；确认与截单没登记就不做](./0170-settlement-orchestrations-enter-through-parcel-api.md)｜**部分被 ADR-0190 取代**（「不进派发」那几句）。**入口**：六个构造接在 parcel-api。审核在接收编排上。确认与截单空册不调用。2026-09-30。装配是机制，触发是产品策略，接受依据是 ADR-0146 决定一。
 - [ADR-0171：计价输入在没有实测读口时用申报，并标明来源](./0171-pricing-input-resolver-uses-declaration-until-a-measurement-port-exists.md)｜**输入**：发生项成员、申报测量、地址要素三口接上。没有实测时用申报。集运单元不可得。2026-09-30。本项是机制，接受依据是 ADR-0146 决定一。
 - [ADR-0172：冻结边界的首版形态是剩余计划段数，没声明就不是未冻结](./0172-route-freeze-is-remaining-segment-count.md)｜**冻结**：剩余段数不超过登记值即越过边界。未声明答未配置。2026-09-30。本项是产品策略，接受依据是 ADR-0146 决定二、决定七。
@@ -195,6 +195,7 @@
 - [ADR-0189：逐段计价区域按卡给——绑了分区目录的卡由包裹邮编路线经目录读出，未绑的卡取租户按线路段登记的段计价区域](./0189-leg-pricing-zones-are-supplied-per-card-and-unbound-cards-take-a-registered-leg-zone.md)｜**已接受**（2026-10-18，用户原话「你作为业务和系统专家自决」，Claude Code 会话代 PP、NR owner 裁定；票 routing-first-cut/18）。**按卡给**：绑目录的卡走包裹邮编路线与 PP 读数补全（票 routing-first-cut/20），未绑的卡取段计价区域，都没有即待判断。**段计价区域**：NR 一本只增不改的册，键（租户，线路，版本，段号），只挂在有成本依据的段上，不随线路版本内容走。只适用于整段区域恒定的卡，按目的邮编分区的卡要绑目录。不采节点邮编。**越权风险点**待 PP、NR、SA owner 复核。
 - [ADR-0190：包裹计费时点发起 SELL 评价，形成预估客户费用](./0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md)｜**已接受**（2026-10-19，用户原话「你作为业务和系统专家自决」，Claude Code 会话代 SA、PP owner 裁定）。**独立 SELL 请求身份**，不动 BUY。**内置两种计费时点**：有效网络收寄已采用、有效交付已终局，结算账户登记采用哪一种与计价范围，没登记答未配置。**选卡同受理前试算**，预估阶段没有实测时用申报并标明来源。**一份评价映一个费用项目**才形成预估客户费用。编排住 `cmd/parcel-dispatch`，取代 ADR-0169、0170 里「不进派发」的句子。**越权风险点**待 SA、PP owner 复核。
 - [ADR-0196：一码两物按关联到的包裹认——后到那件答身份冲突，先到那件只追加一版身份冲突判断](./0196-one-mark-on-two-units-is-an-identity-conflict-judged-by-the-associated-parcel.md)｜**已接受**（2026-10-19，用户授权会话 idp-parcel-9b 代 NO owner 裁定，落在票 no-reception-identity/01）。号码唯一指向的包裹已关联到同租户另一件作业实物：后到那件答`待识别`、记身份冲突、候选记那件包裹；先到那件原判断照留，另追加一版待识别收寄记身份冲突；两件在方向依据的身份一格里都落成身份冲突。同一实物重投仍是重放。PS 已采用的那次不回滚，交 VE。越权风险点含按包裹而非按号认、派生来源标识、并发未串行
+- [ADR-0198：包裹计费时点那一路，SELL 请求怎样下结论，矛盾怎样上抛](./0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md)｜**已接受**（2026-10-19，用户原话「你作为业务和系统专家自决」，Claude Code 会话代 SA owner 裁定）。评价失败停在`已提交`；卡没声明金额取整、映射不全记`待判断`，缺口不落库；回指不在册、结算币种不符、另有结论、已完成却未受理一律上抛；没有回指零写入。部分停用 ADR-0169 决定四一句，限本路。越权风险点 5 条待 SA owner 复核。
 
 ## 已被取代决策
 
