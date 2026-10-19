@@ -17,14 +17,14 @@
 | partycommercial | 159 | 169 | 13 | 40 | 1 | 38 |
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
-| settlementaccounting | 202 | 143 | 32 | 63 | 12 | 9 |
+| settlementaccounting | 203 | 145 | 33 | 63 | 12 | 9 |
 | transportfulfillment | 157 | 157 | 28 | 36 | 11 | 30 |
-| visibilityexception | 101 | 98 | 11 | 30 | 8 | 11 |
-| **合计** | 1286 | 1188 | 164 | 308 | 60 | 168 |
+| visibilityexception | 103 | 100 | 11 | 30 | 8 | 11 |
+| **合计** | 1289 | 1192 | 165 | 308 | 60 | 168 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 81、测试 157。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 81、测试 159。
 
-## 跨上下文消费缝：44 组，119 个生产文件
+## 跨上下文消费缝：44 组，120 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -66,7 +66,7 @@
 | transportfulfillment | parcelshipment | 1 |
 | transportfulfillment | partycommercial | 2 |
 | visibilityexception | accessidentity | 2 |
-| visibilityexception | customscompliance | 2 |
+| visibilityexception | customscompliance | 3 |
 | visibilityexception | networkrouting | 1 |
 | visibilityexception | nodeoperations | 1 |
 | visibilityexception | parcelshipment | 4 |
@@ -90,7 +90,7 @@
 | transport_fulfillment | 23 |
 | visibility_exception | 26 |
 
-## 接线面：接入面端点 141 个，消费适配器 39 个生产文件，直投路由表 27 条
+## 接线面：接入面端点 141 个，消费适配器 40 个生产文件，直投路由表 28 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -119,8 +119,8 @@
 | parcelpricing | 2 | 0 | 0 | 0 | 2 |
 | parcelshipment | 13 | 1 | 1 | 0 | 15 |
 | settlementaccounting | 5 | 0 | 0 | 0 | 5 |
-| visibilityexception | 12 | 0 | 0 | 2 | 14 |
-| **合计** | 35 | 1 | 1 | 2 | 39 |
+| visibilityexception | 13 | 0 | 0 | 2 | 15 |
+| **合计** | 36 | 1 | 1 | 2 | 40 |
 
 直投路由表按 `cmd/` 生产文件里 `map[eventing.EventType]dispatch.Consumer` 字面量的条目数，按条目键（事件类型常量）所属的消费门包归属。路由表只随消费者一起长（ADR-0049 第三条），本表只报它此刻多长。
 
@@ -131,8 +131,8 @@
 | parcelpricing | 2 |
 | parcelshipment | 12 |
 | settlementaccounting | 2 |
-| visibilityexception | 8 |
-| **合计** | 27 |
+| visibilityexception | 9 |
+| **合计** | 28 |
 
 ## 端口：声明 487 个；基线口径缺 28，精确口径缺 2
 
