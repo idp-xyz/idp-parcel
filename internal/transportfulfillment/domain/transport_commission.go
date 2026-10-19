@@ -65,6 +65,9 @@ type TransportCommission struct {
 	startedAt      time.Time
 	startedBasis   ParticipationBasisReference
 	cancelledAt    time.Time
+	// agreementVersion 是登记方指名、提交时核过的那一版协议（对象与版本标签）。快照 agreement 是 PC 一处拼出的指称，本上下文
+	// 不拆它（SupplierAgreementVersion 头注）；要按这份委托回去问 PC 那一版声明的收费发生条件，就得留下原来那两格。
+	agreementVersion SupplierAgreementVersion
 }
 
 // declaredCommissionValid 是登记方声明那一半的构造门，只在草稿处判一次：协议快照与法人之外，提交不比草稿多判任何一格，
@@ -184,16 +187,17 @@ func (draft TransportCommissionDraft) Submit(
 		return TransportCommission{}, ErrInvalidTransportCommission
 	}
 	return TransportCommission{
-		tenantID:       draft.tenantID,
-		commission:     draft.commission,
-		provider:       draft.provider,
-		agreement:      agreement,
-		legalEntity:    legalEntity,
-		conditions:     draft.conditions,
-		role:           draft.role,
-		responsibility: draft.responsibility,
-		members:        append([]CarriedObjectReference(nil), draft.members...),
-		submittedAt:    draft.submittedAt,
+		tenantID:         draft.tenantID,
+		commission:       draft.commission,
+		provider:         draft.provider,
+		agreement:        agreement,
+		legalEntity:      legalEntity,
+		conditions:       draft.conditions,
+		role:             draft.role,
+		responsibility:   draft.responsibility,
+		members:          append([]CarriedObjectReference(nil), draft.members...),
+		submittedAt:      draft.submittedAt,
+		agreementVersion: draft.agreement,
 	}, nil
 }
 
@@ -211,6 +215,12 @@ func (commission TransportCommission) Provider() ServiceProviderReference {
 
 func (commission TransportCommission) Agreement() AgreementSnapshotReference {
 	return commission.agreement
+}
+
+// AgreementVersion 交回提交时登记方指名、核过的那一版协议。运输收费发生项从委托取采购上下文时按它回问 PC 那一版声明的
+// 收费发生条件（ADR-0207 文末补记）。迁移 TF 0038 之前提交的委托没有记下它，答 false：那时只存了快照，快照不拆。
+func (commission TransportCommission) AgreementVersion() (SupplierAgreementVersion, bool) {
+	return commission.agreementVersion, commission.agreementVersion.valid()
 }
 
 // LegalEntity 是承担这次采购责任的运营法人，提交时从核过的那一版供应商协议快照下来，不由登记方给（ADR-0202 决定三）。

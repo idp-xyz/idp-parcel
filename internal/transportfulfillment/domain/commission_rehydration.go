@@ -26,6 +26,8 @@ type RehydrateTransportCommissionSpec struct {
 	StartedBasis   ParticipationBasisReference
 	StartedAt      time.Time
 	CancelledAt    time.Time
+	// AgreementVersion 可缺：迁移 TF 0038 之前落的委托只有快照，没有记下登记方指名的那两格。
+	AgreementVersion SupplierAgreementVersion
 }
 
 // RehydrateTransportCommission 验四快照与采购责任法人、非空成员、提交时刻，以及开始/取消互斥与时刻
@@ -71,16 +73,17 @@ func RehydrateTransportCommission(spec RehydrateTransportCommissionSpec) (Transp
 	}
 
 	commission := TransportCommission{
-		tenantID:       spec.TenantID,
-		commission:     spec.Commission,
-		provider:       spec.Provider,
-		agreement:      spec.Agreement,
-		legalEntity:    spec.LegalEntity,
-		conditions:     spec.Conditions,
-		role:           spec.Role,
-		responsibility: spec.Responsibility,
-		members:        append([]CarriedObjectReference(nil), spec.Members...),
-		submittedAt:    spec.SubmittedAt.UTC(),
+		tenantID:         spec.TenantID,
+		commission:       spec.Commission,
+		provider:         spec.Provider,
+		agreement:        spec.Agreement,
+		legalEntity:      spec.LegalEntity,
+		conditions:       spec.Conditions,
+		role:             spec.Role,
+		responsibility:   spec.Responsibility,
+		members:          append([]CarriedObjectReference(nil), spec.Members...),
+		submittedAt:      spec.SubmittedAt.UTC(),
+		agreementVersion: spec.AgreementVersion,
 	}
 	if started {
 		commission.startedBasis = spec.StartedBasis

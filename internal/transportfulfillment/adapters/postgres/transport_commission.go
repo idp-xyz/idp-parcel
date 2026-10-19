@@ -44,11 +44,12 @@ func (repository *TransportCommissions) FindByKey(
 		submittedAt, recordedAt                                                    time.Time
 		startedAt, cancelledAt                                                     *time.Time
 		startedBasis                                                               *string
+		agreementObject, agreementVersion                                          *string
 	)
 	err = querier.QueryRow(ctx,
 		`SELECT provider_ref, agreement_ref, procurement_legal_entity_ref, conditions_ref, role_ref, responsibility_ref,
 		        members, submitted_at, started_at, started_basis, cancelled_at,
-		        content_digest, recorded_at
+		        content_digest, recorded_at, agreement_object, agreement_version
 		   FROM transport_fulfillment.transport_commission
 		  WHERE tenant_id = $1
 		    AND commission_id = $2`,
@@ -56,7 +57,7 @@ func (repository *TransportCommissions) FindByKey(
 		key.Commission.String(),
 	).Scan(&provider, &agreement, &legalEntity, &conditions, &role, &responsibility,
 		&membersJSON, &submittedAt, &startedAt, &startedBasis, &cancelledAt,
-		&digest, &recordedAt)
+		&digest, &recordedAt, &agreementObject, &agreementVersion)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.TransportCommissionRecord{}, false, nil
 	}
@@ -64,7 +65,7 @@ func (repository *TransportCommissions) FindByKey(
 		return ports.TransportCommissionRecord{}, false, fmt.Errorf("find transport commission: %w", err)
 	}
 
-	commission, err := rebuildCommission(key, provider, agreement, legalEntity, conditions, role, responsibility, membersJSON, submittedAt, startedAt, startedBasis, cancelledAt)
+	commission, err := rebuildCommission(key, provider, agreement, legalEntity, conditions, role, responsibility, membersJSON, submittedAt, startedAt, startedBasis, cancelledAt, agreementObject, agreementVersion)
 	if err != nil {
 		return ports.TransportCommissionRecord{}, false, fmt.Errorf("find transport commission: %w", err)
 	}
@@ -97,13 +98,14 @@ func (repository *TransportCommissions) Save(
 
 	startedBasis, startedAt := startedColumns(record.Commission)
 	cancelledAt := cancelledColumn(record.Commission)
+	agreementObject, agreementVersion := agreementVersionColumns(record.Commission)
 
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO transport_fulfillment.transport_commission
 			(tenant_id, commission_id, provider_ref, agreement_ref, procurement_legal_entity_ref,
 			 conditions_ref, role_ref, responsibility_ref, members, submitted_at, started_at,
-			 started_basis, cancelled_at, content_digest, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			 started_basis, cancelled_at, content_digest, recorded_at, agreement_object, agreement_version)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Commission.String(),
@@ -120,6 +122,8 @@ func (repository *TransportCommissions) Save(
 		cancelledAt,
 		record.ContentDigest,
 		record.RecordedAt.UTC(),
+		agreementObject,
+		agreementVersion,
 	)
 	if err != nil {
 		return ports.CommissionSaveOutcomeInvalid, fmt.Errorf("save transport commission: %w", err)
@@ -193,6 +197,7 @@ func rebuildCommission(
 	startedAt *time.Time,
 	startedBasis *string,
 	cancelledAt *time.Time,
+	agreementObject, agreementVersion *string,
 ) (domain.TransportCommission, error) {
 	var memberIDs []string
 	if err := json.Unmarshal(membersJSON, &memberIDs); err != nil {
@@ -245,7 +250,25 @@ func rebuildCommission(
 	if cancelledAt != nil {
 		spec.CancelledAt = cancelledAt.UTC()
 	}
+	// 两列成对可缺（迁移 0038）：缺是旧行没记下，不是坏行；在而立不起来才是坏行。
+	if agreementObject != nil || agreementVersion != nil {
+		if agreementObject == nil || agreementVersion == nil {
+			return domain.TransportCommission{}, fmt.Errorf("agreement object and version are stored one without the other")
+		}
+		if spec.AgreementVersion, err = domain.NewSupplierAgreementVersion(*agreementObject, *agreementVersion); err != nil {
+			return domain.TransportCommission{}, err
+		}
+	}
 	return domain.RehydrateTransportCommission(spec)
+}
+
+func agreementVersionColumns(commission domain.TransportCommission) (*string, *string) {
+	version, recorded := commission.AgreementVersion()
+	if !recorded {
+		return nil, nil
+	}
+	object, label := version.Object(), version.Version()
+	return &object, &label
 }
 
 func startedColumns(commission domain.TransportCommission) (*string, *time.Time) {
