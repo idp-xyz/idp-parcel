@@ -96,7 +96,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 | `data/commercial/register-parties.json` | `cmd/parcel-commercial register-parties` | 参与方身份：业务参与方（含合成干线承运方 `SYN-PARTY-CARRIER-TRUNK-01`、合成末端承运方 `SYN-PARTY-CARRIER-LM-01`，供两份供应商协议引用）、关系、责任法人、客户账户 |
 | `data/commercial/register-legal-entity-profiles.json` | `cmd/parcel-commercial register-legal-entity-profiles` | 法人资料（ADR-0145 决定三）：`SYN-LE-01` 两笔修订——修订 1 不带开票资料（按它生效的时段解析答「资料不全」），修订 2 自 3 月起补上开票抬头；注册地址在 `CN`，与法人身份层的注册国家一致，税号取目录里 `CN` 的资料层合成类型。排在参与方身份之后：资料引用已登记的责任法人 |
 | `data/pricing/` | `cmd/parcel-pricing-register` | 两张价卡（SELL 首重续重 / BUY 重量段）+ 两条参考序列（燃油、汇率）+ 两份序列复核 + 一份分区参考目录与其复核（不复核不在用，ADR-0099 / ADR-0109）；售价卡绑燃油序列与这本分区目录——由 `seedgen` 生成，勿手改 |
-| `data/network/` | `cmd/parcel-network-register` | 稳定定义由演示租户显式采用参考配置 `network-routing/network-catalog/SYN-CN-SG@1`（ADR-0147，登记行 `adopt` 格，依据格随之写成 `REFCFG-1:…@1`）：4 节点、3 连接、1 线路（三段成本依据引 BUY 卡）、2 服务区（CN 收寄 / SG 交付覆盖）、7 份日历（4 节点的处理时长与截单、3 连接的衔接缓冲）、1 路由策略（成本单维）；上海枢纽修订 2 是采用后的租户修订，依据换成租户自己的。另直接登记 1 条台风停运调整与 1 行自动改路事实（判断键对齐 `SYN-ACCOUNT-01` 与 `SYN-RS-CN-SG-01`，不是一笔已受理委托的运行时产物），以及演示线路各段的段计价区域（`22-leg-pricing-zones-cn-sg-v1.json`，ADR-0189；成本卡没绑分区目录，每段登 `Z1`，是租户取值）。产品本身不带任何网络：参考配置不采用就不进任何租户的目录 |
+| `data/network/` | `cmd/parcel-network-register` | 稳定定义由演示租户显式采用参考配置 `network-routing/network-catalog/SYN-CN-SG@1`（ADR-0147，登记行 `adopt` 格，依据格随之写成 `REFCFG-1:…@1`）：4 节点、3 连接、1 线路（三段成本依据引 BUY 卡）、2 服务区（CN 收寄 / SG 交付覆盖）、7 份日历（4 节点的处理时长与截单、3 连接的衔接缓冲）、1 路由策略（成本单维）；上海枢纽修订 2 是采用后的租户修订，依据换成租户自己的。路由策略修订 2 同样是租户修订，补上参考配置装不下的冻结形态：剩余段数，剩余不超过一段即冻结（`23-route-strategy-cn-sg-v2.json`）。另直接登记 1 条台风停运调整与 1 行自动改路事实（判断键对齐 `SYN-ACCOUNT-01` 与 `SYN-RS-CN-SG-01`，不是一笔已受理委托的运行时产物），以及演示线路各段的段计价区域（`22-leg-pricing-zones-cn-sg-v1.json`，ADR-0189；成本卡没绑分区目录，每段登 `Z1`，是租户取值）。产品本身不带任何网络：参考配置不采用就不进任何租户的目录 |
 | `data/customs/` | `cmd/parcel-customs-register` | 十册 26 份：就绪与授权（第三单元先就绪再撤销就绪；第二单元只撤授权）、解释规则（含一次换版）、义务目录+两项（已了结/已承接）、门禁目录+判断（含一份只登目录的空清单格）、建案要求两向（要求/显式不要求）、口岸目录（SZX 含一次换版 + SIN）、申报路径两向（CN 出口 / SG 进口）、监管凭证两版（一版写明次数额度、一版来源未提供额度）、税费付款协作两格（核定税费 / 明确无需付款）。税费付款核对不在包内，见已知边界 |
 | `data/visibility/` | `cmd/parcel-ve-register` | 里程碑映射、分诊规则、通知策略、索赔资格、索赔授权两格（一格空名单）、披露策略、异常披露规则、冲突信号规则、索赔材料收讫两笔（照片留下、发票收讫后撤销） |
 | `data/collection/` | `cmd/parcel-collection-register` | 一条 COD 指令走全程（渠道报收、银行短收、短款、清分进应付客户）+ SGD 分户账只开立；CNY 账两笔回汇批次（已归集 / 已交出汇付主张），SGD 账无批次 |
@@ -130,7 +130,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
    `NETWORK_SERVICE`（与 `cmd/parcel-dispatch` 的 `IDP_PARCEL_ROUTE_SERVICE_PURPOSE` 同值），策略选首个
    内置排序形态成本单维；线路三段的成本依据都引成本卡 `SYN-PLAN-CN-SG-COST-01/v1`（与两份供应商协议
    同一张）。服务区域 `SYN-AREA-CN-EAST` 覆盖 CN、收寄节点上海枢纽，`SYN-AREA-SG` 覆盖 SG、交付节点
-   新加坡末端。上海枢纽修订 2 是采用后的租户修订，展示版本轴与「改过的就是租户取值」；一次台风停运
+   新加坡末端。上海枢纽修订 2 与路由策略修订 2 是采用后的租户修订，展示版本轴与「改过的就是租户取值」；一次台风停运
    （SUSPENSION，已解除）展示临时调整与稳定定义分离。自动改路事实一行把四条件陈述折在策略
    `SYN-RS-CN-SG-01/v1` 上，判断键是合成的，库里没有对应的委托。
 4. **过关的规则**（customs-compliance）：中国出口侧就绪+提交授权、放行结果解释规则 v1→v2

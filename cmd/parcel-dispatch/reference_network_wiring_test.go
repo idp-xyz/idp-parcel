@@ -154,6 +154,11 @@ func TestTheAdoptedDemoNetworkGetsPastRouteEvidenceThroughProductionWiring(t *te
 	if evidence.RankingForm != nrdomain.CostSingleDimensionRanking || !evidence.Strategy.Valid() {
 		t.Fatalf("策略：排序形态 %s、引用 %q", evidence.RankingForm, evidence.Strategy)
 	}
+	// 演示策略修订 2 声明了冻结形态：没有它，收寄后的复核在计划仍适用时答冻结形态未配置。
+	if evidence.FreezeForm != nrdomain.RemainingSegmentCountFreeze ||
+		evidence.FreezeRemainingSegmentLimit == nil || *evidence.FreezeRemainingSegmentLimit != 1 {
+		t.Fatalf("策略：冻结形态 %v、剩余段数 %v", evidence.FreezeForm, evidence.FreezeRemainingSegmentLimit)
+	}
 	if len(evidence.Paths) != 1 || evidence.Paths[0].Candidate.String() != "SYN-LINE-CN-SG-01@1" || len(evidence.Paths[0].Legs) != 3 {
 		t.Fatalf("候选段链 = %+v，想要 SYN-LINE-CN-SG-01@1 三段", evidence.Paths)
 	}
