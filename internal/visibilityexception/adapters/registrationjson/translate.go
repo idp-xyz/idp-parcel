@@ -47,14 +47,18 @@ func injectedTenant(tenant domain.TenantID) tenantOf {
 // ErrSelfReportedTenant 表示在线口的批文里带了 tenantId：租户只从认证结果来。
 var ErrSelfReportedTenant = errors.New("visibility registration: online input must not carry tenantId; the tenant comes from the operator envelope")
 
-// refuseSelfReportedTenant 键在场即拒、不看值：`"tenantId": null` 也是自报。批文不是 JSON 对象时交给 decodeStrict 去答形状错。
+// refuseSelfReportedTenant 键在场即拒、不看值：`"tenantId": null` 也是自报。键名按 encoding/json 认字段的同一折叠比：
+// 它把 `tenantid`、`TENANTID` 都解进 `json:"tenantId"` 格，只认精确键，变体就绕过了拒自报（票 operator-channel/52）。
+// 批文不是 JSON 对象时交给 decodeStrict 去答形状错。
 func refuseSelfReportedTenant(raw []byte) error {
 	var top map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &top); err != nil {
 		return nil
 	}
-	if _, present := top["tenantId"]; present {
-		return ErrSelfReportedTenant
+	for key := range top {
+		if strings.EqualFold(key, "tenantId") {
+			return ErrSelfReportedTenant
+		}
 	}
 	return nil
 }

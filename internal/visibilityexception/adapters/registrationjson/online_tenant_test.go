@@ -71,8 +71,13 @@ func TestOnlineTranslationRefusesASelfReportedTenantOnEveryFace(t *testing.T) {
 			return err
 		},
 	}
+	// encoding/json 认字段名不分大小写，`tenantid` 一类变体同样会解进租户格，同属自报（票 operator-channel/52）。
+	selfReported := []string{`{"tenantId": null, "version": "v"}`}
+	for _, key := range []string{"tenantId", "TenantId", "tenantID", "tenantid", "tenantiD", "TENANTID"} {
+		selfReported = append(selfReported, `{"`+key+`": "SYN-TENANT-02", "version": "v"}`)
+	}
 	for name, translate := range faces {
-		for _, raw := range []string{`{"tenantId": "SYN-TENANT-02", "version": "v"}`, `{"tenantId": null, "version": "v"}`} {
+		for _, raw := range selfReported {
 			if err := translate([]byte(raw)); !errors.Is(err, registrationjson.ErrSelfReportedTenant) {
 				t.Fatalf("%s with %s: err = %v, want ErrSelfReportedTenant", name, raw, err)
 			}
