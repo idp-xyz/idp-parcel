@@ -1,7 +1,7 @@
 # 12 送站交接单：作业事实登记开立、归入、关闭；客户渠道与运营决定两路确认绑定；范围成立时自投门铃重核
 
 Category: enhancement
-Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（08、10、11 已进 main），分支 `claude-psxm12`；access_identity 迁移 0016、node_operations 迁移 0016、治理种子 governance/37。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
+Status: in-progress——2026-10-19 作者子代理修完评审阻断（以送站交接单为依据推范围须是它的成员），待复审。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（08、10、11 已进 main），分支 `claude-psxm12`；access_identity 迁移 0016、node_operations 迁移 0016、治理种子 governance/37。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
 Blocked by:
 - [08](./08-pre-advice-and-handover-note-model-and-window-register.md) 进 main：交接单的领域与册。
 - [10](./10-authorized-delivery-relationship-in-party-commercial.md) 进 main：授权交付判断与 NO 侧适配器。
@@ -83,12 +83,16 @@ L
 | `27a3bd97` | 演示种子（授予两行、对照五行、治理区间 `governance/37` 至 `41`、`seed.sh` 五行登记）、种子 README、演示文档「送站交接单」一段与实走记录 |
 | `1ad7bca9` | 交接单册与收寄库补两个新端口的实现断言（机制清点基线口径据此认得出） |
 | `68ad8bef` | 机制清点重生成 |
-| 本笔 | 本完成记录与 AT 盘点追记十七 |
+| `7d9c8c21` | 本完成记录与 AT 盘点追记十七 |
+| `afd7c005` | 评审阻断的修复：以送站交接单为依据推范围须是它的成员（领域、端口、postgres、编排；迁移 `node_operations/0016` 改名并重建收寄册细分 CHECK）；用例先红后绿 |
+| `28668fae` | ADR-0212 文末复核记录（决定原文不动）；演示文档答复表补一行 |
+| `98866b09` | 机制清点重生成（修复之后） |
+| 本笔 | 完成记录随修复改写、AT 盘点那一行补两条用例 |
 
 ### 落点
 
 - 接入身份 `internal/accessidentity`：`operation_decision.go` 加 `DecisionDeliveryHandoverConfirmation`；`customer_client.go` 加 `CustomerCapabilityDeliveryHandoverConfirmation`，`customer_client_pre_advice.go` 的「铸造侧判准入」名单加它；新文件 `customer_client_handover.go`（信封、`MintDeliveryHandoverConfirmation`、推导口）、`work_fact_admission.go`（`WorkFactKind` 三种、`WorkFactAdmission`）；`admission_scope_mapping.go` 的 `checkAdmissionRequirement` 认作业事实登记那一格。
-- 迁移：`migrations/access_identity/0016_delivery_handover_confirmation_decision_and_customer_capability.sql`（决定种类 CHECK 以 0015 全集为底、客户面能力 CHECK 以 0014 全集为底，各加一词，头注写「之后谁再重建取并集」）；`migrations/node_operations/0016_delivery_handover_binding_source_request_key.sql`（结论多一列来源请求键，客户渠道必带、运营决定必不带）。
+- 迁移：`migrations/access_identity/0016_delivery_handover_confirmation_decision_and_customer_capability.sql`（决定种类 CHECK 以 0015 全集为底、客户面能力 CHECK 以 0014 全集为底，各加一词，头注写「之后谁再重建取并集」）；`migrations/node_operations/0016_delivery_handover_binding_source_and_member_inapplicability.sql`（结论多一列来源请求键，客户渠道必带、运营决定必不带；收寄册依据不适用的细分 CHECK 以 0015 全集为底加 `NOT_A_HANDOVER_MEMBER`，头注写取并集）。
 - NO 领域 `domain/delivery_handover_note.go`：结论带 `SourceRequestKey`，`DeliveryHandoverNoteState.ScopeEstablishedAt`。
 - NO 端口：`ports/delivery_handover.go`（新：`HandoverAssignmentReceptions`、`DeliveryScopeEstablishedIntent`、`DeliveryScopeEstablishedDoorbell`）；`delivery_scope_registers.go` 的交接单册多 `FindDeliveryHandoverMember`，另立 `HandoverReceptionMembership`；`ports.go` 的 `PendingIdentityLookup` 多 `FindRecheckableInHandoverNote`。
 - NO 编排：新文件 `application/delivery_handover_note.go`（`DeliveryHandoverNoteHandler` 五个入口）；`recheck_pending_identity.go` 多 `RecheckByHandoverNote`；`receive_delivered_unit.go` 依赖多 `Handover`，收寄带交接单标识时落成员（`joinHandoverNote`）。
@@ -179,11 +183,29 @@ rebase 到 `8e5125c2` 之后：`gofmt -l .` 无输出；`go build ./...`、`go v
 
 一次性库 `psxm12_demo`（门禁库服务器上建、用完删），`seed.sh` 退 0，送站交接确认两格授予、五行对照、五条区间都在册。共享的集成客户端发行方仍答 `invalid_client`，另起私有 Dex（同一份 `integration-dex.yaml`，发布在 `127.0.0.1:5564`，issuer 串仍是 `http://127.0.0.1:5558/dex`），用完删容器；操作者发行方用共享的 5556（只取令牌）。在 `4a9ac524` 上编出的 `parcel-api`（19212）与 `parcel-dispatch`：`submit-one-shipment.sh` 一单经 dispatch 到`已接受`；不带预报送一件同号，答 `200 PENDING_IDENTIFICATION`、`UNVERIFIED/NO_BASIS`；开交接单 `201`、归入 `201`、关闭 `201`、关闭后再归入 `200 … / NOTE_CLOSED`；运营决定指名无关系的交付方答 `200 NOT_IN_AUTHORIZED_DELIVERY_RELATIONSHIP`，指名种子里有授权交付关系的 `SYN-PARTY-DELIVERER-01` 答 `201 BINDING_CONFIRMED` 带 `scopeEstablishedAt`；门铃一封经 dispatch 投给重核消费者，册上追加 `IDENTITY-RECHECK/<原版本>` 一版 `INTAKE_FORMED`、关联那件包裹、接收时刻与控制依据照原收寄、核对态 `VERIFIED`，收寄意图一封投出——识别了。客户口另走一遍：未关闭答 `NOTE_NOT_CLOSED`、关闭后确认 `201`（落来源请求键）、改口否认 `EXISTING_CONCLUSION`、不存在的 404、操作者令牌 401。答复原文在 `/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/psxm12-walk-handover.log`、`/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/psxm12-walk-customer.log`、`/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/psxm12-walk-db.log`，种子日志 `/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/psxm12-seed-run.log`；记录也写进演示文档「送站交接单」一段。走完已停自己起的两个进程、删私有 Dex 容器、删库；`psb26_walk` 未碰，别的进程与容器未碰。
 
+### 评审阻断的修复（2026-10-19，会话 idp-parcel-9b 代决，授权同票面）
+
+- **裁定**：以送站交接单为依据推可验证交付范围时，这件作业实物须是该交接单的成员（收寄带来的或归入的都算）；不是成员答「依据不适用」，细分新加 `NOT_A_HANDOVER_MEMBER`（`domain.ScopeNotAHandoverMember`）。交接单未关闭时，带它标识的收寄先落收寄成员、再推导，成员即成立；关闭之后落不进，推导答不是成员。重核按此刻的成员册同一判法。判法与理由在 ADR-0212 文末复核记录（`28668fae`），决定原文不动。
+- **推导**：`domain.DeliveryScopeDerivation` 多一格 `HandoverMember`；`deriveHandoverNoteScope` 在节点之后、绑定之前判它——不是成员时补齐绑定也补不出范围，恢复动作是归入一张开放的交接单，先报这一格才把人指对。开放与关闭都按同一条判（不是成员即不适用）：开放期间带单号收进来的件已由编排先落成员，走到推导时仍不是成员的，只有这一条之前没落成员的旧行。
+- **成员信息怎样交进来**：范围证据读口 `ports.DeliveryScopeEvidence` 多一问 `IsDeliveryHandoverMember(租户，交接单，作业实物)`，身份判断（`identityJudge.deriveScope`）在交接单在册时问一次、填进推导。不选「编排先查」：收寄与重核共用这一份身份判断，放在判断里两处自然同一判法；也不选「交接单证据状态带整份成员清单」：一张交接单名下可以有很多件，推一件只要这一格。生产上是交接单册 `DeliveryHandoverNotes.IsDeliveryHandoverMember`（走成员表按交接单的索引，`ReadExecutor` 读得到同一笔事务里刚落的收寄成员），`DeliveryScopeEvidence` 转交。
+- **收寄次序**：`receive` 在身份判断之前调 `joinHandoverNote`（原先在落册之后）；它只依赖命令里的租户、来源标识、实物与收寄时刻。同一来源重投或并发输给另一方，撞的是同一个（收寄，来源标识），成员不多一个。锁次序不变：收寄先取实物锁、再取交接单行的共享锁，与归入同序；确认只取交接单行的排他锁。
+- **库面**：`node_operations/0016` 改名为 `0016_delivery_handover_binding_source_and_member_inapplicability.sql`（本票之前没进 main），追加重建 `reception_delivery_scope_inapplicability_closed`：以 0015 的全集为底加 `NOT_A_HANDOVER_MEMBER`，头注写「之后谁再重建取并集」。
+- **用例**：
+  - 领域 `internal/nodeoperations/domain/delivery_scope_membership_test.go::TestAHandoverNoteScopeReachesOnlyItsMembers`（已关闭交接单的成员已证、非成员不适用·不是成员、开放交接单的非成员同答、绑定没全部确认的非成员先报不是成员；新细分线上名往返、只挂在依据不适用上）。
+  - 编排 `internal/nodeoperations/application/delivery_handover_note_test.go::TestAReceptionCarryingAClosedNoteItIsNotAMemberOfIsNotApplicable`（范围已成立、开放期间带它收寄的那件已证、关联；关闭之后带它收寄的另一件不关联、依据不适用·不是交接单成员、成员不多；那一件重核判断不变）。
+  - 存储 `internal/nodeoperations/adapters/postgres/delivery_handover_recheck_test.go::TestMembershipIsAnsweredPerNoteAndUnit`（两种成员、非成员、别的交接单、别的租户；范围证据读口同答；新细分过得了库面 CHECK、原样读回）。
+  - 真库 `cmd/parcel-api/assemble_delivery_handover_note_test.go::TestAReceptionCarryingAClosedNoteIsNotApplicableUnlessItIsAMemberAgainstARealDatabase`（经 `buildReceptionOrchestration`、`buildDeliveryHandoverNoteOrchestration` 与 `buildIdentityRecheckOrchestration`：开放期间带单号送站 `INTAKE_FORMED`、`VERIFIED//`；关闭之后另一件 `UNVERIFIED/BASIS_NOT_APPLICABLE/NOT_A_HANDOVER_MEMBER`、不关联、成员仍只一个；人工重核 `STILL_UNIDENTIFIED`）。
+  - 随新规则改的既有用例（不改断言）：领域 `handoverDerivation` 夹具与「最后归入优先」那一条补 `HandoverMember: true`，细分词表那一条多一格；编排的范围证据替身多答成员一问（读同一夹具的交接单册替身与 `assigned`）；票 11 的 `TestARecheckRederivesTheScopeFromTheStoredBasisAndTheEvidenceNow` 补一行夹具（交接单也登在交接单册替身上，收寄才落得进成员）；HTTP 的 `noScopeEvidence` 多一问。
+- **先红后绿**：红追加在原红日志 `/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/psxm12-red.log` 末尾「评审阻断」一段，钉 `7d9c8c21`、工作树只有测试改动。领域与存储两包编译即红（「stranger.HandoverMember undefined」「undefined: domain.ScopeNotAHandoverMember」「fixture.notes.IsDeliveryHandoverMember undefined」）；行为红两条，正是这个漏洞：编排「关闭之后带它收寄：INTAKE_FORMED 冲突 false 核对态 VERIFIED//, want 不关联的待识别、依据不适用·不是交接单成员」，parcel-api 真库「outcome = INTAKE_FORMED, want PENDING_IDENTIFICATION」。绿 `/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/psxm12-green-fix.log`。
+- **门**（钉 `98866b09`，`origin/main` 仍是 `8e5125c2`，无需再 rebase）：`gofmt -l .` 无输出；`go build ./...`、`go vet ./...` 退 0；带 DSN 以 `-p 1 -count=1` 跑 `./internal/accessidentity/... ./internal/nodeoperations/... ./internal/partycommercial/... ./cmd/... ./migrations/... ./internal/architecture/... ./scripts/demo-seeds/...`，有测试的包 40 个 ok、0 FAIL（`cmd/parcel-api`、`cmd/parcel-dispatch`、`cmd/parcel-frontline-import`、`cmd/parcel-access-register` 都在其中）。票 11 的两份真库夹具（`confirmedHandoverNoteOnRealDatabase`、`confirmedHandoverNoteForDispatch`）开的交接单都没关，收寄带单号先落成员，照旧答已证、不用改。
+- **机制清点**：`98866b09`，nodeoperations 测试文件多一份，其余不变。
+- **没重走演示**：演示动线里的交接单归入的是不带依据的那一件（成员经归入），关闭之后不再带单号收寄，答复不变；改动的那一格由真库用例钉住。
+
 ### 代决
 
 1. **两处字面量都取 `DELIVERY_HANDOVER_CONFIRMATION`**（运营决定种类与客户面能力），不取票面建议的 `HANDOVER_NOTE_CONFIRMATION`：与 `DELIVERY_PRE_ADVICE_*` 同一族名，UC 与 ADR 的词是「送站交接确认」，派单也这样建议。
 2. **作业事实登记面判准入只从交接单三种事实起**：能力词取能力面本名 `WORK_FACT_REGISTRATION`（同运营决定口取 `OPERATION_DECISION` 的取法），事实类型 `DELIVERY_HANDOVER_NOTE_OPENING` / `…_ASSIGNMENT` / `…_CLOSURE`；词表只收在铸造侧判准入的那几种。收寄口与运输履约各口照旧不判，没有顺手接上。
-3. **收寄带交接单标识即落收寄成员**（事实身份取收寄来源标识、业务时间取收寄时刻），只对收进来的（形成与待识别）；交接单不在册或已关闭时不落、收寄照常。没有它，门铃按成员找重核对象时找不到带着交接单收进来的待识别。
+3. **收寄带交接单标识即落收寄成员**（事实身份取收寄来源标识、业务时间取收寄时刻），只在明确接收那一支、在身份判断之前落；交接单不在册或已关闭时不落、收寄照常，推导随后答依据不在册或不是交接单成员。没有它，门铃按成员找重核对象时找不到带着交接单收进来的待识别；先落再推导，是评审阻断那条判法要的次序（见「评审阻断的修复」）。
 4. **归入条件**：在交接单开立节点上有当前收寄（形成或待识别的判断链），且每一条都属于重核对象；有一条已关联即不能归入。作业事实信封的节点不是交接单开立节点时答查无此单（404），与越权探针同答。
 5. **重放与冲突**：开立按交接单标识比内容（节点、交付方线索、声称、开立时刻）；归入按（归入，事实身份）比交接单、实物与业务时间；关闭同一事实身份同时刻答已有结果、异时刻答来源冲突，另一份关闭事实到来时答已有结果并回显第一份（关闭是终态，同预报撤回的先例）。
 6. **结论代数只比结论**：（交接单，客户账户）已有结论时，同结论答已有结果、异结论答已有结论，不比途径、交付方参与方或依据；已有结论时不再问 PC。客户口的来源请求键不作重放身份（随结论存作审计）。
@@ -198,7 +220,7 @@ rebase 到 `8e5125c2` 之后：`gofmt -l .` 无输出；`go build ./...`、`go v
 
 ### 越权风险点（待 owner 复核）
 
-1. **关闭之后带交接单标识的收寄仍按它成立范围**：本票关闭之后不落收寄成员，但范围推导（票 11 的 `DeriveVerifiableDeliveryScope`）按来源依据认交接单，不看成员、不看收寄时刻是否晚于关闭。客户确认的是冻结的成员清单，关闭之后才扫进来的件却能借这张交接单的范围。owner 若要堵，改在推导一处（交接单一支多看「收寄时刻不晚于关闭」或成员），要先定已有收寄怎么读。
+1. **关闭之后带交接单标识的收寄仍按它成立范围——已裁已修**：评审裁为阻断，会话 `idp-parcel-9b` 代决在本票修（`afd7c005`），判法写进 ADR-0212 文末复核记录：以交接单为依据推范围，这件实物须是它的成员，不是成员答依据不适用·`NOT_A_HANDOVER_MEMBER`。见「评审阻断的修复」。
 2. **作业事实登记面只有交接单三种判准入**（代决 2），收寄口不判：同一能力面两种口径并存。要统一，收寄口接准入随另票，演示种子同笔补收寄的对照与区间。
 3. **字面量与票面建议不同**（代决 1）：管理台（票 13）与运营授予表照 `DELIVERY_HANDOVER_CONFIRMATION`。
 4. **运营决定先于客户确认时，客户再否认答已有结论**：确认是终态（ADR-0212 决定三），客户事后不认这次送站只能走别的路。这是 ADR 原句的直接后果，列出来是因为客户面上第一次出现「别人替我确认过，我否认不了」。
@@ -212,16 +234,16 @@ rebase 到 `8e5125c2` 之后：`gofmt -l .` 无输出；`go build ./...`、`go v
 - `cmd/parcel-frontline-import/intake_import.go`：收寄依赖多交接单册（收寄编排构造期要它）。
 - 既有用例随新依赖与新格改（不改断言）：`receive_delivered_unit_test.go`（替身多交接单册）、`dispose_identity_conflict_test.go`、`adapters/http/receive_delivered_unit_test.go`（新替身 `noHandoverMembership`）、`adapters/http/work_fact_intake_test.go`、`cmd/parcel-dispatch` 三份收寄夹具与 `delivery_scope_fixture_test.go`（`handoverMembershipFor`）、`cmd/parcel-frontline-import/intake_handoff_continuation_test.go`；客户渠道结论补来源请求键：`domain/delivery_handover_note_test.go`、`application/delivery_scope_judgment_test.go`、`adapters/postgres/delivery_scope_registers_test.go`、`cmd/parcel-api/delivery_scope_fixture_test.go`、`cmd/parcel-dispatch/delivery_scope_fixture_test.go`。
 - `scripts/demo-seeds/README.md`、`docs/design/synthetic-demo-journey-script.md`：授予表、首方客户渠道第 8 项与「送站交接单」一段。
-- 没碰 `docs/adr/README.md`、ADR 原文、NO 节点控制那几格（`reception.go` 读控制处、复核目录注册）。
+- `docs/adr/0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md`：文末追加一条复核记录（评审阻断的判法，派单要求），决定原文不动。
+- 没碰 `docs/adr/README.md`、ADR 决定原文、NO 节点控制那几格（`reception.go` 读控制处、复核目录注册）。
 
 ### AT 盘点
 
-`.scratch/at-coverage-inventory.md` 追记十七：`AT-NO-071`、`AT-NO-072`、`AT-NO-073`、`AT-NO-075` 由②入①，`AT-NO-074` 行内补命令面与并发面。①338→342、②228→224（NO 43→47、25→21），合计不变。列进①的各条用例 Covers 注释都点了 AT 号，扫描口径认得出。
+`.scratch/at-coverage-inventory.md` 追记十七：`AT-NO-071`、`AT-NO-072`、`AT-NO-073`、`AT-NO-075` 由②入①，`AT-NO-074` 行内补命令面与并发面。①338→342、②228→224（NO 43→47、25→21），合计不变。列进①的各条用例 Covers 注释都点了 AT 号，扫描口径认得出。评审阻断修复之后，`AT-NO-071` 那一行补上编排与真库两条非成员用例，桶数不变。
 
 ### 未做
 
 - 完成判据末格「走 Go 那条路」：分支与作者自验已做；非作者评审与推送方在干净检出上带 DSN 跑全量不归作者，该格未勾。
 - 票面「不做」照旧：管理台交接单页与确认按钮（票 13）、客户查看交接单明细的读口、前线导入模板的交接单行、运营决定否认。
-- 越权风险点 1 的推导口径没改（归票 11 的推导，需 owner 定）。
 - 收寄口没接准入范围（越权风险点 2）。
 - 演示脚本没另立：实走用 curl，载荷与答复写在演示文档那一段。
