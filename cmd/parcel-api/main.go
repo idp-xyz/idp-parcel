@@ -54,7 +54,7 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	if isolatedRead != nil {
-		logger.Info("Isolated read admission enabled (ADR-0078): operations query endpoints answer with injected synthetic scope",
+		logger.Info("Isolated read admission enabled (ADR-0078): shipment request views answer with injected synthetic scope",
 			"tenant", os.Getenv(isolatedReadTenantEnv))
 	}
 

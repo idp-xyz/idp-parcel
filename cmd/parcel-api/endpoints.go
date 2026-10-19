@@ -50,8 +50,7 @@ import (
 //
 // 所有 *Views、*Catalog 与 *Rules 参数都是查阅端点的读口：读面不是编排（查阅不触发
 // 判断、派生或披露），生产装配交入各自的真库读适配器；未配置 Intake 仍拒在它们之前，
-// 接入渠道就位前一次也不会被调到——除非隔离读面准入按 ADR-0078 被显式启用（见
-// isolatedReadIntakes），且被换的只有运营查阅行。
+// 接入渠道就位前一次也不会被调到。委托查阅三口另有隔离读面准入（ADR-0078，见 isolatedReadIntakes）可显式启用。
 func assembleBusinessEndpoints(
 	submission shipmenthttp.SubmissionHandler,
 	withdrawal shipmenthttp.WithdrawalHandler,
@@ -261,9 +260,9 @@ func assembleBusinessEndpoints(
 	deliveryRegistrationIntake := tfhttp.DeliveryRegistrationIntake(tfhttp.UnconfiguredIntake{})
 	deliveryCorrectionIntake := tfhttp.DeliveryProofCorrectionIntake(tfhttp.UnconfiguredIntake{})
 	deliveryAttemptIntake := tfhttp.DeliveryAttemptIntake(tfhttp.UnconfiguredIntake{})
-	// 作业事实各口（含三个更正口）换操作者渠道，隔离写放行同笔撤下（ADR-0150 决定三；票 operator-channel/10 余下半边）。
-	// 关段、建派送任务、有效时间判断、承运商首次有效收寄判断归运营决定，在端点行上直接挂 operatorDecisions.transport
-	// （票 operator-channel/15 余下四口，隔离写放行同笔撤下）。
+	// 作业事实各口挂操作者渠道的「作业事实登记」能力面：首登（ADR-0149 决定二）与更正（随原事实归族，ADR-0151 决定四）；
+	// 写开关换不了它们（ADR-0150 决定三）。关段、建派送任务、有效时间判断、承运商首次有效收寄判断归运营决定（ADR-0151
+	// 决定六），端点行直接挂 operatorDecisions.transport，不在这组变量里。
 	if workFactTransport != nil {
 		pickupRegistrationIntake = workFactTransport
 		pickupAttemptIntake = workFactTransport
@@ -293,14 +292,13 @@ func assembleBusinessEndpoints(
 		// Intake 答`未决 · 授权口不可用`。
 		{Pattern: "/shipment-requests/continued-attempt-closures", Handler: shipmenthttp.NewFormControlledClosureEndpoint(operatorDecisions.shipment, continuedAttemptDecisions)},
 		{Pattern: "/shipment-requests/continued-attempt-reopenings", Handler: shipmenthttp.NewFormReopeningEndpoint(operatorDecisions.shipment, continuedAttemptDecisions)},
-		// 复核完成与主动拒绝两个命令口（票 09；ADR-0081 的命令面保留条款、ADR-0086）：
-		// 与其余命令面同挂字面量 UnconfiguredIntake{}，隔离读准入换不了写行。生产渠道是操作者渠道的
-		// 「运营决定」能力面（ADR-0151）：复核人与决定人取认证出的提交操作者，有没有权由编排问 party-commercial。
+		// 复核完成与主动拒绝两个命令口（票 09；ADR-0081 的命令面保留条款、ADR-0086）：挂操作者渠道的「运营决定」
+		// 能力面（ADR-0151），隔离读准入换不了写行：复核人与决定人取认证出的提交操作者，有没有权由编排问 party-commercial。
 		{Pattern: "/shipment-requests/manual-review-completions", Handler: shipmenthttp.NewCompleteManualReviewEndpoint(operatorDecisions.shipment, manualReview)},
 		{Pattern: "/shipment-requests/rejections", Handler: shipmenthttp.NewRejectShipmentRequestEndpoint(operatorDecisions.shipment, rejection)},
 		// 授权处置命令口（票 sa-preacceptance-policy-view/04；ADR-0132）：授权角色对停在`等待授权处置`的
-		// 委托选去向。运营侧写行，同挂字面量 UnconfiguredIntake{}。生产渠道是操作者渠道的「运营决定」
-		// 能力面（ADR-0151）：处置人取认证出的提交操作者，有没有权由编排问 party-commercial。
+		// 委托选去向。运营侧写行，挂操作者渠道的「运营决定」能力面（ADR-0151）：处置人取认证出的提交操作者，有没有权由
+		// 编排问 party-commercial。
 		{Pattern: "/shipment-requests/authorized-dispositions", Handler: shipmenthttp.NewDisposeShipmentRequestEndpoint(operatorDecisions.shipment, disposition)},
 		// 受控补充命令口（票 first-tenant-runway/09；ADR-0106 Decision 四）：客户在`已提交`委托上形成
 		// 同一委托的新提交版本，编排随新版本落库同事务铸「新提交版本已形成」信封驱动续办。它是客户
@@ -321,36 +319,32 @@ func assembleBusinessEndpoints(
 		// 授权处置队列查阅（票 sa-preacceptance-policy-view/04，ADR-0132 决定二）：同为委托查阅面的子集视图，
 		// Intake 沿用同一变量；单份详情复用复核队列的 `?shipmentRequestId=` 分支，这里只有列表。
 		{Pattern: "/authorized-disposition-queue", Handler: shipmenthttp.NewQueryAuthorizedDispositionQueueEndpoint(shipmentViewsIntake, dispositionQueue)},
-		// 面单交易查阅（票 admin-skeleton-closure-batch/08，ADR-0084 决定七）：**另立一种
-		// 准入形**而不是复用委托查阅那个变量。两者由同一个隔离读开关、同一个装配点换值
-		// （决定七要的「沿用同一开关」），但接口不同：面单交易没有账户维可分，收一个必带
-		// 账户维的作用域等于在类型上声称会按账户过滤而它不会。渠道墙未降前这一口读到的是
-		// 空册，那是设计：写入方是渠道适配器，首发不进生产。
+		// 面单交易查阅（票 admin-skeleton-closure-batch/08，ADR-0084 决定七）：**另立一种准入形**而不是复用委托查阅那个
+		// 变量：面单交易没有账户维可分，收一个必带账户维的作用域等于在类型上声称会按账户过滤而它不会。它挂操作者查阅读
+		// （票 operator-channel/35）。渠道墙未降前这一口读到的是空册，那是设计：写入方是渠道适配器，首发不进生产。
 		{Pattern: "/label-transactions", Handler: shipmenthttp.NewQueryLabelTransactionsEndpoint(labelTransactionIntake, labelTransactions)},
 		// 渠道择优决定查阅（票 label-channel/23）：并列冲突列表与按标识取一条共用一个端点、按 decisionId 分派。
-		// 准入形同面单交易（只有租户维，本册没有账户维可分），自立 Intake 变量、随同一个隔离读开关换值；读口是
+		// 准入形同面单交易（只有租户维，本册没有账户维可分），自立 Intake 变量、挂操作者查阅读；读口是
 		// 决定登记册本尊（两个契约一只适配器）。择优编排今天无生产装配点，接线前这一口读到的是空册，空册是如实答案。
 		{Pattern: "/channel-selection-decisions", Handler: shipmenthttp.NewQueryChannelSelectionDecisionsEndpoint(channelSelectionDecisionIntake, channelSelectionDecisions)},
 		{Pattern: "/node-operations/receptions", Handler: nodeopshttp.NewReceiveDeliveredUnitEndpoint(receptionIntake, reception)},
-		// 节点作业与运输履约查阅页（票 admin-skeleton-closure-batch/05）各一口按
-		// registry 分派（NO 三册、TF 四册）：分派对应「一页里的页签」。命令端点在上，
-		// 走写开关的逐口变量（票 operator-channel/08）；查阅行走本上下文自己的 Intake 变量，
-		// 隔离读准入（ADR-0078）启用时只换查阅行，命令行换不了。
+		// 节点作业与运输履约查阅页（票 admin-skeleton-closure-batch/05）各一口按 registry 分派：分派对应「一页里的页签」。
+		// 命令行挂各自上下文的作业事实渠道；查阅行挂本上下文的操作者查阅读（票 operator-channel/35），两个隔离开关都换不了
+		// 这几行。
 		{Pattern: "/node-operations-records", Handler: nodeopshttp.NewQueryNodeOperationsRecordsEndpoint(nodeOperationsCatalogueIntake, nodeOperationsRecords)},
 		{Pattern: "/transport-fulfillment/deliveries", Handler: tfhttp.NewRegisterEffectiveDeliveryEndpoint(deliveryRegistrationIntake, delivery)},
 		{Pattern: "/transport-fulfillment/delivery-proof-corrections", Handler: tfhttp.NewCorrectDeliveryProofEndpoint(deliveryCorrectionIntake, delivery)},
 		// 派送尝试登记（票 product-strategy-boundary/19）：执行方报来的每次到场与逐对象结果，交付生效只引用它登下的事实。
-		// 作业事实，生产渠道归操作者渠道的「作业事实登记」能力面（ADR-0149，operator-channel/10）；在那之前生产形态如实答
-		// 未配置，隔离形态经写开关逐口放行。
+		// 作业事实，挂操作者渠道的「作业事实登记」能力面（ADR-0149 决定二）。
 		{Pattern: "/transport-fulfillment/delivery-attempts", Handler: tfhttp.NewRecordDeliveryAttemptEndpoint(deliveryAttemptIntake, deliveryAttempt)},
 		// 控制事实入口（票 tf-segment-lifecycle-closure/04）：交接一组（登记 + 更正）、揽收一组
 		// （单对象登记 + 更正 + 多对象执行），按事实分组而不按 UC 分。它们是 CONTEXT 成立边界的来源事实，
 		// 进段那道门（enterFulfillmentSegment）在生产上只从登记那几行走得到——接上之前它没有任何路。
 		// 命令面，命令里带着段引用，这几行比交付更不能让隔离读开关换值：一条穿过去的请求会在段登记册
-		// 上立出一个来源不明的实际履约段。登记与执行三行经写开关逐口放行（票 operator-channel/08，写下
-		// 的段带 `SYN-` 租户维可分辨），两个更正口仍挂字面量 UnconfiguredIntake{}。
-		// 揽收更正口（票 tf-segment-lifecycle-closure/08）落新版本回指前版、重交 PS 采认，不进段——段侧
-		// 重派生另立票；它接的是自己那一格装配（assemble_offsite_pickup_correction.go），与首登共用一册。
+		// 上立出一个来源不明的实际履约段。登记、执行与更正各行都挂作业事实渠道（首登 ADR-0149 决定二；更正随原事实，
+		// ADR-0151 决定四），写开关换不了这几行（ADR-0150 决定三）。
+		// 揽收更正口（票 tf-segment-lifecycle-closure/08）落新版本回指前版、重交 PS 采认；它接的是自己那一格装配
+		// （buildOffsitePickupCorrectionOrchestration），与首登共用一册。
 		{Pattern: "/transport-fulfillment/handovers", Handler: tfhttp.NewRegisterTransportHandoverEndpoint(handoverRegistrationIntake, handover)},
 		{Pattern: "/transport-fulfillment/handover-corrections", Handler: tfhttp.NewCorrectTransportHandoverEndpoint(handoverCorrectionIntake, handover)},
 		{Pattern: "/transport-fulfillment/offsite-pickups", Handler: tfhttp.NewRegisterOffsitePickupEndpoint(pickupRegistrationIntake, pickupRegistration)},
@@ -363,12 +357,12 @@ func assembleBusinessEndpoints(
 		// TF 四个 admin 写面（ADR-0085，票 tf-segment-lifecycle-closure/07）：关段、建派送任务、装载分配、
 		// 明确终止参与。它们是运营决定不是承运方回传口，所以路径取读面册名前缀 `transport-fulfillment-`
 		// 而不是控制事实那组的 `/transport-fulfillment/...`。四口都挂操作者渠道的「运营决定」能力面（ADR-0151），每口按自己的
-		// 决定种类认证；关段与建派送任务两行的隔离写放行随换口同笔撤下（ADR-0150 决定三；票 operator-channel/15）。
+		// 决定种类认证；写开关换不了这几行（ADR-0150 决定三）。
 		// 终止口只能铸终止那一路（tfhttp.ParticipationTermination 比应用命令窄），交付与交接两路是内部触发。
 		{Pattern: "/transport-fulfillment-segment-closures", Handler: tfhttp.NewCloseFulfillmentSegmentEndpoint(operatorDecisions.transport, segmentCloser)},
 		{Pattern: "/transport-fulfillment-dispatch-task-registrations", Handler: tfhttp.NewOpenDispatchTaskEndpoint(operatorDecisions.transport, dispatchTaskOpener)},
 		// 末端派送任务内部触发执行器的生产入口（ADR-0114 决定二末句；票 tf-segment-lifecycle-closure/12「生产入口」）：谁按拍调、
-		// 拍频多大属调用方（实例半边），真渠道未就位前如实答未配置；隔离形态经写开关放行这一口（票 operator-channel/08），
+		// 拍频多大属调用方（实例半边）；这一口挂作业事实渠道（ADR-0149；它不在 ADR-0151 决定六改归运营决定的那几口里），
 		// 只让一拍能被调用、不替调用方定拍频。与上一行手工建任务是两件事。
 		{Pattern: "/transport-fulfillment-delivery-dispatch-triggers", Handler: tfhttp.NewTriggerDeliveryDispatchEndpoint(deliveryDispatchTriggerIntake, deliveryDispatchTrigger)},
 		{Pattern: "/transport-fulfillment-load-assignment-registrations", Handler: tfhttp.NewFormLoadAssignmentEndpoint(operatorDecisions.transport, loadAssigner)},
@@ -376,39 +370,37 @@ func assembleBusinessEndpoints(
 		// 外部承运凭证登记两口（ADR-0085，票 label-channel/18）：登记一份凭证的首版，与对它此刻的当前版落
 		// 一次作废 / 失效 / 替代。它们是运营登记不是承运方回传口，路径取读面册名前缀 `transport-fulfillment-`；
 		// 改变口不叫 `-corrections`——作废、失效、替代改变的是适用关系而不是更正一个判断，原版本一字不动。
-		// 写准入不另立形，同挂字面量 UnconfiguredIntake{}：一份凭证登进去就会被收编执行器用来把外部轨迹认到
-		// 某个载运对象上，这两行比查阅行更不能让隔离读开关换值。
+		// 挂操作者渠道的「登记册配置写」能力面（ADR-0100 决定四；票 operator-channel/04）：一份凭证登进去就会被收编执行器
+		// 用来把外部轨迹认到某个载运对象上，这两行比查阅行更不能让隔离读开关换值。
 		{Pattern: "/transport-fulfillment-external-carrier-credential-registrations", Handler: tfhttp.NewRegisterExternalCarrierCredentialEndpoint(operatorRegistries.transport, credentialRegistration)},
 		{Pattern: "/transport-fulfillment-external-carrier-credential-applicability-changes", Handler: tfhttp.NewChangeExternalCarrierCredentialApplicabilityEndpoint(operatorRegistries.transport, credentialRegistration)},
 		// 有效时间规则登记（label-channel/19）与凭证两行同一格：一版规则登进去会让收编执行器替该源
-		// 此后每一条素材形成有效时间，登记方身份没有可采信的渠道前 Intake 恒堵。
+		// 此后每一条素材形成有效时间，挂操作者渠道的「登记册配置写」能力面（ADR-0100 决定四）。
 		{Pattern: "/transport-fulfillment-effective-time-rule-registrations", Handler: tfhttp.NewRegisterEffectiveTimeRuleEndpoint(operatorRegistries.transport, effectiveTimeRuleRegistration)},
 		// 外部承运轨迹事实的有效时间判断面两口（ADR-0085，票 label-channel/21）。读口按（租户，轨迹源）上列当前版
 		// （待判断 / 全部），是判断人的「该判哪几条」：零登记零编辑零披露，消费本上下文自己的存储读面，走运输履约
-		// 查阅同一个 Intake 变量——隔离读准入（ADR-0078）启用时随查阅行一起换值。写口是所有者的显式判断（ADR-0102
-		// 决定三第一种来源），一次判断就把事实交给 visibility-exception 进客户可见面：读开关换不了它，挂操作者渠道的「运营决定」
-		// 能力面（票 operator-channel/15，隔离写放行同笔撤下）。路径取读面册名前缀 `transport-fulfillment-`——两口都是运营侧
+		// 查阅同一个 Intake 变量（操作者查阅读）。写口是所有者的显式判断（ADR-0102 决定三第一种来源），一次判断就把事实交给
+		// visibility-exception 进客户可见面：读写两个隔离开关都换不了它，挂操作者渠道的「运营决定」能力面（ADR-0151 决定一）。路径取读面册名前缀 `transport-fulfillment-`——两口都是运营侧
 		// 动作，不是承运方回传口。
 		{Pattern: "/transport-fulfillment-external-tracking-facts", Handler: tfhttp.NewQueryExternalTrackingFactsEndpoint(transportCatalogueIntake, externalTrackingFactReview)},
 		{Pattern: "/transport-fulfillment-effective-time-judgments", Handler: tfhttp.NewJudgeEffectiveTimeEndpoint(operatorDecisions.transport, effectiveTimeJudgment)},
 		// 实际承运商首次有效收寄的判断面两口（票 label-channel/31，ADR-0135 决定八）。读口按（租户，载运对象）上列整条
 		// 收寄链，是判断人的「这个对象走到哪一版」：零登记零编辑零披露，消费本上下文自己的存储读面，走运输履约查阅同一个
 		// Intake 变量。写口是判断方的显式读法，一次判断落的是控制事实——立段、结束取消权、交 parcel-shipment 形成终局：
-		// 读开关换不了它，挂操作者渠道的「运营决定」能力面（票 operator-channel/15，隔离写放行同笔撤下）。
+		// 读写两个隔离开关都换不了它，挂操作者渠道的「运营决定」能力面（ADR-0151 决定一）。
 		{Pattern: "/transport-fulfillment-carrier-first-effective-pickups", Handler: tfhttp.NewQueryCarrierFirstEffectivePickupsEndpoint(transportCatalogueIntake, carrierPickupChain)},
 		{Pattern: "/transport-fulfillment-carrier-first-effective-pickup-judgments", Handler: tfhttp.NewJudgeCarrierFirstEffectivePickupEndpoint(operatorDecisions.transport, carrierPickupJudgment)},
 		// 总单登记两口（ADR-0113 决定五；票 tf-carrier-master-document-register/01）：登记一份总单的首版，与对它此刻的
 		// 当前版形成一次撤销 / 替代 / 关联重述。运营登记不是承运方回传口，路径取读面册名前缀 `transport-fulfillment-`；
-		// 新版本口不叫 `-corrections`，理由同凭证。写准入不另立形，同挂字面量 UnconfiguredIntake{}：一份总单登进去就成了
-		// parcel-pricing 主单级评价可引的身份（ADR-0111），这两行不能让隔离读开关换值。
+		// 新版本口不叫 `-corrections`，理由同凭证。挂操作者渠道的「登记册配置写」能力面（ADR-0100 决定四）：一份总单登进去
+		// 就成了 parcel-pricing 主单级评价可引的身份（ADR-0111），这两行不能让隔离读开关换值。
 		{Pattern: "/transport-fulfillment-carrier-master-document-registrations", Handler: tfhttp.NewRegisterCarrierMasterDocumentEndpoint(operatorRegistries.transport, masterDocumentRegistration)},
 		{Pattern: "/transport-fulfillment-carrier-master-document-revisions", Handler: tfhttp.NewReviseCarrierMasterDocumentEndpoint(operatorRegistries.transport, masterDocumentRegistration)},
 		{Pattern: "/transport-fulfillment-records", Handler: tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(transportCatalogueIntake, transportFulfillmentRecords)},
 		// 交接范围汇总（票 admin-web-audit-followups/06，读面来自 tf-unwired-seven/03）。
 		// 它是本装配表上第一行第二参不是读口而是**应用读用例**的查阅端点：汇总是派生量，
 		// 只能由 domain.SummarizeHandovers 派生（理由在 tfhttp.HandoverScopeSummarizer）。
-		// 读用例零登记零编辑零披露，查阅的性质没变，因此 Intake 随运输履约查阅同一个变量
-		// ——隔离读准入（ADR-0078）启用时两行一起换值，那三条判据它逐条满足。
+		// 读用例零登记零编辑零披露，查阅的性质没变，因此 Intake 随运输履约查阅同一个变量，同挂操作者查阅读。
 		{Pattern: "/transport-fulfillment-handover-scope-summary", Handler: tfhttp.NewQueryHandoverScopeSummaryEndpoint(transportCatalogueIntake, handoverScopeSummary)},
 		{Pattern: "/customer-tracking-view", Handler: visibilityhttp.NewQueryCustomerTrackingViewEndpoint(visibilityhttp.UnconfiguredIntake{}, trackingViews)},
 		{Pattern: "/tracking-projections", Handler: visibilityhttp.NewQueryTrackingProjectionsEndpoint(trackingProjectionsIntake, projectionViews)},
@@ -435,15 +427,15 @@ func assembleBusinessEndpoints(
 		{Pattern: "/pricing-price-card-registrations", Handler: pricinghttp.NewRegisterPriceCardEndpoint(operatorRegistries.pricing, priceCardRegistration)},
 		{Pattern: "/pricing-reference-series-registrations", Handler: pricinghttp.NewRegisterReferenceSeriesEndpoint(operatorRegistries.pricing, referenceSeriesRegistration)},
 		// 序列版本复核（ADR-0099 决定二，票 pricing-reference-series-operations/04）：治理
-		// 动作也是命令行，同挂字面量 UnconfiguredIntake{}。**这一口比两个登记口更不能松**
+		// 动作也是命令行，挂操作者渠道的登记册 Intake。**这一口比两个登记口更不能松**
 		// ——复核责任方是四眼门的一半，任何采信自报身份的 Intake 都等于把那道门拆了。
 		{Pattern: "/pricing-reference-series-reviews", Handler: pricinghttp.NewReviewReferenceSeriesEndpoint(operatorRegistries.pricing, referenceSeriesReview)},
 		// 序列登记前预览（票 pricing-reference-series-operations/08，ADR-0101 决定四）：不写库，
 		// 但拟登本体要信封里的租户与登记责任方才立得住，等的与登记口是同一样东西，所以同挂
-		// 字面量 UnconfiguredIntake{}，不走查阅行的 Intake 变量——隔离读放行装不进它（编译期）。
+		// 操作者渠道的登记册 Intake，不走查阅行的 Intake 变量。
 		{Pattern: "/pricing-reference-series-previews", Handler: pricinghttp.NewPreviewReferenceSeriesEndpoint(operatorRegistries.pricing, referenceSeriesPreview)},
 		// 计价参考目录登记写面（ADR-0109 Decision 二，票 price-card-shape-gaps/01）：模板导入的命令行，
-		// 同挂字面量 UnconfiguredIntake{}，判据同两个登记口。
+		// 挂操作者渠道的登记册 Intake，判据同两个登记口。
 		{Pattern: "/pricing-reference-catalogue-registrations", Handler: pricinghttp.NewRegisterReferenceCatalogueEndpoint(operatorRegistries.pricing, referenceCatalogueRegistration)},
 		// 评价回放的治理触发面（ADR-0124 决定一，票 wiring-baseline-remainder/06）：治理动作也是命令行，
 		// 挂操作者渠道的登记册 Intake（同一 ADR 决定六，票 operator-channel/06）——租户来自认证出的身份，任何
@@ -471,8 +463,8 @@ func assembleBusinessEndpoints(
 		{Pattern: "/network-catalog", Handler: networkhttp.NewQueryNetworkCatalogEndpoint(networkCatalogIntake, networkCatalog)},
 		{Pattern: "/route-plans", Handler: networkhttp.NewQueryRoutePlansEndpoint(networkCatalogIntake, routePlans)},
 		// 网络目录七族登记写面（ADR-0085，票 admin-write-faces/02 切片 02a）：登记是命令
-		// 行，与其余命令面同挂字面量 UnconfiguredIntake{}——写准入不另立形，隔离读准入
-		// （ADR-0078）只经查阅行的 Intake 变量换值，写行换不了。
+		// 行，挂操作者渠道的登记册 Intake（ADR-0100 决定四，票 operator-channel/04）——写准入不另立形，查阅行的 Intake
+		// 变量换不了写行。
 		//
 		// 路径取「读口册名 + 该族原词 + -registrations」：族词与查阅的 `?family=`、登记
 		// CLI 的 `-kind` 逐字同一个，同一本册在三处不换词。一族一个端点而不用 `?family=`
@@ -487,7 +479,7 @@ func assembleBusinessEndpoints(
 		{Pattern: "/network-catalog-route-strategy-registrations", Handler: networkhttp.NewRegisterRouteStrategyVersionEndpoint(operatorRegistries.network, networkCatalogRegistration)},
 		{Pattern: "/customs-compliance-rules", Handler: customshttp.NewQueryComplianceRulesEndpoint(complianceRulesIntake, complianceRules)},
 		// 案件配置册、门禁条件册与规则库查阅同属关务租户内运营读面，共用同一个
-		// CatalogueQueryIntake 变量：已换操作者查阅读，不再随隔离读准入换值（票 operator-channel/05）。
+		// CatalogueQueryIntake 变量，挂操作者查阅读（票 operator-channel/05）。
 		// 判据同为那三条（消费所属上下文存储读面、零持久化、作用域为运营侧授权结果）。
 		//
 		// 门禁条件不并进 /customs-case-registers 的 registry 分派：那三册归 customs-cases
@@ -554,14 +546,14 @@ func assembleBusinessEndpoints(
 		{Pattern: "/commercial-group-legal-entities", Handler: commercialhttp.NewQueryGroupLegalEntitiesEndpoint(commercialCatalogueIntake, partyIdentities)},
 		// 责任法人修订历史（票 admin-web-group-legal-entities/03）：法人册那一页详情抽屉的供数面，按路径里的法人展开
 		// 整条修订链。同读口参数、同 Intake 变量（读同一张表、同一租户作用域、供同一页——裁决在 ports.LegalEntityRevisionHistoryRead）；
-		// 已换操作者查阅读，不再随隔离读准入换值（票 operator-channel/05）。{legalEntityId} 由 chi 填进 PathValue，端点按同名取。
+		// 挂操作者查阅读（票 operator-channel/05）。{legalEntityId} 由 chi 填进 PathValue，端点按同名取。
 		{Pattern: "/commercial-group-legal-entities/{legalEntityId}/revisions", Handler: commercialhttp.NewQueryLegalEntityRevisionsEndpoint(commercialCatalogueIntake, partyIdentities)},
 		// 法人资料修订历史（ADR-0145 决定三，票 legal-entity-profile/03）：法人资料页的供数面，按路径里的法人展开资料修订链。
-		// 同 Intake 变量，已换操作者查阅读（票 operator-channel/05）；读口参数另立——资料修订在自己的登记册上，
+		// 同 Intake 变量，挂操作者查阅读（票 operator-channel/05）；读口参数另立——资料修订在自己的登记册上，
 		// 生产装配交入的是资料登记册适配器而不是商业目录适配器。本口只交修订事实，此刻有效的是哪一笔由按时点解析回答。
 		{Pattern: "/commercial-group-legal-entities/{legalEntityId}/profile-revisions", Handler: commercialhttp.NewQueryLegalEntityProfileRevisionsEndpoint(commercialCatalogueIntake, legalEntityProfiles)},
 		// 法人资料按时点解析（ADR-0145 决定五、六，票 legal-entity-profile/05）：给定时点答那一刻有效的是哪一笔、能不能开立。
-		// 同 Intake 变量，已换操作者查阅读（票 operator-channel/05）；第二参是应用读用例而不是读口——哪一笔有效只能由
+		// 同 Intake 变量，挂操作者查阅读（票 operator-channel/05）；第二参是应用读用例而不是读口——哪一笔有效只能由
 		// 领域对时点判出，在装配点预先挑一遍就等于为同一判断立第二个口径。
 		{Pattern: "/commercial-group-legal-entities/{legalEntityId}/profile-resolution", Handler: commercialhttp.NewQueryLegalEntityProfileResolutionEndpoint(commercialCatalogueIntake, legalEntityProfileResolver)},
 		{Pattern: "/commercial-party-relationships", Handler: commercialhttp.NewQueryPartyRelationshipsEndpoint(commercialCatalogueIntake, partyIdentities)},
@@ -579,7 +571,7 @@ func assembleBusinessEndpoints(
 		// 类型、格式与所属层的最新修订。判号不走本口，走 ports.RegistrationNumberTypeLookup。
 		{Pattern: "/commercial-registration-number-types", Handler: commercialhttp.NewQueryRegistrationNumberTypesEndpoint(commercialCatalogueIntake, registrationNumberTypes)},
 		// 商业八类配置写面（ADR-0085，票 admin-write-faces/02 切片 02c）：写准入不另立形，
-		// 判据同上——命令面一律挂字面量 UnconfiguredIntake{}，隔离读准入换不了写行。
+		// 判据同上——挂操作者渠道的登记册 Intake，查阅行的 Intake 变量换不了写行。
 		//
 		// 发布口不带 `-registrations` 后缀：本上下文这一格的动词是发布，答案代数说的也是
 		// 发布（`已发布已生效`/`已计划生效`），叫成登记会与身份、映射两族的登记答案混为
@@ -606,13 +598,11 @@ func assembleBusinessEndpoints(
 		{Pattern: "/commercial-publication-draft-publications", Handler: commercialhttp.NewPublishPublicationDraftEndpoint(operatorRegistries.commercial, commercialPublicationDrafts)},
 		// 商业发布词表读口（票 admin-write-faces/20）：按 kind 答该册正文各封闭集的码，表单据此供下拉。它不要租户，
 		// 却与四口同挂操作者渠道的登记册 Intake（ADR-0151 决定五），理由不是预览口那条：它唯一的消费者是四口喂的表单，
-		// 四口开不了时它单独开只让一张提交不了的表单多几行下拉；且它不读任何存储读面，不满足隔离读放行（ADR-0078）的
-		// 入格判据——挂到 commercialCatalogueIntake 上会让 TestIsolatedReadAdmissionSwitchesOnlyOperationsReadLines 的
-		// 二分（放行 → 500 / 不放 → 403）多出一种 200 的形态，要加第三桶并改 ADR-0078 判据措辞，那是另一张票。
+		// 四口开不了时它单独开只让一张提交不了的表单多几行下拉；且它不读任何存储读面，不是运营查阅，不挂查阅行的
+		// commercialCatalogueIntake。
 		{Pattern: "/commercial-publication-vocabularies", Handler: commercialhttp.NewQueryPublicationVocabularyEndpoint(operatorRegistries.commercial)},
 		// 身份族四类登记加停用挂操作者渠道的登记册 Intake（ADR-0100 决定四，票 operator-channel/04）：租户取认证出的身份，
-		// 写开关换不了这几行——它们曾按 ADR-0091 逐口放行（票 admin-web-group-legal-entities/06），换口同一笔撤下（ADR-0150
-		// 决定三）。上一段「一律挂字面量」对这几行不成立。
+		// 写开关换不了这几行（ADR-0150 决定三）。
 		{Pattern: "/commercial-business-party-registrations", Handler: commercialhttp.NewRegisterBusinessPartyEndpoint(operatorRegistries.commercial, partyIdentityRegistration)},
 		{Pattern: "/commercial-legal-entity-registrations", Handler: commercialhttp.NewRegisterLegalEntityEndpoint(operatorRegistries.commercial, partyIdentityRegistration)},
 		{Pattern: "/commercial-customer-account-registrations", Handler: commercialhttp.NewRegisterCustomerAccountEndpoint(operatorRegistries.commercial, partyIdentityRegistration)},
@@ -625,7 +615,7 @@ func assembleBusinessEndpoints(
 		{Pattern: "/commercial-registration-number-type-registrations", Handler: commercialhttp.NewRegisterRegistrationNumberTypeEndpoint(operatorRegistries.commercial, registrationNumberTypeRegistration)},
 		{Pattern: "/commercial-registration-number-type-deactivations", Handler: commercialhttp.NewDeactivateRegistrationNumberTypeEndpoint(operatorRegistries.commercial, registrationNumberTypeRegistration)},
 		// 法人资料登记（ADR-0145 决定三，票 legal-entity-profile/03）只有登记修订一口：资料没有停用，新修订是往修订链上插
-		// 一笔。与身份族挂同一个操作者渠道 Intake（票 operator-channel/04），隔离写放行同笔撤下（ADR-0150 决定三）。
+		// 一笔。与身份族挂同一个操作者渠道 Intake（票 operator-channel/04）；写开关换不了它（ADR-0150 决定三）。
 		{Pattern: "/commercial-legal-entity-profile-registrations", Handler: commercialhttp.NewRegisterLegalEntityProfileEndpoint(operatorRegistries.commercial, legalEntityProfileRegistration)},
 		// 渠道账号使用授权两口（ADR-0093）。撤销不叫 `-deactivations` 也不走 DELETE：它是往
 		// 修订链上追加一条终止事实，册上那一行不会消失，而那两个名字都会让登记方以为会。
@@ -634,8 +624,7 @@ func assembleBusinessEndpoints(
 		{Pattern: "/commercial-channel-account-use-registrations", Handler: commercialhttp.NewRegisterChannelAccountUseEndpoint(operatorRegistries.commercial, channelAccountUseRegistration)},
 		{Pattern: "/commercial-channel-account-use-revocations", Handler: commercialhttp.NewRevokeChannelAccountUseEndpoint(operatorRegistries.commercial, channelAccountUseRegistration)},
 		// VE 六类目录查阅与运营追踪查阅同属租户内运营读面，共用同一个
-		// OperationsTrackingIntake 变量：隔离读准入（ADR-0078）启用时两行一起换值，
-		// 判据同为那三条（消费所属上下文存储读面、零持久化、作用域为运营侧授权结果）。
+		// OperationsTrackingIntake 变量，同挂操作者查阅读（票 operator-channel/35）。
 		{Pattern: "/visibility-catalogues", Handler: visibilityhttp.NewQueryVisibilityCataloguesEndpoint(trackingProjectionsIntake, visibilityCatalogues)},
 		// VE 六类配置登记写面（ADR-0085，票 admin-write-faces/02 切片 02d）：写准入不另
 		// 立形，判据同上。路径取「读口册名 + 该类种类词 + -registrations」，种类词与查阅
@@ -660,8 +649,7 @@ func assembleBusinessEndpoints(
 		{Pattern: "/exception-case-records", Handler: visibilityhttp.NewQueryExceptionCaseRecordsEndpoint(trackingProjectionsIntake, exceptionCaseRecords)},
 		{Pattern: "/claims-recovery-records", Handler: visibilityhttp.NewQueryClaimsRecoveryRecordsEndpoint(trackingProjectionsIntake, claimsRecoveryRecords)},
 		// 代收分户账册（票 admin-remainder-mechanism-batch/04）：分户账连派生余额与
-		// 批次引用一次上列。册只一本，不设分派参数（裁决在端点文件头）；隔离读准入
-		// 按同三条判据入格，随本上下文自己的 Intake 变量换值。
+		// 批次引用一次上列。册只一本，不设分派参数（裁决在端点文件头）；挂操作者查阅读（票 operator-channel/35）。
 		{Pattern: "/collection-subledgers", Handler: collectionhttp.NewQueryCodSubledgersEndpoint(collectionCatalogueIntake, codSubledgers)},
 		// 结算与核算四页（票 admin-skeleton-closure-batch/04）各立入口，四行共用本上下文
 		// 自己的 Intake 变量：作用域形状同为租户一维，责任法人、结算账户与币种是账上的
@@ -681,8 +669,8 @@ func assembleBusinessEndpoints(
 		{Pattern: "/settlement-external-funds-fact-registrations", Handler: settlementhttp.NewRegisterExternalFundsFactEndpoint(externalFundsFactRegistrationIntake, externalFundsFactRegistration)},
 		{Pattern: "/settlement-external-funds-fact-correction-registrations", Handler: settlementhttp.NewRegisterExternalFundsFactCorrectionEndpoint(externalFundsFactCorrectionIntake, externalFundsFactCorrectionRegistration)},
 		// 治理登记册三册一口（票 admin-skeleton-closure-batch/02）：治理无租户维是
-		// 设计不是缺列（ADR-0083），Intake 因此是本上下文自己的一种准入形——隔离读
-		// 启用与 SYN- 门禁同走一个开关，但开关值里的合成租户不进治理作用域。
+		// 设计不是缺列（ADR-0083），Intake 因此是本上下文自己的一种准入形：挂操作者查阅读，信封上的租户只用于认证、
+		// 不进治理作用域（票 operator-channel/35）。
 		{Pattern: "/governance-registers", Handler: governancehttp.NewQueryGovernanceRegistersEndpoint(governanceRegistryIntake, governanceRegisters)},
 		// 作业设备册（ADR-0149 决定二、越权风险点 2；票 operator-channel/21）：只查阅已登记的行。
 		// 能力面是主数据与运营查阅读，不形成作业事实，所以不挂作业事实那一组 Intake。
