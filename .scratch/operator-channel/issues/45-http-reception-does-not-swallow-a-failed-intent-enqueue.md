@@ -1,7 +1,7 @@
 # 45 HTTP 收寄路上，意图入队失败被吞成续办引用后照常提交：设备拿到 201 就出队，没人会重发
 
 Category: bug
-Status: ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 2 研判中发现；用户授权代决）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（operator-channel/29 已进 main），分支 `claude-no4503`（与 no-reception-identity/03 同一分支，先 45 后 03）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 2 研判中发现；用户授权代决）
 Blocked by: operator-channel/29 进 main（同改 cmd/parcel-api/assemble_reception.go 与收寄编排）
 父票：[26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)（票 26 评审遗留的后续）
 出处：

@@ -1,7 +1,7 @@
 # 03 一码两物并发送站：两笔事务互相看不到对方未提交的关联，两件可能都关联成立
 
 Category: bug
-Status: ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立并代决（票 no-reception-identity/01 评审遗留）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（no-reception-identity/01 已进 main），分支 `claude-no4503`（与 operator-channel/45 同一分支，先 45 后 03）。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立并代决（票 no-reception-identity/01 评审遗留）
 Blocked by: no-reception-identity/01 进 main
 父票：[01](./01-one-barcode-on-two-units-forms-an-identity-conflict.md)
 出处：ADR-0196「越权风险点」中「并发未串行」那一条；票 01 实施子代理回报与评审记录。
