@@ -73,7 +73,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：12 个模块共 225 份 SQL
+## 迁移：12 个模块共 226 份 SQL
 
 | 模块 | 份数 |
 |---|---|
