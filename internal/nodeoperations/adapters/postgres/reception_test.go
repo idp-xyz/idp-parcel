@@ -576,3 +576,280 @@ func TestTheServiceResultCheckMigrationBackfillsFormedReceptionsAsChecked(t *tes
 		t.Fatalf("未形成行回填了 %q, want 不带", *check)
 	}
 }
+
+func deliverySource(t *testing.T, unit, mark, claim string) domain.DeliverySource {
+	t.Helper()
+	source := domain.DeliverySource{
+		Unit:        ref(t, domain.NewHandlingUnitID, unit),
+		Mark:        mark,
+		Claim:       claim,
+		DeliveredBy: ref(t, domain.NewDeliveringPartyReference, "SYN-COURIER-NRS02"),
+		Node:        ref(t, domain.NewNodeReference, "node-1"),
+		OccurredAt:  receivedAt,
+	}
+	switch claim {
+	case "RECEIVED":
+		source.Evidence = ref(t, domain.NewReceptionEvidenceReference, "SYN-SIGN-NRS02")
+	case "REFUSED":
+		source.Refusal = "SYN-REFUSED-DAMAGED"
+	}
+	return source
+}
+
+// successorRecord 是指名 predecessor 为前版的一版待识别追加版，判断版本取 version。
+func successorRecord(t *testing.T, tenant, sourceID, version, predecessor string) ports.ReceptionRecord {
+	t.Helper()
+	record := pendingRecord(t, tenant, sourceID)
+	intake, err := domain.FormNodeIntake(domain.NodeIntakeSpec{
+		TenantID:    record.Key.TenantID,
+		Unit:        record.Intake.Unit(),
+		Node:        record.Intake.Node(),
+		DeliveredBy: record.Intake.DeliveredBy(),
+		Evidence:    record.Intake.Evidence(),
+		Version:     ref(t, domain.NewIntakeResultVersion, version),
+		ReceivedAt:  record.Intake.ReceivedAt(),
+	})
+	if err != nil {
+		t.Fatalf("构造追加版收寄：%v", err)
+	}
+	record.Intake = intake
+	record.JudgmentVersion = intake.Version()
+	record.Predecessor = ref(t, domain.NewIntakeResultVersion, predecessor)
+	record.Source = deliverySource(t, "SYN-UNIT-NRS02-LATE", "SYN-BARCODE-NRS02", "RECEIVED")
+	return record
+}
+
+// Covers: ADR-0199 决定一、决定二的存储面——三种观察的来源文档、判断版本与前版原样读回，外部标识观察两端的空白原样；
+// 不带来源文档与判断版本的行（来源保全之前的形状）读回零值，不报错。
+func TestTheDeliverySourceAndJudgmentVersionsAreReadBackUnchanged(t *testing.T) {
+	repository, transactor := newReceptions(t)
+	ctx := t.Context()
+
+	formed := formedRecord(t, "SYN-TENANT-NRS02", "SYN-SCAN-NRS02-1")
+	formed.JudgmentVersion = formed.Intake.Version()
+	formed.Source = deliverySource(t, "unit-1", " SYN-BARCODE-NRS02\t", "RECEIVED")
+	refused := notFormedRecord(t, "SYN-TENANT-NRS02", "SYN-SCAN-NRS02-2")
+	refused.JudgmentVersion = ref(t, domain.NewIntakeResultVersion, "SYN-INTAKEV-NRS02-REFUSED")
+	refused.Source = deliverySource(t, "unit-3", "SYN-BARCODE-NRS02-3", "REFUSED")
+	undecided := ports.ReceptionRecord{
+		Key:             ports.ReceptionKey{TenantID: formed.Key.TenantID, SourceID: "SYN-SCAN-NRS02-3"},
+		ContentDigest:   "digest-scan",
+		Kind:            ports.RecordReceptionUndecided,
+		JudgmentVersion: ref(t, domain.NewIntakeResultVersion, "SYN-INTAKEV-NRS02-SCAN"),
+		Source:          deliverySource(t, "unit-4", "SYN-BARCODE-NRS02-4", "SCAN_ONLY"),
+		RecordedAt:      receivedAt.Add(time.Minute),
+	}
+	successor := successorRecord(t, "SYN-TENANT-NRS02", "SYN-SCAN-NRS02-4", "SYN-INTAKEV-NRS02-NEXT", formed.JudgmentVersion.String())
+	unpreserved := notFormedRecord(t, "SYN-TENANT-NRS02", "SYN-SCAN-NRS02-5")
+	inTx(t, transactor, ctx, func(txCtx context.Context) error {
+		for _, record := range []ports.ReceptionRecord{formed, refused, undecided, successor, unpreserved} {
+			if _, err := repository.Save(txCtx, record); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	for _, want := range []ports.ReceptionRecord{formed, refused, undecided, successor, unpreserved} {
+		found, exists, err := repository.FindByKey(ctx, want.Key)
+		if err != nil || !exists {
+			t.Fatalf("取回 %s：%v exists=%v", want.Key.SourceID, err, exists)
+		}
+		if found.Source != want.Source || found.JudgmentVersion != want.JudgmentVersion || found.Predecessor != want.Predecessor {
+			t.Errorf("%s 读回 来源 %+v 版本 %q 前版 %q, want %+v %q %q", want.Key.SourceID,
+				found.Source, found.JudgmentVersion, found.Predecessor, want.Source, want.JudgmentVersion, want.Predecessor)
+		}
+	}
+	if found, _, _ := repository.FindByKey(ctx, unpreserved.Key); found.Source.Preserved() {
+		t.Error("没存来源文档的行读回成了保全过的来源")
+	}
+}
+
+// Covers: ADR-0199 决定二「一版至多一个后继，库面以（租户，前版）唯一守住」——同租户第二行指名同一前版被库面拦下，适配器
+// 交回 ports.ErrPredecessorAlreadySucceeded（不译成`已有记录`：那一格说的是同一来源已在册）；另一个租户指名同名前版照常落册。
+func TestASecondSuccessorOfOneVersionIsRefusedByTheTable(t *testing.T) {
+	repository, transactor := newReceptions(t)
+	ctx := t.Context()
+
+	first := successorRecord(t, "SYN-TENANT-NRS02-A", "SYN-SCAN-NRS02-NEXT-1", "SYN-INTAKEV-NRS02-NEXT-1", "SYN-INTAKEV-NRS02-ROOT")
+	elsewhere := successorRecord(t, "SYN-TENANT-NRS02-B", "SYN-SCAN-NRS02-NEXT-1", "SYN-INTAKEV-NRS02-NEXT-1", "SYN-INTAKEV-NRS02-ROOT")
+	inTx(t, transactor, ctx, func(txCtx context.Context) error {
+		for _, record := range []ports.ReceptionRecord{first, elsewhere} {
+			if _, err := repository.Save(txCtx, record); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	second := successorRecord(t, "SYN-TENANT-NRS02-A", "SYN-SCAN-NRS02-NEXT-2", "SYN-INTAKEV-NRS02-NEXT-2", "SYN-INTAKEV-NRS02-ROOT")
+	err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+		_, err := repository.Save(txCtx, second)
+		return err
+	})
+	if !errors.Is(err, ports.ErrPredecessorAlreadySucceeded) {
+		t.Fatalf("同一前版的第二个后继 err = %v, want ErrPredecessorAlreadySucceeded", err)
+	}
+	if _, exists, err := repository.FindByKey(ctx, second.Key); err != nil || exists {
+		t.Fatalf("被拦下的后继读回 exists=%v err=%v, want 不在册", exists, err)
+	}
+}
+
+// Covers: ADR-0199 决定二「当前有效版本是沿后继走到头的那一版」——三版一链从哪一版问都答末一版；没有后继的版本答它自己；
+// 另一个租户里同名的链不相干。
+func TestTheCurrentVersionFollowsSuccessorsToTheEnd(t *testing.T) {
+	repository, transactor := newReceptions(t)
+	ctx := t.Context()
+
+	tenant := "SYN-TENANT-NRS02"
+	inTx(t, transactor, ctx, func(txCtx context.Context) error {
+		for _, record := range []ports.ReceptionRecord{
+			successorRecord(t, tenant, "SYN-SCAN-NRS02-V2", "SYN-INTAKEV-NRS02-V2", "SYN-INTAKEV-NRS02-V1"),
+			successorRecord(t, tenant, "SYN-SCAN-NRS02-V3", "SYN-INTAKEV-NRS02-V3", "SYN-INTAKEV-NRS02-V2"),
+			successorRecord(t, "SYN-TENANT-NRS02-OTHER", "SYN-SCAN-NRS02-V4", "SYN-INTAKEV-NRS02-V4", "SYN-INTAKEV-NRS02-V3"),
+		} {
+			if _, err := repository.Save(txCtx, record); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	for from, want := range map[string]string{
+		"SYN-INTAKEV-NRS02-V1":    "SYN-INTAKEV-NRS02-V3",
+		"SYN-INTAKEV-NRS02-V2":    "SYN-INTAKEV-NRS02-V3",
+		"SYN-INTAKEV-NRS02-V3":    "SYN-INTAKEV-NRS02-V3",
+		"SYN-INTAKEV-NRS02-ALONE": "SYN-INTAKEV-NRS02-ALONE",
+	} {
+		current, err := repository.CurrentVersion(ctx, ref(t, domain.NewTenantID, tenant), ref(t, domain.NewIntakeResultVersion, from))
+		if err != nil {
+			t.Fatalf("从 %s 走：%v", from, err)
+		}
+		if current.String() != want {
+			t.Errorf("从 %s 走到 %s, want %s", from, current, want)
+		}
+	}
+}
+
+// Covers: ADR-0199 决定二的库面形状——绕过适配器直接写库的一行也过不了：形成格的判断版本不是它的收寄结果版本、带前版却没有
+// 判断版本、前版就是自己、来源文档不是对象，都被 CHECK 拒。来源保全之前的形状（三格都空）照常可写。
+func TestTheReceptionTableRefusesMisshapenVersions(t *testing.T) {
+	_, _, pool := newReceptionsWithPool(t)
+	const insert = `INSERT INTO node_operations.reception
+		(tenant_id, source_id, content_digest, kind, intake, control, candidates, identity_conflict,
+		 service_markers, judgment_version, predecessor_version, source_document, recorded_at)
+		VALUES ('SYN-TENANT-01', $1, 'syn-digest', $2,
+		        CASE WHEN $2 = 'PENDING_IDENTIFICATION' THEN '{"version":"SYN-INTAKEV-1"}'::jsonb END,
+		        CASE WHEN $2 = 'PENDING_IDENTIFICATION' THEN '{}'::jsonb END,
+		        '[]'::jsonb, false, '[]'::jsonb, $3, $4, $5::jsonb, now())`
+	cases := map[string]struct {
+		kind                           string
+		version, predecessor, document *string
+	}{
+		"判断版本不是收寄结果版本": {kind: "PENDING_IDENTIFICATION", version: ptr("SYN-INTAKEV-2")},
+		"带前版没有判断版本":    {kind: "INTAKE_NOT_FORMED", predecessor: ptr("SYN-INTAKEV-0")},
+		"前版就是自己":       {kind: "INTAKE_NOT_FORMED", version: ptr("SYN-INTAKEV-3"), predecessor: ptr("SYN-INTAKEV-3")},
+		"空白判断版本":       {kind: "INTAKE_NOT_FORMED", version: ptr(" ")},
+		"来源文档不是对象":     {kind: "INTAKE_NOT_FORMED", version: ptr("SYN-INTAKEV-4"), document: ptr(`["SYN"]`)},
+	}
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := pool.Exec(t.Context(), insert, "SYN-SCAN-"+name, testCase.kind, testCase.version, testCase.predecessor, testCase.document)
+			var pgErr *pgconn.PgError
+			if !errors.As(err, &pgErr) || pgErr.Code != "23514" {
+				t.Fatalf("写入 err = %v, want CHECK 违例（23514）", err)
+			}
+		})
+	}
+	if _, err := pool.Exec(t.Context(), insert, "SYN-SCAN-LEGACY", "INTAKE_NOT_FORMED", nil, nil, nil); err != nil {
+		t.Fatalf("来源保全之前的形状被拒：%v", err)
+	}
+	if _, err := pool.Exec(t.Context(), insert, "SYN-SCAN-OK", "PENDING_IDENTIFICATION", ptr("SYN-INTAKEV-1"), ptr("SYN-INTAKEV-0"), ptr(`{"shape":"NRS-1"}`)); err != nil {
+		t.Fatalf("合形的追加版被拒：%v", err)
+	}
+}
+
+// Covers: ADR-0199 决定一「既有行不回填」与决定二的迁移——施加来源保全那一份之前落下的行：来源文档全留空；形成与待识别两格的
+// 判断版本回填它们自己的收寄结果版本（同一个值），未收寄与待确认从未签过版本、留空；前版一律留空。从空库按序施加本上下文的
+// 迁移，停在那一份之前落旧形状的行，再施加那一份。
+func TestTheDeliverySourceMigrationLeavesExistingSourcesEmpty(t *testing.T) {
+	ctx := t.Context()
+	conn, err := pgx.Connect(ctx, pgtest.FreshDatabase(t))
+	if err != nil {
+		t.Fatalf("连空库：%v", err)
+	}
+	defer conn.Close(context.WithoutCancel(ctx))
+	if _, err := conn.Exec(ctx, `CREATE SCHEMA node_operations`); err != nil {
+		t.Fatalf("建 schema：%v", err)
+	}
+	assets, err := migrations.NodeOperations()
+	if err != nil {
+		t.Fatalf("读迁移：%v", err)
+	}
+	const target = "0007_reception_delivery_source"
+	var preserving *migrations.Asset
+	for index := range assets {
+		if assets[index].Name == target {
+			preserving = &assets[index]
+			break
+		}
+		if _, err := conn.Exec(ctx, assets[index].SQL); err != nil {
+			t.Fatalf("施加 %s：%v", assets[index].Name, err)
+		}
+	}
+	if preserving == nil {
+		t.Fatalf("没有找到迁移 %s", target)
+	}
+	if _, err := conn.Exec(ctx, `INSERT INTO node_operations.reception
+		(tenant_id, source_id, content_digest, kind, intake, control, candidates, identity_conflict, service_markers,
+		 service_result_check, recorded_at)
+		VALUES ('SYN-TENANT-01', 'SYN-SCAN-FORMED', 'syn-digest-1', 'INTAKE_FORMED',
+		        '{"version":"SYN-INTAKEV-FORMED"}'::jsonb, '{}'::jsonb, '[]'::jsonb, false, '[]'::jsonb, 'CHECKED', now()),
+		       ('SYN-TENANT-01', 'SYN-SCAN-PENDING', 'syn-digest-2', 'PENDING_IDENTIFICATION',
+		        '{"version":"SYN-INTAKEV-PENDING"}'::jsonb, '{}'::jsonb, '[]'::jsonb, true, '[]'::jsonb, NULL, now()),
+		       ('SYN-TENANT-01', 'SYN-SCAN-REFUSED', 'syn-digest-3', 'INTAKE_NOT_FORMED', NULL, NULL,
+		        '[]'::jsonb, false, '[]'::jsonb, NULL, now()),
+		       ('SYN-TENANT-01', 'SYN-SCAN-UNDECIDED', 'syn-digest-4', 'RECEPTION_UNDECIDED', NULL, NULL,
+		        '[]'::jsonb, false, '[]'::jsonb, NULL, now())`); err != nil {
+		t.Fatalf("落旧形状的行：%v", err)
+	}
+	if _, err := conn.Exec(ctx, preserving.SQL); err != nil {
+		t.Fatalf("施加 %s：%v", target, err)
+	}
+
+	type columns struct{ version, predecessor, document *string }
+	got := map[string]columns{}
+	rows, err := conn.Query(ctx, `SELECT source_id, judgment_version, predecessor_version, source_document::text FROM node_operations.reception`)
+	if err != nil {
+		t.Fatalf("读回：%v", err)
+	}
+	for rows.Next() {
+		var source string
+		var row columns
+		if err := rows.Scan(&source, &row.version, &row.predecessor, &row.document); err != nil {
+			t.Fatalf("扫描：%v", err)
+		}
+		got[source] = row
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("读回：%v", err)
+	}
+	want := map[string]*string{
+		"SYN-SCAN-FORMED":    ptr("SYN-INTAKEV-FORMED"),
+		"SYN-SCAN-PENDING":   ptr("SYN-INTAKEV-PENDING"),
+		"SYN-SCAN-REFUSED":   nil,
+		"SYN-SCAN-UNDECIDED": nil,
+	}
+	for source, version := range want {
+		row, present := got[source]
+		if !present {
+			t.Fatalf("%s 不见了", source)
+		}
+		if (version == nil) != (row.version == nil) || (version != nil && *version != *row.version) {
+			t.Errorf("%s 的判断版本 = %v, want %v", source, row.version, version)
+		}
+		if row.predecessor != nil || row.document != nil {
+			t.Errorf("%s 回填了前版 %v 或来源文档 %v, want 都留空", source, row.predecessor, row.document)
+		}
+	}
+}

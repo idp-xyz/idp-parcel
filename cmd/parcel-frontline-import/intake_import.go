@@ -159,7 +159,8 @@ func importIntake(ctx context.Context, batch intakeBatch, importer intakeImporte
 //     真实的拒收事实）；
 //   - 待确认且带记录 → 已落地：SCAN_ONLY 行的判断本就是「待确认」，记录已提交；
 //   - 待确认不带记录 → 未决：编排不再交回这一格，出现即实现缺陷；
-//   - 已有结果 → 重放：同一来源身份同一内容，原结果原样；
+//   - 已有结果 → 重放：同一来源身份同一内容，原结果原样；明细带原判断种类与那条判断链此刻的当前有效版本（ADR-0199
+//     决定二），原判断后来被接续时内勤看得到接续到了哪一版；
 //   - 来源冲突 → 被拒：同一行事实号换了内容，绝不覆盖，人核对纸单再改文件。
 func intakeRowDisposition(row intakeRow, result application.ReceiveDeliveredUnitResult) rowResult {
 	outcome := result.Outcome()
@@ -181,7 +182,7 @@ func intakeRowDisposition(row intakeRow, result application.ReceiveDeliveredUnit
 		}
 	case application.ReceptionExistingResult:
 		answer.Disposition = rowReplayed
-		answer.Detail = "原结果 " + record.Kind.String() + "；" + describeReception(record)
+		answer.Detail = "原判断 " + result.RecordedOutcome().String() + "，" + describeCurrentVersion(result) + "；" + describeReception(record)
 	case application.ReceptionSourceConflict:
 		answer.Disposition = rowRejected
 		answer.Detail = "同一行事实号已在册且内容不同——绝不覆盖；核对纸单：若是另一件事实请换行事实号"
@@ -195,6 +196,14 @@ func intakeRowDisposition(row intakeRow, result application.ReceiveDeliveredUnit
 		answer.Detail += "；意图未交出（" + handoff + "），重跑同一文件会重发同一份"
 	}
 	return answer
+}
+
+// describeCurrentVersion 写当前有效版本。来源保全之前落下的未收寄与待确认行从未签过判断版本，如实说没有，不拿空串充数。
+func describeCurrentVersion(result application.ReceiveDeliveredUnitResult) string {
+	if current := result.CurrentVersion().String(); current != "" {
+		return "当前有效版本 " + current
+	}
+	return "没有判断版本（来源保全之前落下的行）"
 }
 
 func describeReception(record ports.ReceptionRecord) string {

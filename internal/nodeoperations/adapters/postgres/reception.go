@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
@@ -138,9 +139,49 @@ func (repository *Receptions) FindOtherUnitIntakes(
 	return records, nil
 }
 
+// maxJudgmentChain 给沿后继走的那条递归查询封顶。（租户，前版）唯一保证链不分叉，却拦不住绕过编排写出的环；封顶让环报错，
+// 而不是让查询不收敛。一条链上的版本是重核、冲突与续办逐次追加的，远到不了这个数。
+const maxJudgmentChain = 1024
+
+// CurrentVersion 沿后继走到头（ADR-0199 决定二），一条递归查询走完。每一步按（租户，前版）找唯一的那一行，走索引
+// reception_predecessor_unique。走 ReadExecutor：事务内读得到本事务刚追加的那一版。
+func (repository *Receptions) CurrentVersion(
+	ctx context.Context,
+	tenant domain.TenantID,
+	version domain.IntakeResultVersion,
+) (domain.IntakeResultVersion, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return domain.IntakeResultVersion{}, fmt.Errorf("current judgment version: %w", err)
+	}
+	var current string
+	var depth int
+	if err := querier.QueryRow(ctx,
+		`WITH RECURSIVE chain (version, depth) AS (
+		     SELECT $2::text, 0
+		   UNION ALL
+		     SELECT r.judgment_version, chain.depth + 1
+		       FROM chain
+		       JOIN node_operations.reception r
+		         ON r.tenant_id = $1
+		        AND r.predecessor_version = chain.version
+		      WHERE chain.depth < $3
+		 )
+		 SELECT version, depth FROM chain ORDER BY depth DESC LIMIT 1`,
+		tenant.String(), version.String(), maxJudgmentChain,
+	).Scan(&current, &depth); err != nil {
+		return domain.IntakeResultVersion{}, fmt.Errorf("current judgment version: %w", err)
+	}
+	if depth >= maxJudgmentChain {
+		return domain.IntakeResultVersion{}, fmt.Errorf("current judgment version: chain from %q does not end within %d versions", version, maxJudgmentChain)
+	}
+	return domain.NewIntakeResultVersion(current)
+}
+
 // receptionColumns 与 scanReception 的扫描顺序是同一份约定，两处一起改。
 const receptionColumns = `source_id, content_digest, kind, intake, control, candidates,
-		        identity_conflict, refusal_reason, service_markers, service_result_check, recorded_at`
+		        identity_conflict, refusal_reason, service_markers, service_result_check, recorded_at,
+		        judgment_version, predecessor_version, source_document`
 
 // scanReception 把一行收寄册读回成记录：读回的一切经领域构造函数重建，一次坏写入在这里暴露，而不是变成一个看起来
 // 合法的收寄结果。
@@ -153,9 +194,12 @@ func scanReception(row pgx.Row, tenant domain.TenantID) (ports.ReceptionRecord, 
 		identityConflict            bool
 		checkName                   *string
 		recordedAt                  time.Time
+		judgment, predecessor       *string
+		sourceJSON                  []byte
 	)
 	if err := row.Scan(&sourceID, &digest, &kindName, &intakeJSON, &controlJSON, &candidatesJSON,
-		&identityConflict, &refusal, &markersJSON, &checkName, &recordedAt); err != nil {
+		&identityConflict, &refusal, &markersJSON, &checkName, &recordedAt,
+		&judgment, &predecessor, &sourceJSON); err != nil {
 		return ports.ReceptionRecord{}, err
 	}
 
@@ -175,6 +219,19 @@ func scanReception(row pgx.Row, tenant domain.TenantID) (ports.ReceptionRecord, 
 		RefusalReason:      refusal,
 		ServiceResultCheck: check,
 		RecordedAt:         recordedAt.UTC(),
+	}
+
+	if record.JudgmentVersion, err = versionFrom(judgment); err != nil {
+		return ports.ReceptionRecord{}, err
+	}
+	if record.Predecessor, err = versionFrom(predecessor); err != nil {
+		return ports.ReceptionRecord{}, err
+	}
+	// 来源文档为空是来源保全之前的行，读回零值即「来源未保全」，不是坏行。
+	if len(sourceJSON) > 0 {
+		if record.Source, err = domain.ParseDeliverySource(sourceJSON); err != nil {
+			return ports.ReceptionRecord{}, err
+		}
 	}
 
 	if len(intakeJSON) > 0 {
@@ -213,6 +270,9 @@ func scanReception(row pgx.Row, tenant domain.TenantID) (ports.ReceptionRecord, 
 // 错误（ADR-0031）；用 ON CONFLICT DO NOTHING 而不是捕 23505 译码：撞键的 INSERT 会
 // 把整个事务打进中止态，而编排拿到`已有记录`还要在同一个事务里读回原结果作答。
 //
+// ON CONFLICT 只认主键。（租户，前版）唯一撞上时不该吞成`已有记录`：来源不同，读回的那一行不是这一版的答案；照常报唯一
+// 违例，译成 ports.ErrPredecessorAlreadySucceeded，事务随之中止、不形成答案。
+//
 // 走 RequireExecutor：收寄判断落库与将来同一步的意图发布必须同生共死。
 func (repository *Receptions) Save(
 	ctx context.Context,
@@ -243,13 +303,21 @@ func (repository *Receptions) Save(
 	if err != nil {
 		return ports.ReceptionSaveOutcomeInvalid, fmt.Errorf("save reception: %w", err)
 	}
+	// 零值来源写 NULL：那是来源未保全的形状，不是一份空文档。
+	var sourceJSON []byte
+	if record.Source.Preserved() {
+		if sourceJSON, err = domain.CanonicalizeDeliverySource(record.Source); err != nil {
+			return ports.ReceptionSaveOutcomeInvalid, fmt.Errorf("save reception: %w", err)
+		}
+	}
 
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO node_operations.reception
 			(tenant_id, source_id, content_digest, kind, intake, control,
-			 candidates, identity_conflict, refusal_reason, service_markers, service_result_check, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
-		 ON CONFLICT DO NOTHING`,
+			 candidates, identity_conflict, refusal_reason, service_markers, service_result_check, recorded_at,
+			 judgment_version, predecessor_version, source_document)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+		 ON CONFLICT (tenant_id, source_id) DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.SourceID,
 		record.ContentDigest,
@@ -262,7 +330,14 @@ func (repository *Receptions) Save(
 		markersJSON,
 		serviceResultCheckColumn(record.ServiceResultCheck),
 		record.RecordedAt.UTC(),
+		versionColumn(record.JudgmentVersion),
+		versionColumn(record.Predecessor),
+		sourceJSON,
 	)
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "reception_predecessor_unique" {
+		return ports.ReceptionSaveOutcomeInvalid, fmt.Errorf("save reception %q: %w", record.Key.SourceID, ports.ErrPredecessorAlreadySucceeded)
+	}
 	if err != nil {
 		return ports.ReceptionSaveOutcomeInvalid, fmt.Errorf("save reception: %w", err)
 	}
@@ -417,6 +492,22 @@ func receptionKindFrom(raw string) (ports.ReceptionRecordKind, error) {
 	default:
 		return 0, fmt.Errorf("unknown reception record kind %q", raw)
 	}
+}
+
+// versionColumn 把缺席的判断版本或前版写成 NULL：首判没有前版，来源保全之前的未收寄与待确认没有判断版本。
+func versionColumn(version domain.IntakeResultVersion) *string {
+	name := version.String()
+	if name == "" {
+		return nil
+	}
+	return &name
+}
+
+func versionFrom(raw *string) (domain.IntakeResultVersion, error) {
+	if raw == nil {
+		return domain.IntakeResultVersion{}, nil
+	}
+	return domain.NewIntakeResultVersion(*raw)
 }
 
 // serviceResultCheckColumn 把不带写成 NULL：只有形成格带核对态，这条形状规则由迁移的 CHECK 在库里再守一遍。

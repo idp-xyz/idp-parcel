@@ -66,6 +66,21 @@ const (
 	ScanOnlyObservation
 )
 
+// String 是接收观察写进来源文档的名字，取在线口与受控批量口共用的那份词表（两口逐字一致，见 nodeopshttp 的
+// receptionDocument）：来源文档存的是交付观察，用设备那头的词，看的人不必再翻一道。内容指纹不用它，照旧按封闭码记。
+func (kind ReceptionClaimKind) String() string {
+	switch kind {
+	case ExplicitReception:
+		return "RECEIVED"
+	case ExplicitRefusal:
+		return "REFUSED"
+	case ScanOnlyObservation:
+		return "SCAN_ONLY"
+	default:
+		return ""
+	}
+}
+
 // ReceiveDeliveredUnitCommand 携带一件实物的交付受理输入。批量交付由调用方逐件分发：
 // 每件实物独立形成结果，整批状态吞并成员差异被用例明禁。
 type ReceiveDeliveredUnitCommand struct {
@@ -82,11 +97,12 @@ type ReceiveDeliveredUnitCommand struct {
 }
 
 type ReceiveDeliveredUnitResult struct {
-	outcome    ReceptionOutcome
-	record     ports.ReceptionRecord
-	hasRecord  bool
-	handoff    string
-	handoffErr error
+	outcome        ReceptionOutcome
+	record         ports.ReceptionRecord
+	hasRecord      bool
+	currentVersion domain.IntakeResultVersion
+	handoff        string
+	handoffErr     error
 }
 
 func (result ReceiveDeliveredUnitResult) Outcome() ReceptionOutcome {
@@ -95,6 +111,20 @@ func (result ReceiveDeliveredUnitResult) Outcome() ReceptionOutcome {
 
 func (result ReceiveDeliveredUnitResult) Record() (ports.ReceptionRecord, bool) {
 	return result.record, result.hasRecord
+}
+
+// RecordedOutcome 是已有结果所指那条记录的原判断种类，CurrentVersion 是那条判断链此刻的当前有效版本（ADR-0199 决定二）。两格
+// 只随已有结果在场；它们是信息格，Outcome 仍是已有结果——设备照 outcome 出队（ADR-0022），原判断后来被接续成什么不改变这次
+// 重投的处置。没有判断版本的旧行（来源保全之前的未收寄与待确认）CurrentVersion 缺席。
+func (result ReceiveDeliveredUnitResult) RecordedOutcome() ReceptionOutcome {
+	if result.outcome != ReceptionExistingResult {
+		return ReceptionOutcomeInvalid
+	}
+	return outcomeOfKind(result.record.Kind)
+}
+
+func (result ReceiveDeliveredUnitResult) CurrentVersion() domain.IntakeResultVersion {
+	return result.currentVersion
 }
 
 // IntakeHandoffReference 非空说明收寄已写下而意图没交出去：调用方照常提交时，重放会重发同一份。
@@ -174,7 +204,7 @@ func (handler *ReceiveDeliveredUnitHandler) Handle(
 	if found {
 		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedDeliveryContentDigest(command)) {
 		case domain.SamePayload:
-			return handler.existingResult(ctx, existing), nil
+			return handler.existingResult(ctx, existing)
 		case domain.DifferentPayload:
 			// 同一来源身份携带不同对象、时间或内容：冲突保留原结果，停止自动采用
 			// （AT-NO-017）。
@@ -191,26 +221,53 @@ func (handler *ReceiveDeliveredUnitHandler) Handle(
 	case ExplicitRefusal:
 		// 明确拒收且未取得控制：未收寄结果带原因，不形成委托拒绝、取消或终局
 		// （AT-NO-024）。
-		record := ports.ReceptionRecord{
+		return handler.commitWithoutIntake(ctx, command, ports.ReceptionRecord{
 			Key:           key,
 			ContentDigest: digest,
 			Kind:          ports.RecordIntakeNotFormed,
 			RefusalReason: command.Refusal,
-			RecordedAt:    handler.deps.Clock.Now(),
-		}
-		return handler.commit(ctx, record)
+		})
 	case ScanOnlyObservation:
 		// 只有到站扫描，没有明确接收或控制证据：判断待确认、不建立控制；扫描来源
-		// 已随记录保全（AT-NO-023）。
-		record := ports.ReceptionRecord{
+		// 随记录保全（AT-NO-023）。
+		return handler.commitWithoutIntake(ctx, command, ports.ReceptionRecord{
 			Key:           key,
 			ContentDigest: digest,
 			Kind:          ports.RecordReceptionUndecided,
-			RecordedAt:    handler.deps.Clock.Now(),
-		}
-		return handler.commit(ctx, record)
+		})
 	default:
 		return ReceiveDeliveredUnitResult{}, fmt.Errorf("%w: unknown reception claim %d", ErrReceptionCommandRejected, command.Claim)
+	}
+}
+
+// commitWithoutIntake 落未收寄与待确认两格：签判断版本、带来源文档，再提交。这两格没有收寄结果版本可借，判断版本向同一个
+// 签发器另签（ADR-0199 决定二）；签不出就不形成答案，同明确接收那一支。
+func (handler *ReceiveDeliveredUnitHandler) commitWithoutIntake(
+	ctx context.Context,
+	command ReceiveDeliveredUnitCommand,
+	record ports.ReceptionRecord,
+) (ReceiveDeliveredUnitResult, error) {
+	version, err := handler.deps.Versions.NextIntakeResultVersion(ctx)
+	if err != nil {
+		return ReceiveDeliveredUnitResult{}, fmt.Errorf("next judgment version: %w", err)
+	}
+	record.JudgmentVersion = version
+	record.Source = deliverySourceOf(command)
+	record.RecordedAt = handler.deps.Clock.Now()
+	return handler.commit(ctx, record)
+}
+
+// deliverySourceOf 取本次交付的来源文档（ADR-0199 决定一）。逐格照抄命令，外部标识观察不改写：入口交来什么就存什么。
+func deliverySourceOf(command ReceiveDeliveredUnitCommand) domain.DeliverySource {
+	return domain.DeliverySource{
+		Unit:        command.Unit,
+		Mark:        command.Mark.Mark,
+		Claim:       command.Claim.String(),
+		Evidence:    command.Evidence,
+		Refusal:     command.Refusal,
+		DeliveredBy: command.DeliveredBy,
+		Node:        command.Node,
+		OccurredAt:  command.OccurredAt.UTC(),
 	}
 }
 
@@ -305,6 +362,8 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 		Key:                key,
 		ContentDigest:      digest,
 		Kind:               kind,
+		JudgmentVersion:    version,
+		Source:             deliverySourceOf(command),
 		Intake:             intake,
 		Control:            control,
 		Candidates:         candidates,
@@ -331,6 +390,11 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 // 追加的一版是那件实物的又一行待识别收寄：收寄事实与控制照原判断，换一个结果版本、去掉关联、候选记那件包裹、记身份
 // 冲突。它不交 PS 意图（待识别没有可采用的关联）。来源标识由后到那次送站与先到那件实物派生：同一次送站重放不会再追加，
 // 第三件再来时各追加各的。
+//
+// 这一版指名前版：被依的那一行所在判断链此刻的当前有效版本（ADR-0199 决定二）。第三件再来时那条链已由上一版冲突版接续，
+// 前版就是上一版冲突版，不是原判断——指原判断就成了一版两个后继。读链在包裹锁之后（FindOtherUnitIntakes 取的锁），并发的
+// 另一件送站已追加的那一版此刻读得到。来源保全之前追加的冲突版没有指名前版，链上看不见它，这里会从原判断接下去（ADR-0199
+// 决定二「不回填」）。
 func (handler *ReceiveDeliveredUnitHandler) appendIdentityConflicts(
 	ctx context.Context,
 	late ports.ReceptionRecord,
@@ -355,6 +419,11 @@ func (handler *ReceiveDeliveredUnitHandler) appendIdentityConflicts(
 		if err != nil {
 			return fmt.Errorf("next intake result version for identity conflict: %w", err)
 		}
+		// 被依的那一行带着关联，是形成格，它的判断版本就是收寄结果版本。
+		predecessor, err := handler.deps.Receptions.CurrentVersion(ctx, late.Key.TenantID, earlier.Intake.Version())
+		if err != nil {
+			return fmt.Errorf("current version before identity conflict: %w", err)
+		}
 		intake, err := domain.FormNodeIntake(domain.NodeIntakeSpec{
 			TenantID:    late.Key.TenantID,
 			Unit:        unit,
@@ -372,9 +441,13 @@ func (handler *ReceiveDeliveredUnitHandler) appendIdentityConflicts(
 				TenantID: late.Key.TenantID,
 				SourceID: identityConflictSourceID(late.Key.SourceID, unit),
 			},
-			// 摘要沿用后到那次送站的：这一版由那次送站引起；万一有设备撞上派生的来源标识，指纹对不上，答来源冲突而不是重放。
+			// 摘要与来源文档都沿用后到那次送站的：这一版由那次送站引起；万一有设备撞上派生的来源标识，指纹对不上，答来源冲突
+			// 而不是重放。来源文档里的作业实物因此是后到那件。
 			ContentDigest:    late.ContentDigest,
 			Kind:             ports.RecordPendingIdentification,
+			JudgmentVersion:  version,
+			Predecessor:      predecessor,
+			Source:           late.Source,
 			Intake:           intake,
 			Control:          earlier.Control,
 			Candidates:       late.Candidates,
@@ -420,36 +493,48 @@ func (handler *ReceiveDeliveredUnitHandler) commit(
 		if !found {
 			return ReceiveDeliveredUnitResult{}, errors.New("node operations: reception already recorded but not readable")
 		}
-		return handler.existingResult(ctx, winner), nil
+		return handler.existingResult(ctx, winner)
 	default:
 		return ReceiveDeliveredUnitResult{}, fmt.Errorf("%w: %d", ErrUnexpectedReceptionSave, saved)
 	}
 }
 
-// existingResult 按已有记录作答并重发同一份意图（AT-NO-016/027）。
+// existingResult 按已有记录作答并重发同一份意图（AT-NO-016/027），带回那条判断链此刻的当前有效版本（ADR-0199 决定二）。读不出
+// 当前有效版本就不形成答案：答一格缺了它的已有结果，设备出队，原判断后来被接续这件事就没人看得到。
 func (handler *ReceiveDeliveredUnitHandler) existingResult(
 	ctx context.Context,
 	record ports.ReceptionRecord,
-) ReceiveDeliveredUnitResult {
+) (ReceiveDeliveredUnitResult, error) {
 	result := resultForRecord(record)
 	result.outcome = ReceptionExistingResult
+	if record.JudgmentVersion.String() != "" {
+		current, err := handler.deps.Receptions.CurrentVersion(ctx, record.Key.TenantID, record.JudgmentVersion)
+		if err != nil {
+			return ReceiveDeliveredUnitResult{}, fmt.Errorf("current version of the recorded judgment: %w", err)
+		}
+		result.currentVersion = current
+	}
 	result.handoff, result.handoffErr = handler.handOff(ctx, record)
-	return result
+	return result, nil
 }
 
 func resultForRecord(record ports.ReceptionRecord) ReceiveDeliveredUnitResult {
-	outcome := ReceptionOutcomeInvalid
-	switch record.Kind {
+	return ReceiveDeliveredUnitResult{outcome: outcomeOfKind(record.Kind), record: record, hasRecord: true}
+}
+
+func outcomeOfKind(kind ports.ReceptionRecordKind) ReceptionOutcome {
+	switch kind {
 	case ports.RecordIntakeFormed:
-		outcome = NodeIntakeFormed
+		return NodeIntakeFormed
 	case ports.RecordPendingIdentification:
-		outcome = UnitPendingIdentification
+		return UnitPendingIdentification
 	case ports.RecordIntakeNotFormed:
-		outcome = NodeIntakeNotFormed
+		return NodeIntakeNotFormed
 	case ports.RecordReceptionUndecided:
-		outcome = ReceptionUndecided
+		return ReceptionUndecided
+	default:
+		return ReceptionOutcomeInvalid
 	}
-	return ReceiveDeliveredUnitResult{outcome: outcome, record: record, hasRecord: true}
 }
 
 // handOff 交发布意图。只有形成了可供下游消费的收寄（关联收寄）才交——待识别、未收寄

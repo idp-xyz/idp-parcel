@@ -4,6 +4,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
@@ -135,10 +136,22 @@ func (check ServiceResultCheck) String() string {
 // 候选与身份冲突只在待识别格有意义；服务结果标记（已取消 / 终局，编排在身份唯一成立时向 PS 取，由
 // ParcelServiceResults.Markers 合成）与核对态只在形成格在场——它们不阻止接收，只限制后续方向性作业。标记串原样保全，
 // 只给人看与审计，不得解析（ADR-0186）。
+//
+// 判断版本、前版与来源文档见 ADR-0199 决定一、决定二：
+//   - JudgmentVersion：每种判断都有。形成与待识别两格就是 Intake 上的收寄结果版本，不另签；未收寄与待确认两格由同一个
+//     签发器另签。类型沿用 IntakeResultVersion，因为两者同一签发器、同一命名空间。
+//   - Predecessor：只有追加的一版带，指名它接续的那条判断链此刻的当前有效版本；首判不带。一版至多一个后继，由收寄库守。
+//   - Source：本次交付的来源文档，追加的冲突版带引起它的那次送站的。零值是来源未保全（来源保全之前落下的行）。
+//
+// 三格都不进内容指纹：判断版本与前版是服务端在判断时刻签下与认出的，来源文档里多出的证据、拒收原因与交付方按 ADR-0199
+// 越权风险点不改幂等与冲突的分界。
 type ReceptionRecord struct {
 	Key                ReceptionKey
 	ContentDigest      string
 	Kind               ReceptionRecordKind
+	JudgmentVersion    domain.IntakeResultVersion
+	Predecessor        domain.IntakeResultVersion
+	Source             domain.DeliverySource
 	Intake             domain.NodeIntake
 	Control            domain.PhysicalControl
 	Candidates         []domain.ParcelAssociationReference
@@ -174,7 +187,21 @@ type ReceptionStore interface {
 		parcel domain.ParcelAssociationReference,
 		unit domain.HandlingUnitID,
 	) ([]ReceptionRecord, error)
+	// CurrentVersion 交回 version 所在判断链此刻的当前有效版本：沿「前版是它」的那一行一路走到没有后继的那一版；没有后继
+	// 时就是 version 自己（ADR-0199 决定二）。只走本租户，不看 version 本身在不在册——没有判断版本的旧行无从问起，由调用方
+	// 不问。读不动作为错误返回。
+	//
+	// 追加一版之前在同一笔事务里问：并发里另一方先追加的那一版要么已提交、在这里读得到，要么撞上（租户，前版）唯一。
+	CurrentVersion(
+		ctx context.Context,
+		tenant domain.TenantID,
+		version domain.IntakeResultVersion,
+	) (domain.IntakeResultVersion, error)
 }
+
+// ErrPredecessorAlreadySucceeded 说明 Save 写的一版所指名的前版在本租户已有后继：一版至多一个后继（ADR-0199 决定二）。它不译成
+// ReceptionAlreadyRecorded——那一格说的是同一来源已在册，读回赢家作答；这里来源不同，读回什么都不是这一版的答案。
+var ErrPredecessorAlreadySucceeded = errors.New("node operations: the predecessor judgment version already has a successor")
 
 // IntakeIdentityFactory 签发收寄结果版本。
 type IntakeIdentityFactory interface {

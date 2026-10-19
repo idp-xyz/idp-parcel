@@ -47,8 +47,9 @@ type receptionStoreDouble struct {
 	lostRace    bool
 	readBackErr error
 	saveAsked   bool
-	// othersErr 让按包裹读别的作业实物收寄那一次报错。
+	// othersErr 让按包裹读别的作业实物收寄那一次报错；chainErr 让读判断链当前有效版本那一次报错。
 	othersErr error
+	chainErr  error
 }
 
 func newReceptionStore() *receptionStoreDouble {
@@ -80,6 +81,12 @@ func (double *receptionStoreDouble) Save(
 	if _, exists := double.byKey[record.Key]; exists || double.lostRace {
 		return ports.ReceptionAlreadyRecorded, nil
 	}
+	// 照库面的（租户，前版）唯一：一版至多一个后继。
+	if record.Predecessor.String() != "" {
+		if _, taken := double.successorOf(record.Key.TenantID, record.Predecessor); taken {
+			return ports.ReceptionSaveOutcomeInvalid, ports.ErrPredecessorAlreadySucceeded
+		}
+	}
 	double.byKey[record.Key] = record
 	double.saved++
 	return ports.ReceptionSaved, nil
@@ -106,6 +113,38 @@ func (double *receptionStoreDouble) FindOtherUnitIntakes(
 		return strings.Compare(left.Key.SourceID, right.Key.SourceID)
 	})
 	return found, nil
+}
+
+// CurrentVersion 照真库的走法在内存里沿后继走：同租户里前版是它的那一行，一路走到没有后继的那一版。
+func (double *receptionStoreDouble) CurrentVersion(
+	_ context.Context,
+	tenant domain.TenantID,
+	version domain.IntakeResultVersion,
+) (domain.IntakeResultVersion, error) {
+	if double.chainErr != nil {
+		return domain.IntakeResultVersion{}, double.chainErr
+	}
+	current := version
+	for range len(double.byKey) + 1 {
+		next, found := double.successorOf(tenant, current)
+		if !found {
+			return current, nil
+		}
+		current = next
+	}
+	return domain.IntakeResultVersion{}, errors.New("判断链没有尽头")
+}
+
+func (double *receptionStoreDouble) successorOf(
+	tenant domain.TenantID,
+	version domain.IntakeResultVersion,
+) (domain.IntakeResultVersion, bool) {
+	for key, record := range double.byKey {
+		if key.TenantID == tenant && record.Predecessor == version {
+			return record.JudgmentVersion, true
+		}
+	}
+	return domain.IntakeResultVersion{}, false
 }
 
 // recordsOfUnit 交回收寄库里这件作业实物的各行带收寄的记录。
@@ -860,4 +899,265 @@ func TestTheSameUnitDeliveredAgainIsNotAnIdentityConflict(t *testing.T) {
 	if fixture.receptions.saved != saved {
 		t.Fatalf("重放又落了 %d 行", fixture.receptions.saved-saved)
 	}
+}
+
+// sourceOf 是一条命令应留下的来源文档：逐格取自命令，外部标识观察不改写。
+func sourceOf(command application.ReceiveDeliveredUnitCommand, claim string) domain.DeliverySource {
+	return domain.DeliverySource{
+		Unit:        command.Unit,
+		Mark:        command.Mark.Mark,
+		Claim:       claim,
+		Evidence:    command.Evidence,
+		Refusal:     command.Refusal,
+		DeliveredBy: command.DeliveredBy,
+		Node:        command.Node,
+		OccurredAt:  command.OccurredAt.UTC(),
+	}
+}
+
+// Covers: `AT-NO-047`「明确接收、明确拒收、只有扫描各来一次交付——每一次的来源都随判断保全，外部标识观察原样；此后的重投
+// 与追加版本都不改写它」的编排面（ADR-0199 决定一、决定二）：三支各落一行，记录带来源文档，外部标识观察逐字等于入参
+// （两端带空白的号原样），某格在这种观察里本就缺席时是空串；三支都签判断版本，形成格的就是收寄结果版本。同一来源只在
+// 证据、交付方或拒收原因上不同的重投答已有结果，首存的来源文档不被覆盖。
+func TestEveryObservationKeepsItsDeliverySource(t *testing.T) {
+	const mark = "  SYN-BARCODE-NRS02 \t"
+	customer2 := mustValue(t, domain.NewDeliveringPartyReference, "SYN-CUSTOMER-NRS02-2")
+	cases := map[string]struct {
+		arrange func(*application.ReceiveDeliveredUnitCommand)
+		resend  func(*application.ReceiveDeliveredUnitCommand)
+		claim   string
+		kind    ports.ReceptionRecordKind
+	}{
+		"明确接收": {
+			resend: func(command *application.ReceiveDeliveredUnitCommand) {
+				command.Evidence = mustValue(t, domain.NewReceptionEvidenceReference, "SYN-SIGN-NRS02-OTHER")
+				command.DeliveredBy = customer2
+			},
+			claim: "RECEIVED",
+			kind:  ports.RecordIntakeFormed,
+		},
+		"明确拒收": {
+			arrange: func(command *application.ReceiveDeliveredUnitCommand) {
+				command.Claim, command.Evidence, command.Refusal = application.ExplicitRefusal, domain.ReceptionEvidenceReference{}, "SYN-REFUSED-DAMAGED"
+			},
+			resend: func(command *application.ReceiveDeliveredUnitCommand) {
+				command.Refusal = "SYN-REFUSED-OTHER"
+				command.DeliveredBy = customer2
+			},
+			claim: "REFUSED",
+			kind:  ports.RecordIntakeNotFormed,
+		},
+		"仅扫描": {
+			arrange: func(command *application.ReceiveDeliveredUnitCommand) {
+				command.Claim, command.Evidence = application.ScanOnlyObservation, domain.ReceptionEvidenceReference{}
+			},
+			resend: func(command *application.ReceiveDeliveredUnitCommand) { command.DeliveredBy = customer2 },
+			claim:  "SCAN_ONLY",
+			kind:   ports.RecordReceptionUndecided,
+		},
+	}
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			fixture := newReceptionFixture(t)
+			command := receiveCommand(t)
+			command.Mark = ports.ExternalMarkObservation{Mark: mark}
+			if testCase.arrange != nil {
+				testCase.arrange(&command)
+			}
+			want := sourceOf(command, testCase.claim)
+
+			result, err := fixture.handler.Handle(context.Background(), command)
+			if err != nil {
+				t.Fatalf("首投：%v", err)
+			}
+			record, _ := result.Record()
+			if record.Kind != testCase.kind {
+				t.Fatalf("种类 = %s, want %s", record.Kind, testCase.kind)
+			}
+			if record.Source != want || record.Source.Mark != mark {
+				t.Fatalf("来源文档 = %+v, want %+v", record.Source, want)
+			}
+			if record.JudgmentVersion.String() == "" {
+				t.Fatal("这一支的判断没有签判断版本")
+			}
+			if testCase.kind == ports.RecordIntakeFormed && record.JudgmentVersion != record.Intake.Version() {
+				t.Fatalf("形成格的判断版本 %q 不是收寄结果版本 %q", record.JudgmentVersion, record.Intake.Version())
+			}
+			if record.Predecessor.String() != "" {
+				t.Fatalf("首投指名了前版 %q", record.Predecessor)
+			}
+
+			resent := command
+			testCase.resend(&resent)
+			replay, err := fixture.handler.Handle(context.Background(), resent)
+			if err != nil || replay.Outcome() != application.ReceptionExistingResult {
+				t.Fatalf("只在证据、交付方或原因上不同的重投 outcome = %q err = %v, want EXISTING_RESULT", replay.Outcome(), err)
+			}
+			key := ports.ReceptionKey{TenantID: command.TenantID, SourceID: command.SourceID}
+			if kept := fixture.receptions.byKey[key]; kept.Source != want || kept.JudgmentVersion != record.JudgmentVersion {
+				t.Fatalf("重投之后在册的来源 %+v 版本 %q, want 首存的 %+v %q", kept.Source, kept.JudgmentVersion, want, record.JudgmentVersion)
+			}
+			if fixture.receptions.saved != 1 {
+				t.Fatalf("落册 %d 行, want 1", fixture.receptions.saved)
+			}
+		})
+	}
+}
+
+// conflictVersionsOf 交回这件作业实物在册上指名了前版的各行，即追加的冲突版。
+func conflictVersionsOf(fixture *receptionFixture, unit string) map[domain.IntakeResultVersion]ports.ReceptionRecord {
+	byPredecessor := map[domain.IntakeResultVersion]ports.ReceptionRecord{}
+	for _, row := range fixture.receptions.recordsOfUnit(unit) {
+		if row.Predecessor.String() != "" {
+			byPredecessor[row.Predecessor] = row
+		}
+	}
+	return byPredecessor
+}
+
+// Covers: `AT-NO-048`「原判断已被后续版本接续之后，同一来源重投——返回已有结果，带原判断种类与当前有效版本；不重复控制
+// 起点或事件」（ADR-0199 决定二）：ADR-0196 一码两物之后，先到那件的原判断由追加的冲突版接续——冲突版指名原判断为
+// 前版、带后到那次送站的来源文档。重投先到那件的来源答已有结果：原判断种类是 INTAKE_FORMED，当前有效版本是冲突版；
+// 不另落一行、不另签版本，意图只重发原来那一份。第三件再来，追加的冲突版指名上一版冲突版，当前有效版本随之走到它。
+func TestAReplayAfterAnIdentityConflictAnswersTheCurrentVersion(t *testing.T) {
+	fixture, _ := oneMarkFixture(t)
+	first := oneMarkCommand(t, "SYN-DELIVERY-NRS02-A", "SYN-UNIT-NRS02-A")
+	formed, err := fixture.handler.Handle(context.Background(), first)
+	if err != nil || formed.Outcome() != application.NodeIntakeFormed {
+		t.Fatalf("先到那件 outcome = %q err = %v, want INTAKE_FORMED", formed.Outcome(), err)
+	}
+	if formed.RecordedOutcome() != application.ReceptionOutcomeInvalid || formed.CurrentVersion().String() != "" {
+		t.Fatalf("首答带了原判断种类 %q 或当前有效版本 %q——两格只随已有结果", formed.RecordedOutcome(), formed.CurrentVersion())
+	}
+	original, _ := formed.Record()
+
+	second := oneMarkCommand(t, "SYN-DELIVERY-NRS02-B", "SYN-UNIT-NRS02-B")
+	conflicted, err := fixture.handler.Handle(context.Background(), second)
+	if err != nil || conflicted.Outcome() != application.UnitPendingIdentification {
+		t.Fatalf("后到那件 outcome = %q err = %v, want PENDING_IDENTIFICATION", conflicted.Outcome(), err)
+	}
+	late, _ := conflicted.Record()
+	appended, found := conflictVersionsOf(fixture, "SYN-UNIT-NRS02-A")[original.JudgmentVersion]
+	if !found {
+		t.Fatalf("先到那件的冲突版没有指名原判断 %q 为前版：%+v", original.JudgmentVersion, conflictVersionsOf(fixture, "SYN-UNIT-NRS02-A"))
+	}
+	if appended.JudgmentVersion.String() == "" || appended.JudgmentVersion != appended.Intake.Version() {
+		t.Fatalf("冲突版的判断版本 %q 不是它的收寄结果版本 %q", appended.JudgmentVersion, appended.Intake.Version())
+	}
+	if appended.Source != late.Source || appended.Source.Unit.String() != "SYN-UNIT-NRS02-B" {
+		t.Fatalf("冲突版的来源文档 = %+v, want 后到那次送站的 %+v", appended.Source, late.Source)
+	}
+
+	saved, signed, intents := fixture.receptions.saved, fixture.versions.next, len(fixture.downstream.intents)
+	replay, err := fixture.handler.Handle(context.Background(), first)
+	if err != nil || replay.Outcome() != application.ReceptionExistingResult {
+		t.Fatalf("重投先到那件 outcome = %q err = %v, want EXISTING_RESULT", replay.Outcome(), err)
+	}
+	if replay.RecordedOutcome() != application.NodeIntakeFormed {
+		t.Fatalf("原判断种类 = %q, want INTAKE_FORMED", replay.RecordedOutcome())
+	}
+	if replay.CurrentVersion() != appended.JudgmentVersion {
+		t.Fatalf("当前有效版本 = %q, want 冲突版 %q", replay.CurrentVersion(), appended.JudgmentVersion)
+	}
+	if fixture.receptions.saved != saved || fixture.versions.next != signed {
+		t.Fatalf("重投又落了 %d 行、签了 %d 个版本", fixture.receptions.saved-saved, fixture.versions.next-signed)
+	}
+	if got := fixture.downstream.intents[len(fixture.downstream.intents)-1]; len(fixture.downstream.intents) != intents+1 || got.Record.Key != original.Key {
+		t.Fatalf("意图 %d → %d 份，末一份是 %q, want 只重发原来那一份", intents, len(fixture.downstream.intents), got.Record.Key.SourceID)
+	}
+
+	third := oneMarkCommand(t, "SYN-DELIVERY-NRS02-C", "SYN-UNIT-NRS02-C")
+	if _, err := fixture.handler.Handle(context.Background(), third); err != nil {
+		t.Fatalf("第三件：%v", err)
+	}
+	next, found := conflictVersionsOf(fixture, "SYN-UNIT-NRS02-A")[appended.JudgmentVersion]
+	if !found {
+		t.Fatalf("第三件引起的冲突版没有指名上一版冲突版 %q：%+v", appended.JudgmentVersion, conflictVersionsOf(fixture, "SYN-UNIT-NRS02-A"))
+	}
+	again, err := fixture.handler.Handle(context.Background(), first)
+	if err != nil || again.CurrentVersion() != next.JudgmentVersion || again.RecordedOutcome() != application.NodeIntakeFormed {
+		t.Fatalf("再重投 当前有效版本 = %q 原判断种类 = %q err = %v, want %q INTAKE_FORMED",
+			again.CurrentVersion(), again.RecordedOutcome(), err, next.JudgmentVersion)
+	}
+}
+
+// Covers: `AT-NO-048` 的另两支（ADR-0199 决定二）——仅扫描与明确拒收重投答已有结果，原判断种类各是 RECEPTION_UNDECIDED 与
+// INTAKE_NOT_FORMED，当前有效版本是它们自己签下的判断版本（没有后继）。
+func TestAReplayOfAnUndecidedOrRefusedJudgmentAnswersItsOwnVersion(t *testing.T) {
+	cases := map[string]struct {
+		arrange func(*application.ReceiveDeliveredUnitCommand)
+		want    application.ReceptionOutcome
+	}{
+		"仅扫描": {
+			arrange: func(command *application.ReceiveDeliveredUnitCommand) {
+				command.Claim, command.Evidence = application.ScanOnlyObservation, domain.ReceptionEvidenceReference{}
+			},
+			want: application.ReceptionUndecided,
+		},
+		"明确拒收": {
+			arrange: func(command *application.ReceiveDeliveredUnitCommand) {
+				command.Claim, command.Evidence, command.Refusal = application.ExplicitRefusal, domain.ReceptionEvidenceReference{}, "SYN-REFUSED-DAMAGED"
+			},
+			want: application.NodeIntakeNotFormed,
+		},
+	}
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			fixture := newReceptionFixture(t)
+			command := receiveCommand(t)
+			testCase.arrange(&command)
+			first, err := fixture.handler.Handle(context.Background(), command)
+			if err != nil {
+				t.Fatalf("首投：%v", err)
+			}
+			record, _ := first.Record()
+			replay, err := fixture.handler.Handle(context.Background(), command)
+			if err != nil || replay.Outcome() != application.ReceptionExistingResult {
+				t.Fatalf("重投 outcome = %q err = %v, want EXISTING_RESULT", replay.Outcome(), err)
+			}
+			if replay.RecordedOutcome() != testCase.want {
+				t.Fatalf("原判断种类 = %q, want %q", replay.RecordedOutcome(), testCase.want)
+			}
+			if replay.CurrentVersion().String() == "" || replay.CurrentVersion() != record.JudgmentVersion {
+				t.Fatalf("当前有效版本 = %q, want 它自己的判断版本 %q", replay.CurrentVersion(), record.JudgmentVersion)
+			}
+		})
+	}
+}
+
+// Covers: ADR-0186「没形成答案一律交回 error」的两处新读写——拒收与仅扫描签不出判断版本时不落册；重投时读不出判断链的当前
+// 有效版本，不答一格缺了当前有效版本的已有结果。两处都零落册、零意图。
+func TestJudgmentVersionFailuresFormNoAnswer(t *testing.T) {
+	failure := errors.New("dependency down")
+	for name, claim := range map[string]application.ReceptionClaimKind{"明确拒收": application.ExplicitRefusal, "仅扫描": application.ScanOnlyObservation} {
+		t.Run(name+"签不出判断版本", func(t *testing.T) {
+			fixture := newReceptionFixture(t)
+			fixture.versions.err = failure
+			command := receiveCommand(t)
+			command.Claim, command.Evidence, command.Refusal = claim, domain.ReceptionEvidenceReference{}, "SYN-REFUSED-DAMAGED"
+			result, err := fixture.handler.Handle(context.Background(), command)
+			if err == nil || errors.Is(err, application.ErrReceptionCommandRejected) {
+				t.Fatalf("outcome = %q err = %v, want 依赖故障类 error", result.Outcome(), err)
+			}
+			if fixture.receptions.saved != 0 {
+				t.Fatalf("落册 %d 行, want 0", fixture.receptions.saved)
+			}
+		})
+	}
+
+	t.Run("重投读不出当前有效版本", func(t *testing.T) {
+		fixture := newReceptionFixture(t)
+		if _, err := fixture.handler.Handle(context.Background(), receiveCommand(t)); err != nil {
+			t.Fatalf("首投：%v", err)
+		}
+		fixture.receptions.chainErr = failure
+		intents := len(fixture.downstream.intents)
+		result, err := fixture.handler.Handle(context.Background(), receiveCommand(t))
+		if err == nil {
+			t.Fatalf("outcome = %q, want error", result.Outcome())
+		}
+		if fixture.receptions.saved != 1 || len(fixture.downstream.intents) != intents {
+			t.Fatalf("落册 %d、意图 %d → %d, want 仍是首投那一份", fixture.receptions.saved, intents, len(fixture.downstream.intents))
+		}
+	})
 }

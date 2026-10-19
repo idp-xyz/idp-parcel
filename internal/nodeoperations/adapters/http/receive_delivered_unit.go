@@ -112,6 +112,10 @@ func NewReceiveDeliveredUnitEndpoint(intake ReceptionIntake, handler ReceptionHa
 //
 // `serviceResultCheck` 只随收寄已形成的记录出现（首答与重放都带），是信息格不是业务判别：读不动那条照样是
 // INTAKE_FORMED，这一格告诉看的人标记缺席不代表没有取消或终局（ADR-0186）。
+//
+// `recordedOutcome` 与 `currentVersion` 只随已有结果出现，同是信息格（ADR-0199 决定二）：原判断种类取记录种类的原名，与
+// `outcome` 的前四格同一份词，但不进 `outcome`——设备照 `outcome` 出队，重投的处置不因原判断后来被接续而变。来源保全之前的
+// 未收寄与待确认行没有判断版本，`currentVersion` 缺席。
 type receptionResponse struct {
 	Outcome            string   `json:"outcome"`
 	IntakeVersion      string   `json:"intakeVersion,omitempty"`
@@ -123,6 +127,8 @@ type receptionResponse struct {
 	RefusalReason      string   `json:"refusalReason,omitempty"`
 	ServiceMarkers     []string `json:"serviceMarkers,omitempty"`
 	ServiceResultCheck string   `json:"serviceResultCheck,omitempty"`
+	RecordedOutcome    string   `json:"recordedOutcome,omitempty"`
+	CurrentVersion     string   `json:"currentVersion,omitempty"`
 }
 
 // problemResponse 刻意不带自由文本消息。底层失败的措辞会捎带租户、节点或实物的存在
@@ -165,6 +171,8 @@ func writeOutcome(response http.ResponseWriter, result application.ReceiveDelive
 		body.ServiceMarkers = append(body.ServiceMarkers, record.ServiceMarkers...)
 		body.ServiceResultCheck = record.ServiceResultCheck.String()
 	}
+	body.RecordedOutcome = result.RecordedOutcome().String()
+	body.CurrentVersion = result.CurrentVersion().String()
 
 	// ADR-0022：状态码只报有没有形成答案。待识别、未形成、未决、已有结果与来源冲突
 	// 都是形成了的答案（2xx 带结果体）；只有首次收寄成立用 201 区分「新事实已登记」。

@@ -158,6 +158,13 @@ func TestFrontlineImportVerticalOnRealPostgres(t *testing.T) {
 	assertDisposition(t, replayed, 0, rowReplayed, "EXISTING_RESULT")
 	assertDisposition(t, replayed, 1, rowReplayed, "EXISTING_RESULT")
 	assertDisposition(t, replayed, 2, rowReplayed, "EXISTING_RESULT")
+	// 重放的明细带原判断种类与当前有效版本（ADR-0199 决定二）：三行都没有后继，当前有效版本就是各自的判断版本。
+	for index, record := range []ports.ReceptionRecord{pending, refused, scanOnly} {
+		want := "原判断 " + record.Kind.String() + "，当前有效版本 " + record.JudgmentVersion.String()
+		if record.JudgmentVersion.String() == "" || !strings.Contains(replayed[index].Detail, want) {
+			t.Fatalf("重放明细 = %q, want 含 %q", replayed[index].Detail, want)
+		}
+	}
 
 	// 来源冲突：同一行事实号换了业务时间即另一份内容（摘要含业务时间）。绝不覆盖。
 	conflicting := strings.Replace(string(sampleTemplate(t)),

@@ -78,6 +78,28 @@ func (double *receptionStoreDouble) FindOtherUnitIntakes(
 	return []ports.ReceptionRecord{}, nil
 }
 
+// CurrentVersion 沿后继在内存里走到头：同租户里前版是它的那一行。
+func (double *receptionStoreDouble) CurrentVersion(
+	_ context.Context,
+	tenant domain.TenantID,
+	version domain.IntakeResultVersion,
+) (domain.IntakeResultVersion, error) {
+	current := version
+	for range len(double.byKey) + 1 {
+		advanced := false
+		for key, record := range double.byKey {
+			if key.TenantID == tenant && record.Predecessor == current {
+				current, advanced = record.JudgmentVersion, true
+				break
+			}
+		}
+		if !advanced {
+			return current, nil
+		}
+	}
+	return domain.IntakeResultVersion{}, errors.New("判断链没有尽头")
+}
+
 type versionFactoryDouble struct{ next int }
 
 func (double *versionFactoryDouble) NextIntakeResultVersion(context.Context) (domain.IntakeResultVersion, error) {
@@ -246,6 +268,8 @@ type receptionView struct {
 	Candidates         []string `json:"candidates"`
 	RefusalReason      string   `json:"refusalReason"`
 	ServiceResultCheck *string  `json:"serviceResultCheck"`
+	RecordedOutcome    *string  `json:"recordedOutcome"`
+	CurrentVersion     *string  `json:"currentVersion"`
 }
 
 func decodeReception(t *testing.T, recorder *httptest.ResponseRecorder) receptionView {
@@ -391,6 +415,44 @@ func TestReceiveReportsOKForEveryAnswerThatFormedNoIntake(t *testing.T) {
 			}
 			if testCase.inspect != nil {
 				testCase.inspect(t, view)
+			}
+		})
+	}
+}
+
+// Covers: ADR-0199 决定二「已有结果的答复带两格信息」的 HTTP 面——重投答 200 EXISTING_RESULT，另带 `recordedOutcome`（原判断
+// 种类）与 `currentVersion`（当前有效版本）；两格是信息格，`outcome` 照旧是 EXISTING_RESULT，首答不带它们。拒收那一支没有
+// 收寄结果版本，当前有效版本是它签下的判断版本。
+func TestAnExistingResultCarriesTheRecordedOutcomeAndTheCurrentVersion(t *testing.T) {
+	refusal := defaultBody()
+	refusal.Claim, refusal.Refusal, refusal.Evidence = "REFUSAL", "PACKAGING_UNSAFE", ""
+	for name, testCase := range map[string]struct {
+		body     deviceBody
+		recorded string
+	}{
+		"收寄已形成": {body: defaultBody(), recorded: "INTAKE_FORMED"},
+		"明确拒收":  {body: refusal, recorded: "INTAKE_NOT_FORMED"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newAdapterFixture(t)
+			first := decodeReception(t, fixture.post(t, testCase.body))
+			if first.RecordedOutcome != nil || first.CurrentVersion != nil {
+				t.Fatalf("首答带了 recordedOutcome %v / currentVersion %v——两格只随已有结果", first.RecordedOutcome, first.CurrentVersion)
+			}
+			response := fixture.post(t, testCase.body)
+			replay := decodeReception(t, response)
+			if response.Code != http.StatusOK || replay.Outcome != "EXISTING_RESULT" {
+				t.Fatalf("重投 %d %q, want 200 EXISTING_RESULT", response.Code, replay.Outcome)
+			}
+			if replay.RecordedOutcome == nil || *replay.RecordedOutcome != testCase.recorded {
+				t.Fatalf("recordedOutcome = %v, want %q", replay.RecordedOutcome, testCase.recorded)
+			}
+			stored := fixture.store.byKey[ports.ReceptionKey{TenantID: fixture.intake.tenant, SourceID: testCase.body.SourceID}]
+			if replay.CurrentVersion == nil || *replay.CurrentVersion == "" || *replay.CurrentVersion != stored.JudgmentVersion.String() {
+				t.Fatalf("currentVersion = %v, want 在册的判断版本 %q", replay.CurrentVersion, stored.JudgmentVersion)
+			}
+			if testCase.recorded == "INTAKE_FORMED" && *replay.CurrentVersion != first.IntakeVersion {
+				t.Fatalf("currentVersion = %q, want 收寄结果版本 %q", *replay.CurrentVersion, first.IntakeVersion)
 			}
 		})
 	}

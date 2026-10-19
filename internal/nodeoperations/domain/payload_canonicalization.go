@@ -4,6 +4,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -222,4 +223,113 @@ func CanonicalizeDeliveryPayload(unit HandlingUnitID, mark string, claim uint8, 
 		Node:             node.String(),
 		OccurredAt:       occurredAt.UTC().Format(time.RFC3339Nano),
 	})
+}
+
+// 收寄面来源文档的形状版本（ADR-0199 决定一；ADR-0014）。它与 NOC-1 是两份文档、各自换版：NOC-1 只收幂等与冲突分界的
+// 那几格，来源文档另收证据、拒收原因与交付方。把这几格并进指纹就得另起摘要形状并长期比对两版（ADR-0199 越权风险点）。
+const deliverySourceShapeVersion = "NRS-1"
+
+// ErrInvalidDeliverySource 说明一份来源文档缺了每种观察都有的格（作业实物、接收观察、节点、发生时间），或形状版本认不出。
+var ErrInvalidDeliverySource = errors.New("node operations: invalid delivery source")
+
+// DeliverySource 是收寄面一次交付的来源文档（ADR-0199 决定一）：与判断同一行写下，此后的重投、追加版本与解析失败都不改写它
+// （NO CONTEXT「待识别实物与身份关联」）。三种观察共用这一个形状，某格在这种观察里本就缺席——拒收没有接收证据、接收没有
+// 拒收原因——就是空串。
+//
+// Mark 原样存：在线口是设备送来的那一格，受控批量口是去两端空白之后交给编排的那一格（UC-NO-002 输入语义契约）。重核拿的就是
+// 它，改写一个字符就问的是另一个号。Claim 是接收观察的名字，领域不拥有那个枚举，由编排照两个入口共用的词表给出。
+//
+// 零值即「来源未保全」：来源保全（ADR-0199 决定一）之前落下的行没有来源文档，号码从未留存，补不回。
+type DeliverySource struct {
+	Unit        HandlingUnitID
+	Mark        string
+	Claim       string
+	Evidence    ReceptionEvidenceReference
+	Refusal     string
+	DeliveredBy DeliveringPartyReference
+	Node        NodeReference
+	OccurredAt  time.Time
+}
+
+// Preserved 报告这份来源文档在不在。
+func (source DeliverySource) Preserved() bool {
+	return source != DeliverySource{}
+}
+
+// deliverySourceDocument 不带 omitempty：缺席格写空串、不省键，读的人分得清「这种观察没有这一格」与「这一版形状没有这一格」。
+type deliverySourceDocument struct {
+	Shape       string `json:"shape"`
+	Unit        string `json:"unit"`
+	Mark        string `json:"mark"`
+	Claim       string `json:"claim"`
+	Evidence    string `json:"evidence"`
+	Refusal     string `json:"refusal"`
+	DeliveredBy string `json:"delivered_by"`
+	Node        string `json:"node"`
+	OccurredAt  string `json:"occurred_at"`
+}
+
+// CanonicalizeDeliverySource 把来源文档写成 NRS-1 形状，时刻按 UTC。
+func CanonicalizeDeliverySource(source DeliverySource) ([]byte, error) {
+	if !source.Unit.valid() || !source.Node.valid() || strings.TrimSpace(source.Claim) == "" || source.OccurredAt.IsZero() {
+		return nil, ErrInvalidDeliverySource
+	}
+	return json.Marshal(deliverySourceDocument{
+		Shape:       deliverySourceShapeVersion,
+		Unit:        source.Unit.String(),
+		Mark:        source.Mark,
+		Claim:       source.Claim,
+		Evidence:    source.Evidence.String(),
+		Refusal:     source.Refusal,
+		DeliveredBy: source.DeliveredBy.String(),
+		Node:        source.Node.String(),
+		OccurredAt:  source.OccurredAt.UTC().Format(time.RFC3339Nano),
+	})
+}
+
+// ParseDeliverySource 读回一份来源文档。形状版本认不出就拒，不按 NRS-1 硬读：将来加格的一版被旧口读成 NRS-1，会静默丢掉
+// 新格（ADR-0014「只在同一形状内可比」同一条理由）。
+func ParseDeliverySource(document []byte) (DeliverySource, error) {
+	var stored deliverySourceDocument
+	if err := json.Unmarshal(document, &stored); err != nil {
+		return DeliverySource{}, fmt.Errorf("%w: %v", ErrInvalidDeliverySource, err)
+	}
+	if stored.Shape != deliverySourceShapeVersion {
+		return DeliverySource{}, fmt.Errorf("%w: shape %q", ErrInvalidDeliverySource, stored.Shape)
+	}
+	unit, err := NewHandlingUnitID(stored.Unit)
+	if err != nil {
+		return DeliverySource{}, fmt.Errorf("%w: %v", ErrInvalidDeliverySource, err)
+	}
+	node, err := NewNodeReference(stored.Node)
+	if err != nil {
+		return DeliverySource{}, fmt.Errorf("%w: %v", ErrInvalidDeliverySource, err)
+	}
+	occurredAt, err := time.Parse(time.RFC3339Nano, stored.OccurredAt)
+	if err != nil {
+		return DeliverySource{}, fmt.Errorf("%w: %v", ErrInvalidDeliverySource, err)
+	}
+	source := DeliverySource{
+		Unit:       unit,
+		Mark:       stored.Mark,
+		Claim:      stored.Claim,
+		Refusal:    stored.Refusal,
+		Node:       node,
+		OccurredAt: occurredAt.UTC(),
+	}
+	// 证据与交付方缺席时是零值：写下时就是零值，原样读回。
+	if stored.Evidence != "" {
+		if source.Evidence, err = NewReceptionEvidenceReference(stored.Evidence); err != nil {
+			return DeliverySource{}, fmt.Errorf("%w: %v", ErrInvalidDeliverySource, err)
+		}
+	}
+	if stored.DeliveredBy != "" {
+		if source.DeliveredBy, err = NewDeliveringPartyReference(stored.DeliveredBy); err != nil {
+			return DeliverySource{}, fmt.Errorf("%w: %v", ErrInvalidDeliverySource, err)
+		}
+	}
+	if strings.TrimSpace(source.Claim) == "" {
+		return DeliverySource{}, fmt.Errorf("%w: claim is blank", ErrInvalidDeliverySource)
+	}
+	return source, nil
 }
