@@ -62,7 +62,10 @@ Blocked by: 01 进 main（ADR-0199、NO CONTEXT 与 UC-NO-002 先落）。同改
 |---|---|
 | `2387d911` | 实施与用例：来源文档形状、记录三格、编排三支与冲突版、收寄库读链与写入、迁移 0007、HTTP 两格、前线导入明细 |
 | `3b7ee610` | 机制清点在 `2387d911` 的干净检出上重生成：cmd 测试文件 157→158，node_operations 迁移 6→7 |
-| 本笔 | 本票完成记录；AT 覆盖盘点补 `AT-NO-047` 至 `AT-NO-051` |
+| `6ed9ec11` | 本票完成记录；AT 覆盖盘点补 `AT-NO-047` 至 `AT-NO-051` |
+| `0a3a441d` | 评审阻断修补：观察号码带 NUL 在在线收寄口答 400 `MALFORMED_REQUEST`、在前线导入收寄模板按坏行整批拒（见「评审阻断修补」） |
+| `c8cc32c5` | 机制清点在 `0a3a441d` 的干净检出上重生成：cmd 测试文件 158→159 |
+| 本笔 | 完成记录补评审阻断修补 |
 
 **落点**
 
@@ -126,11 +129,14 @@ Blocked by: 01 进 main（ADR-0199、NO CONTEXT 与 UC-NO-002 先落）。同改
 
 绿在同目录 `nrs02-green.log`。
 
-**门**（钉 `3b7ee610`）：`gofmt -l .` 无输出；`go build ./...`、`go vet ./...` 均退 0；带 DSN 跑 `go test -p 1 -count=1 ./internal/nodeoperations/... ./cmd/parcel-api/... ./cmd/parcel-frontline-import/... ./migrations/... ./internal/architecture/...`，全部 ok。额外跑了门外的收寄记录消费方，`cmd/parcel-dispatch`、`internal/parcelshipment/adapters/nodeoperations`、`internal/visibilityexception/adapters/nodeoperations` 均 ok。没有跑全量 `./...`。
+**门**（钉 `3b7ee610`；评审阻断修补之后在 `0a3a441d` 的工作树上照同一组再跑一遍，见「评审阻断修补」）：`gofmt -l .` 无输出；`go build ./...`、`go vet ./...` 均退 0；带 DSN 跑 `go test -p 1 -count=1 ./internal/nodeoperations/... ./cmd/parcel-api/... ./cmd/parcel-frontline-import/... ./migrations/... ./internal/architecture/...`，全部 ok。额外跑了门外的收寄记录消费方，`cmd/parcel-dispatch`、`internal/parcelshipment/adapters/nodeoperations`、`internal/visibilityexception/adapters/nodeoperations` 均 ok。没有跑全量 `./...`。
 
 **证据层级**：S（隔离测试库，夹具全为合成 `SYN-` 值，不涉租户取值）。
 
-**越出地盘的改动**：`cmd/parcel-frontline-import/vertical_test.go` 的重放段加了一条明细断言，用来钉「前线导入明细带原判断种类与当前有效版本」。票面地盘只列了 `intake_import.go`。除此之外没有。
+**越出地盘的改动**
+
+- `cmd/parcel-frontline-import/vertical_test.go` 的重放段加了一条明细断言，用来钉「前线导入明细带原判断种类与当前有效版本」。票面地盘只列了 `intake_import.go`。
+- 评审阻断修补按评审指派动了两个入口：`internal/nodeoperations/adapters/http/reception_payload.go` 及 `work_fact_intake_test.go`，`cmd/parcel-frontline-import/intake_template.go` 及新文件 `intake_mark_nul_test.go`。
 
 **AT 盘点**：票 01 新增的 `AT-NO-047` 至 `AT-NO-051` 当时没进 `.scratch/at-coverage-inventory.md`，本笔照扫描口径补上。047、048 入①；049、050、051 入②，分别待票 04、04、05。①290→292，②225→228，合计 1083→1088（NO 46→51）。
 
@@ -142,10 +148,39 @@ Blocked by: 01 进 main（ADR-0199、NO CONTEXT 与 UC-NO-002 先落）。同改
 
 **发现**（都不改裁定）
 
-- **外部标识观察带 NUL 字符时，jsonb 拒收**（PostgreSQL 22P05，`\u0000`）。
-  - 明确接收那一支在落册之前先拿这个号经身份核对查 PS（text 参数），NUL 会不会在那一步就先失败，本票没有实测。
-  - 拒收与仅扫描两支此前不落号码，本票之后会因此不形成答案（5xx），设备重投也一样。
-  - 在线口与受控批量口今天都不拒控制字符；要挡就在入口（`nodeopshttp` 的 `applyReceptionClaim` 与收寄模板）按坏报文拒，属入口的票。
+- **外部标识观察带 NUL 字符时，jsonb 拒收**（PostgreSQL 22P05）。**已处理**，评审列为阻断，修法见下「评审阻断修补」。
 - **来源保全之前的未收寄与待确认行没有判断版本**，不能被指名为前版。票 04 续办仅扫描待确认时要面对这些旧行：可以续办时再签，也可以不续办，由那张票定。迁移头注已点名。
 - **与并行的 ps-external-mark-relations/05 同碰 `receive_delivered_unit.go`。** 本票在 `receive` 里只在记录字面量加了两行，身份核对那一段与身份读口一行没碰；其余改动都在 `Handle` 的拒收与仅扫描两支、`appendIdentityConflicts`、`commit` 与 `existingResult`。合并预期只在字面量附近有上下文重叠。
+
+### 评审阻断修补（2026-10-19，同一作者子代理，分支 `claude-nrs02`）
+
+**阻断**：外部标识观察带 NUL（`\x00`）时，拒收与仅扫描两支经本票变成 5xx，设备永远重投；前线导入那一行永远记未决。来源文档原样保全这个号，jsonb 存不下它（22P05）。这是本票带进来的回归。
+
+**修法**（照票 operator-channel/45、54 的路数，在入口挡，编排与收寄库不动）
+
+- 在线收寄口：`nodeopshttp` 的 `receptionCommand` 遇到 `mark` 含 NUL 答 400 `MALFORMED_REQUEST`，头注写了理由。只拒 NUL：扫描附带的回车、换行、Tab 照 UC-NO-002 与 ADR-0023 原样收。
+- 前线导入：收寄模板译装时用新的 `intakeMarkStorable`（放在 `intakeSourceIDCarriable` 旁边）核 mark 格，含 NUL 就按坏行整批拒，报文点名行号与 `mark` 列。
+- **旧缺陷顺带收掉**：明确接收那一支在本票之前就会先拿这个号经身份核对查 PS，在那一步撞 22021（`invalid byte sequence for encoding "UTF8": 0x00`），同样 5xx 或未决。现在一并由入口挡住，红的输出里看得到这一行。
+
+**用例**
+
+| 入口 | 用例 |
+|---|---|
+| 在线收寄口，传输面 | `internal/nodeoperations/adapters/http`：`TestWorkFactReceptionIntakeRefusesAMarkCarryingNUL`。三种观察各一格，经端点答 400、编排替身零落册；另一格钉 Tab 与回车换行照原样进命令 |
+| 在线收寄口，生产装配 | `cmd/parcel-api`：`TestTheWiredReceptionRefusesAMarkCarryingNUL`。生产的作业事实收寄口加生产装配的收寄编排，三种观察各一格答 400、册上 0 行；带 Tab 与回车换行的拒收照常 200 落册，原样读回 |
+| 前线导入 | `cmd/parcel-frontline-import`：`TestFrontlineImportRejectsAMarkCellCarryingNUL`（真库，生产的身份核对读口）。三种观察各一格在译装时整批拒、册上不落 |
+
+**先红后绿**：红在 `/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/nrs02-red2.log`，只写了用例、生产代码钉 `6ed9ec11` 一字未改。原话举例：
+
+- 生产装配三格都是「带 NUL 的号答 500 {"error":{"code":"NO_ANSWER_FORMED"}}」。
+- 前线导入：
+  - 仅扫描与拒收是「第 2 行 → NO_ANSWER_FORMED [未决] 编排未形成答案，已回滚：record reception: save reception: ERROR: unsupported Unicode escape sequence (SQLSTATE 22P05)」。
+  - 明确接收是「… resolve parcel identity: … find parcels by external identifier: ERROR: invalid byte sequence for encoding "UTF8": 0x00 (SQLSTATE 22021)」。
+- 传输面三格都是 200 或 201 带业务结果，没有答坏报文。
+
+绿在同目录 `nrs02-green2.log`。
+
+**门**（`0a3a441d` 的工作树）：`gofmt -l .` 无输出；`go build ./...`、`go vet ./...` 均退 0；带 DSN 跑 `go test -p 1 -count=1 ./internal/nodeoperations/... ./cmd/parcel-api/... ./cmd/parcel-frontline-import/... ./migrations/... ./internal/architecture/...`，全部 ok。机制清点有差，单独一笔 `c8cc32c5`。
+
+**证据层级**：S。
 
