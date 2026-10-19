@@ -66,7 +66,7 @@
 | `AT-NO-016` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestReplayConflictAndFailedIntentStayDisciplined |
 | `AT-NO-017` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestReplayConflictAndFailedIntentStayDisciplined |
 | `AT-NO-018` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestUnknownAndConflictedIdentitiesStayPending |
-| `AT-NO-019` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestUnknownAndConflictedIdentitiesStayPending |
+| `AT-NO-019` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestOneMarkOnTwoUnitsFormsAnIdentityConflict；cmd/parcel-api/reception_one_mark_two_units_test.go::TestTheWiredReceptionTurnsOneMarkOnTwoUnitsIntoAnIdentityConflict；internal/nodeoperations/application/receive_delivered_unit_test.go::TestUnknownAndConflictedIdentitiesStayPending（半边：一件实物多候选） |
 | `AT-NO-020` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestAUniquelyIdentifiedReceptionCarriesTheParcelShipmentServiceResults |
 | `AT-NO-021` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestAUniquelyIdentifiedReceptionCarriesTheParcelShipmentServiceResults |
 | `AT-NO-023` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestScanOnlyAndRefusalDoNotEstablishControl |
