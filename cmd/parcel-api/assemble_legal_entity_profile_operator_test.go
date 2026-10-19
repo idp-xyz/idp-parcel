@@ -18,8 +18,8 @@ import (
 // Covers: 票 operator-channel/04 完成判据「已换各口对合成操作者答业务结果」（法人资料登记口）——资料登记口经操作者渠道与
 // 生产装配登下一笔资料修订：持登记册配置写授予的合成操作者对合规载荷答 201 REGISTERED，带 tenantId 答 400、不带令牌答 401，
 // 两者都不落行；再登一笔未来生效的修订，按时点解析读口在今天答第一笔、在未来那一刻答第二笔——资料落在信封给的
-// SYN-TENANT-01 下，读口按同一租户解析得到。解析读口仍挂隔离读 Intake（ADR-0078，本票不换读行），解析用例照 main 的接法
-// 现造；法人与目录先经同一编排直登。测试输入是隔离合成，只记 `S`。
+// SYN-TENANT-01 下，读口按同一租户解析得到。解析读口挂操作者查阅读（票 operator-channel/05），持查阅读授予的合成操作者
+// 去读，解析用例照 main 的接法现造；法人与目录先经同一编排直登。测试输入是隔离合成，只记 `S`。
 func TestTheOperatorChannelRegistersALegalEntityProfileThatResolvesAgainstARealDatabase(t *testing.T) {
 	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
@@ -29,9 +29,13 @@ func TestTheOperatorChannelRegistersALegalEntityProfileThatResolvesAgainstARealD
 	if err != nil {
 		t.Fatalf("装配商业登记编排：%v", err)
 	}
-	readIntakes, err := buildIsolatedReadIntakes(fakeGetenv(map[string]string{isolatedReadTenantEnv: "SYN-TENANT-01"}))
+	reader, err := buildOperatorMinter(acceptingVerifier{}, operationsReaderRegister{}, admissionScopeUnset())
 	if err != nil {
-		t.Fatalf("构造隔离读准入：%v", err)
+		t.Fatalf("构造查阅读铸造器：%v", err)
+	}
+	readIntakes, err := buildOperatorRegistryIntakes(reader)
+	if err != nil {
+		t.Fatalf("构造查阅读 Intake：%v", err)
 	}
 	registerLegalEntityWithIdentityLayer(t, registration, "SYN-TENANT-01", "SYN-PARTY-LEP05", "SYN-LE-LEP05")
 
@@ -69,11 +73,12 @@ func TestTheOperatorChannelRegistersALegalEntityProfileThatResolvesAgainstARealD
 	if err != nil {
 		t.Fatalf("资料登记册：%v", err)
 	}
-	resolution := commercialhttp.NewQueryLegalEntityProfileResolutionEndpoint(readIntakes.commercialCatalogue,
+	resolution := commercialhttp.NewQueryLegalEntityProfileResolutionEndpoint(readIntakes.commercialOperationsRead,
 		commercialapp.NewResolveLegalEntityProfileHandler(profiles, identities))
 	resolveAt := func(at string) (string, int) {
 		t.Helper()
 		request := httptest.NewRequest(http.MethodGet, "/commercial-group-legal-entities/SYN-LE-LEP05/profile-resolution?at="+at, nil)
+		request.Header.Set("Authorization", "Bearer "+presentedOperatorToken)
 		request.SetPathValue("legalEntityId", "SYN-LE-LEP05")
 		recorder := httptest.NewRecorder()
 		resolution.ServeHTTP(recorder, request)

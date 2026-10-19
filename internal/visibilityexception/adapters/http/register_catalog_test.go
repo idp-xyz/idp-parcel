@@ -408,34 +408,33 @@ func registrationAnswer(t *testing.T, response *httptest.ResponseRecorder) struc
 	return body
 }
 
-// TestIsolatedReadIntakeCannotServeCatalogRegistration 钉住 ADR-0078 的编译期排除在写面
-// 成立：隔离读放行类型不满足任何登记命令 Intake 接口。这条一旦变红，说明有人把隔离放行
-// 扩到了写行——那是 ADR-0085 Decision 二明文维持的原判。
-func TestIsolatedReadIntakeCannotServeCatalogRegistration(t *testing.T) {
-	var intake any = visibilityhttp.IsolatedOperationsReadIntake{}
+// TestOperationsReadIntakeCannotServeCatalogRegistration 钉住查阅读与登记写是两格授予：操作者查阅读 Intake 不满足任何
+// 登记命令 Intake 接口。这条一旦变红，说明有人让持查阅读的操作者绕过登记册配置写那一格登进了册（ADR-0100 决定二）。
+func TestOperationsReadIntakeCannotServeCatalogRegistration(t *testing.T) {
+	var intake any = &visibilityhttp.OperatorOperationsReadIntake{}
 	if _, ok := intake.(visibilityhttp.MilestoneMappingRegistrationIntake); ok {
-		t.Fatal("隔离读 Intake 不该装得进里程碑映射登记口")
+		t.Fatal("查阅读 Intake 不该装得进里程碑映射登记口")
 	}
 	if _, ok := intake.(visibilityhttp.TriageRulesRegistrationIntake); ok {
-		t.Fatal("隔离读 Intake 不该装得进分诊规则登记口")
+		t.Fatal("查阅读 Intake 不该装得进分诊规则登记口")
 	}
 	if _, ok := intake.(visibilityhttp.NotificationPolicyRegistrationIntake); ok {
-		t.Fatal("隔离读 Intake 不该装得进通知策略登记口")
+		t.Fatal("查阅读 Intake 不该装得进通知策略登记口")
 	}
 	if _, ok := intake.(visibilityhttp.ClaimEligibilityRegistrationIntake); ok {
-		t.Fatal("隔离读 Intake 不该装得进索赔资格登记口")
+		t.Fatal("查阅读 Intake 不该装得进索赔资格登记口")
 	}
 	if _, ok := intake.(visibilityhttp.ClaimAuthorizationRegistrationIntake); ok {
-		t.Fatal("隔离读 Intake 不该装得进申请人授权登记口")
+		t.Fatal("查阅读 Intake 不该装得进申请人授权登记口")
 	}
 	if _, ok := intake.(visibilityhttp.DisclosurePolicyRegistrationIntake); ok {
-		t.Fatal("隔离读 Intake 不该装得进披露策略登记口")
+		t.Fatal("查阅读 Intake 不该装得进披露策略登记口")
 	}
 	if _, ok := intake.(visibilityhttp.ExceptionDisclosureRulesRegistrationIntake); ok {
-		t.Fatal("隔离读 Intake 不该装得进异常披露规则登记口")
+		t.Fatal("查阅读 Intake 不该装得进异常披露规则登记口")
 	}
 	if _, ok := intake.(visibilityhttp.ConflictSignalRuleRegistrationIntake); ok {
-		t.Fatal("隔离读 Intake 不该装得进冲突信号规则登记口")
+		t.Fatal("查阅读 Intake 不该装得进冲突信号规则登记口")
 	}
 }
 

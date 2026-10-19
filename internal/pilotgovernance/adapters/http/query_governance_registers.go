@@ -142,6 +142,18 @@ func writeRegistryIntakeProblem(response http.ResponseWriter, err error) {
 		writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
 		return
 	}
+	if errors.Is(err, ErrOperatorCredentialRejected) {
+		writeProblem(response, http.StatusUnauthorized, codeOperatorCredentialRejected)
+		return
+	}
+	if errors.Is(err, ErrOperatorNotGranted) {
+		writeProblem(response, http.StatusForbidden, codeOperatorNotGranted)
+		return
+	}
+	if errors.Is(err, ErrIdentityDependencyUnavailable) {
+		writeProblem(response, http.StatusServiceUnavailable, codeIdentityDependencyUnavailable)
+		return
+	}
 	writeProblem(response, http.StatusInternalServerError, codeIntakeFailed)
 }
 

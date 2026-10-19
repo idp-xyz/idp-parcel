@@ -30,10 +30,9 @@ const codeAccessChannelNotConfigured = "ACCESS_CHANNEL_NOT_CONFIGURED"
 // 的隔离边界）；本类型恰是其反面，分界同 ADR-0052：「读一个空登记册并如实答未配置
 // 不是默认实现，恰恰是它想保护的东西」，这里的空登记册就是装配点本身。查阅端点与
 // 命令端点的未配置实现都在本类型上：写准入不另立形（ADR-0085 决定二），命令端点在
-// 装配表里同挂字面量 UnconfiguredIntake{} 起步；隔离读放行 IsolatedOperationsReadIntake
-// 刻意不实现命令 Intake，放行装不进命令端点由编译期决定（ADR-0078 隔离读准入不扩到
-// 写行）。真通道 Intake 就位时在装配点替换，本类型随之退场，路由层与各处理器不动
-// （ADR-0055）。
+// 装配表里同挂字面量 UnconfiguredIntake{} 起步；查阅面的操作者 Intake OperatorOperationsReadIntake
+// 刻意不实现命令 Intake，它装不进命令端点由编译期决定。真通道 Intake 就位时在装配点替换，本类型随之退场，
+// 路由层与各处理器不动（ADR-0055）。
 type UnconfiguredIntake struct{}
 
 var _ CatalogueQueryIntake = UnconfiguredIntake{}

@@ -7,6 +7,8 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	identityhttp "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/http"
+	craccess "go.idp.xyz/idp-parcel/internal/collectionremittance/adapters/accessidentity"
+	collectionhttp "go.idp.xyz/idp-parcel/internal/collectionremittance/adapters/http"
 	ccaccess "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/accessidentity"
 	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	nraccess "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/accessidentity"
@@ -20,6 +22,10 @@ import (
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	pcaccess "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/accessidentity"
 	commercialhttp "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/http"
+	pgaccess "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/accessidentity"
+	governancehttp "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/http"
+	settlementaccess "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/accessidentity"
+	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
 	tfaccess "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/accessidentity"
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 	veaccess "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/accessidentity"
@@ -150,6 +156,15 @@ type operatorRegistryIntakes struct {
 	networkOperationsRead    *networkhttp.OperatorOperationsReadIntake
 	customsOperationsRead    *customshttp.OperatorOperationsReadIntake
 	commercialOperationsRead *commercialhttp.OperatorOperationsReadIntake
+	// 运营查阅面余下各族同一面（票 operator-channel/35）。面单交易与渠道择优决定两口共用委托上下文这一只；委托查阅三口
+	// 不在其中——它们的作用域按客户账户切，操作者信封给不出（票 operator-channel/53）。
+	shipmentOperationsRead   *shipmenthttp.OperatorOperationsReadIntake
+	nodeOperationsRead       *nodeopshttp.OperatorOperationsReadIntake
+	transportOperationsRead  *tfhttp.OperatorOperationsReadIntake
+	visibilityOperationsRead *visibilityhttp.OperatorOperationsReadIntake
+	collectionOperationsRead *collectionhttp.OperatorOperationsReadIntake
+	settlementOperationsRead *settlementhttp.OperatorOperationsReadIntake
+	governanceOperationsRead *governancehttp.OperatorOperationsReadIntake
 }
 
 func buildOperatorRegistryIntakes(minter *accessidentity.OperatorMinter) (operatorRegistryIntakes, error) {
@@ -236,11 +251,85 @@ func buildOperatorRegistryIntakes(minter *accessidentity.OperatorMinter) (operat
 	if err != nil {
 		return operatorRegistryIntakes{}, err
 	}
+	reads, err := buildOperatorOperationsReads(minter)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	reads.visibility, reads.customs, reads.network, reads.pricing, reads.commercial, reads.transport =
+		visibility, customs, network, pricing, commercial, transport
+	reads.pricingOperationsRead = pricingOperationsRead
+	reads.networkOperationsRead = networkOperationsRead
+	reads.customsOperationsRead = customsOperationsRead
+	reads.commercialOperationsRead = commercialOperationsRead
+	return reads, nil
+}
+
+// buildOperatorOperationsReads 装运营查阅面余下各族的操作者 Intake（票 operator-channel/35）：每族一只认证方加一只
+// Intake，与目录查阅各族同一面、同一只铸造器。
+func buildOperatorOperationsReads(minter *accessidentity.OperatorMinter) (operatorRegistryIntakes, error) {
+	shipmentAuthenticator, err := psaccess.NewOperatorOperationsReadAuthenticator(minter)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	shipment, err := shipmenthttp.NewOperatorOperationsReadIntake(shipmentAuthenticator)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	nodeAuthenticator, err := noaccess.NewOperatorOperationsReadAuthenticator(minter)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	node, err := nodeopshttp.NewOperatorOperationsReadIntake(nodeAuthenticator)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	transportAuthenticator, err := tfaccess.NewOperatorOperationsReadAuthenticator(minter)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	transport, err := tfhttp.NewOperatorOperationsReadIntake(transportAuthenticator)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	visibilityAuthenticator, err := veaccess.NewOperatorOperationsReadAuthenticator(minter)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	visibility, err := visibilityhttp.NewOperatorOperationsReadIntake(visibilityAuthenticator)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	collectionAuthenticator, err := craccess.NewOperatorOperationsReadAuthenticator(minter)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	collection, err := collectionhttp.NewOperatorOperationsReadIntake(collectionAuthenticator)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	settlementAuthenticator, err := settlementaccess.NewOperatorOperationsReadAuthenticator(minter)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	settlement, err := settlementhttp.NewOperatorOperationsReadIntake(settlementAuthenticator)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	governanceAuthenticator, err := pgaccess.NewOperatorOperationsReadAuthenticator(minter)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	governance, err := governancehttp.NewOperatorOperationsReadIntake(governanceAuthenticator)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
 	return operatorRegistryIntakes{
-		visibility: visibility, customs: customs, network: network, pricing: pricing, commercial: commercial, transport: transport,
-		pricingOperationsRead:    pricingOperationsRead,
-		networkOperationsRead:    networkOperationsRead,
-		customsOperationsRead:    customsOperationsRead,
-		commercialOperationsRead: commercialOperationsRead,
+		shipmentOperationsRead:   shipment,
+		nodeOperationsRead:       node,
+		transportOperationsRead:  transport,
+		visibilityOperationsRead: visibility,
+		collectionOperationsRead: collection,
+		settlementOperationsRead: settlement,
+		governanceOperationsRead: governance,
 	}, nil
 }

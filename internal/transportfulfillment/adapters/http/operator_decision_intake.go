@@ -15,8 +15,9 @@ import (
 var (
 	// ErrOperatorCredentialRejected：令牌缺失、过期或校验不过（401）——持令牌的人去登录或换令牌。
 	ErrOperatorCredentialRejected = errors.New("transport fulfillment http: operator credential rejected")
-	// ErrOperatorNotGranted：令牌有效，但不在册、不绑这个租户或没有这一种决定的授予（403）——管授予的人去登记。
-	ErrOperatorNotGranted = errors.New("transport fulfillment http: operator holds no grant for this decision")
+	// ErrOperatorNotGranted：令牌有效，但不在册、不绑这个租户，或没有该口所要那一格的授予（403）——管授予的人去登记。
+	// 运营决定口要那一种决定，登记写面要登记册配置写，查阅读面要主数据与运营查阅读；恢复动作相同，所以不按面分设哨兵。
+	ErrOperatorNotGranted = errors.New("transport fulfillment http: operator holds no grant for the capability face or decision this endpoint needs")
 	// ErrOutsideAdmissionScope：这笔生产写不落在治理登记的生产权威区间内（403）——阶段治理去登记区间。
 	ErrOutsideAdmissionScope = errors.New("transport fulfillment http: production write is outside the admission scope")
 	// ErrIdentityDependencyUnavailable：发行方公钥集、操作者册或准入范围读不动（503）——运维去救依赖。

@@ -177,16 +177,12 @@ func assembleBusinessEndpoints(
 	workDevices http.Handler,
 	operatorBinding http.Handler,
 ) []httpapi.BusinessEndpoint {
-	// 缺省朝拦：各隔离入参都为 nil 时，下面这组变量全取未配置即拒，整份装配与
-	// ADR-0078/0091 之前逐字节同形。
+	// 缺省朝拦：真渠道与隔离入参都缺席时，下面这组变量全取未配置即拒。
 	//
-	// **读写入参各换各的行，互不顶替**（ADR-0091 决定四把开关也分成了两个）：isolatedRead
-	// 换查阅行，isolatedSubmission 只换 `/shipment-requests` 一行——写开关此刻只剩这一行可换。作业事实各口走
-	// workFactReception / workFactTransport，运营决定各口走 operatorDecisions，都不经隔离写。其余命令面仍挂字面量
-	// `UnconfiguredIntake{}`，不经由任何变量——读这段代码就能看出它们两个开关都换不了。这句从前说的是「命令面全都
-	// 换不了」，ADR-0091 让提交那一行成了例外，票 06 又让身份族逐口成为例外，票 operator-channel/08
-	// 再让主链命令面逐口成为例外，因此改成现在这句；身份族、作业事实各口与运营决定四口随后逐口换上真渠道、隔离放行
-	// 同笔撤下（ADR-0150 决定三），已不在例外之列。剩下那几行的字面量纪律一字未松。
+	// **读写入参各换各的行，互不顶替**（ADR-0091 决定四把开关也分成了两个）：isolatedRead 只换委托查阅那一只变量，
+	// isolatedSubmission 只换 `/shipment-requests` 一行。运营查阅各族走 operatorRegistries 的查阅读，作业事实各口走
+	// workFactReception / workFactTransport，运营决定各口走 operatorDecisions，都不经隔离开关。其余命令面挂字面量
+	// `UnconfiguredIntake{}`，不经由任何变量——读这段代码就能看出它们哪个开关都换不了。
 	shipmentViewsIntake := shipmenthttp.ShipmentRequestViewsIntake(shipmenthttp.UnconfiguredIntake{})
 	labelTransactionIntake := shipmenthttp.LabelTransactionQueryIntake(shipmenthttp.UnconfiguredIntake{})
 	channelSelectionDecisionIntake := shipmenthttp.ChannelSelectionDecisionQueryIntake(shipmenthttp.UnconfiguredIntake{})
@@ -200,8 +196,8 @@ func assembleBusinessEndpoints(
 	collectionCatalogueIntake := collectionhttp.CatalogueQueryIntake(collectionhttp.UnconfiguredIntake{})
 	settlementCatalogueIntake := settlementhttp.CatalogueQueryIntake(settlementhttp.UnconfiguredIntake{})
 	governanceRegistryIntake := governancehttp.RegistryQueryIntake(governancehttp.UnconfiguredIntake{})
-	// ADR-0077 那一族目录查阅已换操作者查阅读，隔离读放行同笔撤下（ADR-0150 决定三；票 operator-channel/05）。
-	// 发行方未配置时这四只 Intake 仍在，答的是未配置，与换口前的 403 同码。
+	// 运营查阅各族挂操作者查阅读（ADR-0100 决定四；ADR-0150 决定三：合成租户按真实租户对待，不另开放行）。发行方
+	// 未配置时这些 Intake 仍在，答的是未配置，与未接真渠道时同码。
 	if operatorRegistries.pricingOperationsRead != nil {
 		pricingCatalogueIntake = operatorRegistries.pricingOperationsRead
 	}
@@ -214,16 +210,31 @@ func assembleBusinessEndpoints(
 	if operatorRegistries.commercialOperationsRead != nil {
 		commercialCatalogueIntake = operatorRegistries.commercialOperationsRead
 	}
+	if operatorRegistries.shipmentOperationsRead != nil {
+		labelTransactionIntake = operatorRegistries.shipmentOperationsRead
+		channelSelectionDecisionIntake = operatorRegistries.shipmentOperationsRead
+	}
+	if operatorRegistries.nodeOperationsRead != nil {
+		nodeOperationsCatalogueIntake = operatorRegistries.nodeOperationsRead
+	}
+	if operatorRegistries.transportOperationsRead != nil {
+		transportCatalogueIntake = operatorRegistries.transportOperationsRead
+	}
+	if operatorRegistries.visibilityOperationsRead != nil {
+		trackingProjectionsIntake = operatorRegistries.visibilityOperationsRead
+	}
+	if operatorRegistries.collectionOperationsRead != nil {
+		collectionCatalogueIntake = operatorRegistries.collectionOperationsRead
+	}
+	if operatorRegistries.settlementOperationsRead != nil {
+		settlementCatalogueIntake = operatorRegistries.settlementOperationsRead
+	}
+	if operatorRegistries.governanceOperationsRead != nil {
+		governanceRegistryIntake = operatorRegistries.governanceOperationsRead
+	}
+	// 委托查阅三口仍走隔离读：它们的读口按可见客户账户切，操作者信封只给得出租户（票 operator-channel/53）。
 	if isolatedRead != nil {
 		shipmentViewsIntake = isolatedRead.shipmentRequestViews
-		labelTransactionIntake = isolatedRead.labelTransactions
-		channelSelectionDecisionIntake = isolatedRead.channelSelectionDecisions
-		nodeOperationsCatalogueIntake = isolatedRead.nodeOperationsCatalogue
-		transportCatalogueIntake = isolatedRead.transportCatalogue
-		trackingProjectionsIntake = isolatedRead.trackingProjections
-		collectionCatalogueIntake = isolatedRead.collectionCatalogue
-		settlementCatalogueIntake = isolatedRead.settlementCatalogue
-		governanceRegistryIntake = isolatedRead.governanceRegisters
 	}
 
 	// 提交口是 ADR-0091 放行的第一格，也是唯一一格：它单独一个变量，与上面那组查阅
@@ -235,7 +246,7 @@ func assembleBusinessEndpoints(
 	}
 
 	// 主链命令面每口一个变量、每条真渠道一个 if，不并进上面任何一个 if——理由同提交口那段。入参是具体类型：它此刻实现了
-	// 哪几口，下面就只换得了哪几行。这段原是 ADR-0091 的逐口隔离放行（票 operator-channel/08），各口已随真渠道撤下放行。
+	// 哪几口，下面就只换得了哪几行。
 	receptionIntake := nodeopshttp.ReceptionIntake(nodeopshttp.UnconfiguredIntake{})
 	if workFactReception != nil {
 		receptionIntake = workFactReception

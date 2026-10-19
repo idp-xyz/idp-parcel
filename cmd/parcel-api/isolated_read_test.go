@@ -39,86 +39,30 @@ func TestBuildIsolatedReadIntakesRefusesRealLookingTenant(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0078 Decision 三 — 合成租户合规时各上下文 Intake 全部就位；漏一个字段
-// 会让对应端点在启用态仍答 403，与放行面枚举失配。
-func TestBuildIsolatedReadIntakesGrantsAllContexts(t *testing.T) {
+// Covers: ADR-0078 Decision 三 — 合成租户合规时委托查阅那一只 Intake 就位；漏了它，委托查阅三口在启用态仍答 403。
+// 运营查阅其余各族已换操作者查阅读（票 operator-channel/05、35），开关不再产出它们的 Intake。
+func TestBuildIsolatedReadIntakesGrantsTheShipmentViews(t *testing.T) {
 	intakes, err := buildIsolatedReadIntakes(fakeGetenv(map[string]string{
 		isolatedReadTenantEnv: "SYN-TENANT-01",
 	}))
 	if err != nil {
 		t.Fatalf("synthetic tenant refused: %v", err)
 	}
-	if intakes == nil {
-		t.Fatal("synthetic tenant yielded nil intakes")
-	}
-	if intakes.shipmentRequestViews == nil || intakes.labelTransactions == nil || intakes.channelSelectionDecisions == nil ||
-		intakes.trackingProjections == nil ||
-		intakes.pricingCatalogue == nil || intakes.networkCatalog == nil ||
-		intakes.complianceRules == nil || intakes.commercialCatalogue == nil ||
-		intakes.collectionCatalogue == nil || intakes.settlementCatalogue == nil ||
-		intakes.governanceRegisters == nil || intakes.nodeOperationsCatalogue == nil ||
-		intakes.transportCatalogue == nil {
-		t.Fatalf("some context intake is nil: %+v", intakes)
+	if intakes == nil || intakes.shipmentRequestViews == nil {
+		t.Fatalf("shipment views intake missing: %+v", intakes)
 	}
 }
 
-// isolatedReadAdmittedPatterns 是 ADR-0078 Decision 一的放行面。它与下面的两态
-// 测试互为对照：这里多列一个端点，启用态断言会在该端点上撞到 403 而失败；少列一个，
-// 会在「其余端点仍拒」的断言上失败——枚举漂移在两个方向上都有测试信号。
-//
-// 入格靠的是那三条判据（消费所属上下文的存储读面且不触发判断、派生或披露；零持久化；
-// 作用域是运营侧的授权结果），不是 ADR 正文里那份名单——正文自己把名单限定在「当前
-// 装配点上」，新的目录查阅端点满足同三条即入格，不另开 ADR。合同与协议两行就是照这
-// 条进来的（票 admin-web-page-wiring-frontier/01）。
+// isolatedReadAdmittedPatterns 是 ADR-0078 Decision 一的放行面今天还剩的那几口：委托查阅与它的两个子集视图，三口
+// 共用一只 Intake 变量。它与下面的两态测试互为对照：这里多列一个端点，启用态断言会在该端点上撞到 403 而失败；少列
+// 一个，会在「其余端点仍拒」的断言上失败——枚举漂移在两个方向上都有测试信号。运营查阅其余各族已换操作者查阅读、
+// 放行同笔撤下（ADR-0150 决定三），那几口的答复格由 TestSwappedCatalogueReadFacesAnswerFromTheOperatorChannel 钉。
 var isolatedReadAdmittedPatterns = map[string]bool{
 	"/shipment-request-views": true,
-	// 复核队列是委托查阅面的子集视图，在装配上与它共用同一个 Intake 变量，因此启用态
-	// 必然随它一起放行——这一行不是可选项，漏了它就等于断言「同一个 Intake 会给出两种
-	// 答案」，而那是装不出来的形状（票 admin-skeleton-closure-batch/09）。
-	"/acceptance-review-queue": true,
-	// 授权处置队列同样是委托查阅面的子集视图、共用同一个 Intake 变量，启用态必然随它一起放行（票
-	// sa-preacceptance-policy-view/04）。三条判据逐条满足：消费本上下文自己的存储读面、零持久化、
-	// 作用域来自运营侧授权结果——队列只列不处置，处置在另一条写行上，那一行挂字面量 UnconfiguredIntake{}。
+	// 复核队列与授权处置队列是委托查阅面的子集视图，在装配上共用同一个 Intake 变量，启用态必然随它一起放行——漏了
+	// 就等于断言「同一个 Intake 会给出两种答案」，那是装不出来的形状。
+	"/acceptance-review-queue":      true,
 	"/authorized-disposition-queue": true,
-	// 面单交易查阅同样共用委托查阅的 Intake 变量，因此启用态必然随它一起放行（票
-	// admin-skeleton-closure-batch/08）。它照样满足那三条判据：消费本上下文自己的存储
-	// 读面、零持久化、作用域来自运营侧授权结果——查阅一笔面单交易不触发任何判断、派生
-	// 或披露，渠道墙未降前它读到的还是空册。
-	"/label-transactions":            true,
-	"/node-operations-records":       true,
-	"/transport-fulfillment-records": true,
-	"/tracking-projections":          true,
-	"/governance-registers":          true,
-	"/visibility-catalogues":         true,
-	"/exception-triage-records":      true,
-	"/exception-case-records":        true,
-	"/claims-recovery-records":       true,
-	"/collection-subledgers":         true,
-	"/settlement-charges":            true,
-	"/settlement-statements":         true,
-	"/settlement-funds-applications": true,
-	"/settlement-operating-results":  true,
-	// 交接范围汇总（票 admin-web-audit-followups/06）与运输履约查阅共用同一个 Intake 变量，
-	// 因此启用态必然随它一起放行——漏了这一行等于断言「同一个 Intake 会给出两种答案」，
-	// 那是装不出来的形状。它照样满足那三条判据：消费本上下文自己的存储读面、零持久化、
-	// 作用域来自运营侧授权结果。第二参是应用读用例而不是读口，判据不因此改口径——那个
-	// 用例零登记零编辑零披露，只把成员交给领域派生。
-	//
-	// 单独列在表尾而不挨着 /transport-fulfillment-records：这个键比表里最长的还长，插进
-	// 那一段会让 gofmt 把整段的对齐列一起改掉，而这是一份几个会话都在往里加行的共享文件。
-	"/transport-fulfillment-handover-scope-summary": true,
-	// 外部承运轨迹事实当前版查阅（票 label-channel/21 读半边）同样共用运输履约查阅的 Intake 变量，启用态
-	// 随它一起放行。三条判据逐条满足：消费本上下文自己的存储读面、零持久化、作用域来自运营侧授权结果——
-	// 上列「该判哪几条」不触发判断，判断在另一条写行上，而写行挂的是字面量 UnconfiguredIntake{}，本
-	// 用例下面那半会证它仍答 403。单列在表尾的理由同上一行。
-	"/transport-fulfillment-external-tracking-facts": true,
-	// 实际承运商首次有效收寄链查阅（票 label-channel/31 读半边）同样共用运输履约查阅的 Intake 变量，启用态随它一起
-	// 放行；判据同上一行：上列一条链不触发判断，判断在另一条写行上，那一行挂的是字面量 UnconfiguredIntake{}。
-	"/transport-fulfillment-carrier-first-effective-pickups": true,
-	// 渠道择优决定查阅（票 label-channel/23）随委托查阅的注入值一起放行（第三半接口，只交出租户维）。三条判据逐条
-	// 满足：消费本上下文自己的存储读面、零持久化、作用域来自运营侧授权结果——列并列冲突不触发任何判断，人工裁决
-	// 不在这一口。单列在表尾的理由同上两行。
-	"/channel-selection-decisions": true,
 }
 
 // Covers: ADR-0078 Decision 一、二 — 启用态只放运营查阅行。unwired* 读口交回稳定

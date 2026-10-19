@@ -9,8 +9,8 @@ import (
 )
 
 // ErrAccessChannelNotConfigured 表示当前没有任何已启用的接入渠道：真实渠道分两族
-// ——运营侧归操作者渠道（ADR-0100），客户侧属 `PAR-INT-01`（首方渠道见 ADR-0139 草案）——两族的真 Intake
-// 都未就位，装配点上还没有一行真渠道 Intake（ADR-0055）。
+// ——运营侧归操作者渠道（ADR-0100），发行方参数未设时那一族的 Intake 也交回这一格；客户侧属 `PAR-INT-01`
+// （首方渠道见 ADR-0139 草案），真 Intake 未就位，那几行在装配点上挂本包的未配置实现（ADR-0055）。
 //
 // 与 ErrMalformedRequest、ErrMalformedClaim 各分一格的判据同 ADR-0029——恢复动作不同：
 // 这一格要接入方去提供并配置渠道参数，改请求或重试都不会好。哨兵只此一个而不随端点分
@@ -53,14 +53,14 @@ func (UnconfiguredIntake) IntakeClaim(context.Context, *http.Request) (applicati
 	return application.ReceiveClaimCommand{}, ErrAccessChannelNotConfigured
 }
 
-// IntakeOperationsQuery 同 IntakeQuery：不读请求，只答未配置。运营接入面的认证方式
-// 同属接入渠道实例半边（ADR-0076 第三条），未登记前不铸造任何作用域。
+// IntakeOperationsQuery 同 IntakeQuery：不读请求，只答未配置，不铸造任何作用域。装配点在运营查阅面换上的是
+// OperatorOperationsReadIntake（ADR-0100 决定四）。
 func (UnconfiguredIntake) IntakeOperationsQuery(context.Context, *http.Request) (OperationsTrackingQuery, error) {
 	return OperationsTrackingQuery{}, ErrAccessChannelNotConfigured
 }
 
 // 配置登记命令口的未配置实现（ADR-0085）：与查阅口同一分界——不读业务内容、不采信
-// 自报身份、不构造命令。隔离读放行（ADR-0078）不实现这些接口，写行换不了。
+// 自报身份、不构造命令。查阅读 Intake 不实现这些接口，写行换不了。
 var (
 	_ MilestoneMappingRegistrationIntake         = UnconfiguredIntake{}
 	_ TriageRulesRegistrationIntake              = UnconfiguredIntake{}

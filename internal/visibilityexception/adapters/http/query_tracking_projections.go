@@ -21,8 +21,8 @@ type OperationsTrackingQuery struct {
 // OperationsTrackingIntake 把一次已认证的运营查阅请求翻译成查询。
 //
 // 它是接口而非解析代码,理由与 QueryIntake 相同:请求方身份与租户「必须同时核对」
-// (CONTEXT 投影规则),认证归操作者渠道(ADR-0100),真 Intake 未就位;采信自报租户会穿透 ADR-0003
-// 的隔离边界。未决期间本包不带任何实现,包括「开发用」的采信头部版本。
+// (CONTEXT 投影规则),认证归操作者渠道(ADR-0100),真实现是 OperatorOperationsReadIntake;采信自报租户会穿透
+// ADR-0003 的隔离边界。本包不带任何采信实现,包括「开发用」的采信头部版本。
 type OperationsTrackingIntake interface {
 	IntakeOperationsQuery(ctx context.Context, request *http.Request) (OperationsTrackingQuery, error)
 }
@@ -187,9 +187,22 @@ func serveProjectionVersion(
 	})
 }
 
+// writeOperationsIntakeProblem 逐格映射,不合并:未配置、令牌不过、授予不足、身份依赖读不动各对一种恢复动作(ADR-0029)。
 func writeOperationsIntakeProblem(response http.ResponseWriter, err error) {
 	if errors.Is(err, ErrAccessChannelNotConfigured) {
 		writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
+		return
+	}
+	if errors.Is(err, ErrOperatorCredentialRejected) {
+		writeProblem(response, http.StatusUnauthorized, codeOperatorCredentialRejected)
+		return
+	}
+	if errors.Is(err, ErrOperatorNotGranted) {
+		writeProblem(response, http.StatusForbidden, codeOperatorNotGranted)
+		return
+	}
+	if errors.Is(err, ErrIdentityDependencyUnavailable) {
+		writeProblem(response, http.StatusServiceUnavailable, codeIdentityDependencyUnavailable)
 		return
 	}
 	if errors.Is(err, ErrMalformedRequest) {

@@ -10,6 +10,7 @@ import (
 	"time"
 
 	governancehttp "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/http"
+	"go.idp.xyz/idp-parcel/internal/pilotgovernance/domain"
 	"go.idp.xyz/idp-parcel/internal/pilotgovernance/ports"
 )
 
@@ -90,13 +91,24 @@ func (reader unreachableRegistryReader) ListTakeovers(
 	return nil, nil
 }
 
-func grantedIntake(t *testing.T, limit int) governancehttp.IsolatedOperationsReadIntake {
-	t.Helper()
-	intake, err := governancehttp.NewIsolatedOperationsReadIntake("SYN-SCOPE-ISOLATED-READ", limit)
+// grantedRegistryIntake 是已认证、授予齐备的查阅出示：交回给定页大小的作用域，只供本包用例。
+type grantedRegistryIntake struct{ limit int }
+
+func (intake grantedRegistryIntake) IntakeRegistryQuery(context.Context, *http.Request) (governancehttp.RegistryQuery, error) {
+	reference, err := domain.NewOperationsScopeReference("SYN-SCOPE-OPERATOR-READ")
 	if err != nil {
-		t.Fatalf("构造注入 Intake：%v", err)
+		return governancehttp.RegistryQuery{}, err
 	}
-	return intake
+	scope, err := domain.NewOperationsQueryScope(reference)
+	if err != nil {
+		return governancehttp.RegistryQuery{}, err
+	}
+	return governancehttp.RegistryQuery{Scope: scope, Limit: intake.limit}, nil
+}
+
+func grantedIntake(t *testing.T, limit int) grantedRegistryIntake {
+	t.Helper()
+	return grantedRegistryIntake{limit: limit}
 }
 
 func registryBody(t *testing.T, recorder *httptest.ResponseRecorder) map[string]any {

@@ -44,6 +44,29 @@ var swappedCatalogueReadPatterns = []string{
 	"/commercial-registration-number-types",
 }
 
+// swappedOperationsReadPatterns 是运营查阅面余下各族（票 operator-channel/35）：面单交易、渠道择优、节点作业、运输履约、
+// 追踪与异常、代收、结算、治理。委托查阅三口不在其中，仍挂隔离读（票 operator-channel/53）。
+var swappedOperationsReadPatterns = []string{
+	"/label-transactions",
+	"/channel-selection-decisions",
+	"/node-operations-records",
+	"/transport-fulfillment-records",
+	"/transport-fulfillment-handover-scope-summary",
+	"/transport-fulfillment-external-tracking-facts",
+	"/transport-fulfillment-carrier-first-effective-pickups",
+	"/tracking-projections",
+	"/visibility-catalogues",
+	"/exception-triage-records",
+	"/exception-case-records",
+	"/claims-recovery-records",
+	"/collection-subledgers",
+	"/settlement-charges",
+	"/settlement-statements",
+	"/settlement-funds-applications",
+	"/settlement-operating-results",
+	"/governance-registers",
+}
+
 // operationsReaderRegister 持有主数据与运营查阅读，不持登记写。
 type operationsReaderRegister struct{}
 
@@ -68,7 +91,7 @@ func (operationsReaderRegister) FindOperator(_ context.Context, subject accessid
 	return standing, err == nil, err
 }
 
-// Covers: 票 operator-channel/05 完成判据——已换各口三格各答其格；授予齐备的合成操作者越过 Intake，读口未接线所以答
+// Covers: 票 operator-channel/05、35 完成判据——已换各口三格各答其格；授予齐备的合成操作者越过 Intake，读口未接线所以答
 // NO_ANSWER_FORMED，而不是未配置。隔离读打开也不再改这几口。
 func TestSwappedCatalogueReadFacesAnswerFromTheOperatorChannel(t *testing.T) {
 	granted, err := buildOperatorMinter(acceptingVerifier{}, operationsReaderRegister{}, admissionScopeUnset())
@@ -108,7 +131,7 @@ func TestSwappedCatalogueReadFacesAnswerFromTheOperatorChannel(t *testing.T) {
 		router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpointsWithOperatorIntakes(
 			unconfiguredOperatorDecisions(), testCase.registries, unconfiguredIntegrationClientIntakes(),
 			isolated, nil, nil, nil))
-		for _, pattern := range swappedCatalogueReadPatterns {
+		for _, pattern := range append(append([]string{}, swappedCatalogueReadPatterns...), swappedOperationsReadPatterns...) {
 			probe, ok := businessEndpointProbes[pattern]
 			if !ok {
 				t.Fatalf("探针表没有 %s", pattern)

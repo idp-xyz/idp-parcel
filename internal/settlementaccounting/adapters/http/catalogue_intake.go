@@ -57,6 +57,14 @@ func writeCatalogueIntakeProblem(response http.ResponseWriter, err error) {
 		writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
 		return
 	}
+	if errors.Is(err, ErrOperatorCredentialRejected) {
+		writeProblem(response, http.StatusUnauthorized, codeOperatorCredentialRejected)
+		return
+	}
+	if errors.Is(err, ErrOperatorNotGranted) {
+		writeProblem(response, http.StatusForbidden, codeOperatorNotGranted)
+		return
+	}
 	if errors.Is(err, ErrIntegrationClientCredentialRejected) {
 		writeProblem(response, http.StatusUnauthorized, codeIntegrationClientCredentialRejected)
 		return
