@@ -242,7 +242,7 @@ func TestARestrictedRequestPausesForDispositionAndIsRejectedByAuthority(t *testi
 	if n := fixture.countOutboxOfType(t, string(nrinbox.AcceptedDecisionEventType)); n != 0 {
 		t.Fatalf("拒绝入队了 %d 封接受信封", n)
 	}
-	// 库里那一行确实是已拒绝：读回那一半由重建门挡在 ADR-0030 门外，这里只看投影。
+	// 投影列也要对：队列读面按它取行，等待态不清零，已拒绝委托会再被列给处置角色。
 	var state, waitingOn int16
 	if err := fixture.pool.QueryRow(ctx,
 		`SELECT state, task_waiting_on FROM parcel_shipment.shipment_request WHERE shipment_request_id = $1`,
@@ -251,6 +251,47 @@ func TestARestrictedRequestPausesForDispositionAndIsRejectedByAuthority(t *testi
 	}
 	if state != int16(psdomain.ShipmentRequestRejected) || waitingOn != 0 {
 		t.Fatalf("库里 state = %d waiting = %d, want REJECTED 且等待态清零", state, waitingOn)
+	}
+}
+
+// Covers: ADR-0132 决定二「撞上已成立的决定答`任务已完结`并交回那一个」在真库上成立（票 operator-channel/33）：
+// `拒绝`去向原样重放答 TASK_ALREADY_CLOSED 并交回那份拒绝决定与留痕，不再释放、不改写库里那一行。已拒绝行
+// 读不回时这一口答 500，而离线客户端按 ADR-0022 会把 5xx 留在队列里不断重发。
+func TestARejectionDispositionReplayedAnswersTaskAlreadyClosed(t *testing.T) {
+	fixture := newDispositionLoopFixture(t)
+	ctx := t.Context()
+
+	fixture.pauseAtDisposition(t, ctx)
+	first := fixture.disposeWithin(t, ctx, psdomain.DisposeByRejection)
+	if first.Outcome() != psapplication.AuthorizedDispositionRecorded {
+		t.Fatalf("首次处置 outcome = %q, want RECORDED", first.Outcome())
+	}
+	formed, _ := first.AcceptanceDecision()
+
+	replay := fixture.disposeWithin(t, ctx, psdomain.DisposeByRejection)
+	if replay.Outcome() != psapplication.AuthorizedDispositionTaskAlreadyClosed {
+		t.Fatalf("重放 outcome = %q, want TASK_ALREADY_CLOSED", replay.Outcome())
+	}
+	if replay.State() != psdomain.ShipmentRequestRejected {
+		t.Fatalf("重放 state = %q, want REJECTED", replay.State())
+	}
+	decision, has := replay.AcceptanceDecision()
+	if !has || decision.Accepted() || decision.DecisionID() != formed.DecisionID() {
+		t.Fatalf("重放交回的决定 = %+v（has=%v）, want 首次形成的那份拒绝 %s", decision, has, formed.DecisionID())
+	}
+	rejection, active := decision.ActiveRejection()
+	if !active || rejection.Decider().String() != synRDisposer || rejection.Authority().String() != synRDispositionAuthority {
+		t.Fatalf("重放交回的留痕 = %+v（active=%v）", rejection, active)
+	}
+	if fixture.release.calls != 1 {
+		t.Fatalf("release calls = %d, want 1——重放不得再释放一次", fixture.release.calls)
+	}
+	stored := fixture.mustLoadRequest(t, ctx)
+	if got, _ := stored.AcceptanceDecision(); got.DecisionID() != formed.DecisionID() {
+		t.Fatalf("库里的决定 = %s, want %s——重放改写了已成立的决定", got.DecisionID(), formed.DecisionID())
+	}
+	if recorded, present := stored.AcceptanceDecisionTask().AuthorizedDisposition(); !present || recorded.Choice() != psdomain.DisposeByRejection {
+		t.Fatalf("库里的处置记录 = %+v（present=%v）", recorded, present)
 	}
 }
 

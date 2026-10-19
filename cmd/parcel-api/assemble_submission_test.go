@@ -445,6 +445,91 @@ func TestAnOtherAuthorityDecisionReachesTheEndpointWithItsHandoffContinuation(t 
 	}
 }
 
+// Covers: 票 operator-channel/33——提交口按来源身份读回原委托的两条路撞上一份已被规则拒绝的委托：客户原样重放
+// 那份提交答`既有结果`（PSC-1），以「已拒绝修正」关联它重新提交则关联成立（`AT-PS-036`，「保留原版本或原决定」）。
+// 已拒绝行读不回时，前者答 500、后者报读不到原委托。规则拒绝取`没有适用合同`那一格：依据带不出来。
+func TestASubmissionReadsBackARuleRejectedRequest(t *testing.T) {
+	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	submittedRequestOnRealAssembly(t, db)
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		t.Fatalf("构造委托仓储：%v", err)
+	}
+	identity := submissionCommand(t).Identity
+	failed, err := domain.NewAcceptanceCheck(domain.LegalEntityAndContractCheck, domain.DeclaredParcelID{},
+		domain.CheckFailed, mustValue(t, domain.NewCheckReason, "SYN-NO-APPLICABLE-BASIS"))
+	if err != nil {
+		t.Fatalf("失败校验项：%v", err)
+	}
+	spec := domain.AcceptanceDecisionSpec{
+		DecisionID: mustValue(t, domain.NewAcceptanceDecisionID, "SYN-DECISION-RULE-1"),
+		Checks:     []domain.AcceptanceCheck{failed},
+		DecidedAt:  envelopeProofAnchor.Add(time.Hour),
+	}
+	var state domain.ShipmentRequestState
+	err = db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		request, found, err := requests.FindBySourceIdentity(txCtx, identity)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return errors.New("委托读不回来")
+		}
+		rejected, err := request.Decide(spec)
+		if err != nil {
+			return err
+		}
+		state = rejected.State()
+		_, err = requests.Save(txCtx, identity, rejected)
+		return err
+	})
+	if err != nil || state != domain.ShipmentRequestRejected {
+		t.Fatalf("规则拒绝并保存：state=%q err=%v", state, err)
+	}
+	submission, _ := envelopeMintingSubmission(t, db)
+
+	replay, err := submission.Handle(t.Context(), submissionCommand(t))
+	if err != nil {
+		t.Fatalf("原样重放已被拒绝的提交：%v", err)
+	}
+	if got := replay.Outcome(); got != shipmentapp.OutcomeExistingResult {
+		t.Fatalf("重放 outcome = %v, want EXISTING_RESULT", got)
+	}
+
+	linked := submissionCommand(t)
+	linked.Identity, err = domain.NewSourceIdentity(identity.TenantID(), identity.CustomerAccountID(), identity.Source(),
+		mustValue(t, domain.NewSourceRequestKey, "SYN-KEY-LINKED-1"))
+	if err != nil {
+		t.Fatalf("关联新委托的来源身份：%v", err)
+	}
+	linked.PayloadDigest = mustValue(t, domain.NewPayloadDigest, "syn-digest-linked-1")
+	linked.ShipmentRequestID = mustValue(t, domain.NewShipmentRequestID, "syn-request-linked-1")
+	linked.BatchID = mustValue(t, domain.NewSubmissionBatchID, "syn-batch-linked-1")
+	linked.Link = shipmentapp.PriorRequestClaim{
+		PriorIdentity:  identity,
+		PriorRequestID: submissionCommand(t).ShipmentRequestID,
+		Kind:           domain.LinkRejectedCorrection,
+	}
+	result, err := submission.Handle(t.Context(), linked)
+	if err != nil {
+		t.Fatalf("以已拒绝修正关联重新提交：%v", err)
+	}
+	if got := result.Outcome(); got != shipmentapp.OutcomeSubmitted {
+		t.Fatalf("关联 outcome = %v, want SUBMITTED", got)
+	}
+	created, found, err := requests.FindBySourceIdentity(t.Context(), linked.Identity)
+	if err != nil || !found {
+		t.Fatalf("读回关联新委托：err=%v found=%v", err, found)
+	}
+	link, established := created.PriorRequestLink()
+	if !established || link.Kind() != domain.LinkRejectedCorrection || link.PriorRequestID() != submissionCommand(t).ShipmentRequestID {
+		t.Fatalf("关联出处 = %+v（established=%v）, want 已拒绝修正指向 syn-request-1", link, established)
+	}
+}
+
 // envelopeMintingSubmission 装配「会真发信封」的提交编排：仓储、边界壳、Outbox Store、
 // 意图适配器与标识工厂全是生产实现，只有归属权威换成放行替身（隔离合成 `S`，不进生产
 // 装配）——真实治理桥在目录未配置时把提交停在 OWNERSHIP_UNRESOLVED，建单一段走不到，

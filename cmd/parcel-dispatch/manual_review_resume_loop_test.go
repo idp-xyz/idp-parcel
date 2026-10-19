@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -16,6 +17,7 @@ import (
 	psapplication "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 )
 
 // 本文件对真实 PostgreSQL 16 证 ADR-0086 的整条闭环（票 09）：规则要求人工复核时，
@@ -224,6 +226,91 @@ func TestAManualReviewPauseIsResumedByItsCompletionEnvelope(t *testing.T) {
 	if n := fixture.countOutboxOfType(t, string(nrinbox.AcceptedDecisionEventType)); n != 1 {
 		t.Fatalf("重投后接受信封 = %d 封, want 仍为 1", n)
 	}
+}
+
+// Covers: 已排队的「复核已完成」信封撞上一份已被主动拒绝的委托时，接受链交回既有决定（票 operator-channel/33）：
+// 决定与留痕原样留在库里，不落成`委托不可用`的未决、不追加处理尝试、不发接受信封。已拒绝行读不回时，形成决定
+// 那一步走不到它本来就有的「既有决定」那一支，续办引用会指向一场永远不会自己好的重试。
+func TestACompletionEnvelopeMeetingAnActivelyRejectedRequestHandsBackTheDecision(t *testing.T) {
+	fixture := newManualReviewLoopFixture(t)
+	ctx := t.Context()
+
+	fixture.submit(t, ctx)
+	request := fixture.mustLoadRequest(t, ctx)
+	mustWithinTX(t, fixture.transactor, ctx, func(txCtx context.Context) error {
+		return fixture.submittedHandoff.HandOffShipmentRequestSubmitted(txCtx,
+			psports.ShipmentRequestSubmittedHandoffIntent{Identity: fixture.identity, Request: request})
+	})
+	submittedDelivery := fixture.claimDeliveryOfType(t, string(psinbox.ShipmentRequestSubmittedEventType))
+	if err := fixture.submittedGate.Consume(ctx, submittedDelivery.Envelope); err != nil {
+		t.Fatalf("第一扇门：%v", err)
+	}
+	fixture.markPublished(t, submittedDelivery)
+	paused := fixture.mustLoadRequest(t, ctx)
+	if completed := fixture.completeReview(t, ctx, paused); completed.Outcome() != psapplication.ManualReviewCompletionRecorded {
+		t.Fatalf("复核完成 outcome = %q, want RECORDED", completed.Outcome())
+	}
+
+	// 续办信封还在队列里，授权角色先一步主动拒绝了这份委托。
+	rejection := psdomain.ActiveRejectionSpec{
+		DecisionID: mustPS(t, psdomain.NewAcceptanceDecisionID, "SYN-DECISION-ACTIVE-1"),
+		Authority:  mustPS(t, psdomain.NewRejectionAuthorityReference, "SYN-REJECT-RULE-1/v1"),
+		Decider:    mustPS(t, psdomain.NewDeciderReference, "SYN-OPERATOR-01"),
+		Reason:     mustPS(t, psdomain.NewRejectionReasonReference, "SYN-REJECT-REASON-1"),
+		Evidence:   mustPS(t, psdomain.NewRejectionEvidenceReference, "SYN-REJECT-EVIDENCE-1"),
+		DecidedAt:  time.Now().UTC(),
+	}
+	mustWithinTX(t, fixture.transactor, ctx, func(txCtx context.Context) error {
+		loaded, found, err := fixture.requests.FindBySourceIdentity(txCtx, fixture.identity)
+		if err != nil {
+			return err
+		}
+		if !found {
+			return errors.New("委托读不回来")
+		}
+		rejected, err := loaded.RejectByAuthority(rejection)
+		if err != nil {
+			return err
+		}
+		_, err = fixture.requests.Save(txCtx, fixture.identity, rejected)
+		return err
+	})
+	attemptsBefore := fixture.countAttempts(t)
+
+	resume := fixture.claimDeliveryOfType(t, string(psinbox.ManualReviewCompletedEventType)).Envelope
+	if err := fixture.resumeGate.Consume(ctx, resume); err != nil {
+		t.Fatalf("续办一拍：%v", err)
+	}
+	if n := fixture.countInbox(t, "parcel-shipment/advance-acceptance-chain-on-review-completion", string(resume.ID)); n != 1 {
+		t.Fatalf("续办门 inbox 行数 = %d, want 1", n)
+	}
+	if n := fixture.countSQL(t, `SELECT count(*) FROM parcel_shipment.acceptance_processing_attempt
+		WHERE shipment_request_id = '`+fixture.requestID.String()+`' AND reason_ref = 'SHIPMENT_REQUEST_UNAVAILABLE'`); n != 0 {
+		t.Fatalf("续办落成了 %d 条`委托不可用`的处理尝试——已拒绝委托没读回来", n)
+	}
+	if got := fixture.countAttempts(t); got != attemptsBefore {
+		t.Fatalf("处理尝试 %d → %d；撞上既有决定不该再记一轮未决", attemptsBefore, got)
+	}
+	stored := fixture.mustLoadRequest(t, ctx)
+	decision, formed := stored.AcceptanceDecision()
+	if stored.State() != psdomain.ShipmentRequestRejected || !formed || decision.DecisionID().String() != "SYN-DECISION-ACTIVE-1" {
+		t.Fatalf("续办后 state = %q decision = %v formed = %v, want 那份主动拒绝原样不动", stored.State(), decision.DecisionID(), formed)
+	}
+	if rejection, active := decision.ActiveRejection(); !active || rejection.Decider().String() != "SYN-OPERATOR-01" {
+		t.Fatalf("续办后留痕 = %+v（active=%v）", rejection, active)
+	}
+	// 既有决定那一支照常把决定交给下游（交接按决定标识先查后插），交出去的只能是那份拒绝。
+	if n := fixture.countSQL(t, `SELECT count(*) FROM `+migrate.SchemaBento+`.outbox
+		WHERE event_type = '`+string(nrinbox.AcceptedDecisionEventType)+`'
+		  AND (payload->>'state' <> 'REJECTED' OR payload->>'decisionId' <> 'SYN-DECISION-ACTIVE-1')`); n != 0 {
+		t.Fatalf("撞上已拒绝委托交出了 %d 封不是那份拒绝的决定信封", n)
+	}
+}
+
+func (fixture *manualReviewLoopFixture) countAttempts(t *testing.T) int {
+	t.Helper()
+	return fixture.countSQL(t, `SELECT count(*) FROM parcel_shipment.acceptance_processing_attempt
+		WHERE shipment_request_id = '`+fixture.requestID.String()+`'`)
 }
 
 func (fixture *manualReviewLoopFixture) completeReview(
