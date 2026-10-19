@@ -1,7 +1,7 @@
 # 23 运输委托提交面
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg23（见文末「完成记录」「评审记录」；评审一项阻断已修）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
+Status: resolved——2026-10-19 进 main（全量钉 `98affcab`：148 ok / 0 FAIL；TF 链第二波同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg23（见文末「完成记录」「评审记录」；评审一项阻断已修）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
 Blocked by: [22](./22-supplier-agreement-version-point-read-and-tf-check-adapter.md)
 地盘：`operation_decision.go`；tfhttp `operator_decision_intake.go`、新 `submit_transport_commission.go`；`application/commission_transport.go`（核对、法人快照、改注释）；`domain/transport_commission.go`、`commission_rehydration.go`；`postgres/transport_commission.go`；迁移 TF 0025（法人列）；新 `cmd/parcel-api/assemble_transport_commission.go` + `endpoints.go` 行；种子；ADR-0202、UC-TF-004 AT、演示文档。
 出处：[02](./02-transport-commission-has-no-command-face.md)；方案「02 委托、订舱、承运答复」D02-1、D02-3、D02-4、D02-7，「跨票通则」X1、X3，「需要的 ADR」ADR-0202。
@@ -150,3 +150,18 @@ M
 - 带 55432 DSN、`-p 1 -count=1`：`./internal/architecture/`、`./internal/transportfulfillment/...`、`./internal/accessidentity/...`、`./internal/partycommercial/...`、`./migrations/...`、`./cmd/parcel-api/`、`./cmd/parcel-dispatch/`、`./scripts/demo-seeds/...` 全部 ok。新增的回滚用例先在修前的装配上跑过，确认是红的。没跑全量。
 - 乱序迁移复现见上文阻断 1。一次性库 `dcg23_seed2` 上 `seed.sh` 灌入退 0，委托提交的授予与对照都是 RECORDED，库已删。
 - 没有重生成机制清点（进 main 时统一做）。
+
+## 进 main 记录（2026-10-19）
+
+- TF 链第二波 17、23、27、32 与 first-party-api/00 合成一批，按 17 → 23 → 27 → 32 → first-party-api/00 叠到 main 上，整批快进推送，与本记录同一次推送。
+- 合批时的处理：
+  - README 的 ADR 行按号合并。
+  - 决定种类：23 与 27 各加一种，枚举与测试两边都留。access_identity 迁移 0008、0009 与另一会话的 0011 三份 CHECK 全集一致（15 种）。
+  - `endpoints.go`、`main.go`、`unwired_orchestration.go`、演示种子 JSON 与 `seed.sh` 的追加行两边都留。
+  - 23 与 27 在 TF application 包里同名：27 的协议读不动一格改名 `ChargeSupplierAgreementUnavailable`，测试替身加 `charge` 前缀。
+  - UC-TF-005 的 AT 表按号排：32 的 110–116，27 的 120–125。
+  - AT 覆盖盘点计数表按两侧增量重算。
+  - 种子 README 文件表 `operator-channel` 一行去重。
+  - 23 立的 40 号票与 17 立的 40 号票撞号，23 那张改为 41，ADR-0202 风险点 11 同步。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `98affcab`：148 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。

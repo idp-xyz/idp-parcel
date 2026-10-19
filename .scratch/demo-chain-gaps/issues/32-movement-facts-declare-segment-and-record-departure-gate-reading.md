@@ -1,7 +1,7 @@
 # 32 移动事实声明段与出发门禁读数
 
 Category: enhancement
-Status: in-progress——评审修订完，待进 main，分支 claude-dcg32。2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md) 与 [ADR-0205](../../../docs/adr/0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md)。
+Status: resolved——2026-10-19 进 main（全量钉 `98affcab`：148 ok / 0 FAIL；TF 链第二波同批，见文末「进 main 记录」）。此前 in-progress——评审修订完，待进 main，分支 claude-dcg32。2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md) 与 [ADR-0205](../../../docs/adr/0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md)。
 Blocked by: [31](./31-customs-action-admission-judgement-and-node-customs-zones.md)；[operator-channel/48](../../operator-channel/issues/48-cmd-parcel-api-tests-and-comments-say-what-the-code-does.md)（同一测试文件）
 地盘：TF `domain/load_assignment_movement.go`、`movement_fact_rehydration.go`、`payload_canonicalization.go`、新 `departure_gate_reading.go`；`application/record_movement_fact.go`；新 `ports/departure_gate.go`；新 `adapters/customscompliance/departure_gate.go`；`postgres/movement_fact_registry.go`；迁移 TF 0026；tfhttp `record_movement_fact.go`；`cmd/parcel-api/assemble_movement_fact.go`(+_test)、`movement_fact_same_identity_test.go`、`transport_fulfillment_command_lines_test.go`、`storable_values_channel_test.go`；ADR-0205、TF CONTEXT、UC-TF-005。
 出处：[05](./05-movement-facts-are-unlinked-and-departure-gate-is-self-reported.md)；方案「05 移动事实与出发门禁」D05-1、D05-2、D05-6、D05-7、D05-8、D05-9，「跨票通则」X4、X5，「需要的 ADR」ADR-0205，「已不成立或已修」05。
@@ -178,3 +178,18 @@ L
   - `./cmd/parcel-api/`
 - 演示种子未改，没有重灌。
 - 合并预检：对 main `08254c8c` 跑 `git merge-tree`，只有 `.scratch/at-coverage-inventory.md` 一处冲突，`docs/adr/README.md` 自动合入。
+
+## 进 main 记录（2026-10-19）
+
+- TF 链第二波 17、23、27、32 与 first-party-api/00 合成一批，按 17 → 23 → 27 → 32 → first-party-api/00 叠到 main 上，整批快进推送，与本记录同一次推送。
+- 合批时的处理：
+  - README 的 ADR 行按号合并。
+  - 决定种类：23 与 27 各加一种，枚举与测试两边都留。access_identity 迁移 0008、0009 与另一会话的 0011 三份 CHECK 全集一致（15 种）。
+  - `endpoints.go`、`main.go`、`unwired_orchestration.go`、演示种子 JSON 与 `seed.sh` 的追加行两边都留。
+  - 23 与 27 在 TF application 包里同名：27 的协议读不动一格改名 `ChargeSupplierAgreementUnavailable`，测试替身加 `charge` 前缀。
+  - UC-TF-005 的 AT 表按号排：32 的 110–116，27 的 120–125。
+  - AT 覆盖盘点计数表按两侧增量重算。
+  - 种子 README 文件表 `operator-channel` 一行去重。
+  - 23 立的 40 号票与 17 立的 40 号票撞号，23 那张改为 41，ADR-0202 风险点 11 同步。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `98affcab`：148 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。

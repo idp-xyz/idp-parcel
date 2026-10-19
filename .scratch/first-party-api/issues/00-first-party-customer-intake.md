@@ -1,7 +1,7 @@
 # 首方客户渠道 Intake：客户渠道册、首方铸造器、提交口先换并撤写开关
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-fpa00；隔离评审 1 项阻断与 6 项非阻断已修，待复核（2026-10-19 立；ADR-0139–0142 于同日由用户在 Claude Code 会话里答「接受」，按复核建议修订后接受）。
+Status: resolved——2026-10-19 进 main（全量钉 `98affcab`：148 ok / 0 FAIL；TF 链第二波同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-fpa00；隔离评审 1 项阻断与 6 项非阻断已修，待复核（2026-10-19 立；ADR-0139–0142 于同日由用户在 Claude Code 会话里答「接受」，按复核建议修订后接受）。
 Blocked by: 无
 地盘：`internal/accessidentity`（客户渠道册、首方铸造器）、`migrations/access_identity/` 下一号、`cmd/parcel-access-register` 新子命令、`cmd/parcel-api` 新 `assemble_*.go` 与 `endpoints.go` 提交口一行、`scripts/demo-seeds`（access 种子与演示发行方配置）、参数登记册 `PAR-INT-13` 的证据格不动（无租户）。
 出处：[ADR-0139](../../../docs/adr/0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md) Decision 二至四、六、七与 Consequences；[ADR-0150](../../../docs/adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 决定三。
@@ -121,3 +121,17 @@ L
 - 与当前 `origin/main`（`451fbf4d`）做 `git merge-tree`，无冲突。合并树导出到临时目录后，`go build ./...` 与相关包 `go vet` 干净；`./cmd/parcel-api/`、`./internal/architecture/`、PS 领域与 pilotgovernance 适配器的测试 ok。导出目录已删。
 - 种子数据与 `seed.sh` 都没动（只改了注释与 README），因此没有重灌一次性库。没跑全量，也没重生成机制清点。
 
+## 进 main 记录（2026-10-19）
+
+- TF 链第二波 17、23、27、32 与 first-party-api/00 合成一批，按 17 → 23 → 27 → 32 → first-party-api/00 叠到 main 上，整批快进推送，与本记录同一次推送。
+- 合批时的处理：
+  - README 的 ADR 行按号合并。
+  - 决定种类：23 与 27 各加一种，枚举与测试两边都留。access_identity 迁移 0008、0009 与另一会话的 0011 三份 CHECK 全集一致（15 种）。
+  - `endpoints.go`、`main.go`、`unwired_orchestration.go`、演示种子 JSON 与 `seed.sh` 的追加行两边都留。
+  - 23 与 27 在 TF application 包里同名：27 的协议读不动一格改名 `ChargeSupplierAgreementUnavailable`，测试替身加 `charge` 前缀。
+  - UC-TF-005 的 AT 表按号排：32 的 110–116，27 的 120–125。
+  - AT 覆盖盘点计数表按两侧增量重算。
+  - 种子 README 文件表 `operator-channel` 一行去重。
+  - 23 立的 40 号票与 17 立的 40 号票撞号，23 那张改为 41，ADR-0202 风险点 11 同步。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `98affcab`：148 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。
