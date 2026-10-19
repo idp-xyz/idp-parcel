@@ -1,6 +1,6 @@
 # ADR-0206：关务动作准入判断——一口折叠限制、门禁核对、外部放行三源，适用哪些受门禁动作由关务按节点关务区域判
 
-Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/31，统一代决见 `.scratch/demo-chain-gaps/tf-chain-plan.md`「05 移动事实与出发门禁」D05-2 至 D05-5 与「需要的 ADR」ADR-0206。越权风险点见文末，待各条括注的 owner 复核。）
+Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/31，统一代决见 `.scratch/demo-chain-gaps/tf-chain-plan.md`「05 移动事实与出发门禁」D05-2 至 D05-5 与「需要的 ADR」ADR-0206。越权风险点见文末，待各条括注的 owner 复核。）Consequences「外包干线交接……与有效交付……的门禁按交出、交付意图读本判断，挂法等 peer」一句与越权风险点 9 已由 [ADR-0213](./0213-a-transport-handover-declares-its-releasing-receiving-and-onward-nodes.md) 回答（2026-10-19）：交接声明交出、去向节点，交出意图取它们；交付意图的 at 取进入派送段那次交接的交出节点。无条款停用，本记录各条不变。
 Date: 2026-10-19
 
 ## Context
@@ -120,3 +120,4 @@ Date: 2026-10-19
 - [ADR-0085](./0085-registry-write-faces-enter-the-endpoint-table-with-unconfigured-grade.md)：登记写面的 CLI 与端点同一用例
 - [ADR-0049](./0049-publish-channel-is-in-process-delivery-until-load-evidence.md)：接得住才登记
 - 票 `.scratch/demo-chain-gaps/issues/31-customs-action-admission-judgement-and-node-customs-zones.md`、`05-movement-facts-are-unlinked-and-departure-gate-is-self-reported.md`
+- [ADR-0213](./0213-a-transport-handover-declares-its-releasing-receiving-and-onward-nodes.md)：回答 Consequences「挂法等 peer」与越权风险点 9——交接声明交出、接收、去向节点，交出门禁按（交出节点，去向节点）问交出意图，交付门禁按进入派送段那次交接的交出节点问交付意图
