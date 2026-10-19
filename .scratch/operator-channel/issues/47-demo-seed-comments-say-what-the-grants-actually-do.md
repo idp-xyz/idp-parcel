@@ -1,7 +1,7 @@
 # 47 演示种子与 README 的注释和说明照实写：授予与对照做了什么、管理台实际有哪几页
 
 Category: chore
-Status: in-progress——2026-10-18 作者子代理完工，待非作者评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 7、序 4 评审遗留；用户授权代决）；分支 `claude-oc47`
+Status: in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待非作者评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 7、序 4 评审遗留；用户授权代决）；分支 `claude-oc47`
 Blocked by: 无
 父票：[26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)（票 26 评审遗留的后续）
 出处：票 [24](./24-demo-configurator-holds-the-shipment-side-decision-grants.md) Comments 评审 Spec 非阻断 1–3、Standards 非阻断 1；票 [15](./15-operation-decision-faces-take-operator-intake.md) Comments「钉 `60244fa6`」那条评审 Spec 非阻断 1。
@@ -171,3 +171,9 @@ Blocked by: 无
 
 - README 里还有两处在数 dex.yaml 的静态用户：「操作者渠道」第 2 步的「Dex 两个静态用户的主体」，以及「组成」表 `operator-channel/` 行的「两个合成静态用户」。和 C7-3、C7-4 去掉的是同一类问题。
 - seed.sh 治理段总述的末句「只登今天已换口的那几种；余下的口换口时随那一笔补」，对运营决定已经不成立（`decisionKinds` 每一种都已登区间），对外部事实可能还成立，要等外部事实各口逐一核过才能改写。
+
+## Comments
+
+- **评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审）· 钉 `0ccc6d88`（基线 `b58b10ef`）· 2026-10-18**：用户 2026-10-18 选「精简续做」，评审由会话本身读 diff 做（隔离子代理那一轮随 workflow 停下未跑完）；不算非作者评审，如实记下。
+  - **Spec**：阻断无。seed.sh 与 README 的改动只在注释、说明与进度行字样，数据与命令未动；授予「只开门」改成逐口照 ADR-0151 决定二写决定方从哪来，委托侧前提照 ADR-0183 决定一写清；管理台页面点名到 `AcceptanceReviewPage`、`AuthorizedDispositionPage`、`EffectiveTimeJudgmentPage`。
+  - **Standards**：阻断无，非阻断无。「十一种 / 六种 / 五种」与「N/7」这类计数都已去掉，改指 `decisionKinds` 与目录；`bash -n scripts/demo-seeds/seed.sh` 退 0。
