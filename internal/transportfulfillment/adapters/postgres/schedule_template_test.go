@@ -244,7 +244,8 @@ func TestAdHocSchedulesRegisterAndReviseOnTheRegistry(t *testing.T) {
 }
 
 // Covers: ADR-0201 决定六与方案 D01-5——候选按连接答：生产空册答`未配置`；登过但这段时间没有班次答`已列出`空集；
-// 周期安排在评估时物化、不落册；已登记的那一班顶替同一身份的物化结果，改出了时间段就不再是候选；他租户不可见。
+// 周期安排在评估时物化、不落册；已登记的那一班顶替同一身份的物化结果，改出了时间段就不再是候选；他租户不可见；
+// 「配过」只看当前版，周期安排改登到别的连接，原连接答`未配置`。
 func TestScheduleCandidatesAnswerNotConfiguredOnAnEmptyRegistry(t *testing.T) {
 	stores := newScheduleRegistryStores(t)
 	tenant := deliveryValue(t, domain.NewTenantID, "SYN-TENANT-01")
@@ -312,6 +313,19 @@ func TestScheduleCandidatesAnswerNotConfiguredOnAnEmptyRegistry(t *testing.T) {
 	}
 	if strings.Join(identities, ",") != "SYN-TPL-1/2026-10-21" {
 		t.Fatalf("窄区间候选 = %v，要只有 SYN-TPL-1/2026-10-21——册上那一班改在区间外，不由物化结果顶回来", identities)
+	}
+
+	// `AT-TF-103`「没有任何当前版」：连接上唯一的一份周期安排换版改登到别的连接之后，原连接只剩被顶掉的旧版，
+	// 答`未配置`，新连接才算配过。
+	moved := syntheticTemplateCommand(tenant, "SYN-TPL-3", "SYN-CONN-3", "22:00")
+	wantScheduleOutcome(t, stores.registerTemplate(t, moved), application.ScheduleTemplateRegistered)
+	moved.Connection = "SYN-CONN-4"
+	wantScheduleOutcome(t, stores.registerTemplate(t, moved), application.ScheduleTemplateRevised)
+	if result := candidates(tenant, "SYN-CONN-3", from, to); result.Outcome() != application.ScheduleCandidatesNotConfigured {
+		t.Fatalf("周期安排改登走之后的原连接 = %s，要 NOT_CONFIGURED", result.Outcome())
+	}
+	if result := candidates(tenant, "SYN-CONN-4", from, to); result.Outcome() != application.ScheduleCandidatesListed || len(result.Candidates()) == 0 {
+		t.Fatalf("改登到的连接 = %s %d，要已列出且有候选", result.Outcome(), len(result.Candidates()))
 	}
 }
 

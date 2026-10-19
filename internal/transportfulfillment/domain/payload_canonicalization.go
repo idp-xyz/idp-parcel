@@ -68,7 +68,8 @@ func marshalPayload(document any) ([]byte, string, error) {
 // canonicalInstant 按纳秒成串，不折到登记册精度：经 CompareStoredDigest 比对的口，摘要是落库前由命令原值算出的，
 // 原样重放必然同串；已存摘要不在原处改写（ADR-0014），所以它不能原地折到微秒，要折就得换形状版本。由此留下一处
 // 有意的不对称：存摘要的口按纳秒比，两侧现算的口按微秒比（AtRegistryPrecision）。原样重放在两类口上都认作重放，
-// 只有亚微秒不同的两份命令答法不同——存摘要的口答冲突，现算的口答重放。
+// 只有亚微秒不同的两份命令答法不同——存摘要的口答冲突，现算的口答重放。立形时就没有存量摘要的口可以一开始就折
+// （CanonicalizeTransportSchedulePayload 即是，理由在它那里）。
 func canonicalInstant(at time.Time) string {
 	return at.UTC().Format(time.RFC3339Nano)
 }
@@ -469,6 +470,9 @@ func CanonicalizeScheduleTemplatePayload(content ScheduleTemplateContent) ([]byt
 // CanonicalizeTransportSchedulePayload 定形「登记具体班次」（ADR-0201）。进摘要的是班次本身：方向、出发与到达、
 // 服务范围与来历（物化来的再加周期安排代码与运行日期，临时班次那两格写 null）。版本是登记册给的，不进；物化
 // 时那一版周期安排的版本号也不进——按更新的一版再物化出一模一样的班次，班次没有变，不该多出一版。
+//
+// 出发与到达先经 AtRegistryPrecision 折到登记册精度，再照 canonicalInstant 成串：这本册子上同键异内容不是冲突而是
+// 下一版，按纳秒算摘要，一次带亚微秒时刻的临时班次登记之后照读回值原样重登，就会多出一版与上一版库面完全相同的班次。
 func CanonicalizeTransportSchedulePayload(schedule TransportSchedule) ([]byte, string, error) {
 	var template, runningDate *string
 	if code, _, date, materialized := schedule.origin.Template(); materialized {
@@ -493,8 +497,8 @@ func CanonicalizeTransportSchedulePayload(schedule TransportSchedule) ([]byte, s
 		Connection:       schedule.direction.Connection().String(),
 		FromNode:         schedule.direction.From().String(),
 		ToNode:           schedule.direction.To().String(),
-		DepartsAt:        canonicalInstant(schedule.departsAt),
-		ArrivesAt:        canonicalInstant(schedule.arrivesAt),
+		DepartsAt:        canonicalInstant(AtRegistryPrecision(schedule.departsAt)),
+		ArrivesAt:        canonicalInstant(AtRegistryPrecision(schedule.arrivesAt)),
 		ServiceScope:     schedule.serviceScope.String(),
 		Origin:           schedule.origin.kind.String(),
 		Template:         template,

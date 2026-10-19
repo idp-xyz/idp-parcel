@@ -105,7 +105,7 @@ func (repository *ScheduleTemplates) SaveTemplateVersion(
 }
 
 // ScheduleCandidates 实现 ports.ScheduleCandidateSource：准备评估候选时读周期安排与具体班次两本册子（ADR-0201
-// 决定五、六）。两问都只看当前版——被后一版顶掉的那一版不再是任何候选的来源。
+// 决定五、六）。各问都只看当前版——被后一版顶掉的那一版不再是任何候选的来源。
 type ScheduleCandidates struct {
 	db *bentopg.DB
 }

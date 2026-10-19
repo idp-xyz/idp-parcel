@@ -76,7 +76,7 @@ type ScheduleCandidatesDeps struct {
 
 // ScheduleCandidatesHandler 是准备评估候选那一处物化（ADR-0201 决定五）：周期安排在评估时按日期物化，只算不存；
 // 已登记的具体班次按身份顶替同一（代码、日期）的物化结果——登记册上那一班可能已改过时刻，它才是这一班现在的
-// 样子。哪一班被选中、要不要登进册子，归调用它的准备编排。
+// 样子。哪一班被选中，归调用它的准备编排。
 type ScheduleCandidatesHandler struct {
 	deps ScheduleCandidatesDeps
 }

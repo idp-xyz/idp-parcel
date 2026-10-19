@@ -307,7 +307,7 @@ func MaterializeSchedule(template ScheduleTemplate, date RunningDate) (Transport
 }
 
 // MaterializeDepartingWithin 物化出发时刻落在 [from, to] 内的全部班次，按出发先后排。它是准备评估候选那一处物化
-// （ADR-0201 决定五），只算不存：没被选中的候选不进登记册。
+// （ADR-0201 决定五），只算不存：评估本身不往登记册落任何一班。
 //
 // 枚举的日期比区间两端在当地各宽一天，再按出发时刻筛：夏令时的规范化可能把某个日期的出发推过当地午夜，只按
 // 区间两端的当地日期枚举会漏掉它。

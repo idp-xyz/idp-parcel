@@ -131,10 +131,10 @@ func TestCommandPayloadsRoundTripAsTFC1(t *testing.T) {
 			},
 		},
 		{
-			// 临时班次：出处两格写 null。
+			// 临时班次：出处两格写 null；出发与到达按微秒取，纳秒尾巴在册上存不下，不构成下一版。
 			name:     "ad hoc schedule",
-			document: `{"canonicalization":"TFC-1","face":"REGISTER_TRANSPORT_SCHEDULE","connection":"CONN","from_node":"A","to_node":"B","departs_at":"2026-03-05T02:11:12.345678901Z","arrives_at":"2026-03-05T04:11:12.345678901Z","service_scope":"SCOPE","origin":"AD_HOC","template":null,"running_date":null}`,
-			digest:   "TFC-1:d259c6392f43cb6a51c1d867f06ec64c82a3bf4c0fddf348f81ba1a7a5333b1a",
+			document: `{"canonicalization":"TFC-1","face":"REGISTER_TRANSPORT_SCHEDULE","connection":"CONN","from_node":"A","to_node":"B","departs_at":"2026-03-05T02:11:12.345678Z","arrives_at":"2026-03-05T04:11:12.345678Z","service_scope":"SCOPE","origin":"AD_HOC","template":null,"running_date":null}`,
+			digest:   "TFC-1:6c1a7a71da1ea34ddcf37fb1be8d1b72c92129c1d4ffad62c672e5af3acf20e3",
 			call: func() ([]byte, string, error) {
 				return domain.CanonicalizeTransportSchedulePayload(adHocScheduleFor(t, "SCH-ADHOC", at, at.Add(2*time.Hour)))
 			},
@@ -265,6 +265,26 @@ func TestDeliveryProofCorrectionTimeIsComparedToTheMicrosecond(t *testing.T) {
 	}
 	if digest(given) == digest(given.Add(time.Microsecond)) {
 		t.Fatal("相差一微秒应是另一份更正")
+	}
+}
+
+// Covers: ADR-0201 决定四——这本册子上同身份异内容是下一版，不是冲突；临时班次带纳秒的出发与到达，与照读回值
+// （微秒）原样重登算出同一摘要，不多出一版库面相同的班次；跨过一微秒才异。
+func TestAdHocScheduleTimesAreComparedToTheMicrosecond(t *testing.T) {
+	given := time.Date(2026, 9, 10, 9, 0, 0, 123456789, time.UTC)
+	digest := func(departsAt time.Time) string {
+		t.Helper()
+		_, digest, err := domain.CanonicalizeTransportSchedulePayload(adHocScheduleFor(t, "SCH-ADHOC", departsAt, departsAt.Add(2*time.Hour)))
+		if err != nil {
+			t.Fatalf("canonicalize: %v", err)
+		}
+		return digest
+	}
+	if digest(given) != digest(given.Truncate(time.Microsecond)) {
+		t.Fatal("纳秒尾巴不应构成下一版")
+	}
+	if digest(given) == digest(given.Add(time.Microsecond)) {
+		t.Fatal("相差一微秒应是另一份内容")
 	}
 }
 
