@@ -1,7 +1,7 @@
 # 02 装载分配登记口能在同一分配下另起并列首版：版本链成了森林，抢占变化入口要用的版本号，撤回之后还能起活跃新根
 
 Category: bug
-Status: needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: in-progress——2026-10-18 会话 `idp-parcel-9b` 代决并认领（分支 `claude-tfa02`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment-load-assignment-registrations
@@ -14,6 +14,12 @@ Blocked by: 无
 - cmd/parcel-api/（新增真库回归测试文件）
 
 代决依据：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」。
+
+## 裁定（2026-10-18，会话 idp-parcel-9b 代决）
+
+取「应当」里的推荐取法：本口只形成一次分配的**首版**。该分配已有任何版本时，对指名的新版本号答新格「分配已形成」（`LOAD_ASSIGNMENT_ALREADY_FORMED`，HTTP 200，回显链头），不落库、不另起根。变化与撤回走领域 `ReviseMembers` / `Withdraw` 的入口（tf-unwired-seven/05 记着那两个入口没接，不在本票）。不取备选（把换版本号当变化）：那要给本口加前版格、把变化入口并进来，超出这一口的职责。修复方向四条照做；迁移取 `migrations/transport_fulfillment/` 下一个空号，建索引前先查存量并列首版，有就如实报出、不静默删。属机制，不涉租户取值。
+
+越权风险点：代 TF owner 定了「本口只管首版」；owner 复核时看今天有没有调用方靠「换版本号」表达变化（演示种子、管理台、探针）。
 
 ## 现象
 - **同一分配可起两个首版。** 先投 v1（班次 S1，分配时刻 08:00），再投 v2（换成班次 S2，分配时刻早一天多，成员也不同），两次都答 201 `LOAD_ASSIGNMENT_FORMED`。在册两版的 `corrects_version` 都是 NULL，班次与分配时刻各不相同。
