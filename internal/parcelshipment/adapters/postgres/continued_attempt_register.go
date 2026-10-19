@@ -176,11 +176,13 @@ type continuedAttemptRegisterDocument struct {
 
 // continuedAttemptDecisionDoc 是一条决定的文档形状。关闭独有的两项（截断边界、关闭责任来源）与重开
 // 独有的一项（关联此前关闭）都带 omitempty：哪一半在场由领域那道按 Kind 分派的校验裁决，文档只如实
-// 带回。
+// 带回。请求证据与操作证据同样 omitempty（ADR-0187）：旧版写下的行没有这两键，读回时照缺席处理，由重建门裁决。
 type continuedAttemptDecisionDoc struct {
 	ID                          string    `json:"id"`
 	Kind                        uint8     `json:"kind"`
 	Requester                   string    `json:"requester,omitempty"`
+	RequestEvidence             string    `json:"requestEvidence,omitempty"`
+	OperationEvidence           string    `json:"operationEvidence,omitempty"`
 	Decider                     string    `json:"decider"`
 	AuthorityRole               string    `json:"authorityRole"`
 	AuthoritySnapshot           string    `json:"authoritySnapshot"`
@@ -200,6 +202,8 @@ func continuedAttemptRegisterDocumentOf(register domain.ContinuedAttemptRegister
 			ID:                          decision.ID().String(),
 			Kind:                        uint8(decision.Kind()),
 			Requester:                   decision.Requester().String(),
+			RequestEvidence:             decision.RequestEvidence().String(),
+			OperationEvidence:           decision.OperationEvidence().String(),
 			Decider:                     decision.Decider().String(),
 			AuthorityRole:               decision.AuthorityRole().String(),
 			AuthoritySnapshot:           decision.AuthoritySnapshot().String(),
@@ -265,14 +269,28 @@ func (document continuedAttemptDecisionDoc) spec() (domain.ContinuedAttemptDecis
 		Reason:            reason,
 		EffectiveAt:       document.EffectiveAt,
 	}
-	// 四个可缺项各自缺席即那一格（请求方「如有」；另三项由 Kind 决定哪一半在场）。在这里补空值判断
-	// 之外的任何规则，都是把领域那道按 Kind 分派的校验抄成第二份。
+	// 可缺项（请求方、请求证据、操作证据，以及由 Kind 决定哪一半在场的截断边界、关闭责任来源、关联此前关闭）各自
+	// 缺席即那一格。在这里补空值判断之外的任何规则，都是把领域那两道门抄成第二份。
 	if document.Requester != "" {
 		requester, err := domain.NewRequesterReference(document.Requester)
 		if err != nil {
 			return domain.ContinuedAttemptDecisionSpec{}, err
 		}
 		spec.Requester = requester
+	}
+	if document.RequestEvidence != "" {
+		evidence, err := domain.NewContinuedAttemptRequestEvidenceReference(document.RequestEvidence)
+		if err != nil {
+			return domain.ContinuedAttemptDecisionSpec{}, err
+		}
+		spec.RequestEvidence = evidence
+	}
+	if document.OperationEvidence != "" {
+		evidence, err := domain.NewContinuedAttemptOperationEvidenceReference(document.OperationEvidence)
+		if err != nil {
+			return domain.ContinuedAttemptDecisionSpec{}, err
+		}
+		spec.OperationEvidence = evidence
 	}
 	if document.CutoffBoundary != "" {
 		boundary, err := domain.NewAuthoritativeCutoffBoundary(document.CutoffBoundary)

@@ -168,7 +168,9 @@ func TestAContinuedAttemptRegisterRoundTripsWholly(t *testing.T) {
 		closure.Reason().String() != "CHANNEL_SUSPENDED" ||
 		!closure.EffectiveAt().Equal(continuedAttemptDecidedAt) ||
 		closure.CutoffBoundary().String() != "PS-CUTOFF-1" ||
-		closure.ClosureResponsibilitySource().String() != "PC-CHANNEL-ACCOUNT-SUSPENSION-1" {
+		closure.ClosureResponsibilitySource().String() != "PC-CHANNEL-ACCOUNT-SUSPENSION-1" ||
+		closure.RequestEvidence().String() != "SYN-SHIPPER-INSTRUCTION-CALL-7" ||
+		closure.OperationEvidence().String() != "OPERATOR/SYN-ISSUER#SYN-OPERATOR-7" {
 		t.Fatalf("关闭决定往返变形：%+v", closure)
 	}
 	if reopening.ID().String() != "decision-2" ||
@@ -178,7 +180,8 @@ func TestAContinuedAttemptRegisterRoundTripsWholly(t *testing.T) {
 		!reopening.EffectiveAt().Equal(continuedAttemptDecidedAt.Add(time.Hour)) ||
 		reopening.RelatedPriorClosure().String() != "decision-1" ||
 		reopening.CutoffBoundary().String() != "" ||
-		reopening.ClosureResponsibilitySource().String() != "" {
+		reopening.ClosureResponsibilitySource().String() != "" ||
+		reopening.RequestEvidence().String() != "" || reopening.OperationEvidence().String() != "" {
 		t.Fatalf("重开决定往返变形：%+v", reopening)
 	}
 	// 读回之后终局才现取：判断不在库里，是拿当前终局对着决定链算出来的。
@@ -334,6 +337,61 @@ func TestACorruptRegisterRowFailsRehydrationLoudly(t *testing.T) {
 		mustBuild(t, domain.NewDeclaredParcelID, "parcel-x"))
 	if !errors.Is(err, domain.ErrInvalidRehydratedContinuedAttemptRegister) {
 		t.Fatalf("一条没有截断边界也没有关闭责任来源的关闭读回来应在重建门上报错，实得 %v", err)
+	}
+}
+
+// TestARegisterWrittenWithoutTheEvidenceKeysStillReadsBack 证回滚写回的旧形状照样读得回（ADR-0187 决定二）：去掉两份证据
+// 的键，模拟旧版把册整份写回，请求方还在、请求证据没了——那是当时合法的历史，重建门照收，包裹判断不变；只丢审计，不卡包裹。
+func TestARegisterWrittenWithoutTheEvidenceKeysStillReadsBack(t *testing.T) {
+	repository, transactor, pool := newContinuedAttemptRegisters(t)
+	ctx := t.Context()
+
+	closed, err := openRegisterFixture(t, "tenant-a", "parcel-1").
+		Append(closureDecisionFixture(t, "decision-1", continuedAttemptDecidedAt), false)
+	if err != nil {
+		t.Fatalf("追加关闭：%v", err)
+	}
+	mustInsertRegister(t, transactor, ctx, repository, closed)
+	if _, err := pool.Exec(ctx,
+		`UPDATE parcel_shipment.continued_attempt_register
+		    SET snapshot = jsonb_build_object('decisions',
+		        (SELECT jsonb_agg(decision - 'requestEvidence' - 'operationEvidence')
+		           FROM jsonb_array_elements(snapshot->'decisions') AS decision))
+		  WHERE tenant_id = 'tenant-a' AND parcel_id = 'parcel-1'`); err != nil {
+		t.Fatalf("模拟旧版写回：%v", err)
+	}
+
+	found := mustFindRegister(t, repository, "tenant-a", "parcel-1")
+	closure := found.Decisions()[0]
+	if closure.Requester().String() != "SHIPPER-ACCOUNT-7" || closure.RequestEvidence().String() != "" || closure.OperationEvidence().String() != "" {
+		t.Fatalf("旧形状读回 = 请求方 %q / 请求证据 %q / 操作证据 %q", closure.Requester(), closure.RequestEvidence(), closure.OperationEvidence())
+	}
+	if got := found.Judge(false); got != domain.ContinuedAttemptControlledClosed {
+		t.Fatalf("旧形状读回后判断 = %q，want CONTROLLED_CLOSED", got)
+	}
+}
+
+// TestAnEvidenceWithoutARequesterFailsRehydration 证有请求证据无请求方的一行在重建门上报错：证据证的是谁的请求，在哪一版
+// 规则下都说不出（ADR-0187 决定二）。
+func TestAnEvidenceWithoutARequesterFailsRehydration(t *testing.T) {
+	repository, _, pool := newContinuedAttemptRegisters(t)
+	ctx := t.Context()
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO parcel_shipment.continued_attempt_register (tenant_id, parcel_id, revision, snapshot)
+		 VALUES ('tenant-a', 'parcel-x', 1,
+		         '{"decisions":[{"id":"decision-1","kind":1,"requestEvidence":"SYN-CALL-1","decider":"OPS-1",
+		                         "authorityRole":"ROLE-1","authoritySnapshot":"SNAP-1","reason":"R-1",
+		                         "effectiveAt":"2026-09-03T10:00:00Z","cutoffBoundary":"decision-1",
+		                         "closureResponsibilitySource":"OPERATOR-ACTION/SYN-OPS-CASE-1"}]}')`); err != nil {
+		t.Fatalf("裸写坏行：%v", err)
+	}
+
+	_, _, err := repository.FindByParcel(ctx,
+		mustBuild(t, domain.NewTenantID, "tenant-a"),
+		mustBuild(t, domain.NewDeclaredParcelID, "parcel-x"))
+	if !errors.Is(err, domain.ErrInvalidRehydratedContinuedAttemptRegister) {
+		t.Fatalf("有请求证据无请求方的关闭读回来应在重建门上报错，实得 %v", err)
 	}
 }
 
