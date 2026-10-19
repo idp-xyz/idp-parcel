@@ -11,7 +11,7 @@
 | collectionremittance | 23 | 9 | 4 | 6 | 0 | 3 |
 | customscompliance | 119 | 114 | 22 | 47 | 10 | 16 |
 | networkrouting | 77 | 77 | 9 | 14 | 2 | 7 |
-| nodeoperations | 93 | 94 | 12 | 25 | 4 | 13 |
+| nodeoperations | 93 | 95 | 12 | 25 | 4 | 13 |
 | parcelpricing | 133 | 122 | 17 | 16 | 1 | 23 |
 | parcelshipment | 209 | 203 | 20 | 39 | 10 | 19 |
 | partycommercial | 165 | 177 | 13 | 42 | 1 | 38 |
@@ -20,7 +20,7 @@
 | settlementaccounting | 208 | 150 | 34 | 63 | 12 | 9 |
 | transportfulfillment | 213 | 214 | 36 | 42 | 13 | 42 |
 | visibilityexception | 108 | 104 | 12 | 31 | 8 | 11 |
-| **合计** | 1433 | 1357 | 184 | 337 | 62 | 187 |
+| **合计** | 1433 | 1358 | 184 | 337 | 62 | 187 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 101、测试 206。
 
