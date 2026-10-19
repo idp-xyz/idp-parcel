@@ -117,7 +117,8 @@ SELECT
             'effective_from', effective_from, 'effective_to', effective_to,
             'cutoff_local_minute', cutoff_local_minute,
             'processing_minutes', processing_minutes,
-            'buffer_minutes', buffer_minutes
+            'buffer_minutes', buffer_minutes,
+            'delivery_minutes', delivery_minutes
         ) ORDER BY target_kind, target_code, version), '[]'::jsonb)
        FROM network_routing.service_calendar_version
       WHERE tenant_id = $1 AND effective_from <= $2
@@ -268,6 +269,7 @@ func rebuildCatalogSnapshot(
 			CutoffLocalMinute: row.CutoffLocalMinute,
 			ProcessingMinutes: row.ProcessingMinutes,
 			BufferMinutes:     row.BufferMinutes,
+			DeliveryMinutes:   row.DeliveryMinutes,
 		})
 	}
 
@@ -432,6 +434,7 @@ type calendarVersionRow struct {
 	CutoffLocalMinute *int       `json:"cutoff_local_minute"`
 	ProcessingMinutes *int       `json:"processing_minutes"`
 	BufferMinutes     *int       `json:"buffer_minutes"`
+	DeliveryMinutes   *int       `json:"delivery_minutes"`
 }
 
 type adjustmentRow struct {
@@ -818,11 +821,11 @@ func (catalog *NetworkCatalog) RegisterServiceCalendarVersion(
 	if _, err := executor.Exec(ctx,
 		`INSERT INTO network_routing.service_calendar_version
 			(tenant_id, target_kind, target_code, version, effective_from, effective_to,
-			 cutoff_local_minute, processing_minutes, buffer_minutes, basis_ref)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+			 cutoff_local_minute, processing_minutes, buffer_minutes, delivery_minutes, basis_ref)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
 		tenant.String(), kind, row.TargetCode, row.Version, row.EffectiveFrom.UTC(),
 		optionalTime(row.EffectiveTo, row.HasEffectiveTo),
-		row.CutoffLocalMinute, row.ProcessingMinutes, row.BufferMinutes, basisColumn(row.Basis),
+		row.CutoffLocalMinute, row.ProcessingMinutes, row.BufferMinutes, row.DeliveryMinutes, basisColumn(row.Basis),
 	); err != nil {
 		return fmt.Errorf("register service calendar version: %w", err)
 	}

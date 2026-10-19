@@ -10,7 +10,8 @@ import (
 
 // RoutePlanCatalogueReader 是路由判断两册端点消费的读口（票 admin-skeleton-closure-batch/03）。
 // 上列的是检索列面：计划本体、无路可走判断与改路决定住在 jsonb 内，权威读法归各判断
-// 口，本端点不透出——见 ports.RoutePlanCatalogueRead 的口面纪律。
+// 口，本端点不透出——见 ports.RoutePlanCatalogueRead 的口面纪律；成计划行的段链是那条纪律
+// 写明的例外（ADR-0217）。
 type RoutePlanCatalogueReader interface {
 	ListInitialRoutes(
 		ctx context.Context,
@@ -127,7 +128,21 @@ type initialRouteBody struct {
 	Conclusion         string             `json:"conclusion"`
 	PlanVersion        string             `json:"planVersion,omitempty"`
 	Applicability      *applicabilityBody `json:"applicability,omitempty"`
+	Legs               []plannedLegBody   `json:"legs,omitempty"`
 	RecordedAt         string             `json:"recordedAt"`
+}
+
+// plannedLegBody 是成计划行上的一段（ADR-0217）。reference 是登记方声明段引用时照抄的拼写；kind 是
+// 封闭两格原词；交付段的 to 是交付范围。各格都是字符串：管理台契约夹具的值类型今天只认字符串。
+type plannedLegBody struct {
+	Reference   string `json:"reference"`
+	Kind        string `json:"kind"`
+	From        string `json:"from"`
+	To          string `json:"to"`
+	Responsible string `json:"responsible"`
+	Earliest    string `json:"earliest"`
+	Latest      string `json:"latest"`
+	WindowBasis string `json:"windowBasis"`
 }
 
 type applicabilityBody struct {
@@ -162,6 +177,18 @@ func initialRouteBodyOf(row ports.InitialRouteCatalogueRow) initialRouteBody {
 			applicability.Successor = row.ApplicabilitySuccessor
 		}
 		body.Applicability = &applicability
+	}
+	for _, leg := range row.Legs {
+		body.Legs = append(body.Legs, plannedLegBody{
+			Reference:   leg.Reference,
+			Kind:        leg.Kind,
+			From:        leg.From,
+			To:          leg.To,
+			Responsible: leg.Responsible,
+			Earliest:    utcText(leg.Earliest),
+			Latest:      utcText(leg.Latest),
+			WindowBasis: leg.WindowBasis,
+		})
 	}
 	return body
 }

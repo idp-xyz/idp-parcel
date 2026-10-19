@@ -14,7 +14,9 @@ import (
 //
 // 上列的是**检索列面**的照实转写：计划本体（jsonb）、无路可走判断（jsonb）、改路
 // 决定与建议（jsonb）是判断的权威内容，读回要走各判断口的装载纪律，本口不从 jsonb
-// 里抠字段冒充列。计划适用性表没有租户列（计划版本标识全局唯一由签发方保证，见
+// 里抠字段冒充列。唯一的例外是初始路由成计划行的段链（ADR-0217）：它照判断口的装载
+// 纪律把计划整份过构造门重建之后再逐段转写，与 PlannedLegWindowRead 同一读法——运营
+// 要看得见计划末尾有没有交付段、各段窗口多大，才知道末端交接该声明哪一段。计划适用性表没有租户列（计划版本标识全局唯一由签发方保证，见
 // 0005_plan_applicability.sql 的键选维）——本口的适用性列经**本租户的判断行**联查
 // 得出，租户作用域由判断行的租户条件承担，不存在跨租可见路径（ADR-0003）。
 //
@@ -46,7 +48,24 @@ type InitialRouteCatalogueRow struct {
 	HasSuccessor           bool
 	ApplicabilityChangedAt time.Time
 
+	// Legs 仅 ROUTE_FORMED 行在场，按段链顺序。
+	Legs []RoutePlanLegCatalogueRow
+
 	RecordedAt time.Time
+}
+
+// RoutePlanLegCatalogueRow 是成计划行上的一段。Reference 是 NR 一处定义的「版本#序位」拼写（ADR-0131
+// 决定一），登记方声明段引用照抄它；Kind 是封闭两格原词（BETWEEN_NODES / DELIVERY，ADR-0217）；
+// To 在交付段上是交付范围（服务区域版本），不是节点。
+type RoutePlanLegCatalogueRow struct {
+	Reference   string
+	Kind        string
+	From        string
+	To          string
+	Responsible string
+	Earliest    time.Time
+	Latest      time.Time
+	WindowBasis string
 }
 
 // RouteReassessmentCatalogueRow 是路由复核册上列的一行。结论封闭四走向

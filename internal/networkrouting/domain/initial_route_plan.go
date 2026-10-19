@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -10,6 +11,7 @@ var (
 	ErrInvalidNoCurrentRoute     = errors.New("network routing: invalid no-current-route judgment")
 	ErrCandidateSpaceUndecided   = errors.New("network routing: candidate space still carries undecided candidates")
 	ErrSelectedCandidateNotFound = errors.New("network routing: selected candidate is not a qualified member of the evaluated space")
+	ErrUnknownPlannedLegKind     = errors.New("network routing: unknown planned leg kind")
 )
 
 // RoutePlanVersionID 是一个包裹级路由计划版本的标识。计划按包裹独立版本化，改路形成
@@ -95,12 +97,53 @@ func (window PlannedTimeWindow) valid() bool {
 		!window.latest.Before(window.earliest) && window.basis.valid()
 }
 
+// PlannedLegKind 是计划履约段的种类（ADR-0217）。段链里先是若干节点间段，之后至多一段交付段。
+//
+// 种类是本上下文对计划内容的描述，不是运输履约的段服务动作：对象在执行哪一段、那一段是不是末端派送，仍由
+// 控制事实登记方声明（ADR-0114 决定一），不由消费方拿种类去推。零值是节点间段——种类出现之前落库的计划只有
+// 这一种段，读回时不必回填。
+type PlannedLegKind uint8
+
+const (
+	// BetweenNodesLeg 起讫都是计划节点，按网络连接成段。
+	BetweenNodesLeg PlannedLegKind = iota
+	// DeliveryLeg 起于交付节点、止于交付范围，按交付节点服务日历上登记的派送时长成段。
+	DeliveryLeg
+)
+
+func (kind PlannedLegKind) String() string {
+	switch kind {
+	case BetweenNodesLeg:
+		return "BETWEEN_NODES"
+	case DeliveryLeg:
+		return "DELIVERY"
+	default:
+		return ""
+	}
+}
+
+// PlannedLegKindFrom 逐格译回族内种类。空词也拒：种类缺席是旧行的读法，由调用方按「缺席即节点间段」
+// 显式处理，不由一个空串兜成族内的一格。
+func PlannedLegKindFrom(raw string) (PlannedLegKind, error) {
+	switch raw {
+	case "BETWEEN_NODES":
+		return BetweenNodesLeg, nil
+	case "DELIVERY":
+		return DeliveryLeg, nil
+	default:
+		return BetweenNodesLeg, fmt.Errorf("%w: %q", ErrUnknownPlannedLegKind, raw)
+	}
+}
+
 // PlannedLeg 是两个计划边界之间的逻辑移动段。外部不透明段（CONTEXT：外包合作方内部
-// 网络不可可靠观察）与普通段同一形状——from 是已知交接点、to 是预期返回控制点或交付
-// 范围，区别只在「不虚构内部节点」这个事实由 opaque 标记声明。
+// 网络不可可靠观察）与普通段同一形状——from 是已知交接点、to 是预期返回控制点，区别只在
+// 「不虚构内部节点」这个事实由 opaque 标记声明。交付段的终点是交付范围（ADR-0217）：它
+// 不是网络节点，所以不放进 to，另由 scope 持有，节点间段的 scope 恒缺席。
 type PlannedLeg struct {
+	kind        PlannedLegKind
 	from        PlanNodeReference
 	to          PlanNodeReference
+	scope       ServiceAreaVersionReference
 	responsible ResponsiblePartyReference
 	window      PlannedTimeWindow
 	opaque      bool
@@ -114,26 +157,66 @@ type PlannedLegSpec struct {
 	Opaque      bool
 }
 
+// NewPlannedLeg 立一段节点间段。
 func NewPlannedLeg(spec PlannedLegSpec) (PlannedLeg, error) {
-	if !spec.From.valid() || !spec.To.valid() || spec.From == spec.To ||
-		!spec.Responsible.valid() || !spec.Window.valid() {
-		return PlannedLeg{}, ErrInvalidRoutePlan
-	}
-	return PlannedLeg{
+	leg := PlannedLeg{
+		kind:        BetweenNodesLeg,
 		from:        spec.From,
 		to:          spec.To,
 		responsible: spec.Responsible,
 		window:      spec.Window,
 		opaque:      spec.Opaque,
-	}, nil
+	}
+	if !leg.valid() {
+		return PlannedLeg{}, ErrInvalidRoutePlan
+	}
+	return leg, nil
+}
+
+// DeliveryLegSpec 是交付段的构造输入（ADR-0217）。From 是交付节点；Scope 是解析收件地理所用的
+// 服务区域版本，即交付范围；窗口起于离开交付节点的时刻、止于加上派送时长的时刻。
+type DeliveryLegSpec struct {
+	From        PlanNodeReference
+	Scope       ServiceAreaVersionReference
+	Responsible ResponsiblePartyReference
+	Window      PlannedTimeWindow
+}
+
+// NewDeliveryLeg 立一段交付段。交付段没有不透明一格：末端外包而内部不可观察时，它要的是已知交接点
+// 与返回控制边界，那是另一种形状，今天没有来源说它（ADR-0217 越权风险点）。
+func NewDeliveryLeg(spec DeliveryLegSpec) (PlannedLeg, error) {
+	leg := PlannedLeg{
+		kind:        DeliveryLeg,
+		from:        spec.From,
+		scope:       spec.Scope,
+		responsible: spec.Responsible,
+		window:      spec.Window,
+	}
+	if !leg.valid() {
+		return PlannedLeg{}, ErrInvalidRoutePlan
+	}
+	return leg, nil
+}
+
+func (leg PlannedLeg) Kind() PlannedLegKind {
+	return leg.kind
 }
 
 func (leg PlannedLeg) From() PlanNodeReference {
 	return leg.from
 }
 
+// To 是节点间段的终点节点。交付段没有终点节点，交回零值；它的终点见 DeliveryScope。
 func (leg PlannedLeg) To() PlanNodeReference {
 	return leg.to
+}
+
+// DeliveryScope 交回交付段的交付范围；节点间段第二个返回值为假。
+func (leg PlannedLeg) DeliveryScope() (ServiceAreaVersionReference, bool) {
+	if leg.kind != DeliveryLeg {
+		return ServiceAreaVersionReference{}, false
+	}
+	return leg.scope, true
 }
 
 func (leg PlannedLeg) Responsible() ResponsiblePartyReference {
@@ -151,8 +234,17 @@ func (leg PlannedLeg) Opaque() bool {
 }
 
 func (leg PlannedLeg) valid() bool {
-	return leg.from.valid() && leg.to.valid() && leg.from != leg.to &&
-		leg.responsible.valid() && leg.window.valid()
+	if !leg.from.valid() || !leg.responsible.valid() || !leg.window.valid() {
+		return false
+	}
+	switch leg.kind {
+	case BetweenNodesLeg:
+		return leg.to.valid() && leg.from != leg.to && !leg.scope.valid()
+	case DeliveryLeg:
+		return leg.scope.valid() && !leg.to.valid() && !leg.opaque
+	default:
+		return false
+	}
 }
 
 // InitialRoutePlanSpec 是形成一个包裹级初始路由计划所需的全部输入。
@@ -196,7 +288,9 @@ type InitialRoutePlan struct {
 //   - 判断身份、版本、策略与修订标识必备——审计清单点名它们，缺一项计划就复算不了；
 //   - 被选候选必须是已评估空间里的合格成员（`AT-NR-001`「只形成一个当前有效计划并
 //     保留所有候选依据」——选了一个不在册或已被淘汰的候选，依据链当场断裂）；
-//   - 段链必须连续且至少一段：计划节点序列由段推导，断链的「路径」不是一条路径。
+//   - 段链必须连续且至少一段节点间段：计划节点序列由节点间段推导，断链的「路径」不是一条路径。
+//     交付段至多一段、只能在末尾、起于末个计划节点（ADR-0217）——交付之后没有下一段可接，
+//     而起点对不上交付节点的交付段说的是另一条路。
 func FormInitialRoutePlan(spec InitialRoutePlanSpec) (InitialRoutePlan, error) {
 	if !spec.Key.MinimumIdentityEstablished() ||
 		!spec.Version.valid() ||
@@ -228,11 +322,14 @@ func FormInitialRoutePlan(spec InitialRoutePlanSpec) (InitialRoutePlan, error) {
 		return InitialRoutePlan{}, ErrSelectedCandidateNotFound
 	}
 
-	if len(spec.Legs) == 0 {
+	if len(spec.Legs) == 0 || spec.Legs[0].kind != BetweenNodesLeg {
 		return InitialRoutePlan{}, ErrInvalidRoutePlan
 	}
 	for index, leg := range spec.Legs {
 		if !leg.valid() {
+			return InitialRoutePlan{}, ErrInvalidRoutePlan
+		}
+		if leg.kind == DeliveryLeg && index != len(spec.Legs)-1 {
 			return InitialRoutePlan{}, ErrInvalidRoutePlan
 		}
 		if index > 0 && spec.Legs[index-1].to != leg.from {
@@ -302,8 +399,19 @@ func (plan InitialRoutePlan) Candidates() []RouteCandidate {
 	return append([]RouteCandidate(nil), plan.candidates...)
 }
 
+// Legs 交回整条段链（含交付段）。引用的序位按它数（PlannedLegReference）。
 func (plan InitialRoutePlan) Legs() []PlannedLeg {
 	return append([]PlannedLeg(nil), plan.legs...)
+}
+
+// NodeLegs 交回段链里的节点间段。计划节点、已执行前缀与运输准备只认这一部分（ADR-0217）：交付段
+// 之后没有可控节点，也没有一条网络连接可备班次。交付段只在末尾，所以这是段链的前缀，序位不变。
+func (plan InitialRoutePlan) NodeLegs() []PlannedLeg {
+	count := len(plan.legs)
+	if count > 0 && plan.legs[count-1].kind == DeliveryLeg {
+		count--
+	}
+	return append([]PlannedLeg(nil), plan.legs[:count]...)
 }
 
 // LegAt 按序位取段，序位自首段起计、首段为 1（PlannedLegReference 的同一口径）。越界答「没有」
@@ -397,12 +505,13 @@ func (citation PlannedLegCostCitation) valid() bool {
 	return !citation.hasPolicy || citation.policyReference != ""
 }
 
-// Nodes 按段链推导有序计划节点序列。节点不单独存一份：两份就可能各说各话，而段链连续
-// 由构造期保证。
+// Nodes 按节点间段推导有序计划节点序列。节点不单独存一份：两份就可能各说各话，而段链连续
+// 由构造期保证。交付范围不是计划节点，不进序列。
 func (plan InitialRoutePlan) Nodes() []PlanNodeReference {
-	nodes := make([]PlanNodeReference, 0, len(plan.legs)+1)
-	nodes = append(nodes, plan.legs[0].from)
-	for _, leg := range plan.legs {
+	legs := plan.NodeLegs()
+	nodes := make([]PlanNodeReference, 0, len(legs)+1)
+	nodes = append(nodes, legs[0].from)
+	for _, leg := range legs {
 		nodes = append(nodes, leg.to)
 	}
 	return nodes

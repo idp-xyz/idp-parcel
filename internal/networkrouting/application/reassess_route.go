@@ -217,13 +217,14 @@ func (handler *ReassessRouteHandler) Handle(
 }
 
 // freezeOf 在原计划仍可执行时判断有没有越过冻结边界。未声明形态答未配置，不当成未冻结。
-// 硬约束失效不走这里。
+// 硬约束失效不走这里。剩余段数只数节点间段（ADR-0217）：交付段一加进计划，演示策略「剩余
+// 不超过一段即冻结」就会在倒数第二个节点提前冻结，那是计划形状变了，不是租户改了取值。
 func freezeOf(
 	plan domain.InitialRoutePlan,
 	trigger domain.ReassessmentTrigger,
 	evidence ports.InitialRouteEvidence,
 ) (domain.FreezeJudgment, bool) {
-	nodes, ok := domain.PlanNodes(plan.Legs())
+	nodes, ok := domain.PlanNodes(plan.NodeLegs())
 	if !ok {
 		return domain.FreezeJudgment{}, true
 	}
@@ -565,7 +566,7 @@ func structuralAutoReroute(
 ) (domain.RerouteAuthority, []string) {
 	atNode := trigger.Control() == domain.NodeIntakeControl || trigger.Control() == domain.TransportHandoverControl
 	onlyUnexecuted := false
-	if nodes, ok := domain.PlanNodes(plan.Legs()); ok {
+	if nodes, ok := domain.PlanNodes(plan.NodeLegs()); ok {
 		prefix := domain.JudgeExecutedPrefix(nodes, trigger.Control(), trigger.Location().String())
 		onlyUnexecuted = prefix.Grade() == domain.ExecutedPrefixEstablished ||
 			prefix.Grade() == domain.ExecutedPrefixNodeNotOnPlan
@@ -626,7 +627,7 @@ func (handler *ReassessRouteHandler) formPlanFromEvidence(
 	var legs []domain.PlannedLeg
 	for _, path := range evidence.Paths {
 		if path.Candidate == selected {
-			legs = path.Legs
+			legs = path.PlanLegs()
 			break
 		}
 	}

@@ -75,7 +75,7 @@ func (view *CatalogInitialRouteEvidence) LoadInitialRouteEvidence(
 	if err != nil {
 		return none, false, err
 	}
-	projections, paths, executability, err := foldTimeAndPaths(candidates, asOf, snapshot, executability)
+	projections, paths, executability, err := foldTimeAndPaths(candidates, deliveryScopes(areas), asOf, snapshot, executability)
 	if err != nil {
 		return none, false, err
 	}
@@ -124,6 +124,7 @@ func applicableStrategy(
 
 func foldTimeAndPaths(
 	candidates []catalogCandidate,
+	scopes map[domain.CandidateID]domain.ServiceAreaVersionReference,
 	asOf time.Time,
 	snapshot ports.NetworkCatalogSnapshot,
 	executability []domain.PathExecutability,
@@ -135,7 +136,8 @@ func foldTimeAndPaths(
 	projections := make([]domain.CandidateTimeProjection, 0, len(candidates))
 	paths := make([]ports.CandidatePath, 0, len(candidates))
 	for index, candidate := range candidates {
-		projection, legs, missing, err := projectCandidateTime(candidate, asOf, nodes, snapshot.Calendars)
+		scope, scoped := scopes[candidate.id]
+		projection, path, missing, err := projectCandidateTime(candidate, scope, scoped, asOf, nodes, snapshot.Calendars)
 		if err != nil {
 			return nil, nil, nil, err
 		}
@@ -148,9 +150,21 @@ func foldTimeAndPaths(
 			continue
 		}
 		projections = append(projections, projection)
-		paths = append(paths, ports.CandidatePath{Candidate: candidate.id, Legs: legs})
+		paths = append(paths, path)
 	}
 	return projections, paths, executability, nil
+}
+
+// deliveryScopes 取各候选的交付范围：只有区域解析答覆盖收件地的候选才有，范围就是那次解析所用的服务区域
+// 版本（ADR-0217）。被排除或资料不足的候选在区域那一层就出局，没有交付范围可指，也就不成交付段。
+func deliveryScopes(resolutions []domain.ServiceAreaResolution) map[domain.CandidateID]domain.ServiceAreaVersionReference {
+	scopes := make(map[domain.CandidateID]domain.ServiceAreaVersionReference, len(resolutions))
+	for _, resolution := range resolutions {
+		if resolution.Outcome() == domain.AreaCoversDestination {
+			scopes[resolution.Candidate()] = resolution.AreaVersion()
+		}
+	}
+	return scopes
 }
 
 func calendarMissing(candidate catalogCandidate, missing string, current domain.PathExecutability) (domain.PathExecutability, error) {

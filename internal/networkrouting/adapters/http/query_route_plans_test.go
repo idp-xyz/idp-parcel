@@ -181,8 +181,77 @@ func TestRoutePlansEndpointTranscribesInitialRoutesWithApplicability(t *testing.
 	}
 
 	// 上面逐键断言过的这份响应体原样钉成契约夹具：两行一成计划带适用性、一无路可走，
-	// 可缺席键因此各出场一次，前端对着它校类型时每一格都有实例可核。
+	// 可缺席键因此各出场一次，前端对着它校类型时每一格都有实例可核。段链 legs 一键（ADR-0217）
+	// 例外，不进夹具：管理台的响应类型还不认它，进夹具前端契约测试当场红；类型跟上之后随票
+	// demo-chain-gaps/72 补进夹具。
 	assertContractFixture(t, "route_plans_initial_route.json", recorder.Body.Bytes())
+}
+
+// Covers: AT-NR-062 的传输面——成计划行逐段透出引用、种类、起讫、责任、窗口与依据，时刻转 UTC 文本；交付段的终点
+// 是交付范围；没有段的行不长出 legs 键。
+func TestRoutePlansEndpointListsThePlannedLegsOfAFormedRoute(t *testing.T) {
+	reader := &stubRoutePlanReader{judgments: []ports.InitialRouteCatalogueRow{
+		{
+			CustomerAccountID: "SYN-ACC-1", ShipmentRequestID: "SYN-REQ-1", AcceptanceBaseline: "SYN-BASELINE-1",
+			DeclaredParcelID: "SYN-PARCEL-1", ServicePurpose: "NETWORK_SERVICE", Conclusion: "ROUTE_FORMED",
+			PlanVersion: "RPV-000000000001", HasPlanVersion: true, RecordedAt: endpointBaseAt,
+			Legs: []ports.RoutePlanLegCatalogueRow{
+				{
+					Reference: "RPV-000000000001#1", Kind: "BETWEEN_NODES", From: "SYN-NODE-SIN-HUB", To: "SYN-NODE-SIN-LM",
+					Responsible: "SYN-CONN-SIN-LM@1", Earliest: endpointBaseAt, Latest: endpointBaseAt.Add(2 * time.Hour),
+					WindowBasis: "CONNECTION/SYN-CONN-SIN-LM@1",
+				},
+				{
+					Reference: "RPV-000000000001#2", Kind: "DELIVERY", From: "SYN-NODE-SIN-LM", To: "SYN-AREA-SG@1",
+					Responsible: "SYN-AREA-SG@1", Earliest: endpointBaseAt.Add(6 * time.Hour), Latest: endpointBaseAt.Add(9 * time.Hour),
+					WindowBasis: "NODE/SYN-NODE-SIN-LM@2",
+				},
+			},
+		},
+		{
+			CustomerAccountID: "SYN-ACC-1", ShipmentRequestID: "SYN-REQ-2", AcceptanceBaseline: "SYN-BASELINE-1",
+			DeclaredParcelID: "SYN-PARCEL-2", ServicePurpose: "NETWORK_SERVICE", Conclusion: "NO_CURRENT_ROUTE",
+			RecordedAt: endpointBaseAt,
+		},
+	}}
+	endpoint := networkhttp.NewQueryRoutePlansEndpoint(grantedCatalogueIntake{tenant: "tenant-1", limit: 25}, reader)
+	recorder := httptest.NewRecorder()
+	endpoint.ServeHTTP(recorder, httptest.NewRequest(http.MethodGet, "/route-plans?register=initial-route", nil))
+	if recorder.Code != http.StatusOK {
+		t.Fatalf("上列答 %d\n%s", recorder.Code, recorder.Body.String())
+	}
+	judgments, _ := routePlanBody(t, recorder)["judgments"].([]any)
+	if len(judgments) != 2 {
+		t.Fatalf("judgments = %v", judgments)
+	}
+	formed, _ := judgments[0].(map[string]any)
+	legs, ok := formed["legs"].([]any)
+	if !ok || len(legs) != 2 {
+		t.Fatalf("legs = %v", formed["legs"])
+	}
+	delivery, _ := legs[1].(map[string]any)
+	want := map[string]string{
+		"reference": "RPV-000000000001#2", "kind": "DELIVERY", "from": "SYN-NODE-SIN-LM", "to": "SYN-AREA-SG@1",
+		"responsible": "SYN-AREA-SG@1", "earliest": legInstant(endpointBaseAt.Add(6 * time.Hour)),
+		"latest": legInstant(endpointBaseAt.Add(9 * time.Hour)), "windowBasis": "NODE/SYN-NODE-SIN-LM@2",
+	}
+	for key, value := range want {
+		if delivery[key] != value {
+			t.Fatalf("交付段 %s = %v, want %q（整段 %v）", key, delivery[key], value, delivery)
+		}
+	}
+	if len(delivery) != len(want) {
+		t.Fatalf("交付段多出了键：%v", delivery)
+	}
+	noRoute, _ := judgments[1].(map[string]any)
+	if _, present := noRoute["legs"]; present {
+		t.Fatalf("无路可走行长出了 legs：%v", noRoute)
+	}
+}
+
+// legInstant 是端点转写时刻的同一格式（UTC、RFC3339Nano）。
+func legInstant(at time.Time) string {
+	return at.UTC().Format(time.RFC3339Nano)
 }
 
 func TestRoutePlansEndpointTranscribesReassessmentsAndAnswersEmptyRegistry(t *testing.T) {

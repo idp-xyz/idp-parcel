@@ -191,6 +191,20 @@ func TestACalendarRowCarriesItsContent(t *testing.T) {
 	if calendar.BufferMinutes != nil {
 		t.Fatalf("衔接缓冲没登却译出 %v", *calendar.BufferMinutes)
 	}
+	if calendar.DeliveryMinutes != nil {
+		t.Fatalf("派送时长没登却译出 %v", *calendar.DeliveryMinutes)
+	}
+
+	// 派送时长（ADR-0217）同一约定：登了就到达，登 0 是 0。
+	delivered, err := registrationjson.ServiceCalendarVersionFromJSON([]byte(`{"tenant_id": "SYN-TENANT-01",
+		"target_kind": "NODE", "target_code": "SYN-NODE-A", "version": 2, "effective_from": "2026-09-01T00:00:00Z",
+		"processing_minutes": 240, "delivery_minutes": 0}`))
+	if err != nil {
+		t.Fatalf("译装派送时长：%v", err)
+	}
+	if minutes := delivered.Calendar.DeliveryMinutes; minutes == nil || *minutes != 0 {
+		t.Fatalf("派送时长 = %v，登了 0 就是 0", minutes)
+	}
 }
 
 // demoNetwork 是本票随产品发布的演示网络那一版（ADR-0147 决定二的标识写法）。

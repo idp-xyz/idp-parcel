@@ -17,8 +17,9 @@ import (
 // 业务事实不造种子，读面各自成器不互相搭车（先例：parcelpricing.EvaluationCatalogue
 // 与 OperationsCatalogue 同一分法）。
 //
-// 只读：上列不重建判断、不选版不折叠。计划本体/无路可走/改路决定住在 jsonb 内，
-// 权威读法归各判断口，本口只转写检索列。租户条件进每条语句（ADR-0003）；
+// 只读：上列不选版不折叠。计划本体/无路可走/改路决定住在 jsonb 内，权威读法归各
+// 判断口，本口只转写检索列；成计划行的段链例外（ADR-0217），照判断口的装载纪律重建
+// 整份计划后逐段转写，不从 jsonb 里抠字段。租户条件进每条语句（ADR-0003）；
 // plan_applicability 无租户列，其行只经本租户判断行的计划版本联查得出——联查键是
 // 全局唯一的计划版本标识，不构成跨租读路（见 ports.RoutePlanCatalogueRead 口面注）。
 type RoutePlanCatalogue struct {
@@ -62,7 +63,7 @@ func (catalogue *RoutePlanCatalogue) ListInitialRoutes(
 	rows, err := querier.Query(ctx,
 		`SELECT r.customer_account_id, r.shipment_request_id, r.acceptance_baseline,
 		        r.declared_parcel_id, r.service_purpose, r.conclusion, r.plan_version,
-		        a.state, a.basis, a.successor, a.transitioned_at, r.recorded_at
+		        a.state, a.basis, a.successor, a.transitioned_at, r.recorded_at, r.plan
 		   FROM network_routing.initial_route r
 		   LEFT JOIN network_routing.plan_applicability a ON a.plan_id = r.plan_version
 		  WHERE r.tenant_id = $1
@@ -82,15 +83,23 @@ func (catalogue *RoutePlanCatalogue) ListInitialRoutes(
 		var row ports.InitialRouteCatalogueRow
 		var planVersion, state, basis, successor *string
 		var transitionedAt *time.Time
+		var planJSON []byte
 		if err := rows.Scan(
 			&row.CustomerAccountID, &row.ShipmentRequestID, &row.AcceptanceBaseline,
 			&row.DeclaredParcelID, &row.ServicePurpose, &row.Conclusion, &planVersion,
-			&state, &basis, &successor, &transitionedAt, &row.RecordedAt,
+			&state, &basis, &successor, &transitionedAt, &row.RecordedAt, &planJSON,
 		); err != nil {
 			return nil, fmt.Errorf("list initial routes: %w", err)
 		}
 		if planVersion != nil {
 			row.PlanVersion, row.HasPlanVersion = *planVersion, true
+		}
+		if planJSON != nil {
+			legs, err := catalogueLegsOf(tenant, row, planJSON)
+			if err != nil {
+				return nil, fmt.Errorf("list initial routes: %w", err)
+			}
+			row.Legs = legs
 		}
 		// 适用性组按在场与否成组翻译：state 与 transitioned_at 同 NOT NULL 由表面
 		// 保证；basis/successor 的逐态矩阵由 CHECK 钉住，照实转写不补半边。
@@ -111,6 +120,53 @@ func (catalogue *RoutePlanCatalogue) ListInitialRoutes(
 		return nil, fmt.Errorf("list initial routes: %w", err)
 	}
 	return judgments, nil
+}
+
+// catalogueLegsOf 按判断口的装载纪律重建整份计划，再逐段转写：重建失败是坏数据，整页答不出，不跳过这一行
+// ——跳过会让一份坏计划在查阅页上看起来像一行没有段的计划。
+func catalogueLegsOf(
+	tenant domain.TenantID,
+	row ports.InitialRouteCatalogueRow,
+	planJSON []byte,
+) ([]ports.RoutePlanLegCatalogueRow, error) {
+	key, err := rebuildRouteKey(tenant, routeKeyColumns{
+		customerAccount:    row.CustomerAccountID,
+		shipmentRequest:    row.ShipmentRequestID,
+		acceptanceBaseline: row.AcceptanceBaseline,
+		declaredParcel:     row.DeclaredParcelID,
+		servicePurpose:     row.ServicePurpose,
+	})
+	if err != nil {
+		return nil, err
+	}
+	plan, err := rebuildPlan(key, planJSON)
+	if err != nil {
+		return nil, err
+	}
+	legs := plan.Legs()
+	rows := make([]ports.RoutePlanLegCatalogueRow, 0, len(legs))
+	for index, leg := range legs {
+		reference, err := domain.NewPlannedLegReference(plan.Version(), index+1)
+		if err != nil {
+			return nil, err
+		}
+		window := leg.Window()
+		legRow := ports.RoutePlanLegCatalogueRow{
+			Reference:   reference.String(),
+			Kind:        leg.Kind().String(),
+			From:        leg.From().String(),
+			To:          leg.To().String(),
+			Responsible: leg.Responsible().String(),
+			Earliest:    window.Earliest(),
+			Latest:      window.Latest(),
+			WindowBasis: window.Basis().String(),
+		}
+		if scope, delivery := leg.DeliveryScope(); delivery {
+			legRow.To = scope.String()
+		}
+		rows = append(rows, legRow)
+	}
+	return rows, nil
 }
 
 // ListRouteReassessments 上列路由复核册的检索列面。排序以落册时间倒序、同刻按

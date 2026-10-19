@@ -612,11 +612,12 @@ type areaCoveragePayload struct {
 	DestinationNodes []string `json:"destination_nodes"`
 }
 
-// calendarContent 是日历的三格内容（ADR-0175 决定一），各自可缺：缺席是没登这一格，写 0 才是零分钟。
+// calendarContent 是日历的内容格（ADR-0175 决定一，派送时长见 ADR-0217），各自可缺：缺席是没登这一格，写 0 才是零分钟。
 type calendarContent struct {
 	CutoffLocalMinute *int `json:"cutoff_local_minute"`
 	ProcessingMinutes *int `json:"processing_minutes"`
 	BufferMinutes     *int `json:"buffer_minutes"`
+	DeliveryMinutes   *int `json:"delivery_minutes"`
 }
 
 func (content calendarContent) row(targetKind ports.CatalogTargetKind, header versionHeader) ports.ServiceCalendarDefinitionVersion {
@@ -630,6 +631,7 @@ func (content calendarContent) row(targetKind ports.CatalogTargetKind, header ve
 		CutoffLocalMinute: content.CutoffLocalMinute,
 		ProcessingMinutes: content.ProcessingMinutes,
 		BufferMinutes:     content.BufferMinutes,
+		DeliveryMinutes:   content.DeliveryMinutes,
 		Basis:             header.basis,
 	}
 }

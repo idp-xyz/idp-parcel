@@ -480,7 +480,7 @@ func (handler *CreateInitialRouteHandler) planRecord(
 	var legs []domain.PlannedLeg
 	for _, path := range evidence.Paths {
 		if path.Candidate == selected {
-			legs = path.Legs
+			legs = path.PlanLegs()
 			break
 		}
 	}

@@ -164,6 +164,7 @@ type ServiceAreaDefinitionVersion struct {
 
 // ServiceCalendarDefinitionVersion 是某适用对象的服务日历适用版本行。
 // 截单、处理时长与衔接缓冲都是这一版的内容（ADR-0175）。指针为空是没登记这一格，与登记了 0 不同。
+// 派送时长是交付节点日历上的一格（ADR-0217）：登了，候选在这个节点之后带一段交付段；没登就不成段。
 type ServiceCalendarDefinitionVersion struct {
 	TargetKind        CatalogTargetKind
 	TargetCode        string
@@ -174,6 +175,7 @@ type ServiceCalendarDefinitionVersion struct {
 	CutoffLocalMinute *int
 	ProcessingMinutes *int
 	BufferMinutes     *int
+	DeliveryMinutes   *int
 	Basis             domain.CatalogBasisReference
 }
 

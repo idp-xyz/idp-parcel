@@ -323,6 +323,12 @@ func TestCatalogRegistrationRefusesIncompleteRowsBySlot(t *testing.T) {
 			row.BufferMinutes = minutes(-1)
 			return s.RegisterServiceCalendarVersion(t.Context(), application.RegisterServiceCalendarVersionCommand{TenantID: tenant(t), Calendar: row})
 		}, application.CatalogCalendarContentOutOfRange},
+		// AT-NR-063：派送时长与另三格同一受理门。
+		{"日历派送时长为负", func(t *testing.T, s *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
+			row := validCalendar()
+			row.DeliveryMinutes = minutes(-1)
+			return s.RegisterServiceCalendarVersion(t.Context(), application.RegisterServiceCalendarVersionCommand{TenantID: tenant(t), Calendar: row})
+		}, application.CatalogCalendarContentOutOfRange},
 
 		{"策略缺适用范围", func(t *testing.T, s *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
 			row := validStrategy()

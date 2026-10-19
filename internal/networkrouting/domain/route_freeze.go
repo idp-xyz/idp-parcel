@@ -124,14 +124,15 @@ func JudgeExecutedPrefix(planNodes []string, control ControlEvidenceKind, locati
 	}
 }
 
-// PlanNodes 从连续段链取出计划节点。断链时第二返回值是假。
+// PlanNodes 从连续的节点间段取出计划节点。断链时第二返回值是假；混进交付段同样答假——交付范围
+// 不是计划节点，调用方该交 InitialRoutePlan.NodeLegs（ADR-0217）。
 func PlanNodes(legs []PlannedLeg) ([]string, bool) {
 	if len(legs) == 0 {
 		return nil, false
 	}
 	nodes := []string{legs[0].From().String()}
 	for _, leg := range legs {
-		if nodes[len(nodes)-1] != leg.From().String() {
+		if leg.Kind() != BetweenNodesLeg || nodes[len(nodes)-1] != leg.From().String() {
 			return nil, false
 		}
 		nodes = append(nodes, leg.To().String())

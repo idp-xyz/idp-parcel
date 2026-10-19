@@ -165,9 +165,23 @@ type Clock interface {
 
 // CandidatePath 是一个候选的路径内容：被选中后成为计划的段链。段链属候选事实——网络
 // 定义拥有节点与连接，领域只校验链形不发明节点。
+//
+// Legs 只放节点间段，与线路的连接逐一对应；交付段另放 Delivery（ADR-0217）。分开放是因为候选
+// 成本按线路段号取成本依据：交付段没有成本依据，混进 Legs 会让每个候选都停在待判断。
 type CandidatePath struct {
-	Candidate domain.CandidateID
-	Legs      []domain.PlannedLeg
+	Candidate   domain.CandidateID
+	Legs        []domain.PlannedLeg
+	Delivery    domain.PlannedLeg
+	HasDelivery bool
+}
+
+// PlanLegs 交回被选中后成为计划段链的那一串：节点间段，之后有交付段就接上它。
+func (path CandidatePath) PlanLegs() []domain.PlannedLeg {
+	legs := append([]domain.PlannedLeg(nil), path.Legs...)
+	if path.HasDelivery {
+		legs = append(legs, path.Delivery)
+	}
+	return legs
 }
 
 // InitialRouteEvidence 是一次初始路由判断所需的版本化事实（UC-NR-001 层次 1–4 的输入

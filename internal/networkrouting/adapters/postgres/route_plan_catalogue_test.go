@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"fmt"
 	"testing"
 	"time"
 
@@ -15,7 +16,8 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 16 证路由判断两册读面（票 admin-skeleton-closure-batch/03，
-// 形状照 ADR-0077）：检索列面照登转写、jsonb 判断本体不透出、适用性联查按在场成组、
+// 形状照 ADR-0077）：检索列面照登转写、jsonb 判断本体不透出（成计划行的段链经重建后列出，
+// ADR-0217）、适用性联查按在场成组、
 // 跨租户不可见、空租户答空列表、limit 生效且非正拒。
 //
 // 夹具以测试内 SQL 插行铺设（S 级合成行，SYN- 前缀）：两册是业务事实，写入方是渠道
@@ -39,7 +41,9 @@ func newRoutePlanCatalogue(t *testing.T) (*adapter.RoutePlanCatalogue, *pgxpool.
 var routePlanBaseAt = time.Date(2026, 8, 2, 8, 0, 0, 0, time.UTC)
 
 // insertInitialRouteRow 直插一行合规初始路由判断。formedPlanVersion 空串表示
-// NO_CURRENT_ROUTE（计划与无路可走二居其一，XOR CHECK）。
+// NO_CURRENT_ROUTE（计划与无路可走二居其一，XOR CHECK）。成计划行的 plan 是一份能过
+// 构造门的单段计划（段上没有 kind 键，即种类出现之前的形状）：查阅口重建整份计划后才
+// 逐段列出（ADR-0217），坏 jsonb 会让整页答不出。
 func insertInitialRouteRow(
 	t *testing.T,
 	pool *pgxpool.Pool,
@@ -50,7 +54,13 @@ func insertInitialRouteRow(
 	t.Helper()
 	conclusion, planVersion, plan, noRoute := "NO_CURRENT_ROUTE", (*string)(nil), []byte(nil), []byte(`{"synthetic":true,"basis":"SYN-NO-ROUTE"}`)
 	if formedPlanVersion != "" {
-		conclusion, planVersion, plan, noRoute = "ROUTE_FORMED", &formedPlanVersion, []byte(`{"synthetic":true}`), nil
+		formed := fmt.Sprintf(`{"version":%q,"selected":"SYN-CAND-1",
+			"candidates":[{"id":"SYN-CAND-1","outcome":"QUALIFIED"}],
+			"legs":[{"from":"SYN-NODE-A","to":"SYN-NODE-B","responsible":"SYN-CONN-A-B@1",
+				"earliest":"2026-08-02T08:00:00Z","latest":"2026-08-02T10:00:00Z","window_basis":"CONNECTION/SYN-CONN-A-B@1"}],
+			"strategy":"SYN-RS@1","view_revision":"1",
+			"judged_at":"2026-08-02T08:00:00Z","effective_from":"2026-08-02T08:00:00Z"}`, formedPlanVersion)
+		conclusion, planVersion, plan, noRoute = "ROUTE_FORMED", &formedPlanVersion, []byte(formed), nil
 	}
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO network_routing.initial_route
@@ -94,7 +104,7 @@ func insertApplicabilityRow(
 
 // Covers: 初始路由册照列转写——两种结论并见不折叠（「无当前有效路由」是明确判断
 // 不是空行）；适用性按计划版本联查成组透出（当前有效两缺、已被替代两在、未登记
-// 如实缺席）；判断本体 jsonb 不上列；他租的判断不进本租户列表——含他租计划的
+// 如实缺席）；判断本体 jsonb 不上列，成计划行的段链照重建后的计划列出；他租的判断不进本租户列表——含他租计划的
 // 适用性行也不经联查泄出；空租户答空。
 func TestInitialRouteCatalogueTranscribesJudgmentsWithApplicability(t *testing.T) {
 	catalogue, pool := newRoutePlanCatalogue(t)
@@ -137,6 +147,10 @@ func TestInitialRouteCatalogueTranscribesJudgmentsWithApplicability(t *testing.T
 		effective.PlanVersion != "SYN-PLAN-1#v1" {
 		t.Fatalf("成计划行变形：%+v", effective)
 	}
+	if len(effective.Legs) != 1 || effective.Legs[0].Reference != "SYN-PLAN-1#v1#1" ||
+		effective.Legs[0].Kind != "BETWEEN_NODES" || effective.Legs[0].To != "SYN-NODE-B" {
+		t.Fatalf("成计划行的段链没照重建后的计划列出：%+v", effective.Legs)
+	}
 	if !effective.HasApplicability || effective.ApplicabilityState != "CURRENTLY_EFFECTIVE" ||
 		!effective.ApplicabilityChangedAt.Equal(routePlanBaseAt) {
 		t.Fatalf("当前有效适用性变形：%+v", effective)
@@ -157,7 +171,7 @@ func TestInitialRouteCatalogueTranscribesJudgmentsWithApplicability(t *testing.T
 	}
 
 	noRoute := rows[byParcel["SYN-PARCEL-3"]]
-	if noRoute.Conclusion != "NO_CURRENT_ROUTE" || noRoute.HasPlanVersion || noRoute.HasApplicability {
+	if noRoute.Conclusion != "NO_CURRENT_ROUTE" || noRoute.HasPlanVersion || noRoute.HasApplicability || len(noRoute.Legs) != 0 {
 		t.Fatalf("无路可走行变形：%+v", noRoute)
 	}
 

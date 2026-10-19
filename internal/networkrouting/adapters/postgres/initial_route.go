@@ -63,7 +63,10 @@ type costCitationRow struct {
 	ComparisonCurrency string `json:"comparison_currency"`
 }
 
+// legRow 的 Kind 缺席即节点间段：种类出现之前落库的计划只有这一种段，读回不必回填（ADR-0217）。交付段
+// 的 To 写交付范围——它与节点间段的终点节点住同一个键，由 Kind 说怎么读。
 type legRow struct {
+	Kind        string    `json:"kind,omitempty"`
 	From        string    `json:"from"`
 	To          string    `json:"to"`
 	Responsible string    `json:"responsible"`
@@ -226,7 +229,7 @@ func rowOfPlan(plan domain.InitialRoutePlan) planRow {
 	legRows := make([]legRow, 0, len(legs))
 	for _, leg := range legs {
 		window := leg.Window()
-		legRows = append(legRows, legRow{
+		row := legRow{
 			From:        leg.From().String(),
 			To:          leg.To().String(),
 			Responsible: leg.Responsible().String(),
@@ -234,7 +237,12 @@ func rowOfPlan(plan domain.InitialRoutePlan) planRow {
 			Latest:      window.Latest(),
 			WindowBasis: window.Basis().String(),
 			Opaque:      leg.Opaque(),
-		})
+		}
+		if scope, delivery := leg.DeliveryScope(); delivery {
+			row.Kind = leg.Kind().String()
+			row.To = scope.String()
+		}
+		legRows = append(legRows, row)
 	}
 	return planRow{
 		Version:          plan.Version().String(),
@@ -371,11 +379,14 @@ func rebuildPlan(key domain.InitialRouteJudgmentKey, data []byte) (domain.Initia
 }
 
 func rebuildLeg(stored legRow) (domain.PlannedLeg, error) {
-	from, err := domain.NewPlanNodeReference(stored.From)
-	if err != nil {
-		return domain.PlannedLeg{}, err
+	kind := domain.BetweenNodesLeg
+	if stored.Kind != "" {
+		var err error
+		if kind, err = domain.PlannedLegKindFrom(stored.Kind); err != nil {
+			return domain.PlannedLeg{}, err
+		}
 	}
-	to, err := domain.NewPlanNodeReference(stored.To)
+	from, err := domain.NewPlanNodeReference(stored.From)
 	if err != nil {
 		return domain.PlannedLeg{}, err
 	}
@@ -388,6 +399,22 @@ func rebuildLeg(stored legRow) (domain.PlannedLeg, error) {
 		return domain.PlannedLeg{}, err
 	}
 	window, err := domain.NewPlannedTimeWindow(stored.Earliest, stored.Latest, basis)
+	if err != nil {
+		return domain.PlannedLeg{}, err
+	}
+	if kind == domain.DeliveryLeg {
+		if stored.Opaque {
+			return domain.PlannedLeg{}, domain.ErrInvalidRoutePlan
+		}
+		scope, err := domain.NewServiceAreaVersionReference(stored.To)
+		if err != nil {
+			return domain.PlannedLeg{}, err
+		}
+		return domain.NewDeliveryLeg(domain.DeliveryLegSpec{
+			From: from, Scope: scope, Responsible: responsible, Window: window,
+		})
+	}
+	to, err := domain.NewPlanNodeReference(stored.To)
 	if err != nil {
 		return domain.PlannedLeg{}, err
 	}

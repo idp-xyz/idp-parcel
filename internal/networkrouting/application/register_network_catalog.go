@@ -429,11 +429,12 @@ func (service *NetworkCatalogRegistration) RegisterServiceCalendarVersion(
 		row.EffectiveFrom, row.EffectiveTo, row.HasEffectiveTo); reason != CatalogRefusalReasonNone {
 		return catalogRefused(reason), nil
 	}
-	// 与迁移 0015 的 CHECK 同格。没登的格是 nil，不在这里补 0（ADR-0175 决定一）。
+	// 与迁移 0015、0020 的 CHECK 同格。没登的格是 nil，不在这里补 0（ADR-0175 决定一、ADR-0217）。
 	switch {
 	case row.CutoffLocalMinute != nil && (*row.CutoffLocalMinute < 0 || *row.CutoffLocalMinute > 1439),
 		row.ProcessingMinutes != nil && *row.ProcessingMinutes < 0,
-		row.BufferMinutes != nil && *row.BufferMinutes < 0:
+		row.BufferMinutes != nil && *row.BufferMinutes < 0,
+		row.DeliveryMinutes != nil && *row.DeliveryMinutes < 0:
 		return catalogRefused(CatalogCalendarContentOutOfRange), nil
 	}
 
