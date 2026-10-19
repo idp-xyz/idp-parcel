@@ -1,7 +1,7 @@
 # 39 票 15 补记复核完成、主动拒绝、授权处置三口凭哪条重放代数；ADR-0151 复核记录收拢决定三的读法
 
 Category: enhancement
-Status: in-progress——2026-10-19 完工，待推送方自审进 main（纯 `.md`，分支 `claude-oc5039`），见「完成记录」。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（50 与 39 同一分支 `claude-oc5039`，先 50 后 39）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 15 之三、之四补核；用户授权代决）
+Status: resolved——2026-10-19 进 main（纯 `.md`，推送方自审），见「进 main 记录」。此前 in-progress——2026-10-19 完工，待推送方自审进 main（纯 `.md`，分支 `claude-oc5039`），见「完成记录」。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（50 与 39 同一分支 `claude-oc5039`，先 50 后 39）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 15 之三、之四补核；用户授权代决）
 Blocked by: 无——2026-10-19 核得 operator-channel/33、34、36 的 Status 都是 resolved、已进 main（核于 `b57531cc`），operator-channel/50 已裁（同分支前一笔 `2ec19d26`）。此前：operator-channel/33、34、36 进 main（补记要写「只核对 · 成立」须等修完）；operator-channel/50 裁定（TF 各口的补记行随它）
 父票：[15](./15-operation-decision-faces-take-operator-intake.md)
 出处：票 15 Comments「评审 ← 会话 idp-parcel-9b 起的隔离子代理 · 钉 `0e3bb7df`」那一条里的「子代理顺带提到之三那三口也查不到逐口核对记录」；本次补核（簇 C6）。
@@ -61,7 +61,7 @@ Blocked by: 无——2026-10-19 核得 operator-channel/33、34、36 的 Status 
 - [x] 票 15 补记已落，票号齐全；全节没有行号，没有对别处条目的计数，没有「第 N 条」。
 - [x] 票 28 那节补记的位置引用已改成引文，意思不变。
 - [x] ADR-0151 复核记录已落；`git diff` 上决定原文没有改动行。
-- [ ] 纯 .md，推送方自审。
+- [x] 纯 .md，推送方自审。
 
 ## 完成记录（2026-10-19，会话 idp-parcel-9b 起的子代理，分支 `claude-oc5039`）
 
@@ -82,3 +82,8 @@ Blocked by: 无——2026-10-19 核得 operator-channel/33、34、36 的 Status 
 - 完成判据「纯 .md，推送方自审」没勾：纯 `.md` 已满足，推送方自审要等进 main 时做。
 - 证据层级：本票没有新取证；补记各行的实测都出自票 50 附录与各修复票，层级 `S`。
 - 评审：纯 `.md`，推送方自审。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 推送方自审（会话 idp-parcel-9b 读 diff 审，不算非作者评审）：分支 `claude-oc5039` 两笔只改 `.md`（票 50、39、15 与 ADR-0151）。ADR-0151 只有新增行，复核记录放在越权风险点与 Links 之间，与 ADR-0149、ADR-0183 同处。票 15 补记里的占位名已逐个换成票号，回写只加行；票 50 多裁的一格（链尾失效后重放维持答 `OBJECT_NOT_IN_SEGMENT`）写进了越权风险点。
+- rebase 到远端 main 之上快进推送；rebase 后在票 15 末尾补一行回写：tf-face-algebra/14 已进 main。纯文档，不跑 Go 测试。

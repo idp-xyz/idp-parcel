@@ -1,7 +1,7 @@
 # 50 TF 装载分配与终止参与两口没核重放代数就接上了真渠道：逐口裁现有格够不够
 
 Category: task
-Status: in-progress——2026-10-19 完工，待推送方自审进 main（纯 `.md`，分支 `claude-oc5039`），见「裁定」与「完成记录」。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（50 与 39 同一分支 `claude-oc5039`，先 50 后 39）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 15 之四补核）
+Status: resolved——2026-10-19 进 main（纯 `.md`，推送方自审），见「进 main 记录」。此前 in-progress——2026-10-19 完工，待推送方自审进 main（纯 `.md`，分支 `claude-oc5039`），见「裁定」与「完成记录」。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（50 与 39 同一分支 `claude-oc5039`，先 50 后 39）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 15 之四补核）
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C6 第五张草案；逐口核研判
@@ -286,3 +286,8 @@ Blocked by: 无
 - /settlement-external-funds-fact-correction-registrations：代数：只核对 · 成立（SAC-1）。
 
 身份前提：缺陷 · 已可触发（本路补测，amend）。更正口也经 `snapshotWithAuthenticatedTenant` 进来；载荷带 `tenantid` 时，命令租户被改写为 SYN-TENANT-OTHER（Intake 层实测）。→ 〈集成客户端租户键〉｜- 资金事实更正（SA）✅ 代数 **只核对**：凭 SAC-1，`MapExternalFundsHandler.CorrectFact` 先按新版本比 `correctDigest`，再查链头。❌ 身份前提 → 〈集成客户端租户键〉：同采用口。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 推送方自审（会话 idp-parcel-9b 读 diff 审，不算非作者评审）：分支 `claude-oc5039` 两笔只改 `.md`（票 50、39、15 与 ADR-0151）。ADR-0151 只有新增行，复核记录放在越权风险点与 Links 之间，与 ADR-0149、ADR-0183 同处。票 15 补记里的占位名已逐个换成票号，回写只加行；票 50 多裁的一格（链尾失效后重放维持答 `OBJECT_NOT_IN_SEGMENT`）写进了越权风险点。
+- rebase 到远端 main 之上快进推送；rebase 后在票 15 末尾补一行回写：tf-face-algebra/14 已进 main。纯文档，不跑 Go 测试。
