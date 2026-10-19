@@ -1,7 +1,7 @@
 # 48 cmd/parcel-api 测试与注释照实写：隔离形态残名改名、去变更说明、序号引用改引文
 
 Category: chore
-Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 续做并扩范围（见「裁定补」）：分支 `claude-oc48` 上的四笔先 rebase 到最新 main 并核一遍。此前 ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-oc48`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-oc48`）上留有4 笔（隔离形态残名、Covers、作业事实装配表、isolatedWriteAdmission 头注），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 4、序 6、序 2 评审遗留；用户授权代决）；分支 `claude-oc48`
+Status: in-progress——2026-10-19 作者子代理完工，待评审（见文末「完成记录」）。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 续做并扩范围（见「裁定补」）：分支 `claude-oc48` 上的四笔先 rebase 到最新 main 并核一遍。此前 ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-oc48`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-oc48`）上留有4 笔（隔离形态残名、Covers、作业事实装配表、isolatedWriteAdmission 头注），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 4、序 6、序 2 评审遗留；用户授权代决）；分支 `claude-oc48`
 Blocked by: 无
 父票：[26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)（票 26 评审遗留的后续）
 出处：票 [15](./15-operation-decision-faces-take-operator-intake.md) Comments「钉 `60244fa6`」那条评审 Standards 非阻断 1–3（cmd 部分）；票 [23](./23-node-operations-isolated-command-intake-retires.md) Comments 评审 Standards 非阻断 3；票 [25](./25-node-reception-carries-parcel-shipment-service-result-markers.md) Comments 评审 Standards 非阻断 2 的同类横扫。
@@ -149,12 +149,12 @@ TF adapters/http 的 `decisionLines` 头注属于同一条评审，但不在 C8 
 
 #### 完成判据
 
-- [ ] `assembleBusinessEndpoints` 的主链变量段和运输履约各行的行注里，不再出现「写开关逐口放行」「经写开关放行」「同笔撤下」「随换口」「这段原是」「这句从前」「NO 三册」「TF 四册」「同挂字面量」「恒堵」「另立票」。
-- [ ] 全仓不再有 `operationDecisionFacesLeftOnIsolatedWrite`；`TestWorkFactChannelLeavesOperationDecisionFacesUnconfigured` 跑运营决定全集仍 PASS。
-- [ ] 真库表的 Covers 与表头里不再有「第二条」「第三、四条」「四口」「已撤」「改写后」。
-- [ ] gofmt、`go build ./...`、`go vet ./...` 通过；带 DSN 跑 `go test -p 1 -count=1 ./cmd/parcel-api/` 全 ok，其中 `TestTransportFulfillmentCommandLinesAnswerBusinessOutcomesAgainstARealDatabase` 是 PASS 而不是 SKIP。
+- [x] `assembleBusinessEndpoints` 的主链变量段和运输履约各行的行注里，不再出现「写开关逐口放行」「经写开关放行」「同笔撤下」「随换口」「这段原是」「这句从前」「NO 三册」「TF 四册」「同挂字面量」「恒堵」「另立票」。
+- [x] 全仓不再有 `operationDecisionFacesLeftOnIsolatedWrite`；`TestWorkFactChannelLeavesOperationDecisionFacesUnconfigured` 跑运营决定全集仍 PASS。
+- [x] 真库表的 Covers 与表头里不再有「第二条」「第三、四条」「四口」「已撤」「改写后」。
+- [x] gofmt、`go build ./...`、`go vet ./...` 通过；带 DSN 跑 `go test -p 1 -count=1 ./cmd/parcel-api/` 全 ok，其中 `TestTransportFulfillmentCommandLinesAnswerBusinessOutcomesAgainstARealDatabase` 是 PASS 而不是 SKIP。
 - [ ] 走 Go 那条路（parallel-sessions）。
-- [ ] 票 15 Comments「钉 `60244fa6`」那条评审下追记处置：Standards (1)(2)(3) 的 cmd 部分指向本票；(1) 里 `OperatorDecisionIntake` 的头注已由 `7ec601ab` 修掉。票 22 Comments 追记 cmd 部分。票 26「评审结果」序 4、序 5 的去向格补上本票号。
+- [x] 票 15 Comments「钉 `60244fa6`」那条评审下追记处置：Standards (1)(2)(3) 的 cmd 部分指向本票；(1) 里 `OperatorDecisionIntake` 的头注已由 `7ec601ab` 修掉。票 22 Comments 追记 cmd 部分。票 26「评审结果」序 4、序 5 的去向格补上本票号。
 
 ### 三、序号引用横扫（簇 C1 派生草案）
 
@@ -186,12 +186,102 @@ Go 注释与测试头注，用序号去指别处的条目。常见两种：
 
 #### 完成判据
 
-- [ ] 判别定义已写进票面；重扫出的清单与逐处改法，写进完成记录。
-- [ ] go build ./...、go vet ./... 退 0，gofmt -l . 无输出；相关包的测试全绿。
+- [x] 判别定义已写进票面；重扫出的清单与逐处改法，写进完成记录。
+- [x] go build ./...、go vet ./... 退 0，gofmt -l . 无输出；相关包的测试全绿。
 
 ## 完成判据（总）
 
-- [ ] 上面三节各条逐条改完或注明「已不存在」；凡草案里改 endpoints.go 的条目，本票一律不做（归 35）。
-- [ ] 改动文件 `git diff --check` 干净、无 CR / BOM；注释中文、只写为什么、不写变更说明、跨文件引用不用行号也不用计数。
+- [x] 上面三节各条逐条改完或注明「已不存在」；凡草案里改 endpoints.go 的条目，本票一律不做（归 35）。
+- [x] 改动文件 `git diff --check` 干净、无 CR / BOM；注释中文、只写为什么、不写变更说明、跨文件引用不用行号也不用计数。
 - [ ] 改动包 `gofmt -l` 无输出，`go build ./...`、`go vet ./...` 退 0，改动包及反向依赖与 `./internal/architecture/...` 带 DSN `go test -p 1 -count=1` 全 ok。
 - [ ] 非作者评审（隔离子代理两轴）0 阻断；推送方在干净检出上带 DSN 跑全量；机制清点有变则重生成。
+
+## 完成记录（2026-10-19，作者子代理，分支 `claude-oc48`，工作树 `/home/tops/workspace/idp-parcel-claude-oc48`）
+
+证据层级：全部 `S`（隔离合成与真库测试库，不涉租户实例）。
+
+### rebase
+
+- 原基 `b58b10ef` 上的四笔半成品 rebase 到当时的 `origin/main` `18343ffd`，**无冲突**。新 SHA：`9bef9289`（节点收寄真库用例去隔离形态残名）、`4687368f`（作业事实装配用例取运营决定全集）、`0eb92673`（运输履约真库表的 Covers 与表头）、`cff36a01`（`isolatedWriteAdmission` 去变更说明）。
+- `b58b10ef..18343ffd` 之间 main 动过的同文件只有 `assemble_work_fact_operator_test.go`（POD 更正载荷加 `predecessorVersion`），与本票改的变量与头注不相交，git 自动合入；四笔改到的格都还在，没有被别的票改掉或删掉的。
+- 收口时 `origin/main` 已到 `7bba9b85`。其后各笔与本分支改动文件求交为空，也没有新增本类引用（新文件逐个扫过）；没有再 rebase。
+
+### 各格落点
+
+**一、隔离形态残名与变更说明**
+- C8-1：按二节「`assemble_work_fact_operator_test.go`：`operationDecisionFacesLeftOnIsolatedWrite` 改名为 `transportOperationDecisionFaces`」那条落（票面写明「并入时以本条为准」），见下。
+- C8-4：`cff36a01`。
+- C8-7：`9bef9289`（`git mv` 改名、用例改名、Covers 改引票 operator-channel/10 完成判据原句）。
+- C8-8：按二节改 `transport_fulfillment_command_lines_test.go` 那条落，见下。
+
+**二、作业事实装配测试的表与真库表的 Covers**
+- 改 `endpoints.go` 的各条（头段、主链变量段、`/node-operations-records`、派送尝试、控制事实一组、TF admin 写面、派送发起、两个判断口、登记写面）：本票不做（归 35）。核于 `cff36a01`：票 35 的 `1f87522a`、`435db84e` 已落，本节完成判据第一格所列各词在主链变量段与运输履约各行都不再出现；`endpoints.go` 余下两处「同挂字面量」在受控补充、资料修订两行（委托侧客户渠道），不属运输履约，归本节「不做」所说的非运输履约段行注对账。故该格打勾，达成者是票 35。
+- `transportOperationDecisionFaces`：`4687368f`。表取 ADR-0151 决定一里运输履约归运营决定的全集（补装载分配、终止参与），与 `endpoints.go` 里挂 `operatorDecisions.transport` 的各行逐一对得上。先红证据在该提交说明（overlay 变异体，`S`）。
+- 真库表：`0eb92673`。Covers 改引票 operator-channel/15 完成判据「越过 Intake 之后：TF 各口答业务结果」；`transportCommandLine` 头注改说「写开关换不了表里任何一行（ADR-0150 决定三）」；`operationDecisionTransportFaces` 与 `operatorDecisionTransportForTest` 头注的「四口」「四种」改为指名该变量。
+- `isolatedWriteAdmission` 末句：`cff36a01`。
+- 同文件余下的计数（随横扫那笔 `6c35156c`）：`TestWorkFactFacesAnswerOnTheOperatorChannel` 的 Covers「运营决定四口不在这一面」改指 `transportOperationDecisionFaces`（那张表此刻收的已不止四口，数已经错了）；`workFactOperatorFace` 头注与该 Covers 的「三个更正口」改为「更正口」。
+- 票 15、22、26 追记：`631a2bcf`。另在票 23 评审下记了处置（C8-4、C8-7 出自它的 Standards (2)(3)），票 26 序 6 的去向格一并补号；这两处超出本节完成判据所列。
+
+**三、序号引用横扫**
+
+判别定义：本票「裁定」与「裁定补」两节即定义。执行时的细则：
+- 算：Go 注释以位置序数指某张票面里的条目——「做什么 / 完成判据 / 裁定 / 判断项 / 专钉 / 要落的 / 要做的 / 修复方向 / 先答再开工」后接「第 N 条 / 项 / 件」；含并列（「第 1、2 条」）、不带小节名（「票 X 第 N 条」）、被折行拆开（「…裁定」换行接「第 2 条」）几种。
+- 不算：ADR 决定编号及其下的「第 N 条」（ADR 接受后不改写）；外部规范章节号（RFC 8705 第 3 节，照留）；同一文件里对上下文列表的序数（`rehydration_gate_test.go`「上面第四条判据」）；字面序数（「第一条派送要求缝」「第一条事实」「第二件读不回」「第四件」「是第一条」）。
+- 本轮没动、留待另议：UC 文档条目（`manual_review_authorization.go`、`authority_grant.go` 的「UC-PC-003 第四项」：指 UC「待人类评审的建模未决」的第四项，不是应用流程步骤标号，也不是票面）；不带「第…条」的裸编号标签（「完成判据 3」「判据 4」「裁决 1」「判断项 2」）。后者取证于 `cff36a01`、避开三个在途目录：`git grep -nP '(完成判据|判据|裁决|判断项|裁定) ?[0-9]' -- '*.go'` 去掉 ADR 决定编号后 343 行、172 个文件，另有圈码（「裁决 ①」）40 行。它们多指票面自带编号的条目，随票面重排同样会失效，但不在「裁定补」列举的写法里，量也大，要不要横扫、要不要立门禁需另行裁定。
+- 门禁：没有立。照「裁定补」「横扫一次比逐票补干净」只扫一次。若日后要立，可在 `internal/architecture` 按上面「算」的写法匹配，误报面是字面序数，得配白名单。
+
+取证与改动（取证 SHA `cff36a01`，三个在途目录 `cmd/parcel-dispatch`、`internal/visibilityexception`、`internal/settlementaccounting` 不在内；派单正则在这三处本就 0 行）：
+- 派单正则 `git grep -nE '(裁定|完成判据|做什么|判断项)第 ?[0-9一二三四五六七八九十]+ ?条' -- '*.go'` 命中 40 行；放宽扫描（并列、「件」「项」、不带小节名、折行拆开）另得 41 行。共 81 行、49 个文件，全数改完。改完重扫：派单正则 0 行；放宽扫描余下的都落在上面「不算」与「本轮没动」两类里。
+- 提交：`6c35156c`（`cmd/` 下 12 个文件）、`a1f2e86f`（`internal/` 下 37 个文件）。只改注释：diff 里 `+`/`-` 行全是 `//` 行。
+- `endpoints.go` 的两处（票 pricing-reference-series-operations/05 两项）本节一原说「整份归 35，本票不碰」；35 已 resolved，「裁定补」范围是全仓，本笔只改这两行注释。此为代决，越权风险点：若评审认为 `endpoints.go` 仍不该由本票动，回退这两行即可，不牵连别处。
+
+逐文件处数（行）：
+- `cmd/parcel-access-register/`：`admission_scope_test.go` 1、`device_test.go` 3、`integration_client_test.go` 2、`main_test.go` 1。
+- `cmd/parcel-api/`：`assemble_admission_scope_test.go` 2、`assemble_continued_attempt_decision_test.go` 1、`assemble_operator_decisions_test.go` 1、`assemble_work_fact_operator_test.go` 2、`delivery_dispatch_task_reference_test.go` 3、`endpoints.go` 2、`main.go` 2。
+- `cmd/parcel-settlement-register/pre_acceptance_estimate_adoption_vertical_test.go` 1。
+- `internal/accessidentity/`：`adapters/oidc/client_verifier_test.go` 2、`adapters/oidc/issuer_double_test.go` 1、`adapters/pilotgovernance/admission_scope_test.go` 1、`adapters/postgres/device_registry_test.go` 5、`device_catalogue_test.go` 1、`integration_client_envelope.go` 1、`integration_client_envelope_test.go` 2、`signed_push_test.go` 2。
+- `internal/parcelpricing/`：`adapters/accessidentity/operator_registry_authenticator_test.go` 1、`adapters/http/progress_price_card_draft_test.go` 1、`adapters/http/query_pending_series_evaluations.go` 1、`adapters/http/query_pending_series_evaluations_test.go` 1、`adapters/http/query_reference_series_coverage.go` 1、`adapters/postgres/reference_series_coverage_test.go` 1、`application/approve_and_publish_price_card_draft_test.go` 3、`application/form_pre_acceptance_estimates_test.go` 1、`domain/price_card_draft_approval.go` 1、`domain/price_card_draft_approval_test.go` 1、`ports/evaluation_issue_read.go` 1。
+- `internal/parcelshipment/`：`adapters/http/query_channel_selection_decisions.go` 1、`adapters/partycommercial/active_rejection_test.go` 1、`adapters/partycommercial/unconfigured_source_data_amendment_test.go` 1、`domain/delivery_place_reference.go` 1、`domain/delivery_place_resolution_test.go` 2。
+- `internal/partycommercial/`：`adapters/http/party_identity_operator_intake_test.go` 2、`adapters/http/publication_mirror_operator_intake_test.go` 1、`application/publish_commercial_authority_test.go` 1。
+- `internal/transportfulfillment/`：`adapters/http/open_dispatch_task.go` 1、`adapters/http/open_dispatch_task_test.go` 1、`adapters/http/perform_offsite_pickup_test.go` 2、`adapters/http/register_offsite_pickup_test.go` 2、`adapters/http/register_transport_handover_test.go` 2、`adapters/http/trigger_delivery_dispatch_test.go` 1、`application/correct_delivery_proof_replay_test.go` 1、`application/handover_correction_chain_test.go` 1、`application/trigger_delivery_dispatch.go` 7、`application/trigger_delivery_dispatch_task_reference_test.go` 4。
+
+逐处改法（按被指的票；引文与票面逐字相同，比对前只去掉 markdown 的 `**`，反引号照留，引文不折行；裸号与「票面」一律补全命名空间）：
+- operator-channel/01：做什么第 2 条 →「结构与 CHECK 守上面的不变量」；第 3 条 →「受控 CLI 登记口（登记主体、授予、撤销）」。
+- operator-channel/02：做什么第 3 条 →「测试用进程内签发与 JWKS 替身」。
+- operator-channel/10：做什么第 1 条 →「授予按租户 × 作业范围」；第 2 条 →「受控 CLI 登记」「设备册：设备标识、所属租户与作业范围」「状态（登记 / 停用）」（按各用例证的那一半取）；第 4 条 →「主链事实的更正口随原事实归本能力面」；完成判据第二条 →「隔离放行用例改写为真渠道答复格用例」。
+- operator-channel/11（`accessidentity` 里写「票面」的，由引入提交 `6e535aaf`「票 operator-channel/11 之一」认定）：做什么第 1 条 →「集成客户端册：客户端标识绑定唯一租户与一个来源身份」；第 2 条 →「OAuth 2.0 client credentials 令牌校验」「可选 mTLS 绑定」；第 3 条 →「集成客户端信封：租户、客户端、来源身份、授予集」。
+- operator-channel/12（`signed_push_test.go` 的「票面」：引入提交 `f185673c` 列在票 12 的完成记录里，引文也逐字对得上）：做什么第 2 条 →「校验通过后以该推送源绑定的集成客户端身份铸信封」「签名不过、时间戳越窗、重放各答其格」。
+- operator-channel/15：完成判据第一条 →「无此决定种类的授予」；第三条 →「委托侧五口到达编排，在各自的授权缺口补上之前，生产装配如实停在该口今天的格」（「五口」是票面原话）。
+- operator-channel/18：做什么第 1、2 条 →「批文译装下沉」与「`/commercial-publications` 换操作者 Intake」。
+- operator-channel/19：做什么第 1 件 →「`cmd/parcel-access-register` 登记、结束两个子命令」；完成判据第一条 →「对照已登且区间覆盖 → 铸成」；第二条 →「生产装配：selfAuthority 未配时」「配了且对照与区间齐备时，装载分配与终止参与答业务结果」。
+- operator-channel/21：做什么第 1 条 →「设备册增一个按租户列出已登记设备的读口」「每行只有设备标识、作业范围、登记还是停用；停用了的带停用时刻」。
+- operator-channel/41：「做什么」第三条 →「POD 更正在签版本号之前先过完备性检查」。
+- tf-face-algebra/09（原写「票 09」的同此）：裁定第 1 条 →「单射铸法：取长度前缀，带形状标记」；第 2 条 →「在册核对作第二道防线」；第 3 条 →「先查在册再取件：查在册放在参与 `Active` 判断之前」；第 4 条 →「手工建任务口拒执行器的保留前缀」。同文件里把完成判据嵌套两层拼成一串的引文（如「真渠道真库回归：拼接撞键：两个对象各自形成任务」）改为「真渠道真库回归」下「拼接撞键：两个对象各自形成任务」两段，各自逐字。
+- tf-face-algebra/07：修复方向第二条 →「所以要改成按（前版）读回那份后继，再用〈交接更正冲突〉那套比对分格」。
+- tf-segment-lifecycle-closure/04（原写「票 04」，由引入提交 `9ced5ae5` 认定）：「端点测试要专钉的」第 1 条 →「三入口各一条」；第 2 条 → 单对象口「响应透出 `segmentContinuationReference`（两个单对象口）」，多对象口取整句「响应透出 `segmentContinuationReference`（两个单对象口）与 `segmentEntries`（多对象口）」。
+- pricing-reference-series-operations/05（原写「票 05」的同此）：第 1 项 →「伴生读口 `ReferenceSeriesCoverageRead`」；第 2 项 →「被挂起评价联动」。
+- product-strategy-boundary/12（原写「psb/12」，`.scratch` 下没有 psb 目录）：第 10 项 →「结算编排的生产入口与触发面」。
+- product-strategy-boundary/25：第 2 条 →「PP 受理前试算入口」；第 3 条 →「SA 采用登记」。
+- price-card-import/04（原写「票 04」的由引入提交认定）：第 2 条 →「操作者主体消费面」；第 3 条 →「主体相同或授予不足各答一格」「批准：只接 `已校验`」（原引文少了票面上的空格，已照票面补）；第 4 条 →「发布：只接 `已批准`」；第 5 条 →「载荷只收草稿引用」。
+- label-channel/23（目录是 `label-channel-service-first-release`，Go 注释惯用缩写，照惯例写）：「先答再开工」第二条 →「先答再开工」里「保留期与读面」。
+- ps-port-remainder/04：第 2 条 →「`UnconfiguredSourceDataAmendmentAuthorizer{}`（一律答 `AuthorizationRulesNotConfigured`）」。
+- ps-port-remainder/06（原写「票面」的由引入提交 `43919344` 认定）：要落的第 3 条 →「包裹 → 委托的路」；第 4 条 →「收件资料范围怎么指名」。
+- ps-port-remainder/08：第 3 件 →「对称的动作守卫」。
+- admin-web-group-legal-entities/07：要做的第 1 条 →「身份口对带尾随 JSON 值的载荷答 400 `MALFORMED_REQUEST`」；/11 要做的第 1 条 →「只在 `registration_transport.go` 的 `ErrMalformedRequest` 分支交 detail」。
+- dead-session-salvage「票 02 裁定第 3 条」：票 02 自己没有编号的裁定，它写「判据录清册末节「裁定」」；改指并回清册 `branch-merge-census-2026-08-21`「裁定」里「`mcp1-pc-publication`:弃」那一条（冒号是清册原文的半角），封存现场 `db81745` 与该条吻合。
+
+找不到原文的条目：无。
+
+### 门与验证（钉 `a1f2e86f`）
+
+- `gofmt -l .` 无输出；`go build ./...`、`go vet ./...` 退 0；改动文件 `git diff --check` 干净，无 CR、无 BOM。
+- 带 DSN `go test -p 1 -count=1 ./cmd/... ./internal/architecture/...` 加改过注释的 17 个 internal 包：31 ok、1 个无测试文件、0 FAIL。`TestTransportFulfillmentCommandLinesAnswerBusinessOutcomesAgainstARealDatabase`、`TestNodeOperationsReceptionLineAnswersBusinessOutcomesAgainstARealDatabase` 在 `-v` 下是 PASS 不是 SKIP；`TestWorkFactChannelLeavesOperationDecisionFacesUnconfigured` 对运营决定全集 PASS。
+- 引文核对：脚本取 diff 新增注释行里的每段「」引文，到所点名的票文件里找逐字子串，133 段中只有 3 段不在票里，三段都是改动前就有、只随折行挪了位置的领域短语（「要不要求证书绑定令牌」「是不是同一个人」「失败结果不制造实际履约段」），不是票面引文。
+- 机制清点在 `a1f2e86f` 上重生成，与 main 无差，不另提交。
+
+### 没做
+
+- 「走 Go 那条路」、非作者评审、推送方全量：待后续。
+- 总判据「改动包及反向依赖」：只跑了上面那组；反向依赖没有单独跑（本票只改注释，编译产物不变），留推送方全量。
+- 三节里列为「本轮没动、留待另议」的两类：UC-PC-003「第四项」两处、裸编号标签 343 行（另圈码 40 行）。
+- 横扫中看到但不属本类、没动的：`main.go` 结算编排入口「七个构造」（数的是紧接其下同一处的构造，本地计数）；`unconfigured_source_data_amendment_test.go`「已随票 02 余段接真退场」是变更说明；`accessidentity` 测试里还有几处不带序号的「票面完成判据「…」」没补命名空间。
