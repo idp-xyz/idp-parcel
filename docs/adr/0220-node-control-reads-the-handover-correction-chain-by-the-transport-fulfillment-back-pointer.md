@@ -73,6 +73,7 @@ Date: 2026-10-19
   - `adapters/postgres/physical_control_transition.go`：认链按链上各版取。
   - `application`：`Advance` 立链，两半共用。
 - 不加迁移，不加信封，不改 TF，派发路由、inbox 名与哨兵名单不变。
+- 迁移 `node_operations/0017` 给部分索引 `physical_control_transition_advanced_by_chain` 写的注释「同一（对象，范围）下各版是一条更正链。」自本记录起不再成立：这本索引只是认链那一问的读路（决定三），不定义哪几版是一条链。已发布的迁移不改；要不要另起迁移改名或改注释，留给 NO owner。
 - 每封信多读 TF 的次数等于这一版的前版数，首登版不多读。
 - 文档：
   - UC-NO-005：输入契约、流程里「按四维键读回那一版」那一步、「一致性、幂等与并发」里认链那一条、`AT-NO-126`–`128`；
