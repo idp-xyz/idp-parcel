@@ -2,12 +2,15 @@ package nodeopshttp_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 	"time"
+
+	"go.idp.xyz/idp-bento-go/eventing"
 
 	nodeopshttp "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/application"
@@ -246,6 +249,44 @@ func TestWorkFactReceptionAnswers400ForAbsentFactIdentityOrOccurrenceTime(t *tes
 			endpoint.ServeHTTP(recorder, receptionRequest(body))
 			if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), "MALFORMED_REQUEST") {
 				t.Fatalf("status = %d body = %s, want 400 MALFORMED_REQUEST", recorder.Code, recorder.Body.String())
+			}
+		})
+	}
+}
+
+// Covers: 票 operator-channel/45 裁定三末条——来源标识原样进收寄意图信封的 Subject，越过框架上限（按字节）或带控制字符，
+// 信封就被确定性拒收；本口不提交意图没交出去的收寄，设备会对着 5xx 永远重发。所以在接入时答坏报文；上限上那一个照收、
+// 逐字不改。信封真收得下上限上那一个，由 parcel-api 的真库用例在生产装配上钉。
+func TestWorkFactReceptionIntakeBoundsTheSourceIDByTheIntentEnvelope(t *testing.T) {
+	intake := receptionIntakeForTest(t)
+	body := func(t *testing.T, sourceID string) string {
+		t.Helper()
+		encoded, err := json.Marshal(sourceID)
+		if err != nil {
+			t.Fatalf("编码 sourceId：%v", err)
+		}
+		return `{"sourceId":` + string(encoded) + `,"deliveredBy":"SYN-COURIER-01","handlingUnit":"SYN-HU-0012",` +
+			`"claim":"SCAN_ONLY","mark":"SYN-MARK-0012","occurredAt":"2026-09-24T09:50:00+08:00"}`
+	}
+
+	longest := strings.Repeat("S", eventing.MaxSubjectLength)
+	command, err := intake.IntakeReception(context.Background(), receptionRequest(body(t, longest)))
+	if err != nil {
+		t.Fatalf("上限上的来源标识：%v", err)
+	}
+	if command.SourceID != longest {
+		t.Fatal("上限上的来源标识没有逐字进命令")
+	}
+
+	for name, sourceID := range map[string]string{
+		"超出上限一字节":       longest + "S",
+		"字符数在上限内而字节数超出": strings.Repeat("寄", eventing.MaxSubjectLength/len("寄")+1),
+		"带控制字符":         "SYN-DEVICE-07/000133\t",
+	} {
+		t.Run(name, func(t *testing.T) {
+			_, err := intake.IntakeReception(context.Background(), receptionRequest(body(t, sourceID)))
+			if !errors.Is(err, nodeopshttp.ErrMalformedRequest) {
+				t.Fatalf("err = %v, want ErrMalformedRequest", err)
 			}
 		})
 	}

@@ -82,10 +82,11 @@ type ReceiveDeliveredUnitCommand struct {
 }
 
 type ReceiveDeliveredUnitResult struct {
-	outcome   ReceptionOutcome
-	record    ports.ReceptionRecord
-	hasRecord bool
-	handoff   string
+	outcome    ReceptionOutcome
+	record     ports.ReceptionRecord
+	hasRecord  bool
+	handoff    string
+	handoffErr error
 }
 
 func (result ReceiveDeliveredUnitResult) Outcome() ReceptionOutcome {
@@ -96,9 +97,16 @@ func (result ReceiveDeliveredUnitResult) Record() (ports.ReceptionRecord, bool) 
 	return result.record, result.hasRecord
 }
 
-// IntakeHandoffReference 非空说明结果已提交但意图还没交出去，重放会重发同一份。
+// IntakeHandoffReference 非空说明收寄已写下而意图没交出去：调用方照常提交时，重放会重发同一份。
 func (result ReceiveDeliveredUnitResult) IntakeHandoffReference() string {
 	return result.handoff
+}
+
+// IntakeHandoffError 是意图没交出去时那次入队报的错，与 IntakeHandoffReference 同在场同缺席。续办引用只对有人读它的调用方
+// 有用（前线导入把它写进报告）；没人读的调用方据此整笔回滚，不提交意图没跟上的收寄（UC-NO-002 步骤 8，见 parcel-api 的
+// transactionalReception）。
+func (result ReceiveDeliveredUnitResult) IntakeHandoffError() error {
+	return result.handoffErr
 }
 
 // ReceiveDeliveredUnitDeps 是收寄编排的全部依赖，缺任一个构造即拒。
@@ -402,7 +410,7 @@ func (handler *ReceiveDeliveredUnitHandler) commit(
 	switch saved {
 	case ports.ReceptionSaved:
 		result := resultForRecord(record)
-		result.handoff = handler.handOff(ctx, record)
+		result.handoff, result.handoffErr = handler.handOff(ctx, record)
 		return result, nil
 	case ports.ReceptionAlreadyRecorded:
 		winner, found, err := handler.deps.Receptions.FindByKey(ctx, record.Key)
@@ -425,7 +433,7 @@ func (handler *ReceiveDeliveredUnitHandler) existingResult(
 ) ReceiveDeliveredUnitResult {
 	result := resultForRecord(record)
 	result.outcome = ReceptionExistingResult
-	result.handoff = handler.handOff(ctx, record)
+	result.handoff, result.handoffErr = handler.handOff(ctx, record)
 	return result
 }
 
@@ -445,18 +453,20 @@ func resultForRecord(record ports.ReceptionRecord) ReceiveDeliveredUnitResult {
 }
 
 // handOff 交发布意图。只有形成了可供下游消费的收寄（关联收寄）才交——待识别、未收寄
-// 与待确认没有 PS 能采用的东西；失败不翻结果，留续办引用重发同一份（AT-NO-027）。
+// 与待确认没有 PS 能采用的东西；失败不翻结果，留续办引用重发同一份（AT-NO-027），入队的错一并交出，提交还是回滚由调用方
+// 按有没有人读续办来定。
 func (handler *ReceiveDeliveredUnitHandler) handOff(
 	ctx context.Context,
 	record ports.ReceptionRecord,
-) string {
+) (string, error) {
 	if record.Kind != ports.RecordIntakeFormed {
-		return ""
+		return "", nil
 	}
-	if err := handler.deps.Downstream.HandOffNodeIntake(ctx, ports.NodeIntakeHandoffIntent{Record: record}); err == nil {
-		return ""
+	err := handler.deps.Downstream.HandOffNodeIntake(ctx, ports.NodeIntakeHandoffIntent{Record: record})
+	if err == nil {
+		return "", nil
 	}
-	return receptionContinuation("NODE_INTAKE_HANDOFF", record.Key.TenantID.String(), record.Key.SourceID)
+	return receptionContinuation("NODE_INTAKE_HANDOFF", record.Key.TenantID.String(), record.Key.SourceID), err
 }
 
 func receptionContinuation(parts ...string) string {

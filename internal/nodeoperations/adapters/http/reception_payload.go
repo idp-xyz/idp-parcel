@@ -8,6 +8,9 @@ import (
 	"net/http"
 	"strings"
 	"time"
+	"unicode"
+
+	"go.idp.xyz/idp-bento-go/eventing"
 
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
@@ -43,6 +46,13 @@ func receptionCommand(tenant domain.TenantID, node domain.NodeReference, request
 	}
 	if strings.TrimSpace(document.SourceID) == "" {
 		return none, fmt.Errorf("%w: sourceId is blank; the device-issued fact identity is not minted here (ADR-0023)", ErrMalformedRequest)
+	}
+	// 来源标识原样进收寄意图信封的 Subject（postgres 适配器 OutboxNodeIntakeHandoff）。越过框架的 Subject 上限或带控制字符，
+	// 信封就被确定性拒收；本口不提交意图没交出去的收寄（parcel-api 的 transactionalReception），设备便会对着 5xx 永远重发。
+	// 来源标识由设备签发（ADR-0023），重发同样的内容不会变好，所以在这里答坏报文，让设备出队交给人。
+	if len(document.SourceID) > eventing.MaxSubjectLength || strings.IndexFunc(document.SourceID, unicode.IsControl) >= 0 {
+		return none, fmt.Errorf("%w: sourceId exceeds %d bytes or carries a control character, which the intent envelope cannot carry",
+			ErrMalformedRequest, eventing.MaxSubjectLength)
 	}
 	deliveredBy, err := domain.NewDeliveringPartyReference(document.DeliveredBy)
 	if err != nil {

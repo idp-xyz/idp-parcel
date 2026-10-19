@@ -25,9 +25,14 @@ import (
 // 连带作废收寄的写。服务结果读口因此包在 SavepointedServiceResultView 里（ADR-0186）；身份核对
 // 读口不包——它读不动本就不形成答案，整笔回滚正是要的结果。
 //
-// 意图入队报 SQL 级错误时同样整笔回滚、答 5xx。「结果已提交而意图没跟上」（AT-NO-027 的续办
-// 重发）只在入队以 Go 层错误失败时出现：编排把它吞成续办引用后照常交回业务答案，事务照常提交，
-// 重放重发同一份。
+// 意图没交出去的收寄在这条路上不提交。编排把入队的 Go 层失败吞成续办引用、照常交回业务答案——前线导入靠它，报告把引用
+// 写给内勤，重跑同一文件重发同一份（ADR-0043 决定三）；这里没有人读它：响应里没有续办这一格，设备收到 2xx 就出队，不会
+// 再有人重投同一来源去触发重发。所以凭 IntakeHandoffError 整笔回滚、答 5xx，设备留在队里重发，重发时收寄与意图在同一笔
+// 里落地（ADR-0049「发布意图与业务结果同一提交」）。入队报 SQL 级错误时事务已中止，本就整笔回滚、答 5xx。
+//
+// 信封被框架确定性拒收不另成一格：信封上随设备而变的只有来源标识（进 Subject），收寄口在接入时就按信封上限把越界的拒成
+// 坏报文（nodeopshttp 的 receptionCommand）。剩下能让信封被拒的是服务端缺陷，答 5xx 让设备留着这次接收等修好；答 4xx
+// 会让设备把一次如实记下的接收出队交给人，错却不在它。
 type transactionalReception struct {
 	transactor bentoapp.Transactor
 	inner      *nodeopsapp.ReceiveDeliveredUnitHandler
@@ -45,6 +50,9 @@ func (reception transactionalReception) Handle(
 		if handleErr != nil {
 			return handleErr
 		}
+		if handoffErr := handled.IntakeHandoffError(); handoffErr != nil {
+			return fmt.Errorf("parcel-api: reception intent not handed off: %w", handoffErr)
+		}
 		result = handled
 		return nil
 	})
@@ -61,39 +69,55 @@ func (reception transactionalReception) Handle(
 // （ADR-0184），服务结果读口读 PS 的取消与终局两册（票 operator-channel/25）。两个读口跟着收寄走同一笔事务只因
 // ctx 是同一个：PS 读不加锁，READ COMMITTED 下同事务读既无一致性收益也无代价。
 func buildReceptionOrchestration(db *bentopg.DB) (nodeopshttp.ReceptionHandler, error) {
+	deps, err := buildReceptionDeps(db)
+	if err != nil {
+		return nil, err
+	}
+	return receptionWithin(db, deps)
+}
+
+// buildReceptionDeps 是 buildReceptionOrchestration 的依赖半边。单拆出来是为了真库用例只换一只依赖（让入队失败一次、
+// 在读别的实物关联与落册之间挂起），其余照生产装配，不在测试里另抄一份装配。
+func buildReceptionDeps(db *bentopg.DB) (nodeopsapp.ReceiveDeliveredUnitDeps, error) {
+	none := nodeopsapp.ReceiveDeliveredUnitDeps{}
 	receptions, err := nopostgres.NewReceptions(db)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-api: receptions: %w", err)
+		return none, fmt.Errorf("parcel-api: receptions: %w", err)
 	}
 	versions, err := noidentity.NewIntakeResultVersions()
 	if err != nil {
-		return nil, fmt.Errorf("parcel-api: intake result versions: %w", err)
+		return none, fmt.Errorf("parcel-api: intake result versions: %w", err)
 	}
 	store, err := outbox.NewStore(db)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-api: outbox store: %w", err)
+		return none, fmt.Errorf("parcel-api: outbox store: %w", err)
 	}
 	clock := systemClock{}
 	downstream, err := nopostgres.NewOutboxNodeIntakeHandoff(db, store, clock)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-api: node intake handoff: %w", err)
+		return none, fmt.Errorf("parcel-api: node intake handoff: %w", err)
 	}
 	identity, err := buildParcelIdentityView(db)
 	if err != nil {
-		return nil, err
+		return none, err
 	}
 	serviceResults, err := buildParcelServiceResultView(db)
 	if err != nil {
-		return nil, err
+		return none, err
 	}
-	handler, err := nodeopsapp.NewReceiveDeliveredUnitHandler(nodeopsapp.ReceiveDeliveredUnitDeps{
+	return nodeopsapp.ReceiveDeliveredUnitDeps{
 		Identity:       identity,
 		ServiceResults: serviceResults,
 		Receptions:     receptions,
 		Versions:       versions,
 		Downstream:     downstream,
 		Clock:          clock,
-	})
+	}, nil
+}
+
+// receptionWithin 把一组收寄依赖装成编排，包进 transactionalReception。
+func receptionWithin(db *bentopg.DB, deps nodeopsapp.ReceiveDeliveredUnitDeps) (nodeopshttp.ReceptionHandler, error) {
+	handler, err := nodeopsapp.NewReceiveDeliveredUnitHandler(deps)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: reception orchestration: %w", err)
 	}

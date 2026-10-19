@@ -613,7 +613,8 @@ func TestScanOnlyAndRefusalDoNotEstablishControl(t *testing.T) {
 // 意图」。
 func TestReplayConflictAndFailedIntentStayDisciplined(t *testing.T) {
 	fixture := newReceptionFixture(t)
-	fixture.downstream.err = errors.New("downstream unreachable")
+	unreachable := errors.New("downstream unreachable")
+	fixture.downstream.err = unreachable
 
 	first, err := fixture.handler.Handle(context.Background(), receiveCommand(t))
 	if err != nil {
@@ -625,6 +626,10 @@ func TestReplayConflictAndFailedIntentStayDisciplined(t *testing.T) {
 	if first.IntakeHandoffReference() == "" {
 		t.Fatal("首投失败没有留发布续办引用")
 	}
+	// 入队的错随结果交出：不读续办的调用方据它整笔回滚（票 operator-channel/45）。
+	if !errors.Is(first.IntakeHandoffError(), unreachable) {
+		t.Fatalf("handoff error = %v; 续办引用在场时入队的错也该在场", first.IntakeHandoffError())
+	}
 
 	fixture.downstream.err = nil
 	replay, err := fixture.handler.Handle(context.Background(), receiveCommand(t))
@@ -633,6 +638,9 @@ func TestReplayConflictAndFailedIntentStayDisciplined(t *testing.T) {
 	}
 	if replay.Outcome() != application.ReceptionExistingResult {
 		t.Fatalf("replay = %q", replay.Outcome())
+	}
+	if replay.IntakeHandoffReference() != "" || replay.IntakeHandoffError() != nil {
+		t.Fatalf("重发成功仍留着续办：%q / %v", replay.IntakeHandoffReference(), replay.IntakeHandoffError())
 	}
 	if fixture.receptions.saved != 1 {
 		t.Fatal("重放重复建立了记录")
