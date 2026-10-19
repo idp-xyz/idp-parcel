@@ -73,17 +73,25 @@ func (register *PhysicalControlTransitions) FindTransition(
 	return record, true, nil
 }
 
-// FindAdvancedInHandoverChain 按（租户，对象，范围，方向）取推进了的那一行，任一版，走 physical_control_transition_advanced_by_chain。
-// 读到两行报错：一条更正链上推进过两次，是编排的锁或链检查被绕过了，任取一行会把另一次藏起来。
+// FindAdvancedInHandoverChain 取这条更正链上推进了的那一行：只取链上各版（这一版与 TF 更正回指上溯的各前版，ADR-0220），同一
+// （对象，范围）下不在链上的版本不算。链上各版共有对象与范围，按这两格先缩到 physical_control_transition_advanced_by_chain 那几行，
+// 再按链上的版本筛；那本索引按（对象，范围）建，只是读的路，不是认链的判据。读到两行报错：一条更正链上推进过两次，是编排的锁或链
+// 检查被绕过了，任取一行会把另一次藏起来。
 func (register *PhysicalControlTransitions) FindAdvancedInHandoverChain(
 	ctx context.Context,
 	tenant domain.TenantID,
-	handover domain.AuthoritativeHandoverReference,
+	chain domain.HandoverCorrectionChain,
 	direction domain.ControlTransitionDirection,
 ) (ports.ControlTransitionRecord, bool, error) {
 	querier, err := register.db.ReadExecutor(ctx)
 	if err != nil {
 		return ports.ControlTransitionRecord{}, false, fmt.Errorf("find advanced transition in handover chain: %w", err)
+	}
+	handover := chain.Head()
+	members := chain.Members()
+	versions := make([]string, 0, len(members))
+	for _, member := range members {
+		versions = append(versions, member.Version())
 	}
 	rows, err := querier.Query(ctx,
 		`SELECT `+transitionColumns+`
@@ -91,10 +99,11 @@ func (register *PhysicalControlTransitions) FindAdvancedInHandoverChain(
 		  WHERE tenant_id = $1
 		    AND handover_object = $2
 		    AND handover_scope = $3
-		    AND direction = $4
+		    AND handover_version = ANY($4::text[])
+		    AND direction = $5
 		    AND outcome = 'ADVANCED'
 		  LIMIT 2`,
-		tenant.String(), handover.Object(), handover.Scope(), direction.String(),
+		tenant.String(), handover.Object(), handover.Scope(), versions, direction.String(),
 	)
 	if err != nil {
 		return ports.ControlTransitionRecord{}, false, fmt.Errorf("find advanced transition in handover chain: %w", err)
@@ -118,7 +127,8 @@ func (register *PhysicalControlTransitions) FindAdvancedInHandoverChain(
 		return found[0], true, nil
 	default:
 		return ports.ControlTransitionRecord{}, false, fmt.Errorf(
-			"find advanced transition in handover chain: object %q scope %q advanced more than once", handover.Object(), handover.Scope())
+			"find advanced transition in handover chain: object %q scope %q versions %q advanced more than once",
+			handover.Object(), handover.Scope(), versions)
 	}
 }
 

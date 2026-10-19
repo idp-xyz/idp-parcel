@@ -19,14 +19,24 @@ const (
 	singaporeHB = "SYN-NODE-SIN-HUB"
 )
 
-// declaredHandover 登一版声明了节点的交接。scope 不同即不同的更正链；替身的交接来源按版本串认，所以各版版本串要各不相同。
-func (fixture *transferFixture) declaredHandover(t *testing.T, scope, version, releasing, receiving string, handedOver bool) {
+// declaredHandover 登一版声明了节点的交接。corrects 是它沿 TF 更正回指上溯的各前版（同一范围，近者在前），不给即首登：同一范围下
+// 的别的版本不是它的前版（ADR-0220）。替身的交接来源按版本串认，所以各版版本串要各不相同。
+func (fixture *transferFixture) declaredHandover(
+	t *testing.T, scope, version, releasing, receiving string, handedOver bool, corrects ...string,
+) {
 	t.Helper()
 	reference, err := domain.NewAuthoritativeHandoverReference("parcel-1", scope, version)
 	if err != nil {
 		t.Fatalf("交接键：%v", err)
 	}
 	answer := ports.AuthoritativeHandover{Reference: reference, HandedOver: handedOver, JudgedAt: transferJudgedAt}
+	for _, predecessor := range corrects {
+		earlier, err := domain.NewAuthoritativeHandoverReference("parcel-1", scope, predecessor)
+		if err != nil {
+			t.Fatalf("前版键：%v", err)
+		}
+		answer.Earlier = append(answer.Earlier, earlier)
+	}
 	if handedOver {
 		answer.TransferOut = mustValue(t, domain.NewTransferOutReference, "TRANSPORT-HANDOVER/"+version)
 	}
@@ -262,7 +272,7 @@ func TestTransferInRedeliveriesAndCorrectionsWriteNothingNew(t *testing.T) {
 		fixture := newTransferFixture(t)
 		fixture.controls.active = nil
 		fixture.declaredHandover(t, "SYN-SCOPE-IN", "in-v1", "", shenzhenGW, true)
-		fixture.declaredHandover(t, "SYN-SCOPE-IN", "in-v2", "", shenzhenGW, true)
+		fixture.declaredHandover(t, "SYN-SCOPE-IN", "in-v2", "", shenzhenGW, true, "in-v1")
 		inbound := establishedIn(t, fixture.advanceIn(t, "SYN-SCOPE-IN", "in-v1").In())
 
 		result := fixture.advanceIn(t, "SYN-SCOPE-IN", "in-v2")
@@ -309,7 +319,11 @@ func TestTransferInRedeliveriesAndCorrectionsWriteNothingNew(t *testing.T) {
 				t.Fatal(err)
 			}
 			fixture.controls.advanceInUnderLock = &ports.ControlTransitionRecord{Transition: winner, RecordedAt: transferRecordedAt}
-			fixture.declaredHandover(t, "SYN-SCOPE-IN", "in-v1", "", shenzhenGW, true)
+			var corrects []string
+			if version != "in-v1" {
+				corrects = []string{version}
+			}
+			fixture.declaredHandover(t, "SYN-SCOPE-IN", "in-v1", "", shenzhenGW, true, corrects...)
 			saves := fixture.controls.saves
 
 			result := fixture.advanceIn(t, "SYN-SCOPE-IN", "in-v1")
@@ -331,7 +345,7 @@ func TestAWithdrawingCorrectionOfANodeToNodeHandoverIsRecordedOnBothSides(t *tes
 	fixture := newTransferFixture(t)
 	fixture.declaredHandover(t, "SYN-SCOPE-IN", "in-v1", shanghaiHub, shenzhenGW, true)
 	inbound := establishedIn(t, fixture.advanceIn(t, "SYN-SCOPE-IN", "in-v1").In())
-	fixture.declaredHandover(t, "SYN-SCOPE-IN", "in-v2", shanghaiHub, shenzhenGW, false)
+	fixture.declaredHandover(t, "SYN-SCOPE-IN", "in-v2", shanghaiHub, shenzhenGW, false, "in-v1")
 
 	result := fixture.advanceIn(t, "SYN-SCOPE-IN", "in-v2")
 

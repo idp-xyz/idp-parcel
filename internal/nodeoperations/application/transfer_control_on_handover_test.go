@@ -48,7 +48,7 @@ func (double *objectResolverDouble) ResolveHandoverObject(
 	return double.resolution, nil
 }
 
-// controlRegisterDouble 在内存里扮转移册：按（对象，范围，版本，方向）存行，按（对象，范围，方向）认更正链。active 是收寄成立的那几份
+// controlRegisterDouble 在内存里扮转移册：按（对象，范围，版本，方向）存行，按编排交来的更正链认链上各版。active 是收寄成立的那几份
 // 控制（成立时的样子），released 是此前已转出、册外带来的几份；读控制时与真库一样折叠：册上推进了的转入行补进来，推进了的转出行按
 // 控制依据把那一份换成已转出的。advanceUnderLock 扮「同链前版在锁外刚提交」：转出一半取实物锁那一刻才出现在册上；advanceInUnderLock
 // 同此，只在转入一半取锁时出现。lostRace 让 Save 答已在册而不落行，winner 是另一方先落的那一行。
@@ -84,11 +84,11 @@ func (double *controlRegisterDouble) FindTransition(
 }
 
 func (double *controlRegisterDouble) FindAdvancedInHandoverChain(
-	_ context.Context, _ domain.TenantID, handover domain.AuthoritativeHandoverReference, direction domain.ControlTransitionDirection,
+	_ context.Context, _ domain.TenantID, chain domain.HandoverCorrectionChain, direction domain.ControlTransitionDirection,
 ) (ports.ControlTransitionRecord, bool, error) {
 	for _, record := range double.rows {
 		transition := record.Transition
-		if transition.Handover().SameChain(handover) && transition.Direction() == direction &&
+		if chain.Holds(transition.Handover()) && transition.Direction() == direction &&
 			transition.Outcome() == domain.ControlAdvanced {
 			return record, true, nil
 		}
@@ -205,18 +205,31 @@ func handoverVersion(t *testing.T, version string) domain.AuthoritativeHandoverR
 	return reference
 }
 
-// handedOver 登一版`已交接`；refused 登一版拒收或待确认（本上下文只看得见「不是`已交接`」）。
-func (fixture *transferFixture) handedOver(t *testing.T, version string) {
+// handedOver 登一版`已交接`；refused 登一版拒收或待确认（本上下文只看得见「不是`已交接`」）。corrects 是这一版沿 TF 更正回指上溯的
+// 各前版，近者在前；不给即首登——同一范围下的别的版本不是它的前版（ADR-0220）。
+func (fixture *transferFixture) handedOver(t *testing.T, version string, corrects ...string) {
 	t.Helper()
 	fixture.handovers.answers[version] = ports.AuthoritativeHandover{
 		Reference: handoverVersion(t, version), HandedOver: true, JudgedAt: transferJudgedAt,
 		TransferOut: mustValue(t, domain.NewTransferOutReference, "TRANSPORT-HANDOVER/"+version),
+		Earlier:     earlierVersions(t, corrects),
 	}
 }
 
-func (fixture *transferFixture) refused(t *testing.T, version string) {
+func (fixture *transferFixture) refused(t *testing.T, version string, corrects ...string) {
 	t.Helper()
-	fixture.handovers.answers[version] = ports.AuthoritativeHandover{Reference: handoverVersion(t, version), JudgedAt: transferJudgedAt}
+	fixture.handovers.answers[version] = ports.AuthoritativeHandover{
+		Reference: handoverVersion(t, version), JudgedAt: transferJudgedAt, Earlier: earlierVersions(t, corrects),
+	}
+}
+
+func earlierVersions(t *testing.T, versions []string) []domain.AuthoritativeHandoverReference {
+	t.Helper()
+	earlier := make([]domain.AuthoritativeHandoverReference, 0, len(versions))
+	for _, version := range versions {
+		earlier = append(earlier, handoverVersion(t, version))
+	}
+	return earlier
 }
 
 // transfer 跑一版、交回转出一半。本文件的交接都不声明接收节点，转入一半零写入，不碰替身——转入各格见
@@ -383,7 +396,7 @@ func TestCorrectionsThatKeepTheTransferWriteNothing(t *testing.T) {
 	t.Run("后继版仍已交接", func(t *testing.T) {
 		fixture := newTransferFixture(t)
 		fixture.handedOver(t, "v1")
-		fixture.handedOver(t, "v2")
+		fixture.handedOver(t, "v2", "v1")
 		fixture.transfer(t, "v1")
 
 		result := fixture.transfer(t, "v2")
@@ -395,7 +408,7 @@ func TestCorrectionsThatKeepTheTransferWriteNothing(t *testing.T) {
 	t.Run("前版在锁外刚转出", func(t *testing.T) {
 		fixture := newTransferFixture(t)
 		fixture.handedOver(t, "v1")
-		fixture.handedOver(t, "v2")
+		fixture.handedOver(t, "v2", "v1")
 		earlier := fixture.transfer(t, "v1")
 		recorded, _ := earlier.Transition()
 		fixture.controls.rows = map[string]ports.ControlTransitionRecord{}
@@ -428,7 +441,7 @@ func TestCorrectionsThatKeepTheTransferWriteNothing(t *testing.T) {
 func TestAWithdrawingCorrectionIsRecordedForRecompute(t *testing.T) {
 	fixture := newTransferFixture(t)
 	fixture.handedOver(t, "v1")
-	fixture.refused(t, "v2")
+	fixture.refused(t, "v2", "v1")
 	fixture.transfer(t, "v1")
 
 	result := fixture.transfer(t, "v2")

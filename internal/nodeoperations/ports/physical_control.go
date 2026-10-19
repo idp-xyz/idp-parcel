@@ -18,8 +18,11 @@ var ErrAuthoritativeHandoverUnreadable = errors.New("node operations: authoritat
 // AuthoritativeHandover 是按键读回的一版权威运输交接，用本上下文的语言（ADR-0025：提供方类型不进消费方 ports）。
 //
 // HandedOver 只在`已交接`时为真，TransferOut 只随它在场——拒收与待确认给不出转出引用。JudgedAt 是交接判断的业务时间，已折到
-// 节点控制转移册的存储精度：转出前比较的与读回时折叠比较的是同一个时刻。Superseded 说这一版已被同链的后一版更正：晚到的前版
-// 不再是这个对象的交接结果。
+// 节点控制转移册的存储精度：转出前比较的与读回时折叠比较的是同一个时刻。Superseded 说已有一版经 TF 的更正回指指着这一版：晚到的
+// 前版不再是这个对象的交接结果。
+//
+// Earlier 是这一版沿 TF 的更正回指上溯的各前版，近者在前；首登版为空。本上下文认更正链只认它（ADR-0220）：同一（对象，范围）下
+// 另起的一次首登不在其中，它是另一次交接，不是这一版的前版。
 //
 // ReleasingNode 与 ReceivingNode 是这一版声明的交出与接收节点（ADR-0213 决定一），零值即没有声明——缺席是一种答案，本上下文不补。
 // 接收节点决定转入在哪个节点立控制；交出节点只用来与被转出那一份控制的节点比，不是转出的前提。更正承继前版的声明，同一条更正链上
@@ -30,11 +33,13 @@ type AuthoritativeHandover struct {
 	TransferOut   domain.TransferOutReference
 	JudgedAt      time.Time
 	Superseded    bool
+	Earlier       []domain.AuthoritativeHandoverReference
 	ReleasingNode domain.NodeReference
 	ReceivingNode domain.NodeReference
 }
 
-// AuthoritativeHandoverSource 按（租户，交接键）读回一版权威运输交接；没有交回 false。读不动的错误包 ErrAuthoritativeHandoverUnreadable。
+// AuthoritativeHandoverSource 按（租户，交接键）读回一版权威运输交接与它的各前版；没有交回 false。这一版或它的前版读不动，错误包
+// ErrAuthoritativeHandoverUnreadable。
 type AuthoritativeHandoverSource interface {
 	FindAuthoritativeHandover(
 		ctx context.Context,
@@ -104,12 +109,13 @@ type PhysicalControlRegister interface {
 		handover domain.AuthoritativeHandoverReference,
 		direction domain.ControlTransitionDirection,
 	) (ControlTransitionRecord, bool, error)
-	// FindAdvancedInHandoverChain 交回同一条更正链（同一对象与范围，任一版）上在这个方向推进了的那一行；没有交回 false。一条链上
-	// 至多推进一次，读到不止一行作为错误返回，不任取一行。
+	// FindAdvancedInHandoverChain 交回这条更正链上（链上任一版，这一版自己也算）在这个方向推进了的那一行；没有交回 false。链由交接
+	// 来源按 TF 的更正回指给出（ADR-0220），同一（对象，范围）下不在链上的版本推进过不算。一条链上至多推进一次，读到不止一行作为
+	// 错误返回，不任取一行。
 	FindAdvancedInHandoverChain(
 		ctx context.Context,
 		tenant domain.TenantID,
-		handover domain.AuthoritativeHandoverReference,
+		chain domain.HandoverCorrectionChain,
 		direction domain.ControlTransitionDirection,
 	) (ControlTransitionRecord, bool, error)
 	// FindActiveControls 交回这件作业实物此刻在身的各份控制：收寄成立的与交接转入成立的都算，已折进转出、按控制依据去重；没有交回

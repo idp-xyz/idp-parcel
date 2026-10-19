@@ -63,11 +63,12 @@ func keyOf(handover tfdomain.TransportHandover) tfports.TransportHandoverKey {
 	}
 }
 
-// readerDouble 扮 TF 交接登记册：按键存记录，successors 记哪几版已被更正。
+// readerDouble 扮 TF 交接登记册：按键存记录，successors 记哪几版已被更正；findErrFor 只让那几个键读不动。
 type readerDouble struct {
 	records    map[tfports.TransportHandoverKey]tfports.TransportHandoverRecord
 	successors map[tfports.TransportHandoverKey]bool
 	findErr    error
+	findErrFor map[tfports.TransportHandoverKey]error
 	successErr error
 }
 
@@ -85,6 +86,9 @@ func newReader(handovers ...tfdomain.TransportHandover) *readerDouble {
 func (reader *readerDouble) FindByKey(_ context.Context, key tfports.TransportHandoverKey) (tfports.TransportHandoverRecord, bool, error) {
 	if reader.findErr != nil {
 		return tfports.TransportHandoverRecord{}, false, reader.findErr
+	}
+	if err := reader.findErrFor[key]; err != nil {
+		return tfports.TransportHandoverRecord{}, false, err
 	}
 	record, found := reader.records[key]
 	return record, found, nil
@@ -175,6 +179,89 @@ func TestReadFailuresAreSortedByRecovery(t *testing.T) {
 	}
 }
 
+// corrected 真经 TF 领域对 predecessor 落一版更正：新版回指前版、对象与范围不变。
+func corrected(
+	t *testing.T, predecessor tfdomain.TransportHandover, verdict tfdomain.HandoverVerdict, version string,
+) tfdomain.TransportHandover {
+	t.Helper()
+	correction := tfdomain.HandoverCorrection{
+		Verdict:     verdict,
+		Version:     value(t, tfdomain.NewHandoverResultVersion, version),
+		CorrectedAt: handedOverAt.Add(time.Hour),
+	}
+	if verdict == tfdomain.ObjectHandedOver {
+		correction.ReleasingEvidence = value(t, tfdomain.NewHandoverEvidenceReference, "LOAD-SCAN/8")
+		correction.ReceivingEvidence = value(t, tfdomain.NewHandoverEvidenceReference, "CARRIER-ACK/10")
+		correction.Rule = value(t, tfdomain.NewHandoverRuleReference, "handover-rules/v1")
+	} else {
+		correction.Basis = value(t, tfdomain.NewHandoverBasisReference, "SEAL_MISMATCH")
+	}
+	built, err := predecessor.Correct(correction)
+	if err != nil {
+		t.Fatalf("correct transport handover to %s: %v", version, err)
+	}
+	return built
+}
+
+func earlierVersionsOf(answer ports.AuthoritativeHandover) []string {
+	versions := []string{}
+	for _, earlier := range answer.Earlier {
+		versions = append(versions, earlier.Object()+"|"+earlier.Scope()+"|"+earlier.Version())
+	}
+	return versions
+}
+
+// Covers: `AT-NO-128`（ADR-0220）——前版只沿 TF 的更正回指上溯：更正链上的一版交回各前版、近者在前，对象与范围照键；同一（对象，
+// 范围）下另起的首登没有回指，前版为空——它不是那一版的更正。
+func TestTheSourceWalksBackTheCorrectionChainOnly(t *testing.T) {
+	first := formed(t, tfdomain.ObjectHandedOver, "parcel-1", "v1")
+	second := corrected(t, first, tfdomain.ObjectHandedOver, "v2")
+	third := corrected(t, second, tfdomain.HandoverRefused, "v3")
+	separate := formed(t, tfdomain.ObjectHandedOver, "parcel-1", "w1")
+	reader := newReader(first, second, third, separate)
+
+	answer, found, err := find(t, reader, "parcel-1", "v3")
+	if err != nil || !found {
+		t.Fatalf("found=%v err=%v", found, err)
+	}
+	if got := earlierVersionsOf(answer); len(got) != 2 ||
+		got[0] != "parcel-1|handover-scope-1|v2" || got[1] != "parcel-1|handover-scope-1|v1" {
+		t.Fatalf("前版 = %v, want v2、v1", got)
+	}
+	for version, want := range map[string]int{"v1": 0, "w1": 0, "v2": 1} {
+		answer, _, err := find(t, reader, "parcel-1", version)
+		if err != nil || len(answer.Earlier) != want {
+			t.Fatalf("%s 的前版 = %v err=%v, want %d 版", version, earlierVersionsOf(answer), err, want)
+		}
+	}
+}
+
+// Covers: `AT-NO-128`（ADR-0220、ADR-0029 的分格）——上溯时回指的那一版读不动：包 ErrAuthoritativeHandoverUnreadable，编排答未决、
+// 重投；读不回、读回的与键不符、回指成环：提供方仓储坏了，ErrHandoverRecordInconsistent，不当未决。
+func TestWalkingBackSortsFailuresByRecovery(t *testing.T) {
+	first := formed(t, tfdomain.ObjectHandedOver, "parcel-1", "v1")
+	second := corrected(t, first, tfdomain.ObjectHandedOver, "v2")
+
+	unreadable := newReader(first, second)
+	unreadable.findErrFor = map[tfports.TransportHandoverKey]error{keyOf(first): errors.New("connection reset")}
+	if _, _, err := find(t, unreadable, "parcel-1", "v2"); !errors.Is(err, ports.ErrAuthoritativeHandoverUnreadable) {
+		t.Fatalf("前版读不动 err = %v, want ErrAuthoritativeHandoverUnreadable", err)
+	}
+
+	missing := newReader(second)
+	wrongKey := newReader(second)
+	stray := formed(t, tfdomain.ObjectHandedOver, "parcel-9", "v1")
+	wrongKey.records[keyOf(first)] = tfports.TransportHandoverRecord{Key: keyOf(stray), Handover: stray, RecordedAt: handedOverAt}
+	looping := newReader(second)
+	backwards := corrected(t, formed(t, tfdomain.ObjectHandedOver, "parcel-1", "v2"), tfdomain.ObjectHandedOver, "v1")
+	looping.records[keyOf(backwards)] = tfports.TransportHandoverRecord{Key: keyOf(backwards), Handover: backwards, RecordedAt: handedOverAt}
+	for name, reader := range map[string]*readerDouble{"前版读不回": missing, "前版与键不符": wrongKey, "回指成环": looping} {
+		if _, _, err := find(t, reader, "parcel-1", "v2"); !errors.Is(err, adapter.ErrHandoverRecordInconsistent) {
+			t.Fatalf("%s：err = %v, want ErrHandoverRecordInconsistent", name, err)
+		}
+	}
+}
+
 // noUnitResolver 与 recordingRegister 是处理方那一条用例给编排的最小替身：对象认不出任何作业实物，转移册在内存里记行。
 type noUnitResolver struct{}
 
@@ -195,7 +282,7 @@ func (register *recordingRegister) FindTransition(
 }
 
 func (register *recordingRegister) FindAdvancedInHandoverChain(
-	context.Context, nodomain.TenantID, nodomain.AuthoritativeHandoverReference, nodomain.ControlTransitionDirection,
+	context.Context, nodomain.TenantID, nodomain.HandoverCorrectionChain, nodomain.ControlTransitionDirection,
 ) (ports.ControlTransitionRecord, bool, error) {
 	return ports.ControlTransitionRecord{}, false, nil
 }

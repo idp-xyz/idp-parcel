@@ -10,8 +10,8 @@ import (
 var ErrInvalidControlTransition = errors.New("node operations: invalid control transition")
 
 // AuthoritativeHandoverReference 指名 transport-fulfillment 的一版权威运输交接：载运对象、交接范围与结果版本，三格都是 TF 的引用。
-// 本上下文不解析它们：对象是正式包裹身份还是集运单元，由本上下文自己的册子认（ADR-0214 决定二）；版本只用来认重放与更正链。TF 的
-// 更正保留对象与范围、只换版本，所以同一（对象，范围）下的各版是一条更正链。
+// 本上下文不解析它们：对象是正式包裹身份还是集运单元，由本上下文自己的册子认（ADR-0214 决定二）；版本只用来认重放。哪几版是一条
+// 更正链由 TF 的更正回指定（HandoverCorrectionChain，ADR-0220），同一（对象，范围）下的两版不因此就是一条链。
 type AuthoritativeHandoverReference struct {
 	object  requiredValue
 	scope   requiredValue
@@ -44,11 +44,6 @@ func (reference AuthoritativeHandoverReference) Scope() string {
 
 func (reference AuthoritativeHandoverReference) Version() string {
 	return reference.version.String()
-}
-
-// SameChain 报告两版是不是同一条更正链上的：对象与范围相同。
-func (reference AuthoritativeHandoverReference) SameChain(other AuthoritativeHandoverReference) bool {
-	return reference.object == other.object && reference.scope == other.scope
 }
 
 func (reference AuthoritativeHandoverReference) valid() bool {
@@ -428,16 +423,18 @@ func ObjectNotResolved(
 	return notAdvanced(tenant, handover, direction, reason, HandlingUnitID{}, PhysicalControl{}, at)
 }
 
-// PendingControlSourceRecompute 入账一版撤回控制的更正（ADR-0214 决定五；转入一侧同此，决定七落地补记）：earlier 是同一条更正链上
-// 先前推进了的那一行，withdrawing 是把它更正成拒收或待确认的这一版，这一行与 earlier 同方向。已转出的控制不回退，转入成立的控制也
-// 不撤；这一行带着先前推进的那一份控制（转出带转出依据，转入带立起时的那一份），留给控制来源链的重算。
+// PendingControlSourceRecompute 入账一版撤回控制的更正（ADR-0214 决定五；转入一侧同此，决定七落地补记）：chain 的这一版把它的某一版
+// 前版更正成了拒收或待确认，earlier 是那一版前版先前推进了的那一行，这一行与 earlier 同方向。前版只认 TF 更正回指上溯得到的那几版
+// （ADR-0220）：同一（对象，范围）下另起的一次交接推进过，不是这一版要入账的东西。已转出的控制不回退，转入成立的控制也不撤；这一行
+// 带着先前推进的那一份控制（转出带转出依据，转入带立起时的那一份），留给控制来源链的重算。
 func PendingControlSourceRecompute(
 	earlier ControlTransition,
-	withdrawing AuthoritativeHandoverReference,
+	chain HandoverCorrectionChain,
 	at time.Time,
 ) (ControlTransition, error) {
+	withdrawing := chain.Head()
 	if (earlier.direction != ControlTransitionOut && earlier.direction != ControlTransitionIn) || earlier.outcome != ControlAdvanced ||
-		!withdrawing.valid() || !earlier.handover.SameChain(withdrawing) || earlier.handover == withdrawing {
+		!chain.valid() || !chain.Holds(earlier.handover) || earlier.handover == withdrawing {
 		return ControlTransition{}, ErrInvalidControlTransition
 	}
 	return notAdvanced(earlier.tenantID, withdrawing, earlier.direction, ControlSourceChainPendingRecompute,

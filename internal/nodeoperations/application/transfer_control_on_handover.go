@@ -187,9 +187,10 @@ func NewTransferControlOnHandoverHandler(deps TransferControlOnHandoverDeps) (*T
 	return &TransferControlOnHandoverHandler{deps: deps}, nil
 }
 
-// transferOut 是转出一半，handover 是 Advance 已读回、已核过键的那一版。各步的次序有讲究：
+// transferOut 是转出一半，handover 是 Advance 已读回、已核过键的那一版，chain 是它与它沿 TF 更正回指上溯的各前版。下文的「同链」
+// 只指这条链（ADR-0220）：同一（对象，范围）下另起的首登推进过，不算前版推进过，也不是这一版要剔掉的东西。各步的次序有讲究：
 //
-//  1. （Advance）读回那一版；读不动或读不回答未决。
+//  1. （Advance）读回那一版与它的各前版；读不动或读不回答未决。
 //  2. 这一版在转出方向上已有一行就交回它：重投与人工补拍都答同一行，这一版此后被更正了也一样——行是它自己落的。
 //  3. 被同链后一版更正了就停：晚到的前版说的已不是这个对象此刻的结果。
 //  4. 不是`已交接`：同链前版转出过就入账「控制来源链待重算」，否则零写入。不取实物锁——这一格不改变任何控制；与前版的先后靠
@@ -202,9 +203,10 @@ func NewTransferControlOnHandoverHandler(deps TransferControlOnHandoverDeps) (*T
 func (handler *TransferControlOnHandoverHandler) transferOut(
 	ctx context.Context,
 	tenant domain.TenantID,
-	reference domain.AuthoritativeHandoverReference,
+	chain domain.HandoverCorrectionChain,
 	handover ports.AuthoritativeHandover,
 ) (TransferControlOnHandoverResult, error) {
+	reference := chain.Head()
 	existing, recorded, err := handler.deps.Controls.FindTransition(ctx, tenant, reference, domain.ControlTransitionOut)
 	if err != nil {
 		return TransferControlOnHandoverResult{}, fmt.Errorf("find the control transition of this handover: %w", err)
@@ -216,7 +218,7 @@ func (handler *TransferControlOnHandoverHandler) transferOut(
 		return TransferControlOnHandoverResult{outcome: HandoverVersionSuperseded}, nil
 	}
 
-	earlier, chained, err := handler.deps.Controls.FindAdvancedInHandoverChain(ctx, tenant, reference, domain.ControlTransitionOut)
+	earlier, chained, err := handler.deps.Controls.FindAdvancedInHandoverChain(ctx, tenant, chain, domain.ControlTransitionOut)
 	if err != nil {
 		return TransferControlOnHandoverResult{}, fmt.Errorf("find an earlier transfer in the handover chain: %w", err)
 	}
@@ -227,7 +229,7 @@ func (handler *TransferControlOnHandoverHandler) transferOut(
 		if !chained {
 			return TransferControlOnHandoverResult{outcome: HandoverDoesNotTransferControl}, nil
 		}
-		pending, err := domain.PendingControlSourceRecompute(earlier.Transition, reference, handover.JudgedAt)
+		pending, err := domain.PendingControlSourceRecompute(earlier.Transition, chain, handover.JudgedAt)
 		if err != nil {
 			return TransferControlOnHandoverResult{}, fmt.Errorf("record the control source chain pending recompute: %w", err)
 		}
@@ -254,7 +256,7 @@ func (handler *TransferControlOnHandoverHandler) transferOut(
 		return TransferControlOnHandoverResult{}, fmt.Errorf("find the active controls of the handed over unit: %w", err)
 	}
 	if earlier, chained, err := handler.deps.Controls.FindAdvancedInHandoverChain(
-		ctx, tenant, reference, domain.ControlTransitionOut); err != nil {
+		ctx, tenant, chain, domain.ControlTransitionOut); err != nil {
 		return TransferControlOnHandoverResult{}, fmt.Errorf("find an earlier transfer in the handover chain under the unit lock: %w", err)
 	} else if chained && earlier.Transition.Handover() == reference {
 		return TransferControlOnHandoverResult{outcome: ControlTransitionAlreadyRecorded, transition: earlier}, nil
@@ -262,9 +264,10 @@ func (handler *TransferControlOnHandoverHandler) transferOut(
 		return TransferControlOnHandoverResult{outcome: ControlAlreadyTransferredInChain}, nil
 	}
 	// 一次交接不结束它自己立起的控制：同链前版在接收节点立过控制、这一版是仍`已交接`的更正时，那一份是这次交接的结果，不是它要交出的
-	// 东西。不剔掉它，前版转出没推进（例如实物当时没有在身控制）的更正链就会把前版刚立起的控制转出去。
+	// 东西。不剔掉它，前版转出没推进（例如实物当时没有在身控制）的更正链就会把前版刚立起的控制转出去。同一（对象，范围）下另起的一次
+	// 交接立起的控制不在剔除之列：先交进节点、再从同一节点交出，范围写成同一个也是两次交接，后一次正该转出前一次立起的那一份。
 	if inbound, established, err := handler.deps.Controls.FindAdvancedInHandoverChain(
-		ctx, tenant, reference, domain.ControlTransitionIn); err != nil {
+		ctx, tenant, chain, domain.ControlTransitionIn); err != nil {
 		return TransferControlOnHandoverResult{}, fmt.Errorf("find the control this handover chain established: %w", err)
 	} else if established {
 		active = withoutControlOf(active, inbound.Transition)

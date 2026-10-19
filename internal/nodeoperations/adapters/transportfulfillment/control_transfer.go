@@ -20,7 +20,8 @@ import (
 var (
 	// ErrUntranslatableAnswer 语义与其他消费方适配器的同名哨兵一致：引用或取值译不成本上下文的值，不是等谁。
 	ErrUntranslatableAnswer = errors.New("node operations transportfulfillment adapter: untranslatable answer")
-	// ErrHandoverRecordInconsistent 说明按键读回的登记指着另一个键，或业务时间为零：提供方的仓储不变量已破（ADR-0029），不是等谁。
+	// ErrHandoverRecordInconsistent 说明按键读回的登记指着另一个键、业务时间为零，或更正回指连不成一条链（回指的前版读不回、回指
+	// 成环）：提供方的仓储不变量已破（ADR-0029），不是等谁。
 	ErrHandoverRecordInconsistent = errors.New("node operations transportfulfillment adapter: transport handover disagrees with its key")
 	// ErrControlTransferUndecided 说明这一拍停在交接登记册上（读不动或还读不回）。重投可能就过；生产装配把它登进
 	// WithUndecidedSentinels，停在哪一口留在错误正文里。
@@ -31,7 +32,7 @@ var (
 )
 
 // TransportHandoverReader 是 TF 交接登记册按键取一版、按前版找后继的那两问，由 TF 的 TransportHandoverRegistry 满足。只读：本适配器
-// 不写 TF 的库。
+// 不写 TF 的库。上溯前版不另要一问：每一版本体上带着它更正的那一版（Corrects），按键再取一次即可。
 type TransportHandoverReader interface {
 	FindByKey(ctx context.Context, key tfports.TransportHandoverKey) (tfports.TransportHandoverRecord, bool, error)
 	FindSuccessor(ctx context.Context, predecessor tfports.TransportHandoverKey) (tfports.TransportHandoverRecord, bool, error)
@@ -51,7 +52,10 @@ func NewAuthoritativeHandoverSource(handovers TransportHandoverReader) (*Authori
 	return &AuthoritativeHandoverSource{handovers: handovers}, nil
 }
 
-// FindAuthoritativeHandover 按（租户，对象，范围，版本）取回那一版，再问它有没有被同链后一版更正。
+// FindAuthoritativeHandover 按（租户，对象，范围，版本）取回那一版，问它有没有被后一版更正，再沿它的更正回指上溯各前版。
+//
+// 链只按 TF 的更正回指认（ADR-0220）：TF 的首登口不问同一（对象，范围）下有没有别的版本，换个版本号就是另一次首登；更正口登记的
+// 那一版才回指前版。按（对象，范围）列出各版当成一条链，就把同一范围下另起的交接认成了更正。
 //
 // 必须带版本读：按三维读「当前版」会把更正与原判断叠成一次查找，晚到的前版就会被当成后一版处理。转出依据只取 TF 给的
 // TransferOutBasis——那一格只有`已交接`给得出，拒收与待确认在源头就没有转出引用。对象只当不透明的引用传下去，它是包裹还是集运单元
@@ -75,8 +79,7 @@ func (source *AuthoritativeHandoverSource) FindAuthoritativeHandover(
 		return ports.AuthoritativeHandover{}, false, nil
 	}
 	handover := record.Handover
-	if record.Key != key || handover.TenantID() != key.TenantID || handover.Object() != key.Object ||
-		handover.Scope() != key.Scope || handover.Version() != key.Version || handover.JudgedAt().IsZero() {
+	if !consistentWith(record, key) {
 		return ports.AuthoritativeHandover{}, false, fmt.Errorf("%w: object %q scope %q version %q",
 			ErrHandoverRecordInconsistent, reference.Object(), reference.Scope(), reference.Version())
 	}
@@ -84,10 +87,15 @@ func (source *AuthoritativeHandoverSource) FindAuthoritativeHandover(
 	if err != nil {
 		return ports.AuthoritativeHandover{}, false, fmt.Errorf("%w: successor: %v", ports.ErrAuthoritativeHandoverUnreadable, err)
 	}
+	earlier, err := source.earlierVersions(ctx, key, handover)
+	if err != nil {
+		return ports.AuthoritativeHandover{}, false, err
+	}
 	answer := ports.AuthoritativeHandover{
 		Reference:  reference,
 		JudgedAt:   handover.JudgedAt().UTC().Truncate(time.Microsecond),
 		Superseded: superseded,
+		Earlier:    earlier,
 	}
 	if basis, transfers := handover.TransferOutBasis(); transfers {
 		if answer.TransferOut, err = nodomain.NewTransferOutReference(basis); err != nil {
@@ -106,6 +114,54 @@ func (source *AuthoritativeHandoverSource) FindAuthoritativeHandover(
 		}
 	}
 	return answer, true, nil
+}
+
+// earlierVersions 沿更正回指上溯，交回 handover 之前的各版，近者在前；首登版交回空。
+//
+// TF 的更正只换版本、保留对象与范围，前版的键就是这一版的键换上回指的版本。前版在后版登记那一笔之前已经提交，看得见后版就看得见
+// 前版：读不回、回指成环或读回的与键不符都是提供方的仓储坏了，响亮失败；读不动才是等它，交回未决。
+func (source *AuthoritativeHandoverSource) earlierVersions(
+	ctx context.Context,
+	key tfports.TransportHandoverKey,
+	handover tfdomain.TransportHandover,
+) ([]nodomain.AuthoritativeHandoverReference, error) {
+	earlier := []nodomain.AuthoritativeHandoverReference{}
+	seen := map[tfdomain.HandoverResultVersion]bool{key.Version: true}
+	current := handover
+	for {
+		predecessor, corrects := current.Corrects()
+		if !corrects {
+			return earlier, nil
+		}
+		if seen[predecessor] {
+			return nil, fmt.Errorf("%w: object %q scope %q: correction chain loops back to version %q",
+				ErrHandoverRecordInconsistent, key.Object.String(), key.Scope.String(), predecessor.String())
+		}
+		seen[predecessor] = true
+		predecessorKey := key
+		predecessorKey.Version = predecessor
+		record, found, err := source.handovers.FindByKey(ctx, predecessorKey)
+		if err != nil {
+			return nil, fmt.Errorf("%w: earlier version %q: %v", ports.ErrAuthoritativeHandoverUnreadable, predecessor.String(), err)
+		}
+		if !found || !consistentWith(record, predecessorKey) {
+			return nil, fmt.Errorf("%w: object %q scope %q: corrected version %q is not registered under its key",
+				ErrHandoverRecordInconsistent, key.Object.String(), key.Scope.String(), predecessor.String())
+		}
+		reference, err := nodomain.NewAuthoritativeHandoverReference(key.Object.String(), key.Scope.String(), predecessor.String())
+		if err != nil {
+			return nil, fmt.Errorf("%w: earlier version: %v", ErrUntranslatableAnswer, err)
+		}
+		earlier = append(earlier, reference)
+		current = record.Handover
+	}
+}
+
+// consistentWith 核按键读回的那一版确实是这个键的：登记、本体的四维都与键相同，业务时间在场。
+func consistentWith(record tfports.TransportHandoverRecord, key tfports.TransportHandoverKey) bool {
+	handover := record.Handover
+	return record.Key == key && handover.TenantID() == key.TenantID && handover.Object() == key.Object &&
+		handover.Scope() == key.Scope && handover.Version() == key.Version && !handover.JudgedAt().IsZero()
 }
 
 func handoverKeyFor(tenant nodomain.TenantID, reference nodomain.AuthoritativeHandoverReference) (tfports.TransportHandoverKey, error) {

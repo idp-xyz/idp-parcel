@@ -118,6 +118,20 @@ func controlHandover(t *testing.T, object, version string) domain.AuthoritativeH
 	return reference
 }
 
+// controlChain 立 SYN-PARCEL-61 在 SYN-SCOPE-61 下的一条更正链：head 是这一版，earlier 是它沿 TF 更正回指上溯的各前版，近者在前。
+func controlChain(t *testing.T, head string, earlier ...string) domain.HandoverCorrectionChain {
+	t.Helper()
+	predecessors := make([]domain.AuthoritativeHandoverReference, 0, len(earlier))
+	for _, version := range earlier {
+		predecessors = append(predecessors, controlHandover(t, "SYN-PARCEL-61", version))
+	}
+	chain, err := domain.NewHandoverCorrectionChain(controlHandover(t, "SYN-PARCEL-61", head), predecessors...)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return chain
+}
+
 // activeControls 在一笔事务里读一件实物此刻在身的各份控制。
 func (fixture *controlFixture) activeControls(t *testing.T, unit string) []domain.PhysicalControl {
 	t.Helper()
@@ -213,9 +227,9 @@ func TestTransitionsAreKeyedByHandoverAndAControlIsReleasedOnce(t *testing.T) {
 	if err != nil || !found || read.Transition != written.Transition || !read.RecordedAt.Equal(written.RecordedAt) {
 		t.Fatalf("读回 = %+v found=%v err=%v", read, found, err)
 	}
-	chained, found, err := fixture.transitions.FindAdvancedInHandoverChain(t.Context(), tenant, controlHandover(t, "SYN-PARCEL-61", "v7"), domain.ControlTransitionOut)
+	chained, found, err := fixture.transitions.FindAdvancedInHandoverChain(t.Context(), tenant, controlChain(t, "v7", "v1"), domain.ControlTransitionOut)
 	if err != nil || !found || chained.Transition != written.Transition {
-		t.Fatalf("同链任一版都该认得出这次转出：found=%v err=%v", found, err)
+		t.Fatalf("回指 v1 的 v7 该认得出 v1 那次转出：found=%v err=%v", found, err)
 	}
 
 	var again ports.ControlTransitionSaveOutcome
@@ -445,6 +459,35 @@ func TestTheTransferOutWaitsOnTheReceptionUnitLock(t *testing.T) {
 	}
 }
 
+// Covers: `AT-NO-126` 的存储面（ADR-0220）——认链只认交来的那几版：同一（对象，范围）下两次首登各转出一份控制，范围下于是有两行
+// 推进了的转出；各自的链只认得出自己那一行，回指 v1 的更正认得出 v1 那一行，不因范围相同读成「一条链推进过两次」。
+func TestTheChainLookupReadsOnlyTheVersionsOfTheChain(t *testing.T) {
+	fixture := newControlFixture(t)
+	fixture.save(t, intakeWithControl(t, "SYN-SRC-61-P", "SYN-HU-61", "SYN-NODE-SHA-HUB", "SYN-INTAKEV-61-P", "SYN-PARCEL-61", "", "SYN-INTAKEV-61-P"))
+	first := fixture.transferOut(t, "SYN-HU-61", "v1")
+	fixture.save(t, intakeWithControl(t, "SYN-SRC-61-Q", "SYN-HU-61", "SYN-NODE-SZX-GATE", "SYN-INTAKEV-61-Q", "SYN-PARCEL-61", "", "SYN-INTAKEV-61-Q"))
+	separate := fixture.transferOut(t, "SYN-HU-61", "w1")
+	if separate.Transition.Outcome() != domain.ControlAdvanced {
+		t.Fatalf("同一范围下另起的首登 = %s, want 转出了深圳那一份", separate.Transition.Outcome())
+	}
+	tenant := ref(t, domain.NewTenantID, controlTenant)
+
+	for name, probe := range map[string]struct {
+		chain domain.HandoverCorrectionChain
+		want  ports.ControlTransitionRecord
+		found bool
+	}{
+		"另起的首登只认得出自己": {chain: controlChain(t, "w1"), want: separate, found: true},
+		"回指 v1 的更正":   {chain: controlChain(t, "v2", "v1"), want: first, found: true},
+		"不回指任何一版的首登":  {chain: controlChain(t, "v8"), found: false},
+	} {
+		got, found, err := fixture.transitions.FindAdvancedInHandoverChain(t.Context(), tenant, probe.chain, domain.ControlTransitionOut)
+		if err != nil || found != probe.found || (found && got.Transition != probe.want.Transition) {
+			t.Fatalf("%s：found=%v err=%v 读到 %+v", name, found, err, got.Transition.Handover())
+		}
+	}
+}
+
 // Covers: `AT-NO-112` 的存储面（ADR-0214 决定三、五）——转移册照行上列：转出与入账不推进同册，新近记录在前；不在场的格读成空、时刻
 // 读成 nil，不编造。
 func TestTheControlTransitionRegisterIsListed(t *testing.T) {
@@ -452,7 +495,7 @@ func TestTheControlTransitionRegisterIsListed(t *testing.T) {
 	fixture.save(t, intakeWithControl(t, "SYN-SRC-61-J", "SYN-HU-61", "SYN-NODE-SHA-HUB", "SYN-INTAKEV-61-J", "SYN-PARCEL-61", "", "SYN-INTAKEV-61-J"))
 	advanced := fixture.transferOut(t, "SYN-HU-61", "v1")
 	tenant := ref(t, domain.NewTenantID, controlTenant)
-	pending, err := domain.PendingControlSourceRecompute(advanced.Transition, controlHandover(t, "SYN-PARCEL-61", "v2"), controlHandedOverAt)
+	pending, err := domain.PendingControlSourceRecompute(advanced.Transition, controlChain(t, "v2", "v1"), controlHandedOverAt)
 	if err != nil {
 		t.Fatal(err)
 	}

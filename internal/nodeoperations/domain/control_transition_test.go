@@ -22,6 +22,20 @@ func handoverRef(t *testing.T, version string) domain.AuthoritativeHandoverRefer
 	return reference
 }
 
+// correctionChain 立一条更正链：head 是这一版，earlier 是它沿更正回指上溯的各前版，近者在前。
+func correctionChain(t *testing.T, head string, earlier ...string) domain.HandoverCorrectionChain {
+	t.Helper()
+	predecessors := make([]domain.AuthoritativeHandoverReference, 0, len(earlier))
+	for _, version := range earlier {
+		predecessors = append(predecessors, handoverRef(t, version))
+	}
+	chain, err := domain.NewHandoverCorrectionChain(handoverRef(t, head), predecessors...)
+	if err != nil {
+		t.Fatalf("更正链：%v", err)
+	}
+	return chain
+}
+
 func activeControl(t *testing.T, basis string, at time.Time) domain.PhysicalControl {
 	t.Helper()
 	spec := controlSpec(t, domain.EstablishedByNodeIntake, "unit-1")
@@ -132,12 +146,12 @@ func TestUnresolvedObjectsAreRecordedWithoutAUnit(t *testing.T) {
 	}
 }
 
-// Covers: `AT-NO-109` 的领域面（ADR-0214 决定五）——撤回控制的更正带着先前那次转出入账「控制来源链待重算」，控制不回退；只认同一条
-// 更正链上推进了的转出。
+// Covers: `AT-NO-109` 的领域面（ADR-0214 决定五）、`AT-NO-127` 的领域面（ADR-0220）——撤回控制的更正带着先前那次转出入账「控制
+// 来源链待重算」，控制不回退；只认这一版沿更正回指上溯得到的前版推进了的转出，同一（对象，范围）下另起的首登不算。
 func TestAWithdrawingCorrectionRecordsThePendingRecompute(t *testing.T) {
 	earlier := judgeOut(t, []domain.PhysicalControl{activeControl(t, "NODE-INTAKE/v-1", controlAt)}, handedOverAt)
 
-	pending, err := domain.PendingControlSourceRecompute(earlier, handoverRef(t, "v2"), handedOverAt)
+	pending, err := domain.PendingControlSourceRecompute(earlier, correctionChain(t, "v2", "v1"), handedOverAt)
 	if err != nil {
 		t.Fatalf("pending recompute: %v", err)
 	}
@@ -151,15 +165,26 @@ func TestAWithdrawingCorrectionRecordsThePendingRecompute(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	otherScope, err := domain.NewHandoverCorrectionChain(other)
+	if err != nil {
+		t.Fatal(err)
+	}
 	notAdvanced := judgeOut(t, nil, handedOverAt)
 	for name, attempt := range map[string]func() error{
-		"另一条链": func() error { _, err := domain.PendingControlSourceRecompute(earlier, other, handedOverAt); return err },
+		"另一范围": func() error {
+			_, err := domain.PendingControlSourceRecompute(earlier, otherScope, handedOverAt)
+			return err
+		},
+		"同一范围下另起的首登": func() error {
+			_, err := domain.PendingControlSourceRecompute(earlier, correctionChain(t, "v2"), handedOverAt)
+			return err
+		},
 		"同一版": func() error {
-			_, err := domain.PendingControlSourceRecompute(earlier, handoverRef(t, "v1"), handedOverAt)
+			_, err := domain.PendingControlSourceRecompute(earlier, correctionChain(t, "v1"), handedOverAt)
 			return err
 		},
 		"前版没推进过": func() error {
-			_, err := domain.PendingControlSourceRecompute(notAdvanced, handoverRef(t, "v2"), handedOverAt)
+			_, err := domain.PendingControlSourceRecompute(notAdvanced, correctionChain(t, "v2", "v1"), handedOverAt)
 			return err
 		},
 	} {

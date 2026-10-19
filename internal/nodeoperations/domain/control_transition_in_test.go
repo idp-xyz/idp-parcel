@@ -206,7 +206,7 @@ func TestAMismatchedReleasingNodeIsNotedOnTheTransfer(t *testing.T) {
 func TestAWithdrawingCorrectionOfATransferInRecordsThePendingRecompute(t *testing.T) {
 	earlier := judgeIn(t, nil, handedOverAt)
 
-	pending, err := domain.PendingControlSourceRecompute(earlier, handoverRef(t, "v2"), handedOverAt)
+	pending, err := domain.PendingControlSourceRecompute(earlier, correctionChain(t, "v2", "v1"), handedOverAt)
 	if err != nil {
 		t.Fatalf("pending recompute: %v", err)
 	}

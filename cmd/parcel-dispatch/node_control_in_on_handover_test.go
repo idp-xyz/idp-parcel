@@ -45,26 +45,15 @@ func declaredHandover(parcel, scope, version, releasing, receiving, onward strin
 	}
 }
 
-// registerDeclared 经 TF 生产登记编排登一次交接：声明了交出节点的`已交接`带一份问过关务的交出门禁读数（意图照声明，去向在场就带
-// 上），其余不带。读数取「不受门禁」，只要登记过得去：交出门禁归 ADR-0213 决定四，不是本文件要证的。
+// registerDeclared 经 TF 生产登记编排登一次交接：声明了交出节点的`已交接`带一份问过关务的交出门禁读数（见 declaredGateReading），其余
+// 不带。
 func registerDeclared(t *testing.T, db *bentopg.DB, store *outbox.Store, command tfapplication.RegisterTransportHandoverCommand) {
 	t.Helper()
 	command.TenantID = mustTF(t, tfdomain.NewTenantID, nodeControlTenant)
 	register := newHandoverRegistration(t, db, store)
 	var reading tfdomain.HandoverGateReading
 	if command.ReleasingNode != "" {
-		finding, err := tfdomain.NewGateFinding(mustTF(t, tfdomain.NewCarriedObjectReference, command.Object), tfdomain.GateNotGuarded,
-			"AADJ-"+command.Object, []tfdomain.GateBasis{{Action: "CROSS_CUSTOMS_MOVEMENT", Cause: "CUSTOMS_SCOPE_UNRESOLVED", Sources: []string{"SYN-SOURCE-62"}}})
-		if err != nil {
-			t.Fatalf("交出门禁那一格：%v", err)
-		}
-		spec := tfdomain.HandoverGateReadingSpec{Node: mustTF(t, tfdomain.NewNetworkNodeReference, command.ReleasingNode), Finding: finding}
-		if command.OnwardNode != "" {
-			spec.Onward = mustTF(t, tfdomain.NewNetworkNodeReference, command.OnwardNode)
-		}
-		if reading, err = tfdomain.FormHandoverGateReading(spec); err != nil {
-			t.Fatalf("交出门禁读数：%v", err)
-		}
+		reading = declaredGateReading(t, command.Object, command.ReleasingNode, command.OnwardNode)
 	}
 	var result tfapplication.RegisterTransportHandoverResult
 	mustWithinTX(t, db.Transactor(), t.Context(), func(txCtx context.Context) error {
@@ -75,6 +64,26 @@ func registerDeclared(t *testing.T, db *bentopg.DB, store *outbox.Store, command
 	if result.Outcome() != tfapplication.HandoverRegistered {
 		t.Fatalf("登记交接 %s：%s", command.Version, result.Outcome())
 	}
+}
+
+// declaredGateReading 是一份问过关务的交出门禁读数：意图照声明的交出节点，去向在场就带上。读数取「不受门禁」，只要登记过得去：交出
+// 门禁归 ADR-0213 决定四，不是这几份用例要证的。
+func declaredGateReading(t *testing.T, object, releasing, onward string) tfdomain.HandoverGateReading {
+	t.Helper()
+	finding, err := tfdomain.NewGateFinding(mustTF(t, tfdomain.NewCarriedObjectReference, object), tfdomain.GateNotGuarded,
+		"AADJ-"+object, []tfdomain.GateBasis{{Action: "CROSS_CUSTOMS_MOVEMENT", Cause: "CUSTOMS_SCOPE_UNRESOLVED", Sources: []string{"SYN-SOURCE-62"}}})
+	if err != nil {
+		t.Fatalf("交出门禁那一格：%v", err)
+	}
+	spec := tfdomain.HandoverGateReadingSpec{Node: mustTF(t, tfdomain.NewNetworkNodeReference, releasing), Finding: finding}
+	if onward != "" {
+		spec.Onward = mustTF(t, tfdomain.NewNetworkNodeReference, onward)
+	}
+	reading, err := tfdomain.FormHandoverGateReading(spec)
+	if err != nil {
+		t.Fatalf("交出门禁读数：%v", err)
+	}
+	return reading
 }
 
 func controlTransitionsOf(t *testing.T, db *bentopg.DB, version string) map[string]noports.PhysicalControlTransitionCatalogueRow {

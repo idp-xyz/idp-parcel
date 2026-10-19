@@ -38,7 +38,8 @@ func (result AdvanceControlOnHandoverResult) Disposition() ControlOnHandoverDisp
 	}
 }
 
-// Advance 跑一版交接：读回一次，先转出、后转入（ADR-0214 决定四、七）。
+// Advance 跑一版交接：读回一次，先转出、后转入（ADR-0214 决定四、七）。两半认同一条更正链：这一版与交接来源按 TF 更正回指给出的
+// 各前版（ADR-0220）。来源给的前版连不成一条链，是它的缺陷，不是等谁，响亮失败。
 //
 // 先转出是因为节点之间直接交接时同一版既声明交出节点又声明接收节点：交出节点那一份控制先结束，接收节点才立得起控制，否则转入会读到
 // 它仍在身而停在「仍有在身控制」。两半同在消费门那一笔事务里，实物锁可重入，转入读得到转出刚落的那一行。
@@ -63,11 +64,16 @@ func (handler *TransferControlOnHandoverHandler) Advance(
 		return AdvanceControlOnHandoverResult{}, fmt.Errorf(
 			"node operations: handover source answered version %q for %q", handover.Reference.Version(), reference.Version())
 	}
-	out, err := handler.transferOut(ctx, tenant, reference, handover)
+	chain, err := domain.NewHandoverCorrectionChain(reference, handover.Earlier...)
+	if err != nil {
+		return AdvanceControlOnHandoverResult{}, fmt.Errorf(
+			"node operations: handover source answered earlier versions of %q that are not its correction chain: %w", reference.Version(), err)
+	}
+	out, err := handler.transferOut(ctx, tenant, chain, handover)
 	if err != nil {
 		return AdvanceControlOnHandoverResult{}, err
 	}
-	in, err := handler.establishIn(ctx, tenant, reference, handover)
+	in, err := handler.establishIn(ctx, tenant, chain, handover)
 	if err != nil {
 		return AdvanceControlOnHandoverResult{}, err
 	}
@@ -85,9 +91,10 @@ func (handler *TransferControlOnHandoverHandler) Advance(
 func (handler *TransferControlOnHandoverHandler) establishIn(
 	ctx context.Context,
 	tenant domain.TenantID,
-	reference domain.AuthoritativeHandoverReference,
+	chain domain.HandoverCorrectionChain,
 	handover ports.AuthoritativeHandover,
 ) (TransferControlOnHandoverResult, error) {
+	reference := chain.Head()
 	if handover.ReceivingNode == (domain.NodeReference{}) {
 		return TransferControlOnHandoverResult{outcome: HandoverDeclaresNoReceivingNode}, nil
 	}
@@ -102,7 +109,7 @@ func (handler *TransferControlOnHandoverHandler) establishIn(
 		return TransferControlOnHandoverResult{outcome: HandoverVersionSuperseded}, nil
 	}
 
-	earlier, chained, err := handler.deps.Controls.FindAdvancedInHandoverChain(ctx, tenant, reference, domain.ControlTransitionIn)
+	earlier, chained, err := handler.deps.Controls.FindAdvancedInHandoverChain(ctx, tenant, chain, domain.ControlTransitionIn)
 	if err != nil {
 		return TransferControlOnHandoverResult{}, fmt.Errorf("find an earlier transfer in in the handover chain: %w", err)
 	}
@@ -113,7 +120,7 @@ func (handler *TransferControlOnHandoverHandler) establishIn(
 		if !chained {
 			return TransferControlOnHandoverResult{outcome: HandoverDoesNotTransferControl}, nil
 		}
-		pending, err := domain.PendingControlSourceRecompute(earlier.Transition, reference, handover.JudgedAt)
+		pending, err := domain.PendingControlSourceRecompute(earlier.Transition, chain, handover.JudgedAt)
 		if err != nil {
 			return TransferControlOnHandoverResult{}, fmt.Errorf("record the control source chain pending recompute in: %w", err)
 		}
@@ -140,7 +147,7 @@ func (handler *TransferControlOnHandoverHandler) establishIn(
 		return TransferControlOnHandoverResult{}, fmt.Errorf("find the controls of the handed in unit: %w", err)
 	}
 	if earlier, chained, err := handler.deps.Controls.FindAdvancedInHandoverChain(
-		ctx, tenant, reference, domain.ControlTransitionIn); err != nil {
+		ctx, tenant, chain, domain.ControlTransitionIn); err != nil {
 		return TransferControlOnHandoverResult{}, fmt.Errorf("find an earlier transfer in in the handover chain under the unit lock: %w", err)
 	} else if chained && earlier.Transition.Handover() == reference {
 		return TransferControlOnHandoverResult{outcome: ControlTransitionAlreadyRecorded, transition: earlier}, nil
