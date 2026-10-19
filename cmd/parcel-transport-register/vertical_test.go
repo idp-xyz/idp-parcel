@@ -33,8 +33,8 @@ func demoTransportSeedFiles(t *testing.T, kind string) []string {
 	return files
 }
 
-// Covers: 票 demo-chain-gaps/16 演示判据——演示种子照 seed.sh 原样登进真库：三条 SYN 周期安排各答已登记、重跑答已存在；
-// 查阅口的周期安排册列出这三条；按运行日期显式登一个班次答已登记、再登答已存在。夹具全是 SYN 合成值（S 级）。
+// Covers: 票 demo-chain-gaps/16 演示判据——演示种子照 seed.sh 原样登进真库：每份 SYN 周期安排各答已登记、重跑答已存在；
+// 查阅口的周期安排册列出全部；按运行日期显式登一个班次答已登记、再登答已存在。夹具全是 SYN 合成值（S 级）。
 func TestDemoTransportSeedsRegisterOnARealDatabase(t *testing.T) {
 	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {

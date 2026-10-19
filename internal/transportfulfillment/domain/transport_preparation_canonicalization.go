@@ -5,8 +5,8 @@ package domain
 // 版本）不进——它们是键。判断结论与候选不进：结论是这些依据在当时的登记册上判出来的，班次与池此后会变，重投时按原依据
 // 再来就是重放，不因登记册变了而读成冲突；依据本身变了（例如客户更正了申报、提供方答出另一版锚）才是冲突。
 //
-// 新聚合的规范化另立本文件，不进 payload_canonicalization.go（规范化文件的串行令牌，计划「并行车道」）。形状版本仍用
-// TFC-1：本口立形时没有任何已存摘要。
+// 准备结果是新聚合，它的规范化与既有聚合的各立一处，不混进 payload_canonicalization.go。形状版本仍用 TFC-1：本口立形
+// 时没有任何已存摘要（ADR-0014 的规范化版本纪律）。
 func CanonicalizePreparationInput(leg PreparationLeg, demand DemandSnapshot) (string, error) {
 	type quantity struct {
 		Dimension string `json:"dimension"`

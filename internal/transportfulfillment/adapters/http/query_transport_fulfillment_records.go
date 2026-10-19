@@ -584,8 +584,7 @@ type transportPreparationListResponse struct {
 
 // transportPreparationBody 逐字段透出一份运输准备结果（ADR-0201 决定七）。
 //
-// outcome 是五值封闭词（NOT_CONFIGURED / NO_CURRENT_OPPORTUNITY / CAPACITY_UNCONFIRMED / OPPORTUNITY_UNAVAILABLE /
-// OPPORTUNITY_PREPARED），原样透出；selectedSchedule 只在已准备上在场。候选与需求量照判断当时写下的转写：可用量是
+// outcome 是领域那一组封闭词（NOT_CONFIGURED、OPPORTUNITY_PREPARED 等），原样透出；selectedSchedule 只在已准备上在场。候选与需求量照判断当时写下的转写：可用量是
 // 那一刻的，不是此刻的；候选的 version 为 0 即那一班只在评估时物化、没有登记，后续订舱或装载要先登它。需求量缺了哪一维，
 // 那一维就是待补充——不代填零。
 type transportPreparationBody struct {

@@ -1050,8 +1050,8 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: initial route preparation undecided translation: %w", err)
 	}
-	// 先 VE 后 TF：准备读三本册子、可能停在未决，反序会把追踪投影堵在班次册后面；TF 未决重投时 VE 那一路按 inbox 跳过，
-	// 不重复投影。
+	// 沿用路由表先 VE 的惯例。FanOut 各路都会调到、各开各的 inbox 事务，次序不影响入账；TF 未决重投时 VE 那一路按 inbox
+	// 跳过，不重复投影。
 	initialRouteFan, err := dispatch.FanOut(veInitialRouteRouted, tfInitialRouteRouted)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: initial route fan-out: %w", err)
