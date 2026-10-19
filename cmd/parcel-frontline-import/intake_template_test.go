@@ -2,10 +2,13 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"go.idp.xyz/idp-bento-go/eventing"
 
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
@@ -156,6 +159,72 @@ func TestDecodeTemplateRejectsShapeErrors(t *testing.T) {
 			}
 			if !strings.Contains(err.Error(), spec.wants) {
 				t.Fatalf("错误 = %q，要含 %q", err, spec.wants)
+			}
+		})
+	}
+}
+
+// receivedRowIn 是一行能形成收寄的 RECEIVED 行，批次号与行事实号任填。证据号与实物号不随行事实号走：越界或控制字符要在
+// 来源标识上被认出来，不能先在别的格上被拒。
+func receivedRowIn(batchRef, factRef string) string {
+	return "INTAKE-1," + batchRef + "," + factRef + ",SYN-CLERK-A,SYN-NODE-SZX,SYN-CUSTOMER-1,SYN-HU-0001,SYN-MARK-0001,RECEIVED,SYN-RECEIPT-0001,,2026-09-08T09:15:00+08:00\n"
+}
+
+// boundedSourcePrefix 是批次 SYN-BATCH-1 下铸出的来源标识里行事实号之前的那一段。写成字面量：要证的是落库的键多长，
+// 拿被测函数自己拼一遍等于什么都没证。
+const boundedSourcePrefix = "FTI/INTAKE-1/SYN-BATCH-1/"
+
+// factRefFilling 给出一个行事实号，使批次 SYN-BATCH-1 下铸出的来源标识恰好 length 字节。
+func factRefFilling(t *testing.T, length int) string {
+	t.Helper()
+	const head = "SYN-SLIP-"
+	pad := length - len(boundedSourcePrefix) - len(head)
+	if pad < 1 {
+		t.Fatalf("目标长度 %d 装不下前缀", length)
+	}
+	return head + strings.Repeat("9", pad)
+}
+
+// Covers: 票 operator-channel/54 完成判据——铸出的来源标识恰在收寄意图信封的 Subject 上限内照常译装；越过一个字节、批次号或
+// 行事实号带控制字符（单元格内换行算在内）的那一行整批拒，报文点名行号与该改的格。上限取 eventing.MaxSubjectLength，与
+// 设备收寄口同源。
+func TestDecodeTemplateBoundsTheMintedSourceIDByTheIntentEnvelope(t *testing.T) {
+	atLimit := factRefFilling(t, eventing.MaxSubjectLength)
+	batch, err := decodeIntakeTemplate(synTenant(t), []byte(templateHeader+receivedRowIn("SYN-BATCH-1", atLimit)))
+	if err != nil {
+		t.Fatalf("恰在上限内的一行被拒：%v", err)
+	}
+	if got := batch.Rows[0].Command.SourceID; got != boundedSourcePrefix+atLimit || len(got) != eventing.MaxSubjectLength {
+		t.Fatalf("来源标识长 %d 字节，要恰为上限 %d", len(got), eventing.MaxSubjectLength)
+	}
+
+	cases := []struct {
+		name  string
+		row   string
+		wants []string
+	}{
+		{"越过一个字节", receivedRowIn("SYN-BATCH-1", factRefFilling(t, eventing.MaxSubjectLength+1)),
+			[]string{"第 2 行", "batchRef 与 factRef 合起来太长", fmt.Sprintf("%d 字节", eventing.MaxSubjectLength+1), fmt.Sprintf("最多带 %d 字节", eventing.MaxSubjectLength), "请缩短批次号或行事实号"}},
+		{"行事实号带控制字符", receivedRowIn("SYN-BATCH-1", "SYN-SLIP-\a0001"),
+			[]string{"第 2 行", `factRef="SYN-SLIP-\a0001" 带控制字符`, "请删掉批次号或行事实号里的不可见字符"}},
+		{"行事实号带单元格内换行", receivedRowIn("SYN-BATCH-1", "\"SYN-SLIP-\n0001\""),
+			[]string{"第 2 行", `factRef="SYN-SLIP-\n0001" 带控制字符`}},
+		{"批次号带控制字符", receivedRowIn("SYN-BATCH-\x1f1", "SYN-SLIP-0001"),
+			[]string{"第 2 行", `batchRef="SYN-BATCH-\x1f1" 带控制字符`}},
+	}
+	for _, spec := range cases {
+		t.Run(spec.name, func(t *testing.T) {
+			batch, err := decodeIntakeTemplate(synTenant(t), []byte(templateHeader+spec.row))
+			if err == nil {
+				t.Fatalf("应整批拒绝，却译装出来源标识 %q（%d 字节）", batch.Rows[0].Command.SourceID, len(batch.Rows[0].Command.SourceID))
+			}
+			if !errors.Is(err, ErrIntakeTemplate) {
+				t.Fatalf("错误没带 ErrIntakeTemplate：%v", err)
+			}
+			for _, want := range spec.wants {
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("错误 = %q，要含 %q", err, want)
+				}
 			}
 		})
 	}

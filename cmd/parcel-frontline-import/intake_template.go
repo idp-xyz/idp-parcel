@@ -3,6 +3,10 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strings"
+	"unicode"
+
+	"go.idp.xyz/idp-bento-go/eventing"
 
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
@@ -91,6 +95,10 @@ func intakeRowFrom(
 	line int,
 	cell func(string) string,
 ) (intakeRow, error) {
+	sourceID := intakeSourceID(batchRef, factRef)
+	if err := intakeSourceIDCarriable(batchRef, factRef, sourceID); err != nil {
+		return intakeRow{}, err
+	}
 	operator := cell(columnOperator)
 	if operator == "" {
 		return intakeRow{}, fmt.Errorf("%s 为空", columnOperator)
@@ -114,7 +122,7 @@ func intakeRowFrom(
 
 	command := application.ReceiveDeliveredUnitCommand{
 		TenantID:    tenant,
-		SourceID:    intakeSourceID(batchRef, factRef),
+		SourceID:    sourceID,
 		Node:        node,
 		DeliveredBy: deliveredBy,
 		Unit:        unit,
@@ -170,6 +178,31 @@ func intakeRowFrom(
 // 记录方，纸单流水号就是内勤这一侧的那个判断。
 func intakeSourceID(batchRef, factRef string) string {
 	return importMarker(intakeTemplateVersion, batchRef, factRef)
+}
+
+// intakeSourceIDCarriable 核铸出的来源标识进不进得了收寄意图信封。来源标识原样做信封的 Subject（NO 的
+// OutboxNodeIntakeHandoff），越过框架的 eventing.MaxSubjectLength 或带控制字符，信封就被确定性拒收。导入路的编排把入队
+// 失败吞成续办、收寄照常提交，报告让内勤重跑同一文件——可这一行重跑多少次都撞同一道拒收，续办永远续不上。所以在译装时
+// 就按坏行整批拒，让内勤改批次号或行事实号；不动编排吞错那一半，导入路仍要续办。设备收寄口（nodeopshttp 的
+// receptionCommand）按同一个上限拒成坏报文，两口的数都取框架常量，不另写。
+//
+// 判的是铸出的整条标识而不是两格各自的长度：上限压在拼好的那一串上，标记前缀与模板版本也占字节，单看两格判不准。
+func intakeSourceIDCarriable(batchRef, factRef, sourceID string) error {
+	if len(sourceID) > eventing.MaxSubjectLength {
+		return fmt.Errorf("%s 与 %s 合起来太长：拼出的来源标识 %d 字节，收寄意图最多带 %d 字节（%s %d 字节，%s %d 字节）——请缩短批次号或行事实号",
+			columnBatchRef, columnFactRef, len(sourceID), eventing.MaxSubjectLength,
+			columnBatchRef, len(batchRef), columnFactRef, len(factRef))
+	}
+	if strings.IndexFunc(sourceID, unicode.IsControl) < 0 {
+		return nil
+	}
+	// 标识里其余各段是本口自己的常量，控制字符只能来自这两格；点名是哪一格，内勤才知道去改哪一列。
+	column, value := columnFactRef, factRef
+	if strings.IndexFunc(batchRef, unicode.IsControl) >= 0 {
+		column, value = columnBatchRef, batchRef
+	}
+	return fmt.Errorf("%s=%q 带控制字符（单元格内换行、Tab 之类），拼出的来源标识交不出收寄意图——请删掉批次号或行事实号里的不可见字符",
+		column, value)
 }
 
 // intakeEvidence 铸明确接收的证据引用。`ReceptionEvidenceReference` 点名的「受控接收
