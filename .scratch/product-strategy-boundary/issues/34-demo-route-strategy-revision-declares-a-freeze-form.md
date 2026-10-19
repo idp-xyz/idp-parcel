@@ -1,7 +1,7 @@
 # 34 演示租户的路由策略修订声明冻结形态：收寄后的路由复核在演示上越过冻结一格
 
 Category: enhancement
-Status: 完工，待评审与进 main——2026-10-18 Claude Code 会话立并实施（用户「你作为业务和系统专家自决……解决所有的问题」授权），分支 `claude-psb34`。出自演示动线重走（[05](./05-demo-journey-criterion-evidence.md)）。
+Status: resolved——2026-10-18 进 main（至 `dd2793d8`）。2026-10-18 Claude Code 会话立并实施（用户「你作为业务和系统专家自决……解决所有的问题」授权），分支 `claude-psb34`。出自演示动线重走（[05](./05-demo-journey-criterion-evidence.md)）。
 Blocked by: 无（实走要 [routing-first-cut/21](../../routing-first-cut/issues/21-reassessment-after-network-intake-carries-no-geo-projection.md) 先越过 `PLAN_REVIEW_INCONCLUSIVE`；种子本身不依赖它）
 地盘：`scripts/demo-seeds/data/network/` 新增一份行文件；`scripts/demo-seeds/seed.sh` 只加调用行；`scripts/demo-seeds/README.md` 两句；`cmd/parcel-dispatch/reference_network_wiring_test.go` 一条断言。
 出处：network-routing CONTEXT「路由冻结边界」；[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)；[ADR-0150](../../../docs/adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md)；先例：上海枢纽修订 2（`05-node-sha-hub-v2.json`）。
@@ -37,3 +37,8 @@ Blocked by: 无（实走要 [routing-first-cut/21](../../routing-first-cut/issue
 ## 评审记录（2026-10-18，隔离子代理一次过两轴，判 PASS）
 
 非阻断已修：README 组成表与动线第 3 步补上路由策略修订 2；接线用例补一条冻结形态断言，原先只断言排序形态；完成记录的基点不再写死。票 21 的链接随票 21 进 main 已能打开。
+
+## 进 main 记录（2026-10-18）
+
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `7529b5ab`：143 包 ok，0 FAIL，0 SKIP。
+- 之后 rebase 跨过 routing-first-cut/22 与一笔票面文档。22 只动网络路由的初始路由交接与 dispatch 的另一份用例，与本票的种子和接线用例不相交，没重跑全量。快进推到 main：`670a6138..dd2793d8`。机制清点不变。

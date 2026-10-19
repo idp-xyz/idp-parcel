@@ -1,7 +1,7 @@
 # 22 初始路由信封 ID 越过上限：真实标识下交接入不了队，初始路由信封一封也发不出去
 
 Category: bug
-Status: 完工，待评审与进 main——2026-10-18 Claude Code 会话立并实施（用户「你作为业务和系统专家自决……解决所有的问题」授权），分支 `claude-rfc22`。出自演示动线重走（[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)）。
+Status: resolved——2026-10-18 进 main（至 `670a6138`）。2026-10-18 Claude Code 会话立并实施（用户「你作为业务和系统专家自决……解决所有的问题」授权），分支 `claude-rfc22`。出自演示动线重走（[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)）。
 Blocked by: 无
 地盘：`internal/networkrouting/adapters/postgres/initial_route_handoff.go` 与其用例；`cmd/parcel-dispatch/initial_route_projection_test.go` 里照抄信封 ID 的那个助手。
 出处：`outboxintent.FingerprintEventID` 头注（票 sa-cc/34 裁决 2）；ADR-0043；先例 `customsCaseEventID` 与 `customsCasePartitionKey`。
@@ -34,3 +34,8 @@ Blocked by: 无
   - 分区键注释不再照抄先例「由框架校验响亮拒收」：在本口，拒收同样只化成续办引用。
   - 信封 ID 注释不再写别的上下文铸的标识有多长，改引 `FingerprintEventID` 头注的规则。
   - 清扫票的分区键一句改成「分区键不动；原先与 ID 共用一串的取那一串」。
+
+## 进 main 记录（2026-10-18）
+
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `6f178864`：143 包 ok，0 FAIL，0 SKIP。
+- 之后 rebase 跨过 main 上一笔票面文档，没有 Go 改动，没重跑。快进推到 main：`59403e6f..670a6138`。机制清点在钉 `dd2793d8` 的干净树上重生成，没有变化。
