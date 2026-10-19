@@ -522,3 +522,33 @@ func (double *lateAdoptionStore) Save(_ context.Context, _ ports.SegmentCommissi
 	double.landed = true
 	return ports.AdoptionAlreadyRegistered, nil
 }
+
+// Covers: `AT-TF-189`（ADR-0204 决定二、三）——一份已开始的委托再被一个首个参与更早的段采用，开始前移到它；一次申请时刻落在
+// 新旧两个开始之间的订舱，前移之前读作开始之前提出、取消答运输已开始，前移之后读作开始之后为剩余范围提出、取消成立。
+func TestAnEarlierSegmentAdvancesTheStartAndReleasesBookingsForTheRemainingScope(t *testing.T) {
+	fixture := newCommissionAdoptionFixture(t)
+	if result, err := fixture.handler.SubmitBooking(context.Background(), submitBookingCommand(t)); err != nil || result.Outcome() != application.BookingSubmitted {
+		t.Fatalf("submit booking: %q %v", result.Outcome(), err)
+	}
+	if result, err := fixture.adopter.Adopt(context.Background(), adoptCommand("SEG-1", "commission-1", "partner-1")); err != nil || result.Outcome() != application.CommissionAdopted {
+		t.Fatalf("采用 SEG-1 = %q %v", result.Outcome(), err)
+	}
+	if !bookingSentAt.Before(segmentEnteredAt) {
+		t.Fatal("夹具前提：订舱要在 SEG-1 开始之前提出")
+	}
+	if result, err := fixture.handler.CancelBooking(context.Background(), cancelBookingCommand("booking-1", commissionNowAt)); err != nil || result.Outcome() != application.CommissionTransportStarted {
+		t.Fatalf("前移之前取消订舱 = %q %v，want TRANSPORT_ALREADY_STARTED", result.Outcome(), err)
+	}
+
+	earliestAt := bookingSentAt.Add(-10 * time.Minute)
+	fixture.segments.segments["tenant-1|SEG-EARLIEST"] = adoptableSegment(t, "SEG-EARLIEST", earliestAt)
+	if result, err := fixture.adopter.Adopt(context.Background(), adoptCommand("SEG-EARLIEST", "commission-1", "partner-1")); err != nil || result.Outcome() != application.CommissionAdopted {
+		t.Fatalf("采用 SEG-EARLIEST = %q %v", result.Outcome(), err)
+	}
+	if basis, at, started := fixture.storedCommission(t).Commission.TransportStarted(); !started || basis.String() != "TRANSPORT-HANDOVER/SEG-EARLIEST/parcel-1/v1" || !at.Equal(earliestAt) {
+		t.Fatalf("委托的开始 = (%s, %s, %v)，want 前移到 SEG-EARLIEST", basis, at, started)
+	}
+	if result, err := fixture.handler.CancelBooking(context.Background(), cancelBookingCommand("booking-1", commissionNowAt)); err != nil || result.Outcome() != application.BookingCancelled {
+		t.Fatalf("前移之后取消订舱 = %q %v，want BOOKING_CANCELLED", result.Outcome(), err)
+	}
+}

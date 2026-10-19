@@ -135,8 +135,9 @@ func AdoptCommissionForSegment(
 }
 
 // advanceTransportStart 把已开始委托的开始前移到更早的一条控制事实。只给采用用：开始依据只能是某一段的首个参与，别的来源
-// 没有「更早的一条控制事实」可给。前移之后，申请时刻落在新旧两个开始之间的订舱也读作开始时已经提出（CancelBooking 的判据），
-// 与「开始取首个参与、不取登记时刻」同一个理由：开始取得越晚，可取消的范围就凭空越大。
+// 没有「更早的一条控制事实」可给。与「开始取首个参与、不取登记时刻」同一个理由：取消订舱按申请时刻对开始时刻判（CancelBooking），
+// 开始偏晚，运输开始之后为剩余范围提出的订舱就被读作开始之前提出、取消不了；前移之后，申请落在新旧两个开始之间的订舱回到
+// 可取消。
 func (commission TransportCommission) advanceTransportStart(basis ParticipationBasisReference, at time.Time) (TransportCommission, error) {
 	_, startedAt, started := commission.TransportStarted()
 	if !started || !basis.valid() || AtRegistryPrecision(at).IsZero() || at.Before(commission.submittedAt) || !at.Before(startedAt) {
