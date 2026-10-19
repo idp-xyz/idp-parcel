@@ -1,6 +1,6 @@
 # ADR-0142：首方 webhook 是产品自有的出向渠道，属机制半边——订阅绑定在客户渠道册的行上、载荷是契约拥有的投影而不是内部信封、投递由 Outbox → 派发 → 出向渠道消费者承担、至少一次、按事件 ID 幂等、按客户密钥签名、失败预算耗尽即暂停订阅并出声；它是 `NotificationChannelGateway` 在机器接收方上的第一份生产实现，结果层只诚实记到「渠道接受」；`PAR-INT-06` 收窄为「某客户实际启用哪条通知渠道」与既有消息渠道的适配
 
-Status: Proposed（**草案**，2026-09-16。用户经 IDP 队列通道 1 令「按建议继续」，本记录是通道 1 复核所列六件缺项的第三件——「客户 API 今天只有请求-响应；轨迹更新、异常通知、受理结果都该能推；本仓已有 Outbox 与信封机制，缺的只是一份 ADR」。**接受与否归用户**，接受前不是依据。裁决能力边界：读过 [ADR-0139](./0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md)、[ADR-0140](./0140-first-party-api-contract-is-generated-from-endpoint-descriptors-with-url-major-version-and-problem-details.md)、[ADR-0049](./0049-publish-channel-is-in-process-delivery-until-load-evidence.md) 全文，[ADR-0043](./0043-publish-intent-claimed-by-result-identity.md) 与 [ADR-0072](./0072-access-channel-capability-is-shared-and-registry-shape-awaits-channel-evidence.md) 的 Decision，`internal/platform/dispatch/direct_publisher.go` 全文，`internal/visibilityexception/ports/ports.go` 里 `CustomerViewHandoff`、`NotificationChannelGateway`、`NotificationHandoff` 三个口与其注释，[UC-VE-006](../application/visibility-exception/UC-VE-006-FORM-CUSTOMER-DISCLOSURE-AND-NOTIFICATION.md) 的结果层与 `AT-VE-103..105`，[参数登记册](../product/PILOT-PARAMETER-REGISTER.md)的 `PAR-INT-06` 行，[开发主线](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)机制半边现状里 PN-06 那句「通知网关等真实渠道凭证」；未重读 VE CONTEXT 全文、未重读各上下文 `Outbox*Handoff` 的信封内容、未核对 `eventing.Envelope` 的全部字段——本记录因此只裁**出向渠道的归属、订阅模型、投递语义与结果层的诚实映射**，不裁 v1 事件目录的内容、不裁任何事件载荷的字段、不裁重试节奏的取值）
+Status: Accepted（2026-10-19 **修订后接受**：用户在 Claude Code 会话里答「接受」，按会话复核建议修订。修订要点：`PAR-INT-06` 已按 ADR-0146 拆分，本记录是那条注所指的第一种出向连接器形态（Decision 一）；对外事件写成「事件描述符」由 ADR-0140 的生成器收进 `webhooks` 节（Decision 四）；只为声明对外的信封类型登出向路由（Decision 五）；时间窗由接收方定、签名构造与入向签名推送共用一套（Decision 六）；重试节奏随产品发布参考节奏（Decision 七）；VE 通知只有一条入账路（Decision 八）；越权风险点逐条按复核建议处置。此前 Proposed——**草案**，2026-09-16。用户经 IDP 队列通道 1 令「按建议继续」，本记录是通道 1 复核所列六件缺项的第三件——「客户 API 今天只有请求-响应；轨迹更新、异常通知、受理结果都该能推；本仓已有 Outbox 与信封机制，缺的只是一份 ADR」。**接受与否归用户**，接受前不是依据。裁决能力边界：读过 [ADR-0139](./0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md)、[ADR-0140](./0140-first-party-api-contract-is-generated-from-endpoint-descriptors-with-url-major-version-and-problem-details.md)、[ADR-0049](./0049-publish-channel-is-in-process-delivery-until-load-evidence.md) 全文，[ADR-0043](./0043-publish-intent-claimed-by-result-identity.md) 与 [ADR-0072](./0072-access-channel-capability-is-shared-and-registry-shape-awaits-channel-evidence.md) 的 Decision，`internal/platform/dispatch/direct_publisher.go` 全文，`internal/visibilityexception/ports/ports.go` 里 `CustomerViewHandoff`、`NotificationChannelGateway`、`NotificationHandoff` 三个口与其注释，[UC-VE-006](../application/visibility-exception/UC-VE-006-FORM-CUSTOMER-DISCLOSURE-AND-NOTIFICATION.md) 的结果层与 `AT-VE-103..105`，[参数登记册](../product/PILOT-PARAMETER-REGISTER.md)的 `PAR-INT-06` 行，[开发主线](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)机制半边现状里 PN-06 那句「通知网关等真实渠道凭证」；未重读 VE CONTEXT 全文、未重读各上下文 `Outbox*Handoff` 的信封内容、未核对 `eventing.Envelope` 的全部字段——本记录因此只裁**出向渠道的归属、订阅模型、投递语义与结果层的诚实映射**，不裁 v1 事件目录的内容、不裁任何事件载荷的字段、不裁重试节奏的取值）
 Date: 2026-09-16
 
 ## Context
@@ -19,21 +19,21 @@ Date: 2026-09-16
 
 ## Decision
 
-**一、首方 webhook 是产品自有的出向渠道族，属机制半边；`PAR-INT-06` 的适用面收窄为「某客户实际启用哪条通知渠道」与「客户既有消息渠道（邮件、短信、IM、非本产品协议的回调）的适配所需证据」。** 协议、签名密钥形态、订阅绑定模型三件由产品定义，现在就立。`PAR-INT-06` 的登记状态不改，其「已确认约束」（默认人工确认、仅批准范围可自动发布）继续管披露内容，不归本记录；接受本记录时在该行备注加一条指向本记录的引用（同 ADR-0139 对 `PAR-INT-01` 的处置）。
+**一、首方 webhook 是产品自有的出向渠道族，属机制半边；`PAR-INT-06` 的适用面收窄为「某客户实际启用哪条通知渠道」与「客户既有消息渠道（邮件、短信、IM、非本产品协议的回调）的适配所需证据」。** 协议、签名密钥形态、订阅绑定模型三件由产品定义，现在就立。`PAR-INT-06` 的登记状态不改，其「已确认约束」（默认人工确认、仅批准范围可自动发布）继续管披露内容，不归本记录；该行已按 ADR-0146 拆分，行内注写着「本行所列全为租户取值；通知出向连接器形态归产品策略」，本记录就是那条注所指的第一种连接器形态；接受时只把注里的「Proposed」改为已接受。
 
 **二、出向渠道能力落点是 `internal/outboundchannel/`，与 `internal/accessidentity/` 对称：技术能力，不是限界上下文。** 它不进 CONTEXT-MAP、不拥有业务领域语言、没有 `domain` 子包；它拥有**订阅登记册**（谁订了什么、投到哪、用哪把密钥的引用）、**投递账**（每个事件对每个订阅的每次尝试与结果）和**投递执行**（签名、发送、记账、按预算重试）。不归 `platform`：订阅与投递账带（租户，客户账户）隔离语义，ADR-0072 Alternatives 对 `platform` 的界定「技术件不判业务」在此同样守不住。各业务上下文对它一无所知——它们只往 Outbox 写自己的信封，与今天一样。
 
 **三、订阅绑定在客户渠道册的行上，是首方族的一部分。** 一条订阅 =（客户渠道册的一行引用，回调 URL，签名密钥的受控引用，事件类型过滤，生效区间，状态）。订阅**不能**独立于渠道行存在：它继承那一行的（租户，客户账户），一个客户系统只能订到它自己账户下的事件——ADR-0003 的隔离边界在出向这一侧的落法。密钥本体不落库、不进仓库，库里只登受控引用（AGENTS「敏感实例外置」，与 ADR-0139 Decision 二同款）；密钥由产品签发、可轮换，轮换期间新旧两把并存一个窗口，签名头同时携带两把的签名，接收方任一验过即认。订阅的登记走两口：客户系统经首方 API 自助（`/v1/webhook-subscriptions`，挂首方渠道 Intake，走 ADR-0139 的三格）与租户运营经管理台写面（ADR-0085 那一族）；两口消费同一登记用例。
 
-**四、载荷是契约拥有的事件投影，从内部信封翻译，翻译住在 `outboundchannel` 的消费侧适配器里。** 每一种对外事件类型有：稳定的类型名、`schemaVersion`、契约拥有的载荷形状（进 ADR-0140 生成的首方 API 契约的 `webhooks` 节）。翻译器按 `Envelope.Type` 从内部信封产出对外事件，或判定「此类内部事件不对外」。**v1 对外事件目录本记录不定**——哪些内部信封对外、各对外事件的载荷字段，归各上下文 owner 按其用例与 CONTEXT 声明，写成 ADR-0140 的描述符；本记录只定「对外事件一定是翻译出来的投影，不是内部信封本体」。载荷里没有租户维——租户由订阅所属的行决定，客户系统不需要也不该看到它（同 `CustomerViewHandoffIntent` 注释「视图对象没有租户维」的处置）。载荷里带客户账户引用，因为一个客户系统将来可能代多个账户（ADR-0139 风险点 5），事件要说清是谁的。
+**四、载荷是契约拥有的事件投影，从内部信封翻译，翻译住在 `outboundchannel` 的消费侧适配器里。** 每一种对外事件类型有：稳定的类型名、`schemaVersion`、契约拥有的载荷形状（进 ADR-0140 生成的首方 API 契约的 `webhooks` 节）。翻译器按 `Envelope.Type` 从内部信封产出对外事件，或判定「此类内部事件不对外」。**v1 对外事件目录本记录不定**——哪些内部信封对外、各对外事件的载荷字段，归各上下文 owner 按其用例与 CONTEXT 声明，写成**事件描述符**——与翻译器同包，由 ADR-0140 的生成器收进契约的 `webhooks` 节，形状与端点描述符在同一张实施票里定；本记录只定「对外事件一定是翻译出来的投影，不是内部信封本体」。载荷里没有租户维——租户由订阅所属的行决定，客户系统不需要也不该看到它（同 `CustomerViewHandoffIntent` 注释「视图对象没有租户维」的处置）。载荷里带客户账户引用，因为一个客户系统将来可能代多个账户（ADR-0139 风险点 5），事件要说清是谁的。
 
-**五、投递是 Outbox → 派发 → 出向渠道消费者，至少一次，按事件 ID 幂等。** `outboundchannel` 向派发器的路由表注册为一个 `Consumer`（ADR-0049 Decision 三「路由表是显式清单」）：收到内部信封 → 翻译（或判不对外、直接消费成功）→ 找出该事件所属（租户，客户账户）下活跃的订阅 → 为每条订阅落一笔投递账（事件 ID × 订阅 ID 唯一，撞即幂等跳过）→ 消费门事务提交。**发送不在消费门事务里做**：HTTP 调用的时长与结果不确定性进不了一个要提交的事务（ADR-0049 对「消费者慢会吃掉失败预算」的警告在这里更重——接收方是客户的服务器）。投递账落下之后由 `outboundchannel` 自己的投递循环按账逐条发送、记结果、按退避重试。对外事件 ID 从内部信封 ID 派生（ADR-0043：信封 ID 由结果标识认领，重放重发同一份），所以同一业务结果无论内部重投多少次，客户系统看到的是同一个事件 ID——接收方按它幂等，协议文档写明「不假定只到达一次，不假定有序」。
+**五、投递是 Outbox → 派发 → 出向渠道消费者，至少一次，按事件 ID 幂等。** `outboundchannel` 向派发器的路由表注册为一个 `Consumer`（ADR-0049 Decision 三「路由表是显式清单」）：收到内部信封 → 翻译 → 找出该事件所属（租户，客户账户）下活跃的订阅 → 为每条订阅落一笔投递账（事件 ID × 订阅 ID 唯一，撞即幂等跳过）→ 消费门事务提交。只有 v1 事件目录声明对外的信封类型才在路由表登这一路，与该类型既有的消费者经 `dispatch.FanOut` 并列；未声明的类型不登路由，「缺省不对外」由显式路由表在结构上保证。`FanOut` 里任一路失败会让整次 `Publish` 失败，所以出向消费者在消费门里只落投递账这一件更不能放松。**发送不在消费门事务里做**：HTTP 调用的时长与结果不确定性进不了一个要提交的事务（ADR-0049 对「消费者慢会吃掉失败预算」的警告在这里更重——接收方是客户的服务器）。投递账落下之后由 `outboundchannel` 自己的投递循环按账逐条发送、记结果、按退避重试。对外事件 ID 从内部信封 ID 派生（ADR-0043：信封 ID 由结果标识认领，重放重发同一份），所以同一业务结果无论内部重投多少次，客户系统看到的是同一个事件 ID——接收方按它幂等，协议文档写明「不假定只到达一次，不假定有序」。
 
-**六、签名与时间窗。** 每次投递带三个头：事件 ID、发送时间戳、签名。签名是 HMAC-SHA256，原文为「时间戳 + `.` + 原始请求体」，密钥取订阅上受控引用所指的那一把；头里可并列多把密钥的签名（轮换窗口）。接收方按契约文档核签名并拒绝时间戳超出窗口的投递（窗口长度进契约文档，是协议参数不是租户参数）。头名与签名原文的构造照 Standard Webhooks 惯例（`webhook-id` / `webhook-timestamp` / `webhook-signature`），不自造——集成方的通用接收库认得它。不做 mTLS 到接收方、不做接收方 IP 白名单发布，两者列为风险点。
+**六、签名与时间窗。** 每次投递带三个头：事件 ID、发送时间戳、签名。签名是 HMAC-SHA256，原文为「时间戳 + `.` + 原始请求体」，密钥取订阅上受控引用所指的那一把；头里可并列多把密钥的签名（轮换窗口）。接收方按契约文档核签名并拒绝时间戳超出窗口的投递。**窗口由接收方自定**：入向的签名推送同样由接收方定窗口（彼时接收方是本产品，按推送源登记）；契约文档给一个推荐容差，属产品策略，本产品作为发送方不持这个取值。头名与签名原文的构造照 Standard Webhooks 惯例（`webhook-id` / `webhook-timestamp` / `webhook-signature`），不自造——集成方的通用接收库认得它；与入向签名推送（`internal/accessidentity` 的 `signed_push.go`）同一套构造，纯算法件两处共用。不做 mTLS 到接收方、不做接收方 IP 白名单发布，两者列为风险点。
 
-**七、失败预算与暂停要出声。** 一条订阅连续投递失败达到预算（次数与退避序列是 `outboundchannel` 的节奏配置，形状同 `dispatch.Config`：装配方显式给出，不设默认）后进入**已暂停**：不再尝试新事件，既有未送出的事件留在投递账里可查；暂停是订阅状态的一个取值，可由租户运营或客户系统恢复，恢复后按投递账补发暂停期间的事件——**不静默丢**，理由与 ADR-0049「无订阅者即阻塞分区而不是静默丢弃」同一条。一条订阅的失败**不阻塞**其他订阅、不阻塞派发器的分区：消费门在落账那一刻就提交了，发送是它自己的循环。暂停必须出声：管理台的客户渠道页与客户系统自助的订阅查阅面都看得到状态与最近失败。
+**七、失败预算与暂停要出声。** 一条订阅连续投递失败达到预算（次数与退避序列是 `outboundchannel` 的节奏配置，形状同 `dispatch.Config`：装配方显式给出，不设默认；取值属产品策略，随产品发布一份参考节奏供采用，照 [ADR-0147](./0147-reference-configuration-ships-embedded-and-is-adopted-through-ordinary-registration.md) 的参考配置形，不进试点参数登记册）后进入**已暂停**：不再尝试新事件，既有未送出的事件留在投递账里可查；暂停是订阅状态的一个取值，可由租户运营或客户系统恢复，恢复后按投递账补发暂停期间的事件——**不静默丢**，理由与 ADR-0049「无订阅者即阻塞分区而不是静默丢弃」同一条。一条订阅的失败**不阻塞**其他订阅、不阻塞派发器的分区：消费门在落账那一刻就提交了，发送是它自己的循环。暂停必须出声：管理台的客户渠道页与客户系统自助的订阅查阅面都看得到状态与最近失败。
 
-**八、它是 `NotificationChannelGateway` 在机器接收方上的第一份生产实现，结果层只诚实记到「渠道接受」。** VE 的通知编排把 `CustomerNotification` 交给 `SubmitToChannel`；当该客户的通知渠道是首方 webhook 时，实现把通知翻成对外事件、落投递账并返回——这一步对应 `UC-VE-006` 的**提交**层。接收方 2xx 对应**渠道接受**（`AT-VE-103`「只记录接受，不推定送达」）；非 2xx / 超时 / 预算耗尽对应**失败**。**送达与客户确认两层 webhook 观察不到，本记录不为它们造任何推定**：合同若要求送达或确认，通知义务在 webhook 这条渠道上停在「已接受」，`AT-VE-105`「合同要求客户确认但只有送达，通知义务保持待确认」的纪律在此照旧——客户确认若要成立，要靠客户系统调一个确认端点（另一个用例，不在本记录）。接受结果如何回写到 VE 的通知记录（异步、经 VE 自己的入口）归 VE owner，见风险点。
+**八、它是 `NotificationChannelGateway` 在机器接收方上的第一份生产实现，结果层只诚实记到「渠道接受」。** VE 的通知编排把 `CustomerNotification` 交给 `SubmitToChannel`；当该客户的通知渠道是首方 webhook 时，实现把通知翻成对外事件、落投递账并返回——这一步对应 `UC-VE-006` 的**提交**层。接收方 2xx 对应**渠道接受**（`AT-VE-103`「只记录接受，不推定送达」）；非 2xx / 超时 / 预算耗尽对应**失败**。**送达与客户确认两层 webhook 观察不到，本记录不为它们造任何推定**：合同若要求送达或确认，通知义务在 webhook 这条渠道上停在「已接受」，`AT-VE-105`「合同要求客户确认但只有送达，通知义务保持待确认」的纪律在此照旧——客户确认若要成立，要靠客户系统调一个确认端点（另一个用例，不在本记录）。**单一入账路**：VE 通知只经 `SubmitToChannel` 进投递账；`NotificationHandoff` 信封不登出向路由，它的下游是义务台账与升级判断。渠道接受、失败、订阅暂停由 `outboundchannel` 经 Outbox 发内部信封，VE 消费后经自己的入口记节点——不让 VE 读 `outboundchannel` 的表。
 
 **九、不做的，逐条写明。**
 
@@ -41,7 +41,7 @@ Date: 2026-09-16
 - 不在业务事务里同步调用客户系统的 URL——ADR-0043 / ADR-0049 否决「取消 Outbox 在事务里直接调消费者」的理由在此更强。
 - 不为出向引入消息中间件——ADR-0049 的判据「无负载证据不分布」原样成立；投递循环是 `outboundchannel` 自己的进程内循环，与派发器同形。
 - 不替租户预建任何既有消息渠道（邮件、短信、IM）的适配——照 `PAR-INT-06` 原句等证据，到时为那一族立它自己的渠道实现，与首方 webhook 在 `NotificationChannelGateway` 后面并列。
-- 不定 v1 事件目录、不定任何载荷字段、不定重试次数与退避序列的取值、不定时间窗长度的值——各归风险点或配置。
+- 不定 v1 事件目录、不定任何载荷字段、不定重试次数与退避序列的取值——归参考节奏。
 - 不做「客户确认」的回写端点——它是 `UC-VE-006` 客户确认那一层的另一个用例。
 
 ## Consequences
@@ -51,8 +51,9 @@ Date: 2026-09-16
 - 首方 API 契约（ADR-0140）增 `webhooks` 节与 `/v1/webhook-subscriptions` 一族端点；对外文档增「Webhook：订阅、验签、去重、乱序、重试与补偿查询」一章（方案稿对外文档必备项里的「Webhook」一项由此有权威落点）；补偿查询就是既有的 `/customer-tracking-view` 等查阅面，不新造。
 - 管理台增客户渠道页里的订阅子面（状态、最近失败、恢复），走 ADR-0085 写面纪律。
 - 沙箱（ADR-0141）里集成方能收到事件的前提是沙箱里有事实发生——ADR-0141 风险点 4 由此变成实施前必答。
-- 参数登记册：`PAR-INT-06` 行加引用；增行「客户 webhook 订阅」（实例半边：某租户的客户账户 × 回调地址 × 事件过滤 × 区间）。
+- 参数登记册：`PAR-INT-06` 行内注的「Proposed」改为已接受；增行「客户 webhook 订阅」（实例半边：某租户的客户账户 × 回调地址 × 事件过滤 × 区间）。
 - 各上下文 owner 得到一件新工作：声明本上下文哪些内部信封对外、对外载荷长什么样（ADR-0140 描述符）。没有声明的内部事件默认**不对外**——缺省朝拦。
+- 解除 [product-strategy-boundary/11](../../.scratch/product-strategy-boundary/issues/11-ve-eta-triage-disclosure-methods-and-notification-connector.md) 第 1 项（通知出向连接器形态）的阻塞；开发主线「按四项判据重定级」表 PN-06 行的未满足项随实施消掉。
 
 ## Alternatives considered
 
@@ -70,14 +71,24 @@ Date: 2026-09-16
 
 本记录能力边界之外、实施时必须先答的几件：
 
+**复核处置（2026-10-19，Claude Code 会话的复核建议，随用户接受一并认可）**：逐条标在各条之下；标「留待」的仍归 owner 复核，其余 owner 不认可的走 supersede。
+
 1. **v1 对外事件目录**——哪些内部信封对外（委托已接受 / 已拒绝 / 已撤回、包裹终局、客户视图版本、客户可见异常通知……），各上下文 owner 按 CONTEXT 与用例逐个声明并写描述符；未声明即不对外。
+   - **认可**：由各上下文的实施票逐个声明。
 2. **接受结果回写 VE**——接收方 2xx 如何成为 VE 通知记录上的「渠道接受」节点：`outboundchannel` 发一份内部信封由 VE 消费，还是 VE 轮询投递账；归 VE owner，纪律是「不推定送达」。
+   - **复核建议**：经内部信封回 VE（Decision 八）；不让 VE 读 `outboundchannel` 的表，那是跨所有权读表。
 3. **投递循环的进程归属**——挂在 `cmd/parcel-dispatch` 里还是另起进程；影响失败隔离与部署形态，归部署 owner。
-4. **重试节奏与失败预算取值、时间窗长度**——形状同 `dispatch.Config` 不设默认；取值属运营参数，参数登记册增行。
+   - **复核建议**：首发挂 `cmd/parcel-dispatch`，投递循环自有预算；分进程等负载证据。
+4. **重试节奏与失败预算取值**——形状同 `dispatch.Config` 不设默认。
+   - **改**：取值属产品策略，随产品发布参考节奏（Decision 七）；时间窗由接收方定（Decision 六）。
 5. **接收方安全的两件可选项**——mTLS 到接收方、发布本产品的出向 IP 段；集成方常问，本记录不预裁。
+   - **留待，仍归 owner 复核**：首发不做。
 6. **1:N 客户账户下的订阅**——一个 client 代多个账户时订阅按账户还是按 client；随 ADR-0139 风险点 5 一并裁。
+   - **留待，仍归 owner 复核**：随 ADR-0139 风险点 5 的首发 1:1，订阅即按账户。
 7. **沙箱里的事实来源**——ADR-0141 风险点 4；没有它集成方在沙箱里收不到任何事件。
+   - **改**：同 ADR-0141 风险点 4 的复核建议。
 8. **客户确认的回写用例**——`UC-VE-006` 的客户确认层在 webhook 渠道上怎么成立（客户系统调确认端点），另立用例与票。
+   - **留待，仍归 owner 复核**：另立用例。
 
 ## Links
 
@@ -97,3 +108,7 @@ Date: 2026-09-16
 - `internal/platform/dispatch/direct_publisher.go`：`Consumer` 接口与三种不成功各自成格——`outboundchannel` 消费者要接的形状
 - [Standard Webhooks](https://www.standardwebhooks.com/)：签名头与原文构造的惯例来源；[RFC 2104](https://www.rfc-editor.org/rfc/rfc2104.html)：HMAC
 - 来源：IDP 队列通道 1 的复核与用户「按建议继续」指令（2026-09-16）
+- [ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)：`PAR-INT-06` 的拆分与出向连接器形态归产品策略
+- [ADR-0147](./0147-reference-configuration-ships-embedded-and-is-adopted-through-ordinary-registration.md)：参考节奏随产品发布、经普通登记采用
+- [ADR-0149](./0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md)：入向签名推送——签名构造与本记录共用
+- 来源：IDP 队列通道 1 的复核与用户「按建议继续」指令（2026-09-16）；Claude Code 会话复核（2026-10-19），用户在会话里答「接受」，修订后接受
