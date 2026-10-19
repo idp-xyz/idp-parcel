@@ -21,8 +21,10 @@ import (
 const (
 	workFactTenant = "SYN-TENANT-01"
 	// workFactNode 是替身认证方交回的节点；presentedScopeReference 是请求头 Parcel-Work-Scope-Reference 出示的引用。两值刻意不同：
-	// 相同时 Intake 改拿头值铸节点也照样全绿，「节点只来自认证结果」那一格就测不出来。生产上铸造方核过设备的登记范围，
-	// 交回的正是出示的那一格，两值相等；这里让替身答一个别的节点只为测出差别，不是在模拟真实答复。
+	// 相同时 Intake 改拿头值铸节点也照样全绿，「节点只来自认证结果」那一格就测不出来。生产上两值相等：`internal/accessidentity`
+	// 的 WorkFactMinter.MintWorkFact 只在设备登记的作业范围等于出示的那一份时放行，并把出示的作业范围原样装进信封；
+	// `internal/nodeoperations/adapters/accessidentity` 的 WorkFactAuthenticator.AuthenticateNodeReception 再从信封的作业范围
+	// 取节点。这里让替身答一个别的节点只为测出差别，不是在模拟真实答复。
 	workFactNode            = "SYN-NODE-SZX-01"
 	presentedScopeReference = "SYN-NODE-SHA-HUB"
 )
