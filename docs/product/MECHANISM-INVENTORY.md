@@ -6,12 +6,12 @@
 
 | 上下文 | 生产 | 测试 | 应用编排 | postgres 适配器 | 其中 Outbox 投递 | http 适配器 |
 |---|---|---|---|---|---|---|
-| accessidentity | 37 | 37 | 0 | 6 | 0 | 2 |
+| accessidentity | 38 | 38 | 0 | 6 | 0 | 2 |
 | architecture（非业务） | 0 | 14 | 0 | 0 | 0 | 0 |
 | collectionremittance | 23 | 9 | 4 | 6 | 0 | 3 |
 | customscompliance | 119 | 114 | 22 | 47 | 10 | 16 |
 | networkrouting | 80 | 80 | 9 | 14 | 2 | 7 |
-| nodeoperations | 104 | 108 | 14 | 28 | 4 | 15 |
+| nodeoperations | 105 | 110 | 14 | 28 | 4 | 15 |
 | parcelpricing | 133 | 122 | 17 | 16 | 1 | 23 |
 | parcelshipment | 209 | 203 | 20 | 39 | 10 | 19 |
 | partycommercial | 165 | 177 | 13 | 42 | 1 | 38 |
@@ -19,12 +19,12 @@
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 208 | 150 | 34 | 63 | 12 | 9 |
 | transportfulfillment | 231 | 230 | 40 | 45 | 13 | 43 |
-| visibilityexception | 108 | 104 | 12 | 31 | 8 | 11 |
-| **合计** | 1465 | 1390 | 190 | 343 | 62 | 190 |
+| visibilityexception | 110 | 106 | 12 | 31 | 8 | 12 |
+| **合计** | 1469 | 1395 | 190 | 343 | 62 | 191 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 106、测试 214。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 107、测试 217。
 
-## 跨上下文消费缝：48 组，141 个生产文件
+## 跨上下文消费缝：48 组，142 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -69,7 +69,7 @@
 | transportfulfillment | networkrouting | 2 |
 | transportfulfillment | parcelshipment | 2 |
 | transportfulfillment | partycommercial | 3 |
-| visibilityexception | accessidentity | 2 |
+| visibilityexception | accessidentity | 3 |
 | visibilityexception | customscompliance | 3 |
 | visibilityexception | networkrouting | 1 |
 | visibilityexception | nodeoperations | 1 |
@@ -77,11 +77,11 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 6 |
 
-## 迁移：12 个模块共 267 份 SQL
+## 迁移：12 个模块共 268 份 SQL
 
 | 模块 | 份数 |
 |---|---|
-| access_identity | 16 |
+| access_identity | 17 |
 | collection_remittance | 1 |
 | customs_compliance | 24 |
 | network_routing | 20 |
