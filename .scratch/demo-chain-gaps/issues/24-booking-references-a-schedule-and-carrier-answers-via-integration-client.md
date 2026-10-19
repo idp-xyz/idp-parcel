@@ -1,7 +1,7 @@
 # 24 订舱提交（引班次）与承运答复集成客户端面
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg24（见文末「完成记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
+Status: in-progress——完工待评审与进 main，分支 claude-dcg24（见文末「完成记录」与「评审记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
 Blocked by: [23](./23-transport-commission-submission-face.md)、[16](./16-transport-schedule-templates-and-concrete-schedules-are-registered.md)
 地盘：`operation_decision.go`、`integration_client.go`；tfhttp 新 `submit_booking_request.go`、`answer_booking.go`、`integration_client_intake.go`；TF 新 `adapters/accessidentity/integration_client_authenticator.go`；domain、postgres 订舱（班次引用、`WAITLISTED`）；迁移 TF 0029；`assemble_transport_commission.go`、`assemble_integration_client.go`、`endpoints.go` 行；种子 access 02/03/05/06、governance。
 出处：[02](./02-transport-commission-has-no-command-face.md)；方案「02 委托、订舱、承运答复」D02-2、D02-3、D02-8、D02-9，「需要的 ADR」ADR-0202。
@@ -68,16 +68,19 @@ L
 9. **订舱摘要加班次不换 `TFC-1`，并把票 23 委托摘要改形一并登成 ADR-0014 部分停用**：票 17 评审确立了这一种改动要登部分停用，票 23 当时没登。
    - 越权风险点：ADR-0202 风险点 16（TF owner）；`unversioned_payload_digest.go` 头注写着「函数体一个字节都不能改」，本票整删了订舱那一个函数，前提是迁移 0029 拒绝有行的库（TF owner，同票 23 代决 3）。
 10. **答复主键改三列**：迁移 0029 改的是 0003 建的主键；两表在本票之前没有写入方，有行即拒绝施加。
-11. **答复口的路径取 `/transport-fulfillment/`**（控制事实那组），订舱口取 `transport-fulfillment-`（运营决定那组）：读路径就分得出提交方在不在产品之内。答复标识的线名取 `answer` 不取 `acceptance`：候补与拒绝都不是接受。
+11. **答复口的路径取 `/transport-fulfillment/`**（控制事实那组），订舱口取 `transport-fulfillment-`（运营决定那组）：照端点表既有的分法，承运方回传的外部事实取斜杠前缀，运营决定与运营登记取连字符前缀。提交方属哪一族由挂的 Intake 定，路径不承担这一区分（评审更正：原写「读路径就分得出提交方在不在产品之内」不成立，斜杠那组也有一线作业事实口）。答复标识的线名取 `answer` 不取 `acceptance`：候补与拒绝都不是接受。
 12. **集成客户端族在 TF 的认证失败用本族自己的码**：沿 CC、SA 两包已有的码，操作者两格与它分开。
 13. **装配另立 `buildBookingFaces`，不与委托提交共用一只编排实例**（回答票 23 代决 10）：这一只不装协议核对与委托意图交付，两口都不提交委托。
 14. **governance 占号 30 下放两份区间**：协调方只分了一个号，而运营决定与外部事实各要一条区间。
     - 越权风险点：`30-` 前缀下两份文件，与「一号一份」的惯例不同（协调方）。
 15. **`main.go` 顺手补上容量池登记那一处被吞掉的 `err` 检查**：票 23 合批时在 `buildCapacityPoolRegistration` 与它的检查之间插了一行，容量池装配失败会被下一行覆盖。只插入，不重排。
+16. **同一订舱的答复判定按订舱串行，用事务级咨询锁**（评审后补）：答复编排的判定读改为 `BookingAnswerLedger.FindAnswersForUpdate`，先取（租户、订舱）的 `pg_advisory_xact_lock` 再读答复册，与落库同一笔事务。「定局之后不再有后继」「定局不早于候补」跨行，两条部分唯一索引各钉一种答复、够不着；读已提交下不锁，一份候补与一份接受并发到达会各自落库（评审在临时副本里实测过）。取咨询锁而不是 `SELECT … FOR UPDATE` 订舱那一行：同 `ChargeOccurrences.FindCovering` 的先例，判定只关乎答复册；不在事务里调用由 `RequireExecutor` 拒。端口只留这一种读法，原先的无锁 `FindAnswers` 与 `BookingAnswerHistory` 删掉——没有别的消费者，查阅面（票 48）另立读口。
+    - 越权风险点：绕过答复编排直插答复表的写入不受这把锁约束，只有两条部分唯一索引兜底（TF owner）；票 25 的取消订舱若要与答复互斥，须取同一把锁（见「待裁 / 交接」）。
 
 ### 用例
 
 - 领域：`TestABookingNamesAConcreteSchedule`；`TestOnlyAWaitlistAdmitsASettlingSuccessor`（`AT-TF-151`）；`TestBookingIsNotAcceptanceAndOnlyAcceptanceBinds` 加候补一格并把封闭集改为五值（`AT-TF-150` 形状半边）；规范化定值改为带班次。
+- 答复判定串行（真库，评审后补）：`TestABookingAnswerIsJudgedAfterTheConcurrentOneSettles`（`AT-TF-154`）——先到那笔持锁落下接受、未提交时，后到那笔对同一订舱的判定读挂在锁上（观察连接看 `pg_stat_activity` 的锁等待），提交后读见那份接受；别的订舱不受牵连。把锁换成空查询，这个用例红（变异实测）。`TestABookingKeepsAWaitlistAndOneSettlingAnswer` 末尾加事务外判定读被拒（`ErrTransactionRequired`）。
 - 编排：`TestABookingOnARegisteredScheduleIsSubmittedOnce`（`AT-TF-148`）；`TestABookingNeedsARegisteredCommissionAndSchedule`（`AT-TF-146`、`147`，含他租户班次与重放先于委托核对）；`TestABookingWhoseReferencesCannotBeReadIsUndecided`；`TestAConcurrentBookingLoserIsJudgedByContent`；`TestOnlyTheCommissionedProviderAnswersItsBooking`（`AT-TF-149`）；`TestACarrierAnswersInFiveValues`（`AT-TF-150`）；`TestAWaitlistedBookingSettlesOnce`（`AT-TF-151`）；`TestAnAnswerRecoveryDiscipline`（`AT-TF-153` 与未决各格）；`TestABookingAnswerCannotBeOverwritten` 改走已提交委托并标 `AT-TF-152`；未决原因封闭集加一种。
 - 两册（真库）：订舱往返带班次、约束拒空白班次、拒无依据的候补与「待确认」值；`TestABookingKeepsAWaitlistAndOneSettlingAnswer`（`AT-TF-151` 真库面）；`TestMigration0029RefusesBookingsItCannotGiveASchedule`。
 - 线格式：`TestTheBookingRequestSubmissionFaceAnswersOnTheWire`、`TestTheBookingAnswerFaceAnswersOnTheWire`、`TestTheBookingAnswerIntakeAuthenticatesBeforeReadingThePayload`；运营决定各口表加订舱提交一口。
@@ -105,13 +108,43 @@ L
   - TF 领域 `commission_rehydration.go` 改一句注释；`registry_zero_gates_test.go`、`transport_commission_test.go` 随订舱多一格改夹具；
   - 编排既有测试随依赖与格名改写（`commission_transport_test.go`、`commission_agreement_check_test.go`、`unversioned_payload_digest*.go`）；
   - `cmd/parcel-api` 的 `endpoints_test.go`、`assemble_operator_decisions_test.go`、`assemble_integration_client_test.go` 各追加本票的口；`main.go` 多插一处 `err` 检查（代决 15）；
-  - ADR-0014 与 `docs/adr/README.md` 该行登部分停用（代决 9）。
-- **号段**：迁移 access_identity 0013、TF 0029（照分配）；AT `AT-TF-146` 至 `153`（分配 146–155，154、155 未用）；立票 48、49（照分配）；governance 30（两份，代决 14）。
+  - ADR-0014 与 `docs/adr/README.md` 该行登部分停用（代决 9）；
+  - UC-TF-004 表尾追加 `AT-TF-146` 至 `154`（评审补登：本票地盘与文档令牌次序里都没有它；票 20 也往同一表尾追加 `AT-TF-136` 起的行，号不冲突，rebase 到 20 之后按 AT 号顺序合并表尾即可）；
+  - 评审后：`integration-dex.yaml` 改 main 上原有的两句头注、去掉客户端计数（同波别的分支都不动这份文件）；开发主线 PN-04 一行只把「一订舱一应答」这一短语改写为指向 ADR-0202 补记（同波别的分支都不动这份文件）；`scripts/demo-seeds/README.md`「集成客户端渠道」本票加的那一步与演示动线本票那段补记各补一句「集成客户端发行方要重建才读得到新客户端」，只改本票自己加的行。
+- **号段**：迁移 access_identity 0013、TF 0029（照分配）；AT `AT-TF-146` 至 `154`（分配 146–155，155 未用）；立票 48、49（照分配）；governance 30（两份，代决 14）。
 - **进 main 时要做的**：
-  - access_identity 0013 的决定种类 CHECK 只列到 0011 的全集加本票一种。票 20 的 0012 若先进 main，合批时要把它那两种并进 0013 的列表（反过来 0012 也要并进本票这一种），否则后施加的那份会把先施加那份的种类删掉——同票 23 评审阻断 1。
+  - access_identity 0013 与票 20 的 0012 两份都在就要互含，与哪份先进 main 无关：新库按编号施加时 0013 总在最后。0013 已预列 `CAPACITY_RESERVATION`、`CAPACITY_RELEASE`（评审阻断 1，已修），票 20 的 0012 已预列 `BOOKING_REQUEST_SUBMISSION`；一次性库上按 0012 → 0013 施加实测四种都在。0013 一经在任何库上施加就不能再改（`internal/platform/migrate` 的 `ErrChecksumDrift`），之后谁再重建这条 CHECK 都取并集。
   - AT 覆盖盘点补 `AT-TF-146` 至 `153`；重生成机制清点。
 - **没改的**：TF CONTEXT（订舱生命周期「待确认、候补、部分确认、已确认、拒绝或失效」已盖住本票）；ADR-0149（票 23 已加前向指针，ADR-0202 不停用它任何一条）。
 - **待裁 / 交接**：
   - ADR-0202 补记风险点 12–17 待 TF、access-identity owner 复核；票 49 待 owner 裁委托范围怎么表达。
-  - 票 25（取消订舱）要在答复册上处理「已有定局的订舱能不能取消」与 `BookingStore.Replace`；票 28 的订舱发生项取依据时，当前那一份答复用 `BookingAnswerStore.FindByKey`（有定局交定局）。
+  - 票 25（取消订舱）要在答复册上处理「已有定局的订舱能不能取消」与 `BookingStore.Replace`，并与答复判定取同一把锁（`BookingAnswerLedger.FindAnswersForUpdate` 那一把），否则取消与一份并发的接受仍会各自读到对方之前的册；票 28 的订舱发生项取依据时，当前那一份答复用 `BookingAnswerStore.FindByKey`（有定局交定局）。
   - 票 37（确认订舱的容量关系）可按 `CarrierAcceptance.Binds` 与 `AcceptedQuantity` 接。
+
+## 评审记录
+
+2026-10-19 隔离评审：阻断 1 项，非阻断 8 项（其中 5 项建议进 main 前修）。作者子代理在同一分支上修订，提交 `de510f38`（阻断）、`a456d0cc`（答复判定串行）、`93f1e118`（注释与演示文档），本节与上文完成记录的改动另一笔提交。
+
+### 阻断（已修）
+
+1. **access_identity 0013 的决定种类并集没有含票 20 的两种**。新库按编号施加时 0013 在票 20 的 0012 之后，只列 0011 全集加本票一种会删掉 `CAPACITY_RESERVATION`、`CAPACITY_RELEASE`；原记录写的「若 0012 先进 main 才要补」条件不对，且 0013 一经施加就因校验和漂移不能再改。
+   - 修法：0013 的列表并进这两种，头注写明为何预列尚未在本分支 Go 侧定义的词（与票 20 的 0012 预列本票一种同形）。完成记录「进 main 时要做的」第一条改成「两份都在就要互含」，去掉条件。ADR-0202 补记「迁移」一条同步。
+   - 验证：一次性库 `dcg24_rev_seed` 上 `seed.sh` 退 0，约束含本票一种与那两种；在同一库上按票 20 的 0012 → 本分支 0013 的次序手工施加（事务内、回滚）后，约束仍含四种（含 0011 的 `IDENTITY_CONFLICT_DISPOSITION`）。用完已删库。
+
+### 非阻断
+
+1. **答复判定在并发下不串行**（建议进 main 前修）——已修。答复编排的判定读改为 `FindAnswersForUpdate`：先取（租户、订舱）的事务级咨询锁再读，落库同一笔事务；端口删掉无锁的 `FindAnswers` 与 `BookingAnswerHistory`。迁移 0029 头注改写（「由编排判」补上先锁后读，并写明绕过编排的直插不受约束），ADR-0202 补记「候补之后可接一份定局」一条补上串行这一句，UC-TF-004 追加 `AT-TF-154`。新增真库用例 `TestABookingAnswerIsJudgedAfterTheConcurrentOneSettles`，变异实测（锁换成空查询）会红。见上文代决 16。
+2. **`CarrierAcceptanceOutcome` 注释另给了一套「待补充」读法**（建议进 main 前修）——已修，改为只说两者是读法、口径以 ADR-0202 决定五为准，不在注释里另下定义。
+3. **`FormCarrierAcceptance` 注释留着「CONTEXT 193」行号**（建议进 main 前修）——已修，改引文 CONTEXT「承运接受可以部分或附条件成立」。同文件里 main 上原有的「CONTEXT 105」「CONTEXT 195」两处不是本票改的行，未动。
+4. **`integration-dex.yaml` 两处客户端计数已变错**（建议进 main 前修）——已修，改为「各合成集成客户端」「每个合成外部方各起一台」。
+5. **`answer_booking.go` 头注与代决 11 的路径理由不实**（建议进 main 前修）——已修，路径不动，理由改为照端点表既有分法，并写明提交方的族由挂的 Intake 定、路径不承担这一区分；代决 11 同步更正。
+6. **UC-TF-004 不在地盘与文档令牌里、地盘外改动没列它**——已补登到「偏离与待裁」的地盘外改动，并写明 rebase 到票 20 之后按 AT 号顺序合并表尾。
+7. **共享集成客户端发行方要重建才读得到新客户端**——已修：`scripts/demo-seeds/README.md`「集成客户端渠道」本票那一步补 `up -d --wait --force-recreate integration-issuer` 与「重建后签名钥换新、旧令牌作废」，演示动线本票那段补记指向它。对共享 5558 那只实测：用干线承运客户端取令牌答 `invalid_client`，与 README 写的一致（没有重建它——那是共享环境，留给合入后的人按文档做）。
+8. **开发主线 PN-04「一订舱一应答」与补记不一致**——已修，这一短语改为「一订舱至多一份候补与一份定局（ADR-0202 文末补记）」。
+
+没有不采纳的项。没有被权限检查拦下的改动。
+
+### 修订后的验证（证据 `S`）
+
+- `go build ./...` 干净；`go vet` 跑 TF、access-identity、architecture、`cmd/parcel-api`、`migrations`，干净；`gofmt -l internal cmd migrations scripts` 为空。
+- 带 55432 DSN、`-p 1 -count=1`：`./internal/architecture/`、`./internal/transportfulfillment/...`、`./internal/accessidentity/...`、`./cmd/parcel-api/`、`./migrations/...`、`./scripts/demo-seeds/...` 全 ok。没跑全量，没重生成机制清点。
