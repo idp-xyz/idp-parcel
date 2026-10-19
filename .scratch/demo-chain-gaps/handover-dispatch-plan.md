@@ -177,6 +177,7 @@ C12 是演示租户取值，写进演示动线即可。C16 不另立 ADR：落�
 - 交接与交付门禁的阻断读数派生 VE 异常信号，与 [52](./issues/52-departure-gate-signal-rule-has-no-online-registration-or-catalogue-read.md) 同一套信号规则。
 - HANDOVER_IN 对不上作业实物时的节点对账。
 - 控制来源链重算的处置面。
+- 票 61 落地时立：集运单元交接 → [80](./issues/80-a-consolidation-unit-handover-does-not-move-member-control.md)；控制来源链重算与入账各格的处置面 → [81](./issues/81-control-source-chain-recompute-has-no-disposition-face.md)。
 
 ---
 
