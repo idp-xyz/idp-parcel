@@ -1,7 +1,7 @@
 # 29 供应商协议声明收费发生条件
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg29（完成记录见文末）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
+Status: in-progress——评审修补完，待进 main，分支 claude-dcg29（完成记录与评审记录见文末）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
 Blocked by: [27](./27-transport-charge-occurrences-are-registered-and-handed-off.md)
 地盘：PC `domain/publication_canonicalization_supplier_agreement.go`、`supplier_agreement.go`、发布用例、http 草稿载荷、postgres + 迁移 PC 新号；TF 登记时判条件；种子 `commercial/publish-batch.json` v2；ADR-0209、PC CONTEXT。
 出处：[07](./07-transport-charge-occurrences-have-no-production-path.md)；方案「07 运输收费发生项」D07-1，「需要的 ADR」ADR-0209。
@@ -54,7 +54,7 @@ L
 
 ### 越权风险点
 
-1. ADR-0209 文末八条（文法偏简；取消的配形；按件以成员数计；按范围覆盖认单位词；v1 与 v2 并存无收尾入口；断言项不迁；登记者不进内容比对；`NOT_CHARGED` 不落记录）待 PC / TF owner 复核，第 8 条同时待 SA owner。
+1. ADR-0209 文末越权风险点（文法偏简；取消的配形；按件以成员数计；按范围覆盖认单位词；v1 与 v2 并存无收尾入口；断言项不迁；登记者不进内容比对；`NOT_CHARGED` 不落记录）待 PC / TF owner 复核，第 8 条同时待 SA owner。
 2. 代决 4、5 部分停用 ADR-0207，与方案「需要的 ADR」表「无」作用不一致（TF owner；方案 owner 可据此改表）。
 3. 锁键从事实依据放宽到主要业务范围：失败尝试同一次到场的各对象登记互相串行（变慢、不错判）；票 28 定订舱与取消的范围时要沿用同一键（TF owner）。
 4. 方案跨票通则 X1 仍写干线「采用 v1」；演示文档与种子 README 已写明自此读作 `v2`，方案原文未改（方案 owner）。
@@ -91,3 +91,40 @@ L
 4. TF 迁移号 `0034` 不在协调表里（见代决 9）。
 5. 种子 README 是热点文件，只追加：数据表 `data/commercial/` 一行仍写「两份供应商协议正文」，第 8 步原段仍是断言期的登法，已在其后追加一段写明作废；进 main 合批时可一并改写原行。
 6. 未做：机制清点重生成、AT 覆盖盘点计数（进 main 时统一做）；管理台无相应页面（地盘外，见 51）。
+
+## 评审记录（2026-10-19，隔离评审一轮；作者子代理修补，分支 `claude-dcg29`）
+
+阻断 0 项；非阻断 9 项，其中 5 项评审建议进 main 前修。建议进 main 前修的 5 项里，4 项已在本分支修完；README 合并冲突那一项要 rebase，被权限检查拦下，留给进 main 时处理（见下文第 5 条）。
+
+### 已修
+
+1. **揽收与派送同串的尝试在覆盖判断里撞成一次到场**（建议进 main 前修）。采用评审给的第一种修法：覆盖一问除了范围串相同，还要求事实依据出自同一处。领域给出 `OccurrenceBasisReference.Source`（依据串第一道斜杠之前那一词），PG `FindCovering` 在三支之外加一条 `split_part(head.fact_basis, '/', 1) = $10`，应用层替身照同一读法。不采用第二种修法（让范围串自带侧别）：断言期已落册的失败尝试项，范围就是尝试串本身；改写法之后，新登记认不出这些项已经按尝试计过，要补上只能改写册上的项，这违背「断言项不改写」，否则就会漏挡。锁键不变，仍只取范围串，两侧同串的两次到场只是多等一会儿。文档：ADR-0209 决定四补一条、越权风险点补一条，`docs/adr/README.md` 本票那一行同步，UC-TF-005 `AT-TF-169` 补一格。用例：领域 `TestTheBasisSourceSeparatesTheTwoSidesOfAnAttempt`；应用 `TestAPickupAndADeliveryAttemptSharingAnIdentityAreTwoArrivals`（派送同串登成 1 `ATTEMPT`，对它声明自营答不适用）；真库 `TestCoverageKeepsAPickupAndADeliveryAttemptSharingAnIdentityApart`，实测去掉出处那一条即红。
+2. **UC-TF-005 `AT-TF-120` 输入列仍写断言**（建议进 main 前修）。输入改为「登记方给出服务方与协议版本（协议声明了实际履约的收费发生条件）」；结果列补上依据记「按协议声明判」，数量与单位取自协议的数量形。
+3. **`selfOperated` 头注的锁键**（建议进 main 前修）。改为（租户、原因、主要业务范围）。
+4. **「三处」计数**（建议进 main 前修）。PC 领域 `ChargeOccurrenceConditionOf` 头注、领域测试注释、ADR-0209 决定一，都改为点名函数，不再数调用方。同类的「两只读口」也一并改了：ADR-0209 决定一改为「供应商协议的读口」，UC-PC-001 `AT-PC-053` 与 PC postgres 测试头注改为点名两个读口。
+
+### 未在本分支做
+
+5. **`docs/adr/README.md` 与 origin/main 冲突**（建议进 main 前修）。作者执行 `git rebase origin/main` 时被权限检查拦下（Git Destructive），照指示没有换写法绕过。去向：进 main 时 rebase，或在合批时合并。其余文件 `git merge-tree` 都能自动合并。合并时：
+   - 0207 那一行取本分支的「部分停用」版；
+   - 0211、0212 两行照 main；
+   - 0209 那一行接在最后，只追加，不重排。
+6. **方案「需要的 ADR」表 0209 行与跨票通则 X1**。归方案 owner，按评审原文改：0209 行写「部分停用 ADR-0207 决定三两句（限新形成的发生项）与决定四锁键」；X1 改为 v2，或注明自票 29 起读作 v2。本分支不改方案文件：它是单一权威，也是跨票热点。
+7. **种子 README 数据表 `data/commercial/` 一行与第 8 步原段**。这是热点文件，本分支只追加；合批时直接改写原行与原段，删掉「上段作废」那段追加说明。
+8. **`Register` 把协议核对的确定性失败答成未决**。立 [54](./54-charge-occurrence-registration-does-not-separate-deterministic-agreement-check-failures.md)。今天的哨兵在适配器包里，应用层分不出来，要先在 ports 立哨兵；这是票 27 已有的模式，修起来要同时看委托提交那一路。号接在途分支所见最大号 53 之后；同波别的票若也取 54，合批时改号。
+9. **机制清点重生成、AT 覆盖盘点、TF 迁移号 `0034`**。合批时统一做；票 33 进 main 时若拿了 `0034`，本票改号。
+
+### 代决（评审修补）
+
+10. **「同一次到场」连同依据出处认，范围串不改写法**。理由见上文已修第 1 条。
+
+### 越权风险点（评审修补）
+
+6. 出处按依据串第一道斜杠之前那一词认（ADR-0209 越权风险点 9）。日后若有哪种依据的前缀带斜杠，或两种事实共用一个前缀，覆盖判断就会多挡或漏挡（TF owner）。
+7. 锁键仍只取范围串：揽收与派送同串的两次到场互相串行，只是变慢，不会错判（TF owner）。
+
+### 验证（评审修补后）
+
+- `go build ./...` 干净；`go vet` 覆盖 `./internal/transportfulfillment/...`、`./internal/partycommercial/...`、`./cmd/parcel-api/`、`./cmd/parcel-dispatch/`、`./cmd/parcel-commercial/`，均干净；`gofmt -l internal cmd scripts` 为空。
+- 带真库跑 `go test -p 1 -count=1`（55432 DSN），全绿：`./internal/transportfulfillment/...`、`./internal/partycommercial/...`、`./internal/architecture/`、`./cmd/parcel-commercial/`、`./cmd/parcel-api/`、`./cmd/parcel-dispatch/`。种子与迁移这一轮没动，没有重跑 `seed.sh`。
+
