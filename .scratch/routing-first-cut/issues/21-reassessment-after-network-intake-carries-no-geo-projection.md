@@ -1,7 +1,7 @@
 # 21 收寄后的路由复核不带地理投影：关务适用性答两端未知，复核停在看不清
 
 Category: bug
-Status: 完工，待评审与进 main——2026-10-18 Claude Code 会话立并实施（用户「你作为业务和系统专家自决……解决所有的问题」授权），分支 `claude-rfc21`。出自演示动线重走（[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)），停点取证记在 [product-strategy-boundary/32](../../product-strategy-boundary/issues/32-demo-rule-package-declares-no-unprovable-intake-qualification.md) 的完成记录里。
+Status: resolved——2026-10-18 进 main（至 `2b693d74`）。2026-10-18 Claude Code 会话立并实施（用户「你作为业务和系统专家自决……解决所有的问题」授权），分支 `claude-rfc21`。出自演示动线重走（[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)），停点取证记在 [product-strategy-boundary/32](../../product-strategy-boundary/issues/32-demo-rule-package-declares-no-unprovable-intake-qualification.md) 的完成记录里。
 Blocked by: 无
 地盘：`internal/parcelshipment/ports` 的网络收寄发布意图；`internal/parcelshipment/application` 的采用编排；`internal/parcelshipment/adapters/postgres` 的两份发布载荷；`internal/networkrouting/adapters/inbox` 的两份译码；`internal/networkrouting/adapters/parcelshipment` 的复核触发；`internal/networkrouting/application` 的复核编排；UC-NR-003 输入语义契约一行。
 出处：[ADR-0075](../../../docs/adr/0075-customer-address-is-carried-with-the-routing-request.md) 决定一、三；[UC-NR-003](../../../docs/application/network-routing/UC-NR-003-REASSESS-ROUTE-AFTER-NETWORK-INTAKE.md)。
@@ -60,3 +60,9 @@ Blocked by: 无
 - 更正那一路与不采用那一路补了断言。
 - 注释去掉数别处的计数，跨文件引用改用 `ports.NetworkIntakeHandoffIntent`，`triggerDigest` 头注合成一句。
 - 补记修复前的出站行治不好、演示库要重灌。
+
+## 进 main 记录（2026-10-18）
+
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `20f2af3d`：143 包 ok，0 FAIL，0 SKIP。
+- 之后 rebase 跨过 main 上 operator-channel/36 那几笔（委托主动拒绝与授权处置）。重跑了两边都碰的包：parcel-shipment、network-routing、`cmd/parcel-api`、`cmd/parcel-dispatch`、架构门禁，全部 ok。
+- 快进推到 main：`a4bdbc1b..2b693d74`。机制清点在钉 `2b693d74` 的干净树上重生成，没有变化。
