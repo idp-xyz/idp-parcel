@@ -1,7 +1,7 @@
 # 02 收寄现场观察的号码：在线收寄口原样交核对，受控批量口逐格去两端空白——扫描后缀与两口口径归 NO 定
 
 Category: task
-Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-nri02`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 0 研判）
+Status: in-progress——2026-10-19 子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-nri02`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 0 研判）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C2 第四张草案
@@ -53,3 +53,19 @@ Blocked by: 无
 - [ ] `internal/nodeoperations/adapters/http/work_fact_intake_test.go`：在线口 `mark` 带两端空白或回车换行时，按裁定处理；`cmd/parcel-frontline-import/intake_template_test.go`：模板 `mark` 格按裁定处理。两条都要有。
 - [ ] Go 门禁：`go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出；带 DSN 跑 `internal/nodeoperations/...`、`cmd/parcel-frontline-import` 全绿。
 - [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
+
+## 完成记录（2026-10-19，会话 idp-parcel-9b 的子代理，分支 claude-nri02）
+
+落点（提交 `334ca1d5`）：
+
+- 权威处：UC-NO-002「输入语义契约」表后一段——在线收寄口不改写设备上报的外部标识观察（ADR-0023），扫描附带的回车、换行、Tab 与两端空白由一线客户端送出前去掉；受控批量口逐格去两端空白属 CSV 收寄模板的形状纪律；在线口带空白的号答零候选、建立待识别实物，是安全失败，识别留待 `AT-NO-026`。逐字核对引 PS CONTEXT「按外部标识核对包裹身份」，不复述。
+- `reception_payload.go`：`receptionDocument` 头注补写「不换词」只管键名与词表、值的空白两口各办各的（只改注释）。
+- `.scratch/frontline-client-shape/README.md`：§3.2 试证项「键盘楔扫描」下加一行指针。
+
+用例：`work_fact_intake_test.go` 的 `TestWorkFactReceptionIntakeKeepsTheObservedMarkVerbatim`——载荷 `mark` 为前导空格加尾随回车换行，断言原样进命令。钉现状的刻画用例，首跑即绿。
+
+门：`gofmt -l internal/nodeoperations/` 无输出；`go vet ./internal/nodeoperations/...` 退 0；`go test -count=1 ./internal/nodeoperations/adapters/http/` ok（无 DSN）。
+
+未做：完成判据第二条的受控批量口那条（`cmd/parcel-frontline-import/intake_template_test.go` 钉模板 `mark` 格去两端空白），本次派单范围只含在线口；带 DSN 跑 `internal/nodeoperations/...`、`cmd/parcel-frontline-import` 与全仓 `go build ./...`、`go vet ./...` 未跑。
+
+评审：待会话读 diff 审。
