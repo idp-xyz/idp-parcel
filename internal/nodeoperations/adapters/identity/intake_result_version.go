@@ -38,8 +38,8 @@ var _ ports.IntakeIdentityFactory = (*IntakeResultVersions)(nil)
 // 不看 ctx：内核只读本机熵源，没有一处可取消的等待。端口签名上留着 ctx 是给库序列那一类
 // 实现的，本实现如实不用。
 //
-// 签不出号时如实报错——编排为此留了`收寄待确认`那一格，拿一个可预测的值顶上会让两次收寄
-// 在 parcel-shipment 的采用判断里被当成同一次（那一步正按本版本幂等）。
+// 签不出号时如实报错——编排据此不形成答案、不落册，设备重投时再签（ADR-0186）；拿一个可预测的值
+// 顶上会让两次收寄在 parcel-shipment 的采用判断里被当成同一次（那一步正按本版本幂等）。
 func (factory *IntakeResultVersions) NextIntakeResultVersion(
 	_ context.Context,
 ) (domain.IntakeResultVersion, error) {

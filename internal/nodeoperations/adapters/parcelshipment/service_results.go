@@ -1,5 +1,5 @@
-// Package parcelshipment 是 node-operations 消费 parcel-shipment 的适配器（ADR-0025 消费方侧），两件：按外部标识核对
-// 正式包裹身份（ADR-0184，见 ParcelIdentityView），与读当前服务结果（票 operator-channel/25，见 ServiceResultView）。
+// Package parcelshipment 是 node-operations 消费 parcel-shipment 的适配器（ADR-0025 消费方侧）：按外部标识核对正式包裹
+// 身份（ADR-0184，见 ParcelIdentityView），与读当前服务结果（票 operator-channel/25，见 ServiceResultView）。
 // 它只翻译不判断：哪些包裹被这个号码标识、有没有已成立的取消决定、有没有当前有效终局，都由 PS 自己的读口答；收寄
 // 编排再据候选数分走向、据服务结果落标记（UC-NO-002 第 4、7 步）。
 //

@@ -29,8 +29,8 @@ func NewParcelIdentityView(parcels psports.ParcelExternalIdentifierView) (*Parce
 }
 
 // ResolveParcelIdentity 交回此刻被这个号码标识的正式包裹。号码原样交给 PS 逐字比对，这里不折算；观察里一个号码
-// 都没有（空或全空白）答零个候选——没有线索的实物就是待识别，不是依赖故障。PS 读不动原样交回，编排据此停在
-// `收寄待确认`。
+// 都没有（空或全空白）答零个候选——没有线索的实物就是待识别，不是依赖故障。PS 读不动原样交回，编排据此不形成答案、
+// 不落册（ADR-0186）：拿空候选顶替会把可能已知的包裹落成待识别。
 func (view *ParcelIdentityView) ResolveParcelIdentity(
 	ctx context.Context,
 	tenant nodomain.TenantID,
