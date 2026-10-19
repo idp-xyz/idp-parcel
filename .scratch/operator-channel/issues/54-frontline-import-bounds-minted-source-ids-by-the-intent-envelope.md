@@ -1,7 +1,7 @@
 # 54 前线导入铸出的来源标识越过意图信封上限时，报告说「重跑会重发」，重跑却永远交不出去
 
 Category: bug
-Status: ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立并代决（票 operator-channel/45 评审遗留）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（operator-channel/45 已进 main），分支 `claude-oc54`。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立并代决（票 operator-channel/45 评审遗留）
 Blocked by: operator-channel/45 进 main
 父票：[45](./45-http-reception-does-not-swallow-a-failed-intent-enqueue.md)
 出处：票 45 实施子代理回报的「没做」与会话评审。
