@@ -23,10 +23,10 @@ Date: 2026-10-19
 
 - 采购责任法人与协议快照取自协议版本，不由调用方给。快照照 ADR-0208 决定六写成两段式指称「对象/版本」。
 - 协议的四个否定格各自成格、答 200：未在册、未生效、已终止、服务方不符（带回这一版约定的供应商）。续办各不相同（去发布、换一版、取得新协议、改服务方），折成一格登记方只能去猜（[ADR-0029](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)）。核对口读不动答未决。
-- 三件缺任一答未受理 `PROCUREMENT_CONTEXT_MISSING`。**不适用只有两格**（ADR-0098 决定三）：登记方显式声明自营（此时服务方与协议必须留空，同时给出答未受理 `SELF_OPERATION_CONTRADICTED`），或那一段当前的实际承运商判断是自营法人。没有判断、判断待确认、判为外部参与方都不说明自营。两格都先问册：同一件事已登成外部发生项时答冲突并回显它——实际承运商判断可以在登记之后才改判，那时直接答不适用，就把册上那份外部成本静默地说成了没有。
+- 三件缺任一答未受理 `PROCUREMENT_CONTEXT_MISSING`。**不适用只有两格**（ADR-0098 决定三）：登记方显式声明自营（此时服务方与协议必须留空，同时给出答未受理 `SELF_OPERATION_CONTRADICTED`），或那一段当前的实际承运商判断是自营法人。没有判断、判断待确认、判为外部参与方都不说明自营。两格都先问册：同一件事已登成外部发生项时答冲突并回显它——实际承运商判断可以在登记之后才改判，那时直接答不适用，就把册上那份外部成本静默地说成了没有。问册先问成员交集、取决定四那把串行锁，再按身份查：先按身份查，看不见另一笔正在登记同一身份、尚未提交的外部发生项，等锁之后的交集一问又按身份把它排除，两问都落空。
 - 票 demo-chain-gaps/28 起，段已采用运输委托时从委托快照取采购上下文；调用方给了而不一致答冲突。不在建段时盖章。
 
-**三、发生条件在协议能声明之前由登记者断言，断言与发生项同行留痕。** 登记方交一句原话断言「采用协议的发生条件已满足」（引哪一版协议、凭什么事实）；缺了答未受理 `CONDITION_NOT_ASSERTED`。发生项记下条件的**依据**（封闭集合，首版只有「登记者断言」一格）与断言原话，库面断言那一格必带非空原话。只记「断言过」不够：日后复核的人要知道当时断言的是什么。数量与单位同由登记方声明。ADR-0209 落地后多出「按协议声明判」一格，协议没声明答`未配置`；两类发生项在册上仍分得开，审计要问的正是「这一项是谁判的」。
+**三、发生条件在协议能声明之前由登记者断言，断言与发生项同行留痕。** 登记方交一句原话断言「采用协议的发生条件已满足」（引哪一版协议、凭什么事实）；缺了答未受理 `CONDITION_NOT_ASSERTED`。发生项记下条件的**依据**（封闭集合，首版只有「登记者断言」一格）、**断言人**与断言原话，库面断言那一格两件都必带、不得为空。只记「断言过」不够：日后复核的人要知道当时是谁断言的、断言的是什么。断言人是做出这一次登记决定的操作者，取自操作者信封的主体，写成「发行方#sub」（[ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md) 决定二第三条），与租户一样不由载荷给。断言人是登记决定的出处，不是发生项的内容：另一位操作者照原样重报，说的仍是册上那一项，答`已存在`、回显原断言人；原话不同才是异内容。数量与单位同由登记方声明。ADR-0209 落地后多出「按协议声明判」一格，协议没声明答`未配置`；两类发生项在册上仍分得开，审计要问的正是「这一项是谁判的」。
 
 **四、发生项身份由事实确定性派生；首版 `V1`；同一成员在同一件事实上只计一次。**
 
@@ -38,7 +38,7 @@ Date: 2026-10-19
 
 **五、已形成信封与发生项同一事务交出，引用式载荷，指纹 ID。** 类型 `transport-fulfillment.charge-occurrence.formed`；载荷只带登记册键三维 `tenantId`、`occurrence`、`version`，键名与 ADR-0208 决定一一字不差，原因、业务时间、协议与成员都不带——它们只有登记册一处权威。信封 ID 由 `outboxintent.FingerprintEventID` 从键三维铸出，版本在 ID 里，两代各一封；分区键取「租户/charge-occurrence/发生项」，同一发生项的首版与日后的更正排一条队。事务边界归装配点：编排答未决或报错时整笔回滚，不留一份落了册而结算永远等不到的发生项。消费者先进路由表（ADR-0208 决定一，[ADR-0049](./0049-publish-channel-is-in-process-delivery-until-load-evidence.md)）。
 
-**六、入口是操作者渠道「运营决定」能力面的一种决定。** 决定种类 `TRANSPORT_CHARGE_OCCURRENCE_REGISTRATION`，口 `POST /transport-fulfillment-charge-occurrence-registrations`。按 [ADR-0151](./0151-unassigned-command-faces-get-their-families.md) 的定族判据，这是操作者做出的生产决定：发生项不是现场的物理事实，是对已发生事实的一次采购判断，所以不挂作业事实登记，也不要设备。只有新落一版答 201，已存在、冲突、不适用、协议否定格、未决、未受理都是形成了的答案、答 200（[ADR-0022](./0022-http-status-carries-answer-formed-not-business-verdict.md)）；原因词不在封闭集答 400。响应没有任何金额或币种键。
+**六、入口是操作者渠道「运营决定」能力面的一种决定。** 决定种类 `TRANSPORT_CHARGE_OCCURRENCE_REGISTRATION`，口 `POST /transport-fulfillment-charge-occurrence-registrations`。按 [ADR-0151](./0151-unassigned-command-faces-get-their-families.md) 的定族判据，这是操作者做出的生产决定：发生项不是现场的物理事实，是对已发生事实的一次采购判断，所以不挂作业事实登记，也不要设备。租户与登记者（断言人）只取自认证结果，载荷里不收。只有新落一版答 201，已存在、冲突、不适用、协议否定格、未决、未受理都是形成了的答案、答 200（[ADR-0022](./0022-http-status-carries-answer-formed-not-business-verdict.md)）；原因词不在封闭集答 400。响应没有任何金额或币种键。
 
 **七、不在任何物理编排里内联，也暂不自动形成。** 揽收、派送、交接、交付照常落册，发生项另行登记。ADR-0098 决定一的两条理由对实际履约原样成立：把形成塞进必须照常成功的物理登记，既压缩了对象状态，又造出一个读失败即静默不发生、无人重试的派生步骤。运输履约自消费交接与有效交付信封来自动形成，等 ADR-0209 与票 demo-chain-gaps/25 落地后另定。
 
@@ -57,20 +57,22 @@ Date: 2026-10-19
 
 ## Consequences
 
-- 代码：运输履约 `application.RegisterChargeOccurrenceHandler`（失败尝试那一半在 `register_failed_attempt_charge.go`），领域 `ChargeOccurrenceForActualFulfillment`、`ChargeOccurrenceForDeliveryAttempt`、`DeriveChargeOccurrenceReference`、`OccurrenceCondition`；端口 `ChargeOccurrenceHandoff`、`FulfillmentSegmentView`、`ActualCarrierJudgmentView` 与册口的 `FindCovering`；`adapters/postgres.OutboxChargeOccurrenceHandoff`；`tfhttp.NewRegisterChargeOccurrenceEndpoint`；`cmd/parcel-api/assemble_charge_occurrence.go`。原先独立的失败尝试费登记处理器并入本用例，不再单列。
-- 迁移 `transport_fulfillment/0032_charge_occurrence_condition_and_coverage_index.sql`（发生条件两列与成员交集一问的索引；表里有行即拒迁移，不替不在场的人补断言）；`access_identity/0009_transport_charge_occurrence_registration_decision.sql`（决定种类）。
+- 代码：运输履约 `application.RegisterChargeOccurrenceHandler`（失败尝试那一半在 `register_failed_attempt_charge.go`），领域 `ChargeOccurrenceForActualFulfillment`、`ChargeOccurrenceForDeliveryAttempt`、`DeriveChargeOccurrenceReference`、`OccurrenceCondition`、`RegistrantReference`；端口 `ChargeOccurrenceHandoff`、`FulfillmentSegmentView`、`ActualCarrierJudgmentView` 与册口的 `FindCovering`；`adapters/postgres.OutboxChargeOccurrenceHandoff`；`tfhttp.NewRegisterChargeOccurrenceEndpoint`；`cmd/parcel-api/assemble_charge_occurrence.go`。原先独立的失败尝试费登记处理器并入本用例，不再单列。运输履约的运营决定认证方随之交回 `tfhttp.OperatorIdentity`（租户与操作者），其余各口仍只取租户。
+- 迁移 `transport_fulfillment/0032_charge_occurrence_condition_and_coverage_index.sql`（发生条件的依据、断言人、原话三列与成员交集一问的索引；表里有行即拒迁移，不替不在场的人补断言）；`access_identity/0009_transport_charge_occurrence_registration_decision.sql`（决定种类）。
 - 演示租户的配置员持这一种决定：授予、准入范围对照、权威区间各一行（`scripts/demo-seeds/data/access/02`、`03`，`data/governance/25`）。种子不登任何发生项。
 - [UC-TF-005](../application/transport-fulfillment/UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md) 步 9 与 `AT-TF-120` 至 `AT-TF-125`；UC-TF-002 与 UC-TF-006 的发生项一步指向本记录。
-- 端到端（一次性库实测，证据 `S`）：干线参与在 SIN-HUB 结束后登 `ACTUAL_FULFILLMENT` 答 201，结算发起一份 BUY 请求，计价形成评价；演示成本卡没绑分区目录、按发生项造的计价输入也不带分区，评价停在待判断 `ZONE_UNRESOLVED`，按 ADR-0200 入账、不形成供应商预期成本。这一格就是 [ADR-0189](./0189-leg-pricing-zones-are-supplied-per-card-and-unbound-cards-take-a-registered-leg-zone.md) 越权风险点 3，不在本记录范围内。
+- 端到端（一次性库实测，证据 `S`）：干线参与在 SIN-HUB 结束后登 `ACTUAL_FULFILLMENT` 答 201，结算发起一份 BUY 请求，计价形成评价；演示成本卡没绑分区目录、按发生项造的计价输入也不带分区，评价停在待判断 `ZONE_UNRESOLVED`，按 ADR-0200 入账、不形成供应商预期成本。这一格就是 [ADR-0189](./0189-leg-pricing-zones-are-supplied-per-card-and-unbound-cards-take-a-registered-leg-zone.md) 越权风险点 3，不在本记录范围内。走通这一格的演示租户取值另立票 demo-chain-gaps/43（演示成本卡绑分区目录，等 routing-first-cut/20）。
+- 已知限制，留给发生项修订入口落地那一张票：重放与自营两条路径按身份只读首版 `V1`。首版被失效之后，同内容重登仍答`已存在`并回显那个已失效的首版，声明自营答冲突——与决定四「失效那一项的成员可以另登」口径不一。今天没有生产修订入口（`ReviseValidity` 没有生产调用方），修订入口落地时，这两条路径改读链头，链头已失效时另行作答。
 
 ## 越权风险点
 
-1. **断言期内发生条件由人判断**（TF、PC owner）。ADR-0209 落地之前，「协议计不计这一项」没有机器核对；断言留痕只保证事后查得到是谁判的。
+1. **断言期内发生条件由人判断**（TF、PC owner）。ADR-0209 落地之前，「协议计不计这一项」没有机器核对；断言留痕（断言人与原话）只保证事后查得到是谁凭什么判的，不保证判得对。
 2. **旅程无人核**（TF owner）。同一包裹被不同登记者声明成不同旅程时没有核对；旅程是跨上下文的词，权威来源未定。
 3. **不自动形成**（TF、SA owner）。参与结束之后要有人登记，漏登就漏一份成本来源；结算那一侧没有「该有而没有」的提示。
-4. **数量与单位由登记方声明**（TF、PC owner）。协议能声明数量形之前不核，`SEGMENT`、件数还是次数由登记方一并断言。
+4. **数量与单位由登记方声明**（TF、PC owner）。协议能声明数量形之前不核，`SEGMENT`、件数还是次数由登记方一并断言。按段计费的协议下，同一段上的包裹若逐件各登一项、每项都填「数量 1、单位 `SEGMENT`」，同一段就算出多份段费；成员交集保护按成员判、不按段判，拦不住这一种重复（TF、PC owner 定）。ADR-0209 的数量形落地时，`PER_SEGMENT` 应在段级去重。
 5. **成员交集只在同一（原因、事实依据）上查**（TF owner）。同一包裹在同一段上，以实际履约与别的原因各登一项不算交集；一个原因对一个费用项目（ADR-0208 越权风险点 1），这两项本该各自计费，但若 owner 认定某些原因互斥，要另加判据。
 6. **自营只认两格**（TF owner）。协议、委托与承运商判断都说是外包、而登记方声明自营时，本用例照声明答不适用；声明本身不核。
+7. **断言人不进内容比对**（TF owner）。另一位操作者照原样重报答`已存在`，第二位操作者的断言不另留痕；断言人随发生项回显在登记答复里，持这一种决定授予的操作者都看得到。
 
 ## Links
 
