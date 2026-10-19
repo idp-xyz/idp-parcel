@@ -1,7 +1,7 @@
 # 07 只因歧义信号落下的身份冲突，在那份声明随委托被拒绝或撤回之后自动解开
 
 Category: enhancement
-Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理补齐评审要求（rebase 到 origin/main `38916b00`；管理台认冲突来由），待复核。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 立并代决、认领（ADR 占号 0211），分支 `claude-nri07`
+Status: resolved——2026-10-19 进 main（代码验证钉 `ed1ca68c`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理补齐评审要求（rebase 到 origin/main `38916b00`；管理台认冲突来由），待复核。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 立并代决、认领（ADR 占号 0211），分支 `claude-nri07`
 Blocked by: 无
 父票：[04](./04-identity-conflicts-have-a-disposition-and-release.md)
 出处：ADR-0210 决定一「不做自动解除……记作后续方向」；ADR-0195 歧义信号。
@@ -38,7 +38,7 @@ ADR-0195 让「号码另有一份`已提交`委托声明」的唯一命中落成
 - [x] PS：委托拒绝、撤回各交声明撤除信封，接受不交；信封 ID 用 `outboxintent.FingerprintEventID`，分区键登记。
 - [x] 真库端到端（经生产派发装配）：号码被另一份已提交委托声明 → 送站落冲突（来由只因歧义信号）→ 那份委托被拒绝 → 门铃 → 重核追加关联版，身份一格成立，意图一封；另有一格「拒绝之后仍有第三份已提交委托声明同号」不解开；一格「一码两物的冲突」不被这道门铃解开。修前先红。
 - [x] Go 门禁：`gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0；带 DSN 跑 `internal/parcelshipment/...`、`internal/nodeoperations/...`、`cmd/parcel-api`、`cmd/parcel-dispatch`、`migrations/...`、`internal/architecture` 全绿；机制清点重生成。
-- [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）。
+- [x] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）。
 
 ## 完成记录（2026-10-19，会话 idp-parcel-9b 的作者子代理，分支 `claude-nri07`，基于 main `a7dfad8f`）
 
@@ -158,3 +158,8 @@ ADR-0195 让「号码另有一份`已提交`委托声明」的唯一命中落成
 - **评审补（已做）**：rebase 到另一会话 TF 链第二波与首方渠道之后；管理台复核页「重核」只对只因歧义信号的冲突放开，认 `STILL_AMBIGUOUS`，显示冲突来由（旧行写「来由未记」），三道门过。
 - **与 ps-external-mark-relations/07 的交叠（推送方处理）**：两边都新增 `AT-NO-062`；本票先进，07 只改文档，进 main 时把它的 AT 顺延。两边都改 ADR-0199 的 Status 行与 adr/README 那一行，拼接即可。
 - **越权风险点留给 owner**：「撤单即自动解开」要不要进复核目录供人事后核。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-nri07`（作者已 rebase 到另一会话 TF 链第二波与首方渠道之后，并补了管理台）直接叠在远端 main 之上快进推送；机制清点重生成零差。
+- 推送方全量一次：钉 `ed1ca68c` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 148 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
