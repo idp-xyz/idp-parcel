@@ -1,7 +1,7 @@
 # 02 装载分配登记口能在同一分配下另起并列首版：版本链成了森林，抢占变化入口要用的版本号，撤回之后还能起活跃新根
 
 Category: bug
-Status: in-progress——2026-10-18 会话 `idp-parcel-9b` 代决并认领（分支 `claude-tfa02`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 代决并认领（分支 `claude-tfa02`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment-load-assignment-registrations
@@ -78,3 +78,41 @@ Blocked by: 无
 - [ ] 新增生产文件时，在干净检出上重生成 `docs/product/MECHANISM-INVENTORY.md`。
 - [ ] 在票 15 补记下追加回写行（只加行）。
 - [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：作者自验、非作者评审（两轴分开）、推送方在干净检出上带 DSN 跑全量。
+
+## 完成记录（2026-10-18，会话 idp-parcel-9b 的实施子代理，分支 claude-tfa02）
+
+提交：`4e812d38`（端口与 PG 读链头）、`a33ce961`（编排与 HTTP 新格）、`98838cfd`（迁移与并发读回）、`0a748baf`（真渠道回归）、`4d4aee8e`（机制清点）。
+
+- **落点**
+  - 端口 `LoadAssignmentRegistry.FindChainHead`（租户、分配）：取此刻未被任何版本回指的那一版；PG 实现两步读（先取链头版本号，再走 `FindByKey` 装回）。本表库面不守「一版至多被回指一次」，并列链尾取最后登记者，注释写明。
+  - `FormLoadAssignmentHandler.Form`：按键查 → 按分配读链头 → 登记。新格 `LoadAssignmentAlreadyFormed`（`LOAD_ASSIGNMENT_ALREADY_FORMED`）交回链头、不 `Save`；读链头失败答未决。`Save` 答已登记而按本次键读不回时改按分配读链头答新格。「换对象范围要换版本号，那是变化不是重投」那句失实注释已改。
+  - HTTP：新格走既有非 201 分支答 200 并回显链头，`writeLoadAssignmentOutcome` 的注释补列这一格。
+  - 迁移 `migrations/transport_fulfillment/0021_load_assignment_one_root_per_assignment.sql`：先查存量并列首版，有就 `RAISE` 逐个列出并拒绝迁移，再建部分唯一索引 `load_assignment_one_root_per_assignment`。
+- **各格对应用例**
+  - 编排（替身，替身也模拟了首版索引）：`TestAnotherVersionOfAFormedAssignmentAnswersAlreadyFormed`（v1 后投 v2，答新格回显 v1，不 `Save`）、`TestAWithdrawnAssignmentAnswersAlreadyFormedWithTheWithdrawal`、`TestALosingConcurrentFirstVersionAnswersAlreadyFormedWithTheWinner`、`TestAChainHeadReadFailureIsUndecided`；`TestASecondFormOfTheSameVersionKeepsTheOriginal` 照过。
+  - 真库适配器：`TestTheChainHeadIsTheVersionNoOtherCorrects`（无版本读空、首版、变化后、撤回后、跨租户不串）、`TestASecondFirstVersionOfOneAssignmentIsAlreadyRegistered`（第二个首版答已登记，版本行与成员行都不落）。
+  - HTTP 适配器：`TestFormLoadAssignmentAnswersAlreadyFormedWithTheChainHead`。
+  - 真渠道（`cmd/parcel-api/load_assignment_single_chain_test.go`，生产端点构造加生产准入桥）：
+    - `TestTheLoadAssignmentFaceAnswersAlreadyFormedForASecondVersion`：答新格，行数不变；本口没占的 v2 留给领域变化，照常登记。
+    - `TestTheLoadAssignmentFaceAnswersAlreadyFormedAfterAWithdrawnChain`：撤回版经生产登记册存入，再投 v3 答新格回显撤回版；同版本重放仍答 `LOAD_ASSIGNMENT_VERSION_EXISTS`。
+    - `TestALosingConcurrentFirstVersionAnswersAlreadyFormedWithTheWinner`：赢家在事务里挂住，观察到本口那笔插入挂在锁上再放行，确定落在索引那条路。
+    - `TestConcurrentFirstVersionsThroughTheFaceFormExactlyOne`：四轮两首版并发经本口到达，每轮恰一份 201、另一份答新格回显赢家，库面一个首版。
+- **先红后绿**
+  - 真渠道四例先在 `59403e6f` 上跑，全红：第二个首版、撤回后再投、并发落败一方、并发对的两份，全都答 201 `LOAD_ASSIGNMENT_FORMED`。现象一与现象三复现。
+  - 适配器：`FindChainHead` 打桩回空时红（「只有首版时链头应是 v1：found=false」）；0021 落地前第二个首版 `Save` 答已存（outcome=1）。
+  - 编排：改处理器前三例红（v2 与撤回后两例答 `LOAD_ASSIGNMENT_UNDECIDED`，读链头失败一例答 `LOAD_ASSIGNMENT_FORMED`）；并发落败例在加按分配读回前答 `LOAD_ASSIGNMENT_UNDECIDED`。
+  - HTTP 适配器例改前答 201。
+  - 改后全绿；真渠道四例 `-count=5` 稳定。
+- **复现不了的格**：无。现象二（版本号被占）没有单独跑出红：修复前首例在更前一步就红了。修复后由首例尾段覆盖。
+- **迁移号**：`transport_fulfillment/0021`。落地时 origin/main 上该目录最高是 0020，本地各分支也没有 0021。
+- **存量检查**：语句是迁移里的那条 `SELECT tenant_id, assignment_ref, count(*) … WHERE corrects_version IS NULL GROUP BY tenant_id, assignment_ref HAVING count(*) > 1`。
+  - 本机 gate 库（55432）：c8_walk6、psb26_mcp4d、psb26_walk 均 0 行，无并列首版；postgres 库与演示库 idp-postgres/parcel_syn 没有该表。
+  - 临时库上造一对并列首版跑 0021：`RAISE` 列出 `SYN-TENANT-01/SYN-LA-FORK（2 个首版）`，索引未建；删掉并列根后重跑，索引建成。
+  - 干净库：pgtest 模板库按序施加全部迁移，上列测试全绿。
+- **门**：改动 `.go` 跑 `gofmt -l` 无输出；`go build ./...` 与 `go vet ./...` 退 0；带 DSN 跑 `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api ./internal/architecture/... ./migrations/...` 全 ok；机制清点已重生成，单独提交。全仓全量未跑。
+- **顺带发现（不在本票，未改）**
+  - 领域 `LoadAssignment.Withdraw` 在变化版上撤回时，照抄前版的 `revisedAt`，产出的行撞 0009 的 `load_assignment_revision_xor_withdrawal`。撤回入口接上（tf-unwired-seven/05）之前要修。
+  - 响应形状没有撤回格：链头是撤回版时，调用方从本口读不出它已撤回。本票未加字段。
+- **未做**：票 15 补记下的回写行（越出本票地盘，留给会话）；非作者评审；推送方全量。
+- **证据层级**：`S`（隔离合成，`SYN-` 夹具）。
+- 评审：待会话读 diff 审。
