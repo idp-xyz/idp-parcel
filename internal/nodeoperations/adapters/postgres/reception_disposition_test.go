@@ -275,3 +275,34 @@ func TestABrokenDispositionDocumentIsLoud(t *testing.T) {
 		t.Fatalf("坏文档读回：err = %v, want ErrInvalidIdentityDisposition", err)
 	}
 }
+
+// Covers: 处置新加的两个读面照 no-reception-source/04 的口径不读并入行（ADR-0199 决定四：并入不是判断、不进任何版本链）——同一件实物
+// 在同一节点再来落下的并入行，按实物读各行与按实物上列链头都不交回；它不带关联，按包裹读关联与处置截断也碰不到它。
+func TestTheDispositionReadsLeaveMergeRecordsOut(t *testing.T) {
+	catalogue, receptions, _, transactor := newReviewCatalogue(t)
+	ctx := t.Context()
+	early, conflict, late := oneMarkChains(t)
+	intoEarly := mergedRow(t, dispositionTenant, "SYN-SCAN-NRI06-MERGED-A", "SYN-UNIT-NRI06-A", "node-1", early.JudgmentVersion.String())
+	intoLate := mergedRow(t, dispositionTenant, "SYN-SCAN-NRI06-MERGED-B", "SYN-UNIT-NRI06-B", "node-1", late.JudgmentVersion.String())
+	_, notIt := dispositionOfOneMark(t)
+	saveReceptions(t, transactor, ctx, receptions, early, conflict, late, intoEarly, intoLate, notIt)
+
+	rows, err := receptions.FindUnitIntakes(ctx, ref(t, domain.NewTenantID, dispositionTenant), ref(t, domain.NewHandlingUnitID, "SYN-UNIT-NRI06-A"))
+	if err != nil {
+		t.Fatalf("按实物读：%v", err)
+	}
+	if got := sourceIDsOf(rows); !slices.Equal(got, []string{conflict.Key.SourceID, notIt.Key.SourceID, early.Key.SourceID}) {
+		t.Fatalf("按实物读 = %v, want 不含并入行", got)
+	}
+	units, err := catalogue.ListIdentityReviewUnits(ctx, ref(t, domain.NewTenantID, dispositionTenant), 10)
+	if err != nil {
+		t.Fatalf("按实物上列：%v", err)
+	}
+	for _, unit := range units {
+		for _, head := range unit.Heads {
+			if head.SourceID == intoEarly.Key.SourceID || head.SourceID == intoLate.Key.SourceID || head.Kind == ports.RecordMergedIntoExistingIntake.String() {
+				t.Fatalf("%s 的链头里有并入行 %+v", unit.Unit, head)
+			}
+		}
+	}
+}
