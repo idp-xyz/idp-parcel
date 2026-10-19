@@ -40,6 +40,14 @@ func commandEndpoint[R any](
 					writeProblem(response, http.StatusForbidden, codeOperatorNotGranted)
 					return
 				}
+				if errors.Is(err, ErrIntegrationClientCredentialRejected) {
+					writeProblem(response, http.StatusUnauthorized, codeIntegrationClientCredentialRejected)
+					return
+				}
+				if errors.Is(err, ErrIntegrationClientNotGranted) {
+					writeProblem(response, http.StatusForbidden, codeIntegrationClientNotGranted)
+					return
+				}
 				if errors.Is(err, ErrDeviceNotInUse) {
 					writeProblem(response, http.StatusForbidden, codeDeviceNotInUse)
 					return

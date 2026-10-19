@@ -43,6 +43,7 @@ const (
 	OperatorDecisionCarrierFirstEffectivePickupJudgment OperatorDecision = "CARRIER_FIRST_EFFECTIVE_PICKUP_JUDGMENT"
 	OperatorDecisionTransportCommissionSubmission       OperatorDecision = "TRANSPORT_COMMISSION_SUBMISSION"
 	OperatorDecisionChargeOccurrenceRegistration        OperatorDecision = "TRANSPORT_CHARGE_OCCURRENCE_REGISTRATION"
+	OperatorDecisionBookingRequestSubmission            OperatorDecision = "BOOKING_REQUEST_SUBMISSION"
 )
 
 // 容量预占与容量释放各是一种决定（ADR-0203 决定三）：能占的不因此能放。
@@ -84,8 +85,9 @@ var (
 
 	_ TransportCommissionSubmissionIntake = (*OperatorDecisionIntake)(nil)
 
-	_ CapacityReservationIntake = (*OperatorDecisionIntake)(nil)
-	_ CapacityReleaseIntake     = (*OperatorDecisionIntake)(nil)
+	_ CapacityReservationIntake      = (*OperatorDecisionIntake)(nil)
+	_ CapacityReleaseIntake          = (*OperatorDecisionIntake)(nil)
+	_ BookingRequestSubmissionIntake = (*OperatorDecisionIntake)(nil)
 )
 
 func NewOperatorDecisionIntake(authenticator OperatorAuthenticator) (*OperatorDecisionIntake, error) {
@@ -198,6 +200,19 @@ func (intake *OperatorDecisionIntake) IntakeChargeOccurrenceRegistration(ctx con
 		return application.RegisterChargeOccurrenceCommand{}, err
 	}
 	return payload.Command(operator)
+}
+
+// IntakeBookingRequestSubmission 译订舱提交（`/transport-fulfillment-booking-request-submissions`）。
+func (intake *OperatorDecisionIntake) IntakeBookingRequestSubmission(ctx context.Context, request *http.Request) (application.SubmitBookingCommand, error) {
+	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionBookingRequestSubmission)
+	if err != nil {
+		return application.SubmitBookingCommand{}, err
+	}
+	var payload BookingRequestSubmissionPayload
+	if err := decodeClosedPayload(request.Body, &payload); err != nil {
+		return application.SubmitBookingCommand{}, err
+	}
+	return payload.Command(tenant)
 }
 
 // tenantFor 交回出示者在这一种决定上的租户。租户只取自认证结果（ADR-0003），载荷里不收租户。
