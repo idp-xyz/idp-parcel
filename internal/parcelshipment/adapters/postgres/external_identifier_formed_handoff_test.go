@@ -105,26 +105,29 @@ func TestAcceptanceRingsADoorbellPerFormedRelation(t *testing.T) {
 	}
 }
 
-// Covers: 票 operator-channel/54 的口径落到门铃上——号码进册前没有长度门（只拦全空白），越过 Subject 上限或带控制字符的号
-// 照样形成关联，接受不因门铃被拒而回滚：这样的号 Subject 换成号码的定长摘要，载荷照旧原样带号。
+// Covers: 票 operator-channel/54 的口径落到门铃上——号码进册前只有「存得下」那道门（票 ps-external-mark-relations/06），不拦
+// 控制字符：带控制字符的号与册收得下的最长号照样形成关联，接受不因门铃被拒而回滚。Subject 收不下的号换成号码的定长摘要，
+// 收得下的原样带，哪一封都不越 Subject 上限；载荷照旧原样带号。
 func TestANumberTheSubjectCannotCarryStillRingsByItsDigest(t *testing.T) {
 	fixture := newExternalIdentifierFixture(t)
-	long := strings.Repeat("CUST-NRS03-LONG-", 40)
+	longest := strings.Repeat("CUST-NRS03-LONG-", 32)
 	tabbed := "CUST-NRS03\tTAB"
 	fixture.insertAndAccept(t, numberedRequest(t, "tenant-1", "customer-1", "req-key-1", "request-1",
-		[]string{"parcel-1", "parcel-2"}, map[string]string{"parcel-1": long, "parcel-2": tabbed}))
+		[]string{"parcel-1", "parcel-2"}, map[string]string{"parcel-1": longest, "parcel-2": tabbed}))
 
 	bells := doorbellsOf(t, fixture.pool)
-	if got := numbersRung(bells); !slices.Equal(got, []string{tabbed, long}) && !slices.Equal(got, []string{long, tabbed}) {
+	if got := numbersRung(bells); !slices.Equal(got, []string{tabbed, longest}) && !slices.Equal(got, []string{longest, tabbed}) {
 		t.Fatalf("门铃的号 = %q, want 两个号原样在载荷里", got)
 	}
 	for _, bell := range bells {
-		if !strings.HasPrefix(bell.subject, "NUMBER-SHA256/") || len(bell.subject) > eventing.MaxSubjectLength {
-			t.Fatalf("号 %q 的 Subject = %q, want 号码摘要", bell.payload["number"], bell.subject)
+		number := bell.payload["number"]
+		digested := strings.HasPrefix(bell.subject, "NUMBER-SHA256/")
+		if len(bell.subject) > eventing.MaxSubjectLength || (bell.subject != number && !digested) || (number == tabbed && !digested) {
+			t.Fatalf("号 %q 的 Subject = %q, want 收得下的原样、收不下的（带控制字符）换成号码摘要，且不越上限", number, bell.subject)
 		}
 	}
-	if got := fixture.parcelsOf(t, "tenant-1", long); !slices.Equal(got, []string{"parcel-1"}) {
-		t.Fatalf("长号查得 %v——接受被门铃带着回滚了", got)
+	if got := fixture.parcelsOf(t, "tenant-1", longest); !slices.Equal(got, []string{"parcel-1"}) {
+		t.Fatalf("最长的号查得 %v——接受被门铃带着回滚了", got)
 	}
 }
 

@@ -259,9 +259,10 @@ func customerParcelNumbers(
 	}
 	declarations := make([]domain.CustomerParcelNumberDeclaration, 0, len(members))
 	for index, member := range members {
+		// 拒因点名草案里那一格：号码进不了册，客户改这一格才会好（票 ps-external-mark-relations/06 裁定二）。
 		number, err := domain.NewExternalIdentifierNumber(customerParcels[index].String())
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
+			return nil, malformedField(fmt.Sprintf("parcels[%d].customerParcelReference", index), err)
 		}
 		declaration, err := domain.DeclareCustomerParcelNumber(member, number)
 		if err != nil {

@@ -561,6 +561,41 @@ func TestCustomerSubmissionIntakeTrimsOnlyTheEndsOfCustomerReferences(t *testing
 	}
 }
 
+// Covers: 票 ps-external-mark-relations/06 裁定二——客户包裹参考去过两端空白后存不进外部标识关联册（超过 512 字节、带 NUL），
+// 这份草案立不成命令：答 ErrMalformedRequest，拒因点名那一格（parcels[1].customerParcelReference），不把号码本身抄进拒因。
+// 恰 512 字节的照收、逐字进配对。
+func TestIsolatedSubmissionIntakeRefusesACustomerParcelReferenceTheRegisterCannotStore(t *testing.T) {
+	intake := newIsolatedIntake(t, &permittingOwnershipDouble{revision: "SYN-REV-1"})
+	withSecond := func(reference string) string {
+		return strings.Replace(strings.Replace(isolatedDraft, `"parcels": [`, `"parcels": [
+    {"customerParcelReference": "SYN-PCLREF-0000"},`, 1), `"SYN-PCLREF-0001"`, `"`+reference+`"`, 1)
+	}
+	for name, reference := range map[string]string{
+		"513 字节": strings.Repeat("P", 513),
+		"带 NUL":  `SYN-PCL\u0000REF`,
+	} {
+		_, err := intake.IntakeSubmission(context.Background(), draftRequest(withSecond(reference)))
+		if !errors.Is(err, shipmenthttp.ErrMalformedRequest) {
+			t.Fatalf("%s：err = %v, want ErrMalformedRequest", name, err)
+		}
+		if !strings.Contains(err.Error(), "parcels[1].customerParcelReference") {
+			t.Fatalf("%s：拒因 %q 没点名那一格", name, err)
+		}
+		if strings.Contains(err.Error(), "PPPP") {
+			t.Fatalf("%s：拒因把号码本身抄了进去：%q", name, err)
+		}
+	}
+
+	longest := strings.Repeat("P", 512)
+	command, err := intake.IntakeSubmission(context.Background(), draftRequest(withSecond(" "+longest+" ")))
+	if err != nil {
+		t.Fatalf("接入 512 字节的客户包裹参考：%v", err)
+	}
+	if got := customerNumbersOf(command); !slices.Equal(got, []string{"SYN-PCLREF-0000", longest}) {
+		t.Fatalf("客户包裹件号 = %d 个, want 第二个逐字是那 512 字节", len(got))
+	}
+}
+
 func customerNumbersOf(command application.SubmitShipmentRequestCommand) []string {
 	numbers := make([]string, len(command.CustomerParcelNumbers))
 	for index, declaration := range command.CustomerParcelNumbers {

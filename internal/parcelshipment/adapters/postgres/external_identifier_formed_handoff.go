@@ -127,7 +127,7 @@ func ringFormed(ctx context.Context, doorbell *ExternalIdentifierDoorbell, forme
 //
 //   - ID 是关联键（租户，类型，分配方，号码，包裹，形成依据）的定长指纹：一条关联一封，重放撞同一个 ID，EnqueueOnce 不出第二封。
 //   - 分区键是（租户，号码）的定长指纹：同一个号的门铃排一条队，重核按号找的正是同一批待识别；不用可读的「租户/号码」，号码
-//     没有长度上限。
+//     进册的字节界与分区键的上限是各自的两条界，拼起来的串不保证收得下。
 //   - Subject 原样带号码，越界或带控制字符时换成号码的摘要，见 externalIdentifierSubject。
 //   - Scope 是租户，与各上下文的信封同一口径。
 func externalIdentifierDoorbellEnvelope(entry formedExternalIdentifier) (eventing.Envelope, error) {
@@ -155,10 +155,11 @@ func externalIdentifierDoorbellEnvelope(entry formedExternalIdentifier) (eventin
 	}, nil
 }
 
-// externalIdentifierSubject 是门铃的 Subject：号码原样，给看信封的人读。号码进册前只拦全空白，没有长度门，也不拦控制字符
-// （条码规则属租户取值，ADR-0184 决定五）；而信封的 Subject 有上限、不收控制字符，越界的信封被框架确定性拒收。门铃与关联同
-// 一笔事务，拒收就把委托接受或面单结果一并回滚，重试多少次都一样——为一封门铃挡住一份接受，代价倒置了。所以这样的号在
-// Subject 上换成号码的定长摘要，载荷照旧原样带号：NO 按载荷里的号比对，Subject 只是给人看的。
+// externalIdentifierSubject 是门铃的 Subject：号码原样，给看信封的人读。号码进册前的门（NewExternalIdentifierNumber）只管存不
+// 存得下，不拦控制字符（条码规则属租户取值，ADR-0184 决定五）；它的字节界与 Subject 的上限是各自的两条界，这里不假设哪条更紧。
+// 信封的 Subject 有上限、不收控制字符，越界的信封被框架确定性拒收。门铃与关联同一笔事务，拒收就把委托接受或面单结果一并
+// 回滚，重试多少次都一样——为一封门铃挡住一份接受，代价倒置了。所以这样的号在 Subject 上换成号码的定长摘要，载荷照旧原样
+// 带号：NO 按载荷里的号比对，Subject 只是给人看的。
 func externalIdentifierSubject(number string) string {
 	if len(number) <= eventing.MaxSubjectLength && utf8.ValidString(number) && strings.IndexFunc(number, unicode.IsControl) < 0 {
 		return number

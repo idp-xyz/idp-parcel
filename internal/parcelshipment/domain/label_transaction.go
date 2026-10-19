@@ -2,6 +2,7 @@ package domain
 
 import (
 	"errors"
+	"fmt"
 	"time"
 )
 
@@ -397,6 +398,17 @@ func (transaction LabelTransaction) RecordChannelResult(spec RecordChannelResult
 	results, err := transaction.matchResultsToCoverage(spec.ParcelResults)
 	if err != nil {
 		return LabelTransaction{}, err
+	}
+	// 受理的那件带回的号随这笔结果进外部标识关联册（ADR-0184 决定三），进册的门只有 NewExternalIdentifierNumber 一处，这里
+	// 照问它。存不进的照坏结果拒：放过去，仓储落库时整笔撞库回滚、答依赖故障，重放同一份结果永远一样。门不放进
+	// matchResultsToCoverage：重建也走那里，已落库的结果要读得回。
+	for _, result := range results {
+		if !result.accepted {
+			continue
+		}
+		if _, err := NewExternalIdentifierNumber(result.identifier.String()); err != nil {
+			return LabelTransaction{}, fmt.Errorf("%w: parcel %s channel identifier: %w", ErrInvalidLabelTransaction, result.parcel, err)
+		}
 	}
 	transaction.parcelResults = results
 	transaction.resultObservedAt = spec.ObservedAt.UTC()

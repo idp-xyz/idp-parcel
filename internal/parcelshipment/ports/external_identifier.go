@@ -9,6 +9,9 @@ import (
 // ParcelExternalIdentifierView 按（租户，号码）核对包裹身份（ADR-0184 决定五、ADR-0195）。号码逐字比对；命中多件即
 // 交回多件、去重，不按形成时间、来源或分配方挑一件——消费方据候选与歧义信号判身份。不交分配方、客户账户或委托
 // （CONTEXT-MAP `parcel-shipment → node-operations`）。查无交空；依赖读不动作为错误返回，空与「没查到」不是一回事。
+//
+// 号码收成品类型：过不了 NewExternalIdentifierNumber 的号（ErrExternalIdentifierNumberNotStorable）交不进来，它也不可能在册，
+// 消费方在构造那一步就答查无此号、不必来问；把它当成读不动，会让一个确定不在册的号落进永远续不上的重核。
 type ParcelExternalIdentifierView interface {
 	FindParcelsByExternalIdentifier(
 		ctx context.Context,

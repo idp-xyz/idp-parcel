@@ -2,6 +2,8 @@ package domain
 
 import (
 	"errors"
+	"fmt"
+	"strings"
 	"time"
 )
 
@@ -9,13 +11,34 @@ import (
 // 或一件包裹给了两个号。它与 ErrInvalidDeclaredMeasurement 同格——客户输入的问题，编排答`输入未受理`。
 var ErrInvalidCustomerParcelNumber = errors.New("parcel shipment: invalid customer parcel number")
 
+// ErrExternalIdentifierNumberNotStorable 说明号码存不进外部标识关联册。它是确定的：同一个号再交多少次都一样，所以写入方
+// 答坏输入、不答依赖故障；核对的一侧据此答查无此号——立不起来的号不可能在册。
+var ErrExternalIdentifierNumberNotStorable = errors.New("parcel shipment: external identifier number cannot enter the register")
+
+// externalIdentifierNumberMaxBytes 是号码「存得下、索引得了」的机制界（票 ps-external-mark-relations/06 裁定一），不是业务
+// 口径：关联册按号码建 btree 索引，索引行有长度上限，号码不设界就会在写入那一刻整笔回滚。界远低于那条上限，远高于现行
+// 条码与运单号的长度；租户真实号码多长不在这里配。按 UTF-8 字节计，因为库里的上限按字节算。
+const externalIdentifierNumberMaxBytes = 512
+
 // ExternalIdentifierNumber 是外部参与方分配的号码本身。逐字保存、逐字比对，不做大小写、空白或校验位折算：
 // 条码规则属租户取值（UC-NO-002 明禁写默认条码规则；ADR-0184 决定五）。
 type ExternalIdentifierNumber struct{ requiredValue }
 
+// NewExternalIdentifierNumber 是号码进册前唯一的一道门：全空白、带 NUL（Postgres 的 text 存不下）、超过字节界的立不起来。
+// 其余字符一个不拒，回车换行、Tab、GS 分隔符都是现场或客户给出的号码的一部分，拒掉或去掉就是在折算号码。
 func NewExternalIdentifierNumber(value string) (ExternalIdentifierNumber, error) {
 	required, err := newRequiredValue("external identifier number", value)
-	return ExternalIdentifierNumber{required}, err
+	if err != nil {
+		return ExternalIdentifierNumber{}, err
+	}
+	if strings.ContainsRune(value, 0) {
+		return ExternalIdentifierNumber{}, fmt.Errorf("%w: it carries a NUL character", ErrExternalIdentifierNumberNotStorable)
+	}
+	if len(value) > externalIdentifierNumberMaxBytes {
+		return ExternalIdentifierNumber{}, fmt.Errorf("%w: it is %d bytes, over the %d-byte limit",
+			ErrExternalIdentifierNumberNotStorable, len(value), externalIdentifierNumberMaxBytes)
+	}
+	return ExternalIdentifierNumber{required}, nil
 }
 
 // ExternalIdentifierKind 是标识类型的封闭集合。类型决定被标识对象的种类与分配方的种类（ADR-0184 决定二）：

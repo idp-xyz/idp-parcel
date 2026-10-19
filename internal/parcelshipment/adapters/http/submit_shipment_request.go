@@ -9,6 +9,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
@@ -21,6 +22,25 @@ import (
 // 分法直接决定离线客户端的动作——4xx 出队交给人，5xx 留在队里重发——所以把依赖不可用误包成
 // 它，会让一条本该重试的请求被丢掉。
 var ErrMalformedRequest = errors.New("parcel shipment http: malformed request")
+
+// malformedFieldError 是点得出是哪一格的坏报文：除了 ErrMalformedRequest 本身，还带着草案里那一格的路径，端点据此在答复的
+// `field` 里点名。路径出自调用方自己的报文形状，不是底层失败的措辞，所以它不碰 problemResponse 不带自由文本的那条理由。
+type malformedFieldError struct {
+	field string
+	cause error
+}
+
+func malformedField(field string, cause error) error {
+	return &malformedFieldError{field: field, cause: cause}
+}
+
+func (malformed *malformedFieldError) Error() string {
+	return fmt.Sprintf("%v: %s: %v", ErrMalformedRequest, malformed.field, malformed.cause)
+}
+
+func (malformed *malformedFieldError) Unwrap() []error {
+	return []error{ErrMalformedRequest, malformed.cause}
+}
 
 // SubmissionIntake 把一次已认证的接入请求翻译成一条提交命令。
 //
@@ -130,6 +150,8 @@ type problemResponse struct {
 
 type problemDetail struct {
 	Code string `json:"code"`
+	// Field 只随能点名到格的 MALFORMED_REQUEST 在场：调用方报文里那一格的路径，改它才会好。没点名时整键不出现。
+	Field string `json:"field,omitempty"`
 }
 
 func writeOutcome(response http.ResponseWriter, result application.SubmitShipmentRequestResult) {

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	noparcel "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/parcelshipment"
@@ -116,5 +117,31 @@ func TestABlankMarkHasNoCandidatesAndAReadFailureIsReturned(t *testing.T) {
 	}
 	if _, err := noparcel.NewParcelIdentityView(nil); err == nil {
 		t.Fatal("缺读口也装得起来")
+	}
+}
+
+// Covers: 票 ps-external-mark-relations/06 裁定三——观察到的号过不了 PS 号码的构造门（超过 512 字节、带 NUL），就不可能在册：
+// 答零个候选、不带歧义信号、不报错，也不去问 PS。报错会被收寄读成身份读不动，落未核对的待识别、响重核门铃，而重核拿着
+// 同一个号永远续不上。PS 那边哪怕有歧义信号也轮不到它：号根本没交过去。
+func TestAMarkTheRegisterCannotHoldHasNoCandidatesAndIsNotAnError(t *testing.T) {
+	fake := &externalIdentifiersFake{
+		parcels:  []psdomain.DeclaredParcelID{must(t, psdomain.NewDeclaredParcelID, "DPCL-1")},
+		declared: true,
+	}
+	view, err := noparcel.NewParcelIdentityView(fake)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, mark := range map[string]string{
+		"513 字节": strings.Repeat("M", 513),
+		"带 NUL":  "SYN-PCL\x00-01",
+	} {
+		answer, err := resolveAnswer(t, view, mark)
+		if err != nil || len(answer.Candidates) != 0 || answer.Ambiguous {
+			t.Fatalf("%s：answer = %+v err = %v, want 零候选、无信号、不报错", name, answer, err)
+		}
+	}
+	if len(fake.asked) != 0 {
+		t.Fatalf("PS 被问 %d 次, want 0——不可能在册的号不必去问", len(fake.asked))
 	}
 }

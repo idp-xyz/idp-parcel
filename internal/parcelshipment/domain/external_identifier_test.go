@@ -2,6 +2,7 @@ package domain_test
 
 import (
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -133,6 +134,63 @@ func TestAnExternalIdentifierNumberIsKeptVerbatim(t *testing.T) {
 	}
 	if _, err := domain.DeclareCustomerParcelNumber(domain.DeclaredParcelID{}, number); err == nil {
 		t.Fatal("没有包裹的配对也立得起来")
+	}
+}
+
+// Covers: 票 ps-external-mark-relations/06 裁定一——号码进册前要存得下：带 NUL 的、UTF-8 字节数超过 512 的立不起来，
+// 拒因是 ErrExternalIdentifierNumberNotStorable；界按字节不按字符数，171 个汉字（513 字节）同样立不起来。恰 512 字节的
+// 与带回车换行、Tab、GS 分隔符的照收，逐字不动——其余字符照 ADR-0184 决定五不折算、不拒。
+func TestAnExternalIdentifierNumberMustBeStorable(t *testing.T) {
+	for name, value := range map[string]string{
+		"带 NUL":        "SYN-NUM\x00-0001",
+		"513 字节 ASCII": strings.Repeat("A", 513),
+		"513 字节汉字":     strings.Repeat("号", 171),
+	} {
+		if _, err := domain.NewExternalIdentifierNumber(value); !errors.Is(err, domain.ErrExternalIdentifierNumberNotStorable) {
+			t.Fatalf("%s：err = %v, want ErrExternalIdentifierNumberNotStorable", name, err)
+		}
+	}
+	for name, value := range map[string]string{
+		"512 字节 ASCII":   strings.Repeat("A", 512),
+		"512 字节汉字加两位":    strings.Repeat("号", 170) + "AB",
+		"带回车换行":          "SYN-NUM-0001\r\n",
+		"带 Tab 与 GS 分隔符": "\tSYN\x1dNUM-0001",
+	} {
+		number, err := domain.NewExternalIdentifierNumber(value)
+		if err != nil || number.String() != value {
+			t.Fatalf("%s：number = %q err = %v, want 逐字照收", name, number.String(), err)
+		}
+	}
+}
+
+// Covers: 票 ps-external-mark-relations/06 裁定二——渠道结果里受理的那件包裹带回的渠道包裹件号存不进册时，这份渠道结果照该路
+// 坏结果的答法拒收（ErrInvalidLabelTransaction，编排答`未受理`），不交给仓储去撞库；恰 512 字节的照收、逐字形成关联。门只在
+// 记录结果这一步：已落库的结果重建时不再过这道门，旧行读得回。
+func TestAChannelResultWhoseAcceptedNumberCannotEnterTheRegisterIsRefused(t *testing.T) {
+	for name, identifier := range map[string]string{
+		"带 NUL":  "SYN-CH\x00-0001",
+		"513 字节": strings.Repeat("C", 513),
+	} {
+		_, err := submittedLabelTransaction(t, "parcel-1").RecordChannelResult(domain.RecordChannelResultSpec{
+			Outcome:       domain.LabelTransactionSucceeded,
+			ParcelResults: []domain.LabelTransactionParcelResultSpec{acceptedParcelResult(t, "parcel-1", identifier)},
+			ObservedAt:    labelTransactionAt.Add(2 * time.Minute),
+		})
+		if !errors.Is(err, domain.ErrInvalidLabelTransaction) || !errors.Is(err, domain.ErrExternalIdentifierNumberNotStorable) {
+			t.Fatalf("%s：err = %v, want ErrInvalidLabelTransaction 且拒因是号码存不进册", name, err)
+		}
+	}
+
+	longest := strings.Repeat("C", 512)
+	recorded := recordedLabelTransaction(t, domain.LabelTransactionSucceeded, acceptedParcelResult(t, "parcel-1", longest))
+	if relations := channelRelationsOf(t, recorded); relations["parcel-1"].Number().String() != longest {
+		t.Fatalf("512 字节的渠道包裹件号没有逐字形成关联：%+v", relations)
+	}
+
+	stored := rehydratedLabelTransactionSpec(t)
+	stored.ParcelResults[0] = acceptedParcelResult(t, "parcel-1", strings.Repeat("C", 513))
+	if _, err := domain.RehydrateLabelTransaction(stored); err != nil {
+		t.Fatalf("已落库的结果重建被这道门拦下：%v", err)
 	}
 }
 
