@@ -382,16 +382,23 @@ func deliverAndEndParticipation(t *testing.T, db *bentopg.DB, store *outbox.Stor
 	tenant := mustTF(t, tfdomain.NewTenantID, formationTenant)
 	object := mustTF(t, tfdomain.NewCarriedObjectReference, parcel)
 	attempt := mustTF(t, tfdomain.NewAttemptReference, "SYN-ATTEMPT-DCG67")
+	// 在册的每一版交付都带交付门禁读数（ADR-0213 决定五）。取登记编排在这份夹具上会停的那一格：SZX 那次交接没声明交出
+	// 节点，进段的那次交接取不到 at，不问关务。本文件证的是发生项那一路，不背关务那一侧。
+	gateReading, err := tfdomain.FormDeliveryGateReading(tfdomain.DeliveryGateReadingSpec{Stop: tfdomain.DeliveryReleasingNodeNotDeclared})
+	if err != nil {
+		t.Fatalf("交付门禁读数：%v", err)
+	}
 	delivery, err := tfdomain.RehydrateEffectiveDelivery(tfdomain.RehydrateEffectiveDeliverySpec{
-		TenantID:   tenant,
-		Object:     object,
-		Attempt:    attempt,
-		Place:      mustTF(t, tfdomain.NewAttemptPlaceReference, "SYN-DOOR-DCG67"),
-		Method:     mustTF(t, tfdomain.NewDeliveryMethodReference, "SYN-METHOD-01"),
-		Recipient:  mustTF(t, tfdomain.NewReceivingPartyReference, "SYN-RECIPIENT-01"),
-		Proof:      mustTF(t, tfdomain.NewDeliveryProofReference, "SYN-POD-DCG67"),
-		Version:    mustTF(t, tfdomain.NewDeliveryResultVersion, "SYN-DRV-DCG67"),
-		OccurredAt: at,
+		TenantID:    tenant,
+		Object:      object,
+		Attempt:     attempt,
+		Place:       mustTF(t, tfdomain.NewAttemptPlaceReference, "SYN-DOOR-DCG67"),
+		Method:      mustTF(t, tfdomain.NewDeliveryMethodReference, "SYN-METHOD-01"),
+		Recipient:   mustTF(t, tfdomain.NewReceivingPartyReference, "SYN-RECIPIENT-01"),
+		Proof:       mustTF(t, tfdomain.NewDeliveryProofReference, "SYN-POD-DCG67"),
+		Version:     mustTF(t, tfdomain.NewDeliveryResultVersion, "SYN-DRV-DCG67"),
+		OccurredAt:  at,
+		GateReading: gateReading,
 	})
 	if err != nil {
 		t.Fatalf("交付：%v", err)
