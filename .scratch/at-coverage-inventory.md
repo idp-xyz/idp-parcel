@@ -18,8 +18,8 @@
 
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 310 |
-| ② 机制候选 | 235 |
+| ① 已钉住 | 312 |
+| ② 机制候选 | 233 |
 | ③ 实例/闸门 | 143 |
 | ④ 机制未落地 | 425 |
 | 合计 | 1113 |
@@ -27,7 +27,7 @@
 | 前缀 | 总数 | ① | ② | ③ | ④ |
 |---|---|---|---|---|---|
 | CC | 425 | 35 | 0 | 89 | 301 |
-| NO | 61 | 22 | 32 | 7 | 0 |
+| NO | 61 | 24 | 30 | 7 | 0 |
 | NR | 53 | 24 | 28 | 1 | 0 |
 | PC | 36 | 35 | 1 | 0 | 0 |
 | PS | 93 | 66 | 25 | 2 | 0 |
@@ -94,6 +94,8 @@
 | `AT-NO-040` | internal/nodeoperations/application/consolidate_parcels_test.go::TestSealingFreezesTheSnapshotAndClosureIsFinal |
 | `AT-NO-047` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestEveryObservationKeepsItsDeliverySource；cmd/parcel-api/reception_delivery_source_test.go::TestTheWiredReceptionKeepsTheDeliverySourceOfEveryObservation |
 | `AT-NO-048` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestAReplayAfterAnIdentityConflictAnswersTheCurrentVersion；internal/nodeoperations/application/receive_delivered_unit_test.go::TestAReplayOfAnUndecidedOrRefusedJudgmentAnswersItsOwnVersion；cmd/parcel-api/reception_delivery_source_test.go::TestTheWiredReplayAfterAnIdentityConflictAnswersTheCurrentVersion |
+| `AT-NO-049` | internal/nodeoperations/application/receive_delivered_unit_same_unit_test.go::TestTheSameUnitAtTheSameNodeIsMergedIntoItsCurrentIntake；internal/nodeoperations/application/receive_delivered_unit_test.go::TestTheSameUnitDeliveredAgainIsNotAnIdentityConflict；internal/nodeoperations/adapters/http/receive_delivered_unit_same_unit_test.go::TestTheSameUnitAgainAnswersTheIntakeItWasMergedInto；cmd/parcel-api/reception_same_unit_test.go::TestTheWiredReceptionMergesTheSameUnitAtTheSameNode；cmd/parcel-api/reception_same_unit_concurrent_test.go::TestConcurrentDeliveriesOfOneUnitSerializeOnTheUnit（并发半边）；cmd/parcel-frontline-import/intake_same_unit_test.go::TestFrontlineImportContinuesAndMergesRowsOfTheSameUnit |
+| `AT-NO-050` | internal/nodeoperations/application/receive_delivered_unit_same_unit_test.go::TestAScanOnlyJudgmentIsContinuedByTheLaterObservation；cmd/parcel-api/reception_same_unit_test.go::TestTheWiredReceptionContinuesAScanOnlyJudgment；cmd/parcel-frontline-import/intake_same_unit_test.go::TestFrontlineImportContinuesAndMergesRowsOfTheSameUnit |
 | `AT-NO-052` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestAUniqueHitThatAnUnacceptedRequestAlsoDeclaresIsAnIdentityConflict |
 | `AT-NO-061` | internal/nodeoperations/domain/directional_basis_test.go::TestIdentityBasisReadsEachJudgmentChainHead；cmd/parcel-api/reception_one_mark_two_units_test.go::TestTheWiredReceptionTurnsOneMarkOnTwoUnitsIntoAnIdentityConflict（真库面：一码两物之后两件的原因集） |
 | `AT-NR-001` | internal/networkrouting/application/create_initial_route_test.go::TestThreeParcelsKeepThreeIndependentResults；internal/networkrouting/domain/initial_route_plan_test.go::TestAnInitialRoutePlanCarriesItsFullSelectionBasis；internal/networkrouting/domain/route_ranking_test.go::TestSelectionFollowsTheStrategysDeclaredCriterionOrder |
@@ -375,8 +377,6 @@
 | `AT-NO-043` | 同一来源事实重复或内容冲突 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-044` | 路由变化与旧指令下分拣并发 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-045` | 节点完成备货、点验和物理装载 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
-| `AT-NO-049` | 同一作业实物换来源，再次交到已有当前收寄的同一节点 | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
-| `AT-NO-050` | 只有到站扫描的待确认之后，同一实物来了明确接收或拒收 | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
 | `AT-NO-051` | 身份核对读不动 | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
 | `AT-NO-053` | 一码两物之后，持授予的操作者指定后到那件是那件包裹，同一次处置把先到那件列为连带实物 | UC-NO-004-DISPOSE-AN-IDENTITY-CONFLICT.md |
 | `AT-NO-054` | 多候选、或恰一个候选带歧义信号的待识别实物，处置确认不是其中任何一件 | UC-NO-004-DISPOSE-AN-IDENTITY-CONFLICT.md |
@@ -1221,6 +1221,8 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-19 追记（票 demo-chain-gaps/31 评审后补）：UC-CC-013 新立 `AT-CC-411`–`425`（`docs/application` 的 AT 全集随之扩大），随票在领域、编排、真库与装配用例上补 Covers 点名，全部入①；只有半边覆盖的测试在行内注明哪一半边。①290→305（CC 20→35），CC 总数 410→425，合计 1083→1098；②③④不变。
 
 追记九（票 no-reception-source/03，2026-10-19）：`AT-NO-026`「身份后来被 `parcel-shipment` 确认」随按存下的号重核落地点名入①（编排面、生产派发器门铃真库面、人工重核真库面三处），由②移出。①309→310（NO 21→22）、②236→235（rebase 到另一会话 TF 链第一波之上后按新基数重算）（NO 33→32），合计不变。
+
+追记十（票 no-reception-source/04，2026-10-19）：`AT-NO-049`「同一作业实物换来源，再次交到已有当前收寄的同一节点」与 `AT-NO-050`「只有到站扫描的待确认之后，同一实物来了明确接收或拒收」随同一作业实物在同一节点并入、仅扫描待确认续办落地点名入①（编排面、HTTP 面、真库面、受控批量口面；`AT-NO-049` 另有真库并发半边），由②移出。①310→312（NO 22→24）、②235→233（NO 32→30），合计不变。
 
 ### 两盘之间新落的硬句测试面（不入①，逐面列出供领票比对）
 
