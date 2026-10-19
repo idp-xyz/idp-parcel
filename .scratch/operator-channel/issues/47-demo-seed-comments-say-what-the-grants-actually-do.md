@@ -1,7 +1,7 @@
 # 47 演示种子与 README 的注释和说明照实写：授予与对照做了什么、管理台实际有哪几页
 
 Category: chore
-Status: in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 7、序 4 评审遗留；用户授权代决）；分支 `claude-oc47`
+Status: in-progress——2026-10-18 作者子代理完工，待非作者评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 7、序 4 评审遗留；用户授权代决）；分支 `claude-oc47`
 Blocked by: 无
 父票：[26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)（票 26 评审遗留的后续）
 出处：票 [24](./24-demo-configurator-holds-the-shipment-side-decision-grants.md) Comments 评审 Spec 非阻断 1–3、Standards 非阻断 1；票 [15](./15-operation-decision-faces-take-operator-intake.md) Comments「钉 `60244fa6`」那条评审 Spec 非阻断 1。
@@ -124,7 +124,50 @@ Blocked by: 无
 
 ## 完成判据
 
-- [ ] 上列各条逐条改完或注明「已不存在」；改后的说法与代码一致（引符号名为证）。
-- [ ] 改动文件 `git diff --check` 干净、无 CR / BOM；注释中文、只写为什么、不写变更说明、跨文件引用不用行号也不用计数。
-- [ ] `bash -n scripts/demo-seeds/seed.sh` 退 0。
+- [x] 上列各条逐条改完或注明「已不存在」；改后的说法与代码一致（引符号名为证）。
+- [x] 改动文件 `git diff --check` 干净、无 CR / BOM；注释中文、只写为什么、不写变更说明、跨文件引用不用行号也不用计数。
+- [x] `bash -n scripts/demo-seeds/seed.sh` 退 0。
 - [ ] 非作者评审（隔离子代理两轴）0 阻断。
+
+## 完成记录（2026-10-18，会话 idp-parcel-9b 的实施子代理，分支 claude-oc47）
+
+**落点**（基于 `b58b10ef`；动手前对着该版文件与代码把「做什么」各条备注里的事实复核了一遍，均仍成立）：
+
+- `scripts/demo-seeds/seed.sh`（只改注释与进度行文字）：`cbd40430`（C7-2、C7-3、C7-6）、`650b45a4`（C7-7）。
+- `scripts/demo-seeds/README.md`：`1cbe5053`（C7-1、C7-5）、`07aba1ad`（C7-4、C7-8）。
+- 替换稿逐字照各条「改法」。偏离一处：C7-7 去掉编号之后，代收段注释里「别指望本节像前六步那样幂等」没了锚点（网络目录段本来也不幂等），改成「别指望本节重放幂等」，随 `650b45a4` 提交。
+- C7-8 备注里「已知边界」以「七页真数据展示还依赖查询端点的目录 Intake 配置」开头的那条，照票面不改。
+- 对端会话要在 seed.sh 加的那一行调用：完工时 fetch 的 origin/main 仍是 `b58b10ef`，上面还没有这一行，所以本分支没有 rebase。本票没改任何调用行，进 main 时就算冲突，也只会落在相邻的注释上。
+
+**完成判据逐格**：
+
+1. 各条逐条改完、说法与代码一致：会话 scratchpad 里的核对脚本 `oc47/check.sh`（只读，不提交）对 C7-1…C7-8 逐格核「旧说法已去 / 新说法在」，「不做」三格核：对 `b58b10ef` 比，非注释、非进度行逐字不变；`data/` 未动。说法与代码一致的符号证据，在本分支带 DSN 跑绿：
+   - `TestSwappedDecisionFacesAnswerFromTheOperatorChannel`：权威串未设时，授予齐备的各运营决定口答 403 `OUTSIDE_ADMISSION_SCOPE`。
+   - `TestIsolatedWriteAdmissionSwitchesOnlyTheAdmittedCommandLines`、`TestIsolatedWriteAdmissionNamesTheAdmittedCommandLines`：`isolatedWriteAdmittedCommandLines` 里没有运营决定口。
+   - `TestManualReviewCompletionIsAddressedServerSideAndSignedByTheAuthenticatedOperator`、`TestActiveRejectionAndDispositionTakeTheDeciderFromTheAuthenticatedOperator`：复核人、决定人、处置人都取信封里的提交操作者。
+   - `TestClosureAndReopeningThroughTheOperatorChannelAgainstARealDatabase`：按包裹查到`已接受`委托之后，停在授权缺口上。
+
+   管理台页面一格用 grep 复核：`apps/admin-web/src` 里调运营决定口的只有 `completeManualReview`、`rejectShipmentRequest`、`disposeShipmentRequest`、`judgeEffectiveTime`。`data/governance/` 里能力为 `OPERATION_DECISION` 的区间、`data/access/02` 的授予、`03` 的对照，都与 `accessidentity` 的 `decisionKinds` 逐种对得上。
+2. `git diff --check b58b10ef` 干净；核对脚本的 CR、BOM 两格都过。新写的注释与说明只写为什么，不写变更说明；跨文件引用用符号名（`decisionKinds`、`isolatedWriteAdmittedCommandLines`、页面组件名）与文件路径，不用行号，也不用计数。
+3. `bash -n scripts/demo-seeds/seed.sh` 退 0，核对脚本里也有这一格。
+4. 非作者评审：待评审。
+
+**先红后绿**：本票没有运行时行为，红绿落在核对脚本上。改前对 `b58b10ef` 跑：C7-1…C7-8 每一条都至少有一格 RED，脚本退 1；「不做」三格、`bash -n`、CR / BOM 都 ok。改后对 `07aba1ad` 跑：全部 ok，退 0。
+
+**门**：
+
+- 没有 `.go` 改动，gofmt 不适用。`go build ./...`、`go vet ./...` 都退 0。
+- `IDP_PARCEL_POSTGRES_DSN=… go test -p 1 -count=1 ./internal/architecture/... ./scripts/demo-seeds/...` ok（后者没有测试文件）。本票没改 Go 包，所以不存在「改动包」或「直接引用改动包的包」；grep 过，Go 测试只读 `scripts/demo-seeds/data/` 下的文件，不读 seed.sh 与 README。
+- 上面第 1 格列的取证用例逐个 `-run` 跑绿。
+- 前端没改，没跑。
+- 机制清点重生成，无差。
+- seed.sh 没有实跑：只改了注释与 echo 文字，以 `bash -n` 为准；实跑要往演示库灌数，不在本票范围。
+
+**证据层级**：S。纯文档与注释，演示租户 SYN-TENANT-01 的合成取值一行未动，没有写成任何默认值。
+
+**评审**：待非作者评审。
+
+**留给评审与后续**（票面没列，没改）：
+
+- README 里还有两处在数 dex.yaml 的静态用户：「操作者渠道」第 2 步的「Dex 两个静态用户的主体」，以及「组成」表 `operator-channel/` 行的「两个合成静态用户」。和 C7-3、C7-4 去掉的是同一类问题。
+- seed.sh 治理段总述的末句「只登今天已换口的那几种；余下的口换口时随那一笔补」，对运营决定已经不成立（`decisionKinds` 每一种都已登区间），对外部事实可能还成立，要等外部事实各口逐一核过才能改写。
