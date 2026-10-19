@@ -11,20 +11,20 @@
 | collectionremittance | 23 | 9 | 4 | 6 | 0 | 3 |
 | customscompliance | 119 | 114 | 22 | 47 | 10 | 16 |
 | networkrouting | 80 | 80 | 9 | 14 | 2 | 7 |
-| nodeoperations | 103 | 103 | 13 | 28 | 4 | 15 |
+| nodeoperations | 104 | 108 | 14 | 28 | 4 | 15 |
 | parcelpricing | 133 | 122 | 17 | 16 | 1 | 23 |
 | parcelshipment | 209 | 203 | 20 | 39 | 10 | 19 |
 | partycommercial | 165 | 177 | 13 | 42 | 1 | 38 |
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 208 | 150 | 34 | 63 | 12 | 9 |
-| transportfulfillment | 225 | 225 | 39 | 43 | 13 | 43 |
+| transportfulfillment | 231 | 230 | 40 | 45 | 13 | 43 |
 | visibilityexception | 108 | 104 | 12 | 31 | 8 | 11 |
-| **合计** | 1458 | 1380 | 188 | 341 | 62 | 190 |
+| **合计** | 1465 | 1390 | 190 | 343 | 62 | 190 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 106、测试 212。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 106、测试 214。
 
-## 跨上下文消费缝：48 组，140 个生产文件
+## 跨上下文消费缝：48 组，141 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -65,7 +65,7 @@
 | settlementaccounting | partycommercial | 5 |
 | settlementaccounting | transportfulfillment | 1 |
 | transportfulfillment | accessidentity | 5 |
-| transportfulfillment | customscompliance | 2 |
+| transportfulfillment | customscompliance | 3 |
 | transportfulfillment | networkrouting | 2 |
 | transportfulfillment | parcelshipment | 2 |
 | transportfulfillment | partycommercial | 3 |
@@ -77,7 +77,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 6 |
 
-## 迁移：12 个模块共 265 份 SQL
+## 迁移：12 个模块共 267 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -85,13 +85,13 @@
 | collection_remittance | 1 |
 | customs_compliance | 24 |
 | network_routing | 20 |
-| node_operations | 16 |
+| node_operations | 17 |
 | parcel_pricing | 12 |
 | parcel_shipment | 26 |
 | party_commercial | 39 |
 | pilot_governance | 8 |
 | settlement_accounting | 39 |
-| transport_fulfillment | 37 |
+| transport_fulfillment | 38 |
 | visibility_exception | 27 |
 
 ## 接线面：接入面端点 169 个，消费适配器 51 个生产文件，直投路由表 34 条
@@ -141,7 +141,7 @@
 | visibilityexception | 10 |
 | **合计** | 34 |
 
-## 端口：声明 540 个；基线口径缺 37，精确口径缺 2
+## 端口：声明 543 个；基线口径缺 37，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
