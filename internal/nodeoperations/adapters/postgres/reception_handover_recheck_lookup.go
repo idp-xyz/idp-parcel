@@ -8,6 +8,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 )
 
+var _ ports.HandoverAssignmentReceptions = (*Receptions)(nil)
+
 // FindRecheckableInHandoverNote 按（租户，交接单）找名下的重核对象（ADR-0212 决定六）：成员表按交接单取作业实物（索引
 // delivery_handover_member_by_note，迁移 0013），收寄册按作业实物取（部分索引 reception_intake_unit_idx，迁移 0005——谓词里的
 // `intake IS NOT NULL` 与它的部分条件逐字同形，规划器才认得它），再筛开立节点上当前有效版本属于重核对象的行：判据与

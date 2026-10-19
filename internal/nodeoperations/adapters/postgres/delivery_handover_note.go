@@ -34,7 +34,10 @@ func NewDeliveryHandoverNotes(db *bentopg.DB) (*DeliveryHandoverNotes, error) {
 	return &DeliveryHandoverNotes{db: db}, nil
 }
 
-var _ ports.DeliveryHandoverNoteRegister = (*DeliveryHandoverNotes)(nil)
+var (
+	_ ports.DeliveryHandoverNoteRegister = (*DeliveryHandoverNotes)(nil)
+	_ ports.HandoverReceptionMembership  = (*DeliveryHandoverNotes)(nil)
+)
 
 const handoverNoteColumns = `note_id, node_ref, delivering_party, claimed_account_ids, opened_at`
 
