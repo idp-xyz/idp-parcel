@@ -13,7 +13,7 @@ import (
 //
 // 末个节点的日历登了派送时长、且候选的交付范围已解析出来（scoped），段链末尾接一段交付段，
 // 候选的投影窗口也延到交付段的终点（ADR-0217）：预计承诺说的是交到收件人，止于交付节点的投影
-// 会把派送那一截算成零。没登派送时长就不成段，投影止于离开交付节点，与这一格出现之前相同。
+// 会把派送那一截算成零。没登派送时长就不成段，投影止于离开交付节点。
 func projectCandidateTime(
 	candidate catalogCandidate,
 	scope domain.ServiceAreaVersionReference,

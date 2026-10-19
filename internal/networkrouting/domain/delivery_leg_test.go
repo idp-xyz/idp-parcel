@@ -120,7 +120,7 @@ func TestAPlanRefusesAMisplacedDeliveryLeg(t *testing.T) {
 }
 
 // Covers: 交付段构造门——交付范围、责任与窗口必备；零长窗口（登了 0 分钟派送时长）合法（AT-NR-063 的领域半边）。
-// 段种类词封闭两格，族外与空词都拒。
+// 段种类词封闭，族外与空词都拒。
 func TestADeliveryLegNeedsItsScopeAndTheKindVocabularyIsClosed(t *testing.T) {
 	window := plannedWindow(t)
 	if _, err := domain.NewDeliveryLeg(domain.DeliveryLegSpec{

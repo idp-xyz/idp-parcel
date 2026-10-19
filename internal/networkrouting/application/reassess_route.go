@@ -216,27 +216,38 @@ func (handler *ReassessRouteHandler) Handle(
 	return handler.reassessNoRoute(ctx, trigger, evidence)
 }
 
+// planNodesOf 取计划的节点序列，只由节点间段推（ADR-0217）：交付段之后没有可控节点，把它计入
+// 剩余段数，冻结边界会整体提前一个节点。答不出只可能是计划绕过了构造门——FormInitialRoutePlan
+// 保证节点间段连续且至少一段——那是编程错误，响亮报错；折成「冻结形态未配置」会把它伪装成租户
+// 配置缺口。
+func planNodesOf(plan domain.InitialRoutePlan) ([]string, error) {
+	nodes, ok := domain.PlanNodes(plan.NodeLegs())
+	if !ok {
+		return nil, fmt.Errorf("network routing: plan %s yields no node sequence", plan.Version().String())
+	}
+	return nodes, nil
+}
+
 // freezeOf 在原计划仍可执行时判断有没有越过冻结边界。未声明形态答未配置，不当成未冻结。
-// 硬约束失效不走这里。剩余段数只数节点间段（ADR-0217）：交付段一加进计划，演示策略「剩余
-// 不超过一段即冻结」就会在倒数第二个节点提前冻结，那是计划形状变了，不是租户改了取值。
+// 硬约束失效不走这里。
 func freezeOf(
 	plan domain.InitialRoutePlan,
 	trigger domain.ReassessmentTrigger,
 	evidence ports.InitialRouteEvidence,
-) (domain.FreezeJudgment, bool) {
-	nodes, ok := domain.PlanNodes(plan.NodeLegs())
-	if !ok {
-		return domain.FreezeJudgment{}, true
+) (domain.FreezeJudgment, bool, error) {
+	nodes, err := planNodesOf(plan)
+	if err != nil {
+		return domain.FreezeJudgment{}, false, err
 	}
 	prefix := domain.JudgeExecutedPrefix(nodes, trigger.Control(), trigger.Location().String())
 	if prefix.Grade() != domain.ExecutedPrefixEstablished {
-		return domain.FreezeJudgment{}, true
+		return domain.FreezeJudgment{}, true, nil
 	}
 	judgment, err := domain.JudgeFreezeBoundary(evidence.FreezeForm, evidence.FreezeRemainingSegmentLimit, prefix.RemainingSegments())
 	if err != nil || judgment.Unconfigured() {
-		return judgment, true
+		return judgment, true, nil
 	}
-	return judgment, false
+	return judgment, false, nil
 }
 
 // reassessPlan 是原来有计划的那条线：6A 独立判定，仍适用即保留、失效即失效（候选状态
@@ -260,7 +271,10 @@ func (handler *ReassessRouteHandler) reassessPlan(
 		return handler.undecided(key, PlanReviewInconclusive), nil
 
 	case domain.PlanStillApplicable:
-		judgment, unconfigured := freezeOf(plan, trigger, evidence)
+		judgment, unconfigured, err := freezeOf(plan, trigger, evidence)
+		if err != nil {
+			return ReassessRouteResult{}, err
+		}
 		if unconfigured {
 			return handler.undecided(key, FreezeFormUnconfigured), nil
 		}
@@ -340,7 +354,10 @@ func (handler *ReassessRouteHandler) rerouteAfterLapse(
 	evidence ports.InitialRouteEvidence,
 	record ports.ReassessmentRecord,
 ) (ports.ReassessmentRecord, error) {
-	authority, blockers := structuralAutoReroute(trigger, lapsedPlan, evidence)
+	authority, blockers, err := structuralAutoReroute(trigger, lapsedPlan, evidence)
+	if err != nil {
+		return ports.ReassessmentRecord{}, err
+	}
 	record.RerouteState = authority
 	record.RerouteBlockers = blockers
 
@@ -487,7 +504,10 @@ func (handler *ReassessRouteHandler) tryImprovementReroute(
 	evidence ports.InitialRouteEvidence,
 	record ports.ReassessmentRecord,
 ) (ports.ReassessmentRecord, error) {
-	authority, _ := structuralAutoReroute(trigger, plan, evidence)
+	authority, _, err := structuralAutoReroute(trigger, plan, evidence)
+	if err != nil {
+		return ports.ReassessmentRecord{}, err
+	}
 	if authority != domain.AutomaticRerouteAllowed {
 		return record, nil
 	}
@@ -563,15 +583,16 @@ func structuralAutoReroute(
 	trigger domain.ReassessmentTrigger,
 	plan domain.InitialRoutePlan,
 	evidence ports.InitialRouteEvidence,
-) (domain.RerouteAuthority, []string) {
+) (domain.RerouteAuthority, []string, error) {
 	atNode := trigger.Control() == domain.NodeIntakeControl || trigger.Control() == domain.TransportHandoverControl
-	onlyUnexecuted := false
-	if nodes, ok := domain.PlanNodes(plan.NodeLegs()); ok {
-		prefix := domain.JudgeExecutedPrefix(nodes, trigger.Control(), trigger.Location().String())
-		onlyUnexecuted = prefix.Grade() == domain.ExecutedPrefixEstablished ||
-			prefix.Grade() == domain.ExecutedPrefixNodeNotOnPlan
+	nodes, err := planNodesOf(plan)
+	if err != nil {
+		return domain.RerouteAuthorityInvalid, nil, err
 	}
-	return domain.FoldAutoReroute(
+	prefix := domain.JudgeExecutedPrefix(nodes, trigger.Control(), trigger.Location().String())
+	onlyUnexecuted := prefix.Grade() == domain.ExecutedPrefixEstablished ||
+		prefix.Grade() == domain.ExecutedPrefixNodeNotOnPlan
+	authority, blockers := domain.FoldAutoReroute(
 		evidence.AutoRerouteForm,
 		evidence.AutoRerouteImprovementThresholdMinor,
 		atNode,
@@ -579,6 +600,7 @@ func structuralAutoReroute(
 		evidence.UnresolvedRestrictions,
 		evidence.OutstandingResponsibilities,
 	)
+	return authority, blockers, nil
 }
 
 func costImprovement(costs []domain.CandidateCostFact, current, next domain.CandidateID) (int64, bool) {

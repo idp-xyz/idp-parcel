@@ -133,7 +133,7 @@ type initialRouteBody struct {
 }
 
 // plannedLegBody 是成计划行上的一段（ADR-0217）。reference 是登记方声明段引用时照抄的拼写；kind 是
-// 封闭两格原词；交付段的 to 是交付范围。各格都是字符串：管理台契约夹具的值类型今天只认字符串。
+// domain.PlannedLegKind 的原词；交付段的 to 是交付范围。各格都是字符串：管理台契约夹具的值类型今天只认字符串。
 type plannedLegBody struct {
 	Reference   string `json:"reference"`
 	Kind        string `json:"kind"`
