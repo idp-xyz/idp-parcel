@@ -17,7 +17,7 @@ import (
 
 // 钉 BUY 消费门（票 demo-chain-gaps/08；票 sa-cc/01 的消费门接上形成路）：真算的 PP 评价经真 BUY 读口、真形成编排
 // 与真外层走一遍，BUY 请求册与预期成本库是内存替身。门只管译引用、分方向与折结果：回指在册的已完成评价形成一份
-// 供应商预期成本，版本标识由请求派生、三件来源引用取自请求、金额出自评价；SELL 评价与没有回指的 BUY 评价入账、零
+// 供应商预期成本，版本标识由请求派生、合格来源引用取自请求、金额出自评价；SELL 评价与没有回指的 BUY 评价入账、零
 // 写入；评价采用不了的各格入账、零写入；回指不在册是两侧矛盾、原样上抛；评价读不回、依赖答不出是未决并带根因。
 // 夹具全为 SYN 卡（S 级）。
 
@@ -151,7 +151,7 @@ func roundedBuyCard(t *testing.T) ppdomain.PricingPlanVersion {
 	return buyPlan(t, ppdomain.PricingDirectionBuy, ppdomain.PricingPurposeSupplierCost, true)
 }
 
-// Covers: 回指在册的已完成 BUY 评价经门形成一份供应商预期成本首版：版本标识由请求派生，三件来源引用取自请求，金额与
+// Covers: 回指在册的已完成 BUY 评价经门形成一份供应商预期成本首版：版本标识由请求派生，合格来源引用取自请求，金额与
 // 规则版本出自评价（12.5 USD → 1250 分）。同一封再投一次入账，仍只有一份。
 func TestTheBuyGateFormsTheSupplierExpectedCostFromTheRequestedEvaluation(t *testing.T) {
 	fixture := newBuyGateFixture(t, requestedEvaluation(t, "eval-buy-1", "EVREQ-SYN-1", roundedBuyCard(t), "Z1"))

@@ -11,7 +11,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
-// 钉 BUY 形成编排外层（票 demo-chain-gaps/08）：按评价回指读回 BUY 评价请求，以请求上的三件来源引用与由请求派生的
+// 钉 BUY 形成编排外层（票 demo-chain-gaps/08）：按评价回指读回 BUY 评价请求，以请求上的合格来源引用与由请求派生的
 // 版本标识调形成编排本体；重放不多形成；没有回指零写入；回指不在册是矛盾；评价停下的各格是定局、零写入；只有依赖
 // 答不出才是未决，并带根因。评价读口与预期成本库用 form_supplier_expected_cost_test.go 的替身。夹具全是合成串。
 

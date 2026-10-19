@@ -99,7 +99,7 @@ type FormRequestedSupplierExpectedCostDeps struct {
 }
 
 // FormRequestedSupplierExpectedCostHandler 是 UC-SA-002 步 5 BUY 方向的形成编排外层（票 demo-chain-gaps/08）：BUY·供应商
-// 成本评价已记录之后，按评价回指读回 BUY 评价请求，以请求上的三件来源引用与由请求派生的版本标识调形成编排。请求册
+// 成本评价已记录之后，按评价回指读回 BUY 评价请求，以请求上的合格来源引用与由请求派生的版本标识调形成编排。请求册
 // 没有状态列，本编排不改记请求：评价采用不了的那几格在计价那一侧的评价上可查（评价状态与问题项，按回指读），本侧
 // 只是不形成成本行。
 type FormRequestedSupplierExpectedCostHandler struct {

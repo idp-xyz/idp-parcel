@@ -538,9 +538,9 @@ var dutyPaymentVerificationUndecidedSentinels = []error{
 }
 
 // buyEvaluationRecordedUndecidedSentinels 是 PP 评价已记录信封 → SA 供应商预期成本形成这条线（sa-cc/01；
-// 票 demo-chain-gaps/08、ADR-0200）登记的未决哨兵，两枚的恢复动作都是等依赖、重投：
-//   - sapricing.ErrEvaluationNotVisible——信封所指的评价在提供方读不回，或读口自己答不出。读不回里混着两种重投
-//     不自愈的格，见那枚哨兵的头注。
+// 票 demo-chain-gaps/08、ADR-0200）登记的未决哨兵，恢复动作都是等依赖、重投：
+//   - sapricing.ErrEvaluationNotVisible——信封所指的评价在提供方读不回，或读口自己答不出。读不回里混着重投不自愈
+//     的格，见那枚哨兵的头注。
 //   - sapricing.ErrSupplierCostFormationUndecided——BUY 请求册、评价读口或预期成本库答不出：形成与否未知，整笔
 //     回滚等重投。停在哪一个依赖上、它原样答了什么都在错误正文里。
 //
@@ -2779,7 +2779,7 @@ func adoptDutyPaymentVerificationConsumer(
 // formSupplierExpectedCostOnBuyEvaluationConsumer 接 sa-cc/01 那条线（票 demo-chain-gaps/08 接上形成路，ADR-0200）：
 // parcel-pricing 记下一份评价后交出的 `parcel-pricing.evaluation.recorded` 引用式信封 → SA 消费门 → 按（租户 + 评价
 // 标识）经 SA 的消费侧适配器读 PP 评价库（mech/06 SA-c 缝，ADR-0025）→ 不是 BUY·SUPPLIER_COST 的放过 → 形成编排外层
-// 按评价回指读回 BUY 评价请求，以请求上的三件来源引用与由请求派生的版本标识调既有的 FormSupplierExpectedCostHandler。
+// 按评价回指读回 BUY 评价请求，以请求上的合格来源引用与由请求派生的版本标识调既有的 FormSupplierExpectedCostHandler。
 // 跨上下文翻译只在 SA 的 `adapters/parcelpricing`；SA application 不 import PP。
 //
 // 外层与本体读的是同一只 BUY 读口：外层只看回指，本体按评价引用自己再读结果与金额，命令上不带金额
