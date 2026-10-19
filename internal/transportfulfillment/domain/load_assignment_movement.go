@@ -184,6 +184,9 @@ func (assignment LoadAssignment) Withdraw(
 	withdrawn.members = append([]CarriedObjectReference(nil), assignment.members...)
 	withdrawn.corrects = assignment.version
 	withdrawn.version = version
+	// 值拷贝会把变化版的修订时刻一并带过来；撤回版只是撤回，不是变化（见 RevisedAt 的头注），
+	// 带着它的这一版重建门与库面 CHECK 都会拒。
+	withdrawn.revisedAt = time.Time{}
 	withdrawn.withdrawn = true
 	withdrawn.withdrawnAt = withdrawnAt.UTC()
 	return withdrawn, nil

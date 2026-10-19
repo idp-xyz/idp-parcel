@@ -135,6 +135,49 @@ func TestALoadAssignmentIsIntentNotLoading(t *testing.T) {
 	}
 }
 
+// 在变化版上撤回，撤回版只带撤回那一组格：修订与撤回各自产出一版且互斥（迁移 0009 的
+// load_assignment_revision_xor_withdrawal），撤回版若照抄前版的修订时刻，库面会拒掉整笔事务。
+// 分配时刻照旧沿用原分配时刻，对象范围随前版。
+func TestWithdrawingARevisedAssignmentCarriesNoRevisionTime(t *testing.T) {
+	assignment, err := domain.FormLoadAssignment(assignmentSpec(t))
+	if err != nil {
+		t.Fatalf("form assignment: %v", err)
+	}
+	revised, err := assignment.ReviseMembers(
+		[]domain.CarriedObjectReference{mustValue(t, domain.NewCarriedObjectReference, "parcel-1")},
+		mustValue(t, domain.NewLoadAssignmentVersion, "assignment/v2"),
+		assignedAt.Add(time.Hour),
+	)
+	if err != nil {
+		t.Fatalf("revise members: %v", err)
+	}
+	withdrawnAt := assignedAt.Add(2 * time.Hour)
+	withdrawn, err := revised.Withdraw(mustValue(t, domain.NewLoadAssignmentVersion, "assignment/v3"), withdrawnAt)
+	if err != nil {
+		t.Fatalf("withdraw: %v", err)
+	}
+
+	if at, wasRevised := withdrawn.RevisedAt(); wasRevised {
+		t.Fatalf("撤回版带了前版的修订时刻 %s——修订与撤回只占其一", at)
+	}
+	if at, isWithdrawn := withdrawn.Withdrawn(); !isWithdrawn || !at.Equal(withdrawnAt) {
+		t.Fatalf("撤回两件不对：at=%s withdrawn=%v", at, isWithdrawn)
+	}
+	if predecessor, has := withdrawn.Corrects(); !has || predecessor.String() != "assignment/v2" {
+		t.Fatalf("撤回版应回指变化版 v2：%q has=%v", predecessor, has)
+	}
+	if !withdrawn.AssignedAt().Equal(assignedAt) {
+		t.Fatalf("撤回版的分配时刻被改了：%s", withdrawn.AssignedAt())
+	}
+	if members := withdrawn.Members(); len(members) != 1 || members[0].String() != "parcel-1" {
+		t.Fatalf("撤回版的对象范围应随前版：%v", members)
+	}
+	// 前版原样：撤回是值语义上的新版本，不改变化版自己的修订时刻。
+	if at, wasRevised := revised.RevisedAt(); !wasRevised || !at.Equal(assignedAt.Add(time.Hour)) {
+		t.Fatalf("撤回改写了变化版的修订时刻：%s revised=%v", at, wasRevised)
+	}
+}
+
 // Covers: CONTEXT「出发、移动、到达……属于实际事实」与执行准备判断「不得共用一个可覆盖
 // 状态」——事实记录不等于交接、不结束控制（类型上无控制/交接字段）；迟到与更正形成新
 // 版本回指前身，原记录不改写。

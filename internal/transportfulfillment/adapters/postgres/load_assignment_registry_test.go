@@ -143,6 +143,68 @@ func TestAWithdrawnVersionRoundTripsStillWithdrawn(t *testing.T) {
 	}
 }
 
+// TestAWithdrawalOfARevisedVersionSavesAndReadsBack 证在变化版上撤回形成的那一版能落库：
+// 0009 的 load_assignment_revision_xor_withdrawal 不许一版同时带修订时刻与撤回，撤回版只带撤回
+// 那一组格。读回来回指变化版、对象范围随变化版、分配时刻仍是原分配时刻，且它是链头。
+func TestAWithdrawalOfARevisedVersionSavesAndReadsBack(t *testing.T) {
+	repository, transactor, _ := newLoadAssignments(t)
+	ctx := t.Context()
+
+	first := synLoadAssignmentRecord(t, "SYN-TENANT-01", "SYN-LA-REVISED-WD", "v1", "SYN-PARCEL-1", "SYN-PARCEL-2")
+	mustSaveLoadAssignment(t, transactor, ctx, repository, first)
+
+	revisedAt := assignedAtDBFixture.Add(time.Hour)
+	revised, err := first.Assignment.ReviseMembers(
+		[]domain.CarriedObjectReference{segmentRef(t, domain.NewCarriedObjectReference, "SYN-PARCEL-1")},
+		segmentRef(t, domain.NewLoadAssignmentVersion, "v2"), revisedAt)
+	if err != nil {
+		t.Fatalf("变化：%v", err)
+	}
+	mustSaveLoadAssignment(t, transactor, ctx, repository, ports.LoadAssignmentRecord{
+		Key:        loadAssignmentKeyFixture(t, "SYN-TENANT-01", "SYN-LA-REVISED-WD", "v2"),
+		Assignment: revised,
+		RecordedAt: revisedAt.Add(time.Minute),
+	})
+
+	withdrawnAt := assignedAtDBFixture.Add(2 * time.Hour)
+	withdrawn, err := revised.Withdraw(segmentRef(t, domain.NewLoadAssignmentVersion, "v3"), withdrawnAt)
+	if err != nil {
+		t.Fatalf("撤回：%v", err)
+	}
+	withdrawnKey := loadAssignmentKeyFixture(t, "SYN-TENANT-01", "SYN-LA-REVISED-WD", "v3")
+	mustSaveLoadAssignment(t, transactor, ctx, repository, ports.LoadAssignmentRecord{
+		Key:        withdrawnKey,
+		Assignment: withdrawn,
+		RecordedAt: withdrawnAt.Add(time.Minute),
+	})
+
+	found, exists, err := repository.FindByKey(ctx, withdrawnKey)
+	if err != nil || !exists {
+		t.Fatalf("取回撤回版：%v exists=%v", err, exists)
+	}
+	if at, isWithdrawn := found.Assignment.Withdrawn(); !isWithdrawn || !at.Equal(withdrawnAt) {
+		t.Fatalf("撤回两件没有原样带回：at=%v withdrawn=%v", at, isWithdrawn)
+	}
+	if _, wasRevised := found.Assignment.RevisedAt(); wasRevised {
+		t.Fatal("撤回版读回来带了修订时刻")
+	}
+	if corrects, has := found.Assignment.Corrects(); !has || corrects.String() != "v2" {
+		t.Fatalf("撤回版应回指变化版 v2：%q has=%v", corrects, has)
+	}
+	if members := found.Assignment.Members(); len(members) != 1 || members[0].String() != "SYN-PARCEL-1" {
+		t.Fatalf("撤回版的对象范围应随变化版：%v", members)
+	}
+	if !found.Assignment.AssignedAt().Equal(assignedAtDBFixture) {
+		t.Fatalf("撤回版的分配时刻被改了：%s", found.Assignment.AssignedAt())
+	}
+
+	head, headFound, err := repository.FindChainHead(ctx,
+		segmentRef(t, domain.NewTenantID, "SYN-TENANT-01"), segmentRef(t, domain.NewLoadAssignmentReference, "SYN-LA-REVISED-WD"))
+	if err != nil || !headFound || head.Key.Version.String() != "v3" {
+		t.Fatalf("撤回之后链头应是撤回版 v3：%+v found=%v err=%v", head.Key, headFound, err)
+	}
+}
+
 // TestASecondSaveOfTheSameVersionKeepsTheOriginal 证撞键译`已登记`而不是报错，也不顶替：
 // 换对象范围要换版本号，那是变化不是重投。
 func TestASecondSaveOfTheSameVersionKeepsTheOriginal(t *testing.T) {
