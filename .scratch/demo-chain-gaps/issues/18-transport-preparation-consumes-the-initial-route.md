@@ -1,7 +1,7 @@
 # 18 运输准备结果与初始路由消费者（01·三）
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg18（此前 ready-for-agent——2026-10-19 Claude Code 会话立，用户「你作为业务和系统专家自决……解决所有的问题」授权；代决见 [tf-chain-plan](../tf-chain-plan.md)）。
+Status: in-progress——完工待评审与进 main，分支 claude-dcg18；隔离评审 0 项阻断，非阻断处置见文末「评审记录」（此前 ready-for-agent——2026-10-19 Claude Code 会话立，用户「你作为业务和系统专家自决……解决所有的问题」授权；代决见 [tf-chain-plan](../tf-chain-plan.md)）。
 Blocked by: [16](./16-transport-schedule-templates-and-concrete-schedules-are-registered.md)；软依赖 [17](./17-capacity-pools-are-registered.md)（没有池时答 `容量待确认`，不挡落地）
 地盘：TF：新 `domain/transport_opportunity.go`；新 `application/prepare_opportunity_on_planned_legs.go`；新 `adapters/networkrouting/planned_leg_source.go`；新 `adapters/parcelshipment/declared_demand_source.go`；新包 `adapters/inbox/`；`postgres` 新 `transport_opportunity.go` + `review_catalogue.go`；迁移 TF 0028；`cmd/parcel-dispatch/assemble.go`(+_test)。
 出处：[01](./01-transport-opportunity-has-no-production-entry.md)；方案「01 运输机会与班次」D01-1、D01-5、D01-6、D01-7、D01-8、D01-10、D01-11，「跨票通则」X3、X4、X6，「需要的 ADR」ADR-0201。
@@ -44,25 +44,25 @@ L
 2. **窗口依据说不清连接就响亮失败**：一格不指或指两格，答 `ErrUntranslatableAnswer`（不进哨兵名单），不折成`未配置`、不按节点对猜（`AT-TF-135`）。既有用例 `initial_route_projection_test.go` 的夹具窗口依据随之改成指名连接。
 3. **规则版本 `TF-PREPARE/1`**：覆盖候选条件、择优、需求量取法与单位表；改一条就换串。
 4. **单位表**（答票 17 补记风险点 20）：质量 `G/KG/T/LB/OZ`、体积 `MM3/CM3/L/M3/IN3/FT3`、计数 `PCS`，定义值换算，大写原样比、不折大小写（与计价侧同一纪律）；认不出或量纲不符答`单位不可换算` → `容量待确认`。
-5. **需求量三维与锚**：重量照抄、体积三边乘积（单位写作长度单位加 `3`）、件数恒一件（来源是对象本身，只配件数维池）；锚 `baseline` 或已采用版本标识（与计价侧同词）。PS 答未定 / 未申报 / 无三格：不带锚、只剩件数，不答未决——重投不会让客户补报。
+5. **需求量三维与锚**：重量照抄、体积三边乘积（单位写作长度单位加 `3`）、件数恒一件（来源是对象本身，只配件数维池）；锚 `baseline` 或已采用版本标识（与计价侧同词）。PS 答未定 / 未申报 / 无：不带锚、只剩件数，不答未决——未申报与无，重投不会让客户补报；未定是`待复核`，会由复核解开但没有时限，复核后不随之重备（补记风险点 28）。
 6. **依据摘要只含依据**：段方向、窗口与需求量快照；结论与候选不进。同依据重投答`已有结果`、不重判；客户更正了申报再来答`结果冲突`、原结果不覆盖。
 7. **两种候选各用各的池**：登记册上的班次按登记册上的池（含预占，判断时点取当时的时钟）；只评估时物化的那一班按周期安排当前版声明物化出的空池，只算不存。为此 `ScheduleCandidatesResult` 多交一口 `Entries()`（来历与物化出的池），`Candidates()` 不变。
 8. **候选口只问出发落在段窗口内的**：早于窗口出发的不进候选列表，淘汰原因里那一格只在登记册上那一班改了时刻时出现；常见的淘汰是晚于窗口到达与起讫不符。
-9. **一封信封各段同一笔事务**：任一段未决整封回滚重投；已答的段重投答`已有结果`。消费入账的格：各段都有答案（含`未配置`、`已有结果`、`结果冲突`）与无路线零写入。
+9. **一封信封各段同一笔事务**：任一段未决整封回滚，已落的段行一并回滚，重投从头判；`已有结果`只在同一身份已由另一次提交落过时出现（同键的另一封信、并发撞键）。消费入账的格：各段都有答案（含`未配置`、`已有结果`、`结果冲突`）与无路线零写入。
 10. **无路线也交编排**：适配器不在翻译层跳过，`PlannedRouteNotFormed` 交编排、编排答零写入。
 11. **对象身份**：载运对象引用取 NR 判断键上的声明包裹，拼写不改。
 12. **端口另立文件**（方案 X4）：`ports/transport_preparation.go`（申报需求量、按班次读池、准备结果库）；`ports.go` 未动。查阅册加一法 `ListTransportPreparations`，随之补了 `cmd/parcel-api/unwired_orchestration.go` 与 tfhttp 两个替身的占位。
 13. **新包 `adapters/inbox`（`tfinbox`）**：消费者名 `transport-fulfillment/prepare-opportunity-from-initial-route`，事件类型串由本包自己写出；与 VE 认的串相等由派发路由表用例一并钉住。
-14. **哨兵名单**：只列 `ErrInitialRouteNotVisible` 与 `ErrPreparationUndecided`；记录对不上键、译不过去、编排结果集外都不进。
-15. **FanOut 次序**：先 VE 后 TF——准备读三本册子、可能未决，反序会把追踪投影堵在班次册后面。
-16. **演示班期**（租户取值，`S`）：首段窗口随提交时刻在上海当地 04:00–22:00 之间移动、长十二小时，按日一班 22:00 历时 600 分钟只接得住一小段；另登两份上海→深圳快线（`SYN-SCHED-SHA-SZX-EXPRESS-1200`、`-2000`，当地 12:00、20:00，历时 240 分钟，重量 3000 KG、件数 600 PCS），三班合起来覆盖首段窗口的全部落点。只加文件、`seed.sh` 只追加一节，既有三份周期安排不动（票 32 的真库用例读着第一份的 22:00）。
+14. **哨兵名单**：只列 `ErrInitialRouteNotVisible` 与 `ErrPreparationUndecided`；记录对不上键、计划段译不过去、编排结果集外都不进。申报译不过去（端口 `ErrDeclaredDemandUntranslatable`）与准备结果行读不懂（端口 `ErrTransportPreparationRecordUnreadable`，含依据摘要形状认不出）由编排原样以 error 上抛，不折成 `ErrPreparationUndecided`（评审修补）。
+15. **FanOut 次序**：先 VE 后 TF，沿用路由表先 VE 的惯例。`dispatch.FanOut` 各路都会调到、各开各的 inbox 事务，次序不影响入账。
+16. **演示班期**（租户取值，`S`）：首段窗口随提交时刻移动，按日运行的上海→深圳只接得住一小段；另登上海→深圳快线 `SYN-SCHED-SHA-SZX-EXPRESS-1200`、`-2000`，与按日那一班合起来覆盖首段窗口的全部落点。取值只登在 `scripts/demo-seeds/README.md` 组成表的 `data/transport/` 那几行，这里不复述。只加文件、`seed.sh` 只追加一节，既有周期安排不动（票 32 的真库用例读着 `01` 那一份的出发时刻）。
 17. **AT 号**：`AT-TF-126` 至 `AT-TF-135`（协调方预分配号段）。
-18. **TF CONTEXT 不动**：文档令牌次序里没有本票，准备结果的规则已由 ADR-0201 决定七与 UC 验收行承担；UC-TF-003 只在验收表末尾追加行。
+18. **TF CONTEXT 不动**：准备结果的规则已由 ADR-0201 决定七、八与 UC 验收行承担，CONTEXT 没有要改的不变量或生命周期。UC-TF-003 归文档令牌管，令牌次序里没有本票：本票只在验收表末尾追加行，进 main 时若票 20 也在表尾追加，并列保留两边的行。
 19. **新立票 44、45**（预分配号段）：44 节点实测后的再准备（决定八「另立票」），45 管理台运输准备结果区（前端切片）。
 
 ### 越权风险点
 
-ADR-0201 补记续编的六条：22 单位表封闭且区分大小写、23 选中的班次可以未登记、24 件数恒为一件、25 窗口依据的形状由 NR 定（NR owner 会签）、26 补登班次不重备已有结果、27 演示快线是为覆盖提交时刻凑的班期。本票另有：
+ADR-0201 补记续编的 22 至 28：22 单位表封闭且区分大小写、23 选中的班次可以未登记、24 件数恒为一件、25 窗口依据的形状由 NR 定（NR owner 会签）、26 补登班次不重备已有结果、27 演示快线是为覆盖提交时刻凑的班期、28 待复核期间形成的结果不随复核重备（PS owner 会签，评审补）。本票另有：
 
 1. **事件放大**（TF owner；NR owner 会签消费边）：正文风险点 1 原样成立——每包裹每段一次准备，每段读一次申报、两本册子与池册。
 2. **PS 读口歧义答未决**（PS owner）：同一包裹被多份已接受委托声明时 PS 返 error，本路答未决重投，直到放弃；与 VE 客户视图那一路对歧义的处置同形。
@@ -106,5 +106,42 @@ ADR-0201 补记续编的六条：22 单位表封闭且区分大小写、23 选�
 
 - **地盘外动了的文件**：`application/schedule_candidates.go`（加 `Entries()`，票 16 的文件，车道 A 内）；`ports/catalogue_read.go`、`adapters/http/query_transport_fulfillment_records.go`(+test)（车道 A 独占，查阅册新增一册必经）；`cmd/parcel-api/unwired_orchestration.go`（接口加法的占位）；`cmd/parcel-dispatch/initial_route_projection_test.go`（夹具窗口依据，见代决 2）；`adapters/networkrouting/delivery_window_source.go`、`adapters/parcelshipment/delivery_place_source.go`（只改包头注）。都没碰 9b 与 operator-channel/48 的地盘。
 - **派发令牌热点**：`assemble.go` 改了路由表上已有的初始路由那一行（挂的值换成 FanOut），这是票面要求，不是追加；其余是新增行与三处注释改口。`origin/main` 自本票基点之后在同一文件路由表末尾追加了一行（NO 外部件号声明撤回），与本票改的那一行不相邻，rebase 应无冲突。
-- **待 owner 裁**：ADR-0201 补记风险点 25 待 NR owner 会签；单位表要不要折大小写（风险点 22）、演示快线班期（风险点 27）待 TF owner 与演示 owner。
+- **待 owner 裁**：ADR-0201 补记风险点 25 待 NR owner 会签、28 待 PS owner 会签；单位表要不要折大小写（风险点 22）、演示快线班期（风险点 27）待 TF owner 与演示 owner。
+
+## 评审记录（2026-10-19，隔离评审一轮，作者子代理修补，分支 `claude-dcg18`）
+
+阻断 0 项；非阻断 8 项，标「进 main 前修」的 5 项全部处置，其余 3 项也修了。修补提交：`c71fe5eb`（代码与用例）、`1fe5a080` 与 `67882366`（注释）、`e0f1a1ee`（ADR 补记、种子 README 与演示脚本）。
+
+### 修了什么
+
+1. **确定性错误进了未决名单**（进 main 前修）。端口 `ports/transport_preparation.go` 立两个哨兵：`ErrDeclaredDemandUntranslatable`（申报译不成需求量快照）与 `ErrTransportPreparationRecordUnreadable`（库里那一份过不了重建门，或依据摘要形状认不出）。PS 适配器的译不过去用一个包级错误同时包住本包 `ErrUntranslatableAnswer` 与端口哨兵——包级那个不直接包端口哨兵，因为交付地点那一缝也用它。postgres `FindByKey` 重建失败包住读不懂；编排遇到这两类原样以 error 上抛，不答 `PreparationRunUndecided`，摘要形状认不出（含撞键读回的赢家）同答读不懂。用例：编排 `TestDeterministicFailuresAreRaisedNotUndecided`（申报译不过去、重建门不过、摘要形状认不出、撞键赢家摘要认不出，去掉修补即红）；真库 `TestAnUnreadableStoredPreparationIsRaisedNotUndecided`（改坏需求量快照、改坏摘要前缀两例，坏行原样留着）；派发 `TestTheInitialRoutePreparationLaneRegistersOnlyResumableSentinels`（名单取生产切片，续办两枚在、确定性五类不在）；PS 适配器用例加钉读不动不带端口哨兵、集外取值两个哨兵都认得。
+2. **「已答过的段重投答已有结果」与实现不符**（进 main 前修）。补记还没进 main，就地改了票 18 补记那一条，没有另追更正补记：整封回滚、已落段行一并回滚、重投从头判；`已有结果`只在同一身份已由另一次提交落过时出现。`Prepare` 头注同步改了；`prepareLeg`、规范化头注、补记「依据摘要只含依据」与风险点 26 里同类的「重投」一并改成「同一身份再来」。完成记录代决 9 同步改。
+3. **演示班期多处复述**（进 main 前修）。具体时刻、历时与容量只留 `scripts/demo-seeds/README.md` 组成表 `data/transport/05…、06…` 那一行，行尾写明 ADR 补记、演示脚本与 `seed.sh` 都指到这里。ADR 补记「演示班期」一条只留裁定（只调演示租户班期、不改匹配规则、证据 `S`）并指向 README；风险点 27 去掉「两份」与时刻；`seed.sh` 注释只写为什么加快线；演示脚本补记改成指向 README；完成记录代决 16 去掉时刻。
+4. **令牌与文件尾**（进 main 前修，本票能做的部分）。完成记录代决 18 的理由改成与实际改动一致（CONTEXT 不动是因为没有要改的不变量；UC-TF-003 归文档令牌、本票只在表尾追加）。其余三件是进 main 时的动作，交推送方，见下「交推送方」。
+5. **计数**（进 main 前修）。`vertical_test.go` 头注改成「每份……列出全部」；README `data/transport/` 行改成点名 `01`–`03`；`assemble.go`「三本册子」、`assemble_transport_preparation.go`「三站」改成直接列名。同类自查又改了几处数另一个包里东西的：PS 适配器与其用例里 PS 申报测量的「五格」（并删掉与实现不符的「无 default」）、tfhttp 准备结果册的「五值封闭词」、编排用例头注的「五格结论」、编排依赖注释的「两本班次册」。
+6. **FanOut 次序的因果**。`initialRouteFan` 上方改成「沿用路由表先 VE 的惯例；FanOut 各路都会调到、各开各的 inbox 事务，次序不影响入账」；完成记录代决 15 同步改。
+7. **PS「未定」不是客户没报**。补记「需求量的三维与锚」一条分开说理由，新增越权风险点 28（待复核期间形成的结果不随复核重备，TF owner、PS owner 会签，补救等票 36 或 44）；PS 适配器头注与完成记录代决 5 同步。
+8. **头注里的车道协调理由**。端口文件与规范化文件头注改成长期成立的理由（新聚合的端口与规范化各立一处），只留 X4 与 ADR-0014 出处。
+
+### 没采纳的
+
+- 无整项不采纳。第 1 项里评审给的两种做法（「分开」或「登明坏行按读不动处理」）取了分开；第 2 项评审说「只能再追加补记来更正」，那是对已进 main 的补记说的，本票补记还在分支上，就地改。
+
+### 同类未修、登记去向（不另立票：本票预分配的 44、45 已用，自取号会撞同波其他票的号段）
+
+- **班次册与池册的坏行仍按读不动答未决**。准备编排里候选口（票 16 的 `ScheduleCandidatesHandler`，任何 error 答候选未决）与池册（票 17 的 `CapacityPools.FindByKey`，重建失败不带可认的哨兵）的坏行，仍落 `ScheduleCandidatesUnavailable` / `CapacityPoolsUnavailable` 未决、重投到放弃。分开要动票 16、17 的仓储与编排契约，不在本票地盘；交 TF owner 定是否随下一张碰这两本册子的票一并分开。
+- **PS 读口的错误不分读不到、坏行与歧义**。PS `DeclaredMeasurementView` 的契约只说「error 表示读面坏了」，本路分不出，一律答未决（歧义那一格已是本票越权风险点 2）。要分开得 PS 先在端口上立哨兵，交 PS owner。
+- **路由表总注释里同一种说法**。`assemble.go` 路由表上方「各类 FanOut……顺序一律先 VE 后……避免把投影或补派生堵在……墙上」那一句是本票之前就有的，讲的同样是 FanOut 并不存在的阻挡机制；本票只在那一行加了 `/TF`。它在派发令牌管的热点注释块中段，改写不是追加，留给派发令牌持有方顺手改。
+
+### 交推送方（进 main 时做）
+
+- 波 3 落地顺序 20 → 24 → 18：rebase 时 UC-TF-003 验收表尾、`seed.sh` 尾、seeds README 组成表与数据故事若与 20、24 同处追加，按只追加并列保留两边的行。
+- 种子落地后照种子令牌惯例把进 main 的 SHA 通知 9b。
+- 按计划「并行车道」的「其他」一条重生成 `docs/product/MECHANISM-INVENTORY.md`（本票未生成）。
+
+### 修补后的验证
+
+- `go build ./...` 通过；`go vet`（`./internal/transportfulfillment/...`、`./cmd/parcel-dispatch/`、`./cmd/parcel-transport-register/`、`./cmd/parcel-api/`）与 `gofmt -l` 干净。
+- `IDP_PARCEL_POSTGRES_DSN=…55432/postgres go test -p 1 -count=1`：`./internal/transportfulfillment/...`、`./cmd/parcel-dispatch/`、`./cmd/parcel-api/`、`./cmd/parcel-transport-register/`、`./internal/architecture/`、`./scripts/demo-seeds/...` 全 ok。编排新用例在去掉编排修补时红、恢复后绿。
+- 一次性库 `dcg18_review` 上 `seed.sh` 灌入退 0（末段两份快线 `TEMPLATE_REGISTERED`），已 `DROP DATABASE … WITH (FORCE)`。没有起进程重走演示（评审修补不改准备的判法，只改未决与错误的分格）。
 
