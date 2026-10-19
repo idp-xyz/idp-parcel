@@ -1,7 +1,7 @@
 # 09 送站预报的提交与撤回口：挂首方客户渠道族，一口一词，NO 定载荷形状
 
 Category: enhancement
-Status: in-progress——2026-10-19 评审 0 阻断，治理种子撞号已改为 35、36，待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-psxm09`，access_identity 迁移号 0014；与票 14 并行。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
+Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 评审 0 阻断，治理种子撞号已改为 35、36，待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-psxm09`，access_identity 迁移号 0014；与票 14 并行。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
 Blocked by:
 - [08](./08-pre-advice-and-handover-note-model-and-window-register.md) 进 main：预报册与领域。
 - 首方客户渠道 Intake 已由 [first-party-api/00](../../first-party-api/issues/00-first-party-customer-intake.md) 进 main（`38916b00`），照它落地的形状挂，不设阻塞边。能力粒度与 1:N 绑定在 [first-party-api/01](../../first-party-api/issues/01-customer-api-scopes-and-account-binding-cardinality.md)，两票同改客户面能力的枚举与 CHECK，谁后进谁 rebase。
@@ -193,3 +193,14 @@ M
 ### 评审后改号（2026-10-19）
 
 评审 0 阻断，只有一处撞号：另一会话的第四波已占治理种子 `governance/32`、`33`、`34`。本票两份权威区间改为 `35-authority-interval-customer-command-delivery-pre-advice-submission.json`、`36-authority-interval-customer-command-delivery-pre-advice-withdrawal.json`，文件名其余部分与内容不变，`seed.sh` 那两行与 README `data/access/` 那一行随改（`0f04a07a`）。上文各节引的号已改成 35、36；实走记录里的 `seed.sh` 灌入发生在改号之前。改号后：`origin/main` 仍是 `6b02b547`，rebase 无事可做；`gofmt -l .` 无输出，`go build ./...`、`scripts/demo-seeds/...` 与 `cmd/parcel-api/...` 的 `go vet` 退 0，带 DSN 跑 `./scripts/demo-seeds/...`、`./cmd/parcel-api/...` 全 ok；一次性库 `psxm09_seed3` 上 `seed.sh` 退 0，治理登记册上两条 `CUSTOMER_COMMAND` 区间在册，用完删库，`psb26_walk` 未碰。机制清点重生成无差。
+
+## Comments
+
+### 评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审；2026-10-19，钉 `e61c49fd`，改号后钉 `f7fa3fd3`）
+
+两轴合审，0 阻断。
+
+- **Spec**：ADR-0212 决定二、九与 ADR-0139 决定四、五、八落到。客户面能力加 `DELIVERY_PRE_ADVICE_SUBMISSION`、`DELIVERY_PRE_ADVICE_WITHDRAWAL`，迁移 access_identity 0014 只重建客户面能力那条 CHECK、头注写明取并集；铸造照 `MintSubmission` 的校验次序，准入范围在铸造侧判。两面规范化形状挂 NOC-1，接入请求标识、租户、客户账户、客户端都不进摘要；封闭解码拒自报身份。编排的重放与冲突代数（原样重投已有结果、换内容来源冲突，回显在册）；撤别的客户账户的预报与不存在的同答 404，不泄露存在性。端点答复各格与首方族一致。演示种子与脚本在一次性库实灌实走过。
+- **作者自定的格认可**：规范化形状放在 NO 领域（与 NO 其余命令口一致）；预报标识签发器另起端口与适配器；另一接入请求去撤已撤回的预报答已有结果。
+- **评审修补（已做，`0f04a07a`）**：两份权威区间种子撞了另一会话已占的 `governance/32`、`33`，改为 35、36。
+- **与另一会话的共享文件**：`cmd/parcel-api` 三份与 `customer_client.go` 只追加，rebase 时与对方第三波两边都保留。
