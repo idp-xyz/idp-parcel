@@ -79,12 +79,12 @@ Date: 2026-10-19
 
 1. **无池即无保护**（TF owner）。不登池的班次上，装载分配与确认订舱不受任何容量约束。
 2. **需求量与分配量是声明值**（TF owner）。与实测不符（`AT-TF-087`）靠重评处置，本记录不核。
-3. **需求来源不回读**（TF owner）。`PREPARATION_DEMAND_SNAPSHOT` 的引用此刻不核准备结果在不在、量对不对；运营声明的版本也只是一个引用。
+3. **需求来源不回读**（TF owner）。`PREPARATION_DEMAND_SNAPSHOT` 的引用此刻不核准备结果在不在、量对不对；运营声明的版本也只是一个引用。去处是票 [demo-chain-gaps/47](../../.scratch/demo-chain-gaps/issues/47-capacity-demand-from-a-preparation-snapshot-is-not-read-back.md)。
 4. **软超配仍归 psb/09**（TF owner）。本记录只守硬上限。
 5. **资源与载运位置粒度不支持**（TF owner；方案 D03-8）。池只按（班次、维度）立。
 6. **判断时点由声明方给**（TF owner）。整段判法让倒填与前填都越不过硬上限，但倒填的释放会把容量提前还回去；有效期已在过去的预占不拒，它此刻什么也不占。
 7. **读池一律加行锁**（TF owner）。事务外读池也会等在途的写；目前读池的只有写编排。
-8. **逐份预占没有查阅册**（前端 owner）。查阅口只到池级三个和，管理台看不到每份预占的来源与释放明细。
+8. **逐份预占没有查阅册**（前端 owner）。查阅口只到池级三个和，管理台看不到每份预占的来源与释放明细。去处是票 [demo-chain-gaps/46](../../.scratch/demo-chain-gaps/issues/46-capacity-reservations-have-no-per-reservation-review-registry.md)。
 9. **种类粒度**（psb/07）。两种决定是本记录按「授予粒度等于权力粒度」定的。
 10. **缩容之后的余量可为负**（TF owner；票 40）。容量更正把上限缩到既有预占之下时，`CAPACITY_EXCEEDED` 如实报负余量，不截成零。
 
