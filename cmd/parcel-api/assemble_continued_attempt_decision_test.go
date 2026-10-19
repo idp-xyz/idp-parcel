@@ -255,7 +255,7 @@ func envelopeCountForDecision(t *testing.T, db *bentopg.DB, decision domain.Cont
 	}
 	var count int
 	err = querier.QueryRow(t.Context(),
-		`SELECT count(*) FROM `+migrate.SchemaBento+`.outbox WHERE event_type = $1 AND event_id LIKE '%' || $2 || '%'`,
+		`SELECT count(*) FROM `+migrate.SchemaBento+`.outbox WHERE event_type = $1 AND payload->>'decision' = $2`,
 		pspostgres.ContinuedAttemptDecisionEventType, decision.String(),
 	).Scan(&count)
 	if err != nil {

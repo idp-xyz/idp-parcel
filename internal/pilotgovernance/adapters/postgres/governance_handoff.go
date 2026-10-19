@@ -67,12 +67,19 @@ type takeoverPayload struct {
 	Authority   string `json:"authority"`
 }
 
+// 三只口各有一个指纹 ID 的口名前缀；前缀不同，暂停与恢复取同一个暂停标识也算不出同一个 ID。
+const (
+	suspensionEventIDPort = "suspension"
+	resumptionEventIDPort = "resumption"
+	takeoverEventIDPort   = "takeover"
+)
+
 func suspensionEventID(id domain.SuspensionID) string {
-	return "suspension/" + id.String()
+	return string(outboxintent.FingerprintEventID(suspensionEventIDPort, id.String()))
 }
 
 func resumptionEventID(id domain.SuspensionID) string {
-	return "resumption/" + id.String()
+	return string(outboxintent.FingerprintEventID(resumptionEventIDPort, id.String()))
 }
 
 // suspensionPartitionKey 是暂停与恢复共用的分区键——取被解除的那个暂停标识。
@@ -90,8 +97,9 @@ func suspensionPartitionKey(id domain.SuspensionID) string {
 // 区间关闭后另立新权威）是两行两份意图：ID 只取范围三维时两份算出同一个字符串，第二份
 // 被 EnqueueOnce 静默吞掉，受影响上下文永远不知道权威已再次易手。
 func takeoverEventID(interval domain.AuthorityInterval) string {
-	return "takeover/" + interval.ObjectScope + "/" + interval.Capability + "/" + interval.FactKind +
-		"/" + interval.Authority + "/" + interval.From.UTC().Format(time.RFC3339)
+	return string(outboxintent.FingerprintEventID(takeoverEventIDPort,
+		interval.ObjectScope, interval.Capability, interval.FactKind, interval.Authority,
+		interval.From.UTC().Format(time.RFC3339)))
 }
 
 // takeoverPartitionKey 取范围三维，不取权威方与生效起点。

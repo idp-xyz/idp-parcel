@@ -254,9 +254,9 @@ func TestPayableAndCreditNoteEnvelopesShareTheClaimPartition(t *testing.T) {
 		return handoff.HandOffSupplierBill(txCtx, ports.SupplierBillHandoffIntent{CreditNote: note})
 	})
 
-	receptionID := "tenant-a/bill/claim-p/v1"
-	payableID := "tenant-a/bill/claim-p/payable/payable-1"
-	noteID := "tenant-a/bill/claim-p/credit-note/note-1/v1"
+	receptionID := saID("supplier-bill", "tenant-a/bill/claim-p/v1")
+	payableID := saID("supplier-bill", "tenant-a/bill/claim-p/payable/payable-1")
+	noteID := saID("supplier-bill", "tenant-a/bill/claim-p/credit-note/note-1/v1")
 	for _, eventID := range []string{receptionID, payableID, noteID} {
 		if count := countSAIntents(t, pool, eventID); count != 1 {
 			t.Fatalf("%s 信封 = %d, want 1", eventID, count)

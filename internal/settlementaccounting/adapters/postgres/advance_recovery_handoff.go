@@ -117,13 +117,13 @@ func (handoff *OutboxAdvanceRecoveryHandoff) HandOffAdvanceRecovery(
 	now := handoff.clock.Now().UTC()
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(shape.eventID),
+		ID:           outboxintent.FingerprintEventID("advance-recovery", shape.eventID),
 		Source:       saEventSource,
 		Type:         shape.eventType,
 		Version:      1,
 		Scope:        shape.tenant,
 		Subject:      shape.subject,
-		PartitionKey: shape.eventID,
+		PartitionKey: string(outboxintent.FingerprintEventID("advance-recovery", shape.eventID)),
 		OccurredAt:   shape.occurredAt,
 		RecordedAt:   now,
 		ContentType:  eventing.JSONContentType,

@@ -79,20 +79,20 @@ func TestAReversedApplicationEnqueuesItsOwnEnvelopeInTheSamePartition(t *testing
 
 	appliedID := "tenant-a/application/application-9"
 	reversedID := appliedID + "/reversed"
-	if count := countSAIntents(t, pool, appliedID); count != 1 {
+	if count := countSAIntents(t, pool, saID("settlement-application", appliedID)); count != 1 {
 		t.Fatalf("核销行数 = %d, want 1", count)
 	}
-	if count := countSAIntents(t, pool, reversedID); count != 1 {
+	if count := countSAIntents(t, pool, saID("settlement-application", reversedID)); count != 1 {
 		t.Fatalf("撤销行数 = %d, want 1——ID 不带状态段时它会被 EnqueueOnce 静默吞掉", count)
 	}
 
-	if got := settlementApplicationIntentType(t, pool, reversedID); got != "settlement-accounting.settlement-application.reversed" {
+	if got := settlementApplicationIntentType(t, pool, saID("settlement-application", reversedID)); got != "settlement-accounting.settlement-application.reversed" {
 		t.Fatalf("撤销事件类型 = %q, want settlement-accounting.settlement-application.reversed", got)
 	}
-	if got := partitionKeyOf(t, pool, appliedID); got != appliedID {
+	if got := partitionKeyOf(t, pool, saID("settlement-application", appliedID)); got != appliedID {
 		t.Fatalf("核销分区键 = %q, want %q", got, appliedID)
 	}
-	if got := partitionKeyOf(t, pool, reversedID); got != appliedID {
+	if got := partitionKeyOf(t, pool, saID("settlement-application", reversedID)); got != appliedID {
 		t.Fatalf("撤销分区键 = %q；两拍不同分区就没有先后可言", got)
 	}
 }
@@ -121,7 +121,7 @@ func TestSettlementApplicationFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("首发：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/application/application-1"); count != 1 {
+	if count := countSAIntents(t, pool, saID("settlement-application", "tenant-a/application/application-1")); count != 1 {
 		t.Fatalf("application-1 行数 = %d, want 1", count)
 	}
 
@@ -134,7 +134,7 @@ func TestSettlementApplicationFollowsTheTransactionalTemplate(t *testing.T) {
 	}); !errors.Is(err, rollback) {
 		t.Fatalf("事务应以回滚错误结束，实得：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/application/application-2"); count != 0 {
+	if count := countSAIntents(t, pool, saID("settlement-application", "tenant-a/application/application-2")); count != 0 {
 		t.Fatalf("回滚后 application-2 行数 = %d, want 0", count)
 	}
 
@@ -143,7 +143,7 @@ func TestSettlementApplicationFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("重发：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/application/application-1"); count != 1 {
+	if count := countSAIntents(t, pool, saID("settlement-application", "tenant-a/application/application-1")); count != 1 {
 		t.Fatalf("重发后行数 = %d, want 1——重发的必须是同一份", count)
 	}
 

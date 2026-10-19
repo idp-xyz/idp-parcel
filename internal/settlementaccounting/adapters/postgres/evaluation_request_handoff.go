@@ -85,7 +85,7 @@ func (handoff *OutboxEvaluationRequestHandoff) HandOffEvaluationRequest(
 	partitionKey := evaluationRequestPartitionKey(key)
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(partitionKey + "/submitted"),
+		ID:           outboxintent.FingerprintEventID("evaluation-request", partitionKey+"/submitted"),
 		Source:       saEventSource,
 		Type:         evaluationRequestEventType,
 		Version:      1,

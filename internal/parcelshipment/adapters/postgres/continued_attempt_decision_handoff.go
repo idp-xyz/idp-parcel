@@ -57,12 +57,15 @@ type continuedAttemptDecisionPayload struct {
 	Kind     string `json:"kind"`
 }
 
-// continuedAttemptDecisionEventID 取（租户 + 包裹 + 决定标识）加类型段。决定标识必须在里面：关过—重开—再关
+// continuedAttemptDecisionEventID 取（租户 + 包裹 + 决定标识）的指纹，加口名前缀。决定标识必须在里面：关过—重开—再关
 // 三条决定指同一件包裹，少了它三封算出同一个字符串，EnqueueOnce 先查后插，后两封静默不入队。登记册键就是
 // 租户 + 包裹，一封一决定即一封一包裹。
+// continuedAttemptDecisionEventIDPort 是本口指纹 ID 的口名前缀。
+const continuedAttemptDecisionEventIDPort = "continued-attempt-decision"
+
 func continuedAttemptDecisionEventID(intent ports.ContinuedAttemptDecisionHandoffIntent) string {
-	return intent.Tenant.String() + "/continued-attempt-decision/" + intent.Parcel.String() + "/" +
-		intent.Decision.String() + "/judgment-due"
+	return string(outboxintent.FingerprintEventID(continuedAttemptDecisionEventIDPort,
+		intent.Tenant.String(), intent.Parcel.String(), intent.Decision.String()))
 }
 
 // HandOffContinuedAttemptDecision 把一份意图入队。意图残缺（无租户 / 包裹 / 决定标识、种类不是两格之一、

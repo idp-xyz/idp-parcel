@@ -16,6 +16,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
@@ -90,7 +91,7 @@ func labelTransactionJudgmentIntent(
 }
 
 func labelTransactionJudgmentEventID(transaction, parcel string, revision string) string {
-	return "tenant-a/label-transaction/" + transaction + "/" + parcel + "/" + revision + "/judgment-due"
+	return string(outboxintent.FingerprintEventID("label-transaction-judgment", "tenant-a", transaction, parcel, revision))
 }
 
 // TestTheWriteSideEnqueuesEachBeatInTheSameTransactionAsItsSave 把真编排、真仓储与真 outbox 适配器接在

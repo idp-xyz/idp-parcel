@@ -17,6 +17,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
@@ -113,11 +114,8 @@ func supplemented(t *testing.T, request domain.ShipmentRequest, key string) doma
 // versionFormedEventID 照 ADR-0043 的认领口径拼：来源身份 + **新**提交版本 + 类型段。版本段
 // 取新版本——同一委托的第二次补充是另一封信，取旧版本或省掉它都会被 EnqueueOnce 当重放吞掉。
 func versionFormedEventID(identity domain.SourceIdentity, request domain.ShipmentRequest) string {
-	return identity.TenantID().String() + "/" +
-		identity.CustomerAccountID().String() + "/" +
-		identity.Source().String() + "/" +
-		identity.RequestKey().String() + "/" +
-		request.CurrentSubmissionVersion().VersionID().String() + "/submission-version-formed"
+	return string(outboxintent.FingerprintEventID("submission-version-formed", identity.TenantID().String(), identity.CustomerAccountID().String(),
+		identity.Source().String(), identity.RequestKey().String(), request.CurrentSubmissionVersion().VersionID().String()))
 }
 
 func countVersionFormedIntents(t *testing.T, pool *pgxpool.Pool, eventID string) int {

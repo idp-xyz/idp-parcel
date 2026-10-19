@@ -1,7 +1,7 @@
 # 01 余下各口的信封 ID 仍原样串接实例引用：标识一长就入不了队，交接只留没人重发的续办引用
 
 Category: bug
-Status: ready-for-agent——2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决」授权），出自 [routing-first-cut/22](../../routing-first-cut/issues/22-initial-route-envelope-id-exceeds-the-event-id-limit.md) 的取证。
+Status: 部分完工，待评审与进 main（分支 `claude-eib01`）；余下运输履约各口待做。2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决」授权），出自 [routing-first-cut/22](../../routing-first-cut/issues/22-initial-route-envelope-id-exceeds-the-event-id-limit.md) 的取证。
 Blocked by: 无
 出处：`outboxintent.FingerprintEventID` 头注（票 sa-cc/34 裁决 2）：信封 ID 上限是 `eventing.MaxEventIDLength`，租户、委托、包裹这类引用多长归实例半边，本仓给不出上界，原样串接就是把上限押在别人的长度上。
 
@@ -40,3 +40,17 @@ Blocked by: 无
 ## 不做
 
 - 不改分区键的语义，不改载荷形状。
+
+## 完成记录（2026-10-19，Claude Code 会话，分支 `claude-eib01`）
+
+运输履约各口留着：对端会话正在改那几个文件，等它收口再做。其余全部改完。
+
+- 具名构造函数（节点作业、委托、商业、治理、可视异常各口）改走 `outboxintent.FingerprintEventID`，口名前缀按口定；构造函数照旧交回 `string`，编排里的调用点不动。
+  - 原先拿 ID 兼作分区键的，分区键取原先那一串、一字不变（先例 `customsCasePartitionKey`）。
+  - 例外：节点作业里在分区门禁上登过「无先后」豁免的那几口（协作承接、执行事实、收寄），分区键照旧取 ID 本身。它们每封本就自成一区，豁免理由继续成立。
+- 结算侧原地串接的各口：在信封处对原先那串可读身份取指纹。原先就有独立分区键的不动；原先拿 ID 兼作分区键、登过豁免的（索赔结算、预付回收、费用确认）分区键跟着取同一个指纹。
+- 新门禁 `TestEveryEnvelopeIDIsMintedAsAFingerprint`：构造带 ID 的 `eventing.Envelope` 的生产文件必须经指纹铸 ID，例外只许变短；另有一条自检用例证它真能红。
+  - 门禁另查出票面没列的几口。可达性判断（四个标识串起来，演示值已近上限）与责任认定（索赔项标识来自登记批文，长度由外部定）改成指纹。
+  - 只取单一产品铸造定长标识的几口登为例外，理由点名铸造工厂。
+  - 运输履约各口登为例外，去处本票。
+- 用例：各口的模板用例与两个进程里照抄 ID 拼法的用例改成同一个指纹公式。按 ID 数信封的那一条改按载荷里的决定标识数。结算侧加测试助手 `saID(口名, 可读串)`，用例里照旧写可读的那串。

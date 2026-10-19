@@ -52,8 +52,12 @@ type triagePayload struct {
 	EpisodeID string `json:"episodeId"`
 }
 
+// triageEventIDPort 是本口指纹 ID 的口名前缀。
+const triageEventIDPort = "triage"
+
 func triageEventID(tenant, parcel, kind string) string {
-	return tenant + "/" + parcel + "/" + kind
+	return string(outboxintent.FingerprintEventID(triageEventIDPort,
+		tenant, parcel, kind))
 }
 
 // HandOffTriage 把一份意图入队。信封 ID 取租户加对象加类型——与 FindLatest 键一致

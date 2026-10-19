@@ -51,8 +51,12 @@ type sealedSnapshotPayload struct {
 	Seal     string `json:"seal"`
 }
 
+// sealedSnapshotEventIDPort 是本口指纹 ID 的口名前缀。
+const sealedSnapshotEventIDPort = "sealed-snapshot"
+
 func sealedSnapshotEventID(tenant, unit, seal string) string {
-	return tenant + "/" + unit + "/" + seal
+	return string(outboxintent.FingerprintEventID(sealedSnapshotEventIDPort,
+		tenant, unit, seal))
 }
 
 // sealedSnapshotPartitionKey 取（租户+单元），不取封签。

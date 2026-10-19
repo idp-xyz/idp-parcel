@@ -49,12 +49,15 @@ type finalOutcomePayload struct {
 	Version  string `json:"version"`
 }
 
+// finalOutcomeEventIDPort 是本口指纹 ID 的口名前缀。
+const finalOutcomeEventIDPort = "final-outcome"
+
 func finalOutcomeEventID(key ports.FinalAdoptionKey) string {
-	return key.TenantID.String() + "/final-outcome/" + key.Parcel.String() + "/" +
-		key.Kind.String() + "/" + key.Version.String()
+	return string(outboxintent.FingerprintEventID(finalOutcomeEventIDPort,
+		key.TenantID.String(), key.Parcel.String(), key.Kind.String(), key.Version.String()))
 }
 
-// HandOffFinalOutcome 把一份意图入队。信封 ID 取采用键再加类型段——意图由（租户+包裹+
+// HandOffFinalOutcome 把一份意图入队。信封 ID 是采用键的指纹加口名前缀——意图由（租户+包裹+
 // 责任结果种类+版本）认领（ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
 func (handoff *OutboxFinalOutcomeHandoff) HandOffFinalOutcome(
 	ctx context.Context,

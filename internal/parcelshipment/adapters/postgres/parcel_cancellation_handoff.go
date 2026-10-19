@@ -51,8 +51,12 @@ type parcelCancellationPayload struct {
 	Parcel     string `json:"parcel"`
 }
 
+// parcelCancellationEventIDPort 是本口指纹 ID 的口名前缀。
+const parcelCancellationEventIDPort = "parcel-cancellation"
+
 func parcelCancellationEventID(key ports.CancellationRequestKey) string {
-	return key.TenantID.String() + "/" + key.RequestKey.String() + "/" + key.Parcel.String()
+	return string(outboxintent.FingerprintEventID(parcelCancellationEventIDPort,
+		key.TenantID.String(), key.RequestKey.String(), key.Parcel.String()))
 }
 
 // HandOffParcelCancellation 把一份意图入队。信封 ID 取取消键（含租户）——意图由

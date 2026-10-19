@@ -104,10 +104,10 @@ func TestReallocationAndRederivationEachEnqueueInTheSamePartition(t *testing.T) 
 		{resultBase + "/result/v1", resultBase},
 		{resultBase + "/result/v2", resultBase},
 	} {
-		if count := countSAIntents(t, pool, row.id); count != 1 {
+		if count := countSAIntents(t, pool, saID("operating", row.id)); count != 1 {
 			t.Fatalf("%s 行数 = %d, want 1——ID 不带版本时新版会被 EnqueueOnce 静默吞掉", row.id, count)
 		}
-		if got := partitionKeyOf(t, pool, row.id); got != row.partition {
+		if got := partitionKeyOf(t, pool, saID("operating", row.id)); got != row.partition {
 			t.Fatalf("%s 分区键 = %q, want %q；两版不同分区就没有先后可言", row.id, got, row.partition)
 		}
 	}
@@ -125,7 +125,7 @@ func TestOperatingFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("首发：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/allocation/alloc-1/allocation/v1"); count != 1 {
+	if count := countSAIntents(t, pool, saID("operating", "tenant-a/allocation/alloc-1/allocation/v1")); count != 1 {
 		t.Fatalf("alloc-1 行数 = %d, want 1", count)
 	}
 
@@ -138,7 +138,7 @@ func TestOperatingFollowsTheTransactionalTemplate(t *testing.T) {
 	}); !errors.Is(err, rollback) {
 		t.Fatalf("事务应以回滚错误结束，实得：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/allocation/alloc-2/allocation/v1"); count != 0 {
+	if count := countSAIntents(t, pool, saID("operating", "tenant-a/allocation/alloc-2/allocation/v1")); count != 0 {
 		t.Fatalf("回滚后 alloc-2 行数 = %d, want 0", count)
 	}
 
@@ -147,7 +147,7 @@ func TestOperatingFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("重发：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/allocation/alloc-1/allocation/v1"); count != 1 {
+	if count := countSAIntents(t, pool, saID("operating", "tenant-a/allocation/alloc-1/allocation/v1")); count != 1 {
 		t.Fatalf("重发后行数 = %d, want 1——重发的必须是同一份", count)
 	}
 
@@ -174,7 +174,7 @@ func TestOperatingResultUsesItsOwnEnvelope(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("指标入队：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/operating-result/customer-1/period-2026-08/CONFIRMED/result/v1"); count != 1 {
+	if count := countSAIntents(t, pool, saID("operating", "tenant-a/operating-result/customer-1/period-2026-08/CONFIRMED/result/v1")); count != 1 {
 		t.Fatalf("经营结果行数 = %d, want 1", count)
 	}
 }

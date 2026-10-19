@@ -57,7 +57,7 @@ func TestClaimSettlementFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("首发：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/claim-amount/amount-1"); count != 1 {
+	if count := countSAIntents(t, pool, saID("claim-settlement", "tenant-a/claim-amount/amount-1")); count != 1 {
 		t.Fatalf("amount-1 行数 = %d, want 1", count)
 	}
 
@@ -70,7 +70,7 @@ func TestClaimSettlementFollowsTheTransactionalTemplate(t *testing.T) {
 	}); !errors.Is(err, rollback) {
 		t.Fatalf("事务应以回滚错误结束，实得：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/claim-amount/amount-2"); count != 0 {
+	if count := countSAIntents(t, pool, saID("claim-settlement", "tenant-a/claim-amount/amount-2")); count != 0 {
 		t.Fatalf("回滚后 amount-2 行数 = %d, want 0", count)
 	}
 
@@ -79,7 +79,7 @@ func TestClaimSettlementFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("重发：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/claim-amount/amount-1"); count != 1 {
+	if count := countSAIntents(t, pool, saID("claim-settlement", "tenant-a/claim-amount/amount-1")); count != 1 {
 		t.Fatalf("重发后行数 = %d, want 1——重发的必须是同一份", count)
 	}
 
@@ -106,7 +106,7 @@ func TestClaimSettlementReceivableUsesItsOwnEnvelope(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("应追偿入队：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/receivable/receivable-1"); count != 1 {
+	if count := countSAIntents(t, pool, saID("claim-settlement", "tenant-a/receivable/receivable-1")); count != 1 {
 		t.Fatalf("receivable-1 行数 = %d, want 1", count)
 	}
 }

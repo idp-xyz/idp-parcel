@@ -145,7 +145,7 @@ func (handoff *OutboxStatementHandoff) HandOffStatement(
 	now := handoff.clock.Now().UTC()
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(shape.eventID),
+		ID:           outboxintent.FingerprintEventID("statement", shape.eventID),
 		Source:       saEventSource,
 		Type:         shape.eventType,
 		Version:      1,

@@ -12,6 +12,7 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	adapter "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
@@ -76,7 +77,7 @@ func triageIntent(t *testing.T, tenant, parcel, kind string) (ports.TriageHandof
 }
 
 func triageHandoffEventID(tenant, parcel, kind string) string {
-	return tenant + "/" + parcel + "/" + kind
+	return string(outboxintent.FingerprintEventID("triage", tenant, parcel, kind))
 }
 
 func TestTriageIntentCommitsAtomicallyWithTheEpisode(t *testing.T) {

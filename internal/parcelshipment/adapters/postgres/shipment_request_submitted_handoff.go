@@ -62,15 +62,16 @@ type shipmentRequestSubmittedPayload struct {
 	DeclaredParcelIDs   []string `json:"declaredParcelIds"`
 }
 
-// shipmentRequestSubmittedEventID 由来源身份（含租户）加类型段认领意图（ADR-0043）。
+// shipmentRequestSubmittedEventID 由来源身份（含租户）的指纹加口名前缀认领意图（ADR-0043）。
 // 同一来源身份至多建立一份委托，重复请求因此复用原 EventID，不造语义相同的第二个事件
 // ——「EventID 在首次命令处理中生成并与业务结果一起保存」由身份即键结构性兑现：身份
 // 就存在业务行上，重放按同一身份重导出同一个 ID。
+// shipmentRequestSubmittedEventIDPort 是本口指纹 ID 的口名前缀。
+const shipmentRequestSubmittedEventIDPort = "shipment-request-submitted"
+
 func shipmentRequestSubmittedEventID(identity domain.SourceIdentity) string {
-	return identity.TenantID().String() + "/" +
-		identity.CustomerAccountID().String() + "/" +
-		identity.Source().String() + "/" +
-		identity.RequestKey().String() + "/shipment-request-submitted"
+	return string(outboxintent.FingerprintEventID(shipmentRequestSubmittedEventIDPort,
+		identity.TenantID().String(), identity.CustomerAccountID().String(), identity.Source().String(), identity.RequestKey().String()))
 }
 
 // HandOffShipmentRequestSubmitted 把一份意图入队。身份或委托缺席是装配缺陷，响亮报错

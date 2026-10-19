@@ -34,6 +34,7 @@ import (
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/platform/dispatch"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	sainbox "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/inbox"
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
@@ -1223,8 +1224,8 @@ func TestASubmittedEvaluationRequestStopsHonestlyAtThePricingInputSeamThroughThe
 	if err != nil {
 		t.Fatalf("一拍：%v", err)
 	}
-	cardedID := "tenant-a/evaluation-request/EVREQ-SYN-CARDED/submitted"
-	uncardedID := "tenant-a/evaluation-request/EVREQ-SYN-NOCARD/submitted"
+	cardedID := string(outboxintent.FingerprintEventID("evaluation-request", "tenant-a/evaluation-request/EVREQ-SYN-CARDED/submitted"))
+	uncardedID := string(outboxintent.FingerprintEventID("evaluation-request", "tenant-a/evaluation-request/EVREQ-SYN-NOCARD/submitted"))
 	if published != 1 {
 		t.Fatalf("published = %d, want 1（正：有卡的停在输入不可得；反：没卡的未配置、缺席请求未决、毒丸入账）；有卡的失败码 = %q 原文 = %v",
 			published, recordedFailureCode(t, db, cardedID), observed[cardedID])

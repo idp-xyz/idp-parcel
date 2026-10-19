@@ -16,6 +16,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
@@ -77,7 +78,7 @@ func networkIntakeIntent(t *testing.T) ports.NetworkIntakeHandoffIntent {
 }
 
 func networkIntakeEventID(tenant, parcel, kind, version string) string {
-	return tenant + "/" + parcel + "/" + kind + "/" + version + "/network-intake"
+	return string(outboxintent.FingerprintEventID("network-intake", tenant, parcel, kind, version))
 }
 
 func TestNetworkIntakeIntentCommitsAtomicallyWithTheAdoption(t *testing.T) {

@@ -60,12 +60,13 @@ type operatorRegistrationCompletedPayload struct {
 // operatorRegistrationCompletedEventID 由租户加种类加承载版本认领意图（ADR-0043）：同一版规则包
 // 的时点声明重放重发同一封；同一规则包发新版本再声明一次是另一份登记、另一个 ID。种类段在里面，
 // 是因为将来授权登记若也从某一版商业对象发出，两类不得互相吞没。
+// operatorRegistrationCompletedEventIDPort 是本口指纹 ID 的口名前缀。
+const operatorRegistrationCompletedEventIDPort = "operator-registration-completed"
+
 func operatorRegistrationCompletedEventID(intent ports.OperatorRegistrationCompletedIntent) string {
 	version := intent.Registration
-	return version.Tenant().String() + "/" +
-		intent.Kind.String() + "/" +
-		version.ObjectID().String() + "/" +
-		version.Version().String() + "/operator-registration-completed"
+	return string(outboxintent.FingerprintEventID(operatorRegistrationCompletedEventIDPort,
+		version.Tenant().String(), intent.Kind.String(), version.ObjectID().String(), version.Version().String()))
 }
 
 // HandOffOperatorRegistrationCompleted 把一份意图入队。种类集合外、承载版本零值或登记时刻零值

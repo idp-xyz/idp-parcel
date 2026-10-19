@@ -79,7 +79,7 @@ func (handoff *OutboxReachabilityHandoff) HandOffReachabilityJudgment(
 	now := handoff.clock.Now().UTC()
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(intent.Correlation.String()),
+		ID:           outboxintent.FingerprintEventID("reachability-judgment", intent.Correlation.String()),
 		Source:       nrEventSource,
 		Type:         reachabilityJudgmentEventType,
 		Version:      1,

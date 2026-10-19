@@ -12,6 +12,7 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	adapter "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
@@ -92,10 +93,10 @@ func TestLiabilityIntentCommitsAtomicallyWithTheClaim(t *testing.T) {
 	if _, exists, err := fixture.claims.FindByBatchItem(ctx, tenant, intent.Claim.Batch(), intent.Claim.ID()); err != nil || !exists {
 		t.Fatalf("业务行不在：err=%v exists=%v", err, exists)
 	}
-	if count := countLiabilityIntents(t, fixture.pool, "item-1"); count != 1 {
+	if count := countLiabilityIntents(t, fixture.pool, string(outboxintent.FingerprintEventID("liability", "item-1"))); count != 1 {
 		t.Fatalf("outbox 行数 = %d，want 1", count)
 	}
-	if got := liabilityIntentType(t, fixture.pool, "item-1"); got != "visibility-exception.claim-liability.concluded" {
+	if got := liabilityIntentType(t, fixture.pool, string(outboxintent.FingerprintEventID("liability", "item-1"))); got != "visibility-exception.claim-liability.concluded" {
 		t.Fatalf("事件类型 = %q，不是本口的类型", got)
 	}
 }
@@ -122,7 +123,7 @@ func TestLiabilityIntentRollbackDropsBoth(t *testing.T) {
 	if _, exists, err := fixture.claims.FindByBatchItem(ctx, tenant, intent.Claim.Batch(), intent.Claim.ID()); err != nil || exists {
 		t.Fatalf("回滚后业务行仍在：err=%v exists=%v", err, exists)
 	}
-	if count := countLiabilityIntents(t, fixture.pool, "item-1"); count != 0 {
+	if count := countLiabilityIntents(t, fixture.pool, string(outboxintent.FingerprintEventID("liability", "item-1"))); count != 0 {
 		t.Fatalf("回滚后 outbox 行数 = %d，want 0", count)
 	}
 
@@ -132,7 +133,7 @@ func TestLiabilityIntentRollbackDropsBoth(t *testing.T) {
 		}
 		return fixture.handoff.HandOffLiability(txCtx, intent)
 	})
-	if count := countLiabilityIntents(t, fixture.pool, "item-1"); count != 1 {
+	if count := countLiabilityIntents(t, fixture.pool, string(outboxintent.FingerprintEventID("liability", "item-1"))); count != 1 {
 		t.Fatalf("回滚后再投 outbox 行数 = %d，want 1", count)
 	}
 }
@@ -148,7 +149,7 @@ func TestResendingTheSameLiabilityIntentIsIdempotent(t *testing.T) {
 	fixture.inTx(t, ctx, func(txCtx context.Context) error {
 		return fixture.handoff.HandOffLiability(txCtx, intent)
 	})
-	if count := countLiabilityIntents(t, fixture.pool, "item-1"); count != 1 {
+	if count := countLiabilityIntents(t, fixture.pool, string(outboxintent.FingerprintEventID("liability", "item-1"))); count != 1 {
 		t.Fatalf("outbox 行数 = %d，want 1——重发的必须是同一份", count)
 	}
 }
@@ -158,7 +159,7 @@ func TestLiabilityIntentRefusesToRunOutsideATransaction(t *testing.T) {
 	if err := fixture.handoff.HandOffLiability(t.Context(), liabilityIntent(t, "tenant-a", "batch-1", "item-1")); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("无事务入队应返回 ErrTransactionRequired，实得：%v", err)
 	}
-	if count := countLiabilityIntents(t, fixture.pool, "item-1"); count != 0 {
+	if count := countLiabilityIntents(t, fixture.pool, string(outboxintent.FingerprintEventID("liability", "item-1"))); count != 0 {
 		t.Fatalf("被拒绝的入队仍然落库了：%d 行", count)
 	}
 }
@@ -174,7 +175,7 @@ func TestAForeignLiabilityIntentIsLoud(t *testing.T) {
 	}); err == nil {
 		t.Fatal("缺索赔的意图必须响亮报错")
 	}
-	if count := countLiabilityIntents(t, fixture.pool, "item-1"); count != 0 {
+	if count := countLiabilityIntents(t, fixture.pool, string(outboxintent.FingerprintEventID("liability", "item-1"))); count != 0 {
 		t.Fatalf("异类意图入队了：%d 行", count)
 	}
 }

@@ -53,13 +53,15 @@ type networkIntakePayload struct {
 	Geo      *carriedGeoPayload `json:"geo,omitempty"`
 }
 
+// networkIntakeEventIDPort 是本口指纹 ID 的口名前缀；它把本口与同 source 下其它采用键形状的口（如终局）错开。
+const networkIntakeEventIDPort = "network-intake"
+
 func networkIntakeEventID(key ports.IntakeAdoptionKey) string {
-	// 类型段把本口与同 source 下其它采用键形状的口（如终局）错开。
-	return key.TenantID.String() + "/" + key.Parcel.String() + "/" + key.Kind.String() + "/" +
-		key.Version.String() + "/network-intake"
+	return string(outboxintent.FingerprintEventID(networkIntakeEventIDPort,
+		key.TenantID.String(), key.Parcel.String(), key.Kind.String(), key.Version.String()))
 }
 
-// HandOffNetworkIntake 把一份意图入队。信封 ID 取采用键（含租户）再加类型段——意图由
+// HandOffNetworkIntake 把一份意图入队。信封 ID 是采用键（含租户）的指纹加口名前缀——意图由
 // （租户+包裹+来源类型+来源版本）认领（ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
 func (handoff *OutboxNetworkIntakeHandoff) HandOffNetworkIntake(
 	ctx context.Context,

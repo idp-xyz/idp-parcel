@@ -52,8 +52,12 @@ type executionFactPayload struct {
 	Action   string `json:"action"`
 }
 
+// executionFactEventIDPort 是本口指纹 ID 的口名前缀。
+const executionFactEventIDPort = "execution-fact"
+
 func executionFactEventID(key ports.ExecutionFactKey) string {
-	return key.TenantID.String() + "/" + key.Item.String() + "/" + key.Unit.String() + "/" + key.Action.String()
+	return string(outboxintent.FingerprintEventID(executionFactEventIDPort,
+		key.TenantID.String(), key.Item.String(), key.Unit.String(), key.Action.String()))
 }
 
 // HandOffExecutionFact 把一份意图入队。信封 ID 取执行事实幂等键——意图由

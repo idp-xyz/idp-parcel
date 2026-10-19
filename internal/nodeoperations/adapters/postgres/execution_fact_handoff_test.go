@@ -15,6 +15,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
@@ -73,7 +74,7 @@ func executionFactIntent(t *testing.T) ports.ExecutionFactHandoffIntent {
 }
 
 func executionFactEventID() string {
-	return "tenant-a/item-1/unit-1/UNSEAL"
+	return string(outboxintent.FingerprintEventID("execution-fact", "tenant-a", "item-1", "unit-1", "UNSEAL"))
 }
 
 func TestExecutionFactIntentCommitsAtomicallyWithTheFact(t *testing.T) {

@@ -6,6 +6,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 )
 
 // 本文件对真实 PostgreSQL 16 证进程口那一半的 ADR-0094 决定四：受控批量口发布带时点策略声明的
@@ -66,7 +67,7 @@ func countOperatorRegistrationEnvelopes(t *testing.T, dsn, eventID string) int {
 func TestPublishingAsOfPoliciesThroughTheCLIEnqueuesTheOperatorRegistrationEnvelope(t *testing.T) {
 	dsn := freshMigratedDSN(t)
 	batch := batchFile(t, `{"items":[`+rulePackageItemWithAsOf("rules-asof", "digest-asof")+`]}`)
-	eventID := "tenant-1/AS_OF_POLICY/rules-asof/v1/operator-registration-completed"
+	eventID := string(outboxintent.FingerprintEventID("operator-registration-completed", "tenant-1", "AS_OF_POLICY", "rules-asof", "v1"))
 
 	if code := runCLI(t, dsn, "publish", "-input", batch); code != exitLanded {
 		t.Fatalf("首次发布退出码 = %d, want %d", code, exitLanded)

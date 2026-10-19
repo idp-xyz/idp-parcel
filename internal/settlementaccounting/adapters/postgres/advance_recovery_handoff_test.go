@@ -57,7 +57,7 @@ func TestAdvanceRecoveryFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("首发：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/recovery/recovery-1"); count != 1 {
+	if count := countSAIntents(t, pool, saID("advance-recovery", "tenant-a/recovery/recovery-1")); count != 1 {
 		t.Fatalf("recovery-1 行数 = %d, want 1", count)
 	}
 
@@ -70,7 +70,7 @@ func TestAdvanceRecoveryFollowsTheTransactionalTemplate(t *testing.T) {
 	}); !errors.Is(err, rollback) {
 		t.Fatalf("事务应以回滚错误结束，实得：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/recovery/recovery-2"); count != 0 {
+	if count := countSAIntents(t, pool, saID("advance-recovery", "tenant-a/recovery/recovery-2")); count != 0 {
 		t.Fatalf("回滚后 recovery-2 行数 = %d, want 0", count)
 	}
 
@@ -79,7 +79,7 @@ func TestAdvanceRecoveryFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("重发：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/recovery/recovery-1"); count != 1 {
+	if count := countSAIntents(t, pool, saID("advance-recovery", "tenant-a/recovery/recovery-1")); count != 1 {
 		t.Fatalf("重发后行数 = %d, want 1——重发的必须是同一份", count)
 	}
 
@@ -108,7 +108,7 @@ func TestAdvanceRecoveryAdjustmentUsesItsOwnEnvelope(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("调整入队：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/adjustment/adjust-1"); count != 1 {
+	if count := countSAIntents(t, pool, saID("advance-recovery", "tenant-a/adjustment/adjust-1")); count != 1 {
 		t.Fatalf("adjust-1 行数 = %d, want 1", count)
 	}
 }

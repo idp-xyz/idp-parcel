@@ -157,13 +157,13 @@ func (handoff *OutboxClaimSettlementHandoff) HandOffClaimSettlement(
 	now := handoff.clock.Now().UTC()
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(shape.eventID),
+		ID:           outboxintent.FingerprintEventID("claim-settlement", shape.eventID),
 		Source:       saEventSource,
 		Type:         shape.eventType,
 		Version:      1,
 		Scope:        shape.tenant,
 		Subject:      shape.subject,
-		PartitionKey: shape.eventID,
+		PartitionKey: string(outboxintent.FingerprintEventID("claim-settlement", shape.eventID)),
 		OccurredAt:   shape.occurredAt,
 		RecordedAt:   now,
 		ContentType:  eventing.JSONContentType,

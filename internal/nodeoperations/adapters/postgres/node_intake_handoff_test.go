@@ -15,6 +15,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
@@ -71,7 +72,7 @@ func intakeIntent(t *testing.T, tenant, sourceID string) ports.NodeIntakeHandoff
 }
 
 func intakeEventID(tenant, sourceID string) string {
-	return tenant + "/" + sourceID
+	return string(outboxintent.FingerprintEventID("node-intake", tenant, sourceID))
 }
 
 func TestNodeIntakeIntentCommitsAtomicallyWithTheReception(t *testing.T) {

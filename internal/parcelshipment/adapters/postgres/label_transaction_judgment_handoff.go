@@ -57,12 +57,15 @@ type labelTransactionJudgmentPayload struct {
 	Beat        string `json:"beat"`
 }
 
-// labelTransactionJudgmentEventID 取（租户 + 交易 + 包裹 + 版本）加类型段。版本必须在里面：定案那拍
+// labelTransactionJudgmentEventID 取（租户 + 交易 + 包裹 + 版本）的指纹，加口名前缀。版本必须在里面：定案那拍
 // 与作废那拍指同一笔交易、同一件包裹，少了版本两封算出同一个字符串，EnqueueOnce 先查后插，
 // 第二封静默不入队（同 TF externalTrackingFactEventID 头注那条理由）。包裹也必须在里面：一封一包裹。
+// labelTransactionJudgmentEventIDPort 是本口指纹 ID 的口名前缀。
+const labelTransactionJudgmentEventIDPort = "label-transaction-judgment"
+
 func labelTransactionJudgmentEventID(intent ports.LabelTransactionJudgmentIntent) string {
-	return intent.Tenant.String() + "/label-transaction/" + intent.TransactionID.String() + "/" +
-		intent.Parcel.String() + "/" + strconv.FormatInt(intent.Revision, 10) + "/judgment-due"
+	return string(outboxintent.FingerprintEventID(labelTransactionJudgmentEventIDPort,
+		intent.Tenant.String(), intent.TransactionID.String(), intent.Parcel.String(), strconv.FormatInt(intent.Revision, 10)))
 }
 
 // HandOffLabelTransactionJudgment 把一份意图入队。意图残缺（无租户 / 交易 / 包裹、版本未持久化、

@@ -14,6 +14,7 @@ import (
 	adapter "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
@@ -75,7 +76,7 @@ func cancellationIntent(t *testing.T, tenant, requestKey, parcel string) ports.P
 }
 
 func cancellationEventID(tenant, requestKey, parcel string) string {
-	return tenant + "/" + requestKey + "/" + parcel
+	return string(outboxintent.FingerprintEventID("parcel-cancellation", tenant, requestKey, parcel))
 }
 
 func TestParcelCancellationIntentCommitsAtomicallyWithTheDecision(t *testing.T) {

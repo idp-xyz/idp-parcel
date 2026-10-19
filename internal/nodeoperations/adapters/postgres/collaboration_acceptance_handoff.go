@@ -50,8 +50,12 @@ type collaborationAcceptancePayload struct {
 	ItemRef  string `json:"itemRef"`
 }
 
+// collaborationAcceptanceEventIDPort 是本口指纹 ID 的口名前缀。
+const collaborationAcceptanceEventIDPort = "collaboration-acceptance"
+
 func collaborationAcceptanceEventID(key ports.CollaborationAcceptanceKey) string {
-	return key.TenantID.String() + "/" + key.Item.String()
+	return string(outboxintent.FingerprintEventID(collaborationAcceptanceEventIDPort,
+		key.TenantID.String(), key.Item.String()))
 }
 
 // HandOffCollaborationAcceptance 把一份意图入队。信封 ID 取承接幂等键——意图由

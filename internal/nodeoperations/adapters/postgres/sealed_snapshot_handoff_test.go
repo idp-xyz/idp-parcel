@@ -15,6 +15,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
@@ -88,7 +89,7 @@ func sealedSnapshotIntent(t *testing.T, tenant, unitID, seal string) (ports.Seal
 }
 
 func snapshotEventID(tenant, unit, seal string) string {
-	return tenant + "/" + unit + "/" + seal
+	return string(outboxintent.FingerprintEventID("sealed-snapshot", tenant, unit, seal))
 }
 
 func sealOpenedUnit(t *testing.T, unit *domain.ConsolidationUnit, seal string) {

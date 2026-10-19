@@ -14,6 +14,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	"go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
@@ -73,7 +74,7 @@ func TestJudgmentIntentFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("首发：%v", err)
 	}
-	if count := countJudgmentIntents(t, pool, "corr-1"); count != 1 {
+	if count := countJudgmentIntents(t, pool, string(outboxintent.FingerprintEventID("reachability-judgment", "corr-1"))); count != 1 {
 		t.Fatalf("corr-1 行数 = %d, want 1", count)
 	}
 
@@ -86,7 +87,7 @@ func TestJudgmentIntentFollowsTheTransactionalTemplate(t *testing.T) {
 	}); !errors.Is(err, rollback) {
 		t.Fatalf("事务应以回滚错误结束，实得：%v", err)
 	}
-	if count := countJudgmentIntents(t, pool, "corr-2"); count != 0 {
+	if count := countJudgmentIntents(t, pool, string(outboxintent.FingerprintEventID("reachability-judgment", "corr-2"))); count != 0 {
 		t.Fatalf("回滚后 corr-2 行数 = %d, want 0", count)
 	}
 
@@ -95,7 +96,7 @@ func TestJudgmentIntentFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("重发：%v", err)
 	}
-	if count := countJudgmentIntents(t, pool, "corr-1"); count != 1 {
+	if count := countJudgmentIntents(t, pool, string(outboxintent.FingerprintEventID("reachability-judgment", "corr-1"))); count != 1 {
 		t.Fatalf("重发后 corr-1 行数 = %d, want 1——重发的必须是同一份", count)
 	}
 

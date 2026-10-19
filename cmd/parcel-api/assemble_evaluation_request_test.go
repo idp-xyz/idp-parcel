@@ -7,6 +7,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	saapplication "go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
@@ -83,7 +84,8 @@ func TestTheProductionEvaluationRequestOrchestrationRegistersAndHandsOffOnce(t *
 	if stored.Request.Sources().FeeItem != command.FeeItem {
 		t.Fatalf("登记下的费用项目 = %q", stored.Request.Sources().FeeItem.String())
 	}
-	eventID := command.TenantID.String() + "/evaluation-request/" + record.Key.Request.String() + "/submitted"
+	eventID := string(outboxintent.FingerprintEventID("evaluation-request",
+		command.TenantID.String()+"/evaluation-request/"+record.Key.Request.String()+"/submitted"))
 	if count := outboxRowsFor(t, db, eventID); count != 1 {
 		t.Fatalf("信封行数 = %d, want 1", count)
 	}
@@ -121,7 +123,7 @@ func TestTheProductionTriggerDoesNotRequestWhenTheReasonIsNotRegistered(t *testi
 	if _, fired := triggered.Request(); fired {
 		t.Fatal("没登记仍发起了请求")
 	}
-	eventID := command.TenantID.String() + "/evaluation-request/"
+	eventID := "evaluation-request/"
 	if count := outboxRowsLike(t, db, eventID); count != 0 {
 		t.Fatalf("没登记却有 %d 封信封", count)
 	}

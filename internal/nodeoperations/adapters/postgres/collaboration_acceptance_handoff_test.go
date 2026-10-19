@@ -15,6 +15,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
@@ -71,7 +72,7 @@ func acceptanceIntent(t *testing.T, tenant, item string) ports.CollaborationAcce
 }
 
 func acceptanceEventID(tenant, item string) string {
-	return tenant + "/" + item
+	return string(outboxintent.FingerprintEventID("collaboration-acceptance", tenant, item))
 }
 
 func TestCollaborationAcceptanceIntentCommitsAtomicallyWithTheDecision(t *testing.T) {

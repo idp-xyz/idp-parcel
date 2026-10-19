@@ -55,7 +55,7 @@ func TestStatementHandoffFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("首发：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/statement/st-1"); count != 1 {
+	if count := countSAIntents(t, pool, saID("statement", "tenant-a/statement/st-1")); count != 1 {
 		t.Fatalf("st-1 行数 = %d, want 1", count)
 	}
 
@@ -68,7 +68,7 @@ func TestStatementHandoffFollowsTheTransactionalTemplate(t *testing.T) {
 	}); !errors.Is(err, rollback) {
 		t.Fatalf("事务应以回滚错误结束，实得：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/statement/st-2"); count != 0 {
+	if count := countSAIntents(t, pool, saID("statement", "tenant-a/statement/st-2")); count != 0 {
 		t.Fatalf("回滚后 st-2 行数 = %d, want 0", count)
 	}
 
@@ -77,7 +77,7 @@ func TestStatementHandoffFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("重发：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/statement/st-1"); count != 1 {
+	if count := countSAIntents(t, pool, saID("statement", "tenant-a/statement/st-1")); count != 1 {
 		t.Fatalf("重发后 st-1 行数 = %d, want 1——重发的必须是同一份", count)
 	}
 
@@ -116,21 +116,21 @@ func TestStatementVoidAndInclusionUseDistinctEnvelopes(t *testing.T) {
 		return handoff.HandOffStatement(txCtx, inclusion)
 	})
 
-	if count := countSAIntents(t, pool, "tenant-a/statement/st-void"); count != 1 {
+	if count := countSAIntents(t, pool, saID("statement", "tenant-a/statement/st-void")); count != 1 {
 		t.Fatalf("发布信封 = %d", count)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/statement/st-void/voided"); count != 1 {
+	if count := countSAIntents(t, pool, saID("statement", "tenant-a/statement/st-void/voided")); count != 1 {
 		t.Fatalf("作废信封 = %d——作废被发布吞了", count)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/inclusion/inclusion-1"); count != 1 {
+	if count := countSAIntents(t, pool, saID("statement", "tenant-a/inclusion/inclusion-1")); count != 1 {
 		t.Fatalf("纳入信封 = %d", count)
 	}
 
 	// 两个字段的分工在这里一并钉住：**都入队**（ID 带 /voided 所以作废不被发布吞）
 	// 且**落在同一分区**（分区键只到对账单，所以作废排在发布之后）。少了后半条，
 	// 把 PartitionKey 改回 eventID 不会让任何东西变红——那正是这个缺陷此前的处境。
-	publishedPartition := partitionKeyOf(t, pool, "tenant-a/statement/st-void")
-	voidedPartition := partitionKeyOf(t, pool, "tenant-a/statement/st-void/voided")
+	publishedPartition := partitionKeyOf(t, pool, saID("statement", "tenant-a/statement/st-void"))
+	voidedPartition := partitionKeyOf(t, pool, saID("statement", "tenant-a/statement/st-void/voided"))
 	if publishedPartition != voidedPartition {
 		t.Fatalf("发布与作废落进两个分区（%q vs %q）：作废可能先于它作废的那份送达",
 			publishedPartition, voidedPartition)
@@ -139,7 +139,7 @@ func TestStatementVoidAndInclusionUseDistinctEnvelopes(t *testing.T) {
 		t.Fatalf("分区键 = %q，应当只到对账单这一层", publishedPartition)
 	}
 	if inclusionPartition := partitionKeyOf(
-		t, pool, "tenant-a/inclusion/inclusion-1",
+		t, pool, saID("statement", "tenant-a/inclusion/inclusion-1"),
 	); inclusionPartition == publishedPartition {
 		t.Fatal("纳入与对账单共用了分区：两者不是同一个需要保序的对象")
 	}

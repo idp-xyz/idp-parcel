@@ -12,6 +12,7 @@ import (
 	noports "go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 )
 
 // 本文件对真实 PostgreSQL 16 证采用那条链的诚实停点：真的已接受委托、真的节点收寄
@@ -218,7 +219,7 @@ func recordFormedNodeIntake(t *testing.T, fixture *synVerticalFixture) string {
 	if outcome != noports.ReceptionSaved {
 		t.Fatalf("save outcome = %v, want 已写入", outcome)
 	}
-	return tenant.String() + "/" + nodeIntakeSourceID
+	return string(outboxintent.FingerprintEventID("node-intake", tenant.String(), nodeIntakeSourceID))
 }
 
 // mustNO 是 mustPS 在 node-operations 值对象上的孪生。两份分开是为了让失败信息说清

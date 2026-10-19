@@ -13,6 +13,7 @@ import (
 	adapter "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
@@ -45,7 +46,7 @@ func finalOutcomeHandoffIntent(t *testing.T, parcel, version string) ports.Final
 }
 
 func finalOutcomeEventID(parcel, version string) string {
-	return "tenant-a/final-outcome/" + parcel + "/EFFECTIVE_DELIVERY/" + version
+	return string(outboxintent.FingerprintEventID("final-outcome", "tenant-a", parcel, "EFFECTIVE_DELIVERY", version))
 }
 
 // TestFinalOutcomeFollowsTheTransactionalTemplate 证终局判断意图复现样板四条：首发一行、

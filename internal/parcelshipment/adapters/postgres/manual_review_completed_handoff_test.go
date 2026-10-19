@@ -15,6 +15,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
@@ -99,11 +100,8 @@ func (fixture *reviewCompletedFixture) seedAwaitingReview(
 // reviewCompletedEventID 照 ADR-0043 的认领口径拼：来源身份 + 提交版本 + 类型段。版本段
 // 不能省——换代后的再复核是另一份完成，省掉它就会被 EnqueueOnce 当重放吞掉。
 func reviewCompletedEventID(identity domain.SourceIdentity, request domain.ShipmentRequest) string {
-	return identity.TenantID().String() + "/" +
-		identity.CustomerAccountID().String() + "/" +
-		identity.Source().String() + "/" +
-		identity.RequestKey().String() + "/" +
-		request.CurrentSubmissionVersion().VersionID().String() + "/manual-review-completed"
+	return string(outboxintent.FingerprintEventID("manual-review-completed", identity.TenantID().String(), identity.CustomerAccountID().String(),
+		identity.Source().String(), identity.RequestKey().String(), request.CurrentSubmissionVersion().VersionID().String()))
 }
 
 func mustCompleteReview(t *testing.T, request domain.ShipmentRequest) domain.ShipmentRequest {

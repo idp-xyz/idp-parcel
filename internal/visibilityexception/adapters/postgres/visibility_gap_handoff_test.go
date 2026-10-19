@@ -12,6 +12,7 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	adapter "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
@@ -72,7 +73,7 @@ func gapIntent(t *testing.T, tenant string) ports.VisibilityGapHandoffIntent {
 }
 
 func gapEventID(gap domain.VisibilityGap) string {
-	return gap.Parcel().String() + "/" + gap.Expectation().String() + "/" + gap.WindowRule().String()
+	return string(outboxintent.FingerprintEventID("visibility-gap", gap.Parcel().String(), gap.Expectation().String(), gap.WindowRule().String()))
 }
 
 func TestVisibilityGapIntentCommitsAtomicallyWithTheGap(t *testing.T) {

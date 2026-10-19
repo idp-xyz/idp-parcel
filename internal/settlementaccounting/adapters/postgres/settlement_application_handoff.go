@@ -95,7 +95,7 @@ func (handoff *OutboxSettlementApplicationHandoff) HandOffSettlementApplication(
 	}
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(eventID),
+		ID:           outboxintent.FingerprintEventID("settlement-application", eventID),
 		Source:       saEventSource,
 		Type:         eventType,
 		Version:      1,

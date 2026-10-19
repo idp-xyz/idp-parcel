@@ -14,6 +14,7 @@ import (
 	adapter "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
@@ -76,7 +77,7 @@ func submittedIntent(t *testing.T, key, requestID string) ports.ShipmentRequestS
 }
 
 func submittedEventID(tenant, customer, source, key string) string {
-	return tenant + "/" + customer + "/" + source + "/" + key + "/shipment-request-submitted"
+	return string(outboxintent.FingerprintEventID("shipment-request-submitted", tenant, customer, source, key))
 }
 
 func TestSubmittedIntentCommitsAtomicallyWithTheRequestRow(t *testing.T) {

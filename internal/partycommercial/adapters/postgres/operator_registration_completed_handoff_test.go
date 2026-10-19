@@ -16,6 +16,7 @@ import (
 	adapter "go.idp.xyz/idp-parcel/internal/partycommercial/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
@@ -89,8 +90,8 @@ func asOfRegistrationIntent(t *testing.T) ports.OperatorRegistrationCompletedInt
 // EnqueueOnce 当重放吞掉。
 func operatorRegistrationEventID(intent ports.OperatorRegistrationCompletedIntent) string {
 	version := intent.Registration
-	return version.Tenant().String() + "/" + intent.Kind.String() + "/" +
-		version.ObjectID().String() + "/" + version.Version().String() + "/operator-registration-completed"
+	return string(outboxintent.FingerprintEventID("operator-registration-completed",
+		version.Tenant().String(), intent.Kind.String(), version.ObjectID().String(), version.Version().String()))
 }
 
 func countOperatorRegistrationIntents(t *testing.T, pool *pgxpool.Pool, eventID string) int {

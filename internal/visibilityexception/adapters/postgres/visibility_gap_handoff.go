@@ -53,8 +53,12 @@ type visibilityGapPayload struct {
 	WindowRule  string `json:"windowRule"`
 }
 
+// visibilityGapEventIDPort 是本口指纹 ID 的口名前缀。
+const visibilityGapEventIDPort = "visibility-gap"
+
 func visibilityGapEventID(gap domain.VisibilityGap) string {
-	return gap.Parcel().String() + "/" + gap.Expectation().String() + "/" + gap.WindowRule().String()
+	return string(outboxintent.FingerprintEventID(visibilityGapEventIDPort,
+		gap.Parcel().String(), gap.Expectation().String(), gap.WindowRule().String()))
 }
 
 // HandOffVisibilityGap 把一份意图入队。信封 ID 取缺口身份三维——意图由三维认领

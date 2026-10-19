@@ -69,22 +69,22 @@ func TestBillVersionsOfOneClaimShareAPartition(t *testing.T) {
 		})
 	})
 
-	if count := countSAIntents(t, pool, "tenant-a/bill/claim-v/v1"); count != 1 {
+	if count := countSAIntents(t, pool, saID("supplier-bill", "tenant-a/bill/claim-v/v1")); count != 1 {
 		t.Fatalf("v1 信封 = %d", count)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/bill/claim-v/v2"); count != 1 {
+	if count := countSAIntents(t, pool, saID("supplier-bill", "tenant-a/bill/claim-v/v2")); count != 1 {
 		t.Fatalf("v2 信封 = %d——后一版被前一版吞了", count)
 	}
 
-	first := partitionKeyOf(t, pool, "tenant-a/bill/claim-v/v1")
-	second := partitionKeyOf(t, pool, "tenant-a/bill/claim-v/v2")
+	first := partitionKeyOf(t, pool, saID("supplier-bill", "tenant-a/bill/claim-v/v1"))
+	second := partitionKeyOf(t, pool, saID("supplier-bill", "tenant-a/bill/claim-v/v2"))
 	if first != second {
 		t.Fatalf("同一主张的两版落进两个分区（%q vs %q）：v1 可能在 v2 之后被审", first, second)
 	}
 	if first != "tenant-a/bill/claim-v" {
 		t.Fatalf("分区键 = %q，应当只到主张这一层", first)
 	}
-	if other := partitionKeyOf(t, pool, "tenant-a/bill/claim-other/v1"); other == first {
+	if other := partitionKeyOf(t, pool, saID("supplier-bill", "tenant-a/bill/claim-other/v1")); other == first {
 		t.Fatal("不同主张共用了分区：它们之间没有先后可言")
 	}
 }
@@ -101,7 +101,7 @@ func TestSupplierBillFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("首发：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/bill/claim-1/v1"); count != 1 {
+	if count := countSAIntents(t, pool, saID("supplier-bill", "tenant-a/bill/claim-1/v1")); count != 1 {
 		t.Fatalf("claim-1 行数 = %d, want 1", count)
 	}
 
@@ -114,7 +114,7 @@ func TestSupplierBillFollowsTheTransactionalTemplate(t *testing.T) {
 	}); !errors.Is(err, rollback) {
 		t.Fatalf("事务应以回滚错误结束，实得：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/bill/claim-2/v1"); count != 0 {
+	if count := countSAIntents(t, pool, saID("supplier-bill", "tenant-a/bill/claim-2/v1")); count != 0 {
 		t.Fatalf("回滚后 claim-2 行数 = %d, want 0", count)
 	}
 
@@ -123,7 +123,7 @@ func TestSupplierBillFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("重发：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/bill/claim-1/v1"); count != 1 {
+	if count := countSAIntents(t, pool, saID("supplier-bill", "tenant-a/bill/claim-1/v1")); count != 1 {
 		t.Fatalf("重发后行数 = %d, want 1——重发的必须是同一份", count)
 	}
 

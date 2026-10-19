@@ -53,8 +53,12 @@ type nodeIntakePayload struct {
 	SourceID string `json:"sourceId"`
 }
 
+// nodeIntakeEventIDPort 是本口指纹 ID 的口名前缀。
+const nodeIntakeEventIDPort = "node-intake"
+
 func nodeIntakeEventID(key ports.ReceptionKey) string {
-	return key.TenantID.String() + "/" + key.SourceID
+	return string(outboxintent.FingerprintEventID(nodeIntakeEventIDPort,
+		key.TenantID.String(), key.SourceID))
 }
 
 // HandOffNodeIntake 把一份意图入队。信封 ID 取收寄幂等键——意图由收寄键认领

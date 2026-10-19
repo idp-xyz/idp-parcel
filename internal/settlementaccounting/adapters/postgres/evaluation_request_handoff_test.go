@@ -90,17 +90,17 @@ func TestASubmittedEvaluationRequestEnqueuesOneReferenceOnlyEnvelope(t *testing.
 
 	partition := "tenant-a/evaluation-request/EVREQ-SYN-1"
 	eventID := partition + "/submitted"
-	if count := countSAIntents(t, pool, eventID); count != 1 {
+	if count := countSAIntents(t, pool, saID("evaluation-request", eventID)); count != 1 {
 		t.Fatalf("行数 = %d, want 1", count)
 	}
-	if got := settlementApplicationIntentType(t, pool, eventID); got != "settlement-accounting.evaluation-request.submitted" {
+	if got := settlementApplicationIntentType(t, pool, saID("evaluation-request", eventID)); got != "settlement-accounting.evaluation-request.submitted" {
 		t.Fatalf("事件类型 = %q, want settlement-accounting.evaluation-request.submitted", got)
 	}
-	if got := partitionKeyOf(t, pool, eventID); got != partition {
+	if got := partitionKeyOf(t, pool, saID("evaluation-request", eventID)); got != partition {
 		t.Fatalf("分区键 = %q, want %q——主体是评价请求，状态段只进 ID", got, partition)
 	}
 
-	payload := evaluationRequestPayloadOf(t, pool, eventID)
+	payload := evaluationRequestPayloadOf(t, pool, saID("evaluation-request", eventID))
 	if payload.TenantID != "tenant-a" || payload.EvaluationRequestID != "EVREQ-SYN-1" {
 		t.Fatalf("载荷引用 = %+v", payload)
 	}
@@ -122,7 +122,7 @@ func TestEvaluationRequestFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("首发：%v", err)
 	}
-	if count := countSAIntents(t, pool, firstID); count != 1 {
+	if count := countSAIntents(t, pool, saID("evaluation-request", firstID)); count != 1 {
 		t.Fatalf("EVREQ-SYN-3 行数 = %d, want 1", count)
 	}
 
@@ -136,7 +136,7 @@ func TestEvaluationRequestFollowsTheTransactionalTemplate(t *testing.T) {
 	}); !errors.Is(err, rollback) {
 		t.Fatalf("事务应以回滚错误结束，实得：%v", err)
 	}
-	if count := countSAIntents(t, pool, "tenant-a/evaluation-request/EVREQ-SYN-4/submitted"); count != 0 {
+	if count := countSAIntents(t, pool, saID("evaluation-request", "tenant-a/evaluation-request/EVREQ-SYN-4/submitted")); count != 0 {
 		t.Fatalf("回滚后 EVREQ-SYN-4 行数 = %d, want 0", count)
 	}
 
@@ -146,7 +146,7 @@ func TestEvaluationRequestFollowsTheTransactionalTemplate(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("重发：%v", err)
 	}
-	if count := countSAIntents(t, pool, firstID); count != 1 {
+	if count := countSAIntents(t, pool, saID("evaluation-request", firstID)); count != 1 {
 		t.Fatalf("重发后行数 = %d, want 1——重发的必须是同一份", count)
 	}
 
@@ -167,8 +167,8 @@ func TestTwoEvaluationRequestsLandInTheirOwnPartitions(t *testing.T) {
 	}); err != nil {
 		t.Fatalf("两份入队：%v", err)
 	}
-	six := partitionKeyOf(t, pool, "tenant-a/evaluation-request/EVREQ-SYN-6/submitted")
-	seven := partitionKeyOf(t, pool, "tenant-a/evaluation-request/EVREQ-SYN-7/submitted")
+	six := partitionKeyOf(t, pool, saID("evaluation-request", "tenant-a/evaluation-request/EVREQ-SYN-6/submitted"))
+	seven := partitionKeyOf(t, pool, saID("evaluation-request", "tenant-a/evaluation-request/EVREQ-SYN-7/submitted"))
 	if six == seven {
 		t.Fatalf("两份请求共用了分区 %q", six)
 	}

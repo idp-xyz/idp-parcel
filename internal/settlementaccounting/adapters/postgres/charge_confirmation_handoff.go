@@ -51,8 +51,11 @@ type chargeConfirmationPayload struct {
 	ChargeID string `json:"chargeId"`
 }
 
+// chargeConfirmationEventIDPort 是本口指纹 ID 的口名前缀。
+const chargeConfirmationEventIDPort = "charge-confirmation"
+
 func chargeConfirmationEventID(tenant, charge string) string {
-	return tenant + "/charge/" + charge
+	return string(outboxintent.FingerprintEventID(chargeConfirmationEventIDPort, tenant, charge))
 }
 
 // HandOffChargeConfirmation 把一份意图入队。信封 ID 取（租户+费用）——意图由费用

@@ -61,12 +61,12 @@ type submissionVersionFormedPayload struct {
 
 // submissionVersionFormedEventID 由来源身份加新提交版本认领意图（ADR-0043）：同一版本至多形成
 // 一次（同一补充身份的重放由编排答`已处理`，走不到交接），重放不入队第二份。
+// submissionVersionFormedEventIDPort 是本口指纹 ID 的口名前缀。
+const submissionVersionFormedEventIDPort = "submission-version-formed"
+
 func submissionVersionFormedEventID(identity domain.SourceIdentity, version domain.SubmissionVersionID) string {
-	return identity.TenantID().String() + "/" +
-		identity.CustomerAccountID().String() + "/" +
-		identity.Source().String() + "/" +
-		identity.RequestKey().String() + "/" +
-		version.String() + "/submission-version-formed"
+	return string(outboxintent.FingerprintEventID(submissionVersionFormedEventIDPort,
+		identity.TenantID().String(), identity.CustomerAccountID().String(), identity.Source().String(), identity.RequestKey().String(), version.String()))
 }
 
 // HandOffSubmissionVersionFormed 把一份意图入队。身份或委托缺席、当前版本没有前版都是装配缺陷

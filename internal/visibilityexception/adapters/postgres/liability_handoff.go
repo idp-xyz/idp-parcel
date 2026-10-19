@@ -73,7 +73,7 @@ func (handoff *OutboxLiabilityHandoff) HandOffLiability(
 	now := handoff.clock.Now().UTC()
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(intent.Claim.ID().String()),
+		ID:           outboxintent.FingerprintEventID("liability", intent.Claim.ID().String()),
 		Source:       veEventSource,
 		Type:         liabilityEventType,
 		Version:      1,

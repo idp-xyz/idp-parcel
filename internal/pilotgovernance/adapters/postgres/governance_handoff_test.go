@@ -15,6 +15,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/pilotgovernance/domain"
 	"go.idp.xyz/idp-parcel/internal/pilotgovernance/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
@@ -86,7 +87,7 @@ func TestGovernanceSuspensionIntentCommitsAtomically(t *testing.T) {
 	ctx := t.Context()
 	decision := incidentSuspension(t, "suspension-1")
 	intent := ports.GovernanceHandoffIntent{Suspension: &decision}
-	eventID := "suspension/suspension-1"
+	eventID := string(outboxintent.FingerprintEventID("suspension", "suspension-1"))
 
 	fixture.within(t, ctx, func(txCtx context.Context) error {
 		if _, err := fixture.suspensions.Save(txCtx, decision); err != nil {
@@ -108,7 +109,7 @@ func TestGovernanceSuspensionIntentRollbackDropsBoth(t *testing.T) {
 	ctx := t.Context()
 	decision := incidentSuspension(t, "suspension-1")
 	intent := ports.GovernanceHandoffIntent{Suspension: &decision}
-	eventID := "suspension/suspension-1"
+	eventID := string(outboxintent.FingerprintEventID("suspension", "suspension-1"))
 	rollback := errors.New("回滚")
 
 	if err := fixture.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
@@ -148,19 +149,19 @@ func TestResendingTheSameGovernanceIntentIsIdempotent(t *testing.T) {
 		{
 			name:     "suspension",
 			intent:   ports.GovernanceHandoffIntent{Suspension: &suspension},
-			eventID:  "suspension/suspension-1",
+			eventID:  string(outboxintent.FingerprintEventID("suspension", "suspension-1")),
 			eventTyp: "pilot-governance.suspension.recorded",
 		},
 		{
 			name:     "resumption",
 			intent:   ports.GovernanceHandoffIntent{Resumption: &resumption},
-			eventID:  "resumption/suspension-1",
+			eventID:  string(outboxintent.FingerprintEventID("resumption", "suspension-1")),
 			eventTyp: "pilot-governance.resumption.recorded",
 		},
 		{
 			name:     "takeover",
 			intent:   ports.GovernanceHandoffIntent{Takeover: &takeover},
-			eventID:  "takeover/lane-1-parcels/shipment-intake/acceptance-decision/ops-takeover/2026-08-14T10:00:00Z",
+			eventID:  string(outboxintent.FingerprintEventID("takeover", "lane-1-parcels", "shipment-intake", "acceptance-decision", "ops-takeover", "2026-08-14T10:00:00Z")),
 			eventTyp: "pilot-governance.takeover.recorded",
 		},
 	}
@@ -198,17 +199,17 @@ func TestAResumptionSharesThePartitionOfTheSuspensionItLifts(t *testing.T) {
 		return fixture.handoff.HandOffGovernance(txCtx, ports.GovernanceHandoffIntent{Resumption: &resumption})
 	})
 
-	if count := countGovernanceIntents(t, fixture.pool, "suspension/suspension-1", "pilot-governance.suspension.recorded"); count != 1 {
+	if count := countGovernanceIntents(t, fixture.pool, string(outboxintent.FingerprintEventID("suspension", "suspension-1")), "pilot-governance.suspension.recorded"); count != 1 {
 		t.Fatalf("暂停行数 = %d, want 1", count)
 	}
-	if count := countGovernanceIntents(t, fixture.pool, "resumption/suspension-1", "pilot-governance.resumption.recorded"); count != 1 {
+	if count := countGovernanceIntents(t, fixture.pool, string(outboxintent.FingerprintEventID("resumption", "suspension-1")), "pilot-governance.resumption.recorded"); count != 1 {
 		t.Fatalf("恢复行数 = %d, want 1", count)
 	}
 
-	if got := partitionKeyOf(t, fixture.pool, "suspension/suspension-1"); got != "suspension/suspension-1" {
+	if got := partitionKeyOf(t, fixture.pool, string(outboxintent.FingerprintEventID("suspension", "suspension-1"))); got != "suspension/suspension-1" {
 		t.Fatalf("暂停分区键 = %q, want suspension/suspension-1", got)
 	}
-	if got := partitionKeyOf(t, fixture.pool, "resumption/suspension-1"); got != "suspension/suspension-1" {
+	if got := partitionKeyOf(t, fixture.pool, string(outboxintent.FingerprintEventID("resumption", "suspension-1"))); got != "suspension/suspension-1" {
 		t.Fatalf("恢复分区键 = %q；两拍不同分区，恢复就可能赶在暂停之前送到", got)
 	}
 }
@@ -240,8 +241,8 @@ func TestASecondTakeoverOfTheSameScopeEnqueuesInTheSamePartition(t *testing.T) {
 		return fixture.handoff.HandOffGovernance(txCtx, ports.GovernanceHandoffIntent{Takeover: &second})
 	})
 
-	firstID := "takeover/lane-1-parcels/shipment-intake/acceptance-decision/ops-takeover/2026-08-14T10:00:00Z"
-	secondID := "takeover/lane-1-parcels/shipment-intake/acceptance-decision/ops-relief/2026-08-16T10:00:00Z"
+	firstID := string(outboxintent.FingerprintEventID("takeover", "lane-1-parcels", "shipment-intake", "acceptance-decision", "ops-takeover", "2026-08-14T10:00:00Z"))
+	secondID := string(outboxintent.FingerprintEventID("takeover", "lane-1-parcels", "shipment-intake", "acceptance-decision", "ops-relief", "2026-08-16T10:00:00Z"))
 	if count := countGovernanceIntents(t, fixture.pool, firstID, "pilot-governance.takeover.recorded"); count != 1 {
 		t.Fatalf("首次接管行数 = %d, want 1", count)
 	}
@@ -277,7 +278,7 @@ func TestGovernanceIntentRefusesToRunOutsideATransaction(t *testing.T) {
 	if err := fixture.handoff.HandOffGovernance(t.Context(), ports.GovernanceHandoffIntent{Suspension: &decision}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("无事务入队应返回 ErrTransactionRequired，实得：%v", err)
 	}
-	if count := countGovernanceIntents(t, fixture.pool, "suspension/suspension-1", "pilot-governance.suspension.recorded"); count != 0 {
+	if count := countGovernanceIntents(t, fixture.pool, string(outboxintent.FingerprintEventID("suspension", "suspension-1")), "pilot-governance.suspension.recorded"); count != 0 {
 		t.Fatalf("被拒绝的入队仍然落库了：%d 行", count)
 	}
 }

@@ -14,6 +14,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
@@ -58,7 +59,7 @@ func continuedAttemptDecisionIntent(
 }
 
 func continuedAttemptDecisionEventID(parcel, decision string) string {
-	return "tenant-a/continued-attempt-decision/" + parcel + "/" + decision + "/judgment-due"
+	return string(outboxintent.FingerprintEventID("continued-attempt-decision", "tenant-a", parcel, decision))
 }
 
 // Covers: 复现样板四条——首发一行、回滚无痕、重发同一份、无事务拒。信封 ID 由（租户 + 包裹 + 决定标识）
