@@ -249,7 +249,7 @@ func TestAdoptingACommissionStartsItAndCancellationThenAnswersAlreadyStarted(t *
 		t.Fatalf("另一段采用已开始的委托 = %q %v", second.Outcome(), err)
 	}
 	if basis, at, _ := fixture.storedCommission(t).Commission.TransportStarted(); basis.String() != "TRANSPORT-HANDOVER/SEG-1/parcel-1/v1" || !at.Equal(segmentEnteredAt) {
-		t.Fatalf("后到的段改写了委托的首次开始：(%s, %s)", basis, at)
+		t.Fatalf("开始得更晚的段改写了委托的开始：(%s, %s)", basis, at)
 	}
 	adoption, _ := second.Adoption()
 	if basis, _ := adoption.Adoption.Started(); basis.String() != "TRANSPORT-HANDOVER/SEG-2/parcel-1/v1" {
@@ -352,9 +352,10 @@ func TestAnAdoptionAnswersEachUnmetPreconditionWithoutWriting(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0029 在采用编排的恢复面——采用册、段册、委托册读不动与标开始写不动各答未决并指名等谁；并发里另一笔先取消了
-// 委托答委托不可采用（连线已落，由装配整笔回滚撤掉），先开始了委托则照常采用、不改写那一次开始；同段并发首交的输家按摘要分
-// 已有与冲突。
+// Covers: ADR-0029 在采用编排的恢复面与 `AT-TF-187` 的并发窗口——采用册、段册、委托册读不动与标开始写不动各答未决并指名
+// 等谁；并发里另一笔先取消了委托，按取消时刻与段的首个参与分答取消晚于开始或委托不可采用（连线已落，由装配整笔回滚撤掉）；
+// 另一段先开始了委托，开始得更早就照常采用、不动它，更晚就被这一段前移；前移撞上更早的前移则不动；同段并发首交的输家按
+// 摘要分已有与冲突。
 func TestAdoptionRecoveryAndConcurrency(t *testing.T) {
 	t.Run("store failures are undecided with their reasons", func(t *testing.T) {
 		for want, break_ := range map[application.CommissionAdoptionUndecidedReason]func(*commissionAdoptionFixture){
