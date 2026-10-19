@@ -1,12 +1,16 @@
 # 14 TF 其余构造门：判零仍按纳秒、三处自由文本不拒 NUL
 
 Category: bug
-Status: needs-triage——2026-10-19 会话 `idp-parcel-9b` 立（tf-face-algebra/01 实施中清点出的地盘外同病，未逐口实测）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-tfa14`）。此前 needs-triage——2026-10-19 会话 `idp-parcel-9b` 立（tf-face-algebra/01 实施中清点出的地盘外同病，未逐口实测）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：tf-face-algebra/01 完成记录「同形门清点」。
 地盘：
 - internal/transportfulfillment/domain（各口构造门与重建门）
+
+## 裁定（2026-10-19，会话 idp-parcel-9b 代决）
+
+照 tf-face-algebra/01 的裁定办：落 timestamptz、重建复用构造门的时刻非零门改按 `AtRegistryPrecision` 判零（只改判定、不改存值，扩展同一条规则不另立定义）；三处自由文本拒 NUL 答未受理；`TransportMovementFact.Correct` 补「更正时刻早于发生时刻」的拒，与重建门口径一致。落 jsonb 快照或不复用构造门的口逐口写明不改的理由。属机制。
 
 ## 现象（读码清点，未逐口实测）
 

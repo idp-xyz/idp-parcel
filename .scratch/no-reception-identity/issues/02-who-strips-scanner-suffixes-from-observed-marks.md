@@ -1,7 +1,7 @@
 # 02 收寄现场观察的号码：在线收寄口原样交核对，受控批量口逐格去两端空白——扫描后缀与两口口径归 NO 定
 
 Category: task
-Status: ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 0 研判）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-nri02`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 0 研判）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C2 第四张草案
