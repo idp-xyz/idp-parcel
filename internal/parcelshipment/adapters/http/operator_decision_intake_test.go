@@ -425,3 +425,20 @@ func TestABlankShipperAuthorizationEvidenceLeavesTheRequesterAbsent(t *testing.T
 		t.Fatalf("requester = %q, want absent", blank.Requester.String())
 	}
 }
+
+// Covers: 票 operator-channel/37——认不出的`关闭责任来源`种类词是坏报文：答 400、报文原样带出那个词，排在按包裹寻址之前，
+// 包裹查不到时也不落进「与越权探针同答」那一格；认词交给 application，本口只把认不出译成坏报文。
+func TestAnUnrecognisedResponsibilitySourceWordAnswers400CarryingTheWord(t *testing.T) {
+	ctx := context.Background()
+	missing := decisionIntakeWithParcels(t, decisionAuthenticator{}, decisionTargets{}, parcelTargets{missing: true})
+	for _, word := range []string{"", "CUSTOMER-WHIM", "shipper-instruction", "SHIPPER-INSTRUCTION/SYN-ACCOUNT-01"} {
+		_, err := missing.IntakeControlledClosure(ctx, decisionRequest("t",
+			`{"parcel": "SYN-PARCEL-99", "reason": "r", "responsibilitySource": "`+word+`", "responsibilitySubject": "x"}`))
+		if !errors.Is(err, shipmenthttp.ErrMalformedRequest) {
+			t.Fatalf("%q: err = %v, want ErrMalformedRequest", word, err)
+		}
+		if quoted, _ := json.Marshal(word); !strings.Contains(err.Error(), string(quoted)) {
+			t.Fatalf("%q: err = %v, want the unrecognised word quoted", word, err)
+		}
+	}
+}

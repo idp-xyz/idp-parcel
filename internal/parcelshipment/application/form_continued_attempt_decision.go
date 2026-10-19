@@ -168,7 +168,9 @@ func (kind ClosureResponsibilitySourceKind) String() string {
 	}
 }
 
-const closureResponsibilitySourceSeparator = "/"
+// kindSegmentSeparator 隔开`<种类>/<主体>`形引用的种类段与主体。`关闭责任来源`与「代货主」请求方引用同形（ADR-0183
+// 决定二），共用这一个分隔符；种类段让日后另有来处的请求方在审计里分得开。
+const kindSegmentSeparator = "/"
 
 // closureResponsibilitySourceOf 把种类与主体合成落册的`关闭责任来源`引用（`<种类>/<主体>`），是下面
 // closureResponsibilitySourceKindOf 的对偶：合成与解析收在相邻一对（票 label-channel/30 裁决 ②），谁改了分隔符或
@@ -183,22 +185,29 @@ func closureResponsibilitySourceOf(
 		return domain.ClosureResponsibilitySourceReference{}, fmt.Errorf(
 			"closure responsibility source: kind %d or subject %q cannot be written down", kind, subject)
 	}
-	return domain.NewClosureResponsibilitySourceReference(kind.String() + closureResponsibilitySourceSeparator + trimmed)
+	return domain.NewClosureResponsibilitySourceReference(kind.String() + kindSegmentSeparator + trimmed)
 }
 
 // closureResponsibilitySourceKindOf 从已落册的关闭上读回种类段。读不出（旧格式、被人手改）按「认不出」处理，
 // 由调用处决定那意味着什么——这里不猜。
 func closureResponsibilitySourceKindOf(source domain.ClosureResponsibilitySourceReference) ClosureResponsibilitySourceKind {
-	segment, _, found := strings.Cut(source.String(), closureResponsibilitySourceSeparator)
+	segment, _, found := strings.Cut(source.String(), kindSegmentSeparator)
 	if !found {
 		return ClosureResponsibilitySourceKindInvalid
 	}
+	return ParseClosureResponsibilitySourceKind(segment)
+}
+
+// ParseClosureResponsibilitySourceKind 认一个`关闭责任来源`种类词，认不出交回 ClosureResponsibilitySourceKindInvalid
+// ——不默认任何一格（票 label-channel/30 裁决 ②）。种类词表只在这里列一遍：入口认载荷里的词、重开那道门读回落册引用的
+// 种类段，都走它。它只认词，不合成落册引用——合成仍只在 closureResponsibilitySourceOf。
+func ParseClosureResponsibilitySourceKind(word string) ClosureResponsibilitySourceKind {
 	for _, kind := range []ClosureResponsibilitySourceKind{
 		ShipperInstructionResponsibilitySource,
 		OperatorActionResponsibilitySource,
 		ExternalRestrictionResponsibilitySource,
 	} {
-		if kind.String() == segment {
+		if kind.String() == word {
 			return kind
 		}
 	}
@@ -363,6 +372,24 @@ func (handler *FormContinuedAttemptDecisionHandler) FormReopening(
 			return handler.shipperReauthorizationGate(register, command)
 		},
 	})
+}
+
+// customerAccountRequesterKind 是「代货主」请求方的种类段（ADR-0183 决定二），与`关闭责任来源`同形 `<种类>/<主体>`。
+const customerAccountRequesterKind = "CUSTOMER-ACCOUNT"
+
+// ShipperRequesterOf 合成「代货主」那一方的请求方引用：包裹所属委托的客户账户，带种类段（ADR-0183 决定二）。重开那道门
+// shipperReauthorizationGate 拿命令里的货主账户与原关闭的请求方比相等，两边都得是同一个合成出来的串——任何渠道要写这种
+// 请求方或货主账户都调这里，不另拼（ADR-0183 复核记录「日后另开写入路径……照决定二写同一种带种类段的引用」）。
+func ShipperRequesterOf(identity domain.SourceIdentity) (domain.RequesterReference, error) {
+	return domain.NewRequesterReference(
+		customerAccountRequesterKind + kindSegmentSeparator + identity.CustomerAccountID().String())
+}
+
+// ShipperInstructionSubjectOf 给出货主指令关闭的责任主体：与 ShipperRequesterOf 出自 ADR-0183 决定三同一句（请求方与
+// 责任来源的主体都取那份委托的客户账户）。主体进落册的`关闭责任来源`、因而进重放比对，渠道之间写法一不同，同一货主的
+// 同一份请求就会被认成两次、册上多出一条关闭——任何渠道都调这里。
+func ShipperInstructionSubjectOf(identity domain.SourceIdentity) string {
+	return identity.CustomerAccountID().String()
 }
 
 // HasShipperAuthorizationEvidence 说一份货主重授权证据算不算带了：全空白与没带同读。接入层据它决定请求方在不在场

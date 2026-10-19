@@ -17,7 +17,7 @@ import (
 // 货主、渠道服务方或代理商只能提出请求（CONTEXT Rules），它不带来任何授权，**也不进提供方**——适配器折
 // 提供方请求时，请求方取的是实例坐标里的运营角色代询问身份上的客户账户（`formContinuedAttemptDecisionRequest`），
 // 本字段今天没有任何适配器读它。它的用处在本上下文的写面：落在决定上，重开时核「与原关闭请求方同一
-// 货主账户」。关闭这一格允许缺席，重开与关闭同型只为一口。
+// 货主账户」。它可缺席（「如有」）：关闭不是货主指令形成的、重开没带货主新授权时都没有请求方（ADR-0183 决定三、四）。
 //
 // Identity 是该包裹所属委托的来源身份：授权规则按责任法人与商业范围版本化，而范围要从委托上解
 // ——那是实例半边的映射（`PAR-COM-14`），适配器只把身份交给映射，不代它挑范围。
@@ -61,7 +61,8 @@ type ContinuedAttemptDecisionAuthorizer interface {
 
 // ContinuedAttemptDecisionIdentity 签发`面单继续尝试决定`的标识。
 //
-// 决定标识由本上下文铸而不从内容派生：关过—重开—再关是三条各自的决定，内容可以逐字相同。
+// 决定标识由本上下文铸而不从内容派生，铸在认重放之后：册上已有同类同内容的决定，这份请求就是它的重放，交回原决定、
+// 不铸新标识（ADR-0183「复核记录二」）。关过—重开—再关的再关是另一次请求，带它自己形成时固定的生效时间。
 // 它兼作`权威业务截断边界`的值（票 label-channel/30 裁决：`AuthoritativeCutoffBoundary` = 关闭决定标识）
 // 与关闭路径终局的来源版本（`CONTINUED-ATTEMPT-CLOSURE/<决定标识>`）——一个事一个名。
 type ContinuedAttemptDecisionIdentity interface {

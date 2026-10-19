@@ -159,10 +159,10 @@ func (intake *OperatorDecisionIntake) IntakeControlledClosure(ctx context.Contex
 		ResponsibilitySourceKind: kind,
 	}
 	if shipperInstruction {
-		if command.Requester, err = shipperOf(identity); err != nil {
-			return application.FormControlledClosureCommand{}, err
+		if command.Requester, err = application.ShipperRequesterOf(identity); err != nil {
+			return application.FormControlledClosureCommand{}, fmt.Errorf("parcel shipment http: shipper requester: %w", err)
 		}
-		command.ResponsibilitySourceSubject = identity.CustomerAccountID().String()
+		command.ResponsibilitySourceSubject = application.ShipperInstructionSubjectOf(identity)
 		return command, nil
 	}
 	command.ResponsibilitySourceSubject = subject
@@ -194,9 +194,9 @@ func (intake *OperatorDecisionIntake) IntakeReopening(ctx context.Context, reque
 	if err != nil {
 		return application.FormReopeningCommand{}, err
 	}
-	shipper, err := shipperOf(identity)
+	shipper, err := application.ShipperRequesterOf(identity)
 	if err != nil {
-		return application.FormReopeningCommand{}, err
+		return application.FormReopeningCommand{}, fmt.Errorf("parcel shipment http: shipper requester: %w", err)
 	}
 	command := application.FormReopeningCommand{
 		Identity:                     identity,
@@ -231,15 +231,6 @@ func (intake *OperatorDecisionIntake) locateParcel(ctx context.Context, tenant d
 	return parcel, target.Identity(), nil
 }
 
-// shipperOf 是操作者渠道上唯一可能的「代货主」请求方：包裹所属委托的客户账户，带种类段（ADR-0183 决定二）。
-func shipperOf(identity domain.SourceIdentity) (domain.RequesterReference, error) {
-	requester, err := domain.NewRequesterReference("CUSTOMER-ACCOUNT/" + identity.CustomerAccountID().String())
-	if err != nil {
-		return domain.RequesterReference{}, fmt.Errorf("parcel shipment http: shipper requester: %w", err)
-	}
-	return requester, nil
-}
-
 // continuedAttemptFacts 收关闭与重开共有的两件事实：原因必填（立不起来是坏报文，同本包别的决定口）；生效时间给了却解不出是
 // 坏报文，缺席交给编排答`输入未受理`——生效时间是决定的一部分，服务端不补。
 func continuedAttemptFacts(rawReason, rawEffectiveAt string) (domain.ContinuedAttemptReasonReference, time.Time, error) {
@@ -257,18 +248,13 @@ func continuedAttemptFacts(rawReason, rawEffectiveAt string) (domain.ContinuedAt
 	return reason, effectiveAt.UTC(), nil
 }
 
-// parseClosureResponsibilitySource 认关闭责任来源的封闭词；认不出是坏报文，不默认任何一格（票 label-channel/30 裁决 ②）。
+// parseClosureResponsibilitySource 把认不出的种类词译成坏报文；认词本身归 application.ParseClosureResponsibilitySourceKind。
 func parseClosureResponsibilitySource(raw string) (application.ClosureResponsibilitySourceKind, error) {
-	for _, kind := range []application.ClosureResponsibilitySourceKind{
-		application.ShipperInstructionResponsibilitySource,
-		application.OperatorActionResponsibilitySource,
-		application.ExternalRestrictionResponsibilitySource,
-	} {
-		if kind.String() == raw {
-			return kind, nil
-		}
+	kind := application.ParseClosureResponsibilitySourceKind(raw)
+	if kind == application.ClosureResponsibilitySourceKindInvalid {
+		return kind, fmt.Errorf("%w: responsibilitySource %q is not a closure responsibility source", ErrMalformedRequest, raw)
 	}
-	return application.ClosureResponsibilitySourceKindInvalid, fmt.Errorf("%w: responsibilitySource %q is not a closure responsibility source", ErrMalformedRequest, raw)
+	return kind, nil
 }
 
 type decisionReasonPayload struct {

@@ -917,3 +917,71 @@ func TestOnlyTheSameContentIsAReplayAndAuthorizationStillComesFirst(t *testing.T
 		t.Fatalf("未获授权的重放 = %v / %v, want NOT_AUTHORIZED", refused.Outcome(), err)
 	}
 }
+
+// Covers: 票 operator-channel/37——`关闭责任来源`种类词只认一处：每个有名字的种类认回自己；空串、词表外的词、小写词、
+// 带主体的整串都交回 Invalid，不默认任何一格（票 label-channel/30 裁决 ②）。入口与重开那道门都靠它认词。
+func TestParseClosureResponsibilitySourceKindRecognisesEachNamedKindAndNothingElse(t *testing.T) {
+	for _, kind := range []application.ClosureResponsibilitySourceKind{
+		application.ShipperInstructionResponsibilitySource,
+		application.OperatorActionResponsibilitySource,
+		application.ExternalRestrictionResponsibilitySource,
+	} {
+		if got := application.ParseClosureResponsibilitySourceKind(kind.String()); got != kind {
+			t.Fatalf("%s 认回 %s", kind, got)
+		}
+	}
+	for _, word := range []string{"", "OTHER", "shipper-instruction", "SHIPPER-INSTRUCTION/SYN-CUSTOMER-1"} {
+		if got := application.ParseClosureResponsibilitySourceKind(word); got != application.ClosureResponsibilitySourceKindInvalid {
+			t.Fatalf("%q 认成了 %s", word, got)
+		}
+	}
+}
+
+// Covers: ADR-0183 决定二、三——「代货主」请求方写成带种类段的 `CUSTOMER-ACCOUNT/<客户账户标识>`，货主指令关闭的责任主体
+// 就是那个客户账户标识；两者都从委托的来源身份推出，这里钉住线上落册的串形。
+func TestTheShipperRequesterAndInstructionSubjectComeFromTheCustomerAccount(t *testing.T) {
+	fixture := newContinuedAttemptFixture(t)
+	requester, err := application.ShipperRequesterOf(fixture.identity)
+	if err != nil {
+		t.Fatalf("合成请求方：%v", err)
+	}
+	if requester.String() != "CUSTOMER-ACCOUNT/SYN-CUSTOMER-1" {
+		t.Fatalf("请求方 = %q, want CUSTOMER-ACCOUNT/SYN-CUSTOMER-1", requester)
+	}
+	if subject := application.ShipperInstructionSubjectOf(fixture.identity); subject != "SYN-CUSTOMER-1" {
+		t.Fatalf("责任主体 = %q, want SYN-CUSTOMER-1", subject)
+	}
+}
+
+// Covers: 票 operator-channel/37——关闭的请求方与责任主体、重开的货主账户都经同一对函数从同一份来源身份推出时：同内容关闭
+// 重投认得出是重放（答`已有结果`、册上仍一条），重开那道门认得出是同一货主、照常形成。
+func TestAShipperPairDerivedInOnePlaceReplaysAndPassesTheReopeningGate(t *testing.T) {
+	fixture := newContinuedAttemptFixture(t)
+	shipper, err := application.ShipperRequesterOf(fixture.identity)
+	if err != nil {
+		t.Fatalf("合成请求方：%v", err)
+	}
+	closure := fixture.closureCommand(t)
+	closure.Requester = shipper
+	closure.ResponsibilitySourceSubject = application.ShipperInstructionSubjectOf(fixture.identity)
+
+	first, err := fixture.handler.FormControlledClosure(t.Context(), closure)
+	if err != nil || first.Outcome() != application.ContinuedAttemptDecisionFormed {
+		t.Fatalf("首关 = %v / %v, want FORMED", first.Outcome(), err)
+	}
+	again, err := fixture.handler.FormControlledClosure(t.Context(), closure)
+	if err != nil || again.Outcome() != application.ContinuedAttemptDecisionExistingResult {
+		t.Fatalf("重投 = %v / %v, want EXISTING_RESULT", again.Outcome(), err)
+	}
+	if decisions := fixture.registers.decisions(fixture.identity.TenantID(), fixture.parcel); len(decisions) != 1 {
+		t.Fatalf("册上 %d 条, want 1", len(decisions))
+	}
+
+	closed, _ := first.Decision()
+	reopening := fixture.reopeningCommand(t, closed.ID())
+	reopening.Requester, reopening.ShipperAccount = shipper, shipper
+	reopened, err := fixture.handler.FormReopening(t.Context(), reopening)
+	if err != nil || reopened.Outcome() != application.ContinuedAttemptDecisionFormed {
+		t.Fatalf("重开 = %v / %v / %v, want FORMED", reopened.Outcome(), reopened.Refusal(), err)
+	}
+}

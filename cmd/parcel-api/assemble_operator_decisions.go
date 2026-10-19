@@ -112,8 +112,8 @@ func buildOperatorBinding(minter *accessidentity.OperatorMinter) (http.Handler, 
 	return identityhttp.NewQueryOperatorBindingEndpoint(authenticator)
 }
 
-// buildOperatorDecisionIntakes 装两边运营决定口的防腐认证方与 Intake。委托侧按委托标识寻址的三口用 targets，受控关闭与
-// 重开两口按包裹寻址、用 parcels（ADR-0183 决定一）。
+// buildOperatorDecisionIntakes 装 operatorDecisionIntakes 各格的防腐认证方与 Intake。shipmenthttp.OperatorDecisionIntake 按
+// 委托标识寻址时用 targets，受控关闭与重开按包裹寻址、用 parcels（ADR-0183 决定一）。
 func buildOperatorDecisionIntakes(
 	minter *accessidentity.OperatorMinter,
 	targets psports.OperatorDecisionTargets,

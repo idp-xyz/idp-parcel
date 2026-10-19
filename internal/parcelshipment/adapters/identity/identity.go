@@ -230,7 +230,8 @@ func (factory *ChannelSelectionDecisions) NextChannelSelectionDecisionID(
 }
 
 // ContinuedAttemptDecisions 实现 ports.ContinuedAttemptDecisionIdentity（票 label-channel/30）。
-// 决定标识由它铸而不从内容派生：关过—重开—再关是三条各自的决定，内容可以逐字相同。
+// 决定标识由它铸而不从内容派生，铸在认重放之后——同类同内容的请求按重放认、交回原决定、不来铸新号（ADR-0183「复核记录二」）；
+// 关过—重开—再关的再关是另一次请求，带它自己形成时固定的生效时间。
 type ContinuedAttemptDecisions struct {
 	minter platformidentity.Minter
 }

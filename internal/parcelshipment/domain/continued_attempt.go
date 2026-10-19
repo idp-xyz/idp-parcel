@@ -130,9 +130,9 @@ func (judgment ContinuedAttemptJudgment) String() string {
 type ContinuedAttemptDecisionSpec struct {
 	ID   ContinuedAttemptDecisionID
 	Kind ContinuedAttemptDecisionKind
-	// Requester 只有关闭这一格允许缺席（CONTEXT 原文「请求方（如有）」）——运营企业自行发起
-	// 的关闭没有外部请求方。它与 Decider 分立是硬要求：「登录操作人可以作为操作证据，但不能
-	// 替代实际决定方和授权角色」。
+	// Requester 可缺席（CONTEXT 原文「请求方（如有）」）——运营企业自行发起的关闭、没带货主新
+	// 授权的重开都没有外部请求方（ADR-0183 决定三、四）。它与 Decider 分立是硬要求：「登录操作人
+	// 可以作为操作证据，但不能替代实际决定方和授权角色」。
 	Requester         RequesterReference
 	Decider           DeciderReference
 	AuthorityRole     ContinuedAttemptAuthorityRoleReference

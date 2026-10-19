@@ -23,7 +23,7 @@ func TestClosureResponsibilitySourceComposesAndParsesBackToTheSameKind(t *testin
 		if got := closureResponsibilitySourceKindOf(source); got != kind {
 			t.Fatalf("%s：合成 %q 后解析回 %s", kind, source, got)
 		}
-		if source.String() != kind.String()+closureResponsibilitySourceSeparator+"SYN-SUBJECT-1" {
+		if source.String() != kind.String()+kindSegmentSeparator+"SYN-SUBJECT-1" {
 			t.Fatalf("%s：落册串 %q 没按 <种类>/<主体> 拼、或主体空白没去", kind, source)
 		}
 	}
