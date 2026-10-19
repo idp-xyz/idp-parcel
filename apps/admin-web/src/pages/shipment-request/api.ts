@@ -404,12 +404,18 @@ export interface LabelTransactionsListResponseBody {
 export const CONTINUED_ATTEMPT_BASIS_REGISTER_AND_CURRENT_FINAL =
   'DERIVED_FROM_DECISION_REGISTER_AND_CURRENT_FINAL';
 
-/** 复核完成命令的封闭结果。`已有完成`带先到那份的留痕:操作员要知道签的是谁。 */
+/**
+ * 复核完成命令的封闭结果,取值照 Go 侧 ManualReviewCompletionOutcome.String() 的原词,词表以那一处为准。
+ * `已有完成`带先到那份的留痕:操作员要知道签的是谁;`版本已换代`带当前版本:草案指名的那一份已不再是判断对象。
+ */
 export type ManualReviewCompletionOutcome =
   | 'RECORDED'
   | 'ALREADY_COMPLETED'
-  | 'TASK_CONCLUDED'
-  | 'VERSION_SUPERSEDED';
+  | 'TASK_ALREADY_CLOSED'
+  | 'VERSION_SUPERSEDED'
+  | 'REVISION_CONFLICT'
+  | 'NOT_AUTHORIZED'
+  | 'AUTHORITY_RULES_NOT_CONFIGURED';
 
 export interface ManualReviewCompletionResponseBody {
   outcome: ManualReviewCompletionOutcome;
@@ -434,10 +440,11 @@ export interface ActiveRejectionResponseBody {
 
 // ---- 请求草案形状 ----
 //
-// 真实线格式不是本目录能定的:动作端点当前一律挂「未配置即拒」Intake,不读请求体;
-// 渠道字段格式、枚举与必填条件属 PAR-INT-01 待登记。下面的草案只承载各用例
-// 输入语义契约里「客户可声明」的各组,键名是页面侧暂定,真渠道接线时以渠道契约
-// 为准重谈,不得反过来把这里当成已发布的渠道 Schema。
+// 运营决定各口(复核完成、主动拒绝、授权处置)挂在操作者真渠道上,服务端 Intake 按这里的键名
+// 封闭解码,两边的格必须一致:多一格、少一个必填格都答 400。其余动作端点默认仍挂「未配置即拒」
+// Intake,不读请求体;渠道字段格式、枚举与必填条件属 PAR-INT-01 待登记。那几份草案只承载各用例
+// 输入语义契约里「客户可声明」的各组,键名是页面侧暂定,真渠道接线时以渠道契约为准重谈,
+// 不得反过来把它们当成已发布的渠道 Schema。
 
 export interface DeclaredParcelDraft {
   /** 客户侧包裹引用。 */
@@ -510,15 +517,20 @@ export interface CancellationDraft {
 }
 
 /**
- * 复核完成草案。**故意只有这两个字段。**
+ * 复核完成草案。**故意不带任何「谁在签」的格。**
  *
  * 复核人、授权依据与证据引用不在这里:那三样是「谁在签」,由 PAR-INT-01 的接入面从
  * 已认证的操作员身份翻译出来(ManualReviewCompletionIntake 的注释:采信自报的复核人
  * 等于让任何调用方替任何角色签复核)。页面把它们填成任何值都是伪造采信身份,哪怕
- * 填的是「开发用」占位。这里送的两样都是页面自己手上的事实:审的是哪一份、理由是什么。
+ * 填的是「开发用」占位。这里送的都是页面自己手上的事实:审的是哪一份、理由是什么。
  */
 export interface ManualReviewCompletionDraft {
   shipmentRequestId: string;
+  /**
+   * 操作员看过的那一份提交版本,取自队列行。复核挂在版本的判断任务上;不指名版本,新版本
+   * 形成之后按旧页面提交,服务端就分不清这份复核签给了谁,只能把它签到新版本头上。
+   */
+  submissionVersionId: string;
   /** 复核理由。模板保证非空白后才提交。 */
   reason: string;
 }

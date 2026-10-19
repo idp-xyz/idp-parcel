@@ -23,6 +23,7 @@ import {
   type ReviewStatusRecord,
 } from './api';
 import { recordedJudgmentsBlock } from './recorded-judgments';
+import { manualReviewCompletionDraftOf } from './manual-review-completion';
 import { confirmDialogFooter } from '../../components/confirm-dialog-footer';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
@@ -261,36 +262,37 @@ export function AcceptanceReviewPage() {
 
   // 两个命令各自 await 自己那一支：两支的响应体是不同的封闭形状，合成一个三元表达式
   // 会把它们并成联合类型，于是谁的 outcome 词表都对不上。
-  const decide = (command: ReviewCommandId, shipmentRequestId: string, reason: string) => {
+  const decide = (command: ReviewCommandId, entry: AcceptanceReviewQueueEntry, reason: string) => {
     setCommandPending(true);
     setCommandNote(null);
     if (command === 'complete') {
-      void completeManualReview({ shipmentRequestId, reason }).then((answer) => {
+      void completeManualReview(manualReviewCompletionDraftOf(entry, reason)).then((answer) => {
         settle(commandNoteOf('记录复核完成', answer), answer.kind === 'outcome');
       });
       return;
     }
-    void rejectShipmentRequest({ shipmentRequestId, reason }).then((answer) => {
+    void rejectShipmentRequest({ shipmentRequestId: entry.shipmentRequestId, reason }).then((answer) => {
       settle(commandNoteOf('主动拒绝委托', answer), answer.kind === 'outcome');
     });
   };
 
   // 「主动拒绝委托」按下之后再拦一道确认；「记录复核完成」只落留痕、决定由下一轮判断形成，不拦。
   // 模板交出理由的同时已清空输入框，所以取消确认时要说一声理由需重填，不让人以为它还在。
+  // 两个命令都从队列行出发：复核完成要带上这一行的提交版本，拒绝要攥住这一行等确认。
   const onDecide = ({ itemId, decision, reason }: { itemId: string; decision: ReviewCommandId; reason: string }) => {
+    const entry = entries.find((candidate) => candidate.shipmentRequestId === itemId);
+    if (!entry) return;
     if (decision === 'reject') {
-      const entry = entries.find((candidate) => candidate.shipmentRequestId === itemId);
-      if (!entry) return;
       setCommandNote(null);
       setPendingRejection({ entry, reason });
       return;
     }
-    decide(decision, itemId, reason);
+    decide(decision, entry, reason);
   };
   const confirmRejection = () => {
     if (!pendingRejection) return;
     setPendingRejection(null);
-    decide('reject', pendingRejection.entry.shipmentRequestId, pendingRejection.reason);
+    decide('reject', pendingRejection.entry, pendingRejection.reason);
   };
   const cancelRejection = () => {
     setPendingRejection(null);
