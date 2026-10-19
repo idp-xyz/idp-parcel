@@ -1,7 +1,7 @@
 # 07 可验证的交付范围：客户编号空间里的唯一命中，要有「这次送站属于这个客户账户」的证据才算证据充分
 
 Category: enhancement
-Status: in-progress——2026-10-19 推送方自审 0 阻断；作者子代理照推送方要求 rebase 到 main `1734f2a0`（含 no-reception-identity/07 与 ps-external-mark-relations/06），冲突两边并存、AT 顺延一号，待进 main。此前 in-progress——2026-10-19 作者子代理完工，待推送方自审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 立并代决方向、认领（文档与拆票，ADR 占号 0212），分支 `claude-psxm07`
+Status: resolved——2026-10-19 进 main（纯 `.md`，推送方自审），见「进 main 记录」；实施拆在 08–13。此前 in-progress——2026-10-19 推送方自审 0 阻断；作者子代理照推送方要求 rebase 到 main `1734f2a0`（含 no-reception-identity/07 与 ps-external-mark-relations/06），冲突两边并存、AT 顺延一号，待进 main。此前 in-progress——2026-10-19 作者子代理完工，待推送方自审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 立并代决方向、认领（文档与拆票，ADR 占号 0212），分支 `claude-psxm07`
 Blocked by: 无（文档与拆票）；实施票另接阻塞边
 父票：[05](./05-a-unique-hit-in-someone-elses-number-space-is-not-enough.md)
 出处：票 05「要裁的一问」候选 (c)，裁定「(c) 可验证交付范围记作终局方向，随一线客户端收寄流程另立」；ADR-0195、ADR-0184 决定六及其复核记录「决定六与 UC-NO-002「权限、隔离与审计」」的「日后」一段。
@@ -32,7 +32,7 @@ ADR-0184 决定六：身份核对在租户内按号码取候选，不按交付�
 
 - [x] ADR-0212、CONTEXT（PS、NO）、CONTEXT-MAP、GLOSSARY、UC 照 AGENTS.md「改文档」同步；ADR-0184、0195 部分停用照约定；参数登记册登「未配置」行。
 - [x] 实施票已立（`.scratch/ps-external-mark-relations/issues/08-` 起），阻塞边接上（含对 first-party-api 的依赖）。first-party-api/00 已于中途进 main（`38916b00`），各票改写为「已进 main，照其形状挂」，不设阻塞边，见完成记录。
-- [ ] 纯 `.md`，推送方自审。纯 `.md` 已满足（本分支只改 `.md`），自审待推送方。
+- [x] 纯 `.md`，推送方自审。纯 `.md` 已满足（本分支只改 `.md`），自审待推送方。
 
 ## 完成记录（2026-10-19，作者子代理，分支 `claude-psxm07`；起于 main `a7dfad8f`，中途照协调者通知 rebase 到 `38916b00`，first-party-api/00 已在其中）
 
@@ -131,3 +131,10 @@ ADR-0184 决定六：身份核对在租户内按号码取候选，不按交付�
   - UC-NO-002「控制、身份与后续作业」里 main 的来由一条补了同样两句。
 - **AT 新号段**：`AT-NO-063` 至 `AT-NO-075`。UC-NO-002 是 063 至 068，UC-NO-006 是 069 至 075，票 07、09、11、12 的引用同步。全仓与各远端分支 grep 过，号段在 rebase 时是空的；`.scratch/at-coverage-inventory.md` 本分支没有登过，不用改。
 - **实施票**：票 11 的协调说明改写为 06 与 no-reception-identity/07 都已进 main，点名 `TestTheWiredDispatchReleasesAnAmbiguityOnlyConflictOnceTheDeclarationIsGone` 一类真库用例在翻转后要补预报夹具，并补了与 ADR-0211 接缝的做什么与完成判据；票 08 的号码形状门改指已进 main 的票 06 那一界。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 推送方自审（会话 idp-parcel-9b 读 diff 审，不算非作者评审）：分支 `claude-psxm07` 只改 `.md`——ADR-0212 新立，ADR-0184、0195、0199 照约定部分停用（前向指针与复核记录，README 标注），PS / NO / PC CONTEXT、CONTEXT-MAP、GLOSSARY，UC-NO-002 与新 UC-NO-006（`AT-NO-063` 至 `AT-NO-075`），参数登记册 `PAR-NET-17`、`PAR-NET-18` 登「未配置」，实施票 08–13。方向裁定五条落到；留给 ADR 的各格（预报与交接单归 NO、授权交付关系归 PC、范围未证答待识别并记交付范围核对态、有范围时消歧不收窄、与歧义信号并存）取法有理。与 ADR-0211 的接缝（来由按范围相容分、只缺范围时追加不记冲突的待识别、重核对象只留一份定义）都写进了越权风险点，认可。
+- 作者两次 rebase（no-reception-identity/07、ps-external-mark-relations/06 先后进 main），冲突两边并存；与 no-reception-identity/07 撞的 `AT-NO-062` 由本票顺延一号。验证：对 `origin/main` 的 diff 只有 `.md`，无冲突标记。
+- 越权风险点里留给 owner 的：CONTEXT-MAP「不交号码的分配方、客户账户或委托」与「范围相容」的读法、预报范围收到所列号码、PN-03 就绪门槛要不要列 `PAR-NET-17`、`PAR-NET-18`。
+- 快进推送；纯文档，不跑 Go 测试。
