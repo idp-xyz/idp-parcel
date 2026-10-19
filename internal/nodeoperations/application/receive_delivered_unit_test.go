@@ -285,7 +285,7 @@ func TestAnUnreadableServiceResultViewStillFormsTheIntakeAndSaysSo(t *testing.T)
 	}
 }
 
-// Covers: ADR-0186「装配缺依赖，改为在构造期拒绝」——六个依赖缺任一个，构造就交回错误，不留到第一次收寄才暴露成一次
+// Covers: ADR-0186「装配缺依赖，改为在构造期拒绝」——依赖缺任一个，构造就交回错误，不留到第一次收寄才暴露成一次
 // 依赖故障。
 func TestAMissingDependencyIsRefusedAtConstruction(t *testing.T) {
 	cases := map[string]func(*application.ReceiveDeliveredUnitDeps){

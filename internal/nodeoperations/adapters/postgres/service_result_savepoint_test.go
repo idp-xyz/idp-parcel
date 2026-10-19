@@ -111,13 +111,17 @@ func TestASavepointReleasesAReadableServiceResultUnchanged(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0186 装饰器的无事务一支——ctx 不在事务里时直通内层，不发 SAVEPOINT（事务块外发它本身就报错），读数与错误
-// 都原样交回。
+// Covers: ADR-0186 装饰器的无事务一支——ctx 不在事务里（RequireExecutor 答 ErrTransactionRequired）时直通内层，不发
+// SAVEPOINT（事务块外发它本身就报错），读数与错误都原样交回。读口不是写口：无事务时不拒，这一点与各写口的
+// *RefuseToRunOutsideATransaction 用例相反。
 func TestASavepointPassesThroughOutsideATransaction(t *testing.T) {
 	tenant := ref(t, domain.NewTenantID, "SYN-TENANT-01")
 	parcel := ref(t, domain.NewParcelAssociationReference, "SYN-PARCEL-1")
 
 	db, _, inner, view := savepointFixture(t, `SELECT 'SYN-CANCEL-1'`)
+	if _, err := db.RequireExecutor(t.Context()); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Fatalf("前提不成立：ctx 应在事务外，RequireExecutor 却答 %v", err)
+	}
 	results, err := view.FindParcelServiceResults(t.Context(), tenant, parcel)
 	if err != nil || results.Cancellation != "SYN-CANCEL-1" || inner.asked != 1 {
 		t.Fatalf("读回 %+v err=%v 问内层 %d 次, want 直通一次", results, err, inner.asked)

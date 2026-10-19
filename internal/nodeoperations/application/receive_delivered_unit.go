@@ -218,8 +218,9 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 	if err != nil {
 		return ReceiveDeliveredUnitResult{}, fmt.Errorf("resolve parcel identity: %w", err)
 	}
-	// 身份唯一成立才有可问的包裹：向 PS 取它此刻的服务结果，落成标记（UC-NO-002 第 7 步）。读不动不挡已经发生的物理
-	// 事实——照常落册，核对态记读不动、标记留空，不补查（ADR-0186）；空标记因此只在已查时才说「没有取消与终局」。
+	// 身份唯一成立才有可问的包裹：向 PS 取它此刻的服务结果，落成标记（UC-NO-002「对已取消、终局、无路由或受限实物
+	// 标记相应引用」）。读不动不挡已经发生的物理事实——照常落册，核对态记读不动、标记留空，不补查（ADR-0186）；空标记
+	// 因此只在已查时才说「没有取消与终局」。
 	var markers []string
 	check := ports.ServiceResultCheckAbsent
 	if len(candidates) == 1 {
