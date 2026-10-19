@@ -7,7 +7,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 )
 
-// CatalogueRegistrationEffect 是四本结算读口登记册共用的落点。重放是同一键、同一内容再交一次；
+// CatalogueRegistrationEffect 是结算各本只增不改的登记册共用的落点。重放是同一键、同一内容再交一次；
 // 冲突是同一键不同内容。两种都不改已落的行。
 type CatalogueRegistrationEffect uint8
 

@@ -48,3 +48,23 @@ func TestCommandForAcceptsBothCommands(t *testing.T) {
 		t.Fatalf("%s 译装被拒：%v", commandExternalFundsFactCorrection, err)
 	}
 }
+
+// TestCommandForAcceptsTheSellCustomerChargeRegisters 证 ADR-0190 两本册的命令接进了命令表，各自译装得过（落库在
+// sell_customer_charge_registers_vertical_test）；词表外的时点在事务之前就拒。
+func TestCommandForAcceptsTheSellCustomerChargeRegisters(t *testing.T) {
+	adoption := []byte(`{"tenantId": "SYN-T1", "accountId": "SYN-ACCT-1", "billingMoment": "NETWORK_INTAKE_ADOPTED", "pricingScopeId": "SYN-SCOPE-SELL-1"}`)
+	if _, err := commandFor(commandSellBillingMomentAdoption, adoption); err != nil {
+		t.Fatalf("%s 译装被拒：%v", commandSellBillingMomentAdoption, err)
+	}
+	mapping := []byte(`{"tenantId": "SYN-T1", "pricingChargeCode": "BASE_FREIGHT", "feeItem": "SYN-FEE-FREIGHT", "basisRef": "SYN-CLAUSE-1"}`)
+	if _, err := commandFor(commandFeeItemMapping, mapping); err != nil {
+		t.Fatalf("%s 译装被拒：%v", commandFeeItemMapping, err)
+	}
+	if _, err := commandFor(commandSellBillingMomentAdoption, []byte(`{"tenantId": "SYN-T1", "accountId": "SYN-ACCT-1", "billingMoment": "COMMISSION_ACCEPTED", "pricingScopeId": "SYN-SCOPE-SELL-1"}`)); err == nil {
+		t.Fatal("词表外的计费时点没在译装拒")
+	}
+	// 两本册的载荷形状不同，送错命令要拒，不能靠字段名巧合译进另一本。
+	if _, err := commandFor(commandFeeItemMapping, adoption); err == nil {
+		t.Fatal("采用载荷送进映射命令没拒")
+	}
+}

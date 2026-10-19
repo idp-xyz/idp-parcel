@@ -37,6 +37,8 @@ const (
 	commandSellEvaluationTrigger       = "sell-evaluation-trigger"
 	commandSettlementMoment            = "settlement-moment"
 	commandPreAcceptanceEstimate       = "pre-acceptance-estimate-adoption"
+	commandSellBillingMomentAdoption   = "sell-billing-moment-adoption"
+	commandFeeItemMapping              = "fee-item-mapping"
 )
 
 var allCommands = []string{
@@ -58,6 +60,8 @@ var allCommands = []string{
 	commandSellEvaluationTrigger,
 	commandSettlementMoment,
 	commandPreAcceptanceEstimate,
+	commandSellBillingMomentAdoption,
+	commandFeeItemMapping,
 }
 
 // dispatchFunc 是一条命令在事务内的一次调用，交回已经归好退出码的答复。资金事实与结算账户是两族答案，
@@ -134,6 +138,32 @@ func commandFor(command string, raw []byte) (dispatchFunc, error) {
 				return "", 0, err
 			}
 			message, code := adoptionAnswer(commandPreAcceptanceEstimate, effect, translated.Adoption.Account().String())
+			return message, code, nil
+		}, nil
+	case commandSellBillingMomentAdoption:
+		translated, err := registrationjson.SellBillingMomentAdoptionFromJSON(raw)
+		if err != nil {
+			return nil, err
+		}
+		return func(ctx context.Context, registrar registrar) (string, int, error) {
+			effect, err := registrar.sellMoments.Register(ctx, translated)
+			if err != nil {
+				return "", 0, err
+			}
+			message, code := catalogueAnswer(commandSellBillingMomentAdoption, effect, translated.Adoption.Account().String())
+			return message, code, nil
+		}, nil
+	case commandFeeItemMapping:
+		tenant, mapping, err := registrationjson.FeeItemMappingFromJSON(raw)
+		if err != nil {
+			return nil, err
+		}
+		return func(ctx context.Context, registrar registrar) (string, int, error) {
+			effect, err := registrar.feeMappings.RegisterFeeItemMapping(ctx, tenant, mapping)
+			if err != nil {
+				return "", 0, err
+			}
+			message, code := catalogueAnswer(commandFeeItemMapping, effect, mapping.ChargeCode().String())
 			return message, code, nil
 		}, nil
 	case commandSupplierAuditAuthority:

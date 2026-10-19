@@ -9,6 +9,8 @@
 // 结算账户是另一族答案：固定属性冲突绝不覆盖，册上没有的账户也不在这里代拟。
 // `allocation-form` 只登记一条分摊规则版本选用的分法，不登权重，也不在这里把来源金额展开成份额。
 // `accounting-connector` 只登记某个对方采用规范文书。没登记的外部交换不在这里放行，本口也不解析账单文件或财务系统报文。
+// `sell-billing-moment-adoption` 与 `fee-item-mapping` 登 ADR-0190 的两本租户取值册：一户采用哪种包裹计费时点、计价费用代码
+// 映到哪个费用项目。本口不预选时点、不代拟映射，没登记的由读口答未找到。
 //
 // 本口只开人工 / 受控批量的门，不自动采用：任何回调 / 文件到达都不在这里（UC-SA-005 输入表「不因接收回调
 // 自动采用」；真实财务系统来源仍 `No-Go / 待参数化`，PAR-INT-05）。输入全部来自 -input 指定的 JSON 文件，未知
@@ -77,6 +79,8 @@ type registrar struct {
 	sellTriggers *application.RegisterSellEvaluationTriggerHandler
 	moments      *application.RegisterSettlementMomentHandler
 	adoptions    *application.RegisterPreAcceptanceEstimateAdoptionHandler
+	sellMoments  *application.RegisterSellBillingMomentAdoptionHandler
+	feeMappings  *application.RegisterFeeItemMappingHandler
 	transactor   bentoapp.Transactor
 }
 
@@ -312,6 +316,22 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造受理前估价采用登记：%w", err)
 	}
+	sellMomentStore, err := sapostgres.NewSellBillingMomentAdoptions(db)
+	if err != nil {
+		return none, fmt.Errorf("构造 SELL 计费时点采用册：%w", err)
+	}
+	sellMomentHandler, err := application.NewRegisterSellBillingMomentAdoptionHandler(sellMomentStore, systemClock{})
+	if err != nil {
+		return none, fmt.Errorf("构造 SELL 计费时点采用登记：%w", err)
+	}
+	feeItemMappingStore, err := sapostgres.NewFeeItemMappings(db)
+	if err != nil {
+		return none, fmt.Errorf("构造费用项目映射册：%w", err)
+	}
+	feeItemMappingHandler, err := application.NewRegisterFeeItemMappingHandler(feeItemMappingStore, systemClock{})
+	if err != nil {
+		return none, fmt.Errorf("构造费用项目映射登记：%w", err)
+	}
 	return registrar{
 		funds:        funds,
 		accounts:     accountHandler,
@@ -326,6 +346,8 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 		sellTriggers: sellTriggerHandler,
 		moments:      momentHandler,
 		adoptions:    adoptionHandler,
+		sellMoments:  sellMomentHandler,
+		feeMappings:  feeItemMappingHandler,
 		transactor:   db.Transactor(),
 	}, nil
 }
