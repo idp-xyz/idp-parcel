@@ -20,9 +20,10 @@ import (
 // 起点的新版，前版终点随之落定）、义务与门禁各分目录与明细；随后是第六本册子
 // （case-requirement，建案要求规则），随 cc-case-requirement-rule-registry 01 并入本口；
 // 再两个是口岸目录与申报路径目录（票 admin-remainder-mechanism-batch/03），版本代数
-// 同解释规则——起点入键、终点在换版时落定；末三个是监管凭证、税费付款协作事项、税费
+// 同解释规则——起点入键、终点在换版时落定；再三个是监管凭证、税费付款协作事项、税费
 // 付款核对（票 sa-cc/07）——凭证是不可变版本（同身份换任何一件都是冲突），协作事项按
-// （范围，税费引用）一格一行，核对按三维加内容指纹逐版追加。外部资金事实引用**没有**
+// （范围，税费引用）一格一行，核对按三维加内容指纹逐版追加；最后是节点关务区域（node-zone，
+// ADR-0206），版本代数同口岸目录，准入判断按它判一次移动跨不跨关务区域。外部资金事实引用**没有**
 // 命令：它进本上下文只经 settlement-accounting 的采用信封（ADR-0137 决定四），CC 另开
 // 人工补录口就是第二个铸造点。
 //
@@ -44,6 +45,7 @@ const (
 	commandRegulatoryCredential    = "regulatory-credential"
 	commandDutyCollaboration       = "duty-collaboration"
 	commandDutyPaymentVerification = "duty-payment-verification"
+	commandNodeZone                = "node-zone"
 )
 
 var allCommands = []string{
@@ -55,6 +57,7 @@ var allCommands = []string{
 	commandCaseRequirement,
 	commandCandidatePort, commandDeclarationPath,
 	commandRegulatoryCredential, commandDutyCollaboration, commandDutyPaymentVerification,
+	commandNodeZone,
 }
 
 // answer 是一个登记用例交回的封闭结果在本入口的译法。两族用例各有自己的结果代数
@@ -215,6 +218,14 @@ func commandFor(command string, raw []byte) (dispatchFunc, error) {
 		}
 		return reconciled(func(ctx context.Context, registrar registrar) (application.DutyReconciliationResult, error) {
 			return registrar.dutyReconciliation.VerifyPayment(ctx, translated)
+		}), nil
+	case commandNodeZone:
+		translated, err := registrationjson.NodeCustomsZoneFromJSON(raw)
+		if err != nil {
+			return nil, err
+		}
+		return configured(func(ctx context.Context, registrar registrar) (application.CaseConfigurationOutcome, error) {
+			return registrar.nodeZones.Handle(ctx, translated)
 		}), nil
 	default:
 		return nil, fmt.Errorf("未知登记命令 %q（支持 %s）", command, strings.Join(allCommands, " / "))

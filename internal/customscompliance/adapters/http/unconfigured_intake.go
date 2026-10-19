@@ -126,3 +126,13 @@ func (UnconfiguredIntake) IntakeDutyPaymentVerificationRegistration(
 ) (application.VerifyDutyPaymentCommand, error) {
 	return application.VerifyDutyPaymentCommand{}, ErrAccessChannelNotConfigured
 }
+
+// 节点关务区域登记口的未配置实现（ADR-0206），分界同上：不读业务内容、不采信自报身份、不构造命令。
+var _ NodeCustomsZoneRegistrationIntake = UnconfiguredIntake{}
+
+func (UnconfiguredIntake) IntakeNodeCustomsZoneRegistration(
+	context.Context,
+	*http.Request,
+) (application.RegisterNodeCustomsZoneCommand, error) {
+	return application.RegisterNodeCustomsZoneCommand{}, ErrAccessChannelNotConfigured
+}

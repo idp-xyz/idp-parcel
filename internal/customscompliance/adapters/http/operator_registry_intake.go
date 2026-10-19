@@ -40,7 +40,7 @@ type OperatorRegistryAuthenticator interface {
 	AuthenticateRegistryWrite(ctx context.Context, bearerToken string) (domain.TenantID, error)
 }
 
-// OperatorRegistryIntake 是操作者渠道在本包七个登记口的 Intake（ADR-0100 决定四；票 operator-channel/04）。
+// OperatorRegistryIntake 是操作者渠道在本包各登记口的 Intake（ADR-0100 决定四；票 operator-channel/04）。
 //
 // 译装只用 registrationjson 那一份：受控批量口与在线口共用同一套形状，在线那一路租户取认证结果，批文带 tenantId 即拒。
 // 先认证、后读批文：令牌不过的调用方看不到批文校验的结果。
@@ -56,6 +56,7 @@ var (
 	_ CaseRequirementRegistrationIntake         = (*OperatorRegistryIntake)(nil)
 	_ DutyCollaborationRegistrationIntake       = (*OperatorRegistryIntake)(nil)
 	_ DutyPaymentVerificationRegistrationIntake = (*OperatorRegistryIntake)(nil)
+	_ NodeCustomsZoneRegistrationIntake         = (*OperatorRegistryIntake)(nil)
 )
 
 func NewOperatorRegistryIntake(authenticator OperatorRegistryAuthenticator) (*OperatorRegistryIntake, error) {
@@ -93,7 +94,11 @@ func (intake *OperatorRegistryIntake) IntakeDutyPaymentVerificationRegistration(
 	return translateOnline(ctx, intake, request, registrationjson.DutyPaymentVerificationFromJSONForTenant)
 }
 
-// translateOnline 是七口共用的那一段：认证、读批文、交 registrationjson 在线那一路。批文读不出、超限或译不出都答坏报文。
+func (intake *OperatorRegistryIntake) IntakeNodeCustomsZoneRegistration(ctx context.Context, request *http.Request) (application.RegisterNodeCustomsZoneCommand, error) {
+	return translateOnline(ctx, intake, request, registrationjson.NodeCustomsZoneFromJSONForTenant)
+}
+
+// translateOnline 是各口共用的那一段：认证、读批文、交 registrationjson 在线那一路。批文读不出、超限或译不出都答坏报文。
 func translateOnline[C any](
 	ctx context.Context,
 	intake *OperatorRegistryIntake,

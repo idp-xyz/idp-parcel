@@ -72,6 +72,7 @@ type registrar struct {
 	portsPaths         *application.RegisterPortsPathsHandler
 	credentials        *application.RegisterCredentialHandler
 	dutyReconciliation *application.DutyPaymentReconciliationHandler
+	nodeZones          *application.RegisterNodeCustomsZoneHandler
 	transactor         bentoapp.Transactor
 }
 
@@ -273,12 +274,23 @@ func buildRegistrar(db *bentopg.DB) (registrar, error) {
 	if err != nil {
 		return none, fmt.Errorf("构造税费付款协作与核对编排：%w", err)
 	}
+	nodeZoneRegistry, err := adapter.NewNodeCustomsZoneRegistrations(db)
+	if err != nil {
+		return none, fmt.Errorf("构造节点关务区域写口：%w", err)
+	}
+	nodeZoneView, err := adapter.NewNodeCustomsZonePointView(db)
+	if err != nil {
+		return none, fmt.Errorf("构造节点关务区域读口：%w", err)
+	}
+	nodeZoneHandler := application.NewRegisterNodeCustomsZoneHandler(
+		application.RegisterNodeCustomsZoneDeps{Registry: nodeZoneRegistry, View: nodeZoneView})
 	return registrar{
 		configurations:     configurations,
 		requirements:       requirementHandler,
 		portsPaths:         portsPathsHandler,
 		credentials:        credentialHandler,
 		dutyReconciliation: dutyReconciliationHandler,
+		nodeZones:          nodeZoneHandler,
 		transactor:         db.Transactor(),
 	}, nil
 }
