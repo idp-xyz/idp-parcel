@@ -75,6 +75,9 @@ var businessEndpointProbes = map[string]businessEndpointProbe{
 	"/transport-fulfillment-transport-commission-submissions":                  {method: http.MethodPost, target: "/transport-fulfillment-transport-commission-submissions"},
 	"/transport-fulfillment-booking-request-submissions":                       {method: http.MethodPost, target: "/transport-fulfillment-booking-request-submissions"},
 	"/transport-fulfillment/booking-answers":                                   {method: http.MethodPost, target: "/transport-fulfillment/booking-answers"},
+	"/transport-fulfillment-segment-commission-adoptions":                      {method: http.MethodPost, target: "/transport-fulfillment-segment-commission-adoptions"},
+	"/transport-fulfillment-transport-commission-cancellations":                {method: http.MethodPost, target: "/transport-fulfillment-transport-commission-cancellations"},
+	"/transport-fulfillment-booking-request-cancellations":                     {method: http.MethodPost, target: "/transport-fulfillment-booking-request-cancellations"},
 	"/transport-fulfillment-records":                                           {method: http.MethodGet, target: "/transport-fulfillment-records?registry=transport-schedule"},
 	"/transport-fulfillment-handover-scope-summary":                            {method: http.MethodGet, target: "/transport-fulfillment-handover-scope-summary?scope=scope-1"},
 	"/customer-tracking-view":                                                  {method: http.MethodGet, target: "/customer-tracking-view"},
@@ -430,6 +433,9 @@ func assembleUnwiredBusinessEndpointsWithOperatorIntakes(
 		unwiredBookingFaces{},
 		nil,
 		unwiredDeliveryPreAdvices{},
+		unwiredSegmentCommissionAdoption{},
+		unwiredCancellationFaces{},
+		unwiredCancellationFaces{},
 	)
 }
 

@@ -345,6 +345,24 @@ func (unwiredBookingFaces) AnswerBooking(context.Context, tfapp.AnswerBookingCom
 	return tfapp.CommissionResult{}, errOrchestrationNotWired
 }
 
+// unwiredSegmentCommissionAdoption 是履约段采用运输委托口的占位（ADR-0204）。
+type unwiredSegmentCommissionAdoption struct{}
+
+func (unwiredSegmentCommissionAdoption) Adopt(context.Context, tfapp.AdoptSegmentCommissionCommand) (tfapp.CommissionAdoptionResult, error) {
+	return tfapp.CommissionAdoptionResult{}, errOrchestrationNotWired
+}
+
+// unwiredCancellationFaces 是取消委托与取消订舱两口的占位（ADR-0204 决定三）。
+type unwiredCancellationFaces struct{}
+
+func (unwiredCancellationFaces) CancelCommission(context.Context, tfapp.CancelCommissionCommand) (tfapp.CommissionResult, error) {
+	return tfapp.CommissionResult{}, errOrchestrationNotWired
+}
+
+func (unwiredCancellationFaces) CancelBooking(context.Context, tfapp.CancelBookingCommand) (tfapp.CommissionResult, error) {
+	return tfapp.CommissionResult{}, errOrchestrationNotWired
+}
+
 // unwiredEffectiveTimeRuleRegistration 是轨迹源有效时间规则登记口的占位（票 label-channel/19）。
 type unwiredEffectiveTimeRuleRegistration struct{}
 

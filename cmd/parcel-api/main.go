@@ -528,6 +528,16 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 履约段采用运输委托口（ADR-0204）。
+	segmentCommissionAdoption, err := buildSegmentCommissionAdoption(db)
+	if err != nil {
+		return err
+	}
+	// 取消委托与取消订舱两口（ADR-0204 决定三）。
+	cancellationFaces, err := buildCancellationFaces(db)
+	if err != nil {
+		return err
+	}
 	veRegistration, err := buildVERegistrationOrchestration(db)
 	if err != nil {
 		return err
@@ -785,6 +795,9 @@ func run(logger *slog.Logger) error {
 			bookingFaces,
 			customerPreAdvice,
 			deliveryPreAdvices,
+			segmentCommissionAdoption,
+			cancellationFaces,
+			cancellationFaces,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,

@@ -290,6 +290,10 @@ var swappedDecisionFaces = map[string]accessidentity.DecisionKind{
 	"/transport-fulfillment-transport-commission-submissions": accessidentity.DecisionTransportCommissionSubmission,
 	// 订舱提交（ADR-0202 决定一）：同委托提交，生来就在运营决定面上。
 	"/transport-fulfillment-booking-request-submissions": accessidentity.DecisionBookingRequestSubmission,
+	// 履约段采用运输委托、取消委托、取消订舱（ADR-0204；ADR-0202 决定一）：同委托提交，生来就在运营决定面上。
+	"/transport-fulfillment-segment-commission-adoptions":       accessidentity.DecisionFulfillmentSegmentCommissionAdoption,
+	"/transport-fulfillment-transport-commission-cancellations": accessidentity.DecisionTransportCommissionCancellation,
+	"/transport-fulfillment-booking-request-cancellations":      accessidentity.DecisionBookingRequestCancellation,
 	// 受控关闭与重开：按包裹寻址、请求方由服务端推出（ADR-0183），此前没有隔离放行。
 	"/shipment-requests/continued-attempt-closures":   accessidentity.DecisionControlledClosure,
 	"/shipment-requests/continued-attempt-reopenings": accessidentity.DecisionControlledReopening,

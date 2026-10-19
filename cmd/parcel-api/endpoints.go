@@ -189,6 +189,9 @@ func assembleBusinessEndpoints(
 	bookingAnswer tfhttp.BookingAnswerer,
 	customerPreAdvice *nodeopshttp.CustomerPreAdviceIntake,
 	deliveryPreAdvices nodeopshttp.DeliveryPreAdviceHandler,
+	segmentCommissionAdoption tfhttp.SegmentCommissionAdopter,
+	transportCommissionCancellation tfhttp.TransportCommissionCanceller,
+	bookingRequestCancellation tfhttp.BookingRequestCanceller,
 ) []httpapi.BusinessEndpoint {
 	// 缺省朝拦：真渠道与隔离入参都缺席时，下面这组变量全取未配置即拒。
 	//
@@ -739,5 +742,12 @@ func assembleBusinessEndpoints(
 		// 都不同。
 		{Pattern: "/node-operations/delivery-pre-advices", Handler: nodeopshttp.NewSubmitDeliveryPreAdviceEndpoint(preAdviceSubmissionIntake, deliveryPreAdvices)},
 		{Pattern: "/node-operations/delivery-pre-advice-withdrawals", Handler: nodeopshttp.NewWithdrawDeliveryPreAdviceEndpoint(preAdviceWithdrawalIntake, deliveryPreAdvices)},
+		// 履约段采用运输委托口（ADR-0204）：声明一个在册的实际履约段在一份已提交的委托下履约，委托随之标为已开始，是操作者做出的
+		// 生产决定，挂「运营决定」能力面的履约段采用运输委托一种。写开关换不了它（ADR-0150 决定三）。
+		{Pattern: "/transport-fulfillment-segment-commission-adoptions", Handler: tfhttp.NewAdoptSegmentCommissionEndpoint(operatorDecisions.transport, segmentCommissionAdoption)},
+		// 取消委托口与取消订舱口（ADR-0204 决定三；ADR-0202 决定一）：只停尚未开始的范围，已开始答运输已开始。各按自己那一种运营
+		// 决定认证——能提交的不因此能取消。写开关换不了它们（ADR-0150 决定三）。
+		{Pattern: "/transport-fulfillment-transport-commission-cancellations", Handler: tfhttp.NewCancelTransportCommissionEndpoint(operatorDecisions.transport, transportCommissionCancellation)},
+		{Pattern: "/transport-fulfillment-booking-request-cancellations", Handler: tfhttp.NewCancelBookingRequestEndpoint(operatorDecisions.transport, bookingRequestCancellation)},
 	}
 }
