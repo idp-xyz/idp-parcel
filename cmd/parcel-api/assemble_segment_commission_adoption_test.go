@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"testing"
 	"time"
@@ -11,8 +12,10 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
+	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	tfapp "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
 // 本文件对真实 PostgreSQL 证采用口与两个取消口的生产装配（票 demo-chain-gaps/25，ADR-0204）：干线供应商协议照种子发布批经 PC
@@ -108,11 +111,14 @@ func adoptionBody(segment, commission, provider string) string {
 	return `{"segment": "` + segment + `", "commission": "` + commission + `", "provider": "` + provider + `"}`
 }
 
-// Covers: `AT-TF-181`、`AT-TF-182`、`AT-TF-184` 真库面，票 demo-chain-gaps/25 演示判据（S）——
+// Covers: `AT-TF-181`、`AT-TF-182`、`AT-TF-184`、`AT-TF-187` 真库面，票 demo-chain-gaps/25 演示判据（S）——
 //   - 演示：干线委托提交后，用现有交接口在 SZX 立干线段，采用干线委托答 201，委托行的开始依据是那一次交接、开始时刻是交接
 //     时刻，采用行一行；再取消委托答 200 TRANSPORT_ALREADY_STARTED，委托行没有取消时刻。
-//   - 另一份未开始的委托可以取消，答 201；取消之后拿它来采用答 200 COMMISSION_NOT_ADOPTABLE，整笔回滚、不多一行采用。
+//   - 另一份未开始的委托可以取消，答 201。
 //   - 原样再采用答 200 EXISTING_ADOPTION。
+//   - 采用登记之前的取消：第二段 11:00 由交接立起，那份委托 12:00 登记取消时本上下文还不知道两者相连，取消照常成立；此后拿
+//     第二段去采用它答 200 COMMISSION_CANCELLED_AFTER_START，并排回显取消时刻与段的首个参与，不多一行采用（领域在落连线之前
+//     就判出这一格，这里证的是答法与零写入，不是装配回滚；回滚见下一个用例）。
 func TestTheWiredAdoptionFaceStartsTheCommissionOfASegmentEstablishedByHandover(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -164,7 +170,7 @@ func TestTheWiredAdoptionFaceStartsTheCommissionOfASegmentEstablishedByHandover(
 		t.Fatalf("原样再采用 = %d %v", status, answer)
 	}
 
-	// 另立一段去采用那份已取消的委托：答不可采用，且整笔回滚。
+	// 另立一段去采用那份已取消的委托：段在取消之前就已开始。
 	orchestrations, err := buildControlFactOrchestrations(db)
 	if err != nil {
 		t.Fatal(err)
@@ -180,8 +186,11 @@ func TestTheWiredAdoptionFaceStartsTheCommissionOfASegmentEstablishedByHandover(
 		t.Fatalf("第二段 = %v %v", registered.Outcome(), err)
 	}
 	status, answer = postWithToken(t, endpoints.adoption, adoptionPath, token, adoptionBody(trunkSegmentDCG25+"-2", "SYN-COMMISSION-TRUNK-DCG25-SPARE", provider))
-	if status != http.StatusOK || answer["outcome"] != "COMMISSION_NOT_ADOPTABLE" {
-		t.Fatalf("采用已取消的委托 = %d %v", status, answer)
+	commission, _ := answer["commission"].(map[string]any)
+	segmentStart, _ := answer["segmentStart"].(map[string]any)
+	if status != http.StatusOK || answer["outcome"] != "COMMISSION_CANCELLED_AFTER_START" ||
+		commission["cancelledAt"] != "2026-10-19T12:00:00Z" || segmentStart["startedAt"] != "2026-10-19T11:00:00Z" {
+		t.Fatalf("采用段开始之后才登记取消的委托 = %d %v", status, answer)
 	}
 	var adoptions int
 	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM transport_fulfillment.segment_commission_adoption`).Scan(&adoptions); err != nil || adoptions != 1 {
@@ -220,5 +229,108 @@ func TestTheWiredAdoptionFaceRefusesAnOperatorWithoutTheAdoptionGrant(t *testing
 	problem, _ := answer["error"].(map[string]any)
 	if status != http.StatusForbidden || problem["code"] != "OPERATOR_NOT_GRANTED" {
 		t.Fatalf("无采用授予 = %d %v", status, answer)
+	}
+}
+
+// raceCancellingCommissions 在采用编排写委托开始的那一刻之前，先在采用那一笔事务之外经生产的取消口取消这份委托并提交，再照常
+// 写：模拟「采用读到委托时它尚未取消，写的那一刻它已被另一笔取消」。probe 在同一刻用采用那一笔的上下文读连线，证读回之前
+// 连线确实已经落了——下面的零行才是回滚撤掉的，不是从没写过。
+type raceCancellingCommissions struct {
+	*tfpostgres.TransportCommissions
+	race  func()
+	probe func(ctx context.Context)
+}
+
+func (store *raceCancellingCommissions) Replace(ctx context.Context, record ports.TransportCommissionRecord) (bool, error) {
+	if store.race != nil {
+		store.probe(ctx)
+		store.race()
+		store.race = nil
+	}
+	return store.TransportCommissions.Replace(ctx, record)
+}
+
+// Covers: `AT-TF-187` 的装配回滚（ADR-0204 决定二）——采用把连线落进事务之后、写委托开始之前，委托被另一笔提交取消（取消时刻
+// 早于段的首个参与）：编排读回答 200 COMMISSION_NOT_ADOPTABLE，装配整笔回滚，已落的连线随之撤掉，采用册零行；委托行仍是已
+// 取消、没有开始。
+func TestTheAdoptionShellRollsBackALinkWhenTheCommissionIsCancelledUnderneath(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	seeded := publishSeededSupplierAgreements(t, db)
+	trunk := seeded["SYN-SUPPLIER-TRUNK-CN-SG-01"]
+	provider := trunk.Declarations.SupplierAgreementBody.Supplier
+	endpoints := adoptionFacesForTest(t, db)
+	const token = "presented.operator.token"
+	if status, answer := postWithToken(t, endpoints.commission, commissionSubmissionPath, token,
+		commissionBody("SYN-COMMISSION-TRUNK-DCG25", provider, trunk.ObjectID, trunk.Version, "2026-10-19T08:00:00Z")); status != http.StatusCreated {
+		t.Fatalf("委托 = %d %v", status, answer)
+	}
+	establishTrunkSegmentByHandover(t, db)
+
+	adoptions, err := tfpostgres.NewSegmentCommissionAdoptions(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	segments, err := tfpostgres.NewFulfillmentSegments(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	commissions, err := tfpostgres.NewTransportCommissions(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancellations, err := buildCancellationFaces(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tenant := mustValue(t, tfdomain.NewTenantID, "SYN-TENANT-01")
+	adoptionKey := ports.SegmentCommissionAdoptionKey{TenantID: tenant, Segment: mustValue(t, tfdomain.NewFulfillmentSegmentReference, trunkSegmentDCG25)}
+	linkedBeforeTheRace := false
+	racing := &raceCancellingCommissions{
+		TransportCommissions: commissions,
+		probe: func(txCtx context.Context) {
+			_, found, err := adoptions.FindBySegment(txCtx, adoptionKey)
+			linkedBeforeTheRace = err == nil && found
+		},
+		race: func() {
+			// t.Context() 不带采用那一笔的事务，取消口另开一笔、提交后才回来。
+			cancelled, err := cancellations.CancelCommission(t.Context(), tfapp.CancelCommissionCommand{
+				TenantID: tenant, Commission: "SYN-COMMISSION-TRUNK-DCG25", CancelledAt: trunkHandoverJudgedAt.Add(-time.Hour),
+			})
+			if err != nil || cancelled.Outcome() != tfapp.CommissionCancelled {
+				t.Fatalf("另一笔取消 = %v %v", cancelled.Outcome(), err)
+			}
+		},
+	}
+	adopter := transactionalSegmentCommissionAdopter{
+		transactor: db.Transactor(),
+		inner: tfapp.NewAdoptSegmentCommissionHandler(tfapp.AdoptSegmentCommissionDeps{
+			Adoptions: adoptions, Segments: segments, Commissions: racing, StartAdvancement: commissions, Clock: systemClock{},
+		}),
+	}
+	result, err := adopter.Adopt(t.Context(), tfapp.AdoptSegmentCommissionCommand{
+		TenantID: tenant, Segment: trunkSegmentDCG25, Commission: "SYN-COMMISSION-TRUNK-DCG25", Provider: provider,
+	})
+	if err != nil || result.Outcome() != tfapp.CommissionNotAdoptable {
+		t.Fatalf("写开始之前委托被取消 = %v %v，want COMMISSION_NOT_ADOPTABLE", result.Outcome(), err)
+	}
+	if !linkedBeforeTheRace {
+		t.Fatal("连线在写开始之前没落进事务——零行就证不了回滚")
+	}
+	var adoptionRows int
+	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM transport_fulfillment.segment_commission_adoption`).Scan(&adoptionRows); err != nil || adoptionRows != 0 {
+		t.Fatalf("采用 %d 行 %v，want 0（已落的连线应随整笔回滚撤掉）", adoptionRows, err)
+	}
+	var startedAt, cancelledAt *time.Time
+	if err := pool.QueryRow(t.Context(),
+		`SELECT started_at, cancelled_at FROM transport_fulfillment.transport_commission
+		  WHERE tenant_id = 'SYN-TENANT-01' AND commission_id = 'SYN-COMMISSION-TRUNK-DCG25'`).Scan(&startedAt, &cancelledAt); err != nil {
+		t.Fatal(err)
+	}
+	if startedAt != nil || cancelledAt == nil {
+		t.Fatalf("委托行 = 开始 %v、取消 %v，want 只有取消", startedAt, cancelledAt)
 	}
 }

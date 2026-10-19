@@ -56,7 +56,8 @@ func (adopter transactionalSegmentCommissionAdopter) Adopt(
 }
 
 // buildSegmentCommissionAdoption 装配 `/transport-fulfillment-segment-commission-adoptions` 背后的真编排（票 demo-chain-gaps/25，
-// ADR-0204）。缝全接真：采用册、段登记册（只读）、委托册与时钟。采用不入队：今天没有它的消费者。
+// ADR-0204）。缝全接真：采用册、段登记册（只读）、委托册（首次开始与前移开始是同一个适配器的两把写口）与时钟。采用不入队：
+// 今天没有它的消费者。
 func buildSegmentCommissionAdoption(db *bentopg.DB) (tfhttp.SegmentCommissionAdopter, error) {
 	adoptions, err := tfpostgres.NewSegmentCommissionAdoptions(db)
 	if err != nil {
@@ -71,10 +72,11 @@ func buildSegmentCommissionAdoption(db *bentopg.DB) (tfhttp.SegmentCommissionAdo
 		return nil, fmt.Errorf("parcel-api: transport commissions: %w", err)
 	}
 	handler := tfapp.NewAdoptSegmentCommissionHandler(tfapp.AdoptSegmentCommissionDeps{
-		Adoptions:   adoptions,
-		Segments:    segments,
-		Commissions: commissions,
-		Clock:       systemClock{},
+		Adoptions:        adoptions,
+		Segments:         segments,
+		Commissions:      commissions,
+		StartAdvancement: commissions,
+		Clock:            systemClock{},
 	})
 	return transactionalSegmentCommissionAdopter{transactor: db.Transactor(), inner: handler}, nil
 }
