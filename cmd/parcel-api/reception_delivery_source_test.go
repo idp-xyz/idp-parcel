@@ -2,6 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -224,5 +227,55 @@ func TestTheWiredReplayAfterAnIdentityConflictAnswersTheCurrentVersion(t *testin
 	}
 	if after := countRows(t, pool, `SELECT count(*) FROM node_operations.reception`); after != before {
 		t.Fatalf("重投落了 %d 行", after-before)
+	}
+}
+
+// Covers: 观察号码带 NUL 的送站在入口答坏报文（票 no-reception-source/02 评审阻断）的生产装配面：作业事实收寄口与生产
+// 装配之间，三种观察都答 400 MALFORMED_REQUEST、册上不落。来源文档原样保全这个号（ADR-0199 决定一），jsonb 存不下 NUL，
+// 放进编排就是 5xx、设备永远重投；明确接收那一支在来源保全之前就已在身份核对按这个号查 PS 时撞错，同由入口挡住。扫描附带的
+// Tab 与回车换行照收：带着它们的拒收照常落册，原样读回。夹具全为合成（S 级）。
+func TestTheWiredReceptionRefusesAMarkCarryingNUL(t *testing.T) {
+	pool, _, reception, receptions := wiredReceptionWithStore(t)
+	endpoint := nodeopshttp.NewReceiveDeliveredUnitEndpoint(workFactReceptionForTest(t), reception)
+	post := func(sourceID, mark, claim string) *httptest.ResponseRecorder {
+		t.Helper()
+		encoded, err := json.Marshal(mark)
+		if err != nil {
+			t.Fatalf("编码 mark：%v", err)
+		}
+		recorder := httptest.NewRecorder()
+		request := httptest.NewRequest(http.MethodPost, "/node-operations/receptions", strings.NewReader(
+			`{"sourceId":"`+sourceID+`","deliveredBy":"SYN-COURIER-NRS02","handlingUnit":"SYN-HU-NRS02-NUL",`+
+				`"mark":`+string(encoded)+`,`+claim+`,"occurredAt":"2026-09-24T09:00:00+08:00"}`))
+		stampWorkFact(request, "NODE", "SYN-NODE-SHA-HUB", "SYN-DEVICE-NODE")
+		endpoint.ServeHTTP(recorder, request)
+		return recorder
+	}
+
+	for name, delivery := range map[string]struct{ sourceID, claim string }{
+		"明确接收": {"SYN-DEVICE-NRS02/NUL-RECEIVED", `"claim":"RECEIVED","evidenceRef":"SYN-EVIDENCE/tally-NRS02"`},
+		"明确拒收": {"SYN-DEVICE-NRS02/NUL-REFUSED", `"claim":"REFUSED","refusalReason":"SYN 外包装破损拒收"`},
+		"仅扫描":  {"SYN-DEVICE-NRS02/NUL-SCANNED", `"claim":"SCAN_ONLY"`},
+	} {
+		t.Run(name, func(t *testing.T) {
+			answer := post(delivery.sourceID, "SYN-MARK-\x00-NRS02", delivery.claim)
+			if answer.Code != http.StatusBadRequest || problemCode(t, answer) != "MALFORMED_REQUEST" {
+				t.Fatalf("带 NUL 的号答 %d %s, want 400 MALFORMED_REQUEST", answer.Code, answer.Body.String())
+			}
+			if rows := receptionRows(t, pool, delivery.sourceID); rows != 0 {
+				t.Fatalf("%s 在册 %d 行, want 0", delivery.sourceID, rows)
+			}
+		})
+	}
+
+	const kept = "SYN-MARK-NRS02\t\r\n"
+	answer := post("SYN-DEVICE-NRS02/TAB-REFUSED", kept, `"claim":"REFUSED","refusalReason":"SYN 外包装破损拒收"`)
+	if answer.Code != http.StatusOK || registrationOutcome(t, answer) != "INTAKE_NOT_FORMED" {
+		t.Fatalf("带 Tab 与回车换行的号答 %d %s, want 200 INTAKE_NOT_FORMED", answer.Code, answer.Body.String())
+	}
+	tenant := mustValue(t, nodomain.NewTenantID, "SYN-TENANT-01")
+	found, exists, err := receptions.FindByKey(t.Context(), noports.ReceptionKey{TenantID: tenant, SourceID: "SYN-DEVICE-NRS02/TAB-REFUSED"})
+	if err != nil || !exists || found.Source.Mark != kept {
+		t.Fatalf("读回的外部标识观察 %q exists=%v err=%v, want 原样 %q", found.Source.Mark, exists, err, kept)
 	}
 }

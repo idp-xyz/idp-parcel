@@ -54,6 +54,12 @@ func receptionCommand(tenant domain.TenantID, node domain.NodeReference, request
 		return none, fmt.Errorf("%w: sourceId exceeds %d bytes or carries a control character, which the intent envelope cannot carry",
 			ErrMalformedRequest, eventing.MaxSubjectLength)
 	}
+	// 外部标识观察原样进收寄记录的来源文档（ADR-0199 决定一），也原样拿去问 PS 的关联册；Postgres 的 text 与 jsonb 都存不下
+	// NUL，带着它的载荷到编排只会落不了册、答 5xx，设备对着同一份载荷永远重投。重发同样的内容不会变好，所以在这里答坏报文，
+	// 让设备出队交给人。只拒 NUL：扫描附带的回车、换行与 Tab 是设备事实，照原样收（见 receptionDocument 头注）。
+	if strings.ContainsRune(document.Mark, 0) {
+		return none, fmt.Errorf("%w: mark carries a NUL character, which the reception record cannot store", ErrMalformedRequest)
+	}
 	deliveredBy, err := domain.NewDeliveringPartyReference(document.DeliveredBy)
 	if err != nil {
 		return none, fmt.Errorf("%w: deliveredBy: %v", ErrMalformedRequest, err)

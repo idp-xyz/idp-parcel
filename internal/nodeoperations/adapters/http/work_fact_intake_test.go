@@ -340,3 +340,47 @@ func TestWorkFactReceptionIntakeServesOnlyTheReceptionLine(t *testing.T) {
 		t.Fatal("查阅行归查阅读，作业事实 Intake 不该装得进")
 	}
 }
+
+// Covers: 观察号码带 NUL 在接入时答坏报文（票 no-reception-source/02 评审阻断）——收寄记录原样保全外部标识观察（ADR-0199
+// 决定一），而 Postgres 的 text 与 jsonb 都存不下 NUL：放进编排只会落不了册、答 5xx，设备对着同一份载荷永远重投。三种观察都
+// 经端点答 400 MALFORMED_REQUEST，编排一次也不调、册上不落。扫描附带的 Tab 与回车换行不在此列，照原样进命令（UC-NO-002 输入
+// 语义契约）。
+func TestWorkFactReceptionIntakeRefusesAMarkCarryingNUL(t *testing.T) {
+	for name, claim := range map[string]string{
+		"明确接收": `"claim":"RECEIVED","evidenceRef":"SYN-EVIDENCE/tally-0014"`,
+		"明确拒收": `"claim":"REFUSED","refusalReason":"SYN-REFUSED-DAMAGED"`,
+		"仅扫描":  `"claim":"SCAN_ONLY"`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			store := newReceptionStore()
+			handler, err := application.NewReceiveDeliveredUnitHandler(application.ReceiveDeliveredUnitDeps{
+				Identity:       &identityViewDouble{},
+				ServiceResults: &serviceResultsDouble{},
+				Receptions:     store,
+				Versions:       &versionFactoryDouble{},
+				Downstream:     &downstreamDouble{},
+				Clock:          adapterClock{at: time.Date(2026, 9, 24, 2, 0, 0, 0, time.UTC)},
+			})
+			if err != nil {
+				t.Fatalf("构造收寄编排：%v", err)
+			}
+			endpoint := nodeopshttp.NewReceiveDeliveredUnitEndpoint(receptionIntakeForTest(t), handler)
+			recorder := httptest.NewRecorder()
+			endpoint.ServeHTTP(recorder, receptionRequest(`{"sourceId":"SYN-DEVICE-07/000134","deliveredBy":"SYN-COURIER-01",`+
+				`"handlingUnit":"SYN-HU-0014","mark":"SYN-MARK-\u0000-0014",`+claim+`,"occurredAt":"2026-09-24T10:00:00+08:00"}`))
+			if recorder.Code != http.StatusBadRequest || !strings.Contains(recorder.Body.String(), "MALFORMED_REQUEST") {
+				t.Fatalf("status = %d body = %s, want 400 MALFORMED_REQUEST", recorder.Code, recorder.Body.String())
+			}
+			if store.saved != 0 {
+				t.Fatalf("落册 %d 行, want 0", store.saved)
+			}
+		})
+	}
+
+	command, err := receptionIntakeForTest(t).IntakeReception(context.Background(), receptionRequest(`{"sourceId":"SYN-DEVICE-07/000135",`+
+		`"deliveredBy":"SYN-COURIER-01","handlingUnit":"SYN-HU-0015","mark":"SYN-MARK-0015\t\r\n","claim":"SCAN_ONLY",`+
+		`"occurredAt":"2026-09-24T10:05:00+08:00"}`))
+	if err != nil || command.Mark.Mark != "SYN-MARK-0015\t\r\n" {
+		t.Fatalf("Mark = %q err = %v, want 带 Tab 与回车换行的号原样进命令", command.Mark.Mark, err)
+	}
+}

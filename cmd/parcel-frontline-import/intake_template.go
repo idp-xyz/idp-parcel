@@ -120,13 +120,17 @@ func intakeRowFrom(
 		return intakeRow{}, err
 	}
 
+	mark := cell(columnMark)
+	if err := intakeMarkStorable(mark); err != nil {
+		return intakeRow{}, err
+	}
 	command := application.ReceiveDeliveredUnitCommand{
 		TenantID:    tenant,
 		SourceID:    sourceID,
 		Node:        node,
 		DeliveredBy: deliveredBy,
 		Unit:        unit,
-		Mark:        ports.ExternalMarkObservation{Mark: cell(columnMark)},
+		Mark:        ports.ExternalMarkObservation{Mark: mark},
 		OccurredAt:  occurredAt,
 	}
 
@@ -203,6 +207,17 @@ func intakeSourceIDCarriable(batchRef, factRef, sourceID string) error {
 	}
 	return fmt.Errorf("%s=%q 带控制字符（单元格内换行、Tab 之类），拼出的来源标识交不出收寄意图——请删掉批次号或行事实号里的不可见字符",
 		column, value)
+}
+
+// intakeMarkStorable 核观察号码那一格存不存得下。收寄记录原样保全这一格（ADR-0199 决定一），身份核对也拿它原样问 PS 的
+// 关联册；Postgres 的 text 与 jsonb 都存不下 NUL，放进编排那一行只会回滚记未决，重跑同一文件多少次都一样。所以在译装时按
+// 坏行整批拒，让内勤核对纸单重录这一格。设备收寄口（nodeopshttp 的 receptionCommand）对同一格答坏报文，两口同拒 NUL、
+// 只拒 NUL。
+func intakeMarkStorable(mark string) error {
+	if !strings.ContainsRune(mark, 0) {
+		return nil
+	}
+	return fmt.Errorf("%s=%q 带 NUL 字符，收寄记录存不下这个号——请核对纸单，删掉标识里的不可见字符后重录", columnMark, mark)
 }
 
 // intakeEvidence 铸明确接收的证据引用。`ReceptionEvidenceReference` 点名的「受控接收
