@@ -101,6 +101,7 @@ type ReceiveDeliveredUnitResult struct {
 	record         ports.ReceptionRecord
 	hasRecord      bool
 	currentVersion domain.IntakeResultVersion
+	mergedInto     domain.IntakeResultVersion
 	handoff        string
 	handoffErr     error
 }
@@ -125,6 +126,13 @@ func (result ReceiveDeliveredUnitResult) RecordedOutcome() ReceptionOutcome {
 
 func (result ReceiveDeliveredUnitResult) CurrentVersion() domain.IntakeResultVersion {
 	return result.currentVersion
+}
+
+// MergedInto 是这次送站并入的那一版判断（ADR-0199 决定四），只随已有结果在场：首次并入与并入行的重投都带，同一来源的其余
+// 重投不带。它让读续办与报告的一方分得开「这一来源已在册」与「这一来源刚并进了别人的收寄」；设备照 outcome 出队，两者同一种
+// 处置，线上不另立一格。
+func (result ReceiveDeliveredUnitResult) MergedInto() domain.IntakeResultVersion {
+	return result.mergedInto
 }
 
 // IntakeHandoffReference 非空说明收寄已写下而意图没交出去：调用方照常提交时，重放会重发同一份。
@@ -174,9 +182,9 @@ func NewReceiveDeliveredUnitHandler(deps ReceiveDeliveredUnitDeps) (*ReceiveDeli
 	return &ReceiveDeliveredUnitHandler{deps: deps}, nil
 }
 
-// Handle 把一件送达实物推进到收寄判断：幂等/冲突按内容指纹分界 → 接收观察三态分派
-// （拒收不建控制、仅扫描不建控制）→ 身份核对分关联/待识别/身份冲突 → 收寄与控制
-// 同一提交 → 发布意图。物理事实全程只增不删。
+// Handle 把一件送达实物推进到收寄判断：幂等/冲突按内容指纹分界 → 认同一作业实物在这个节点上的当前收寄与待确认（ADR-0199
+// 决定四：有当前收寄即并入，有待确认即续办）→ 接收观察三态分派（拒收不建控制、仅扫描不建控制）→ 身份核对分关联/待识别/
+// 身份冲突 → 收寄与控制同一提交 → 发布意图。物理事实全程只增不删。
 //
 // 没形成答案（身份核对读不动、收寄库读写失败、已存摘要认不出、版本签发失败）一律交回 error，不答一格业务结果：
 // 什么都没落册时答`收寄待确认`，设备收到 2xx 就出队，这一次接收从此没有记录（ADR-0186、ADR-0022）。
@@ -215,9 +223,24 @@ func (handler *ReceiveDeliveredUnitHandler) Handle(
 		}
 	}
 
+	// 接收观察不在三态之内的命令先拒：认实物在前，一条坏命令会被答成并入的已有结果。
+	if command.Claim.String() == "" {
+		return ReceiveDeliveredUnitResult{}, fmt.Errorf("%w: unknown reception claim %d", ErrReceptionCommandRejected, command.Claim)
+	}
+	// 同一作业实物按租户内的作业实物标识认，在身份核对之前认出（ADR-0199 决定四）：三种观察都先问，这一问在真库上取实物锁，
+	// 同一件实物的另一次送站等到本笔提交。读不动就不形成答案——认不出当前收寄还往下走，就是又起一个控制起点。
+	judgments, err := handler.deps.Receptions.FindCurrentJudgmentsAtNode(ctx, command.TenantID, command.Unit, command.Node)
+	if err != nil {
+		return ReceiveDeliveredUnitResult{}, fmt.Errorf("find current judgments of the unit at the node: %w", err)
+	}
+	if current, found := currentIntakeAmong(judgments); found {
+		return handler.merge(ctx, command, key, digest, current)
+	}
+	predecessor := undecidedToContinue(judgments)
+
 	switch command.Claim {
 	case ExplicitReception:
-		return handler.receive(ctx, command, key, digest)
+		return handler.receive(ctx, command, key, digest, predecessor)
 	case ExplicitRefusal:
 		// 明确拒收且未取得控制：未收寄结果带原因，不形成委托拒绝、取消或终局
 		// （AT-NO-024）。
@@ -225,6 +248,7 @@ func (handler *ReceiveDeliveredUnitHandler) Handle(
 			Key:           key,
 			ContentDigest: digest,
 			Kind:          ports.RecordIntakeNotFormed,
+			Predecessor:   predecessor,
 			RefusalReason: command.Refusal,
 		})
 	case ScanOnlyObservation:
@@ -234,6 +258,7 @@ func (handler *ReceiveDeliveredUnitHandler) Handle(
 			Key:           key,
 			ContentDigest: digest,
 			Kind:          ports.RecordReceptionUndecided,
+			Predecessor:   predecessor,
 		})
 	default:
 		return ReceiveDeliveredUnitResult{}, fmt.Errorf("%w: unknown reception claim %d", ErrReceptionCommandRejected, command.Claim)
@@ -271,12 +296,13 @@ func deliverySourceOf(command ReceiveDeliveredUnitCommand) domain.DeliverySource
 	}
 }
 
-// receive 走明确接收支：身份核对分派关联收寄或待识别，两格都成立收寄与控制。
+// receive 走明确接收支：身份核对分派关联收寄或待识别，两格都成立收寄与控制。predecessor 非空即这次接收续办那条待确认。
 func (handler *ReceiveDeliveredUnitHandler) receive(
 	ctx context.Context,
 	command ReceiveDeliveredUnitCommand,
 	key ports.ReceptionKey,
 	digest string,
+	predecessor domain.IntakeResultVersion,
 ) (ReceiveDeliveredUnitResult, error) {
 	judgment, err := identityJudge{
 		identity:   handler.deps.Identity,
@@ -333,6 +359,7 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 		ContentDigest:      digest,
 		Kind:               kind,
 		JudgmentVersion:    version,
+		Predecessor:        predecessor,
 		Source:             deliverySourceOf(command),
 		Intake:             intake,
 		Control:            control,
@@ -479,6 +506,17 @@ func (handler *ReceiveDeliveredUnitHandler) existingResult(
 	ctx context.Context,
 	record ports.ReceptionRecord,
 ) (ReceiveDeliveredUnitResult, error) {
+	// 并入行不是判断，答的是它并入的那一版：重投并入的那一来源与首次并入同答。读不回那一版就不形成答案。
+	if record.Kind == ports.RecordMergedIntoExistingIntake {
+		merged, found, err := handler.deps.Receptions.FindByJudgmentVersion(ctx, record.Key.TenantID, record.MergedInto)
+		if err != nil {
+			return ReceiveDeliveredUnitResult{}, fmt.Errorf("read the judgment the delivery was merged into: %w", err)
+		}
+		if !found {
+			return ReceiveDeliveredUnitResult{}, fmt.Errorf("node operations: merged judgment %q is not readable", record.MergedInto)
+		}
+		return handler.mergedResult(ctx, merged)
+	}
 	result := resultForRecord(record)
 	result.outcome = ReceptionExistingResult
 	if record.JudgmentVersion.String() != "" {

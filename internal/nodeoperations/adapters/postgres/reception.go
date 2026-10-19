@@ -181,7 +181,7 @@ func (repository *Receptions) CurrentVersion(
 // receptionColumns 与 scanReception 的扫描顺序是同一份约定，两处一起改。
 const receptionColumns = `source_id, content_digest, kind, intake, control, candidates,
 		        identity_conflict, refusal_reason, service_markers, service_result_check, recorded_at,
-		        judgment_version, predecessor_version, source_document`
+		        judgment_version, predecessor_version, source_document, merged_version`
 
 // scanReception 把一行收寄册读回成记录：读回的一切经领域构造函数重建，一次坏写入在这里暴露，而不是变成一个看起来
 // 合法的收寄结果。
@@ -196,10 +196,11 @@ func scanReception(row pgx.Row, tenant domain.TenantID) (ports.ReceptionRecord, 
 		recordedAt                  time.Time
 		judgment, predecessor       *string
 		sourceJSON                  []byte
+		merged                      *string
 	)
 	if err := row.Scan(&sourceID, &digest, &kindName, &intakeJSON, &controlJSON, &candidatesJSON,
 		&identityConflict, &refusal, &markersJSON, &checkName, &recordedAt,
-		&judgment, &predecessor, &sourceJSON); err != nil {
+		&judgment, &predecessor, &sourceJSON, &merged); err != nil {
 		return ports.ReceptionRecord{}, err
 	}
 
@@ -225,6 +226,9 @@ func scanReception(row pgx.Row, tenant domain.TenantID) (ports.ReceptionRecord, 
 		return ports.ReceptionRecord{}, err
 	}
 	if record.Predecessor, err = versionFrom(predecessor); err != nil {
+		return ports.ReceptionRecord{}, err
+	}
+	if record.MergedInto, err = versionFrom(merged); err != nil {
 		return ports.ReceptionRecord{}, err
 	}
 	// 来源文档为空是来源保全之前的行，读回零值即「来源未保全」，不是坏行。
@@ -315,8 +319,8 @@ func (repository *Receptions) Save(
 		`INSERT INTO node_operations.reception
 			(tenant_id, source_id, content_digest, kind, intake, control,
 			 candidates, identity_conflict, refusal_reason, service_markers, service_result_check, recorded_at,
-			 judgment_version, predecessor_version, source_document)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
+			 judgment_version, predecessor_version, source_document, merged_version)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
 		 ON CONFLICT (tenant_id, source_id) DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.SourceID,
@@ -333,6 +337,7 @@ func (repository *Receptions) Save(
 		versionColumn(record.JudgmentVersion),
 		versionColumn(record.Predecessor),
 		sourceJSON,
+		versionColumn(record.MergedInto),
 	)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "reception_predecessor_unique" {
@@ -489,6 +494,8 @@ func receptionKindFrom(raw string) (ports.ReceptionRecordKind, error) {
 		return ports.RecordIntakeNotFormed, nil
 	case ports.RecordReceptionUndecided.String():
 		return ports.RecordReceptionUndecided, nil
+	case ports.RecordMergedIntoExistingIntake.String():
+		return ports.RecordMergedIntoExistingIntake, nil
 	default:
 		return 0, fmt.Errorf("unknown reception record kind %q", raw)
 	}

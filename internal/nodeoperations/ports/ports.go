@@ -54,8 +54,8 @@ type ReceptionKey struct {
 	SourceID string
 }
 
-// ReceptionRecordKind 是越过提交边界的四种判断走向（结果语义契约的前四格；已有结果
-// 与来源冲突是应答不是记录）。
+// ReceptionRecordKind 是越过提交边界的记录种类。除 RecordMergedIntoExistingIntake 之外都是判断走向（结果语义契约的前四格；
+// 已有结果与来源冲突是应答不是记录）；它不是判断，见它自己的注。
 type ReceptionRecordKind uint8
 
 const (
@@ -64,6 +64,10 @@ const (
 	RecordPendingIdentification
 	RecordIntakeNotFormed
 	RecordReceptionUndecided
+	// RecordMergedIntoExistingIntake 是「并入已有收寄」（ADR-0199 决定四）：同一作业实物在同一节点已有当前收寄时，这次送站
+	// 不形成新判断，只把来源照样保全、指名并入的那一版。它不带收寄与控制、不签判断版本、不指名前版——并入不是后继，占了前版
+	// 就把那条链的当前有效版本挪到一行不是判断的记录上。种类不进 outcome 词表：送站的一方收到的是已有结果。
+	RecordMergedIntoExistingIntake
 )
 
 func (kind ReceptionRecordKind) String() string {
@@ -76,6 +80,8 @@ func (kind ReceptionRecordKind) String() string {
 		return "INTAKE_NOT_FORMED"
 	case RecordReceptionUndecided:
 		return "RECEPTION_UNDECIDED"
+	case RecordMergedIntoExistingIntake:
+		return "MERGED_INTO_EXISTING_INTAKE"
 	default:
 		return ""
 	}
@@ -160,8 +166,9 @@ func (check ServiceResultCheck) String() string {
 //     签发器另签。类型沿用 IntakeResultVersion，因为两者同一签发器、同一命名空间。
 //   - Predecessor：只有追加的一版带，指名它接续的那条判断链此刻的当前有效版本；首判不带。一版至多一个后继，由收寄库守。
 //   - Source：本次交付的来源文档，追加的冲突版带引起它的那次送站的。零值是来源未保全（来源保全之前落下的行）。
+//   - MergedInto：只有「并入已有收寄」那一种带，指名并入的那一版判断（ADR-0199 决定四）；它不是前版，不占（租户，前版）唯一。
 //
-// 三格都不进内容指纹：判断版本与前版是服务端在判断时刻签下与认出的，来源文档里多出的证据、拒收原因与交付方按 ADR-0199
+// 四格都不进内容指纹：判断版本与前版是服务端在判断时刻签下与认出的，来源文档里多出的证据、拒收原因与交付方按 ADR-0199
 // 越权风险点不改幂等与冲突的分界。
 type ReceptionRecord struct {
 	Key                ReceptionKey
@@ -169,6 +176,7 @@ type ReceptionRecord struct {
 	Kind               ReceptionRecordKind
 	JudgmentVersion    domain.IntakeResultVersion
 	Predecessor        domain.IntakeResultVersion
+	MergedInto         domain.IntakeResultVersion
 	Source             domain.DeliverySource
 	Intake             domain.NodeIntake
 	Control            domain.PhysicalControl
@@ -215,10 +223,32 @@ type ReceptionStore interface {
 		tenant domain.TenantID,
 		version domain.IntakeResultVersion,
 	) (domain.IntakeResultVersion, error)
+	// FindCurrentJudgmentsAtNode 交回这件作业实物在这个节点上各条判断链此刻的当前有效版本，按来源标识定序；没有交回空切片。
+	// 收寄编排据此认「同一作业实物在同一节点已有当前收寄」与「待确认由后来的观察续办」（ADR-0199 决定四）：同一实物按租户内
+	// 的作业实物标识认，不按号码认。形成与待识别两种按收寄上的实物与节点认（追加的冲突版来源文档里是后到那件，收寄上才是
+	// 它接续的那件），未收寄与待确认两种没有收寄，按来源文档认。并入行不是判断，不在其中；来源保全之前落下的未收寄与待确认行没有判断版本、
+	// 也没存实物与节点，认不出是哪件，同样不在其中。
+	//
+	// 查之前先按（租户，作业实物）取锁，要在收寄落册所在的事务里调：从这次读到那笔事务结束，同一件实物的另一次收寄等着，
+	// 否则两个来源并发送站各自读不到对方未提交的收寄，两条都形成控制起点。三种观察都取，唯一识别那一支随后才取包裹锁
+	// （FindOtherUnitIntakes），次序固定先实物后包裹。只在单线程里跑的替身不必模拟这一格。
+	FindCurrentJudgmentsAtNode(
+		ctx context.Context,
+		tenant domain.TenantID,
+		unit domain.HandlingUnitID,
+		node domain.NodeReference,
+	) ([]ReceptionRecord, error)
+	// FindByJudgmentVersion 交回本租户判断版本为 version 的那一行；没有交回 false。收寄编排答并入行的重投时按它读回并入的那一版，
+	// 原判断种类取那一版的。读不动作为错误返回。
+	FindByJudgmentVersion(
+		ctx context.Context,
+		tenant domain.TenantID,
+		version domain.IntakeResultVersion,
+	) (ReceptionRecord, bool, error)
 }
 
-// PendingIdentityLookup 找待重核的待识别实物（ADR-0199 决定三）。与 ReceptionStore 分立：收寄编排既不按判断版本、也不按号码
-// 找记录，扩它的接口就要连带改所有只为收寄而写的替身；生产上两者是同一只收寄库适配器。
+// PendingIdentityLookup 找待重核的待识别实物（ADR-0199 决定三）。与 ReceptionStore 分立：收寄编排不按号码找记录，扩它的接口
+// 就要连带改所有只为收寄而写的替身；按判断版本取一行两边都要，方法同名同形，生产上两者是同一只收寄库适配器。
 type PendingIdentityLookup interface {
 	// FindByJudgmentVersion 交回本租户判断版本为 version 的那一行；没有交回 false。人工重核与按判断版本自投的门铃都只指名
 	// 这一件。读不动作为错误返回。

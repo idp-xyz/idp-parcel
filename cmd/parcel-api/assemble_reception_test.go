@@ -48,7 +48,9 @@ func TestTheWiredReceptionAnswersHonestlyAgainstARealDatabase(t *testing.T) {
 		t.Fatal("待识别没有留下收寄与控制")
 	}
 
+	// 拒收换一件实物：同一件实物在同一节点已有当前收寄时，再来的拒收并入它、不形成未收寄（ADR-0199 决定四）。
 	refusal := receptionCommand(t, "SYN-DELIVERY-REFUSED-1", nodeopsapp.ExplicitRefusal)
+	refusal.Unit = mustValue(t, nodomain.NewHandlingUnitID, "SYN-UNIT-REFUSED-1")
 	first, err := reception.Handle(t.Context(), refusal)
 	if err != nil {
 		t.Fatalf("明确拒收：%v", err)

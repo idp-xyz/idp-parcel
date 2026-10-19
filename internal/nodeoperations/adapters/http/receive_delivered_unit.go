@@ -116,6 +116,10 @@ func NewReceiveDeliveredUnitEndpoint(intake ReceptionIntake, handler ReceptionHa
 // `recordedOutcome` 与 `currentVersion` 只随已有结果出现，同是信息格（ADR-0199 决定二）：原判断种类取记录种类的原名，与
 // `outcome` 的前四格同一份词，但不进 `outcome`——设备照 `outcome` 出队，重投的处置不因原判断后来被接续而变。来源保全之前的
 // 未收寄与待确认行没有判断版本，`currentVersion` 缺席。
+//
+// 同一作业实物在同一节点已有当前收寄时，这次送站并入它（ADR-0199 决定四），答的同是已有结果：各格照并入的那一版判断转写，
+// 两格信息格也是那一版的。线上不另立「并入」一格——设备照 `outcome` 出队，并入与重投同一种处置；这次送站自带的拒收原因留在
+// 来源里，不进答复，答复说的是并入的那一条。
 type receptionResponse struct {
 	Outcome            string   `json:"outcome"`
 	IntakeVersion      string   `json:"intakeVersion,omitempty"`

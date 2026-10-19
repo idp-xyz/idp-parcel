@@ -52,6 +52,9 @@ type receptionStoreDouble struct {
 	// othersErr 让按包裹读别的作业实物收寄那一次报错；chainErr 让读判断链当前有效版本那一次报错。
 	othersErr error
 	chainErr  error
+	// lookups 记下按实物与节点找各链当前有效版本的每一问（「实物@节点」），currentErr 让这一问报错。
+	lookups    []string
+	currentErr error
 }
 
 func newReceptionStore() *receptionStoreDouble {
@@ -941,14 +944,17 @@ func TestOneMarkOnTwoUnitsFormsAnIdentityConflict(t *testing.T) {
 	}
 }
 
-// Covers: 票 no-reception-identity/01 裁定「同一作业实物的重投仍是重放」——同一份送站重投走已有结果，同一件实物换个来源
-// 再收一次照常形成收寄，都不认成一码多物；冲突形成之后重放后到那件，也不再追加。
+// Covers: 票 no-reception-identity/01 裁定「同一作业实物的重投仍是重放」与 ADR-0199 决定四对它的改写：同一份送站重投走已有结果；
+// 同一件实物换个来源再送到同一节点并入它的当前收寄（`AT-NO-049`），都不认成一码多物、不另起控制起点。冲突形成之后重放后到那件
+// 不再追加；先到那件换来源再来，并入的是它的冲突版——答已有结果、原判断种类是待识别、不交意图、不再追加冲突版。
 func TestTheSameUnitDeliveredAgainIsNotAnIdentityConflict(t *testing.T) {
 	fixture, _ := oneMarkFixture(t)
 	first := oneMarkCommand(t, "SYN-DELIVERY-NRI01-A", "SYN-UNIT-NRI01-A")
-	if _, err := fixture.handler.Handle(context.Background(), first); err != nil {
+	formed, err := fixture.handler.Handle(context.Background(), first)
+	if err != nil {
 		t.Fatalf("首投：%v", err)
 	}
+	original, _ := formed.Record()
 	replay, err := fixture.handler.Handle(context.Background(), first)
 	if err != nil || replay.Outcome() != application.ReceptionExistingResult {
 		t.Fatalf("重投 outcome = %q err = %v, want EXISTING_RESULT", replay.Outcome(), err)
@@ -957,11 +963,17 @@ func TestTheSameUnitDeliveredAgainIsNotAnIdentityConflict(t *testing.T) {
 	again := oneMarkCommand(t, "SYN-DELIVERY-NRI01-A2", "SYN-UNIT-NRI01-A")
 	again.OccurredAt = deliveredAt.Add(time.Hour)
 	result, err := fixture.handler.Handle(context.Background(), again)
-	if err != nil || result.Outcome() != application.NodeIntakeFormed {
-		t.Fatalf("同一件实物再收 outcome = %q err = %v, want INTAKE_FORMED", result.Outcome(), err)
+	if err != nil || result.Outcome() != application.ReceptionExistingResult {
+		t.Fatalf("同一件实物换来源再来 outcome = %q err = %v, want EXISTING_RESULT——并入当前收寄", result.Outcome(), err)
+	}
+	if result.RecordedOutcome() != application.NodeIntakeFormed || result.MergedInto() != original.JudgmentVersion {
+		t.Fatalf("并入 原判断种类 = %q 并入版本 = %q, want INTAKE_FORMED %q", result.RecordedOutcome(), result.MergedInto(), original.JudgmentVersion)
 	}
 	if record, _ := result.Record(); record.IdentityConflict {
-		t.Fatal("同一件实物再收被记成了身份冲突")
+		t.Fatal("同一件实物再来被记成了身份冲突")
+	}
+	if starts := controlStartsOf(fixture, "SYN-UNIT-NRI01-A"); starts != 1 {
+		t.Fatalf("先到那件有 %d 个控制起点, want 1", starts)
 	}
 
 	second := oneMarkCommand(t, "SYN-DELIVERY-NRI01-B", "SYN-UNIT-NRI01-B")
@@ -975,6 +987,27 @@ func TestTheSameUnitDeliveredAgainIsNotAnIdentityConflict(t *testing.T) {
 	}
 	if fixture.receptions.saved != saved {
 		t.Fatalf("重放又落了 %d 行", fixture.receptions.saved-saved)
+	}
+
+	conflict, found := conflictVersionsOf(fixture, "SYN-UNIT-NRI01-A")[original.JudgmentVersion]
+	if !found {
+		t.Fatalf("先到那件没有接续原判断的冲突版：%+v", conflictVersionsOf(fixture, "SYN-UNIT-NRI01-A"))
+	}
+	intents := len(fixture.downstream.intents)
+	third := oneMarkCommand(t, "SYN-DELIVERY-NRI01-A3", "SYN-UNIT-NRI01-A")
+	third.OccurredAt = deliveredAt.Add(2 * time.Hour)
+	merged, err := fixture.handler.Handle(context.Background(), third)
+	if err != nil || merged.Outcome() != application.ReceptionExistingResult {
+		t.Fatalf("冲突之后先到那件再来 outcome = %q err = %v, want EXISTING_RESULT", merged.Outcome(), err)
+	}
+	if merged.RecordedOutcome() != application.UnitPendingIdentification || merged.CurrentVersion() != conflict.JudgmentVersion ||
+		merged.MergedInto() != conflict.JudgmentVersion {
+		t.Fatalf("并入 原判断种类 = %q 当前有效版本 = %q 并入版本 = %q, want PENDING_IDENTIFICATION 与冲突版 %q",
+			merged.RecordedOutcome(), merged.CurrentVersion(), merged.MergedInto(), conflict.JudgmentVersion)
+	}
+	if len(fixture.downstream.intents) != intents || len(conflictVersionsOf(fixture, "SYN-UNIT-NRI01-A")) != 1 {
+		t.Fatalf("意图 %d → %d 份、冲突版 %d 版, want 不交意图、不再追加", intents, len(fixture.downstream.intents),
+			len(conflictVersionsOf(fixture, "SYN-UNIT-NRI01-A")))
 	}
 }
 

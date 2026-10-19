@@ -160,7 +160,9 @@ func importIntake(ctx context.Context, batch intakeBatch, importer intakeImporte
 //   - 待确认且带记录 → 已落地：SCAN_ONLY 行的判断本就是「待确认」，记录已提交；
 //   - 待确认不带记录 → 未决：编排不再交回这一格，出现即实现缺陷；
 //   - 已有结果 → 重放：同一来源身份同一内容，原结果原样；明细带原判断种类与那条判断链此刻的当前有效版本（ADR-0199
-//     决定二），原判断后来被接续时内勤看得到接续到了哪一版；
+//     决定二），原判断后来被接续时内勤看得到接续到了哪一版。同一件实物在同一节点已有当前收寄时本行并入它（ADR-0199
+//     决定四），应用结果同是已有结果，去向随之记重放——这一行不用人再管；明细先写明并入的那一版，内勤分得开「这行导过了」
+//     与「这件早已收寄，这行只留了来源」；
 //   - 来源冲突 → 被拒：同一行事实号换了内容，绝不覆盖，人核对纸单再改文件。
 func intakeRowDisposition(row intakeRow, result application.ReceiveDeliveredUnitResult) rowResult {
 	outcome := result.Outcome()
@@ -182,7 +184,7 @@ func intakeRowDisposition(row intakeRow, result application.ReceiveDeliveredUnit
 		}
 	case application.ReceptionExistingResult:
 		answer.Disposition = rowReplayed
-		answer.Detail = "原判断 " + result.RecordedOutcome().String() + "，" + describeCurrentVersion(result) + "；" + describeReception(record)
+		answer.Detail = describeMerge(result) + "原判断 " + result.RecordedOutcome().String() + "，" + describeCurrentVersion(result) + "；" + describeReception(record)
 	case application.ReceptionSourceConflict:
 		answer.Disposition = rowRejected
 		answer.Detail = "同一行事实号已在册且内容不同——绝不覆盖；核对纸单：若是另一件事实请换行事实号"
@@ -196,6 +198,14 @@ func intakeRowDisposition(row intakeRow, result application.ReceiveDeliveredUnit
 		answer.Detail += "；意图未交出（" + handoff + "），重跑同一文件会重发同一份"
 	}
 	return answer
+}
+
+// describeMerge 写并入的那一版；这一来源不是并入的写空。
+func describeMerge(result application.ReceiveDeliveredUnitResult) string {
+	if merged := result.MergedInto().String(); merged != "" {
+		return "并入已有收寄 " + merged + "（本行来源已保全，未另起控制起点）；"
+	}
+	return ""
 }
 
 // describeCurrentVersion 写当前有效版本。来源保全之前落下的未收寄与待确认行从未签过判断版本，如实说没有，不拿空串充数。
