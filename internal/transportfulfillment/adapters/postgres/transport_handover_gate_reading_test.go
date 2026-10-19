@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"encoding/json"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
+	"go.idp.xyz/idp-parcel/migrations"
 )
 
 // 本文件对真实 PostgreSQL 证交出门禁读数（ADR-0213 决定四，TF 迁移 0041）：随`已交接`那一版往返，各条读路都带着；
@@ -245,5 +247,66 @@ func TestTheDatabaseGuardsTheHandoverGateReadingShape(t *testing.T) {
 	}
 	if _, _, err := repository.FindByKey(t.Context(), handoverKeyFixture(t, "tenant-1", "HRV-MISMATCH")); !errors.Is(err, domain.ErrInvalidHandoverGateReading) {
 		t.Fatalf("整格与停点对不上的一行装回了：%v", err)
+	}
+}
+
+// Covers: 迁移 0041 的存量回填——迁移之前登下的`已交接`（含迁移 0039 之后声明了交出节点的那一形）回填为未决「登记于门禁
+// 读数之前」，读回成形、不按节点核；拒收那一行两列仍是 NULL。回填语句取迁移文件原文，不在这里另抄一份。
+func TestTheMigrationBackfillsEarlierHandoversAsRecordedBeforeTheGateReading(t *testing.T) {
+	repository, _, pool := newTransportHandovers(t)
+	ctx := t.Context()
+
+	assets, err := migrations.TransportFulfillment()
+	if err != nil {
+		t.Fatalf("读迁移：%v", err)
+	}
+	var backfill string
+	for _, asset := range assets {
+		if strings.HasPrefix(asset.Name, "0041_") {
+			start := strings.Index(asset.SQL, "UPDATE transport_fulfillment.transport_handover")
+			if start < 0 {
+				t.Fatal("迁移 0041 里找不到回填那一句")
+			}
+			end := strings.Index(asset.SQL[start:], ";")
+			if end < 0 {
+				t.Fatal("迁移 0041 的回填那一句没有收尾")
+			}
+			backfill = asset.SQL[start : start+end]
+		}
+	}
+	if backfill == "" {
+		t.Fatal("没有迁移 0041")
+	}
+
+	for _, statement := range []string{
+		`ALTER TABLE transport_fulfillment.transport_handover DROP CONSTRAINT transport_handover_gate_reading_on_handed_over`,
+		`INSERT INTO transport_fulfillment.transport_handover
+		     (tenant_id, object_ref, scope_ref, handover_version, released_by, received_by, verdict,
+		      releasing_evidence, receiving_evidence, rule_ref, basis_ref, judged_at, content_digest, recorded_at, releasing_node)
+		 VALUES ('tenant-1', 'parcel-1', 'scope-1', 'HRV-LEGACY', 'node-1', 'carrier-1', 'HANDED_OVER',
+		         'seal-out', 'seal-in', 'rule/v1', NULL, now(), 'digest-1', now(), 'SYN-NODE-SZX-GATE'),
+		        ('tenant-1', 'parcel-1', 'scope-1', 'HRV-LEGACY-REFUSED', 'node-1', 'carrier-1', 'REFUSED',
+		         'seal-out', NULL, NULL, 'seal-broken', now(), 'digest-2', now(), NULL)`,
+		backfill,
+	} {
+		if _, err := pool.Exec(ctx, statement); err != nil {
+			t.Fatalf("执行 %q：%v", statement, err)
+		}
+	}
+
+	found, exists, err := repository.FindByKey(ctx, handoverKeyFixture(t, "tenant-1", "HRV-LEGACY"))
+	if err != nil || !exists {
+		t.Fatalf("回填后的已交接装不回：%v exists=%v", err, exists)
+	}
+	reading, read := found.Handover.GateReading()
+	if stop, _ := reading.Stop(); !read || reading.Answer() != domain.GateUndecided || stop != domain.HandoverRecordedBeforeGateReading {
+		t.Fatalf("回填读数 = %s %s", reading.Answer(), stop)
+	}
+	refused, exists, err := repository.FindByKey(ctx, handoverKeyFixture(t, "tenant-1", "HRV-LEGACY-REFUSED"))
+	if err != nil || !exists {
+		t.Fatalf("拒收那一行装不回：%v exists=%v", err, exists)
+	}
+	if _, read := refused.Handover.GateReading(); read {
+		t.Fatalf("拒收那一行被回填了读数")
 	}
 }
