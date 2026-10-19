@@ -412,7 +412,7 @@ func TestMovementFactFailuresKeepTheirSentinels(t *testing.T) {
 	})
 }
 
-// 更正版沿用原读数（ADR-0205 越权风险点 8）：投影照派生、带替代关系，信号不再交——同一次出发原版已经命中过。
+// Covers: AT-TF-161——更正版沿用原读数（ADR-0205 越权风险点 8）：投影照派生、带替代关系，信号不再交——同一次出发原版已经命中过。
 func TestACorrectedDepartureProjectsWithItsSupersessionButRaisesNoSecondSignal(t *testing.T) {
 	original := movementRecord(t, tfdomain.DepartureFact)
 	corrected, err := original.Fact.Correct(original.Fact.Location(), movementDepartedAt.Add(time.Minute), original.Fact.Source(),

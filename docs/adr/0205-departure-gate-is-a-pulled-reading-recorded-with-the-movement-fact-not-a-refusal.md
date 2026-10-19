@@ -109,3 +109,25 @@ Date: 2026-10-19
 - [ADR-0022](./0022-http-status-carries-answer-formed-not-business-verdict.md)：2xx 即出队
 - [ADR-0049](./0049-publish-channel-is-in-process-delivery-until-load-evidence.md)：接得住才登记
 - 票 `.scratch/demo-chain-gaps/issues/32-movement-facts-declare-segment-and-record-departure-gate-reading.md`、`05-movement-facts-are-unlinked-and-departure-gate-is-self-reported.md`
+
+## 补记：票 33 落地时的补充裁定（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」，待 TF、VE owner 复核）
+
+正文不改。决定五（信封与 VE 消费者同一变更上线，阻断读数派生异常信号）由票 [demo-chain-gaps/33](../../.scratch/demo-chain-gaps/issues/33-movement-fact-recorded-envelope-and-tracking-projection.md) 落地；落地时计划与正文都没裁、又必须定下的几格记在这里，越权风险点接正文编号续写。
+
+- **信封**（机制）：`transport-fulfillment.movement-fact.recorded` 是引用式信封，载荷恰是登记册的键三维（租户、事实、版本），种类、段、业务时间与门禁读数一样不带——它们只有登记册一处权威，读数尤其不能在信封上再抄一份。ID 经指纹铸、带版本；分区取「租户/移动事实」，同一事实的更正版与首版排一条队。信封与事实同一笔入队；同内容重投重交同一份，入队那一步按 ID 吞掉重复，先前没交成的由此补上；交出失败答未决、续办引用与登记册读不动那一格分开。出发、移动、到达都交，不只出发：追踪要的不只是门禁。
+- **类型词**（机制，代 TF owner 定）：VE 按种类分三个词——`movement-departure`、`movement-in-transit`、`movement-arrival`。读数不进类型词：被阻断的出发也是一次出发，阻断由信号表达，不靠映射目录归成另一个里程碑。不设跨种类的词，理由同 ADR-0197 决定二。
+- **展开口径**（机制）：VE 按键回读移动事实，对象取它声明的段里、事实发生那一刻在控的对象——与决定四同一口径，口径只在 `ActualFulfillmentSegment.ObjectsUnderControlAt` 定义一处；三种事实都按这一条，按消费那一刻段册的内容算。事实引用写作 `movement-fact/<对象>/<事实>`，对象维进引用（ADR-0066 决定二）；版本取事实版本，更正版以 `Corrects()` 回指的前版作替代关系。三个时间：发生与有效都取事实的业务发生时间，接收取落册时刻，不用信封时间。没声明段、段不在册、那一刻段里没有在控对象，都入账不派生；段册读不动是未决。
+- **阻断读数派生信号**（识别条件归产品策略，类型、规则版本、可信度与启不启用归租户取值）：出发读数里逐对象那一格为阻断的每一件，形成一次异常信号交分诊（`UC-VE-004`）；只看逐对象那一格，不看整格。信号的类型、识别规则版本、可信度依据三样全取租户登记的「出发门禁阻断信号规则」（新册，`PAR-VIS-04` 之下，VE 迁移 0027，一租户一条、不可覆盖，形同冲突信号规则），没登记就如实不形成——投影照派生、消费照入账，不替租户拟一种异常类型（ADR-0146 决定三：参考配置显式采用才生效）。命中时刻取判断那一刻，不取出发的业务时间。更正版沿用原读数（越权风险点 8），不再命中第二次。信号与投影同一笔事务：规则读不动或分诊停在未决，整封回滚重投，不把「这次没交进分诊」吞成入账。
+- **路由与未决**（机制）：派发进程路由表挂一行，只投 VE，不 FanOut——NR 的路由偏离另立票 demo-chain-gaps/35，接得住之前不挂（ADR-0049）。未决名单只登等得来的四格：事实读不回、段册读不动、信号搁置、派生编排未决；键不符、引用译不出、意图待发、封闭集合外都保持发布失败。
+- **参考映射与演示采用**（参考配置，证据 `S`）：参考映射只把出发映成 `DEPARTED`，移动与到达留未归类。演示租户的映射 `SYN-VE-MAP-V1` 就地加这一行；演示租户另采用一条出发门禁阻断信号规则（`DEPARTURE_GATE_BLOCKED` / `SYN-VE-DEPARTURE-GATE-V1` / `SOURCE_CONFIRMED`），分诊规则不登这一类，信号进人工复核。别的租户登什么是租户取值。
+
+越权风险点（续上文编号）：
+
+14. **段日后才登记，那一条事实不回补投影**（TF owner、VE owner）。事实可以先于段登记（决定四），VE 收到信封时段不在册就入账不派生；段日后登了，没有任何东西回头让这封信重投。另立票 [demo-chain-gaps/53](../../.scratch/demo-chain-gaps/issues/53-movement-facts-recorded-before-their-segment-never-reach-tracking.md)。
+15. **对象按消费那一刻的段册算**（VE owner）。出发读数问的是登记那一刻段里在控的那几件；VE 消费时段里的参与若已被更正或补登，投到的对象可能与读数问到的不同。信号仍按读数里阻断的那几件形成，不受此影响。
+16. **出发门禁阻断信号规则只开了受控 CLI**（VE owner、access-identity owner）。同一个登记用例的在线登记口（ADR-0085）与 `/visibility-catalogues` 的目录查阅面没有接，管理台看不到这一册。另立票 [demo-chain-gaps/52](../../.scratch/demo-chain-gaps/issues/52-departure-gate-signal-rule-has-no-online-registration-or-catalogue-read.md)。
+17. **只有阻断形成信号**（VE owner、TF owner）。读不动、未决的出发不形成信号；关务长时间读不动时（越权风险点 2），违规出发可能只落成读不动而不被发现。要不要为「读不动的出发」另立一类信号，归 VE owner。
+18. **三个类型词由本补记代 TF owner 定**（TF owner、VE owner）。词一经租户映射引用，改名要迁每个租户的映射。
+19. **移动与到达也进投影**（VE owner）。它们在参考映射里未归类，运营追踪查阅会多出两类未归类条目；owner 若只要出发进投影，改的是适配器在种类分支上入账不派生，类型词不动。
+20. **段里在控的若是袋或集运单元，VE 把它当一件包裹投**（VE owner、NO owner）。与越权风险点 5 同源：载运对象引用不分包裹与集运单元，投影按对象引用立追踪包裹，袋里的成员拿不到这一条出发。成员展开等票 demo-chain-gaps/42。
+21. **演示映射就地改 v1**（演示租户 owner）。已灌过的演示库版本号已占，要 `--reset` 才拿得到出发那一行，同票 demo-chain-gaps/11、13 的做法。

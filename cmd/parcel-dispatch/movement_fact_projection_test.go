@@ -127,7 +127,7 @@ func TestABlockedDepartureRaisesTheAdoptedSignalThroughTheProductionRoute(t *tes
 	}
 }
 
-// Covers: 移动事实这一路的失败分格——读不回事实、段册读不动、信号搁置、派生编排未决落 dispatch.consumer_undecided，其余保持
+// Covers: AT-TF-160 派发半边——移动事实这一路的失败分格：读不回事实、段册读不动、信号搁置、派生编排未决落 dispatch.consumer_undecided，其余保持
 // dispatch.publish_failed。名单取 veMovementFactUndecidedSentinels 本身：测试里重列一份会让漏登记的哨兵在测试里绿、在生产里塌成
 // publish_failed。
 func TestMovementFactFailuresLandInTheRightPartition(t *testing.T) {
