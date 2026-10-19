@@ -1,7 +1,7 @@
 # 49 NO adapters/http 测试与注释照实写：收寄替身交回不同节点、死引用改指、去变更说明
 
 Category: chore
-Status: in-progress——2026-10-18 作者子代理完工，待非作者评审；分支 `claude-oc49`，见文末「完成记录」。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 6 评审遗留；用户授权代决）；分支 `claude-oc49`
+Status: in-progress——2026-10-18 完工；非作者评审第 1 轮 0 阻断，非阻断已修，待进 main。此前 in-progress——2026-10-18 作者子代理完工，待非作者评审；分支 `claude-oc49`，见文末「完成记录」。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 6 评审遗留；用户授权代决）；分支 `claude-oc49`
 Blocked by: 无
 父票：[26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)（票 26 评审遗留的后续）
 出处：票 [23](./23-node-operations-isolated-command-intake-retires.md) Comments 评审 Spec 非阻断 1、Standards 非阻断 1–2。
@@ -114,3 +114,10 @@ const (
 **证据层级**：全部 `S`（`SYN-NODE-SZX-01`、`SYN-NODE-SHA-HUB` 都是仓内已有的合成标识）。
 
 **评审**：待非作者评审。
+
+## Comments
+
+- **评审 ← 会话 idp-parcel-9b 起的隔离子代理（非作者）· 钉 `68184011`（基线 `b58b10ef`）· 2026-10-18 · 第 1 轮**
+  - **Spec**：阻断无，非阻断无。C8-9 常量拆分、请求头改出示 `presentedScopeReference`、两条断言与票面一致；变异体（Intake 改拿头值铸节点）在改后用例上转红、在原用例上为绿。C8-10 死引用改指包路径加 `decodeClosedDocument`；C8-11 两处变更说明已删。
+  - **Standards**：阻断无。非阻断 1：`workFactNode` 头注「生产上铸造方核过设备的登记范围」讲别包行为却没指符号。
+  - **处置**：非阻断已在 `e0f84cbc` 改指 `WorkFactMinter.MintWorkFact` 与 `WorkFactAuthenticator.AuthenticateNodeReception`。
