@@ -1,7 +1,7 @@
 # 06 外部标识号码进册前没有「存得下」的门：超长号码撞索引上限答 500，NUL 撞库面答 500；按号核对遇到不可能在册的号也答错误
 
 Category: bug
-Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 立并代决、认领，分支 `claude-psxm06`
+Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 立并代决、认领，分支 `claude-psxm06`
 Blocked by: 无
 父票：[05](./05-a-unique-hit-in-someone-elses-number-space-is-not-enough.md)
 出处：no-reception-source/03 完成记录「发现」（PS 关联册按号码建的 btree 索引有长度上限，号码进册前无长度门）；本会话复核。
@@ -31,9 +31,82 @@ Blocked by: 无
 
 ## 完成判据
 
-- [ ] 领域：NUL、513 字节答构造错误；512 字节与带回车换行的号照收（逐字）。
-- [ ] 提交 Intake：越界的客户包裹件号答 400 点名该格，委托不落；面单渠道结果照该路坏结果答法，不 500。各一条用例，修前先红（真库用例至少一条经生产装配）。
-- [ ] 读口：越界号答零候选、无信号、不报错；经生产收寄装配真库用例：设备送来越界号，答待识别（已核对），不落未核对、不响门铃。
-- [ ] ADR-0184 文末复核记录；`git diff` 该文件只有新增行。
-- [ ] Go 门禁：`gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0；带 DSN 跑 `internal/parcelshipment/...`、`internal/nodeoperations/...`、`cmd/parcel-api`、`internal/architecture` 全绿；机制清点重生成。
+- [x] 领域：NUL、513 字节答构造错误；512 字节与带回车换行的号照收（逐字）。
+- [x] 提交 Intake：越界的客户包裹件号答 400 点名该格，委托不落；面单渠道结果照该路坏结果答法，不 500。各一条用例，修前先红（真库用例至少一条经生产装配）。
+- [x] 读口：越界号答零候选、无信号、不报错；经生产收寄装配真库用例：设备送来越界号，答待识别（已核对），不落未核对、不响门铃。
+- [x] ADR-0184 文末复核记录；`git diff` 该文件只有新增行。
+- [x] Go 门禁：`gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0；带 DSN 跑 `internal/parcelshipment/...`、`internal/nodeoperations/...`、`cmd/parcel-api`、`internal/architecture` 全绿；机制清点重生成。
 - [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）。
+
+## 完成记录（2026-10-19，会话 idp-parcel-9b 的作者子代理，分支 `claude-psxm06`）
+
+起点 main `a7dfad8f`。证据层级 **S**：夹具全为合成值，隔离合成库上跑。
+
+**提交**
+
+| 提交 | 内容 |
+|---|---|
+| `f7ed10af` | 领域构造门、提交口点名该格、面单渠道结果拒收、NO 核对答零候选、门铃 Subject 用例与注释改前提，各层用例 |
+| `9c590d4b` | ADR-0184 复核记录（2026-10-19 那一节追加一条，只有新增行） |
+| `6df94d97` | 机制清点在 `9c590d4b` 的干净检出上重生成 |
+| 本笔 | 本完成记录 |
+
+**落点**
+
+- 领域 `NewExternalIdentifierNumber`：全空白照旧拒；带 NUL、UTF-8 字节数超过 512 的拒，拒因 `ErrExternalIdentifierNumberNotStorable`（新哨兵，错误文本只说为什么，不带号码本身）。界是包内常量 `externalIdentifierNumberMaxBytes`，头注写明是机制界、不是租户取值。其余字符一个不拒：回车换行、Tab、GS 分隔符照收。
+- 门只此一处。写入方与核对一侧都问它，见下。
+
+**写入方清单与各自答法**（grep `NewExternalIdentifierNumber` 的全部调用方、`insertExternalIdentifierRelations` 的全部调用方；`insertExternalIdentifierChanges` 写的 `successor_number` 一并看了）
+
+| 写入方 | 号从哪来 | 答法 |
+|---|---|---|
+| 提交口 `IsolatedSubmissionIntake.customerParcelNumbers`（`NewExternalIdentifierNumber` 调用方） | 草案逐件 `customerParcelReference` 去两端空白后的值 | 400 `MALFORMED_REQUEST`，问题体 `error.field` 点名 `parcels[i].customerParcelReference`；在编排之前拒，来源保全与委托都不落 |
+| 委托仓储 `Save` → `insertExternalIdentifierRelations`（`ExternalIdentifierRelationsFormedByAcceptance`） | 委托快照上的配对，提交时已过门 | 不另设答法：进不了快照的号到不了这里 |
+| 面单交易仓储 `Save` → `insertExternalIdentifierRelations`（`ExternalIdentifierRelationsFormedByChannelResults`） | 渠道结果受理件的 `ChannelParcelIdentifier`，`channelRelationOf` 不经构造器直接转成号码 | 门落在 `LabelTransaction.RecordChannelResult`：受理件的号问 `NewExternalIdentifierNumber`，过不了就交 `ErrInvalidLabelTransaction`（同时包着 `ErrExternalIdentifierNumberNotStorable`）。编排 `LabelTransactionHandler.refuse` 把它译成 `LabelTransactionNotAccepted`、不报错，不 `Save`，交回读出的那一份，交易停在原状态 |
+| `insertExternalIdentifierChanges` 的 `successor_number` | 替代交易的新关联，同样出自 `RecordChannelResult` | 同上一行，记录结果那一步已拒 |
+| 委托仓储重建快照（`shipment_request.go` 里的 `NewExternalIdentifierNumber` 调用方） | 库里已落的快照 | 本票不碰那份文件（并行子代理的地盘）。风险见「未做」 |
+
+面单渠道结果「该路现有的坏结果答法」查清了：`RecordChannelResult` 对结构立不起来的结果（受理不带标识、未受理不带原因等）一律交 `ErrInvalidLabelTransaction`，编排 `refuse` 把它译成`未受理`。本票照用，没有另造一格。门不放进 `matchResultsToCoverage`：重建也走那里，已落库的结果要读得回（领域用例里钉了一格）。这条写链今天没有生产触发面：`cmd/parcel-api` 只有事务壳 `transactionalLabelTransactions.RecordChannelResult`，没有端点或连接器调它。所以它的真库用例经真编排、真仓储、真关联册，不经生产装配。
+
+「点名该格」的形状：PS 的 `problemResponse` 头注明说刻意不带自由文本（`UC-PS-001` 不许错误信息泄露别的客户），所以没加 `detail` 散文，加的是结构化的 `field`。它是调用方自己报文里那一格的路径，只随能点名到格的 400 在场，`omitempty`，别的问题答复逐字节不变。实现是 `submit_shipment_request.go` 里的 `malformedFieldError`：同时 `Unwrap` 出 `ErrMalformedRequest` 与领域拒因，端点 `errors.As` 取路径。
+
+**读口答法**：`FindParcelsByExternalIdentifier` 收的是成品类型 `domain.ExternalIdentifierNumber`，过不了门的号构造不出来，交不进读口，所以读口本身没改。零候选落在构造那一步：NO 的 `ParcelIdentityView.ResolveParcelIdentity` 构造 PS 号码遇 `ErrExternalIdentifierNumberNotStorable` 时，答零候选、无歧义信号、不报错，不去问 PS。其余构造错误照旧是 `ErrUntranslatableAnswer`。端口 `ParcelExternalIdentifierView` 头注补了一段，写明这条约定。
+
+**修前的实际现象**（红日志原话）：
+
+- 提交口：513 字节的「答 201 {"outcome":"SUBMITTED",…}」，号码进了快照，要到接受时才撞册。带 NUL 的「答 500 {"error":{"code":"NO_ANSWER_FORMED"}}」，且来源保全已落一行（来源保全与建单各一笔事务）。
+- 面单渠道结果：513 字节的「outcome = "APPLIED"」，进了册。带 NUL 的「save label transaction: ERROR: unsupported Unicode escape sequence (SQLSTATE 22P05)」。4000 字节不可压缩的「insert external identifier relation: ERROR: index row size 4024 exceeds btree version 4 maximum 2704 for index "external_identifier_relation_by_number" (SQLSTATE 54000)」。
+- 读侧：票面「现象」第三条与修前实测不符。修前越界的号在读口不报错：查询只比较、不构造索引行，答零候选、已核对，真库用例修前就是绿的。那个陷阱要等构造门落地、NO 未改的中间态才现形：「identityCheck":"UNCHECKED"」「untranslatable answer: mark: parcel shipment: external identifier number cannot enter the register: it is 513 bytes, over the 512-byte limit」。所以门与 NO 的零候选必须同笔进。带 NUL 的号到不了这一步：设备收寄口 `receptionCommand` 早已对 NUL 答坏报文，NO 收寄库的来源文档也存不下 NUL。
+
+**完成判据格 → 用例**
+
+| 格 | 用例 |
+|---|---|
+| 领域 | `internal/parcelshipment/domain/external_identifier_test.go::TestAnExternalIdentifierNumberMustBeStorable`（含 171 个汉字＝513 字节也拒、170 个汉字加两位＝512 字节照收，界按字节） |
+| 提交 Intake | 真库、生产装配：`cmd/parcel-api/external_identifier_number_gate_test.go::TestTheWiredSubmissionRefusesACustomerParcelReferenceTheRegisterCannotStore`（隔离提交 Intake 与提交编排都由装配函数造，登记册放一条匹配的合成权威区间；513 字节与带 NUL 两格答 400、`field` 点名、来源保全与委托零行；512 字节照收、快照逐字）。Intake 单元：`internal/parcelshipment/adapters/http/isolated_write_intake_test.go::TestIsolatedSubmissionIntakeRefusesACustomerParcelReferenceTheRegisterCannotStore` |
+| 面单渠道结果 | 真库：`internal/parcelshipment/adapters/postgres/label_transaction_channel_number_gate_test.go::TestAChannelResultWhoseNumberCannotEnterTheRegisterIsNotAccepted`（513 字节、带 NUL、4000 字节不可压缩三格答`未受理`、不报错、交易停在已提交渠道、册零行；512 字节不可压缩的落册并经读口查回）。领域：`TestAChannelResultWhoseAcceptedNumberCannotEnterTheRegisterIsRefused`（含重建不过门那一格） |
+| 读口 | 真库、生产装配：`cmd/parcel-api/external_identifier_number_gate_test.go::TestTheWiredReceptionAnswersAMarkTheRegisterCannotHoldAsCheckedPending`（513 与 4000 字节两格答 200 `PENDING_IDENTIFICATION`、`identityCheck` `CHECKED`、无候选、控制照建，重核门铃零封）。适配器：`internal/nodeoperations/adapters/parcelshipment/identity_test.go::TestAMarkTheRegisterCannotHoldHasNoCandidatesAndIsNotAnError`（PS 替身带候选与信号，也答零候选、无信号、PS 没被问） |
+| ADR | `git diff --numstat` 该文件 8 增 0 删 |
+
+真库用例里的号用不可压缩的串：Postgres 写索引行前会先压缩，一长串同一个字符压得下去，撞不到索引行上限。
+
+**先红后绿**：`/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/psxm06-red.log` 有三段。第一段是修前，只加了空哨兵供用例编译：领域、Intake、适配器各自断言级红，面单真库三格与提交口真库红，收寄真库绿。第二段把提交口真库用例拆成逐格子用例后补跑，两格的现象见上。第三段是中间态：构造门已落、NO 未改，读侧两条用例红。绿：`/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/psxm06-green.log`。红之后改过一处断言：提交口真库用例原先断言 `error.detail`，查到 `problemResponse` 不带自由文本的理由后改断言 `error.field`，状态码与落库断言没动。
+
+**门**（在 `f7ed10af` 的 Go 内容上跑，之后的提交不碰 Go 文件）：`gofmt -l .` 无输出；`go build ./...`、`go vet ./...` 退 0；带 DSN `-p 1 -count=1` 跑 `./internal/parcelshipment/... ./internal/nodeoperations/... ./cmd/parcel-api/... ./internal/architecture/...`，30 个包全 ok。同用这只 NO 适配器的 `./cmd/parcel-dispatch/...`、`./cmd/parcel-frontline-import/...` 也跑了，ok。`cmd/parcel-label-transaction` 不存在，面单渠道结果写号那条路的真库用例在 `internal/parcelshipment/adapters/postgres`，已含在上面。全量 `./...` 没跑，留给推送方。
+
+**越出地盘的改动**
+
+- `internal/parcelshipment/domain/label_transaction.go`：`RecordChannelResult` 加门。它就是面单渠道结果这条写册路的入口，算在「各条入口」里，单列备查。
+- `internal/parcelshipment/adapters/http/submit_shipment_request.go`：`malformedFieldError` 与 `problemDetail.Field`，提交端点 400 那一支取路径。
+- `internal/parcelshipment/ports/external_identifier.go`：端口头注补一段。
+- `internal/parcelshipment/adapters/postgres/external_identifier_formed_handoff.go` 与其测试：两段注释原写「号码进册前只拦全空白，没有长度门」，门落地后成了假话，改了。用例 `TestANumberTheSubjectCannotCarryStillRingsByItsDigest` 原用 640 字节的号，现在进不了册，在全门里红了；改用册收得下的最长号（512 字节）与带 Tab 的号，Subject 断言放宽成「收得下的原样、收不下的摘要、都不越上限」，带 Tab 的仍须是摘要。`externalIdentifierSubject` 的长度分支在今天的两条界下走不到，照留：两条界各自独立，这里不假设哪条更紧。
+- `internal/nodeoperations/adapters/parcelshipment/identity.go`：派活时已点名。
+- `docs/product/MECHANISM-INVENTORY.md`：重生成。
+- 没碰：`internal/parcelshipment/adapters/postgres/shipment_request.go`、NO 重核编排、演示库。
+
+**未做**
+
+- 「走 Go 那条路」不勾：本分支没推 origin、没进 main（派活时明令不推），进 main 归推送方。
+- 门落地前已进委托快照、超过 512 字节的客户包裹件号：委托仓储重建快照时经 `NewExternalIdentifierNumber`，这样的委托会读不回来。修法是让快照重建走不设界的路，落在 `shipment_request.go`，不在本票地盘，记进了 ADR-0184 复核记录「留给 PS owner」。真实租户未上线。演示种子不灌客户包裹件号；演示库里经管理台录入的号有没有超界，没查（不动演示库）。
+- 非法 UTF-8：Postgres text 同样存不下，但裁定没点它。今天各入口都经 JSON 解码，非法字节已被换成 U+FFFD，到不了门前，所以没设门。
+- 读口 `FindParcelsByExternalIdentifier` 没改，理由见「读口答法」。
