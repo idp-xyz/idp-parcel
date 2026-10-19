@@ -60,23 +60,111 @@ func (repository *AlternateJourneys) FindByKey(
 		return ports.AlternateJourneyRecord{}, false, fmt.Errorf("find alternate journey: %w", err)
 	}
 
-	kind, err := dispositionBasisKindFrom(basisKind)
+	record, err := alternateJourneyRecordFrom(key, journeyID, basisKind, membersJSON, startedAt, digest, recordedAt)
 	if err != nil {
 		return ports.AlternateJourneyRecord{}, false, fmt.Errorf("find alternate journey: %w", err)
+	}
+	return record, true, nil
+}
+
+// FindByMember 按成员读这个对象出现在其中的全部替代 / 退运旅程（实现 ports.AlternateJourneyMemberView，ADR-0218）。没有
+// 就是空切片；哪一趟算数由领域判，这里不挑、不排序。读回同 FindByKey 一道经公开构造门复验。
+func (repository *AlternateJourneys) FindByMember(
+	ctx context.Context,
+	tenant domain.TenantID,
+	object domain.CarriedObjectReference,
+) ([]ports.AlternateJourneyRecord, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("find alternate journeys by member: %w", err)
+	}
+	rows, err := querier.Query(ctx,
+		`SELECT original_journey, purpose, basis, journey_id, basis_kind, members, started_at, content_digest, recorded_at
+		   FROM transport_fulfillment.alternate_journey
+		  WHERE tenant_id = $1
+		    AND members @> jsonb_build_array($2::text)`,
+		tenant.String(),
+		object.String(),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("find alternate journeys by member: %w", err)
+	}
+	defer rows.Close()
+
+	var records []ports.AlternateJourneyRecord
+	for rows.Next() {
+		var original, purpose, basis, journeyID, basisKind, digest string
+		var membersJSON []byte
+		var startedAt, recordedAt time.Time
+		if err := rows.Scan(&original, &purpose, &basis, &journeyID, &basisKind, &membersJSON, &startedAt, &digest, &recordedAt); err != nil {
+			return nil, fmt.Errorf("find alternate journeys by member: %w", err)
+		}
+		key, err := alternateJourneyKeyFrom(tenant, original, purpose, basis)
+		if err != nil {
+			return nil, fmt.Errorf("find alternate journeys by member: %w", err)
+		}
+		record, err := alternateJourneyRecordFrom(key, journeyID, basisKind, membersJSON, startedAt, digest, recordedAt)
+		if err != nil {
+			return nil, fmt.Errorf("find alternate journeys by member: %w", err)
+		}
+		records = append(records, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("find alternate journeys by member: %w", err)
+	}
+	return records, nil
+}
+
+var _ ports.AlternateJourneyMemberView = (*AlternateJourneys)(nil)
+
+// alternateJourneyKeyFrom 把库面的键列译回幂等键；目的不在封闭二值里是库面违约。
+func alternateJourneyKeyFrom(tenant domain.TenantID, original, purpose, basis string) (ports.AlternateJourneyKey, error) {
+	originalJourney, err := domain.NewJourneyReference(original)
+	if err != nil {
+		return ports.AlternateJourneyKey{}, err
+	}
+	dispositionBasis, err := domain.NewDispositionBasisReference(basis)
+	if err != nil {
+		return ports.AlternateJourneyKey{}, err
+	}
+	var journeyPurpose domain.JourneyPurpose
+	switch purpose {
+	case domain.AlternateJourneyPurpose.String():
+		journeyPurpose = domain.AlternateJourneyPurpose
+	case domain.ReturnJourneyPurpose.String():
+		journeyPurpose = domain.ReturnJourneyPurpose
+	default:
+		return ports.AlternateJourneyKey{}, fmt.Errorf("unknown journey purpose %q", purpose)
+	}
+	return ports.AlternateJourneyKey{TenantID: tenant, Original: originalJourney, Purpose: journeyPurpose, Basis: dispositionBasis}, nil
+}
+
+// alternateJourneyRecordFrom 把一行的内容列连同它的键经公开构造门重建成记录：身份独立、成员非空不重、目的与依据种类封闭。
+func alternateJourneyRecordFrom(
+	key ports.AlternateJourneyKey,
+	journeyID, basisKind string,
+	membersJSON []byte,
+	startedAt time.Time,
+	digest string,
+	recordedAt time.Time,
+) (ports.AlternateJourneyRecord, error) {
+	kind, err := dispositionBasisKindFrom(basisKind)
+	if err != nil {
+		return ports.AlternateJourneyRecord{}, err
 	}
 	journeyRef, err := domain.NewJourneyReference(journeyID)
 	if err != nil {
-		return ports.AlternateJourneyRecord{}, false, fmt.Errorf("find alternate journey: %w", err)
+		return ports.AlternateJourneyRecord{}, err
 	}
 	var memberIDs []string
 	if err := json.Unmarshal(membersJSON, &memberIDs); err != nil {
-		return ports.AlternateJourneyRecord{}, false, fmt.Errorf("find alternate journey: %w", err)
+		return ports.AlternateJourneyRecord{}, err
 	}
 	members := make([]domain.CarriedObjectReference, 0, len(memberIDs))
 	for _, raw := range memberIDs {
 		member, err := domain.NewCarriedObjectReference(raw)
 		if err != nil {
-			return ports.AlternateJourneyRecord{}, false, fmt.Errorf("find alternate journey: %w", err)
+			return ports.AlternateJourneyRecord{}, err
 		}
 		members = append(members, member)
 	}
@@ -91,14 +179,14 @@ func (repository *AlternateJourneys) FindByKey(
 		StartedAt:       startedAt,
 	})
 	if err != nil {
-		return ports.AlternateJourneyRecord{}, false, fmt.Errorf("find alternate journey: %w", err)
+		return ports.AlternateJourneyRecord{}, err
 	}
 	return ports.AlternateJourneyRecord{
 		Key:           key,
 		ContentDigest: digest,
 		Journey:       journey,
 		RecordedAt:    recordedAt.UTC(),
-	}, true, nil
+	}, nil
 }
 
 // Save 写下一次旅程启动。同键已有记录时答`已启动`，不覆盖先到者。

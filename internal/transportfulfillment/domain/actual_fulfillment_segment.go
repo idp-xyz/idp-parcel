@@ -567,7 +567,7 @@ func (segment ActualFulfillmentSegment) currentParticipationEnteredBy(
 func (segment ActualFulfillmentSegment) EndParticipationWithDelivery(
 	delivery EffectiveDelivery,
 ) (ActualFulfillmentSegment, error) {
-	basis, err := NewParticipationBasisReference("EFFECTIVE-DELIVERY/" + delivery.Version().String())
+	basis, err := EffectiveDeliveryEndBasis(delivery.Version())
 	if err != nil {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}
