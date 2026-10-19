@@ -76,6 +76,10 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 `OPERATOR_NOT_GRANTED`；`submit-one-shipment.sh` 落下一笔`已提交`委托之后，按委托标识寻址的口查得到它，受控关闭与
 重开要等那一笔成了`已接受`才查得到。查得到之后各口停在各自的授权缺口上（ADR-0151 决定七、ADR-0183 决定六）。
 
+配置员另持运营决定「运输收费发生项登记」（ADR-0207；`data/access/02` 的授予、`03` 的对照与 `data/governance/25` 的
+权威区间各一行）。种子不登任何发生项：发生项是对已发生履约事实的一次采购判断，要等干线段的参与结束之后经
+`POST /transport-fulfillment-charge-occurrence-registrations` 登记，登法见下面「数据故事」第 8 步的补记。
+
 单要一枚令牌：`scripts/demo-seeds/operator-channel/operator-token.sh <邮箱>` 打印访问令牌，末尾加 `claims` 打印两枚
 令牌的载荷。它与管理台走同一个公共客户端、同一条 authorization_code + PKCE 流，管理台不必在跑。
 
@@ -179,6 +183,11 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
    `docs/design/synthetic-demo-journey-script.md`「第 3 步 · 一单会走的网」的 2026-10-19 补记里，这里不复述。
    每份周期安排还声明了重量与件数两维的硬上限，按日期登记一班时随班次各建一池；种子只登了干线 2026-10-21 那一班，
    它的两池在 `capacity-pool` 查阅册上（票 demo-chain-gaps/17）。
+   干线（`SZX-GATE→SIN-HUB`，外包给 `SYN-PARTY-CARRIER-TRUNK-01`、采用 `SYN-SUPPLIER-TRUNK-CN-SG-01` 的 `v1`）的参与在
+   SIN-HUB 以下一次交接结束之后，配置员登一项 `ACTUAL_FULFILLMENT` 运输收费发生项（ADR-0207）：事实给那个干线段与
+   包裹，服务方与协议版本由登记方给出、经 party-commercial 核对，旅程按演示约定写 `SYN-JRN-<包裹号>`，数量 1、单位
+   `SEGMENT`，并断言协议 v1 的发生条件已满足——协议正文还不声明发生条件，这一格由人判断并留痕。登成之后结算按上表
+   BUY 触发册那一行发起 BUY 评价（ADR-0208）。数量、单位与断言是演示租户的取值，证据只记 `S`。
 
 ## 已知边界（如实记录，不是缺陷）
 

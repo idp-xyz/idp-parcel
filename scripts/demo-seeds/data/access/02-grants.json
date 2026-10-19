@@ -222,6 +222,15 @@
       },
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "basis": "SYN-GRANT-BASIS-DEX-WF-06"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-TRANSPORT-CHARGE-OCCURRENCE-REGISTRATION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "TRANSPORT_CHARGE_OCCURRENCE_REGISTRATION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-CHARGE-OCCURRENCE-01"
     }
   ]
 }
