@@ -137,6 +137,39 @@ func (repository *BookingRequests) Save(
 	return ports.BookingSaved, nil
 }
 
+var _ ports.BookingCancellationStore = (*BookingRequests)(nil)
+
+// Replace 只落取消时刻（ports.BookingCancellationStore）：UPDATE 不含申请量、班次与委托，WHERE 要求尚未取消——并发第二笔
+// 取消与行不存在同样答 false。recorded_at 不动：它记的是这次订舱申请落册的时刻，取消的业务时刻在 cancelled_at；改写它会让
+// 订舱口重放回显的落册时刻变成最后一次换存的时刻（票 demo-chain-gaps/46 对池行时刻的同一问）。
+func (repository *BookingRequests) Replace(
+	ctx context.Context,
+	record ports.BookingRecord,
+) (bool, error) {
+	executor, err := repository.db.RequireExecutor(ctx)
+	if err != nil {
+		return false, fmt.Errorf("replace booking request: %w", err)
+	}
+	cancelledAt, cancelled := record.Booking.Cancelled()
+	if !cancelled {
+		return false, fmt.Errorf("replace booking request: replace requires a cancellation")
+	}
+	tag, err := executor.Exec(ctx,
+		`UPDATE transport_fulfillment.booking_request
+		    SET cancelled_at = $3
+		  WHERE tenant_id = $1
+		    AND booking_id = $2
+		    AND cancelled_at IS NULL`,
+		record.Key.TenantID.String(),
+		record.Key.Booking.String(),
+		cancelledAt.UTC(),
+	)
+	if err != nil {
+		return false, fmt.Errorf("replace booking request: %w", err)
+	}
+	return tag.RowsAffected() > 0, nil
+}
+
 // BookingAnswers 实现 ports.BookingAnswerStore 与 ports.BookingAnswerLedger。一次订舱至多一份候补、至多一份定局（迁移
 // 0029 的两条部分唯一索引）；INSERT 撞上任何一条唯一约束即`已有应答`，已接受的行不会被拒绝覆盖。两份答复之间的先后
 // 索引钉不住，靠 FindAnswersForUpdate 那把锁把同一订舱的判定与写入串起来。
