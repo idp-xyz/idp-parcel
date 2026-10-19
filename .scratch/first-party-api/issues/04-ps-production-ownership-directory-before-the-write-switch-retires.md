@@ -7,9 +7,9 @@ Blocked by: 无
 
 ## 现状（票 00 落地后）
 
-- 提交口挂首方客户渠道 Intake，隔离写开关不再放行任何命令面。写开关只剩 ADR-0091 决定二的「墙二」：给提交编排的生产归属适配器注入合成治理坐标（`IsolatedGovernanceScopeDirectory`）与合成自身权威串。
+- 提交口挂首方客户渠道 Intake，隔离写开关不放行任何命令面。写开关只管 ADR-0091 决定二的「墙二」：给提交编排的生产归属适配器注入合成治理坐标（`IsolatedGovernanceScopeDirectory`）与合成自身权威串，且只答写开关那个租户的拟受理范围（ADR-0091 决定六；票 00 评审修补）。
 - 生产形态下 `buildProductionOwnership` 的 `Directory` 留空，`governanceScope` 先于读册早退，任何租户经首方口提交都停在 `OWNERSHIP_UNRESOLVED`。演示要走到`已提交`仍得设写开关。
-- 首方 Intake 给编排的拟受理范围是（租户、客户账户）快照（`customerAccountAdmissionScope`，票 00 代决）；目录还没有一处把它换成治理坐标。
+- 首方 Intake 给编排的拟受理范围是（租户、客户账户）快照，形状 `PS-CUSTOMER-ACCOUNT-ADMISSION-SCOPE/1` 的构造与认回在 PS 领域（`NewCustomerAccountAdmissionScope` / `AdmissionScope.CustomerAccount`，票 00 代决）。生产目录从快照认（租户、客户账户）就调后者，不另解析引用串；目录还没有一处把它换成治理坐标。
 
 ## 做什么
 
