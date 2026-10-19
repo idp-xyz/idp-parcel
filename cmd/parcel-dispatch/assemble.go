@@ -1674,31 +1674,9 @@ func preAcceptanceTrials(db *bentopg.DB, clock systemClock) (*sapricing.PreAccep
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance submission declaration view: %w", err)
 	}
-	seriesVersions, err := pppostgres.NewReferenceSeriesVersions(db)
+	planGiven, err := planGivenEstimateEvaluations(db, clock)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance reference series register: %w", err)
-	}
-	seriesReviews, err := pppostgres.NewReferenceSeriesReviews(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance reference series in-force resolver: %w", err)
-	}
-	catalogueVersions, err := pppostgres.NewReferenceCatalogueVersions(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance reference catalogue register: %w", err)
-	}
-	catalogueReviews, err := pppostgres.NewReferenceCatalogueReviews(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance reference catalogue in-force resolver: %w", err)
-	}
-	planGiven, err := ppapplication.NewFormPlanGivenEstimateEvaluationsHandler(ppapplication.FormPlanGivenEstimateEvaluationsDeps{
-		Clock:            clock,
-		SeriesInForce:    seriesReviews,
-		SeriesVersions:   seriesVersions,
-		CatalogueInForce: catalogueReviews,
-		Catalogues:       catalogueVersions,
-	})
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: plan-given estimate evaluations: %w", err)
+		return nil, err
 	}
 	estimates, err := ppapplication.NewFormPreAcceptanceEstimatesHandler(ppapplication.FormPreAcceptanceEstimatesDeps{
 		PriceCards:   cards,
@@ -1714,6 +1692,39 @@ func preAcceptanceTrials(db *bentopg.DB, clock systemClock) (*sapricing.PreAccep
 		return nil, fmt.Errorf("parcel-dispatch: pre-acceptance trials: %w", err)
 	}
 	return trials, nil
+}
+
+// planGivenEstimateEvaluations 装 PP「对给定价卡形成试算」的入口：补齐读数那两对与正式评价（formEvaluationFromRequest）同源
+// 同形。受理前估价与选路比价共用这一只的装法（ADR-0179 决定四、ADR-0189 决定一）：两路与随后的正式评价按同一版本清单作答，
+// 靠的就是补齐读数只有一种装法；入口里没有评价库写口与交付口，试算只算不存、不交付（ADR-0152 决定二）。
+func planGivenEstimateEvaluations(db *bentopg.DB, clock systemClock) (*ppapplication.FormPlanGivenEstimateEvaluationsHandler, error) {
+	seriesVersions, err := pppostgres.NewReferenceSeriesVersions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: plan-given estimate reference series register: %w", err)
+	}
+	seriesReviews, err := pppostgres.NewReferenceSeriesReviews(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: plan-given estimate reference series in-force resolver: %w", err)
+	}
+	catalogueVersions, err := pppostgres.NewReferenceCatalogueVersions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: plan-given estimate reference catalogue register: %w", err)
+	}
+	catalogueReviews, err := pppostgres.NewReferenceCatalogueReviews(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: plan-given estimate reference catalogue in-force resolver: %w", err)
+	}
+	planGiven, err := ppapplication.NewFormPlanGivenEstimateEvaluationsHandler(ppapplication.FormPlanGivenEstimateEvaluationsDeps{
+		Clock:            clock,
+		SeriesInForce:    seriesReviews,
+		SeriesVersions:   seriesVersions,
+		CatalogueInForce: catalogueReviews,
+		Catalogues:       catalogueVersions,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: plan-given estimate evaluations: %w", err)
+	}
+	return planGiven, nil
 }
 
 // acceptanceConsumer 接 UC-NR-001 那条线：PS 接受决定信封 → 消费门 → 初始路由编排。
@@ -1832,10 +1843,11 @@ func (broken brokenCustomsSource) AssessCustomsApplicability(
 	return nrports.CustomsApplicabilityAssessment{}, broken.err
 }
 
-// routeCosts 装配候选成本取数侧（票 routing-first-cut/10、/17、/18）：目录依据、内部政策解析与方案装载全接库；包裹事实取
-// parcel-shipment 的客户声明；逐段区域取租户登的段计价区域（ADR-0189 决定二），没登的段待判断，候选缺成本依据——不给
-// 任何租户编一个区让候选假出价。绑了分区目录的卡与要按序列换算的卡照旧待判断：评价还不经 parcel-pricing 的读数补全
-// （票 routing-first-cut/20）。计价时点取路由判断的时钟，与证据视图同一个。
+// routeCosts 装配候选成本取数侧（票 routing-first-cut/10、/17、/18、/20）：目录依据、内部政策解析与方案装载全接库；包裹事实取
+// parcel-shipment 的客户声明；逐段区域取租户登的段计价区域（ADR-0189 决定二）；评价走 PP「对给定价卡形成试算」的入口，与受理前
+// 估价同一种装法（planGivenEstimateEvaluations），绑了分区目录的卡由随请求携带的邮编路线经在用目录解区，要按序列换算的卡按在用
+// 序列取值（ADR-0189 决定一）。卡要的那一格没有（没登区、没有路线、没有在用版本），那一段待判断，候选缺成本依据——不给任何租户
+// 编一个区让候选假出价。计价时点取路由判断的时钟，与证据视图同一个。
 func routeCosts(db *bentopg.DB, clock systemClock) nrports.RouteCandidateCostSource {
 	catalog, err := nrpostgres.NewNetworkCatalog(db)
 	if err != nil {
@@ -1857,13 +1869,18 @@ func routeCosts(db *bentopg.DB, clock systemClock) nrports.RouteCandidateCostSou
 	if err != nil {
 		return brokenCostSource{err: fmt.Errorf("parcel-dispatch: leg pricing zones: %w", err)}
 	}
+	estimates, err := planGivenEstimateEvaluations(db, clock)
+	if err != nil {
+		return brokenCostSource{err: err}
+	}
 	return nrpricing.NewRouteCandidateCostAdapter(nrpricing.RouteCandidateCostDeps{
-		Bases:    catalog,
-		Internal: nrpartycommercial.NewInternalPlanResolver(publications),
-		Facts:    facts,
-		Zones:    zones,
-		Plans:    priceCards,
-		Clock:    clock,
+		Bases:     catalog,
+		Internal:  nrpartycommercial.NewInternalPlanResolver(publications),
+		Facts:     facts,
+		Zones:     zones,
+		Estimates: estimates,
+		Plans:     priceCards,
+		Clock:     clock,
 	})
 }
 
@@ -1886,7 +1903,7 @@ type brokenCostSource struct {
 }
 
 func (broken brokenCostSource) LoadCandidateCosts(
-	context.Context, nrdomain.InitialRouteJudgmentKey, nrports.InitialRouteEvidence,
+	context.Context, nrdomain.InitialRouteJudgmentKey, nrports.InitialRouteEvidence, nrports.RequestCarriedContent,
 ) (nrports.RouteCandidateCosts, error) {
 	return nrports.RouteCandidateCosts{}, broken.err
 }

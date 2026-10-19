@@ -24,7 +24,7 @@ var acceptedAt = time.Date(2026, 8, 14, 9, 0, 0, 0, time.UTC)
 type costPassthrough struct{}
 
 func (costPassthrough) LoadCandidateCosts(
-	_ context.Context, _ nrdomain.InitialRouteJudgmentKey, evidence nrports.InitialRouteEvidence,
+	_ context.Context, _ nrdomain.InitialRouteJudgmentKey, evidence nrports.InitialRouteEvidence, _ nrports.RequestCarriedContent,
 ) (nrports.RouteCandidateCosts, error) {
 	return nrports.RouteCandidateCosts{Facts: evidence.CandidateCosts}, nil
 }

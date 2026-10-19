@@ -2,12 +2,15 @@ package parcelpricing_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
+	ppapplication "go.idp.xyz/idp-parcel/internal/parcelpricing/application"
 	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
+	ppports "go.idp.xyz/idp-parcel/internal/parcelpricing/ports"
 
 	adapter "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/parcelpricing"
 )
@@ -84,7 +87,8 @@ func TestLegAmountsAreSummedBeforeTheSingleRounding(t *testing.T) {
 }
 
 // Covers: 比较币种异于卡币种时，取数侧拿的是比较币种金额——换算由提供方按同一读数完成，
-// 比较金额不过卡的取整点。
+// 比较金额不过卡的取整点。兼 `AT-NR-072`（票 routing-first-cut/20）：卡绑的汇率序列由 parcel-pricing 的补齐读数按在用
+// 版本解出，取数侧不自带读数。
 func TestAComparisonCurrencyReachesThroughTheLegs(t *testing.T) {
 	plan := syntheticBuyPlanWithRate(t, "plan-cny", "v1", "10")
 	source := newAdapter(t,
@@ -93,7 +97,7 @@ func TestAComparisonCurrencyReachesThroughTheLegs(t *testing.T) {
 		},
 		map[string]ppdomain.PricingPlanVersion{"plan-cny/v1": plan},
 	)
-	source.series = []ppdomain.ReferenceSeriesValue{cnyExchangeReading(t)}
+	source.series.inForce["fx-daily"] = fxDailyRegistration(t, "7.2")
 
 	costs, err := source.LoadCandidateCosts(context.Background(), judgmentKey(t), evidenceWithComparison(t, "CNY",
 		pathOf(t, "line-cny", 1)))
@@ -323,28 +327,6 @@ func TestEachLegIsPricedInItsOwnZone(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0189 决定一「绑了分区目录的卡由邮编路线经目录读区，不读段计价区域」——这一段登了 Z1、卡的档位也在 Z1，
-// 卡却绑了目录：评价只认目录读数，今天成本取数侧交不出读数（票 routing-first-cut/20），候选待判断，不拿登记的区顶上。
-func TestARegisteredLegZoneDoesNotStandInForABoundCardsCatalogue(t *testing.T) {
-	source := newAdapter(t,
-		map[string][]nrports.LineSegmentCostBasis{
-			"line-bound": {{SegmentIndex: 0, Kind: nrports.SupplierBuyPlanBasis, Reference: "plan-bound/v1"}},
-		},
-		map[string]ppdomain.PricingPlanVersion{"plan-bound/v1": zoneCatalogueBoundBuyPlan(t, "plan-bound", "v1", "5")},
-	)
-	source.zoneByOrdinal = map[int]string{1: "Z1"}
-
-	costs, err := source.LoadCandidateCosts(context.Background(), judgmentKey(t), evidenceWithComparison(t, "USD",
-		pathOf(t, "line-bound", 1)))
-	if err != nil {
-		t.Fatalf("取候选成本：%v", err)
-	}
-	fact := factOf(t, costs.Facts, "line-bound")
-	if fact.State().String() != "PENDING" {
-		t.Fatalf("fact = %s %d minor, want PENDING（绑了目录的卡不读登记的区）", fact.State(), fact.AmountMinor())
-	}
-}
-
 // Covers: 包裹事实进每一段的输入——卡的档位只到 10kg：声明 1kg 时出价；声明 12kg 时落在档外，评价答待判断，候选随之
 // 待判断。两种重量答得不同，说明评价读的是这份声明。
 func TestTheParcelFactsReachEveryLegsEvaluation(t *testing.T) {
@@ -376,7 +358,133 @@ func TestTheParcelFactsReachEveryLegsEvaluation(t *testing.T) {
 	}
 }
 
-// testSource 是可调替身的容器：plan 表按「id/version」键取；包裹事实、逐段区域、序列读数与计价时点可逐格替换。
+// Covers: `AT-NR-072` 的反面——卡绑的汇率序列没有在用版本：补齐读数留说明、不编汇率，评价待判断，候选随之待判断。
+func TestASeriesBoundCardWithoutAnInForceSeriesStaysPending(t *testing.T) {
+	source := newAdapter(t,
+		map[string][]nrports.LineSegmentCostBasis{
+			"line-cny": {{SegmentIndex: 0, Kind: nrports.SupplierBuyPlanBasis, Reference: "plan-cny/v1"}},
+		},
+		map[string]ppdomain.PricingPlanVersion{"plan-cny/v1": syntheticBuyPlanWithRate(t, "plan-cny", "v1", "10")},
+	)
+
+	costs, err := source.LoadCandidateCosts(context.Background(), judgmentKey(t), evidenceWithComparison(t, "CNY",
+		pathOf(t, "line-cny", 1)))
+	if err != nil {
+		t.Fatalf("取候选成本：%v", err)
+	}
+	if fact := factOf(t, costs.Facts, "line-cny"); fact.State().String() != "PENDING" {
+		t.Fatalf("fact = %s %d minor, want PENDING（序列没有在用版本，不编汇率）", fact.State(), fact.AmountMinor())
+	}
+}
+
+// Covers: `AT-NR-070`（票 routing-first-cut/20，ADR-0189 决定一第一条）——绑了分区目录的卡，区由随请求携带的邮编路线经
+// 在用目录读出：目的邮编 018000 落目录 018 → Z1，卡在 Z1 有档，候选出价。这一段另登了 Z9（卡上没有 Z9 的档）：出价说明
+// 评价没读登的区。目录读数按路线的目的邮编取，路线原样交到目录。
+func TestABoundCardsZoneIsReadFromTheCatalogueThroughThePostalRoute(t *testing.T) {
+	source := newAdapter(t,
+		map[string][]nrports.LineSegmentCostBasis{
+			"line-bound": {{SegmentIndex: 0, Kind: nrports.SupplierBuyPlanBasis, Reference: "plan-bound/v1"}},
+		},
+		map[string]ppdomain.PricingPlanVersion{"plan-bound/v1": zoneCatalogueBoundBuyPlan(t, "plan-bound", "v1", "5")},
+	)
+	source.catalogues.inForce["zones-plan-bound"] = zoneCatalogueRegistration(t, "zones-plan-bound")
+	source.zoneByOrdinal = map[int]string{1: "Z9"}
+	source.carried = carriedRoute("200000", "018000")
+
+	costs, err := source.LoadCandidateCosts(context.Background(), judgmentKey(t), evidenceWithComparison(t, "USD",
+		pathOf(t, "line-bound", 1)))
+	if err != nil {
+		t.Fatalf("取候选成本：%v", err)
+	}
+	fact := factOf(t, costs.Facts, "line-bound")
+	if fact.State().String() != "PRICED" || fact.AmountMinor() != 500 {
+		t.Fatalf("fact = %s %d minor, want PRICED 500（目录解出 Z1，不读登的 Z9）", fact.State(), fact.AmountMinor())
+	}
+	if source.catalogues.lastRoute.Origin() != "200000" || source.catalogues.lastRoute.Destination() != "018000" {
+		t.Fatalf("交到目录的路线 = %+v，want 200000 → 018000", source.catalogues.lastRoute)
+	}
+	if len(costs.Citations) != 1 || costs.Citations[0].PlanReference() != "plan-bound/v1" {
+		t.Fatalf("出处 = %+v，want 这一段一条、指那张绑了目录的卡", costs.Citations)
+	}
+}
+
+// Covers: `AT-NR-071`（票 routing-first-cut/20，ADR-0189 决定一）——绑了分区目录的卡没有邮编路线可用：请求没带投影，或带了
+// 却没报收件邮编。这一段登了 Z1、卡的档位也在 Z1，评价照样不读登的区，候选待判断；不从节点推邮编，不拿卡上唯一的区当默认。
+func TestABoundCardWithoutAPostalRouteStaysPending(t *testing.T) {
+	for name, carried := range map[string]nrports.RequestCarriedContent{
+		"请求没带投影": {},
+		"收件邮编没报": {Geo: nrdomain.NewGeoResolutionProjection(
+			nrdomain.NewGeoResolutionSide("CN", true, "200000", true),
+			nrdomain.NewGeoResolutionSide("SG", true, "", false))},
+	} {
+		t.Run(name, func(t *testing.T) {
+			source := newAdapter(t,
+				map[string][]nrports.LineSegmentCostBasis{
+					"line-bound": {{SegmentIndex: 0, Kind: nrports.SupplierBuyPlanBasis, Reference: "plan-bound/v1"}},
+				},
+				map[string]ppdomain.PricingPlanVersion{"plan-bound/v1": zoneCatalogueBoundBuyPlan(t, "plan-bound", "v1", "5")},
+			)
+			source.catalogues.inForce["zones-plan-bound"] = zoneCatalogueRegistration(t, "zones-plan-bound")
+			source.zoneByOrdinal = map[int]string{1: "Z1"}
+			source.carried = carried
+
+			costs, err := source.LoadCandidateCosts(context.Background(), judgmentKey(t), evidenceWithComparison(t, "USD",
+				pathOf(t, "line-bound", 1)))
+			if err != nil {
+				t.Fatalf("取候选成本：%v", err)
+			}
+			if fact := factOf(t, costs.Facts, "line-bound"); fact.State().String() != "PENDING" {
+				t.Fatalf("fact = %s %d minor, want PENDING（绑了目录的卡没有路线，不读登的区）", fact.State(), fact.AmountMinor())
+			}
+			if source.catalogues.calls != 0 {
+				t.Fatalf("没有路线还去问目录 %d 次", source.catalogues.calls)
+			}
+		})
+	}
+}
+
+// Covers: `AT-NR-071` 的另一半（判据「没绑目录、也没登段计价区域的卡仍待判断」）——请求带了邮编路线也一样：路线只给绑了目录的卡解区，没绑的卡
+// 不拿它顶替调用方给的分区（ADR-0189 决定一第三条）。
+func TestAnUnboundCardDoesNotReadItsZoneFromThePostalRoute(t *testing.T) {
+	source := newAdapter(t,
+		map[string][]nrports.LineSegmentCostBasis{
+			"line-x": {{SegmentIndex: 0, Kind: nrports.SupplierBuyPlanBasis, Reference: "plan-x/v1"}},
+		},
+		map[string]ppdomain.PricingPlanVersion{"plan-x/v1": syntheticBuyPlan(t, "plan-x", "v1", "5")},
+	)
+	source.zonesConfigured = false
+	source.carried = carriedRoute("200000", "018000")
+
+	costs, err := source.LoadCandidateCosts(context.Background(), judgmentKey(t), evidenceWithComparison(t, "USD",
+		pathOf(t, "line-x", 1)))
+	if err != nil {
+		t.Fatalf("取候选成本：%v", err)
+	}
+	if fact := factOf(t, costs.Facts, "line-x"); fact.State().String() != "PENDING" {
+		t.Fatalf("fact = %s %d minor, want PENDING", fact.State(), fact.AmountMinor())
+	}
+}
+
+// Covers: `AT-NR-071` 末句——补齐读数读不回（目录在用解析的依赖故障）不是这一段待判断：整次取数报错，编排据此落依赖不可用的未决，
+// 不把一次故障记成缺成本依据。
+func TestAnUnreadableCatalogueFailsTheWholeCostLoad(t *testing.T) {
+	source := newAdapter(t,
+		map[string][]nrports.LineSegmentCostBasis{
+			"line-bound": {{SegmentIndex: 0, Kind: nrports.SupplierBuyPlanBasis, Reference: "plan-bound/v1"}},
+		},
+		map[string]ppdomain.PricingPlanVersion{"plan-bound/v1": zoneCatalogueBoundBuyPlan(t, "plan-bound", "v1", "5")},
+	)
+	source.catalogues.err = errors.New("catalogue register is down")
+	source.carried = carriedRoute("200000", "018000")
+
+	if _, err := source.LoadCandidateCosts(context.Background(), judgmentKey(t), evidenceWithComparison(t, "USD",
+		pathOf(t, "line-bound", 1))); err == nil {
+		t.Fatal("目录读不回该整次报错，而不是交回一条待判断")
+	}
+}
+
+// testSource 是可调替身的容器：plan 表按「id/version」键取；包裹事实、逐段区域、随请求携带的内容、在用序列与目录、计价
+// 时点可逐格替换。评价走真的 parcel-pricing「对给定价卡形成试算」入口，补齐读数的四口换成下面两本册。
 type testSource struct {
 	*adapter.RouteCandidateCostAdapter
 	bases           map[string][]nrports.LineSegmentCostBasis
@@ -388,7 +496,9 @@ type testSource struct {
 	zoneByOrdinal   map[int]string
 	unzonedOrdinals map[int]bool
 	zoneQueries     []adapter.LegZoneQuery
-	series          []ppdomain.ReferenceSeriesValue
+	carried         nrports.RequestCarriedContent
+	series          *seriesBook
+	catalogues      *catalogueBook
 	now             time.Time
 }
 
@@ -401,18 +511,37 @@ func newAdapter(t *testing.T, bases map[string][]nrports.LineSegmentCostBasis, p
 		facts:           adapter.ParcelFacts{Weight: weightOf(t, "1")},
 		hasFacts:        true,
 		zonesConfigured: true,
+		series:          &seriesBook{inForce: map[string]ppdomain.ReferenceSeriesRegistration{}},
+		catalogues:      &catalogueBook{inForce: map[string]ppdomain.ReferenceCatalogueRegistration{}},
 		now:             planPeriod.Add(6 * 30 * 24 * time.Hour),
 	}
+	estimates, err := ppapplication.NewFormPlanGivenEstimateEvaluationsHandler(ppapplication.FormPlanGivenEstimateEvaluationsDeps{
+		Clock:            source,
+		SeriesInForce:    source.series,
+		SeriesVersions:   source.series,
+		CatalogueInForce: source.catalogues,
+		Catalogues:       source.catalogues,
+	})
+	if err != nil {
+		t.Fatalf("试算入口：%v", err)
+	}
 	source.RouteCandidateCostAdapter = adapter.NewRouteCandidateCostAdapter(adapter.RouteCandidateCostDeps{
-		Bases:    source,
-		Internal: source,
-		Facts:    source,
-		Zones:    source,
-		Series:   source,
-		Plans:    source,
-		Clock:    source,
+		Bases:     source,
+		Internal:  source,
+		Facts:     source,
+		Zones:     source,
+		Estimates: estimates,
+		Plans:     source,
+		Clock:     source,
 	})
 	return source
+}
+
+// LoadCandidateCosts 带上本替身记着的携带内容去取：多数用例不关心邮编路线，零值即请求什么都没带。
+func (source *testSource) LoadCandidateCosts(
+	ctx context.Context, key nrdomain.InitialRouteJudgmentKey, evidence nrports.InitialRouteEvidence,
+) (nrports.RouteCandidateCosts, error) {
+	return source.RouteCandidateCostAdapter.LoadCandidateCosts(ctx, key, evidence, source.carried)
 }
 
 func (source *testSource) ParcelFactsFor(
@@ -433,10 +562,83 @@ func (source *testSource) ZoneFor(_ context.Context, query adapter.LegZoneQuery)
 	return adapter.LegZone{Zone: "Z1"}, true, nil
 }
 
-func (source *testSource) ReferenceSeriesFor(
-	context.Context, nrdomain.InitialRouteJudgmentKey, time.Time,
-) ([]ppdomain.ReferenceSeriesValue, error) {
-	return source.series, nil
+// seriesBook 是在用序列那一对补齐口的替身：按序列标识登一版，在用解析答那一版，取值按计价基准时点从那一版解。没登即没有
+// 登过任何版本。
+type seriesBook struct {
+	inForce map[string]ppdomain.ReferenceSeriesRegistration
+}
+
+func (book *seriesBook) ResolveInForce(
+	_ context.Context, _ ppdomain.TenantID, _ ppdomain.ReferenceSeriesKind, seriesID string, _ time.Time,
+) (ppdomain.VersionReference, ppports.InForceOutcome, error) {
+	registration, found := book.inForce[seriesID]
+	if !found {
+		return ppdomain.VersionReference{}, ppports.SeriesHasNoRegisteredVersion, nil
+	}
+	return registration.Reference(), ppports.SeriesVersionInForce, nil
+}
+
+func (book *seriesBook) Register(context.Context, ppdomain.ReferenceSeriesRegistration) (ppports.ReferenceSeriesRegistrationOutcome, error) {
+	return ppports.ReferenceSeriesRegistrationOutcomeInvalid, errors.New("not used")
+}
+
+func (book *seriesBook) ResolveAt(
+	_ context.Context, _ ppdomain.TenantID, reference ppdomain.VersionReference, asOf time.Time,
+) (ppdomain.ResolvedSeriesReading, bool, error) {
+	for _, registration := range book.inForce {
+		if registration.Reference().SameIdentity(reference) {
+			reading, found := registration.ResolveAt(asOf)
+			return reading, found, nil
+		}
+	}
+	return ppdomain.ResolvedSeriesReading{}, false, nil
+}
+
+// catalogueBook 是在用目录那一对补齐口的替身，形状同 seriesBook；另记下问了几次与最近一次交来的路线。err 非空即在用解析
+// 读不回。
+type catalogueBook struct {
+	inForce   map[string]ppdomain.ReferenceCatalogueRegistration
+	err       error
+	calls     int
+	lastRoute ppdomain.PostalRoute
+}
+
+func (book *catalogueBook) ResolveInForce(
+	_ context.Context, _ ppdomain.TenantID, _ ppdomain.CatalogueKind, catalogueID string, _ time.Time,
+) (ppdomain.VersionReference, ppports.CatalogueInForceOutcome, error) {
+	book.calls++
+	if book.err != nil {
+		return ppdomain.VersionReference{}, ppports.CatalogueInForceOutcomeInvalid, book.err
+	}
+	registration, found := book.inForce[catalogueID]
+	if !found {
+		return ppdomain.VersionReference{}, ppports.CatalogueHasNoRegisteredVersion, nil
+	}
+	return registration.Reference(), ppports.CatalogueVersionInForce, nil
+}
+
+func (book *catalogueBook) Register(context.Context, ppdomain.ReferenceCatalogueRegistration) (ppports.ReferenceCatalogueRegistrationOutcome, error) {
+	return ppports.ReferenceCatalogueRegistrationOutcomeInvalid, errors.New("not used")
+}
+
+func (book *catalogueBook) ResolveAt(
+	_ context.Context, _ ppdomain.TenantID, reference ppdomain.VersionReference, asOf time.Time, route ppdomain.PostalRoute,
+) (ppdomain.ResolvedCatalogueValue, bool, error) {
+	book.lastRoute = route
+	for _, registration := range book.inForce {
+		if registration.Reference().SameIdentity(reference) {
+			reading, applicable := registration.ResolveAt(asOf, route)
+			return reading, applicable, nil
+		}
+	}
+	return ppdomain.ResolvedCatalogueValue{}, false, nil
+}
+
+// carriedRoute 是随请求携带的一份投影：寄件 CN、收件 SG，两端邮编按给的报。
+func carriedRoute(origin, destination string) nrports.RequestCarriedContent {
+	return nrports.RequestCarriedContent{Geo: nrdomain.NewGeoResolutionProjection(
+		nrdomain.NewGeoResolutionSide("CN", true, origin, true),
+		nrdomain.NewGeoResolutionSide("SG", true, destination, true))}
 }
 
 func (source *testSource) Now() time.Time { return source.now }

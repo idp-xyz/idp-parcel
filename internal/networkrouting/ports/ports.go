@@ -248,11 +248,15 @@ type RouteCandidateCosts struct {
 // 合成每候逐一格三态事实；出处（评价标识、方案引用、内部政策引用与全精度比较金额）随事实
 // 交回，由编排并入计划留痕。整条取数路径没接时以 ErrRouteCostSourceNotConfigured 如实作答；
 // 缺某一段的输入只让那一段待判断，不整判断停下。
+//
+// carried 是随这次判断请求携带的内容，与证据视图收到的是同一份：绑了分区目录的卡要包裹的邮编
+// 路线才解得出区域（ADR-0189 决定一），路线只在请求里，本上下文不另开读地址的口（ADR-0075）。
 type RouteCandidateCostSource interface {
 	LoadCandidateCosts(
 		ctx context.Context,
 		key domain.InitialRouteJudgmentKey,
 		evidence InitialRouteEvidence,
+		carried RequestCarriedContent,
 	) (RouteCandidateCosts, error)
 }
 

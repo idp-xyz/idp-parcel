@@ -39,7 +39,7 @@ func TestRegisteredLegZonesHandTheTenantsZoneThroughVerbatim(t *testing.T) {
 	}
 	query := adapter.LegZoneQuery{Key: judgmentKey(t), Candidate: candidate, Ordinal: 2}
 	zone, configured, err := source.ZoneFor(t.Context(), query)
-	if err != nil || !configured || zone.Zone != "Z-LANE-7" || zone.HasPostal {
+	if err != nil || !configured || zone.Zone != "Z-LANE-7" {
 		t.Fatalf("段 2 = %+v configured=%v err=%v", zone, configured, err)
 	}
 	if register.asked[0] != "tenant-1|SYN-LINE-1" {

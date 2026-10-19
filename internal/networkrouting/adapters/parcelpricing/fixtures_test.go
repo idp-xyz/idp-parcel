@@ -2,6 +2,7 @@ package parcelpricing_test
 
 import (
 	"testing"
+	"time"
 
 	ppdomain "go.idp.xyz/idp-parcel/internal/parcelpricing/domain"
 )
@@ -18,9 +19,9 @@ func value[T any](t *testing.T, constructor func(string) (T, error), raw string)
 	return built
 }
 
-// cnyExchangeReading 是一份汇率读数：fx-daily@7.2，口径按 fx-caliber 政策报价。方案侧要有同名汇率绑定才解得出来
-// （syntheticBuyPlanWithRate 带）。
-func cnyExchangeReading(t *testing.T) ppdomain.ReferenceSeriesValue {
+// fxDailyRegistration 登一版 fx-daily 汇率序列：口径按 fx-caliber 政策报价，一期自卡的适用期起不封口、取值 rate。方案侧
+// 要有同名汇率绑定才用得上它（syntheticBuyPlanWithRate 带）。
+func fxDailyRegistration(t *testing.T, rate string) ppdomain.ReferenceSeriesRegistration {
 	t.Helper()
 	fxSeries, err := ppdomain.NewVersionReference(
 		ppdomain.ArtifactReferenceSeries, "fx-daily", "v1", "sha256:syn-fx-1")
@@ -32,12 +33,56 @@ func cnyExchangeReading(t *testing.T) ppdomain.ReferenceSeriesValue {
 	if err != nil {
 		t.Fatalf("caliber: %v", err)
 	}
-	quoted, err := ppdomain.NewQuotedReferenceSeriesValue(
-		ppdomain.ReferenceSeriesExchangeRate, fxSeries, decimalOf(t, "7.2"), caliber)
+	period, err := ppdomain.NewSeriesPeriodValue(planPeriod, time.Time{}, decimalOf(t, rate), "SYN-EVIDENCE/fx-daily")
 	if err != nil {
-		t.Fatalf("quoted series: %v", err)
+		t.Fatalf("fx period: %v", err)
 	}
-	return quoted
+	registration, err := ppdomain.NewReferenceSeriesRegistration(ppdomain.ReferenceSeriesRegistrationSpec{
+		Tenant:           value(t, ppdomain.NewTenantID, "tenant-1"),
+		Kind:             ppdomain.ReferenceSeriesExchangeRate,
+		Reference:        fxSeries,
+		SourceIdentifier: "SYN-BANK/fx-daily",
+		Registrant:       "SYN-OPS",
+		QuoteBasis:       caliber,
+		Periods:          []ppdomain.SeriesPeriodValue{period},
+	})
+	if err != nil {
+		t.Fatalf("fx registration: %v", err)
+	}
+	return registration
+}
+
+// zoneCatalogueRegistration 登一版分区目录：目的邮编前缀 018 落 Z1，与始发无关，自卡的适用期起不封口。目录标识要与卡上
+// 的绑定同名（zoneCatalogueBoundBuyPlan 绑 zones-<卡标识>）。
+func zoneCatalogueRegistration(t *testing.T, catalogueID string) ppdomain.ReferenceCatalogueRegistration {
+	t.Helper()
+	reference, err := ppdomain.NewVersionReferenceIdentity(ppdomain.ArtifactReferenceCatalogue, catalogueID, "v1")
+	if err != nil {
+		t.Fatalf("catalogue reference: %v", err)
+	}
+	period, err := ppdomain.NewEffectivePeriod(planPeriod, time.Time{})
+	if err != nil {
+		t.Fatalf("catalogue period: %v", err)
+	}
+	entry, err := ppdomain.NewCatalogueEntry("018", "Z1")
+	if err != nil {
+		t.Fatalf("catalogue entry: %v", err)
+	}
+	registration, err := ppdomain.NewReferenceCatalogueRegistration(ppdomain.ReferenceCatalogueRegistrationSpec{
+		Tenant:           value(t, ppdomain.NewTenantID, "tenant-1"),
+		Kind:             ppdomain.CatalogueKindZone,
+		Reference:        reference,
+		SourceIdentifier: "SYN-CARRIER/zone-chart",
+		Registrant:       "SYN-OPS",
+		Origin:           ppdomain.NewIndependentCatalogueOrigin(),
+		PrefixLength:     3,
+		Entries:          []ppdomain.CatalogueEntry{entry},
+		Period:           period,
+	})
+	if err != nil {
+		t.Fatalf("catalogue registration: %v", err)
+	}
+	return registration
 }
 
 func decimalOf(t *testing.T, raw string) ppdomain.Decimal {

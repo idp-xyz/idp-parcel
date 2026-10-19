@@ -350,7 +350,7 @@ func (handler *CreateInitialRouteHandler) routeOneParcel(
 	}
 
 	for attempt := 0; attempt < 2; attempt++ {
-		record, undecided, err := handler.judgeParcel(ctx, key, evidence)
+		record, undecided, err := handler.judgeParcel(ctx, key, evidence, carried)
 		if err != nil {
 			return ParcelRouteResult{}, err
 		}
@@ -381,6 +381,7 @@ func (handler *CreateInitialRouteHandler) judgeParcel(
 	ctx context.Context,
 	key domain.InitialRouteJudgmentKey,
 	evidence ports.InitialRouteEvidence,
+	carried ports.RequestCarriedContent,
 ) (ports.InitialRouteRecord, *ParcelRouteResult, error) {
 	none := ports.InitialRouteRecord{}
 	if !evidence.ViewRevision.Valid() || !evidence.Strategy.Valid() {
@@ -422,7 +423,7 @@ func (handler *CreateInitialRouteHandler) judgeParcel(
 		undecided := handler.undecidedParcel(key, RouteCostSourceNotConfigured)
 		return none, &undecided, nil
 	}
-	costs, err := handler.deps.Costs.LoadCandidateCosts(ctx, key, evidence)
+	costs, err := handler.deps.Costs.LoadCandidateCosts(ctx, key, evidence, carried)
 	if err != nil {
 		if errors.Is(err, ports.ErrRouteCostSourceNotConfigured) {
 			undecided := handler.undecidedParcel(key, RouteCostSourceNotConfigured)

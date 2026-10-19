@@ -314,6 +314,7 @@ func (passthroughCosts) LoadCandidateCosts(
 	_ context.Context,
 	_ domain.InitialRouteJudgmentKey,
 	evidence ports.InitialRouteEvidence,
+	_ ports.RequestCarriedContent,
 ) (ports.RouteCandidateCosts, error) {
 	return ports.RouteCandidateCosts{Facts: evidence.CandidateCosts}, nil
 }
@@ -322,7 +323,7 @@ func (passthroughCosts) LoadCandidateCosts(
 type unconfiguredCosts struct{}
 
 func (unconfiguredCosts) LoadCandidateCosts(
-	context.Context, domain.InitialRouteJudgmentKey, ports.InitialRouteEvidence,
+	context.Context, domain.InitialRouteJudgmentKey, ports.InitialRouteEvidence, ports.RequestCarriedContent,
 ) (ports.RouteCandidateCosts, error) {
 	return ports.RouteCandidateCosts{}, ports.ErrRouteCostSourceNotConfigured
 }
@@ -355,6 +356,56 @@ func TestAnUnconfiguredCostSourceLeavesTheParcelUndecided(t *testing.T) {
 	}
 	if fixture.store.saved != 0 || len(fixture.downstream.intents) != 0 {
 		t.Fatalf("saved = %d intents = %d：未决不落库、不交意图", fixture.store.saved, len(fixture.downstream.intents))
+	}
+}
+
+// carriedRecordingCosts 照 passthroughCosts 交回证据里的事实，另记下每次交进来的携带内容。
+type carriedRecordingCosts struct {
+	carried []ports.RequestCarriedContent
+}
+
+func (costs *carriedRecordingCosts) LoadCandidateCosts(
+	_ context.Context,
+	_ domain.InitialRouteJudgmentKey,
+	evidence ports.InitialRouteEvidence,
+	carried ports.RequestCarriedContent,
+) (ports.RouteCandidateCosts, error) {
+	costs.carried = append(costs.carried, carried)
+	return ports.RouteCandidateCosts{Facts: evidence.CandidateCosts}, nil
+}
+
+// Covers: `AT-NR-070` 的编排半边（票 routing-first-cut/20，ADR-0189 决定一）——随请求携带的地理投影原样交到候选成本取数侧，
+// 与证据视图收到的是同一份：绑了分区目录的卡要靠它里面的邮编路线解区，编排不另读地址，也不在两口之间换一份。
+func TestTheCarriedProjectionReachesTheCostSource(t *testing.T) {
+	fixture := newRouteFixture(t)
+	costs := &carriedRecordingCosts{}
+	fixture.handler = application.NewCreateInitialRouteHandler(application.CreateInitialRouteDeps{
+		Applicability: fixture.applicability,
+		Evidence:      fixture.evidence,
+		Costs:         costs,
+		Store:         fixture.store,
+		Log:           fixture.log,
+		Downstream:    fixture.downstream,
+		Identities:    &routeIdentityDouble{},
+		Clock:         fixedClock{at: routeJudgedAt},
+	})
+	fixture.evidence.byParcel["parcel-1"] = routableEvidence(t)
+	command := routeCommand(t, "parcel-1")
+	command.Carried = ports.RequestCarriedContent{Geo: domain.NewGeoResolutionProjection(
+		domain.NewGeoResolutionSide("CN", true, "200000", true),
+		domain.NewGeoResolutionSide("SG", true, "018000", true))}
+
+	if _, err := fixture.handler.Handle(context.Background(), command); err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if len(costs.carried) == 0 {
+		t.Fatal("候选成本取数侧没被问到")
+	}
+	for _, carried := range costs.carried {
+		if carried.Geo.ContentDigest() != command.Carried.Geo.ContentDigest() ||
+			carried.Geo.ContentDigest() != fixture.evidence.carried.Geo.ContentDigest() {
+			t.Fatalf("取数侧收到的投影 %s，想要与请求、证据视图同一份 %s", carried.Geo.ContentDigest(), command.Carried.Geo.ContentDigest())
+		}
 	}
 }
 

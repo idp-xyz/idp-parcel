@@ -39,6 +39,12 @@ var demoNetworkSeeds = filepath.Join("..", "..", "scripts", "demo-seeds", "data"
 // 是另一册，不在目录里，跳过。
 func registerDemoNetworkSeeds(t *testing.T, db *bentopg.DB) {
 	t.Helper()
+	registerDemoNetworkSeedsKeeping(t, db, func(string) bool { return true })
+}
+
+// registerDemoNetworkSeedsKeeping 同 registerDemoNetworkSeeds，只登 keep 答真的那几份：要证「某一册没登」的用例用它略过那一份。
+func registerDemoNetworkSeedsKeeping(t *testing.T, db *bentopg.DB, keep func(name string) bool) {
+	t.Helper()
 	catalog, err := nrpostgres.NewNetworkCatalog(db)
 	if err != nil {
 		t.Fatalf("构造网络目录：%v", err)
@@ -58,6 +64,9 @@ func registerDemoNetworkSeeds(t *testing.T, db *bentopg.DB) {
 	sort.Strings(names)
 	adopted := 0
 	for _, name := range names {
+		if !keep(name) {
+			continue
+		}
 		raw, err := os.ReadFile(filepath.Join(demoNetworkSeeds, name))
 		if err != nil {
 			t.Fatalf("读 %s：%v", name, err)
@@ -202,7 +211,7 @@ func TestTheAdoptedDemoNetworkGetsPastRouteEvidenceThroughProductionWiring(t *te
 		t.Fatalf("合格候选 %d 个，想要 1：%+v", qualified, candidates)
 	}
 
-	costs, err := routeCosts(db, systemClock{}).LoadCandidateCosts(t.Context(), wiringRouteKey(t, demoTenant), evidence)
+	costs, err := routeCosts(db, systemClock{}).LoadCandidateCosts(t.Context(), wiringRouteKey(t, demoTenant), evidence, wiringCarried())
 	if err != nil {
 		t.Fatalf("候选成本取数侧：err = %v，want 交回成本事实", err)
 	}
@@ -256,7 +265,7 @@ func TestADeclaredParcelOnZonedLegsIsPricedThroughProductionWiring(t *testing.T)
 		t.Fatalf("事实引用 = %+v，want 一条标明来源是基线上的客户声明", got.Facts)
 	}
 
-	costs, err := routeCosts(fixture.db, systemClock{}).LoadCandidateCosts(ctx, key, evidence)
+	costs, err := routeCosts(fixture.db, systemClock{}).LoadCandidateCosts(ctx, key, evidence, wiringCarried())
 	if err != nil {
 		t.Fatalf("候选成本取数侧：err = %v，want 交回成本事实", err)
 	}
@@ -347,7 +356,7 @@ func TestTheCostSideResolvesTheLineOfACandidateMintedByCatalogFolding(t *testing
 	costs := nrpricing.NewRouteCandidateCostAdapter(nrpricing.RouteCandidateCostDeps{
 		Bases: bases,
 	})
-	_, err := costs.LoadCandidateCosts(t.Context(), wiringRouteKey(t, demoTenant), evidence)
+	_, err := costs.LoadCandidateCosts(t.Context(), wiringRouteKey(t, demoTenant), evidence, wiringCarried())
 	if !errors.Is(err, errStopAtLineBases) {
 		t.Fatalf("候选成本取数侧没走到读逐段依据：err = %v", err)
 	}
