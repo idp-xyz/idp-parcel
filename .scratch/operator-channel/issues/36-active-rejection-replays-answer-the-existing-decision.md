@@ -1,7 +1,7 @@
 # 36 主动拒绝撞上既有决定仍答「已形成」201、不回显；主动拒绝与处置「拒绝」去向的重放白耗决定标识
 
 Category: bug
-Status: ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 15 之三、之四补核发现；用户授权代决）
+Status: in-progress——2026-10-18 作者子代理完工，待评审。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 15 之三、之四补核发现；用户授权代决）
 Blocked by: operator-channel/33 进 main（真库重放要读回已拒绝委托）；operator-channel/34 进 main（同改 apps/admin-web/src/pages/shipment-request/api.ts 与 cmd/parcel-api/assemble_review_test.go）
 父票：[15](./15-operation-decision-faces-take-operator-intake.md)
 出处：票 26 遗留研判中补核票 15 之三、之四（簇 C6）发现；补记随 operator-channel/39。
@@ -74,3 +74,36 @@ HTTP 201 是读代码得出的（`writeActiveRejectionOutcome`）；在真库上
 - [ ] 管理台三道门退出码为 0。
 - [ ] 在票 15 补记下追加回写，只加行。
 - [ ] 走 Go 那条路（并行会话）：开分支、作者自验、非作者评审、推送方带 DSN 跑全量。
+
+## 完成记录（2026-10-18，会话 idp-parcel-9b 的实施子代理，分支 claude-oc36）
+
+基线 `0b74ff1e`。提交：`ecc00ee1`（主动拒绝编排与领域）、`ee2be830`（处置编排与领域）、`d03977da`（主动拒绝 HTTP 回显与真库）、`86ebeb81`（处置 HTTP 回显与真库）、`7c73fd5f`（管理台响应形状）、`bc415dcf`（票 15 回写）。
+
+**落点**
+- 领域：`ShipmentRequest.ActiveRejectionAdmissible` 与 `ShipmentRequest.AuthorizedDispositionAdmissible` 是只读判定，`RejectByAuthority`、`DisposeUnderAuthority` 先过同一道，不另写一份前置。
+- 编排：`ActiveRejectionTaskAlreadyClosed`（`TASK_ALREADY_CLOSED`）是新格。两口都在授权之后、签发标识之前问只读判定，转移里撞上的同一错误留作防御，映射到同一格（`inadmissible`）。处置口各格不变。
+- HTTP：两口共用 `decisionEcho`，回显 `decisionKind`；决定带主动拒绝留痕时，再回显 `decider` 和 `rejectionReason`。201 仍只给 `FORMED` / `RECORDED`。
+- 管理台：`ActiveRejectionResponseBody` 和 `AuthorizedDispositionResponseBody` 加了 `decider?`、`rejectionReason?` 两个字段，页面不改。
+- 越出地盘（最小）：`cmd/parcel-api/assemble_review.go` 拆出 `rejectionOrchestrationWith`，`cmd/parcel-api/assemble_disposition.go` 拆出 `dispositionOrchestrationWith`，形照 `manualReviewOrchestrationWith`，生产入口不变（nil / 未配置授权器）。真库用例要递进合成映射或授权器，只能从这里进。
+
+**完成判据逐格**
+- [x] 编排（替身）：`TestAnActiveRejectionAgainstADecidedVersionAnswersTaskAlreadyClosed` 覆盖已拒绝、已接受两种：答`任务已完结`，不签标识、不保存、不释放、不记尝试。`TestReplayedActiveRejectionsIssueNoFurtherDecisionIdentity` 覆盖原样重放和换人换原因：签发停在 1。首次仍答 `FORMED`（`TestAnAuthorizedOperatorFormsAnActiveRejection`）。处置口用 `TestEveryDispositionRefusalLandsOnItsOwnOutcome`：「拒绝」重放签发停在 1；「交客户补充」之后改选「拒绝」、已拒绝、没停在等处置三种都不签。
+- [x] 真库装配：`TestARejectionReplayAnswersTaskAlreadyClosedThroughTheOperatorIntake` 覆盖原样重放和换人换原因：答 200 并回显首份，处理尝试不增；同一用例里复核撞上已拒绝的委托，答`任务已完结`并交回决定。`TestARejectionAfterAnAutomaticAcceptanceAnswersTaskAlreadyClosed` 答 200 + `ACCEPTED`。`TestTheProductionRejectionAssemblyStaysUndecidedOnARejectedRequest` 答 `UNDECIDED` / `REJECTION_AUTHORITY_UNAVAILABLE`。
+- [x] 处置「拒绝」真库重放：`TestARejectionDispositionReplayEchoesTheFirstDeciderThroughTheOperatorIntake`。
+- [x] 管理台三道门退出码为 0。
+- [x] 票 15 补记下回写一行，只加行。
+- [ ] 推送方带 DSN 跑全量：不归作者。
+
+**先红后绿**
+- 编排：`FORMED` 应为 `TASK_ALREADY_CLOSED`；处置撞门的各格签了 1 个标识，重放签到 2 个。
+- 真库：两口重放回显的决定方和原因为空。
+- 真库里接受之后、生产装配两例首跑即绿：它们的红已在编排层先行取得，答复格由编排给出。
+
+**门**
+- Go：gofmt 无输出，`go build ./...` 和 `go vet ./...` 退 0。带 DSN `-p 1 -count=1` 跑 `internal/parcelshipment/...`、`cmd/parcel-api`、`cmd/parcel-dispatch`、`./internal/architecture/...`，22 个包 ok，0 FAIL。
+- 前端：tsc 退 0；run-tests 536 项全过；vite build 退 0。
+- 机制清点无差。
+
+**证据层级**：`S`，全部输入是合成数据。
+
+评审：待会话读 diff 审。
