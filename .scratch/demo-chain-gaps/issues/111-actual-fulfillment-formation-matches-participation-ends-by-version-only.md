@@ -1,7 +1,7 @@
 # 111 实际履约发生项自动形成只按 `TRANSPORT-HANDOVER/<版本>` 找结束的参与：同一包裹两次交接用同一版本号，交接信封整封弃置
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-dcg111（2026-10-19 Claude Code 子代理立，演示动线重走，[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)「重走（钉 `76686b7b`，2026-10-19）」停点一）。
+Status: in-progress——完工待评审与进 main，分支 claude-dcg111（完成记录与评审记录见文末；2026-10-19 Claude Code 子代理立，演示动线重走，[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)「重走（钉 `76686b7b`，2026-10-19）」停点一）。
 Blocked by: 无
 地盘：TF `application/form_actual_fulfillment_on_participation_end.go`（`formFor`）；若改依据拼法，另及 `domain/transport_handover.go`（`TransferOutBasis`）、`domain/actual_fulfillment_segment.go`（`ParticipationEndedBy`）与存量迁移。与 [89](./89-actual-fulfillment-formation-blocks-later-envelopes-in-the-handover-and-delivery-partitions.md) 相邻。
 出处：[ADR-0218](../../../docs/adr/0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 找参与那一步「多于一条：库面不一致，响亮失败」；[ADR-0213](../../../docs/adr/0213-a-transport-handover-declares-its-releasing-receiving-and-onward-nodes.md) 文末补记停点 `ENTRY_HANDOVER_AMBIGUOUS`（交付门禁那一侧已认「入场依据只带版本、不带范围」，先按业务时间再分）；演示动线票 95、98 补记给的交接载荷（每次交接各起 `scope`，`version` 写 `v1`）。
@@ -65,7 +65,7 @@ S–M
 - **交付门禁读数**：认法随领域那一处，新依据只认得出范围相同的一版；`ENTRY_HANDOVER_AMBIGUOUS` 自此只出自存量。注释随之改（端口、PG 读口、停点）。
 - 不加迁移（TF 迁移号 0044 未用）、不加信封、不改派发路由与哨兵名单、不改 NO。
 - **文档**：ADR-0221；ADR-0218 Status 行与 Links 加前向指针、README 该行写部分停用；ADR-0213 Links 加一条；ADR README 追加 ADR-0221 一行。TF CONTEXT「载运对象、计划与实际履约」一条；UC-TF-005 步 9 引 ADR-0221、`AT-TF-255` 措辞改为「逐字对上」、新立 `AT-TF-266`–`270`、`272`；UC-TF-006 新立 `AT-TF-271`、`AT-TF-262` 注明只出自存量。演示动线第 3 步补记一则。AT 盘点追记。
-- **立票**：[112](./112-node-control-transfer-out-reference-names-only-the-handover-version.md)（NO 转出引用只带版本）、[113](./113-effective-delivery-end-basis-names-only-the-delivery-result-version.md)（有效交付终点依据只带版本）。
+- **立票**：[112](./112-node-control-transfer-out-reference-names-only-the-handover-version.md)（NO 转出引用只带版本）。初稿另立 [113](./113-effective-delivery-end-basis-names-only-the-delivery-result-version.md)（有效交付终点依据只带版本），评审核实前提不成立，已改 wontfix（见评审记录）。
 
 ### 代决
 
@@ -75,9 +75,9 @@ S–M
 4. **存量照读不改写**；旧拼法单条对上也要时刻对上，这条从交付门禁读数推到结束与重派生两处。
 5. **旧拼法多条对上答 `ENDED_PARTICIPATION_AMBIGUOUS`、入账**，不响亮失败：重投不会变，响亮只会把信封烧成 `ABANDONED`、挡同分区后面的信封（ADR-0218 越权风险点 8）。逐字对上多条仍响亮。
 6. **NO 的转出引用不换**：那是 NO 的取舍，`internal/nodeoperations/**` 此刻在另一会话地盘里；换了 TF 的 `TransferOutBasis`，NO 的既有测试就要跟着改。立票 112。
-7. **有效交付那一侧同族缺口不在本票修**，立票 113。
+7. **有效交付那一侧不是同族缺口**：交付结果版本由 `NextDeliveryResultVersion` 按全局序列铸，本身唯一，`EFFECTIVE-DELIVERY/<版本>` 指得回那一件；场外揽收、实际承运商首次有效收寄同理。只有交接版本是登记方给的。ADR-0221 Context 记这一条。初稿把它当同族缺口立了票 113、列成越权风险点，评审指出前提不成立，已删、113 改 wontfix。
 8. **新 ADR 而非补记**：依据串落在段登记册、委托与段采用的开始依据里，派送任务引用由它派生，两种拼法从此长期并存，属难逆转的身份取舍；部分停用 ADR-0218 决定一两句与决定六一条。ADR-0213 补记的停点不停用，只加 Links。
-9. **票 tf-face-algebra/09 的撞键用例改造**：新依据里带着对象，原来「段 `seg/A` 加对象 `CU-77` 与段 `seg` 加对象 `A/CU-77`」那组在旧拼法任务引用下不再撞。`cmd/parcel-api` 三条撞键用例改由 `collidingEntries` 按新依据凑出撞键的段与版本，`application` 那条「旧拼法串本身合新形状」照新依据重算；编排单测那条拼接撞键只改注释、把前提写明是旧依据时代的。
+9. **票 tf-face-algebra/09 的撞键用例改造**：新依据里带着对象，原来「段 `seg/A` 加对象 `CU-77` 与段 `seg` 加对象 `A/CU-77`」那组在旧拼法任务引用下不再撞。`cmd/parcel-api` 三条撞键用例改由 `collidingEntries` 按新依据凑出撞键的段与版本，`application` 那条「旧拼法串本身合新形状」照新依据重算；编排单测那条拼接撞键同样用 `handoverParticipationBasis` 凑出撞键的段与版本、先核前提（初稿只改了注释，评审后补）。
 10. **票面「要裁的」第二条**：动线文档不再补「各次交接版本各不相同」那句。本票落地之后不必守，补记里写明。
 
 ### 越权风险点
@@ -86,13 +86,12 @@ S–M
 2. 旧拼法单条对上也要时刻对上：本票之前单条逐字就算。生产路径上时刻一律相等，据此判定没有存量会变；手工改过参与时刻的行会答没有参与被结束、入账。
 3. 同一次交接两串：TF 参与上是新依据，NO 转出引用是旧串，查阅按交接键对（票 112）。
 4. 派送任务引用变长，对象在引用里出现两次；存量参与的任务引用不变。
-5. 有效交付终点依据仍只带版本（票 113）。
-6. 改了票 tf-face-algebra/09 的证据用例（代决 9）：用例的意思保住了，但撞键输入换了，评审时要按新依据核一遍前提。
+5. 改了票 tf-face-algebra/09 的证据用例（代决 9）：用例的意思保住了，但撞键输入换了，评审时要按新依据核一遍前提。
 
 ### 用例
 
-- `AT-TF-266`（拼法、单射、读回只认一种写法、进段与结束各认自己那一次）、`267`（演示判据：编排与派发生产路由真库两半）、`268`（旧拼法按版本加时刻认）、`269`（旧拼法多条答认不出、入账）、`270`（逐字优先）、`271`（交付门禁：新依据认得出进段那一次）、`272`（存量参与的更正重派生）。号段 266–275 用到 272，273–275 未用。
-- 新用例：`domain/handover_participation_basis_test.go`、`application/form_actual_fulfillment_handover_basis_test.go`、`application/read_delivery_gate_test.go::TestAKeyedEntryBasisTellsTwoScopesReusingTheVersionApart`、`cmd/parcel-dispatch/actual_fulfillment_handover_version_reuse_test.go`。`AT-TF-262` 的歧义格改用旧拼法存量参与摆。
+- `AT-TF-266`（拼法、单射、读回只认一种写法、进段、结束与重派生各认自己那一次）、`267`（演示判据：编排与派发生产路由真库两半）、`268`（旧拼法按版本加时刻认）、`269`（旧拼法多条答认不出、入账）、`270`（逐字优先）、`271`（交付门禁：新依据认得出进段那一次）、`272`（存量参与的更正重派生）。号段 266–275 用到 272，273–275 未用。
+- 新用例：`domain/handover_participation_basis_test.go`（含评审后补的 `TestAKeyedEntryIsRederivedOnlyByItsOwnHandoversCorrection`）、`application/form_actual_fulfillment_handover_basis_test.go`、`application/read_delivery_gate_test.go::TestAKeyedEntryBasisTellsTwoScopesReusingTheVersionApart`、`cmd/parcel-dispatch/actual_fulfillment_handover_version_reuse_test.go`。`AT-TF-262` 的歧义格改用旧拼法存量参与摆。
 
 ### 验证（证据只记 `S`）
 
@@ -106,4 +105,20 @@ S–M
 
 - TF 迁移号 0044 未用：存量照读、不改写，没有库面变化。
 - psb/05「重走（钉 `76686b7b`）」停点一的去处与动线建议句，进 main 时由协调方回填；本票没改 psb/05。
-- 票 112、113 待分诊；112 的地盘此刻在另一会话手里。
+- 票 112 待分诊，地盘此刻在另一会话手里；113 已 wontfix。
+
+## 评审记录（2026-10-19，隔离评审，钉 `b088a6f6`；同一作者子代理修订）
+
+阻断 0 项。非阻断 5 项全部照改，没有不采纳的，也没有另立票。
+
+1. **ADR-0221 越权风险点 5 与票 113 的前提不成立**（评审建议进 main 前处理）。读码核实：有效交付首登与更正都经 `ports.DeliveryIdentityFactory` 的 `NextDeliveryResultVersion` 要新版本，PG 实现推进全局序列 `transport_fulfillment.delivery_result_version_seq`；`domain.NewDeliveryResultVersion` 在生产代码里只用在更正的前版与读回处。场外揽收与实际承运商首次有效收寄的版本同样按序列铸。修法：
+   - ADR-0221 删去风险点 5（它是最后一条，前几条编号不动，「第 3 点待 NO owner 会签」照旧成立），Links 的后续票只留 112；Context 加一条「别的控制事实作依据也只带版本，却不在此列」，写明理由与铸版本的符号；
+   - ADR README 的 ADR-0221 行同步删去那一项，补一句不在此列；
+   - 票 113 改 wontfix，文首加「核实」一节写明依据，原推理留作记录；
+   - 本票完成记录的立票、代决 7、越权风险点（原 5 删、原 6 改为 5）、偏离与待裁随之改。
+2. **编排单测 `TestConcatenationCollidingInputsMintDifferentTaskReferences` 的前提已不成立**（评审建议进 main 前处理）。照 `cmd/parcel-api` 的 `collidingEntries` 思路改写：用 `handoverParticipationBasis` 凑出一对（段，版本），第一次交接的版本以「/第二件/第二件的入场依据」结尾；先核 `legacyShapeReference` 两者相等，不等就 `t.Fatal`；再核第一项任务的引用以夹具算的入场依据结尾，确认夹具算的就是在册的那一串。变异核验：把任务引用铸法退成斜杠直拼，这条用例在第二拍答 `DISPATCH_TASK_REFERENCE_TAKEN` 处变红；还原后绿。
+3. **「重派生各认自己那一次」在按键铸的依据上没有用例**：补 `domain/handover_participation_basis_test.go::TestAKeyedEntryIsRederivedOnlyByItsOwnHandoversCorrection`。段凭 `SZX`/`v1` 立起；另一范围 `SHA`/`v1`、业务时间相同的那一版更正成 `v2`，重派生答 `ErrNoParticipationToRederive`；自己那一次的更正照常重派生，回指写在册的按键铸的那一串。用例里先核两版业务时间确实相同。变异核验：铸法去掉范围，这条用例变红。AT 盘点 `AT-TF-266` 行补点名。
+4. **`deliveryDispatchTaskReference` 头注的例子还是旧依据**：换成单测钉的那一串，并注明存量参与铸出的引用也是这个形状。
+5. **演示动线补记与 `AT-TF-266` 复述了拼法**：两处都删掉拼法细节，只引 ADR-0221 决定一，留下可观察的结果（两次交接各得一串、读得出是哪一次）。
+
+验证：`go build ./...`、`go vet`（TF 各包、`cmd/parcel-api`、`cmd/parcel-dispatch`）、`gofmt -l` 干净；`IDP_PARCEL_POSTGRES_DSN=… go test -p 1 -count=1 ./internal/architecture/ ./internal/transportfulfillment/... ./cmd/parcel-dispatch/ ./cmd/parcel-api/` 全 ok。证据只记 `S`。
