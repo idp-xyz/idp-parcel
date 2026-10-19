@@ -51,7 +51,8 @@ func submittedCommission(t *testing.T) domain.TransportCommission {
 }
 
 // Covers: ADR-0204 决定一、二——采用声明（段、委托、服务方）：段的首个当前参与作开始依据，委托未开始时随之标为已开始，开始
-// 的依据与时刻取首个参与而不取登记时刻；已开始的委托原样交回，不被后到的段改写开始；连线自带这一段的开始依据。
+// 的依据与时刻取首个参与而不取登记时刻；委托的开始是已采用各段首个参与里最早的那一条：后到的段开始得更晚，委托原样交回，
+// 开始得更早，开始前移到它；连线自带这一段的开始依据。
 func TestAdoptingACommissionStartsItFromTheSegmentsFirstParticipation(t *testing.T) {
 	commission := submittedCommission(t)
 	provider := mustValue(t, domain.NewServiceProviderReference, "partner-1")
@@ -61,12 +62,12 @@ func TestAdoptingACommissionStartsItFromTheSegmentsFirstParticipation(t *testing
 		adoptionParticipation{object: "parcel-1", basis: "TRANSPORT-HANDOVER/h-1/v1", enteredAt: firstAt},
 	)
 
-	adoption, adopted, startedNow, err := domain.AdoptCommissionForSegment(segment, commission, provider)
+	adoption, adopted, change, err := domain.AdoptCommissionForSegment(segment, commission, provider)
 	if err != nil {
 		t.Fatalf("采用：%v", err)
 	}
-	if !startedNow {
-		t.Fatal("未开始的委托采用之后没有标为开始")
+	if change != domain.CommissionStartMarked {
+		t.Fatalf("未开始的委托采用之后 change = %s，want MARKED", change)
 	}
 	basis, at, started := adopted.TransportStarted()
 	if !started || basis.String() != "TRANSPORT-HANDOVER/h-1/v1" || !at.Equal(firstAt) {
@@ -82,22 +83,47 @@ func TestAdoptingACommissionStartsItFromTheSegmentsFirstParticipation(t *testing
 		t.Fatalf("连线上的开始 = (%s, %s)", startBasis, startAt)
 	}
 
-	t.Run("a commission already started by another segment keeps its first start", func(t *testing.T) {
+	t.Run("a segment that started later keeps the commission's start", func(t *testing.T) {
 		later := adoptionSegment(t, "tenant-1",
-			adoptionParticipation{object: "parcel-3", basis: "TRANSPORT-HANDOVER/h-3/v1", enteredAt: firstAt.Add(-time.Hour)},
+			adoptionParticipation{object: "parcel-3", basis: "TRANSPORT-HANDOVER/h-3/v1", enteredAt: firstAt.Add(time.Hour)},
 		)
-		second, kept, startedNow, err := domain.AdoptCommissionForSegment(later, adopted, provider)
+		second, kept, change, err := domain.AdoptCommissionForSegment(later, adopted, provider)
 		if err != nil {
 			t.Fatalf("已开始的委托被另一段采用：%v", err)
 		}
-		if startedNow {
-			t.Fatal("已开始的委托又开始了一次")
+		if change != domain.CommissionStartKept {
+			t.Fatalf("change = %s，want KEPT", change)
 		}
 		if basis, at, _ := kept.TransportStarted(); basis.String() != "TRANSPORT-HANDOVER/h-1/v1" || !at.Equal(firstAt) {
-			t.Fatalf("委托的开始被后到的段改写成 (%s, %s)", basis, at)
+			t.Fatalf("委托的开始被开始得更晚的段改写成 (%s, %s)", basis, at)
 		}
 		if startBasis, _ := second.Started(); startBasis.String() != "TRANSPORT-HANDOVER/h-3/v1" {
 			t.Fatalf("后到那一段的连线没带自己的开始依据：%s", startBasis)
+		}
+	})
+
+	t.Run("a segment adopted later but started earlier advances the commission's start", func(t *testing.T) {
+		earlier := adoptionSegment(t, "tenant-1",
+			adoptionParticipation{object: "parcel-3", basis: "TRANSPORT-HANDOVER/h-3/v1", enteredAt: firstAt.Add(-time.Hour)},
+		)
+		second, advanced, change, err := domain.AdoptCommissionForSegment(earlier, adopted, provider)
+		if err != nil {
+			t.Fatalf("已开始的委托被开始得更早的段采用：%v", err)
+		}
+		if change != domain.CommissionStartAdvanced {
+			t.Fatalf("change = %s，want ADVANCED", change)
+		}
+		if basis, at, _ := advanced.TransportStarted(); basis.String() != "TRANSPORT-HANDOVER/h-3/v1" || !at.Equal(firstAt.Add(-time.Hour)) {
+			t.Fatalf("委托的开始没有前移到更早的那一段：(%s, %s)", basis, at)
+		}
+		if basis, at, _ := adopted.TransportStarted(); basis.String() != "TRANSPORT-HANDOVER/h-1/v1" || !at.Equal(firstAt) {
+			t.Fatal("值语义：前移改了原委托")
+		}
+		if startBasis, _ := second.Started(); startBasis.String() != "TRANSPORT-HANDOVER/h-3/v1" {
+			t.Fatalf("连线没带这一段自己的开始依据：%s", startBasis)
+		}
+		if _, err := advanced.Cancel(firstAt.Add(-30 * time.Minute)); !errors.Is(err, domain.ErrTransportAlreadyStarted) {
+			t.Fatalf("前移之后取消：err = %v，want ErrTransportAlreadyStarted", err)
 		}
 	})
 }
@@ -132,8 +158,9 @@ func TestTheFirstEffectiveParticipationSkipsSupersededAndVoidedVersions(t *testi
 	}
 }
 
-// Covers: ADR-0204 决定一的前置条件——服务方不符、委托已取消、段早于委托提交就已开始各自成格，不并成一格不成形；服务方
-// 排在取消之前；租户不同的段与委托连不上。
+// Covers: ADR-0204 决定一、三的前置条件——服务方不符、委托在段开始之前已取消、委托在段开始之后才取消、段早于委托提交就已
+// 开始各自成格，不并成一格不成形；服务方排在取消之前；取消按业务时间比段的首个参与，同一刻算开始在先；段没有当前参与或
+// 早于委托提交时没有可比的开始，已取消的委托答不可采用；租户不同的段与委托连不上。
 func TestAnAdoptionRefusesEachUnmetPrecondition(t *testing.T) {
 	provider := mustValue(t, domain.NewServiceProviderReference, "partner-1")
 	segment := adoptionSegment(t, "tenant-1",
@@ -146,6 +173,18 @@ func TestAnAdoptionRefusesEachUnmetPrecondition(t *testing.T) {
 	early := adoptionSegment(t, "tenant-1",
 		adoptionParticipation{object: "parcel-1", basis: "TRANSPORT-HANDOVER/h-1/v1", enteredAt: commissionSubmittedAt.Add(-time.Minute)},
 	)
+	cancelledLater, err := submittedCommission(t).Cancel(commissionSubmittedAt.Add(2 * time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancelledAtTheStart, err := submittedCommission(t).Cancel(commissionSubmittedAt.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	voided := adoptionSegment(t, "tenant-1",
+		adoptionParticipation{object: "parcel-1", basis: "TRANSPORT-HANDOVER/h-1/v1", enteredAt: commissionSubmittedAt.Add(time.Hour)},
+		adoptionParticipation{object: "parcel-1", basis: "TRANSPORT-HANDOVER/h-1/v2", supersedes: "TRANSPORT-HANDOVER/h-1/v1", enteredAt: commissionSubmittedAt.Add(time.Hour), voided: true},
+	)
 	for name, tc := range map[string]struct {
 		segment    domain.ActualFulfillmentSegment
 		commission domain.TransportCommission
@@ -155,6 +194,10 @@ func TestAnAdoptionRefusesEachUnmetPrecondition(t *testing.T) {
 		"another provider":            {segment, submittedCommission(t), mustValue(t, domain.NewServiceProviderReference, "partner-9"), domain.ErrAdoptionProviderMismatch},
 		"another provider, cancelled": {segment, cancelled, mustValue(t, domain.NewServiceProviderReference, "partner-9"), domain.ErrAdoptionProviderMismatch},
 		"cancelled":                   {segment, cancelled, provider, domain.ErrCommissionNotAdoptable},
+		"cancelled after the start":   {segment, cancelledLater, provider, domain.ErrCommissionCancelledAfterStart},
+		"cancelled at the start":      {segment, cancelledAtTheStart, provider, domain.ErrCommissionCancelledAfterStart},
+		"cancelled, no participation": {voided, cancelledLater, provider, domain.ErrCommissionNotAdoptable},
+		"cancelled, started early":    {early, cancelledLater, provider, domain.ErrCommissionNotAdoptable},
 		"started before submission":   {early, submittedCommission(t), provider, domain.ErrSegmentStartedBeforeCommission},
 		"blank provider":              {segment, submittedCommission(t), domain.ServiceProviderReference{}, domain.ErrInvalidCommissionAdoption},
 		"another tenant":              {adoptionSegment(t, "tenant-2", adoptionParticipation{object: "parcel-1", basis: "TRANSPORT-HANDOVER/h-1/v1", enteredAt: commissionSubmittedAt.Add(time.Hour)}), submittedCommission(t), provider, domain.ErrInvalidCommissionAdoption},

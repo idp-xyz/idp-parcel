@@ -54,6 +54,15 @@ func (double *cancellableBookingStore) Replace(_ context.Context, record ports.B
 	return true, nil
 }
 
+// unreachableStartAdvancement 是前移写口的占位：这些线格式用例只有一个段，委托的开始不会被前移，走到这里就是编排判错了。
+type unreachableStartAdvancement struct{ t *testing.T }
+
+func (double unreachableStartAdvancement) AdvanceStart(context.Context, ports.TransportCommissionRecord) (bool, error) {
+	double.t.Helper()
+	double.t.Error("只有一个段的线格式用例走到了前移开始")
+	return false, nil
+}
+
 type adoptionRegisterDouble struct {
 	records map[string]ports.SegmentCommissionAdoptionRecord
 }
@@ -127,10 +136,11 @@ func newAdoptionFaces(t *testing.T) adoptionFaces {
 		Clock:                fixedCommissionClock{},
 	})
 	adopter := application.NewAdoptSegmentCommissionHandler(application.AdoptSegmentCommissionDeps{
-		Adoptions:   &adoptionRegisterDouble{records: map[string]ports.SegmentCommissionAdoptionRecord{}},
-		Segments:    trunkSegmentView{segment: segment},
-		Commissions: commissions,
-		Clock:       fixedCommissionClock{},
+		Adoptions:        &adoptionRegisterDouble{records: map[string]ports.SegmentCommissionAdoptionRecord{}},
+		Segments:         trunkSegmentView{segment: segment},
+		Commissions:      commissions,
+		StartAdvancement: unreachableStartAdvancement{t: t},
+		Clock:            fixedCommissionClock{},
 	})
 	intake := operatorIntake(t, authenticatorFake{})
 	return adoptionFaces{
@@ -196,9 +206,10 @@ func TestTheAdoptionFaceStartsTheCommissionAndTheCancellationFaceThenAnswersAlre
 	}
 }
 
-// Covers: `AT-TF-184`、`AT-TF-185`（ADR-0204 决定三）的线格式——未开始的委托与订舱可以取消，各答 201 并回显取消时刻；重放答 200
-// 原取消；委托不在册 200 COMMISSION_NOT_FOUND、订舱不在册 200 BOOKING_NOT_FOUND；取消之后再采用答 200
-// COMMISSION_NOT_ADOPTABLE；时刻写坏、自报租户是坏报文（400）。
+// Covers: `AT-TF-184`、`AT-TF-185`、`AT-TF-187`（ADR-0204 决定三）的线格式——未开始的委托与订舱可以取消，各答 201 并回显取消
+// 时刻；重放答 200 EXISTING_CANCELLATION；委托不在册 200 COMMISSION_NOT_FOUND、订舱不在册 200 BOOKING_NOT_FOUND；取消时刻不早于
+// 段的首个参与、之后才来采用答 200 COMMISSION_CANCELLED_AFTER_START，并排回显委托的取消时刻与段的首个参与；取消早于段的开始
+// 答 200 COMMISSION_NOT_ADOPTABLE；时刻写坏、自报租户是坏报文（400）。
 func TestTheCancellationFacesStopUnstartedIntents(t *testing.T) {
 	faces := newAdoptionFaces(t)
 	const token = "presented.operator.token"
@@ -214,7 +225,7 @@ func TestTheCancellationFacesStopUnstartedIntents(t *testing.T) {
 	if status != http.StatusCreated || answer["outcome"] != "BOOKING_CANCELLED" || booking["cancelledAt"] != "2026-10-19T12:00:00Z" {
 		t.Fatalf("取消订舱 = %d %v", status, answer)
 	}
-	if status, answer := postBookingFace(t, faces.cancelBooking, bookingCancellationPath, token, bookingCancellationBody); status != http.StatusOK || answer["outcome"] != "EXISTING_BOOKING" {
+	if status, answer := postBookingFace(t, faces.cancelBooking, bookingCancellationPath, token, bookingCancellationBody); status != http.StatusOK || answer["outcome"] != "EXISTING_CANCELLATION" {
 		t.Fatalf("再取消订舱 = %d %v", status, answer)
 	}
 	status, answer = postBookingFace(t, faces.cancelCommission, commissionCancellationPath, token, commissionCancellationBody)
@@ -222,11 +233,28 @@ func TestTheCancellationFacesStopUnstartedIntents(t *testing.T) {
 	if status != http.StatusCreated || answer["outcome"] != "COMMISSION_CANCELLED" || commission["cancelledAt"] != "2026-10-19T12:00:00Z" {
 		t.Fatalf("取消委托 = %d %v", status, answer)
 	}
-	if status, answer := postBookingFace(t, faces.cancelCommission, commissionCancellationPath, token, commissionCancellationBody); status != http.StatusOK || answer["outcome"] != "EXISTING_COMMISSION" {
+	if status, answer := postBookingFace(t, faces.cancelCommission, commissionCancellationPath, token, commissionCancellationBody); status != http.StatusOK || answer["outcome"] != "EXISTING_CANCELLATION" {
 		t.Fatalf("再取消委托 = %d %v", status, answer)
 	}
-	if status, answer := postBookingFace(t, faces.adopt, adoptionPath, token, segmentCommissionAdoptionBody); status != http.StatusOK || answer["outcome"] != "COMMISSION_NOT_ADOPTABLE" {
-		t.Fatalf("取消之后采用 = %d %v", status, answer)
+	status, answer = postBookingFace(t, faces.adopt, adoptionPath, token, segmentCommissionAdoptionBody)
+	commission, _ = answer["commission"].(map[string]any)
+	segmentStart, _ := answer["segmentStart"].(map[string]any)
+	if status != http.StatusOK || answer["outcome"] != "COMMISSION_CANCELLED_AFTER_START" || answer["adoption"] != nil ||
+		commission["cancelledAt"] != "2026-10-19T12:00:00Z" ||
+		segmentStart["basis"] != "TRANSPORT-HANDOVER/SYN-HANDOVER-SZX-01/v1" || segmentStart["startedAt"] != "2026-10-19T10:00:00Z" {
+		t.Fatalf("段开始之后才登记的取消、再采用 = %d %v", status, answer)
+	}
+
+	cancelledFirst := newAdoptionFaces(t)
+	if status, answer := postBookingFace(t, cancelledFirst.submit, "/transport-fulfillment-transport-commission-submissions", token, trunkCommissionBody); status != http.StatusCreated {
+		t.Fatalf("委托 = %d %v", status, answer)
+	}
+	if status, answer := postBookingFace(t, cancelledFirst.cancelCommission, commissionCancellationPath, token, strings.Replace(commissionCancellationBody, "2026-10-19T12:00:00Z", "2026-10-19T09:00:00Z", 1)); status != http.StatusCreated {
+		t.Fatalf("段开始之前取消委托 = %d %v", status, answer)
+	}
+	status, answer = postBookingFace(t, cancelledFirst.adopt, adoptionPath, token, segmentCommissionAdoptionBody)
+	if status != http.StatusOK || answer["outcome"] != "COMMISSION_NOT_ADOPTABLE" || answer["segmentStart"] != nil || answer["commission"] != nil {
+		t.Fatalf("段开始之前已取消、再采用 = %d %v", status, answer)
 	}
 
 	for name, testCase := range map[string]struct {

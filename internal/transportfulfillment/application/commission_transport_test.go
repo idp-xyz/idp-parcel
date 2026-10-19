@@ -540,8 +540,8 @@ func TestCancellationOnlyReachesUnstartedCommissions(t *testing.T) {
 		if err != nil {
 			t.Fatalf("replay cancel: %v", err)
 		}
-		if replay.Outcome() != application.CommissionExistingResult {
-			t.Fatalf("outcome = %q, want EXISTING_COMMISSION（不二取）", replay.Outcome())
+		if replay.Outcome() != application.CancellationExistingResult {
+			t.Fatalf("outcome = %q, want EXISTING_CANCELLATION（不二取）", replay.Outcome())
 		}
 	})
 

@@ -47,8 +47,8 @@ func TestBookingCancellationOnlyStopsUnconsumedBookings(t *testing.T) {
 			t.Fatal("取消成立没有回显取消时刻")
 		}
 		replay, err := fixture.handler.CancelBooking(context.Background(), cancelBookingCommand("booking-1", bookingSentAt.Add(2*time.Hour)))
-		if err != nil || replay.Outcome() != application.BookingExistingResult {
-			t.Fatalf("replay = %q %v, want EXISTING_BOOKING", replay.Outcome(), err)
+		if err != nil || replay.Outcome() != application.CancellationExistingResult {
+			t.Fatalf("replay = %q %v, want EXISTING_CANCELLATION", replay.Outcome(), err)
 		}
 		stored, _ := replay.Booking()
 		if at, _ := stored.Booking.Cancelled(); !at.Equal(bookingSentAt.Add(time.Hour)) {
@@ -167,7 +167,7 @@ func TestCommissionCancellationRacingAStartAnswersFromTheWinner(t *testing.T) {
 				record.Commission = cancelled
 				return record
 			},
-			want: application.CommissionExistingResult,
+			want: application.CancellationExistingResult,
 		},
 	} {
 		t.Run(name, func(t *testing.T) {

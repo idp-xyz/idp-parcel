@@ -57,7 +57,8 @@ func NewAdoptSegmentCommissionEndpoint(intake SegmentCommissionAdoptionIntake, a
 
 // segmentCommissionAdoptionResponse 是采用口的封闭响应形状。前置条件不满足的各格各自成格，续办两两不同，传输层不合并。
 // `commissionProvider` 只随 `PROVIDER_MISMATCH` 出现，是委托的服务提供方；`adoption` 随采用成立、已有采用与采用冲突出现，
-// 冲突时是段上在册的那一份；`commission` 只随采用成立出现，回显委托此刻的开始。
+// 冲突时是段上在册的那一份；`commission` 随采用成立出现时回显委托此刻的开始，随 `COMMISSION_CANCELLED_AFTER_START` 出现时
+// 回显在册的取消；`segmentStart` 只随后者出现，是这一段的首个当前参与——两个时刻并排给出，登记方才看得出相抵的是哪一对。
 type segmentCommissionAdoptionResponse struct {
 	Outcome               string                         `json:"outcome"`
 	UndecidedReason       string                         `json:"undecidedReason,omitempty"`
@@ -65,6 +66,13 @@ type segmentCommissionAdoptionResponse struct {
 	CommissionProvider    string                         `json:"commissionProvider,omitempty"`
 	Adoption              *segmentCommissionAdoptionBody `json:"adoption,omitempty"`
 	Commission            *commissionTransitionBody      `json:"commission,omitempty"`
+	SegmentStart          *segmentStartBody              `json:"segmentStart,omitempty"`
+}
+
+// segmentStartBody 是段的首个当前参与：入场依据与入场时刻（RFC 3339 UTC）。
+type segmentStartBody struct {
+	Basis     string `json:"basis"`
+	StartedAt string `json:"startedAt"`
 }
 
 // segmentCommissionAdoptionBody 逐字段透出在册那一份采用：`startBasis`、`startedAt` 是这一段在委托下开始的依据与时刻（采用
@@ -106,6 +114,9 @@ func writeSegmentCommissionAdoptionOutcome(response http.ResponseWriter, result 
 	}
 	if record, present := result.Commission(); present {
 		body.Commission = commissionTransitionBodyOf(record.Commission, record.RecordedAt)
+	}
+	if basis, startedAt, present := result.SegmentStart(); present {
+		body.SegmentStart = &segmentStartBody{Basis: basis.String(), StartedAt: rfc3339(startedAt)}
 	}
 	// ADR-0022：只有这次真把段挂到委托上用 201；已有采用、冲突、前置条件不满足的各格、未受理、未决都是形成了的答案（200）。
 	status := http.StatusOK

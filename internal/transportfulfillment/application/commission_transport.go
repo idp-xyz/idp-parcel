@@ -39,7 +39,9 @@ var (
 // 答复不归它答）各自续办不同，不并进`未受理`。他租户名下的同名委托、班次与订舱按本租户的键读不回，同落「不在册」那一格。
 //
 // 取消两口沿用同一套格（ADR-0204 决定三）：委托不在册与订舱不在册各是一格，不并进`未受理`；运输已开始答
-// `TRANSPORT_ALREADY_STARTED`，与领域哨兵 ErrTransportAlreadyStarted 同名（AT-TF-092）。
+// `TRANSPORT_ALREADY_STARTED`，与领域哨兵 ErrTransportAlreadyStarted 同名（AT-TF-092）。取消的重放另起一格
+// `EXISTING_CANCELLATION`，不借提交口的 `EXISTING_COMMISSION` / `EXISTING_BOOKING`：取消口的调用方拿到「已有委托」读不出
+// 这是自己那一次取消的重放，还得去翻响应体里有没有取消时刻。
 type CommissionOutcome uint8
 
 const (
@@ -67,6 +69,7 @@ const (
 	BookingNotFound
 	BookingSourceNotProvider
 	BookingCancelled
+	CancellationExistingResult
 )
 
 func (outcome CommissionOutcome) String() string {
@@ -117,6 +120,8 @@ func (outcome CommissionOutcome) String() string {
 		return "SOURCE_NOT_SERVICE_PROVIDER"
 	case BookingCancelled:
 		return "BOOKING_CANCELLED"
+	case CancellationExistingResult:
+		return "EXISTING_CANCELLATION"
 	default:
 		return ""
 	}
@@ -604,6 +609,10 @@ func answerFromStoredAnswer(stored ports.BookingAnswerRecord, digest string, com
 // 形成的订舱、承运接受与容量预占各按自己的规则保留，取消不碰它们（CONTEXT 生命周期「尚未消耗的运输委托或订舱范围可以
 // 取消」）。
 //
+// 取消是整份的：委托一旦开始就整份拒，没有「只停尚未开始的成员」这一种部分取消；取消成立时也不向尚未消耗的订舱或预占发
+// 取消、释放请求——CONTEXT「上游运输意图取消只对尚未消耗的下游范围发出取消或释放请求」的下游那一步本编排没做，要运营人员
+// 经取消订舱口、释放口逐个登记（ADR-0204 越权风险点「取消只有整份，也不往下游传」）。
+//
 // 已取消的重放答原取消、不二取，哪怕这次给的取消时刻不同：取消只有一次，第二个时刻没有可落的地方。
 func (handler *CommissionTransportHandler) CancelCommission(
 	ctx context.Context,
@@ -662,7 +671,7 @@ func answerFromSettledCommission(record ports.TransportCommissionRecord) (Commis
 		return CommissionResult{outcome: CommissionTransportStarted, commission: record, hasRecord: true}, true
 	}
 	if _, cancelled := record.Commission.Cancelled(); cancelled {
-		return CommissionResult{outcome: CommissionExistingResult, commission: record, hasRecord: true}, true
+		return CommissionResult{outcome: CancellationExistingResult, commission: record, hasRecord: true}, true
 	}
 	return CommissionResult{}, false
 }
@@ -674,8 +683,8 @@ func answerFromSettledCommission(record ports.TransportCommissionRecord) (Commis
 // 仍可为剩余范围订舱（票 24 的核对次序不挡已开始的委托），那样的订舱尚未消耗，可以取消。逐订舱的消耗关系本上下文没有
 // 记，这是能判出「尚可停止」的最近一层事实（ADR-0204 越权风险点）。
 //
-// 委托已取消不挡取消订舱：上游取消只对下游尚未消耗的范围发出取消，下游按自己的规则分别形成结果（CONTEXT「上游运输意图
-// 取消……」），取消订舱正是那个下游结果。已形成的承运答复不因取消而改写，接受是独立对象，本编排碰不到它。
+// 委托已取消不挡取消订舱：取消委托不向下游订舱传取消（CancelCommission 的头注），已取消委托下的订舱只能经这一口逐个停掉，
+// 挡了它那些订舱就永远停不掉。已形成的承运答复不因取消而改写，接受是独立对象，本编排碰不到它。
 func (handler *CommissionTransportHandler) CancelBooking(
 	ctx context.Context,
 	command CancelBookingCommand,
@@ -694,7 +703,7 @@ func (handler *CommissionTransportHandler) CancelBooking(
 		return CommissionResult{outcome: BookingNotFound}, nil
 	}
 	if _, cancelled := existing.Booking.Cancelled(); cancelled {
-		return CommissionResult{outcome: BookingExistingResult, booking: existing, hasRecord: true}, nil
+		return CommissionResult{outcome: CancellationExistingResult, booking: existing, hasRecord: true}, nil
 	}
 	commission, found, err := handler.deps.Commissions.FindByKey(ctx, ports.TransportCommissionKey{
 		TenantID:   command.TenantID,
@@ -731,7 +740,7 @@ func (handler *CommissionTransportHandler) CancelBooking(
 	}
 	if found {
 		if _, cancelled := current.Booking.Cancelled(); cancelled {
-			return CommissionResult{outcome: BookingExistingResult, booking: current, hasRecord: true}, nil
+			return CommissionResult{outcome: CancellationExistingResult, booking: current, hasRecord: true}, nil
 		}
 	}
 	return CommissionResult{}, fmt.Errorf("%w: booking %s not cancelled after a refused cancellation", ErrUnexpectedBookingSave, bookingRef)

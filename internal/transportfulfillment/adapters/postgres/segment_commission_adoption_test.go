@@ -18,9 +18,9 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// 本文件对真实 PostgreSQL 证履约段采用运输委托这本册（迁移 TF 0035，ADR-0204）与取消订舱的写口：采用整份往返、同段第二份
-// 答已登记不覆盖、段或委托不在册时外键挡住；采用编排接真段册、真委托册与真采用册时，采用把委托标为开始、此后取消委托答运输
-// 已开始；取消订舱只落一次取消、不改落册时刻。夹具全为合成登记（S 级）。
+// 本文件对真实 PostgreSQL 证履约段采用运输委托这本册（迁移 TF 0035，ADR-0204）、委托开始的前移写口与取消订舱的写口：采用
+// 整份往返、同段第二份答已登记不覆盖、段或委托不在册时外键挡住；采用编排接真段册、真委托册与真采用册时，采用把委托标为开始、
+// 此后取消委托答运输已开始，开始得更早的段后采用把开始前移；取消订舱只落一次取消、不改落册时刻。夹具全为合成登记（S 级）。
 
 type adoptionStores struct {
 	segments    *adapter.FulfillmentSegments
@@ -82,7 +82,7 @@ func TestAWiredAdoptionStartsTheCommissionAndCancellationThenAnswersAlreadyStart
 	stores.seed(t, ctx)
 	clock := fixedAdoptionClock{at: segmentEnteredAtFixture.Add(24 * time.Hour)}
 	adopter := application.NewAdoptSegmentCommissionHandler(application.AdoptSegmentCommissionDeps{
-		Adoptions: stores.adoptions, Segments: stores.segments, Commissions: stores.commissions, Clock: clock,
+		Adoptions: stores.adoptions, Segments: stores.segments, Commissions: stores.commissions, StartAdvancement: stores.commissions, Clock: clock,
 	})
 	tenant := deliveryValue(t, domain.NewTenantID, "tenant-1")
 	command := application.AdoptSegmentCommissionCommand{TenantID: tenant, Segment: "SEG-ADOPT", Commission: "commission-1", Provider: "partner-1"}
@@ -245,6 +245,150 @@ func TestAdoptionAndBookingCancellationWritesRefuseToRunOutsideATransaction(t *t
 	}
 	if _, err := stores.bookings.Replace(t.Context(), booking); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("取消订舱写口无事务应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	commission := submittedCommission(t, "tenant-1", "commission-1")
+	commission.Commission, err = commission.Commission.MarkTransportStarted(
+		deliveryValue(t, domain.NewParticipationBasisReference, "OFFSITE-PICKUP/parcel-1"), segmentEnteredAtFixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := stores.commissions.AdvanceStart(t.Context(), commission); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("前移开始写口无事务应返回 ErrTransactionRequired，实得：%v", err)
+	}
+}
+
+// Covers: `AT-TF-181` 的真库面（ADR-0204 决定二）——委托的开始取已采用各段首个参与里最早的那一条：先采用开始得晚的 SEG-LATE，
+// 委托标为它的开始；再采用开始得早的 SEG-ADOPT，开始前移到 SEG-ADOPT 的首个参与，SEG-LATE 的连线仍带它自己的开始。前移写口
+// 拿一个不更早的开始来写答 false、行不动；对尚未开始的委托也答 false。
+func TestAnEarlierStartingSegmentAdoptedLaterAdvancesTheCommissionStart(t *testing.T) {
+	stores := newAdoptionStores(t)
+	ctx := t.Context()
+	stores.seed(t, ctx)
+	late := activeMember(t, "parcel-2")
+	late.EnteredAt = segmentEnteredAtFixture.Add(2 * time.Hour)
+	mustSaveSegment(t, stores.transactor, ctx, stores.segments, segmentRecord(t, "SEG-LATE", late))
+	clock := fixedAdoptionClock{at: segmentEnteredAtFixture.Add(24 * time.Hour)}
+	adopter := application.NewAdoptSegmentCommissionHandler(application.AdoptSegmentCommissionDeps{
+		Adoptions: stores.adoptions, Segments: stores.segments, Commissions: stores.commissions, StartAdvancement: stores.commissions, Clock: clock,
+	})
+	tenant := deliveryValue(t, domain.NewTenantID, "tenant-1")
+	adopt := func(segment string) application.CommissionAdoptionOutcome {
+		t.Helper()
+		var result application.CommissionAdoptionResult
+		mustWithinDeliveryTransaction(t, stores.transactor, ctx, func(txCtx context.Context) error {
+			var err error
+			result, err = adopter.Adopt(txCtx, application.AdoptSegmentCommissionCommand{TenantID: tenant, Segment: segment, Commission: "commission-1", Provider: "partner-1"})
+			return err
+		})
+		return result.Outcome()
+	}
+	start := func() (string, time.Time) {
+		t.Helper()
+		var basis string
+		var at time.Time
+		if err := stores.pool.QueryRow(ctx,
+			`SELECT started_basis, started_at FROM transport_fulfillment.transport_commission
+			  WHERE tenant_id = 'tenant-1' AND commission_id = 'commission-1'`).Scan(&basis, &at); err != nil {
+			t.Fatalf("读委托行：%v", err)
+		}
+		return basis, at
+	}
+
+	if outcome := adopt("SEG-LATE"); outcome != application.CommissionAdopted {
+		t.Fatalf("采用 SEG-LATE = %q", outcome)
+	}
+	if basis, at := start(); basis != "OFFSITE-PICKUP/parcel-2" || !at.Equal(late.EnteredAt) {
+		t.Fatalf("先采用的段标的开始 = (%s, %s)", basis, at)
+	}
+	if outcome := adopt("SEG-ADOPT"); outcome != application.CommissionAdopted {
+		t.Fatalf("采用 SEG-ADOPT = %q", outcome)
+	}
+	if basis, at := start(); basis != "OFFSITE-PICKUP/parcel-1" || !at.Equal(segmentEnteredAtFixture) {
+		t.Fatalf("开始没有前移到更早的那一段：(%s, %s)", basis, at)
+	}
+	found, _, err := stores.adoptions.FindBySegment(ctx, ports.SegmentCommissionAdoptionKey{TenantID: tenant, Segment: deliveryValue(t, domain.NewFulfillmentSegmentReference, "SEG-LATE")})
+	if basis, _ := found.Adoption.Started(); err != nil || basis.String() != "OFFSITE-PICKUP/parcel-2" {
+		t.Fatalf("SEG-LATE 的连线丢了自己的开始：%s %v", basis, err)
+	}
+
+	advance := func(record ports.TransportCommissionRecord) bool {
+		t.Helper()
+		var ok bool
+		mustWithinDeliveryTransaction(t, stores.transactor, ctx, func(txCtx context.Context) error {
+			var err error
+			ok, err = stores.commissions.AdvanceStart(txCtx, record)
+			return err
+		})
+		return ok
+	}
+	notEarlier := submittedCommission(t, "tenant-1", "commission-1")
+	notEarlier.Commission, err = notEarlier.Commission.MarkTransportStarted(
+		deliveryValue(t, domain.NewParticipationBasisReference, "OFFSITE-PICKUP/parcel-9"), segmentEnteredAtFixture)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if advance(notEarlier) {
+		t.Fatal("同一时刻的开始也前移落上了")
+	}
+	if basis, _ := start(); basis != "OFFSITE-PICKUP/parcel-1" {
+		t.Fatalf("没落上的前移改了行：%s", basis)
+	}
+	mustWithinDeliveryTransaction(t, stores.transactor, ctx, func(txCtx context.Context) error {
+		_, err := stores.commissions.Save(txCtx, submittedCommission(t, "tenant-1", "commission-2"))
+		return err
+	})
+	unstarted := submittedCommission(t, "tenant-1", "commission-2")
+	unstarted.Commission, err = unstarted.Commission.MarkTransportStarted(
+		deliveryValue(t, domain.NewParticipationBasisReference, "OFFSITE-PICKUP/parcel-9"), commissionAt.Add(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if advance(unstarted) {
+		t.Fatal("尚未开始的委托被前移写口标了开始")
+	}
+}
+
+// Covers: `AT-TF-187` 的真库面（ADR-0204 决定三「采用登记之前的取消」）——委托在段的首个参与之后登记取消，取消照常成立；此后
+// 的采用答取消晚于开始，零行采用，委托仍是已取消、没有开始。
+func TestAnAdoptionAfterACancellationDatedAfterTheSegmentStartedAnswersTheConflict(t *testing.T) {
+	stores := newAdoptionStores(t)
+	ctx := t.Context()
+	stores.seed(t, ctx)
+	clock := fixedAdoptionClock{at: segmentEnteredAtFixture.Add(24 * time.Hour)}
+	tenant := deliveryValue(t, domain.NewTenantID, "tenant-1")
+	handler := application.NewCommissionTransportHandler(application.CommissionTransportDeps{
+		Commissions: stores.commissions, Bookings: stores.bookings, BookingCancellations: stores.bookings, Clock: clock,
+	})
+	var cancel application.CommissionResult
+	mustWithinDeliveryTransaction(t, stores.transactor, ctx, func(txCtx context.Context) error {
+		var err error
+		cancel, err = handler.CancelCommission(txCtx, application.CancelCommissionCommand{TenantID: tenant, Commission: "commission-1", CancelledAt: segmentEnteredAtFixture.Add(time.Hour)})
+		return err
+	})
+	if cancel.Outcome() != application.CommissionCancelled {
+		t.Fatalf("采用登记之前的取消 = %q", cancel.Outcome())
+	}
+	adopter := application.NewAdoptSegmentCommissionHandler(application.AdoptSegmentCommissionDeps{
+		Adoptions: stores.adoptions, Segments: stores.segments, Commissions: stores.commissions, StartAdvancement: stores.commissions, Clock: clock,
+	})
+	var result application.CommissionAdoptionResult
+	mustWithinDeliveryTransaction(t, stores.transactor, ctx, func(txCtx context.Context) error {
+		var err error
+		result, err = adopter.Adopt(txCtx, application.AdoptSegmentCommissionCommand{TenantID: tenant, Segment: "SEG-ADOPT", Commission: "commission-1", Provider: "partner-1"})
+		return err
+	})
+	basis, startedAt, echoed := result.SegmentStart()
+	if result.Outcome() != application.CommissionAdoptionCancelledAfterStart || !echoed || basis.String() != "OFFSITE-PICKUP/parcel-1" || !startedAt.Equal(segmentEnteredAtFixture) {
+		t.Fatalf("采用 = %q，段的首个参与 (%s, %s, %v)", result.Outcome(), basis, startedAt, echoed)
+	}
+	var rows int
+	var started, cancelled *time.Time
+	if err := stores.pool.QueryRow(ctx, `SELECT count(*) FROM transport_fulfillment.segment_commission_adoption`).Scan(&rows); err != nil || rows != 0 {
+		t.Fatalf("采用 %d 行 %v", rows, err)
+	}
+	if err := stores.pool.QueryRow(ctx,
+		`SELECT started_at, cancelled_at FROM transport_fulfillment.transport_commission WHERE tenant_id = 'tenant-1' AND commission_id = 'commission-1'`).Scan(&started, &cancelled); err != nil || started != nil || cancelled == nil {
+		t.Fatalf("委托行 = 开始 %v、取消 %v %v", started, cancelled, err)
 	}
 }
 

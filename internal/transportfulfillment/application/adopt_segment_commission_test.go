@@ -75,11 +75,34 @@ func (double *adoptedSegmentViewDouble) FindByKey(
 	return ports.FulfillmentSegmentRecord{Key: key, Segment: segment}, true, nil
 }
 
-// adoptionRacingCommissionStore 在 Replace 那一刻先让另一笔落定（race 改写在册那一份），再照常按「既未开始也未取消」判这一笔落不落。
+// adoptionRacingCommissionStore 在 Replace 那一刻先让另一笔落定（race 改写在册那一份），再照常按「既未开始也未取消」判这一笔落不落；
+// AdvanceStart 同样先跑 advanceRace，再照迁移里那条 WHERE 判：只写已开始、未取消、在册开始晚于这一次的行。
 type adoptionRacingCommissionStore struct {
 	*commissionStoreDouble
-	race       func(ports.TransportCommissionRecord) ports.TransportCommissionRecord
-	replaceErr error
+	race        func(ports.TransportCommissionRecord) ports.TransportCommissionRecord
+	advanceRace func(ports.TransportCommissionRecord) ports.TransportCommissionRecord
+	replaceErr  error
+	advances    int
+}
+
+func (double *adoptionRacingCommissionStore) AdvanceStart(_ context.Context, record ports.TransportCommissionRecord) (bool, error) {
+	double.advances++
+	key := commissionStoreKey(record.Key)
+	if double.advanceRace != nil {
+		double.records[key] = double.advanceRace(double.records[key])
+		double.advanceRace = nil
+	}
+	stored, exists := double.records[key]
+	if !exists {
+		return false, nil
+	}
+	_, storedAt, started := stored.Commission.TransportStarted()
+	_, at, _ := record.Commission.TransportStarted()
+	if _, cancelled := stored.Commission.Cancelled(); cancelled || !started || !storedAt.After(at) {
+		return false, nil
+	}
+	double.records[key] = record
+	return true, nil
 }
 
 func (double *adoptionRacingCommissionStore) Replace(ctx context.Context, record ports.TransportCommissionRecord) (bool, error) {
@@ -148,10 +171,11 @@ func newCommissionAdoptionFixture(t *testing.T) *commissionAdoptionFixture {
 		}},
 	}
 	fixture.adopter = application.NewAdoptSegmentCommissionHandler(application.AdoptSegmentCommissionDeps{
-		Adoptions:   fixture.adoptions,
-		Segments:    fixture.segments,
-		Commissions: fixture.racing,
-		Clock:       commissionClock{at: commissionNowAt},
+		Adoptions:        fixture.adoptions,
+		Segments:         fixture.segments,
+		Commissions:      fixture.racing,
+		StartAdvancement: fixture.racing,
+		Clock:            commissionClock{at: commissionNowAt},
 	})
 	return fixture
 }
@@ -171,7 +195,7 @@ func (fixture *commissionAdoptionFixture) storedCommission(t *testing.T) ports.T
 
 // Covers: `AT-TF-181`、`AT-TF-182`（ADR-0204 决定一、二、三）——段采用委托答采用成立，委托随之以段的首个参与标为已开始（不取
 // 登记时刻）；此后取消委托答运输已开始（AT-TF-092），原样再交答已有采用，同段换一份委托答采用冲突并回显在册那一份；另一段
-// 采用同一份已开始的委托照常成立，不改写首次开始。
+// 采用同一份已开始的委托照常成立；它开始得更晚就不动委托的开始，开始得更早就把委托的开始前移到它（不回退为未开始）。
 func TestAdoptingACommissionStartsItAndCancellationThenAnswersAlreadyStarted(t *testing.T) {
 	fixture := newCommissionAdoptionFixture(t)
 	result, err := fixture.adopter.Adopt(context.Background(), adoptCommand("SEG-1", "commission-1", "partner-1"))
@@ -231,10 +255,27 @@ func TestAdoptingACommissionStartsItAndCancellationThenAnswersAlreadyStarted(t *
 	if basis, _ := adoption.Adoption.Started(); basis.String() != "TRANSPORT-HANDOVER/SEG-2/parcel-1/v1" {
 		t.Fatal("后到那一段的连线没带自己的开始依据")
 	}
+
+	fixture.segments.segments["tenant-1|SEG-0"] = adoptableSegment(t, "SEG-0", segmentEnteredAt.Add(-30*time.Minute))
+	earlier, err := fixture.adopter.Adopt(context.Background(), adoptCommand("SEG-0", "commission-1", "partner-1"))
+	if err != nil || earlier.Outcome() != application.CommissionAdopted {
+		t.Fatalf("开始得更早的段后采用 = %q %v", earlier.Outcome(), err)
+	}
+	stored := fixture.storedCommission(t)
+	if basis, at, _ := stored.Commission.TransportStarted(); basis.String() != "TRANSPORT-HANDOVER/SEG-0/parcel-1/v1" || !at.Equal(segmentEnteredAt.Add(-30*time.Minute)) {
+		t.Fatalf("委托的开始没有前移到更早的那一段：(%s, %s)", basis, at)
+	}
+	if echoed, _ := earlier.Commission(); !echoed.RecordedAt.Equal(stored.RecordedAt) {
+		t.Fatal("采用成立回显的委托不是前移之后在册的那一份")
+	}
+	if fixture.racing.advances != 1 {
+		t.Fatalf("前移写口调了 %d 次，want 1", fixture.racing.advances)
+	}
 }
 
-// Covers: `AT-TF-183`、`AT-TF-184`（ADR-0204 决定一）——段不在册、委托不在册、服务方不符（回显委托的服务提供方）、委托已取消、
-// 段早于委托提交就已开始、声明不成形各答一格，都零写入、委托不标开始。
+// Covers: `AT-TF-183`、`AT-TF-184`、`AT-TF-187`（ADR-0204 决定一、三）——段不在册、委托不在册、服务方不符（回显委托的服务提供
+// 方）、委托在段开始之前已取消、委托在段开始之后才登记取消（回显在册的取消与段的首个参与）、段早于委托提交就已开始、声明
+// 不成形各答一格，都零写入、委托不标开始。
 func TestAnAdoptionAnswersEachUnmetPreconditionWithoutWriting(t *testing.T) {
 	for name, tc := range map[string]struct {
 		command application.AdoptSegmentCommissionCommand
@@ -256,6 +297,18 @@ func TestAnAdoptionAnswersEachUnmetPreconditionWithoutWriting(t *testing.T) {
 				}
 			},
 			want: application.CommissionNotAdoptable,
+		},
+		"commission cancelled after the segment started": {
+			command: adoptCommand("SEG-1", "commission-1", "partner-1"),
+			prepare: func(t *testing.T, fixture *commissionAdoptionFixture) {
+				tenant, _ := domain.NewTenantID("tenant-1")
+				if result, err := fixture.handler.CancelCommission(context.Background(), application.CancelCommissionCommand{
+					TenantID: tenant, Commission: "commission-1", CancelledAt: segmentEnteredAt.Add(10 * time.Minute),
+				}); err != nil || result.Outcome() != application.CommissionCancelled {
+					t.Fatalf("采用登记之前的取消：%q %v（这一格今天照常成立，ADR-0204 越权风险点）", result.Outcome(), err)
+				}
+			},
+			want: application.CommissionAdoptionCancelledAfterStart,
 		},
 		"segment started before the commission": {
 			command: adoptCommand("SEG-EARLY", "commission-1", "partner-1"),
@@ -284,6 +337,17 @@ func TestAnAdoptionAnswersEachUnmetPreconditionWithoutWriting(t *testing.T) {
 			if named != (tc.want == application.CommissionAdoptionProviderMismatch) || (named && provider.String() != "partner-1") {
 				t.Fatalf("服务方不符的回显 = (%s, %v)", provider, named)
 			}
+			basis, startedAt, echoed := result.SegmentStart()
+			commission, withCommission := result.Commission()
+			if tc.want == application.CommissionAdoptionCancelledAfterStart {
+				cancelledAt, cancelled := commission.Commission.Cancelled()
+				if !echoed || basis.String() != "TRANSPORT-HANDOVER/SEG-1/parcel-1/v1" || !startedAt.Equal(segmentEnteredAt) ||
+					!withCommission || !cancelled || !cancelledAt.Equal(segmentEnteredAt.Add(10*time.Minute)) {
+					t.Fatalf("取消晚于开始的回显 = 段 (%s, %s, %v)，委托 %v", basis, startedAt, echoed, withCommission)
+				}
+			} else if echoed || withCommission {
+				t.Fatal("别的格回显了段的开始或委托")
+			}
 		})
 	}
 }
@@ -304,6 +368,80 @@ func TestAdoptionRecoveryAndConcurrency(t *testing.T) {
 			if err != nil || result.Outcome() != application.CommissionAdoptionUndecided || result.UndecidedReason() != want || result.ContinuationReference() == "" {
 				t.Fatalf("%s: outcome = %q / %q %v", want, result.Outcome(), result.UndecidedReason(), err)
 			}
+		}
+	})
+
+	t.Run("a cancellation dated after the segment started that lands first is answered as cancelled after start", func(t *testing.T) {
+		fixture := newCommissionAdoptionFixture(t)
+		fixture.racing.race = func(record ports.TransportCommissionRecord) ports.TransportCommissionRecord {
+			cancelled, err := record.Commission.Cancel(segmentEnteredAt.Add(5 * time.Minute))
+			if err != nil {
+				t.Fatal(err)
+			}
+			record.Commission = cancelled
+			return record
+		}
+		result, err := fixture.adopter.Adopt(context.Background(), adoptCommand("SEG-1", "commission-1", "partner-1"))
+		if err != nil || result.Outcome() != application.CommissionAdoptionCancelledAfterStart {
+			t.Fatalf("outcome = %q %v, want COMMISSION_CANCELLED_AFTER_START", result.Outcome(), err)
+		}
+		if _, _, echoed := result.SegmentStart(); !echoed {
+			t.Fatal("并发窗口里的取消晚于开始没有回显段的首个参与")
+		}
+	})
+
+	t.Run("a segment adopted concurrently that started later is overtaken by this earlier start", func(t *testing.T) {
+		fixture := newCommissionAdoptionFixture(t)
+		fixture.racing.race = func(record ports.TransportCommissionRecord) ports.TransportCommissionRecord {
+			basis, _ := domain.NewParticipationBasisReference("TRANSPORT-HANDOVER/SEG-LATE/parcel-1/v1")
+			started, err := record.Commission.MarkTransportStarted(basis, segmentEnteredAt.Add(time.Hour))
+			if err != nil {
+				t.Fatal(err)
+			}
+			record.Commission = started
+			return record
+		}
+		result, err := fixture.adopter.Adopt(context.Background(), adoptCommand("SEG-1", "commission-1", "partner-1"))
+		if err != nil || result.Outcome() != application.CommissionAdopted {
+			t.Fatalf("outcome = %q %v, want COMMISSION_ADOPTED", result.Outcome(), err)
+		}
+		if basis, at, _ := fixture.storedCommission(t).Commission.TransportStarted(); basis.String() != "TRANSPORT-HANDOVER/SEG-1/parcel-1/v1" || !at.Equal(segmentEnteredAt) {
+			t.Fatalf("并发里先落的更晚开始没有被这一段前移：(%s, %s)", basis, at)
+		}
+	})
+
+	t.Run("an advance overtaken by an even earlier one keeps the earlier start", func(t *testing.T) {
+		fixture := newCommissionAdoptionFixture(t)
+		basis, _ := domain.NewParticipationBasisReference("TRANSPORT-HANDOVER/SEG-LATE/parcel-1/v1")
+		key := ports.TransportCommissionKey{}
+		key.TenantID, _ = domain.NewTenantID("tenant-1")
+		key.Commission, _ = domain.NewTransportCommissionReference("commission-1")
+		unstarted := fixture.commissions.records[commissionStoreKey(key)]
+		started, err := unstarted.Commission.MarkTransportStarted(basis, segmentEnteredAt.Add(time.Hour))
+		if err != nil {
+			t.Fatal(err)
+		}
+		record := unstarted
+		record.Commission = started
+		fixture.commissions.records[commissionStoreKey(key)] = record
+		fixture.racing.advanceRace = func(record ports.TransportCommissionRecord) ports.TransportCommissionRecord {
+			earliest, _ := domain.NewParticipationBasisReference("TRANSPORT-HANDOVER/SEG-EARLIEST/parcel-1/v1")
+			startedEarliest, err := unstarted.Commission.MarkTransportStarted(earliest, segmentEnteredAt.Add(-time.Hour))
+			if err != nil {
+				t.Fatal(err)
+			}
+			record.Commission = startedEarliest
+			return record
+		}
+		result, err := fixture.adopter.Adopt(context.Background(), adoptCommand("SEG-1", "commission-1", "partner-1"))
+		if err != nil || result.Outcome() != application.CommissionAdopted {
+			t.Fatalf("outcome = %q %v, want COMMISSION_ADOPTED", result.Outcome(), err)
+		}
+		if basis, _, _ := fixture.storedCommission(t).Commission.TransportStarted(); basis.String() != "TRANSPORT-HANDOVER/SEG-EARLIEST/parcel-1/v1" {
+			t.Fatalf("更早的那一次前移被这一段改写成 %s", basis)
+		}
+		if fixture.racing.advances != 1 {
+			t.Fatalf("前移写口调了 %d 次，want 1", fixture.racing.advances)
 		}
 	})
 
