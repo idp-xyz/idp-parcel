@@ -18,6 +18,10 @@ import (
 // ErrUnexpectedReceptionSave 说明收寄库交回了封闭集合以外的写入结果。
 var ErrUnexpectedReceptionSave = errors.New("node operations: unexpected reception save outcome")
 
+// ErrReceptionCommandRejected 说明这条命令本身有缺陷（必填缺失、接收观察不在三态之内），重发同样的内容不会变好；
+// 入口据此答坏报文、前线导入记被拒，而不是当成没形成答案留给重投（ADR-0186）。
+var ErrReceptionCommandRejected = errors.New("node operations: reception command rejected")
+
 // ReceptionOutcome 是收寄请求的应用处理结果，对应 UC-NO-002 结果语义契约的六格。
 type ReceptionOutcome uint8
 
@@ -78,11 +82,10 @@ type ReceiveDeliveredUnitCommand struct {
 }
 
 type ReceiveDeliveredUnitResult struct {
-	outcome      ReceptionOutcome
-	record       ports.ReceptionRecord
-	hasRecord    bool
-	continuation string
-	handoff      string
+	outcome   ReceptionOutcome
+	record    ports.ReceptionRecord
+	hasRecord bool
+	handoff   string
 }
 
 func (result ReceiveDeliveredUnitResult) Outcome() ReceptionOutcome {
@@ -93,18 +96,16 @@ func (result ReceiveDeliveredUnitResult) Record() (ports.ReceptionRecord, bool) 
 	return result.record, result.hasRecord
 }
 
-func (result ReceiveDeliveredUnitResult) ContinuationReference() string {
-	return result.continuation
-}
-
 // IntakeHandoffReference 非空说明结果已提交但意图还没交出去，重放会重发同一份。
 func (result ReceiveDeliveredUnitResult) IntakeHandoffReference() string {
 	return result.handoff
 }
 
+// ReceiveDeliveredUnitDeps 是收寄编排的全部依赖，缺任一个构造即拒。
 type ReceiveDeliveredUnitDeps struct {
 	Identity ports.ParcelIdentityView
-	// ServiceResults 在身份唯一成立时被问一次，答出的取消与终局落成收寄记录上的服务结果标记（票 operator-channel/25）。
+	// ServiceResults 在身份唯一成立时被问一次，答出的取消与终局落成收寄记录上的服务结果标记。它报错时编排照常落册，
+	// 只把核对态记成读不动（ADR-0186）；装配须保证读口失败不连带收寄的写，见 transactionalReception。
 	ServiceResults ports.ParcelServiceResultView
 	Receptions     ports.ReceptionStore
 	Versions       ports.IntakeIdentityFactory
@@ -116,13 +117,31 @@ type ReceiveDeliveredUnitHandler struct {
 	deps ReceiveDeliveredUnitDeps
 }
 
-func NewReceiveDeliveredUnitHandler(deps ReceiveDeliveredUnitDeps) *ReceiveDeliveredUnitHandler {
-	return &ReceiveDeliveredUnitHandler{deps: deps}
+// NewReceiveDeliveredUnitHandler 在构造期拒缺依赖的装配：留到运行期，缺件会在第一次收寄时冒充一次依赖故障（ADR-0186）。
+func NewReceiveDeliveredUnitHandler(deps ReceiveDeliveredUnitDeps) (*ReceiveDeliveredUnitHandler, error) {
+	switch {
+	case deps.Identity == nil:
+		return nil, errors.New("node operations: reception needs a parcel identity view")
+	case deps.ServiceResults == nil:
+		return nil, errors.New("node operations: reception needs a parcel service result view")
+	case deps.Receptions == nil:
+		return nil, errors.New("node operations: reception needs a reception store")
+	case deps.Versions == nil:
+		return nil, errors.New("node operations: reception needs an intake result version factory")
+	case deps.Downstream == nil:
+		return nil, errors.New("node operations: reception needs a node intake handoff")
+	case deps.Clock == nil:
+		return nil, errors.New("node operations: reception needs a clock")
+	}
+	return &ReceiveDeliveredUnitHandler{deps: deps}, nil
 }
 
 // Handle 把一件送达实物推进到收寄判断：幂等/冲突按内容指纹分界 → 接收观察三态分派
 // （拒收不建控制、仅扫描不建控制）→ 身份核对分关联/待识别/身份冲突 → 收寄与控制
 // 同一提交 → 发布意图。物理事实全程只增不删。
+//
+// 没形成答案（身份核对读不动、收寄库读写失败、已存摘要认不出、版本签发失败）一律交回 error，不答一格业务结果：
+// 什么都没落册时答`收寄待确认`，设备收到 2xx 就出队，这一次接收从此没有记录（ADR-0186、ADR-0022）。
 func (handler *ReceiveDeliveredUnitHandler) Handle(
 	ctx context.Context,
 	command ReceiveDeliveredUnitCommand,
@@ -132,8 +151,7 @@ func (handler *ReceiveDeliveredUnitHandler) Handle(
 		strings.TrimSpace(command.Node.String()) == "" ||
 		strings.TrimSpace(command.Unit.String()) == "" ||
 		command.OccurredAt.IsZero() {
-		return ReceiveDeliveredUnitResult{outcome: ReceptionUndecided,
-			continuation: receptionContinuation("INCOMPLETE_DELIVERY", command.SourceID)}, nil
+		return ReceiveDeliveredUnitResult{}, fmt.Errorf("%w: incomplete delivery", ErrReceptionCommandRejected)
 	}
 
 	key := ports.ReceptionKey{TenantID: command.TenantID, SourceID: command.SourceID}
@@ -143,8 +161,7 @@ func (handler *ReceiveDeliveredUnitHandler) Handle(
 	}
 	existing, found, err := handler.deps.Receptions.FindByKey(ctx, key)
 	if err != nil {
-		return ReceiveDeliveredUnitResult{outcome: ReceptionUndecided,
-			continuation: receptionContinuation("RECEPTION_STORE_UNAVAILABLE", command.SourceID)}, nil
+		return ReceiveDeliveredUnitResult{}, fmt.Errorf("find reception: %w", err)
 	}
 	if found {
 		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedDeliveryContentDigest(command)) {
@@ -155,8 +172,8 @@ func (handler *ReceiveDeliveredUnitHandler) Handle(
 			// （AT-NO-017）。
 			return ReceiveDeliveredUnitResult{outcome: ReceptionSourceConflict}, nil
 		default:
-			return ReceiveDeliveredUnitResult{outcome: ReceptionUndecided,
-				continuation: receptionContinuation("RECEPTION_STORE_UNAVAILABLE", command.SourceID)}, nil
+			// 已存摘要的形状版本认不出：无从判断重放还是冲突，不猜，也不另落一条。
+			return ReceiveDeliveredUnitResult{}, errors.New("node operations: stored reception digest is not comparable")
 		}
 	}
 
@@ -185,8 +202,7 @@ func (handler *ReceiveDeliveredUnitHandler) Handle(
 		}
 		return handler.commit(ctx, record)
 	default:
-		return ReceiveDeliveredUnitResult{outcome: ReceptionUndecided,
-			continuation: receptionContinuation("UNKNOWN_RECEPTION_CLAIM", command.SourceID)}, nil
+		return ReceiveDeliveredUnitResult{}, fmt.Errorf("%w: unknown reception claim %d", ErrReceptionCommandRejected, command.Claim)
 	}
 }
 
@@ -197,31 +213,27 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 	key ports.ReceptionKey,
 	digest string,
 ) (ReceiveDeliveredUnitResult, error) {
+	// 身份核对读不动不拿空候选顶替（ADR-0089）：那会把可能已知的包裹落成待识别。
 	candidates, err := handler.deps.Identity.ResolveParcelIdentity(ctx, command.TenantID, command.Mark)
 	if err != nil {
-		return ReceiveDeliveredUnitResult{outcome: ReceptionUndecided,
-			continuation: receptionContinuation("IDENTITY_VIEW_UNAVAILABLE", command.SourceID)}, nil
+		return ReceiveDeliveredUnitResult{}, fmt.Errorf("resolve parcel identity: %w", err)
 	}
-	// 身份唯一成立才有可问的包裹：向 PS 取它此刻的服务结果，落成标记（UC-NO-002 第 7 步；票 operator-channel/25）。
-	// 读不动与身份核对读不动同一种处理——停在待确认、不落册；问在签发版本之前，免得一次注定不落册的尝试消耗版本号。
+	// 身份唯一成立才有可问的包裹：向 PS 取它此刻的服务结果，落成标记（UC-NO-002 第 7 步）。读不动不挡已经发生的物理
+	// 事实——照常落册，核对态记读不动、标记留空，不补查（ADR-0186）；空标记因此只在已查时才说「没有取消与终局」。
 	var markers []string
+	check := ports.ServiceResultCheckAbsent
 	if len(candidates) == 1 {
-		if handler.deps.ServiceResults == nil {
-			// 装配缺件不是「没有限制」：停下说清楚，不把没问过的包裹记成不带标记。
-			return ReceiveDeliveredUnitResult{outcome: ReceptionUndecided,
-				continuation: receptionContinuation("SERVICE_RESULT_VIEW_UNCONFIGURED", command.SourceID)}, nil
-		}
 		results, err := handler.deps.ServiceResults.FindParcelServiceResults(ctx, command.TenantID, candidates[0])
 		if err != nil {
-			return ReceiveDeliveredUnitResult{outcome: ReceptionUndecided,
-				continuation: receptionContinuation("SERVICE_RESULT_VIEW_UNAVAILABLE", command.SourceID)}, nil
+			check = ports.ServiceResultsUnreadable
+		} else {
+			check = ports.ServiceResultsChecked
+			markers = results.Markers()
 		}
-		markers = results.Markers()
 	}
 	version, err := handler.deps.Versions.NextIntakeResultVersion(ctx)
 	if err != nil {
-		return ReceiveDeliveredUnitResult{outcome: ReceptionUndecided,
-			continuation: receptionContinuation("INTAKE_IDENTITY_UNAVAILABLE", command.SourceID)}, nil
+		return ReceiveDeliveredUnitResult{}, fmt.Errorf("next intake result version: %w", err)
 	}
 
 	spec := domain.NodeIntakeSpec{
@@ -268,15 +280,16 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 	}
 
 	record := ports.ReceptionRecord{
-		Key:              key,
-		ContentDigest:    digest,
-		Kind:             kind,
-		Intake:           intake,
-		Control:          control,
-		Candidates:       candidates,
-		IdentityConflict: conflict,
-		ServiceMarkers:   markers,
-		RecordedAt:       handler.deps.Clock.Now(),
+		Key:                key,
+		ContentDigest:      digest,
+		Kind:               kind,
+		Intake:             intake,
+		Control:            control,
+		Candidates:         candidates,
+		IdentityConflict:   conflict,
+		ServiceMarkers:     markers,
+		ServiceResultCheck: check,
+		RecordedAt:         handler.deps.Clock.Now(),
 	}
 	return handler.commit(ctx, record)
 }
@@ -288,8 +301,7 @@ func (handler *ReceiveDeliveredUnitHandler) commit(
 ) (ReceiveDeliveredUnitResult, error) {
 	saved, err := handler.deps.Receptions.Save(ctx, record)
 	if err != nil {
-		return ReceiveDeliveredUnitResult{outcome: ReceptionUndecided,
-			continuation: receptionContinuation("RECEPTION_STORE_UNAVAILABLE", record.Key.SourceID)}, nil
+		return ReceiveDeliveredUnitResult{}, fmt.Errorf("save reception: %w", err)
 	}
 	switch saved {
 	case ports.ReceptionSaved:
@@ -298,9 +310,11 @@ func (handler *ReceiveDeliveredUnitHandler) commit(
 		return result, nil
 	case ports.ReceptionAlreadyRecorded:
 		winner, found, err := handler.deps.Receptions.FindByKey(ctx, record.Key)
-		if err != nil || !found {
-			return ReceiveDeliveredUnitResult{outcome: ReceptionUndecided,
-				continuation: receptionContinuation("RECEPTION_STORE_UNAVAILABLE", record.Key.SourceID)}, nil
+		if err != nil {
+			return ReceiveDeliveredUnitResult{}, fmt.Errorf("read back reception winner: %w", err)
+		}
+		if !found {
+			return ReceiveDeliveredUnitResult{}, errors.New("node operations: reception already recorded but not readable")
 		}
 		return handler.existingResult(ctx, winner), nil
 	default:

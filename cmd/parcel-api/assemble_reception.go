@@ -79,7 +79,7 @@ func buildReceptionOrchestration(db *bentopg.DB) (nodeopshttp.ReceptionHandler, 
 	if err != nil {
 		return nil, err
 	}
-	handler := nodeopsapp.NewReceiveDeliveredUnitHandler(nodeopsapp.ReceiveDeliveredUnitDeps{
+	handler, err := nodeopsapp.NewReceiveDeliveredUnitHandler(nodeopsapp.ReceiveDeliveredUnitDeps{
 		Identity:       identity,
 		ServiceResults: serviceResults,
 		Receptions:     receptions,
@@ -87,6 +87,9 @@ func buildReceptionOrchestration(db *bentopg.DB) (nodeopshttp.ReceptionHandler, 
 		Downstream:     downstream,
 		Clock:          clock,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: reception orchestration: %w", err)
+	}
 	return transactionalReception{transactor: db.Transactor(), inner: handler}, nil
 }
 

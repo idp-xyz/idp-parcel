@@ -38,6 +38,13 @@ func (double *identityViewDouble) ResolveParcelIdentity(
 type receptionStoreDouble struct {
 	byKey map[ports.ReceptionKey]ports.ReceptionRecord
 	saved int
+	// findErr 让每一次 FindByKey 报错；saveErr 让 Save 报错。
+	findErr error
+	saveErr error
+	// lostRace 让 Save 答「已有记录」而不落册（另一方先提交了同键），readBackErr 让随后读回赢家那一次报错。
+	lostRace    bool
+	readBackErr error
+	saveAsked   bool
 }
 
 func newReceptionStore() *receptionStoreDouble {
@@ -48,6 +55,12 @@ func (double *receptionStoreDouble) FindByKey(
 	_ context.Context,
 	key ports.ReceptionKey,
 ) (ports.ReceptionRecord, bool, error) {
+	if double.findErr != nil {
+		return ports.ReceptionRecord{}, false, double.findErr
+	}
+	if double.saveAsked && double.readBackErr != nil {
+		return ports.ReceptionRecord{}, false, double.readBackErr
+	}
 	record, found := double.byKey[key]
 	return record, found, nil
 }
@@ -56,7 +69,11 @@ func (double *receptionStoreDouble) Save(
 	_ context.Context,
 	record ports.ReceptionRecord,
 ) (ports.ReceptionSaveOutcome, error) {
-	if _, exists := double.byKey[record.Key]; exists {
+	double.saveAsked = true
+	if double.saveErr != nil {
+		return ports.ReceptionSaveOutcomeInvalid, double.saveErr
+	}
+	if _, exists := double.byKey[record.Key]; exists || double.lostRace {
 		return ports.ReceptionAlreadyRecorded, nil
 	}
 	double.byKey[record.Key] = record
@@ -64,9 +81,15 @@ func (double *receptionStoreDouble) Save(
 	return ports.ReceptionSaved, nil
 }
 
-type versionFactoryDouble struct{ next int }
+type versionFactoryDouble struct {
+	next int
+	err  error
+}
 
 func (double *versionFactoryDouble) NextIntakeResultVersion(_ context.Context) (domain.IntakeResultVersion, error) {
+	if double.err != nil {
+		return domain.IntakeResultVersion{}, double.err
+	}
 	double.next++
 	return domain.NewIntakeResultVersion("intake-result/v" + string(rune('0'+double.next)))
 }
@@ -112,7 +135,19 @@ type receptionFixture struct {
 	identity       *identityViewDouble
 	serviceResults *serviceResultViewDouble
 	receptions     *receptionStoreDouble
+	versions       *versionFactoryDouble
 	downstream     *downstreamDouble
+}
+
+func (fixture *receptionFixture) deps() application.ReceiveDeliveredUnitDeps {
+	return application.ReceiveDeliveredUnitDeps{
+		Identity:       fixture.identity,
+		ServiceResults: fixture.serviceResults,
+		Receptions:     fixture.receptions,
+		Versions:       fixture.versions,
+		Downstream:     fixture.downstream,
+		Clock:          fixedClock{at: deliveredAt.Add(time.Minute)},
+	}
 }
 
 func newReceptionFixture(t *testing.T) *receptionFixture {
@@ -123,16 +158,14 @@ func newReceptionFixture(t *testing.T) *receptionFixture {
 		}},
 		serviceResults: &serviceResultViewDouble{},
 		receptions:     newReceptionStore(),
+		versions:       &versionFactoryDouble{},
 		downstream:     &downstreamDouble{},
 	}
-	fixture.handler = application.NewReceiveDeliveredUnitHandler(application.ReceiveDeliveredUnitDeps{
-		Identity:       fixture.identity,
-		ServiceResults: fixture.serviceResults,
-		Receptions:     fixture.receptions,
-		Versions:       &versionFactoryDouble{},
-		Downstream:     fixture.downstream,
-		Clock:          fixedClock{at: deliveredAt.Add(time.Minute)},
-	})
+	handler, err := application.NewReceiveDeliveredUnitHandler(fixture.deps())
+	if err != nil {
+		t.Fatalf("构造收寄编排：%v", err)
+	}
+	fixture.handler = handler
 	return fixture
 }
 
@@ -180,6 +213,9 @@ func TestAnExplicitReceptionFormsIntakeAndControl(t *testing.T) {
 	if len(record.ServiceMarkers) != 0 {
 		t.Fatalf("PS 没有取消与终局，却带了标记：%v", record.ServiceMarkers)
 	}
+	if record.ServiceResultCheck != ports.ServiceResultsChecked {
+		t.Fatalf("核对态 = %q, want CHECKED——读口答复了", record.ServiceResultCheck)
+	}
 	if len(fixture.serviceResults.asked) != 1 || fixture.serviceResults.asked[0] != "tenant-1|parcel-1" {
 		t.Fatalf("服务结果读口被问 %v，want 恰一次、问的是身份核对出的那一件", fixture.serviceResults.asked)
 	}
@@ -211,46 +247,175 @@ func TestAUniquelyIdentifiedReceptionCarriesTheParcelShipmentServiceResults(t *t
 	}
 }
 
-// Covers: 票 operator-channel/25 裁定第 3 条——服务结果读不动是依赖故障：答`收寄待确认`带续办引用，不落册、不交意图，
-// 与身份核对读不动同一种处理；设备照常重投，物理事实在重投那一次落。不把「没查到」记成「没有限制」。
-func TestAnUnreachableServiceResultViewLeavesTheReceptionUndecided(t *testing.T) {
+// Covers: ADR-0186「身份唯一，但服务结果读不动：照常`节点收寄已形成`」——收寄、控制、关联、意图都照常，记录的核对态为
+// 读不动、标记为空；读口答空时核对态为已查、标记也为空。两份记录的标记逐字相同，只有核对态把「没取得 PS 的答复」与
+// 「查过了，没有取消与终局」分开。
+func TestAnUnreadableServiceResultViewStillFormsTheIntakeAndSaysSo(t *testing.T) {
+	unreadable := newReceptionFixture(t)
+	unreadable.serviceResults.err = errors.New("parcel shipment unreachable")
+	readable := newReceptionFixture(t)
+
+	formed := map[string]ports.ReceptionRecord{}
+	for name, fixture := range map[string]*receptionFixture{"读不动": unreadable, "答空": readable} {
+		result, err := fixture.handler.Handle(context.Background(), receiveCommand(t))
+		if err != nil {
+			t.Fatalf("%s：handle: %v", name, err)
+		}
+		if result.Outcome() != application.NodeIntakeFormed {
+			t.Fatalf("%s：outcome = %q, want INTAKE_FORMED——服务结果读不动不挡已经发生的物理事实", name, result.Outcome())
+		}
+		record, recorded := result.Record()
+		association, identified := record.Intake.Association()
+		if !recorded || !identified || association.String() != "parcel-1" || !record.Control.Active() {
+			t.Fatalf("%s：记录 = %+v；收寄、关联与控制都该照常成立", name, record)
+		}
+		if fixture.receptions.saved != 1 || len(fixture.downstream.intents) != 1 {
+			t.Fatalf("%s：落册 %d、意图 %d，want 各 1", name, fixture.receptions.saved, len(fixture.downstream.intents))
+		}
+		if len(record.ServiceMarkers) != 0 {
+			t.Fatalf("%s：标记 = %v, want 空", name, record.ServiceMarkers)
+		}
+		formed[name] = record
+	}
+	if got := formed["读不动"].ServiceResultCheck; got != ports.ServiceResultsUnreadable {
+		t.Fatalf("读不动那条的核对态 = %q, want UNREADABLE", got)
+	}
+	if got := formed["答空"].ServiceResultCheck; got != ports.ServiceResultsChecked {
+		t.Fatalf("答空那条的核对态 = %q, want CHECKED", got)
+	}
+}
+
+// Covers: ADR-0186「装配缺依赖，改为在构造期拒绝」——六个依赖缺任一个，构造就交回错误，不留到第一次收寄才暴露成一次
+// 依赖故障。
+func TestAMissingDependencyIsRefusedAtConstruction(t *testing.T) {
+	cases := map[string]func(*application.ReceiveDeliveredUnitDeps){
+		"身份核对读口": func(deps *application.ReceiveDeliveredUnitDeps) { deps.Identity = nil },
+		"服务结果读口": func(deps *application.ReceiveDeliveredUnitDeps) { deps.ServiceResults = nil },
+		"收寄库":    func(deps *application.ReceiveDeliveredUnitDeps) { deps.Receptions = nil },
+		"版本签发":   func(deps *application.ReceiveDeliveredUnitDeps) { deps.Versions = nil },
+		"意图交付":   func(deps *application.ReceiveDeliveredUnitDeps) { deps.Downstream = nil },
+		"时钟":     func(deps *application.ReceiveDeliveredUnitDeps) { deps.Clock = nil },
+	}
+	for name, drop := range cases {
+		t.Run(name, func(t *testing.T) {
+			deps := newReceptionFixture(t).deps()
+			drop(&deps)
+			if handler, err := application.NewReceiveDeliveredUnitHandler(deps); err == nil || handler != nil {
+				t.Fatalf("缺%s却构造成功（handler=%v err=%v）", name, handler, err)
+			}
+		})
+	}
+}
+
+// Covers: ADR-0186「身份核对读不动」与「NO 自身落不了册」——编排交回 error、不形成答案：零落册、零意图，也不拿空候选顶替
+// （ADR-0089）。端点据此答 5xx，设备留队重投；前线导入记未决。
+func TestDependencyFailuresFormNoAnswer(t *testing.T) {
+	failure := errors.New("dependency down")
+	cases := map[string]func(*receptionFixture){
+		"身份核对读口报错":         func(fixture *receptionFixture) { fixture.identity.err = failure },
+		"收寄库 FindByKey 报错": func(fixture *receptionFixture) { fixture.receptions.findErr = failure },
+		"收寄库 Save 报错":      func(fixture *receptionFixture) { fixture.receptions.saveErr = failure },
+		"并发读回赢家报错": func(fixture *receptionFixture) {
+			fixture.receptions.lostRace, fixture.receptions.readBackErr = true, failure
+		},
+		"并发读回读不到赢家": func(fixture *receptionFixture) { fixture.receptions.lostRace = true },
+		"版本签发报错":    func(fixture *receptionFixture) { fixture.versions.err = failure },
+	}
+	for name, arrange := range cases {
+		t.Run(name, func(t *testing.T) {
+			fixture := newReceptionFixture(t)
+			arrange(fixture)
+			result, err := fixture.handler.Handle(context.Background(), receiveCommand(t))
+			if err == nil {
+				t.Fatalf("outcome = %q, want error——没形成答案就不能答一格业务结果", result.Outcome())
+			}
+			if errors.Is(err, application.ErrReceptionCommandRejected) {
+				t.Fatalf("依赖故障被当成了输入缺陷：%v", err)
+			}
+			if fixture.receptions.saved != 0 || len(fixture.downstream.intents) != 0 {
+				t.Fatalf("落册 %d、意图 %d, want 都是 0", fixture.receptions.saved, len(fixture.downstream.intents))
+			}
+		})
+	}
+}
+
+// Covers: ADR-0186 与 ADR-0014「规范化版本不同不是冲突」——已存摘要的形状版本认不出，无从判断是重放还是冲突，与收寄库
+// 读不出同一种处理：交回 error，不答冲突、不另落一条。
+func TestAnUnknownStoredDigestShapeFormsNoAnswer(t *testing.T) {
+	fixture := newReceptionFixture(t)
+	command := receiveCommand(t)
+	if _, err := fixture.handler.Handle(context.Background(), command); err != nil {
+		t.Fatalf("首投：%v", err)
+	}
+	key := ports.ReceptionKey{TenantID: command.TenantID, SourceID: command.SourceID}
+	record := fixture.receptions.byKey[key]
+	record.ContentDigest = "NOC-9:9938edb9fffaab6f67866d4ed949ee826323c990a1a5ffc322c9b7f3ad19b430"
+	fixture.receptions.byKey[key] = record
+
+	result, err := fixture.handler.Handle(context.Background(), command)
+	if err == nil {
+		t.Fatalf("outcome = %q, want error", result.Outcome())
+	}
+	if fixture.receptions.saved != 1 || len(fixture.downstream.intents) != 1 {
+		t.Fatalf("落册 %d、意图 %d, want 仍是首投那一份", fixture.receptions.saved, len(fixture.downstream.intents))
+	}
+}
+
+// Covers: ADR-0186「输入缺陷两支，交回被拒类错误」——缺租户、来源、节点、实物或发生时间，与接收观察不在三态之内，重发同样
+// 的内容不会变好：交回 ErrReceptionCommandRejected，端点据此答 400，前线导入记被拒；零落册、零意图。
+func TestInputDefectsAreRejected(t *testing.T) {
+	cases := map[string]func(*application.ReceiveDeliveredUnitCommand){
+		"缺来源身份": func(command *application.ReceiveDeliveredUnitCommand) { command.SourceID = " " },
+		"缺发生时间": func(command *application.ReceiveDeliveredUnitCommand) { command.OccurredAt = time.Time{} },
+		"未知接收观察": func(command *application.ReceiveDeliveredUnitCommand) {
+			command.Claim = application.ReceptionClaimKindInvalid
+		},
+	}
+	for name, mutate := range cases {
+		t.Run(name, func(t *testing.T) {
+			fixture := newReceptionFixture(t)
+			command := receiveCommand(t)
+			mutate(&command)
+			result, err := fixture.handler.Handle(context.Background(), command)
+			if !errors.Is(err, application.ErrReceptionCommandRejected) {
+				t.Fatalf("outcome = %q err = %v, want ErrReceptionCommandRejected", result.Outcome(), err)
+			}
+			if fixture.receptions.saved != 0 || len(fixture.downstream.intents) != 0 || len(fixture.serviceResults.asked) != 0 {
+				t.Fatal("被拒的输入不该落册、交意图或问读口")
+			}
+		})
+	}
+}
+
+// Covers: ADR-0186「不补查，也不发续办引用」与 `AT-NO-016`——读不动那条落册之后，同一来源、同一内容重投答`已有结果`：不再
+// 落一条、不重签版本、不再问读口，核对态照读回的那份答读不动，即使此刻读口已经读得动。
+func TestReplayingAnUnreadableReceptionAnswersTheRecordedCheck(t *testing.T) {
 	fixture := newReceptionFixture(t)
 	fixture.serviceResults.err = errors.New("parcel shipment unreachable")
+	if _, err := fixture.handler.Handle(context.Background(), receiveCommand(t)); err != nil {
+		t.Fatalf("首投：%v", err)
+	}
+	fixture.serviceResults.err = nil
+	fixture.serviceResults.results = ports.ParcelServiceResults{Cancellation: "cancel-9"}
 
-	result, err := fixture.handler.Handle(context.Background(), receiveCommand(t))
+	replay, err := fixture.handler.Handle(context.Background(), receiveCommand(t))
 	if err != nil {
-		t.Fatalf("handle: %v", err)
+		t.Fatalf("重投：%v", err)
 	}
-	if result.Outcome() != application.ReceptionUndecided || result.ContinuationReference() == "" {
-		t.Fatalf("outcome = %q / %q, want RECEPTION_UNDECIDED 带续办引用", result.Outcome(), result.ContinuationReference())
+	if replay.Outcome() != application.ReceptionExistingResult {
+		t.Fatalf("outcome = %q, want EXISTING_RESULT", replay.Outcome())
 	}
-	if fixture.receptions.saved != 0 || len(fixture.downstream.intents) != 0 {
-		t.Fatalf("读不动却落了册（%d）或交了意图（%d）", fixture.receptions.saved, len(fixture.downstream.intents))
+	record, _ := replay.Record()
+	if record.ServiceResultCheck != ports.ServiceResultsUnreadable || len(record.ServiceMarkers) != 0 {
+		t.Fatalf("重投读回 核对态 %q 标记 %v, want 读不动且无标记——不补查", record.ServiceResultCheck, record.ServiceMarkers)
+	}
+	if fixture.receptions.saved != 1 || fixture.versions.next != 1 || len(fixture.serviceResults.asked) != 1 {
+		t.Fatalf("落册 %d、签发 %d、问读口 %d 次, want 各 1", fixture.receptions.saved, fixture.versions.next, len(fixture.serviceResults.asked))
 	}
 }
 
-// Covers: 装配漏了服务结果读口是装配缺件，不是「没有限制」：身份唯一成立时如实停在`收寄待确认`、带续办引用、不落册，
-// 不 panic、也不把没问过的包裹记成不带标记。
-func TestAMissingServiceResultViewStopsHonestlyInsteadOfRecordingNoMarkers(t *testing.T) {
-	fixture := newReceptionFixture(t)
-	handler := application.NewReceiveDeliveredUnitHandler(application.ReceiveDeliveredUnitDeps{
-		Identity:   fixture.identity,
-		Receptions: fixture.receptions,
-		Versions:   &versionFactoryDouble{},
-		Downstream: fixture.downstream,
-		Clock:      fixedClock{at: deliveredAt.Add(time.Minute)},
-	})
-	result, err := handler.Handle(context.Background(), receiveCommand(t))
-	if err != nil {
-		t.Fatalf("handle: %v", err)
-	}
-	if result.Outcome() != application.ReceptionUndecided || result.ContinuationReference() == "" || fixture.receptions.saved != 0 {
-		t.Fatalf("outcome = %q / %q / saved %d, want RECEPTION_UNDECIDED 带续办引用且不落册", result.Outcome(), result.ContinuationReference(), fixture.receptions.saved)
-	}
-}
-
-// Covers: 票 operator-channel/25 裁定第 1 条——只在身份唯一成立时问：待识别（零候选）与身份冲突（多候选）没有可问的包裹，
-// 明确拒收与仅扫描不经身份核对，四支都不问服务结果读口、也不带标记。
+// Covers: 票 operator-channel/25 裁定「按什么键查 → 取 (b)，在编排里、身份唯一成立时按包裹查」——待识别（零候选）与身份冲突
+// （多候选）没有可问的包裹，明确拒收与仅扫描不经身份核对，四支都不问服务结果读口，也不带标记与核对态。
 func TestTheServiceResultViewIsAskedOnlyForAUniquelyIdentifiedParcel(t *testing.T) {
 	cases := map[string]struct {
 		candidates []string
@@ -284,8 +449,12 @@ func TestTheServiceResultViewIsAskedOnlyForAUniquelyIdentifiedParcel(t *testing.
 			if len(fixture.serviceResults.asked) != 0 {
 				t.Fatalf("服务结果读口被问了 %v，这一支没有可问的包裹", fixture.serviceResults.asked)
 			}
-			if record, recorded := result.Record(); recorded && len(record.ServiceMarkers) != 0 {
-				t.Fatalf("这一支不该带标记：%v", record.ServiceMarkers)
+			record, recorded := result.Record()
+			if !recorded {
+				t.Fatal("这一支该落册")
+			}
+			if len(record.ServiceMarkers) != 0 || record.ServiceResultCheck != ports.ServiceResultCheckAbsent {
+				t.Fatalf("这一支不该带标记与核对态：%v / %q", record.ServiceMarkers, record.ServiceResultCheck)
 			}
 		})
 	}

@@ -157,19 +157,21 @@ func (intake *bodyIntake) IntakeReception(
 	return command, nil
 }
 
-// noServiceResults 是服务结果读口的替身：PS 对任何包裹都没有取消与终局。本文件证的是传输面，标记的取法另有编排的用例。
-type noServiceResults struct{}
+// serviceResultsDouble 是服务结果读口的替身：默认 PS 对任何包裹都没有取消与终局，err 非空时读不动。本文件证的是传输面，
+// 标记的取法另有编排的用例。
+type serviceResultsDouble struct{ err error }
 
-func (noServiceResults) FindParcelServiceResults(context.Context, domain.TenantID, domain.ParcelAssociationReference) (ports.ParcelServiceResults, error) {
-	return ports.ParcelServiceResults{}, nil
+func (double *serviceResultsDouble) FindParcelServiceResults(context.Context, domain.TenantID, domain.ParcelAssociationReference) (ports.ParcelServiceResults, error) {
+	return ports.ParcelServiceResults{}, double.err
 }
 
 type adapterFixture struct {
-	intake   *bodyIntake
-	identity *identityViewDouble
-	store    *receptionStoreDouble
-	handoff  *downstreamDouble
-	endpoint http.Handler
+	intake         *bodyIntake
+	identity       *identityViewDouble
+	serviceResults *serviceResultsDouble
+	store          *receptionStoreDouble
+	handoff        *downstreamDouble
+	endpoint       http.Handler
 }
 
 func newAdapterFixture(t *testing.T) *adapterFixture {
@@ -183,17 +185,21 @@ func newAdapterFixture(t *testing.T) *adapterFixture {
 		identity: &identityViewDouble{candidates: []domain.ParcelAssociationReference{
 			adapterValue(t, domain.NewParcelAssociationReference, "parcel-1"),
 		}},
-		store:   newReceptionStore(),
-		handoff: &downstreamDouble{},
+		serviceResults: &serviceResultsDouble{},
+		store:          newReceptionStore(),
+		handoff:        &downstreamDouble{},
 	}
-	handler := application.NewReceiveDeliveredUnitHandler(application.ReceiveDeliveredUnitDeps{
+	handler, err := application.NewReceiveDeliveredUnitHandler(application.ReceiveDeliveredUnitDeps{
 		Identity:       fixture.identity,
-		ServiceResults: noServiceResults{},
+		ServiceResults: fixture.serviceResults,
 		Receptions:     fixture.store,
 		Versions:       &versionFactoryDouble{},
 		Downstream:     fixture.handoff,
 		Clock:          adapterClock{at: time.Date(2026, 9, 5, 10, 0, 0, 0, time.UTC)},
 	})
+	if err != nil {
+		t.Fatalf("构造收寄编排：%v", err)
+	}
 	fixture.endpoint = nodeopshttp.NewReceiveDeliveredUnitEndpoint(fixture.intake, handler)
 	return fixture
 }
@@ -222,14 +228,14 @@ func (fixture *adapterFixture) post(t *testing.T, body deviceBody) *httptest.Res
 }
 
 type receptionView struct {
-	Outcome               string   `json:"outcome"`
-	IntakeVersion         string   `json:"intakeVersion"`
-	Unit                  string   `json:"unit"`
-	Association           string   `json:"association"`
-	ControlBasis          string   `json:"controlBasis"`
-	Candidates            []string `json:"candidates"`
-	RefusalReason         string   `json:"refusalReason"`
-	ContinuationReference string   `json:"continuationReference"`
+	Outcome            string   `json:"outcome"`
+	IntakeVersion      string   `json:"intakeVersion"`
+	Unit               string   `json:"unit"`
+	Association        string   `json:"association"`
+	ControlBasis       string   `json:"controlBasis"`
+	Candidates         []string `json:"candidates"`
+	RefusalReason      string   `json:"refusalReason"`
+	ServiceResultCheck *string  `json:"serviceResultCheck"`
 }
 
 func decodeReception(t *testing.T, recorder *httptest.ResponseRecorder) receptionView {
@@ -258,6 +264,48 @@ func TestReceiveReportsCreatedWhenAnIntakeWasFormed(t *testing.T) {
 	if view.IntakeVersion == "" || view.Association != "parcel-1" || view.ControlBasis == "" {
 		t.Fatalf("view = %+v; 成立答案少了版本/关联/控制依据", view)
 	}
+}
+
+// Covers: ADR-0186「HTTP 收寄响应看得出读不动」——核对态是 INTAKE_FORMED 记录的信息格，首答与重放都带，不进 `outcome`
+// 词表：读不动那条照样 201 INTAKE_FORMED、重放照样 EXISTING_RESULT；其余种类的记录没有可问的包裹，这一格不出现。
+func TestTheServiceResultCheckTravelsWithEveryFormedIntake(t *testing.T) {
+	for name, testCase := range map[string]struct {
+		err  error
+		want string
+	}{
+		"已查":  {want: "CHECKED"},
+		"读不动": {err: errors.New("parcel shipment unreachable"), want: "UNREADABLE"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newAdapterFixture(t)
+			fixture.serviceResults.err = testCase.err
+
+			first := fixture.post(t, defaultBody())
+			replay := fixture.post(t, defaultBody())
+
+			for answer, recorder := range map[string]*httptest.ResponseRecorder{"首答": first, "重放": replay} {
+				view := decodeReception(t, recorder)
+				if view.ServiceResultCheck == nil || *view.ServiceResultCheck != testCase.want {
+					t.Fatalf("%s：serviceResultCheck = %v, want %q（outcome %q）", answer, view.ServiceResultCheck, testCase.want, view.Outcome)
+				}
+			}
+			if first.Code != http.StatusCreated || decodeReception(t, first).Outcome != "INTAKE_FORMED" {
+				t.Fatalf("首答 %d %q, want 201 INTAKE_FORMED", first.Code, decodeReception(t, first).Outcome)
+			}
+			if decodeReception(t, replay).Outcome != "EXISTING_RESULT" {
+				t.Fatalf("重放 outcome = %q, want EXISTING_RESULT", decodeReception(t, replay).Outcome)
+			}
+		})
+	}
+
+	t.Run("其他种类不带", func(t *testing.T) {
+		fixture := newAdapterFixture(t)
+		fixture.identity.candidates = nil
+		view := decodeReception(t, fixture.post(t, defaultBody()))
+		if view.Outcome != "PENDING_IDENTIFICATION" || view.ServiceResultCheck != nil {
+			t.Fatalf("outcome %q serviceResultCheck %v, want 待识别且不带核对态", view.Outcome, view.ServiceResultCheck)
+		}
+	})
 }
 
 // Covers: ADR-0022「业务判别一律进响应体」——待识别、未形成、未决、已有结果与来源冲突
@@ -306,19 +354,6 @@ func TestReceiveReportsOKForEveryAnswerThatFormedNoIntake(t *testing.T) {
 			inspect: func(t *testing.T, view receptionView) {
 				if view.RefusalReason != "PACKAGING_UNSAFE" {
 					t.Fatalf("refusalReason = %q", view.RefusalReason)
-				}
-			},
-		},
-		"dependency failure is undecided": {
-			arrange: func(t *testing.T, fixture *adapterFixture) deviceBody {
-				fixture.identity.err = errors.New("identity view down")
-				return defaultBody()
-			},
-			posts: 1,
-			want:  "RECEPTION_UNDECIDED",
-			inspect: func(t *testing.T, view receptionView) {
-				if view.ContinuationReference == "" {
-					t.Fatal("未决没有带续办引用")
 				}
 			},
 		},
@@ -453,6 +488,35 @@ func TestTransportProblemsCarryOnlyStableCodes(t *testing.T) {
 		endpoint.ServeHTTP(recorder, request)
 		if recorder.Code != http.StatusInternalServerError || !strings.Contains(recorder.Body.String(), "NO_ANSWER_FORMED") {
 			t.Fatalf("status = %d body = %s", recorder.Code, recorder.Body.String())
+		}
+	})
+
+	// ADR-0186「身份核对读不动：编排交回 error，不形成答案」——答 500 且不带 outcome：2xx 会让设备出队，而这一次什么都
+	// 没落册。
+	t.Run("an identity view failure is 500 without an outcome", func(t *testing.T) {
+		fixture := newAdapterFixture(t)
+		fixture.identity.err = errors.New("identity view down")
+		response := fixture.post(t, defaultBody())
+		if response.Code != http.StatusInternalServerError || !strings.Contains(response.Body.String(), "NO_ANSWER_FORMED") {
+			t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+		}
+		if strings.Contains(response.Body.String(), "outcome") {
+			t.Fatalf("没形成答案却带了 outcome：%s", response.Body.String())
+		}
+		if fixture.store.saved != 0 {
+			t.Fatalf("saved = %d, want 0", fixture.store.saved)
+		}
+	})
+
+	// ADR-0186「输入缺陷两支，交回被拒类错误」——缺来源身份过得了解析、过不了编排，重发同样的内容不会变好：答 400，设备
+	// 出队交给人，而不是留在队里无限重发。
+	t.Run("a command the orchestration rejects is 400", func(t *testing.T) {
+		fixture := newAdapterFixture(t)
+		body := defaultBody()
+		body.SourceID = " "
+		response := fixture.post(t, body)
+		if response.Code != http.StatusBadRequest || !strings.Contains(response.Body.String(), "MALFORMED_REQUEST") {
+			t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
 		}
 	})
 

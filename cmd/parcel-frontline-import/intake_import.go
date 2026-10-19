@@ -59,7 +59,7 @@ func buildIntakeImporter(db *bentopg.DB, clock ports.Clock, identity ports.Parce
 	if err != nil {
 		return intakeImporter{}, fmt.Errorf("服务结果读口：%w", err)
 	}
-	handler := application.NewReceiveDeliveredUnitHandler(application.ReceiveDeliveredUnitDeps{
+	handler, err := application.NewReceiveDeliveredUnitHandler(application.ReceiveDeliveredUnitDeps{
 		Identity:       identity,
 		ServiceResults: serviceResults,
 		Receptions:     receptions,
@@ -67,6 +67,9 @@ func buildIntakeImporter(db *bentopg.DB, clock ports.Clock, identity ports.Parce
 		Downstream:     downstream,
 		Clock:          clock,
 	})
+	if err != nil {
+		return intakeImporter{}, fmt.Errorf("收寄编排：%w", err)
+	}
 	return intakeImporter{
 		handler:    handler,
 		transactor: db.Transactor(),
@@ -126,7 +129,7 @@ func importIntake(ctx context.Context, batch intakeBatch, importer intakeImporte
 //   - 收寄形成 / 待识别 / 未形成 → 已落地：三格都是越过提交边界的判断（未形成也是一条
 //     真实的拒收事实）；
 //   - 待确认且带记录 → 已落地：SCAN_ONLY 行的判断本就是「待确认」，记录已提交；
-//   - 待确认不带记录 → 未决：依赖故障或身份核对缝不通，什么都没落库，重跑续办；
+//   - 待确认不带记录 → 未决：编排不再交回这一格，出现即实现缺陷；
 //   - 已有结果 → 重放：同一来源身份同一内容，原结果原样；
 //   - 来源冲突 → 被拒：同一行事实号换了内容，绝不覆盖，人核对纸单再改文件。
 func intakeRowDisposition(row intakeRow, result application.ReceiveDeliveredUnitResult) rowResult {
@@ -143,8 +146,9 @@ func intakeRowDisposition(row intakeRow, result application.ReceiveDeliveredUnit
 			answer.Disposition = rowLanded
 			answer.Detail = "扫描来源已保全，收寄判断待确认，未建立控制"
 		} else {
+			// 编排对没形成答案的尝试一律交回 error（ADR-0186），这一格不再有业务含义；出现即实现缺陷，按未决让人看。
 			answer.Disposition = rowUndecided
-			answer.Detail = "未落库；续办引用 " + result.ContinuationReference()
+			answer.Detail = "实现缺陷：待确认却没有记录，未落库"
 		}
 	case application.ReceptionExistingResult:
 		answer.Disposition = rowReplayed

@@ -94,6 +94,11 @@ func NewReceiveDeliveredUnitEndpoint(intake ReceptionIntake, handler ReceptionHa
 
 		result, err := handler.Handle(request.Context(), command)
 		if err != nil {
+			// 命令本身的缺陷重发不会变好，答 4xx 让设备出队交给人；其余都是没形成答案，答 5xx 留在队里重发（ADR-0186）。
+			if errors.Is(err, application.ErrReceptionCommandRejected) {
+				writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
+				return
+			}
 			writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
 			return
 		}
@@ -102,19 +107,22 @@ func NewReceiveDeliveredUnitEndpoint(intake ReceptionIntake, handler ReceptionHa
 }
 
 // receptionResponse 是本端点的封闭响应形状。`outcome` 取应用结果枚举的原名，传输层
-// 不合并、不改名，也没有「其他」这一格。待识别带候选、未形成带拒收原因、未决带续办
-// 引用——少了它们调用方只知道被挡，不知道下一步找身份、找交付方还是等依赖。
+// 不合并、不改名，也没有「其他」这一格。待识别带候选、未形成带拒收原因——少了它们调用方
+// 只知道被挡，不知道下一步找身份还是找交付方。
+//
+// `serviceResultCheck` 只随收寄已形成的记录出现（首答与重放都带），是信息格不是业务判别：读不动那条照样是
+// INTAKE_FORMED，这一格告诉看的人标记缺席不代表没有取消或终局（ADR-0186）。
 type receptionResponse struct {
-	Outcome               string   `json:"outcome"`
-	IntakeVersion         string   `json:"intakeVersion,omitempty"`
-	Unit                  string   `json:"unit,omitempty"`
-	Node                  string   `json:"node,omitempty"`
-	Association           string   `json:"association,omitempty"`
-	ControlBasis          string   `json:"controlBasis,omitempty"`
-	Candidates            []string `json:"candidates,omitempty"`
-	RefusalReason         string   `json:"refusalReason,omitempty"`
-	ServiceMarkers        []string `json:"serviceMarkers,omitempty"`
-	ContinuationReference string   `json:"continuationReference,omitempty"`
+	Outcome            string   `json:"outcome"`
+	IntakeVersion      string   `json:"intakeVersion,omitempty"`
+	Unit               string   `json:"unit,omitempty"`
+	Node               string   `json:"node,omitempty"`
+	Association        string   `json:"association,omitempty"`
+	ControlBasis       string   `json:"controlBasis,omitempty"`
+	Candidates         []string `json:"candidates,omitempty"`
+	RefusalReason      string   `json:"refusalReason,omitempty"`
+	ServiceMarkers     []string `json:"serviceMarkers,omitempty"`
+	ServiceResultCheck string   `json:"serviceResultCheck,omitempty"`
 }
 
 // problemResponse 刻意不带自由文本消息。底层失败的措辞会捎带租户、节点或实物的存在
@@ -155,9 +163,7 @@ func writeOutcome(response http.ResponseWriter, result application.ReceiveDelive
 		}
 		body.RefusalReason = record.RefusalReason
 		body.ServiceMarkers = append(body.ServiceMarkers, record.ServiceMarkers...)
-	}
-	if continuation := result.ContinuationReference(); continuation != "" {
-		body.ContinuationReference = continuation
+		body.ServiceResultCheck = record.ServiceResultCheck.String()
 	}
 
 	// ADR-0022：状态码只报有没有形成答案。待识别、未形成、未决、已有结果与来源冲突
