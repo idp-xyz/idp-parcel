@@ -41,6 +41,7 @@ const (
 	OperatorDecisionParticipationTermination            OperatorDecision = "PARTICIPATION_TERMINATION"
 	OperatorDecisionEffectiveTimeJudgment               OperatorDecision = "EFFECTIVE_TIME_JUDGMENT"
 	OperatorDecisionCarrierFirstEffectivePickupJudgment OperatorDecision = "CARRIER_FIRST_EFFECTIVE_PICKUP_JUDGMENT"
+	OperatorDecisionTransportCommissionSubmission       OperatorDecision = "TRANSPORT_COMMISSION_SUBMISSION"
 )
 
 // OperatorAuthenticator 认证一次运营决定出示，交回出示者的租户。失败只交回本包的格：ErrAccessChannelNotConfigured、
@@ -65,6 +66,8 @@ var (
 	_ CarrierPickupJudgmentIntake    = (*OperatorDecisionIntake)(nil)
 	_ LoadAssignmentIntake           = (*OperatorDecisionIntake)(nil)
 	_ ParticipationTerminationIntake = (*OperatorDecisionIntake)(nil)
+
+	_ TransportCommissionSubmissionIntake = (*OperatorDecisionIntake)(nil)
 )
 
 func NewOperatorDecisionIntake(authenticator OperatorAuthenticator) (*OperatorDecisionIntake, error) {
@@ -150,6 +153,19 @@ func (intake *OperatorDecisionIntake) IntakeParticipationTermination(ctx context
 		return ParticipationTermination{}, err
 	}
 	return payload.Termination(tenant)
+}
+
+// IntakeTransportCommissionSubmission 译运输委托提交（`/transport-fulfillment-transport-commission-submissions`）。
+func (intake *OperatorDecisionIntake) IntakeTransportCommissionSubmission(ctx context.Context, request *http.Request) (application.SubmitCommissionCommand, error) {
+	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionTransportCommissionSubmission)
+	if err != nil {
+		return application.SubmitCommissionCommand{}, err
+	}
+	var payload TransportCommissionSubmissionPayload
+	if err := decodeClosedPayload(request.Body, &payload); err != nil {
+		return application.SubmitCommissionCommand{}, err
+	}
+	return payload.Command(tenant)
 }
 
 // tenantFor 交回出示者在这一种决定上的租户。租户只取自认证结果（ADR-0003），载荷里不收租户。

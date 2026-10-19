@@ -99,6 +99,7 @@ func TestEveryTFDecisionMapsToItsOwnDecisionKind(t *testing.T) {
 		tfhttp.OperatorDecisionParticipationTermination:            identity.DecisionParticipationTermination,
 		tfhttp.OperatorDecisionEffectiveTimeJudgment:               identity.DecisionEffectiveTimeJudgment,
 		tfhttp.OperatorDecisionCarrierFirstEffectivePickupJudgment: identity.DecisionCarrierFirstEffectivePickupJudgment,
+		tfhttp.OperatorDecisionTransportCommissionSubmission:       identity.DecisionTransportCommissionSubmission,
 	}
 	for decision, kind := range decisions {
 		for other, otherKind := range decisions {

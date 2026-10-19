@@ -105,6 +105,10 @@ func TestEachTFDecisionFaceAuthenticatesForItsOwnDecision(t *testing.T) {
 			_, err := intake.IntakeCarrierPickupJudgment(ctx, bearerRequest("t", "!!not-json!!"))
 			return err
 		}},
+		{tfhttp.OperatorDecisionTransportCommissionSubmission, func() error {
+			_, err := intake.IntakeTransportCommissionSubmission(ctx, bearerRequest("t", "!!not-json!!"))
+			return err
+		}},
 	}
 	for _, face := range faces {
 		asked = nil
