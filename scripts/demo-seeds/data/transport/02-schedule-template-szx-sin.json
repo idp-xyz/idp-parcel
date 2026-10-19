@@ -9,5 +9,9 @@
   "durationMinutes": 300,
   "timeZone": "Asia/Shanghai",
   "serviceScope": "SYN-SCOPE-01",
-  "effectiveFrom": "2026-01-01"
+  "effectiveFrom": "2026-01-01",
+  "capacities": [
+    {"dimension": "WEIGHT", "unit": "KG", "capacity": 5000},
+    {"dimension": "PIECES", "unit": "PCS", "capacity": 1000}
+  ]
 }
