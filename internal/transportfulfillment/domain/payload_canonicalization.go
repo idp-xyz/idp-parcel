@@ -420,18 +420,85 @@ func CanonicalizeCarrierFirstEffectivePickupPayload(expressesControl bool, subje
 	})
 }
 
-// CanonicalizeEstablishSchedulePayload 定形「建立班期」。
-func CanonicalizeEstablishSchedulePayload(direction string, departsAt time.Time) ([]byte, string, error) {
+// CanonicalizeScheduleTemplatePayload 定形「登记周期安排」（ADR-0201）。正文各格全进摘要：同一代码再登时内容同即
+// `已存在`，异即下一版，没有不进摘要的正文。星期按周一到周日写词，生效区间不设终点写 null——零值日期与「不设
+// 终点」在摘要里分得开。代码与版本是身份，不进。
+func CanonicalizeScheduleTemplatePayload(content ScheduleTemplateContent) ([]byte, string, error) {
+	weekdays, err := normalizedWeekdays(content.Weekdays)
+	if err != nil {
+		return nil, "", err
+	}
+	words := make([]string, 0, len(weekdays))
+	for _, weekday := range weekdays {
+		words = append(words, ScheduleWeekdayWord(weekday))
+	}
+	var effectiveUntil *string
+	if content.EffectiveUntil.valid() {
+		until := content.EffectiveUntil.String()
+		effectiveUntil = &until
+	}
 	return marshalPayload(struct {
-		Canonicalization string `json:"canonicalization"`
-		Face             string `json:"face"`
-		Direction        string `json:"direction"`
-		DepartsAt        string `json:"departs_at"`
+		Canonicalization     string   `json:"canonicalization"`
+		Face                 string   `json:"face"`
+		Connection           string   `json:"connection"`
+		FromNode             string   `json:"from_node"`
+		ToNode               string   `json:"to_node"`
+		Weekdays             []string `json:"weekdays"`
+		DepartureLocalMinute int      `json:"departure_local_minute"`
+		DurationMinutes      int64    `json:"duration_minutes"`
+		TimeZone             string   `json:"time_zone"`
+		ServiceScope         string   `json:"service_scope"`
+		EffectiveFrom        string   `json:"effective_from"`
+		EffectiveUntil       *string  `json:"effective_until"`
+	}{
+		Canonicalization:     payloadCanonicalizationVersion,
+		Face:                 "REGISTER_SCHEDULE_TEMPLATE",
+		Connection:           content.Direction.Connection().String(),
+		FromNode:             content.Direction.From().String(),
+		ToNode:               content.Direction.To().String(),
+		Weekdays:             words,
+		DepartureLocalMinute: content.DepartureLocalMinute,
+		DurationMinutes:      int64(content.Duration / time.Minute),
+		TimeZone:             content.TimeZone,
+		ServiceScope:         content.ServiceScope.String(),
+		EffectiveFrom:        content.EffectiveFrom.String(),
+		EffectiveUntil:       effectiveUntil,
+	})
+}
+
+// CanonicalizeTransportSchedulePayload 定形「登记具体班次」（ADR-0201）。进摘要的是班次本身：方向、出发与到达、
+// 服务范围与来历（物化来的再加周期安排代码与运行日期，临时班次那两格写 null）。版本是登记册给的，不进；物化
+// 时那一版周期安排的版本号也不进——按更新的一版再物化出一模一样的班次，班次没有变，不该多出一版。
+func CanonicalizeTransportSchedulePayload(schedule TransportSchedule) ([]byte, string, error) {
+	var template, runningDate *string
+	if code, _, date, materialized := schedule.origin.Template(); materialized {
+		codeText, dateText := code.String(), date.String()
+		template, runningDate = &codeText, &dateText
+	}
+	return marshalPayload(struct {
+		Canonicalization string  `json:"canonicalization"`
+		Face             string  `json:"face"`
+		Connection       string  `json:"connection"`
+		FromNode         string  `json:"from_node"`
+		ToNode           string  `json:"to_node"`
+		DepartsAt        string  `json:"departs_at"`
+		ArrivesAt        string  `json:"arrives_at"`
+		ServiceScope     string  `json:"service_scope"`
+		Origin           string  `json:"origin"`
+		Template         *string `json:"template"`
+		RunningDate      *string `json:"running_date"`
 	}{
 		Canonicalization: payloadCanonicalizationVersion,
-		Face:             "ESTABLISH_SCHEDULE",
-		Direction:        direction,
-		DepartsAt:        canonicalInstant(departsAt),
+		Face:             "REGISTER_TRANSPORT_SCHEDULE",
+		Connection:       schedule.direction.Connection().String(),
+		FromNode:         schedule.direction.From().String(),
+		ToNode:           schedule.direction.To().String(),
+		DepartsAt:        canonicalInstant(schedule.departsAt),
+		ArrivesAt:        canonicalInstant(schedule.arrivesAt),
+		ServiceScope:     schedule.serviceScope.String(),
+		Origin:           schedule.origin.kind.String(),
+		Template:         template,
+		RunningDate:      runningDate,
 	})
 }
 

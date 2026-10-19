@@ -12,45 +12,9 @@ import (
 )
 
 var (
-	scheduleDepartsAt = time.Date(2026, 8, 20, 8, 0, 0, 0, time.UTC)
 	reserveAt         = time.Date(2026, 8, 13, 18, 0, 0, 0, time.UTC)
 	reserveValidUntil = time.Date(2026, 8, 15, 0, 0, 0, 0, time.UTC)
 )
-
-type scheduleStoreDouble struct {
-	records map[string]ports.ScheduleRecord
-	findErr error
-}
-
-func newScheduleStore() *scheduleStoreDouble {
-	return &scheduleStoreDouble{records: map[string]ports.ScheduleRecord{}}
-}
-
-func scheduleKey(key ports.ScheduleKey) string {
-	return key.TenantID.String() + "|" + key.Schedule.String()
-}
-
-func (double *scheduleStoreDouble) FindByKey(
-	_ context.Context,
-	key ports.ScheduleKey,
-) (ports.ScheduleRecord, bool, error) {
-	if double.findErr != nil {
-		return ports.ScheduleRecord{}, false, double.findErr
-	}
-	record, found := double.records[scheduleKey(key)]
-	return record, found, nil
-}
-
-func (double *scheduleStoreDouble) Save(
-	_ context.Context,
-	record ports.ScheduleRecord,
-) (ports.ScheduleSaveOutcome, error) {
-	if _, exists := double.records[scheduleKey(record.Key)]; exists {
-		return ports.ScheduleAlreadyEstablished, nil
-	}
-	double.records[scheduleKey(record.Key)] = record
-	return ports.ScheduleSaved, nil
-}
 
 type poolStoreDouble struct {
 	records map[string]ports.CapacityPoolRecord
@@ -119,21 +83,18 @@ type opportunityClock struct{ at time.Time }
 func (clock opportunityClock) Now() time.Time { return clock.at }
 
 type opportunityFixture struct {
-	schedules *scheduleStoreDouble
-	pools     *poolStoreDouble
-	handoff   *consumptionHandoffDouble
-	handler   *application.PrepareTransportOpportunityHandler
+	pools   *poolStoreDouble
+	handoff *consumptionHandoffDouble
+	handler *application.PrepareTransportOpportunityHandler
 }
 
 func newOpportunityFixture(t *testing.T) *opportunityFixture {
 	t.Helper()
 	fixture := &opportunityFixture{
-		schedules: newScheduleStore(),
-		pools:     newPoolStore(),
-		handoff:   &consumptionHandoffDouble{},
+		pools:   newPoolStore(),
+		handoff: &consumptionHandoffDouble{},
 	}
 	fixture.handler = application.NewPrepareTransportOpportunityHandler(application.PrepareTransportOpportunityDeps{
-		Schedules:  fixture.schedules,
 		Pools:      fixture.pools,
 		Downstream: fixture.handoff,
 		Clock:      opportunityClock{at: reserveAt},
@@ -176,45 +137,6 @@ func reserveCommand(t *testing.T, quantity int64) application.ReserveCapacityCom
 		Quantity:    quantity,
 		ValidUntil:  reserveValidUntil,
 		At:          reserveAt,
-	}
-}
-
-// Covers: CONTEXT「具体班次」句（班次是执行体，班次存在≠容量可用≠已订舱）的编排面
-// （AT-TF-027 的身份半边）——建立幂等分重放/冲突；容量池是另一入口单独建立，班次
-// 记录上不带容量。
-func TestAScheduleEstablishesOnce(t *testing.T) {
-	fixture := newOpportunityFixture(t)
-	command := application.EstablishScheduleCommand{
-		TenantID:  opportunityTenant(t),
-		Schedule:  "schedule-1",
-		Direction: "US-WEST/EXPORT",
-		DepartsAt: scheduleDepartsAt,
-	}
-
-	first, err := fixture.handler.EstablishSchedule(context.Background(), command)
-	if err != nil {
-		t.Fatalf("establish: %v", err)
-	}
-	if first.Outcome() != application.ScheduleEstablished {
-		t.Fatalf("outcome = %q", first.Outcome())
-	}
-
-	replay, err := fixture.handler.EstablishSchedule(context.Background(), command)
-	if err != nil {
-		t.Fatalf("replay: %v", err)
-	}
-	if replay.Outcome() != application.ScheduleExistingResult {
-		t.Fatalf("outcome = %q", replay.Outcome())
-	}
-
-	flipped := command
-	flipped.Direction = "US-EAST/EXPORT"
-	conflict, err := fixture.handler.EstablishSchedule(context.Background(), flipped)
-	if err != nil {
-		t.Fatalf("conflict: %v", err)
-	}
-	if conflict.Outcome() != application.ScheduleConflict {
-		t.Fatalf("outcome = %q", conflict.Outcome())
 	}
 }
 
@@ -393,24 +315,9 @@ func TestConversionsSplitByTheirSentinels(t *testing.T) {
 // （投递失败不翻结果、重放重发同一份）在本编排的恢复面；未决原因集封闭。
 func TestOpportunityRecoveryDiscipline(t *testing.T) {
 	t.Run("store failures are undecided with their reasons", func(t *testing.T) {
-		fixture := newOpportunityFixture(t)
-		fixture.schedules.findErr = errors.New("store down")
-		result, err := fixture.handler.EstablishSchedule(context.Background(), application.EstablishScheduleCommand{
-			TenantID:  opportunityTenant(t),
-			Schedule:  "schedule-1",
-			Direction: "US-WEST/EXPORT",
-			DepartsAt: scheduleDepartsAt,
-		})
-		if err != nil {
-			t.Fatalf("establish: %v", err)
-		}
-		if result.UndecidedReason() != application.ScheduleStoreUnavailable {
-			t.Fatalf("reason = %q", result.UndecidedReason())
-		}
-
 		poolFixture := newOpportunityFixture(t)
 		poolFixture.pools.findErr = errors.New("store down")
-		result, err = poolFixture.handler.Reserve(context.Background(), reserveCommand(t, 10))
+		result, err := poolFixture.handler.Reserve(context.Background(), reserveCommand(t, 10))
 		if err != nil {
 			t.Fatalf("reserve: %v", err)
 		}
@@ -445,7 +352,7 @@ func TestOpportunityRecoveryDiscipline(t *testing.T) {
 	t.Run("the undecided reason set is closed", func(t *testing.T) {
 		labels := map[string]struct{}{}
 		for _, reason := range []application.OpportunityUndecidedReason{
-			application.ScheduleStoreUnavailable, application.PoolStoreUnavailable,
+			application.PoolStoreUnavailable,
 		} {
 			label := reason.String()
 			if label == "" {
@@ -453,11 +360,11 @@ func TestOpportunityRecoveryDiscipline(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 2 {
+		if len(labels) != 1 {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if application.OpportunityUndecidedReason(len(labels)+1).String() != "" {
-			t.Fatal("第三个未决原因带了标签——封闭集合被悄悄放开")
+			t.Fatal("名单外的未决原因带了标签——封闭集合被悄悄放开")
 		}
 	})
 }

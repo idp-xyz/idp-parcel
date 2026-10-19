@@ -113,11 +113,30 @@ func TestCommandPayloadsRoundTripAsTFC1(t *testing.T) {
 			},
 		},
 		{
-			name:     "schedule",
-			document: `{"canonicalization":"TFC-1","face":"ESTABLISH_SCHEDULE","direction":"EAST","departs_at":"2026-03-05T02:11:12.345678901Z"}`,
-			digest:   "TFC-1:7cc90e5b932e8669012567d2d7300b6d2b7da486bcbec8b01dc6824c66d03512",
+			// 星期按周一到周日写词（登记时给的是乱序带重复）；生效区间不设终点写 null。
+			name:     "schedule template",
+			document: `{"canonicalization":"TFC-1","face":"REGISTER_SCHEDULE_TEMPLATE","connection":"CONN","from_node":"A","to_node":"B","weekdays":["MON","WED","SUN"],"departure_local_minute":1320,"duration_minutes":600,"time_zone":"Asia/Shanghai","service_scope":"SCOPE","effective_from":"2026-01-01","effective_until":null}`,
+			digest:   "TFC-1:0e3cf3ae653725cb0fe21e2970927fa89f6e5bcc987ca37ac931909dd7735d7e",
 			call: func() ([]byte, string, error) {
-				return domain.CanonicalizeEstablishSchedulePayload("EAST", at)
+				return domain.CanonicalizeScheduleTemplatePayload(templateContentFor(t, []time.Weekday{time.Sunday, time.Wednesday, time.Monday, time.Sunday}, ""))
+			},
+		},
+		{
+			// 物化来的班次：出处的周期安排版本不进摘要，代码与运行日期进。
+			name:     "materialized schedule",
+			document: `{"canonicalization":"TFC-1","face":"REGISTER_TRANSPORT_SCHEDULE","connection":"CONN","from_node":"A","to_node":"B","departs_at":"2026-03-04T14:00:00Z","arrives_at":"2026-03-05T00:00:00Z","service_scope":"SCOPE","origin":"TEMPLATE","template":"TPL","running_date":"2026-03-04"}`,
+			digest:   "TFC-1:8335f29706cd108d1af36ce2185464c3f641b9cf7879b864b9138805f77c97ea",
+			call: func() ([]byte, string, error) {
+				return domain.CanonicalizeTransportSchedulePayload(materializedFor(t, "2026-03-04"))
+			},
+		},
+		{
+			// 临时班次：出处两格写 null。
+			name:     "ad hoc schedule",
+			document: `{"canonicalization":"TFC-1","face":"REGISTER_TRANSPORT_SCHEDULE","connection":"CONN","from_node":"A","to_node":"B","departs_at":"2026-03-05T02:11:12.345678901Z","arrives_at":"2026-03-05T04:11:12.345678901Z","service_scope":"SCOPE","origin":"AD_HOC","template":null,"running_date":null}`,
+			digest:   "TFC-1:d259c6392f43cb6a51c1d867f06ec64c82a3bf4c0fddf348f81ba1a7a5333b1a",
+			call: func() ([]byte, string, error) {
+				return domain.CanonicalizeTransportSchedulePayload(adHocScheduleFor(t, "SCH-ADHOC", at, at.Add(2*time.Hour)))
 			},
 		},
 		{

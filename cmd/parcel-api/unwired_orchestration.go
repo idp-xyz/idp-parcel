@@ -296,6 +296,24 @@ func (unwiredMasterDocumentRegistration) Revise(
 	return tfapp.RegisterMasterDocumentResult{}, errOrchestrationNotWired
 }
 
+// unwiredTransportScheduleRegistration 一个类型顶周期安排与具体班次两个端点：两口共用 TransportScheduleRegistrar
+// （ADR-0201 决定一）。
+type unwiredTransportScheduleRegistration struct{}
+
+func (unwiredTransportScheduleRegistration) RegisterTemplate(
+	context.Context,
+	tfapp.RegisterScheduleTemplateCommand,
+) (tfapp.ScheduleRegistrationResult, error) {
+	return tfapp.ScheduleRegistrationResult{}, errOrchestrationNotWired
+}
+
+func (unwiredTransportScheduleRegistration) RegisterSchedule(
+	context.Context,
+	tfapp.RegisterTransportScheduleCommand,
+) (tfapp.ScheduleRegistrationResult, error) {
+	return tfapp.ScheduleRegistrationResult{}, errOrchestrationNotWired
+}
+
 // unwiredEffectiveTimeRuleRegistration 是轨迹源有效时间规则登记口的占位（票 label-channel/19）。
 type unwiredEffectiveTimeRuleRegistration struct{}
 
@@ -353,7 +371,7 @@ func (unwiredCarrierPickupJudgment) Judge(
 	return tfapp.JudgeCarrierFirstEffectivePickupResult{}, errOrchestrationNotWired
 }
 
-// unwiredTransportFulfillmentRecords 是运输履约查阅页四册读口的占位，方法表与
+// unwiredTransportFulfillmentRecords 是运输履约查阅页各册读口的占位，方法表与
 // tfports.ReviewCatalogueRead 逐一对上（票 admin-skeleton-closure-batch/05）。
 type unwiredTransportFulfillmentRecords struct{}
 
@@ -362,6 +380,14 @@ func (unwiredTransportFulfillmentRecords) ListTransportSchedules(
 	tfdomain.TenantID,
 	int,
 ) ([]tfports.TransportScheduleCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredTransportFulfillmentRecords) ListScheduleTemplates(
+	context.Context,
+	tfdomain.TenantID,
+	int,
+) ([]tfports.ScheduleTemplateCatalogueRow, error) {
 	return nil, errOrchestrationNotWired
 }
 

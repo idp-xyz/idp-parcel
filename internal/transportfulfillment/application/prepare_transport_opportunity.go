@@ -13,12 +13,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-var (
-	// ErrUnexpectedScheduleSave 说明班次库交回了封闭集合以外的写入结果。
-	ErrUnexpectedScheduleSave = errors.New("transport fulfillment: unexpected schedule save outcome")
-	// ErrUnexpectedPoolSave 说明容量池库交回了封闭集合以外的写入结果。
-	ErrUnexpectedPoolSave = errors.New("transport fulfillment: unexpected capacity pool save outcome")
-)
+// ErrUnexpectedPoolSave 说明容量池库交回了封闭集合以外的写入结果。
+var ErrUnexpectedPoolSave = errors.New("transport fulfillment: unexpected capacity pool save outcome")
 
 // OpportunityOutcome 是运输机会准备的应用处理结果。容量三格是业务负向（ADR-0029）：
 // 超额预留带余量（等容量或换班次）、预占过期（重新预占）、守恒撞线（同一范围不得二次
@@ -27,9 +23,6 @@ type OpportunityOutcome uint8
 
 const (
 	OpportunityOutcomeInvalid OpportunityOutcome = iota
-	ScheduleEstablished
-	ScheduleExistingResult
-	ScheduleConflict
 	PoolEstablished
 	PoolExistingResult
 	PoolConflict
@@ -47,12 +40,6 @@ const (
 
 func (outcome OpportunityOutcome) String() string {
 	switch outcome {
-	case ScheduleEstablished:
-		return "SCHEDULE_ESTABLISHED"
-	case ScheduleExistingResult:
-		return "EXISTING_SCHEDULE"
-	case ScheduleConflict:
-		return "SCHEDULE_CONFLICT"
 	case PoolEstablished:
 		return "POOL_ESTABLISHED"
 	case PoolExistingResult:
@@ -89,26 +76,16 @@ type OpportunityUndecidedReason uint8
 
 const (
 	OpportunityUndecidedReasonNone OpportunityUndecidedReason = iota
-	ScheduleStoreUnavailable
 	PoolStoreUnavailable
 )
 
 func (reason OpportunityUndecidedReason) String() string {
 	switch reason {
-	case ScheduleStoreUnavailable:
-		return "SCHEDULE_STORE_UNAVAILABLE"
 	case PoolStoreUnavailable:
 		return "POOL_STORE_UNAVAILABLE"
 	default:
 		return ""
 	}
-}
-
-type EstablishScheduleCommand struct {
-	TenantID  domain.TenantID
-	Schedule  string
-	Direction string
-	DepartsAt time.Time
 }
 
 type EstablishPoolCommand struct {
@@ -148,7 +125,6 @@ type ConsumeCapacityCommand struct {
 type OpportunityResult struct {
 	outcome      OpportunityOutcome
 	reason       OpportunityUndecidedReason
-	schedule     ports.ScheduleRecord
 	pool         ports.CapacityPoolRecord
 	hasRecord    bool
 	available    int64
@@ -163,10 +139,6 @@ func (result OpportunityResult) Outcome() OpportunityOutcome {
 // UndecidedReason 只在`未决`时非零。
 func (result OpportunityResult) UndecidedReason() OpportunityUndecidedReason {
 	return result.reason
-}
-
-func (result OpportunityResult) Schedule() (ports.ScheduleRecord, bool) {
-	return result.schedule, result.hasRecord && result.schedule.Key.Schedule.String() != ""
 }
 
 func (result OpportunityResult) Pool() (ports.CapacityPoolRecord, bool) {
@@ -188,7 +160,6 @@ func (result OpportunityResult) ConsumptionHandoffReference() string {
 }
 
 type PrepareTransportOpportunityDeps struct {
-	Schedules  ports.TransportScheduleStore
 	Pools      ports.CapacityPoolStore
 	Downstream ports.CapacityConsumptionHandoff
 	Clock      ports.Clock
@@ -200,66 +171,6 @@ type PrepareTransportOpportunityHandler struct {
 
 func NewPrepareTransportOpportunityHandler(deps PrepareTransportOpportunityDeps) *PrepareTransportOpportunityHandler {
 	return &PrepareTransportOpportunityHandler{deps: deps}
-}
-
-// EstablishSchedule 建立班次：纯执行载体（无容量/价格字段，领域已钉），幂等按
-// （租户+班次标识）分重放/冲突。
-func (handler *PrepareTransportOpportunityHandler) EstablishSchedule(
-	ctx context.Context,
-	command EstablishScheduleCommand,
-) (OpportunityResult, error) {
-	scheduleRef, err := domain.NewScheduleReference(command.Schedule)
-	if err != nil {
-		return OpportunityResult{outcome: OpportunityNotAccepted}, nil
-	}
-	schedule, err := domain.FormTransportSchedule(domain.TransportScheduleSpec{
-		TenantID:  command.TenantID,
-		Schedule:  scheduleRef,
-		Direction: command.Direction,
-		DepartsAt: command.DepartsAt,
-	})
-	if err != nil {
-		return OpportunityResult{outcome: OpportunityNotAccepted}, nil
-	}
-
-	key := ports.ScheduleKey{TenantID: command.TenantID, Schedule: scheduleRef}
-	_, digest, err := domain.CanonicalizeEstablishSchedulePayload(command.Direction, command.DepartsAt)
-	if err != nil {
-		return OpportunityResult{}, err
-	}
-	existing, found, err := handler.deps.Schedules.FindByKey(ctx, key)
-	if err != nil {
-		return opportunityUndecided(ScheduleStoreUnavailable, command.Schedule), nil
-	}
-	if found {
-		switch domain.CompareStoredDigest(existing.ContentDigest, digest,
-			unversionedOpportunityDigest(command.Direction, command.DepartsAt.UTC().Format(time.RFC3339Nano))) {
-		case domain.SamePayload:
-			return OpportunityResult{outcome: ScheduleExistingResult, schedule: existing, hasRecord: true}, nil
-		case domain.DifferentPayload:
-			return OpportunityResult{outcome: ScheduleConflict}, nil
-		default:
-			return opportunityUndecided(ScheduleStoreUnavailable, command.Schedule), nil
-		}
-	}
-
-	record := ports.ScheduleRecord{Key: key, ContentDigest: digest, Schedule: schedule, RecordedAt: handler.deps.Clock.Now()}
-	saved, err := handler.deps.Schedules.Save(ctx, record)
-	if err != nil {
-		return opportunityUndecided(ScheduleStoreUnavailable, command.Schedule), nil
-	}
-	switch saved {
-	case ports.ScheduleSaved:
-		return OpportunityResult{outcome: ScheduleEstablished, schedule: record, hasRecord: true}, nil
-	case ports.ScheduleAlreadyEstablished:
-		winner, found, err := handler.deps.Schedules.FindByKey(ctx, key)
-		if err != nil || !found {
-			return opportunityUndecided(ScheduleStoreUnavailable, command.Schedule), nil
-		}
-		return OpportunityResult{outcome: ScheduleExistingResult, schedule: winner, hasRecord: true}, nil
-	default:
-		return OpportunityResult{}, fmt.Errorf("%w: %d", ErrUnexpectedScheduleSave, saved)
-	}
 }
 
 // EstablishPool 建立容量池：班次存在≠容量可用——池是单独建立的有限量（领域已钉），

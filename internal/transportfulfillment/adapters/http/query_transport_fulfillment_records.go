@@ -9,14 +9,19 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// ReviewCatalogueReader 是本端点消费的读口：班次册、容量池册、权威交接判断册、
-// 有效交付结果册与总单册五本册子的列表读面（管理台 transport-fulfillment-review 页）。
+// ReviewCatalogueReader 是本端点消费的读口：班次册、周期安排册、容量池册、权威交接判断册、有效交付结果册与
+// 总单册的列表读面（管理台 transport-fulfillment-review 页）。
 type ReviewCatalogueReader interface {
 	ListTransportSchedules(
 		ctx context.Context,
 		tenant domain.TenantID,
 		limit int,
 	) ([]ports.TransportScheduleCatalogueRow, error)
+	ListScheduleTemplates(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ports.ScheduleTemplateCatalogueRow, error)
 	ListCapacityPools(
 		ctx context.Context,
 		tenant domain.TenantID,
@@ -44,6 +49,7 @@ var _ ReviewCatalogueReader = ports.ReviewCatalogueRead(nil)
 
 const (
 	outcomeTransportSchedulesListed     = "TRANSPORT_SCHEDULES_LISTED"
+	outcomeScheduleTemplatesListed      = "SCHEDULE_TEMPLATES_LISTED"
 	outcomeCapacityPoolsListed          = "CAPACITY_POOLS_LISTED"
 	outcomeTransportHandoversListed     = "TRANSPORT_HANDOVERS_LISTED"
 	outcomeEffectiveDeliveriesListed    = "EFFECTIVE_DELIVERIES_LISTED"
@@ -52,15 +58,16 @@ const (
 
 const (
 	registryTransportSchedule     = "transport-schedule"
+	registryScheduleTemplate      = "transport-schedule-template"
 	registryCapacityPool          = "capacity-pool"
 	registryTransportHandover     = "transport-handover"
 	registryEffectiveDelivery     = "effective-delivery"
 	registryCarrierMasterDocument = "carrier-master-document"
 )
 
-// NewQueryTransportFulfillmentRecordsEndpoint 交回运输履约查阅页五本册子的 HTTP
+// NewQueryTransportFulfillmentRecordsEndpoint 交回运输履约查阅页各本册子的 HTTP
 // 入口（GET /transport-fulfillment-records，票 admin-skeleton-closure-batch/05；总单一格
-// 由 ADR-0113 决定六补入）。
+// 由 ADR-0113 决定六补入，周期安排一格由 ADR-0201 补入）。
 //
 // 本页是治理查阅面，不是一线作业端（ADR-0021）：实时现场作业走设备渠道的命令端点，
 // 本端点零登记零编辑动作，只上列已登记的履约判断与事实。册名封闭集只有有表的册：
@@ -80,6 +87,7 @@ func NewQueryTransportFulfillmentRecordsEndpoint(
 		}
 		registry := request.URL.Query().Get("registry")
 		if registry != registryTransportSchedule &&
+			registry != registryScheduleTemplate &&
 			registry != registryCapacityPool &&
 			registry != registryTransportHandover &&
 			registry != registryEffectiveDelivery &&
@@ -96,6 +104,8 @@ func NewQueryTransportFulfillmentRecordsEndpoint(
 		switch registry {
 		case registryTransportSchedule:
 			serveTransportSchedules(response, request, reader, tenant, query.Limit)
+		case registryScheduleTemplate:
+			serveScheduleTemplates(response, request, reader, tenant, query.Limit)
 		case registryCapacityPool:
 			serveCapacityPools(response, request, reader, tenant, query.Limit)
 		case registryTransportHandover:
@@ -123,15 +133,60 @@ func serveTransportSchedules(
 	bodies := make([]transportScheduleBody, 0, len(rows))
 	for _, row := range rows {
 		bodies = append(bodies, transportScheduleBody{
-			ScheduleID: row.ScheduleID,
-			Direction:  row.Direction,
-			DepartsAt:  rfc3339(row.DepartsAt),
-			RecordedAt: rfc3339(row.RecordedAt),
+			ScheduleID:      row.ScheduleID,
+			Version:         row.Version,
+			Connection:      row.Connection,
+			FromNode:        row.FromNode,
+			ToNode:          row.ToNode,
+			DepartsAt:       rfc3339(row.DepartsAt),
+			ArrivesAt:       rfc3339(row.ArrivesAt),
+			ServiceScope:    row.ServiceScope,
+			Origin:          row.Origin,
+			Template:        row.Template,
+			TemplateVersion: row.TemplateVersion,
+			RunningDate:     row.RunningDate,
+			RecordedAt:      rfc3339(row.RecordedAt),
 		})
 	}
 	writeJSON(response, http.StatusOK, transportScheduleListResponse{
 		Outcome:   outcomeTransportSchedulesListed,
 		Schedules: bodies,
+	})
+}
+
+func serveScheduleTemplates(
+	response http.ResponseWriter,
+	request *http.Request,
+	reader ReviewCatalogueReader,
+	tenant domain.TenantID,
+	limit int,
+) {
+	rows, err := reader.ListScheduleTemplates(request.Context(), tenant, limit)
+	if err != nil {
+		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+		return
+	}
+	bodies := make([]scheduleTemplateBody, 0, len(rows))
+	for _, row := range rows {
+		bodies = append(bodies, scheduleTemplateBody{
+			Template:           row.Template,
+			Version:            row.Version,
+			Connection:         row.Connection,
+			FromNode:           row.FromNode,
+			ToNode:             row.ToNode,
+			Weekdays:           append([]string{}, row.Weekdays...),
+			DepartureLocalTime: domain.LocalTimeOfDay(row.DepartureLocalMinute),
+			DurationMinutes:    row.DurationMinutes,
+			TimeZone:           row.TimeZone,
+			ServiceScope:       row.ServiceScope,
+			EffectiveFrom:      row.EffectiveFrom,
+			EffectiveUntil:     row.EffectiveUntil,
+			RecordedAt:         rfc3339(row.RecordedAt),
+		})
+	}
+	writeJSON(response, http.StatusOK, scheduleTemplateListResponse{
+		Outcome:   outcomeScheduleTemplatesListed,
+		Templates: bodies,
 	})
 }
 
@@ -281,16 +336,48 @@ type transportScheduleListResponse struct {
 	Schedules []transportScheduleBody `json:"schedules"`
 }
 
-// transportScheduleBody 逐字段透出一个具体班次。
+// transportScheduleBody 逐字段透出一个具体班次的一版（查阅列面与登记答复同一形状）。
 //
-// 没有执行准备键、也没有实际执行键——那两组在存储上还没有登记格（班次行只登身份、
-// 方向与出发时刻），不代填「未出发」一类派生状态词；缺席说的是「无处可登」，代填
-// 会把它演成「已登而未发生」。
+// 方向是连接与起讫三格，各自透出，不拼成一个「A → B」串——组合是呈现的事。物化来的班次带周期安排、物化时那一版
+// 与运行日期；临时班次这三键缺席。没有执行准备键、也没有实际执行键——那两组在存储上还没有登记格，不代填「未
+// 出发」一类派生状态词；缺席说的是「无处可登」，代填会把它演成「已登而未发生」。
 type transportScheduleBody struct {
-	ScheduleID string `json:"scheduleId"`
-	Direction  string `json:"direction"`
-	DepartsAt  string `json:"departsAt"`
-	RecordedAt string `json:"recordedAt"`
+	ScheduleID      string `json:"scheduleId"`
+	Version         int    `json:"version"`
+	Connection      string `json:"connection"`
+	FromNode        string `json:"fromNode"`
+	ToNode          string `json:"toNode"`
+	DepartsAt       string `json:"departsAt"`
+	ArrivesAt       string `json:"arrivesAt"`
+	ServiceScope    string `json:"serviceScope"`
+	Origin          string `json:"origin"`
+	Template        string `json:"template,omitempty"`
+	TemplateVersion int    `json:"templateVersion,omitempty"`
+	RunningDate     string `json:"runningDate,omitempty"`
+	RecordedAt      string `json:"recordedAt"`
+}
+
+type scheduleTemplateListResponse struct {
+	Outcome   string                 `json:"outcome"`
+	Templates []scheduleTemplateBody `json:"templates"`
+}
+
+// scheduleTemplateBody 逐字段透出一份周期安排的一版（查阅列面与登记答复同一形状）。出发时刻是当地 HH:MM，时区
+// 随行给出——周期安排没有绝对出发时刻，那要按日期物化才有；effectiveUntil 缺席即不设终点。
+type scheduleTemplateBody struct {
+	Template           string   `json:"template"`
+	Version            int      `json:"version"`
+	Connection         string   `json:"connection"`
+	FromNode           string   `json:"fromNode"`
+	ToNode             string   `json:"toNode"`
+	Weekdays           []string `json:"weekdays"`
+	DepartureLocalTime string   `json:"departureLocalTime"`
+	DurationMinutes    int64    `json:"durationMinutes"`
+	TimeZone           string   `json:"timeZone"`
+	ServiceScope       string   `json:"serviceScope"`
+	EffectiveFrom      string   `json:"effectiveFrom"`
+	EffectiveUntil     string   `json:"effectiveUntil,omitempty"`
+	RecordedAt         string   `json:"recordedAt"`
 }
 
 type capacityPoolListResponse struct {

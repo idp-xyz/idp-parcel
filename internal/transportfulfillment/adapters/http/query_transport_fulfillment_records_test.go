@@ -56,7 +56,7 @@ func (intake failingCatalogueIntake) IntakeCatalogueQuery(
 }
 
 // unreachableReviewCatalogue 断言读口未被触到：传输形状的拒绝与未配置格都发生在
-// 读库之前。一个类型实现四个读口——同一道分界，替身分设只会让它看起来能只守一半。
+// 读库之前。一个类型实现全部读口——同一道分界，替身分设只会让它看起来能只守一半。
 type unreachableReviewCatalogue struct{ t *testing.T }
 
 func (stub unreachableReviewCatalogue) refuse(register string) {
@@ -68,6 +68,13 @@ func (stub unreachableReviewCatalogue) ListTransportSchedules(
 	context.Context, domain.TenantID, int,
 ) ([]ports.TransportScheduleCatalogueRow, error) {
 	stub.refuse("transport schedule")
+	return nil, nil
+}
+
+func (stub unreachableReviewCatalogue) ListScheduleTemplates(
+	context.Context, domain.TenantID, int,
+) ([]ports.ScheduleTemplateCatalogueRow, error) {
+	stub.refuse("schedule template")
 	return nil, nil
 }
 
@@ -99,9 +106,10 @@ func (stub unreachableReviewCatalogue) ListCarrierMasterDocuments(
 	return nil, nil
 }
 
-// stubReviewCatalogue 是五本册子的读口替身，记下读口收到的键。
+// stubReviewCatalogue 是各本册子的读口替身，记下读口收到的键。
 type stubReviewCatalogue struct {
 	schedules       []ports.TransportScheduleCatalogueRow
+	templates       []ports.ScheduleTemplateCatalogueRow
 	pools           []ports.CapacityPoolCatalogueRow
 	handovers       []ports.TransportHandoverCatalogueRow
 	deliveries      []ports.EffectiveDeliveryCatalogueRow
@@ -117,6 +125,13 @@ func (stub *stubReviewCatalogue) ListTransportSchedules(
 ) ([]ports.TransportScheduleCatalogueRow, error) {
 	stub.gotTenant, stub.gotLimit = tenant.String(), limit
 	return stub.schedules, stub.err
+}
+
+func (stub *stubReviewCatalogue) ListScheduleTemplates(
+	_ context.Context, tenant domain.TenantID, limit int,
+) ([]ports.ScheduleTemplateCatalogueRow, error) {
+	stub.gotTenant, stub.gotLimit = tenant.String(), limit
+	return stub.templates, stub.err
 }
 
 func (stub *stubReviewCatalogue) ListCapacityPools(
@@ -174,7 +189,8 @@ func arrayAt(t *testing.T, response *httptest.ResponseRecorder, key string) stri
 }
 
 var fulfillmentRegistries = []string{
-	"transport-schedule", "capacity-pool", "transport-handover", "effective-delivery", "carrier-master-document",
+	"transport-schedule", "transport-schedule-template", "capacity-pool", "transport-handover", "effective-delivery",
+	"carrier-master-document",
 }
 
 const fulfillmentTarget = "/transport-fulfillment-records?registry=transport-schedule"
@@ -196,7 +212,7 @@ func TestTransportFulfillmentRecordsQueryRefusesNonGetMethods(t *testing.T) {
 }
 
 // Covers: ADR-0055/ADR-0077 Decision 三 — 未配置 Intake 一律 403 +
-// ACCESS_CHANNEL_NOT_CONFIGURED，四本册子一致，读口不被触到，不带业务结果格。
+// ACCESS_CHANNEL_NOT_CONFIGURED，各本册子一致，读口不被触到，不带业务结果格。
 func TestUnconfiguredIntakeRefusesEveryTransportFulfillmentRecordsRequest(t *testing.T) {
 	endpoint := tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(
 		tfhttp.UnconfiguredIntake{}, unreachableReviewCatalogue{t: t},
@@ -288,16 +304,22 @@ func TestTransportFulfillmentRecordsQueryAnswers500WhenTheRegisterFails(t *testi
 	}
 }
 
-// Covers: 逐格转写 — 班次册：身份、方向、出发时刻照转写；没有执行准备与实际执行键
-// （无处可登不代填）；读口收到的是接入面裁决的键。
+// Covers: 逐格转写 — 班次册：身份、版本、方向三格、出发与到达、服务范围与来历照转写；临时班次不带出处三键；没有
+// 执行准备与实际执行键（无处可登不代填）；读口收到的是接入面裁决的键。
 func TestTransportScheduleRegistryTranscribesRows(t *testing.T) {
 	register := &stubReviewCatalogue{
 		schedules: []ports.TransportScheduleCatalogueRow{
 			{
-				ScheduleID: "sched-1",
-				Direction:  "CN-US",
-				DepartsAt:  catalogueBaseAt,
-				RecordedAt: catalogueBaseAt.Add(time.Minute),
+				ScheduleID:   "sched-1",
+				Version:      2,
+				Connection:   "SYN-CONN-1",
+				FromNode:     "SYN-NODE-A",
+				ToNode:       "SYN-NODE-B",
+				DepartsAt:    catalogueBaseAt,
+				ArrivesAt:    catalogueBaseAt.Add(6 * time.Hour),
+				ServiceScope: "SYN-SCOPE-01",
+				Origin:       "AD_HOC",
+				RecordedAt:   catalogueBaseAt.Add(time.Minute),
 			},
 		},
 	}
@@ -321,14 +343,76 @@ func TestTransportScheduleRegistryTranscribesRows(t *testing.T) {
 	}
 	schedule := body.Schedules[0]
 	if string(schedule["scheduleId"]) != `"sched-1"` ||
-		string(schedule["direction"]) != `"CN-US"` ||
-		string(schedule["departsAt"]) != `"`+catalogueBaseAt.Format(time.RFC3339Nano)+`"` {
+		string(schedule["version"]) != `2` ||
+		string(schedule["connection"]) != `"SYN-CONN-1"` ||
+		string(schedule["fromNode"]) != `"SYN-NODE-A"` ||
+		string(schedule["toNode"]) != `"SYN-NODE-B"` ||
+		string(schedule["departsAt"]) != `"`+catalogueBaseAt.Format(time.RFC3339Nano)+`"` ||
+		string(schedule["arrivesAt"]) != `"`+catalogueBaseAt.Add(6*time.Hour).Format(time.RFC3339Nano)+`"` ||
+		string(schedule["serviceScope"]) != `"SYN-SCOPE-01"` ||
+		string(schedule["origin"]) != `"AD_HOC"` {
 		t.Fatalf("班次行转写走样：%s", response.Body.String())
 	}
-	for _, key := range []string{"preparation", "actualExecution"} {
+	for _, key := range []string{"preparation", "actualExecution", "direction", "template", "templateVersion", "runningDate"} {
 		if _, present := schedule[key]; present {
 			t.Fatalf("班次行不该带 %q 键（无处可登不代填）：%s", key, response.Body.String())
 		}
+	}
+}
+
+// Covers: 逐格转写 — 周期安排册（ADR-0201）：正文照转写，出发时刻写当地 HH:MM，生效区间不设终点时不带终点键；
+// 没有任何绝对出发时刻键——周期安排不是班次。
+func TestScheduleTemplateRegistryTranscribesRows(t *testing.T) {
+	register := &stubReviewCatalogue{
+		templates: []ports.ScheduleTemplateCatalogueRow{
+			{
+				Template:             "SYN-TPL-1",
+				Version:              3,
+				Connection:           "SYN-CONN-1",
+				FromNode:             "SYN-NODE-A",
+				ToNode:               "SYN-NODE-B",
+				Weekdays:             []string{"MON", "WED"},
+				DepartureLocalMinute: 22*60 + 5,
+				DurationMinutes:      600,
+				TimeZone:             "Asia/Shanghai",
+				ServiceScope:         "SYN-SCOPE-01",
+				EffectiveFrom:        "2026-01-01",
+				RecordedAt:           catalogueBaseAt,
+			},
+		},
+	}
+	response := serveGet(recordsEndpoint(register), "/transport-fulfillment-records?registry=transport-schedule-template")
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+	}
+	var body struct {
+		Outcome   string                       `json:"outcome"`
+		Templates []map[string]json.RawMessage `json:"templates"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode %s: %v", response.Body.Bytes(), err)
+	}
+	if body.Outcome != "SCHEDULE_TEMPLATES_LISTED" || len(body.Templates) != 1 {
+		t.Fatalf("响应走样：%s", response.Body.String())
+	}
+	template := body.Templates[0]
+	if string(template["template"]) != `"SYN-TPL-1"` ||
+		string(template["version"]) != `3` ||
+		string(template["weekdays"]) != `["MON","WED"]` ||
+		string(template["departureLocalTime"]) != `"22:05"` ||
+		string(template["durationMinutes"]) != `600` ||
+		string(template["timeZone"]) != `"Asia/Shanghai"` ||
+		string(template["effectiveFrom"]) != `"2026-01-01"` {
+		t.Fatalf("周期安排行转写走样：%s", response.Body.String())
+	}
+	for _, key := range []string{"effectiveUntil", "departsAt", "arrivesAt"} {
+		if _, present := template[key]; present {
+			t.Fatalf("周期安排行不该带 %q 键：%s", key, response.Body.String())
+		}
+	}
+	if empty := serveGet(recordsEndpoint(&stubReviewCatalogue{}), "/transport-fulfillment-records?registry=transport-schedule-template"); arrayAt(t, empty, "templates") != "[]" {
+		t.Fatalf("空周期安排册应答空数组：%s", empty.Body.String())
 	}
 }
 

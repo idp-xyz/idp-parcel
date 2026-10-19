@@ -7,6 +7,7 @@ import (
 
 var (
 	ErrInvalidTransportSchedule = errors.New("transport fulfillment: invalid transport schedule")
+	ErrInvalidScheduleDirection = errors.New("transport fulfillment: invalid schedule direction")
 	ErrInvalidCapacityPool      = errors.New("transport fulfillment: invalid capacity pool")
 	// ErrCapacityExceeded：池容量是硬上限，普通业务授权不能突破（CONTEXT：触及硬限制时
 	// 拒绝新的预占，不能以审批绕过）。软容量超配走版本化阈值与缺口处置，另票。
@@ -27,38 +28,245 @@ func NewScheduleReference(value string) (ScheduleReference, error) {
 	return ScheduleReference{required}, err
 }
 
-// TransportSchedule 是一次运输机会的执行体：明确日期、时间范围与方向的独立班次身份
-// （周期模板不是班次）。班次存在不等于容量可用，也不等于已订舱——本类型上没有任何
-// 容量或订舱字段可以承载那两个结论，它们各自成对象（CONTEXT 119）。
-type TransportSchedule struct {
-	tenantID  TenantID
-	schedule  ScheduleReference
-	direction requiredValue
-	departsAt time.Time
+// NetworkConnectionReference 指名 network-routing 目录上的一条连接，不带版本。拼写归 NR，本上下文原样保存、不解析，
+// 也不核它在 NR 目录里在不在：登班次与登网络是两本册子，各有各的登记方与节奏（ADR-0201 决定二）。
+type NetworkConnectionReference struct{ requiredValue }
+
+func NewNetworkConnectionReference(value string) (NetworkConnectionReference, error) {
+	required, err := newRequiredValue("network connection reference", value)
+	return NetworkConnectionReference{required}, err
 }
 
-// TransportScheduleSpec 固定班次身份三件：方向、发运时间与引用。
-type TransportScheduleSpec struct {
-	TenantID  TenantID
-	Schedule  ScheduleReference
-	Direction string
-	DepartsAt time.Time
+// NetworkNodeReference 指名 network-routing 目录上的一个节点，拼写同样归 NR。
+type NetworkNodeReference struct{ requiredValue }
+
+func NewNetworkNodeReference(value string) (NetworkNodeReference, error) {
+	required, err := newRequiredValue("network node reference", value)
+	return NetworkNodeReference{required}, err
 }
 
-func FormTransportSchedule(spec TransportScheduleSpec) (TransportSchedule, error) {
-	direction, err := newRequiredValue("schedule direction", spec.Direction)
+// ScheduleServiceScopeReference 指名班次适用的服务范围（CONTEXT「建立具体班次」要固定的那一格）。它只被引用，
+// 本上下文不据以挑选候选——候选按方向与时刻判（ADR-0201 决定六）。
+type ScheduleServiceScopeReference struct{ requiredValue }
+
+func NewScheduleServiceScopeReference(value string) (ScheduleServiceScopeReference, error) {
+	required, err := newRequiredValue("schedule service scope reference", value)
+	return ScheduleServiceScopeReference{required}, err
+}
+
+// ScheduleDirection 是班次与周期安排的方向身份：NR 连接代码加起讫节点（ADR-0201 决定二）。只认节点对会在平行连接
+// 上撞成同一个方向；只认连接代码又挡不住起讫被登反——三格缺一不可。与计划履约段怎么比对归消费侧适配器，本类型
+// 不认识 NR 的任何结构。
+type ScheduleDirection struct {
+	connection NetworkConnectionReference
+	from       NetworkNodeReference
+	to         NetworkNodeReference
+}
+
+func NewScheduleDirection(connection, from, to string) (ScheduleDirection, error) {
+	connectionRef, err := NewNetworkConnectionReference(connection)
 	if err != nil {
+		return ScheduleDirection{}, ErrInvalidScheduleDirection
+	}
+	fromRef, err := NewNetworkNodeReference(from)
+	if err != nil {
+		return ScheduleDirection{}, ErrInvalidScheduleDirection
+	}
+	toRef, err := NewNetworkNodeReference(to)
+	if err != nil {
+		return ScheduleDirection{}, ErrInvalidScheduleDirection
+	}
+	if fromRef == toRef {
+		return ScheduleDirection{}, ErrInvalidScheduleDirection
+	}
+	return ScheduleDirection{connection: connectionRef, from: fromRef, to: toRef}, nil
+}
+
+func (direction ScheduleDirection) valid() bool {
+	return direction.connection.valid() && direction.from.valid() && direction.to.valid() && direction.from != direction.to
+}
+
+func (direction ScheduleDirection) Connection() NetworkConnectionReference {
+	return direction.connection
+}
+
+func (direction ScheduleDirection) From() NetworkNodeReference {
+	return direction.from
+}
+
+func (direction ScheduleDirection) To() NetworkNodeReference {
+	return direction.to
+}
+
+// ScheduleVersion 是具体班次在登记册上的版本序号，从 1 起。同一身份异内容再登就是下一版（ADR-0201 决定四）；
+// 序号由登记册顺次给，不由登记方指名——登记方登的是「这一班现在是什么样」，不是「第几版」。
+type ScheduleVersion int
+
+func (version ScheduleVersion) valid() bool {
+	return version >= 1
+}
+
+// ScheduleOriginKind 说一个具体班次从哪来：由周期安排按日期物化，或是不出自任何周期安排的临时班次。
+type ScheduleOriginKind uint8
+
+const (
+	ScheduleOriginInvalid ScheduleOriginKind = iota
+	ScheduleMaterializedFromTemplate
+	ScheduleAdHoc
+)
+
+func (kind ScheduleOriginKind) String() string {
+	switch kind {
+	case ScheduleMaterializedFromTemplate:
+		return "TEMPLATE"
+	case ScheduleAdHoc:
+		return "AD_HOC"
+	default:
+		return ""
+	}
+}
+
+// ParseScheduleOriginKind 把 String 写出的词认回来，供读回走构造门。
+func ParseScheduleOriginKind(value string) (ScheduleOriginKind, error) {
+	switch value {
+	case ScheduleMaterializedFromTemplate.String():
+		return ScheduleMaterializedFromTemplate, nil
+	case ScheduleAdHoc.String():
+		return ScheduleAdHoc, nil
+	default:
+		return ScheduleOriginInvalid, ErrInvalidTransportSchedule
+	}
+}
+
+// ScheduleOrigin 是班次的来历。物化来的班次记下周期安排代码、物化时那一版与运行日期；运行日期连同代码就是班次
+// 身份的来源，版本只是出处——同一日期按更新的一版再物化，若班次本身没变，就不算班次换了内容。
+type ScheduleOrigin struct {
+	kind            ScheduleOriginKind
+	template        ScheduleTemplateCode
+	templateVersion ScheduleTemplateVersion
+	runningDate     RunningDate
+}
+
+func (origin ScheduleOrigin) Kind() ScheduleOriginKind {
+	return origin.kind
+}
+
+// Template 只在物化来的班次上交回出处；临时班次交回 false。
+func (origin ScheduleOrigin) Template() (ScheduleTemplateCode, ScheduleTemplateVersion, RunningDate, bool) {
+	if origin.kind != ScheduleMaterializedFromTemplate {
+		return ScheduleTemplateCode{}, 0, RunningDate{}, false
+	}
+	return origin.template, origin.templateVersion, origin.runningDate, true
+}
+
+func (origin ScheduleOrigin) valid() bool {
+	switch origin.kind {
+	case ScheduleMaterializedFromTemplate:
+		return origin.template.valid() && origin.templateVersion.valid() && origin.runningDate.valid()
+	case ScheduleAdHoc:
+		return !origin.template.valid() && origin.templateVersion == 0 && !origin.runningDate.valid()
+	default:
+		return false
+	}
+}
+
+// TransportSchedule 是一次运输机会的执行体：明确运行方向、出发与到达时刻、适用服务范围的独立班次身份（CONTEXT
+// 「建立具体班次」；周期安排不是班次）。班次存在不等于容量可用，也不等于已订舱——本类型上没有任何容量或订舱字段
+// 可以承载那两个结论，它们各自成对象。
+type TransportSchedule struct {
+	tenantID     TenantID
+	schedule     ScheduleReference
+	version      ScheduleVersion
+	direction    ScheduleDirection
+	departsAt    time.Time
+	arrivesAt    time.Time
+	serviceScope ScheduleServiceScopeReference
+	origin       ScheduleOrigin
+}
+
+// TransportScheduleSpec 是一个班次的身份与正文：方向、出发与到达时刻、适用服务范围。
+type TransportScheduleSpec struct {
+	TenantID     TenantID
+	Schedule     ScheduleReference
+	Direction    ScheduleDirection
+	DepartsAt    time.Time
+	ArrivesAt    time.Time
+	ServiceScope ScheduleServiceScopeReference
+}
+
+// FormTransportSchedule 立一个不出自周期安排的临时班次的首版（ADR-0201 决定五）。临时班次不得取物化班次那种
+// 「代码/日期」形的身份：那一形归周期安排，按（代码、日期）物化时会撞上一份来历不同的班次，同一身份两种来历，
+// 读的人分不出这一班是谁定的。
+func FormTransportSchedule(spec TransportScheduleSpec) (TransportSchedule, error) {
+	if _, _, derived := parseMaterializedScheduleReference(spec.Schedule.String()); derived {
 		return TransportSchedule{}, ErrInvalidTransportSchedule
 	}
-	if !spec.TenantID.valid() || !spec.Schedule.valid() || AtRegistryPrecision(spec.DepartsAt).IsZero() {
+	return formSchedule(spec, 1, ScheduleOrigin{kind: ScheduleAdHoc})
+}
+
+// RehydrateTransportScheduleSpec 是读回一版班次所需的全部：正文、版本与来历。
+type RehydrateTransportScheduleSpec struct {
+	Schedule        TransportScheduleSpec
+	Version         ScheduleVersion
+	OriginKind      ScheduleOriginKind
+	Template        ScheduleTemplateCode
+	TemplateVersion ScheduleTemplateVersion
+	RunningDate     RunningDate
+}
+
+// RehydrateTransportSchedule 是持久化适配器读回一版班次的门：逐格过构造门，并核身份与来历对得上——物化来的
+// 班次身份必须正是由它的（代码、日期）派生的那一个，临时班次身份必须不是那一形。
+func RehydrateTransportSchedule(spec RehydrateTransportScheduleSpec) (TransportSchedule, error) {
+	origin := ScheduleOrigin{
+		kind:            spec.OriginKind,
+		template:        spec.Template,
+		templateVersion: spec.TemplateVersion,
+		runningDate:     spec.RunningDate,
+	}
+	switch spec.OriginKind {
+	case ScheduleMaterializedFromTemplate:
+		if !origin.valid() || spec.Schedule.Schedule != materializedScheduleReference(spec.Template, spec.RunningDate) {
+			return TransportSchedule{}, ErrInvalidTransportSchedule
+		}
+	case ScheduleAdHoc:
+		if _, _, derived := parseMaterializedScheduleReference(spec.Schedule.Schedule.String()); derived {
+			return TransportSchedule{}, ErrInvalidTransportSchedule
+		}
+	}
+	return formSchedule(spec.Schedule, spec.Version, origin)
+}
+
+func formSchedule(spec TransportScheduleSpec, version ScheduleVersion, origin ScheduleOrigin) (TransportSchedule, error) {
+	departsAt := AtRegistryPrecision(spec.DepartsAt)
+	arrivesAt := AtRegistryPrecision(spec.ArrivesAt)
+	if !spec.TenantID.valid() || !spec.Schedule.valid() || !version.valid() || !origin.valid() ||
+		!spec.Direction.valid() || !spec.ServiceScope.valid() ||
+		departsAt.IsZero() || arrivesAt.IsZero() || !arrivesAt.After(departsAt) {
 		return TransportSchedule{}, ErrInvalidTransportSchedule
 	}
 	return TransportSchedule{
-		tenantID:  spec.TenantID,
-		schedule:  spec.Schedule,
-		direction: direction,
-		departsAt: spec.DepartsAt.UTC(),
+		tenantID:     spec.TenantID,
+		schedule:     spec.Schedule,
+		version:      version,
+		direction:    spec.Direction,
+		departsAt:    spec.DepartsAt.UTC(),
+		arrivesAt:    spec.ArrivesAt.UTC(),
+		serviceScope: spec.ServiceScope,
+		origin:       origin,
 	}, nil
+}
+
+// Revise 以 next 的正文形成本班次的下一版（ADR-0201 决定四）。身份与来历种类不变：临时班次不会变成物化来的，
+// 物化来的也只能由同一（代码、日期）再物化——身份本来就由它们派生。内容没变就不该有新版，那由编排比摘要答
+// `已存在`，不走到这里。
+func (schedule TransportSchedule) Revise(next TransportSchedule) (TransportSchedule, error) {
+	if next.tenantID != schedule.tenantID || next.schedule != schedule.schedule ||
+		next.origin.kind != schedule.origin.kind {
+		return TransportSchedule{}, ErrInvalidTransportSchedule
+	}
+	revised := next
+	revised.version = schedule.version + 1
+	return revised, nil
 }
 
 func (schedule TransportSchedule) TenantID() TenantID {
@@ -69,12 +277,28 @@ func (schedule TransportSchedule) Schedule() ScheduleReference {
 	return schedule.schedule
 }
 
-func (schedule TransportSchedule) Direction() string {
-	return schedule.direction.String()
+func (schedule TransportSchedule) Version() ScheduleVersion {
+	return schedule.version
+}
+
+func (schedule TransportSchedule) Direction() ScheduleDirection {
+	return schedule.direction
 }
 
 func (schedule TransportSchedule) DepartsAt() time.Time {
 	return schedule.departsAt
+}
+
+func (schedule TransportSchedule) ArrivesAt() time.Time {
+	return schedule.arrivesAt
+}
+
+func (schedule TransportSchedule) ServiceScope() ScheduleServiceScopeReference {
+	return schedule.serviceScope
+}
+
+func (schedule TransportSchedule) Origin() ScheduleOrigin {
+	return schedule.origin
 }
 
 // CapacityPoolReference 指名一个容量池。

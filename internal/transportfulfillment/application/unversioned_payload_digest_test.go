@@ -72,7 +72,6 @@ func unversionedDigestCases(t *testing.T) []unversionedDigestCase {
 		bookingUnversionedCase(t),
 		bookingAnswerUnversionedCase(t),
 		pickupAttemptUnversionedCase(t),
-		scheduleUnversionedCase(t),
 		poolUnversionedCase(t),
 		effectiveDeliveryUnversionedCase(t),
 		pickupRegistrationUnversionedCase(t),
@@ -245,36 +244,6 @@ func pickupAttemptUnversionedCase(t *testing.T) unversionedDigestCase {
 		conflict: func(t *testing.T) {
 			changed := pickupCommand(t, "source-legacy-1", "attempt-1", successSubmission(t, "parcel-1", "TRANSPORT-CONTROL/TF-9"))
 			handle(t, changed, application.PickupSourceConflict)
-		},
-	}
-}
-
-func scheduleUnversionedCase(t *testing.T) unversionedDigestCase {
-	fixture := newOpportunityFixture(t)
-	command := application.EstablishScheduleCommand{
-		TenantID:  opportunityTenant(t),
-		Schedule:  "schedule-1",
-		Direction: "US-WEST/EXPORT",
-		DepartsAt: scheduleDepartsAt,
-	}
-	establish := func(t *testing.T, command application.EstablishScheduleCommand, want application.OpportunityOutcome) {
-		t.Helper()
-		result, err := fixture.handler.EstablishSchedule(context.Background(), command)
-		wantOutcome(t, result.Outcome(), err, want)
-	}
-	return unversionedDigestCase{
-		name:        "ESTABLISH_SCHEDULE",
-		unversioned: "19878af2c3c7559a4d5bd400a42c196c81e4013b26b8036b06d6543a4bab74b4",
-		first: func(t *testing.T) (string, func(string)) {
-			establish(t, command, application.ScheduleEstablished)
-			return onlyDigest(t, fixture.schedules.records,
-				func(record *ports.ScheduleRecord) *string { return &record.ContentDigest })
-		},
-		replay: func(t *testing.T) { establish(t, command, application.ScheduleExistingResult) },
-		conflict: func(t *testing.T) {
-			changed := command
-			changed.Direction = "US-EAST/EXPORT"
-			establish(t, changed, application.ScheduleConflict)
 		},
 	}
 }

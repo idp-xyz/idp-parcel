@@ -72,11 +72,17 @@ func newReviewCatalogueStores(t *testing.T) reviewCatalogueStores {
 
 func catalogueScheduleRecord(t *testing.T, tenant, id string, departsAt time.Time) ports.ScheduleRecord {
 	t.Helper()
+	direction, err := domain.NewScheduleDirection("SYN-CONN-1", "SYN-NODE-A", "SYN-NODE-B")
+	if err != nil {
+		t.Fatalf("构造方向：%v", err)
+	}
 	schedule, err := domain.FormTransportSchedule(domain.TransportScheduleSpec{
-		TenantID:  deliveryValue(t, domain.NewTenantID, tenant),
-		Schedule:  deliveryValue(t, domain.NewScheduleReference, id),
-		Direction: "CN-US",
-		DepartsAt: departsAt,
+		TenantID:     deliveryValue(t, domain.NewTenantID, tenant),
+		Schedule:     deliveryValue(t, domain.NewScheduleReference, id),
+		Direction:    direction,
+		DepartsAt:    departsAt,
+		ArrivesAt:    departsAt.Add(6 * time.Hour),
+		ServiceScope: deliveryValue(t, domain.NewScheduleServiceScopeReference, "SYN-SCOPE-01"),
 	})
 	if err != nil {
 		t.Fatalf("构造班次：%v", err)
@@ -205,8 +211,11 @@ func TestReviewCatalogueListsTransportSchedulesLatestDepartureFirst(t *testing.T
 	if len(rows) != 2 || rows[0].ScheduleID != "sched-2" || rows[1].ScheduleID != "sched-1" {
 		t.Fatalf("册面行序变形：%+v", rows)
 	}
-	if rows[0].Direction != "CN-US" ||
+	if rows[0].Connection != "SYN-CONN-1" || rows[0].FromNode != "SYN-NODE-A" || rows[0].ToNode != "SYN-NODE-B" ||
+		rows[0].Version != 1 || rows[0].Origin != "AD_HOC" || rows[0].Template != "" || rows[0].RunningDate != "" ||
+		rows[0].ServiceScope != "SYN-SCOPE-01" ||
 		!rows[0].DepartsAt.Equal(scheduleDeparts.Add(2*time.Hour)) ||
+		!rows[0].ArrivesAt.Equal(scheduleDeparts.Add(8*time.Hour)) ||
 		!rows[1].DepartsAt.Equal(scheduleDeparts) {
 		t.Errorf("班次行转写变形：%+v", rows)
 	}
@@ -465,6 +474,13 @@ func TestFulfillmentReviewCatalogueRejectsNonPositiveLimitAndAnswersEmptyHonestl
 	schedules, err := stores.catalogue.ListTransportSchedules(ctx, tenant, 5)
 	if err != nil || len(schedules) != 0 {
 		t.Errorf("空班次册：rows=%+v err=%v", schedules, err)
+	}
+	if _, err := stores.catalogue.ListScheduleTemplates(ctx, tenant, 0); err == nil {
+		t.Error("零页大小的周期安排上列没有被拒")
+	}
+	templates, err := stores.catalogue.ListScheduleTemplates(ctx, tenant, 5)
+	if err != nil || len(templates) != 0 {
+		t.Errorf("空周期安排册：rows=%+v err=%v", templates, err)
 	}
 	pools, err := stores.catalogue.ListCapacityPools(ctx, tenant, 5)
 	if err != nil || len(pools) != 0 {

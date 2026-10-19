@@ -33,7 +33,7 @@ func NewReviewCatalogue(db *bentopg.DB) (*ReviewCatalogue, error) {
 	return &ReviewCatalogue{db: db}, nil
 }
 
-// ListTransportSchedules 上列班次登记册：晚出发的在前，同刻按班次标识稳定排序。
+// ListTransportSchedules 上列班次登记册：每个班次只列当前版，晚出发的在前，同刻按班次标识稳定排序。
 func (catalogue *ReviewCatalogue) ListTransportSchedules(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -48,9 +48,14 @@ func (catalogue *ReviewCatalogue) ListTransportSchedules(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT schedule_id, direction, departs_at, recorded_at
-		   FROM transport_fulfillment.transport_schedule
-		  WHERE tenant_id = $1
+		`SELECT schedule_id, schedule_version, connection_code, from_node, to_node,
+		        departs_at, arrives_at, service_scope_ref, origin,
+		        COALESCE(template_code, ''), COALESCE(template_version, 0),
+		        COALESCE(to_char(running_date, 'YYYY-MM-DD'), ''), recorded_at
+		   FROM (SELECT DISTINCT ON (schedule_id) *
+		           FROM transport_fulfillment.transport_schedule
+		          WHERE tenant_id = $1
+		          ORDER BY schedule_id, schedule_version DESC) AS current_schedule
 		  ORDER BY departs_at DESC, schedule_id
 		  LIMIT $2`,
 		tenant.String(),
@@ -64,15 +69,72 @@ func (catalogue *ReviewCatalogue) ListTransportSchedules(
 	list := make([]ports.TransportScheduleCatalogueRow, 0, limit)
 	for rows.Next() {
 		var row ports.TransportScheduleCatalogueRow
-		if err := rows.Scan(&row.ScheduleID, &row.Direction, &row.DepartsAt, &row.RecordedAt); err != nil {
+		if err := rows.Scan(
+			&row.ScheduleID, &row.Version, &row.Connection, &row.FromNode, &row.ToNode,
+			&row.DepartsAt, &row.ArrivesAt, &row.ServiceScope, &row.Origin,
+			&row.Template, &row.TemplateVersion, &row.RunningDate, &row.RecordedAt,
+		); err != nil {
 			return nil, fmt.Errorf("list transport schedules: %w", err)
 		}
 		row.DepartsAt = row.DepartsAt.UTC()
+		row.ArrivesAt = row.ArrivesAt.UTC()
 		row.RecordedAt = row.RecordedAt.UTC()
 		list = append(list, row)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("list transport schedules: %w", err)
+	}
+	return list, nil
+}
+
+// ListScheduleTemplates 上列周期安排登记册（ADR-0201）：每份只列当前版，按代码稳定排序——周期安排没有业务时刻可排。
+func (catalogue *ReviewCatalogue) ListScheduleTemplates(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.ScheduleTemplateCatalogueRow, error) {
+	if limit <= 0 {
+		return nil, fmt.Errorf("list schedule templates: limit must be positive, got %d", limit)
+	}
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list schedule templates: %w", err)
+	}
+
+	rows, err := querier.Query(ctx,
+		`SELECT template_code, template_version, connection_code, from_node, to_node,
+		        weekdays, departure_local_minute, duration_minutes, time_zone, service_scope_ref,
+		        to_char(effective_from, 'YYYY-MM-DD'), COALESCE(to_char(effective_until, 'YYYY-MM-DD'), ''),
+		        recorded_at
+		   FROM (SELECT DISTINCT ON (template_code) *
+		           FROM transport_fulfillment.schedule_template
+		          WHERE tenant_id = $1
+		          ORDER BY template_code, template_version DESC) AS current_template
+		  ORDER BY template_code
+		  LIMIT $2`,
+		tenant.String(),
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list schedule templates: %w", err)
+	}
+	defer rows.Close()
+
+	list := make([]ports.ScheduleTemplateCatalogueRow, 0, limit)
+	for rows.Next() {
+		var row ports.ScheduleTemplateCatalogueRow
+		if err := rows.Scan(
+			&row.Template, &row.Version, &row.Connection, &row.FromNode, &row.ToNode,
+			&row.Weekdays, &row.DepartureLocalMinute, &row.DurationMinutes, &row.TimeZone, &row.ServiceScope,
+			&row.EffectiveFrom, &row.EffectiveUntil, &row.RecordedAt,
+		); err != nil {
+			return nil, fmt.Errorf("list schedule templates: %w", err)
+		}
+		row.RecordedAt = row.RecordedAt.UTC()
+		list = append(list, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list schedule templates: %w", err)
 	}
 	return list, nil
 }

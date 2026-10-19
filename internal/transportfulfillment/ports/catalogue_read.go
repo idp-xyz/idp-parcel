@@ -12,29 +12,55 @@ import (
 // 共接口——扩写侧接口会拆全部写侧测试替身，伴生读端口另立（判据同 collectionremittance
 // CodSubledgerCatalogueRow 那句）。
 //
-// 上列的是**检索列面**的照实转写：班次、容量池、权威交接判断、有效交付与总单各照
-// 登记行转写，容量四量按预占子表求和派生、总单的关联数按关联子表计数派生——派生是
-// 求和与计数不是判断（判据同代收分户账六位置余额）。总单一格在 ADR-0113 立册之前
-// 刻意没有——没有表就没有读法，造一个恒空方法会把「无处可登」演成「登记册为空」
-// （票 05 Comments 记明）；立册之后它是第五本册，空册从此是「登记册为空」。运输舱单
-// 仍无册，本端口仍然没有它的方法，理由同上。
+// 上列的是**检索列面**的照实转写：班次、周期安排、容量池、权威交接判断、有效交付与
+// 总单各照登记行转写，容量四量按预占子表求和派生、总单的关联数按关联子表计数派生——
+// 派生是求和与计数不是判断（判据同代收分户账六位置余额）。总单一格在 ADR-0113 立册
+// 之前刻意没有——没有表就没有读法，造一个恒空方法会把「无处可登」演成「登记册为空」
+// （票 05 Comments 记明）；立册之后空册从此是「登记册为空」，周期安排一格随 ADR-0201
+// 立册同理。运输舱单仍无册，本端口仍然没有它的方法，理由同上。
 //
 // 租户在方法签名上（ADR-0077 Decision 五）；Limit 必须为正，每页多大由接入面按渠道
 // 契约裁决，读口只拒绝无意义的取值；空登记册如实交回空列表（Decision 四：空册本身
 // 就是内容，续办是交付两个命令端点的真渠道去产生事实，不折成未配置）。
 
-// TransportScheduleCatalogueRow 是班次登记册上列的一行：班次身份、运行方向与出发
-// 时刻照行转写。
+// TransportScheduleCatalogueRow 是班次登记册上列的一行：只列每个班次的当前版，方向三格、出发与到达、服务范围与
+// 来历照行转写。物化来的班次带周期安排代码、物化时那一版与运行日期；临时班次这三格缺席（空串与零）。
 //
-// 没有执行准备键、也没有实际执行键——班次的开放/关闭订舱、暂停、延误与出发、移动、
-// 到达在存储上还没有登记格（迁移 0004 的班次行只登身份、方向与出发时刻），本行不
-// 代填「未出发」一类派生状态词（票 05 Comments 记明）。时间范围同理：行上只有出发
-// 时刻，没有范围终点。
+// 没有执行准备键、也没有实际执行键——班次的开放/关闭订舱、暂停、延误与出发、移动、到达在存储上还没有登记格，
+// 本行不代填「未出发」一类派生状态词（票 05 Comments 记明）。
 type TransportScheduleCatalogueRow struct {
-	ScheduleID string
-	Direction  string
-	DepartsAt  time.Time
-	RecordedAt time.Time
+	ScheduleID      string
+	Version         int
+	Connection      string
+	FromNode        string
+	ToNode          string
+	DepartsAt       time.Time
+	ArrivesAt       time.Time
+	ServiceScope    string
+	Origin          string
+	Template        string
+	TemplateVersion int
+	RunningDate     string
+	RecordedAt      time.Time
+}
+
+// ScheduleTemplateCatalogueRow 是周期安排登记册上列的一行：只列每份周期安排的当前版，正文照行转写（ADR-0201）。
+// 出发时刻是当地当日分钟数，时区随行给出；周期安排不是班次，本行没有任何绝对出发时刻——那要按日期物化才有。
+// EffectiveUntil 空串即不设终点。
+type ScheduleTemplateCatalogueRow struct {
+	Template             string
+	Version              int
+	Connection           string
+	FromNode             string
+	ToNode               string
+	Weekdays             []string
+	DepartureLocalMinute int
+	DurationMinutes      int64
+	TimeZone             string
+	ServiceScope         string
+	EffectiveFrom        string
+	EffectiveUntil       string
+	RecordedAt           time.Time
 }
 
 // CapacityPoolCatalogueRow 是容量池登记册上列的一行：池身份、所属班次、容量维度
@@ -127,6 +153,11 @@ type ReviewCatalogueRead interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]TransportScheduleCatalogueRow, error)
+	ListScheduleTemplates(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ScheduleTemplateCatalogueRow, error)
 	ListCapacityPools(
 		ctx context.Context,
 		tenant domain.TenantID,

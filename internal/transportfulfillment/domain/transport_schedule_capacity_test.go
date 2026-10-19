@@ -35,9 +35,9 @@ func reservationRef(t *testing.T, value string) domain.CapacityReservationRefere
 	return mustValue(t, domain.NewCapacityReservationReference, value)
 }
 
-// Covers: CONTEXT「具体班次」与「承运接受……不等于容量已经预占」——班次是执行体，
-// 班次存在≠容量可用≠已订舱：类型上没有任何容量、预占或订舱字段（结构防线）；周期模板
-// 不是班次，身份三件（方向/发运时间/引用）缺一不可（AT-TF-027 的身份半边）。
+// Covers: CONTEXT「具体班次」与「承运接受……不等于容量已经预占」——班次是执行体，班次存在≠容量可用≠已订舱：
+// 类型上没有任何容量、预占或订舱字段（结构防线）；周期安排不是班次，班次的方向、出发与到达、服务范围缺一不可
+// （AT-TF-027 的身份半边）。
 func TestAScheduleCarriesNoCapacityOrBooking(t *testing.T) {
 	scheduleType := reflect.TypeOf(domain.TransportSchedule{})
 	for index := 0; index < scheduleType.NumField(); index++ {
@@ -49,31 +49,28 @@ func TestAScheduleCarriesNoCapacityOrBooking(t *testing.T) {
 		}
 	}
 
-	schedule, err := domain.FormTransportSchedule(domain.TransportScheduleSpec{
-		TenantID:  mustValue(t, domain.NewTenantID, "tenant-1"),
-		Schedule:  mustValue(t, domain.NewScheduleReference, "schedule-1"),
-		Direction: "CN-US",
-		DepartsAt: reservedAt.Add(12 * time.Hour),
-	})
-	if err != nil {
-		t.Fatalf("form schedule: %v", err)
-	}
-	if schedule.Direction() != "CN-US" {
-		t.Fatalf("direction = %q", schedule.Direction())
+	departs := reservedAt.Add(12 * time.Hour)
+	schedule := adHocScheduleFor(t, "schedule-1", departs, departs.Add(time.Hour))
+	if schedule.Direction().Connection().String() != "CONN" || schedule.Direction().From().String() != "A" {
+		t.Fatalf("direction = %+v", schedule.Direction())
 	}
 
 	broken := map[string]func(*domain.TransportScheduleSpec){
-		"no direction": func(spec *domain.TransportScheduleSpec) { spec.Direction = "  " },
-		"no departure": func(spec *domain.TransportScheduleSpec) { spec.DepartsAt = time.Time{} },
-		"no schedule":  func(spec *domain.TransportScheduleSpec) { spec.Schedule = domain.ScheduleReference{} },
+		"no direction":     func(spec *domain.TransportScheduleSpec) { spec.Direction = domain.ScheduleDirection{} },
+		"no departure":     func(spec *domain.TransportScheduleSpec) { spec.DepartsAt = time.Time{} },
+		"no arrival":       func(spec *domain.TransportScheduleSpec) { spec.ArrivesAt = time.Time{} },
+		"no schedule":      func(spec *domain.TransportScheduleSpec) { spec.Schedule = domain.ScheduleReference{} },
+		"no service scope": func(spec *domain.TransportScheduleSpec) { spec.ServiceScope = domain.ScheduleServiceScopeReference{} },
 	}
 	for name, breakSpec := range broken {
 		t.Run(name, func(t *testing.T) {
 			spec := domain.TransportScheduleSpec{
-				TenantID:  mustValue(t, domain.NewTenantID, "tenant-1"),
-				Schedule:  mustValue(t, domain.NewScheduleReference, "schedule-x"),
-				Direction: "CN-US",
-				DepartsAt: reservedAt,
+				TenantID:     mustValue(t, domain.NewTenantID, "tenant-1"),
+				Schedule:     mustValue(t, domain.NewScheduleReference, "schedule-x"),
+				Direction:    directionFor(t),
+				DepartsAt:    reservedAt,
+				ArrivesAt:    reservedAt.Add(time.Hour),
+				ServiceScope: mustValue(t, domain.NewScheduleServiceScopeReference, "SCOPE"),
 			}
 			breakSpec(&spec)
 			if _, err := domain.FormTransportSchedule(spec); !errors.Is(err, domain.ErrInvalidTransportSchedule) {

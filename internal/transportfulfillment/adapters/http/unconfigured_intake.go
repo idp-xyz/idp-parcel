@@ -52,6 +52,8 @@ var _ EffectiveTimeRuleIntake = UnconfiguredIntake{}
 var _ EffectiveTimeJudgmentIntake = UnconfiguredIntake{}
 var _ CarrierPickupJudgmentIntake = UnconfiguredIntake{}
 var _ MasterDocumentIntake = UnconfiguredIntake{}
+var _ ScheduleTemplateIntake = UnconfiguredIntake{}
+var _ TransportScheduleIntake = UnconfiguredIntake{}
 
 // IntakeRegistration 不读请求。参数刻意匿名：连签名都不给「读一眼再决定」留位置。
 func (UnconfiguredIntake) IntakeRegistration(context.Context, *http.Request) (application.RegisterEffectiveDeliveryCommand, error) {
@@ -163,4 +165,14 @@ func (UnconfiguredIntake) IntakeMasterDocumentRegistration(context.Context, *htt
 
 func (UnconfiguredIntake) IntakeMasterDocumentRevision(context.Context, *http.Request) (application.ReviseMasterDocumentCommand, error) {
 	return application.ReviseMasterDocumentCommand{}, ErrAccessChannelNotConfigured
+}
+
+// IntakeScheduleTemplateRegistration 与 IntakeTransportScheduleRegistration 堵住周期安排与具体班次两口：同样不读
+// 请求、不构造命令。
+func (UnconfiguredIntake) IntakeScheduleTemplateRegistration(context.Context, *http.Request) (application.RegisterScheduleTemplateCommand, error) {
+	return application.RegisterScheduleTemplateCommand{}, ErrAccessChannelNotConfigured
+}
+
+func (UnconfiguredIntake) IntakeTransportScheduleRegistration(context.Context, *http.Request) (application.RegisterTransportScheduleCommand, error) {
+	return application.RegisterTransportScheduleCommand{}, ErrAccessChannelNotConfigured
 }

@@ -109,10 +109,12 @@ func TestAScheduleRoundTripsAndSecondWriterGetsAlreadyEstablished(t *testing.T) 
 	if err != nil || !exists {
 		t.Fatalf("班次读回失败：err=%v exists=%v", err, exists)
 	}
-	if found.Schedule.Direction() != "CN-US" ||
+	if found.Schedule.Direction() != record.Schedule.Direction() ||
 		!found.Schedule.DepartsAt().Equal(scheduleDeparts) ||
+		!found.Schedule.ArrivesAt().Equal(scheduleDeparts.Add(6*time.Hour)) ||
+		found.Schedule.Version() != 1 ||
 		found.ContentDigest != record.ContentDigest {
-		t.Fatalf("班次往返变形：direction=%q digest=%q", found.Schedule.Direction(), found.ContentDigest)
+		t.Fatalf("班次往返变形：direction=%+v version=%d digest=%q", found.Schedule.Direction(), found.Schedule.Version(), found.ContentDigest)
 	}
 
 	second := record
@@ -379,9 +381,10 @@ func TestJourneyScheduleCapacityCheckConstraintsRejectImpossibleRows(t *testing.
 
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO transport_fulfillment.transport_schedule
-			(tenant_id, schedule_id, direction, departs_at, content_digest, recorded_at)
-		 VALUES ('tenant-a', 's-bad-1', '   ', now(), 'd', now())`); err == nil {
-		t.Fatal("一行「空方向」溜进了班次库")
+			(tenant_id, schedule_id, schedule_version, connection_code, from_node, to_node,
+			 departs_at, arrives_at, service_scope_ref, origin, content_digest, recorded_at)
+		 VALUES ('tenant-a', 's-bad-1', 1, '   ', 'A', 'B', now(), now() + interval '1 hour', 'S', 'AD_HOC', 'd', now())`); err == nil {
+		t.Fatal("一行「空连接代码」溜进了班次库")
 	}
 
 	if _, err := pool.Exec(ctx,
@@ -470,11 +473,17 @@ func formedJourney(
 
 func formedSchedule(t *testing.T, tenant, id string) ports.ScheduleRecord {
 	t.Helper()
+	direction, err := domain.NewScheduleDirection("SYN-CONN-1", "SYN-NODE-A", "SYN-NODE-B")
+	if err != nil {
+		t.Fatalf("构造方向：%v", err)
+	}
 	schedule, err := domain.FormTransportSchedule(domain.TransportScheduleSpec{
-		TenantID:  deliveryValue(t, domain.NewTenantID, tenant),
-		Schedule:  deliveryValue(t, domain.NewScheduleReference, id),
-		Direction: "CN-US",
-		DepartsAt: scheduleDeparts,
+		TenantID:     deliveryValue(t, domain.NewTenantID, tenant),
+		Schedule:     deliveryValue(t, domain.NewScheduleReference, id),
+		Direction:    direction,
+		DepartsAt:    scheduleDeparts,
+		ArrivesAt:    scheduleDeparts.Add(6 * time.Hour),
+		ServiceScope: deliveryValue(t, domain.NewScheduleServiceScopeReference, "SYN-SCOPE-01"),
 	})
 	if err != nil {
 		t.Fatalf("构造班次：%v", err)

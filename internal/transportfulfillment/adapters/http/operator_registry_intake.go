@@ -16,9 +16,9 @@ type OperatorRegistryAuthenticator interface {
 	AuthenticateRegistryWrite(ctx context.Context, bearerToken string) (domain.TenantID, error)
 }
 
-// OperatorRegistryIntake 是操作者渠道在本包外部承运凭证、有效时间规则与总单三本册子五口的 Intake（ADR-0100
-// 决定四；票 operator-channel/04）。三本册子都是逐字段表单（ADR-0101 决定八），线格式就是各自的载荷类型，租户取
-// 认证结果；本包没有登记 CLI，载荷只此一份。先认证、后解载荷。
+// OperatorRegistryIntake 是操作者渠道在本包各本登记册写口的 Intake（ADR-0100 决定四；票 operator-channel/04）。
+// 各册都是逐字段表单（ADR-0101 决定八），线格式就是各自的载荷类型，租户取认证结果；周期安排与具体班次另有受控
+// CLI，收的是同一份载荷再加租户（ADR-0201 决定一），其余各册载荷只此一份。先认证、后解载荷。
 type OperatorRegistryIntake struct {
 	authenticator OperatorRegistryAuthenticator
 }
@@ -56,7 +56,7 @@ func (intake *OperatorRegistryIntake) IntakeMasterDocumentRevision(ctx context.C
 	return registryCommand(ctx, intake, request, MasterDocumentRevisionPayload.Command)
 }
 
-// registryCommand 是五口共用的一段：认证 → 封闭解码（decodeClosedPayload，与运营决定口同一份判据）→ 载荷连同认证出
+// registryCommand 是各口共用的一段：认证 → 封闭解码（decodeClosedPayload，与运营决定口同一份判据）→ 载荷连同认证出
 // 的租户译成命令。
 func registryCommand[Payload any, Command any](
 	ctx context.Context,

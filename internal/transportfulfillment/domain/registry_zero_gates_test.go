@@ -459,10 +459,12 @@ func TestScheduleAndCapacityGatesJudgeZeroOnTheRegistry(t *testing.T) {
 	t.Run("FormTransportSchedule 发运时间", func(t *testing.T) {
 		pinRegistryZeroGate(t, domain.ErrInvalidTransportSchedule, func(at time.Time) error {
 			_, err := domain.FormTransportSchedule(domain.TransportScheduleSpec{
-				TenantID:  mustValue(t, domain.NewTenantID, "SYN-TENANT-01"),
-				Schedule:  mustValue(t, domain.NewScheduleReference, "SYN-SCHEDULE-1"),
-				Direction: "SYN-DIRECTION-1",
-				DepartsAt: at,
+				TenantID:     mustValue(t, domain.NewTenantID, "SYN-TENANT-01"),
+				Schedule:     mustValue(t, domain.NewScheduleReference, "SYN-SCHEDULE-1"),
+				Direction:    directionFor(t),
+				DepartsAt:    at,
+				ArrivesAt:    at.Add(time.Hour),
+				ServiceScope: mustValue(t, domain.NewScheduleServiceScopeReference, "SYN-SCOPE-01"),
 			})
 			return err
 		})
