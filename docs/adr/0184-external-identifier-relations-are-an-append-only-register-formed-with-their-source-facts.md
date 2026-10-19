@@ -83,6 +83,14 @@ PS CONTEXT 把「外部标识关系」列为本上下文所管，定义要求记
    - **决定六维持。** 候选与信号都不按范围收窄。
    - **上一节「决定六与 UC-NO-002「权限、隔离与审计」」的代价「其二」。** 对方的委托已提交、还没接受的那一格，不论跨客户账户还是同一客户账户重复用号，NO 都答身份冲突、不再唯一关联（`TestTheWiredReceptionAnswersAConflictWhenAnUnacceptedRequestAlsoDeclaresTheNumber`，由 `TestTheWiredReceptionAssociatesTheOnlyRegisteredHolderOfANumber` 翻转而来）。对方从未报过这个号、或对方委托已被拒绝或撤回的那几种情形，仍按原文，唯一命中照旧关联（`TestTheWiredReceptionAssociatesOnceTheOtherDeclarationIsRejectedOrWithdrawn`）。
    - **上一节「风险点 1 的更正」再更正。** 「接受之前送站答待识别」：号码只在别处一份已接受委托里在册、而送站这件所属的委托已提交并报了这个号时，答待识别并记身份冲突，不再唯一关联到别处那一件。
+2. **号码进册前要存得下：带 NUL 的不收，UTF-8 字节数以 512 为界**（出处：票 [ps-external-mark-relations/06](../../.scratch/ps-external-mark-relations/issues/06-numbers-enter-the-register-only-when-storable.md) 裁定。会话 `idp-parcel-9b` 据用户原话「你作为业务和系统专家你来自决」代 PS owner 裁定，决定原文不动）：
+   - **为什么要这道门。** 本册按号码建 btree 索引，索引行有长度上限。号码原样进册，越过上限的在写入那一刻整笔回滚，入口答 500，重发同一个号永远一样。号码带 NUL 时 Postgres 的 text 存不下，同样答 500。决定一说行只插不改，决定五说号码逐字保存，两条都没说号码要存得下。
+   - **门在哪里。** 只在领域 `NewExternalIdentifierNumber` 一处：拒 NUL，拒 UTF-8 字节数超过 512 的号，拒因是 `ErrExternalIdentifierNumberNotStorable`。512 是「存得下、索引得了」的机制界，不是业务口径：远低于索引行上限，远高于现行条码与运单号的长度。租户真实号码多长，不在这里配。决定五的逐字照旧，其余字符一个不拒、不折算，回车换行、Tab、GS 分隔符照收。
+   - **写入方怎么答。** 提交口的客户包裹件号越界，答 400 `MALFORMED_REQUEST`，`error.field` 点名草案里那一格，委托与来源保全都不落。面单渠道结果里受理那件的渠道包裹件号越界，`RecordChannelResult` 照该路坏结果的答法拒收（`ErrInvalidLabelTransaction`，编排答`未受理`），交易停在原状态。这道门只设在记录结果那一步，已落库的结果重建时不过它。
+   - **核对一侧怎么答。** 读口 `FindParcelsByExternalIdentifier` 收的是成品号码类型，过不了门的号交不进来。NO 的 `ParcelIdentityView` 在构造那一步就答零个候选、无歧义信号、不报错。这样的号确定不在册，答查无此号是真话。若答成报错，收寄会读成身份读不动，落未核对的待识别、响重核门铃，而重核拿着同一个号永远续不上。
+   - 用例：`TestAnExternalIdentifierNumberMustBeStorable`、`TestAChannelResultWhoseNumberCannotEnterTheRegisterIsNotAccepted`、`TestTheWiredSubmissionRefusesACustomerParcelReferenceTheRegisterCannotStore`、`TestTheWiredReceptionAnswersAMarkTheRegisterCannotHoldAsCheckedPending`。
+   - **越权风险点。** 代 PS owner 定了 512 字节这一界。owner 复核时看：有没有渠道会把更长的内容当号码交来，例如整段二维码内容。要放宽，只改领域那一处的界，新界仍须低于索引行上限。要让超过索引行上限的号进册，得先换索引形状，例如按号码摘要建索引，那要另立记录。
+   - **留给 PS owner。** 门落地之前，可能已有超过 512 字节的客户包裹件号进了委托快照（提交口那时只拒全空白）。委托仓储重建快照时也经 `NewExternalIdentifierNumber`，这样的委托会读不回来。真实租户尚未上线；演示种子不灌客户包裹件号，演示库里经管理台录入的号有没有超界，本票没有去查。要兜底，就让快照重建走不设界的路，那一笔落在委托仓储。
 
 ## Links
 
