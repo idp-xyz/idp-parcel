@@ -352,6 +352,16 @@
 | `AT-TF-159` | internal/visibilityexception/adapters/transportfulfillment/derive_on_movement_fact_test.go::TestAMovementFactWithNoObjectToProjectIsAccountedForWithoutDeriving |
 | `AT-TF-160` | internal/visibilityexception/adapters/transportfulfillment/derive_on_movement_fact_test.go::TestMovementFactFailuresKeepTheirSentinels；cmd/parcel-dispatch/movement_fact_projection_test.go::TestMovementFactFailuresLandInTheRightPartition（派发半边） |
 | `AT-TF-161` | internal/visibilityexception/adapters/transportfulfillment/derive_on_movement_fact_test.go::TestACorrectedDepartureProjectsWithItsSupersessionButRaisesNoSecondSignal |
+| `AT-TF-191` | internal/transportfulfillment/application/trigger_dispatch_on_handover_test.go::TestAHandoverIntoADeliverySegmentFormsTheTaskAtTheDispatchClock；cmd/parcel-dispatch/delivery_dispatch_on_handover_test.go::TestTheHandoverLaneFormsOneTaskAndNeitherRedeliveryNorARetickRebuildsIt |
+| `AT-TF-192` | internal/transportfulfillment/application/trigger_dispatch_on_handover_test.go::TestRerunningTheHandoverBeatFindsTheTaskAlreadyFormed；cmd/parcel-dispatch/delivery_dispatch_on_handover_test.go::TestTheHandoverLaneFormsOneTaskAndNeitherRedeliveryNorARetickRebuildsIt |
+| `AT-TF-193` | internal/transportfulfillment/application/trigger_dispatch_on_handover_test.go::TestARefusedOrPendingHandoverIsNotATrigger；cmd/parcel-dispatch/delivery_dispatch_on_handover_test.go::TestHandoversThatAreNotATriggerSettleWithoutATask |
+| `AT-TF-194` | internal/transportfulfillment/application/trigger_dispatch_on_handover_test.go::TestAnObjectNotInADeliverySegmentSettlesWithoutATask；internal/transportfulfillment/adapters/inbox/transport_handover_registered_consumer_test.go::TestTheHandoverDispatchGateSettlesRetriesOrFailsAsTheOrchestrationDisposes；cmd/parcel-dispatch/delivery_dispatch_on_handover_test.go::TestHandoversThatAreNotATriggerSettleWithoutATask |
+| `AT-TF-195` | internal/transportfulfillment/application/trigger_dispatch_on_handover_test.go::TestARequirementMissingSettlesTheEnvelope；cmd/parcel-dispatch/delivery_dispatch_on_handover_test.go::TestAHandoverIntoADeliverySegmentReachesTrackingAndDispatchThroughTheProductionRoute、::TestHandoversThatAreNotATriggerSettleWithoutATask |
+| `AT-TF-196` | internal/transportfulfillment/application/trigger_dispatch_on_handover_test.go::TestUnreadableDependenciesAreRetried；internal/transportfulfillment/adapters/inbox/transport_handover_registered_consumer_test.go::TestTheHandoverDispatchGateSettlesRetriesOrFailsAsTheOrchestrationDisposes；cmd/parcel-dispatch/delivery_dispatch_on_handover_test.go::TestAnUnreadableRequirementSeamIsRetriedUntilItReads |
+| `AT-TF-197` | cmd/parcel-dispatch/delivery_dispatch_on_handover_test.go::TestHandoversThatAreNotATriggerSettleWithoutATask |
+| `AT-TF-198` | internal/transportfulfillment/application/trigger_dispatch_on_handover_test.go::TestOwnDefectsAreNeitherSettledNorRetried；internal/transportfulfillment/adapters/inbox/transport_handover_registered_consumer_test.go::TestTheHandoverDispatchGateSettlesRetriesOrFailsAsTheOrchestrationDisposes、::TestAHandoverEnvelopeMissingAKeyFieldIsPoison |
+| `AT-TF-199` | cmd/parcel-dispatch/assemble_test.go::TestARegisteredTransportHandoverReachesTheConsumerThroughTheRouteTable；cmd/parcel-dispatch/delivery_dispatch_on_handover_test.go::TestAHandoverIntoADeliverySegmentReachesTrackingAndDispatchThroughTheProductionRoute |
+| `AT-TF-200` | cmd/parcel-dispatch/delivery_dispatch_on_handover_test.go::TestTheHandoverLaneFormsOneTaskAndNeitherRedeliveryNorARetickRebuildsIt（执行器半边：同一组登记册与所有者，未经补拍 HTTP 口；HTTP 那一半由票 60 的演示实走取证） |
 | `AT-VE-038` | internal/visibilityexception/application/derive_projection_test.go::TestFactsDeriveAndRederiveTheProjection |
 | `AT-VE-039` | internal/visibilityexception/application/derive_projection_test.go::TestReplayConflictAndUnconfiguredMappingStayHonest |
 | `AT-VE-040` | internal/visibilityexception/application/derive_projection_test.go::TestReplayConflictAndUnconfiguredMappingStayHonest |
@@ -1266,6 +1276,8 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 追记十六（票 ps-external-mark-relations/11，2026-10-19）：`AT-NO-064` 至 `AT-NO-067` 随身份核对判可验证交付范围（PS 读口带范围、NO 判断表、重核重算范围）落地点名入①（PS 存储面、NO 编排面、生产装配真库面；`AT-NO-067` 另有 PS 渠道包裹件号面），由②移出；`AT-NO-063`、`AT-NO-068` 从推导半边补齐收寄编排面（`AT-NO-063` 另有 HTTP 面、生产装配真库面与受控批量口面）；`AT-NO-070` 补上收寄半边（编排面与真库面，重核走同一份推导、没单立用例）；`AT-NO-052` 补范围那一半（编排面与改名翻转后的真库面）；`AT-NO-062` 补末句（没有范围时追加不记冲突的待识别：编排面、命令口面、派发真库面）与有范围那一格。①334→338、②232→228（NO 39→43、29→25），合计不变。只在本表此刻的数上加本票的增量，绝对数随同波票按批重算。
 
 2026-10-19 追记（票 demo-chain-gaps/33）：UC-TF-005 新立 `AT-TF-156`–`161`（移动事实已形成信封、VE 投影与阻断信号），随票在 TF 编排与真库、VE 编排与适配器、派发与装配用例上补 Covers 点名，全部入①；半边覆盖在行内注明。①、TF 与合计各加 6，②③④不变；绝对数进 main 时随同波票按批重算（号段 156–165 由协调方预分，本票用到 161）。
+
+2026-10-19 追记（票 demo-chain-gaps/60）：UC-TF-006 新立 `AT-TF-191`–`200`（派送发起随交接信封进程内逐对象发起，ADR-0216），随票在编排、消费门、派发真库与路由表用例上补 Covers 点名，全部入①；半边覆盖在行内注明。①、TF 与合计各加 10，②③④不变；绝对数进 main 时随同波票按批重算（号段 191–200 由协调方预分，本票用满）。
 
 ### 两盘之间新落的硬句测试面（不入①，逐面列出供领票比对）
 
