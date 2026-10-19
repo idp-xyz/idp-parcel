@@ -118,6 +118,10 @@ ADR-0195 让「号码另有一份`已提交`委托声明」的唯一命中落成
 - **声明撤除门铃另起分区。** 不取，理由见决定三「信封形状」分区键那一项。
 - **信号仍在时也追加一版冲突、刷新候选。** 不取，见越权风险点「信号仍在不追加，零候选也不追加」。
 
+## 复核记录（2026-10-19，决定原文不动）
+
+「能力边界」末项与越权风险点「新增重核结果一格 `STILL_AMBIGUOUS`」所说的管理台缺口，由同一张票在评审后补上（会话 `idp-parcel-9b` 评审要求，授权同 Status 行）：复核页待识别实物区加「冲突来由」一列（三值各一句，来由缺席的冲突行写「来由未记」）；「重核」动作对来由为只因歧义信号的冲突行放开，其余来由与来由未记的冲突行照旧只给「处置」；重核答复认 `STILL_AMBIGUOUS`，写作「仍有未决的同号声明——暂不能关联，判断不变」。判读在 `apps/admin-web/src/pages/operations/identity-conflict-cause.ts` 与 `identity-recheck.ts`，落成见票 [no-reception-identity/07](../../.scratch/no-reception-identity/issues/07-an-ambiguity-only-conflict-releases-when-the-declaration-is-gone.md) 完成记录。两处原句此后只作当时的事实记录。
+
 ## Links
 
 - 票：[no-reception-identity/07](../../.scratch/no-reception-identity/issues/07-an-ambiguity-only-conflict-releases-when-the-declaration-is-gone.md)（裁定与完成记录）；父票 [04](../../.scratch/no-reception-identity/issues/04-identity-conflicts-have-a-disposition-and-release.md)

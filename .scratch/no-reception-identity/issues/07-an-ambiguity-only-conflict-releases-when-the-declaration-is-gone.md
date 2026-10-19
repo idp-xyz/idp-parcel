@@ -1,7 +1,7 @@
 # 07 只因歧义信号落下的身份冲突，在那份声明随委托被拒绝或撤回之后自动解开
 
 Category: enhancement
-Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 立并代决、认领（ADR 占号 0211），分支 `claude-nri07`
+Status: in-progress——2026-10-19 作者子代理补齐评审要求（rebase 到 origin/main `38916b00`；管理台认冲突来由），待复核。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 立并代决、认领（ADR 占号 0211），分支 `claude-nri07`
 Blocked by: 无
 父票：[04](./04-identity-conflicts-have-a-disposition-and-release.md)
 出处：ADR-0210 决定一「不做自动解除……记作后续方向」；ADR-0195 歧义信号。
@@ -42,14 +42,16 @@ ADR-0195 让「号码另有一份`已提交`委托声明」的唯一命中落成
 
 ## 完成记录（2026-10-19，会话 idp-parcel-9b 的作者子代理，分支 `claude-nri07`，基于 main `a7dfad8f`）
 
-**提交**
+**提交**（评审后 rebase 到 origin/main `38916b00`，下列是 rebase 之后的 SHA；rebase 之前依次是 `e7f631ee`、`dba5a0f2`、`0b739c5f`、`8e17ebb0`）
 
 | 提交 | 内容 |
 |---|---|
-| `e7f631ee` | 文档：新 ADR-0211；ADR-0210、ADR-0199、ADR-0195 部分停用（Status 行与 Links 前向指针、文末复核记录、adr/README 该行）；NO / PS CONTEXT、CONTEXT-MAP、GLOSSARY、UC-NO-002（含 `AT-NO-062`）、UC-NO-004 |
-| `dba5a0f2` | 实施与用例：冲突来由、重核对象放宽与 `STILL_AMBIGUOUS`、迁移 `node_operations/0012`、PS 声明撤除门铃、重核消费者第三扇门、路由表一行、分区主体登记一行、复核目录与人工重核答复带来由 |
-| `0b739c5f` | 机制清点在 `dba5a0f2` 上重生成：node_operations 迁移 11→12、全库 235→236，消费适配器 43→44 个生产文件，直投路由表 31→32 条 |
-| 本笔 | 完成记录；AT 覆盖盘点 `AT-NO-062` 入①（追记十三） |
+| `59f8a34d` | 文档：新 ADR-0211；ADR-0210、ADR-0199、ADR-0195 部分停用（Status 行与 Links 前向指针、文末复核记录、adr/README 该行）；NO / PS CONTEXT、CONTEXT-MAP、GLOSSARY、UC-NO-002（含 `AT-NO-062`）、UC-NO-004。rebase 时 adr/README 与 main 新加的 ADR-0207 那一行相撞，两边都留 |
+| `e039e96b` | 实施与用例：冲突来由、重核对象放宽与 `STILL_AMBIGUOUS`、迁移 `node_operations/0012`、PS 声明撤除门铃、重核消费者第三扇门、路由表一行、分区主体登记一行、复核目录与人工重核答复带来由 |
+| `71d5a980` | 完成记录初稿；AT 覆盖盘点 `AT-NO-062` 入①（追记十三）。rebase 时盘点总数与 main 的 demo-chain-gaps/32 追记相撞，两边都留、总数重算（①328→329，合计 1120→1121） |
+| `0325d95c` | 管理台：复核页认冲突来由（评审要求，见下「管理台」） |
+| `dedf346c` | 机制清点在 `0325d95c` 上重生成：node_operations 迁移 11→12、全库 242→243，消费适配器 43→44 个生产文件，直投路由表 31→32 条。rebase 前那一笔 `0b739c5f` 钉的是旧基线的数，rebase 时跳过、在新树上重算 |
+| 本笔 | ADR-0211 文末追加复核记录（管理台缺口已补）；本完成记录按评审补齐 |
 
 **落点**
 
@@ -59,6 +61,7 @@ ADR-0195 让「号码另有一份`已提交`委托声明」的唯一命中落成
 - **HTTP**（`adapters/http`）：人工重核答复与复核目录待识别行各多一格 `identityConflictCause`（omitempty）。
 - **入站**：新文件 `adapters/inbox/customer_parcel_number_declaration_retired_consumer.go`（`CustomerParcelNumberDeclarationRetiredConsumer`，与关联已形成那一扇同用消费者名；两扇门的载荷译码共用 `decodeTenantAndNumber`，`external_identifier_relation_formed_consumer.go` 只改用它）；新文件 `adapters/parcelshipment/recheck_on_declaration_retired.go`（`RecheckOnDeclarationRetiredAdapter`，转交按号重核）。
 - **PS**：新文件 `internal/parcelshipment/adapters/postgres/customer_parcel_number_declaration_retired_handoff.go`（事件类型常量、`declarationsRetiredBy`、`ExternalIdentifierDoorbell.RingDeclarationsRetired`、信封组装）；`shipment_request.go` 的 `Save` 把 `Exec` 换成 `UPDATE … FROM (预期版本那一行的 state) … RETURNING prior.state, saved.saved_at`，零行即版本冲突，之后按保存前后两个状态响门铃。
+- **管理台**（`apps/admin-web/src/pages/operations`，评审要求在本票内做）：新模块 `identity-conflict-cause.ts`——冲突来由三值各一句（只因歧义信号写明「那份委托被拒绝或撤回后可再重核」，多候选、一码两物写明「只经处置解开」），记冲突却不带来由的写「来由未记：此前落下的冲突，只经处置解开」，未收录的码原样示出；`conflictReleasableByRecheck` 只认 `AMBIGUITY_ONLY`。`identity-recheck.ts`：`recheckAvailabilityOf` 对只因歧义信号的冲突行放开（其余几道照旧），其余冲突行的不给理由点名来由、指向下方「处置」；`STILL_AMBIGUOUS` 的标题「仍有未决的同号声明——暂不能关联，判断不变」，细节说当前有效版本照旧、冲突照留、那份委托被拒绝或撤回后服务端自动再核、现在就要定用「处置」；「追加冲突版」与「记着身份冲突」两格那一句怎么解随来由走。`records-api.ts`、`identity-recheck-api.ts` 镜像 `identityConflictCause`；`NodeOperationsReviewPage.tsx` 待识别实物区加「冲突来由」一列，区注补一句。
 - **装配**：`cmd/parcel-dispatch/assemble_node_identity_recheck.go` 的 `recheckGates` 多一扇门；`assemble.go` 路由表只加一行，接在「键比上面各行都长，单起一段」那一段的末尾（键比那一段的键短，gofmt 不重排别的行）；`internal/architecture/partition_subject_registry_test.go` 登一行。
 
 **冲突来由的存储**
@@ -111,16 +114,21 @@ ADR-0195 让「号码另有一份`已提交`委托声明」的唯一命中落成
 | 重核对象放宽、只因歧义信号之外照旧 | `TestAnAmbiguityOnlyConflictIsReleasedOnceTheDeclarationIsGone`、`TestAnAmbiguityOnlyConflictStaysWhileADeclarationRemains`、`TestConflictsOfOtherCausesStillWaitForADisposition`；存储面 `TestAnAmbiguityOnlyConflictIsFoundByThePreservedMark`；人工重核口 `adapters/http/recheck_ambiguity_only_conflict_test.go::TestAManualRecheckReleasesAnAmbiguityOnlyConflictOnceTheSignalIsGone`；复核目录 `TestUnidentifiedItemsCarryTheConflictCause`（HTTP）、`TestUnidentifiedItemsCarryTheirConflictCause`（PG） |
 | PS 拒绝、撤回各交，接受不交；ID 用 FingerprintEventID；分区键登记 | `internal/parcelshipment/adapters/postgres/customer_parcel_number_declaration_retired_handoff_test.go`：`TestARejectionOrWithdrawalRingsADoorbellPerDeclaredNumber`、`TestOnlyLeavingSubmittedUnacceptedRingsTheRetiredDoorbell`（接受不交、同号同队、再保存不交、无号不交）、`TestARevisionConflictRingsNothing`、`TestTheRetiredDoorbellRefusesToRingOutsideATransaction`；登记行由 `internal/architecture` 的分区主体门禁核 |
 | 入站门 | `adapters/inbox/customer_parcel_number_declaration_retired_consumer_test.go::TestARetiredDeclarationDoorbellIsHandledExactlyOnce`；`adapters/parcelshipment/recheck_on_declaration_retired_test.go::TestARetiredDeclarationAsksTheRecheckByTheVerbatimNumber` |
+| 管理台认冲突来由（评审要求） | `apps/admin-web/src/pages/operations/identity-conflict-cause.test.ts`：冲突来由一列、可经重核解开的判据、重核动作随来由放开或指向处置、行转写、`STILL_AMBIGUOUS` 答复、冲突两格那一句随来由走（六条）；既有 `identity-recheck.test.ts` 的「记身份冲突不给按钮」照旧过 |
 | 真库端到端（经生产派发装配），修前先红 | `cmd/parcel-dispatch/node_identity_ambiguity_release_test.go`：`TestTheWiredDispatchReleasesAnAmbiguityOnlyConflictOnceTheDeclarationIsGone`（被拒绝、被撤回两格：冲突来由只因歧义信号 → 门铃 → 关联版、身份一格成立、意图一封）、`TestTheWiredDispatchKeepsConflictsTheRetiredDeclarationDidNotCause`（第三份声明仍在不解开，第三份也撤回后解开作反证；一码两物不被这道门铃解开）、`TestARetiredDeclarationReachesTheRecheckConsumerThroughTheRouteTable`、`TestTheRecheckConsumerAndThePSAgreeOnTheRetiredDeclarationType` |
 
 **先红后绿**
 
 - 红：`/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/nri07-red.log`（作者会话的 scratchpad，不入库）。四个内部包编译红（`undefined: ports.IdentityConflictCause`、`undefined: noinbox.RetiredCustomerParcelNumberDeclaration`、`undefined: adapter.CustomerParcelNumberDeclarationRetiredEventType` 等）；`cmd/parcel-dispatch` 编译过、行为红：路由表那条 `published = 0, want 1；失败码 = "dispatch.no_subscriber"`，端到端几格 `读冲突来由：ERROR: column "identity_conflict_cause" does not exist (SQLSTATE 42703)`；补跑一个不入库的临时探针单看门铃：`委托被拒绝之后声明撤除门铃 0 封, want 1——状态变化那一笔没入队`。
-- 绿：`/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/nri07-gate-2.log`（钉 `dba5a0f2`）。
+- 绿：`/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/nri07-gate-2.log`（钉 rebase 前的 `dba5a0f2`）；rebase 之后重跑见 `nri07-gate-3.log`（同目录，钉 `0325d95c`）。
+- 管理台红：`/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/nri07-red-admin-web.log`——写完 `identity-conflict-cause.test.ts`、改源码之前 `node scripts/run-tests.mjs` 退 2，编译红：`error TS2561: Object literal may only specify known properties, but 'identityConflictCause' does not exist in type 'UnidentifiedItemRecord'`（同形还有 `IdentityRecheckResponseBody`），新模块也不存在。绿：同目录 `nri07-admin-web-gates.log`。
 
-**门**（钉 `dba5a0f2`）
+**门**
 
-`gofmt -l .` 无输出；`go build ./...`、`go vet ./...` 退 0；带 DSN `go test -p 1 -count=1 ./internal/parcelshipment/... ./internal/nodeoperations/... ./cmd/parcel-api/... ./cmd/parcel-dispatch/... ./cmd/parcel-frontline-import/... ./migrations/... ./internal/architecture/...` 33 个包 ok、0 FAIL，退 0。没跑全量 `./...`。机制清点在同一 SHA 上重生成，差异单独一笔 `0b739c5f`。
+- Go，钉 `0325d95c`（rebase 到 `38916b00` 之后）：`gofmt -l .` 无输出；`go build ./...`、`go vet ./...` 退 0；带 DSN `go test -p 1 -count=1 ./internal/parcelshipment/... ./internal/nodeoperations/... ./cmd/parcel-api/... ./cmd/parcel-dispatch/... ./cmd/parcel-frontline-import/... ./migrations/... ./internal/architecture/...` 33 个包 ok、0 FAIL，退 0。main 在 `a7dfad8f..38916b00` 之间没改 `ShipmentRequests.Save` 所在的 `shipment_request.go`，`RETURNING prior.state` 那一处照旧成立；`assemble.go` 路由表那一行与分区主体登记那一行自动合入。
+- Go，rebase 之前钉 `dba5a0f2`：同一组命令 33 个包 ok、0 FAIL。
+- 管理台三道门（`apps/admin-web` 下，`~/.local/node` 的 Node v22.23.3；本工作树先 `pnpm install --frozen-lockfile`，没动 lockfile）：`node node_modules/typescript/bin/tsc -b --noEmit` 退 0；`node scripts/run-tests.mjs` 571 pass、0 fail，退 0；`pnpm exec vite build` 退 0（只有既有的 chunk 体积提示）。main 工作树里的 Vite 开发服务器没碰。
+- 没跑全量 `./...`。机制清点在 `0325d95c` 上重生成，差异单独一笔 `dedf346c`。
 
 **证据层级**：全部合成夹具，`S`。没有租户取值进代码：来由、门铃形状都是机制。
 
@@ -130,10 +138,12 @@ ADR-0195 让「号码另有一份`已提交`委托声明」的唯一命中落成
 - `docs/domain/GLOSSARY.md`「待识别实物」「身份冲突处置」两处——那两句写着「只经处置解除」「不自动解除」，不改就与 CONTEXT 相反。
 - `cmd/parcel-dispatch/node_identity_ambiguity_release_test.go`（新）——票面 `cmd/parcel-dispatch` 只列了两个装配文件，真库端到端判据要这份用例。
 - `internal/nodeoperations/adapters/http` 的两个答复格在 `internal/nodeoperations/**` 之内，列出只为评审好找。
+- `apps/admin-web/src/pages/operations/` 下五个文件改、两个文件新增——评审要求在本票内做，随本分支走 Go 那条路落，不走前端切片在 main 上直接做的路。
+- ADR-0211 文末追加一节复核记录：「能力边界」末项与越权风险点「新增重核结果一格」说的管理台缺口已补，原句不动。
 
 **未做**
 
-- 管理台：复核页按 `identityConflict` 把冲突行的重核按钮置灰（`apps/admin-web/src/pages/operations/identity-recheck.ts` 里那条判读），不认 `identityConflictCause` 与 `STILL_AMBIGUOUS`（页面对未收录的 outcome 照原名示出）。后端已带出来由，前端随前端切片补；`apps/admin-web/**` 不在本票地盘。
+- ~~管理台认冲突来由~~：已做（`0325d95c`，见「落点」管理台一条）。此前记的是「复核页按 `identityConflict` 把冲突行的重核按钮置灰、不认 `STILL_AMBIGUOUS`，随前端切片补」，评审要求在本票内补齐。
 - 完成判据末格「走 Go 那条路」归推送方：本作者不 push、不进 main。
 - 越权风险点「撤单即自动解开」的 owner 复核（是否要求这类自动解开进复核目录供人事后核）。
 - 按设计不做：既有冲突行不回填来由；零候选那一格不解；信号仍在时不刷新候选。
