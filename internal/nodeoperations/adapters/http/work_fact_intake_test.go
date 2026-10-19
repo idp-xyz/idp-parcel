@@ -153,6 +153,21 @@ func TestWorkFactReceptionIntakeTranslatesRefusalAndScanOnlyReceptions(t *testin
 	}
 }
 
+// Covers: 在线收寄口不改写设备交来的外部标识观察（UC-NO-002「输入语义契约」，票 no-reception-identity/02）——前导空格与扫描
+// 附带的回车换行原样进命令，去后缀归一线客户端。本口若补去空白，带不带后缀的同一来源重投会被收寄内容摘要判成同一内容。
+func TestWorkFactReceptionIntakeKeepsTheObservedMarkVerbatim(t *testing.T) {
+	intake := receptionIntakeForTest(t)
+	command, err := intake.IntakeReception(context.Background(), receptionRequest(`{"sourceId":"SYN-DEVICE-07/000126",`+
+		`"deliveredBy":"SYN-COURIER-01","handlingUnit":"SYN-HU-0004","mark":" SYN-MARK-0004\r\n","claim":"SCAN_ONLY",`+
+		`"occurredAt":"2026-09-24T09:30:00+08:00"}`))
+	if err != nil {
+		t.Fatalf("intake：%v", err)
+	}
+	if want := " SYN-MARK-0004\r\n"; command.Mark.Mark != want {
+		t.Fatalf("Mark = %q, want %q（设备交来的原样，不去空白与终止符）", command.Mark.Mark, want)
+	}
+}
+
 // Covers: 载荷里带 tenantId 或 node 即拒（MALFORMED_REQUEST）——两格只来自认证结果，值与认证结果相同也拒，否则「碰巧相同」的
 // 载荷在别的环境里就是穿透 ADR-0003 隔离边界、或替设备报一个它不在的节点的第一步。
 func TestWorkFactReceptionIntakeRefusesSelfReportedTenantOrNode(t *testing.T) {

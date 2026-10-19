@@ -19,6 +19,10 @@ import (
 // receptionDocument 是收寄口的载荷：一次一件实物（批量交付由调用方逐件分发，见 ReceiveDeliveredUnitCommand）。键名与
 // 接收观察词表同受控批量口（parcel-frontline-import 的收寄模板）逐字一致——两口消费同一用例，同一件事在两处不换词；
 // 模板的行事实号在这里换成 sourceId，因为在线口收的是设备签发的事实身份，不是批次内的行号。
+//
+// 「不换词」只管键名与词表，不管值里的空白——两口在这一格各办各的（UC-NO-002「输入语义契约」）：本口把 mark 原样交进命令，
+// 设备交来的观察不改写，扫描附带的回车、换行、Tab 与两端空白归一线客户端送出前去掉；收寄模板逐格去两端空白，是 CSV 模板的
+// 形状纪律。在这里补去空白会改写设备事实与收寄内容摘要，带不带后缀的同一来源重投就被判成同一内容。
 type receptionDocument struct {
 	SourceID      string `json:"sourceId"`
 	DeliveredBy   string `json:"deliveredBy"`

@@ -94,6 +94,7 @@ R1/R3/R4/R5/R7/R8 属「已有口径的落实核对」，接端点时逐条验�
 
 1. Web Serial 连一台真实秤读稳定重量（含断线重连）；
 2. 键盘楔扫描在扫描间隔、前缀后缀、焦点被弹层抢走三种情形下的可靠性；
+   - 指针：键盘楔扫描的后缀（回车、换行、Tab）与两端空白由客户端送出前去掉，服务端在线收寄口原样收（UC-NO-002「输入语义契约」，票 `no-reception-identity/02`）；
 3. IndexedDB 队列在设备重启／浏览器被杀后的存活率与恢复时延。
 
 ### 3.3 `packages/` 触发评估（[ADR-0018](../../docs/adr/0018-product-clients-share-release-boundary-under-apps.md)：出现第二个端**且**确有共享物）
