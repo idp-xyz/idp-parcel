@@ -123,8 +123,8 @@ func (requirement DeliveryRequirement) String() string {
 }
 
 // DeliveryDispatchUndecidedReason 指名`未决`停在哪一步等谁。三条缝各两格（未接线 / 读不到），加段登记册与任务口各一格。
-// 未接线单独成格是 ADR-0114 决定三的要求：缝没接时答未决并点名哪条缝，不造替身、不填默认——今天三条缝一条都没接
-// （票 tf-segment-lifecycle-closure/12–14），生产装配里这一格就是执行器的诚实停点。
+// 未接线单独成格是 ADR-0114 决定三的要求：缝没接时答未决并点名哪条缝，不造替身、不填默认。生产装配
+// buildDeliveryDispatchTrigger 三条缝都接了真适配器；这一格守的是缺件的装配——缺哪条照实点名，不拿替身顶上。
 type DeliveryDispatchUndecidedReason uint8
 
 const (
