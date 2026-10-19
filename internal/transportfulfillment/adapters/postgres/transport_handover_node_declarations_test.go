@@ -1,8 +1,11 @@
 package postgres_test
 
 import (
+	"errors"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
@@ -35,7 +38,7 @@ func handedOverRecordWithNodes(t *testing.T, version string, nodes domain.Handov
 	return record
 }
 
-// Covers: AT-TF-217、AT-TF-220、AT-TF-221——声明的节点随行往返（按键、按前版找后继、按范围三条读路都带着），没声明的
+// Covers: AT-TF-217、AT-TF-220、AT-TF-221——声明的节点随行往返（按键、按前版找后继、按范围，各条读路都带着），没声明的
 // 那格读回缺席；更正行照前版承继三格；查阅册逐格列出，没声明的列空。
 func TestHandoverNodeDeclarationsRoundTripThroughEveryReadPath(t *testing.T) {
 	stores := newReviewCatalogueStores(t)
@@ -123,22 +126,38 @@ func TestAHandoverWithoutNodeDeclarationsStoresNulls(t *testing.T) {
 	}
 }
 
-// Covers: AT-TF-222 的库面——空白节点串绕过领域直插被 CHECK 拒：「没有声明」只有 NULL 一种写法。
+// Covers: AT-TF-222 的库面——空白节点串绕过领域直插被 CHECK 拒：「没有声明」只有 NULL 一种写法。断言落到
+// SQLSTATE 与约束名上：只断有错，直插语句里别的列因约束变化失败时这里照样会过，证明不了是这道 CHECK 拦下的。
+// 空白只取空格与空串：CHECK 照 TF 既有迁移用 btrim，只削空格；制表符一类的空白由领域 TrimSpace 挡在库前，不归库面证。
 func TestABlankHandoverNodeIsRefusedByTheDatabase(t *testing.T) {
 	_, _, pool := newTransportHandovers(t)
-	_, err := pool.Exec(t.Context(),
-		`INSERT INTO transport_fulfillment.transport_handover
-			(tenant_id, object_ref, scope_ref, handover_version,
-			 released_by, received_by, verdict,
-			 releasing_evidence, receiving_evidence, rule_ref, basis_ref,
-			 corrects_version, corrected_at, judged_at, content_digest, recorded_at,
-			 releasing_node, receiving_node, onward_node)
-		 VALUES ('tenant-1', 'parcel-1', 'scope-1', 'HRV-BLANK-1',
-		         'node-1', 'carrier-1', 'HANDED_OVER',
-		         'seal-out', 'seal-in', 'rule/v1', NULL,
-		         NULL, NULL, now(), 'digest-1', now(),
-		         '  ', NULL, NULL)`)
-	if err == nil {
-		t.Fatal("空白交出节点进了库")
+	blanks := map[string][3]any{
+		"releasing_node": {"  ", nil, nil},
+		"receiving_node": {nil, " ", nil},
+		"onward_node":    {nil, nil, ""},
+	}
+	for column, nodes := range blanks {
+		t.Run(column, func(t *testing.T) {
+			_, err := pool.Exec(t.Context(),
+				`INSERT INTO transport_fulfillment.transport_handover
+					(tenant_id, object_ref, scope_ref, handover_version,
+					 released_by, received_by, verdict,
+					 releasing_evidence, receiving_evidence, rule_ref, basis_ref,
+					 corrects_version, corrected_at, judged_at, content_digest, recorded_at,
+					 releasing_node, receiving_node, onward_node)
+				 VALUES ('tenant-1', 'parcel-1', 'scope-1', 'HRV-BLANK-' || $4::text,
+				         'node-1', 'carrier-1', 'HANDED_OVER',
+				         'seal-out', 'seal-in', 'rule/v1', NULL,
+				         NULL, NULL, now(), 'digest-1', now(),
+				         $1, $2, $3)`,
+				nodes[0], nodes[1], nodes[2], column)
+			var pgErr *pgconn.PgError
+			if !errors.As(err, &pgErr) {
+				t.Fatalf("空白 %s 直插 err=%v，want 库面 CHECK 拒", column, err)
+			}
+			if pgErr.Code != "23514" || pgErr.ConstraintName != "transport_handover_nodes_not_blank" {
+				t.Fatalf("空白 %s 直插被 %s / %q 拒，want 23514 / transport_handover_nodes_not_blank", column, pgErr.Code, pgErr.ConstraintName)
+			}
+		})
 	}
 }
