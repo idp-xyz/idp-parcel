@@ -44,11 +44,12 @@ export function externalMarkCellOf(record: Pick<UnidentifiedItemRecord, 'sourceP
 }
 
 /**
- * 重核对象的条件照 ADR-0199 决定三逐条判：记身份冲突的重核解不开；来源未保全的无号可问；已被接续的不是当前有效版本。
+ * 重核对象的条件照 ADR-0199 决定三逐条判：记身份冲突的只经人工处置解除（ADR-0210 决定一），不经重核；来源未保全的无号
+ * 可问；已被接续的不是当前有效版本。
  * 服务端照样会逐条判、照样答一格不重核——页面先说清楚，只是省一次必然不追加的写。
  */
 export function recheckAvailabilityOf(record: UnidentifiedItemRecord): RecheckAvailability {
-  if (record.identityConflict) return { kind: 'unavailable', reason: '记身份冲突，重核解不开（等身份冲突的处置）' };
+  if (record.identityConflict) return { kind: 'unavailable', reason: '记身份冲突，只经人工处置解除，不经重核' };
   if (!record.sourcePreserved) return { kind: 'unavailable', reason: '来源未保全，无号可再问' };
   if (record.succeededBy) return { kind: 'unavailable', reason: `已被 ${record.succeededBy} 接续` };
   if (!record.judgmentVersion) return { kind: 'unavailable', reason: '没有判断版本，无从指名' };
@@ -107,7 +108,7 @@ export function describeRecheckAnswer(body: IdentityRecheckResponseBody): Rechec
         headline,
         details: [
           `冲突版 ${body.judgmentVersion ?? '—'} 接续${rechecked}，候选 ${(body.candidates ?? []).join('、') || '—'}`,
-          '身份冲突暂停方向性作业；号码唯一指向的包裹若已关联到另一件实物，那一件也追加了冲突版。重核解不开冲突，等身份冲突的处置。',
+          '身份冲突暂停方向性作业；号码唯一指向的包裹若已关联到另一件实物，那一件也追加了冲突版。身份冲突只经人工处置解除，再重核不会解开。',
         ],
       };
     case 'STILL_UNIDENTIFIED':
@@ -132,7 +133,7 @@ export function describeRecheckAnswer(body: IdentityRecheckResponseBody): Rechec
         tone: 'answered',
         landed: false,
         headline,
-        details: ['这一件记着身份冲突（多候选或一码两物），方向依据一直判身份冲突；重核解不开，等身份冲突的处置'],
+        details: ['这一件记着身份冲突（多候选或一码两物）；身份冲突只经人工处置解除，不经重核'],
       };
     case 'SOURCE_NOT_PRESERVED':
       return {

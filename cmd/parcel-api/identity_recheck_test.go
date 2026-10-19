@@ -259,7 +259,8 @@ func countReceptionRows(t *testing.T, pool *pgxpool.Pool) int {
 // Covers: 票面并发判据「重核与同一包裹另一件实物的收寄并发，经（租户、包裹）锁串行，后到者答身份冲突，不出现两件都关联成立」
 // （ADR-0199 决定三：重核走与收寄步骤 4 同一份身份判断，含票 no-reception-identity/03 的包裹锁）。A 零候选落册，委托接受形成号的
 // 关联；A 的重核读完别的实物关联（空）之后挂住，B 贴着同一个号经生产装配送站，等在那件包裹的锁上；重核提交后 B 读到 A 的追加
-// 版，答记身份冲突的待识别，A 那条链再追加一版身份冲突。方向依据的身份一格读这本册，两件都含身份冲突。
+// 版，答记身份冲突的待识别，A 那条链再追加一版身份冲突。方向依据的身份一格只读各链链头（ADR-0210 决定五）：A 那条链是
+// 原待识别 → 重核版 → 冲突版，链头是冲突版；B 只有自己那一版。两件都落成缺少·{待识别, 身份冲突}。
 func TestARecheckAndAnotherUnitsReceptionSerializeOnTheParcel(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -345,8 +346,9 @@ func TestARecheckAndAnotherUnitsReceptionSerializeOnTheParcel(t *testing.T) {
 		if err != nil {
 			t.Fatalf("判 %s 的身份：%v", unit, err)
 		}
-		if !slices.Contains(basis.Cell().Reasons(), nodomain.ReasonIdentityConflict) {
-			t.Fatalf("%s 的身份一格 = %v, want 含身份冲突", unit, basis.Cell().Reasons())
+		want := []nodomain.DirectionalBasisReason{nodomain.ReasonPendingIdentification, nodomain.ReasonIdentityConflict}
+		if reasons := basis.Cell().Reasons(); basis.Cell().Answer() != nodomain.BasisMissing || !slices.Equal(reasons, want) {
+			t.Fatalf("%s 的身份一格 = %s %v（%d 行）, want 缺少·%v", unit, basis.Cell().Answer(), reasons, len(observations), want)
 		}
 	}
 }

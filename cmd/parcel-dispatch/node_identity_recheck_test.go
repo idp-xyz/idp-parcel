@@ -62,7 +62,8 @@ func TestTheRecheckConsumerAndThePSDoorbellAgreeOnTheEventType(t *testing.T) {
 // 不另起控制起点，发布意图一封」的真库面，经生产装配：号码不在册时收寄落成零候选的待识别 → PS 委托接受、客户包裹件号形成
 // 这个号的关联，同笔入队门铃 → 生产派发器一拍把门铃投给 NO 的重核消费者 → NO 追加一版`节点收寄已形成`（前版是原待识别、
 // 来源标识由原判断版本派生）并交收寄意图一封，意图载荷指回的那一版业务时间是原收寄时刻 → 方向依据的身份一格对这件实物判
-// 成立。同一个号再响一次门铃不再追加，也不再交意图。
+// 成立：身份读口读回的追加版带着前版，身份一格只读链头（ADR-0210 决定五），原待识别已被接续、不再参与。同一个号再响一次
+// 门铃不再追加，也不再交意图。
 func TestTheWiredDispatchRechecksAPendingUnitOnceItsMarkIsRelated(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
 	ctx := t.Context()
@@ -137,12 +138,21 @@ func TestTheWiredDispatchRechecksAPendingUnitOnceItsMarkIsRelated(t *testing.T) 
 	if err != nil {
 		t.Fatalf("读收寄身份：%v", err)
 	}
+	var readBack *nodomain.IntakeIdentityObservation
+	for index := range observations {
+		if observations[index].SourceID == derived.SourceID {
+			readBack = &observations[index]
+		}
+	}
+	if len(observations) != 2 || readBack == nil || readBack.Predecessor != pending.JudgmentVersion {
+		t.Fatalf("身份读口读回 %d 行、追加版 %+v, want 原待识别与追加版两行、追加版带前版 %s", len(observations), readBack, pending.JudgmentVersion)
+	}
 	basis, err := nodomain.JudgeIdentityBasis(observations)
 	if err != nil {
 		t.Fatalf("判身份：%v", err)
 	}
-	if basis.Cell().Answer() != nodomain.BasisEstablished {
-		t.Fatalf("身份一格 = %v（%v）, want 成立", basis.Cell().Answer(), basis.Cell().Reasons())
+	if basis.Cell().Answer() != nodomain.BasisEstablished || basis.IntakeSourceID() != derived.SourceID {
+		t.Fatalf("身份一格 = %v（%v）依 %q, want 成立、依追加版", basis.Cell().Answer(), basis.Cell().Reasons(), basis.IntakeSourceID())
 	}
 
 	rows := fixture.countSQL(t, `SELECT count(*) FROM node_operations.reception`)

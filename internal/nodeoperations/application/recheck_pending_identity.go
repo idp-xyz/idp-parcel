@@ -35,7 +35,7 @@ const (
 	RecheckStillUnidentified
 	// RecheckExistingResult：被重核那一版已有后继，或派生键已在册（并发里另一方先追加）；答当前有效那一版，不再追加。
 	RecheckExistingResult
-	// RecheckIdentityConflictRecorded：指名的待识别记着身份冲突，重核解不开，等身份冲突的处置。
+	// RecheckIdentityConflictRecorded：指名的待识别记着身份冲突。身份冲突只经人工处置解除（ADR-0210 决定一），不经重核。
 	RecheckIdentityConflictRecorded
 	// RecheckSourceNotPreserved：指名的是来源保全之前落下的行，号码从未留存，无从按号再问。
 	RecheckSourceNotPreserved
@@ -189,7 +189,7 @@ func (handler *RecheckPendingIdentityHandler) recheck(
 	case record.Kind != ports.RecordPendingIdentification || associated:
 		return answered(RecheckNotPendingIdentification, record), nil
 	case record.IdentityConflict:
-		// 记身份冲突的（多候选、一码两物）在方向依据里一直判身份冲突，重核解不开，那要身份冲突的处置。
+		// 记身份冲突的（多候选、一码两物）不重核：身份冲突只经人工处置解除（ADR-0210 决定一），重核再问一次 PS 也替不了那次处置。
 		return answered(RecheckIdentityConflictRecorded, record), nil
 	case !record.Source.Preserved():
 		return answered(RecheckSourceNotPreserved, record), nil
