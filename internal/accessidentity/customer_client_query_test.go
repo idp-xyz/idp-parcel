@@ -137,7 +137,8 @@ func TestTrackingViewQueryAnswersTheCustomerGrades(t *testing.T) {
 	}
 }
 
-// Covers: 一口一词（票 first-party-api/00 代决 1）——查阅口的词进封闭词表；它不在铸造侧判准入，所以登不进准入范围对照。
+// Covers: 一口一词（票 first-party-api/00「代决」一节「客户面能力词表一口一词」）——查阅口的词进封闭词表；它不在铸造侧判准入，
+// 所以登不进准入范围对照。
 func TestTrackingViewQueryWordJoinsTheVocabularyButNotTheAdmissionMapping(t *testing.T) {
 	if got, err := accessidentity.ParseCustomerCapability("CUSTOMER_TRACKING_VIEW_QUERY"); err != nil || got != accessidentity.CustomerCapabilityTrackingViewQuery {
 		t.Fatalf("CUSTOMER_TRACKING_VIEW_QUERY：%q, %v", got, err)
