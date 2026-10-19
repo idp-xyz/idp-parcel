@@ -1,7 +1,7 @@
 # 23 运输委托提交面
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg23（见文末「完成记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
+Status: in-progress——完工待评审与进 main，分支 claude-dcg23（见文末「完成记录」「评审记录」；评审一项阻断已修）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
 Blocked by: [22](./22-supplier-agreement-version-point-read-and-tf-check-adapter.md)
 地盘：`operation_decision.go`；tfhttp `operator_decision_intake.go`、新 `submit_transport_commission.go`；`application/commission_transport.go`（核对、法人快照、改注释）；`domain/transport_commission.go`、`commission_rehydration.go`；`postgres/transport_commission.go`；迁移 TF 0025（法人列）；新 `cmd/parcel-api/assemble_transport_commission.go` + `endpoints.go` 行；种子；ADR-0202、UC-TF-004 AT、演示文档。
 出处：[02](./02-transport-commission-has-no-command-face.md)；方案「02 委托、订舱、承运答复」D02-1、D02-3、D02-4、D02-7，「跨票通则」X1、X3，「需要的 ADR」ADR-0202。
@@ -34,7 +34,7 @@ M
 
 ### 做了什么
 
-- **决定种类**：`accessidentity.DecisionTransportCommissionSubmission`（`TRANSPORT_COMMISSION_SUBMISSION`），枚举只追加。迁移 `access_identity/0008_transport_commission_submission_decision.sql` 重建决定种类约束，列出截至本迁移的全集（含 `PENDING_IDENTITY_RECHECK`）。
+- **决定种类**：`accessidentity.DecisionTransportCommissionSubmission`（`TRANSPORT_COMMISSION_SUBMISSION`），枚举只追加。迁移 `access_identity/0008_transport_commission_submission_decision.sql` 重建决定种类约束，列各份重建的并集（含 `PENDING_IDENTITY_RECHECK`，及 main 上 0011 与在途 0009 的两种；评审修补，见「评审记录」）。
 - **领域**：`TransportCommissionDraft`（`DraftTransportCommission`、`Submit`）是成立委托的唯一入口。草稿收登记方声明的一半，协议只指名对象与版本标签（`SupplierAgreementVersion`）；`Submit` 收核过的协议快照与采购责任法人。`TransportCommission` 多 `LegalEntity()`，重建门同步验它。导出的 `SubmitTransportCommission` 与 `TransportCommissionSpec` 退役。
 - **编排** `CommissionTransportHandler.SubmitCommission`：草稿门 → 按（租户、委托）分重放与冲突 → 在提交时点经 `ports.SupplierAgreementSource` 核协议 → 四个否定格逐格答、读不动答未决（`SUPPLIER_AGREEMENT_UNAVAILABLE`）→ 以核出的快照与法人提交 → 意图同笔入队。并发首交的输家按摘要分已有与冲突。`CanonicalizeCommissionPayload` 改收协议对象与版本标签。
 - **委托册**：迁移 `transport_fulfillment/0025_transport_commission_procurement_legal_entity.sql` 加 `procurement_legal_entity_ref`（非空、非空白），表里有行即拒绝施加；读写两侧带上这一列。
@@ -43,7 +43,7 @@ M
 - **命令面**：`POST /transport-fulfillment-transport-commission-submissions`，tfhttp `submit_transport_commission.go`，挂 `operatorDecisions.transport`，按自己的决定种类认证。载荷 `commission`、`provider`、`agreement`、`agreementVersion`、`conditions`、`role`、`responsibility`、`members`、`submittedAt`；封闭解码，自报租户或法人即 400。新提交 201，其余格 200。
 - **装配**：`cmd/parcel-api/assemble_transport_commission.go`，整次提交一笔事务；`endpoints.go`、`main.go`、`unwired_orchestration.go` 各追加行。
 - **演示种子**：配置员授「运输委托提交」（`SYN-GRANT-DEX-CONFIG-TRANSPORT-COMMISSION-SUBMISSION-01`，依据 `SYN-GRANT-BASIS-DEX-16`），准入对照 `SYN-MAP-OD-TRANSPORT-COMMISSION-SUBMISSION-01`，权威区间 `governance/24-…`；`seed.sh` 与 README 授予表各加一项。
-- **文档**：ADR-0202（新）；ADR-0149 Links 加前向指针；`docs/adr/README.md` 加 0202 一行；UC-TF-004 补 `AT-TF-105` 至 `AT-TF-107`；演示文档「第 3 步」补委托一节。
+- **文档**：ADR-0202（新）；ADR-0149 Links 加前向指针；`docs/adr/README.md` 加 0202 一行；UC-TF-004 补 `AT-TF-107` 至 `AT-TF-109`；演示文档「第 3 步」补委托一节。
 
 ### 代决与越权风险点
 
@@ -72,11 +72,11 @@ M
 ### 用例
 
 - 领域：`TestADraftOnlyBecomesACommissionWithACheckedAgreementAndLegalEntity`；`TestACommissionSnapshotsItsCommercialBasis`（缺快照、缺法人、声明各格）；`TestRehydrateTransportCommissionRoundTripsStartAndCancel`（法人往返、缺法人拒）；`TestCommissionAndBookingGatesJudgeZeroOnTheRegistry`（草稿提交时刻判零）；规范化定值用例改为新形状。
-- 编排：`TestACommissionSubmitsOnceWithItsSnapshots`（`AT-TF-106`：快照与法人取自核对、核对问的是指名的那一版与提交时刻、重放不再问协议、协议终止后重放仍答原委托、异版本同标识冲突）；`TestACommissionWhoseAgreementDoesNotHoldIsAnsweredPerCell`（`AT-TF-105`：四格零写入、服务方不符带供应商、读不动未决、声明不合法不问协议、核对口违约）；`TestAConcurrentFirstSubmissionLoserIsJudgedByContent`；`TestCommissionRecoveryDiscipline`（未决原因封闭集）。
-- 委托册与信封（真库）：委托往返带法人；`TestTransportCommissionFollowsTheTransactionalTemplate`（ID 改指纹）；`TestATransportCommissionWithLongIdentifiersStillEnqueues`。
+- 编排：`TestACommissionSubmitsOnceWithItsSnapshots`（`AT-TF-108`：快照与法人取自核对、核对问的是指名的那一版与提交时刻、重放不再问协议、协议终止后重放仍答原委托、异版本同标识冲突）；`TestACommissionWhoseAgreementDoesNotHoldIsAnsweredPerCell`（`AT-TF-107`：四格零写入、服务方不符带供应商、读不动未决、声明不合法不问协议、核对口违约）；`TestAConcurrentFirstSubmissionLoserIsJudgedByContent`；`TestCommissionRecoveryDiscipline`（未决原因封闭集）。
+- 委托册与信封（真库）：委托往返带法人；`TestTransportCommissionFollowsTheTransactionalTemplate`（ID 改指纹）；`TestATransportCommissionEnqueuesPastTheConcatenatedIDLimit`（评审后改名，只证到信封 ID 上限那一档）。
 - 线格式：`TestTheTransportCommissionSubmissionFaceAnswersOnTheWire`；`TestEachTFDecisionFaceAuthenticatesForItsOwnDecision`、`TestEveryTFDecisionMapsToItsOwnDecisionKind` 各加一口。
-- 生产装配（真库，`S`）：`TestTheWiredTransportCommissionSubmissionChecksTheSeededAgreements`——按种子发布批发布两份 SYN 协议，经操作者渠道：干线委托 201 `COMMISSION_SUBMITTED`（快照 `SYN-SUPPLIER-TRUNK-CN-SG-01/v1`、法人 `SYN-LE-01`）、原样重交 200 `EXISTING_COMMISSION`、委托行与信封 `xmin` 相同（同一笔）、末端承运商 200 `PROVIDER_MISMATCH`、未发布版本 `AGREEMENT_NOT_REGISTERED`、生效前 `AGREEMENT_NOT_EFFECTIVE`，核不过的零写入。端点探测表（未配置、方法门、自报身份各用例共用）与换口授予表各加一口。
-- 派发（真库）：`TestTheTransportCommissionSubmittedEnvelopeHasNoSubscriber`（`AT-TF-107` 分发半边）——生产适配器入队的委托信封一拍记 `dispatch.no_subscriber`。
+- 生产装配（真库，`S`）：`TestTheWiredTransportCommissionSubmissionChecksTheSeededAgreements`——按种子发布批发布两份 SYN 协议，经操作者渠道：干线委托 201 `COMMISSION_SUBMITTED`（快照 `SYN-SUPPLIER-TRUNK-CN-SG-01/v1`、法人 `SYN-LE-01`）、原样重交 200 `EXISTING_COMMISSION`、委托行与信封 `xmin` 相同（同一笔）、末端承运商 200 `PROVIDER_MISMATCH`、未发布版本 `AGREEMENT_NOT_REGISTERED`、生效前 `AGREEMENT_NOT_EFFECTIVE`，核不过的零写入。`TestTheWiredTransportCommissionSubmissionAnswersUndecidedWhenTheAgreementReadAbortsTheTransaction`（评审后补）：协议正文表读不到、事务已中止，仍答 200 `COMMISSION_UNDECIDED` / `SUPPLIER_AGREEMENT_UNAVAILABLE`，零写入。端点探测表（未配置、方法门、自报身份各用例共用）与换口授予表各加一口。
+- 派发（真库）：`TestTheTransportCommissionSubmittedEnvelopeHasNoSubscriber`（`AT-TF-109` 分发半边）——生产适配器入队的委托信封一拍记 `dispatch.no_subscriber`。
 - 操作者册（真库）：`TestTheTransportCommissionSubmissionDecisionIsGrantedAndReadBack`（含待识别重核，证约束重建没漏抄）。
 
 ### 验证（证据 `S`）
@@ -109,3 +109,44 @@ M
   - ADR-0202 风险点 6（检查次序与服务方比较的归属）待 TF owner 复核；风险点 5、7 待 PC owner。
   - `docs/adr/README.md` 里 ADR-0206 一行出现两次，是之前合批的遗留，本票没动。
 
+
+## 评审记录
+
+2026-10-19 隔离评审：阻断 1 项，已修；非阻断 6 项，修 4 项，部分采纳 1 项，改走文档 1 项。评审修补的提交：`1d77bdfe`（迁移并集）、`419110ee`（未决回滚）、`852275e9`（AT 改号与 CONTEXT 引用）、`f2547601`（ADR-0202 补记、用例改名、立票 40）。
+
+### 阻断
+
+1. **迁移 0008 在存量库上乱序施加会删掉后来的决定种类**。0008 原先只列到本分支基线为止的全集，没有 main 上 0011 带来的 `IDENTITY_CONFLICT_DISPOSITION`，也没有 0011 预先列上的 `TRANSPORT_CHARGE_OCCURRENCE_REGISTRATION`。`migrate.Run` 不看编号先后，只要还没施加就补上，所以已迁到 main 的库会在 0011 之后再施加 0008。
+   - 修：IN 列表改为各份重建的并集，补上这两种；头注照 0011 的约定写明为什么多列。ADR-0202 Consequences 同步改述。
+   - 复现（一次性库，用完已删）：先用 main（`08254c8c`）的导出跑迁移，再插一行 `IDENTITY_CONFLICT_DISPOSITION` 授予。修前分支（`ffa7b5ba` 的导出）的迁移报 `SQLSTATE 23514`，整个迁移计划中止；修后退 0。之后五种授予都写得进，封闭集外的串仍被拒。
+   - 转告协调方：dcg27 的 access-identity 0009 是同一类问题，也要列同一并集（含 `IDENTITY_CONFLICT_DISPOSITION` 与 `TRANSPORT_COMMISSION_SUBMISSION`）。first-party-api/00 若用 0010 加种类，同样处理。
+
+### 非阻断
+
+1. **AT 编号与在途分支撞号**（建议进 main 前修）。修：本票改为 `AT-TF-107` 至 `AT-TF-109`，UC-TF-004、ADR-0202、各用例 Covers 与本票面同步改。方案波 2 的落地顺序是 17 → 23，票 17 在 UC-TF-003 占了 105、106。dcg32 用的 105 至 111 由它进 main 时往后顺延。
+2. **注释里的「CONTEXT 243」行号已指错**（建议进 main 前修）。修：委托册头注与编排用例 Covers 改写为节名「Boundaries and ownership」加原句。领域 `TransportCommission` 类型头注引的是同一句、同一个错行号，虽然是既有注释，也一并改了。同文件里其余几处 `CONTEXT <行号>`（取消、订舱结果、承运接受各方法的头注）也是既有的，不在本票改写范围内，没有动。
+3. **rebase 到最新 main 并合并热点、做收口事项**（建议进 main 前做）。部分采纳：
+   - 本分支现在不 rebase。方案令牌序要求 17 先于 23 落装配、种子、规范化与文档令牌，而 17 还没进 main。现在 rebase 到 main，等 17 进去后还要再 rebase 一次，热点文件的冲突就得解两遍。进 main 时由协调方排在 17 之后 rebase，逐项合并：热点只追加；决定种类常量与列表接在 main 的 `IDENTITY_CONFLICT_DISPOSITION` 之后；授予、对照 JSON 与 README 授予表同一行都保留两边。然后做 AT 覆盖盘点（补 `AT-TF-099` 至 `104` 与本票 107 至 109），重生成机制清点，跑全量。
+   - 已在本分支做的：envelope-id-bounds/01「现状」清单里 `transportCommissionEventID` 那一项下补了一行，说明它已改走指纹。这一行插在该项下面，避开票 17 在那张票文末追加的那一行。
+4. **适配器侧的不可译答复折成未决**（未要求进 main 前修）。采纳第二种做法：ADR-0202 决定三补一条，明说核对口交回的 error 一律答未决（含适配器侧不可译答复），编排自己看得见的违约答 500；补风险点 10，编排注释指向它。没有把哨兵挪进 ports，理由有两条：
+   - 那枚哨兵是 TF partycommercial 适配器包里各适配器共用的（承运主体目录、派送条件、协议核对），挪进 ports 会牵动票 22 和别的口；
+   - PC 侧坏数据仍与读不动混在未决里，单挪这一枚，也换不来「未决就是重试会好」。
+5. **PC 点读放在提交事务里，读失败时线上落 500**（未要求进 main 前修）。修了，用的是评审没列的第三种做法：装配壳在编排答未决时交本壳哨兵逼回滚，回滚后交回那一份未决，不拆编排。先例是 `errActionAdmissionUnreadable`。新增真库用例 `TestTheWiredTransportCommissionSubmissionAnswersUndecidedWhenTheAgreementReadAbortsTheTransaction`，把协议正文表改名让它读不到：修前答 500，修后答 200 `COMMISSION_UNDECIDED` / `SUPPLIER_AGREEMENT_UNAVAILABLE`，零写入。ADR-0202 决定三与 Consequences 已记。
+6. **分区键越限时委托落册而意图入不了队；用例名说的比证的多**（未要求进 main 前修）。修：用例改名为 `TestATransportCommissionEnqueuesPastTheConcatenatedIDLimit`，注释收窄到信封 ID 上限那一档，并指向残余去处。残余立了 [40](./40-transport-commission-handoff-does-not-separate-deterministic-rejection.md)，两条修法是照 SELL 加确定性拒收哨兵，或在草稿门限标识长度，归 TF owner 裁；ADR-0202 补风险点 11 指向它。本票不修，因为两条修法都会改答法（答 500，或新增一种未受理原因），限长的上限值又是产品策略，要 owner 裁。
+
+### 评审修补里的代决与越权风险点
+
+12. **编排答未决时装配整笔回滚**。在提交编排里，未决的每一格本来就零写入，回滚不会丢东西。
+    - 越权风险点：将来如果某一格未决要落「待续办」记录，这一回滚会把它一起丢掉；改编排的人要同步改装配壳（TF owner）。
+13. **适配器侧不可译答复落未决**，见 ADR-0202 风险点 10（TF owner；知会 PC owner）。
+14. **AT 号预先改为 107 至 109**，假定票 17 以 105、106 先进 main。
+    - 越权风险点：票 17 的号如果在评审里变了，协调方进 main 时要重核（协调方）。
+15. **迁移 0008 预先列上票 27 的 `TRANSPORT_CHARGE_OCCURRENCE_REGISTRATION`**，与 main 上的 0011 取同一并集。
+    - 越权风险点：票 27 若改了这一种的线上名，0008、0011 里预列的旧名会作为死值留在约束里，新名要另起迁移补进并集（票 27 owner）。
+
+### 评审修补后的验证（证据 `S`）
+
+- `go build ./...` 干净；`go vet` 跑 TF、access-identity、architecture、`cmd/parcel-api`、`cmd/parcel-dispatch`、`migrations`，干净；`gofmt -l internal cmd migrations scripts` 为空。
+- 带 55432 DSN、`-p 1 -count=1`：`./internal/architecture/`、`./internal/transportfulfillment/...`、`./internal/accessidentity/...`、`./internal/partycommercial/...`、`./migrations/...`、`./cmd/parcel-api/`、`./cmd/parcel-dispatch/`、`./scripts/demo-seeds/...` 全部 ok。新增的回滚用例先在修前的装配上跑过，确认是红的。没跑全量。
+- 乱序迁移复现见上文阻断 1。一次性库 `dcg23_seed2` 上 `seed.sh` 灌入退 0，委托提交的授予与对照都是 RECORDED，库已删。
+- 没有重生成机制清点（进 main 时统一做）。
