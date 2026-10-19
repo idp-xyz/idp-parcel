@@ -18,8 +18,8 @@
 
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 320 |
-| ② 机制候选 | 225 |
+| ① 已钉住 | 321 |
+| ② 机制候选 | 224 |
 | ③ 实例/闸门 | 143 |
 | ④ 机制未落地 | 425 |
 | 合计 | 1113 |
@@ -27,7 +27,7 @@
 | 前缀 | 总数 | ① | ② | ③ | ④ |
 |---|---|---|---|---|---|
 | CC | 425 | 35 | 0 | 89 | 301 |
-| NO | 61 | 32 | 22 | 7 | 0 |
+| NO | 61 | 33 | 21 | 7 | 0 |
 | NR | 53 | 24 | 28 | 1 | 0 |
 | PC | 36 | 35 | 1 | 0 | 0 |
 | PS | 93 | 66 | 25 | 2 | 0 |
@@ -96,6 +96,7 @@
 | `AT-NO-048` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestAReplayAfterAnIdentityConflictAnswersTheCurrentVersion；internal/nodeoperations/application/receive_delivered_unit_test.go::TestAReplayOfAnUndecidedOrRefusedJudgmentAnswersItsOwnVersion；cmd/parcel-api/reception_delivery_source_test.go::TestTheWiredReplayAfterAnIdentityConflictAnswersTheCurrentVersion |
 | `AT-NO-049` | internal/nodeoperations/application/receive_delivered_unit_same_unit_test.go::TestTheSameUnitAtTheSameNodeIsMergedIntoItsCurrentIntake；internal/nodeoperations/application/receive_delivered_unit_test.go::TestTheSameUnitDeliveredAgainIsNotAnIdentityConflict；internal/nodeoperations/adapters/http/receive_delivered_unit_same_unit_test.go::TestTheSameUnitAgainAnswersTheIntakeItWasMergedInto；cmd/parcel-api/reception_same_unit_test.go::TestTheWiredReceptionMergesTheSameUnitAtTheSameNode；cmd/parcel-api/reception_same_unit_concurrent_test.go::TestConcurrentDeliveriesOfOneUnitSerializeOnTheUnit（并发半边）；cmd/parcel-frontline-import/intake_same_unit_test.go::TestFrontlineImportContinuesAndMergesRowsOfTheSameUnit |
 | `AT-NO-050` | internal/nodeoperations/application/receive_delivered_unit_same_unit_test.go::TestAScanOnlyJudgmentIsContinuedByTheLaterObservation；cmd/parcel-api/reception_same_unit_test.go::TestTheWiredReceptionContinuesAScanOnlyJudgment；cmd/parcel-frontline-import/intake_same_unit_test.go::TestFrontlineImportContinuesAndMergesRowsOfTheSameUnit |
+| `AT-NO-051` | internal/nodeoperations/application/receive_unchecked_identity_test.go::TestAnUnreadableIdentityCheckFormsAPendingUnitMarkedUnchecked；internal/nodeoperations/adapters/http/receive_delivered_unit_identity_check_test.go::TestTheIdentityCheckTravelsWithEveryPendingUnit；internal/nodeoperations/adapters/postgres/parcel_containment_unchecked_test.go::TestAnUncheckedUnitInABagMakesEveryUnbaggedParcelUnattributable；internal/nodeoperations/adapters/postgres/parcel_containment_unchecked_test.go::TestAnAssociatedUnitInABagStaysContainedBesideAnUncheckedUnit；cmd/parcel-api/reception_unchecked_identity_test.go::TestTheWiredReceptionFormsAnUncheckedPendingUnitWhileIdentityIsUnreadable；cmd/parcel-frontline-import/intake_service_results_test.go::TestFrontlineImportLandsTheReceivedRowUncheckedWhenIdentityIsUnreadable |
 | `AT-NO-052` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestAUniqueHitThatAnUnacceptedRequestAlsoDeclaresIsAnIdentityConflict |
 | `AT-NO-053` | internal/nodeoperations/application/dispose_identity_conflict_test.go::TestDesignatingTheLateUnitDisposesBothUnitsOfOneMark；internal/nodeoperations/application/dispose_identity_conflict_test.go::TestDesignatingTheEarlyUnitNeedsNoCoDispositionAndHandsNoSecondIntent；internal/nodeoperations/adapters/http/dispose_identity_conflict_test.go::TestADispositionAnswersCreatedThenTheRecordedOne；cmd/parcel-api/identity_disposition_test.go::TestTheWiredDispositionDisposesOneMarkOnTwoUnits |
 | `AT-NO-054` | internal/nodeoperations/application/dispose_identity_conflict_test.go::TestConfirmingNoneOfTheCandidatesKeepsTheUnitPendingAndRecheckSkipsTheExcluded |
@@ -385,7 +386,6 @@
 | `AT-NO-043` | 同一来源事实重复或内容冲突 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-044` | 路由变化与旧指令下分拣并发 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-045` | 节点完成备货、点验和物理装载 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
-| `AT-NO-051` | 身份核对读不动 | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
 | `AT-NR-007` | 产品明确允许待路由，委托已接受但当前仍无可行候选 | UC-NR-001-CREATE-INITIAL-ROUTE.md |
 | `AT-NR-008` | 候选参考某班次可用性和容量风险后被选中 | UC-NR-001-CREATE-INITIAL-ROUTE.md |
 | `AT-NR-013` | 客户声明偏好某线路，但合同和产品未承诺该偏好 | UC-NR-001-CREATE-INITIAL-ROUTE.md |
@@ -1225,6 +1225,8 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 追记十（票 no-reception-source/04，2026-10-19）：`AT-NO-049`「同一作业实物换来源，再次交到已有当前收寄的同一节点」与 `AT-NO-050`「只有到站扫描的待确认之后，同一实物来了明确接收或拒收」随同一作业实物在同一节点并入、仅扫描待确认续办落地点名入①（编排面、HTTP 面、真库面、受控批量口面；`AT-NO-049` 另有真库并发半边），由②移出。①310→312（NO 22→24）、②235→233（NO 32→30），合计不变。
 
 追记十一（票 no-reception-identity/06，2026-10-19）：`AT-NO-053` 至 `AT-NO-060`（UC-NO-004 身份冲突处置）随处置命令口、编排、处置截断与重核例外落地点名入①（编排面、HTTP 面、存储面、真库面；`AT-NO-059` 另有真库并发半边），由②移出。①312→320（NO 24→32）、②233→225（NO 30→22），合计不变。
+
+追记十二（票 no-reception-source/05，2026-10-19）：`AT-NO-051`「身份核对读不动」随身份核对读不动翻成待识别加「未核对」落地点名入①（编排面、HTTP 面、存储面的 `ParcelContainmentView` 两条、生产装配真库面、受控批量口面），由②移出。①320→321（NO 32→33）、②225→224（NO 22→21），合计不变。
 
 ### 两盘之间新落的硬句测试面（不入①，逐面列出供领票比对）
 
