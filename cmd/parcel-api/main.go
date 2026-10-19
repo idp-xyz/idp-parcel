@@ -66,12 +66,11 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	if isolatedWrite != nil {
-		// 放行了哪几口也要出声（ADR-0078 决定三、ADR-0091 决定四）：命令面是逐口换的，只报「已启用」
-		// 说不出此刻哪几口真的会读请求、哪几口仍答 403，而两者在配置上看不出差别。
-		logger.Info("Isolated write admission enabled (ADR-0091): production ownership resolves against the governance register with injected synthetic coordinates; command lines admitted per endpoint",
+		// 放行什么也要出声（ADR-0078 决定三、ADR-0091 决定四）：提交口换上首方客户渠道之后，写开关只剩委托受理的归属坐标，
+		// 不放行任何命令面（ADR-0150 决定三）——提交要带首方客户端的令牌。
+		logger.Info("Isolated write admission enabled (ADR-0091): production ownership resolves against the governance register with injected synthetic coordinates; no command line is admitted, submissions go through the first-party customer channel",
 			"tenant", os.Getenv(isolatedWriteTenantEnv),
-			"selfAuthority", isolatedWrite.selfAuthority,
-			"admittedCommandLines", isolatedWrite.admittedCommandLines())
+			"selfAuthority", isolatedWrite.selfAuthority)
 	}
 
 	// 本产品在治理登记册里的权威串（ADR-0180 决定三）与两道隔离开关同处最早：隔离写开关开着而两值不等，上面那道门已经
@@ -116,6 +115,20 @@ func run(logger *slog.Logger) error {
 		logger.Info("Integration client channel not configured (ADR-0149): issuer parameters unset, integration client family answers ACCESS_CHANNEL_NOT_CONFIGURED")
 	}
 
+	// 首方客户族的信任锚（ADR-0139 决定二）与另两族同处开池之前：参数只设一部分、或受众撞了另一族，都要带原因退出。
+	customerClientVerifier, customerClientChannelConfigured, err := buildCustomerClientCredentialVerifier(os.Getenv)
+	if err != nil {
+		return err
+	}
+	if customerClientChannelConfigured {
+		logger.Info("First-party customer channel issuer configured (ADR-0139): customer client tokens verified against the issuer's JWKS",
+			"issuer", os.Getenv(customerAPIIssuerEnv),
+			"jwksURL", os.Getenv(customerAPIJWKSURLEnv),
+			"audience", os.Getenv(customerAPIAudienceEnv))
+	} else {
+		logger.Info("First-party customer channel not configured (ADR-0139): issuer parameters unset, customer-facing lines on the first-party channel answer ACCESS_CHANNEL_NOT_CONFIGURED")
+	}
+
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 
@@ -129,10 +142,6 @@ func run(logger *slog.Logger) error {
 	defer closeDB()
 
 	submission, err := buildSubmissionOrchestration(db, isolatedWrite, selfAuthority)
-	if err != nil {
-		return err
-	}
-	isolatedSubmissionIntake, err := buildIsolatedSubmissionIntake(db, isolatedWrite)
 	if err != nil {
 		return err
 	}
@@ -197,6 +206,23 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	integrationClients, err := buildIntegrationClientIntakes(integrationClientMinter)
+	if err != nil {
+		return err
+	}
+	// 提交口的首方 Intake（ADR-0139 决定四；票 first-party-api/00）：预取期望修订用的归属权威与提交编排同一组坐标。
+	customerClientRegistry, err := aipg.NewCustomerClientRegistry(db)
+	if err != nil {
+		return err
+	}
+	customerClientMinter, err := buildCustomerClientMinter(customerClientVerifier, customerClientRegistry, admission)
+	if err != nil {
+		return err
+	}
+	submissionOwnership, err := buildProductionOwnership(db, isolatedWrite, selfAuthority)
+	if err != nil {
+		return err
+	}
+	customerSubmission, err := buildCustomerSubmissionIntake(customerClientMinter, submissionOwnership)
 	if err != nil {
 		return err
 	}
@@ -712,7 +738,7 @@ func run(logger *slog.Logger) error {
 			settlementRegistration.externalFundsFactCorrection,
 			governanceRegisters,
 			isolatedRead,
-			isolatedSubmissionIntake,
+			customerSubmission,
 			operatorDecisions,
 			operatorRegistries,
 			integrationClients,

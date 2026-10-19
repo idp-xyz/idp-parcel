@@ -224,6 +224,37 @@ func TestSubmitReportsBadRequestWithoutAnOutcome(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0139 决定四——首方族在提交口的各格按恢复动作分开答，各个 `403` 只靠稳定错误码分开；哪一格都没有 `outcome`、
+// 都不保全来源（Intake 没交出命令，编排一步都没走）。
+func TestSubmitAnswersTheCustomerChannelGradesApart(t *testing.T) {
+	for name, testCase := range map[string]struct {
+		err    error
+		status int
+		code   string
+	}{
+		"issuer unset":        {shipmenthttp.ErrAccessChannelNotConfigured, http.StatusForbidden, "ACCESS_CHANNEL_NOT_CONFIGURED"},
+		"token rejected":      {shipmenthttp.ErrCustomerClientCredentialRejected, http.StatusUnauthorized, "CUSTOMER_CLIENT_CREDENTIAL_REJECTED"},
+		"not granted":         {shipmenthttp.ErrCustomerClientNotGranted, http.StatusForbidden, "CUSTOMER_CLIENT_NOT_GRANTED"},
+		"outside admission":   {shipmenthttp.ErrOutsideAdmissionScope, http.StatusForbidden, "OUTSIDE_ADMISSION_SCOPE"},
+		"dependency unusable": {shipmenthttp.ErrIdentityDependencyUnavailable, http.StatusServiceUnavailable, "IDENTITY_DEPENDENCY_UNAVAILABLE"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newFixture(t)
+			fixture.intake.err = fmt.Errorf("customer channel: %w", testCase.err)
+
+			response := fixture.post(t)
+
+			if response.Code != testCase.status || !strings.Contains(response.Body.String(), `"code":"`+testCase.code+`"`) {
+				t.Fatalf("answer = %d %s, want %d %s", response.Code, response.Body.String(), testCase.status, testCase.code)
+			}
+			assertNoOutcomeField(t, response)
+			if fixture.sources.preserveCount != 0 {
+				t.Fatal("a refused presentation still preserved a source")
+			}
+		})
+	}
+}
+
 // Covers: ADR-0022 三类分法 — 依赖答不出是「没形成答案」，必须落在 5xx，离线客户端据此把
 // 那一条留在队里。判成 4xx 会让它把一条本该重试的请求丢掉。
 func TestSubmitReportsServerErrorWhenNoAnswerWasFormed(t *testing.T) {

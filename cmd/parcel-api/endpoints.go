@@ -170,7 +170,7 @@ func assembleBusinessEndpoints(
 	externalFundsFactCorrectionRegistration settlementhttp.ExternalFundsFactCorrectionRegistrar,
 	governanceRegisters governancehttp.GovernanceRegistryReader,
 	isolatedRead *isolatedReadIntakes,
-	isolatedSubmission shipmenthttp.SubmissionIntake,
+	customerSubmission shipmenthttp.SubmissionIntake,
 	operatorDecisions operatorDecisionIntakes,
 	operatorRegistries operatorRegistryIntakes,
 	integrationClients integrationClientIntakes,
@@ -186,7 +186,7 @@ func assembleBusinessEndpoints(
 	// 缺省朝拦：真渠道与隔离入参都缺席时，下面这组变量全取未配置即拒。
 	//
 	// **读写入参各换各的行，互不顶替**（ADR-0091 决定四把开关也分成了两个）：isolatedRead 只换委托查阅那一只变量，
-	// isolatedSubmission 只换 `/shipment-requests` 一行。运营查阅各族走 operatorRegistries 的查阅读，作业事实各口走
+	// customerSubmission（首方客户渠道）只换 `/shipment-requests` 一行。运营查阅各族走 operatorRegistries 的查阅读，作业事实各口走
 	// workFactReception / workFactTransport，运营决定各口走 operatorDecisions，都不经隔离开关。其余命令面挂字面量
 	// `UnconfiguredIntake{}`，不经由任何变量——读这段代码就能看出它们哪个开关都换不了。
 	shipmentViewsIntake := shipmenthttp.ShipmentRequestViewsIntake(shipmenthttp.UnconfiguredIntake{})
@@ -243,12 +243,12 @@ func assembleBusinessEndpoints(
 		shipmentViewsIntake = isolatedRead.shipmentRequestViews
 	}
 
-	// 提交口是 ADR-0091 放行的第一格，也是唯一一格：它单独一个变量，与上面那组查阅
-	// 变量分开，免得日后有人顺手把它并进 isolatedRead 那个 if 里——并进去就等于让读
-	// 开关也能开写行，而两个开关分设的全部理由就是不许这样。
+	// 提交口挂首方客户渠道的 Intake（ADR-0139 决定四；票 first-party-api/00），隔离写放行随之撤下（ADR-0150 决定三）。它
+	// 单独一个变量，与上面那组查阅变量分开，免得日后有人顺手把它并进 isolatedRead 那个 if 里——读开关开不了写行。发行方
+	// 参数未设时 Intake 仍在，答的是未配置，与换口之前的 403 同字节。
 	submissionIntake := shipmenthttp.SubmissionIntake(shipmenthttp.UnconfiguredIntake{})
-	if isolatedSubmission != nil {
-		submissionIntake = isolatedSubmission
+	if customerSubmission != nil {
+		submissionIntake = customerSubmission
 	}
 
 	// 主链命令面每口一个变量、每条真渠道一个 if，不并进上面任何一个 if——理由同提交口那段。入参是具体类型：它此刻实现了

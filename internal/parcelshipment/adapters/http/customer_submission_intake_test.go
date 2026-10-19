@@ -2,7 +2,11 @@ package shipmenthttp_test
 
 import (
 	"context"
+	"crypto/tls"
+	"crypto/x509"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
 	"slices"
@@ -16,16 +20,15 @@ import (
 )
 
 const (
-	isolatedTenant          = "SYN-TENANT-01"
-	isolatedCustomerAccount = "SYN-ACCOUNT-01"
-	isolatedSource          = "SYN-SOURCE/admin-web"
-	isolatedScopeReference  = "SYN-ADM-SCOPE/shipment-intake"
-	isolatedScopeDigest     = "sha256:syn-adm-scope-shipment-intake"
+	customerTenant          = "SYN-TENANT-01"
+	customerAccount         = "SYN-ACCOUNT-01"
+	customerSource          = "https://auth.syn.example/customers#SYN-CUSTOMER-CLIENT-01"
+	customerAccessRequestID = "SYN-ACCESS-REQUEST-0001"
 )
 
-// isolatedDraft 是管理台提交页会送的那份草案。测试各例只改其中一处，因此每条断言指向的
-// 差异是唯一的。
-const isolatedDraft = `{
+// customerDraft 是首方提交口的一份载荷。测试各例只改其中一处，因此每条断言指向的差异是唯一的。
+const customerDraft = `{
+  "accessRequestId": "SYN-ACCESS-REQUEST-0001",
   "customerShipmentReference": "SYN-CUSTREF-0001",
   "requestedServiceProduct": "国际小包标准",
   "senderRelation": "SYN-SENDER-01",
@@ -42,32 +45,132 @@ const isolatedDraft = `{
   ]
 }`
 
-// Covers: ADR-0091 决定二与 ADR-0003 —— 来源信封整组来自注入。报文里没有租户的位置，
-// 硬塞一个进去连解码都过不去；铸出来的三维恒为注入值。
-//
-// 这一条比读面的同名用例更要紧：读面铸不出信封，写面会把这三维**落库**，采信一次自报
-// 就在库里留下一行分不清来历的事实。
-func TestIsolatedSubmissionIntakeMintsTheEnvelopeAndHasNoPlaceForASelfReportedTenant(t *testing.T) {
-	intake := newIsolatedIntake(t, &permittingOwnershipDouble{revision: "SYN-REV-1"})
+// customerAuthenticatorDouble 替身的是认证那一侧（PS 的 adapters/accessidentity 与共享接入身份能力），不是本包的翻译：
+// 身份三格取自它被构造时的绑定，来源请求键取自它调回去拿到的接入请求标识，空白答形状错——与首方族的推导口同一条。
+type customerAuthenticatorDouble struct {
+	account    string
+	err        error
+	credential shipmenthttp.PresentedClientCredential
+	asked      bool
+}
 
-	command, err := intake.IntakeSubmission(context.Background(), draftRequest(isolatedDraft))
+func (double *customerAuthenticatorDouble) AuthenticateSubmission(
+	_ context.Context,
+	credential shipmenthttp.PresentedClientCredential,
+	accessRequestID func() (string, error),
+) (domain.SourceIdentity, error) {
+	double.credential = credential
+	if double.err != nil {
+		return domain.SourceIdentity{}, double.err
+	}
+	double.asked = true
+	raw, err := accessRequestID()
+	if err != nil {
+		return domain.SourceIdentity{}, err
+	}
+	key, err := domain.NewSourceRequestKey(strings.TrimSpace(raw))
+	if err != nil {
+		return domain.SourceIdentity{}, fmt.Errorf("%w: %v", shipmenthttp.ErrMalformedRequest, err)
+	}
+	account := double.account
+	if account == "" {
+		account = customerAccount
+	}
+	tenant, _ := domain.NewTenantID(customerTenant)
+	customer, _ := domain.NewCustomerAccountID(account)
+	source, _ := domain.NewSource(customerSource)
+	return domain.NewSourceIdentity(tenant, customer, source, key)
+}
+
+// Covers: ADR-0139 决定二与 ADR-0003 —— 来源信封取自认证结果：租户、客户账户与来源是认证交回的那一组，来源请求键是载荷里的
+// 接入请求标识。载荷里没有租户的位置，硬塞一个进去连解码都过不去。
+//
+// 写面会把这几维**落库**，采信一次自报就在库里留下一行分不清来历的事实。
+func TestCustomerSubmissionIntakeTakesTheEnvelopeFromAuthenticationAndHasNoPlaceForASelfReportedTenant(t *testing.T) {
+	intake := newCustomerIntake(t, &customerAuthenticatorDouble{}, &permittingOwnershipDouble{revision: "SYN-REV-1"})
+
+	command, err := intake.IntakeSubmission(context.Background(), draftRequest(customerDraft))
 	if err != nil {
 		t.Fatalf("接入提交：%v", err)
 	}
-	if got := command.Identity.TenantID().String(); got != isolatedTenant {
-		t.Fatalf("租户 = %q, want %q", got, isolatedTenant)
+	if got := command.Identity.TenantID().String(); got != customerTenant {
+		t.Fatalf("租户 = %q, want %q", got, customerTenant)
 	}
-	if got := command.Identity.CustomerAccountID().String(); got != isolatedCustomerAccount {
-		t.Fatalf("客户账户 = %q, want %q", got, isolatedCustomerAccount)
+	if got := command.Identity.CustomerAccountID().String(); got != customerAccount {
+		t.Fatalf("客户账户 = %q, want %q", got, customerAccount)
 	}
-	if got := command.Identity.Source().String(); got != isolatedSource {
-		t.Fatalf("来源 = %q, want %q", got, isolatedSource)
+	if got := command.Identity.Source().String(); got != customerSource {
+		t.Fatalf("来源 = %q, want %q", got, customerSource)
+	}
+	if got := command.Identity.RequestKey().String(); got != customerAccessRequestID {
+		t.Fatalf("来源请求键 = %q, want 载荷里的接入请求标识", got)
 	}
 
-	// 报文里根本没有租户这一格：塞进去是未知字段，解码即拒。
-	reported := strings.Replace(isolatedDraft, `{`, `{"tenantId":"TENANT-PROD-9",`, 1)
-	if _, err := intake.IntakeSubmission(context.Background(), draftRequest(reported)); !errors.Is(err, shipmenthttp.ErrMalformedRequest) {
-		t.Fatalf("带自报租户的报文 err = %v, want ErrMalformedRequest——未知字段不得被静默丢弃", err)
+	for name, body := range map[string]string{
+		"自报租户":   strings.Replace(customerDraft, `{`, `{"tenantId":"TENANT-PROD-9",`, 1),
+		"自报客户账户": strings.Replace(customerDraft, `{`, `{"customerAccountId":"ACCOUNT-PROD-9",`, 1),
+		"自报来源":   strings.Replace(customerDraft, `{`, `{"source":"SOURCE-PROD-9",`, 1),
+	} {
+		if _, err := intake.IntakeSubmission(context.Background(), draftRequest(body)); !errors.Is(err, shipmenthttp.ErrMalformedRequest) {
+			t.Fatalf("%s：err = %v, want ErrMalformedRequest——未知字段不得被静默丢弃", name, err)
+		}
+	}
+}
+
+// Covers: 票 first-party-api/00 做什么 2「先认证」——认证那一侧的格原样交回，载荷一个字节都没读；Bearer 令牌与本次 TLS
+// 连接出示的客户端证书交给认证方，证书取自连接、不取自任何头部。
+func TestCustomerSubmissionIntakeAuthenticatesBeforeReadingThePayload(t *testing.T) {
+	refused := &customerAuthenticatorDouble{err: fmt.Errorf("%w: token expired", shipmenthttp.ErrCustomerClientCredentialRejected)}
+	intake := newCustomerIntake(t, refused, &permittingOwnershipDouble{revision: "SYN-REV-1"})
+	probe := &bodyProbe{}
+	request := httptest.NewRequest(http.MethodPost, "/shipment-requests", probe)
+	request.Header.Set("Authorization", "Bearer presented.customer.token")
+	certificate := &x509.Certificate{Raw: []byte("SYN-CLIENT-CERTIFICATE-DER")}
+	request.TLS = &tls.ConnectionState{PeerCertificates: []*x509.Certificate{certificate}}
+
+	_, err := intake.IntakeSubmission(context.Background(), request)
+	if !errors.Is(err, shipmenthttp.ErrCustomerClientCredentialRejected) {
+		t.Fatalf("err = %v, want 认证那一格原样交回", err)
+	}
+	if probe.read {
+		t.Fatal("认证没过就读了载荷——未认证的调用方会看到载荷校验的结果")
+	}
+	if refused.credential.Token != "presented.customer.token" || string(refused.credential.Certificate) != "SYN-CLIENT-CERTIFICATE-DER" {
+		t.Fatalf("交给认证方的出示 = %+v", refused.credential)
+	}
+}
+
+type bodyProbe struct{ read bool }
+
+func (probe *bodyProbe) Read([]byte) (int, error) {
+	probe.read = true
+	return 0, io.EOF
+}
+
+// Covers: ADR-0139 决定五「接入请求标识……不进规范化业务内容摘要」——同一份内容换一个接入请求标识，摘要不变、来源身份变：
+// 两次是两次来源请求，内容相同可在摘要上认出；接入请求标识空白答形状错，不铸身份。
+func TestCustomerSubmissionAccessRequestIdentifierIsEnvelopeMetadataNotContent(t *testing.T) {
+	intake := newCustomerIntake(t, &customerAuthenticatorDouble{}, &permittingOwnershipDouble{revision: "SYN-REV-1"})
+
+	first, err := intake.IntakeSubmission(context.Background(), draftRequest(customerDraft))
+	if err != nil {
+		t.Fatalf("首次接入：%v", err)
+	}
+	another, err := intake.IntakeSubmission(context.Background(),
+		draftRequest(strings.Replace(customerDraft, customerAccessRequestID, "SYN-ACCESS-REQUEST-0002", 1)))
+	if err != nil {
+		t.Fatalf("换接入请求标识：%v", err)
+	}
+	if another.PayloadDigest != first.PayloadDigest {
+		t.Fatal("只换了接入请求标识摘要就变了——它是信封元数据，混进摘要会让同内容的两次提交永远不相等")
+	}
+	if another.Identity == first.Identity {
+		t.Fatal("换了接入请求标识来源身份没变——两次来源请求被并成了一次")
+	}
+
+	blank := strings.Replace(customerDraft, `"accessRequestId": "SYN-ACCESS-REQUEST-0001",`, `"accessRequestId": "  ",`, 1)
+	if _, err := intake.IntakeSubmission(context.Background(), draftRequest(blank)); !errors.Is(err, shipmenthttp.ErrMalformedRequest) {
+		t.Fatalf("接入请求标识空白：err = %v, want ErrMalformedRequest", err)
 	}
 }
 
@@ -76,14 +179,14 @@ func TestIsolatedSubmissionIntakeMintsTheEnvelopeAndHasNoPlaceForASelfReportedTe
 //
 // 这条同时是「内部标识现签」那个取舍的安全网：现签让两次命令的标识不同，若摘要跟着标识
 // 走，重放语义就坏了而没有任何别的东西会红。
-func TestIsolatedSubmissionIntakeDigestsCustomerContentNotMintedIdentities(t *testing.T) {
-	intake := newIsolatedIntake(t, &permittingOwnershipDouble{revision: "SYN-REV-1"})
+func TestCustomerSubmissionIntakeDigestsCustomerContentNotMintedIdentities(t *testing.T) {
+	intake := newCustomerIntake(t, &customerAuthenticatorDouble{}, &permittingOwnershipDouble{revision: "SYN-REV-1"})
 
-	first, err := intake.IntakeSubmission(context.Background(), draftRequest(isolatedDraft))
+	first, err := intake.IntakeSubmission(context.Background(), draftRequest(customerDraft))
 	if err != nil {
 		t.Fatalf("首次接入：%v", err)
 	}
-	replay, err := intake.IntakeSubmission(context.Background(), draftRequest(isolatedDraft))
+	replay, err := intake.IntakeSubmission(context.Background(), draftRequest(customerDraft))
 	if err != nil {
 		t.Fatalf("重发同一份草案：%v", err)
 	}
@@ -96,10 +199,10 @@ func TestIsolatedSubmissionIntakeDigestsCustomerContentNotMintedIdentities(t *te
 		t.Fatal("两次现签出同一个内部标识——那说明它是从客户参考派生的，端口注释明禁")
 	}
 	if first.Identity != replay.Identity {
-		t.Fatal("同一份委托参考铸出了不同的来源身份——重放认不出来")
+		t.Fatal("同一份载荷铸出了不同的来源身份——重放认不出来")
 	}
 
-	changed := strings.Replace(isolatedDraft, "合成收件地址", "另一个收件地址", 1)
+	changed := strings.Replace(customerDraft, "合成收件地址", "另一个收件地址", 1)
 	other, err := intake.IntakeSubmission(context.Background(), draftRequest(changed))
 	if err != nil {
 		t.Fatalf("接入改过收件地址的草案：%v", err)
@@ -109,37 +212,50 @@ func TestIsolatedSubmissionIntakeDigestsCustomerContentNotMintedIdentities(t *te
 	}
 }
 
-// Covers: 类型注释第三条与 `UC-PS-001` 步骤 3B —— 期望规则修订向归属权威预取，原样带进
-// 命令；准入范围取注入的合成值。修订若不取自权威，门禁会在提交时点判`决定已过期`，
-// 而那一格与「归属真的未确定」在结果上都是 OWNERSHIP_UNRESOLVED，分不出来。
-func TestIsolatedSubmissionIntakeTakesTheExpectedRevisionFromTheOwnershipAuthority(t *testing.T) {
+// Covers: 类型注释第四条与 `UC-PS-001` 步骤 3B —— 期望规则修订向归属权威预取，原样带进命令；拟受理范围按（租户、客户账户）
+// 立快照，问归属与带进命令的是同一份。修订若不取自权威，门禁会在提交时点判`决定已过期`，而那一格与「归属真的未确定」在
+// 结果上都是 OWNERSHIP_UNRESOLVED，分不出来。另一个客户账户的提交得到另一份快照。
+func TestCustomerSubmissionIntakeTakesTheExpectedRevisionFromTheOwnershipAuthority(t *testing.T) {
 	authority := &permittingOwnershipDouble{revision: "SYN-REV-FROM-AUTHORITY"}
-	intake := newIsolatedIntake(t, authority)
+	intake := newCustomerIntake(t, &customerAuthenticatorDouble{}, authority)
 
-	command, err := intake.IntakeSubmission(context.Background(), draftRequest(isolatedDraft))
+	command, err := intake.IntakeSubmission(context.Background(), draftRequest(customerDraft))
 	if err != nil {
 		t.Fatalf("接入提交：%v", err)
 	}
 	if got := command.ExpectedRevision.String(); got != "SYN-REV-FROM-AUTHORITY" {
 		t.Fatalf("期望修订 = %q, want 来自归属权威的那个", got)
 	}
-	if got := command.AdmissionScope.Digest().String(); got != isolatedScopeDigest {
-		t.Fatalf("准入范围摘要 = %q, want %q", got, isolatedScopeDigest)
+	if got := command.AdmissionScope.Reference().String(); got != "customer-account:"+customerTenant+"/"+customerAccount {
+		t.Fatalf("拟受理范围 = %q", got)
 	}
 	if authority.asked != 1 {
 		t.Fatalf("问归属 %d 次, want 1", authority.asked)
 	}
-	if authority.scope.Digest().String() != isolatedScopeDigest {
+	if authority.scope != command.AdmissionScope {
 		t.Fatal("问归属用的范围与带进命令的不是同一个——门禁会判范围不符")
+	}
+
+	again, err := intake.IntakeSubmission(context.Background(), draftRequest(customerDraft))
+	if err != nil || again.AdmissionScope != command.AdmissionScope {
+		t.Fatalf("同一账户再提交一次快照变了：%v", err)
+	}
+	other := newCustomerIntake(t, &customerAuthenticatorDouble{account: "SYN-ACCOUNT-02"}, &permittingOwnershipDouble{revision: "SYN-REV-1"})
+	elsewhere, err := other.IntakeSubmission(context.Background(), draftRequest(customerDraft))
+	if err != nil {
+		t.Fatalf("另一个账户：%v", err)
+	}
+	if elsewhere.AdmissionScope.Digest() == command.AdmissionScope.Digest() {
+		t.Fatal("两个客户账户的拟受理范围摘要相同")
 	}
 }
 
 // Covers: ADR-0029 的恢复动作分格 —— 归属权威调不通是依赖故障，不得包成
 // ErrMalformedRequest。包错了，离线客户端会把一件重试就能好的事出队交给人。
-func TestIsolatedSubmissionIntakeDoesNotDressADependencyFailureAsAMalformedRequest(t *testing.T) {
-	intake := newIsolatedIntake(t, &permittingOwnershipDouble{err: errors.New("governance register unreachable")})
+func TestCustomerSubmissionIntakeDoesNotDressADependencyFailureAsAMalformedRequest(t *testing.T) {
+	intake := newCustomerIntake(t, &customerAuthenticatorDouble{}, &permittingOwnershipDouble{err: errors.New("governance register unreachable")})
 
-	_, err := intake.IntakeSubmission(context.Background(), draftRequest(isolatedDraft))
+	_, err := intake.IntakeSubmission(context.Background(), draftRequest(customerDraft))
 	if err == nil {
 		t.Fatal("归属调不通却接入成功了")
 	}
@@ -150,10 +266,10 @@ func TestIsolatedSubmissionIntakeDoesNotDressADependencyFailureAsAMalformedReque
 
 // Covers: 票 psb/17——草案的 requestedServiceProduct 以封闭条目名进服务要求段，随同一次 CanonicalizeSubmission 既进
 // 摘要又挑成声明的产品进命令；条目名取既有的字面，所以既有草案的摘要一字不变。
-func TestIsolatedSubmissionIntakeCarriesTheRequestedServiceProductFromOneCanonicalization(t *testing.T) {
-	intake := newIsolatedIntake(t, &permittingOwnershipDouble{revision: "SYN-REV-1"})
+func TestCustomerSubmissionIntakeCarriesTheRequestedServiceProductFromOneCanonicalization(t *testing.T) {
+	intake := newCustomerIntake(t, &customerAuthenticatorDouble{}, &permittingOwnershipDouble{revision: "SYN-REV-1"})
 
-	command, err := intake.IntakeSubmission(context.Background(), draftRequest(isolatedDraft))
+	command, err := intake.IntakeSubmission(context.Background(), draftRequest(customerDraft))
 	if err != nil {
 		t.Fatalf("接入草案：%v", err)
 	}
@@ -161,7 +277,7 @@ func TestIsolatedSubmissionIntakeCarriesTheRequestedServiceProductFromOneCanonic
 		t.Fatalf("命令里的声明产品 = %q, want 国际小包标准", got.String())
 	}
 
-	undeclared := strings.Replace(isolatedDraft, `"requestedServiceProduct": "国际小包标准",`, ``, 1)
+	undeclared := strings.Replace(customerDraft, `"requestedServiceProduct": "国际小包标准",`, ``, 1)
 	plain, err := intake.IntakeSubmission(context.Background(), draftRequest(undeclared))
 	if err != nil {
 		t.Fatalf("接入不带产品的草案：%v", err)
@@ -178,17 +294,17 @@ func TestIsolatedSubmissionIntakeCarriesTheRequestedServiceProductFromOneCanonic
 // 字段译成按封闭要素名命名的范围条目，随同一次 CanonicalizeSubmission 既进摘要又挑成要素子段进命令：带了邮编摘要就变
 // （它是内容），要素子段里就有同一个值（它是内容的那一半）；不带则子段缺席、摘要与从前一字不差——新字段留空不改任何
 // 既有草案的摘要。
-func TestIsolatedSubmissionIntakeCarriesTheClosedElementsWithTheDigestFromOneCanonicalization(t *testing.T) {
-	intake := newIsolatedIntake(t, &permittingOwnershipDouble{revision: "SYN-REV-1"})
+func TestCustomerSubmissionIntakeCarriesTheClosedElementsWithTheDigestFromOneCanonicalization(t *testing.T) {
+	intake := newCustomerIntake(t, &customerAuthenticatorDouble{}, &permittingOwnershipDouble{revision: "SYN-REV-1"})
 
-	plain, err := intake.IntakeSubmission(context.Background(), draftRequest(isolatedDraft))
+	plain, err := intake.IntakeSubmission(context.Background(), draftRequest(customerDraft))
 	if err != nil {
 		t.Fatalf("接入不带要素的草案：%v", err)
 	}
 	if !plain.DeclaredElements.Empty() {
 		t.Fatalf("没报邮编的草案带出了要素 %#v", plain.DeclaredElements)
 	}
-	blank := strings.Replace(isolatedDraft, `"recipientAddress"`,
+	blank := strings.Replace(customerDraft, `"recipientAddress"`,
 		`"recipientPostalCode": "", "senderPostalCode": "   ", "recipientAddress"`, 1)
 	blanked, err := intake.IntakeSubmission(context.Background(), draftRequest(blank))
 	if err != nil {
@@ -198,7 +314,7 @@ func TestIsolatedSubmissionIntakeCarriesTheClosedElementsWithTheDigestFromOneCan
 		t.Fatal("新字段留空改了摘要或长出了要素——缺席的字段整条不进（canonicalEntries 头注）")
 	}
 
-	declared := strings.Replace(isolatedDraft, `"recipientAddress"`,
+	declared := strings.Replace(customerDraft, `"recipientAddress"`,
 		`"recipientPostalCode": "SYN-100115", "recipientCountryCode": "SYN-CC", "senderPostalCode": "SYN-200000", "recipientAddress"`, 1)
 	command, err := intake.IntakeSubmission(context.Background(), draftRequest(declared))
 	if err != nil {
@@ -234,17 +350,18 @@ func TestIsolatedSubmissionIntakeCarriesTheClosedElementsWithTheDigestFromOneCan
 
 // Covers: 形状级失败一律 4xx。三种缺失各测一次——它们缺的是不同的东西，而每一种都不该
 // 让编排收到一条立不起来的命令。
-func TestIsolatedSubmissionIntakeRefusesDraftsThatCannotFormACommand(t *testing.T) {
+func TestCustomerSubmissionIntakeRefusesDraftsThatCannotFormACommand(t *testing.T) {
 	for name, body := range map[string]string{
-		"委托参考为空": strings.Replace(isolatedDraft, `"SYN-CUSTREF-0001"`, `""`, 1),
-		"一件包裹都没有": strings.Replace(isolatedDraft,
+		"委托参考为空": strings.Replace(customerDraft, `"SYN-CUSTREF-0001"`, `""`, 1),
+		"一件包裹都没有": strings.Replace(customerDraft,
 			`"parcels": [`, `"parcels": [], "ignored": [`, 1),
-		"生效时间不是时间": strings.Replace(isolatedDraft,
+		"生效时间不是时间": strings.Replace(customerDraft,
 			`"requestedServiceProduct"`, `"requestEffectiveAt": "下周三", "requestedServiceProduct"`, 1),
 		"报文不是 JSON": `{`,
+		"载荷之后还有内容":  customerDraft + ` {}`,
 	} {
 		t.Run(name, func(t *testing.T) {
-			intake := newIsolatedIntake(t, &permittingOwnershipDouble{revision: "SYN-REV-1"})
+			intake := newCustomerIntake(t, &customerAuthenticatorDouble{}, &permittingOwnershipDouble{revision: "SYN-REV-1"})
 			if _, err := intake.IntakeSubmission(context.Background(), draftRequest(body)); !errors.Is(err, shipmenthttp.ErrMalformedRequest) {
 				t.Fatalf("err = %v, want ErrMalformedRequest", err)
 			}
@@ -254,10 +371,10 @@ func TestIsolatedSubmissionIntakeRefusesDraftsThatCannotFormACommand(t *testing.
 
 // Covers: 票 product-strategy-boundary/26——草案上已声明的重量编成成员画像，成员是同一下标现签的内部包裹标识。
 // 重量缺席不立画像、不补默认测量。尺寸在场才带外廓。服务条目仍进摘要：拿掉重量摘要要变。
-func TestIsolatedSubmissionIntakeCarriesAProfileOnlyWhenWeightIsDeclared(t *testing.T) {
-	intake := newIsolatedIntake(t, &permittingOwnershipDouble{revision: "SYN-REV-1"})
+func TestCustomerSubmissionIntakeCarriesAProfileOnlyWhenWeightIsDeclared(t *testing.T) {
+	intake := newCustomerIntake(t, &customerAuthenticatorDouble{}, &permittingOwnershipDouble{revision: "SYN-REV-1"})
 
-	command, err := intake.IntakeSubmission(context.Background(), draftRequest(isolatedDraft))
+	command, err := intake.IntakeSubmission(context.Background(), draftRequest(customerDraft))
 	if err != nil {
 		t.Fatalf("接入带重量的草案：%v", err)
 	}
@@ -277,7 +394,7 @@ func TestIsolatedSubmissionIntakeCarriesAProfileOnlyWhenWeightIsDeclared(t *test
 		t.Fatal("没报尺寸的草案带出了外廓")
 	}
 
-	sized := strings.Replace(isolatedDraft, `"declaredWeightUnit": "KG"`,
+	sized := strings.Replace(customerDraft, `"declaredWeightUnit": "KG"`,
 		`"declaredWeightUnit": "KG", "declaredLength": "20", "declaredWidth": "15", "declaredHeight": "10", "declaredDimensionsUnit": "CM"`, 1)
 	withSize, err := intake.IntakeSubmission(context.Background(), draftRequest(sized))
 	if err != nil {
@@ -296,7 +413,7 @@ func TestIsolatedSubmissionIntakeCarriesAProfileOnlyWhenWeightIsDeclared(t *test
 		t.Fatal("报了尺寸摘要没变——尺寸仍要留在服务条目里")
 	}
 
-	unweighed := strings.Replace(isolatedDraft,
+	unweighed := strings.Replace(customerDraft,
 		`,`+"\n"+`      "declaredWeightValue": "1.50",`+"\n"+`      "declaredWeightUnit": "KG"`, ``, 1)
 	plain, err := intake.IntakeSubmission(context.Background(), draftRequest(unweighed))
 	if err != nil {
@@ -310,19 +427,15 @@ func TestIsolatedSubmissionIntakeCarriesAProfileOnlyWhenWeightIsDeclared(t *test
 	}
 }
 
-func newIsolatedIntake(t *testing.T, authority *permittingOwnershipDouble) *shipmenthttp.IsolatedSubmissionIntake {
+func newCustomerIntake(
+	t *testing.T,
+	authenticator *customerAuthenticatorDouble,
+	authority *permittingOwnershipDouble,
+) *shipmenthttp.CustomerSubmissionIntake {
 	t.Helper()
-	intake, err := shipmenthttp.NewIsolatedSubmissionIntake(shipmenthttp.IsolatedSubmissionIntakeDeps{
-		Tenant:          isolatedTenant,
-		CustomerAccount: isolatedCustomerAccount,
-		Source:          isolatedSource,
-		ScopeReference:  isolatedScopeReference,
-		ScopeDigest:     isolatedScopeDigest,
-		Ownership:       authority,
-		Clock:           frozenClock{at: time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)},
-	})
+	intake, err := shipmenthttp.NewCustomerSubmissionIntake(authenticator, authority, frozenClock{at: time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)})
 	if err != nil {
-		t.Fatalf("构造隔离提交 Intake：%v", err)
+		t.Fatalf("构造首方提交 Intake：%v", err)
 	}
 	return intake
 }
@@ -385,9 +498,9 @@ func (double *permittingOwnershipDouble) DecideProductionOwnership(
 
 // Covers: ADR-0184 决定四——逐件的客户包裹参考按次序与现签的内部成员配成客户包裹件号带进命令：号码是客户给的
 // 那个，包裹是本包现签的那个，不是反过来（客户参考号不得变成内部标识）。
-func TestIsolatedSubmissionIntakePairsCustomerParcelReferencesWithMintedMembers(t *testing.T) {
-	intake := newIsolatedIntake(t, &permittingOwnershipDouble{revision: "SYN-REV-1"})
-	twoParcels := strings.Replace(isolatedDraft, `"parcels": [`, `"parcels": [
+func TestCustomerSubmissionIntakePairsCustomerParcelReferencesWithMintedMembers(t *testing.T) {
+	intake := newCustomerIntake(t, &customerAuthenticatorDouble{}, &permittingOwnershipDouble{revision: "SYN-REV-1"})
+	twoParcels := strings.Replace(customerDraft, `"parcels": [`, `"parcels": [
     {"customerParcelReference": "SYN-PCLREF-0000"},`, 1)
 
 	command, err := intake.IntakeSubmission(context.Background(), draftRequest(twoParcels))
@@ -412,9 +525,9 @@ func TestIsolatedSubmissionIntakePairsCustomerParcelReferencesWithMintedMembers(
 // Covers: ADR-0184 复核记录「越权风险点 2 的事实更正」——入口去两端空白，定的是委托记下的声明值：客户包裹件号取
 // 去过空白的值，载荷摘要与来源身份都与不带空白的同一份草案相同，委托没有第二个声明值。入口只去单元格两端：号码
 // 本身的字符一个不动，大小写与内部空格原样——改号码字符是条码规则，属租户取值，入口同样不许做。
-func TestIsolatedSubmissionIntakeTrimsOnlyTheEndsOfCustomerReferences(t *testing.T) {
-	intake := newIsolatedIntake(t, &permittingOwnershipDouble{revision: "SYN-REV-1"})
-	plain, err := intake.IntakeSubmission(context.Background(), draftRequest(isolatedDraft))
+func TestCustomerSubmissionIntakeTrimsOnlyTheEndsOfCustomerReferences(t *testing.T) {
+	intake := newCustomerIntake(t, &customerAuthenticatorDouble{}, &permittingOwnershipDouble{revision: "SYN-REV-1"})
+	plain, err := intake.IntakeSubmission(context.Background(), draftRequest(customerDraft))
 	if err != nil {
 		t.Fatalf("接入不带空白的草案：%v", err)
 	}
@@ -422,7 +535,7 @@ func TestIsolatedSubmissionIntakeTrimsOnlyTheEndsOfCustomerReferences(t *testing
 	padded := strings.NewReplacer(
 		`"SYN-CUSTREF-0001"`, `" \tSYN-CUSTREF-0001\t "`,
 		`"SYN-PCLREF-0001"`, `"  \tSYN-PCLREF-0001\t "`,
-	).Replace(isolatedDraft)
+	).Replace(customerDraft)
 	command, err := intake.IntakeSubmission(context.Background(), draftRequest(padded))
 	if err != nil {
 		t.Fatalf("接入两端带空白的草案：%v", err)
@@ -437,7 +550,7 @@ func TestIsolatedSubmissionIntakeTrimsOnlyTheEndsOfCustomerReferences(t *testing
 		t.Fatal("两端带空白的委托参考铸出了另一个来源身份")
 	}
 
-	verbatim := strings.Replace(isolatedDraft, `"SYN-PCLREF-0001"`, `" \tsyn-pclref 0001 \t"`, 1)
+	verbatim := strings.Replace(customerDraft, `"SYN-PCLREF-0001"`, `" \tsyn-pclref 0001 \t"`, 1)
 	cased, err := intake.IntakeSubmission(context.Background(), draftRequest(verbatim))
 	if err != nil {
 		t.Fatalf("接入小写带内部空格的草案：%v", err)

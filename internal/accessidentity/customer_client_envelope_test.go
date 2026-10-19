@@ -116,7 +116,7 @@ func TestGrantedCustomerClientMintsASubmissionEnvelopeFromItsBinding(t *testing.
 	if envelope.TenantID() != customerTenant || envelope.CustomerAccountID() != customerAccount {
 		t.Fatalf("信封身份 = (%q, %q), want 册上绑定的 (%q, %q)", envelope.TenantID(), envelope.CustomerAccountID(), customerTenant, customerAccount)
 	}
-	if want := "SYN-CUSTOMER-CLIENT-01@" + customerIssuer; envelope.Source() != want {
+	if want := customerIssuer + "#SYN-CUSTOMER-CLIENT-01"; envelope.Source() != want {
 		t.Fatalf("来源 = %q, want %q", envelope.Source(), want)
 	}
 	if envelope.RequestKey() != "SYN-ACCESS-REQUEST-0001" {

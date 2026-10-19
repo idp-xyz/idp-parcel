@@ -37,9 +37,10 @@ func (subject CustomerClientSubject) Subject() string { return subject.subject }
 
 // channelSource 是这个客户端交进来的委托在来源信封里的来源格。客户渠道册的行形（ADR-0139 决定二）没有来源一列：来源就是
 // 这个客户端本身，于是由主体推出，不另登一格让它与主体各说各话。发行方要在里面——`sub` 只在它的发行方之内唯一，换一个
-// 发行方，同一个 `sub` 是另一个客户端，它们的接入请求标识不该落进同一个判重空间。
+// 发行方，同一个 `sub` 是另一个客户端，它们的接入请求标识不该落进同一个判重空间。拼法与 PS 留痕里提交操作者的引用同一种
+// （发行方 + `#` + `sub`）。
 func (subject CustomerClientSubject) channelSource() string {
-	return subject.subject + "@" + subject.issuer
+	return subject.issuer + "#" + subject.subject
 }
 
 // CustomerClientBinding 是客户渠道册里「一个客户端主体绑定唯一（租户、客户账户）」那一行（ADR-0139 决定二）。

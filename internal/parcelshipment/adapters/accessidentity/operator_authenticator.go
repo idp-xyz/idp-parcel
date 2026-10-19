@@ -1,5 +1,6 @@
 // Package accessidentity 是 parcel-shipment 对共享接入身份能力（internal/accessidentity）的消费侧适配器：
-// 铸造操作者信封，把结果译成本上下文的租户、提交操作者与答复格（ADR-0072 决定一、ADR-0151）。
+// 铸造操作者信封与首方客户族的提交信封，把结果译成本上下文的租户、提交操作者、来源身份与答复格（ADR-0072 决定一、
+// ADR-0151、ADR-0139）。
 package accessidentity
 
 import (

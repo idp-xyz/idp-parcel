@@ -28,49 +28,23 @@ const (
 // 因此也带 `SYN-` 前缀：修订串会随决定一路传到调用方与门禁，合成来源要在那里也看得见。
 const isolatedSelfAuthority = "SYN-AUTH/idp-parcel-pilot"
 
-// 提交口注入的合成来源与准入范围（ADR-0091 决定二）。
+// isolatedWriteAdmission 携带 ADR-0091 放行的写路径那一格：委托受理的生产归属范围目录（墙二）与隔离形态的自身权威串。
+// nil 表示未启用——各装配函数对 nil 的处理与本记录之前逐字节同形。
 //
-// 客户账户**刻意复用隔离读面那一个**：写下的委托挂在哪个账户上，决定了它在委托查阅页
-// 上可不可见。两处各写各的常量会长出一种「提交成功但页面查无此单」的配置，而那个症状
-// 看起来像缺陷不像配置错——与两开关取值必须相同是同一条理由。
-const (
-	isolatedSubmissionSource       = "SYN-SOURCE/admin-web"
-	isolatedSubmissionScopeRef     = "SYN-ADM-SCOPE/shipment-intake"
-	isolatedSubmissionScopeDigest  = "sha256:syn-adm-scope-shipment-intake"
-	isolatedSubmissionCustomerAcct = isolatedReadCustomerAccount
-)
-
-// isolatedWriteAdmission 携带 ADR-0091 放行的写路径几格。nil 表示未启用——各装配函数
-// 对 nil 的处理与本记录之前逐字节同形。
-//
-// 提交口的命令面 Intake（墙一）不在本结构里：它要先经库装归属权威，由 buildIsolatedSubmissionIntake
-// 在开池之后构造。命令面按端点逐口放行（Consequences），又随真渠道逐口撤下（ADR-0150 决定三）：哪几口此刻仍经
-// 写开关放行由 admittedCommandLines 说，启动日志照它出声。
+// 墙一（提交口的命令面 Intake）已随首方客户渠道退场（ADR-0150 决定三，票 first-party-api/00）：提交口挂首方 Intake，写开关
+// 不再放行任何命令面，也不再进 assembleBusinessEndpoints。墙二的真形态是 PS 的生产归属目录，未立；在它立起之前，演示部署
+// 靠这一格让提交编排读得到合成坐标，生产形态下目录照旧留空、归属答`权威未确定`。写开关随读开关在最后一口换完的那一笔一起
+// 删（ADR-0150 决定三），删之前要有生产目录接手这一格，否则演示提交停在 OWNERSHIP_UNRESOLVED。
 type isolatedWriteAdmission struct {
 	governanceDirectory pspilot.GovernanceScopeDirectory
 	selfAuthority       string
-	// tenant 是开关的值本身。归属那一格用不到它（治理登记册无租户维），提交口用得到：
-	// 来源信封的租户维就是它。
-	tenant string
-}
-
-// isolatedWriteAdmittedCommandLines 是写开关到此刻为止换上隔离 Intake 的命令面，供启动日志出声
-// （ADR-0078 决定三、ADR-0091 决定四「放行必须出声」）。每放一口在这里加一行、每撤一口删一行（ADR-0150 决定三），
-// 与 assembleBusinessEndpoints 里换的那几行同步——两处对不上由装配测试拦（isolated_write_test.go 的二分表）。
-var isolatedWriteAdmittedCommandLines = []string{
-	"/shipment-requests",
-}
-
-// admittedCommandLines 交回放行名单的副本：日志与测试都不该改得动那份表。
-func (admission *isolatedWriteAdmission) admittedCommandLines() []string {
-	return append([]string(nil), isolatedWriteAdmittedCommandLines...)
 }
 
 // buildIsolatedWriteAdmission 解析隔离写路径准入的显式输入（ADR-0091 决定四）。
 //
 // 三态与隔离读面同款：未设 → (nil, nil)；设了但不带合成前缀 → 报错，进程启动即拒；
 // 设了且合规 → 交回两格，启动日志由调用方写。另加一条读面没有的校验：两开关都设时
-// 取值必须相同。
+// 取值必须相同。开关的值只作启用凭据（ADR-0091 决定五），不进任何一格。
 func buildIsolatedWriteAdmission(getenv func(string) string) (*isolatedWriteAdmission, error) {
 	tenant := getenv(isolatedWriteTenantEnv)
 	if tenant == "" {
@@ -110,6 +84,5 @@ func buildIsolatedWriteAdmission(getenv func(string) string) (*isolatedWriteAdmi
 	return &isolatedWriteAdmission{
 		governanceDirectory: directory,
 		selfAuthority:       isolatedSelfAuthority,
-		tenant:              tenant,
 	}, nil
 }

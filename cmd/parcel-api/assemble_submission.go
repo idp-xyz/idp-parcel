@@ -202,8 +202,9 @@ func (boundary submissionBoundary) Save(
 // 为什么。
 //
 // `isolated` 为 nil 即生产形态，目录照旧留空，归属的答复与 ADR-0091 之前逐字节相同；
-// 非 nil 时按隔离形态注入合成坐标与合成权威串（ADR-0091 决定二、五），恢复动作这才
-// 变成「往登记册里登一条匹配的区间」——注入的只是坐标，归属仍要读册后才有答案。
+// 非 nil 时按隔离形态注入合成坐标与合成权威串（ADR-0091 决定二、五，墙二），恢复动作这才
+// 变成「往登记册里登一条匹配的区间」——注入的只是坐标，归属仍要读册后才有答案。提交命令
+// 从哪个口进来与这一格无关：墙一已换成首方客户渠道（票 first-party-api/00）。
 //
 // 面向他方生产权威的出向通道同属实例半边（`PAR-GOV-05..07`），两种形态都放未配置适配器：
 // 归属判为`其他权威`时它如实答`通道未配置`，编排据以落 OWNERSHIP_UNRESOLVED 并给出续办引用
@@ -251,12 +252,13 @@ func buildSubmissionOrchestration(
 
 // buildProductionOwnership 装配治理桥的三个读口、目录与本产品的权威串。
 //
-// 它被提交编排与隔离形态的提交 Intake 各调一次，因此两处**读的是同一本登记册**——
-// 那正是门禁要的：Intake 预取的修订与编排提交时点重判出的修订，只在登记册真的变过时
-// 才该不同。两处各建一个适配器实例不影响这一点（三个读口都是无状态读，修订由登记内容
-// 派生，不由实例派生）；共用一个实例要把它穿过生产装配路径，而生产形态根本没有 Intake
-// 这一侧。selfAuthority 只进生产分支；隔离分支照旧取 isolatedSelfAuthority（ADR-0150
-// 决定三），两值不等的装配在 buildIsolatedWriteAdmission 就被拒了。
+// 它被提交编排与首方提交 Intake 各调一次（Intake 预取期望修订），因此两处**读的是同一本
+// 登记册**——那正是门禁要的：Intake 预取的修订与编排提交时点重判出的修订，只在登记册真的
+// 变过时才该不同。两处各建一个适配器实例不影响这一点（三个读口都是无状态读，修订由登记内容
+// 派生，不由实例派生）；两处传入的 isolated 与 selfAuthority 必须相同，否则 Intake 与编排
+// 各认一套坐标，门禁会判修订不符。selfAuthority 只进生产分支；隔离分支照旧取
+// isolatedSelfAuthority（ADR-0150 决定三），两值不等的装配在 buildIsolatedWriteAdmission
+// 就被拒了。
 func buildProductionOwnership(
 	db *bentopg.DB,
 	isolated *isolatedWriteAdmission,
@@ -293,32 +295,4 @@ func buildProductionOwnership(
 		return nil, fmt.Errorf("parcel-api: production ownership adapter: %w", err)
 	}
 	return adapter, nil
-}
-
-// buildIsolatedSubmissionIntake 装配 ADR-0091 放行的提交口 Intake。isolated 为 nil 即
-// 生产形态，交回 nil，装配点那一行照旧挂字面量未配置即拒。
-func buildIsolatedSubmissionIntake(
-	db *bentopg.DB,
-	isolated *isolatedWriteAdmission,
-) (shipmenthttp.SubmissionIntake, error) {
-	if isolated == nil {
-		return nil, nil
-	}
-	ownership, err := buildProductionOwnership(db, isolated, isolated.selfAuthority)
-	if err != nil {
-		return nil, err
-	}
-	intake, err := shipmenthttp.NewIsolatedSubmissionIntake(shipmenthttp.IsolatedSubmissionIntakeDeps{
-		Tenant:          isolated.tenant,
-		CustomerAccount: isolatedSubmissionCustomerAcct,
-		Source:          isolatedSubmissionSource,
-		ScopeReference:  isolatedSubmissionScopeRef,
-		ScopeDigest:     isolatedSubmissionScopeDigest,
-		Ownership:       ownership,
-		Clock:           systemClock{},
-	})
-	if err != nil {
-		return nil, fmt.Errorf("parcel-api: isolated submission intake: %w", err)
-	}
-	return intake, nil
 }

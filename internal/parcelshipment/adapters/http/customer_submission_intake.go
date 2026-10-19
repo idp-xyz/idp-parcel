@@ -2,8 +2,12 @@ package shipmenthttp
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -11,131 +15,119 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
+	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	platformidentity "go.idp.xyz/idp-parcel/internal/platform/identity"
 )
 
-// IsolatedSubmissionIntake 是隔离写路径准入（ADR-0091）在提交口的注入式放行。
-//
-// 它与隔离读面的 IsolatedOperationsReadIntake 同层同款，但**多做三件读面不必做的事**，
-// 因为提交命令的入参不是一个作用域就能凑齐的：
-//
-//   - **来源信封**：租户、货主客户账户、来源三样整组注入，请求里写什么都不看（ADR-0003
-//     的最高隔离边界在隔离形态下同样不许被自报穿透）。来源请求键是唯一从请求内容派生的
-//     一格，见下面 sourceRequestKey 的注释。
-//   - **载荷摘要与要素子段**：把管理台草案译成 `SubmissionPayloadSpec` 再走领域侧的
-//     `CanonicalizeSubmission`（ADR-0014；pp-seams/05 裁决 3——摘要与寄 / 收地址要素一次产出、一起
-//     进命令）。摘要只吃客户声明的引用，不吃本包现签的内部标识——否则同一份内容重发两次会得到
-//     两个摘要，重放就被判成`接入冲突`。
-//   - **期望规则修订**：向归属权威预取。`UC-PS-001` 步骤 3B 把「准入范围与期望规则修订」
-//     判给试点准入控制装配，本包据此照办；编排随后在提交时点重判一次，因此门禁仍拦得住
-//     预取与提交之间登记册发生的变化，只是拦不住「调用方揣着上周的修订」——隔离形态里
-//     没有那样的调用方。
-//
-// **本类型对 `PAR-INT-01` 一格都不预设。** 它翻译的是本仓自己那张管理台页面的草案形状，
-// 不是任何租户的渠道契约；真渠道的词表、认证与幂等键仍按 ADR-0072 等渠道证据，落在
-// `internal/accessidentity/`。两者不会相混：本类型只在隔离形态的装配路径上出现，生产
-// 装配里没有通往它的代码路径（ADR-0091 判据三）。
-type IsolatedSubmissionIntake struct {
-	tenant          domain.TenantID
-	customerAccount domain.CustomerAccountID
-	source          domain.Source
-	admissionScope  domain.AdmissionScope
-	ownership       ports.ProductionOwnershipAuthority
-	clock           ports.Clock
-	requests        platformidentity.Minter
-	batches         platformidentity.Minter
-	parcels         platformidentity.Minter
-}
-
-var _ SubmissionIntake = (*IsolatedSubmissionIntake)(nil)
-
-// 本包现签内部标识用的前缀。它们不带 `SYN-`：合成来源由**行自己的租户维与来源维**表达
-// （ADR-0091 决定三），内部标识跟着染色只会让人以为分辨靠的是它。
-const (
-	isolatedRequestPrefix = "SHR"
-	isolatedBatchPrefix   = "SBAT"
-	isolatedParcelPrefix  = "DPCL"
+// 首方客户族在本包的两格答复（ADR-0139 决定四），与 ErrAccessChannelNotConfigured、ErrOutsideAdmissionScope、
+// ErrIdentityDependencyUnavailable 并列，各对一种恢复动作（ADR-0029），writeIntakeProblem 逐格映射、不合并。操作者族那两格
+// 不复用：持令牌的是货主客户的系统，错误码若仍叫操作者，管授予的人会去操作者册里找一个不存在的人。
+var (
+	// ErrCustomerClientCredentialRejected：令牌缺失、过期、校验不过，或册上要求证书绑定而这次出示对不上（401）——持凭据
+	// 的客户系统去换令牌。
+	ErrCustomerClientCredentialRejected = errors.New("parcel shipment http: customer client credential rejected")
+	// ErrCustomerClientNotGranted：令牌有效，但客户端不在客户渠道册，或此刻没有这一口能力的生效授予（403）——租户运营去
+	// 登记或恢复授予。不在册、未授予、区间外与已撤销同答这一格，不说哪一半不对。
+	ErrCustomerClientNotGranted = errors.New("parcel shipment http: customer client holds no effective grant for this capability")
 )
 
-// IsolatedSubmissionIntakeDeps 是构造本 Intake 的全部输入。四个字符串是装配点给定的
-// 合成值，两个协作者是本进程既有的生产实现。
-type IsolatedSubmissionIntakeDeps struct {
-	Tenant          string
-	CustomerAccount string
-	Source          string
-	ScopeReference  string
-	ScopeDigest     string
-	Ownership       ports.ProductionOwnershipAuthority
-	Clock           ports.Clock
+const (
+	codeCustomerClientCredentialRejected = "CUSTOMER_CLIENT_CREDENTIAL_REJECTED"
+	codeCustomerClientNotGranted         = "CUSTOMER_CLIENT_NOT_GRANTED"
+)
+
+// PresentedClientCredential 是这一次 HTTP 出示：Bearer 令牌，与这次 TLS 连接上的客户端证书（DER；没有就为空）。证书只用来
+// 核对证书绑定令牌（RFC 8705）。
+type PresentedClientCredential struct {
+	Token       string
+	Certificate []byte
 }
 
-// NewIsolatedSubmissionIntake 由装配点以显式合成值构造。立不起来的值在这里拒：装配错误
-// 要在启动时暴露，不该等到第一个请求。
-func NewIsolatedSubmissionIntake(deps IsolatedSubmissionIntakeDeps) (*IsolatedSubmissionIntake, error) {
-	fail := func(err error) (*IsolatedSubmissionIntake, error) {
-		return nil, fmt.Errorf("parcel shipment http: isolated submission intake: %w", err)
-	}
+// CustomerClientAuthenticator 认证一次首方客户出示，交回铸好的来源身份。失败只交回本包的格；从共享接入身份能力译过来的
+// 那一层在 adapters/accessidentity（跨上下文翻译的位置，见 internal/architecture 的边界门禁）。
+//
+// accessRequestID 在令牌、册与授予都过了之后才被调用：认证没过的调用方看不到载荷校验的结果。它交回载荷里的接入请求
+// 标识，由首方族的推导口铸成来源请求键（ADR-0139 决定五）；它自己的错原样交回。
+type CustomerClientAuthenticator interface {
+	AuthenticateSubmission(
+		ctx context.Context,
+		credential PresentedClientCredential,
+		accessRequestID func() (string, error),
+	) (domain.SourceIdentity, error)
+}
 
-	tenant, err := domain.NewTenantID(deps.Tenant)
-	if err != nil {
-		return fail(err)
-	}
-	account, err := domain.NewCustomerAccountID(deps.CustomerAccount)
-	if err != nil {
-		return fail(err)
-	}
-	source, err := domain.NewSource(deps.Source)
-	if err != nil {
-		return fail(err)
-	}
-	scopeReference, err := domain.NewAdmissionScopeReference(deps.ScopeReference)
-	if err != nil {
-		return fail(err)
-	}
-	scopeDigest, err := domain.NewAdmissionScopeDigest(deps.ScopeDigest)
-	if err != nil {
-		return fail(err)
-	}
-	scope, err := domain.NewAdmissionScope(scopeReference, scopeDigest)
-	if err != nil {
-		return fail(err)
-	}
-	if deps.Ownership == nil {
-		return fail(fmt.Errorf("ownership authority is nil"))
-	}
-	if deps.Clock == nil {
-		return fail(fmt.Errorf("clock is nil"))
-	}
+// CustomerSubmissionIntake 是首方客户渠道在提交口的 Intake（ADR-0139 决定四；票 first-party-api/00）。
+//
+// 它把一次已认证的首方请求译成提交命令，做四件事：
+//
+//   - **来源信封**：租户、货主客户账户与来源整组取自认证结果——册上那一行的绑定与客户端主体，请求里写什么都不看（ADR-0003
+//     的最高隔离边界）。来源请求键是载荷里的接入请求标识，由首方族的推导口铸成；它不进内容摘要（ADR-0139 决定五）。
+//   - **载荷摘要与要素子段**：把载荷译成 `SubmissionPayloadSpec` 再走领域侧的 `CanonicalizeSubmission`（ADR-0014；
+//     pp-seams/05 裁决 3——摘要与寄 / 收地址要素一次产出、一起进命令）。摘要只吃客户声明的内容，不吃本包现签的内部标识，
+//     也不吃接入请求标识——否则同一份内容重发两次会得到两个摘要，重放就被判成`接入冲突`。
+//   - **拟受理范围**：按这次提交的（租户、客户账户）立快照，见 customerAccountAdmissionScope。
+//   - **期望规则修订**：向归属权威预取。`UC-PS-001` 步骤 3B 把「准入范围与期望规则修订」判给试点准入控制装配，本包据此
+//     照办；编排随后在提交时点重判一次，门禁仍拦得住预取与提交之间登记册发生的变化。
+//
+// 提交口的生产写不在铸造侧判准入范围：它的生产归属由编排自己判（ADR-0139 决定八）。
+type CustomerSubmissionIntake struct {
+	authenticator CustomerClientAuthenticator
+	ownership     ports.ProductionOwnershipAuthority
+	clock         ports.Clock
+	requests      platformidentity.Minter
+	batches       platformidentity.Minter
+	parcels       platformidentity.Minter
+}
 
-	requests, err := platformidentity.NewMinter(isolatedRequestPrefix)
-	if err != nil {
-		return fail(err)
-	}
-	batches, err := platformidentity.NewMinter(isolatedBatchPrefix)
-	if err != nil {
-		return fail(err)
-	}
-	parcels, err := platformidentity.NewMinter(isolatedParcelPrefix)
-	if err != nil {
-		return fail(err)
-	}
+var _ SubmissionIntake = (*CustomerSubmissionIntake)(nil)
 
-	return &IsolatedSubmissionIntake{
-		tenant:          tenant,
-		customerAccount: account,
-		source:          source,
-		admissionScope:  scope,
-		ownership:       deps.Ownership,
-		clock:           deps.Clock,
-		requests:        requests,
-		batches:         batches,
-		parcels:         parcels,
+// 本包现签内部标识用的前缀。值沿用隔离提交口那一组：同一类标识换了入口不该换前缀，库里已有的标识与此后签出的仍是同一类。
+const (
+	submissionRequestPrefix = "SHR"
+	submissionBatchPrefix   = "SBAT"
+	submissionParcelPrefix  = "DPCL"
+)
+
+// NewCustomerSubmissionIntake 由装配点构造。立不起来的依赖在这里拒：装配错误要在启动时暴露，不该等到第一个请求。
+func NewCustomerSubmissionIntake(
+	authenticator CustomerClientAuthenticator,
+	ownership ports.ProductionOwnershipAuthority,
+	clock ports.Clock,
+) (*CustomerSubmissionIntake, error) {
+	fail := func(err error) (*CustomerSubmissionIntake, error) {
+		return nil, fmt.Errorf("parcel shipment http: customer submission intake: %w", err)
+	}
+	if authenticator == nil || ownership == nil || clock == nil {
+		return fail(errors.New("needs an authenticator, an ownership authority and a clock"))
+	}
+	requests, err := platformidentity.NewMinter(submissionRequestPrefix)
+	if err != nil {
+		return fail(err)
+	}
+	batches, err := platformidentity.NewMinter(submissionBatchPrefix)
+	if err != nil {
+		return fail(err)
+	}
+	parcels, err := platformidentity.NewMinter(submissionParcelPrefix)
+	if err != nil {
+		return fail(err)
+	}
+	return &CustomerSubmissionIntake{
+		authenticator: authenticator,
+		ownership:     ownership,
+		clock:         clock,
+		requests:      requests,
+		batches:       batches,
+		parcels:       parcels,
 	}, nil
 }
 
-// submissionDraft 是管理台提交页送上来的形状（`apps/admin-web` 的 `ShipmentRequestDraft`）。
-// 它是本仓自己那张页面的草案形状，不是已发布的渠道 Schema——页面注释与本注释同此一句。
+// submissionDraft 是首方提交口的载荷形状：管理台提交页的草案形状（`apps/admin-web` 的 `ShipmentRequestDraft`）加一格接入
+// 请求标识。它是首方 API 的产品契约（ADR-0139 决定五），字段名与版本策略的正式发布归 ADR-0140 的契约生成，不在本类型。
 type submissionDraft struct {
+	// AccessRequestID 是接入请求标识：客户系统逐请求给的标识，重发同一请求原样带上。它是信封元数据，由首方族的推导口铸成
+	// 来源请求键，不进内容摘要（ADR-0139 决定五）。
+	AccessRequestID           string  `json:"accessRequestId"`
 	CustomerShipmentReference string  `json:"customerShipmentReference"`
 	RequestedServiceProduct   string  `json:"requestedServiceProduct"`
 	RequestEffectiveAt        *string `json:"requestEffectiveAt"`
@@ -170,23 +162,26 @@ type declaredParcelDraft struct {
 	ServiceNotes            string `json:"serviceNotes"`
 }
 
-// IntakeSubmission 把一次管理台提交译成提交命令。
+// IntakeSubmission 把一次首方提交译成提交命令。
 //
-// 请求体只供给「客户可声明」的那几组（`UC-PS-001` 输入语义契约）；来源信封整组不看请求。
-// 形状级失败包 ErrMalformedRequest（4xx，重发同样内容不会好）；归属权威调不通不包它
-// （5xx，运维救依赖）——两格的恢复动作不同，判据同 ADR-0029。
-func (intake *IsolatedSubmissionIntake) IntakeSubmission(
+// 先认证、后读载荷：令牌、册与授予那几格在载荷被读之前答出。请求体只供给「客户可声明」的那几组（`UC-PS-001` 输入语义
+// 契约）与接入请求标识；来源信封的其余几格不看请求。形状级失败包 ErrMalformedRequest（4xx，重发同样内容不会好）；归属权威
+// 调不通不包它（5xx，运维救依赖）——两格的恢复动作不同，判据同 ADR-0029。
+func (intake *CustomerSubmissionIntake) IntakeSubmission(
 	ctx context.Context,
 	request *http.Request,
 ) (application.SubmitShipmentRequestCommand, error) {
 	var draft submissionDraft
-	decoder := json.NewDecoder(request.Body)
-	decoder.DisallowUnknownFields()
-	if err := decoder.Decode(&draft); err != nil {
-		return application.SubmitShipmentRequestCommand{}, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
+	identity, err := intake.authenticator.AuthenticateSubmission(ctx, presentedClientCredential(request), func() (string, error) {
+		if err := decodeSubmissionDraft(request.Body, &draft); err != nil {
+			return "", err
+		}
+		return draft.AccessRequestID, nil
+	})
+	if err != nil {
+		return application.SubmitShipmentRequestCommand{}, err
 	}
-
-	identity, err := intake.sourceIdentity(draft)
+	scope, err := customerAccountAdmissionScope(identity)
 	if err != nil {
 		return application.SubmitShipmentRequestCommand{}, err
 	}
@@ -228,9 +223,9 @@ func (intake *IsolatedSubmissionIntake) IntakeSubmission(
 	}
 
 	// 归属权威调不通时上抛裸错：那是依赖故障，不是这次请求的形状问题。
-	decision, err := intake.ownership.DecideProductionOwnership(ctx, intake.admissionScope)
+	decision, err := intake.ownership.DecideProductionOwnership(ctx, scope)
 	if err != nil {
-		return application.SubmitShipmentRequestCommand{}, fmt.Errorf("isolated submission intake: decide production ownership: %w", err)
+		return application.SubmitShipmentRequestCommand{}, fmt.Errorf("customer submission intake: decide production ownership: %w", err)
 	}
 
 	now := intake.clock.Now().UTC()
@@ -242,7 +237,7 @@ func (intake *IsolatedSubmissionIntake) IntakeSubmission(
 		BatchID:                 internalBatch,
 		ShipmentRequestID:       internalRequest,
 		DeclaredParcelIDs:       internalParcels,
-		AdmissionScope:          intake.admissionScope,
+		AdmissionScope:          scope,
 		ExpectedRevision:        decision.Revision(),
 		DeclaredProfiles:        profiles,
 		DeclaredElements:        canonical.DeclaredElements(),
@@ -259,7 +254,7 @@ func customerParcelNumbers(
 	customerParcels, members []domain.DeclaredParcelID,
 ) ([]domain.CustomerParcelNumberDeclaration, error) {
 	if len(customerParcels) != len(members) {
-		return nil, fmt.Errorf("isolated submission intake: %d customer parcel references and %d minted members",
+		return nil, fmt.Errorf("customer submission intake: %d customer parcel references and %d minted members",
 			len(customerParcels), len(members))
 	}
 	declarations := make([]domain.CustomerParcelNumberDeclaration, 0, len(members))
@@ -286,7 +281,7 @@ func declaredProfiles(
 	members []domain.DeclaredParcelID,
 ) ([]domain.DeclaredParcelProfile, error) {
 	if len(draft.Parcels) != len(members) {
-		return nil, fmt.Errorf("isolated submission intake: %d draft parcels and %d minted members",
+		return nil, fmt.Errorf("customer submission intake: %d draft parcels and %d minted members",
 			len(draft.Parcels), len(members))
 	}
 	profiles := make([]domain.DeclaredParcelProfile, 0, len(draft.Parcels))
@@ -359,29 +354,49 @@ func declaredDimensions(parcel declaredParcelDraft) (domain.DeclaredDimensions, 
 	return domain.NewDeclaredDimensions(lengthValue, widthValue, heightValue, unitRef)
 }
 
-// sourceIdentity 铸来源信封。租户、客户账户与来源整组来自注入；**来源请求键是唯一从
-// 请求内容派生的一格**，取客户委托参考。
+// decodeSubmissionDraft 收一份载荷：封闭解码，只许一个 JSON 对象、其后无尾随内容。载荷里出现任何不认识的格即拒——自报的
+// 租户、客户账户或来源都是这一类，它们只取自认证结果。
+func decodeSubmissionDraft(body io.Reader, draft *submissionDraft) error {
+	decoder := json.NewDecoder(body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(draft); err != nil {
+		return fmt.Errorf("%w: %v", ErrMalformedRequest, err)
+	}
+	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
+		return fmt.Errorf("%w: trailing content after the payload", ErrMalformedRequest)
+	}
+	return nil
+}
+
+// customerAccountScopeShape 是拟受理范围快照的形状版本，进摘要：形状一改，新旧快照的摘要就不会相等。
+const customerAccountScopeShape = "PS-CUSTOMER-ACCOUNT-ADMISSION-SCOPE/1"
+
+// customerAccountAdmissionScope 立这次首方提交的拟受理范围快照：（租户、客户账户）。
 //
-// 这不是对 `PAR-INT-01`「来源请求键由哪个渠道字段铸成」那一格的回答，也不许被读成那个：
-// 真渠道的推导口在 `internal/accessidentity` 留着未决（`RequestKeyDerivation` 仓内零生产
-// 实现），本包碰都不碰它。这里取客户委托参考只是因为隔离形态需要一个稳定的重放语义——
-// 同一份委托参考再发一次要被认出是重放，而不是长出第二份委托。
-func (intake *IsolatedSubmissionIntake) sourceIdentity(
-	draft submissionDraft,
-) (domain.SourceIdentity, error) {
-	reference := strings.TrimSpace(draft.CustomerShipmentReference)
-	if reference == "" {
-		return domain.SourceIdentity{}, fmt.Errorf("%w: customerShipmentReference is blank", ErrMalformedRequest)
-	}
-	key, err := domain.NewSourceRequestKey(reference)
+// 本用例的客户来源批次只覆盖一个明确货主客户账户（`UC-PS-001`），而首方族一个客户端绑唯一的客户账户，所以这一个账户就是
+// 这次提交能确定的完整范围。范围到治理坐标的换算归生产归属目录（PS 生产归属那一票）；在它立起之前，生产形态下归属照旧
+// 先于读册答`权威未确定`，这份快照只作决定记录与门禁里的范围摘要。
+func customerAccountAdmissionScope(identity domain.SourceIdentity) (domain.AdmissionScope, error) {
+	tenant := identity.TenantID().String()
+	account := identity.CustomerAccountID().String()
+	reference, err := domain.NewAdmissionScopeReference("customer-account:" + tenant + "/" + account)
 	if err != nil {
-		return domain.SourceIdentity{}, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
+		return domain.AdmissionScope{}, err
 	}
-	identity, err := domain.NewSourceIdentity(intake.tenant, intake.customerAccount, intake.source, key)
+	sum := sha256.Sum256([]byte(customerAccountScopeShape + "\n" + tenant + "\n" + account))
+	digest, err := domain.NewAdmissionScopeDigest("sha256:" + hex.EncodeToString(sum[:]))
 	if err != nil {
-		return domain.SourceIdentity{}, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
+		return domain.AdmissionScope{}, err
 	}
-	return identity, nil
+	return domain.NewAdmissionScope(reference, digest)
+}
+
+func presentedClientCredential(request *http.Request) PresentedClientCredential {
+	var certificate []byte
+	if request.TLS != nil && len(request.TLS.PeerCertificates) > 0 {
+		certificate = request.TLS.PeerCertificates[0].Raw
+	}
+	return PresentedClientCredential{Token: httpapi.BearerToken(request), Certificate: certificate}
 }
 
 // declaredEffectiveAt 取客户请求生效时间。键缺席交回零值，而零值在
@@ -425,7 +440,7 @@ func customerDeclaredReferences(
 // mintInternalIdentities 现签内部标识。它们**不从客户参考派生**——`SubmissionIdentityFactory`
 // 的端口注释把这条写死了：「客户参考号不得变成内部标识」。代价是同一份内容重发两次会
 // 签出两组新标识，但那两组都用不上：重放在来源身份上就被认出，命令里的标识根本走不到建单。
-func (intake *IsolatedSubmissionIntake) mintInternalIdentities(
+func (intake *CustomerSubmissionIntake) mintInternalIdentities(
 	parcelCount int,
 ) (domain.ShipmentRequestID, domain.SubmissionBatchID, []domain.DeclaredParcelID, error) {
 	requestValue, err := intake.requests.Next()

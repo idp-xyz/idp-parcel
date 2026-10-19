@@ -24,7 +24,9 @@ var ErrMalformedRequest = errors.New("parcel shipment http: malformed request")
 
 // SubmissionIntake 把一次已认证的接入请求翻译成一条提交命令。
 //
-// 它是接口而不是本包内的解析代码，因为翻译要用到的三样东西没有一样是本包能自己定的：
+// 它是接口而不是本包内的解析代码，因为翻译要用到的三样东西没有一样是本包能自己定的。下面三条
+// 说的是租户既有渠道的适配那一族（ADR-0139 决定一）；首方客户族的三样由产品定，实现是
+// CustomerSubmissionIntake：
 //
 //   - 来源信封（租户、货主客户账户、来源、请求标识）按 `UC-PS-001` 的输入语义契约整组
 //     「客户不可声明」，只能来自认证结果。真实接入渠道的认证方式属 `PAR-INT-01` 待提供，
@@ -36,7 +38,8 @@ var ErrMalformedRequest = errors.New("parcel shipment http: malformed request")
 //     等于替治理规则决定「完整拟受理范围」是什么，而 `UC-PS-001` 步骤 3B 把那件事判给了
 //     试点准入控制。
 //
-// 三项未决期间本包不带任何实现，包括「开发用」的采信头部版本——那正是红线所禁的生产默认值。
+// 既有渠道适配那一族三项未决期间，本包不为它带任何实现，包括「开发用」的采信头部版本——那正是
+// 红线所禁的生产默认值。
 type SubmissionIntake interface {
 	IntakeSubmission(ctx context.Context, request *http.Request) (application.SubmitShipmentRequestCommand, error)
 }
@@ -69,15 +72,7 @@ func NewSubmitShipmentRequestEndpoint(intake SubmissionIntake, handler Submissio
 
 		command, err := intake.IntakeSubmission(request.Context(), request)
 		if err != nil {
-			if errors.Is(err, ErrAccessChannelNotConfigured) {
-				writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
-				return
-			}
-			if errors.Is(err, ErrMalformedRequest) {
-				writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-				return
-			}
-			writeProblem(response, http.StatusInternalServerError, codeIntakeFailed)
+			writeIntakeProblem(response, err)
 			return
 		}
 

@@ -161,6 +161,14 @@ func writeIntakeProblem(response http.ResponseWriter, err error) {
 		writeProblem(response, http.StatusForbidden, codeOperatorNotGranted)
 		return
 	}
+	if errors.Is(err, ErrCustomerClientCredentialRejected) {
+		writeProblem(response, http.StatusUnauthorized, codeCustomerClientCredentialRejected)
+		return
+	}
+	if errors.Is(err, ErrCustomerClientNotGranted) {
+		writeProblem(response, http.StatusForbidden, codeCustomerClientNotGranted)
+		return
+	}
 	if errors.Is(err, ErrOutsideAdmissionScope) {
 		writeProblem(response, http.StatusForbidden, codeOutsideAdmissionScope)
 		return

@@ -5,9 +5,7 @@ import (
 	"net/http/httptest"
 	"strings"
 	"testing"
-	"time"
 
-	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/platform/buildinfo"
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 )
@@ -104,130 +102,30 @@ func TestBuildIsolatedWriteAdmissionRefusesTenantMismatch(t *testing.T) {
 	}
 }
 
-// expectedWriteAdmittedLines 是 ADR-0091 逐口放行到此刻为止已换上隔离 Intake 的命令面。每放一口在这里加一行，
-// 某口换上真渠道时同笔删掉它那一行（ADR-0150 决定三），下面两个用例据此二分：名单内 400、名单外 403。
-var expectedWriteAdmittedLines = map[string]bool{
-	"/shipment-requests": true,
-}
-
-// Covers: ADR-0091 Consequences「命令面按端点逐口放行，不是一次全开」 — 写面放行只及名单里那几行，其余命令面
-// 照旧 `403` + `ACCESS_CHANNEL_NOT_CONFIGURED`。
-//
-// 放行后的口签名取 `400` + `MALFORMED_REQUEST`：探针请求没有报文体，而隔离 Intake真的去读了它。这一格比 `500`
-// 更能说明问题——`403` 意味着「压根没读」，`400` 意味着「读了，读不出命令」，两者的可观察签名不同，正是本用例
-// 要钉的分界。
-func TestIsolatedWriteAdmissionSwitchesOnlyTheAdmittedCommandLines(t *testing.T) {
-	router := httpapi.NewWithEndpoints(buildinfo.Info{},
-		assembleUnwiredBusinessEndpointsWith(nil, isolatedSubmissionIntakeForTest(t)))
-
-	for pattern, probe := range businessEndpointProbes {
-		response := httptest.NewRecorder()
-		router.ServeHTTP(response, httptest.NewRequest(probe.method, probe.target, nil))
-
-		if expectedWriteAdmittedLines[pattern] {
-			if response.Code != http.StatusBadRequest {
-				t.Fatalf("%s: status = %d, want %d——放行后 Intake 该真的读请求",
-					pattern, response.Code, http.StatusBadRequest)
-			}
-			if got := problemCode(t, response); got != "MALFORMED_REQUEST" {
-				t.Fatalf("%s: code = %q, want MALFORMED_REQUEST", pattern, got)
-			}
-			continue
-		}
-
-		if response.Code != http.StatusForbidden {
-			t.Fatalf("%s: status = %d, want %d——写面放行只及名单里那几行",
-				pattern, response.Code, http.StatusForbidden)
-		}
-		if got := problemCode(t, response); got != "ACCESS_CHANNEL_NOT_CONFIGURED" {
-			t.Fatalf("%s: code = %q, want ACCESS_CHANNEL_NOT_CONFIGURED", pattern, got)
-		}
-	}
-}
-
-// Covers: 票 operator-channel/08 完成判据「生产形态（开关为 nil）逐字节不变」——隔离入参全为 nil 时，放行名单上的每一行
-// 答的仍是未配置即拒那一份字节：状态、内容类型与响应体逐字节等于字面量 UnconfiguredIntake{} 的答复。名单每放一口，这里
-// 就多钉一行；上面那组用例证的是「开了只及名单」，这一条证的是「不开就跟没写过一样」。
-func TestProductionFormAnswersTheAdmittedCommandLinesByteForByteUnconfigured(t *testing.T) {
-	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnconfiguredBusinessEndpoints())
-	const unconfigured = `{"error":{"code":"ACCESS_CHANNEL_NOT_CONFIGURED"}}` + "\n"
-
-	for pattern := range expectedWriteAdmittedLines {
-		probe := businessEndpointProbes[pattern]
-		response := httptest.NewRecorder()
-		router.ServeHTTP(response, httptest.NewRequest(probe.method, probe.target, strings.NewReader(`{"any":"body"}`)))
-
-		if response.Code != http.StatusForbidden {
-			t.Fatalf("%s: status = %d, want %d", pattern, response.Code, http.StatusForbidden)
-		}
-		if got := response.Header().Get("Content-Type"); got != "application/json" {
-			t.Fatalf("%s: Content-Type = %q, want application/json", pattern, got)
-		}
-		if got := response.Body.String(); got != unconfigured {
-			t.Fatalf("%s: body = %q, want %q——生产形态的字节变了", pattern, got, unconfigured)
-		}
-	}
-}
-
-// Covers: ADR-0078 决定三 / ADR-0091 决定四「放行必须出声」 — 启动日志要说得出放行了哪几口，且说的与装配点换的
-// 是同一份名单。日志里的名单与上面那张二分表对不上，就是有人换了一行没出声、或出了声没换行。
-func TestIsolatedWriteAdmissionNamesTheAdmittedCommandLines(t *testing.T) {
-	admission, err := buildIsolatedWriteAdmission(fakeGetenv(map[string]string{
+// Covers: ADR-0150 决定三与票 first-party-api/00「隔离提交放行已撤」——写开关开着、首方客户族没配时，`/shipment-requests`
+// 答的是首方族的未配置，与生产形态逐字节相同：写开关不再进业务端点的装配，它换不了任何命令面。读开关同样换不了这一行
+// （ADR-0091 决定四）。
+func TestNeitherIsolatedSwitchOpensTheSubmissionLine(t *testing.T) {
+	if admission, err := buildIsolatedWriteAdmission(fakeGetenv(map[string]string{
 		isolatedWriteTenantEnv: "SYN-TENANT-01",
-	}))
-	if err != nil {
-		t.Fatalf("synthetic tenant refused: %v", err)
+	})); err != nil || admission == nil {
+		t.Fatalf("写开关：admission = %+v, err = %v", admission, err)
 	}
-	named := admission.admittedCommandLines()
-	if len(named) != len(expectedWriteAdmittedLines) {
-		t.Fatalf("日志名单 %v 与放行二分表 %v 条数不同", named, expectedWriteAdmittedLines)
-	}
-	for _, pattern := range named {
-		if !expectedWriteAdmittedLines[pattern] {
-			t.Fatalf("日志名单点了 %s，装配点没换这一行", pattern)
-		}
-	}
-}
-
-// Covers: ADR-0091 决定四 — **读开关换不了写行**。只给隔离读入参时，已放行的命令口仍答 403；
-// 这一条与上面那个用例互为对照，两个开关分设的全部意义就在这一格上。
-func TestIsolatedReadAdmissionCannotOpenTheAdmittedCommandLines(t *testing.T) {
 	intakes, err := buildIsolatedReadIntakes(fakeGetenv(map[string]string{
 		isolatedReadTenantEnv: "SYN-TENANT-01",
 	}))
 	if err != nil {
 		t.Fatalf("build isolated read intakes: %v", err)
 	}
-	router := httpapi.NewWithEndpoints(buildinfo.Info{}, assembleUnwiredBusinessEndpoints(intakes))
+	const unconfigured = `{"error":{"code":"ACCESS_CHANNEL_NOT_CONFIGURED"}}` + "\n"
+	router := httpapi.NewWithEndpoints(buildinfo.Info{},
+		assembleUnwiredBusinessEndpointsWith(intakes, unconfiguredCustomerSubmission(t)))
 
-	for pattern := range expectedWriteAdmittedLines {
-		response := httptest.NewRecorder()
-		router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, pattern, nil))
-
-		if response.Code != http.StatusForbidden {
-			t.Fatalf("%s: status = %d, want %d——读开关开了写行，两个开关就白分了",
-				pattern, response.Code, http.StatusForbidden)
-		}
+	response := httptest.NewRecorder()
+	router.ServeHTTP(response, httptest.NewRequest(http.MethodPost, "/shipment-requests", strings.NewReader(`{"any":"body"}`)))
+	if response.Code != http.StatusForbidden || response.Body.String() != unconfigured {
+		t.Fatalf("/shipment-requests: %d %q, want 403 %q——两个隔离开关都开不了提交口", response.Code, response.Body.String(), unconfigured)
 	}
-}
-
-// isolatedSubmissionIntakeForTest 用装配点自己的合成常量构造提交 Intake，归属那一侧换
-// 放行替身（真库不在本用例范围内，本用例问的是路由与准入形状）。
-func isolatedSubmissionIntakeForTest(t *testing.T) shipmenthttp.SubmissionIntake {
-	t.Helper()
-	intake, err := shipmenthttp.NewIsolatedSubmissionIntake(shipmenthttp.IsolatedSubmissionIntakeDeps{
-		Tenant:          "SYN-TENANT-01",
-		CustomerAccount: isolatedSubmissionCustomerAcct,
-		Source:          isolatedSubmissionSource,
-		ScopeReference:  isolatedSubmissionScopeRef,
-		ScopeDigest:     isolatedSubmissionScopeDigest,
-		Ownership:       permittingOwnership{anchor: time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)},
-		Clock:           fixedClock{at: time.Date(2026, 9, 2, 12, 0, 0, 0, time.UTC)},
-	})
-	if err != nil {
-		t.Fatalf("构造隔离提交 Intake：%v", err)
-	}
-	return intake
 }
 
 // Covers: ADR-0091 决定四 — 两者取值相同时放行；写开关也可单设。读开关不是写开关的
