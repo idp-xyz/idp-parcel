@@ -1,6 +1,6 @@
 # ADR-0022: HTTP 状态码只回答「有没有形成答案」，业务判别一律进响应体
 
-Status: Accepted（**部分停用**：Decision 中「两项未决期间，业务端点可以存在并由测试替身驱动，但不进 `cmd/parcel-api` 的装配」的末段「但不进 `cmd/parcel-api` 的装配」已由 [ADR-0055](./0055-business-endpoint-intake-has-an-unconfigured-grade.md) 停用——端点改为带「未配置即拒」Intake 进装配；该句要防的「默认实现铸造信封」由未配置格保留并加强，同段「禁止在它们决定前落地任何默认实现」原文有效，其余各条不变）  
+Status: Accepted（**部分停用**：三类表 4xx 行「调用方的错，重发不会改变结果｜出队，交给人，不自动重发」对 `429` 的适用已由 [ADR-0140](./0140-first-party-api-contract-is-generated-from-endpoint-descriptors-with-url-major-version-and-problem-details.md) Decision 三停用，**适用场景**仅限首方与集成两族的限流答复（`429` + `Retry-After`，按 `Retry-After` 重发即正当）；其余 4xx 照旧。**部分停用**：Decision 中「两项未决期间，业务端点可以存在并由测试替身驱动，但不进 `cmd/parcel-api` 的装配」的末段「但不进 `cmd/parcel-api` 的装配」已由 [ADR-0055](./0055-business-endpoint-intake-has-an-unconfigured-grade.md) 停用——端点改为带「未配置即拒」Intake 进装配；该句要防的「默认实现铸造信封」由未配置格保留并加强，同段「禁止在它们决定前落地任何默认实现」原文有效，其余各条不变）  
 Date: 2026-08-11
 
 ## Context
@@ -68,3 +68,4 @@ Date: 2026-08-11
 - [UC-PS-001：客户提交国际小包请求](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)：七种应用结果、幂等与并发要求、可观测性统计维度的出处
 - [开发主线：机制半边现状](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md#机制半边现状)：HTTP 面缺口与六处 `!found` 出口的出处
 - [首发试点参数与证据登记册](../product/PILOT-PARAMETER-REGISTER.md)：`PAR-INT-01` 登记接入渠道，接入认证等它
+- [ADR-0140](./0140-first-party-api-contract-is-generated-from-endpoint-descriptors-with-url-major-version-and-problem-details.md)：Decision 三部分停用三类表 4xx 行对 `429` 的适用，限首方与集成两族的限流答复
