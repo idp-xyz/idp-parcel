@@ -11,12 +11,12 @@ Blocked by: 无
 - 生产装配交进来的是零值，读作「本部署没认领任何段」，恒答未证明。
 - 要认领一段，今天只能改装配代码重新编译。租户上线时实施方没有任何登记口能填这两格。
 - 这两格本该是租户取值：段怎么起名、哪条引用算数，都随租户的资格声明。可现在它们写在部署代码里，而且不分租户，同一部署里的所有租户共用一份。
-- 节点执行事实只出在关务节点协作链上（UC-NO-001）。没有别的面能登它。
+- 节点执行事实只出在关务节点协作链上（UC-NO-001，`AcceptCollaborationHandler`），而这个用例在 `cmd/` 下没有生产调用方（[operator-channel/46](../../operator-channel/issues/46-node-collaboration-and-consolidation-answer-no-answer-when-own-store-fails.md) 的现象一节也记了这一点）。所以只补认领的登记口，任何资格仍然证不出来；协作链的生产面要另有票接。
 
 ## 要定的
 
 - 认领住哪：PS 一本按租户分的登记册（资格引用 → 协作事项、动作；前缀由引用取出并校验同段），还是部署参数。按 ADR-0146 与 ADR-0150 的口径倾向前者：租户取值经普通登记落，不写进部署。
-- 证据口按租户取认领：今天的 `NodeExecutionQualificationEvidence` 不带租户维。
+- 证据口按租户取认领：今天 `NodeExecutionQualificationEvidence` 的认领不带租户维（执行事实的键带租户）。
 - ADR-0063 决定五的残余要在登记门上守住：认领的段不能是正式关务判断那一段。
 
 ## 不做
