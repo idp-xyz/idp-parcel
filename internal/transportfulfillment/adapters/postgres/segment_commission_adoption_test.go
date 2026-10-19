@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"errors"
 	"testing"
 	"time"
 
@@ -210,8 +211,40 @@ func TestTheAdoptionRegisterKeepsOneAdoptionPerSegmentAndNeedsBothEnds(t *testin
 	if _, err := save(record("SEG-OTHER", "commission-9", "digest-y")); err == nil {
 		t.Fatal("委托不在册的采用落进了库")
 	}
-	if _, err := stores.adoptions.Save(ctx, record("SEG-OTHER", "commission-1", "digest-z")); err == nil {
-		t.Fatal("采用写口在事务外照写了")
+}
+
+// TestAdoptionAndBookingCancellationWritesRefuseToRunOutsideATransaction 证两个写口无环境事务即拒：采用与委托的开始、取消与它
+// 所在那一笔都要同笔落，事务边界归装配点。断言指名 ErrTransactionRequired，不把「拒得对」与别的失败混成一格。
+func TestAdoptionAndBookingCancellationWritesRefuseToRunOutsideATransaction(t *testing.T) {
+	stores := newAdoptionStores(t)
+	tenant := deliveryValue(t, domain.NewTenantID, "tenant-1")
+	adoption, err := domain.RehydrateSegmentCommissionAdoption(domain.RehydrateSegmentCommissionAdoptionSpec{
+		TenantID:   tenant,
+		Segment:    deliveryValue(t, domain.NewFulfillmentSegmentReference, "SEG-ADOPT"),
+		Commission: deliveryValue(t, domain.NewTransportCommissionReference, "commission-1"),
+		Provider:   deliveryValue(t, domain.NewServiceProviderReference, "partner-1"),
+		StartBasis: deliveryValue(t, domain.NewParticipationBasisReference, "OFFSITE-PICKUP/parcel-1"),
+		StartedAt:  segmentEnteredAtFixture,
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	record := ports.SegmentCommissionAdoptionRecord{
+		Key:           ports.SegmentCommissionAdoptionKey{TenantID: tenant, Segment: adoption.Segment()},
+		ContentDigest: "digest",
+		Adoption:      adoption,
+		RecordedAt:    segmentEnteredAtFixture,
+	}
+	if _, err := stores.adoptions.Save(t.Context(), record); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("采用写口无事务应返回 ErrTransactionRequired，实得：%v", err)
+	}
+	booking := submittedBookingRecord(t, "tenant-1", "booking-1")
+	booking.Booking, err = booking.Booking.Cancel(bookingAt.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := stores.bookings.Replace(t.Context(), booking); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("取消订舱写口无事务应返回 ErrTransactionRequired，实得：%v", err)
 	}
 }
 
