@@ -1,7 +1,7 @@
 # 09 送站预报的提交与撤回口：挂首方客户渠道族，一口一词，NO 定载荷形状
 
 Category: enhancement
-Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-psxm09`，access_identity 迁移号 0014；与票 14 并行。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
+Status: in-progress——2026-10-19 评审 0 阻断，治理种子撞号已改为 35、36，待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-psxm09`，access_identity 迁移号 0014；与票 14 并行。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
 Blocked by:
 - [08](./08-pre-advice-and-handover-note-model-and-window-register.md) 进 main：预报册与领域。
 - 首方客户渠道 Intake 已由 [first-party-api/00](../../first-party-api/issues/00-first-party-customer-intake.md) 进 main（`38916b00`），照它落地的形状挂，不设阻塞边。能力粒度与 1:N 绑定在 [first-party-api/01](../../first-party-api/issues/01-customer-api-scopes-and-account-binding-cardinality.md)，两票同改客户面能力的枚举与 CHECK，谁后进谁 rebase。
@@ -65,7 +65,7 @@ M
 - `migrations/access_identity/0014_delivery_pre_advice_customer_capabilities.sql`：只重建客户面能力那条 CHECK。
 - `internal/nodeoperations`：`domain/delivery_pre_advice_payload.go`（规范化两面与 `CompareVersionedDigest`）；`ports/delivery_pre_advice_identity.go`（预报标识签发口）；`adapters/identity/delivery_pre_advice_id.go`；`application/delivery_pre_advice.go`（提交与撤回编排）；`adapters/accessidentity/customer_pre_advice_authenticator.go`（首方认证适配）；`adapters/http/delivery_pre_advice.go`（两口、Intake 与答复）。
 - `cmd/parcel-api`：新文件 `assemble_delivery_pre_advice.go`（Intake 与编排的装配、事务包装）；`endpoints.go`、`main.go`、`endpoints_test.go` 只追加，确切行见「共享文件里加的行」一节。
-- `scripts/demo-seeds`：`data/access/08` 两格授予，`data/access/03` 两行对照，`data/governance/32`、`33` 两条权威区间，`seed.sh` 两行登记与注释，新脚本 `submit-one-pre-advice.sh`，README「首方客户渠道」一节末尾送站预报那一项与 `data/access/` 那一行；`docs/design/synthetic-demo-journey-script.md` 加「送站预报：客户在送站之前交」一段。
+- `scripts/demo-seeds`：`data/access/08` 两格授予，`data/access/03` 两行对照，`data/governance/35`、`36` 两条权威区间，`seed.sh` 两行登记与注释，新脚本 `submit-one-pre-advice.sh`，README「首方客户渠道」一节末尾送站预报那一项与 `data/access/` 那一行；`docs/design/synthetic-demo-journey-script.md` 加「送站预报：客户在送站之前交」一段。
 
 ### 能力词与迁移
 
@@ -122,7 +122,7 @@ M
 
 ### 种子与演示脚本
 
-- `syn-customer-client-01` 加两格授予（`SYN-GRANT-CUSTOMER-PRE-ADVICE-SUBMISSION-01`、`…-WITHDRAWAL-01`）。准入范围对照两行（能力 `CUSTOMER_COMMAND`，事实类型取能力词，对象范围 `SYN-PILOT-SCOPE/customer-commands@v1`，依据 `SYN-MAP-BASIS-03`）。治理登记册两条本产品权威区间（`data/governance/32`、`33`，权威串 `SYN-AUTH/idp-parcel-pilot`）。
+- `syn-customer-client-01` 加两格授予（`SYN-GRANT-CUSTOMER-PRE-ADVICE-SUBMISSION-01`、`…-WITHDRAWAL-01`）。准入范围对照两行（能力 `CUSTOMER_COMMAND`，事实类型取能力词，对象范围 `SYN-PILOT-SCOPE/customer-commands@v1`，依据 `SYN-MAP-BASIS-03`）。治理登记册两条本产品权威区间（`data/governance/35`、`36`，权威串 `SYN-AUTH/idp-parcel-pilot`）。
 - `scripts/demo-seeds/submit-one-pre-advice.sh [客户包裹件号 ...]`：照 `submit-one-shipment.sh` 先取首方令牌（或用 `IDP_PARCEL_CUSTOMER_TOKEN`），交一份预报，签发的标识单独一行打到标准输出，说明打到标准错误，供票 11 的动线 `PRE_ADVICE_ID=$(…)` 接着用。节点缺省 `SYN-NODE-SHA-HUB`，预计送达缺省此刻往后两小时，可用环境变量改；不给号码时用按 UTC 时刻起的合成号。
 - README「首方客户渠道」一节末尾送站预报那一项、`data/access/` 那一行，`docs/design/synthetic-demo-journey-script.md` 一段（含实走记录）。
 
@@ -176,7 +176,7 @@ M
 - `internal/nodeoperations/domain/delivery_pre_advice_payload.go`（及用例）：形状放进领域，见代决 10。
 - `internal/nodeoperations/ports/delivery_pre_advice_identity.go`、`internal/nodeoperations/adapters/identity/delivery_pre_advice_id.go`（及用例）：预报标识的签发口与签发器，照收寄结果版本那一对的形状另起一对。
 - `internal/accessidentity/admission_scope_mapping.go`：`checkAdmissionRequirement` 加首方族一格，并把头注的「两族」改成「各族」。票面只写了「登进准入范围对照」，不改它就登不进。
-- `scripts/demo-seeds/data/governance/32`、`33` 与 `seed.sh` 那两行：票面只写了「准入范围对照两行」，没有区间，对照就只换坐标、不放行。
+- `scripts/demo-seeds/data/governance/35`、`36` 与 `seed.sh` 那两行：票面只写了「准入范围对照两行」，没有区间，对照就只换坐标、不放行。
 - `internal/accessidentity/adapters/postgres/customer_client_pre_advice_grant_test.go`：只加用例，钉迁移 0014。
 - 没有动 `register_pre_advice_window` 一支、时窗册与 `node_operations` 迁移（票 14 的地盘），也没有动 `internal/nodeoperations/ports/delivery_scope_registers.go`。
 
@@ -189,3 +189,7 @@ M
 ### AT 盘点
 
 `.scratch/at-coverage-inventory.md` 照口径同步：`AT-NO-069` 由②入①；`AT-NO-070` 已在①，行内补撤回命令半边，收寄与重核那一半仍归票 11；见那份文件的追记十五。
+
+### 评审后改号（2026-10-19）
+
+评审 0 阻断，只有一处撞号：另一会话的第四波已占治理种子 `governance/32`、`33`、`34`。本票两份权威区间改为 `35-authority-interval-customer-command-delivery-pre-advice-submission.json`、`36-authority-interval-customer-command-delivery-pre-advice-withdrawal.json`，文件名其余部分与内容不变，`seed.sh` 那两行与 README `data/access/` 那一行随改（`0f04a07a`）。上文各节引的号已改成 35、36；实走记录里的 `seed.sh` 灌入发生在改号之前。改号后：`origin/main` 仍是 `6b02b547`，rebase 无事可做；`gofmt -l .` 无输出，`go build ./...`、`scripts/demo-seeds/...` 与 `cmd/parcel-api/...` 的 `go vet` 退 0，带 DSN 跑 `./scripts/demo-seeds/...`、`./cmd/parcel-api/...` 全 ok；一次性库 `psxm09_seed3` 上 `seed.sh` 退 0，治理登记册上两条 `CUSTOMER_COMMAND` 区间在册，用完删库，`psb26_walk` 未碰。机制清点重生成无差。
