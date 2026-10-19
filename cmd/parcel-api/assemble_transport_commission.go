@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
@@ -18,10 +19,18 @@ import (
 // transactionalTransportCommissionSubmitter 把一次委托提交包进一笔事务，理由随 transactionalDelivery：委托册的写口与
 // Outbox 入队按框架合同无事务即拒，事务边界归装配点；委托与「委托已提交」意图同笔落地，编排返回 error 时整笔回滚。
 // 协议核对读的是 party-commercial 的已提交数据，落在同一笔里不改变它读到什么。
+//
+// 编排答`未决`时整笔回滚而不提交，再交回那一份答复：读口（协议点读、委托册）在事务里报了 SQL 错误，PostgreSQL 就把
+// 整笔事务置为 aborted，照常提交只换回提交错误，线上落成 500 `NO_ANSWER_FORMED`，与 ADR-0202 决定三写的「PC 读不动
+// 答未决」对不上；`未决`各格也没有任何东西要落库。先例是 errActionAdmissionUnreadable。
 type transactionalTransportCommissionSubmitter struct {
 	transactor bentoapp.Transactor
 	inner      *tfapp.CommissionTransportHandler
 }
+
+// errTransportCommissionUndecided 只在本壳里流转：编排答`未决`时回调交它，逼事务回滚；回滚之后认出它，交回编排那一份
+// 答复。
+var errTransportCommissionUndecided = errors.New("parcel-api: transport commission undecided; transaction rolled back")
 
 var _ tfhttp.TransportCommissionSubmitter = transactionalTransportCommissionSubmitter{}
 
@@ -36,8 +45,14 @@ func (submitter transactionalTransportCommissionSubmitter) SubmitCommission(
 			return handleErr
 		}
 		result = handled
+		if handled.Outcome() == tfapp.CommissionUndecided {
+			return errTransportCommissionUndecided
+		}
 		return nil
 	})
+	if errors.Is(err, errTransportCommissionUndecided) {
+		return result, nil
+	}
 	if err != nil {
 		return tfapp.CommissionResult{}, err
 	}

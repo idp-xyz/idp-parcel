@@ -142,7 +142,7 @@ func commissionBody(commission, provider, agreement, version, submittedAt string
 		` "responsibility": "SYN-RESPONSIBILITY-TRUNK-01", "members": ["SYN-PARCEL-DCG23-01"], "submittedAt": "` + submittedAt + `"}`
 }
 
-// Covers: `AT-TF-105`、`AT-TF-106`、`AT-TF-107` 保存半边（真库面），票 demo-chain-gaps/23 完成判据（S）——
+// Covers: `AT-TF-107`、`AT-TF-108`、`AT-TF-109` 保存半边（真库面），票 demo-chain-gaps/23 完成判据（S）——
 //   - 演示：干线委托采用种子里的干线协议、服务方填干线承运方，答 201 COMMISSION_SUBMITTED，快照是 PC 拼出的
 //     「对象/版本」、采购责任法人是种子里协议正文的法人；同一份原样重交答 200 EXISTING_COMMISSION（首笔事务真的提交了）。
 //   - 委托与 Outbox 同一笔：委托行与「委托已提交」信封同一个事务号（xmin 相同），信封载荷只带引用。
@@ -231,5 +231,35 @@ func TestTheWiredTransportCommissionSubmissionChecksTheSeededAgreements(t *testi
 	}
 	if rows != 1 {
 		t.Fatalf("委托表 %d 行，want 1——核不过协议的提交落了行", rows)
+	}
+}
+
+// 协议点读在事务里报 SQL 错误时，PostgreSQL 把整笔事务置为 aborted：答复若照常提交，只换回提交错误，线上落成 500。
+// 这里让 PC 的协议正文表在真库上读不到（改表名），钉住登记方拿到的仍是 ADR-0202 决定三写的「读不动答未决」，且零写入。
+// Covers: `AT-TF-107`「读不动答未决」那一支（真库面，事务已中止）。
+func TestTheWiredTransportCommissionSubmissionAnswersUndecidedWhenTheAgreementReadAbortsTheTransaction(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	endpoint := commissionSubmissionEndpointForTest(t, db)
+	if _, err := pool.Exec(t.Context(),
+		`ALTER TABLE party_commercial.supplier_agreement RENAME TO supplier_agreement_unreachable`); err != nil {
+		t.Fatalf("让协议正文表读不到：%v", err)
+	}
+
+	status, answer := submitCommissionOverTheWire(t, endpoint, commissionBody("SYN-COMMISSION-TRUNK-ABORTED",
+		"SYN-PARTY-CARRIER-TRUNK-01", "SYN-SUPPLIER-TRUNK-CN-SG-01", "v1", "2026-10-19T08:00:00Z"))
+	if status != http.StatusOK || answer.Outcome != "COMMISSION_UNDECIDED" ||
+		answer.UndecidedReason != "SUPPLIER_AGREEMENT_UNAVAILABLE" || answer.Commission != nil {
+		t.Fatalf("协议读不动 = %d %+v，want 200 COMMISSION_UNDECIDED / SUPPLIER_AGREEMENT_UNAVAILABLE", status, answer)
+	}
+	var rows int
+	if err := pool.QueryRow(t.Context(), `SELECT count(*) FROM transport_fulfillment.transport_commission`).Scan(&rows); err != nil {
+		t.Fatalf("数委托行：%v", err)
+	}
+	if rows != 0 {
+		t.Fatalf("委托表 %d 行，want 0——读不动的提交落了行", rows)
 	}
 }
