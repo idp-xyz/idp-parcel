@@ -257,18 +257,26 @@
 ### 0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md
 
 > ## 越权风险点（归 owner 复核）
+>
+> 2026-10-19 用户在 Claude Code 会话里答「接受」，修订后接受；风险点按复核建议逐条处置，见 ADR 正文。仍留待 owner：9（首方族是否补静态密钥这一凭据形态，首发不补）。
 
 ### 0140-first-party-api-contract-is-generated-from-endpoint-descriptors-with-url-major-version-and-problem-details.md
 
 > ## 越权风险点（归 owner 复核）
+>
+> 2026-10-19 用户在 Claude Code 会话里答「接受」，修订后接受；风险点按复核建议逐条处置，见 ADR 正文。仍留待 owner：5（SDK）、7（各上下文 owner 逐端点确认描述符）。
 
 ### 0141-integrator-sandbox-is-a-deployment-form-of-the-first-party-api-on-synthetic-data.md
 
 > ## 越权风险点（归 owner 复核）
+>
+> 2026-10-19 用户在 Claude Code 会话里答「接受」，修订后接受；风险点按复核建议逐条处置，见 ADR 正文，无留待项。
 
 ### 0142-first-party-webhooks-are-a-product-owned-outbound-channel.md
 
 > ## 越权风险点（归 owner 复核）
+>
+> 2026-10-19 用户在 Claude Code 会话里答「接受」，修订后接受；风险点按复核建议逐条处置，见 ADR 正文。仍留待 owner：1（v1 对外事件目录由各上下文声明）、5（mTLS 与出向 IP 段）、6（1:N 账户下的订阅）、8（客户确认回写用例）。
 
 ### 0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md
 
