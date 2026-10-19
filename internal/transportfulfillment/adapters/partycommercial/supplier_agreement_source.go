@@ -20,7 +20,7 @@ import (
 // agreementOf。正文缺席时那个谓词无从可问，就按壳的生命周期位置分格：
 //
 //   - 已计划生效（PUBLISHED）、已到期、已被替代 → 未生效。三者对这一版的续办相同：换一版此刻生效的。
-//   - 已退役 → 已终止。PC CONTEXT 写供应商协议版本「到期、终止或被替代」三种收尾，版本生命周期上与「终止」
+//   - 已退役 → 已终止。PC CONTEXT 写供应商协议版本「到期、终止或被替代」，版本生命周期上与「终止」
 //     对应的是按明确决定收尾的退役（Retire 要一份决定引用），不是按区间到点的到期。
 //   - 已生效而正文没登 → 未在册。供应商与责任法人都在正文里，没有正文就核不了服务方、也快照不了法人；续办
 //     是回 PC 带正文重放同一版，与「从未发布」同属去 PC 补登。
@@ -44,7 +44,8 @@ func NewSupplierAgreementSource(versions pcports.SupplierAgreementVersionView) (
 
 var _ tfports.SupplierAgreementSource = (*SupplierAgreementSource)(nil)
 
-// CheckSupplierAgreement 按（租户、协议版本）向 PC 点读，再按三项检查的次序译成一格。
+// CheckSupplierAgreement 按（租户、协议版本）向 PC 点读，再按 tfports.SupplierAgreementStanding 所列检查的次序
+// 译成一格。
 func (source *SupplierAgreementSource) CheckSupplierAgreement(
 	ctx context.Context,
 	tenant tfdomain.TenantID,

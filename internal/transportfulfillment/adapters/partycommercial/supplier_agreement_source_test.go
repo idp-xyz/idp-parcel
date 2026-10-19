@@ -131,7 +131,7 @@ func mustCheck(t *testing.T, stub *versionViewStub, provider string, at time.Tim
 	return check
 }
 
-// Covers: 方案 D02-4 三项都过——在册格带采购责任法人（取自协议，不由调用方给）与 PC 一处拼出的「对象/版本」快照引用；
+// Covers: 方案 D02-4 的检查都过——在册格带采购责任法人（取自协议，不由调用方给）与 PC 一处拼出的「对象/版本」快照引用；
 // 租户、对象、版本标签原样交给 PC。
 func TestARegisteredAgreementHandsOverItsLegalEntityAndSnapshot(t *testing.T) {
 	stub := &versionViewStub{read: withBody(t, "supplier-1")}
@@ -152,7 +152,7 @@ func TestARegisteredAgreementHandsOverItsLegalEntityAndSnapshot(t *testing.T) {
 	}
 }
 
-// Covers: 方案 D02-4 第三项——协议在有效期内而供应商不是服务方，答服务方不符并说出协议约定的是谁；不交法人与快照。
+// Covers: 方案 D02-4「协议供应商等于服务提供方」——协议在有效期内而供应商不是服务方，答服务方不符并说出协议约定的是谁；不交法人与快照。
 func TestAnAgreementWithAnotherSupplierIsAProviderMismatch(t *testing.T) {
 	check := mustCheck(t, &versionViewStub{read: withBody(t, "supplier-1")}, "supplier-2", insideAgreement)
 
@@ -167,7 +167,7 @@ func TestAnAgreementWithAnotherSupplierIsAProviderMismatch(t *testing.T) {
 	}
 }
 
-// Covers: 方案 D02-4 第二项——决定时点落在协议区间之外答未生效；次序上先于服务方：区间外的协议即便供应商也不对，
+// Covers: 方案 D02-4「在提交时点 `SupportsProcurementAt`」——决定时点落在协议区间之外答未生效；次序上先于服务方：区间外的协议即便供应商也不对，
 // 答的仍是未生效。
 func TestAnAgreementOutsideItsIntervalIsNotEffectiveBeforeTheProviderIsCompared(t *testing.T) {
 	for name, at := range map[string]time.Time{

@@ -66,8 +66,21 @@ type SupplierAgreementCheck struct {
 
 // SupplierAgreementSource 按（租户、协议版本、服务提供方、决定时点）核一版供应商协议。
 //
-// error 只有两种来历：party-commercial 读不动，或它交回的东西不在词汇表里。两者都不得折成任何一格否定结论——
-// 把读不到答成「未在册」，一次故障就会让登记方去 party-commercial 补一份其实在册的协议。调用方据 error 停在未决。
+// 否定结论只出自 SupplierAgreementStanding 的格；error 不是其中任何一格，也不得被折成任何一格——把读不到答成
+// 「未在册」，一次故障就会让登记方去 party-commercial 补一份其实在册的协议。error 的来历如下，恢复动作各不相同：
+//
+//   - party-commercial 那一侧失败：读不动（连接、超时之类），或点读时发现它自己的数据写坏了（正文挂在已计划生效
+//     的壳上、快照与所问的键不符、正文行不完整）。PC 对这两者交的都是不带哨兵的 error，适配器原样包裹上抛，所以
+//     **调用方在值上分不开它们**：前者重试会好；后者要等 PC 的数据修好，在那之前重试只会原样再撞。
+//   - 适配器包上 ErrUntranslatableAnswer（adapters/partycommercial）：本上下文的入参在 PC 的词汇表里立不起来，或
+//     PC 交回了词汇表之外的东西（所答非所问、正文挂错版本、未知的生命周期位置）。确定性的，重试无益，要修的是
+//     PC 读口或适配器。
+//   - 零决定时点：调用方违约，不带哨兵。SupportsProcurementAt 对零时点恒答否，照问会被译成一格看似真实的未生效，
+//     所以在问 PC 之前就拒。确定性的，要修的是调用方；调用方传自己的提交或登记时刻，就撞不上。
+//
+// 命令面把任一 error 答成未决即可：登记方能做的只有稍后再交，分不分得开不改变它的续办。若有走派发的消费者用本口
+// 落未决哨兵，能用 errors.Is 认出的只有 ErrUntranslatableAnswer，它与零时点都不进名单；PC 那一侧失败进名单时，
+// PC 坏数据会随读不动一起被当成未决反复重试，直到数据修好——要分开，得先由 PC 给坏数据一个哨兵。
 type SupplierAgreementSource interface {
 	CheckSupplierAgreement(
 		ctx context.Context,

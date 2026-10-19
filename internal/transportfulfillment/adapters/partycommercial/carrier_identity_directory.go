@@ -1,9 +1,7 @@
-// Package partycommercial 是 transport-fulfillment 对 party-commercial 参与方身份登记册的消费侧适配器
+// Package partycommercial 是 transport-fulfillment 对 party-commercial 各读口的消费侧适配器
 // （ADR-0025：只有本包可以同时导入两个上下文；只翻译不判断，翻译必须是全函数）。
 //
-// 它只答一件事：某个承运主体身份在 PC 上登了没有。判断值只引用已登记的参与方或运营法人身份，本上下文
-// 不为承运方铸身份（TF CONTEXT Boundaries；ADR-0103 决定六）——所以这里没有任何写口，也不读名称：
-// 名称在册上找不到身份时归「待确认（承运主体身份未登记）」，那是 TF 的判断值，不是本包的答复。
+// 各文件各答一件事，判据写在各自的文件头。
 package partycommercial
 
 import (
@@ -15,6 +13,10 @@ import (
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
+
+// 本文件答某个承运主体身份在 PC 上登了没有。判断值只引用已登记的参与方或运营法人身份，本上下文不为承运方
+// 铸身份（TF CONTEXT Boundaries；ADR-0103 决定六）——所以这里没有任何写口，也不读名称：名称在册上找不到身份时
+// 归「待确认（承运主体身份未登记）」，那是 TF 的判断值，不是本包的答复。
 
 // ErrUntranslatableAnswer 与其余跨上下文适配器的同名哨兵同义：某一侧交出了词汇表之外的内容，是编程错误
 // 不是业务答案。

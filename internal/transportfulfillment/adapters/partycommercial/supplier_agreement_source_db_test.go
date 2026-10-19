@@ -26,7 +26,7 @@ import (
 // 演示种子里的供应商协议经 PC 发布用例落库，再经 PC 点读口与本包适配器核出各格。种子从仓库里的发布批读，不在
 // 测试里抄一份——两份各改各的，测试就会对着一份种子里已经不存在的协议证明它可用。
 
-// 演示租户已发布的两份供应商协议：干线一份由外包段采用，末端一份暂不被任何委托采用（.scratch/demo-chain-gaps/tf-chain-plan.md
+// 本文件核的演示租户供应商协议：干线一份由外包段采用，末端一份暂不被任何委托采用（.scratch/demo-chain-gaps/tf-chain-plan.md
 // 「跨票通则」X1）。
 const (
 	trunkAgreement    = "SYN-SUPPLIER-TRUNK-CN-SG-01"
@@ -118,7 +118,7 @@ func publishSeededAgreement(
 	}
 }
 
-// Covers: 票 demo-chain-gaps/22 完成判据——SYN 两份协议各按自己的供应商在册，交回种子里的责任法人与 PC 拼出的快照；
+// Covers: 票 demo-chain-gaps/22 完成判据——SYN 干线与末端协议各按自己的供应商在册，交回种子里的责任法人与 PC 拼出的快照；
 // 干线协议填末端承运商答服务方不符（票 23 的演示停点）；生效前答未生效；没发布的版本与他租户答未在册。
 func TestTheSyntheticSupplierAgreementsAreCheckedThroughTheRealPointRead(t *testing.T) {
 	pool := pgtest.Pool(t)
