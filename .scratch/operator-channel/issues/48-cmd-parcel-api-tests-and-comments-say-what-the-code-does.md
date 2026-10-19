@@ -1,7 +1,7 @@
 # 48 cmd/parcel-api 测试与注释照实写：隔离形态残名改名、去变更说明、序号引用改引文
 
 Category: chore
-Status: ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-oc48`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-oc48`）上留有4 笔（隔离形态残名、Covers、作业事实装配表、isolatedWriteAdmission 头注），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 4、序 6、序 2 评审遗留；用户授权代决）；分支 `claude-oc48`
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 续做并扩范围（见「裁定补」）：分支 `claude-oc48` 上的四笔先 rebase 到最新 main 并核一遍。此前 ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-oc48`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-oc48`）上留有4 笔（隔离形态残名、Covers、作业事实装配表、isolatedWriteAdmission 头注），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 4、序 6、序 2 评审遗留；用户授权代决）；分支 `claude-oc48`
 Blocked by: 无
 父票：[26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)（票 26 评审遗留的后续）
 出处：票 [15](./15-operation-decision-faces-take-operator-intake.md) Comments「钉 `60244fa6`」那条评审 Standards 非阻断 1–3（cmd 部分）；票 [23](./23-node-operations-isolated-command-intake-retires.md) Comments 评审 Standards 非阻断 3；票 [25](./25-node-reception-carries-parcel-shipment-service-result-markers.md) Comments 评审 Standards 非阻断 2 的同类横扫。
@@ -20,6 +20,11 @@ Blocked by: 无
 
 - 无业务裁定，都是注释、命名与测试表的机械修正。
 - 序号引用那一问由本会话代决：凡 Go 注释以序号指票面条目（「完成判据第N条」「裁定第N条」「做什么第N条」）一律改成引文；UC 应用流程表自带的步骤标号近于符号，可保留。
+
+
+## 裁定补（2026-10-19，会话 idp-parcel-9b 代决）
+
+「序号引用改引文」那一问扩到全仓 Go 注释：凡以序号指票面条目（「裁定第 N 条」「做什么第 N 条」「完成判据第 N 条/第N条」「判断项第 N 条」）的，一律改成符号名或引文——票面条目会增删重排，序号与行号同构（AGENTS.md「改文档」）。理由同本票原裁定；扩范围是因为 tf-face-algebra/09 进 main 时又新添了这一类，评审漏看，横扫一次比逐票补干净。不在此列：ADR 的「决定N」（ADR 接受后不改写，决定编号是稳定的符号）、UC 应用流程步骤标号、外部规范的章节号（如 RFC 第 N 节）。避开另一会话在途的 `cmd/parcel-dispatch`、`internal/visibilityexception`、`internal/settlementaccounting`。
 
 ## 做什么
 
