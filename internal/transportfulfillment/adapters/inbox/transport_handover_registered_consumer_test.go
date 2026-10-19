@@ -130,7 +130,7 @@ func handoverEnvelope(eventID string, payload string) eventing.Envelope {
 const registeredHandoverPayload = `{"tenantId":"SYN-TENANT-01","object":"SYN-PARCEL-01",` +
 	`"scope":"SYN-HANDOVER-SCOPE-01","version":"SYN-HANDOVER-V1"}`
 
-// Covers: AT-TF-198（消费门，ADR-0216 决定三）——入账的那一格提交 inbox，同一封再到不再交处理方；读不回的那一格回滚、
+// Covers: AT-TF-194、AT-TF-196、AT-TF-198（消费门，ADR-0216 决定三）——入账的那一格提交 inbox，同一封再到不再交处理方；读不回的那一格回滚、
 // 错误带未决哨兵，读回之后重投入账；缺陷的那一格回滚、错误带缺陷哨兵而不带未决哨兵。
 func TestTheHandoverDispatchGateSettlesRetriesOrFailsAsTheOrchestrationDisposes(t *testing.T) {
 	t.Run("入账：同一封只处理一次", func(t *testing.T) {

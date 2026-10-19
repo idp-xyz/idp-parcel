@@ -248,7 +248,7 @@ func TestUnreadableDependenciesAreRetried(t *testing.T) {
 	})
 }
 
-// Covers: AT-TF-197（ADR-0216 决定三）——本上下文自己的缺陷不入账也不重投：键过不了自己的构造门、装配缺一条要求缝。
+// Covers: AT-TF-198（ADR-0216 决定三）——本上下文自己的缺陷不入账也不重投：键过不了自己的构造门、装配缺一条要求缝。
 // 一对象同时在两个段里在场是库面不一致，原样上抛，不挑一个。
 func TestOwnDefectsAreNeitherSettledNorRetried(t *testing.T) {
 	t.Run("键过不了构造门", func(t *testing.T) {

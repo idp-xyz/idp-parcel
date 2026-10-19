@@ -235,7 +235,7 @@ func handoverDispatchTaskReference(object string, ordinal int) string {
 	return reference
 }
 
-// Covers: AT-TF-191、AT-TF-195、AT-TF-199（ADR-0216 决定一、三、五）——生产路由表上交接信封扇出两路：VE 投影与 TF 派送
+// Covers: AT-TF-195、AT-TF-199（ADR-0216 决定一、三）——生产路由表上交接信封扇出两路：VE 投影与 TF 派送
 // 发起各记一行 inbox，信封定稿 PUBLISHED。三条要求缝是生产真缝，空库里所有者都答「没有」，派送发起答`要求缺失`入账：
 // 不重投、不形成任务。两路认的事件类型与生产交出的是同一个串——信封是生产交接口真交出的那一封。
 func TestAHandoverIntoADeliverySegmentReachesTrackingAndDispatchThroughTheProductionRoute(t *testing.T) {
@@ -274,7 +274,7 @@ func TestAHandoverIntoADeliverySegmentReachesTrackingAndDispatchThroughTheProduc
 	}
 }
 
-// Covers: AT-TF-191、AT-TF-192（ADR-0216 决定一、二、三）——要求缝都给：交接信封一到形成一项任务，对象恰为该对象，成立
+// Covers: AT-TF-191、AT-TF-192、AT-TF-200（ADR-0216 决定一至四）——要求缝都给：交接信封一到形成一项任务，对象恰为该对象，成立
 // 时间取派发这一拍的时钟；同一封重投不重建；之后经补拍口对同一（段，对象）再打一拍，执行器答`已在册`并交回同一项。
 func TestTheHandoverLaneFormsOneTaskAndNeitherRedeliveryNorARetickRebuildsIt(t *testing.T) {
 	fixture := newHandoverDispatchFixture(t)
