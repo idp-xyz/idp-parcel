@@ -30,35 +30,86 @@ func previewHandler(t *testing.T, fixture *departureGateFixture) *application.Pr
 }
 
 // Covers: AT-TF-227 编排半边——问询交回的读数与随后同参登记的那条出发同格：整格、起讫、停点、逐对象那一格连同关务
-// 判断标识与依据都相同，问关务的问法也逐问相同。覆盖读数的五格与本侧各停点：同一条路径，任何一格都不该分岔。
+// 判断标识与依据都相同，问关务的问法也逐问相同。读数的五格各至少一例、本侧新登记出发会停的各停点各一例：同一条路径，
+// 任何一格都不该分岔。每例另钉住它读出的整格，用例表漏了哪一格由末尾那道核对指名，覆盖面不靠注释自称。
 func TestAPreviewAnswersTheSameReadingAsTheDepartureWithTheSameParameters(t *testing.T) {
-	cases := map[string]func(*departureGateFixture, *application.RecordMovementFactCommand){
-		"段里两件、一件阻断": func(fixture *departureGateFixture, _ *application.RecordMovementFactCommand) {
-			fixture.customs.answers["parcel-2"] = domain.DepartureGateBlocked
+	type arrangement func(*departureGateFixture, *application.RecordMovementFactCommand)
+	cases := map[string]struct {
+		arrange arrangement
+		want    domain.DepartureGateAnswer
+	}{
+		"两件都不受门禁": {
+			arrange: func(*departureGateFixture, *application.RecordMovementFactCommand) {},
+			want:    domain.DepartureGateNotGuarded,
 		},
-		"一件调用失败、一件译不回来": func(fixture *departureGateFixture, _ *application.RecordMovementFactCommand) {
-			fixture.customs.errors["parcel-1"] = true
-			fixture.customs.untranslatable["parcel-2"] = true
+		"两件都放行": {
+			arrange: func(fixture *departureGateFixture, _ *application.RecordMovementFactCommand) {
+				fixture.customs.answers["parcel-1"] = domain.DepartureGateAdmitted
+				fixture.customs.answers["parcel-2"] = domain.DepartureGateAdmitted
+			},
+			want: domain.DepartureGateAdmitted,
 		},
-		"没声明段": func(_ *departureGateFixture, command *application.RecordMovementFactCommand) { command.Segment = "" },
-		"段不在册": func(_ *departureGateFixture, command *application.RecordMovementFactCommand) {
-			command.Segment = "segment-9"
+		"一件关务答未决": {
+			arrange: func(fixture *departureGateFixture, _ *application.RecordMovementFactCommand) {
+				fixture.customs.answers["parcel-2"] = domain.DepartureGateUndecided
+			},
+			want: domain.DepartureGateUndecided,
 		},
-		"段册读不动": func(fixture *departureGateFixture, _ *application.RecordMovementFactCommand) {
-			fixture.segments.findErr = departureGateDown
+		"段里两件、一件阻断": {
+			arrange: func(fixture *departureGateFixture, _ *application.RecordMovementFactCommand) {
+				fixture.customs.answers["parcel-2"] = domain.DepartureGateBlocked
+			},
+			want: domain.DepartureGateBlocked,
 		},
-		"拟出发那一刻段里没有在控对象": func(_ *departureGateFixture, command *application.RecordMovementFactCommand) {
-			command.OccurredAt = movedAtFixture.Add(-2 * time.Hour)
+		"一件调用失败、一件译不回来": {
+			arrange: func(fixture *departureGateFixture, _ *application.RecordMovementFactCommand) {
+				fixture.customs.errors["parcel-1"] = true
+				fixture.customs.untranslatable["parcel-2"] = true
+			},
+			want: domain.DepartureGateUnreadable,
 		},
-		"班次不在册": func(fixture *departureGateFixture, _ *application.RecordMovementFactCommand) {
-			fixture.schedules.registered = false
+		"没声明段": {
+			arrange: func(_ *departureGateFixture, command *application.RecordMovementFactCommand) { command.Segment = "" },
+			want:    domain.DepartureGateUndecided,
+		},
+		"段不在册": {
+			arrange: func(_ *departureGateFixture, command *application.RecordMovementFactCommand) {
+				command.Segment = "segment-9"
+			},
+			want: domain.DepartureGateUndecided,
+		},
+		"段册读不动": {
+			arrange: func(fixture *departureGateFixture, _ *application.RecordMovementFactCommand) {
+				fixture.segments.findErr = departureGateDown
+			},
+			want: domain.DepartureGateUnreadable,
+		},
+		"拟出发那一刻段里没有在控对象": {
+			arrange: func(_ *departureGateFixture, command *application.RecordMovementFactCommand) {
+				command.OccurredAt = movedAtFixture.Add(-2 * time.Hour)
+			},
+			want: domain.DepartureGateUndecided,
+		},
+		"班次不在册": {
+			arrange: func(fixture *departureGateFixture, _ *application.RecordMovementFactCommand) {
+				fixture.schedules.registered = false
+			},
+			want: domain.DepartureGateUndecided,
+		},
+		"班次册读不动": {
+			arrange: func(fixture *departureGateFixture, _ *application.RecordMovementFactCommand) {
+				fixture.schedules.findErr = departureGateDown
+			},
+			want: domain.DepartureGateUnreadable,
 		},
 	}
-	for name, arrange := range cases {
+	covered := map[domain.DepartureGateAnswer]bool{}
+	for name, tc := range cases {
+		covered[tc.want] = true
 		t.Run(name, func(t *testing.T) {
 			fixture := newDepartureGateFixture(t, "parcel-1", "parcel-2")
 			command := departureCommand(t)
-			arrange(fixture, &command)
+			tc.arrange(fixture, &command)
 
 			previewed, err := previewHandler(t, fixture).Preview(t.Context(), previewOf(command))
 			if err != nil {
@@ -70,6 +121,9 @@ func TestAPreviewAnswersTheSameReadingAsTheDepartureWithTheSameParameters(t *tes
 			previewReading, read := previewed.Reading()
 			if !read {
 				t.Fatal("问到了却没交回读数")
+			}
+			if previewReading.Answer() != tc.want {
+				t.Fatalf("问询读出 %s，这一例要的是 %s：用例没走到它声称的那一格", previewReading.Answer(), tc.want)
 			}
 			previewQueries := slices.Clone(fixture.customs.queries)
 
@@ -87,6 +141,14 @@ func TestAPreviewAnswersTheSameReadingAsTheDepartureWithTheSameParameters(t *tes
 				t.Fatalf("问关务的问法不同：\n问询 %+v\n出发 %+v", previewQueries, fixture.customs.queries)
 			}
 		})
+	}
+	for _, answer := range []domain.DepartureGateAnswer{
+		domain.DepartureGateNotGuarded, domain.DepartureGateAdmitted, domain.DepartureGateUndecided,
+		domain.DepartureGateUnreadable, domain.DepartureGateBlocked,
+	} {
+		if !covered[answer] {
+			t.Errorf("用例表里没有一例读出 %s", answer)
+		}
 	}
 }
 
