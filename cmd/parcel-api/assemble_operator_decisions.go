@@ -156,7 +156,7 @@ type operatorRegistryIntakes struct {
 	networkOperationsRead    *networkhttp.OperatorOperationsReadIntake
 	customsOperationsRead    *customshttp.OperatorOperationsReadIntake
 	commercialOperationsRead *commercialhttp.OperatorOperationsReadIntake
-	// 运营查阅面余下各族同一面（票 operator-channel/35）。面单交易与渠道择优决定两口共用委托上下文这一只；委托查阅三口
+	// 运营查阅面余下各族同一面（票 operator-channel/35）。面单交易与渠道择优决定两口共用委托上下文这一只；委托查阅及其子集视图
 	// 不在其中——它们的作用域按客户账户切，操作者信封给不出（票 operator-channel/53）。
 	shipmentOperationsRead   *shipmenthttp.OperatorOperationsReadIntake
 	nodeOperationsRead       *nodeopshttp.OperatorOperationsReadIntake

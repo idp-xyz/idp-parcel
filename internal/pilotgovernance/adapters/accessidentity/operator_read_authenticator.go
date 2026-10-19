@@ -11,20 +11,20 @@ import (
 	governancehttp "go.idp.xyz/idp-parcel/internal/pilotgovernance/adapters/http"
 )
 
-// OperatorMinter 是查阅读认证方对铸造操作者信封的最小依赖，identity.OperatorMinter 满足它。
-type OperatorMinter interface {
+// Minter 是查阅读认证方对铸造操作者信封的最小依赖，identity.OperatorMinter 满足它。
+type Minter interface {
 	MintOperator(ctx context.Context, credential identity.OperatorCredential, request identity.OperatorRequest) (identity.OperatorEnvelope, error)
 }
 
 // OperatorOperationsReadAuthenticator 实现 governancehttp.OperatorOperationsReadAuthenticator：以主数据与运营查阅读能力面铸
 // 信封，不带准入要求——查阅不形成生产事实（ADR-0100 决定四）。
 type OperatorOperationsReadAuthenticator struct {
-	minter OperatorMinter
+	minter Minter
 }
 
 var _ governancehttp.OperatorOperationsReadAuthenticator = (*OperatorOperationsReadAuthenticator)(nil)
 
-func NewOperatorOperationsReadAuthenticator(minter OperatorMinter) (*OperatorOperationsReadAuthenticator, error) {
+func NewOperatorOperationsReadAuthenticator(minter Minter) (*OperatorOperationsReadAuthenticator, error) {
 	if minter == nil {
 		return nil, errors.New("pilot governance accessidentity: operator operations read authenticator needs a minter")
 	}

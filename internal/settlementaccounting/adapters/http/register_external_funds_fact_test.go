@@ -573,7 +573,7 @@ func sameSnapshotShape[Command any](
 }
 
 // Covers: 判据 2——查阅读 Intake 装不进两个命令口：OperatorOperationsReadIntake 不满足任何一个登记命令 Intake 接口，
-// 编译期排除保持（ADR-0085 决定二维持的原判；隔离读放行退场后这条性质改挂操作者查阅读，票 operator-channel/35）。
+// 编译期排除保持（ADR-0085 决定二维持的原判）。
 func TestOperationsReadIntakeCannotServeExternalFundsFactRegistration(t *testing.T) {
 	var intake any = &settlementhttp.OperatorOperationsReadIntake{}
 	if _, ok := intake.(settlementhttp.ExternalFundsFactRegistrationIntake); ok {

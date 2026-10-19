@@ -45,7 +45,7 @@ var swappedCatalogueReadPatterns = []string{
 }
 
 // swappedOperationsReadPatterns 是运营查阅面余下各族（票 operator-channel/35）：面单交易、渠道择优、节点作业、运输履约、
-// 追踪与异常、代收、结算、治理。委托查阅三口不在其中，仍挂隔离读（票 operator-channel/53）。
+// 追踪与异常、代收、结算、治理。委托查阅及其子集视图不在其中，仍挂隔离读（票 operator-channel/53）。
 var swappedOperationsReadPatterns = []string{
 	"/label-transactions",
 	"/channel-selection-decisions",

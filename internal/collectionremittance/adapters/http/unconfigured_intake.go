@@ -6,8 +6,8 @@ import (
 	"net/http"
 )
 
-// ErrAccessChannelNotConfigured 表示当前没有任何已启用的接入渠道:运营查阅接入面的
-// 认证归操作者渠道(ADR-0100),其真 Intake 未就位,装配点上还没有一行真通道 Intake(ADR-0055)。哨兵
+// ErrAccessChannelNotConfigured 表示当前没有任何已启用的接入渠道:运营查阅接入面的认证归操作者渠道(ADR-0100),
+// 发行方参数未设时那一族的 Intake 也交回这一格(ADR-0055)。哨兵
 // 只此一个而不随端点分设:未配置是渠道这一层的状态,按端点分设哨兵会让装配点看起来
 // 能只配一半(判据同 customshttp)。
 //

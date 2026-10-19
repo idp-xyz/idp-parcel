@@ -396,23 +396,3 @@ func TestChannelSelectionDecisionsAnswersSplitByRecoveryAction(t *testing.T) {
 		t.Fatalf("Allow = %q, want GET；本端点只有读", got)
 	}
 }
-
-// Covers: ADR-0078 Decision 二——隔离读放行只交出注入作用域的租户维与页大小，不读请求里的任何授权输入；
-// 冒充头与查询参数都不改变答案。
-func TestIsolatedReadIntakeHandsOutOnlyTheInjectedTenantForChannelSelectionDecisions(t *testing.T) {
-	intake, err := shipmenthttp.NewIsolatedOperationsReadIntake("SYN-SCOPE-1", "SYN-TENANT-01", []string{"SYN-ACCOUNT-01"}, 25)
-	if err != nil {
-		t.Fatalf("构造隔离读 Intake：%v", err)
-	}
-	request := httptest.NewRequest(http.MethodGet, "/channel-selection-decisions?view=tied&tenant=TENANT-9", nil)
-	request.Header.Set("X-Reported-Tenant", "TENANT-9")
-	request.Header.Set("Authorization", "Bearer whatever")
-
-	query, err := intake.IntakeChannelSelectionDecisionQuery(t.Context(), request)
-	if err != nil {
-		t.Fatalf("隔离读 Intake：%v", err)
-	}
-	if query.Tenant.String() != "SYN-TENANT-01" || query.Limit != 25 {
-		t.Fatalf("应只交出注入的租户与页大小：%+v", query)
-	}
-}

@@ -50,7 +50,7 @@ import (
 //
 // 所有 *Views、*Catalog 与 *Rules 参数都是查阅端点的读口：读面不是编排（查阅不触发
 // 判断、派生或披露），生产装配交入各自的真库读适配器；未配置 Intake 仍拒在它们之前，
-// 接入渠道就位前一次也不会被调到。委托查阅三口另有隔离读面准入（ADR-0078，见 isolatedReadIntakes）可显式启用。
+// 接入渠道就位前一次也不会被调到。委托查阅及其子集视图另有隔离读面准入（ADR-0078，见 isolatedReadIntakes）可显式启用。
 func assembleBusinessEndpoints(
 	submission shipmenthttp.SubmissionHandler,
 	withdrawal shipmenthttp.WithdrawalHandler,
@@ -231,7 +231,7 @@ func assembleBusinessEndpoints(
 	if operatorRegistries.governanceOperationsRead != nil {
 		governanceRegistryIntake = operatorRegistries.governanceOperationsRead
 	}
-	// 委托查阅三口仍走隔离读：它们的读口按可见客户账户切，操作者信封只给得出租户（票 operator-channel/53）。
+	// 委托查阅及其子集视图仍走隔离读：它们的读口按可见客户账户切，操作者信封只给得出租户（票 operator-channel/53）。
 	if isolatedRead != nil {
 		shipmentViewsIntake = isolatedRead.shipmentRequestViews
 	}
@@ -420,8 +420,8 @@ func assembleBusinessEndpoints(
 		// 不为事实册另立第二种准入形（裁决在各端点构造函数注释）。
 		{Pattern: "/pricing-evaluations", Handler: pricinghttp.NewQueryEvaluationsEndpoint(pricingCatalogueIntake, pricingEvaluations)},
 		// 价卡与序列登记写面（ADR-0085，票 admin-write-faces/01）：登记是命令行，挂操作者
-		// 渠道的登记册 Intake（ADR-0100 决定四，票 operator-channel/04）——写准入不另立形，隔离读准入
-		// （ADR-0078）只经查阅行的 Intake 变量换值，写行换不了。两类登记各立端点，
+		// 渠道的登记册 Intake（ADR-0100 决定四，票 operator-channel/04）——写准入不另立形，查阅行的 Intake 变量换不了
+		// 写行。两类登记各立端点，
 		// 与其 CLI 命令一一对应（裁决在端点构造函数注释）；登记 CLI 保留为受控批量口，
 		// 两口消费同一登记用例，答案代数一致。
 		{Pattern: "/pricing-price-card-registrations", Handler: pricinghttp.NewRegisterPriceCardEndpoint(operatorRegistries.pricing, priceCardRegistration)},
@@ -589,7 +589,7 @@ func assembleBusinessEndpoints(
 		// 运营操作者面发布路径四口（ADR-0126 Decision 三、四；票 admin-write-faces/08）：预览 + 载体录入 / 批准 / 发布。
 		// 四口挂操作者渠道的登记册 Intake（同一 ADR 决定五，票 operator-channel/06）：租户、录入者与批准者（主体引用 +
 		// 授予集）都取认证出的身份。预览不落库，但拟录的壳要信封里的租户才立得住，所以与三个命令口同一个 Intake、不走
-		// 查阅行的 Intake 变量——隔离读放行装不进它（编译期，同 PP 预览口）。**批准那一口比其余更不能松**：批准者是审批
+		// 查阅行的 Intake 变量。**批准那一口比其余更不能松**：批准者是审批
 		// 职责规则的一半，任何采信自报身份的 Intake 都等于把那道门拆了。发布口不并进 `/commercial-publications`：那一口
 		// 收受控批文（声明摘要 + 批准三格），这一口收载体引用，两口消费的用例不同。
 		{Pattern: "/commercial-publication-previews", Handler: commercialhttp.NewPreviewCommercialPublicationEndpoint(operatorRegistries.commercial, commercialPublicationPreview)},
@@ -638,7 +638,7 @@ func assembleBusinessEndpoints(
 		{Pattern: "/visibility-catalogue-disclosure-policy-registrations", Handler: visibilityhttp.NewRegisterDisclosurePolicyEndpoint(operatorRegistries.visibility, disclosurePolicyRegistration)},
 		// 异常披露规则（0023）与冲突信号规则（0025）两册写面（票 ve-disclosure-policy-view/02
 		// 步二，口径「同族一致」）：路径种类词随读口 kind 原词 EXCEPTION_DISCLOSURE_RULE /
-		// CONFLICT_SIGNAL_RULE 变形，写准入同上一律字面量 UnconfiguredIntake{}。
+		// CONFLICT_SIGNAL_RULE 变形，写准入同上，挂操作者渠道的登记册 Intake。
 		{Pattern: "/visibility-catalogue-exception-disclosure-rule-registrations", Handler: visibilityhttp.NewRegisterExceptionDisclosureRulesEndpoint(operatorRegistries.visibility, exceptionDisclosureRulesRegistration)},
 		{Pattern: "/visibility-catalogue-conflict-signal-rule-registrations", Handler: visibilityhttp.NewRegisterConflictSignalRuleEndpoint(operatorRegistries.visibility, conflictSignalRuleRegistration)},
 		// VE 案件侧三页（票 admin-skeleton-closure-batch/06）：分诊两册、案件单册、

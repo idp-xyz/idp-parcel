@@ -35,10 +35,10 @@ type CatalogueQuery struct {
 // CatalogueQueryIntake 把一次已认证的运营查阅请求翻译成查询。
 //
 // 它是接口而非解析代码：请求方身份与租户必须同时核对，运营接入面的认证归
-// 操作者渠道（ADR-0100），其真 Intake 未就位；采信自报租户会穿透 ADR-0003 的隔离边界（ADR-0077 Decision
-// 三）。未决期间本包不带任何采信实现，包括「开发用」的采信头部版本。
+// 操作者渠道（ADR-0100），真实现是 OperatorOperationsReadIntake；采信自报租户会穿透 ADR-0003 的隔离边界（ADR-0077
+// Decision 三）。本包不带任何采信实现，包括「开发用」的采信头部版本。
 //
-// 四个端点共用一个 Intake 类型：它们是同一上下文同一作用域形状的运营查阅，分设只会
+// 各端点共用一个 Intake 类型：它们是同一上下文同一作用域形状的运营查阅，分设只会
 // 让装配点看起来能只配一半（判据同 pricinghttp 同名接口）。
 type CatalogueQueryIntake interface {
 	IntakeCatalogueQuery(ctx context.Context, request *http.Request) (CatalogueQuery, error)

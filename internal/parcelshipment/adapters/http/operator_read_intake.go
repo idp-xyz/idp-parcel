@@ -16,7 +16,7 @@ type OperatorOperationsReadAuthenticator interface {
 }
 
 // OperatorOperationsReadIntake 是操作者渠道在面单交易与渠道择优决定两口的 Intake（ADR-0100 决定四）。两口的作用域
-// 只有租户一维（ADR-0084 决定七），信封给得出。委托查阅三口刻意不实现：它们的读口按可见客户账户切，操作者信封只有
+// 只有租户一维（ADR-0084 决定七），信封给得出。委托查阅及其子集视图刻意不实现：它们的读口按可见客户账户切，操作者信封只有
 // 租户，拿一组账户去凑等于造一个作用域（票 operator-channel/53）。
 type OperatorOperationsReadIntake struct {
 	authenticator OperatorOperationsReadAuthenticator

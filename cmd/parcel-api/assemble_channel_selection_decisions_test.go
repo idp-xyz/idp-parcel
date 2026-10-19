@@ -10,6 +10,7 @@ import (
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
+	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	shipmentdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
@@ -65,12 +66,20 @@ func TestTheWiredChannelSelectionDecisionReadAnswersHonestlyAgainstARealDatabase
 		}
 	}
 
-	admitted, err := shipmenthttp.NewIsolatedOperationsReadIntake(
-		isolatedReadScopeReference, tenant, []string{isolatedReadCustomerAccount}, isolatedReadLimit)
+	reader2, err := buildOperatorMinter(acceptingVerifier{}, tenantOperationsReaderRegister{tenant: tenant}, admissionScopeUnset())
 	if err != nil {
-		t.Fatalf("构造隔离读 Intake：%v", err)
+		t.Fatalf("构造查阅读铸造器：%v", err)
 	}
-	endpoint := shipmenthttp.NewQueryChannelSelectionDecisionsEndpoint(admitted, reader)
+	reads, err := buildOperatorRegistryIntakes(reader2)
+	if err != nil {
+		t.Fatalf("构造查阅读 Intake：%v", err)
+	}
+	query := shipmenthttp.NewQueryChannelSelectionDecisionsEndpoint(reads.shipmentOperationsRead, reader)
+	// 查阅员出示令牌，租户取自信封（册上把这个操作者绑在本用例的租户上）。
+	endpoint := http.HandlerFunc(func(response http.ResponseWriter, request *http.Request) {
+		request.Header.Set("Authorization", "Bearer "+presentedOperatorToken)
+		query.ServeHTTP(response, request)
+	})
 
 	listed := serveChannelSelectionDecisions(t, endpoint, "/channel-selection-decisions?view=tied")
 	if listed.Code != http.StatusOK {
@@ -197,4 +206,28 @@ func channelSelectionDecision(
 		t.Fatalf("形成决定 %s：%v", id, err)
 	}
 	return decision
+}
+
+// tenantOperationsReaderRegister 同 operationsReaderRegister，只是把操作者绑在给定租户上：本文件的夹具落在自己的租户下。
+type tenantOperationsReaderRegister struct{ tenant string }
+
+func (register tenantOperationsReaderRegister) FindOperator(_ context.Context, subject accessidentity.OperatorSubject) (accessidentity.OperatorStanding, bool, error) {
+	binding, err := accessidentity.NewOperatorBinding(subject, register.tenant, "SYN-BASIS-BINDING")
+	if err != nil {
+		return accessidentity.OperatorStanding{}, false, err
+	}
+	interval, err := accessidentity.NewEffectiveInterval(time.Now().Add(-time.Hour), time.Time{})
+	if err != nil {
+		return accessidentity.OperatorStanding{}, false, err
+	}
+	grant, err := accessidentity.NewOperatorGrant(register.tenant, "SYN-GRANT-READ", subject, accessidentity.CapabilityMasterDataAndOperationsRead, interval, "SYN-BASIS-GRANT")
+	if err != nil {
+		return accessidentity.OperatorStanding{}, false, err
+	}
+	recorded, err := accessidentity.NewRecordedGrant(grant, nil)
+	if err != nil {
+		return accessidentity.OperatorStanding{}, false, err
+	}
+	standing, err := accessidentity.NewOperatorStanding(binding, []accessidentity.RecordedGrant{recorded})
+	return standing, err == nil, err
 }

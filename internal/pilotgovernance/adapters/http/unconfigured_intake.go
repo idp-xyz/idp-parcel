@@ -6,9 +6,8 @@ import (
 	"net/http"
 )
 
-// ErrAccessChannelNotConfigured 表示当前没有任何已启用的接入渠道：运营接入认证属
-// 操作者渠道（ADR-0100），其真 Intake 未就位，装配点上还没有一行真渠道 Intake
-// （ADR-0055、ADR-0077 Decision 三）。
+// ErrAccessChannelNotConfigured 表示当前没有任何已启用的接入渠道：运营接入认证属操作者渠道（ADR-0100），发行方
+// 参数未设时那一族的 Intake 也交回这一格（ADR-0055、ADR-0077 Decision 三）。
 //
 // 恢复动作判据同 ADR-0029：这一格要接入方去提供并配置渠道参数，改请求或重试都不会
 // 好。本包据以回 403 + ACCESS_CHANNEL_NOT_CONFIGURED；折进 404 会与「产品没有这个

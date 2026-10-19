@@ -15,7 +15,7 @@ type OperatorOperationsReadAuthenticator interface {
 	AuthenticateOperationsRead(ctx context.Context, bearerToken string) (domain.TenantID, error)
 }
 
-// OperatorOperationsReadIntake 是操作者渠道在结算与核算四页的 Intake（ADR-0100 决定四）。查阅不登记、不编辑，不形成生产事实，
+// OperatorOperationsReadIntake 是操作者渠道在结算与核算各页的 Intake（ADR-0100 决定四）。查阅不登记、不编辑，不形成生产事实，
 // 所以不判准入范围。
 type OperatorOperationsReadIntake struct {
 	authenticator OperatorOperationsReadAuthenticator

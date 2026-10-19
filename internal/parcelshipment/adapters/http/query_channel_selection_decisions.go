@@ -32,8 +32,8 @@ type ChannelSelectionDecisionQuery struct {
 }
 
 // ChannelSelectionDecisionQueryIntake 把一次已认证的运营查阅请求翻译成查询。它是接口而非解析代码，理由同本包
-// 其余 Intake：作用域整组只能来自认证与授权结果（操作者渠道 ADR-0100，真 Intake 未就位），采信自报租户会穿透 ADR-0003 的隔离
-// 边界。未决期间本包不带任何采信实现，包括「开发用」的采信头部版本。
+// 其余 Intake：作用域整组只能来自认证与授权结果（操作者渠道 ADR-0100，真实现是 OperatorOperationsReadIntake），采信自报
+// 租户会穿透 ADR-0003 的隔离边界。本包不带任何采信实现，包括「开发用」的采信头部版本。
 type ChannelSelectionDecisionQueryIntake interface {
 	IntakeChannelSelectionDecisionQuery(ctx context.Context, request *http.Request) (ChannelSelectionDecisionQuery, error)
 }
@@ -56,21 +56,12 @@ type ChannelSelectionDecisionsReader interface {
 // 编译期锁缝：读口形状与端口保持一致——本适配器不新造查询语义。
 var _ ChannelSelectionDecisionsReader = ports.ChannelSelectionDecisionRead(nil)
 
-// 本端点的两格准入实现。未配置一格同本包其余 Intake：不读请求，只答未配置。隔离读放行一格只交出注入作用域的
-// 租户维与页大小（判据同 IntakeLabelTransactionQuery：少的那一维是本册压根没有的那一维，不是被丢掉的过滤条件）。
-var (
-	_ ChannelSelectionDecisionQueryIntake = UnconfiguredIntake{}
-	_ ChannelSelectionDecisionQueryIntake = IsolatedOperationsReadIntake{}
-)
+// 未配置一格同本包其余 Intake：不读请求，只答未配置。真实现是 OperatorOperationsReadIntake。
+var _ ChannelSelectionDecisionQueryIntake = UnconfiguredIntake{}
 
 // IntakeChannelSelectionDecisionQuery 不读请求（参数匿名）：渠道未配置就无从铸造作用域。
 func (UnconfiguredIntake) IntakeChannelSelectionDecisionQuery(context.Context, *http.Request) (ChannelSelectionDecisionQuery, error) {
 	return ChannelSelectionDecisionQuery{}, ErrAccessChannelNotConfigured
-}
-
-// IntakeChannelSelectionDecisionQuery 不读请求（参数匿名）：作用域整组来自注入，答复与请求内容及自报身份无关。
-func (intake IsolatedOperationsReadIntake) IntakeChannelSelectionDecisionQuery(context.Context, *http.Request) (ChannelSelectionDecisionQuery, error) {
-	return ChannelSelectionDecisionQuery{Tenant: intake.scope.TenantID(), Limit: intake.limit}, nil
 }
 
 // 业务结果的封闭集合。没有冲突仍是 LISTED：空列表是「该租户此刻没有等人工裁决的择优」这个如实答案，与

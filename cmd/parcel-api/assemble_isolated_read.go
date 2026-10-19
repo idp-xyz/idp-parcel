@@ -7,7 +7,7 @@ import (
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 )
 
-// isolatedReadTenantEnv 是隔离读面准入（ADR-0078）的唯一显式输入：未设即全拦，设了
+// isolatedReadTenantEnv 是隔离读面准入（ADR-0078）的唯一显式输入：未设即委托查阅一族未配置即拒，设了
 // 只换委托查阅那一只 Intake 变量。按环境切换装配只此一处、只此一维（ADR-0078 Decision 四），
 // 不得据此再添 demo/mode 类开关。
 const isolatedReadTenantEnv = "IDP_PARCEL_ISOLATED_READ_TENANT"
@@ -17,7 +17,7 @@ const isolatedReadTenantEnv = "IDP_PARCEL_ISOLATED_READ_TENANT"
 // 这个开关。横线归拼接处（标识前缀门禁），判定时拼成 `SYN-`。
 const syntheticIdentifierPrefix = "SYN"
 
-// 注入给运营查阅作用域的合成常量。作用域引用是授权结果的审计引用，不参与行过滤，
+// 注入给委托查阅作用域的合成常量。作用域引用是授权结果的审计引用，不参与行过滤，
 // 值只需自证合成；页大小对演示种子的量级绰绰有余，改它不需要动 ADR。
 const (
 	isolatedReadScopeReference = "SYN-SCOPE-ISOLATED-READ"
@@ -29,8 +29,7 @@ const (
 // 扩账户在这里加，不另设输入。
 const isolatedReadCustomerAccount = "SYN-ACCOUNT-01"
 
-// isolatedReadIntakes 携带 ADR-0078 放行面今天仍在的那一只注入式 Intake：委托查阅三口共用的那个变量。运营查阅
-// 其余各族已换操作者查阅读、放行同笔撤下（ADR-0150 决定三；票 operator-channel/05、35）；委托查阅的读口按可见客户
+// isolatedReadIntakes 携带 ADR-0078 放行面的注入式 Intake：委托查阅及其子集视图共用的那个变量。它们的读口按可见客户
 // 账户切，操作者信封给不出，换口与开关整体退场归票 operator-channel/53。nil 指针表示未启用。
 type isolatedReadIntakes struct {
 	shipmentRequestViews shipmenthttp.ShipmentRequestViewsIntake
@@ -38,7 +37,7 @@ type isolatedReadIntakes struct {
 
 // buildIsolatedReadIntakes 解析隔离读面准入的显式输入（ADR-0078 Decision 三）。
 //
-// 三态：未设 → (nil, nil)，委托查阅三口未配置即拒；设了但不带合成前缀 → 报错，进程启动即拒——静默回落会让配置错误
+// 三态：未设 → (nil, nil)，委托查阅及其子集视图未配置即拒；设了但不带合成前缀 → 报错，进程启动即拒——静默回落会让配置错误
 // 与「刻意拦着」两态可观察签名相同，那正是「默认值不出声」病；设了且合规 → 交回注入式 Intake，启动日志由调用方写。
 func buildIsolatedReadIntakes(getenv func(string) string) (*isolatedReadIntakes, error) {
 	tenant := getenv(isolatedReadTenantEnv)

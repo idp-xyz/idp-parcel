@@ -13,7 +13,7 @@
 | 演示库 | `postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable` | 本机隔离库；**任何一步都不得指向生产库** |
 | 种子 | `scripts/demo-seeds/seed.sh` | 合成 `SYN-` 主数据，四条登记 CLI 灌入；复灌用 `--reset` |
 | 演示发行方 | `scripts/demo-seeds/operator-channel/compose.yaml` | Dex；`docker compose -f … up -d --wait`，用法见 `scripts/demo-seeds/README.md`「操作者渠道」一节 |
-| 后端 | `cmd/parcel-api` | 运营查阅各口走操作者渠道：发行方三件加治理自授权，请求带配置员令牌；委托查阅三口另需 `IDP_PARCEL_ISOLATED_READ_TENANT=SYN-TENANT-01`（票 operator-channel/53 之前）；要演示委托提交另加 `IDP_PARCEL_ISOLATED_WRITE_TENANT`，同值（ADR-0091） |
+| 后端 | `cmd/parcel-api` | 运营查阅各口走操作者渠道：发行方三件加治理自授权，请求带配置员令牌；委托查阅及其子集视图另需 `IDP_PARCEL_ISOLATED_READ_TENANT=SYN-TENANT-01`（票 operator-channel/53 之前）；要演示委托提交另加 `IDP_PARCEL_ISOLATED_WRITE_TENANT`，同值（ADR-0091） |
 | 管理台 | `apps/admin-web` | dev 服务器**从 WSL 起**（本机 `node_modules` 是 WSL 侧 pnpm 装的 POSIX 链接农场，Windows 进程解析不到属预期），用 `PARCEL_API_TARGET` 指向后端；原样命令见「取证」页面层一节 |
 
 起后端（本机 8080 被 Windows 服务占用，换端口，见 admin-web README 的暗礁一节）：
@@ -26,7 +26,7 @@ $env:IDP_PARCEL_OPERATOR_OIDC_ISSUER='http://127.0.0.1:5556/dex'
 $env:IDP_PARCEL_OPERATOR_OIDC_JWKS_URL='http://127.0.0.1:5556/dex/keys'
 $env:IDP_PARCEL_OPERATOR_OIDC_AUDIENCE='idp-parcel-admin-web'
 $env:IDP_PARCEL_GOVERNANCE_SELF_AUTHORITY='SYN-AUTH/idp-parcel-pilot'
-# 委托查阅三口仍走隔离读（票 operator-channel/53 之前）
+# 委托查阅及其子集视图仍走隔离读（票 operator-channel/53 之前）
 $env:IDP_PARCEL_ISOLATED_READ_TENANT='SYN-TENANT-01'
 # 要演示委托提交才需要下面这行；只看主数据各页时不设它（ADR-0091，两值必须相同）
 $env:IDP_PARCEL_ISOLATED_WRITE_TENANT='SYN-TENANT-01'
@@ -40,7 +40,7 @@ TOKEN=$(./scripts/demo-seeds/operator-channel/operator-token.sh syn-operator-con
 curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:19080/network-catalog?family=node
 ```
 
-启动日志必须出现这几行，否则对应各页会是`未配置`态：
+启动日志应出现这几行。缺发行方那一行，运营查阅与运营决定各页答`未配置`；缺治理自授权那一行，查阅各页照常，运营决定各口答 `OUTSIDE_ADMISSION_SCOPE`；缺隔离读那一行，委托查阅一族答`未配置`：
 
 ```json
 {"level":"INFO","msg":"Operator channel issuer configured (ADR-0100): operator tokens verified against the issuer's JWKS"}
@@ -48,7 +48,7 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:19080/network-catalog
 {"level":"INFO","msg":"Isolated read admission enabled (ADR-0078): shipment request views answer with injected synthetic scope","tenant":"SYN-TENANT-01"}
 ```
 
-放行必须出声是 [ADR-0078](../adr/0078-isolated-environment-operations-reads-admit-by-assembly-injection.md) 的要求，不是日志噪音：隔离读面把委托查阅三口从`未配置`切成可答，这件事要在事后可查。设了写开关时另有一行 ADR-0091 的同款声明，带 `selfAuthority`。不带令牌打运营查阅各口答 `401 OPERATOR_CREDENTIAL_REJECTED`，持令牌但授予不足答 `403 OPERATOR_NOT_GRANTED`。
+放行必须出声是 [ADR-0078](../adr/0078-isolated-environment-operations-reads-admit-by-assembly-injection.md) 的要求，不是日志噪音：隔离读面把委托查阅及其子集视图从`未配置`切成可答，这件事要在事后可查。设了写开关时另有一行 ADR-0091 的同款声明，带 `selfAuthority`。不带令牌打运营查阅各口答 `401 OPERATOR_CREDENTIAL_REJECTED`，持令牌但授予不足答 `403 OPERATOR_NOT_GRANTED`。
 
 ### 起 dispatch（只在演示委托提交时需要）
 
@@ -169,13 +169,14 @@ go run ./cmd/parcel-dispatch
 
 | 环境变量 | 结果 |
 |---|---|
-| 不设 `IDP_PARCEL_ISOLATED_READ_TENANT` | **全部**端点答 `403`，包括第 1–4 步走过的那些 |
-| `IDP_PARCEL_ISOLATED_READ_TENANT=SYN-TENANT-01` | 运营查阅端点答 `200`，其余仍 `403`——**含提交口** |
+| 不设发行方三件 | 运营查阅与运营决定各口答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`，包括第 1–4 步走过的那些 |
+| 设发行方三件、请求不带令牌 | 运营查阅各口答 `401 OPERATOR_CREDENTIAL_REJECTED`；带配置员令牌才答 `200` |
+| `IDP_PARCEL_ISOLATED_READ_TENANT=SYN-TENANT-01` | 只有委托查阅及其子集视图不带令牌也答 `200`，其余照上两行——**提交口仍 `403`** |
 | 再加 `IDP_PARCEL_ISOLATED_WRITE_TENANT=SYN-TENANT-01` | 提交口走到编排，其余命令面仍 `403` |
 | 任一开关取 `TENANT-PROD-1`（无 `SYN-` 前缀） | **进程启动即拒**，带原因退出，不静默回落 |
 | 两开关取不同的 `SYN-` 租户 | **进程启动即拒**，报文同时点名两个开关 |
 
-第二、三行挨着看是这套门禁分级的证据：读开关开到底也开不了写行，那是 [ADR-0091](../adr/0091-isolated-form-extends-to-the-write-path-by-graded-switches.md) 把两个开关分设的全部理由——合一的话，今天所有设了读开关的环境会在升级那一刻静默获得写准入。
+读开关与写开关那两行挨着看是这套门禁分级的证据：读开关开到底也开不了写行，那是 [ADR-0091](../adr/0091-isolated-form-extends-to-the-write-path-by-graded-switches.md) 把两个开关分设的全部理由——合一的话，今天所有设了读开关的环境会在升级那一刻静默获得写准入。
 
 后两条是重点：静默回落会让「配置错了」与「刻意拦着」两态的可观察签名变成同一个，那正是 ADR-0078 要避免的「默认值不出声」病。演示时把它们留到最后，比前几条更能说明这套门禁不是摆设。
 
@@ -190,7 +191,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 
 ## 取证
 
-**2026-10-18 起（票 operator-channel/35）**：运营查阅各口挂操作者查阅读。下表的 `200` 今天只在带配置员令牌时成立；只设隔离读开关、不带令牌时，除委托查阅三口外全答 `403`（目录四族那一半 2026-10-16 在 `c68e4342` 上重走已实测）。下表锚在 `627d339`，保留为当时的取证。
+**2026-10-18 起（票 operator-channel/35）**：运营查阅各口挂操作者查阅读。下表的 `200` 今天只在带配置员令牌时成立；只设隔离读开关、不带令牌时，除委托查阅及其子集视图外全答 `403`（目录四族那一半 2026-10-16 在 `c68e4342` 上重走已实测）。下表锚在 `627d339`，保留为当时的取证。
 
 以下断言实测于 `627d339`，演示库为本机 `idp-parcel-postgres-gate`（`postgres:16.14`，`127.0.0.1:55432`），种子为票 `master-data-wiring/08` 的合成包。行数写在这里是因为**数本身就是论点**——「这一格有数据」与「这一格是空的」的分界正是动线第 5 步要讲的东西；它们锚在上述 SHA 与那一份种子上，换一份种子就要重取。
 
