@@ -18,6 +18,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
+	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
@@ -310,10 +311,9 @@ func (fixture *submitFlowFixture) submitCommand(
 
 // submittedFlowEventID 与适配器的认领公式同形:来源身份四维加类型段。
 func submittedFlowEventID(identity domain.SourceIdentity) string {
-	return identity.TenantID().String() + "/" +
-		identity.CustomerAccountID().String() + "/" +
-		identity.Source().String() + "/" +
-		identity.RequestKey().String() + "/shipment-request-submitted"
+	return string(outboxintent.FingerprintEventID("shipment-request-submitted",
+		identity.TenantID().String(), identity.CustomerAccountID().String(),
+		identity.Source().String(), identity.RequestKey().String()))
 }
 
 const submittedFlowEventType = "parcel-shipment.shipment-request.submitted"
