@@ -141,5 +141,5 @@ Date: 2026-10-19
 
 越权风险点（续上文编号）：
 
-29. **后两段的班期也是凑的，且零余量咬合**（演示租户；NR owner 知会）。排法只写在上面指的 README 那一行。没有余量：参考配置或租户修订改了处理时长、截单或缓冲，就会有提交时刻无声落空；守卫用例归票 [demo-chain-gaps/108](../../.scratch/demo-chain-gaps/issues/108-demo-transport-seeds-have-no-guard-for-three-leg-preparation-coverage.md)，落地之前没有用例先红。
+29. **后两段的班期也是凑的，且零余量咬合**（演示租户；NR owner 知会）。排法只写在上面指的 README 那一行。没有余量：参考配置或租户修订改了处理时长、截单或缓冲，就会有提交时刻无声落空；守卫用例归票 [demo-chain-gaps/108](../../.scratch/demo-chain-gaps/issues/110-demo-transport-seeds-have-no-guard-for-three-leg-preparation-coverage.md)，落地之前没有用例先红。
 30. **准备选中的班与演示订舱的班不同**（TF owner）。怎样不同只写在[演示动线](../design/synthetic-demo-journey-script.md)第 5 步票 98 补记「三段运输准备都有一班」那一条；这与风险点 23「准备不替运营登班次」同源，不是不一致。

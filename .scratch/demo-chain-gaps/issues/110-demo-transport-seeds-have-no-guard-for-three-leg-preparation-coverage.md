@@ -1,4 +1,4 @@
-# 108 演示班期「任何提交时刻三段都有一班可准备」没有守卫用例，日历或班期一改就无声落空
+# 110 演示班期「任何提交时刻三段都有一班可准备」没有守卫用例，日历或班期一改就无声落空
 
 Category: enhancement
 Status: needs-triage——2026-10-19 Claude Code 子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权），出自 [98](./98-demo-walk-doc-and-seed-corrections-from-the-8197fa2f-walk.md) 的隔离评审。

@@ -242,7 +242,7 @@ go run ./cmd/parcel-dispatch
 >    "segmentServiceAction":"LINEHAUL","releasingNode":"SYN-NODE-SHA-HUB","onwardNode":"SYN-NODE-SZX-GATE"}
 >   ```
 >
-> - **装载分配的重量行写整数**。上面票 21 补记那份载荷里，`quantity` 只收整数，`quantityFromMembers` 只许落在件数池那一行。演示包裹申报 1.50 KG，重量行要声明一个整数（下面实走写 2）；这是当前机制的形状，不是产品规则，对不齐的那一格归票 [107](../../.scratch/demo-chain-gaps/issues/107-capacity-quantities-are-whole-numbers-while-preparation-demand-is-decimal.md)。写 `1.5` 答 `400 MALFORMED_REQUEST`；重量行写 `quantityFromMembers` 答 `200 INPUT_NOT_ACCEPTED`，不指名原因。
+> - **装载分配的重量行写整数**。上面票 21 补记那份载荷里，`quantity` 只收整数，`quantityFromMembers` 只许落在件数池那一行。演示包裹申报 1.50 KG，重量行要声明一个整数（下面实走写 2）；这是当前机制的形状，不是产品规则，对不齐的那一格归票 [107](../../.scratch/demo-chain-gaps/issues/109-capacity-quantities-are-whole-numbers-while-preparation-demand-is-decimal.md)。写 `1.5` 答 `400 MALFORMED_REQUEST`；重量行写 `quantityFromMembers` 答 `200 INPUT_NOT_ACCEPTED`，不指名原因。
 > - **三段运输准备都有一班**。种子另登了深圳→新加坡快班与新加坡枢纽→末端穿梭，取值与为什么这样排只写在种子 README 组成表 `data/transport/07`–`23` 那一行。上面票 18 补记里「后两段……答 `NO_CURRENT_OPPORTUNITY`」自此读作：不论提交落在哪一刻，三段都答 `OPPORTUNITY_PREPARED`。后两段选中的多半是评估时物化的快班或穿梭（候选 `version` 为 0）。干线订舱照旧订在种子显式登记的 `SYN-SCHED-SZX-SIN-DAILY/2026-10-21` 上：准备选中哪一班，不替运营决定订哪一班。
 > - **集成客户端发行方**。共享那只答 `invalid_client` 时，不要重建它，另起一只私有的。做法只写在种子 README「集成客户端渠道」一节「另起一只私有的」那一条，这里不复述。
 >

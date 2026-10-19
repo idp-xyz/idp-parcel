@@ -1,4 +1,4 @@
-# 107 容量需求、预占与装载分配量只收整数，运输准备按申报取的需求量却是小数，两边对不齐
+# 109 容量需求、预占与装载分配量只收整数，运输准备按申报取的需求量却是小数，两边对不齐
 
 Category: bug
 Status: needs-triage——2026-10-19 Claude Code 子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权），出自 [98](./98-demo-walk-doc-and-seed-corrections-from-the-8197fa2f-walk.md) 的隔离评审。
