@@ -108,7 +108,7 @@ func adoptionBody(segment, commission, provider string) string {
 	return `{"segment": "` + segment + `", "commission": "` + commission + `", "provider": "` + provider + `"}`
 }
 
-// Covers: `AT-TF-181`、`AT-TF-182` 真库面，票 demo-chain-gaps/25 演示判据（S）——
+// Covers: `AT-TF-181`、`AT-TF-182`、`AT-TF-184` 真库面，票 demo-chain-gaps/25 演示判据（S）——
 //   - 演示：干线委托提交后，用现有交接口在 SZX 立干线段，采用干线委托答 201，委托行的开始依据是那一次交接、开始时刻是交接
 //     时刻，采用行一行；再取消委托答 200 TRANSPORT_ALREADY_STARTED，委托行没有取消时刻。
 //   - 另一份未开始的委托可以取消，答 201；取消之后拿它来采用答 200 COMMISSION_NOT_ADOPTABLE，整笔回滚、不多一行采用。
@@ -189,7 +189,7 @@ func TestTheWiredAdoptionFaceStartsTheCommissionOfASegmentEstablishedByHandover(
 	}
 }
 
-// Covers: 采用口没有持有采用授予的操作者进不来——只持有委托提交与取消委托的人答 403 OPERATOR_NOT_GRANTED（ADR-0202 决定一
+// Covers: `AT-TF-188` 授予那一半——采用口没有持有采用授予的操作者进不来——只持有委托提交与取消委托的人答 403 OPERATOR_NOT_GRANTED（ADR-0202 决定一
 // 「授予的粒度等于权力的粒度」），不落任何行。
 func TestTheWiredAdoptionFaceRefusesAnOperatorWithoutTheAdoptionGrant(t *testing.T) {
 	pool := pgtest.Pool(t)
