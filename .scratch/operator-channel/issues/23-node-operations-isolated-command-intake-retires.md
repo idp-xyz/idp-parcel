@@ -50,3 +50,4 @@ Blocked by: 无
     (4) 删 `IntakeReception` 时，把「留空的后果照实说」那句也删了，测试失败消息还改写成把空的 `ServiceMarkers` 当作正确。已由 `0214a62a`（票 25）修掉。
   - **无发现**：两条完成判据都成立——原用例逐格有对应、坏报文表逐字一致、全仓无引用、本包与 `cmd/parcel-api` 测试绿；译装挪到新文件后与原文逐字节一致；门里节点作业那一格（字段、访问器、构造、合成节点常量）删干净了，两份放行名单只剩 `/shipment-requests`；做法与 TF 票 22 一致。
   - **结论**：两轴 0 阻断，不立修复票。Spec 那条与 Standards (1)–(3) 在 main `4dd937eb` 上仍在。
+  - **处置（2026-10-19，票 [48](./48-cmd-parcel-api-tests-and-comments-say-what-the-code-does.md) 作者子代理，分支 `claude-oc48`，待评审；证据 `S`）**：Standards (2)(3) 的 `cmd/parcel-api` 部分。(2) `isolatedWriteAdmission` 里「…节点作业那一格随票 23」整行删去（`cff36a01`）。(3) `isolated_write_reception_test.go` 改名 `node_operations_reception_line_test.go`，用例改名 `TestNodeOperationsReceptionLineAnswersBusinessOutcomesAgainstARealDatabase`（`9bef9289`）；`endpoints.go`「走写开关的逐口变量（票 operator-channel/08）」由票 [35](./35-remaining-operations-read-faces-take-operator-intake.md) 删（`435db84e`）。

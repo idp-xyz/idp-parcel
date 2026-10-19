@@ -44,9 +44,9 @@ Blocked by: 无
 | 1 | 15 之六 | `0e3bb7df` | **1** / 3 | 0 / 3 | 修复票 [28](./28-controlled-closure-and-reopening-have-no-replay-algebra.md)：needs-triage，先裁「按什么认出同一次请求的重放」；潜伏，授权映射接上之前必须修。货主重授权证据落不落册，待 PS owner 裁 |
 | 2 | 25 | `0214a62a` | 0 / 2 | 0 / 3 | 待用户裁：本票裁定「读不动…不落册」与 UC-NO-002「收寄判断待确认｜物理事实已保存」相抵；同事务读 PS 遇 SQL 错误时答 500 而不是`收寄待确认`，修法随这一裁定定 |
 | 3 | 20 | `857453d8` | **1** / 2 | 0 / 4 | 修复票 [27](./27-carrier-pickup-voiding-replay-without-kind-is-not-accepted.md)：已由票 20 的代码作者会话认领（分支 `claude-oc27`）。子代理建议另立：给 TF 定一处在册时刻精度规则 |
-| 4 | 15 之五 | `60244fa6` | 0 / 1 | 0 / 3 | 随票记 |
-| 5 | 22 | `7ec601ab` | 0 / 3 | 0 / 5 | 随票记。子代理建议另立：TF 更正载荷缺时刻答 400 |
-| 6 | 23 | `9c551dc4` | 0 / 1 | 0 / 4 | 随票记（Standards 有一条已由 `0214a62a` 修掉） |
+| 4 | 15 之五 | `60244fa6` | 0 / 1 | 0 / 3 | 随票记。Standards 的 `cmd/parcel-api` 部分归票 [48](./48-cmd-parcel-api-tests-and-comments-say-what-the-code-does.md) |
+| 5 | 22 | `7ec601ab` | 0 / 3 | 0 / 5 | 随票记。子代理建议另立：TF 更正载荷缺时刻答 400。`cmd/parcel-api` 半边归票 [48](./48-cmd-parcel-api-tests-and-comments-say-what-the-code-does.md) |
+| 6 | 23 | `9c551dc4` | 0 / 1 | 0 / 4 | 随票记（Standards 有一条已由 `0214a62a` 修掉）。Standards (2)(3) 的 `cmd/parcel-api` 部分归票 [48](./48-cmd-parcel-api-tests-and-comments-say-what-the-code-does.md) |
 | 7 | 24 | `e8673ac1` | 0 / 3 | 0 / 1 | 随票记 |
 
 序 2 的去向（2026-10-18）：用户授权会话 `idp-parcel-9b` 代决，修复票 [29](./29-node-reception-records-physical-facts-when-cross-context-reads-fail.md) 落地，裁定成文为 [ADR-0186](../../../docs/adr/0186-node-reception-records-physical-facts-when-the-service-result-read-fails.md)，取代票 25 裁定里「读不动答`收寄待确认`、带续办引用、不落册」那一句；同事务读 PS 的 SQL 级错误改经 savepoint 隔离。
