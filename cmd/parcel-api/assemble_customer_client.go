@@ -23,12 +23,12 @@ const (
 
 const customerAPIKeySetFetchTimeout = 5 * time.Second
 
-// buildCustomerClientCredentialVerifier 解析首方客户族的发行方参数。三态同另两族：三件都未设 → 未配置核验方，整族答
-// ACCESS_CHANNEL_NOT_CONFIGURED；设了一部分或值不成形 → 进程启动即拒；三件齐且成形 → OIDC 校验器。
+// buildCustomerClientCredentialVerifier 解析首方客户族的发行方参数。三态同操作者族、集成客户端族：三件都未设 → 未配置
+// 核验方，整族答 ACCESS_CHANNEL_NOT_CONFIGURED；设了一部分或值不成形 → 进程启动即拒；三件齐且成形 → OIDC 校验器。
 //
-// 另加一条两族没有的：受众与操作者族、集成客户端族那一件相同即启动拒。三族可以落在同一个发行方实例上，那时一枚令牌能过
-// 哪一族的校验只看受众；受众撞了，一个集成客户端的令牌就过得了首方族的校验期，「不得互相顶替」就只剩册这一道（ADR-0139
-// 决定三）。只比已设的那几件：另两族没配时无从撞。
+// 另加一条操作者族、集成客户端族都没有的：受众与它们任一件相同即启动拒。各族可以落在同一个发行方实例上，那时一枚令牌
+// 能过哪一族的校验只看受众；受众撞了，一个集成客户端的令牌就过得了首方族的校验期，「不得互相顶替」就只剩册这一道
+// （ADR-0139 决定三）。只比已设的那几件：哪一族没配，就无从与它撞。
 func buildCustomerClientCredentialVerifier(getenv func(string) string) (accessidentity.CustomerClientCredentialVerifier, bool, error) {
 	config := oidc.Config{
 		Issuer:   strings.TrimSpace(getenv(customerAPIIssuerEnv)),
@@ -56,8 +56,8 @@ func buildCustomerClientCredentialVerifier(getenv func(string) string) (accessid
 	return verifier, true, nil
 }
 
-// buildCustomerClientMinter 建本进程唯一一只首方铸造器。准入范围与另两族同一只（buildAdmissionScope，ADR-0180）：提交口
-// 不在铸造侧判它，余下客户面各口换上首方 Intake 时判。发行方参数没设时核验方就是未配置那一只。
+// buildCustomerClientMinter 建本进程唯一一只首方铸造器。准入范围与操作者族、集成客户端族同一只（buildAdmissionScope，
+// ADR-0180）：提交口不在铸造侧判它，余下客户面各口换上首方 Intake 时判。发行方参数没设时核验方就是未配置那一只。
 func buildCustomerClientMinter(
 	verifier accessidentity.CustomerClientCredentialVerifier,
 	registry accessidentity.CustomerClientRegistry,

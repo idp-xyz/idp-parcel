@@ -286,11 +286,11 @@
 #
 # 这里原有两条——摘要函数 CanonicalizeSubmissionPayload 与它的版本报出口——并预言「同一条
 # 路径的两端，接上那天一起出名单」。**那个预言没兑现，摘要函数已于 ADR-0091 单独出名单。**
-# 先接它的是隔离形态的提交 Intake（IsolatedSubmissionIntake）；2026-10-19 起接它的是首方客户渠道
-# 的提交 Intake（CustomerSubmissionIntake，ADR-0139 决定四；票 first-party-api/00），隔离提交 Intake
-# 同笔删去（ADR-0150 决定三）。原注释还写着「adapters/http 侧不得出现调用它的『开发用』实现」，
-# 那句仍然有效且未被违反——它禁的是采信自报身份、从请求内容铸信封的那一种，而首方 Intake 的
-# 来源信封只取自已核验令牌主体在客户渠道册上的那一行。
+# 接它的是首方客户渠道的提交 Intake（CustomerSubmissionIntake，ADR-0139 决定四）。原注释还写着
+# 「adapters/http 侧不得出现调用它的『开发用』实现」，那句仍然有效且未被违反——它禁的是采信自报
+# 身份、从请求内容铸信封的那一种，而首方 Intake 的租户、客户账户与来源只取自已核验令牌主体在
+# 客户渠道册上的那一行；来源请求键是载荷里的接入请求标识，那是首方契约定的推导口（ADR-0139
+# 决定五），不是自报身份。
 #
 # 版本报出口 CurrentPayloadCanonicalizationVersion 曾在这里，理由行写着「至今零生产调用点，接它的
 # 仍是真渠道那笔工作」。**那句取证不支持**：真渠道 Intake 与隔离 Intake 走同一个

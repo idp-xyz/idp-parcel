@@ -18,7 +18,8 @@ CREATE TABLE access_identity.customer_client (
     recorded_at                      timestamptz NOT NULL DEFAULT now(),
 
     -- 键不含租户与客户账户：同一个客户端主体至多一行，「一个客户端代表两个客户账户」在库里无处可放。首发一客户端一客户
-    -- 账户（ADR-0139 越权风险点 5）；1:N 归票 first-party-api/01，届时改的是这一条键与 accessidentity 的绑定形状。
+    -- 账户（ADR-0139 越权风险点「客户系统的令牌是否允许携带多个客户账户」的复核建议）；1:N 归票 first-party-api/01，届时
+    -- 改的是这一条键与 accessidentity 的绑定形状。
     CONSTRAINT customer_client_pkey PRIMARY KEY (issuer, subject),
 
     -- 授予经这三列回指绑定：授予行的租户必须就是客户端所绑的那个。

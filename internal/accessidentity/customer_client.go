@@ -16,8 +16,8 @@ var ErrIncompleteCustomerClientRegistration = errors.New("access identity: custo
 // CustomerClientSubject 是首方客户族的客户端主体：签发客户端凭据令牌的发行方 + 令牌的 `sub`（ADR-0139 决定二）。
 //
 // 取 `sub` 而不取 `client_id`，理由同 IntegrationClientSubject 的头注。它与 IntegrationClientSubject、OperatorSubject
-// 分型：三族可以落在同一个发行方实例上（部署决定），一个外部系统的 `sub` 不该在类型上就能拿去查客户渠道册——两族按
-// ADR-0149「按提交者分族」分开，「不得互相顶替」靠的就是这一层（ADR-0139 决定三）。
+// 分型：各族可以落在同一个发行方实例上（部署决定），一个外部系统的 `sub` 不该在类型上就能拿去查客户渠道册——首方族与
+// 集成客户端族按 ADR-0149「按提交者分族」分开，「不得互相顶替」靠的就是这一层（ADR-0139 决定三）。
 type CustomerClientSubject struct {
 	issuer  string
 	subject string
@@ -46,7 +46,8 @@ func (subject CustomerClientSubject) channelSource() string {
 // CustomerClientBinding 是客户渠道册里「一个客户端主体绑定唯一（租户、客户账户）」那一行（ADR-0139 决定二）。
 //
 // 绑定一次登定、不可撤销、不可改指：同一个客户端先后代表两个客户账户，它交进来的委托就说不清是谁的。停用一个客户端就
-// 撤它名下的授予，理由同 OperatorBinding。首发一客户端一客户账户（ADR-0139 越权风险点 5；1:N 归票 first-party-api/01）。
+// 撤它名下的授予，理由同 OperatorBinding。首发一客户端一客户账户（ADR-0139 越权风险点「客户系统的令牌是否允许携带多个
+// 客户账户」的复核建议；1:N 归票 first-party-api/01）。
 //
 // 凭据引用与要求证书绑定令牌两格的含义同 IntegrationClientBinding：前者指向受限存储里这个客户端凭据的出处、核验不读它；
 // 后者是租户对这个客户端的取值，产品不给缺省。

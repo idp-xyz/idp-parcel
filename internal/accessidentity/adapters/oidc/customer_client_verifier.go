@@ -19,7 +19,7 @@ type CustomerClientVerifier struct {
 
 var _ accessidentity.CustomerClientCredentialVerifier = (*CustomerClientVerifier)(nil)
 
-// NewCustomerClientVerifier 建首方族的校验器。它用首方族自己那组部署参数，受众与另外两族不同由装配点核。
+// NewCustomerClientVerifier 建首方族的校验器。它用首方族自己那组部署参数，受众与操作者族、集成客户端族不同由装配点核。
 func NewCustomerClientVerifier(config Config, client *http.Client, now func() time.Time) (*CustomerClientVerifier, error) {
 	verifier, err := NewClientVerifier(config, client, now)
 	if err != nil {

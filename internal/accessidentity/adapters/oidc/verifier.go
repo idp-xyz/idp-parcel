@@ -1,4 +1,4 @@
-// Package oidc 是三族令牌校验的生产实现：操作者渠道（ADR-0100 决定二）、集成客户端族（ADR-0149 决定三）与首方客户族
+// Package oidc 是令牌校验的生产实现，服务操作者渠道（ADR-0100 决定二）、集成客户端族（ADR-0149 决定三）与首方客户族
 // （ADR-0139 决定二，复用集成客户端族的客户端凭据核验）。parcel-api 自己按发行方的 JWKS 校验令牌的签名、iss、aud 与
 // 有效期，交回经核验的主体。各族各有一组部署参数、各建一只校验器，核验共用同一段（issuerTokens）。
 package oidc
@@ -71,8 +71,8 @@ func absoluteHTTPURL(value string) error {
 // 间隔才认得新钥。
 const minRefetchInterval = time.Minute
 
-// issuerTokens 是对一个发行方所签令牌的核验：按它的公钥集验签名，再核 iss、aud 与有效期。两族的校验器各包一只，
-// 只在交回什么主体、看不看 cnf 上分开。
+// issuerTokens 是对一个发行方所签令牌的核验：按它的公钥集验签名，再核 iss、aud 与有效期。操作者校验器与客户端校验器
+// 各包一只，只在交回什么主体、看不看 cnf 上分开。
 type issuerTokens struct {
 	config Config
 	client *http.Client

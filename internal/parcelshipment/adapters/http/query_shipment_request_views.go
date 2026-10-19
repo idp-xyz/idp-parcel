@@ -147,7 +147,7 @@ func serveDetail(
 }
 
 // writeIntakeProblem 是本包 Intake 失败的唯一映射：各口不再各抄一份。操作者渠道与首方客户族的各格与未配置并列，
-// 各对一种恢复动作（ADR-0029）；两族的令牌格与授予格各用各的错误码，不合并。
+// 各对一种恢复动作（ADR-0029）；操作者渠道与首方客户族的令牌格与授予格各用各的错误码，不合并。
 func writeIntakeProblem(response http.ResponseWriter, err error) {
 	if errors.Is(err, ErrAccessChannelNotConfigured) {
 		writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)

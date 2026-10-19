@@ -117,8 +117,8 @@ func TestCustomerSubmissionIntakeTakesTheEnvelopeFromAuthenticationAndHasNoPlace
 	}
 }
 
-// Covers: 票 first-party-api/00 做什么「首方铸造器」那一项的「先认证」——认证那一侧的格原样交回，载荷一个字节都没读；Bearer 令牌与本次 TLS
-// 连接出示的客户端证书交给认证方，证书取自连接、不取自任何头部。
+// Covers: 票 first-party-api/00 做什么「首方铸造器」那一项（顺序照 MintIntegrationClient，先认证、后读载荷）——认证那一侧
+// 的格原样交回，载荷一个字节都没读；Bearer 令牌与本次 TLS 连接出示的客户端证书交给认证方，证书取自连接、不取自任何头部。
 func TestCustomerSubmissionIntakeAuthenticatesBeforeReadingThePayload(t *testing.T) {
 	refused := &customerAuthenticatorDouble{err: fmt.Errorf("%w: token expired", shipmenthttp.ErrCustomerClientCredentialRejected)}
 	intake := newCustomerIntake(t, refused, &permittingOwnershipDouble{revision: "SYN-REV-1"})

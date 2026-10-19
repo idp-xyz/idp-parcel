@@ -3,7 +3,7 @@
 Category: enhancement
 Status: needs-triage——2026-10-19 票 [00](./00-first-party-customer-intake.md) 立。
 Blocked by: 无
-出处：[ADR-0139](../../../docs/adr/0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md) 决定三「不给操作者面开首方客户渠道……『操作者代客提交』是另一个用例，需要它自己的授权与来源标记」与决定六第四条；[ADR-0150](../../../docs/adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 决定三。
+出处：[ADR-0139](../../../docs/adr/0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md) 决定三「不给操作者面开首方客户渠道……『操作者代客提交』是另一个用例，需要它自己的授权与来源标记」与决定六「不做客户人员的浏览器登录（authorization code + PKCE）那一族」；[ADR-0150](../../../docs/adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 决定三。
 
 ## 现状（票 00 落地后）
 

@@ -126,11 +126,11 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 ## 首方客户渠道：演示发行方
 
 票 `first-party-api/00`。提交口（`POST /shipment-requests`）认首方客户族的令牌（ADR-0139 决定二）：货主客户的系统以 OAuth 2.0
-客户端凭据取令牌，`parcel-api` 自己验签名、`iss`、`aud` 与有效期，再查客户渠道册与授予。隔离写开关不再放行提交口（ADR-0150 决定三）。
+客户端凭据取令牌，`parcel-api` 自己验签名、`iss`、`aud` 与有效期，再查客户渠道册与授予。隔离写开关不放行提交口（ADR-0150 决定三）。
 
 1. 发行方与集成客户端族是同一只（`integration-issuer`，`http://127.0.0.1:5558/dex`），受众另是一个：`idp-parcel-customer-api`，
-   只给合成货主系统 `syn-customer-client-01` 取。三族落不落在同一个发行方实例上是部署决定，受众两两不同是硬条件——
-   `parcel-api` 见首方受众与另两族任一件相同即启动拒。
+   只给合成货主系统 `syn-customer-client-01` 取。各族落不落在同一个发行方实例上是部署决定，受众两两不同是硬条件——
+   `parcel-api` 见首方受众与操作者族、集成客户端族任一件相同即启动拒。
 2. 起 `parcel-api` 时再加三件：`IDP_PARCEL_CUSTOMER_API_OIDC_ISSUER=http://127.0.0.1:5558/dex`、
    `IDP_PARCEL_CUSTOMER_API_OIDC_JWKS_URL=http://127.0.0.1:5558/dex/keys`、`IDP_PARCEL_CUSTOMER_API_OIDC_AUDIENCE=idp-parcel-customer-api`。
    日志出现「First-party customer channel issuer configured」。三件都不设，提交口答 403 `ACCESS_CHANNEL_NOT_CONFIGURED`；

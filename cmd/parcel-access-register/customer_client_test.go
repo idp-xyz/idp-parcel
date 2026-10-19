@@ -67,7 +67,7 @@ const customerClientRevocationBatch = `{
   ]
 }`
 
-// Covers: 票 first-party-api/00 做什么 1——三个子命令在真库上登记首方客户端、按客户面能力授予、撤销，整批重放以原结果回答；
+// Covers: 票 first-party-api/00 做什么「客户渠道册」那一项——三个子命令在真库上登记首方客户端、按客户面能力授予、撤销，整批重放以原结果回答；
 // 授予只在撤销时刻前生效；乙租户登甲的客户端、同租户改指另一个客户账户、授未登记的客户端、撤不存在的授予，各报请人看（退出码
 // 2、答复名如实回显），册上不因它们变。集成客户端册的撤销批撤不动客户渠道册的授予：两本册各认各的授予标识。
 func TestCustomerClientRegisterGrantRevokeEndToEnd(t *testing.T) {
