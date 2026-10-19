@@ -1,11 +1,13 @@
 package application_test
 
 import (
+	"context"
 	"testing"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
 type participationFixture struct {
@@ -487,5 +489,206 @@ func TestASegmentRegistryFailureEndingAParticipationIsUndecided(t *testing.T) {
 	}
 	if result.ContinuationReference() == "" {
 		t.Fatal("未决没有续办引用")
+	}
+}
+
+// 已离场的答复带在册终点三件，不是命令里的那一份（票 tf-face-algebra/03）：同一次终止的重投、异依据或异时刻
+// 的重投、被别处结束，调用方只有比得出在册的那一份才分得开。
+func TestAnAlreadyEndedAnswerEchoesTheRecordedEnd(t *testing.T) {
+	fixture := newParticipationFixture(t)
+	fixture.twoMemberSegment(t)
+	first := terminationCommand(t, "parcel-1")
+	if _, err := fixture.handler.End(t.Context(), first); err != nil {
+		t.Fatalf("首次终止：%v", err)
+	}
+
+	replay := first
+	replay.Basis = "control-termination/case-2"
+	replay.EndedAt = first.EndedAt.Add(3 * time.Hour)
+	result, err := fixture.handler.End(t.Context(), replay)
+	if err != nil {
+		t.Fatalf("异内容重投不该上抛：%v", err)
+	}
+	if result.Outcome() != application.ParticipationAlreadyEnded {
+		t.Fatalf("outcome = %q, want PARTICIPATION_ALREADY_ENDED", result.Outcome())
+	}
+	kind, basis, endedAt, ended := result.End()
+	if !ended || kind != domain.EndedByControlTermination || basis.String() != first.Basis || !endedAt.Equal(first.EndedAt) {
+		t.Fatalf("回显 = %q %q %s ended=%v, want 在册那一份 CONTROL_TERMINATED %q %s", kind, basis, endedAt, ended, first.Basis, first.EndedAt)
+	}
+}
+
+// racingEndRegistry 在窄口写之前插一手「另一事务刚提交了什么」：race 交回 raced=true 时本次写按它答，不落替身。
+// 替身的 EndParticipation 不按入场依据指名行，替不了真库「链尾刚被替代、按旧链尾写中 0 行」那一格，所以那一格
+// 由 race 直接答出来。
+type racingEndRegistry struct {
+	*segmentRegistryDouble
+	race  func(call int) (ports.ParticipationEndOutcome, bool)
+	calls int
+}
+
+func (registry *racingEndRegistry) EndParticipation(
+	ctx context.Context,
+	key ports.FulfillmentSegmentKey,
+	participation domain.FulfillmentParticipation,
+) (ports.ParticipationEndOutcome, error) {
+	registry.calls++
+	if outcome, raced := registry.race(registry.calls); raced {
+		return outcome, nil
+	}
+	return registry.segmentRegistryDouble.EndParticipation(ctx, key, participation)
+}
+
+func (fixture *participationFixture) racingHandler(race func(call int) (ports.ParticipationEndOutcome, bool)) (*application.EndFulfillmentParticipationHandler, *racingEndRegistry) {
+	registry := &racingEndRegistry{segmentRegistryDouble: fixture.segments, race: race}
+	return application.NewEndFulfillmentParticipationHandler(application.EndFulfillmentParticipationDeps{
+		Segments:   registry,
+		Handovers:  fixture.handovers,
+		Deliveries: fixture.deliveries,
+		Clock:      handoverClock{at: handoverRegisteredAt},
+	}), registry
+}
+
+// 并发输家先读回再作答（票 tf-face-algebra/03）：窄口写中 0 行分不出「别人已结束」与「链尾刚被替代」，
+// 不读回就答已离场，会把一条仍在场的参与说成已离场。
+func TestAConcurrentLoserReadsBackBeforeAnswering(t *testing.T) {
+	t.Run("另一终止先落：答已离场并回显赢家", func(t *testing.T) {
+		fixture := newParticipationFixture(t)
+		fixture.twoMemberSegment(t)
+		winner := terminationCommand(t, "parcel-1")
+		winner.Basis = "control-termination/winner"
+		handler, _ := fixture.racingHandler(func(call int) (ports.ParticipationEndOutcome, bool) {
+			if call > 1 {
+				return ports.ParticipationEndOutcomeInvalid, false
+			}
+			if _, err := fixture.handler.End(t.Context(), winner); err != nil {
+				t.Fatalf("赢家终止：%v", err)
+			}
+			return ports.ParticipationAlreadyEnded, true
+		})
+
+		result, err := handler.End(t.Context(), terminationCommand(t, "parcel-1"))
+		if err != nil {
+			t.Fatalf("并发输家不该上抛：%v", err)
+		}
+		_, basis, _, ended := result.End()
+		if result.Outcome() != application.ParticipationAlreadyEnded || !ended || basis.String() != winner.Basis {
+			t.Fatalf("outcome = %q basis = %q ended=%v, want 已离场并回显赢家依据", result.Outcome(), basis, ended)
+		}
+	})
+
+	t.Run("链尾刚被替代而仍在场：在新链尾上重走一次", func(t *testing.T) {
+		fixture := newParticipationFixture(t)
+		fixture.twoMemberSegment(t)
+		handler, _ := fixture.racingHandler(func(call int) (ports.ParticipationEndOutcome, bool) {
+			if call > 1 {
+				return ports.ParticipationEndOutcomeInvalid, false
+			}
+			fixture.segments.supersedeTail(t, "tenant-1", "segment-1", "parcel-1")
+			return ports.ParticipationAlreadyEnded, true
+		})
+
+		result, err := handler.End(t.Context(), terminationCommand(t, "parcel-1"))
+		if err != nil {
+			t.Fatalf("并发输家不该上抛：%v", err)
+		}
+		if result.Outcome() != application.ParticipationEndedNow {
+			t.Fatalf("outcome = %q, want PARTICIPATION_ENDED（新链尾上重走）", result.Outcome())
+		}
+		tail := fixture.participation(t, "parcel-1")
+		if _, chained := tail.Supersedes(); !chained || tail.Active() {
+			t.Fatalf("终点没落在替代版本上：%+v", tail)
+		}
+	})
+
+	t.Run("重走仍不成就：答未决带续办，不答已离场", func(t *testing.T) {
+		fixture := newParticipationFixture(t)
+		fixture.twoMemberSegment(t)
+		handler, registry := fixture.racingHandler(func(int) (ports.ParticipationEndOutcome, bool) {
+			return ports.ParticipationAlreadyEnded, true
+		})
+
+		result, err := handler.End(t.Context(), terminationCommand(t, "parcel-1"))
+		if err != nil {
+			t.Fatalf("并发输家不该上抛：%v", err)
+		}
+		if result.Outcome() != application.ParticipationEndUndecided || result.ContinuationReference() == "" {
+			t.Fatalf("outcome = %q continuation = %q, want 未决带续办", result.Outcome(), result.ContinuationReference())
+		}
+		if registry.calls != 2 {
+			t.Fatalf("窄口写了 %d 次，want 2（首写加新链尾上重走一次）", registry.calls)
+		}
+	})
+
+	t.Run("读回不通：答未决", func(t *testing.T) {
+		fixture := newParticipationFixture(t)
+		fixture.twoMemberSegment(t)
+		handler, _ := fixture.racingHandler(func(int) (ports.ParticipationEndOutcome, bool) {
+			fixture.segments.findErr = assignmentRegistryError
+			return ports.ParticipationAlreadyEnded, true
+		})
+
+		result, err := handler.End(t.Context(), terminationCommand(t, "parcel-1"))
+		if err != nil {
+			t.Fatalf("读回不通不该上抛：%v", err)
+		}
+		if result.Outcome() != application.ParticipationEndUndecided || result.ContinuationReference() == "" {
+			t.Fatalf("outcome = %q continuation = %q, want 未决带续办", result.Outcome(), result.ContinuationReference())
+		}
+	})
+}
+
+// supersedeTail 让该对象的链尾长出一版仍在场的替代版本，模拟另一事务刚提交的一次交接更正（裁决仍是已交接）。
+func (double *segmentRegistryDouble) supersedeTail(t *testing.T, tenant, segment, object string) {
+	t.Helper()
+	record := double.saved(t, tenant, segment)
+	rows := double.rows[segmentRegistryKey(record.Key)]
+	for _, row := range rows.participations {
+		if row.Object.String() != object || rows.superseded(row) {
+			continue
+		}
+		basis, err := domain.NewParticipationBasisReference(row.EntryBasis.String() + "/corrected")
+		if err != nil {
+			t.Fatalf("替代版本入场依据：%v", err)
+		}
+		replacement := row
+		replacement.EntryBasis = basis
+		replacement.Supersedes = row.EntryBasis
+		rows.participations = append(rows.participations, replacement)
+		return
+	}
+	t.Fatalf("段里没有 %s 的链尾", object)
+}
+
+// 坏命令不论参与状态一律答 INPUT_NOT_ACCEPTED（票 tf-face-algebra/03）：同一份坏命令落在已离场与在场的参与上
+// 答得不一样，调用方就会把「命令坏了」读成「对象已离场」。
+func TestAMalformedTerminationIsNotAcceptedWhateverTheParticipationState(t *testing.T) {
+	malformed := map[string]func(*application.EndFulfillmentParticipationCommand){
+		"缺依据":   func(command *application.EndFulfillmentParticipationCommand) { command.Basis = "" },
+		"依据全空白": func(command *application.EndFulfillmentParticipationCommand) { command.Basis = "   " },
+		"缺时刻":   func(command *application.EndFulfillmentParticipationCommand) { command.EndedAt = time.Time{} },
+		"终止早于入场": func(command *application.EndFulfillmentParticipationCommand) {
+			command.EndedAt = handoverJudgedTime.Add(-time.Hour)
+		},
+	}
+	for name, spoil := range malformed {
+		t.Run(name, func(t *testing.T) {
+			fixture := newParticipationFixture(t)
+			fixture.twoMemberSegment(t)
+			if _, err := fixture.handler.End(t.Context(), terminationCommand(t, "parcel-1")); err != nil {
+				t.Fatalf("先让 parcel-1 离场：%v", err)
+			}
+			for _, object := range []string{"parcel-1", "parcel-2"} {
+				command := terminationCommand(t, object)
+				spoil(&command)
+				result, err := fixture.handler.End(t.Context(), command)
+				if err != nil {
+					t.Fatalf("%s：坏命令不该上抛：%v", object, err)
+				}
+				if result.Outcome() != application.ParticipationEndNotAccepted {
+					t.Fatalf("%s：outcome = %q, want INPUT_NOT_ACCEPTED", object, result.Outcome())
+				}
+			}
+		})
 	}
 }

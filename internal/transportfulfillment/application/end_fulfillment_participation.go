@@ -133,6 +133,7 @@ type EndFulfillmentParticipationResult struct {
 	continuation string
 	nextSegment  string
 	segment      string
+	recordedEnd  domain.FulfillmentParticipation
 }
 
 func (result EndFulfillmentParticipationResult) Outcome() ParticipationEndOutcome {
@@ -143,6 +144,13 @@ func (result EndFulfillmentParticipationResult) Outcome() ParticipationEndOutcom
 // 没结束任何参与时为空。
 func (result EndFulfillmentParticipationResult) Segment() string {
 	return result.segment
+}
+
+// End 只在`已离场`时给出在册终点三件（种类、依据、时刻），取自读回的链尾，不是本次命令带来的那一份
+// （票 tf-face-algebra/03，照关段回显关闭时刻的先例）。同一次终止的重投、异依据或异时刻的重投、参与已被交接或
+// 交付结束，三者答的都是`已离场`，调用方只有拿在册那一份比对才分得开。
+func (result EndFulfillmentParticipationResult) End() (domain.ParticipationEndKind, domain.ParticipationBasisReference, time.Time, bool) {
+	return result.recordedEnd.End()
 }
 
 // ContinuationReference 只在`未决`时非空。
@@ -206,55 +214,82 @@ func (handler *EndFulfillmentParticipationHandler) End(
 		command.Segment = resolved
 	}
 	segment, object, accepted := participationEndTargetFrom(command)
-	if !accepted {
+	if !accepted || !terminationInputFormed(command) {
 		return EndFulfillmentParticipationResult{outcome: ParticipationEndNotAccepted}, nil
 	}
 
 	key := ports.FulfillmentSegmentKey{TenantID: command.TenantID, Segment: segment}
-	record, found, err := handler.deps.Segments.FindByKey(ctx, key)
-	if err != nil {
-		return participationEndUndecided(command), nil
-	}
-	if !found {
-		return EndFulfillmentParticipationResult{outcome: ParticipationSegmentNotFound}, nil
-	}
-	current, joined := record.Segment.ParticipationFor(object)
-	// 链尾失效即该对象在本段当前无有效参与（票 tf-segment-lifecycle-closure/11 裁决 4）：它从未离场，答`已离场`
-	// 会让调用方以为册上有一个终点；`对象不在段内`说的正是「此刻没有有效参与可结束」。
-	if !joined || current.Voided() {
-		return EndFulfillmentParticipationResult{outcome: ParticipationObjectNotInSegment}, nil
-	}
-	if !current.Active() {
-		// 已离场的不重复结束也不改写——更正走新的判断版本，不在这里覆盖。
-		return EndFulfillmentParticipationResult{outcome: ParticipationAlreadyEnded}, nil
-	}
+	// 窄口写中 0 行分不出「别人已结束」与「链尾刚被替代」，所以每次写空都回到读段那一步，按读回的链尾作答
+	// （票 tf-face-algebra/03，照关段与建派送任务的并发输家先例）：读回已离场答已离场并回显，仍在场就在新链尾上
+	// 重走；写满 participationEndWrites 仍不成就答`未决`，绝不在没读回时宣称已离场。
+	for writes := 0; ; writes++ {
+		record, found, err := handler.deps.Segments.FindByKey(ctx, key)
+		if err != nil {
+			return participationEndUndecided(command), nil
+		}
+		if !found {
+			return EndFulfillmentParticipationResult{outcome: ParticipationSegmentNotFound}, nil
+		}
+		current, joined := record.Segment.ParticipationFor(object)
+		// 链尾失效即该对象在本段当前无有效参与（票 tf-segment-lifecycle-closure/11 裁决 4）：它从未离场，答`已离场`
+		// 会让调用方以为册上有一个终点；`对象不在段内`说的正是「此刻没有有效参与可结束」。
+		if !joined || current.Voided() {
+			return EndFulfillmentParticipationResult{outcome: ParticipationObjectNotInSegment}, nil
+		}
+		// 终点早于起点在领域门里只对在场的参与判得到；已离场那一支先于领域门作答，这里补判，坏命令的答复才不随
+		// 参与状态改变。
+		if command.Source == ParticipationEndedByTermination && command.EndedAt.Before(current.EnteredAt()) {
+			return EndFulfillmentParticipationResult{outcome: ParticipationEndNotAccepted}, nil
+		}
+		if !current.Active() {
+			// 已离场的不重复结束也不改写——更正走新的判断版本，不在这里覆盖。
+			return EndFulfillmentParticipationResult{outcome: ParticipationAlreadyEnded, recordedEnd: current}, nil
+		}
+		if writes == participationEndWrites {
+			return participationEndUndecided(command), nil
+		}
 
-	ended, fact, outcome := handler.applyEnd(ctx, command, record.Segment, object)
-	if outcome != ParticipationEndOutcomeInvalid {
-		return EndFulfillmentParticipationResult{outcome: outcome, continuation: continuationFor(outcome, command)}, nil
-	}
+		ended, fact, outcome := handler.applyEnd(ctx, command, record.Segment, object)
+		if outcome != ParticipationEndOutcomeInvalid {
+			return EndFulfillmentParticipationResult{outcome: outcome, continuation: continuationFor(outcome, command)}, nil
+		}
 
-	participation, present := ended.ParticipationFor(object)
-	if !present {
-		return participationEndUndecided(command), nil
+		participation, present := ended.ParticipationFor(object)
+		if !present {
+			return participationEndUndecided(command), nil
+		}
+		saved, err := handler.deps.Segments.EndParticipation(ctx, key, participation)
+		if err != nil {
+			return participationEndUndecided(command), nil
+		}
+		switch saved {
+		case ports.ParticipationEnded:
+			return EndFulfillmentParticipationResult{
+				outcome:     ParticipationEndedNow,
+				segment:     command.Segment,
+				nextSegment: handler.enterNextSegment(ctx, command, fact),
+			}, nil
+		case ports.ParticipationAlreadyEnded:
+			continue
+		default:
+			return participationEndUndecided(command), nil
+		}
 	}
-	saved, err := handler.deps.Segments.EndParticipation(ctx, key, participation)
-	if err != nil {
-		return participationEndUndecided(command), nil
+}
+
+// participationEndWrites 是一次 End 最多走几次窄口写：首写，加上首写撞上链尾刚被替代时在新链尾上重走的一次。
+// 再多就是在与持续的更正赛跑，交给调用方凭续办引用重来，而不是在编排里无界地追。
+const participationEndWrites = 2
+
+// terminationInputFormed 在读段之前判终止那一路的依据与时刻成不成形（票 tf-face-algebra/03）。放在读段之后，
+// 已离场那一支会先于它作答，同一份坏命令落在已离场与在场的参与上就答得不一样。另两路的依据由读回的控制事实
+// 交出，不在命令里，不经这道门。
+func terminationInputFormed(command EndFulfillmentParticipationCommand) bool {
+	if command.Source != ParticipationEndedByTermination {
+		return true
 	}
-	switch saved {
-	case ports.ParticipationEnded:
-		return EndFulfillmentParticipationResult{
-			outcome:     ParticipationEndedNow,
-			segment:     command.Segment,
-			nextSegment: handler.enterNextSegment(ctx, command, fact),
-		}, nil
-	case ports.ParticipationAlreadyEnded:
-		// 并发下另一方先结束：那是业务答案，不是本次失败。
-		return EndFulfillmentParticipationResult{outcome: ParticipationAlreadyEnded}, nil
-	default:
-		return participationEndUndecided(command), nil
-	}
+	_, err := domain.NewParticipationBasisReference(command.Basis)
+	return err == nil && !command.EndedAt.IsZero()
 }
 
 // resolveSegmentByObject 在命令不带段时问登记册「这个对象此刻在哪个段里在场」（票 06 裁决 (a)）。
