@@ -83,7 +83,7 @@
 | network_routing | 19 |
 | node_operations | 7 |
 | parcel_pricing | 12 |
-| parcel_shipment | 25 |
+| parcel_shipment | 26 |
 | party_commercial | 37 |
 | pilot_governance | 8 |
 | settlement_accounting | 38 |
