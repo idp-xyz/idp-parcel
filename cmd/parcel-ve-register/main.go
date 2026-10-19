@@ -11,11 +11,14 @@
 // notification-policy（`PAR-VIS-07` 的渠道与时限半边）、claim-eligibility /
 // claim-authorization（`PAR-VIS-08`）、disclosure-policy（`PAR-VIS-09`）、
 // exception-disclosure-rules（`PAR-VIS-07` 的披露与自动发布范围半边，0023）、
-// conflict-signal-rule（`PAR-VIS-04`，0025；票 ve-disclosure-policy-view/02 接入后两册）、
+// conflict-signal-rule（`PAR-VIS-04`，0025）、
 // departure-gate-signal-rule（`PAR-VIS-04`，0027；票 demo-chain-gaps/33，形同冲突信号规则）。
-// 后两册的命令名对齐读口 /visibility-catalogues?kind= 的原词 EXCEPTION_DISCLOSURE_RULE /
+// exception-disclosure-rules 与 conflict-signal-rule 由票 ve-disclosure-policy-view/02 接入，
+// 命令名对齐读口 /visibility-catalogues?kind= 的原词 EXCEPTION_DISCLOSURE_RULE /
 // CONFLICT_SIGNAL_RULE，按 DISCLOSURE_POLICY ↔ disclosure-policy 的既有变形；异常披露规则
-// 与披露策略是相邻的两本册，命令名里「规则」「策略」两词就是分册的记号。此外材料归集面
+// 与披露策略是相邻的两本册，命令名里「规则」「策略」两词就是分册的记号。
+// departure-gate-signal-rule 还没有目录读口的 kind（票 demo-chain-gaps/52），命令名照
+// conflict-signal-rule 的形状取，读口日后补 kind 时按同一变形对齐。此外材料归集面
 // 两命令 claim-material-receipt / claim-material-receipt-revocation（票
 // ve-claims-read-seams/02）登的是收讫事实不是规则册——材料实物经租户的客服/作业面
 // 收到后由操作者在此登记收讫，客户自助提交材料属 PAR-INT-01 之后的渠道工作，不在

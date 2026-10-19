@@ -154,7 +154,9 @@ func (handler *RecordMovementFactHandler) Record(
 		return handler.replayOrConflict(ctx, command, winner, requested)
 	}
 	if err := handler.deps.Handoff.HandOffMovementFact(ctx, ports.MovementFactIntent{Record: record}); err != nil {
-		// 答未决而不上抛：调用方（离线队列）按续办重投同一份，重投走在册那一支重交同一份意图，把这一次没落成的补上。
+		// 答未决而不上抛，与登记册读不动那几格同一口径：2xx 出队，`未决`连同续办引用呈现给操作员（ADR-0022），同一份再报
+		// 一次走在册那一支、重交同一份意图，把这一次没落成的补上。真库上入队失败是 SQL 级错误，整笔已进中止态，装配点提交
+		// 失败随之上抛、事实一并回滚，离线队列按非 2xx 重发——这一格在那里走不到；答得出未决的只有没把事务带进中止态的交出失败。
 		return movementFactUndecided(command, movementFactHandoffUnavailable), nil
 	}
 	return RecordMovementFactResult{outcome: MovementFactRecorded, record: record, hasRecord: true}, nil
@@ -285,7 +287,8 @@ func movementFactSpecFrom(
 	return spec, ports.MovementFactKey{TenantID: command.TenantID, Fact: fact, Version: version}, true
 }
 
-// 未决停在哪一口：续办引用按它分开，运维据此知道该查登记册还是 Outbox 下游。
+// 未决停在哪一口。续办引用按它分开：同一口重投引用不变，引用变了说明这一份已越过登记册、停在了交出。引用是不透明摘要、结果
+// 也不带原因码，单看一个引用分不出是哪一口；要直接分辨，得照 RegisterChargeOccurrenceResult 那样在结果里带出原因，线格式随之加一格。
 const (
 	movementFactRegistryUnavailable = "MOVEMENT_FACT_REGISTRY_UNAVAILABLE"
 	movementFactHandoffUnavailable  = "MOVEMENT_FACT_HANDOFF_UNAVAILABLE"
