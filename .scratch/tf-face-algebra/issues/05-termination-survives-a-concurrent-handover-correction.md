@@ -1,7 +1,7 @@
 # 05 终止参与与交接更正并发时终点丢失：终止写在被替代的旧链尾上、答 201，更正派生的新链尾没有终点，参与又成了在场
 
 Category: bug
-Status: needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: in-progress——2026-10-18 会话 `idp-parcel-9b` 代决并认领（分支 `claude-tfa0305`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment-participation-terminations, /transport-fulfillment/handover-corrections
@@ -11,6 +11,10 @@ Blocked by: 无
 - （只在取「修复方向」第二条时另加：internal/transportfulfillment/application/ 里调用段参与替代的各重派生调用点，届时重新协调地盘）
 
 代决依据：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」。
+
+## 裁定（2026-10-18，会话 idp-parcel-9b 代决）
+
+取第一条「悲观锁」：替代路径在同一事务里先 `SELECT … FOR UPDATE` 锁住被替代的链尾行，再读终点、派生、插新链尾；终止的窄口更新只改链尾行，两者在同一行上排队。改动集中在段登记册的一处读法，不扩散到各编排。与 tf-face-algebra/03 同一分支接连做。
 
 ## 现象
 终止事务的窄口 UPDATE 已执行、尚未提交时，另一事务提交交接更正 v1→v2（裁决仍是已交接）。之后的经过：
