@@ -1,7 +1,7 @@
 # 07 交接更正链不线性：同一前版能被更正成两个新版本，范围汇总把一个对象数两次
 
 Category: bug
-Status: in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 代决并认领（分支 `claude-oc41tfa07`，与 operator-channel/41 同一分支，排在其后）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: resolved——2026-10-18 进 main（41、07 同批，代码验证钉 `6d1989b2`），见「进 main 记录」。此前 in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 代决并认领（分支 `claude-oc41tfa07`，与 operator-channel/41 同一分支，排在其后）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment/handover-corrections
@@ -81,3 +81,8 @@ Blocked by: 无
   - **Spec**：阻断无。编排先判前版已有后继（新端口 `FindSuccessor`），同内容答已有版本、异内容答冲突；迁移 0022 加 `(tenant_id, object_ref, scope_ref, corrects_version) WHERE corrects_version IS NOT NULL` 部分唯一索引兜底，存量分叉整笔失败并列出、不删行。
   - **Standards**：阻断无。
   - **未单独观察到的格**：范围汇总 handedOver=2 与并发两份更正的红没单独跑出，由链线性的用例与索引兜底覆盖。
+
+### 进 main 记录（2026-10-18，会话 idp-parcel-9b）
+
+- 分支 `claude-oc41tfa07`（41、07 同一分支）rebase 到远端 main `bb219e09` 之上，快进推送；迁移用 `transport_fulfillment/0022`；rebase 后机制清点计数随 03、05 变化，在分支 tip 上重生成补一笔。
+- 推送方全量一次：钉 `6d1989b2` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 143 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。

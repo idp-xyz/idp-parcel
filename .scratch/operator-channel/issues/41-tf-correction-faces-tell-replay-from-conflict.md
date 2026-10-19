@@ -1,7 +1,7 @@
 # 41 TF 更正口的重放代数不全：POD 更正原样重发会追加新版本，交接更正同一新版本换内容答已有版本
 
 Category: bug
-Status: in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 认领（分支 `claude-oc41tfa07`，tf-face-algebra/07 随后在同一分支）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 5 研判；逐口核实测补强）
+Status: resolved——2026-10-18 进 main（41、07 同批，代码验证钉 `6d1989b2`），见「进 main 记录」。此前 in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 认领（分支 `claude-oc41tfa07`，tf-face-algebra/07 随后在同一分支）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 5 研判；逐口核实测补强）
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C4 第四张草案；逐口核研判 POD 更正、交接更正两口
@@ -290,3 +290,8 @@ Blocked by: 无
   - **Spec**：阻断无。POD 更正载荷指名 `predecessorVersion`：指名的前版即当前版才更正；不是当前版时 `answerAgainstCurrent` 按当前版现算摘要比，同内容答已有版本、异内容（含迟到的旧更正）答冲突，照揽收更正先例；并发输家读回赢家再分格。交接更正撞键后比已存摘要分 `EXISTING_VERSION` 与 `SOURCE_CONFLICT`。ADR-0149 文末追加复核记录，决定原文未动。
   - **Standards**：阻断无。认可一处口径偏离：POD 更正不往册行写摘要、两侧从本体现算（附录 F-6 的做法，与票 20、票 13 同形）——写了会让首登原样重放被判冲突。
   - **未做的格**：「做什么」第 4 条（票 10 各口逐口记代数）归 operator-channel/50 与 39；`correctedAt` 回显归 operator-channel/31；意图交付失败后续办未在真库测。
+
+### 进 main 记录（2026-10-18，会话 idp-parcel-9b）
+
+- 分支 `claude-oc41tfa07`（41、07 同一分支）rebase 到远端 main `bb219e09` 之上，快进推送；迁移用 `transport_fulfillment/0022`；rebase 后机制清点计数随 03、05 变化，在分支 tip 上重生成补一笔。
+- 推送方全量一次：钉 `6d1989b2` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 143 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
