@@ -173,6 +173,7 @@ var businessEndpointProbes = map[string]businessEndpointProbe{
 	"/settlement-external-funds-fact-registrations":                            {method: http.MethodPost, target: "/settlement-external-funds-fact-registrations"},
 	"/settlement-external-funds-fact-correction-registrations":                 {method: http.MethodPost, target: "/settlement-external-funds-fact-correction-registrations"},
 	"/customs-node-zone-registrations":                                         {method: http.MethodPost, target: "/customs-node-zone-registrations"},
+	"/transport-fulfillment-charge-occurrence-registrations":                   {method: http.MethodPost, target: "/transport-fulfillment-charge-occurrence-registrations"},
 }
 
 // Covers: ADR-0055 第一、二、三条 — 端点已装配、未配置自成一格、状态码取 403。
@@ -414,6 +415,7 @@ func assembleUnwiredBusinessEndpointsWithOperatorIntakes(
 		unwiredNodeCustomsZoneRegistration{},
 		unwiredIdentityRecheck{},
 		unwiredIdentityDisposition{},
+		unwiredChargeOccurrenceRegistration{},
 	)
 }
 

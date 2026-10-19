@@ -181,6 +181,7 @@ func assembleBusinessEndpoints(
 	nodeCustomsZoneRegistration customshttp.NodeCustomsZoneRegistrar,
 	identityRecheck nodeopshttp.IdentityRecheckHandler,
 	identityDisposition nodeopshttp.IdentityDispositionHandler,
+	chargeOccurrenceRegistration tfhttp.ChargeOccurrenceRegistrar,
 ) []httpapi.BusinessEndpoint {
 	// 缺省朝拦：真渠道与隔离入参都缺席时，下面这组变量全取未配置即拒。
 	//
@@ -706,5 +707,8 @@ func assembleBusinessEndpoints(
 		// 节点关务区域登记口（ADR-0206；ADR-0085 决定一）：关务登记写面族的一格，挂操作者渠道的登记册 Intake，写开关换
 		// 不了它（ADR-0150 决定三）。事物词取登记 CLI 的命令名 node-zone，判据同上面关务各登记口。
 		{Pattern: "/customs-node-zone-registrations", Handler: customshttp.NewRegisterNodeCustomsZoneEndpoint(operatorRegistries.customs, nodeCustomsZoneRegistration)},
+		// 运输收费发生项登记口（ADR-0207）：对已发生的履约事实作一次采购判断，是操作者做出的生产决定，挂「运营决定」能力面的
+		// 运输收费发生项登记一种（ADR-0151 定族判据），不挂作业事实。写开关换不了它（ADR-0150 决定三）。
+		{Pattern: "/transport-fulfillment-charge-occurrence-registrations", Handler: tfhttp.NewRegisterChargeOccurrenceEndpoint(operatorDecisions.transport, chargeOccurrenceRegistration)},
 	}
 }

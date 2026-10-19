@@ -294,6 +294,8 @@ var swappedDecisionFaces = map[string]accessidentity.DecisionKind{
 	"/node-operations/identity-rechecks": accessidentity.DecisionPendingIdentityRecheck,
 	// 身份冲突处置：复核页上对一件判身份冲突的作业实物指定一件或确认都不是（ADR-0210 决定六，票 no-reception-identity/06）。
 	"/node-operations/identity-dispositions": accessidentity.DecisionIdentityConflictDisposition,
+	// 运输收费发生项登记（ADR-0207 决定六）。
+	"/transport-fulfillment-charge-occurrence-registrations": accessidentity.DecisionTransportChargeOccurrenceRegistration,
 }
 
 // Covers: 票 operator-channel/15 完成判据「无此决定种类的授予」那一格——授予按决定种类各自成立：持有别的每一种
