@@ -6,7 +6,7 @@ Blocked by:
 - [08](./08-pre-advice-and-handover-note-model-and-window-register.md) 进 main：预报册与领域。
 - 首方客户渠道 Intake 已由 [first-party-api/00](../../first-party-api/issues/00-first-party-customer-intake.md) 进 main（`38916b00`），照它落地的形状挂，不设阻塞边。能力粒度与 1:N 绑定在 [first-party-api/01](../../first-party-api/issues/01-customer-api-scopes-and-account-binding-cardinality.md)，两票同改客户面能力的枚举与 CHECK，谁后进谁 rebase。
 父票：[07](./07-verifiable-delivery-scope-for-customer-numbers.md)
-出处：[ADR-0212](../../../docs/adr/0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md) 决定二、九；[ADR-0139](../../../docs/adr/0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md) 决定四、五、八；[UC-NO-006](../../../docs/application/node-operations/UC-NO-006-ESTABLISH-A-VERIFIABLE-DELIVERY-SCOPE.md) 应用流程步骤 1、2 与 `AT-NO-068`、`AT-NO-069`。
+出处：[ADR-0212](../../../docs/adr/0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md) 决定二、九；[ADR-0139](../../../docs/adr/0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md) 决定四、五、八；[UC-NO-006](../../../docs/application/node-operations/UC-NO-006-ESTABLISH-A-VERIFIABLE-DELIVERY-SCOPE.md) 应用流程步骤 1、2 与 `AT-NO-069`、`AT-NO-070`。
 地盘：
 - `internal/accessidentity`：客户面能力 `CustomerCapability` 加两个词；`CustomerClientMinter` 加两口的铸造方法与首方族推导口；按命令分型的信封；各自测试
 - `migrations/access_identity/`：客户面能力那条 CHECK 加两个词，取当时下一个空号（另一会话正在连续取号，不写死号）
@@ -42,8 +42,8 @@ Blocked by:
 
 ## 完成判据
 
-- [ ] HTTP 与铸造用例（`AT-NO-068`）：令牌无效 401、不在册或没有这一格授予 403、不在准入范围 403、依赖读不动 503、发行方未配置 403；别族令牌（操作者、集成客户端）一律拒；坏载荷各种答 400，含请求自带租户或客户账户、号码为空或重复。
-- [ ] 编排用例（`AT-NO-068`、`AT-NO-069` 的撤回半）：首次答已登记并签发标识；同一接入请求原样重投答已有结果，换内容答来源冲突；撤自己的预报落撤回，撤别的客户账户的与查无此预报同答。
+- [ ] HTTP 与铸造用例（`AT-NO-069`）：令牌无效 401、不在册或没有这一格授予 403、不在准入范围 403、依赖读不动 503、发行方未配置 403；别族令牌（操作者、集成客户端）一律拒；坏载荷各种答 400，含请求自带租户或客户账户、号码为空或重复。
+- [ ] 编排用例（`AT-NO-069`、`AT-NO-070` 的撤回半）：首次答已登记并签发标识；同一接入请求原样重投答已有结果，换内容答来源冲突；撤自己的预报落撤回，撤别的客户账户的与查无此预报同答。
 - [ ] 真库用例（`cmd/parcel-api`，经生产装配）：合成客户端取令牌、交预报、撤回，册上各一行；撤销授予之后再交答 `CUSTOMER_CLIENT_NOT_GRANTED`。
 - [ ] 演示实走（`S`）：`seed.sh` 退 0，脚本交出一份预报并打印标识。
 - [ ] Go 门禁：`go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出；带 DSN 跑 `internal/accessidentity/...`、`internal/nodeoperations/...`、`cmd/parcel-api`、`cmd/parcel-access-register`、`migrations/...`、`scripts/demo-seeds/...`、`internal/architecture/...` 全绿；机制清点重生成。

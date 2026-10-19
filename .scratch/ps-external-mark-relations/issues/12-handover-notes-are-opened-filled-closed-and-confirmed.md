@@ -8,7 +8,7 @@ Blocked by:
 - [11](./11-identity-check-judges-the-verifiable-delivery-scope.md) 进 main：门铃触发的重核要带上范围的判断。
 - 首方客户渠道 Intake 已由 [first-party-api/00](../../first-party-api/issues/00-first-party-customer-intake.md) 进 main（`38916b00`），客户渠道确认口照它的形状挂，不设阻塞边；与 [09](./09-pre-advice-submission-on-the-first-party-customer-channel.md)、first-party-api/01 同改客户面能力的枚举与 CHECK，谁后进谁 rebase。
 父票：[07](./07-verifiable-delivery-scope-for-customer-numbers.md)
-出处：[ADR-0212](../../../docs/adr/0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md) 决定三、六、九；NO CONTEXT 生命周期「送站交接单」；[UC-NO-006](../../../docs/application/node-operations/UC-NO-006-ESTABLISH-A-VERIFIABLE-DELIVERY-SCOPE.md) 与 `AT-NO-070` 至 `AT-NO-074`。
+出处：[ADR-0212](../../../docs/adr/0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md) 决定三、六、九；NO CONTEXT 生命周期「送站交接单」；[UC-NO-006](../../../docs/application/node-operations/UC-NO-006-ESTABLISH-A-VERIFIABLE-DELIVERY-SCOPE.md) 与 `AT-NO-071` 至 `AT-NO-075`。
 地盘：
 - `internal/accessidentity`：作业事实登记的事实类型加开立、归入、关闭；运营决定加决定种类「送站交接确认」；客户面能力加「送站交接确认」；各自测试
 - `migrations/access_identity/`：上面几处 CHECK，取当时下一个空号（另一会话正在连续取号，不写死号；可并成一份）
@@ -57,11 +57,11 @@ Blocked by:
 
 ## 完成判据
 
-- [ ] 编排用例 `AT-NO-070`：开立、收寄带它、归入、关闭；关闭后归入、归入不合条件的实物，都答交接单状态不符；归入不改写来源。
-- [ ] 编排用例 `AT-NO-071`：授权交付判断答是、否、未配置，以及交付方是本人，依次答绑定已确认、不在授权交付关系内、未配置、绑定已确认；读不动不形成答案。
-- [ ] 编排与 HTTP 用例 `AT-NO-072`：客户渠道对未关闭的答状态不符；已关闭、声称了它的答确认或否认；没声称它的与查无此单同答；同结论重投答已有结果，异结论答已有结论。
-- [ ] 编排用例 `AT-NO-073`：声称两个客户账户只确认其一时不成立、不交门铃；另一个否认后不再成立，成员可以归入另一张交接单。
-- [ ] 真库用例 `AT-NO-074`（`cmd/parcel-api` 与 `cmd/parcel-dispatch`，经生产装配）：没带依据而落待识别的同号实物，归入交接单 → 运营决定确认 → 门铃 → 重核追加关联版，业务时间取原收寄时刻、不另起控制起点，意图一封；名下已关联或记冲突的实物不受影响。修前先红。
+- [ ] 编排用例 `AT-NO-071`：开立、收寄带它、归入、关闭；关闭后归入、归入不合条件的实物，都答交接单状态不符；归入不改写来源。
+- [ ] 编排用例 `AT-NO-072`：授权交付判断答是、否、未配置，以及交付方是本人，依次答绑定已确认、不在授权交付关系内、未配置、绑定已确认；读不动不形成答案。
+- [ ] 编排与 HTTP 用例 `AT-NO-073`：客户渠道对未关闭的答状态不符；已关闭、声称了它的答确认或否认；没声称它的与查无此单同答；同结论重投答已有结果，异结论答已有结论。
+- [ ] 编排用例 `AT-NO-074`：声称两个客户账户只确认其一时不成立、不交门铃；另一个否认后不再成立，成员可以归入另一张交接单。
+- [ ] 真库用例 `AT-NO-075`（`cmd/parcel-api` 与 `cmd/parcel-dispatch`，经生产装配）：没带依据而落待识别的同号实物，归入交接单 → 运营决定确认 → 门铃 → 重核追加关联版，业务时间取原收寄时刻、不另起控制起点，意图一封；名下已关联或记冲突的实物不受影响。修前先红。
 - [ ] 信封各格：作业事实登记、运营决定、客户面三族各自的未配置、令牌无效、未授予、不在准入范围；别族令牌一律拒。
 - [ ] 演示实走（`S`）：不带预报送一件，落待识别 → 开交接单并归入 → 运营决定确认 → 识别。
 - [ ] Go 门禁：`go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出；带 DSN 跑 `internal/accessidentity/...`、`internal/nodeoperations/...`、`internal/partycommercial/...`、`cmd/parcel-api`、`cmd/parcel-dispatch`、`cmd/parcel-access-register`、`migrations/...`、`scripts/demo-seeds/...`、`internal/architecture/...` 全绿；机制清点重生成。
