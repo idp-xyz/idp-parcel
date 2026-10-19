@@ -1,7 +1,7 @@
 # 67 实际履约发生项随交接与有效交付信封自动形成
 
 Category: enhancement
-Status: ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
+Status: in-progress——完工待评审与进 main，分支 claude-dcg67（2026-10-19 作者子代理，见文末「完成记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
 Blocked by: [25](./25-segment-adopts-transport-commission-and-cancellation-faces.md)、[28](./28-booking-and-cancellation-occurrences-and-procurement-context-from-adoption.md)
 地盘：TF 新 `application/form_actual_fulfillment_on_participation_end.go`、新 inbox 消费者两只（交接、有效交付，inbox 名各自分家）；`cmd/parcel-dispatch/assemble.go`（交接 FanOut 与 `deliveryFan` 各加一路）+ 新装配文件 + 新真库用例；文档 ADR-0218（ADR-0207 Links 加后继指针、README 状态格注明部分停用）、UC-TF-005「应用流程」步 9 与 AT、演示脚本（干线成本那一步改为自动）。
 出处：[tf-chain-plan](../tf-chain-plan.md)「等 peer 的」TF 自消费交接 / 有效交付信封；方案「复核」等 peer 各项现状，「代决」C15，「需要的 ADR」ADR-0218。
@@ -26,3 +26,83 @@ Blocked by: [25](./25-segment-adopts-transport-commission-and-cancellation-faces
 ## 规模
 
 M
+
+## 完成记录（2026-10-19，作者子代理，分支 claude-dcg67）
+
+基线 `8e5125c2`（origin/main，25、27、28、59 都已在内）。授权：用户原话「你作为业务和系统专家自决……解决所有的问题」；方案代决 C15 照 [handover-dispatch-plan](../handover-dispatch-plan.md) 落，方案没裁的细节按下文「代决」自决，统一写进 [ADR-0218](../../../docs/adr/0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md)。
+
+### 提交
+
+- `7ecc0dc9`：领域（参与由哪件事实结束、自动形成的旅程、交付终点依据一处给出）与旅程册按成员读。
+- `003a19c8`：自动形成编排、处置三格与两扇消费门（含 `transportHandoverKeyOf` 共用一处的小重构）。
+- `cc6478de`：派发装配、交接与有效交付两张扇出各加一路、真库用例。
+- `fd088f3b`：ADR-0218；ADR-0207、ADR-0209 的 Status 行与 Links 前向指针；`docs/adr/README.md` 0207、0209 行末追加部分停用，0217 行后追加 0218 行。
+- `30fced43`：TF CONTEXT 成本来源一条；UC-TF-005 目标与边界、步 9、`AT-TF-246`–`255`；AT 覆盖盘点点名与追记。
+- `60c6ff02`：立票 [88](./88-actual-fulfillment-not-formed-when-adoption-or-agreement-arrives-late.md)。
+- `9105ab04`：演示动线第 3 步补记（一次性库实走）、种子 README 第 8 步一段。
+
+### 落点
+
+- 领域 `domain/actual_fulfillment_formation.go`（新）：`ActualFulfillmentJourney`（参与入场时已开始、开始最晚的那一趟替代 / 退运旅程，否则派生 `JRN/<对象>`；同刻两趟 `ErrAmbiguousJourney`）、`EffectiveDeliveryEndBasis`、`ActualFulfillmentSegment.ParticipationEndedBy`。`EndParticipationWithDelivery` 改用 `EffectiveDeliveryEndBasis`，结束参与与事后找参与是同一出处。前缀常量 `derivedJourneyPrefix = "JRN"` 进前缀门禁。
+- 端口 `ports/alternate_journey_member_view.go`（新）；postgres `AlternateJourneys.FindByMember`（`members @> jsonb_build_array($2)`，按整串认成员），`FindByKey` 的重建抽成共用函数。无迁移。
+- 应用 `application/form_actual_fulfillment_on_participation_end.go`（新）：`OnHandover` / `OnDelivery` 两个入口共用 `formFor`；结果代数、`Disposition`、`ActualFulfillmentFormationRegistrant`、`ErrParticipationEndedInSeveralSegments`。登记仍交 `RegisterChargeOccurrenceHandler`，本编排只答「结束了哪一条参与、段采没采用委托、旅程是哪一趟」。
+- 消费门 `adapters/inbox/actual_fulfillment_formation_consumers.go`（新）：两个消费者名 `transport-fulfillment/form-actual-fulfillment-occurrence-from-transport-handover`、`…-from-effective-delivery`，共用一对哨兵 `ErrActualFulfillmentFormationUndecided` / `ErrActualFulfillmentFormationDefect`；交付信封译码要版本（缺了是毒丸）；`EffectiveDeliveryRegisteredEventType` 在本包写出，与 PS、VE 两路相等由真库用例钉。
+- 派发 `cmd/parcel-dispatch/assemble_actual_fulfillment_on_participation_end.go`（新）：两份未决哨兵名单；`actualFulfillmentFormerOver` 是协议核对口以外唯一的接线处，登记用例照 parcel-api 的 `chargeOccurrenceDeps` 另接一份。`assemble.go` 只在两张扇出前各追加一路、FanOut 参数末尾各加一个，路由表头注两行补一句、「各投两个」改「各投各的」，没重排既有行。
+- 不加迁移、不加信封、不改登记用例与已形成信封；未用 TF 迁移号 0042，未用新立票号 89。
+
+### 代决与越权风险点
+
+方案 C15 之外，本票自决（都写进 ADR-0218）：
+
+1. **找参与按终点依据，不按「此刻在场」或「最近一段」**：在对象有过参与的各段里找链尾（非失效）终点种类与依据恰是这件事实的那一条；零条入账，多条上抛。交付那一路的依据取信封所指那一版结果，不读交付登记册的当前版。
+   - 越权风险点：交接更正撤回控制之后已形成的项不回退（ADR-0218 越权风险点 2，去处是发生项修订入口）。
+2. **没有采用连线时不交登记用例**（方案只说「不形成、不推断自营」）：交过去登记用例会问承运商判断、可能答不适用，那就是推断。
+3. **成员只有这一个对象**，按段计的协议由覆盖一问让第一件盖住整段。
+   - 越权风险点：段费那一项的成员名单只有第一件（ADR-0218 越权风险点 5）。
+4. **旅程按参与入场时刻判**（方案原话「当前旅程」）：按处理此刻判，信封晚到会把原段成本挂到新旅程上。同刻两趟响亮失败。
+   - 越权风险点：对象是集运单元时派生拼写指的是单元；替代旅程册今天没有生产写口，生产上一律是派生拼写（ADR-0218 越权风险点 4）。
+5. **登记者记本上下文的系统身份** `idp-parcel/transport-fulfillment#form-actual-fulfillment-on-participation-end`。这一句与 ADR-0209 决定五「登记者取自操作者信封的主体」相抵，按 README 规则记成 ADR-0209 部分停用（限自动形成那一路），派单只点名了 ADR-0207，这是本票多出来的一处。
+   - 越权风险点：审计在这些项上看到的是系统；人工后登回显系统身份（ADR-0218 越权风险点 3）。
+6. **ADR-0207 决定四末句的演示约定一并记成停用**：派单只点名决定七后半句与风险点 3；演示拼写改了，决定四末句那句租户取值随之失效，照实标出。
+7. **处置分格**：已登记、已存在、冲突、协议四个否定格、未配置、不计费、缺采购上下文入账；登记用例的未决与本编排读不动重投；不适用、其余未受理、集外格、上抛响亮失败。缺采购上下文入账的理由：只出现在迁移 0038 之前的委托上，重投报不出协议版本。
+8. **自动形成没赶上的参与不补**（采用晚于参与结束、协议后补条件）：另立票 88（ADR-0218 越权风险点 1、6）。
+
+ADR-0218 的 Status 写明待 TF owner 复核，第 2、3 点同时待 SA owner，第 5 点同时待 PC owner。
+
+### 各判据对应用例
+
+- 已采用委托的段参与结束：发生项 `REGISTERED`，与已形成信封同笔：
+  - 应用 `TestAHandoverEndingAnAdoptedSegmentsParticipationFormsTheOccurrence`、`TestAnEffectiveDeliveryEndingAnAdoptedSegmentsParticipationFormsTheOccurrence`；
+  - 派发真库 `TestAHandoverAtTheEndOfAnAdoptedTrunkSegmentFormsTheOccurrenceAndFiresBuy`（生产路由表：交接信封 `PUBLISHED`、本路一行 inbox、发生项一项、再一拍 BUY 请求恰一份）、`TestAnEffectiveDeliveryEndingAnAdoptedSegmentsParticipationFormsTheOccurrence`。
+- 无采用连线：零写入，入账：应用 `TestASegmentWithoutAnAdoptionFormsNothingAndInfersNoSelfOperation`（承运商判断是自营法人也不交登记用例）；真库 `TestAnUnadoptedSegmentSettlesWithoutAnOccurrence`。
+- 协议未声明收费发生条件：`未配置`，入账：应用 `TestAnAgreementThatDoesNotChargeOrDeclareActualFulfillmentSettlesWithoutAnOccurrence`（另含不计费）。
+- 人工同身份重登：`EXISTING`：应用 `TestManualAndAutomaticRegistrationOfTheSameIdentityAnswerExisting`（先自动后人工、先人工后自动、人工写别的旅程答冲突）；真库那一条的末段（先自动后人工）。
+- PC 读不动：登哨兵重投：应用 `TestUnreadableDependenciesAreRetriedWithoutWriting`；真库 `TestAnUnreadableAgreementCheckIsRetriedAndLeavesNothingBehind`（`dispatch.ErrConsumerUndecided` 带本路哨兵、inbox 0 行、发生项 0 项，恢复后重投形成）。
+- 其余格：`TestAFactThatEndsNoParticipationSettlesWithoutRegistration`、`TestTheOccurrenceJoinsTheAlternateJourneyStartedBeforeTheParticipation`、`TestRegistrationBusinessAnswersSettle`、`TestFormationDefectsAreNeitherSettledNorRetried`；领域 `actual_fulfillment_formation_test.go` 三个；tfinbox 两扇门各一个真库用例；postgres `TestAlternateJourneysAreFoundByMember`。AT 对照见 AT 覆盖盘点 `AT-TF-246`–`255` 各行。
+
+### 验证
+
+- `go build ./...` 退 0；`go vet ./cmd/... ./internal/transportfulfillment/... ./internal/architecture/...` 退 0；`gofmt -l cmd internal scripts` 无输出。
+- 带 DSN `go test -p 1 -count=1`：`./internal/transportfulfillment/...`、`./cmd/parcel-dispatch/`、`./internal/architecture/`、`./scripts/demo-seeds/...` 全 ok。代码定在 `cc6478de`，此后只改了一处用例 Covers 注释与文档。
+- 没跑全量，没重生成机制清点（按派单，进 main 时统一做）。
+
+### 演示实走（证据 `S`）
+
+一次性库 `dcg67_demo`，`seed.sh` 原样灌入退 0；`parcel-api`（操作者与集成客户端两族）与 `parcel-dispatch`（七个变量照动线「前置」）都用本分支构建。
+
+1. 干线委托 `SYN-COMMISSION-TRUNK-DCG67`（`v3`，成员 `SYN-PARCEL-DCG67-01`）答 `201 COMMISSION_SUBMITTED`。
+2. 华东场外设备在 SZX 交接，立段 `SYN-SEG-SZX-SIN-DCG67`（`LINEHAUL`），答 `201 HANDOVER_REGISTERED`。
+3. 采用答 `201 COMMISSION_ADOPTED`，委托开始依据是那一次交接。
+4. 新加坡尾程场外设备在 SIN-HUB 交接，答 `201`，`participationEnd` 为 `PARTICIPATION_ENDED`。
+5. dispatch 随后两拍：两封交接信封与发生项已形成信封都 `PUBLISHED`；本路两封各一行 inbox（SZX 那封入账为没有参与被结束）；发生项一项，旅程 `JRN/SYN-PARCEL-DCG67-01`、登记者系统身份、服务方与协议 `…/v3` 取委托、1 件 `PIECE`、业务时间是 SIN 交接时刻；BUY 请求一份（费用项目 `SYN-FEE-ITEM-TRUNK-COST-01`），没有人工登记。
+6. 人工按 `JRN/SYN-PARCEL-DCG67-01` 再登答 `200 EXISTING`，回显系统登记者；按旧约定 `SYN-JRN-…` 答 `200 CONFLICT`。
+7. 再往下：计价那一拍停在计价输入不可得（合成包裹号不是申报包裹），与票 29 的记录同一停点；没有走提交真包裹那条路（要另起首方客户发行方），所以 `ZONE_UNRESOLVED` 那一停点（票 43）这次没有重走。
+
+走完已停进程并删库。
+
+### 偏离与待裁
+
+- 派单号段：AT `246`–`255` 用满；新立票号用了 88，89 未用；TF 迁移 0042 未用。
+- ADR-0209 决定五部分停用是派单没点名的一处（代决 5）；ADR-0207 决定四末句停用同（代决 6）。进 main 时 README 这两行与别的票若同时改，按「只追加」合并。
+- `cmd/parcel-dispatch/assemble.go` 两张扇出的参数列表与路由表头注改了几处既有行（追加参数、补一句、「两个」改「各的」）。票 61、63 也往交接扇出加路，合并时参数照追加顺序排，头注照两边各补的句子合。
+- 待裁：票 88（自动形成没赶上的参与怎么补）。
