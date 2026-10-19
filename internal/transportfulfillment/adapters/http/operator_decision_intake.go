@@ -45,6 +45,12 @@ const (
 	OperatorDecisionChargeOccurrenceRegistration        OperatorDecision = "TRANSPORT_CHARGE_OCCURRENCE_REGISTRATION"
 )
 
+// 容量预占与容量释放各是一种决定（ADR-0203 决定三）：能占的不因此能放。
+const (
+	OperatorDecisionCapacityReservation OperatorDecision = "CAPACITY_RESERVATION"
+	OperatorDecisionCapacityRelease     OperatorDecision = "CAPACITY_RELEASE"
+)
+
 // OperatorIdentity 是一次运营决定出示认证出的身份：租户与做出决定的操作者。操作者写成「发行方#sub」：sub 只在它的
 // 发行方之内唯一，单拿 sub 会让两个发行方的同一个 sub 在留痕里读成一个人（ADR-0100 决定二第三条）；与 PS、NO 的
 // 运营决定认证方同一个写法。多数口只取租户；发生项登记把操作者记作断言人（ADR-0207 决定三）。
@@ -77,6 +83,9 @@ var (
 	_ ParticipationTerminationIntake = (*OperatorDecisionIntake)(nil)
 
 	_ TransportCommissionSubmissionIntake = (*OperatorDecisionIntake)(nil)
+
+	_ CapacityReservationIntake = (*OperatorDecisionIntake)(nil)
+	_ CapacityReleaseIntake     = (*OperatorDecisionIntake)(nil)
 )
 
 func NewOperatorDecisionIntake(authenticator OperatorAuthenticator) (*OperatorDecisionIntake, error) {
