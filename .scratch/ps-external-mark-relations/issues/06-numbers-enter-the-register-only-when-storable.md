@@ -1,7 +1,7 @@
 # 06 外部标识号码进册前没有「存得下」的门：超长号码撞索引上限答 500，NUL 撞库面答 500；按号核对遇到不可能在册的号也答错误
 
 Category: bug
-Status: in-progress——2026-10-19 裁定补由作者子代理实施完（NO 对超长号照常问 PS），待复核。此前 in-progress——2026-10-19 评审两条阻断由作者子代理修完（rebase 到 origin/main `38916b00`），待复核。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 立并代决、认领，分支 `claude-psxm06`
+Status: in-progress——2026-10-19 评审 0 阻断（阻断两条与裁定补已修，会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 裁定补由作者子代理实施完（NO 对超长号照常问 PS），待复核。此前 in-progress——2026-10-19 评审两条阻断由作者子代理修完（rebase 到 origin/main `38916b00`），待复核。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 立并代决、认领，分支 `claude-psxm06`
 Blocked by: 无
 父票：[05](./05-a-unique-hit-in-someone-elses-number-space-is-not-enough.md)
 出处：no-reception-source/03 完成记录「发现」（PS 关联册按号码建的 btree 索引有长度上限，号码进册前无长度门）；本会话复核。
@@ -254,3 +254,12 @@ NUL 那条真库用例修前已绿：原裁定三下带 NUL 的号本就答零�
 - 全量 `./...` 没跑。
 
 **越出地盘的改动（本节新增）**：`internal/parcelshipment/ports/external_identifier.go` 的端口签名改了参数类型。实现者与调用方见上，都在 PS 与 NO 适配器内，没碰 NO 重核编排与 `shipment_request.go`。
+
+## Comments
+
+### 评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审；2026-10-19，首轮钉 `4847684b`，修补后钉 `7aca18c7`）
+
+- **首轮阻断两条（已修）**：一、生产提交口已换成首方客户渠道 Intake，越界号在首方口上答 400 并照 ADR-0140 用 `detail` 点名那一格（只点格与拒因，不带号码、不涉别的客户），真库用例改走首方生产装配；二、门落地前已进委托快照的超长号在仓储重建时读不回——领域加 `RehydrateExternalIdentifierNumber` 只给委托仓储还原用，重建面门禁归类，真库用例直写 600 字节快照读回逐字一致。
+- **裁定补（推送方代决，已做）**：门落地前已进册的超长号现场要能核到——NO 适配器只对带 NUL 的号直接答零候选，超长号照问 PS。作者另立核对专用的 `ExternalIdentifierLookupNumber`（只拒空白与 NUL），PS 读口改收它：核对用的号在类型上传不进任何写入方，比开放还原构造更稳，认可。真库用例：门前直写进册的 600 字节号经生产收寄装配唯一关联。
+- **Spec 其余**：入册门（拒 NUL、拒超 512 字节）只在领域构造处一处；面单渠道结果越界答`未受理`不落库；ADR-0184 复核记录只追加。
+- **未做（不另立票）**：ADR-0140 的 problem+json 整仓迁移不在本票，作者已记。
