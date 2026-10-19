@@ -82,6 +82,11 @@ export interface UnidentifiedItemRecord {
    * 类型留 string，理由同收寄行的 serviceResultCheck。
    */
   identityCheck?: string;
+  /**
+   * 冲突来由（ADR-0211 决定一）：AMBIGUITY_ONLY / MULTIPLE_CANDIDATES / ONE_MARK_ON_TWO_UNITS，只在这一行记了身份冲突、且记了
+   * 来由时出现。记冲突却整键缺席的是来由这一格落地之前的行，读法见 identity-conflict-cause。类型留 string，理由同上。
+   */
+  identityConflictCause?: string;
 }
 
 /**

@@ -180,7 +180,9 @@ const sections: ReviewSection[] = [
     //
     // 「重核」也不确认身份:它只叫服务端拿来源里存下的号再问一次 parcel-shipment
     // (ADR-0199 决定三),结果唯一才追加一版关联收寄,原行照留。外部标识观察一列是重核
-    // 拿去问的那一格,原样示出;判断版本一列是重核指名的那一版。
+    // 拿去问的那一格,原样示出;判断版本一列是重核指名的那一版。记身份冲突的行只有来由是
+    // 「只因歧义信号」的给「重核」(ADR-0211 决定二:声明同号的委托被拒绝或撤回后再问就是唯一命中),
+    // 其余来由与来由未记的只给下方「处置」;冲突来由一列说的就是这一分别。
     columns: [
       col('unit', '内部作业标签', { mono: true }),
       col('node', '登记节点', { mono: true }),
@@ -189,6 +191,7 @@ const sections: ReviewSection[] = [
       // 身份核对一列紧挨候选：未核对那一行候选是空的，这一列说它是没问到、不是查无此号（ADR-0199 决定五）。
       col('identityCheck', '身份核对'),
       col('identityConflict', '身份冲突', { className: 'w-[88px]' }),
+      col('identityConflictCause', '冲突来由'),
       col('receivedAt', '收到时间', { mono: true }),
       col('association', '正式包裹关联（引用）', { mono: true }),
       col('judgmentVersion', '判断版本', { mono: true }),

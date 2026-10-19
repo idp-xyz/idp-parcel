@@ -2,11 +2,18 @@
 //
 // 单独成模块而不写在页面里：这一区最容易错的是两格——「外部标识观察」把来源未保全、设备没报号与号尾带不可见字符三件事
 // 说成同一片空白；「重核」答复把不重核的三格（记身份冲突、来源未保全、指名的不是待识别）说成失败。页面组件要跑起来得有
-// React 与 DOM，判读是纯函数就能拿 node:test 钉住（同 reception-rows 的先例）。
+// React 与 DOM，判读是纯函数就能拿 node:test 钉住（同 reception-rows 的先例）。冲突来由那几句在 identity-conflict-cause，
+// 这里只按它判重核能不能发起、答复里那一句冲突怎么解（票 no-reception-identity/07；ADR-0211）。
 
 import { formatInstant } from '../catalogue-view';
 import type { IdentityRecheckResponseBody } from './identity-recheck-api';
 import { identityCheckCellOf } from './identity-check';
+import {
+  ambiguityOnlyCause,
+  conflictReleasableByRecheck,
+  identityConflictCauseCellOf,
+  identityConflictCauseShortOf,
+} from './identity-conflict-cause';
 import { labelOf, receptionKindLabels } from './presentation';
 import type { UnidentifiedItemRecord } from './records-api';
 
@@ -20,6 +27,7 @@ export const recheckOutcomeLabels: Record<string, string> = {
   IDENTITY_CONFLICT_RECORDED: '不重核：这一件记着身份冲突',
   SOURCE_NOT_PRESERVED: '不重核：来源未保全',
   NOT_PENDING_IDENTIFICATION: '不重核：指名的那一版不是待识别实物',
+  STILL_AMBIGUOUS: '仍有未决的同号声明——暂不能关联，判断不变',
 };
 
 /** 「重核」动作此刻能不能发起；不能时带一句为什么，页面照列，不让人去点一个必然答「不重核」的按钮。 */
@@ -46,12 +54,15 @@ export function externalMarkCellOf(record: Pick<UnidentifiedItemRecord, 'sourceP
 }
 
 /**
- * 重核对象的条件照 ADR-0199 决定三逐条判：记身份冲突的只经人工处置解除（ADR-0210 决定一），不经重核；来源未保全的无号
- * 可问；已被接续的不是当前有效版本。
+ * 重核对象的条件照 ADR-0199 决定三逐条判：记身份冲突的只经人工处置解除（ADR-0210 决定一），不经重核——来由是只因歧义信号的
+ * 例外（ADR-0211 决定二）；来源未保全的无号可问；已被接续的不是当前有效版本。
  * 服务端照样会逐条判、照样答一格不重核——页面先说清楚，只是省一次必然不追加的写。
  */
 export function recheckAvailabilityOf(record: UnidentifiedItemRecord): RecheckAvailability {
-  if (record.identityConflict) return { kind: 'unavailable', reason: '记身份冲突，只经人工处置解除，不经重核' };
+  if (record.identityConflict && !conflictReleasableByRecheck(record)) {
+    const cause = identityConflictCauseShortOf(record.identityConflictCause);
+    return { kind: 'unavailable', reason: `记身份冲突（${cause}），只经下方「处置」解除，不经重核` };
+  }
   if (!record.sourcePreserved) return { kind: 'unavailable', reason: '来源未保全，无号可再问' };
   if (record.succeededBy) return { kind: 'unavailable', reason: `已被 ${record.succeededBy} 接续` };
   if (!record.judgmentVersion) return { kind: 'unavailable', reason: '没有判断版本，无从指名' };
@@ -68,6 +79,7 @@ export function unidentifiedRowOf(record: UnidentifiedItemRecord): UnidentifiedR
       externalMark: externalMarkCellOf(record),
       candidates: record.candidates.join('、'),
       identityConflict: record.identityConflict ? '有冲突' : '无冲突',
+      identityConflictCause: identityConflictCauseCellOf(record),
       receivedAt: formatInstant(record.receivedAt),
       association: record.association ?? '',
       judgmentVersion: record.judgmentVersion ?? '',
@@ -111,7 +123,8 @@ export function describeRecheckAnswer(body: IdentityRecheckResponseBody): Rechec
         headline,
         details: [
           `冲突版 ${body.judgmentVersion ?? '—'} 接续${rechecked}，候选 ${(body.candidates ?? []).join('、') || '—'}`,
-          '身份冲突暂停方向性作业；号码唯一指向的包裹若已关联到另一件实物，那一件也追加了冲突版。身份冲突只经人工处置解除，再重核不会解开。',
+          '身份冲突暂停方向性作业；号码唯一指向的包裹若已关联到另一件实物，那一件也追加了冲突版。',
+          conflictReleaseLine(body.identityConflictCause),
         ],
       };
     case 'IDENTITY_NOW_CHECKED':
@@ -146,7 +159,20 @@ export function describeRecheckAnswer(body: IdentityRecheckResponseBody): Rechec
         tone: 'answered',
         landed: false,
         headline,
-        details: ['这一件记着身份冲突（多候选或一码两物）；身份冲突只经人工处置解除，不经重核'],
+        details: [
+          `这一件记着身份冲突（${identityConflictCauseShortOf(body.identityConflictCause)}）；这一来由只经人工处置解除，不经重核`,
+        ],
+      };
+    case 'STILL_AMBIGUOUS':
+      // 不是失败，也不是查无此号：parcel-shipment 仍答恰一个候选，只是号码还被另一份已提交、未决的委托报着，说不出到站的是哪一件。
+      return {
+        tone: 'answered',
+        landed: false,
+        headline,
+        details: [
+          `${rechecked}照旧是当前有效版本，身份冲突照留；parcel-shipment 仍只答候选 ${(body.candidates ?? []).join('、') || '—'}，同时号码还被另一份已提交、未决的委托报着`,
+          '那份委托被拒绝或撤回之后，parcel-shipment 会交出声明撤除，服务端自动再核一次；也可届时再点重核。现在就要定，用下方「处置」。',
+        ],
       };
     case 'SOURCE_NOT_PRESERVED':
       return {
@@ -188,6 +214,14 @@ export function recheckProblemNote(code: string): string {
     default:
       return `服务端问题码：${code}`;
   }
+}
+
+/** 追加了冲突版之后那一句「怎么解」：随这一版记下的来由走（ADR-0211 决定二）。 */
+function conflictReleaseLine(cause: string | undefined): string {
+  if (cause === ambiguityOnlyCause) {
+    return '来由只因歧义信号：声明同号的那份委托被拒绝或撤回之后，服务端会自动再核；也可用下方「处置」直接定。';
+  }
+  return `这一来由（${identityConflictCauseShortOf(cause)}）只经下方「处置」解除，再重核不会解开。`;
 }
 
 function serviceResultLine(body: IdentityRecheckResponseBody): string {

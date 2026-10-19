@@ -17,9 +17,11 @@ export interface IdentityRecheckRequest {
 
 /**
  * 重核口的封闭响应形状。`outcome` 取重核结果枚举原名（INTAKE_FORMED / IDENTITY_CONFLICT / IDENTITY_NOW_CHECKED /
- * STILL_UNIDENTIFIED / EXISTING_RESULT / IDENTITY_CONFLICT_RECORDED / SOURCE_NOT_PRESERVED / NOT_PENDING_IDENTIFICATION）。
+ * STILL_UNIDENTIFIED / EXISTING_RESULT / IDENTITY_CONFLICT_RECORDED / SOURCE_NOT_PRESERVED / NOT_PENDING_IDENTIFICATION /
+ * STILL_AMBIGUOUS，最后一格见 ADR-0211 决定二）。
  * recheckedVersion 恒在场；judgmentVersion 只随追加了一版的各格出现；currentVersion 与 recordedOutcome 只随已有结果
- * 出现。其余几格说的是答复所指的那一版，identityCheck 只在那一版是待识别时出现（ADR-0199 决定五）。
+ * 出现。其余几格说的是答复所指的那一版，identityCheck 只在那一版是待识别时出现（ADR-0199 决定五），identityConflictCause 只在
+ * 那一版记了身份冲突、且记了来由时出现（ADR-0211 决定一）。
  */
 export interface IdentityRecheckResponseBody {
   outcome: string;
@@ -32,6 +34,7 @@ export interface IdentityRecheckResponseBody {
   association?: string;
   candidates?: string[];
   identityConflict?: boolean;
+  identityConflictCause?: string;
   serviceMarkers?: string[];
   serviceResultCheck?: string;
   identityCheck?: string;
