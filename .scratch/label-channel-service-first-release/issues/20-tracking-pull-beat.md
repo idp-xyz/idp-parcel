@@ -3,6 +3,7 @@
 Category: enhancement
 Status: draft——2026-09-24 按 ADR-0146 重新定性（定性表见 [product-strategy-boundary/02](../../product-strategy-boundary/issues/02-split-parameter-register-and-retriage-deferrals.md)「票：未 resolved 的」）：连接器形态归产品策略，不再等第一家真源；对合成源与公开承运商参考配置做，随 [product-strategy-boundary/09](../../product-strategy-boundary/issues/09-tf-fulfillment-judgment-methods-and-connectors.md)「外部轨迹来源连接器」一项分诊后转 ready-for-agent。正文「随第一家真源」按旧口径写成，未改写
 Blocked by: 18（已 resolved）；[product-strategy-boundary/09](../../product-strategy-boundary/issues/09-tf-fulfillment-judgment-methods-and-connectors.md) 分诊
+Blocked by（2026-10-19 追加）: [tf-face-algebra/06](../../tf-face-algebra/issues/06-effective-time-judgment-chain-does-not-fork.md)——同一事实的判断与收编更正并发时版本链分叉；节拍一接上收编入口就发作，须先落
 
 ## 缺口
 
