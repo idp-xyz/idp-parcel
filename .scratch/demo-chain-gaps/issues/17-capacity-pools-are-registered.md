@@ -40,7 +40,7 @@ M
 1. **池身份**：由（班次、维度）派生，写作 `<班次身份>/<维度词>`，一班一维一池；`EstablishPoolCommand` 不再收池名。见补记「池身份」。
 2. **容量维度封闭词**：`WEIGHT`、`VOLUME`、`PIECES`、`PALLET_POSITIONS`、`BAG_POSITIONS`、`CARGO_SLOTS`，大小写不折。见补记「容量维度封闭词」。
 3. **单位只存不判**：照旧是不透明引用，不按维度限定拼写，同维换算留给票 18（ADR-0201 决定八）。
-4. **池不改版**：同身份同内容答`已存在`，异内容答`池冲突`并交回库里那一池。原并发分支在撞键后不比内容一律答`已存在`，一并改成按赢家内容分格。见补记「池不改版」。
+4. **登记口不改池**（评审后由「池不改版」收窄，见下文评审记录）：登记口上同身份同内容答`已存在`，异内容答`池冲突`并交回库里那一池。原并发分支在撞键后不比内容一律答`已存在`，一并改成按赢家内容分格。见补记「登记口不改池」。
 5. **建池次序**：先按池身份答重放与冲突，再核班次在册（照方案 D03-2 给装载分配定的次序）；班次只经准备评估物化而没有显式登记，不算在册。
 6. **物化登记逐池作答**：班次那一格照旧，旁边逐池列`已建立` / `已存在` / `池冲突`；一维冲突不挡班次。`ScheduleRegistrationResult.Persisted()` 取「班次落了一版或任一池新建」，端点据此给 201。见补记「物化登记逐池作答」。
 7. **容量声明的文法与摘要**：可选；按维度次序归一，同一维度两次、硬上限不为正、缺单位都答`未受理`。不声明时摘要整键缺席，与此前登下的周期安排摘要逐字相同（黄金摘要用例原样通过即证）。
@@ -98,3 +98,28 @@ ADR-0201 补记接正文编号续写的四条：17 池身份绑死班次与维�
 - **给票 18、20、21 的接缝**：评估时物化的候选可调 `ScheduleTemplate.MaterializeCapacityPools` 算池（只算不存，满容量）；已登记班次上的池要按班次列，本票没加这一问（`postgres/capacity_pool.go` 在票 21 的地盘里，D03-3 的「班次挂没挂池」也要这一问）。预占与释放的命令仍按池身份串寻址，派生身份即 `<班次>/<维度>`。
 - **消耗交接的信封 ID**：`capacityConsumptionEventID` 用 `/` 拼租户、池与预占，池身份现在自带 `/`。这一口没接线，方案 D03-7 已把它并入 envelope-id-bounds/01，指纹化时一并消掉。本票只改了它的测试夹具。
 - **地盘外动到的文件**（都是追加或随签名必须跟的）：`application/unversioned_payload_digest.go`(+test)、tfhttp `operator_registry_intake.go`（头注）与 `unconfigured_intake.go`、`postgres/capacity_consumption_handoff_test.go`、`cmd/parcel-api/assemble_transport_schedule.go`、`unwired_orchestration.go`、`endpoints_test.go`、`assemble_operator_decisions_test.go`、`cmd/parcel-transport-register/main_test.go`、`docs/design/synthetic-demo-journey-script.md`、UC-TF-003。没碰 peer 地盘与 `apps/admin-web`。
+
+## 评审记录（2026-10-19，隔离评审一轮，作者子代理修订）
+
+阻断 0 项。非阻断 9 项：标「进 main 前修」的 3 项全修；其余 6 项修 3 项、登记去向 3 项。修订两笔：代码 `0fe11a37`，文档 `b0aa2e46`。
+
+### 已修
+
+1. **`PAR-NET-12` 与 ADR-0201 补记口径不一**（进 main 前修）：登记册这一行照 `PAR-NET-08` 补〔ADR-0146 拆分〕。「容量池身份」由（具体班次、维度）派生，划为机制；维度封闭词与周期安排上逐维容量声明的文法划为产品策略，都指向 ADR-0201 补记。租户提供各班次（或其周期安排）启用哪几维、各维单位与硬上限，以及按资源粒度分池等需求。原有「缩容与超配缺口处置 → psb/09」一句不动。补记里加一条「参数登记册」作对照。
+2. **补记「池不改版」与 TF CONTEXT 缩容规则相抵**（进 main 前修）：改名「登记口不改池」，范围收窄到登记写面，即同（班次、维度）异内容答`池冲突`，不经再登记改上限。删掉「换上限会让已占的量失去守恒依据」那半句，改写为：登记口立池、不更正池；容量变了是容量事实更正，UC-TF-003 要它形成新版本，TF CONTEXT 要缩容不改写既有预占、形成超配缺口，这些归另立的更正入口。风险点 19 跟着改，指向新立的票 [40](./40-capacity-pool-capacity-correction-has-no-entry.md)，并写明登记口的`池冲突`不能读成「池容量不可更正」，票 20、21 与 psb/09 不以它为拒绝缩容的依据。代码里三处引这个补记名的注释（`poolReplayOrConflict` 头注、`establishPools` 头注、建池幂等用例的 Covers）同步改名，`poolReplayOrConflict` 头注里同一个理由也一并换掉。CLI 退出码 2 的说明从「池不改版」改为「登记口不改池」。
+3. **跨文件计数与按位置数邻行**（进 main 前修）：`cmd/parcel-transport-register/main.go` 包头注改成「与 parcel-api 上对应的登记口调同一个编排」；`cmd/parcel-api/endpoints.go` 新行注改成「族与周期安排、具体班次登记口同」，按名指，不按位置数。
+4. **TFC-1 不换号没登记**（可选）：没有照票 16 的先例不处理。ADR-0014 的部分停用范围在 README 那一行写的是「仅限 PC 客户合同一册……此后任何一册再改规范化形状照本记录换号」，只在补记里补半句会与这句相抵。因此照 README 顶部「部分停用」规则补全登记：ADR-0201 补记「迁移 0027」一条补上「`TFC-1` 不换号，与 ADR-0177 决定三同一前提」，同时部分停用 ADR-0014 那一句，适用场景仅限容量池一册加维度这一次；ADR-0014 的 `Status` 行与 Links 各加一条前向指针（正文不改）；`docs/adr/README.md` 里 ADR-0014 那一行在「此后任何一册……」之前插入这一次的适用场景（没有新增行，也没有重排）。另加风险点 21：若有库绕过了 0027 的拒绝、留下旧池，这些池的摘要会全部失配，只能答`池冲突`。票 16 改班次摘要时 `REGISTER_TRANSPORT_SCHEDULE` 是新起的面名，不是同一面改形状，所以不算进这一条。
+5. **查阅册与登记答复的容量次序不一**：领域加 `domain.CompareCapacityDimensions`，按封闭词次序比较，声明归一也改用它。`postgres/review_catalogue.go` 的 `catalogueCapacities` 按它稳定排序。SQL 里仍按维度词排序，只为结果稳定。列面照实转写、不当重建门（文件头注的纪律），认不出的维度词照原样列出并排在最前。真库用例与 tfhttp 用例都改成 WEIGHT 在 PIECES 之前。
+6. **vertical 用例 Covers 替票 18 定件数来源**：改成「准备评估只认重量、体积、件数三维有申报来源（ADR-0201 决定八）」，不再写「件数即对象数」。
+
+### 登记去向，不在本票改
+
+7. **AT 号撞号**（`AT-TF-105`、`106`）：本票保留。按方案「并行车道」波 2 的落地顺序 17 → 23 → 27 → 32，本票先进；dcg23（UC-TF-004、ADR-0202 占 105 至 107）与 dcg32（UC-TF-005、ADR-0205 占 105 至 111）由协调方在各自进 main 前顺延重编，ADR 里的引用一并改。进 main 记录照此写明。
+8. **`capacityConsumptionEventID` 遇上含 `/` 的池身份**：不在本票改。已在 [envelope-id-bounds/01](../../envelope-id-bounds/issues/01-remaining-envelope-ids-still-concatenate-instance-references.md) 末尾追加一条补记，写明前提：池身份写作 `<班次>/<维度>`，物化班次身份本身也带 `/`；运输履约半边改指纹形时一并消掉。
+9. **与同波分支合并**：修订后重跑 merge-tree。与当前 `main`（`08254c8c`）、`claude-dcg32` 无冲突。与 `claude-dcg27` 冲突在 `scripts/demo-seeds/README.md`。与 `claude-dcg23` 冲突在 `cmd/parcel-api/endpoints.go`、`endpoints_test.go`、`main.go`、`unwired_orchestration.go` 与 `docs/design/synthetic-demo-journey-script.md`，比评审时多出后三处，都是只追加的装配与动线令牌。协调方按令牌次序合并（17 先），后进的分支追加在本票所加行之后。
+
+### 修订后验证
+
+- `go build ./...`；`go vet`（`./internal/transportfulfillment/...`、`./cmd/parcel-api/`、`./cmd/parcel-transport-register/`、`./internal/architecture/`、`./migrations/`）；`gofmt -l` 干净。
+- `IDP_PARCEL_POSTGRES_DSN=…55432… go test -p 1 -count=1`：`./internal/transportfulfillment/...`、`./cmd/parcel-transport-register/`、`./migrations/`、`./cmd/parcel-api/`、`./internal/architecture/`、`./scripts/demo-seeds/...` 全部 ok。用 `-v` 确认查阅册次序那条真库用例（`TestTemplateCapacitiesMaterializePoolsOnTheRegistry`）确实执行了。种子数据没改，`seed.sh` 没有重灌。
+
