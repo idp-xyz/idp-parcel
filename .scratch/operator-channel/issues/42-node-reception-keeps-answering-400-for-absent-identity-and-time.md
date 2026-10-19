@@ -1,7 +1,7 @@
 # 42 作业事实面上缺席的身份与时刻答哪一格：NO 收寄答 400，TF 交编排答未受理——NO 一侧与票 08「缺席交编排」不符
 
 Category: task
-Status: ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 5 研判）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc42`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 5 研判）
 Blocked by: operator-channel/29 已进 main（ADR-0186 在场）
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C4 第六张草案

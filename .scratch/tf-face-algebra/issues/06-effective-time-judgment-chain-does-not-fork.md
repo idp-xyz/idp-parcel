@@ -1,7 +1,7 @@
 # 06 有效时间判断：同一事实并发判断时版本链分叉且不自愈——回指列缺「一版至多被回指一次」，撞键一律答未决
 
 Category: bug
-Status: needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-tfa06`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment-effective-time-judgments
@@ -14,6 +14,10 @@ Blocked by: 无
 - .scratch/label-channel-service-first-release/issues/20-tracking-pull-beat.md（只加 Blocked by 一行）
 
 代决依据：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」。
+
+## 裁定（2026-10-19，会话 idp-parcel-9b 代决）
+
+照「修复方向（机制）」四条做，与 tf-face-algebra/02、07 同形；迁移取 `migrations/transport_fulfillment/` 下一个空号。属机制。
 
 ## 现象
 - 同一载荷经生产装配并发投递（默认池），全答 201 `EFFECTIVE_TIME_JUDGED`，判断版本全都回指同一待判断版，每份各发一封判断意图。管理台当前版读面上，同一事实列出与投递份数相同的当前版。多轮复跑，分叉每轮都有。
