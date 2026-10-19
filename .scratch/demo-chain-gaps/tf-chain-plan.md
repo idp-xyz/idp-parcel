@@ -296,6 +296,7 @@
   - 越权风险点：一个原因只映一个费用项目，不分协议；主要范围等同协议的商业范围（SA / PC owner）。
 
 - **D10-1 演示的 BUY 触发行**：登 `ACTUAL_FULFILLMENT → OCCURRENCE_FORMED`，费用项目 `SYN-FEE-ITEM-TRUNK-COST-01`。成本卡补声明金额取整，以新版本重发（票 30）。
+  - 改判（2026-10-19，票 30 实施时）：成本卡**就地改 v1**，不另发 v2——另发一版会让在用解析答适用冲突。理由与越权风险点以[票 30](./issues/30-buy-cost-card-declares-amount-rounding.md)完成记录的「代决」「越权风险点」为准。上一句「以新版本重发」作废。
 
 ---
 
