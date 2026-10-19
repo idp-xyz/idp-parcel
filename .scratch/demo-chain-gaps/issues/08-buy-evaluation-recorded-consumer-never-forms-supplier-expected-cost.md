@@ -1,7 +1,7 @@
 # 08 BUY 评价已记录的消费门对每一封都答来源引用未登记，供应商预期成本编排没装配
 
 Category: enhancement
-Status: in-progress——完工待进 main，分支 `claude-dcg08`；评审记录见文末（基于 `81a4c418`；2026-10-19 作者子代理落地，见文末「代决」与「完成记录」）。此前 needs-triage——2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自同日对演示动线余下各段的只读勘察（隔离子代理，证据 `S`）。
+Status: resolved——2026-10-19 进 main（全量钉 `d4cf5411`：144 ok / 0 FAIL；08、11 同批，见文末「评审与进 main 记录」）（基于 `81a4c418`；2026-10-19 作者子代理落地，见文末「代决」与「完成记录」）。此前 needs-triage——2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自同日对演示动线余下各段的只读勘察（隔离子代理，证据 `S`）。
 Blocked by: 无
 出处：[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 2026-10-18 那次重走。
 
@@ -120,4 +120,4 @@ none（票 05 格 18 去处 sa-cc/11 已 resolved，票 05 重走一节已记「
   - ADR-0200 越权风险点 3、4 说的「另立票」立成 [14](./14-buy-request-stuck-after-an-unadoptable-evaluation.md)、[15](./15-occurrence-revision-does-not-drive-a-cost-correction.md)。
   - [09](./09-demo-price-cards-declare-no-amount-rounding.md) 的证据句同步。
 - 与 [11](./11-external-result-received-has-no-subscriber.md) 合成一批，rebase 到 main 后整批快进推送，与本记录同一次推送。
-- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 @@PIN@@：@@N@@ 包 ok，0 FAIL。机制清点在同一 tip 上重生成。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `d4cf5411`：144 包 ok，0 FAIL。机制清点在同一 tip 上重生成。

@@ -1,7 +1,7 @@
 # 11 外部结果已收信封没有订阅者，每封都撞 no_subscriber
 
 Category: enhancement
-Status: in-progress——完工待进 main，分支 `claude-dcg11`；评审记录见文末
+Status: resolved——2026-10-19 进 main（全量钉 `d4cf5411`：144 ok / 0 FAIL；08、11 同批，见文末「评审与进 main 记录」）
 Blocked by: 无
 出处：[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 2026-10-18 那次重走。
 
@@ -81,3 +81,14 @@ none（.scratch/outbox-handoff-consumption-map/report.md 记为「应有但未�
 - 已灌过的演示库：`SYN-VE-MAP-V1` 版本号已占，重跑种子答已登记、库里仍是旧行，要 `--reset`。
 - `.scratch/outbox-handoff-consumption-map/report.md` 里 `ExternalResultHandoff` 那一行状态未刷新（该报告自带保质期声明，按 HEAD 重取证时自然更新）。
 - ADR 编号进 main 时若改号，全仓搜 `ADR-0197` 与 `0197-` 一并替换。
+
+## 评审与进 main 记录（2026-10-19）
+
+- 隔离子代理一次过两轴，判 0 阻断。逐项核过的：代决不与已接受文档冲突（只 VE 订阅，同 ADR-0137 决定二「来源变化不触发后台重算」；非放行层进投影为未归类，合 VE CONTEXT 与 `AT-VE-042`，客户视图不读投影条目）；类型词表在消费侧适配器（ADR-0025），对 CC 封闭集合是全函数；展开、幂等、确定性错误与未决名单都对。
+- 已修的非阻断：
+  - 种子 README 把重跑答复改准：`REFUSED VERSION_NOT_OVERWRITABLE`，退出码 2，`seed.sh` 中止。
+  - ADR-0197 越权风险点 5 补上一层后果：先部分放行、后全部放行时，全部放行被判同层冲突而吞掉。立票 [12](./12-successive-same-layer-customs-results-are-judged-conflicts.md)。
+  - 票面状态词，以及一处读着像行号的引用。
+- 顺带立票 [13](./13-demo-milestone-mapping-handover-row-never-matches.md)：作者核对时发现演示映射里交接那一行永不匹配。
+- 没改的：`ErrResultScopeUnitNotVisible` 读不回那一格归未决，与兄弟适配器同先例。
+- 与 [08](./08-buy-evaluation-recorded-consumer-never-forms-supplier-expected-cost.md) 合成一批进 main，全量与推送见 08 的进 main 记录。
