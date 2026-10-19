@@ -1,7 +1,7 @@
 # 25 履约段采用运输委托；取消委托与订舱
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg25（见文末「完成记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
+Status: in-progress——完工待评审与进 main，分支 claude-dcg25（见文末「完成记录」「评审记录」；隔离评审 1 项阻断已修）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
 Blocked by: [23](./23-transport-commission-submission-face.md)、[24](./24-booking-references-a-schedule-and-carrier-answers-via-integration-client.md)
 地盘：`operation_decision.go`；tfhttp 新 `adopt_segment_commission.go`、`cancel_transport_commission.go`、`cancel_booking_request.go`；`application` 新 `adopt_segment_commission.go` + `CancelBooking`；`domain` 新 `segment_commission_adoption.go`；ports 新文件（含 `BookingStore.Replace`）；postgres 新表，迁移 TF 0030；装配与 `endpoints.go` 行；种子；ADR-0204（ADR-0098 加后继指针）、TF CONTEXT。
 出处：[02](./02-transport-commission-has-no-command-face.md)；方案「02 委托、订舱、承运答复」D02-3、D02-6，「需要的 ADR」ADR-0204。
@@ -29,14 +29,14 @@ M
 
 ## 完成记录
 
-2026-10-19 作者子代理在分支 `claude-dcg25` 上做完，基于派单时的 origin/main `6b02b547`，未 rebase，由协调方按令牌次序合入。号段照协调方预分配：迁移 access_identity `0015`、TF `0035`（票面原写 0030，已被票 20 占用），governance 种子 `32`、`33`、`34`，AT `AT-TF-181` 至 `188`，立票 `57`、`58`，ADR-0204。
+2026-10-19 作者子代理在分支 `claude-dcg25` 上做完，基于派单时的 origin/main `6b02b547`；隔离评审之后 rebase 到 origin/main `0c56e842`（见「评审记录」），由协调方按令牌次序合入。号段照协调方预分配：迁移 access_identity `0015`、TF `0035`（票面原写 0030，已被票 20 占用），governance 种子 `32`、`33`、`34`，AT `AT-TF-181` 至 `188`，立票 `57`、`58`，ADR-0204。
 
-提交：`a8c15b03`（三种决定种类、迁移 access_identity 0015）、`143c234e`（领域、端口、编排）、`2cb65683`（采用册迁移 TF 0035、订舱取消写口）、`6e956ced`（tfhttp 三口）、`5214152e`（写口无事务负向证据）、`f2375e3d`（parcel-api 装配与端点表、真库用例）、`6fb67ee9`（演示种子）、`195777e6`（真库用例 Covers）、`4fcaf056`（ADR-0204、ADR-0098 部分停用、TF CONTEXT、UC-TF-004、演示文档）、`b52c87c7`（立票 57、58）、`da74265a`（ADR-0204 风险点指向 57、58）。
+提交（rebase 之后的号）：`640acb71`（三种决定种类、迁移 access_identity 0015）、`10bb0fb5`（领域、端口、编排）、`ef9c4993`（采用册迁移 TF 0035、订舱取消写口）、`460bccd0`（tfhttp 三口）、`d16b67dc`（写口无事务负向证据）、`c98f748d`（parcel-api 装配与端点表、真库用例）、`39387b2e`（演示种子）、`d55024a4`（真库用例 Covers）、`5e8b68c8`（ADR-0204、ADR-0098 部分停用、TF CONTEXT、UC-TF-004、演示文档）、`b3e06c9d`（立票 57、58）、`7a7428cc`（ADR-0204 风险点指向 57、58）、`b20d798e`（本记录）。评审修订的提交见「评审记录」。
 
 ### 做了什么
 
 - **决定种类**：`accessidentity` 追加 `DecisionFulfillmentSegmentCommissionAdoption`（`FULFILLMENT_SEGMENT_COMMISSION_ADOPTION`）、`DecisionTransportCommissionCancellation`（`TRANSPORT_COMMISSION_CANCELLATION`）、`DecisionBookingRequestCancellation`（`BOOKING_REQUEST_CANCELLATION`），只追加。迁移 `access_identity/0015_segment_commission_adoption_and_cancellation_decisions.sql` 以 0013 那份决定种类全集为底再加三种（0014 重建的是客户面能力那条 CHECK，不并）。
-- **领域**（新文件 `domain/segment_commission_adoption.go`、`segment_commission_adoption_canonicalization.go`）：`SegmentCommissionAdoption`（段、委托、服务方、这一段的开始依据与时刻）；`AdoptCommissionForSegment` 判服务方不符、委托已取消、段没有当前参与、段早于委托提交就已开始，委托未开始时以段的首个参与 `MarkTransportStarted`，已开始的原样交回；`ActualFulfillmentSegment.FirstEffectiveParticipation`（未被替代、未失效的最早一条，已离场照算，同刻按入场依据字面序）；重建门与 TFC-1 摘要（只收委托与服务方）。
+- **领域**（新文件 `domain/segment_commission_adoption.go`、`segment_commission_adoption_canonicalization.go`）：`SegmentCommissionAdoption`（段、委托、服务方、这一段的开始依据与时刻）；`AdoptCommissionForSegment` 判服务方不符、委托已取消、段没有当前参与、段早于委托提交就已开始，委托未开始时以段的首个参与 `MarkTransportStarted`，已开始的原样交回（评审后改：取消分两格、开始取最早的首个参与，见「评审记录」）；`ActualFulfillmentSegment.FirstEffectiveParticipation`（未被替代、未失效的最早一条，已离场照算，同刻按入场依据字面序）；重建门与 TFC-1 摘要（只收委托与服务方）。
 - **端口**（新文件，不动 `ports.go`）：`ports/segment_commission_adoption.go`（`SegmentCommissionAdoptionStore`：`FindBySegment`、`Save`，没有改与删）、`ports/booking_cancellation.go`（`BookingCancellationStore.Replace`——票面写的 `BookingStore.Replace` 另立一口，理由同计划 X4）。段只读用既有 `ports.FulfillmentSegmentView`。
 - **采用编排**（`application/adopt_segment_commission.go`）：声明过构造门 → 按（租户、段）分 `EXISTING_ADOPTION` / `ADOPTION_CONFLICT`（回显在册那一份）→ 段在册（`SEGMENT_NOT_FOUND`）→ 委托在册（`COMMISSION_NOT_FOUND`）→ 领域判（`PROVIDER_MISMATCH` 带 `commissionProvider`、`COMMISSION_NOT_ADOPTABLE`、`SEGMENT_WITHOUT_EFFECTIVE_PARTICIPATION`、`SEGMENT_STARTED_BEFORE_COMMISSION`）→ 先落连线、后标委托开始；标不上就读回（另一段先开始了照常采用、不改写首次开始；先被取消了答不可采用）。未决三原因：采用册、段册、委托册。不入队。
 - **取消两口**（`application/commission_transport.go`）：`CancelCommission` 不在册改答 `COMMISSION_NOT_FOUND`（此前 `INPUT_NOT_ACCEPTED`）、已开始答 `TRANSPORT_ALREADY_STARTED` 并回显委托（线上名此前是 `TRANSPORT_STARTED`，没有线上消费方）、落取消撞上并发的开始或取消时读回按先落者答（此前答未受理）；新 `CancelBooking`：订舱在册（`BOOKING_NOT_FOUND`）→ 已取消即重放 → 所属委托开始时这次订舱已提出（申请不晚于开始时刻）答 `TRANSPORT_ALREADY_STARTED` → 领域取消 → 只落取消时刻。新格 `BOOKING_CANCELLED`；`BookingCommissionNotFound` 改名 `CommissionNotFound`（取消委托与订舱共用这一格，线上名不变）；`CommissionTransportDeps` 加 `BookingCancellations`。
@@ -53,7 +53,7 @@ M
 
 1. **「服务方一致」比的是登记方声明的服务方与委托的服务提供方**（ADR-0204 决定一）。不比实际承运商判断，也不比交接接收方：签约服务商与实际承运商可以不同（AT-TF-046），拿它们比会把转包拒掉。命令因此收（段、委托、服务方）三格，服务方不从委托抄——抄过来就核不出指错了委托。越权风险点：声明方自己核自己，只挡得住指错委托，挡不住两格一起填错。
 2. **首个参与的读法**（决定二）：未被替代、未失效的最早一条，已离场照算，同刻按入场依据字面序。越权风险点 1：首个参与此后被更正，委托与连线上的开始都不重派生（票 57）。
-3. **一段至多一份委托，一份委托可以多段采用；后到的段不改写首次开始，连线上另记本段的开始依据**（决定一、二）。越权风险点 2：没有反向解除采用的面（票 57）。
+3. **一段至多一份委托，一份委托可以多段采用；后到的段不改写首次开始，连线上另记本段的开始依据**（决定一、二；评审后改为委托开始取已采用各段最早的首个参与、只前移，见「评审记录」非阻断 1）。越权风险点 2：没有反向解除采用的面（票 57）。
 4. **前置条件的格与判序**（决定一）：新格 `SEGMENT_WITHOUT_EFFECTIVE_PARTICIPATION`、`SEGMENT_STARTED_BEFORE_COMMISSION`、`COMMISSION_NOT_ADOPTABLE`；服务方排在取消之前。「服务方不一致答冲突」落为 `PROVIDER_MISMATCH`（200），与委托提交口同名；同段换委托是另一格 `ADOPTION_CONFLICT`。
 5. **连线先落、委托后标，采用成立以外整笔回滚**（决定二）：并发取消那一格连线已落，靠装配回滚撤掉——这是编排对装配的契约，写在编排头注。越权风险点：绕过这只壳直接调编排的调用方要自己守它。
 6. **取消订舱的「已开始」按时刻判**（决定三，产品策略）：申请不晚于委托开始时刻的答已开始，开始之后为剩余范围订的可取消；委托已取消不挡取消订舱。越权风险点 3：没有逐订舱的消费关系，时刻是最近一层能判的事实（归票 37 一并考虑）。
@@ -70,7 +70,7 @@ M
 - `AT-TF-181`、`AT-TF-182`：`application/adopt_segment_commission_test.go` 的 `TestAdoptingACommissionStartsItAndCancellationThenAnswersAlreadyStarted`；`domain/segment_commission_adoption_test.go` 的 `TestAdoptingACommissionStartsItFromTheSegmentsFirstParticipation`；真库 `adapters/postgres/segment_commission_adoption_test.go` 的 `TestAWiredAdoptionStartsTheCommissionAndCancellationThenAnswersAlreadyStarted`、`cmd/parcel-api/assemble_segment_commission_adoption_test.go` 的 `TestTheWiredAdoptionFaceStartsTheCommissionOfASegmentEstablishedByHandover`；线格式 `adapters/http/commission_adoption_and_cancellation_faces_test.go`。
 - `AT-TF-183`、`AT-TF-184`：`TestAnAdoptionAnswersEachUnmetPreconditionWithoutWriting`、`TestAnAdoptionRefusesEachUnmetPrecondition`、`TestTheFirstEffectiveParticipationSkipsSupersededAndVoidedVersions`、线格式两个用例、`TestCancellationOnlyReachesUnstartedCommissions`。
 - `AT-TF-185`、`AT-TF-186`：`application/cancel_transport_intent_test.go` 的 `TestBookingCancellationOnlyStopsUnconsumedBookings`；真库 `TestABookingCancellationLandsOnceAndKeepsTheRecordingTime`。
-- `AT-TF-187`：`TestCommissionCancellationRacingAStartAnswersFromTheWinner`、`TestAdoptionRecoveryAndConcurrency`；真库面「取消后再采用答不可采用且零写入」在 cmd 用例里。
+- `AT-TF-187`：`TestCommissionCancellationRacingAStartAnswersFromTheWinner`、`TestAdoptionRecoveryAndConcurrency`；真库面「取消后再采用答不可采用且零写入」在 cmd 用例里（评审后那一格改答 `COMMISSION_CANCELLED_AFTER_START`，用例清单见「评审记录」）。
 - `AT-TF-188`：`TestTheWiredAdoptionFaceRefusesAnOperatorWithoutTheAdoptionGrant`、`TestEachTFDecisionFaceAuthenticatesForItsOwnDecision`、TF 认证方逐种互斥用例、access-identity 真库册面 `TestTheAdoptionAndCancellationDecisionsAreGrantedAndReadBack`。
 - 库面：同段第二份答已登记、外键挡住不在册的两端（`TestTheAdoptionRegisterKeepsOneAdoptionPerSegmentAndNeedsBothEnds`），两写口无事务即拒（`TestAdoptionAndBookingCancellationWritesRefuseToRunOutsideATransaction`）。
 
@@ -88,4 +88,40 @@ M
 - 票面「服务方不一致答冲突」落为 `PROVIDER_MISMATCH`（见代决 4）。
 - `CancelCommission` 的两处线上答法变了（不在册、已开始的名字），此前没有线上口，不破契约；评审请核一遍没有别处按旧串比。
 - 待裁：票 57、58；越权风险点 6 并入票 46；风险点 3 归票 37。
-- 热点文件都只追加：`endpoints.go`、`main.go`、`operation_decision.go`、`operator_decision_intake.go`、`seed.sh`、`docs/adr/README.md`（ADR-0098 那一行按「部分停用」规则在行尾追加被停条款与适用场景）、种子 README（授予表那一格在括号末尾追加三种）。与票 21 同期合入时，UC-TF-004 验收表尾、`docs/adr/README.md` 已接受节末会有表尾追加的文本冲突。
+- 热点文件都只追加：`endpoints.go`、`main.go`、`operation_decision.go`、`operator_decision_intake.go`、`seed.sh`、`docs/adr/README.md`（ADR-0098 那一行按「部分停用」规则在行尾追加被停条款与适用场景）、种子 README（授予表那一格在括号末尾追加三种）。与票 21 同期合入时，UC-TF-004 验收表尾、`docs/adr/README.md` 已接受节末会有表尾追加的文本冲突。（评审实测与当时 origin/main 另有五处追加冲突，已随 rebase 解掉，见「评审记录」。）
+
+## 评审记录
+
+2026-10-19 隔离评审：阻断 1 项，非阻断 8 项（其中 5 项建议进 main 前修）。作者子代理按评审修订：先 rebase 到 origin/main `0c56e842`，再逐项改。授权与代决口径同「完成记录」。
+
+评审修订的提交：`08e7a66d`（TF 代码：取消晚于开始一格、开始前移、取消重放名、端口头注）、`3b80e59e`（parcel-api：装配接前移写口、真库回滚用例）、`cde05b82`（AT-TF-189 用例、前移写口头注改正方向）、`5cf75d73`（ADR-0204、UC-TF-004、TF CONTEXT、演示文档）、`c9590f33`（票 57、58 并入新问）、`6954b422`（并发用例 Covers）、`ca49d581`（ADR README 本票一行）。
+
+### 阻断：采用与取消按落库先后裁，与 UC-TF-004「以业务时间和有效边界裁决」相悖——已修，代码与文档两半都做
+
+- **代码**：领域 `AdoptCommissionForSegment` 对已取消的委托比取消时刻与段的首个参与。段在委托提交之后开始、取消又不早于那一刻（同一刻算开始在先，与订舱判法同一边界）答新哨兵 `ErrCommissionCancelledAfterStart`，线上 `COMMISSION_CANCELLED_AFTER_START`（200），并排回显委托（含取消时刻）与段的首个参与（`segmentStart`），零写入；取消早于段开始、段没有当前参与、段早于委托提交仍答 `COMMISSION_NOT_ADOPTABLE`，这几格「另起委托」的续办是对的。编排在写开始没落上、读回发现已取消时，用同一个领域函数按此刻的委托重判，并发窗口与无并发时答法一致。
+- **文档**：ADR-0204 决定三新增「采用与取消的先后」，写明这是对 UC 那条规则的有意收窄及理由——照业务时间判谁在先，判出取消晚于开始只挂起待更正、不自动撤回已以 201 答出去的取消；取消登记时委托已开始照答已开始（`AT-TF-092`「取消到达时」）；残留的一处随登记先后而异（取消时刻早于段开始时），缺「取消是否送达服务方」这一事实，如实写出。新增越权风险点 8（采用登记之前的取消窗口、没有更正取消的面）→ 并入票 57，不另立票（协调方预分配的立票号 57、58 已用完，并入两张同源票不占新号）。UC-TF-004 的 `AT-TF-187` 改为引用这一条，「一致性、幂等与并发」补一条指向它，不再与原规则并列互斥。
+- **代决与越权风险点**：「不自动撤回已成立的取消」是本次代决（越权风险点：取消晚于开始那一格今天没有可走的更正面，委托停在已取消、段挂不上它，ADR-0204 风险点 8 / 票 57）；「取消登记时委托已开始一律答已开始、不比时刻」沿用原代决，补写了理由。
+
+### 非阻断
+
+1. **后采用、开始更早的段，委托开始停在较晚那次**（建议进 main 前）——修了，选「前移」：委托的开始取已采用各段首个参与里最早的那一条，只前移、不后移（后移即回退已发生事实）。领域 `CommissionStartChange`（`KEPT` / `MARKED` / `ADVANCED`）；新端口文件 `ports/transport_commission_start_advancement.go`；postgres 新文件 `AdvanceStart`（`WHERE started_at > 新开始`，并发前移只有更早的那次落得上）；编排写开始没落上就读回重判，至多三轮；`AT-TF-189` 与替身、真库、无事务负向证据齐。顺带改正一处方向：评审意见与 ADR-0204 原文都把「开始偏晚」的后果写成「可取消范围变大」，按判据（申请不晚于开始即取消不了）实际是变小——开始之后为剩余范围提出的订舱被锁住；ADR-0204「候选与反方」与前移写口头注已按正确方向改写，风险点 3 补了前移之后「此前答过的已开始随之过时」。代决：开始取最早、只前移（越权风险点：首个参与被更正时仍不重派生，ADR-0204 风险点 1 / 票 57）。
+2. **取消只有整份、不往下游传，ADR 却把 CONTEXT 那句当已满足引用**（建议进 main 前）——修了文档：ADR-0204 决定三写明委托取消是整份的、成立时不向订舱与预占发请求，订舱口不挡已取消委托的理由改为「这是唯一的手工路径」；新增越权风险点 9 → 并入票 58（部分取消要先知道成员随哪一段开始，与 58 的成员—段对象关系同源；订舱一级「哪些已消耗」指向票 37）。编排头注同步。未改代码：部分取消与下游传播都要 TF owner 先裁形状。
+3. **CONTEXT 两句硬句**（建议进 main 前）——修了：「采用之后不改」改写为现状并指向 ADR-0204 风险点 2；订舱判法标「属产品策略（ADR-0204 决定三）」；生命周期一条同步前移语义。
+4. **与 origin/main 五处追加冲突**（建议进 main 前）——修了：rebase 到 `0c56e842`，`cmd/parcel-api/endpoints.go`、`endpoints_test.go`、`main.go`、`scripts/demo-seeds/seed.sh`、`data/access/03-admission-scope-mappings.json` 两边的行全保留、只追加（`seed.sh` 本票三行插在 31 号之后、送站预报两行之前，不重排既有行）；重跑 `cmd/parcel-api` 与一次性库种子灌入。
+5. **机制清点没重生成**（建议进 main 前）——不采纳：协调方派单明令「不要重生成机制清点（进 main 时统一做）」，合入时以统一重生成的结果为准。
+6. **取消重放沿用提交口的重放名**——修了：两个取消口的重放答 `EXISTING_CANCELLATION`（编排枚举 `CancellationExistingResult`），写进 ADR-0204 决定三；全仓与在途分支没有消费方（同原「偏离」那一条的核法）。
+7. **cmd 真库用例 Covers 声称证了装配回滚**——修了：新增 `TestTheAdoptionShellRollsBackALinkWhenTheCommissionIsCancelledUnderneath`，包一层委托册，在写开始之前经生产取消口另开一笔提交取消；探针用采用那一笔的上下文证连线确已落进事务，断言答 `COMMISSION_NOT_ADOPTABLE`、采用册零行、委托行只有取消。做过变异核对：把壳改成不回滚，用例即红（采用 1 行）。原用例第二段 11:00 开始、委托 12:00 取消，此后采用改答 `COMMISSION_CANCELLED_AFTER_START`，Covers 改写为它实际证到的（领域在落连线之前判出、零写入）。
+8. **端口头注的时效措辞**——修了：两处改为结构理由（ports.go 的接口有别的包写的替身实现，加方法就编不过）；`FindBySegment` 的消费方改为将来时并指票 28。
+
+### 用例（评审新增与改动）
+
+- `AT-TF-187`：领域 `TestAnAdoptionRefusesEachUnmetPrecondition`（取消晚于、等于、早于段开始，无当前参与，段早于提交）；编排 `TestAnAdoptionAnswersEachUnmetPreconditionWithoutWriting`（回显两项）、`TestAdoptionRecoveryAndConcurrency`（并发窗口两格）；线格式 `TestTheCancellationFacesStopUnstartedIntents`；真库 `TestAnAdoptionAfterACancellationDatedAfterTheSegmentStartedAnswersTheConflict`、cmd `TestTheWiredAdoptionFaceStartsTheCommissionOfASegmentEstablishedByHandover`、`TestTheAdoptionShellRollsBackALinkWhenTheCommissionIsCancelledUnderneath`。
+- `AT-TF-181` 前移半边与 `AT-TF-189`：领域 `TestAdoptingACommissionStartsItFromTheSegmentsFirstParticipation`；编排 `TestAdoptingACommissionStartsItAndCancellationThenAnswersAlreadyStarted`、`TestAnEarlierSegmentAdvancesTheStartAndReleasesBookingsForTheRemainingScope`、`TestAdoptionRecoveryAndConcurrency`（并发前移两格）；真库 `TestAnEarlierStartingSegmentAdoptedLaterAdvancesTheCommissionStart`；无事务负向证据 `TestAdoptionAndBookingCancellationWritesRefuseToRunOutsideATransaction` 补 `AdvanceStart`。
+
+### 再验证
+
+- `go build ./...`；`go vet`（transportfulfillment、accessidentity、cmd/parcel-api、scripts/demo-seeds、migrations）；本分支改动的 Go 文件 `gofmt -l` 为空。
+- `IDP_PARCEL_POSTGRES_DSN=… go test -p 1 -count=1 ./internal/transportfulfillment/... ./internal/accessidentity/... ./internal/architecture/ ./migrations/ ./cmd/parcel-api/ ./scripts/demo-seeds/...` 全 ok（rebase 之后跑）。全量与机制清点未跑（进 main 时统一做）。
+- 演示种子：一次性库 `dcg25_rev_seed` 上 `seed.sh` 退 0，三种授予、27 条准入对照（含送站预报两条与本票三条）落库，用完已删库。
+- 演示环境没有重走；评审后补的三条答法（`EXISTING_CANCELLATION`、`COMMISSION_CANCELLED_AFTER_START`、开始前移）在演示文档里注明只有用例证据。
+
