@@ -1,7 +1,7 @@
 # 60 派送发起随交接信封在进程内逐对象发起
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg60（2026-10-19 作者子代理，见「完成记录」；隔离评审一轮已按「评审记录」修订，待进 main）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
+Status: resolved——2026-10-19 进 main（全量钉 @@PIN@@；交接与派送 A 波同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg60（2026-10-19 作者子代理，见「完成记录」；隔离评审一轮已按「评审记录」修订，待进 main）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
 Blocked by: 无
 地盘：TF 新 `application/trigger_dispatch_on_handover.go`、新 `adapters/inbox/transport_handover_registered_consumer.go`（inbox 名与 VE 那一路分家）；`cmd/parcel-dispatch/assemble.go`（交接一行改 FanOut，`veHandoverUndecidedSentinels` 注释）+ 新 `assemble_delivery_dispatch_on_handover.go`（照 parcel-api `buildDeliveryDispatchTrigger` 另写一份，不跨 main 包复用）+ 新真库用例；`cmd/parcel-api/assemble_delivery_dispatch.go` 头注「实例半边」一句改指 ADR-0216；文档 ADR-0216、UC-TF-006 触发行与 AT、TF CONTEXT「揽收、派送与交付」一句、`docs/product/PILOT-PARAMETER-REGISTER.md` 的 `PAR-NET-09` 拍频格、演示脚本。
 出处：[06](./06-delivery-dispatch-has-no-in-process-trigger-and-no-recipient-leg.md)；[psb/09](../../product-strategy-boundary/issues/09-tf-fulfillment-judgment-methods-and-connectors.md)「派送发起策略」；[psb/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)「格 13 · 派送发起」；方案「代决」C10，「需要的 ADR」ADR-0216。
@@ -204,3 +204,9 @@ M
 - `gofmt -l cmd internal` 无输出。
 - 带 DSN 跑 `go test -p 1 -count=1 ./internal/architecture/ ./internal/transportfulfillment/application/ ./internal/transportfulfillment/adapters/inbox/ ./cmd/parcel-dispatch/`，全 ok。
 - 这次只改了注释与文档，没跑全量，也没重生成机制清点。
+
+## 进 main 记录（2026-10-19）
+
+- 交接与派送 A 波 60、64、68 合成一批，按 68 → 64 → 60 叠到 main 上，整批快进推送，与本记录同一次推送。合批时协调方在合批分支上直接做了票 71（派送发起过期注释改指 ADR-0216）与票 74（ADR 索引 ADR-0205 两行合一）；另把 ADR 索引里 0206、0207、0209、0210、0217 各两行合成一行——那是协调方先前合批时的冲突解法把同一行的新旧两版都留下了，解法已改为按合并基点判新旧。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 @@PIN@@。机制清点在推送 tip 上重生成。
