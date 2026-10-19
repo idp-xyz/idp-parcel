@@ -1,7 +1,7 @@
 # 48 cmd/parcel-api 测试与注释照实写：隔离形态残名改名、去变更说明、序号引用改引文
 
 Category: chore
-Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审（见文末「完成记录」）。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 续做并扩范围（见「裁定补」）：分支 `claude-oc48` 上的四笔先 rebase 到最新 main 并核一遍。此前 ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-oc48`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-oc48`）上留有4 笔（隔离形态残名、Covers、作业事实装配表、isolatedWriteAdmission 头注），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 4、序 6、序 2 评审遗留；用户授权代决）；分支 `claude-oc48`
+Status: resolved——2026-10-19 进 main（代码验证钉 `1293a408`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审（见文末「完成记录」）。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 续做并扩范围（见「裁定补」）：分支 `claude-oc48` 上的四笔先 rebase 到最新 main 并核一遍。此前 ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-oc48`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-oc48`）上留有4 笔（隔离形态残名、Covers、作业事实装配表、isolatedWriteAdmission 头注），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 4、序 6、序 2 评审遗留；用户授权代决）；分支 `claude-oc48`
 Blocked by: 无
 父票：[26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)（票 26 评审遗留的后续）
 出处：票 [15](./15-operation-decision-faces-take-operator-intake.md) Comments「钉 `60244fa6`」那条评审 Standards 非阻断 1–3（cmd 部分）；票 [23](./23-node-operations-isolated-command-intake-retires.md) Comments 评审 Standards 非阻断 3；票 [25](./25-node-reception-carries-parcel-shipment-service-result-markers.md) Comments 评审 Standards 非阻断 2 的同类横扫。
@@ -153,7 +153,7 @@ TF adapters/http 的 `decisionLines` 头注属于同一条评审，但不在 C8 
 - [x] 全仓不再有 `operationDecisionFacesLeftOnIsolatedWrite`；`TestWorkFactChannelLeavesOperationDecisionFacesUnconfigured` 跑运营决定全集仍 PASS。
 - [x] 真库表的 Covers 与表头里不再有「第二条」「第三、四条」「四口」「已撤」「改写后」。
 - [x] gofmt、`go build ./...`、`go vet ./...` 通过；带 DSN 跑 `go test -p 1 -count=1 ./cmd/parcel-api/` 全 ok，其中 `TestTransportFulfillmentCommandLinesAnswerBusinessOutcomesAgainstARealDatabase` 是 PASS 而不是 SKIP。
-- [ ] 走 Go 那条路（parallel-sessions）。
+- [x] 走 Go 那条路（parallel-sessions）。
 - [x] 票 15 Comments「钉 `60244fa6`」那条评审下追记处置：Standards (1)(2)(3) 的 cmd 部分指向本票；(1) 里 `OperatorDecisionIntake` 的头注已由 `7ec601ab` 修掉。票 22 Comments 追记 cmd 部分。票 26「评审结果」序 4、序 5 的去向格补上本票号。
 
 ### 三、序号引用横扫（簇 C1 派生草案）
@@ -193,8 +193,8 @@ Go 注释与测试头注，用序号去指别处的条目。常见两种：
 
 - [x] 上面三节各条逐条改完或注明「已不存在」；凡草案里改 endpoints.go 的条目，本票一律不做（归 35）。
 - [x] 改动文件 `git diff --check` 干净、无 CR / BOM；注释中文、只写为什么、不写变更说明、跨文件引用不用行号也不用计数。
-- [ ] 改动包 `gofmt -l` 无输出，`go build ./...`、`go vet ./...` 退 0，改动包及反向依赖与 `./internal/architecture/...` 带 DSN `go test -p 1 -count=1` 全 ok。
-- [ ] 非作者评审（隔离子代理两轴）0 阻断；推送方在干净检出上带 DSN 跑全量；机制清点有变则重生成。
+- [x] 改动包 `gofmt -l` 无输出，`go build ./...`、`go vet ./...` 退 0，改动包及反向依赖与 `./internal/architecture/...` 带 DSN `go test -p 1 -count=1` 全 ok。（由推送方全量覆盖，见进 main 记录）
+- [x] 非作者评审（隔离子代理两轴）0 阻断；推送方在干净检出上带 DSN 跑全量；机制清点有变则重生成。（评审由会话 idp-parcel-9b 读 diff 代行，不算非作者评审——用户 2026-10-18 选「精简续做」；全量见进 main 记录）
 
 ## 完成记录（2026-10-19，作者子代理，分支 `claude-oc48`，工作树 `/home/tops/workspace/idp-parcel-claude-oc48`）
 
@@ -296,3 +296,9 @@ Go 注释与测试头注，用序号去指别处的条目。常见两种：
 - **Standards**：没写命名空间的「票 04」一类都补全了；同段里顺带的计数说法一并改掉。
 - **作者代决认可**：`endpoints.go` 两行注释照「裁定补」的全仓范围改了。推送方已就此更正先前对另一会话说的「48 不碰 endpoints.go」。
 - **留待另议，不立票**：不带「第…条」的裸编号标签（「判据 3」「裁定 2」一类）与圈码，存量较多、跨多个上下文与在途会话。照 AGENTS.md「改文档」，这一类结构上守不了、只能靠不写，新写的由各票评审拦；存量在各文件下次被改时顺手改，不另起横扫。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-oc48`（暂停前四笔、续做四笔、评审记录一笔）rebase 到远端 main 之上快进推送；机制清点重生成零差。
+- 推送方全量一次：钉 `1293a408` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 144 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0。
+- 验证之后远端进了另一会话的 demo-chain-gaps/13（`cmd/parcel-dispatch` 一份测试与演示种子映射），与本票的文件不相交；rebase 后补跑 `cmd/parcel-dispatch/...`、`cmd/parcel-api/...` 带 DSN 照绿，未重跑全量。
