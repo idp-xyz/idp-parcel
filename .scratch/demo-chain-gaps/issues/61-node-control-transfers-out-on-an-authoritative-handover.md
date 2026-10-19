@@ -1,7 +1,7 @@
 # 61 节点控制按权威运输交接转出（UC-NO-005 上半）
 
 Category: enhancement
-Status: in-progress——评审已修订（0 阻断），待进 main，分支 claude-dcg61（已 rebase 到 `origin/main` `8e5125c2`）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
+Status: in-progress——评审已修订（0 阻断），待进 main，分支 claude-dcg61（已 rebase 到 `origin/main` `129e9a38`）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
 Blocked by: 无
 地盘（**需与 idp-parcel-9b 协调**）：NO 新 `domain/control_transition.go`、新 `ports/physical_control.go`（不改 `ports.go`）、新 `application/transfer_control_on_handover.go`、新 `adapters/postgres/physical_control_transition.go` + NO 迁移（认领时现取）、新查阅册 `adapters/postgres/review_catalogue_control_transition.go`、新 `adapters/inbox/transport_handover_registered_consumer.go`；改写 `adapters/transportfulfillment/control_transfer.go`（按键读交接，去掉字符串比对）；`cmd/parcel-dispatch/assemble.go` FanOut 加一路 + 新 `assemble_node_control_on_handover.go` + 新真库用例；文档 ADR-0214、新 UC-NO-005、NO CONTEXT「节点控制」一句、CONTEXT-MAP `node-operations ↔ transport-fulfillment` 一句、开发主线「机制半边现状」PN-04 行更正、演示脚本。
 与 idp-parcel-9b 的四个共享点（详见方案「与 idp-parcel-9b 的协调点」）：
@@ -37,7 +37,7 @@ L
 
 ## 完成记录
 
-2026-10-19，作者子代理，分支 `claude-dcg61`（基于 `origin/main` `de9e3ad9`；评审后 rebase 到 `8e5125c2`，见「评审记录」）。授权：用户原话「你作为业务和系统专家自决……解决所有的问题」；统一代决见 [handover-dispatch-plan](../handover-dispatch-plan.md) C2–C7，方案没裁的细节下面逐条记「代决」。证据只记 `S`。
+2026-10-19，作者子代理，分支 `claude-dcg61`（基于 `origin/main` `de9e3ad9`；评审后 rebase 到 `129e9a38`，见「评审记录」）。授权：用户原话「你作为业务和系统专家自决……解决所有的问题」；统一代决见 [handover-dispatch-plan](../handover-dispatch-plan.md) C2–C7，方案没裁的细节下面逐条记「代决」。证据只记 `S`。
 
 ### 做了什么
 
@@ -184,6 +184,7 @@ L
   - 没另立后继票：这一格与 81 同是入账格的处置面，归 81，不另占号。
 - **与当前 `origin/main` 合并**（建议进 main 前修）。
   - rebase 到 `8e5125c2`（含票 59、28）。冲突只在 `.scratch/at-coverage-inventory.md` 与 `docs/design/synthetic-demo-journey-script.md`，都是相邻追加段，两段都留，59 在前。
+  - 修订期间 main 又进了 ps-external-mark-relations/12（送站交接单、迁移 `node_operations/0016`），再 rebase 到 `129e9a38`，无冲突。它新加的收寄读口 `reception_handover_recheck_lookup.go` 经 `receptionColumns` 读，转出照样折进去；迁移号 0017 在 main 上仍空着。
   - 演示补记改写：载荷可带 `releasingNode`，NO 转出不读它；交出节点不符的信息格随票 62；那次实走在 59 进 main 之前。
   - 「完成判据·演示」那一行同注。
 - **`ReviewCatalogueReader` 头注**：不再逐册枚举，改说「节点作业查阅各本册子的列表读面，一册一个方法」。
@@ -225,7 +226,7 @@ L
 
 ### 验证
 
-- 在 rebase 后的分支上：`go build ./...`、`gofmt -l`（internal、cmd、migrations）干净；`go vet` 跑过 `./internal/nodeoperations/...`、`./cmd/parcel-dispatch/`、`./cmd/parcel-api/`、`./migrations/`，干净。
+- 在 rebase 到 `129e9a38` 之后的分支上：`go build ./...`、`gofmt -l`（internal、cmd、migrations）干净；`go vet` 跑过 `./internal/nodeoperations/...`、`./cmd/parcel-dispatch/`、`./cmd/parcel-api/`、`./migrations/`，干净。
 - `IDP_PARCEL_POSTGRES_DSN=… go test -p 1 -count=1` 全 ok，覆盖：
   - `./internal/nodeoperations/...`、`./internal/architecture/`、`./migrations/`；
   - `./cmd/parcel-dispatch/`、`./cmd/parcel-api/`、`./cmd/parcel-frontline-import/`、`./cmd/parcel-node-operations-register/`；
