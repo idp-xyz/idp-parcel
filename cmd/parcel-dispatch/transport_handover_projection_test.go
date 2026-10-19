@@ -111,6 +111,12 @@ func recordRegisteredTransportHandover(t *testing.T, fixture *synVerticalFixture
 	if err != nil {
 		t.Fatalf("形成对象级交接：%v", err)
 	}
+	// 这里绕过登记编排直接写登记册，照编排的样子带上`已交接`必带的交出门禁读数（ADR-0213 决定四）：没声明交出节点，
+	// 读数是不问关务就定得出的那一份。
+	gateReading, _ := handover.UnaskedGateReading()
+	if handover, err = handover.WithGateReading(gateReading); err != nil {
+		t.Fatalf("挂交出门禁读数：%v", err)
+	}
 
 	record := tfports.TransportHandoverRecord{
 		Key: tfports.TransportHandoverKey{

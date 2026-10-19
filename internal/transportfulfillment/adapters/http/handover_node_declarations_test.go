@@ -10,6 +10,7 @@ import (
 
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
@@ -52,8 +53,14 @@ func TestAHandoverCorrectionPayloadCarryingANodeIsMalformed(t *testing.T) {
 }
 
 // nodeHandoverEndpoint 是首登口接上生产 Intake 与真编排之后的样子：载荷经 HandoverRegistrationPayload 进来，只有
-// 登记册与段册是替身。
+// 登记册、段册与关务那一口是替身（关务答不受门禁）。
 func nodeHandoverEndpoint(t *testing.T) http.Handler {
+	t.Helper()
+	return nodeHandoverEndpointAsking(t, &customsGateStub{answer: domain.GateNotGuarded})
+}
+
+// nodeHandoverEndpointAsking 同 nodeHandoverEndpoint，关务那一口由调用方给；交出门禁读数照组合根的次序在登记之前问。
+func nodeHandoverEndpointAsking(t *testing.T, customs ports.HandoverGateView) http.Handler {
 	t.Helper()
 	at := time.Date(2026, 9, 24, 6, 0, 0, 0, time.UTC)
 	registry, segments := newHandoverRegistry(), newSegmentRegistry()
@@ -69,7 +76,7 @@ func nodeHandoverEndpoint(t *testing.T) http.Handler {
 			Clock:      tfClock{at: at},
 		}),
 	})
-	return tfhttp.NewRegisterTransportHandoverEndpoint(workFactIntakeForTest(t), handler)
+	return tfhttp.NewRegisterTransportHandoverEndpoint(workFactIntakeForTest(t), gated(t, registry, handler, customs))
 }
 
 func handoverAnswer(t *testing.T, endpoint http.Handler, body string) (int, map[string]json.RawMessage) {

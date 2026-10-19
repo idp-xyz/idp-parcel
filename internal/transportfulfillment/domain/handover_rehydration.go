@@ -31,13 +31,16 @@ type RehydrateTransportHandoverSpec struct {
 	Nodes             HandoverNodeDeclarations
 	Corrects          HandoverResultVersion
 	CorrectedAt       time.Time
+	// GateReading 是这一版落册时随记的交出门禁读数：`已交接`必带（迁移之前的存量回填为未决），其余裁决不带。
+	GateReading HandoverGateReading
 }
 
 // RehydrateTransportHandover 从库里读到的产物重建一份交接判断。
 //
 // 逐格完备性与 FormTransportHandover 同一套：`已交接`要双方证据加适用规则且不带依据，
 // 拒收与待确认必须带依据。版本链要么整体缺席（首登），要么回指前版且不自指、更正时间
-// 不早于裁决时间——与 Correct 立的三道门一一对应。
+// 不早于裁决时间——与 Correct 立的三道门一一对应。交出门禁读数与 WithGateReading 同一道
+// 归属门，只多收存量回填那一种停点。
 func RehydrateTransportHandover(spec RehydrateTransportHandoverSpec) (TransportHandover, error) {
 	if !spec.TenantID.valid() || !spec.Object.valid() || !spec.Scope.valid() ||
 		!spec.ReleasedBy.valid() || !spec.ReceivedBy.valid() ||
@@ -65,7 +68,7 @@ func RehydrateTransportHandover(spec RehydrateTransportHandoverSpec) (TransportH
 			return TransportHandover{}, rehydratedHandoverRefusal("更正时间早于裁决")
 		}
 	}
-	return TransportHandover{
+	handover := TransportHandover{
 		tenantID:          spec.TenantID,
 		object:            spec.Object,
 		scope:             spec.Scope,
@@ -81,7 +84,18 @@ func RehydrateTransportHandover(spec RehydrateTransportHandoverSpec) (TransportH
 		nodes:             spec.Nodes,
 		corrects:          spec.Corrects,
 		correctedAt:       spec.CorrectedAt.UTC(),
-	}, nil
+	}
+	if spec.Verdict != ObjectHandedOver {
+		if spec.GateReading.formed() {
+			return TransportHandover{}, rehydratedHandoverRefusal("拒收或待确认带了交出门禁读数——没有转出控制就没有交出可读")
+		}
+		return handover, nil
+	}
+	if err := spec.GateReading.placedOn(handover, true); err != nil {
+		return TransportHandover{}, rehydratedHandoverRefusal("已交接缺交出门禁读数，或读数问的对象、意图与这一版的声明对不上")
+	}
+	handover.gateReading = spec.GateReading
+	return handover, nil
 }
 
 func rehydratedHandoverRefusal(reason string) error {

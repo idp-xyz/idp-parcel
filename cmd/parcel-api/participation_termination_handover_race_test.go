@@ -105,8 +105,13 @@ func (channel terminationChannel) racingCorrections(t *testing.T, segments *raci
 	if err != nil {
 		t.Fatal(err)
 	}
+	gate, err := buildHandoverGateReader(channel.db, handovers)
+	if err != nil {
+		t.Fatal(err)
+	}
 	handler := transactionalHandover{
 		transactor: channel.db.Transactor(),
+		gate:       gate,
 		inner: tfapp.NewRegisterTransportHandoverHandler(tfapp.RegisterTransportHandoverDeps{
 			Handovers:         handovers,
 			Segments:          segments,

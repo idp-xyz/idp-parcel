@@ -274,6 +274,7 @@ func serveTransportHandovers(
 			ReleasingNode:   row.ReleasingNode,
 			ReceivingNode:   row.ReceivingNode,
 			OnwardNode:      row.OnwardNode,
+			GateReading:     row.GateReading,
 		})
 	}
 	writeJSON(response, http.StatusOK, transportHandoverListResponse{
@@ -516,7 +517,7 @@ type transportHandoverListResponse struct {
 // 一版本，更正是新行指回前版，原判断在册面上继续可见。交接边界由 releasedBy 与
 // receivedBy 两个参与方引用表达，组合成「A → B」是呈现的事。releasingNode / receivingNode /
 // onwardNode 是登记方声明的三个节点（ADR-0213），没声明的那格缺席——缺席是「没有声明」，
-// 不是读不出。
+// 不是读不出。gateReading 是`已交接`那一版随记的交出门禁读数整格（ADR-0213 决定四），拒收与待确认上缺席。
 type transportHandoverBody struct {
 	Object          string `json:"object"`
 	Scope           string `json:"scope"`
@@ -532,6 +533,7 @@ type transportHandoverBody struct {
 	ReleasingNode   string `json:"releasingNode,omitempty"`
 	ReceivingNode   string `json:"receivingNode,omitempty"`
 	OnwardNode      string `json:"onwardNode,omitempty"`
+	GateReading     string `json:"gateReading,omitempty"`
 }
 
 type effectiveDeliveryListResponse struct {

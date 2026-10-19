@@ -8,6 +8,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	tfcustoms "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/customscompliance"
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	tfapp "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
@@ -27,8 +28,13 @@ import (
 // 从进段那道门铸出，装配点若把 Judgments 留空，CONTEXT「实际履约段成立时即形成首个判断版本」在
 // 生产上就没有一条路走到，而三条编排的答案照样是成功——缺席被设计成不红，只有这里能补上它。
 
+// transactionalHandover 先在写事务之外问交出门禁读数，再把交接登记（首登或更正）包进一笔事务，读数随`已交接`那一版
+// 同一笔落册（ADR-0213 决定四）。同内容重放不重问关务，取在册那一版的读数（RecordedHandoverGateReading 说明为什么）；
+// 那一问也在池上。读数不进写事务的理由与出发登记相同（transactionalMovementFact）：关务的判断在它自己的事务里记下，
+// 嵌进来即拒；跨上下文读在写事务里出一次 SQL 级错误，整笔进中止态，读不动反而挡住了交接落册。
 type transactionalHandover struct {
 	transactor bentoapp.Transactor
+	gate       *tfapp.HandoverGateReader
 	inner      *tfapp.RegisterTransportHandoverHandler
 }
 
@@ -38,9 +44,16 @@ func (handover transactionalHandover) Register(
 	ctx context.Context,
 	command tfapp.RegisterTransportHandoverCommand,
 ) (tfapp.RegisterTransportHandoverResult, error) {
+	reading, replayed := handover.inner.RecordedHandoverGateReading(ctx, command)
+	if !replayed {
+		var err error
+		if reading, err = handover.gate.ReadRegistration(ctx, command); err != nil {
+			return tfapp.RegisterTransportHandoverResult{}, err
+		}
+	}
 	var result tfapp.RegisterTransportHandoverResult
 	err := handover.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		handled, handleErr := handover.inner.Register(txCtx, command)
+		handled, handleErr := handover.inner.RegisterWithGateReading(txCtx, command, reading)
 		if handleErr != nil {
 			return handleErr
 		}
@@ -57,9 +70,16 @@ func (handover transactionalHandover) Correct(
 	ctx context.Context,
 	command tfapp.CorrectTransportHandoverCommand,
 ) (tfapp.RegisterTransportHandoverResult, error) {
+	reading, replayed := handover.inner.RecordedCorrectionGateReading(ctx, command)
+	if !replayed {
+		var err error
+		if reading, err = handover.gate.ReadCorrection(ctx, command); err != nil {
+			return tfapp.RegisterTransportHandoverResult{}, err
+		}
+	}
 	var result tfapp.RegisterTransportHandoverResult
 	err := handover.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-		handled, handleErr := handover.inner.Correct(txCtx, command)
+		handled, handleErr := handover.inner.CorrectWithGateReading(txCtx, command, reading)
 		if handleErr != nil {
 			return handleErr
 		}
@@ -139,6 +159,10 @@ type controlFactOrchestrations struct {
 // 缝全接真：交接登记册、揽收登记册、揽收尝试库、段登记册、实际承运商判断登记册、结果版本签发
 // （一只 ResultVersions 担揽收与交付两个签发端口，按端口各自注入）、三条 Outbox 意图交付、时钟。
 // 本笔没有「显式未配置」缝：控制事实引用的都是本上下文自己的事实，没有等租户参数的实例半边。
+//
+// 交接那一条另接交出门禁读数：经消费侧适配器问关务的动作准入判断（ADR-0213 决定四）。关务那一口在这里另装一份，
+// 理由同 buildMovementFactOrchestration——同一批真适配器、同一个库、无状态，传进来就要改 main 里既有几行的次序。
+// 节点关务区域没登记时关务按 ADR-0206 决定二作答，读数照记，不是本笔的未配置缝。
 func buildControlFactOrchestrations(db *bentopg.DB) (controlFactOrchestrations, error) {
 	segments, err := tfpostgres.NewFulfillmentSegments(db)
 	if err != nil {
@@ -170,6 +194,10 @@ func buildControlFactOrchestrations(db *bentopg.DB) (controlFactOrchestrations, 
 	if err != nil {
 		return controlFactOrchestrations{}, err
 	}
+	handoverGate, err := buildHandoverGateReader(db, handovers)
+	if err != nil {
+		return controlFactOrchestrations{}, err
+	}
 
 	pickups, err := tfpostgres.NewOffsitePickupRegistrations(db)
 	if err != nil {
@@ -193,6 +221,7 @@ func buildControlFactOrchestrations(db *bentopg.DB) (controlFactOrchestrations, 
 	return controlFactOrchestrations{
 		handover: transactionalHandover{
 			transactor: transactor,
+			gate:       handoverGate,
 			inner: tfapp.NewRegisterTransportHandoverHandler(tfapp.RegisterTransportHandoverDeps{
 				Handovers:         handovers,
 				Segments:          segments,
@@ -225,4 +254,22 @@ func buildControlFactOrchestrations(db *bentopg.DB) (controlFactOrchestrations, 
 			}),
 		},
 	}, nil
+}
+
+// buildHandoverGateReader 装交出门禁读数那一侧：交接登记册（更正取前版）与关务动作准入判断的消费侧适配器。另成一个函数，
+// 让与生产装配同形的测试装配取的是同一份，而不是各抄一遍。
+func buildHandoverGateReader(db *bentopg.DB, handovers *tfpostgres.TransportHandovers) (*tfapp.HandoverGateReader, error) {
+	customsAdmission, err := buildCustomsAdmissionOrchestration(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: transport handover gate: %w", err)
+	}
+	customs, err := tfcustoms.NewHandoverGateView(customsAdmission.actionAdmission)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: transport handover gate: %w", err)
+	}
+	gate, err := tfapp.NewHandoverGateReader(tfapp.HandoverGateReadDeps{Handovers: handovers, Customs: customs})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: transport handover gate: %w", err)
+	}
+	return gate, nil
 }

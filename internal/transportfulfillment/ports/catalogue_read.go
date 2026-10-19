@@ -100,7 +100,8 @@ type CapacityPoolCatalogueRow struct {
 // 列面不把两方折成一个「边界」串——组合是呈现的事。
 //
 // ReleasingNode、ReceivingNode 与 OnwardNode 是登记方声明的交出、接收与去向节点（ADR-0213），各自缺席即空串；
-// 与两个参与方引用并列透出，不互相折算。
+// 与两个参与方引用并列透出，不互相折算。GateReading 是这一版随记的交出门禁读数的整格（ADR-0213 决定四，五格封闭词
+// 同出发读数），只在`已交接`上在场；逐对象依据与关务判断标识不上列面，按键读回交接看。
 type TransportHandoverCatalogueRow struct {
 	Object          string
 	Scope           string
@@ -116,6 +117,7 @@ type TransportHandoverCatalogueRow struct {
 	ReleasingNode   string
 	ReceivingNode   string
 	OnwardNode      string
+	GateReading     string
 }
 
 // EffectiveDeliveryCatalogueRow 是有效交付结果册上列的一行：只列当前版

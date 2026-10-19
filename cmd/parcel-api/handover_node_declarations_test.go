@@ -55,9 +55,18 @@ func postWorkFact(t *testing.T, endpoint http.Handler, path, body string) (int, 
 	stampWorkFact(request, "OFFSITE", "SYN-OFFSITE-01", "SYN-DEVICE-OFFSITE")
 	response := httptest.NewRecorder()
 	endpoint.ServeHTTP(response, request)
-	var fields map[string]string
-	if err := json.Unmarshal(response.Body.Bytes(), &fields); err != nil {
+	var decoded map[string]json.RawMessage
+	if err := json.Unmarshal(response.Body.Bytes(), &decoded); err != nil {
 		t.Fatalf("decode %s：%v", response.Body.String(), err)
+	}
+	// 字符串格照原样取值；对象格（交出门禁读数 gateReading）留原文，要看它的用例自己解。
+	fields := make(map[string]string, len(decoded))
+	for key, raw := range decoded {
+		var text string
+		if err := json.Unmarshal(raw, &text); err != nil {
+			text = string(raw)
+		}
+		fields[key] = text
 	}
 	return response.Code, fields
 }

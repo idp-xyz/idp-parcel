@@ -156,6 +156,9 @@ type TransportHandover struct {
 	nodes             HandoverNodeDeclarations
 	corrects          HandoverResultVersion
 	correctedAt       time.Time
+	// gateReading 是这一版落册时随记的交出门禁读数（ADR-0213 决定四），只有`已交接`有。它是判断，不是内容：不进摘要，
+	// 更正版不承继——更正成`已交接`的那一版另读一份（见 WithGateReading）。
+	gateReading HandoverGateReading
 }
 
 // FormTransportHandover 逐格校验三值各自的完备性：

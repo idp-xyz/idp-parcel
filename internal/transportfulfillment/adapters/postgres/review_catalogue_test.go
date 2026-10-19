@@ -141,6 +141,7 @@ func catalogueHandoverRecord(t *testing.T, tenant, object, version string) ports
 	if err != nil {
 		t.Fatalf("构造交接夹具：%v", err)
 	}
+	handover = gateReadingOn(t, handover)
 	return ports.TransportHandoverRecord{
 		Key: ports.TransportHandoverKey{
 			TenantID: handoverValue(t, domain.NewTenantID, tenant),

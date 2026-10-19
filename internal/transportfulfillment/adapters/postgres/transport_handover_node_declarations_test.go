@@ -34,7 +34,7 @@ func handedOverRecordWithNodes(t *testing.T, version string, nodes domain.Handov
 	if err != nil {
 		t.Fatalf("构造带节点的已交接夹具：%v", err)
 	}
-	record.Handover = handover
+	record.Handover = gateReadingOn(t, handover)
 	return record
 }
 
@@ -144,12 +144,13 @@ func TestABlankHandoverNodeIsRefusedByTheDatabase(t *testing.T) {
 					 released_by, received_by, verdict,
 					 releasing_evidence, receiving_evidence, rule_ref, basis_ref,
 					 corrects_version, corrected_at, judged_at, content_digest, recorded_at,
-					 releasing_node, receiving_node, onward_node)
+					 releasing_node, receiving_node, onward_node, gate_reading, gate_reading_detail)
 				 VALUES ('tenant-1', 'parcel-1', 'scope-1', 'HRV-BLANK-' || $4::text,
 				         'node-1', 'carrier-1', 'HANDED_OVER',
 				         'seal-out', 'seal-in', 'rule/v1', NULL,
 				         NULL, NULL, now(), 'digest-1', now(),
-				         $1, $2, $3)`,
+				         $1, $2, $3, 'UNDECIDED',
+				         '{"node": null, "onward": null, "stop": "RECORDED_BEFORE_GATE_READING", "finding": null}'::jsonb)`,
 				nodes[0], nodes[1], nodes[2], column)
 			var pgErr *pgconn.PgError
 			if !errors.As(err, &pgErr) {

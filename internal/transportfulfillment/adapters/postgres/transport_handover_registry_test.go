@@ -376,6 +376,7 @@ func scopedRecord(t *testing.T, tenant, object, scope, version string) ports.Tra
 	if err != nil {
 		t.Fatalf("构造 %s/%s/%s 夹具：%v", tenant, object, scope, err)
 	}
+	handover = gateReadingOn(t, handover)
 	return ports.TransportHandoverRecord{
 		Key: ports.TransportHandoverKey{
 			TenantID: handover.TenantID(),
@@ -474,6 +475,7 @@ func handedOverRecord(t *testing.T, version string) ports.TransportHandoverRecor
 	if err != nil {
 		t.Fatalf("构造已交接夹具：%v", err)
 	}
+	handover = gateReadingOn(t, handover)
 	return ports.TransportHandoverRecord{
 		Key:           handoverKeyFixture(t, "tenant-1", version),
 		ContentDigest: "digest-handed-over",

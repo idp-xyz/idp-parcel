@@ -194,35 +194,34 @@ func NewRegisterTransportHandoverHandler(deps RegisterTransportHandoverDeps) *Re
 	return &RegisterTransportHandoverHandler{deps: deps}
 }
 
-// Register 首登一个交接判断版本：受理（三裁决各格完备性由 FormTransportHandover
-// 把门）→ 幂等按（租户+对象+范围+版本）分重放/冲突 → 原子提交 → 一份意图交下游
-// （NO 控制转移与 NR 重判自分）。
+// Register 是 RegisterWithGateReading 不带读数的那一种，供不必问关务的调用方：不是`已交接`的交接没有读数，`已交接`而没
+// 声明交出节点的读数不问关务就定得出（domain.TransportHandover.UnaskedGateReading），与组合根问来的那一份逐字相同。
+// 声明了交出节点的`已交接`要问关务，走这里就是接线错误，上抛 ErrHandoverGateReadingMisplaced——这一口给不出一份错的读数。
 func (handler *RegisterTransportHandoverHandler) Register(
 	ctx context.Context,
 	command RegisterTransportHandoverCommand,
+) (RegisterTransportHandoverResult, error) {
+	return handler.RegisterWithGateReading(ctx, command, domain.HandoverGateReading{})
+}
+
+// RegisterWithGateReading 首登一个交接判断版本：受理（三裁决各格完备性由 FormTransportHandover
+// 把门）→ 幂等按（租户+对象+范围+版本）分重放/冲突 → 带上交出门禁读数 → 原子提交 → 一份意图交下游
+// （NO 控制转移与 NR 重判自分）。
+//
+// reading 是组合根在写事务之前用 HandoverGateReader 问好的交出门禁读数，只属`已交接`（ADR-0213 决定四）。重放与冲突
+// 用不上它——在册那一版早已带着首登时问来的读数，同身份再到只比内容，不另记一份；读数是判断，不进摘要。
+func (handler *RegisterTransportHandoverHandler) RegisterWithGateReading(
+	ctx context.Context,
+	command RegisterTransportHandoverCommand,
+	reading domain.HandoverGateReading,
 ) (RegisterTransportHandoverResult, error) {
 	handover, err := handoverFrom(command)
 	if err != nil {
 		return RegisterTransportHandoverResult{outcome: HandoverNotAccepted}, nil
 	}
 
-	key := ports.TransportHandoverKey{
-		TenantID: command.TenantID,
-		Object:   handover.Object(),
-		Scope:    handover.Scope(),
-		Version:  handover.Version(),
-	}
-	_, digest, err := domain.CanonicalizeHandoverPayload(
-		command.Verdict,
-		command.ReleasedBy,
-		command.ReceivedBy,
-		command.ReleasingEvidence,
-		command.ReceivingEvidence,
-		command.Rule,
-		command.Basis,
-		command.JudgedAt,
-		handover.Nodes(),
-	)
+	key := handoverRecordKey(command.TenantID, handover)
+	digest, err := registrationDigest(command, handover)
 	if err != nil {
 		return RegisterTransportHandoverResult{}, err
 	}
@@ -232,6 +231,9 @@ func (handler *RegisterTransportHandoverHandler) Register(
 	}
 	if found {
 		return handler.answerOccupiedKey(ctx, existing, digest, unversionedHandoverDigest(command)), nil
+	}
+	if handover, err = withGateReading(handover, reading); err != nil {
+		return RegisterTransportHandoverResult{}, err
 	}
 
 	result, err := handler.commit(ctx, ports.TransportHandoverRecord{
@@ -319,13 +321,27 @@ func (handler *RegisterTransportHandoverHandler) establishSegment(
 	)
 }
 
-// Correct 对已登记的判断落更正版本：读回前版 → 领域 Correct（新版回指前身、完备性
-// 同首次裁决、同版本号拒）→ 以新版本键登记 → 意图重新交付下游 → 同事务在段上重派生该对象的参与
-// （ADR-0112 决定二）。仍`已交接`的更正形成替代参与版本；被更正为拒收或待确认的如实答
-// `更正撤回了控制`（决定四，失效格另票），原参与不动。这一半失败不翻更正，答法与首登进段同一格。
+// Correct 是 CorrectWithGateReading 不带读数的那一种，口径同 Register：更正成`已交接`而前版没声明交出节点时读数不问关务
+// 就定得出；要问关务的走这里是接线错误。
 func (handler *RegisterTransportHandoverHandler) Correct(
 	ctx context.Context,
 	command CorrectTransportHandoverCommand,
+) (RegisterTransportHandoverResult, error) {
+	return handler.CorrectWithGateReading(ctx, command, domain.HandoverGateReading{})
+}
+
+// CorrectWithGateReading 对已登记的判断落更正版本：读回前版 → 领域 Correct（新版回指前身、完备性
+// 同首次裁决、同版本号拒）→ 带上交出门禁读数 → 以新版本键登记 → 意图重新交付下游 → 同事务在段上重派生该对象的参与
+// （ADR-0112 决定二）。仍`已交接`的更正形成替代参与版本；被更正为拒收或待确认的如实答
+// `更正撤回了控制`（决定四，失效格另票），原参与不动。这一半失败不翻更正，答法与首登进段同一格。
+//
+// 更正成`已交接`的那一版带自己的读数，不承继前版的：前版可能是待确认、根本没有读数；前版是`已交接`时意图与时点相同，
+// 关务三源没变就答同一份判断（ADR-0206 决定六按内容派生标识），变了就该记下变了的那一份。reading 由组合根在写事务之前
+// 用 HandoverGateReader.ReadCorrection 问好。
+func (handler *RegisterTransportHandoverHandler) CorrectWithGateReading(
+	ctx context.Context,
+	command CorrectTransportHandoverCommand,
+	reading domain.HandoverGateReading,
 ) (RegisterTransportHandoverResult, error) {
 	predecessorKey, err := correctionKey(command)
 	if err != nil {
@@ -348,24 +364,11 @@ func (handler *RegisterTransportHandoverHandler) Correct(
 	if err != nil {
 		return RegisterTransportHandoverResult{outcome: HandoverNotAccepted}, nil
 	}
-	_, correctionDigest, err := domain.CanonicalizeHandoverCorrectionPayload(
-		command.Verdict,
-		command.PredecessorVersion,
-		command.ReleasingEvidence,
-		command.ReceivingEvidence,
-		command.Rule,
-		command.Basis,
-		command.CorrectedAt,
-	)
+	correctionDigest, err := correctionDigestOf(command)
 	if err != nil {
 		return RegisterTransportHandoverResult{}, err
 	}
-	key := ports.TransportHandoverKey{
-		TenantID: command.TenantID,
-		Object:   corrected.Object(),
-		Scope:    corrected.Scope(),
-		Version:  corrected.Version(),
-	}
+	key := handoverRecordKey(command.TenantID, corrected)
 	unversioned := unversionedHandoverCorrectionDigest(command)
 	successor, hasSuccessor, err := handler.deps.Handovers.FindSuccessor(ctx, predecessorKey)
 	if err != nil {
@@ -384,6 +387,9 @@ func (handler *RegisterTransportHandoverHandler) Correct(
 		// 新版本键上已有一版：是这次更正的重放，还是同键异内容（换了证据、改了判、换了前版，或撞上一份首登的版本号）。
 		// 跨口撞键时两份摘要的 face 不同，自然落进冲突格。
 		return handler.answerOccupiedKey(ctx, occupant, correctionDigest, unversioned), nil
+	}
+	if corrected, err = withGateReading(corrected, reading); err != nil {
+		return RegisterTransportHandoverResult{}, err
 	}
 
 	result, err := handler.commit(ctx, ports.TransportHandoverRecord{
@@ -481,6 +487,141 @@ func (handler *RegisterTransportHandoverHandler) answerOccupiedKey(
 	default:
 		return handoverRegistryUndecided(occupant.Key.Object.String())
 	}
+}
+
+// RecordedHandoverGateReading 答这条首登命令是不是在册那一版的同内容重放；是则交回在册那一版首登时问来的读数。
+//
+// 组合根在问读数之前先问它，理由同 RecordMovementFactHandler.RecordedDepartureReading：重放终归回显首次读数，重问关务
+// 只是多做一笔判断，离线队列重投时还拖长每一次。查不了册、不在册、不是`已交接`、内容不同或受理不了都答 false：照常
+// 问读数，答复仍由 RegisterWithGateReading 在写事务里按在册那一版定。
+func (handler *RegisterTransportHandoverHandler) RecordedHandoverGateReading(
+	ctx context.Context,
+	command RegisterTransportHandoverCommand,
+) (domain.HandoverGateReading, bool) {
+	handover, err := handoverFrom(command)
+	if err != nil || !handover.TransfersControl() {
+		return domain.HandoverGateReading{}, false
+	}
+	digest, err := registrationDigest(command, handover)
+	if err != nil {
+		return domain.HandoverGateReading{}, false
+	}
+	existing, found, err := handler.deps.Handovers.FindByKey(ctx, handoverRecordKey(command.TenantID, handover))
+	if err != nil || !found {
+		return domain.HandoverGateReading{}, false
+	}
+	return recordedGateReading(existing, digest, unversionedHandoverDigest(command))
+}
+
+// RecordedCorrectionGateReading 是 RecordedHandoverGateReading 的更正口：前版已有的后继、或新版本键上已在册的那一版是这条
+// 更正的同内容重放时，交回它落册时问来的读数。认法与 CorrectWithGateReading 的占位那两支同序：先看前版的后继，再看新键。
+func (handler *RegisterTransportHandoverHandler) RecordedCorrectionGateReading(
+	ctx context.Context,
+	command CorrectTransportHandoverCommand,
+) (domain.HandoverGateReading, bool) {
+	if command.Verdict != domain.ObjectHandedOver {
+		return domain.HandoverGateReading{}, false
+	}
+	predecessorKey, err := correctionKey(command)
+	if err != nil {
+		return domain.HandoverGateReading{}, false
+	}
+	digest, err := correctionDigestOf(command)
+	if err != nil {
+		return domain.HandoverGateReading{}, false
+	}
+	unversioned := unversionedHandoverCorrectionDigest(command)
+	successor, hasSuccessor, err := handler.deps.Handovers.FindSuccessor(ctx, predecessorKey)
+	if err != nil {
+		return domain.HandoverGateReading{}, false
+	}
+	if hasSuccessor {
+		return recordedGateReading(successor, digest, unversioned)
+	}
+	newKey := predecessorKey
+	if newKey.Version, err = domain.NewHandoverResultVersion(command.NewVersion); err != nil {
+		return domain.HandoverGateReading{}, false
+	}
+	occupant, occupied, err := handler.deps.Handovers.FindByKey(ctx, newKey)
+	if err != nil || !occupied {
+		return domain.HandoverGateReading{}, false
+	}
+	return recordedGateReading(occupant, digest, unversioned)
+}
+
+func recordedGateReading(
+	record ports.TransportHandoverRecord,
+	digest string,
+	unversioned string,
+) (domain.HandoverGateReading, bool) {
+	if domain.CompareStoredHandoverDigest(record.ContentDigest, digest, unversioned) != domain.SamePayload {
+		return domain.HandoverGateReading{}, false
+	}
+	return record.Handover.GateReading()
+}
+
+// withGateReading 给将要落册的那一版带上交出门禁读数。不是`已交接`的不带；`已交接`而没交读数时，只在不问关务就定得出
+// 的那一种（没声明交出节点）由领域补上，要问关务却没问是接线错误——补一格未决会把漏接的门禁演成一串看似正常的读数。
+func withGateReading(
+	handover domain.TransportHandover,
+	reading domain.HandoverGateReading,
+) (domain.TransportHandover, error) {
+	given := reading.Answer() != domain.GateAnswerInvalid
+	if !handover.TransfersControl() {
+		if given {
+			return domain.TransportHandover{}, fmt.Errorf("%w: a %s handover carries no gate reading",
+				domain.ErrHandoverGateReadingMisplaced, handover.Verdict())
+		}
+		return handover, nil
+	}
+	if !given {
+		unasked, determined := handover.UnaskedGateReading()
+		if !determined {
+			return domain.TransportHandover{}, fmt.Errorf("%w: the releasing node is declared but customs was not asked",
+				domain.ErrHandoverGateReadingMisplaced)
+		}
+		reading = unasked
+	}
+	return handover.WithGateReading(reading)
+}
+
+func handoverRecordKey(tenant domain.TenantID, handover domain.TransportHandover) ports.TransportHandoverKey {
+	return ports.TransportHandoverKey{
+		TenantID: tenant,
+		Object:   handover.Object(),
+		Scope:    handover.Scope(),
+		Version:  handover.Version(),
+	}
+}
+
+// registrationDigest 是首登口的内容摘要；登记编排与写事务之前认重放的那一问取同一份。
+func registrationDigest(command RegisterTransportHandoverCommand, handover domain.TransportHandover) (string, error) {
+	_, digest, err := domain.CanonicalizeHandoverPayload(
+		command.Verdict,
+		command.ReleasedBy,
+		command.ReceivedBy,
+		command.ReleasingEvidence,
+		command.ReceivingEvidence,
+		command.Rule,
+		command.Basis,
+		command.JudgedAt,
+		handover.Nodes(),
+	)
+	return digest, err
+}
+
+// correctionDigestOf 是更正口的内容摘要，取用方同 registrationDigest。
+func correctionDigestOf(command CorrectTransportHandoverCommand) (string, error) {
+	_, digest, err := domain.CanonicalizeHandoverCorrectionPayload(
+		command.Verdict,
+		command.PredecessorVersion,
+		command.ReleasingEvidence,
+		command.ReceivingEvidence,
+		command.Rule,
+		command.Basis,
+		command.CorrectedAt,
+	)
+	return digest, err
 }
 
 func handoverFrom(command RegisterTransportHandoverCommand) (domain.TransportHandover, error) {

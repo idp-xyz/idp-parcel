@@ -181,6 +181,41 @@ type handoverResponse struct {
 	ReleasingNode string `json:"releasingNode,omitempty"`
 	ReceivingNode string `json:"receivingNode,omitempty"`
 	OnwardNode    string `json:"onwardNode,omitempty"`
+	// GateReading 是在册那一版随记的交出门禁读数（ADR-0213 决定四），只在`已交接`上有：重放交回的是那一版落册时问来的
+	// 那一份，不是此刻重问的；阻断也照样 201。拒收与待确认上缺席。
+	GateReading *handoverGateReadingView `json:"gateReading,omitempty"`
+}
+
+// handoverGateReadingView 是交出门禁读数回给登记方的线格式，与出发读数（departureGateReadingView）同形：整格、问关务时的
+// 那一份意图（at 交出节点、onward 去向节点，代出发的 from / to）、本上下文这一侧的停点与那件对象的那一格。问了关务而
+// 这一版没声明去向时写明 onwardNotDeclared：跨关务区域那一道因此不在答复里，读到「不受门禁」的人得知道那不是关务核过跨区
+// （ADR-0213 越权风险点 7）。
+//
+// 关务判断标识与依据原文不回给登记方，只随交接落册供运营与 VE 查，口径同出发读数（ADR-0205 决定一）。
+type handoverGateReadingView struct {
+	Answer            string                    `json:"answer"`
+	At                string                    `json:"at,omitempty"`
+	Onward            string                    `json:"onward,omitempty"`
+	OnwardNotDeclared bool                      `json:"onwardNotDeclared,omitempty"`
+	Stops             []string                  `json:"stops,omitempty"`
+	Objects           []departureGateObjectView `json:"objects,omitempty"`
+}
+
+func handoverGateReadingViewOf(reading domain.HandoverGateReading) *handoverGateReadingView {
+	view := &handoverGateReadingView{Answer: reading.Answer().String(), OnwardNotDeclared: reading.OnwardNotDeclared()}
+	if node, asked := reading.Node(); asked {
+		view.At = node.String()
+	}
+	if onward, declared := reading.Onward(); declared {
+		view.Onward = onward.String()
+	}
+	if stop, stopped := reading.Stop(); stopped {
+		view.Stops = []string{stop.String()}
+	}
+	if finding, asked := reading.Finding(); asked {
+		view.Objects = []departureGateObjectView{{Object: finding.Object().String(), Answer: finding.Answer().String()}}
+	}
+	return view
 }
 
 func writeHandoverOutcome(response http.ResponseWriter, result application.RegisterTransportHandoverResult) {
@@ -211,10 +246,14 @@ func writeHandoverOutcome(response http.ResponseWriter, result application.Regis
 		body.ReleasingNode = nodes.Releasing.String()
 		body.ReceivingNode = nodes.Receiving.String()
 		body.OnwardNode = nodes.Onward.String()
+		if reading, read := record.Handover.GateReading(); read {
+			body.GateReading = handoverGateReadingViewOf(reading)
+		}
 	}
 
 	// ADR-0022：状态码只报有没有新落一版。首登与更正都持久化了新版本用 201；重放、冲突、
-	// 未受理、未决都是形成了的答案（200）。
+	// 未受理、未决都是形成了的答案（200）。交出门禁读数是阻断也照样 201：交接落册了，读数是记录里的一格，不是这一次
+	// 登记的答复（ADR-0213 决定四）。
 	status := http.StatusOK
 	if result.Outcome() == application.HandoverRegistered ||
 		result.Outcome() == application.HandoverCorrected {

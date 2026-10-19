@@ -249,7 +249,8 @@ func (catalogue *ReviewCatalogue) ListTransportHandovers(
 		        corrected_at, judged_at, recorded_at,
 		        COALESCE(releasing_node, ''),
 		        COALESCE(receiving_node, ''),
-		        COALESCE(onward_node, '')
+		        COALESCE(onward_node, ''),
+		        COALESCE(gate_reading, '')
 		   FROM transport_fulfillment.transport_handover
 		  WHERE tenant_id = $1
 		  ORDER BY judged_at DESC, object_ref, scope_ref, handover_version
@@ -274,6 +275,7 @@ func (catalogue *ReviewCatalogue) ListTransportHandovers(
 			&row.Basis, &row.CorrectsVersion,
 			&correctedAt, &row.JudgedAt, &row.RecordedAt,
 			&row.ReleasingNode, &row.ReceivingNode, &row.OnwardNode,
+			&row.GateReading,
 		); err != nil {
 			return nil, fmt.Errorf("list transport handovers: %w", err)
 		}

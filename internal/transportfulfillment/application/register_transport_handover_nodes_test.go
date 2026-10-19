@@ -37,7 +37,9 @@ func TestDeclaredHandoverNodesAreContentOfTheRegistration(t *testing.T) {
 	fixture := newHandoverFixture(t)
 	command := registerHandoverWithNodes(t)
 
-	first, err := fixture.handler.Register(context.Background(), command)
+	customs := notGuardedCustoms()
+
+	first, err := gatedRegister(t, fixture, customs, command)
 	wantOutcome(t, first.Outcome(), err, application.HandoverRegistered)
 	stored := onlyHandoverRecord(t, fixture.registry)
 	if !strings.HasPrefix(stored.ContentDigest, "TFC-2:") {
@@ -51,7 +53,7 @@ func TestDeclaredHandoverNodesAreContentOfTheRegistration(t *testing.T) {
 		t.Fatalf("交下游的意图没带上在册那一版的节点声明：%+v", fixture.handoff.intents)
 	}
 
-	replay, err := fixture.handler.Register(context.Background(), command)
+	replay, err := gatedRegister(t, fixture, customs, command)
 	wantOutcome(t, replay.Outcome(), err, application.HandoverExistingVersion)
 	if record, _ := replay.Record(); record.Handover.Nodes() != nodes {
 		t.Fatalf("重放交回的节点 = %+v，want 在册那一版", record.Handover.Nodes())
@@ -72,7 +74,7 @@ func TestDeclaredHandoverNodesAreContentOfTheRegistration(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			changed := command
 			change(&changed)
-			result, err := fixture.handler.Register(context.Background(), changed)
+			result, err := gatedRegister(t, fixture, customs, changed)
 			wantOutcome(t, result.Outcome(), err, application.HandoverRegistrationConflict)
 			if after := onlyHandoverRecord(t, fixture.registry); after.Handover.Nodes() != nodes || after.ContentDigest != stored.ContentDigest {
 				t.Fatalf("冲突顶替了在册那一版：%+v", after.Handover.Nodes())
@@ -119,7 +121,7 @@ func TestRowsStoredBeforeNodeDeclarationsReplayWithoutNodesAndConflictWithThem(t
 // Covers: AT-TF-220——更正命令不带节点，新版本照前版承继三格声明；更正之后原样重投更正仍答已有版本。
 func TestAHandoverCorrectionInheritsTheDeclaredNodes(t *testing.T) {
 	fixture := newHandoverFixture(t)
-	registered, err := fixture.handler.Register(context.Background(), registerHandoverWithNodes(t))
+	registered, err := gatedRegister(t, fixture, notGuardedCustoms(), registerHandoverWithNodes(t))
 	wantOutcome(t, registered.Outcome(), err, application.HandoverRegistered)
 	original, _ := registered.Record()
 

@@ -58,6 +58,8 @@ type departureGateDB struct {
 	t    *testing.T
 	pool *pgxpool.Pool
 	view *tfcustoms.DepartureGateView
+	// handover 是同一口判断上的交出那一侧（handover_gate_test.go 用）。
+	handover *tfcustoms.HandoverGateView
 }
 
 func newDepartureGateDB(t *testing.T) *departureGateDB {
@@ -94,8 +96,10 @@ func newDepartureGateDB(t *testing.T) *departureGateDB {
 	must(err)
 	view, err := tfcustoms.NewDepartureGateView(ownTransactionJudge{db: db, inner: handler})
 	must(err)
+	handover, err := tfcustoms.NewHandoverGateView(ownTransactionJudge{db: db, inner: handler})
+	must(err)
 
-	fixture := &departureGateDB{t: t, pool: pool, view: view}
+	fixture := &departureGateDB{t: t, pool: pool, view: view, handover: handover}
 	registry, err := ccpostgres.NewNodeCustomsZoneRegistrations(db)
 	must(err)
 	tenant := ref(t, ccdomain.NewTenantID, departureTenant)
