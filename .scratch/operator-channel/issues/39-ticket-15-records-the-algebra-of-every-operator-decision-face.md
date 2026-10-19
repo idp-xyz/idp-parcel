@@ -1,7 +1,7 @@
 # 39 票 15 补记复核完成、主动拒绝、授权处置三口凭哪条重放代数；ADR-0151 复核记录收拢决定三的读法
 
 Category: enhancement
-Status: ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 15 之三、之四补核；用户授权代决）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（50 与 39 同一分支 `claude-oc5039`，先 50 后 39）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 15 之三、之四补核；用户授权代决）
 Blocked by: operator-channel/33、34、36 进 main（补记要写「只核对 · 成立」须等修完）；operator-channel/50 裁定（TF 各口的补记行随它）
 父票：[15](./15-operation-decision-faces-take-operator-intake.md)
 出处：票 15 Comments「评审 ← 会话 idp-parcel-9b 起的隔离子代理 · 钉 `0e3bb7df`」那一条里的「子代理顺带提到之三那三口也查不到逐口核对记录」；本次补核（簇 C6）。

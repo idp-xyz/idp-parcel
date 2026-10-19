@@ -1,7 +1,7 @@
 # 50 TF 装载分配与终止参与两口没核重放代数就接上了真渠道：逐口裁现有格够不够
 
 Category: task
-Status: ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 15 之四补核）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（50 与 39 同一分支 `claude-oc5039`，先 50 后 39）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 15 之四补核）
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C6 第五张草案；逐口核研判
