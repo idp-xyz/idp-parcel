@@ -1,7 +1,7 @@
 # 02 装载分配登记口能在同一分配下另起并列首版：版本链成了森林，抢占变化入口要用的版本号，撤回之后还能起活跃新根
 
 Category: bug
-Status: in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 代决并认领（分支 `claude-tfa02`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: resolved——2026-10-18 进 main（代码验证钉 `0a5afa74`），见「进 main 记录」。此前 in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 代决并认领（分支 `claude-tfa02`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment-load-assignment-registrations
@@ -123,3 +123,8 @@ Blocked by: 无
   - **Spec**：阻断无。编排先按键查（原样重放仍答 `LOAD_ASSIGNMENT_VERSION_EXISTS`），键不在再读链头 `FindChainHead`，分配已有版本即答 `LOAD_ASSIGNMENT_ALREADY_FORMED` 并回显链头、不落库；读链头失败答未决。迁移 0021 先查存量并列首版、有就列出并拒绝迁移、不代删，再建部分唯一索引；撞索引时按分配读链头。真渠道现象一、三复现后转绿，并发两条用例稳定。
   - **Standards**：阻断无，非阻断无。
   - **票外发现（建议另立）**：(1) 领域 `LoadAssignment.Withdraw` 撤回变化版时照抄前版 `revisedAt`，存库会撞 0009 的 `revision_xor_withdrawal`，撤回入口接上之前要修。(2) 链头是撤回版时答复里没有撤回标记，调用方看不出分配已撤回。
+
+### 进 main 记录（2026-10-18，会话 idp-parcel-9b）
+
+- 分支 `claude-tfa02` rebase 到远端 main 之上，快进推送；迁移用 `transport_fulfillment/0021`。验证钉 `0a5afa74` 之后远端只多一笔纯 `.md`（`4c2b0daa`，票 03、05 裁定），rebase 后代码与已验那份逐字相同，未重跑。
+- 推送方全量一次：钉 `0a5afa74` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 143 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
