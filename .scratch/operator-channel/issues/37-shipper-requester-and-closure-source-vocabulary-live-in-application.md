@@ -1,7 +1,7 @@
 # 37 受控关闭与重开：「代货主」那一对与关闭责任来源词表收归 application 一处，装配头注去计数，票 28 遗留头注改口
 
 Category: enhancement
-Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc37`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 1 评审遗留；用户授权代决）
+Status: in-progress——2026-10-19 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc37`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 1 评审遗留；用户授权代决）
 Blocked by: 无（operator-channel/34 已进 main）
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)。被评的是 [15](./15-operation-decision-faces-take-operator-intake.md) 之六（代码 `0e3bb7df`），规则出处是 [ADR-0183](../../../docs/adr/0183-operator-channel-addresses-controlled-closure-and-reopening-by-parcel-and-derives-the-shipper-from-the-accepted-request.md)。
 出处：
@@ -137,3 +137,9 @@ Blocked by: 无（operator-channel/34 已进 main）
 **证据层级**：`S`（合成数据、替身与门禁库）。
 
 评审：待会话读 diff 审。
+
+## Comments
+
+- **评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审）· 钉 `8b6c8fa1`（基线 `9d9ac2d4`）· 2026-10-19**：代码出自本会话起的实施子代理，会话读 diff 审，不算非作者评审，如实记下。
+  - **Spec**：阻断无。`ShipperRequesterOf`、`ShipperInstructionSubjectOf` 收在 application 与重开门相邻，`ParseClosureResponsibilitySourceKind` 是种类词表唯一一处，适配器只把 Invalid 译成坏报文；错误前缀与答复格逐词不变，既有用例原样绿；grep 核过 `CUSTOMER-ACCOUNT` 只在 application。
+  - **Standards**：阻断无。认可越出地盘的一处：`ContinuedAttemptDecisionSpec.Requester` 注释「只有关闭这一格允许缺席」已失实，改口为请求方可缺席（ADR-0183 决定三、四）。判据里剩两处 grep 命中讲的是渠道选择决定，说法正确、不属票 28 遗留，保留。
