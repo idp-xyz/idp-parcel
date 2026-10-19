@@ -33,6 +33,10 @@ const (
 	// HandoverReleasingNodeNotDeclared：说不出在哪个节点交出，就没有交出意图可问（ADR-0213 决定四）。不从交出方、
 	// 接收方或范围补一个节点——那是推导（ADR-0096）。
 	HandoverReleasingNodeNotDeclared
+	// HandoverOnwardSameAsReleasing：声明的去向就是交出节点，立不起一份交出意图——关务的交出意图拒它，问了也只会落成
+	// 「译不回来」。那是两边口径漂了才该有的依据种类，会把一格确定的声明问题引去查实现，补问时还会被当暂时故障一再重问；
+	// 所以停在本上下文这一侧，具名答未决。这是读数的停点，不是对交接的校验：交接照登，三格之间的关系本上下文仍不核。
+	HandoverOnwardSameAsReleasing
 	// HandoverRecordedBeforeGateReading 只出现在迁移前就已落册的`已交接`上（TF 迁移 0041 的存量回填）：那时没问过
 	// 关务，如实答未决而不是猜一格。新登记的交接不会停在这里，构造门拒它。
 	HandoverRecordedBeforeGateReading
@@ -51,7 +55,7 @@ func (stop HandoverGateStop) valid() bool {
 // Answer 是这种停点所属的那一格。
 func (stop HandoverGateStop) Answer() GateAnswer {
 	switch stop {
-	case HandoverReleasingNodeNotDeclared, HandoverRecordedBeforeGateReading:
+	case HandoverReleasingNodeNotDeclared, HandoverOnwardSameAsReleasing, HandoverRecordedBeforeGateReading:
 		return GateUndecided
 	case HandoverGateRegistryUnavailable:
 		return GateUnreadable
@@ -64,6 +68,8 @@ func (stop HandoverGateStop) String() string {
 	switch stop {
 	case HandoverReleasingNodeNotDeclared:
 		return "RELEASING_NODE_NOT_DECLARED"
+	case HandoverOnwardSameAsReleasing:
+		return "ONWARD_SAME_AS_RELEASING"
 	case HandoverRecordedBeforeGateReading:
 		return "RECORDED_BEFORE_GATE_READING"
 	case HandoverGateRegistryUnavailable:
@@ -127,8 +133,11 @@ func formHandoverGateReading(spec HandoverGateReadingSpec) (HandoverGateReading,
 		return HandoverGateReading{answer: spec.Stop.Answer(), stop: spec.Stop}, nil
 	}
 	if !spec.Node.valid() {
-		// 问了关务就一定有交出节点：关务的交出意图 at 必填，没有它的答复不是这次交出问来的。去向与交出节点相同不在这里
-		// 拒——那是登记方声明的两格，本上下文不核；关务那边立不起这份意图，答复记成读不动（译不回来），读数照样成形。
+		// 问了关务就一定有交出节点：关务的交出意图 at 必填，没有它的答复不是这次交出问来的。去向与交出节点相同的那一版
+		// 不问关务（HandoverOnwardSameAsReleasing），问来的读数里出现它就不是这次交出问来的。
+		return HandoverGateReading{}, ErrInvalidHandoverGateReading
+	}
+	if spec.Onward == spec.Node {
 		return HandoverGateReading{}, ErrInvalidHandoverGateReading
 	}
 	return HandoverGateReading{
@@ -178,20 +187,30 @@ func (handover TransportHandover) GateReading() (HandoverGateReading, bool) {
 }
 
 // UnaskedGateReading 交回不问关务就定得出的那一份读数：`已交接`而没声明交出节点，读数是未决「交出节点未声明」
-// （ADR-0213 决定四）。别的情形答 false——不是`已交接`就没有读数，声明了交出节点就得问关务。
+// （ADR-0213 决定四）；声明的去向就是交出节点，读数是未决「去向与交出节点相同」。别的情形答 false——不是`已交接`就
+// 没有读数，立得起交出意图就得问关务。
 //
-// 「没声明交出节点就不问」只在这里定义一处：写事务之前问读数的那一侧与登记编排的兜底都取它，两边给出的读数逐字相同。
+// 「哪些`已交接`不问关务」只在这里定义一处：写事务之前问读数的那一侧与登记编排的兜底都取它，两边给出的读数逐字相同。
 func (handover TransportHandover) UnaskedGateReading() (HandoverGateReading, bool) {
-	if !handover.TransfersControl() || handover.nodes.Releasing.valid() {
+	if !handover.TransfersControl() {
 		return HandoverGateReading{}, false
 	}
-	return HandoverGateReading{answer: HandoverReleasingNodeNotDeclared.Answer(), stop: HandoverReleasingNodeNotDeclared}, true
+	stop := HandoverGateStopInvalid
+	switch releasing := handover.nodes.Releasing; {
+	case !releasing.valid():
+		stop = HandoverReleasingNodeNotDeclared
+	case handover.nodes.Onward == releasing:
+		stop = HandoverOnwardSameAsReleasing
+	default:
+		return HandoverGateReading{}, false
+	}
+	return HandoverGateReading{answer: stop.Answer(), stop: stop}, true
 }
 
 // WithGateReading 交回带上读数的这一版。读数要属于这一版，否则是 ErrHandoverGateReadingMisplaced：
 //   - 只有`已交接`带读数；
 //   - 问了关务的，问的对象就是这一版的对象，交出节点与去向节点就是这一版的声明；
-//   - 停在「交出节点未声明」的，这一版确实没声明交出节点；
+//   - 停在「交出节点未声明」「去向与交出节点相同」的，正是这一版不问关务就定得出的那一份；
 //   - 停在「交接登记册读不动」的只能是更正版——首登问读数不读登记册；
 //   - 存量回填那一种停点只由重建门收。
 func (handover TransportHandover) WithGateReading(reading HandoverGateReading) (TransportHandover, error) {
@@ -218,8 +237,8 @@ func (reading HandoverGateReading) placedOn(handover TransportHandover, rehydrat
 			return ErrHandoverGateReadingMisplaced
 		}
 		return nil
-	case HandoverReleasingNodeNotDeclared:
-		if handover.nodes.Releasing.valid() {
+	case HandoverReleasingNodeNotDeclared, HandoverOnwardSameAsReleasing:
+		if unasked, determined := handover.UnaskedGateReading(); !determined || unasked.stop != reading.stop {
 			return ErrHandoverGateReadingMisplaced
 		}
 		return nil

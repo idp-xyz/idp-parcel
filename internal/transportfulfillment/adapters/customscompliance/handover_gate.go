@@ -43,8 +43,9 @@ func (view *HandoverGateView) ReadHandoverGate(
 	return findingFromResult(query.Object, result)
 }
 
-// handoverAdmissionCommandFor 把交出问询译成关务的命令。登记方声明的两个节点在关务那边立不起来（含去向与交出节点相同，
-// 关务的交出意图拒它）都归译不回来：那一件记读不动、交接照登，依据种类指向两边的口径，而不是关务进程。
+// handoverAdmissionCommandFor 把交出问询译成关务的命令。登记方声明的节点在关务那边立不起来都归译不回来：那一件记读不动、
+// 交接照登，依据种类指向两边的口径，而不是关务进程。去向与交出节点相同的那一版编排不来问
+// （domain.TransportHandover.UnaskedGateReading）；仍问到这里，关务的交出意图拒它，同归译不回来。
 func handoverAdmissionCommandFor(query tfports.HandoverGateQuery) (ccapp.JudgeActionAdmissionCommand, error) {
 	none := ccapp.JudgeActionAdmissionCommand{}
 	tenant, err := ccdomain.NewTenantID(query.TenantID.String())

@@ -54,7 +54,8 @@ func (reader *HandoverGateReader) ReadRegistration(
 // Correct 立出那一版，再问；更正成拒收或待确认、立不起那一版、前版不在册，都交回零值读数，由更正编排照常答。
 //
 // 前版读不动时没法知道该问哪一份意图：读数停在「交接登记册读不动」，更正照登——与出发那一侧段册、班次册读不动同一纪律
-// （ADR-0205 决定二）。写事务里若同一口仍读不动，更正编排答未决，这份读数用不上。
+// （ADR-0205 决定二）。写事务里若同一口仍读不动，更正编排答未决，这份读数用不上；写事务里读得动而那一版不必问关务时，
+// 更正编排落不问就定得出的那一份，不落这一格。
 func (reader *HandoverGateReader) ReadCorrection(
 	ctx context.Context,
 	command CorrectTransportHandoverCommand,

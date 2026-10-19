@@ -64,6 +64,7 @@ func TestAHandoverGateReadingIsEitherAStopOrOneAnswer(t *testing.T) {
 		"both":                   {Node: node, Stop: domain.HandoverReleasingNodeNotDeclared, Finding: finding},
 		"asked without a node":   {Finding: finding},
 		"stop claiming an ask":   {Node: node, Stop: domain.HandoverReleasingNodeNotDeclared},
+		"asked onward to itself": {Node: node, Onward: node, Finding: finding},
 		"backfill at formation":  {Stop: domain.HandoverRecordedBeforeGateReading},
 		"stop out of the closed": {Stop: domain.HandoverGateStop(99)},
 	} {
@@ -74,6 +75,7 @@ func TestAHandoverGateReadingIsEitherAStopOrOneAnswer(t *testing.T) {
 
 	for stop, want := range map[domain.HandoverGateStop]domain.GateAnswer{
 		domain.HandoverReleasingNodeNotDeclared:  domain.GateUndecided,
+		domain.HandoverOnwardSameAsReleasing:     domain.GateUndecided,
 		domain.HandoverRecordedBeforeGateReading: domain.GateUndecided,
 		domain.HandoverGateRegistryUnavailable:   domain.GateUnreadable,
 	} {
@@ -101,8 +103,9 @@ func TestTheHandoverGateRehydrationDoorChecksTheRecordedAnswer(t *testing.T) {
 	}
 }
 
-// Covers: AT-TF-237、AT-TF-239、AT-TF-242、AT-TF-243、AT-TF-244 领域半边——「没声明交出节点就不问」只在 UnaskedGateReading 定义一处；读数只挂在
-// `已交接`上，问的对象与意图必须是这一版的；「交接登记册读不动」只属更正版；更正版不承继前版的读数。
+// Covers: AT-TF-237、AT-TF-239、AT-TF-242、AT-TF-243、AT-TF-244 领域半边——「哪些`已交接`不问关务」只在 UnaskedGateReading 定义一处
+// （没声明交出节点、去向就是交出节点）；读数只挂在`已交接`上，问的对象与意图必须是这一版的；「交接登记册读不动」只属更正版；
+// 更正版不承继前版的读数。
 func TestAHandoverGateReadingBelongsToItsHandedOverVersion(t *testing.T) {
 	unaskedHandover := releasedHandover(t, "parcel-1", "", "SYN-NODE-SIN-HUB")
 	unasked, determined := unaskedHandover.UnaskedGateReading()
@@ -111,6 +114,14 @@ func TestAHandoverGateReadingBelongsToItsHandedOverVersion(t *testing.T) {
 	}
 	if _, determined := releasedHandover(t, "parcel-1", "SYN-NODE-SZX-GATE", "").UnaskedGateReading(); determined {
 		t.Fatalf("声明了交出节点却不必问关务")
+	}
+	loopHandover := releasedHandover(t, "parcel-1", "SYN-NODE-SZX-GATE", "SYN-NODE-SZX-GATE")
+	loop, determined := loopHandover.UnaskedGateReading()
+	if stop, _ := loop.Stop(); !determined || stop != domain.HandoverOnwardSameAsReleasing || loop.Answer() != domain.GateUndecided {
+		t.Fatalf("去向就是交出节点时定不出读数：%+v", loop)
+	}
+	if _, err := loopHandover.WithGateReading(loop); err != nil {
+		t.Fatalf("去向就是交出节点的那一份挂不上：%v", err)
 	}
 	refusedSpec := handoverSpec(t, "parcel-1", domain.HandoverRefused)
 	refused, err := domain.FormTransportHandover(refusedSpec)
@@ -155,6 +166,12 @@ func TestAHandoverGateReadingBelongsToItsHandedOverVersion(t *testing.T) {
 		},
 		"unasked on a declared releasing node": func() (domain.TransportHandover, error) {
 			return gate.WithGateReading(unasked)
+		},
+		"same-onward stop on a distinct onward": func() (domain.TransportHandover, error) {
+			return gate.WithGateReading(loop)
+		},
+		"not-declared stop on a same-onward version": func() (domain.TransportHandover, error) {
+			return loopHandover.WithGateReading(unasked)
 		},
 		"registry stop on a first registration": func() (domain.TransportHandover, error) {
 			return gate.WithGateReading(registryStop)

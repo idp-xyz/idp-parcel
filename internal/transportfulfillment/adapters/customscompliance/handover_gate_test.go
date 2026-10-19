@@ -9,8 +9,8 @@ import (
 	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// 本文件证消费侧适配器以交出意图问关务（ADR-0213 决定四）：真库那一半接关务的生产编排与真表，夹具同出发那一侧
-// （departure_gate_test.go 的 newDepartureGateDB，四个节点已登区域），隔离合成 S。
+// 本文件证消费侧适配器以交出意图问关务（ADR-0213 决定四）：真库那一半接关务的生产编排与真表，夹具同出发那一侧的
+// newDepartureGateDB，隔离合成 S。
 
 func (fixture *departureGateDB) release(at, onward string) tfdomain.GateFinding {
 	fixture.t.Helper()

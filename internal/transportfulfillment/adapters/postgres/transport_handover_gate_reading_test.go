@@ -58,8 +58,8 @@ func askedGateReading(t *testing.T, handover domain.TransportHandover, answer do
 }
 
 // Covers: AT-TF-236、AT-TF-237、AT-TF-238、AT-TF-239、AT-TF-243、AT-TF-245 的库面——问了关务的读数连同关务判断标识与依据原文落进明细、整格另成
-// 一列，按键、按前版找后继、按范围各条读路都原样装回，没声明去向读回仍写明；停在「交出节点未声明」的那一版读回同一停点；
-// 拒收那一版两列皆 NULL；查阅册列出整格。
+// 一列，按键、按前版找后继、按范围各条读路都原样装回，没声明去向读回仍写明；停在「交出节点未声明」「去向与交出节点相同」
+// 的那几版读回同一停点；拒收那一版两列皆 NULL；查阅册列出整格。
 func TestHandoverGateReadingsRoundTripThroughEveryReadPath(t *testing.T) {
 	stores := newReviewCatalogueStores(t)
 	ctx := t.Context()
@@ -154,11 +154,17 @@ func TestHandoverGateReadingsRoundTripThroughEveryReadPath(t *testing.T) {
 	plain := handedOverRecord(t, "HRV-G-3")
 	mustSaveHandover(t, stores.transactor, ctx, stores.handovers, plain)
 	mustSaveHandover(t, stores.transactor, ctx, stores.handovers, refusedRecord(t, "HRV-G-4"))
+	gateNode := handoverValue(t, domain.NewNetworkNodeReference, "SYN-NODE-SZX-GATE")
+	mustSaveHandover(t, stores.transactor, ctx, stores.handovers,
+		handedOverRecordWithNodes(t, "HRV-G-5", domain.HandoverNodeDeclarations{Releasing: gateNode, Onward: gateNode}))
 	scoped, err := stores.handovers.ListByScope(ctx, first.Key.TenantID, first.Key.Scope)
-	if err != nil || len(scoped) != 4 {
+	if err != nil || len(scoped) != 5 {
 		t.Fatalf("按范围读：%v rows=%d", err, len(scoped))
 	}
-	want := map[string]string{"HRV-G-1": "BLOCKED", "HRV-G-2": "UNREADABLE", "HRV-G-3": "UNDECIDED", "HRV-G-4": ""}
+	want := map[string]string{"HRV-G-1": "BLOCKED", "HRV-G-2": "UNREADABLE", "HRV-G-3": "UNDECIDED", "HRV-G-4": "", "HRV-G-5": "UNDECIDED"}
+	wantStop := map[string]domain.HandoverGateStop{
+		"HRV-G-3": domain.HandoverReleasingNodeNotDeclared, "HRV-G-5": domain.HandoverOnwardSameAsReleasing,
+	}
 	for _, record := range scoped {
 		reading, read := record.Handover.GateReading()
 		got := ""
@@ -168,15 +174,15 @@ func TestHandoverGateReadingsRoundTripThroughEveryReadPath(t *testing.T) {
 		if got != want[record.Key.Version.String()] {
 			t.Fatalf("按范围读回 %s 的读数 = %q", record.Key.Version, got)
 		}
-		if record.Key.Version.String() == "HRV-G-3" {
-			if stop, _ := reading.Stop(); stop != domain.HandoverReleasingNodeNotDeclared {
-				t.Fatalf("没声明交出节点那一版的停点 = %s", stop)
+		if want, stopped := wantStop[record.Key.Version.String()]; stopped {
+			if stop, _ := reading.Stop(); stop != want {
+				t.Fatalf("%s 的停点 = %s，want %s", record.Key.Version, stop, want)
 			}
 		}
 	}
 
 	rows, err := stores.catalogue.ListTransportHandovers(ctx, first.Key.TenantID, 10)
-	if err != nil || len(rows) != 4 {
+	if err != nil || len(rows) != 5 {
 		t.Fatalf("上列交接册：%v rows=%d", err, len(rows))
 	}
 	for _, row := range rows {
@@ -186,26 +192,30 @@ func TestHandoverGateReadingsRoundTripThroughEveryReadPath(t *testing.T) {
 	}
 }
 
-// Covers: AT-TF-239、AT-TF-244 的库面半边——迁移 0041 的库面：`已交接`缺读数、拒收带读数、整格越出封闭集、整格与明细一缺一在、明细停点与答复都在或都不在，
-// 都被 CHECK 拒；断言落到 SQLSTATE 与约束名上。存量回填那一形（未决、停点「登记于门禁读数之前」）读回成形。
+// Covers: AT-TF-239、AT-TF-244 的库面半边——迁移 0041 的库面：`已交接`缺读数、拒收带读数、整格越出封闭集、整格与明细一缺一在、
+// 明细停点与答复都在或都不在、问了关务的读数与这一行的交出节点、去向、对象对不上，都被 CHECK 拒；断言落到 SQLSTATE 与
+// 约束名上。存量回填那一形（未决、停点「登记于门禁读数之前」）读回成形。
 func TestTheDatabaseGuardsTheHandoverGateReadingShape(t *testing.T) {
 	repository, _, pool := newTransportHandovers(t)
 	const backfill = `{"node": null, "onward": null, "stop": "RECORDED_BEFORE_GATE_READING", "finding": null}`
-	insert := func(version string, verdict, rule, basis, answer, detail any) error {
+	insertDeclared := func(version string, verdict, rule, basis, answer, detail, releasing, onward any) error {
 		_, err := pool.Exec(t.Context(),
 			`INSERT INTO transport_fulfillment.transport_handover
 				(tenant_id, object_ref, scope_ref, handover_version,
 				 released_by, received_by, verdict,
 				 releasing_evidence, receiving_evidence, rule_ref, basis_ref,
 				 corrects_version, corrected_at, judged_at, content_digest, recorded_at,
-				 gate_reading, gate_reading_detail)
+				 gate_reading, gate_reading_detail, releasing_node, onward_node)
 			 VALUES ('tenant-1', 'parcel-1', 'scope-1', $1,
 			         'node-1', 'carrier-1', $2,
 			         'seal-out', 'seal-in', $3, $4,
 			         NULL, NULL, $5, 'digest-1', $5,
-			         $6, $7::jsonb)`,
-			version, verdict, rule, basis, handoverJudgedAtFixture, answer, detail)
+			         $6, $7::jsonb, $8, $9)`,
+			version, verdict, rule, basis, handoverJudgedAtFixture, answer, detail, releasing, onward)
 		return err
+	}
+	insert := func(version string, verdict, rule, basis, answer, detail any) error {
+		return insertDeclared(version, verdict, rule, basis, answer, detail, nil, nil)
 	}
 	for name, tc := range map[string]struct {
 		verdict, rule, basis, answer, detail any
@@ -228,6 +238,45 @@ func TestTheDatabaseGuardsTheHandoverGateReadingShape(t *testing.T) {
 				t.Fatalf("err = %v，want 23514 / %s", err, tc.constraint)
 			}
 		})
+	}
+
+	// 问了关务的读数与这一行的声明对不上：交出节点、去向、对象各错一格，或这一行根本没声明交出节点。
+	asked := func(node, onward, object string) string {
+		quote := func(value string) string {
+			if value == "" {
+				return "null"
+			}
+			return `"` + value + `"`
+		}
+		return `{"node": ` + quote(node) + `, "onward": ` + quote(onward) + `, "stop": null, "finding": {"object": "` + object +
+			`", "answer": "NOT_GUARDED", "judgement": "AADJ-1", "bases": [{"action": "OUTBOUND_RELEASE", "cause": "OUTSIDE_CUSTOMS_BOOKS", "sources": []}]}}`
+	}
+	for name, tc := range map[string]struct {
+		detail            string
+		releasing, onward any
+	}{
+		"asked at another node":        {asked("SYN-NODE-SHA-HUB", "SYN-NODE-SIN-HUB", "parcel-1"), "SYN-NODE-SZX-GATE", "SYN-NODE-SIN-HUB"},
+		"asked toward another onward":  {asked("SYN-NODE-SZX-GATE", "SYN-NODE-SIN-GW", "parcel-1"), "SYN-NODE-SZX-GATE", "SYN-NODE-SIN-HUB"},
+		"asked with an onward dropped": {asked("SYN-NODE-SZX-GATE", "", "parcel-1"), "SYN-NODE-SZX-GATE", "SYN-NODE-SIN-HUB"},
+		"asked about another object":   {asked("SYN-NODE-SZX-GATE", "SYN-NODE-SIN-HUB", "parcel-2"), "SYN-NODE-SZX-GATE", "SYN-NODE-SIN-HUB"},
+		"asked without a releasing":    {asked("", "", "parcel-1"), nil, nil},
+	} {
+		t.Run(name, func(t *testing.T) {
+			err := insertDeclared("HRV-MATCH-"+name, "HANDED_OVER", "rule/v1", nil, "NOT_GUARDED", tc.detail, tc.releasing, tc.onward)
+			var pgErr *pgconn.PgError
+			if !errors.As(err, &pgErr) || pgErr.Code != "23514" || pgErr.ConstraintName != "transport_handover_gate_reading_matches_handover" {
+				t.Fatalf("err = %v，want 23514 / transport_handover_gate_reading_matches_handover", err)
+			}
+		})
+	}
+	if err := insertDeclared("HRV-MATCHED", "HANDED_OVER", "rule/v1", nil, "NOT_GUARDED",
+		asked("SYN-NODE-SZX-GATE", "SYN-NODE-SIN-HUB", "parcel-1"), "SYN-NODE-SZX-GATE", "SYN-NODE-SIN-HUB"); err != nil {
+		t.Fatalf("与声明对得上的问询读数进不了库：%v", err)
+	}
+	if found, exists, err := repository.FindByKey(t.Context(), handoverKeyFixture(t, "tenant-1", "HRV-MATCHED")); err != nil || !exists {
+		t.Fatalf("读回与声明对得上的那一行：%v exists=%v", err, exists)
+	} else if reading, _ := found.Handover.GateReading(); reading.Answer() != domain.GateNotGuarded {
+		t.Fatalf("读回的读数 = %s", reading.Answer())
 	}
 
 	if err := insert("HRV-BACKFILL", "HANDED_OVER", "rule/v1", nil, "UNDECIDED", backfill); err != nil {

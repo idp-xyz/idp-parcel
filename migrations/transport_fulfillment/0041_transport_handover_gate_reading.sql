@@ -5,8 +5,10 @@
 -- 同一套封闭集。只有`已交接`带读数：拒收与待确认不转出控制，没有交出可读。
 --
 -- 读数整格另成一列并收进封闭词表，按格查「哪些交出被阻断」不必解 jsonb；停点、问关务时的意图与那一格答复存 jsonb。
--- 交接是对象级判断，一版恰一件对象，所以明细里停点与答复各至多一个、恰有其一。整格与明细是否一致、读数与这一版的
--- 对象和节点声明是否对得上，由领域重建门核（RehydrateHandoverGateReading、RehydrateTransportHandover），库面只守形状。
+-- 交接是对象级判断，一版恰一件对象，所以明细里停点与答复各至多一个、恰有其一。整格与明细是否一致由领域重建门核
+-- （RehydrateHandoverGateReading）。问了关务的读数与这一版的对象和节点声明是否对得上，库面也守一道：那几格同在这一行，
+-- 一旦对不上，重建门拒装回，登记编排把它当未决、派发侧消费者照未决重投，确定性的坏行就被演成一格反复重试的未决；
+-- 在写入那一刻拒掉，坏行进不了库。
 --
 -- 全部 CHECK 过 SQL 三值逻辑那一眼（f822e1d 入册的纪律）：可空列使用前先 IS NULL / IS NOT NULL；jsonb 取键可能取到
 -- NULL，形状判断包在 CASE 里，取不到时落 ELSE false，而不是让 NULL 把 CHECK 放过去。
@@ -42,5 +44,20 @@ ALTER TABLE transport_fulfillment.transport_handover
                 THEN (jsonb_typeof(gate_reading_detail -> 'stop') = 'string')
                      <> (jsonb_typeof(gate_reading_detail -> 'finding') = 'object')
                 ELSE false
+            END
+        ),
+
+    -- 问了关务的那一份意图就是这一版的声明：at 取交出节点（问关务就一定有），onward 取去向节点（没声明就都没有），
+    -- 那一格答的就是这一版的对象。停在本上下文这一侧的读数没问过谁，不在这道里。
+    ADD CONSTRAINT transport_handover_gate_reading_matches_handover
+        CHECK (
+            gate_reading_detail IS NULL
+            OR CASE
+                WHEN jsonb_typeof(gate_reading_detail -> 'finding') = 'object'
+                THEN releasing_node IS NOT NULL
+                     AND (gate_reading_detail ->> 'node') IS NOT DISTINCT FROM releasing_node
+                     AND (gate_reading_detail ->> 'onward') IS NOT DISTINCT FROM onward_node
+                     AND (gate_reading_detail -> 'finding' ->> 'object') IS NOT DISTINCT FROM object_ref
+                ELSE true
             END
         );

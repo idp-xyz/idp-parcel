@@ -194,6 +194,31 @@ func TestAHandoverWithoutAReleasingNodeIsUndecidedWithoutAskingCustoms(t *testin
 	}
 }
 
+// Covers: AT-TF-237——声明的去向就是交出节点：立不起交出意图，不问关务，读数未决「去向与交出节点相同」，不记成关务那边
+// 译不回来的读不动；交接照登，三格之间的关系不核。不经组合根的那一口给出同一份读数。
+func TestAHandoverWhoseOnwardIsItsReleasingNodeIsUndecidedWithoutAskingCustoms(t *testing.T) {
+	fixture := newHandoverFixture(t)
+	customs := notGuardedCustoms()
+	command := releasedAtGate(t, "SYN-NODE-SZX-GATE")
+
+	result, err := gatedRegister(t, fixture, customs, command)
+	wantOutcome(t, result.Outcome(), err, application.HandoverRegistered)
+	if len(customs.queries) != 0 {
+		t.Fatalf("去向就是交出节点却问了关务：%+v", customs.queries)
+	}
+	reading := recordedReading(t, result)
+	if stop, _ := reading.Stop(); reading.Answer() != domain.GateUndecided || stop != domain.HandoverOnwardSameAsReleasing {
+		t.Fatalf("读数 = %s %s", reading.Answer(), stop)
+	}
+
+	plain := newHandoverFixture(t)
+	direct, err := plain.handler.Register(context.Background(), command)
+	wantOutcome(t, direct.Outcome(), err, application.HandoverRegistered)
+	if !reflect.DeepEqual(recordedReading(t, direct), reading) {
+		t.Fatalf("两口给出的读数不同：%+v vs %+v", recordedReading(t, direct), reading)
+	}
+}
+
 // Covers: AT-TF-238——声明了交出节点、没声明去向：照问，不带去向；读数写明去向未声明，跨关务区域那一道由关务不列。
 func TestAHandoverWithoutAnOnwardNodeIsAskedAndSaysSo(t *testing.T) {
 	fixture := newHandoverFixture(t)
@@ -353,6 +378,34 @@ func TestACorrectionWhosePredecessorCannotBeReadRecordsAnUnreadableGate(t *testi
 	}
 	if len(customs.queries) != 1 {
 		t.Fatalf("读不动前版却问了关务")
+	}
+}
+
+// Covers: AT-TF-243——写事务之前读不动前版，写事务里读得动，而前版没声明交出节点：这一版本不问关务就定得出，落「交出节点
+// 未声明」，不落读不动——一格确定的未决不记成看似暂时故障的那一格，与首登对同一种声明给出同一份读数。
+func TestACorrectionThatNeedsNoCustomsAnswerIsNotLeftUnreadable(t *testing.T) {
+	fixture := newHandoverFixture(t)
+	customs := notGuardedCustoms()
+	registered, err := gatedRegister(t, fixture, customs, registerHandoverCommand(t))
+	wantOutcome(t, registered.Outcome(), err, application.HandoverRegistered)
+
+	confirm := correctHandoverCommand(t, "handover-result/parcel-1/v1", "handover-result/parcel-1/v2")
+	confirm.Verdict, confirm.Basis = domain.ObjectHandedOver, ""
+	confirm.ReleasingEvidence, confirm.ReceivingEvidence, confirm.Rule = "evidence-release-2", "evidence-receive-2", "handover-rule/v1"
+
+	unreachable := &handoverRegistryDouble{records: fixture.registry.records, findErr: errors.New("pool down")}
+	reading, err := handoverGateReader(t, unreachable, customs).ReadCorrection(context.Background(), confirm)
+	if stop, _ := reading.Stop(); err != nil || stop != domain.HandoverGateRegistryUnavailable {
+		t.Fatalf("写事务之前的那一份 = %s %v", stop, err)
+	}
+	result, err := fixture.handler.CorrectWithGateReading(context.Background(), confirm, reading)
+	wantOutcome(t, result.Outcome(), err, application.HandoverCorrected)
+	stored := recordedReading(t, result)
+	if stop, _ := stored.Stop(); stored.Answer() != domain.GateUndecided || stop != domain.HandoverReleasingNodeNotDeclared {
+		t.Fatalf("读数 = %s %s", stored.Answer(), stop)
+	}
+	if len(customs.queries) != 0 {
+		t.Fatalf("不必问关务的那一版问了关务")
 	}
 }
 

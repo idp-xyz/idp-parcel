@@ -91,7 +91,8 @@ func handoverGateReadingFrom(answerText *string, raw []byte) (domain.HandoverGat
 
 func handoverGateStopFrom(raw string) (domain.HandoverGateStop, error) {
 	for _, stop := range []domain.HandoverGateStop{
-		domain.HandoverReleasingNodeNotDeclared, domain.HandoverRecordedBeforeGateReading, domain.HandoverGateRegistryUnavailable,
+		domain.HandoverReleasingNodeNotDeclared, domain.HandoverOnwardSameAsReleasing,
+		domain.HandoverRecordedBeforeGateReading, domain.HandoverGateRegistryUnavailable,
 	} {
 		if stop.String() == raw {
 			return stop, nil

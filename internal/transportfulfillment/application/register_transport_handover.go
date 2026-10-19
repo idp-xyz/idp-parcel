@@ -561,7 +561,11 @@ func recordedGateReading(
 }
 
 // withGateReading 给将要落册的那一版带上交出门禁读数。不是`已交接`的不带；`已交接`而没交读数时，只在不问关务就定得出
-// 的那一种（没声明交出节点）由领域补上，要问关务却没问是接线错误——补一格未决会把漏接的门禁演成一串看似正常的读数。
+// 的那一种由领域补上，要问关务却没问是接线错误——补一格未决会把漏接的门禁演成一串看似正常的读数。
+//
+// 更正在写事务之前读不动前版时交来的是「交接登记册读不动」：那一格只说当时不知道该问哪一份意图。写事务里前版读得动、
+// 这一版又不问关务就定得出时，就没有什么读不动的了，落定得出的那一份——否则一格确定的未决会被记成看似暂时故障的读不动，
+// 首登与更正对同一种声明也给出两样读数。前版声明了交出节点时那一格照留：该问的意图确实没问成。
 func withGateReading(
 	handover domain.TransportHandover,
 	reading domain.HandoverGateReading,
@@ -574,8 +578,11 @@ func withGateReading(
 		}
 		return handover, nil
 	}
+	unasked, determined := handover.UnaskedGateReading()
+	if stop, stopped := reading.Stop(); stopped && stop == domain.HandoverGateRegistryUnavailable && determined {
+		reading = unasked
+	}
 	if !given {
-		unasked, determined := handover.UnaskedGateReading()
 		if !determined {
 			return domain.TransportHandover{}, fmt.Errorf("%w: the releasing node is declared but customs was not asked",
 				domain.ErrHandoverGateReadingMisplaced)
