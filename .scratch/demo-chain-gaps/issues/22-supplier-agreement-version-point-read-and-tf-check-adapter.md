@@ -1,7 +1,7 @@
 # 22 供应商协议版本点读口与 TF 协议核对适配器
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg22（见文末「完成记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
+Status: in-progress——完工、隔离评审已修订，待进 main，分支 claude-dcg22（见文末「完成记录」「评审记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
 Blocked by: 无
 地盘：PC `ports/ports.go`（加窄口）、`adapters/postgres/supplier_agreement.go`；TF 新 `ports/supplier_agreement.go`、新 `adapters/partycommercial/supplier_agreement_source.go`。
 出处：[02](./02-transport-commission-has-no-command-face.md)、[07](./07-transport-charge-occurrences-have-no-production-path.md)；方案「02 委托、订舱、承运答复」D02-4、D02-5，「07 运输收费发生项」D07-2，「跨票通则」X4。
@@ -76,7 +76,7 @@ type SupplierAgreementCheck struct {
 | `SupplierAgreementProviderMismatch` | `PROVIDER_MISMATCH` | 有效期内但协议供应商不是服务方；带协议约定的供应商 |
 
 - 四个否定格的 `String()` 与方案 D02-4 的业务结果词同拼写，23 可直接用作 200 业务结果。
-- `error` 的来历：PC 读不动（原样包裹）、PC 读口违约（包 `adapters/partycommercial.ErrUntranslatableAnswer`）、零决定时点。调用方一律停在未决（D02-4「PC 读不动答 `UNDECIDED`」）。走派发的消费者若用它，`ErrUntranslatableAnswer` 是确定性错误，不进未决哨兵名单。
+- `error` 的来历与各自的恢复动作以 `ports.SupplierAgreementSource` 的文档注释为准，此处不复述。要点：PC 读不动与 PC 侧坏数据在值上分不开；能用 `errors.Is` 认出的只有 `ErrUntranslatableAnswer`；零决定时点是调用方违约。23、27 都是命令面，把任一 error 答成 `UNDECIDED` 即可（D02-4「PC 读不动答 `UNDECIDED`」）。
 - 入参 `domain.NewSupplierAgreementVersion(object, version)` 任一格空或含 NUL 在构造期拒，23 的载荷据此答 `INPUT_NOT_ACCEPTED`。
 - 装配（23 接线时）：`tfpartycommercial.NewSupplierAgreementSource(pcpostgres.NewSupplierAgreementContents(db))`。委托的 `Agreement` 存 `Snapshot`，新法人列存 `LegalEntity`。
 
@@ -89,7 +89,7 @@ type SupplierAgreementCheck struct {
 2. **已生效壳没登正文答「未在册」**，不另立一格。供应商与责任法人都在正文里，没有正文就核不了。
    - 越权风险点：「从未发布」与「发布时漏登正文」落同一格。要分开得看 PC 目录上的 `HasContent`（TF / PC owner）。
 3. **正文缺席时按壳位置分格**：已计划生效、已到期、已被替代答未生效；已退役答已终止。
-   - 理由：PC CONTEXT 写供应商协议版本「到期、终止或被替代」三种收尾。版本生命周期里按明确决定收尾的是退役，`Retire` 要一份决定引用。
+   - 理由：PC CONTEXT 写供应商协议版本「到期、终止或被替代」。版本生命周期里按明确决定收尾的是退役，`Retire` 要一份决定引用。
    - 越权风险点：PC 没有明文把供应商协议的「终止」对到版本退役（PC owner）。今天库里只出现已计划生效与已生效两种位置，因为发布册只增、不翻状态；其余映射是为翻译成全函数立的。
 4. **快照引用取 PC 的 `CommercialVersion.QualifiedLabel()`**（形如 `SYN-SUPPLIER-TRUNK-CN-SG-01/v1`），TF 不拼不拆（ADR-0080 决定七）。
    - 越权风险点：票 26 的 SA 若要从发生项快照回读 PC 的协议范围，拆分要由 PC 在 `NewQualifiedVersionLabel` 同一处提供反向，SA 不得自拆（SA / PC owner）。
@@ -117,6 +117,38 @@ type SupplierAgreementCheck struct {
 
 ### 待裁
 
-- ADR-0202（票 23）把上面的接口形状与代决 1–4 写进正文。
+- ADR-0202（票 23）把上面的接口形状与代决 1–4 写进正文，并写明两件评审登记的事（见「评审记录」）：
+  - 检查次序与服务方比较是 TF 的内置判法，却放在消费侧适配器里，与 ADR-0025「适配器只翻译，不判断」有张力。ADR-0202 要么写明这一例外的理由，要么由 23 把比较挪进委托编排。
+  - 区间更正（ADR-0038）没有折进核对（代决 6），记为已知缺口。若 PC owner 裁定要折入，由 PC 在点读口里交出更正后的区间，TF 不自己读更正。
 - 票 26：SA 从快照回读 PC 时的反向拆分归 PC 一处（代决 4）。
 - 本票不接线：生产接线棘轮与类型可达性棘轮在本票都没有新增条目。新领域值经 TF 端口可达，PC 新类型在 ports 不在 domain。23 接线时照常看棘轮。
+
+## 评审记录
+
+2026-10-19 隔离评审：阻断 0 项，非阻断 6 项，其中 3 项建议进 main 前修。三项都已修，另修了一项不要求进 main 前修的。修订提交 `2c614ca9`。
+
+### 已修
+
+1. **测试 Covers 注释用序号指方案子项。** 「方案 D02-4 第二项 / 第三项」改成引文：「在提交时点 `SupportsProcurementAt`」「协议供应商等于服务提供方」。「方案 D02-4 三项都过」改成「方案 D02-4 的检查都过」。
+   - 顺手清了同类引用：适配器 `CheckSupplierAgreement` 的「按三项检查的次序」改成按 `tfports.SupplierAgreementStanding` 所列检查的次序；真库测试的「演示租户已发布的两份供应商协议」和 Covers 里的「SYN 两份协议」不再数种子里的条目。
+2. **核对口注释说 error 只有两种来历，与实现不符。** `ports.SupplierAgreementSource` 的文档注释改为如实列出各种来历和各自的恢复动作：
+   - PC 那一侧失败：读不动或 PC 侧坏数据。两者原样包裹，在值上分不开。
+   - `ErrUntranslatableAnswer`：确定性错误。
+   - 零决定时点：调用方违约，不带哨兵。
+
+   注释还写明命令面把任一 error 答成未决即可，并写明派发消费者落未决哨兵时哪些不进名单、PC 坏数据会随读不动一起被重试。完成记录的「error 的来历」一条改为引这段端口注释，不再复述。
+   - 没有给零时点另立哨兵：23、27 都是命令面，判时点用的是自己的提交或登记时刻，碰不到零值。等真有派发消费者需要区分时，再由它来立。
+3. **适配器文件头注「三种收尾」数的是 PC CONTEXT 的条目。** 删去「三种」，只留引文。完成记录代决 3 的理由一句也删去「三种」。
+4. **包注释说本包「只答一件事」，已经不准。** 这一项不要求进 main 前修，但改动小，又落在本票的适配器包里，所以本票一并修了。包注释改成本包是 TF 对 PC 各读口的消费侧适配器，各文件各答一件事，不列数目。承运主体身份那一段挪到 `carrier_identity_directory.go` 的文件头注。
+
+### 未在本票改，已登去向
+
+5. **检查次序与服务方比较放在消费侧适配器，与 ADR-0025「适配器只翻译，不判断」有张力。** 这样放是方案「票 22」那一行明文派给适配器的，PS 的 `channel_selection_basis.go` 也有先例，所以不算越过方案。但这个例外要在 ADR 里记下来，归 ADR-0202（票 23），已写进「待裁」。本票不改。
+6. **点读口绕开了区间更正（ADR-0038）。** 已在代决 6 登为 PC owner 的越权风险点。ADR-0202 要把它写成已知缺口，已写进「待裁」。若要折入，由 PC 在点读口一处交出更正后的区间。本票不改。
+
+### 验证
+
+修订后重跑：
+- `go build ./...` 干净；`go vet` 跑 PC 与 TF 两个上下文，干净；`gofmt -l internal/ cmd/` 干净。
+- 带 DSN、`-p 1 -count=1` 跑 PC `adapters/postgres`、TF `adapters/partycommercial`、TF `domain`、`./internal/architecture/`，全 ok。
+- 只改了注释与票面，行为未变。
