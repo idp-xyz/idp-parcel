@@ -1,8 +1,8 @@
 # 19 装载分配核班次在册（03a）
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg19（见文末「完成记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
-Blocked by: 无（演示那一步要 [16](./16-transport-schedule-templates-and-concrete-schedules-are-registered.md) 或 [18](./18-transport-preparation-consumes-the-initial-route.md) 的在册班次）
+Status: in-progress——完工待评审与进 main，分支 claude-dcg19（见文末「完成记录」；隔离评审 0 阻断，已修订，见「评审记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
+Blocked by: 无（演示那一步要 [16](./16-transport-schedule-templates-and-concrete-schedules-are-registered.md) 或 [18](./18-transport-preparation-consumes-the-initial-route.md) 的在册班次；已移交票 16 的完成判据，见「评审记录」）
 地盘：`application/form_load_assignment.go`(+_test)；`cmd/parcel-api/assemble_segment_operations.go`(+_test)、`load_assignment_single_chain_test.go`、`storable_values_channel_test.go`；tfhttp `form_load_assignment_test.go`、`segment_operations_test.go`；UC-TF-004 AT 行。
 出处：[03](./03-load-assignment-does-not-check-the-schedule.md)；方案「03 装载分配与容量」D03-1、D03-2，「已不成立或已修」03。
 
@@ -19,7 +19,7 @@ Blocked by: 无（演示那一步要 [16](./16-transport-schedule-templates-and-
 - 他租户引用落同一格。
 - 真库测试先补登班次行。
 - 不碰 `OpenDispatchTaskDeps`。
-- 演示：对物化班次分配答 201，对乱填班次答 `SCHEDULE_NOT_FOUND`。
+- 演示：对物化班次分配答 201，对乱填班次答 `SCHEDULE_NOT_FOUND`。——已移交票 [16](./16-transport-schedule-templates-and-concrete-schedules-are-registered.md) 的完成判据，见「评审记录」。
 
 ## 规模
 
@@ -81,3 +81,37 @@ S
 - **给票 16 的提示。** 「自由串方向退役」若改了 `TransportScheduleSpec` 或方向写法，测试里登班次的地方各只有一处要跟：cmd 的 `registerTransportSchedules`、postgres 包的 `formedSchedule`。
 - 演示动线不倒退：方案「已不成立或已修」03 已核，psb/05 重走的步 1–8 没有装载分配这一步。
 
+## 评审记录（2026-10-19，隔离评审，评的是 `9ca6f8d4`；修订由作者子代理做）
+
+阻断 0 项。非阻断 6 项，其中 3 项标了「建议进 main 前处理」：修了 2 项，第 3 项（重生成机制清点）按派单口径留到进 main。其余 3 项里修了 1 项，2 项登记去向。
+
+**修了**
+
+- **班次适配器缺 `TransportScheduleReader` 的编译期断言**（建议进 main 前）。`transport_schedule.go` 补了一组 var 断言，`TransportScheduleStore`、`TransportScheduleReader` 各一行，照 `DispatchTasks` 的写法。生成器输出到临时文件实测，端口基线口径回到「缺 28」，精确口径仍是「缺 2」。提交 `ab4c3d62`。
+  - 和在途的 dcg16 在同一处相邻：dcg16 工作树在类型声明之后单加了一行 Store 断言。后落地的一方合成一组即可。重复的空白标识符断言照样能编译，但只留一组。
+- **演示一项没有票接**（建议进 main 前）。二选一里选了「写进票 16 的完成判据」：
+  - 票 16 的完成判据新增一行：对它显式登的那个物化班次提交装载分配答 201，对乱填的班次答 `SCHEDULE_NOT_FOUND`。
+  - 本票完成判据的演示那一项注明已移交，Blocked by 同步改。
+  - 本票因此可以照常标 resolved，不留只剩演示的尾巴。
+  - 代决：选 16，不选 18，也不留尾巴。理由：
+    - 方案「并行车道」波 1 的落地顺序里，19 在 16 之前。
+    - 16 的演示本来就要显式登一个班次，对它分配是顺手的下一步。
+    - 16 的作者落地前要 rebase，会看到这一行。
+    - 18 在波 3，离得太远。
+  - 越权风险点：改了别票票面（16 的完成判据）。如果实际上 16 先于本票进 main，这一项回到本票自己走。新增那一行里已写明这个条件。
+- **夹具丢掉了班次登记的结果**。`storable_values_regression_test.go` 的 `newStorableFixture` 现在接住 `Save` 的结果，不是 `ports.ScheduleSaved` 就当场 `t.Fatalf`，不让后面的用例红在 `SCHEDULE_NOT_FOUND` 上、看不出病根。同在 `ab4c3d62`。
+
+**没采纳**
+
+- **重生成 `docs/product/MECHANISM-INVENTORY.md`**（建议进 main 前）。本步不做：派单口径明确「不要重生成机制清点（进 main 时统一做）」，方案「并行车道」也定了每次落地重新生成、冲突时以重新生成为准。补完断言后，本分支实测是：transportfulfillment 文件 158，合计 1290，端口声明 488，基线缺 28，精确缺 2。进 main 时在干净检出上重生成即可对齐。
+- **读回过不了构造门时答 `LOAD_ASSIGNMENT_UNDECIDED`**（非阻断）。本票不改，也不另开只查存在的轻读口。理由：
+  - 过不了构造门的班次行是库里的坏行，属于系统故障，不是调用方换个载荷就能修好的。坏行修好之后，同一提交原样重投就能形成，带续办引用的 `UNDECIDED` 对的正是这个恢复动作。答成 `SCHEDULE_NOT_FOUND` 反而会把运营引去登一个其实已经在册的班次。
+  - 只查存在的轻读口会把坏行算作在册，分配就形成在一个谁也读不回的班次上。坏行被藏起来了，而不是暴露出来。
+  - 票 16 的方向改形：它的完成判据已有「自由串方向退役（表无生产行）」。dcg16 在途的迁移草稿是表里有行就拒绝迁移，迁移之后不会留下过不了新读回门的旧行，所以不再给 16 加判据。
+- **UC-TF-004 步 1 的文字和 AT-TF-099 字面上有点拉扯**（非阻断）。不改：方案 D03-2 有意只补 AT 行；ADR-0029 优先于 UC，`输入未受理`本来就只留给查询之前就短路的那一支。去向：以后哪张票改 UC-TF-004 的步骤文字，顺手在步 1 补半句「引用对象不在册按恢复动作另答，见 AT-TF-099」。不另立票。
+
+**修订后验证**（证据级别 `S`）
+
+- `go build ./...` 干净；`go vet ./internal/transportfulfillment/... ./cmd/parcel-api/` 通过；`gofmt -l internal cmd` 干净。
+- `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/ ./internal/architecture/`（真库 DSN 55432）：全部 ok。
+- 机制清点只输出到临时文件核端口口径，没有改提交的清点文件。

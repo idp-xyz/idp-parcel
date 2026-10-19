@@ -24,6 +24,7 @@ Blocked by: 无
 - 查阅口新增 `transport-schedule-template`。
 - 生产空册答 `未配置`。
 - 演示：seed 后查阅口列出三条 SYN 周期安排；显式登一个班次答 201。
+- 演示（接 [19](./19-load-assignment-checks-the-schedule-is-registered.md) 移交的那一项，见 19 的「评审记录」）：对上面显式登的那个物化班次提交装载分配答 201，对乱填的班次答 `SCHEDULE_NOT_FOUND`。若本票先于 19 进 main，这一项不归本票，回 19 自己走。
 
 ## 规模
 
