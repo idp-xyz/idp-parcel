@@ -95,6 +95,9 @@ func NewOpenDispatchTaskEndpoint(intake DispatchTaskIntake, opener DispatchTaskO
 
 // dispatchTaskResponse 是派送任务口的封闭响应形状。`DISPATCH_TASK_ALREADY_OPEN` 交回的是**原任务**的工作
 // 范围而不是这次送来的——一次重投不改写工作范围，响应照实透出原任务，调用方据以看出两者差在哪。
+//
+// 所以载荷收的内容格在这里逐格都要回显，conditions 也不例外：少一格，同一任务换那一格重投时调用方就比不出差异。
+// 格序与 deliveryDispatchTriggerResponse 的任务那几格一致，同一项任务在两个口上的回显读起来是同一份。
 type dispatchTaskResponse struct {
 	Outcome               string   `json:"outcome"`
 	Task                  string   `json:"task,omitempty"`
@@ -103,6 +106,7 @@ type dispatchTaskResponse struct {
 	Place                 string   `json:"place,omitempty"`
 	WindowFrom            string   `json:"windowFrom,omitempty"`
 	WindowTo              string   `json:"windowTo,omitempty"`
+	Conditions            string   `json:"conditions,omitempty"`
 	OpenedAt              string   `json:"openedAt,omitempty"`
 	ContinuationReference string   `json:"continuationReference,omitempty"`
 }
@@ -124,6 +128,7 @@ func writeDispatchTaskOutcome(response http.ResponseWriter, result application.O
 		from, to := record.Task.Window()
 		body.WindowFrom = rfc3339(from)
 		body.WindowTo = rfc3339(to)
+		body.Conditions = record.Task.Conditions().String()
 		body.OpenedAt = rfc3339(record.Task.OpenedAt())
 	}
 	// ADR-0022：只有新建立了任务用 201；已在册、未受理、未决都是形成了的答案（200）。
