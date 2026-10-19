@@ -172,9 +172,11 @@ func handoverDerivation(t *testing.T, bindings ...domain.DeliveryHandoverBinding
 		TenantID:     note.TenantID(),
 		Basis:        domain.UnitDeliveryScopeBasis{Source: basis},
 		HandoverNote: domain.DeliveryHandoverNoteState{Note: note, Bindings: bindings},
-		Node:         note.Node(),
-		ReceivedAt:   scopeReceivedAt,
-		Mark:         "SYN-CPN-ANY",
+		// 这件实物收寄带着这张交接单的标识，是它收寄带来的成员。
+		HandoverMember: true,
+		Node:           note.Node(),
+		ReceivedAt:     scopeReceivedAt,
+		Mark:           "SYN-CPN-ANY",
 	}
 }
 
@@ -223,6 +225,7 @@ func TestTheLastAssignedHandoverNoteTakesPrecedenceOverTheSourceBasis(t *testing
 	input := preAdviceDerivation(t)
 	input.Basis.LastAssignedNote = note.ID()
 	input.HandoverNote = domain.DeliveryHandoverNoteState{Note: note, Bindings: []domain.DeliveryHandoverBinding{confirmedA}}
+	input.HandoverMember = true
 	effective := input.Basis.Effective()
 	if effective.Kind() != domain.BasisDeliveryHandoverNote || effective.Identifier() != note.ID().String() {
 		t.Fatalf("effective basis = %s %s, want the assigned note", effective.Kind(), effective.Identifier())
@@ -253,7 +256,8 @@ func TestTheDeliveryScopeCheckIsAClosedVocabulary(t *testing.T) {
 			t.Fatalf("reason %s round trip = %v %v", reason, parsed, err)
 		}
 	}
-	for _, detail := range []domain.DeliveryScopeInapplicability{domain.ScopeNodeMismatch, domain.ScopeOutsideWindow, domain.ScopeBasisWithdrawn} {
+	for _, detail := range []domain.DeliveryScopeInapplicability{domain.ScopeNodeMismatch, domain.ScopeOutsideWindow, domain.ScopeBasisWithdrawn,
+		domain.ScopeNotAHandoverMember} {
 		if parsed, err := domain.ParseDeliveryScopeInapplicability(detail.String()); err != nil || parsed != detail {
 			t.Fatalf("detail %s round trip = %v %v", detail, parsed, err)
 		}

@@ -12,7 +12,7 @@ import (
 )
 
 // DeliveryScopeEvidence 实现 ports.DeliveryScopeEvidence：收寄与重核的身份判断推导可验证交付范围时，按标识读预报与交接单、按实物读
-// 最后归入的交接单、按原收寄业务时间读时窗。三本册各自的读口就是这几问，这里只把它们并成一个口；写口一个也不露出来。读走各册的
+// 最后归入的交接单与它是不是交接单成员、按原收寄业务时间读时窗。三本册各自的读口就是这几问，这里只把它们并成一个口；写口一个也不露出来。读走各册的
 // ReadExecutor：在收寄那一笔事务里调时读得到同一事务里刚写的行。
 type DeliveryScopeEvidence struct {
 	preAdvices *DeliveryPreAdvices
@@ -54,6 +54,12 @@ func (evidence DeliveryScopeEvidence) FindLastAssignedHandoverNote(
 	ctx context.Context, tenant domain.TenantID, unit domain.HandlingUnitID,
 ) (domain.DeliveryHandoverNoteID, bool, error) {
 	return evidence.notes.FindLastAssignedHandoverNote(ctx, tenant, unit)
+}
+
+func (evidence DeliveryScopeEvidence) IsDeliveryHandoverMember(
+	ctx context.Context, tenant domain.TenantID, note domain.DeliveryHandoverNoteID, unit domain.HandlingUnitID,
+) (bool, error) {
+	return evidence.notes.IsDeliveryHandoverMember(ctx, tenant, note, unit)
 }
 
 func (evidence DeliveryScopeEvidence) FindPreAdviceWindowAt(

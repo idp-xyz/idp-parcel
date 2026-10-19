@@ -317,6 +317,30 @@ func (register *DeliveryHandoverNotes) FindDeliveryHandoverMember(
 	return member, found, nil
 }
 
+// IsDeliveryHandoverMember 答（租户，交接单，作业实物）有没有一个成员，收寄带来的与归入的都算，走成员表按交接单的索引
+// delivery_handover_member_by_note（迁移 0013，前两列即这一问的等值条件）。走 ReadExecutor：收寄在同一笔事务里先落收寄成员、再推导，
+// 这一问要读得到它。
+func (register *DeliveryHandoverNotes) IsDeliveryHandoverMember(
+	ctx context.Context,
+	tenant domain.TenantID,
+	note domain.DeliveryHandoverNoteID,
+	unit domain.HandlingUnitID,
+) (bool, error) {
+	querier, err := register.db.ReadExecutor(ctx)
+	if err != nil {
+		return false, fmt.Errorf("is delivery handover member: %w", err)
+	}
+	var member bool
+	if err := querier.QueryRow(ctx,
+		`SELECT EXISTS (SELECT 1 FROM node_operations.delivery_handover_member
+		                 WHERE tenant_id = $1 AND note_id = $2 AND unit_id = $3)`,
+		tenant.String(), note.String(), unit.String(),
+	).Scan(&member); err != nil {
+		return false, fmt.Errorf("is delivery handover member: %w", err)
+	}
+	return member, nil
+}
+
 // ListDeliveryHandoverMembers 按落册先后列一张交接单的成员。
 func (register *DeliveryHandoverNotes) ListDeliveryHandoverMembers(
 	ctx context.Context,

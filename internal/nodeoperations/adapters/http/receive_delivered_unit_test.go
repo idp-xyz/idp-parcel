@@ -50,6 +50,10 @@ func (double *identityViewDouble) ResolveParcelIdentity(
 // noScopeEvidence 是证据读口的替身：哪份预报、交接单与时窗都不在册。本文件的收寄都不带依据，读不到它。
 type noScopeEvidence struct{}
 
+func (noScopeEvidence) IsDeliveryHandoverMember(context.Context, domain.TenantID, domain.DeliveryHandoverNoteID, domain.HandlingUnitID) (bool, error) {
+	return false, nil
+}
+
 // noHandoverMembership 是收寄落交接单成员那一口的替身：本包的收寄用例都不带交接单依据，答查无此单即可。
 type noHandoverMembership struct{}
 

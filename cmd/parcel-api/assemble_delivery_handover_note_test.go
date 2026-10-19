@@ -406,3 +406,91 @@ func TestADeliveryHandoverNoteIsOpenedFilledAndConfirmedAgainstARealDatabase(t *
 		t.Fatalf("册上的交接单 = %+v（found %v err %v）", state, found, err)
 	}
 }
+
+// Covers: `AT-NO-071` 与票 12 评审阻断的代决（ADR-0212 文末复核记录）的真库面，经生产装配 buildReceptionOrchestration、
+// buildDeliveryHandoverNoteOrchestration 与 buildIdentityRecheckOrchestration：交接单经运营决定确认、范围成立；开放期间带它的标识送站
+// 的那件先落收寄成员、再推导，答收寄已形成、核对态已证；交接单关闭之后带它的标识送站的另一件不再成为成员，答范围未证的待识别、
+// 核对态依据不适用·不是交接单成员、不关联；那一件人工重核，判断不变。
+func TestAReceptionCarryingAClosedNoteIsNotApplicableUnlessItIsAMemberAgainstARealDatabase(t *testing.T) {
+	db, reception := wiredReceptionOnRealDatabase(t)
+	ctx := t.Context()
+	for _, submission := range []struct{ key, member, number string }{
+		{"SYN-KEY-HANDOVER-CLOSED-1", "SYN-PARCEL-HANDOVER-CLOSED-1", "SYN-HANDOVER-CLOSED-0001"},
+		{"SYN-KEY-HANDOVER-CLOSED-2", "SYN-PARCEL-HANDOVER-CLOSED-2", "SYN-HANDOVER-CLOSED-0002"},
+	} {
+		command := numberedSubmission(t, "SYN-CUSTOMER-1", submission.key, submission.member, submission.number)
+		submitOnRealAssembly(t, db, command)
+		acceptNumbered(t, db, command)
+	}
+	registerCustomerAccountInPartyCommercial(t, db, "SYN-TENANT-1", "SYN-CUSTOMER-1", "SYN-PARTY-OWNER-PSXM12")
+
+	handover, err := buildDeliveryHandoverNoteOrchestration(db)
+	if err != nil {
+		t.Fatalf("装配交接单编排：%v", err)
+	}
+	tenant := mustValue(t, nodomain.NewTenantID, "SYN-TENANT-1")
+	node := mustValue(t, nodomain.NewNodeReference, "SYN-NODE-ORIGIN")
+	noteID := mustValue(t, nodomain.NewDeliveryHandoverNoteID, "SYN-HANDOVER-API-CLOSED")
+	account := mustValue(t, nodomain.NewCustomerAccountReference, "SYN-CUSTOMER-1")
+	if opened, err := handover.Open(ctx, nodeopsapp.OpenDeliveryHandoverNoteCommand{
+		TenantID: tenant, Node: node, Note: noteID,
+		DeliveringParty: mustValue(t, nodomain.NewDeliveringPartyReference, "SYN-DRIVER-PSXM12"),
+		ClaimedAccounts: []nodomain.CustomerAccountReference{account},
+		OpenedAt:        time.Now().UTC().Add(-time.Hour).Truncate(time.Microsecond),
+	}); err != nil || opened.Outcome() != nodeopsapp.DeliveryHandoverNoteOpened {
+		t.Fatalf("开立：%v %v", opened.Outcome(), err)
+	}
+	if confirmed, err := handover.ConfirmByOperationDecision(ctx, nodeopsapp.ConfirmDeliveryHandoverCommand{
+		TenantID: tenant, Operator: "OPERATOR/https://id.syn.example/dex#SYN-OPERATOR-PSXM12", Note: noteID, Account: account,
+		DeliveringParticipant: mustValue(t, nodomain.NewDeliveringPartyReference, "SYN-PARTY-OWNER-PSXM12"),
+		Basis:                 "SYN-BASIS-COUNTER-PSXM12",
+	}); err != nil || confirmed.Outcome() != nodeopsapp.DeliveryHandoverBindingConfirmed {
+		t.Fatalf("确认：%v %v", confirmed.Outcome(), err)
+	}
+	basis := mustValue(t, func(raw string) (nodomain.DeliveryScopeBasisReference, error) {
+		return nodomain.NewDeliveryScopeBasisReference(nodomain.BasisDeliveryHandoverNote, raw)
+	}, noteID.String())
+	deliver := func(suffix, number string) nodeopsapp.ReceiveDeliveredUnitResult {
+		t.Helper()
+		command := receptionCommand(t, "SYN-DELIVERY-HANDOVER-"+suffix, nodeopsapp.ExplicitReception)
+		command.Unit = mustValue(t, nodomain.NewHandlingUnitID, "SYN-UNIT-HANDOVER-"+suffix)
+		command.Mark = noports.ExternalMarkObservation{Mark: number}
+		command.ScopeBasis = basis
+		result, err := reception.Handle(ctx, command)
+		if err != nil {
+			t.Fatalf("收寄 %s：%v", suffix, err)
+		}
+		return result
+	}
+
+	member := deliver("OPEN", "SYN-HANDOVER-CLOSED-0001")
+	memberRecord, _ := member.Record()
+	if association, associated := memberRecord.Intake.Association(); member.Outcome() != nodeopsapp.NodeIntakeFormed || !associated ||
+		association.String() != "SYN-PARCEL-HANDOVER-CLOSED-1" || scopeCheckText(memberRecord) != "VERIFIED//" {
+		t.Fatalf("开放期间带它送站：%v 关联 %v 核对态 %s, want INTAKE_FORMED、已证", member.Outcome(), association, scopeCheckText(memberRecord))
+	}
+	if closed, err := handover.Close(ctx, nodeopsapp.CloseDeliveryHandoverNoteCommand{
+		TenantID: tenant, Node: node, FactID: "SYN-CLOSE-API-CLOSED", Note: noteID, ClosedAt: time.Now().UTC(),
+	}); err != nil || closed.Outcome() != nodeopsapp.DeliveryHandoverNoteClosed {
+		t.Fatalf("关闭：%v %v", closed.Outcome(), err)
+	}
+	stranger := deliver("LATE", "SYN-HANDOVER-CLOSED-0002")
+	assertScopeUnverifiedOnRealAssembly(t, stranger, "UNVERIFIED/BASIS_NOT_APPLICABLE/NOT_A_HANDOVER_MEMBER", "SYN-PARCEL-HANDOVER-CLOSED-2")
+	notes, err := nopostgres.NewDeliveryHandoverNotes(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if members, err := notes.ListDeliveryHandoverMembers(ctx, tenant, noteID); err != nil || len(members) != 1 || members[0].Unit() != memberRecord.Intake.Unit() {
+		t.Fatalf("成员 = %+v（err %v）, want 只有开放期间收进来的那一件", members, err)
+	}
+
+	recheck, err := buildIdentityRecheckOrchestration(db)
+	if err != nil {
+		t.Fatalf("装配重核编排：%v", err)
+	}
+	strangerRecord, _ := stranger.Record()
+	rechecked, err := recheck.Recheck(ctx, nodeopsapp.RecheckPendingIdentityCommand{TenantID: tenant, Version: strangerRecord.JudgmentVersion})
+	if err != nil || rechecked.Outcome() != nodeopsapp.RecheckStillUnidentified {
+		t.Fatalf("非成员人工重核：%v %v, want 判断不变", rechecked.Outcome(), err)
+	}
+}

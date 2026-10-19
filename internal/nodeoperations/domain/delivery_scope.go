@@ -139,8 +139,9 @@ func (reason DeliveryScopeUnverifiedReason) String() string {
 	}
 }
 
-// DeliveryScopeInapplicability 细分「依据不适用」，取 ADR-0212 决定五括号里列的那几格。未证的原因按恢复动作分；这几格的恢复动作
-// 相同（补证据），仍单列，是为了让复核的人看得出补哪一样：换节点的依据、在时窗里重交、交一份没撤回的。
+// DeliveryScopeInapplicability 细分「依据不适用」，取 ADR-0212 决定五括号里列的那几格，另加「不是交接单成员」一格（ADR-0212 文末
+// 复核记录）。未证的原因按恢复动作分；这几格的恢复动作相同（补证据），仍单列，是为了让复核的人看得出补哪一样：换节点的依据、在时窗
+// 里重交、交一份没撤回的、把它归入一张开放的交接单。
 type DeliveryScopeInapplicability uint8
 
 const (
@@ -148,6 +149,9 @@ const (
 	ScopeNodeMismatch
 	ScopeOutsideWindow
 	ScopeBasisWithdrawn
+	// ScopeNotAHandoverMember：依据是一张送站交接单，这件实物却不在它名下（收寄带来的与归入的成员都算）。交接单成立的范围只落到
+	// 它名下的作业实物（NO CONTEXT「可验证交付范围」）；关闭之后才带着单号送来的件不是客户确认过的那份冻结的成员清单里的。
+	ScopeNotAHandoverMember
 )
 
 func (detail DeliveryScopeInapplicability) String() string {
@@ -158,6 +162,8 @@ func (detail DeliveryScopeInapplicability) String() string {
 		return "OUTSIDE_WINDOW"
 	case ScopeBasisWithdrawn:
 		return "WITHDRAWN"
+	case ScopeNotAHandoverMember:
+		return "NOT_A_HANDOVER_MEMBER"
 	default:
 		return ""
 	}
@@ -189,7 +195,7 @@ func ParseDeliveryScopeUnverifiedReason(raw string) (DeliveryScopeUnverifiedReas
 
 // ParseDeliveryScopeInapplicability 按线上名认依据不适用的细分，大小写不折叠。
 func ParseDeliveryScopeInapplicability(raw string) (DeliveryScopeInapplicability, error) {
-	for _, detail := range []DeliveryScopeInapplicability{ScopeNodeMismatch, ScopeOutsideWindow, ScopeBasisWithdrawn} {
+	for _, detail := range []DeliveryScopeInapplicability{ScopeNodeMismatch, ScopeOutsideWindow, ScopeBasisWithdrawn, ScopeNotAHandoverMember} {
 		if detail.String() == raw {
 			return detail, nil
 		}
@@ -249,17 +255,19 @@ func (scope VerifiableDeliveryScope) Accounts() []CustomerAccountReference {
 func (scope VerifiableDeliveryScope) Check() DeliveryScopeCheck { return scope.check }
 
 // DeliveryScopeDerivation 是推导一件作业实物的可验证交付范围所需的全部输入（ADR-0212 决定四至六）。证据状态由调用方按
-// Basis.Effective() 读好交进来：依据是预报就填 PreAdvice，是交接单就填 HandoverNote，零值即不在册。Window 是时窗册在原收寄业务
-// 时间的生效行，零值即没有生效行——重核时也按原收寄的业务时间取，不按重核时刻（决定六）。Mark 是外部标识观察，逐字。
+// Basis.Effective() 读好交进来：依据是预报就填 PreAdvice，是交接单就填 HandoverNote，零值即不在册。HandoverMember 只在依据是交接单
+// 时有意义：这件实物此刻是不是那张交接单名下的成员（收寄带来的或归入的），零值即不是。Window 是时窗册在原收寄业务时间的生效行，
+// 零值即没有生效行——重核时也按原收寄的业务时间取，不按重核时刻（决定六）。Mark 是外部标识观察，逐字。
 type DeliveryScopeDerivation struct {
-	TenantID     TenantID
-	Basis        UnitDeliveryScopeBasis
-	PreAdvice    DeliveryPreAdviceState
-	HandoverNote DeliveryHandoverNoteState
-	Window       PreAdviceValidityWindow
-	Node         NodeReference
-	ReceivedAt   time.Time
-	Mark         string
+	TenantID       TenantID
+	Basis          UnitDeliveryScopeBasis
+	PreAdvice      DeliveryPreAdviceState
+	HandoverNote   DeliveryHandoverNoteState
+	HandoverMember bool
+	Window         PreAdviceValidityWindow
+	Node           NodeReference
+	ReceivedAt     time.Time
+	Mark           string
 }
 
 // DeriveVerifiableDeliveryScope 推导一件作业实物的可验证交付范围。纯函数：同样的依据与证据状态答同样的范围，收寄与重核走同一份。
@@ -312,6 +320,10 @@ func derivePreAdviceScope(input DeliveryScopeDerivation, identifier string) Veri
 
 // deriveHandoverNoteScope 按 ADR-0212 决定三判：全有或全无，范围是声称的整组客户账户，不看号码（交接单是账户级）。交接单不需要
 // 时窗。在别的节点开立的交接单对这一次收寄不适用：成员与归入都只在开立的那个节点上发生，收寄上报了别处的交接单是扫错了依据。
+//
+// 这件实物要是交接单名下的成员（ADR-0212 文末复核记录）：客户渠道只对已关闭的交接单下结论，确认的是关闭那一刻冻结的成员清单，
+// 关闭之后才带着单号送来的件借这张单拿到已证，就绕过了客户的确认。开放期间带着单号收寄的件由编排先落收寄成员、再走到这里。成员判
+// 在绑定之前：不是成员，补齐绑定也补不出范围，恢复动作是把它归入一张开放的交接单。
 func deriveHandoverNoteScope(input DeliveryScopeDerivation, identifier string) VerifiableDeliveryScope {
 	note := input.HandoverNote.Note
 	if !input.HandoverNote.Registered() || note.id.value != identifier || note.tenantID != input.TenantID {
@@ -319,6 +331,9 @@ func deriveHandoverNoteScope(input DeliveryScopeDerivation, identifier string) V
 	}
 	if note.node != input.Node {
 		return unverifiedScope(ScopeBasisNotApplicable, ScopeNodeMismatch)
+	}
+	if !input.HandoverMember {
+		return unverifiedScope(ScopeBasisNotApplicable, ScopeNotAHandoverMember)
 	}
 	if !input.HandoverNote.ScopeEstablished() {
 		return unverifiedScope(ScopeBindingsNotAllConfirmed, ScopeInapplicabilityAbsent)

@@ -67,6 +67,31 @@ func (double *handoverRegisterDouble) FindPreAdviceWindowAt(context.Context, dom
 	return domain.PreAdviceValidityWindow{}, false, double.err
 }
 
+// IsDeliveryHandoverMember 照真库在内存里认：这张交接单名下有这件实物（收寄带来的或归入的）。
+func (double *handoverRegisterDouble) IsDeliveryHandoverMember(_ context.Context, _ domain.TenantID, note domain.DeliveryHandoverNoteID, unit domain.HandlingUnitID) (bool, error) {
+	if double == nil {
+		return false, nil
+	}
+	for _, member := range double.members {
+		if member.Note() == note && member.Unit() == unit {
+			return true, double.err
+		}
+	}
+	return false, double.err
+}
+
+// IsDeliveryHandoverMember 让收寄编排那只范围证据替身也答成员一问：读同一夹具的交接单册替身，另认直接写进 assigned 的归入。
+func (double *scopeEvidenceDouble) IsDeliveryHandoverMember(ctx context.Context, tenant domain.TenantID, note domain.DeliveryHandoverNoteID, unit domain.HandlingUnitID) (bool, error) {
+	if assigned, found := double.assigned[unit.String()]; found && assigned == note {
+		return true, double.err
+	}
+	member, err := double.handover.IsDeliveryHandoverMember(ctx, tenant, note, unit)
+	if err != nil {
+		return false, err
+	}
+	return member, double.err
+}
+
 var _ ports.DeliveryScopeEvidence = (*handoverRegisterDouble)(nil)
 
 // Covers: `AT-NO-075`（编排半边）、ADR-0212 决定六「重核对象只看成员里属于那一组的」——交接单名下：一件没带依据、经客户包裹件号

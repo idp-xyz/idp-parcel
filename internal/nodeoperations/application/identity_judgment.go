@@ -133,7 +133,7 @@ func (judge identityJudge) judge(
 
 // deriveScope 按依据读证据状态，交领域推导（domain.DeriveVerifiableDeliveryScope，收寄与重核同一份）。依据取最后归入的交接单，没有
 // 归入过的取来源里的引用（ADR-0212 决定三）；证据状态是此刻的，预报的有效时窗按原收寄的业务时间取——重核晚来，时窗不跟着重核时刻
-// 走（决定六）。时窗只在预报在册时才读：预报不在册时答依据不在册，与时窗无关。
+// 走（决定六）。时窗只在预报在册时才读：预报不在册时答依据不在册，与时窗无关。成员只在交接单在册时才问。
 func (judge identityJudge) deriveScope(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -187,8 +187,13 @@ func (judge identityJudge) deriveScope(
 		if err != nil {
 			return domain.VerifiableDeliveryScope{}, fmt.Errorf("find the delivery handover note: %w", err)
 		}
-		if found {
-			input.HandoverNote = state
+		if !found {
+			break
+		}
+		input.HandoverNote = state
+		// 成员按此刻的成员册判，收寄与重核同一判法：收寄带着开放交接单的标识时，编排在走到这里之前已落下收寄成员。
+		if input.HandoverMember, err = judge.scope.IsDeliveryHandoverMember(ctx, tenant, id, subject.unit); err != nil {
+			return domain.VerifiableDeliveryScope{}, fmt.Errorf("find the handover note membership: %w", err)
 		}
 	}
 	return domain.DeriveVerifiableDeliveryScope(input), nil

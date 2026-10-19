@@ -331,3 +331,74 @@ func TestTheLastTwoConfirmationsSerializeOnTheNote(t *testing.T) {
 		t.Fatalf("先一笔看到成立 %v、后一笔 %v, want 只有后一笔看到", first.established, secondEstablished)
 	}
 }
+
+// Covers: 票 12 评审阻断的代决（ADR-0212 文末复核记录）的存储面——成员一问按（租户，交接单，作业实物）答，收寄带来的与归入的都算；
+// 别的交接单、别的实物、别的租户都答否；范围证据读口答的是同一问。依据不适用的新细分 NOT_A_HANDOVER_MEMBER 过得了收寄册那条细分
+// CHECK（迁移 node_operations 0016 重建），原样读回。
+func TestMembershipIsAnsweredPerNoteAndUnit(t *testing.T) {
+	fixture := newHandoverRecheckFixture(t)
+	ctx := t.Context()
+	const tenant, noteID = "SYN-TENANT-PSXM12", "SYN-HANDOVER-PSXM12-05"
+	note := handoverNoteAt(t, tenant, noteID, "node-1", "SYN-ACCOUNT-01")
+	other := handoverNoteAt(t, tenant, "SYN-HANDOVER-PSXM12-06", "node-1", "SYN-ACCOUNT-01")
+	members := []domain.DeliveryHandoverMember{
+		handoverMemberAt(t, tenant, noteID, "SYN-UNIT-PSXM12-ASSIGNED", domain.MembershipByAssignment, "SYN-FACT-PSXM12-5"),
+		handoverMemberAt(t, tenant, noteID, "SYN-UNIT-PSXM12-RECEIVED", domain.MembershipByReception, "SYN-SCAN-PSXM12-5"),
+	}
+	stranger := recheckablePending(t, tenant, "SYN-SCAN-PSXM12-STRANGER", "SYN-INTAKEV-PSXM12-STRANGER", "SYN-MARK-PSXM12")
+	check, err := domain.NewDeliveryScopeCheck(domain.DeliveryScopeUnverified, domain.ScopeBasisNotApplicable, domain.ScopeNotAHandoverMember)
+	if err != nil {
+		t.Fatal(err)
+	}
+	stranger.DeliveryScopeCheck = check
+	stranger.IdentityCheck = ports.IdentityChecked
+	inTx(t, fixture.transactor, ctx, func(txCtx context.Context) error {
+		for _, opened := range []domain.DeliveryHandoverNote{note, other} {
+			if _, _, err := fixture.notes.OpenDeliveryHandoverNote(txCtx, opened); err != nil {
+				return err
+			}
+		}
+		for _, member := range members {
+			if _, _, err := fixture.notes.AppendDeliveryHandoverMember(txCtx, member); err != nil {
+				return err
+			}
+		}
+		_, err := fixture.receptions.Save(txCtx, stranger)
+		return err
+	})
+	db, err := bentopg.NewDB(fixture.pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatal(err)
+	}
+	evidence, err := adapter.NewDeliveryScopeEvidence(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tenantID := ref(t, domain.NewTenantID, tenant)
+	for name, testCase := range map[string]struct {
+		tenant domain.TenantID
+		note   string
+		unit   string
+		want   bool
+	}{
+		"归入的成员":   {tenantID, noteID, "SYN-UNIT-PSXM12-ASSIGNED", true},
+		"收寄带来的成员": {tenantID, noteID, "SYN-UNIT-PSXM12-RECEIVED", true},
+		"不是成员的实物": {tenantID, noteID, "SYN-UNIT-PSXM12-STRANGER", false},
+		"别的交接单":   {tenantID, "SYN-HANDOVER-PSXM12-06", "SYN-UNIT-PSXM12-ASSIGNED", false},
+		"别的租户":    {ref(t, domain.NewTenantID, "SYN-TENANT-PSXM12-OTHER"), noteID, "SYN-UNIT-PSXM12-ASSIGNED", false},
+	} {
+		noteRef, unitRef := ref(t, domain.NewDeliveryHandoverNoteID, testCase.note), ref(t, domain.NewHandlingUnitID, testCase.unit)
+		direct, err := fixture.notes.IsDeliveryHandoverMember(ctx, testCase.tenant, noteRef, unitRef)
+		if err != nil || direct != testCase.want {
+			t.Fatalf("%s：交接单册答 %v（err %v）, want %v", name, direct, err, testCase.want)
+		}
+		viaEvidence, err := evidence.IsDeliveryHandoverMember(ctx, testCase.tenant, noteRef, unitRef)
+		if err != nil || viaEvidence != testCase.want {
+			t.Fatalf("%s：范围证据读口答 %v（err %v）, want %v", name, viaEvidence, err, testCase.want)
+		}
+	}
+	read, found, err := fixture.receptions.FindByKey(ctx, stranger.Key)
+	if err != nil || !found || read.DeliveryScopeCheck != check {
+		t.Fatalf("新细分读回 = %+v（found %v err %v）", read.DeliveryScopeCheck, found, err)
+	}
+}

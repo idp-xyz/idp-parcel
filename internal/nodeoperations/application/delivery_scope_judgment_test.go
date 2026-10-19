@@ -479,6 +479,8 @@ func TestARecheckRederivesTheScopeFromTheStoredBasisAndTheEvidenceNow(t *testing
 			fixture := newRecheckFixture(t)
 			fixture.answerCandidates(t, map[string]string{"parcel-a": "customer-A"}, nil, "parcel-a")
 			fixture.scope.notes["HANDOVER-1"] = handoverNoteState(t, "HANDOVER-1", "node-origin", []string{"customer-A"})
+			// 交接单也在交接单册上：收寄带它的标识时落收寄成员，以交接单为依据推范围要这件是它的成员。
+			fixture.handover.notes["HANDOVER-1"] = fixture.scope.notes["HANDOVER-1"].Note
 			command := receiveCommand(t)
 			command.ScopeBasis = testCase.basis(t)
 			outcome, pending := handleScoped(t, fixture.receptionFixture, command)

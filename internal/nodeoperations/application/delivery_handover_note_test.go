@@ -703,3 +703,78 @@ func TestDeliveryHandoverNoteHandlerRefusesMissingDependencies(t *testing.T) {
 		t.Fatal("无效结果答出了名字")
 	}
 }
+
+// receptionOverHandoverRegister 交回一只与交接单编排共用交接单册替身的收寄编排：成员落在那本册上，范围证据也读那本册，交接单的
+// 绑定、关闭与成员都是编排刚落下的那一份。
+func (fixture *handoverFixture) receptionOverHandoverRegister(t *testing.T) *application.ReceiveDeliveredUnitHandler {
+	t.Helper()
+	deps := fixture.receptionFixture.deps()
+	deps.Scope = fixture.notes
+	handler, err := application.NewReceiveDeliveredUnitHandler(deps)
+	if err != nil {
+		t.Fatalf("构造收寄编排：%v", err)
+	}
+	return handler
+}
+
+// Covers: `AT-NO-071`、`AT-NO-073` 与票 12 评审阻断的代决（ADR-0212 文末复核记录）——以送站交接单为依据推范围，这件实物要是它的成员：
+// 范围已成立的交接单开放期间带它收寄的那件先落收寄成员、再推导，答已证、关联；交接单关闭之后带它收寄的那件不再成为成员，答依据
+// 不适用·不是交接单成员，落范围未证的待识别、不关联、成员一个不多；那件此后重核，证据没变，判断不变。
+func TestAReceptionCarryingAClosedNoteItIsNotAMemberOfIsNotApplicable(t *testing.T) {
+	fixture := newHandoverFixture(t)
+	ctx := context.Background()
+	if _, err := fixture.handover.Open(ctx, openCommand(t, "SYN-HANDOVER-60", handoverAccount)); err != nil {
+		t.Fatal(err)
+	}
+	if result, err := fixture.handover.ConfirmByOperationDecision(ctx, confirmCommand(t, "SYN-HANDOVER-60", handoverAccount)); err != nil ||
+		result.Outcome() != application.DeliveryHandoverBindingConfirmed {
+		t.Fatalf("确认：%v %v", result.Outcome(), err)
+	}
+	reception := fixture.receptionOverHandoverRegister(t)
+	receive := func(source, unit string) ports.ReceptionRecord {
+		t.Helper()
+		parcel := "parcel-" + unit
+		fixture.answerCandidates(t, map[string]string{parcel: handoverAccount}, nil, parcel)
+		command := receiveCommand(t)
+		command.SourceID = source
+		command.Unit = mustValue(t, domain.NewHandlingUnitID, unit)
+		command.Node = mustValue(t, domain.NewNodeReference, handoverNode)
+		command.ScopeBasis = basisOf(t, domain.BasisDeliveryHandoverNote, "SYN-HANDOVER-60")
+		result, err := reception.Handle(ctx, command)
+		if err != nil {
+			t.Fatalf("收寄 %s：%v", source, err)
+		}
+		record, _ := result.Record()
+		return record
+	}
+
+	member := receive("delivery-60-open", "unit-60-open")
+	if association, associated := member.Intake.Association(); member.Kind != ports.RecordIntakeFormed || !associated ||
+		association.String() != "parcel-unit-60-open" || checkOf(member) != "VERIFIED//" {
+		t.Fatalf("开放期间带它收寄：%s 关联 %v 核对态 %s, want 已形成、已证", member.Kind, association, checkOf(member))
+	}
+	if _, err := fixture.handover.Close(ctx, closeCommand(t, "SYN-CLOSE-60", "SYN-HANDOVER-60")); err != nil {
+		t.Fatal(err)
+	}
+	membersBefore := len(fixture.notes.members)
+	stranger := receive("delivery-60-late", "unit-60-late")
+	if _, associated := stranger.Intake.Association(); stranger.Kind != ports.RecordPendingIdentification || associated || stranger.IdentityConflict ||
+		checkOf(stranger) != "UNVERIFIED/BASIS_NOT_APPLICABLE/NOT_A_HANDOVER_MEMBER" {
+		t.Fatalf("关闭之后带它收寄：%s 冲突 %v 核对态 %s, want 不关联的待识别、依据不适用·不是交接单成员", stranger.Kind, stranger.IdentityConflict, checkOf(stranger))
+	}
+	if len(fixture.notes.members) != membersBefore {
+		t.Fatalf("关闭之后多了成员：%d → %d", membersBefore, len(fixture.notes.members))
+	}
+
+	recheck, err := application.NewRecheckPendingIdentityHandler(application.RecheckPendingIdentityDeps{
+		Identity: fixture.identity, ServiceResults: fixture.serviceResults, Receptions: fixture.receptions, Pending: fixture.receptions,
+		Versions: fixture.versions, Downstream: fixture.downstream, Scope: fixture.notes, Clock: fixedClock{at: deliveredAt.Add(3 * time.Hour)},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	result, err := recheck.Recheck(ctx, application.RecheckPendingIdentityCommand{TenantID: stranger.Key.TenantID, Version: stranger.JudgmentVersion})
+	if err != nil || result.Outcome() != application.RecheckStillUnidentified {
+		t.Fatalf("非成员重核：%v %v, want 判断不变", result.Outcome(), err)
+	}
+}

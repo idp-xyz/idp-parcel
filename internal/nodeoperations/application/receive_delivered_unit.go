@@ -333,6 +333,10 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 	digest string,
 	predecessor domain.IntakeResultVersion,
 ) (ReceiveDeliveredUnitResult, error) {
+	// 先落收寄成员、再推导：以交接单为依据推范围要这件是它的成员，开放期间带着单号收进来的这一件此刻成为成员。
+	if err := handler.joinHandoverNote(ctx, command); err != nil {
+		return ReceiveDeliveredUnitResult{}, err
+	}
 	judgment, err := identityJudge{
 		identity:   handler.deps.Identity,
 		services:   handler.deps.ServiceResults,
@@ -413,15 +417,9 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 		RecordedAt:            handler.deps.Clock.Now(),
 	}
 	result, err := handler.commit(ctx, record)
-	// 成员、门铃与冲突版都只在本次真落了册时追加：并发里输给另一方的那次读回的是赢家，赢家已经记过、响过、追加过。
-	if err != nil || (result.Outcome() != UnitPendingIdentification && result.Outcome() != NodeIntakeFormed) {
+	// 门铃与冲突版都只在本次真落了册时追加：并发里输给另一方的那次读回的是赢家，赢家已经响过、追加过。
+	if err != nil || result.Outcome() != UnitPendingIdentification {
 		return result, err
-	}
-	if err := handler.joinHandoverNote(ctx, command, record); err != nil {
-		return ReceiveDeliveredUnitResult{}, err
-	}
-	if result.Outcome() != UnitPendingIdentification {
-		return result, nil
 	}
 	if unchecked {
 		// 门铃入不了队就不形成答案：一条没有门铃的未核对行只能等人工重核，比翻转前设备退避重投、PS 恢复后自动续上倒退。
@@ -440,12 +438,12 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 }
 
 // joinHandoverNote 在收寄带着送站交接单的标识时，把这件实物记成那张交接单收寄带来的成员（ADR-0212 决定三）：事实身份取这次收寄的
-// 来源标识，业务时间取收寄时刻。只记收进来的（形成与待识别），拒收与只有扫描的实物不在节点手里，不是交接单名下的实物。交接单不在册
-// （扫错了依据）或已关闭（关闭冻结成员）时不记、收寄照常：收寄不能因为依据不对就拒，依据不对已经记在交付范围核对态里。
+// 来源标识，业务时间取收寄时刻。只在明确接收那一支调：拒收与只有扫描的实物不在节点手里，不是交接单名下的实物。交接单不在册（扫错了
+// 依据）或已关闭（关闭冻结成员）时不记、收寄照常：收寄不能因为依据不对就拒，推导随后答依据不在册或不是交接单成员，记在交付范围
+// 核对态里。同一来源重投、或并发里输给另一方，撞的是同一个（收寄，来源标识），册上不多一个成员。
 func (handler *ReceiveDeliveredUnitHandler) joinHandoverNote(
 	ctx context.Context,
 	command ReceiveDeliveredUnitCommand,
-	record ports.ReceptionRecord,
 ) error {
 	if command.ScopeBasis.Kind() != domain.BasisDeliveryHandoverNote {
 		return nil
@@ -455,12 +453,12 @@ func (handler *ReceiveDeliveredUnitHandler) joinHandoverNote(
 		return fmt.Errorf("handover note of the delivery scope basis: %w", err)
 	}
 	member, err := domain.FormDeliveryHandoverMember(domain.DeliveryHandoverMemberSpec{
-		TenantID: record.Key.TenantID,
+		TenantID: command.TenantID,
 		Note:     note,
-		Unit:     record.Intake.Unit(),
+		Unit:     command.Unit,
 		Kind:     domain.MembershipByReception,
-		FactID:   record.Key.SourceID,
-		FormedAt: record.Intake.ReceivedAt(),
+		FactID:   command.SourceID,
+		FormedAt: command.OccurredAt,
 	})
 	if err != nil {
 		return fmt.Errorf("form the reception member of the handover note: %w", err)

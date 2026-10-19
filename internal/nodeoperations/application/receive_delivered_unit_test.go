@@ -75,6 +75,8 @@ type scopeEvidenceDouble struct {
 	windows     []domain.PreAdviceValidityWindow
 	windowAsked []time.Time
 	err         error
+	// handover 是同一夹具里的交接单册替身：收寄落的成员记在那里，成员一问也读它。
+	handover *handoverRegisterDouble
 }
 
 func newScopeEvidence() *scopeEvidenceDouble {
@@ -351,6 +353,7 @@ func newReceptionFixture(t *testing.T) *receptionFixture {
 		handover:       newHandoverRegister(),
 	}
 	fixture.receptions.handover = fixture.handover
+	fixture.scope.handover = fixture.handover
 	handler, err := application.NewReceiveDeliveredUnitHandler(fixture.deps())
 	if err != nil {
 		t.Fatalf("构造收寄编排：%v", err)
