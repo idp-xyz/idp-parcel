@@ -561,6 +561,34 @@ func TestANewDeliveryWithoutAGateReadingIsAWiringError(t *testing.T) {
 	}
 }
 
+// Covers: `AT-TF-264`——登不出交付的命令不问关务：缺 POD（交付证明必备）、方式或接收方受理不了的，读数那一侧与登记编排按
+// 同一处受理认出来，交回零值读数，登记照常答未受理；关务一笔判断都不记，不留一份从没落册的交付的判断。
+func TestACommandThatCannotFormADeliveryDoesNotAskCustoms(t *testing.T) {
+	for name, spoil := range map[string]func(*application.RegisterEffectiveDeliveryCommand){
+		"missing proof":     func(command *application.RegisterEffectiveDeliveryCommand) { command.Proof = "" },
+		"missing method":    func(command *application.RegisterEffectiveDeliveryCommand) { command.Method = "" },
+		"missing recipient": func(command *application.RegisterEffectiveDeliveryCommand) { command.Recipient = "" },
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newDeliveryGateFixture(t)
+			fixture.enteredByHandover(t, "SYN-NODE-SIN-HUB")
+			command := registerCommand(t)
+			spoil(&command)
+
+			result, err := fixture.gatedDeliveryRegister(t, command)
+			if err != nil || result.Outcome() != application.DeliveryNotAccepted {
+				t.Fatalf("outcome = %s %v, want NOT_ACCEPTED", result.Outcome(), err)
+			}
+			if len(fixture.customs.queries) != 0 {
+				t.Fatalf("问关务 %d 次，want 0：这次交付登不出来", len(fixture.customs.queries))
+			}
+			if fixture.store.saves != 0 {
+				t.Fatal("受理不了的命令落册了")
+			}
+		})
+	}
+}
+
 func mustNode(t *testing.T, raw string) domain.NetworkNodeReference {
 	t.Helper()
 	node, err := domain.NewNetworkNodeReference(raw)

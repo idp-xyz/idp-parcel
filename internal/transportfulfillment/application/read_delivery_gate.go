@@ -40,7 +40,8 @@ func NewDeliveryGateReader(deps DeliveryGateReadDeps) (*DeliveryGateReader, erro
 }
 
 // ReadRegistration 为一条首登命令问读数。只为妥投问：受理不了、尝试或对象结果不在册、结果不是妥投，都交回零值读数，由
-// 登记编排照常答（未受理、未生效）——那几种登不出交付，没有交付可读。
+// 登记编排照常答（未受理、未生效）——那几种登不出交付，没有交付可读。受理不了要连方式、接收方与 POD 一起认（与登记编排
+// 共用 deliverySpecFrom）：只认键就去问，缺 POD 那种必答未受理的命令也会让关务记下一笔判断，而这次交付从没落册。
 //
 // 写事务之前读派送尝试读不动时，不知道这次交付的业务时间，读数停在「派送尝试读面读不动」：写事务里仍读不动，编排答未决、
 // 用不上它；写事务里读得动，交付照登、记这一格。
@@ -50,6 +51,9 @@ func (reader *DeliveryGateReader) ReadRegistration(
 ) (domain.DeliveryGateReading, error) {
 	key, accepted := deliveryKeyFrom(command.TenantID, command.Attempt, command.Object)
 	if !accepted {
+		return domain.DeliveryGateReading{}, nil
+	}
+	if _, badInput := deliverySpecFrom(command); badInput {
 		return domain.DeliveryGateReading{}, nil
 	}
 	_, result, found, err := reader.deps.Attempts.LoadDeliveryResult(ctx, key.TenantID, key.Attempt, key.Object)
