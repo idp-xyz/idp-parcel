@@ -59,9 +59,9 @@ type initialRoutePayload struct {
 // initialRouteEventIDPort 是本口指纹 ID 的口名前缀。
 const initialRouteEventIDPort = "initial-route"
 
-// initialRouteEventID 把判断键六维折成 outboxintent.FingerprintEventID 的定长形。原样串接时，演示委托的真实标识
-// （委托、包裹、提交版本各二十六位编码）就拼出一百三十多字节，越过信封 ID 上限，入队被确定性拒收；交接只留下
-// 一条没人重发的续办引用，初始路由信封一封也发不出去。
+// initialRouteEventID 把判断键六维折成 outboxintent.FingerprintEventID 的定长形，理由见那份头注：各维多长归实例半边，
+// 原样串接就把信封 ID 上限押在别人的长度上。越过上限的入队被确定性拒收，而交接失败只化成一条续办引用，重发同一份
+// 照样被拒。
 func initialRouteEventID(key domain.InitialRouteJudgmentKey) eventing.EventID {
 	return outboxintent.FingerprintEventID(initialRouteEventIDPort,
 		key.TenantID.String(), key.CustomerAccountID.String(), key.ShipmentRequestID.String(),
@@ -69,14 +69,15 @@ func initialRouteEventID(key domain.InitialRouteJudgmentKey) eventing.EventID {
 }
 
 // initialRoutePartitionKey 是换成指纹 ID 之前兼作分区键的那一串，一字不变：分区键是顺序语义，改它会让换形前后
-// 同一判断键落进两个分区（先例 customsCasePartitionKey）。超 eventing.MaxPartitionKeyLength 由框架校验响亮拒收。
+// 同一判断键落进两个分区（先例 customsCasePartitionKey）。它仍随各维长度涨，上限是 eventing.MaxPartitionKeyLength；
+// 越过时框架照样拒收，在本口同样只化成续办引用。
 func initialRoutePartitionKey(key domain.InitialRouteJudgmentKey) string {
 	return key.TenantID.String() + "/initial-route/" + key.ShipmentRequestID.String() + "/" +
 		key.DeclaredParcelID.String() + "/" + key.AcceptanceBaseline.String() + "/" +
 		key.ServicePurpose.String()
 }
 
-// HandOffInitialRoute 把一份意图入队。信封 ID 取判断键再加类型段——意图由判断键认领
+// HandOffInitialRoute 把一份意图入队。信封 ID 是判断键的指纹加口名前缀——意图由判断键认领
 // （ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
 func (handoff *OutboxInitialRouteHandoff) HandOffInitialRoute(
 	ctx context.Context,

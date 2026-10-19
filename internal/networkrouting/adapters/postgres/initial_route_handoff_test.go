@@ -99,7 +99,7 @@ func TestAnInitialRouteWithFullLengthIdentifiersStillEnqueues(t *testing.T) {
 }
 
 // TestInitialRouteFollowsTheTransactionalTemplate 证初始路由意图复现样板四条：首发一行、
-// 回滚无痕、重发同一份、无事务拒。信封 ID 由判断键认领并加类型段。
+// 回滚无痕、重发同一份、无事务拒。信封 ID 由判断键认领：判断键的指纹加口名前缀。
 func TestInitialRouteFollowsTheTransactionalTemplate(t *testing.T) {
 	handoff, db, pool := newInitialRouteHandoffFixture(t)
 	ctx := t.Context()

@@ -19,9 +19,18 @@ Blocked by: 无
 
 其余仍原样串接实例引用的口另立 [envelope-id-bounds/01](../../envelope-id-bounds/issues/01-remaining-envelope-ids-still-concatenate-instance-references.md)。
 
-## 完成记录（2026-10-18，Claude Code 会话，分支 `claude-rfc22` 基 `45b9a088`）
+## 完成记录（2026-10-18，Claude Code 会话，分支 `claude-rfc22`）
 
 - `initialRouteEventID` 改走 `outboxintent.FingerprintEventID("initial-route", …六维)`；新增 `initialRoutePartitionKey`，取原串接形。
 - 用例：
   - `TestAnInitialRouteWithFullLengthIdentifiersStillEnqueues` 用演示真实长度的标识，先断言原串接形确实越过上限，再证指纹形入得了队、分区键仍是可读串接。旧实现在这一条上入队被拒。
   - 既有用例与 dispatch 的 `synInitialRouteEventID` 改成同一公式。
+
+## 评审记录（2026-10-18，隔离子代理一次过两轴，代码 PASS）
+
+- 阻断 1 条，在清扫票里，已修：清单漏了结算适配器里不经具名函数、原地串接的信封 ID。已补进 envelope-id-bounds/01，取证方法改成按信封字面量的 `ID:` 表达式扫。
+- 非阻断已修：
+  - `HandOffInitialRoute` 头注与模板用例头注不再说「判断键加类型段」。
+  - 分区键注释不再照抄先例「由框架校验响亮拒收」：在本口，拒收同样只化成续办引用。
+  - 信封 ID 注释不再写别的上下文铸的标识有多长，改引 `FingerprintEventID` 头注的规则。
+  - 清扫票的分区键一句改成「分区键不动；原先与 ID 共用一串的取那一串」。
