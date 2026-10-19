@@ -1,7 +1,7 @@
 # 08 移动事实同身份异内容答「已有版本」：作业事实口缺内容冲突格，另一台设备或另一作业范围的真实作业被静默吞掉
 
 Category: bug
-Status: in-progress——2026-10-18 作者子代理完工，待评审。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 代决（见「裁定」）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 代决（见「裁定」）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment/movement-facts
@@ -126,3 +126,10 @@ Blocked by: 无
 **证据层级**：`S`（隔离合成 `SYN-` 数据、真库、生产装配）。
 
 评审：待会话读 diff 审。
+
+## Comments
+
+- **评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审）· 钉 `9cc039ef`（基线 `45b9a088`）· 2026-10-18**：用户选「精简续做」，评审由会话本身读 diff 做；代码出自本会话起的实施子代理，不算非作者评审，如实记下。
+  - **Spec**：阻断无。`CanonicalizeMovementFactPayload`（TFC-1）进摘要的格与裁定一致，业务时间照 ADR-0023 不进；「找到在册版本」与「撞键读回赢家」两支都由 `movementFactReplayOrConflict` 两侧现算再比，同串答已有版本、异串答 `SOURCE_CONFLICT` 不带记录；身份在册时先比内容后判门禁。认可实施者自定的一格：门禁挡着而查册失败时答未决，不答门禁——此刻判断不了是不是重放。
+  - **Standards**：阻断无，非阻断无。冲突不回显关掉了「另一作业范围的内容被回显」；HTTP 只改注释。
+  - **未做的格**：「去处」那格（换版本重投登成并列版本、前版格答 400）没复现也没改，只删了指向「换版本号」的旧注释，留给后续；时刻回显归 operator-channel/31。
