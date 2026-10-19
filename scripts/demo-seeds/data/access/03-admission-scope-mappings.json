@@ -192,6 +192,30 @@
       "objectScope": "SYN-PILOT-SCOPE/customer-commands@v1",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "basis": "SYN-MAP-BASIS-03"
+    },
+    {
+      "mappingId": "SYN-MAP-OD-SEGMENT-COMMISSION-ADOPTION-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "FULFILLMENT_SEGMENT_COMMISSION_ADOPTION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
+      "mappingId": "SYN-MAP-OD-TRANSPORT-COMMISSION-CANCELLATION-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "TRANSPORT_COMMISSION_CANCELLATION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
+      "mappingId": "SYN-MAP-OD-BOOKING-REQUEST-CANCELLATION-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "BOOKING_REQUEST_CANCELLATION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
     }
   ]
 }

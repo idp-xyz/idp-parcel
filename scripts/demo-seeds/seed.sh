@@ -278,6 +278,9 @@ echo "== 试点治理登记（pilot-governance：权威区间、暂停、恢复�
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/29-authority-interval-operation-decision-capacity-release.json"
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/30-authority-interval-operation-decision-booking-request-submission.json"
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/31-authority-interval-external-fact-carrier-booking-answer.json"
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/32-authority-interval-operation-decision-segment-commission-adoption.json"
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/33-authority-interval-operation-decision-transport-commission-cancellation.json"
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/34-authority-interval-operation-decision-booking-request-cancellation.json"
 # 送站预报两口（ADR-0212 决定二；票 ps-external-mark-relations/09）是首方客户族的生产写，准入范围在铸造侧判（ADR-0139 决定八）：
 # 能力 CUSTOMER_COMMAND，事实类型取客户面能力词，对象范围另起一个客户面的合成范围。
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/35-authority-interval-customer-command-delivery-pre-advice-submission.json"

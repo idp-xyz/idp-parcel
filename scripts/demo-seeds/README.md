@@ -67,7 +67,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 
 | 登录邮箱 | 授予（自 2026-01-01 生效，不设终点） |
 |---|---|
-| `syn-operator-config-01@syn-tenant-01.example.invalid` | 登记册配置写、主数据与运营查阅读、运营决定（装载分配、终止参与、关段、建派送任务、有效时间判断、承运商首次有效收寄判断；复核完成、主动拒绝、授权处置、受控关闭、受控重开——委托侧这几种越过 Intake 的前提见表后说明；待识别重核——节点作业复核页上的「重核」；身份冲突处置——同一页上的「处置」；运输委托提交；订舱提交）；作业事实登记，按作业范围给：演示网络各节点（收寄），华东场外揽收与新加坡尾程派送两个场外范围（运输履约各口），每个范围配一台合成设备（`data/access/04`） |
+| `syn-operator-config-01@syn-tenant-01.example.invalid` | 登记册配置写、主数据与运营查阅读、运营决定（装载分配、终止参与、关段、建派送任务、有效时间判断、承运商首次有效收寄判断；复核完成、主动拒绝、授权处置、受控关闭、受控重开——委托侧这几种越过 Intake 的前提见表后说明；待识别重核——节点作业复核页上的「重核」；身份冲突处置——同一页上的「处置」；运输委托提交；订舱提交；履约段采用运输委托、取消运输委托、取消订舱）；作业事实登记，按作业范围给：演示网络各节点（收寄），华东场外揽收与新加坡尾程派送两个场外范围（运输履约各口），每个范围配一台合成设备（`data/access/04`） |
 | `syn-operator-viewer-01@syn-tenant-01.example.invalid` | 主数据与运营查阅读 |
 
 委托侧各种运营决定的授予只开门。权威串设了之后，越过 Intake 还要指名的对象在演示租户下查得到：复核完成、主动拒绝、
@@ -90,6 +90,12 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 外部事实区间各一行）。种子不登任何订舱或答复：订舱要先有干线委托，订在 `data/transport/04` 物化登记的
 `SYN-SCHED-SZX-SIN-DAILY/2026-10-21` 那一班上，再由合成干线承运商用自己的令牌答复，走法见
 `docs/design/synthetic-demo-journey-script.md` 的第 3 步。
+
+配置员另持运营决定「履约段采用运输委托」「取消运输委托」「取消订舱」三种（ADR-0204；`data/access/02` 的授予、`03` 的对照与
+`data/governance/32`、`33`、`34` 的权威区间各三行）。种子不登任何采用或取消：采用要先有干线委托与干线段——段由 SZX 那一次交给
+干线承运方的交接立起来，再经 `POST /transport-fulfillment-segment-commission-adoptions` 声明（段、委托、服务方）；取消经
+`POST /transport-fulfillment-transport-commission-cancellations` 与 `POST /transport-fulfillment-booking-request-cancellations`。
+走法同样见演示文档第 3 步。
 
 单要一枚令牌：`scripts/demo-seeds/operator-channel/operator-token.sh <邮箱>` 打印访问令牌，末尾加 `claims` 打印两枚
 令牌的载荷。它与管理台走同一个公共客户端、同一条 authorization_code + PKCE 流，管理台不必在跑。
