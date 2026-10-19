@@ -1,7 +1,7 @@
 # 35 运营查阅面余下各族换操作者 Intake：委托侧、节点、运输、追踪、代收、结算与治理的查阅
 
 Category: enhancement
-Status: 完工，待进 main——2026-10-18 Claude Code 会话，见「完成记录」与「评审与处置」。此前 in-progress——2026-10-16 Claude Code 会话认领（工作流派单），隔离工作树分支 `claude-oc35`，基 `627dde00`；受众逐口核过，见「受众核对」。此前 ready-for-agent——2026-10-16 Claude Code 会话立并分诊（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [no-directional-basis/01](../../no-directional-basis/issues/01-consolidation-adds-members-without-any-directional-basis.md) 偏离标记半边「运营今天就该看得见」：节点作业查阅在生产装配里仍是未配置 Intake，真实租户访问答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`。
+Status: 完工，待进 main——2026-10-18 Claude Code 会话，见「完成记录」与两轮「评审与处置」。此前 in-progress——2026-10-16 Claude Code 会话认领（工作流派单），隔离工作树分支 `claude-oc35`，基 `627dde00`；受众逐口核过，见「受众核对」。此前 ready-for-agent——2026-10-16 Claude Code 会话立并分诊（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [no-directional-basis/01](../../no-directional-basis/issues/01-consolidation-adds-members-without-any-directional-basis.md) 偏离标记半边「运营今天就该看得见」：节点作业查阅在生产装配里仍是未配置 Intake，真实租户访问答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`。
 Blocked by: 无
 父票：无。[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) 已于 2026-10-16 收口；本票接的是 [05](./05-catalogue-read-faces-take-operator-intake.md) 完成记录里「节点、运输、追踪、代收、结算、治理的查阅仍走隔离读」那一半。
 地盘：`cmd/parcel-api` 端点表里这几只查阅变量的装配行、行注与装配测试（含隔离读用例）；[合成演示动线](../../../docs/design/synthetic-demo-journey-script.md)「前置」与「取证」两节。`endpoints.go` 与 `idp-parcel-9b` 会话约定：改前报行号范围；换完把「节点作业查阅」那一行写着「经写开关放行」的行注改成实情。
@@ -66,13 +66,13 @@ Blocked by: 无
 - 节点作业查阅各册在生产装配下经操作者渠道可读，包括 no-directional-basis/01 落地后的「集运成员关系」册。
 - 演示动线脚本的「前置」「取证」两节与代码一致：照脚本起进程，各查阅口带配置员令牌答 200。证据只记 `S`。
 
-## 完成记录（2026-10-18，Claude Code 会话，分支 `claude-oc35`，rebase 后基 `5959fd08`）
+## 完成记录（2026-10-18，Claude Code 会话，分支 `claude-oc35`，rebase 后基 `05dbf409`（no-directional-basis/01 已在其中））
 
 各笔：
 
-- `77e45adc` 认领与逐口受众核对；`b69b793e` 后续票改号 36 → 53（36–52 归 `idp-parcel-9b` 会话）
-- `acdcd257` 面单交易、渠道择优决定、节点作业、运输履约、追踪与异常、代收、结算、治理各族换操作者查阅读；这几族的隔离读 Intake 退场；隔离读开关只剩委托查阅三口
-- `87025cc0` `endpoints.go` 行注对上现行渠道；并入 `idp-parcel-9b` 研判草案 C4-1、C4-4 与 C8 机械项里 `endpoints.go` 那部分（出处：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) Comments「钉 `60244fa6`」评审 Standards (1)(2)）。草案里 `assemble_work_fact_operator_test.go`、`transport_fulfillment_command_lines_test.go`、`assemble_isolated_write.go` 那几条归该会话的票 48，本票不碰
+- `fcee42aa` 认领与逐口受众核对；`00b339cb` 后续票改号 36 → 53（36–52 归 `idp-parcel-9b` 会话）
+- `1f87522a` 面单交易、渠道择优决定、节点作业、运输履约、追踪与异常、代收、结算、治理各族换操作者查阅读；这几族的隔离读 Intake 退场；隔离读开关只剩委托查阅三口
+- `435db84e` `endpoints.go` 行注对上现行渠道；并入 `idp-parcel-9b` 研判草案 C4-1、C4-4 与 C8 机械项里 `endpoints.go` 那部分（出处：[psb/15](../../product-strategy-boundary/issues/15-operator-channel-per-adr-0100.md) Comments「钉 `60244fa6`」评审 Standards (1)(2)）。草案里 `assemble_work_fact_operator_test.go`、`transport_fulfillment_command_lines_test.go`、`assemble_isolated_write.go` 那几条归该会话的票 48，本票不碰
 - 本笔：演示动线脚本「前置」改起操作者渠道并取配置员令牌，「取证」表头加一句现状（表本身锚在 `627d339`，保留为当时的取证）；完成记录
 
 ### 判据
