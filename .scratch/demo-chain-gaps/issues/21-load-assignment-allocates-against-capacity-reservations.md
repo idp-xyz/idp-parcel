@@ -1,7 +1,7 @@
 # 21 装载分配的容量关系（03b）
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg21（2026-10-19 Claude Code 作者子代理，见「完成记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
+Status: resolved——2026-10-19 进 main（全量钉 `c91bcba2`：151 ok / 0 FAIL；TF 链第四波同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg21（2026-10-19 Claude Code 作者子代理，见「完成记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
 Blocked by: [19](./19-load-assignment-checks-the-schedule-is-registered.md)、[20](./20-capacity-reservation-and-release-decision-faces.md)
 地盘：`domain/load_assignment_movement.go`、`load_assignment_rehydration.go`、`transport_schedule_capacity.go`；`ports/load_assignment.go`（不改 `ports.go` 签名）；`postgres/load_assignment_registry.go`、`capacity_pool.go`；迁移 TF 0031；tfhttp `form_load_assignment.go`；`assemble_segment_operations.go`；UC-TF-004 AT。
 出处：[03](./03-load-assignment-does-not-check-the-schedule.md)；方案「03 装载分配与容量」D03-1、D03-3、D03-4、D03-5，「需要的 ADR」ADR-0203。
@@ -102,3 +102,9 @@ L
 - `go build ./...`；`go vet ./internal/transportfulfillment/... ./internal/architecture/`；`gofmt -l internal cmd migrations scripts` 空。
 - `IDP_PARCEL_POSTGRES_DSN=…55432… go test -p 1 -count=1`：`./internal/transportfulfillment/...`、`./internal/architecture/`、`./cmd/parcel-api/` 全部 ok；`./scripts/demo-seeds/...` 没有测试文件。种子数据没改，`seed.sh` 没有重灌。
 - `git merge-tree` 对当前 `origin/main`（`0c56e842`）无冲突。
+
+## 进 main 记录（2026-10-19）
+
+- TF 链第四波 21、25 合成一批，按 21 → 25 叠到 main 上，整批快进推送，与本记录同一次推送。没有要人工解的冲突，UC-TF-004 与演示脚本的追加段两边都留。access_identity 0015 的决定种类全集是 0013 的十八种加本批三种。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `c91bcba2`：151 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。

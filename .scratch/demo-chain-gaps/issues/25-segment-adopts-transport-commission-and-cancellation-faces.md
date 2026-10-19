@@ -1,7 +1,7 @@
 # 25 履约段采用运输委托；取消委托与订舱
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg25（见文末「完成记录」「评审记录」；隔离评审 1 项阻断已修）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
+Status: resolved——2026-10-19 进 main（全量钉 `c91bcba2`：151 ok / 0 FAIL；TF 链第四波同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg25（见文末「完成记录」「评审记录」；隔离评审 1 项阻断已修）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
 Blocked by: [23](./23-transport-commission-submission-face.md)、[24](./24-booking-references-a-schedule-and-carrier-answers-via-integration-client.md)
 地盘：`operation_decision.go`；tfhttp 新 `adopt_segment_commission.go`、`cancel_transport_commission.go`、`cancel_booking_request.go`；`application` 新 `adopt_segment_commission.go` + `CancelBooking`；`domain` 新 `segment_commission_adoption.go`；ports 新文件（含 `BookingStore.Replace`）；postgres 新表，迁移 TF 0030；装配与 `endpoints.go` 行；种子；ADR-0204（ADR-0098 加后继指针）、TF CONTEXT。
 出处：[02](./02-transport-commission-has-no-command-face.md)；方案「02 委托、订舱、承运答复」D02-3、D02-6，「需要的 ADR」ADR-0204。
@@ -125,3 +125,8 @@ M
 - 演示种子：一次性库 `dcg25_rev_seed` 上 `seed.sh` 退 0，三种授予、27 条准入对照（含送站预报两条与本票三条）落库，用完已删库。
 - 演示环境没有重走；评审后补的三条答法（`EXISTING_CANCELLATION`、`COMMISSION_CANCELLED_AFTER_START`、开始前移）在演示文档里注明只有用例证据。
 
+## 进 main 记录（2026-10-19）
+
+- TF 链第四波 21、25 合成一批，按 21 → 25 叠到 main 上，整批快进推送，与本记录同一次推送。没有要人工解的冲突，UC-TF-004 与演示脚本的追加段两边都留。access_identity 0015 的决定种类全集是 0013 的十八种加本批三种。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `c91bcba2`：151 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。
