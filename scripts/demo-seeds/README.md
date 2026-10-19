@@ -133,7 +133,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 1. 发行方是 `operator-channel/compose.yaml` 里的第二只 Dex（`integration-issuer`，配置 `integration-dex.yaml`），上面那条 `up -d --wait` 一并起，地址 `http://127.0.0.1:5558/dex`。它只签客户端凭据许可的令牌；版本与操作者族那只不同，理由写在 compose 注释里。
 2. 起 `parcel-api` 时再加三件：`IDP_PARCEL_INTEGRATION_CLIENT_OIDC_ISSUER=http://127.0.0.1:5558/dex`、`IDP_PARCEL_INTEGRATION_CLIENT_OIDC_JWKS_URL=http://127.0.0.1:5558/dex/keys`、`IDP_PARCEL_INTEGRATION_CLIENT_OIDC_AUDIENCE=idp-parcel-integration`。日志出现「Integration client channel issuer configured」。
 3. 取令牌：`scripts/demo-seeds/operator-channel/integration-token.sh syn-integration-customs-broker-01 syn-customs-broker-secret`（银行是 `syn-integration-bank-01` / `syn-bank-secret`）。客户端行的「要求证书绑定令牌」填的是 `false`：这只发行方签不出 `cnf`，这是演示租户对这两台客户端的取值，不是放宽核验。
-4. 承运订舱答复口（`POST /transport-fulfillment/booking-answers`，ADR-0202 决定二）认合成干线承运商这一台：`integration-token.sh syn-integration-carrier-trunk-01 syn-carrier-trunk-secret`。它只能答干线委托下的订舱——答复方的来源身份要等于订舱所属委托的服务提供方，拿它答末端委托下的订舱答 200 `SOURCE_NOT_SERVICE_PROVIDER`。证书绑定一格同上。
+4. 承运订舱答复口（`POST /transport-fulfillment/booking-answers`，ADR-0202 决定二）认合成干线承运商这一台：`integration-token.sh syn-integration-carrier-trunk-01 syn-carrier-trunk-secret`。它只能答干线委托下的订舱——答复方的来源身份要等于订舱所属委托的服务提供方，拿它答末端委托下的订舱答 200 `SOURCE_NOT_SERVICE_PROVIDER`。证书绑定一格同上。这台客户端是后加进 `integration-dex.yaml` 的，发行方只在启动时读配置，`up -d` 也不因挂载文件的内容变了就重建容器：之前起过的 `integration-issuer` 要先 `docker compose -f scripts/demo-seeds/operator-channel/compose.yaml up -d --wait --force-recreate integration-issuer` 重建，否则取令牌答 `invalid_client`。它用内存存储，重建后签名钥换新，之前取的令牌作废，重取即可。
 
 ## 首方客户渠道：演示发行方
 

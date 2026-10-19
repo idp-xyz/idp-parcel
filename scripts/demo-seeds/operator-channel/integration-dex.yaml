@@ -20,7 +20,7 @@ oauth2:
   skipApprovalScreen: true
 
 staticClients:
-  # 本产品在这只发行方那里的受众。它不登进集成客户端册，拿它取的令牌过得了校验也答未授予；两只合成客户端取令牌时
+  # 本产品在这只发行方那里的受众。它不登进集成客户端册，拿它取的令牌过得了校验也答未授予；各合成集成客户端取令牌时
   # 带 audience:server:client_id 范围，令牌的 aud 才含它——parcel-api 的集成客户端受众参数就取这一串。
   # trustedPeers 列的是被允许这样做的客户端。
   - id: idp-parcel-integration
@@ -32,7 +32,7 @@ staticClients:
       - syn-integration-customs-broker-01
       - syn-integration-bank-01
       - syn-integration-carrier-trunk-01
-  # 一个客户端只代表一个外部方（accessidentity.IntegrationClientBinding）：报关服务商与银行各一台。
+  # 一个客户端只代表一个外部方（accessidentity.IntegrationClientBinding），每个合成外部方各起一台。
   - id: syn-integration-customs-broker-01
     name: 合成报关服务商 01
     secret: syn-customs-broker-secret

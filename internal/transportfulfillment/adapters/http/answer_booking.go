@@ -11,8 +11,8 @@ import (
 )
 
 // 承运订舱答复口（UC-TF-004 步 4；ADR-0202 决定二、五）。承运系统对一次订舱作答，挂集成客户端族、按承运订舱答复这一类
-// 事实认证。它是承运方回传口，路径取控制事实那组的 `/transport-fulfillment/...` 而不是运营决定的 `transport-fulfillment-`
-// 前缀——读路径就分得出这一口的提交方在产品之外。
+// 事实认证。它是承运方回传的外部事实，路径照端点表既有的分法取控制事实那组的 `/transport-fulfillment/...`，不取运营
+// 决定与运营登记的 `transport-fulfillment-` 前缀；提交方是哪一族由挂的 Intake 定，路径不承担这一区分。
 
 // BookingAnswerIntake 把已认证的承运答复请求翻译成答复命令。
 type BookingAnswerIntake interface {

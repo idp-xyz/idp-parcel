@@ -419,7 +419,7 @@ func NewAcceptanceBasisReference(value string) (AcceptanceBasisReference, error)
 //
 // 候补（ADR-0202 决定五）是承运方答「此刻排进候补、尚未确认」：不成约、没有接受量，带候补的依据。它是五值里唯一不定局的
 // 一值——同一订舱在候补之后还可以有一个定局答复（见 AdmitsSuccessor），其余四值一经答出就是这次订舱的结局。`待确认`
-// 与`待补充`不在这里：前者是订舱还没有任何答复时的读法，后者是答复缺件时的读法，都不是承运方答出的值。
+// 与`待补充`不在这里：两者是读法，不是承运方答出的值，口径以 ADR-0202 决定五为准。
 type CarrierAcceptanceOutcome uint8
 
 const (
@@ -467,7 +467,7 @@ type CarrierAcceptance struct {
 }
 
 // FormCarrierAcceptance 依附订舱申请形成承运结果。接受必须带不超过申请量的接受量
-// （部分接受合法，CONTEXT 193）；拒绝/失效/撤回/候补必须带原因来源且没有接受量。
+// （部分接受合法，CONTEXT「承运接受可以部分或附条件成立」）；拒绝/失效/撤回/候补必须带原因来源且没有接受量。
 func FormCarrierAcceptance(
 	booking BookingRequest,
 	acceptance CarrierAcceptanceReference,
