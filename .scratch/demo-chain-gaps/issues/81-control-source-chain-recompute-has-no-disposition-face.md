@@ -25,3 +25,12 @@ Blocked by: 无
 ## 规模
 
 M
+
+## 补记（票 95，2026-10-19）
+
+票 [95](./95-node-operations-reads-a-new-handover-under-the-same-scope-as-a-correction.md)（[ADR-0220](../../../docs/adr/0220-node-control-reads-the-handover-correction-chain-by-the-transport-fulfillment-back-pointer.md)）把节点控制认更正链改成只按运输履约的更正回指，存量不改写、不重判，留给本票的处置面一并看。ADR-0220 之前按（对象，范围）认错链的行有两种形状：
+
+- 同一范围下另起的首登被当成后继：转出一侧落 `NO_ACTIVE_CONTROL`（剔掉了前一次立起的控制），或零写入、不留行；转入一侧零写入。前一次立起的控制随后由下一次交接转出，转出行上看不出是错的那一次。
+- 同一范围下另起的拒收或待确认被当成撤回控制的更正：入账 `CONTROL_SOURCE_CHAIN_PENDING_RECOMPUTE`。
+
+要不要按交接册上的回指把这两种行找出来、入账或重放，归本票「要裁的」。生产没有存量（演示库、开发库按一次性库用）。
