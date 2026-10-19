@@ -361,6 +361,15 @@ func (handler *RegisterTransportHandoverHandler) Correct(
 		Version:  corrected.Version(),
 	}
 	unversioned := unversionedHandoverCorrectionDigest(command)
+	successor, hasSuccessor, err := handler.deps.Handovers.FindSuccessor(ctx, predecessorKey)
+	if err != nil {
+		return handoverRegistryUndecided(command.Object), nil
+	}
+	if hasSuccessor {
+		// 链线性，一版最多被更正一次（票 tf-face-algebra/07）：前版已有后继，这一份要么是那次更正的重放（新版本号换了
+		// 也是——新版本不进摘要），要么是同一前版上的另一份更正，不再分一枝。要改请对链尾提更正。
+		return handler.answerOccupiedKey(ctx, successor, correctionDigest, unversioned), nil
+	}
 	occupant, occupied, err := handler.deps.Handovers.FindByKey(ctx, key)
 	if err != nil {
 		return handoverRegistryUndecided(command.Object), nil
@@ -421,7 +430,7 @@ func (handler *RegisterTransportHandoverHandler) commit(
 		result.handoff = handler.handOff(ctx, record)
 		return result, nil
 	case ports.HandoverAlreadyRegistered:
-		winner, found, err := handler.deps.Handovers.FindByKey(ctx, record.Key)
+		winner, found, err := handler.findWinner(ctx, record)
 		if err != nil || !found {
 			return handoverRegistryUndecided(record.Key.Object.String()), nil
 		}
@@ -429,6 +438,25 @@ func (handler *RegisterTransportHandoverHandler) commit(
 	default:
 		return RegisterTransportHandoverResult{}, fmt.Errorf("%w: %d", ErrUnexpectedHandoverSave, saved)
 	}
+}
+
+// findWinner 读回让 Save 答`已登记`的那一版。撞的可能是主键，也可能是更正记录撞上「一版最多被更正一次」的部分唯一索引
+// ——那时按本次新键读是空的，先到的是同一前版的另一个后继。
+func (handler *RegisterTransportHandoverHandler) findWinner(
+	ctx context.Context,
+	record ports.TransportHandoverRecord,
+) (ports.TransportHandoverRecord, bool, error) {
+	winner, found, err := handler.deps.Handovers.FindByKey(ctx, record.Key)
+	if err != nil || found {
+		return winner, found, err
+	}
+	predecessor, corrects := record.Handover.Corrects()
+	if !corrects {
+		return ports.TransportHandoverRecord{}, false, nil
+	}
+	predecessorKey := record.Key
+	predecessorKey.Version = predecessor
+	return handler.deps.Handovers.FindSuccessor(ctx, predecessorKey)
 }
 
 // answerOccupiedKey 按在册那一版的已存摘要给同键的这一份分格：同内容是重放，交回原版并重发同一份意图；异内容是冲突，

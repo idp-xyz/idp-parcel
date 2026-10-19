@@ -43,6 +43,14 @@ func (double *handoverRegistryDouble) FindByKey(
 	return record, found, nil
 }
 
+// FindSuccessor 只为满足端口：本包看的是 HTTP 分法，线性链的判据由编排与生产适配器的测试钉。
+func (double *handoverRegistryDouble) FindSuccessor(
+	context.Context,
+	ports.TransportHandoverKey,
+) (ports.TransportHandoverRecord, bool, error) {
+	return ports.TransportHandoverRecord{}, false, nil
+}
+
 func (double *handoverRegistryDouble) Save(
 	_ context.Context,
 	record ports.TransportHandoverRecord,

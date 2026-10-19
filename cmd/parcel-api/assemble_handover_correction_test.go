@@ -12,6 +12,7 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
+	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	tfapp "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
@@ -124,6 +125,95 @@ func refusingHandoverCorrection(t *testing.T, object, predecessor, newVersion, b
 		PredecessorVersion: predecessor,
 		Verdict:            tfdomain.HandoverRefused,
 		Basis:              basis,
+		NewVersion:         newVersion,
+		CorrectedAt:        controlFactJudgedAt.Add(2 * time.Hour),
+	}
+}
+
+// Covers: 票 tf-face-algebra/07——交接更正链线性。v1→v2 之后以 v1 作前版再更正成 v2-retry（换放行证据）答冲突，
+// 范围汇总对单对象范围得 total=1；同一前版上两份更正并发，多轮里每轮恰好一份 201。测试输入是隔离合成，只记 `S`。
+func TestTheWiredHandoverCorrectionChainStaysLinearAgainstARealDatabase(t *testing.T) {
+	orchestrations, pool := wiredHandoverOrchestrations(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	handovers, err := tfpostgres.NewTransportHandovers(db)
+	if err != nil {
+		t.Fatalf("交接登记册读面：%v", err)
+	}
+
+	registerPlainHandover(t, orchestrations, "SYN-PARCEL-07", "SYN-HANDOVER-07/v1", "SYN-EVIDENCE-RELEASE-1")
+	first := handedOverCorrection(t, "SYN-PARCEL-07", "SYN-HANDOVER-07/v2", "SYN-EVIDENCE-RELEASE-07-A")
+	if result, err := orchestrations.handover.Correct(t.Context(), first); err != nil || result.Outcome() != tfapp.HandoverCorrected {
+		t.Fatalf("v1→v2 outcome = %v err = %v", result.Outcome(), err)
+	}
+	retry := handedOverCorrection(t, "SYN-PARCEL-07", "SYN-HANDOVER-07/v2-retry", "SYN-EVIDENCE-RELEASE-07-B")
+	if result, err := orchestrations.handover.Correct(t.Context(), retry); err != nil || result.Outcome() != tfapp.HandoverRegistrationConflict {
+		t.Fatalf("v1→v2-retry outcome = %v err = %v, want SOURCE_CONFLICT（v1 已有后继）", result.Outcome(), err)
+	}
+	records, err := handovers.ListByScope(t.Context(), mustValue(t, tfdomain.NewTenantID, "SYN-TENANT-1"),
+		mustValue(t, tfdomain.NewHandoverScopeReference, "SYN-HANDOVER-SCOPE-1"))
+	if err != nil {
+		t.Fatalf("按范围读交接：%v", err)
+	}
+	results := make([]tfdomain.TransportHandover, 0, len(records))
+	for _, record := range records {
+		results = append(results, record.Handover)
+	}
+	summary, err := tfdomain.SummarizeHandovers(results)
+	if err != nil {
+		t.Fatalf("汇总：%v", err)
+	}
+	if summary.Total() != 1 || summary.HandedOver() != 1 {
+		t.Fatalf("单对象范围汇总 total=%d handedOver=%d，want 1/1", summary.Total(), summary.HandedOver())
+	}
+
+	for round := range 6 {
+		object := fmt.Sprintf("SYN-PARCEL-07-R%d", round)
+		registerPlainHandover(t, orchestrations, object, "SYN-HANDOVER-07/v1", "SYN-EVIDENCE-RELEASE-1")
+		outcomes := make([]tfapp.HandoverRegistrationOutcome, 2)
+		var wait sync.WaitGroup
+		for racer := range outcomes {
+			wait.Add(1)
+			go func() {
+				defer wait.Done()
+				command := handedOverCorrection(t, object, fmt.Sprintf("SYN-HANDOVER-07/race-%d", racer), fmt.Sprintf("SYN-EVIDENCE-RELEASE-RACE-%d", racer))
+				result, err := orchestrations.handover.Correct(context.Background(), command)
+				if err != nil {
+					t.Errorf("%s 第 %d 份更正：%v", object, racer, err)
+					return
+				}
+				outcomes[racer] = result.Outcome()
+			}()
+		}
+		wait.Wait()
+		corrected, conflicts := 0, 0
+		for _, outcome := range outcomes {
+			switch outcome {
+			case tfapp.HandoverCorrected:
+				corrected++
+			case tfapp.HandoverRegistrationConflict:
+				conflicts++
+			}
+		}
+		if corrected != 1 || conflicts != 1 {
+			t.Fatalf("%s 同一前版两份并发更正答 %v，want 恰好一份 HANDOVER_CORRECTED、一份 SOURCE_CONFLICT", object, outcomes)
+		}
+	}
+}
+
+func handedOverCorrection(t *testing.T, object, newVersion, releasingEvidence string) tfapp.CorrectTransportHandoverCommand {
+	t.Helper()
+	return tfapp.CorrectTransportHandoverCommand{
+		TenantID:           mustValue(t, tfdomain.NewTenantID, "SYN-TENANT-1"),
+		Object:             object,
+		Scope:              "SYN-HANDOVER-SCOPE-1",
+		PredecessorVersion: "SYN-HANDOVER-07/v1",
+		Verdict:            tfdomain.ObjectHandedOver,
+		ReleasingEvidence:  releasingEvidence,
+		ReceivingEvidence:  "SYN-EVIDENCE-RECEIVE-1",
+		Rule:               "SYN-HANDOVER-RULE/v1",
 		NewVersion:         newVersion,
 		CorrectedAt:        controlFactJudgedAt.Add(2 * time.Hour),
 	}

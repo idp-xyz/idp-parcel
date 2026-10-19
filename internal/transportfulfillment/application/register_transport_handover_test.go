@@ -64,8 +64,35 @@ func (double *handoverRegistryDouble) Save(
 	if _, exists := double.records[handoverRegistryKey(record.Key)]; exists {
 		return ports.HandoverAlreadyRegistered, nil
 	}
+	// 与库面部分唯一索引同一条：一版最多被更正一次，同一前版的第二个后继同样答已登记。
+	if predecessor, corrects := record.Handover.Corrects(); corrects {
+		if _, taken, _ := double.FindSuccessor(context.Background(), handoverKeyAt(record.Key, predecessor)); taken {
+			return ports.HandoverAlreadyRegistered, nil
+		}
+	}
 	double.records[handoverRegistryKey(record.Key)] = record
 	return ports.HandoverSaved, nil
+}
+
+func (double *handoverRegistryDouble) FindSuccessor(
+	_ context.Context,
+	predecessor ports.TransportHandoverKey,
+) (ports.TransportHandoverRecord, bool, error) {
+	if double.findErr != nil {
+		return ports.TransportHandoverRecord{}, false, double.findErr
+	}
+	for _, record := range double.records {
+		corrected, corrects := record.Handover.Corrects()
+		if corrects && corrected == predecessor.Version && handoverKeyAt(record.Key, corrected) == predecessor {
+			return record, true, nil
+		}
+	}
+	return ports.TransportHandoverRecord{}, false, nil
+}
+
+func handoverKeyAt(key ports.TransportHandoverKey, version domain.HandoverResultVersion) ports.TransportHandoverKey {
+	key.Version = version
+	return key
 }
 
 type handoverHandoffDouble struct {

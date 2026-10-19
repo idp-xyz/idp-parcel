@@ -95,6 +95,71 @@ func (repository *TransportHandovers) FindByKey(
 	}, true, nil
 }
 
+// FindSuccessor 按前版的键交回回指它的那一版（票 tf-face-algebra/07）。部分唯一索引 transport_handover_corrects_once
+// 保证至多一行；Save 撞上它时按新键读回是空的，编排靠这里找到先到的那一次。
+func (repository *TransportHandovers) FindSuccessor(
+	ctx context.Context,
+	predecessor ports.TransportHandoverKey,
+) (ports.TransportHandoverRecord, bool, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return ports.TransportHandoverRecord{}, false, fmt.Errorf("find transport handover successor: %w", err)
+	}
+
+	var versionRaw, releasedBy, receivedBy, verdictName, digest string
+	var releasing, receiving, rule, basis, corrects *string
+	var correctedAt *time.Time
+	var judgedAt, recordedAt time.Time
+	err = querier.QueryRow(ctx,
+		`SELECT handover_version, released_by, received_by, verdict,
+		        releasing_evidence, receiving_evidence, rule_ref, basis_ref,
+		        corrects_version, corrected_at, judged_at, content_digest, recorded_at
+		   FROM transport_fulfillment.transport_handover
+		  WHERE tenant_id = $1
+		    AND object_ref = $2
+		    AND scope_ref = $3
+		    AND corrects_version = $4`,
+		predecessor.TenantID.String(),
+		predecessor.Object.String(),
+		predecessor.Scope.String(),
+		predecessor.Version.String(),
+	).Scan(&versionRaw, &releasedBy, &receivedBy, &verdictName,
+		&releasing, &receiving, &rule, &basis,
+		&corrects, &correctedAt, &judgedAt, &digest, &recordedAt)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return ports.TransportHandoverRecord{}, false, nil
+	}
+	if err != nil {
+		return ports.TransportHandoverRecord{}, false, fmt.Errorf("find transport handover successor: %w", err)
+	}
+
+	key := predecessor
+	if key.Version, err = domain.NewHandoverResultVersion(versionRaw); err != nil {
+		return ports.TransportHandoverRecord{}, false, fmt.Errorf("find transport handover successor: %w", err)
+	}
+	handover, err := rebuildHandover(key, handoverRow{
+		releasedBy:  releasedBy,
+		receivedBy:  receivedBy,
+		verdictName: verdictName,
+		releasing:   releasing,
+		receiving:   receiving,
+		rule:        rule,
+		basis:       basis,
+		corrects:    corrects,
+		correctedAt: correctedAt,
+		judgedAt:    judgedAt,
+	})
+	if err != nil {
+		return ports.TransportHandoverRecord{}, false, fmt.Errorf("find transport handover successor: %w", err)
+	}
+	return ports.TransportHandoverRecord{
+		Key:           key,
+		ContentDigest: digest,
+		Handover:      handover,
+		RecordedAt:    recordedAt.UTC(),
+	}, true, nil
+}
+
 // ListByScope 交回一个交接范围内**全部已登记的版本**，供 domain.SummarizeHandovers 派生汇总
 // （ports.HandoverScopeView）。
 //
@@ -178,7 +243,7 @@ func (repository *TransportHandovers) ListByScope(
 	return records, nil
 }
 
-// Save 落一个交接判断版本。撞键答`已登记`（ADR-0031），编排据此读回赢家。
+// Save 落一个交接判断版本。撞主键或撞「前版已有后继」都答`已登记`（ADR-0031），编排据此读回赢家。
 func (repository *TransportHandovers) Save(
 	ctx context.Context,
 	record ports.TransportHandoverRecord,

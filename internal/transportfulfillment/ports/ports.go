@@ -204,8 +204,12 @@ const (
 )
 
 // TransportHandoverRegistry 按幂等键找回并保存交接判断（写入代数同 ADR-0031）。
+//
+// 更正链线性，一版最多被更正一次（票 tf-face-algebra/07）：FindSuccessor 按前版的键交回回指它的那一版；Save 撞上
+// 「前版已有后继」与撞上主键同答已登记。
 type TransportHandoverRegistry interface {
 	FindByKey(ctx context.Context, key TransportHandoverKey) (TransportHandoverRecord, bool, error)
+	FindSuccessor(ctx context.Context, predecessor TransportHandoverKey) (TransportHandoverRecord, bool, error)
 	Save(ctx context.Context, record TransportHandoverRecord) (HandoverSaveOutcome, error)
 }
 

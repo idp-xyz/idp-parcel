@@ -131,6 +131,62 @@ func TestACorrectionLandsAsANewVersionRow(t *testing.T) {
 	}
 }
 
+// Covers: 票 tf-face-algebra/07——一版最多被更正一次的库面兜底：FindSuccessor 按前版读回回指它的那一版；同一前版的
+// 第二个后继撞部分唯一索引，Save 答`已登记`而不是落下第二枝，事务照样可用。
+func TestAPredecessorIsCorrectedAtMostOnce(t *testing.T) {
+	repository, transactor, pool := newTransportHandovers(t)
+	ctx := t.Context()
+
+	first := handedOverRecord(t, "HRV-000000000001")
+	mustSaveHandover(t, transactor, ctx, repository, first)
+	correction := func(version, basis string) ports.TransportHandoverRecord {
+		t.Helper()
+		corrected, err := first.Handover.Correct(domain.HandoverCorrection{
+			Verdict:     domain.HandoverRefused,
+			Basis:       handoverValue(t, domain.NewHandoverBasisReference, basis),
+			Version:     handoverValue(t, domain.NewHandoverResultVersion, version),
+			CorrectedAt: handoverJudgedAtFixture.Add(2 * time.Hour),
+		})
+		if err != nil {
+			t.Fatalf("更正：%v", err)
+		}
+		return ports.TransportHandoverRecord{
+			Key:           handoverKeyFixture(t, "tenant-1", version),
+			ContentDigest: "digest-" + basis,
+			Handover:      corrected,
+			RecordedAt:    handoverJudgedAtFixture.Add(2 * time.Hour),
+		}
+	}
+
+	predecessorKey := handoverKeyFixture(t, "tenant-1", "HRV-000000000001")
+	if _, found, err := repository.FindSuccessor(ctx, predecessorKey); err != nil || found {
+		t.Fatalf("还没有更正却读出了后继：found=%v err=%v", found, err)
+	}
+	mustSaveHandover(t, transactor, ctx, repository, correction("HRV-000000000002", "count-mismatch"))
+	successor, found, err := repository.FindSuccessor(ctx, predecessorKey)
+	if err != nil || !found || successor.Key.Version.String() != "HRV-000000000002" || successor.ContentDigest != "digest-count-mismatch" {
+		t.Fatalf("读回后继 = %q found=%v err=%v，want HRV-000000000002", successor.Key.Version, found, err)
+	}
+
+	var outcome ports.HandoverSaveOutcome
+	mustWithinHandoverTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		var err error
+		outcome, err = repository.Save(txCtx, correction("HRV-000000000003", "seal-broken"))
+		return err
+	})
+	if outcome != ports.HandoverAlreadyRegistered {
+		t.Fatalf("同一前版的第二个后继 save outcome = %d，want 已登记", outcome)
+	}
+	var rows int
+	if err := pool.QueryRow(ctx,
+		`SELECT count(*) FROM transport_fulfillment.transport_handover`).Scan(&rows); err != nil {
+		t.Fatalf("统计版本行：%v", err)
+	}
+	if rows != 2 {
+		t.Fatalf("rows = %d, want 2（v1 只有一个后继）", rows)
+	}
+}
+
 // TestHandedOverCompletenessIsPinnedInTheDatabase 证逐格完备性入库内 CHECK：绕过领域
 // 直插一行缺接收证据的「已交接」被数据库拒（领域构造门是第一道，两道互补不互替）。
 func TestHandedOverCompletenessIsPinnedInTheDatabase(t *testing.T) {
