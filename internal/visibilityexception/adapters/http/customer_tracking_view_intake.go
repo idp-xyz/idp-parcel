@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	"go.idp.xyz/idp-parcel/internal/visibilityexception/domain"
@@ -73,7 +74,12 @@ func (intake *CustomerTrackingViewIntake) IntakeQuery(ctx context.Context, reque
 	if err != nil {
 		return TrackingViewQuery{}, err
 	}
-	parameters := request.URL.Query()
+	// 不用 URL.Query()：它吞掉 ParseQuery 的错误，带分号或坏百分号转义的那一段会被悄悄丢掉，余下的照常作答——正是查询串封闭要拒的
+	// 「悄悄忽略」。
+	parameters, err := url.ParseQuery(request.URL.RawQuery)
+	if err != nil {
+		return TrackingViewQuery{}, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
+	}
 	for name := range parameters {
 		if name != trackingViewParcelParameter {
 			return TrackingViewQuery{}, fmt.Errorf("%w: query parameter %q is not part of the tracking view query", ErrMalformedRequest, name)

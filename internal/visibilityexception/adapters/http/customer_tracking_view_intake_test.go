@@ -70,7 +70,8 @@ func TestCustomerTrackingViewIntakeKeysTheQueryByTheAuthenticatedAccount(t *test
 	}
 }
 
-// Covers: AT-VE-171——查询串里自报的账户、租户或任何别的一格都答坏请求，不悄悄忽略；没有包裹定位、给了两次、给了空白也答坏请求。
+// Covers: AT-VE-171——查询串里自报的账户、租户或任何别的一格都答坏请求，不悄悄忽略；没有包裹定位、给了两次、给了空白也答坏请求；
+// 解不开的段落（分号分隔、坏百分号转义）同样答坏请求，不丢掉那一段后照常作答。
 func TestCustomerTrackingViewQueryStringIsClosed(t *testing.T) {
 	intake := customerIntake(t, viewerDouble{viewer: viewerOf(t, "customer-1")})
 	for name, target := range map[string]string{
@@ -79,6 +80,8 @@ func TestCustomerTrackingViewQueryStringIsClosed(t *testing.T) {
 		"no parcel":             "/customer-tracking-view",
 		"parcel twice":          "/customer-tracking-view?parcel=parcel-1&parcel=parcel-2",
 		"blank parcel":          "/customer-tracking-view?parcel=%20",
+		"semicolon segment":     "/customer-tracking-view?parcel=parcel-1&customerAccount=customer-2;x",
+		"bad percent escape":    "/customer-tracking-view?parcel=parcel-1&%zz=customer-2",
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := intake.IntakeQuery(context.Background(), customerQuery(target, "t")); !errors.Is(err, visibilityhttp.ErrMalformedRequest) {
