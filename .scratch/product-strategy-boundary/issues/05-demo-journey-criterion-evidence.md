@@ -132,6 +132,7 @@ Blocked by: 02、03、04（只挡收口）
 
 - 证据：`cmd/parcel-api/assemble_delivery_dispatch.go`：执行器与端点都在，缺内置的发起策略；拍频是租户取值。
 - 归类：产品策略缺执行器。去处：[票 09](./09-tf-fulfillment-judgment-methods-and-connectors.md) 第 2 项（即票 01 表 PN-04 第三项）；拍频经参考配置在演示租户上采用。
+- 2026-10-19 补：去处改为 [demo-chain-gaps/60](../../demo-chain-gaps/issues/60-delivery-dispatch-is-triggered-in-process-from-the-handover-envelope.md)——发起随交接信封在进程内逐对象进行，拍频格退役，代决见 [handover-dispatch-plan](../../demo-chain-gaps/handover-dispatch-plan.md) C10。
 
 **格 14 · 外部轨迹来源连接器**（代码）
 
@@ -274,7 +275,7 @@ Blocked by: 02、03、04（只挡收口）
 | 10 申报发送通道 | `customs-compliance.declaration-submission.formed` 的消费方仍只有 VE | 代码 | [票 10](./10-cc-declaration-channel-and-public-regulatory-reference-configuration.md) `needs-triage` |
 | 11 外部结果与凭证 | 外部结果 `200 SOURCE_NOT_ACCEPTED`、凭证登记 `400 MALFORMED_REQUEST`：渠道已放行 | 实测 | 同格 7 |
 | 12 交接、移动、派送与交付 | 交接、交付、派送尝试 `200 SOURCE_NOT_ACCEPTED`；移动、建派送任务、派送发起、段关闭、有效时间判断 `200 INPUT_NOT_ACCEPTED`：渠道已放行；派送尝试写入方已在（[票 19](./19-delivery-attempt-result-has-no-production-writer.md) resolved） | 实测 | 同格 7 |
-| 13 派送发起 | 触发执行器的地点、窗口、条件三条要求缝已接真（ADR-0114）；定时发起策略本次未核 | 代码 | [票 09](./09-tf-fulfillment-judgment-methods-and-connectors.md) 第 2 项，`needs-triage` |
+| 13 派送发起 | 触发执行器的地点、窗口、条件三条要求缝已接真（ADR-0114）；定时发起策略本次未核 | 代码 | [票 09](./09-tf-fulfillment-judgment-methods-and-connectors.md) 第 2 项，`needs-triage`；2026-10-19 去处改为 [demo-chain-gaps/60](../../demo-chain-gaps/issues/60-delivery-dispatch-is-triggered-in-process-from-the-handover-envelope.md) |
 | 14 外部轨迹来源 | `TrackingSource` 仍无实现 | 代码 | 票 09 第 1 项，`needs-triage` |
 | 15 客户侧读写面 | `GET /customer-tracking-view`、`POST /claims` 仍 `403 ACCESS_CHANNEL_NOT_CONFIGURED` | 实测 | 同「盘点」（票 01 表横切第三项；票 01 本身已 resolved，本次没找到承接的工作票） |
 | 16 客户通知出向 | `NotificationChannelGateway` 仍无实现 | 代码 | [票 11](./11-ve-eta-triage-disclosure-methods-and-notification-connector.md) `needs-triage` |

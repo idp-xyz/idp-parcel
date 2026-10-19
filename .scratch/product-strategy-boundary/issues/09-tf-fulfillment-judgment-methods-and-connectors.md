@@ -9,7 +9,7 @@ Blocked by: 无（第 1、3 项里公开承运商接口的参考配置那半等 
 ## 做什么
 
 1. **外部轨迹来源连接器**（`PAR-INT-03`）。`TrackingSource` 一家实现都没有，端口注释称「设计而不是欠账」；按 ADR-0146 连接器形态归产品。已知缺口：重定级表 PN-04 行第三项。
-2. **派送发起策略**（`PAR-NET-09`）。派送执行器与端点都在（`cmd/parcel-api/assemble_delivery_dispatch.go`），缺内置的发起策略；拍频是租户取值，可出参考配置。已知缺口：同上。
+2. **派送发起策略**（`PAR-NET-09`）。派送执行器与端点都在（`cmd/parcel-api/assemble_delivery_dispatch.go`），缺内置的发起策略；拍频是租户取值，可出参考配置。已知缺口：同上。2026-10-19 补：内置策略由 [demo-chain-gaps/60](../../demo-chain-gaps/issues/60-delivery-dispatch-is-triggered-in-process-from-the-handover-envelope.md) 收（随交接信封在进程内逐对象发起，拍频格退役），代决见 [handover-dispatch-plan](../../demo-chain-gaps/handover-dispatch-plan.md) C10。
 3. **待核：运输委托 / 订舱 / 承运接受的交互连接器**（`PAR-INT-07`）。核现有委托订舱编排之外有无出向连接器；公开承运商订舱接口按参考配置出。
 4. **待核：揽收控制成立与交接证据证明力的判断形态**（`PAR-NET-07`「实际接收与控制成立规则、证据规则」、`PAR-NET-15`「交出/接收/拒收/封签/点验证据来源及证明力」）。ADR-0135 与交接登记编排已定了裁决值与转出引用；核「哪些证据足以成立」有无判断形态，没有则内置形态，租户选形态并映射其伙伴的证据。
 5. **待核：POD 有效性与接收方核验的判断形态**（`PAR-NET-09`「接收方核验、POD 证据集合与有效性」）。

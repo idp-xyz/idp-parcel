@@ -500,16 +500,16 @@
 
 | 事项 | 为什么等 | 前置 | 收工后去处 |
 |---|---|---|---|
-| 04 交接后节点控制转移，NR 复核 | 在 `internal/nodeoperations/**` 和交接路径上 | — | 原票 04（交接信封扇出到 NO、NR） |
-| 06 派送发起与末端段 | 在 `trigger_delivery_dispatch.go`、`open_dispatch_task.go`、`assemble_delivery_dispatch.go` 上，`claude-tfa09` 也在动这些文件 | — | 原票 06；末端是否外包随它定（X1） |
-| 外包干线交接的跨境门禁 | 门禁要挂在 `register_transport_handover.go` 上 | 31 | 交接登记读 ADR-0206 准入判断，按 ADR-0205 照记读数 |
-| 有效交付的 `FINAL_DELIVERY` 门禁 | 在 `register_effective_delivery.go` 上 | 31 | 同上 |
-| 删掉移动命令与载荷里的 `gateRequired` / `gateClearance`；设备出发前门禁读口 | 在 `work_fact_intake*.go` 上（peer 的测试钉着透传） | 32 | 32 的后续小票 |
-| NO 实测触发的再准备 | 要读 `internal/nodeoperations` 的端口，现在还在变 | 18 | 新 TF 消费者票 |
-| TF 自消费交接 / 有效交付信封，自动形成 `ACTUAL_FULFILLMENT` | 路由行与 04、06 落在同一类型上 | 25、29 | 新票（ADR-0207 第七条的后继） |
-| admin-web 各页（班次、池、委托、订舱、发生项、门禁读数） | 在 `apps/admin-web/**` 上，走前端 main 直做流程 | 各对应票 | 前端切片 |
-| 19 与 `buildSegmentOperations` 同函数相邻 | peer 若改 `OpenDispatchTaskDeps` 会碰同一函数 | — | 不阻断；落地前 rebase |
-| `cmd/parcel-api/assemble_operator_decisions.go`（`frontlineMovementSource`、`buildWorkFactIntakes`） | 与 9b 的收寄接线相邻 | — | 本计划所有票都不碰 |
+| 04 交接后节点控制转移，NR 复核 | 在 `internal/nodeoperations/**` 和交接路径上 | — | 原票 04（交接信封扇出到 NO、NR）；去处见 [handover-dispatch-plan](./handover-dispatch-plan.md) 的「等 peer 的」各项去处一节 |
+| 06 派送发起与末端段 | 在 `trigger_delivery_dispatch.go`、`open_dispatch_task.go`、`assemble_delivery_dispatch.go` 上，`claude-tfa09` 也在动这些文件 | — | 原票 06；末端是否外包随它定（X1）；去处见 [handover-dispatch-plan](./handover-dispatch-plan.md) 的「等 peer 的」各项去处一节 |
+| 外包干线交接的跨境门禁 | 门禁要挂在 `register_transport_handover.go` 上 | 31 | 交接登记读 ADR-0206 准入判断，按 ADR-0205 照记读数；去处见 [handover-dispatch-plan](./handover-dispatch-plan.md) 的「等 peer 的」各项去处一节 |
+| 有效交付的 `FINAL_DELIVERY` 门禁 | 在 `register_effective_delivery.go` 上 | 31 | 同上；去处见 [handover-dispatch-plan](./handover-dispatch-plan.md) 的「等 peer 的」各项去处一节 |
+| 删掉移动命令与载荷里的 `gateRequired` / `gateClearance`；设备出发前门禁读口 | 在 `work_fact_intake*.go` 上（peer 的测试钉着透传） | 32 | 32 的后续小票；去处见 [handover-dispatch-plan](./handover-dispatch-plan.md) 的「等 peer 的」各项去处一节 |
+| NO 实测触发的再准备 | 要读 `internal/nodeoperations` 的端口，现在还在变 | 18 | 新 TF 消费者票；去处见 [handover-dispatch-plan](./handover-dispatch-plan.md) 的「等 peer 的」各项去处一节 |
+| TF 自消费交接 / 有效交付信封，自动形成 `ACTUAL_FULFILLMENT` | 路由行与 04、06 落在同一类型上 | 25、29 | 新票（ADR-0207 第七条的后继）；去处见 [handover-dispatch-plan](./handover-dispatch-plan.md) 的「等 peer 的」各项去处一节 |
+| admin-web 各页（班次、池、委托、订舱、发生项、门禁读数） | 在 `apps/admin-web/**` 上，走前端 main 直做流程 | 各对应票 | 前端切片；去处见 [handover-dispatch-plan](./handover-dispatch-plan.md) 的「等 peer 的」各项去处一节 |
+| 19 与 `buildSegmentOperations` 同函数相邻 | peer 若改 `OpenDispatchTaskDeps` 会碰同一函数 | — | 不阻断；落地前 rebase；去处见 [handover-dispatch-plan](./handover-dispatch-plan.md) 的「等 peer 的」各项去处一节 |
+| `cmd/parcel-api/assemble_operator_decisions.go`（`frontlineMovementSource`、`buildWorkFactIntakes`） | 与 9b 的收寄接线相邻 | — | 本计划所有票都不碰；去处见 [handover-dispatch-plan](./handover-dispatch-plan.md) 的「等 peer 的」各项去处一节 |
 
 ---
 
