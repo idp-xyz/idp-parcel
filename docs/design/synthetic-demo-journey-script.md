@@ -284,6 +284,23 @@ go run ./cmd/parcel-dispatch
 
 > 2026-10-19 实走（票 ps-external-mark-relations/12 作者子代理，本票实现那一笔 `5e9a90e3` 上编出的 `parcel-api` 与 `parcel-dispatch`；实测，只记 `S`）：一次性库 `psxm12_demo`，`seed.sh` 退 0，送站交接确认的两格授予、五行对照（其中三行能力为 `WORK_FACT_REGISTRATION`）都答 `RECORDED`，五条权威区间在册。共享的集成客户端发行方仍答 `invalid_client`，另起私有 Dex（同一份 `integration-dex.yaml`，发布在 `127.0.0.1:5564`，issuer 串仍是 `http://127.0.0.1:5558/dex`）；操作者发行方用共享的 5556。`submit-one-shipment.sh` 落一笔委托（客户包裹件号 `SYN-PCLREF-20261019T180729Z`），dispatch 推到`已接受`、关联在册。不带依据送站答 `200 PENDING_IDENTIFICATION`、候选记那一件、`UNVERIFIED/NO_BASIS`。开立 `SYN-HANDOVER-PSXM12-WALK-01`（声称 `SYN-ACCOUNT-01`）答 `201`、原样重投 `200 EXISTING_RESULT`；归入那一件 `201 UNIT_ASSIGNED`；关闭 `201`；关闭之后再归入 `200 HANDOVER_NOTE_STATE_MISMATCH / NOTE_CLOSED`；运营决定确认指名 `SYN-PARTY-DELIVERER-99` 答 `200 NOT_IN_AUTHORIZED_DELIVERY_RELATIONSHIP`，指名 `SYN-PARTY-DELIVERER-01` 答 `201 BINDING_CONFIRMED`、带 `scopeEstablishedAt`；不带令牌 `401`。门铃一封，dispatch 投给重核消费者，册上追加 `IDENTITY-RECHECK/<原判断版本>` 一版 `INTAKE_FORMED`：关联那件包裹、前版是待识别那一版、接收时刻与控制依据照原收寄、核对态 `VERIFIED`，收寄意图一封投出。第二张 `SYN-HANDOVER-PSXM12-WALK-02` 声称 `SYN-ACCOUNT-01`、`SYN-ACCOUNT-02`：未关闭时客户确认答 `200 … / NOTE_NOT_CLOSED`；关闭后答 `201 BINDING_CONFIRMED`（落途径客户渠道、来源请求键），改口否认答 `200 EXISTING_CONCLUSION`；对第一张（已由运营决定确认）否认也答 `EXISTING_CONCLUSION`；不存在的交接单 `404`；操作者令牌打客户口 `401 CUSTOMER_CLIENT_CREDENTIAL_REJECTED`；还差 `SYN-ACCOUNT-02`，没有第二封门铃。走完已停进程、删容器、删库，`psb26_walk` 未碰。
 
+#### 客户追踪视图：客户经首方渠道读回
+
+客户系统用同一枚首方令牌读本账户包裹的客户视图（[ADR-0139](../adr/0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md) 决定四；[UC-VE-008](../application/visibility-exception/UC-VE-008-PROVIDE-CUSTOMER-END-TO-END-TRACKING-VIEW.md)；票 [demo-chain-gaps/96](../../.scratch/demo-chain-gaps/issues/96-customer-tracking-view-has-no-first-party-customer-intake.md)）：`GET /customer-tracking-view?parcel=<正式包裹号>`。授予是 `CUSTOMER_TRACKING_VIEW_QUERY`，种子登了。查阅不判准入范围（ADR-0139 决定八），两个隔离开关都换不了这一口。视图在委托`已接受`、初始路由投影形成之后由 dispatch 派生，各维展示与否照演示租户的披露策略。
+
+| 请求 | 答复 |
+|---|---|
+| 首方令牌，本账户的包裹 | `200 CURRENT_VIEW`，带版本、投影锚与四维 |
+| 首方令牌，别的账户的包裹，或不存在的包裹 | `200 VIEW_NOT_FOUND`，两种字节相同 |
+| 查询串自报 `customerAccount`、带 `parcel` 以外任何一格，或缺 `parcel` | `400 MALFORMED_REQUEST` |
+| 不带令牌、配置员令牌、集成客户端令牌 | `401 CUSTOMER_CLIENT_CREDENTIAL_REJECTED` |
+| 首方令牌，客户端没有这一格授予或授予已撤 | `403 CUSTOMER_CLIENT_NOT_GRANTED` |
+| 首方族三件不设 | `403 ACCESS_CHANNEL_NOT_CONFIGURED` |
+
+正式包裹号（`DPCL-…`）不在首方提交的答复里，演示时用操作者渠道 `GET /tracking-projections` 读出来。客户按自己的包裹参考定位，见票 [demo-chain-gaps/101](../../.scratch/demo-chain-gaps/issues/101-customer-tracking-view-locates-by-the-internal-parcel-id-only.md)。
+
+> 2026-10-19 实走（票 demo-chain-gaps/96 作者子代理，`79ad6122` 上编出的 `parcel-api` 与 `parcel-dispatch`；实测，只记 `S`）：一次性库 `dcg96_demo`，`seed.sh` 退 0，查阅那一格授予答 `RECORDED`。共享的集成客户端发行方仍不认合成货主系统，另起一只私有 Dex：同一份 `integration-dex.yaml`，宿主端口 5596，`iss` 不变。`submit-one-shipment.sh` 经首方口提交 `SHR-TCTWPC4IVFG5JV2HZUZ4S5XILY`，答 `SUBMITTED`。dispatch 几拍之后，VE 在 `SYN-ACCOUNT-01` 名下形成包裹 `DPCL-HZGZRSETALCQU3RUXADEQGJNOM` 的视图 `CVW-Y6LB5VLNUWLJBOMIUIENS4XLIY`。`customer-token.sh` 取令牌查它，答 `200 CURRENT_VIEW`：里程碑与 ETA `SHOWN`，终局 `PENDING_CONFIRMATION`，说明 `NOT_DISCLOSED`。别账户对照：库里用 SQL 直插一行 `SYN-ACCOUNT-02` 名下的视图（包裹 `SYN-PARCEL-DCG96-ACCOUNT-02`）。同一令牌查它、查一件不存在的包裹，都答 `200 {"outcome":"VIEW_NOT_FOUND"}`。查询串自报 `customerAccount` 答 `400`。不带令牌、配置员令牌、合成报关服务商的集成客户端令牌，都答 `401 CUSTOMER_CLIENT_CREDENTIAL_REJECTED`。用 `parcel-access-register customer-client-revoke` 撤掉这一格授予之后，答 `403 CUSTOMER_CLIENT_NOT_GRANTED`。走完已停进程、删容器、删库。
+
 ## 对照组：证明门是真的
 
 演示里最容易被质疑的一句是「你们这个 403 是写死的吧」。下面几行对照可以当场答掉，每行只动一处：

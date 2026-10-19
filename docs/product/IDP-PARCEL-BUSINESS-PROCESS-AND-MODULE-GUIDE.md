@@ -502,7 +502,7 @@ POD 后来被证明无效时，原证据和原判断继续保留，运输控制�
 | `/node-operations/receptions` | 命令 | `node-operations` | 节点收寄 | 真实渠道未配置时拒绝 |
 | `/transport-fulfillment/deliveries` | 命令 | `transport-fulfillment` | 有效交付登记 | 真实渠道未配置时拒绝 |
 | `/transport-fulfillment/delivery-proof-corrections` | 命令 | `transport-fulfillment` | POD/交付证明更正 | 真实渠道未配置时拒绝 |
-| `/customer-tracking-view` | 查阅 | `visibility-exception` | 客户授权全程追踪 | 真实客户查询渠道未配置时拒绝 |
+| `/customer-tracking-view` | 查阅 | `visibility-exception` | 客户授权全程追踪 | 首方客户渠道（ADR-0139）：发行方未配置时拒绝，客户账户只取自客户渠道册 |
 | `/tracking-projections` | 查阅 | `visibility-exception` | 运营追踪投影 | 仅在显式隔离读准入时可读 |
 | `/claims` | 命令 | `visibility-exception` | 接收客户索赔 | 真实渠道未配置时拒绝 |
 | `/customs/external-results` | 命令 | `customs-compliance` | 接收外部监管结果 | 真实渠道未配置时拒绝 |
