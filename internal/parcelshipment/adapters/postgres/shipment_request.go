@@ -720,7 +720,7 @@ func (document customerParcelNumberDocument) declaration() (domain.CustomerParce
 	if err != nil {
 		return domain.CustomerParcelNumberDeclaration{}, err
 	}
-	number, err := domain.NewExternalIdentifierNumber(document.Number)
+	number, err := domain.RehydrateExternalIdentifierNumber(document.Number)
 	if err != nil {
 		return domain.CustomerParcelNumberDeclaration{}, err
 	}

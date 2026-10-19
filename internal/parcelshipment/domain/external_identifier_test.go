@@ -163,6 +163,22 @@ func TestAnExternalIdentifierNumberMustBeStorable(t *testing.T) {
 	}
 }
 
+// Covers: 票 ps-external-mark-relations/06 评审阻断二——还原库里已存下的号只拒全空白：门立起来之前进了快照的 600 字节的号，
+// 新号的构造门不收，还原照收、逐字不动。
+func TestARehydratedExternalIdentifierNumberIsNotHeldToTheEntryGate(t *testing.T) {
+	legacy := strings.Repeat("L", 600)
+	if _, err := domain.NewExternalIdentifierNumber(legacy); !errors.Is(err, domain.ErrExternalIdentifierNumberNotStorable) {
+		t.Fatalf("新号构造 err = %v, want 门照样拒", err)
+	}
+	number, err := domain.RehydrateExternalIdentifierNumber(legacy)
+	if err != nil || number.String() != legacy {
+		t.Fatalf("还原 err = %v、%d 字节, want 逐字照收", err, len(number.String()))
+	}
+	if _, err := domain.RehydrateExternalIdentifierNumber(" \t "); err == nil {
+		t.Fatal("全空白的号也还原得出来")
+	}
+}
+
 // Covers: 票 ps-external-mark-relations/06 裁定二——渠道结果里受理的那件包裹带回的渠道包裹件号存不进册时，这份渠道结果照该路
 // 坏结果的答法拒收（ErrInvalidLabelTransaction，编排答`未受理`），不交给仓储去撞库；恰 512 字节的照收、逐字形成关联。门只在
 // 记录结果这一步：已落库的结果重建时不再过这道门，旧行读得回。

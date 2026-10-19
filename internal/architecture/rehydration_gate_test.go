@@ -45,6 +45,9 @@ var rehydrationEntryIdentifiers = map[string]bool{
 	// 的结论——那正是移除四参构造器要堵的入口。
 	"RehydrateFinancialControlResult":     true,
 	"RehydrateFinancialControlResultSpec": true,
+	// 外部标识号码的还原（票 ps-external-mark-relations/06）。同类：它不过「存得下」那道门，只为门立起来之前存下的号读得回；
+	// 对其余调用方开放，新号就能绕过那道门进册。
+	"RehydrateExternalIdentifierNumber": true,
 }
 
 // rehydrationSurfaceOpenIdentifiers 是重建面上**有意对所有调用方开放**的那一半，每条写明为什么。

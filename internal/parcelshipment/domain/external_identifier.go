@@ -41,6 +41,14 @@ func NewExternalIdentifierNumber(value string) (ExternalIdentifierNumber, error)
 	return ExternalIdentifierNumber{required}, nil
 }
 
+// RehydrateExternalIdentifierNumber 还原库里已经存下的号码，只拒全空白。「存得下」那道门守的是进册，不守读回：门立起来之前，
+// 提交口只拒全空白，超过字节界的号已经能进委托快照；还原时再过一遍那道门，这样的委托就整份读不回来——与面单交易的门不放进
+// matchResultsToCoverage 同一个理由，重建要读得回。只给仓储还原用，新号一律走 NewExternalIdentifierNumber。
+func RehydrateExternalIdentifierNumber(value string) (ExternalIdentifierNumber, error) {
+	required, err := newRequiredValue("external identifier number", value)
+	return ExternalIdentifierNumber{required}, err
+}
+
 // ExternalIdentifierKind 是标识类型的封闭集合。类型决定被标识对象的种类与分配方的种类（ADR-0184 决定二）：
 // 「号码挂错对象」在形状上立不起来，CONTEXT「外部标识必须关联其真实标识对象」因此不靠调用方自觉。
 //
