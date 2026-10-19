@@ -49,6 +49,8 @@ Blocked by: 无
 | 6 | 23 | `9c551dc4` | 0 / 1 | 0 / 4 | 随票记（Standards 有一条已由 `0214a62a` 修掉） |
 | 7 | 24 | `e8673ac1` | 0 / 3 | 0 / 1 | 随票记 |
 
+序 2 的去向（2026-10-18）：用户授权会话 `idp-parcel-9b` 代决，修复票 [29](./29-node-reception-records-physical-facts-when-cross-context-reads-fail.md) 落地，裁定成文为 [ADR-0186](../../../docs/adr/0186-node-reception-records-physical-facts-when-the-service-result-read-fails.md)，取代票 25 裁定里「读不动答`收寄待确认`、带续办引用、不落册」那一句；同事务读 PS 的 SQL 级错误改经 savepoint 隔离。
+
 完成判据核对：表中每一行都有一条非作者评审写进对应票面（序 1、序 4 都在票 15），三格齐；有阻断的序 1、序 3 各立修复票（28、27）。非阻断照 parallel-sessions 随票记，不另立票；要不要另立、何时清，归各票的 owner。
 
 评审用的隔离检出（钉各行代码 SHA 的那几份，加上复核用的 main `4dd937eb` 那一份）都已 `git worktree remove` 拆掉。

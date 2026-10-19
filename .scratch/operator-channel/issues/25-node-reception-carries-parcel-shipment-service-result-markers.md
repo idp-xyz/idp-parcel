@@ -65,3 +65,4 @@ Blocked by: 无——机制半边不挡；生产效果挂在 ps-external-mark-re
     (3) 判断题（Primitive Obsession）：`serviceMarkersOf` 的「封闭两种」只靠唯一生产者里的两个字面量 `"CANCELLED/"`、`"FINAL/"` 撑着；`ReceptionRecord.ServiceMarkers` 仍是 `[]string`，库里只校验它是数组，响应原样透出。no-directional-basis/01 的消费方只能再抄一份前缀，有违「单一权威」的风险。
   - **无发现**：端口在 NO `ports`；跨上下文翻译只在 `adapters/parcelshipment`；领域包不依赖 HTTP/pgx；注释是中文；红线五条都没碰。
   - **结论**：两轴 0 阻断，不立修复票。各条在 main `4dd937eb` 上都没改。待用户裁：Spec (2) 裁定与 UC-NO-002 的矛盾；Spec (1) 怎么修随这一裁一起定——若读不动仍答`收寄待确认`，就得让 PS 读的失败不毁掉收寄那笔事务。
+- **2026-10-18 · 票 [29](./29-node-reception-records-physical-facts-when-cross-context-reads-fail.md)**：本票裁定里「读不动答`收寄待确认`、带续办引用、不落册」一句已被 [ADR-0186](../../../docs/adr/0186-node-reception-records-physical-facts-when-the-service-result-read-fails.md) 取代——服务结果读不动照常形成收寄、记录核对态记「读不动」；原文不改。
