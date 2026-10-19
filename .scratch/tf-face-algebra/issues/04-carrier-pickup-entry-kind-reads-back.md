@@ -1,7 +1,7 @@
 # 04 凭实际承运商首次有效收寄入场的段按键读不回：`participationEntryKindFrom` 不认第三个入场词，段里一名这样的成员就让整段的终止、交接、揽收进段停在未决或 500
 
 Category: bug
-Status: in-progress——2026-10-18 会话 `idp-parcel-9b` 认领并实施（分支 `claude-tfa04`），待进 main。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: resolved——2026-10-18 进 main（代码验证钉 `adbe8d17`），见「进 main 记录」。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 认领并实施（分支 `claude-tfa04`），待进 main。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment-participation-terminations, /transport-fulfillment-carrier-first-effective-pickup-judgments, /transport-fulfillment/handovers, /transport-fulfillment/offsite-pickups
@@ -74,3 +74,8 @@ Blocked by: 无
 - **未做**：票面「现象」里读码推出、未逐一实测的关段、派送发起、参与重派生几条路径，靠同一处译回修好，没有各自补端到端用例。
 - **证据层级**：`S`（测试沿用本包既有夹具，租户为 `tenant-1`）。
 - **评审**：作者自审——本票由会话本身动手实施并自审（用户选「精简续做」），不算非作者评审。
+
+### 进 main 记录（2026-10-18，会话 idp-parcel-9b）
+
+- 分支 `claude-tfa04` rebase 到远端 main `7272f6cd` 之上，快进推送；rebase 前的 SHA 作封存出处。
+- 推送方全量一次：钉 `adbe8d17` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 143 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
