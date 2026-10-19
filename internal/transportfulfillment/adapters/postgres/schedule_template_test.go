@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -22,6 +23,8 @@ import (
 // 本文件对真实 PostgreSQL 证周期安排与具体班次两本册子（迁移 0024，ADR-0201）。夹具全为合成值（S 级）。
 
 type scheduleRegistryStores struct {
+	pool       *pgxpool.Pool
+	db         *bentopg.DB
 	templates  *adapter.ScheduleTemplates
 	schedules  *adapter.TransportSchedules
 	pools      *adapter.CapacityPools
@@ -38,11 +41,12 @@ func (clock fixedScheduleClock) Now() time.Time { return clock.at }
 
 func newScheduleRegistryStores(t *testing.T) scheduleRegistryStores {
 	t.Helper()
-	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
-	stores := scheduleRegistryStores{transactor: db.Transactor()}
+	stores := scheduleRegistryStores{pool: pool, db: db, transactor: db.Transactor()}
 	if stores.templates, err = adapter.NewScheduleTemplates(db); err != nil {
 		t.Fatalf("构造周期安排册：%v", err)
 	}
