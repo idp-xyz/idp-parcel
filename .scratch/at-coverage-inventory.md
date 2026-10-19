@@ -18,8 +18,8 @@
 
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 309 |
-| ② 机制候选 | 236 |
+| ① 已钉住 | 310 |
+| ② 机制候选 | 235 |
 | ③ 实例/闸门 | 143 |
 | ④ 机制未落地 | 425 |
 | 合计 | 1113 |
@@ -27,7 +27,7 @@
 | 前缀 | 总数 | ① | ② | ③ | ④ |
 |---|---|---|---|---|---|
 | CC | 425 | 35 | 0 | 89 | 301 |
-| NO | 61 | 21 | 33 | 7 | 0 |
+| NO | 61 | 22 | 32 | 7 | 0 |
 | NR | 53 | 24 | 28 | 1 | 0 |
 | PC | 36 | 35 | 1 | 0 | 0 |
 | PS | 93 | 66 | 25 | 2 | 0 |
@@ -87,6 +87,7 @@
 | `AT-NO-023` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestScanOnlyAndRefusalDoNotEstablishControl |
 | `AT-NO-024` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestScanOnlyAndRefusalDoNotEstablishControl |
 | `AT-NO-025` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestABatchKeepsPerUnitResultsIndependent |
+| `AT-NO-026` | internal/nodeoperations/application/recheck_pending_identity_test.go::TestAPendingUnitIsRecheckedIntoAnIntakeOnceItsMarkIsRelated；cmd/parcel-dispatch/node_identity_recheck_test.go::TestTheWiredDispatchRechecksAPendingUnitOnceItsMarkIsRelated；cmd/parcel-api/identity_recheck_test.go::TestTheWiredManualRecheckLandsTheSameVersionAsTheDoorbell |
 | `AT-NO-027` | internal/nodeoperations/application/receive_delivered_unit_test.go::TestReplayConflictAndFailedIntentStayDisciplined |
 | `AT-NO-035` | internal/nodeoperations/application/consolidate_parcels_test.go::TestOneDirectParentIsEnforcedAcrossUnits |
 | `AT-NO-036` | internal/nodeoperations/application/consolidate_parcels_test.go::TestSealingFreezesTheSnapshotAndClosureIsFinal |
@@ -362,7 +363,6 @@
 | `AT-NO-011` | 协作事项在部分不可逆执行后取消或缩小范围 | UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md |
 | `AT-NO-013` | 跨客户合报事项只允许节点处理 C2/P2 | UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md |
 | `AT-NO-014` | 事实已保存，但任务派生或发布发生技术失败 | UC-NO-001-ACCEPT-AND-EXECUTE-CUSTOMS-NODE-COLLABORATION.md |
-| `AT-NO-026` | 身份后来被 `parcel-shipment` 确认 | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
 | `AT-NO-029` | 已控制包裹完成扫描、称重和量方 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-030` | 新测量使路由资格变化 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-032` | 新路由指令生效 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
@@ -1219,6 +1219,8 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 
 追记八（票 no-reception-identity/05，2026-10-19）：票 no-reception-identity/04 新立 UC-NO-004（`AT-NO-053` 至 `AT-NO-061`），票 ps-external-mark-relations/05 在 UC-NO-002 新增 `AT-NO-052`，本表都未随之扩，照扫描口径补进：`AT-NO-052` 在票 ps-external-mark-relations/05 落地时已由编排用例点名、只是没入表，`AT-NO-061` 随身份一格读链头落地点名（领域面与真库面），两条入①；`AT-NO-053` 至 `AT-NO-060` 未被测试引用、属 NO 机制面，入②（待票 no-reception-identity/06）。①292→294（NO 19→21）、②228→236（NO 25→33），合计 1088→1098（NO 51→61，`docs/application` 的 AT 全集随 UC-NO-002 与 UC-NO-004 扩了这几行）。
 2026-10-19 追记（票 demo-chain-gaps/31 评审后补）：UC-CC-013 新立 `AT-CC-411`–`425`（`docs/application` 的 AT 全集随之扩大），随票在领域、编排、真库与装配用例上补 Covers 点名，全部入①；只有半边覆盖的测试在行内注明哪一半边。①290→305（CC 20→35），CC 总数 410→425，合计 1083→1098；②③④不变。
+
+追记九（票 no-reception-source/03，2026-10-19）：`AT-NO-026`「身份后来被 `parcel-shipment` 确认」随按存下的号重核落地点名入①（编排面、生产派发器门铃真库面、人工重核真库面三处），由②移出。①294→295（NO 21→22）、②236→235（NO 33→32），合计不变。
 
 ### 两盘之间新落的硬句测试面（不入①，逐面列出供领票比对）
 
