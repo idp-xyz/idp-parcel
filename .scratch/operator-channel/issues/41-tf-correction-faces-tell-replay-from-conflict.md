@@ -1,7 +1,7 @@
 # 41 TF 更正口的重放代数不全：POD 更正原样重发会追加新版本，交接更正同一新版本换内容答已有版本
 
 Category: bug
-Status: in-progress——2026-10-18 会话 `idp-parcel-9b` 认领（分支 `claude-oc41tfa07`，tf-face-algebra/07 随后在同一分支）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 5 研判；逐口核实测补强）
+Status: in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 认领（分支 `claude-oc41tfa07`，tf-face-algebra/07 随后在同一分支）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 5 研判；逐口核实测补强）
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C4 第四张草案；逐口核研判 POD 更正、交接更正两口
@@ -252,3 +252,34 @@ Blocked by: 无
 - [ ] `go build ./...`、`go vet ./...` 退出码 0，`gofmt -l .` 无输出；带 DSN 跑 `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/... ./internal/architecture/...`，全部 ok。
 - [ ] 票 13 更正行、票 15 补记回写行都已追加（只加行）。
 - [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：作者自验，非作者评审（两轴分开），推送方在干净检出上带 DSN 跑全量。
+
+## 完成记录（2026-10-18，会话 idp-parcel-9b 的实施子代理，分支 claude-oc41tfa07）
+
+提交：`cdb07524`（POD 更正）、`7c319259`（交接更正 + ADR-0149 复核记录）；机制清点 `d3d13eb5` 与 tf-face-algebra/07 共用。迁移：本票无。
+
+**落点**
+- POD 更正：`DeliveryProofCorrectionPayload` 与 `CorrectDeliveryProofCommand` 加 `predecessorVersion`；`RegisterEffectiveDeliveryHandler.Correct` 指名前版不是当前版时与当前版比（`answerAgainstCurrent`）；完备性提到签号之前；`EffectiveDeliveries.Supersede` 只翻指名的前版，输家读回赢家再比。比对形状 `CanonicalizeDeliveryProofCorrectionPayload`（TFC-1，face `CORRECT_DELIVERY_PROOF`），两侧都从本体现算、更正时刻经 `AtRegistryPrecision`；册行摘要仍留首登那一份。没有照「做什么」第一条往册行写摘要：写了首登原样重放就会答成冲突（附录 F-6 第 7 条），按 F-6 修复方向两侧现算，不动迁移。
+- 交接更正：`Correct` 先按新版本键读，`commit` 撞键读回赢家，都经 `answerOccupiedKey`（`CompareStoredDigest`）分格；恢复 `unversionedHandoverCorrectionDigest`（基 `1121ba61` 的 `correctionDigest` 原样）。
+- [ADR-0149](../../../docs/adr/0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md) 文末追加复核记录，决定原文不动。管理台与种子没有调用 POD 更正口（grep 确认）。
+
+**各格对应用例**
+- POD 原样重发答已有版本、不签号、重发同一版本意图；同前版换 POD 或更正时刻答冲突；纳秒尾巴同串：`TestAPODCorrectionReplayIsAnExistingVersionAndADifferentOneIsAConflict`；领域 `TestCommandPayloadsRoundTripAsTFC1`「delivery proof correction」、`TestDeliveryProofCorrectionTimeIsComparedToTheMicrosecond`。
+- 迟到旧更正不改回：`TestALateStaleCorrectionDoesNotTurnTheCurrentPODBack`。
+- 被拒不签号：`TestARefusedPODCorrectionMintsNoVersion`。
+- 读旧当前版分叉：编排 `TestACorrectionThatLostTheRaceIsComparedWithTheWinner`；库面 `TestSupersedingAPredecessorThatIsNoLongerCurrentReportsFalse`。
+- 真库：`cmd/parcel-api/assemble_delivery_proof_correction_test.go` 两例（重发不加行不加意图、迟到旧更正答冲突当前 POD 不变；并发多轮无分叉、无翻成历史却无后继的版本）。
+- 交接更正异证据、异更正时刻、改判、换前版、跨口撞键答冲突，原样重投答已有版本：`TestAHandoverCorrectionOnAnOccupiedVersionTellsReplayFromConflict`；并发输家首登与更正：`TestAHandoverThatLostTheRaceIsComparedWithTheWinner`；旧摘要：`unversionedDigestCases` 加 `CORRECT_TRANSPORT_HANDOVER`，定值按旧算法独立算出；真库 `cmd/parcel-api/assemble_handover_correction_test.go` 前两例。
+
+**先红后绿**：上列编排与库面用例先跑红（重放答 `DELIVERY_CORRECTED`、冲突答 `EXISTING_VERSION`、被拒签号 2 次、输家答 `SOURCE_NOT_ACCEPTED`、库面第二份更正落下），实现后转绿。真库用例做了变异自检：撤掉前版比对与 Supersede 条件、撤掉摘要比对，各自转红（重发答 `DELIVERY_CORRECTED`、并发出分叉、换依据答 `EXISTING_VERSION`、并发首登输家答 `EXISTING_VERSION`）。
+
+**没做或没单独复现的格**
+- 「做什么」第四条（票 10 其余作业事实口逐口记代数）没做，留给会话定是否另立票。
+- 附录 F-6：答复回显 `correctedAt` 没做；续办（意图交付失败后重投）只在编排层断言重发同一版本，真库没造失败的 Outbox。
+- 真库回归走的是 `buildDeliveryOrchestration` / `buildControlFactOrchestrations` 加真库，没经 `WorkFactCommandIntake` 与路由；线格式由 `TestWorkFactCommandIntakeTranslatesDeliveryProofCorrectionWithItsPredecessor` 单测。
+- 票 13 更正行、票 15 补记回写行在地盘外，没写。
+
+**门**：`gofmt -l` 无输出；`go build ./...`、`go vet ./...` 退 0；带 DSN `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/... ./internal/architecture/... ./migrations/...` 全 ok（钉 `c4ee61e5`）。
+
+证据层级：`S`。
+
+评审：待会话读 diff 审。

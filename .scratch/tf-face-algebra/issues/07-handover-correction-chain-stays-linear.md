@@ -1,7 +1,7 @@
 # 07 交接更正链不线性：同一前版能被更正成两个新版本，范围汇总把一个对象数两次
 
 Category: bug
-Status: in-progress——2026-10-18 会话 `idp-parcel-9b` 代决并认领（分支 `claude-oc41tfa07`，与 operator-channel/41 同一分支，排在其后）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 代决并认领（分支 `claude-oc41tfa07`，与 operator-channel/41 同一分支，排在其后）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment/handover-corrections
@@ -47,3 +47,30 @@ Blocked by: 无
 - [ ] Go 门禁：`go build ./...`、`go vet ./...` 退出码 0，`gofmt -l .` 无输出；带 DSN 跑 `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/... ./internal/architecture/...` 全部 ok。
 - [ ] 票 15 补记下追加回写行（只加行）。
 - [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：作者自验，非作者评审（两轴分开），推送方在干净检出上带 DSN 跑全量。
+
+## 完成记录（2026-10-18，会话 idp-parcel-9b 的实施子代理，分支 claude-oc41tfa07）
+
+提交：`c4ee61e5`；机制清点 `d3d13eb5`（与 operator-channel/41 共用）。迁移号：`0022_transport_handover_corrects_once.sql`（fetch 后核过 origin/main 与在途分支，0022 无人用）。
+
+**落点**
+- 端口 `TransportHandoverRegistry` 加 `FindSuccessor`（按前版的键交回回指它的那一版）；生产适配器实现，HTTP 测试替身补桩。
+- `RegisterTransportHandoverHandler.Correct` 在领域 `Correct` 与摘要之后先判「前版已有后继」，经 operator-channel/41 的 `answerOccupiedKey` 分格；新版本不进摘要，换新版本号原样重投仍是重放，交回已落下的后继。
+- `commit` 撞键读回改走 `findWinner`：按新键读空且本记录是更正时，按前版读回先到的后继再分格。
+- 迁移 0022：部分唯一索引（tenant_id, object_ref, scope_ref, corrects_version）WHERE corrects_version IS NOT NULL，写法照 0015/0021；之前的 DO 块查存量分叉，有就 `RAISE EXCEPTION` 列出「租户/对象/范围 的 前版（后继 …）」，不删任何行。
+
+**各格对应用例**
+- 编排：`TestAPredecessorThatAlreadyHasASuccessorIsNotCorrectedAgain`（同内容答 `EXISTING_VERSION` 并交回 v2，异内容答 `SOURCE_CONFLICT`）；`TestACorrectionThatLostTheRaceForThePredecessorIsComparedWithTheWinner`（撞索引后按前版读回）。
+- 库面：`TestAPredecessorIsCorrectedAtMostOnce`（FindSuccessor 读回；第二个后继 Save 答已登记）。
+- 真库：`TestTheWiredHandoverCorrectionChainStaysLinearAgainstARealDatabase`（v1→v2 后 v1→v2-retry 答冲突；`ListByScope` + `SummarizeHandovers` 得 total=1、handedOver=1；同一前版两份并发更正六轮，每轮恰好一份 `HANDOVER_CORRECTED`、一份冲突）。
+
+**先红后绿**：真库用例先在未改代码上跑红——v1→v2-retry 答 201 `HANDOVER_CORRECTED`，复现票面现象；编排用例在替身按索引兜底后先红（答 `HANDOVER_UNDECIDED`）；库面用例在挪走 0022 时红（第二个后继落下）。实现后全绿。
+
+**存量检查**：检查语句即 0022 的 DO 块（按 tenant_id, object_ref, scope_ref, corrects_version 分组，HAVING count(*) > 1）。干净库上为空，迁移顺序跑通（`pgtest.Pool` 每例全量施加）。另用一次性探针在已迁移库上删掉索引、植入 v1→v2、v1→v3 两个后继，再执行 0022：整笔失败，报「SYN-T/SYN-O/SYN-S 的 v1（后继 v2、v3）」，索引未建、三行都在。探针跑完即删，没有提交。
+
+**没做或没单独复现的格**：汇总 handedOver=2 没单独观察到（未改代码时用例停在前一步的 201）；并发两份更正在未改代码下没单独跑红。票 15 补记回写行在地盘外，没写。
+
+**门**：`gofmt -l` 无输出；`go build ./...`、`go vet ./...` 退 0；带 DSN `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/... ./internal/architecture/... ./migrations/...` 全 ok。
+
+证据层级：`S`。
+
+评审：待会话读 diff 审。
