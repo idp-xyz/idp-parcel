@@ -368,7 +368,10 @@ func (projection TrackingProjection) PriorVersion() (ProjectionVersionID, bool) 
 // 显示终局已完成（`AT-VE-160`）。归类与否不进判断：终局是 PS 的事实，不是里程碑，
 // 映射目录没登这一类也不改变终局已经形成。
 //
-// 条目只含当前有效事实（派生前已滤掉被替代的），所以这里不再看替代关系。
+// 这里不看替代关系，靠的是调用方的前提，不是本类型的不变量：DeriveTrackingProjection
+// 与 Rederive 收什么条目就放什么条目，滤掉被替代事实的是 DeriveProjectionHandler 先经
+// CurrentlyEffective 做的那一步。另起一条构造路径而不先滤，被替代的那一代终局在这里也
+// 会答在场。
 func (projection TrackingProjection) CarriesCustomerServiceFinal() bool {
 	for _, entry := range projection.entries {
 		if entry.fact.source == SourceParcelShipment &&

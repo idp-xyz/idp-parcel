@@ -116,8 +116,8 @@ func NewDeriveCustomerViewHandler(deps DeriveCustomerViewDeps) *DeriveCustomerVi
 // Handle 把一个投影新版本推进到客户视图版本：受理（账户与投影身份缺一即未受理，不读
 // 任何依赖）→ 幂等按投影版本（同一投影版本不重发视图，只重发同一份意图）→ 披露策略
 // 答复译成四维（未配置即四维全部待确认，如实说等，不虚构可见性；终局一维另看投影里
-// 有没有终局）→ 首版发布或替代指回前版 → 提交与发布意图。视图只基于当前投影形成，本编排不读内部案件或原始来源消息——
-// 依赖清单里根本没有那些端口。
+// 有没有终局）→ 首版发布或替代指回前版 → 提交与发布意图。视图只基于当前投影形成，
+// 本编排不读内部案件或原始来源消息——依赖清单里根本没有那些端口。
 func (handler *DeriveCustomerViewHandler) Handle(
 	ctx context.Context,
 	command DeriveCustomerViewCommand,

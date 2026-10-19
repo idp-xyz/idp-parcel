@@ -146,7 +146,7 @@ func viewCustomer(t *testing.T) domain.CustomerAccountReference {
 	return mustValue(t, domain.NewCustomerAccountReference, "customer-1")
 }
 
-// viewEntry 造投影里的一条：揽收归入里程碑；终局不是里程碑，留作未归类。
+// viewEntry 造投影里的一条：给了里程碑即归类，不给即留作未归类——终局不是里程碑。
 func viewEntry(
 	t *testing.T,
 	source domain.SourceContext,
@@ -186,6 +186,13 @@ func viewEntry(
 func intakeEntry(t *testing.T) domain.MilestoneClassification {
 	t.Helper()
 	return viewEntry(t, domain.SourceNodeOperations, "fact-1", "node-intake", "PICKED_UP")
+}
+
+// deliveryEntry 是 TF 的有效交付，归入交付里程碑：终局的上游来源，不是终局本身。
+func deliveryEntry(t *testing.T) domain.MilestoneClassification {
+	t.Helper()
+	return viewEntry(t, domain.SourceTransportFulfillment,
+		"effective-delivery/parcel-1/attempt-1", "effective-delivery", "DELIVERED")
 }
 
 func finalEntry(t *testing.T, kind string) domain.MilestoneClassification {
@@ -346,51 +353,63 @@ func TestANonDisclosableDimensionIsWithheldAloneWithoutHidingTheOthers(t *testin
 
 // Covers: CONTEXT 生命周期「当前投影、客户可见 ETA、客户服务终局或已批准披露内容首次
 // 满足展示条件 → 形成……客户视图版本」与「某一维信息待确认……只对该维返回待确认」——
-// 策略准许展示终局，包裹在途时终局一维仍答待确认、不带内容，其余三维照策略展示；终局
-// 采用进投影后新版本视图指回前版、终局一维转为展示。点名 `AT-VE-160`「只有有效交付扫描
-// 但终局尚未形成→不显示包裹服务终局已完成」与 `AT-VE-159`「已形成当前有效客户服务终局
-// →展示终局」。
+// 策略准许展示终局，包裹在途、有效交付已进投影而终局未采用时，终局一维都答待确认、
+// 不带内容，其余三维照策略展示；终局采用进投影后新版本视图指回前版、终局一维转为展示。
+// 点名 `AT-VE-160` 的终局半边「只有有效交付扫描但终局尚未形成→可展示获准交付里程碑，
+// 不显示包裹服务终局已完成」与 `AT-VE-159` 的展示半边「`parcel-shipment` 已形成当前
+// 有效客户服务终局→展示终局及其依据版本，不由摘要反推」。视图每一维只带策略给的内容
+// 来处，不列交付里程碑本身，也不带终局的依据版本，这两半没有钉。
 func TestAPermittedFinalPendsUntilTheProjectionCarriesTheAdoptedFinal(t *testing.T) {
 	fixture := newViewFixture(t)
 	ctx := context.Background()
 
-	inTransit, err := fixture.handler.Handle(ctx, commandOver(t, inTransitProjection(t, "projection-1")))
-	if err != nil {
-		t.Fatalf("in-transit handle: %v", err)
-	}
-	if inTransit.Outcome() != application.CustomerViewPublished {
-		t.Fatalf("outcome = %q, want PUBLISHED", inTransit.Outcome())
-	}
-	before, _ := inTransit.View()
-	dimensions := before.Dimensions()
-	if dimensions.Final.State() != domain.DimensionPendingConfirmation {
-		t.Fatalf("final = %q before the final formed, want PENDING_CONFIRMATION", dimensions.Final.State())
-	}
-	if _, has := dimensions.Final.Content(); has {
-		t.Fatal("the final dimension carried content before any final formed")
-	}
-	if dimensions.Milestones.State() != domain.DimensionShown ||
-		dimensions.ETA.State() != domain.DimensionShown ||
-		dimensions.Note.State() != domain.DimensionShown {
-		t.Fatal("pending the final pulled the other dimensions down with it")
+	var latest domain.CustomerTrackingView
+	for _, stage := range []struct {
+		name       string
+		projection domain.TrackingProjection
+	}{
+		{"在途", inTransitProjection(t, "projection-1")},
+		{"有效交付、终局未采用", projectionOf(t, "projection-2", intakeEntry(t), deliveryEntry(t))},
+	} {
+		result, err := fixture.handler.Handle(ctx, commandOver(t, stage.projection))
+		if err != nil {
+			t.Fatalf("%s: handle: %v", stage.name, err)
+		}
+		if result.Outcome() != application.CustomerViewPublished {
+			t.Fatalf("%s: outcome = %q, want PUBLISHED", stage.name, result.Outcome())
+		}
+		latest, _ = result.View()
+		dimensions := latest.Dimensions()
+		if dimensions.Final.State() != domain.DimensionPendingConfirmation {
+			t.Fatalf("%s: final = %q, want PENDING_CONFIRMATION", stage.name, dimensions.Final.State())
+		}
+		if _, has := dimensions.Final.Content(); has {
+			t.Fatalf("%s: the final dimension carried content before any final was adopted", stage.name)
+		}
+		if dimensions.Milestones.State() != domain.DimensionShown ||
+			dimensions.ETA.State() != domain.DimensionShown ||
+			dimensions.Note.State() != domain.DimensionShown {
+			t.Fatalf("%s: pending the final pulled the other dimensions down with it", stage.name)
+		}
 	}
 
-	delivered, err := fixture.handler.Handle(ctx, commandOver(t, projectionOf(t, "projection-2",
-		intakeEntry(t), finalEntry(t, domain.FinalOutcomeAdoptedFactKind))))
+	adopted, err := fixture.handler.Handle(ctx, commandOver(t, projectionOf(t, "projection-3",
+		intakeEntry(t), deliveryEntry(t), finalEntry(t, domain.FinalOutcomeAdoptedFactKind))))
 	if err != nil {
-		t.Fatalf("delivered handle: %v", err)
+		t.Fatalf("adopted handle: %v", err)
 	}
-	if delivered.Outcome() != application.CustomerViewPublished {
-		t.Fatalf("outcome = %q, want PUBLISHED", delivered.Outcome())
+	if adopted.Outcome() != application.CustomerViewPublished {
+		t.Fatalf("outcome = %q, want PUBLISHED", adopted.Outcome())
 	}
-	after, _ := delivered.View()
+	after, _ := adopted.View()
 	content, shown := after.Dimensions().Final.Content()
 	if !shown || content.String() != "final/v1" {
 		t.Fatalf("final = %q content %q, want SHOWN with the content the policy approved",
 			after.Dimensions().Final.State(), content)
 	}
-	if prior, superseding := after.PriorVersion(); !superseding || prior != before.Version() {
-		t.Fatalf("prior version = %q, want the in-transit view %q kept as history", prior, before.Version())
+	if prior, superseding := after.PriorVersion(); !superseding || prior != latest.Version() {
+		t.Fatalf("prior version = %q, want the delivered-but-unadopted view %q kept as history",
+			prior, latest.Version())
 	}
 }
 

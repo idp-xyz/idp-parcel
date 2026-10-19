@@ -177,9 +177,11 @@ func projectionWith(t *testing.T, entries ...domain.MilestoneClassification) dom
 // Covers: VE CONTEXT「客户全程追踪视图只基于……`parcel-shipment` 提供的客户服务终局……
 // 形成。它不得从内部案件、原始来源消息或单一交付扫描自行推导终局」与「某一维信息待
 // 确认……只对该维返回待确认」——策略准许展示终局，终局一维仍要投影里有 PS 已采用的
-// 终局才展示；不采用判断、别的上下文借用同一类型字面量都不算。点名 `AT-VE-159`
-// 「已形成当前有效客户服务终局→展示终局」与 `AT-VE-160`「只有有效交付扫描但终局尚未
-// 形成→不显示包裹服务终局已完成」。策略不准看的，终局形成了也不给看。
+// 终局才展示；不采用判断、别的上下文借用同一类型字面量都不算。策略不准看的，终局形成
+// 了也不给看。点名 `AT-VE-159` 的展示半边「`parcel-shipment` 已形成当前有效客户服务
+// 终局→展示终局及其依据版本，不由摘要反推」与 `AT-VE-160` 的终局半边「只有有效交付
+// 扫描但终局尚未形成→可展示获准交付里程碑，不显示包裹服务终局已完成」。这里只判终局
+// 一维：交付里程碑不在这一维上，终局的依据版本这一维也不带，这两半没有钉。
 func TestTheFinalDimensionShowsOnlyWhenTheProjectionCarriesAnAdoptedFinal(t *testing.T) {
 	permitted, err := domain.ShowDimension(mustValue(t, domain.NewViewContentReference, "final/v1"))
 	if err != nil {
