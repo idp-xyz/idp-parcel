@@ -1,7 +1,7 @@
 # 40 生产装配的揽收更正不重派生段上参与：buildOffsitePickupCorrectionOrchestration 没交段登记册
 
 Category: bug
-Status: in-progress——2026-10-18 作者子代理完工，待非作者评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 遗留研判（簇 C4）中发现，原属 tf-segment-lifecycle-closure 那条线；用户授权代决）；分支 `claude-oc40`
+Status: in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待非作者评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 遗留研判（簇 C4）中发现，原属 tf-segment-lifecycle-closure 那条线；用户授权代决）；分支 `claude-oc40`
 Blocked by: 无
 父票：[26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)（票 26 评审遗留的后续）
 出处：
@@ -85,3 +85,10 @@ Blocked by: 无
 - **证据层级**：`S`（`SYN-` 合成租户、对象、段与控制引用，只在测试里）。
 - **遗留（未改，地盘外）**：`internal/transportfulfillment/application/register_offsite_pickup.go` 里 `CorrectOffsitePickupCommand` 的注释仍写着「段侧「来源更正 → 参与关系重派生」另立票，本编排不进段」——票 10 落地后已失实（「没有 Segment」那半句仍成立：更正命令不带段号）。不在本票地盘，留给评审或后续票决定是否收。
 - **评审**：待非作者评审。
+
+## Comments
+
+- **评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审）· 钉 `6eba9a2f`（基线 `b58b10ef`）· 2026-10-18**：用户 2026-10-18 因 token 花费选「精简续做」，评审由会话本身读 diff 做；代码出自本会话起的实施子代理，审者与写者不同上下文但同属一个会话，按 parallel-sessions 不算非作者评审，如实记下。
+  - **Spec**：阻断无。装配补交段登记册、判断登记册照裁定不交；两条真库用例在 `9735981b` 上先红（红在段上当前参与与拒绝格，不是编译错）、`9138e344` 上转绿；首登那一行不动、替代行回指首登，与 ADR-0112 决定一、二一致。
+  - **Standards**：阻断无。非阻断 1：`register_offsite_pickup.go` 的 `CorrectOffsitePickupCommand` 头注仍写「段侧另立票，本编排不进段」，已失实（完成记录「遗留」那条），已在 `6eba9a2f` 改成照实说（地盘外一句注释，改到最小）。
+  - **无发现**：注释中文、无行号与计数；合成值只用 `SYN-`；领域包未动。
