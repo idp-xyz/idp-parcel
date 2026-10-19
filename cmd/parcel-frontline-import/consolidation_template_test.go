@@ -2,10 +2,13 @@ package main
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"go.idp.xyz/idp-bento-go/eventing"
 
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
@@ -166,5 +169,72 @@ func TestConsolidationTemplateDoesNotShareIntakeShape(t *testing.T) {
 	_, err = decodeIntakeTemplate(synTenant(t), sampleConsolidationTemplate(t))
 	if !errors.Is(err, ErrIntakeTemplate) || !strings.Contains(err.Error(), "缺列") {
 		t.Fatalf("集运样例喂收寄口应按列集不符整批拒：%v", err)
+	}
+}
+
+// synTenantPartitionPrefix 是合成租户下封装快照意图分区键里单元号之前的那一段（分区键取 租户/单元）。写成字面量：要证的
+// 是信封上那一串多长，拿被测代码自己拼一遍等于什么都没证。
+const synTenantPartitionPrefix = "SYN-T1/"
+
+// unitRefFilling 给出一个恰好 length 字节的单元号。
+func unitRefFilling(t *testing.T, length int) string {
+	t.Helper()
+	const head = "SYN-CU-"
+	if length <= len(head) {
+		t.Fatalf("目标长度 %d 装不下前缀", length)
+	}
+	return head + strings.Repeat("9", length-len(head))
+}
+
+// unitRefLimit 是合成租户下单元号的上限：单元号原样做封装快照意图的 Subject，又连同租户号做分区键，取两者里紧的那个。
+func unitRefLimit() int {
+	return min(eventing.MaxSubjectLength, eventing.MaxPartitionKeyLength-len(synTenantPartitionPrefix))
+}
+
+// Covers: 票 operator-channel/54 裁定补——单元号恰在封装快照意图信封的上限内照常译装；越过一个字节、恰为 Subject 上限而
+// 分区键越界、带控制字符（单元格内换行算在内）的那一行整批拒，报文点名行号与 unitRef。不只封装行：单元号是六种动作共用的
+// 同一个身份，开启得了却封装交不出的单元不该让它开启。上限取 eventing 的框架常量。
+func TestDecodeConsolidationTemplateBoundsTheUnitRefByTheSnapshotEnvelope(t *testing.T) {
+	atLimit := unitRefFilling(t, unitRefLimit())
+	batch, err := decodeConsolidationTemplate(synTenant(t), []byte(consolidationHeader+consolidationLineFor("SYN-WORK-1", "OPEN_UNIT", atLimit, "SYN-CAGE-1", "", "", "")))
+	if err != nil {
+		t.Fatalf("恰在上限内的单元号被拒：%v", err)
+	}
+	if got := batch.Rows[0].Command.(application.OpenUnitCommand).Unit.String(); got != atLimit {
+		t.Fatalf("单元号没逐字进命令：%d 字节", len(got))
+	}
+
+	overByOne := unitRefFilling(t, unitRefLimit()+1)
+	cases := []struct {
+		name  string
+		row   string
+		wants []string
+	}{
+		{"越过一个字节", consolidationLineFor("SYN-WORK-1", "OPEN_UNIT", overByOne, "SYN-CAGE-1", "", "", ""),
+			[]string{"第 2 行", fmt.Sprintf("unitRef 太长：%d 字节", unitRefLimit()+1), fmt.Sprintf("最多带 %d 字节", unitRefLimit()), "请缩短单元号"}},
+		{"恰为 Subject 上限而分区键越界", consolidationLineFor("SYN-WORK-1", "OPEN_UNIT", unitRefFilling(t, eventing.MaxSubjectLength), "SYN-CAGE-1", "", "", ""),
+			[]string{"第 2 行", fmt.Sprintf("unitRef 太长：%d 字节", eventing.MaxSubjectLength)}},
+		{"封装行同样拒", consolidationLineFor("SYN-WORK-1", "SEAL_UNIT", overByOne, "", "", "SYN-SEAL-1", "SYN-BASIS-1"),
+			[]string{"第 2 行", "unitRef 太长"}},
+		{"单元号带控制字符", consolidationLineFor("SYN-WORK-1", "OPEN_UNIT", "SYN-CU-\a1", "SYN-CAGE-1", "", "", ""),
+			[]string{"第 2 行", `unitRef="SYN-CU-\a1" 带控制字符`, "请删掉单元号里的不可见字符"}},
+		{"单元号带单元格内换行", consolidationLineFor("SYN-WORK-1", "OPEN_UNIT", "\"SYN-CU-\n1\"", "SYN-CAGE-1", "", "", ""),
+			[]string{"第 2 行", `unitRef="SYN-CU-\n1" 带控制字符`}},
+	}
+	for _, spec := range cases {
+		t.Run(spec.name, func(t *testing.T) {
+			_, err := decodeConsolidationTemplate(synTenant(t), []byte(consolidationHeader+spec.row))
+			if err == nil {
+				t.Fatalf("应整批拒绝")
+			}
+			if !errors.Is(err, ErrConsolidationTemplate) {
+				t.Fatalf("错误没带 ErrConsolidationTemplate：%v", err)
+			}
+			for _, want := range spec.wants {
+				if !strings.Contains(err.Error(), want) {
+					t.Fatalf("错误 = %q，要含 %q", err, want)
+				}
+			}
+		})
 	}
 }
