@@ -2,9 +2,15 @@
 # 步 0（票 seed-completeness/04）：对已经在跑的 parcel-api 打一次真提交，断言答复是已提交，
 # 再从委托查阅把同一笔读回来。
 #
+# 提交走首方客户渠道（票 first-party-api/00，ADR-0139）：先替合成货主系统向演示发行方取一枚客户端凭据令牌
+# （operator-channel/customer-token.sh；设了 IDP_PARCEL_CUSTOMER_TOKEN 就直接用它），再带 Bearer 令牌提交。载荷里的
+# accessRequestId 是接入请求标识，铸成这一笔的来源请求键。起 API 要带首方族三件部署参数（发行方、JWKS、受众
+# idp-parcel-customer-api），见 README「首方客户渠道」一节。
+#
 # 不进 seed.sh。种子灌的是主数据；这一步是运行时命令，重复跑会多一笔委托（跨秒各落一笔）；同一 UTC 秒内再跑撞同一来源键，提交口答 200 EXISTING_RESULT，脚本因要求 201 失败退出、不落第二笔。
-# 列表与详情在读 Intake 未配置时答 403（PAR-INT-01）。本脚本看到 403 就停，不换入口、不写库。
-# 要让查阅答得上来，起 API 的方式与 parcel.sh 相同：隔离读、隔离写都设成 SYN-TENANT-01。
+# 列表与详情在读 Intake 未配置时答 403（PAR-INT-01）。本脚本看到 401 / 403 就停，不换入口、不写库。
+# 要让查阅答得上来、归属答得出本产品承接，隔离读、隔离写两个开关仍都设成 SYN-TENANT-01：读开关注入委托查阅的可见账户
+# （票 operator-channel/53 之前），写开关只剩委托受理的归属坐标（PS 生产归属目录立起之前），都不再放行提交口。
 # 草案带寄 / 收两端的国家 / 地区码（CN、SG，与种子同款）：演示网络的服务区域按国家覆盖，缺了这两格，
 # 服务区域解析在那一侧答资料不足（ADR-0148 决定二）。
 # 两端邮编与这一件的尺寸是给受理前估价的（ADR-0179 决定二、四）：售价卡绑分区目录 SYN-CAT-ZONE-CN-SG，收件邮编落在
@@ -24,13 +30,23 @@ if ! command -v python3 >/dev/null 2>&1; then
   exit 1
 fi
 
+token="${IDP_PARCEL_CUSTOMER_TOKEN:-}"
+if [[ -z "$token" ]]; then
+  if ! token="$("$(dirname "$0")/operator-channel/customer-token.sh")"; then
+    printf 'submit-one-shipment: 取不到首方客户端令牌——演示发行方起了没有（operator-channel/compose.yaml）\n' >&2
+    exit 1
+  fi
+fi
+
 stamp="$(date -u +%Y%m%dT%H%M%SZ)"
 ref="SYN-CUSTREF-${stamp}"
 parcel_ref="SYN-PCLREF-${stamp}"
+access_request="SYN-ACCESS-REQUEST-${stamp}"
 
-body="$(python3 - "$ref" "$parcel_ref" <<'PY'
+body="$(python3 - "$ref" "$parcel_ref" "$access_request" <<'PY'
 import json, sys
 print(json.dumps({
+    "accessRequestId": sys.argv[3],
     "customerShipmentReference": sys.argv[1],
     "requestedServiceProduct": "SYN-PROD-CN-SG-EXPRESS",
     "senderRelation": "SYN-SENDER-01",
@@ -58,14 +74,18 @@ PY
 post_file="$(mktemp)"
 trap 'rm -f "$post_file"' EXIT
 post_code="$(curl -sS -o "$post_file" -w '%{http_code}' -X POST \
-  -H 'Content-Type: application/json' --data "$body" "${base}/shipment-requests")"
+  -H 'Content-Type: application/json' -H "Authorization: Bearer ${token}" \
+  --data "$body" "${base}/shipment-requests")"
 
-python3 - "$post_code" "$post_file" "$ref" <<'PY'
+python3 - "$post_code" "$post_file" "$access_request" <<'PY'
 import json, sys
 code, path, ref = sys.argv[1], sys.argv[2], sys.argv[3]
 raw = open(path, encoding="utf-8").read()
+if code == "401":
+    sys.exit("提交口 401：首方客户端令牌没过校验（发行方、受众或有效期）。本脚本不绕过。应答：\n" + raw)
 if code == "403":
-    sys.exit("提交口 403：隔离写未开。生产路径保持未配置（PAR-INT-01），本脚本不绕过。应答：\n" + raw)
+    sys.exit("提交口 403：首方族未配置（ACCESS_CHANNEL_NOT_CONFIGURED），或客户端不在客户渠道册、没有提交授予"
+             "（CUSTOMER_CLIENT_NOT_GRANTED）。本脚本不绕过。应答：\n" + raw)
 if code != "201":
     sys.exit(f"提交口 HTTP {code}，要 201。应答：\n" + raw)
 body = json.loads(raw)
@@ -78,7 +98,7 @@ open(path, "w", encoding="utf-8").write(request_id + "\n" + ref + "\n")
 PY
 
 request_id="$(sed -n '1p' "$post_file")"
-ref="$(sed -n '2p' "$post_file")"
+ref="$(sed -n '2p' "$post_file")"  # 来源请求键：首方族由接入请求标识铸成
 
 list_file="$(mktemp)"
 trap 'rm -f "$post_file" "$list_file"' EXIT

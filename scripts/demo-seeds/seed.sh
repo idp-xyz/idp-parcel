@@ -293,6 +293,11 @@ echo "== 操作者册登记（access-identity：合成操作者主体与能力�
 # （票 product-strategy-boundary/31）。这三类事实的准入对照随下面的准入范围对照一起登。
 "$BIN/parcel-access-register" integration-client-register -input "$SEEDS/access/05-integration-clients.json"
 "$BIN/parcel-access-register" integration-client-grant -input "$SEEDS/access/06-integration-client-grants.json"
+# 首方客户族（ADR-0139 决定二；票 first-party-api/00）：提交口要「客户端 × 授予」对上。合成货主系统一台，主体是演示发行方
+# （operator-channel/integration-dex.yaml，与集成客户端族同一只、受众不同）签出的 sub，绑 SYN-ACCOUNT-01——与隔离读面注入的
+# 可见账户同一个，提交的委托才在委托查阅上看得见（读开关退场前）。授予按客户面能力给，此刻只有提交一项。
+"$BIN/parcel-access-register" customer-client-register -input "$SEEDS/access/07-customer-clients.json"
+"$BIN/parcel-access-register" customer-client-grant -input "$SEEDS/access/08-customer-client-grants.json"
 # 准入范围对照（ADR-0180 决定一、二；票 operator-channel/19）：演示租户在上面那几种（能力、事实类型）上的生产写
 # 落在哪个治理对象范围。对照住接入身份、与操作者授予同处，不进 data/governance/；它只换坐标，区间才答「谁在写
 # 生产」。演示租户越过准入范围只有这一条普通登记的路（ADR-0150 决定一）。配置员持有哪一种运营决定，这里就要有那一种

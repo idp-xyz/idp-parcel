@@ -2,6 +2,10 @@
 # 按它公布的公钥集校验（ADR-0149 决定三）。只为隔离演示环境准备，不是部署描述符；客户端口令是合成值。
 #
 # 与操作者族的发行方（dex.yaml）分开起：两族的信任锚是两组部署参数，受众也不同，一族的令牌过不了另一族的校验。
+#
+# 首方客户族（ADR-0139 决定二；票 first-party-api/00）也由这只发行方签：两族同是客户端凭据许可，落在同一个发行方实例上是
+# 演示部署的决定。两族的受众各是一个静态客户端、trustedPeers 各列各的客户端，一个客户端取不到另一族受众的令牌；parcel-api
+# 的首方族参数取同一个发行方地址与公钥集、受众取 idp-parcel-customer-api。
 issuer: http://127.0.0.1:5558/dex
 
 storage:
@@ -38,6 +42,24 @@ staticClients:
   - id: syn-integration-bank-01
     name: 合成银行 01
     secret: syn-bank-secret
+    redirectURIs:
+      - http://127.0.0.1/unused
+    grantTypes:
+      - client_credentials
+
+  # 本产品客户 API 在这只发行方那里的受众（首方客户族）。它不登进客户渠道册；合成客户端取令牌时带
+  # audience:server:client_id:idp-parcel-customer-api 范围，令牌的 aud 才含它。只列首方客户端：集成客户端取不到这一族的受众。
+  - id: idp-parcel-customer-api
+    name: 包裹网络客户 API（演示受众）
+    secret: syn-customer-api-audience-secret
+    redirectURIs:
+      - http://127.0.0.1/unused
+    trustedPeers:
+      - syn-customer-client-01
+  # 一个首方客户端只代表一个客户账户（accessidentity.CustomerClientBinding）：合成货主 SYN-ACCOUNT-01 的系统。
+  - id: syn-customer-client-01
+    name: 合成货主系统 01
+    secret: syn-customer-client-secret
     redirectURIs:
       - http://127.0.0.1/unused
     grantTypes:

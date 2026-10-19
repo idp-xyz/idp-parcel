@@ -13,7 +13,7 @@
 | 演示库 | `postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable` | 本机隔离库；**任何一步都不得指向生产库** |
 | 种子 | `scripts/demo-seeds/seed.sh` | 合成 `SYN-` 主数据，四条登记 CLI 灌入；复灌用 `--reset` |
 | 演示发行方 | `scripts/demo-seeds/operator-channel/compose.yaml` | Dex；`docker compose -f … up -d --wait`，用法见 `scripts/demo-seeds/README.md`「操作者渠道」一节 |
-| 后端 | `cmd/parcel-api` | 运营查阅各口走操作者渠道：发行方三件加治理自授权，请求带配置员令牌；委托查阅及其子集视图另需 `IDP_PARCEL_ISOLATED_READ_TENANT=SYN-TENANT-01`（票 operator-channel/53 之前）；要演示委托提交另加 `IDP_PARCEL_ISOLATED_WRITE_TENANT`，同值（ADR-0091） |
+| 后端 | `cmd/parcel-api` | 运营查阅各口走操作者渠道：发行方三件加治理自授权，请求带配置员令牌；委托查阅及其子集视图另需 `IDP_PARCEL_ISOLATED_READ_TENANT=SYN-TENANT-01`（票 operator-channel/53 之前）；要演示委托提交另加首方客户族三件（票 first-party-api/00，请求带合成货主系统的令牌）与 `IDP_PARCEL_ISOLATED_WRITE_TENANT`（只剩归属坐标），同值（ADR-0091） |
 | 管理台 | `apps/admin-web` | dev 服务器**从 WSL 起**（本机 `node_modules` 是 WSL 侧 pnpm 装的 POSIX 链接农场，Windows 进程解析不到属预期），用 `PARCEL_API_TARGET` 指向后端；原样命令见「取证」页面层一节 |
 
 起后端（本机 8080 被 Windows 服务占用，换端口，见 admin-web README 的暗礁一节）：
@@ -30,9 +30,13 @@ $env:IDP_PARCEL_GOVERNANCE_SELF_AUTHORITY='SYN-AUTH/idp-parcel-pilot'
 $env:IDP_PARCEL_INTEGRATION_CLIENT_OIDC_ISSUER='http://127.0.0.1:5558/dex'
 $env:IDP_PARCEL_INTEGRATION_CLIENT_OIDC_JWKS_URL='http://127.0.0.1:5558/dex/keys'
 $env:IDP_PARCEL_INTEGRATION_CLIENT_OIDC_AUDIENCE='idp-parcel-integration'
+# 首方客户渠道（ADR-0139）：提交口走它；发行方与集成客户端族同一只，受众另是一个（票 first-party-api/00）
+$env:IDP_PARCEL_CUSTOMER_API_OIDC_ISSUER='http://127.0.0.1:5558/dex'
+$env:IDP_PARCEL_CUSTOMER_API_OIDC_JWKS_URL='http://127.0.0.1:5558/dex/keys'
+$env:IDP_PARCEL_CUSTOMER_API_OIDC_AUDIENCE='idp-parcel-customer-api'
 # 委托查阅及其子集视图仍走隔离读（票 operator-channel/53 之前）
 $env:IDP_PARCEL_ISOLATED_READ_TENANT='SYN-TENANT-01'
-# 要演示委托提交才需要下面这行；只看主数据各页时不设它（ADR-0091，两值必须相同）
+# 要演示委托提交才需要下面这行：它不放行提交口，只给归属注入合成坐标（PS 生产目录立起之前）；两值必须相同（ADR-0091）
 $env:IDP_PARCEL_ISOLATED_WRITE_TENANT='SYN-TENANT-01'
 go run ./cmd/parcel-api
 ```
@@ -147,7 +151,9 @@ go run ./cmd/parcel-dispatch
 | 起进程时 | `POST /shipment-requests` |
 |---|---|
 | 只设 `IDP_PARCEL_ISOLATED_READ_TENANT` | **未配置态**：`403`，`ACCESS_CHANNEL_NOT_CONFIGURED`——读开关换不了写行 |
-| 另加 `IDP_PARCEL_ISOLATED_WRITE_TENANT='SYN-TENANT-01'` | 走到编排：合成种子里那条委托受理维的权威区间在册，归属答本产品承接，委托建成`已提交` |
+| 另加首方客户族三件与 `IDP_PARCEL_ISOLATED_WRITE_TENANT='SYN-TENANT-01'`，请求带合成货主系统的令牌（`submit-one-shipment.sh` 自己取） | 走到编排：合成种子里那条委托受理维的权威区间在册，归属答本产品承接，委托建成`已提交` |
+
+> 2026-10-19 补记（票 `first-party-api/00`）：提交口换上首方客户渠道（[ADR-0139](../adr/0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md)），隔离写开关不再放行它（[ADR-0150](../adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 决定三）。写开关此刻只剩下面「墙二」那一格合成坐标；不带令牌答 `401 CUSTOMER_CLIENT_CREDENTIAL_REJECTED`，首方族三件不设答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`。管理台的提交页不带首方客户端令牌，提交答 `401`：运营代客提交是另一个用例（ADR-0139 决定三）。
 
 第一种跑法适合讲「门是分级的」，第二种适合讲「墙拆掉之后链路真的通」。**两个开关取值必须相同**，不同则进程启动即拒——写下的委托挂在一个读面不过滤的租户上，页面就看不见它。
 
@@ -186,7 +192,7 @@ go run ./cmd/parcel-dispatch
 | 不设发行方三件 | 运营查阅与运营决定各口答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`，包括第 1–4 步走过的那些 |
 | 设发行方三件、请求不带令牌 | 运营查阅各口答 `401 OPERATOR_CREDENTIAL_REJECTED`；带配置员令牌才答 `200` |
 | `IDP_PARCEL_ISOLATED_READ_TENANT=SYN-TENANT-01` | 只有委托查阅及其子集视图不带令牌也答 `200`，其余照上两行——**提交口仍 `403`** |
-| 再加 `IDP_PARCEL_ISOLATED_WRITE_TENANT=SYN-TENANT-01` | 提交口走到编排；挂字面量未配置的命令面仍 `403`，挂操作者渠道的各口照上面两行 |
+| 再加 `IDP_PARCEL_ISOLATED_WRITE_TENANT=SYN-TENANT-01` | 提交口仍答首方族的 `403`（写开关不放行任何命令面）；再加首方族三件、带合成货主系统令牌才走到编排。挂字面量未配置的命令面仍 `403`，挂操作者渠道的各口照上面两行 |
 | 任一开关取 `TENANT-PROD-1`（无 `SYN-` 前缀） | **进程启动即拒**，带原因退出，不静默回落 |
 | 两开关取不同的 `SYN-` 租户 | **进程启动即拒**，报文同时点名两个开关 |
 

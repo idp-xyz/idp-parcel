@@ -46,7 +46,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
    最后一件是本产品在治理登记册里的权威串（ADR-0180 决定三），运营决定与外部事实各口铸信封前拿它认区间：不设，
    这几口授予齐备也答 403 `OUTSIDE_ADMISSION_SCOPE`；设了，种子里演示租户的准入范围对照（`data/access/03`）与
    `data/governance/` 里能力为 `OPERATION_DECISION`、`EXTERNAL_FACT` 的权威区间才认得上。取值与隔离形态的权威串同串，
-   隔离写开关开着而两值不等进程启动即拒。隔离写开关不放行任何运营决定口（放行名单见 `isolatedWriteAdmittedCommandLines`），
+   隔离写开关开着而两值不等进程启动即拒。隔离写开关不放行任何命令面（提交口已换首方客户渠道，票 first-party-api/00），
    运营决定各口都只能经这一件认区间。管理台上提交运营决定的页面，如「接受前人工复核」（`AcceptanceReviewPage`：复核完成、
    主动拒绝）、「授权处置」（`AuthorizedDispositionPage`）、「外部轨迹有效时间判断」（`EffectiveTimeJudgmentPage`），不设
    这一件时提交答的就是 `OUTSIDE_ADMISSION_SCOPE`；管理台上没有页面的运营决定口只能直接调 API。
@@ -106,10 +106,12 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 | `data/visibility/` | `cmd/parcel-ve-register` | 里程碑映射、分诊规则、通知策略、索赔资格、索赔授权两格（一格空名单）、披露策略、异常披露规则、冲突信号规则、索赔材料收讫两笔（照片留下、发票收讫后撤销） |
 | `data/collection/` | `cmd/parcel-collection-register` | 一条 COD 指令走全程（渠道报收、银行短收、短款、清分进应付客户）+ SGD 分户账只开立；CNY 账两笔回汇批次（已归集 / 已交出汇付主张），SGD 账无批次 |
 | `data/settlement/` | `cmd/parcel-settlement-register` 的 `settlement-account` / `external-funds-fact` / `funds-mapping` / `pre-acceptance-estimate-adoption` / `sell-billing-moment-adoption` / `fee-item-mapping` / `buy-evaluation-trigger` | 结算账户登记册（ADR-0158）1 行：货主 `SYN-PARTY-SHIPPER-01` 在法人 `SYN-LE-01` 下的 CNY 应收账户 `SYN-SETTLEMENT-ACCOUNT-01`，结算政策 `SYN-SETTLEMENT-PREPAID-01`，责任依据是该政策所引的客户合同 `SYN-CONTRACT-01`。五维照发布批里那份结算政策的正文配，受理前财务控制的作用域经它找到账户。另有一笔合成收款 `SYN-FUNDS-RECEIPT-01`（200.00 CNY）映射到该账户（ADR-0182），金额只盖这一件的试算合计，不是生产默认。受理前估价采用册（ADR-0179 决定五）1 行：这一户采用「逐件 SELL 试算合计」（`PER_PARCEL_SELL_TRIAL_SUM`），计价范围 `SYN-SCOPE-01`，与售价卡 `SYN-PLAN-CN-SG-01` 的范围同值，估价按它解析在用售价卡。SELL 计费时点采用册（ADR-0190 决定三）1 行：这一户在「有效网络收寄已采用」那一拍发起 SELL 评价，计价范围同上。费用项目映射（决定五）2 行：基础运费与偏远附加都映到 `SYN-FEE-ITEM-FREIGHT-01`，是 SYN 简化。售价卡声明了金额取整（总额，0.01 CNY，四舍五入），结算由评价形成客户费用时要这一格。BUY 触发册（ADR-0164、ADR-0208）1 行：原因 `ACTUAL_FULFILLMENT` 采用「发生项形成」，费用项目 `SYN-FEE-ITEM-TRUNK-COST-01`；干线实际履约发生项一形成就发起 BUY 评价，主要范围取发生项上干线协议 `SYN-SUPPLIER-TRUNK-CN-SG-01/v1` 的商业范围 `SYN-SCOPE-01`。别的原因不登，形成了答未配置 |
-| `data/access/` | `cmd/parcel-access-register` 的 `operator-register` / `operator-grant` / `admission-scope-mapping-register` / `device-register` / `integration-client-register` / `integration-client-grant` | 操作者册（ADR-0100 决定二第三条）：合成操作者主体绑演示租户，各自持有哪些授予以上面「操作者渠道」一节的授予表为准，这里不另列；主体是演示发行方 Dex 给 `operator-channel/dex.yaml` 里静态用户真签出的 `sub`，换发行方就按新发行方的标识另登一批。另有演示租户的准入范围对照（ADR-0180 决定一、二）：各（能力、事实类型）的生产写落在哪个治理对象范围，与 `data/governance/` 里本产品的权威区间配上，运营决定与外部事实各口才越得过准入范围。`04-devices.json` 是作业事实各口用的合成设备，每台绑一个作业范围，与配置员的作业事实登记授予一一对上。`05`、`06` 是集成客户端族：合成报关服务商与合成银行各一台，主体是演示的集成客户端发行方签出的 `sub`，授予按事实类型给 |
+| `data/access/` | `cmd/parcel-access-register` 的 `operator-register` / `operator-grant` / `admission-scope-mapping-register` / `device-register` / `integration-client-register` / `integration-client-grant` / `customer-client-register` / `customer-client-grant` | 操作者册（ADR-0100 决定二第三条）：合成操作者主体绑演示租户，各自持有哪些授予以上面「操作者渠道」一节的授予表为准，这里不另列；主体是演示发行方 Dex 给 `operator-channel/dex.yaml` 里静态用户真签出的 `sub`，换发行方就按新发行方的标识另登一批。另有演示租户的准入范围对照（ADR-0180 决定一、二）：各（能力、事实类型）的生产写落在哪个治理对象范围，与 `data/governance/` 里本产品的权威区间配上，运营决定与外部事实各口才越得过准入范围。`04-devices.json` 是作业事实各口用的合成设备，每台绑一个作业范围，与配置员的作业事实登记授予一一对上。`05`、`06` 是集成客户端族：合成报关服务商与合成银行各一台，主体是演示的集成客户端发行方签出的 `sub`，授予按事实类型给。`07`、`08` 是首方客户族：合成货主系统一台绑 `SYN-ACCOUNT-01`，主体是同一只发行方签出的 `sub`，授予按客户面能力给（此刻只有提交） |
 | `data/transport/` | `cmd/parcel-transport-register schedule-template` | 周期安排登记册（ADR-0201）3 份：演示网络三条连接各一份按日运行的周期安排——`SYN-SCHED-SHA-SZX-DAILY`（`SYN-CONN-SHA-SZX`，当地 22:00 出发、历时 600 分钟，Asia/Shanghai）、`SYN-SCHED-SZX-SIN-DAILY`（`SYN-CONN-SZX-SIN`，10:00、300 分钟，Asia/Shanghai）、`SYN-SCHED-SIN-LM-DAILY`（`SYN-CONN-SIN-LM`，07:00、90 分钟，Asia/Singapore），服务范围都是 `SYN-SCOPE-01`。方向的连接代码与起讫节点取演示网络参考配置，时区取该连接的业务时区；出发时刻与历时是合成分钟数，不是任何线路的真实班期。具体班次不预生成：准备评估时按日期物化，或经 `schedule` 命令 / `POST /transport-fulfillment-transport-schedule-registrations` 按运行日期显式登记 |
 | `data/transport/04-materialized-schedule-szx-sin.json` | `cmd/parcel-transport-register schedule` | 逐维容量与容量池（ADR-0201 决定三，票 demo-chain-gaps/17）：上一行三份周期安排各声明重量（KG）与件数（PCS）两维硬上限——`SHA-SZX` 20000 / 4000、`SZX-SIN` 5000 / 1000、`SIN-LM` 1500 / 300，都是合成值，不是任何车辆或舱位的真实载量。这一份按固定合成日期 2026-10-21 显式物化登记干线一班 `SYN-SCHED-SZX-SIN-DAILY/2026-10-21`，随之建两池 `…/2026-10-21/WEIGHT` 与 `…/2026-10-21/PIECES`，`GET /transport-fulfillment-records?registry=capacity-pool` 列出它们。另一维的池经 `capacity-pool` 命令或 `POST /transport-fulfillment-capacity-pool-registrations` 登在已登记的班次上，池身份由（班次、维度）派生 |
 | `operator-channel/` | — | 演示发行方：Dex 的容器描述（`compose.yaml`，不并进仓库根那份门禁库描述）与配置（`dex.yaml`：管理台公共客户端、两个合成静态用户），取令牌脚本 `operator-token.sh`，操作者渠道取证脚本 `probe-operator-channel.sh`；另有集成客户端族的发行方配置 `integration-dex.yaml` 与取令牌脚本 `integration-token.sh`。用法见上面「操作者渠道」「集成客户端渠道」两节 |
+
+| `operator-channel/` | — | 演示发行方：Dex 的容器描述（`compose.yaml`，不并进仓库根那份门禁库描述）与配置（`dex.yaml`：管理台公共客户端、两个合成静态用户），取令牌脚本 `operator-token.sh`，操作者渠道取证脚本 `probe-operator-channel.sh`；另有集成客户端族的发行方配置 `integration-dex.yaml` 与取令牌脚本 `integration-token.sh`，首方客户族的受众与合成客户端也登在 `integration-dex.yaml`，取令牌脚本 `customer-token.sh`。用法见上面「操作者渠道」「集成客户端渠道」「首方客户渠道」三节 |
 | `migrate/` | — | 迁移助手（`migrate.Run` 的隔离环境入口；迁移计划刻意没有生产入口） |
 | `seedgen/` | — | 计价快照生成器：价卡、序列与参考目录的登记输入带规范化版本号与内容摘要自校，必须经真领域构造函数折装；PPC/PRS/PRC 规范化版本升级时重跑并提交新产物 |
 
@@ -120,6 +122,26 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 1. 发行方是 `operator-channel/compose.yaml` 里的第二只 Dex（`integration-issuer`，配置 `integration-dex.yaml`），上面那条 `up -d --wait` 一并起，地址 `http://127.0.0.1:5558/dex`。它只签客户端凭据许可的令牌；版本与操作者族那只不同，理由写在 compose 注释里。
 2. 起 `parcel-api` 时再加三件：`IDP_PARCEL_INTEGRATION_CLIENT_OIDC_ISSUER=http://127.0.0.1:5558/dex`、`IDP_PARCEL_INTEGRATION_CLIENT_OIDC_JWKS_URL=http://127.0.0.1:5558/dex/keys`、`IDP_PARCEL_INTEGRATION_CLIENT_OIDC_AUDIENCE=idp-parcel-integration`。日志出现「Integration client channel issuer configured」。
 3. 取令牌：`scripts/demo-seeds/operator-channel/integration-token.sh syn-integration-customs-broker-01 syn-customs-broker-secret`（银行是 `syn-integration-bank-01` / `syn-bank-secret`）。客户端行的「要求证书绑定令牌」填的是 `false`：这只发行方签不出 `cnf`，这是演示租户对这两台客户端的取值，不是放宽核验。
+
+## 首方客户渠道：演示发行方
+
+票 `first-party-api/00`。提交口（`POST /shipment-requests`）认首方客户族的令牌（ADR-0139 决定二）：货主客户的系统以 OAuth 2.0
+客户端凭据取令牌，`parcel-api` 自己验签名、`iss`、`aud` 与有效期，再查客户渠道册与授予。隔离写开关不再放行提交口（ADR-0150 决定三）。
+
+1. 发行方与集成客户端族是同一只（`integration-issuer`，`http://127.0.0.1:5558/dex`），受众另是一个：`idp-parcel-customer-api`，
+   只给合成货主系统 `syn-customer-client-01` 取。三族落不落在同一个发行方实例上是部署决定，受众两两不同是硬条件——
+   `parcel-api` 见首方受众与另两族任一件相同即启动拒。
+2. 起 `parcel-api` 时再加三件：`IDP_PARCEL_CUSTOMER_API_OIDC_ISSUER=http://127.0.0.1:5558/dex`、
+   `IDP_PARCEL_CUSTOMER_API_OIDC_JWKS_URL=http://127.0.0.1:5558/dex/keys`、`IDP_PARCEL_CUSTOMER_API_OIDC_AUDIENCE=idp-parcel-customer-api`。
+   日志出现「First-party customer channel issuer configured」。三件都不设，提交口答 403 `ACCESS_CHANNEL_NOT_CONFIGURED`；
+   只设一部分，进程启动即拒。
+3. 取令牌：`scripts/demo-seeds/operator-channel/customer-token.sh`（缺省就是那台合成货主系统；末尾加 `claims` 打印载荷）。
+   `submit-one-shipment.sh` 自己调它。客户端行（`data/access/07`）的「要求证书绑定令牌」填 `false`，理由同集成客户端那两台。
+4. 答复按恢复动作分格（ADR-0139 决定四）：令牌不过或证书绑定对不上答 401 `CUSTOMER_CLIENT_CREDENTIAL_REJECTED`；不在册或
+   没有提交授予答 403 `CUSTOMER_CLIENT_NOT_GRANTED`；发行方公钥集或册读不动答 503 `IDENTITY_DEPENDENCY_UNAVAILABLE`。
+   操作者令牌与集成客户端令牌在提交口一律答 401。
+5. 生产归属：PS 的生产归属目录还没立，演示提交要越过`权威未确定`仍靠隔离写开关那一格合成坐标（`IDP_PARCEL_ISOLATED_WRITE_TENANT`），
+   它不放行任何命令面，只给提交编排读得到委托受理那条合成区间。
 
 ## 数据故事（同一合成租户 SYN-TENANT-01，范围 SYN-SCOPE-01）
 
@@ -232,15 +254,15 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
   租户取值；同段的指令、事实和记账已经是 `SYN-` 实例。现在 CNY 账有已归集与已交出两格，
   SGD 账仍无批次，分户账页对空批次继续写「未配置」。不带 `--reset` 重放本节仍会在既有记账处
   因余额不足中止，批次与交出这两步本身重放走 0。
-- 运行时只多一步，而且**不在** `seed.sh` 里：`submit-one-shipment.sh` 对已经在跑的
+- 运行时只多一步，而且**不在** `seed.sh` 里：`submit-one-shipment.sh` 先替合成货主系统取一枚首方客户端令牌，再对已经在跑的
   `parcel-api` 打 `POST /shipment-requests`（草案带寄 / 收两端国家码 `CN` / `SG`，演示网络的服务区域
   按国家覆盖；另带两端邮编 `200000` / `018000` 与这一件的尺寸，受理前估价按邮编路线经分区目录解出 Z1、
   按 MAX 计费重算体积重），断言 `201` / `SUBMITTED`，再从
-  `GET /shipment-request-views` 把同一笔读回来。起进程要与 `parcel.sh` 一样同时设
+  `GET /shipment-request-views` 把同一笔读回来。起进程要带首方族三件（上面「首方客户渠道」一节），并与 `parcel.sh` 一样同时设
   `IDP_PARCEL_ISOLATED_READ_TENANT` 与 `IDP_PARCEL_ISOLATED_WRITE_TENANT`，都是
-  `SYN-TENANT-01`。只开写、不开读时提交能落成已提交，列表和详情仍答 `403`
+  `SYN-TENANT-01`：读开关给委托查阅注入可见账户，写开关给归属注入合成坐标。只开写、不开读时提交能落成已提交，列表和详情仍答 `403`
   `ACCESS_CHANNEL_NOT_CONFIGURED`——读 Intake 还是未配置，脚本看到 403 就停，不改门。
-  两个都不设时提交口自己也是这道 403（`PAR-INT-01`）。路由、运输履约、节点作业、
+  不设写开关时提交停在 `OWNERSHIP_UNRESOLVED`（生产形态的如实答复）；首方族三件不设时提交口答 403 `ACCESS_CHANNEL_NOT_CONFIGURED`。路由、运输履约、节点作业、
   轨迹投影、异常案件、结算这些运行时页保持空着：本脚本不灌它们，空是如实答案。
   证据只记 `S`。
   这一步不幂等：跨秒重跑各落一笔委托；同一 UTC 秒内重跑撞同一来源键，提交口答 `200`
