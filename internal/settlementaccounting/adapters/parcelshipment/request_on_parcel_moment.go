@@ -145,7 +145,7 @@ var _ sainbox.FormedFinalOutcomeHandler = (*RequestOnFinalOutcomeAdapter)(nil)
 // HandleFormedFinalOutcome 回读 → 只认已终局的有效交付 → 交编排 → 落成消费两格。
 //
 // 「有效交付」认的是终局所采用的责任结果种类（小包托运的封闭集合），不认终局类型引用：后者是合同规则给的开放引用，
-// 归商业规则的实例半边，拿它判会把一个租户的命名当成产品口径。退运完成、服务终止、监管处置与面单渠道两格都不是
+// 归商业规则的实例半边，拿它判会把一个租户的命名当成产品口径。退运完成、服务终止、监管处置与面单渠道的终局都不是
 // 这一拍（ADR-0190 越权风险点 8）。计价基准时点取终局的生效时点——被采用责任结果的业务时间，不是采认时刻。
 func (adapter *RequestOnFinalOutcomeAdapter) HandleFormedFinalOutcome(
 	ctx context.Context,

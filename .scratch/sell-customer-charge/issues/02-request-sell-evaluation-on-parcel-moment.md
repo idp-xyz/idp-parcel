@@ -25,7 +25,7 @@ Blocked by: [01](./01-sell-request-identity-and-registers.md)。02、03、04 都
 
 ## 完成记录
 
-2026-10-19 Claude Code 作者会话在分支 `claude-sell-02`（基于 `claude-sell-01`）落地，三笔提交：`359cb52c`（链与发起编排）、`03e2f3f6`（两只消费者与派发扇出）、`ab419e81`（机制清点重生成）。证据级别：隔离合成，只记 `S`。
+2026-10-19 Claude Code 作者会话在分支 `claude-sell-02`（基于 `claude-sell-01`）落地，三笔提交：`61c971e1`（链与发起编排）、`f99685a6`（两只消费者与派发扇出）、`（rebase 时丢弃，落地时于 tip 上重生成）`（机制清点重生成）。证据级别：隔离合成，只记 `S`。
 
 ### 做了什么
 
@@ -83,3 +83,10 @@ DSN `postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable`：
 - `go test -p 1 -count=1 ./internal/settlementaccounting/... ./internal/parcelshipment/... ./cmd/parcel-dispatch/ ./internal/architecture/` 全部 `ok`，新增真库用例逐条 `PASS`，没有 `SKIP`。
 - `go build ./...` 退 0；`go vet` 上述各包退 0；`gofmt -l` 空。
 - 第一笔单独检出（临时 detached worktree）也能 build、vet，本笔各包测试绿。
+
+## 评审记录（2026-10-19，隔离子代理一次过两轴）
+
+- 唯一阻断是机制清点没重生成，落地时在这一批的 tip 上重生成。
+- 已修的非阻断：端口里拒收哨兵的头注与实现对齐（整笔回滚、硬失败，不是入账不重投）；「包裹无商业解析」补进 ADR-0190 越权风险点 8；两处注释不再数别处的东西；完成记录的 SHA。
+- 记一笔：链上确定性的译不动（闭包查无等）也归未决，重试到预算耗尽才落失败，与受理前财务控制同先例。终局那一路没有真库端到端用例，重放用例没断言重交信封，留给后续。
+- 与票 03、04 合成一批进 main。

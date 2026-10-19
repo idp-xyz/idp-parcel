@@ -12,7 +12,7 @@ import (
 
 // AdoptedSettlementTerms 实现 saports.AdoptedSettlementTermsView：凭回指取已固定的闭包，从闭包里取出采用的结算政策，
 // 把它落在结算账户键上的四维译过来。它是「包裹 → 结算账户」那条链的中段（ADR-0190 决定三），与 CreditBasis、
-// PreAcceptanceControlPolicy 并列——同一份回指、同一份闭包、各取各的成员，三格含义各不相同，不合成一只。
+// PreAcceptanceControlPolicy 并列——同一份回指、同一份闭包、各取各的成员，各自的含义不同，不合成一只。
 //
 // 法人、相对方、币种取政策的适用范围，政策引用取政策对象标识不带版本：账户册的键就是这么登的（SettlementPolicyReference
 // 头注），受理前财务控制在小包托运那一侧拼账户键时取的也是这四样（那一侧的 RegisteredAccountDirectory）。两边取法不同，

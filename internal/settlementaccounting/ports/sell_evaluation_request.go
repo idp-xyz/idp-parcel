@@ -65,7 +65,8 @@ type SellEvaluationRequestIntent struct {
 }
 
 // ErrSellEvaluationRequestHandoffRejected 表示交接口铸出的信封被框架的确定性校验拒收（租户或包裹标识超长时作用域或
-// 分区键过不了上限）。同一份请求重交永远同一个结果，消费方据此入账不重投，而不是按依赖故障重试到预算耗尽。
+// 分区键过不了上限）。同一份请求重交永远同一个结果，不该按依赖故障重试到预算耗尽：发起编排据此整笔回滚、交出硬失败，
+// 请求行不会脱离信封独自留下。
 var ErrSellEvaluationRequestHandoffRejected = errors.New("settlement accounting: sell evaluation request envelope rejected by envelope validation")
 
 // SellEvaluationRequestHandoff 把 SELL 评价请求写入 Outbox，与请求行同一事务。信封被确定性拒收时交回的错误
