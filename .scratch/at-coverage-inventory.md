@@ -18,8 +18,8 @@
 
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 333 |
-| ② 机制候选 | 233 |
+| ① 已钉住 | 334 |
+| ② 机制候选 | 232 |
 | ③ 实例/闸门 | 143 |
 | ④ 机制未落地 | 425 |
 | 合计 | 1134 |
@@ -27,7 +27,7 @@
 | 前缀 | 总数 | ① | ② | ③ | ④ |
 |---|---|---|---|---|---|
 | CC | 425 | 35 | 0 | 89 | 301 |
-| NO | 75 | 38 | 30 | 7 | 0 |
+| NO | 75 | 39 | 29 | 7 | 0 |
 | NR | 53 | 24 | 28 | 1 | 0 |
 | PC | 36 | 35 | 1 | 0 | 0 |
 | PS | 93 | 66 | 25 | 2 | 0 |
@@ -110,7 +110,8 @@
 | `AT-NO-062` | internal/nodeoperations/application/identity_conflict_cause_test.go::TestAnAmbiguityOnlyConflictIsReleasedOnceTheDeclarationIsGone；internal/nodeoperations/application/identity_conflict_cause_test.go::TestAnAmbiguityOnlyConflictStaysWhileADeclarationRemains；cmd/parcel-dispatch/node_identity_ambiguity_release_test.go::TestTheWiredDispatchReleasesAnAmbiguityOnlyConflictOnceTheDeclarationIsGone；cmd/parcel-dispatch/node_identity_ambiguity_release_test.go::TestTheWiredDispatchKeepsConflictsTheRetiredDeclarationDidNotCause |
 | `AT-NO-063` | internal/nodeoperations/domain/delivery_scope_test.go::TestAPreAdviceCountsOnlyWhenEveryConditionHolds（推导半边：没带依据、预报没列这个号、节点不符、时窗外、已撤回各答未证并附原因；收寄落待识别、候选照记归票 ps-external-mark-relations/11） |
 | `AT-NO-068` | internal/nodeoperations/domain/delivery_scope_test.go::TestAnUnregisteredWindowAnswersUnconfiguredApartFromUnverified（推导半边：时窗没有生效行答未配置、与未证分开；身份按没有范围判归票 11） |
-| `AT-NO-070` | internal/nodeoperations/domain/delivery_scope_test.go::TestAPreAdviceCountsOnlyWhenEveryConditionHolds（推导半边：撤回之后按依据不适用·已撤回判；撤回口与「撤别人的与查无此预报同答」的命令面归票 09） |
+| `AT-NO-069` | internal/accessidentity/customer_client_pre_advice_test.go::TestPreAdviceLinesMintTheirEnvelopesFromTheBinding；internal/accessidentity/customer_client_pre_advice_test.go::TestPreAdviceLinesAnswerTheirOwnGrades；internal/nodeoperations/domain/delivery_pre_advice_payload_test.go::TestPreAdviceSubmissionCanonicalizesAsNOC1；internal/nodeoperations/domain/delivery_pre_advice_payload_test.go::TestPreAdviceSubmissionDigestSeparatesEveryContentChange；internal/nodeoperations/application/delivery_pre_advice_test.go::TestSubmittingAPreAdviceRegistersReplaysAndConflicts；internal/nodeoperations/application/delivery_pre_advice_test.go::TestAPreAdviceThatCannotFormNeverReachesTheRegister；internal/nodeoperations/adapters/accessidentity/customer_pre_advice_authenticator_test.go::TestCustomerPreAdviceAuthenticatorTranslatesTheEnvelope；internal/nodeoperations/adapters/http/delivery_pre_advice_test.go::TestSubmittingAPreAdviceTranslatesThePayloadAndAnswersRegistered；internal/nodeoperations/adapters/http/delivery_pre_advice_test.go::TestMalformedPreAdvicePayloadsAnswerBadRequest；cmd/parcel-api/assemble_delivery_pre_advice_test.go::TestACustomerClientSubmitsAndWithdrawsAPreAdviceAgainstARealDatabase（真库面：经生产装配交预报、重投、换内容、撤销授予之后答未授予） |
+| `AT-NO-070` | internal/nodeoperations/domain/delivery_scope_test.go::TestAPreAdviceCountsOnlyWhenEveryConditionHolds（推导半边：撤回之后按依据不适用·已撤回判）；internal/nodeoperations/application/delivery_pre_advice_test.go::TestWithdrawingAPreAdviceTouchesOnlyTheEnvelopesOwnAccount；internal/nodeoperations/adapters/http/delivery_pre_advice_test.go::TestWithdrawingAPreAdviceTakesTheAccountFromTheEnvelope；cmd/parcel-api/assemble_delivery_pre_advice_test.go::TestACustomerClientSubmitsAndWithdrawsAPreAdviceAgainstARealDatabase（撤回命令半边，票 ps-external-mark-relations/09：撤自己的落撤回，撤别的客户账户的与查无此预报同答；此后的收寄与重核按依据不适用判、此前的关联不回滚那一半归票 11） |
 | `AT-NO-074` | internal/nodeoperations/domain/delivery_handover_note_test.go::TestAHandoverNoteEstablishesScopeOnlyWhenEveryClaimIsConfirmed；internal/nodeoperations/domain/delivery_scope_test.go::TestAHandoverNoteScopeIsAllOrNothing（领域半边：只确认 A 不成立、B 否认仍不成立、全部确认才成立；成员另行归入的命令面归票 12） |
 | `AT-NR-001` | internal/networkrouting/application/create_initial_route_test.go::TestThreeParcelsKeepThreeIndependentResults；internal/networkrouting/domain/initial_route_plan_test.go::TestAnInitialRoutePlanCarriesItsFullSelectionBasis；internal/networkrouting/domain/route_ranking_test.go::TestSelectionFollowsTheStrategysDeclaredCriterionOrder |
 | `AT-NR-002` | internal/networkrouting/application/create_initial_route_test.go::TestTwoParcelsFormTwoIndependentPlans |
@@ -408,7 +409,6 @@
 | `AT-NO-065` | 有可验证交付范围（A），A 的两份已接受委托都报了这个号；或 A 的一件在册、A 另一份`已提交`委托也报了它 | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
 | `AT-NO-066` | 有可验证交付范围（A），号码在 A 的预报里，但 A 的委托还没接受，册上只有 B 的一件 | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
 | `AT-NO-067` | 号码经渠道包裹件号在册里只标识一件，没有歧义信号，送站没有可验证交付范围 | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
-| `AT-NO-069` | 客户账户经首方口提交送站预报 | UC-NO-006-ESTABLISH-A-VERIFIABLE-DELIVERY-SCOPE.md |
 | `AT-NO-071` | 节点开立送站交接单，收寄带它的标识；把一件缺范围的待识别实物归入；关闭后再归入 | UC-NO-006-ESTABLISH-A-VERIFIABLE-DELIVERY-SCOPE.md |
 | `AT-NO-072` | 运营操作者确认交接单对客户账户 A 的绑定：有授权交付关系、没有、本租户一条都没登记、交付方就是 A 所属参与方本身 | UC-NO-006-ESTABLISH-A-VERIFIABLE-DELIVERY-SCOPE.md |
 | `AT-NO-073` | 客户账户 A 经客户渠道对交接单作结论：交接单未关闭、已关闭且声称了 A、没声称 A | UC-NO-006-ESTABLISH-A-VERIFIABLE-DELIVERY-SCOPE.md |
@@ -1260,6 +1260,8 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 追记十三（票 no-reception-identity/07，2026-10-19）：票 no-reception-identity/07 在 UC-NO-002 新增 `AT-NO-062`「只因歧义信号落下的身份冲突，声明它的委托被拒绝或撤回」，随冲突来由、重核对象放宽与 PS 声明撤除门铃同票落地，点名直接入①（编排面、生产装配真库面）。①328→329（NO 33→34），合计 1120→1121（NO 61→62，`docs/application` 的 AT 全集随 UC-NO-002 扩了这一行）。
 
 追记十四（票 ps-external-mark-relations/08，2026-10-19）：票 ps-external-mark-relations/07 在 UC-NO-002 新增 `AT-NO-063` 至 `AT-NO-068`、新立 UC-NO-006（`AT-NO-069` 至 `AT-NO-075`），本表都未随之扩，照扫描口径补进。票 08 立了送站预报、送站交接单、预报有效时窗册与可验证交付范围的推导，测试点名的四条入①、都只是半边，半边在行内注明：`AT-NO-063`、`AT-NO-068`、`AT-NO-070` 是推导半边，`AT-NO-074` 是领域半边，各自的收寄、命令口一半归票 09、11、12。其余九条未被测试引用、属 NO 机制面，入②。①329→333（NO 34→38）、②224→233（NO 21→30），合计 1121→1134（NO 62→75，`docs/application` 的 AT 全集随 UC-NO-002 与 UC-NO-006 扩了这几行）。数在分支 `claude-psxm08` 的起点 `a2ff42f6` 加本票测试上量，只对这一加成立。
+
+追记十五（票 ps-external-mark-relations/09，2026-10-19）：`AT-NO-069`「客户账户经首方口提交送站预报」随预报提交口（铸造、载荷形状、编排、首方认证适配、HTTP、生产装配真库面）落地点名入①，由②移出；`AT-NO-070` 已在①，行内补上撤回命令半边，收寄与重核那一半仍归票 11。①334、②232，NO 39 / 29，合计不变。总览表此刻没含上一条 demo-chain-gaps/33 追记的 +6，本追记只在表上的数上加本票的增量，绝对数随同波票按批重算。
 
 2026-10-19 追记（票 demo-chain-gaps/33）：UC-TF-005 新立 `AT-TF-156`–`161`（移动事实已形成信封、VE 投影与阻断信号），随票在 TF 编排与真库、VE 编排与适配器、派发与装配用例上补 Covers 点名，全部入①；半边覆盖在行内注明。①、TF 与合计各加 6，②③④不变；绝对数进 main 时随同波票按批重算（号段 156–165 由协调方预分，本票用到 161）。
 
