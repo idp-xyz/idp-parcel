@@ -326,14 +326,17 @@ export type AuthorizedDispositionOutcome =
 
 /**
  * 与 adapters/http 的 authorizedDispositionResponse 一一对应:`已记录`带去向与之后的委托状态;
- * 撞上既有处置时带先到那一份的去向;`任务已完结`带既有决定——处置人要知道输给了什么;
- * `版本已换代`带当前版本供重读队列;处置成立而随附释放未确定完成时带补偿续办引用。
+ * 撞上既有处置时带先到那一份的去向;`任务已完结`带既有决定——处置人要知道输给了什么,决定带
+ * 主动拒绝留痕时再带实际决定方与结构化原因;`版本已换代`带当前版本供重读队列;处置成立而随附释放
+ * 未确定完成时带补偿续办引用。
  */
 export interface AuthorizedDispositionResponseBody {
   outcome: AuthorizedDispositionOutcome;
   requestState?: string;
   dispositionChoice?: AuthorizedDispositionChoice;
   decisionKind?: 'ACCEPTED' | 'REJECTED';
+  decider?: string;
+  rejectionReason?: string;
   currentVersion?: string;
   compensationReference?: string;
 }
@@ -428,11 +431,16 @@ export interface ManualReviewCompletionResponseBody {
   currentVersion?: string;
 }
 
-/** 主动拒绝命令的封闭结果。撞上既有决定时交回先到那一个,可能是接受。 */
+/**
+ * 主动拒绝命令的封闭结果。撞上既有决定时答 TASK_ALREADY_CLOSED 并交回先到那一个,可能是接受;决定带
+ * 主动拒绝留痕时再带实际决定方与结构化原因,后到者凭它们自己比出是重放还是输给了别人。
+ */
 export interface ActiveRejectionResponseBody {
   outcome: string;
   requestState?: string;
   decisionKind?: 'ACCEPTED' | 'REJECTED';
+  decider?: string;
+  rejectionReason?: string;
   pendingReason?: string;
   continuationReference?: string;
   compensationReference?: string;
