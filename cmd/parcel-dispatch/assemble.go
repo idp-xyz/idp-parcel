@@ -301,8 +301,9 @@ var veDeliveryUndecidedSentinels = []error{
 	vetf.ErrProjectionUndecided,
 }
 
-// veHandoverUndecidedSentinels 只给 VE 交接投影这一路。本路不 FanOut 给 PS：终局只认
-// 有效交付；NO/NR 控制转移不在本票。
+// veHandoverUndecidedSentinels 只给 VE 交接投影这一路。与 TF 派送发起那一路
+// （deliveryDispatchOnHandoverUndecidedSentinels）分开列：同一封信扇出给两路，各包各的哨兵再 FanOut。
+// 不投 PS：终局只认有效交付；NO 控制转移与 NR 复核另立票（demo-chain-gaps/61–63）。
 //
 // 不在名单里：ErrHandoverRecordInconsistent、ErrHandoverUntranslatableAnswer、
 // ErrHandoverProjectionHandoffPending、veconsume.ErrUnexpectedProjectionOutcome。
@@ -680,7 +681,7 @@ var chargeOccurrenceFormedUndecidedSentinels = []error{
 // TF 有效交付登记 → FanOut（先 VE 投影，再 PS 终局 UC-PS-004）、
 // TF 实际承运商首次有效收寄登记 → 只投 PS 面单渠道终局判断（lc/25，ADR-0135；不 FanOut：
 // VE 侧今天没有它的消费者，登记接不住的比不登记更糟）、
-// TF 权威交接登记 → 只投 VE 投影（不 FanOut 给 PS：终局只认有效交付）、
+// TF 权威交接登记 → FanOut（先 VE 投影，再 TF 派送发起 ADR-0216；不投 PS：终局只认有效交付）、
 // PS 包裹服务终局形成 → FanOut（先 VE 投影，再 SA 发起 SELL 评价 ADR-0190；不投 PS：终局是 PS 自家事实，
 // 让它经调度器消费自己等于把一份事实记两遍）、NR 包裹级初始路由判断 → FanOut（先 VE 投影，再 TF 逐段运输
 // 准备 ADR-0201 决定七；应消费方里的 NO 今天仍没有消费者，不登）、TF 替代/退运旅程启动 → 只投 VE 投影（不 FanOut：一封信带全体成员，
@@ -1000,6 +1001,19 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: handover projection undecided translation: %w", err)
 	}
+	tfHandover, err := triggerDeliveryDispatchOnHandoverConsumer(db, inboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	tfHandoverRouted, err := dispatch.WithUndecidedSentinels(tfHandover, deliveryDispatchOnHandoverUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: delivery dispatch on handover undecided translation: %w", err)
+	}
+	// 先 VE 后 TF，沿路由表先 VE 的惯例：派送发起停在未决重投时，VE 那一路按 inbox 跳过，不重复投影；反过来也不让投影等派送。
+	handoverFan, err := dispatch.FanOut(veHandoverRouted, tfHandoverRouted)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: transport handover fan-out: %w", err)
+	}
 
 	veExternalTracking, err := deriveExternalTrackingConsumer(db, inboxStore, projectionDerive)
 	if err != nil {
@@ -1137,7 +1151,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 			sainbox.BuyEvaluationRecordedEventType:                 evaluationRecordedFan,
 			ppinbox.EvaluationRequestSubmittedEventType:            routedEvaluationRequests,
 			ppinbox.SellEvaluationRequestSubmittedEventType:        routedSellEvaluationRequests,
-			veinbox.TransportHandoverRegisteredEventType:           veHandoverRouted,
+			veinbox.TransportHandoverRegisteredEventType:           handoverFan,
 			veinbox.ExternalCarrierTrackingJudgedEventType:         veExternalTrackingRouted,
 			veinbox.FinalOutcomeFormedEventType:                    finalOutcomeFan,
 			veinbox.InitialRouteFormedEventType:                    initialRouteFan,

@@ -1158,9 +1158,9 @@ func saValue[T any](t *testing.T, construct func(string) (T, error), raw string)
 	return built
 }
 
-// Covers: 路由表第六条——TF 权威交接登记只投 VE 投影，不 FanOut 给 PS。手法同前五条：
-// 毒丸载荷（缺 tenantId/object/scope/version 四维之一）让消费门显式拒收入账并交回
-// nil，因此这一条会被定稿。漏挂或挂错的话这里撞的是无订阅者。
+// Covers: AT-TF-199（路由表的交接一条）——TF 权威交接登记 FanOut 给 VE 投影与 TF 派送发起两路（ADR-0216），不投 PS。
+// 手法同前几条：毒丸载荷（缺 tenantId/object/scope/version 四维之一）让两路消费门都显式拒收入账并交回 nil，因此这一条会被
+// 定稿；漏挂或挂错的话这里撞的是无订阅者，少挂一路时那一路名下没有 inbox 行。
 func TestARegisteredTransportHandoverReachesTheConsumerThroughTheRouteTable(t *testing.T) {
 	beat, db, store := wiredBeat(t)
 	enqueueForBeat(t, db, store, "handover-1", veinbox.TransportHandoverRegisteredEventType, `{}`)
@@ -1170,8 +1170,16 @@ func TestARegisteredTransportHandoverReachesTheConsumerThroughTheRouteTable(t *t
 		t.Fatalf("一拍：%v", err)
 	}
 	if published != 1 {
-		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把交接登记投给 VE",
+		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把交接登记投出去",
 			published, recordedFailureCode(t, db, "handover-1"))
+	}
+	for _, consumer := range []string{
+		"visibility-exception/derive-projection-from-transport-handover",
+		"transport-fulfillment/trigger-delivery-dispatch-from-transport-handover",
+	} {
+		if n := inboxRowsOf(t, db, consumer, "handover-1"); n != 1 {
+			t.Fatalf("%s 名下 inbox 行 = %d, want 1——FanOut 少了这一路", consumer, n)
+		}
 	}
 }
 
