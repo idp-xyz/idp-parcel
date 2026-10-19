@@ -1,10 +1,10 @@
 # 05 第三期：身份核对读不动翻成`待识别实物已建立` + 身份核对态「未核对」——ADR-0186 决定二（草案 C1-T1）身份支的 5xx 由本票翻转
 
 Category: enhancement
-Status: ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）；开工前先看下面 Blocked by 里那项用户决定
+Status: ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）；Blocked by 里原挂的用户决定已于 2026-10-19 由会话 idp-parcel-9b 代决
 Blocked by:
 - 04 进 main（前提「挡住同一作业实物重复形成控制起点」）；02、03 经它已在 main。
-- 用户决定：ADR-0199 越权风险点「重核只有信封与人工两个触发」那一条——PS 读不动期间落下的未核对行，若号码的关联早在读不动之前就已形成，由什么续上：落未核对行的同一笔事务给自己投一封重核意图 / 同一来源重投时对未核对行重核 / 明确接受只靠人工。2026-10-19 未裁。
+- ~~用户决定~~ 已解：未核对行由什么续上，2026-10-19 会话 idp-parcel-9b 代决取「落未核对行的同一笔事务自投重核门铃」，见 ADR-0199 决定三与越权风险点「未核对行由自投门铃续上」。
 父票：[01](./01-node-reception-preserves-the-delivery-source.md)
 出处：票 01 裁定分期之「三、身份读不动翻成『待识别 + 未核对』」与「核对态要不要放进设备响应」那一问；ADR-0199 决定五。票 01「做什么」点名的三条真库用例归本票。
 地盘：
@@ -15,6 +15,7 @@ Blocked by:
 - internal/nodeoperations/adapters/http/receive_delivered_unit.go、query_node_operations_records.go 及其测试
 - cmd/parcel-api/assemble_reception.go、cmd/parcel-frontline-import/intake_import.go（两处装配给身份读口包 savepoint；前线导入明细）
 - cmd/parcel-api 下新起真库用例文件
+- cmd/parcel-dispatch/assemble.go（自投门铃的路由；另一会话的在途地盘，动手前先报文件名）
 - apps/admin-web/src/pages/operations/**（待识别实物页显示身份核对态）
 - docs/adr/0186-node-reception-records-physical-facts-when-the-service-result-read-fails.md（文末追加复核记录，决定原文不动）
 - docs/adr/README.md（0186 一行标部分停用）
@@ -42,7 +43,7 @@ ADR-0199 决定五列的前提，缺一个都不翻：
 2. **身份读口经 savepoint 隔离**：两处生产装配都包，ctx 不在事务里时直通，写法同 `SavepointedServiceResultView`；`transactionalReception` 与前线导入装配的头注随之改写。
 3. **存储**：身份核对态一列，封闭 `CHECKED` / `UNCHECKED`，只有待识别行带；既有待识别行回填 `CHECKED`，迁移头注写推定依据（翻转前身份读不动从不落行：ADR-0186 决定二；ADR-0186 之前读不动答零行的待确认：票 operator-channel/29 现象；ADR-0196 的冲突版来自读口答复了的那次送站），写法同迁移 0006。
 4. **处处可见**：HTTP 答复带 `identityCheck`（信息格，不进 outcome 词表，首答与重放都带）；前线导入明细写「身份未核对：候选缺席不代表查无此号」，这一行照常记成功、不再记未决；复核目录待识别行带核对态；管理台待识别实物页显示；`ParcelContainmentView` 在同租户有未核对在袋件时，对没有已关联在袋实物的包裹答`不可归属`。
-5. **重核接上未核对**：票 03 的重核对象本就含不带关联、不记冲突的待识别；本票补「未核对 → 零候选」时追加「待识别 · 已核对」那一格的用例；按上面那项用户决定接上自动续办（若决定是只靠人工，写进完成记录）。
+5. **重核接上未核对**：票 03 的重核对象本就含不带关联、不记冲突的待识别；本票补「未核对 → 零候选」时追加「待识别 · 已核对」那一格的用例；落未核对行的同一笔事务自投重核门铃（ADR-0199 决定三），NO 的 inbox 消费者接住后走票 03 的同一份重核，只看那一件；身份核对仍读不动就交回 error、门铃退避重投。
 6. **改随新答法变了的用例与注释**：ADR-0186 名下「身份核对读不动不形成答案」的用例（`TestDependencyFailuresFormNoAnswer` 里身份核对那一格，HTTP 与前线导入两侧的对应用例）改钉新答法；`ReceiveDeliveredUnitHandler.Handle` 与 `receive` 头注里「身份核对读不动…交回 error」改写。
 7. **ADR-0186 复核记录**：决定二「身份核对读不动：不形成答案」与决定七「身份读口不隔离」自本票落地起部分停用（ADR-0199 决定五），决定二里「不拿空候选顶替」照旧、由核对态兑现；adr/README 的 0186 一行加「部分停用」注。
 8. **AT 点名**：`AT-NO-051`。
@@ -56,7 +57,7 @@ ADR-0199 决定五列的前提，缺一个都不翻：
 ## 完成判据
 
 - [ ] 真库用例一（经生产装配）：PS 身份读口读不动期间，同一来源重投，收寄不多出一条：答已有结果，`recordedOutcome` 是 `PENDING_IDENTIFICATION`、`identityCheck` 是 `UNCHECKED`，册上一行、一个控制起点、意图为零。
-- [ ] 真库用例二：PS 恢复后，重核落下关联，意图一封，业务时间是原收寄时刻。触发照上面那项用户决定；决定之前至少经人工发起跑通。
+- [ ] 真库用例二：PS 恢复后，重核落下关联，意图一封，业务时间是原收寄时刻。触发是自投门铃，不经人工：PS 恢复后门铃重投即落下关联；PS 仍读不动时门铃交回 error、册上不追加。
 - [ ] 真库用例三：换来源重扫同一作业实物，不再形成第二个控制起点（并入未核对的那一条，答已有结果）。
 - [ ] savepoint 用例：身份读口报 SQL 级错误时，收寄那笔事务照常提交、未核对行落下；ctx 不在事务里时直通（照 `service_result_savepoint_test` 的做法）。
 - [ ] 零候选（`CHECKED`）与未核对（`UNCHECKED`）在 HTTP 答复、前线导入明细、复核目录、管理台上分得开；`ParcelContainmentView` 对未核对在袋件答`不可归属`，对已关联在袋的包裹仍答`在`（`AT-NO-051`）。
