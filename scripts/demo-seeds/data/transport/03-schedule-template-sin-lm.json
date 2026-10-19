@@ -1,0 +1,13 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "template": "SYN-SCHED-SIN-LM-DAILY",
+  "connection": "SYN-CONN-SIN-LM",
+  "fromNode": "SYN-NODE-SIN-HUB",
+  "toNode": "SYN-NODE-SIN-LM",
+  "weekdays": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"],
+  "departureLocalTime": "07:00",
+  "durationMinutes": 90,
+  "timeZone": "Asia/Singapore",
+  "serviceScope": "SYN-SCOPE-01",
+  "effectiveFrom": "2026-01-01"
+}

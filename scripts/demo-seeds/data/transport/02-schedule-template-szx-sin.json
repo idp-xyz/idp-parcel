@@ -1,0 +1,13 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "template": "SYN-SCHED-SZX-SIN-DAILY",
+  "connection": "SYN-CONN-SZX-SIN",
+  "fromNode": "SYN-NODE-SZX-GATE",
+  "toNode": "SYN-NODE-SIN-HUB",
+  "weekdays": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"],
+  "departureLocalTime": "10:00",
+  "durationMinutes": 300,
+  "timeZone": "Asia/Shanghai",
+  "serviceScope": "SYN-SCOPE-01",
+  "effectiveFrom": "2026-01-01"
+}
