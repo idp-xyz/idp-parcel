@@ -1,7 +1,7 @@
 # 63 交接进入节点时路由复核
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg63（基于 claude-dcg59，见文末「完成记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
+Status: in-progress——完工待评审与进 main，分支 claude-dcg63（基于 claude-dcg59，见文末「完成记录」；隔离评审 1 项阻断已修，见文末「评审记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
 Blocked by: [59](./59-handover-declares-releasing-receiving-and-onward-nodes.md)
 地盘：NR 新 `adapters/inbox/transport_handover_consumer.go`、新 `adapters/transportfulfillment/reassess_on_handover.go`、新 `adapters/parcelshipment/accepted_carried_geo.go`；`cmd/parcel-dispatch/assemble.go` FanOut 加一路 + 新 `assemble_reassess_on_handover.go` + 新真库用例；文档 ADR-0215（ADR-0075 Links 加后继指针、`docs/adr/README.md` 状态格注明部分停用）、UC-NR-003 触发行与 AT、NR CONTEXT 一句。
 出处：[04](./04-handover-does-not-move-node-control-or-trigger-reassessment.md)；方案「复核」04「票面漏掉的真阻断」，「代决」C8、C9，「需要的 ADR」ADR-0215。
@@ -121,3 +121,59 @@ M
 - **迁移、种子都没动。** NR 不需要迁移，演示种子不需要改。
 - **待裁**：代决 1 的 AT 号读法、代决 7 的复核册扩列去向（票 84），待协调方或 NR owner 确认。
 
+
+## 评审记录（2026-10-19，作者子代理，分支 `claude-dcg63`）
+
+隔离评审 1 项阻断，非阻断 7 项（其中 3 项建议进 main 前修）。逐项去向如下。
+
+### 阻断（已修）
+
+1. **NR CONTEXT「客户地址继续由 `parcel-shipment` 保存」那条的硬句没有限定条件。** 那一句仍写「也不另建读取小包托运地址的端口」，同一节新增那句却说消费侧适配器去读，按 ADR-0215 自己的读法两句互相矛盾。
+   - 改法：在原句末尾补适用场景，原句不动，内容是「受理之后不由小包托运请求触发的复核除外……只取用地理维，地址本体与身份内容不取用、不落库（ADR-0215）」。
+   - 新增那一句不再重述投影的取法，只指向「客户地址」那一条的例外。CONTEXT 里这条例外只在一处表达。
+
+### 建议进 main 前修的（已修）
+
+2. **注释在数别处的东西。** 下面几处都改成不计数、不列举的说法，只改注释：
+   - `transportHandoverConsumerName` 与 `Consume` 的注释：「还扇出给别的消费者」「与本包其他消费门共用」；
+   - `assemble.go` 交接 FanOut 上方：「排在前面的各路」；
+   - 生产路由用例：「各路认的」；
+   - 评审没点名、但属同一类的几处也顺手改了：
+     - `assemble_reassess_on_handover.go` 的哨兵名单注释：「与同一封交接信封扇出的其他各路分开列」「各种触发」，两个包的 `ErrUntranslatableAnswer` 改成按包名点名；
+     - `reassess_on_handover.go`：「认可的依据之一」「交接判断的封闭集」「各条触发」「这几种结论」；
+     - `accepted_carried_geo.go`：「这几条链」「随信封携带与经本适配器读取」；
+     - 消费门注释：「各条复核触发」。
+3. **`assemble_test.go` 中 AT-TF-199 的注释还写「两路」。** 改成「各路消费门」，断言不动。
+4. **NR 一路未决会占住交接分区头。** ADR-0215 的 Consequences 补一条，越权风险点补第 10 条：
+   - 分区键是（租户 + 载运对象 + 类型段），NR 停在未决时，同一对象后续交接的追踪投影与派送发起要推迟，最长到重投预算耗尽。
+   - 未决原因里有证据未配置、冻结形态未配置这类租户取值缺口，它们在预算之内不会自愈。
+   - ADR-0074 与 ADR-0216 的「下一拍」因此受到牵连。
+   - 写明 owner 可选的两种缓解：未配置类改为入账并记一条未决复核；或者把 NR 一路拆成独立分区的信封。
+   - 第 9 条删去「与收寄触发同一种代价」，改指第 10 条。
+   - 代码照旧重投。理由是复核登记册今天没有「未决复核」这一行可落，入账就等于丢掉这次复核；缓解要落库形状与重判入口，归 NR owner 另裁。
+
+### 其余非阻断
+
+5. **两种触发分属不同分区，复核不按业务时间排序。** 采纳，ADR-0215 补越权风险点第 11 条，把按业务时间排序的处置留给后继票。这一条没有另立票，理由是它和 UC-NR-003「一致性、幂等与并发」对收寄与实测各路的同一要求一起处置更合适，越权风险点已经点名。
+6. **措辞比实际说得满。** 已修：
+   - ADR-0215 决定二改为「只取用地理维……委托聚合按小包托运的读法整份读回，地址本体与身份内容不取用、不落库」；
+   - 越权风险点 1 改为「首次从委托聚合取地理维」，并写明此前只有初始路由经同一个读法读聚合，按包裹反查也是新的；
+   - adr/README 的 0075、0215 两行与 CONTEXT-MAP 的 PS→NR 边措辞同步改；
+   - 顺手把 ADR-0215 里的「Consequences 末条」「Alternatives 末条」换成按条目原文指认：补了一条 Consequences 之后，「末条」就已经指错了。
+7. **坏行重建失败被折进未决哨兵。** 本票保持现状。这与 VE 交接一路是同一种既有折法，收紧要先由提供方仓储把重建失败做成单独的哨兵。另立票 [89](./89-handover-consumers-retry-deterministic-rebuild-failures-as-undecided.md)，TF、PS 两个提供方与各消费侧一并处理。
+8. **CONTEXT-MAP 的 `node-operations / transport-fulfillment → network-routing` 边上，「（ADR-0215）」是纯文本。** 已改成链接。
+
+### 号
+
+新立票 89，评审要求「号接现有最大号」。取号时盘过各分支：main 与 origin/main 最大号 79，`claude-dcg61` 81，`claude-dcg63` 84，`claude-dcg65` 87，`claude-dcg67` 88，`claude-dcg69` 79。协调方没有给这一号，进 main 时请核对是否撞号。
+
+### 验证
+
+`go build ./...`、`go vet`（`./cmd/parcel-dispatch/`、`./internal/networkrouting/...`）、`gofmt -l` 都干净。在 `IDP_PARCEL_POSTGRES_DSN` 下跑 `go test -p 1 -count=1 ./internal/networkrouting/... ./cmd/parcel-dispatch/ ./internal/architecture/`，全部 ok。没有动迁移与种子。
+
+### 提交
+
+- `a453e237`：文档。CONTEXT、CONTEXT-MAP、ADR-0215、adr/README。
+- `5187678d`：注释不再计数。
+- `c7b8392a`：立票 89。
+- 本笔：评审记录。
