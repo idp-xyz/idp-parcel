@@ -1,6 +1,6 @@
 # ADR-0209：供应商协议声明收费发生条件——逐原因计不计费、计费带数量形，发生项登记按采用的那一版判，断言期退场
 
-Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/29，代决出自 `.scratch/demo-chain-gaps/tf-chain-plan.md` 的「07 运输收费发生项」D07-1 与「需要的 ADR」里 ADR-0209 一条。部分停用 [ADR-0207](./0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md) 决定三的断言期判法与决定四串行化那一句的键，适用场景见决定四、六与文末「对已接受记录的作用」。越权风险点见文末，待 PC owner 与 TF owner 复核。）
+Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/29，代决出自 `.scratch/demo-chain-gaps/tf-chain-plan.md` 的「07 运输收费发生项」D07-1 与「需要的 ADR」里 ADR-0209 一条。部分停用 [ADR-0207](./0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md) 决定三的断言期判法与决定四串行化那一句的键，适用场景见决定四、六与文末「对已接受记录的作用」。越权风险点见文末，待 PC owner 与 TF owner 复核。）**部分停用**（2026-10-19）：决定五「登记者取自操作者信封的主体」一句已由 [ADR-0218](./0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 停用，**适用场景**只限实际履约发生项自动形成那一路（没有操作者信封，登记者记本上下文的系统身份）；运营决定那一路与其余各条不变，本记录正文不改写。
 Date: 2026-10-19
 
 ## Context
@@ -110,3 +110,4 @@ Date: 2026-10-19
 - [UC-TF-005](../application/transport-fulfillment/UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md)：步 9，`AT-TF-166` 至 `170`
 - 票 `.scratch/demo-chain-gaps/issues/29-supplier-agreements-declare-charge-occurrence-conditions.md`
 - [ADR-0207](./0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md) 文末「补记：票 28 落地时的补充裁定」：订舱与取消的范围取那一次订舱、取消只认订舱一级，回答本记录越权风险点 2 与 Consequences「订舱与取消的范围怎么取由票 28 定」；演示干线协议以 v3 再发，本记录决定六的 v2 不改
+- [ADR-0218：实际履约发生项由交接与有效交付信封自动形成](./0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md)：部分停用本记录决定五「登记者取自操作者信封的主体」（限自动形成那一路）
