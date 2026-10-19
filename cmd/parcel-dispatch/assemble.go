@@ -704,6 +704,7 @@ var chargeOccurrenceFormedUndecidedSentinels = []error{
 // 「TF 实际承运商首次有效收寄登记」只接 `carrier-first-effective-pickup.registered`，不接
 // `external-carrier-tracking.judged`——后者按 TF CONTEXT 不构成收寄，在本进程只投 VE 投影。
 // 「TF 权威交接登记」只接 `transport-handover.registered`，不接 PS。
+// 「TF 权威交接登记」的 FanOut 另投 NR 路由复核一路（UC-NR-003，ADR-0215），排在 TF 派送发起之后。
 //
 // 上面几处一律按名字指，不按「第几条」——本注释的枚举刚被 ADR-0086 的两扇门从头部
 // 顶偏过一次（原三处序数在 1665fdb 上还都是对的，加了「委托已提交」与「复核已完成」
@@ -1017,9 +1018,17 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: node control on handover undecided translation: %w", err)
 	}
+	nrHandover, err := reassessOnHandoverConsumer(db, inboxStore, settings, clock)
+	if err != nil {
+		return nil, err
+	}
+	nrHandoverRouted, err := dispatch.WithUndecidedSentinels(nrHandover, reassessOnHandoverUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: reassess on handover undecided translation: %w", err)
+	}
 	// 先 VE 后 TF，沿路由表先 VE 的惯例：派送发起停在未决重投时，VE 那一路按 inbox 跳过，不重复投影；反过来也不让投影等派送。
-	// NO 节点控制转出（ADR-0214 决定一）不靠它在扇出里的位置：FanOut 每一路都调，各路各记 inbox 账，谁停在未决都不让别路重做。
-	handoverFan, err := dispatch.FanOut(veHandoverRouted, tfHandoverRouted, noHandoverRouted)
+	// NO 节点控制转出（ADR-0214 决定一）与 NR 路由复核（ADR-0215）不靠它们在扇出里的位置：FanOut 每一路都调，各路各记 inbox 账，谁停在未决都不让别路重做。
+	handoverFan, err := dispatch.FanOut(veHandoverRouted, tfHandoverRouted, noHandoverRouted, nrHandoverRouted)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: transport handover fan-out: %w", err)
 	}
@@ -1871,50 +1880,10 @@ func networkIntakeConsumer(
 	settings dispatchSettings,
 	clock systemClock,
 ) (dispatch.Consumer, error) {
-	routeStore, err := nrpostgres.NewInitialRoutes(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: initial route store: %w", err)
-	}
-	evidence, err := initialRouteEvidence(db, clock, customsApplicabilitySource(db))
+	reassessHandler, err := reassessRouteHandler(db, clock)
 	if err != nil {
 		return nil, err
 	}
-	applicabilities, err := nrpostgres.NewPlanApplicabilities(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: plan applicabilities: %w", err)
-	}
-	reassessments, err := nrpostgres.NewRouteReassessments(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: route reassessments: %w", err)
-	}
-	handoffLog, err := nrpostgres.NewRouteHandoffLogs(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: route handoff log: %w", err)
-	}
-	identities, err := nrpostgres.NewRouteIdentities(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: route identities: %w", err)
-	}
-
-	rerouteFacts, err := nrpostgres.NewAutoRerouteFactsCatalog(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-dispatch: auto reroute facts: %w", err)
-	}
-	reassessHandler := nrapplication.NewReassessRouteHandler(nrapplication.ReassessRouteDeps{
-		Routes:        routeStore,
-		Evidence:      evidence,
-		Applicability: applicabilities,
-		Store:         reassessments,
-		Log:           handoffLog,
-		Identities:    identities,
-		Clock:         clock,
-		// 自动改路四条件的事实目录已就位（审计票 05）：按判断键取当前陈述，从未
-		// 登记的键照端口第二格答未配置——失效照常落库、改路评估整段不做，与先前
-		// 显式 nil 在空册上的行为等价；登记过的键才走 7B/7C。改善阈值、改路条件
-		// 与权限、冻结边界的取值属 PAR-NET-14 实例半边，目录只存登记方折算完的
-		// 陈述与出处，不种任何默认行。
-		AutoReroute: rerouteFacts,
-	})
 
 	adoptions, err := pspostgres.NewIntakeAdoptions(db)
 	if err != nil {

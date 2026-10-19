@@ -1162,6 +1162,7 @@ func saValue[T any](t *testing.T, construct func(string) (T, error), raw string)
 // TF 派送发起见 ADR-0216，NO 节点控制转出见 ADR-0214 决定一），不投 PS。手法同前几条：毒丸载荷（缺 tenantId/object/scope/version
 // 四维之一）让各路消费门都显式拒收入账并交回 nil，因此这一条会被定稿；漏挂或挂错的话这里撞的是无订阅者，少挂一路时那一路名下
 // 没有 inbox 行。
+// Covers: AT-NR-064（路由表那一半）——同一封信另投 NR 路由复核一路（ADR-0215），毒丸在那一路同样拒收入账。
 func TestARegisteredTransportHandoverReachesTheConsumerThroughTheRouteTable(t *testing.T) {
 	beat, db, store := wiredBeat(t)
 	enqueueForBeat(t, db, store, "handover-1", veinbox.TransportHandoverRegisteredEventType, `{}`)
@@ -1178,6 +1179,7 @@ func TestARegisteredTransportHandoverReachesTheConsumerThroughTheRouteTable(t *t
 		"visibility-exception/derive-projection-from-transport-handover",
 		"transport-fulfillment/trigger-delivery-dispatch-from-transport-handover",
 		"node-operations/transfer-control-on-transport-handover",
+		"network-routing/reassess-on-transport-handover",
 	} {
 		if n := inboxRowsOf(t, db, consumer, "handover-1"); n != 1 {
 			t.Fatalf("%s 名下 inbox 行 = %d, want 1——FanOut 少了这一路", consumer, n)
