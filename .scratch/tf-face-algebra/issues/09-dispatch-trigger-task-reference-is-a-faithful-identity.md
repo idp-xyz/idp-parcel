@@ -1,7 +1,7 @@
 # 09 派送发起的确定性任务引用不是忠实身份：键可被手工建任务口占用、拼接不单射，对象首拍就答「已形成」而它并没有派送任务
 
 Category: bug
-Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（tf-face-algebra/10 已进 main），分支 `claude-tfa09`。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 代决（见「裁定」）；排在 tf-face-algebra/10 进 main 之后（同碰手工建任务口）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: resolved——2026-10-19 进 main（代码验证钉 `502a738f`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（tf-face-algebra/10 已进 main），分支 `claude-tfa09`。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 代决（见「裁定」）；排在 tf-face-algebra/10 进 main 之后（同碰手工建任务口）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment-delivery-dispatch-triggers, /transport-fulfillment-dispatch-task-registrations
@@ -84,8 +84,8 @@ Blocked by: 无
 - [x] 并发首拍真库回归照过：一笔 201，另一笔读回赢家答已在册。
 - [x] `go build ./...`、`go vet ./...` 退出码 0，`gofmt -l .` 无输出；带 DSN 跑 `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/... ./internal/architecture/...`，全部 ok。
 - [x] 新增生产文件时，在干净检出上重生成 `docs/product/MECHANISM-INVENTORY.md`。
-- [ ] 票 15 补记下追加回写行（只加行）。
-- [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：作者自验；非作者评审，两轴分开；推送方在干净检出上带 DSN 跑全量。
+- [x] 票 15 补记下追加回写行（只加行）。
+- [x] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：作者自验；非作者评审，两轴分开；推送方在干净检出上带 DSN 跑全量。
 
 ## 完成记录（2026-10-19，会话 idp-parcel-9b 的实施子代理，分支 claude-tfa09）
 
@@ -173,3 +173,9 @@ S（隔离合成：`SYN-` 租户与对象、三缝替身；未接任何租户真
 - **Standards**：查在册读口与任务口同一张登记册，装配拆出 `deliveryDispatchTriggerOver` 让真库用例只换三条缝。注释只写为什么。
 - **非阻断（已修于 `f099b64f`）**：`DeliveryDispatchUndecidedReason` 头注仍说三条缝一条都没接，生产装配早已全接，改为说明这一格守的是缺件的装配。
 - 剩余局限（作者已记）：恰好落在新键上的旧拼法存量（要刻意构造段）核得过即被认，存量不回写、无从分辨来源。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-tfa09` rebase 到远端 main 之上快进推送；rebase 只撞机制清点，在新树上重生成解决（cmd 测试文件 155）。评审修补一笔 `f099b64f`（头注，不改行为）在验证钉之内。
+- 票 15 补记下的回写行由推送方随本笔追加。
+- 推送方全量一次：钉 `502a738f` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 144 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
