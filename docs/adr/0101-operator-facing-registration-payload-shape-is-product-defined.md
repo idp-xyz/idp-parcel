@@ -1,6 +1,6 @@
 # ADR-0101：运营操作者面的登记载荷形状由产品定义，属机制半边——「渠道原始载荷 → 登记快照」的翻译只在客户渠道上属渠道契约；价卡首例：产品发布版本化导入模板，导入形成持久化草稿，校验与发布共用一份规范化摘要，批准是独立的操作者动作，审批职责规则缺省朝拦
 
-Status: Accepted（2026-09-03，用户经 IDP 队列通道 4 授权本会话「作为业务和系统专家自决，先按建议出 ADR」，与 [ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md) 同一次授权、同一批裁决。裁决能力边界：读过 [ADR-0085](./0085-registry-write-faces-enter-the-endpoint-table-with-unconfigured-grade.md) 全文与票 [admin-write-faces/01](../../.scratch/admin-write-faces/issues/01-registry-configuration-has-no-admin-write-face.md) 文末「不逐字段建」那条评论、parcel-pricing `CONTEXT.md`「定价方案与价表版本」生命周期与「不采纳的工件形态」两节、参考蓝图 V1.2 第 38 节、`internal/parcelpricing/domain` 的 `PriceCardRegistration` 与方案快照、管理台价卡页与其 `api.ts`、`cmd/parcel-pricing-register`、`scripts/demo-seeds/seedgen`；未重读 parcel-pricing `CONTEXT.md` 其余各节、[计价规则模型最终设计](../design/pp-pricing-rule-model-final-design.md)全文与其他登记册的 `CONTEXT.md`——本记录因此只裁**载荷形状归谁定**与**价卡生命周期中草稿、已校验、已批准、已发布各态的持久化载体**，不改任何一条领域不变量，不裁其他登记册的具体形态）
+Status: Accepted（**部分停用**，2026-10-19：决定一「适用场景收窄为客户渠道载荷」由 [ADR-0139](./0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md) Decision 一**再收窄为客户既有渠道的载荷**；首方 API 的载荷形状是产品契约（ADR-0140）。2026-09-03，用户经 IDP 队列通道 4 授权本会话「作为业务和系统专家自决，先按建议出 ADR」，与 [ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md) 同一次授权、同一批裁决。裁决能力边界：读过 [ADR-0085](./0085-registry-write-faces-enter-the-endpoint-table-with-unconfigured-grade.md) 全文与票 [admin-write-faces/01](../../.scratch/admin-write-faces/issues/01-registry-configuration-has-no-admin-write-face.md) 文末「不逐字段建」那条评论、parcel-pricing `CONTEXT.md`「定价方案与价表版本」生命周期与「不采纳的工件形态」两节、参考蓝图 V1.2 第 38 节、`internal/parcelpricing/domain` 的 `PriceCardRegistration` 与方案快照、管理台价卡页与其 `api.ts`、`cmd/parcel-pricing-register`、`scripts/demo-seeds/seedgen`；未重读 parcel-pricing `CONTEXT.md` 其余各节、[计价规则模型最终设计](../design/pp-pricing-rule-model-final-design.md)全文与其他登记册的 `CONTEXT.md`——本记录因此只裁**载荷形状归谁定**与**价卡生命周期中草稿、已校验、已批准、已发布各态的持久化载体**，不改任何一条领域不变量，不裁其他登记册的具体形态）
 Date: 2026-09-03
 
 ## Context
@@ -78,3 +78,4 @@ Date: 2026-09-03
 - [首租户需求映射](../../.scratch/tenant-implementation-01/requirement-mapping.md)：「Excel → 登记批次的转换工具 待建（实施工具）」一行，本记录改其口径为产品功能
 - `internal/parcelpricing/domain`：`PriceCardRegistration`、`SourceFileIdentity`、`RehydratePriceCardRegistration` 与方案快照——本记录 Decision 三、四、五在其上加草稿载体，不改它们
 - 来源：IDP 队列通道 4 的质疑与授权（2026-09-03）
+- [ADR-0139](./0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md)：Decision 一把决定一的适用场景再收窄到客户既有渠道的载荷

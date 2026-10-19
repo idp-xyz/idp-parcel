@@ -1,6 +1,6 @@
 # ADR-0106: 等待受控补充是入账暂停——与人工复核、运营登记同组提交入账，续办由「新提交版本已形成」信封驱动；停用 ADR-0086 Context 对这一格的分侧
 
-Status: Accepted
+Status: Accepted（**部分停用**，2026-10-19：决定四「客户渠道的采信身份属 `PAR-INT-01` 接入契约，是实例半边」的适用场景由 [ADR-0139](./0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md) Decision 一收窄为**租户既有渠道的适配**；首方族的采信身份由 ADR-0139 Decision 二定。）
 Date: 2026-09-04
 
 ## Context
@@ -58,3 +58,4 @@ Date: 2026-09-04
 - [票 first-tenant-runway/09](../../.scratch/first-tenant-runway/issues/09-does-waiting-for-a-customer-supplement-actually-self-heal.md)：三问的取证与裁决
 - [票 first-tenant-runway/07](../../.scratch/first-tenant-runway/issues/07-undecided-that-never-self-heals-burns-the-retry-budget.md)：D4 / D5 把同一形状做实的先例
 - [UC-PS-001](../application/parcel-shipment/UC-PS-001-SUBMIT-SHIPMENT-REQUEST.md)：「安全续办」与`尚未决定`的结果语义
+- [ADR-0139](./0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md)：Decision 一把决定四的适用场景收窄到租户既有渠道的适配
