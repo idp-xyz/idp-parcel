@@ -1,6 +1,6 @@
 # ADR-0186：节点收寄遇跨上下文读不动——服务结果读不动照常形成收寄并记「读不动」，身份核对读不动与本方落册失败不形成答案
 
-Status: Accepted（2026-10-18。用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」；该会话经隔离子代理研判、三份对抗核验（权威一致性、实现与回归、业务后果）与合成，代 NO owner 裁定，裁定原文落在票 [operator-channel/29](../../.scratch/operator-channel/issues/29-node-reception-records-physical-facts-when-cross-context-reads-fail.md)「裁定」一节，本记录落地后取代那一节。实施与成文由该会话起的实施子代理完成。裁决能力边界：读过 UC-NO-002 的结果语义契约与应用流程表、票 [operator-channel/25](../../.scratch/operator-channel/issues/25-node-reception-carries-parcel-shipment-service-result-markers.md) 的裁定与非作者评审、票 29 全文；代码读过 `ReceiveDeliveredUnitHandler`、NO 的 HTTP 收寄端点、前线导入的收寄子命令、NO 的收寄库 postgres 适配器、两处生产装配与 settlementaccounting 适配器的 SAVEPOINT 先例。**没读** NO `CONTEXT.md` 全文、ADR-0022/0023/0089 全文与 bento `WithinTransaction` 的源码；后者的行为以真库用例实测为准。）
+Status: Accepted（2026-10-18。用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」；该会话经隔离子代理研判、三份对抗核验（权威一致性、实现与回归、业务后果）与合成，代 NO owner 裁定，裁定原文落在票 [operator-channel/29](../../.scratch/operator-channel/issues/29-node-reception-records-physical-facts-when-cross-context-reads-fail.md)「裁定」一节，本记录落地后取代那一节。实施与成文由该会话起的实施子代理完成。裁决能力边界：读过 UC-NO-002 的结果语义契约与应用流程表、票 [operator-channel/25](../../.scratch/operator-channel/issues/25-node-reception-carries-parcel-shipment-service-result-markers.md) 的裁定与非作者评审、票 29 全文；代码读过 `ReceiveDeliveredUnitHandler`、NO 的 HTTP 收寄端点、前线导入的收寄子命令、NO 的收寄库 postgres 适配器、两处生产装配与 settlementaccounting 适配器的 SAVEPOINT 先例。**没读** NO `CONTEXT.md` 全文、ADR-0022/0023/0089 全文与 bento `WithinTransaction` 的源码；后者的行为以真库用例实测为准。）部分停用：决定二「身份核对读不动：不形成答案」与决定七「身份读口不隔离」两处由 [ADR-0199](./0199-node-reception-preserves-the-delivery-source-and-rechecks-pending-identities.md) 决定五停用，随票 no-reception-source/05 进 main 生效；被停的原句见本记录文末「复核记录（2026-10-19，ADR-0199 决定五部分停用两处）」与 adr/README 该行。
 
 Date: 2026-10-18
 
@@ -59,3 +59,20 @@ UC-NO-002 写明「即使包裹已经取消或终局，节点仍可形成真实�
 2. **票 operator-channel/08「缺席交编排」只是 TF 作业事实口的分格，NO 收寄不适用。** 该票评审把「缺席交编排」记在 ADR-0023 名下，那一格在 TF 一侧成立：事实时刻缺席交编排，答 200 `SOURCE_NOT_ACCEPTED`。同一个一线作业端因此会在同一能力面上看到两种答法；按 ADR-0022 的表两者都让离线端出队交人，本记录不拉齐。
 3. **不立跨上下文「缺席字段答哪一格」的统一规则。** 缺席答哪一格取决于各口的判重键与定序靠什么，逐口定。ADR-0124 决定三是反向先例：回放命令三样缺任何一样即 400 `MALFORMED_REQUEST`，统一成「缺席交编排」会推翻它。
 4. **决定三「本方落册读写失败不形成答案」的适用面扩到 NO 的承接与集运编排**（票 [operator-channel/46](../../.scratch/operator-channel/issues/46-node-collaboration-and-consolidation-answer-no-answer-when-own-store-fails.md)）。两只编排原先在本方册读写失败时答 2xx「未决」、什么也没落，与收寄同形；今后同样交回 error（HTTP 5xx `NO_ANSWER_FORMED`，前线导入记未决、整行回滚），装配缺依赖在构造期拒。跨上下文依据读不动不在此列，仍按 no-directional-basis/01 的依据格记「读不动」。票 46 的真库用例另量到更重的一格：集运移入行在单元写下之后来源事实写失败，旧答法照常提交，单元里留下没有来源事实的成员，重跑会被读成重放而补不回——整行回滚正是为此。
+
+## 复核记录（2026-10-19，ADR-0199 决定五部分停用两处；决定原文不动）
+
+[ADR-0199](./0199-node-reception-preserves-the-delivery-source-and-rechecks-pending-identities.md) 决定五（身份核对读不动翻成`待识别实物已建立`加身份核对态「未核对」）由票 [no-reception-source/05](../../.scratch/no-reception-source/issues/05-an-unreadable-identity-check-forms-a-pending-unit-marked-unchecked.md) 落地（会话 `idp-parcel-9b` 代 NO owner 裁定，授权同 Status 行）。翻转的四个前提由票 no-reception-source/02、03、04 与该票自带的「未核对处处可见」补齐。自该票进 main 起停用本记录两处：
+
+1. **决定二「身份核对读不动：不形成答案」。** 被停的原句：「编排交回 error；HTTP 答 500 `NO_ANSWER_FORMED`、不带 `outcome`，前线导入记未决。不落册」。改为：落`待识别实物已建立`，收寄与控制照常，来源文档照存，候选为空，记身份核对态「未核对」（`UNCHECKED`）；不问服务结果、不交意图，同一笔自投一封重核门铃（ADR-0199 决定三的第三个触发）。HTTP 答 200 `PENDING_IDENTIFICATION`，信息格 `identityCheck` 为 `UNCHECKED`；前线导入记落地，明细写「身份未核对：候选缺席不代表查无此号」。同条「不拿空候选顶替」照旧成立，由核对态兑现：未核对与零候选的待识别在设备答复、前线导入明细、复核目录与管理台上分得开，`ParcelContainmentView` 对未核对在袋件答`不可归属`。同条末句「目标形态『待识别 + 身份未核对』另立票」所指的就是这次落地。
+2. **决定七「身份读口不隔离」，连同它的理由「身份读口读不动本就不形成答案，整笔回滚正是要的结果」。** 身份读口改经 savepoint 隔离（`SavepointedParcelIdentityView`，与 `SavepointedServiceResultView` 同形），两处生产装配都包：读不动要落册，那条理由的前提不在了。同条服务结果读口那一半不变。
+
+随决定二一并失效的还有 Consequences「设备遇 5xx 逐条退避」一条里「身份核对读不动现在答 5xx，设备留队重投」一句：翻转之后设备收到 2xx 就出队，续上身份靠服务端的重核门铃。同条逐条退避、不得队首阻塞的要求对其余 5xx 不变。
+
+不变的：决定一（服务结果读不动）、决定三（本方落不了册不形成答案；自投门铃入不了队也归这一格）、决定四至六、决定八。Alternatives 里「身份核对读不动即落待识别。不取」一条照留：它否决的是拿零候选顶替，翻转后的形态带核对态，不是那一条。
+
+改钉的用例：编排面 `TestDependencyFailuresFormNoAnswer` 去掉身份核对那一格，由 `TestAnUnreadableIdentityCheckFormsAPendingUnitMarkedUnchecked` 钉新答法；HTTP 面 `TestTransportProblemsCarryOnlyStableCodes` 里身份核对那一格改钉 200 未核对；生产装配面 `TestTheWiredReceptionFormsNoAnswerWhenIdentityIsUnreadable` 由 `TestTheWiredReceptionFormsAnUncheckedPendingUnitWhileIdentityIsUnreadable` 接替；前线导入面 `TestFrontlineImportLeavesTheReceivedRowUndecidedWhenIdentityIsUnreadable` 由 `TestFrontlineImportLandsTheReceivedRowUncheckedWhenIdentityIsUnreadable` 接替。
+
+## Links
+
+- 部分停用于 [ADR-0199](./0199-node-reception-preserves-the-delivery-source-and-rechecks-pending-identities.md) 决定五（决定二、决定七各一处，见上一节）。
