@@ -112,7 +112,7 @@ M
 
 ## 评审记录
 
-2026-10-19 隔离评审：阻断 1 项，已修；非阻断 6 项，修 4 项，部分采纳 1 项，改走文档 1 项。评审修补的提交：`1d77bdfe`（迁移并集）、`419110ee`（未决回滚）、`852275e9`（AT 改号与 CONTEXT 引用）、`f2547601`（ADR-0202 补记、用例改名、立票 40）。
+2026-10-19 隔离评审：阻断 1 项，已修；非阻断 6 项，修 4 项，部分采纳 1 项，改走文档 1 项。评审修补的提交：`1d77bdfe`（迁移并集）、`419110ee`（未决回滚）、`852275e9`（AT 改号与 CONTEXT 引用）、`f2547601`（ADR-0202 补记、用例改名、立票 41）。
 
 ### 阻断
 
@@ -132,7 +132,7 @@ M
    - 那枚哨兵是 TF partycommercial 适配器包里各适配器共用的（承运主体目录、派送条件、协议核对），挪进 ports 会牵动票 22 和别的口；
    - PC 侧坏数据仍与读不动混在未决里，单挪这一枚，也换不来「未决就是重试会好」。
 5. **PC 点读放在提交事务里，读失败时线上落 500**（未要求进 main 前修）。修了，用的是评审没列的第三种做法：装配壳在编排答未决时交本壳哨兵逼回滚，回滚后交回那一份未决，不拆编排。先例是 `errActionAdmissionUnreadable`。新增真库用例 `TestTheWiredTransportCommissionSubmissionAnswersUndecidedWhenTheAgreementReadAbortsTheTransaction`，把协议正文表改名让它读不到：修前答 500，修后答 200 `COMMISSION_UNDECIDED` / `SUPPLIER_AGREEMENT_UNAVAILABLE`，零写入。ADR-0202 决定三与 Consequences 已记。
-6. **分区键越限时委托落册而意图入不了队；用例名说的比证的多**（未要求进 main 前修）。修：用例改名为 `TestATransportCommissionEnqueuesPastTheConcatenatedIDLimit`，注释收窄到信封 ID 上限那一档，并指向残余去处。残余立了 [40](./40-transport-commission-handoff-does-not-separate-deterministic-rejection.md)，两条修法是照 SELL 加确定性拒收哨兵，或在草稿门限标识长度，归 TF owner 裁；ADR-0202 补风险点 11 指向它。本票不修，因为两条修法都会改答法（答 500，或新增一种未受理原因），限长的上限值又是产品策略，要 owner 裁。
+6. **分区键越限时委托落册而意图入不了队；用例名说的比证的多**（未要求进 main 前修）。修：用例改名为 `TestATransportCommissionEnqueuesPastTheConcatenatedIDLimit`，注释收窄到信封 ID 上限那一档，并指向残余去处。残余立了 [41](./41-transport-commission-handoff-does-not-separate-deterministic-rejection.md)，两条修法是照 SELL 加确定性拒收哨兵，或在草稿门限标识长度，归 TF owner 裁；ADR-0202 补风险点 11 指向它。本票不修，因为两条修法都会改答法（答 500，或新增一种未受理原因），限长的上限值又是产品策略，要 owner 裁。
 
 ### 评审修补里的代决与越权风险点
 

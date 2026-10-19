@@ -87,7 +87,7 @@ Date: 2026-10-19
 8. **种类粒度**（psb/07）。五种决定是本记录按「授予粒度等于权力粒度」定的，种类数属于产品角色模型。
 9. **提交时刻由登记方给**（TF owner）。核协议用的是登记方给的提交时刻，倒填到协议有效期内就能用一版已终止的协议提交。与 ADR-0023 同一取舍：服务端不代铸业务时间。
 10. **核对口的确定性违约有一部分答未决**（TF owner；知会 PC owner）。适配器侧的不可译答复与 PC 侧坏数据都落 `SUPPLIER_AGREEMENT_UNAVAILABLE`，登记方照「稍后原样重交」只会原样再撞。要分开，先把适配器的不可译哨兵挪进 TF `ports`、由 PC 给坏数据一个哨兵，编排再按 `errors.Is` 改答没形成答案。
-11. **分区键越限时同一笔不成立**（TF owner）。分区键与 Subject 随租户、委托标识变长；越过 `eventing.MaxPartitionKeyLength` 时信封在入队前被确定性拒收，事务不中止，委托落册而意图不在 Outbox，重放每次原样再撞。去处是票 [demo-chain-gaps/40](../../.scratch/demo-chain-gaps/issues/40-transport-commission-handoff-does-not-separate-deterministic-rejection.md)；先例是 SELL 评价请求交接口的确定性拒收哨兵。
+11. **分区键越限时同一笔不成立**（TF owner）。分区键与 Subject 随租户、委托标识变长；越过 `eventing.MaxPartitionKeyLength` 时信封在入队前被确定性拒收，事务不中止，委托落册而意图不在 Outbox，重放每次原样再撞。去处是票 [demo-chain-gaps/41](../../.scratch/demo-chain-gaps/issues/41-transport-commission-handoff-does-not-separate-deterministic-rejection.md)；先例是 SELL 评价请求交接口的确定性拒收哨兵。
 
 ## Links
 

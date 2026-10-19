@@ -106,7 +106,7 @@ func TestTransportCommissionRefusesABlankKey(t *testing.T) {
 // Covers: 委托信封 ID 定长、分区键保留可读形——委托标识取到 eventing.MaxEventIDLength 那么长，原样串接的 ID 必然越限，
 // 指纹 ID 照样入队（不随两维变长）；分区键仍是「租户/委托/口名」，运维认得出是哪份委托。只证到信封 ID 上限这一档：
 // 分区键与 Subject 仍随标识变长，越过 eventing.MaxPartitionKeyLength 照样被确定性拒收——envelope-id-bounds/01 登记的
-// 残余，去处是票 demo-chain-gaps/40。
+// 残余，去处是票 demo-chain-gaps/41。
 func TestATransportCommissionEnqueuesPastTheConcatenatedIDLimit(t *testing.T) {
 	handoff, db, pool := newCommissionHandoffFixture(t)
 	long := strings.Repeat("c", eventing.MaxEventIDLength)

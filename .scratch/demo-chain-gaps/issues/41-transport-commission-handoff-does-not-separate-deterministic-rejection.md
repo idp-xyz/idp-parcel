@@ -1,4 +1,4 @@
-# 40 运输委托交接口不分确定性拒收：分区键越限时委托落册，意图却永远入不了队
+# 41 运输委托交接口不分确定性拒收：分区键越限时委托落册，意图却永远入不了队
 
 Category: enhancement
 Status: needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [23](./23-transport-commission-submission-face.md) 的隔离评审（非阻断项，评审未要求进 main 前修）。
