@@ -237,6 +237,44 @@ func TestARedeliveredHandoverAnswersTheRecordedTransition(t *testing.T) {
 	}
 }
 
+// Covers: `AT-NO-102`（ADR-0214 决定五、六）——这一版自己的行先于别的判断：已落行的那一版此后被同链后一版更正了，原样重投仍交回
+// 它那一行，不答「已被更正」；并发里同一版另一方先落了推进行、锁下才看得见，认链认出的是这一版自己，答已在册而不是「前版已转出」。
+func TestTheVersionsOwnRowIsAnsweredBeforeTheChain(t *testing.T) {
+	t.Run("落行之后被更正，原样重投", func(t *testing.T) {
+		fixture := newTransferFixture(t)
+		fixture.handedOver(t, "v1")
+		first := fixture.transfer(t, "v1")
+		answer := fixture.handovers.answers["v1"]
+		answer.Superseded = true
+		fixture.handovers.answers["v1"] = answer
+
+		again := fixture.transfer(t, "v1")
+
+		recorded, _ := again.Transition()
+		original, _ := first.Transition()
+		if again.Outcome() != application.ControlTransitionAlreadyRecorded || recorded.Transition != original.Transition ||
+			fixture.controls.saves != 1 {
+			t.Fatalf("outcome = %s，交回 %+v，落册 %d 次, want 已在册、原那一行、1", again.Outcome(), recorded, fixture.controls.saves)
+		}
+	})
+	t.Run("同一版并发，锁下才看得见对方的推进行", func(t *testing.T) {
+		fixture := newTransferFixture(t)
+		fixture.handedOver(t, "v1")
+		winner, _ := fixture.transfer(t, "v1").Transition()
+		fixture.controls.rows = map[string]ports.ControlTransitionRecord{}
+		fixture.controls.advanceUnderLock = &winner
+		saves := fixture.controls.saves
+
+		result := fixture.transfer(t, "v1")
+
+		recorded, _ := result.Transition()
+		if result.Outcome() != application.ControlTransitionAlreadyRecorded || recorded.Transition != winner.Transition ||
+			fixture.controls.saves != saves {
+			t.Fatalf("outcome = %s，交回 %+v，又落册 %d 次, want 已在册、赢家那一行、0", result.Outcome(), recorded, fixture.controls.saves-saves)
+		}
+	})
+}
+
 // Covers: `AT-NO-103`（ADR-0214 决定四）——拒收与待确认：同链上没转出过，零写入，不认对象、不取锁。
 func TestARefusedOrPendingHandoverWritesNothing(t *testing.T) {
 	fixture := newTransferFixture(t)

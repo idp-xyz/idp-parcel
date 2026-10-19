@@ -21,13 +21,14 @@ const (
 	ControlTransferredOutOnHandover
 	// ControlNotAdvancedOnHandover：入账不推进，原因在落下的那一行上（domain.ControlNotAdvancedReason）。
 	ControlNotAdvancedOnHandover
-	// ControlTransitionAlreadyRecorded：这一版在这个方向上已有一行，交回那一行。
+	// ControlTransitionAlreadyRecorded：这一版在这个方向上已有一行，交回那一行。这一版此后被同链后一版更正了也答这一格：行是它自己
+	// 落的，重投与人工补拍都该答同一行。
 	ControlTransitionAlreadyRecorded
 	// HandoverDoesNotTransferControl：拒收或待确认，同链上也没转出过，零写入。
 	HandoverDoesNotTransferControl
 	// ControlAlreadyTransferredInChain：同链前版已经转出过，这一版仍`已交接`，零写入（ADR-0214 决定五）。
 	ControlAlreadyTransferredInChain
-	// HandoverVersionSuperseded：这一版已被同链后一版更正，零写入；后一版自己的信封来决定。
+	// HandoverVersionSuperseded：这一版已被同链后一版更正、自己又没有行，零写入；后一版自己的信封来决定。
 	HandoverVersionSuperseded
 	// ControlOnHandoverUndecided：交接登记册此刻读不动或还读不回这一版。
 	ControlOnHandoverUndecided
@@ -80,7 +81,8 @@ type ControlOnHandoverDisposition uint8
 
 const (
 	ControlOnHandoverDispositionInvalid ControlOnHandoverDisposition = iota
-	// ControlOnHandoverSettled：入账不重投。入账不推进的各格也在这里：对不上实物、没有在身控制，重投答的还是同一件事。
+	// ControlOnHandoverSettled：入账不重投。入账不推进的各格也在这里：收寄先于交接到达时，对不上实物、没有在身控制，重投答的还是
+	// 同一件事。收寄晚于交接到达的那种次序不靠重投补，见 ADR-0214 越权风险点「收寄晚于交接到达」。
 	ControlOnHandoverSettled
 	// ControlOnHandoverRetry：等交接登记册，重投可能就过。
 	ControlOnHandoverRetry
@@ -171,11 +173,15 @@ func NewTransferControlOnHandoverHandler(deps TransferControlOnHandoverDeps) (*T
 
 // Transfer 跑一版交接。各步的次序有讲究：
 //
-//  1. 读回那一版；读不动或读不回答未决。被同链后一版更正了就停：晚到的前版说的已不是这个对象此刻的结果。
-//  2. 这一版在转出方向上已有一行就交回它：重投与人工补拍都答同一行。
-//  3. 不是`已交接`：同链前版转出过就入账「控制来源链待重算」，否则零写入。不取实物锁——这一格不改变任何控制。
-//  4. `已交接`：同链前版转出过就零写入；否则认交接对象，对不上一件作业实物就入账。
-//  5. 对上一件：取实物锁、读它此刻在身的各份控制，锁下再认一次更正链（前版可能刚在锁外转出），然后按领域判转出或入账。
+//  1. 读回那一版；读不动或读不回答未决。
+//  2. 这一版在转出方向上已有一行就交回它：重投与人工补拍都答同一行，这一版此后被更正了也一样——行是它自己落的。
+//  3. 被同链后一版更正了就停：晚到的前版说的已不是这个对象此刻的结果。
+//  4. 不是`已交接`：同链前版转出过就入账「控制来源链待重算」，否则零写入。不取实物锁——这一格不改变任何控制；与前版的先后靠
+//     同一对象的交接信封同分区排队（ADR-0214 决定五），前版的推进行在这一版开读之前已经提交。
+//  5. `已交接`：同链前版转出过就零写入；否则认交接对象，对不上一件作业实物就入账。
+//  6. 对上一件：取实物锁、读它此刻在身的各份控制，锁下再认一次更正链（前版可能刚在锁外转出），然后按领域判转出或入账。
+//
+// 认更正链时认出的若是这一版自己（并发里同一版另一方先落了推进行），答已在册而不是「前版已转出」：它不是前版。
 func (handler *TransferControlOnHandoverHandler) Transfer(
 	ctx context.Context,
 	command TransferControlOnHandoverCommand,
@@ -195,9 +201,6 @@ func (handler *TransferControlOnHandoverHandler) Transfer(
 		return TransferControlOnHandoverResult{}, fmt.Errorf(
 			"node operations: handover source answered version %q for %q", handover.Reference.Version(), reference.Version())
 	}
-	if handover.Superseded {
-		return TransferControlOnHandoverResult{outcome: HandoverVersionSuperseded}, nil
-	}
 
 	existing, recorded, err := handler.deps.Controls.FindTransition(ctx, tenant, reference, domain.ControlTransitionOut)
 	if err != nil {
@@ -206,10 +209,16 @@ func (handler *TransferControlOnHandoverHandler) Transfer(
 	if recorded {
 		return TransferControlOnHandoverResult{outcome: ControlTransitionAlreadyRecorded, transition: existing}, nil
 	}
+	if handover.Superseded {
+		return TransferControlOnHandoverResult{outcome: HandoverVersionSuperseded}, nil
+	}
 
 	earlier, chained, err := handler.deps.Controls.FindAdvancedInHandoverChain(ctx, tenant, reference, domain.ControlTransitionOut)
 	if err != nil {
 		return TransferControlOnHandoverResult{}, fmt.Errorf("find an earlier transfer in the handover chain: %w", err)
+	}
+	if chained && earlier.Transition.Handover() == reference {
+		return TransferControlOnHandoverResult{outcome: ControlTransitionAlreadyRecorded, transition: earlier}, nil
 	}
 	if !handover.HandedOver {
 		if !chained {
@@ -241,9 +250,11 @@ func (handler *TransferControlOnHandoverHandler) Transfer(
 	if err != nil {
 		return TransferControlOnHandoverResult{}, fmt.Errorf("find the active controls of the handed over unit: %w", err)
 	}
-	if _, chained, err := handler.deps.Controls.FindAdvancedInHandoverChain(
+	if earlier, chained, err := handler.deps.Controls.FindAdvancedInHandoverChain(
 		ctx, tenant, reference, domain.ControlTransitionOut); err != nil {
 		return TransferControlOnHandoverResult{}, fmt.Errorf("find an earlier transfer in the handover chain under the unit lock: %w", err)
+	} else if chained && earlier.Transition.Handover() == reference {
+		return TransferControlOnHandoverResult{outcome: ControlTransitionAlreadyRecorded, transition: earlier}, nil
 	} else if chained {
 		return TransferControlOnHandoverResult{outcome: ControlAlreadyTransferredInChain}, nil
 	}
