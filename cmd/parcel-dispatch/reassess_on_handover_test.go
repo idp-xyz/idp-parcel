@@ -255,9 +255,10 @@ func registerHandover(
 	t.Helper()
 	before := syn.outboxIDsOfType(t, string(tfinbox.TransportHandoverRegisteredEventType))
 	var result tfapplication.RegisterTransportHandoverResult
+	reading := releaseGateReadingFor(t, command)
 	mustWithinTX(t, syn.transactor, t.Context(), func(txCtx context.Context) error {
 		var err error
-		result, err = register.Register(txCtx, command)
+		result, err = register.RegisterWithGateReading(txCtx, command, reading)
 		return err
 	})
 	if result.Outcome() != tfapplication.HandoverRegistered {
@@ -270,6 +271,27 @@ func registerHandover(
 	}
 	t.Fatalf("登记交接 %s 没有交出信封", command.Version)
 	return ""
+}
+
+// releaseGateReadingFor 给声明了交出节点的`已交接`配一份问过关务的交出门禁读数：交出门禁归 ADR-0213 决定四，生产上由组合根
+// 在写事务之前问来；这里只要登记过得去，读数取「不受门禁」。其余交接不问关务，交回零值，登记照不带读数那一种办。
+func releaseGateReadingFor(t *testing.T, command tfapplication.RegisterTransportHandoverCommand) tfdomain.HandoverGateReading {
+	t.Helper()
+	if command.Verdict != tfdomain.ObjectHandedOver || command.ReleasingNode == "" {
+		return tfdomain.HandoverGateReading{}
+	}
+	finding, err := tfdomain.NewGateFinding(mustTF(t, tfdomain.NewCarriedObjectReference, command.Object), tfdomain.GateNotGuarded,
+		"AADJ-"+command.Object, []tfdomain.GateBasis{{Action: "CROSS_CUSTOMS_MOVEMENT", Cause: "CUSTOMS_SCOPE_UNRESOLVED", Sources: []string{"SYN-SOURCE-63"}}})
+	if err != nil {
+		t.Fatalf("交出门禁那一格：%v", err)
+	}
+	reading, err := tfdomain.FormHandoverGateReading(tfdomain.HandoverGateReadingSpec{
+		Node: mustTF(t, tfdomain.NewNetworkNodeReference, command.ReleasingNode), Finding: finding,
+	})
+	if err != nil {
+		t.Fatalf("交出门禁读数：%v", err)
+	}
+	return reading
 }
 
 // outboxEnvelope 从 outbox 原样读回一封信，可换一个信封 ID——模拟同一份内容另一封投递。
