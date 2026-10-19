@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -161,6 +162,15 @@ func TestTheAdoptedDemoNetworkGetsPastRouteEvidenceThroughProductionWiring(t *te
 	}
 	if len(evidence.Paths) != 1 || evidence.Paths[0].Candidate.String() != "SYN-LINE-CN-SG-01@1" || len(evidence.Paths[0].Legs) != 3 {
 		t.Fatalf("候选段链 = %+v，想要 SYN-LINE-CN-SG-01@1 三段", evidence.Paths)
+	}
+	// 末端日历修订 2 登了派送时长（ADR-0217）：三段节点间段之后接一段交付段，止于覆盖收件地的 SYN-AREA-SG@1，
+	// 窗口长 240 分钟、依据指那一版日历。
+	delivery := evidence.Paths[0].Delivery
+	scope, isDelivery := delivery.DeliveryScope()
+	if !evidence.Paths[0].HasDelivery || !isDelivery || delivery.From().String() != "SYN-NODE-SIN-LM" ||
+		scope.String() != "SYN-AREA-SG@1" || delivery.Window().Basis().String() != "NODE/SYN-NODE-SIN-LM@2" ||
+		delivery.Window().Latest().Sub(delivery.Window().Earliest()) != 240*time.Minute {
+		t.Fatalf("交付段 = %+v（在场 %v），想要 SYN-NODE-SIN-LM → SYN-AREA-SG@1、240 分钟", delivery, evidence.Paths[0].HasDelivery)
 	}
 	if len(evidence.Projections) != 1 {
 		t.Fatalf("时间投影 %d 份，想要候选一份（四个节点都有处理时长）", len(evidence.Projections))

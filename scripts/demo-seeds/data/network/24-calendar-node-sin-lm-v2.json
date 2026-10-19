@@ -1,0 +1,10 @@
+{
+  "tenant_id": "SYN-TENANT-01",
+  "target_kind": "NODE",
+  "target_code": "SYN-NODE-SIN-LM",
+  "version": 2,
+  "processing_minutes": 240,
+  "delivery_minutes": 240,
+  "effective_from": "2026-06-01T00:00:00Z",
+  "basis": "SYN-NET-OPS/CHANGE-SIN-LM-DELIVERY-2606"
+}
