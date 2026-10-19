@@ -18,11 +18,11 @@
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 192 | 133 | 30 | 63 | 12 | 9 |
-| transportfulfillment | 157 | 149 | 28 | 36 | 11 | 30 |
+| transportfulfillment | 157 | 150 | 28 | 36 | 11 | 30 |
 | visibilityexception | 101 | 98 | 11 | 30 | 8 | 11 |
-| **合计** | 1273 | 1165 | 162 | 308 | 60 | 168 |
+| **合计** | 1273 | 1166 | 162 | 308 | 60 | 168 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 81、测试 144。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 81、测试 145。
 
 ## 跨上下文消费缝：43 组，114 个生产文件
 
@@ -72,7 +72,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 5 |
 
-## 迁移：12 个模块共 223 份 SQL
+## 迁移：12 个模块共 224 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -86,7 +86,7 @@
 | party_commercial | 37 |
 | pilot_governance | 8 |
 | settlement_accounting | 38 |
-| transport_fulfillment | 22 |
+| transport_fulfillment | 23 |
 | visibility_exception | 26 |
 
 ## 接线面：接入面端点 141 个，消费适配器 35 个生产文件，直投路由表 26 条
