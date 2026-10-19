@@ -172,6 +172,12 @@ echo "== 关务案件配置登记（customs-compliance：就绪/授权/规则/�
 # 它要已接收的资金事实版本和付款人规则，这两样本 CLI 都没有登记入口。
 "$BIN/parcel-customs-register" duty-collaboration -input "$SEEDS/customs/25-duty-collaboration-assessed.json"
 "$BIN/parcel-customs-register" duty-collaboration -input "$SEEDS/customs/26-duty-collaboration-not-required.json"
+# 节点关务区域（ADR-0206）：演示网络四个节点，上海枢纽与深圳口岸在 CN、新加坡枢纽与末端在 SG——租户取值（PAR-CUS-08），
+# 不是产品默认。准入判断据此判 SHA→SZX 同区只适用装载出发、SZX→SIN 跨区另加跨关务区域移动；不登时带跨区门的对象答未配置。
+"$BIN/parcel-customs-register" node-zone -input "$SEEDS/customs/27-node-zone-sha-hub.json"
+"$BIN/parcel-customs-register" node-zone -input "$SEEDS/customs/28-node-zone-szx-gate.json"
+"$BIN/parcel-customs-register" node-zone -input "$SEEDS/customs/29-node-zone-sin-hub.json"
+"$BIN/parcel-customs-register" node-zone -input "$SEEDS/customs/30-node-zone-sin-lm.json"
 
 echo "== 追踪与异常目录登记（visibility-exception：目录册 + 材料收讫） =="
 "$BIN/parcel-ve-register" milestone-mapping -input "$SEEDS/visibility/01-milestone-mapping-v1.json"

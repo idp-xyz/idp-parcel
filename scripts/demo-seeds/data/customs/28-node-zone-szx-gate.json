@@ -1,0 +1,6 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "nodeRef": "SYN-NODE-SZX-GATE",
+  "zoneRef": "SYN-ZONE-CN",
+  "appliesFrom": "2026-01-01T00:00:00Z"
+}
