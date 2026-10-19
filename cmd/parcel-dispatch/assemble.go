@@ -52,8 +52,10 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/dispatch"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	sacustoms "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/customscompliance"
+	saidentity "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/identity"
 	sainbox "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/inbox"
 	sapricing "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/parcelpricing"
+	saparcelshipment "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/parcelshipment"
 	sapartycommercial "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/partycommercial"
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	saapplication "go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
@@ -568,6 +570,29 @@ var evaluationRequestSubmittedUndecidedSentinels = []error{
 	ppsettlement.ErrEvaluationFormationUndecided,
 }
 
+// sellEvaluationOnNetworkIntakeUndecidedSentinels 是 PS 收寄采用信封 → SA 发起 SELL 评价这一路（ADR-0190 决定二、六）
+// 登记的未决哨兵：信封所指的采用记录还读不回（可见性滞后）、发起编排停在自己的未决（链上某一口、采用册、请求册、
+// 铸造口或交接口不可用）。与 network-routing 复核那一路各列各的：同一封信，两路等的依赖不同。
+//
+// 不在名单里、落 publish_failed 的：saparcelshipment.ErrAdoptionRecordInconsistent（提供方仓储不变量已破）、
+// saparcelshipment.ErrUntranslatableAnswer（词汇表外，含本包译出的命令被编排拒收）、
+// saparcelshipment.ErrUnexpectedSellEvaluationRequestOutcome，以及请求信封被框架确定性拒收那一格
+// （errors.Is ports.ErrSellEvaluationRequestHandoffRejected）——重投同一份永远同一个结果，登进名单只会以未决之名耗尽
+// 失败预算，而请求行随事务回滚，不会留下一份没有信封的请求。`不采用`、`未配置`与`包裹无商业解析`是答案，处理方
+// 入账，本来就到不了这里。
+var sellEvaluationOnNetworkIntakeUndecidedSentinels = []error{
+	saparcelshipment.ErrIntakeAdoptionNotVisible,
+	saparcelshipment.ErrSellEvaluationRequestUndecided,
+}
+
+// sellEvaluationOnFinalOutcomeUndecidedSentinels 是 PS 终局信封 → SA 发起 SELL 评价这一路的未决哨兵。与收寄采用那一路
+// 同形、只换可见性那一枚，仍各列一份：两路回读的是两本册，合成一份就会把对方的可见性也宣布成本路在等的依赖。
+// 不在名单里的几格同上；不采用的终局与有效交付以外的终局是答案，入账。
+var sellEvaluationOnFinalOutcomeUndecidedSentinels = []error{
+	saparcelshipment.ErrFinalOutcomeNotVisible,
+	saparcelshipment.ErrSellEvaluationRequestUndecided,
+}
+
 // wireDispatcher 接依赖图。它与读环境分开，是为了让组合根能对着真库整体验一遍——
 // 一个只能靠进程起停验证的装配点，等于没有验证。
 //
@@ -576,15 +601,15 @@ var evaluationRequestSubmittedUndecidedSentinels = []error{
 // 的第三扇门（ADR-0094 Decision 四：按信封里的租户取`等待运营登记`队列逐份重驱；本进程
 // 里唯一一封由 party-commercial 发、parcel-shipment 收的信）、
 // PS 接受决定 → FanOut（先 VE 客户归属确立补派生 UC-VE-008
-// AT-VE-169，再 NR 初始路由 UC-NR-001）、PS 有效网络收寄采用结果 → 路由复核
-// （UC-PS-003 步骤 8 → UC-NR-003）、NO 节点收寄形成 → FanOut（先 VE 投影 UC-VE-002，
+// AT-VE-169，再 NR 初始路由 UC-NR-001）、PS 有效网络收寄采用结果 → FanOut（先 NR 路由复核
+// UC-PS-003 步骤 8 → UC-NR-003，再 SA 发起 SELL 评价 ADR-0190）、NO 节点收寄形成 → FanOut（先 VE 投影 UC-VE-002，
 // 再 PS 来源采用）、TF 对象级场外揽收登记 → FanOut（先 VE 投影，再 PS 来源采用）、
 // TF 有效交付登记 → FanOut（先 VE 投影，再 PS 终局 UC-PS-004）、
 // TF 实际承运商首次有效收寄登记 → 只投 PS 面单渠道终局判断（lc/25，ADR-0135；不 FanOut：
 // VE 侧今天没有它的消费者，登记接不住的比不登记更糟）、
 // TF 权威交接登记 → 只投 VE 投影（不 FanOut 给 PS：终局只认有效交付）、
-// PS 包裹服务终局形成 → 只投 VE 投影（不 FanOut：终局是 PS 自家事实，让它经调度器
-// 消费自己等于把一份事实记两遍）、NR 包裹级初始路由判断 → 只投 VE 投影（不 FanOut：
+// PS 包裹服务终局形成 → FanOut（先 VE 投影，再 SA 发起 SELL 评价 ADR-0190；不投 PS：终局是 PS 自家事实，
+// 让它经调度器消费自己等于把一份事实记两遍）、NR 包裹级初始路由判断 → 只投 VE 投影（不 FanOut：
 // 按消费清点该信封的应消费方还有 NO/TF，但两侧消费者今天不存在，登记接不住的比不
 // 登记更糟）、TF 替代/退运旅程启动 → 只投 VE 投影（不 FanOut：一封信带全体成员，
 // 消费侧按成员循环拆分派生，ADR-0066）、CC 关务案件建立 → 只投 VE 投影（不 FanOut：
@@ -595,9 +620,9 @@ var evaluationRequestSubmittedUndecidedSentinels = []error{
 // 登记（sa-cc/03）、CC 付款核对形成 → SA 结算输入采用（sa-cc/09；同一条缝的反方向，各记各的 inbox 账）、
 // PP 评价已记录 → SA 供应商预期成本形成（sa-cc/01；裁决 (c) 范围只到「命令凑不齐 → 未决」，形成路等 08 的
 // 回指 / 11 接上后由后继票补）。
-// 「PS 有效网络收寄采用结果」那一路单投 network-routing；各类 FanOut 同一 EventType
-// 各投两个独立消费者，顺序一律先 VE 后 PS/NR，避免把投影或补派生堵在资格墙、终局
-// 规则墙或路由证据墙上。
+// 各类 FanOut 同一 EventType 各投两个独立消费者，顺序一律先 VE 后 PS/NR，避免把投影或
+// 补派生堵在资格墙、终局规则墙或路由证据墙上；SA 发起 SELL 评价那一路排在既有那一路之后，
+// 计费不挡履约与追踪。
 // 「TF 有效交付登记」只接 `effective-delivery.registered`，不接 `offsite-pickup.formed`。
 // 「TF 实际承运商首次有效收寄登记」只接 `carrier-first-effective-pickup.registered`，不接
 // `external-carrier-tracking.judged`——后者按 TF CONTEXT 不构成收寄，在本进程只投 VE 投影。
@@ -701,6 +726,19 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 	routedIntakes, err := dispatch.WithUndecidedSentinels(intakes, nrparcelshipment.ErrReassessmentUndecided)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: reassessment undecided translation: %w", err)
+	}
+	sellOnIntakes, err := requestSellEvaluationOnNetworkIntakeConsumer(db, outboxStore, inboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	routedSellOnIntakes, err := dispatch.WithUndecidedSentinels(
+		sellOnIntakes, sellEvaluationOnNetworkIntakeUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: sell evaluation on network intake undecided translation: %w", err)
+	}
+	networkIntakeFan, err := dispatch.FanOut(routedIntakes, routedSellOnIntakes)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: network intake fan-out: %w", err)
 	}
 
 	adoptions, err := adoptNodeIntakeConsumer(db, outboxStore, inboxStore, clock)
@@ -873,6 +911,19 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: final outcome projection undecided translation: %w", err)
 	}
+	sellOnFinals, err := requestSellEvaluationOnFinalOutcomeConsumer(db, outboxStore, inboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	routedSellOnFinals, err := dispatch.WithUndecidedSentinels(
+		sellOnFinals, sellEvaluationOnFinalOutcomeUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: sell evaluation on final outcome undecided translation: %w", err)
+	}
+	finalOutcomeFan, err := dispatch.FanOut(veFinalOutcomeRouted, routedSellOnFinals)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: final outcome fan-out: %w", err)
+	}
 
 	veInitialRoute, err := deriveInitialRouteConsumer(db, inboxStore, projectionDerive)
 	if err != nil {
@@ -931,7 +982,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 			psinbox.SettlementAccountRegisteredEventType:           routedSettlementAccount,
 			psinbox.SubmissionVersionFormedEventType:               routedSupplement,
 			nrinbox.AcceptedDecisionEventType:                      acceptanceFan,
-			nrinbox.AdoptedNetworkIntakeEventType:                  routedIntakes,
+			nrinbox.AdoptedNetworkIntakeEventType:                  networkIntakeFan,
 			psinbox.NodeIntakeFormedEventType:                      nodeIntakeFan,
 			psinbox.OffsitePickupRegisteredEventType:               pickupFan,
 			psinbox.EffectiveDeliveryRegisteredEventType:           deliveryFan,
@@ -944,7 +995,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 			ppinbox.EvaluationRequestSubmittedEventType:            routedEvaluationRequests,
 			veinbox.TransportHandoverRegisteredEventType:           veHandoverRouted,
 			veinbox.ExternalCarrierTrackingJudgedEventType:         veExternalTrackingRouted,
-			veinbox.FinalOutcomeFormedEventType:                    veFinalOutcomeRouted,
+			veinbox.FinalOutcomeFormedEventType:                    finalOutcomeFan,
 			veinbox.InitialRouteFormedEventType:                    veInitialRouteRouted,
 			veinbox.ExceptionJourneyRecordedEventType:              veExceptionJourneyRouted,
 			veinbox.CustomsCaseEstablishedEventType:                veCustomsCaseRouted,
@@ -2744,6 +2795,123 @@ func formEvaluationOnEvaluationRequestConsumer(
 	consumer, err := ppinbox.NewEvaluationRequestSubmittedConsumer(db.Transactor(), inboxStore, processing)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: evaluation request submitted consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// sellEvaluationRequester 装 ADR-0190 决定二、三的发起编排。包裹到结算账户那条链三段都接真读口：PS 委托仓储兼答
+// 委托接受时固定的商业解析回指，PC 解析库答闭包采用的结算政策，SA 账户册答账户——与受理前财务控制同一条链、同一份
+// 账户册。采用册、请求册与交接口接真册与真 Outbox 适配器。生产装配里不放任何替身：空册答未配置，那是真话，演示
+// 租户的采用行由种子登，不在这里预选时点。
+//
+// 两只计费时点消费者各调一次、各得一只：它们都是 db 上的无状态包装，共享一份反而让两条线的依赖图看不出各自要什么。
+func sellEvaluationRequester(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	clock systemClock,
+) (*saapplication.RequestSellEvaluationOnParcelMomentHandler, error) {
+	shipments, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: parcel commercial resolution source: %w", err)
+	}
+	resolutions, err := saparcelshipment.NewParcelCommercialResolutions(shipments)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: parcel commercial resolutions: %w", err)
+	}
+	closures, err := pcpostgres.NewCommercialResolutions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: commercial closures for settlement terms: %w", err)
+	}
+	terms, err := sapartycommercial.NewAdoptedSettlementTerms(closures)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: adopted settlement terms: %w", err)
+	}
+	accounts, err := sapostgres.NewSettlementAccounts(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: settlement accounts: %w", err)
+	}
+	adoptions, err := sapostgres.NewSellBillingMomentAdoptions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: sell billing moment adoptions: %w", err)
+	}
+	requests, err := sapostgres.NewSellEvaluationRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: sell evaluation requests: %w", err)
+	}
+	identities, err := saidentity.NewSellEvaluationRequestIdentities()
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: sell evaluation request identities: %w", err)
+	}
+	handoff, err := sapostgres.NewOutboxSellEvaluationRequestHandoff(db, outboxStore, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: sell evaluation request handoff: %w", err)
+	}
+	requester, err := saapplication.NewRequestSellEvaluationOnParcelMomentHandler(saapplication.RequestSellEvaluationOnParcelMomentDeps{
+		Resolutions: resolutions,
+		Terms:       terms,
+		Accounts:    accounts,
+		Adoptions:   adoptions,
+		Registry:    requests,
+		Identity:    identities,
+		Downstream:  handoff,
+		Clock:       clock,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: request sell evaluation on parcel moment: %w", err)
+	}
+	return requester, nil
+}
+
+// requestSellEvaluationOnNetworkIntakeConsumer 接 ADR-0190 决定二「有效网络收寄已采用」那一拍：PS 收寄采用信封 → SA 消费门
+// → 按采用键回读 PS 采用记录（不采用的略过）→ 发起编排。跨上下文翻译只在 SA 的 `adapters/parcelshipment`。
+func requestSellEvaluationOnNetworkIntakeConsumer(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	inboxStore *inbox.Store,
+	clock systemClock,
+) (dispatch.Consumer, error) {
+	requester, err := sellEvaluationRequester(db, outboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	adoptions, err := pspostgres.NewIntakeAdoptions(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: intake adoptions for sell evaluation: %w", err)
+	}
+	processing, err := saparcelshipment.NewRequestOnNetworkIntakeAdapter(adoptions, requester)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: request sell evaluation on network intake: %w", err)
+	}
+	consumer, err := sainbox.NewNetworkIntakeRecordedConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: sell evaluation on network intake consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// requestSellEvaluationOnFinalOutcomeConsumer 接「有效交付已终局」那一拍：PS 终局信封 → SA 消费门 → 按终局采用键回读
+// PS 终局记录（只认已终局的有效交付）→ 发起编排。
+func requestSellEvaluationOnFinalOutcomeConsumer(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	inboxStore *inbox.Store,
+	clock systemClock,
+) (dispatch.Consumer, error) {
+	requester, err := sellEvaluationRequester(db, outboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	finals, err := pspostgres.NewFinalOutcomes(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: final outcomes for sell evaluation: %w", err)
+	}
+	processing, err := saparcelshipment.NewRequestOnFinalOutcomeAdapter(finals, requester)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: request sell evaluation on final outcome: %w", err)
+	}
+	consumer, err := sainbox.NewFinalOutcomeFormedConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: sell evaluation on final outcome consumer: %w", err)
 	}
 	return consumer, nil
 }
