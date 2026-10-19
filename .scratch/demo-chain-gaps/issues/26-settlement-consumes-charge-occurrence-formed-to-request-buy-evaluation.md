@@ -112,7 +112,7 @@ M
    - 「测试改用真交接口入队并钉两串相等」写进票 [27](./27-transport-charge-occurrences-are-registered-and-handed-off.md) 的完成判据，同一条带上 `agreement_ref` 照 ADR-0208 决定六写。
 6. **BUY 请求交接口没有确定性拒收哨兵**（未修，立票 [39](./39-buy-evaluation-request-handoff-does-not-separate-deterministic-rejection.md)，`6005e30d`）。
    - 不在本票修的理由：哨兵要从 `RequestBuyEvaluationHandler` 透出来。这只编排同时服务 ADR-0164 那条触发面和 `cmd/parcel-api` 的评价请求端点，两处今天对任何交信封失败都答「已请求、留续办引用」。改了会动那两处的答法，属 SA owner 的形状问题；`cmd/parcel-api` 目录也有别的会话在改注释。
-   - ADR-0208 越权风险点 6 已指向票 38。
+   - ADR-0208 越权风险点 6 已指向票 39。
 7. **机制清点没有重生成**（未做）。任务口径规定进 main 时统一重生成，分支上不做。本分支多了迁移 SA 0040，进 main 时须带上。
 
 ### 代决与越权风险点（评审修订新增）
@@ -122,7 +122,7 @@ M
   - PC 存储行译不回领域值（对象标识、版本、范围的构造失败）仍走普通 error，到 SA 按未决重投。
   - 越权风险点（PC owner）：这几种同样是确定性的，属 PC 存储不变量已破，但 PC 读口头注把「读取失败与坏数据」并作一格，那是 PC 的既有口径。要不要拆开归 PC owner；表上的非空白 CHECK 已经挡掉最常见的一种。
 - **改了票 27 的完成判据**（越权风险点，归 27 的认领者与 TF owner）：追加的一条只钉两串相等与 `agreement_ref` 形状，两件都出自已写进 ADR-0208 的约定。
-- **票 38 立为 `needs-triage`**，不标 `ready-for-agent`：哨兵从哪一层透出来，会改变 ADR-0164 触发面和 parcel-api 端点的答法，要先裁。
+- **票 39 立为 `needs-triage`**，不标 `ready-for-agent`：哨兵从哪一层透出来，会改变 ADR-0164 触发面和 parcel-api 端点的答法，要先裁。
 
 ### 验证（修订后）
 
