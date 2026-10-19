@@ -100,6 +100,10 @@ type UnidentifiedItemCatalogueRow struct {
 	// 「租户没登时窗」（未配置）与「范围成立却仍冲突或零候选」（已证）。零值即这一行没记——未核对的、追加给先到那件的冲突版、
 	// 处置版与这一格落地之前的行，读面如实不带，不替它推。取领域同一个类型，经领域的那道门还原，集外取值让整页答不出。
 	DeliveryScopeCheck domain.DeliveryScopeCheck
+	// DeliveryScopeBasis 是这件实物可取的两样依据（ADR-0212 决定三、七）：Source 是这一版来源里上报的依据引用（来源没带、来源未保全与
+	// 旧形状的来源都读作零值），LastAssignedNote 是这件实物此刻最后归入的交接单（零值即没归入过）。两格分开给，不替看的人取「此刻起作用
+	// 的那一份」：核对态记的是做那一版判断时的推导，此后的归入要等范围成立、经重核才进判断，审阅者要同时看得见两样。
+	DeliveryScopeBasis domain.UnitDeliveryScopeBasis
 }
 
 // IdentityReviewUnitRow 是待识别实物页按实物列的一行（ADR-0210 决定八末项与越权风险点「逐链追加会写到操作者没看过的链上」）：

@@ -133,7 +133,8 @@ func (catalogue *ReviewCatalogue) ListReceptions(
 
 // ListUnidentifiedItems 上列待识别实物册：收寄登记里 PENDING_IDENTIFICATION 那一格
 // 的身份视角，新近登记在前。来源文档里的号码照行转写（来源文档为空即来源未保全）；直接接续这一版的那一版按（租户，前版）
-// 取，走 reception_predecessor_unique。
+// 取，走 reception_predecessor_unique。来源文档里的交付范围依据两键与实物最后归入的交接单经 unitScopeBasisFrom 还原；后者与交接单册
+// FindLastAssignedHandoverNote 同一问法（只看归入，业务时间倒序、同刻按落册先后），走同一本部分索引。
 func (catalogue *ReviewCatalogue) ListUnidentifiedItems(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -165,7 +166,16 @@ func (catalogue *ReviewCatalogue) ListUnidentifiedItems(
 		                     AND successor.predecessor_version = r.judgment_version), ''),
 		        r.identity_check,
 		        r.identity_conflict_cause,
-		        r.delivery_scope_check, r.delivery_scope_unverified_reason, r.delivery_scope_inapplicability
+		        r.delivery_scope_check, r.delivery_scope_unverified_reason, r.delivery_scope_inapplicability,
+		        COALESCE(r.source_document->>'scope_basis_kind', ''),
+		        COALESCE(r.source_document->>'scope_basis_id', ''),
+		        COALESCE((SELECT member.note_id
+		                    FROM node_operations.delivery_handover_member AS member
+		                   WHERE member.tenant_id = r.tenant_id
+		                     AND member.unit_id = r.intake->>'unit'
+		                     AND member.membership_kind = 'ASSIGNMENT'
+		                   ORDER BY member.formed_at DESC, member.member_sequence DESC
+		                   LIMIT 1), '')
 		   FROM node_operations.reception AS r
 		  WHERE r.tenant_id = $1
 		    AND r.kind = 'PENDING_IDENTIFICATION'
@@ -187,6 +197,7 @@ func (catalogue *ReviewCatalogue) ListUnidentifiedItems(
 			identity       *string
 			conflictCause  *string
 			scope          [3]*string
+			basis          [3]string
 		)
 		if err := rows.Scan(
 			&row.SourceID, &row.Unit, &row.Node,
@@ -195,6 +206,7 @@ func (catalogue *ReviewCatalogue) ListUnidentifiedItems(
 			&row.JudgmentVersion, &row.SourcePreserved, &row.Mark, &row.SucceededBy,
 			&identity, &conflictCause,
 			&scope[0], &scope[1], &scope[2],
+			&basis[0], &basis[1], &basis[2],
 		); err != nil {
 			return nil, fmt.Errorf("list unidentified items: %w", err)
 		}
@@ -208,6 +220,9 @@ func (catalogue *ReviewCatalogue) ListUnidentifiedItems(
 		}
 		if row.DeliveryScopeCheck, err = deliveryScopeCheckFrom(scope[0], scope[1], scope[2]); err != nil {
 			return nil, fmt.Errorf("list unidentified items: source %q: %w", row.SourceID, err)
+		}
+		if row.DeliveryScopeBasis, err = unitScopeBasisFrom(basis[0], basis[1], basis[2]); err != nil {
+			return nil, fmt.Errorf("list unidentified items: source %q: delivery scope basis: %w", row.SourceID, err)
 		}
 		if err := json.Unmarshal(candidatesJSON, &row.Candidates); err != nil {
 			return nil, fmt.Errorf("list unidentified items: %w", err)

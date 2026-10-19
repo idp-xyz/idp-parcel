@@ -655,6 +655,11 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 送站预报与送站交接单的运营查阅读口（票 ps-external-mark-relations/13），同上是读口，不是编排。
+	deliveryScopeRecords, err := nopostgres.NewDeliveryScopeCatalogue(db)
+	if err != nil {
+		return err
+	}
 	// 交接范围汇总读用例（票 admin-web-audit-followups/06）。读口取交接登记册本尊：它同时
 	// 实现写侧的幂等存取与 ports.HandoverScopeView，两个契约一只适配器（分口的理由在
 	// ports.HandoverScopeView 注释）。这一格与上面几只不同——交入装配点的是应用用例不是
@@ -811,6 +816,7 @@ func run(logger *slog.Logger) error {
 			cancellationFaces,
 			deliveryHandoverNotes,
 			departureGatePreview,
+			deliveryScopeRecords,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,

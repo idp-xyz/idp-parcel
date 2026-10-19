@@ -194,6 +194,7 @@ func assembleBusinessEndpoints(
 	bookingRequestCancellation tfhttp.BookingRequestCanceller,
 	deliveryHandoverNotes deliveryHandoverNoteFaces,
 	departureGatePreview tfhttp.DepartureGatePreviewer,
+	deliveryScopeRecords nodeopshttp.DeliveryScopeCatalogueReader,
 ) []httpapi.BusinessEndpoint {
 	// 缺省朝拦：真渠道与隔离入参都缺席时，下面这组变量全取未配置即拒。
 	//
@@ -765,5 +766,12 @@ func assembleBusinessEndpoints(
 		// 设备出发前门禁问询口（ADR-0219）：只读，交回与随后同参出发同一套读数，本上下文不落任何东西。挂作业事实渠道、与移动事实口
 		// 同一份认证与授予——能报出发就能问出发前那一问，不另立能力种类；写开关换不了它（ADR-0150 决定三）。
 		{Pattern: "/transport-fulfillment/departure-gate-previews", Handler: tfhttp.NewPreviewDepartureGateEndpoint(departureGatePreviewIntake, departureGatePreview)},
+		// 送站预报与送站交接单的运营查阅读（UC-NO-006「权限、隔离与审计」；票 ps-external-mark-relations/13）：与节点作业查阅页同挂主数据与
+		// 运营查阅读那一个 Intake，列表一口、按标识读一口。路径随查阅面的连字符前缀，不挂在命令口的 /node-operations/ 下：同一路径上的
+		// GET 会与开立口、提交口撞成一个处理器。
+		{Pattern: "/node-operations-delivery-pre-advices", Handler: nodeopshttp.NewQueryDeliveryPreAdvicesEndpoint(nodeOperationsCatalogueIntake, deliveryScopeRecords)},
+		{Pattern: "/node-operations-delivery-pre-advices/{preAdviceId}", Handler: nodeopshttp.NewQueryDeliveryPreAdviceEndpoint(nodeOperationsCatalogueIntake, deliveryScopeRecords)},
+		{Pattern: "/node-operations-delivery-handover-notes", Handler: nodeopshttp.NewQueryDeliveryHandoverNotesEndpoint(nodeOperationsCatalogueIntake, deliveryScopeRecords)},
+		{Pattern: "/node-operations-delivery-handover-notes/{noteId}", Handler: nodeopshttp.NewQueryDeliveryHandoverNoteEndpoint(nodeOperationsCatalogueIntake, deliveryScopeRecords)},
 	}
 }

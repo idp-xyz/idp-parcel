@@ -118,7 +118,7 @@ func serveReceptions(
 	}
 	bodies := make([]receptionCatalogueBody, 0, len(rows))
 	for _, row := range rows {
-		bodies = append(bodies, receptionCatalogueBody{
+		body := receptionCatalogueBody{
 			SourceID:             row.SourceID,
 			Kind:                 row.Kind,
 			Unit:                 row.Unit,
@@ -133,7 +133,9 @@ func serveReceptions(
 			ServiceResultCheck:   row.ServiceResultCheck.String(),
 			IdentityCheck:        row.IdentityCheck.String(),
 			RecordedAt:           rfc3339(row.RecordedAt),
-		})
+		}
+		body.deliveryScopeCheckFields = deliveryScopeCheckFieldsOf(row.DeliveryScopeCheck)
+		bodies = append(bodies, body)
 	}
 	writeJSON(response, http.StatusOK, receptionCatalogueListResponse{
 		Outcome:    outcomeReceptionsListed,
@@ -170,6 +172,8 @@ func serveUnidentifiedItems(
 			IdentityCheck:    row.IdentityCheck.String(),
 		}
 		body.IdentityConflictCause = row.IdentityConflictCause.String()
+		body.deliveryScopeCheckFields = deliveryScopeCheckFieldsOf(row.DeliveryScopeCheck)
+		body.DeliveryScopeBasis, body.AssignedHandoverNote = deliveryScopeBasisBodyOf(row.DeliveryScopeBasis)
 		if row.SourcePreserved {
 			mark := row.Mark
 			body.ExternalMark = &mark
@@ -262,6 +266,8 @@ type receptionCatalogueBody struct {
 	ServiceResultCheck   string   `json:"serviceResultCheck,omitempty"`
 	IdentityCheck        string   `json:"identityCheck,omitempty"`
 	RecordedAt           string   `json:"recordedAt"`
+	// 交付范围核对态三键与收寄答复同名同值（ADR-0212 决定五「收寄答复与复核目录都带它」），这一版没记时整键缺席。
+	deliveryScopeCheckFields
 }
 
 // units 是同一页按实物列的那一半（票 no-reception-identity/06）：items 逐行列待识别，分不出哪一版仍是当前有效版本、冲突处置过没有；
@@ -300,6 +306,11 @@ type unidentifiedItemBody struct {
 	IdentityCheck    string   `json:"identityCheck,omitempty"`
 	// identityConflictCause 的读法见类型头注。
 	IdentityConflictCause string `json:"identityConflictCause,omitempty"`
+	// 交付范围核对态三键同收寄册那一格；deliveryScopeBasis 是这一版来源里上报的依据引用，与收寄载荷同一个 {kind, id} 形，来源没带即
+	// 整键缺席；assignedHandoverNote 是这件实物此刻最后归入的交接单，没归入过即整键缺席。两样分开给的理由在 ports 那一格的注释。
+	deliveryScopeCheckFields
+	DeliveryScopeBasis   *deliveryScopeBasisDocument `json:"deliveryScopeBasis,omitempty"`
+	AssignedHandoverNote string                      `json:"assignedHandoverNote,omitempty"`
 }
 
 type consolidationUnitListResponse struct {

@@ -65,6 +65,10 @@ var swappedOperationsReadPatterns = []string{
 	"/settlement-funds-applications",
 	"/settlement-operating-results",
 	"/governance-registers",
+	"/node-operations-delivery-pre-advices",
+	"/node-operations-delivery-pre-advices/{preAdviceId}",
+	"/node-operations-delivery-handover-notes",
+	"/node-operations-delivery-handover-notes/{noteId}",
 }
 
 // operationsReaderRegister 持有主数据与运营查阅读，不持登记写。
