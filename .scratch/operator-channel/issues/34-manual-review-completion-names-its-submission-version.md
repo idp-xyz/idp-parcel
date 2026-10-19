@@ -1,7 +1,7 @@
 # 34 复核完成口的提交版本由服务端当前版顶替：新提交版本形成后，同一复核请求重投或按旧页面提交，会把旧版本的复核签到新版本的任务上
 
 Category: bug
-Status: ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-oc34`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-oc34`）上留有2 笔（复核完成版本由调用方指名的后端修法；前端复核草案构造的 WIP），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 15 之三、之四补核发现；用户授权代决）；分支 `claude-oc34`
+Status: in-progress——2026-10-18 作者子代理完工，待评审。此前 ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-oc34`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-oc34`）上留有2 笔（复核完成版本由调用方指名的后端修法；前端复核草案构造的 WIP），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 15 之三、之四补核发现；用户授权代决）；分支 `claude-oc34`
 Blocked by: 无
 父票：[15](./15-operation-decision-faces-take-operator-intake.md)（之三 `44ef6a4a`、之四 `dc439417`）
 出处：票 15 Comments「评审 ← 会话 idp-parcel-9b 起的隔离子代理 · 钉 `0e3bb7df`」那一条里的「子代理顺带提到之三那三口也查不到逐口核对记录」；票 26 遗留研判中补核票 15 之三、之四（簇 C6）发现；补记随 operator-channel/39。
@@ -77,3 +77,36 @@ Blocked by: 无
 - [ ] 管理台 node:test：证明复核完成草案带上了队列行的 `submissionVersionId`（必要时把草案构造抽成可测的纯函数）；管理台三道门退出码为 0。
 - [ ] 在票 15 补记的复核完成那一行下追加回写（✅ 只核对，附本票进 main 的 SHA），只加行。
 - [ ] 走 Go 那条路（并行会话）：开分支；作者自验（gofmt / vet / build，改动包带 DSN 跑 `go test -p 1 -count=1`）；非作者评审；推送方带 DSN 跑全量。Go 和管理台在同一个分支、同一次进 main，因为版本格改成必填后，旧管理台会被答 400。不走「前端切片」：那一节的适用条件是「这张票的 diff 全部落在 `apps/admin-web/**` 与它自己的票面里」。
+
+## 完成记录（2026-10-18，会话 idp-parcel-9b 的实施子代理，分支 claude-oc34）
+
+**落点**（原基线 `b58b10ef`，已 rebase 到 `origin/main` `200281b2`，无冲突；未推送）：
+
+| 笔 | 做了什么 |
+|---|---|
+| `87bcc45c` 后端 | `IntakeManualReviewCompletion` 改收 `manualReviewCompletionPayload`，必填 `submissionVersionId`；版本与理由两道纯载荷校验排在 `locate` 之前；命令取载荷里的版本。`OperatorDecisionIntake`、`IntakeManualReviewCompletion`、`IntakeActiveRejection` 三处头注改正，拒绝口给出自己的理由。Intake 单测与真库装配回归随这一笔。 |
+| `f7754809` 前端 WIP | 原样保留：`manualReviewCompletionDraftOf` 半成品与它的 node:test（此时为红）。 |
+| `43b2e118` 前端 | `ManualReviewCompletionDraft` 加 `submissionVersionId`；`manualReviewCompletionDraftOf` 取队列行的版本；`AcceptanceReviewPage` 的复核完成从队列行经它发出。`ManualReviewCompletionOutcome` 照 Go 侧 `String()` 改。草案节头注和复核草案的「故意只有这两个字段」两处注释改正。 |
+
+**完成判据逐格**：
+
+- [x] Intake 单测：`TestManualReviewCompletionIsAddressedServerSideAndSignedByTheAuthenticatedOperator` 已改写，载荷送 `SYN-VERSION-01`、替身当前版 `SYN-VERSION-02`，断言命令取载荷那一份。`TestAManualReviewCompletionWithoutItsVersionAnswers400EvenWhenTheRequestIsUnknown` 覆盖缺版本、版本空白、版本非字符串、缺理由、理由空白，委托查得到和查不到两种情形下都答 `ErrMalformedRequest`。
+- [x] 真库装配回归：`cmd/parcel-api` · `TestAReviewNamingASupersededVersionIsNotSignedOntoTheNewVersionThroughTheOperatorIntake`。它经生产的 `OperatorDecisionIntake` 和真寻址（`pspostgres.NewShipmentRequestViews`），走完整个 HTTP 端点。用例依次验证：V1 复核答 201 `RECORDED`；受控补充形成 V2；原样重投答 200 `VERSION_SUPERSEDED`，`currentVersion` 为 V2；信封仍是 1 封；V2 任务上没有完成。
+- [x] 管理台 node:test：`manual-review-completion.test.ts` 两例，一例钉住草案带上队列行的 `submissionVersionId` 且整形只有三格，另一例钉住旧页面那一行指名它自己的版本。三道门退 0（见下）。
+- [ ] 票 15 补记下回写：**未做**。票 15 里还没有「复核完成那一行」，那一行归 [39](./39-ticket-15-records-the-algebra-of-every-operator-decision-face.md)，而 39 要等本票进 main 才能动；进 main 的 SHA 现在也还没有。这一行留给 39，或留给本票进 main 的那一笔。
+- [ ] Go 那条路：作者自验已做（见下）。**非作者评审**与**推送方带 DSN 跑全量**未做。
+
+**先红后绿**：
+
+- 后端：rebase 之后，只把 Intake 的命令版本退回 `target.CurrentVersion`（载荷照收），再跑新用例。真库回归在重投那一步答 201 `RECORDED`，复核人是 V1 那一份，`currentVersion` 是 V2，失败于「want 200 VERSION_SUPERSEDED」。Intake 单测失败于「submission version = "SYN-VERSION-02"」。整份退回 `origin/main` 的 Intake 时，三例都红，答 400 `unknown field "submissionVersionId"`。复原修法之后全部转绿。
+- 前端：接手时 WIP 那两例在草案不带版本时 ✖；`43b2e118` 之后 ✔。
+
+**门**：
+
+- Go：`gofmt -l` 无输出；`go build ./...`、`go vet ./...` 退 0。带 DSN 跑 `go test -p 1 -count=1 ./internal/parcelshipment/... ./cmd/parcel-api ./internal/architecture/...` 退 0，21 个包 ok。
+- 前端（`apps/admin-web`）：`tsc -b --noEmit` 退 0；`node scripts/run-tests.mjs` 退 0，536 例全过；`pnpm exec vite build` 退 0。
+- 机制清点重生成后无差。
+
+**证据层级**：`S`（合成 `SYN-` 数据，复核授权请求映射为合成替身）。
+
+**评审**：待会话读 diff 审。
