@@ -1,7 +1,7 @@
 # 11 监管凭证登记按登记册存得下的值判：亚微秒有效期原样重放答 CONTENT_CONFLICT，零时刻毒行让整租户凭证列面 500，同一微秒有效期、越界额度与 NUL 答 500
 
 Category: bug
-Status: in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: resolved——2026-10-18 进 main（代码验证钉 `3ad147be`），见「进 main 记录」。此前 in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/customs-regulatory-credential-registrations
@@ -126,3 +126,8 @@ Blocked by: 无
   - **Spec**：阻断无。CC 领域 `AtRegistryPrecision` 是规则的唯一陈述，头注按符号名引 TF 同名函数与 accessidentity `sameInstant`；CCC-1 期限两端先折、`canonicalInstant` 不动；构造门的判零与先后两侧先折；额度不超过库列 integer 上限；`newRequiredValue` 拒 NUL。现象三格都先红复现、修后转绿，变异自检四处都转红。
   - **Standards**：阻断无。认可一处与判据的出入：NUL 答 400 `MALFORMED_REQUEST` 而不是 200 `NOT_ACCEPTED`——门在共用的必备值构造里，译装时即拒，与空白引用同一格，不是 500、册上零行，合「存不进去的输入在构造期答改输入」。
   - **无发现**：合成值只用 `SYN-`；查存量毒行的 SQL 写在完成记录、真库验过。
+
+### 进 main 记录（2026-10-18，会话 idp-parcel-9b）
+
+- 分支 `claude-tfa11` rebase 到远端 main `45b9a088` 之上，快进推送；rebase 前的 SHA 作封存出处。
+- 推送方全量一次：钉 `3ad147be` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 143 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
