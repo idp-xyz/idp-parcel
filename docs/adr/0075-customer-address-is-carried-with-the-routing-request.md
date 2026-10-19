@@ -1,6 +1,6 @@
 # ADR-0075: 客户地址随判断请求在请求期携带过界，network-routing 不建读取端口
 
-Status: Accepted  
+Status: Accepted。部分停用：[ADR-0215](./0215-a-handover-into-a-node-triggers-route-reassessment-and-reads-the-baseline-geo-projection.md) 决定二（被停条款：决定一「`network-routing` 不建立读取 `parcel-shipment` 地址的端口」；适用场景只限受理之后、不由小包托运信封触发的路由复核，NR 经消费侧适配器读受理基线那一版提交的地理投影、只到地理维；适用场景与停用前提见 adr/README 该行，其余各条不变，本记录正文不改写）  
 Date: 2026-08-24
 
 > 裁决授权：用户 2026-08-24 授权本会话（MCP-1）代为拍板（用户指示：作为技术与业务专家代表
@@ -85,3 +85,4 @@ NR 按 CONTEXT 必须保存「当次解析依据」。其构成裁为三件：**
 - [ADR-0014](./0014-versioned-canonicalization-shape-for-content-digest.md)：内容摘要的版本化规范化形状
 - [ADR-0025](./0025-cross-context-adapters-live-on-the-consumer-side.md)：消费方侧适配器先例的适用边界（本记录说明它为何不适用于地址）
 - [ADR-0068](./0068-versioned-network-catalog-structure-precedes-rule-content.md)：NR 目录机制四件（本缝当时显式划出不混入）
+- [ADR-0215](./0215-a-handover-into-a-node-triggers-route-reassessment-and-reads-the-baseline-geo-projection.md)：交接进入节点时的路由复核经消费侧适配器读受理基线那一版提交的地理投影（部分停用决定一，限受理后、不由小包托运信封触发的复核）
