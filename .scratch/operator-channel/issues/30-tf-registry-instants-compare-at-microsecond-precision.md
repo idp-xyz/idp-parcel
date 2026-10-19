@@ -1,7 +1,7 @@
 # 30 TF 登记册上的时刻按微秒认：带纳秒的原样重放被判成冲突或多签一版，同一微秒内的时间窗与恰在起点的作废答 500
 
 Category: bug
-Status: in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 3 评审遗留；用户授权代决）；分支 `claude-oc30`
+Status: in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 3 评审遗留；用户授权代决）；分支 `claude-oc30`
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)（评审欠账）。被评的是 [20](./20-tf-closure-dispatch-task-and-pickup-judgment-canonicalization.md)，代码 `857453d8`。
 出处：
@@ -220,3 +220,10 @@ TF 各登记册的时刻都落在 `timestamptz` 列上，写入时截到微秒�
 证据层级 `S`。
 
 评审：待会话读 diff 审
+
+## Comments
+
+- **评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审）· 钉 `fa686eb0`（基线 `320d2900`）· 2026-10-18**：用户选「精简续做」，评审由会话本身读 diff 做；代码出自本会话起的实施子代理，不算非作者评审，如实记下。
+  - **Spec**：阻断无。`AtRegistryPrecision` 的头注是规则的唯一陈述；相等类（凭证 `Equal`、总单 changedAt、凭证登记重放、有效时间判断、派送尝试内容）与严格先后类（凭证适用区间、派送任务时间窗、履约尝试计划窗）经 `sameOnRegistry` / `afterOnRegistry` 两侧折到微秒；只改判定不改存值；恰在起点收区间答未受理；存摘要的口与 `canonicalInstant` 不动。作者自检：生产文件换回修复前真库新用例全红，逐处改回原判定都转红；冲突断言旧版在变异下照绿、新版转红。
+  - **Standards**：阻断无。非阻断 1：有效时间那例真库测试沿用既有夹具 `credentialRecord`，租户是 `tenant-1` 而非 `SYN-` 值（夹具早于本票，留作后续顺手改）。
+  - **未做的格**：「做什么」里列为可加的 cmd/parcel-api HTTP 例没加（票面本就写作可选）。
