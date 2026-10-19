@@ -1,0 +1,6 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "pricingChargeCode": "BASE_FREIGHT",
+  "feeItem": "SYN-FEE-ITEM-FREIGHT-01",
+  "basisRef": "SYN-FEE-MAPPING-BASIS-01"
+}

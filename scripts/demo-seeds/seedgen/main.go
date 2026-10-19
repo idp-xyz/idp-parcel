@@ -173,6 +173,13 @@ func sellCardSnapshot() []byte {
 	must("分区目录绑定", err)
 	structures, err = structures.WithReferenceCatalogues(zoneLink)
 	must("方案结构绑分区目录", err)
+	// 金额取整是演示租户的取值：总额按 0.01 CNY 四舍五入。结算由评价形成客户费用时要这一格（ADR-0190），没声明的卡
+	// 交到结算那一侧答金额精度未声明。
+	amountRounding, err := domain.NewAmountRoundingPolicy(
+		domain.RoundingHalfUp, money("0.01", cny), []domain.AmountRoundingPoint{domain.AmountRoundingTotal})
+	must("金额取整", err)
+	structures, err = structures.WithAmountRounding(amountRounding)
+	must("方案结构声明金额取整", err)
 
 	plan, err := domain.NewPricingPlanVersion(
 		reference(domain.ArtifactPricingPlan, "SYN-PLAN-CN-SG-01", "v1"),

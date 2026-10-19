@@ -308,5 +308,15 @@ echo "== 结算账户与受理前估价采用登记（settlement-accounting：�
 # 采用册对账户册设外键，所以排在账户之后。没登这一行的户，控制停在金额未配置；形态与范围是演示租户的合成取值。
 "$BIN/parcel-settlement-register" pre-acceptance-estimate-adoption \
   -input "$SEEDS/settlement/02-pre-acceptance-estimate-adoption-account-01.json"
+# SELL 计费时点采用（ADR-0190 决定三）：这一户在「有效网络收寄已采用」那一拍发起 SELL 评价，计价范围与受理前估价
+# 采用的同值，估价与随后的预估客户费用因此选同一张卡（ADR-0190 越权风险点 9）。没登这一行的户，收寄采用之后不计费。
+"$BIN/parcel-settlement-register" sell-billing-moment-adoption \
+  -input "$SEEDS/settlement/05-sell-billing-moment-adoption-account-01.json"
+# 费用项目映射（ADR-0190 决定五）：售价卡出的基础运费与偏远附加都映到同一个合成费用项目——一份评价只映一个费用
+# 项目才形成，把附加并进运费是 SYN 简化（ADR-0190 越权风险点 2）。
+"$BIN/parcel-settlement-register" fee-item-mapping \
+  -input "$SEEDS/settlement/06-fee-item-mapping-base-freight.json"
+"$BIN/parcel-settlement-register" fee-item-mapping \
+  -input "$SEEDS/settlement/07-fee-item-mapping-remote-area-surcharge.json"
 
 echo "种子灌入完成：租户 SYN-TENANT-01，各上下文全部落库。"
