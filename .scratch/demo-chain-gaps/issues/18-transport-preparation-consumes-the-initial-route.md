@@ -1,7 +1,7 @@
 # 18 运输准备结果与初始路由消费者（01·三）
 
 Category: enhancement
-Status: resolved——2026-10-19 进 main（全量钉 `edfff8fe`：150 ok / 0 FAIL；TF 链第三波同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg18；隔离评审 0 项阻断，非阻断处置见文末「评审记录」（此前 ready-for-agent——2026-10-19 Claude Code 会话立，用户「你作为业务和系统专家自决……解决所有的问题」授权；代决见 [tf-chain-plan](../tf-chain-plan.md)）。
+Status: resolved——2026-10-19 进 main（全量钉 `79fb2c11`：151 ok / 0 FAIL；TF 链第三波同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg18；隔离评审 0 项阻断，非阻断处置见文末「评审记录」（此前 ready-for-agent——2026-10-19 Claude Code 会话立，用户「你作为业务和系统专家自决……解决所有的问题」授权；代决见 [tf-chain-plan](../tf-chain-plan.md)）。
 Blocked by: [16](./16-transport-schedule-templates-and-concrete-schedules-are-registered.md)；软依赖 [17](./17-capacity-pools-are-registered.md)（没有池时答 `容量待确认`，不挡落地）
 地盘：TF：新 `domain/transport_opportunity.go`；新 `application/prepare_opportunity_on_planned_legs.go`；新 `adapters/networkrouting/planned_leg_source.go`；新 `adapters/parcelshipment/declared_demand_source.go`；新包 `adapters/inbox/`；`postgres` 新 `transport_opportunity.go` + `review_catalogue.go`；迁移 TF 0028；`cmd/parcel-dispatch/assemble.go`(+_test)。
 出处：[01](./01-transport-opportunity-has-no-production-entry.md)；方案「01 运输机会与班次」D01-1、D01-5、D01-6、D01-7、D01-8、D01-10、D01-11，「跨票通则」X3、X4、X6，「需要的 ADR」ADR-0201。
@@ -156,4 +156,4 @@ ADR-0201 补记续编的 22 至 28：22 单位表封闭且区分大小写、23 �
   - 24 的两份权威区间同号 30，外部事实那份改为 31。
   - UC-TF-004 验收表去掉合并时插进的空行，免得断成两张表。
 - 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
-- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `edfff8fe`：150 包 ok，0 FAIL，0 SKIP。机制清点在合批时重生成（`90202334`），之后只改了一份测试文件。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上先钉 `edfff8fe`：150 包 ok；推送前 main 进了 ps-external-mark-relations/08（NO 送站预报，同改 `cmd/parcel-api` 与种子），本批重放到它上面，追加行冲突两边都留，种子重灌退 0，机制清点重生成，全量在推送 tip `79fb2c11` 上重跑：151 包 ok，0 FAIL，0 SKIP。机制清点在合批时重生成（`90202334`），之后只改了一份测试文件。

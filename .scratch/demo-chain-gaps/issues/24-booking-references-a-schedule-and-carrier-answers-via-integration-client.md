@@ -1,7 +1,7 @@
 # 24 订舱提交（引班次）与承运答复集成客户端面
 
 Category: enhancement
-Status: resolved——2026-10-19 进 main（全量钉 `edfff8fe`：150 ok / 0 FAIL；TF 链第三波同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg24（见文末「完成记录」与「评审记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
+Status: resolved——2026-10-19 进 main（全量钉 `79fb2c11`：151 ok / 0 FAIL；TF 链第三波同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg24（见文末「完成记录」与「评审记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
 Blocked by: [23](./23-transport-commission-submission-face.md)、[16](./16-transport-schedule-templates-and-concrete-schedules-are-registered.md)
 地盘：`operation_decision.go`、`integration_client.go`；tfhttp 新 `submit_booking_request.go`、`answer_booking.go`、`integration_client_intake.go`；TF 新 `adapters/accessidentity/integration_client_authenticator.go`；domain、postgres 订舱（班次引用、`WAITLISTED`）；迁移 TF 0029；`assemble_transport_commission.go`、`assemble_integration_client.go`、`endpoints.go` 行；种子 access 02/03/05/06、governance。
 出处：[02](./02-transport-commission-has-no-command-face.md)；方案「02 委托、订舱、承运答复」D02-2、D02-3、D02-8、D02-9，「需要的 ADR」ADR-0202。
@@ -161,4 +161,4 @@ L
   - 24 的两份权威区间同号 30，外部事实那份改为 31。
   - UC-TF-004 验收表去掉合并时插进的空行，免得断成两张表。
 - 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
-- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `edfff8fe`：150 包 ok，0 FAIL，0 SKIP。机制清点在合批时重生成（`90202334`），之后只改了一份测试文件。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上先钉 `edfff8fe`：150 包 ok；推送前 main 进了 ps-external-mark-relations/08（NO 送站预报，同改 `cmd/parcel-api` 与种子），本批重放到它上面，追加行冲突两边都留，种子重灌退 0，机制清点重生成，全量在推送 tip `79fb2c11` 上重跑：151 包 ok，0 FAIL，0 SKIP。机制清点在合批时重生成（`90202334`），之后只改了一份测试文件。
