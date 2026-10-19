@@ -17,12 +17,14 @@ import (
 )
 
 // tfInitialRoutePreparationUndecidedSentinels 只给「初始路由 → TF 运输准备」这一路（ADR-0201 决定七）。与 VE 初始路由投影
-// 那份分开列：两路收同一封信、各记各的 inbox 账，未决面也各是各的——本路多停三站（申报读口、班次与池两本册子、准备结果库），
+// 那份分开列：两路收同一封信、各记各的 inbox 账，未决面也各是各的——本路还会停在申报读口、班次与池的册子、准备结果库上，
 // 合用一份会把 VE 没有的格子也宣布成「等依赖」。
 //
 // 不在名单里：ErrInitialRouteRecordInconsistent（提供方仓储不变量已破）、ErrUntranslatableAnswer（计划段说不清自己走哪条
-// 连接、键维译不过来，或本包译出的命令被编排拒收——重投不会变）、ErrUnexpectedPreparationOutcome。`未配置`不在任何名单
-// 里：它入账不重投，不是错误（ADR-0094 判据、计划 X6）。
+// 连接、键维译不过来，或本包译出的命令被编排拒收——重投不会变）、ErrUnexpectedPreparationOutcome，以及编排原样上抛的
+// tfports.ErrDeclaredDemandUntranslatable（申报译不成需求量快照）与 tfports.ErrTransportPreparationRecordUnreadable（库里
+// 那一份读不懂）——它们不包 ErrPreparationUndecided，名单认不出它们。`未配置`不在任何名单里：它入账不重投，不是错误
+// （ADR-0094 判据、计划 X6）。
 var tfInitialRoutePreparationUndecidedSentinels = []error{
 	tfnetworkrouting.ErrInitialRouteNotVisible,
 	tfnetworkrouting.ErrPreparationUndecided,

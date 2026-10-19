@@ -143,7 +143,7 @@ func (result PrepareOnPlannedLegsResult) ContinuationReference() string {
 	return result.continuation
 }
 
-// PrepareOnPlannedLegsDeps 是本编排的缝：申报需求量、两本班次册、池册与准备结果库。不接任何 Outbox：准备结果没有消费者，
+// PrepareOnPlannedLegsDeps 是本编排的缝：申报需求量、班次候选口、池册与准备结果库。不接任何 Outbox：准备结果没有消费者，
 // 不入队信封（ADR-0201 决定七、计划 X3）。
 type PrepareOnPlannedLegsDeps struct {
 	Demand       ports.DeclaredDemandSource
@@ -167,8 +167,11 @@ func NewPrepareOnPlannedLegsHandler(deps PrepareOnPlannedLegsDeps) *PrepareOnPla
 	}
 }
 
-// Prepare 先受理，再取一次需求量，再逐段作答。一段未决整次未决：调用方在同一笔事务里，回滚后重投从头再来，已答过的段
-// 按身份答`已有结果`，不会重复形成。
+// Prepare 先受理，再取一次需求量，再逐段作答。一段未决整次未决：调用方在同一笔事务里，整封回滚，前面已落的段行一并
+// 回滚，不留半封结果；重投从头判，结论可能因登记册其间变了而不同。`已有结果`只在同一身份已由另一次提交落过时出现
+// （同键的另一封信、并发撞键）。
+//
+// 译不过去的申报与读不懂的库行不答未决，原样以 error 上抛：重投不会让它们变好（ADR-0029）。
 func (handler *PrepareOnPlannedLegsHandler) Prepare(
 	ctx context.Context,
 	command PrepareOnPlannedLegsCommand,
@@ -198,6 +201,9 @@ func (handler *PrepareOnPlannedLegsHandler) Prepare(
 	}
 
 	demand, err := handler.deps.Demand.LoadDeclaredDemand(ctx, command.TenantID, object)
+	if errors.Is(err, ports.ErrDeclaredDemandUntranslatable) {
+		return PrepareOnPlannedLegsResult{}, err
+	}
 	if err != nil {
 		return preparationUndecided(DeclaredDemandUnavailable, command.TenantID.String(), object.String()), nil
 	}
@@ -237,13 +243,16 @@ func (handler *PrepareOnPlannedLegsHandler) prepareLeg(
 		return LegPreparation{}, nil, err
 	}
 	existing, found, err := handler.deps.Preparations.FindByKey(ctx, key)
+	if errors.Is(err, ports.ErrTransportPreparationRecordUnreadable) {
+		return LegPreparation{}, nil, err
+	}
 	if err != nil {
 		return undecided(TransportPreparationStoreUnavailable)
 	}
 	if found {
-		answered, ok := preparationReplayOrConflict(existing, digest)
-		if !ok {
-			return undecided(TransportPreparationStoreUnavailable)
+		answered, err := preparationReplayOrConflict(existing, digest)
+		if err != nil {
+			return LegPreparation{}, nil, err
 		}
 		return answered, nil, nil
 	}
@@ -300,12 +309,15 @@ func (handler *PrepareOnPlannedLegsHandler) prepareLeg(
 	case ports.TransportPreparationAlreadyRecorded:
 		// 并发下另一方先落了同一身份：读回赢家按依据分重放与冲突，不宣称自己形成了它。
 		winner, found, err := handler.deps.Preparations.FindByKey(ctx, key)
+		if errors.Is(err, ports.ErrTransportPreparationRecordUnreadable) {
+			return LegPreparation{}, nil, err
+		}
 		if err != nil || !found {
 			return undecided(TransportPreparationStoreUnavailable)
 		}
-		answered, ok := preparationReplayOrConflict(winner, digest)
-		if !ok {
-			return undecided(TransportPreparationStoreUnavailable)
+		answered, err := preparationReplayOrConflict(winner, digest)
+		if err != nil {
+			return LegPreparation{}, nil, err
 		}
 		return answered, nil, nil
 	default:
@@ -350,15 +362,16 @@ func (handler *PrepareOnPlannedLegsHandler) candidateInputs(
 }
 
 // preparationReplayOrConflict 比库里那一份的依据摘要：同即`已有结果`，异即`结果冲突`，两格都交回原结果、不覆盖。认不出
-// 摘要形状答不了，交给调用方按读不动作答。
-func preparationReplayOrConflict(existing ports.TransportPreparationRecord, digest string) (LegPreparation, bool) {
+// 摘要形状就分不了这两格，那是坏行，答读不懂。
+func preparationReplayOrConflict(existing ports.TransportPreparationRecord, digest string) (LegPreparation, error) {
 	switch domain.CompareStoredDigest(existing.InputDigest, digest, "") {
 	case domain.SamePayload:
-		return LegPreparation{Answer: LegPreparationExisting, Record: existing}, true
+		return LegPreparation{Answer: LegPreparationExisting, Record: existing}, nil
 	case domain.DifferentPayload:
-		return LegPreparation{Answer: LegPreparationConflict, Record: existing}, true
+		return LegPreparation{Answer: LegPreparationConflict, Record: existing}, nil
 	default:
-		return LegPreparation{}, false
+		return LegPreparation{}, fmt.Errorf("%w: leg %q object %q: stored input digest shape is not recognized",
+			ports.ErrTransportPreparationRecordUnreadable, existing.Key.Leg, existing.Key.Object)
 	}
 }
 

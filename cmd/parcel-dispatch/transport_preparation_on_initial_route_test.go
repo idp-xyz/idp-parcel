@@ -2,6 +2,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -10,9 +12,12 @@ import (
 	nrpostgres "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/postgres"
 	nrdomain "go.idp.xyz/idp-parcel/internal/networkrouting/domain"
 	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
+	tfnetworkrouting "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/networkrouting"
+	tfparcelshipment "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/parcelshipment"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	tfapplication "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
+	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
 // 本文件证初始路由信封 FanOut 给 TF 运输准备那一路（票 demo-chain-gaps/18，ADR-0201 决定七）：生产 wireDispatcher、生产 NR
@@ -298,4 +303,35 @@ func setTemplateTimeZone(t *testing.T, fixture *synVerticalFixture, code, zone s
 			fixture.identity.TenantID().String(), code, zone)
 		return err
 	})
+}
+
+// Covers: ADR-0029 / 计划 X6——本路的未决名单只收续办那两枚（判断还看不见、编排停在自己的未决上）；确定性的几枚一枚都
+// 不在：提供方记录与键不符、计划段或键维译不过来、编排结果集外，以及编排原样上抛的申报译不过去与准备结果行读不懂。
+// 名单取生产切片本身，测试里重列一份会让误登记的哨兵一起消失。
+func TestTheInitialRoutePreparationLaneRegistersOnlyResumableSentinels(t *testing.T) {
+	listed := func(err error) bool {
+		for _, sentinel := range tfInitialRoutePreparationUndecidedSentinels {
+			if errors.Is(err, sentinel) {
+				return true
+			}
+		}
+		return false
+	}
+	for _, err := range []error{tfnetworkrouting.ErrInitialRouteNotVisible, tfnetworkrouting.ErrPreparationUndecided} {
+		if !listed(fmt.Errorf("%w: syn", err)) {
+			t.Fatalf("续办哨兵 %v 不在名单里", err)
+		}
+	}
+	for _, err := range []error{
+		tfnetworkrouting.ErrInitialRouteRecordInconsistent,
+		tfnetworkrouting.ErrUntranslatableAnswer,
+		tfnetworkrouting.ErrUnexpectedPreparationOutcome,
+		fmt.Errorf("%w: %w: declared measurement outcome", tfparcelshipment.ErrUntranslatableAnswer,
+			tfports.ErrDeclaredDemandUntranslatable),
+		fmt.Errorf("find transport preparation: %w: bad row", tfports.ErrTransportPreparationRecordUnreadable),
+	} {
+		if listed(err) {
+			t.Fatalf("确定性错误 %v 进了未决名单——派发会按 consumer_undecided 重投到放弃", err)
+		}
+	}
 }

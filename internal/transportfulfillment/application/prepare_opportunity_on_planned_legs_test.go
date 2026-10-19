@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
@@ -11,8 +12,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// 本文件证准备编排的受理门、各口未决与撞键读回（ADR-0201 决定七）。五格结论与重放、冲突在真库上证（postgres 包的准备用例），
-// 这里只用替身补真库难造的几格。夹具全为合成值（S 级）。
+// 本文件证准备编排的受理门、各口未决、确定性失败不答未决与撞键读回（ADR-0201 决定七）。各格结论与重放、冲突在真库上
+// 证（postgres 包的准备用例），这里只用替身补真库难造的几格。夹具全为合成值（S 级）。
 
 var preparedAt = time.Date(2026, 10, 19, 1, 0, 0, 0, time.UTC)
 
@@ -154,4 +155,59 @@ func TestARacedPreparationReadsBackTheWinner(t *testing.T) {
 	if err != nil || raced.Outcome() != application.PreparationRunAnswered || raced.Legs()[0].Answer != application.LegPreparationExisting {
 		t.Fatalf("撞键 = %s %v", raced.Outcome(), err)
 	}
+}
+
+// Covers: ADR-0029 / 计划 X6——申报译不过去、库里那一份过不了重建门、已存摘要的形状认不出（含撞键读回的赢家），都原样以
+// error 上抛：不答未决，也不在坏行上分已有结果与结果冲突。重投不会让它们变好，答未决只会把信封烧到放弃。
+func TestDeterministicFailuresAreRaisedNotUndecided(t *testing.T) {
+	leg := plannedLeg(t, "RPV-1#1")
+	key := ports.TransportPreparationKey{
+		TenantID: opportunityTenant(t), Leg: leg.Reference(),
+		Object: mustCarriedObject(t, "SYN-PARCEL-01"), Rule: domain.BuiltInPreparationRuleVersion(),
+	}
+	unknownShape := ports.TransportPreparationRecord{Key: key, InputDigest: "TFC-99:syn"}
+	for name, test := range map[string]struct {
+		demand demandDouble
+		store  *preparationStoreDouble
+		want   error
+	}{
+		"申报译不过去": {
+			demand: demandDouble{err: fmt.Errorf("%w: declared measurement outcome", ports.ErrDeclaredDemandUntranslatable)},
+			store:  &preparationStoreDouble{records: map[ports.TransportPreparationKey]ports.TransportPreparationRecord{}},
+			want:   ports.ErrDeclaredDemandUntranslatable,
+		},
+		"重建门不过": {
+			store: &preparationStoreDouble{records: map[ports.TransportPreparationKey]ports.TransportPreparationRecord{},
+				findErr: fmt.Errorf("find transport preparation: %w: bad row", ports.ErrTransportPreparationRecordUnreadable)},
+			want: ports.ErrTransportPreparationRecordUnreadable,
+		},
+		"已存摘要形状认不出": {
+			store: &preparationStoreDouble{records: map[ports.TransportPreparationKey]ports.TransportPreparationRecord{key: unknownShape}},
+			want:  ports.ErrTransportPreparationRecordUnreadable,
+		},
+		"撞键赢家的摘要认不出": {
+			store: &preparationStoreDouble{records: map[ports.TransportPreparationKey]ports.TransportPreparationRecord{},
+				raceWinner: &unknownShape},
+			want: ports.ErrTransportPreparationRecordUnreadable,
+		},
+	} {
+		written := len(test.store.records)
+		result, err := preparationHandler(test.demand, candidateSourceDouble{}, poolsOnSchedulesDouble{}, test.store).
+			Prepare(context.Background(), formedCommand(t, leg))
+		if !errors.Is(err, test.want) || result.Outcome() == application.PreparationRunUndecided {
+			t.Fatalf("%s = %s %v, want error %v 且不答未决", name, result.Outcome(), err, test.want)
+		}
+		if test.store.raceWinner == nil && len(test.store.records) != written {
+			t.Fatalf("%s 写了 %d 份", name, len(test.store.records)-written)
+		}
+	}
+}
+
+func mustCarriedObject(t *testing.T, raw string) domain.CarriedObjectReference {
+	t.Helper()
+	object, err := domain.NewCarriedObjectReference(raw)
+	if err != nil {
+		t.Fatalf("对象：%v", err)
+	}
+	return object
 }

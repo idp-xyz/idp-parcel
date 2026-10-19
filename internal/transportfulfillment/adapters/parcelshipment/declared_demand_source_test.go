@@ -8,10 +8,11 @@ import (
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	adapter "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/parcelshipment"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
+	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// 本文件钉 DeclaredDemand 对 PS 申报测量五格的全函数翻译（票 demo-chain-gaps/18，ADR-0201 决定八）：基线锚带测量、已采用
-// 版本锚带与不带测量、未定 / 未申报 / 无三格各一例，读口 error 原样上抛。夹具全部合成。
+// 本文件钉 DeclaredDemand 对 PS 申报测量各格的全函数翻译（票 demo-chain-gaps/18，ADR-0201 决定八）：基线锚带测量、已采用
+// 版本锚带与不带测量、未定 / 未申报 / 无各一例，读口 error 原样上抛、集外取值答译不过去。夹具全部合成。
 
 type measurementLookupStub struct {
 	resolution psdomain.DeclaredMeasurementResolution
@@ -69,8 +70,8 @@ func demandWords(snapshot tfdomain.DemandSnapshot) map[string]string {
 	return words
 }
 
-// Covers: AT-TF-132——五格逐格有落点：基线锚记 `baseline` 带重量、体积、件数；已采用版本锚记那一版标识，那一版清空了测量
-// 只剩件数、绝不回退基线值；未定、未申报、无三格不带锚、只剩件数；按租户与对象原值问。
+// Covers: AT-TF-132——PS 的每一格都有落点：基线锚记 `baseline` 带重量、体积、件数；已采用版本锚记那一版标识，那一版清空了测量
+// 只剩件数、绝不回退基线值；未定、未申报、无都不带锚、只剩件数；按租户与对象原值问。
 func TestDeclaredDemandTranslatesEveryMeasurementOutcome(t *testing.T) {
 	onBaseline, err := psdomain.DeclaredMeasurementOnBaseline(declaredMeasurement(t, true))
 	if err != nil {
@@ -125,13 +126,16 @@ func TestDeclaredDemandTranslatesEveryMeasurementOutcome(t *testing.T) {
 	}
 }
 
-// Covers: X6——PS 读不动原样上抛，由编排答未决；不折成「没报」。
+// Covers: X6、ADR-0029——PS 读不动原样上抛、不带译不过去的哨兵，由编排答未决，不折成「没报」；集外取值同时是本包的
+// ErrUntranslatableAnswer 与端口的 ErrDeclaredDemandUntranslatable，编排认出它不答未决。
 func TestDeclaredDemandPropagatesAnUnreadableShipment(t *testing.T) {
 	down := errors.New("parcel shipment is down")
-	if _, err := loadDemand(t, &measurementLookupStub{err: down}); !errors.Is(err, down) {
+	if _, err := loadDemand(t, &measurementLookupStub{err: down}); !errors.Is(err, down) ||
+		errors.Is(err, tfports.ErrDeclaredDemandUntranslatable) {
 		t.Fatalf("读不动 = %v", err)
 	}
-	if _, err := loadDemand(t, &measurementLookupStub{}); !errors.Is(err, adapter.ErrUntranslatableAnswer) {
+	_, err := loadDemand(t, &measurementLookupStub{})
+	if !errors.Is(err, adapter.ErrUntranslatableAnswer) || !errors.Is(err, tfports.ErrDeclaredDemandUntranslatable) {
 		t.Fatalf("集外取值 = %v", err)
 	}
 }

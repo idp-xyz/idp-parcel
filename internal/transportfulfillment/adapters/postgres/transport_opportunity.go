@@ -184,7 +184,8 @@ func (repository *TransportPreparations) Save(
 	return ports.TransportPreparationSaved, nil
 }
 
-// FindByKey 按四维身份取回一份结果，经重建门读回：结论与候选依据推不到一处就答读不懂，不以坏行作答。
+// FindByKey 按四维身份取回一份结果，经重建门读回：结论与候选依据推不到一处就答读不懂（包住
+// ports.ErrTransportPreparationRecordUnreadable），不以坏行作答，也不冒充读不动。
 func (repository *TransportPreparations) FindByKey(
 	ctx context.Context,
 	key ports.TransportPreparationKey,
@@ -228,7 +229,8 @@ func (repository *TransportPreparations) FindByKey(
 		candidates: candidates, judgedAt: judgedAt,
 	})
 	if err != nil {
-		return ports.TransportPreparationRecord{}, false, fmt.Errorf("find transport preparation: %w", err)
+		return ports.TransportPreparationRecord{}, false, fmt.Errorf("find transport preparation: %w: %w",
+			ports.ErrTransportPreparationRecordUnreadable, err)
 	}
 	return ports.TransportPreparationRecord{
 		Key:         key,

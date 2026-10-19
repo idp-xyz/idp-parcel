@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5/pgxpool"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
@@ -35,17 +36,19 @@ func (stub *stubDeclaredDemand) LoadDeclaredDemand(context.Context, domain.Tenan
 
 type preparationStores struct {
 	scheduleRegistryStores
+	pool         *pgxpool.Pool
 	preparations *adapter.TransportPreparations
 	demand       *stubDeclaredDemand
 	prepare      *application.PrepareOnPlannedLegsHandler
 	opportunity  *application.PrepareTransportOpportunityHandler
 }
 
-// newPreparationStores 与 newScheduleRegistryStores 同形，只是把库留在手上：准备结果库要与两本班次册落在同一个库里，
-// 而 pgtest.Pool 每调一次就是一个新库。
+// newPreparationStores 与 newScheduleRegistryStores 同形，只是把库留在手上：准备结果库要与周期安排册、班次册、池册落在
+// 同一个库里，而 pgtest.Pool 每调一次就是一个新库；坏行用例还要在这个库上直接改行。
 func newPreparationStores(t *testing.T) preparationStores {
 	t.Helper()
-	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
@@ -71,7 +74,7 @@ func newPreparationStores(t *testing.T) preparationStores {
 		Pools:     registry.pools,
 		Clock:     fixedScheduleClock{at: time.Date(2026, 10, 19, 1, 0, 0, 0, time.UTC)},
 	})
-	stores := preparationStores{scheduleRegistryStores: registry}
+	stores := preparationStores{scheduleRegistryStores: registry, pool: pool}
 	if stores.preparations, err = adapter.NewTransportPreparations(db); err != nil {
 		t.Fatalf("构造准备结果库：%v", err)
 	}
@@ -297,6 +300,46 @@ func TestPreparationWritesNothingWhenUndecidedOrWithoutARoute(t *testing.T) {
 	}
 	if rows, err := stores.catalogue.ListTransportPreparations(t.Context(), tenant, 10); err != nil || len(rows) != 0 {
 		t.Fatalf("未决或无路线写了结果：%d %v", len(rows), err)
+	}
+}
+
+// Covers: ADR-0029——库里同一身份那一份过不了重建门（需求量快照里有一维认不出），或依据摘要的形状认不出，同一段再来
+// 时答 error 包住 ErrTransportPreparationRecordUnreadable：不答未决，不在坏行上分已有结果与结果冲突，坏行原样留着等人看。
+func TestAnUnreadableStoredPreparationIsRaisedNotUndecided(t *testing.T) {
+	for name, corruption := range map[string]string{
+		"重建门不过": `UPDATE transport_fulfillment.transport_preparation
+		              SET demand = '[{"dimension": "SYN-DIMENSION", "amount": "1", "unit": "PCS"}]'::jsonb`,
+		"摘要形状认不出": `UPDATE transport_fulfillment.transport_preparation SET input_digest = 'TFC-99:syn'`,
+	} {
+		t.Run(name, func(t *testing.T) {
+			stores := newPreparationStores(t)
+			tenant := deliveryValue(t, domain.NewTenantID, "SYN-TENANT-01")
+			command := application.PrepareOnPlannedLegsCommand{
+				TenantID: tenant, Object: "SYN-PARCEL-01", Route: application.PlannedRouteFormed,
+				Legs: []domain.PreparationLeg{preparationLeg(t, "SYN-RPV-1#1", "SYN-CONN-EMPTY", departure, departure.Add(time.Hour))},
+			}
+			if first := stores.run(t, command); first.Outcome() != application.PreparationRunAnswered {
+				t.Fatalf("首判 = %s", first.Outcome())
+			}
+			if _, err := stores.pool.Exec(t.Context(), corruption); err != nil {
+				t.Fatalf("改坏那一行：%v", err)
+			}
+			var result application.PrepareOnPlannedLegsResult
+			err := stores.transactor.WithinTransaction(t.Context(), func(txCtx context.Context) error {
+				prepared, err := stores.prepare.Prepare(txCtx, command)
+				result = prepared
+				return err
+			})
+			if !errors.Is(err, ports.ErrTransportPreparationRecordUnreadable) ||
+				result.Outcome() == application.PreparationRunUndecided {
+				t.Fatalf("坏行 = %s %v, want ErrTransportPreparationRecordUnreadable 且不答未决", result.Outcome(), err)
+			}
+			var rows int
+			if err := stores.pool.QueryRow(t.Context(),
+				`SELECT count(*) FROM transport_fulfillment.transport_preparation`).Scan(&rows); err != nil || rows != 1 {
+				t.Fatalf("库里 %d 行 %v, want 坏行原样一行", rows, err)
+			}
+		})
 	}
 }
 
