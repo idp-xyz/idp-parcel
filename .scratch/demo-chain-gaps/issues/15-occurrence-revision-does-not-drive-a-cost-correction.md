@@ -2,7 +2,7 @@
 
 Category: enhancement
 Status: needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [08](./08-buy-evaluation-recorded-consumer-never-forms-supplier-expected-cost.md) 的隔离评审。
-Blocked by: [07](./07-transport-charge-occurrences-have-no-production-path.md)（发生项先要有生产路径）
+Blocked by: [27](./27-transport-charge-occurrences-are-registered-and-handed-off.md)（发生项先要有生产路径；原票 07 已拆分）
 出处：[ADR-0200](../../../docs/adr/0200-buy-evaluation-forms-the-supplier-expected-cost-through-its-request.md) 越权风险点 4。
 
 ## 现象
