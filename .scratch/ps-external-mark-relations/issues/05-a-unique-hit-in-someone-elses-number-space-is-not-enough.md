@@ -1,7 +1,7 @@
 # 05 号码只在一份已接受委托里在册时，别人贴着同号的实物送站被唯一关联到那一件
 
 Category: bug
-Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（ADR 用号 0195），分支 `claude-psxm05`。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 0 研判）
+Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（ADR 用号 0195），分支 `claude-psxm05`。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 0 研判）
 Blocked by: 无
 父票：[01](./01-external-mark-relations-have-no-model-in-parcel-shipment.md)；[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C2 第二张草案
@@ -166,3 +166,13 @@ ADR-0199 决定三的重核经同一个 `Unique` 继承这份判断。信号消�
 - 身份冲突的处置与解除：歧义信号落下的冲突要靠它解开，这一项未立票。
 - GLOSSARY 没加「歧义信号」：它是 PS 定义、经 CONTEXT-MAP 交给 NO 的词，没进跨上下文统一语言。是否要加，留评审定。
 
+## Comments
+
+### 评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审；2026-10-19，钉 `a8b9934b`）
+
+两轴合审，0 阻断。
+
+- **Spec**：取 (a) 落到。信号判据「本租户一份`已提交`委托的快照客户包裹件号与号码逐字相等」，拒绝、撤回（含补充期满形成的拒绝）不算，已接受的经关联册作候选；信号与候选同一条语句同一快照取，接受与关联同一笔事务写，两次读之间不会两头漏。PS 端口只交是否值，不交委托、客户账户或声明包裹，ADR-0184 决定五后半句守住；只停用「只交回包裹」那半句，ADR-0195 写明，ADR-0184 文末追加复核记录、正文不动。NO 只经 `ParcelIdentityAnswer.Unique()` 认唯一，ADR-0199 的重核自然继承。票 04 刻画用例按裁定翻转并改名，两份已接受委托撞号那条照旧绿。零候选带信号仍是不记冲突的待识别，理由（接受之后重核不会跳过它）认可。
+- **Standards**：状态值由领域常量传参，SQL 只比较；迁移 0026 的部分索引谓词写死 `state = 1`，与传参同形，编号若改只会失去索引、不会判错。
+- **非阻断（不另立票）**：GLOSSARY 不加「歧义信号」——术语只在 PS CONTEXT 定义一处，NO 侧经端口值读，不跨上下文另起口径。
+- **另立票**：歧义信号落下的身份冲突要靠「身份冲突的处置与解除」解开，ADR-0196、ADR-0199、ADR-0195 都点名它尚无票 → no-reception-identity/04（needs-triage）。
