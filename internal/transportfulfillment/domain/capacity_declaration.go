@@ -59,6 +59,12 @@ func ParseCapacityDimension(word string) (CapacityDimension, error) {
 	return CapacityDimensionInvalid, fmt.Errorf("%w: dimension %q", ErrInvalidCapacityDeclaration, word)
 }
 
+// CompareCapacityDimensions 按维度在封闭词里的次序比较。声明归一、登记答复与查阅册列容量都按它排：同一组声明在
+// 各个面上只有一种次序，读的人不必猜哪一面是按什么排的。
+func CompareCapacityDimensions(left, right CapacityDimension) int {
+	return int(left) - int(right)
+}
+
 // CapacityDeclaration 是周期安排上一个维度的容量声明：维度、单位与硬上限（ADR-0201 决定三的可选逐维容量）。按日期
 // 物化班次时，每一条声明在那一班上建一个池。单位只被引用、不被换算——同维度内怎样按量纲换算归准备评估（决定八）。
 type CapacityDeclaration struct {
@@ -87,7 +93,7 @@ func normalizedCapacityDeclarations(declarations []CapacityDeclaration) ([]Capac
 		normalized = append(normalized, declaration)
 	}
 	slices.SortFunc(normalized, func(left, right CapacityDeclaration) int {
-		return int(left.Dimension) - int(right.Dimension)
+		return CompareCapacityDimensions(left.Dimension, right.Dimension)
 	})
 	return normalized, nil
 }

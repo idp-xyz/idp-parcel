@@ -378,8 +378,8 @@ func TestScheduleTemplateRegistryTranscribesRows(t *testing.T) {
 				ServiceScope:         "SYN-SCOPE-01",
 				EffectiveFrom:        "2026-01-01",
 				Capacities: []ports.ScheduleTemplateCapacityRow{
-					{Dimension: "PIECES", Unit: "PCS", Capacity: 800},
 					{Dimension: "WEIGHT", Unit: "KG", Capacity: 9007199254740993},
+					{Dimension: "PIECES", Unit: "PCS", Capacity: 800},
 				},
 				RecordedAt: catalogueBaseAt,
 			},
@@ -422,7 +422,7 @@ func TestScheduleTemplateRegistryTranscribesRows(t *testing.T) {
 		string(template["durationMinutes"]) != `600` ||
 		string(template["timeZone"]) != `"Asia/Shanghai"` ||
 		string(template["effectiveFrom"]) != `"2026-01-01"` ||
-		string(template["capacities"]) != `[{"dimension":"PIECES","unit":"PCS","capacity":"800"},{"dimension":"WEIGHT","unit":"KG","capacity":"9007199254740993"}]` {
+		string(template["capacities"]) != `[{"dimension":"WEIGHT","unit":"KG","capacity":"9007199254740993"},{"dimension":"PIECES","unit":"PCS","capacity":"800"}]` {
 		t.Fatalf("周期安排行转写走样：%s", response.Body.String())
 	}
 	// 不声明容量的周期安排：capacities 照样在场，是空数组——「没声明」与「键丢了」分得开。

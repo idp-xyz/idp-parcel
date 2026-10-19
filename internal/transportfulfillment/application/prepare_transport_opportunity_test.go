@@ -429,7 +429,7 @@ func TestAPoolNeedsARegisteredSchedule(t *testing.T) {
 	})
 }
 
-// Covers: ADR-0201 补记「池身份」「池不改版」——池身份由（班次、维度）派生、不由登记方起名；同一（班次、维度）同内容
+// Covers: ADR-0201 补记「池身份」「登记口不改池」——池身份由（班次、维度）派生、不由登记方起名；同一（班次、维度）同内容
 // 答`已存在`交回原池，异内容答`池冲突`并交回库里那一个，不成下一版、不改写；重放与冲突都先于班次核对作答（已建的
 // 池答的是它是什么，不是去登班次）；文法外的输入零写入。
 func TestEstablishingAPoolIsIdempotentPerScheduleAndDimension(t *testing.T) {

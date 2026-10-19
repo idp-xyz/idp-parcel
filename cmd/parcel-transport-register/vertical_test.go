@@ -120,8 +120,7 @@ func TestDemoTransportSeedsRegisterOnARealDatabase(t *testing.T) {
 }
 
 // Covers: 票 demo-chain-gaps/17——演示种子的每份周期安排都逐维声明重量与件数两池：准备评估只认重量、体积、件数三维
-// 有来源（ADR-0201 决定八），而演示包裹必报的是重量、件数即对象数，体积要看客户报没报外廓；只声明这两维，演示里的
-// 每一维池都有需求量可比。
+// 有申报来源（ADR-0201 决定八），其中体积要看客户报没报外廓；只声明重量与件数两维，演示里的每一维池都有需求量可比。
 func TestDemoTransportTemplatesDeclareWeightAndPiecePools(t *testing.T) {
 	for _, file := range demoTransportSeedFiles(t, "schedule-template") {
 		raw, err := os.ReadFile(file)

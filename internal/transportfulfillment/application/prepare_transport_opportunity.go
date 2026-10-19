@@ -270,10 +270,10 @@ func establishMaterializedPool(
 	return saveCapacityPool(ctx, pools, clock, pool, digest)
 }
 
-// poolReplayOrConflict 比已建的池与这次的内容：同即`已存在`，异即`池冲突`。池没有下一版——预占、分配与消耗都挂在池
-// 身份上，换容量会让已占的量在新上限下失去守恒依据，所以同身份异内容答冲突而不是像班次那样成下一版（ADR-0201
-// 补记「池不改版」）。冲突也交回库里那一个池：登记方要看见挡住他的是什么。两侧摘要都是 TFC-1：池表在迁移 0027
-// 之前无行，没有无版本那一形可比。
+// poolReplayOrConflict 比已建的池与这次的内容：同即`已存在`，异即`池冲突`。登记口立池而不更正池：同身份上再登一份
+// 不同内容，读不出是登错了还是容量变了，后者按 TF CONTEXT 要另走更正（缩容不改写既有预占、形成超配缺口），不该由
+// 登记口顺手改上限，所以答冲突而不是像班次那样成下一版（ADR-0201 补记「登记口不改池」）。冲突也交回库里那一个池：
+// 登记方要看见挡住他的是什么。两侧摘要都是 TFC-1：池表在迁移 0027 之前无行，没有无版本那一形可比。
 func poolReplayOrConflict(existing ports.CapacityPoolRecord, digest string, subject string) OpportunityResult {
 	switch domain.CompareStoredDigest(existing.ContentDigest, digest, "") {
 	case domain.SamePayload:

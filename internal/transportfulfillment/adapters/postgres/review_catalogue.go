@@ -3,6 +3,7 @@ package postgres
 import (
 	"context"
 	"fmt"
+	"slices"
 	"time"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
@@ -139,20 +140,33 @@ func (catalogue *ReviewCatalogue) ListScheduleTemplates(
 			return nil, fmt.Errorf("list schedule templates: %w", err)
 		}
 		row.RecordedAt = row.RecordedAt.UTC()
-		row.Capacities = make([]ports.ScheduleTemplateCapacityRow, 0, len(capacities))
-		for _, capacity := range capacities {
-			row.Capacities = append(row.Capacities, ports.ScheduleTemplateCapacityRow{
-				Dimension: capacity.Dimension,
-				Unit:      capacity.Unit,
-				Capacity:  capacity.Capacity,
-			})
-		}
+		row.Capacities = catalogueCapacities(capacities)
 		list = append(list, row)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("list schedule templates: %w", err)
 	}
 	return list, nil
+}
+
+// catalogueCapacities 照实转写一版的容量声明，次序按封闭词（领域的比较）定，与登记答复同一次序。SQL 里按维度词排
+// 是字母序，WEIGHT 会落到 PIECES 之后，那一层只为让结果稳定。维度词只为排序而认：认不出的词照实列出、排在最前，
+// 列面不当重建门（见本文件头注）。
+func catalogueCapacities(stored []storedCapacityDeclaration) []ports.ScheduleTemplateCapacityRow {
+	rows := make([]ports.ScheduleTemplateCapacityRow, 0, len(stored))
+	for _, capacity := range stored {
+		rows = append(rows, ports.ScheduleTemplateCapacityRow{
+			Dimension: capacity.Dimension,
+			Unit:      capacity.Unit,
+			Capacity:  capacity.Capacity,
+		})
+	}
+	slices.SortStableFunc(rows, func(left, right ports.ScheduleTemplateCapacityRow) int {
+		leftDimension, _ := domain.ParseCapacityDimension(left.Dimension)
+		rightDimension, _ := domain.ParseCapacityDimension(right.Dimension)
+		return domain.CompareCapacityDimensions(leftDimension, rightDimension)
+	})
+	return rows
 }
 
 // ListCapacityPools 上列容量池登记册：三个和按预占子表求和（bigint 求和在 PG 里是

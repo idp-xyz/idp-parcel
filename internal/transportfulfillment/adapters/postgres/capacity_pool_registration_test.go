@@ -125,7 +125,7 @@ func TestEstablishingAPoolOnTheRegistryChecksTheSchedule(t *testing.T) {
 }
 
 // Covers: ADR-0201 决定三「逐维容量声明随物化建池且幂等」与 `AT-TF-106`——周期安排的容量声明在真库上随那一版落册、
-// 读回（当前版、候选来源与查阅册三处同一组）；按日期物化登记一班时逐维建池，同一日期再登班次与池都答`已存在`，
+// 读回（当前版、候选来源与查阅册三处同一组，查阅册与当前版同按封闭词次序列）；按日期物化登记一班时逐维建池，同一日期再登班次与池都答`已存在`，
 // 册上不多一行；周期安排换版改了重量又加了袋位，再登同一日期：重量答`池冲突`且库里那一池不改写，袋位建池。
 func TestTemplateCapacitiesMaterializePoolsOnTheRegistry(t *testing.T) {
 	stores := newScheduleRegistryStores(t)
@@ -152,8 +152,8 @@ func TestTemplateCapacitiesMaterializePoolsOnTheRegistry(t *testing.T) {
 	}
 	catalogued, err := stores.catalogue.ListScheduleTemplates(t.Context(), tenant, 10)
 	if err != nil || len(catalogued) != 1 || len(catalogued[0].Capacities) != 2 ||
-		catalogued[0].Capacities[0].Dimension != "PIECES" || catalogued[0].Capacities[1].Dimension != "WEIGHT" ||
-		catalogued[0].Capacities[1].Capacity != 5000 {
+		catalogued[0].Capacities[0].Dimension != "WEIGHT" || catalogued[0].Capacities[0].Capacity != 5000 ||
+		catalogued[0].Capacities[1].Dimension != "PIECES" || catalogued[0].Capacities[1].Unit != "PCS" {
 		t.Fatalf("周期安排册的容量声明 = %+v %v", catalogued, err)
 	}
 

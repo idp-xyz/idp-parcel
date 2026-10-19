@@ -412,8 +412,8 @@ func assembleBusinessEndpoints(
 		// 运行日期）物化，也登临时班次。
 		{Pattern: "/transport-fulfillment-transport-schedule-template-registrations", Handler: tfhttp.NewRegisterScheduleTemplateEndpoint(operatorRegistries.transport, transportScheduleRegistration)},
 		{Pattern: "/transport-fulfillment-transport-schedule-registrations", Handler: tfhttp.NewRegisterTransportScheduleEndpoint(operatorRegistries.transport, transportScheduleRegistration)},
-		// 容量池登记口（ADR-0201 决定一）：在一个已登记的班次上登一个维度的池，族与上两口同；池身份由班次与维度派生，
-		// 不由登记方起名。受控 CLI parcel-transport-register 的 capacity-pool 命令调的是同一个编排。
+		// 容量池登记口（ADR-0201 决定一）：在一个已登记的班次上登一个维度的池，族与周期安排、具体班次登记口同；
+		// 池身份由班次与维度派生，不由登记方起名。受控 CLI parcel-transport-register 的 capacity-pool 命令调的是同一个编排。
 		{Pattern: "/transport-fulfillment-capacity-pool-registrations", Handler: tfhttp.NewRegisterCapacityPoolEndpoint(operatorRegistries.transport, capacityPoolRegistration)},
 		{Pattern: "/transport-fulfillment-records", Handler: tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(transportCatalogueIntake, transportFulfillmentRecords)},
 		// 交接范围汇总（票 admin-web-audit-followups/06，读面来自 tf-unwired-seven/03）。
