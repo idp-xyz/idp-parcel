@@ -62,44 +62,58 @@ func (registrar transactionalChargeOccurrenceRegistrar) Register(
 }
 
 func buildChargeOccurrenceRegistration(db *bentopg.DB) (tfhttp.ChargeOccurrenceRegistrar, error) {
+	deps, err := chargeOccurrenceDeps(db)
+	if err != nil {
+		return nil, err
+	}
+	return transactionalChargeOccurrenceRegistrar{
+		transactor: db.Transactor(),
+		inner:      tfapp.NewRegisterChargeOccurrenceHandler(deps),
+	}, nil
+}
+
+// chargeOccurrenceDeps 交回登记编排的真依赖。与事务壳分开交出：并发用例要在同一套真依赖外面套一层挂起，才挂得住
+// 一笔握着串行锁的登记。
+func chargeOccurrenceDeps(db *bentopg.DB) (tfapp.RegisterChargeOccurrenceDeps, error) {
+	none := tfapp.RegisterChargeOccurrenceDeps{}
 	pickups, err := tfpostgres.NewPickupAttempts(db)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-api: pickup attempts for charge occurrences: %w", err)
+		return none, fmt.Errorf("parcel-api: pickup attempts for charge occurrences: %w", err)
 	}
 	deliveries, err := tfpostgres.NewDeliveryAttempts(db)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-api: delivery attempts for charge occurrences: %w", err)
+		return none, fmt.Errorf("parcel-api: delivery attempts for charge occurrences: %w", err)
 	}
 	segments, err := tfpostgres.NewFulfillmentSegments(db)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-api: fulfillment segments for charge occurrences: %w", err)
+		return none, fmt.Errorf("parcel-api: fulfillment segments for charge occurrences: %w", err)
 	}
 	judgments, err := tfpostgres.NewActualCarrierJudgments(db)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-api: actual carrier judgments for charge occurrences: %w", err)
+		return none, fmt.Errorf("parcel-api: actual carrier judgments for charge occurrences: %w", err)
 	}
 	agreementVersions, err := pcpostgres.NewSupplierAgreementContents(db)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-api: supplier agreement versions: %w", err)
+		return none, fmt.Errorf("parcel-api: supplier agreement versions: %w", err)
 	}
 	agreements, err := tfpartycommercial.NewSupplierAgreementSource(agreementVersions)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-api: supplier agreement check: %w", err)
+		return none, fmt.Errorf("parcel-api: supplier agreement check: %w", err)
 	}
 	occurrences, err := tfpostgres.NewChargeOccurrences(db)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-api: charge occurrences: %w", err)
+		return none, fmt.Errorf("parcel-api: charge occurrences: %w", err)
 	}
 	store, err := outbox.NewStore(db)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-api: outbox store: %w", err)
+		return none, fmt.Errorf("parcel-api: outbox store: %w", err)
 	}
 	clock := systemClock{}
 	handoff, err := tfpostgres.NewOutboxChargeOccurrenceHandoff(db, store, clock)
 	if err != nil {
-		return nil, fmt.Errorf("parcel-api: charge occurrence handoff: %w", err)
+		return none, fmt.Errorf("parcel-api: charge occurrence handoff: %w", err)
 	}
-	handler := tfapp.NewRegisterChargeOccurrenceHandler(tfapp.RegisterChargeOccurrenceDeps{
+	return tfapp.RegisterChargeOccurrenceDeps{
 		PickupAttempts:   pickups,
 		DeliveryAttempts: deliveries,
 		Segments:         segments,
@@ -108,6 +122,5 @@ func buildChargeOccurrenceRegistration(db *bentopg.DB) (tfhttp.ChargeOccurrenceR
 		Occurrences:      occurrences,
 		Handoff:          handoff,
 		Clock:            clock,
-	})
-	return transactionalChargeOccurrenceRegistrar{transactor: db.Transactor(), inner: handler}, nil
+	}, nil
 }

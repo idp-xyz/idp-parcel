@@ -20,7 +20,7 @@ import (
 	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// unwiredChargeOccurrenceRegistration 是端点表装配测试里发生项登记那一格的占位：未配置与渠道换口两条用例都钉在编排
+// unwiredChargeOccurrenceRegistration 是端点表装配测试里发生项登记那一格的占位：未配置与渠道换口的用例都钉在编排
 // 之前，走到它就是 Intake 漏了一道。
 type unwiredChargeOccurrenceRegistration struct{}
 
@@ -50,6 +50,12 @@ func chargeValue[T any](t *testing.T, construct func(string) (T, error), raw str
 
 // seedTrunkAgreementAndEndedSegment 登一份已生效的干线协议版本与正文，再登一个参与已以下一次交接结束的干线段。
 func seedTrunkAgreementAndEndedSegment(t *testing.T, db *bentopg.DB) {
+	t.Helper()
+	seedTrunkAgreementAndEndedSegmentOf(t, db, chargeParcel)
+}
+
+// seedTrunkAgreementAndEndedSegmentOf 同上，段里每个包裹各一条已以下一次交接结束的参与。
+func seedTrunkAgreementAndEndedSegmentOf(t *testing.T, db *bentopg.DB, parcels ...string) {
 	t.Helper()
 	ctx := t.Context()
 	approvedAt := time.Date(2026, 1, 2, 0, 0, 0, 0, time.UTC)
@@ -92,17 +98,9 @@ func seedTrunkAgreementAndEndedSegment(t *testing.T, db *bentopg.DB) {
 		t.Fatal(err)
 	}
 	segment, err := tfdomain.RehydrateActualFulfillmentSegment(tfdomain.RehydrateActualFulfillmentSegmentSpec{
-		TenantID: chargeValue(t, tfdomain.NewTenantID, chargeTenant),
-		Segment:  chargeValue(t, tfdomain.NewFulfillmentSegmentReference, chargeSegment),
-		Participations: []tfdomain.RehydrateParticipationSpec{{
-			Object:     chargeValue(t, tfdomain.NewCarriedObjectReference, chargeParcel),
-			EntryKind:  tfdomain.EnteredByTransportHandover,
-			EntryBasis: chargeValue(t, tfdomain.NewParticipationBasisReference, "TRANSPORT-HANDOVER/SYN-HO-SZX-ASSEMBLY"),
-			EnteredAt:  time.Date(2026, 10, 19, 1, 0, 0, 0, time.UTC),
-			EndKind:    tfdomain.EndedByNextHandover,
-			EndBasis:   chargeValue(t, tfdomain.NewParticipationBasisReference, "TRANSPORT-HANDOVER/SYN-HO-SIN-ASSEMBLY"),
-			EndedAt:    time.Date(2026, 10, 19, 6, 0, 0, 0, time.UTC),
-		}},
+		TenantID:       chargeValue(t, tfdomain.NewTenantID, chargeTenant),
+		Segment:        chargeValue(t, tfdomain.NewFulfillmentSegmentReference, chargeSegment),
+		Participations: endedTrunkParticipations(t, parcels),
 	})
 	if err != nil {
 		t.Fatalf("段：%v", err)
@@ -129,6 +127,29 @@ func seedTrunkAgreementAndEndedSegment(t *testing.T, db *bentopg.DB) {
 	}); err != nil {
 		t.Fatalf("夹具：%v", err)
 	}
+}
+
+// endedTrunkParticipations 给每个包裹一条凭 SZX 交接入场、以 SIN 交接离场的参与。第一个包裹的交接依据沿用单包裹
+// 夹具原有的那两个串。
+func endedTrunkParticipations(t *testing.T, parcels []string) []tfdomain.RehydrateParticipationSpec {
+	t.Helper()
+	rows := make([]tfdomain.RehydrateParticipationSpec, 0, len(parcels))
+	for index, parcel := range parcels {
+		suffix := "ASSEMBLY"
+		if index > 0 {
+			suffix = parcel
+		}
+		rows = append(rows, tfdomain.RehydrateParticipationSpec{
+			Object:     chargeValue(t, tfdomain.NewCarriedObjectReference, parcel),
+			EntryKind:  tfdomain.EnteredByTransportHandover,
+			EntryBasis: chargeValue(t, tfdomain.NewParticipationBasisReference, "TRANSPORT-HANDOVER/SYN-HO-SZX-"+suffix),
+			EnteredAt:  time.Date(2026, 10, 19, 1, 0, 0, 0, time.UTC),
+			EndKind:    tfdomain.EndedByNextHandover,
+			EndBasis:   chargeValue(t, tfdomain.NewParticipationBasisReference, "TRANSPORT-HANDOVER/SYN-HO-SIN-"+suffix),
+			EndedAt:    time.Date(2026, 10, 19, 6, 0, 0, 0, time.UTC),
+		})
+	}
+	return rows
 }
 
 func chargeCommandFor(t *testing.T, agreementVersion string) tfapp.RegisterChargeOccurrenceCommand {
