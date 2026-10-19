@@ -1,7 +1,7 @@
 # 38 受控关闭与重开的请求证据与操作证据落在决定上（新 ADR 部分停用 ADR-0183 决定五首句与 ADR-0151 决定二受控关闭与重开一项的半句）
 
 Category: enhancement
-Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc38`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 1 评审遗留；用户授权代决）
+Status: in-progress——2026-10-19 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc38`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 1 评审遗留；用户授权代决）
 Blocked by: 无（operator-channel/37 已进 main）
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)。被评的是 [15](./15-operation-decision-faces-take-operator-intake.md) 之六（代码 `0e3bb7df`），规则出处是 [ADR-0183](../../../docs/adr/0183-operator-channel-addresses-controlled-closure-and-reopening-by-parcel-and-derives-the-shipper-from-the-accepted-request.md)。
 出处：
@@ -260,3 +260,9 @@ Blocked by: 无（operator-channel/37 已进 main）
 **证据层级**：`S`（合成 `SYN-` 数据、演示租户 `SYN-TENANT-01`、本机 PostgreSQL 55432）。
 
 评审：待会话读 diff 审。
+
+## Comments
+
+- **评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审）· 钉 `4355b9c1`（基线 `ccbab34f`）· 2026-10-19**：代码出自本会话起的实施子代理，会话读 diff 审，不算非作者评审，如实记下。
+  - **Spec**：阻断无。ADR-0187 Accepted，写明授权、能力边界与越权风险点；0151、0183 只在 Status 行标部分停用、Links 加指针，正文未动；CONTEXT、GLOSSARY、SCENARIOS 改句与 ADR 同笔先于代码。领域新增请求证据与操作证据两格，操作证据只进审计、无门读它；两份证据不进重放比较。快照两键 omitempty。认可两处与派单要点的出入（以票面裁定为准）：不加守卫迁移（会把旧关闭历史判成坏数据、构成回填），重建门只拒「有证据无请求方」、照收「有请求方无证据」的旧决定。
+  - **Standards**：阻断无。领域、编排、接入合成一笔，因领域门一接上另两层与夹具同时变红，分开会留下不绿的中间检出，认可。
