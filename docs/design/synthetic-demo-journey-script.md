@@ -115,6 +115,8 @@ go run ./cmd/parcel-dispatch
 
 > 2026-10-10 补记（票 `routing-first-cut/11`）：上两段写于当时，原样保留。这一步的目录今天是演示租户**显式采用**随产品发布的参考配置 `network-routing/network-catalog/SYN-CN-SG@1` 登进去的（[ADR-0147](../adr/0147-reference-configuration-ships-embedded-and-is-adopted-through-ordinary-registration.md)），每一版定义行的依据格是那一版的引用串。网络本身多了几样：线路与路由策略的适用范围是服务目的 `NETWORK_SERVICE`，策略声明成本单维，服务区域带 CN / SG 覆盖与收寄、交付节点，四个节点各一份带处理时长的日历，线路三段挂 BUY 价卡引用。上海枢纽修订 2 是采用后的租户修订，依据换成了演示租户自己的。服务区域覆盖的列已由迁移 `0011` 补上；管理台服务区域页今天怎么显示，本票没核。
 
+> 2026-10-19 补记（票 `demo-chain-gaps/16`，[ADR-0201](../adr/0201-schedule-templates-materialize-concrete-schedules-by-date-and-preparation-answers-not-configured-on-an-empty-register.md)）：网走得通之后，货怎么运也有了登记。种子给三条连接各登一份按日运行的周期安排（`scripts/demo-seeds/data/transport/`），`GET /transport-fulfillment-records?registry=transport-schedule-template` 列出这三份；`POST /transport-fulfillment-transport-schedule-registrations` 带 `{"template":"SYN-SCHED-SZX-SIN-DAILY","runningDate":"<日期>"}` 显式登一个班次答 `201` `SCHEDULE_REGISTERED`，同一日期再登答 `200` `EXISTING_SCHEDULE`，班次身份是 `SYN-SCHED-SZX-SIN-DAILY/<日期>`。各段的履约方式是演示租户的声明（租户取值，只记 `S`）：`SHA-HUB→SZX-GATE` 自营；`SZX-GATE→SIN-HUB` 外包给 `SYN-PARTY-CARRIER-TRUNK-01`，采用 `SYN-SUPPLIER-TRUNK-CN-SG-01` v1；`SIN-HUB→SIN-LM` 与末端派送自营、经一线设备；`SYN-SUPPLIER-LASTMILE-SG-01` 暂不被任何委托采用。2026-10-19 在一次性库上按 `seed.sh` 灌入退 0，经操作者渠道取证上面两口（实测，只记 `S`），走完已删库。
+
 ### 第 4 步 · 过关的规则（customs-compliance）
 
 | 看哪页 | 取哪个端点 |
