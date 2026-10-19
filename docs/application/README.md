@@ -65,6 +65,7 @@ PN-08 的阶段准入、暂停恢复、生产权威、对象级接管和 `Go/No-
 | `UC-NO-002` | [接收客户送达节点的作业实物](./node-operations/UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md) | `node-operations` | 客户送站节点收寄、控制和待识别实物机制已形成，真实节点与收寄参数待提供 |
 | `UC-NO-003` | [执行正常节点作业、集运与封签](./node-operations/UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md) | `node-operations` | 测量、分拣、集运、快照、封签和非 WMS 边界已形成，真实设备、SOP 与规则待提供 |
 | `UC-NO-004` | [处置作业实物的身份冲突](./node-operations/UC-NO-004-DISPOSE-AN-IDENTITY-CONFLICT.md) | `node-operations` | 运营决定处置、逐链追加处置版、连带指明与身份一格读链头已定（ADR-0210），待实现；谁持有处置授予待租户提供 |
+| `UC-NO-005` | [按权威运输交接推进节点控制](./node-operations/UC-NO-005-ADVANCE-NODE-CONTROL-ON-AN-AUTHORITATIVE-TRANSPORT-HANDOVER.md) | `node-operations` | 交接对象经节点自己的当前关联对上作业实物、只追加的节点控制转移册与读时折叠、`已交接`转出此刻唯一在身的控制、撤回控制的更正入账待重算已定并实现转出（ADR-0214）；转入待票 demo-chain-gaps/62，集运单元交接待单元控制规则 |
 | `UC-NO-006` | [建立送站的可验证交付范围](./node-operations/UC-NO-006-ESTABLISH-A-VERIFIABLE-DELIVERY-SCOPE.md) | `node-operations` | 送站预报、送站交接单、绑定确认与范围成立后的重核已定（ADR-0212），待实现；授权交付关系、预报有效时窗与各项授予待租户提供 |
 | `UC-TF-001` | [承接并履行监管运输处置](./transport-fulfillment/UC-TF-001-ACCEPT-AND-FULFILL-REGULATORY-TRANSPORT-DISPOSITION.md) | `transport-fulfillment` | 监管运输承接、独立退运旅程、交接和移动事实已形成，真实路径与责任参数待提供 |
 | `UC-TF-002` | [执行场外揽收并形成运输控制](./transport-fulfillment/UC-TF-002-PERFORM-OFFSITE-PICKUP.md) | `transport-fulfillment` | 任务/尝试/逐对象结果和运输控制机制已形成，真实模式、履约方与来源参数待提供 |
