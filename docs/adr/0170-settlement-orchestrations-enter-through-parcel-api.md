@@ -34,4 +34,5 @@ Date: 2026-09-30
 
 - [ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)
 - [ADR-0169](./0169-sell-evaluation-forms-a-customer-charge.md)：形成编排不进派发，本记录不改那一条
+- [ADR-0190](./0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md)：后继，SELL 的发起与形成编排改住 `cmd/parcel-dispatch`，取代本记录 Context 与候选中关于不进派发的两句
 - 票 `.scratch/product-strategy-boundary/issues/12-sa-amount-grammars-allocation-forms-and-accounting-connectors.md` 第 10 项
