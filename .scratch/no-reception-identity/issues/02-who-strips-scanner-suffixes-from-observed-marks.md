@@ -1,7 +1,7 @@
 # 02 收寄现场观察的号码：在线收寄口原样交核对，受控批量口逐格去两端空白——扫描后缀与两口口径归 NO 定
 
 Category: task
-Status: in-progress——2026-10-19 子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-nri02`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 0 研判）
+Status: in-progress——2026-10-19 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-nri02`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 0 研判）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C2 第四张草案
@@ -69,3 +69,7 @@ Blocked by: 无
 未做：完成判据第二条的受控批量口那条（`cmd/parcel-frontline-import/intake_template_test.go` 钉模板 `mark` 格去两端空白），本次派单范围只含在线口；带 DSN 跑 `internal/nodeoperations/...`、`cmd/parcel-frontline-import` 与全仓 `go build ./...`、`go vet ./...` 未跑。
 
 评审：待会话读 diff 审。
+
+## Comments
+
+- **评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审）· 钉 `b7212074`（基线 `c4c89a8c`）· 2026-10-19**：出自本会话起的子代理，会话读 diff 审，不算非作者评审。UC-NO-002「输入语义契约」表后一段只引 ADR-0023 与 PS CONTEXT，不复述；`receptionDocument` 头注只改注释；在线口原样保留用例 `TestWorkFactReceptionIntakeKeepsTheObservedMarkVerbatim` 钉现状。子代理漏了完成判据点名的批量口用例，会话补 `TestDecodeTemplateTrimsTheObservedMarkCell`（钉现状，首跑即绿）。阻断无，非阻断无。
