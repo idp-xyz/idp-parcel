@@ -1,7 +1,7 @@
 # 50 TF 装载分配与终止参与两口没核重放代数就接上了真渠道：逐口裁现有格够不够
 
 Category: task
-Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（50 与 39 同一分支 `claude-oc5039`，先 50 后 39）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 15 之四补核）
+Status: in-progress——2026-10-19 完工，待推送方自审进 main（纯 `.md`，分支 `claude-oc5039`），见「裁定」与「完成记录」。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（50 与 39 同一分支 `claude-oc5039`，先 50 后 39）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 15 之四补核）
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C6 第五张草案；逐口核研判
@@ -39,11 +39,97 @@ Blocked by: 无
 
 判据可以照 ADR-0151 的复核记录（<日期>，随 <T0> 落）。
 
+## 裁定（2026-10-19，会话 idp-parcel-9b 代决）
+
+代 TF owner 裁，依据见上方「代决依据」。判据照 ADR-0151 复核记录（2026-10-19，随 operator-channel/39 落）的读法：「内容冲突代数」看答法，不看有没有一个叫「冲突」的格。两口的取舍都属机制，不涉租户取值。
+
+### 装载分配 `/transport-fulfillment-load-assignment-registrations`
+
+- **同版本重放：现有格够用，只核对。**
+  - 凭 `FormLoadAssignmentHandler.Form` 按（租户、分配、版本）认重放：同一版本再投答 `LOAD_ASSIGNMENT_VERSION_EXISTS`，经 `loadAssignmentResponse` 回显在册那一版（分配、班期、成员、版本、分配时刻），不落库、不顶替。
+  - 版本即身份。同一版本异内容不是本口该收的「变化」：变化与撤回要回指前版，走领域 `ReviseMembers` / `Withdraw` 的入口，不经本口重投表达。回显让调用方自己比得出差异，与票 20「裁定记录」对建派送任务的裁法同形。
+  - 不补 TFC-1 形状，不加冲突格，`payload_canonicalization.go` 不动。
+- **并列首版：不成立，已由 tf-face-algebra/02 修。** 本口只形成一次分配的首版。该分配已有任何版本时，对新版本号答新格 `LOAD_ASSIGNMENT_ALREADY_FORMED`（200，回显链头），不落库、不另起根；库面一分配一个首版（迁移 `transport_fulfillment/0021`）。
+- **零时刻之后不足一微秒的分配时刻、版本或成员带 NUL：不成立，已由 tf-face-algebra/01 修。** 构造门按登记册精度判零，`newRequiredValue` 拒 NUL，都答 `INPUT_NOT_ACCEPTED`，不落库。
+- 余项（潜伏，不挡本口）：链头是撤回版时，「分配已形成」的答复看不出分配已撤回 → tf-face-algebra/13（ready-for-agent）。撤回入口（tf-unwired-seven/05）接上之前走不到。
+
+### 终止参与 `/transport-fulfillment-participation-terminations`
+
+- **现有格够用，补回显；已由 tf-face-algebra/03 落。**
+  - 凭 `EndFulfillmentParticipationHandler.End`：终点是链尾参与上的单向槽，已离场答 `PARTICIPATION_ALREADY_ENDED`，不落库、不发意图、不签标识。
+  - 已离场之后没有第二个终点可落，冲突格给不出可续办的去处。这与票 20 对关段的理由同形，代价也同形：答复要让调用方比得出差异。
+  - 现在已离场的答复带在册终点的种类、依据、时刻（`endKind` / `endBasis` / `endedAt`）。原样重放、异依据或异时刻、被下一次交接结束，这几种情形调用方都能自己分出来。
+  - tf-face-algebra/03 里补 TFC-1 形状 `END_FULFILLMENT_PARTICIPATION` 的备选不取。
+  - 同一张票还收了两件：并发输家先读回再作答；坏命令不论参与状态，一律答 `INPUT_NOT_ACCEPTED`。
+- **与交接更正并发时终点丢失：已由 tf-face-algebra/05 修**（替代口与终止窄口都先锁住链尾行）。
+- **凭实际承运商首次有效收寄入场的段按键读不回：已由 tf-face-algebra/04 修。**
+- **链尾被交接更正成失效版本后，同一终止重放答 `OBJECT_NOT_IN_SEGMENT`：维持，不加格。** tf-face-algebra/03「不做」把它的去留留给了 TF owner，这里一并裁。此刻链尾的入场依据已失效，对象确实不在本段；答复如实反映在册状态，不会让调用方把没被采纳的内容读成成功，不属于 ADR-0151 复核记录说的「不算的情况」。
+- 读码所见、未实测：`FulfillmentParticipation.End` 的时刻非零门仍按纳秒判，属 tf-face-algebra/01 清点出的履约段同病 → tf-face-algebra/14（in-progress，本票落时未进 main）。
+
+### 回归用例
+
+本票不另写代码。完成判据要的「领域、编排、真库装配三层」，逐格指到修复票已有的用例；用例名都在本分支基 `b57531cc` 上用 `grep -rn 'func <名>' --include=*_test.go` 找到了定义。修复没动的那一层，照实写无用例。「真库装配」含真库适配器用例与 `cmd/parcel-api` 的真渠道用例（生产装配加真库）。
+
+- 装载分配 · 同版本重放（只核对，代码未动）：
+  - 领域：领域层未改，故无领域用例。
+  - 编排：`TestASecondFormOfTheSameVersionKeepsTheOriginal`（既有，tf-face-algebra/02 修后照过）。
+  - 真库装配：真渠道 `TestTheLoadAssignmentFaceAnswersAlreadyFormedAfterAWithdrawnChain` 末段（撤回链之后同版本重放仍答 `LOAD_ASSIGNMENT_VERSION_EXISTS`，回显原版）；真库适配器 `TestALoadAssignmentAtTheRegistryZeroIsNotAcceptedAgainstARealRegistry` 里「零点后 1µs 原样重放」那一格。
+- 装载分配 · 并列首版（tf-face-algebra/02）：
+  - 领域：领域层未改，故无领域用例。
+  - 编排：`TestAnotherVersionOfAFormedAssignmentAnswersAlreadyFormed`、`TestAWithdrawnAssignmentAnswersAlreadyFormedWithTheWithdrawal`、`TestALosingConcurrentFirstVersionAnswersAlreadyFormedWithTheWinner`、`TestAChainHeadReadFailureIsUndecided`。
+  - 真库装配：真库适配器 `TestTheChainHeadIsTheVersionNoOtherCorrects`、`TestASecondFirstVersionOfOneAssignmentIsAlreadyRegistered`；真渠道 `TestTheLoadAssignmentFaceAnswersAlreadyFormedForASecondVersion`、`TestTheLoadAssignmentFaceAnswersAlreadyFormedAfterAWithdrawnChain`、`TestALosingConcurrentFirstVersionAnswersAlreadyFormedWithTheWinner`（与编排那例同名，定义在 `cmd/parcel-api`）、`TestConcurrentFirstVersionsThroughTheFaceFormExactlyOne`。
+  - 另有 HTTP 适配器 `TestFormLoadAssignmentAnswersAlreadyFormedWithTheChainHead`。
+- 装载分配 · 零时刻与 NUL（tf-face-algebra/01）：
+  - 领域：`TestALoadAssignmentAtTheZeroInstantOnTheRegistryIsNotFormed`、`TestLoadAssignmentRevisionAndWithdrawalAtTheZeroInstantOnTheRegistryAreRefused`、`TestRequiredValuesRefuseNUL`。
+  - 编排：编排层未改，故无编排用例。
+  - 真库装配：真库适配器 `TestALoadAssignmentAtTheRegistryZeroIsNotAcceptedAgainstARealRegistry`、`TestValuesWithNULAreNotAcceptedAgainstARealRegistry`；真渠道 `TestLoadAssignmentUnstorableValuesAreNotAcceptedOnTheProductionChannel`。
+- 终止参与 · 回显、并发输家读回、坏命令（tf-face-algebra/03）：
+  - 领域：领域层未改，故无领域用例。
+  - 编排：`TestAnAlreadyEndedAnswerEchoesTheRecordedEnd`、`TestAConcurrentLoserReadsBackBeforeAnswering`、`TestAMalformedTerminationIsNotAcceptedWhateverTheParticipationState`。
+  - 真库装配：真渠道 `TestATerminationReplayEchoesTheRecordedEndAndWritesNothing`、`TestATerminationAfterTheNextHandoverEndedItEchoesThatHandover`、`TestAConcurrentTerminationLoserBehindASupersedingCorrectionDoesNotClaimTheEnd`。
+  - 另有 HTTP 适配器 `TestParticipationTerminationAlreadyEndedEchoesTheRecordedEnd`。
+- 终止参与 · 与交接更正并发（tf-face-algebra/05）：
+  - 领域、编排：都未改，故无领域用例，也无编排用例。
+  - 真库装配：真库适配器 `TestSupersedeInheritsAnEndCommittedAfterTheCallerRead`、`TestSupersedeRefusesWhenTheInheritedEndPrecedesTheCorrectedStart`；真渠道 `TestAHandoverCorrectionArrivingInsideAnOpenTerminationKeepsTheEnd`、`TestATerminationCommittedBetweenACorrectionsReadAndItsSupersedeIsKept`、`TestATerminationArrivingWhileACorrectionHoldsTheTailKeepsTheEnd`。
+- 终止参与 · 第三入场词读回（tf-face-algebra/04）：
+  - 领域、编排：都未改，故无领域用例，也无编排用例。
+  - 真库装配：真库适配器 `TestACarrierPickupEntryRoundTripsBesideOtherMembers`。没有真渠道用例，tf-face-algebra/04 完成记录「未做」如实记着。
+- 终止参与 · 链尾失效后答 `OBJECT_NOT_IN_SEGMENT`（维持）：代码未动，没有专门用例。
+
+### 越权风险点
+
+代 TF owner 裁了这两口的代数够用（装载分配同版本重放只核对；终止参与补回显即够，链尾失效后答 `OBJECT_NOT_IN_SEGMENT` 维持），owner 复核时看今天有没有调用方靠同一版本号重投表达变化，或者非要冲突格而不是回显来分辨异依据的终止。
+
 ## 完成判据（按裁定）
 
-- [ ] 两口的逐口裁定记在本票里（由 TF owner 裁）；裁为补形状或补回显的口，补上领域、编排、真库装配三层的回归用例。
-- [ ] 在票 15 补记里这两口那一行下追加回写，只加行。
-- [ ] 改代码的部分走 Go 那条路（并行会话）。
+- [x] 两口的逐口裁定记在本票里（由 TF owner 裁）；裁为补形状或补回显的口，补上领域、编排、真库装配三层的回归用例。
+- [x] 在票 15 补记里这两口那一行下追加回写，只加行。
+- [x] 改代码的部分走 Go 那条路（并行会话）。
+
+## 完成记录（2026-10-19，会话 idp-parcel-9b 起的子代理，分支 `claude-oc5039`）
+
+- 基线 `b57531cc`。本笔只改本票票面；「地盘」里列的 `.go` 一份没动——要改代码的格都在修复票里走完了 Go 那条路，并已进 main。
+- 逐口裁定：见「裁定」，由会话代 TF owner 裁，越权风险点在该节末。终止参与裁为补回显，三层回归用例见「回归用例」：领域层两口都没改，照实写无领域用例；编排与真库装配各格都指到了已有用例。
+- 票 15 补记的回写：随 operator-channel/39 落，在同分支紧随本笔的下一笔里（票 15 的补记节由 39 统一追加，本票这两口的行与回写都在那一节）。
+- Go 那条路：tf-face-algebra/01、02、03、04、05 的 Status 都是 resolved，各票「进 main 记录」有推送方全量。
+- 附录里的〈占位名〉逐个在 `.scratch/` 下按票题与 Status 核过（核于 `b57531cc`），对应如下。附录原稿不改，票 15 补记里已换成票号。
+  - 〈装载分配并列首版〉→ tf-face-algebra/02（resolved）
+  - 〈TF 构造门存得下〉→ tf-face-algebra/01（resolved）。附录里点名它的装载分配、移动事实、派送尝试，都在 01 里收；01 清点出的地盘外同病另立 tf-face-algebra/14（in-progress，未进 main），附录各行没有点名它。
+  - 〈终止参与回显〉→ tf-face-algebra/03（resolved）
+  - 〈终止与更正并发丢终点〉→ tf-face-algebra/05（resolved）
+  - 〈第三入场词读回〉→ tf-face-algebra/04（resolved）
+  - 〈有效时间链线性〉→ tf-face-algebra/06（resolved）
+  - 〈交接更正冲突〉→ operator-channel/41（resolved；该票附录 F-7，tf-face-algebra/07 的裁定也说比对「用 operator-channel/41 交接更正那一半立起来的那套」）
+  - 〈交接更正链线性〉→ tf-face-algebra/07（resolved）
+  - 〈POD 更正代数〉→ operator-channel/41（resolved；该票附录 F-6）
+  - 〈移动事实冲突格〉→ tf-face-algebra/08（resolved）
+  - 〈派送发起任务引用〉→ tf-face-algebra/09（needs-triage，未修）
+  - 〈建派送任务回显条件〉→ tf-face-algebra/10（needs-triage，未修）
+  - 〈监管凭证存得下〉→ tf-face-algebra/11（resolved）
+  - 〈集成客户端租户键〉→ operator-channel/52（resolved）
+  - 附录里写成票号的 operator-channel/30、31、33、34、36 也都是 resolved。
+- 证据层级：本票没有新取证；所引用例与实测都出自修复票，层级 `S`。
+- 评审：纯 `.md`，推送方自审。
 
 
 ## 附录：逐口结论原稿
