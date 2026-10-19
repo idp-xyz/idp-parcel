@@ -51,6 +51,8 @@ Blocked by: 无
 
 序 2 的去向（2026-10-18）：用户授权会话 `idp-parcel-9b` 代决，修复票 [29](./29-node-reception-records-physical-facts-when-cross-context-reads-fail.md) 落地，裁定成文为 [ADR-0186](../../../docs/adr/0186-node-reception-records-physical-facts-when-the-service-result-read-fails.md)，取代票 25 裁定里「读不动答`收寄待确认`、带续办引用、不落册」那一句；同事务读 PS 的 SQL 级错误改经 savepoint 隔离。
 
+序 1「货主重授权证据落不落册，待 PS owner 裁」的去向（2026-10-19，研判轮 review26-followups-decide 簇 C5）：用户授权会话 `idp-parcel-9b` 代决，拆两票。C5-Q2（请求方种类段与责任来源词表收进 application）由票 [37](./37-shipper-requester-and-closure-source-vocabulary-live-in-application.md) 落地；C5-Q1 由票 [38](./38-controlled-closure-and-reopening-record-request-and-operation-evidence.md) 落地（分支 `claude-oc38`，待评审），裁定成文为 [ADR-0187](../../../docs/adr/0187-controlled-closure-and-reopening-record-request-and-operation-evidence-on-the-decision.md)：请求证据与操作证据落在决定上，部分停用 ADR-0183 决定五首句与 ADR-0151 决定二受控关闭与重开一项半句。
+
 完成判据核对：表中每一行都有一条非作者评审写进对应票面（序 1、序 4 都在票 15），三格齐；有阻断的序 1、序 3 各立修复票（28、27）。非阻断照 parallel-sessions 随票记，不另立票；要不要另立、何时清，归各票的 owner。
 
 评审用的隔离检出（钉各行代码 SHA 的那几份，加上复核用的 main `4dd937eb` 那一份）都已 `git worktree remove` 拆掉。
