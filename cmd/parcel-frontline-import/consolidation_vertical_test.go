@@ -1,12 +1,16 @@
 package main
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
+	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
+	"go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
@@ -258,5 +262,75 @@ func TestFrontlineConsolidationImportRejectsWithoutRecording(t *testing.T) {
 	seven := findUnit(t, units, "SYN-CU-7")
 	if seven.Closed() || seven.Asset().String() != "SYN-CAGE-7" || memberIDs(seven.Members()) != "SYN-HU-7" {
 		t.Fatalf("CU-7 状态变了：关闭=%v 载具=%s 成员=%q", seven.Closed(), seven.Asset(), memberIDs(seven.Members()))
+	}
+}
+
+// factSaveFails 让来源事实那一步写失败、其余照常。坏在这里，是因为单元那一步已在同一笔事务里写下：编排若答一格
+// 结果而不交回 error，事务照常提交，册上就留下一个没有来源事实的成员。
+type factSaveFails struct {
+	*nopostgres.ConsolidationFacts
+}
+
+func (factSaveFails) Save(context.Context, ports.ConsolidationFactRecord) (ports.ConsolidationFactSaveOutcome, error) {
+	return ports.ConsolidationFactSaveOutcome(0), errors.New("SYN 来源事实登记写失败")
+}
+
+// TestFrontlineConsolidationRowFormsNoAnswerWhenItsOwnRegisterFails 证本方册写失败的那一行在真库上什么也不留
+// （票 operator-channel/46，ADR-0186 决定三的同形）：移入行在单元写下之后、来源事实写失败，编排交回 error，本行
+// 记未决、整笔回滚——单元里没有这个成员、登记里没有这条事实；册恢复后重跑同一行照常落地，而不是被跨单元核对
+// 读成「成员已在本单元」的重放、永远缺一条来源事实。
+func TestFrontlineConsolidationRowFormsNoAnswerWhenItsOwnRegisterFails(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	clock := fixedClock{at: mustInstant(t, "2026-09-08T18:00:00+08:00")}
+	healthy, err := buildConsolidationImporter(db, clock)
+	if err != nil {
+		t.Fatalf("装配集运导入口：%v", err)
+	}
+	units, err := nopostgres.NewConsolidationUnits(db)
+	if err != nil {
+		t.Fatalf("构造集运单元库：%v", err)
+	}
+	facts, err := nopostgres.NewConsolidationFacts(db)
+	if err != nil {
+		t.Fatalf("构造集运事实登记：%v", err)
+	}
+	outboxStore, err := outbox.NewStore(db)
+	if err != nil {
+		t.Fatalf("构造 outbox 存储：%v", err)
+	}
+	downstream, err := nopostgres.NewOutboxSealedSnapshotHandoff(db, outboxStore, clock)
+	if err != nil {
+		t.Fatalf("构造封装快照意图交付：%v", err)
+	}
+	broken := healthy
+	broken.handler = application.NewConsolidateParcelsHandler(application.ConsolidateParcelsDeps{
+		Store: units, Facts: factSaveFails{facts}, Containment: units, Downstream: downstream, Clock: clock,
+	})
+
+	opened := importConsolidationTemplate(t, healthy, []byte(consolidationHeader+
+		consolidationLineFor("SYN-WORK-1", "OPEN_UNIT", "SYN-CU-1", "SYN-CAGE-1", "", "", "")))
+	assertDisposition(t, opened, 0, rowLanded, "OPENED")
+
+	addRow := []byte(consolidationHeader + consolidationLineFor("SYN-WORK-2", "ADD_MEMBER", "SYN-CU-1", "", "SYN-HU-1", "", ""))
+	failed := importConsolidationTemplate(t, broken, addRow)
+	assertDisposition(t, failed, 0, rowUndecided, "NO_ANSWER_FORMED")
+	if code := exitCodeFor(failed); code != exitUndecided {
+		t.Fatalf("退出码 = %d，要 %d", code, exitUndecided)
+	}
+	if members := memberIDs(findUnit(t, units, "SYN-CU-1").Members()); members != "" {
+		t.Fatalf("没形成答案的一行在单元里留下了成员 %q", members)
+	}
+	if _, found := findFact(t, facts, "FTI/CONSOLIDATION-1/SYN-BATCH-2/SYN-WORK-2"); found {
+		t.Fatal("没形成答案的一行留下了来源事实")
+	}
+
+	rerun := importConsolidationTemplate(t, healthy, addRow)
+	assertDisposition(t, rerun, 0, rowLanded, "MEMBER_ADDED")
+	if _, found := findFact(t, facts, "FTI/CONSOLIDATION-1/SYN-BATCH-2/SYN-WORK-2"); !found {
+		t.Fatal("册恢复后重跑落地了却没留来源事实")
 	}
 }

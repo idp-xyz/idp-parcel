@@ -13,6 +13,8 @@ import (
 // ErrUnexpectedConsolidationSave 说明集运库交回了封闭集合以外的写入结果。
 var ErrUnexpectedConsolidationSave = errors.New("node operations: unexpected consolidation save outcome")
 
+var errStoredConsolidationDigestNotComparable = errors.New("node operations: stored consolidation fact digest is not comparable")
+
 // ErrNoDirectionalBasisRecord 说明移入的调用方没交方向依据记录。这是装配缺陷，不是业务答案：真缺依据是记录里
 // 一格的取值，照样落册；没判就交进来，落下去的只能是一条读作`未记录`的新事实，而那一格留给的是它出现之前的旧事实。
 var ErrNoDirectionalBasisRecord = errors.New("node operations: add member needs the directional basis judged before the write")
@@ -33,7 +35,6 @@ const (
 	UnitClosedRecorded
 	UnitNotFound
 	ConsolidationNotAccepted
-	ConsolidationUndecided
 	ConsolidationExistingResult
 	ConsolidationSourceConflict
 )
@@ -62,8 +63,6 @@ func (outcome ConsolidationOutcome) String() string {
 		return "UNIT_NOT_FOUND"
 	case ConsolidationNotAccepted:
 		return "NOT_ACCEPTED"
-	case ConsolidationUndecided:
-		return "UNDECIDED"
 	case ConsolidationExistingResult:
 		return "EXISTING_RESULT"
 	case ConsolidationSourceConflict:
@@ -182,32 +181,38 @@ func (handler *ConsolidateParcelsHandler) Open(
 	if err != nil {
 		return ConsolidationResult{}, err
 	}
-	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest,
+	gate, proceed, err := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest,
 		unversionedConsolidationDigest(domain.OpenUnitAction, command.Source, command.Unit.String(), command.Asset.String()))
+	if err != nil {
+		return ConsolidationResult{}, err
+	}
 	if !proceed {
 		return gate.result, nil
 	}
 
 	unit, err := domain.OpenConsolidationUnit(command.Unit, command.Asset, command.Source)
 	if err != nil {
-		return handler.rejected(ctx, gate), nil
+		return handler.rejected(ctx, gate)
 	}
 	saved, err := handler.deps.Store.Save(ctx, command.TenantID, unit)
 	if err != nil {
-		return ConsolidationResult{outcome: ConsolidationUndecided}, nil
+		return ConsolidationResult{}, fmt.Errorf("record consolidation unit: %w", err)
 	}
 	switch saved {
 	case ports.ConsolidationSaved:
 		return handler.recorded(ctx, gate, ports.ConsolidationFactRecord{
 			Action: domain.OpenUnitAction,
 			Unit:   command.Unit,
-		}, ConsolidationResult{outcome: UnitOpened, unit: unit}), nil
+		}, ConsolidationResult{outcome: UnitOpened, unit: unit})
 	case ports.ConsolidationAlreadyRecorded:
 		// 别的来源先开了同一个实例：这不是来源冲突（两次报的不是同一件事），本次没有
 		// 作业发生，因此不留来源事实——重放照样读到同一个已有实例。
 		existing, found, err := handler.deps.Store.FindByID(ctx, command.TenantID, command.Unit)
-		if err != nil || !found {
-			return ConsolidationResult{outcome: ConsolidationUndecided}, nil
+		if err != nil {
+			return ConsolidationResult{}, fmt.Errorf("read back consolidation unit: %w", err)
+		}
+		if !found {
+			return ConsolidationResult{}, errors.New("node operations: consolidation unit already recorded but not readable")
 		}
 		return ConsolidationResult{outcome: UnitExisting, unit: existing}, nil
 	default:
@@ -234,15 +239,18 @@ func (handler *ConsolidateParcelsHandler) AddMember(
 	if err != nil {
 		return ConsolidationResult{}, err
 	}
-	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest,
+	gate, proceed, err := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest,
 		unversionedConsolidationDigest(domain.AddMemberAction, command.Source, command.Unit.String(), command.Member.String()))
+	if err != nil {
+		return ConsolidationResult{}, err
+	}
 	if !proceed {
 		return gate.result, nil
 	}
 
 	unit, found, err := handler.deps.Store.FindByID(ctx, command.TenantID, command.Unit)
 	if err != nil {
-		return ConsolidationResult{outcome: ConsolidationUndecided}, nil
+		return ConsolidationResult{}, fmt.Errorf("look up consolidation unit: %w", err)
 	}
 	if !found {
 		return ConsolidationResult{outcome: UnitNotFound}, nil
@@ -250,7 +258,7 @@ func (handler *ConsolidateParcelsHandler) AddMember(
 
 	parent, contained, err := handler.deps.Containment.CurrentParent(ctx, command.TenantID, command.Member)
 	if err != nil {
-		return ConsolidationResult{outcome: ConsolidationUndecided}, nil
+		return ConsolidationResult{}, fmt.Errorf("look up current parent: %w", err)
 	}
 	if contained {
 		if parent == command.Unit {
@@ -260,17 +268,17 @@ func (handler *ConsolidateParcelsHandler) AddMember(
 	}
 
 	if err := unit.AddMember(command.Member); err != nil {
-		return handler.rejected(ctx, gate), nil
+		return handler.rejected(ctx, gate)
 	}
 	if err := handler.deps.Store.Update(ctx, command.TenantID, unit); err != nil {
-		return ConsolidationResult{outcome: ConsolidationUndecided}, nil
+		return ConsolidationResult{}, fmt.Errorf("update consolidation unit: %w", err)
 	}
 	return handler.recorded(ctx, gate, ports.ConsolidationFactRecord{
 		Action:           domain.AddMemberAction,
 		Unit:             command.Unit,
 		Member:           command.Member,
 		DirectionalBasis: basis,
-	}, ConsolidationResult{outcome: MemberAdded, unit: unit, basis: basis}), nil
+	}, ConsolidationResult{outcome: MemberAdded, unit: unit, basis: basis})
 }
 
 // RemoveMember 把实物移出单元（开放态，领域拦）。
@@ -282,30 +290,33 @@ func (handler *ConsolidateParcelsHandler) RemoveMember(
 	if err != nil {
 		return ConsolidationResult{}, err
 	}
-	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest,
+	gate, proceed, err := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest,
 		unversionedConsolidationDigest(domain.RemoveMemberAction, command.Source, command.Unit.String(), command.Member.String()))
+	if err != nil {
+		return ConsolidationResult{}, err
+	}
 	if !proceed {
 		return gate.result, nil
 	}
 
 	unit, found, err := handler.deps.Store.FindByID(ctx, command.TenantID, command.Unit)
 	if err != nil {
-		return ConsolidationResult{outcome: ConsolidationUndecided}, nil
+		return ConsolidationResult{}, fmt.Errorf("look up consolidation unit: %w", err)
 	}
 	if !found {
 		return ConsolidationResult{outcome: UnitNotFound}, nil
 	}
 	if err := unit.RemoveMember(command.Member); err != nil {
-		return handler.rejected(ctx, gate), nil
+		return handler.rejected(ctx, gate)
 	}
 	if err := handler.deps.Store.Update(ctx, command.TenantID, unit); err != nil {
-		return ConsolidationResult{outcome: ConsolidationUndecided}, nil
+		return ConsolidationResult{}, fmt.Errorf("update consolidation unit: %w", err)
 	}
 	return handler.recorded(ctx, gate, ports.ConsolidationFactRecord{
 		Action: domain.RemoveMemberAction,
 		Unit:   command.Unit,
 		Member: command.Member,
-	}, ConsolidationResult{outcome: MemberRemoved, unit: unit}), nil
+	}, ConsolidationResult{outcome: MemberRemoved, unit: unit})
 }
 
 // Seal 封装并交快照意图：冻结当时成员、封签与依据（领域把门空单元与重复封装）；
@@ -319,24 +330,27 @@ func (handler *ConsolidateParcelsHandler) Seal(
 	if err != nil {
 		return ConsolidationResult{}, err
 	}
-	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest,
+	gate, proceed, err := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest,
 		unversionedConsolidationDigest(domain.SealUnitAction, command.Source, command.Unit.String(), command.Seal.String(), command.Basis.String()))
+	if err != nil {
+		return ConsolidationResult{}, err
+	}
 	if !proceed {
 		return gate.result, nil
 	}
 
 	unit, found, err := handler.deps.Store.FindByID(ctx, command.TenantID, command.Unit)
 	if err != nil {
-		return ConsolidationResult{outcome: ConsolidationUndecided}, nil
+		return ConsolidationResult{}, fmt.Errorf("look up consolidation unit: %w", err)
 	}
 	if !found {
 		return ConsolidationResult{outcome: UnitNotFound}, nil
 	}
 	if err := unit.Seal(command.Seal, command.Basis, command.Source); err != nil {
-		return handler.rejected(ctx, gate), nil
+		return handler.rejected(ctx, gate)
 	}
 	if err := handler.deps.Store.Update(ctx, command.TenantID, unit); err != nil {
-		return ConsolidationResult{outcome: ConsolidationUndecided}, nil
+		return ConsolidationResult{}, fmt.Errorf("update consolidation unit: %w", err)
 	}
 	result := ConsolidationResult{outcome: UnitSealedRecorded, unit: unit}
 	snapshots := unit.Snapshots()
@@ -345,7 +359,7 @@ func (handler *ConsolidateParcelsHandler) Seal(
 		Action: domain.SealUnitAction,
 		Unit:   command.Unit,
 		Seal:   command.Seal,
-	}, result), nil
+	}, result)
 }
 
 // Unseal 受控开封（历史快照原样保留，领域拦未封装）。CONTEXT 要求节点保存开封的授权
@@ -358,29 +372,32 @@ func (handler *ConsolidateParcelsHandler) Unseal(
 	if err != nil {
 		return ConsolidationResult{}, err
 	}
-	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest,
+	gate, proceed, err := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest,
 		unversionedConsolidationDigest(domain.UnsealUnitAction, command.Source, command.Unit.String(), command.Basis.String()))
+	if err != nil {
+		return ConsolidationResult{}, err
+	}
 	if !proceed {
 		return gate.result, nil
 	}
 
 	unit, found, err := handler.deps.Store.FindByID(ctx, command.TenantID, command.Unit)
 	if err != nil {
-		return ConsolidationResult{outcome: ConsolidationUndecided}, nil
+		return ConsolidationResult{}, fmt.Errorf("look up consolidation unit: %w", err)
 	}
 	if !found {
 		return ConsolidationResult{outcome: UnitNotFound}, nil
 	}
 	if err := unit.Unseal(command.Basis, command.Source.OccurredAt()); err != nil {
-		return handler.rejected(ctx, gate), nil
+		return handler.rejected(ctx, gate)
 	}
 	if err := handler.deps.Store.Update(ctx, command.TenantID, unit); err != nil {
-		return ConsolidationResult{outcome: ConsolidationUndecided}, nil
+		return ConsolidationResult{}, fmt.Errorf("update consolidation unit: %w", err)
 	}
 	return handler.recorded(ctx, gate, ports.ConsolidationFactRecord{
 		Action: domain.UnsealUnitAction,
 		Unit:   command.Unit,
-	}, ConsolidationResult{outcome: UnitUnsealed, unit: unit}), nil
+	}, ConsolidationResult{outcome: UnitUnsealed, unit: unit})
 }
 
 // Close 永久终局关闭（成员未清空且无处置转移依据由领域拦；已关闭重复关闭按领域
@@ -393,29 +410,32 @@ func (handler *ConsolidateParcelsHandler) Close(
 	if err != nil {
 		return ConsolidationResult{}, err
 	}
-	gate, proceed := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest,
+	gate, proceed, err := handler.admit(ctx, command.TenantID, command.Unit, command.Source, digest,
 		unversionedConsolidationDigest(domain.CloseUnitAction, command.Source, command.Unit.String(), command.Disposition.String()))
+	if err != nil {
+		return ConsolidationResult{}, err
+	}
 	if !proceed {
 		return gate.result, nil
 	}
 
 	unit, found, err := handler.deps.Store.FindByID(ctx, command.TenantID, command.Unit)
 	if err != nil {
-		return ConsolidationResult{outcome: ConsolidationUndecided}, nil
+		return ConsolidationResult{}, fmt.Errorf("look up consolidation unit: %w", err)
 	}
 	if !found {
 		return ConsolidationResult{outcome: UnitNotFound}, nil
 	}
 	if err := unit.Close(command.Disposition, command.Source.OccurredAt()); err != nil {
-		return handler.rejected(ctx, gate), nil
+		return handler.rejected(ctx, gate)
 	}
 	if err := handler.deps.Store.Update(ctx, command.TenantID, unit); err != nil {
-		return ConsolidationResult{outcome: ConsolidationUndecided}, nil
+		return ConsolidationResult{}, fmt.Errorf("update consolidation unit: %w", err)
 	}
 	return handler.recorded(ctx, gate, ports.ConsolidationFactRecord{
 		Action: domain.CloseUnitAction,
 		Unit:   command.Unit,
-	}, ConsolidationResult{outcome: UnitClosedRecorded, unit: unit}), nil
+	}, ConsolidationResult{outcome: UnitClosedRecorded, unit: unit})
 }
 
 // admissionGate 带着一次受理判断的全部上下文，好让四条出口（放行、已有结果、冲突、
@@ -434,6 +454,9 @@ type admissionGate struct {
 // 三条出口对应 AT-NO-043 的两向加一条不受理：同一来源身份携带同一内容是重放，答已有
 // 结果；同一身份携带不同内容是冲突，两份都保留、什么都不改；来源身份缺席即不受理——
 // 不给业务时间兜底填系统时钟，那正是 ADR-0023 禁止的服务端代铸。
+//
+// 登记读不动与已存摘要形状认不出交回 error，不答一格：本方册坏了就是没形成答案（ADR-0022），答 2xx 的格设备会
+// 出队，这一次作业在服务端从此没有记录（ADR-0186 决定三的同形）。下面几处本方册读写同此。
 func (handler *ConsolidateParcelsHandler) admit(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -441,33 +464,33 @@ func (handler *ConsolidateParcelsHandler) admit(
 	source domain.WorkFactSource,
 	digest string,
 	unversioned string,
-) (admissionGate, bool) {
+) (admissionGate, bool, error) {
 	gate := admissionGate{tenant: tenant, digest: digest, unversioned: unversioned, source: source}
 	if strings.TrimSpace(tenant.String()) == "" ||
 		strings.TrimSpace(unit.String()) == "" ||
 		!isSourceExpressed(source) {
 		gate.result = ConsolidationResult{outcome: ConsolidationNotAccepted}
-		return gate, false
+		return gate, false, nil
 	}
 	gate.key = ports.ConsolidationFactKey{TenantID: tenant, SourceID: source.SourceID()}
 
 	existing, found, err := handler.deps.Facts.FindByKey(ctx, gate.key)
 	if err != nil {
-		gate.result = ConsolidationResult{outcome: ConsolidationUndecided}
-		return gate, false
+		return gate, false, fmt.Errorf("look up consolidation fact: %w", err)
 	}
 	if !found {
-		return gate, true
+		return gate, true, nil
 	}
 	switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversioned) {
 	case domain.SamePayload:
-		gate.result = handler.existingResult(ctx, existing)
+		gate.result, err = handler.existingResult(ctx, existing)
+		return gate, false, err
 	case domain.DifferentPayload:
 		gate.result = ConsolidationResult{outcome: ConsolidationSourceConflict}
+		return gate, false, nil
 	default:
-		gate.result = ConsolidationResult{outcome: ConsolidationUndecided}
+		return gate, false, errStoredConsolidationDigestNotComparable
 	}
-	return gate, false
 }
 
 // recorded 在作业真的发生之后留下来源事实。并发下同一来源身份的另一半先提交时，读回它：同一内容按已有结果作答，
@@ -478,7 +501,7 @@ func (handler *ConsolidateParcelsHandler) recorded(
 	gate admissionGate,
 	record ports.ConsolidationFactRecord,
 	result ConsolidationResult,
-) ConsolidationResult {
+) (ConsolidationResult, error) {
 	record.Key = gate.key
 	record.ContentDigest = gate.digest
 	record.PerformedBy = gate.source.PerformedBy()
@@ -488,56 +511,63 @@ func (handler *ConsolidateParcelsHandler) recorded(
 
 	saved, err := handler.deps.Facts.Save(ctx, record)
 	if err != nil {
-		return ConsolidationResult{outcome: ConsolidationUndecided}
+		return ConsolidationResult{}, fmt.Errorf("record consolidation fact: %w", err)
 	}
 	if saved == ports.ConsolidationFactAlreadyRecorded {
 		// 交回的方向依据记录得是先到那一份落在册上的，不是本次刚判的：读回赢家再答。赢家是同一来源的另一份内容时，
 		// 答来源冲突而不是已有结果——与受理闸同一条代数。
 		winner, found, err := handler.deps.Facts.FindByKey(ctx, gate.key)
-		if err != nil || !found {
-			return ConsolidationResult{outcome: ConsolidationUndecided}
+		if err != nil {
+			return ConsolidationResult{}, fmt.Errorf("read back consolidation fact winner: %w", err)
+		}
+		if !found {
+			return ConsolidationResult{}, errors.New("node operations: consolidation fact already recorded but not readable")
 		}
 		switch domain.CompareStoredDigest(winner.ContentDigest, gate.digest, gate.unversioned) {
 		case domain.SamePayload:
 			return handler.existingResult(ctx, winner)
 		case domain.DifferentPayload:
-			return ConsolidationResult{outcome: ConsolidationSourceConflict}
+			return ConsolidationResult{outcome: ConsolidationSourceConflict}, nil
 		default:
-			return ConsolidationResult{outcome: ConsolidationUndecided}
+			return ConsolidationResult{}, errStoredConsolidationDigestNotComparable
 		}
 	}
-	return result
+	return result, nil
 }
 
 // rejected 复查登记再答未受理。领域拒绝有两种来路：这一步在当前三相下本就做不得，
 // 或者同一来源身份的前一次已经把它做完了（重放跑赢了 admit 那次读）。后者的真话是
-// 「已有结果」——两者都答未受理会让现场按三相去找一处并不存在的状态错。
+// 「已有结果」——两者都答未受理会让现场按三相去找一处并不存在的状态错。复查读不动时分不出这两种来路，
+// 因此交回 error 而不是先答未受理。
 func (handler *ConsolidateParcelsHandler) rejected(
 	ctx context.Context,
 	gate admissionGate,
-) ConsolidationResult {
+) (ConsolidationResult, error) {
 	existing, found, err := handler.deps.Facts.FindByKey(ctx, gate.key)
-	if err == nil && found &&
+	if err != nil {
+		return ConsolidationResult{}, fmt.Errorf("recheck consolidation fact: %w", err)
+	}
+	if found &&
 		domain.CompareStoredDigest(existing.ContentDigest, gate.digest, gate.unversioned) == domain.SamePayload {
 		return handler.existingResult(ctx, existing)
 	}
-	return ConsolidationResult{outcome: ConsolidationNotAccepted}
+	return ConsolidationResult{outcome: ConsolidationNotAccepted}, nil
 }
 
 // existingResult 按已有来源事实作答：结果格是`已有结果`，单元照当前状态读回，方向依据记录照册上原样交回。
 func (handler *ConsolidateParcelsHandler) existingResult(
 	ctx context.Context,
 	existing ports.ConsolidationFactRecord,
-) ConsolidationResult {
+) (ConsolidationResult, error) {
 	unit, found, err := handler.deps.Store.FindByID(ctx, existing.Key.TenantID, existing.Unit)
 	if err != nil {
-		return ConsolidationResult{outcome: ConsolidationUndecided}
+		return ConsolidationResult{}, fmt.Errorf("read back consolidation unit: %w", err)
 	}
 	result := ConsolidationResult{outcome: ConsolidationExistingResult, basis: existing.DirectionalBasis}
 	if found {
 		result.unit = unit
 	}
-	return result
+	return result, nil
 }
 
 // isSourceExpressed 判来源四格是否齐备。领域构造器已经守着同一条，这里再判一次是为了

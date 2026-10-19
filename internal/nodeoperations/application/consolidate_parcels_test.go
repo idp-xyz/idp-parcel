@@ -13,8 +13,12 @@ import (
 
 var consolidationAt = time.Date(2026, 8, 13, 23, 0, 0, 0, time.UTC)
 
+// 单元库替身的失败注入：三口各一格，非空即在该口交回错误。
 type consolidationStoreDouble struct {
-	byID map[string]*domain.ConsolidationUnit
+	byID      map[string]*domain.ConsolidationUnit
+	findErr   error
+	saveErr   error
+	updateErr error
 }
 
 func (double *consolidationStoreDouble) FindByID(
@@ -22,6 +26,9 @@ func (double *consolidationStoreDouble) FindByID(
 	_ domain.TenantID,
 	id domain.ConsolidationUnitID,
 ) (*domain.ConsolidationUnit, bool, error) {
+	if double.findErr != nil {
+		return nil, false, double.findErr
+	}
 	unit, found := double.byID[id.String()]
 	return unit, found, nil
 }
@@ -31,6 +38,9 @@ func (double *consolidationStoreDouble) Save(
 	_ domain.TenantID,
 	unit *domain.ConsolidationUnit,
 ) (ports.ConsolidationSaveOutcome, error) {
+	if double.saveErr != nil {
+		return ports.ConsolidationSaveOutcome(0), double.saveErr
+	}
 	if _, exists := double.byID[unit.ID().String()]; exists {
 		return ports.ConsolidationAlreadyRecorded, nil
 	}
@@ -43,6 +53,9 @@ func (double *consolidationStoreDouble) Update(
 	_ domain.TenantID,
 	unit *domain.ConsolidationUnit,
 ) error {
+	if double.updateErr != nil {
+		return double.updateErr
+	}
 	double.byID[unit.ID().String()] = unit
 	return nil
 }
@@ -51,6 +64,7 @@ func (double *consolidationStoreDouble) Update(
 // 语义：封装态成员仍被包含，关闭态不算。
 type containmentIndexDouble struct {
 	store *consolidationStoreDouble
+	err   error
 }
 
 func (double *containmentIndexDouble) CurrentParent(
@@ -58,6 +72,9 @@ func (double *containmentIndexDouble) CurrentParent(
 	_ domain.TenantID,
 	member domain.HandlingUnitID,
 ) (domain.ConsolidationUnitID, bool, error) {
+	if double.err != nil {
+		return domain.ConsolidationUnitID{}, false, double.err
+	}
 	for _, unit := range double.store.byID {
 		if unit.Closed() {
 			continue
@@ -90,9 +107,17 @@ func (double *snapshotDownstreamDouble) HandOffSnapshot(
 // consolidationFactStoreDouble 是来源事实登记的替身：按（租户+来源身份）幂等，同键
 // 第二份答`已有记录`而不覆盖先到者——与真实仓储的 ON CONFLICT DO NOTHING 同一语义
 // （AT-NO-043）。
+//
+// 失败注入同承接册替身（nextFindErr）；raceOnSave 让写答`已有记录`，raceWinner 非空时先把它落下当先到者，为空时
+// 什么也不落——摆出「撞键却读不回」。
 type consolidationFactStoreDouble struct {
-	byKey map[ports.ConsolidationFactKey]ports.ConsolidationFactRecord
-	saved int
+	byKey      map[ports.ConsolidationFactKey]ports.ConsolidationFactRecord
+	saved      int
+	findErr    error
+	findErrs   []error
+	saveErr    error
+	raceOnSave bool
+	raceWinner *ports.ConsolidationFactRecord
 }
 
 func newConsolidationFactStore() *consolidationFactStoreDouble {
@@ -103,6 +128,9 @@ func (double *consolidationFactStoreDouble) FindByKey(
 	_ context.Context,
 	key ports.ConsolidationFactKey,
 ) (ports.ConsolidationFactRecord, bool, error) {
+	if err := nextFindErr(double.findErr, &double.findErrs); err != nil {
+		return ports.ConsolidationFactRecord{}, false, err
+	}
 	record, found := double.byKey[key]
 	return record, found, nil
 }
@@ -111,6 +139,15 @@ func (double *consolidationFactStoreDouble) Save(
 	_ context.Context,
 	record ports.ConsolidationFactRecord,
 ) (ports.ConsolidationFactSaveOutcome, error) {
+	if double.saveErr != nil {
+		return ports.ConsolidationFactSaveOutcome(0), double.saveErr
+	}
+	if double.raceOnSave {
+		if double.raceWinner != nil {
+			double.byKey[record.Key] = *double.raceWinner
+		}
+		return ports.ConsolidationFactAlreadyRecorded, nil
+	}
 	if _, exists := double.byKey[record.Key]; exists {
 		return ports.ConsolidationFactAlreadyRecorded, nil
 	}
@@ -120,24 +157,26 @@ func (double *consolidationFactStoreDouble) Save(
 }
 
 type consolidateFixture struct {
-	handler    *application.ConsolidateParcelsHandler
-	store      *consolidationStoreDouble
-	facts      *consolidationFactStoreDouble
-	downstream *snapshotDownstreamDouble
+	handler     *application.ConsolidateParcelsHandler
+	store       *consolidationStoreDouble
+	facts       *consolidationFactStoreDouble
+	containment *containmentIndexDouble
+	downstream  *snapshotDownstreamDouble
 }
 
 func newConsolidateFixture(t *testing.T) *consolidateFixture {
 	t.Helper()
 	store := &consolidationStoreDouble{byID: map[string]*domain.ConsolidationUnit{}}
 	fixture := &consolidateFixture{
-		store:      store,
-		facts:      newConsolidationFactStore(),
-		downstream: &snapshotDownstreamDouble{},
+		store:       store,
+		facts:       newConsolidationFactStore(),
+		containment: &containmentIndexDouble{store: store},
+		downstream:  &snapshotDownstreamDouble{},
 	}
 	fixture.handler = application.NewConsolidateParcelsHandler(application.ConsolidateParcelsDeps{
 		Store:       store,
 		Facts:       fixture.facts,
-		Containment: &containmentIndexDouble{store: store},
+		Containment: fixture.containment,
 		Downstream:  fixture.downstream,
 		Clock:       fixedClock{at: consolidationAt},
 	})
@@ -384,5 +423,166 @@ func TestSealingFreezesTheSnapshotAndClosureIsFinal(t *testing.T) {
 	}
 	if again.Outcome() != application.ConsolidationNotAccepted {
 		t.Fatalf("again = %q; 终局不重演", again.Outcome())
+	}
+}
+
+var errConsolidationStoreDown = errors.New("store down")
+
+// Covers: ADR-0186 决定三在集运口的同形（票 operator-channel/46）——单元库、包含索引、来源事实登记读写失败，已存
+// 摘要的形状认不出，并发读回失败或读不回，都交回 error，不留来源事实、不交快照意图。依据是 ADR-0022「返回 error
+// 就是没形成」：答 2xx 的`未决`，设备收到就出队；而单元那一步可能已在同一笔事务里写下，调用方见 error 才会回滚。
+// 方向依据读不动不在此列——它是依据记录里的一格取值（DirectionalBasisJudge），照样落册。
+func TestConsolidationOwnStoreFailuresFormNoAnswer(t *testing.T) {
+	ctx := context.Background()
+	tenant := consolidationTenant(t)
+	unknownShape := "NOC-9:9938edb9fffaab6f67866d4ed949ee826323c990a1a5ffc322c9b7f3ad19b430"
+	openCommand := func(t *testing.T, source string) application.OpenUnitCommand {
+		return application.OpenUnitCommand{
+			TenantID: tenant, Unit: unitID(t, "unit-1"),
+			Asset:  mustValue(t, domain.NewCarrierAssetReference, "cage-unit-1"),
+			Source: workSource(t, source, consolidationAt),
+		}
+	}
+	add := func(t *testing.T, fixture *consolidateFixture) (application.ConsolidationResult, error) {
+		return fixture.handler.AddMember(ctx, addMemberCommand(t, "src-add"), judgedBasis(t))
+	}
+	seal := func(t *testing.T, fixture *consolidateFixture) (application.ConsolidationResult, error) {
+		return fixture.handler.Seal(ctx, application.SealUnitCommand{
+			TenantID: tenant, Unit: unitID(t, "unit-1"),
+			Seal:   mustValue(t, domain.NewSealReference, "seal-1"),
+			Basis:  mustValue(t, domain.NewWorkBasisReference, "basis-1"),
+			Source: workSource(t, "src-seal", consolidationAt),
+		})
+	}
+	opened := func(t *testing.T, fixture *consolidateFixture) { openUnit(t, fixture, "unit-1") }
+	withMember := func(t *testing.T, fixture *consolidateFixture) {
+		opened(t, fixture)
+		addMemberTo(t, fixture, "unit-1", "hu-1", "src-add")
+	}
+	// 移出、开封、关闭三口的单元读与移入、封装同一处写法；读不动在它们身上无须先摆出三相。
+	unitReadOps := map[string]func(t *testing.T, fixture *consolidateFixture) (application.ConsolidationResult, error){
+		"移入": add,
+		"移出": func(t *testing.T, fixture *consolidateFixture) (application.ConsolidationResult, error) {
+			return fixture.handler.RemoveMember(ctx, application.RemoveMemberCommand{
+				TenantID: tenant, Unit: unitID(t, "unit-1"), Member: handlingUnit(t, "hu-1"),
+				Source: workSource(t, "src-remove", consolidationAt),
+			})
+		},
+		"封装": seal,
+		"开封": func(t *testing.T, fixture *consolidateFixture) (application.ConsolidationResult, error) {
+			return fixture.handler.Unseal(ctx, application.UnsealUnitCommand{
+				TenantID: tenant, Unit: unitID(t, "unit-1"),
+				Basis:  mustValue(t, domain.NewWorkBasisReference, "basis-unseal"),
+				Source: workSource(t, "src-unseal", consolidationAt),
+			})
+		},
+		"关闭": func(t *testing.T, fixture *consolidateFixture) (application.ConsolidationResult, error) {
+			return fixture.handler.Close(ctx, application.CloseUnitCommand{
+				TenantID: tenant, Unit: unitID(t, "unit-1"),
+				Disposition: mustValue(t, domain.NewWorkBasisReference, "disposition-1"),
+				Source:      workSource(t, "src-close", consolidationAt),
+			})
+		},
+	}
+
+	type failureCase struct {
+		name  string
+		setup func(t *testing.T, fixture *consolidateFixture)
+		run   func(t *testing.T, fixture *consolidateFixture) (application.ConsolidationResult, error)
+	}
+	cases := []failureCase{
+		{"受理闸读来源事实登记读不动", func(t *testing.T, fixture *consolidateFixture) {
+			opened(t, fixture)
+			fixture.facts.findErr = errConsolidationStoreDown
+		}, add},
+		{"已存来源事实摘要的形状认不出", func(t *testing.T, fixture *consolidateFixture) {
+			withMember(t, fixture)
+			_, rewrite := storedDigest(t, fixture.facts.byKey, ports.ConsolidationFactKey{TenantID: tenant, SourceID: "src-add"},
+				func(record *ports.ConsolidationFactRecord) *string { return &record.ContentDigest })
+			rewrite(unknownShape)
+		}, add},
+		{"开启写单元库失败", func(t *testing.T, fixture *consolidateFixture) {
+			fixture.store.saveErr = errConsolidationStoreDown
+		}, func(t *testing.T, fixture *consolidateFixture) (application.ConsolidationResult, error) {
+			return fixture.handler.Open(ctx, openCommand(t, "src-open"))
+		}},
+		{"开启撞已有实例而读回失败", func(t *testing.T, fixture *consolidateFixture) {
+			opened(t, fixture)
+			fixture.store.findErr = errConsolidationStoreDown
+		}, func(t *testing.T, fixture *consolidateFixture) (application.ConsolidationResult, error) {
+			return fixture.handler.Open(ctx, openCommand(t, "src-open-again"))
+		}},
+		{"包含索引读不动", func(t *testing.T, fixture *consolidateFixture) {
+			opened(t, fixture)
+			fixture.containment.err = errConsolidationStoreDown
+		}, add},
+		{"移入写单元库失败", func(t *testing.T, fixture *consolidateFixture) {
+			opened(t, fixture)
+			fixture.store.updateErr = errConsolidationStoreDown
+		}, add},
+		{"封装写单元库失败", func(t *testing.T, fixture *consolidateFixture) {
+			withMember(t, fixture)
+			fixture.store.updateErr = errConsolidationStoreDown
+		}, seal},
+		{"来源事实写失败", func(t *testing.T, fixture *consolidateFixture) {
+			opened(t, fixture)
+			fixture.facts.saveErr = errConsolidationStoreDown
+		}, add},
+		{"来源事实撞已有记录而读回失败", func(t *testing.T, fixture *consolidateFixture) {
+			opened(t, fixture)
+			fixture.facts.raceOnSave = true
+			fixture.facts.findErrs = []error{nil, errConsolidationStoreDown}
+		}, add},
+		{"来源事实撞已有记录却读不回", func(t *testing.T, fixture *consolidateFixture) {
+			opened(t, fixture)
+			fixture.facts.raceOnSave = true
+		}, add},
+		{"来源事实撞已有记录而赢家摘要的形状认不出", func(t *testing.T, fixture *consolidateFixture) {
+			opened(t, fixture)
+			fixture.facts.raceOnSave = true
+			fixture.facts.raceWinner = &ports.ConsolidationFactRecord{
+				Key:           ports.ConsolidationFactKey{TenantID: tenant, SourceID: "src-add"},
+				ContentDigest: unknownShape, Action: domain.AddMemberAction, Unit: unitID(t, "unit-1"),
+			}
+		}, add},
+		{"已有结果读回单元读不动", func(t *testing.T, fixture *consolidateFixture) {
+			withMember(t, fixture)
+			fixture.store.findErr = errConsolidationStoreDown
+		}, add},
+		{"领域拒后复查登记读不动", func(t *testing.T, fixture *consolidateFixture) {
+			opened(t, fixture) // 空单元封装由领域拦
+			fixture.facts.findErrs = []error{nil, errConsolidationStoreDown}
+		}, seal},
+	}
+	for name, run := range unitReadOps {
+		cases = append(cases, failureCase{name + "读单元库读不动", func(t *testing.T, fixture *consolidateFixture) {
+			opened(t, fixture)
+			fixture.store.findErr = errConsolidationStoreDown
+		}, run})
+	}
+
+	for _, testCase := range cases {
+		t.Run(testCase.name, func(t *testing.T) {
+			fixture := newConsolidateFixture(t)
+			testCase.setup(t, fixture)
+			facts, intents := len(fixture.facts.byKey), len(fixture.downstream.intents)
+			if testCase.name == "来源事实撞已有记录而赢家摘要的形状认不出" {
+				facts++ // 替身在写时把赢家落下，那是并发另一半的写，不是本次的
+			}
+
+			result, err := testCase.run(t, fixture)
+			if err == nil {
+				t.Fatalf("outcome = %q，error 为 nil——本方册失败要交回 error，不答`未决`", result.Outcome())
+			}
+			if result.Outcome() != application.ConsolidationOutcomeInvalid {
+				t.Fatalf("交回 error 时还带了结果格 %q", result.Outcome())
+			}
+			if len(fixture.facts.byKey) != facts {
+				t.Fatal("没形成答案却留了来源事实")
+			}
+			if len(fixture.downstream.intents) != intents {
+				t.Fatal("没形成答案却交了快照意图")
+			}
+		})
 	}
 }

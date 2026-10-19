@@ -175,8 +175,10 @@ func submitConsolidation(
 //   - 单元已在册 / 成员已在本单元 → 重放：别的来源先做了同一件事，本行没有作业发生、不留
 //     来源事实，重跑答同一句——对内勤而言与重放要做的事相同：不用管；
 //   - 成员在别的单元 / 单元不在册 / 未受理 / 来源冲突 → 被拒：四种都是重跑同一文件不会变的
-//     答案，要人核对纸单——抄错了单元、行序颠倒、还是这一步在当前三相下本就做不得；
-//   - 未决 → 未决：依赖故障，什么都没落库，重跑续办。
+//     答案，要人核对纸单——抄错了单元、行序颠倒、还是这一步在当前三相下本就做不得。
+//
+// 未决不从这里出：本方册读写失败时编排交回 error，由 importConsolidation 整笔回滚、记`NO_ANSWER_FORMED`。
+// 编排答一格而不交 error 的话，同一笔事务里已写下的单元那一步会随提交落册，留下没有来源事实的半截。
 func consolidationRowDisposition(row consolidationRow, result application.ConsolidationResult) rowResult {
 	outcome := result.Outcome()
 	answer := rowResult{Line: row.Line, FactRef: row.FactRef, Outcome: outcome.String()}
@@ -209,9 +211,6 @@ func consolidationRowDisposition(row consolidationRow, result application.Consol
 	case application.ConsolidationSourceConflict:
 		answer.Disposition = rowRejected
 		answer.Detail = "同一行事实号已在册且内容不同——绝不覆盖；核对纸单：若是另一件事实请换行事实号"
-	case application.ConsolidationUndecided:
-		answer.Disposition = rowUndecided
-		answer.Detail = "未落库；依赖未答，重跑同一文件续办"
 	default:
 		// 编排交回一个它自己都不认识的格是实现坏了，不是业务答案；按未决让人看。
 		answer.Outcome = fmt.Sprintf("UNKNOWN(%d)", outcome)
