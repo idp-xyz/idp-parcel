@@ -37,6 +37,8 @@ type LoadAssignmentSaveOutcome uint8
 const (
 	LoadAssignmentSaveOutcomeInvalid LoadAssignmentSaveOutcome = iota
 	LoadAssignmentSaved
+	// LoadAssignmentVersionAlreadyRegistered 覆盖两种撞：同一版本已在册，或同一分配已有一个首版而这次也是首版。
+	// 库面一句 ON CONFLICT DO NOTHING 分不出撞的是哪道唯一，调用方先按本次键读、读不回再按分配读链头。
 	LoadAssignmentVersionAlreadyRegistered
 )
 

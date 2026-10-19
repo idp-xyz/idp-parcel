@@ -230,6 +230,40 @@ func TestTheChainHeadIsTheVersionNoOtherCorrects(t *testing.T) {
 	}
 }
 
+// TestASecondFirstVersionOfOneAssignmentIsAlreadyRegistered 证首版唯一索引（0021）：同一分配另一个版本号的首版撞它
+// 译`已登记`、连同成员一行不落，链头仍是先到的首版。编排读链头再写是第一道，两份首版并发到达时只有这一道拦得住。
+func TestASecondFirstVersionOfOneAssignmentIsAlreadyRegistered(t *testing.T) {
+	repository, transactor, pool := newLoadAssignments(t)
+	ctx := t.Context()
+	mustSaveLoadAssignment(t, transactor, ctx, repository,
+		synLoadAssignmentRecord(t, "SYN-TENANT-01", "SYN-LA-ROOT", "vA", "SYN-PARCEL-A"))
+
+	var outcome ports.LoadAssignmentSaveOutcome
+	mustWithinDispatchTaskTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+		var err error
+		outcome, err = repository.Save(txCtx, synLoadAssignmentRecord(t, "SYN-TENANT-01", "SYN-LA-ROOT", "vB", "SYN-PARCEL-B"))
+		return err
+	})
+	if outcome != ports.LoadAssignmentVersionAlreadyRegistered {
+		t.Fatalf("第二个首版 outcome = %d, want LoadAssignmentVersionAlreadyRegistered", outcome)
+	}
+	var versions, members int
+	if err := pool.QueryRow(ctx,
+		`SELECT (SELECT count(*) FROM transport_fulfillment.load_assignment WHERE assignment_ref = 'SYN-LA-ROOT'),
+		        (SELECT count(*) FROM transport_fulfillment.load_assignment_member WHERE assignment_ref = 'SYN-LA-ROOT')`,
+	).Scan(&versions, &members); err != nil {
+		t.Fatalf("数行：%v", err)
+	}
+	if versions != 1 || members != 1 {
+		t.Fatalf("版本行 %d、成员行 %d, want 各 1", versions, members)
+	}
+	head, found, err := repository.FindChainHead(ctx,
+		segmentRef(t, domain.NewTenantID, "SYN-TENANT-01"), segmentRef(t, domain.NewLoadAssignmentReference, "SYN-LA-ROOT"))
+	if err != nil || !found || head.Key.Version.String() != "vA" {
+		t.Fatalf("链头应仍是先到的 vA：%+v found=%v err=%v", head.Key, found, err)
+	}
+}
+
 // TestLoadAssignmentWritesRefuseToRunOutsideATransaction 证写口无环境事务即拒——版本行与
 // 成员行必须同笔落。断言指名 ErrTransactionRequired 而不是 err != nil。
 func TestLoadAssignmentWritesRefuseToRunOutsideATransaction(t *testing.T) {

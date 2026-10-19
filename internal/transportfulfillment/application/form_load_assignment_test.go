@@ -280,6 +280,34 @@ func TestAChainHeadReadFailureIsUndecided(t *testing.T) {
 	}
 }
 
+// 读链头与写之间另一位写入方先落了首版：插入撞上首版唯一索引答`已登记`，本次的键却读不回——按分配读回链头答
+// `分配已形成`交回赢家，不宣称自己形成了它，也不因按本次键读空就落成`未决`。
+func TestALosingConcurrentFirstVersionAnswersAlreadyFormedWithTheWinner(t *testing.T) {
+	winnerCommand := formAssignmentCommand(t)
+	winnerCommand.Version = "LAV-000000000009"
+	formed, err := newLoadAssignmentHandler(newLoadAssignmentRegistry()).Form(t.Context(), winnerCommand)
+	if err != nil {
+		t.Fatalf("赢家夹具：%v", err)
+	}
+	winner, _ := formed.Record()
+	registry := newLoadAssignmentRegistry()
+	registry.rival = &winner
+
+	result, err := newLoadAssignmentHandler(registry).Form(t.Context(), formAssignmentCommand(t))
+	if err != nil {
+		t.Fatalf("并发落败：%v", err)
+	}
+	if result.Outcome() != application.LoadAssignmentAlreadyFormed {
+		t.Fatalf("outcome = %q, want LOAD_ASSIGNMENT_ALREADY_FORMED", result.Outcome())
+	}
+	if head, _ := result.Record(); head.Key.Version != winner.Key.Version {
+		t.Fatalf("交回的不是赢家：%+v", head.Key)
+	}
+	if len(registry.records) != 1 {
+		t.Fatalf("登记册里 %d 个版本, want 只有赢家", len(registry.records))
+	}
+}
+
 // 缺任一必备件的分配不受理，且一次库都不碰。
 func TestAnIncompleteLoadAssignmentIsNotAccepted(t *testing.T) {
 	cases := map[string]func(*application.FormLoadAssignmentCommand){

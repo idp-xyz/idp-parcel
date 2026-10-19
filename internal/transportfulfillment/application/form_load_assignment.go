@@ -145,16 +145,24 @@ func (handler *FormLoadAssignmentHandler) Form(
 		return loadAssignmentUndecided(command), nil
 	}
 	if saved == ports.LoadAssignmentVersionAlreadyRegistered {
-		// 并发下另一方先登记：读回赢家而不是宣称自己形成了它。
+		// 并发下另一方先登记：读回赢家而不是宣称自己形成了它。撞上的可能是同一版本，也可能是同一分配别的版本号的
+		// 首版（0021 的首版唯一索引）——后者按本次键读不回，要按分配读链头。
 		winner, found, err := handler.deps.Assignments.FindByKey(ctx, key)
-		if err != nil || !found {
+		if err != nil {
 			return loadAssignmentUndecided(command), nil
 		}
-		return FormLoadAssignmentResult{
-			outcome:   LoadAssignmentVersionExists,
-			record:    winner,
-			hasRecord: true,
-		}, nil
+		if found {
+			return FormLoadAssignmentResult{
+				outcome:   LoadAssignmentVersionExists,
+				record:    winner,
+				hasRecord: true,
+			}, nil
+		}
+		head, formed, err := handler.deps.Assignments.FindChainHead(ctx, key.TenantID, key.Assignment)
+		if err != nil || !formed {
+			return loadAssignmentUndecided(command), nil
+		}
+		return loadAssignmentAlreadyFormed(head), nil
 	}
 	return FormLoadAssignmentResult{outcome: LoadAssignmentFormed, record: record, hasRecord: true}, nil
 }
