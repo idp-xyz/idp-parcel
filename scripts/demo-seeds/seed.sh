@@ -274,6 +274,8 @@ echo "== 试点治理登记（pilot-governance：权威区间、暂停、恢复�
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/25-authority-interval-operation-decision-transport-charge-occurrence-registration.json"
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/28-authority-interval-operation-decision-capacity-reservation.json"
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/29-authority-interval-operation-decision-capacity-release.json"
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/30-authority-interval-operation-decision-booking-request-submission.json"
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/30-authority-interval-external-fact-carrier-booking-answer.json"
 
 echo "== 操作者册登记（access-identity：合成操作者主体与能力面授予；票 operator-channel/01、17） =="
 # 合成主体绑演示租户：配置员扮运营主管，持有全部运营决定（票 operator-channel/24「裁定」）——授登记册配置写、主数据与
@@ -298,6 +300,7 @@ echo "== 操作者册登记（access-identity：合成操作者主体与能力�
 # 集成客户端族（ADR-0149 决定三）：外部结果、监管凭证与外部资金事实三类口要「客户端 × 授予」对上。合成报关服务商与
 # 合成银行各一台，主体是演示的集成客户端发行方（operator-channel/integration-dex.yaml）签出的 sub；授予按事实类型给
 # （票 product-strategy-boundary/31）。这三类事实的准入对照随下面的准入范围对照一起登。
+# 另有合成干线承运商的承运系统一台（票 demo-chain-gaps/24）：只授承运订舱答复一类，来源身份是干线承运方 SYN-PARTY-CARRIER-TRUNK-01。
 "$BIN/parcel-access-register" integration-client-register -input "$SEEDS/access/05-integration-clients.json"
 "$BIN/parcel-access-register" integration-client-grant -input "$SEEDS/access/06-integration-client-grants.json"
 # 首方客户族（ADR-0139 决定二；票 first-party-api/00）：提交口要「客户端 × 授予」对上。合成货主系统一台，主体是演示发行方

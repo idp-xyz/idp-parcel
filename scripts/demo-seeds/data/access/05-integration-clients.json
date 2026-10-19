@@ -16,6 +16,14 @@
       "credentialRef": "SYN-CREDENTIAL-STORE/integration-dex/syn-integration-bank-01",
       "certificateBoundTokenRequired": false,
       "basis": "SYN-INTEGRATION-CLIENT-BASIS-01"
+    },
+    {
+      "issuer": "http://127.0.0.1:5558/dex",
+      "subject": "CiBzeW4taW50ZWdyYXRpb24tY2Fycmllci10cnVuay0wMQ",
+      "sourceIdentity": "SYN-PARTY-CARRIER-TRUNK-01",
+      "credentialRef": "SYN-CREDENTIAL-STORE/integration-dex/syn-integration-carrier-trunk-01",
+      "certificateBoundTokenRequired": false,
+      "basis": "SYN-INTEGRATION-CLIENT-BASIS-01"
     }
   ]
 }

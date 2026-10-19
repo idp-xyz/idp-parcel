@@ -31,6 +31,7 @@ staticClients:
     trustedPeers:
       - syn-integration-customs-broker-01
       - syn-integration-bank-01
+      - syn-integration-carrier-trunk-01
   # 一个客户端只代表一个外部方（accessidentity.IntegrationClientBinding）：报关服务商与银行各一台。
   - id: syn-integration-customs-broker-01
     name: 合成报关服务商 01
@@ -42,6 +43,15 @@ staticClients:
   - id: syn-integration-bank-01
     name: 合成银行 01
     secret: syn-bank-secret
+    redirectURIs:
+      - http://127.0.0.1/unused
+    grantTypes:
+      - client_credentials
+  # 合成干线承运商的承运系统（票 demo-chain-gaps/24）：答复干线订舱。它代表的来源身份是干线承运方 SYN-PARTY-CARRIER-TRUNK-01
+  # ——干线委托的服务提供方，答复口只认它答干线订舱（ADR-0202 决定二）。
+  - id: syn-integration-carrier-trunk-01
+    name: 合成干线承运商 01
+    secret: syn-carrier-trunk-secret
     redirectURIs:
       - http://127.0.0.1/unused
     grantTypes:

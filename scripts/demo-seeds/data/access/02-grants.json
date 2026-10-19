@@ -249,6 +249,15 @@
       "decisionKind": "CAPACITY_RELEASE",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "basis": "SYN-GRANT-BASIS-DEX-CAPACITY-RELEASE-01"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-BOOKING-REQUEST-SUBMISSION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "BOOKING_REQUEST_SUBMISSION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-BOOKING-REQUEST-SUBMISSION-01"
     }
   ]
 }

@@ -24,6 +24,14 @@
       "factType": "EXTERNAL_FUNDS_FACT",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "basis": "SYN-INTEGRATION-GRANT-BASIS-01"
+    },
+    {
+      "grantId": "SYN-GRANT-INTEGRATION-CARRIER-TRUNK-BOOKING-ANSWER-01",
+      "issuer": "http://127.0.0.1:5558/dex",
+      "subject": "CiBzeW4taW50ZWdyYXRpb24tY2Fycmllci10cnVuay0wMQ",
+      "factType": "CARRIER_BOOKING_ANSWER",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-INTEGRATION-GRANT-BASIS-01"
     }
   ]
 }

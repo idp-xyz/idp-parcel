@@ -67,7 +67,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 
 | 登录邮箱 | 授予（自 2026-01-01 生效，不设终点） |
 |---|---|
-| `syn-operator-config-01@syn-tenant-01.example.invalid` | 登记册配置写、主数据与运营查阅读、运营决定（装载分配、终止参与、关段、建派送任务、有效时间判断、承运商首次有效收寄判断；复核完成、主动拒绝、授权处置、受控关闭、受控重开——委托侧这几种越过 Intake 的前提见表后说明；待识别重核——节点作业复核页上的「重核」；身份冲突处置——同一页上的「处置」；运输委托提交）；作业事实登记，按作业范围给：演示网络各节点（收寄），华东场外揽收与新加坡尾程派送两个场外范围（运输履约各口），每个范围配一台合成设备（`data/access/04`） |
+| `syn-operator-config-01@syn-tenant-01.example.invalid` | 登记册配置写、主数据与运营查阅读、运营决定（装载分配、终止参与、关段、建派送任务、有效时间判断、承运商首次有效收寄判断；复核完成、主动拒绝、授权处置、受控关闭、受控重开——委托侧这几种越过 Intake 的前提见表后说明；待识别重核——节点作业复核页上的「重核」；身份冲突处置——同一页上的「处置」；运输委托提交；订舱提交）；作业事实登记，按作业范围给：演示网络各节点（收寄），华东场外揽收与新加坡尾程派送两个场外范围（运输履约各口），每个范围配一台合成设备（`data/access/04`） |
 | `syn-operator-viewer-01@syn-tenant-01.example.invalid` | 主数据与运营查阅读 |
 
 委托侧各种运营决定的授予只开门。权威串设了之后，越过 Intake 还要指名的对象在演示租户下查得到：复核完成、主动拒绝、
@@ -84,6 +84,12 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 `data/governance/28`、`29` 的权威区间各两行）。种子不登任何预占：预占是为一个业务范围占住一个池的一段容量，由配置员
 经 `POST /transport-fulfillment-capacity-reservations` 声明，释放经 `POST /transport-fulfillment-capacity-releases`，
 登法见下面「数据故事」第 8 步的补记。
+
+配置员另持运营决定「订舱提交」（ADR-0202 决定一、五；`data/access/02` 的授予、`03` 的对照与 `data/governance/30` 那份运营决定
+区间各一行），承运答复口另认合成干线承运商的集成客户端（`data/access/05`、`06` 各一行，`03` 的对照与 `data/governance/30` 那份
+外部事实区间各一行）。种子不登任何订舱或答复：订舱要先有干线委托，订在 `data/transport/04` 物化登记的
+`SYN-SCHED-SZX-SIN-DAILY/2026-10-21` 那一班上，再由合成干线承运商用自己的令牌答复，走法见
+`docs/design/synthetic-demo-journey-script.md` 的第 3 步。
 
 单要一枚令牌：`scripts/demo-seeds/operator-channel/operator-token.sh <邮箱>` 打印访问令牌，末尾加 `claims` 打印两枚
 令牌的载荷。它与管理台走同一个公共客户端、同一条 authorization_code + PKCE 流，管理台不必在跑。
@@ -112,7 +118,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 | `data/visibility/` | `cmd/parcel-ve-register` | 里程碑映射、分诊规则、通知策略、索赔资格、索赔授权两格（一格空名单）、披露策略、异常披露规则、冲突信号规则、索赔材料收讫两笔（照片留下、发票收讫后撤销） |
 | `data/collection/` | `cmd/parcel-collection-register` | 一条 COD 指令走全程（渠道报收、银行短收、短款、清分进应付客户）+ SGD 分户账只开立；CNY 账两笔回汇批次（已归集 / 已交出汇付主张），SGD 账无批次 |
 | `data/settlement/` | `cmd/parcel-settlement-register` 的 `settlement-account` / `external-funds-fact` / `funds-mapping` / `pre-acceptance-estimate-adoption` / `sell-billing-moment-adoption` / `fee-item-mapping` / `buy-evaluation-trigger` | 结算账户登记册（ADR-0158）1 行：货主 `SYN-PARTY-SHIPPER-01` 在法人 `SYN-LE-01` 下的 CNY 应收账户 `SYN-SETTLEMENT-ACCOUNT-01`，结算政策 `SYN-SETTLEMENT-PREPAID-01`，责任依据是该政策所引的客户合同 `SYN-CONTRACT-01`。五维照发布批里那份结算政策的正文配，受理前财务控制的作用域经它找到账户。另有一笔合成收款 `SYN-FUNDS-RECEIPT-01`（200.00 CNY）映射到该账户（ADR-0182），金额只盖这一件的试算合计，不是生产默认。受理前估价采用册（ADR-0179 决定五）1 行：这一户采用「逐件 SELL 试算合计」（`PER_PARCEL_SELL_TRIAL_SUM`），计价范围 `SYN-SCOPE-01`，与售价卡 `SYN-PLAN-CN-SG-01` 的范围同值，估价按它解析在用售价卡。SELL 计费时点采用册（ADR-0190 决定三）1 行：这一户在「有效网络收寄已采用」那一拍发起 SELL 评价，计价范围同上。费用项目映射（决定五）2 行：基础运费与偏远附加都映到 `SYN-FEE-ITEM-FREIGHT-01`，是 SYN 简化。售价卡声明了金额取整（总额，0.01 CNY，四舍五入），结算由评价形成客户费用时要这一格。BUY 触发册（ADR-0164、ADR-0208）1 行：原因 `ACTUAL_FULFILLMENT` 采用「发生项形成」，费用项目 `SYN-FEE-ITEM-TRUNK-COST-01`；干线实际履约发生项一形成就发起 BUY 评价，主要范围取发生项上干线协议 `SYN-SUPPLIER-TRUNK-CN-SG-01/v1` 的商业范围 `SYN-SCOPE-01`。别的原因不登，形成了答未配置 |
-| `data/access/` | `cmd/parcel-access-register` 的 `operator-register` / `operator-grant` / `admission-scope-mapping-register` / `device-register` / `integration-client-register` / `integration-client-grant` / `customer-client-register` / `customer-client-grant` | 操作者册（ADR-0100 决定二第三条）：合成操作者主体绑演示租户，各自持有哪些授予以上面「操作者渠道」一节的授予表为准，这里不另列；主体是演示发行方 Dex 给 `operator-channel/dex.yaml` 里静态用户真签出的 `sub`，换发行方就按新发行方的标识另登一批。另有演示租户的准入范围对照（ADR-0180 决定一、二）：各（能力、事实类型）的生产写落在哪个治理对象范围，与 `data/governance/` 里本产品的权威区间配上，运营决定与外部事实各口才越得过准入范围。`04-devices.json` 是作业事实各口用的合成设备，每台绑一个作业范围，与配置员的作业事实登记授予一一对上。`05`、`06` 是集成客户端族：合成报关服务商与合成银行各一台，主体是演示的集成客户端发行方签出的 `sub`，授予按事实类型给。`07`、`08` 是首方客户族：合成货主系统一台绑 `SYN-ACCOUNT-01`，主体是同一只发行方签出的 `sub`，授予按客户面能力给（此刻只有提交） |
+| `data/access/` | `cmd/parcel-access-register` 的 `operator-register` / `operator-grant` / `admission-scope-mapping-register` / `device-register` / `integration-client-register` / `integration-client-grant` / `customer-client-register` / `customer-client-grant` | 操作者册（ADR-0100 决定二第三条）：合成操作者主体绑演示租户，各自持有哪些授予以上面「操作者渠道」一节的授予表为准，这里不另列；主体是演示发行方 Dex 给 `operator-channel/dex.yaml` 里静态用户真签出的 `sub`，换发行方就按新发行方的标识另登一批。另有演示租户的准入范围对照（ADR-0180 决定一、二）：各（能力、事实类型）的生产写落在哪个治理对象范围，与 `data/governance/` 里本产品的权威区间配上，运营决定与外部事实各口才越得过准入范围。`04-devices.json` 是作业事实各口用的合成设备，每台绑一个作业范围，与配置员的作业事实登记授予一一对上。`05`、`06` 是集成客户端族：合成报关服务商、合成银行与合成干线承运商各一台（干线承运商的来源身份是 `SYN-PARTY-CARRIER-TRUNK-01`，只授承运订舱答复），主体是演示的集成客户端发行方签出的 `sub`，授予按事实类型给。`07`、`08` 是首方客户族：合成货主系统一台绑 `SYN-ACCOUNT-01`，主体是同一只发行方签出的 `sub`，授予按客户面能力给（此刻只有提交） |
 | `data/transport/` | `cmd/parcel-transport-register schedule-template` | 周期安排登记册（ADR-0201）3 份：演示网络三条连接各一份按日运行的周期安排——`SYN-SCHED-SHA-SZX-DAILY`（`SYN-CONN-SHA-SZX`，当地 22:00 出发、历时 600 分钟，Asia/Shanghai）、`SYN-SCHED-SZX-SIN-DAILY`（`SYN-CONN-SZX-SIN`，10:00、300 分钟，Asia/Shanghai）、`SYN-SCHED-SIN-LM-DAILY`（`SYN-CONN-SIN-LM`，07:00、90 分钟，Asia/Singapore），服务范围都是 `SYN-SCOPE-01`。方向的连接代码与起讫节点取演示网络参考配置，时区取该连接的业务时区；出发时刻与历时是合成分钟数，不是任何线路的真实班期。具体班次不预生成：准备评估时按日期物化，或经 `schedule` 命令 / `POST /transport-fulfillment-transport-schedule-registrations` 按运行日期显式登记 |
 | `data/transport/04-materialized-schedule-szx-sin.json` | `cmd/parcel-transport-register schedule` | 逐维容量与容量池（ADR-0201 决定三，票 demo-chain-gaps/17）：上一行三份周期安排各声明重量（KG）与件数（PCS）两维硬上限——`SHA-SZX` 20000 / 4000、`SZX-SIN` 5000 / 1000、`SIN-LM` 1500 / 300，都是合成值，不是任何车辆或舱位的真实载量。这一份按固定合成日期 2026-10-21 显式物化登记干线一班 `SYN-SCHED-SZX-SIN-DAILY/2026-10-21`，随之建两池 `…/2026-10-21/WEIGHT` 与 `…/2026-10-21/PIECES`，`GET /transport-fulfillment-records?registry=capacity-pool` 列出它们。另一维的池经 `capacity-pool` 命令或 `POST /transport-fulfillment-capacity-pool-registrations` 登在已登记的班次上，池身份由（班次、维度）派生 |
 | `data/node-operations/01-pre-advice-window-syn-tenant-01.json` | `cmd/parcel-node-operations-register -kind pre-advice-window` | 预报有效时窗册（ADR-0212 决定二末项，`PAR-NET-18`）1 行：演示租户 `SYN-TENANT-01` 提前 1440 分、宽限 720 分，2026-01-01 起不设终点，登记依据 `SYN-BASIS-PRE-ADVICE-WINDOW-01`。合成取值，不是任何租户的预报惯例；同一行也可经 `POST /node-operations-pre-advice-window-registrations` 登记。没有这一行，凭预报的交付范围核对态答未配置 |
@@ -127,6 +133,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 1. 发行方是 `operator-channel/compose.yaml` 里的第二只 Dex（`integration-issuer`，配置 `integration-dex.yaml`），上面那条 `up -d --wait` 一并起，地址 `http://127.0.0.1:5558/dex`。它只签客户端凭据许可的令牌；版本与操作者族那只不同，理由写在 compose 注释里。
 2. 起 `parcel-api` 时再加三件：`IDP_PARCEL_INTEGRATION_CLIENT_OIDC_ISSUER=http://127.0.0.1:5558/dex`、`IDP_PARCEL_INTEGRATION_CLIENT_OIDC_JWKS_URL=http://127.0.0.1:5558/dex/keys`、`IDP_PARCEL_INTEGRATION_CLIENT_OIDC_AUDIENCE=idp-parcel-integration`。日志出现「Integration client channel issuer configured」。
 3. 取令牌：`scripts/demo-seeds/operator-channel/integration-token.sh syn-integration-customs-broker-01 syn-customs-broker-secret`（银行是 `syn-integration-bank-01` / `syn-bank-secret`）。客户端行的「要求证书绑定令牌」填的是 `false`：这只发行方签不出 `cnf`，这是演示租户对这两台客户端的取值，不是放宽核验。
+4. 承运订舱答复口（`POST /transport-fulfillment/booking-answers`，ADR-0202 决定二）认合成干线承运商这一台：`integration-token.sh syn-integration-carrier-trunk-01 syn-carrier-trunk-secret`。它只能答干线委托下的订舱——答复方的来源身份要等于订舱所属委托的服务提供方，拿它答末端委托下的订舱答 200 `SOURCE_NOT_SERVICE_PROVIDER`。证书绑定一格同上。
 
 ## 首方客户渠道：演示发行方
 
