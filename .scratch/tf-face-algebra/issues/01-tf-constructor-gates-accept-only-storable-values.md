@@ -1,7 +1,7 @@
 # 01 TF 构造门按登记册存得下的值收：零时刻之后不足一微秒的业务时间写得进、读不回，引用里的 NUL 答 500
 
 Category: bug
-Status: needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 代决并认领（分支 `claude-tfa01`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment-load-assignment-registrations, /transport-fulfillment/movement-facts, /transport-fulfillment/delivery-attempts
@@ -13,6 +13,10 @@ Blocked by: 无
 - cmd/parcel-api/（新增真渠道回归测试文件）
 
 代决依据：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」。
+
+## 裁定（2026-10-19，会话 idp-parcel-9b 代决）
+
+照「修复方向（机制）」四条做，没有取舍：判零按登记册精度（扩展 `AtRegistryPrecision` 头注那条规则，不另立第二处定义）；`newRequiredValue` 拒含 NUL，各构造门折成`未受理`；不放 HTTP 入口、不让 PG 适配器拒写；同形门逐处清点，地盘外的写进完成记录另立。与 customs-compliance 的 tf-face-algebra/11 同形。属机制，不涉租户取值。
 
 ## 现象
 
