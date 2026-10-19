@@ -1,7 +1,7 @@
 # 54 前线导入铸出的来源标识越过意图信封上限时，报告说「重跑会重发」，重跑却永远交不出去
 
 Category: bug
-Status: in-progress——2026-10-19 作者子代理完工（含裁定补），待评审。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（operator-channel/45 已进 main），分支 `claude-oc54`。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立并代决（票 operator-channel/45 评审遗留）
+Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工（含裁定补），待评审。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（operator-channel/45 已进 main），分支 `claude-oc54`。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立并代决（票 operator-channel/45 评审遗留）
 Blocked by: operator-channel/45 进 main
 父票：[45](./45-http-reception-does-not-swallow-a-failed-intent-enqueue.md)
 出处：票 45 实施子代理回报的「没做」与会话评审。
@@ -116,3 +116,14 @@ Blocked by: operator-channel/45 进 main
 - 「走 Go 那条路」同上。
 - 集运模板的 `sealRef` 只进封装快照意图的载荷与定长指纹 ID，载荷上限 1 MiB（`eventing.MaxPayloadBytes`），CSV 一格到不了，没设门。
 - Scope 取 CLI 给的租户号（收寄、集运两口同），超过 `eventing.MaxScopeLength` 时整批信封都会被拒。租户由受控运维给出，不在内勤改文件能解决的范围，没设门，记此一句。
+
+## Comments
+
+### 评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审；2026-10-19，钉 `ac8236ea`）
+
+两轴合审，0 阻断。
+
+- **Spec**：收寄一半判铸出的整条来源标识（标记前缀与模板版本也占字节），上限与 `receptionCommand` 同取 `eventing.MaxSubjectLength`；集运一半（裁定补并入）六种动作都判单元号，取 Subject 与分区键两道上限里紧的那个——作者多判的分区键一格有实测撑着（506 与 512 字节修前都照常封装、意图交不出），认可。坏行整批拒、报告点名该改的列；编排吞错那半与两份 `*_import.go` 未动。HTTP 路查过：NO 写路只有收寄口，票 45 已拒，封装快照意图不在 parcel-api 装配。
+- **Standards**：上限都取框架常量，注释只写为什么。
+- **评审修补（已做，`c77d7807`）**：集运那一半在 cmd 里照抄了分区键拼法 `租户/单元`，成了第二处定义。改为 NO 适配器导出 `SealedSnapshotPartitionKey`，cmd 用空单元号拼出前缀算余量；`OutboxSealedSnapshotHandoff` 照用同一函数。改后本包与 NO PG 适配器带 DSN 照绿，五条边界用例 PASS。
+- **未设门、只记**（作者已写进票面）：两口的 Scope 取 CLI 给的租户号，越过 `eventing.MaxScopeLength` 时整批信封被拒——租户由受控运维给出，内勤改文件解决不了，不在本票。
