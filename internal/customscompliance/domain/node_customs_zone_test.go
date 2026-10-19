@@ -37,6 +37,7 @@ func departure(t *testing.T, from, to string) domain.ActionIntent {
 }
 
 // 演示动线两段（证据 S）：同区段只适用装载出发，跨境段另加跨关务区域移动——不是每次出发都问两种。
+// Covers: AT-CC-411、AT-CC-412 的领域半边——适用动作与跨区判断按区域读数定；区域读数从哪来归真库那一半。
 func TestDepartureAppliesCrossZoneMovementOnlyWhenZonesDiffer(t *testing.T) {
 	tests := map[string]struct {
 		from, to string

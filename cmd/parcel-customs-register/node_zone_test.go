@@ -24,6 +24,7 @@ func (nodeZoneClock) Now() time.Time { return time.Date(2026, 8, 20, 10, 1, 0, 0
 // 演示种子的四个节点区域照原样灌进真库（证据 S），再拿生产那只准入编排判演示动线两段：SHA→SZX 只适用装载出发，
 // SZX→SIN 另加跨关务区域移动（票 demo-chain-gaps/31 演示判据）。读的是 scripts/demo-seeds 里的文件本身——种子改了
 // 形状或节点代码，这里先红。
+// Covers: AT-CC-411、AT-CC-412 的演示种子半边——区域读数取自随产品发出的种子文件。
 func TestDemoNodeZoneSeedsDriveTheAdmissionApplicability(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))

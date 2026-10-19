@@ -140,6 +140,7 @@ func assertFinding(t *testing.T, finding domain.ActionAdmissionFinding, answer d
 }
 
 // 不在本上下文任何案件与单元里的对象：同区出发没有任何东西约束它；跨境那一步跨关务边界必须有案可依，答未决。
+// Covers: AT-CC-413、AT-CC-414（领域半边）。
 func TestObjectOutsideCustomsBooksIsUnguardedWithinAZoneButUndecidedAcrossIt(t *testing.T) {
 	domestic := newAdmissionCase(t).judge()
 	if domestic.Answer() != domain.AdmissionNotGuarded || len(domestic.Findings()) != 1 {
@@ -156,6 +157,7 @@ func TestObjectOutsideCustomsBooksIsUnguardedWithinAZoneButUndecidedAcrossIt(t *
 }
 
 // 门禁满足不答放行：要有动作时点前生效的全部放行；部分或附条件放行说不出本件放没放、条件成没成，答未决。
+// Covers: AT-CC-415、AT-CC-416 的折法半边——钉在装载出发那一道上，跨区那一道走同一份折法；跨区一道的整条在真库用例。
 func TestGateMetAdmitsOnlyWithAFullReleaseInForceAtTheActionInstant(t *testing.T) {
 	admitted := newAdmissionCase(t).inUnit().gate(domain.LoadingDeparture, domain.GateReadingFormed, domain.GateMet).
 		release("SYN-SRC-FULL", domain.FullRelease, admissionAt.Add(-time.Hour)).judge()
@@ -193,6 +195,7 @@ func TestGateNotMetBlocksUnlessTheAuthorityAlreadyReleasedInFull(t *testing.T) {
 }
 
 // 外部放行不解内部限制；限制按动作时点判——动作之后才解除的限制，当时仍挡着。
+// Covers: AT-CC-418（折法半边，钉在装载出发那一道上）、AT-CC-419。
 func TestRestrictionInForceAtTheActionInstantBlocksDespiteAFullRelease(t *testing.T) {
 	blocked := newAdmissionCase(t).inUnit().gate(domain.LoadingDeparture, domain.GateReadingFormed, domain.GateMet).
 		release("SYN-SRC-FULL", domain.FullRelease, admissionAt.Add(-time.Hour)).
@@ -212,6 +215,7 @@ func TestRestrictionInForceAtTheActionInstantBlocksDespiteAFullRelease(t *testin
 	assertFinding(t, findingOf(t, otherAction, domain.LoadingDeparture), domain.AdmissionNotGuarded, domain.CauseOutsideCustomsBooks)
 }
 
+// Covers: AT-CC-420（领域半边）。
 func TestGateStopsFoldIntoNotConfiguredOrUndecided(t *testing.T) {
 	tests := map[string]struct {
 		state  domain.GateReadingState
@@ -243,6 +247,7 @@ func TestCaseWithoutUnitIsUndecided(t *testing.T) {
 }
 
 // 节点未登记区域时，只有对象带着跨区的门才答未配置；不带跨区门的对象（含不在任何单元里的）这一道不列。
+// Covers: AT-CC-421（领域半边）、AT-CC-422——不在册对象这一支整次答复为不受门禁。
 func TestUnregisteredNodeZoneIsNotConfiguredOnlyWhenTheObjectHasACrossZoneGate(t *testing.T) {
 	guarded := newAdmissionCase(t).unzonedDestination().inUnit().
 		gate(domain.LoadingDeparture, domain.GateReadingFormed, domain.GateNotApplicable).

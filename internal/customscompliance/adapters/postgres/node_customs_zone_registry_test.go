@@ -12,6 +12,7 @@ import (
 
 // 节点关务区域册的版本代数在真库上走一遍（隔离合成 S）：登记、重放、同起点换区域冲突、换版落终点、错序撞排他
 // 约束——与口岸目录同款，但本册的约束与 SQL 是新写的，先例的绿证不了它。穿登记用例走，冲突判定的读回也在内。
+// Covers: AT-CC-425。
 func TestNodeCustomsZoneRegistryVersionsOnRealPostgres(t *testing.T) {
 	fixture := newViewFixture(t)
 	registry, err := adapter.NewNodeCustomsZoneRegistrations(fixture.db)

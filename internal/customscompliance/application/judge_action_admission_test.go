@@ -185,6 +185,7 @@ func judged(t *testing.T, result application.JudgeActionAdmissionResult) (domain
 }
 
 // 同一请求在同样的三源上重放：命中已记录的那份，标识与首次判断时刻都不变。
+// Covers: AT-CC-423 的编排半边（替身册；判断册一行、Outbox 不增在真库用例）。
 func TestAdmissionJudgementIsRecordedOnceAndReplaysToTheSameRecord(t *testing.T) {
 	fixture := newAdmissionFixture()
 	handler := fixture.handler(t)
@@ -249,6 +250,7 @@ func TestAdmissionJudgementTakesANewIdentityWhenASourceChanges(t *testing.T) {
 }
 
 // 门禁编排的停点译成领域读数：业务停点进判断，依赖读不动不进判断。
+// Covers: AT-CC-420 的编排半边——目录未登记的停点译成未配置读数。
 func TestGateStopsBecomeReadingsAndDependencyFailuresStopTheJudgement(t *testing.T) {
 	fixture := newAdmissionFixture()
 	fixture.inUnit(t)
@@ -277,6 +279,7 @@ func TestGateStopsBecomeReadingsAndDependencyFailuresStopTheJudgement(t *testing
 	}
 }
 
+// Covers: AT-CC-424（编排半边：替身依赖逐口读不动）。
 func TestEachUnreadableSourceStopsBeforeTheFold(t *testing.T) {
 	failure := errors.New("dependency down")
 	tests := map[string]struct {
@@ -337,6 +340,7 @@ func TestTheAdmissionHandlerNamesWhichDependencyIsMissing(t *testing.T) {
 }
 
 // 判断册拒收这次写入本身（词表外、缺事务）是编程或接线错，原样上抛；只有库读写不动才答读不动——前者重投不会好。
+// Covers: AT-CC-424「判断册写口拒收这次写入本身不答读不动」那一句。
 func TestAStoreRejectionIsAProgrammingErrorNotAnUnreadableStore(t *testing.T) {
 	fixture := newAdmissionFixture()
 	fixture.store.saveErr = fmt.Errorf("wrapped: %w", ports.ErrActionAdmissionJudgementRejected)
@@ -347,6 +351,7 @@ func TestAStoreRejectionIsAProgrammingErrorNotAnUnreadableStore(t *testing.T) {
 }
 
 // 认定清单折不出结论：目录读口交回了领域构造造不出的认定，归那一口读不动，不是 Go error、也不折进五格。
+// Covers: AT-CC-424「门禁目录交回折不出结论的认定」那一支。
 func TestFindingsThatDoNotFoldNameTheGateConditionView(t *testing.T) {
 	fixture := newAdmissionFixture()
 	fixture.inUnit(t)
@@ -365,6 +370,7 @@ func TestFindingsThatDoNotFoldNameTheGateConditionView(t *testing.T) {
 }
 
 // 动作时点按微秒入标识：库只存到微秒，消费方读回时点重问不带亚微秒位，仍要命中首次那一份。
+// Covers: AT-CC-423「执行方读回微秒精度的动作时点再问」那一支（编排半边）。
 func TestAdmissionAtIsTruncatedToTheMicrosecondTheStoreKeeps(t *testing.T) {
 	fixture := newAdmissionFixture()
 	handler := fixture.handler(t)

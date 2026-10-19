@@ -225,6 +225,7 @@ func expectAdmission(t *testing.T, finding domain.ActionAdmissionFinding, answer
 
 // 演示判据（证据 S）：SHA→SZX 只适用装载出发；SZX→SIN 另加跨关务区域移动。对象不在任何案件与单元里：同区那一步
 // 不受门禁，跨境那一步缺案可依答未决。
+// Covers: AT-CC-411、AT-CC-412、AT-CC-413、AT-CC-414。
 func TestAdmissionOnRealPostgresAppliesActionsByNodeZones(t *testing.T) {
 	db := newAdmissionDB(t)
 	db.demoZones()
@@ -245,6 +246,7 @@ func TestAdmissionOnRealPostgresAppliesActionsByNodeZones(t *testing.T) {
 	}
 }
 
+// Covers: AT-CC-415、AT-CC-416、AT-CC-417、AT-CC-418。
 func TestAdmissionOnRealPostgresAdmitsOnlyWithAGateMetAndAFullRelease(t *testing.T) {
 	db := newAdmissionDB(t)
 	db.demoZones()
@@ -285,6 +287,7 @@ func TestAdmissionOnRealPostgresAdmitsOnlyWithAGateMetAndAFullRelease(t *testing
 }
 
 // 未配置两种来路：门禁目录没登；节点没登区域而对象带着跨区的门。
+// Covers: AT-CC-420、AT-CC-421。
 func TestAdmissionOnRealPostgresAnswersNotConfigured(t *testing.T) {
 	db := newAdmissionDB(t)
 	db.demoZones()
@@ -306,6 +309,7 @@ func TestAdmissionOnRealPostgresAnswersNotConfigured(t *testing.T) {
 }
 
 // 重放回到同一行、不另记；准入判断不入队。
+// Covers: AT-CC-423。
 func TestAdmissionOnRealPostgresReplaysWithoutEnqueueing(t *testing.T) {
 	db := newAdmissionDB(t)
 	db.demoZones()

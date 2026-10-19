@@ -64,6 +64,7 @@ func TestNodeCustomsZoneRegistrationFaceAnswersFromTheOperatorChannel(t *testing
 
 // 生产装配那两格对真库走通（隔离合成 S）：区域登记在自己的事务里落地并能重放；准入判断不靠调用方的事务，自己开一笔、
 // 记下判断、重放回到同一份。
+// Covers: AT-CC-423 的生产装配半边（自带事务下重放回同一份）。
 func TestCustomsAdmissionOrchestrationRunsOnRealPostgres(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -124,6 +125,7 @@ func TestCustomsAdmissionOrchestrationRunsOnRealPostgres(t *testing.T) {
 
 // 读口在事务里报 SQL 错误时，PostgreSQL 把整笔事务置为 aborted：答复若照常提交，只会换回提交错误，「读不动：
 // 指名哪一口」就丢了。这里让限制册在真库上读不到（改表名，前两口照常读通），钉住消费方拿到的仍是具名那一口。
+// Covers: AT-CC-424「读口在事务里报 SQL 错误」那一支。
 func TestActionAdmissionNamesTheUnreadablePortWhenTheTransactionIsAborted(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))

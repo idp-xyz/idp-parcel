@@ -18,15 +18,15 @@
 
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 294 |
+| ① 已钉住 | 309 |
 | ② 机制候选 | 236 |
 | ③ 实例/闸门 | 143 |
 | ④ 机制未落地 | 425 |
-| 合计 | 1098 |
+| 合计 | 1113 |
 
 | 前缀 | 总数 | ① | ② | ③ | ④ |
 |---|---|---|---|---|---|
-| CC | 410 | 20 | 0 | 89 | 301 |
+| CC | 425 | 35 | 0 | 89 | 301 |
 | NO | 61 | 21 | 33 | 7 | 0 |
 | NR | 53 | 24 | 28 | 1 | 0 |
 | PC | 36 | 35 | 1 | 0 | 0 |
@@ -58,6 +58,21 @@
 | `AT-CC-380` | internal/customscompliance/application/receive_manifest_test.go::TestManifestsAssociateOnlyOnUniqueMatch |
 | `AT-CC-381` | internal/customscompliance/application/receive_manifest_test.go::TestManifestsAssociateOnlyOnUniqueMatch |
 | `AT-CC-387` | internal/customscompliance/application/receive_manifest_test.go::TestManifestsAssociateOnlyOnUniqueMatch |
+| `AT-CC-411` | internal/customscompliance/adapters/postgres/action_admission_test.go::TestAdmissionOnRealPostgresAppliesActionsByNodeZones；internal/customscompliance/domain/node_customs_zone_test.go::TestDepartureAppliesCrossZoneMovementOnlyWhenZonesDiffer（领域半边）；cmd/parcel-customs-register/node_zone_test.go::TestDemoNodeZoneSeedsDriveTheAdmissionApplicability（演示种子半边） |
+| `AT-CC-412` | internal/customscompliance/adapters/postgres/action_admission_test.go::TestAdmissionOnRealPostgresAppliesActionsByNodeZones；internal/customscompliance/domain/node_customs_zone_test.go::TestDepartureAppliesCrossZoneMovementOnlyWhenZonesDiffer（领域半边）；cmd/parcel-customs-register/node_zone_test.go::TestDemoNodeZoneSeedsDriveTheAdmissionApplicability（演示种子半边） |
+| `AT-CC-413` | internal/customscompliance/adapters/postgres/action_admission_test.go::TestAdmissionOnRealPostgresAppliesActionsByNodeZones；internal/customscompliance/domain/action_admission_test.go::TestObjectOutsideCustomsBooksIsUnguardedWithinAZoneButUndecidedAcrossIt（领域半边） |
+| `AT-CC-414` | internal/customscompliance/adapters/postgres/action_admission_test.go::TestAdmissionOnRealPostgresAppliesActionsByNodeZones；internal/customscompliance/domain/action_admission_test.go::TestObjectOutsideCustomsBooksIsUnguardedWithinAZoneButUndecidedAcrossIt（领域半边） |
+| `AT-CC-415` | internal/customscompliance/adapters/postgres/action_admission_test.go::TestAdmissionOnRealPostgresAdmitsOnlyWithAGateMetAndAFullRelease；internal/customscompliance/domain/action_admission_test.go::TestGateMetAdmitsOnlyWithAFullReleaseInForceAtTheActionInstant（折法半边，钉在装载出发一道） |
+| `AT-CC-416` | internal/customscompliance/adapters/postgres/action_admission_test.go::TestAdmissionOnRealPostgresAdmitsOnlyWithAGateMetAndAFullRelease；internal/customscompliance/domain/action_admission_test.go::TestGateMetAdmitsOnlyWithAFullReleaseInForceAtTheActionInstant（折法半边，钉在装载出发一道） |
+| `AT-CC-417` | internal/customscompliance/adapters/postgres/action_admission_test.go::TestAdmissionOnRealPostgresAdmitsOnlyWithAGateMetAndAFullRelease |
+| `AT-CC-418` | internal/customscompliance/adapters/postgres/action_admission_test.go::TestAdmissionOnRealPostgresAdmitsOnlyWithAGateMetAndAFullRelease；internal/customscompliance/domain/action_admission_test.go::TestRestrictionInForceAtTheActionInstantBlocksDespiteAFullRelease（折法半边，钉在装载出发一道） |
+| `AT-CC-419` | internal/customscompliance/domain/action_admission_test.go::TestRestrictionInForceAtTheActionInstantBlocksDespiteAFullRelease |
+| `AT-CC-420` | internal/customscompliance/adapters/postgres/action_admission_test.go::TestAdmissionOnRealPostgresAnswersNotConfigured；internal/customscompliance/domain/action_admission_test.go::TestGateStopsFoldIntoNotConfiguredOrUndecided（领域半边）；internal/customscompliance/application/judge_action_admission_test.go::TestGateStopsBecomeReadingsAndDependencyFailuresStopTheJudgement（编排半边） |
+| `AT-CC-421` | internal/customscompliance/adapters/postgres/action_admission_test.go::TestAdmissionOnRealPostgresAnswersNotConfigured；internal/customscompliance/domain/action_admission_test.go::TestUnregisteredNodeZoneIsNotConfiguredOnlyWhenTheObjectHasACrossZoneGate（领域半边） |
+| `AT-CC-422` | internal/customscompliance/domain/action_admission_test.go::TestUnregisteredNodeZoneIsNotConfiguredOnlyWhenTheObjectHasACrossZoneGate |
+| `AT-CC-423` | internal/customscompliance/adapters/postgres/action_admission_test.go::TestAdmissionOnRealPostgresReplaysWithoutEnqueueing；internal/customscompliance/application/judge_action_admission_test.go::TestAdmissionJudgementIsRecordedOnceAndReplaysToTheSameRecord（编排半边）；internal/customscompliance/application/judge_action_admission_test.go::TestAdmissionAtIsTruncatedToTheMicrosecondTheStoreKeeps（半边：读回微秒时点再问）；cmd/parcel-api/assemble_customs_admission_test.go::TestCustomsAdmissionOrchestrationRunsOnRealPostgres（生产装配半边） |
+| `AT-CC-424` | internal/customscompliance/application/judge_action_admission_test.go::TestEachUnreadableSourceStopsBeforeTheFold；internal/customscompliance/application/judge_action_admission_test.go::TestFindingsThatDoNotFoldNameTheGateConditionView（半边：折不出结论的认定）；internal/customscompliance/application/judge_action_admission_test.go::TestAStoreRejectionIsAProgrammingErrorNotAnUnreadableStore（半边：写口拒收不答读不动）；cmd/parcel-api/assemble_customs_admission_test.go::TestActionAdmissionNamesTheUnreadablePortWhenTheTransactionIsAborted（半边：事务内 SQL 错误） |
+| `AT-CC-425` | internal/customscompliance/adapters/postgres/node_customs_zone_registry_test.go::TestNodeCustomsZoneRegistryVersionsOnRealPostgres |
 | `AT-CC-389` | internal/customscompliance/application/receive_manifest_test.go::TestRevisionsAdvanceVersionsAndRematchAssociations |
 | `AT-NO-008` | internal/nodeoperations/application/accept_collaboration_test.go::TestExecutionFactsAreRecordedWithinTheDecision；internal/nodeoperations/application/accept_collaboration_test.go::TestOneDecisionPerCollaborationItem |
 | `AT-NO-009` | internal/nodeoperations/application/accept_collaboration_test.go::TestOneDecisionPerCollaborationItem |
@@ -1203,6 +1218,7 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 追记七（票 no-reception-source/02，2026-10-19）：票 no-reception-source/01 在 UC-NO-002 新增 `AT-NO-047` 至 `AT-NO-051`，本表当时未随之扩，照扫描口径补进：`AT-NO-047`、`AT-NO-048` 随收寄来源保全与判断版本落地点名入①（编排面与真库面），`AT-NO-049`、`AT-NO-050`、`AT-NO-051` 未被测试引用、属 NO 机制面、行文无实例关键词，入②（分别待票 no-reception-source/04、04、05）。①290→292（NO 17→19）、②225→228（NO 22→25），合计 1083→1088（NO 46→51，`docs/application` 的 AT 全集随 UC-NO-002 扩了这几行）。
 
 追记八（票 no-reception-identity/05，2026-10-19）：票 no-reception-identity/04 新立 UC-NO-004（`AT-NO-053` 至 `AT-NO-061`），票 ps-external-mark-relations/05 在 UC-NO-002 新增 `AT-NO-052`，本表都未随之扩，照扫描口径补进：`AT-NO-052` 在票 ps-external-mark-relations/05 落地时已由编排用例点名、只是没入表，`AT-NO-061` 随身份一格读链头落地点名（领域面与真库面），两条入①；`AT-NO-053` 至 `AT-NO-060` 未被测试引用、属 NO 机制面，入②（待票 no-reception-identity/06）。①292→294（NO 19→21）、②228→236（NO 25→33），合计 1088→1098（NO 51→61，`docs/application` 的 AT 全集随 UC-NO-002 与 UC-NO-004 扩了这几行）。
+2026-10-19 追记（票 demo-chain-gaps/31 评审后补）：UC-CC-013 新立 `AT-CC-411`–`425`（`docs/application` 的 AT 全集随之扩大），随票在领域、编排、真库与装配用例上补 Covers 点名，全部入①；只有半边覆盖的测试在行内注明哪一半边。①290→305（CC 20→35），CC 总数 410→425，合计 1083→1098；②③④不变。
 
 ### 两盘之间新落的硬句测试面（不入①，逐面列出供领票比对）
 
