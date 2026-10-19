@@ -174,9 +174,8 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 
 8. **货怎么运**（transport-fulfillment，演示租户的租户取值，证据只记 `S`）：三条连接各有一份按日运行的周期安排
    （上表 `data/transport/`），具体班次由（周期安排代码、运行日期）派生，例如 `SYN-SCHED-SZX-SIN-DAILY/2026-10-21`。
-   各段的履约方式是演示租户的声明，不从有没有协议或委托推出来（tf-chain-plan「X1」）：`SHA-HUB→SZX-GATE` 自营；
-   `SZX-GATE→SIN-HUB` 外包给 `SYN-PARTY-CARRIER-TRUNK-01`，采用 `SYN-SUPPLIER-TRUNK-CN-SG-01` v1；`SIN-HUB→SIN-LM`
-   与末端派送自营、经一线设备。末端协议 `SYN-SUPPLIER-LASTMILE-SG-01` 暂不被任何委托采用。
+   各段由谁履约（自营还是外包、外包采用哪份协议）是演示租户的声明，不从有没有协议或委托推出来；声明只写在
+   `docs/design/synthetic-demo-journey-script.md`「第 3 步 · 一单会走的网」的 2026-10-19 补记里，这里不复述。
 
 ## 已知边界（如实记录，不是缺陷）
 
