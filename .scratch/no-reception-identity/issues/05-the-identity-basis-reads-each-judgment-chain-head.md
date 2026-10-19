@@ -1,7 +1,7 @@
 # 05 方向依据的身份一格改读每条判断链的当前有效版本——不再对全部行取或
 
 Category: enhancement
-Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（04 已进 main），分支 `claude-nri05`；与 no-reception-source/03 并行。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 04 拆出（代决，用户 2026-10-16 授权「你作为业务和系统专家你来自决」）
+Status: resolved——2026-10-19 进 main（代码验证钉 `36960d4c`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（04 已进 main），分支 `claude-nri05`；与 no-reception-source/03 并行。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 04 拆出（代决，用户 2026-10-16 授权「你作为业务和系统专家你来自决」）
 Blocked by: 04 进 main（ADR-0210、NO CONTEXT「判断链与当前有效版本」与 UC-NO-004 先落）。不依 no-reception-source/03：本票只碰身份读口与方向依据领域件，与它的地盘不交叉，可以先行或并行。
 父票：[04](./04-identity-conflicts-have-a-disposition-and-release.md)
 出处：票 04 裁定里「方向依据的身份一格改读每条判断链的当前有效版本，不再对全部行取或」那一点；[ADR-0210](../../../docs/adr/0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md) 决定五与「与已接受决定的关系」。
@@ -52,7 +52,7 @@ Blocked by: 04 进 main（ADR-0210、NO CONTEXT「判断链与当前有效版本
 - [x] 读口用例（`adapters/postgres`）：前版读回逐字一致；没有前版的旧行读回为缺席。
 - [x] 真库用例：一码两物之后两件的身份一格各是缺少·{待识别, 身份冲突}（`AT-NO-061`）；no-reception-identity/01、03 与 no-directional-basis/01 的既有用例照旧绿，改钉的逐条列在完成记录。
 - [x] Go 门禁：`go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出；带 DSN 跑 `internal/nodeoperations/...`、`cmd/parcel-api`、`cmd/parcel-frontline-import`、`internal/architecture/...`、`migrations/...` 全绿；机制清点在本笔的干净检出上重生成。
-- [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
+- [x] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
 
 ## 完成记录（2026-10-19，会话 idp-parcel-9b 的作者子代理，分支 `claude-nri05`，基于 main `dee3a79c`）
 
@@ -126,3 +126,8 @@ Blocked by: 04 进 main（ADR-0210、NO CONTEXT「判断链与当前有效版本
 - **作者多出的一格认可**：成环库面拦不住，与 `CurrentVersion` 走到环同一待遇报错不挑；编排把它记成身份一格读不动，不抛。
 - **Standards**：头注写为什么（取或会让冲突版一落就再也解不开）。
 - **非阻断（不另立票）**：`appendIdentityConflicts` 头注「方向依据的身份一格读到这一版就落成身份冲突」没写全（新读法下原因集还含待识别），那份文件归 no-reception-source/03 在途，随它或 no-reception-identity/06 顺手改；`AT-NO-061` 的「零候选被重核版接续」真库面等 no-reception-source/03 进 main。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-nri05` 直接叠在远端 main 之上快进推送；机制清点重生成零差，没有清点那一笔。
+- 推送方全量一次：钉 `36960d4c` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 144 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
