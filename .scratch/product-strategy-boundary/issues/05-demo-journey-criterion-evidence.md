@@ -296,3 +296,39 @@ Blocked by: 02、03、04（只挡收口）
 1. 格 4 归租户取值，依据是机制与采用路径都已在 main，缺的是演示租户这份网络的适用范围与覆盖；若评审认为 `SYN-SCOPE-01` 与服务目的 `NETWORK_SERVICE` 的不一致本身该由产品给出映射，它就转成产品策略缺执行器，去处仍是 rfc/11 一带。
 2. 格 3 越过是从探针原因反推的：NR 先判资格、后判证据，原因落在证据上，说明资格那一步没答「不可用」也没答「不适用」。资格视图本身没有单独取证。
 3. 格 5 起全部是代码取证，与「盘点」判断项 2 同理：是缺口的下界，真走到时可能换成别的停法。
+
+## 重走（钉 `851e9da7`，2026-10-18）
+
+Claude Code 会话做，用户「你作为业务和系统专家自决……解决所有的问题」授权。一次性库 `c8_walk7`，按该检出的 `seed.sh` 原样灌，退 0。`parcel-api` 照动线「前置」起操作者渠道，`parcel-dispatch` 照前置的七个变量起。实测只记 `S`，走完已停进程、删库。
+
+**结论**：实物主链今天从提交一路走到包裹终局。
+
+1. 委托 `201 SUBMITTED`，受理前财务控制冻结 9600，成`已接受`（格 5）。
+2. 初始路由 `ROUTE_FORMED`，三段计划，`network-routing.initial-route.formed` 发布（格 6；本轮修了 [routing-first-cut/18](../../routing-first-cut/issues/18-leg-endpoints-folded-into-price-card-zones.md) 段计价区域、[/22](../../routing-first-cut/issues/22-initial-route-envelope-id-exceeds-the-event-id-limit.md) 信封 ID 越过上限）。
+3. 上海枢纽设备经收寄口收寄，标识用客户包裹号，答 `INTAKE_FORMED`；PS 采用落行（格 7；本轮 [30](./30-demo-tenant-registers-work-devices-and-work-fact-grants.md) 登设备与授予，[32](./32-demo-rule-package-declares-no-unprovable-intake-qualification.md) 去掉没有证明方的硬资格）。
+4. 路由复核答 `STILL_APPLICABLE`（本轮 [routing-first-cut/21](../../routing-first-cut/issues/21-reassessment-after-network-intake-carries-no-geo-projection.md) 让采用信封带地理投影，[34](./34-demo-route-strategy-revision-declares-a-freeze-form.md) 声明冻结形态）。
+5. 新加坡尾程场外设备登末端交接，立派送段（`FINAL_DELIVERY`，计划段 `RPV-000000000001#3`），答 `HANDOVER_REGISTERED`。
+6. 派送发起答 `DISPATCH_TASK_FORMED`：地点、窗口、条件都从要求缝取到。
+7. 派送尝试 `ATTEMPT_RECORDED`，有效交付 `DELIVERY_REGISTERED`，参与随之结束。
+8. `transport-fulfillment.effective-delivery.registered` 发布，PS 采用为终局 `EFFECTIVE_DELIVERY`，`final_outcome` 一行，`parcel-shipment.final-outcome.formed` 发布。
+
+**这条路上的软停点**：每一步都过得去，但过关只靠登记方自报。
+
+- 交接段号、计划段引用都由载荷手填，交接裁决不经证据判断。
+- 派送发起是手打一拍。
+- 派送窗口取的是计划第三段，即到新加坡末端节点为止；计划里没有末端到收件人那一段。
+- 交付方式、接收方、POD 不经有效性判断。
+
+**硬停点与去处**（同日对余下各段的只读勘察，隔离子代理，证据 `S`）：
+
+- 运输机会与班次没有生产入口，见 [demo-chain-gaps/01](../../demo-chain-gaps/issues/01-transport-opportunity-has-no-production-entry.md)。
+- 运输委托与订舱没有命令面，见 [02](../../demo-chain-gaps/issues/02-transport-commission-has-no-command-face.md)。
+- 交接之后节点控制不转移，见 [04](../../demo-chain-gaps/issues/04-handover-does-not-move-node-control-or-trigger-reassessment.md)。
+- 运输收费发生项没有形成路径，见 [07](../../demo-chain-gaps/issues/07-transport-charge-occurrences-have-no-production-path.md)。
+- 由此往下，格 17–21 的金额链在 main 上一格都走不动：
+  - BUY 消费门见 [08](../../demo-chain-gaps/issues/08-buy-evaluation-recorded-consumer-never-forms-supplier-expected-cost.md)。
+  - SELL 请求面与形成编排见 [21](./21-sell-evaluation-to-customer-charge.md)。要先裁两处：ADR-0169 否决往计算目的里加 SELL；ADR-0098 决定三让自营履约不形成发生项，自营包裹因此永远形不成客户费用。
+  - 演示租户值见 [demo-chain-gaps/09](../../demo-chain-gaps/issues/09-demo-price-cards-declare-no-amount-rounding.md)、[10](../../demo-chain-gaps/issues/10-demo-tenant-buy-and-sell-trigger-registers-are-empty.md)。
+- 关务是旁路，不挡实物主链：主链编排都不读关务的案件、提交或放行。建案与提交没有生产入口，见 [18](./18-customs-case-and-declaration-submission-entry.md)；外部结果信封没有订阅者，见 [demo-chain-gaps/11](../../demo-chain-gaps/issues/11-external-result-received-has-no-subscriber.md)。出发门禁由设备自报，见 [demo-chain-gaps/05](../../demo-chain-gaps/issues/05-movement-facts-are-unlinked-and-departure-gate-is-self-reported.md)。
+- 客户侧各面（格 15、16）等 ADR-0139–0142；集成客户端各面等 [31](./31-demo-integration-client-needs-a-client-credentials-capable-issuer.md)。
+
