@@ -75,10 +75,11 @@ Date: 2026-10-19
 13. **服务范围只存不判**（TF owner）。候选不按服务范围筛；一条连接上服务于不同范围的班次在准备时同样参选。
 14. **择优形态是否开成租户可选**（TF owner）。
 15. **准备结果不发信封**（TF / NR owner）。UC-TF-003 步 8 的发布意图暂缺，等 NR「分配失败重评」那条边。
+16. **决定四、八的三类是本记录自归**（TF owner）。计划没归这两条：登记代数归机制——同代码异内容成下一版是册子自己的代数，不是给租户选的形态；需求量来源归产品策略——取申报还是实测、认哪几维，产品可以另内置别的形态。owner 若认为登记代数也该是可选形态，要另立 ADR 取代决定四。
 
 ## Links
 
-- [ADR-0146：产品策略是机制与租户取值之间的第三类](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)：决定三、六、八的三类归属与「至少一种内置形」
+- [ADR-0146：产品策略是机制与租户取值之间的第三类](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)：各决定的三类归属与「至少一种内置形」
 - [ADR-0151：未归族的命令口定族](./0151-unassigned-command-faces-get-their-families.md)：决定一的定族判据
 - [ADR-0085：登记册配置写面进端点表带未配置格](./0085-registry-write-faces-enter-the-endpoint-table-with-unconfigured-grade.md)：CLI 保留为受控批量口，与端点同一登记用例
 - [ADR-0049](./0049-publish-channel-is-in-process-delivery-until-load-evidence.md)：Consequences「生产方上线之前，消费者必须先在路由表里」，决定七的上线次序
