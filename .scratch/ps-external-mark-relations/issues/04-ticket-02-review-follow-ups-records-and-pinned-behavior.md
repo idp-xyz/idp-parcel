@@ -1,7 +1,7 @@
 # 04 票 02 评审遗留收口：ADR-0184 与 ADR-0185 复核记录、UC-NO-002 同步，入口去空白与同号核对的现状钉成用例
 
 Category: chore
-Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 恢复（分支 `claude-psxm04` 上已有半成品，先 rebase）。此前 ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-psxm04`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-psxm04`）上留有1 笔（入口去两端空白与逐字核对的钉住用例），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 0 评审遗留；用户授权代决）；分支 `claude-psxm04`
+Status: resolved——2026-10-19 进 main（代码验证钉 `516cf9c2`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 恢复（分支 `claude-psxm04` 上已有半成品，先 rebase）。此前 ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-psxm04`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-psxm04`）上留有1 笔（入口去两端空白与逐字核对的钉住用例），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 0 评审遗留；用户授权代决）；分支 `claude-psxm04`
 Blocked by: 无
 父票：[01](./01-external-mark-relations-have-no-model-in-parcel-shipment.md)（已 resolved）。被评的是 [02](./02-register-and-customer-parcel-numbers-feed-node-identity.md)，代码 `cc52e9b6`，建模 `5714a137`。
 地盘：
@@ -152,3 +152,8 @@ ADR-0184、ADR-0185 越权风险点的 owner 复核行不在本票（归 operato
 - **Spec**：ADR-0184 复核记录第 3、4、5 条与 ADR-0185 文末新节都只有新增行，决定原文与 owner 复核行未动（`git diff` 删除行为零）。第 3 条两处偏离草案有理：operator-channel/51 的 owner 复核行已答了那两问，再写成待复核就是第二套口径。UC-NO-002 两处改动只把身份核对口径指向 CONTEXT-MAP 与 PS CONTEXT，不另立规则。
 - **Standards**：四条用例钉现状、首跑即绿，完成记录照实写了；入口去空白那条有变异实测撑着。`customerParcelNumbers` 头注改成引符号名与复核记录小节名，无行号、无计数。
 - **与 no-reception-identity/01 的交叠**：本票三条真库用例走多候选或首件；01 只改唯一命中且包裹已关联到别的实物那一格，不碰这里。两边 `cmd/parcel-api` 测试辅助函数无重名，叠起来编译由推送方全量验。复核记录「其二」的唯一命中，01 之后只对先到那件成立，ADR-0196 已写，本票不改。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-psxm04` rebase 到 `claude-nri01` 之上一并快进推送。rebase 撞了票 26 的「评审结果」节（与票 38 收口同处追加），两段都留；机制清点叠起来后重生成一笔（cmd 测试文件 147）。
+- 推送方全量一次：钉 `516cf9c2`（no-reception-identity/01 与 ps-external-mark-relations/04 叠成一串）的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 143 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。验证之后远端只前进了两笔纯票面认领，再 rebase 一次，`git diff 516cf9c2 HEAD -- . ':!.scratch'` 为空，未重跑。

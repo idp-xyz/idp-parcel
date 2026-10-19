@@ -1,7 +1,7 @@
 # 01 同一外部条码出现在两件实物：第二件也唯一关联到同一包裹，不形成身份冲突（AT-NO-019 字面场景没有实现）
 
 Category: bug
-Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-nri01`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 0 研判）
+Status: resolved——2026-10-19 进 main（代码验证钉 `516cf9c2`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-nri01`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 0 研判）
 Blocked by: 无（operator-channel/29 已进 main）
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C2 第三张草案（AT-NO-019）
@@ -114,3 +114,8 @@ no-directional-basis/01 当前裁定的身份判断是「恰好关联到一个�
 - **非阻断（已修于本评审提交）**：冲突形成之后，先到那件换个来源再收，按包裹读不到后到那件（它的行不带关联），照常答`节点收寄已形成`并交意图；方向依据靠册上的冲突行照停。ADR-0196「能力边界」原先没写这一格，补了一条。
 - **非阻断（另立票）**：两件实物并发送站互相看不到对方未提交的关联（ADR-0196 越权风险点 4）→ no-reception-identity/03。
 - **与 ps-external-mark-relations/04 的交叠**：那张票的三条真库用例走多候选或首件，不受本票影响；ADR-0184 复核记录「其二」说的唯一命中，在本票之后只对先到的那件成立，后到的同包裹实物答身份冲突——ADR-0196 自己写了，那边不改。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-nri01` rebase 到远端 main 之上，ps-external-mark-relations/04 叠在它后面，一并快进推送；两边的机制清点各自多一份 cmd 测试文件，叠起来后重生成一笔（147）。
+- 推送方全量一次：钉 `516cf9c2`（no-reception-identity/01 与 ps-external-mark-relations/04 叠成一串）的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 143 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。验证之后远端只前进了两笔纯票面认领，再 rebase 一次，`git diff 516cf9c2 HEAD -- . ':!.scratch'` 为空，未重跑。
