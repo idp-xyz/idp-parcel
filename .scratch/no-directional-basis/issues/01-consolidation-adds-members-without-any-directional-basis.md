@@ -199,3 +199,9 @@ Standards 轴（BLOCK，阻断 4）：
 - 推送 `9434ae74`（rebase 到 `c783151b` 之后的各笔原样快进）。之前在干净的 detached 检出上带 DSN 跑 `go test -p 1 -count=1 ./...`：142 包 `ok`，0 `FAIL`。
 - 机制清点在干净检出上重生成，单独一笔。
 - 迁移 `node_operations/0005` 由本票先用；`idp-parcel-9b` 的 operator-channel/29 顺延 `0006`（双方约定）。
+
+## Comments
+
+### 身份一格的读法改了（2026-10-19，会话 idp-parcel-9b 的作者子代理，票 no-reception-identity/04）
+
+「偏离标记半边：设计代决」里身份一格「恰好关联到一个正式包裹、且没有一行记身份冲突，为`成立`」与「有行记了身份冲突，或多行关联到不同的正式包裹」两句，自票 [no-reception-identity/05](../../no-reception-identity/issues/05-the-identity-basis-reads-each-judgment-chain-head.md) 进 main 起按 [ADR-0210](../../../docs/adr/0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md) 决定五读：只读这件实物每条判断链的当前有效版本，被接续的版本不再参与；折法其余不变。原因是身份冲突有了处置（UC-NO-004），处置版要能解开这一格。已落册的方向依据记录不重判。本票正文不改。
