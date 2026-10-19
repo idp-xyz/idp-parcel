@@ -1,7 +1,7 @@
 # 62 节点控制按权威运输交接转入 HANDOVER_IN（UC-NO-005 下半）
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg62（基于 `origin/main` `ea61d108`）；隔离评审 0 阻断，非阻断已修，见文末「评审记录」。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
+Status: resolved——2026-10-19 进 main（全量钉 `779f5fb1`：153 ok / 0 FAIL；62、66 同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg62（基于 `origin/main` `ea61d108`）；隔离评审 0 阻断，非阻断已修，见文末「评审记录」。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
 Blocked by: 无（[59](./59-handover-declares-releasing-receiving-and-onward-nodes.md)、[61](./61-node-control-transfers-out-on-an-authoritative-handover.md) 已进 main）
 地盘（**需与 idp-parcel-9b 协调**）：61 新立的同一批 NO 文件（`application/transfer_control_on_handover.go`、`adapters/postgres/physical_control_transition.go`、`adapters/postgres/review_catalogue_control_transition.go`、`domain/control_transition.go`）；UC-NO-005 下半；演示脚本。
 与 idp-parcel-9b 的四个共享点同 [61](./61-node-control-transfers-out-on-an-authoritative-handover.md)：`reception.go` 的折叠挂点、NO 迁移号、查阅口注册行、NO CONTEXT「节点控制」与 UC-NO-005 的措辞（详见方案「与 idp-parcel-9b 的协调点」）。
@@ -122,3 +122,9 @@ M
 没有不采纳的项，也没有另立新票。
 
 修后验证：`go build ./...`、`gofmt -l internal/nodeoperations`、`go vet ./internal/nodeoperations/...` 干净；`IDP_PARCEL_POSTGRES_DSN=… go test -p 1 -count=1 ./internal/nodeoperations/... ./internal/architecture/ ./cmd/parcel-dispatch/ ./migrations/` 全 ok。改动只在注释与文档，演示种子未动，未复跑演示。
+
+## 进 main 记录（2026-10-19）
+
+- 62 与 66 合成一批，按 62 → 66 叠到 main 上，整批快进推送，与本记录同一次推送。只有演示动线文档的追加段要合，两边都留。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `779f5fb1`：153 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。

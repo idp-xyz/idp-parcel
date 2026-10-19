@@ -1,7 +1,7 @@
 # 66 交付门禁：有效交付读 FINAL_DELIVERY 准入并照记
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg66（2026-10-19 Claude Code 作者子代理，基于 `origin/main` `ea61d108`，评审修订时 rebase 到 `8c9b7e83`；见文末「完成记录」与「评审记录」。立票时：ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。）
+Status: resolved——2026-10-19 进 main（全量钉 `779f5fb1`：153 ok / 0 FAIL；62、66 同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg66（2026-10-19 Claude Code 作者子代理，基于 `origin/main` `ea61d108`，评审修订时 rebase 到 `8c9b7e83`；见文末「完成记录」与「评审记录」。立票时：ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。）
 Blocked by: [59](./59-handover-declares-releasing-receiving-and-onward-nodes.md)、[65](./65-handover-records-an-outbound-release-gate-reading.md)
 地盘：TF `application/register_effective_delivery.go`、新 `application/read_delivery_gate.go`、新 `adapters/customscompliance/delivery_gate.go`；`adapters/postgres/effective_delivery.go` + TF 迁移（认领时现取）、tfhttp 交付响应；`cmd/parcel-api/assemble_delivery.go`；文档 UC-TF-006 与 AT。
 出处：[tf-chain-plan](../tf-chain-plan.md)「等 peer 的」有效交付的 `FINAL_DELIVERY` 门禁；方案「代决」C14，「需要的 ADR」ADR-0213。
@@ -168,3 +168,9 @@ PS 终局一侧：`cmd/parcel-dispatch` 的有效交付终局与追踪投影用�
 - 演示种子未改，没跑全量，没重生成机制清点。
 - 没有新取号：停点拆分不占 AT 号（落在既有 `AT-TF-262`、`AT-TF-264` 里），没立新票、没新迁移。
 - 没有被权限检查拦下的改动。
+
+## 进 main 记录（2026-10-19）
+
+- 62 与 66 合成一批，按 62 → 66 叠到 main 上，整批快进推送，与本记录同一次推送。只有演示动线文档的追加段要合，两边都留。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `779f5fb1`：153 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。
