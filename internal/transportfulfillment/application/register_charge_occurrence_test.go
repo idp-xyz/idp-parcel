@@ -140,14 +140,14 @@ func (double judgmentViewDouble) FindByKey(_ context.Context, _ ports.ActualCarr
 	return double.record, double.found, double.err
 }
 
-type agreementSourceDouble struct {
+type chargeAgreementSourceDouble struct {
 	check    ports.SupplierAgreementCheck
 	err      error
 	askedAt  []time.Time
 	provider []string
 }
 
-func (double *agreementSourceDouble) CheckSupplierAgreement(
+func (double *chargeAgreementSourceDouble) CheckSupplierAgreement(
 	_ context.Context,
 	_ domain.TenantID,
 	_ domain.SupplierAgreementVersion,
@@ -159,9 +159,9 @@ func (double *agreementSourceDouble) CheckSupplierAgreement(
 	return double.check, double.err
 }
 
-func registeredAgreement(t *testing.T) *agreementSourceDouble {
+func chargeRegisteredAgreement(t *testing.T) *chargeAgreementSourceDouble {
 	t.Helper()
-	return &agreementSourceDouble{check: ports.SupplierAgreementCheck{
+	return &chargeAgreementSourceDouble{check: ports.SupplierAgreementCheck{
 		Standing:    ports.SupplierAgreementRegistered,
 		Snapshot:    occurrenceValue(t, domain.NewAgreementSnapshotReference, trunkSnapshot),
 		LegalEntity: occurrenceValue(t, domain.NewProcurementLegalEntityReference, trunkLegalEntity),
@@ -242,7 +242,7 @@ func judgedCarrier(t *testing.T, kind domain.CarrierSubjectKind, reference strin
 type occurrenceRig struct {
 	registry   *occurrenceRegistryDouble
 	handoff    *occurrenceHandoffDouble
-	agreements *agreementSourceDouble
+	agreements *chargeAgreementSourceDouble
 	segments   segmentViewDouble
 	judgments  judgmentViewDouble
 	pickups    ports.FailedAttemptSource
@@ -254,7 +254,7 @@ func newOccurrenceRig(t *testing.T) *occurrenceRig {
 	return &occurrenceRig{
 		registry:   newOccurrenceRegistry(),
 		handoff:    &occurrenceHandoffDouble{},
-		agreements: registeredAgreement(t),
+		agreements: chargeRegisteredAgreement(t),
 		segments:   trunkSegmentWith(t, participationRow(t, trunkParcel, true)),
 	}
 }
@@ -530,7 +530,7 @@ func TestEachAgreementRefusalIsItsOwnOutcome(t *testing.T) {
 		rig := newOccurrenceRig(t)
 		rig.agreements.err = errors.New("party commercial down")
 		result := rig.register(t, actualFulfillmentCommand(t))
-		if result.Outcome() != application.ChargeOccurrenceUndecided || result.Detail() != application.SupplierAgreementUnavailable ||
+		if result.Outcome() != application.ChargeOccurrenceUndecided || result.Detail() != application.ChargeSupplierAgreementUnavailable ||
 			result.Continuation() == "" {
 			t.Fatalf("outcome/detail/continuation = %q/%q/%q", result.Outcome(), result.Detail(), result.Continuation())
 		}

@@ -89,7 +89,7 @@ const (
 	// 未决：依赖读不动，原样重试。
 	FactSourceUnavailable
 	CarrierJudgmentUnavailable
-	SupplierAgreementUnavailable
+	ChargeSupplierAgreementUnavailable
 	OccurrenceRegistryUnavailable
 	OccurrenceHandoffUnavailable
 	// 未受理：改请求。
@@ -116,7 +116,7 @@ func (detail ChargeOccurrenceDetail) String() string {
 		return "FACT_SOURCE_UNAVAILABLE"
 	case CarrierJudgmentUnavailable:
 		return "CARRIER_JUDGMENT_UNAVAILABLE"
-	case SupplierAgreementUnavailable:
+	case ChargeSupplierAgreementUnavailable:
 		return "SUPPLIER_AGREEMENT_UNAVAILABLE"
 	case OccurrenceRegistryUnavailable:
 		return "OCCURRENCE_REGISTRY_UNAVAILABLE"
@@ -316,7 +316,7 @@ func (handler *RegisterChargeOccurrenceHandler) Register(
 
 	check, err := handler.deps.Agreements.CheckSupplierAgreement(ctx, command.TenantID, agreement, spec.Provider, fact.occurredAt)
 	if err != nil {
-		return chargeUndecided(SupplierAgreementUnavailable, continuation), nil
+		return chargeUndecided(ChargeSupplierAgreementUnavailable, continuation), nil
 	}
 	switch check.Standing {
 	case ports.SupplierAgreementRegistered:
