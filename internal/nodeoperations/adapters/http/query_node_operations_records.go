@@ -8,8 +8,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 )
 
-// ReviewCatalogueReader 是本端点消费的读口：收寄册、待识别实物册、集运单元册与集运
-// 成员关系册的列表读面（管理台 node-operations-review 页）。
+// ReviewCatalogueReader 是本端点消费的读口：节点作业查阅各本册子的列表读面，一册一个方法，
+// 册名见下方 registry 常量（管理台 node-operations-review 页按册名取）。
 type ReviewCatalogueReader interface {
 	ListReceptions(
 		ctx context.Context,

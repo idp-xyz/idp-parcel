@@ -14,8 +14,8 @@ import (
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 )
 
-// nodeControlOnHandoverUndecidedSentinels 只给「交接 → NO 节点控制转出」这一路（ADR-0214 决定六）。与 VE 投影、TF 派送发起两路分开
-// 列：同一封信扇出给三路、各记各的 inbox 账，本路只会停在交接登记册上，合用一份会把别路的格子也宣布成「等依赖」。
+// nodeControlOnHandoverUndecidedSentinels 只给「交接 → NO 节点控制转出」这一路（ADR-0214 决定六）。与同一封信上其余各路的名单分开
+// 列：各路各记各的 inbox 账，本路只会停在交接登记册上，合用一份会把别路的格子也宣布成「等依赖」。
 //
 // 不在名单里：notf.ErrControlTransferDefect（信封键过不了本上下文的构造门、编排答出封闭集合以外的格）、
 // notf.ErrHandoverRecordInconsistent 与 notf.ErrUntranslatableAnswer（提供方记录坏了）、noapplication.ErrUnexpectedControlTransitionSave

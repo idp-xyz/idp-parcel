@@ -18,6 +18,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/dispatch"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
+	tfinbox "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/inbox"
 	tfapplication "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	veinbox "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/inbox"
@@ -151,11 +152,16 @@ func controlTransitions(t *testing.T, db *bentopg.DB) []noports.PhysicalControlT
 
 // Covers: `AT-NO-101`、`AT-NO-112`（ADR-0214 决定一、三、六）——生产路由表上交接信封扇出到 NO 这一路：上海枢纽收寄在身的那件包裹交接
 // `已交接`之后派发一拍，信封 PUBLISHED、NO 名下 inbox 一行；转移册落一行 OUT·ADVANCED，收寄按键读回控制已转出、controlReleasedBy 是
-// `TRANSPORT-HANDOVER/<版本>`。三路认的事件类型与生产交出的是同一个串。
+// `TRANSPORT-HANDOVER/<版本>`。NO 认的事件类型与下面逐一列出的别路消费门认的比过；与生产交出的是同一个串，由这一拍真落到 NO 名下
+// 来证。
 func TestAHandoverTransfersOutTheNodeControlThroughTheProductionRoute(t *testing.T) {
-	if noinbox.TransportHandoverRegisteredEventType != veinbox.TransportHandoverRegisteredEventType {
-		t.Fatalf("NO 认 %q、VE 认 %q——同一封信两路认的不是同一个类型",
-			noinbox.TransportHandoverRegisteredEventType, veinbox.TransportHandoverRegisteredEventType)
+	for lane, eventType := range map[string]eventing.EventType{
+		"VE 投影":   veinbox.TransportHandoverRegisteredEventType,
+		"TF 派送发起": tfinbox.TransportHandoverRegisteredEventType,
+	} {
+		if noinbox.TransportHandoverRegisteredEventType != eventType {
+			t.Fatalf("NO 认 %q、%s 认 %q——同一封信各路认的不是同一个类型", noinbox.TransportHandoverRegisteredEventType, lane, eventType)
+		}
 	}
 	beat, db, store := wiredBeat(t)
 	received := receiveIntoControl(t, db, "SYN-HU-61-A", "SYN-PARCEL-61-A")

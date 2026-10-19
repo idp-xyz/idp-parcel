@@ -1018,7 +1018,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 		return nil, fmt.Errorf("parcel-dispatch: node control on handover undecided translation: %w", err)
 	}
 	// 先 VE 后 TF，沿路由表先 VE 的惯例：派送发起停在未决重投时，VE 那一路按 inbox 跳过，不重复投影；反过来也不让投影等派送。
-	// NO 节点控制转出排在最后（ADR-0214 决定六），理由同：各路各记 inbox 账，谁停在未决都不让别路重做。
+	// NO 节点控制转出（ADR-0214 决定一）不靠它在扇出里的位置：FanOut 每一路都调，各路各记 inbox 账，谁停在未决都不让别路重做。
 	handoverFan, err := dispatch.FanOut(veHandoverRouted, tfHandoverRouted, noHandoverRouted)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: transport handover fan-out: %w", err)

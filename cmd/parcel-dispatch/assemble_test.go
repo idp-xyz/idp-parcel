@@ -1158,10 +1158,10 @@ func saValue[T any](t *testing.T, construct func(string) (T, error), raw string)
 	return built
 }
 
-// Covers: AT-TF-199（路由表的交接一条）——TF 权威交接登记 FanOut 给 VE 投影与 TF 派送发起两路（ADR-0216），不投 PS。
-// 手法同前几条：毒丸载荷（缺 tenantId/object/scope/version 四维之一）让两路消费门都显式拒收入账并交回 nil，因此这一条会被
-// 定稿；漏挂或挂错的话这里撞的是无订阅者，少挂一路时那一路名下没有 inbox 行。
-// 第三路是 NO 节点控制转出（ADR-0214 决定六），它的消费门同样拒毒丸入账。
+// Covers: AT-TF-199（路由表的交接一条）——TF 权威交接登记 FanOut 给同一封信的各路消费方，各路的 inbox 名逐一列在下面（VE 投影与
+// TF 派送发起见 ADR-0216，NO 节点控制转出见 ADR-0214 决定一），不投 PS。手法同前几条：毒丸载荷（缺 tenantId/object/scope/version
+// 四维之一）让各路消费门都显式拒收入账并交回 nil，因此这一条会被定稿；漏挂或挂错的话这里撞的是无订阅者，少挂一路时那一路名下
+// 没有 inbox 行。
 func TestARegisteredTransportHandoverReachesTheConsumerThroughTheRouteTable(t *testing.T) {
 	beat, db, store := wiredBeat(t)
 	enqueueForBeat(t, db, store, "handover-1", veinbox.TransportHandoverRegisteredEventType, `{}`)

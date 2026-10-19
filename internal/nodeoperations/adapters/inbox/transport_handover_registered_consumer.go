@@ -13,12 +13,13 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/inboxconsume"
 )
 
-// transferControlOnHandoverConsumerName 是本消费者在 inbox 键上的稳定名。同一封交接信封还扇出给 VE 投影与 TF 派送发起，inbox 键只由
-// （消费者名 + 来源 + 事件 ID）认领，共名会让一路把另一路的投递当重复跳过。改名等于换消费者。
+// transferControlOnHandoverConsumerName 是本消费者在 inbox 键上的稳定名。同一封交接信封还扇出给别的消费方，inbox 键只由（消费者名 +
+// 来源 + 事件 ID）认领，共名会让一路把另一路的投递当重复跳过。改名等于换消费者。
 const transferControlOnHandoverConsumerName = "node-operations/transfer-control-on-transport-handover"
 
 // TransportHandoverRegisteredEventType 是 transport-fulfillment 权威运输交接登记成立时交出的信封（ADR-0214 决定一）。消费方自己写出
-// 这个字符串，不导入提供方 outbox 适配器的常量；与生产交出的、与另两路认的是同一个串，由 cmd/parcel-dispatch 的一条用例钉住。
+// 这个字符串，不导入提供方 outbox 适配器的常量；与生产交出的是同一个串，由 cmd/parcel-dispatch 的一条用例经派发一拍真落到本消费者
+// 名下钉住。
 const TransportHandoverRegisteredEventType eventing.EventType = "transport-fulfillment.transport-handover.registered"
 
 // RegisteredTransportHandover 是译码后的交接判断键，四维都是 TF 登记册的键维，原样交给消费侧适配器去读回那一版。版本必须进译码：
