@@ -163,10 +163,11 @@ func (repository *LoadAssignments) FindChainHead(
 	return repository.FindByKey(ctx, ports.LoadAssignmentKey{TenantID: tenant, Assignment: assignment, Version: head})
 }
 
-// Save 登记一个版本连同它的对象范围。撞键答`已登记`（ADR-0031），编排据此读回原版本或链头。
+// Save 登记一个版本连同它的对象范围与分配量。撞键答`已登记`（ADR-0031），编排据此读回原版本或链头。
 //
-// 撞键只看版本那一行：成员挂在它下面，版本行没落就一个成员也不写。版本行撞的可以是主键（同一版本已在册），
-// 也可以是 0021 的首版唯一索引（同一分配已有首版）；ON CONFLICT 不写冲突目标，撞哪道唯一都折成这一格，编排先按本次键读、读不回再按分配读链头。
+// 撞键只看版本那一行：成员与分配量挂在它下面，版本行没落就一行也不写。ON CONFLICT 不写冲突目标，版本行撞表上
+// 任何一道唯一都折成这一格——主键（同一版本已在册）、0021 的首版唯一索引（同一分配已有首版）、0031 的「一版至多
+// 一个后继」（前版已被别的版本接替）都在其内；编排先按本次键读、读不回再按分配读链头。
 func (repository *LoadAssignments) Save(
 	ctx context.Context,
 	record ports.LoadAssignmentRecord,
