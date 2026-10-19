@@ -163,7 +163,7 @@ func NewCredentialApplicability(from, until time.Time) (CredentialApplicability,
 	if from.IsZero() {
 		return CredentialApplicability{}, fmt.Errorf("%w: applicability start", ErrInvalidExternalCarrierCredential)
 	}
-	if !until.IsZero() && !until.After(from) {
+	if !endsAfterStart(from, until) {
 		return CredentialApplicability{}, fmt.Errorf("%w: applicability end must be after its start", ErrInvalidExternalCarrierCredential)
 	}
 	return CredentialApplicability{from: from.UTC(), until: until.UTC()}, nil
@@ -185,15 +185,21 @@ func (applicability CredentialApplicability) Covers(at time.Time) bool {
 }
 
 func (applicability CredentialApplicability) valid() bool {
-	return !applicability.from.IsZero() && (applicability.until.IsZero() || applicability.until.After(applicability.from))
+	return !applicability.from.IsZero() && endsAfterStart(applicability.from, applicability.until)
 }
 
-// closedAt 收掉终点。既定终点已过就不能再收——那是改写一段已经结束的区间。
+// endsAfterStart 是构造门与 valid 共用的「终点晚于起点」：开放的终点不受此限。
+func endsAfterStart(from, until time.Time) bool {
+	return until.IsZero() || afterOnRegistry(until, from)
+}
+
+// closedAt 收掉终点。收掉的终点须严格晚于起点：恰在起点收出的是空区间，类型不变式与库面约束都不收它，
+// 「自始作废」是另一种建模。既定终点已过就不能再收——那是改写一段已经结束的区间。
 func (applicability CredentialApplicability) closedAt(at time.Time) (CredentialApplicability, bool) {
-	if at.IsZero() || at.Before(applicability.from) {
+	if at.IsZero() || !afterOnRegistry(at, applicability.from) {
 		return CredentialApplicability{}, false
 	}
-	if !applicability.until.IsZero() && at.After(applicability.until) {
+	if !applicability.until.IsZero() && afterOnRegistry(at, applicability.until) {
 		return CredentialApplicability{}, false
 	}
 	return CredentialApplicability{from: applicability.from, until: at.UTC()}, true
@@ -336,17 +342,17 @@ func (credential ExternalCarrierCredential) changeApplicability(
 }
 
 // Equal 按业务内容比较两个版本——同键异内容要答`内容冲突`而不是`已登记`（ADR-0031），比的是
-// 这里的字段而不是结构体相等：time.Time 的 == 会被单调时钟读数搅掉。
+// 这里的字段而不是结构体相等：time.Time 的 == 会被单调时钟读数搅掉；时刻按登记册精度比（AtRegistryPrecision）。
 func (credential ExternalCarrierCredential) Equal(other ExternalCarrierCredential) bool {
 	return credential.tenantID == other.tenantID &&
 		credential.credential == other.credential &&
 		credential.version == other.version &&
 		credential.assigner == other.assigner &&
 		credential.identifies == other.identifies &&
-		credential.applicability.from.Equal(other.applicability.from) &&
-		credential.applicability.until.Equal(other.applicability.until) &&
+		sameOnRegistry(credential.applicability.from, other.applicability.from) &&
+		sameOnRegistry(credential.applicability.until, other.applicability.until) &&
 		credential.standing == other.standing &&
-		credential.changedAt.Equal(other.changedAt) &&
+		sameOnRegistry(credential.changedAt, other.changedAt) &&
 		credential.supersedes == other.supersedes &&
 		credential.replacedBy == other.replacedBy
 }

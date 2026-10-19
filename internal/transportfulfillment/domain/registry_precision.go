@@ -19,3 +19,14 @@ import "time"
 func AtRegistryPrecision(at time.Time) time.Time {
 	return at.UTC().Truncate(time.Microsecond)
 }
+
+// sameOnRegistry 是同键内容相等一类的判定，规则见 AtRegistryPrecision。
+func sameOnRegistry(left, right time.Time) bool {
+	return AtRegistryPrecision(left).Equal(AtRegistryPrecision(right))
+}
+
+// afterOnRegistry 是严格先后构造门一类的判定，规则见 AtRegistryPrecision：库面的严格先后约束按截后的值判，
+// 领域门按截前的值放行的那一对永远存不进去。
+func afterOnRegistry(later, earlier time.Time) bool {
+	return AtRegistryPrecision(later).After(AtRegistryPrecision(earlier))
+}

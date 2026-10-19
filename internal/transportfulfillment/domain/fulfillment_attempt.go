@@ -92,7 +92,7 @@ func FormFulfillmentAttempt(spec FulfillmentAttemptSpec) (FulfillmentAttempt, er
 		!spec.Evidence.valid() ||
 		spec.PlannedFrom.IsZero() ||
 		spec.PlannedTo.IsZero() ||
-		!spec.PlannedTo.After(spec.PlannedFrom) ||
+		!afterOnRegistry(spec.PlannedTo, spec.PlannedFrom) ||
 		spec.ArrivedAt.IsZero() ||
 		len(spec.Objects) == 0 {
 		return FulfillmentAttempt{}, ErrInvalidFulfillmentAttempt

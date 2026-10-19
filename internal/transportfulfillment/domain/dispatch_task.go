@@ -120,7 +120,7 @@ func OpenDispatchTask(spec DispatchTaskSpec) (DispatchTask, error) {
 		!spec.Place.valid() ||
 		spec.WindowFrom.IsZero() ||
 		spec.WindowTo.IsZero() ||
-		!spec.WindowTo.After(spec.WindowFrom) ||
+		!afterOnRegistry(spec.WindowTo, spec.WindowFrom) ||
 		!spec.Conditions.valid() ||
 		spec.OpenedAt.IsZero() {
 		return DispatchTask{}, ErrInvalidDispatchTask
@@ -204,7 +204,7 @@ func (task DispatchTask) Reschedule(windowFrom, windowTo, at time.Time) (Dispatc
 	if task.state != TaskOpen {
 		return DispatchTask{}, ErrTaskClosed
 	}
-	if windowFrom.IsZero() || windowTo.IsZero() || !windowTo.After(windowFrom) ||
+	if windowFrom.IsZero() || windowTo.IsZero() || !afterOnRegistry(windowTo, windowFrom) ||
 		at.IsZero() || at.Before(task.openedAt) {
 		return DispatchTask{}, ErrInvalidDispatchTask
 	}

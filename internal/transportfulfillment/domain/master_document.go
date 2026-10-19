@@ -382,7 +382,7 @@ func (document MasterDocument) nextVersion(
 }
 
 // Equal 按业务内容比较两个版本——同键异内容要答`内容冲突`而不是`已登记`（ADR-0031），比的是这里的
-// 字段而不是结构体相等：time.Time 的 == 会被单调时钟读数搅掉，切片也比不了。
+// 字段而不是结构体相等：time.Time 的 == 会被单调时钟读数搅掉，切片也比不了；时刻按登记册精度比（AtRegistryPrecision）。
 func (document MasterDocument) Equal(other MasterDocument) bool {
 	return document.tenantID == other.tenantID &&
 		document.document == other.document &&
@@ -393,7 +393,7 @@ func (document MasterDocument) Equal(other MasterDocument) bool {
 		document.booking == other.booking &&
 		sameAssociations(document.associations, other.associations) &&
 		document.standing == other.standing &&
-		document.changedAt.Equal(other.changedAt) &&
+		sameOnRegistry(document.changedAt, other.changedAt) &&
 		document.supersedes == other.supersedes &&
 		document.replacedBy == other.replacedBy
 }
