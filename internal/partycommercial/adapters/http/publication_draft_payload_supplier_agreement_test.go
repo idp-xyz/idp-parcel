@@ -146,3 +146,63 @@ func TestSupplierAgreementPayloadHasNoDirectionAndMustMatchItsKind(t *testing.T)
 		t.Fatalf("preview = %q, cause = %v; want NOT_ACCEPTED / ErrPublicationContentKindMismatch", preview.Outcome(), preview.RefusalCause())
 	}
 }
+
+// Covers: AT-PC-053——表单载荷的收费发生条件一节（ADR-0209）与批文同键：带条件的正文预览出 PCC-2 的串、录入得到同一个
+// 串；每一条的问题落在 supplierAgreement.chargeConditions[<序>] 上，整节立不住落在 supplierAgreement.chargeConditions 上。
+func TestSupplierAgreementPayloadCarriesChargeConditions(t *testing.T) {
+	withConditions := strings.Replace(supplierAgreementPayload, `"effectiveEndsAt": "2026-12-31T16:00:00Z"`,
+		`"effectiveEndsAt": "2026-12-31T16:00:00Z",
+    "chargeConditions": [
+      {"reason": "ACTUAL_FULFILLMENT", "charged": true, "quantityForm": "PER_SEGMENT"},
+      {"reason": "FAILED_ATTEMPT", "charged": false}
+    ]`, 1)
+	payload := decodePublication(t, withConditions)
+	tenant := pcNew(t, domain.NewTenantID, pcTenant)
+	previewCommand, err := payload.PreviewCommand(tenant)
+	if err != nil {
+		t.Fatalf("preview command: %v", err)
+	}
+	preview, err := application.NewPreviewCommercialPublicationHandler().Handle(context.Background(), previewCommand)
+	if err != nil || preview.Outcome() != application.CommercialPublicationPreviewed {
+		t.Fatalf("preview = %q, %v", preview.Outcome(), err)
+	}
+	previewed, _ := preview.Canonical()
+	if !strings.HasPrefix(previewed.Digest().String(), "PCC-2:") {
+		t.Fatalf("digest %s does not carry PCC-2", previewed.Digest())
+	}
+	conditions := previewCommand.Content.SupplierAgreement.ChargeConditions
+	if conditions == nil {
+		t.Fatal("条件没有到达领域")
+	}
+	if fulfillment, declared := conditions.For(domain.ActualFulfillmentChargeReason); !declared {
+		t.Fatal("实际履约没声明")
+	} else if form, _ := fulfillment.QuantityForm(); form != domain.PerSegmentQuantity {
+		t.Fatalf("数量形 = %s", form)
+	}
+
+	broken := strings.Replace(supplierAgreementPayload, `"effectiveEndsAt": "2026-12-31T16:00:00Z"`,
+		`"effectiveEndsAt": "2026-12-31T16:00:00Z",
+    "chargeConditions": [
+      {"reason": "ACTUAL_FULFILLMENT", "quantityForm": "PER_SEGMENT"},
+      {"reason": "FAILED_ATTEMPT", "charged": true, "quantityForm": "PER_SEGMENT"}
+    ]`, 1)
+	_, _, err = decodePublication(t, broken).Publication(tenant)
+	var problems *commercialhttp.PublicationPayloadProblems
+	if !errors.As(err, &problems) {
+		t.Fatalf("err = %v (%T), want *PublicationPayloadProblems", err, err)
+	}
+	fields := map[string]bool{}
+	for _, problem := range problems.Problems {
+		fields[problem.Field] = true
+	}
+	if !fields["supplierAgreement.chargeConditions[0].charged"] || !fields["supplierAgreement.chargeConditions[1]"] {
+		t.Fatalf("逐条问题没收齐：%v", fields)
+	}
+
+	empty := strings.Replace(supplierAgreementPayload, `"effectiveEndsAt": "2026-12-31T16:00:00Z"`,
+		`"effectiveEndsAt": "2026-12-31T16:00:00Z", "chargeConditions": []`, 1)
+	_, _, err = decodePublication(t, empty).Publication(tenant)
+	if !errors.As(err, &problems) || len(problems.Problems) != 1 || problems.Problems[0].Field != "supplierAgreement.chargeConditions" {
+		t.Fatalf("空清单 err = %v", err)
+	}
+}

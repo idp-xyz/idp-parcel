@@ -207,6 +207,9 @@ type SupplierAgreementBodyDeclaration struct {
 	Scope        domain.CommercialScopeReference
 	PurchasePlan domain.PricingPlanReference
 	Effective    domain.EffectiveInterval
+	// ChargeConditions 是可缺的收费发生条件一节（ADR-0209）；嵌在正文里而不另开通道，理由同价格政策的口径：条件只能
+	// 随正文同一次发布固定，嵌套让「先发正文、回头补条件」在结构上写不出来。
+	ChargeConditions *domain.ChargeOccurrenceConditions
 }
 
 // PricePolicyBodyDeclaration 是价格规则版本的正文输入（票 party-commercial-context-gaps/06）：
@@ -653,11 +656,12 @@ func publicationContentOf(
 		}
 		body := declarations.SupplierAgreementBody
 		content.SupplierAgreement = &domain.SupplierAgreementBody{
-			Supplier:     body.Supplier,
-			LegalEntity:  body.LegalEntity,
-			Scope:        body.Scope,
-			PurchasePlan: body.PurchasePlan,
-			Effective:    body.Effective,
+			Supplier:         body.Supplier,
+			LegalEntity:      body.LegalEntity,
+			Scope:            body.Scope,
+			PurchasePlan:     body.PurchasePlan,
+			Effective:        body.Effective,
+			ChargeConditions: body.ChargeConditions,
 		}
 		return content, true
 	case domain.ServiceProductObject:
@@ -997,6 +1001,11 @@ func declarationWrites(
 			version, body.Supplier, body.LegalEntity, body.Scope, body.PurchasePlan, body.Effective)
 		if err != nil {
 			return nil, fmt.Errorf("supplier agreement body: %w", err)
+		}
+		if body.ChargeConditions != nil {
+			if agreement, err = agreement.WithChargeConditions(*body.ChargeConditions); err != nil {
+				return nil, fmt.Errorf("supplier agreement charge conditions: %w", err)
+			}
 		}
 		writes = append(writes, declarationWrite{
 			channel: SupplierAgreementBodyChannel,

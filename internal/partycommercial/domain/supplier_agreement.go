@@ -22,6 +22,8 @@ type SupplierAgreement struct {
 	effective     EffectiveInterval
 	terminatedAt  time.Time
 	terminationOn RelationshipBasisReference
+	// chargeConditions 是可缺的收费发生条件一节（ADR-0209）。零值即没声明：运输履约按这一版登记发生项时答`未配置`。
+	chargeConditions ChargeOccurrenceConditions
 }
 
 func NewSupplierAgreement(
@@ -46,6 +48,24 @@ func NewSupplierAgreement(
 		purchasePlan: purchasePlan,
 		effective:    effective,
 	}, nil
+}
+
+// WithChargeConditions 交回带收费发生条件的同一版正文。条件只能随正文一次发布固定：发布后再加就是改一份已固定的
+// 正文，要另发新版本（CONTEXT「采购服务、价格、结算或责任条件变化时形成新版本」），所以已带条件的正文再加即拒。
+func (agreement SupplierAgreement) WithChargeConditions(conditions ChargeOccurrenceConditions) (SupplierAgreement, error) {
+	if !conditions.valid() || agreement.chargeConditions.valid() || !agreement.supplier.valid() {
+		return SupplierAgreement{}, ErrInvalidSupplierAgreement
+	}
+	agreement.chargeConditions = conditions
+	return agreement, nil
+}
+
+// ChargeConditions 交回这一版声明的收费发生条件；整节没声明答 false。
+func (agreement SupplierAgreement) ChargeConditions() (ChargeOccurrenceConditions, bool) {
+	if !agreement.chargeConditions.valid() {
+		return ChargeOccurrenceConditions{}, false
+	}
+	return agreement.chargeConditions, true
 }
 
 func (agreement SupplierAgreement) Version() CommercialVersion {

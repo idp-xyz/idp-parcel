@@ -59,6 +59,18 @@ func TestClosedSetNamedLookupsRoundTripAndRefuseOutsiders(t *testing.T) {
 				domain.CustomerServiceRuleObject,
 			},
 			"", "service_product", "SHIPPER_ACCOUNT", "SERVICE_PRODUCT "),
+		// 收费发生条件（ADR-0209）：原因词与运输履约四个原因逐字相同，大小写不折叠；数量形四个，「按公斤」不是一形。
+		closedSetNamed("TransportChargeReason", domain.TransportChargeReasonNamed,
+			[]domain.TransportChargeReason{
+				domain.BookingChargeReason, domain.CancellationChargeReason,
+				domain.FailedAttemptChargeReason, domain.ActualFulfillmentChargeReason,
+			},
+			"", "actual_fulfillment", "DETENTION"),
+		closedSetNamed("ChargeQuantityForm", domain.ChargeQuantityFormNamed,
+			[]domain.ChargeQuantityForm{
+				domain.PerSegmentQuantity, domain.PerPieceQuantity, domain.PerAttemptQuantity, domain.PerBookingQuantity,
+			},
+			"", "per_piece", "PER_KG"),
 		closedSetNamed("RuleCategory", domain.RuleCategoryNamed,
 			[]domain.RuleCategory{
 				domain.MinimumIngressIdentityRules, domain.ShipmentInvariantRules, domain.ProductAndContractDocumentRules,

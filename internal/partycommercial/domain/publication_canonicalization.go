@@ -45,6 +45,24 @@ var (
 // PCC-1 同号另接：客户服务规则正文（适用对象恰一 × 责任方 × 范围 × 按种类序的期限表 × 按索赔类型序的材料表），见 publication_canonicalization_customer_service_rule.go。
 const publicationCanonicalizationVersion = "PCC-1"
 
+// supplierChargeConditionCanonicalizationVersion 是 PCC-1 加供应商协议一节里的收费发生条件（ADR-0209）。只有带
+// 这一节的文档写成这一版；其余一切文档仍按 PCC-1 写，字节不变。本构建两版都认、都能折回。
+const supplierChargeConditionCanonicalizationVersion = "PCC-2"
+
+// supportedPublicationCanonicalization 答本构建认不认这一版形状：认的才能折回、才能拿来对账。
+func supportedPublicationCanonicalization(version string) bool {
+	return version == publicationCanonicalizationVersion || version == supplierChargeConditionCanonicalizationVersion
+}
+
+// canonicalizationOfContent 答一份正文面按哪一版形状写。一份正文只有一种字节：折回的文档若声称的版本不是它的
+// 正文该写成的那一版，它就不是本构建写下的。
+func canonicalizationOfContent(content PublicationContent) string {
+	if content.SupplierAgreement != nil {
+		return canonicalizationOfSupplierAgreement(*content.SupplierAgreement)
+	}
+	return publicationCanonicalizationVersion
+}
+
 // canonicalDigestSeparator 把版本前缀与十六进制摘要分开：`PCC-1:<hex>`。串自带版本是 ADR-0014
 // 「已保存摘要必须携带产生它的规范化版本」在本上下文的落法（先例 parcel-shipment 的 `PSC-1:<sha256>`），
 // 不给版本册加列——一列会让没版本的旧串与有版本的新串在库上长成同一种东西。
@@ -150,9 +168,10 @@ func (canonical CanonicalPublicationContent) Document() []byte {
 // 快照是数据，但正文立不立得住仍由构造门说；文档里没有任何一册的正文时答 ErrPublicationContentAbsent。
 func RehydratePublicationContent(canonicalization string, document []byte) (PublicationContent, error) {
 	none := PublicationContent{}
-	if canonicalization != publicationCanonicalizationVersion {
-		return none, fmt.Errorf("%w: document canonicalized as %q, this build canonicalizes %s",
-			ErrCanonicalizationUnsupported, canonicalization, publicationCanonicalizationVersion)
+	if !supportedPublicationCanonicalization(canonicalization) {
+		return none, fmt.Errorf("%w: document canonicalized as %q, this build canonicalizes %s and %s",
+			ErrCanonicalizationUnsupported, canonicalization, publicationCanonicalizationVersion,
+			supplierChargeConditionCanonicalizationVersion)
 	}
 	var decoded canonicalPublicationDocument
 	if err := json.Unmarshal(document, &decoded); err != nil {
@@ -180,7 +199,16 @@ func RehydratePublicationContent(canonicalization string, document []byte) (Publ
 			return none, fmt.Errorf("rehydrate publication content: supplier agreement: %w", err)
 		}
 		content.SupplierAgreement = &body
+		if written := canonicalizationOfContent(content); written != canonicalization {
+			return none, fmt.Errorf("rehydrate publication content: %w: a document of shape %s is labelled %s",
+				ErrCanonicalizationUnsupported, written, canonicalization)
+		}
 		return content, nil
+	}
+	if canonicalization != publicationCanonicalizationVersion {
+		// PCC-2 只多供应商协议那一节；别的册标着 PCC-2，就不是本构建写下的文档。
+		return none, fmt.Errorf("rehydrate publication content: %w: only a supplier agreement with charge conditions is written as %s",
+			ErrCanonicalizationUnsupported, canonicalization)
 	}
 	if decoded.ServiceProduct != nil {
 		body, err := decoded.ServiceProduct.body()
@@ -382,7 +410,7 @@ func IsRegisterCanonicalized(kind CommercialObjectKind) bool {
 	}
 }
 
-// canonicalPublicationDocument 是 PCC-1 的文档形状。字段顺序由结构体钉死——json.Marshal 按声明顺序
+// canonicalPublicationDocument 是 PCC-1 的文档形状，PCC-2 只在供应商协议一节里多一键（见 canonicalSupplierAgreementBody）。字段顺序由结构体钉死——json.Marshal 按声明顺序
 // 输出，这就是「规范化」的全部：同一份正文只有一种字节。各册一格、缺席省略，让文档的字节只由
 // 在场的那一册决定。
 type canonicalPublicationDocument struct {
@@ -534,7 +562,10 @@ func ReconcileDeclaredDigest(declared CommercialContentDigest, canonical Canonic
 	if declared == canonical.digest {
 		return nil
 	}
-	if version, carried := declared.Canonicalization(); carried && version != canonical.canonicalization {
+	// 声明的版本本构建认得，只是与这份正文该写成的那一版不同（例如正文带了收费发生条件、声明的却是 PCC-1 的串）：
+	// 那是输入自己不自洽，改批文抄算出的串，与「换构建」是两格。
+	if version, carried := declared.Canonicalization(); carried && version != canonical.canonicalization &&
+		!supportedPublicationCanonicalization(version) {
 		return fmt.Errorf("%w: declared %s, this build canonicalizes %s",
 			ErrCanonicalizationUnsupported, version, canonical.canonicalization)
 	}

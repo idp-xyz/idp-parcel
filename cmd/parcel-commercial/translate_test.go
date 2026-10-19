@@ -1147,3 +1147,52 @@ func TestCreditSelectorTranslatesAsTwoDimensions(t *testing.T) {
 		})
 	}
 }
+
+// Covers: AT-PC-053——供应商协议批文的收费发生条件一节（ADR-0209）：逐原因翻成领域声明，计费带数量形、不计费不带；
+// charged 缺键、不计费却带数量形、数量形配不上原因、同一原因两条、空清单、集外原因都拒，不替登记方补一格。
+func TestASupplierAgreementBodyTranslatesItsChargeConditions(t *testing.T) {
+	head := `"supplier": "supplier-1", "legalEntity": "legal-1", "scope": "scope-procurement", "purchasePlan": "plan-buy-1",
+		"effectiveStartsAt": "2026-01-01T00:00:00Z", `
+	commands, err := publishCommandsFromJSON([]byte(supplierBatchJSON(head + `"chargeConditions": [
+		{"reason": "ACTUAL_FULFILLMENT", "charged": true, "quantityForm": "PER_PIECE"},
+		{"reason": "FAILED_ATTEMPT", "charged": false}]`)))
+	if err != nil {
+		t.Fatalf("翻译带条件的供应商协议批：%v", err)
+	}
+	conditions := commands[0].Declarations.SupplierAgreementBody.ChargeConditions
+	if conditions == nil {
+		t.Fatal("收费发生条件没有翻过去")
+	}
+	fulfillment, declared := conditions.For(pcdomain.ActualFulfillmentChargeReason)
+	if form, charged := fulfillment.QuantityForm(); !declared || !charged || form != pcdomain.PerPieceQuantity {
+		t.Fatalf("实际履约变形：%+v", fulfillment)
+	}
+	if attempt, declared := conditions.For(pcdomain.FailedAttemptChargeReason); !declared || attempt.Charged() {
+		t.Fatalf("失败尝试变形：%+v", attempt)
+	}
+	if _, declared := conditions.For(pcdomain.BookingChargeReason); declared {
+		t.Fatal("没声明的订舱翻出了一条")
+	}
+
+	plain, err := publishCommandsFromJSON([]byte(supplierBatchJSON(strings.TrimSuffix(head, ", "))))
+	if err != nil || plain[0].Declarations.SupplierAgreementBody.ChargeConditions != nil {
+		t.Fatalf("缺键应是没声明：%v", err)
+	}
+
+	refusals := map[string]string{
+		"charged 缺键": `"chargeConditions": [{"reason": "ACTUAL_FULFILLMENT", "quantityForm": "PER_PIECE"}]`,
+		"不计费带数量形":    `"chargeConditions": [{"reason": "FAILED_ATTEMPT", "charged": false, "quantityForm": "PER_ATTEMPT"}]`,
+		"数量形配不上原因":   `"chargeConditions": [{"reason": "FAILED_ATTEMPT", "charged": true, "quantityForm": "PER_SEGMENT"}]`,
+		"同一原因两条":     `"chargeConditions": [{"reason": "BOOKING", "charged": false}, {"reason": "BOOKING", "charged": true, "quantityForm": "PER_BOOKING"}]`,
+		"空清单":        `"chargeConditions": []`,
+		"集外原因":       `"chargeConditions": [{"reason": "DETENTION", "charged": false}]`,
+		"条件里夹带未知键":   `"chargeConditions": [{"reason": "BOOKING", "charged": false, "amount": 1}]`,
+	}
+	for name, conditions := range refusals {
+		t.Run(name, func(t *testing.T) {
+			if _, err := publishCommandsFromJSON([]byte(supplierBatchJSON(head + conditions))); err == nil {
+				t.Fatal("坏输入被翻译收下了")
+			}
+		})
+	}
+}

@@ -178,3 +178,108 @@ func TestASupplierAgreementDraftPublishesItsBodyThroughTheExistingUseCase(t *tes
 		t.Fatalf("入册摘要 %s ≠ 载体摘要 %s", registry.savedVersions[0].ContentDigest(), stored.Canonical().Digest())
 	}
 }
+
+func trunkChargeConditionDeclaration(t *testing.T) *domain.ChargeOccurrenceConditions {
+	t.Helper()
+	charged, err := domain.NewChargedOccurrenceCondition(domain.ActualFulfillmentChargeReason, domain.PerPieceQuantity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	uncharged, err := domain.NewUnchargedOccurrenceCondition(domain.FailedAttemptChargeReason)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conditions, err := domain.NewChargeOccurrenceConditions(charged, uncharged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return &conditions
+}
+
+// Covers: AT-PC-053——带收费发生条件的正文经受控批文那一半发布：对账门按 PCC-2 的串放行，条件随正文同笔登进供应商
+// 协议册；批文若抄了不带条件那份正文的 PCC-1 串，答`未受理`、一个字节不写。载体那一半把条件原样交回发布用例。
+func TestASupplierAgreementPublishesItsChargeConditionsWithTheBody(t *testing.T) {
+	body := supplierAgreementDeclaration(t, "plan-buy-1")
+	body.ChargeConditions = trunkChargeConditionDeclaration(t)
+	canonical, err := domain.CanonicalizePublicationContent(domain.PublicationContent{
+		Kind: domain.SupplierAgreementObject,
+		SupplierAgreement: &domain.SupplierAgreementBody{
+			Supplier: body.Supplier, LegalEntity: body.LegalEntity, Scope: body.Scope,
+			PurchasePlan: body.PurchasePlan, Effective: body.Effective, ChargeConditions: body.ChargeConditions,
+		},
+	})
+	if err != nil || canonical.Canonicalization() != "PCC-2" {
+		t.Fatalf("规范化：%v / %q", err, canonical.Canonicalization())
+	}
+
+	t.Run("the PCC-2 digest publishes and the conditions land", func(t *testing.T) {
+		registry := &publicationRegistryDouble{}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		spec := publishSpec(t, domain.SupplierAgreementObject, "agreement-1", "v2")
+		spec.ContentDigest = canonical.Digest()
+		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         spec,
+			Approval:     publishApproval(t, "agreement-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{SupplierAgreementBody: body},
+		})
+		if err != nil || result.Outcome() != application.CommercialVersionPublishedEffective || len(registry.savedSupplier) != 1 {
+			t.Fatalf("outcome = %q, err = %v, saved = %d", result.Outcome(), err, len(registry.savedSupplier))
+		}
+		conditions, declared := registry.savedSupplier[0].ChargeConditions()
+		if !declared || !conditions.Equal(*body.ChargeConditions) {
+			t.Fatal("登进册的正文丢了收费发生条件")
+		}
+	})
+
+	t.Run("a PCC-1 digest of the body without conditions is not accepted", func(t *testing.T) {
+		registry := &publicationRegistryDouble{}
+		handler := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: pubNow}, &operatorRegistrationHandoffDouble{})
+		result, err := handler.Handle(context.Background(), application.PublishCommercialAuthorityCommand{
+			Spec:         supplierAgreementSpec(t, "agreement-1", "v2", supplierAgreementDeclaration(t, "plan-buy-1")),
+			Approval:     publishApproval(t, "agreement-1"),
+			RoleStanding: domain.ApprovalRoleConfirmed,
+			Declarations: application.CommercialDeclarations{SupplierAgreementBody: body},
+		})
+		if err != nil || result.Outcome() != application.CommercialPublicationNotAccepted ||
+			!errors.Is(result.RefusalCause(), domain.ErrDeclaredDigestMismatch) {
+			t.Fatalf("outcome = %q, cause = %v, err = %v", result.Outcome(), result.RefusalCause(), err)
+		}
+		if len(registry.savedVersions) != 0 || len(registry.savedSupplier) != 0 {
+			t.Fatal("未受理却写了东西")
+		}
+	})
+
+	t.Run("a draft carries the conditions back to the use case", func(t *testing.T) {
+		drafts := newDraftRegistryDouble()
+		shell := draftShell(t, domain.SupplierAgreementObject, "agreement-1", "v2")
+		content := supplierAgreementContent(t, "plan-buy-1")
+		content.SupplierAgreement.ChargeConditions = body.ChargeConditions
+		if submitted, err := application.NewSubmitPublicationDraftHandler(drafts, fixedClock{at: draftSubmittedAt}).Handle(context.Background(),
+			application.SubmitPublicationDraftCommand{Shell: shell, Content: content, Submitter: pcValue(t, domain.NewOperatorSubjectReference, "op-submitter")},
+		); err != nil || submitted.Outcome() != application.PublicationDraftSubmitted {
+			t.Fatalf("录入：%q, %v", submitted.Outcome(), err)
+		}
+		rules := approvalDutyRuleDouble{rule: dutyRule(t, true, ""), found: true}
+		if approved, err := application.NewApprovePublicationDraftHandler(drafts, rules, fixedClock{at: draftApprovedAt}).Handle(context.Background(),
+			application.ApprovePublicationDraftCommand{
+				Tenant: shell.TenantID, Kind: shell.Kind, ObjectID: shell.ObjectID, Version: shell.Version,
+				Approver: operatorSubject(t, "op-approver"),
+			}); err != nil || approved.Outcome() != application.PublicationDraftApproved {
+			t.Fatalf("批准：%q, %v", approved.Outcome(), err)
+		}
+		registry := &publicationRegistryDouble{}
+		publisher := application.NewPublishCommercialAuthorityHandler(registry, fixedClock{at: draftPublishedAt}, &operatorRegistrationHandoffDouble{})
+		result, err := application.NewPublishPublicationDraftHandler(drafts, publisher, fixedClock{at: draftPublishedAt}).Handle(context.Background(),
+			application.PublishPublicationDraftCommand{Tenant: shell.TenantID, Kind: shell.Kind, ObjectID: shell.ObjectID, Version: shell.Version})
+		if err != nil || result.Outcome() != application.PublicationDraftPublished || len(registry.savedSupplier) != 1 {
+			t.Fatalf("发布：%q, %v", result.Outcome(), err)
+		}
+		if conditions, declared := registry.savedSupplier[0].ChargeConditions(); !declared || !conditions.Equal(*body.ChargeConditions) {
+			t.Fatal("载体发布丢了收费发生条件")
+		}
+		if !strings.HasPrefix(registry.savedVersions[0].ContentDigest().String(), "PCC-2:") {
+			t.Fatalf("入册摘要 = %s，want PCC-2", registry.savedVersions[0].ContentDigest())
+		}
+	})
+}

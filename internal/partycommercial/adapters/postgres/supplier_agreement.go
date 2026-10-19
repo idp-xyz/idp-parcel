@@ -54,13 +54,37 @@ func (repository *CommercialPublications) SaveSupplierAgreement(
 		return ports.SupplierAgreementSaveOutcomeInvalid, fmt.Errorf("save supplier agreement: %w", err)
 	}
 	if tag.RowsAffected() > 0 {
+		// 条件与正文同一笔落：正文行刚由本事务插入，条件行不可能撞键。
+		if conditions, declared := agreement.ChargeConditions(); declared {
+			for _, condition := range conditions.All() {
+				var form *string
+				if quantityForm, charged := condition.QuantityForm(); charged {
+					word := quantityForm.String()
+					form = &word
+				}
+				if _, err := executor.Exec(ctx,
+					`INSERT INTO party_commercial.supplier_agreement_charge_condition
+						(tenant_id, object_kind, object_id, version_label, reason, charged, quantity_form)
+					 VALUES ($1, $2, $3, $4, $5, $6, $7)`,
+					version.Tenant().String(),
+					uint8(version.Kind()),
+					version.ObjectID().String(),
+					version.Version().String(),
+					condition.Reason().String(),
+					condition.Charged(),
+					form,
+				); err != nil {
+					return ports.SupplierAgreementSaveOutcomeInvalid, fmt.Errorf("save supplier agreement charge condition: %w", err)
+				}
+			}
+		}
 		return ports.SupplierAgreementSaved, nil
 	}
 
 	var existing scannedSupplierAgreement
 	err = executor.QueryRow(ctx,
 		`SELECT supplier_party_id, legal_entity_ref, agreement_scope_ref, purchase_plan_ref,
-		        effective_starts_at, effective_ends_at
+		        effective_starts_at, effective_ends_at, `+supplierAgreementChargeConditionsColumn("supplier_agreement")+`
 		   FROM party_commercial.supplier_agreement
 		  WHERE tenant_id = $1 AND object_kind = $2 AND object_id = $3 AND version_label = $4`,
 		version.Tenant().String(),
@@ -68,19 +92,26 @@ func (repository *CommercialPublications) SaveSupplierAgreement(
 		version.ObjectID().String(),
 		version.Version().String(),
 	).Scan(&existing.supplier, &existing.legalEntity, &existing.scope, &existing.purchasePlan,
-		&existing.startsAt, &existing.endsAt)
+		&existing.startsAt, &existing.endsAt, &existing.conditions)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.SupplierAgreementSaveOutcomeInvalid, fmt.Errorf("save supplier agreement: 撞键后读不回既有行")
 	}
 	if err != nil {
 		return ports.SupplierAgreementSaveOutcomeInvalid, fmt.Errorf("save supplier agreement: %w", err)
 	}
+	existingConditions, existingDeclared, err := chargeConditionsFromColumn(existing.conditions)
+	if err != nil {
+		return ports.SupplierAgreementSaveOutcomeInvalid, fmt.Errorf("save supplier agreement: %w", err)
+	}
+	conditions, declared := agreement.ChargeConditions()
 	if existing.supplier == agreement.Supplier().String() &&
 		existing.legalEntity == agreement.LegalEntity().String() &&
 		existing.scope == agreement.Scope().String() &&
 		existing.purchasePlan == agreement.PurchasePricingPlan().String() &&
 		existing.startsAt.Equal(startsAt) &&
-		sameOptionalTime(existing.endsAt, endsAt) {
+		sameOptionalTime(existing.endsAt, endsAt) &&
+		existingDeclared == declared &&
+		existingConditions.Equal(conditions) {
 		return ports.SupplierAgreementAlreadyRegistered, nil
 	}
 	return ports.SupplierAgreementContentConflict, nil
@@ -93,6 +124,59 @@ type scannedSupplierAgreement struct {
 	purchasePlan string
 	startsAt     time.Time
 	endsAt       *time.Time
+	// conditions 是收费发生条件一节聚合成的 JSON 数组（0038）；没有行时为 nil。
+	conditions []byte
+}
+
+// supplierAgreementChargeConditionsColumn 是把一版协议的条件行聚成一列的标量子查询：与正文同一条语句取回，理由同
+// LoadSupplierAgreementVersion 头注（分两次读，中间若有一次发布落地，交回的正文与条件会对应一个从未同时存在过的
+// 状态）。alias 是外层查询里正文表的别名。没有行时 jsonb_agg 答 NULL，即整节没声明。
+func supplierAgreementChargeConditionsColumn(alias string) string {
+	return `(SELECT jsonb_agg(jsonb_build_object(
+	                    'reason', condition.reason,
+	                    'charged', condition.charged,
+	                    'quantityForm', condition.quantity_form)
+	                ORDER BY condition.reason)
+	           FROM party_commercial.supplier_agreement_charge_condition AS condition
+	          WHERE condition.tenant_id     = ` + alias + `.tenant_id
+	            AND condition.object_kind   = ` + alias + `.object_kind
+	            AND condition.object_id     = ` + alias + `.object_id
+	            AND condition.version_label = ` + alias + `.version_label)`
+}
+
+type scannedChargeCondition struct {
+	Reason       string  `json:"reason"`
+	Charged      bool    `json:"charged"`
+	QuantityForm *string `json:"quantityForm"`
+}
+
+// chargeConditionsFromColumn 把聚合列逐条过领域构造门折回。列为 NULL 答「没声明」；有行却折不回是坏数据，响亮报错，
+// 不把那一条当没声明——那会把一份明说「不计费」的协议读成`未配置`。
+func chargeConditionsFromColumn(raw []byte) (domain.ChargeOccurrenceConditions, bool, error) {
+	if raw == nil {
+		return domain.ChargeOccurrenceConditions{}, false, nil
+	}
+	var rows []scannedChargeCondition
+	if err := json.Unmarshal(raw, &rows); err != nil {
+		return domain.ChargeOccurrenceConditions{}, false, fmt.Errorf("收费发生条件聚合列不是本适配器写下的形状：%w", err)
+	}
+	conditions := make([]domain.ChargeOccurrenceCondition, 0, len(rows))
+	for _, row := range rows {
+		form := ""
+		if row.QuantityForm != nil {
+			form = *row.QuantityForm
+		}
+		condition, err := domain.ChargeOccurrenceConditionOf(row.Reason, row.Charged, form)
+		if err != nil {
+			return domain.ChargeOccurrenceConditions{}, false, err
+		}
+		conditions = append(conditions, condition)
+	}
+	declared, err := domain.NewChargeOccurrenceConditions(conditions...)
+	if err != nil {
+		return domain.ChargeOccurrenceConditions{}, false, err
+	}
+	return declared, true, nil
 }
 
 // SupplierAgreementContents 实现 ports.SupplierAgreementContentView：按已唯一选出的协议版本取回
@@ -136,14 +220,14 @@ func (repository *SupplierAgreementContents) LoadSupplierAgreement(
 	var row scannedSupplierAgreement
 	err = querier.QueryRow(ctx,
 		`SELECT supplier_party_id, legal_entity_ref, agreement_scope_ref, purchase_plan_ref,
-		        effective_starts_at, effective_ends_at
+		        effective_starts_at, effective_ends_at, `+supplierAgreementChargeConditionsColumn("supplier_agreement")+`
 		   FROM party_commercial.supplier_agreement
 		  WHERE tenant_id = $1 AND object_kind = $2 AND object_id = $3 AND version_label = $4`,
 		tenant.String(),
 		uint8(domain.SupplierAgreementObject),
 		agreement.ObjectID().String(),
 		agreement.Version().String(),
-	).Scan(&row.supplier, &row.legalEntity, &row.scope, &row.purchasePlan, &row.startsAt, &row.endsAt)
+	).Scan(&row.supplier, &row.legalEntity, &row.scope, &row.purchasePlan, &row.startsAt, &row.endsAt, &row.conditions)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return none, false, nil
 	}
@@ -183,13 +267,14 @@ func (repository *SupplierAgreementContents) LoadSupplierAgreementVersion(
 		return none, fmt.Errorf("load supplier agreement version: %w", err)
 	}
 
-	var raw []byte
+	var raw, conditions []byte
 	var supplier, legalEntity, scope, purchasePlan *string
 	var startsAt, endsAt *time.Time
 	err = querier.QueryRow(ctx,
 		`SELECT version.snapshot,
 		        content.supplier_party_id, content.legal_entity_ref, content.agreement_scope_ref,
-		        content.purchase_plan_ref, content.effective_starts_at, content.effective_ends_at
+		        content.purchase_plan_ref, content.effective_starts_at, content.effective_ends_at,
+		        `+supplierAgreementChargeConditionsColumn("content")+`
 		   FROM party_commercial.commercial_version AS version
 		   LEFT JOIN party_commercial.supplier_agreement AS content
 		          ON content.tenant_id     = version.tenant_id
@@ -204,7 +289,7 @@ func (repository *SupplierAgreementContents) LoadSupplierAgreementVersion(
 		uint8(domain.SupplierAgreementObject),
 		agreement.String(),
 		version.String(),
-	).Scan(&raw, &supplier, &legalEntity, &scope, &purchasePlan, &startsAt, &endsAt)
+	).Scan(&raw, &supplier, &legalEntity, &scope, &purchasePlan, &startsAt, &endsAt, &conditions)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return none, nil
 	}
@@ -229,6 +314,9 @@ func (repository *SupplierAgreementContents) LoadSupplierAgreementVersion(
 	// supplier_party_id 在正文表上 NOT NULL，它的在场即正文行的在场；其余正文列除区间终点外同为 NOT NULL，
 	// 到这里缺一列即坏数据（判据同 ListSupplierAgreements）。
 	if supplier == nil {
+		if conditions != nil {
+			return none, fmt.Errorf("load supplier agreement version: %s/%s 没有正文行却有收费发生条件", agreement, version)
+		}
 		return read, nil
 	}
 	if legalEntity == nil || scope == nil || purchasePlan == nil || startsAt == nil {
@@ -248,6 +336,7 @@ func (repository *SupplierAgreementContents) LoadSupplierAgreementVersion(
 		purchasePlan: *purchasePlan,
 		startsAt:     *startsAt,
 		endsAt:       endsAt,
+		conditions:   conditions,
 	})
 	if err != nil {
 		return none, fmt.Errorf("load supplier agreement version: %w", err)
@@ -278,5 +367,13 @@ func supplierAgreementFrom(version domain.CommercialVersion, row scannedSupplier
 	if err != nil {
 		return domain.SupplierAgreement{}, err
 	}
-	return domain.NewSupplierAgreement(version, supplier, legalEntity, scope, purchasePlan, interval)
+	agreement, err := domain.NewSupplierAgreement(version, supplier, legalEntity, scope, purchasePlan, interval)
+	if err != nil {
+		return domain.SupplierAgreement{}, err
+	}
+	conditions, declared, err := chargeConditionsFromColumn(row.conditions)
+	if err != nil || !declared {
+		return agreement, err
+	}
+	return agreement.WithChargeConditions(conditions)
 }

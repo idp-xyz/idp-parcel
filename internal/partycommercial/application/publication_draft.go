@@ -470,11 +470,12 @@ func declarationsOfContent(content domain.PublicationContent) CommercialDeclarat
 	if content.SupplierAgreement != nil {
 		body := content.SupplierAgreement
 		declarations.SupplierAgreementBody = &SupplierAgreementBodyDeclaration{
-			Supplier:     body.Supplier,
-			LegalEntity:  body.LegalEntity,
-			Scope:        body.Scope,
-			PurchasePlan: body.PurchasePlan,
-			Effective:    body.Effective,
+			Supplier:         body.Supplier,
+			LegalEntity:      body.LegalEntity,
+			Scope:            body.Scope,
+			PurchasePlan:     body.PurchasePlan,
+			Effective:        body.Effective,
+			ChargeConditions: body.ChargeConditions,
 		}
 	}
 	if content.ServiceProduct != nil && content.ServiceProduct.DeliveryConditions != nil {

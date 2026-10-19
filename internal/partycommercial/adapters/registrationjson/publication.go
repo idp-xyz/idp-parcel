@@ -225,6 +225,17 @@ type supplierAgreementBodyDocument struct {
 	PurchasePlan      string     `json:"purchasePlan"`
 	EffectiveStartsAt time.Time  `json:"effectiveStartsAt"`
 	EffectiveEndsAt   *time.Time `json:"effectiveEndsAt,omitempty"`
+	// chargeConditions 是可缺的收费发生条件一节（ADR-0209）。缺键 = 这一版没声明，运输履约按它登记发生项时答
+	// 未配置；键在而为空数组由领域拒——空清单与缺键说的是同一句话，不收两种写法。
+	ChargeConditions []chargeConditionDocument `json:"chargeConditions,omitempty"`
+}
+
+// chargeConditionDocument 是协议对一个发生原因的声明。charged 是 *bool：JSON 的 false 与缺席分不开，而「不计费」是
+// 一句要登记方自己说的声明，不由缺键代说。quantityForm 只随计费在场，不计费带着它由领域拒。
+type chargeConditionDocument struct {
+	Reason       string `json:"reason"`
+	Charged      *bool  `json:"charged"`
+	QuantityForm string `json:"quantityForm,omitempty"`
 }
 
 // pricePolicyBodyDocument 是一份商业价格政策正文（票 party-commercial-context-gaps/06）：方向、
@@ -1253,13 +1264,42 @@ func supplierAgreementBodyFrom(
 	if err != nil {
 		return nil, err
 	}
-	return &pcapplication.SupplierAgreementBodyDeclaration{
+	declaration := &pcapplication.SupplierAgreementBodyDeclaration{
 		Supplier:     supplier,
 		LegalEntity:  legalEntity,
 		Scope:        scope,
 		PurchasePlan: purchasePlan,
 		Effective:    interval,
-	}, nil
+	}
+	if document.ChargeConditions != nil {
+		conditions, err := chargeConditionsFrom(document.ChargeConditions)
+		if err != nil {
+			return nil, err
+		}
+		declaration.ChargeConditions = &conditions
+	}
+	return declaration, nil
+}
+
+// chargeConditionsFrom 把批文的条件一节逐条译成领域声明：原因与数量形是封闭集原词，集外拒；charged 缺键拒，不替
+// 登记方选「计」或「不计」。
+func chargeConditionsFrom(documents []chargeConditionDocument) (pcdomain.ChargeOccurrenceConditions, error) {
+	conditions := make([]pcdomain.ChargeOccurrenceCondition, 0, len(documents))
+	for _, document := range documents {
+		if document.Charged == nil {
+			return pcdomain.ChargeOccurrenceConditions{}, fmt.Errorf("收费发生条件 %q 缺 charged：计不计费要协议自己说", document.Reason)
+		}
+		condition, err := pcdomain.ChargeOccurrenceConditionOf(document.Reason, *document.Charged, document.QuantityForm)
+		if err != nil {
+			return pcdomain.ChargeOccurrenceConditions{}, fmt.Errorf("收费发生条件：%w", err)
+		}
+		conditions = append(conditions, condition)
+	}
+	conditionSet, err := pcdomain.NewChargeOccurrenceConditions(conditions...)
+	if err != nil {
+		return pcdomain.ChargeOccurrenceConditions{}, fmt.Errorf("收费发生条件（空清单或同一原因两条）：%w", err)
+	}
+	return conditionSet, nil
 }
 
 func rulePackageBodyFrom(document rulePackageBodyDocument) (*pcapplication.RulePackageBodyDeclaration, error) {
