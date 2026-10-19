@@ -43,7 +43,8 @@ type HandoverCorrectionIntake interface {
 
 // HandoverRegistrationPayload 是交接判断首登的线格式，逐格镜像 application.RegisterTransportHandoverCommand 去掉租户，与既有
 // 传输层替身的请求体同形。verdict 取 domain.HandoverVerdict 的封闭词，judgedAt 取 RFC 3339；segment / plannedSegment /
-// segmentServiceAction 可缺，缺席即不立段。
+// segmentServiceAction 可缺，缺席即不立段。releasingNode / receivingNode / onwardNode 是交出、接收与去向节点的声明
+// （NR 节点代码，ADR-0213），各自可缺，缺席即没有声明——不带这三键的报文与它们进文法之前的报文同形同答。
 type HandoverRegistrationPayload struct {
 	Object               string `json:"object"`
 	Scope                string `json:"scope"`
@@ -59,6 +60,9 @@ type HandoverRegistrationPayload struct {
 	Segment              string `json:"segment,omitempty"`
 	PlannedSegment       string `json:"plannedSegment,omitempty"`
 	SegmentServiceAction string `json:"segmentServiceAction,omitempty"`
+	ReleasingNode        string `json:"releasingNode,omitempty"`
+	ReceivingNode        string `json:"receivingNode,omitempty"`
+	OnwardNode           string `json:"onwardNode,omitempty"`
 }
 
 // Command 把载荷连同信封给的租户翻成首登命令。结论词不在封闭集内、时刻解不出是坏报文（400）；结论空着照零值交进去，
@@ -82,6 +86,9 @@ func (payload HandoverRegistrationPayload) Command(tenant domain.TenantID) (appl
 		Segment:              payload.Segment,
 		PlannedSegment:       payload.PlannedSegment,
 		SegmentServiceAction: payload.SegmentServiceAction,
+		ReleasingNode:        payload.ReleasingNode,
+		ReceivingNode:        payload.ReceivingNode,
+		OnwardNode:           payload.OnwardNode,
 	}
 	var err error
 	if payload.Verdict != "" {
@@ -169,6 +176,11 @@ type handoverResponse struct {
 	// ParticipationEnd 是`已交接`落库后结束前段参与那一半的答案（票 06）：PARTICIPATION_ENDED、
 	// NO_ACTIVE_PARTICIPATION 等，拒收/待确认与重放时为空。
 	ParticipationEnd string `json:"participationEnd,omitempty"`
+	// 三格节点声明回显在册那一版（ADR-0213）：重放答的是首登时的声明，更正答的是从前版承继来的声明。没声明的格不出现，
+	// 不声明节点的登记答复与节点进文法之前逐键相同。
+	ReleasingNode string `json:"releasingNode,omitempty"`
+	ReceivingNode string `json:"receivingNode,omitempty"`
+	OnwardNode    string `json:"onwardNode,omitempty"`
 }
 
 func writeHandoverOutcome(response http.ResponseWriter, result application.RegisterTransportHandoverResult) {
@@ -195,6 +207,10 @@ func writeHandoverOutcome(response http.ResponseWriter, result application.Regis
 		if predecessor, corrected := record.Handover.Corrects(); corrected {
 			body.Corrects = predecessor.String()
 		}
+		nodes := record.Handover.Nodes()
+		body.ReleasingNode = nodes.Releasing.String()
+		body.ReceivingNode = nodes.Receiving.String()
+		body.OnwardNode = nodes.Onward.String()
 	}
 
 	// ADR-0022：状态码只报有没有新落一版。首登与更正都持久化了新版本用 201；重放、冲突、

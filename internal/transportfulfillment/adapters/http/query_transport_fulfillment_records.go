@@ -271,6 +271,9 @@ func serveTransportHandovers(
 			CorrectedAt:     optionalInstant(row.CorrectedAt),
 			JudgedAt:        rfc3339(row.JudgedAt),
 			RecordedAt:      rfc3339(row.RecordedAt),
+			ReleasingNode:   row.ReleasingNode,
+			ReceivingNode:   row.ReceivingNode,
+			OnwardNode:      row.OnwardNode,
 		})
 	}
 	writeJSON(response, http.StatusOK, transportHandoverListResponse{
@@ -511,7 +514,9 @@ type transportHandoverListResponse struct {
 // 不折并——整批、整车结论只能由对象级结果派生，本册行粒度就是载运对象。basis 只在
 // 拒收与待确认上在场（已交接不带依据）；corrects 两键成对缺席表示首登版本——一行
 // 一版本，更正是新行指回前版，原判断在册面上继续可见。交接边界由 releasedBy 与
-// receivedBy 两个参与方引用表达，组合成「A → B」是呈现的事。
+// receivedBy 两个参与方引用表达，组合成「A → B」是呈现的事。releasingNode / receivingNode /
+// onwardNode 是登记方声明的三个节点（ADR-0213），没声明的那格缺席——缺席是「没有声明」，
+// 不是读不出。
 type transportHandoverBody struct {
 	Object          string `json:"object"`
 	Scope           string `json:"scope"`
@@ -524,6 +529,9 @@ type transportHandoverBody struct {
 	CorrectedAt     string `json:"correctedAt,omitempty"`
 	JudgedAt        string `json:"judgedAt"`
 	RecordedAt      string `json:"recordedAt"`
+	ReleasingNode   string `json:"releasingNode,omitempty"`
+	ReceivingNode   string `json:"receivingNode,omitempty"`
+	OnwardNode      string `json:"onwardNode,omitempty"`
 }
 
 type effectiveDeliveryListResponse struct {
