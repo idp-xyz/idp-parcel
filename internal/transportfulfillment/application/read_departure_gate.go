@@ -60,8 +60,9 @@ func (reader *DepartureGateReader) Read(ctx context.Context, command RecordMovem
 	})
 }
 
-// departureGateIntent 是一条出发的读数只取决于的那四样：租户、班次、声明的段（零值即没声明）与出发时点。出发登记与出发前
-// 问询（ADR-0219）各自把输入收成它，再走同一个 readIntent——「同参同读数」靠的是只有这一条路，不靠两边各写一遍再比对。
+// departureGateIntent 是读数从输入里只取的那四样：租户、班次、声明的段（零值即没声明）与出发时点；其余取决于此刻的段册、
+// 班次册与关务。出发登记与出发前问询（ADR-0219）各自把输入收成它，再走同一个 readIntent——「同参同读数」靠的是只有这一条
+// 路，不靠两边各写一遍再比对。
 type departureGateIntent struct {
 	tenant   domain.TenantID
 	schedule domain.ScheduleReference
