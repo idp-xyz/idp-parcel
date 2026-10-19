@@ -3,16 +3,18 @@ package application_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
+	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
 // 钉 ADR-0208 的发起半边：发生项已形成之后，费用项目取触发册那一行、主要范围取协议的商业范围、发生项与协议原样取自
-// 命令；没登原因或没登费用项目答未配置、不读协议、不铸请求；依赖答不出答未决并点名；协议在 PC 不认是矛盾，上抛；修订版
-// 不发起；交信封失败答未决让调用方整笔回滚。夹具全是合成串，证据只记 S。
+// 命令；没登原因或没登费用项目答未配置、不读协议、不铸请求；依赖答不出答未决并点名；协议在 PC 不认是矛盾、协议范围
+// 答出确定性坏答案，都上抛；修订版不发起；交信封失败答未决让调用方整笔回滚。夹具全是合成串，证据只记 S。
 
 // agreementScopeDouble 按协议指称答范围；err 非空时如实报错。calls 数被问了几次——未配置的格不该去问。
 type agreementScopeDouble struct {
@@ -203,6 +205,22 @@ func TestAnAgreementUnknownToPartyCommercialIsAContradiction(t *testing.T) {
 	}
 	if fixture.identity.next != 0 {
 		t.Fatal("矛盾仍铸了请求 ID")
+	}
+}
+
+// Covers: 协议范围读口答出确定性坏答案（译不过去、指称歧义）不是未决——原样上抛，不铸请求；重投同一份永远同一个结果，
+// 当未决只会耗尽失败预算（ADR-0208 决定五）。
+func TestAnUntranslatableAgreementScopeIsRaisedNotLeftUndecided(t *testing.T) {
+	fixture := newEvaluationRequestFixture(t)
+	untranslatable := fmt.Errorf("load supplier agreement scope: %w", ports.ErrSupplierAgreementScopeUntranslatable)
+	handler := newOccurrenceFormedTrigger(t, registeredFulfillmentRow(), &agreementScopeDouble{err: untranslatable}, fixture)
+	result, err := handler.Trigger(t.Context(), occurrenceFormedCommand(t))
+	if !errors.Is(err, ports.ErrSupplierAgreementScopeUntranslatable) {
+		t.Fatalf("outcome = %s / %s err = %v, want 上抛 ErrSupplierAgreementScopeUntranslatable",
+			result.Outcome(), result.UndecidedReason(), err)
+	}
+	if fixture.identity.next != 0 || len(fixture.handoff.intents) != 0 {
+		t.Fatalf("坏答案仍铸了 %d 个 ID、交了 %d 封信", fixture.identity.next, len(fixture.handoff.intents))
 	}
 }
 

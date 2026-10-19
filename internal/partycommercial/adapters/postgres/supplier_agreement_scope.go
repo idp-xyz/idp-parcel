@@ -29,7 +29,7 @@ var _ ports.SupplierAgreementScopeView = (*SupplierAgreementScopes)(nil)
 //
 // 不拆指称串：拆就得在这里再写一遍分隔符，而「对象/版本」只许 NewQualifiedVersionLabel 一处拼（QualifiedLabel 头注）。
 // SQL 只按「对象标识是指称的前缀」收窄，每一行再用那一处拼出自己的指称去比，比中才算。对象标识或版本里自带斜杠时
-// 一个指称可能比中两行，那是两段式指称本身的歧义，响亮报错，不挑一行。
+// 一个指称可能比中两行，那是两段式指称本身的歧义，响亮报错（包 ports.ErrSupplierAgreementLabelAmbiguous），不挑一行。
 func (repository *SupplierAgreementScopes) LoadSupplierAgreementScope(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -90,6 +90,7 @@ func (repository *SupplierAgreementScopes) LoadSupplierAgreementScope(
 		}
 		return scope, true, nil
 	default:
-		return none, false, fmt.Errorf("load supplier agreement scope: label %q names %d agreement versions", agreement, len(matched))
+		return none, false, fmt.Errorf("load supplier agreement scope: %w: label %q names %d agreement versions",
+			ports.ErrSupplierAgreementLabelAmbiguous, agreement, len(matched))
 	}
 }

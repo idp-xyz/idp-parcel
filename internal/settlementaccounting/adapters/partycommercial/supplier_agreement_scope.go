@@ -2,6 +2,7 @@ package partycommercial
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
@@ -15,6 +16,9 @@ import (
 //
 // 主要范围等同协议的商业范围，是本路的产品策略：计价按主要范围选在用价卡，演示的成本卡与干线协议同在一个范围里。
 // 一份协议覆盖多条线、各线另有成本卡的时候它不够用，那是 ADR-0208 的越权风险点，不在这里补。
+//
+// 译不过去与指称歧义都包 saports.ErrSupplierAgreementScopeUntranslatable：两种都是确定性的，编排凭它与读不动分开，
+// 前者落发布失败，后者才答未决。
 type SupplierAgreementScope struct {
 	agreements pcports.SupplierAgreementScopeView
 }
@@ -37,13 +41,16 @@ func (adapter *SupplierAgreementScope) LoadSupplierAgreementScope(
 	none := sadomain.PrimaryScopeReference{}
 	commercialTenant, err := pcdomain.NewTenantID(tenant.String())
 	if err != nil {
-		return none, false, fmt.Errorf("%w: tenant: %v", ErrUntranslatableAnswer, err)
+		return none, false, fmt.Errorf("%w: %w: tenant: %v", saports.ErrSupplierAgreementScopeUntranslatable, ErrUntranslatableAnswer, err)
 	}
 	label, err := pcdomain.NewCommercialVersionLabel(agreement.String())
 	if err != nil {
-		return none, false, fmt.Errorf("%w: supplier agreement: %v", ErrUntranslatableAnswer, err)
+		return none, false, fmt.Errorf("%w: %w: supplier agreement: %v", saports.ErrSupplierAgreementScopeUntranslatable, ErrUntranslatableAnswer, err)
 	}
 	scope, found, err := adapter.agreements.LoadSupplierAgreementScope(ctx, commercialTenant, label)
+	if errors.Is(err, pcports.ErrSupplierAgreementLabelAmbiguous) {
+		return none, false, fmt.Errorf("load supplier agreement scope: %w: %w", saports.ErrSupplierAgreementScopeUntranslatable, err)
+	}
 	if err != nil {
 		return none, false, fmt.Errorf("load supplier agreement scope: %w", err)
 	}
@@ -52,7 +59,7 @@ func (adapter *SupplierAgreementScope) LoadSupplierAgreementScope(
 	}
 	primary, err := sadomain.NewPrimaryScopeReference(scope.String())
 	if err != nil {
-		return none, false, fmt.Errorf("%w: supplier agreement scope: %v", ErrUntranslatableAnswer, err)
+		return none, false, fmt.Errorf("%w: %w: supplier agreement scope: %v", saports.ErrSupplierAgreementScopeUntranslatable, ErrUntranslatableAnswer, err)
 	}
 	return primary, true, nil
 }

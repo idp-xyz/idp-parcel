@@ -72,7 +72,8 @@ func NewTriggerBuyEvaluationOnOccurrenceFormedHandler(
 // Trigger 走一拍：受理 → 修订版不发起 → 触发册（原因、费用项目）→ 协议范围 → 交请求编排。
 //
 // 未配置的两格先于协议读口判：没登的原因不必去问 party-commercial。答`未配置`的入账不重投，只有依赖答不出才是`未决`
-// （ADR-0029、ADR-0094）。
+// （ADR-0029、ADR-0094）。协议范围读口答出确定性的坏答案（ports.ErrSupplierAgreementScopeUntranslatable）不算答不出，
+// 与协议查无一样原样上抛。
 //
 // 本编排只该跑在调用方的事务里：请求登记与信封同生同灭。请求编排在交信封失败时留续办引用、照答已请求，那个形状在
 // 事务里会让一份请求行提交而信封缺席、再没有东西推它，所以这里把它改答`未决`，让调用方整笔回滚重来——与 SELL 那只
@@ -102,6 +103,10 @@ func (handler *TriggerBuyEvaluationOnOccurrenceFormedHandler) Trigger(
 	}
 
 	scope, found, err := handler.deps.Agreements.LoadSupplierAgreementScope(ctx, command.TenantID, command.Agreement)
+	if errors.Is(err, ports.ErrSupplierAgreementScopeUntranslatable) {
+		return BuyEvaluationTriggerResult{}, fmt.Errorf("trigger buy evaluation on occurrence formed: occurrence %s agreement %s: %w",
+			command.Occurrence.ID(), command.Agreement, err)
+	}
 	if err != nil {
 		return buyTriggerUndecided(BuyEvaluationTriggerAgreementScopeUnavailable), nil
 	}

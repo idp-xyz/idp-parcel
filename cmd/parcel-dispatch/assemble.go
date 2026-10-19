@@ -657,6 +657,8 @@ var sellEvaluationRequestSubmittedUndecidedSentinels = []error{
 //   - 入账定局的各格不是错误，处理方答 nil——已发起（含已存在）、没登这个原因、登了却没登费用项目、修订版不经本路发起。
 //     未配置缺的是租户取值，补登之后这一份不回补。
 //   - saapplication.ErrOccurrenceAgreementNotRegistered——发生项上的协议 PC 不认，两侧矛盾，落 publish_failed 等人看。
+//   - SA 的 ports.ErrSupplierAgreementScopeUntranslatable——协议范围读口答出确定性坏答案（译不过去、指称比中不止一版），
+//     编排原样上抛，不折进 ErrBuyEvaluationTriggerUndecided。
 //   - satransport.ErrChargeOccurrenceInconsistent、satransport.ErrUntranslatableAnswer、
 //     satransport.ErrUnexpectedBuyEvaluationTriggerOutcome——提供方不变量已破、词汇表外或本包译出的命令被拒，重投不自愈。
 var chargeOccurrenceFormedUndecidedSentinels = []error{
@@ -693,8 +695,8 @@ var chargeOccurrenceFormedUndecidedSentinels = []error{
 // 登记（sa-cc/03）、CC 付款核对形成 → SA 结算输入采用（sa-cc/09；同一条缝的反方向，各记各的 inbox 账）、
 // PP 评价已记录 → FanOut（先 SA 供应商预期成本形成，sa-cc/01、ADR-0200；再 SA 预估客户费用形成，ADR-0190 决定五、六。
 // 两路各认一个方向，另一个方向的评价在各自那一路入账走掉）。
-// TF 运输收费发生项已形成 → 只投 SA 发起 BUY 评价（ADR-0208）。生产方还没上线：ADR-0049 要的是生产方上线之前消费者
-// 先在路由表里，所以这一条先登；在那之前本路一封也收不到，不是接不住。
+// TF 运输收费发生项已形成 → 只投 SA 发起 BUY 评价（ADR-0208）。消费者可以先于生产方登进路由表（ADR-0049）；没有生产方
+// 交出这一类信封时，本路一封也收不到，不是接不住。
 // 各类 FanOut 同一 EventType 各投两个独立消费者，顺序一律先 VE 后 PS/NR，避免把投影或
 // 补派生堵在资格墙、终局规则墙或路由证据墙上；SA 发起 SELL 评价那一路排在既有那一路之后，
 // 计费不挡履约与追踪。

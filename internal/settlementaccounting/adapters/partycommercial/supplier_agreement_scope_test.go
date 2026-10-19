@@ -3,15 +3,18 @@ package partycommercial_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	pcdomain "go.idp.xyz/idp-parcel/internal/partycommercial/domain"
+	pcports "go.idp.xyz/idp-parcel/internal/partycommercial/ports"
 	adapter "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/partycommercial"
 	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
+	saports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
 // 本文件证协议范围那一缝的翻译（ADR-0208 决定四）：发生项上的协议指称原样交给 party-commercial，协议的商业范围原样
-// 译成主要范围；查无交 found=false 让编排判矛盾，读不动原样上抛让编排答未决。
+// 译成主要范围；查无交 found=false 让编排判矛盾，读不动原样上抛让编排答未决，指称歧义包确定性哨兵让编排上抛。
 
 type agreementScopeSourceDouble struct {
 	asked  string
@@ -69,10 +72,21 @@ func TestAnUnknownAgreementIsNotFoundAndAReadFailureIsReturned(t *testing.T) {
 	}
 	down := errors.New("party commercial down")
 	if _, _, err := scopeAdapter(t, &agreementScopeSourceDouble{err: down}).LoadSupplierAgreementScope(
-		t.Context(), saTenant(t, "SYN-TENANT-01"), saAgreement(t, "SYN-SUPPLIER-TRUNK-CN-SG-01/v1")); !errors.Is(err, down) {
-		t.Fatalf("读不动 err = %v", err)
+		t.Context(), saTenant(t, "SYN-TENANT-01"), saAgreement(t, "SYN-SUPPLIER-TRUNK-CN-SG-01/v1")); !errors.Is(err, down) ||
+		errors.Is(err, saports.ErrSupplierAgreementScopeUntranslatable) {
+		t.Fatalf("读不动 err = %v, want 原样上抛、不带确定性哨兵", err)
 	}
 	if _, err := adapter.NewSupplierAgreementScope(nil); err == nil {
 		t.Fatal("读口缺席却构造成功")
+	}
+}
+
+// Covers: PC 答指称比中不止一版——包 saports.ErrSupplierAgreementScopeUntranslatable，编排凭它落发布失败而不答未决。
+func TestAnAmbiguousAgreementLabelIsDeterministic(t *testing.T) {
+	ambiguous := fmt.Errorf("load supplier agreement scope: %w", pcports.ErrSupplierAgreementLabelAmbiguous)
+	_, found, err := scopeAdapter(t, &agreementScopeSourceDouble{err: ambiguous}).LoadSupplierAgreementScope(
+		t.Context(), saTenant(t, "SYN-TENANT-01"), saAgreement(t, "SYN-SUPPLIER/TRUNK/v1"))
+	if !errors.Is(err, saports.ErrSupplierAgreementScopeUntranslatable) || found {
+		t.Fatalf("歧义指称：found=%v err=%v, want ErrSupplierAgreementScopeUntranslatable", found, err)
 	}
 }
