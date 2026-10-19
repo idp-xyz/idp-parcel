@@ -334,6 +334,17 @@ func (unwiredTransportCommissionSubmission) SubmitCommission(
 	return tfapp.CommissionResult{}, errOrchestrationNotWired
 }
 
+// unwiredBookingFaces 是订舱提交与承运答复两口的占位（ADR-0202 决定二、五）。
+type unwiredBookingFaces struct{}
+
+func (unwiredBookingFaces) SubmitBooking(context.Context, tfapp.SubmitBookingCommand) (tfapp.CommissionResult, error) {
+	return tfapp.CommissionResult{}, errOrchestrationNotWired
+}
+
+func (unwiredBookingFaces) AnswerBooking(context.Context, tfapp.AnswerBookingCommand) (tfapp.CommissionResult, error) {
+	return tfapp.CommissionResult{}, errOrchestrationNotWired
+}
+
 // unwiredEffectiveTimeRuleRegistration 是轨迹源有效时间规则登记口的占位（票 label-channel/19）。
 type unwiredEffectiveTimeRuleRegistration struct{}
 

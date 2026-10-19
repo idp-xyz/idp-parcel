@@ -351,6 +351,9 @@ func run(logger *slog.Logger) error {
 		return err
 	}
 	capacityPoolRegistration, err := buildCapacityPoolRegistration(db)
+	if err != nil {
+		return err
+	}
 	transportCommissionSubmission, err := buildTransportCommissionSubmission(db)
 	if err != nil {
 		return err
@@ -508,6 +511,11 @@ func run(logger *slog.Logger) error {
 	}
 	// 容量预占口与释放口（ADR-0203）。
 	capacityDecisions, err := buildCapacityDecisions(db)
+	if err != nil {
+		return err
+	}
+	// 订舱提交与承运答复两口（ADR-0202 决定一、二、五）。
+	bookingFaces, err := buildBookingFaces(db)
 	if err != nil {
 		return err
 	}
@@ -764,6 +772,8 @@ func run(logger *slog.Logger) error {
 			preAdviceWindowRegistration,
 			capacityDecisions,
 			capacityDecisions,
+			bookingFaces,
+			bookingFaces,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,

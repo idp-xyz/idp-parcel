@@ -185,6 +185,8 @@ func assembleBusinessEndpoints(
 	preAdviceWindowRegistration nodeopshttp.PreAdviceWindowRegistrar,
 	capacityReservation tfhttp.CapacityReserver,
 	capacityRelease tfhttp.CapacityReleaser,
+	bookingRequestSubmission tfhttp.BookingRequestSubmitter,
+	bookingAnswer tfhttp.BookingAnswerer,
 ) []httpapi.BusinessEndpoint {
 	// 缺省朝拦：真渠道与隔离入参都缺席时，下面这组变量全取未配置即拒。
 	//
@@ -721,5 +723,11 @@ func assembleBusinessEndpoints(
 		// 换不了它们（ADR-0150 决定三）。
 		{Pattern: "/transport-fulfillment-capacity-reservations", Handler: tfhttp.NewReserveCapacityEndpoint(operatorDecisions.transport, capacityReservation)},
 		{Pattern: "/transport-fulfillment-capacity-releases", Handler: tfhttp.NewReleaseCapacityEndpoint(operatorDecisions.transport, capacityRelease)},
+		// 订舱提交口（ADR-0202 决定一、五）：在一份已提交的委托下就一个在册具体班次申请舱位，是管理台上作出的生产决定，挂
+		// 「运营决定」能力面的订舱提交一种。写开关换不了它（ADR-0150 决定三）。
+		{Pattern: "/transport-fulfillment-booking-request-submissions", Handler: tfhttp.NewSubmitBookingRequestEndpoint(operatorDecisions.transport, bookingRequestSubmission)},
+		// 承运订舱答复口（ADR-0202 决定二、五）：提交方是承运系统，挂集成客户端族的承运订舱答复一类；答复方的来源身份取自客户端
+		// 绑定、须等于订舱所属委托的服务提供方。发行方参数未设时答未配置；写开关换不了它（ADR-0150 决定三）。
+		{Pattern: "/transport-fulfillment/booking-answers", Handler: tfhttp.NewAnswerBookingEndpoint(tfhttp.BookingAnswerIntake(integrationClients.transport), bookingAnswer)},
 	}
 }

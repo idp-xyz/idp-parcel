@@ -12,6 +12,8 @@ import (
 	customshttp "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/http"
 	saaccess "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/accessidentity"
 	settlementhttp "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/http"
+	tfaccess "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/accessidentity"
+	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 )
 
 // 集成客户端族信任锚的三件部署形态参数（ADR-0149 决定三，方式同 ADR-0100 决定二）。与操作者族分开：至少受众不同，
@@ -24,10 +26,11 @@ const (
 
 const integrationClientKeySetFetchTimeout = 5 * time.Second
 
-// integrationClientIntakes 是集成客户端族在外部结果、监管凭证与外部资金事实（含更正）上的 Intake。
+// integrationClientIntakes 是集成客户端族在外部结果、监管凭证、外部资金事实（含更正）与承运订舱答复上的 Intake。
 type integrationClientIntakes struct {
 	customs    *customshttp.IntegrationClientIntake
 	settlement *settlementhttp.IntegrationClientIntake
+	transport  *tfhttp.IntegrationClientIntake
 }
 
 // buildIntegrationClientCredentialVerifier 解析集成客户端族的发行方参数。三态同操作者族：三件都未设 → 未配置核验方；
@@ -85,5 +88,13 @@ func buildIntegrationClientIntakes(minter *accessidentity.IntegrationClientMinte
 	if err != nil {
 		return integrationClientIntakes{}, err
 	}
-	return integrationClientIntakes{customs: customs, settlement: settlement}, nil
+	transportAuthenticator, err := tfaccess.NewIntegrationClientAuthenticator(minter)
+	if err != nil {
+		return integrationClientIntakes{}, err
+	}
+	transport, err := tfhttp.NewIntegrationClientIntake(transportAuthenticator)
+	if err != nil {
+		return integrationClientIntakes{}, err
+	}
+	return integrationClientIntakes{customs: customs, settlement: settlement, transport: transport}, nil
 }

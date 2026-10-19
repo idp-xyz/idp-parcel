@@ -73,6 +73,8 @@ var businessEndpointProbes = map[string]businessEndpointProbe{
 	"/transport-fulfillment-transport-schedule-registrations":                  {method: http.MethodPost, target: "/transport-fulfillment-transport-schedule-registrations"},
 	"/transport-fulfillment-capacity-pool-registrations":                       {method: http.MethodPost, target: "/transport-fulfillment-capacity-pool-registrations"},
 	"/transport-fulfillment-transport-commission-submissions":                  {method: http.MethodPost, target: "/transport-fulfillment-transport-commission-submissions"},
+	"/transport-fulfillment-booking-request-submissions":                       {method: http.MethodPost, target: "/transport-fulfillment-booking-request-submissions"},
+	"/transport-fulfillment/booking-answers":                                   {method: http.MethodPost, target: "/transport-fulfillment/booking-answers"},
 	"/transport-fulfillment-records":                                           {method: http.MethodGet, target: "/transport-fulfillment-records?registry=transport-schedule"},
 	"/transport-fulfillment-handover-scope-summary":                            {method: http.MethodGet, target: "/transport-fulfillment-handover-scope-summary?scope=scope-1"},
 	"/customer-tracking-view":                                                  {method: http.MethodGet, target: "/customer-tracking-view"},
@@ -422,6 +424,8 @@ func assembleUnwiredBusinessEndpointsWithOperatorIntakes(
 		unwiredPreAdviceWindowRegistration{},
 		unwiredCapacityDecisions{},
 		unwiredCapacityDecisions{},
+		unwiredBookingFaces{},
+		unwiredBookingFaces{},
 	)
 }
 

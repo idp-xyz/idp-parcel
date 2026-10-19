@@ -21,6 +21,7 @@ var integrationClientFaces = []string{
 	"/customs-regulatory-credential-registrations",
 	"/settlement-external-funds-fact-registrations",
 	"/settlement-external-funds-fact-correction-registrations",
+	"/transport-fulfillment/booking-answers",
 }
 
 type absentClientRegister struct{}
@@ -160,6 +161,7 @@ func TestIntegrationClientFacesAnswerTheChannelGrades(t *testing.T) {
 			accessidentity.FactCustomsExternalResult,
 			accessidentity.FactRegulatoryCredential,
 			accessidentity.FactExternalFunds,
+			accessidentity.FactCarrierBookingAnswer,
 		},
 		start: now.Add(-time.Hour),
 		end:   now.Add(time.Hour),
@@ -199,7 +201,7 @@ func TestIntegrationClientFacesAnswerTheChannelGrades(t *testing.T) {
 		"funds grant does not cover customs facts": {
 			verifier: acceptingClientVerifier{}, registry: fundsOnly, token: "presented.client.token",
 			status: http.StatusForbidden, code: "INTEGRATION_CLIENT_NOT_GRANTED",
-			only: []string{"/customs/external-results", "/customs-regulatory-credential-registrations"},
+			only: []string{"/customs/external-results", "/customs-regulatory-credential-registrations", "/transport-fulfillment/booking-answers"},
 		},
 	}
 	for name, testCase := range cases {
