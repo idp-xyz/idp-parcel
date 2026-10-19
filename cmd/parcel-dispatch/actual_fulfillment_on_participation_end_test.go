@@ -209,7 +209,7 @@ func formationOccurrences(t *testing.T, db *bentopg.DB) []formationOccurrenceRow
 	return found
 }
 
-// Covers: AT-TF-246（S，票 demo-chain-gaps/67 演示判据的真库半边，ADR-0218）——干线段采用了委托之后在 SIN 交接：派发第一拍
+// Covers: AT-TF-246、AT-TF-250（S，票 demo-chain-gaps/67 演示判据的真库半边，ADR-0218）——干线段采用了委托之后在 SIN 交接：派发第一拍
 // 交接信封扇出到本路，实际履约发生项经既有登记用例形成（成员是这件包裹、旅程 `JRN/<包裹>`、登记者是本上下文的系统身份、
 // 采购上下文取委托、按件计），已形成信封同笔入队；第二拍结算发起恰一份 BUY 请求——无需人工登记。此后人工按同一身份登记答
 // `已存在`。两次交接认的事件类型与 VE 那一路相同，信封定稿 PUBLISHED。

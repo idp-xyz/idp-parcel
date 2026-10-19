@@ -16,7 +16,7 @@
 - 记录出发、实际移动、到达、资源变化、中断、折返、改降和控制责任变化。
 - 在下一次权威交接或有效交付后结束相应对象的履约参与关系。
 - 以稳定事实引用交给追踪、异常、节点、路由和包裹终局消费方。
-- 外包段上的参与结束之后，经运营决定另行登记实际履约的运输收费发生项，不在交接编排里形成（[ADR-0207](../../adr/0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md)）。
+- 外包段上的参与结束之后形成实际履约的运输收费发生项，不在交接编排里形成：段已采用运输委托的，由本上下文随交接与有效交付信封自动形成（[ADR-0218](../../adr/0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md)）；其余经运营决定另行登记（[ADR-0207](../../adr/0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md)）。
 
 本用例不执行：
 
@@ -92,7 +92,7 @@
 | 6 | 执行方/伙伴接入 | 接收出发、移动、到达、中断和资源变化事实；出发在写入之前逐对象向 `customs-compliance` 拉取门禁读数 | 保存来源，不直接修改计划；出发与读数同一笔落册 |
 | 7 | `transport-fulfillment` | 形成下一次交接或控制结束结果 | 结束相应对象参与关系，其他对象继续 |
 | 8 | `transport-fulfillment` | 发布稳定事实引用给路由、追踪、异常和 `parcel-shipment` | 发布失败只重试同一意图 |
-| 9 | 运输运营（运营决定） | 参与结束之后另行登记实际履约的运输收费发生项：事实取段内已结束的参与，采购上下文由登记方给出并经协议核对，发生条件、数量与单位按采用的那一版协议声明的收费发生条件定，段已采用运输委托时采购上下文取委托快照、登记方可以不给，发生项与已形成信封同笔落地（[ADR-0207](../../adr/0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md)、[ADR-0209](../../adr/0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md)；ADR-0207 文末补记） | 只固定发生事实，金额交给 `parcel-pricing` 与 `settlement-accounting`；不内联进交接或交付编排；协议没声明答未配置 |
+| 9 | `transport-fulfillment`（段已采用委托）/ 运输运营（运营决定） | 段已采用运输委托的，派发进程随交接与有效交付信封找出被这件事实结束的参与，经同一个登记用例自动形成实际履约发生项，旅程取参与入场时已开始的替代 / 退运旅程、否则派生 `JRN/<包裹>`，登记者是本上下文的系统身份；没有采用连线的段不自动形成、不推断自营（[ADR-0218](../../adr/0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md)）。其余由运营决定在参与结束之后另行登记实际履约的运输收费发生项：事实取段内已结束的参与，采购上下文由登记方给出并经协议核对，发生条件、数量与单位按采用的那一版协议声明的收费发生条件定，段已采用运输委托时采购上下文取委托快照、登记方可以不给，发生项与已形成信封同笔落地（[ADR-0207](../../adr/0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md)、[ADR-0209](../../adr/0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md)；ADR-0207 文末补记） | 只固定发生事实，金额交给 `parcel-pricing` 与 `settlement-accounting`；不内联进交接或交付编排；协议没声明答未配置；自动形成读不动时信封重投，不回滚交接与交付 |
 
 ## 交接与实际履约规则
 
@@ -193,6 +193,16 @@
 | `AT-TF-229` | 问询答出读数之后 | 本用例零写入：不落移动事实、不入队信封、不记谁问过；关务照 ADR-0206 决定六记一次判断，随后同参出发在同样三源上命中同一判断，出发落册的依据指回它 |
 | `AT-TF-230` | 问询的操作者在该作业范围上没有作业事实登记授予，或设备不在用，或作业范围不是场外 | 与移动事实口同一道门：403 `OPERATOR_NOT_GRANTED`、403 `DEVICE_NOT_IN_USE`、400；不问任何一口 |
 | `AT-TF-231` | 问询答不受门禁之后、出发之前，包裹上落了约束装载出发的限制 | 出发按它自己那一刻重问，读数阻断、照样落册；问询那一份不交给出发 |
+| `AT-TF-246` | 段已采用运输委托，对象在下一次`已交接`的交接上结束参与 | 派发进程随交接信封经既有登记用例形成实际履约发生项：成员只有这一个对象，依据与范围取段，业务时间取参与终点，采购上下文取委托，登记者是本上下文的系统身份，已形成信封同笔；随后结算发起 BUY 请求，不用人工登记（[ADR-0218](../../adr/0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md)） |
+| `AT-TF-247` | 同上，参与由有效交付结束 | 照样形成，业务时间取交付时刻；同一次交付的 POD 更正版本没有结束任何参与，入账、不多一项 |
+| `AT-TF-248` | 参与结束的那一段没有采用连线（实际承运商判断哪怕是自营法人） | 不形成、零写入，入账；不交登记用例、不推断自营，这一段照旧人工登记 |
+| `AT-TF-249` | 委托采用的那一版协议没声明实际履约的收费发生条件，或声明不计费 | 答未配置或不计费，入账，不落册 |
+| `AT-TF-250` | 人工与自动对同一段同一件登记，旅程同为派生拼写 | 先后到达的一方答已存在、回显先到那一份；人工写了别的旅程，后到的一方答冲突，入账，册上那一份不动 |
+| `AT-TF-251` | 交接是拒收或待确认；`已交接`但对象不在任何段里，或在段里的参与没被它结束 | 没有参与被这件事实结束，入账，不交登记用例 |
+| `AT-TF-252` | 对象在参与入场之前已开始一趟替代或退运旅程 | 发生项挂在开始最晚、且不晚于入场的那一趟上；没有就派生 `JRN/<包裹>`；同一刻开始两趟响亮失败 |
+| `AT-TF-253` | 交接读不回或读不动，段登记册、采用连线、旅程册或协议核对口读不动 | 未决，登本路哨兵重投；发生项、已形成信封与 inbox 已处理整笔回滚；读得动后重投形成 |
+| `AT-TF-254` | 委托在迁移 0038 之前提交、没记下协议版本；或协议按段计、同一段第二件的参与结束 | 分别答缺采购上下文、范围已计过，都入账 |
+| `AT-TF-255` | 本上下文交出的键过不了自己的门，同一件事实在多个段里结束了参与，或登记用例答不适用、缺采购上下文以外的未受理 | 响亮失败，不入账也不登哨兵 |
 
 ## 给开发的交接
 
