@@ -1,8 +1,8 @@
 # 01 同一外部条码出现在两件实物：第二件也唯一关联到同一包裹，不形成身份冲突（AT-NO-019 字面场景没有实现）
 
 Category: bug
-Status: ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 0 研判）
-Blocked by: operator-channel/29 已进 main
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-nri01`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 0 研判）
+Blocked by: 无（operator-channel/29 已进 main）
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C2 第三张草案（AT-NO-019）
 地盘：
