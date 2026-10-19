@@ -1,7 +1,7 @@
 # 01 结算：SELL 评价请求身份、包裹计费时点采用册与费用项目映射册
 
 Category: enhancement
-Status: ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。
+Status: 完工，待评审与进 main——分支 `claude-sell-01`（2026-10-19 Claude Code 会话立，用户「你作为业务和系统专家自决……解决所有的问题」授权；完工见文末「完成记录」）。
 Blocked by: 无
 地盘：`internal/settlementaccounting` 的 domain、ports、application（只登记那几只）、adapters/postgres、adapters/registrationjson、adapters/identity；`migrations/settlement_accounting/` 0037–0039；`cmd/parcel-settlement-register`；`internal/architecture` 里分区主体、标识前缀两本登记的对应行。
 出处：[ADR-0190](../../../docs/adr/0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 决定一、三、五（映射册那一半）。
@@ -26,3 +26,46 @@ Blocked by: 无
 
 - 真库用例：三册的登记、幂等、租户隔离、无事务拒（架构门禁要的负向证据）。
 - 登记口的译装与路由用例；分区主体、标识前缀两道门禁绿。
+
+## 完成记录
+
+2026-10-19 Claude Code 作者会话在分支 `claude-sell-01` 落地，两笔提交：`0b86bd42`（请求身份、请求册与交接）、`f4cd6a1b`（两本租户取值册与两条命令）。证据级别：隔离合成，只记 `S`。
+
+### 做了什么
+
+- **SELL 评价请求**（决定一）：领域 `SellEvaluationRequest`／`SubmitSellEvaluationRequest`，铸造标识前缀 `SELLREQ`（`adapters/identity` 的 `SellEvaluationRequestIdentities`），自然键（包裹、计费时点），租户在册键上。各格缺一不成。包裹计费时点是封闭词 `ParcelBillingMoment`（`NETWORK_INTAKE_ADOPTED`、`EFFECTIVE_DELIVERY_FINALIZED`）。
+- **请求册**（迁移 0037 `sell_evaluation_request`）：端口 `SellEvaluationRequestRegistry`（Save、FindByNaturalKey）与 `SellEvaluationRequestView`（FindByID、FindCurrentByParcel），同一个适配器 `SellEvaluationRequests`。撞主键或撞自然键都答`已存在`、不覆盖。
+- **交接**：`OutboxSellEvaluationRequestHandoff`，类型 `settlement-accounting.sell-evaluation-request.submitted`，载荷只有 `tenantId`、`sellEvaluationRequestId`，ID 走 `outboxintent.FingerprintEventID("sell-evaluation-request", 租户, 请求, "submitted")`，分区键 `租户/sell-evaluation-request/包裹`，在分区主体表登「租户/包裹」并带裁段。信封被框架确定性拒收时交回 `ports.ErrSellEvaluationRequestHandoffRejected`。
+- **SELL 计费时点采用册**（决定三，迁移 0038）：`SellBillingMomentAdoption`，照受理前估价采用册的不可变元组与账户外键。
+- **费用项目映射册**（决定五，迁移 0039）：`FeeItemMapping`（计价费用代码 → 费用项目、登记依据），只增不改。没登记的读答未找到，判待判断归票 04。
+- 两本册的登记用例（`application/register_sell_customer_charge_registers.go`）、批文译装（`registrationjson/sell_customer_charge_registers.go`）、`parcel-settlement-register` 的 `sell-billing-moment-adoption` 与 `fee-item-mapping` 两条命令。两本都不交信封：没登记时那一拍已入账不重投，补登之后没有停着等它的东西。
+
+### 评审途中按协调方口径做的调整
+
+协调方转来 ADR-0190 评审结果，本票照做，ADR 文字由协调方在 `claude-sell01` 上改：
+
+1. 请求加一格**结算币种**，登记时从不可变的结算账户行（ADR-0158）快照，计价建快照时取它，不再另读账户册。
+2. 请求册的**状态格**登记时是 `SUBMITTED`，形成那一半改记为 `FORMED`、`PENDING_JUDGMENT`、`UNRATABLE`、`CONFLICT` 之一；另一列 `customer_charge_id` 只在 `FORMED` 时非空（CHECK 配对，外键指 `customer_charge`），按包裹读就能找到当前有效的预估客户费用。Save 只收`已提交`、不带费用标识的记录。领域侧状态词表 `SellEvaluationRequestState` 已立，改记的写口归票 04。
+3. 映射册值保持（费用项目、登记依据）；读口查不到答未找到，不在册这一层答未配置。
+
+### 偏离与取舍
+
+- **复用而不新立**：SELL 请求 Save 的落点复用 BUY 的 `ports.EvaluationRequestSaveOutcome`（写入代数同一条）；两本册的落点复用 `ports.CatalogueRegistrationEffect`，没有照受理前估价采用册另立一个三值类型。计价范围复用 `domain.EstimatePricingScope`（ADR-0190 决定四与受理前估价同一口径，已改它的头注），来源事实引用复用 `domain.SourceFactReference`。
+- **新增的拒收哨兵** `ErrSellEvaluationRequestHandoffRejected` 票面没写：票 02 的消费者要靠它分出「确定性拒收，入账不重投」与「依赖故障，重试」。
+- **分区键带段**：主体是包裹，但字符串带 `/sell-evaluation-request/` 段，不与 PS 采用链、VE 各口的包裹分区共队。
+- 请求册对结算账户不设外键（与 BUY 请求册同），账户存在由票 02 的链保证。
+- `ports/settlement_catalogue.go` 里 `CatalogueRegistrationEffect` 头注原写着一个已失效的册数，顺手去掉了数。
+- 迁移号 0037–0039 提交时在本机各分支上都空着，未改号。
+- 派单提到的 `internal/architecture/envelope_id_bound_gate_test.go` 不在本分支的基线上（在 `claude-eib01` 的 `b364b8da`）。本票交接口调用 `outboxintent.FingerprintEventID`，那道门禁落地后照判据会过。
+
+### 待协调方裁的一处
+
+ADR-0190 决定五写「评价**未成形**、不可计价或适用冲突时入账……状态留在请求册上可查」，票 04 也写「评价未成形、不可计价、冲突：在请求册上记状态」；而协调方给的状态集没有「未成形」。本票按协调方口径只立五格（含 `SUBMITTED`），CHECK 里没有 `NOT_FORMED`。票 04 遇到未成形的评价时记哪一格（留在 `SUBMITTED`，或补一格要再加迁移），请在改 ADR 时一并定下。
+
+### 验证
+
+DSN `postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable`，在 `f4cd6a1b` 上：
+
+- `go test -p 1 -count=1 ./internal/settlementaccounting/... ./cmd/parcel-settlement-register/ ./internal/architecture/ ./migrations/...` 全部 `ok`。本票新增的真库用例逐条 `PASS`，没有 `SKIP`。
+- `go vet` 上述各包退 0，`gofmt -l` 空，`go build ./...` 退 0；第一笔单独检出也能 build、vet。
+- 新增用例：领域（时点封闭、请求各格缺一不成、自然键只取包裹与时点、状态词表与「只有已形成带费用」、采用元组、映射三格）；真库请求册（三口往返、同自然键另一 ID 答已存在且先到者不被覆盖、换时点另一份且按包裹读答最晚的、租户隔离、无事务拒、键与对象不符拒、登记冒充已形成拒、状态格与费用标识的 CHECK 和外键）；真库交接（契约字面、请求行与信封同生同灭、回滚两样都不留、重发不翻倍、无事务拒、按包裹同区、超长确定性拒收、缺件响亮报错）；两本册真库（登记、重放、冲突不覆盖、账户不在册上外键拒、租户隔离、无事务拒）；译装正反例；用例层透传；CLI 命令表与真库登记全链。
