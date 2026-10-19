@@ -187,6 +187,8 @@ func assembleBusinessEndpoints(
 	capacityRelease tfhttp.CapacityReleaser,
 	bookingRequestSubmission tfhttp.BookingRequestSubmitter,
 	bookingAnswer tfhttp.BookingAnswerer,
+	customerPreAdvice *nodeopshttp.CustomerPreAdviceIntake,
+	deliveryPreAdvices nodeopshttp.DeliveryPreAdviceHandler,
 ) []httpapi.BusinessEndpoint {
 	// 缺省朝拦：真渠道与隔离入参都缺席时，下面这组变量全取未配置即拒。
 	//
@@ -255,6 +257,9 @@ func assembleBusinessEndpoints(
 	if customerSubmission != nil {
 		submissionIntake = customerSubmission
 	}
+	// 送站预报两口挂首方客户渠道的 Intake（ADR-0212 决定二；票 ps-external-mark-relations/09），理由同提交口那段：单独的变量，两个
+	// 隔离开关都换不了它们。customerPreAdvice 缺席时两行是字面量未配置即拒。
+	preAdviceSubmissionIntake, preAdviceWithdrawalIntake := customerPreAdviceIntakes(customerPreAdvice)
 
 	// 主链命令面每口一个变量、每条真渠道一个 if，不并进上面任何一个 if——理由同提交口那段。入参是具体类型：它此刻实现了
 	// 哪几口，下面就只换得了哪几行。
@@ -729,5 +734,10 @@ func assembleBusinessEndpoints(
 		// 承运订舱答复口（ADR-0202 决定二、五）：提交方是承运系统，挂集成客户端族的承运订舱答复一类；答复方的来源身份取自客户端
 		// 绑定、须等于订舱所属委托的服务提供方。发行方参数未设时答未配置；写开关换不了它（ADR-0150 决定三）。
 		{Pattern: "/transport-fulfillment/booking-answers", Handler: tfhttp.NewAnswerBookingEndpoint(tfhttp.BookingAnswerIntake(integrationClients.transport), bookingAnswer)},
+		// 送站预报的提交口与撤回口（ADR-0212 决定二；UC-NO-006）：节点作业在客户面开的写口，挂首方客户渠道族，一口一项客户面能力。
+		// 路径随本上下文命令口的 /node-operations/ 前缀；撤回另立子资源，理由同 /shipment-requests/withdrawals：命令形状与恢复动作
+		// 都不同。
+		{Pattern: "/node-operations/delivery-pre-advices", Handler: nodeopshttp.NewSubmitDeliveryPreAdviceEndpoint(preAdviceSubmissionIntake, deliveryPreAdvices)},
+		{Pattern: "/node-operations/delivery-pre-advice-withdrawals", Handler: nodeopshttp.NewWithdrawDeliveryPreAdviceEndpoint(preAdviceWithdrawalIntake, deliveryPreAdvices)},
 	}
 }

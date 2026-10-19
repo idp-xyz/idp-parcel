@@ -111,10 +111,16 @@ type CustomerCapability string
 const (
 	// CustomerCapabilityShipmentRequestSubmission 是委托提交（`/shipment-requests`，UC-PS-001）。
 	CustomerCapabilityShipmentRequestSubmission CustomerCapability = "SHIPMENT_REQUEST_SUBMISSION"
+	// CustomerCapabilityDeliveryPreAdviceSubmission 是送站预报提交（`/node-operations/delivery-pre-advices`，UC-NO-006；ADR-0212 决定二）。
+	CustomerCapabilityDeliveryPreAdviceSubmission CustomerCapability = "DELIVERY_PRE_ADVICE_SUBMISSION"
+	// CustomerCapabilityDeliveryPreAdviceWithdrawal 是送站预报撤回（`/node-operations/delivery-pre-advice-withdrawals`，UC-NO-006）。
+	CustomerCapabilityDeliveryPreAdviceWithdrawal CustomerCapability = "DELIVERY_PRE_ADVICE_WITHDRAWAL"
 )
 
 var customerCapabilities = []CustomerCapability{
 	CustomerCapabilityShipmentRequestSubmission,
+	CustomerCapabilityDeliveryPreAdviceSubmission,
+	CustomerCapabilityDeliveryPreAdviceWithdrawal,
 }
 
 // ParseCustomerCapability 按字面取值认能力，大小写不折叠：册里存的就是这些字面量。

@@ -179,6 +179,8 @@ var businessEndpointProbes = map[string]businessEndpointProbe{
 	"/node-operations-pre-advice-window-registrations":                         {method: http.MethodPost, target: "/node-operations-pre-advice-window-registrations"},
 	"/transport-fulfillment-capacity-reservations":                             {method: http.MethodPost, target: "/transport-fulfillment-capacity-reservations"},
 	"/transport-fulfillment-capacity-releases":                                 {method: http.MethodPost, target: "/transport-fulfillment-capacity-releases"},
+	"/node-operations/delivery-pre-advices":                                    {method: http.MethodPost, target: "/node-operations/delivery-pre-advices"},
+	"/node-operations/delivery-pre-advice-withdrawals":                         {method: http.MethodPost, target: "/node-operations/delivery-pre-advice-withdrawals"},
 }
 
 // Covers: ADR-0055 第一、二、三条 — 端点已装配、未配置自成一格、状态码取 403。
@@ -426,6 +428,8 @@ func assembleUnwiredBusinessEndpointsWithOperatorIntakes(
 		unwiredCapacityDecisions{},
 		unwiredBookingFaces{},
 		unwiredBookingFaces{},
+		nil,
+		unwiredDeliveryPreAdvices{},
 	)
 }
 

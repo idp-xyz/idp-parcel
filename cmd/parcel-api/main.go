@@ -227,6 +227,15 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 送站预报两口的首方 Intake 与编排（ADR-0212 决定二；票 ps-external-mark-relations/09）：铸造器与提交口同一只。
+	customerPreAdvice, err := buildCustomerPreAdviceIntake(customerClientMinter)
+	if err != nil {
+		return err
+	}
+	deliveryPreAdvices, err := buildDeliveryPreAdviceOrchestration(db)
+	if err != nil {
+		return err
+	}
 	manualReview, err := buildManualReviewOrchestration(db)
 	if err != nil {
 		return err
@@ -774,6 +783,8 @@ func run(logger *slog.Logger) error {
 			capacityDecisions,
 			bookingFaces,
 			bookingFaces,
+			customerPreAdvice,
+			deliveryPreAdvices,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,

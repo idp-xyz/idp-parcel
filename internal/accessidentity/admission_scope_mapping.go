@@ -21,9 +21,12 @@ var ErrAdmissionScopeMappingEndDoesNotMatch = errors.New("access identity: mappi
 // 决定二），读到它说明有绕过登记口的直插；不任选一行——选哪一行都可能把这笔写放进它不在的试点范围。
 var ErrConflictingAdmissionScopeMappings = errors.New("access identity: two admission scope mappings are effective for the same key")
 
-// checkAdmissionRequirement 认的是两族认证方今天会提的准入要求：运营决定口取能力面 CapabilityOperationDecision 与
+// checkAdmissionRequirement 认的是各族认证方今天会提的准入要求：运营决定口取能力面 CapabilityOperationDecision 与
 // 决定种类，外部结果与资金事实口取 ExternalFactAdmissionCapability 与外部事实类型（ADR-0180 决定四）。别的能力面
 // 要判准入时，它的词随那一面的票加进来。
+//
+// 首方客户族在铸造侧判准入的口取 CustomerCommandAdmissionCapability 与那一口的客户面能力词；不在铸造侧判的口（委托提交）
+// 的词登不进来。
 func checkAdmissionRequirement(requirement AdmissionRequirement) error {
 	switch requirement.Capability {
 	case CapabilityOperationDecision.String():
@@ -32,6 +35,10 @@ func checkAdmissionRequirement(requirement AdmissionRequirement) error {
 		}
 	case ExternalFactAdmissionCapability:
 		if _, err := ParseExternalFactType(requirement.FactKind); err == nil {
+			return nil
+		}
+	case CustomerCommandAdmissionCapability:
+		if capability, err := ParseCustomerCapability(requirement.FactKind); err == nil && customerCommandAdmission(capability) != nil {
 			return nil
 		}
 	}
