@@ -1,7 +1,7 @@
 # 33 「已拒绝」委托写得进、读不回，主动拒绝留痕不落库：拒绝口与处置「拒绝」去向的重放、提交口原样重放、「已拒绝修正」关联都读不回已拒绝委托
 
 Category: bug
-Status: in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 15 之三、之四补核发现；读侧今天可达，优先；用户授权代决）；分支 `claude-oc33`
+Status: in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 15 之三、之四补核发现；读侧今天可达，优先；用户授权代决）；分支 `claude-oc33`
 Blocked by: 无
 父票：[15](./15-operation-decision-faces-take-operator-intake.md)
 出处：票 26 遗留研判中补核票 15 之三、之四（簇 C6）发现；补记随 operator-channel/39。
@@ -96,3 +96,60 @@ ADR-0030 / ADR-0061 只挡住了读：`已拒绝`因为快照缺主动拒绝的�
 - [ ] 「先补表达、后开门」两笔的顺序在 `git log` 上看得出来。
 - [ ] 在票 15 补记下追加回写，只加行。
 - [ ] 走 Go 那条路（并行会话）：开分支；作者自验（gofmt / vet / build，改动包带 DSN 跑 `go test -p 1 -count=1`）；非作者评审；推送方带 DSN 跑全量。
+
+## 完成记录（2026-10-18，会话 idp-parcel-9b 的实施子代理，分支 claude-oc33）
+
+**落点**（基线 `b58b10ef`，五笔，未推送）：
+
+| 笔 | 做了什么 |
+|---|---|
+| `cd46fd0f` 先补表达 | 快照决定增设 `activeRejection`，`decisionDocumentOf` 写、解码读；依据缺席按拒绝决定放宽（`commercialBasisDocument.absent`），接受决定照旧必带；重建面新增 `RehydrateActiveRejectionSpec` 并随 `RehydrateAcceptanceDecisionSpec` 带进聚合，已接受决定带留痕按坏数据拒绝；受限名单同笔登记；适配器头注改成与事实一致。门不动。 |
+| `9e84d743` ADR | [ADR-0188](../../../docs/adr/0188-rejected-shipment-request-rehydration-by-snapshot-expressiveness.md)：对账表、坏数据判据、文档处理；ADR-0061、ADR-0030 的 Links 加推进指针，adr/README 加一行。 |
+| `5b458dd9` 再开门 | `admitRehydratedState` 放进`已拒绝`；`validForRehydration` 按对账表补`已拒绝`校验（`rejectedDecisionValidForRehydration` / `ruleRejectionHolds` / `activeRejectionHolds`）。 |
+| `c39e960e` 消费方回归 | 三个 `cmd/` 真库用例。 |
+| `627ff0b1` 票 15 回写 | 只加行。 |
+
+**与票面「做什么」的一处偏离**：重建规格里的留痕那一格（`RehydrateActiveRejectionSpec`）随第一笔落，没有等到第二笔。第一笔要「解码负责读」，解码出来的留痕得有处可放。第一笔里门仍关着，`已接受`带留痕即拒，所以这一格不会让任何聚合静默带错。第二笔只做开门和补校验。
+
+**完成判据逐格**：
+
+- [x] 新 ADR 已立并接受，ADR-0061、ADR-0030 的 Links 与 adr/README 已改：见 `9e84d743`。
+- [x] 仓储真库：`TestRejectionsRoundTripWithTheirTrail` 有四格：带依据的规则拒绝、不带依据的规则拒绝、主动拒绝、处置`拒绝`。四格都经真实写路径写下再读回，快照里的留痕、决定与任务都按 `reflect.DeepEqual` 逐格相等。`TestRejectedRowsWithoutOrWithBothExplanationsAreInvalidOnRead` 覆盖补表达前的主动拒绝行、补表达前的处置`拒绝`行，以及两样都有的行，三者读回都得到 `ErrInvalidRehydratedShipmentRequest`。`TestUnsupportedStatesSurfaceOnRead` 已改写：`已接受`/`已拒绝`缺产物算坏数据，只剩`已撤回`得到 `ErrRehydrationStateNotSupported`。真实写下的已拒绝快照由上面的往返用例覆盖。
+- [x] 领域重建门：`TestRehydratingARejectedRequestFromEachPathKeepsItsDecision`，四格都过门；`TestRehydrationRefusesImpossibleRejectedShapes`，二十一种坏形状各一例，逐例核过拒绝理由与用例名对得上；另有 `TestRehydrationRefusesAnAcceptedDecisionCarryingAnActiveRejectionTrail`。
+- [x] 消费方真库回归：
+  - `TestASubmissionReadsBackARuleRejectedRequest`：原样重放答 `EXISTING_RESULT`，`LinkRejectedCorrection` 关联成立。
+  - `TestARejectionDispositionReplayedAnswersTaskAlreadyClosed`：答 `TASK_ALREADY_CLOSED`，交回 `REJECTED` 与留痕，不再释放。
+  - `TestACompletionEnvelopeMeetingAnActivelyRejectedRequestHandsBackTheDecision`：交回既有决定，不记`委托不可用`，不加处理尝试，交出的决定信封只能是那份拒绝。
+- [x] 两笔顺序：`cd46fd0f`（表达）→ `9e84d743`（ADR）→ `5b458dd9`（开门）。
+- [x] 票 15 补记下回写：`627ff0b1`。
+- [ ] Go 那条路：作者自验已做（见下）。**非作者评审**与**推送方带 DSN 跑全量**未做。
+
+**先红后绿**（日志在 `/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/oc33/`）：
+
+- 第一笔：
+  - 适配器用例当时名为 `TestRejectionsKeepTheirTrailAndMeetTheGateOnRead`，第二笔改写成往返用例。红在两处：不带依据的规则拒绝读回报裸错「blank value: commercial resolution ID」；主动拒绝与处置`拒绝`的快照留痕为 nil。
+  - 领域用例红：已接受决定带留痕时 err = nil。
+  - 架构门红：`RehydrateActiveRejectionSpec` 两份名单都没有。
+  - 实现后三处全绿。
+- 第二笔：
+  - 只放门、不补校验时，二十一种坏形状全部过门（`red_domain_gate_open.log`）。
+  - 门关着时，往返四例、旧形状与两样都有三例、`TestUnsupportedStatesSurfaceOnRead` 都红（`red_adapter_gate_closed.log`）。
+  - 消费方三例全红（`red_consumers_gate_closed.log`）：处置重放与提交重放读回得到 `ErrRehydrationStateNotSupported`；续办信封停在可达性那一腿，未决 `REACHABILITY_AUTHORITY_UNAVAILABLE`。注意：续办这条最先读不回的是可达性一腿，不是票面写的形成决定那一步。
+  - 补校验并开门后全绿。
+
+**门**：
+- `gofmt -l internal cmd`：无输出。
+- `go build ./...`、`go vet ./...`：退 0。
+- 测试包集合：改动包、直接引用 `parcelshipment/domain` 或 `parcelshipment/adapters/postgres` 的包，加 `./internal/architecture/...`，共 36 个。带 DSN 跑 `go test -p 1 -count=1`，退 0，35 ok、1 个无测试文件。
+- 机制清点：重跑无差，没有单独提交。
+- 无迁移：快照是 JSON 列。
+
+**证据层级**：S（隔离合成，`SYN-` 值；处置夹具沿用既有用例的值）。
+
+**遗留**：
+- 地盘外过期注释一处，未改：`internal/parcelshipment/adapters/postgres/authorized_disposition_test.go` 的 `TestARejectionDispositionIsSavedWithItsWaitStateCleared` 头注写着「读回那一半今天由重建门挡在门外」，现在不成立。
+- 「适用范围」交 PS owner。
+- `已撤回`另立票。
+- 两口撞上已有决定时的答复格和耗标识，归 36。
+
+评审：待会话读 diff 审
