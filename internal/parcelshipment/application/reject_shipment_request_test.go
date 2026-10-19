@@ -113,26 +113,99 @@ func TestAnActiveRejectionReleasesEveryOccupationRegardlessOfTheConclusion(t *te
 	})
 }
 
-// Covers: CONTEXT「接受或拒绝提交后，另一方只能读取既有结果，不能追加相反决定」— 撞上一个
-// 已成立的接受时交回那一个，不报错也不覆盖。
-func TestAnActiveRejectionAgainstADecidedVersionReadsTheExistingDecision(t *testing.T) {
+// Covers: CONTEXT「接受或拒绝提交后，另一方只能读取既有结果，不能追加相反决定」、ADR-0132 决定二「撞上已成立的决定答
+// `任务已完结`并交回那一个」与 ADR-0183 复核记录二「认在签发标识之前，
+// 重放不消耗标识」——先到的可能是另一次拒绝，也可能是自动接受；后到者读回那一个决定，本命令什么也不写：不签标识、
+// 不保存、不发释放、不记处理尝试。答`已形成`会让换了人、换了原因的后到者把没被采纳的拒绝读成成功。
+func TestAnActiveRejectionAgainstADecidedVersionAnswersTaskAlreadyClosed(t *testing.T) {
+	cases := []struct {
+		name     string
+		arrange  func(*rejectableRequestStore)
+		accepted bool
+	}{
+		{name: "earlier rejection", arrange: func(store *rejectableRequestStore) { store.decided = true }},
+		{name: "earlier acceptance", arrange: func(store *rejectableRequestStore) { store.acceptedFirst = true }, accepted: true},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := newRejectionFixture(t)
+			tc.arrange(fixture.requests)
+
+			result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+			if err != nil {
+				t.Fatalf("handle: %v", err)
+			}
+
+			if result.Outcome() != application.ActiveRejectionTaskAlreadyClosed {
+				t.Fatalf("outcome = %q, want TASK_ALREADY_CLOSED", result.Outcome())
+			}
+			decision, present := result.AcceptanceDecision()
+			if !present || decision.Accepted() != tc.accepted {
+				t.Fatalf("decision = %#v (present=%v); the later attempt must read the earlier decision", decision, present)
+			}
+			if !tc.accepted {
+				earlier, active := decision.ActiveRejection()
+				if !active || earlier.Decider().String() != "OPERATOR-0" || earlier.Reason().String() != "EARLIER_DECISION" {
+					t.Fatalf("rejection trail = %+v (active=%v); want the earlier decider and reason", earlier, active)
+				}
+			}
+			fixture.assertNothingWritten(t)
+		})
+	}
+}
+
+// Covers: 票 operator-channel/36「编排层签发次数不随重放增长」——首次拒绝形成并落库之后，原样重放与换人换原因的
+// 后到者都读回首份决定，签发次数停在首次那一个。
+func TestReplayedActiveRejectionsIssueNoFurtherDecisionIdentity(t *testing.T) {
 	fixture := newRejectionFixture(t)
-	fixture.requests.decided = true
-
-	result, err := fixture.handler.Handle(context.Background(), fixture.command(t))
-	if err != nil {
-		t.Fatalf("handle: %v", err)
+	first, err := fixture.handler.Handle(context.Background(), fixture.command(t))
+	if err != nil || first.Outcome() != application.ActiveRejectionFormed {
+		t.Fatalf("first = %q, err = %v; want FORMED", first.Outcome(), err)
 	}
+	fixture.requests.stored = fixture.requests.saved
 
-	decision, present := result.AcceptanceDecision()
-	if !present || decision.DecisionID().String() != "decision-0" {
-		t.Fatalf("decision = %#v; the later attempt must read the earlier decision, not form its own", decision)
+	other := fixture.command(t)
+	other.Decider = mustValue(t, domain.NewDeciderReference, "OPERATOR-2")
+	other.Reason = mustValue(t, domain.NewRejectionReasonReference, "ANOTHER_REASON")
+	for name, command := range map[string]application.RejectShipmentRequestCommand{
+		"verbatim replay":            fixture.command(t),
+		"another decider and reason": other,
+	} {
+		result, err := fixture.handler.Handle(context.Background(), command)
+		if err != nil {
+			t.Fatalf("%s: handle: %v", name, err)
+		}
+		if result.Outcome() != application.ActiveRejectionTaskAlreadyClosed {
+			t.Fatalf("%s: outcome = %q, want TASK_ALREADY_CLOSED", name, result.Outcome())
+		}
+		decision, _ := result.AcceptanceDecision()
+		if earlier, _ := decision.ActiveRejection(); earlier.Decider().String() != "OPERATOR-1" ||
+			earlier.Reason().String() != "OPERATOR_DECLINED_SERVICE" {
+			t.Fatalf("%s: trail = %+v; want the first decider and reason", name, earlier)
+		}
 	}
-	if fixture.requests.saved != nil {
+	if fixture.identities.issued != 1 {
+		t.Fatalf("issued %d decision IDs, want 1——重放消耗了稀缺身份", fixture.identities.issued)
+	}
+	if fixture.release.calls != 1 {
+		t.Fatalf("release calls = %d, want 1——重放又释放了一次", fixture.release.calls)
+	}
+}
+
+// assertNothingWritten 钉「读回既有决定的那一格什么也不写」：不签标识、不保存、不发释放、不记处理尝试。
+func (value *rejectionFixture) assertNothingWritten(t *testing.T) {
+	t.Helper()
+	if value.identities.issued != 0 {
+		t.Fatalf("issued %d decision IDs; 读回既有决定消耗了稀缺身份", value.identities.issued)
+	}
+	if value.requests.saved != nil {
 		t.Fatal("a late rejection saved over an already decided version")
 	}
-	if fixture.release.calls != 0 {
+	if value.release.calls != 0 {
 		t.Fatal("a late rejection ran the compensation of a decision it did not form")
+	}
+	if len(value.recorder.recordedAttempts) != 0 {
+		t.Fatalf("recorded %d processing attempts; 已决委托上没有可续办的东西", len(value.recorder.recordedAttempts))
 	}
 }
 
@@ -251,6 +324,7 @@ type rejectionFixture struct {
 	judgments  *recordedJudgmentsDouble
 	release    *controlReleaseDouble
 	identities *countingIdentityFactory
+	recorder   *judgmentRequestStore
 }
 
 func newRejectionFixture(t *testing.T) *rejectionFixture {
@@ -261,12 +335,13 @@ func newRejectionFixture(t *testing.T) *rejectionFixture {
 		judgments:  &recordedJudgmentsDouble{t: t, controlOutcome: domain.FinancialControlHeld},
 		release:    &controlReleaseDouble{},
 		identities: &countingIdentityFactory{t: t},
+		recorder:   &judgmentRequestStore{},
 	}
 	value.handler = application.NewRejectShipmentRequestHandler(application.RejectShipmentRequestDeps{
 		Requests:   value.requests,
 		Authorizer: value.authorizer,
 		Judgments:  value.judgments,
-		Recorder:   &judgmentRequestStore{},
+		Recorder:   value.recorder,
 		Release:    value.release,
 		Identities: value.identities,
 		Clock:      fixedClock{at: handlerClockAt},
@@ -358,6 +433,8 @@ type rejectableRequestStore struct {
 	missing       bool
 	err           error
 	saved         *domain.ShipmentRequest
+	// stored 在场时就是库里此刻那一份：重放用例把首次保存的结果放回这里，后到的请求读到的才是真成立的那条决定。
+	stored *domain.ShipmentRequest
 }
 
 func (store *rejectableRequestStore) FindBySourceIdentity(
@@ -370,6 +447,9 @@ func (store *rejectableRequestStore) FindBySourceIdentity(
 	}
 	if store.missing {
 		return domain.ShipmentRequest{}, false, nil
+	}
+	if store.stored != nil {
+		return *store.stored, true, nil
 	}
 	if store.acceptedFirst {
 		// 接受同样要真经领域 Decide 形成——AT-PS-071 撞的是一次合法成立的接受，

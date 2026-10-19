@@ -96,11 +96,8 @@ type ActiveRejectionSpec struct {
 //
 // 拒绝不形成接受基线与预计承诺：没有承诺可作，凭空造一个会让下游按一份不存在的承诺办事。
 func (request ShipmentRequest) RejectByAuthority(spec ActiveRejectionSpec) (ShipmentRequest, error) {
-	if request.decisionFormed {
-		return ShipmentRequest{}, ErrDecisionAlreadyFormed
-	}
-	if request.state != ShipmentRequestSubmitted {
-		return ShipmentRequest{}, ErrInvalidShipmentRequest
+	if err := request.ActiveRejectionAdmissible(); err != nil {
+		return ShipmentRequest{}, err
 	}
 	if !spec.DecisionID.valid() || spec.DecidedAt.IsZero() {
 		return ShipmentRequest{}, ErrInvalidAcceptanceDecision
@@ -116,6 +113,20 @@ func (request ShipmentRequest) RejectByAuthority(spec ActiveRejectionSpec) (Ship
 		return ShipmentRequest{}, ErrInvalidActiveRejection
 	}
 	return request.formActiveRejection(spec.DecisionID, rejection, spec.Basis, spec.DecidedAt), nil
+}
+
+// ActiveRejectionAdmissible 只读地答「此刻还能不能对这份委托形成主动拒绝」，答案就是 RejectByAuthority 的状态前置
+// ——转移自己先过这一道，两处说不出两套话。编排在签发决定标识之前问它：撞上已成立的决定还去领标识，一次重放就
+// 白耗一个本上下文签发的稀缺身份（ADR-0183 复核记录二「认在签发标识之前」）。它只是提前问一次，不替代转移里那一道：
+// 读与写之间另一方仍可能抢先，裁决竞争的是保存时的版本闸门。
+func (request ShipmentRequest) ActiveRejectionAdmissible() error {
+	if request.decisionFormed {
+		return ErrDecisionAlreadyFormed
+	}
+	if request.state != ShipmentRequestSubmitted {
+		return ErrInvalidShipmentRequest
+	}
+	return nil
 }
 
 // formActiveRejection 是「授权角色决定不承担」越过决定边界的那一步，主动拒绝与授权处置的`拒绝`

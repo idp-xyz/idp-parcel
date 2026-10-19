@@ -19,6 +19,7 @@ const (
 	ActiveRejectionFormed
 	ActiveRejectionNotAuthorized
 	ActiveRejectionUndecided
+	ActiveRejectionTaskAlreadyClosed
 )
 
 func (outcome ActiveRejectionOutcome) String() string {
@@ -29,6 +30,8 @@ func (outcome ActiveRejectionOutcome) String() string {
 		return "NOT_AUTHORIZED"
 	case ActiveRejectionUndecided:
 		return "UNDECIDED"
+	case ActiveRejectionTaskAlreadyClosed:
+		return "TASK_ALREADY_CLOSED"
 	default:
 		return ""
 	}
@@ -146,6 +149,10 @@ func (handler *RejectShipmentRequestHandler) Handle(
 		return RejectShipmentRequestResult{}, ErrUnexpectedAuthorizationOutcome
 	}
 
+	if err := request.ActiveRejectionAdmissible(); err != nil {
+		return handler.inadmissible(request, err)
+	}
+
 	decisionID, err := handler.deps.Identities.NextAcceptanceDecisionID(ctx)
 	if err != nil {
 		return handler.undecided(ctx, command, DecisionIdentityUnavailable, request.State()), nil
@@ -160,16 +167,8 @@ func (handler *RejectShipmentRequestHandler) Handle(
 		DecidedAt:  handler.deps.Clock.Now(),
 	})
 	if err != nil {
-		if errors.Is(err, domain.ErrDecisionAlreadyFormed) {
-			decision, formed := request.AcceptanceDecision()
-			return RejectShipmentRequestResult{
-				outcome:     ActiveRejectionFormed,
-				state:       request.State(),
-				decision:    decision,
-				hasDecision: formed,
-			}, nil
-		}
-		return RejectShipmentRequestResult{}, fmt.Errorf("reject by authority: %w", err)
+		// 前置刚问过，这里再撞上只会是防御：同一份读回的委托不会在两次询问之间变样，但转移的答复仍按同一张表译。
+		return handler.inadmissible(request, err)
 	}
 
 	saved, err := handler.deps.Requests.Save(ctx, command.Identity, rejected)
@@ -195,6 +194,26 @@ func (handler *RejectShipmentRequestHandler) Handle(
 		decision:     decision,
 		hasDecision:  true,
 		compensation: handler.releaseOccupation(ctx, command),
+	}, nil
+}
+
+// inadmissible 把「此刻不能形成主动拒绝」的领域答复译成本命令的结果。已越过决定边界答`任务已完结`并交回那一个
+// 决定，与复核完成、授权处置两口同名同义（ADR-0132 决定二）；不答`已形成`——那一格只留给本命令确实形成了拒绝
+// 的那一次，否则换了人、换了原因的后到者会把没被采纳的拒绝读成成功。也不分出「同内容重放」与「输给了别人」：
+// 一槽一个决定，异内容不可能是新决定，调用方凭交回的决定方与原因自己比。
+func (handler *RejectShipmentRequestHandler) inadmissible(
+	request domain.ShipmentRequest,
+	err error,
+) (RejectShipmentRequestResult, error) {
+	if !errors.Is(err, domain.ErrDecisionAlreadyFormed) {
+		return RejectShipmentRequestResult{}, fmt.Errorf("reject by authority: %w", err)
+	}
+	decision, formed := request.AcceptanceDecision()
+	return RejectShipmentRequestResult{
+		outcome:     ActiveRejectionTaskAlreadyClosed,
+		state:       request.State(),
+		decision:    decision,
+		hasDecision: formed,
 	}, nil
 }
 
