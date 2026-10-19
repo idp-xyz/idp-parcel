@@ -565,6 +565,265 @@ func TestRehydrationRefusesAnAcceptedDecisionCarryingAnActiveRejectionTrail(t *t
 	}
 }
 
+// ruleRejectedSnapshot 是`Decide`有失败项形成的已拒绝快照（ADR-0188 对账表第一列）。依据缺席即
+// `没有适用合同`那一格，复核状态随之是未设；带依据时是规则包声明与任务完成事实的合成。
+func ruleRejectedSnapshot(t *testing.T, basis domain.CommercialBasisSnapshot, review domain.ManualReviewState) domain.RehydrateShipmentRequestSpec {
+	t.Helper()
+	snapshot := submittedSnapshot(t)
+	snapshot.State = domain.ShipmentRequestRejected
+	snapshot.AcceptanceTask.State = domain.AcceptanceTaskComplete
+	snapshot.DecisionFormed = true
+	snapshot.Decision = domain.RehydrateAcceptanceDecisionSpec{
+		DecisionID: mustValue(t, domain.NewAcceptanceDecisionID, "SYN-DECISION-RULE-1"),
+		Checks: []domain.AcceptanceCheck{
+			versionCheck(t, domain.CustomerRelationshipCheck, domain.CheckFailed, "NO_APPLICABLE_BASIS"),
+			versionCheck(t, domain.ProductAndServiceCheck, domain.CheckPassed, ""),
+		},
+		Basis:        basis,
+		ManualReview: review,
+		DecidedAt:    decidedAt,
+	}
+	return snapshot
+}
+
+// activelyRejectedSnapshot 是`RejectByAuthority`形成的已拒绝快照（对账表第二列）：没有校验明细、
+// 没有复核状态，依据可缺席。
+func activelyRejectedSnapshot(t *testing.T) domain.RehydrateShipmentRequestSpec {
+	t.Helper()
+	snapshot := submittedSnapshot(t)
+	snapshot.State = domain.ShipmentRequestRejected
+	snapshot.AcceptanceTask.State = domain.AcceptanceTaskComplete
+	snapshot.DecisionFormed = true
+	snapshot.Decision = domain.RehydrateAcceptanceDecisionSpec{
+		DecisionID:      mustValue(t, domain.NewAcceptanceDecisionID, "SYN-DECISION-ACTIVE-1"),
+		DecidedAt:       decidedAt,
+		ActiveRejection: activeRejectionTrail(t),
+	}
+	return snapshot
+}
+
+// dispositionRejectedSnapshot 是授权处置`拒绝`形成的已拒绝快照（对账表第三列）：留痕是处置记录的
+// 逐格翻译，决定时刻即处置时点，依据缺席。
+func dispositionRejectedSnapshot(t *testing.T) domain.RehydrateShipmentRequestSpec {
+	t.Helper()
+	disposition := authorizedDisposition(t, domain.DisposeByRejection)
+	snapshot := submittedSnapshot(t)
+	snapshot.State = domain.ShipmentRequestRejected
+	snapshot.AcceptanceTask.State = domain.AcceptanceTaskComplete
+	snapshot.AcceptanceTask.AuthorizedDisposition = disposition
+	snapshot.DecisionFormed = true
+	snapshot.Decision = domain.RehydrateAcceptanceDecisionSpec{
+		DecisionID: mustValue(t, domain.NewAcceptanceDecisionID, "SYN-DECISION-DISPOSE-1"),
+		DecidedAt:  disposition.DisposedAt(),
+		ActiveRejection: domain.RehydrateActiveRejectionSpec{
+			Authority: mustValue(t, domain.NewRejectionAuthorityReference, disposition.Authority().String()),
+			Decider:   mustValue(t, domain.NewDeciderReference, disposition.Disposer().String()),
+			Reason:    mustValue(t, domain.NewRejectionReasonReference, disposition.Reason().String()),
+			Evidence:  mustValue(t, domain.NewRejectionEvidenceReference, disposition.Evidence().String()),
+		},
+	}
+	return snapshot
+}
+
+// Covers: ADR-0188 决定一、二——`已拒绝`三条来路（规则拒绝分带依据与不带依据两格）各一份完好快照都过得了门，
+// 决定与留痕原样带进聚合，不重算。
+func TestRehydratingARejectedRequestFromEachPathKeepsItsDecision(t *testing.T) {
+	cases := map[string]domain.RehydrateShipmentRequestSpec{
+		"规则拒绝带依据":  ruleRejectedSnapshot(t, acceptanceBasis(t), domain.ManualReviewNotRequired),
+		"规则拒绝不带依据": ruleRejectedSnapshot(t, domain.CommercialBasisSnapshot{}, domain.ManualReviewStateInvalid),
+		"主动拒绝":     activelyRejectedSnapshot(t),
+		"处置拒绝":     dispositionRejectedSnapshot(t),
+	}
+	for name, snapshot := range cases {
+		t.Run(name, func(t *testing.T) {
+			request, err := domain.RehydrateShipmentRequest(snapshot)
+			if err != nil {
+				t.Fatalf("rehydrate: %v", err)
+			}
+			if request.State() != domain.ShipmentRequestRejected {
+				t.Fatalf("state = %q, want REJECTED", request.State())
+			}
+			decision, present := request.AcceptanceDecision()
+			if !present || decision.Accepted() || decision.DecisionID() != snapshot.Decision.DecisionID {
+				t.Fatalf("decision = %#v present = %v", decision, present)
+			}
+			if !decision.DecidedAt().Equal(snapshot.Decision.DecidedAt) || len(decision.Checks()) != len(snapshot.Decision.Checks) {
+				t.Fatalf("决定时刻或校验明细往返变形：%#v", decision)
+			}
+			if decision.Basis().ResolutionID() != snapshot.Decision.Basis.ResolutionID() {
+				t.Fatalf("依据往返变形：%v", decision.Basis().ResolutionID())
+			}
+			trail, active := decision.ActiveRejection()
+			want := snapshot.Decision.ActiveRejection
+			if active != (want != domain.RehydrateActiveRejectionSpec{}) {
+				t.Fatalf("active = %v；主动拒绝与规则拒绝在重建后分不开了", active)
+			}
+			if active && (trail.Authority() != want.Authority || trail.Decider() != want.Decider ||
+				trail.Reason() != want.Reason || trail.Evidence() != want.Evidence) {
+				t.Fatalf("留痕 = %+v, want %+v", trail, want)
+			}
+			if _, waiting := request.AcceptanceDecisionTask().WaitingOn(); waiting || !request.AcceptanceDecisionTask().IsComplete() {
+				t.Fatal("已拒绝委托的任务没收工或仍在等待")
+			}
+			if _, err := request.RejectByAuthority(domain.ActiveRejectionSpec{}); !errors.Is(err, domain.ErrDecisionAlreadyFormed) {
+				t.Fatalf("重建后的已拒绝委托再拒一次：err = %v, want ErrDecisionAlreadyFormed", err)
+			}
+		})
+	}
+}
+
+// Covers: ADR-0188 决定三——`已拒绝`的坏数据判据逐格各一例，全部走 ErrInvalidRehydratedShipmentRequest，
+// 不折成「本期不支持」。
+func TestRehydrationRefusesImpossibleRejectedShapes(t *testing.T) {
+	failed := versionCheck(t, domain.CustomerRelationshipCheck, domain.CheckFailed, "NO_APPLICABLE_BASIS")
+	passed := versionCheck(t, domain.ProductAndServiceCheck, domain.CheckPassed, "")
+	cases := map[string]func() domain.RehydrateShipmentRequestSpec{
+		"失败项与留痕两样都没有": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := ruleRejectedSnapshot(t, domain.CommercialBasisSnapshot{}, domain.ManualReviewStateInvalid)
+			snapshot.Decision.Checks = []domain.AcceptanceCheck{passed}
+			return snapshot
+		},
+		"补表达前的主动拒绝行（留痕缺席）": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := activelyRejectedSnapshot(t)
+			snapshot.Decision.ActiveRejection = domain.RehydrateActiveRejectionSpec{}
+			return snapshot
+		},
+		"补表达前的处置拒绝行（留痕缺席）": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := dispositionRejectedSnapshot(t)
+			snapshot.Decision.ActiveRejection = domain.RehydrateActiveRejectionSpec{}
+			return snapshot
+		},
+		"失败项与留痕两样都有": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := ruleRejectedSnapshot(t, domain.CommercialBasisSnapshot{}, domain.ManualReviewStateInvalid)
+			snapshot.Decision.ActiveRejection = activeRejectionTrail(t)
+			return snapshot
+		},
+		"主动拒绝带校验明细": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := activelyRejectedSnapshot(t)
+			snapshot.Decision.Checks = []domain.AcceptanceCheck{passed}
+			return snapshot
+		},
+		"主动拒绝带复核状态": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := activelyRejectedSnapshot(t)
+			snapshot.Decision.ManualReview = domain.ManualReviewNotRequired
+			return snapshot
+		},
+		"半截留痕": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := activelyRejectedSnapshot(t)
+			snapshot.Decision.ActiveRejection.Evidence = domain.RejectionEvidenceReference{}
+			return snapshot
+		},
+		"规则拒绝的复核状态对不上": func() domain.RehydrateShipmentRequestSpec {
+			return ruleRejectedSnapshot(t, acceptanceBasis(t), domain.ManualReviewCompleted)
+		},
+		"带接受基线": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := activelyRejectedSnapshot(t)
+			snapshot.Baseline = acceptedSnapshot(t).Baseline
+			return snapshot
+		},
+		"带预计承诺": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := ruleRejectedSnapshot(t, acceptanceBasis(t), domain.ManualReviewNotRequired)
+			snapshot.Commitment = acceptedSnapshot(t).Commitment
+			return snapshot
+		},
+		"带客户资料版本": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := activelyRejectedSnapshot(t)
+			snapshot.SourceDataVersions = []domain.CustomerSourceDataVersion{rejectedSourceDataVersion(t)}
+			return snapshot
+		},
+		"没越过决定边界": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := activelyRejectedSnapshot(t)
+			snapshot.DecisionFormed = false
+			return snapshot
+		},
+		"没有决定": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := activelyRejectedSnapshot(t)
+			snapshot.Decision = domain.RehydrateAcceptanceDecisionSpec{}
+			return snapshot
+		},
+		"决定是接受": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := ruleRejectedSnapshot(t, acceptanceBasis(t), domain.ManualReviewNotRequired)
+			snapshot.Decision.Accepted = true
+			return snapshot
+		},
+		"没有决定时刻": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := activelyRejectedSnapshot(t)
+			snapshot.Decision.DecidedAt = time.Time{}
+			return snapshot
+		},
+		"任务仍在运行": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := activelyRejectedSnapshot(t)
+			snapshot.AcceptanceTask.State = domain.AcceptanceTaskRunning
+			return snapshot
+		},
+		"任务仍在等待": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := activelyRejectedSnapshot(t)
+			snapshot.AcceptanceTask.WaitingOn = domain.ResumeByInternalRetry
+			return snapshot
+		},
+		"处置为拒绝而决定是规则拒绝": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := ruleRejectedSnapshot(t, domain.CommercialBasisSnapshot{}, domain.ManualReviewStateInvalid)
+			snapshot.Decision.Checks = []domain.AcceptanceCheck{failed}
+			snapshot.AcceptanceTask.AuthorizedDisposition = authorizedDisposition(t, domain.DisposeByRejection)
+			return snapshot
+		},
+		"处置为拒绝而留痕与处置记录对不上": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := dispositionRejectedSnapshot(t)
+			snapshot.Decision.ActiveRejection.Decider = mustValue(t, domain.NewDeciderReference, "SYN-SOMEONE-ELSE")
+			return snapshot
+		},
+		"处置为拒绝而决定时刻不是处置时点": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := dispositionRejectedSnapshot(t)
+			snapshot.Decision.DecidedAt = snapshot.Decision.DecidedAt.Add(time.Minute)
+			return snapshot
+		},
+		"处置为拒绝而决定带依据": func() domain.RehydrateShipmentRequestSpec {
+			snapshot := dispositionRejectedSnapshot(t)
+			snapshot.Decision.Basis = acceptanceBasis(t)
+			return snapshot
+		},
+	}
+	for name, build := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := domain.RehydrateShipmentRequest(build())
+			if !errors.Is(err, domain.ErrInvalidRehydratedShipmentRequest) {
+				t.Fatalf("error = %v, want ErrInvalidRehydratedShipmentRequest", err)
+			}
+			if errors.Is(err, domain.ErrRehydrationStateNotSupported) {
+				t.Fatalf("error = %v；门已开到`已拒绝`，坏数据不得折成未开门", err)
+			}
+		})
+	}
+}
+
+// rejectedSourceDataVersion 是一份本身完好的客户资料版本，只用来证`已拒绝`快照不得带它。
+func rejectedSourceDataVersion(t *testing.T) domain.CustomerSourceDataVersion {
+	t.Helper()
+	scope, err := domain.NewShipmentScopedSourceData(
+		mustValue(t, domain.NewShipmentRequestID, "request-1"),
+		mustValue(t, domain.NewSourceDataGroupReference, "SHIPPER_NAME"),
+	)
+	if err != nil {
+		t.Fatalf("source data scope: %v", err)
+	}
+	version, err := domain.FormCustomerSourceDataVersion(domain.CustomerSourceDataVersionSpec{
+		VersionID: mustValue(t, domain.NewSourceDataVersionID, "SYN-SRC-VER-1"),
+		Scope:     scope,
+		Basis:     domain.NewSupplementOnAcceptanceBaseline(),
+		Intent:    domain.SupplementIntent,
+		Request:   sourceFingerprint(t, "tenant-1", "customer-1", "SOURCE-1", "key-1", "sha256:amend"),
+		Reason:    mustValue(t, domain.NewAmendmentReasonReference, "SYN-MISSING-SHIPPER"),
+		Requester: mustValue(t, domain.NewRequesterReference, "SYN-CUSTOMER-1"),
+		Decider:   mustValue(t, domain.NewDeciderReference, "SYN-OPERATOR-1"),
+		Authority: mustValue(t, domain.NewAmendmentAuthoritySnapshot, "SYN-AUTH-SNAP-1"),
+		FormedAt:  decidedAt.Add(time.Hour),
+	})
+	if err != nil {
+		t.Fatalf("form source data version: %v", err)
+	}
+	return version
+}
+
 // activeRejectionTrail 是一份四格齐全的主动拒绝留痕快照（合成 SYN- 值）。
 func activeRejectionTrail(t *testing.T) domain.RehydrateActiveRejectionSpec {
 	t.Helper()
@@ -578,10 +837,9 @@ func activeRejectionTrail(t *testing.T) domain.RehydrateActiveRejectionSpec {
 
 // Covers: ADR-0030「没开的状态由入口显式拒绝，且用一个与『这行数据不可能』不同的哨兵」。
 //
-// `已拒绝`/`已撤回`仍少撤回或主动拒绝的完整表达。两个哨兵必须互相分得开。
+// `已撤回`仍少撤回的完整表达（ADR-0188 决定一）。两个哨兵必须互相分得开。
 func TestRehydrationRefusesAStateThisDoorDoesNotYetCover(t *testing.T) {
 	unsupported := map[string]domain.ShipmentRequestState{
-		"已拒绝": domain.ShipmentRequestRejected,
 		"已撤回": domain.ShipmentRequestWithdrawn,
 	}
 

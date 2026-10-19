@@ -3,6 +3,7 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -19,7 +20,7 @@ import (
 
 // 本文件对真实 PostgreSQL 16 证委托聚合仓储的行为：全聚合快照往返不丢字段、作用域
 // 隔离由 SQL 条件承担、重复建单由主键拦住、并发保存由乐观版本拦住、重建门开到
-// `已提交`与`已接受`（ADR-0061）由读回侧如实透出。
+// `已提交`、`已接受`与`已拒绝`（ADR-0061、ADR-0188）由读回侧如实透出。
 
 func TestASubmittedRequestRoundTripsWholly(t *testing.T) {
 	repository, transactor, _ := newShipmentRequests(t)
@@ -271,29 +272,20 @@ func TestRequestWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	}
 }
 
-// TestUnsupportedStatesSurfaceOnRead 证重建门开到`已接受`之后，门外状态与坏快照分格
-// （ADR-0061）：只把状态列推到`已接受`、快照仍是已提交形状，读回是坏数据而不是「本期
-// 不支持」——门已经开了，缺产物就是这一行立不起来。`已拒绝`/`已撤回`仍走不支持哨兵。
+// TestUnsupportedStatesSurfaceOnRead 证门外状态与坏快照分格（ADR-0061、ADR-0188）：只把状态列推到
+// `已接受`或`已拒绝`、快照仍是已提交形状，读回是坏数据而不是「本期不支持」——门已经开了，缺产物就是
+// 这一行立不起来。`已撤回`仍走不支持哨兵。
 func TestUnsupportedStatesSurfaceOnRead(t *testing.T) {
 	repository, transactor, pool := newShipmentRequests(t)
 	ctx := t.Context()
 
-	mustInsert(t, transactor, ctx, repository, submittedShipmentRequest(t, "req-key-accepted", "request-accepted"))
-	if _, err := pool.Exec(ctx,
-		`UPDATE parcel_shipment.shipment_request SET state = $1 WHERE source_request_key = $2`,
-		uint8(domain.ShipmentRequestAccepted), "req-key-accepted"); err != nil {
-		t.Fatalf("推进状态列到已接受：%v", err)
+	// 状态列推进到已开门的状态、文档仍是已提交形状：门开着，缺产物就是这一行立不起来（ADR-0061、ADR-0188）。
+	// `已拒绝`不再算门外——一份没有决定的已拒绝快照是坏数据，不是「等门开」。
+	opened := map[string]domain.ShipmentRequestState{
+		"req-key-accepted": domain.ShipmentRequestAccepted,
+		"req-key-rejected": domain.ShipmentRequestRejected,
 	}
-	_, _, err := repository.FindBySourceIdentity(ctx, requestIdentity(t, "req-key-accepted"))
-	if !errors.Is(err, domain.ErrInvalidRehydratedShipmentRequest) {
-		t.Fatalf("已接受缺产物：err = %v, want ErrInvalidRehydratedShipmentRequest", err)
-	}
-
-	unsupported := map[string]domain.ShipmentRequestState{
-		"req-key-rejected":  domain.ShipmentRequestRejected,
-		"req-key-withdrawn": domain.ShipmentRequestWithdrawn,
-	}
-	for key, state := range unsupported {
+	for key, state := range opened {
 		mustInsert(t, transactor, ctx, repository, submittedShipmentRequest(t, key, "request-"+key))
 		if _, err := pool.Exec(ctx,
 			`UPDATE parcel_shipment.shipment_request SET state = $1 WHERE source_request_key = $2`,
@@ -301,15 +293,27 @@ func TestUnsupportedStatesSurfaceOnRead(t *testing.T) {
 			t.Fatalf("推进状态列到 %s：%v", state, err)
 		}
 		_, _, err := repository.FindBySourceIdentity(ctx, requestIdentity(t, key))
-		if !errors.Is(err, domain.ErrRehydrationStateNotSupported) {
-			t.Fatalf("%s：err = %v, want ErrRehydrationStateNotSupported", state, err)
+		if !errors.Is(err, domain.ErrInvalidRehydratedShipmentRequest) {
+			t.Fatalf("%s 缺产物：err = %v, want ErrInvalidRehydratedShipmentRequest", state, err)
 		}
+	}
+
+	mustInsert(t, transactor, ctx, repository, submittedShipmentRequest(t, "req-key-withdrawn", "request-withdrawn"))
+	if _, err := pool.Exec(ctx,
+		`UPDATE parcel_shipment.shipment_request SET state = $1 WHERE source_request_key = $2`,
+		uint8(domain.ShipmentRequestWithdrawn), "req-key-withdrawn"); err != nil {
+		t.Fatalf("推进状态列到已撤回：%v", err)
+	}
+	_, _, err := repository.FindBySourceIdentity(ctx, requestIdentity(t, "req-key-withdrawn"))
+	if !errors.Is(err, domain.ErrRehydrationStateNotSupported) {
+		t.Fatalf("已撤回：err = %v, want ErrRehydrationStateNotSupported", err)
 	}
 }
 
-// Covers: `已拒绝`三条来路经真实写路径落库后，快照的决定上留着主动拒绝留痕（主动拒绝与处置`拒绝`），
-// 不带商业依据的拒绝在读回时走得到重建门，而不是在依据解码处报一句两个哨兵都不中的裸错（ADR-0029）。
-func TestRejectionsKeepTheirTrailAndMeetTheGateOnRead(t *testing.T) {
+// Covers: ADR-0188——`已拒绝`三条来路（规则拒绝分带依据与不带依据两格）都经真实写路径落库再读回，决定与
+// 主动拒绝留痕逐格相等；处置`拒绝`的处置记录随任务一起回来。写侧丢留痕或读侧在依据解码处报裸错，
+// 凡按来源身份读委托的编排（提交重放、`AT-PS-036` 关联、两口重放、续办信封）都会读不回已拒绝委托。
+func TestRejectionsRoundTripWithTheirTrail(t *testing.T) {
 	repository, transactor, pool := newShipmentRequests(t)
 	ctx := t.Context()
 
@@ -333,8 +337,8 @@ func TestRejectionsKeepTheirTrailAndMeetTheGateOnRead(t *testing.T) {
 			).Scan(&authority, &decider, &reason, &evidence); err != nil {
 				t.Fatalf("读快照留痕：%v", err)
 			}
-			decision, _ := rejected.AcceptanceDecision()
-			if trail, active := decision.ActiveRejection(); active {
+			want, _ := rejected.AcceptanceDecision()
+			if trail, active := want.ActiveRejection(); active {
 				if authority == nil || *authority != trail.Authority().String() ||
 					decider == nil || *decider != trail.Decider().String() ||
 					reason == nil || *reason != trail.Reason().String() ||
@@ -345,12 +349,67 @@ func TestRejectionsKeepTheirTrailAndMeetTheGateOnRead(t *testing.T) {
 				t.Fatal("规则拒绝的快照凭空长出了主动拒绝留痕")
 			}
 
-			_, _, err = repository.FindBySourceIdentity(ctx, requestIdentity(t, key))
-			if !errors.Is(err, domain.ErrRehydrationStateNotSupported) {
-				t.Fatalf("读回 err = %v, want ErrRehydrationStateNotSupported——一行完好的已拒绝快照该停在门外", err)
+			found := mustFind(t, repository, ctx, key)
+			if found.State() != domain.ShipmentRequestRejected || found.Revision() != rejected.Revision()+1 {
+				t.Fatalf("state = %q revision = %d", found.State(), found.Revision())
 			}
-			if errors.Is(err, domain.ErrInvalidRehydratedShipmentRequest) {
-				t.Fatalf("读回 err = %v；完好的数据报成了坏数据", err)
+			got, present := found.AcceptanceDecision()
+			if !present || !reflect.DeepEqual(got, want) {
+				t.Fatalf("决定往返不等：\n got = %#v\nwant = %#v", got, want)
+			}
+			if !reflect.DeepEqual(found.AcceptanceDecisionTask(), rejected.AcceptanceDecisionTask()) {
+				t.Fatalf("判断任务往返不等：\n got = %#v\nwant = %#v", found.AcceptanceDecisionTask(), rejected.AcceptanceDecisionTask())
+			}
+			if _, present := found.AcceptanceBaseline(); present {
+				t.Fatal("已拒绝委托读回长出了接受基线")
+			}
+			if _, present := found.ExpectedCommitment(); present {
+				t.Fatal("已拒绝委托读回长出了预计承诺")
+			}
+		})
+	}
+}
+
+// Covers: ADR-0188 决定三之 1、6——补表达之前写下的主动拒绝行（决定上没有留痕、也没有失败项）与两样都有的
+// 行读回都是坏数据，不折成「本期不支持」，也不从任务处置记录推回留痕。
+func TestRejectedRowsWithoutOrWithBothExplanationsAreInvalidOnRead(t *testing.T) {
+	repository, transactor, pool := newShipmentRequests(t)
+	ctx := t.Context()
+	paths := map[string]rejectionPath{}
+	for _, path := range rejectionPaths(t) {
+		paths[path.name] = path
+	}
+	cases := map[string]struct {
+		path    string
+		rewrite string
+	}{
+		"补表达前的主动拒绝行": {path: "active", rewrite: `snapshot #- '{decision,activeRejection}'`},
+		"补表达前的处置拒绝行": {path: "disposition", rewrite: `snapshot #- '{decision,activeRejection}'`},
+		"规则拒绝又带留痕": {path: "rule-without-basis", rewrite: `jsonb_set(snapshot, '{decision,activeRejection}',
+			'{"authority":"SYN-REJECT-RULE-1/v1","decider":"SYN-OPERATOR-01","reason":"SYN-REJECT-REASON-1","evidence":"SYN-REJECT-EVIDENCE-1"}')`},
+	}
+	for name, c := range cases {
+		t.Run(name, func(t *testing.T) {
+			path := paths[c.path]
+			key := "req-key-old-" + c.path
+			mustInsert(t, transactor, ctx, repository, path.submitted(t, key, "request-old-"+c.path))
+			rejected, err := path.reject(t, mustFind(t, repository, ctx, key))
+			if err != nil {
+				t.Fatalf("形成拒绝：%v", err)
+			}
+			mustSave(t, transactor, ctx, repository, requestIdentity(t, key), rejected)
+			if _, err := pool.Exec(ctx,
+				`UPDATE parcel_shipment.shipment_request SET snapshot = `+c.rewrite+` WHERE source_request_key = $1`, key,
+			); err != nil {
+				t.Fatalf("改写快照：%v", err)
+			}
+
+			_, _, err = repository.FindBySourceIdentity(ctx, requestIdentity(t, key))
+			if !errors.Is(err, domain.ErrInvalidRehydratedShipmentRequest) {
+				t.Fatalf("读回 err = %v, want ErrInvalidRehydratedShipmentRequest", err)
+			}
+			if errors.Is(err, domain.ErrRehydrationStateNotSupported) {
+				t.Fatalf("读回 err = %v；门已开到`已拒绝`，坏数据不得折成未开门", err)
 			}
 		})
 	}

@@ -24,8 +24,8 @@ var ErrRehydrationStateNotSupported = errors.New("parcel shipment: rehydration d
 // 它是本包唯一一处「相信输入」的地方（ADR-0028）：字段一律当**数据**收下，绝不从中重新
 // 推导 accepted、state、baseline 或任何派生字段。要重算的那扇门是 Decide，不是这里。
 //
-// ADR-0030 的准入判据是快照表达能力。今天开`已提交`与`已接受`：后者可达的决定、基线、承诺
-// 与客户资料版本都有字段可填；`已拒绝`/`已撤回`仍少撤回或主动拒绝的完整表达，由入口挡住。
+// ADR-0030 的准入判据是快照表达能力。今天开`已提交`、`已接受`与`已拒绝`：后两者可达的决定（含
+// 主动拒绝留痕）、基线、承诺与客户资料版本都有字段可填；`已撤回`仍少撤回的表达，由入口挡住（ADR-0188）。
 type RehydrateShipmentRequestSpec struct {
 	// Revision 是这一行在库里的版本。重建的聚合必然已持久化，所以它必须从 1 起。
 	Revision          int64
@@ -47,7 +47,8 @@ type RehydrateShipmentRequestSpec struct {
 	// CustomerParcelNumbers 是委托上的客户包裹件号（ADR-0184 决定四），收成品类型：包外只能经
 	// DeclareCustomerParcelNumber 造它。它在`已提交`下就有值；漏带回，接受时就形成不出外部标识关联。
 	CustomerParcelNumbers []CustomerParcelNumberDeclaration
-	// 以下四项在`已提交`下必然缺席；`已接受`下决定、基线、承诺必须在场，资料版本可空。
+	// 以下四项在`已提交`下必然缺席；`已接受`下决定、基线、承诺必须在场，资料版本可空；`已拒绝`下只有
+	// 决定在场，其余三项必然缺席（ADR-0188 对账表）。
 	Decision           RehydrateAcceptanceDecisionSpec
 	DecisionFormed     bool
 	Baseline           RehydrateAcceptanceBaselineSpec
@@ -253,15 +254,15 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 // admitRehydratedState 判这扇门今天开到哪个状态。
 //
 // 见 ADR-0030：一个状态只有在快照类型能表达它可达的全部字段时才准进来。今天满足这条的是
-// `已提交`与`已接受`。`已拒绝`/`已撤回`的判断产物在规格里仍没有完整字段可填，放进来重建出
-// 的聚合会缺撤回或主动拒绝留痕，而它此后看起来与真的一样。
+// `已提交`、`已接受`与`已拒绝`（ADR-0061、ADR-0188）。`已撤回`的撤回在规格里仍没有字段可填，
+// 放进来重建出的聚合会缺撤回，而它此后看起来与真的一样。
 func admitRehydratedState(state ShipmentRequestState) error {
 	switch state {
-	case ShipmentRequestSubmitted, ShipmentRequestAccepted:
+	case ShipmentRequestSubmitted, ShipmentRequestAccepted, ShipmentRequestRejected:
 		return nil
 	case ShipmentRequestStateInvalid:
 		return rehydrationRefusal("委托状态未设")
-	case ShipmentRequestRejected, ShipmentRequestWithdrawn:
+	case ShipmentRequestWithdrawn:
 		return fmt.Errorf("%w：%s", ErrRehydrationStateNotSupported, state)
 	default:
 		// 越界值印数字而不是名字：`String()` 对它交回空串，而一个说不出是哪个值的拒绝，
@@ -306,6 +307,9 @@ func (request ShipmentRequest) validForRehydration() error {
 	if err := request.acceptedProductsValidForRehydration(); err != nil {
 		return err
 	}
+	if err := request.rejectedDecisionValidForRehydration(); err != nil {
+		return err
+	}
 	if err := request.linkValidForRehydration(); err != nil {
 		return err
 	}
@@ -322,9 +326,8 @@ func (request ShipmentRequest) validForRehydration() error {
 // 承诺，且版本、成员、依据与决定时刻互相一致。半截快照是坏数据，不得折成「本期不支持」。
 func (request ShipmentRequest) acceptedProductsValidForRehydration() error {
 	hasDecision := request.decision.decisionID.valid()
-	hasBaseline := len(request.baseline.declaredParcelIDs) != 0 ||
-		request.baseline.submissionVersion.valid() || !request.baseline.fixedAt.IsZero()
-	hasCommitment := !request.commitment.formedAt.IsZero() || request.commitment.basis.valid()
+	hasBaseline := request.baseline.recorded()
+	hasCommitment := request.commitment.recorded()
 	hasSourceData := len(request.sourceDataVersions) != 0
 	hasWithdrawal := request.withdrawal.formed()
 
@@ -413,6 +416,107 @@ func (request ShipmentRequest) acceptedProductsValidForRehydration() error {
 		if parcelID, named := version.scope.DeclaredParcelID(); named && !request.baseline.covers(parcelID) {
 			return rehydrationRefusal("客户资料版本指名了接受基线外的成员")
 		}
+	}
+	return nil
+}
+
+// rejectedDecisionValidForRehydration 照 ADR-0188 的对账表校验`已拒绝`。三条来路共有的形状先校：越过
+// 决定边界、决定是拒绝且有决定时刻、任务收工不等待、不带任何接受产物。随后按「失败校验项」与「主动
+// 拒绝留痕」恰有其一分成规则拒绝与主动拒绝两支各自校验。
+//
+// 恰有其一这条把补表达之前写下的主动拒绝行与处置`拒绝`行（两样都没有）拒成坏数据。不从任务处置记录
+// 推回留痕：重建只校验不重算（ADR-0028），而主动拒绝那条来路根本没有处置记录可推。
+func (request ShipmentRequest) rejectedDecisionValidForRehydration() error {
+	if request.state != ShipmentRequestRejected {
+		return nil
+	}
+	if request.withdrawal.formed() {
+		return rehydrationRefusal("已拒绝委托携带了撤回")
+	}
+	if !request.decisionFormed {
+		return rehydrationRefusal("已拒绝委托没有越过决定边界")
+	}
+	if !request.decision.decisionID.valid() {
+		return rehydrationRefusal("已拒绝委托没有决定")
+	}
+	if request.decision.accepted {
+		return rehydrationRefusal("已拒绝委托的决定是接受")
+	}
+	if request.decision.decidedAt.IsZero() {
+		return rehydrationRefusal("已拒绝委托的决定没有决定时刻")
+	}
+	if !request.acceptanceTask.IsComplete() {
+		return rehydrationRefusal("已拒绝委托的判断任务尚未完成")
+	}
+	if _, waiting := request.acceptanceTask.WaitingOn(); waiting {
+		return rehydrationRefusal("已拒绝委托的判断任务仍在等待")
+	}
+	// 拒绝不形成接受基线与预计承诺；资料版本的唯一入口要求`已接受`。三者任一在场，这份聚合是拼出来的。
+	if request.baseline.recorded() || request.commitment.recorded() || len(request.sourceDataVersions) != 0 {
+		return rehydrationRefusal("已拒绝委托携带了接受基线、预计承诺或客户资料版本")
+	}
+
+	classified, err := classifyAcceptanceChecks(request.decision.checks)
+	if err != nil {
+		return rehydrationRefusal("拒绝决定含非法校验")
+	}
+	ruleFormed := classified.failed > 0
+	trailRecorded := request.decision.activeRejection.anyRecorded()
+	switch {
+	case ruleFormed && trailRecorded:
+		return rehydrationRefusal("拒绝决定既有失败校验项又有主动拒绝留痕")
+	case !ruleFormed && !trailRecorded:
+		return rehydrationRefusal("拒绝决定既没有失败校验项也没有主动拒绝留痕")
+	case ruleFormed:
+		return request.ruleRejectionHolds()
+	default:
+		return request.activeRejectionHolds()
+	}
+}
+
+// ruleRejectionHolds 校验 Decide 有失败项形成的拒绝。依据可缺席（`没有适用合同`），复核状态照 Decide
+// 的合成重核一遍——这是比对不是重算：合成只读规则包声明与任务上的完成事实，两者都在这一行里。
+// 处置为`拒绝`的任务不可能配一份规则拒绝：那一去向自己就形成了决定。
+func (request ShipmentRequest) ruleRejectionHolds() error {
+	if request.decision.manualReview != request.manualReviewState(request.decision.basis.manualReview) {
+		return rehydrationRefusal("规则拒绝的复核状态与规则包声明和任务完成事实对不上")
+	}
+	if disposition, recorded := request.acceptanceTask.AuthorizedDisposition(); recorded &&
+		disposition.choice == DisposeByRejection {
+		return rehydrationRefusal("任务已处置为拒绝，决定却是规则拒绝")
+	}
+	return nil
+}
+
+// activeRejectionHolds 校验主动拒绝与处置`拒绝`形成的拒绝。两条路共用 formActiveRejection：不写校验明细
+// 与复核状态，留痕四格齐全。任务处置记录为`拒绝`时，决定就是那次处置形成的——留痕逐格等于处置记录的
+// 翻译、决定时刻即处置时点、不带依据（DisposeUnderAuthority 传的是零值依据）。
+func (request ShipmentRequest) activeRejectionHolds() error {
+	if !request.decision.activeRejection.formed() {
+		return rehydrationRefusal("主动拒绝留痕不完整")
+	}
+	if len(request.decision.checks) != 0 {
+		return rehydrationRefusal("主动拒绝的决定带着校验明细")
+	}
+	if request.decision.manualReview != ManualReviewStateInvalid {
+		return rehydrationRefusal("主动拒绝的决定带着复核状态")
+	}
+	disposition, recorded := request.acceptanceTask.AuthorizedDisposition()
+	if !recorded || disposition.choice != DisposeByRejection {
+		return nil
+	}
+	trail := request.decision.activeRejection
+	if trail.authority.requiredValue != disposition.authority.requiredValue ||
+		trail.decider.requiredValue != disposition.disposer.requiredValue ||
+		trail.reason.requiredValue != disposition.reason.requiredValue ||
+		trail.evidence.requiredValue != disposition.evidence.requiredValue {
+		return rehydrationRefusal("处置形成的拒绝留痕与任务处置记录对不上")
+	}
+	if !request.decision.decidedAt.Equal(disposition.disposedAt) {
+		return rehydrationRefusal("处置形成的拒绝决定时刻不是处置时点")
+	}
+	if request.decision.basis.valid() {
+		return rehydrationRefusal("处置形成的拒绝决定带着商业依据")
 	}
 	return nil
 }
@@ -596,6 +700,15 @@ func (task AcceptanceDecisionTask) validForRehydration() error {
 		}
 	}
 	return nil
+}
+
+// recorded 回答基线有没有任何一格在场；任一格在场即算，半截的一份由各状态的校验拒绝。
+func (baseline AcceptanceBaseline) recorded() bool {
+	return len(baseline.declaredParcelIDs) != 0 || baseline.submissionVersion.valid() || !baseline.fixedAt.IsZero()
+}
+
+func (commitment ExpectedCommitment) recorded() bool {
+	return !commitment.formedAt.IsZero() || commitment.basis.valid()
 }
 
 // anyRecorded 回答留痕四格里有没有任何一格在场。formed 要四格齐全，拿它判「有没有留痕」会把
