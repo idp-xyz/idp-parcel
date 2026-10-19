@@ -128,7 +128,7 @@ func (source *AcceptedCarriedGeoSource) LoadAcceptedCarriedGeo(
 	if err != nil {
 		return none, false, fmt.Errorf("%w: shipment request: %v", ErrUntranslatableAnswer, err)
 	}
-	// 基线引用取基线的提交版本标识，与 RouteOnAcceptanceAdapter、ReassessOnIntakeAdapter 同源：三条链必须用同一个
+	// 基线引用取基线的提交版本标识，与 RouteOnAcceptanceAdapter、ReassessOnIntakeAdapter 同源：这几条链必须用同一个
 	// 字符串指同一份基线，否则同一件包裹的初始判断与各次复核会落在不同的判断键上。
 	reference, err := nrdomain.NewAcceptanceBaselineReference(baseline.SubmissionVersionID().String())
 	if err != nil {
@@ -151,8 +151,8 @@ func baselineCovers(baseline psdomain.AcceptanceBaseline, parcel psdomain.Declar
 	return false
 }
 
-// geoFromProjection 逐格照抄 PS 的投影，与 PS 信封的线格式（经 geoFromCarried 译回）同一套取值：两条路到 NR 的投影
-// 摘要必须相等，复核的触发指纹才不因取法不同而变。
+// geoFromProjection 逐格照抄 PS 的投影，与 PS 信封的线格式（经 geoFromCarried 译回）同一套取值：随信封携带与经本适配器读取，
+// 到 NR 的投影摘要必须相等，复核的触发指纹才不因取法不同而变。
 func geoFromProjection(projection psdomain.CarriedGeoProjection) nrdomain.GeoResolutionProjection {
 	if !projection.Carried() {
 		return nrdomain.GeoResolutionProjection{}

@@ -18,12 +18,12 @@ import (
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 )
 
-// reassessOnHandoverUndecidedSentinels 只给「交接 → NR 路由复核」这一路（ADR-0215）。与追踪投影、派送发起两路分开列：
-// 同一封信扇出给几路、各记各的 inbox 账，本路还会停在 PS 读口与复核编排上，合用一份会把别路没有的格子也宣布成「等依赖」；
+// reassessOnHandoverUndecidedSentinels 只给「交接 → NR 路由复核」这一路（ADR-0215）。与同一封交接信封扇出的其他各路分开列：
+// 各路各记各的 inbox 账，本路还会停在 PS 读口与复核编排上，合用一份会把别路没有的格子也宣布成「等依赖」；
 // 与收寄采用那一路（nrparcelshipment.ErrReassessmentUndecided）也分开，运维要分得出复核是哪一种触发停住的。
 //
 // 不在名单里：nrtransportfulfillment.ErrHandoverRecordInconsistent 与 nrparcelshipment.ErrAcceptedRequestInconsistent
-// （仓储不变量已破）、两个包的 ErrUntranslatableAnswer（编程错误）、psdomain.ErrAmbiguousParcelTarget（两份已接受委托
+// （仓储不变量已破）、nrtransportfulfillment 与 nrparcelshipment 各自的 ErrUntranslatableAnswer（编程错误）、psdomain.ErrAmbiguousParcelTarget（两份已接受委托
 // 声明同一件包裹，要人去看）——重投都不会变。不是复核触发的交接与不是当前已接受包裹的对象不在任何名单里：它们入账，
 // 不是错误。
 var reassessOnHandoverUndecidedSentinels = []error{
@@ -81,7 +81,7 @@ func reassessOnHandoverConsumerOver(
 }
 
 // reassessRouteHandler 是 UC-NR-003 复核编排的生产接法。收寄采用那一路（networkIntakeConsumer）与交接这一路共用这一份：
-// 两种触发复核的是同一份路由判断，证据、自动改路事实与判断库接法一处定义，不会一路改了另一路还停在旧接法上。
+// 各种触发复核的是同一份路由判断，证据、自动改路事实与判断库接法一处定义，不会一路改了另一路还停在旧接法上。
 func reassessRouteHandler(db *bentopg.DB, clock systemClock) (*nrapplication.ReassessRouteHandler, error) {
 	evidence, err := initialRouteEvidence(db, clock, customsApplicabilitySource(db))
 	if err != nil {

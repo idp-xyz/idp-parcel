@@ -474,7 +474,7 @@ func TestAnUndecidedReassessmentOnAHandoverRollsBackOnTheDatabase(t *testing.T) 
 	}
 }
 
-// Covers: AT-NR-064（路由表那一半）——生产路由表上交接信封扇出到 NR 复核这一路：信封是生产交接口真交出的那一封，三路认的
+// Covers: AT-NR-064（路由表那一半）——生产路由表上交接信封扇出到 NR 复核这一路：信封是生产交接口真交出的那一封，各路认的
 // 是同一个事件类型；空库里对象不是当前已接受包裹，复核这一路入账、零复核，信封定稿 PUBLISHED。
 func TestAHandoverReachesRouteReassessmentThroughTheProductionRoute(t *testing.T) {
 	for lane, eventType := range map[string]eventing.EventType{

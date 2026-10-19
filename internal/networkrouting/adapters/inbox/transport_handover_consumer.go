@@ -12,8 +12,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/inboxconsume"
 )
 
-// transportHandoverConsumerName 是本消费者在 inbox 键上的稳定名。同一封交接信封还扇出给追踪投影与派送发起两路，inbox
-// 键只由（消费者名 + 来源 + 事件 ID）认领，共名会让一路把另一路的投递当重复跳过。与收寄采用那一路也分家：两条复核
+// transportHandoverConsumerName 是本消费者在 inbox 键上的稳定名。同一封交接信封还扇出给别的消费者，inbox 键只由
+// （消费者名 + 来源 + 事件 ID）认领，共名会互相把对方的投递当重复跳过。与收寄采用那一路也分家：各条复核
 // 触发各记各的账。改名等于换消费者。
 const transportHandoverConsumerName = "network-routing/reassess-on-transport-handover"
 
@@ -73,7 +73,7 @@ func NewTransportHandoverConsumer(
 	return &TransportHandoverConsumer{gate: gate}, nil
 }
 
-// Consume 处理一份投递。舞步在 inboxconsume，与本包另两扇门共用。
+// Consume 处理一份投递。舞步在 inboxconsume，与本包其他消费门共用。
 func (consumer *TransportHandoverConsumer) Consume(ctx context.Context, envelope eventing.Envelope) error {
 	return consumer.gate.Consume(ctx, envelope)
 }

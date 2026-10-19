@@ -1,5 +1,5 @@
 // Package transportfulfillment 是 network-routing 消费 transport-fulfillment 权威交接结果的适配器（ADR-0025 消费方
-// 侧；只翻译不判断）。交接进入一个节点、取得节点控制，是 CONTEXT「当前可控节点」认可的两种依据之一；本包把那一次
+// 侧；只翻译不判断）。交接进入一个节点、取得节点控制，是 CONTEXT「当前可控节点」认可的依据之一；本包把那一次
 // 交接译成复核触发，复核结论由 NR 的复核编排回答（UC-NR-003，ADR-0215）。
 package transportfulfillment
 
@@ -23,7 +23,7 @@ var (
 	// 落库，读不着通常是可见性滞后：重投会改变结果，生产装配把它登进本路的未决哨兵。
 	ErrHandoverNotVisible = errors.New(
 		"network routing transportfulfillment adapter: transport handover is not yet visible")
-	// ErrHandoverRecordInconsistent 说明按键取回的交接指着另一把键、业务时间为零，或裁决落在封闭三值之外。仓储不变量
+	// ErrHandoverRecordInconsistent 说明按键取回的交接指着另一把键、业务时间为零，或裁决落在交接判断的封闭集之外。仓储不变量
 	// 已破（ADR-0029），不是等谁，禁止进未决哨兵。
 	ErrHandoverRecordInconsistent = errors.New(
 		"network routing transportfulfillment adapter: transport handover disagrees with its key")
@@ -32,7 +32,7 @@ var (
 	ErrUntranslatableAnswer = errors.New(
 		"network routing transportfulfillment adapter: untranslatable answer")
 	// ErrHandoverReassessmentUndecided 说明这次复核停在未决（复核登记册或路由历史读不回、证据未配置、适用性看不清、
-	// 取号依赖故障）。与收寄采用那一路的同类哨兵分设：两条触发等的依赖不同，运维读到失败要分得出是哪一路。
+	// 取号依赖故障）。与收寄采用那一路的同类哨兵分设：各条触发等的依赖不同，运维读到失败要分得出是哪一路。
 	ErrHandoverReassessmentUndecided = errors.New(
 		"network routing transportfulfillment adapter: route reassessment on transport handover is undecided")
 )
@@ -250,7 +250,7 @@ func reassessmentToConsumption(result nrapplication.ReassessRouteResult) error {
 		nrapplication.ReassessedPlanLapsed,
 		nrapplication.ReassessedFirstPlanFormed,
 		nrapplication.ReassessedRerouted:
-		// 四种结论都已越过提交边界落了库，是终局答案。失效与改路不因「听起来像坏消息」就重投：复核复的就是这件事。
+		// 这几种结论都已越过提交边界落了库，是终局答案。失效与改路不因「听起来像坏消息」就重投：复核复的就是这件事。
 		return nil
 	case nrapplication.ReassessExistingResult:
 		// 同一版交接已复核过，读回原结果：幂等。
