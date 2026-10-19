@@ -445,6 +445,11 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 节点关务区域登记口与动作准入判断（ADR-0206）。
+	customsAdmission, err := buildCustomsAdmissionOrchestration(db)
+	if err != nil {
+		return err
+	}
 	veRegistration, err := buildVERegistrationOrchestration(db)
 	if err != nil {
 		return err
@@ -688,6 +693,7 @@ func run(logger *slog.Logger) error {
 			workFactTransport,
 			workDeviceCatalogue,
 			operatorBinding,
+			customsAdmission.nodeZoneRegistration,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,

@@ -175,6 +175,7 @@ func assembleBusinessEndpoints(
 	workFactTransport *tfhttp.WorkFactCommandIntake,
 	workDevices http.Handler,
 	operatorBinding http.Handler,
+	nodeCustomsZoneRegistration customshttp.NodeCustomsZoneRegistrar,
 ) []httpapi.BusinessEndpoint {
 	// 缺省朝拦：真渠道与隔离入参都缺席时，下面这组变量全取未配置即拒。
 	//
@@ -679,5 +680,8 @@ func assembleBusinessEndpoints(
 		// 操作者绑定（票 group-legal-entities-uiux/11）：这个会话的操作者在操作者册上绑的那一个租户，管理台顶栏作用域与
 		// 集团与法人页头靠它显示当前集团。主数据与运营查阅读守口，认证件同作业设备册。路径写成字面量，理由同上一行。
 		{Pattern: "/operator-binding", Handler: identityhttp.OperatorBindingHandler(operatorBinding)},
+		// 节点关务区域登记口（ADR-0206；ADR-0085 决定一）：关务登记写面族的一格，挂操作者渠道的登记册 Intake，写开关换
+		// 不了它（ADR-0150 决定三）。事物词取登记 CLI 的命令名 node-zone，判据同上面关务各登记口。
+		{Pattern: "/customs-node-zone-registrations", Handler: customshttp.NewRegisterNodeCustomsZoneEndpoint(operatorRegistries.customs, nodeCustomsZoneRegistration)},
 	}
 }
