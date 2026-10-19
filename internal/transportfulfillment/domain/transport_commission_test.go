@@ -55,6 +55,7 @@ func submittedBooking(t *testing.T) domain.BookingRequest {
 		TenantID:    mustValue(t, domain.NewTenantID, "tenant-1"),
 		Booking:     mustValue(t, domain.NewBookingReference, "booking-1"),
 		Commission:  mustValue(t, domain.NewTransportCommissionReference, "commission-1"),
+		Schedule:    mustValue(t, domain.NewScheduleReference, "schedule-1"),
 		Quantity:    100,
 		Unit:        mustValue(t, domain.NewQuantityUnitReference, "kg"),
 		RequestedAt: bookingRequestedAt,
@@ -125,7 +126,7 @@ func TestACommissionSnapshotsItsCommercialBasis(t *testing.T) {
 
 // Covers: CONTEXT「承运接受……不等于容量已经预占、载运对象已经分配或实际承运商已经
 // 收寄」与 105「面单生成、渠道受理、预报成功、订舱接受、舱单建立、电子数据接收和车辆
-// 到场均不构成实际承运商首次有效收寄」——只有接受成约；拒绝/失效/撤回分格带原因；
+// 到场均不构成实际承运商首次有效收寄」——只有接受成约；拒绝/失效/撤回/候补分格带原因；
 // 接受对象上没有任何收寄或控制字段（结构防线）。
 func TestBookingIsNotAcceptanceAndOnlyAcceptanceBinds(t *testing.T) {
 	for _, subject := range []reflect.Type{
@@ -178,6 +179,8 @@ func TestBookingIsNotAcceptanceAndOnlyAcceptanceBinds(t *testing.T) {
 		"refused":   domain.BookingRefused,
 		"expired":   domain.BookingExpired,
 		"withdrawn": domain.BookingWithdrawn,
+		// Covers: `AT-TF-150` 形状半边——候补不成约、没有接受量、带依据。
+		"waitlisted": domain.BookingWaitlisted,
 	} {
 		t.Run(name+" carries its basis and does not bind", func(t *testing.T) {
 			result, err := domain.FormCarrierAcceptance(
@@ -229,7 +232,7 @@ func TestBookingIsNotAcceptanceAndOnlyAcceptanceBinds(t *testing.T) {
 	t.Run("the acceptance outcome set is closed", func(t *testing.T) {
 		labels := map[string]struct{}{}
 		for _, outcome := range []domain.CarrierAcceptanceOutcome{
-			domain.BookingAccepted, domain.BookingRefused, domain.BookingExpired, domain.BookingWithdrawn,
+			domain.BookingAccepted, domain.BookingRefused, domain.BookingExpired, domain.BookingWithdrawn, domain.BookingWaitlisted,
 		} {
 			label := outcome.String()
 			if label == "" {
@@ -237,11 +240,11 @@ func TestBookingIsNotAcceptanceAndOnlyAcceptanceBinds(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 4 {
+		if len(labels) != 5 {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if domain.CarrierAcceptanceOutcome(len(labels)+1).String() != "" {
-			t.Fatal("第五个接受取值带了标签——封闭集合被悄悄放开")
+			t.Fatal("第六个接受取值带了标签——封闭集合被悄悄放开")
 		}
 	})
 }

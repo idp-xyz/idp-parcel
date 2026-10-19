@@ -146,6 +146,7 @@ func TestAConcurrentFirstSubmissionLoserIsJudgedByContent(t *testing.T) {
 				Commissions: racing,
 				Bookings:    fixture.bookings,
 				Answers:     fixture.answers,
+				Schedules:   fixture.schedules,
 				Agreements:  fixture.agreements,
 				Downstream:  fixture.handoff,
 				Clock:       commissionClock{at: commissionNowAt},

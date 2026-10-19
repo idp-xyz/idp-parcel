@@ -367,6 +367,7 @@ func TestCommissionAndBookingGatesJudgeZeroOnTheRegistry(t *testing.T) {
 			TenantID:    mustValue(t, domain.NewTenantID, "SYN-TENANT-01"),
 			Booking:     mustValue(t, domain.NewBookingReference, "SYN-BOOKING-1"),
 			Commission:  mustValue(t, domain.NewTransportCommissionReference, "SYN-COMMISSION-1"),
+			Schedule:    mustValue(t, domain.NewScheduleReference, "SYN-SCHEDULE-1"),
 			Quantity:    100,
 			Unit:        mustValue(t, domain.NewQuantityUnitReference, "kg"),
 			RequestedAt: at,

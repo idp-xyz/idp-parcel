@@ -68,7 +68,6 @@ func unversionedDigestCases(t *testing.T) []unversionedDigestCase {
 	t.Helper()
 	return []unversionedDigestCase{
 		dispositionUnversionedCase(t),
-		bookingUnversionedCase(t),
 		bookingAnswerUnversionedCase(t),
 		pickupAttemptUnversionedCase(t),
 		effectiveDeliveryUnversionedCase(t),
@@ -147,33 +146,8 @@ func dispositionUnversionedCase(t *testing.T) unversionedDigestCase {
 	}
 }
 
-func bookingUnversionedCase(t *testing.T) unversionedDigestCase {
-	fixture := newCommissionFixture(t)
-	command := submitBookingCommand(t)
-	submit := func(t *testing.T, command application.SubmitBookingCommand, want application.CommissionOutcome) {
-		t.Helper()
-		result, err := fixture.handler.SubmitBooking(context.Background(), command)
-		wantOutcome(t, result.Outcome(), err, want)
-	}
-	return unversionedDigestCase{
-		name:        "SUBMIT_BOOKING",
-		unversioned: "976bf4be9af7daa957ed89ba0a928effb1a58a926bc6e41bc04a0e011a2dd555",
-		first: func(t *testing.T) (string, func(string)) {
-			submit(t, command, application.BookingSubmitted)
-			return onlyDigest(t, fixture.bookings.records,
-				func(record *ports.BookingRecord) *string { return &record.ContentDigest })
-		},
-		replay: func(t *testing.T) { submit(t, command, application.BookingExistingResult) },
-		conflict: func(t *testing.T) {
-			changed := submitBookingCommand(t)
-			changed.Quantity = 120
-			submit(t, changed, application.BookingConflict)
-		},
-	}
-}
-
 func bookingAnswerUnversionedCase(t *testing.T) unversionedDigestCase {
-	fixture := newCommissionFixture(t)
+	fixture := newBookedFixture(t)
 	command := answerBookingCommand(t, domain.BookingAccepted)
 	answer := func(t *testing.T, command application.AnswerBookingCommand, want application.CommissionOutcome) {
 		t.Helper()
@@ -184,8 +158,6 @@ func bookingAnswerUnversionedCase(t *testing.T) unversionedDigestCase {
 		name:        "ANSWER_BOOKING",
 		unversioned: "26681fe16aea102b12f9887e6bf7b60cd4511678da29104d245506cfab4b0b0e",
 		first: func(t *testing.T) (string, func(string)) {
-			submitted, err := fixture.handler.SubmitBooking(context.Background(), submitBookingCommand(t))
-			wantOutcome(t, submitted.Outcome(), err, application.BookingSubmitted)
 			answer(t, command, application.BookingAnswered)
 			return onlyDigest(t, fixture.answers.records,
 				func(record *ports.BookingAnswerRecord) *string { return &record.ContentDigest })

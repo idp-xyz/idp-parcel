@@ -305,10 +305,14 @@ func NewBookingReference(value string) (BookingReference, error) {
 // BookingRequest 是针对具体班次或外部运输服务的舱位/容量申请（CONTEXT「订舱」）。
 // 订舱申请本身不占用容量、不等于承运接受——它与委托、接受、预占分别拥有身份与生命
 // 周期（CONTEXT 119/122）。
+//
+// 订舱必须指名一个具体班次（ADR-0202 决定五）：周期安排不是班次，不能被订舱直接引用（CONTEXT「周期安排」），而不指名
+// 班次的订舱说不清申请的是哪一班的舱位。班次在不在册由编排在提交时核，这里只钉「有这一格」。
 type BookingRequest struct {
 	tenantID    TenantID
 	booking     BookingReference
 	commission  TransportCommissionReference
+	schedule    ScheduleReference
 	quantity    int64
 	unit        QuantityUnitReference
 	requestedAt time.Time
@@ -320,6 +324,7 @@ type BookingRequestSpec struct {
 	TenantID    TenantID
 	Booking     BookingReference
 	Commission  TransportCommissionReference
+	Schedule    ScheduleReference
 	Quantity    int64
 	Unit        QuantityUnitReference
 	RequestedAt time.Time
@@ -329,6 +334,7 @@ func SubmitBookingRequest(spec BookingRequestSpec) (BookingRequest, error) {
 	if !spec.TenantID.valid() ||
 		!spec.Booking.valid() ||
 		!spec.Commission.valid() ||
+		!spec.Schedule.valid() ||
 		spec.Quantity <= 0 ||
 		!spec.Unit.valid() ||
 		AtRegistryPrecision(spec.RequestedAt).IsZero() {
@@ -338,6 +344,7 @@ func SubmitBookingRequest(spec BookingRequestSpec) (BookingRequest, error) {
 		tenantID:    spec.TenantID,
 		booking:     spec.Booking,
 		commission:  spec.Commission,
+		schedule:    spec.Schedule,
 		quantity:    spec.Quantity,
 		unit:        spec.Unit,
 		requestedAt: spec.RequestedAt.UTC(),
@@ -354,6 +361,11 @@ func (booking BookingRequest) Booking() BookingReference {
 
 func (booking BookingRequest) Commission() TransportCommissionReference {
 	return booking.commission
+}
+
+// Schedule 是这次订舱申请舱位的那一个具体班次。
+func (booking BookingRequest) Schedule() ScheduleReference {
+	return booking.schedule
 }
 
 func (booking BookingRequest) Quantity() (int64, QuantityUnitReference) {
@@ -393,7 +405,7 @@ func NewCarrierAcceptanceReference(value string) (CarrierAcceptanceReference, er
 	return CarrierAcceptanceReference{required}, err
 }
 
-// AcceptanceBasisReference 指名拒绝、失效或撤回的原因来源。
+// AcceptanceBasisReference 指名拒绝、失效、撤回或候补的原因来源。
 type AcceptanceBasisReference struct{ requiredValue }
 
 func NewAcceptanceBasisReference(value string) (AcceptanceBasisReference, error) {
@@ -401,8 +413,13 @@ func NewAcceptanceBasisReference(value string) (AcceptanceBasisReference, error)
 	return AcceptanceBasisReference{required}, err
 }
 
-// CarrierAcceptanceOutcome 是承运方对订舱作答的封闭四值：接受成约；拒绝、失效与撤回
-// 分格（CONTEXT 194：每次结果保留数量和来源，后续替代不覆盖原申请）。
+// CarrierAcceptanceOutcome 是承运方对订舱作答的封闭五值：接受成约；拒绝、失效与撤回
+// 分格（CONTEXT 生命周期「订舱申请 → 待确认、候补、部分确认、已确认、拒绝或失效：每次结果保留数量和来源，后续替代不覆盖
+// 原申请」）。
+//
+// 候补（ADR-0202 决定五）是承运方答「此刻排进候补、尚未确认」：不成约、没有接受量，带候补的依据。它是五值里唯一不定局的
+// 一值——同一订舱在候补之后还可以有一个定局答复（见 AdmitsSuccessor），其余四值一经答出就是这次订舱的结局。`待确认`
+// 与`待补充`不在这里：前者是订舱还没有任何答复时的读法，后者是答复缺件时的读法，都不是承运方答出的值。
 type CarrierAcceptanceOutcome uint8
 
 const (
@@ -411,10 +428,11 @@ const (
 	BookingRefused
 	BookingExpired
 	BookingWithdrawn
+	BookingWaitlisted
 )
 
 func (outcome CarrierAcceptanceOutcome) valid() bool {
-	return outcome >= BookingAccepted && outcome <= BookingWithdrawn
+	return outcome >= BookingAccepted && outcome <= BookingWaitlisted
 }
 
 func (outcome CarrierAcceptanceOutcome) String() string {
@@ -427,6 +445,8 @@ func (outcome CarrierAcceptanceOutcome) String() string {
 		return "EXPIRED"
 	case BookingWithdrawn:
 		return "WITHDRAWN"
+	case BookingWaitlisted:
+		return "WAITLISTED"
 	default:
 		return ""
 	}
@@ -447,7 +467,7 @@ type CarrierAcceptance struct {
 }
 
 // FormCarrierAcceptance 依附订舱申请形成承运结果。接受必须带不超过申请量的接受量
-// （部分接受合法，CONTEXT 193）；拒绝/失效/撤回必须带原因来源且没有接受量。
+// （部分接受合法，CONTEXT 193）；拒绝/失效/撤回/候补必须带原因来源且没有接受量。
 func FormCarrierAcceptance(
 	booking BookingRequest,
 	acceptance CarrierAcceptanceReference,
@@ -510,7 +530,7 @@ func (acceptance CarrierAcceptance) AcceptedQuantity() int64 {
 	return acceptance.quantity
 }
 
-// Basis 在拒绝、失效或撤回时交回原因来源；接受没有它。
+// Basis 在拒绝、失效、撤回或候补时交回原因来源；接受没有它。
 func (acceptance CarrierAcceptance) Basis() (AcceptanceBasisReference, bool) {
 	if !acceptance.basis.valid() {
 		return AcceptanceBasisReference{}, false
@@ -525,4 +545,24 @@ func (acceptance CarrierAcceptance) DecidedAt() time.Time {
 // Binds 只在接受时为真：订舱不是接受，接受才成约（CONTEXT「承运接受」）。
 func (acceptance CarrierAcceptance) Binds() bool {
 	return acceptance.outcome == BookingAccepted
+}
+
+// Settles 答这个答复是不是这次订舱的结局：候补不是，其余四值都是。
+func (acceptance CarrierAcceptance) Settles() bool {
+	return acceptance.outcome != BookingWaitlisted
+}
+
+// AdmitsSuccessor 答 next 能不能接在本答复之后，成为同一订舱的下一份答复：只有候补可以被后继；后继必须是同一租户同一
+// 订舱上另一份答复，是定局（候补之后再候补，只是把同一件事又说一遍，改的应是原答复），且不早于候补。
+//
+// 后继不覆盖候补：两份答复各自保留，候补那一份仍是那段时间里承运方确实说过的话（CONTEXT「后续替代不覆盖原申请」）。定局
+// 之后不再有后继——已接受的订舱不能再被拒绝，改约走撤回与新订舱。
+func (acceptance CarrierAcceptance) AdmitsSuccessor(next CarrierAcceptance) bool {
+	return acceptance.outcome == BookingWaitlisted &&
+		next.Settles() &&
+		next.outcome.valid() &&
+		next.tenantID == acceptance.tenantID &&
+		next.booking == acceptance.booking &&
+		next.acceptance != acceptance.acceptance &&
+		!next.decidedAt.Before(acceptance.decidedAt)
 }

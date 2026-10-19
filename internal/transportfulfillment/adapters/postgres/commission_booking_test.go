@@ -150,8 +150,8 @@ func TestABookingAndAnswerRoundTripAndAcceptedCannotBeRefused(t *testing.T) {
 		t.Fatalf("订舱读回失败：err=%v exists=%v", err, exists)
 	}
 	qty, unit := foundBooking.Booking.Quantity()
-	if qty != 100 || unit.String() != "kg" {
-		t.Fatalf("订舱往返变形：qty=%d unit=%s", qty, unit)
+	if qty != 100 || unit.String() != "kg" || foundBooking.Booking.Schedule().String() != "schedule-1" {
+		t.Fatalf("订舱往返变形：qty=%d unit=%s schedule=%s", qty, unit, foundBooking.Booking.Schedule())
 	}
 
 	accepted := acceptedAnswer(t, foundBooking.Booking, "acceptance-1", 40)
@@ -300,9 +300,30 @@ func TestCommissionBookingCheckConstraintsRejectImpossibleRows(t *testing.T) {
 
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO transport_fulfillment.booking_request
-			(tenant_id, booking_id, commission_id, quantity, unit_ref, requested_at, content_digest, recorded_at)
-		 VALUES ('tenant-a', 'b-bad-1', 'c-1', 0, 'kg', now(), 'd', now())`); err == nil {
+			(tenant_id, booking_id, commission_id, schedule_id, quantity, unit_ref, requested_at, content_digest, recorded_at)
+		 VALUES ('tenant-a', 'b-bad-1', 'c-1', 's-1', 0, 'kg', now(), 'd', now())`); err == nil {
 		t.Fatal("一行「订舱数量为零」溜进了订舱库")
+	}
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO transport_fulfillment.booking_request
+			(tenant_id, booking_id, commission_id, schedule_id, quantity, unit_ref, requested_at, content_digest, recorded_at)
+		 VALUES ('tenant-a', 'b-bad-2', 'c-1', ' ', 1, 'kg', now(), 'd', now())`); err == nil {
+		t.Fatal("一行「班次为空白」溜进了订舱库")
+	}
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO transport_fulfillment.booking_answer
+			(tenant_id, booking_id, acceptance_id, outcome, quantity, basis, decided_at, content_digest, recorded_at)
+		 VALUES ('tenant-a', 'a-bad-4', 'acc-1', 'WAITLISTED', 0, NULL, now(), 'd', now())`); err == nil {
+		t.Fatal("一行「候补却没有依据」溜进了应答库")
+	}
+
+	if _, err := pool.Exec(ctx,
+		`INSERT INTO transport_fulfillment.booking_answer
+			(tenant_id, booking_id, acceptance_id, outcome, quantity, basis, decided_at, content_digest, recorded_at)
+		 VALUES ('tenant-a', 'a-bad-5', 'acc-1', 'PENDING', 0, 'why', now(), 'd', now())`); err == nil {
+		t.Fatal("一行「待确认」被当成答复值溜进了应答库")
 	}
 
 	if _, err := pool.Exec(ctx,
@@ -397,6 +418,7 @@ func submittedBookingRecord(t *testing.T, tenant, id string) ports.BookingRecord
 		TenantID:    deliveryValue(t, domain.NewTenantID, tenant),
 		Booking:     deliveryValue(t, domain.NewBookingReference, id),
 		Commission:  deliveryValue(t, domain.NewTransportCommissionReference, "commission-1"),
+		Schedule:    deliveryValue(t, domain.NewScheduleReference, "schedule-1"),
 		Quantity:    100,
 		Unit:        deliveryValue(t, domain.NewQuantityUnitReference, "kg"),
 		RequestedAt: bookingAt,

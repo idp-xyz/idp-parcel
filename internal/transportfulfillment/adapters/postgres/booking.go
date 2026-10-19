@@ -36,19 +36,19 @@ func (repository *BookingRequests) FindByKey(
 		return ports.BookingRecord{}, false, fmt.Errorf("find booking request: %w", err)
 	}
 
-	var commissionID, unit, digest string
+	var commissionID, scheduleID, unit, digest string
 	var quantity int64
 	var requestedAt, recordedAt time.Time
 	var cancelledAt *time.Time
 	err = querier.QueryRow(ctx,
-		`SELECT commission_id, quantity, unit_ref, requested_at, cancelled_at,
+		`SELECT commission_id, schedule_id, quantity, unit_ref, requested_at, cancelled_at,
 		        content_digest, recorded_at
 		   FROM transport_fulfillment.booking_request
 		  WHERE tenant_id = $1
 		    AND booking_id = $2`,
 		key.TenantID.String(),
 		key.Booking.String(),
-	).Scan(&commissionID, &quantity, &unit, &requestedAt, &cancelledAt, &digest, &recordedAt)
+	).Scan(&commissionID, &scheduleID, &quantity, &unit, &requestedAt, &cancelledAt, &digest, &recordedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.BookingRecord{}, false, nil
 	}
@@ -60,6 +60,10 @@ func (repository *BookingRequests) FindByKey(
 	if err != nil {
 		return ports.BookingRecord{}, false, fmt.Errorf("find booking request: %w", err)
 	}
+	scheduleRef, err := domain.NewScheduleReference(scheduleID)
+	if err != nil {
+		return ports.BookingRecord{}, false, fmt.Errorf("find booking request: %w", err)
+	}
 	unitRef, err := domain.NewQuantityUnitReference(unit)
 	if err != nil {
 		return ports.BookingRecord{}, false, fmt.Errorf("find booking request: %w", err)
@@ -68,6 +72,7 @@ func (repository *BookingRequests) FindByKey(
 		TenantID:    key.TenantID,
 		Booking:     key.Booking,
 		Commission:  commissionRef,
+		Schedule:    scheduleRef,
 		Quantity:    quantity,
 		Unit:        unitRef,
 		RequestedAt: requestedAt,
@@ -108,13 +113,14 @@ func (repository *BookingRequests) Save(
 
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO transport_fulfillment.booking_request
-			(tenant_id, booking_id, commission_id, quantity, unit_ref,
+			(tenant_id, booking_id, commission_id, schedule_id, quantity, unit_ref,
 			 requested_at, cancelled_at, content_digest, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Booking.String(),
 		record.Booking.Commission().String(),
+		record.Booking.Schedule().String(),
 		quantity,
 		unit.String(),
 		record.Booking.RequestedAt().UTC(),
@@ -131,11 +137,16 @@ func (repository *BookingRequests) Save(
 	return ports.BookingSaved, nil
 }
 
-// BookingAnswers 实现 ports.BookingAnswerStore。一订舱一应答：INSERT 撞键即
-// `已有应答`，已接受的行不会被拒绝覆盖。
+// BookingAnswers 实现 ports.BookingAnswerStore 与 ports.BookingAnswerLedger。一次订舱至多一份候补、至多一份定局（迁移
+// 0029 的两条部分唯一索引）；INSERT 撞上任何一条唯一约束即`已有应答`，已接受的行不会被拒绝覆盖。
 type BookingAnswers struct {
 	db *bentopg.DB
 }
+
+var (
+	_ ports.BookingAnswerStore  = (*BookingAnswers)(nil)
+	_ ports.BookingAnswerLedger = (*BookingAnswers)(nil)
+)
 
 func NewBookingAnswers(db *bentopg.DB) (*BookingAnswers, error) {
 	if db == nil {
@@ -144,42 +155,91 @@ func NewBookingAnswers(db *bentopg.DB) (*BookingAnswers, error) {
 	return &BookingAnswers{db: db}, nil
 }
 
-// FindByKey 按订舱键取回承运应答。读回经重建门复验四值形状。
+const bookingAnswerColumns = `acceptance_id, outcome, quantity, basis, decided_at, content_digest, recorded_at`
+
+// FindByKey 按订舱键取回当前那一份答复：有定局取定局，否则取候补。读回经重建门复验五值形状。
 func (repository *BookingAnswers) FindByKey(
 	ctx context.Context,
 	key ports.BookingKey,
 ) (ports.BookingAnswerRecord, bool, error) {
-	querier, err := repository.db.ReadExecutor(ctx)
-	if err != nil {
-		return ports.BookingAnswerRecord{}, false, fmt.Errorf("find booking answer: %w", err)
-	}
-
-	var acceptanceID, outcomeName, digest string
-	var quantity int64
-	var basis *string
-	var decidedAt, recordedAt time.Time
-	err = querier.QueryRow(ctx,
-		`SELECT acceptance_id, outcome, quantity, basis, decided_at, content_digest, recorded_at
+	records, err := repository.query(ctx, key, "find booking answer",
+		`SELECT `+bookingAnswerColumns+`
 		   FROM transport_fulfillment.booking_answer
 		  WHERE tenant_id = $1
-		    AND booking_id = $2`,
-		key.TenantID.String(),
-		key.Booking.String(),
-	).Scan(&acceptanceID, &outcomeName, &quantity, &basis, &decidedAt, &digest, &recordedAt)
-	if errors.Is(err, pgx.ErrNoRows) {
-		return ports.BookingAnswerRecord{}, false, nil
+		    AND booking_id = $2
+		  ORDER BY (outcome <> 'WAITLISTED') DESC, decided_at DESC
+		  LIMIT 1`)
+	if err != nil || len(records) == 0 {
+		return ports.BookingAnswerRecord{}, false, err
 	}
-	if err != nil {
-		return ports.BookingAnswerRecord{}, false, fmt.Errorf("find booking answer: %w", err)
-	}
+	return records[0], true, nil
+}
 
+// FindAnswers 按订舱键取回名下全部答复，按答复时刻先后；同刻按落库先后。
+func (repository *BookingAnswers) FindAnswers(
+	ctx context.Context,
+	key ports.BookingKey,
+) ([]ports.BookingAnswerRecord, error) {
+	return repository.query(ctx, key, "find booking answers",
+		`SELECT `+bookingAnswerColumns+`
+		   FROM transport_fulfillment.booking_answer
+		  WHERE tenant_id = $1
+		    AND booking_id = $2
+		  ORDER BY decided_at, inserted_at`)
+}
+
+func (repository *BookingAnswers) query(
+	ctx context.Context,
+	key ports.BookingKey,
+	operation string,
+	statement string,
+) ([]ports.BookingAnswerRecord, error) {
+	querier, err := repository.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", operation, err)
+	}
+	rows, err := querier.Query(ctx, statement, key.TenantID.String(), key.Booking.String())
+	if err != nil {
+		return nil, fmt.Errorf("%s: %w", operation, err)
+	}
+	defer rows.Close()
+	var records []ports.BookingAnswerRecord
+	for rows.Next() {
+		var acceptanceID, outcomeName, digest string
+		var quantity int64
+		var basis *string
+		var decidedAt, recordedAt time.Time
+		if err := rows.Scan(&acceptanceID, &outcomeName, &quantity, &basis, &decidedAt, &digest, &recordedAt); err != nil {
+			return nil, fmt.Errorf("%s: %w", operation, err)
+		}
+		record, err := rehydrateBookingAnswer(key, acceptanceID, outcomeName, quantity, basis, decidedAt, digest, recordedAt)
+		if err != nil {
+			return nil, fmt.Errorf("%s: %w", operation, err)
+		}
+		records = append(records, record)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("%s: %w", operation, err)
+	}
+	return records, nil
+}
+
+func rehydrateBookingAnswer(
+	key ports.BookingKey,
+	acceptanceID, outcomeName string,
+	quantity int64,
+	basis *string,
+	decidedAt time.Time,
+	digest string,
+	recordedAt time.Time,
+) (ports.BookingAnswerRecord, error) {
 	outcome, err := carrierOutcomeFrom(outcomeName)
 	if err != nil {
-		return ports.BookingAnswerRecord{}, false, fmt.Errorf("find booking answer: %w", err)
+		return ports.BookingAnswerRecord{}, err
 	}
 	acceptanceRef, err := domain.NewCarrierAcceptanceReference(acceptanceID)
 	if err != nil {
-		return ports.BookingAnswerRecord{}, false, fmt.Errorf("find booking answer: %w", err)
+		return ports.BookingAnswerRecord{}, err
 	}
 	spec := domain.RehydrateCarrierAcceptanceSpec{
 		TenantID:   key.TenantID,
@@ -192,23 +252,23 @@ func (repository *BookingAnswers) FindByKey(
 	if basis != nil {
 		basisRef, err := domain.NewAcceptanceBasisReference(*basis)
 		if err != nil {
-			return ports.BookingAnswerRecord{}, false, fmt.Errorf("find booking answer: %w", err)
+			return ports.BookingAnswerRecord{}, err
 		}
 		spec.Basis = basisRef
 	}
 	acceptance, err := domain.RehydrateCarrierAcceptance(spec)
 	if err != nil {
-		return ports.BookingAnswerRecord{}, false, fmt.Errorf("find booking answer: %w", err)
+		return ports.BookingAnswerRecord{}, err
 	}
 	return ports.BookingAnswerRecord{
 		Key:           key,
 		ContentDigest: digest,
 		Acceptance:    acceptance,
 		RecordedAt:    recordedAt.UTC(),
-	}, true, nil
+	}, nil
 }
 
-// Save 写下一次承运应答。同订舱已有应答时答`已有应答`，不覆盖——已接受不能再被拒绝。
+// Save 写下一次承运答复。撞上同一答复标识、第二份候补或第二份定局时答`已有应答`，不覆盖——已接受不能再被拒绝。
 func (repository *BookingAnswers) Save(
 	ctx context.Context,
 	record ports.BookingAnswerRecord,
@@ -259,6 +319,8 @@ func carrierOutcomeFrom(raw string) (domain.CarrierAcceptanceOutcome, error) {
 		return domain.BookingExpired, nil
 	case domain.BookingWithdrawn.String():
 		return domain.BookingWithdrawn, nil
+	case domain.BookingWaitlisted.String():
+		return domain.BookingWaitlisted, nil
 	default:
 		return 0, fmt.Errorf("unknown carrier acceptance outcome %q", raw)
 	}

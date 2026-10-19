@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"sort"
 	"strings"
 	"testing"
 	"time"
@@ -101,6 +102,7 @@ func (double *bookingStoreDouble) Save(
 	return ports.BookingSaved, nil
 }
 
+// answerStoreDouble 照迁移 0029 的三条唯一约束办：同一答复标识、同一订舱第二份候补、第二份定局都答已有应答。
 type answerStoreDouble struct {
 	records map[string]ports.BookingAnswerRecord
 	findErr error
@@ -111,15 +113,27 @@ func newAnswerStore() *answerStoreDouble {
 	return &answerStoreDouble{records: map[string]ports.BookingAnswerRecord{}}
 }
 
-func (double *answerStoreDouble) FindByKey(
+func answerStoreKey(record ports.BookingAnswerRecord) string {
+	return bookingStoreKey(record.Key) + "|" + record.Acceptance.Acceptance().String()
+}
+
+func (double *answerStoreDouble) FindAnswers(
 	_ context.Context,
 	key ports.BookingKey,
-) (ports.BookingAnswerRecord, bool, error) {
+) ([]ports.BookingAnswerRecord, error) {
 	if double.findErr != nil {
-		return ports.BookingAnswerRecord{}, false, double.findErr
+		return nil, double.findErr
 	}
-	record, found := double.records[bookingStoreKey(key)]
-	return record, found, nil
+	var answers []ports.BookingAnswerRecord
+	for _, record := range double.records {
+		if bookingStoreKey(record.Key) == bookingStoreKey(key) {
+			answers = append(answers, record)
+		}
+	}
+	sort.Slice(answers, func(i, j int) bool {
+		return answers[i].Acceptance.DecidedAt().Before(answers[j].Acceptance.DecidedAt())
+	})
+	return answers, nil
 }
 
 func (double *answerStoreDouble) Save(
@@ -127,11 +141,46 @@ func (double *answerStoreDouble) Save(
 	record ports.BookingAnswerRecord,
 ) (ports.BookingAnswerSaveOutcome, error) {
 	double.saves++
-	if _, exists := double.records[bookingStoreKey(record.Key)]; exists {
+	if _, exists := double.records[answerStoreKey(record)]; exists {
 		return ports.BookingAlreadyAnswered, nil
 	}
-	double.records[bookingStoreKey(record.Key)] = record
+	for _, stored := range double.records {
+		if bookingStoreKey(stored.Key) == bookingStoreKey(record.Key) && stored.Acceptance.Settles() == record.Acceptance.Settles() {
+			return ports.BookingAlreadyAnswered, nil
+		}
+	}
+	double.records[answerStoreKey(record)] = record
 	return ports.BookingAnswerSaved, nil
+}
+
+// answersOf 交 booking 名下在册的答复数。
+func (double *answerStoreDouble) answersOf(booking string) int {
+	count := 0
+	for _, record := range double.records {
+		if record.Key.Booking.String() == booking {
+			count++
+		}
+	}
+	return count
+}
+
+// scheduleReaderDouble 是班次登记的只读替身：只认登记过的（租户，班次）。
+type scheduleReaderDouble struct {
+	registered map[string]bool
+	findErr    error
+}
+
+func (double *scheduleReaderDouble) FindByKey(
+	_ context.Context,
+	key ports.ScheduleKey,
+) (ports.ScheduleRecord, bool, error) {
+	if double.findErr != nil {
+		return ports.ScheduleRecord{}, false, double.findErr
+	}
+	if !double.registered[key.TenantID.String()+"|"+key.Schedule.String()] {
+		return ports.ScheduleRecord{}, false, nil
+	}
+	return ports.ScheduleRecord{Key: key}, true, nil
 }
 
 type commissionHandoffDouble struct {
@@ -198,6 +247,7 @@ type commissionFixture struct {
 	commissions *commissionStoreDouble
 	bookings    *bookingStoreDouble
 	answers     *answerStoreDouble
+	schedules   *scheduleReaderDouble
 	agreements  *agreementSourceDouble
 	handoff     *commissionHandoffDouble
 	handler     *application.CommissionTransportHandler
@@ -209,6 +259,7 @@ func newCommissionFixture(t *testing.T) *commissionFixture {
 		commissions: newCommissionStore(),
 		bookings:    newBookingStore(),
 		answers:     newAnswerStore(),
+		schedules:   &scheduleReaderDouble{registered: map[string]bool{"tenant-1|schedule-1": true}},
 		agreements:  &agreementSourceDouble{check: registeredAgreement(t)},
 		handoff:     &commissionHandoffDouble{},
 	}
@@ -216,6 +267,7 @@ func newCommissionFixture(t *testing.T) *commissionFixture {
 		Commissions: fixture.commissions,
 		Bookings:    fixture.bookings,
 		Answers:     fixture.answers,
+		Schedules:   fixture.schedules,
 		Agreements:  fixture.agreements,
 		Downstream:  fixture.handoff,
 		Clock:       commissionClock{at: commissionNowAt},
@@ -250,6 +302,7 @@ func submitBookingCommand(t *testing.T) application.SubmitBookingCommand {
 		TenantID:    tenant,
 		Booking:     "booking-1",
 		Commission:  "commission-1",
+		Schedule:    "schedule-1",
 		Quantity:    100,
 		Unit:        "kg",
 		RequestedAt: bookingSentAt,
@@ -261,6 +314,7 @@ func answerBookingCommand(t *testing.T, outcome domain.CarrierAcceptanceOutcome)
 	tenant, _ := domain.NewTenantID("tenant-1")
 	command := application.AnswerBookingCommand{
 		TenantID:   tenant,
+		Source:     "partner-1",
 		Booking:    "booking-1",
 		Acceptance: "acceptance-1",
 		Outcome:    outcome,
@@ -352,10 +406,7 @@ func TestACommissionSubmitsOnceWithItsSnapshots(t *testing.T) {
 // 已接受的订舱不能再被拒绝（同键异应答冲突不覆盖，原接受保留）；同应答重放返原；
 // 应答四格完备性由 FormCarrierAcceptance 把门（超量接受、拒绝免因都未受理）。
 func TestABookingAnswerCannotBeOverwritten(t *testing.T) {
-	fixture := newCommissionFixture(t)
-	if _, err := fixture.handler.SubmitBooking(context.Background(), submitBookingCommand(t)); err != nil {
-		t.Fatalf("submit booking: %v", err)
-	}
+	fixture := newBookedFixture(t)
 
 	accepted, err := fixture.handler.AnswerBooking(context.Background(), answerBookingCommand(t, domain.BookingAccepted))
 	if err != nil {
@@ -413,17 +464,30 @@ func TestABookingAnswerCannotBeOverwritten(t *testing.T) {
 		}
 	})
 
-	t.Run("answering an absent booking is not accepted", func(t *testing.T) {
+	t.Run("answering an absent booking is its own cell", func(t *testing.T) {
 		missing := answerBookingCommand(t, domain.BookingAccepted)
 		missing.Booking = "booking-9"
 		result, err := fixture.handler.AnswerBooking(context.Background(), missing)
 		if err != nil {
 			t.Fatalf("answer: %v", err)
 		}
-		if result.Outcome() != application.CommissionNotAccepted {
-			t.Fatalf("outcome = %q", result.Outcome())
+		if result.Outcome() != application.BookingNotFound {
+			t.Fatalf("outcome = %q, want BOOKING_NOT_FOUND（续办是核订舱标识，不是改载荷）", result.Outcome())
 		}
 	})
+}
+
+// newBookedFixture 交回一份已提交委托（服务方 partner-1）并在登记过的班次 schedule-1 上订了舱（booking-1）的编排。
+func newBookedFixture(t *testing.T) *commissionFixture {
+	t.Helper()
+	fixture := newCommissionFixture(t)
+	if result, err := fixture.handler.SubmitCommission(context.Background(), submitCommissionCommand(t)); err != nil || result.Outcome() != application.CommissionSubmitted {
+		t.Fatalf("submit commission: %q %v", result.Outcome(), err)
+	}
+	if result, err := fixture.handler.SubmitBooking(context.Background(), submitBookingCommand(t)); err != nil || result.Outcome() != application.BookingSubmitted {
+		t.Fatalf("submit booking: %q %v", result.Outcome(), err)
+	}
+	return fixture
 }
 
 // Covers: CONTEXT「首个有效出发或移动事实形成前可以取消……之后只能形成中断、改降、
@@ -557,7 +621,7 @@ func TestCommissionRecoveryDiscipline(t *testing.T) {
 		labels := map[string]struct{}{}
 		for _, reason := range []application.CommissionUndecidedReason{
 			application.CommissionStoreUnavailable, application.BookingStoreUnavailable, application.AnswerStoreUnavailable,
-			application.SupplierAgreementUnavailable,
+			application.SupplierAgreementUnavailable, application.ScheduleStoreUnavailable,
 		} {
 			label := reason.String()
 			if label == "" {
@@ -565,7 +629,7 @@ func TestCommissionRecoveryDiscipline(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 4 {
+		if len(labels) != 5 {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if application.CommissionUndecidedReason(len(labels)+1).String() != "" {

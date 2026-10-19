@@ -104,7 +104,7 @@ type RehydrateCarrierAcceptanceSpec struct {
 	DecidedAt  time.Time
 }
 
-// RehydrateCarrierAcceptance 验四值形状：接受带正数量无原因，拒绝/失效/撤回无数量
+// RehydrateCarrierAcceptance 验五值形状：接受带正数量无原因，拒绝/失效/撤回/候补无数量
 // 有原因。不重审申请量上限。
 func RehydrateCarrierAcceptance(spec RehydrateCarrierAcceptanceSpec) (CarrierAcceptance, error) {
 	if !spec.TenantID.valid() ||

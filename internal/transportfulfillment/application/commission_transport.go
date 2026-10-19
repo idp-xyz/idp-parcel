@@ -21,12 +21,22 @@ var (
 	// ErrUnexpectedAgreementCheck 说明协议核对口交回了封闭集合以外的格，或在册格缺了快照与法人——核对口违约，
 	// 不是登记方能改的输入，也不是稍后再交就会好的依赖故障。只认本层看得见的这几种；核对口以 error 交回的违约落未决。
 	ErrUnexpectedAgreementCheck = errors.New("transport fulfillment: unexpected supplier agreement check")
+	// ErrAnswerSourceMissing 说明承运答复命令没带答复方的来源身份。来源身份只取自集成客户端绑定（ADR-0202 决定二），绑定
+	// 建不成就没有来源，所以缺它是装配违约，不是答复方能改的输入。
+	ErrAnswerSourceMissing = errors.New("transport fulfillment: booking answer carries no answering source")
+	// ErrBookingWithoutCommission 说明在册的订舱指名的委托读不回来。订舱只在委托在册时成立，委托又不删，读不回就是库里的
+	// 数据违约；答「订舱不存在」会让承运方去核一个确实存在的订舱。
+	ErrBookingWithoutCommission = errors.New("transport fulfillment: booking names a commission that is not registered")
 )
 
 // CommissionOutcome 是委托/订舱编排的应用处理结果。`运输已开始`是业务负向格——已
 // 开始的委托取消不了，只能按事实形成中断等实际结果（领域硬句编排分格）。协议核对不过的各格同是业务答案：
 // 续办各不相同（去 party-commercial 发布或补正文、换一版此刻生效的、取得新协议、改服务方），折成一格登记方就只能
 // 去猜（ADR-0029），所以逐格分开，不并进`未受理`。
+//
+// 订舱与承运答复的引用格同一条纪律：委托不在册（去提交委托或改引用）、委托已取消（另起委托）、班次不在册（去登记班次或
+// 改引在册班次）、订舱不在册（核订舱标识，或等运营侧把订舱录进来再答）、答复方不是该订舱所属委托的服务提供方（这份
+// 答复不归它答）各自续办不同，不并进`未受理`。他租户名下的同名委托、班次与订舱按本租户的键读不回，同落「不在册」那一格。
 type CommissionOutcome uint8
 
 const (
@@ -48,6 +58,11 @@ const (
 	CommissionAgreementNotEffective
 	CommissionAgreementTerminated
 	CommissionProviderMismatch
+	BookingCommissionNotFound
+	BookingCommissionNotBookable
+	BookingScheduleNotFound
+	BookingNotFound
+	BookingSourceNotProvider
 )
 
 func (outcome CommissionOutcome) String() string {
@@ -86,6 +101,16 @@ func (outcome CommissionOutcome) String() string {
 		return "AGREEMENT_TERMINATED"
 	case CommissionProviderMismatch:
 		return "PROVIDER_MISMATCH"
+	case BookingCommissionNotFound:
+		return "COMMISSION_NOT_FOUND"
+	case BookingCommissionNotBookable:
+		return "COMMISSION_NOT_BOOKABLE"
+	case BookingScheduleNotFound:
+		return "SCHEDULE_NOT_FOUND"
+	case BookingNotFound:
+		return "BOOKING_NOT_FOUND"
+	case BookingSourceNotProvider:
+		return "SOURCE_NOT_SERVICE_PROVIDER"
 	default:
 		return ""
 	}
@@ -100,6 +125,7 @@ const (
 	BookingStoreUnavailable
 	AnswerStoreUnavailable
 	SupplierAgreementUnavailable
+	ScheduleStoreUnavailable
 )
 
 func (reason CommissionUndecidedReason) String() string {
@@ -112,6 +138,8 @@ func (reason CommissionUndecidedReason) String() string {
 		return "ANSWER_STORE_UNAVAILABLE"
 	case SupplierAgreementUnavailable:
 		return "SUPPLIER_AGREEMENT_UNAVAILABLE"
+	case ScheduleStoreUnavailable:
+		return "SCHEDULE_STORE_UNAVAILABLE"
 	default:
 		return ""
 	}
@@ -133,19 +161,22 @@ type SubmitCommissionCommand struct {
 	SubmittedAt      time.Time
 }
 
-// SubmitBookingCommand 携带一次订舱申请。
+// SubmitBookingCommand 携带一次订舱申请：在哪一份已提交的委托下、就哪一个具体班次申请多少舱位（ADR-0202 决定五）。
 type SubmitBookingCommand struct {
 	TenantID    domain.TenantID
 	Booking     string
 	Commission  string
+	Schedule    string
 	Quantity    int64
 	Unit        string
 	RequestedAt time.Time
 }
 
-// AnswerBookingCommand 携带承运方对订舱的应答（封闭四值：接受/拒绝/失效/撤回）。
+// AnswerBookingCommand 携带承运方对订舱的答复（封闭五值：接受/拒绝/失效/撤回/候补）。Source 是答复方的来源身份，
+// 只取自集成客户端绑定（ADR-0202 决定二），不由载荷给——载荷里能写的来源等于自报。
 type AnswerBookingCommand struct {
 	TenantID   domain.TenantID
+	Source     string
 	Booking    string
 	Acceptance string
 	Outcome    domain.CarrierAcceptanceOutcome
@@ -211,7 +242,8 @@ func (result CommissionResult) AgreementSupplier() (domain.ServiceProviderRefere
 type CommissionTransportDeps struct {
 	Commissions ports.TransportCommissionStore
 	Bookings    ports.BookingStore
-	Answers     ports.BookingAnswerStore
+	Answers     ports.BookingAnswerLedger
+	Schedules   ports.TransportScheduleReader
 	Agreements  ports.SupplierAgreementSource
 	Downstream  ports.TransportCommissionHandoff
 	Clock       ports.Clock
@@ -328,7 +360,15 @@ func compareCommissionDigest(stored, current string) domain.StoredDigestComparis
 	return domain.CompareStoredDigest(stored, current, "")
 }
 
-// SubmitBooking 提交订舱申请：订舱不占容量、不等于接受（领域词条），幂等分重放/冲突。
+// SubmitBooking 提交订舱申请（UC-TF-004 步 1、3；ADR-0202 决定五）：订舱过构造门 → 按（租户+订舱）分重放与冲突 → 核
+// 委托在册且未取消 → 核班次在册 → 落库。订舱不占容量、不等于接受（领域词条）；确认订舱与容量的关系另归一张票，这里不碰
+// 任何池。
+//
+// 重放判在两项核对之前：那一格答的是「这次订舱是谁」，交回的是在册那一份，与委托、班次此后变成什么样无关——委托事后
+// 取消了，原样重放仍是原订舱；先核对会把重放改答成去处理委托或班次，而处理完再投还是重放。委托核在班次之前：订舱属于
+// 委托，委托不在册时班次在不在册已无从谈起。
+//
+// 订舱不入队：今天没有它的消费者（tf-chain-plan「跨票通则」X3），出站订舱连接器也不在本口（同计划 D02-8）。
 func (handler *CommissionTransportHandler) SubmitBooking(
 	ctx context.Context,
 	command SubmitBookingCommand,
@@ -339,7 +379,7 @@ func (handler *CommissionTransportHandler) SubmitBooking(
 	}
 
 	key := ports.BookingKey{TenantID: command.TenantID, Booking: booking.Booking()}
-	_, digest, err := domain.CanonicalizeBookingPayload(command.Commission, command.Quantity, command.Unit, command.RequestedAt)
+	_, digest, err := domain.CanonicalizeBookingPayload(command.Commission, command.Schedule, command.Quantity, command.Unit, command.RequestedAt)
 	if err != nil {
 		return CommissionResult{}, err
 	}
@@ -348,14 +388,30 @@ func (handler *CommissionTransportHandler) SubmitBooking(
 		return commissionUndecided(BookingStoreUnavailable, command.Booking), nil
 	}
 	if found {
-		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedBookingDigest(command)) {
-		case domain.SamePayload:
-			return CommissionResult{outcome: BookingExistingResult, booking: existing, hasRecord: true}, nil
-		case domain.DifferentPayload:
-			return CommissionResult{outcome: BookingConflict}, nil
-		default:
-			return commissionUndecided(BookingStoreUnavailable, command.Booking), nil
-		}
+		return answerFromStoredBooking(existing, digest, command.Booking), nil
+	}
+
+	commission, found, err := handler.deps.Commissions.FindByKey(ctx, ports.TransportCommissionKey{
+		TenantID:   command.TenantID,
+		Commission: booking.Commission(),
+	})
+	if err != nil {
+		return commissionUndecided(CommissionStoreUnavailable, command.Booking), nil
+	}
+	if !found {
+		return CommissionResult{outcome: BookingCommissionNotFound}, nil
+	}
+	if _, cancelled := commission.Commission.Cancelled(); cancelled {
+		// 委托取消停止的正是尚未消耗的运输意图（CONTEXT 生命周期「尚未消耗的运输委托或订舱范围可以取消」），在它下面新订舱
+		// 等于把停掉的意图又续上。已开始的委托不挡：开始之后仍可能为剩余范围订舱。
+		return CommissionResult{outcome: BookingCommissionNotBookable}, nil
+	}
+	_, registered, err := handler.deps.Schedules.FindByKey(ctx, ports.ScheduleKey{TenantID: command.TenantID, Schedule: booking.Schedule()})
+	if err != nil {
+		return commissionUndecided(ScheduleStoreUnavailable, command.Booking), nil
+	}
+	if !registered {
+		return CommissionResult{outcome: BookingScheduleNotFound}, nil
 	}
 
 	record := ports.BookingRecord{
@@ -372,24 +428,50 @@ func (handler *CommissionTransportHandler) SubmitBooking(
 	case ports.BookingSaved:
 		return CommissionResult{outcome: BookingSubmitted, booking: record, hasRecord: true}, nil
 	case ports.BookingAlreadyRegistered:
+		// 并发首交的输家照样按摘要分重放与冲突，理由同委托：读回赢家就答「已有」会把冲突吞掉。
 		winner, found, err := handler.deps.Bookings.FindByKey(ctx, key)
 		if err != nil || !found {
 			return commissionUndecided(BookingStoreUnavailable, command.Booking), nil
 		}
-		return CommissionResult{outcome: BookingExistingResult, booking: winner, hasRecord: true}, nil
+		return answerFromStoredBooking(winner, digest, command.Booking), nil
 	default:
 		return CommissionResult{}, fmt.Errorf("%w: %d", ErrUnexpectedBookingSave, saved)
 	}
 }
 
-// AnswerBooking 登记承运方应答：一次订舱一个应答——已接受的订舱不能再被拒绝，同键
-// 异应答是冲突不是覆盖；应答四格完备性由 FormCarrierAcceptance 把门（接受限申请量、
-// 拒/失效/撤回带因）。
+// answerFromStoredBooking 按已存订舱作答：同内容是重放，异内容是冲突，认不出形状答未决。订舱表没有 TFC-1 之前的行
+// （TF 迁移 0029 在表里有行时拒绝施加），无版本那一形交空串，理由同 compareCommissionDigest。
+func answerFromStoredBooking(stored ports.BookingRecord, digest, subject string) CommissionResult {
+	switch domain.CompareStoredDigest(stored.ContentDigest, digest, "") {
+	case domain.SamePayload:
+		return CommissionResult{outcome: BookingExistingResult, booking: stored, hasRecord: true}
+	case domain.DifferentPayload:
+		return CommissionResult{outcome: BookingConflict}
+	default:
+		return commissionUndecided(BookingStoreUnavailable, subject)
+	}
+}
+
+// AnswerBooking 登记承运方对订舱的答复（UC-TF-004 步 4；ADR-0202 决定二、五）：订舱在册 → 答复方是该订舱所属委托的服务
+// 提供方 → 同一答复标识分重放与冲突 → 答复过构造门 → 已有答复时只有候补接得上后继 → 落库。
+//
+// 来源核对排在重放之前：同一租户下的另一个承运商拿别人的答复标识原样重放，不该读回别人的答复。答复方与服务方按同一串
+// 字面比，不比名称、不归一（ADR-0202 决定四同一条纪律）。
+//
+// 一次订舱至多一份定局：已接受的订舱不能再被拒绝，同订舱另一份答复是冲突不是覆盖；候补之后可以接一份定局，两份都留
+// （domain.CarrierAcceptance.AdmitsSuccessor）。答复不入队，理由同订舱。
 func (handler *CommissionTransportHandler) AnswerBooking(
 	ctx context.Context,
 	command AnswerBookingCommand,
 ) (CommissionResult, error) {
+	if strings.TrimSpace(command.Source) == "" {
+		return CommissionResult{}, ErrAnswerSourceMissing
+	}
 	bookingRef, err := domain.NewBookingReference(command.Booking)
+	if err != nil {
+		return CommissionResult{outcome: CommissionNotAccepted}, nil
+	}
+	acceptanceRef, err := domain.NewCarrierAcceptanceReference(command.Acceptance)
 	if err != nil {
 		return CommissionResult{outcome: CommissionNotAccepted}, nil
 	}
@@ -400,34 +482,44 @@ func (handler *CommissionTransportHandler) AnswerBooking(
 		return commissionUndecided(BookingStoreUnavailable, command.Booking), nil
 	}
 	if !found {
-		// 应答一个不存在的订舱：提交矛盾，改单重来。
-		return CommissionResult{outcome: CommissionNotAccepted}, nil
+		return CommissionResult{outcome: BookingNotFound}, nil
+	}
+	commission, found, err := handler.deps.Commissions.FindByKey(ctx, ports.TransportCommissionKey{
+		TenantID:   command.TenantID,
+		Commission: bookingRecord.Booking.Commission(),
+	})
+	if err != nil {
+		return commissionUndecided(CommissionStoreUnavailable, command.Booking), nil
+	}
+	if !found {
+		return CommissionResult{}, fmt.Errorf("%w: booking %s, commission %s", ErrBookingWithoutCommission,
+			bookingRef, bookingRecord.Booking.Commission())
+	}
+	if commission.Commission.Provider().String() != command.Source {
+		return CommissionResult{outcome: BookingSourceNotProvider}, nil
 	}
 
 	_, digest, err := domain.CanonicalizeBookingAnswerPayload(command.Outcome, command.Acceptance, command.Quantity, command.Basis, command.DecidedAt)
 	if err != nil {
 		return CommissionResult{}, err
 	}
-	existingAnswer, answered, err := handler.deps.Answers.FindByKey(ctx, key)
+	answers, err := handler.deps.Answers.FindAnswers(ctx, key)
 	if err != nil {
 		return commissionUndecided(AnswerStoreUnavailable, command.Booking), nil
 	}
-	if answered {
-		switch domain.CompareStoredDigest(existingAnswer.ContentDigest, digest, unversionedAnswerDigest(command)) {
-		case domain.SamePayload:
-			return CommissionResult{outcome: BookingAnswerExists, answer: existingAnswer, hasRecord: true}, nil
-		case domain.DifferentPayload:
-			// 已接受的订舱不能再被拒绝（反之亦然）：应答不可覆盖，改约走撤回与新订舱。
-			return CommissionResult{outcome: BookingAnswerConflict}, nil
-		default:
-			return commissionUndecided(AnswerStoreUnavailable, command.Booking), nil
-		}
+	if stored, present := answerWithAcceptance(answers, acceptanceRef); present {
+		return answerFromStoredAnswer(stored, digest, command), nil
 	}
 
 	acceptance, err := acceptanceFrom(command, bookingRecord.Booking)
 	if err != nil {
 		return CommissionResult{outcome: CommissionNotAccepted}, nil
 	}
+	if head, answered := currentAnswer(answers); answered && !head.Acceptance.AdmitsSuccessor(acceptance) {
+		// 已有定局，或这份不是候补的合格后继：应答不可覆盖，改约走撤回与新订舱。
+		return CommissionResult{outcome: BookingAnswerConflict}, nil
+	}
+
 	record := ports.BookingAnswerRecord{
 		Key:           key,
 		ContentDigest: digest,
@@ -442,13 +534,52 @@ func (handler *CommissionTransportHandler) AnswerBooking(
 	case ports.BookingAnswerSaved:
 		return CommissionResult{outcome: BookingAnswered, answer: record, hasRecord: true}, nil
 	case ports.BookingAlreadyAnswered:
-		winner, found, err := handler.deps.Answers.FindByKey(ctx, key)
-		if err != nil || !found {
+		// 并发下另一份答复先落：同一答复标识按摘要分重放与冲突；撞的是别的标识（另一份定局或候补先占了位）就是冲突。
+		winners, err := handler.deps.Answers.FindAnswers(ctx, key)
+		if err != nil {
 			return commissionUndecided(AnswerStoreUnavailable, command.Booking), nil
 		}
-		return CommissionResult{outcome: BookingAnswerExists, answer: winner, hasRecord: true}, nil
+		if stored, present := answerWithAcceptance(winners, acceptanceRef); present {
+			return answerFromStoredAnswer(stored, digest, command), nil
+		}
+		return CommissionResult{outcome: BookingAnswerConflict}, nil
 	default:
 		return CommissionResult{}, fmt.Errorf("%w: %d", ErrUnexpectedBookingSave, saved)
+	}
+}
+
+// answerWithAcceptance 在同一订舱名下的答复里找同一答复标识的那一份。
+func answerWithAcceptance(answers []ports.BookingAnswerRecord, acceptance domain.CarrierAcceptanceReference) (ports.BookingAnswerRecord, bool) {
+	for _, stored := range answers {
+		if stored.Acceptance.Acceptance() == acceptance {
+			return stored, true
+		}
+	}
+	return ports.BookingAnswerRecord{}, false
+}
+
+// currentAnswer 交这次订舱当前的那一份答复：有定局交定局，没有定局交最后一份候补。
+func currentAnswer(answers []ports.BookingAnswerRecord) (ports.BookingAnswerRecord, bool) {
+	for _, stored := range answers {
+		if stored.Acceptance.Settles() {
+			return stored, true
+		}
+	}
+	if len(answers) == 0 {
+		return ports.BookingAnswerRecord{}, false
+	}
+	return answers[len(answers)-1], true
+}
+
+// answerFromStoredAnswer 按同一答复标识的已存答复作答：同内容是重放，异内容是冲突（不覆盖），认不出形状答未决。
+func answerFromStoredAnswer(stored ports.BookingAnswerRecord, digest string, command AnswerBookingCommand) CommissionResult {
+	switch domain.CompareStoredDigest(stored.ContentDigest, digest, unversionedAnswerDigest(command)) {
+	case domain.SamePayload:
+		return CommissionResult{outcome: BookingAnswerExists, answer: stored, hasRecord: true}
+	case domain.DifferentPayload:
+		return CommissionResult{outcome: BookingAnswerConflict}
+	default:
+		return commissionUndecided(AnswerStoreUnavailable, command.Booking)
 	}
 }
 
@@ -543,6 +674,9 @@ func bookingFrom(command SubmitBookingCommand) (domain.BookingRequest, error) {
 		return domain.BookingRequest{}, err
 	}
 	if spec.Commission, err = domain.NewTransportCommissionReference(command.Commission); err != nil {
+		return domain.BookingRequest{}, err
+	}
+	if spec.Schedule, err = domain.NewScheduleReference(command.Schedule); err != nil {
 		return domain.BookingRequest{}, err
 	}
 	if spec.Unit, err = domain.NewQuantityUnitReference(command.Unit); err != nil {

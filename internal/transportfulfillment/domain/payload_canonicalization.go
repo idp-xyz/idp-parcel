@@ -307,12 +307,15 @@ func CanonicalizeCommissionPayload(provider, agreementObject, agreementVersion, 
 	})
 }
 
-// CanonicalizeBookingPayload 定形「提交订舱」。
-func CanonicalizeBookingPayload(commission string, quantity int64, unit string, requestedAt time.Time) ([]byte, string, error) {
+// CanonicalizeBookingPayload 定形「提交订舱」。班次进摘要：同一订舱标识换一个班次再交是另一份内容。订舱表在提交口接线
+// 之前没有任何写入方（TF 迁移 0029 在表里有行时拒绝施加），不存在按旧形状算出的已存摘要，所以这一形状沿用 TFC-1 前缀，
+// 不另立版本。
+func CanonicalizeBookingPayload(commission, schedule string, quantity int64, unit string, requestedAt time.Time) ([]byte, string, error) {
 	return marshalPayload(struct {
 		Canonicalization string `json:"canonicalization"`
 		Face             string `json:"face"`
 		Commission       string `json:"commission"`
+		Schedule         string `json:"schedule"`
 		Quantity         int64  `json:"quantity"`
 		Unit             string `json:"unit"`
 		RequestedAt      string `json:"requested_at"`
@@ -320,6 +323,7 @@ func CanonicalizeBookingPayload(commission string, quantity int64, unit string, 
 		Canonicalization: payloadCanonicalizationVersion,
 		Face:             "SUBMIT_BOOKING",
 		Commission:       commission,
+		Schedule:         schedule,
 		Quantity:         quantity,
 		Unit:             unit,
 		RequestedAt:      canonicalInstant(requestedAt),

@@ -82,10 +82,10 @@ func TestCommandPayloadsRoundTripAsTFC1(t *testing.T) {
 		},
 		{
 			name:     "booking",
-			document: `{"canonicalization":"TFC-1","face":"SUBMIT_BOOKING","commission":"COM-1","quantity":2,"unit":"PIECE","requested_at":"2026-03-05T02:11:12.345678901Z"}`,
-			digest:   "TFC-1:7b51aa6dd349ee0d6487d1ea591d69ee92c89124465f5c5727caee55ead1ea82",
+			document: `{"canonicalization":"TFC-1","face":"SUBMIT_BOOKING","commission":"COM-1","schedule":"SCH-1","quantity":2,"unit":"PIECE","requested_at":"2026-03-05T02:11:12.345678901Z"}`,
+			digest:   "TFC-1:83cc2796e97d23424ee97f9e9972e3355d3f24bbaa22862190cb5ecbeb83d181",
 			call: func() ([]byte, string, error) {
-				return domain.CanonicalizeBookingPayload("COM-1", 2, "PIECE", at)
+				return domain.CanonicalizeBookingPayload("COM-1", "SCH-1", 2, "PIECE", at)
 			},
 		},
 		{

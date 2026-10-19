@@ -30,16 +30,6 @@ func unversionedDispositionDigest(command AcceptRegulatoryDispositionCommand) st
 	return hex.EncodeToString(digest[:8])
 }
 
-func unversionedBookingDigest(command SubmitBookingCommand) string {
-	digest := sha256.Sum256([]byte(strings.Join([]string{
-		command.Commission,
-		fmt.Sprintf("%d", command.Quantity),
-		command.Unit,
-		command.RequestedAt.UTC().Format(time.RFC3339Nano),
-	}, "\x00")))
-	return hex.EncodeToString(digest[:])
-}
-
 func unversionedAnswerDigest(command AnswerBookingCommand) string {
 	digest := sha256.Sum256([]byte(strings.Join([]string{
 		fmt.Sprintf("%d", command.Outcome),
