@@ -288,7 +288,7 @@ func assembleBusinessEndpoints(
 		{Pattern: "/shipment-requests/parcel-cancellations", Handler: shipmenthttp.NewCancelParcelEndpoint(shipmenthttp.UnconfiguredIntake{}, cancellation)},
 		// 受控关闭 / 重开决定两个命令口（票 label-channel/30）：同一只编排两条命令，运营侧写行，挂操作者渠道的「运营决定」
 		// 能力面（ADR-0151；票 operator-channel/15）。按包裹寻址、请求方与货主账户取包裹所属已接受委托的客户账户（ADR-0183）；
-		// 提交操作者不进命令，决定方与授权角色由授权答复给出。授权请求映射未配置（`PAR-COM-13` / `PAR-COM-14`）时越过
+		// 提交操作者只作操作证据（ADR-0187），决定方与授权角色由授权答复给出。授权请求映射未配置（`PAR-COM-13` / `PAR-COM-14`）时越过
 		// Intake 答`未决 · 授权口不可用`。
 		{Pattern: "/shipment-requests/continued-attempt-closures", Handler: shipmenthttp.NewFormControlledClosureEndpoint(operatorDecisions.shipment, continuedAttemptDecisions)},
 		{Pattern: "/shipment-requests/continued-attempt-reopenings", Handler: shipmenthttp.NewFormReopeningEndpoint(operatorDecisions.shipment, continuedAttemptDecisions)},

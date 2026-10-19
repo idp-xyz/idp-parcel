@@ -16,7 +16,7 @@ import (
 // 这里：动作由询问里的 Kind 钉死（关闭权与重开权是 PC 互不蕴含的两格，映射不得把一格读成另一格）；所代的客户账户
 // 只能是询问身份上的那一个；原因与时点是询问自带的事实——让映射再给一份就有了第二个来源。
 //
-// 请求方一律是运营角色（pc-gaps/13 裁决 ③：例外支首发不开，货主只作 Requester 证据随查询进 PC）：客户账户请求
+// 请求方一律是运营角色（pc-gaps/13 裁决 ③：例外支首发不开，货主只作请求方落在决定上，不进 PC）：客户账户请求
 // 这两格由 PC 的 resolveDecider 显式拒（ErrCustomerAccountCannotDecide），本适配器不给映射一个「客户自己来的」种类。
 type ContinuedAttemptDecisionRequestCoordinates struct {
 	OperatorRole pcdomain.OperatorRoleReference
