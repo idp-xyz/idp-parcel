@@ -19,10 +19,11 @@ import (
 	"go.idp.xyz/idp-parcel/internal/platform/dispatch"
 )
 
-// recheckPendingIdentitiesConsumer 接 node-operations 的重核消费者（ADR-0199 决定三）。同一个消费者三扇门，复用同一只重核编排：
+// recheckPendingIdentitiesConsumer 接 node-operations 的重核消费者（ADR-0199 决定三）。同一个消费者四扇门，复用同一只重核编排：
 //   - PS 外部标识关联已形成的门铃 → 按号重核待识别实物；
 //   - PS 客户包裹件号声明撤除的门铃 → 同样按号重核，只因歧义信号落下的身份冲突由此可能解开（ADR-0211 决定三）；
-//   - 落未核对行时本上下文自投的门铃 → 只重核指名那一件（ADR-0199 决定三「给本上下文自投一封门铃」）。
+//   - 落未核对行时本上下文自投的门铃 → 只重核指名那一件（ADR-0199 决定三「给本上下文自投一封门铃」）；
+//   - 交付范围成立时本上下文自投的门铃 → 按送站交接单重核名下的重核对象，或只重核归入的那一件（ADR-0212 决定六）。
 //
 // 结果唯一即追加一版关联收寄并交收寄意图（意图与追加版同一笔，由消费门那一笔事务承担）。交回的一个 Consumer 按事件类型把信封
 // 分给各扇门，路由表上每一类各挂一行、挂的是同一个值。
@@ -63,10 +64,19 @@ func recheckPendingIdentitiesConsumer(
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: declaration retired doorbell consumer: %w", err)
 	}
+	withinScope, err := noinbox.NewRecheckWithinEstablishedScope(recheck)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: recheck within the established delivery scope: %w", err)
+	}
+	established, err := noinbox.NewDeliveryScopeEstablishedConsumer(db.Transactor(), inboxStore, withinScope)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: delivery scope established doorbell consumer: %w", err)
+	}
 	routed, err := dispatch.WithUndecidedSentinels(recheckGates{
 		noinbox.ExternalIdentifierRelationFormedEventType:       consumer,
 		noinbox.CustomerParcelNumberDeclarationRetiredEventType: retired,
 		noinbox.UncheckedPendingIdentityRecordedEventType:       doorbell,
+		noinbox.DeliveryScopeEstablishedEventType:               established,
 	}, noapplication.ErrParcelIdentityUnreadable)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: recheck pending identities undecided translation: %w", err)

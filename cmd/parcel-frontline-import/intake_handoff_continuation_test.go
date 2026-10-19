@@ -82,6 +82,10 @@ func importerWithSwitchableHandoff(t *testing.T) (*pgxpool.Pool, intakeImporter,
 	if err != nil {
 		t.Fatalf("交付范围证据：%v", err)
 	}
+	handover, err := nopostgres.NewDeliveryHandoverNotes(db)
+	if err != nil {
+		t.Fatalf("交接单册：%v", err)
+	}
 	switchable := &switchableIntakeHandoff{inner: downstream, down: true}
 	handler, err := application.NewReceiveDeliveredUnitHandler(application.ReceiveDeliveredUnitDeps{
 		Identity:       resolvingParcelIdentityView{association: association},
@@ -91,6 +95,7 @@ func importerWithSwitchableHandoff(t *testing.T) (*pgxpool.Pool, intakeImporter,
 		Downstream:     switchable,
 		Doorbell:       doorbell,
 		Scope:          scope,
+		Handover:       handover,
 		Clock:          clock,
 	})
 	if err != nil {

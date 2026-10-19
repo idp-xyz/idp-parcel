@@ -216,7 +216,7 @@ func receivePendingForRecheck(
 	}
 	handler, err := noapplication.NewReceiveDeliveredUnitHandler(noapplication.ReceiveDeliveredUnitDeps{
 		Identity: identity, ServiceResults: services, Receptions: receptions, Versions: versions,
-		Downstream: downstream, Doorbell: doorbell, Scope: deliveryScopeEvidenceFor(t, db), Clock: systemClock{},
+		Downstream: downstream, Doorbell: doorbell, Scope: deliveryScopeEvidenceFor(t, db), Handover: handoverMembershipFor(t, db), Clock: systemClock{},
 	})
 	if err != nil {
 		t.Fatalf("构造收寄编排：%v", err)

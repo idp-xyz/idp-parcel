@@ -306,6 +306,8 @@ var swappedDecisionFaces = map[string]accessidentity.DecisionKind{
 	// 容量预占与容量释放（ADR-0203 决定三，`AT-TF-144`）：两种各自授予，持预占的在释放口答 403。
 	"/transport-fulfillment-capacity-reservations": accessidentity.DecisionCapacityReservation,
 	"/transport-fulfillment-capacity-releases":     accessidentity.DecisionCapacityRelease,
+	// 送站交接确认（ADR-0212 决定三，票 ps-external-mark-relations/12）：依授权交付关系确认交接单对一个客户账户的绑定。
+	"/node-operations/delivery-handover-confirmations": accessidentity.DecisionDeliveryHandoverConfirmation,
 }
 
 // Covers: 票 operator-channel/15 完成判据「无此决定种类的授予」那一格——授予按决定种类各自成立：持有别的每一种

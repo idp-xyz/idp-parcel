@@ -134,6 +134,8 @@ type receptionStoreDouble struct {
 	// lookups 记下按实物与节点找各链当前有效版本的每一问（「实物@节点」），currentErr 让这一问报错。
 	lookups    []string
 	currentErr error
+	// handover 是同一夹具里的交接单册替身：按交接单找重核对象要读它的成员与开立节点。
+	handover *handoverRegisterDouble
 }
 
 func newReceptionStore() *receptionStoreDouble {
@@ -317,6 +319,7 @@ type receptionFixture struct {
 	downstream     *downstreamDouble
 	doorbell       *doorbellDouble
 	scope          *scopeEvidenceDouble
+	handover       *handoverRegisterDouble
 }
 
 func (fixture *receptionFixture) deps() application.ReceiveDeliveredUnitDeps {
@@ -328,6 +331,7 @@ func (fixture *receptionFixture) deps() application.ReceiveDeliveredUnitDeps {
 		Downstream:     fixture.downstream,
 		Doorbell:       fixture.doorbell,
 		Scope:          fixture.scope,
+		Handover:       fixture.handover,
 		Clock:          fixedClock{at: deliveredAt.Add(time.Minute)},
 	}
 }
@@ -344,7 +348,9 @@ func newReceptionFixture(t *testing.T) *receptionFixture {
 		downstream:     &downstreamDouble{},
 		doorbell:       &doorbellDouble{},
 		scope:          newScopeEvidence(),
+		handover:       newHandoverRegister(),
 	}
+	fixture.receptions.handover = fixture.handover
 	handler, err := application.NewReceiveDeliveredUnitHandler(fixture.deps())
 	if err != nil {
 		t.Fatalf("构造收寄编排：%v", err)

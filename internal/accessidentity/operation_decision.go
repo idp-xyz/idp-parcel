@@ -63,6 +63,10 @@ const (
 	DecisionBookingRequestCancellation           DecisionKind = "BOOKING_REQUEST_CANCELLATION"
 )
 
+// DecisionDeliveryHandoverConfirmation 是送站交接确认（ADR-0212 决定三）：持这一种授予的人指名送站交接单、客户账户、交付方参与方与
+// 依据引用，依 party-commercial 的授权交付关系确认交接单对那个客户账户的绑定。只能确认、不能否认——否认是客户账户自己的话，走客户面。
+const DecisionDeliveryHandoverConfirmation DecisionKind = "DELIVERY_HANDOVER_CONFIRMATION"
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -75,6 +79,7 @@ var decisionKinds = []DecisionKind{
 	DecisionCapacityReservation, DecisionCapacityRelease,
 	DecisionBookingRequestSubmission,
 	DecisionFulfillmentSegmentCommissionAdoption, DecisionTransportCommissionCancellation, DecisionBookingRequestCancellation,
+	DecisionDeliveryHandoverConfirmation,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。

@@ -148,13 +148,14 @@ func confirmedHandoverNoteOnRealDatabase(t *testing.T, db *bentopg.DB, customer 
 		t.Fatalf("交接单：%v", err)
 	}
 	binding, err := nodomain.FormDeliveryHandoverBinding(nodomain.DeliveryHandoverBindingSpec{
-		TenantID:    tenant,
-		Note:        note.ID(),
-		Account:     account,
-		Conclusion:  nodomain.BindingConfirmed,
-		Route:       nodomain.ConcludedViaCustomerChannel,
-		Concluder:   "SYN-CUSTOMER-CLIENT-PSXM11",
-		ConcludedAt: receptionDeliveredAt.Add(-30 * time.Minute),
+		TenantID:         tenant,
+		Note:             note.ID(),
+		Account:          account,
+		Conclusion:       nodomain.BindingConfirmed,
+		Route:            nodomain.ConcludedViaCustomerChannel,
+		Concluder:        "SYN-CUSTOMER-CLIENT-PSXM11",
+		SourceRequestKey: "SYN-ACCESS-REQUEST-PSXM11-" + id,
+		ConcludedAt:      receptionDeliveredAt.Add(-30 * time.Minute),
 	})
 	if err != nil {
 		t.Fatalf("绑定结论：%v", err)

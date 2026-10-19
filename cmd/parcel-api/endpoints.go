@@ -192,6 +192,7 @@ func assembleBusinessEndpoints(
 	segmentCommissionAdoption tfhttp.SegmentCommissionAdopter,
 	transportCommissionCancellation tfhttp.TransportCommissionCanceller,
 	bookingRequestCancellation tfhttp.BookingRequestCanceller,
+	deliveryHandoverNotes deliveryHandoverNoteFaces,
 ) []httpapi.BusinessEndpoint {
 	// 缺省朝拦：真渠道与隔离入参都缺席时，下面这组变量全取未配置即拒。
 	//
@@ -749,5 +750,13 @@ func assembleBusinessEndpoints(
 		// 决定认证——能提交的不因此能取消。写开关换不了它们（ADR-0150 决定三）。
 		{Pattern: "/transport-fulfillment-transport-commission-cancellations", Handler: tfhttp.NewCancelTransportCommissionEndpoint(operatorDecisions.transport, transportCommissionCancellation)},
 		{Pattern: "/transport-fulfillment-booking-request-cancellations", Handler: tfhttp.NewCancelBookingRequestEndpoint(operatorDecisions.transport, bookingRequestCancellation)},
+		// 送站交接单五口（ADR-0212 决定三；UC-NO-006）：开立、归入、关闭是节点当场的作业事实，挂「作业事实登记」能力面、各判自己那一种
+		// 事实的准入范围；确认挂「运营决定」能力面的送站交接确认一种；客户的确认或否认挂首方客户渠道族，一口一项客户面能力。写开关换
+		// 不了它们（ADR-0150 决定三）。
+		{Pattern: "/node-operations/delivery-handover-notes", Handler: nodeopshttp.NewOpenDeliveryHandoverNoteEndpoint(deliveryHandoverNotes.openingIntake(), deliveryHandoverNotes.handler)},
+		{Pattern: "/node-operations/delivery-handover-assignments", Handler: nodeopshttp.NewAssignToDeliveryHandoverNoteEndpoint(deliveryHandoverNotes.assignmentIntake(), deliveryHandoverNotes.handler)},
+		{Pattern: "/node-operations/delivery-handover-closures", Handler: nodeopshttp.NewCloseDeliveryHandoverNoteEndpoint(deliveryHandoverNotes.closureIntake(), deliveryHandoverNotes.handler)},
+		{Pattern: "/node-operations/delivery-handover-confirmations", Handler: nodeopshttp.NewConfirmDeliveryHandoverEndpoint(operatorDecisions.nodeOperations, deliveryHandoverNotes.handler)},
+		{Pattern: "/node-operations/delivery-handover-conclusions", Handler: nodeopshttp.NewConcludeDeliveryHandoverEndpoint(deliveryHandoverNotes.conclusionIntake(), deliveryHandoverNotes.handler)},
 	}
 }

@@ -275,7 +275,8 @@ func ParseHandoverBindingRoute(raw string) (HandoverBindingRoute, error) {
 
 // DeliveryHandoverBindingSpec 是一份绑定结论的输入。Concluder 是作结论的一方：客户渠道写客户端的来源格，运营决定写提交操作者
 // （与 ADR-0187 操作证据同一写法）。DeliveringParticipant 是 party-commercial 的参与方标识、Basis 是依据引用，两格只在运营决定时
-// 在场，逐字保存、不判真伪。
+// 在场，逐字保存、不判真伪。SourceRequestKey 只在客户渠道时在场：首方族推导口从接入请求标识铸出的来源请求键（UC-NO-006 结果语义
+// 契约「绑定已否认」要存它）。
 type DeliveryHandoverBindingSpec struct {
 	TenantID              TenantID
 	Note                  DeliveryHandoverNoteID
@@ -285,6 +286,7 @@ type DeliveryHandoverBindingSpec struct {
 	Concluder             string
 	DeliveringParticipant string
 	Basis                 string
+	SourceRequestKey      string
 	ConcludedAt           time.Time
 }
 
@@ -299,15 +301,17 @@ type DeliveryHandoverBinding struct {
 	concluder             string
 	deliveringParticipant string
 	basis                 string
+	sourceRequestKey      string
 	concludedAt           time.Time
 }
 
-// FormDeliveryHandoverBinding 立一份结论并验途径与结论、证据的搭配：运营决定只能确认，且必带交付方参与方与依据引用；客户渠道两种
-// 结论都可以，不带那两格。账户在不在声称之列不在这里判——那要读交接单，由作结论的编排与册各守一道。
+// FormDeliveryHandoverBinding 立一份结论并验途径与结论、证据的搭配：运营决定只能确认，且必带交付方参与方与依据引用、不带来源请求
+// 键；客户渠道两种结论都可以，必带来源请求键、不带那两格。账户在不在声称之列不在这里判——那要读交接单，由作结论的编排与册各守一道。
 func FormDeliveryHandoverBinding(spec DeliveryHandoverBindingSpec) (DeliveryHandoverBinding, error) {
 	participant := strings.TrimSpace(spec.DeliveringParticipant)
 	basis := strings.TrimSpace(spec.Basis)
 	concluder := strings.TrimSpace(spec.Concluder)
+	requestKey := strings.TrimSpace(spec.SourceRequestKey)
 	if !spec.TenantID.valid() ||
 		!spec.Note.valid() ||
 		!spec.Account.valid() ||
@@ -318,11 +322,11 @@ func FormDeliveryHandoverBinding(spec DeliveryHandoverBindingSpec) (DeliveryHand
 	}
 	switch spec.Route {
 	case ConcludedViaOperationDecision:
-		if spec.Conclusion != BindingConfirmed || participant == "" || basis == "" {
+		if spec.Conclusion != BindingConfirmed || participant == "" || basis == "" || requestKey != "" {
 			return DeliveryHandoverBinding{}, ErrInvalidDeliveryHandoverNote
 		}
 	case ConcludedViaCustomerChannel:
-		if participant != "" || basis != "" {
+		if participant != "" || basis != "" || requestKey == "" {
 			return DeliveryHandoverBinding{}, ErrInvalidDeliveryHandoverNote
 		}
 	default:
@@ -337,6 +341,7 @@ func FormDeliveryHandoverBinding(spec DeliveryHandoverBindingSpec) (DeliveryHand
 		concluder:             concluder,
 		deliveringParticipant: participant,
 		basis:                 basis,
+		sourceRequestKey:      requestKey,
 		concludedAt:           registerInstant(spec.ConcludedAt),
 	}, nil
 }
@@ -350,6 +355,9 @@ func (binding DeliveryHandoverBinding) Conclusion() HandoverBindingConclusion {
 func (binding DeliveryHandoverBinding) Route() HandoverBindingRoute { return binding.route }
 func (binding DeliveryHandoverBinding) Concluder() string           { return binding.concluder }
 func (binding DeliveryHandoverBinding) ConcludedAt() time.Time      { return binding.concludedAt }
+
+// SourceRequestKey 交回客户渠道作结论时的来源请求键；运营决定的确认为空。
+func (binding DeliveryHandoverBinding) SourceRequestKey() string { return binding.sourceRequestKey }
 
 // OperationDecisionEvidence 交回运营决定确认时记下的交付方参与方与依据引用；客户渠道的结论两格都是空。
 func (binding DeliveryHandoverBinding) OperationDecisionEvidence() (deliveringParticipant, basis string) {
@@ -397,4 +405,20 @@ func (state DeliveryHandoverNoteState) ScopeEstablished() bool {
 		}
 	}
 	return true
+}
+
+// ScopeEstablishedAt 交回范围成立的时刻：声称的客户账户全部已确认时，最后一个确认落下的那一刻（UC-NO-006 结果语义契约「可验证交付
+// 范围已成立：成立时刻」）。范围成立是派生、不落列，时刻也从结论里读，不另存一份会与结论对不上的副本。没成立答 false。
+func (state DeliveryHandoverNoteState) ScopeEstablishedAt() (time.Time, bool) {
+	if !state.ScopeEstablished() {
+		return time.Time{}, false
+	}
+	var latest time.Time
+	for _, account := range state.Note.claimed {
+		binding, _ := state.BindingFor(account)
+		if binding.concludedAt.After(latest) {
+			latest = binding.concludedAt
+		}
+	}
+	return latest, true
 }

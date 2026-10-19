@@ -164,7 +164,10 @@ type ReceiveDeliveredUnitDeps struct {
 	Doorbell ports.IdentityRecheckDoorbell
 	// Scope 是身份判断推导可验证交付范围要读的证据（ADR-0212 决定四）。
 	Scope ports.DeliveryScopeEvidence
-	Clock ports.Clock
+	// Handover 在收寄带着送站交接单的标识时，同一笔把这件实物记成那张交接单收寄带来的成员（ADR-0212 决定三「成员」）：范围成立的
+	// 门铃按成员找重核对象，不记成员，带着交接单标识收进来的待识别就等不到那一封门铃。
+	Handover ports.HandoverReceptionMembership
+	Clock    ports.Clock
 }
 
 type ReceiveDeliveredUnitHandler struct {
@@ -188,6 +191,8 @@ func NewReceiveDeliveredUnitHandler(deps ReceiveDeliveredUnitDeps) (*ReceiveDeli
 		return nil, errors.New("node operations: reception needs an identity recheck doorbell")
 	case deps.Scope == nil:
 		return nil, errors.New("node operations: reception needs the delivery scope evidence")
+	case deps.Handover == nil:
+		return nil, errors.New("node operations: reception needs the handover note membership")
 	case deps.Clock == nil:
 		return nil, errors.New("node operations: reception needs a clock")
 	}
@@ -408,9 +413,15 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 		RecordedAt:            handler.deps.Clock.Now(),
 	}
 	result, err := handler.commit(ctx, record)
-	// 门铃与冲突版都只在本次真落了册时追加：并发里输给另一方的那次读回的是赢家，赢家已经响过、追加过。
-	if err != nil || result.Outcome() != UnitPendingIdentification {
+	// 成员、门铃与冲突版都只在本次真落了册时追加：并发里输给另一方的那次读回的是赢家，赢家已经记过、响过、追加过。
+	if err != nil || (result.Outcome() != UnitPendingIdentification && result.Outcome() != NodeIntakeFormed) {
 		return result, err
+	}
+	if err := handler.joinHandoverNote(ctx, command, record); err != nil {
+		return ReceiveDeliveredUnitResult{}, err
+	}
+	if result.Outcome() != UnitPendingIdentification {
+		return result, nil
 	}
 	if unchecked {
 		// 门铃入不了队就不形成答案：一条没有门铃的未核对行只能等人工重核，比翻转前设备退避重投、PS 恢复后自动续上倒退。
@@ -426,6 +437,40 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 		return ReceiveDeliveredUnitResult{}, err
 	}
 	return result, nil
+}
+
+// joinHandoverNote 在收寄带着送站交接单的标识时，把这件实物记成那张交接单收寄带来的成员（ADR-0212 决定三）：事实身份取这次收寄的
+// 来源标识，业务时间取收寄时刻。只记收进来的（形成与待识别），拒收与只有扫描的实物不在节点手里，不是交接单名下的实物。交接单不在册
+// （扫错了依据）或已关闭（关闭冻结成员）时不记、收寄照常：收寄不能因为依据不对就拒，依据不对已经记在交付范围核对态里。
+func (handler *ReceiveDeliveredUnitHandler) joinHandoverNote(
+	ctx context.Context,
+	command ReceiveDeliveredUnitCommand,
+	record ports.ReceptionRecord,
+) error {
+	if command.ScopeBasis.Kind() != domain.BasisDeliveryHandoverNote {
+		return nil
+	}
+	note, err := domain.NewDeliveryHandoverNoteID(command.ScopeBasis.Identifier())
+	if err != nil {
+		return fmt.Errorf("handover note of the delivery scope basis: %w", err)
+	}
+	member, err := domain.FormDeliveryHandoverMember(domain.DeliveryHandoverMemberSpec{
+		TenantID: record.Key.TenantID,
+		Note:     note,
+		Unit:     record.Intake.Unit(),
+		Kind:     domain.MembershipByReception,
+		FactID:   record.Key.SourceID,
+		FormedAt: record.Intake.ReceivedAt(),
+	})
+	if err != nil {
+		return fmt.Errorf("form the reception member of the handover note: %w", err)
+	}
+	if _, outcome, err := handler.deps.Handover.AppendDeliveryHandoverMember(ctx, member); err != nil {
+		return fmt.Errorf("record the reception member of the handover note: %w", err)
+	} else if outcome == ports.DeliveryScopeAppendInvalid {
+		return fmt.Errorf("record the reception member of the handover note: unexpected register outcome %q", outcome)
+	}
+	return nil
 }
 
 // appendIdentityConflicts 给关联到同一件包裹的先到实物各追加一版身份冲突判断（ADR-0196）。原判断照留——它可能已被 PS

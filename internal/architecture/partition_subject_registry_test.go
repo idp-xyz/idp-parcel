@@ -108,6 +108,9 @@ var declaredPartitionSubjects = map[string]string{
 	"internal/nodeoperations/adapters/postgres/node_intake_handoff.go":              partitionPerEnvelopePrefix + "键即信封 ID（收寄键）",
 	"internal/nodeoperations/adapters/postgres/sealed_snapshot_handoff.go":          partitionSubjectPrefix + "租户/集运单元",
 
+	// 键比上面各行都长，单起一段：并进去 gofmt 会重排整段的对齐。
+	"internal/nodeoperations/adapters/postgres/delivery_scope_established_doorbell.go": partitionSubjectPrefix + "租户/送站交接单（定长指纹；交付范围成立的自投门铃，同一张交接单的门铃排一条队）",
+
 	// —— parcel-pricing ——
 	"internal/parcelpricing/adapters/postgres/evaluation_handoff.go": partitionPerEnvelopePrefix + "租户段+评价标识（与 ID 不同表达式，粒度仍一评价一区）",
 

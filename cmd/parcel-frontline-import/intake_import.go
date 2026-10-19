@@ -66,6 +66,11 @@ func buildIntakeImporter(db *bentopg.DB, clock ports.Clock, identity ports.Parce
 	if err != nil {
 		return intakeImporter{}, fmt.Errorf("交付范围证据：%w", err)
 	}
+	// 模板行带着交接单标识时同一笔落成员（ADR-0212 决定三），与 parcel-api 同一本交接单册。
+	handover, err := nopostgres.NewDeliveryHandoverNotes(db)
+	if err != nil {
+		return intakeImporter{}, fmt.Errorf("交接单册：%w", err)
+	}
 	handler, err := application.NewReceiveDeliveredUnitHandler(application.ReceiveDeliveredUnitDeps{
 		Identity:       identity,
 		ServiceResults: serviceResults,
@@ -74,6 +79,7 @@ func buildIntakeImporter(db *bentopg.DB, clock ports.Clock, identity ports.Parce
 		Downstream:     downstream,
 		Doorbell:       doorbell,
 		Scope:          scope,
+		Handover:       handover,
 		Clock:          clock,
 	})
 	if err != nil {

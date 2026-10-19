@@ -18,6 +18,11 @@ import (
 //
 // 关闭与加成员在交接单那一行上串行：加成员先取共享锁再看关闭，关闭取排他锁。不锁，两笔并发时加成员那一笔看不到还没提交的关闭，
 // 就会在关闭之后落进一个成员，而「关闭冻结成员」正是要挡这一格。
+//
+// 落结论同样先取交接单那一行的排他锁：几个声称的账户并发确认时排成一队，每一笔落下之后读到的结论里含排在它前面的各笔，最后一笔
+// 才看得到范围成立、才响那一封门铃（ADR-0212 决定六）。不锁，两笔各自读不到对方未提交的结论，都以为还差一个，门铃永远不响。它与
+// 加成员的共享锁互斥也是要的：归入那一笔读到的结论要么已含让范围成立的那一个（归入那一笔替这一件响门铃），要么那一个排在归入之后
+// （它那一笔按交接单重核时读得到这个成员）。
 type DeliveryHandoverNotes struct {
 	db *bentopg.DB
 }
@@ -181,10 +186,10 @@ func (register *DeliveryHandoverNotes) CloseDeliveryHandoverNote(
 	return recorded, ports.DeliveryScopeAlreadyRecorded, nil
 }
 
-const bindingColumns = `note_id, customer_account_id, conclusion, route, concluder, delivering_participant, basis_ref, concluded_at`
+const bindingColumns = `note_id, customer_account_id, conclusion, route, concluder, delivering_participant, basis_ref, concluded_at, source_request_key`
 
-// RecordDeliveryHandoverBinding 落一份绑定结论。插入只从「交接单在册、客户账户在声称之列」那一行选出；撞主键（这个账户已有结论）读
-// 回回显，不覆盖——异结论撞键就落在这里。
+// RecordDeliveryHandoverBinding 落一份绑定结论。先取交接单那一行的排他锁（理由见类型头注），插入只从「交接单在册、客户账户在声称之列」
+// 那一行选出；撞主键（这个账户已有结论）读回回显，不覆盖——异结论撞键就落在这里。
 func (register *DeliveryHandoverNotes) RecordDeliveryHandoverBinding(
 	ctx context.Context,
 	binding domain.DeliveryHandoverBinding,
@@ -196,15 +201,26 @@ func (register *DeliveryHandoverNotes) RecordDeliveryHandoverBinding(
 	}
 	tenant := binding.TenantID()
 	participant, basis := binding.OperationDecisionEvidence()
+	var locked string
+	err = executor.QueryRow(ctx,
+		`SELECT note_id FROM node_operations.delivery_handover_note WHERE tenant_id = $1 AND note_id = $2 FOR UPDATE`,
+		tenant.String(), binding.Note().String(),
+	).Scan(&locked)
+	if errors.Is(err, pgx.ErrNoRows) {
+		return none, ports.DeliveryScopeTargetNotFound, nil
+	}
+	if err != nil {
+		return none, ports.DeliveryScopeAppendInvalid, fmt.Errorf("record delivery handover binding: lock note: %w", err)
+	}
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO node_operations.delivery_handover_binding
 			(tenant_id, `+bindingColumns+`)
-		 SELECT note.tenant_id, note.note_id, $3, $4, $5, $6, NULLIF($7, ''), NULLIF($8, ''), $9
+		 SELECT note.tenant_id, note.note_id, $3, $4, $5, $6, NULLIF($7, ''), NULLIF($8, ''), $9, NULLIF($10, '')
 		   FROM node_operations.delivery_handover_note AS note
 		  WHERE note.tenant_id = $1 AND note.note_id = $2 AND $3 = ANY (note.claimed_account_ids)
 		 ON CONFLICT DO NOTHING`,
 		tenant.String(), binding.Note().String(), binding.Account().String(), binding.Conclusion().String(), binding.Route().String(),
-		binding.Concluder(), participant, basis, binding.ConcludedAt(),
+		binding.Concluder(), participant, basis, binding.ConcludedAt(), binding.SourceRequestKey(),
 	)
 	if err != nil {
 		return none, ports.DeliveryScopeAppendInvalid, fmt.Errorf("record delivery handover binding: %w", err)
@@ -274,6 +290,28 @@ func (register *DeliveryHandoverNotes) FindDeliveryHandoverNote(
 		return domain.DeliveryHandoverNoteState{}, false, fmt.Errorf("find delivery handover note: bindings: %w", err)
 	}
 	return state, true, nil
+}
+
+// FindDeliveryHandoverMember 按（租户，形成方式，事实身份）读一个成员，走成员表的主键。
+func (register *DeliveryHandoverNotes) FindDeliveryHandoverMember(
+	ctx context.Context,
+	tenant domain.TenantID,
+	kind domain.HandoverMembershipKind,
+	factID string,
+) (domain.DeliveryHandoverMember, bool, error) {
+	querier, err := register.db.ReadExecutor(ctx)
+	if err != nil {
+		return domain.DeliveryHandoverMember{}, false, fmt.Errorf("find delivery handover member: %w", err)
+	}
+	member, found, err := scanHandoverMember(querier.QueryRow(ctx,
+		`SELECT `+memberColumns+` FROM node_operations.delivery_handover_member
+		  WHERE tenant_id = $1 AND membership_kind = $2 AND fact_id = $3`,
+		tenant.String(), kind.String(), factID,
+	), tenant)
+	if err != nil {
+		return domain.DeliveryHandoverMember{}, false, fmt.Errorf("find delivery handover member: %w", err)
+	}
+	return member, found, nil
 }
 
 // ListDeliveryHandoverMembers 按落册先后列一张交接单的成员。
@@ -436,10 +474,10 @@ func scanHandoverClosure(row pgx.Row, tenant domain.TenantID) (domain.DeliveryHa
 func scanHandoverBinding(row pgx.Row, tenant domain.TenantID) (domain.DeliveryHandoverBinding, bool, error) {
 	var (
 		note, account, conclusion, route, concluder string
-		participant, basis                          *string
+		participant, basis, requestKey              *string
 		concludedAt                                 time.Time
 	)
-	err := row.Scan(&note, &account, &conclusion, &route, &concluder, &participant, &basis, &concludedAt)
+	err := row.Scan(&note, &account, &conclusion, &route, &concluder, &participant, &basis, &concludedAt, &requestKey)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return domain.DeliveryHandoverBinding{}, false, nil
 	}
@@ -452,6 +490,9 @@ func scanHandoverBinding(row pgx.Row, tenant domain.TenantID) (domain.DeliveryHa
 	}
 	if basis != nil {
 		spec.Basis = *basis
+	}
+	if requestKey != nil {
+		spec.SourceRequestKey = *requestKey
 	}
 	if spec.Note, err = domain.NewDeliveryHandoverNoteID(note); err != nil {
 		return domain.DeliveryHandoverBinding{}, false, err

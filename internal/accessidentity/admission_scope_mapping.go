@@ -26,7 +26,7 @@ var ErrConflictingAdmissionScopeMappings = errors.New("access identity: two admi
 // 要判准入时，它的词随那一面的票加进来。
 //
 // 首方客户族在铸造侧判准入的口取 CustomerCommandAdmissionCapability 与那一口的客户面能力词；不在铸造侧判的口（委托提交）
-// 的词登不进来。
+// 的词登不进来。作业事实登记面取能力面 CapabilityWorkFactRegistration 与 WorkFactKind，只收在铸造侧判准入的那几种。
 func checkAdmissionRequirement(requirement AdmissionRequirement) error {
 	switch requirement.Capability {
 	case CapabilityOperationDecision.String():
@@ -39,6 +39,10 @@ func checkAdmissionRequirement(requirement AdmissionRequirement) error {
 		}
 	case CustomerCommandAdmissionCapability:
 		if capability, err := ParseCustomerCapability(requirement.FactKind); err == nil && customerCommandAdmission(capability) != nil {
+			return nil
+		}
+	case CapabilityWorkFactRegistration.String():
+		if _, err := ParseWorkFactKind(requirement.FactKind); err == nil {
 			return nil
 		}
 	}

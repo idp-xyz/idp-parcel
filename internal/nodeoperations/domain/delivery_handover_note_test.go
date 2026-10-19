@@ -36,13 +36,14 @@ func handoverNote(t *testing.T, accounts ...string) domain.DeliveryHandoverNote 
 func binding(t *testing.T, note domain.DeliveryHandoverNote, account string, conclusion domain.HandoverBindingConclusion) domain.DeliveryHandoverBinding {
 	t.Helper()
 	spec := domain.DeliveryHandoverBindingSpec{
-		TenantID:    note.TenantID(),
-		Note:        note.ID(),
-		Account:     mustBuild(t, domain.NewCustomerAccountReference, account),
-		Conclusion:  conclusion,
-		Route:       domain.ConcludedViaCustomerChannel,
-		Concluder:   "https://id.syn.example/dex#syn-customer-client-01",
-		ConcludedAt: handoverOpenedAt.Add(time.Hour),
+		TenantID:         note.TenantID(),
+		Note:             note.ID(),
+		Account:          mustBuild(t, domain.NewCustomerAccountReference, account),
+		Conclusion:       conclusion,
+		Route:            domain.ConcludedViaCustomerChannel,
+		Concluder:        "https://id.syn.example/dex#syn-customer-client-01",
+		SourceRequestKey: "SYN-ACCESS-REQUEST-PSXM08-" + account,
+		ConcludedAt:      handoverOpenedAt.Add(time.Hour),
 	}
 	formed, err := domain.FormDeliveryHandoverBinding(spec)
 	if err != nil {

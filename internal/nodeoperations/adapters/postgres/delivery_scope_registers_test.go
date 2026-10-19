@@ -214,13 +214,14 @@ func memberOf(t *testing.T, note, unit string, kind domain.HandoverMembershipKin
 func conclusionOf(t *testing.T, note, account string, conclusion domain.HandoverBindingConclusion) domain.DeliveryHandoverBinding {
 	t.Helper()
 	formed, err := domain.FormDeliveryHandoverBinding(domain.DeliveryHandoverBindingSpec{
-		TenantID:    must(t, domain.NewTenantID, registerTenant),
-		Note:        must(t, domain.NewDeliveryHandoverNoteID, note),
-		Account:     must(t, domain.NewCustomerAccountReference, account),
-		Conclusion:  conclusion,
-		Route:       domain.ConcludedViaCustomerChannel,
-		Concluder:   "https://id.syn.example/dex#syn-customer-client-01",
-		ConcludedAt: time.Date(2026, 10, 20, 11, 0, 0, 0, time.UTC),
+		TenantID:         must(t, domain.NewTenantID, registerTenant),
+		Note:             must(t, domain.NewDeliveryHandoverNoteID, note),
+		Account:          must(t, domain.NewCustomerAccountReference, account),
+		Conclusion:       conclusion,
+		Route:            domain.ConcludedViaCustomerChannel,
+		Concluder:        "https://id.syn.example/dex#syn-customer-client-01",
+		SourceRequestKey: "SYN-ACCESS-REQUEST-PSXM08-" + account,
+		ConcludedAt:      time.Date(2026, 10, 20, 11, 0, 0, 0, time.UTC),
 	})
 	if err != nil {
 		t.Fatal(err)

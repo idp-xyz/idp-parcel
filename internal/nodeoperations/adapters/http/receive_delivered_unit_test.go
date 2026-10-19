@@ -50,6 +50,13 @@ func (double *identityViewDouble) ResolveParcelIdentity(
 // noScopeEvidence 是证据读口的替身：哪份预报、交接单与时窗都不在册。本文件的收寄都不带依据，读不到它。
 type noScopeEvidence struct{}
 
+// noHandoverMembership 是收寄落交接单成员那一口的替身：本包的收寄用例都不带交接单依据，答查无此单即可。
+type noHandoverMembership struct{}
+
+func (noHandoverMembership) AppendDeliveryHandoverMember(context.Context, domain.DeliveryHandoverMember) (domain.DeliveryHandoverMember, ports.DeliveryScopeAppendOutcome, error) {
+	return domain.DeliveryHandoverMember{}, ports.DeliveryScopeTargetNotFound, nil
+}
+
 func (noScopeEvidence) FindDeliveryPreAdvice(context.Context, domain.TenantID, domain.DeliveryPreAdviceID) (domain.DeliveryPreAdviceState, bool, error) {
 	return domain.DeliveryPreAdviceState{}, false, nil
 }
@@ -266,6 +273,7 @@ func newAdapterFixture(t *testing.T) *adapterFixture {
 		Downstream:     fixture.handoff,
 		Doorbell:       &doorbellDouble{},
 		Scope:          noScopeEvidence{},
+		Handover:       noHandoverMembership{},
 		Clock:          adapterClock{at: time.Date(2026, 9, 5, 10, 0, 0, 0, time.UTC)},
 	})
 	if err != nil {

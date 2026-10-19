@@ -184,6 +184,11 @@ var businessEndpointProbes = map[string]businessEndpointProbe{
 	"/transport-fulfillment-capacity-releases":                                 {method: http.MethodPost, target: "/transport-fulfillment-capacity-releases"},
 	"/node-operations/delivery-pre-advices":                                    {method: http.MethodPost, target: "/node-operations/delivery-pre-advices"},
 	"/node-operations/delivery-pre-advice-withdrawals":                         {method: http.MethodPost, target: "/node-operations/delivery-pre-advice-withdrawals"},
+	"/node-operations/delivery-handover-notes":                                 {method: http.MethodPost, target: "/node-operations/delivery-handover-notes"},
+	"/node-operations/delivery-handover-assignments":                           {method: http.MethodPost, target: "/node-operations/delivery-handover-assignments"},
+	"/node-operations/delivery-handover-closures":                              {method: http.MethodPost, target: "/node-operations/delivery-handover-closures"},
+	"/node-operations/delivery-handover-confirmations":                         {method: http.MethodPost, target: "/node-operations/delivery-handover-confirmations"},
+	"/node-operations/delivery-handover-conclusions":                           {method: http.MethodPost, target: "/node-operations/delivery-handover-conclusions"},
 }
 
 // Covers: ADR-0055 第一、二、三条 — 端点已装配、未配置自成一格、状态码取 403。
@@ -436,6 +441,7 @@ func assembleUnwiredBusinessEndpointsWithOperatorIntakes(
 		unwiredSegmentCommissionAdoption{},
 		unwiredCancellationFaces{},
 		unwiredCancellationFaces{},
+		deliveryHandoverNoteFaces{handler: unwiredDeliveryHandoverNotes{}},
 	)
 }
 

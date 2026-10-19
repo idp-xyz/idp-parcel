@@ -115,12 +115,16 @@ const (
 	CustomerCapabilityDeliveryPreAdviceSubmission CustomerCapability = "DELIVERY_PRE_ADVICE_SUBMISSION"
 	// CustomerCapabilityDeliveryPreAdviceWithdrawal 是送站预报撤回（`/node-operations/delivery-pre-advice-withdrawals`，UC-NO-006）。
 	CustomerCapabilityDeliveryPreAdviceWithdrawal CustomerCapability = "DELIVERY_PRE_ADVICE_WITHDRAWAL"
+	// CustomerCapabilityDeliveryHandoverConfirmation 是送站交接确认（`/node-operations/delivery-handover-conclusions`，UC-NO-006；ADR-0212
+	// 决定三）：客户账户对声称了自己的已关闭送站交接单确认或否认。
+	CustomerCapabilityDeliveryHandoverConfirmation CustomerCapability = "DELIVERY_HANDOVER_CONFIRMATION"
 )
 
 var customerCapabilities = []CustomerCapability{
 	CustomerCapabilityShipmentRequestSubmission,
 	CustomerCapabilityDeliveryPreAdviceSubmission,
 	CustomerCapabilityDeliveryPreAdviceWithdrawal,
+	CustomerCapabilityDeliveryHandoverConfirmation,
 }
 
 // ParseCustomerCapability 按字面取值认能力，大小写不折叠：册里存的就是这些字面量。

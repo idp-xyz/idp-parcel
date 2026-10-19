@@ -101,13 +101,14 @@ func handoverNoteState(t *testing.T, id, node string, claimed []string, confirme
 	state := domain.DeliveryHandoverNoteState{Note: note}
 	for _, account := range confirmed {
 		binding, err := domain.FormDeliveryHandoverBinding(domain.DeliveryHandoverBindingSpec{
-			TenantID:    tenant,
-			Note:        note.ID(),
-			Account:     mustValue(t, domain.NewCustomerAccountReference, account),
-			Conclusion:  domain.BindingConfirmed,
-			Route:       domain.ConcludedViaCustomerChannel,
-			Concluder:   "SYN-CLIENT",
-			ConcludedAt: deliveredAt.Add(time.Hour),
+			TenantID:         tenant,
+			Note:             note.ID(),
+			Account:          mustValue(t, domain.NewCustomerAccountReference, account),
+			Conclusion:       domain.BindingConfirmed,
+			Route:            domain.ConcludedViaCustomerChannel,
+			Concluder:        "SYN-CLIENT",
+			SourceRequestKey: "SYN-KEY-CONFIRM-" + account,
+			ConcludedAt:      deliveredAt.Add(time.Hour),
 		})
 		if err != nil {
 			t.Fatalf("绑定：%v", err)

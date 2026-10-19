@@ -116,6 +116,11 @@ func buildReceptionDeps(db *bentopg.DB) (nodeopsapp.ReceiveDeliveredUnitDeps, er
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: delivery scope evidence: %w", err)
 	}
+	// 送站带着交接单标识时，同一笔把这件实物记成那张交接单的成员（ADR-0212 决定三），写的是交接单册本尊。
+	handover, err := nopostgres.NewDeliveryHandoverNotes(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: delivery handover notes: %w", err)
+	}
 	return nodeopsapp.ReceiveDeliveredUnitDeps{
 		Identity:       identity,
 		ServiceResults: serviceResults,
@@ -124,6 +129,7 @@ func buildReceptionDeps(db *bentopg.DB) (nodeopsapp.ReceiveDeliveredUnitDeps, er
 		Downstream:     downstream,
 		Doorbell:       doorbell,
 		Scope:          scope,
+		Handover:       handover,
 		Clock:          clock,
 	}, nil
 }

@@ -200,6 +200,33 @@ func (handler *RecheckPendingIdentityHandler) RecheckByMark(
 	return results, nil
 }
 
+// RecheckByHandoverNote 重核送站交接单名下属于重核对象的每一件（「交付范围成立」门铃，ADR-0212 决定六）：成员里在交接单开立节点上
+// 当前有效版本是待识别、不带关联、不记身份冲突或冲突来由是只因歧义信号的那几件。名下已关联或记了别的冲突的不在其中——范围后来成立
+// 也不解开多候选与一码两物的冲突，它们照旧经身份冲突处置。逐件重核在同一笔事务里，任一件没形成答案就整笔交回 error，信封留在 inbox
+// 重投；已经重核过的那几件重投时不再是重核对象。范围按每一件存下的依据重算：此后归入别的交接单的那一件，判的是那一张。
+func (handler *RecheckPendingIdentityHandler) RecheckByHandoverNote(
+	ctx context.Context,
+	tenant domain.TenantID,
+	note domain.DeliveryHandoverNoteID,
+) ([]RecheckPendingIdentityResult, error) {
+	if strings.TrimSpace(tenant.String()) == "" || strings.TrimSpace(note.String()) == "" {
+		return nil, fmt.Errorf("%w: tenant and handover note are required", ErrRecheckCommandRejected)
+	}
+	records, err := handler.deps.Pending.FindRecheckableInHandoverNote(ctx, tenant, note)
+	if err != nil {
+		return nil, fmt.Errorf("find recheckable members of the handover note: %w", err)
+	}
+	results := make([]RecheckPendingIdentityResult, 0, len(records))
+	for _, record := range records {
+		result, err := handler.recheck(ctx, record)
+		if err != nil {
+			return nil, fmt.Errorf("recheck %q: %w", record.Key.SourceID, err)
+		}
+		results = append(results, result)
+	}
+	return results, nil
+}
+
 // recheck 拿被重核那一版来源文档里的外部标识观察，走收寄步骤 4 同一份身份判断，按 ADR-0199 决定三分格追加。
 func (handler *RecheckPendingIdentityHandler) recheck(
 	ctx context.Context,

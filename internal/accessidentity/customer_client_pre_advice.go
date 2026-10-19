@@ -18,6 +18,7 @@ const CustomerCommandAdmissionCapability = "CUSTOMER_COMMAND"
 var customerCapabilitiesAdmittedAtMint = []CustomerCapability{
 	CustomerCapabilityDeliveryPreAdviceSubmission,
 	CustomerCapabilityDeliveryPreAdviceWithdrawal,
+	CustomerCapabilityDeliveryHandoverConfirmation,
 }
 
 // customerCommandAdmission 交回这一口在铸造侧判的准入要求；不在铸造侧判的口交回 nil。

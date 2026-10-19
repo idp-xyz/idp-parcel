@@ -361,6 +361,7 @@ func TestWorkFactReceptionIntakeRefusesAMarkCarryingNUL(t *testing.T) {
 				Downstream:     &downstreamDouble{},
 				Doorbell:       &doorbellDouble{},
 				Scope:          noScopeEvidence{},
+				Handover:       noHandoverMembership{},
 				Clock:          adapterClock{at: time.Date(2026, 9, 24, 2, 0, 0, 0, time.UTC)},
 			})
 			if err != nil {

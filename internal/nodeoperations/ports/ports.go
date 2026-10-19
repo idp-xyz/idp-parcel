@@ -419,6 +419,13 @@ type PendingIdentityLookup interface {
 		tenant domain.TenantID,
 		mark string,
 	) ([]ReceptionRecord, error)
+	// FindRecheckableInHandoverNote 交回送站交接单名下（收寄带来的与归入的成员）在交接单开立节点上、当前有效版本属于上一问那一组的
+	// 各行，按来源标识定序；交接单不在本租户或名下没有这样的行交回空切片（ADR-0212 决定六「重核对象只看成员里属于那一组的」）。
+	FindRecheckableInHandoverNote(
+		ctx context.Context,
+		tenant domain.TenantID,
+		note domain.DeliveryHandoverNoteID,
+	) ([]ReceptionRecord, error)
 }
 
 // IdentityDispositionRegister 是身份冲突处置要问收寄册的那几问（ADR-0210 决定二至四）。与 ReceptionStore 分立，理由同

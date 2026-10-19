@@ -122,13 +122,14 @@ func confirmedHandoverNoteForDispatch(
 		}
 		for _, account := range accounts {
 			binding, err := nodomain.FormDeliveryHandoverBinding(nodomain.DeliveryHandoverBindingSpec{
-				TenantID:    tenant,
-				Note:        note.ID(),
-				Account:     account,
-				Conclusion:  nodomain.BindingConfirmed,
-				Route:       nodomain.ConcludedViaCustomerChannel,
-				Concluder:   "SYN-CUSTOMER-CLIENT-PSXM11",
-				ConcludedAt: openedAt.Add(time.Minute),
+				TenantID:         tenant,
+				Note:             note.ID(),
+				Account:          account,
+				Conclusion:       nodomain.BindingConfirmed,
+				Route:            nodomain.ConcludedViaCustomerChannel,
+				Concluder:        "SYN-CUSTOMER-CLIENT-PSXM11",
+				SourceRequestKey: "SYN-ACCESS-REQUEST-PSXM11-" + id + "-" + account.String(),
+				ConcludedAt:      openedAt.Add(time.Minute),
 			})
 			if err != nil {
 				return err
@@ -152,4 +153,14 @@ func deliveryScopeEvidenceFor(t *testing.T, db *bentopg.DB) nopostgres.DeliveryS
 		t.Fatalf("构造交付范围证据：%v", err)
 	}
 	return scope
+}
+
+// handoverMembershipFor 装收寄编排落交接单成员那一口（生产那一只：交接单册）。
+func handoverMembershipFor(t *testing.T, db *bentopg.DB) *nopostgres.DeliveryHandoverNotes {
+	t.Helper()
+	notes, err := nopostgres.NewDeliveryHandoverNotes(db)
+	if err != nil {
+		t.Fatalf("构造交接单册：%v", err)
+	}
+	return notes
 }

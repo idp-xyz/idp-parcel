@@ -75,6 +75,16 @@ type DeliveryHandoverNoteRegister interface {
 	// FindLastAssignedHandoverNote 交回一件作业实物最后归入的交接单（ADR-0212 决定三「一件实物的依据取它最后归入的交接单」）：只看
 	// 归入，不看收寄带来的成员；「最后」按归入的业务时间认，同一时刻按落册先后。found=false 即没归入过。
 	FindLastAssignedHandoverNote(ctx context.Context, tenant domain.TenantID, unit domain.HandlingUnitID) (domain.DeliveryHandoverNoteID, bool, error)
+	// FindDeliveryHandoverMember 按（租户，形成方式，事实身份）交回那一个成员——成员的重放身份。归入口据此在判归入条件之前先认重放：
+	// 一份已落的归入再投，那件实物此后可能已被识别、不再合条件，答的仍是已有结果。found=false 即没有这份事实。
+	FindDeliveryHandoverMember(ctx context.Context, tenant domain.TenantID, kind domain.HandoverMembershipKind, factID string) (domain.DeliveryHandoverMember, bool, error)
+}
+
+// HandoverReceptionMembership 是收寄编排落交接单成员的那一口（ADR-0212 决定三「收寄来源带它标识的作业实物是成员」）：收寄带着交接单
+// 的标识时，同一笔事务把这件实物记成收寄带来的成员。答法同 DeliveryHandoverNoteRegister 的同名写口；生产上就是那本册。单立一个端口，
+// 是为了收寄编排的替身只写这一问。
+type HandoverReceptionMembership interface {
+	AppendDeliveryHandoverMember(ctx context.Context, member domain.DeliveryHandoverMember) (domain.DeliveryHandoverMember, DeliveryScopeAppendOutcome, error)
 }
 
 // PreAdviceWindowRegister 是预报有效时窗册（PAR-NET-18）。写口要求环境事务。
