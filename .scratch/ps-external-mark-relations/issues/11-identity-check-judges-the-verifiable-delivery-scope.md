@@ -1,7 +1,7 @@
 # 11 核对时判可验证交付范围：收寄来源带依据引用，PS 逐候选答范围相容、信号随范围收窄，NO 按 ADR-0212 的表认唯一，客户包裹件号缺范围时落待识别（有意翻转）
 
 Category: enhancement
-Status: ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（08、09 已进 main），分支 `claude-psxm11`，NO 迁移号 0015（0014 留给票 14）。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
 Blocked by:
 - [08](./08-pre-advice-and-handover-note-model-and-window-register.md) 进 main：推导与册。
 - [09](./09-pre-advice-submission-on-the-first-party-customer-channel.md) 进 main：翻转那一笔须同时把演示动线改成送站前先交预报（ADR-0212 决定十），没有预报口就改不了。
