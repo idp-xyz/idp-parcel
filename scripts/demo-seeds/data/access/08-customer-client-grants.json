@@ -32,6 +32,14 @@
       "capability": "DELIVERY_HANDOVER_CONFIRMATION",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "basis": "SYN-CUSTOMER-GRANT-BASIS-01"
+    },
+    {
+      "grantId": "SYN-GRANT-CUSTOMER-TRACKING-VIEW-QUERY-01",
+      "issuer": "http://127.0.0.1:5558/dex",
+      "subject": "ChZzeW4tY3VzdG9tZXItY2xpZW50LTAx",
+      "capability": "CUSTOMER_TRACKING_VIEW_QUERY",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-CUSTOMER-GRANT-BASIS-01"
     }
   ]
 }
