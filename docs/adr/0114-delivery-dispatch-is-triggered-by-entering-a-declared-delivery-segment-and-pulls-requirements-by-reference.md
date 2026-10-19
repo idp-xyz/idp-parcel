@@ -1,6 +1,6 @@
 # ADR-0114: 末端派送任务由「对象凭`已交接`进入登记方声明为末端派送的段」触发——段服务动作在段成立时由控制事实登记方声明、不推导；触发是异步一拍的跨上下文内部执行器，派送要求三条输入按 ADR-0025 消费侧拉引用与时间窗、不拉地址本体、缺席即待形成
 
-Status: Accepted
+Status: Accepted。决定二末句「执行器的生产入口（谁按拍调它）随第一条派送要求缝的实施票立」已由 [ADR-0216](./0216-delivery-dispatch-is-triggered-in-process-from-the-handover-envelope-per-object.md) 回答（2026-10-19）：派发进程随交接信封逐对象调本执行器，不是租户节拍；本记录各条不变。
 Date: 2026-09-07
 
 ## Context
@@ -49,3 +49,7 @@ Date: 2026-09-07
 ## 复核记录（2026-10-19，决定原文不动）
 
 决定二里「任务引用由执行器按（段，对象，入场依据）确定性铸出，重跑同一拍撞`已在册`而不重建」与「已离场的参与不触发」两句，自票 [tf-face-algebra/09](../../.scratch/tf-face-algebra/issues/09-dispatch-trigger-task-reference-is-a-faithful-identity.md) 起按该票「裁定」节读：铸法、旧拼法兼认、新答格 `DISPATCH_TASK_REFERENCE_TAKEN`、查在册与参与在场判断的先后，都以那一节为准（会话 `idp-parcel-9b` 据用户授权「你作为业务和系统专家你来自决」代决，越权风险点列在该节）。决定二正文字面不改。
+
+## Links
+
+- [ADR-0216](./0216-delivery-dispatch-is-triggered-in-process-from-the-handover-envelope-per-object.md)：回答决定二末句——执行器的生产入口是派发进程消费交接登记信封、逐对象发起，任务成立时间取派发时钟；作业事实口保留作补拍

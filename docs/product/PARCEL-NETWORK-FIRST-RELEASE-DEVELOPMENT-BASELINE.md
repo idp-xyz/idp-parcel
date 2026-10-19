@@ -247,6 +247,8 @@ PN-08 是产品级试点治理与跨上下文应用编排，不是新的限界�
 
 2026-10-16 补记（票 `ps-external-mark-relations/02`，[ADR-0184](../adr/0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md)）：上表单元格不改写。PN-03 第一项里「节点收寄的身份核对缝是未配置桩，PS 侧外部标识关联模型不存在」已过时：外部标识关联册落地，客户包裹件号随委托接受形成，`parcel-api` 与 `parcel-frontline-import` 的身份核对改读这本册，两处未配置替身退场。委托接受之后客户送站，节点按号码唯一识别、形成收寄与控制；接受前送站答待识别。渠道包裹件号一类随票 `ps-external-mark-relations/03`。本条只记这一格，PN-03 第一项其余格的现状不在此复核。
 
+2026-10-19 补记（票 `demo-chain-gaps/60`，[ADR-0216](../adr/0216-delivery-dispatch-is-triggered-in-process-from-the-handover-envelope-per-object.md)）：上表单元格不改写。PN-04 第三项「派送执行器与端点都在，缺内置的发起策略（……拍频是租户取值，可给参考配置）」自本票起过时：派送发起已内置为随交接逐对象发起，派发进程消费交接登记信封、按对象此刻在场的段调执行器，任务成立时间取派发时钟；`PAR-NET-09` 的拍频格退役，不出参考配置，作业事实口留作补拍。同格外部轨迹来源连接器那一半不变。
+
 #### 2026-09-02 裁决：生产接线棘轮那 32 条计入差量，「可派机制工作清零」不再成立
 
 上表各行的差量格与紧接其上那句「**无一张可派的机制工作票**」，**在本节范围内已被本条更正**。
