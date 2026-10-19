@@ -1,7 +1,7 @@
 # 05 方向依据的身份一格改读每条判断链的当前有效版本——不再对全部行取或
 
 Category: enhancement
-Status: ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 04 拆出（代决，用户 2026-10-16 授权「你作为业务和系统专家你来自决」）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（04 已进 main），分支 `claude-nri05`；与 no-reception-source/03 并行。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 04 拆出（代决，用户 2026-10-16 授权「你作为业务和系统专家你来自决」）
 Blocked by: 04 进 main（ADR-0210、NO CONTEXT「判断链与当前有效版本」与 UC-NO-004 先落）。不依 no-reception-source/03：本票只碰身份读口与方向依据领域件，与它的地盘不交叉，可以先行或并行。
 父票：[04](./04-identity-conflicts-have-a-disposition-and-release.md)
 出处：票 04 裁定里「方向依据的身份一格改读每条判断链的当前有效版本，不再对全部行取或」那一点；[ADR-0210](../../../docs/adr/0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md) 决定五与「与已接受决定的关系」。
