@@ -177,6 +177,7 @@ func stopWords(reading domain.DepartureGateReading) []string {
 }
 
 // Covers: AT-TF-110 编排半边——段里出发那一刻在控的每一件都问关务，起讫取班次方向、时点取出发的业务时间；整格取最重。
+// AT-TF-113 编排半边「照样逐对象问关务」：问不问只看段里在控的对象，不看设备怎么报。
 func TestADepartureAsksCustomsForEveryObjectUnderControlWithTheScheduleDirection(t *testing.T) {
 	fixture := newDepartureGateFixture(t, "parcel-2", "parcel-1")
 	fixture.customs.answers["parcel-2"] = domain.DepartureGateBlocked

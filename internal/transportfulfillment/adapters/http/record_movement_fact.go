@@ -24,7 +24,7 @@ type MovementFactIntake interface {
 }
 
 // MovementFactPayload 是移动事实的线格式，逐格镜像 application.RecordMovementFactCommand 去掉租户与来源——两格都归认证结果
-// （来源说的是「自营还是外部」，见 MovementFactIntake）；命令里没有的只有退役键 `gateRequired`。kind 取
+// （来源说的是「自营还是外部」，见 MovementFactIntake）。退役键 `gateRequired` 不进命令，见该字段。kind 取
 // domain.MovementFactKind 的封闭词，occurredAt 取 RFC 3339。
 type MovementFactPayload struct {
 	Fact          string `json:"fact"`
@@ -38,10 +38,10 @@ type MovementFactPayload struct {
 	GateClearance string `json:"gateClearance,omitempty"`
 
 	// RetiredGateRequired 是退役键 `gateRequired`：照收照弃，不进命令，也就进不了内容摘要与读数——带真、带假、不带，登记的是
-	// 同一份。设门与否由关务按对象与起讫判，设备自报失了权威（ADR-0205 决定三与文末复核记录）。
+	// 同一份。设门与否由关务按对象与起讫判，设备自报不算数（ADR-0205 决定三与文末复核记录）。
 	//
 	// 键不删：载荷按封闭形状解，删了它，仍按旧形状报出发的离线设备会收到 400，而离线队列对 4xx 出队不重发（ADR-0022），一次
-	// 已经发生的出发就此从记录里消失——正是 ADR-0205 决定一不许的。类型照旧是 bool：退役只是不读，不借机把这一格放宽成任意值。
+	// 已经发生的出发就此从记录里消失——正是 ADR-0205 决定一不许的。类型是 bool：退役只是不读，不借机把这一格放宽成任意值。
 	RetiredGateRequired bool `json:"gateRequired,omitempty"`
 }
 

@@ -371,7 +371,7 @@ func TestMovementFactPayloadCarriesTheDeclaredSegmentAndResource(t *testing.T) {
 
 // Covers: AT-TF-113 线格式半边（票 demo-chain-gaps/68，ADR-0205 文末复核记录）——退役键 `gateRequired` 在作业事实这一面的
 // 封闭解码下照收照弃：带真、带假、不带，交出的是同一条命令，内容摘要与读数都只从命令来，于是也逐字相同；放行凭据照收。
-// 键的形状不放宽：给的不是布尔仍是坏报文（400），与退役前一样。
+// 键的形状不放宽：给的不是布尔是坏报文（400）。
 func TestTheRetiredGateRequiredKeyIsAcceptedAndDiscarded(t *testing.T) {
 	const head = `{"fact":"SYN-MOVE-68","schedule":"SYN-SCHEDULE/linehaul-68","kind":"DEPARTURE","location":"SYN-NODE-SHA-HUB",` +
 		`"version":"v1","occurredAt":"2026-10-21T22:05:00+08:00","segment":"SYN-SEG-68","gateClearance":"SYN-GATE/release-68"`
