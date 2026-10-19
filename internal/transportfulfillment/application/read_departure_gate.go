@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
@@ -27,7 +28,8 @@ type DepartureGateReadDeps struct {
 	Customs   ports.DepartureGateView
 }
 
-// DepartureGateReader 为一条出发形成门禁读数，供 RecordMovementFactHandler.Record 与事实同一笔落册（ADR-0205）。
+// DepartureGateReader 为一条出发形成门禁读数，供 RecordMovementFactHandler.Record 与事实同一笔落册（ADR-0205）；
+// 设备出发前问询（PreviewDepartureGateHandler，ADR-0219）走同一条路，读数交回设备、不落册。
 //
 // 它由组合根在写事务之前、用外层 ctx 调：关务的判断在它自己的事务里记下（ADR-0206 决定六），嵌进出发登记那一笔会
 // 随它回滚；读在池上，不在写事务里，任何一口读不动都只是读数里的一格，挡不住落册。
@@ -45,29 +47,45 @@ func NewDepartureGateReader(deps DepartureGateReadDeps) (*DepartureGateReader, e
 
 // Read 只为出发问；移动、到达与受理不了的命令交回零值读数，由登记编排照常答（移动与到达不带读数，受理不了的答
 // 未受理）。问不问关务不看设备自报：设门与否由关务按对象与起讫判（ADR-0205 决定三）。
-//
-// 先在本上下文这一侧找齐问关务要的东西：段里出发那一刻在控的对象、班次的方向。缺哪样就停在哪样、不问关务——没有
-// 对象就没有可问的，没有方向就说不出「自哪到哪」。找齐了才逐对象问；某一件读不动不停下，其余照问，每件各记一格。
-// error 只留给读数自己拼不出来（实现坏了）。
 func (reader *DepartureGateReader) Read(ctx context.Context, command RecordMovementFactCommand) (domain.DepartureGateReading, error) {
 	spec, _, accepted := movementFactSpecFrom(command)
 	if !accepted || spec.Kind != domain.DepartureFact || domain.AtRegistryPrecision(spec.OccurredAt).IsZero() {
 		return domain.DepartureGateReading{}, nil
 	}
+	return reader.readIntent(ctx, departureGateIntent{
+		tenant:   spec.TenantID,
+		schedule: spec.Schedule,
+		segment:  spec.Segment,
+		at:       spec.OccurredAt,
+	})
+}
 
+// departureGateIntent 是一条出发的读数只取决于的那四样：租户、班次、声明的段（零值即没声明）与出发时点。出发登记与出发前
+// 问询（ADR-0219）各自把输入收成它，再走同一个 readIntent——「同参同读数」靠的是只有这一条路，不靠两边各写一遍再比对。
+type departureGateIntent struct {
+	tenant   domain.TenantID
+	schedule domain.ScheduleReference
+	segment  domain.FulfillmentSegmentReference
+	at       time.Time
+}
+
+// readIntent 先在本上下文这一侧找齐问关务要的东西：段里出发那一刻在控的对象、班次的方向。缺哪样就停在哪样、不问关务——
+// 没有对象就没有可问的，没有方向就说不出「自哪到哪」。找齐了才逐对象问；某一件读不动不停下，其余照问，每件各记一格。
+// error 只留给读数自己拼不出来（实现坏了）。
+func (reader *DepartureGateReader) readIntent(ctx context.Context, intent departureGateIntent) (domain.DepartureGateReading, error) {
 	var stops []domain.DepartureGateStop
 	var objects []domain.CarriedObjectReference
-	if spec.Segment == (domain.FulfillmentSegmentReference{}) {
+	if intent.segment == (domain.FulfillmentSegmentReference{}) {
 		stops = append(stops, domain.DepartureSegmentNotDeclared)
 	} else {
-		record, found, err := reader.deps.Segments.FindByKey(ctx, ports.FulfillmentSegmentKey{TenantID: spec.TenantID, Segment: spec.Segment})
+		record, found, err := reader.deps.Segments.FindByKey(ctx, ports.FulfillmentSegmentKey{TenantID: intent.tenant, Segment: intent.segment})
 		switch {
 		case err != nil:
 			stops = append(stops, domain.DepartureSegmentRegistryUnavailable)
 		case !found:
 			stops = append(stops, domain.DepartureSegmentNotRegistered)
 		default:
-			if objects = record.Segment.ObjectsUnderControlAt(spec.OccurredAt); len(objects) == 0 {
+			if objects = record.Segment.ObjectsUnderControlAt(intent.at); len(objects) == 0 {
 				stops = append(stops, domain.DepartureNoObjectUnderControl)
 			}
 		}
@@ -75,7 +93,7 @@ func (reader *DepartureGateReader) Read(ctx context.Context, command RecordMovem
 
 	var direction domain.ScheduleDirection
 	directed := false
-	schedule, found, err := reader.deps.Schedules.FindByKey(ctx, ports.ScheduleKey{TenantID: spec.TenantID, Schedule: spec.Schedule})
+	schedule, found, err := reader.deps.Schedules.FindByKey(ctx, ports.ScheduleKey{TenantID: intent.tenant, Schedule: intent.schedule})
 	switch {
 	case err != nil:
 		stops = append(stops, domain.DepartureScheduleRegistryUnavailable)
@@ -95,11 +113,11 @@ func (reader *DepartureGateReader) Read(ctx context.Context, command RecordMovem
 
 	for _, object := range objects {
 		finding, err := reader.deps.Customs.ReadDepartureGate(ctx, ports.DepartureGateQuery{
-			TenantID: spec.TenantID,
+			TenantID: intent.tenant,
 			Object:   object,
 			From:     reading.From,
 			To:       reading.To,
-			At:       spec.OccurredAt,
+			At:       intent.at,
 		})
 		if err != nil {
 			cause := departureGateCustomsUnavailable

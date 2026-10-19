@@ -151,7 +151,17 @@ var workFactLines = map[string]workFactLine{
 		},
 		valid: workFactDeliveryAttemptBody,
 	},
+	"/transport-fulfillment/departure-gate-previews": {
+		intake: func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) error {
+			_, err := intake.IntakeDepartureGatePreview(context.Background(), request)
+			return err
+		},
+		valid: workFactDepartureGatePreviewBody,
+	},
 }
+
+const workFactDepartureGatePreviewBody = `{"schedule":"SYN-SCHEDULE/linehaul-06","segment":"SYN-SEGMENT-08-06",` +
+	`"departsAt":"2026-09-24T14:00:00+08:00"}`
 
 const workFactEffectiveDeliveryBody = `{"attempt":"SYN-ATTEMPT-08-10","object":"SYN-PARCEL-08-10","method":"HANDED_TO_RECIPIENT",` +
 	`"recipient":"SYN-RECIPIENT/consignee-10","proof":"SYN-POD/signature-10"}`
@@ -526,6 +536,7 @@ func TestWorkFactCommandIntakeServesOnlyWorkFactLines(t *testing.T) {
 		"交付生效首登口": isA[tfhttp.DeliveryRegistrationIntake](intake),
 		"交付更正口":   isA[tfhttp.DeliveryProofCorrectionIntake](intake),
 		"派送尝试登记口": isA[tfhttp.DeliveryAttemptIntake](intake),
+		"出发前问询口":  isA[tfhttp.DepartureGatePreviewIntake](intake),
 	} {
 		if !served {
 			t.Fatalf("%s 是作业事实，这一面该实现它", name)
