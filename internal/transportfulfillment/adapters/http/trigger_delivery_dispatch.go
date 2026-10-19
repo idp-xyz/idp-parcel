@@ -3,7 +3,6 @@ package tfhttp
 import (
 	"context"
 	"net/http"
-	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
@@ -119,10 +118,10 @@ func writeDeliveryDispatchTriggerOutcome(response http.ResponseWriter, result ap
 		}
 		body.Place = record.Task.Place().String()
 		from, to := record.Task.Window()
-		body.WindowFrom = from.UTC().Format(time.RFC3339)
-		body.WindowTo = to.UTC().Format(time.RFC3339)
+		body.WindowFrom = rfc3339(from)
+		body.WindowTo = rfc3339(to)
 		body.Conditions = record.Task.Conditions().String()
-		body.OpenedAt = record.Task.OpenedAt().UTC().Format(time.RFC3339)
+		body.OpenedAt = rfc3339(record.Task.OpenedAt())
 	}
 	// ADR-0022：只有这一拍新形成了任务用 201；已在册、不是触发事实、要求缺失、未受理、未决都是形成了的答案（200）。
 	status := http.StatusOK

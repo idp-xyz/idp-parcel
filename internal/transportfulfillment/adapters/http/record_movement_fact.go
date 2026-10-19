@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
@@ -130,7 +129,7 @@ func writeMovementFactOutcome(response http.ResponseWriter, result application.R
 		body.Kind = record.Fact.Kind().String()
 		body.Location = record.Fact.Location().String()
 		body.Version = record.Fact.Version().String()
-		body.OccurredAt = record.Fact.OccurredAt().UTC().Format(time.RFC3339)
+		body.OccurredAt = rfc3339(record.Fact.OccurredAt())
 		if clearance, present := record.Fact.GateClearance(); present {
 			body.GateClearance = clearance.String()
 		}

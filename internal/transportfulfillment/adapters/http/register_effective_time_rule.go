@@ -131,7 +131,7 @@ func writeEffectiveTimeRuleOutcome(response http.ResponseWriter, result applicat
 		if prior, has := rule.Supersedes(); has {
 			body.Supersedes = prior.String()
 		}
-		body.RecordedAt = record.RecordedAt.UTC().Format(time.RFC3339)
+		body.RecordedAt = rfc3339(record.RecordedAt)
 	}
 
 	// ADR-0022：状态码只报有没有新落一版。首登与换版都持久化了新版本用 201；重放、冲突、未受理、未决都是

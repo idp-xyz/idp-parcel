@@ -133,11 +133,11 @@ func writeEffectiveTimeJudgmentOutcome(response http.ResponseWriter, result appl
 			body.SourceEvent = event.String()
 		}
 		body.Status = fact.Status().String()
-		body.OccurredAt = fact.OccurredAt().UTC().Format(time.RFC3339)
-		body.ReceivedAt = fact.ReceivedAt().UTC().Format(time.RFC3339)
+		body.OccurredAt = rfc3339(fact.OccurredAt())
+		body.ReceivedAt = rfc3339(fact.ReceivedAt())
 		body.EffectiveBasis = fact.Effective().Basis().String()
 		if at, judged := fact.EffectiveAt(); judged {
-			body.EffectiveAt = at.UTC().Format(time.RFC3339)
+			body.EffectiveAt = rfc3339(at)
 		}
 		if rule, byRule := fact.Effective().Rule(); byRule {
 			body.EffectiveRule = rule.Rule()
@@ -146,7 +146,7 @@ func writeEffectiveTimeJudgmentOutcome(response http.ResponseWriter, result appl
 		if prior, has := fact.Supersedes(); has {
 			body.Supersedes = prior.String()
 		}
-		body.RecordedAt = record.RecordedAt.UTC().Format(time.RFC3339)
+		body.RecordedAt = rfc3339(record.RecordedAt)
 	}
 
 	// ADR-0022：状态码只报有没有新落一版。判断持久化了新版本用 201；同值重放、未受理、未决都是形成了的答案（200）。

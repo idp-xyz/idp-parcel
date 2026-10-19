@@ -98,7 +98,7 @@ func writeParticipationTerminationOutcome(response http.ResponseWriter, answer p
 		body.Segment, body.Object = answer.segment, answer.object
 	}
 	if kind, basis, endedAt, ended := answer.result.End(); ended {
-		body.EndKind, body.EndBasis, body.EndedAt = kind.String(), basis.String(), endedAt.UTC().Format(time.RFC3339)
+		body.EndKind, body.EndBasis, body.EndedAt = kind.String(), basis.String(), rfc3339(endedAt)
 	}
 	// ADR-0022：只有这次真把那一条参与结束了用 201；已离场、不在段内、段不在册、未受理、未决都是形成了的答案（200）。
 	status := http.StatusOK

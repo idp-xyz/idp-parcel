@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
@@ -83,18 +82,4 @@ func intakeCatalogueQuery(
 		return CatalogueQuery{}, false
 	}
 	return query, true
-}
-
-func rfc3339(at time.Time) string {
-	return at.UTC().Format(time.RFC3339Nano)
-}
-
-// optionalInstant 把可空时刻转写成串，未发生时交回空串配 omitempty 整键不出现。
-// 缺席是真话不是缺陷：不为「未更正」编造一个零时刻——零时刻是合法时间值，用它兼表
-// 没发生会让两态在报文上分不开。
-func optionalInstant(at *time.Time) string {
-	if at == nil {
-		return ""
-	}
-	return rfc3339(*at)
 }

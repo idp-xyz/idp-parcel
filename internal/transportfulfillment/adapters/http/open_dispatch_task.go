@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
@@ -123,9 +122,9 @@ func writeDispatchTaskOutcome(response http.ResponseWriter, result application.O
 		}
 		body.Place = record.Task.Place().String()
 		from, to := record.Task.Window()
-		body.WindowFrom = from.UTC().Format(time.RFC3339)
-		body.WindowTo = to.UTC().Format(time.RFC3339)
-		body.OpenedAt = record.Task.OpenedAt().UTC().Format(time.RFC3339)
+		body.WindowFrom = rfc3339(from)
+		body.WindowTo = rfc3339(to)
+		body.OpenedAt = rfc3339(record.Task.OpenedAt())
 	}
 	// ADR-0022：只有新建立了任务用 201；已在册、未受理、未决都是形成了的答案（200）。
 	status := http.StatusOK

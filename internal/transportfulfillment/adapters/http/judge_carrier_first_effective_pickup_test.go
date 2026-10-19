@@ -108,13 +108,18 @@ func (clock fixedClock) Now() time.Time { return clock.at }
 
 func newCarrierPickupHTTPFixture(t *testing.T, registered bool) (*carrierPickupRegistryDouble, http.Handler, http.Handler) {
 	t.Helper()
+	return newCarrierPickupHTTPFixtureAt(t, registered, time.Date(2026, 9, 10, 10, 0, 0, 0, time.UTC))
+}
+
+func newCarrierPickupHTTPFixtureAt(t *testing.T, registered bool, now time.Time) (*carrierPickupRegistryDouble, http.Handler, http.Handler) {
+	t.Helper()
 	pickups := &carrierPickupRegistryDouble{}
 	handler := application.NewJudgeCarrierFirstEffectivePickupHandler(application.JudgeCarrierFirstEffectivePickupDeps{
 		Pickups:    pickups,
 		Identities: &carrierPickupIdentityDouble{},
 		Downstream: &carrierPickupHandoffDouble{},
 		Directory:  carrierDirectoryDouble{registered: registered},
-		Clock:      fixedClock{at: time.Date(2026, 9, 10, 10, 0, 0, 0, time.UTC)},
+		Clock:      fixedClock{at: now},
 	})
 	judge := tfhttp.NewJudgeCarrierFirstEffectivePickupEndpoint(carrierPickupJudgmentIntakeDouble{tenant: "tenant-1"}, handler)
 	query := tfhttp.NewQueryCarrierFirstEffectivePickupsEndpoint(grantedCatalogueIntake{tenant: "tenant-1", limit: 25}, pickups)
@@ -268,5 +273,66 @@ func TestAVoidingPayloadWithAReferenceButNoKindReplaysAsAlreadyRecorded(t *testi
 	replay := postCarrierPickupJudgment(t, judge, voiding)
 	if replay.Code != http.StatusOK || !strings.Contains(replay.Body.String(), `"outcome":"ALREADY_RECORDED"`) || !strings.Contains(replay.Body.String(), `"pickup"`) {
 		t.Fatalf("原样重放：%d %s", replay.Code, replay.Body.String())
+	}
+}
+
+type pickupInstantsView struct {
+	Outcome string `json:"outcome"`
+	Pickup  struct {
+		OccurredAt string `json:"occurredAt"`
+		JudgedAt   string `json:"judgedAt"`
+		RecordedAt string `json:"recordedAt"`
+	} `json:"pickup"`
+}
+
+func decodePickupInstants(t *testing.T, recorder *httptest.ResponseRecorder) pickupInstantsView {
+	t.Helper()
+	var view pickupInstantsView
+	if err := json.Unmarshal(recorder.Body.Bytes(), &view); err != nil {
+		t.Fatalf("译响应：%v", err)
+	}
+	return view
+}
+
+// Covers: 票 operator-channel/31——`pickup.occurredAt` 回显登记册上的那一份，秒以下不丢：以 .250Z 首判，.750Z 再判答
+// 内容冲突、同串重放答已记录，三次都回显 .25Z。冲突与重放之所以分得出，靠的是调用方拿本次给的与这份回显比。
+func TestCarrierPickupEchoesTheSubSecondOccurredAtAcrossConflictAndReplay(t *testing.T) {
+	_, judge, _ := newCarrierPickupHTTPFixture(t, true)
+	at := func(instant string) string {
+		return strings.Replace(scanPickupBody, `"occurredAt":"2026-09-10T09:00:00Z"`, `"occurredAt":"`+instant+`"`, 1)
+	}
+	for _, step := range []struct {
+		body    string
+		code    int
+		outcome string
+	}{
+		{at("2026-09-10T09:00:00.250Z"), http.StatusCreated, "PICKUP_FORMED"},
+		{at("2026-09-10T09:00:00.750Z"), http.StatusOK, "CONTENT_CONFLICT"},
+		{at("2026-09-10T09:00:00.250Z"), http.StatusOK, "ALREADY_RECORDED"},
+	} {
+		recorder := postCarrierPickupJudgment(t, judge, step.body)
+		view := decodePickupInstants(t, recorder)
+		if recorder.Code != step.code || view.Outcome != step.outcome || view.Pickup.OccurredAt != "2026-09-10T09:00:00.25Z" {
+			t.Fatalf("want %d %s occurredAt=2026-09-10T09:00:00.25Z，实得 %d %s", step.code, step.outcome, recorder.Code, recorder.Body.String())
+		}
+	}
+}
+
+// Covers: 票 operator-channel/31——命令时刻与时钟都带纳秒：首答 201 的记录取自内存、原样重放 200 的取自登记册，两者回显
+// 同一个折到微秒的串；同一个 pickup 里业务时间、判断时刻与登记时刻是同一种精度。
+func TestCarrierPickupFirstAnswerAndReplayEchoTheSameRegistryInstants(t *testing.T) {
+	_, judge, _ := newCarrierPickupHTTPFixtureAt(t, true, time.Date(2026, 9, 10, 10, 0, 0, 987654321, time.UTC))
+	body := strings.Replace(scanPickupBody, `"occurredAt":"2026-09-10T09:00:00Z"`, `"occurredAt":"2026-09-10T09:00:00.123456789Z"`, 1)
+	first := postCarrierPickupJudgment(t, judge, body)
+	replay := postCarrierPickupJudgment(t, judge, body)
+	if first.Code != http.StatusCreated || replay.Code != http.StatusOK {
+		t.Fatalf("首答 %d %s；重放 %d %s", first.Code, first.Body.String(), replay.Code, replay.Body.String())
+	}
+	formed, recorded := decodePickupInstants(t, first), decodePickupInstants(t, replay)
+	if recorded.Outcome != "ALREADY_RECORDED" || formed.Pickup != recorded.Pickup {
+		t.Fatalf("首答与重放回显不同：%s ／ %s", first.Body.String(), replay.Body.String())
+	}
+	if formed.Pickup.OccurredAt != "2026-09-10T09:00:00.123456Z" || formed.Pickup.JudgedAt != "2026-09-10T10:00:00.987654Z" {
+		t.Fatalf("回显应折到登记册的微秒：%+v", formed.Pickup)
 	}
 }

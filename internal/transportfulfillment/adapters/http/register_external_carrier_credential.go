@@ -3,7 +3,6 @@ package tfhttp
 import (
 	"context"
 	"net/http"
-	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
@@ -175,13 +174,13 @@ func writeCredentialOutcome(response http.ResponseWriter, result application.Reg
 		body.Assigner = credential.Assigner().String()
 		body.IdentifiedKind = credential.Identifies().Kind().String()
 		body.IdentifiedRef = credential.Identifies().Reference()
-		body.EffectiveFrom = credential.Applicability().From().UTC().Format(time.RFC3339)
+		body.EffectiveFrom = rfc3339(credential.Applicability().From())
 		if until, closed := credential.Applicability().Until(); closed {
-			body.EffectiveUntil = until.UTC().Format(time.RFC3339)
+			body.EffectiveUntil = rfc3339(until)
 		}
 		body.Standing = credential.Standing().String()
 		if changedAt, changed := credential.ChangedAt(); changed {
-			body.ChangedAt = changedAt.UTC().Format(time.RFC3339)
+			body.ChangedAt = rfc3339(changedAt)
 		}
 		if prior, has := credential.Supersedes(); has {
 			body.Supersedes = prior.String()

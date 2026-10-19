@@ -3,7 +3,6 @@ package tfhttp
 import (
 	"context"
 	"net/http"
-	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
@@ -95,7 +94,7 @@ func writeSegmentClosureOutcome(response http.ResponseWriter, answer segmentClos
 		body.Segment = answer.segment
 	}
 	if closedAt, present := answer.result.ClosedAt(); present {
-		body.ClosedAt = closedAt.UTC().Format(time.RFC3339)
+		body.ClosedAt = rfc3339(closedAt)
 	}
 	// ADR-0022：只有这次声明真把段关上了用 201；早已关闭、仍有在场、不在册、未受理、未决都是形成了的答案（200）。
 	status := http.StatusOK

@@ -3,7 +3,6 @@ package tfhttp
 import (
 	"context"
 	"net/http"
-	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
@@ -64,7 +63,7 @@ func writeLoadAssignmentOutcome(response http.ResponseWriter, result application
 			body.Members = append(body.Members, member.String())
 		}
 		body.Version = record.Assignment.Version().String()
-		body.AssignedAt = record.Assignment.AssignedAt().UTC().Format(time.RFC3339)
+		body.AssignedAt = rfc3339(record.Assignment.AssignedAt())
 	}
 	// ADR-0022：只有新形成了一版用 201；同版本已在册、分配已形成、未受理、未决都是形成了的答案（200）。
 	// 分配已形成回显的是链头，不是这次送来的那一份。

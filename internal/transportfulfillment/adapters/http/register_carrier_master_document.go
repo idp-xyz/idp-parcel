@@ -3,7 +3,6 @@ package tfhttp
 import (
 	"context"
 	"net/http"
-	"time"
 
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
@@ -199,7 +198,7 @@ func writeMasterDocumentOutcome(response http.ResponseWriter, result application
 		}
 		body.Standing = document.Standing().String()
 		if changedAt, changed := document.ChangedAt(); changed {
-			body.ChangedAt = changedAt.UTC().Format(time.RFC3339)
+			body.ChangedAt = rfc3339(changedAt)
 		}
 		if prior, has := document.Supersedes(); has {
 			body.Supersedes = prior.String()

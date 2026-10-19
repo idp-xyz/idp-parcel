@@ -164,15 +164,15 @@ func carrierPickupBodyOf(record ports.CarrierFirstEffectivePickupRecord) carrier
 		Version:    pickup.Version().String(),
 		Object:     pickup.Object().String(),
 		Result:     pickup.Result().String(),
-		JudgedAt:   pickup.JudgedAt().UTC().Format(time.RFC3339),
-		RecordedAt: record.RecordedAt.UTC().Format(time.RFC3339),
+		JudgedAt:   rfc3339(pickup.JudgedAt()),
+		RecordedAt: rfc3339(record.RecordedAt),
 		Bases:      make([]carrierPickupBasisBody, 0, len(pickup.Bases())),
 	}
 	if carrier, identified := pickup.Carrier(); identified {
 		body.CarrierKind, body.CarrierReference = carrier.Kind().String(), carrier.Reference()
 	}
 	if at, present := pickup.OccurredAt(); present {
-		body.OccurredAt = at.UTC().Format(time.RFC3339)
+		body.OccurredAt = rfc3339(at)
 	}
 	if reason, pending := pickup.PendingReason(); pending {
 		body.PendingReason, body.CarrierName = reason.String(), pickup.Material()

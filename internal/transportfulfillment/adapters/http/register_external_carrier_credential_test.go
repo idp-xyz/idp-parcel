@@ -260,6 +260,25 @@ func TestRegisterCredentialReportsCreatedWithTheFiveRegisteredThings(t *testing.
 	}
 }
 
+// Covers: 票 operator-channel/31——带纳秒的适用起点：首登 201 与原样重放 200（EXISTING_VERSION）回显同一个折到登记册
+// 微秒的串，不是一边带纳秒尾巴、一边只到秒。
+func TestCredentialFirstAnswerAndReplayEchoTheSameRegistryInstant(t *testing.T) {
+	fixture := newCredentialFixture(t)
+	body := defaultCredentialBody()
+	body.EffectiveFrom = "2026-09-01T00:00:00.123456789Z"
+
+	first := postTo(t, fixture.register, "/transport-fulfillment-external-carrier-credential-registrations", body)
+	replay := postTo(t, fixture.register, "/transport-fulfillment-external-carrier-credential-registrations", body)
+
+	registered, existing := decodeCredential(t, first), decodeCredential(t, replay)
+	if first.Code != http.StatusCreated || replay.Code != http.StatusOK || existing.Outcome != "EXISTING_VERSION" {
+		t.Fatalf("首登 %d %s；重放 %d %s", first.Code, first.Body.String(), replay.Code, replay.Body.String())
+	}
+	if registered.EffectiveFrom != "2026-09-01T00:00:00.123456Z" || existing.EffectiveFrom != registered.EffectiveFrom {
+		t.Fatalf("effectiveFrom 首登 %q、重放 %q，want 都是 2026-09-01T00:00:00.123456Z", registered.EffectiveFrom, existing.EffectiveFrom)
+	}
+}
+
 // Covers: 改变适用关系新落一版 201，回指前版、终点与替代者透出；对已不适用的再改是 200 答案。
 func TestChangeApplicabilityReportsCreatedAndExposesTheChain(t *testing.T) {
 	fixture := newCredentialFixture(t)
