@@ -236,3 +236,54 @@ func TestIntakeIdentitiesReadsTheUnitsIntakeRows(t *testing.T) {
 		}
 	}
 }
+
+// TestConsolidationMemberCatalogueListsAddAndRemoveFacts 证「集运成员关系」册只列移入与移出两种来源事实，按记录时刻
+// 倒序；移入行的方向依据记录原样读回，没有记录的移入行与移出行都交回零值。
+func TestConsolidationMemberCatalogueListsAddAndRemoveFacts(t *testing.T) {
+	facts, units, transactor, pool := newConsolidationFacts(t)
+	ctx := t.Context()
+	tenant := ref(t, domain.NewTenantID, "tenant-a")
+	unit := openConsolidation(t, "bag-1", "asset-7")
+	saveConsolidation(t, transactor, ctx, units, tenant, unit)
+
+	saveConsolidationFact(t, transactor, ctx, facts, consolidationFactRecord(t, tenant, unit, "src-open"))
+	judged := addMemberFactRecord(t, tenant, unit, "src-add-judged", "hu-1", establishedWithCancelledAndFinal(t))
+	judged.RecordedAt = consolidationAt.Add(2 * time.Minute)
+	saveConsolidationFact(t, transactor, ctx, facts, judged)
+	legacy := addMemberFactRecord(t, tenant, unit, "src-add-legacy", "hu-2", domain.DirectionalBasisRecord{})
+	legacy.RecordedAt = consolidationAt.Add(3 * time.Minute)
+	saveConsolidationFact(t, transactor, ctx, facts, legacy)
+	removed := addMemberFactRecord(t, tenant, unit, "src-remove", "hu-2", domain.DirectionalBasisRecord{})
+	removed.Action = domain.RemoveMemberAction
+	removed.RecordedAt = consolidationAt.Add(4 * time.Minute)
+	saveConsolidationFact(t, transactor, ctx, facts, removed)
+
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	catalogue, err := adapter.NewReviewCatalogue(db)
+	if err != nil {
+		t.Fatalf("构造查阅目录：%v", err)
+	}
+	rows, err := catalogue.ListConsolidationMembers(ctx, tenant, 10)
+	if err != nil {
+		t.Fatalf("list: %v", err)
+	}
+	if len(rows) != 3 || rows[0].SourceID != "src-remove" || rows[1].SourceID != "src-add-legacy" || rows[2].SourceID != "src-add-judged" {
+		t.Fatalf("rows = %+v", rows)
+	}
+	if rows[0].Action != "REMOVE_MEMBER" || rows[0].Member != "hu-2" || rows[0].DirectionalBasis.Recorded() {
+		t.Fatalf("remove row = %+v", rows[0])
+	}
+	if rows[1].DirectionalBasis.Recorded() {
+		t.Fatalf("legacy add row read back as recorded")
+	}
+	if !rows[2].DirectionalBasis.Recorded() || rows[2].DirectionalBasis.ServiceResult().Cancellation() != "CANCEL-1" {
+		t.Fatalf("judged add row basis = %v", rows[2].DirectionalBasis.Cells())
+	}
+	other, err := catalogue.ListConsolidationMembers(ctx, ref(t, domain.NewTenantID, "tenant-b"), 10)
+	if err != nil || len(other) != 0 {
+		t.Fatalf("tenant-b = %+v err=%v", other, err)
+	}
+}

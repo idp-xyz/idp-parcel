@@ -85,11 +85,19 @@ func (stub unreachableReviewCatalogue) ListConsolidationUnits(
 	return nil, nil
 }
 
-// stubReviewCatalogue 是三本册子的读口替身，记下读口收到的键。
+func (stub unreachableReviewCatalogue) ListConsolidationMembers(
+	context.Context, domain.TenantID, int,
+) ([]ports.ConsolidationMemberCatalogueRow, error) {
+	stub.refuse("consolidation member")
+	return nil, nil
+}
+
+// stubReviewCatalogue 是各本册子的读口替身，记下读口收到的键。
 type stubReviewCatalogue struct {
 	receptions []ports.ReceptionCatalogueRow
 	items      []ports.UnidentifiedItemCatalogueRow
 	units      []ports.ConsolidationUnitCatalogueRow
+	members    []ports.ConsolidationMemberCatalogueRow
 	err        error
 
 	gotTenant string
@@ -115,6 +123,13 @@ func (stub *stubReviewCatalogue) ListConsolidationUnits(
 ) ([]ports.ConsolidationUnitCatalogueRow, error) {
 	stub.gotTenant, stub.gotLimit = tenant.String(), limit
 	return stub.units, stub.err
+}
+
+func (stub *stubReviewCatalogue) ListConsolidationMembers(
+	_ context.Context, tenant domain.TenantID, limit int,
+) ([]ports.ConsolidationMemberCatalogueRow, error) {
+	stub.gotTenant, stub.gotLimit = tenant.String(), limit
+	return stub.members, stub.err
 }
 
 func recordsEndpoint(register *stubReviewCatalogue) http.Handler {
@@ -472,13 +487,115 @@ func TestConsolidationUnitRegistryTranscribesRows(t *testing.T) {
 	}
 }
 
+// Covers: 「集运成员关系」册逐行转写移入与移出事实（票 no-directional-basis/01）：来源标识原样带 FTI/ 标记；移入行
+// 的方向依据记录三格各带取值、原因与引用；移入行没有记录时 directionalBasis 为 null（读作`未记录`，不读作依据齐全），
+// 移出行同样为 null。原因数组恒在场——空数组不是 null，页面不必分两种「没有原因」。
+func TestConsolidationMemberRegistryTranscribesRows(t *testing.T) {
+	intakeVersion, err := domain.NewIntakeResultVersion("intake/v1")
+	if err != nil {
+		t.Fatalf("version: %v", err)
+	}
+	association, err := domain.NewParcelAssociationReference("DPCL-1")
+	if err != nil {
+		t.Fatalf("association: %v", err)
+	}
+	identity, err := domain.JudgeIdentityBasis([]domain.IntakeIdentityObservation{{
+		SourceID:    "FTI/INTAKE-1/batch/receipt-1",
+		Version:     intakeVersion,
+		Association: association,
+		ReceivedAt:  catalogueBaseAt,
+	}})
+	if err != nil {
+		t.Fatalf("identity: %v", err)
+	}
+	cancelled, err := domain.JudgeServiceResultBasis("CANCEL-1", "", "")
+	if err != nil {
+		t.Fatalf("service result: %v", err)
+	}
+	judgedAt := catalogueBaseAt.Add(3 * time.Hour)
+	record, err := domain.RecordDirectionalBasis(identity, cancelled, domain.NotConfiguredRoutingBasis(), judgedAt)
+	if err != nil {
+		t.Fatalf("record: %v", err)
+	}
+	register := &stubReviewCatalogue{members: []ports.ConsolidationMemberCatalogueRow{
+		{
+			SourceID: "FTI/CONSOLIDATION-1/batch/work-2", Action: "ADD_MEMBER", UnitID: "bag-1", Member: "hu-1",
+			PerformedBy: "packer-1", Evidence: "FTI/CONSOLIDATION-1/clerk/sheet-1",
+			OccurredAt: catalogueBaseAt, RecordedAt: catalogueBaseAt.Add(time.Minute), DirectionalBasis: record,
+		},
+		{
+			SourceID: "scan-add-legacy", Action: "ADD_MEMBER", UnitID: "bag-1", Member: "hu-2",
+			PerformedBy: "packer-1", Evidence: "WORK-EVIDENCE/1", OccurredAt: catalogueBaseAt, RecordedAt: catalogueBaseAt,
+		},
+		{
+			SourceID: "scan-remove-1", Action: "REMOVE_MEMBER", UnitID: "bag-1", Member: "hu-2",
+			PerformedBy: "packer-2", Evidence: "WORK-EVIDENCE/2", OccurredAt: catalogueBaseAt, RecordedAt: catalogueBaseAt,
+		},
+	}}
+	response := serveGet(recordsEndpoint(register), "/node-operations-records?registry=consolidation-member")
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+	}
+	var body struct {
+		Outcome string `json:"outcome"`
+		Members []struct {
+			SourceID         string `json:"sourceId"`
+			Action           string `json:"action"`
+			OccurredAt       string `json:"occurredAt"`
+			RecordedAt       string `json:"recordedAt"`
+			DirectionalBasis *struct {
+				JudgedAt string `json:"judgedAt"`
+				Identity struct {
+					Answer         string   `json:"answer"`
+					Reasons        []string `json:"reasons"`
+					Association    string   `json:"association"`
+					IntakeSourceID string   `json:"intakeSourceId"`
+				} `json:"identity"`
+				ServiceResult struct {
+					Answer       string   `json:"answer"`
+					Reasons      []string `json:"reasons"`
+					Cancellation string   `json:"cancellation"`
+				} `json:"serviceResult"`
+				Routing struct {
+					Answer  string   `json:"answer"`
+					Reasons []string `json:"reasons"`
+				} `json:"routing"`
+			} `json:"directionalBasis"`
+		} `json:"members"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode %s: %v", response.Body.Bytes(), err)
+	}
+	if body.Outcome != "CONSOLIDATION_MEMBERS_LISTED" || len(body.Members) != 3 {
+		t.Fatalf("响应走样：%s", response.Body.String())
+	}
+	added := body.Members[0]
+	if added.SourceID != "FTI/CONSOLIDATION-1/batch/work-2" || added.Action != "ADD_MEMBER" ||
+		added.OccurredAt != catalogueBaseAt.Format(time.RFC3339Nano) || added.DirectionalBasis == nil {
+		t.Fatalf("移入行走样：%s", response.Body.String())
+	}
+	basis := added.DirectionalBasis
+	if basis.JudgedAt != judgedAt.Format(time.RFC3339Nano) ||
+		basis.Identity.Answer != "ESTABLISHED" || basis.Identity.Association != "DPCL-1" ||
+		basis.Identity.IntakeSourceID != "FTI/INTAKE-1/batch/receipt-1" || basis.Identity.Reasons == nil ||
+		basis.ServiceResult.Answer != "MISSING" || len(basis.ServiceResult.Reasons) != 1 ||
+		basis.ServiceResult.Reasons[0] != "CANCELLED" || basis.ServiceResult.Cancellation != "CANCEL-1" ||
+		basis.Routing.Answer != "NOT_CONFIGURED" {
+		t.Fatalf("方向依据记录转写走样：%s", response.Body.String())
+	}
+	if body.Members[1].DirectionalBasis != nil || body.Members[2].DirectionalBasis != nil {
+		t.Fatalf("未记录与移出行应为 null：%s", response.Body.String())
+	}
+}
+
 // Covers: ADR-0077 Decision 四 — 空登记册是内容不是错误：200 + 空数组（不是 null），
 // 三本册子一致。写入方是收寄命令端点的真渠道，未配置时册子就是空的，读面不代答续办。
 func TestEmptyRegistersAnswerEmptyArrays(t *testing.T) {
 	for registry, key := range map[string]string{
-		"reception":          "receptions",
-		"unidentified-item":  "items",
-		"consolidation-unit": "units",
+		"reception":            "receptions",
+		"unidentified-item":    "items",
+		"consolidation-unit":   "units",
+		"consolidation-member": "members",
 	} {
 		t.Run(registry, func(t *testing.T) {
 			register := &stubReviewCatalogue{}

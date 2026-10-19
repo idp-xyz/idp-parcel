@@ -95,8 +95,10 @@ func TestRehydratingADirectionalBasisAppliesTheSameRules(t *testing.T) {
 	}
 
 	broken := map[string]func(spec *domain.RehydrateDirectionalBasisSpec){
-		"词表外的取值":     func(spec *domain.RehydrateDirectionalBasisSpec) { spec.Routing.Answer = "COMPATIBLE" },
-		"不属其格的原因":    func(spec *domain.RehydrateDirectionalBasisSpec) { spec.ServiceResult.Reasons = []string{"PENDING_IDENTIFICATION"} },
+		"词表外的取值": func(spec *domain.RehydrateDirectionalBasisSpec) { spec.Routing.Answer = "COMPATIBLE" },
+		"不属其格的原因": func(spec *domain.RehydrateDirectionalBasisSpec) {
+			spec.ServiceResult.Reasons = []string{"PENDING_IDENTIFICATION"}
+		},
 		"已取消却没有取消引用": func(spec *domain.RehydrateDirectionalBasisSpec) { spec.Cancellation = "" },
 		"成立却缺所依收寄":   func(spec *domain.RehydrateDirectionalBasisSpec) { spec.IntakeSourceID = "" },
 		"重复的原因": func(spec *domain.RehydrateDirectionalBasisSpec) {

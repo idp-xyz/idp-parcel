@@ -8,8 +8,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 )
 
-// ReviewCatalogueReader 是本端点消费的读口：收寄册、待识别实物册与集运单元册三本
-// 册子的列表读面（管理台 node-operations-review 页）。
+// ReviewCatalogueReader 是本端点消费的读口：收寄册、待识别实物册、集运单元册与集运
+// 成员关系册的列表读面（管理台 node-operations-review 页）。
 type ReviewCatalogueReader interface {
 	ListReceptions(
 		ctx context.Context,
@@ -26,21 +26,28 @@ type ReviewCatalogueReader interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]ports.ConsolidationUnitCatalogueRow, error)
+	ListConsolidationMembers(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ports.ConsolidationMemberCatalogueRow, error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
 var _ ReviewCatalogueReader = ports.ReviewCatalogueRead(nil)
 
 const (
-	outcomeReceptionsListed         = "RECEPTIONS_LISTED"
-	outcomeUnidentifiedItemsListed  = "UNIDENTIFIED_ITEMS_LISTED"
-	outcomeConsolidationUnitsListed = "CONSOLIDATION_UNITS_LISTED"
+	outcomeReceptionsListed           = "RECEPTIONS_LISTED"
+	outcomeUnidentifiedItemsListed    = "UNIDENTIFIED_ITEMS_LISTED"
+	outcomeConsolidationUnitsListed   = "CONSOLIDATION_UNITS_LISTED"
+	outcomeConsolidationMembersListed = "CONSOLIDATION_MEMBERS_LISTED"
 )
 
 const (
-	registryReception         = "reception"
-	registryUnidentifiedItem  = "unidentified-item"
-	registryConsolidationUnit = "consolidation-unit"
+	registryReception           = "reception"
+	registryUnidentifiedItem    = "unidentified-item"
+	registryConsolidationUnit   = "consolidation-unit"
+	registryConsolidationMember = "consolidation-member"
 )
 
 // NewQueryNodeOperationsRecordsEndpoint 交回节点作业查阅页三本册子的 HTTP 入口
@@ -64,7 +71,8 @@ func NewQueryNodeOperationsRecordsEndpoint(
 		registry := request.URL.Query().Get("registry")
 		if registry != registryReception &&
 			registry != registryUnidentifiedItem &&
-			registry != registryConsolidationUnit {
+			registry != registryConsolidationUnit &&
+			registry != registryConsolidationMember {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
@@ -81,6 +89,8 @@ func NewQueryNodeOperationsRecordsEndpoint(
 			serveUnidentifiedItems(response, request, reader, tenant, query.Limit)
 		case registryConsolidationUnit:
 			serveConsolidationUnits(response, request, reader, tenant, query.Limit)
+		case registryConsolidationMember:
+			serveConsolidationMembers(response, request, reader, tenant, query.Limit)
 		}
 	})
 }
@@ -272,4 +282,110 @@ type consolidationUnitBody struct {
 	LatestSealPerformedBy string `json:"latestSealPerformedBy,omitempty"`
 	LatestSealedAt        string `json:"latestSealedAt,omitempty"`
 	ClosedAt              string `json:"closedAt,omitempty"`
+}
+
+func serveConsolidationMembers(
+	response http.ResponseWriter,
+	request *http.Request,
+	reader ReviewCatalogueReader,
+	tenant domain.TenantID,
+	limit int,
+) {
+	rows, err := reader.ListConsolidationMembers(request.Context(), tenant, limit)
+	if err != nil {
+		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+		return
+	}
+	bodies := make([]consolidationMemberBody, 0, len(rows))
+	for _, row := range rows {
+		bodies = append(bodies, consolidationMemberBody{
+			SourceID:         row.SourceID,
+			Action:           row.Action,
+			UnitID:           row.UnitID,
+			Member:           row.Member,
+			PerformedBy:      row.PerformedBy,
+			Evidence:         row.Evidence,
+			OccurredAt:       rfc3339(row.OccurredAt),
+			RecordedAt:       rfc3339(row.RecordedAt),
+			DirectionalBasis: directionalBasisBodyOf(row.DirectionalBasis),
+		})
+	}
+	writeJSON(response, http.StatusOK, consolidationMemberListResponse{
+		Outcome: outcomeConsolidationMembersListed,
+		Members: bodies,
+	})
+}
+
+type consolidationMemberListResponse struct {
+	Outcome string                    `json:"outcome"`
+	Members []consolidationMemberBody `json:"members"`
+}
+
+// consolidationMemberBody 逐字段透出一次移入或移出的来源事实。sourceId 原样带 FTI/ 标记：导入事实与设备事实靠它
+// 分（ADR-0089 决定四）。occurredAt 是现场的业务时间，recordedAt 是落册时刻，两者都给。
+//
+// directionalBasis 是移入事实落册时同一笔记下的方向依据记录（票 no-directional-basis/01）。它为 null 有两种读法，
+// 按 action 分：移出行本来就不带；移入行为 null 读作`未记录`——那条事实落册时还不记方向依据——**不读作依据齐全**。
+// 记录说的是 judgedAt 那一刻所知，不是装袋那一刻；偏离的判断归 network-routing、异常归 visibility-exception，
+// 本读面只上列，不带任何处置、确认或解除动作。
+type consolidationMemberBody struct {
+	SourceID         string                `json:"sourceId"`
+	Action           string                `json:"action"`
+	UnitID           string                `json:"unitId"`
+	Member           string                `json:"member"`
+	PerformedBy      string                `json:"performedBy"`
+	Evidence         string                `json:"evidence"`
+	OccurredAt       string                `json:"occurredAt"`
+	RecordedAt       string                `json:"recordedAt"`
+	DirectionalBasis *directionalBasisBody `json:"directionalBasis"`
+}
+
+// directionalBasisBody 三格同一个形：answer 是封闭词 ESTABLISHED / MISSING / NOT_CONFIGURED / UNREADABLE /
+// NOT_JUDGED，reasons 只在 MISSING 时非空；引用随格——身份成立带所依收寄，服务结果缺少带取消决定或终局。
+type directionalBasisBody struct {
+	JudgedAt      string                   `json:"judgedAt"`
+	Identity      directionalBasisCellBody `json:"identity"`
+	ServiceResult directionalBasisCellBody `json:"serviceResult"`
+	Routing       directionalBasisCellBody `json:"routing"`
+}
+
+type directionalBasisCellBody struct {
+	Answer         string   `json:"answer"`
+	Reasons        []string `json:"reasons"`
+	Association    string   `json:"association,omitempty"`
+	IntakeSourceID string   `json:"intakeSourceId,omitempty"`
+	IntakeVersion  string   `json:"intakeVersion,omitempty"`
+	Cancellation   string   `json:"cancellation,omitempty"`
+	FinalKind      string   `json:"finalKind,omitempty"`
+	FinalVersion   string   `json:"finalVersion,omitempty"`
+}
+
+func directionalBasisBodyOf(record domain.DirectionalBasisRecord) *directionalBasisBody {
+	if !record.Recorded() {
+		return nil
+	}
+	identity := record.Identity()
+	serviceResult := record.ServiceResult()
+	body := &directionalBasisBody{
+		JudgedAt:      rfc3339(record.JudgedAt()),
+		Identity:      directionalBasisCellBodyOf(identity.Cell()),
+		ServiceResult: directionalBasisCellBodyOf(serviceResult.Cell()),
+		Routing:       directionalBasisCellBodyOf(record.Routing().Cell()),
+	}
+	if association, established := identity.Association(); established {
+		body.Identity.Association = association.String()
+		body.Identity.IntakeSourceID = identity.IntakeSourceID()
+		body.Identity.IntakeVersion = identity.IntakeVersion().String()
+	}
+	body.ServiceResult.Cancellation = serviceResult.Cancellation()
+	body.ServiceResult.FinalKind, body.ServiceResult.FinalVersion = serviceResult.Final()
+	return body
+}
+
+func directionalBasisCellBodyOf(cell domain.DirectionalBasisCell) directionalBasisCellBody {
+	body := directionalBasisCellBody{Answer: cell.Answer().String(), Reasons: []string{}}
+	for _, reason := range cell.Reasons() {
+		body.Reasons = append(body.Reasons, reason.String())
+	}
+	return body
 }

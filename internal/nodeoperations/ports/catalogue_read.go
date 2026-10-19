@@ -98,6 +98,24 @@ type ConsolidationUnitCatalogueRow struct {
 	ClosedAt              *time.Time
 }
 
+// ConsolidationMemberCatalogueRow 是「集运成员关系」册上列的一行：一次移入或移出的来源事实（CONTEXT「集运成员
+// 关系」要求记录形成、变更和解除事实）。Action 是封闭词 ADD_MEMBER / REMOVE_MEMBER；SourceID 原样带 FTI/ 标记，
+// 页面据此分得开导入事实与设备事实（ADR-0089 决定四）。
+//
+// DirectionalBasis 只在移入行上可能有值：形成那条事实时同一笔记下的方向依据记录（票 no-directional-basis/01）。
+// 移入行上的零值读作`未记录`——那条事实落册时还不记方向依据——不读作依据齐全；移出行上恒为零值。
+type ConsolidationMemberCatalogueRow struct {
+	SourceID         string
+	Action           string
+	UnitID           string
+	Member           string
+	PerformedBy      string
+	Evidence         string
+	OccurredAt       time.Time
+	RecordedAt       time.Time
+	DirectionalBasis domain.DirectionalBasisRecord
+}
+
 // ReviewCatalogueRead 是节点作业查阅页的伴生列表读端口。
 type ReviewCatalogueRead interface {
 	ListReceptions(
@@ -115,4 +133,9 @@ type ReviewCatalogueRead interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]ConsolidationUnitCatalogueRow, error)
+	ListConsolidationMembers(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ConsolidationMemberCatalogueRow, error)
 }

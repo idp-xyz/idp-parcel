@@ -242,3 +242,63 @@ func (catalogue *ReviewCatalogue) ListConsolidationUnits(
 	}
 	return list, nil
 }
+
+// ListConsolidationMembers 上列「集运成员关系」册：移入与移出两种来源事实，按记录时刻倒序（同刻按来源标识）。
+// 方向依据记录经领域重建门读回，与按键读回走同一份行模型；一行坏记录让整页答不出，而不是悄悄显示成依据齐全。
+func (catalogue *ReviewCatalogue) ListConsolidationMembers(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.ConsolidationMemberCatalogueRow, error) {
+	if limit <= 0 {
+		return nil, fmt.Errorf("list consolidation members: limit must be positive, got %d", limit)
+	}
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list consolidation members: %w", err)
+	}
+
+	rows, err := querier.Query(ctx,
+		`SELECT source_id, action, unit_id, member_id, performed_by, evidence,
+		        occurred_at, recorded_at, directional_basis
+		   FROM node_operations.consolidation_fact
+		  WHERE tenant_id = $1
+		    AND action IN ('ADD_MEMBER', 'REMOVE_MEMBER')
+		  ORDER BY recorded_at DESC, source_id
+		  LIMIT $2`,
+		tenant.String(),
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list consolidation members: %w", err)
+	}
+	defer rows.Close()
+
+	list := make([]ports.ConsolidationMemberCatalogueRow, 0, limit)
+	for rows.Next() {
+		var (
+			row   ports.ConsolidationMemberCatalogueRow
+			basis []byte
+		)
+		if err := rows.Scan(
+			&row.SourceID, &row.Action, &row.UnitID, &row.Member, &row.PerformedBy, &row.Evidence,
+			&row.OccurredAt, &row.RecordedAt, &basis,
+		); err != nil {
+			return nil, fmt.Errorf("list consolidation members: %w", err)
+		}
+		row.OccurredAt = row.OccurredAt.UTC()
+		row.RecordedAt = row.RecordedAt.UTC()
+		if basis != nil {
+			record, err := rebuildDirectionalBasis(basis)
+			if err != nil {
+				return nil, fmt.Errorf("list consolidation members: source %q: directional basis: %w", row.SourceID, err)
+			}
+			row.DirectionalBasis = record
+		}
+		list = append(list, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list consolidation members: %w", err)
+	}
+	return list, nil
+}

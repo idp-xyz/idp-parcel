@@ -87,7 +87,7 @@ func (unwiredReception) Handle(
 	return nodeopsapp.ReceiveDeliveredUnitResult{}, errOrchestrationNotWired
 }
 
-// unwiredNodeOperationsRecords 是节点作业查阅页三册读口的占位，方法表与
+// unwiredNodeOperationsRecords 是节点作业查阅页各册读口的占位，方法表与
 // nodeopsports.ReviewCatalogueRead 逐一对上（票 admin-skeleton-closure-batch/05）。
 // 独立成形的理由同 unwiredPricingEvaluations：并进命令占位会盖不住「册接错适配器」。
 type unwiredNodeOperationsRecords struct{}
@@ -113,6 +113,14 @@ func (unwiredNodeOperationsRecords) ListConsolidationUnits(
 	nodeopsdomain.TenantID,
 	int,
 ) ([]nodeopsports.ConsolidationUnitCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
+func (unwiredNodeOperationsRecords) ListConsolidationMembers(
+	context.Context,
+	nodeopsdomain.TenantID,
+	int,
+) ([]nodeopsports.ConsolidationMemberCatalogueRow, error) {
 	return nil, errOrchestrationNotWired
 }
 
