@@ -15,7 +15,6 @@ import (
 )
 
 // 本文件是节点收寄口的线格式与译装：租户与节点由调用方从认证结果交入，载荷只有设备签发的事实内容（ADR-0023）。
-// 它原住在隔离命令 Intake 的文件里，随那只 Intake 退场挪出（票 operator-channel/23），行为一字未改。
 
 // receptionDocument 是收寄口的载荷：一次一件实物（批量交付由调用方逐件分发，见 ReceiveDeliveredUnitCommand）。键名与
 // 接收观察词表同受控批量口（parcel-frontline-import 的收寄模板）逐字一致——两口消费同一用例，同一件事在两处不换词；
@@ -101,8 +100,8 @@ func applyReceptionClaim(command *application.ReceiveDeliveredUnitCommand, docum
 }
 
 // decodeClosedDocument 以封闭形状解载荷。未知键拒：载荷里出现 tenantId 之类的键不是可以忽略的噪声，是采信自报的入口；
-// 尾随的第二个 JSON 值也拒：一份载荷只许一个文档，放过它就是无声丢掉一段输入。两道判据同 partycommercial 的隔离身份
-// Intake。
+// 尾随的第二个 JSON 值也拒：一份载荷只许一个文档，放过它就是无声丢掉一段输入。两道判据同 partycommercial 适配器
+// （`internal/partycommercial/adapters/http`）的 decodeClosedDocument。
 func decodeClosedDocument(request *http.Request, target any) error {
 	decoder := json.NewDecoder(request.Body)
 	decoder.DisallowUnknownFields()
