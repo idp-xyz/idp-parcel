@@ -372,9 +372,8 @@ echo "== 预报有效时窗登记（node-operations：演示租户一行；票 p
   -file "$SEEDS/node-operations/01-pre-advice-window-syn-tenant-01.json"
 
 echo "== 上海→深圳快线周期安排（transport-fulfillment：让演示提交在一天里任何时刻都有一段运输机会可准备；票 demo-chain-gaps/18） =="
-# 计划段窗口随提交时刻移动：首段从上海枢纽的处理完成起、到演示网络给这条连接的衔接缓冲止。按日一班 22:00 出发、
-# 历时 600 分钟的那一份只接得住提交时刻落在一小段里的单子；再加 12:00 与 20:00 两班、历时 240 分钟的快线，三班合起来
-# 让首段窗口不论落在哪一刻都含一班完整的出发与到达。只调演示租户的班期（合成值），不改匹配规则（ADR-0201 决定六）。
+# 计划段窗口随提交时刻移动，按日运行的那一班只接得住提交时刻落在一小段里的单子；加快线是为了让首段窗口不论落在
+# 哪一刻都含一班完整的出发与到达。只调演示租户的班期（合成值），不改匹配规则（ADR-0201 决定六）；取值见 README。
 "$BIN/parcel-transport-register" schedule-template -input "$SEEDS/transport/05-schedule-template-sha-szx-express-1200.json"
 "$BIN/parcel-transport-register" schedule-template -input "$SEEDS/transport/06-schedule-template-sha-szx-express-2000.json"
 
