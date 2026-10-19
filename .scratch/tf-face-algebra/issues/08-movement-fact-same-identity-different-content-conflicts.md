@@ -1,7 +1,7 @@
 # 08 移动事实同身份异内容答「已有版本」：作业事实口缺内容冲突格，另一台设备或另一作业范围的真实作业被静默吞掉
 
 Category: bug
-Status: needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 代决（见「裁定」）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment/movement-facts
@@ -13,6 +13,16 @@ Blocked by: 无
 - cmd/parcel-api/（新增真渠道真库回归测试文件）
 
 代决依据：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」。
+
+## 裁定（2026-10-18，会话 idp-parcel-9b 代决）
+
+照「修复方向（机制）」做，「应当」里留给 TF owner 的两处张力由本会话代决：
+
+1. **同身份异内容答 `SOURCE_CONFLICT`（200，不回显、不落库、不另起版本）。** 依据 ADR-0149 决定四「摘要作同身份重放与内容冲突的判据」与同族各口；ADR-0023 决定「同一身份重复到达返回原结果」说的是重复到达，不是异内容。TF CONTEXT「同一源事件再次到达 → 重复投递：返回原结果」是外部承运轨迹的规则，不适用于设备作业事实。
+2. **业务时间不进摘要，照 ADR-0023 字面**（「发生时间与接收时间……两者都不进入内容摘要」）：只差发生时间的同身份重投读作重放、交回原结果。同族的揽收登记形状 `CanonicalizeOffsitePickupRegistrationPayload` 把 occurred_at 放进了摘要，与 ADR-0023 字面不一致——那一处不在本票，留给 TF owner 另裁（追加复核记录或改形状），本票不跟着照抄。
+3. 身份在册时先比内容、后判门禁，免得重放被支去取放行。
+
+越权风险点：第 2 条与研判推荐相反（研判推荐照同族把业务时间放进摘要），本会话按权威次序取已接受 ADR 的字面；TF owner 复核时看设备侧的发生时间是否真的不会在同一身份下变化。
 
 ## 现象
 - 同一（租户、事实、版本）带着不同内容再到时，一律答 200 `MOVEMENT_FACT_VERSION_EXISTS`，回显在册那一份，不落库、不留痕。不同内容包括：种类与地点、只差亚秒、只差整秒、只差班次、带放行的受门禁出发、换放行引用、去掉门禁与放行。
