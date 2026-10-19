@@ -343,6 +343,11 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 设备出发前门禁问询（ADR-0219）：与出发登记同一处读数构造，只读。
+	departureGatePreview, err := buildDepartureGatePreview(db)
+	if err != nil {
+		return err
+	}
 	segmentOps, err := buildSegmentOperations(db)
 	if err != nil {
 		return err
@@ -805,6 +810,7 @@ func run(logger *slog.Logger) error {
 			cancellationFaces,
 			cancellationFaces,
 			deliveryHandoverNotes,
+			departureGatePreview,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,

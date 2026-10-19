@@ -84,6 +84,10 @@ var workFactOperatorFaces = []workFactOperatorFace{
 			`"arrivedAt":"2026-09-25T10:00:00+08:00","evidence":"SYN-EVIDENCE/arrival-13",` +
 			`"objects":[{"object":"SYN-PARCEL-08-13","outcome":"DELIVERED","occurredAt":"2026-09-25T10:05:00+08:00"}]}`,
 	},
+	{
+		pattern: "/transport-fulfillment/departure-gate-previews", scopeKind: "OFFSITE", scopeRef: "SYN-OFFSITE-01", device: "SYN-DEVICE-OFFSITE",
+		body: `{"schedule":"SYN-SCHEDULE/linehaul-06","segment":"SYN-SEGMENT-08-06","departsAt":"2026-09-24T14:00:00+08:00"}`,
+	},
 }
 
 // transportOperationDecisionFaces 是运输履约归「运营决定」能力面的各口（ADR-0151 决定一）：作业事实渠道装不进它们，

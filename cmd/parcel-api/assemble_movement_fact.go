@@ -55,37 +55,14 @@ func (movement transactionalMovementFact) Record(
 }
 
 // buildMovementFactOrchestration 装配 `/transport-fulfillment/movement-facts` 背后的真编排（票 tf-segment-lifecycle-closure/05、
-// demo-chain-gaps/32、33）。登记那一半的缝是移动事实登记册、已形成信封与时钟；出发读数那一半问本上下文的段册与班次册，再经
-// 消费侧适配器问关务的动作准入判断——全接真。信封与事实同一笔入队，消费它的是派发进程里全程追踪的投影派生（ADR-0205 决定五）。
-//
-// 关务那一口在这里另装一份，不从 main 的 customsAdmission 传进来：两份接的是同一批真适配器、同一个库，无状态；传进来就要
-// 改 main 里既有几行的次序。
+// demo-chain-gaps/32、33）。登记那一半的缝是移动事实登记册、已形成信封与时钟；出发读数那一半见 buildDepartureGateReader。
+// 信封与事实同一笔入队，消费它的是派发进程里全程追踪的投影派生（ADR-0205 决定五）。
 func buildMovementFactOrchestration(db *bentopg.DB) (tfhttp.MovementFactHandler, error) {
 	facts, err := tfpostgres.NewMovementFacts(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: movement facts: %w", err)
 	}
-	segments, err := tfpostgres.NewFulfillmentSegments(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-api: movement facts: fulfillment segments: %w", err)
-	}
-	schedules, err := tfpostgres.NewTransportSchedules(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-api: movement facts: transport schedules: %w", err)
-	}
-	customsAdmission, err := buildCustomsAdmissionOrchestration(db)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-api: movement facts: %w", err)
-	}
-	customs, err := tfcustoms.NewDepartureGateView(customsAdmission.actionAdmission)
-	if err != nil {
-		return nil, fmt.Errorf("parcel-api: movement facts: %w", err)
-	}
-	gate, err := tfapp.NewDepartureGateReader(tfapp.DepartureGateReadDeps{
-		Segments:  segments,
-		Schedules: schedules,
-		Customs:   customs,
-	})
+	gate, err := buildDepartureGateReader(db)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: movement facts: %w", err)
 	}
@@ -103,4 +80,34 @@ func buildMovementFactOrchestration(db *bentopg.DB) (tfhttp.MovementFactHandler,
 		Clock:   systemClock{},
 	})
 	return transactionalMovementFact{transactor: db.Transactor(), gate: gate, inner: handler}, nil
+}
+
+// buildDepartureGateReader 装出发门禁读数编排：本上下文的段册与班次册，再经消费侧适配器问关务的动作准入判断——全接真。
+// 出发登记与出发前问询（buildDepartureGatePreview，ADR-0219）都从这里取，各取一份、接的是同一批真适配器与同一个库：
+// 两口读数同一套，装配上也只有这一处定义。
+//
+// 关务那一口在这里另装一份，不从 main 的 customsAdmission 传进来：几份接的是同一批真适配器、同一个库，无状态；传进来就要
+// 改 main 里既有几行的次序。
+func buildDepartureGateReader(db *bentopg.DB) (*tfapp.DepartureGateReader, error) {
+	segments, err := tfpostgres.NewFulfillmentSegments(db)
+	if err != nil {
+		return nil, fmt.Errorf("departure gate reader: fulfillment segments: %w", err)
+	}
+	schedules, err := tfpostgres.NewTransportSchedules(db)
+	if err != nil {
+		return nil, fmt.Errorf("departure gate reader: transport schedules: %w", err)
+	}
+	customsAdmission, err := buildCustomsAdmissionOrchestration(db)
+	if err != nil {
+		return nil, fmt.Errorf("departure gate reader: %w", err)
+	}
+	customs, err := tfcustoms.NewDepartureGateView(customsAdmission.actionAdmission)
+	if err != nil {
+		return nil, fmt.Errorf("departure gate reader: %w", err)
+	}
+	return tfapp.NewDepartureGateReader(tfapp.DepartureGateReadDeps{
+		Segments:  segments,
+		Schedules: schedules,
+		Customs:   customs,
+	})
 }

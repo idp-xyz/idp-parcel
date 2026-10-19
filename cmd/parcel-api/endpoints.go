@@ -193,6 +193,7 @@ func assembleBusinessEndpoints(
 	transportCommissionCancellation tfhttp.TransportCommissionCanceller,
 	bookingRequestCancellation tfhttp.BookingRequestCanceller,
 	deliveryHandoverNotes deliveryHandoverNoteFaces,
+	departureGatePreview tfhttp.DepartureGatePreviewer,
 ) []httpapi.BusinessEndpoint {
 	// 缺省朝拦：真渠道与隔离入参都缺席时，下面这组变量全取未配置即拒。
 	//
@@ -758,5 +759,8 @@ func assembleBusinessEndpoints(
 		{Pattern: "/node-operations/delivery-handover-closures", Handler: nodeopshttp.NewCloseDeliveryHandoverNoteEndpoint(deliveryHandoverNotes.closureIntake(), deliveryHandoverNotes.handler)},
 		{Pattern: "/node-operations/delivery-handover-confirmations", Handler: nodeopshttp.NewConfirmDeliveryHandoverEndpoint(operatorDecisions.nodeOperations, deliveryHandoverNotes.handler)},
 		{Pattern: "/node-operations/delivery-handover-conclusions", Handler: nodeopshttp.NewConcludeDeliveryHandoverEndpoint(deliveryHandoverNotes.conclusionIntake(), deliveryHandoverNotes.handler)},
+		// 设备出发前门禁问询口（ADR-0219）：只读，交回与随后同参出发同一套读数，本上下文不落任何东西。挂作业事实渠道、与移动事实口
+		// 同一份认证与授予——能报出发就能问出发前那一问，不另立能力种类；写开关换不了它（ADR-0150 决定三）。
+		{Pattern: "/transport-fulfillment/departure-gate-previews", Handler: tfhttp.NewPreviewDepartureGateEndpoint(departureGatePreviewIntake(workFactTransport), departureGatePreview)},
 	}
 }

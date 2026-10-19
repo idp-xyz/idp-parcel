@@ -363,6 +363,13 @@ func (unwiredCancellationFaces) CancelBooking(context.Context, tfapp.CancelBooki
 	return tfapp.CommissionResult{}, errOrchestrationNotWired
 }
 
+// unwiredDepartureGatePreview 是设备出发前门禁问询口的占位（ADR-0219）。
+type unwiredDepartureGatePreview struct{}
+
+func (unwiredDepartureGatePreview) Preview(context.Context, tfapp.PreviewDepartureGateCommand) (tfapp.PreviewDepartureGateResult, error) {
+	return tfapp.PreviewDepartureGateResult{}, errOrchestrationNotWired
+}
+
 // unwiredEffectiveTimeRuleRegistration 是轨迹源有效时间规则登记口的占位（票 label-channel/19）。
 type unwiredEffectiveTimeRuleRegistration struct{}
 
