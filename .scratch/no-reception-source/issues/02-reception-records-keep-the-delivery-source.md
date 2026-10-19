@@ -1,7 +1,7 @@
 # 02 第一期：收寄记录保全本次交付的来源文档，三种接收观察都存；每版判断有版本、追加版指名前版，已有结果带回原判断种类与当前有效版本
 
 Category: enhancement
-Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-nrs02`（与 ps-external-mark-relations/05 并行，同碰收寄编排）。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）
+Status: in-progress——2026-10-19 评审 0 阻断（阻断一条已修，会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-nrs02`（与 ps-external-mark-relations/05 并行，同碰收寄编排）。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）
 Blocked by: 01 进 main（ADR-0199、NO CONTEXT 与 UC-NO-002 先落）。同改收寄编排与 PG 适配器的 operator-channel/45、no-reception-identity/03 已于 main `91ea0883` 进 main，以它们为底。
 父票：[01](./01-node-reception-preserves-the-delivery-source.md)
 出处：票 01 裁定分期之「一、来源保全」与「已有结果的答复带回原判断种类与当前有效版本」那一问；ADR-0199 决定一、决定二。
@@ -184,3 +184,13 @@ Blocked by: 01 进 main（ADR-0199、NO CONTEXT 与 UC-NO-002 先落）。同改
 
 **证据层级**：S。
 
+## Comments
+
+### 评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审；2026-10-19，钉 `6ed9ec11`，修补后钉 `fd065937`）
+
+两轴合审。
+
+- **阻断（已修于 `0a3a441d`）**：外部标识带 NUL 时，来源文档写进 jsonb 撞 22P05，拒收与仅扫描两支由本票变成 5xx、设备永远重投。照票 45、54 的路数在两处入口拒成坏报文（在线收寄口 400 `MALFORMED_REQUEST`、前线导入整批拒并点名列），只拒 NUL，回车、换行、Tab 照旧原样收。明确接收那一支今天在 PS 身份读口撞 22021，是旧缺陷，同由入口挡住。三种观察经生产装配真库各一格先红后绿。
+- **Spec**：ADR-0199 决定一、二落到。来源文档 NRS-1 与 NOC-1 指纹分开，指纹两个函数逐字不动；判断版本与收寄结果版本同一签发者，形成与待识别行以 CHECK 守「判断版本即收寄版本」；前版（租户，前版）部分唯一索引守「一版至多一个后继」，撞上译成 `ErrPredecessorAlreadySucceeded`；`Save` 的 `ON CONFLICT` 收窄到主键，前版撞键不再被吞成已有记录。ADR-0196 冲突版指名先到那件此刻的当前版本，在（租户、包裹）咨询锁之后同一事务里读，并发可见；冲突版带后到那次送站的来源文档，照 ADR-0199 决定一原文。已有结果带 `recordedOutcome` 与 `currentVersion` 两个信息格，不进 outcome 词表。
+- **Standards**：「新行必带来源与版本」由编排守、不立 NOT VALID CHECK，理由（多个包直写夹具）写在迁移 0007 头注，与 0006 同一取舍。
+- **已知缺口（照 ADR-0199「不回填」，不另立票）**：第一期之前落下的冲突版没有前版、不在链上，先到那件重放时 `currentVersion` 是原判断；第三件再来时新冲突版也从原判断接，原判断实际有两个后继、只一个上链。方向依据读全部行，不受影响。第一期之前的拒收与仅扫描行没有判断版本，票 04 续办时要处理（作者已写进「发现」）。
