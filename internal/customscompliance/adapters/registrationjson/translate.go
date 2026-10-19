@@ -571,8 +571,9 @@ func declarationPathFromJSON(raw []byte, tenantSource tenantOf) (application.Reg
 	}, nil
 }
 
-type regulatoryCredentialDocument struct {
-	TenantID     string    `json:"tenantId"`
+// regulatoryCredentialContent 是凭证登记除租户外的每一格。在线口只解这一份：没有租户格，`tenantid` 一类大小写
+// 变体（encoding/json 认字段名不分大小写）在这里只能是未知字段，严格解码拒掉，不会解进任何租户格。
+type regulatoryCredentialContent struct {
 	CredentialID string    `json:"credentialId"`
 	IssuerRef    string    `json:"issuerRef"`
 	HolderRef    string    `json:"holderRef"`
@@ -582,17 +583,44 @@ type regulatoryCredentialDocument struct {
 	Uses         int       `json:"uses"`
 }
 
+type regulatoryCredentialDocument struct {
+	TenantID string `json:"tenantId"`
+	regulatoryCredentialContent
+}
+
 // RegulatoryCredentialFromJSON 译装一版监管凭证登记（票 sa-cc/07）。有效期两端与额度的
 // 门在领域（期限有序、额度非负），原样递过去不代判；uses 缺席与 0 同义——领域把零约定为
 // 「来源未提供次数额度」并经 Uses 的第二个返回值显式交出，所以这一格不用指针分「没给」
 // 与「给了 0」：两者在领域上就是同一格。
 func RegulatoryCredentialFromJSON(raw []byte) (application.RegisterCredentialCommand, error) {
-	none := application.RegisterCredentialCommand{}
 	var document regulatoryCredentialDocument
 	if err := decodeStrict(raw, &document); err != nil {
-		return none, fmt.Errorf("凭证登记输入不是本入口的形状：%w", err)
+		return application.RegisterCredentialCommand{}, fmt.Errorf("凭证登记输入不是本入口的形状：%w", err)
 	}
-	tenant, err := domain.NewTenantID(document.TenantID)
+	return regulatoryCredentialFrom(document.regulatoryCredentialContent, document.TenantID, tenantFromDocument)
+}
+
+// RegulatoryCredentialFromJSONForTenant 是在线口那一路（票 operator-channel/52）：租户取认证结果，载荷带任何大小写的
+// 租户键即拒。认证租户直接注入命令，不拼回 JSON 再解——拼回去再解，载荷里的变体键会按 encoding/json 的大小写折叠
+// 盖掉拼进去的那一个。
+func RegulatoryCredentialFromJSONForTenant(raw []byte, tenant domain.TenantID) (application.RegisterCredentialCommand, error) {
+	if err := refuseSelfReportedTenant(raw); err != nil {
+		return application.RegisterCredentialCommand{}, err
+	}
+	var content regulatoryCredentialContent
+	if err := decodeStrict(raw, &content); err != nil {
+		return application.RegisterCredentialCommand{}, fmt.Errorf("凭证登记输入不是本入口的形状：%w", err)
+	}
+	return regulatoryCredentialFrom(content, "", injectedTenant(tenant))
+}
+
+func regulatoryCredentialFrom(
+	document regulatoryCredentialContent,
+	documentTenant string,
+	tenantSource tenantOf,
+) (application.RegisterCredentialCommand, error) {
+	none := application.RegisterCredentialCommand{}
+	tenant, err := tenantSource(documentTenant)
 	if err != nil {
 		return none, err
 	}
@@ -982,17 +1010,21 @@ func injectedTenant(tenant domain.TenantID) tenantOf {
 	return func(string) (domain.TenantID, error) { return tenant, nil }
 }
 
-// ErrSelfReportedTenant 表示在线口的批文里带了 tenantId：租户只从认证结果来。
-var ErrSelfReportedTenant = errors.New("customs registration: online input must not carry tenantId; the tenant comes from the operator envelope")
+// ErrSelfReportedTenant 表示在线口的批文里带了 tenantId（不论大小写）：租户只从认证结果来。
+var ErrSelfReportedTenant = errors.New("customs registration: online input must not carry tenantId in any letter case; the tenant comes from the authenticated channel")
 
-// refuseSelfReportedTenant 键在场即拒、不看值：`"tenantId": null` 也是自报。批文不是 JSON 对象时交给 decodeStrict 去答形状错。
+// refuseSelfReportedTenant 键在场即拒、不看值：`"tenantId": null` 也是自报。键名按 encoding/json 认字段的同一折叠比：
+// 它把 `tenantid`、`TENANTID` 都解进 `json:"tenantId"` 格，只认精确键，变体就绕过了拒自报。
+// 批文不是 JSON 对象时交给 decodeStrict 去答形状错。
 func refuseSelfReportedTenant(raw []byte) error {
 	var top map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &top); err != nil {
 		return nil
 	}
-	if _, present := top["tenantId"]; present {
-		return ErrSelfReportedTenant
+	for key := range top {
+		if strings.EqualFold(key, "tenantId") {
+			return ErrSelfReportedTenant
+		}
 	}
 	return nil
 }

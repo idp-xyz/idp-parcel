@@ -1,6 +1,7 @@
 package customshttp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -59,8 +60,8 @@ type IntegrationClientAuthenticator interface {
 // IntegrationClientIntake 是集成客户端族在外部结果与监管凭证登记两口的 Intake（ADR-0149 决定三；票 operator-channel/11）。
 //
 // 先认证、后读载荷：令牌不过的调用方看不到载荷校验的结果。租户只取认证结果。外部结果的来源标识、层、原文语义与发生
-// 时间照 ADR-0023 从载荷收，接收时刻取注入时钟；凭证登记的译装仍走 registrationjson 那一份，本包只把认证出的租户拼回
-// tenantId。载荷里自报租户即拒。
+// 时间照 ADR-0023 从载荷收，接收时刻取注入时钟；凭证登记的译装仍走 registrationjson 那一份，认证出的租户经它的在线
+// 译装注入命令。载荷里自报租户即拒，租户键不论大小写。
 type IntegrationClientIntake struct {
 	authenticator IntegrationClientAuthenticator
 	clock         ports.Clock
@@ -129,11 +130,11 @@ func (intake *IntegrationClientIntake) IntakeRegulatoryCredentialRegistration(
 	if err != nil {
 		return application.RegisterCredentialCommand{}, err
 	}
-	snapshot, err := snapshotWithAuthenticatedTenant(request.Body, tenant.String())
+	payload, err := readSinglePayload(request.Body)
 	if err != nil {
 		return application.RegisterCredentialCommand{}, err
 	}
-	command, err := registrationjson.RegulatoryCredentialFromJSON(snapshot)
+	command, err := registrationjson.RegulatoryCredentialFromJSONForTenant(payload, tenant)
 	if err != nil {
 		return application.RegisterCredentialCommand{}, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
 	}
@@ -201,31 +202,21 @@ func presentedClientCredential(request *http.Request) PresentedClientCredential 
 	return PresentedClientCredential{Token: httpapi.BearerToken(request), Certificate: certificate}
 }
 
-// snapshotWithAuthenticatedTenant 读一份登记快照、拒自报租户，把认证出的租户拼回 tenantId。键在场即拒、不看值。
-func snapshotWithAuthenticatedTenant(body io.Reader, tenantID string) ([]byte, error) {
+// readSinglePayload 收一份载荷原文：只许一个 JSON 对象、其后无尾随内容。认证租户不往原文里拼——拼回去再解，
+// 载荷里 `tenantid` 一类变体会按 encoding/json 的大小写折叠盖掉拼进去的那一个（票 operator-channel/52）。
+func readSinglePayload(body io.Reader) ([]byte, error) {
 	decoder := json.NewDecoder(body)
-	var snapshot map[string]json.RawMessage
-	if err := decoder.Decode(&snapshot); err != nil {
+	var payload json.RawMessage
+	if err := decoder.Decode(&payload); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("%w: trailing content after the payload", ErrMalformedRequest)
 	}
-	if snapshot == nil {
+	if !bytes.HasPrefix(bytes.TrimSpace(payload), []byte("{")) {
 		return nil, fmt.Errorf("%w: the payload must be a JSON object", ErrMalformedRequest)
 	}
-	if _, present := snapshot["tenantId"]; present {
-		return nil, fmt.Errorf(
-			"%w: tenantId must not be carried in the payload; the tenant grid is filled by the access channel, not by the request",
-			ErrMalformedRequest,
-		)
-	}
-	tenant, err := json.Marshal(tenantID)
-	if err != nil {
-		return nil, fmt.Errorf("customs compliance http: encode authenticated tenant: %w", err)
-	}
-	snapshot["tenantId"] = tenant
-	return json.Marshal(snapshot)
+	return payload, nil
 }
 
 func decodeClosedDocument(body io.Reader, target any) error {

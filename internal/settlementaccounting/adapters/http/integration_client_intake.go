@@ -1,6 +1,7 @@
 package settlementhttp
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -49,7 +50,8 @@ type IntegrationClientAuthenticator interface {
 }
 
 // IntegrationClientIntake 是集成客户端族在外部资金事实采用与更正两口的 Intake（ADR-0149 决定三、ADR-0151 决定四；
-// 票 operator-channel/11）。两口同一份认证与授予。译装仍走 registrationjson，本包只把认证出的租户拼回 tenantId。
+// 票 operator-channel/11）。两口同一份认证与授予。译装仍走 registrationjson，认证出的租户经它的在线译装注入命令；载荷里
+// 自报租户即拒，租户键不论大小写。
 type IntegrationClientIntake struct {
 	authenticator IntegrationClientAuthenticator
 }
@@ -74,11 +76,11 @@ func (intake *IntegrationClientIntake) IntakeExternalFundsFactRegistration(
 	if err != nil {
 		return application.AdoptFundsFactCommand{}, err
 	}
-	snapshot, err := snapshotWithAuthenticatedTenant(request.Body, tenant.String())
+	payload, err := readSinglePayload(request.Body)
 	if err != nil {
 		return application.AdoptFundsFactCommand{}, err
 	}
-	command, err := registrationjson.ExternalFundsFactFromJSON(snapshot)
+	command, err := registrationjson.ExternalFundsFactFromJSONForTenant(payload, tenant)
 	if err != nil {
 		return application.AdoptFundsFactCommand{}, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
 	}
@@ -93,11 +95,11 @@ func (intake *IntegrationClientIntake) IntakeExternalFundsFactCorrectionRegistra
 	if err != nil {
 		return application.CorrectFundsFactCommand{}, err
 	}
-	snapshot, err := snapshotWithAuthenticatedTenant(request.Body, tenant.String())
+	payload, err := readSinglePayload(request.Body)
 	if err != nil {
 		return application.CorrectFundsFactCommand{}, err
 	}
-	command, err := registrationjson.ExternalFundsFactCorrectionFromJSON(snapshot)
+	command, err := registrationjson.ExternalFundsFactCorrectionFromJSONForTenant(payload, tenant)
 	if err != nil {
 		return application.CorrectFundsFactCommand{}, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
 	}
@@ -112,28 +114,19 @@ func presentedClientCredential(request *http.Request) PresentedClientCredential 
 	return PresentedClientCredential{Token: httpapi.BearerToken(request), Certificate: certificate}
 }
 
-func snapshotWithAuthenticatedTenant(body io.Reader, tenantID string) ([]byte, error) {
+// readSinglePayload 收一份载荷原文：只许一个 JSON 对象、其后无尾随内容。认证租户不往原文里拼——拼回去再解，
+// 载荷里 `tenantid` 一类变体会按 encoding/json 的大小写折叠盖掉拼进去的那一个（票 operator-channel/52）。
+func readSinglePayload(body io.Reader) ([]byte, error) {
 	decoder := json.NewDecoder(body)
-	var snapshot map[string]json.RawMessage
-	if err := decoder.Decode(&snapshot); err != nil {
+	var payload json.RawMessage
+	if err := decoder.Decode(&payload); err != nil {
 		return nil, fmt.Errorf("%w: %v", ErrMalformedRequest, err)
 	}
 	if err := decoder.Decode(&struct{}{}); !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("%w: trailing content after the payload", ErrMalformedRequest)
 	}
-	if snapshot == nil {
+	if !bytes.HasPrefix(bytes.TrimSpace(payload), []byte("{")) {
 		return nil, fmt.Errorf("%w: the payload must be a JSON object", ErrMalformedRequest)
 	}
-	if _, present := snapshot["tenantId"]; present {
-		return nil, fmt.Errorf(
-			"%w: tenantId must not be carried in the payload; the tenant grid is filled by the access channel, not by the request",
-			ErrMalformedRequest,
-		)
-	}
-	tenant, err := json.Marshal(tenantID)
-	if err != nil {
-		return nil, fmt.Errorf("settlement accounting http: encode authenticated tenant: %w", err)
-	}
-	snapshot["tenantId"] = tenant
-	return json.Marshal(snapshot)
+	return payload, nil
 }

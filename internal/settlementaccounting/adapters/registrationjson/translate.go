@@ -16,6 +16,7 @@ package registrationjson
 import (
 	"bytes"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -30,8 +31,9 @@ import (
 // 做的只是把「哪一格坏了」说出来。金额与时刻原样递给领域：非正金额、零时刻、回指自己、回指非链头都是领域与
 // 用例的门（`domain.AdoptExternalFundsFact` / `CorrectFundsFactCommand` 头注），这里绝不代判。
 
-type externalFundsFactDocument struct {
-	TenantID    string    `json:"tenantId"`
+// externalFundsFactContent 是首版采用除租户外的每一格。在线口只解这一份：没有租户格，`tenantid` 一类大小写变体
+// （encoding/json 认字段名不分大小写）在这里只能是未知字段，严格解码拒掉，不会解进任何租户格。
+type externalFundsFactContent struct {
 	FactRef     string    `json:"factRef"`
 	SourceRef   string    `json:"sourceRef"`
 	PayerRef    string    `json:"payerRef"`
@@ -42,18 +44,41 @@ type externalFundsFactDocument struct {
 	OccurredAt  time.Time `json:"occurredAt"`
 }
 
+type externalFundsFactDocument struct {
+	TenantID string `json:"tenantId"`
+	externalFundsFactContent
+}
+
 // ExternalFundsFactFromJSON 译装一次外部资金事实首版的采用。payerRef 可缺席——来源未提供付款人是事实的一个诚实状态
 // （`domain.FundsPayerReference` 头注），缺席时命令上是空串；给了却全是空白则拒：那不是「未提供」，是打坏了。
 func ExternalFundsFactFromJSON(raw []byte) (application.AdoptFundsFactCommand, error) {
-	none := application.AdoptFundsFactCommand{}
 	var document externalFundsFactDocument
 	if err := decodeStrict(raw, &document); err != nil {
-		return none, fmt.Errorf("资金事实登记输入不是本入口的形状：%w", err)
+		return application.AdoptFundsFactCommand{}, fmt.Errorf("资金事实登记输入不是本入口的形状：%w", err)
 	}
 	tenant, err := domain.NewTenantID(document.TenantID)
 	if err != nil {
-		return none, fmt.Errorf("tenantId：%w", err)
+		return application.AdoptFundsFactCommand{}, fmt.Errorf("tenantId：%w", err)
 	}
+	return externalFundsFactFrom(document.externalFundsFactContent, tenant)
+}
+
+// ExternalFundsFactFromJSONForTenant 是在线口那一路（票 operator-channel/52）：租户取认证结果，载荷带任何大小写的租户键
+// 即拒。认证租户直接注入命令，不拼回 JSON 再解——拼回去再解，载荷里的变体键会按 encoding/json 的大小写折叠盖掉拼进去的
+// 那一个。
+func ExternalFundsFactFromJSONForTenant(raw []byte, tenant domain.TenantID) (application.AdoptFundsFactCommand, error) {
+	if err := refuseSelfReportedTenant(raw); err != nil {
+		return application.AdoptFundsFactCommand{}, err
+	}
+	var content externalFundsFactContent
+	if err := decodeStrict(raw, &content); err != nil {
+		return application.AdoptFundsFactCommand{}, fmt.Errorf("资金事实登记输入不是本入口的形状：%w", err)
+	}
+	return externalFundsFactFrom(content, tenant)
+}
+
+func externalFundsFactFrom(document externalFundsFactContent, tenant domain.TenantID) (application.AdoptFundsFactCommand, error) {
+	none := application.AdoptFundsFactCommand{}
 	if _, err := domain.NewFundsFactReference(document.FactRef); err != nil {
 		return none, fmt.Errorf("factRef：%w", err)
 	}
@@ -88,8 +113,8 @@ func ExternalFundsFactFromJSON(raw []byte) (application.AdoptFundsFactCommand, e
 	}, nil
 }
 
-type externalFundsFactCorrectionDocument struct {
-	TenantID    string    `json:"tenantId"`
+// externalFundsFactCorrectionContent 是外部更正除租户外的每一格，在线口只解这一份，理由同 externalFundsFactContent。
+type externalFundsFactCorrectionContent struct {
 	FactRef     string    `json:"factRef"`
 	Corrects    string    `json:"corrects"`
 	Version     string    `json:"version"`
@@ -97,19 +122,43 @@ type externalFundsFactCorrectionDocument struct {
 	CorrectedAt time.Time `json:"correctedAt"`
 }
 
+type externalFundsFactCorrectionDocument struct {
+	TenantID string `json:"tenantId"`
+	externalFundsFactCorrectionContent
+}
+
 // ExternalFundsFactCorrectionFromJSON 译装一次外部更正的采用。载荷上只有更正自己带的格：来源、付款人、种类、币种与
 // 发生时刻从链头照抄、命令上不接（`application.CorrectFundsFactCommand` 头注），载荷若带了它们按未知字段拒——外部更正
 // 改的是金额，其余若也变了那是另一条事实。
 func ExternalFundsFactCorrectionFromJSON(raw []byte) (application.CorrectFundsFactCommand, error) {
-	none := application.CorrectFundsFactCommand{}
 	var document externalFundsFactCorrectionDocument
 	if err := decodeStrict(raw, &document); err != nil {
-		return none, fmt.Errorf("资金事实更正登记输入不是本入口的形状：%w", err)
+		return application.CorrectFundsFactCommand{}, fmt.Errorf("资金事实更正登记输入不是本入口的形状：%w", err)
 	}
 	tenant, err := domain.NewTenantID(document.TenantID)
 	if err != nil {
-		return none, fmt.Errorf("tenantId：%w", err)
+		return application.CorrectFundsFactCommand{}, fmt.Errorf("tenantId：%w", err)
 	}
+	return externalFundsFactCorrectionFrom(document.externalFundsFactCorrectionContent, tenant)
+}
+
+// ExternalFundsFactCorrectionFromJSONForTenant 是外部更正的在线口那一路，租户与拒自报同 ExternalFundsFactFromJSONForTenant。
+func ExternalFundsFactCorrectionFromJSONForTenant(raw []byte, tenant domain.TenantID) (application.CorrectFundsFactCommand, error) {
+	if err := refuseSelfReportedTenant(raw); err != nil {
+		return application.CorrectFundsFactCommand{}, err
+	}
+	var content externalFundsFactCorrectionContent
+	if err := decodeStrict(raw, &content); err != nil {
+		return application.CorrectFundsFactCommand{}, fmt.Errorf("资金事实更正登记输入不是本入口的形状：%w", err)
+	}
+	return externalFundsFactCorrectionFrom(content, tenant)
+}
+
+func externalFundsFactCorrectionFrom(
+	document externalFundsFactCorrectionContent,
+	tenant domain.TenantID,
+) (application.CorrectFundsFactCommand, error) {
+	none := application.CorrectFundsFactCommand{}
 	if _, err := domain.NewFundsFactReference(document.FactRef); err != nil {
 		return none, fmt.Errorf("factRef：%w", err)
 	}
@@ -143,6 +192,26 @@ func fundsFactKindFrom(raw string) (domain.FundsFactKind, error) {
 		return domain.FundsFactKindInvalid, fmt.Errorf(
 			"kind=%q 不在封闭三值（RECEIPT_CONFIRMED / PAYMENT_FAILED / FUNDS_RETURNED），缺席同样拒", raw)
 	}
+}
+
+// ErrSelfReportedTenant 表示在线口的载荷里带了 tenantId（不论大小写）：租户只从认证结果来。
+var ErrSelfReportedTenant = errors.New("settlement registration: online input must not carry tenantId in any letter case; the tenant comes from the authenticated channel")
+
+// refuseSelfReportedTenant 键在场即拒、不看值：`"tenantId": null` 也是自报。键名按 encoding/json 认字段的同一折叠比：
+// 它把 `tenantid`、`TENANTID` 都解进 `json:"tenantId"` 格，只认精确键，变体就绕过了拒自报。这一道只为给出专门的
+// 提示；在线口解的文档本就没有租户格，漏过这一道的写法也会被严格解码当未知字段拒。载荷不是 JSON 对象时交给
+// decodeStrict 去答形状错。
+func refuseSelfReportedTenant(raw []byte) error {
+	var top map[string]json.RawMessage
+	if err := json.Unmarshal(raw, &top); err != nil {
+		return nil
+	}
+	for key := range top {
+		if strings.EqualFold(key, "tenantId") {
+			return ErrSelfReportedTenant
+		}
+	}
+	return nil
 }
 
 // decodeStrict 拒未知字段：打错的键静默丢弃，会让操作员以为登进去的比实际多。
