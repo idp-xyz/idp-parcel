@@ -230,8 +230,9 @@ func (declaration PlanGivenEstimateDeclaration) estimateCommand(tenant domain.Te
 // 张卡得同一标识，评价可比对可复算。声明与卡取 estimateIdentity 那一份，引用在外层拼进来，各段带长度前缀：引用由调用方给、
 // 可含任何字符，不带前缀就能拼出与另一件相同的串。打头的 plan-given 让本入口与 UC-PP-001 的标识各在各的空间里。
 //
-// 比较币种与事实引用只在声明了时追加，各带一个标签：它们改的是评价内容（比较金额、输入出处），换一格就该换标识；没声明的
-// 声明拼出的串与这两格出现之前逐字相同，已有调用方的标识不随之变。
+// 比较币种与事实引用只在声明了时追加，各带一个标签：它们改的是评价内容（比较金额、输入出处），换一格就该换标识。没声明就
+// 一段都不追加：受理前估价的逐件试算评价标识随结算的控制结果留痕保存（ADR-0179 决定六），同一声明、同一张卡要一直派生出同一
+// 标识，留痕里的标识才对得上复算出来的那一份。
 func planGivenEstimateIdentity(declaration PlanGivenEstimateDeclaration, translated FormEstimateEvaluationsCommand, plan domain.PricingPlanVersion) string {
 	parts := []string{"plan-given", declaration.Subject, estimateIdentity(translated, plan)}
 	if declaration.Comparison != nil {

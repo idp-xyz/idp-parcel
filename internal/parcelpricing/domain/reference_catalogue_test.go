@@ -321,8 +321,8 @@ func TestCatalogueLinkEntersTheContentDigestAndSurvivesTheSnapshot(t *testing.T)
 	}
 }
 
-// 委托报的两端邮编拼成路线只有一种拼法（正式评价、受理前估价、选路比价同用）：目的邮编没报或不成形即没有路线；始发不成形
-// 时退到只按目的邮编拼，不因一格始发让整条路线缺席。
+// 委托报的两端邮编拼成路线只有一种拼法：目的邮编没报或不成形即没有路线；始发不成形时退到只按目的邮编拼，不因一格始发让整条
+// 路线缺席。
 func TestPostalRouteFromDeclaredDropsAMalformedOriginButNotAMalformedDestination(t *testing.T) {
 	for name, test := range map[string]struct {
 		origin, destination string

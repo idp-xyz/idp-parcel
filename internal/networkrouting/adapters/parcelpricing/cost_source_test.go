@@ -444,7 +444,7 @@ func TestABoundCardWithoutAPostalRouteStaysPending(t *testing.T) {
 }
 
 // Covers: `AT-NR-071` 的另一半（判据「没绑目录、也没登段计价区域的卡仍待判断」）——请求带了邮编路线也一样：路线只给绑了目录的卡解区，没绑的卡
-// 不拿它顶替调用方给的分区（ADR-0189 决定一第三条）。
+// 不拿它顶替调用方给的分区（ADR-0189 决定一第二、四条）。
 func TestAnUnboundCardDoesNotReadItsZoneFromThePostalRoute(t *testing.T) {
 	source := newAdapter(t,
 		map[string][]nrports.LineSegmentCostBasis{
@@ -484,7 +484,7 @@ func TestAnUnreadableCatalogueFailsTheWholeCostLoad(t *testing.T) {
 }
 
 // testSource 是可调替身的容器：plan 表按「id/version」键取；包裹事实、逐段区域、随请求携带的内容、在用序列与目录、计价
-// 时点可逐格替换。评价走真的 parcel-pricing「对给定价卡形成试算」入口，补齐读数的四口换成下面两本册。
+// 时点可逐格替换。评价走真的 parcel-pricing「对给定价卡形成试算」入口，补齐读数那几口换成下面两本册。
 type testSource struct {
 	*adapter.RouteCandidateCostAdapter
 	bases           map[string][]nrports.LineSegmentCostBasis

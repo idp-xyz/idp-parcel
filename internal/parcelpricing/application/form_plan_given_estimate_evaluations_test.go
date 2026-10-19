@@ -438,6 +438,21 @@ func TestPlanGivenEstimateCarriesTheDeclaredComparisonCurrencyAndFacts(t *testin
 	}
 }
 
+// 不声明比较币种与事实引用时，评价标识一段都不追加：受理前估价的逐件试算评价标识随结算的控制结果留痕保存（ADR-0179 决定六），
+// 同一声明、同一张卡要一直派生出同一标识，留痕才对得上复算。字面值取证于 `5f0aa66d`（试算声明还没有这两格时）的派生；派生的
+// 形状一改，这里先红，比已留痕的标识悄悄对不上早。
+func TestAnUndeclaredComparisonAndFactsKeepThePlanGivenIdentity(t *testing.T) {
+	handler := newPlanGivenHandler(t, application.FormPlanGivenEstimateEvaluationsDeps{})
+	result, err := handler.Handle(context.Background(), planGivenCommand(t, minimalPlan(t), planGivenDeclaration(t, "SYN-DECL-01/1")))
+	if err != nil || result.Outcome != application.PlanGivenEstimatesFormed || len(result.Estimates) != 1 ||
+		result.Estimates[0].Answer != application.EstimateCandidateEvaluated {
+		t.Fatalf("result = %+v err = %v, 想要已形成且这一件已评价", result, err)
+	}
+	if got := result.Estimates[0].Evaluation.ID().String(); got != "EST-b529fb89ab9a6cc2" {
+		t.Fatalf("标识 = %s，想要 EST-b529fb89ab9a6cc2", got)
+	}
+}
+
 // ADR-0152 决定二的手法：依赖里没有评价库写口（ports.EvaluationStore）与交付口（ports.EvaluationHandoff），装配点装不进去——
 // 结构上不入册、不交付。
 func TestPlanGivenEstimateDependenciesCarryNoEvaluationStoreOrHandoff(t *testing.T) {

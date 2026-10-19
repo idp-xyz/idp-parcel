@@ -360,6 +360,42 @@ func TestAnUnboundCostCardWithoutALegZoneStaysPendingInProductionWiring(t *testi
 	}
 }
 
+// Covers: 票 routing-first-cut/18 判据与票 20 完成判据二（ADR-0189 决定一第二条）——卡没绑目录，演示网络照种子登了三段各 Z1
+// 的段计价区域：三段各 85 CNY、合 25500 分，三段各一条出处。与上一条只差段计价区域那一份登没登，没绑目录的卡就从待判断变成
+// 出价。请求带不带收件邮编都一样出价：这张卡的区出自登的段计价区域，邮编路线与在用目录对它不起作用。
+func TestAnUnboundCostCardIsPricedThroughItsRegisteredLegZonesInProductionWiring(t *testing.T) {
+	fixture := newSYNVerticalFixture(t)
+	acceptDeclaredDemoParcel(t, fixture)
+	registerDemoNetworkSeeds(t, fixture.db)
+	registerCostCard(t, fixture.db, demoShapedCostCard(t, "CNY", ppdomain.PricingPlanStructures{}))
+	registerDemoZoneCatalogue(t, fixture.db)
+	seedWiringCustomsCatalog(t, fixture.db, demoTenant, true)
+	evidence := loadWiringEvidence(t, fixture.db, demoTenant)
+	key := wiringRouteKey(t, demoTenant)
+
+	for name, carried := range map[string]nrports.RequestCarriedContent{
+		"带邮编路线":  carriedPostalRoute(),
+		"不带收件邮编": wiringCarried(),
+	} {
+		costs, err := routeCosts(fixture.db, systemClock{}).LoadCandidateCosts(t.Context(), key, evidence, carried)
+		if err != nil {
+			t.Fatalf("%s：候选成本取数侧 err = %v，want 交回成本事实", name, err)
+		}
+		if fact := demoCandidateCost(t, costs); fact.State() != nrdomain.CandidateCostPriced || fact.AmountMinor() != 25500 {
+			t.Fatalf("%s：演示候选成本 = %s %d minor，want 已出价 25500（段计价区域三段各 Z1，各 85 CNY）",
+				name, fact.State(), fact.AmountMinor())
+		}
+		if len(costs.Citations) != 3 {
+			t.Fatalf("%s：出处 %d 条，want 三段各一条：%+v", name, len(costs.Citations), costs.Citations)
+		}
+		for _, citation := range costs.Citations {
+			if citation.PlanReference() != "SYN-PLAN-CN-SG-COST-01/v1" || !strings.HasPrefix(citation.EvaluationID(), "EST-") {
+				t.Fatalf("%s：出处 = %+v，want 指那张没绑目录的卡、评价标识出自 PP 的试算入口", name, citation)
+			}
+		}
+	}
+}
+
 // Covers: `AT-NR-072` 真库那一格——卡以 SGD 计价、绑汇率序列 SYN-SERIES-FX-CNY-SGD，比较币种 CNY。序列登了且复核过（在用），
 // 补齐读数按计价时点取 2026-07-01 起那一期 5.35：三段各 85 SGD 折 454.75 CNY，合 1364.25 CNY，即 136425 分。序列没登时
 // 同一张卡三段都待判断，不编汇率。比较币种是路由策略版本上的租户取值，演示策略没声明，用例在证据上直接给。
