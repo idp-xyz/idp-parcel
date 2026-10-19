@@ -1,7 +1,7 @@
 # 22 供应商协议版本点读口与 TF 协议核对适配器
 
 Category: enhancement
-Status: in-progress——完工、隔离评审已修订，待进 main，分支 claude-dcg22（见文末「完成记录」「评审记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
+Status: resolved——2026-10-19 进 main（全量钉 `60f8d75c`：146 ok / 0 FAIL；TF 链第一波同批，见文末「进 main 记录」）。此前 in-progress——完工、隔离评审已修订，待进 main，分支 claude-dcg22（见文末「完成记录」「评审记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
 Blocked by: 无
 地盘：PC `ports/ports.go`（加窄口）、`adapters/postgres/supplier_agreement.go`；TF 新 `ports/supplier_agreement.go`、新 `adapters/partycommercial/supplier_agreement_source.go`。
 出处：[02](./02-transport-commission-has-no-command-face.md)、[07](./07-transport-charge-occurrences-have-no-production-path.md)；方案「02 委托、订舱、承运答复」D02-4、D02-5，「07 运输收费发生项」D07-2，「跨票通则」X4。
@@ -152,3 +152,14 @@ type SupplierAgreementCheck struct {
 - `go build ./...` 干净；`go vet` 跑 PC 与 TF 两个上下文，干净；`gofmt -l internal/ cmd/` 干净。
 - 带 DSN、`-p 1 -count=1` 跑 PC `adapters/postgres`、TF `adapters/partycommercial`、TF `domain`、`./internal/architecture/`，全 ok。
 - 只改了注释与票面，行为未变。
+
+## 进 main 记录（2026-10-19）
+
+- TF 链第一波 16、19、22、26、30、31 合成一批，按 19 → 22 → 26/30 → 31 → 16 叠到 main 上，整批快进推送，与本记录同一次推送。
+- 合批时的处理：
+  - README 的 ADR 行按号合并。
+  - `.scratch/at-coverage-inventory.md` 计数表：CC 行取 31，NO 行取 main，合计重算；两段追记都留。
+  - 19 与 16 的接缝在 `d3c39a77`：19 的班次夹具改用 16 的方向与临时班次构造；19 在 `transport_schedule.go` 加的两行端口断言保留。
+  - 26 立的 38 号票与 16 立的 38 号票撞号，26 那张改为 39，ADR-0208 风险点 6 同步。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `60f8d75c`：146 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。

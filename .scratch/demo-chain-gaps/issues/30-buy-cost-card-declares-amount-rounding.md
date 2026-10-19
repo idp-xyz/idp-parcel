@@ -1,7 +1,7 @@
 # 30 BUY 成本卡声明金额取整（09 余半）
 
 Category: enhancement
-Status: in-progress——完工、评审已修订，待进 main，分支 claude-dcg26（与 [26](./26-settlement-consumes-charge-occurrence-formed-to-request-buy-evaluation.md) 同一分支，本票先落）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
+Status: resolved——2026-10-19 进 main（全量钉 `60f8d75c`：146 ok / 0 FAIL；TF 链第一波同批，见文末「进 main 记录」）。此前 in-progress——完工、评审已修订，待进 main，分支 claude-dcg26（与 [26](./26-settlement-consumes-charge-occurrence-formed-to-request-buy-evaluation.md) 同一分支，本票先落）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
 Blocked by: 无
 地盘：`scripts/demo-seeds/data/pricing/` 成本卡新版本、`seed.sh` 一行。
 出处：[09](./09-demo-price-cards-declare-no-amount-rounding.md)；方案「BUY 发起（接 08，收 10）」D10-1，「已不成立或已修」09。
@@ -68,3 +68,14 @@ S
 - 阻断 0 项（本次评审唯一的阻断在票 26 的地盘，见 [26](./26-settlement-consumes-charge-occurrence-formed-to-request-buy-evaluation.md) 评审记录）。
 - 非阻断 1 项落在本票，已修：方案 D10-1 仍写「以新版本重发」，偏离只记在本票。D10-1 下追加一条改判，指向本票完成记录；上文「做什么」「完成判据」两处注明已改判。
 - 评审核过就地改 v1 有据（在用解析多于一版即适用冲突、路由取候选遇同方案两版报歧义），与 sell-customer-charge/05 先例一致；旧内容摘要仓里没有别处引用。
+
+## 进 main 记录（2026-10-19）
+
+- TF 链第一波 16、19、22、26、30、31 合成一批，按 19 → 22 → 26/30 → 31 → 16 叠到 main 上，整批快进推送，与本记录同一次推送。
+- 合批时的处理：
+  - README 的 ADR 行按号合并。
+  - `.scratch/at-coverage-inventory.md` 计数表：CC 行取 31，NO 行取 main，合计重算；两段追记都留。
+  - 19 与 16 的接缝在 `d3c39a77`：19 的班次夹具改用 16 的方向与临时班次构造；19 在 `transport_schedule.go` 加的两行端口断言保留。
+  - 26 立的 38 号票与 16 立的 38 号票撞号，26 那张改为 39，ADR-0208 风险点 6 同步。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `60f8d75c`：146 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。

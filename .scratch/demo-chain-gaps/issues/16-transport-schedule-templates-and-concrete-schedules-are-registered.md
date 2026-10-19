@@ -1,7 +1,7 @@
 # 16 周期安排与具体班次登记（01·一）
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg16（此前 ready-for-agent——2026-10-19 Claude Code 会话立，用户「你作为业务和系统专家自决……解决所有的问题」授权；代决见 [tf-chain-plan](../tf-chain-plan.md)）。
+Status: resolved——2026-10-19 进 main（全量钉 `60f8d75c`：146 ok / 0 FAIL；TF 链第一波同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg16（此前 ready-for-agent——2026-10-19 Claude Code 会话立，用户「你作为业务和系统专家自决……解决所有的问题」授权；代决见 [tf-chain-plan](../tf-chain-plan.md)）。
 Blocked by: 无
 地盘：TF：`domain/transport_schedule_capacity.go`、新 `schedule_template.go`、`payload_canonicalization.go`；`adapters/postgres/transport_schedule.go`、新 `schedule_template.go`、`review_catalogue.go`；`ports/catalogue_read.go`、新 `ports/transport_opportunity.go`；tfhttp 新 `register_transport_schedule*.go`、`query_transport_fulfillment_records.go`；迁移 TF 0024；新 `cmd/parcel-transport-register`；新 `cmd/parcel-api/assemble_transport_schedule.go` + `endpoints.go`/`main.go` 行；种子 `data/transport/`、`seed.sh`、README；文档 ADR-0201、TF CONTEXT、UC-TF-003、PAR-NET-08 拆分。
 出处：[01](./01-transport-opportunity-has-no-production-entry.md)；方案「01 运输机会与班次」D01-2、D01-3、D01-4、D01-5、D01-9、D01-11，「跨票通则」X1、X2，「需要的 ADR」ADR-0201。
@@ -135,3 +135,14 @@ L
 
 - `go build ./...`；`go vet` 覆盖 `./internal/transportfulfillment/...`、`./cmd/parcel-api/`、`./cmd/parcel-transport-register/`、`./internal/architecture/`；`gofmt -l` 干净。
 - `IDP_PARCEL_POSTGRES_DSN=…55432… go test -p 1 -count=1`：`./internal/transportfulfillment/...`、`./cmd/parcel-transport-register/`、`./cmd/parcel-api/`、`./internal/architecture/`、`./migrations/`、`./scripts/demo-seeds/...` 全 ok（真库用例在跑，无 SKIP）。种子数据与 `seed.sh` 本轮没动，未重灌。没跑全量，机制清点未重生成。
+
+## 进 main 记录（2026-10-19）
+
+- TF 链第一波 16、19、22、26、30、31 合成一批，按 19 → 22 → 26/30 → 31 → 16 叠到 main 上，整批快进推送，与本记录同一次推送。
+- 合批时的处理：
+  - README 的 ADR 行按号合并。
+  - `.scratch/at-coverage-inventory.md` 计数表：CC 行取 31，NO 行取 main，合计重算；两段追记都留。
+  - 19 与 16 的接缝在 `d3c39a77`：19 的班次夹具改用 16 的方向与临时班次构造；19 在 `transport_schedule.go` 加的两行端口断言保留。
+  - 26 立的 38 号票与 16 立的 38 号票撞号，26 那张改为 39，ADR-0208 风险点 6 同步。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `60f8d75c`：146 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。

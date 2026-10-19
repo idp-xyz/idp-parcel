@@ -1,7 +1,7 @@
 # 26 SA 消费发生项已形成信封，发起 BUY 评价（收 10 的 BUY 半）
 
 Category: enhancement
-Status: in-progress——完工、评审已修订，待进 main，分支 claude-dcg26（与 [30](./30-buy-cost-card-declares-amount-rounding.md) 同一分支，30 先落）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
+Status: resolved——2026-10-19 进 main（全量钉 `60f8d75c`：146 ok / 0 FAIL；TF 链第一波同批，见文末「进 main 记录」）。此前 in-progress——完工、评审已修订，待进 main，分支 claude-dcg26（与 [30](./30-buy-cost-card-declares-amount-rounding.md) 同一分支，30 先落）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
 Blocked by: 无
 地盘：SA 新 `adapters/transportfulfillment/`、PC 范围读、新 inbox 消费者；触发册加费用项目（domain、ports、postgres、迁移 SA 新号）；`cmd/parcel-settlement-register`；`cmd/parcel-dispatch/assemble.go`(+_test)；种子 settlement BUY 行；ADR-0208（ADR-0164 加后继指针）、UC-SA-002、SA CONTEXT。
 出处：[10](./10-demo-tenant-buy-and-sell-trigger-registers-are-empty.md)、[07](./07-transport-charge-occurrences-have-no-production-path.md)；方案「BUY 发起（接 08，收 10）」D08-1、D10-1，「跨票通则」X3、X6，「需要的 ADR」ADR-0208。
@@ -129,3 +129,14 @@ M
 - `go build ./...`、`go vet ./cmd/... ./internal/... ./scripts/... ./migrations/...`、`gofmt -l` 干净。
 - 带真库 `go test -p 1 -count=1` 全绿：`./internal/architecture/`、`./internal/settlementaccounting/...`、`./internal/partycommercial/...`（含 `adapters/postgres`）、`./cmd/parcel-dispatch/`（整包，含 `TestAFormedChargeOccurrenceFiresABuyEvaluationRequestThroughTheRouteTable` 与 `TestADeclaredParcelOnZonedLegsIsPricedThroughProductionWiring`）。
 - 本轮没动种子与迁移，没有重跑 `seed.sh`。
+
+## 进 main 记录（2026-10-19）
+
+- TF 链第一波 16、19、22、26、30、31 合成一批，按 19 → 22 → 26/30 → 31 → 16 叠到 main 上，整批快进推送，与本记录同一次推送。
+- 合批时的处理：
+  - README 的 ADR 行按号合并。
+  - `.scratch/at-coverage-inventory.md` 计数表：CC 行取 31，NO 行取 main，合计重算；两段追记都留。
+  - 19 与 16 的接缝在 `d3c39a77`：19 的班次夹具改用 16 的方向与临时班次构造；19 在 `transport_schedule.go` 加的两行端口断言保留。
+  - 26 立的 38 号票与 16 立的 38 号票撞号，26 那张改为 39，ADR-0208 风险点 6 同步。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `60f8d75c`：146 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。
