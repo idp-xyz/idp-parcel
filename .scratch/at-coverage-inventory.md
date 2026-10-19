@@ -439,13 +439,16 @@
 | `AT-VE-131` | internal/visibilityexception/application/handle_claim_test.go::TestARecoveryMatterOpensIndependentlyOfAnyClaim |
 | `AT-VE-133` | internal/visibilityexception/application/handle_claim_test.go::TestRecoveryActionsKeepEveryAttemptPerKind |
 | `AT-VE-136` | internal/visibilityexception/application/handle_claim_test.go::TestRecoveryActionsKeepEveryAttemptPerKind |
-| `AT-VE-150` | internal/visibilityexception/adapters/http/query_customer_tracking_view_test.go::TestAnAuthorizedQueryReturnsTheCurrentViewVerbatim |
-| `AT-VE-151` | internal/visibilityexception/adapters/http/query_customer_tracking_view_test.go::TestACrossAccountProbeIsIndistinguishableFromAMissingParcel |
-| `AT-VE-153` | internal/visibilityexception/adapters/http/query_customer_tracking_view_test.go::TestAQueryWithoutAccountAuthorityIsMalformed |
+| `AT-VE-150` | internal/visibilityexception/adapters/http/query_customer_tracking_view_test.go::TestAnAuthorizedQueryReturnsTheCurrentViewVerbatim；internal/visibilityexception/adapters/http/customer_tracking_view_intake_test.go::TestCustomerTrackingViewIntakeKeysTheQueryByTheAuthenticatedAccount、::TestCustomerTrackingViewThroughTheFirstPartyIntakeCannotProbeOtherAccounts；internal/accessidentity/customer_client_query_test.go::TestTrackingViewQueryMintsTheBindingOfTheRegister（铸造半边）；internal/visibilityexception/adapters/accessidentity/customer_tracking_view_authenticator_test.go::TestTrackingViewQueryAuthenticatesToTheBoundCustomerAccount（认证半边）；cmd/parcel-api/assemble_customer_tracking_view_test.go::TestACustomerClientReadsItsOwnTrackingViewAgainstARealDatabase |
+| `AT-VE-151` | internal/visibilityexception/adapters/http/query_customer_tracking_view_test.go::TestACrossAccountProbeIsIndistinguishableFromAMissingParcel；internal/visibilityexception/adapters/http/customer_tracking_view_intake_test.go::TestCustomerTrackingViewThroughTheFirstPartyIntakeCannotProbeOtherAccounts；cmd/parcel-api/assemble_customer_tracking_view_test.go::TestACustomerClientReadsItsOwnTrackingViewAgainstARealDatabase |
+| `AT-VE-153` | internal/visibilityexception/adapters/http/customer_tracking_view_intake_test.go::TestCustomerTrackingViewIntakeKeysTheQueryByTheAuthenticatedAccount（HTTP 半边）；cmd/parcel-api/assemble_customer_tracking_view_test.go::TestCustomerTrackingViewLineRefusesOtherFamiliesAndClientsWithoutTheGrant |
 | `AT-VE-156` | internal/visibilityexception/application/derive_customer_view_test.go::TestFirstQualifyingProjectionPublishesAnAccountIsolatedView |
 | `AT-VE-157` | internal/visibilityexception/application/derive_customer_view_test.go::TestANonDisclosableDimensionIsWithheldAloneWithoutHidingTheOthers |
 | `AT-VE-161` | internal/visibilityexception/application/derive_customer_view_test.go::TestANewerProjectionSupersedesTheCurrentViewKeepingHistory |
 | `AT-VE-168` | internal/visibilityexception/adapters/http/query_customer_tracking_view_test.go::TestAnUnreadableStoreIsNoAnswerNotNotFound |
+| `AT-VE-171` | internal/visibilityexception/adapters/http/customer_tracking_view_intake_test.go::TestCustomerTrackingViewQueryStringIsClosed；cmd/parcel-api/assemble_customer_tracking_view_test.go::TestACustomerClientReadsItsOwnTrackingViewAgainstARealDatabase |
+| `AT-VE-172` | internal/accessidentity/customer_client_query_test.go::TestTrackingViewQueryNeedsItsOwnGrant；internal/visibilityexception/adapters/accessidentity/customer_tracking_view_authenticator_test.go::TestTrackingViewQueryGradesTranslateIntoVisibilityGrades；cmd/parcel-api/assemble_customer_tracking_view_test.go::TestCustomerTrackingViewLineRefusesOtherFamiliesAndClientsWithoutTheGrant |
+| `AT-VE-173` | internal/accessidentity/customer_client_query_test.go::TestTrackingViewQueryDoesNotAskTheAdmissionScope；internal/visibilityexception/adapters/accessidentity/customer_tracking_view_authenticator_test.go::TestTrackingViewQueryAuthenticatesToTheBoundCustomerAccount；cmd/parcel-api/assemble_customer_tracking_view_test.go::TestACustomerClientReadsItsOwnTrackingViewAgainstARealDatabase |
 
 ## ② 机制候选（补 Covers 或小块测试）
 
@@ -1362,3 +1365,5 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-19 追记（票 demo-chain-gaps/66）：UC-TF-006 新立 `AT-TF-256`–`265`（有效交付读交付门禁并照记，ADR-0213 决定五），随票在领域、编排、关务适配器、真库、线格式与生产装配真库用例上补 Covers 点名，全部入①；半边覆盖在行内注明。①、TF 与合计各加 10，②③④不变；绝对数进 main 时随同波票按批重算（号段 256–265 由协调方预分，本票用满）。
 
 2026-10-19 追记（票 demo-chain-gaps/95）：UC-NO-005 新立 `AT-NO-126`–`128`（节点控制认交接更正链只按运输履约的更正回指，ADR-0220），随票在领域、编排、消费侧适配器、真库存储与派发生产路由真库用例上补 Covers 点名，全部入①；半边覆盖在行内注明。`AT-NO-108` 另添派发生产路由面（同一范围下另一次交接之后，交出那一次经 TF 更正口更正仍`已交接`，零写入）。①、NO 与合计各加 3，②③④不变；绝对数进 main 时随同波票按批重算（号段 126–135 由协调方预分，本票用 126–128，129–135 未用）。
+
+2026-10-19 追记（票 demo-chain-gaps/96）：UC-VE-008 新立 `AT-VE-171`–`173`（客户追踪视图查阅口经首方客户渠道：查询串封闭、授予按口、查阅不判准入，ADR-0139 决定四、八），随票在铸造、VE 认证适配、HTTP Intake 与生产装配真库用例上补 Covers 点名，全部入①；半边覆盖在行内注明。①、VE 与合计各加 3，②③④不变；绝对数进 main 时随同波票按批重算（UC-VE 原最大号 170）。同票评审后 `AT-VE-153` 改点：原归属的坏请求映射用例（改名 `TestAMalformedQueryIsBadRequestWithoutOutcome`）只证 400 那一格，没有账户授权的请求如今答认证那几格，改点到首方装配用例的无令牌、只持别口授予两格与 HTTP Intake 的取键半边；`AT-VE-150`、`AT-VE-151` 增引首方各面的用例。这三条都已在①，不动桶数。
