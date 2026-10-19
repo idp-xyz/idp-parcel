@@ -431,6 +431,31 @@ func CanonicalizeEstablishPoolPayload(schedule, unit string, capacity int64) ([]
 	})
 }
 
+// CanonicalizeMovementFactPayload 定形「登记实际移动事实」（票 tf-face-algebra/08 的裁定）：班次、种类、地点与放行引用构成内容。
+// 租户、事实与版本是身份；来源不进，它由这一面注入而不是调用方报的，隔离写时期的存量行带的是合成来源；GateRequired 不进，
+// 它是门禁判断的输入、不是事实的属性（见 RehydrateMovementFactSpec），在册本体上也没有它可算；登记时刻不进。
+// 业务时间照 ADR-0023「发生时间与接收时间……两者都不进入内容摘要」也不进：只差发生时间的同身份重投读作重放。
+//
+// 放行缺席写 null：零值引用就是「没有门禁依据」，与 RecordMovementFact 判在场的口径同一。这一口不存摘要、两侧都从本体现算。
 func CanonicalizeMovementFactPayload(schedule ScheduleReference, kind MovementFactKind, location MovementLocationReference, gateClearance GateClearanceReference) ([]byte, string, error) {
-	return nil, "", nil
+	var clearance *string
+	if gateClearance.valid() {
+		reference := gateClearance.String()
+		clearance = &reference
+	}
+	return marshalPayload(struct {
+		Canonicalization string  `json:"canonicalization"`
+		Face             string  `json:"face"`
+		Schedule         string  `json:"schedule"`
+		Kind             string  `json:"kind"`
+		Location         string  `json:"location"`
+		GateClearance    *string `json:"gate_clearance"`
+	}{
+		Canonicalization: payloadCanonicalizationVersion,
+		Face:             "RECORD_MOVEMENT_FACT",
+		Schedule:         schedule.String(),
+		Kind:             kind.String(),
+		Location:         location.String(),
+		GateClearance:    clearance,
+	})
 }
