@@ -12,7 +12,7 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 16 证身份冲突处置的存储面（ADR-0210 决定三、八；票 no-reception-identity/06）：处置文档随处置版落册
-// 与读回、按实物读各行，以及按包裹读关联的两面认处置截断。夹具全为合成（S 级）。
+// 与读回、按实物读各行，以及 FindOtherUnitIntakes 与 ParcelContainmentView 认处置截断。夹具全为合成（S 级）。
 
 const dispositionTenant = "SYN-TENANT-NRI06"
 
@@ -212,7 +212,7 @@ func TestParcelContainmentStopsAtADisposition(t *testing.T) {
 	assertContainment(t, fixture.load(t, dispositionTenant, "SYN-PARCEL-NRI06-X"), ports.ParcelNotContained)
 }
 
-// Covers: 票 06「做什么」第 7 项的存储面——待识别实物页按实物把各链当前有效版本列在一起，分得出冲突是否已处置、处置了什么。只列
+// Covers: 票 06「做什么」里「复核目录与管理台」那一项的存储面——待识别实物页按实物把各链当前有效版本列在一起，分得出冲突是否已处置、处置了什么。只列
 // 有过待识别那一格的实物；每件交回它各条链的链头（形成格也在），处置版带处置文档。
 func TestIdentityReviewUnitsListEveryChainHeadWithItsDisposition(t *testing.T) {
 	catalogue, receptions, _, transactor := newReviewCatalogue(t)
@@ -276,7 +276,7 @@ func TestABrokenDispositionDocumentIsLoud(t *testing.T) {
 	}
 }
 
-// Covers: 处置新加的两个读面照 no-reception-source/04 的口径不读并入行（ADR-0199 决定四：并入不是判断、不进任何版本链）——同一件实物
+// Covers: 处置新加的读面（按实物读各行、按实物上列链头）照 no-reception-source/04 的口径不读并入行（ADR-0199 决定四：并入不是判断、不进任何版本链）——同一件实物
 // 在同一节点再来落下的并入行，按实物读各行与按实物上列链头都不交回；它不带关联，按包裹读关联与处置截断也碰不到它。
 func TestTheDispositionReadsLeaveMergeRecordsOut(t *testing.T) {
 	catalogue, receptions, _, transactor := newReviewCatalogue(t)

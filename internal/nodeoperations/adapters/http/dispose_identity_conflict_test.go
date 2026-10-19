@@ -488,7 +488,7 @@ func (stub unreachableReviewCatalogue) ListIdentityReviewUnits(context.Context, 
 	return nil, nil
 }
 
-// Covers: 票 06「做什么」第 7 项的传输面：待识别实物册的答复另带 `units`——按实物把各链当前有效版本列在一起；处置版带处置文档
+// Covers: 票 06「做什么」里「复核目录与管理台」那一项的传输面：待识别实物册的答复另带 `units`——按实物把各链当前有效版本列在一起；处置版带处置文档
 // （结果、指定的包裹或排除的那一组、操作者、依据、时刻），其余版本不带 `disposition` 键。
 func TestUnidentifiedItemsCarryEachUnitsChainHeadsAndDisposition(t *testing.T) {
 	disposition, err := domain.FormIdentityDisposition(domain.IdentityDisposition{

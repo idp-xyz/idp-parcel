@@ -341,7 +341,7 @@ func (handler *DisposeIdentityConflictHandler) holdUnits(ctx context.Context, co
 
 // holdParcels 取这次处置要动的各件包裹的锁：指定的那件，加主实物与所列连带实物在册上带过的每一件关联。锁就是收寄与重核按包裹读
 // 别的实物关联时取的那一把（ports.ReceptionStore.FindOtherUnitIntakes），按关联排序取，与同一件包裹上的收寄、重核串行。多锁几件只是
-// 多等一会儿；被这次处置截断的关联都在这几件里，按包裹读关联的两面因此读不到半截处置。已取过的不再取。
+// 多等一会儿；被这次处置截断的关联都在这几件里，FindOtherUnitIntakes 与 ParcelContainmentView 因此读不到半截处置。已取过的不再取。
 func (handler *DisposeIdentityConflictHandler) holdParcels(
 	ctx context.Context,
 	command DisposeIdentityConflictCommand,

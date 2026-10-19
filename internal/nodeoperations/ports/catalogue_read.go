@@ -85,9 +85,9 @@ type UnidentifiedItemCatalogueRow struct {
 	SucceededBy      string
 }
 
-// IdentityReviewUnitRow 是待识别实物页按实物列的一行（ADR-0210 决定八末项、越权风险点 8）：一件有过待识别那一格的作业实物，连同
-// 它各条判断链此刻的当前有效版本。身份冲突处置逐链追加、可能写到操作者没看过的链上，复核页因此要把一件实物的各链列在一起；处置
-// 命令要指名的「所处置的版本」与处置候选也都从这几版来。
+// IdentityReviewUnitRow 是待识别实物页按实物列的一行（ADR-0210 决定八末项与越权风险点「逐链追加会写到操作者没看过的链上」）：
+// 一件有过待识别那一格的作业实物，连同它各条判断链此刻的当前有效版本。身份冲突处置逐链追加、可能写到操作者没看过的链上，复核页
+// 因此要把一件实物的各链列在一起；处置命令要指名的「所处置的版本」与处置候选也都从这几版来。
 type IdentityReviewUnitRow struct {
 	Unit  string
 	Heads []IdentityReviewHead

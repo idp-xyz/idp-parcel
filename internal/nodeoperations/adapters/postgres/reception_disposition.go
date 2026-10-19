@@ -8,8 +8,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 )
 
-// 本文件是身份冲突处置要问收寄册的那几样（ADR-0210 决定二至四、八）：按实物读各行，以及按包裹读关联的两面共用的「处置截断」
-// 谓词。都读收寄册本尊，挂在 Receptions 上，理由同重核那两问。
+// 本文件是身份冲突处置要问收寄册的那几样（ADR-0210 决定二至四、八）：按实物读各行，以及 FindOtherUnitIntakes 与
+// ParcelContainmentView 共用的「处置截断」谓词。都读收寄册本尊，挂在 Receptions 上，不另立适配器。
 
 var _ ports.IdentityDispositionRegister = (*Receptions)(nil)
 

@@ -105,7 +105,7 @@ export interface IdentityReviewHead {
   disposition?: IdentityDispositionRecord;
 }
 
-/** 待识别实物页按实物列的一件：各条判断链的当前有效版本列在一起（ADR-0210 越权风险点 8）。 */
+/** 待识别实物页按实物列的一件：各条判断链的当前有效版本列在一起（ADR-0210 越权风险点「逐链追加会写到操作者没看过的链上」）。 */
 export interface IdentityReviewUnit {
   unit: string;
   heads: IdentityReviewHead[];
