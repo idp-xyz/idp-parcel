@@ -55,12 +55,15 @@ type ChargeOccurrenceRegistry interface {
 	// FindCovering 找同一（租户、原因、主要业务范围）下另一项仍有效、且盖住了本次查询的发生项，交回它的当前版
 	// （ADR-0207 决定四、ADR-0209 决定四）。「盖住」见 ChargeOccurrenceCoverageQuery。实现须在调用方的事务里对这一组
 	// （租户、原因、主要业务范围）串行化，直到事务结束：查与随后的 Save 之间若容另一笔插进来，两笔各自看不见对方，
-	// 同一成员或同一范围照样被算进两项。事实依据定得出范围，按范围串行化因而也串行化了同一事实依据上的各笔。
+	// 同一成员或同一范围照样被算进两项。事实依据定得出范围，按范围串行化因而也串行化了同一事实依据上的各笔。串行化
+	// 可以比「同一范围」粗（例如不分出处、只按范围串）：粗了只多等，细了才会漏。
 	FindCovering(ctx context.Context, query ChargeOccurrenceCoverageQuery) (ChargeOccurrenceRecord, bool, error)
 }
 
-// ChargeOccurrenceCoverageQuery 问「这件事是不是已经被另一项计过」。同一（租户、原因、范围）上另一项仍有效的发生项
-// 盖住本次查询，当且仅当下列之一：
+// ChargeOccurrenceCoverageQuery 问「这件事是不是已经被另一项计过」。「同一范围」是范围串相同、且事实依据出自同一处
+// （domain.OccurrenceBasisReference.Source）：揽收与派送的尝试身份各自签发、可以同串（domain.AttemptOccurrenceScope
+// 头注），只比范围串会让一侧按尝试计过的到场挡住另一侧的一次到场。同一（租户、原因）、同一范围上另一项仍有效的
+// 发生项盖住本次查询，当且仅当下列之一：
 //
 //   - WholeScope 为真：本次按范围计（按段、按尝试、按订舱），范围上任何一项都算——一个范围只计一次；
 //   - 那一项的单位在 ScopeUnits 里：它按范围计过，整个范围已经计了；

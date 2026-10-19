@@ -232,7 +232,11 @@ func (repository *ChargeOccurrences) LoadMembers(
 // 的三种读法见 ports.ChargeOccurrenceCoverageQuery）。
 //
 // 锁按范围不按事实依据（ADR-0209 决定四）：按范围计的一项要挡住同一范围上任何事实依据的另一笔，按依据上锁，两笔
-// 各握各的锁、各自看不见对方。事实依据定得出范围，同一依据上的两笔照旧排在一把锁上。
+// 各握各的锁、各自看不见对方。事实依据定得出范围，同一依据上的两笔照旧排在一把锁上。锁键只取范围串、不取出处：
+// 揽收与派送同串的两次到场因此共用一把锁，只多等，不错判。
+//
+// 同一范围要同一出处：存下的依据串取第一道斜杠之前那一词，与查询依据的 Source 比（读法见
+// domain.OccurrenceBasisReference.Source）。成员交集那一支本就要求依据相同，出处一条对它不多挡什么。
 //
 // 「仍有效」读每一项的当前版：没有别的版本以 corrects_version 回指它的那一版，且它不是失效版——被替代的旧版已由
 // 新版接替，失效的那一项说的是「那个范围不成立」，其成员可以另登。多于一项盖住时回显最早登记的那一项：登记方
@@ -271,6 +275,7 @@ func (repository *ChargeOccurrences) FindCovering(
 		  WHERE head.tenant_id = $1
 		    AND head.reason = $2
 		    AND head.scope_ref = $3
+		    AND split_part(head.fact_basis, '/', 1) = $10
 		    AND head.occurrence_ref <> $4
 		    AND head.revision_kind IS DISTINCT FROM $5
 		    AND NOT EXISTS (
@@ -293,6 +298,7 @@ func (repository *ChargeOccurrences) FindCovering(
 		  LIMIT 1`,
 		query.TenantID.String(), query.Reason.String(), query.Scope.String(), query.Except.String(),
 		domain.OccurrenceInvalidated.String(), query.WholeScope, scopeUnits, query.FactBasis.String(), members,
+		query.FactBasis.Source(),
 	).Scan(&occurrenceRef, &version)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.ChargeOccurrenceRecord{}, false, nil

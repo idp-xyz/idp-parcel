@@ -386,6 +386,58 @@ func TestCoverageCountsAScopeChargedOccurrenceAcrossItsScope(t *testing.T) {
 	}
 }
 
+// Covers: AT-TF-169——揽收与派送同串的尝试是两次到场（真库）：揽收那一次按尝试计过，派送同串的整范围一问与自营那种
+// 按范围单位一问都不算计过；派送那一次也按尝试登下之后，揽收同一次到场的另一对象照旧撞上的是揽收那一项。
+func TestCoverageKeepsAPickupAndADeliveryAttemptSharingAnIdentityApart(t *testing.T) {
+	repository, transactor, _ := newChargeOccurrences(t)
+	ctx := t.Context()
+
+	pickup := occurrenceRecordOnSource(t, "OCC-SIDE-PICKUP", "ATTEMPT-RESULT", "attempt-shared", "ATTEMPT",
+		declaredOccurrenceCondition(t), "parcel-1")
+	mustSaveOccurrence(t, transactor, ctx, repository, pickup)
+
+	query := func(basis string, whole bool, object string) ports.ChargeOccurrenceCoverageQuery {
+		return ports.ChargeOccurrenceCoverageQuery{
+			TenantID:   occurrenceRef(t, domain.NewTenantID, "tenant-1"),
+			Reason:     domain.FailedAttemptOccurrence,
+			Scope:      occurrenceRef(t, domain.NewOccurrenceScopeReference, "attempt-shared"),
+			FactBasis:  occurrenceRef(t, domain.NewOccurrenceBasisReference, basis),
+			Members:    []domain.CarriedObjectReference{occurrenceRef(t, domain.NewCarriedObjectReference, object)},
+			Except:     occurrenceRef(t, domain.NewChargeOccurrenceReference, "OCC-SIDE-NEW"),
+			WholeScope: whole,
+			ScopeUnits: domain.ScopeCountingUnits(),
+		}
+	}
+	find := func(q ports.ChargeOccurrenceCoverageQuery) (ports.ChargeOccurrenceRecord, bool) {
+		t.Helper()
+		var record ports.ChargeOccurrenceRecord
+		var found bool
+		mustWithinOccurrenceTransaction(t, transactor, ctx, func(txCtx context.Context) error {
+			var err error
+			record, found, err = repository.FindCovering(txCtx, q)
+			return err
+		})
+		return record, found
+	}
+
+	if record, found := find(query("DELIVERY-ATTEMPT-RESULT/attempt-shared/parcel-2", true, "parcel-2")); found {
+		t.Fatalf("派送同串按尝试计不该撞上揽收那一项：%+v", record.Key)
+	}
+	if record, found := find(query("DELIVERY-ATTEMPT-RESULT/attempt-shared/parcel-2", false, "parcel-2")); found {
+		t.Fatalf("对派送同串声明自营不该撞上揽收那一项：%+v", record.Key)
+	}
+
+	delivery := occurrenceRecordOnSource(t, "OCC-SIDE-DELIVERY", "DELIVERY-ATTEMPT-RESULT", "attempt-shared", "ATTEMPT",
+		declaredOccurrenceCondition(t), "parcel-2")
+	mustSaveOccurrence(t, transactor, ctx, repository, delivery)
+	if record, found := find(query("ATTEMPT-RESULT/attempt-shared/parcel-3", true, "parcel-3")); !found || record.Key != pickup.Key {
+		t.Fatalf("揽收同一次到场的另一对象应撞上揽收那一项：found=%v key=%+v", found, record.Key)
+	}
+	if record, found := find(query("DELIVERY-ATTEMPT-RESULT/attempt-shared/parcel-4", true, "parcel-4")); !found || record.Key != delivery.Key {
+		t.Fatalf("派送同一次到场的另一对象应撞上派送那一项：found=%v key=%+v", found, record.Key)
+	}
+}
+
 // —— 夹具 ——
 
 func newChargeOccurrences(t *testing.T) (*adapter.ChargeOccurrences, bentoapp.Transactor, *pgxpool.Pool) {
@@ -482,10 +534,21 @@ func occurrenceRecord(t *testing.T, occurrence, validity string, objects ...stri
 	return ports.ChargeOccurrenceRecord{Key: key, Occurrence: built, RecordedAt: occurredAtFixture}
 }
 
-// occurrenceRecordJudged 同 occurrenceRecord，范围、单位与发生条件由调用方给。
+// occurrenceRecordJudged 同 occurrenceRecord，范围、单位与发生条件由调用方给；依据出自揽收结果。
 func occurrenceRecordJudged(
 	t *testing.T,
 	occurrence, scope, unit string,
+	condition domain.OccurrenceCondition,
+	objects ...string,
+) ports.ChargeOccurrenceRecord {
+	t.Helper()
+	return occurrenceRecordOnSource(t, occurrence, "ATTEMPT-RESULT", scope, unit, condition, objects...)
+}
+
+// occurrenceRecordOnSource 同 occurrenceRecordJudged，依据的出处也由调用方给（揽收结果或派送结果）。
+func occurrenceRecordOnSource(
+	t *testing.T,
+	occurrence, source, scope, unit string,
 	condition domain.OccurrenceCondition,
 	objects ...string,
 ) ports.ChargeOccurrenceRecord {
@@ -503,7 +566,7 @@ func occurrenceRecordJudged(
 		Provider:    occurrenceRef(t, domain.NewServiceProviderReference, "partner-1"),
 		Agreement:   occurrenceRef(t, domain.NewAgreementSnapshotReference, "agreement-1/v2"),
 		Reason:      domain.FailedAttemptOccurrence,
-		FactBasis:   occurrenceRef(t, domain.NewOccurrenceBasisReference, "ATTEMPT-RESULT/"+scope+"/"+objects[0]),
+		FactBasis:   occurrenceRef(t, domain.NewOccurrenceBasisReference, source+"/"+scope+"/"+objects[0]),
 		Scope:       occurrenceRef(t, domain.NewOccurrenceScopeReference, scope),
 		Members:     members,
 		Quantity:    1,

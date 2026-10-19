@@ -17,8 +17,8 @@ Date: 2026-10-19
 - 原因是运输收费发生项的四个原因词：`BOOKING`、`CANCELLATION`、`FAILED_ATTEMPT`、`ACTUAL_FULFILLMENT`，与运输履约逐字相同。本上下文只用这四个字面量指名，不解释原因背后的事实怎么取。
 - 每个原因至多一条：计费（带一个数量形），或明确不计费（不带数量形）。「不计费」是一句声明，不是缺席；协议根本没提这个原因才是没声明。整节在场却一条不声明拒，与整节缺席说的是同一句话，一句话只许一种写法。
 - 条件只能随正文同一次发布固定。要改条件就发新版本，旧版本不可变（CONTEXT「采购服务、价格、结算或责任条件变化时形成新版本」）。
-- 批文与表单载荷同键：`supplierAgreementBody.chargeConditions[]`，每条 `reason`、`charged`（必给，缺键不替登记方选「计」或「不计」）、`quantityForm`（只随计费）。规范化折回、批文与表单载荷三处共用一处原词翻译 `ChargeOccurrenceConditionOf`。
-- 库面是子表 `party_commercial.supplier_agreement_charge_condition`（迁移 0038），外键挂在正文行上；两只读口与正文同一条语句读回。
+- 批文与表单载荷同键：`supplierAgreementBody.chargeConditions[]`，每条 `reason`、`charged`（必给，缺键不替登记方选「计」或「不计」）、`quantityForm`（只随计费）。凡把原词折成声明的入口（规范化折回、批文、表单载荷、库面读回）都走 `ChargeOccurrenceConditionOf`，「不计费却带了数量形」只有一种读法——拒。
+- 库面是子表 `party_commercial.supplier_agreement_charge_condition`（迁移 0038），外键挂在正文行上；供应商协议的读口与正文同一条语句读回。
 
 **二、数量形四种，按原因配。**（产品策略）
 
@@ -47,7 +47,8 @@ Date: 2026-10-19
 - 发生条件的依据多出 `AGREEMENT_DECLARED` 一格，ADR-0209 之后新形成的发生项只落这一格；依据不带断言人与原话，判断出自协议，协议已记在发生项上。
 - 断言期退场：登记载荷的 `conditionAssertion`、`quantity`、`unit` 三键随之删去，带来按未知键拒（400）——静默丢掉，登记方会以为自己的断言或数量算了数。命令里也没有这三格，`CONDITION_NOT_ASSERTED` 一格随之退出结果代数。册上断言期形成的项（`REGISTRANT_ASSERTED`）照旧读得出，不改写、不补「按协议判过」。
 - **按范围计的一项盖住整个范围。** 同一（租户、原因、主要业务范围）上另一项仍有效的发生项若按范围计过（单位是 `SEGMENT`、`ATTEMPT`、`BOOKING` 之一，断言期登记方报的同词同样算），或本次按范围计、范围上已有任何一项，答冲突、细格 `SCOPE_ALREADY_CHARGED`，回显那一项；同一事实依据上成员有交集照旧答 `MEMBERS_ALREADY_COVERED`。这回答 ADR-0207 越权风险点 4：一段只计一段，一次到场只计一次。自营的两格问册时也认按范围计过的项——同一段不能既有一笔段费又是自营。
-- 查与随后的落册改按（租户、原因、主要业务范围）串行化，不再按（租户、原因、事实依据）：按范围计的一项要挡住同一范围上任何事实依据的另一笔，按依据上锁两笔各握各的锁、各自看不见对方。事实依据定得出范围，同一依据上的两笔照旧排在一把锁上。
+- **「同一范围」连同事实依据的出处认。** 失败尝试的范围就是尝试身份，而揽收与派送的尝试身份各由自己的登记册签发、同一个串可以各指一次到场（ADR-0207 决定一两侧依据分写前缀的理由）。两侧同串是两次到场：一侧按尝试计过不挡另一侧，对另一侧声明自营也不答冲突。出处取依据串第一道斜杠之前那一词（`OccurrenceBasisReference.Source`）；范围串本身不带侧别，断言期已落册的项因此照旧认得出。
+- 查与随后的落册改按（租户、原因、主要业务范围）串行化，不再按（租户、原因、事实依据）：按范围计的一项要挡住同一范围上任何事实依据的另一笔，按依据上锁两笔各握各的锁、各自看不见对方。事实依据定得出范围，同一依据上的两笔照旧排在一把锁上。锁键只取范围串、不取出处：两侧同串的两次到场共用一把锁，只多等，不错判。
 
 **五、每一项发生项记登记者。**（机制）
 
@@ -81,7 +82,7 @@ Date: 2026-10-19
 
 ## Consequences
 
-- 代码：参与方与商业 `domain.TransportChargeReason`、`ChargeQuantityForm`、`ChargeOccurrenceCondition(s)`、`SupplierAgreement.WithChargeConditions`、`ChargeOccurrenceConditionOf`，规范化 `supplierChargeConditionCanonicalizationVersion`；批文 `chargeConditionDocument`、表单 `ChargeConditionPayload`；`postgres` 供应商协议读写口。运输履约 `domain.ChargeQuantityForm`、`AgreementChargeConditions`、`ConditionDeclaredByAgreement`、`NewAgreementDeclaredOccurrenceCondition`、`AttemptOccurrenceScope` / `SegmentOccurrenceScope`、`ScopeCountingUnits`；`ports.SupplierAgreementCheck.ChargeConditions`、`ChargeOccurrenceCoverageQuery` 的范围三格；登记用例的 `NOT_CONFIGURED` / `NOT_CHARGED` 与 `SCOPE_ALREADY_CHARGED`；登记载荷去掉三键、答复加 `agreement` 与 `registeredBy`。
+- 代码：参与方与商业 `domain.TransportChargeReason`、`ChargeQuantityForm`、`ChargeOccurrenceCondition(s)`、`SupplierAgreement.WithChargeConditions`、`ChargeOccurrenceConditionOf`，规范化 `supplierChargeConditionCanonicalizationVersion`；批文 `chargeConditionDocument`、表单 `ChargeConditionPayload`；`postgres` 供应商协议读写口。运输履约 `domain.ChargeQuantityForm`、`AgreementChargeConditions`、`ConditionDeclaredByAgreement`、`NewAgreementDeclaredOccurrenceCondition`、`AttemptOccurrenceScope` / `SegmentOccurrenceScope`、`OccurrenceBasisReference.Source`、`ScopeCountingUnits`；`ports.SupplierAgreementCheck.ChargeConditions`、`ChargeOccurrenceCoverageQuery` 的范围三格；登记用例的 `NOT_CONFIGURED` / `NOT_CHARGED` 与 `SCOPE_ALREADY_CHARGED`；登记载荷去掉三键、答复加 `agreement` 与 `registeredBy`。
 - 迁移：`party_commercial/0038_supplier_agreement_charge_condition.sql`；`transport_fulfillment/0034_charge_occurrence_agreement_declared_condition_and_registrant.sql`。
 - 种子：`scripts/demo-seeds/data/commercial/publish-batch.json` 加干线 `v2`（`PCC-2:55a33e7a…`）。
 - 文档：PC 与 TF `CONTEXT`、GLOSSARY「收费发生条件」、CONTEXT-MAP 的 PC→TF 一条；UC-PC-001 `AT-PC-051` 至 `053`；UC-TF-005 步 9 与 `AT-TF-166` 至 `170`；参数登记册 `PAR-SET-03` 的登口。

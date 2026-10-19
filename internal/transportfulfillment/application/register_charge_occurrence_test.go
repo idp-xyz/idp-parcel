@@ -69,8 +69,8 @@ func (double *occurrenceRegistryDouble) FindByKey(
 	return record, found, nil
 }
 
-// FindCovering 照真册的读法：同租户、同原因、同范围、不是同一身份，且本次按范围计、或那一项的单位是按范围计的、或
-// 同一事实依据上成员有交集。替身里没有修订版，当前版即首版。
+// FindCovering 照真册的读法：同租户、同原因、同范围（范围串相同且依据同一出处）、不是同一身份，且本次按范围计、或
+// 那一项的单位是按范围计的、或同一事实依据上成员有交集。替身里没有修订版，当前版即首版。
 func (double *occurrenceRegistryDouble) FindCovering(
 	_ context.Context, query ports.ChargeOccurrenceCoverageQuery,
 ) (ports.ChargeOccurrenceRecord, bool, error) {
@@ -85,7 +85,8 @@ func (double *occurrenceRegistryDouble) FindCovering(
 	for key, record := range double.records {
 		occurrence := record.Occurrence
 		if key.TenantID != query.TenantID || key.Occurrence == query.Except ||
-			occurrence.Reason() != query.Reason || occurrence.Scope() != query.Scope {
+			occurrence.Reason() != query.Reason || occurrence.Scope() != query.Scope ||
+			occurrence.FactBasis().Source() != query.FactBasis.Source() {
 			continue
 		}
 		_, unit := occurrence.Quantity()

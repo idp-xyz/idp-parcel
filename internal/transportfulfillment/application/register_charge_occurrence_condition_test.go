@@ -198,6 +198,54 @@ func TestDeclaringSelfOperationOverAScopeChargedSegmentIsAConflict(t *testing.T)
 	}
 }
 
+// Covers: AT-TF-169——「同一次到场」连同侧别认：揽收与派送的尝试身份各由自己的登记册签发，同一个串在两侧各指一次
+// 到场。揽收那一次按尝试计过之后，同串的派送失败照常登成，对它声明自营答不适用；揽收那一侧同一次到场的另一个对象
+// 照旧冲突。只比范围串，另一家服务方的派送尝试费就登不进去。
+func TestAPickupAndADeliveryAttemptSharingAnIdentityAreTwoArrivals(t *testing.T) {
+	const shared = "SYN-ATTEMPT-SHARED-01"
+	pickupFirst := func(t *testing.T) (*occurrenceRig, application.RegisterChargeOccurrenceCommand) {
+		rig := newOccurrenceRig(t)
+		rig.pickups = pickupAt(t, shared, domain.GoodsNotReady)
+		rig.deliveries = deliveryAt(t, shared, domain.NoOneToReceive)
+		pickup := failedAttemptCommand(t)
+		pickup.PickupAttemptSource = "SYN-PICKUP-SOURCE-01"
+		if outcome := rig.register(t, pickup).Outcome(); outcome != application.ChargeOccurrenceRegistered {
+			t.Fatalf("揽收那一次 outcome = %q", outcome)
+		}
+		delivery := failedAttemptCommand(t)
+		delivery.DeliveryAttempt = shared
+		return rig, delivery
+	}
+
+	t.Run("the delivery arrival is charged on its own", func(t *testing.T) {
+		rig, delivery := pickupFirst(t)
+		result := rig.register(t, delivery)
+		if result.Outcome() != application.ChargeOccurrenceRegistered {
+			t.Fatalf("outcome/detail = %q/%q, want REGISTERED", result.Outcome(), result.Detail())
+		}
+		record, _ := result.Record()
+		if record.Occurrence.Scope().String() != shared ||
+			record.Occurrence.FactBasis().Source() != "DELIVERY-ATTEMPT-RESULT" {
+			t.Fatalf("范围/出处 = %q/%q", record.Occurrence.Scope(), record.Occurrence.FactBasis().Source())
+		}
+		if quantity, unit := record.Occurrence.Quantity(); quantity != 1 || unit.String() != "ATTEMPT" {
+			t.Fatalf("数量/单位 = %d/%q", quantity, unit)
+		}
+		if rig.registry.saves != 2 {
+			t.Fatalf("两侧各一项，落了 %d 条", rig.registry.saves)
+		}
+	})
+
+	t.Run("declaring the delivery arrival self operated is not applicable", func(t *testing.T) {
+		rig, delivery := pickupFirst(t)
+		delivery.SelfOperated, delivery.Provider, delivery.AgreementObject, delivery.AgreementVersion = true, "", "", ""
+		result := rig.register(t, delivery)
+		if result.Outcome() != application.ChargeOccurrenceNotApplicable || result.Detail() != application.SelfOperatedDeclared {
+			t.Fatalf("outcome/detail = %q/%q, want NOT_APPLICABLE/SELF_OPERATED_DECLARED", result.Outcome(), result.Detail())
+		}
+	})
+}
+
 // pickupWithTwoFailures 是一次揽收到场里两个对象都失败：按尝试计时这一次到场只计一次。
 func pickupWithTwoFailures(t *testing.T) ports.FailedAttemptSource {
 	t.Helper()

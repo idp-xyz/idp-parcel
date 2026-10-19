@@ -387,6 +387,48 @@ func TestDeliveryAttemptOccurrenceTakesItsFactFromTheResult(t *testing.T) {
 	}
 }
 
+// Covers: AT-TF-169——依据的出处是依据串第一道斜杠之前那一词：揽收与派送同串的尝试范围相同、出处不同，「同一次
+// 到场」靠它分开；尝试串里自己带斜杠也不改出处。
+func TestTheBasisSourceSeparatesTheTwoSidesOfAnAttempt(t *testing.T) {
+	attempt := formedAttempt(t, "attempt/7")
+	object := attempt.Objects()[0]
+	reason := mustValue(t, domain.NewAttemptResultBasisReference, "reason-1")
+	pickup, err := domain.FormAttemptObjectResult(attempt, object, domain.GoodsNotReady, reason, attemptArrivedAt.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("揽收结果：%v", err)
+	}
+	delivery, err := domain.FormDeliveryAttemptResult(attempt, object, domain.NoOneToReceive, reason, attemptArrivedAt.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("派送结果：%v", err)
+	}
+	pickupBasis, err := domain.FailedPickupAttemptBasis(pickup)
+	if err != nil {
+		t.Fatalf("揽收依据：%v", err)
+	}
+	deliveryBasis, err := domain.FailedDeliveryAttemptBasis(delivery)
+	if err != nil {
+		t.Fatalf("派送依据：%v", err)
+	}
+	segmentBasis, err := domain.ActualFulfillmentBasis(mustValue(t, domain.NewFulfillmentSegmentReference, "segment/1"))
+	if err != nil {
+		t.Fatalf("段依据：%v", err)
+	}
+	for basis, want := range map[domain.OccurrenceBasisReference]string{
+		pickupBasis:   "ATTEMPT-RESULT",
+		deliveryBasis: "DELIVERY-ATTEMPT-RESULT",
+		segmentBasis:  "FULFILLMENT-SEGMENT",
+	} {
+		if got := basis.Source(); got != want {
+			t.Fatalf("%q 的出处 = %q, want %q", basis, got, want)
+		}
+	}
+	pickupScope, _ := domain.AttemptOccurrenceScope(pickup.Attempt())
+	deliveryScope, _ := domain.AttemptOccurrenceScope(delivery.Attempt())
+	if pickupScope != deliveryScope {
+		t.Fatalf("同串尝试的范围串应相同（侧别由出处给）：%q / %q", pickupScope, deliveryScope)
+	}
+}
+
 // Covers: ADR-0207 决定四——身份由（租户、原因、事实依据、成员集合）派生：成员换序同一身份，任一维变了换身份，
 // 长度不随引用多长而涨；首版有效性是 V1。
 func TestTheDerivedOccurrenceReferenceIsDeterministicAndBounded(t *testing.T) {

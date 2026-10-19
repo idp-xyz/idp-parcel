@@ -83,6 +83,14 @@ func NewOccurrenceBasisReference(value string) (OccurrenceBasisReference, error)
 	return OccurrenceBasisReference{required}, err
 }
 
+// Source 交回事实依据的出处：依据串第一道斜杠之前的那一词（揽收结果、派送结果、履约段各有一词，见各依据的构造
+// 函数）。主要业务范围要连同出处一起认（AttemptOccurrenceScope 头注）；登记册按同一读法从存下的依据串取出处，所以
+// 各依据构造函数的前缀不得含斜杠。
+func (basis OccurrenceBasisReference) Source() string {
+	source, _, _ := strings.Cut(basis.String(), "/")
+	return source
+}
+
 // QuantityUnitReference 指名数量的单位。数量与单位成对固定，不能事后按报表分组换算。
 type QuantityUnitReference struct{ requiredValue }
 
@@ -393,6 +401,11 @@ func ChargeOccurrenceForFailedAttempt(
 
 // AttemptOccurrenceScope 是失败尝试发生项的主要业务范围：那一次到场。揽收与派送同一写法——范围不进身份，只用来认
 // 「这一次到场是不是已经整体计过」（按尝试计费时一次到场只计一次，ADR-0209 决定四）。
+//
+// 范围串就是尝试身份本身、不带侧别，而两侧的尝试身份各由自己的登记册签发，同一个串可以各指一次到场
+// （FailedPickupAttemptBasis 头注）。所以「同一次到场」要连同事实依据的出处一起认（OccurrenceBasisReference.Source）：
+// 只比范围串，揽收的 A1 按尝试计过之后，另一家服务方的派送 A1 就登不进去。不把侧别写进范围串，是因为断言期已落册
+// 的项范围就是尝试串本身，换写法会让新登记认不出那些项已经按尝试计过。
 func AttemptOccurrenceScope(attempt AttemptReference) (OccurrenceScopeReference, error) {
 	scope, err := NewOccurrenceScopeReference(attempt.String())
 	if err != nil {

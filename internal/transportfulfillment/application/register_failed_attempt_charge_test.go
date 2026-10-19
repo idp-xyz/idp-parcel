@@ -61,7 +61,12 @@ func attemptFixture(t *testing.T, attempt string) domain.FulfillmentAttempt {
 
 func pickupWith(t *testing.T, outcome domain.AttemptObjectOutcome) pickupResultSourceDouble {
 	t.Helper()
-	attempt := attemptFixture(t, "SYN-PICKUP-ATTEMPT-01")
+	return pickupAt(t, "SYN-PICKUP-ATTEMPT-01", outcome)
+}
+
+func pickupAt(t *testing.T, attemptRef string, outcome domain.AttemptObjectOutcome) pickupResultSourceDouble {
+	t.Helper()
+	attempt := attemptFixture(t, attemptRef)
 	var basis domain.AttemptResultBasisReference
 	if outcome.Failed() {
 		basis = occurrenceValue(t, domain.NewAttemptResultBasisReference, "SYN-REASON-NOT-READY")
@@ -79,7 +84,12 @@ func pickupWith(t *testing.T, outcome domain.AttemptObjectOutcome) pickupResultS
 
 func deliveryWith(t *testing.T, outcome domain.DeliveryObjectOutcome) deliveryResultViewDouble {
 	t.Helper()
-	attempt := attemptFixture(t, "SYN-DELIVERY-ATTEMPT-01")
+	return deliveryAt(t, "SYN-DELIVERY-ATTEMPT-01", outcome)
+}
+
+func deliveryAt(t *testing.T, attemptRef string, outcome domain.DeliveryObjectOutcome) deliveryResultViewDouble {
+	t.Helper()
+	attempt := attemptFixture(t, attemptRef)
 	var basis domain.AttemptResultBasisReference
 	if outcome.Failed() {
 		basis = occurrenceValue(t, domain.NewAttemptResultBasisReference, "SYN-REASON-NO-ONE-HOME")
