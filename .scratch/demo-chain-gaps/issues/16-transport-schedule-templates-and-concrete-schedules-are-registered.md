@@ -48,23 +48,26 @@ L
 6. **候选读口只按连接代码取，不按起讫筛**：起讫不符留作淘汰原因交 18。
 7. **服务范围引用必填、只存不判**；演示取 `SYN-SCOPE-01`。
 8. **文法的线格式**：星期 MON…SUN、当地时刻 HH:MM、运行日期 YYYY-MM-DD 一律严格认；时区拒空串与 `Local`（`time.LoadLocation` 接受它们却分别读成 UTC 与本机时区）。
-9. **查阅口** `transport-schedule` 行把 `direction` 换成 `connection`/`fromNode`/`toNode`，加 `arrivesAt`、`serviceScope`、`version` 与来历三键，只列当前版；`transport-schedule-template` 也只列当前版。
+9. **查阅口** `transport-schedule` 行把 `direction` 换成 `connection`/`fromNode`/`toNode`，加 `arrivesAt`、`serviceScope`、`version` 与来历各键（`origin`、`template`、`templateVersion`、`runningDate`），只列当前版；`transport-schedule-template` 也只列当前版。
 10. **端点路径**取读面册名前缀加册名：`/transport-fulfillment-transport-schedule-template-registrations`、`/transport-fulfillment-transport-schedule-registrations`；具体班次一口两种形状（物化 / 临时）二选一，混着给答`未受理`。
 11. **CLI** 命令 `schedule-template` / `schedule`，退出码 0 / 1 / 3，没有冲突格（同键异内容就是下一版）；输入是在线载荷类型原样嵌入再加 `tenantId`，载荷→命令只走在线口那一份 `Command`。
 12. **`EstablishSchedule` 连同它的三格结果与 `SCHEDULE_STORE_UNAVAILABLE` 退役**，`PrepareTransportOpportunityDeps.Schedules` 随之摘掉；票 17 给 `EstablishPool` 核班次在册时再接 `TransportScheduleStore`。
 13. **迁移 0024 用 DROP + CREATE**：表有行即 `RAISE` 拒绝施加，不猜自由串。
 14. **演示时刻**：SHA→SZX 22:00 / 600 分、SZX→SIN 10:00 / 300 分（Asia/Shanghai），SIN→LM 07:00 / 90 分（Asia/Singapore），每天开；时区取连接的业务时区（演示约定，用例钉住）。窗口对不上由 18 调时刻，不改匹配规则。
 15. **AT 号从 `AT-TF-100` 起**：在途票 19 已在 UC-TF-004 占了 `AT-TF-099`。
+16. **ADR-0201 决定四、八的三类**（评审修订补）：计划「需要的 ADR」没归这两条。登记代数归机制（同代码异内容成下一版是册子自己的代数），需求量来源归产品策略（取申报还是实测、认哪几维，产品可另内置别的形态）。其余各条照计划归，见下「评审记录」。
+17. **各段履约方式只在演示动线文档写一处**（评审修订补）：X1 字面要求写进演示动线与种子 README 两处；README 第 8 条改成指向演示动线那段补记，不复述各段方式（一决策一处定义）。
 
 ### 越权风险点（全文见 ADR-0201「越权风险点」）
 
 方案带来的：事件放大（PAR-NFR-03）、只有按周一种形、用申报量、`未配置`不自动重备（→36）、改路缺口（→34）、连接代码跨版本相认、NR 侧车次表要录两遍、登记写授予无逐册维度、择优形态是否开放、准备结果不发信封。本票自决新增的：
 
-1. **出发之后仍可成下一版**（TF owner）：本册不读移动事实，首个有效出发后再登新时刻照样成下一版；CONTEXT 只禁出发后取消。
+1. **出发之后仍可成下一版**（TF owner）：本册不读移动事实，首个有效出发后再登新时刻照样成下一版；CONTEXT 生命周期只把出发前的再登记写成下一版，出发后留白，实现暂不挡。
 2. **临时班次身份不得取派生形**（TF owner）：租户本来就那样编号的会被拒。
 3. **到达只收历时**（TF owner）。
-4. **查阅口班次行换键**（前端 owner）：管理台运输履约查阅页「运行方向」列在前端切片改列之前读空（`apps/admin-web` 不在本票地盘）。
+4. **查阅口班次行换键**（前端 owner）：管理台运输履约查阅页「运行方向」列在前端切片改列之前读空（`apps/admin-web` 不在本票地盘），改列与补周期安排区立为票 [38](./38-admin-web-transport-schedule-section-reads-connection-and-nodes.md)。
 5. **服务范围只存不判**（TF owner）：候选不按服务范围筛。
+6. **决定四、八的三类自归**（TF owner）：owner 若认为登记代数也该是租户可选形态，要另立 ADR 取代决定四（ADR-0201 越权风险点「决定四、八的三类是本记录自归」）。
 
 ### 做了什么
 
@@ -99,6 +102,36 @@ L
 - **与票 19 的接缝**：在途 `claude-dcg19` 的测试按旧形补登班次（`FormTransportSchedule{Direction: 串}`、`CanonicalizeEstablishSchedulePayload`）。19 先进 main 时，16 rebase 要把那几处改成 `NewScheduleDirection` 加到达与服务范围的新构造（或改用 `RegisterTransportScheduleHandler` 物化一班）；19 后进则由 19 跟着改。19 读班次在册走 `TransportScheduleStore.FindByKey`，签名未变，现答当前版。
 - **地盘外动到的文件**（都是追加或随改名必须跟的）：`application/prepare_transport_opportunity.go`(+test)、`unversioned_payload_digest_test.go`、tfhttp `operator_registry_intake.go`（头注）与 `unconfigured_intake.go`、`cmd/parcel-api/unwired_orchestration.go`、`endpoints_test.go`、`assemble_operator_decisions_test.go`（列表各加两行）、`docs/design/synthetic-demo-journey-script.md`。未碰 peer 地盘与 `apps/admin-web`。
 - **本票不接生产调用方的**：`application.ScheduleCandidatesHandler` 与 `postgres.ScheduleCandidates` 是票 18 准备编排要调的候选来源，本票只以真库用例证其答格。
-- **管理台**：班次区「运行方向」列读空、没有周期安排区，归前端切片（方案「等 peer 的」admin-web 一行）。
+- **管理台**：班次区「运行方向」列读空、没有周期安排区，归前端切片（方案「等 peer 的」admin-web 一行），已立票 [38](./38-admin-web-transport-schedule-section-reads-connection-and-nodes.md)。
 - **演示窗口**：三份周期安排的时刻能否落进计划段窗口，等票 18 实测后调。
 
+
+## 评审记录（2026-10-19，隔离评审一轮；作者子代理修订，`f13652b5`、`9cb4dfc9`、`b8fee750`）
+
+阻断 1 项，已修；非阻断 9 项，修 8 项，1 项（与 19 的接缝）前提未到、登记去向。
+
+### 阻断
+
+- **ADR-0201 三类与计划对不上，且没报成自决** → 照 tf-chain-plan「需要的 ADR」ADR-0201 那一块改归，不再偏离：决定一、二、四记机制；决定五拆两条，派生身份（含临时班次不得取派生形）是机制，物化只在两处、不预生成是产品策略；决定七拆开，由初始路由触发、无路线零写入是产品策略，结果唯一、不发信封是机制，改路与再准备的后继票指针另起一条不归类；决定七标题去掉「（机制，票 18）」；三类段注明照计划归。计划没归的决定四（机制）、决定八（产品策略）列为代决 16，ADR 补越权风险点「决定四、八的三类是本记录自归」，Links 里 ADR-0146 一行随之改成「各决定的三类归属」。
+
+### 非阻断
+
+- **与票 19 的接缝**（建议进 main 前）——**未采纳，前提未到**：19 截至 main `dee3a79c` 还没进 main，本分支无从 rebase 到「含 19 的 main」。已把 19 移交的那条演示判据照 19 分支上的原文逐字补进本票「完成判据」（两边同一处同一行，合并时不冲突）。谁后进 main 谁照下面办：16 后进时，rebase 保留 19 在 `adapters/postgres/transport_schedule.go` 加的 `TransportScheduleStore`、`TransportScheduleReader` 两行端口断言；19 测试里的 `FormTransportSchedule{Direction: 串}` 与 `CanonicalizeEstablishSchedulePayload` 改用 `NewScheduleDirection` 加到达与服务范围的新构造，或改由 `RegisterTransportScheduleHandler` 物化一班；补跑那条移交判据并记进本票。16 先进时那一项按判据原文回 19。
+- **「经准备选中后登记」括注替票 18 定写入路径**（建议）——已修：ADR 决定五照计划原话写两处物化；TF CONTEXT 删「没被选中的候选不进登记册」，只留「评估时物化只算不存」；同义的两处代码注释（`domain.ScheduleTemplate.MaterializeDepartingWithin`、`application.ScheduleCandidatesHandler`）一并改中性，不再暗示准备编排往册子写。
+- **ADR Consequences 写死票 17、18 的迁移号**（建议）——已删，迁移号只留各票票面（X7）。
+- **CONTEXT 把出发后改版写成无条件生命周期**（建议）——已修：那一条限定为「首个有效出发或移动事实前」，出发之后能否再登新版写明本上下文不作规定、指向 ADR-0201 越权风险点「出发之后仍可成下一版」，并补「已发生的出发、移动与到达只由实际事实表达，不因新一版改写」；风险点同步改写，实现暂不挡。
+- **管理台班次区读空、无周期安排区未落成票**（建议）——已立前端切片票 [38](./38-admin-web-transport-schedule-section-reads-connection-and-nodes.md)（Blocked by 16，走 workflow.md「前端切片」），ADR 风险点「查阅口班次行换键」与本票偏离一节都指向它。
+- **`未配置`口径 CONTEXT/UC 写「登记过」、ADR 与代码看当前版**——取当前版一口：TF CONTEXT 那条与 UC-TF-003 步 5、`AT-TF-103` 改成「没有任何当前版的周期安排或具体班次」，`AT-TF-103` 点名「唯一的周期安排已改登到别的连接」；真库用例 `TestScheduleCandidatesAnswerNotConfiguredOnAnEmptyRegistry` 补这一形（原连接答 `NOT_CONFIGURED`，新连接已列出）。
+- **临时班次摘要按纳秒算**——已修摘要一侧：`CanonicalizeTransportSchedulePayload` 的出发与到达先经 `AtRegistryPrecision` 折到微秒（先例：首次有效收寄判断、POD 更正两口），注释写明这本册子异内容即下一版、不折会多出库面相同的一版；`canonicalInstant` 的头注补一句「立形时没有存量摘要的口可以一开始就折」。**没照评审建议把 `formSchedule` 的落值也折**：`AtRegistryPrecision` 那条规则写明「只改判定，不改存值」，库面 timestamptz 自会截到微秒，摘要折了就够。黄金摘要改为微秒那一份，另加 `TestAdHocScheduleTimesAreComparedToTheMicrosecond`（纳秒尾巴同摘要，跨一微秒异）。
+- **X1 的各段履约方式写在三处**——已修：种子 README 数据故事第 8 条只指向演示动线第 3 步那段补记，不复述（代决 17；计划本身是索引，不算第二套口径）。
+- **`ScheduleCandidates` 头注「两问」与实际不符**——改成「各问」。
+- 修订时顺手：ADR Consequences 与代决 9 的「来历三键」实为四个键，改成「来历各键」并列出键名。
+
+### 合并提示
+
+- 与当前 main（`dee3a79c`）的 `merge-tree`：只有 `docs/adr/README.md` 一处追加对追加的冲突（main 在 ADR-0200 后追加了 ADR-0210 一行，本票追加 ADR-0201 一行），两行都留、0201 在 0210 之前即可；其余文件自动合并。
+
+### 修订后验证
+
+- `go build ./...`；`go vet` 覆盖 `./internal/transportfulfillment/...`、`./cmd/parcel-api/`、`./cmd/parcel-transport-register/`、`./internal/architecture/`；`gofmt -l` 干净。
+- `IDP_PARCEL_POSTGRES_DSN=…55432… go test -p 1 -count=1`：`./internal/transportfulfillment/...`、`./cmd/parcel-transport-register/`、`./cmd/parcel-api/`、`./internal/architecture/`、`./migrations/`、`./scripts/demo-seeds/...` 全 ok（真库用例在跑，无 SKIP）。种子数据与 `seed.sh` 本轮没动，未重灌。没跑全量，机制清点未重生成。
