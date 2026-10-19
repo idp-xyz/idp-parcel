@@ -240,6 +240,32 @@ go run ./cmd/parcel-dispatch
 
 > 2026-10-19 实走（票 ps-external-mark-relations/09 作者子代理；实测，只记 `S`）：一次性库 `psxm09_demo`，`seed.sh` 退 0，客户端两格授予、两条对照、两条区间都答 `RECORDED` / `REGISTERED`。共享的集成客户端发行方容器是按旧配置起的，不认合成货主系统，所以另起一只私有 Dex，用同一份 `integration-dex.yaml`，发布在 `127.0.0.1:5562`；issuer 串仍是 `http://127.0.0.1:5558/dex`，没有重启别的会话在用的容器。`parcel-api` 只带首方族三件（JWKS 指 5562）与治理自授权起，脚本答 `201 DELIVERY_PRE_ADVICE_REGISTERED`，签出 `PREADV-BGOJWJ3AE7XUSBEIUHTQFA5YGU`，来源是 `http://127.0.0.1:5558/dex#ChZzeW4tY3VzdG9tZXItY2xpZW50LTAx` 加接入请求标识。同一进程上：不带令牌答 401，自报租户答 400，撤回答 201、重投 200，撤不存在的答 404。同一 UTC 秒内用别的号码再跑脚本，撞同一接入请求标识，答 `SOURCE_CONFLICT`，脚本退 1；隔一秒再跑，签出 `PREADV-T7VC26KBK6DXBVUU4DDMDYQ2S4`。册上两行预报、一行撤回。走完已停进程、删容器、删库，`psb26_walk` 未碰。
 
+#### 送站交接单：没带预报的送站补证据
+
+没带预报、或预报没覆盖这个号的送站落待识别之后，节点在这次送站上开立送站交接单，把那件归入，再经运营决定或客户确认补上绑定（[ADR-0212](../adr/0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md) 决定三、六；票 [ps-external-mark-relations/12](../../.scratch/ps-external-mark-relations/issues/12-handover-notes-are-opened-filled-closed-and-confirmed.md)）。声称的客户账户全部确认的那一笔同一笔事务自投「交付范围成立」门铃，dispatch 投给 NO 的重核消费者，名下仍待识别的那一件按此刻的证据重核。五口都在铸造侧判准入范围，起进程要设 `IDP_PARCEL_GOVERNANCE_SELF_AUTHORITY`；种子登了配置员的送站交接确认授予、合成货主系统的送站交接确认授予、五行对照与五条权威区间。
+
+| 口 | 族 | 载荷 |
+|---|---|---|
+| `POST /node-operations/delivery-handover-notes` 开立 | 作业事实登记（配置员令牌 + 设备三头） | `noteId`（设备签发）、`deliveringParty`（线索）、`claimedAccounts`、`openedAt` |
+| `POST /node-operations/delivery-handover-assignments` 归入 | 同上 | `factId`、`noteId`、`unit`、`assignedAt` |
+| `POST /node-operations/delivery-handover-closures` 关闭 | 同上 | `factId`、`noteId`、`closedAt` |
+| `POST /node-operations/delivery-handover-confirmations` 运营决定确认 | 运营决定（配置员令牌） | `noteId`、`customerAccount`、`deliveringParticipant`（PC 参与方）、`basis` |
+| `POST /node-operations/delivery-handover-conclusions` 客户确认或否认 | 首方客户渠道（合成货主系统令牌） | `accessRequestId`、`noteId`、`conclusion`（`CONFIRMED` / `DENIED`） |
+
+| 请求 | 答复 |
+|---|---|
+| 首次开立 / 归入 / 关闭 / 确认 / 否认 | `201`，`DELIVERY_HANDOVER_NOTE_OPENED` / `UNIT_ASSIGNED` / `DELIVERY_HANDOVER_NOTE_CLOSED` / `BINDING_CONFIRMED` / `BINDING_DENIED` |
+| 同一事实或同一结论原样重投 | `200 EXISTING_RESULT`，回显在册那一份 |
+| 同一事实身份换内容 / 账户已有不同结论 | `200 SOURCE_CONFLICT` / `200 EXISTING_CONCLUSION`，回显在册那一份 |
+| 关闭之后归入、归入已识别或记了多候选冲突的实物、客户对未关闭的交接单作结论 | `200 HANDOVER_NOTE_STATE_MISMATCH`，`stateMismatch` 为 `NOTE_CLOSED` / `UNIT_NOT_ASSIGNABLE` / `NOTE_NOT_CLOSED` |
+| 运营决定确认：交付方没有授权交付关系 / 本租户一条都没登记 | `200 NOT_IN_AUTHORIZED_DELIVERY_RELATIONSHIP` / `200 AUTHORIZED_DELIVERY_NOT_CONFIGURED`，不落结论 |
+| 交接单不存在、不是设备那个节点开立的、客户账户不在声称之列 | `404 DELIVERY_HANDOVER_NOTE_NOT_VISIBLE`，几种同答 |
+| 别族令牌 | 作业事实与运营决定口答 `401 OPERATOR_CREDENTIAL_REJECTED`，客户口答 `401 CUSTOMER_CLIENT_CREDENTIAL_REJECTED` |
+
+客户口的答复只回显交接单标识与自己那一个账户的结论，不回显声称了谁、范围成立没有。
+
+> 2026-10-19 实走（票 ps-external-mark-relations/12 作者子代理，本票实现那一笔 `5e9a90e3` 上编出的 `parcel-api` 与 `parcel-dispatch`；实测，只记 `S`）：一次性库 `psxm12_demo`，`seed.sh` 退 0，送站交接确认的两格授予、五行对照（其中三行能力为 `WORK_FACT_REGISTRATION`）都答 `RECORDED`，五条权威区间在册。共享的集成客户端发行方仍答 `invalid_client`，另起私有 Dex（同一份 `integration-dex.yaml`，发布在 `127.0.0.1:5564`，issuer 串仍是 `http://127.0.0.1:5558/dex`）；操作者发行方用共享的 5556。`submit-one-shipment.sh` 落一笔委托（客户包裹件号 `SYN-PCLREF-20261019T180729Z`），dispatch 推到`已接受`、关联在册。不带依据送站答 `200 PENDING_IDENTIFICATION`、候选记那一件、`UNVERIFIED/NO_BASIS`。开立 `SYN-HANDOVER-PSXM12-WALK-01`（声称 `SYN-ACCOUNT-01`）答 `201`、原样重投 `200 EXISTING_RESULT`；归入那一件 `201 UNIT_ASSIGNED`；关闭 `201`；关闭之后再归入 `200 HANDOVER_NOTE_STATE_MISMATCH / NOTE_CLOSED`；运营决定确认指名 `SYN-PARTY-DELIVERER-99` 答 `200 NOT_IN_AUTHORIZED_DELIVERY_RELATIONSHIP`，指名 `SYN-PARTY-DELIVERER-01` 答 `201 BINDING_CONFIRMED`、带 `scopeEstablishedAt`；不带令牌 `401`。门铃一封，dispatch 投给重核消费者，册上追加 `IDENTITY-RECHECK/<原判断版本>` 一版 `INTAKE_FORMED`：关联那件包裹、前版是待识别那一版、接收时刻与控制依据照原收寄、核对态 `VERIFIED`，收寄意图一封投出。第二张 `SYN-HANDOVER-PSXM12-WALK-02` 声称 `SYN-ACCOUNT-01`、`SYN-ACCOUNT-02`：未关闭时客户确认答 `200 … / NOTE_NOT_CLOSED`；关闭后答 `201 BINDING_CONFIRMED`（落途径客户渠道、来源请求键），改口否认答 `200 EXISTING_CONCLUSION`；对第一张（已由运营决定确认）否认也答 `EXISTING_CONCLUSION`；不存在的交接单 `404`；操作者令牌打客户口 `401 CUSTOMER_CLIENT_CREDENTIAL_REJECTED`；还差 `SYN-ACCOUNT-02`，没有第二封门铃。走完已停进程、删容器、删库，`psb26_walk` 未碰。
+
 ## 对照组：证明门是真的
 
 演示里最容易被质疑的一句是「你们这个 403 是写死的吧」。下面几行对照可以当场答掉，每行只动一处：

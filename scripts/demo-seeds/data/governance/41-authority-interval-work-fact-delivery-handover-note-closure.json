@@ -1,0 +1,7 @@
+{
+  "objectScope": "SYN-PILOT-SCOPE/work-facts@v1",
+  "capability": "WORK_FACT_REGISTRATION",
+  "factKind": "DELIVERY_HANDOVER_NOTE_CLOSURE",
+  "authority": "SYN-AUTH/idp-parcel-pilot",
+  "fromAt": "2026-01-01T00:00:00Z"
+}

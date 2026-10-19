@@ -67,7 +67,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 
 | 登录邮箱 | 授予（自 2026-01-01 生效，不设终点） |
 |---|---|
-| `syn-operator-config-01@syn-tenant-01.example.invalid` | 登记册配置写、主数据与运营查阅读、运营决定（装载分配、终止参与、关段、建派送任务、有效时间判断、承运商首次有效收寄判断；复核完成、主动拒绝、授权处置、受控关闭、受控重开——委托侧这几种越过 Intake 的前提见表后说明；待识别重核——节点作业复核页上的「重核」；身份冲突处置——同一页上的「处置」；运输委托提交；订舱提交；履约段采用运输委托、取消运输委托、取消订舱）；作业事实登记，按作业范围给：演示网络各节点（收寄），华东场外揽收与新加坡尾程派送两个场外范围（运输履约各口），每个范围配一台合成设备（`data/access/04`） |
+| `syn-operator-config-01@syn-tenant-01.example.invalid` | 登记册配置写、主数据与运营查阅读、运营决定（装载分配、终止参与、关段、建派送任务、有效时间判断、承运商首次有效收寄判断；复核完成、主动拒绝、授权处置、受控关闭、受控重开——委托侧这几种越过 Intake 的前提见表后说明；待识别重核——节点作业复核页上的「重核」；身份冲突处置——同一页上的「处置」；运输委托提交；订舱提交；履约段采用运输委托、取消运输委托、取消订舱；送站交接确认——依授权交付关系确认送站交接单的绑定）；作业事实登记，按作业范围给：演示网络各节点（收寄），华东场外揽收与新加坡尾程派送两个场外范围（运输履约各口），每个范围配一台合成设备（`data/access/04`） |
 | `syn-operator-viewer-01@syn-tenant-01.example.invalid` | 主数据与运营查阅读 |
 
 委托侧各种运营决定的授予只开门。权威串设了之后，越过 Intake 还要指名的对象在演示租户下查得到：复核完成、主动拒绝、
@@ -97,6 +97,13 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 `POST /transport-fulfillment-transport-commission-cancellations` 与 `POST /transport-fulfillment-booking-request-cancellations`。
 走法同样见演示文档第 3 步。
 
+配置员另持运营决定「送站交接确认」（ADR-0212 决定三；票 ps-external-mark-relations/12；`data/access/02` 的授予、`03` 的对照与
+`data/governance/37` 的权威区间各一行）。送站交接单的开立、归入、关闭是作业事实登记面上的作业事实，各在铸造侧判自己那一种的准入
+范围：`03` 里三行对照（能力 `WORK_FACT_REGISTRATION`，事实类型 `DELIVERY_HANDOVER_NOTE_OPENING` / `…_ASSIGNMENT` / `…_CLOSURE`，
+对象范围 `SYN-PILOT-SCOPE/work-facts@v1`），`data/governance/39`、`40`、`41` 是对应的权威区间；收寄口不判准入，不在其中。种子不登任何
+交接单：交接单在节点当场开立，走法见演示文档「送站交接单」一段。运营决定确认时问的授权交付关系是 `data/commercial/register-authorized-delivery.json`
+那一条（合成交付方 `SYN-PARTY-DELIVERER-01` 替 `SYN-ACCOUNT-01` 送站）。
+
 单要一枚令牌：`scripts/demo-seeds/operator-channel/operator-token.sh <邮箱>` 打印访问令牌，末尾加 `claims` 打印两枚
 令牌的载荷。它与管理台走同一个公共客户端、同一条 authorization_code + PKCE 流，管理台不必在跑。
 
@@ -124,7 +131,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 | `data/visibility/` | `cmd/parcel-ve-register` | 里程碑映射、分诊规则、通知策略、索赔资格、索赔授权两格（一格空名单）、披露策略、异常披露规则、冲突信号规则、索赔材料收讫两笔（照片留下、发票收讫后撤销）、出发门禁阻断信号规则（票 demo-chain-gaps/33） |
 | `data/collection/` | `cmd/parcel-collection-register` | 一条 COD 指令走全程（渠道报收、银行短收、短款、清分进应付客户）+ SGD 分户账只开立；CNY 账两笔回汇批次（已归集 / 已交出汇付主张），SGD 账无批次 |
 | `data/settlement/` | `cmd/parcel-settlement-register` 的 `settlement-account` / `external-funds-fact` / `funds-mapping` / `pre-acceptance-estimate-adoption` / `sell-billing-moment-adoption` / `fee-item-mapping` / `buy-evaluation-trigger` | 结算账户登记册（ADR-0158）1 行：货主 `SYN-PARTY-SHIPPER-01` 在法人 `SYN-LE-01` 下的 CNY 应收账户 `SYN-SETTLEMENT-ACCOUNT-01`，结算政策 `SYN-SETTLEMENT-PREPAID-01`，责任依据是该政策所引的客户合同 `SYN-CONTRACT-01`。五维照发布批里那份结算政策的正文配，受理前财务控制的作用域经它找到账户。另有一笔合成收款 `SYN-FUNDS-RECEIPT-01`（200.00 CNY）映射到该账户（ADR-0182），金额只盖这一件的试算合计，不是生产默认。受理前估价采用册（ADR-0179 决定五）1 行：这一户采用「逐件 SELL 试算合计」（`PER_PARCEL_SELL_TRIAL_SUM`），计价范围 `SYN-SCOPE-01`，与售价卡 `SYN-PLAN-CN-SG-01` 的范围同值，估价按它解析在用售价卡。SELL 计费时点采用册（ADR-0190 决定三）1 行：这一户在「有效网络收寄已采用」那一拍发起 SELL 评价，计价范围同上。费用项目映射（决定五）2 行：基础运费与偏远附加都映到 `SYN-FEE-ITEM-FREIGHT-01`，是 SYN 简化。售价卡声明了金额取整（总额，0.01 CNY，四舍五入），结算由评价形成客户费用时要这一格。BUY 触发册（ADR-0164、ADR-0208）1 行：原因 `ACTUAL_FULFILLMENT` 采用「发生项形成」，费用项目 `SYN-FEE-ITEM-TRUNK-COST-01`；干线实际履约发生项一形成就发起 BUY 评价，主要范围取发生项上干线协议 `SYN-SUPPLIER-TRUNK-CN-SG-01/v1` 的商业范围 `SYN-SCOPE-01`。别的原因不登，形成了答未配置 |
-| `data/access/` | `cmd/parcel-access-register` 的 `operator-register` / `operator-grant` / `admission-scope-mapping-register` / `device-register` / `integration-client-register` / `integration-client-grant` / `customer-client-register` / `customer-client-grant` | 操作者册（ADR-0100 决定二第三条）：合成操作者主体绑演示租户，各自持有哪些授予以上面「操作者渠道」一节的授予表为准，这里不另列；主体是演示发行方 Dex 给 `operator-channel/dex.yaml` 里静态用户真签出的 `sub`，换发行方就按新发行方的标识另登一批。另有演示租户的准入范围对照（ADR-0180 决定一、二）：各（能力、事实类型）的生产写落在哪个治理对象范围，与 `data/governance/` 里本产品的权威区间配上，运营决定与外部事实各口才越得过准入范围。`04-devices.json` 是作业事实各口用的合成设备，每台绑一个作业范围，与配置员的作业事实登记授予一一对上。`05`、`06` 是集成客户端族：合成报关服务商、合成银行与合成干线承运商各一台（干线承运商的来源身份是 `SYN-PARTY-CARRIER-TRUNK-01`，只授承运订舱答复），主体是演示的集成客户端发行方签出的 `sub`，授予按事实类型给。`07`、`08` 是首方客户族：合成货主系统一台绑 `SYN-ACCOUNT-01`，主体是同一只发行方签出的 `sub`，授予按客户面能力给——委托提交，与送站预报的提交、撤回（票 ps-external-mark-relations/09）；预报两口在铸造侧判准入，`03` 里登了它们的对照（能力 `CUSTOMER_COMMAND`，事实类型取能力词，对象范围 `SYN-PILOT-SCOPE/customer-commands@v1`），`data/governance/35`、`36` 是对应的权威区间 |
+| `data/access/` | `cmd/parcel-access-register` 的 `operator-register` / `operator-grant` / `admission-scope-mapping-register` / `device-register` / `integration-client-register` / `integration-client-grant` / `customer-client-register` / `customer-client-grant` | 操作者册（ADR-0100 决定二第三条）：合成操作者主体绑演示租户，各自持有哪些授予以上面「操作者渠道」一节的授予表为准，这里不另列；主体是演示发行方 Dex 给 `operator-channel/dex.yaml` 里静态用户真签出的 `sub`，换发行方就按新发行方的标识另登一批。另有演示租户的准入范围对照（ADR-0180 决定一、二）：各（能力、事实类型）的生产写落在哪个治理对象范围，与 `data/governance/` 里本产品的权威区间配上，运营决定与外部事实各口才越得过准入范围。`04-devices.json` 是作业事实各口用的合成设备，每台绑一个作业范围，与配置员的作业事实登记授予一一对上。`05`、`06` 是集成客户端族：合成报关服务商、合成银行与合成干线承运商各一台（干线承运商的来源身份是 `SYN-PARTY-CARRIER-TRUNK-01`，只授承运订舱答复），主体是演示的集成客户端发行方签出的 `sub`，授予按事实类型给。`07`、`08` 是首方客户族：合成货主系统一台绑 `SYN-ACCOUNT-01`，主体是同一只发行方签出的 `sub`，授予按客户面能力给——委托提交，与送站预报的提交、撤回（票 ps-external-mark-relations/09），送站交接确认（票 ps-external-mark-relations/12）；预报两口与送站交接确认在铸造侧判准入，`03` 里登了它们的对照（能力 `CUSTOMER_COMMAND`，事实类型取能力词，对象范围 `SYN-PILOT-SCOPE/customer-commands@v1`），`data/governance/35`、`36`、`38` 是对应的权威区间。`03` 另有作业事实登记面交接单三种事实的对照（`data/governance/39`、`40`、`41`） |
 | `data/transport/` | `cmd/parcel-transport-register schedule-template` | 周期安排登记册（ADR-0201）3 份：演示网络三条连接各一份按日运行的周期安排——`SYN-SCHED-SHA-SZX-DAILY`（`SYN-CONN-SHA-SZX`，当地 22:00 出发、历时 600 分钟，Asia/Shanghai）、`SYN-SCHED-SZX-SIN-DAILY`（`SYN-CONN-SZX-SIN`，10:00、300 分钟，Asia/Shanghai）、`SYN-SCHED-SIN-LM-DAILY`（`SYN-CONN-SIN-LM`，07:00、90 分钟，Asia/Singapore），服务范围都是 `SYN-SCOPE-01`。方向的连接代码与起讫节点取演示网络参考配置，时区取该连接的业务时区；出发时刻与历时是合成分钟数，不是任何线路的真实班期。具体班次不预生成：准备评估时按日期物化，或经 `schedule` 命令 / `POST /transport-fulfillment-transport-schedule-registrations` 按运行日期显式登记 |
 | `data/access/` | `cmd/parcel-access-register` 的 `operator-register` / `operator-grant` / `admission-scope-mapping-register` / `device-register` / `integration-client-register` / `integration-client-grant` / `customer-client-register` / `customer-client-grant` | 操作者册（ADR-0100 决定二第三条）：合成操作者主体绑演示租户，各自持有哪些授予以上面「操作者渠道」一节的授予表为准，这里不另列；主体是演示发行方 Dex 给 `operator-channel/dex.yaml` 里静态用户真签出的 `sub`，换发行方就按新发行方的标识另登一批。另有演示租户的准入范围对照（ADR-0180 决定一、二）：各（能力、事实类型）的生产写落在哪个治理对象范围，与 `data/governance/` 里本产品的权威区间配上，运营决定与外部事实各口才越得过准入范围。`04-devices.json` 是作业事实各口用的合成设备，每台绑一个作业范围，与配置员的作业事实登记授予一一对上。`05`、`06` 是集成客户端族：合成报关服务商与合成银行各一台，主体是演示的集成客户端发行方签出的 `sub`，授予按事实类型给。`07`、`08` 是首方客户族：合成货主系统一台绑 `SYN-ACCOUNT-01`，主体是同一只发行方签出的 `sub`，授予按客户面能力给（此刻只有提交） |
 | `data/transport/` | `cmd/parcel-transport-register schedule-template` | 周期安排登记册（ADR-0201）：`01`–`03` 是演示网络每条连接各一份按日运行的周期安排——`SYN-SCHED-SHA-SZX-DAILY`（`SYN-CONN-SHA-SZX`，当地 22:00 出发、历时 600 分钟，Asia/Shanghai）、`SYN-SCHED-SZX-SIN-DAILY`（`SYN-CONN-SZX-SIN`，10:00、300 分钟，Asia/Shanghai）、`SYN-SCHED-SIN-LM-DAILY`（`SYN-CONN-SIN-LM`，07:00、90 分钟，Asia/Singapore），服务范围都是 `SYN-SCOPE-01`。方向的连接代码与起讫节点取演示网络参考配置，时区取该连接的业务时区；出发时刻与历时是合成分钟数，不是任何线路的真实班期。具体班次不预生成：准备评估时按日期物化，或经 `schedule` 命令 / `POST /transport-fulfillment-transport-schedule-registrations` 按运行日期显式登记 |
@@ -183,6 +190,13 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
    `VERIFIED`；不带预报再送一件同号，答 200 `PENDING_IDENTIFICATION`、核对态 `UNVERIFIED` / `NO_BASIS`，不记冲突。预报的节点要是收寄
    设备的节点（两个脚本缺省都是 `SYN-NODE-SHA-HUB`），收寄时刻要落在〔预计送达 − 提前量，预计送达 + 宽限量〕里（种子时窗提前一天、
    宽限半天）。证据只记 `S`。
+8. 送站交接单（票 ps-external-mark-relations/12，ADR-0212 决定三、六）：没带预报而落待识别的那一件，经交接单补证据。开立
+   `POST /node-operations/delivery-handover-notes`、归入 `…/delivery-handover-assignments`、关闭 `…/delivery-handover-closures` 用配置员
+   令牌与上海枢纽那台合成设备（作业事实三头）；运营决定确认 `…/delivery-handover-confirmations` 用配置员令牌，指名交付方参与方
+   `SYN-PARTY-DELIVERER-01`；客户的确认或否认 `…/delivery-handover-conclusions` 用合成货主系统的首方令牌（授予
+   `DELIVERY_HANDOVER_CONFIRMATION`），只对已关闭、声称了 `SYN-ACCOUNT-01` 的交接单。声称的客户账户全部确认的那一笔自投「交付范围
+   成立」门铃，dispatch 投给重核消费者，名下的待识别追加一版 `INTAKE_FORMED`、核对态 `VERIFIED`。五口都要
+   `IDP_PARCEL_GOVERNANCE_SELF_AUTHORITY`，不设答 403 `OUTSIDE_ADMISSION_SCOPE`。载荷与答复见演示文档「送站交接单」一段。证据只记 `S`。
 
 ## 数据故事（同一合成租户 SYN-TENANT-01，范围 SYN-SCOPE-01）
 

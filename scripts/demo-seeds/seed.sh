@@ -289,6 +289,13 @@ echo "== 试点治理登记（pilot-governance：权威区间、暂停、恢复�
 # 能力 CUSTOMER_COMMAND，事实类型取客户面能力词，对象范围另起一个客户面的合成范围。
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/35-authority-interval-customer-command-delivery-pre-advice-submission.json"
 "$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/36-authority-interval-customer-command-delivery-pre-advice-withdrawal.json"
+# 送站交接单（ADR-0212 决定三；票 ps-external-mark-relations/12）：运营决定的送站交接确认、客户面的送站交接确认，与作业事实登记面的
+# 开立、归入、关闭三种——作业事实登记面的能力词是 WORK_FACT_REGISTRATION，事实类型逐种取，对象范围另起一个作业事实的合成范围。
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/37-authority-interval-operation-decision-delivery-handover-confirmation.json"
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/38-authority-interval-customer-command-delivery-handover-confirmation.json"
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/39-authority-interval-work-fact-delivery-handover-note-opening.json"
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/40-authority-interval-work-fact-delivery-handover-note-assignment.json"
+"$BIN/parcel-governance-register" authority-interval -input "$SEEDS/governance/41-authority-interval-work-fact-delivery-handover-note-closure.json"
 
 echo "== 操作者册登记（access-identity：合成操作者主体与能力面授予；票 operator-channel/01、17） =="
 # 合成主体绑演示租户：配置员扮运营主管，持有全部运营决定（票 operator-channel/24「裁定」）——授登记册配置写、主数据与
