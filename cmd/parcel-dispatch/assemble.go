@@ -534,7 +534,8 @@ var dutyPaymentVerificationUndecidedSentinels = []error{
 //
 // 不在名单里的几格，恢复动作各不相同：
 //   - 不是 BUY·SUPPLIER_COST 的评价不是错误——处理方答 nil，消费门入账不重投（做法 2「不处理不报错」）：提供方
-//     对两个方向发同一种信封，SELL 那一半只能在这里安静地走掉。
+//     对两个方向发同一种信封，SELL 那一半在这里安静地走掉，由扇出的另一路（sellEvaluationRecordedUndecidedSentinels
+//     那一路）接住。
 //   - sapricing.ErrUntranslatableAnswer——提供方交出词汇表之外的内容，形状变了，重投不自愈。
 //   - sapricing.ErrAmountPrecisionUndeclared——价卡没声明金额取整策略（ADR-0107），这份评价按现卡永远采用不了，
 //     要改的是卡、再评价一份新的，不是重投这一封。
@@ -542,6 +543,23 @@ var dutyPaymentVerificationUndecidedSentinels = []error{
 var buyEvaluationRecordedUndecidedSentinels = []error{
 	sapricing.ErrEvaluationNotVisible,
 	sapricing.ErrSourceReferencesUnrecorded,
+}
+
+// sellEvaluationRecordedUndecidedSentinels 是 PP 评价已记录信封 → SA 预估客户费用形成这条线（ADR-0190 决定五、六；
+// 票 sell-customer-charge/04）登记的未决哨兵。同一种信封扇出给 BUY 与本路，两路各包各的名单，不合成一份。
+//   - sapricing.ErrSellChargeFormationUndecided——评价在提供方还读不回（与信封同事务落库，读不回只剩可见性滞后），或
+//     SELL 请求册、费用项目映射册、客户费用库某一个答不出：形成与否未知，整笔回滚等重投。停在哪一个依赖上写在错误
+//     正文里，名单只要这一枚。
+//
+// 不在名单里的：
+//   - 入账定局的各格不是错误，处理方答 nil——不是 SELL·客户费用的评价、不回指 SELL 请求的评价、请求记下了结论（`已形成`、
+//     `待判断`、`不可计价`、`冲突`）或早有结论、评价失败而请求停在`已提交`。`待判断`里含费用行映不全或映到多个费用项目
+//     与卡没声明金额取整：缺的是租户取值（映射行、卡上的取整声明），评价不可变，重投这一封不会变；补登之后这一份也
+//     不回补（ADR-0190 越权风险点 3）。
+//   - sapricing.ErrUntranslatableAnswer、sapricing.ErrUntranslatableReference——提供方形状变了或引用坏了，重投不自愈。
+//   - 形成编排上抛的矛盾（请求册上另有结论、刚读到`已完成`的评价形成时却未受理），落 publish_failed 等人看。
+var sellEvaluationRecordedUndecidedSentinels = []error{
+	sapricing.ErrSellChargeFormationUndecided,
 }
 
 // evaluationRequestSubmittedUndecidedSentinels 是 SA 评价请求已提交信封 → PP「按评价请求形成评价」这条线
@@ -640,8 +658,9 @@ var sellEvaluationRequestSubmittedUndecidedSentinels = []error{
 // ADR-0066）、VE 投影派生 → 客户视图
 // （UC-VE-008 内部半边：账户维经 PS 按包裹反查填上，ADR-0060 三格）、SA 资金事实采用 → CC 入向
 // 登记（sa-cc/03）、CC 付款核对形成 → SA 结算输入采用（sa-cc/09；同一条缝的反方向，各记各的 inbox 账）、
-// PP 评价已记录 → SA 供应商预期成本形成（sa-cc/01；裁决 (c) 范围只到「命令凑不齐 → 未决」，形成路等 08 的
-// 回指 / 11 接上后由后继票补）。
+// PP 评价已记录 → FanOut（先 SA 供应商预期成本形成，sa-cc/01，裁决 (c) 范围只到「命令凑不齐 → 未决」，形成路等
+// 08 的回指 / 11 接上后由后继票补；再 SA 预估客户费用形成，ADR-0190 决定五、六。两路各认一个方向，另一个方向的评价
+// 在各自那一路入账走掉）。
 // 各类 FanOut 同一 EventType 各投两个独立消费者，顺序一律先 VE 后 PS/NR，避免把投影或
 // 补派生堵在资格墙、终局规则墙或路由证据墙上；SA 发起 SELL 评价那一路排在既有那一路之后，
 // 计费不挡履约与追踪。
@@ -895,6 +914,18 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: buy evaluation recorded undecided translation: %w", err)
 	}
+	sellEvaluations, err := formEstimatedCustomerChargeOnSellEvaluationConsumer(db, inboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	routedSellEvaluations, err := dispatch.WithUndecidedSentinels(sellEvaluations, sellEvaluationRecordedUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: sell evaluation recorded undecided translation: %w", err)
+	}
+	evaluationRecordedFan, err := dispatch.FanOut(routedBuyEvaluations, routedSellEvaluations)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: evaluation recorded fan-out: %w", err)
+	}
 
 	evaluationRequests, err := formEvaluationOnEvaluationRequestConsumer(db, outboxStore, inboxStore, clock)
 	if err != nil {
@@ -1023,7 +1054,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 			psinbox.CarrierFirstEffectivePickupRegisteredEventType: routedPickupJudgments,
 			ccinbox.ExternalFundsFactAdoptedEventType:              routedFundsFacts,
 			sainbox.DutyPaymentVerificationFormedEventType:         routedVerifications,
-			sainbox.BuyEvaluationRecordedEventType:                 routedBuyEvaluations,
+			sainbox.BuyEvaluationRecordedEventType:                 evaluationRecordedFan,
 			ppinbox.EvaluationRequestSubmittedEventType:            routedEvaluationRequests,
 			ppinbox.SellEvaluationRequestSubmittedEventType:        routedSellEvaluationRequests,
 			veinbox.TransportHandoverRegisteredEventType:           veHandoverRouted,
@@ -2720,6 +2751,64 @@ func formSupplierExpectedCostOnBuyEvaluationConsumer(
 	consumer, err := sainbox.NewBuyEvaluationRecordedConsumer(db.Transactor(), inboxStore, processing)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: buy evaluation recorded consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// formEstimatedCustomerChargeOnSellEvaluationConsumer 接 ADR-0190 决定五、六那条线：同一封
+// `parcel-pricing.evaluation.recorded` 扇出到这里 → SA 的 SELL 消费门按（租户 + 评价标识）经消费侧适配器读 PP 评价库
+// → 不是 SELL·客户费用的放过 → 形成编排外层按评价回指读回 SELL 请求、经费用项目映射册映到唯一费用项目、以请求派生的
+// 费用标识调既有的 FormSellCustomerChargeHandler，并在同一事务里把请求改记为结论。跨上下文翻译只在 SA 的
+// `adapters/parcelpricing`；SA application 不 import PP。
+//
+// 形成编排本体与外层读的是同一只 SELL 读口：外层看结果、回指与费用代码，本体按评价引用自己再读金额，命令上不带金额
+// （FormSellCustomerChargeCommand 头注）。映射册与请求册都是真册，空册时答`待判断`或「不归本编排」，不替租户配。
+func formEstimatedCustomerChargeOnSellEvaluationConsumer(
+	db *bentopg.DB,
+	inboxStore *inbox.Store,
+	clock systemClock,
+) (dispatch.Consumer, error) {
+	evaluations, err := pppostgres.NewEvaluations(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: pricing evaluation store: %w", err)
+	}
+	view, err := sapricing.NewSellEvaluationAdapter(evaluations)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: sell evaluation view: %w", err)
+	}
+	charges, err := sapostgres.NewCustomerCharges(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: customer charge store: %w", err)
+	}
+	formSell, err := saapplication.NewFormSellCustomerChargeHandler(view, charges)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: form sell customer charge: %w", err)
+	}
+	requests, err := sapostgres.NewSellEvaluationRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: settlement sell evaluation request register: %w", err)
+	}
+	mappings, err := sapostgres.NewFeeItemMappings(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: fee item mapping register: %w", err)
+	}
+	formation, err := saapplication.NewFormEstimatedCustomerChargeHandler(saapplication.FormEstimatedCustomerChargeDeps{
+		Requests:    requests,
+		Conclusions: requests,
+		Mappings:    mappings,
+		Charges:     formSell,
+		Clock:       clock,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: form estimated customer charge: %w", err)
+	}
+	processing, err := sapricing.NewFormOnSellEvaluationRecordedAdapter(view, formation)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: form on sell evaluation recorded: %w", err)
+	}
+	consumer, err := sainbox.NewSellEvaluationRecordedConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: sell evaluation recorded consumer: %w", err)
 	}
 	return consumer, nil
 }
