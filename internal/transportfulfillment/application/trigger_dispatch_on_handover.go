@@ -247,22 +247,28 @@ func (handler *TriggerDispatchOnHandoverHandler) Trigger(
 }
 
 func handoverKeyOf(command TriggerDispatchOnHandoverCommand) (ports.TransportHandoverKey, bool) {
-	if strings.TrimSpace(command.TenantID.String()) == "" {
+	return transportHandoverKeyOf(command.TenantID, command.Object, command.Scope, command.Version)
+}
+
+// transportHandoverKeyOf 把交接信封上的四维过构造门。自消费交接信封的各路共用这一处：键维与登记册同形，各写一份就会
+// 有一路漏掉某一维的门。
+func transportHandoverKeyOf(tenant domain.TenantID, rawObject, rawScope, rawVersion string) (ports.TransportHandoverKey, bool) {
+	if strings.TrimSpace(tenant.String()) == "" {
 		return ports.TransportHandoverKey{}, false
 	}
-	object, err := domain.NewCarriedObjectReference(command.Object)
+	object, err := domain.NewCarriedObjectReference(rawObject)
 	if err != nil {
 		return ports.TransportHandoverKey{}, false
 	}
-	scope, err := domain.NewHandoverScopeReference(command.Scope)
+	scope, err := domain.NewHandoverScopeReference(rawScope)
 	if err != nil {
 		return ports.TransportHandoverKey{}, false
 	}
-	version, err := domain.NewHandoverResultVersion(command.Version)
+	version, err := domain.NewHandoverResultVersion(rawVersion)
 	if err != nil {
 		return ports.TransportHandoverKey{}, false
 	}
-	return ports.TransportHandoverKey{TenantID: command.TenantID, Object: object, Scope: scope, Version: version}, true
+	return ports.TransportHandoverKey{TenantID: tenant, Object: object, Scope: scope, Version: version}, true
 }
 
 func dispatchOnHandoverUndecided(reason DispatchOnHandoverUndecidedReason) TriggerDispatchOnHandoverResult {
