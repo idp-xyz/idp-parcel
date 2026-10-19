@@ -81,5 +81,32 @@ S
 
 ### 偏离与待裁
 
-- 演示判据由生产装配上的真库用例取证（只记 `S`），没有起进程按演示脚本重走，同票 32、33 的做法。演示种子未改，没有重灌。演示脚本本就不写这个键，没加补记。
+- 演示判据先由生产装配上的真库用例取证（只记 `S`），交评审时没有起进程。评审后已在一次性库上灌种子、起 `parcel-api` 与 `parcel-dispatch` 补走，见「评审记录」第 4 条。演示种子未改。演示脚本本就不写这个键，没加补记。
 - 待裁（TF owner）：退役键何时可删；要不要告知设备键已退役（代决 1、2）。
+
+## 评审记录（2026-10-19，隔离评审后作者子代理修订）
+
+阻断 0 项，非阻断 7 项（1 项建议进 main 前修）。逐项去向：
+
+1. **`read_departure_gate.go` 的 `DepartureGateReader.Read` 头注前后相反**（建议进 main 前修）：第一段写「出发一律照问」，第二段写「缺哪样就停在哪样、不问关务」。已修：改为「问不问关务不看设备自报：设门与否由关务按对象与起讫判（ADR-0205 决定三）」，去掉「一律」和带历史口吻的「本就」。
+2. **`MovementFactPayload` 头注穷举另一个包的字段差集**（「命令里没有的只有退役键」）：已修，改为「退役键 `gateRequired` 不进命令，见该字段」，不再断言差集只有这一格。
+3. **注释带变更叙述**（「类型照旧是 bool」「与退役前一样」）：已修，改为「类型是 bool」「给的不是布尔是坏报文（400）」。同一字段注释里的「设备自报失了权威」也是叙述口吻，一并改成现状陈述「设备自报不算数」。
+4. **演示没起进程，与方案「拆票表」首句不符**：已补走，证据记 `S`，走完删库。
+   - 环境：一次性库照 `seed.sh` 原样灌，退 0。`parcel-api` 配操作者渠道与治理自授权，`parcel-dispatch` 用演示动线脚本里的派发参数。
+   - 请求：配置员令牌，加上 OFFSITE 合成设备三头（`SYN-DEVICE-OFFSITE-CN-EAST-01` / `OFFSITE` / `SYN-OFFSITE-CN-EAST`）。同一班次、地点与时刻，带同一份放行凭据，`POST /transport-fulfillment/movement-facts` 报三条出发，载荷分别带 `"gateRequired":false`、不带、带 `true`。
+   - 结果：
+     - 三条都答 `201` `MOVEMENT_FACT_RECORDED`。答复除 `fact` 外逐字相同，`gateReading` 都是 `{"answer":"UNDECIDED","stops":["SEGMENT_NOT_DECLARED","SCHEDULE_NOT_REGISTERED"]}`，`gateClearance` 照回。
+     - 拿带 `true` 那条的身份，分别带 `false`、不带再报：都答 `200` `MOVEMENT_FACT_VERSION_EXISTS`，回显同一份读数。
+     - 带 `"gateRequired":"no"` 答 `400` `MALFORMED_REQUEST`。
+     - 库面三行读数都是 `UNDECIDED`，凭据照存。`transport-fulfillment.movement-fact.recorded` 只入队三条（重报没有多入），派发进程都投成 `PUBLISHED`，三条载荷除事实标识外相同。
+   - 没走的：这次没有声明段，`NOT_GUARDED` 那一格要先登班次并经交接口立段、让包裹在控，进程演示没搭这条链。这一格仍由真库用例 `TestTheRetiredGateRequiredKeyChangesNothingOnTheDemoDeparture` 钉。
+5. **`work_fact_intake_test.go` 在 idp-parcel-9b 的地盘**：本轮不动，交进 main 的会话办。进 main 前须向 9b 确认它没改这个文件；若有冲突，只会落在 `TestWorkFactCommandIntakeTranslatesMovementFactWithTheAuthenticatedTenantAndSource` 的判断条件和头注那一句。本子代理够不着 9b，它不在本机。
+6. **`AT-TF-113` 结果栏「三种写法」与凭据那一种混在一起，「照样逐对象问关务」只有间接佐证**：两处都改了。
+   - UC-TF-005 那一行改成「带真、带假、不带均 201」。
+   - `TestADepartureAsksCustomsForEveryObjectUnderControlWithTheScheduleDirection` 的 Covers 补上「AT-TF-113 编排半边『照样逐对象问关务』」，AT 覆盖盘点的 `AT-TF-113` 行把它补回来。
+7. **`docs/adr/README.md` 里 ADR-0205 登了两行**（存量，不在本票 diff 内）：另立 [74](./74-adr-readme-lists-adr-0205-twice.md)，号取协调方分给本票的 74–75。README 是跨票热点，只许追加，本票照旧不改它。
+
+修订后验证：
+
+- `go build ./...`、`go vet ./internal/transportfulfillment/... ./cmd/...`、`gofmt -l internal cmd` 都干净。
+- 带 DSN 和 `-p 1 -count=1` 跑 `./internal/transportfulfillment/...`、`./internal/architecture/`、`./cmd/parcel-api/`、`./cmd/parcel-dispatch/`，全部 ok。
