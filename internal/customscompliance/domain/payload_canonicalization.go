@@ -183,7 +183,9 @@ func CanonicalizeDispositionFactSetPayload(facts []string) ([]byte, string, erro
 
 // CanonicalizeCredentialRegistrationPayload 定形「登记监管凭证」。字段是登记册原先逐字段比的
 // 那一组：机构、持有人、程序、期限两端与次数额度；凭证身份是查找键，不进摘要。额度未提供
-// 写 null，与「零次」分开。
+// 写 null，与「零次」分开。期限两端按 AtRegistryPrecision 拼串：在册一侧是从登记册读回的，命令一侧是原值，按纳秒拼
+// 会把同一份重放判成冲突。这一形状的摘要从不落库、两侧都现算，所以就地改它没有已存摘要要认；canonicalInstant 本身
+// 不改，其余口的摘要是落库前算好存下的。
 func CanonicalizeCredentialRegistrationPayload(credential RegulatoryCredential) ([]byte, string, error) {
 	var uses *int
 	if quota, provided := credential.Uses(); provided {
@@ -204,8 +206,8 @@ func CanonicalizeCredentialRegistrationPayload(credential RegulatoryCredential) 
 		Issuer:           credential.Issuer().String(),
 		Holder:           credential.Holder().String(),
 		Procedure:        credential.Procedure().String(),
-		ValidFrom:        canonicalInstant(credential.ValidFrom()),
-		ValidTo:          canonicalInstant(credential.ValidTo()),
+		ValidFrom:        canonicalInstant(AtRegistryPrecision(credential.ValidFrom())),
+		ValidTo:          canonicalInstant(AtRegistryPrecision(credential.ValidTo())),
 		Uses:             uses,
 	})
 }

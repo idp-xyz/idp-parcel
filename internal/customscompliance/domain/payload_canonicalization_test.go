@@ -89,14 +89,14 @@ func TestCommandPayloadsRoundTripAsCCC1(t *testing.T) {
 		},
 		{
 			name:     "credential registration",
-			document: `{"canonicalization":"CCC-1","face":"REGISTER_CREDENTIAL","issuer":"AUTH","holder":"HOLDER","procedure":"PROC","valid_from":"2026-03-05T02:11:12.345678901Z","valid_to":"2026-03-06T02:11:12.345678901Z","uses":12}`,
-			digest:   "CCC-1:d982368033045e3bfc00d1c0659d5cc34dbac6ca84e61654213f351e37be595c",
+			document: `{"canonicalization":"CCC-1","face":"REGISTER_CREDENTIAL","issuer":"AUTH","holder":"HOLDER","procedure":"PROC","valid_from":"2026-03-05T02:11:12.345678Z","valid_to":"2026-03-06T02:11:12.345678Z","uses":12}`,
+			digest:   "CCC-1:ea7d20f66b360e567795dc59a3f4eb6df15ce9ba68f70d91954ef819f60abed4",
 			call:     func() ([]byte, string, error) { return canonicalCredential(at, 12) },
 		},
 		{
 			name:     "credential registration without a uses quota",
-			document: `{"canonicalization":"CCC-1","face":"REGISTER_CREDENTIAL","issuer":"AUTH","holder":"HOLDER","procedure":"PROC","valid_from":"2026-03-05T02:11:12.345678901Z","valid_to":"2026-03-06T02:11:12.345678901Z","uses":null}`,
-			digest:   "CCC-1:fe6795bc8bcc404dc86a64e5a005411d2366e60e5c3ab243949da9f4664eb041",
+			document: `{"canonicalization":"CCC-1","face":"REGISTER_CREDENTIAL","issuer":"AUTH","holder":"HOLDER","procedure":"PROC","valid_from":"2026-03-05T02:11:12.345678Z","valid_to":"2026-03-06T02:11:12.345678Z","uses":null}`,
+			digest:   "CCC-1:1b27f968843dddf8e3278bc7e9a2fb90353144a8cac8c07b47788057f4da4dd5",
 			call:     func() ([]byte, string, error) { return canonicalCredential(at, 0) },
 		},
 	}
@@ -146,5 +146,43 @@ func TestStoredDigestIsComparedWithinItsOwnShape(t *testing.T) {
 				t.Fatalf("CompareStoredDigest(%q) = %d, want %d", testCase.stored, got, testCase.want)
 			}
 		})
+	}
+}
+
+// Covers: 凭证登记的 CCC-1 形状按登记册存得下的精度认期限两端（AtRegistryPrecision）——命令一侧带纳秒、在册一侧读回只到微秒，
+// 两份是同一张凭证；跨一微秒才是另一张。两个方向都断言：纳秒版对微秒版、微秒版对纳秒版，期限两端各钉一次。
+func TestCredentialRegistrationShapeJudgesValidityAtRegistryPrecision(t *testing.T) {
+	digestOf := func(from, to time.Time) string {
+		t.Helper()
+		credential, err := domain.RegisterCredential(
+			mustValue(t, domain.NewCredentialID, "SYN-CRED-TFA11"),
+			mustValue(t, domain.NewRegulatoryAuthorityReference, "SYN-AUTHORITY-TFA11"),
+			mustValue(t, domain.NewCredentialHolderReference, "SYN-HOLDER-TFA11"),
+			mustValue(t, domain.NewCustomsProcedureReference, "SYN-PROC-TFA11"),
+			from, to, 3)
+		if err != nil {
+			t.Fatalf("构造凭证：%v", err)
+		}
+		_, digest, err := domain.CanonicalizeCredentialRegistrationPayload(credential)
+		if err != nil {
+			t.Fatalf("定形：%v", err)
+		}
+		return digest
+	}
+	from := time.Date(2026, 1, 1, 0, 0, 0, 123456789, time.UTC)
+	to := time.Date(2027, 1, 1, 0, 0, 0, 1, time.UTC)
+	nanos := digestOf(from, to)
+	micros := digestOf(from.Truncate(time.Microsecond), to.Truncate(time.Microsecond))
+	if nanos != micros {
+		t.Fatalf("纳秒版对微秒版判成两张：%s ≠ %s", nanos, micros)
+	}
+	if micros != digestOf(from.In(time.FixedZone("CST", 8*3600)), to) {
+		t.Fatal("微秒版对纳秒版（换偏移写法）判成两张")
+	}
+	if digestOf(from.Add(time.Microsecond), to) == micros {
+		t.Fatal("起点跨一微秒仍判成同一张")
+	}
+	if digestOf(from, to.Add(time.Microsecond)) == nanos {
+		t.Fatal("终点跨一微秒仍判成同一张")
 	}
 }
