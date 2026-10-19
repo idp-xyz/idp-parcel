@@ -260,3 +260,44 @@ func TestAGatedDepartureIsBlockedWithoutClearance(t *testing.T) {
 		})
 	}
 }
+
+// Covers: 票 tf-face-algebra/14——移动事实更正门与重建门对「更正时刻早于发生时刻」口径一致：比的是更正后那一版自己的
+// 发生时刻（重建看得见的就是这一行），早于它拒；同刻、晚于它照常，且照常形成的那一版重建得回来。
+func TestAMovementFactCorrectionCannotPrecedeItsOwnOccurrence(t *testing.T) {
+	fact, err := domain.RecordMovementFact(movementSpec(t, domain.InTransitFact))
+	if err != nil {
+		t.Fatalf("record movement: %v", err)
+	}
+	location := mustValue(t, domain.NewMovementLocationReference, "SYN-LOC-2")
+	source := mustValue(t, domain.NewMovementSourceReference, "SYN-SOURCE-2")
+	version := mustValue(t, domain.NewMovementFactVersion, "SYN-MF-V2")
+
+	for name, pair := range map[string]struct{ occurredAt, correctedAt time.Time }{
+		"更正时刻早于更正后的发生时刻一小时": {movementSeenAt, movementSeenAt.Add(-time.Hour)},
+		"发生时刻改晚到更正时刻之后":     {movementSeenAt.Add(3 * time.Hour), movementSeenAt.Add(2 * time.Hour)},
+	} {
+		if _, err := fact.Correct(location, pair.occurredAt, source, version, pair.correctedAt); !errors.Is(err, domain.ErrInvalidMovementFact) {
+			t.Errorf("%s：err = %v，期望 ErrInvalidMovementFact", name, err)
+		}
+	}
+
+	for name, pair := range map[string]struct{ occurredAt, correctedAt time.Time }{
+		"同刻": {movementSeenAt, movementSeenAt},
+		"更正时刻早于原发生时刻、不早于更正后的": {movementSeenAt.Add(-2 * time.Hour), movementSeenAt.Add(-time.Hour)},
+	} {
+		corrected, err := fact.Correct(location, pair.occurredAt, source, version, pair.correctedAt)
+		if err != nil {
+			t.Errorf("%s：err = %v，期望照常", name, err)
+			continue
+		}
+		correctedAt, _ := corrected.CorrectedAt()
+		predecessor, _ := corrected.Corrects()
+		if _, err := domain.RehydrateMovementFact(domain.RehydrateMovementFactSpec{
+			TenantID: corrected.TenantID(), Fact: corrected.Fact(), Schedule: corrected.Schedule(), Kind: corrected.Kind(),
+			Location: corrected.Location(), Source: corrected.Source(), Version: corrected.Version(),
+			OccurredAt: corrected.OccurredAt(), Corrects: predecessor, CorrectedAt: correctedAt,
+		}); err != nil {
+			t.Errorf("%s：更正版本重建不回：%v", name, err)
+		}
+	}
+}

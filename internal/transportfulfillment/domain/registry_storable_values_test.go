@@ -121,11 +121,12 @@ func TestAMovementFactCorrectionAtTheZeroInstantOnTheRegistryIsRefused(t *testin
 	location := mustValue(t, domain.NewMovementLocationReference, "SYN-LOC-2")
 	source := mustValue(t, domain.NewMovementSourceReference, "SYN-SOURCE-2")
 	next := mustValue(t, domain.NewMovementFactVersion, "SYN-MF-V2")
+	// 判更正时刻那几格，更正后的发生时刻取零点前一纳秒：让「更正时刻不早于发生时刻」那道门放行，只剩非零门在判。
 	for name, at := range subMicroAfterZero {
 		if _, err := fact.Correct(location, at, source, next, movementSeenAt); !errors.Is(err, domain.ErrInvalidMovementFact) {
 			t.Fatalf("发生时刻 %s：err = %v，期望 ErrInvalidMovementFact", name, err)
 		}
-		if _, err := fact.Correct(location, movementSeenAt, source, next, at); !errors.Is(err, domain.ErrInvalidMovementFact) {
+		if _, err := fact.Correct(location, beforeRegistryZero, source, next, at); !errors.Is(err, domain.ErrInvalidMovementFact) {
 			t.Fatalf("更正时刻 %s：err = %v，期望 ErrInvalidMovementFact", name, err)
 		}
 	}
@@ -133,7 +134,7 @@ func TestAMovementFactCorrectionAtTheZeroInstantOnTheRegistryIsRefused(t *testin
 	if _, err := fact.Correct(location, at, source, next, movementSeenAt); err != nil {
 		t.Fatalf("发生时刻零点后 1µs：%v", err)
 	}
-	if _, err := fact.Correct(location, movementSeenAt, source, next, at); err != nil {
+	if _, err := fact.Correct(location, beforeRegistryZero, source, next, at); err != nil {
 		t.Fatalf("更正时刻零点后 1µs：%v", err)
 	}
 }

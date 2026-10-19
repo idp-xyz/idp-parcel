@@ -399,6 +399,10 @@ func (fact TransportMovementFact) Correct(
 	if version == fact.version {
 		return TransportMovementFact{}, ErrInvalidMovementFact
 	}
+	// 与 RehydrateMovementFact 同一道：比的是更正后那一版自己的发生时刻，重建与库面约束看得见的也只有这一行。
+	if correctedAt.Before(occurredAt) {
+		return TransportMovementFact{}, ErrInvalidMovementFact
+	}
 	corrected := fact
 	corrected.location = location
 	corrected.occurredAt = occurredAt.UTC()
