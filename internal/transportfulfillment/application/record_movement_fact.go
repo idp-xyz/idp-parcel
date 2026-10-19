@@ -47,8 +47,10 @@ func (outcome MovementFactOutcome) String() string {
 // RecordMovementFactCommand 携带登记一条实际移动事实的全部输入。
 //
 // Segment、Resource 是登记方声明的段与资源，可缺（ADR-0205 决定四）。GateClearance 是设备出示的放行凭据，只作证据原样
-// 保存，挂到移动或到达上领域构造门会拒。GateRequired 收而不读（ADR-0205 决定三）：设门与否由关务按对象与起讫判，设备
-// 不能凭自报把门关掉；字段暂留，是因为一线入口仍按原形透传它，删它要随那一侧一起改。
+// 保存，挂到移动或到达上领域构造门会拒。
+//
+// 命令不带设备自报的「要不要门禁」：设门与否由关务按对象与起讫判，设备不能凭自报把门关掉（ADR-0205 决定三）。收而不读的
+// 一格迟早会被人读，所以不留；线格式上那个键退役在适配器一层（tfhttp.MovementFactPayload），照收照弃、到不了这里。
 type RecordMovementFactCommand struct {
 	TenantID      domain.TenantID
 	Fact          string
@@ -60,7 +62,6 @@ type RecordMovementFactCommand struct {
 	OccurredAt    time.Time
 	Segment       string
 	Resource      string
-	GateRequired  bool
 	GateClearance string
 }
 

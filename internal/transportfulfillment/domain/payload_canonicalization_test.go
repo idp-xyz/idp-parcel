@@ -199,8 +199,9 @@ func TestCommandPayloadsRoundTripAsTFC1(t *testing.T) {
 			},
 		},
 		{
-			// 票 tf-face-algebra/08：业务时间照 ADR-0023 不进摘要；来源与 GateRequired 不是参数，文档上也就没有这几格。声明的段与资源
-			// 是登记方报的内容，进文档；出发门禁读数是登记时问来的判断，不是参数（ADR-0205）。
+			// 票 tf-face-algebra/08：业务时间照 ADR-0023 不进摘要；来源不是参数，文档上也就没有这一格，设备自报的 gateRequired 退役在
+			// 线格式一层、到不了命令（ADR-0205 文末复核记录）。声明的段与资源是登记方报的内容，进文档；出发门禁读数是登记时问来的
+			// 判断，不是参数（ADR-0205）。
 			name:     "movement fact with segment, resource and gate clearance",
 			document: `{"canonicalization":"TFC-1","face":"RECORD_MOVEMENT_FACT","schedule":"SCH","kind":"DEPARTURE","location":"LOC","segment":"SEG","resource":"RES","gate_clearance":"GATE"}`,
 			digest:   "TFC-1:668b7af4210d7694ef4eb66c9c06320b08f863c5562283ff078a45b4781ecfbd",

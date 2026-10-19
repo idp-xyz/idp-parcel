@@ -288,14 +288,13 @@ func TestADepartureIsRecordedWhateverTheGateReadingSays(t *testing.T) {
 	}
 }
 
-// Covers: AT-TF-113 编排半边——设备自报的 gateRequired 不读（真也好假也好都不挡、不改读数）；出示的放行凭据原样保全为证据，
-// 读数照样是问来的那一份。
-func TestTheDeviceGateFlagIsNotReadAndItsClearanceIsKeptAsEvidence(t *testing.T) {
+// Covers: AT-TF-113 编排半边——出示的放行凭据原样保全为证据，读数照样是问来的那一份，凭据不改它。设备自报的「要不要门禁」
+// 命令里没有，退役键的那一半在线格式上钉（tfhttp 与 cmd/parcel-api 的移动事实用例）。
+func TestTheDeviceClearanceIsKeptAsEvidenceAndDoesNotChangeTheReading(t *testing.T) {
 	registry := newMovementFactRegistry()
 	command := recordMovementCommand(t)
 	command.Kind = domain.DepartureFact
 	command.Segment = "segment-1"
-	command.GateRequired = true
 	command.GateClearance = "cc-clearance/v1"
 
 	result, err := newMovementFactHandler(registry).Record(t.Context(), command, readingFor(t, command, domain.DepartureGateNotGuarded))
@@ -311,13 +310,7 @@ func TestTheDeviceGateFlagIsNotReadAndItsClearanceIsKeptAsEvidence(t *testing.T)
 		t.Fatalf("凭据没有随行保全：%q presented=%v", clearance, presented)
 	}
 	if reading, _ := saved.Fact.GateReading(); reading.Answer() != domain.DepartureGateNotGuarded {
-		t.Fatalf("读数 = %s——自报的 gateRequired 改了问来的读数", reading.Answer())
-	}
-
-	arrival := recordMovementCommand(t)
-	arrival.GateRequired = true
-	if result, err := record(t, newMovementFactHandler(newMovementFactRegistry()), arrival); err != nil || result.Outcome() != application.MovementFactRecorded {
-		t.Fatalf("到达自报要门禁：outcome=%q err=%v，字段不读就不该挡", result.Outcome(), err)
+		t.Fatalf("读数 = %s——出示的凭据改了问来的读数", reading.Answer())
 	}
 }
 
@@ -342,8 +335,8 @@ func TestAGateReadingInTheWrongPlaceIsAWiringError(t *testing.T) {
 // SOURCE_CONFLICT，不回显、不落库、不另起版本。作业事实族的调用方是离线队列、2xx 即出队，把异内容答成已有版本会让另一台
 // 设备的真实作业被静默吞掉（ADR-0023 后果节说的判错方向）。
 //
-// 业务时间照 ADR-0023 不进摘要，所以只差发生时间仍是重放；来源由这一面注入、GateRequired 不读、门禁读数是登记时问来的判断，三者
-// 都不构成内容。声明的段与资源是登记方报的，构成内容。
+// 业务时间照 ADR-0023 不进摘要，所以只差发生时间仍是重放；来源由这一面注入、门禁读数是登记时问来的判断，两者都不构成内容。
+// 声明的段与资源是登记方报的，构成内容。
 func TestTheSameVersionIsAReplayOnlyWhenItsContentIsTheSame(t *testing.T) {
 	arrival := func(t *testing.T) application.RecordMovementFactCommand { return recordMovementCommand(t) }
 	clearedDeparture := func(t *testing.T) application.RecordMovementFactCommand {
@@ -351,7 +344,6 @@ func TestTheSameVersionIsAReplayOnlyWhenItsContentIsTheSame(t *testing.T) {
 		command.Kind = domain.DepartureFact
 		command.Segment = "segment-1"
 		command.Resource = "truck-1"
-		command.GateRequired = true
 		command.GateClearance = "cc-clearance/v1"
 		return command
 	}
@@ -371,9 +363,6 @@ func TestTheSameVersionIsAReplayOnlyWhenItsContentIsTheSame(t *testing.T) {
 		{"只差来源", arrival, func(command *application.RecordMovementFactCommand) {
 			command.Source = "other-scan/v2"
 		}, application.MovementFactVersionExists},
-		{"带放行的出发只差 GateRequired", clearedDeparture, func(command *application.RecordMovementFactCommand) {
-			command.GateRequired = false
-		}, application.MovementFactVersionExists},
 		{"改种类", arrival, func(command *application.RecordMovementFactCommand) {
 			command.Kind = domain.InTransitFact
 		}, application.MovementFactSourceConflict},
@@ -386,8 +375,7 @@ func TestTheSameVersionIsAReplayOnlyWhenItsContentIsTheSame(t *testing.T) {
 		{"换放行引用", clearedDeparture, func(command *application.RecordMovementFactCommand) {
 			command.GateClearance = "cc-clearance/v2"
 		}, application.MovementFactSourceConflict},
-		{"去掉门禁与放行", clearedDeparture, func(command *application.RecordMovementFactCommand) {
-			command.GateRequired = false
+		{"去掉放行", clearedDeparture, func(command *application.RecordMovementFactCommand) {
 			command.GateClearance = ""
 		}, application.MovementFactSourceConflict},
 		{"换声明的段", clearedDeparture, func(command *application.RecordMovementFactCommand) {

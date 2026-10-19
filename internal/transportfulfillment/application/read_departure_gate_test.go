@@ -177,12 +177,10 @@ func stopWords(reading domain.DepartureGateReading) []string {
 }
 
 // Covers: AT-TF-110 编排半边——段里出发那一刻在控的每一件都问关务，起讫取班次方向、时点取出发的业务时间；整格取最重。
-// AT-TF-113：设备自报 gateRequired=false 照样问——设门与否由关务按对象与起讫判，不由设备说。
 func TestADepartureAsksCustomsForEveryObjectUnderControlWithTheScheduleDirection(t *testing.T) {
 	fixture := newDepartureGateFixture(t, "parcel-2", "parcel-1")
 	fixture.customs.answers["parcel-2"] = domain.DepartureGateBlocked
 	command := departureCommand(t)
-	command.GateRequired = false
 
 	reading, err := fixture.reader(t).Read(t.Context(), command)
 	if err != nil {
@@ -192,7 +190,7 @@ func TestADepartureAsksCustomsForEveryObjectUnderControlWithTheScheduleDirection
 		t.Fatalf("整格 = %s, want BLOCKED", reading.Answer())
 	}
 	if len(fixture.customs.queries) != 2 {
-		t.Fatalf("问了关务 %d 次, want 2（gateRequired=false 照样问）", len(fixture.customs.queries))
+		t.Fatalf("问了关务 %d 次, want 2", len(fixture.customs.queries))
 	}
 	for _, query := range fixture.customs.queries {
 		if query.From.String() != "NODE-SHA" || query.To.String() != "NODE-SZX" || !query.At.Equal(movedAtFixture) ||

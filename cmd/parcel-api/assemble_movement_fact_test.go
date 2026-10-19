@@ -28,9 +28,8 @@ import (
 var movementFactOccurredAt = time.Date(2026, 8, 22, 6, 0, 0, 0, time.UTC)
 
 // Covers: `/transport-fulfillment/movement-facts` 的第二参是真编排（票 tf-segment-lifecycle-closure/05、demo-chain-gaps/32）——移动
-// 事实登记册在真实 PostgreSQL 上装得起来，事务边界成立（重放走已有版本，证首笔真的提交了）。出发一律落册：自报要门禁却没带凭据、
-// 没声明段、班次也没登，照样 MOVEMENT_FACT_RECORDED，读数停在本上下文这一侧答未决，与事实同一行（AT-TF-114 真库半边）。测试输入是
-// 隔离合成，只记 `S`。
+// 事实登记册在真实 PostgreSQL 上装得起来，事务边界成立（重放走已有版本，证首笔真的提交了）。出发一律落册：没声明段、班次也没登，
+// 照样 MOVEMENT_FACT_RECORDED，读数停在本上下文这一侧答未决，与事实同一行（AT-TF-114 真库半边）。测试输入是隔离合成，只记 `S`。
 func TestTheWiredMovementFactAnswersHonestlyAgainstARealDatabase(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -66,7 +65,6 @@ func TestTheWiredMovementFactAnswersHonestlyAgainstARealDatabase(t *testing.T) {
 	}
 
 	departure := recordMovementFactCommand(t, "SYN-MOVEMENT-DEP-1", tfdomain.DepartureFact)
-	departure.GateRequired = true
 	result, err := movement.Record(t.Context(), departure)
 	if err != nil {
 		t.Fatalf("登记出发：%v", err)
@@ -308,6 +306,87 @@ func TestADemoSelfOperatedDepartureFromShanghaiToShenzhenAnswersCreatedNotGuarde
 	}
 	if !strings.HasPrefix(judgement, "AADJ-") || action != "LOADING_DEPARTURE" || cause != "OUTSIDE_CUSTOMS_BOOKS" {
 		t.Fatalf("库面逐对象依据 = %s %s %s，关务判断标识与依据原文只落册", judgement, action, cause)
+	}
+}
+
+// Covers: AT-TF-113 真库半边与票 demo-chain-gaps/68 的演示判据（证据 S）——演示动线上同一段、同一刻的三条出发，载荷分别带
+// `"gateRequired":true`、带 `false`、不带，经生产作业事实渠道各答 201 MOVEMENT_FACT_RECORDED，答复除事实标识外逐字相同：读数、段与
+// 放行凭据都在答复里，放行凭据也照存在库面那一行。内容摘要两侧现算、不存，于是拿重放验它：用带 `true` 那一条的身份换另两种写法
+// 再报，答已有版本并回显同一份读数——退役键若进了摘要，这里会答 SOURCE_CONFLICT。
+func TestTheRetiredGateRequiredKeyChangesNothingOnTheDemoDeparture(t *testing.T) {
+	line := newDepartureLine(t)
+	line.handOver("SYN-SEG-SHA-SZX-68", "SYN-PARCEL-68-01")
+	endpoint := tfhttp.NewRecordMovementFactEndpoint(workFactTransportForTest(t), line.movement)
+	post := func(fact, retiredKey string) (int, map[string]any) {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodPost, "/transport-fulfillment/movement-facts", strings.NewReader(
+			`{"fact":"`+fact+`","schedule":"`+departureLineSchedule+`","kind":"DEPARTURE","location":"SYN-NODE-SHA-HUB",`+
+				`"version":"v1","occurredAt":"2026-10-21T22:05:00+08:00","segment":"SYN-SEG-SHA-SZX-68",`+
+				`"gateClearance":"SYN-GATE/release-68"`+retiredKey+`}`))
+		stampWorkFact(request, "OFFSITE", "SYN-OFFSITE-01", "SYN-DEVICE-OFFSITE")
+		response := httptest.NewRecorder()
+		endpoint.ServeHTTP(response, request)
+		var answer map[string]any
+		if err := json.Unmarshal(response.Body.Bytes(), &answer); err != nil {
+			t.Fatalf("decode %s：%v", response.Body.String(), err)
+		}
+		return response.Code, answer
+	}
+	// 去掉事实标识与答格，余下的按键排序成串：读数、段、放行凭据、班次、地点、业务时间都在里面。
+	rest := func(answer map[string]any) string {
+		t.Helper()
+		kept := map[string]any{}
+		for key, value := range answer {
+			if key != "fact" && key != "outcome" {
+				kept[key] = value
+			}
+		}
+		raw, err := json.Marshal(kept)
+		if err != nil {
+			t.Fatalf("encode：%v", err)
+		}
+		return string(raw)
+	}
+
+	variants := []struct{ fact, retiredKey string }{
+		{"SYN-MOVE-68-TRUE", `,"gateRequired":true`},
+		{"SYN-MOVE-68-FALSE", `,"gateRequired":false`},
+		{"SYN-MOVE-68-ABSENT", ``},
+	}
+	var first string
+	for _, variant := range variants {
+		status, answer := post(variant.fact, variant.retiredKey)
+		if status != http.StatusCreated || answer["outcome"] != "MOVEMENT_FACT_RECORDED" {
+			t.Fatalf("%s：HTTP %d %v, want 201 MOVEMENT_FACT_RECORDED", variant.fact, status, answer)
+		}
+		reading, _ := answer["gateReading"].(map[string]any)
+		if reading["answer"] != "NOT_GUARDED" || answer["gateClearance"] != "SYN-GATE/release-68" {
+			t.Fatalf("%s：答复 = %v，want 读数不受门禁、放行凭据照回", variant.fact, answer)
+		}
+		if first == "" {
+			first = rest(answer)
+		} else if got := rest(answer); got != first {
+			t.Fatalf("%s 的答复与带 true 那一条不同：\n%s\n%s", variant.fact, got, first)
+		}
+		var stored, clearance string
+		if err := line.pool.QueryRow(t.Context(),
+			`SELECT gate_reading, gate_clearance FROM transport_fulfillment.transport_movement_fact WHERE fact_ref = $1`,
+			variant.fact).Scan(&stored, &clearance); err != nil {
+			t.Fatalf("查库面 %s：%v", variant.fact, err)
+		}
+		if stored != "NOT_GUARDED" || clearance != "SYN-GATE/release-68" {
+			t.Fatalf("%s 库面 = %s / %s", variant.fact, stored, clearance)
+		}
+	}
+
+	for _, retiredKey := range []string{`,"gateRequired":false`, ``} {
+		status, answer := post("SYN-MOVE-68-TRUE", retiredKey)
+		if status != http.StatusOK || answer["outcome"] != "MOVEMENT_FACT_VERSION_EXISTS" {
+			t.Fatalf("换写法%q重报：HTTP %d %v, want 200 MOVEMENT_FACT_VERSION_EXISTS——退役键进了内容摘要", retiredKey, status, answer)
+		}
+		if got := rest(answer); got != first {
+			t.Fatalf("重放回显的不是首次那一份：\n%s\n%s", got, first)
+		}
 	}
 }
 

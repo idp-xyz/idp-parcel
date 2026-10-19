@@ -18,13 +18,14 @@ import (
 // 外部」由 Intake 的认证结果说（自营走作业事实登记能力面、外部走集成客户端族，ADR-0149），本包不写任何判定。
 //
 // `segment` / `resource` 是登记方声明的段与资源，可缺（ADR-0205 决定四）。`gateClearance` 是设备出示的放行凭据，原样收作
-// 证据；`gateRequired` 照收不读——设门与否由关务按对象与起讫判（ADR-0205 决定三），一线入口仍按原形透传它。
+// 证据；`gateRequired` 是退役键，照收照弃（理由见 MovementFactPayload.RetiredGateRequired）。
 type MovementFactIntake interface {
 	IntakeMovementFact(ctx context.Context, request *http.Request) (application.RecordMovementFactCommand, error)
 }
 
 // MovementFactPayload 是移动事实的线格式，逐格镜像 application.RecordMovementFactCommand 去掉租户与来源——两格都归认证结果
-// （来源说的是「自营还是外部」，见 MovementFactIntake）。kind 取 domain.MovementFactKind 的封闭词，occurredAt 取 RFC 3339。
+// （来源说的是「自营还是外部」，见 MovementFactIntake）；命令里没有的只有退役键 `gateRequired`。kind 取
+// domain.MovementFactKind 的封闭词，occurredAt 取 RFC 3339。
 type MovementFactPayload struct {
 	Fact          string `json:"fact"`
 	Schedule      string `json:"schedule"`
@@ -34,8 +35,14 @@ type MovementFactPayload struct {
 	OccurredAt    string `json:"occurredAt"`
 	Segment       string `json:"segment,omitempty"`
 	Resource      string `json:"resource,omitempty"`
-	GateRequired  bool   `json:"gateRequired"`
 	GateClearance string `json:"gateClearance,omitempty"`
+
+	// RetiredGateRequired 是退役键 `gateRequired`：照收照弃，不进命令，也就进不了内容摘要与读数——带真、带假、不带，登记的是
+	// 同一份。设门与否由关务按对象与起讫判，设备自报失了权威（ADR-0205 决定三与文末复核记录）。
+	//
+	// 键不删：载荷按封闭形状解，删了它，仍按旧形状报出发的离线设备会收到 400，而离线队列对 4xx 出队不重发（ADR-0022），一次
+	// 已经发生的出发就此从记录里消失——正是 ADR-0205 决定一不许的。类型照旧是 bool：退役只是不读，不借机把这一格放宽成任意值。
+	RetiredGateRequired bool `json:"gateRequired,omitempty"`
 }
 
 // Command 把载荷连同信封给的租户与来源翻成登记命令。种类词不在封闭集内、时刻解不出是坏报文（400）；种类空着照零值交进去，
@@ -54,7 +61,6 @@ func (payload MovementFactPayload) Command(tenant domain.TenantID, source string
 		Version:       payload.Version,
 		Segment:       payload.Segment,
 		Resource:      payload.Resource,
-		GateRequired:  payload.GateRequired,
 		GateClearance: payload.GateClearance,
 	}
 	var err error

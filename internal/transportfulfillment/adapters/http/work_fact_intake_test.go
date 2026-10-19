@@ -212,7 +212,7 @@ const workFactMovementFactBody = `{"fact":"SYN-MOVE-08-06","schedule":"SYN-SCHED
 	`"version":"v1","occurredAt":"2026-09-24T14:00:00+08:00","gateRequired":true,"gateClearance":"SYN-GATE/release-06"}`
 
 // Covers: MovementFactIntake 契约「这个口只收自营执行方的事实；『自营还是外部』由 Intake 的认证结果说」——作业事实的认证
-// 结果是这一面构造时给定的来源（自营），事实本体与门禁两格（gateRequired / gateClearance 必须收）逐字来自载荷。
+// 结果是这一面构造时给定的来源（自营），事实本体与放行凭据逐字来自载荷；退役键 gateRequired 照收照弃，不让封闭解码答 400。
 func TestWorkFactCommandIntakeTranslatesMovementFactWithTheAuthenticatedTenantAndSource(t *testing.T) {
 	command, err := workFactIntakeForTest(t).IntakeMovementFact(context.Background(), commandRequest(workFactMovementFactBody))
 	if err != nil {
@@ -225,8 +225,7 @@ func TestWorkFactCommandIntakeTranslatesMovementFactWithTheAuthenticatedTenantAn
 		t.Fatalf("Source = %q, want %q（作业事实这一面说自营——外部轨迹不从这个口进，来源不由请求自报）", command.Source, workFactMovementSource)
 	}
 	if command.Fact != "SYN-MOVE-08-06" || command.Schedule != "SYN-SCHEDULE/linehaul-06" || command.Kind.String() != "DEPARTURE" ||
-		command.Location != "SYN-NODE-SHA-HUB" || command.Version != "v1" || !command.GateRequired ||
-		command.GateClearance != "SYN-GATE/release-06" {
+		command.Location != "SYN-NODE-SHA-HUB" || command.Version != "v1" || command.GateClearance != "SYN-GATE/release-06" {
 		t.Fatalf("command = %+v，与载荷不符", command)
 	}
 	if want := time.Date(2026, 9, 24, 6, 0, 0, 0, time.UTC); !command.OccurredAt.Equal(want) {

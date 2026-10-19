@@ -161,7 +161,6 @@ type movementFactBody struct {
 	OccurredAt    string `json:"occurredAt"`
 	Segment       string `json:"segment"`
 	Resource      string `json:"resource"`
-	GateRequired  bool   `json:"gateRequired"`
 	GateClearance string `json:"gateClearance"`
 }
 
@@ -209,7 +208,6 @@ func (intake *movementFactIntakeDouble) IntakeMovementFact(
 		OccurredAt:    occurredAt,
 		Segment:       body.Segment,
 		Resource:      body.Resource,
-		GateRequired:  body.GateRequired,
 		GateClearance: body.GateClearance,
 	}, nil
 }
@@ -301,7 +299,7 @@ func TestRecordMovementFactReportsCreatedWithTheReportedFact(t *testing.T) {
 }
 
 // Covers: AT-TF-111 线格式半边——出发一律 201：关务那一格答阻断也照样落册，响应带出读数（整格、问关务时的起讫、逐对象的那一格）
-// 以及声明的段与资源。设备自报 gateRequired=true 而不带凭据也照记：设门与否不由设备说（ADR-0205 决定三）。
+// 以及声明的段与资源。
 // AT-TF-063：逐对象那一格只有对象与答复，关务判断标识与依据原文不回给设备——同段可能有别的客户的包裹。
 func TestRecordMovementFactAnswersCreatedForEveryDepartureAndShowsItsGateReading(t *testing.T) {
 	fixture := newMovementFactFixture(t)
@@ -311,7 +309,6 @@ func TestRecordMovementFactAnswersCreatedForEveryDepartureAndShowsItsGateReading
 	departure.Fact = "movement-fact-dep-1"
 	departure.Segment = "segment-1"
 	departure.Resource = "truck-1"
-	departure.GateRequired = true
 
 	response := postTo(t, fixture.record, "/transport-fulfillment/movement-facts", departure)
 	if response.Code != http.StatusCreated {
@@ -357,18 +354,46 @@ func TestRecordMovementFactShowsTheStopWhenNoSegmentIsDeclared(t *testing.T) {
 	}
 }
 
-// Covers: MovementFactPayload 的线格式——声明的段与资源逐字到命令，gateRequired 照收（字段暂留，编排不读）。
+// Covers: MovementFactPayload 的线格式——声明的段与资源、出示的放行凭据逐字到命令。
 func TestMovementFactPayloadCarriesTheDeclaredSegmentAndResource(t *testing.T) {
 	command, err := tfhttp.MovementFactPayload{
 		Fact: "f", Schedule: "s", Kind: "DEPARTURE", Location: "l", Version: "1", OccurredAt: "2026-09-05T10:00:00Z",
-		Segment: "segment-1", Resource: "truck-1", GateRequired: true, GateClearance: "g",
+		Segment: "segment-1", Resource: "truck-1", GateClearance: "g",
 	}.Command(httpValue(t, domain.NewTenantID, "tenant-1"), "SELF_OPERATED")
 	if err != nil {
 		t.Fatalf("command: %v", err)
 	}
-	if command.Segment != "segment-1" || command.Resource != "truck-1" || !command.GateRequired || command.GateClearance != "g" ||
+	if command.Segment != "segment-1" || command.Resource != "truck-1" || command.GateClearance != "g" ||
 		command.Source != "SELF_OPERATED" {
 		t.Fatalf("command = %+v", command)
+	}
+}
+
+// Covers: AT-TF-113 线格式半边（票 demo-chain-gaps/68，ADR-0205 文末复核记录）——退役键 `gateRequired` 在作业事实这一面的
+// 封闭解码下照收照弃：带真、带假、不带，交出的是同一条命令，内容摘要与读数都只从命令来，于是也逐字相同；放行凭据照收。
+// 键的形状不放宽：给的不是布尔仍是坏报文（400），与退役前一样。
+func TestTheRetiredGateRequiredKeyIsAcceptedAndDiscarded(t *testing.T) {
+	const head = `{"fact":"SYN-MOVE-68","schedule":"SYN-SCHEDULE/linehaul-68","kind":"DEPARTURE","location":"SYN-NODE-SHA-HUB",` +
+		`"version":"v1","occurredAt":"2026-10-21T22:05:00+08:00","segment":"SYN-SEG-68","gateClearance":"SYN-GATE/release-68"`
+	intake := workFactIntakeForTest(t)
+	absent, err := intake.IntakeMovementFact(t.Context(), commandRequest(head+`}`))
+	if err != nil {
+		t.Fatalf("不带退役键：%v", err)
+	}
+	if absent.GateClearance != "SYN-GATE/release-68" || absent.Segment != "SYN-SEG-68" {
+		t.Fatalf("command = %+v，放行凭据与段要逐字收", absent)
+	}
+	for _, flag := range []string{"true", "false", "null"} {
+		command, err := intake.IntakeMovementFact(t.Context(), commandRequest(head+`,"gateRequired":`+flag+`}`))
+		if err != nil {
+			t.Fatalf("gateRequired=%s：%v——仍按旧形状发它的离线设备会收到 400、出队丢掉这次出发", flag, err)
+		}
+		if command != absent {
+			t.Fatalf("gateRequired=%s 交出的命令 = %+v，不带时 = %+v", flag, command, absent)
+		}
+	}
+	if _, err := intake.IntakeMovementFact(t.Context(), commandRequest(head+`,"gateRequired":"no"}`)); !errors.Is(err, tfhttp.ErrMalformedRequest) {
+		t.Fatalf("gateRequired 给字符串：err = %v, want ErrMalformedRequest", err)
 	}
 }
 
