@@ -61,16 +61,24 @@ CREATE TABLE node_operations.physical_control_transition (
            AND (node IS NULL OR unit IS NOT NULL)),
     CONSTRAINT physical_control_transition_transfer_whole
         CHECK ((transfer_reference IS NULL) = (transferred_at IS NULL)
-           AND (transfer_reference IS NULL OR (direction = 'OUT' AND node IS NOT NULL))),
+           AND (transfer_reference IS NULL OR (direction = 'OUT' AND node IS NOT NULL))
+           AND (transferred_at IS NULL OR transferred_at >= control_established_at)),
 
     -- 推进了的带控制；转出带转出依据。
     CONSTRAINT physical_control_transition_advanced_carries_control
         CHECK (outcome <> 'ADVANCED' OR node IS NOT NULL),
     CONSTRAINT physical_control_transition_out_carries_transfer
         CHECK (NOT (direction = 'OUT' AND outcome = 'ADVANCED') OR transfer_reference IS NOT NULL),
+    -- 推进的转出时刻就是这一版交接的业务时间：读回折叠出的 releasedAt 与这一行的 occurred_at 必须是同一个时刻。
+    CONSTRAINT physical_control_transition_out_released_at_occurrence
+        CHECK (NOT (direction = 'OUT' AND outcome = 'ADVANCED') OR transferred_at = occurred_at),
+    -- 转入推进的那一份控制是交接转入成立的（转入不带转出，已由 transfer_whole 守）。
+    CONSTRAINT physical_control_transition_in_carries_handover_in
+        CHECK (NOT (direction = 'IN' AND outcome = 'ADVANCED') OR control_kind = 'HANDOVER_IN'),
 
-    -- 各原因的形状：对不上实物的三格不带实物；无在身控制与不止一份只带实物；交接早于控制带那一份在身控制、不带转出；要重算的带
-    -- 先前转出的那一份控制与它的转出依据。
+    -- 各原因的形状：对不上实物的各格不带实物；无在身控制与不止一份只带实物；交接早于控制带那一份在身控制、不带转出，且这一行的
+    -- 业务时间不晚于它成立；要重算的带先前转出的那一份控制与它的转出依据。交接早于控制在领域上是严格早于，库面放宽到不晚于：成立
+    -- 时刻落库截到微秒，纳秒上严格早于的两个时刻截断之后可能相等，库面若也取严格会把一行合法的入账拒成坏行。
     CONSTRAINT physical_control_transition_reason_shape
         CHECK (CASE COALESCE(reason, '')
                    WHEN 'NO_ASSOCIATED_UNIT' THEN unit IS NULL
@@ -79,6 +87,7 @@ CREATE TABLE node_operations.physical_control_transition (
                    WHEN 'NO_ACTIVE_CONTROL' THEN unit IS NOT NULL AND node IS NULL
                    WHEN 'SEVERAL_ACTIVE_CONTROLS' THEN unit IS NOT NULL AND node IS NULL
                    WHEN 'HANDOVER_PRECEDES_CONTROL' THEN node IS NOT NULL AND transfer_reference IS NULL
+                                                          AND occurred_at <= control_established_at
                    WHEN 'CONTROL_SOURCE_CHAIN_PENDING_RECOMPUTE' THEN direction = 'OUT' AND transfer_reference IS NOT NULL
                    ELSE TRUE
                END)

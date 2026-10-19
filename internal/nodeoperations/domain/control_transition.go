@@ -364,7 +364,8 @@ func RehydrateControlTransition(spec ControlTransitionSpec) (ControlTransition, 
 	return transition, nil
 }
 
-// validate 是一行控制转移的形状规则，与迁移 0017 的 CHECK 是同一份，库里再守一遍。
+// validate 是一行控制转移的形状规则，迁移 0017 的 CHECK 在库里逐条再守一遍。控制与本行同租户、同实物一条在库面不另写：一行只有
+// 一个租户列与一个实物列，列形本身就守住了。
 func (transition ControlTransition) validate() error {
 	if !transition.tenantID.valid() || !transition.handover.valid() || transition.occurredAt.IsZero() {
 		return ErrInvalidControlTransition

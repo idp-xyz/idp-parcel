@@ -287,6 +287,62 @@ func TestActiveControlsComeFromIntakesAndHandoversIn(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0214 决定三（迁移 0017 的形状 CHECK）——领域读回门守的几条时刻与种类，库面也守：转入推进的控制必须是交接转入成立的；
+// 推进的转出时刻必须就是这一行的业务时间；转出不早于控制成立；交接早于控制的入账，业务时间不晚于控制成立。绕过领域直插的坏行断在
+// 23514 与那一条约束上，不留在册上等读回时才响。
+func TestTheTransitionRegisterRefusesRowsOfAShapeTheDomainWouldRefuse(t *testing.T) {
+	fixture := newControlFixture(t)
+	established, handedOver := controlHandedOverAt, controlHandedOverAt.Add(time.Hour)
+	for name, row := range map[string]struct {
+		direction, outcome, reason, kind string
+		controlEstablishedAt             time.Time
+		transferredAt                    *time.Time
+		occurredAt                       time.Time
+		constraint                       string
+	}{
+		"转入推进带收寄成立的控制": {"IN", "ADVANCED", "", "NODE_INTAKE", established, nil, handedOver,
+			"physical_control_transition_in_carries_handover_in"},
+		"推进的转出时刻不是业务时间": {"OUT", "ADVANCED", "", "NODE_INTAKE", established, &established, handedOver,
+			"physical_control_transition_out_released_at_occurrence"},
+		"转出早于控制成立": {"OUT", "ADVANCED", "", "NODE_INTAKE", handedOver, &established, established,
+			"physical_control_transition_transfer_whole"},
+		"交接早于控制的入账却晚于它": {"OUT", "NOT_ADVANCED", "HANDOVER_PRECEDES_CONTROL", "NODE_INTAKE", established, nil, handedOver,
+			"physical_control_transition_reason_shape"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			transferReference := (*string)(nil)
+			if row.transferredAt != nil {
+				reference := "TRANSPORT-HANDOVER/SHAPE"
+				transferReference = &reference
+			}
+			reason := (*string)(nil)
+			if row.reason != "" {
+				reason = &row.reason
+			}
+			err := fixture.transactor.WithinTransaction(t.Context(), func(txCtx context.Context) error {
+				writer, err := fixture.db.RequireExecutor(txCtx)
+				if err != nil {
+					return err
+				}
+				_, err = writer.Exec(txCtx,
+					`INSERT INTO node_operations.physical_control_transition
+					     (tenant_id, handover_object, handover_scope, handover_version, direction, outcome, reason,
+					      unit, node, control_kind, control_basis, control_established_at, transfer_reference, transferred_at,
+					      occurred_at, recorded_at)
+					 VALUES ($1, 'SYN-PARCEL-61-SHAPE', 'SYN-SCOPE-61', 'v1', $2, $3, $4,
+					         'SYN-HU-61-SHAPE', 'SYN-NODE-SHA-HUB', $5, 'NODE-INTAKE/SHAPE', $6, $7, $8, $9, $9)`,
+					controlTenant, row.direction, row.outcome, reason, row.kind, row.controlEstablishedAt,
+					transferReference, row.transferredAt, row.occurredAt)
+				return err
+			})
+			var pgErr *pgconn.PgError
+			if !errors.As(err, &pgErr) || pgErr.Code != "23514" || pgErr.ConstraintName != row.constraint {
+				t.Fatalf("直插坏行 err = %v, want 23514 撞 %s", err, row.constraint)
+			}
+		})
+	}
+}
+
 // Covers: ADR-0214 决定二——交接对象先认集运单元（与包裹号同串时也按单元），再按正式包裹身份读各条判断链当前有效版本上的关联：被
 // 接续了、接续版不带关联的那件不算；多件各算一件。
 func TestHandoverObjectsResolveByConsolidationUnitThenCurrentAssociation(t *testing.T) {
