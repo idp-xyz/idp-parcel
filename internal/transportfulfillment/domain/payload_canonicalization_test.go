@@ -74,10 +74,10 @@ func TestCommandPayloadsRoundTripAsTFC1(t *testing.T) {
 		},
 		{
 			name:     "commission",
-			document: `{"canonicalization":"TFC-1","face":"SUBMIT_COMMISSION","provider":"PROV","agreement":"AGR","conditions":"COND","role":"ROLE","responsibility":"RESP","submitted_at":"2026-03-05T02:11:12.345678901Z","members":["M-A","M-B"]}`,
-			digest:   "TFC-1:cdf31298450119c31d7bda2e2b68fab01bb60ec6330dc76f31a8105d0c03b2f4",
+			document: `{"canonicalization":"TFC-1","face":"SUBMIT_COMMISSION","provider":"PROV","agreement_object":"AGR","agreement_version":"V1","conditions":"COND","role":"ROLE","responsibility":"RESP","submitted_at":"2026-03-05T02:11:12.345678901Z","members":["M-A","M-B"]}`,
+			digest:   "TFC-1:616bbef68848a87d208a0e8c44e7f21aef9f79b0551ee010c9e63ff05105e701",
 			call: func() ([]byte, string, error) {
-				return domain.CanonicalizeCommissionPayload("PROV", "AGR", "COND", "ROLE", "RESP", at, []string{"M-B", "M-A"})
+				return domain.CanonicalizeCommissionPayload("PROV", "AGR", "V1", "COND", "ROLE", "RESP", at, []string{"M-B", "M-A"})
 			},
 		},
 		{

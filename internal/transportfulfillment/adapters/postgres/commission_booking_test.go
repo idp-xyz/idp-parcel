@@ -44,8 +44,9 @@ func TestACommissionRoundTripsAndReplaceOnlyWritesTransitions(t *testing.T) {
 		t.Fatalf("读回失败：err=%v exists=%v", err, exists)
 	}
 	if found.Commission.Agreement().String() != "agreement-snapshot-1" ||
+		found.Commission.LegalEntity().String() != "legal-entity-1" ||
 		len(found.Commission.Members()) != 1 {
-		t.Fatal("快照或成员往返丢失")
+		t.Fatal("快照、采购责任法人或成员往返丢失")
 	}
 
 	cancelled, err := found.Commission.Cancel(commissionAt.Add(time.Hour))
@@ -73,8 +74,8 @@ func TestACommissionRoundTripsAndReplaceOnlyWritesTransitions(t *testing.T) {
 	if _, ok := after.Commission.Cancelled(); !ok {
 		t.Fatal("取消没有落库")
 	}
-	if after.Commission.Agreement().String() != "agreement-snapshot-1" {
-		t.Fatal("Replace 改写了快照")
+	if after.Commission.Agreement().String() != "agreement-snapshot-1" || after.Commission.LegalEntity().String() != "legal-entity-1" {
+		t.Fatal("Replace 改写了快照或采购责任法人")
 	}
 
 	started, err := record.Commission.MarkTransportStarted(
@@ -357,17 +358,28 @@ func newCommissionStores(t *testing.T) (
 
 func submittedCommission(t *testing.T, tenant, id string) ports.TransportCommissionRecord {
 	t.Helper()
-	commission, err := domain.SubmitTransportCommission(domain.TransportCommissionSpec{
+	agreement, err := domain.NewSupplierAgreementVersion("agreement-1", "v1")
+	if err != nil {
+		t.Fatalf("协议版本：%v", err)
+	}
+	draft, err := domain.DraftTransportCommission(domain.TransportCommissionDraftSpec{
 		TenantID:       deliveryValue(t, domain.NewTenantID, tenant),
 		Commission:     deliveryValue(t, domain.NewTransportCommissionReference, id),
 		Provider:       deliveryValue(t, domain.NewServiceProviderReference, "partner-1"),
-		Agreement:      deliveryValue(t, domain.NewAgreementSnapshotReference, "agreement-snapshot-1"),
+		Agreement:      agreement,
 		Conditions:     deliveryValue(t, domain.NewConditionsSnapshotReference, "conditions-snapshot-1"),
 		Role:           deliveryValue(t, domain.NewRoleSnapshotReference, "role-snapshot-1"),
 		Responsibility: deliveryValue(t, domain.NewResponsibilitySnapshotReference, "responsibility-snapshot-1"),
 		Members:        []domain.CarriedObjectReference{deliveryValue(t, domain.NewCarriedObjectReference, "parcel-1")},
 		SubmittedAt:    commissionAt,
 	})
+	if err != nil {
+		t.Fatalf("委托草稿：%v", err)
+	}
+	commission, err := draft.Submit(
+		deliveryValue(t, domain.NewAgreementSnapshotReference, "agreement-snapshot-1"),
+		deliveryValue(t, domain.NewProcurementLegalEntityReference, "legal-entity-1"),
+	)
 	if err != nil {
 		t.Fatalf("构造委托：%v", err)
 	}

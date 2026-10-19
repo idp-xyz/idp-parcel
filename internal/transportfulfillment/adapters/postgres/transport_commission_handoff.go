@@ -47,12 +47,22 @@ type transportCommissionPayload struct {
 	Commission string `json:"commission"`
 }
 
-func transportCommissionEventID(key ports.TransportCommissionKey) string {
-	return key.TenantID.String() + "/" + key.Commission.String() + "/transport-commission"
+// transportCommissionPort 是本口在信封 ID 上的口名前缀，与同一来源名下别的口的 ID 空间错开（FingerprintEventID 头注）。
+const transportCommissionPort = "transport-commission"
+
+// transportCommissionEventID 按委托幂等键（租户+委托）铸 ID：意图由它认领（ADR-0043），一份委托只发提交一拍。租户与
+// 委托标识多长归实例半边，原样串接会把信封上限押在别人的长度上，所以取指纹。
+func transportCommissionEventID(key ports.TransportCommissionKey) eventing.EventID {
+	return outboxintent.FingerprintEventID(transportCommissionPort, key.TenantID.String(), key.Commission.String())
 }
 
-// HandOffTransportCommission 把一份意图入队。信封 ID 取委托幂等键再加类型段——意图由
-// （租户+委托）认领（ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
+// transportCommissionPartitionKey 保留可读的「租户/委托/口名」：一份委托只走本口一拍，分区仍是逐信封，取可读形只为
+// 运维从分区键认得出是哪份委托。
+func transportCommissionPartitionKey(key ports.TransportCommissionKey) string {
+	return key.TenantID.String() + "/" + key.Commission.String() + "/" + transportCommissionPort
+}
+
+// HandOffTransportCommission 把一份意图入队。信封 ID 由委托幂等键认领（ADR-0043）。键缺席是装配缺陷，响亮报错不入队。
 func (handoff *OutboxTransportCommissionHandoff) HandOffTransportCommission(
 	ctx context.Context,
 	intent ports.TransportCommissionIntent,
@@ -71,16 +81,15 @@ func (handoff *OutboxTransportCommissionHandoff) HandOffTransportCommission(
 	}
 
 	now := handoff.clock.Now().UTC()
-	eventID := transportCommissionEventID(key)
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           eventing.EventID(eventID),
+		ID:           transportCommissionEventID(key),
 		Source:       tfEventSource,
 		Type:         transportCommissionEventType,
 		Version:      1,
 		Scope:        key.TenantID.String(),
 		Subject:      key.Commission.String(),
-		PartitionKey: eventID,
+		PartitionKey: transportCommissionPartitionKey(key),
 		OccurredAt:   intent.Record.RecordedAt.UTC(),
 		RecordedAt:   now,
 		ContentType:  eventing.JSONContentType,

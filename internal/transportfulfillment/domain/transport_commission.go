@@ -47,19 +47,6 @@ func NewResponsibilitySnapshotReference(value string) (ResponsibilitySnapshotRef
 	return ResponsibilitySnapshotReference{required}, err
 }
 
-// TransportCommissionSpec 是提出一份运输委托所需的全部输入。
-type TransportCommissionSpec struct {
-	TenantID       TenantID
-	Commission     TransportCommissionReference
-	Provider       ServiceProviderReference
-	Agreement      AgreementSnapshotReference
-	Conditions     ConditionsSnapshotReference
-	Role           RoleSnapshotReference
-	Responsibility ResponsibilitySnapshotReference
-	Members        []CarriedObjectReference
-	SubmittedAt    time.Time
-}
-
 // TransportCommission 是向外部运输服务提供方提出的明确运输范围与条件请求（CONTEXT
 // 「运输委托」：引用供应商商业协议和履约条件快照，但不等于订舱、承运接受、实际履约段
 // 或供应商账单）。协议、条件、角色与责任依据都是**快照引用**——版本生命周期属
@@ -69,6 +56,7 @@ type TransportCommission struct {
 	commission     TransportCommissionReference
 	provider       ServiceProviderReference
 	agreement      AgreementSnapshotReference
+	legalEntity    ProcurementLegalEntityReference
 	conditions     ConditionsSnapshotReference
 	role           RoleSnapshotReference
 	responsibility ResponsibilitySnapshotReference
@@ -79,29 +67,79 @@ type TransportCommission struct {
 	cancelledAt    time.Time
 }
 
-func SubmitTransportCommission(spec TransportCommissionSpec) (TransportCommission, error) {
-	if !spec.TenantID.valid() ||
-		!spec.Commission.valid() ||
-		!spec.Provider.valid() ||
-		!spec.Agreement.valid() ||
-		!spec.Conditions.valid() ||
-		!spec.Role.valid() ||
-		!spec.Responsibility.valid() ||
-		len(spec.Members) == 0 ||
-		AtRegistryPrecision(spec.SubmittedAt).IsZero() {
-		return TransportCommission{}, ErrInvalidTransportCommission
+// declaredCommissionValid 是登记方声明那一半的构造门，只在草稿处判一次：协议快照与法人之外，提交不比草稿多判任何一格，
+// 否则一份过了草稿门的声明会在核过协议之后才被拒，而那时已经白问了一次 party-commercial。
+func declaredCommissionValid(
+	tenant TenantID,
+	commission TransportCommissionReference,
+	provider ServiceProviderReference,
+	conditions ConditionsSnapshotReference,
+	role RoleSnapshotReference,
+	responsibility ResponsibilitySnapshotReference,
+	members []CarriedObjectReference,
+	submittedAt time.Time,
+) bool {
+	if !tenant.valid() ||
+		!commission.valid() ||
+		!provider.valid() ||
+		!conditions.valid() ||
+		!role.valid() ||
+		!responsibility.valid() ||
+		len(members) == 0 ||
+		AtRegistryPrecision(submittedAt).IsZero() {
+		return false
 	}
-	seen := make(map[CarriedObjectReference]struct{}, len(spec.Members))
-	for _, member := range spec.Members {
+	seen := make(map[CarriedObjectReference]struct{}, len(members))
+	for _, member := range members {
 		if !member.valid() {
-			return TransportCommission{}, ErrInvalidTransportCommission
+			return false
 		}
 		if _, exists := seen[member]; exists {
-			return TransportCommission{}, ErrInvalidTransportCommission
+			return false
 		}
 		seen[member] = struct{}{}
 	}
-	return TransportCommission{
+	return true
+}
+
+// TransportCommissionDraftSpec 是登记方声明的一份委托：指名一版供应商协议（对象与版本标签），其余各格与提交时相同。
+type TransportCommissionDraftSpec struct {
+	TenantID       TenantID
+	Commission     TransportCommissionReference
+	Provider       ServiceProviderReference
+	Agreement      SupplierAgreementVersion
+	Conditions     ConditionsSnapshotReference
+	Role           RoleSnapshotReference
+	Responsibility ResponsibilitySnapshotReference
+	Members        []CarriedObjectReference
+	SubmittedAt    time.Time
+}
+
+// TransportCommissionDraft 是运输委托草稿（CONTEXT 生命周期「运输委托草稿 → 已提交」）：登记方声明的各格都已过构造门，
+// 但指名的那一版供应商协议还没核过，也就还没有协议快照与采购责任法人。草稿不落库——委托只在提交时成立。
+//
+// 草稿是成立一份委托的唯一入口（读回走 RehydrateTransportCommission，那是另一道门）：把「先判声明、再问协议、最后固定
+// 快照」这个次序钉在类型上——声明不合法的请求不该花一次跨上下文读，而快照两格只能由 Submit 从核对结果里来，没有一条
+// 不经核对就能填上它们的构造路径。
+type TransportCommissionDraft struct {
+	tenantID       TenantID
+	commission     TransportCommissionReference
+	provider       ServiceProviderReference
+	agreement      SupplierAgreementVersion
+	conditions     ConditionsSnapshotReference
+	role           RoleSnapshotReference
+	responsibility ResponsibilitySnapshotReference
+	members        []CarriedObjectReference
+	submittedAt    time.Time
+}
+
+func DraftTransportCommission(spec TransportCommissionDraftSpec) (TransportCommissionDraft, error) {
+	if !spec.Agreement.valid() || !declaredCommissionValid(
+		spec.TenantID, spec.Commission, spec.Provider, spec.Conditions, spec.Role, spec.Responsibility, spec.Members, spec.SubmittedAt,
+	) {
+		return TransportCommissionDraft{}, ErrInvalidTransportCommission
+	}
+	return TransportCommissionDraft{
 		tenantID:       spec.TenantID,
 		commission:     spec.Commission,
 		provider:       spec.Provider,
@@ -111,6 +149,51 @@ func SubmitTransportCommission(spec TransportCommissionSpec) (TransportCommissio
 		responsibility: spec.Responsibility,
 		members:        append([]CarriedObjectReference(nil), spec.Members...),
 		submittedAt:    spec.SubmittedAt.UTC(),
+	}, nil
+}
+
+func (draft TransportCommissionDraft) TenantID() TenantID {
+	return draft.tenantID
+}
+
+func (draft TransportCommissionDraft) Commission() TransportCommissionReference {
+	return draft.commission
+}
+
+func (draft TransportCommissionDraft) Provider() ServiceProviderReference {
+	return draft.provider
+}
+
+// Agreement 是登记方指名、待核的那一版供应商协议。
+func (draft TransportCommissionDraft) Agreement() SupplierAgreementVersion {
+	return draft.agreement
+}
+
+// SubmittedAt 是登记方给的提交时刻，也是核协议「在提交时点支持采购」所用的那一刻。
+func (draft TransportCommissionDraft) SubmittedAt() time.Time {
+	return draft.submittedAt
+}
+
+// Submit 以核过的协议快照与采购责任法人把草稿提交成委托。两格都取自核对结果，不由登记方给（ADR-0202 决定三）；草稿本身
+// 不变，同一份草稿可以再交一次。
+func (draft TransportCommissionDraft) Submit(
+	agreement AgreementSnapshotReference,
+	legalEntity ProcurementLegalEntityReference,
+) (TransportCommission, error) {
+	if !agreement.valid() || !legalEntity.valid() || !draft.commission.valid() {
+		return TransportCommission{}, ErrInvalidTransportCommission
+	}
+	return TransportCommission{
+		tenantID:       draft.tenantID,
+		commission:     draft.commission,
+		provider:       draft.provider,
+		agreement:      agreement,
+		legalEntity:    legalEntity,
+		conditions:     draft.conditions,
+		role:           draft.role,
+		responsibility: draft.responsibility,
+		members:        append([]CarriedObjectReference(nil), draft.members...),
+		submittedAt:    draft.submittedAt,
 	}, nil
 }
 
@@ -128,6 +211,11 @@ func (commission TransportCommission) Provider() ServiceProviderReference {
 
 func (commission TransportCommission) Agreement() AgreementSnapshotReference {
 	return commission.agreement
+}
+
+// LegalEntity 是承担这次采购责任的运营法人，提交时从核过的那一版供应商协议快照下来，不由登记方给（ADR-0202 决定三）。
+func (commission TransportCommission) LegalEntity() ProcurementLegalEntityReference {
+	return commission.legalEntity
 }
 
 func (commission TransportCommission) Conditions() ConditionsSnapshotReference {

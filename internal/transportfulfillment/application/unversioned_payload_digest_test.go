@@ -68,7 +68,6 @@ func unversionedDigestCases(t *testing.T) []unversionedDigestCase {
 	t.Helper()
 	return []unversionedDigestCase{
 		dispositionUnversionedCase(t),
-		commissionUnversionedCase(t),
 		bookingUnversionedCase(t),
 		bookingAnswerUnversionedCase(t),
 		pickupAttemptUnversionedCase(t),
@@ -144,31 +143,6 @@ func dispositionUnversionedCase(t *testing.T) unversionedDigestCase {
 			changed := acceptDispositionCommand(t)
 			changed.MovementAuthority = "movement-authority-2"
 			handle(t, changed, application.DispositionDecisionConflict)
-		},
-	}
-}
-
-func commissionUnversionedCase(t *testing.T) unversionedDigestCase {
-	fixture := newCommissionFixture(t)
-	command := submitCommissionCommand(t)
-	submit := func(t *testing.T, command application.SubmitCommissionCommand, want application.CommissionOutcome) {
-		t.Helper()
-		result, err := fixture.handler.SubmitCommission(context.Background(), command)
-		wantOutcome(t, result.Outcome(), err, want)
-	}
-	return unversionedDigestCase{
-		name:        "SUBMIT_COMMISSION",
-		unversioned: "afc54c1c10d616e555bf2ca66e3b12b053c22edf229898c6a56b00009830be79",
-		first: func(t *testing.T) (string, func(string)) {
-			submit(t, command, application.CommissionSubmitted)
-			return onlyDigest(t, fixture.commissions.records,
-				func(record *ports.TransportCommissionRecord) *string { return &record.ContentDigest })
-		},
-		replay: func(t *testing.T) { submit(t, command, application.CommissionExistingResult) },
-		conflict: func(t *testing.T) {
-			changed := submitCommissionCommand(t)
-			changed.Agreement = "agreement-snapshot-2"
-			submit(t, changed, application.CommissionConflict)
 		},
 	}
 }

@@ -14,6 +14,7 @@ func TestRehydrateTransportCommissionRoundTripsStartAndCancel(t *testing.T) {
 		Commission:     mustValue(t, domain.NewTransportCommissionReference, "commission-1"),
 		Provider:       mustValue(t, domain.NewServiceProviderReference, "partner-1"),
 		Agreement:      mustValue(t, domain.NewAgreementSnapshotReference, "agreement-snapshot-1"),
+		LegalEntity:    mustValue(t, domain.NewProcurementLegalEntityReference, "legal-entity-1"),
 		Conditions:     mustValue(t, domain.NewConditionsSnapshotReference, "conditions-snapshot-1"),
 		Role:           mustValue(t, domain.NewRoleSnapshotReference, "role-snapshot-1"),
 		Responsibility: mustValue(t, domain.NewResponsibilitySnapshotReference, "responsibility-snapshot-1"),
@@ -27,6 +28,14 @@ func TestRehydrateTransportCommissionRoundTripsStartAndCancel(t *testing.T) {
 	}
 	if _, _, started := plain.TransportStarted(); started {
 		t.Fatal("刚提交的委托凭空开始了")
+	}
+	if plain.LegalEntity().String() != "legal-entity-1" {
+		t.Fatalf("采购责任法人没有落回：%q", plain.LegalEntity())
+	}
+	withoutLegalEntity := base
+	withoutLegalEntity.LegalEntity = domain.ProcurementLegalEntityReference{}
+	if _, err := domain.RehydrateTransportCommission(withoutLegalEntity); !errors.Is(err, domain.ErrInvalidRehydratedCommission) {
+		t.Fatalf("err = %v; 缺采购责任法人的一行重建成功了", err)
 	}
 
 	startedSpec := base

@@ -180,7 +180,7 @@ var declaredPartitionSubjects = map[string]string{
 	"internal/transportfulfillment/adapters/postgres/offsite_pickup_handoff.go":                  partitionPerEnvelopePrefix + "键即信封 ID（揽收尝试）",
 	"internal/transportfulfillment/adapters/postgres/offsite_pickup_registration_handoff.go":     partitionSubjectPrefix + "租户/载运对象/口名" + partitionRulingMark + "ADR-0074 决定二、五（本口段 /offsite-pickup-registration）",
 	"internal/transportfulfillment/adapters/postgres/regulatory_acceptance_handoff.go":           partitionPerEnvelopePrefix + "键即信封 ID（监管处置承接）",
-	"internal/transportfulfillment/adapters/postgres/transport_commission_handoff.go":            partitionPerEnvelopePrefix + "键即信封 ID（运输委托提交一拍）",
+	"internal/transportfulfillment/adapters/postgres/transport_commission_handoff.go":            partitionPerEnvelopePrefix + "键取（租户/委托/口名），含信封 ID 的全部维（运输委托提交一拍）",
 	"internal/transportfulfillment/adapters/postgres/transport_handover_registration_handoff.go": partitionSubjectPrefix + "租户/载运对象/口名" + partitionRulingMark + "ADR-0074 决定二、五（本口段 /transport-handover-registration）",
 
 	// —— visibility-exception ——

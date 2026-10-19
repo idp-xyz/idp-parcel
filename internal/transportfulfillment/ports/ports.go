@@ -325,8 +325,9 @@ type BookingAnswerStore interface {
 	Save(ctx context.Context, record BookingAnswerRecord) (BookingAnswerSaveOutcome, error)
 }
 
-// TransportCommissionIntent 把委托（含协议/条件/角色/责任快照）交给 settlement-
-// accounting 作供应商成本预期的上游来源。意图由幂等键认领，重放重发同一份。
+// TransportCommissionIntent 是「委托已提交」的发布意图，信封只带（租户+委托）引用。今天没有
+// 消费者（ADR-0066 缓接，ADR-0202 决定六）；供应商成本的来源是运输收费发生项，不是委托。意图由
+// 幂等键认领，重放重发同一份。
 type TransportCommissionIntent struct {
 	Record TransportCommissionRecord
 }

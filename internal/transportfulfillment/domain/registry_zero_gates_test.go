@@ -334,17 +334,17 @@ func TestMasterDocumentChangeJudgesZeroOnTheRegistry(t *testing.T) {
 
 // Covers: 票 tf-face-algebra/14 判零——运输委托提交、开始与取消，订舱申请提交与取消，承运接受决定时间。
 func TestCommissionAndBookingGatesJudgeZeroOnTheRegistry(t *testing.T) {
-	t.Run("SubmitTransportCommission 提交时刻", func(t *testing.T) {
+	t.Run("DraftTransportCommission 提交时刻", func(t *testing.T) {
 		pinRegistryZeroGate(t, domain.ErrInvalidTransportCommission, func(at time.Time) error {
 			spec := commissionSpec(t)
 			spec.SubmittedAt = at
-			_, err := domain.SubmitTransportCommission(spec)
+			_, err := domain.DraftTransportCommission(spec)
 			return err
 		})
 	})
 	spec := commissionSpec(t)
 	spec.SubmittedAt = beforeRegistryZero
-	commission, err := domain.SubmitTransportCommission(spec)
+	commission, err := submitCommission(t, spec)
 	if err != nil {
 		t.Fatalf("提交委托：%v", err)
 	}

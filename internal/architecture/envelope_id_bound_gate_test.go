@@ -42,7 +42,6 @@ var allowedRawEnvelopeID = map[string]string{
 	"internal/transportfulfillment/adapters/postgres/offsite_pickup_handoff.go":                  "envelope-id-bounds/01",
 	"internal/transportfulfillment/adapters/postgres/offsite_pickup_registration_handoff.go":     "envelope-id-bounds/01",
 	"internal/transportfulfillment/adapters/postgres/regulatory_acceptance_handoff.go":           "envelope-id-bounds/01",
-	"internal/transportfulfillment/adapters/postgres/transport_commission_handoff.go":            "envelope-id-bounds/01",
 	"internal/transportfulfillment/adapters/postgres/transport_handover_registration_handoff.go": "envelope-id-bounds/01",
 }
 

@@ -11,12 +11,13 @@ var (
 )
 
 // RehydrateTransportCommissionSpec 是委托行在库里的样子。开始与取消互斥；两者都缺
-// 是刚提交。SubmitTransportCommission 不能兼职重建：它造不出已开始或已取消的委托。
+// 是刚提交。TransportCommissionDraft.Submit 不能兼职重建：它造不出已开始或已取消的委托。
 type RehydrateTransportCommissionSpec struct {
 	TenantID       TenantID
 	Commission     TransportCommissionReference
 	Provider       ServiceProviderReference
 	Agreement      AgreementSnapshotReference
+	LegalEntity    ProcurementLegalEntityReference
 	Conditions     ConditionsSnapshotReference
 	Role           RoleSnapshotReference
 	Responsibility ResponsibilitySnapshotReference
@@ -27,13 +28,14 @@ type RehydrateTransportCommissionSpec struct {
 	CancelledAt    time.Time
 }
 
-// RehydrateTransportCommission 验四快照、非空成员、提交时刻，以及开始/取消互斥与时刻
+// RehydrateTransportCommission 验四快照与采购责任法人、非空成员、提交时刻，以及开始/取消互斥与时刻
 // 不早于提交。不重走 Cancel / MarkTransportStarted——那是状态转换门，不是读回。
 func RehydrateTransportCommission(spec RehydrateTransportCommissionSpec) (TransportCommission, error) {
 	if !spec.TenantID.valid() ||
 		!spec.Commission.valid() ||
 		!spec.Provider.valid() ||
 		!spec.Agreement.valid() ||
+		!spec.LegalEntity.valid() ||
 		!spec.Conditions.valid() ||
 		!spec.Role.valid() ||
 		!spec.Responsibility.valid() ||
@@ -73,6 +75,7 @@ func RehydrateTransportCommission(spec RehydrateTransportCommissionSpec) (Transp
 		commission:     spec.Commission,
 		provider:       spec.Provider,
 		agreement:      spec.Agreement,
+		legalEntity:    spec.LegalEntity,
 		conditions:     spec.Conditions,
 		role:           spec.Role,
 		responsibility: spec.Responsibility,

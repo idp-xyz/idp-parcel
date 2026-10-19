@@ -15,13 +15,17 @@ var (
 	bookingRequestedAt    = time.Date(2026, 8, 12, 9, 0, 0, 0, time.UTC)
 )
 
-func commissionSpec(t *testing.T) domain.TransportCommissionSpec {
+func commissionSpec(t *testing.T) domain.TransportCommissionDraftSpec {
 	t.Helper()
-	return domain.TransportCommissionSpec{
+	agreement, err := domain.NewSupplierAgreementVersion("agreement-1", "v1")
+	if err != nil {
+		t.Fatalf("协议版本：%v", err)
+	}
+	return domain.TransportCommissionDraftSpec{
 		TenantID:       mustValue(t, domain.NewTenantID, "tenant-1"),
 		Commission:     mustValue(t, domain.NewTransportCommissionReference, "commission-1"),
 		Provider:       mustValue(t, domain.NewServiceProviderReference, "partner-1"),
-		Agreement:      mustValue(t, domain.NewAgreementSnapshotReference, "agreement-snapshot-1"),
+		Agreement:      agreement,
 		Conditions:     mustValue(t, domain.NewConditionsSnapshotReference, "conditions-snapshot-1"),
 		Role:           mustValue(t, domain.NewRoleSnapshotReference, "role-snapshot-1"),
 		Responsibility: mustValue(t, domain.NewResponsibilitySnapshotReference, "responsibility-snapshot-1"),
@@ -30,6 +34,19 @@ func commissionSpec(t *testing.T) domain.TransportCommissionSpec {
 		},
 		SubmittedAt: commissionSubmittedAt,
 	}
+}
+
+// submitCommission 走草稿门再以核过的快照与法人提交——成立一份委托的唯一入口。
+func submitCommission(t *testing.T, spec domain.TransportCommissionDraftSpec) (domain.TransportCommission, error) {
+	t.Helper()
+	draft, err := domain.DraftTransportCommission(spec)
+	if err != nil {
+		return domain.TransportCommission{}, err
+	}
+	return draft.Submit(
+		mustValue(t, domain.NewAgreementSnapshotReference, "agreement-snapshot-1"),
+		mustValue(t, domain.NewProcurementLegalEntityReference, "legal-entity-1"),
+	)
 }
 
 func submittedBooking(t *testing.T) domain.BookingRequest {
@@ -50,13 +67,15 @@ func submittedBooking(t *testing.T) domain.BookingRequest {
 
 // Covers: CONTEXT「运输委托引用供应商商业协议和履约条件快照，但不等于订舱、承运接受、
 // 实际履约段或供应商账单」与 243「保存……协议、条件、角色和责任依据快照，不修改商业
-// 版本」——四件快照引用缺一不可；类型上只有引用，没有任何商业版本本体可改。
+// 版本」——协议快照、采购责任法人与条件、角色、责任三件快照缺一不可（前两格在提交时判，后三格在草稿时判）；
+// 类型上只有引用，没有任何商业版本本体可改。
 func TestACommissionSnapshotsItsCommercialBasis(t *testing.T) {
-	commission, err := domain.SubmitTransportCommission(commissionSpec(t))
+	commission, err := submitCommission(t, commissionSpec(t))
 	if err != nil {
 		t.Fatalf("submit commission: %v", err)
 	}
 	if commission.Agreement().String() != "agreement-snapshot-1" ||
+		commission.LegalEntity().String() != "legal-entity-1" ||
 		commission.Conditions().String() != "conditions-snapshot-1" ||
 		commission.Role().String() != "role-snapshot-1" ||
 		commission.Responsibility().String() != "responsibility-snapshot-1" {
@@ -66,22 +85,38 @@ func TestACommissionSnapshotsItsCommercialBasis(t *testing.T) {
 		t.Fatal("刚提交的委托凭空开始了运输")
 	}
 
-	broken := map[string]func(*domain.TransportCommissionSpec){
-		"no agreement":  func(spec *domain.TransportCommissionSpec) { spec.Agreement = domain.AgreementSnapshotReference{} },
-		"no conditions": func(spec *domain.TransportCommissionSpec) { spec.Conditions = domain.ConditionsSnapshotReference{} },
-		"no role":       func(spec *domain.TransportCommissionSpec) { spec.Role = domain.RoleSnapshotReference{} },
-		"no responsibility": func(spec *domain.TransportCommissionSpec) {
+	draft, err := domain.DraftTransportCommission(commissionSpec(t))
+	if err != nil {
+		t.Fatalf("draft commission: %v", err)
+	}
+	if _, err := draft.Submit(domain.AgreementSnapshotReference{}, commission.LegalEntity()); !errors.Is(err, domain.ErrInvalidTransportCommission) {
+		t.Fatalf("no agreement: error = %v, want ErrInvalidTransportCommission", err)
+	}
+	if _, err := draft.Submit(commission.Agreement(), domain.ProcurementLegalEntityReference{}); !errors.Is(err, domain.ErrInvalidTransportCommission) {
+		t.Fatalf("no legal entity: error = %v, want ErrInvalidTransportCommission", err)
+	}
+	if _, err := (domain.TransportCommissionDraft{}).Submit(commission.Agreement(), commission.LegalEntity()); !errors.Is(err, domain.ErrInvalidTransportCommission) {
+		t.Fatalf("zero draft: error = %v, want ErrInvalidTransportCommission", err)
+	}
+
+	broken := map[string]func(*domain.TransportCommissionDraftSpec){
+		"no agreement version": func(spec *domain.TransportCommissionDraftSpec) { spec.Agreement = domain.SupplierAgreementVersion{} },
+		"no conditions": func(spec *domain.TransportCommissionDraftSpec) {
+			spec.Conditions = domain.ConditionsSnapshotReference{}
+		},
+		"no role": func(spec *domain.TransportCommissionDraftSpec) { spec.Role = domain.RoleSnapshotReference{} },
+		"no responsibility": func(spec *domain.TransportCommissionDraftSpec) {
 			spec.Responsibility = domain.ResponsibilitySnapshotReference{}
 		},
-		"no provider":      func(spec *domain.TransportCommissionSpec) { spec.Provider = domain.ServiceProviderReference{} },
-		"no members":       func(spec *domain.TransportCommissionSpec) { spec.Members = nil },
-		"duplicate member": func(spec *domain.TransportCommissionSpec) { spec.Members = append(spec.Members, spec.Members[0]) },
+		"no provider":      func(spec *domain.TransportCommissionDraftSpec) { spec.Provider = domain.ServiceProviderReference{} },
+		"no members":       func(spec *domain.TransportCommissionDraftSpec) { spec.Members = nil },
+		"duplicate member": func(spec *domain.TransportCommissionDraftSpec) { spec.Members = append(spec.Members, spec.Members[0]) },
 	}
 	for name, breakSpec := range broken {
 		t.Run(name, func(t *testing.T) {
 			spec := commissionSpec(t)
 			breakSpec(&spec)
-			if _, err := domain.SubmitTransportCommission(spec); !errors.Is(err, domain.ErrInvalidTransportCommission) {
+			if _, err := domain.DraftTransportCommission(spec); !errors.Is(err, domain.ErrInvalidTransportCommission) {
 				t.Fatalf("error = %v, want ErrInvalidTransportCommission", err)
 			}
 		})
@@ -226,7 +261,7 @@ func TestCancellationOnlyReachesUnstartedIntents(t *testing.T) {
 		}
 	}
 
-	commission, err := domain.SubmitTransportCommission(commissionSpec(t))
+	commission, err := submitCommission(t, commissionSpec(t))
 	if err != nil {
 		t.Fatalf("submit commission: %v", err)
 	}

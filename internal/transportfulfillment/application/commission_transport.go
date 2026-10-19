@@ -18,10 +18,15 @@ var (
 	ErrUnexpectedCommissionSave = errors.New("transport fulfillment: unexpected commission save outcome")
 	// ErrUnexpectedBookingSave 说明订舱库交回了封闭集合以外的写入结果。
 	ErrUnexpectedBookingSave = errors.New("transport fulfillment: unexpected booking save outcome")
+	// ErrUnexpectedAgreementCheck 说明协议核对口交回了封闭集合以外的格，或在册格缺了快照与法人——核对口违约，
+	// 不是登记方能改的输入，也不是稍后再交就会好的依赖故障。
+	ErrUnexpectedAgreementCheck = errors.New("transport fulfillment: unexpected supplier agreement check")
 )
 
 // CommissionOutcome 是委托/订舱编排的应用处理结果。`运输已开始`是业务负向格——已
-// 开始的委托取消不了，只能按事实形成中断等实际结果（领域硬句编排分格）。
+// 开始的委托取消不了，只能按事实形成中断等实际结果（领域硬句编排分格）。协议核对的四个否定格同是业务答案：
+// 续办各不相同（去 party-commercial 发布或补正文、换一版此刻生效的、取得新协议、改服务方），折成一格登记方就只能
+// 去猜（ADR-0029），所以逐格分开，不并进`未受理`。
 type CommissionOutcome uint8
 
 const (
@@ -39,6 +44,10 @@ const (
 	CommissionTransportStarted
 	CommissionNotAccepted
 	CommissionUndecided
+	CommissionAgreementNotRegistered
+	CommissionAgreementNotEffective
+	CommissionAgreementTerminated
+	CommissionProviderMismatch
 )
 
 func (outcome CommissionOutcome) String() string {
@@ -66,9 +75,17 @@ func (outcome CommissionOutcome) String() string {
 	case CommissionTransportStarted:
 		return "TRANSPORT_STARTED"
 	case CommissionNotAccepted:
-		return "SOURCE_NOT_ACCEPTED"
+		return "INPUT_NOT_ACCEPTED"
 	case CommissionUndecided:
 		return "COMMISSION_UNDECIDED"
+	case CommissionAgreementNotRegistered:
+		return "AGREEMENT_NOT_REGISTERED"
+	case CommissionAgreementNotEffective:
+		return "AGREEMENT_NOT_EFFECTIVE"
+	case CommissionAgreementTerminated:
+		return "AGREEMENT_TERMINATED"
+	case CommissionProviderMismatch:
+		return "PROVIDER_MISMATCH"
 	default:
 		return ""
 	}
@@ -82,6 +99,7 @@ const (
 	CommissionStoreUnavailable
 	BookingStoreUnavailable
 	AnswerStoreUnavailable
+	SupplierAgreementUnavailable
 )
 
 func (reason CommissionUndecidedReason) String() string {
@@ -92,23 +110,27 @@ func (reason CommissionUndecidedReason) String() string {
 		return "BOOKING_STORE_UNAVAILABLE"
 	case AnswerStoreUnavailable:
 		return "ANSWER_STORE_UNAVAILABLE"
+	case SupplierAgreementUnavailable:
+		return "SUPPLIER_AGREEMENT_UNAVAILABLE"
 	default:
 		return ""
 	}
 }
 
-// SubmitCommissionCommand 携带一份运输委托提交：协议/条件/角色/责任四快照在成形时
-// 冻结（领域已钉，编排不补不改）。
+// SubmitCommissionCommand 携带一份运输委托提交。协议只由登记方指名（协议对象与版本标签两格），快照引用与采购责任
+// 法人在核过之后从 party-commercial 那一版取，命令里没有这两格（ADR-0202 决定三）。条件、角色、责任仍是登记方声明的
+// 快照引用，不核（ADR-0202 越权风险点）。
 type SubmitCommissionCommand struct {
-	TenantID       domain.TenantID
-	Commission     string
-	Provider       string
-	Agreement      string
-	Conditions     string
-	Role           string
-	Responsibility string
-	Members        []string
-	SubmittedAt    time.Time
+	TenantID         domain.TenantID
+	Commission       string
+	Provider         string
+	AgreementObject  string
+	AgreementVersion string
+	Conditions       string
+	Role             string
+	Responsibility   string
+	Members          []string
+	SubmittedAt      time.Time
 }
 
 // SubmitBookingCommand 携带一次订舱申请。
@@ -140,14 +162,15 @@ type CancelCommissionCommand struct {
 }
 
 type CommissionResult struct {
-	outcome      CommissionOutcome
-	reason       CommissionUndecidedReason
-	commission   ports.TransportCommissionRecord
-	booking      ports.BookingRecord
-	answer       ports.BookingAnswerRecord
-	hasRecord    bool
-	continuation string
-	handoff      string
+	outcome           CommissionOutcome
+	reason            CommissionUndecidedReason
+	commission        ports.TransportCommissionRecord
+	booking           ports.BookingRecord
+	answer            ports.BookingAnswerRecord
+	hasRecord         bool
+	continuation      string
+	handoff           string
+	agreementSupplier domain.ServiceProviderReference
 }
 
 func (result CommissionResult) Outcome() CommissionOutcome {
@@ -180,10 +203,16 @@ func (result CommissionResult) CommissionHandoffReference() string {
 	return result.handoff
 }
 
+// AgreementSupplier 只在`服务方不符`时有值：指名的那一版协议约定的供应商。登记方据此决定改服务方还是换协议。
+func (result CommissionResult) AgreementSupplier() (domain.ServiceProviderReference, bool) {
+	return result.agreementSupplier, result.outcome == CommissionProviderMismatch
+}
+
 type CommissionTransportDeps struct {
 	Commissions ports.TransportCommissionStore
 	Bookings    ports.BookingStore
 	Answers     ports.BookingAnswerStore
+	Agreements  ports.SupplierAgreementSource
 	Downstream  ports.TransportCommissionHandoff
 	Clock       ports.Clock
 }
@@ -196,19 +225,23 @@ func NewCommissionTransportHandler(deps CommissionTransportDeps) *CommissionTran
 	return &CommissionTransportHandler{deps: deps}
 }
 
-// SubmitCommission 提交运输委托：四快照由 SubmitTransportCommission 冻结 → 幂等按
-// （租户+委托）分重放/冲突 → 意图交 SA 成本预期源。
+// SubmitCommission 提交运输委托（UC-TF-004 步 2、3）：草稿过构造门 → 按（租户+委托）分重放与冲突 → 在提交时点核
+// 登记方指名的那一版供应商协议 → 以核出的快照与采购责任法人提交 → 意图与委托同笔入队。
+//
+// 重放判在核协议之前：同一份委托原样再交答原委托，哪怕那一版协议此后已到期或终止；也不为一次重放去问
+// party-commercial。协议核对的四个否定格不落任何行，登记方按格续办后原样重交即可。
 func (handler *CommissionTransportHandler) SubmitCommission(
 	ctx context.Context,
 	command SubmitCommissionCommand,
 ) (CommissionResult, error) {
-	commission, err := commissionFrom(command)
+	draft, err := commissionDraftFrom(command)
 	if err != nil {
 		return CommissionResult{outcome: CommissionNotAccepted}, nil
 	}
 
-	key := ports.TransportCommissionKey{TenantID: command.TenantID, Commission: commission.Commission()}
-	_, digest, err := domain.CanonicalizeCommissionPayload(command.Provider, command.Agreement, command.Conditions, command.Role, command.Responsibility, command.SubmittedAt, command.Members)
+	key := ports.TransportCommissionKey{TenantID: command.TenantID, Commission: draft.Commission()}
+	_, digest, err := domain.CanonicalizeCommissionPayload(command.Provider, command.AgreementObject, command.AgreementVersion,
+		command.Conditions, command.Role, command.Responsibility, command.SubmittedAt, command.Members)
 	if err != nil {
 		return CommissionResult{}, err
 	}
@@ -217,15 +250,30 @@ func (handler *CommissionTransportHandler) SubmitCommission(
 		return commissionUndecided(CommissionStoreUnavailable, command.Commission), nil
 	}
 	if found {
-		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedCommissionDigest(command)) {
-		case domain.SamePayload:
-			return handler.existingCommission(ctx, existing), nil
-		case domain.DifferentPayload:
-			// 同一委托标识携带不同快照或范围：冲突保留原委托，不按最后到达顶替。
-			return CommissionResult{outcome: CommissionConflict}, nil
-		default:
-			return commissionUndecided(CommissionStoreUnavailable, command.Commission), nil
-		}
+		return handler.answerFromStored(ctx, existing, digest, command.Commission), nil
+	}
+
+	check, err := handler.deps.Agreements.CheckSupplierAgreement(ctx, command.TenantID, draft.Agreement(), draft.Provider(), draft.SubmittedAt())
+	if err != nil {
+		// 读不动与 PC 侧坏数据在值上分不开（ports.SupplierAgreementSource 的头注），对命令面续办相同：稍后原样重交。
+		return commissionUndecided(SupplierAgreementUnavailable, command.Commission), nil
+	}
+	switch check.Standing {
+	case ports.SupplierAgreementRegistered:
+	case ports.SupplierAgreementNotRegistered:
+		return CommissionResult{outcome: CommissionAgreementNotRegistered}, nil
+	case ports.SupplierAgreementNotEffective:
+		return CommissionResult{outcome: CommissionAgreementNotEffective}, nil
+	case ports.SupplierAgreementTerminated:
+		return CommissionResult{outcome: CommissionAgreementTerminated}, nil
+	case ports.SupplierAgreementProviderMismatch:
+		return CommissionResult{outcome: CommissionProviderMismatch, agreementSupplier: check.Supplier}, nil
+	default:
+		return CommissionResult{}, fmt.Errorf("%w: standing %d", ErrUnexpectedAgreementCheck, check.Standing)
+	}
+	commission, err := draft.Submit(check.Snapshot, check.LegalEntity)
+	if err != nil {
+		return CommissionResult{}, fmt.Errorf("%w: registered without snapshot or legal entity: %v", ErrUnexpectedAgreementCheck, err)
 	}
 
 	record := ports.TransportCommissionRecord{
@@ -244,14 +292,39 @@ func (handler *CommissionTransportHandler) SubmitCommission(
 		result.handoff = handler.handOff(ctx, record)
 		return result, nil
 	case ports.CommissionAlreadyRegistered:
+		// 并发首交的输家照样按摘要分重放与冲突：先到者的内容可能与本次不同，读回赢家就答「已有」会把冲突吞掉。
 		winner, found, err := handler.deps.Commissions.FindByKey(ctx, key)
 		if err != nil || !found {
 			return commissionUndecided(CommissionStoreUnavailable, command.Commission), nil
 		}
-		return handler.existingCommission(ctx, winner), nil
+		return handler.answerFromStored(ctx, winner, digest, command.Commission), nil
 	default:
 		return CommissionResult{}, fmt.Errorf("%w: %d", ErrUnexpectedCommissionSave, saved)
 	}
+}
+
+// answerFromStored 按已存委托作答：同内容是重放，交回原委托并重发同一份意图；异内容是冲突，保留原委托，不按最后到达
+// 顶替；认不出形状答未决。
+func (handler *CommissionTransportHandler) answerFromStored(
+	ctx context.Context,
+	stored ports.TransportCommissionRecord,
+	digest string,
+	subject string,
+) CommissionResult {
+	switch compareCommissionDigest(stored.ContentDigest, digest) {
+	case domain.SamePayload:
+		return handler.existingCommission(ctx, stored)
+	case domain.DifferentPayload:
+		return CommissionResult{outcome: CommissionConflict}
+	default:
+		return commissionUndecided(CommissionStoreUnavailable, subject)
+	}
+}
+
+// compareCommissionDigest 比委托上的已存摘要。委托表没有 TFC-1 之前的行（TF 迁移 0025 在表里有行时拒绝施加），没有
+// 无版本那一形可比，所以 CompareStoredDigest 的无版本一格交空串：不带前缀的已存摘要只会是坏行，比不上就不是重放。
+func compareCommissionDigest(stored, current string) domain.StoredDigestComparison {
+	return domain.CompareStoredDigest(stored, current, "")
 }
 
 // SubmitBooking 提交订舱申请：订舱不占容量、不等于接受（领域词条），幂等分重放/冲突。
@@ -424,38 +497,38 @@ func (handler *CommissionTransportHandler) CancelCommission(
 	return CommissionResult{outcome: CommissionCancelled, commission: replaced, hasRecord: true}, nil
 }
 
-func commissionFrom(command SubmitCommissionCommand) (domain.TransportCommission, error) {
-	spec := domain.TransportCommissionSpec{
+func commissionDraftFrom(command SubmitCommissionCommand) (domain.TransportCommissionDraft, error) {
+	spec := domain.TransportCommissionDraftSpec{
 		TenantID:    command.TenantID,
 		SubmittedAt: command.SubmittedAt,
 	}
 	var err error
 	if spec.Commission, err = domain.NewTransportCommissionReference(command.Commission); err != nil {
-		return domain.TransportCommission{}, err
+		return domain.TransportCommissionDraft{}, err
 	}
 	if spec.Provider, err = domain.NewServiceProviderReference(command.Provider); err != nil {
-		return domain.TransportCommission{}, err
+		return domain.TransportCommissionDraft{}, err
 	}
-	if spec.Agreement, err = domain.NewAgreementSnapshotReference(command.Agreement); err != nil {
-		return domain.TransportCommission{}, err
+	if spec.Agreement, err = domain.NewSupplierAgreementVersion(command.AgreementObject, command.AgreementVersion); err != nil {
+		return domain.TransportCommissionDraft{}, err
 	}
 	if spec.Conditions, err = domain.NewConditionsSnapshotReference(command.Conditions); err != nil {
-		return domain.TransportCommission{}, err
+		return domain.TransportCommissionDraft{}, err
 	}
 	if spec.Role, err = domain.NewRoleSnapshotReference(command.Role); err != nil {
-		return domain.TransportCommission{}, err
+		return domain.TransportCommissionDraft{}, err
 	}
 	if spec.Responsibility, err = domain.NewResponsibilitySnapshotReference(command.Responsibility); err != nil {
-		return domain.TransportCommission{}, err
+		return domain.TransportCommissionDraft{}, err
 	}
 	for _, raw := range command.Members {
 		member, err := domain.NewCarriedObjectReference(raw)
 		if err != nil {
-			return domain.TransportCommission{}, err
+			return domain.TransportCommissionDraft{}, err
 		}
 		spec.Members = append(spec.Members, member)
 	}
-	return domain.SubmitTransportCommission(spec)
+	return domain.DraftTransportCommission(spec)
 }
 
 func bookingFrom(command SubmitBookingCommand) (domain.BookingRequest, error) {
@@ -512,8 +585,10 @@ func (handler *CommissionTransportHandler) existingCommission(
 	}
 }
 
-// handOff 把委托快照交给 settlement-accounting 作成本预期源。投递失败不翻结果，留
-// 续办引用重放时重发同一份。
+// handOff 把「委托已提交」意图入队，与委托同笔落库（装配点把整次提交包进一笔事务）。这封信封今天没有消费者，
+// 照 ADR-0066 不登路由，派发如实答 `dispatch.no_subscriber`；供应商成本的来源是运输收费发生项加 BUY 评价
+// （ADR-0164），不是委托。入队仍不能省：后继消费者要的就是这份按委托认领的意图（ADR-0043）。投递失败不翻结果，
+// 留续办引用，重放时重发同一份。
 func (handler *CommissionTransportHandler) handOff(
 	ctx context.Context,
 	record ports.TransportCommissionRecord,

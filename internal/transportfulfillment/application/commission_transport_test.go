@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
@@ -149,6 +150,46 @@ func (double *commissionHandoffDouble) HandOffTransportCommission(
 	return nil
 }
 
+// agreementSourceDouble 是协议核对口的替身：默认在册，带回快照与法人；记下每次被问的参数。
+type agreementSourceDouble struct {
+	check ports.SupplierAgreementCheck
+	err   error
+	asked []agreementQuestion
+}
+
+type agreementQuestion struct {
+	agreement domain.SupplierAgreementVersion
+	provider  domain.ServiceProviderReference
+	at        time.Time
+}
+
+func registeredAgreement(t *testing.T) ports.SupplierAgreementCheck {
+	t.Helper()
+	snapshot, _ := domain.NewAgreementSnapshotReference("agreement-1/v1")
+	legalEntity, _ := domain.NewProcurementLegalEntityReference("legal-entity-1")
+	supplier, _ := domain.NewServiceProviderReference("partner-1")
+	return ports.SupplierAgreementCheck{
+		Standing:    ports.SupplierAgreementRegistered,
+		Snapshot:    snapshot,
+		LegalEntity: legalEntity,
+		Supplier:    supplier,
+	}
+}
+
+func (double *agreementSourceDouble) CheckSupplierAgreement(
+	_ context.Context,
+	_ domain.TenantID,
+	agreement domain.SupplierAgreementVersion,
+	provider domain.ServiceProviderReference,
+	at time.Time,
+) (ports.SupplierAgreementCheck, error) {
+	double.asked = append(double.asked, agreementQuestion{agreement: agreement, provider: provider, at: at})
+	if double.err != nil {
+		return ports.SupplierAgreementCheck{}, double.err
+	}
+	return double.check, nil
+}
+
 type commissionClock struct{ at time.Time }
 
 func (clock commissionClock) Now() time.Time { return clock.at }
@@ -157,6 +198,7 @@ type commissionFixture struct {
 	commissions *commissionStoreDouble
 	bookings    *bookingStoreDouble
 	answers     *answerStoreDouble
+	agreements  *agreementSourceDouble
 	handoff     *commissionHandoffDouble
 	handler     *application.CommissionTransportHandler
 }
@@ -167,12 +209,14 @@ func newCommissionFixture(t *testing.T) *commissionFixture {
 		commissions: newCommissionStore(),
 		bookings:    newBookingStore(),
 		answers:     newAnswerStore(),
+		agreements:  &agreementSourceDouble{check: registeredAgreement(t)},
 		handoff:     &commissionHandoffDouble{},
 	}
 	fixture.handler = application.NewCommissionTransportHandler(application.CommissionTransportDeps{
 		Commissions: fixture.commissions,
 		Bookings:    fixture.bookings,
 		Answers:     fixture.answers,
+		Agreements:  fixture.agreements,
 		Downstream:  fixture.handoff,
 		Clock:       commissionClock{at: commissionNowAt},
 	})
@@ -186,15 +230,16 @@ func submitCommissionCommand(t *testing.T) application.SubmitCommissionCommand {
 		t.Fatalf("tenant: %v", err)
 	}
 	return application.SubmitCommissionCommand{
-		TenantID:       tenant,
-		Commission:     "commission-1",
-		Provider:       "partner-1",
-		Agreement:      "agreement-snapshot-1",
-		Conditions:     "conditions-snapshot-1",
-		Role:           "role-snapshot-1",
-		Responsibility: "responsibility-snapshot-1",
-		Members:        []string{"parcel-1"},
-		SubmittedAt:    commissionSentAt,
+		TenantID:         tenant,
+		Commission:       "commission-1",
+		Provider:         "partner-1",
+		AgreementObject:  "agreement-1",
+		AgreementVersion: "v1",
+		Conditions:       "conditions-snapshot-1",
+		Role:             "role-snapshot-1",
+		Responsibility:   "responsibility-snapshot-1",
+		Members:          []string{"parcel-1"},
+		SubmittedAt:      commissionSentAt,
 	}
 }
 
@@ -230,8 +275,9 @@ func answerBookingCommand(t *testing.T, outcome domain.CarrierAcceptanceOutcome)
 }
 
 // Covers: CONTEXT 243「保存……协议、条件、角色和责任依据快照，不修改商业版本」的
-// 编排面（UC-TF-003 预定链前半）——四快照冻结随记录保全；同一委托标识只提交一次，
-// 重放返原、异快照同键冲突；意图交 SA 成本预期源（UC-SA-002 输入行的协议快照来源）。
+// 编排面（UC-TF-004 步 2、3）——协议快照与采购责任法人取自核对结果、不由登记方给，随记录保全；
+// 核协议用的是登记方指名的那一版、服务方与提交时刻；同一委托标识只提交一次，重放返原、
+// 异内容同键冲突；「委托已提交」意图随提交交出、重放重发同一份。
 func TestACommissionSubmitsOnceWithItsSnapshots(t *testing.T) {
 	fixture := newCommissionFixture(t)
 	command := submitCommissionCommand(t)
@@ -244,11 +290,22 @@ func TestACommissionSubmitsOnceWithItsSnapshots(t *testing.T) {
 		t.Fatalf("outcome = %q, want COMMISSION_SUBMITTED", first.Outcome())
 	}
 	record, _ := first.Commission()
-	if record.Commission.Agreement().String() != "agreement-snapshot-1" {
-		t.Fatal("协议快照没有随委托保全")
+	if record.Commission.Agreement().String() != "agreement-1/v1" || record.Commission.LegalEntity().String() != "legal-entity-1" {
+		t.Fatalf("协议快照与法人没有从核对结果随委托保全：%q %q", record.Commission.Agreement(), record.Commission.LegalEntity())
+	}
+	if len(fixture.agreements.asked) != 1 {
+		t.Fatalf("协议核对 %d 次，want 1", len(fixture.agreements.asked))
+	}
+	asked := fixture.agreements.asked[0]
+	if asked.agreement.Object() != "agreement-1" || asked.agreement.Version() != "v1" ||
+		asked.provider.String() != "partner-1" || !asked.at.Equal(commissionSentAt) {
+		t.Fatalf("核协议问的不是登记方指名的那一版、服务方与提交时刻：%+v", asked)
+	}
+	if !strings.HasPrefix(record.ContentDigest, "TFC-1:") {
+		t.Fatalf("委托摘要 = %q，want TFC-1 形", record.ContentDigest)
 	}
 	if len(fixture.handoff.intents) != 1 {
-		t.Fatalf("intents = %d, want 1（SA 成本预期源）", len(fixture.handoff.intents))
+		t.Fatalf("intents = %d, want 1", len(fixture.handoff.intents))
 	}
 
 	replay, err := fixture.handler.SubmitCommission(context.Background(), command)
@@ -261,10 +318,25 @@ func TestACommissionSubmitsOnceWithItsSnapshots(t *testing.T) {
 	if len(fixture.handoff.intents) != 2 {
 		t.Fatalf("intents = %d, want 2（重放重发同一份）", len(fixture.handoff.intents))
 	}
+	if len(fixture.agreements.asked) != 1 {
+		t.Fatalf("重放又问了一次协议：核对 %d 次", len(fixture.agreements.asked))
+	}
 
-	t.Run("a different snapshot under the same identity is a conflict", func(t *testing.T) {
+	t.Run("a replay answers the original even after the agreement has terminated", func(t *testing.T) {
+		fixture.agreements.check = ports.SupplierAgreementCheck{Standing: ports.SupplierAgreementTerminated}
+		defer func() { fixture.agreements.check = registeredAgreement(t) }()
+		result, err := fixture.handler.SubmitCommission(context.Background(), command)
+		if err != nil {
+			t.Fatalf("replay after termination: %v", err)
+		}
+		if result.Outcome() != application.CommissionExistingResult {
+			t.Fatalf("outcome = %q, want EXISTING_COMMISSION（重放判在核协议之前）", result.Outcome())
+		}
+	})
+
+	t.Run("a different agreement version under the same identity is a conflict", func(t *testing.T) {
 		flipped := submitCommissionCommand(t)
-		flipped.Agreement = "agreement-snapshot-2"
+		flipped.AgreementVersion = "v2"
 		result, err := fixture.handler.SubmitCommission(context.Background(), flipped)
 		if err != nil {
 			t.Fatalf("conflict submit: %v", err)
@@ -485,6 +557,7 @@ func TestCommissionRecoveryDiscipline(t *testing.T) {
 		labels := map[string]struct{}{}
 		for _, reason := range []application.CommissionUndecidedReason{
 			application.CommissionStoreUnavailable, application.BookingStoreUnavailable, application.AnswerStoreUnavailable,
+			application.SupplierAgreementUnavailable,
 		} {
 			label := reason.String()
 			if label == "" {
@@ -492,11 +565,11 @@ func TestCommissionRecoveryDiscipline(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 3 {
+		if len(labels) != 4 {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if application.CommissionUndecidedReason(len(labels)+1).String() != "" {
-			t.Fatal("第四个未决原因带了标签——封闭集合被悄悄放开")
+			t.Fatal("名单之外的未决原因带了标签——封闭集合被悄悄放开")
 		}
 	})
 }

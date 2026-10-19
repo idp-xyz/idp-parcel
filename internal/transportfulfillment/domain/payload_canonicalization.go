@@ -277,12 +277,17 @@ func CanonicalizeOffsitePickupPayload(attempt, task string, arrivedAt time.Time,
 }
 
 // CanonicalizeCommissionPayload 定形「提交运输委托」。成员集合排序后进入摘要。
-func CanonicalizeCommissionPayload(provider, agreement, conditions, role, responsibility string, submittedAt time.Time, members []string) ([]byte, string, error) {
+//
+// 协议进摘要的是登记方指名的协议对象与版本标签，不是核过之后才有的快照引用与法人：重放要在问 party-commercial 之前
+// 就分得出来，否则协议后来终止了，原样重放会被答成已终止，而不是交回原委托。委托表在提交口接线之前没有任何写入方，
+// 不存在按旧形状算出的已存摘要，所以这一形状沿用 TFC-1 前缀，不另立版本。
+func CanonicalizeCommissionPayload(provider, agreementObject, agreementVersion, conditions, role, responsibility string, submittedAt time.Time, members []string) ([]byte, string, error) {
 	return marshalPayload(struct {
 		Canonicalization string   `json:"canonicalization"`
 		Face             string   `json:"face"`
 		Provider         string   `json:"provider"`
-		Agreement        string   `json:"agreement"`
+		AgreementObject  string   `json:"agreement_object"`
+		AgreementVersion string   `json:"agreement_version"`
 		Conditions       string   `json:"conditions"`
 		Role             string   `json:"role"`
 		Responsibility   string   `json:"responsibility"`
@@ -292,7 +297,8 @@ func CanonicalizeCommissionPayload(provider, agreement, conditions, role, respon
 		Canonicalization: payloadCanonicalizationVersion,
 		Face:             "SUBMIT_COMMISSION",
 		Provider:         provider,
-		Agreement:        agreement,
+		AgreementObject:  agreementObject,
+		AgreementVersion: agreementVersion,
 		Conditions:       conditions,
 		Role:             role,
 		Responsibility:   responsibility,

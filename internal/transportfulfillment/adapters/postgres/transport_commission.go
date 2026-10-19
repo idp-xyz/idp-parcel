@@ -15,7 +15,7 @@ import (
 )
 
 // TransportCommissions 实现 ports.TransportCommissionStore。Save 登记；Replace 只写
-// 取消或开始两列——协议/条件/角色/责任快照与成员只在 INSERT 出现（CONTEXT 243）。
+// 取消或开始两列——协议/条件/角色/责任快照、采购责任法人与成员只在 INSERT 出现（CONTEXT 243）。
 type TransportCommissions struct {
 	db *bentopg.DB
 }
@@ -38,14 +38,14 @@ func (repository *TransportCommissions) FindByKey(
 	}
 
 	var (
-		provider, agreement, conditions, role, responsibility, digest string
-		membersJSON                                                   []byte
-		submittedAt, recordedAt                                       time.Time
-		startedAt, cancelledAt                                        *time.Time
-		startedBasis                                                  *string
+		provider, agreement, legalEntity, conditions, role, responsibility, digest string
+		membersJSON                                                                []byte
+		submittedAt, recordedAt                                                    time.Time
+		startedAt, cancelledAt                                                     *time.Time
+		startedBasis                                                               *string
 	)
 	err = querier.QueryRow(ctx,
-		`SELECT provider_ref, agreement_ref, conditions_ref, role_ref, responsibility_ref,
+		`SELECT provider_ref, agreement_ref, procurement_legal_entity_ref, conditions_ref, role_ref, responsibility_ref,
 		        members, submitted_at, started_at, started_basis, cancelled_at,
 		        content_digest, recorded_at
 		   FROM transport_fulfillment.transport_commission
@@ -53,7 +53,7 @@ func (repository *TransportCommissions) FindByKey(
 		    AND commission_id = $2`,
 		key.TenantID.String(),
 		key.Commission.String(),
-	).Scan(&provider, &agreement, &conditions, &role, &responsibility,
+	).Scan(&provider, &agreement, &legalEntity, &conditions, &role, &responsibility,
 		&membersJSON, &submittedAt, &startedAt, &startedBasis, &cancelledAt,
 		&digest, &recordedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
@@ -63,7 +63,7 @@ func (repository *TransportCommissions) FindByKey(
 		return ports.TransportCommissionRecord{}, false, fmt.Errorf("find transport commission: %w", err)
 	}
 
-	commission, err := rebuildCommission(key, provider, agreement, conditions, role, responsibility, membersJSON, submittedAt, startedAt, startedBasis, cancelledAt)
+	commission, err := rebuildCommission(key, provider, agreement, legalEntity, conditions, role, responsibility, membersJSON, submittedAt, startedAt, startedBasis, cancelledAt)
 	if err != nil {
 		return ports.TransportCommissionRecord{}, false, fmt.Errorf("find transport commission: %w", err)
 	}
@@ -99,15 +99,16 @@ func (repository *TransportCommissions) Save(
 
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO transport_fulfillment.transport_commission
-			(tenant_id, commission_id, provider_ref, agreement_ref, conditions_ref,
-			 role_ref, responsibility_ref, members, submitted_at, started_at,
+			(tenant_id, commission_id, provider_ref, agreement_ref, procurement_legal_entity_ref,
+			 conditions_ref, role_ref, responsibility_ref, members, submitted_at, started_at,
 			 started_basis, cancelled_at, content_digest, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Commission.String(),
 		record.Commission.Provider().String(),
 		record.Commission.Agreement().String(),
+		record.Commission.LegalEntity().String(),
 		record.Commission.Conditions().String(),
 		record.Commission.Role().String(),
 		record.Commission.Responsibility().String(),
@@ -185,7 +186,7 @@ func (repository *TransportCommissions) Replace(
 
 func rebuildCommission(
 	key ports.TransportCommissionKey,
-	provider, agreement, conditions, role, responsibility string,
+	provider, agreement, legalEntity, conditions, role, responsibility string,
 	membersJSON []byte,
 	submittedAt time.Time,
 	startedAt *time.Time,
@@ -216,6 +217,9 @@ func rebuildCommission(
 		return domain.TransportCommission{}, err
 	}
 	if spec.Agreement, err = domain.NewAgreementSnapshotReference(agreement); err != nil {
+		return domain.TransportCommission{}, err
+	}
+	if spec.LegalEntity, err = domain.NewProcurementLegalEntityReference(legalEntity); err != nil {
 		return domain.TransportCommission{}, err
 	}
 	if spec.Conditions, err = domain.NewConditionsSnapshotReference(conditions); err != nil {

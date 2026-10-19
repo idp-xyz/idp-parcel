@@ -32,3 +32,7 @@ func (agreement SupplierAgreementVersion) Object() string {
 func (agreement SupplierAgreementVersion) Version() string {
 	return agreement.version.String()
 }
+
+func (agreement SupplierAgreementVersion) valid() bool {
+	return agreement.object.valid() && agreement.version.valid()
+}
