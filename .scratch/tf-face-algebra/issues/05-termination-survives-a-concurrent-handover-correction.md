@@ -1,7 +1,7 @@
 # 05 终止参与与交接更正并发时终点丢失：终止写在被替代的旧链尾上、答 201，更正派生的新链尾没有终点，参与又成了在场
 
 Category: bug
-Status: in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 代决并认领（分支 `claude-tfa0305`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: resolved——2026-10-18 进 main（03、05 同批，代码验证钉 `3fae64f8`），见「进 main 记录」。此前 in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 代决并认领（分支 `claude-tfa0305`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment-participation-terminations, /transport-fulfillment/handover-corrections
@@ -88,3 +88,8 @@ Blocked by: 无
 - **评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审）· 钉 `3a178474`（基线 `4c2b0daa`）· 2026-10-18**：用户选「精简续做」，评审由会话本身读 diff 做；代码出自本会话起的实施子代理，不算非作者评审，如实记下。
   - **Spec**：阻断无。`Supersede` 落笔前 `lockedInheritedEnd` 以 `FOR UPDATE` 锁住被替代链尾，新版本离场三列取锁后在册值；继承终点早于更正后起点时交错误由编排记欠账，不去撞 0006 的 CHECK 让整笔事务作废。认可超出裁定字面的一处：`EndParticipation` 也先单独锁行再判在场并写——只锁替代口时第三种交错仍红（实施者 overlay 实测）。三种交错的真库并发回归在修前全红、修后全绿，日志可见卡在行锁上再放行。
   - **Standards**：阻断无。死锁面：两条路径各只锁一行、且都是终止读到的那一版，同一行上排队，不形成环；跨段的多行事务在 PG 侦测到死锁时会中止一方，属既有风险，未扩大。
+
+### 进 main 记录（2026-10-18，会话 idp-parcel-9b）
+
+- 分支 `claude-tfa0305`（03、05 同一分支）rebase 到远端 main 之上，快进推送；机制清点那一笔在重放后的树上重新生成。验证钉 `3fae64f8` 之后远端只多一笔纯 `.md`（`4e000051`），rebase 后代码与已验那份逐字相同，未重跑。
+- 推送方全量一次：钉 `3fae64f8` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 143 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
