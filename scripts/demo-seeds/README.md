@@ -141,6 +141,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 | `data/transport/05-schedule-template-sha-szx-express-1200.json`、`06-…-2000.json` | `cmd/parcel-transport-register schedule-template` | 上海→深圳快线两份（票 demo-chain-gaps/18）：`SYN-SCHED-SHA-SZX-EXPRESS-1200` 与 `-2000`，同走 `SYN-CONN-SHA-SZX`，当地 12:00、20:00 出发、历时 240 分钟，各声明重量 3000 KG、件数 600 PCS（合成值）。计划段窗口随提交时刻移动，首段窗口长十二小时；按日一班 22:00、历时 600 分钟的那一份只接得住一小段提交时刻，加这两班后三班合起来让首段窗口不论落在哪一刻都含一班完整的出发与到达，演示提交因此总有一段 `运输机会已准备`。只调演示租户的班期，不改匹配规则（ADR-0201 决定六） |
 | `data/transport/05-schedule-template-sha-szx-express-1200.json`、`06-…-2000.json` | `cmd/parcel-transport-register schedule-template` | 上海→深圳快线（票 demo-chain-gaps/18）：`SYN-SCHED-SHA-SZX-EXPRESS-1200` 与 `-2000`，同走 `SYN-CONN-SHA-SZX`，当地 12:00、20:00 出发、历时 240 分钟，各声明重量 3000 KG、件数 600 PCS（合成值）。计划段窗口随提交时刻移动，首段窗口长十二小时；`01` 那一份按日运行的上海→深圳只接得住一小段提交时刻，加上快线后首段窗口不论落在哪一刻都含一班完整的出发与到达，演示提交因此总有一段 `运输机会已准备`。只调演示租户的班期，不改匹配规则（ADR-0201 决定六）。ADR-0201 的票 18 补记、演示脚本与 `seed.sh` 不复述这些取值，都指到这里 |
 | `data/network/24-calendar-node-sin-lm-v2.json` | `cmd/parcel-network-register -kind service-calendar` | 新加坡末端日历修订 2（ADR-0217，票 demo-chain-gaps/64）：采用后的租户修订，处理时长照修订 1 重登 240 分钟，另登派送时长 240 分钟（合成值），2026-06-01 起无终点，登记时接续闭合修订 1。登了派送时长，计划在 `SYN-NODE-SIN-LM` 之后多一段交付段（种类 `DELIVERY`，终点 `SYN-AREA-SG@1`，窗口是离开末端的时刻加派送时长），`GET /route-plans?register=initial-route` 的末段即是它；末端交接声明这一段的引用，派送任务窗口就取它。没登时计划止于末端，与修订 1 相同。ADR-0217 决定六、演示脚本与 `seed.sh` 不复述这些取值，都指到这里 |
+| `data/transport/07-schedule-template-szx-sin-express-0200.json` 至 `13-…-express-1800.json`，`14-schedule-template-sin-lm-shuttle-0030.json` 至 `23-…-shuttle-2300.json` | `cmd/parcel-transport-register schedule-template` | 深圳→新加坡快班与新加坡枢纽→末端穿梭（票 demo-chain-gaps/98）。快班 `SYN-SCHED-SZX-SIN-EXPRESS-<HHMM>` 走 `SYN-CONN-SZX-SIN`，当地（Asia/Shanghai）02:00、04:00、09:00、12:00、14:00、16:00、18:00 出发，历时 240 分钟，各声明重量 2000 KG、件数 400 PCS。穿梭 `SYN-SCHED-SIN-LM-SHUTTLE-<HHMM>` 走 `SYN-CONN-SIN-LM`，当地（Asia/Singapore）00:30、02:00、03:30、05:00、06:30、13:30、15:00、16:30、21:30、23:00 出发，历时 30 分钟，各声明重量 800 KG、件数 160 PCS。都是合成值。后两段的窗口由前一段到达、节点处理时长与截单、连接缓冲推出，长度就是那条连接的缓冲；照本票时演示网络的日历推，深圳口岸开出只落在当地 00:00–04:00 与 08:00–18:00，新加坡枢纽开出只落在当地 12:00–16:00 与 20:00–06:00。一班接得住的窗口起点，落在它出发前「缓冲减历时」那么长的一段里；上面的时刻让这些段首尾相接、铺满两处落点，删去任何一份都会让一段提交时刻重新答 `NO_CURRENT_OPPORTUNITY`。改了演示网络的日历或缓冲要重算。`02`、`03` 两份按日一班原样保留。只调演示租户的班期，不改匹配规则（ADR-0201 决定六）；演示脚本与 `seed.sh` 不复述这些取值，都指到这里 |
 | `operator-channel/` | — | 演示发行方：Dex 的容器描述（`compose.yaml`，不并进仓库根那份门禁库描述）与配置（`dex.yaml`：管理台公共客户端、两个合成静态用户），取令牌脚本 `operator-token.sh`，操作者渠道取证脚本 `probe-operator-channel.sh`；另有集成客户端族的发行方配置 `integration-dex.yaml` 与取令牌脚本 `integration-token.sh`，首方客户族的受众与合成客户端也登在 `integration-dex.yaml`，取令牌脚本 `customer-token.sh`。用法见上面「操作者渠道」「集成客户端渠道」「首方客户渠道」三节 |
 | `migrate/` | — | 迁移助手（`migrate.Run` 的隔离环境入口；迁移计划刻意没有生产入口） |
 | `seedgen/` | — | 计价快照生成器：价卡、序列与参考目录的登记输入带规范化版本号与内容摘要自校，必须经真领域构造函数折装；PPC/PRS/PRC 规范化版本升级时重跑并提交新产物 |
@@ -315,6 +316,11 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
    形成那一件的 `ACTUAL_FULFILLMENT` 发生项，配置员不必再登；没有采用委托的段照旧人工登。演示约定的旅程自此写派生拼写
    `JRN/<包裹号>`，不再写 `SYN-JRN-<包裹号>`：照旧拼写人工登同一段同一件，会与自动形成的那一项撞成冲突。演示怎么走只写在
    [演示动线](../../docs/design/synthetic-demo-journey-script.md)「第 3 步」的票 67 补记里，这里不复述。
+
+   2026-10-19 起（票 demo-chain-gaps/98）种子另登了深圳→新加坡快班与新加坡枢纽→末端穿梭（上表 `data/transport/07`–`23`
+   那一行），上面准备结果那段里「后两段……答 `NO_CURRENT_OPPORTUNITY`；这是如实答案」自此读作：三段在任何提交时刻都至少有一班
+   落在窗口里、两池都够，各答 `OPPORTUNITY_PREPARED`。后两段选中的多半是评估时物化出来的快班或穿梭（候选 `version` 为 0）；
+   干线订舱仍订在 `data/transport/04` 显式登记的那一班上，准备选中哪一班不替运营决定订哪一班。
 
 ## 已知边界（如实记录，不是缺陷）
 

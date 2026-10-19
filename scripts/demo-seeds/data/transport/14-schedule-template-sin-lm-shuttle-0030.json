@@ -1,0 +1,17 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "template": "SYN-SCHED-SIN-LM-SHUTTLE-0030",
+  "connection": "SYN-CONN-SIN-LM",
+  "fromNode": "SYN-NODE-SIN-HUB",
+  "toNode": "SYN-NODE-SIN-LM",
+  "weekdays": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"],
+  "departureLocalTime": "00:30",
+  "durationMinutes": 30,
+  "timeZone": "Asia/Singapore",
+  "serviceScope": "SYN-SCOPE-01",
+  "effectiveFrom": "2026-01-01",
+  "capacities": [
+    {"dimension": "WEIGHT", "unit": "KG", "capacity": 800},
+    {"dimension": "PIECES", "unit": "PCS", "capacity": 160}
+  ]
+}

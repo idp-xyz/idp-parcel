@@ -1,0 +1,17 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "template": "SYN-SCHED-SZX-SIN-EXPRESS-1400",
+  "connection": "SYN-CONN-SZX-SIN",
+  "fromNode": "SYN-NODE-SZX-GATE",
+  "toNode": "SYN-NODE-SIN-HUB",
+  "weekdays": ["MON", "TUE", "WED", "THU", "FRI", "SAT", "SUN"],
+  "departureLocalTime": "14:00",
+  "durationMinutes": 240,
+  "timeZone": "Asia/Shanghai",
+  "serviceScope": "SYN-SCOPE-01",
+  "effectiveFrom": "2026-01-01",
+  "capacities": [
+    {"dimension": "WEIGHT", "unit": "KG", "capacity": 2000},
+    {"dimension": "PIECES", "unit": "PCS", "capacity": 400}
+  ]
+}
