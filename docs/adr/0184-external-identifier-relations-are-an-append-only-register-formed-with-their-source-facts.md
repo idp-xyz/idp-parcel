@@ -2,7 +2,7 @@
 
 Status: Accepted（2026-10-16，用户原话「这些需要确定的事情……你帮我做决定吧」与「开始」。Claude Code 会话据此代 PS owner 裁定下面七条，落在票 [ps-external-mark-relations/01](../../.scratch/ps-external-mark-relations/issues/01-external-mark-relations-have-no-model-in-parcel-shipment.md) 那一格。裁决能力边界：读过 PS CONTEXT「外部标识」「面单交易包裹结果」的定义、Rules 里外部标识两条与面单交易各条、`委托` 与 `包裹身份与服务` 两节生命周期，GLOSSARY「外部标识」「包裹内部标识」，CONTEXT-MAP `parcel-shipment → node-operations` 一条，UC-NO-002 的流程表、控制与身份一节和验收表；代码读过 `IsolatedSubmissionIntake` 的译装、`SubmitShipmentRequestHandler`、`ShipmentRequests.Save` 与 `FindCurrentAcceptedByParcel`、`LabelTransactionParcelResult`、NO 的 `ParcelIdentityView` 与两处 `unconfiguredParcelIdentityView`。**没读** UC-PS-001 全文与面单交易各编排的全部分支。）
 
-Partially suspended by: [ADR-0185](./0185-external-identifier-relation-identity-includes-its-formation-basis.md)（被停条款：决定一「键（租户，标识类型，分配方，号码，被标识对象）」——键加入形成依据；其余各条不变，本记录正文不改写）
+Partially suspended by: [ADR-0185](./0185-external-identifier-relation-identity-includes-its-formation-basis.md)（被停条款：决定一「键（租户，标识类型，分配方，号码，被标识对象）」——键加入形成依据；其余各条不变，本记录正文不改写）；[ADR-0195](./0195-a-submitted-declaration-of-the-same-number-turns-a-unique-hit-into-an-identity-conflict.md)（被停条款：决定五「只交回包裹，不交分配方、客户账户或委托」里的「只交回包裹」——答复另带歧义信号；「不交分配方、客户账户或委托」与其余各条不变，本记录正文不改写）
 
 Date: 2026-10-16
 
@@ -76,9 +76,18 @@ PS CONTEXT 把「外部标识关系」列为本上下文所管，定义要求记
    - **日后。** 要让交付范围参与候选，不论收窄还是消歧，前提依次是：NO 给可验证的交付范围建模；先改 PS CONTEXT「按外部标识核对包裹身份」那一条与 CONTEXT-MAP 同句；再另立记录停用本条决定。怎么用、范围外的唯一命中怎么答，留给那篇记录定，本条不预设。哪个授权交付方可以替哪个客户账户送货，属租户取值。
 5. **后果节在接受后被原地改写的补记**（2026-10-16；出处同上，两轴都列为非阻断。同一会话据同一授权补记，决定原文不动）：本记录在 `5714a137` 以 Accepted 立下。同日，票 02 的代码提交 `cc52e9b6` 在同一分支、进 main 之前，把 Consequences 以「PS 迁移」起头那一条的开头原地改了。接受时原句是「PS 迁移一份（关联表、适用变化表、按号码查的索引）」；现行文字是「PS 迁移两份：关联表与按号码查的索引随客户包裹件号进来，适用变化表随渠道来源的作废与替代进来（客户包裹件号没有作废或替代的来源事实）」。同一条其余各句、Decision 与越权风险点都没动。理由见票 02 完成记录「评审中改的」：票 02 没有任何来源事实会产生作废或替代，适用变化表挪到票 03，与渠道来源同笔进来。这是实施拆分的如实更正，但改的是已接受记录的正文。照 AGENTS.md「改文档」里「不改写已接受 ADR 历史」，它本该像本节「越权风险点 4 的事实更正」那样追加在这里。现行文字与落地相符（迁移 `0024`、`0025`；`0025` 同笔另含 ADR-0185 的改键，见该记录），所以保留、不回滚：回滚是对正文的又一次改写，还会让后果节与迁移对不上。接受时的原句，以本条引文与 `5714a137` 为准。
 
+## 复核记录（2026-10-19，决定原文不动）
+
+1. **决定五一句由 ADR-0195 部分停用，「其二」里对方已提交的那一格由它收住**（出处：票 [ps-external-mark-relations/05](../../.scratch/ps-external-mark-relations/issues/05-a-unique-hit-in-someone-elses-number-space-is-not-enough.md) 裁定。会话 `idp-parcel-9b` 据用户原话「你作为业务和系统专家你来自决」代 PS owner 与 NO owner 裁定，决定原文不动）：
+   - **决定五「只交回包裹」。** 身份核对的答复另带歧义信号：号码此刻是否同时被本租户一份`已提交`委托声明为客户包裹件号。同句「不交分配方、客户账户或委托」照旧，信号只是一个是否值。
+   - **决定六维持。** 候选与信号都不按范围收窄。
+   - **上一节「决定六与 UC-NO-002「权限、隔离与审计」」的代价「其二」。** 对方的委托已提交、还没接受的那一格，不论跨客户账户还是同一客户账户重复用号，NO 都答身份冲突、不再唯一关联（`TestTheWiredReceptionAnswersAConflictWhenAnUnacceptedRequestAlsoDeclaresTheNumber`，由 `TestTheWiredReceptionAssociatesTheOnlyRegisteredHolderOfANumber` 翻转而来）。对方从未报过这个号、或对方委托已被拒绝或撤回的那几种情形，仍按原文，唯一命中照旧关联（`TestTheWiredReceptionAssociatesOnceTheOtherDeclarationIsRejectedOrWithdrawn`）。
+   - **上一节「风险点 1 的更正」再更正。** 「接受之前送站答待识别」：号码只在别处一份已接受委托里在册、而送站这件所属的委托已提交并报了这个号时，答待识别并记身份冲突，不再唯一关联到别处那一件。
+
 ## Links
 
 - PS CONTEXT「外部标识」「外部标识关联」与 Lifecycles「外部标识关联」：[../domain/parcel-shipment/CONTEXT.md](../domain/parcel-shipment/CONTEXT.md)
 - [ADR-0060](./0060-parcel-lookup-uses-current-snapshot-projection.md)（委托当前投影列）、[ADR-0084](./0084-label-transaction-is-an-independent-aggregate-with-two-level-results.md)（面单交易两层结果）、[ADR-0113](./0113-carrier-master-document-is-an-independent-register-keyed-by-declared-reference-and-version.md)（外部号码立册、版本链只插不改的先例）
 - 票：[ps-external-mark-relations/01](../../.scratch/ps-external-mark-relations/issues/01-external-mark-relations-have-no-model-in-parcel-shipment.md)
 - [ADR-0185](./0185-external-identifier-relation-identity-includes-its-formation-basis.md)：部分停用本记录决定一的键——键加入形成依据；其余各条不变
+- [ADR-0195](./0195-a-submitted-declaration-of-the-same-number-turns-a-unique-hit-into-an-identity-conflict.md)：部分停用本记录决定五「只交回包裹」一句——答复另带歧义信号；决定六维持，「其二」里对方已提交的那一格由它收住
