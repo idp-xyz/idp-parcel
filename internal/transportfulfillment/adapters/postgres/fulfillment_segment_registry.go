@@ -509,12 +509,16 @@ func participationSpecFrom(row participationRow) (domain.RehydrateParticipationS
 	return spec, nil
 }
 
+// participationEntryKindFrom 要与领域 ParticipationEntryKind 的每个词逐一对上：迁移的 CHECK 收下的词这里不认，
+// 那一名成员落得进、读不回，整段的终止、交接与进段都随之读不回段而停住。
 func participationEntryKindFrom(raw string) (domain.ParticipationEntryKind, error) {
 	switch raw {
 	case domain.EnteredByOffsitePickup.String():
 		return domain.EnteredByOffsitePickup, nil
 	case domain.EnteredByTransportHandover.String():
 		return domain.EnteredByTransportHandover, nil
+	case domain.EnteredByCarrierFirstEffectivePickup.String():
+		return domain.EnteredByCarrierFirstEffectivePickup, nil
 	default:
 		return 0, fmt.Errorf("unknown participation entry kind %q", raw)
 	}
