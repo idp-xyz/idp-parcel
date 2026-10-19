@@ -389,6 +389,12 @@
 | `AT-TF-243` | internal/transportfulfillment/domain/handover_gate_reading_test.go::TestAHandoverGateReadingBelongsToItsHandedOverVersion（领域半边：读不动停点只属更正版）；internal/transportfulfillment/application/read_handover_gate_test.go::TestACorrectionWhosePredecessorCannotBeReadRecordsAnUnreadableGate、::TestACorrectionThatNeedsNoCustomsAnswerIsNotLeftUnreadable；internal/transportfulfillment/adapters/postgres/transport_handover_gate_reading_test.go::TestHandoverGateReadingsRoundTripThroughEveryReadPath（库面往返） |
 | `AT-TF-244` | internal/transportfulfillment/domain/handover_gate_reading_test.go::TestAHandoverGateReadingBelongsToItsHandedOverVersion、::TestTheHandoverRehydrationDoorRequiresAGateReadingExactlyOnHandedOver（领域与重建门半边）；internal/transportfulfillment/application/read_handover_gate_test.go::TestAMisplacedHandoverGateReadingIsAWiringError；internal/transportfulfillment/adapters/postgres/transport_handover_gate_reading_test.go::TestTheDatabaseGuardsTheHandoverGateReadingShape（库面半边） |
 | `AT-TF-245` | internal/transportfulfillment/adapters/http/handover_gate_reading_test.go::TestTheHandoverEndpointRepliesWithTheGateReading；internal/transportfulfillment/adapters/postgres/transport_handover_gate_reading_test.go::TestHandoverGateReadingsRoundTripThroughEveryReadPath（查阅册库面）；cmd/parcel-api/handover_gate_reading_test.go::TestTheWiredHandoverRecordsTheOutboundReleaseGateReadingAgainstARealDatabase（查阅口认证换成固定租户替身） |
+| `AT-TF-226` | cmd/parcel-api/assemble_departure_gate_preview_test.go::TestADemoDeviceAsksBeforeDepartingAndTheDepartureReadsTheSame |
+| `AT-TF-227` | internal/transportfulfillment/application/preview_departure_gate_test.go::TestAPreviewAnswersTheSameReadingAsTheDepartureWithTheSameParameters（编排半边）；internal/transportfulfillment/adapters/http/preview_departure_gate_test.go::TestAPreviewAnswersOKWithTheSameGateReadingBytesAsTheDeparture（线格式半边）；cmd/parcel-api/assemble_departure_gate_preview_test.go::TestAPreviewIsAReadingNotAPermit（真库半边） |
+| `AT-TF-228` | internal/transportfulfillment/application/preview_departure_gate_test.go::TestAPreviewThatCannotBeAcceptedAsksNothing（编排半边）；internal/transportfulfillment/adapters/http/preview_departure_gate_test.go::TestAPreviewRefusesWhatItCannotAccept（线格式半边） |
+| `AT-TF-229` | cmd/parcel-api/assemble_departure_gate_preview_test.go::TestADemoDeviceAsksBeforeDepartingAndTheDepartureReadsTheSame |
+| `AT-TF-230` | internal/transportfulfillment/adapters/http/preview_departure_gate_test.go::TestAPreviewIsRefusedWithoutTheMovementFactGrant（线格式半边）；cmd/parcel-api/assemble_departure_gate_preview_test.go::TestAPreviewWithoutTheGrantIsRefusedAndAsksNoOne（真库半边） |
+| `AT-TF-231` | cmd/parcel-api/assemble_departure_gate_preview_test.go::TestAPreviewIsAReadingNotAPermit |
 | `AT-VE-038` | internal/visibilityexception/application/derive_projection_test.go::TestFactsDeriveAndRederiveTheProjection |
 | `AT-VE-039` | internal/visibilityexception/application/derive_projection_test.go::TestReplayConflictAndUnconfiguredMappingStayHonest |
 | `AT-VE-040` | internal/visibilityexception/application/derive_projection_test.go::TestReplayConflictAndUnconfiguredMappingStayHonest |
@@ -1305,6 +1311,7 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-19 追记（票 demo-chain-gaps/60）：UC-TF-006 新立 `AT-TF-191`–`200`（派送发起随交接信封进程内逐对象发起，ADR-0216），随票在编排、消费门、派发真库与路由表用例上补 Covers 点名，全部入①；半边覆盖在行内注明。①、TF 与合计各加 10，②③④不变；绝对数进 main 时随同波票按批重算（号段 191–200 由协调方预分，本票用满）。
 
 2026-10-19 追记（票 demo-chain-gaps/59）：UC-TF-005 新立 `AT-TF-216`–`222`（交接声明交出、接收、去向节点，ADR-0213），随票在领域、编排、真库、线格式与生产装配真库用例上补 Covers 点名，全部入①；半边覆盖在行内注明。①、TF 与合计各加 7，②③④不变；绝对数进 main 时随同波票按批重算（号段 216–225 由协调方预分，本票用到 222）。
+2026-10-19 追记（票 demo-chain-gaps/69）：UC-TF-005 新立 `AT-TF-226`–`231`（设备出发前门禁问询，ADR-0219），随票在编排、线格式与真库装配用例上补 Covers 点名，全部入①；半边覆盖在行内注明。①、TF 与合计各加 6，②③④不变；绝对数进 main 时随同波票按批重算（号段 226–235 由协调方预分，本票用 226–231，232–235 未用）。
 
 2026-10-19 追记（票 demo-chain-gaps/61）：新立 UC-NO-005，含 `AT-NO-101`–`112`（按权威运输交接转出节点控制，ADR-0214）。随票在领域、编排、消费侧适配器、消费门、真库存储、HTTP 与派发真库用例上补 Covers 点名，全部入①；半边覆盖在行内注明。①、NO 与合计各加 12，②③④不变。绝对数进 main 时随同波票按批重算（号段 101–112 由协调方预分，本票用满）。转入一半的验收示例随票 62 另取号。
 

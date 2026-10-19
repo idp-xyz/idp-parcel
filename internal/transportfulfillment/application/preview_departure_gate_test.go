@@ -29,7 +29,7 @@ func previewHandler(t *testing.T, fixture *departureGateFixture) *application.Pr
 	return handler
 }
 
-// Covers: AT-TF-226、AT-TF-227 编排半边——问询交回的读数与随后同参登记的那条出发同格：整格、起讫、停点、逐对象那一格连同关务
+// Covers: AT-TF-227 编排半边——问询交回的读数与随后同参登记的那条出发同格：整格、起讫、停点、逐对象那一格连同关务
 // 判断标识与依据都相同，问关务的问法也逐问相同。覆盖读数的五格与本侧各停点：同一条路径，任何一格都不该分岔。
 func TestAPreviewAnswersTheSameReadingAsTheDepartureWithTheSameParameters(t *testing.T) {
 	cases := map[string]func(*departureGateFixture, *application.RecordMovementFactCommand){
