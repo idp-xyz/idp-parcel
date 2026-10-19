@@ -164,6 +164,10 @@ type ReceptionStore interface {
 	// FindOtherUnitIntakes 交回本租户收寄册上关联到 parcel、作业实物不是 unit 的各条记录，按来源标识定序；没有交回空切片。
 	// 收寄编排据此认「同一外部条码出现在多个实物」（ADR-0196）：按关联到的包裹认，不按号码认——号码只是这次身份核对的
 	// 输入，关联才是册上已经成立的判断。不看那件实物此刻是否仍在节点控制下。
+	//
+	// 这个读要在收寄落册所在的事务里调：从这次读到那笔事务结束，同一租户同一件包裹上的另一次读等着（票
+	// no-reception-identity/03），否则两笔并发送站各自读不到对方未提交的关联，两件都关联成立。只在单线程里跑的替身不必
+	// 模拟这一格。
 	FindOtherUnitIntakes(
 		ctx context.Context,
 		tenant domain.TenantID,

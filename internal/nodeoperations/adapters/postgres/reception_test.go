@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -280,7 +281,17 @@ func TestOtherUnitIntakesAreFoundByTheirParcelAssociation(t *testing.T) {
 	tenant := formed.Key.TenantID
 	parcel, _ := formed.Intake.Association()
 	asking := ref(t, domain.NewHandlingUnitID, "SYN-UNIT-9")
-	found, err := repository.FindOtherUnitIntakes(ctx, tenant, parcel, asking)
+	// 读口要在收寄所在的事务里调（它取的锁随事务释放），每问一次各开一笔。
+	findOthers := func(parcel domain.ParcelAssociationReference, unit domain.HandlingUnitID) ([]ports.ReceptionRecord, error) {
+		var found []ports.ReceptionRecord
+		err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+			records, err := repository.FindOtherUnitIntakes(txCtx, tenant, parcel, unit)
+			found = records
+			return err
+		})
+		return found, err
+	}
+	found, err := findOthers(parcel, asking)
 	if err != nil {
 		t.Fatalf("按包裹读：%v", err)
 	}
@@ -289,13 +300,103 @@ func TestOtherUnitIntakesAreFoundByTheirParcelAssociation(t *testing.T) {
 		t.Fatalf("按包裹读到 %+v, want 只有同租户那条关联收寄且原样读回", found)
 	}
 
-	sameUnit, err := repository.FindOtherUnitIntakes(ctx, tenant, parcel, formed.Intake.Unit())
+	sameUnit, err := findOthers(parcel, formed.Intake.Unit())
 	if err != nil || len(sameUnit) != 0 {
 		t.Fatalf("同一件实物来问读到 %d 条 err = %v, want 0——自己的收寄不是别的实物", len(sameUnit), err)
 	}
-	candidateOnly, err := repository.FindOtherUnitIntakes(ctx, tenant, pending.Candidates[0], asking)
+	candidateOnly, err := findOthers(pending.Candidates[0], asking)
 	if err != nil || len(candidateOnly) != 0 {
 		t.Fatalf("按候选读到 %d 条 err = %v, want 0——候选不是关联", len(candidateOnly), err)
+	}
+}
+
+// Covers: 票 no-reception-identity/03——按包裹读别的实物关联在查询之前取事务级咨询锁，键是（租户、包裹关联）。一笔事务握着
+// 某租户某包裹的锁时：同租户另一件包裹、另一租户同一个包裹关联的读照常走完；同租户同一件包裹的读等在锁上。等不等由探针
+// 事务的 lock_timeout 量出来：等锁超时报 55P03，不等就读完。握锁的一方在另一条连接上，断言都在事务闭包外。
+func TestTheParcelLockSerializesOnlyTheSameTenantAndParcel(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	repository, err := adapter.NewReceptions(db)
+	if err != nil {
+		t.Fatalf("构造收寄库：%v", err)
+	}
+	transactor := db.Transactor()
+	tenant := ref(t, domain.NewTenantID, "SYN-TENANT-NRI03-A")
+	parcel := ref(t, domain.NewParcelAssociationReference, "SYN-PARCEL-NRI03-1")
+	asking := ref(t, domain.NewHandlingUnitID, "SYN-UNIT-NRI03-ASKING")
+
+	holding := make(chan struct{})
+	release := make(chan struct{})
+	held := make(chan error, 1)
+	go func() {
+		held <- transactor.WithinTransaction(t.Context(), func(txCtx context.Context) error {
+			if _, err := repository.FindOtherUnitIntakes(txCtx, tenant, parcel, asking); err != nil {
+				return err
+			}
+			close(holding)
+			<-release
+			return nil
+		})
+	}()
+	var released sync.Once
+	letGo := func() { released.Do(func() { close(release) }) }
+	t.Cleanup(letGo)
+	select {
+	case <-holding:
+	case err := <-held:
+		t.Fatalf("握锁的一方没握住就结束了：%v", err)
+	case <-time.After(10 * time.Second):
+		t.Fatal("握锁的一方没在时限内取到锁")
+	}
+
+	probe := func(tenant domain.TenantID, parcel domain.ParcelAssociationReference) error {
+		return transactor.WithinTransaction(t.Context(), func(txCtx context.Context) error {
+			executor, err := db.RequireExecutor(txCtx)
+			if err != nil {
+				return err
+			}
+			if _, err := executor.Exec(txCtx, `SET LOCAL lock_timeout = '300ms'`); err != nil {
+				return err
+			}
+			_, err = repository.FindOtherUnitIntakes(txCtx, tenant, parcel, asking)
+			return err
+		})
+	}
+	if err := probe(tenant, ref(t, domain.NewParcelAssociationReference, "SYN-PARCEL-NRI03-2")); err != nil {
+		t.Errorf("同租户另一件包裹的读被挡住了：%v", err)
+	}
+	if err := probe(ref(t, domain.NewTenantID, "SYN-TENANT-NRI03-B"), parcel); err != nil {
+		t.Errorf("另一租户同一个包裹关联的读被挡住了：%v", err)
+	}
+	var pgErr *pgconn.PgError
+	if err := probe(tenant, parcel); !errors.As(err, &pgErr) || pgErr.Code != "55P03" {
+		t.Errorf("同租户同一件包裹的读 err = %v, want 等在锁上直到 lock_timeout（55P03）", err)
+	}
+
+	letGo()
+	select {
+	case err := <-held:
+		if err != nil {
+			t.Fatalf("握锁的一方：%v", err)
+		}
+	case <-time.After(10 * time.Second):
+		t.Fatal("握锁的一方没在时限内收尾")
+	}
+}
+
+// Covers: 按包裹读别的实物关联只在事务里成立——它取的事务级锁要握到收寄落册提交为止；没有事务时锁随单条语句放掉，读完
+// 到落册之间不再串行，所以拒，不改用连接池。
+func TestTheParcelLockedReadRefusesToRunOutsideATransaction(t *testing.T) {
+	repository, _ := newReceptions(t)
+	_, err := repository.FindOtherUnitIntakes(t.Context(),
+		ref(t, domain.NewTenantID, "SYN-TENANT-NRI03-A"),
+		ref(t, domain.NewParcelAssociationReference, "SYN-PARCEL-NRI03-1"),
+		ref(t, domain.NewHandlingUnitID, "SYN-UNIT-NRI03-ASKING"))
+	if !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务按包裹读应返回 ErrTransactionRequired，实得：%v", err)
 	}
 }
 

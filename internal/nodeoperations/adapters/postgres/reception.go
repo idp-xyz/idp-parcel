@@ -85,20 +85,30 @@ func (repository *Receptions) FindByKey(
 }
 
 // FindOtherUnitIntakes 按（租户+正式包裹关联）取回别的作业实物的收寄记录（ADR-0196），走索引 reception_intake_association_idx。
+// 只认收寄本身带的关联——待识别行的候选不是关联，不在此列。
 //
-// 走 ReadExecutor：编排在同一笔事务里先读这里、再写收寄，事务内读得到本事务先写的行。只认收寄本身带的关联——待识别行的
-// 候选不是关联，不在此列。
+// 查询之前按（租户、包裹关联）取事务级咨询锁，把同一件包裹上「读别的实物关联 → 落收寄」串起来（票
+// no-reception-identity/03）。没有它，两件贴同一个号的实物在两笔并发事务里送站，READ COMMITTED 下各自读不到对方尚未
+// 提交的关联，两件都关联成立。后到的一方等在锁上，先到的提交后才查；READ COMMITTED 下这条查询另取快照，读得到刚提交的
+// 关联。锁随事务释放，所以走 RequireExecutor：没有事务时锁在取锁那条语句结束就放掉，读完到落册之间不再串行，静默放过
+// 比报错更糟。锁键各维以 chr(31) 分隔后取 hashtext，口径同 access_identity 的 lockMappingKey；哈希撞上只多等一会儿，不错判。
 func (repository *Receptions) FindOtherUnitIntakes(
 	ctx context.Context,
 	tenant domain.TenantID,
 	parcel domain.ParcelAssociationReference,
 	unit domain.HandlingUnitID,
 ) ([]ports.ReceptionRecord, error) {
-	querier, err := repository.db.ReadExecutor(ctx)
+	executor, err := repository.db.RequireExecutor(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("find other unit intakes: %w", err)
 	}
-	rows, err := querier.Query(ctx,
+	if _, err := executor.Exec(ctx,
+		`SELECT pg_advisory_xact_lock(hashtext('node_operations.reception.parcel_association'), hashtext($1 || chr(31) || $2))`,
+		tenant.String(), parcel.String(),
+	); err != nil {
+		return nil, fmt.Errorf("find other unit intakes: 取包裹锁：%w", err)
+	}
+	rows, err := executor.Query(ctx,
 		`SELECT `+receptionColumns+`
 		   FROM node_operations.reception
 		  WHERE tenant_id = $1
