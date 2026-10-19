@@ -1,7 +1,7 @@
 # 31 TF 命令答复的时刻经登记册精度带小数秒回显：关段与承运商判断只回显到秒，冲突与重放分不出
 
 Category: enhancement
-Status: ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 3 评审遗留；用户授权代决）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc31`；30 已进 main，Blocked by 解除）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 3 评审遗留；用户授权代决）
 Blocked by: operator-channel/30 进 main（要用它的 AtRegistryPrecision）
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)。被评的是 [20](./20-tf-closure-dispatch-task-and-pickup-judgment-canonicalization.md)，代码 `857453d8`。
 出处：票 20 Comments「评审 ← 会话 idp-parcel-9b 起的隔离子代理 · 钉 `857453d8`」，Spec 非阻断 (2)。取证钉 main `8d22729f`。证据层级 `S`。
