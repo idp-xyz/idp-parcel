@@ -387,6 +387,34 @@
     {
       "tenantId": "SYN-TENANT-01",
       "kind": "SUPPLIER_AGREEMENT",
+      "objectId": "SYN-SUPPLIER-TRUNK-CN-SG-01",
+      "version": "v2",
+      "scope": "SYN-SCOPE-01",
+      "contentDigest": "PCC-2:55a33e7a7ef061598a5ad91d642fe0187f75b80beed4c6eebfc345264b8f44b0",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "approval": {
+        "reference": "SYN-APPROVAL-2026-020",
+        "source": "SYN-SOURCE-DEMO-BATCH-2026-01",
+        "approvedAt": "2025-12-15T00:00:00Z"
+      },
+      "approvalRoleStanding": "CONFIRMED",
+      "declarations": {
+        "supplierAgreementBody": {
+          "supplier": "SYN-PARTY-CARRIER-TRUNK-01",
+          "legalEntity": "SYN-LE-01",
+          "scope": "SYN-SCOPE-01",
+          "purchasePlan": "SYN-PLAN-CN-SG-COST-01",
+          "effectiveStartsAt": "2026-01-01T00:00:00Z",
+          "chargeConditions": [
+            {"reason": "ACTUAL_FULFILLMENT", "charged": true, "quantityForm": "PER_PIECE"},
+            {"reason": "FAILED_ATTEMPT", "charged": false}
+          ]
+        }
+      }
+    },
+    {
+      "tenantId": "SYN-TENANT-01",
+      "kind": "SUPPLIER_AGREEMENT",
       "objectId": "SYN-SUPPLIER-LASTMILE-SG-01",
       "version": "v1",
       "scope": "SYN-SCOPE-01",
