@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -16,16 +17,19 @@ import (
 	ccregistration "go.idp.xyz/idp-parcel/internal/customscompliance/adapters/registrationjson"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
+	tfcustoms "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/customscompliance"
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
+	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	tfapp "go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
+	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
 var movementFactOccurredAt = time.Date(2026, 8, 22, 6, 0, 0, 0, time.UTC)
 
 // Covers: `/transport-fulfillment/movement-facts` 的第二参是真编排（票 tf-segment-lifecycle-closure/05、demo-chain-gaps/32）——移动
 // 事实登记册在真实 PostgreSQL 上装得起来，事务边界成立（重放走已有版本，证首笔真的提交了）。出发一律落册：自报要门禁却没带凭据、
-// 没声明段、班次也没登，照样 MOVEMENT_FACT_RECORDED，读数停在本上下文这一侧答未决，与事实同一行（AT-TF-109 真库半边）。测试输入是
+// 没声明段、班次也没登，照样 MOVEMENT_FACT_RECORDED，读数停在本上下文这一侧答未决，与事实同一行（AT-TF-114 真库半边）。测试输入是
 // 隔离合成，只记 `S`。
 func TestTheWiredMovementFactAnswersHonestlyAgainstARealDatabase(t *testing.T) {
 	pool := pgtest.Pool(t)
@@ -127,6 +131,7 @@ var (
 type departureLine struct {
 	t        *testing.T
 	pool     *pgxpool.Pool
+	db       *bentopg.DB
 	movement tfhttp.MovementFactHandler
 	handover tfhttp.HandoverHandler
 }
@@ -191,7 +196,7 @@ func newDepartureLine(t *testing.T) *departureLine {
 	if err != nil {
 		t.Fatalf("装配移动事实：%v", err)
 	}
-	return &departureLine{t: t, pool: pool, movement: movement, handover: controlFacts.handover}
+	return &departureLine{t: t, pool: pool, db: db, movement: movement, handover: controlFacts.handover}
 }
 
 func demoSeed(t *testing.T, family, name string) []byte {
@@ -219,13 +224,17 @@ func (line *departureLine) handOver(segment, object string) {
 	}
 }
 
-func (line *departureLine) depart(fact, segment string) tfdomain.DepartureGateReading {
-	line.t.Helper()
-	result, err := line.movement.Record(line.t.Context(), tfapp.RecordMovementFactCommand{
+func (line *departureLine) departureCommand(fact, segment string) tfapp.RecordMovementFactCommand {
+	return tfapp.RecordMovementFactCommand{
 		TenantID: mustValue(line.t, tfdomain.NewTenantID, departureLineTenant), Fact: fact, Schedule: departureLineSchedule,
 		Kind: tfdomain.DepartureFact, Location: "SYN-NODE-SHA-HUB", Source: frontlineMovementSource, Version: "v1",
 		OccurredAt: departureLineDepartedAt, Segment: segment,
-	})
+	}
+}
+
+func (line *departureLine) depart(fact, segment string) tfdomain.DepartureGateReading {
+	line.t.Helper()
+	result, err := line.movement.Record(line.t.Context(), line.departureCommand(fact, segment))
 	if err != nil {
 		line.t.Fatalf("出发 %s：%v", fact, err)
 	}
@@ -247,8 +256,9 @@ func (line *departureLine) seed(sql string, args ...any) {
 	}
 }
 
-// Covers: AT-TF-105（演示判据，证据 S）——自营 SHA→SZX：按演示种子登了节点区域与周期安排，交接立段后，一线设备在生产渠道上报出发
-// 答 201，读数不受门禁：关务按区域只适用装载出发，包裹不在任何案卷里。起讫取班次方向，逐对象那一格带回关务判断标识与依据原文。
+// Covers: AT-TF-110（演示判据，证据 S）——自营 SHA→SZX：按演示种子登了节点区域与周期安排，交接立段后，一线设备在生产渠道上报出发
+// 答 201，读数不受门禁：关务按区域只适用装载出发，包裹不在任何案卷里。起讫取班次方向；答复里逐对象只有对象与那一格，关务判断
+// 标识与依据原文落在库面那一行（ADR-0205 决定一）。
 func TestADemoSelfOperatedDepartureFromShanghaiToShenzhenAnswersCreatedNotGuarded(t *testing.T) {
 	line := newDepartureLine(t)
 	line.handOver("SYN-SEG-SHA-SZX-DEMO", "SYN-PARCEL-DEMO-01")
@@ -268,18 +278,10 @@ func TestADemoSelfOperatedDepartureFromShanghaiToShenzhenAnswersCreatedNotGuarde
 		Outcome     string `json:"outcome"`
 		Segment     string `json:"segment"`
 		GateReading struct {
-			Answer  string `json:"answer"`
-			From    string `json:"from"`
-			To      string `json:"to"`
-			Objects []struct {
-				Object    string `json:"object"`
-				Answer    string `json:"answer"`
-				Judgement string `json:"judgement"`
-				Bases     []struct {
-					Action string `json:"action"`
-					Cause  string `json:"cause"`
-				} `json:"bases"`
-			} `json:"objects"`
+			Answer  string           `json:"answer"`
+			From    string           `json:"from"`
+			To      string           `json:"to"`
+			Objects []map[string]any `json:"objects"`
 		} `json:"gateReading"`
 	}
 	if err := json.Unmarshal(response.Body.Bytes(), &answer); err != nil {
@@ -290,18 +292,27 @@ func TestADemoSelfOperatedDepartureFromShanghaiToShenzhenAnswersCreatedNotGuarde
 		reading.From != "SYN-NODE-SHA-HUB" || reading.To != "SYN-NODE-SZX-GATE" {
 		t.Fatalf("答复 = %s", response.Body.String())
 	}
-	if len(reading.Objects) != 1 || reading.Objects[0].Object != "SYN-PARCEL-DEMO-01" || reading.Objects[0].Answer != "NOT_GUARDED" ||
-		!strings.HasPrefix(reading.Objects[0].Judgement, "AADJ-") || len(reading.Objects[0].Bases) != 1 ||
-		reading.Objects[0].Bases[0].Action != "LOADING_DEPARTURE" || reading.Objects[0].Bases[0].Cause != "OUTSIDE_CUSTOMS_BOOKS" {
-		t.Fatalf("逐对象那一格 = %+v", reading.Objects)
+	if len(reading.Objects) != 1 || reading.Objects[0]["object"] != "SYN-PARCEL-DEMO-01" || reading.Objects[0]["answer"] != "NOT_GUARDED" ||
+		len(reading.Objects[0]) != 2 {
+		t.Fatalf("逐对象那一格只该有对象与答复 = %+v", reading.Objects)
 	}
 	if stored := storedGateReading(t, line.pool, "SYN-MOVE-DEMO-01"); stored != "NOT_GUARDED" {
 		t.Fatalf("库面读数 = %q", stored)
 	}
+	var judgement, action, cause string
+	if err := line.pool.QueryRow(t.Context(),
+		`SELECT gate_reading_detail #>> '{findings,0,judgement}', gate_reading_detail #>> '{findings,0,bases,0,action}',
+		        gate_reading_detail #>> '{findings,0,bases,0,cause}'
+		   FROM transport_fulfillment.transport_movement_fact WHERE fact_ref = 'SYN-MOVE-DEMO-01'`).Scan(&judgement, &action, &cause); err != nil {
+		t.Fatalf("查库面依据：%v", err)
+	}
+	if !strings.HasPrefix(judgement, "AADJ-") || action != "LOADING_DEPARTURE" || cause != "OUTSIDE_CUSTOMS_BOOKS" {
+		t.Fatalf("库面逐对象依据 = %s %s %s，关务判断标识与依据原文只落册", judgement, action, cause)
+	}
 }
 
-// Covers: 票 demo-chain-gaps/32 完成判据「五格读数与事实同一笔（真库）」「CC 读不动也落库」「段不在册照记」；AT-TF-106、AT-TF-107、
-// AT-TF-109 真库半边——生产装配下五格各落一条出发：
+// Covers: 票 demo-chain-gaps/32 完成判据「五格读数与事实同一笔（真库）」「CC 读不动也落库」「段不在册照记」；AT-TF-111、AT-TF-112、
+// AT-TF-114 真库半边——生产装配下五格各落一条出发：
 //   - 不受门禁：不在案的包裹同区出发；
 //   - 放行：在案在单元、装载出发那一道门禁满足、出发前已有全部放行；
 //   - 阻断：直接落在包裹上的装载出发限制——照记，不拒收；
@@ -399,5 +410,77 @@ func TestTheCustomsJudgementBehindADepartureIsKeptInItsOwnRegister(t *testing.T)
 	}
 	if answer != "NOT_GUARDED" {
 		t.Fatalf("关务判断册里的答复 = %s", answer)
+	}
+}
+
+// countingDepartureGate 数关务被问了几次，问法原样转给生产适配器。
+type countingDepartureGate struct {
+	inner tfports.DepartureGateView
+	asks  int
+}
+
+func (gate *countingDepartureGate) ReadDepartureGate(
+	ctx context.Context,
+	query tfports.DepartureGateQuery,
+) (tfdomain.DepartureGateFinding, error) {
+	gate.asks++
+	return gate.inner.ReadDepartureGate(ctx, query)
+}
+
+// Covers: AT-TF-116 真库半边——离线队列重投同一条出发：装配点在问关务之前就从池上认出是重放，关务不重问，答已有版本
+// 并回显首次读数；换了资源的重投照常问，再答内容冲突。读数编排换成数关务问了几次的那一份，其余都是生产装配。
+func TestAReplayedDepartureDoesNotAskCustomsAgain(t *testing.T) {
+	line := newDepartureLine(t)
+	line.handOver("SYN-SEG-REPLAY", "SYN-PARCEL-REPLAY")
+	movement, ok := line.movement.(transactionalMovementFact)
+	if !ok {
+		t.Fatalf("生产装配交回的不是 transactionalMovementFact：%T", line.movement)
+	}
+	customsAdmission, err := buildCustomsAdmissionOrchestration(line.db)
+	if err != nil {
+		t.Fatalf("装配关务准入：%v", err)
+	}
+	view, err := tfcustoms.NewDepartureGateView(customsAdmission.actionAdmission)
+	if err != nil {
+		t.Fatalf("装关务适配器：%v", err)
+	}
+	segments, err := tfpostgres.NewFulfillmentSegments(line.db)
+	if err != nil {
+		t.Fatalf("段册：%v", err)
+	}
+	schedules, err := tfpostgres.NewTransportSchedules(line.db)
+	if err != nil {
+		t.Fatalf("班次册：%v", err)
+	}
+	counting := &countingDepartureGate{inner: view}
+	if movement.gate, err = tfapp.NewDepartureGateReader(tfapp.DepartureGateReadDeps{
+		Segments: segments, Schedules: schedules, Customs: counting,
+	}); err != nil {
+		t.Fatalf("装读数编排：%v", err)
+	}
+
+	command := line.departureCommand("SYN-MOVE-REPLAY", "SYN-SEG-REPLAY")
+	first, err := movement.Record(t.Context(), command)
+	if err != nil || first.Outcome() != tfapp.MovementFactRecorded || counting.asks != 1 {
+		t.Fatalf("首登：outcome=%s err=%v 问关务 %d 次, want 落册、问一次", first.Outcome(), err, counting.asks)
+	}
+
+	replay, err := movement.Record(t.Context(), command)
+	if err != nil || replay.Outcome() != tfapp.MovementFactVersionExists {
+		t.Fatalf("重投：outcome=%s err=%v, want 已有版本", replay.Outcome(), err)
+	}
+	if counting.asks != 1 {
+		t.Fatalf("同内容重投又问了关务：共 %d 次", counting.asks)
+	}
+	record, _ := replay.Record()
+	if reading, read := record.Fact.GateReading(); !read || reading.Answer() != tfdomain.DepartureGateNotGuarded {
+		t.Fatalf("重投回显的读数 = %s, want 首次的 NOT_GUARDED", reading.Answer())
+	}
+
+	changed := command
+	changed.Resource = "SYN-TRUCK-9"
+	conflict, err := movement.Record(t.Context(), changed)
+	if err != nil || conflict.Outcome() != tfapp.MovementFactSourceConflict || counting.asks != 2 {
+		t.Fatalf("换资源重投：outcome=%s err=%v 问关务 %d 次, want 照常问一次再答内容冲突", conflict.Outcome(), err, counting.asks)
 	}
 }

@@ -154,6 +154,40 @@ func (handler *RecordMovementFactHandler) Record(
 	return RecordMovementFactResult{outcome: MovementFactRecorded, record: record, hasRecord: true}, nil
 }
 
+// RecordedDepartureReading 答这条命令是不是一条在册出发的同内容重放；是则交回在册那一版首次登记时问来的读数。
+//
+// 组合根在问读数之前先问它：重放终归回显首次读数（ADR-0205 决定六），重问关务只是为每件对象多做一笔判断——离线队列
+// 重投一条大段的出发，每次都要逐件串行问一遍，重投越慢越容易超时，超时又招来更多重投。查不了册、不在册、不是出发、
+// 内容不同或受理不了都答 false：照常问读数，答复仍由 Record 在写事务里按在册那一版定。交回的读数只会被重放那一支
+// 丢弃——在册即不再落一版（册只插不改），所以它不会被当成新读数存下。
+func (handler *RecordMovementFactHandler) RecordedDepartureReading(
+	ctx context.Context,
+	command RecordMovementFactCommand,
+) (domain.DepartureGateReading, bool) {
+	spec, key, accepted := movementFactSpecFrom(command)
+	if !accepted || spec.Kind != domain.DepartureFact {
+		return domain.DepartureGateReading{}, false
+	}
+	existing, found, err := handler.deps.Facts.FindByKey(ctx, key)
+	if err != nil || !found {
+		return domain.DepartureGateReading{}, false
+	}
+	reading, read := existing.Fact.GateReading()
+	if !read {
+		return domain.DepartureGateReading{}, false
+	}
+	_, recorded, err := canonicalMovementFact(existing.Fact)
+	if err != nil {
+		return domain.DepartureGateReading{}, false
+	}
+	_, requested, err := domain.CanonicalizeMovementFactPayload(
+		spec.Schedule, spec.Kind, spec.Location, spec.Segment, spec.Resource, spec.GateClearance)
+	if err != nil || recorded != requested {
+		return domain.DepartureGateReading{}, false
+	}
+	return reading, true
+}
+
 func canonicalMovementFact(fact domain.TransportMovementFact) ([]byte, string, error) {
 	segment, _ := fact.Segment()
 	resource, _ := fact.Resource()

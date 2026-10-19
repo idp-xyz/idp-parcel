@@ -165,7 +165,7 @@ func TestRecordingAMovementFactRegistersIt(t *testing.T) {
 	}
 }
 
-// Covers: AT-TF-106、AT-TF-107 编排半边——出发一律落册：读数是阻断、读不动、未决、放行还是不受门禁，都答 MOVEMENT_FACT_RECORDED，
+// Covers: AT-TF-111、AT-TF-112 编排半边——出发一律落册：读数是阻断、读不动、未决、放行还是不受门禁，都答 MOVEMENT_FACT_RECORDED，
 // 读数随事实同一笔保存（ADR-0205 决定一）。拒收一条已经发生的出发只会让离线队列把它出队丢掉。
 func TestADepartureIsRecordedWhateverTheGateReadingSays(t *testing.T) {
 	for _, answer := range []domain.DepartureGateAnswer{
@@ -197,7 +197,7 @@ func TestADepartureIsRecordedWhateverTheGateReadingSays(t *testing.T) {
 	}
 }
 
-// Covers: AT-TF-108 编排半边——设备自报的 gateRequired 不读（真也好假也好都不挡、不改读数）；出示的放行凭据原样保全为证据，
+// Covers: AT-TF-113 编排半边——设备自报的 gateRequired 不读（真也好假也好都不挡、不改读数）；出示的放行凭据原样保全为证据，
 // 读数照样是问来的那一份。
 func TestTheDeviceGateFlagIsNotReadAndItsClearanceIsKeptAsEvidence(t *testing.T) {
 	registry := newMovementFactRegistry()
@@ -346,7 +346,7 @@ func TestTheSameVersionIsAReplayOnlyWhenItsContentIsTheSame(t *testing.T) {
 	}
 }
 
-// Covers: AT-TF-111 编排半边——同身份同内容再到是重放，交回在册那一版连同它首次登记时问来的读数；此刻重问出的读数不同（关务
+// Covers: AT-TF-116 编排半边——同身份同内容再到是重放，交回在册那一版连同它首次登记时问来的读数；此刻重问出的读数不同（关务
 // 那边已阻断）也不另记一份、不判成冲突：读数是判断不是内容。同身份查不了册答未决，与移动、到达同一格。
 func TestAReplayedDepartureEchoesItsFirstReading(t *testing.T) {
 	registry := newMovementFactRegistry()
@@ -382,6 +382,57 @@ func TestAReplayedDepartureEchoesItsFirstReading(t *testing.T) {
 	}
 	if undecided.Outcome() != application.MovementFactUndecided || undecided.ContinuationReference() == "" {
 		t.Fatalf("outcome = %q continuation=%q, want MOVEMENT_FACT_UNDECIDED 带续办引用", undecided.Outcome(), undecided.ContinuationReference())
+	}
+}
+
+// Covers: AT-TF-116 编排半边（重投不重问关务）——同身份同内容的出发在问读数之前就认得出是重放，交回在册那一份读数；
+// 换了内容、身份上在册的是到达、不在册、查不了册、不是出发，都答认不出，照常问读数，由 Record 定那一格答复。
+func TestAReplayedDepartureHandsBackItsRecordedReadingBeforeCustomsIsAsked(t *testing.T) {
+	registry := newMovementFactRegistry()
+	handler := newMovementFactHandler(registry)
+	departure := recordMovementCommand(t)
+	departure.Kind = domain.DepartureFact
+	departure.Segment = "segment-1"
+	if _, replayed := handler.RecordedDepartureReading(t.Context(), departure); replayed {
+		t.Fatal("还没登记就认成了重放")
+	}
+	if result, err := handler.Record(t.Context(), departure, readingFor(t, departure, domain.DepartureGateNotGuarded)); err != nil ||
+		result.Outcome() != application.MovementFactRecorded {
+		t.Fatalf("首登：outcome=%q err=%v", result.Outcome(), err)
+	}
+
+	reading, replayed := handler.RecordedDepartureReading(t.Context(), departure)
+	if !replayed || reading.Answer() != domain.DepartureGateNotGuarded {
+		t.Fatalf("同内容重投：replayed=%v 读数=%s, want 在册那一份 NOT_GUARDED", replayed, reading.Answer())
+	}
+	result, err := handler.Record(t.Context(), departure, reading)
+	if err != nil || result.Outcome() != application.MovementFactVersionExists || registry.saves != 1 {
+		t.Fatalf("拿在册读数再登记：outcome=%q err=%v saves=%d, want 已有版本且不写库", result.Outcome(), err, registry.saves)
+	}
+
+	moved := departure
+	moved.Resource = "truck-9"
+	if _, replayed := handler.RecordedDepartureReading(t.Context(), moved); replayed {
+		t.Fatal("换了资源仍认成重放：内容冲突要照常问读数，再由 Record 答冲突")
+	}
+	arrival := recordMovementCommand(t)
+	arrival.Fact = "movement-fact-arrival"
+	if _, err := record(t, handler, arrival); err != nil {
+		t.Fatalf("登到达：%v", err)
+	}
+	asDeparture := arrival
+	asDeparture.Kind = domain.DepartureFact
+	if _, replayed := handler.RecordedDepartureReading(t.Context(), asDeparture); replayed {
+		t.Fatal("在册的是到达，同身份报出发却认成了重放")
+	}
+	if _, replayed := handler.RecordedDepartureReading(t.Context(), arrival); replayed {
+		t.Fatal("到达没有读数可取，不该认成出发的重放")
+	}
+
+	down := newMovementFactRegistry()
+	down.findErr = movementRegistryDown
+	if _, replayed := newMovementFactHandler(down).RecordedDepartureReading(t.Context(), departure); replayed {
+		t.Fatal("查不了册却认成了重放")
 	}
 }
 

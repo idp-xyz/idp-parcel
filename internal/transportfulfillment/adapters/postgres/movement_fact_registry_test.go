@@ -52,7 +52,7 @@ func TestAMovementFactRoundTrips(t *testing.T) {
 	}
 }
 
-// Covers: AT-TF-106 真库半边——出发连同它的门禁读数同一行往返：整格、问关务时的起讫、逐对象那一格（关务判断标识、依据的动作、
+// Covers: AT-TF-111 真库半边——出发连同它的门禁读数同一行往返：整格、问关务时的起讫、逐对象那一格（关务判断标识、依据的动作、
 // 种类与来源）原样读回；声明的段与资源、设备出示的凭据也原样读回。阻断照样落得进去。
 func TestADepartureRoundTripsWithItsGateReading(t *testing.T) {
 	repository, transactor, _ := newMovementFacts(t)
@@ -100,7 +100,7 @@ func TestADepartureRoundTripsWithItsGateReading(t *testing.T) {
 	}
 }
 
-// Covers: AT-TF-109 真库半边——停在本上下文这一侧的读数（没有逐对象那一格）同样往返；没声明段的出发落得进去、读得回来。
+// Covers: AT-TF-114 真库半边——停在本上下文这一侧的读数（没有逐对象那一格）同样往返；没声明段的出发落得进去、读得回来。
 func TestAStoppedDepartureReadingRoundTrips(t *testing.T) {
 	repository, transactor, _ := newMovementFacts(t)
 	ctx := t.Context()

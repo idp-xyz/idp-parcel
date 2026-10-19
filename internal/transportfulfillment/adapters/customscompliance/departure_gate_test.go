@@ -162,7 +162,7 @@ func expectFinding(t *testing.T, finding tfdomain.DepartureGateFinding, answer t
 	}
 }
 
-// Covers: AT-TF-105 适配器半边（演示判据，证据 S）——自营 SHA→SZX 同区、包裹不在案：关务只适用装载出发、答不受门禁，译回不受门禁
+// Covers: AT-TF-110 适配器半边（演示判据，证据 S）——自营 SHA→SZX 同区、包裹不在案：关务只适用装载出发、答不受门禁，译回不受门禁
 // 并带回关务判断标识。SZX→SIN 跨区：跨区那一道答未决，整次未决，带回的只有跨区那一条依据。
 func TestADomesticDepartureReadsNotGuardedAndACrossZoneDepartureReadsUndecided(t *testing.T) {
 	fixture := newDepartureGateDB(t)
@@ -172,7 +172,7 @@ func TestADomesticDepartureReadsNotGuardedAndACrossZoneDepartureReadsUndecided(t
 		tfdomain.DepartureGateUndecided, "CROSS_CUSTOMS_MOVEMENT", "CUSTOMS_SCOPE_UNRESOLVED")
 }
 
-// Covers: AT-TF-106 适配器半边——直接落在包裹上的装载出发限制：关务答阻断，译回阻断，依据带限制标识。关务的未配置（单元没登
+// Covers: AT-TF-111 适配器半边——直接落在包裹上的装载出发限制：关务答阻断，译回阻断，依据带限制标识。关务的未配置（单元没登
 // 门禁目录）译成未决，依据种类仍说缺的是配置。
 func TestABlockedAndANotConfiguredAnswerAreTranslatedWithTheirBases(t *testing.T) {
 	fixture := newDepartureGateDB(t)

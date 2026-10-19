@@ -14,6 +14,7 @@ import (
 )
 
 // transactionalMovementFact 先在写事务之外问出发门禁读数，再把移动事实登记包进一笔事务，读数随事实同一笔落册（ADR-0205）。
+// 同内容重放的出发不重问关务，取在册那一版的读数（RecordedDepartureReading 说明为什么）；那一问也在池上。
 //
 // 读数不进写事务：关务的动作准入判断在它自己的事务里记下，嵌进来即拒（transactionalActionAdmissionJudge）；读段与班次也在
 // 池上读——跨上下文读在写事务里出一次 SQL 级错误，整笔就进了中止态，读不动于是挡住了落册，而已经发生的出发必须照记。
@@ -30,12 +31,15 @@ func (movement transactionalMovementFact) Record(
 	ctx context.Context,
 	command tfapp.RecordMovementFactCommand,
 ) (tfapp.RecordMovementFactResult, error) {
-	reading, err := movement.gate.Read(ctx, command)
-	if err != nil {
-		return tfapp.RecordMovementFactResult{}, err
+	reading, replayed := movement.inner.RecordedDepartureReading(ctx, command)
+	if !replayed {
+		var err error
+		if reading, err = movement.gate.Read(ctx, command); err != nil {
+			return tfapp.RecordMovementFactResult{}, err
+		}
 	}
 	var result tfapp.RecordMovementFactResult
-	err = movement.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
+	err := movement.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
 		handled, handleErr := movement.inner.Record(txCtx, command, reading)
 		if handleErr != nil {
 			return handleErr

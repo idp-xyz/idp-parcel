@@ -48,7 +48,7 @@ func gateFinding(t *testing.T, object string, answer domain.DepartureGateAnswer)
 	return finding
 }
 
-// Covers: AT-TF-110 领域半边——一条出发上多个对象，整格按压制次序取最重：阻断压过读不动，读不动压过未决，未决压过放行，
+// Covers: AT-TF-115 领域半边——一条出发上多个对象，整格按压制次序取最重：阻断压过读不动，读不动压过未决，未决压过放行，
 // 放行压过不受门禁（ADR-0205 决定二）。逐对象那一格原样保留、按对象排好，读的人看得见是哪一件。
 func TestTheHeaviestObjectAnswerIsTheDepartureAnswer(t *testing.T) {
 	order := []domain.DepartureGateAnswer{
@@ -79,7 +79,7 @@ func TestTheHeaviestObjectAnswerIsTheDepartureAnswer(t *testing.T) {
 	}
 }
 
-// Covers: AT-TF-109 领域半边——停在本上下文这一侧时，每种停点只属一格：缺段、缺对象、缺班次答未决，段册与班次册读不动答读不动，
+// Covers: AT-TF-114 领域半边——停在本上下文这一侧时，每种停点只属一格：缺段、缺对象、缺班次答未决，段册与班次册读不动答读不动，
 // 两者并存时读不动压过未决。停点与逐对象答复恰有其一：停下了就没问关务，问了关务就没有停点。
 func TestStopsBelongToOneAnswerAndExcludeFindings(t *testing.T) {
 	for stop, want := range map[domain.DepartureGateStop]domain.DepartureGateAnswer{
@@ -200,7 +200,7 @@ func TestADepartureGateFindingCarriesAJudgementExactlyWhenCustomsJudged(t *testi
 	}
 }
 
-// Covers: AT-TF-110 领域半边——对象取出发那一刻段里在控的参与：链尾那一版（未被替代、未失效），出发时点在它的控制起止之内；
+// Covers: AT-TF-115 领域半边——对象取出发那一刻段里在控的参与：链尾那一版（未被替代、未失效），出发时点在它的控制起止之内；
 // 出发前已离场的、出发后才入场的都不问；不按此刻，迟到的出发也问得到随车出发的那几件。
 func TestObjectsUnderControlAreTakenAtTheDepartureInstant(t *testing.T) {
 	departure := time.Date(2026, 9, 24, 14, 0, 0, 0, time.UTC)

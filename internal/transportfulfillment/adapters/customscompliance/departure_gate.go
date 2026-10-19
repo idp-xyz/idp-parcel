@@ -5,7 +5,6 @@ package customscompliance
 
 import (
 	"context"
-	"errors"
 	"fmt"
 
 	ccapp "go.idp.xyz/idp-parcel/internal/customscompliance/application"
@@ -15,8 +14,10 @@ import (
 )
 
 // ErrUntranslatableAnswer 语义与其他消费方适配器的同名哨兵一致：一侧交出了本适配器词汇表之外的东西，是编程错误而
-// 不是业务答案。出发登记把它与调用失败一样记成读不动（出发照记），但它仍以 error 交出，不冒充关务的读不动。
-var ErrUntranslatableAnswer = errors.New("transport fulfillment customscompliance adapter: untranslatable answer")
+// 不是业务答案。它以 error 交出、不冒充关务的读不动，并包住端口的 tfports.ErrDepartureGateAnswerUntranslatable：出发
+// 照记、那一件记读不动，但依据种类与调用失败分开——这一类重问一万次也是同一个结果，要查的是两边的口径。
+var ErrUntranslatableAnswer = fmt.Errorf("transport fulfillment customscompliance adapter: untranslatable answer: %w",
+	tfports.ErrDepartureGateAnswerUntranslatable)
 
 // ActionAdmissionJudge 是关务动作准入判断编排的那一口。生产上接组合根给它包的那层自带事务的壳：判断在关务自己的
 // 事务里记下，在调用方事务里调用即拒（ADR-0206 决定六）。这里只声明问的那一口，测试替身不必背上整个编排。
@@ -63,18 +64,27 @@ func (view *DepartureGateView) ReadDepartureGate(
 		if err != nil {
 			return none, err
 		}
-		return tfdomain.NewDepartureGateFinding(query.Object, answer, judgementID, basesFor(judgement))
+		return findingOf(tfdomain.NewDepartureGateFinding(query.Object, answer, judgementID, basesFor(judgement)))
 	case ccapp.ActionAdmissionUnreadable:
 		reason := result.UnreadableReason().String()
 		if reason == "" {
 			return none, fmt.Errorf("%w: customs compliance answered unreadable without naming the port", ErrUntranslatableAnswer)
 		}
-		return tfdomain.NewDepartureGateFinding(query.Object, tfdomain.DepartureGateUnreadable, "",
-			[]tfdomain.DepartureGateBasis{{Cause: reason}})
+		return findingOf(tfdomain.NewDepartureGateFinding(query.Object, tfdomain.DepartureGateUnreadable, "",
+			[]tfdomain.DepartureGateBasis{{Cause: reason}}))
 	default:
 		// 未受理：本上下文交过去的都是各自构造门放行过的值，关务仍不受理，说明两边对同一串的口径漂了。
 		return none, fmt.Errorf("%w: customs compliance answered %q to a departure intent", ErrUntranslatableAnswer, result.Outcome())
 	}
+}
+
+// findingOf 把逐对象那一格立不起来的情形归进译不回来：关务形成了答复，却交不出本上下文认得的形状（例如没有同格依据、
+// 判断标识缺席或含 NUL），是两边对答复形状的口径漂了，与关务进程通不通无关。
+func findingOf(finding tfdomain.DepartureGateFinding, err error) (tfdomain.DepartureGateFinding, error) {
+	if err != nil {
+		return tfdomain.DepartureGateFinding{}, fmt.Errorf("%w: %v", ErrUntranslatableAnswer, err)
+	}
+	return finding, nil
 }
 
 func admissionCommandFor(query tfports.DepartureGateQuery) (ccapp.JudgeActionAdmissionCommand, error) {
@@ -102,8 +112,8 @@ func admissionCommandFor(query tfports.DepartureGateQuery) (ccapp.JudgeActionAdm
 	return ccapp.JudgeActionAdmissionCommand{TenantID: tenant, Object: object, Intent: intent, At: query.At}, nil
 }
 
-// answerFor 是关务五格到出发读数五格的对照。关务的`未配置`落未决：对一条已经发生的出发，缺配置与缺案卷同样是
-// 「此刻判不出」，依据原文里的种类仍说得出缺的是配置（ADR-0205 决定二）。
+// answerFor 是关务答复（ccdomain.AdmissionAnswer）到出发读数各格的对照。关务的`未配置`落未决，理由见 ADR-0205 决定二；
+// 依据原文里的种类仍说得出缺的是配置。不认得的那一格是译不回来，不猜。
 func answerFor(answer ccdomain.AdmissionAnswer) (tfdomain.DepartureGateAnswer, error) {
 	switch answer {
 	case ccdomain.AdmissionNotGuarded:

@@ -7,9 +7,10 @@ import (
 
 	ccdomain "go.idp.xyz/idp-parcel/internal/customscompliance/domain"
 	tfdomain "go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
+	tfports "go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// Covers: 关务五格到出发读数五格的对照（ADR-0205 决定二）——未配置落未决，越界的一格是译不回来，不冒充任何一格。
+// Covers: 关务答复各格到出发读数各格的对照（ADR-0205 决定二）——未配置落未决，越界的一格是译不回来，不冒充任何一格。
 func TestEveryCustomsAnswerHasExactlyOneDepartureAnswer(t *testing.T) {
 	for customs, want := range map[ccdomain.AdmissionAnswer]tfdomain.DepartureGateAnswer{
 		ccdomain.AdmissionNotGuarded:    tfdomain.DepartureGateNotGuarded,
@@ -23,8 +24,21 @@ func TestEveryCustomsAnswerHasExactlyOneDepartureAnswer(t *testing.T) {
 			t.Errorf("%s → %s (%v), want %s", customs, got, err, want)
 		}
 	}
-	if _, err := answerFor(ccdomain.AdmissionAnswerInvalid); !errors.Is(err, ErrUntranslatableAnswer) {
-		t.Fatalf("越界的一格：err = %v, want ErrUntranslatableAnswer", err)
+	if _, err := answerFor(ccdomain.AdmissionAnswerInvalid); !errors.Is(err, ErrUntranslatableAnswer) ||
+		!errors.Is(err, tfports.ErrDepartureGateAnswerUntranslatable) {
+		t.Fatalf("越界的一格：err = %v, want ErrUntranslatableAnswer 且认得出端口的译不回来", err)
+	}
+}
+
+// Covers: 关务形成了答复、逐对象那一格却立不起来（这里是没有同格依据）时归译不回来，编排据此与调用失败分开记依据种类。
+func TestAFindingThatCannotBeFormedIsUntranslatable(t *testing.T) {
+	object, err := tfdomain.NewCarriedObjectReference("parcel-1")
+	if err != nil {
+		t.Fatalf("对象：%v", err)
+	}
+	_, err = findingOf(tfdomain.NewDepartureGateFinding(object, tfdomain.DepartureGateNotGuarded, "AADJ-1", nil))
+	if !errors.Is(err, tfports.ErrDepartureGateAnswerUntranslatable) {
+		t.Fatalf("err = %v, want 端口的译不回来", err)
 	}
 }
 

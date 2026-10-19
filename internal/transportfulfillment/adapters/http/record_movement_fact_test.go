@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -82,16 +83,19 @@ func (double *movementCustomsDouble) ReadDepartureGate(_ context.Context, query 
 		[]domain.DepartureGateBasis{{Action: "LOADING_DEPARTURE", Cause: "SOME_CAUSE", Sources: []string{"SRC-1"}}})
 }
 
-// readThenRecord 照组合根的次序：先问读数，再登记。这里没有事务——事务边界归 cmd 的装配点，本包只验线格式与答法。
+// readThenRecord 照组合根的次序：同内容重放取在册那一份读数，否则先问读数，再登记。这里没有事务——事务边界归 cmd 的装配点，本包只验线格式与答法。
 type readThenRecord struct {
 	gate  *application.DepartureGateReader
 	inner *application.RecordMovementFactHandler
 }
 
 func (composed readThenRecord) Record(ctx context.Context, command application.RecordMovementFactCommand) (application.RecordMovementFactResult, error) {
-	reading, err := composed.gate.Read(ctx, command)
-	if err != nil {
-		return application.RecordMovementFactResult{}, err
+	reading, replayed := composed.inner.RecordedDepartureReading(ctx, command)
+	if !replayed {
+		var err error
+		if reading, err = composed.gate.Read(ctx, command); err != nil {
+			return application.RecordMovementFactResult{}, err
+		}
 	}
 	return composed.inner.Record(ctx, command, reading)
 }
@@ -250,20 +254,11 @@ type movementFactView struct {
 	Resource      string `json:"resource"`
 	GateClearance string `json:"gateClearance"`
 	GateReading   *struct {
-		Answer  string   `json:"answer"`
-		From    string   `json:"from"`
-		To      string   `json:"to"`
-		Stops   []string `json:"stops"`
-		Objects []struct {
-			Object    string `json:"object"`
-			Answer    string `json:"answer"`
-			Judgement string `json:"judgement"`
-			Bases     []struct {
-				Action  string   `json:"action"`
-				Cause   string   `json:"cause"`
-				Sources []string `json:"sources"`
-			} `json:"bases"`
-		} `json:"objects"`
+		Answer  string           `json:"answer"`
+		From    string           `json:"from"`
+		To      string           `json:"to"`
+		Stops   []string         `json:"stops"`
+		Objects []map[string]any `json:"objects"`
 	} `json:"gateReading"`
 	ContinuationReference string `json:"continuationReference"`
 }
@@ -297,8 +292,9 @@ func TestRecordMovementFactReportsCreatedWithTheReportedFact(t *testing.T) {
 	}
 }
 
-// Covers: AT-TF-106 线格式半边——出发一律 201：关务那一格答阻断也照样落册，响应带出读数（整格、问关务时的起讫、逐对象的那一格
-// 与依据原文）以及声明的段与资源。设备自报 gateRequired=true 而不带凭据不再挡（ADR-0205 决定三）。
+// Covers: AT-TF-111 线格式半边——出发一律 201：关务那一格答阻断也照样落册，响应带出读数（整格、问关务时的起讫、逐对象的那一格）
+// 以及声明的段与资源。设备自报 gateRequired=true 而不带凭据也照记：设门与否不由设备说（ADR-0205 决定三）。
+// AT-TF-063：逐对象那一格只有对象与答复，关务判断标识与依据原文不回给设备——同段可能有别的客户的包裹。
 func TestRecordMovementFactAnswersCreatedForEveryDepartureAndShowsItsGateReading(t *testing.T) {
 	fixture := newMovementFactFixture(t)
 	fixture.customs.answer = domain.DepartureGateBlocked
@@ -321,14 +317,16 @@ func TestRecordMovementFactAnswersCreatedForEveryDepartureAndShowsItsGateReading
 	if reading == nil || reading.Answer != "BLOCKED" || reading.From != "NODE-SHA" || reading.To != "NODE-SZX" || len(reading.Stops) != 0 {
 		t.Fatalf("gateReading = %+v", reading)
 	}
-	if len(reading.Objects) != 1 || reading.Objects[0].Object != "parcel-1" || reading.Objects[0].Answer != "BLOCKED" ||
-		reading.Objects[0].Judgement != "AADJ-1" || len(reading.Objects[0].Bases) != 1 ||
-		reading.Objects[0].Bases[0].Cause != "SOME_CAUSE" || reading.Objects[0].Bases[0].Sources[0] != "SRC-1" {
-		t.Fatalf("逐对象那一格 = %+v", reading.Objects)
+	if len(reading.Objects) != 1 || reading.Objects[0]["object"] != "parcel-1" || reading.Objects[0]["answer"] != "BLOCKED" ||
+		len(reading.Objects[0]) != 2 {
+		t.Fatalf("逐对象那一格只该有对象与答复：%+v", reading.Objects)
+	}
+	if strings.Contains(response.Body.String(), "AADJ-1") || strings.Contains(response.Body.String(), "SRC-1") {
+		t.Fatalf("响应带出了关务判断标识或依据来源：%s", response.Body.String())
 	}
 }
 
-// Covers: AT-TF-109 线格式半边——没声明段的出发照记：读数停在「段未声明」答未决，没有逐对象那一格；到达不带读数。
+// Covers: AT-TF-114 线格式半边——没声明段的出发照记：读数停在「段未声明」答未决，没有逐对象那一格；到达不带读数。
 func TestRecordMovementFactShowsTheStopWhenNoSegmentIsDeclared(t *testing.T) {
 	fixture := newMovementFactFixture(t)
 	departure := defaultMovementFactBody()

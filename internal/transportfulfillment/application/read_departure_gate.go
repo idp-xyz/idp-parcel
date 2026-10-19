@@ -9,9 +9,14 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// departureGateCustomsUnavailable 是关务那一问根本没形成答复（调用失败、答复译不回来）时记下的依据种类。关务自己答
-// 读不动时依据种类取关务指名的那一口，不取这个——两者救的东西不同：这个要查接线与关务进程，那个要查关务的某本册。
-const departureGateCustomsUnavailable = "CUSTOMS_ADMISSION_UNAVAILABLE"
+// 关务那一问没有形成本上下文认得的答复时，那一件记读不动，依据种类按救法分三种：
+//   - departureGateCustomsUnavailable：调用失败，要查接线与关务进程，过一会儿可能就好；
+//   - departureGateCustomsUntranslatable：答复译不回来，重问也是同一个结果，要查两边的口径；
+//   - 关务自己答读不动时取关务指名的那一口（不是这里的常量），要查关务的某本册。
+const (
+	departureGateCustomsUnavailable    = "CUSTOMS_ADMISSION_UNAVAILABLE"
+	departureGateCustomsUntranslatable = "CUSTOMS_ADMISSION_UNTRANSLATABLE"
+)
 
 var errDepartureGateViewMisanswered = errors.New("transport fulfillment: the departure gate view answered for another object")
 
@@ -97,8 +102,12 @@ func (reader *DepartureGateReader) Read(ctx context.Context, command RecordMovem
 			At:       spec.OccurredAt,
 		})
 		if err != nil {
+			cause := departureGateCustomsUnavailable
+			if errors.Is(err, ports.ErrDepartureGateAnswerUntranslatable) {
+				cause = departureGateCustomsUntranslatable
+			}
 			if finding, err = domain.NewDepartureGateFinding(object, domain.DepartureGateUnreadable, "",
-				[]domain.DepartureGateBasis{{Cause: departureGateCustomsUnavailable}}); err != nil {
+				[]domain.DepartureGateBasis{{Cause: cause}}); err != nil {
 				return domain.DepartureGateReading{}, err
 			}
 		}

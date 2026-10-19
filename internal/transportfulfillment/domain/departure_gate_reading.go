@@ -23,13 +23,8 @@ var (
 	ErrDepartureGateReadingMisplaced = errors.New("transport fulfillment: the departure gate reading does not belong to this movement fact")
 )
 
-// DepartureGateAnswer 是出发门禁读数的封闭五格。取值次序即一条出发上多个对象压成一格时的压制次序（大者压小者）：
-//   - 阻断压过一切：有一件被挡，整条出发就带着异常信号；
-//   - 读不动压过未决：有一件根本没问到，比「问到了、关务答还缺东西」说得更少，不能被后者盖住；
-//   - 未决压过放行、放行压过不受门禁：理由与关务答复的压制次序同一（ADR-0206 决定五），这里不另立理由。
-//
-// 关务的`未配置`不单成一格：对一条已经发生的出发，缺配置与缺案卷一样是「此刻判不出」，落未决，依据原文里的种类
-// 说明缺的是配置（ADR-0205 决定二）。
+// DepartureGateAnswer 是出发门禁读数的封闭各格。常量的取值次序就是一条出发上多个对象压成一格时的压制次序（大者压
+// 小者），次序与理由只在 ADR-0205 决定二定义：改次序要先改那里，再挪这里的常量。关务的`未配置`不单成一格，同在决定二。
 type DepartureGateAnswer uint8
 
 const (

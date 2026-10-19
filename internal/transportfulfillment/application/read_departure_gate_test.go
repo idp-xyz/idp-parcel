@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"slices"
 	"testing"
 	"time"
@@ -97,18 +98,23 @@ func (double *departureSchedulesDouble) FindByKey(_ context.Context, key ports.S
 	return ports.ScheduleRecord{Key: key, Schedule: schedule}, true, nil
 }
 
-// departureCustomsDouble 按对象交回预设的那一格；errors 里的对象答调用失败。queries 记下每一问。
+// departureCustomsDouble 按对象交回预设的那一格；errors 里的对象答调用失败，untranslatable 里的对象答译不回来。queries
+// 记下每一问。
 type departureCustomsDouble struct {
-	answers map[string]domain.DepartureGateAnswer
-	errors  map[string]bool
-	wrong   bool
-	queries []ports.DepartureGateQuery
+	answers        map[string]domain.DepartureGateAnswer
+	errors         map[string]bool
+	untranslatable map[string]bool
+	wrong          bool
+	queries        []ports.DepartureGateQuery
 }
 
 func (double *departureCustomsDouble) ReadDepartureGate(_ context.Context, query ports.DepartureGateQuery) (domain.DepartureGateFinding, error) {
 	double.queries = append(double.queries, query)
 	if double.errors[query.Object.String()] {
 		return domain.DepartureGateFinding{}, departureGateDown
+	}
+	if double.untranslatable[query.Object.String()] {
+		return domain.DepartureGateFinding{}, fmt.Errorf("adapter: %w", ports.ErrDepartureGateAnswerUntranslatable)
 	}
 	if double.wrong {
 		return domain.DepartureGateFinding{}, nil
@@ -135,7 +141,9 @@ func newDepartureGateFixture(t *testing.T, objects ...string) *departureGateFixt
 	return &departureGateFixture{
 		segments:  departureSegments(t, "segment-1", objects...),
 		schedules: &departureSchedulesDouble{schedule: "schedule-1", registered: true},
-		customs:   &departureCustomsDouble{answers: map[string]domain.DepartureGateAnswer{}, errors: map[string]bool{}},
+		customs: &departureCustomsDouble{
+			answers: map[string]domain.DepartureGateAnswer{}, errors: map[string]bool{}, untranslatable: map[string]bool{},
+		},
 	}
 }
 
@@ -168,8 +176,8 @@ func stopWords(reading domain.DepartureGateReading) []string {
 	return words
 }
 
-// Covers: AT-TF-105 编排半边——段里出发那一刻在控的每一件都问关务，起讫取班次方向、时点取出发的业务时间；整格取最重。
-// AT-TF-108：设备自报 gateRequired=false 照样问——设门与否由关务按对象与起讫判，不由设备说。
+// Covers: AT-TF-110 编排半边——段里出发那一刻在控的每一件都问关务，起讫取班次方向、时点取出发的业务时间；整格取最重。
+// AT-TF-113：设备自报 gateRequired=false 照样问——设门与否由关务按对象与起讫判，不由设备说。
 func TestADepartureAsksCustomsForEveryObjectUnderControlWithTheScheduleDirection(t *testing.T) {
 	fixture := newDepartureGateFixture(t, "parcel-2", "parcel-1")
 	fixture.customs.answers["parcel-2"] = domain.DepartureGateBlocked
@@ -197,10 +205,12 @@ func TestADepartureAsksCustomsForEveryObjectUnderControlWithTheScheduleDirection
 	}
 }
 
-// Covers: AT-TF-107 编排半边——关务那一问调用失败时，那一件记读不动（依据指名关务那一口），其余照问，读数照样形成。
+// Covers: AT-TF-112 编排半边——关务那一问调用失败时，那一件记读不动（依据指名关务那一口），其余照问，读数照样形成。
+// 答复译不回来的那一件同样记读不动，依据种类与调用失败分开：一个过一会儿可能就好，一个重问也是同一个结果。
 func TestACustomsFailureIsRecordedAsUnreadableForThatObjectOnly(t *testing.T) {
-	fixture := newDepartureGateFixture(t, "parcel-1", "parcel-2")
+	fixture := newDepartureGateFixture(t, "parcel-1", "parcel-2", "parcel-3")
 	fixture.customs.errors["parcel-1"] = true
+	fixture.customs.untranslatable["parcel-3"] = true
 
 	reading, err := fixture.reader(t).Read(t.Context(), departureCommand(t))
 	if err != nil {
@@ -210,15 +220,19 @@ func TestACustomsFailureIsRecordedAsUnreadableForThatObjectOnly(t *testing.T) {
 		t.Fatalf("整格 = %s, want UNREADABLE", reading.Answer())
 	}
 	findings := reading.Findings()
-	if len(findings) != 2 || findings[0].Answer() != domain.DepartureGateUnreadable || findings[1].Answer() != domain.DepartureGateNotGuarded {
-		t.Fatalf("逐对象 = %+v，读不动只落在失败的那一件上", findings)
+	if len(findings) != 3 || findings[0].Answer() != domain.DepartureGateUnreadable ||
+		findings[1].Answer() != domain.DepartureGateNotGuarded || findings[2].Answer() != domain.DepartureGateUnreadable {
+		t.Fatalf("逐对象 = %+v，读不动只落在没问出答复的那几件上", findings)
 	}
 	if bases := findings[0].Bases(); len(bases) != 1 || bases[0].Cause != "CUSTOMS_ADMISSION_UNAVAILABLE" {
-		t.Fatalf("读不动的依据 = %+v，要指名关务那一口", bases)
+		t.Fatalf("调用失败的依据 = %+v，要指名关务那一口", bases)
+	}
+	if bases := findings[2].Bases(); len(bases) != 1 || bases[0].Cause != "CUSTOMS_ADMISSION_UNTRANSLATABLE" {
+		t.Fatalf("译不回来的依据 = %+v，要与调用失败分开", bases)
 	}
 }
 
-// Covers: AT-TF-109 编排半边——本上下文这一侧找不齐问关务要的东西就停下、不问关务，停点说缺什么或哪一口读不动；
+// Covers: AT-TF-114 编排半边——本上下文这一侧找不齐问关务要的东西就停下、不问关务，停点说缺什么或哪一口读不动；
 // 段与班次各停各的，班次读到了就记下方向。
 func TestADepartureStopsBeforeCustomsWhenItCannotSayWhatOrWhere(t *testing.T) {
 	cases := map[string]struct {

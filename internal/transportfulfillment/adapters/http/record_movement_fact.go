@@ -118,8 +118,11 @@ type movementFactResponse struct {
 	ContinuationReference string                    `json:"continuationReference,omitempty"`
 }
 
-// departureGateReadingView 是出发门禁读数的线格式：整格、问关务时的起讫、本上下文这一侧的停点、逐对象的那一格与关务依据
-// 原文。逐对象列出而不只给整格：被阻断的是哪一件、凭哪条限制，运营要据此去处置那一件，不是整车。
+// departureGateReadingView 是出发门禁读数回给报事实一方的线格式：整格、问关务时的起讫、本上下文这一侧的停点与逐对象的
+// 那一格。逐对象列出而不只给整格：执行方要知道车上被挡的是哪一件，才能去处置那一件而不是整车。
+//
+// 关务判断标识与依据原文（限制标识、放行来源、申报单元或程序引用）不回给设备，只随事实落册供运营与 VE 查：同段可能
+// 是跨客户共同运输，执行方只拿当前履约所需的最小范围（UC-TF-005 规则，ADR-0205 决定一）。
 type departureGateReadingView struct {
 	Answer  string                    `json:"answer"`
 	From    string                    `json:"from,omitempty"`
@@ -129,16 +132,8 @@ type departureGateReadingView struct {
 }
 
 type departureGateObjectView struct {
-	Object    string                   `json:"object"`
-	Answer    string                   `json:"answer"`
-	Judgement string                   `json:"judgement,omitempty"`
-	Bases     []departureGateBasisView `json:"bases"`
-}
-
-type departureGateBasisView struct {
-	Action  string   `json:"action,omitempty"`
-	Cause   string   `json:"cause"`
-	Sources []string `json:"sources,omitempty"`
+	Object string `json:"object"`
+	Answer string `json:"answer"`
 }
 
 func departureGateReadingViewOf(reading domain.DepartureGateReading) *departureGateReadingView {
@@ -150,12 +145,7 @@ func departureGateReadingViewOf(reading domain.DepartureGateReading) *departureG
 		view.Stops = append(view.Stops, stop.String())
 	}
 	for _, finding := range reading.Findings() {
-		object := departureGateObjectView{Object: finding.Object().String(), Answer: finding.Answer().String()}
-		object.Judgement, _ = finding.Judgement()
-		for _, basis := range finding.Bases() {
-			object.Bases = append(object.Bases, departureGateBasisView{Action: basis.Action, Cause: basis.Cause, Sources: basis.Sources})
-		}
-		view.Objects = append(view.Objects, object)
+		view.Objects = append(view.Objects, departureGateObjectView{Object: finding.Object().String(), Answer: finding.Answer().String()})
 	}
 	return view
 }

@@ -258,7 +258,7 @@ func TestMovementFactsRecordWithoutEndingControl(t *testing.T) {
 	})
 }
 
-// Covers: AT-TF-106 领域半边——出发一律立得成：读数阻断也照记，读数原样随事实（ADR-0205 决定一）；设备出示的放行凭据只作证据
+// Covers: AT-TF-111 领域半边——出发一律立得成：读数阻断也照记，读数原样随事实（ADR-0205 决定一）；设备出示的放行凭据只作证据
 // 原样保全（决定三）。门禁只约束装载出发：移动与到达挂放行凭据被拒，带读数是接错。
 func TestADepartureAlwaysRecordsWithItsGateReading(t *testing.T) {
 	t.Run("a blocked reading is recorded, not refused", func(t *testing.T) {

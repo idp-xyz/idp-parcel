@@ -4,8 +4,8 @@ import "time"
 
 // RehydrateMovementFactSpec 是一条实际移动事实某一个版本在库面的样子。
 //
-// 设备自报的「要不要门禁」从来不进来：它不是事实的属性，而且已不决定是否设门（ADR-0205 决定三）。出发要装回的是
-// 登记那一刻问来的门禁读数，读数由它自己的重建门装好再交进来。
+// 设备自报的「要不要门禁」不在这里：它不是事实的属性，也不决定是否设门（ADR-0205 决定三）。出发要装回的是登记那一刻
+// 问来的门禁读数，读数由它自己的重建门装好再交进来。
 type RehydrateMovementFactSpec struct {
 	TenantID      TenantID
 	Fact          MovementFactReference
