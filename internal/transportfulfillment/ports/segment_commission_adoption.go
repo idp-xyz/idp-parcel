@@ -36,8 +36,8 @@ const (
 // SegmentCommissionAdoptionStore 按段找回并保存采用连线（写入代数同 ADR-0031）。没有改、没有删：采用之后不改、不解除
 // （ADR-0204 越权风险点「没有反向解除采用的面」），这个口上就表达不出改与删。
 //
-// FindBySegment 将来也供运输收费发生项登记按段回读采购上下文：段已采用委托时，服务方与协议从那份委托的快照取（票
-// demo-chain-gaps/28，tf-chain-plan D07-2）。
+// FindBySegment 也供运输收费发生项登记按段回读采购上下文：段已采用委托时，服务方与协议从那份委托的快照取（登记只读，
+// 经 SegmentCommissionAdoptionView；ADR-0207 文末补记）。
 type SegmentCommissionAdoptionStore interface {
 	FindBySegment(ctx context.Context, key SegmentCommissionAdoptionKey) (SegmentCommissionAdoptionRecord, bool, error)
 	// Save 撞上同一段已有的采用答 AdoptionAlreadyRegistered，不覆盖先到者，由编排读回再按摘要分已有与冲突。

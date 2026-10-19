@@ -286,6 +286,7 @@ func TestAnUndecidedChargeOccurrenceRollsBackTheWholeTransaction(t *testing.T) {
 	seedTrunkAgreementAndEndedSegment(t, db)
 	segments, _ := tfpostgres.NewFulfillmentSegments(db)
 	judgments, _ := tfpostgres.NewActualCarrierJudgments(db)
+	adoptions, _ := tfpostgres.NewSegmentCommissionAdoptions(db)
 	occurrences, _ := tfpostgres.NewChargeOccurrences(db)
 	versions, _ := pcpostgres.NewSupplierAgreementContents(db)
 	agreements, err := tfpartycommercial.NewSupplierAgreementSource(versions)
@@ -297,6 +298,7 @@ func TestAnUndecidedChargeOccurrenceRollsBackTheWholeTransaction(t *testing.T) {
 		inner: tfapp.NewRegisterChargeOccurrenceHandler(tfapp.RegisterChargeOccurrenceDeps{
 			Segments:         segments,
 			CarrierJudgments: judgments,
+			Adoptions:        adoptions,
 			Agreements:       agreements,
 			Occurrences:      occurrences,
 			Handoff:          failingChargeHandoff{},

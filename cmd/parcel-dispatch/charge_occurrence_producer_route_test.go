@@ -104,6 +104,10 @@ func registerTrunkOccurrence(t *testing.T, db *bentopg.DB, store *outbox.Store, 
 	if err != nil {
 		t.Fatal(err)
 	}
+	adoptions, err := tfpostgres.NewSegmentCommissionAdoptions(db)
+	if err != nil {
+		t.Fatal(err)
+	}
 	clock := systemClock{}
 	handoff, err := tfpostgres.NewOutboxChargeOccurrenceHandoff(db, store, clock)
 	if err != nil {
@@ -112,6 +116,7 @@ func registerTrunkOccurrence(t *testing.T, db *bentopg.DB, store *outbox.Store, 
 	handler := tfapp.NewRegisterChargeOccurrenceHandler(tfapp.RegisterChargeOccurrenceDeps{
 		Segments:         segments,
 		CarrierJudgments: judgments,
+		Adoptions:        adoptions,
 		Agreements:       agreements,
 		Occurrences:      occurrences,
 		Handoff:          handoff,

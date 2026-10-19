@@ -18,9 +18,9 @@ import (
 
 // 本文件是运输收费发生项登记口的组合根（票 demo-chain-gaps/27，ADR-0207）：`/transport-fulfillment-charge-occurrence-
 // registrations` 背后的真编排。缝全接真：揽收尝试与派送尝试两册（失败尝试的事实）、段登记册与实际承运商判断册（实际
-// 履约的事实与自营判断）、TF 对 PC 协议版本点读口的消费侧适配器（ADR-0025）、发生项登记册、发生项已形成信封的 Outbox
-// 意图、时钟。没有「显式未配置」缝：登记引用的事实都是本上下文自己的，协议在 PC 册上；没登的协议由核对口如实答
-// 未在册，不在这里代拟。
+// 履约的事实与自营判断）、采用连线册与委托册（段已采用委托时的采购上下文）、订舱册与承运答复册（订舱与取消的事实）、
+// TF 对 PC 协议版本点读口的消费侧适配器（ADR-0025）、发生项登记册、发生项已形成信封的 Outbox 意图、时钟。没有「显式
+// 未配置」缝：登记引用的事实都是本上下文自己的，协议在 PC 册上；没登的协议由核对口如实答未在册，不在这里代拟。
 
 // errChargeOccurrenceUndecided 只在本壳里流转：编排答未决时回调交它，逼事务回滚而不提交。未决的几格要么什么都没写，
 // 要么写到一半——落了册而意图没交上，提交它就留下一份结算永远等不到的发生项；读口在事务里报了 SQL 错误时整笔事务
@@ -92,6 +92,22 @@ func chargeOccurrenceDeps(db *bentopg.DB) (tfapp.RegisterChargeOccurrenceDeps, e
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: actual carrier judgments for charge occurrences: %w", err)
 	}
+	adoptions, err := tfpostgres.NewSegmentCommissionAdoptions(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: segment commission adoptions for charge occurrences: %w", err)
+	}
+	commissions, err := tfpostgres.NewTransportCommissions(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: transport commissions for charge occurrences: %w", err)
+	}
+	bookings, err := tfpostgres.NewBookingRequests(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: booking requests for charge occurrences: %w", err)
+	}
+	answers, err := tfpostgres.NewBookingAnswers(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: booking answers for charge occurrences: %w", err)
+	}
 	agreementVersions, err := pcpostgres.NewSupplierAgreementContents(db)
 	if err != nil {
 		return none, fmt.Errorf("parcel-api: supplier agreement versions: %w", err)
@@ -118,6 +134,10 @@ func chargeOccurrenceDeps(db *bentopg.DB) (tfapp.RegisterChargeOccurrenceDeps, e
 		DeliveryAttempts: deliveries,
 		Segments:         segments,
 		CarrierJudgments: judgments,
+		Adoptions:        adoptions,
+		Commissions:      commissions,
+		Bookings:         bookings,
+		BookingAnswers:   answers,
 		Agreements:       agreements,
 		Occurrences:      occurrences,
 		Handoff:          handoff,

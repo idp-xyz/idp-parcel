@@ -32,8 +32,9 @@ type ChargeOccurrenceRegistrar interface {
 // ChargeOccurrenceRegistrationPayload 是登记口的线格式。
 //
 // reason 取发生原因的四个字面量之一。事实按原因各给一组：失败尝试给 pickupAttemptSource 或 deliveryAttempt 之一、
-// objects 恰一个；实际履约给 segment 与 objects。selfOperated 为真是一种声明，此时 provider / agreement /
-// agreementVersion 留空；否则三者必给——缺了是未受理，不是不适用。依据、范围、业务时间、发生项引用与版本都不收：
+// objects 恰一个；实际履约给 segment 与 objects；订舱与取消给 booking 与 objects。selfOperated 为真是一种声明，此时
+// provider / agreement / agreementVersion 留空；否则三者必给——缺了是未受理，不是不适用。事实带着委托时（订舱与取消，
+// 或段已采用委托）三者可以留空、取委托的，给了而不一致答冲突。依据、范围、业务时间、发生项引用与版本都不收：
 // 它们取自事实或由事实派生。发生条件、数量与单位也不收：由采用协议的声明定（ADR-0209）。断言期的
 // conditionAssertion / quantity / unit 三键随之退场，带来按未知键拒（400）——静默丢掉，登记方会以为自己的断言或
 // 数量算了数。
@@ -42,6 +43,7 @@ type ChargeOccurrenceRegistrationPayload struct {
 	PickupAttemptSource string   `json:"pickupAttemptSource,omitempty"`
 	DeliveryAttempt     string   `json:"deliveryAttempt,omitempty"`
 	Segment             string   `json:"segment,omitempty"`
+	Booking             string   `json:"booking,omitempty"`
 	Objects             []string `json:"objects"`
 	Journey             string   `json:"journey"`
 	SelfOperated        bool     `json:"selfOperated,omitempty"`
@@ -67,6 +69,7 @@ func (payload ChargeOccurrenceRegistrationPayload) Command(operator OperatorIden
 		PickupAttemptSource: payload.PickupAttemptSource,
 		DeliveryAttempt:     payload.DeliveryAttempt,
 		Segment:             payload.Segment,
+		Booking:             payload.Booking,
 		Objects:             append([]string(nil), payload.Objects...),
 		Journey:             payload.Journey,
 		SelfOperated:        payload.SelfOperated,
@@ -90,14 +93,27 @@ func NewRegisterChargeOccurrenceEndpoint(intake ChargeOccurrenceRegistrationInta
 
 // chargeOccurrenceResponse 是封闭响应形状。**没有任何金额或币种键**：发生项不是价格、预期成本、账单或应付（CONTEXT），
 // 金额由计价与结算另行形成。detail 指名不适用、冲突、未配置、未决、未受理落在哪一格；agreedSupplier 只在服务方不符
-// 时给出；agreement 只在未配置与协议不计此原因两格给出，指名作答的那一版协议。
+// 时给出；agreement 只在未配置与协议不计此原因两格给出，指名作答的那一版协议；commission 只在采购上下文冲突时给出，
+// 回显事实所属那份委托的采购上下文。
 type chargeOccurrenceResponse struct {
-	Outcome               string                `json:"outcome"`
-	Detail                string                `json:"detail,omitempty"`
-	ContinuationReference string                `json:"continuationReference,omitempty"`
-	AgreedSupplier        string                `json:"agreedSupplier,omitempty"`
-	Agreement             string                `json:"agreement,omitempty"`
-	Occurrence            *chargeOccurrenceBody `json:"occurrence,omitempty"`
+	Outcome               string                          `json:"outcome"`
+	Detail                string                          `json:"detail,omitempty"`
+	ContinuationReference string                          `json:"continuationReference,omitempty"`
+	AgreedSupplier        string                          `json:"agreedSupplier,omitempty"`
+	Agreement             string                          `json:"agreement,omitempty"`
+	Commission            *chargeOccurrenceCommissionBody `json:"commission,omitempty"`
+	Occurrence            *chargeOccurrenceBody           `json:"occurrence,omitempty"`
+}
+
+// chargeOccurrenceCommissionBody 是冲突那一格回显的委托采购上下文：服务方、协议快照与采购责任法人，权威都是委托那一行。
+// 委托提交时记下了协议对象与版本标签就一并给出，登记方照它改载荷最直接。
+type chargeOccurrenceCommissionBody struct {
+	Commission       string `json:"commission"`
+	Provider         string `json:"provider"`
+	Agreement        string `json:"agreement"`
+	AgreementObject  string `json:"agreementObject,omitempty"`
+	AgreementVersion string `json:"agreementVersion,omitempty"`
+	LegalEntity      string `json:"legalEntity"`
 }
 
 // chargeOccurrenceBody 逐字段透出一个发生项版本。occurredAt 是业务时间，recordedAt 是登记时刻，两者归属不同不合并。
@@ -171,6 +187,19 @@ func writeChargeOccurrenceOutcome(response http.ResponseWriter, result applicati
 	if record, present := result.Record(); present {
 		occurrence := chargeOccurrenceBodyOf(record)
 		body.Occurrence = &occurrence
+	}
+	if record, present := result.Commission(); present {
+		commission := record.Commission
+		echoed := chargeOccurrenceCommissionBody{
+			Commission:  commission.Commission().String(),
+			Provider:    commission.Provider().String(),
+			Agreement:   commission.Agreement().String(),
+			LegalEntity: commission.LegalEntity().String(),
+		}
+		if version, recorded := commission.AgreementVersion(); recorded {
+			echoed.AgreementObject, echoed.AgreementVersion = version.Object(), version.Version()
+		}
+		body.Commission = &echoed
 	}
 	// ADR-0022：只有新落了一个发生项版本用 201；已存在、冲突、不适用、协议否定格、未配置、协议不计此原因、未受理、未决
 	// 都是形成了的答案（200）。

@@ -21,6 +21,21 @@ var (
 	// ErrParticipationNotEnded：参与还在场，履约范围没有终点。实际履约发生项锚在参与结束那一刻（下一次交接、有效
 	// 交付或明确终止）；在场时登记，数量与时点都还没定下来。
 	ErrParticipationNotEnded = errors.New("transport fulfillment: the participation has not ended")
+	// ErrBookingNotAnswered：订舱还没有定局答复（没有答复，或只有候补）。订舱费的依据是已接受的承运答复，答复还没来就
+	// 没有这件事实；等到承运方定局再登。
+	ErrBookingNotAnswered = errors.New("transport fulfillment: the booking has no settled carrier answer")
+	// ErrBookingNotAccepted：订舱的定局答复不是接受（拒绝、失效、撤回），或取消那一刻还没有接受（接受晚于取消）。没有成约的
+	// 舱位，订舱费与取消费都无从谈起。
+	ErrBookingNotAccepted = errors.New("transport fulfillment: the booking was not accepted by the carrier")
+	// ErrBookingNotCancelled：取消发生项指名的订舱没有取消。
+	ErrBookingNotCancelled = errors.New("transport fulfillment: the booking is not cancelled")
+	// ErrCancelledAfterTransportStart：按业务时间，这次订舱取消到达时它所属委托下的运输已经开始、这次订舱已在开始之前提出。
+	// 取消停的不是尚未开始的范围（AT-TF-092），不形成「尚未执行服务的取消费」；判法与 ADR-0204 决定三「采用与取消的先后」
+	// 同一边界。
+	ErrCancelledAfterTransportStart = errors.New("transport fulfillment: the booking was cancelled after transport had started")
+	// ErrNotACommissionMember：订舱与取消发生项的成员必须是订舱所属委托的成员。订舱自身不列对象，它申请的是委托范围里的
+	// 舱位；委托之外的对象不在这次采购里，替它开发生项就是给没采购的运输开成本来源。
+	ErrNotACommissionMember = errors.New("transport fulfillment: the object is not a member of the booking's commission")
 )
 
 // ChargeOccurrenceReference 是发生项的稳定身份。settlement-accounting 以它回指本体，
@@ -532,6 +547,164 @@ func ActualFulfillmentEndedAt(segment ActualFulfillmentSegment, members []Carrie
 		}
 	}
 	return latest, nil
+}
+
+// BookingChargeFact 是订舱与取消两种原因共用的事实：一次订舱、它所属的委托，以及这次订舱当前的那一份承运答复（可缺）。
+// 三者都按身份读回、互相对得上（同租户、订舱属这份委托、答复属这次订舱），由各自的门判；这里只把它们并在一处，订舱与取消
+// 两扇门取同一组事实，不各读各的。
+type BookingChargeFact struct {
+	Booking    BookingRequest
+	Commission TransportCommission
+	Answer     CarrierAcceptance
+	Answered   bool
+}
+
+// BookingOccurrenceScope 是订舱与取消发生项的主要业务范围：那一次订舱（ADR-0209 决定二「订舱与取消的范围是一次订舱」）。
+// 两种原因同一范围串，覆盖一问按（原因、范围）认，所以一次订舱上的订舱费与取消费互不挡。
+func BookingOccurrenceScope(booking BookingReference) (OccurrenceScopeReference, error) {
+	scope, err := NewOccurrenceScopeReference(booking.String())
+	if err != nil {
+		return OccurrenceScopeReference{}, ErrInvalidChargeOccurrence
+	}
+	return scope, nil
+}
+
+// BookingOccurrenceGrounds 判订舱发生项的事实是否成立，交回依据、范围与业务时间：订舱有一份已接受的定局答复，成员都是
+// 委托的成员。依据指那一份接受（订舱与答复两段都在串里，从依据就找得回是哪一次订舱的哪一份答复），业务时间取接受的
+// 答复时刻——成约在那一刻发生，订舱申请的时刻还没有成约。
+func BookingOccurrenceGrounds(
+	fact BookingChargeFact,
+	members []CarriedObjectReference,
+) (OccurrenceBasisReference, OccurrenceScopeReference, time.Time, error) {
+	if err := bookingFactCoherent(fact, members); err != nil {
+		return OccurrenceBasisReference{}, OccurrenceScopeReference{}, time.Time{}, err
+	}
+	if err := acceptedBooking(fact); err != nil {
+		return OccurrenceBasisReference{}, OccurrenceScopeReference{}, time.Time{}, err
+	}
+	basis, err := NewOccurrenceBasisReference(
+		"CARRIER-ACCEPTANCE/" + fact.Booking.Booking().String() + "/" + fact.Answer.Acceptance().String())
+	if err != nil {
+		return OccurrenceBasisReference{}, OccurrenceScopeReference{}, time.Time{}, ErrInvalidChargeOccurrence
+	}
+	scope, err := BookingOccurrenceScope(fact.Booking.Booking())
+	if err != nil {
+		return OccurrenceBasisReference{}, OccurrenceScopeReference{}, time.Time{}, err
+	}
+	return basis, scope, fact.Answer.DecidedAt(), nil
+}
+
+// CancellationOccurrenceGrounds 判取消发生项的事实是否成立，交回依据、范围与业务时间：订舱已取消、取消之前（不晚于取消时刻）
+// 已被承运方接受，且按业务时间取消停的是尚未开始的范围；成员都是委托的成员。
+//
+// 取消的是订舱，不是委托：协议能给取消声明的数量形只有按订舱与按件（ADR-0209 决定二），整份委托的取消没有一形配得上，
+// 委托下的舱位要逐次订舱取消、逐次登记。只认已接受过的订舱：取消费是对一份已成约舱位的毁约，没成约的订舱取消了也没有
+// 可停的服务（产品策略，ADR-0207 文末补记）。
+//
+// 「尚未开始」按业务时间判，与 ADR-0204 决定三同一边界：委托没开始，或这次订舱在委托开始之后才提出（为剩余范围订的），
+// 或取消早于委托开始（同一刻算开始在先）。取消订舱口按登记那一刻的委托判过一次，但委托的开始此后可能被更早开始的段前移
+// （ADR-0204 决定二）：前移之后取消落在开始之后的，按业务时间那一程已在用这份舱位，不是尚未执行服务的取消。
+func CancellationOccurrenceGrounds(
+	fact BookingChargeFact,
+	members []CarriedObjectReference,
+) (OccurrenceBasisReference, OccurrenceScopeReference, time.Time, error) {
+	if err := bookingFactCoherent(fact, members); err != nil {
+		return OccurrenceBasisReference{}, OccurrenceScopeReference{}, time.Time{}, err
+	}
+	cancelledAt, cancelled := fact.Booking.Cancelled()
+	if !cancelled {
+		return OccurrenceBasisReference{}, OccurrenceScopeReference{}, time.Time{}, ErrBookingNotCancelled
+	}
+	if err := acceptedBooking(fact); err != nil {
+		return OccurrenceBasisReference{}, OccurrenceScopeReference{}, time.Time{}, err
+	}
+	if fact.Answer.DecidedAt().After(cancelledAt) {
+		// 按业务时间，取消那一刻这份舱位还没成约：后到的接受接的是一份已被取消的申请，不是被取消毁掉的约。
+		return OccurrenceBasisReference{}, OccurrenceScopeReference{}, time.Time{}, ErrBookingNotAccepted
+	}
+	if _, startedAt, started := fact.Commission.TransportStarted(); started &&
+		!fact.Booking.RequestedAt().After(startedAt) && !cancelledAt.Before(startedAt) {
+		return OccurrenceBasisReference{}, OccurrenceScopeReference{}, time.Time{}, ErrCancelledAfterTransportStart
+	}
+	basis, err := NewOccurrenceBasisReference("BOOKING-CANCELLATION/" + fact.Booking.Booking().String())
+	if err != nil {
+		return OccurrenceBasisReference{}, OccurrenceScopeReference{}, time.Time{}, ErrInvalidChargeOccurrence
+	}
+	scope, err := BookingOccurrenceScope(fact.Booking.Booking())
+	if err != nil {
+		return OccurrenceBasisReference{}, OccurrenceScopeReference{}, time.Time{}, err
+	}
+	return basis, scope, cancelledAt, nil
+}
+
+// ChargeOccurrenceForBooking 从已接受的订舱形成订舱发生项（ADR-0207 决定一）。依据、范围与业务时间与 BookingOccurrenceGrounds
+// 同一判据，由领域一处给出。
+func ChargeOccurrenceForBooking(spec TransportChargeOccurrenceSpec, fact BookingChargeFact) (TransportChargeOccurrence, error) {
+	if spec.TenantID != fact.Booking.TenantID() {
+		return TransportChargeOccurrence{}, ErrInvalidChargeOccurrence
+	}
+	basis, scope, at, err := BookingOccurrenceGrounds(fact, spec.Members)
+	if err != nil {
+		return TransportChargeOccurrence{}, err
+	}
+	spec.Reason = BookingOccurrence
+	spec.FactBasis = basis
+	spec.Scope = scope
+	spec.OccurredAt = at
+	return FormTransportChargeOccurrence(spec)
+}
+
+// ChargeOccurrenceForCancellation 从尚未开始范围的订舱取消形成取消发生项（ADR-0207 决定一）。判据同
+// CancellationOccurrenceGrounds。取消不删、不改订舱发生项：两项各是各的事实（UC-TF-004 业务规则「订舱和取消可以分别形成
+// 发生项」）。
+func ChargeOccurrenceForCancellation(spec TransportChargeOccurrenceSpec, fact BookingChargeFact) (TransportChargeOccurrence, error) {
+	if spec.TenantID != fact.Booking.TenantID() {
+		return TransportChargeOccurrence{}, ErrInvalidChargeOccurrence
+	}
+	basis, scope, at, err := CancellationOccurrenceGrounds(fact, spec.Members)
+	if err != nil {
+		return TransportChargeOccurrence{}, err
+	}
+	spec.Reason = CancellationOccurrence
+	spec.FactBasis = basis
+	spec.Scope = scope
+	spec.OccurredAt = at
+	return FormTransportChargeOccurrence(spec)
+}
+
+// bookingFactCoherent 判三件事实彼此对得上、成员成形且都在委托里。对不上是读口交错了东西，不是登记方能改的输入，答
+// ErrInvalidChargeOccurrence；成员不在委托里是登记方报错了成员，单独一格。
+func bookingFactCoherent(fact BookingChargeFact, members []CarriedObjectReference) error {
+	if !fact.Booking.booking.valid() ||
+		!fact.Commission.commission.valid() ||
+		fact.Booking.tenantID != fact.Commission.tenantID ||
+		fact.Booking.commission != fact.Commission.commission ||
+		len(members) == 0 {
+		return ErrInvalidChargeOccurrence
+	}
+	if fact.Answered && (fact.Answer.tenantID != fact.Booking.tenantID || fact.Answer.booking != fact.Booking.booking) {
+		return ErrInvalidChargeOccurrence
+	}
+	for _, member := range members {
+		if !member.valid() {
+			return ErrInvalidChargeOccurrence
+		}
+		if !slices.Contains(fact.Commission.members, member) {
+			return ErrNotACommissionMember
+		}
+	}
+	return nil
+}
+
+// acceptedBooking 判订舱的当前答复是不是一份接受：没有答复或只有候补是还没定局，定局而不是接受是没成约。
+func acceptedBooking(fact BookingChargeFact) error {
+	if !fact.Answered || !fact.Answer.Settles() {
+		return ErrBookingNotAnswered
+	}
+	if !fact.Answer.Binds() {
+		return ErrBookingNotAccepted
+	}
+	return nil
 }
 
 // chargeOccurrenceReferencePrefix 是登记派生的发生项引用的类别段。

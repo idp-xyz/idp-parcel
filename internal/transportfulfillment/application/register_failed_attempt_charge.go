@@ -22,7 +22,8 @@ func (handler *RegisterChargeOccurrenceHandler) failedAttemptFact(
 ) (chargeOccurrenceFact, RegisterChargeOccurrenceResult, bool) {
 	pickup := strings.TrimSpace(command.PickupAttemptSource) != ""
 	delivery := strings.TrimSpace(command.DeliveryAttempt) != ""
-	if pickup == delivery || strings.TrimSpace(command.Segment) != "" || len(command.Objects) != 1 {
+	if pickup == delivery || strings.TrimSpace(command.Segment) != "" || strings.TrimSpace(command.Booking) != "" ||
+		len(command.Objects) != 1 {
 		return chargeOccurrenceFact{}, chargeNotAccepted(ChargeRequestMalformed), true
 	}
 	object, err := domain.NewCarriedObjectReference(command.Objects[0])

@@ -157,17 +157,19 @@ type chargeAgreementSourceDouble struct {
 	err      error
 	askedAt  []time.Time
 	provider []string
+	asked    []string
 }
 
 func (double *chargeAgreementSourceDouble) CheckSupplierAgreement(
 	_ context.Context,
 	_ domain.TenantID,
-	_ domain.SupplierAgreementVersion,
+	agreement domain.SupplierAgreementVersion,
 	provider domain.ServiceProviderReference,
 	at time.Time,
 ) (ports.SupplierAgreementCheck, error) {
 	double.askedAt = append(double.askedAt, at)
 	double.provider = append(double.provider, provider.String())
+	double.asked = append(double.asked, agreement.Object()+" "+agreement.Version())
 	return double.check, double.err
 }
 
@@ -281,13 +283,17 @@ func judgedCarrier(t *testing.T, kind domain.CarrierSubjectKind, reference strin
 }
 
 type occurrenceRig struct {
-	registry   *occurrenceRegistryDouble
-	handoff    *occurrenceHandoffDouble
-	agreements *chargeAgreementSourceDouble
-	segments   segmentViewDouble
-	judgments  judgmentViewDouble
-	pickups    ports.FailedAttemptSource
-	deliveries ports.DeliveryAttemptView
+	registry    *occurrenceRegistryDouble
+	handoff     *occurrenceHandoffDouble
+	agreements  *chargeAgreementSourceDouble
+	segments    segmentViewDouble
+	judgments   judgmentViewDouble
+	pickups     ports.FailedAttemptSource
+	deliveries  ports.DeliveryAttemptView
+	adoptions   adoptionViewDouble
+	commissions commissionViewDouble
+	bookings    bookingViewDouble
+	answers     bookingAnswerViewDouble
 }
 
 func newOccurrenceRig(t *testing.T) *occurrenceRig {
@@ -306,6 +312,10 @@ func (rig *occurrenceRig) handler() *application.RegisterChargeOccurrenceHandler
 		DeliveryAttempts: rig.deliveries,
 		Segments:         rig.segments,
 		CarrierJudgments: rig.judgments,
+		Adoptions:        rig.adoptions,
+		Commissions:      rig.commissions,
+		Bookings:         rig.bookings,
+		BookingAnswers:   rig.answers,
 		Agreements:       rig.agreements,
 		Occurrences:      rig.registry,
 		Handoff:          rig.handoff,
@@ -716,14 +726,14 @@ func TestAnAgreementCheckHandingBackNoLegalEntityIsRaised(t *testing.T) {
 	assertNothingWritten(t, rig)
 }
 
-// Covers: 订舱与取消两种原因的事实依据随票 demo-chain-gaps/28 接上，在那之前如实答未受理；没有登记者同样不形成。
-func TestReasonsWithoutAFactPathAndAnonymousRegistrantsAreNotAccepted(t *testing.T) {
+// Covers: 没有登记者不形成；订舱与取消两种原因指名段而不指名订舱是坏请求，不拿段的事实凑。
+func TestAnonymousRegistrantsAndMismatchedFactsAreNotAccepted(t *testing.T) {
 	for _, reason := range []domain.ChargeOccurrenceReason{domain.BookingOccurrence, domain.CancellationOccurrence} {
 		rig := newOccurrenceRig(t)
 		command := actualFulfillmentCommand(t)
 		command.Reason = reason
 		if result := rig.register(t, command); result.Outcome() != application.ChargeOccurrenceInputNotAccepted ||
-			result.Detail() != application.ReasonNotRegistrable {
+			result.Detail() != application.ChargeRequestMalformed {
 			t.Fatalf("%s outcome/detail = %q/%q", reason, result.Outcome(), result.Detail())
 		}
 	}

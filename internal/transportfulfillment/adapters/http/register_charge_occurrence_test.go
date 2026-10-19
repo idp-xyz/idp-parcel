@@ -97,6 +97,7 @@ func registeredResultWith(t *testing.T, conditions domain.AgreementChargeConditi
 	handler := application.NewRegisterChargeOccurrenceHandler(application.RegisterChargeOccurrenceDeps{
 		Segments:         segmentSource{record: ports.FulfillmentSegmentRecord{Segment: segment}},
 		CarrierJudgments: noJudgment{},
+		Adoptions:        noAdoption{},
 		Agreements: agreementSource{check: ports.SupplierAgreementCheck{
 			Standing:         ports.SupplierAgreementRegistered,
 			Snapshot:         mustTF(t, domain.NewAgreementSnapshotReference, "SYN-SUPPLIER-TRUNK-CN-SG-01/v2"),
@@ -158,7 +159,7 @@ func TestChargeOccurrenceEndpointAnswers201OnlyForANewOccurrenceAndCarriesNoAmou
 	recorder = httptest.NewRecorder()
 	notApplicable.ServeHTTP(recorder, bearerRequest("t", decisionChargeOccurrenceBody))
 	if recorder.Code != http.StatusOK || !strings.Contains(recorder.Body.String(), `"outcome":"INPUT_NOT_ACCEPTED"`) ||
-		!strings.Contains(recorder.Body.String(), `"detail":"REASON_NOT_REGISTRABLE"`) || strings.Contains(recorder.Body.String(), `"occurrence"`) {
+		!strings.Contains(recorder.Body.String(), `"detail":"REQUEST_MALFORMED"`) || strings.Contains(recorder.Body.String(), `"occurrence"`) {
 		t.Fatalf("未受理 = %d %s", recorder.Code, recorder.Body.String())
 	}
 }
@@ -209,7 +210,7 @@ func answeredByConditions(t *testing.T, conditions domain.AgreementChargeConditi
 	return registered
 }
 
-// answeredWithoutRecord 走真编排拿一份不带记录的答案：订舱原因在票 28 之前答未受理。
+// answeredWithoutRecord 走真编排拿一份不带记录的答案：订舱原因不指名订舱是坏请求，在读任何事实之前答未受理。
 func answeredWithoutRecord(t *testing.T) application.RegisterChargeOccurrenceResult {
 	t.Helper()
 	handler := application.NewRegisterChargeOccurrenceHandler(application.RegisterChargeOccurrenceDeps{})
@@ -217,6 +218,7 @@ func answeredWithoutRecord(t *testing.T) application.RegisterChargeOccurrenceRes
 		TenantID:   mustTF(t, domain.NewTenantID, operatorTenant),
 		Registrant: operatorSubject,
 		Reason:     domain.BookingOccurrence,
+		Objects:    []string{"SYN-PARCEL-01"},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -239,6 +241,12 @@ type segmentSource struct {
 
 func (source segmentSource) FindByKey(context.Context, ports.FulfillmentSegmentKey) (ports.FulfillmentSegmentRecord, bool, error) {
 	return source.record, true, nil
+}
+
+type noAdoption struct{}
+
+func (noAdoption) FindBySegment(context.Context, ports.SegmentCommissionAdoptionKey) (ports.SegmentCommissionAdoptionRecord, bool, error) {
+	return ports.SegmentCommissionAdoptionRecord{}, false, nil
 }
 
 type noJudgment struct{}
