@@ -4,6 +4,10 @@
 -- 重建 0002 立的决定种类 CHECK，列**截至本迁移号为止的全集**：0007 加的待重核身份、0008 加的运输委托提交都在内。
 -- 只追加本笔那一种而漏列前两者，施加本迁移的那一刻就把已授的那两种授予判成违约；同一条约束在几份迁移里各重建
 -- 一次，每一份都必须是完整清单，不是增量。本迁移不种任何行。
+--
+-- 全集另含 0011 加的身份冲突处置：那一份编号在本份之后，进 main 的次序却不由编号定，已在用的库可能先施加了它、
+-- 后补施加本份（执行器按迁移标识补施加未施加的步）。本份若只列编号在前的几种，补施加的那一刻就把身份冲突处置删出
+-- 全集。0011 自己也预先列了本份这一种，两份无论哪个次序施加，落下的都是同一个并集。
 
 ALTER TABLE access_identity.operator_grant
     DROP CONSTRAINT operator_grant_decision_kind_decided;
@@ -17,5 +21,6 @@ ALTER TABLE access_identity.operator_grant
             'EFFECTIVE_TIME_JUDGMENT', 'CARRIER_FIRST_EFFECTIVE_PICKUP_JUDGMENT',
             'PENDING_IDENTITY_RECHECK',
             'TRANSPORT_COMMISSION_SUBMISSION',
-            'TRANSPORT_CHARGE_OCCURRENCE_REGISTRATION'
+            'TRANSPORT_CHARGE_OCCURRENCE_REGISTRATION',
+            'IDENTITY_CONFLICT_DISPOSITION'
         ));
