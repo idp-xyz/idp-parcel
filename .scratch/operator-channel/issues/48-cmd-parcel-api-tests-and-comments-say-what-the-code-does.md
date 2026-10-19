@@ -1,7 +1,7 @@
 # 48 cmd/parcel-api 测试与注释照实写：隔离形态残名改名、去变更说明、序号引用改引文
 
 Category: chore
-Status: in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 4、序 6、序 2 评审遗留；用户授权代决）；分支 `claude-oc48`
+Status: ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-oc48`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-oc48`）上留有4 笔（隔离形态残名、Covers、作业事实装配表、isolatedWriteAdmission 头注），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 4、序 6、序 2 评审遗留；用户授权代决）；分支 `claude-oc48`
 Blocked by: 无
 父票：[26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)（票 26 评审遗留的后续）
 出处：票 [15](./15-operation-decision-faces-take-operator-intake.md) Comments「钉 `60244fa6`」那条评审 Standards 非阻断 1–3（cmd 部分）；票 [23](./23-node-operations-isolated-command-intake-retires.md) Comments 评审 Standards 非阻断 3；票 [25](./25-node-reception-carries-parcel-shipment-service-result-markers.md) Comments 评审 Standards 非阻断 2 的同类横扫。

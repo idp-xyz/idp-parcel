@@ -1,7 +1,7 @@
 # 04 票 02 评审遗留收口：ADR-0184 与 ADR-0185 复核记录、UC-NO-002 同步，入口去空白与同号核对的现状钉成用例
 
 Category: chore
-Status: in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 0 评审遗留；用户授权代决）；分支 `claude-psxm04`
+Status: ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-psxm04`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-psxm04`）上留有1 笔（入口去两端空白与逐字核对的钉住用例），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 0 评审遗留；用户授权代决）；分支 `claude-psxm04`
 Blocked by: 无
 父票：[01](./01-external-mark-relations-have-no-model-in-parcel-shipment.md)（已 resolved）。被评的是 [02](./02-register-and-customer-parcel-numbers-feed-node-identity.md)，代码 `cc52e9b6`，建模 `5714a137`。
 地盘：

@@ -1,7 +1,7 @@
 # 34 复核完成口的提交版本由服务端当前版顶替：新提交版本形成后，同一复核请求重投或按旧页面提交，会把旧版本的复核签到新版本的任务上
 
 Category: bug
-Status: in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 15 之三、之四补核发现；用户授权代决）；分支 `claude-oc34`
+Status: ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-oc34`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-oc34`）上留有2 笔（复核完成版本由调用方指名的后端修法；前端复核草案构造的 WIP），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 15 之三、之四补核发现；用户授权代决）；分支 `claude-oc34`
 Blocked by: 无
 父票：[15](./15-operation-decision-faces-take-operator-intake.md)（之三 `44ef6a4a`、之四 `dc439417`）
 出处：票 15 Comments「评审 ← 会话 idp-parcel-9b 起的隔离子代理 · 钉 `0e3bb7df`」那一条里的「子代理顺带提到之三那三口也查不到逐口核对记录」；票 26 遗留研判中补核票 15 之三、之四（簇 C6）发现；补记随 operator-channel/39。
