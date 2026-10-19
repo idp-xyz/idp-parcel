@@ -372,7 +372,8 @@ func (service *NetworkCatalogRegistration) RegisterLegPricingZones(
 	return catalogRegistered(), nil
 }
 
-// legZonesWellFormed 与迁移 0019 的 CHECK 与主键同格；撞库上约束会把整个环境事务打进中止态。
+// legZonesWellFormed 不比迁移 0019 的 CHECK 与主键宽（区域词还多挡制表、换行一类首尾空白）：撞库上约束会把整个环境事务
+// 打进中止态。
 func legZonesWellFormed(zones []ports.LegPricingZone) bool {
 	if len(zones) == 0 {
 		return false

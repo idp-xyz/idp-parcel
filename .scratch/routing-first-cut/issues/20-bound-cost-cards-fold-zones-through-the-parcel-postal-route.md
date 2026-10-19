@@ -5,7 +5,7 @@ Status: ready-for-agent——2026-10-18 Claude Code 会话立（用户「你作�
 Blocked by: 无（[18](./18-leg-endpoints-folded-into-price-card-zones.md) 已落段计价区域那一路）
 出处：[ADR-0189](../../../docs/adr/0189-leg-pricing-zones-are-supplied-per-card-and-unbound-cards-take-a-registered-leg-zone.md) 决定一第一条、决定四；ADR-0152 决定三（估价与正式评价同一份读数补全）。
 
-## 现状（读码，钉 `9063ce06`）
+## 现状（读码，钉 `f8351cef`）
 
 - `RouteCandidateCostAdapter.evaluateLegs` 直接调 `ppdomain.EvaluatePricingAcrossPlans`，不经 parcel-pricing 共用的读数补全：绑了分区目录的卡读不到目录读数，恒答 `ZONE_UNRESOLVED`（待判断）；按序列换算的卡同理（`Series` 未接）。
 - NR 在初始路由请求上携带了寄件、收件两端的国家与邮编（ADR-0075，`CreateInitialRouteCommand.Carried.Geo`），但只交给证据视图，成本取数侧拿不到。
