@@ -1,7 +1,7 @@
 # 10 授权交付关系：参与方关系多一种「授权交付方」角色，PC 答授权交付判断，NO 侧立防腐适配器
 
 Category: enhancement
-Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-psxm10`；与票 08 并行。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
+Status: resolved——2026-10-19 进 main（代码验证钉 `61543aa0`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-psxm10`；与票 08 并行。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
 Blocked by: 无（ADR-0212 已接受，PC CONTEXT「参与方关系」已随票 07 补上授权交付关系一句）
 父票：[07](./07-verifiable-delivery-scope-for-customer-numbers.md)
 出处：[ADR-0212](../../../docs/adr/0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md) 决定一、三、九；PC CONTEXT「参与方关系」；CONTEXT-MAP `party-commercial → node-operations`；参数登记册 `PAR-NET-17`。
@@ -37,7 +37,7 @@ Blocked by: 无（ADR-0212 已接受，PC CONTEXT「参与方关系」已随票 
 - [x] NO 防腐适配器用例：每种答复（含读不动）各译一格。
 - [x] 演示种子 `seed.sh` 退 0。
 - [x] Go 门禁：`go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出；带 DSN 跑 `internal/partycommercial/...`、`internal/nodeoperations/...`、`cmd/parcel-commercial`、`cmd/parcel-api`、`migrations/...`、`internal/architecture/...` 全绿；机制清点重生成。
-- [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
+- [x] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
 
 ## 规模
 
@@ -164,3 +164,8 @@ S
 - **作者自定的格认可**：问句多「开立节点」——`PAR-NET-17` 允许收到节点，不带就判不了；只认每段关系的最新修订——PC 的修订是同一段关系的状态流转（撤销、到期、替代都是下一修订，内容变更另起一段），最新修订即此刻状态；登过任一行即算已配置；登记时多一道「范围里的账户须在册、生效、归相对方」的门，出自 PC CONTEXT 新句的方向。
 - **评审补（推送方，已做）**：ADR-0212 文末追加复核记录，写明问句多了开立节点，决定原文不动。
 - **未做（不另立票，随票 13 一并看）**：管理台的参与方角色标签不认新角色；关系的撤销、到期、替代没有写面——这是各角色共有的旧缺口。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-psxm10` 直接叠在远端 main 之上快进推送；机制清点重生成零差。
+- 推送方全量一次：钉 `61543aa0` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 149 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
