@@ -160,7 +160,7 @@ type CarrierEvidence struct {
 }
 
 func NewCarrierEvidence(spec CarrierEvidenceSpec) (CarrierEvidence, error) {
-	if !spec.Source.valid() || !spec.Reference.valid() || spec.OccurredAt.IsZero() {
+	if !spec.Source.valid() || !spec.Reference.valid() || AtRegistryPrecision(spec.OccurredAt).IsZero() {
 		return CarrierEvidence{}, ErrInvalidCarrierEvidence
 	}
 	material := strings.TrimSpace(spec.Material)
@@ -297,7 +297,7 @@ type OpenActualCarrierJudgmentSpec struct {
 // OpenActualCarrierJudgment 在实际履约段成立那一刻形成首个判断版本：待确认（无合格证据），业务时间取
 // 段成立时刻——未知期间从这一版起算（CONTEXT 生命周期「实际承运商判断」首条）。
 func OpenActualCarrierJudgment(spec OpenActualCarrierJudgmentSpec) (ActualCarrierJudgment, error) {
-	if !spec.TenantID.valid() || !spec.Segment.valid() || spec.EstablishedAt.IsZero() || spec.FormedAt.IsZero() {
+	if !spec.TenantID.valid() || !spec.Segment.valid() || AtRegistryPrecision(spec.EstablishedAt).IsZero() || AtRegistryPrecision(spec.FormedAt).IsZero() {
 		return ActualCarrierJudgment{}, ErrInvalidActualCarrierJudgment
 	}
 	return ActualCarrierJudgment{
@@ -339,7 +339,7 @@ func (judgment ActualCarrierJudgment) Consider(
 	if !evidence.valid() {
 		return ActualCarrierJudgment{}, ErrInvalidCarrierEvidence
 	}
-	if formedAt.IsZero() || !judgment.established() {
+	if AtRegistryPrecision(formedAt).IsZero() || !judgment.established() {
 		return ActualCarrierJudgment{}, ErrInvalidActualCarrierJudgment
 	}
 	if evidence.occurredAt.Before(judgment.establishedAt) {
@@ -365,7 +365,7 @@ func (judgment ActualCarrierJudgment) RecogniseCarrierIdentity(
 	subject CarrierSubject,
 	formedAt time.Time,
 ) (ActualCarrierJudgment, error) {
-	if !subject.valid() || !reference.valid() || formedAt.IsZero() || !judgment.established() {
+	if !subject.valid() || !reference.valid() || AtRegistryPrecision(formedAt).IsZero() || !judgment.established() {
 		return ActualCarrierJudgment{}, ErrInvalidActualCarrierJudgment
 	}
 	bases := judgment.Current().Bases()
@@ -393,7 +393,7 @@ func (judgment ActualCarrierJudgment) WithdrawEvidence(
 	reference CarrierEvidenceReference,
 	formedAt time.Time,
 ) (ActualCarrierJudgment, error) {
-	if !reference.valid() || formedAt.IsZero() || !judgment.established() {
+	if !reference.valid() || AtRegistryPrecision(formedAt).IsZero() || !judgment.established() {
 		return ActualCarrierJudgment{}, ErrInvalidActualCarrierJudgment
 	}
 	bases := judgment.Current().Bases()

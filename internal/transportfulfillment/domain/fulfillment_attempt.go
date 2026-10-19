@@ -90,10 +90,10 @@ func FormFulfillmentAttempt(spec FulfillmentAttemptSpec) (FulfillmentAttempt, er
 		!spec.ExecutedBy.valid() ||
 		!spec.Place.valid() ||
 		!spec.Evidence.valid() ||
-		spec.PlannedFrom.IsZero() ||
-		spec.PlannedTo.IsZero() ||
+		AtRegistryPrecision(spec.PlannedFrom).IsZero() ||
+		AtRegistryPrecision(spec.PlannedTo).IsZero() ||
 		!afterOnRegistry(spec.PlannedTo, spec.PlannedFrom) ||
-		spec.ArrivedAt.IsZero() ||
+		AtRegistryPrecision(spec.ArrivedAt).IsZero() ||
 		len(spec.Objects) == 0 {
 		return FulfillmentAttempt{}, ErrInvalidFulfillmentAttempt
 	}
@@ -252,7 +252,7 @@ func FormAttemptObjectResult(
 	basis AttemptResultBasisReference,
 	occurredAt time.Time,
 ) (AttemptObjectResult, error) {
-	if !attempt.attempt.valid() || !object.valid() || !outcome.valid() || occurredAt.IsZero() {
+	if !attempt.attempt.valid() || !object.valid() || !outcome.valid() || AtRegistryPrecision(occurredAt).IsZero() {
 		return AttemptObjectResult{}, ErrInvalidAttemptObjectResult
 	}
 	if occurredAt.Before(attempt.arrivedAt) {

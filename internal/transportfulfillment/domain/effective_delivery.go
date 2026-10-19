@@ -74,7 +74,7 @@ func FormDeliveryAttemptResult(
 	basis AttemptResultBasisReference,
 	occurredAt time.Time,
 ) (DeliveryAttemptResult, error) {
-	if !attempt.attempt.valid() || !object.valid() || !outcome.valid() || occurredAt.IsZero() {
+	if !attempt.attempt.valid() || !object.valid() || !outcome.valid() || AtRegistryPrecision(occurredAt).IsZero() {
 		return DeliveryAttemptResult{}, ErrInvalidDeliveryAttemptResult
 	}
 	if occurredAt.Before(attempt.arrivedAt) {
@@ -284,7 +284,7 @@ func (delivery EffectiveDelivery) CorrectProof(
 	if !delivery.version.valid() {
 		return EffectiveDelivery{}, ErrInvalidEffectiveDelivery
 	}
-	if !proof.valid() || !version.valid() || correctedAt.IsZero() {
+	if !proof.valid() || !version.valid() || AtRegistryPrecision(correctedAt).IsZero() {
 		return EffectiveDelivery{}, ErrInvalidEffectiveDelivery
 	}
 	if version == delivery.version {

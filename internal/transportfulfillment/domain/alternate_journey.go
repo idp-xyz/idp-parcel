@@ -108,7 +108,7 @@ func FormAlternateJourney(spec AlternateJourneySpec) (AlternateJourney, error) {
 		!spec.BasisKind.valid() ||
 		!spec.Basis.valid() ||
 		len(spec.Members) == 0 ||
-		spec.StartedAt.IsZero() {
+		AtRegistryPrecision(spec.StartedAt).IsZero() {
 		return AlternateJourney{}, ErrInvalidAlternateJourney
 	}
 	if spec.Journey == spec.OriginalJourney {

@@ -88,7 +88,7 @@ func SubmitTransportCommission(spec TransportCommissionSpec) (TransportCommissio
 		!spec.Role.valid() ||
 		!spec.Responsibility.valid() ||
 		len(spec.Members) == 0 ||
-		spec.SubmittedAt.IsZero() {
+		AtRegistryPrecision(spec.SubmittedAt).IsZero() {
 		return TransportCommission{}, ErrInvalidTransportCommission
 	}
 	seen := make(map[CarriedObjectReference]struct{}, len(spec.Members))
@@ -171,7 +171,7 @@ func (commission TransportCommission) MarkTransportStarted(
 	basis ParticipationBasisReference,
 	at time.Time,
 ) (TransportCommission, error) {
-	if !basis.valid() || at.IsZero() || at.Before(commission.submittedAt) {
+	if !basis.valid() || AtRegistryPrecision(at).IsZero() || at.Before(commission.submittedAt) {
 		return TransportCommission{}, ErrInvalidTransportCommission
 	}
 	if _, cancelled := commission.Cancelled(); cancelled {
@@ -191,7 +191,7 @@ func (commission TransportCommission) MarkTransportStarted(
 // 继续按各自规则保留和处置（CONTEXT 195）——本方法不触碰任何那些对象，它们也不在
 // 本类型上；实际运输已开始后不可取消，只能按事实形成中断或其他实际结果。
 func (commission TransportCommission) Cancel(at time.Time) (TransportCommission, error) {
-	if at.IsZero() || at.Before(commission.submittedAt) {
+	if AtRegistryPrecision(at).IsZero() || at.Before(commission.submittedAt) {
 		return TransportCommission{}, ErrInvalidTransportCommission
 	}
 	if _, _, started := commission.TransportStarted(); started {
@@ -243,7 +243,7 @@ func SubmitBookingRequest(spec BookingRequestSpec) (BookingRequest, error) {
 		!spec.Commission.valid() ||
 		spec.Quantity <= 0 ||
 		!spec.Unit.valid() ||
-		spec.RequestedAt.IsZero() {
+		AtRegistryPrecision(spec.RequestedAt).IsZero() {
 		return BookingRequest{}, ErrInvalidBookingRequest
 	}
 	return BookingRequest{
@@ -286,7 +286,7 @@ func (booking BookingRequest) Cancelled() (time.Time, bool) {
 // Cancel 取消尚未消耗的订舱范围。已经形成的承运接受继续按自己的规则保留——接受是
 // 独立对象，本方法碰不到它。
 func (booking BookingRequest) Cancel(at time.Time) (BookingRequest, error) {
-	if at.IsZero() || at.Before(booking.requestedAt) {
+	if AtRegistryPrecision(at).IsZero() || at.Before(booking.requestedAt) {
 		return BookingRequest{}, ErrInvalidBookingRequest
 	}
 	if _, cancelled := booking.Cancelled(); cancelled {
@@ -368,7 +368,7 @@ func FormCarrierAcceptance(
 	basis AcceptanceBasisReference,
 	decidedAt time.Time,
 ) (CarrierAcceptance, error) {
-	if !booking.booking.valid() || !acceptance.valid() || !outcome.valid() || decidedAt.IsZero() {
+	if !booking.booking.valid() || !acceptance.valid() || !outcome.valid() || AtRegistryPrecision(decidedAt).IsZero() {
 		return CarrierAcceptance{}, ErrInvalidCarrierAcceptance
 	}
 	if decidedAt.Before(booking.requestedAt) {

@@ -368,7 +368,7 @@ func (document MasterDocument) nextVersion(
 	if !document.InForce() {
 		return MasterDocument{}, ErrMasterDocumentNoLongerInForce
 	}
-	if !version.valid() || version == document.version || at.IsZero() {
+	if !version.valid() || version == document.version || AtRegistryPrecision(at).IsZero() {
 		return MasterDocument{}, ErrInvalidMasterDocument
 	}
 	changed := document

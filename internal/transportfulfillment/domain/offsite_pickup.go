@@ -148,7 +148,7 @@ func FormOffsitePickup(spec OffsitePickupSpec) (OffsitePickup, error) {
 		!spec.Control.valid() ||
 		!spec.ExecutedBy.valid() ||
 		!spec.Version.valid() ||
-		spec.OccurredAt.IsZero() {
+		AtRegistryPrecision(spec.OccurredAt).IsZero() {
 		return OffsitePickup{}, ErrInvalidOffsitePickup
 	}
 	return OffsitePickup{
@@ -244,7 +244,7 @@ func (pickup OffsitePickup) Correct(correction PickupCorrection) (OffsitePickup,
 	if !pickup.version.valid() {
 		return OffsitePickup{}, ErrInvalidOffsitePickup
 	}
-	if !correction.Version.valid() || correction.CorrectedAt.IsZero() {
+	if !correction.Version.valid() || AtRegistryPrecision(correction.CorrectedAt).IsZero() {
 		return OffsitePickup{}, ErrInvalidOffsitePickup
 	}
 	if correction.Version == pickup.version {

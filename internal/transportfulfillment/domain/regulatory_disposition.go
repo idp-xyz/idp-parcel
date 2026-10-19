@@ -97,7 +97,7 @@ func FormRegulatoryTransportDisposition(
 		!spec.Item.valid() ||
 		!spec.Basis.valid() ||
 		!spec.Kind.valid() ||
-		spec.DecidedAt.IsZero() {
+		AtRegistryPrecision(spec.DecidedAt).IsZero() {
 		return RegulatoryTransportDisposition{}, ErrInvalidRegulatoryDisposition
 	}
 

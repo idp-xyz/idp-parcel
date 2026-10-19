@@ -142,7 +142,7 @@ func FormTransportHandover(spec TransportHandoverSpec) (TransportHandover, error
 		!spec.ReceivedBy.valid() ||
 		!spec.Verdict.valid() ||
 		!spec.Version.valid() ||
-		spec.JudgedAt.IsZero() {
+		AtRegistryPrecision(spec.JudgedAt).IsZero() {
 		return TransportHandover{}, ErrInvalidTransportHandover
 	}
 	if spec.Verdict == ObjectHandedOver {
@@ -273,7 +273,7 @@ func (handover TransportHandover) Correct(correction HandoverCorrection) (Transp
 	if !handover.version.valid() {
 		return TransportHandover{}, ErrInvalidTransportHandover
 	}
-	if !correction.Version.valid() || correction.CorrectedAt.IsZero() {
+	if !correction.Version.valid() || AtRegistryPrecision(correction.CorrectedAt).IsZero() {
 		return TransportHandover{}, ErrInvalidTransportHandover
 	}
 	if correction.Version == handover.version {

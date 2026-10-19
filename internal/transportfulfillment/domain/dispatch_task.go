@@ -118,11 +118,11 @@ func OpenDispatchTask(spec DispatchTaskSpec) (DispatchTask, error) {
 		!spec.Kind.valid() ||
 		len(spec.Objects) == 0 ||
 		!spec.Place.valid() ||
-		spec.WindowFrom.IsZero() ||
-		spec.WindowTo.IsZero() ||
+		AtRegistryPrecision(spec.WindowFrom).IsZero() ||
+		AtRegistryPrecision(spec.WindowTo).IsZero() ||
 		!afterOnRegistry(spec.WindowTo, spec.WindowFrom) ||
 		!spec.Conditions.valid() ||
-		spec.OpenedAt.IsZero() {
+		AtRegistryPrecision(spec.OpenedAt).IsZero() {
 		return DispatchTask{}, ErrInvalidDispatchTask
 	}
 	seen := make(map[CarriedObjectReference]struct{}, len(spec.Objects))
@@ -204,7 +204,7 @@ func (task DispatchTask) Reschedule(windowFrom, windowTo, at time.Time) (Dispatc
 	if task.state != TaskOpen {
 		return DispatchTask{}, ErrTaskClosed
 	}
-	if windowFrom.IsZero() || windowTo.IsZero() || !afterOnRegistry(windowTo, windowFrom) ||
+	if AtRegistryPrecision(windowFrom).IsZero() || AtRegistryPrecision(windowTo).IsZero() || !afterOnRegistry(windowTo, windowFrom) ||
 		at.IsZero() || at.Before(task.openedAt) {
 		return DispatchTask{}, ErrInvalidDispatchTask
 	}
@@ -232,7 +232,7 @@ func (task DispatchTask) close(state TaskState, basis TaskClosureBasisReference,
 	if task.state != TaskOpen {
 		return DispatchTask{}, ErrTaskClosed
 	}
-	if !basis.valid() || at.IsZero() || at.Before(task.openedAt) {
+	if !basis.valid() || AtRegistryPrecision(at).IsZero() || at.Before(task.openedAt) {
 		return DispatchTask{}, ErrInvalidDispatchTask
 	}
 	closed := task

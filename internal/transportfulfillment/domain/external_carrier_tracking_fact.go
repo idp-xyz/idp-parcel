@@ -140,7 +140,7 @@ func PendingEffectiveTime() EffectiveTimeJudgment {
 // JudgeEffectiveTimeExplicitly 由所有者就这一条显式给出有效时间。与发生时间相等也算判断过
 // ——区别在依据上，不在值上。
 func JudgeEffectiveTimeExplicitly(at time.Time) (EffectiveTimeJudgment, error) {
-	if at.IsZero() {
+	if AtRegistryPrecision(at).IsZero() {
 		return EffectiveTimeJudgment{}, ErrInvalidEffectiveTimeJudgment
 	}
 	return EffectiveTimeJudgment{basis: EffectiveTimeJudgedExplicitly, at: at.UTC()}, nil
@@ -148,7 +148,7 @@ func JudgeEffectiveTimeExplicitly(at time.Time) (EffectiveTimeJudgment, error) {
 
 // JudgeEffectiveTimeByRule 依据该源已登记并带版本的规则形成有效时间，事实上记下采用了哪一版。
 func JudgeEffectiveTimeByRule(rule EffectiveTimeRuleReference, at time.Time) (EffectiveTimeJudgment, error) {
-	if !rule.valid() || at.IsZero() {
+	if !rule.valid() || AtRegistryPrecision(at).IsZero() {
 		return EffectiveTimeJudgment{}, ErrInvalidEffectiveTimeJudgment
 	}
 	return EffectiveTimeJudgment{basis: EffectiveTimeJudgedByRule, at: at.UTC(), rule: rule}, nil
@@ -257,14 +257,16 @@ type ExternalCarrierTrackingFact struct {
 }
 
 // AdoptExternalCarrierTracking 是认领的构造门。源未给发生时间单独一格拒绝——那条素材要走
-// 留痕，不是改输入；其余缺失是形状错误。
+// 留痕，不是改输入；其余缺失是形状错误。源给了、在登记册上却是零点的发生时间不是「未给」，
+// 是库收不下的取值，同归形状错误（AtRegistryPrecision）。
 func AdoptExternalCarrierTracking(spec ExternalTrackingFactSpec) (ExternalCarrierTrackingFact, error) {
 	if spec.OccurredAt.IsZero() {
 		return ExternalCarrierTrackingFact{}, ErrOccurredAtNotGivenBySource
 	}
 	if !spec.TenantID.valid() || !spec.Fact.valid() || !spec.Version.valid() ||
 		!spec.Source.valid() || !spec.Credential.valid() || !spec.Object.valid() ||
-		!spec.Status.valid() || spec.ReceivedAt.IsZero() || !spec.Effective.valid() {
+		!spec.Status.valid() || AtRegistryPrecision(spec.ReceivedAt).IsZero() || !spec.Effective.valid() ||
+		AtRegistryPrecision(spec.OccurredAt).IsZero() {
 		return ExternalCarrierTrackingFact{}, ErrInvalidExternalTrackingFact
 	}
 	if spec.Supersedes.valid() {

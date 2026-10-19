@@ -50,7 +50,7 @@ func FormTransportSchedule(spec TransportScheduleSpec) (TransportSchedule, error
 	if err != nil {
 		return TransportSchedule{}, ErrInvalidTransportSchedule
 	}
-	if !spec.TenantID.valid() || !spec.Schedule.valid() || spec.DepartsAt.IsZero() {
+	if !spec.TenantID.valid() || !spec.Schedule.valid() || AtRegistryPrecision(spec.DepartsAt).IsZero() {
 		return TransportSchedule{}, ErrInvalidTransportSchedule
 	}
 	return TransportSchedule{
@@ -277,7 +277,7 @@ func (pool CapacityPool) Reserve(
 	validUntil time.Time,
 	at time.Time,
 ) (CapacityPool, error) {
-	if !reference.valid() || quantity <= 0 || validUntil.IsZero() || at.IsZero() || !validUntil.After(at) {
+	if !reference.valid() || quantity <= 0 || AtRegistryPrecision(validUntil).IsZero() || at.IsZero() || !validUntil.After(at) {
 		return CapacityPool{}, ErrInvalidCapacityPool
 	}
 	if _, exists := pool.ReservationFor(reference); exists {

@@ -400,7 +400,7 @@ func (segment ActualFulfillmentSegment) join(
 	if tenant != segment.tenantID {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}
-	if participation.enteredAt.IsZero() || !participation.object.valid() {
+	if AtRegistryPrecision(participation.enteredAt).IsZero() || !participation.object.valid() {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}
 	// 同一实际控制范围不能因伙伴重投、任务重建或批量重试重复建立履约参与（UC-TF-002
@@ -514,7 +514,7 @@ func (segment ActualFulfillmentSegment) rederive(
 	enteredAt time.Time,
 	voided bool,
 ) (ActualFulfillmentSegment, error) {
-	if !segment.segment.valid() || !segment.tenantID.valid() || tenant != segment.tenantID || enteredAt.IsZero() {
+	if !segment.segment.valid() || !segment.tenantID.valid() || tenant != segment.tenantID || AtRegistryPrecision(enteredAt).IsZero() {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}
 	current, present := segment.currentParticipationEnteredBy(object, kind, replaced)
@@ -610,7 +610,7 @@ func (segment ActualFulfillmentSegment) end(
 	basis ParticipationBasisReference,
 	at time.Time,
 ) (ActualFulfillmentSegment, error) {
-	if !object.valid() || at.IsZero() {
+	if !object.valid() || AtRegistryPrecision(at).IsZero() {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}
 	ended := segment
@@ -643,7 +643,7 @@ func (segment ActualFulfillmentSegment) end(
 // 同一条规则的时序面：关闭时刻不得早于任何参与的终点。早于它就等于说段在那个对象仍受控时
 // 已经结束——与上一句矛盾。同刻允许：最后一个对象交出去的那一刻关段是正当的。
 func (segment ActualFulfillmentSegment) CloseSegment(at time.Time) (ActualFulfillmentSegment, error) {
-	if !segment.Established() || at.IsZero() {
+	if !segment.Established() || AtRegistryPrecision(at).IsZero() {
 		return ActualFulfillmentSegment{}, ErrInvalidFulfillmentSegment
 	}
 	if segment.closed {

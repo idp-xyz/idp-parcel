@@ -205,7 +205,7 @@ func FormTransportChargeOccurrence(spec TransportChargeOccurrenceSpec) (Transpor
 		len(spec.Members) == 0 ||
 		spec.Quantity <= 0 ||
 		!spec.Unit.valid() ||
-		spec.OccurredAt.IsZero() ||
+		AtRegistryPrecision(spec.OccurredAt).IsZero() ||
 		!spec.Validity.valid() {
 		return TransportChargeOccurrence{}, ErrInvalidChargeOccurrence
 	}
@@ -340,7 +340,7 @@ func (occurrence TransportChargeOccurrence) ReviseValidity(
 	if !occurrence.validity.valid() {
 		return TransportChargeOccurrence{}, ErrInvalidChargeOccurrence
 	}
-	if !kind.valid() || !version.valid() || !basis.valid() || revisedAt.IsZero() {
+	if !kind.valid() || !version.valid() || !basis.valid() || AtRegistryPrecision(revisedAt).IsZero() {
 		return TransportChargeOccurrence{}, ErrInvalidChargeOccurrence
 	}
 	if version == occurrence.validity {

@@ -160,7 +160,7 @@ type CredentialApplicability struct {
 
 // NewCredentialApplicability 起点必备；until 为零值表示开放，非零时必须晚于起点。
 func NewCredentialApplicability(from, until time.Time) (CredentialApplicability, error) {
-	if from.IsZero() {
+	if AtRegistryPrecision(from).IsZero() {
 		return CredentialApplicability{}, fmt.Errorf("%w: applicability start", ErrInvalidExternalCarrierCredential)
 	}
 	if !endsAfterStart(from, until) {
@@ -196,7 +196,7 @@ func endsAfterStart(from, until time.Time) bool {
 // closedAt 收掉终点。收掉的终点须严格晚于起点：恰在起点收出的是空区间，类型不变式与库面约束都不收它，
 // 「自始作废」是另一种建模。既定终点已过就不能再收——那是改写一段已经结束的区间。
 func (applicability CredentialApplicability) closedAt(at time.Time) (CredentialApplicability, bool) {
-	if at.IsZero() || !afterOnRegistry(at, applicability.from) {
+	if AtRegistryPrecision(at).IsZero() || !afterOnRegistry(at, applicability.from) {
 		return CredentialApplicability{}, false
 	}
 	if !applicability.until.IsZero() && afterOnRegistry(at, applicability.until) {

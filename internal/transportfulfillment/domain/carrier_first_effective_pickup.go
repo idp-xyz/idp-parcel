@@ -385,7 +385,7 @@ func (pickup CarrierFirstEffectivePickup) Void(voiding CarrierPickupVoiding) (Ca
 // 不带原因；待确认恰带原因、不带承运主体与业务时间；失效三者都不带且必回指前版（首登不能失效）。
 func (pickup CarrierFirstEffectivePickup) valid() bool {
 	if !pickup.tenantID.valid() || !pickup.object.valid() || !pickup.fact.valid() || !pickup.version.valid() ||
-		pickup.judgedAt.IsZero() || !pickup.result.valid() || len(pickup.bases) == 0 {
+		AtRegistryPrecision(pickup.judgedAt).IsZero() || !pickup.result.valid() || len(pickup.bases) == 0 {
 		return false
 	}
 	seen := make(map[string]bool, len(pickup.bases))
@@ -404,7 +404,7 @@ func (pickup CarrierFirstEffectivePickup) valid() bool {
 	}
 	switch pickup.result {
 	case CarrierPickupFormed:
-		return pickup.carrier.valid() && !pickup.occurredAt.IsZero() && !pickup.reason.valid() && pickup.material == ""
+		return pickup.carrier.valid() && !AtRegistryPrecision(pickup.occurredAt).IsZero() && !pickup.reason.valid() && pickup.material == ""
 	case CarrierPickupPending:
 		return !pickup.carrier.valid() && pickup.occurredAt.IsZero() && pickup.reason.valid() && pickup.material != ""
 	case CarrierPickupVoided:
