@@ -1,6 +1,6 @@
 # ADR-0196：一码两物按关联到的包裹认——后到那件答身份冲突，先到那件只追加一版身份冲突判断
 
-Status: Accepted（2026-10-19。用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」；该会话代 NO owner 裁定，裁定原文落在票 [no-reception-identity/01](../../.scratch/no-reception-identity/issues/01-one-barcode-on-two-units-forms-an-identity-conflict.md)「裁定（2026-10-18，会话 idp-parcel-9b 代决）」一节，本记录照它写成并补上实施时定下的形状。）
+Status: Accepted（2026-10-19。用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」；该会话代 NO owner 裁定，裁定原文落在票 [no-reception-identity/01](../../.scratch/no-reception-identity/issues/01-one-barcode-on-two-units-forms-an-identity-conflict.md)「裁定（2026-10-18，会话 idp-parcel-9b 代决）」一节，本记录照它写成并补上实施时定下的形状。）部分停用：几句由 [ADR-0210](./0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md) 停用，随票 no-reception-identity/05、06 进 main 各自生效；被停的原句见本记录文末「复核记录二」与 adr/README 该行。
 
 Date: 2026-10-19
 
@@ -71,3 +71,7 @@ no-directional-basis/01 的身份一格（`domain.JudgeIdentityBasis`）以「�
 1. **决定四两句自票 no-reception-identity/05 进 main 起停用。** 方向依据的身份一格改读每条判断链的当前有效版本（ADR-0210 决定五）。先到那件的冲突版若指名了前版（ADR-0199 第一期之后追加的），此刻的当前有效版本就是那一版冲突版，落成缺少·{待识别, 身份冲突}，不再是「先到那件有原判断的关联行加追加的冲突行，落成缺少·身份冲突」；第一期之前追加、没有前版的冲突版照原句。同条「方向依据代码不改」一并停用。两件都暂停方向性作业，这一结论不变。
 2. **决定六的读法自票 no-reception-identity/06 进 main 起收窄。** 「按租户与包裹关联读别的作业实物的收寄，只认收寄本身带的关联」：被身份冲突处置版接续过的行，它的关联不再算那件实物的关联，处置版自己带的关联照算（ADR-0210 决定八「处置截断」）。还没有处置过的实物照原读法。决定一「这件包裹已有另一件作业实物的收寄关联」随之同读。
 3. **「Consequences」里「解除要等身份冲突的处置能力（未立票）」**已有去处：ADR-0210，实施票 no-reception-identity/05、06。决定五「已被 PS 采用的那次采用不回滚，交 VE 协调」不变；ADR-0210 决定七写明处置不撤回已交出的意图。
+
+## Links
+
+- 部分停用于 [ADR-0210](./0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md)。

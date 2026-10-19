@@ -1,6 +1,6 @@
 # ADR-0199：节点收寄保全交付来源——待识别实物按存下的号重核，同一作业实物在同一节点不另起控制起点，身份核对读不动在前提齐备后翻成待识别加未核对
 
-Status: Accepted（2026-10-19。用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」；该会话代 NO owner 裁定，裁定原文落在票 [no-reception-source/01](../../.scratch/no-reception-source/issues/01-node-reception-preserves-the-delivery-source.md)「裁定（2026-10-18，会话 idp-parcel-9b 代决）」一节，本记录照它写成，补上各期难逆转的形状。成文由该会话起的作者子代理完成。裁决能力边界：读过 NO `CONTEXT.md`、UC-NO-002、CONTEXT-MAP 与 GLOSSARY 的相关条目、ADR-0186、ADR-0196 及其复核记录、票 operator-channel/29、43、45 与 no-reception-identity/01、03；代码读过收寄编排 `ReceiveDeliveredUnitHandler`、ports 的收寄记录与收寄库端口、收寄库 PG 适配器、`ParcelContainmentView`、载荷规范化 `CanonicalizeDeliveryPayload`、方向依据的 `JudgeIdentityBasis`、复核目录读端口与 HTTP 收寄答复。PS 外部标识关联册只读过读面 `FindParcelsByExternalIdentifier` 与写入函数 `insertExternalIdentifierRelations`，它的调用方（委托仓储、面单交易仓储）的事务与 Outbox 装配没有逐行读。）
+Status: Accepted（2026-10-19。用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」；该会话代 NO owner 裁定，裁定原文落在票 [no-reception-source/01](../../.scratch/no-reception-source/issues/01-node-reception-preserves-the-delivery-source.md)「裁定（2026-10-18，会话 idp-parcel-9b 代决）」一节，本记录照它写成，补上各期难逆转的形状。成文由该会话起的作者子代理完成。裁决能力边界：读过 NO `CONTEXT.md`、UC-NO-002、CONTEXT-MAP 与 GLOSSARY 的相关条目、ADR-0186、ADR-0196 及其复核记录、票 operator-channel/29、43、45 与 no-reception-identity/01、03；代码读过收寄编排 `ReceiveDeliveredUnitHandler`、ports 的收寄记录与收寄库端口、收寄库 PG 适配器、`ParcelContainmentView`、载荷规范化 `CanonicalizeDeliveryPayload`、方向依据的 `JudgeIdentityBasis`、复核目录读端口与 HTTP 收寄答复。PS 外部标识关联册只读过读面 `FindParcelsByExternalIdentifier` 与写入函数 `insertExternalIdentifierRelations`，它的调用方（委托仓储、面单交易仓储）的事务与 Outbox 装配没有逐行读。）部分停用：几句由 [ADR-0210](./0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md) 停用，随票 no-reception-identity/05、06 进 main 各自生效；被停的原句见本记录文末「复核记录（2026-10-19，ADR-0210 部分停用几句」与 adr/README 该行。
 
 Date: 2026-10-19
 
@@ -124,3 +124,7 @@ Date: 2026-10-19
 2. **决定三分格**里「唯一，且包裹没有关联到别的作业实物 → 追加一版`节点收寄已形成`」与「唯一，但包裹已关联到别的作业实物 → 照 ADR-0196 追加冲突版」两支，自票 no-reception-identity/06 进 main 起停用，**适用场景**只限被重核那一版是「确认不是其中任何一件」的身份冲突处置版、且唯一命中的那件包裹在它排除之列：这时不追加，照零候选办（ADR-0210 决定九）。其余分格不变。
 3. **决定五末项**「方向依据代码不改：重核版带关联，`JudgeIdentityBasis` 照现有折法就判成立」里「方向依据代码不改」与「照现有折法」，自票 no-reception-identity/05 进 main 起停用。这一项的结论维持：重核版是链头、带关联，判成立；未核对行照待识别折、不另立原因。
 4. 决定二的判断链与当前有效版本，是 ADR-0210 读链头与逐链追加处置版的底子，不变。
+
+## Links
+
+- 部分停用于 [ADR-0210](./0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md)。
