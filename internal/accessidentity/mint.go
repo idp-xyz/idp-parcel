@@ -92,7 +92,10 @@ func (minter *Minter) MintWithdrawal(
 // authenticate 定位登记行并核验凭据，两步的失败分成两格交回。
 //
 // 顺序不能反：先核验后查册的话，册里没有这一行时根本没有受控引用可拿去核验，只能先
-// 答一个含糊的失败，两格就又折回一格了。
+// 答一个含糊的失败，两格就又折回一格了。这条的前提是核验依赖行上的秘密——对秘密式
+// 凭据成立，对 JWT 不成立。首方族的令牌按发行方公钥集验，不走这条路径：那一族先验
+// 令牌、后查册（CustomerClientMinter.admit，ADR-0139 决定二），否则伪造令牌就能换着
+// 主体枚举册的成员。
 func (minter *Minter) authenticate(
 	ctx context.Context,
 	proof ChannelCredentialProof,

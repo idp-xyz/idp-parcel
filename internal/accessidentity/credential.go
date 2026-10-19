@@ -6,9 +6,10 @@ import (
 	"strings"
 )
 
-// ErrAccessChannelNotConfigured 表示这次出示所走的渠道没配置。客户渠道上是登记册里没有
-// 所认领的那一行，恢复动作是去配置渠道参数（PAR-INT-01）；操作者渠道上是 parcel-api 的发行方
-// 部署参数未设（ADR-0100 决定二），恢复动作是去配部署参数。两族都是换一份凭据或重试不会好。
+// ErrAccessChannelNotConfigured 表示这次出示所走的渠道没配置。既有渠道适配一族上是登记册里没有
+// 所认领的那一行，恢复动作是去配置渠道参数（PAR-INT-01）；操作者、集成客户端与首方客户三族上是
+// parcel-api 那一族的发行方部署参数未设（ADR-0100 决定二、ADR-0139 决定四），恢复动作是去配部署参数。
+// 各族都是换一份凭据或重试不会好。
 //
 // 它与 ErrCredentialRejected 分成两格而不是合成一句「认证失败」，判据同 ADR-0029：
 // 恢复动作不同——这一格找的是配渠道的人，那一格找的是持凭据的人。合成一格会让两种
@@ -70,7 +71,8 @@ func NewCredentialReference(value string) (CredentialReference, error) {
 
 func (reference CredentialReference) String() string { return reference.value }
 
-// ChannelCredentialProof 是渠道侧就一次出示材料交出的凭证。
+// ChannelCredentialProof 是既有渠道适配一族就一次出示材料交出的凭证。首方客户族不经它：那一族的凭据形态
+// 由 ADR-0139 决定二定，是客户端凭据令牌（IntegrationClientCredential），走 CustomerClientMinter。
 //
 // **本包不构造它、不拆它，也不知道它背后是 API 密钥、客户证书还是门户会话。** 只有
 // 一个方法，且那个方法只交出登记行的查找键——凭据形态属 ADR-0072 Decision 二明文挡住
@@ -83,7 +85,8 @@ type ChannelCredentialProof interface {
 	ClaimedChannel() ChannelKey
 }
 
-// CredentialVerifier 拿登记行上的受控引用去核对一次出示。
+// CredentialVerifier 拿登记行上的受控引用去核对一次出示。它属租户既有渠道的适配那一族；首方族的
+// 令牌按发行方公钥集验，不读行上的引用，核验方是 CustomerClientCredentialVerifier。
 //
 // 本仓没有它的生产实现，也不该在本轮有：核对怎么做取决于凭据形态，而那一半还锁着；
 // 凭据本体外置另是 AGENTS.md 的红线。接口留在这里，是为了让铸造那一段能先成型、被

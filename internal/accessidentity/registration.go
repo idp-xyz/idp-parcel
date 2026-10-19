@@ -69,17 +69,20 @@ func (registration ChannelRegistration) CredentialReference() CredentialReferenc
 // 一个是去配渠道、一个是去救依赖（ADR-0052 的分界句同款成立）。用 error 顶掉未配置，
 // 运维会去救一个没坏的依赖。
 //
-// 本仓此刻没有它的生产实现——按 ADR-0072 二，表与迁移等 PAR-INT-01 证据。
+// 它属租户既有渠道的适配那一族，本仓此刻没有它的生产实现——按 ADR-0072 二（经 ADR-0139 决定一收窄），
+// 那一族的表与迁移等 PAR-INT-01 证据。首方族不经它查册：CustomerClientMinter 以已核验的令牌主体查客户
+// 渠道册，由那一行拼出 ChannelRegistration 交 seal。
 type ChannelRegistry interface {
 	FindChannel(ctx context.Context, key ChannelKey) (ChannelRegistration, bool, error)
 }
 
 // RequestKeyDerivation 决定**哪个渠道字段铸成来源请求键**。
 //
-// 这一格是 PAR-INT-01 最低证据里「重试和冲突边界」那一件定的，客户尚未回复：同一委托
-// 重复提交按业务标识还是渠道请求键判重、判重命中时渠道期待什么答复，都还没有答案。
-// 来源请求键就是幂等键本身，所以这里**不带任何生产实现，也不取默认值**——按 AGENTS.md
-// 红线，未确认参数保持显式未决，不写死为生产默认。
+// 租户既有渠道的适配那一族，这一格是 PAR-INT-01 最低证据里「重试和冲突边界」那一件定的，客户
+// 尚未回复：同一委托重复提交按业务标识还是渠道请求键判重、判重命中时渠道期待什么答复，都还没有
+// 答案。来源请求键就是幂等键本身，所以那一族**不带任何生产实现，也不取默认值**——按 AGENTS.md
+// 红线，未确认参数保持显式未决，不写死为生产默认。首方族的推导口由产品契约定（ADR-0139 决定五：
+// 载荷里的接入请求标识），实现是 customerAPIRequestKeys。
 //
 // 提交与撤回各有一个方法而不是共用一个带动作参数的方法：同一个客户就同一份委托先提交
 // 后撤回是两次来源请求，共用一个键会让撤回被判成原提交的重放，此后再也分不出「这单
