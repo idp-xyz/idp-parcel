@@ -1,7 +1,7 @@
 # 13 演示里程碑映射的交接那一行永远匹配不上，`IN_TRANSIT` 从不归类
 
 Category: bug
-Status: needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [11](./11-external-result-received-has-no-subscriber.md) 的作者核对。
+Status: resolved——2026-10-19 进 main（见文末「完成记录」）。此前 needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [11](./11-external-result-received-has-no-subscriber.md) 的作者核对。
 Blocked by: 无
 出处：[11](./11-external-result-received-has-no-subscriber.md) 完成记录。
 
@@ -28,3 +28,11 @@ none
 ## 既有票
 
 none
+
+## 完成记录
+
+2026-10-19 Claude Code 会话做。
+
+- 演示映射 v1 就地改：交接那一行的类型词改为 `handover-handed-over`；拒收与待确认不映，照未归类。已灌过的库要 `--reset`，种子 README 那一句同步。
+- 新用例 `TestAHandedOverTransportHandoverClassifiesAsInTransitUnderTheDemoMapping`（`cmd/parcel-dispatch`，真库）：经生产翻译与登记用例登真种子文件，一封已交出的交接经生产路由表一拍，归 `IN_TRANSIT`。把种子换回旧行，这条转红（实测）。
+- 证据级别 `S`。

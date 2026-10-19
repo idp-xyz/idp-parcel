@@ -50,6 +50,33 @@ func TestARegisteredTransportHandoverDerivesAnUnclassifiedProjectionAndPublishes
 	}
 }
 
+// Covers: 演示里程碑映射里交接那一行用的是 VE 交接投影真交出的类型词——已交出的交接经生产路由表归 IN_TRANSIT。
+// 映射行与适配器的类型词各写一处，只有读真种子文件才看得出两边对不上。
+func TestAHandedOverTransportHandoverClassifiesAsInTransitUnderTheDemoMapping(t *testing.T) {
+	fixture := newSYNVerticalFixture(t)
+	registerDemoMilestoneMapping(t, fixture)
+
+	eventID := recordRegisteredTransportHandover(t, fixture)
+	if published, err := fixture.beat.DispatchOnce(t.Context()); err != nil || published != 1 {
+		t.Fatalf("第一拍 published = %d err = %v；失败码 = %q", published, err, recordedFailureCode(t, fixture.db, eventID))
+	}
+
+	tenant := mustVE(t, vedomain.NewTenantID, fixture.identity.TenantID().String())
+	parcel := mustVE(t, vedomain.NewTrackedParcelReference, transportHandoverObject)
+	projections, err := vepostgres.NewProjections(fixture.db)
+	if err != nil {
+		t.Fatalf("构造投影读口：%v", err)
+	}
+	projection, found, err := projections.FindCurrent(t.Context(), tenant, parcel)
+	if err != nil || !found || len(projection.Entries()) != 1 {
+		t.Fatalf("当前投影 found = %v err = %v", found, err)
+	}
+	milestone, classified := projection.Entries()[0].Milestone()
+	if !classified || milestone.String() != "IN_TRANSIT" {
+		t.Fatalf("交接归类 = %q（%v），want IN_TRANSIT——演示映射的交接那一行没命中 VE 交出的类型词", milestone, classified)
+	}
+}
+
 func recordRegisteredTransportHandover(t *testing.T, fixture *synVerticalFixture) string {
 	t.Helper()
 
