@@ -1,7 +1,7 @@
 # 01 余下各口的信封 ID 仍原样串接实例引用：标识一长就入不了队，交接只留没人重发的续办引用
 
 Category: bug
-Status: 部分完工，待评审与进 main（分支 `claude-eib01`）；余下运输履约各口待做。2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决」授权），出自 [routing-first-cut/22](../../routing-first-cut/issues/22-initial-route-envelope-id-exceeds-the-event-id-limit.md) 的取证。
+Status: in-progress——除运输履约外各口已进 main（至 `20a06645`）；余下运输履约各口待做，门禁登着去处。2026-10-18 Claude Code 会话立（用户「你作为业务和系统专家自决」授权），出自 [routing-first-cut/22](../../routing-first-cut/issues/22-initial-route-envelope-id-exceeds-the-event-id-limit.md) 的取证。
 Blocked by: 无
 出处：`outboxintent.FingerprintEventID` 头注（票 sa-cc/34 裁决 2）：信封 ID 上限是 `eventing.MaxEventIDLength`，租户、委托、包裹这类引用多长归实例半边，本仓给不出上界，原样串接就是把上限押在别人的长度上。
 
@@ -61,3 +61,10 @@ Blocked by: 无
 ### 换形边界
 
 部署前已入队、部署后又被重放的意图，会算出新 ID 再入队一封。消费方 inbox 按事件 ID 去重，会把它当新信封再处理一次。本产品首发前没有租户的在途数据，本票按此口径不做迁移；各消费方大多另有业务键幂等（重放答「已存在」），即便有在途数据，后果也是多一次幂等处理。
+
+## 进 main 记录（2026-10-19，除运输履约外各口）
+
+- 隔离子代理一次过两轴评审：阻断 2 条，已修。一是有一条反向用例因 ID 拼法变了而恒真，已改按事件类型数；二是完成记录缺「做什么」里两项的裁决，已补。非阻断已修：常量挪到函数头注之上、可视异常缺口的 Subject 回可读形、结算口名抽常量、例外失效条件写准、测试头注去掉「加类型段」。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `d2ee98db`：143 包 ok，0 FAIL，0 SKIP。
+- 之后 rebase 跨过 ADR-0190 文档与对端会话的运输履约几笔。重跑了架构门禁、运输履约、`cmd/parcel-api`、`cmd/parcel-dispatch`，全部 ok。
+- 快进推到 main：`e564ecbd..20a06645`。机制清点在钉 `20a06645` 的干净树上重生成，另起一笔。
