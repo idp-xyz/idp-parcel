@@ -1,7 +1,7 @@
 # 34 复核完成口的提交版本由服务端当前版顶替：新提交版本形成后，同一复核请求重投或按旧页面提交，会把旧版本的复核签到新版本的任务上
 
 Category: bug
-Status: in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-oc34`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-oc34`）上留有2 笔（复核完成版本由调用方指名的后端修法；前端复核草案构造的 WIP），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 15 之三、之四补核发现；用户授权代决）；分支 `claude-oc34`
+Status: resolved——2026-10-18 进 main（代码验证钉 `e6d990a7`），见「进 main 记录」。此前 in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-oc34`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-oc34`）上留有2 笔（复核完成版本由调用方指名的后端修法；前端复核草案构造的 WIP），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 15 之三、之四补核发现；用户授权代决）；分支 `claude-oc34`
 Blocked by: 无
 父票：[15](./15-operation-decision-faces-take-operator-intake.md)（之三 `44ef6a4a`、之四 `dc439417`）
 出处：票 15 Comments「评审 ← 会话 idp-parcel-9b 起的隔离子代理 · 钉 `0e3bb7df`」那一条里的「子代理顺带提到之三那三口也查不到逐口核对记录」；票 26 遗留研判中补核票 15 之三、之四（簇 C6）发现；补记随 operator-channel/39。
@@ -117,3 +117,8 @@ Blocked by: 无
   - **Spec**：阻断无。`IntakeManualReviewCompletion` 改收必填的 `submissionVersionId`，版本与理由校验排在委托寻址之前（坏载荷 400）；主动拒绝仍取当前版并在头注写明理由（拒绝成立后不再形成新版本，是否绑定所见版本归 PS owner）。管理台 `manualReviewCompletionDraftOf` 从队列行取版本，`ManualReviewCompletionOutcome` 照 Go 侧取值。真库回归在旧做法下重投答 201、修后答 `VERSION_SUPERSEDED`。
   - **Standards**：阻断无。非阻断 1：前端头注用「他」指操作员，已在 `bee6d794` 改中性说法。
   - **未做的格**：票 15 补记行归 operator-channel/39（等 34、36 进 main 后一并写）。
+
+### 进 main 记录（2026-10-18，会话 idp-parcel-9b）
+
+- 分支 `claude-oc34` rebase 到远端 main `088957d8` 之上，快进推送；rebase 前的 SHA 作封存出处。
+- 推送方全量一次：钉 `e6d990a7` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 143 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `go build ./...`、`go vet ./...` 退 0，机制清点重生成零差；管理台 `tsc -b --noEmit` 退 0，`node scripts/run-tests.mjs` 536 例全过。
