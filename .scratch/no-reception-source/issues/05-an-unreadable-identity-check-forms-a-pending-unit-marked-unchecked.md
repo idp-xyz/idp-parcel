@@ -1,7 +1,7 @@
 # 05 第三期：身份核对读不动翻成`待识别实物已建立` + 身份核对态「未核对」——ADR-0186 决定二（草案 C1-T1）身份支的 5xx 由本票翻转
 
 Category: enhancement
-Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（04 已进 main），分支 `claude-nrs05`；与 no-reception-identity/06 并行，后者先进 main 时本分支 rebase。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）；Blocked by 里原挂的用户决定已于 2026-10-19 由会话 idp-parcel-9b 代决
+Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（04 已进 main），分支 `claude-nrs05`；与 no-reception-identity/06 并行，后者先进 main 时本分支 rebase。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）；Blocked by 里原挂的用户决定已于 2026-10-19 由会话 idp-parcel-9b 代决
 Blocked by:
 - 04 进 main（前提「挡住同一作业实物重复形成控制起点」）；02、03 经它已在 main。
 - ~~用户决定~~ 已解：未核对行由什么续上，2026-10-19 会话 idp-parcel-9b 代决取「落未核对行的同一笔事务自投重核门铃」，见 ADR-0199 决定三与越权风险点「未核对行由自投门铃续上」。
@@ -146,3 +146,14 @@ ADR-0186 名下改钉的用例：`TestDependencyFailuresFormNoAnswer` 去掉身�
 - 待识别册答复的 `units`（按实物列链头，供处置用）没带 `identityCheck`：未核对行不记冲突，不进处置。
 - parcel-dispatch 的重核装配没给身份读口包 savepoint，理由见上。
 - 非作者评审与推送方在干净检出上带 DSN 跑全量，不在本作者地盘内。
+
+## Comments
+
+### 评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审；2026-10-19，钉 `c68efed1`）
+
+两轴合审，0 阻断。
+
+- **Spec**：ADR-0199 决定五与决定三第三触发落到。身份读不动落「待识别 · 未核对」，接收、控制与来源照常，不交意图，同一笔自投重核门铃；门铃入不了队整笔不形成答案（一条没有门铃的未核对行只能等人工，比翻转前倒退），不吞成续办。核对态 `identity_check` 只在待识别行、未核对行无候选不记冲突带来源，既有待识别行回填已核对并在迁移头注钉 SHA 写推定依据；06 的处置版补了已核对。门铃信封 ID 由（租户，判断版本）认领、分区键按实物，NO 同一个消费者分两扇门，仍读不动记等依赖退避重投。身份读口经 `SavepointedParcelIdentityView` 隔离，两处生产装配都包。各读面（设备答复、前线导入明细、复核目录、管理台、`ParcelContainmentView`）都分得开未核对与已核对。ADR-0186 决定二、决定七按约定部分停用。票 01 点名的三条真库用例齐。
+- **作者偏离票面一处，认可**：首答 200 而非票面写的 201——待识别今天就答 200，ADR-0199 决定五说未核对与已核对的待识别对设备是同一种处置，状态码不随核对态分叉。
+- **Standards**：注释写为什么；新件另起文件，共享文件只追加。
+- **评审修补（已做）**：UC-NO-002 `AT-NO-051` 一行末尾「翻转前提齐备之前，照 ADR-0186 不形成答案」随本票落地已过时，改为指 ADR-0199 决定五。
