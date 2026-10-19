@@ -1,6 +1,6 @@
 # ADR-0201：运输机会——周期安排按日期物化成班次，初始路由形成后逐段准备，空册答未配置
 
-Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 [demo-chain-gaps/16](../../.scratch/demo-chain-gaps/issues/16-transport-schedule-templates-and-concrete-schedules-are-registered.md) 起草并落决定一至五，决定三的容量声明与决定一的容量池由票 17 落，决定六至八由票 18 落。越权风险点见文末，待 TF owner 复核，决定二与决定七待 NR owner 会签。）
+Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 [demo-chain-gaps/16](../../.scratch/demo-chain-gaps/issues/16-transport-schedule-templates-and-concrete-schedules-are-registered.md) 起草并落决定一至五，决定三的容量声明与决定一的容量池由票 17 落，决定六至八由票 18 落。越权风险点见文末，待 TF owner 复核，决定二与决定七待 NR owner 会签。）部分停用：[ADR-0217](./0217-route-plan-carries-a-delivery-leg-after-the-delivery-node.md)（被停条款：决定二末句「与计划履约段的比对……对的是 `PlannedLeg.From/To` 与窗口依据里的连接代码」只对节点间段成立，计划末尾的交付段不比对、不准备；适用场景见 adr/README 该行，其余各条不变，本记录正文不改写）
 
 Date: 2026-10-19
 
@@ -86,6 +86,7 @@ Date: 2026-10-19
 - [ADR-0094](./0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md)：`未配置`入账不重投
 - [UC-TF-003](../application/transport-fulfillment/UC-TF-003-PREPARE-TRANSPORT-OPPORTUNITY.md)：`AT-TF-027`、`AT-TF-028` 与 `AT-TF-100` 至 `AT-TF-104`
 - 计划 `.scratch/demo-chain-gaps/tf-chain-plan.md`「01 运输机会与班次」；票 `.scratch/demo-chain-gaps/issues/16-…`、`17-…`、`18-…`
+- [ADR-0217](./0217-route-plan-carries-a-delivery-leg-after-the-delivery-node.md)：初始路由计划末尾可带交付段，准备只为节点间段形成结果（部分停用决定二末句）
 
 ## 补记：票 17 落地时的补充裁定（2026-10-19，Claude Code 会话代决，待 TF owner 复核）
 

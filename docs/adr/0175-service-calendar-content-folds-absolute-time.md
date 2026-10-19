@@ -1,6 +1,6 @@
 # ADR-0175：服务日历的截单、处理时长与衔接缓冲按绝对时刻折进时间投影
 
-Status: Accepted（2026-09-30。本项是机制。接受依据是 ADR-0146 决定一、决定七。）
+Status: Accepted（2026-09-30。本项是机制。接受依据是 ADR-0146 决定一、决定七。）部分停用：[ADR-0217](./0217-route-plan-carries-a-delivery-leg-after-the-delivery-node.md)（被停条款：决定一「三格都是分钟，都可空」里的「三格」，节点日历多一格派送时长；决定四「线路的连接序列是候选段链」，交付节点登了派送时长时连接序列之后接一段交付段；适用场景与原句见 adr/README 该行，其余各条不变，本记录正文不改写）
 Date: 2026-09-30
 
 ## Context
@@ -37,3 +37,4 @@ CONTEXT 要求每个节点有业务时区，截单按当地语义，跨节点按
 - [ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)
 - [ADR-0148](./0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md)
 - [network-routing CONTEXT](../domain/network-routing/CONTEXT.md)「服务日历」与业务时区那条规则
+- [ADR-0217](./0217-route-plan-carries-a-delivery-leg-after-the-delivery-node.md)：日历多一格派送时长，候选段链末尾可接交付段（部分停用决定一、决定四各一句）

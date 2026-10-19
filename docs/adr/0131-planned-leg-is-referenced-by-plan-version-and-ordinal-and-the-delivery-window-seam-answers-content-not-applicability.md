@@ -1,6 +1,6 @@
 # ADR-0131: 计划履约段对外以「路由计划版本 + 段序位」引用、没有独立段身份；派送时间窗口缝按该引用取**引用所钉那一版**的段内容，计划适用性四态不折进窗口答案；没有计划段的对象答`要求缺失`，`network-routing` 不给兜底窗口
 
-Status: Accepted
+Status: Accepted（后继：[ADR-0217](./0217-route-plan-carries-a-delivery-leg-after-the-delivery-node.md) 在决定一的引用形之内给计划末尾加一段交付段，序位按整条段链数，派送窗口缝不按段种类分支；Context「NR 计划里没有服务动作一格」仍成立——段种类不是服务动作。本记录各条不变。）
 Date: 2026-09-09
 
 ## Context
@@ -51,3 +51,7 @@ Date: 2026-09-09
 3. **第二分量选段序位而非节点对**（决定一）。两者都完整；选序位是为无歧义，代价是人读引用时看不出走的是哪两个节点。
 4. **引用怎样到登记方手里**未裁。路由指令携带段引用属自然延伸，但指令载体（分拣码 / 标签 / 现场识别）与登记方录入流程是 NO / TF 现场半边，本记录没有替它们定。
 5. **本记录由通道 5 代裁**，读过 NR CONTEXT 全文、TF CONTEXT 相关词条、ADR-0114 / 0004 / 0025、`initial_route_plan.go` / `plan_applicability.go` / `reroute.go` / `route_plan_read.go` / `delivery_requirement.go` / `trigger_delivery_dispatch.go`，没读 UC-TF-006 全文与 NR 复核编排 `reassess_route.go`——若那里对「改路后旧段窗口」另有措辞，以 CONTEXT 硬句为准、以本记录为落法。
+
+## Links
+
+- [ADR-0217](./0217-route-plan-carries-a-delivery-leg-after-the-delivery-node.md)：计划在交付节点之后带交付段，登记方声明它的引用，窗口缝照答它的窗口
