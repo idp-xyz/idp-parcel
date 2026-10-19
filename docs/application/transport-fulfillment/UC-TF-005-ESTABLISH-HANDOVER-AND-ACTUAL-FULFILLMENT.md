@@ -92,7 +92,7 @@
 | 6 | 执行方/伙伴接入 | 接收出发、移动、到达、中断和资源变化事实；出发在写入之前逐对象向 `customs-compliance` 拉取门禁读数 | 保存来源，不直接修改计划；出发与读数同一笔落册 |
 | 7 | `transport-fulfillment` | 形成下一次交接或控制结束结果 | 结束相应对象参与关系，其他对象继续 |
 | 8 | `transport-fulfillment` | 发布稳定事实引用给路由、追踪、异常和 `parcel-shipment` | 发布失败只重试同一意图 |
-| 9 | 运输运营（运营决定） | 参与结束之后另行登记实际履约的运输收费发生项：事实取段内已结束的参与，采购上下文由登记方给出并经协议核对，发生条件、数量与单位按采用的那一版协议声明的收费发生条件定，发生项与已形成信封同笔落地（[ADR-0207](../../adr/0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md)、[ADR-0209](../../adr/0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md)） | 只固定发生事实，金额交给 `parcel-pricing` 与 `settlement-accounting`；不内联进交接或交付编排；协议没声明答未配置 |
+| 9 | 运输运营（运营决定） | 参与结束之后另行登记实际履约的运输收费发生项：事实取段内已结束的参与，采购上下文由登记方给出并经协议核对，发生条件、数量与单位按采用的那一版协议声明的收费发生条件定，段已采用运输委托时采购上下文取委托快照、登记方可以不给，发生项与已形成信封同笔落地（[ADR-0207](../../adr/0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md)、[ADR-0209](../../adr/0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md)；ADR-0207 文末补记） | 只固定发生事实，金额交给 `parcel-pricing` 与 `settlement-accounting`；不内联进交接或交付编排；协议没声明答未配置 |
 
 ## 交接与实际履约规则
 
@@ -173,6 +173,7 @@
 | `AT-TF-220` | 交接更正 | 新版本照前版承继节点声明；更正载荷带节点键答坏报文 |
 | `AT-TF-221` | 运营查阅交接册 | 逐版本列出三格节点，没声明的格不出现 |
 | `AT-TF-222` | 节点格空白，或节点值存不下（含 NUL） | 空白读作没有声明，与不带同答同摘要；存不下答未受理、不落册 |
+| `AT-TF-211` | 外包干线段采用了一份运输委托，参与结束之后登记实际履约，不给服务方与协议；或给了与委托不一致的服务方、协议；或那一段的实际承运商判断是自营法人 | 服务方、协议快照与采购责任法人取委托，协议按委托记下的那一版在业务时间核，照常形成；不一致答冲突并回显委托，不写；段有采用连线时不问承运商判断，不答不适用（[ADR-0207](../../adr/0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md) 文末补记）。没有采用连线的段照旧要登记方给出，缺了答缺采购上下文（`AT-TF-122`） |
 
 ## 给开发的交接
 

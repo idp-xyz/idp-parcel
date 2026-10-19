@@ -109,3 +109,4 @@ Date: 2026-10-19
 - [UC-PC-001](../application/party-commercial/UC-PC-001-MAINTAIN-AND-PUBLISH-COMMERCIAL-AUTHORITY.md)：`AT-PC-051` 至 `053`
 - [UC-TF-005](../application/transport-fulfillment/UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md)：步 9，`AT-TF-166` 至 `170`
 - 票 `.scratch/demo-chain-gaps/issues/29-supplier-agreements-declare-charge-occurrence-conditions.md`
+- [ADR-0207](./0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md) 文末「补记：票 28 落地时的补充裁定」：订舱与取消的范围取那一次订舱、取消只认订舱一级，回答本记录越权风险点 2 与 Consequences「订舱与取消的范围怎么取由票 28 定」；演示干线协议以 v3 再发，本记录决定六的 v2 不改
