@@ -1,6 +1,6 @@
 # ADR-0098: 失败尝试费发生项不在揽收编排里形成，采购上下文显式给出而不推导
 
-Status: Accepted
+Status: Accepted（**部分停用**：决定四「**今天不建**：建它等于在没有任何租户实证的情况下先定一种采购组织方式（揽收是挂在委托下、还是各自独立由第三方关系相连）」已由 [ADR-0204](./0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md) 决定五停用，适用场景只限实际履约段与运输委托之间的连线；揽收任务与尝试 ↔ 委托仍不建，其余各条不变，本记录正文不改写。）
 Date: 2026-09-02
 
 ## Context
@@ -71,3 +71,4 @@ Date: 2026-09-02
 - [ADR-0094](0094-undecided-retry-is-decided-by-resume-path-with-a-fourth-grade-for-operator-registration.md)：静默不发生且无人重试的派生步骤，本 ADR 决定一第二条引它
 - [tf-unwired-seven/04](../../.scratch/tf-unwired-seven/issues/04-transport-charge-occurrence-registry.md)
 - [ADR-0207：运输收费发生项由运营决定显式登记](./0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md)：后继——落在本记录决定二之内，把决定一扩到实际履约，给出决定三不适用格的两种读法，接通 Consequences 所说未接通的生产触发链；本记录各条不变
+- [ADR-0204：履约段采用运输委托](./0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md)：后继——**其决定五部分停用本记录决定四「今天不建」一句**，适用场景只限实际履约段与运输委托之间的连线：连线由登记方逐段声明，产品不替租户定采购组织方式，停用理由的前提（「先定一种采购组织方式」）在这一形态上不成立。揽收任务与尝试 ↔ 委托仍按决定四不建；正文保留原样不改写，此处只作前向指引
