@@ -117,6 +117,8 @@ go run ./cmd/parcel-dispatch
 
 > 2026-10-19 补记（票 `demo-chain-gaps/16`，[ADR-0201](../adr/0201-schedule-templates-materialize-concrete-schedules-by-date-and-preparation-answers-not-configured-on-an-empty-register.md)）：网走得通之后，货怎么运也有了登记。种子给三条连接各登一份按日运行的周期安排（`scripts/demo-seeds/data/transport/`），`GET /transport-fulfillment-records?registry=transport-schedule-template` 列出这三份；`POST /transport-fulfillment-transport-schedule-registrations` 带 `{"template":"SYN-SCHED-SZX-SIN-DAILY","runningDate":"<日期>"}` 显式登一个班次答 `201` `SCHEDULE_REGISTERED`，同一日期再登答 `200` `EXISTING_SCHEDULE`，班次身份是 `SYN-SCHED-SZX-SIN-DAILY/<日期>`。各段的履约方式是演示租户的声明（租户取值，只记 `S`）：`SHA-HUB→SZX-GATE` 自营；`SZX-GATE→SIN-HUB` 外包给 `SYN-PARTY-CARRIER-TRUNK-01`，采用 `SYN-SUPPLIER-TRUNK-CN-SG-01` v1；`SIN-HUB→SIN-LM` 与末端派送自营、经一线设备；`SYN-SUPPLIER-LASTMILE-SG-01` 暂不被任何委托采用。2026-10-19 在一次性库上按 `seed.sh` 灌入退 0，经操作者渠道取证上面两口（实测，只记 `S`），走完已删库。
 
+> 2026-10-19 补记（票 `demo-chain-gaps/17`，[ADR-0201](../adr/0201-schedule-templates-materialize-concrete-schedules-by-date-and-preparation-answers-not-configured-on-an-empty-register.md) 决定三与文末补记）：三份周期安排各声明了重量与件数两维的硬上限（合成值，见种子 README），按日期登记一班时随之各建一池。种子显式登了干线 `SYN-SCHED-SZX-SIN-DAILY/2026-10-21` 一班，`GET /transport-fulfillment-records?registry=capacity-pool` 列出它的 `…/WEIGHT`（5000 KG）与 `…/PIECES`（1000 PCS）两池；`POST /transport-fulfillment-capacity-pool-registrations` 在那一班上另登一维答 `201` `POOL_ESTABLISHED`、再登答 `200` `EXISTING_POOL`，指向没登过的班次答 `200` `SCHEDULE_NOT_FOUND`。2026-10-19 在一次性库上按 `seed.sh` 灌入退 0，经操作者渠道取证上面三口（实测，只记 `S`），走完已删库。
+
 ### 第 4 步 · 过关的规则（customs-compliance）
 
 | 看哪页 | 取哪个端点 |
