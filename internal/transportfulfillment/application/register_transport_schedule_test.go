@@ -70,6 +70,7 @@ func (double *transportScheduleRegistryDouble) Save(_ context.Context, record po
 type scheduleRegistrationFixture struct {
 	templates *templateRegistryDouble
 	schedules *transportScheduleRegistryDouble
+	pools     *poolStoreDouble
 	handler   *application.RegisterTransportScheduleHandler
 }
 
@@ -77,10 +78,12 @@ func newScheduleRegistrationFixture() *scheduleRegistrationFixture {
 	fixture := &scheduleRegistrationFixture{
 		templates: &templateRegistryDouble{current: map[string]ports.ScheduleTemplateRecord{}},
 		schedules: &transportScheduleRegistryDouble{current: map[string]ports.ScheduleRecord{}},
+		pools:     newPoolStore(),
 	}
 	fixture.handler = application.NewRegisterTransportScheduleHandler(application.RegisterTransportScheduleDeps{
 		Templates: fixture.templates,
 		Schedules: fixture.schedules,
+		Pools:     fixture.pools,
 		Clock:     opportunityClock{at: reserveAt},
 	})
 	return fixture
@@ -259,14 +262,151 @@ func TestScheduleRegistrationRecoveryDiscipline(t *testing.T) {
 		labels := map[string]bool{}
 		for _, reason := range []application.ScheduleRegistrationUndecidedReason{
 			application.ScheduleTemplateRegistryUnavailable, application.TransportScheduleRegistryUnavailable,
+			application.CapacityPoolRegistryUnavailable,
 		} {
 			if reason.String() == "" {
 				t.Fatalf("原因 %d 没有标签", reason)
 			}
 			labels[reason.String()] = true
 		}
-		if len(labels) != 2 || application.ScheduleRegistrationUndecidedReason(len(labels)+1).String() != "" {
+		if len(labels) != 3 || application.ScheduleRegistrationUndecidedReason(len(labels)+1).String() != "" {
 			t.Fatal("未决原因集合被悄悄放开或折并")
+		}
+	})
+}
+
+func capacitiesOf(declarations ...application.CapacityDeclarationInput) []application.CapacityDeclarationInput {
+	return declarations
+}
+
+func poolOutcomes(result application.ScheduleRegistrationResult) map[string]application.OpportunityOutcome {
+	outcomes := map[string]application.OpportunityOutcome{}
+	for _, pool := range result.Pools() {
+		outcomes[pool.Pool.Key.Pool.String()] = pool.Outcome
+	}
+	return outcomes
+}
+
+// Covers: ADR-0201 决定三「逐维容量声明随物化建池且幂等」与 `AT-TF-106`——按周期安排物化登记一班时，那一版声明的
+// 每一维在那一班上各建一个池（多维分存，AT-TF-030）；同一日期再登，班次与池都答`已存在`、不多落；周期安排换版改了
+// 某维容量又加了一维，再登同一日期时班次照样答`已存在`，改了的那一维答`池冲突`且库里那一池不改写，新加的那一维
+// 建池——新落了池就算新落（201 的依据）。
+func TestMaterializingAScheduleEstablishesTheDeclaredPools(t *testing.T) {
+	fixture := newScheduleRegistrationFixture()
+	declared := templateCommand(t)
+	declared.Capacities = capacitiesOf(
+		application.CapacityDeclarationInput{Dimension: "PIECES", Unit: "PCS", Capacity: 800},
+		application.CapacityDeclarationInput{Dimension: "WEIGHT", Unit: "KG", Capacity: 5000},
+	)
+	registerTemplate(t, fixture, declared, application.ScheduleTemplateRegistered)
+	materialize := application.RegisterTransportScheduleCommand{
+		TenantID: opportunityTenant(t), Template: "SYN-TPL-1", RunningDate: "2026-10-21",
+	}
+
+	first := registerSchedule(t, fixture, materialize, application.TransportScheduleRegistered)
+	want := map[string]application.OpportunityOutcome{
+		"SYN-TPL-1/2026-10-21/WEIGHT": application.PoolEstablished,
+		"SYN-TPL-1/2026-10-21/PIECES": application.PoolEstablished,
+	}
+	if got := poolOutcomes(first); len(got) != len(want) || got["SYN-TPL-1/2026-10-21/WEIGHT"] != want["SYN-TPL-1/2026-10-21/WEIGHT"] ||
+		got["SYN-TPL-1/2026-10-21/PIECES"] != want["SYN-TPL-1/2026-10-21/PIECES"] {
+		t.Fatalf("首登池 = %v", got)
+	}
+	if pools := first.Pools(); pools[0].Pool.Pool.Dimension() != domain.CapacityWeight {
+		t.Fatalf("池未按维度次序列：%s 在前", pools[0].Pool.Pool.Dimension())
+	}
+	if !first.Persisted() || len(fixture.pools.records) != 2 {
+		t.Fatalf("首登 persisted=%v 池 %d 个", first.Persisted(), len(fixture.pools.records))
+	}
+
+	again := registerSchedule(t, fixture, materialize, application.TransportScheduleExisting)
+	for pool, outcome := range poolOutcomes(again) {
+		if outcome != application.PoolExistingResult {
+			t.Fatalf("再登 %s = %s，要已存在", pool, outcome)
+		}
+	}
+	if again.Persisted() || fixture.pools.saves != 2 {
+		t.Fatalf("再登不该新落：persisted=%v saves=%d", again.Persisted(), fixture.pools.saves)
+	}
+
+	revised := templateCommand(t)
+	revised.Capacities = capacitiesOf(
+		application.CapacityDeclarationInput{Dimension: "WEIGHT", Unit: "KG", Capacity: 6000},
+		application.CapacityDeclarationInput{Dimension: "PIECES", Unit: "PCS", Capacity: 800},
+		application.CapacityDeclarationInput{Dimension: "BAG_POSITIONS", Unit: "BAG", Capacity: 40},
+	)
+	registerTemplate(t, fixture, revised, application.ScheduleTemplateRevised)
+	followed := registerSchedule(t, fixture, materialize, application.TransportScheduleExisting)
+	got := poolOutcomes(followed)
+	if got["SYN-TPL-1/2026-10-21/WEIGHT"] != application.PoolConflict ||
+		got["SYN-TPL-1/2026-10-21/PIECES"] != application.PoolExistingResult ||
+		got["SYN-TPL-1/2026-10-21/BAG_POSITIONS"] != application.PoolEstablished {
+		t.Fatalf("换版后再登池 = %v", got)
+	}
+	if !followed.Persisted() {
+		t.Fatal("新建了袋位池却答没有新落")
+	}
+	for _, pool := range followed.Pools() {
+		if pool.Outcome == application.PoolConflict && pool.Pool.Pool.Capacity() != 5000 {
+			t.Fatalf("冲突交回的不是库里那一池：容量 %d", pool.Pool.Pool.Capacity())
+		}
+	}
+	stored := fixture.pools.records[opportunityTenant(t).String()+"|SYN-TPL-1/2026-10-21/WEIGHT"]
+	if stored.Pool.Capacity() != 5000 {
+		t.Fatalf("周期安排换版改写了已建的池：容量 %d", stored.Pool.Capacity())
+	}
+}
+
+// Covers: ADR-0201 决定三的受理门与决定五——容量声明文法外（维度不在封闭词里、同一维度两次、硬上限不为正）答未受理
+// 零写入；不声明容量的周期安排物化出的班次与临时班次都不带池；池册读不动答未决并指名池册。
+func TestMaterializedPoolsStayWithinTheGrammar(t *testing.T) {
+	for name, capacities := range map[string][]application.CapacityDeclarationInput{
+		"维度不在封闭词里": {{Dimension: "TEU", Unit: "TEU", Capacity: 2}},
+		"同一维度两次": {
+			{Dimension: "WEIGHT", Unit: "KG", Capacity: 5000},
+			{Dimension: "WEIGHT", Unit: "LB", Capacity: 11000},
+		},
+		"硬上限不为正": {{Dimension: "WEIGHT", Unit: "KG", Capacity: -1}},
+		"缺单位":    {{Dimension: "WEIGHT", Capacity: 5000}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newScheduleRegistrationFixture()
+			command := templateCommand(t)
+			command.Capacities = capacities
+			registerTemplate(t, fixture, command, application.ScheduleRegistrationNotAccepted)
+			if len(fixture.templates.current) != 0 {
+				t.Fatal("未受理却落了一版")
+			}
+		})
+	}
+
+	t.Run("不声明容量与临时班次都不带池", func(t *testing.T) {
+		fixture := newScheduleRegistrationFixture()
+		registerTemplate(t, fixture, templateCommand(t), application.ScheduleTemplateRegistered)
+		materialized := registerSchedule(t, fixture, application.RegisterTransportScheduleCommand{
+			TenantID: opportunityTenant(t), Template: "SYN-TPL-1", RunningDate: "2026-10-21",
+		}, application.TransportScheduleRegistered)
+		adHoc := registerSchedule(t, fixture, application.RegisterTransportScheduleCommand{
+			TenantID: opportunityTenant(t), Schedule: "SYN-ADHOC-1", Connection: "SYN-CONN-1",
+			FromNode: "SYN-NODE-A", ToNode: "SYN-NODE-B", DepartsAt: reserveAt, ArrivesAt: reserveAt.Add(time.Hour),
+			ServiceScope: "SYN-SCOPE-01",
+		}, application.TransportScheduleRegistered)
+		if len(materialized.Pools()) != 0 || len(adHoc.Pools()) != 0 || len(fixture.pools.records) != 0 {
+			t.Fatalf("不该带池：%d / %d / %d", len(materialized.Pools()), len(adHoc.Pools()), len(fixture.pools.records))
+		}
+	})
+
+	t.Run("池册读不动", func(t *testing.T) {
+		fixture := newScheduleRegistrationFixture()
+		command := templateCommand(t)
+		command.Capacities = capacitiesOf(application.CapacityDeclarationInput{Dimension: "WEIGHT", Unit: "KG", Capacity: 5000})
+		registerTemplate(t, fixture, command, application.ScheduleTemplateRegistered)
+		fixture.pools.findErr = errors.New("pool registry down")
+		result := registerSchedule(t, fixture, application.RegisterTransportScheduleCommand{
+			TenantID: opportunityTenant(t), Template: "SYN-TPL-1", RunningDate: "2026-10-21",
+		}, application.ScheduleRegistrationUndecided)
+		if result.UndecidedReason() != application.CapacityPoolRegistryUnavailable || result.ContinuationReference() == "" {
+			t.Fatalf("未决 = %s %q", result.UndecidedReason(), result.ContinuationReference())
 		}
 	})
 }

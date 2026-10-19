@@ -17,8 +17,8 @@ type OperatorRegistryAuthenticator interface {
 }
 
 // OperatorRegistryIntake 是操作者渠道在本包各本登记册写口的 Intake（ADR-0100 决定四；票 operator-channel/04）。
-// 各册都是逐字段表单（ADR-0101 决定八），线格式就是各自的载荷类型，租户取认证结果；周期安排与具体班次另有受控
-// CLI，收的是同一份载荷再加租户（ADR-0201 决定一），其余各册载荷只此一份。先认证、后解载荷。
+// 各册都是逐字段表单（ADR-0101 决定八），线格式就是各自的载荷类型，租户取认证结果；周期安排、具体班次与容量池
+// 另有受控 CLI，收的是同一份载荷再加租户（ADR-0201 决定一），其余各册载荷只此一份。先认证、后解载荷。
 type OperatorRegistryIntake struct {
 	authenticator OperatorRegistryAuthenticator
 }

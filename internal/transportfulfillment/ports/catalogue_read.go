@@ -46,7 +46,7 @@ type TransportScheduleCatalogueRow struct {
 
 // ScheduleTemplateCatalogueRow 是周期安排登记册上列的一行：只列每份周期安排的当前版，正文照行转写（ADR-0201）。
 // 出发时刻是当地当日分钟数，时区随行给出；周期安排不是班次，本行没有任何绝对出发时刻——那要按日期物化才有。
-// EffectiveUntil 空串即不设终点。
+// EffectiveUntil 空串即不设终点；Capacities 按维度词排列逐维容量声明，空即这份周期安排物化出的班次不带池。
 type ScheduleTemplateCatalogueRow struct {
 	Template             string
 	Version              int
@@ -60,11 +60,19 @@ type ScheduleTemplateCatalogueRow struct {
 	ServiceScope         string
 	EffectiveFrom        string
 	EffectiveUntil       string
+	Capacities           []ScheduleTemplateCapacityRow
 	RecordedAt           time.Time
 }
 
-// CapacityPoolCatalogueRow 是容量池登记册上列的一行：池身份、所属班次、容量维度
-// 单位与有效容量照行转写；已预占、已释放、实际使用三量按预占子表逐维求和——
+// ScheduleTemplateCapacityRow 是周期安排上一条逐维容量声明：维度词、单位与硬上限照行转写。
+type ScheduleTemplateCapacityRow struct {
+	Dimension string
+	Unit      string
+	Capacity  int64
+}
+
+// CapacityPoolCatalogueRow 是容量池登记册上列的一行：池身份、所属班次、维度、单位与
+// 有效容量照行转写；已预占、已释放、实际使用三量按预占子表逐维求和——
 // CONTEXT 要求四量分别维护，三个和各自照实转写，不互相抵扣（可用量是领域按时点算
 // 的判断，列面不代算）。
 //
@@ -73,6 +81,7 @@ type ScheduleTemplateCatalogueRow struct {
 type CapacityPoolCatalogueRow struct {
 	PoolID     string
 	Schedule   string
+	Dimension  string
 	Unit       string
 	Capacity   int64
 	Reserved   int64

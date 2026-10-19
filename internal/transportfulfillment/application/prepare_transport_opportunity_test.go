@@ -19,6 +19,9 @@ var (
 type poolStoreDouble struct {
 	records map[string]ports.CapacityPoolRecord
 	findErr error
+	saves   int
+	// raceWith 非空时，下一次落池前先让「另一方」落下这一份同身份的池。
+	raceWith *ports.CapacityPoolRecord
 }
 
 func newPoolStore() *poolStoreDouble {
@@ -44,6 +47,11 @@ func (double *poolStoreDouble) Save(
 	_ context.Context,
 	record ports.CapacityPoolRecord,
 ) (ports.PoolSaveOutcome, error) {
+	double.saves++
+	if double.raceWith != nil {
+		double.records[poolKey(double.raceWith.Key)] = *double.raceWith
+		double.raceWith = nil
+	}
 	if _, exists := double.records[poolKey(record.Key)]; exists {
 		return ports.PoolAlreadyEstablished, nil
 	}
@@ -83,19 +91,25 @@ type opportunityClock struct{ at time.Time }
 func (clock opportunityClock) Now() time.Time { return clock.at }
 
 type opportunityFixture struct {
-	pools   *poolStoreDouble
-	handoff *consumptionHandoffDouble
-	handler *application.PrepareTransportOpportunityHandler
+	pools     *poolStoreDouble
+	schedules *registeredSchedulesDouble
+	handoff   *consumptionHandoffDouble
+	handler   *application.PrepareTransportOpportunityHandler
 }
+
+// fixturePool 是夹具池的身份：登在班次 schedule-1 的重量维上，身份由二者派生。
+const fixturePool = "schedule-1/WEIGHT"
 
 func newOpportunityFixture(t *testing.T) *opportunityFixture {
 	t.Helper()
 	fixture := &opportunityFixture{
-		pools:   newPoolStore(),
-		handoff: &consumptionHandoffDouble{},
+		pools:     newPoolStore(),
+		schedules: registeredSchedules([2]string{"tenant-1", "schedule-1"}),
+		handoff:   &consumptionHandoffDouble{},
 	}
 	fixture.handler = application.NewPrepareTransportOpportunityHandler(application.PrepareTransportOpportunityDeps{
 		Pools:      fixture.pools,
+		Schedules:  fixture.schedules,
 		Downstream: fixture.handoff,
 		Clock:      opportunityClock{at: reserveAt},
 	})
@@ -113,13 +127,7 @@ func opportunityTenant(t *testing.T) domain.TenantID {
 
 func establishedPool(t *testing.T, fixture *opportunityFixture) {
 	t.Helper()
-	result, err := fixture.handler.EstablishPool(context.Background(), application.EstablishPoolCommand{
-		TenantID: opportunityTenant(t),
-		Pool:     "pool-1",
-		Schedule: "schedule-1",
-		Unit:     "kg",
-		Capacity: 100,
-	})
+	result, err := fixture.handler.EstablishPool(context.Background(), poolCommand(t))
 	if err != nil {
 		t.Fatalf("establish pool: %v", err)
 	}
@@ -128,11 +136,22 @@ func establishedPool(t *testing.T, fixture *opportunityFixture) {
 	}
 }
 
+func poolCommand(t *testing.T) application.EstablishPoolCommand {
+	t.Helper()
+	return application.EstablishPoolCommand{
+		TenantID:  opportunityTenant(t),
+		Schedule:  "schedule-1",
+		Dimension: "WEIGHT",
+		Unit:      "kg",
+		Capacity:  100,
+	}
+}
+
 func reserveCommand(t *testing.T, quantity int64) application.ReserveCapacityCommand {
 	t.Helper()
 	return application.ReserveCapacityCommand{
 		TenantID:    opportunityTenant(t),
-		Pool:        "pool-1",
+		Pool:        fixturePool,
 		Reservation: "reservation-1",
 		Quantity:    quantity,
 		ValidUntil:  reserveValidUntil,
@@ -209,7 +228,7 @@ func TestConversionsSplitByTheirSentinels(t *testing.T) {
 
 	released, err := fixture.handler.Release(context.Background(), application.ReleaseCapacityCommand{
 		TenantID:    opportunityTenant(t),
-		Pool:        "pool-1",
+		Pool:        fixturePool,
 		Reservation: "reservation-1",
 		Quantity:    20,
 		At:          reserveAt.Add(time.Hour),
@@ -223,7 +242,7 @@ func TestConversionsSplitByTheirSentinels(t *testing.T) {
 
 	consumed, err := fixture.handler.Consume(context.Background(), application.ConsumeCapacityCommand{
 		TenantID:    opportunityTenant(t),
-		Pool:        "pool-1",
+		Pool:        fixturePool,
 		Reservation: "reservation-1",
 		Quantity:    40,
 		Assignment:  "load-assignment-1",
@@ -242,7 +261,7 @@ func TestConversionsSplitByTheirSentinels(t *testing.T) {
 	t.Run("a second conversion over the reserved range hits conservation", func(t *testing.T) {
 		result, err := fixture.handler.Release(context.Background(), application.ReleaseCapacityCommand{
 			TenantID:    opportunityTenant(t),
-			Pool:        "pool-1",
+			Pool:        fixturePool,
 			Reservation: "reservation-1",
 			Quantity:    1,
 			At:          reserveAt.Add(3 * time.Hour),
@@ -263,7 +282,7 @@ func TestConversionsSplitByTheirSentinels(t *testing.T) {
 		}
 		result, err := expiredFixture.handler.Consume(context.Background(), application.ConsumeCapacityCommand{
 			TenantID:    opportunityTenant(t),
-			Pool:        "pool-1",
+			Pool:        fixturePool,
 			Reservation: "reservation-1",
 			Quantity:    10,
 			Assignment:  "load-assignment-1",
@@ -280,7 +299,7 @@ func TestConversionsSplitByTheirSentinels(t *testing.T) {
 	t.Run("consumption without a load assignment is not accepted", func(t *testing.T) {
 		result, err := fixture.handler.Consume(context.Background(), application.ConsumeCapacityCommand{
 			TenantID:    opportunityTenant(t),
-			Pool:        "pool-1",
+			Pool:        fixturePool,
 			Reservation: "reservation-1",
 			Quantity:    1,
 			Assignment:  " ",
@@ -297,7 +316,7 @@ func TestConversionsSplitByTheirSentinels(t *testing.T) {
 	t.Run("an unknown reservation is not accepted", func(t *testing.T) {
 		result, err := fixture.handler.Release(context.Background(), application.ReleaseCapacityCommand{
 			TenantID:    opportunityTenant(t),
-			Pool:        "pool-1",
+			Pool:        fixturePool,
 			Reservation: "reservation-9",
 			Quantity:    1,
 			At:          reserveAt.Add(3 * time.Hour),
@@ -335,7 +354,7 @@ func TestOpportunityRecoveryDiscipline(t *testing.T) {
 		fixture.handoff.err = errors.New("downstream unavailable")
 		result, err := fixture.handler.Consume(context.Background(), application.ConsumeCapacityCommand{
 			TenantID:    opportunityTenant(t),
-			Pool:        "pool-1",
+			Pool:        fixturePool,
 			Reservation: "reservation-1",
 			Quantity:    10,
 			Assignment:  "load-assignment-1",
@@ -353,6 +372,7 @@ func TestOpportunityRecoveryDiscipline(t *testing.T) {
 		labels := map[string]struct{}{}
 		for _, reason := range []application.OpportunityUndecidedReason{
 			application.PoolStoreUnavailable,
+			application.PoolScheduleRegistryUnavailable,
 		} {
 			label := reason.String()
 			if label == "" {
@@ -360,11 +380,146 @@ func TestOpportunityRecoveryDiscipline(t *testing.T) {
 			}
 			labels[label] = struct{}{}
 		}
-		if len(labels) != 1 {
+		if len(labels) != 2 {
 			t.Fatalf("labels collapsed into %d", len(labels))
 		}
 		if application.OpportunityUndecidedReason(len(labels)+1).String() != "" {
 			t.Fatal("名单外的未决原因带了标签——封闭集合被悄悄放开")
 		}
 	})
+}
+
+// Covers: 方案 D03-6「EstablishPool 改为核对班次在册」与 `AT-TF-105`——池只能挂在登记册上有的班次上：班次没登过、
+// 或只在他租户名下登过，都答`班次不在册`且零写入；班次册读不动答未决并指名等的是班次册，同样零写入。
+func TestAPoolNeedsARegisteredSchedule(t *testing.T) {
+	for name, schedules := range map[string]*registeredSchedulesDouble{
+		"没登过":      registeredSchedules(),
+		"只登在他租户名下": registeredSchedules([2]string{"tenant-2", "schedule-1"}),
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newOpportunityFixture(t)
+			fixture.schedules.registered = schedules.registered
+			result, err := fixture.handler.EstablishPool(context.Background(), poolCommand(t))
+			if err != nil {
+				t.Fatalf("establish: %v", err)
+			}
+			if result.Outcome() != application.PoolScheduleNotFound || result.Outcome().String() != "SCHEDULE_NOT_FOUND" {
+				t.Fatalf("outcome = %s，要 SCHEDULE_NOT_FOUND", result.Outcome())
+			}
+			if _, present := result.Pool(); present || fixture.pools.saves != 0 {
+				t.Fatalf("班次不在册却落了池：present=%v saves=%d", present, fixture.pools.saves)
+			}
+		})
+	}
+
+	t.Run("班次册读不动", func(t *testing.T) {
+		fixture := newOpportunityFixture(t)
+		fixture.schedules.findErr = errors.New("schedule registry down")
+		result, err := fixture.handler.EstablishPool(context.Background(), poolCommand(t))
+		if err != nil {
+			t.Fatalf("establish: %v", err)
+		}
+		if result.Outcome() != application.OpportunityUndecided ||
+			result.UndecidedReason() != application.PoolScheduleRegistryUnavailable || result.ContinuationReference() == "" {
+			t.Fatalf("outcome = %s reason = %s", result.Outcome(), result.UndecidedReason())
+		}
+		if fixture.pools.saves != 0 {
+			t.Fatal("班次册读不动却落了池")
+		}
+	})
+}
+
+// Covers: ADR-0201 补记「池身份」「池不改版」——池身份由（班次、维度）派生、不由登记方起名；同一（班次、维度）同内容
+// 答`已存在`交回原池，异内容答`池冲突`并交回库里那一个，不成下一版、不改写；重放与冲突都先于班次核对作答（已建的
+// 池答的是它是什么，不是去登班次）；文法外的输入零写入。
+func TestEstablishingAPoolIsIdempotentPerScheduleAndDimension(t *testing.T) {
+	fixture := newOpportunityFixture(t)
+	established, err := fixture.handler.EstablishPool(context.Background(), poolCommand(t))
+	if err != nil || established.Outcome() != application.PoolEstablished {
+		t.Fatalf("首登 = %s %v", established.Outcome(), err)
+	}
+	record, _ := established.Pool()
+	if record.Key.Pool.String() != fixturePool || record.Pool.Dimension() != domain.CapacityWeight {
+		t.Fatalf("池身份 = %s 维度 = %s", record.Key.Pool, record.Pool.Dimension())
+	}
+
+	readsBefore := fixture.schedules.reads
+	replay, err := fixture.handler.EstablishPool(context.Background(), poolCommand(t))
+	if err != nil || replay.Outcome() != application.PoolExistingResult {
+		t.Fatalf("重放 = %s %v", replay.Outcome(), err)
+	}
+	changed := poolCommand(t)
+	changed.Capacity = 120
+	conflict, err := fixture.handler.EstablishPool(context.Background(), changed)
+	if err != nil || conflict.Outcome() != application.PoolConflict {
+		t.Fatalf("异内容 = %s %v", conflict.Outcome(), err)
+	}
+	stored, present := conflict.Pool()
+	if !present || stored.Pool.Capacity() != 100 {
+		t.Fatalf("冲突应交回库里那一池（容量 100）：present=%v", present)
+	}
+	if fixture.schedules.reads != readsBefore {
+		t.Fatal("已建的池先去核了班次——重放与冲突应先于班次核对作答")
+	}
+	if fixture.pools.saves != 1 {
+		t.Fatalf("重放或冲突多落了池：saves=%d", fixture.pools.saves)
+	}
+
+	other := poolCommand(t)
+	other.Dimension = "PIECES"
+	other.Unit = "PCS"
+	if result, err := fixture.handler.EstablishPool(context.Background(), other); err != nil || result.Outcome() != application.PoolEstablished {
+		t.Fatalf("同一班次另一维 = %s %v（多维分存，AT-TF-030）", result.Outcome(), err)
+	}
+
+	for name, mutate := range map[string]func(*application.EstablishPoolCommand){
+		"维度不在封闭词里": func(command *application.EstablishPoolCommand) { command.Dimension = "weight" },
+		"缺班次":      func(command *application.EstablishPoolCommand) { command.Schedule = " " },
+		"缺单位":      func(command *application.EstablishPoolCommand) { command.Unit = "" },
+		"容量不为正":    func(command *application.EstablishPoolCommand) { command.Capacity = 0 },
+	} {
+		command := poolCommand(t)
+		mutate(&command)
+		fresh := newOpportunityFixture(t)
+		result, err := fresh.handler.EstablishPool(context.Background(), command)
+		if err != nil || result.Outcome() != application.OpportunityNotAccepted || fresh.pools.saves != 0 {
+			t.Fatalf("%s：%s %v saves=%d", name, result.Outcome(), err, fresh.pools.saves)
+		}
+	}
+}
+
+// Covers: ADR-0031 写入代数在建池口的并发面——落池时另一方先建了同一个池：内容同答`已存在`、异答`池冲突`，都交回
+// 赢家，不宣称自己建了它。
+func TestAPoolRaceIsAnsweredFromTheWinner(t *testing.T) {
+	winner := func(t *testing.T, capacity int64) *ports.CapacityPoolRecord {
+		t.Helper()
+		source := newOpportunityFixture(t)
+		command := poolCommand(t)
+		command.Capacity = capacity
+		result, err := source.handler.EstablishPool(context.Background(), command)
+		if err != nil || result.Outcome() != application.PoolEstablished {
+			t.Fatalf("备赢家：%s %v", result.Outcome(), err)
+		}
+		record, _ := result.Pool()
+		return &record
+	}
+	for name, testCase := range map[string]struct {
+		capacity int64
+		want     application.OpportunityOutcome
+	}{
+		"同内容": {capacity: 100, want: application.PoolExistingResult},
+		"异内容": {capacity: 90, want: application.PoolConflict},
+	} {
+		t.Run(name, func(t *testing.T) {
+			fixture := newOpportunityFixture(t)
+			fixture.pools.raceWith = winner(t, testCase.capacity)
+			result, err := fixture.handler.EstablishPool(context.Background(), poolCommand(t))
+			if err != nil || result.Outcome() != testCase.want {
+				t.Fatalf("outcome = %s %v，要 %s", result.Outcome(), err, testCase.want)
+			}
+			if record, _ := result.Pool(); record.Pool.Capacity() != testCase.capacity {
+				t.Fatalf("交回的不是赢家：容量 %d", record.Pool.Capacity())
+			}
+		})
+	}
 }

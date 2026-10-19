@@ -140,11 +140,36 @@ func TestCommandPayloadsRoundTripAsTFC1(t *testing.T) {
 			},
 		},
 		{
-			name:     "pool",
-			document: `{"canonicalization":"TFC-1","face":"ESTABLISH_POOL","schedule":"SCH","unit":"KG","capacity":3}`,
-			digest:   "TFC-1:8700eba6390c7e3ffd97681ec03d2c1d71d57cc3c73666d09904d184a7c68798",
+			// 逐维容量声明按维度次序成组（登记时给的是件数在前）。
+			name:     "schedule template with capacities",
+			document: `{"canonicalization":"TFC-1","face":"REGISTER_SCHEDULE_TEMPLATE","connection":"CONN","from_node":"A","to_node":"B","weekdays":["MON","TUE","WED","THU","FRI","SAT","SUN"],"departure_local_minute":1320,"duration_minutes":600,"time_zone":"Asia/Shanghai","service_scope":"SCOPE","effective_from":"2026-01-01","effective_until":null,"capacities":[{"dimension":"WEIGHT","unit":"KG","capacity":5000},{"dimension":"PIECES","unit":"PCS","capacity":800}]}`,
+			digest:   "TFC-1:1e9018fa08e972343e3b9f408bf8aefb58af4f054987ce189257efcb4851222c",
 			call: func() ([]byte, string, error) {
-				return domain.CanonicalizeEstablishPoolPayload("SCH", "KG", 3)
+				content := templateContentFor(t, everyDay(), "")
+				content.Capacities = []domain.CapacityDeclaration{
+					capacityDeclaration(t, domain.CapacityPieces, "PCS", 800),
+					capacityDeclaration(t, domain.CapacityWeight, "KG", 5000),
+				}
+				return domain.CanonicalizeScheduleTemplatePayload(content)
+			},
+		},
+		{
+			// 池身份由班次与维度派生，不另进；预占不进。
+			name:     "pool",
+			document: `{"canonicalization":"TFC-1","face":"ESTABLISH_POOL","schedule":"SCH","dimension":"WEIGHT","unit":"KG","capacity":3}`,
+			digest:   "TFC-1:c8b9e5b3b737fc80059113a98ce678ff1ec1628b12cceca08a6fed9dbecd2348",
+			call: func() ([]byte, string, error) {
+				pool, err := domain.EstablishCapacityPool(domain.CapacityPoolSpec{
+					TenantID:  mustValue(t, domain.NewTenantID, "SYN-TENANT-01"),
+					Schedule:  mustValue(t, domain.NewScheduleReference, "SCH"),
+					Dimension: domain.CapacityWeight,
+					Unit:      mustValue(t, domain.NewQuantityUnitReference, "KG"),
+					Capacity:  3,
+				})
+				if err != nil {
+					return nil, "", err
+				}
+				return domain.CanonicalizeEstablishPoolPayload(pool)
 			},
 		},
 		{

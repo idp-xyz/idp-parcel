@@ -13,7 +13,7 @@ import (
 )
 
 // ScheduleTemplates 实现 ports.ScheduleTemplateRegistry：周期安排一版一行，只插不改，当前版是版本号最大的那一行
-// （迁移 0024，ADR-0201）。
+// （迁移 0024，ADR-0201）；逐维容量声明随所属那一版落子表（迁移 0027）。
 type ScheduleTemplates struct {
 	db *bentopg.DB
 }
@@ -27,9 +27,18 @@ func NewScheduleTemplates(db *bentopg.DB) (*ScheduleTemplates, error) {
 	return &ScheduleTemplates{db: db}, nil
 }
 
+// scheduleTemplateColumns 连同那一版的容量声明一起取：声明按维度成一个 jsonb 数组，与正文同一行读回，读周期安排的
+// 各问不必各自再查一次子表。各问的 FROM 都是周期安排表本名，相关子查询靠它认出是哪一版。
 const scheduleTemplateColumns = `tenant_id, template_code, template_version, connection_code, from_node, to_node,
 		        weekdays, departure_local_minute, duration_minutes, time_zone, service_scope_ref,
-		        effective_from, effective_until, content_digest, recorded_at`
+		        effective_from, effective_until, content_digest, recorded_at,
+		        (SELECT COALESCE(jsonb_agg(jsonb_build_object(
+		                    'dimension', capacity.dimension, 'unit', capacity.unit_ref, 'capacity', capacity.capacity)
+		                    ORDER BY capacity.dimension), '[]'::jsonb)
+		           FROM transport_fulfillment.schedule_template_capacity AS capacity
+		          WHERE capacity.tenant_id = schedule_template.tenant_id
+		            AND capacity.template_code = schedule_template.template_code
+		            AND capacity.template_version = schedule_template.template_version) AS capacities`
 
 // FindCurrentTemplate 按（租户+代码）取回当前版。否定结果只回 false。
 func (repository *ScheduleTemplates) FindCurrentTemplate(
@@ -100,6 +109,21 @@ func (repository *ScheduleTemplates) SaveTemplateVersion(
 	}
 	if tag.RowsAffected() == 0 {
 		return ports.ScheduleTemplateVersionTaken, nil
+	}
+	for _, declaration := range content.Capacities {
+		if _, err := executor.Exec(ctx,
+			`INSERT INTO transport_fulfillment.schedule_template_capacity
+				(tenant_id, template_code, template_version, dimension, unit_ref, capacity)
+			 VALUES ($1, $2, $3, $4, $5, $6)`,
+			record.Key.TenantID.String(),
+			record.Key.Code.String(),
+			int(template.Version()),
+			declaration.Dimension.String(),
+			declaration.Unit.String(),
+			declaration.Capacity,
+		); err != nil {
+			return ports.ScheduleTemplateSaveOutcomeInvalid, fmt.Errorf("save schedule template capacity: %w", err)
+		}
 	}
 	return ports.ScheduleTemplateSaved, nil
 }
@@ -258,11 +282,12 @@ func scanScheduleTemplate(rows pgx.Rows) (ports.ScheduleTemplateRecord, error) {
 		weekdayWords                                                         []string
 		effectiveFrom, recordedAt                                            time.Time
 		effectiveUntil                                                       *time.Time
+		capacities                                                           []storedCapacityDeclaration
 	)
 	if err := rows.Scan(
 		&tenantID, &code, &version, &connection, &from, &to,
 		&weekdayWords, &departureMinute, &durationMinutes, &timeZone, &serviceScope,
-		&effectiveFrom, &effectiveUntil, &digest, &recordedAt,
+		&effectiveFrom, &effectiveUntil, &digest, &recordedAt, &capacities,
 	); err != nil {
 		return ports.ScheduleTemplateRecord{}, err
 	}
@@ -300,6 +325,14 @@ func scanScheduleTemplate(rows pgx.Rows) (ports.ScheduleTemplateRecord, error) {
 		}
 	}
 
+	for _, stored := range capacities {
+		declaration, err := stored.declaration()
+		if err != nil {
+			return ports.ScheduleTemplateRecord{}, err
+		}
+		spec.Content.Capacities = append(spec.Content.Capacities, declaration)
+	}
+
 	template, err := domain.RehydrateScheduleTemplate(spec, domain.ScheduleTemplateVersion(version))
 	if err != nil {
 		return ports.ScheduleTemplateRecord{}, err
@@ -310,4 +343,23 @@ func scanScheduleTemplate(rows pgx.Rows) (ports.ScheduleTemplateRecord, error) {
 		Template:      template,
 		RecordedAt:    recordedAt.UTC(),
 	}, nil
+}
+
+// storedCapacityDeclaration 是 scheduleTemplateColumns 里容量声明数组的一项。
+type storedCapacityDeclaration struct {
+	Dimension string `json:"dimension"`
+	Unit      string `json:"unit"`
+	Capacity  int64  `json:"capacity"`
+}
+
+func (stored storedCapacityDeclaration) declaration() (domain.CapacityDeclaration, error) {
+	dimension, err := domain.ParseCapacityDimension(stored.Dimension)
+	if err != nil {
+		return domain.CapacityDeclaration{}, err
+	}
+	unit, err := domain.NewQuantityUnitReference(stored.Unit)
+	if err != nil {
+		return domain.CapacityDeclaration{}, err
+	}
+	return domain.CapacityDeclaration{Dimension: dimension, Unit: unit, Capacity: stored.Capacity}, nil
 }

@@ -234,9 +234,9 @@ func TestReviewCatalogueSumsCapacityPoolQuantities(t *testing.T) {
 	ctx := t.Context()
 	tenant := deliveryValue(t, domain.NewTenantID, "tenant-1")
 
-	savePoolRecord(t, stores, ctx, establishedPoolRecord(t, "tenant-1", "pool-1", 50))
+	savePoolRecord(t, stores, ctx, establishedPoolRecord(t, "tenant-1", "schedule-1", 50))
 
-	reservedPool := establishedPoolRecord(t, "tenant-1", "pool-2", 100)
+	reservedPool := establishedPoolRecord(t, "tenant-1", "schedule-2", 100)
 	first := deliveryValue(t, domain.NewCapacityReservationReference, "r-1")
 	pool, err := reservedPool.Pool.Reserve(first, 10, reservedAt.Add(24*time.Hour), reservedAt)
 	if err != nil {
@@ -261,19 +261,20 @@ func TestReviewCatalogueSumsCapacityPoolQuantities(t *testing.T) {
 	reservedPool.Pool = pool
 	savePoolRecord(t, stores, ctx, reservedPool)
 
-	savePoolRecord(t, stores, ctx, establishedPoolRecord(t, "tenant-2", "pool-9", 30))
+	savePoolRecord(t, stores, ctx, establishedPoolRecord(t, "tenant-2", "schedule-9", 30))
 
 	rows, err := stores.catalogue.ListCapacityPools(ctx, tenant, 10)
 	if err != nil {
 		t.Fatalf("上列容量池册：%v", err)
 	}
-	if len(rows) != 2 || rows[0].PoolID != "pool-1" || rows[1].PoolID != "pool-2" {
+	if len(rows) != 2 || rows[0].PoolID != "schedule-1/WEIGHT" || rows[1].PoolID != "schedule-2/WEIGHT" {
 		t.Fatalf("册面行序变形：%+v", rows)
 	}
 	if rows[0].Capacity != 50 || rows[0].Reserved != 0 || rows[0].Released != 0 || rows[0].Consumed != 0 {
 		t.Errorf("空池行转写变形：%+v", rows[0])
 	}
-	if rows[1].Schedule != "schedule-1" ||
+	if rows[1].Schedule != "schedule-2" ||
+		rows[1].Dimension != "WEIGHT" ||
 		rows[1].Unit != "kg" ||
 		rows[1].Capacity != 100 ||
 		rows[1].Reserved != 15 ||

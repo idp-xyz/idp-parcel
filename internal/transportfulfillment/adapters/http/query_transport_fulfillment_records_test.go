@@ -377,6 +377,24 @@ func TestScheduleTemplateRegistryTranscribesRows(t *testing.T) {
 				TimeZone:             "Asia/Shanghai",
 				ServiceScope:         "SYN-SCOPE-01",
 				EffectiveFrom:        "2026-01-01",
+				Capacities: []ports.ScheduleTemplateCapacityRow{
+					{Dimension: "PIECES", Unit: "PCS", Capacity: 800},
+					{Dimension: "WEIGHT", Unit: "KG", Capacity: 9007199254740993},
+				},
+				RecordedAt: catalogueBaseAt,
+			},
+			{
+				Template:             "SYN-TPL-2",
+				Version:              1,
+				Connection:           "SYN-CONN-2",
+				FromNode:             "SYN-NODE-B",
+				ToNode:               "SYN-NODE-C",
+				Weekdays:             []string{"SUN"},
+				DepartureLocalMinute: 60,
+				DurationMinutes:      90,
+				TimeZone:             "Asia/Singapore",
+				ServiceScope:         "SYN-SCOPE-01",
+				EffectiveFrom:        "2026-01-01",
 				RecordedAt:           catalogueBaseAt,
 			},
 		},
@@ -393,7 +411,7 @@ func TestScheduleTemplateRegistryTranscribesRows(t *testing.T) {
 	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
 		t.Fatalf("decode %s: %v", response.Body.Bytes(), err)
 	}
-	if body.Outcome != "SCHEDULE_TEMPLATES_LISTED" || len(body.Templates) != 1 {
+	if body.Outcome != "SCHEDULE_TEMPLATES_LISTED" || len(body.Templates) != 2 {
 		t.Fatalf("响应走样：%s", response.Body.String())
 	}
 	template := body.Templates[0]
@@ -403,8 +421,13 @@ func TestScheduleTemplateRegistryTranscribesRows(t *testing.T) {
 		string(template["departureLocalTime"]) != `"22:05"` ||
 		string(template["durationMinutes"]) != `600` ||
 		string(template["timeZone"]) != `"Asia/Shanghai"` ||
-		string(template["effectiveFrom"]) != `"2026-01-01"` {
+		string(template["effectiveFrom"]) != `"2026-01-01"` ||
+		string(template["capacities"]) != `[{"dimension":"PIECES","unit":"PCS","capacity":"800"},{"dimension":"WEIGHT","unit":"KG","capacity":"9007199254740993"}]` {
 		t.Fatalf("周期安排行转写走样：%s", response.Body.String())
+	}
+	// 不声明容量的周期安排：capacities 照样在场，是空数组——「没声明」与「键丢了」分得开。
+	if string(body.Templates[1]["capacities"]) != `[]` {
+		t.Fatalf("不声明容量的周期安排应答空数组：%s", response.Body.String())
 	}
 	for _, key := range []string{"effectiveUntil", "departsAt", "arrivesAt"} {
 		if _, present := template[key]; present {
@@ -422,8 +445,9 @@ func TestCapacityPoolRegistryTranscribesQuantitiesAsStrings(t *testing.T) {
 	register := &stubReviewCatalogue{
 		pools: []ports.CapacityPoolCatalogueRow{
 			{
-				PoolID:     "pool-1",
+				PoolID:     "sched-1/WEIGHT",
 				Schedule:   "sched-1",
+				Dimension:  "WEIGHT",
 				Unit:       "kg",
 				Capacity:   9007199254740993, // 2^53+1：直投 number 必失真
 				Reserved:   15,
@@ -449,8 +473,9 @@ func TestCapacityPoolRegistryTranscribesQuantitiesAsStrings(t *testing.T) {
 		t.Fatalf("响应走样：%s", response.Body.String())
 	}
 	pool := body.Pools[0]
-	if string(pool["poolId"]) != `"pool-1"` ||
+	if string(pool["poolId"]) != `"sched-1/WEIGHT"` ||
 		string(pool["schedule"]) != `"sched-1"` ||
+		string(pool["dimension"]) != `"WEIGHT"` ||
 		string(pool["unit"]) != `"kg"` ||
 		string(pool["capacity"]) != `"9007199254740993"` ||
 		string(pool["reserved"]) != `"15"` ||

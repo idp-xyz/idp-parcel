@@ -87,6 +87,7 @@ const (
 	ScheduleRegistrationUndecidedReasonNone ScheduleRegistrationUndecidedReason = iota
 	ScheduleTemplateRegistryUnavailable
 	TransportScheduleRegistryUnavailable
+	CapacityPoolRegistryUnavailable
 )
 
 func (reason ScheduleRegistrationUndecidedReason) String() string {
@@ -95,13 +96,15 @@ func (reason ScheduleRegistrationUndecidedReason) String() string {
 		return "SCHEDULE_TEMPLATE_REGISTRY_UNAVAILABLE"
 	case TransportScheduleRegistryUnavailable:
 		return "TRANSPORT_SCHEDULE_REGISTRY_UNAVAILABLE"
+	case CapacityPoolRegistryUnavailable:
+		return "CAPACITY_POOL_REGISTRY_UNAVAILABLE"
 	default:
 		return ""
 	}
 }
 
 // RegisterScheduleTemplateCommand 是一版周期安排的全部输入（ADR-0201 决定三的文法）。星期取 MON…SUN，出发时刻
-// 取当地 HH:MM，生效区间取 YYYY-MM-DD，终点不含、空着即不设终点。
+// 取当地 HH:MM，生效区间取 YYYY-MM-DD，终点不含、空着即不设终点；容量声明可缺，给了就逐维一条。
 type RegisterScheduleTemplateCommand struct {
 	TenantID           domain.TenantID
 	Template           string
@@ -115,6 +118,15 @@ type RegisterScheduleTemplateCommand struct {
 	ServiceScope       string
 	EffectiveFrom      string
 	EffectiveUntil     string
+	Capacities         []CapacityDeclarationInput
+}
+
+// CapacityDeclarationInput 是周期安排上一条逐维容量声明的输入：维度取 domain.CapacityDimension 的封闭词，单位
+// 原样引用，硬上限为正。
+type CapacityDeclarationInput struct {
+	Dimension string
+	Unit      string
+	Capacity  int64
 }
 
 // RegisterTransportScheduleCommand 登一个具体班次，两种形状二选一（ADR-0201 决定五）：
@@ -152,7 +164,15 @@ type ScheduleRegistrationResult struct {
 	hasTemplate  bool
 	schedule     ports.ScheduleRecord
 	hasSchedule  bool
+	pools        []MaterializedPool
 	continuation string
+}
+
+// MaterializedPool 是按周期安排容量声明物化登记一班时，一个声明维度上的池答案：`已建立`、`已存在`或`池冲突`，
+// 各带那个池——冲突带的是库里已建的那一个。
+type MaterializedPool struct {
+	Outcome OpportunityOutcome
+	Pool    ports.CapacityPoolRecord
 }
 
 func (result ScheduleRegistrationResult) Outcome() ScheduleRegistrationOutcome {
@@ -174,6 +194,26 @@ func (result ScheduleRegistrationResult) Schedule() (ports.ScheduleRecord, bool)
 	return result.schedule, result.hasSchedule
 }
 
+// Pools 在物化登记的`已登记`、`下一版`、`已存在`上交回周期安排当前版逐维声明的池，按维度次序；周期安排不声明
+// 容量、或登的是临时班次时为空。
+func (result ScheduleRegistrationResult) Pools() []MaterializedPool {
+	return append([]MaterializedPool(nil), result.pools...)
+}
+
+// Persisted 报这一次有没有新落任何东西：班次落了一版，或任何一个池新建立。端点据此在 201 与 200 之间选
+// （ADR-0022）——班次`已存在`而周期安排新声明了一个维度时，那个池是这一次新落的。
+func (result ScheduleRegistrationResult) Persisted() bool {
+	if result.outcome.Persisted() {
+		return true
+	}
+	for _, pool := range result.pools {
+		if pool.Outcome == PoolEstablished {
+			return true
+		}
+	}
+	return false
+}
+
 func (result ScheduleRegistrationResult) ContinuationReference() string {
 	return result.continuation
 }
@@ -181,12 +221,14 @@ func (result ScheduleRegistrationResult) ContinuationReference() string {
 type RegisterTransportScheduleDeps struct {
 	Templates ports.ScheduleTemplateRegistry
 	Schedules ports.TransportScheduleStore
+	Pools     ports.CapacityPoolStore
 	Clock     ports.Clock
 }
 
 // RegisterTransportScheduleHandler 是周期安排与具体班次两本册子的登记编排（ADR-0201 决定一）。登记册配置写：建
 // 班次不搬包裹，也不形成生产事实，CLI 与端点调的是同一个它（ADR-0085）。没有意图交付——班次是本上下文自己的
-// 执行准备，用到它的（准备、订舱、装载分配）按需来读。
+// 执行准备，用到它的（准备、订舱、装载分配）按需来读。按周期安排物化登记一班时，那一版的逐维容量声明随班次建池
+// （ADR-0201 决定三），池落在容量池册上，与班次同一笔。
 type RegisterTransportScheduleHandler struct {
 	deps RegisterTransportScheduleDeps
 }
@@ -314,7 +356,49 @@ func (handler *RegisterTransportScheduleHandler) materialize(
 	if err != nil {
 		return ScheduleRegistrationResult{outcome: ScheduleRegistrationNotAccepted}, nil
 	}
-	return handler.registerSchedule(ctx, schedule)
+	pools, err := current.Template.MaterializeCapacityPools(schedule)
+	if err != nil {
+		return ScheduleRegistrationResult{outcome: ScheduleRegistrationNotAccepted}, nil
+	}
+	result, err := handler.registerSchedule(ctx, schedule)
+	if err != nil {
+		return ScheduleRegistrationResult{}, err
+	}
+	switch result.outcome {
+	case TransportScheduleRegistered, TransportScheduleRevised, TransportScheduleExisting:
+	default:
+		return result, nil
+	}
+	return handler.establishPools(ctx, result, pools)
+}
+
+// establishPools 在登记下来的那一班上逐维立池，答案逐池列在班次答案旁。
+//
+// 已建的池同内容答`已存在`，异内容答`池冲突`并保留库里那一个——周期安排换版改了某维容量，再按同一日期登记时班次
+// 跟着成下一版或答`已存在`，池却不改写（ADR-0201 补记「池不改版」）。冲突不挡班次：一维容量对不上不是这一班不能
+// 登的理由，挡住它只会让班次也跟不上新的一版；冲突逐池摆在答案里，登记方看得见哪一维没跟上。
+//
+// 池册读不动答未决：重跑同一登记即续办——班次那一半已落就答`已存在`，池在那一次补齐。
+func (handler *RegisterTransportScheduleHandler) establishPools(
+	ctx context.Context,
+	result ScheduleRegistrationResult,
+	pools []domain.CapacityPool,
+) (ScheduleRegistrationResult, error) {
+	for _, pool := range pools {
+		established, err := establishMaterializedPool(ctx, handler.deps.Pools, handler.deps.Clock, pool)
+		if err != nil {
+			return ScheduleRegistrationResult{}, err
+		}
+		record, _ := established.Pool()
+		switch established.Outcome() {
+		case PoolEstablished, PoolExistingResult, PoolConflict:
+			result.pools = append(result.pools, MaterializedPool{Outcome: established.Outcome(), Pool: record})
+		default:
+			key := result.schedule.Key
+			return scheduleRegistrationUndecided(CapacityPoolRegistryUnavailable, key.TenantID, pool.Pool().String()), nil
+		}
+	}
+	return result, nil
 }
 
 func (handler *RegisterTransportScheduleHandler) registerSchedule(
@@ -425,6 +509,18 @@ func scheduleTemplateSpecFrom(command RegisterScheduleTemplateCommand) (domain.S
 			return none, err
 		}
 	}
+	capacities := make([]domain.CapacityDeclaration, 0, len(command.Capacities))
+	for _, input := range command.Capacities {
+		dimension, err := domain.ParseCapacityDimension(input.Dimension)
+		if err != nil {
+			return none, err
+		}
+		unit, err := domain.NewQuantityUnitReference(input.Unit)
+		if err != nil {
+			return none, err
+		}
+		capacities = append(capacities, domain.CapacityDeclaration{Dimension: dimension, Unit: unit, Capacity: input.Capacity})
+	}
 	return domain.ScheduleTemplateSpec{
 		TenantID: command.TenantID,
 		Code:     code,
@@ -437,6 +533,7 @@ func scheduleTemplateSpecFrom(command RegisterScheduleTemplateCommand) (domain.S
 			ServiceScope:         scope,
 			EffectiveFrom:        effectiveFrom,
 			EffectiveUntil:       effectiveUntil,
+			Capacities:           capacities,
 		},
 	}, nil
 }

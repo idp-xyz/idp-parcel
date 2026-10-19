@@ -424,6 +424,9 @@ func CanonicalizeCarrierFirstEffectivePickupPayload(expressesControl bool, subje
 // CanonicalizeScheduleTemplatePayload 定形「登记周期安排」（ADR-0201）。正文各格全进摘要：同一代码再登时内容同即
 // `已存在`，异即下一版，没有不进摘要的正文。星期按周一到周日写词，生效区间不设终点写 null——零值日期与「不设
 // 终点」在摘要里分得开。代码与版本是身份，不进。
+//
+// 逐维容量声明按维度次序成组进摘要；不声明时整键缺席而不写空数组：库里有容量声明进文法之前登下的周期安排，它们的
+// 摘要没有这一键，照原内容再登必须仍答`已存在`，不能因为多出一个空键成了下一版。
 func CanonicalizeScheduleTemplatePayload(content ScheduleTemplateContent) ([]byte, string, error) {
 	weekdays, err := normalizedWeekdays(content.Weekdays)
 	if err != nil {
@@ -438,19 +441,37 @@ func CanonicalizeScheduleTemplatePayload(content ScheduleTemplateContent) ([]byt
 		until := content.EffectiveUntil.String()
 		effectiveUntil = &until
 	}
+	declarations, err := normalizedCapacityDeclarations(content.Capacities)
+	if err != nil {
+		return nil, "", err
+	}
+	type canonicalCapacity struct {
+		Dimension string `json:"dimension"`
+		Unit      string `json:"unit"`
+		Capacity  int64  `json:"capacity"`
+	}
+	var capacities []canonicalCapacity
+	for _, declaration := range declarations {
+		capacities = append(capacities, canonicalCapacity{
+			Dimension: declaration.Dimension.String(),
+			Unit:      declaration.Unit.String(),
+			Capacity:  declaration.Capacity,
+		})
+	}
 	return marshalPayload(struct {
-		Canonicalization     string   `json:"canonicalization"`
-		Face                 string   `json:"face"`
-		Connection           string   `json:"connection"`
-		FromNode             string   `json:"from_node"`
-		ToNode               string   `json:"to_node"`
-		Weekdays             []string `json:"weekdays"`
-		DepartureLocalMinute int      `json:"departure_local_minute"`
-		DurationMinutes      int64    `json:"duration_minutes"`
-		TimeZone             string   `json:"time_zone"`
-		ServiceScope         string   `json:"service_scope"`
-		EffectiveFrom        string   `json:"effective_from"`
-		EffectiveUntil       *string  `json:"effective_until"`
+		Canonicalization     string              `json:"canonicalization"`
+		Face                 string              `json:"face"`
+		Connection           string              `json:"connection"`
+		FromNode             string              `json:"from_node"`
+		ToNode               string              `json:"to_node"`
+		Weekdays             []string            `json:"weekdays"`
+		DepartureLocalMinute int                 `json:"departure_local_minute"`
+		DurationMinutes      int64               `json:"duration_minutes"`
+		TimeZone             string              `json:"time_zone"`
+		ServiceScope         string              `json:"service_scope"`
+		EffectiveFrom        string              `json:"effective_from"`
+		EffectiveUntil       *string             `json:"effective_until"`
+		Capacities           []canonicalCapacity `json:"capacities,omitempty"`
 	}{
 		Canonicalization:     payloadCanonicalizationVersion,
 		Face:                 "REGISTER_SCHEDULE_TEMPLATE",
@@ -464,6 +485,7 @@ func CanonicalizeScheduleTemplatePayload(content ScheduleTemplateContent) ([]byt
 		ServiceScope:         content.ServiceScope.String(),
 		EffectiveFrom:        content.EffectiveFrom.String(),
 		EffectiveUntil:       effectiveUntil,
+		Capacities:           capacities,
 	})
 }
 
@@ -506,20 +528,26 @@ func CanonicalizeTransportSchedulePayload(schedule TransportSchedule) ([]byte, s
 	})
 }
 
-// CanonicalizeEstablishPoolPayload 定形「建立运力池」。
-func CanonicalizeEstablishPoolPayload(schedule, unit string, capacity int64) ([]byte, string, error) {
+// CanonicalizeEstablishPoolPayload 定形「建立运力池」：班次、维度、单位与硬上限。池身份由班次与维度派生，不另进；
+// 预占不进——它们是池建立之后沿转换门落的关系，不是池的内容。显式登记与周期安排物化两处立池都从池本体算，同一池
+// 两处算出同一份摘要。
+//
+// 维度进摘要而形状版本仍是 TFC-1：迁移 0027 在池表有行时拒绝施加，库里没有任何一份不带维度的池摘要要比。
+func CanonicalizeEstablishPoolPayload(pool CapacityPool) ([]byte, string, error) {
 	return marshalPayload(struct {
 		Canonicalization string `json:"canonicalization"`
 		Face             string `json:"face"`
 		Schedule         string `json:"schedule"`
+		Dimension        string `json:"dimension"`
 		Unit             string `json:"unit"`
 		Capacity         int64  `json:"capacity"`
 	}{
 		Canonicalization: payloadCanonicalizationVersion,
 		Face:             "ESTABLISH_POOL",
-		Schedule:         schedule,
-		Unit:             unit,
-		Capacity:         capacity,
+		Schedule:         pool.schedule.String(),
+		Dimension:        pool.dimension.String(),
+		Unit:             pool.unit.String(),
+		Capacity:         pool.capacity,
 	})
 }
 

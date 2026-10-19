@@ -141,7 +141,7 @@ func TestACapacityPoolRoundTripsReservationsAndReplaceDoesNotRewriteIdentity(t *
 	_, _, pools, transactor, _ := newJourneyScheduleCapacityStores(t)
 	ctx := t.Context()
 
-	empty := establishedPoolRecord(t, "tenant-a", "pool-1", 100)
+	empty := establishedPoolRecord(t, "tenant-a", "schedule-1", 100)
 	mustWithinDeliveryTransaction(t, transactor, ctx, func(txCtx context.Context) error {
 		outcome, err := pools.Save(txCtx, empty)
 		if err != nil {
@@ -218,11 +218,11 @@ func TestACapacityPoolRoundTripsReservationsAndReplaceDoesNotRewriteIdentity(t *
 	}
 
 	mutated, err := domain.RehydrateCapacityPool(domain.CapacityPoolSpec{
-		TenantID: empty.Key.TenantID,
-		Pool:     empty.Key.Pool,
-		Schedule: deliveryValue(t, domain.NewScheduleReference, "schedule-forged"),
-		Unit:     deliveryValue(t, domain.NewQuantityUnitReference, "lb"),
-		Capacity: 1,
+		TenantID:  empty.Key.TenantID,
+		Schedule:  deliveryValue(t, domain.NewScheduleReference, "schedule-forged"),
+		Dimension: domain.CapacityVolume,
+		Unit:      deliveryValue(t, domain.NewQuantityUnitReference, "lb"),
+		Capacity:  1,
 	}, after.Pool.ReservationSnapshots())
 	if err != nil {
 		t.Fatalf("伪造身份：%v", err)
@@ -245,11 +245,12 @@ func TestACapacityPoolRoundTripsReservationsAndReplaceDoesNotRewriteIdentity(t *
 	}
 	if again.Pool.Capacity() != 100 ||
 		again.Pool.Schedule().String() != "schedule-1" ||
+		again.Pool.Dimension() != domain.CapacityWeight ||
 		again.Pool.Unit().String() != "kg" {
-		t.Fatal("Replace 把班次/单位/容量写进了库")
+		t.Fatal("Replace 把班次/维度/单位/容量写进了库")
 	}
 
-	missing := establishedPoolRecord(t, "tenant-a", "pool-missing", 50)
+	missing := establishedPoolRecord(t, "tenant-a", "schedule-missing", 50)
 	mustWithinDeliveryTransaction(t, transactor, ctx, func(txCtx context.Context) error {
 		ok, err := pools.Replace(txCtx, missing)
 		if err != nil {
@@ -268,7 +269,7 @@ func TestJourneyScheduleCapacityRecordsAreInvisibleAcrossTenants(t *testing.T) {
 
 	journey := formedJourney(t, "tenant-a", domain.AlternateJourneyPurpose, domain.ServiceDispositionDecision, "journey-alt-1")
 	schedule := formedSchedule(t, "tenant-a", "schedule-1")
-	pool := establishedPoolRecord(t, "tenant-a", "pool-1", 100)
+	pool := establishedPoolRecord(t, "tenant-a", "schedule-1", 100)
 	mustWithinDeliveryTransaction(t, transactor, ctx, func(txCtx context.Context) error {
 		if _, err := journeys.Save(txCtx, journey); err != nil {
 			return err
@@ -306,7 +307,7 @@ func TestJourneyScheduleCapacityWritesRefuseToRunOutsideATransaction(t *testing.
 	if _, err := schedules.Save(ctx, schedule); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务 Save 班次：%v", err)
 	}
-	pool := establishedPoolRecord(t, "tenant-a", "pool-1", 100)
+	pool := establishedPoolRecord(t, "tenant-a", "schedule-1", 100)
 	if _, err := pools.Save(ctx, pool); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务 Save 容量池：%v", err)
 	}
@@ -321,7 +322,7 @@ func TestJourneyScheduleCapacityRollbackLeavesNothingBehind(t *testing.T) {
 	rollback := errors.New("回滚")
 	journey := formedJourney(t, "tenant-a", domain.AlternateJourneyPurpose, domain.ServiceDispositionDecision, "journey-alt-1")
 	schedule := formedSchedule(t, "tenant-a", "schedule-1")
-	pool := establishedPoolRecord(t, "tenant-a", "pool-1", 100)
+	pool := establishedPoolRecord(t, "tenant-a", "schedule-1", 100)
 
 	if err := transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
 		if _, err := journeys.Save(txCtx, journey); err != nil {
@@ -389,21 +390,21 @@ func TestJourneyScheduleCapacityCheckConstraintsRejectImpossibleRows(t *testing.
 
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO transport_fulfillment.capacity_pool
-			(tenant_id, pool_id, schedule_id, unit_ref, capacity, content_digest, recorded_at)
-		 VALUES ('tenant-a', 'p-bad-1', 's-1', 'kg', 0, 'd', now())`); err == nil {
+			(tenant_id, pool_id, schedule_id, dimension, unit_ref, capacity, content_digest, recorded_at)
+		 VALUES ('tenant-a', 's-0/WEIGHT', 's-0', 'WEIGHT', 'kg', 0, 'd', now())`); err == nil {
 		t.Fatal("一行「容量为零」溜进了容量池库")
 	}
 
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO transport_fulfillment.capacity_pool
-			(tenant_id, pool_id, schedule_id, unit_ref, capacity, content_digest, recorded_at)
-		 VALUES ('tenant-a', 'p-ok', 's-1', 'kg', 100, 'd', now())`); err != nil {
+			(tenant_id, pool_id, schedule_id, dimension, unit_ref, capacity, content_digest, recorded_at)
+		 VALUES ('tenant-a', 's-1/WEIGHT', 's-1', 'WEIGHT', 'kg', 100, 'd', now())`); err != nil {
 		t.Fatalf("探针父行插不进去：%v", err)
 	}
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO transport_fulfillment.capacity_reservation
 			(tenant_id, pool_id, reservation_id, quantity, valid_until, released, consumed)
-		 VALUES ('tenant-a', 'p-ok', 'r-1', 10, now(), 6, 5)`); err == nil {
+		 VALUES ('tenant-a', 's-1/WEIGHT', 'r-1', 10, now(), 6, 5)`); err == nil {
 		t.Fatal("一行「释放+消耗超过预占」溜进了预占子表")
 	}
 }
@@ -496,21 +497,22 @@ func formedSchedule(t *testing.T, tenant, id string) ports.ScheduleRecord {
 	}
 }
 
-func establishedPoolRecord(t *testing.T, tenant, id string, capacity int64) ports.CapacityPoolRecord {
+// establishedPoolRecord 在班次 schedule 的重量维上立一个空池；池身份由二者派生。
+func establishedPoolRecord(t *testing.T, tenant, schedule string, capacity int64) ports.CapacityPoolRecord {
 	t.Helper()
 	pool, err := domain.EstablishCapacityPool(domain.CapacityPoolSpec{
-		TenantID: deliveryValue(t, domain.NewTenantID, tenant),
-		Pool:     deliveryValue(t, domain.NewCapacityPoolReference, id),
-		Schedule: deliveryValue(t, domain.NewScheduleReference, "schedule-1"),
-		Unit:     deliveryValue(t, domain.NewQuantityUnitReference, "kg"),
-		Capacity: capacity,
+		TenantID:  deliveryValue(t, domain.NewTenantID, tenant),
+		Schedule:  deliveryValue(t, domain.NewScheduleReference, schedule),
+		Dimension: domain.CapacityWeight,
+		Unit:      deliveryValue(t, domain.NewQuantityUnitReference, "kg"),
+		Capacity:  capacity,
 	})
 	if err != nil {
 		t.Fatalf("构造容量池：%v", err)
 	}
 	return ports.CapacityPoolRecord{
 		Key:           ports.CapacityPoolKey{TenantID: deliveryValue(t, domain.NewTenantID, tenant), Pool: pool.Pool()},
-		ContentDigest: "digest-" + id,
+		ContentDigest: "digest-" + pool.Pool().String(),
 		Pool:          pool,
 		RecordedAt:    reservedAt,
 	}

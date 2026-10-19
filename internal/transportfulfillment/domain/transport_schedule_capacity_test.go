@@ -18,11 +18,11 @@ var (
 func establishedPool(t *testing.T, capacity int64) domain.CapacityPool {
 	t.Helper()
 	pool, err := domain.EstablishCapacityPool(domain.CapacityPoolSpec{
-		TenantID: mustValue(t, domain.NewTenantID, "tenant-1"),
-		Pool:     mustValue(t, domain.NewCapacityPoolReference, "pool-weight-1"),
-		Schedule: mustValue(t, domain.NewScheduleReference, "schedule-1"),
-		Unit:     mustValue(t, domain.NewQuantityUnitReference, "kg"),
-		Capacity: capacity,
+		TenantID:  mustValue(t, domain.NewTenantID, "tenant-1"),
+		Schedule:  mustValue(t, domain.NewScheduleReference, "schedule-1"),
+		Dimension: domain.CapacityWeight,
+		Unit:      mustValue(t, domain.NewQuantityUnitReference, "kg"),
+		Capacity:  capacity,
 	})
 	if err != nil {
 		t.Fatalf("establish pool: %v", err)
@@ -254,11 +254,11 @@ func TestConsumptionAndReleaseAreIrreversibleAndConserved(t *testing.T) {
 // 三量。重建门验守恒与引用不重，不按时点重算可用量。
 func TestRehydrateCapacityPoolRestoresReservationsWithoutReplayingConversions(t *testing.T) {
 	spec := domain.CapacityPoolSpec{
-		TenantID: mustValue(t, domain.NewTenantID, "tenant-1"),
-		Pool:     mustValue(t, domain.NewCapacityPoolReference, "pool-weight-1"),
-		Schedule: mustValue(t, domain.NewScheduleReference, "schedule-1"),
-		Unit:     mustValue(t, domain.NewQuantityUnitReference, "kg"),
-		Capacity: 100,
+		TenantID:  mustValue(t, domain.NewTenantID, "tenant-1"),
+		Schedule:  mustValue(t, domain.NewScheduleReference, "schedule-1"),
+		Dimension: domain.CapacityWeight,
+		Unit:      mustValue(t, domain.NewQuantityUnitReference, "kg"),
+		Capacity:  100,
 	}
 	snapshots := []domain.CapacityReservationSnapshot{{
 		Reference:  reservationRef(t, "reservation-1"),

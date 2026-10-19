@@ -88,11 +88,6 @@ func unversionedPickupContentDigest(command PerformOffsitePickupCommand) string 
 	return hex.EncodeToString(digest[:])
 }
 
-func unversionedOpportunityDigest(parts ...string) string {
-	digest := sha256.Sum256([]byte(strings.Join(parts, "\x00")))
-	return hex.EncodeToString(digest[:])
-}
-
 // unversionedDeliveryContentDigest 是同一（对象+尝试）首登的内容比对锚：方式、接收方与 POD 任一
 // 不同即是另一份内容。
 func unversionedDeliveryContentDigest(command RegisterEffectiveDeliveryCommand) string {

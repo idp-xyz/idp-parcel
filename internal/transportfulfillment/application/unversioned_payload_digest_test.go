@@ -72,7 +72,6 @@ func unversionedDigestCases(t *testing.T) []unversionedDigestCase {
 		bookingUnversionedCase(t),
 		bookingAnswerUnversionedCase(t),
 		pickupAttemptUnversionedCase(t),
-		poolUnversionedCase(t),
 		effectiveDeliveryUnversionedCase(t),
 		pickupRegistrationUnversionedCase(t),
 		pickupCorrectionUnversionedCase(t),
@@ -244,37 +243,6 @@ func pickupAttemptUnversionedCase(t *testing.T) unversionedDigestCase {
 		conflict: func(t *testing.T) {
 			changed := pickupCommand(t, "source-legacy-1", "attempt-1", successSubmission(t, "parcel-1", "TRANSPORT-CONTROL/TF-9"))
 			handle(t, changed, application.PickupSourceConflict)
-		},
-	}
-}
-
-func poolUnversionedCase(t *testing.T) unversionedDigestCase {
-	fixture := newOpportunityFixture(t)
-	command := application.EstablishPoolCommand{
-		TenantID: opportunityTenant(t),
-		Pool:     "pool-1",
-		Schedule: "schedule-1",
-		Unit:     "kg",
-		Capacity: 100,
-	}
-	establish := func(t *testing.T, command application.EstablishPoolCommand, want application.OpportunityOutcome) {
-		t.Helper()
-		result, err := fixture.handler.EstablishPool(context.Background(), command)
-		wantOutcome(t, result.Outcome(), err, want)
-	}
-	return unversionedDigestCase{
-		name:        "ESTABLISH_POOL",
-		unversioned: "1ef67c6d60b18c39b3a7b8ffbc0fe3d5a15596028de121783485a96e9692101e",
-		first: func(t *testing.T) (string, func(string)) {
-			establish(t, command, application.PoolEstablished)
-			return onlyDigest(t, fixture.pools.records,
-				func(record *ports.CapacityPoolRecord) *string { return &record.ContentDigest })
-		},
-		replay: func(t *testing.T) { establish(t, command, application.PoolExistingResult) },
-		conflict: func(t *testing.T) {
-			changed := command
-			changed.Capacity = 120
-			establish(t, changed, application.PoolConflict)
 		},
 	}
 }

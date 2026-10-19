@@ -38,18 +38,19 @@ func newCapacityConsumptionHandoffFixture(t *testing.T) (*adapter.OutboxCapacity
 	return handoff, db, pool
 }
 
-func capacityConsumptionIntent(t *testing.T, pool, reservation string) ports.CapacityConsumptionIntent {
+// capacityConsumptionIntent 的 schedule 是池所在的班次：夹具池登在它的重量维上，池身份是「班次/WEIGHT」。
+func capacityConsumptionIntent(t *testing.T, schedule, reservation string) ports.CapacityConsumptionIntent {
 	t.Helper()
 	return ports.CapacityConsumptionIntent{
-		Pool:        establishedPoolRecord(t, "tenant-a", pool, 100),
+		Pool:        establishedPoolRecord(t, "tenant-a", schedule, 100),
 		Reservation: deliveryValue(t, domain.NewCapacityReservationReference, reservation),
 		Assignment:  deliveryValue(t, domain.NewLoadAssignmentReference, "assignment-1"),
 		Quantity:    10,
 	}
 }
 
-func capacityConsumptionEventID(pool, reservation string) string {
-	return "tenant-a/" + pool + "/" + reservation + "/capacity-consumption"
+func capacityConsumptionEventID(schedule, reservation string) string {
+	return "tenant-a/" + schedule + "/WEIGHT/" + reservation + "/capacity-consumption"
 }
 
 // TestCapacityConsumptionFollowsTheTransactionalTemplate 证容量消耗意图复现样板四条：

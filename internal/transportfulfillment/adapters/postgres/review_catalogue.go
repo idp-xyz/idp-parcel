@@ -105,7 +105,14 @@ func (catalogue *ReviewCatalogue) ListScheduleTemplates(
 		`SELECT template_code, template_version, connection_code, from_node, to_node,
 		        weekdays, departure_local_minute, duration_minutes, time_zone, service_scope_ref,
 		        to_char(effective_from, 'YYYY-MM-DD'), COALESCE(to_char(effective_until, 'YYYY-MM-DD'), ''),
-		        recorded_at
+		        recorded_at,
+		        (SELECT COALESCE(jsonb_agg(jsonb_build_object(
+		                    'dimension', capacity.dimension, 'unit', capacity.unit_ref, 'capacity', capacity.capacity)
+		                    ORDER BY capacity.dimension), '[]'::jsonb)
+		           FROM transport_fulfillment.schedule_template_capacity AS capacity
+		          WHERE capacity.tenant_id = current_template.tenant_id
+		            AND capacity.template_code = current_template.template_code
+		            AND capacity.template_version = current_template.template_version)
 		   FROM (SELECT DISTINCT ON (template_code) *
 		           FROM transport_fulfillment.schedule_template
 		          WHERE tenant_id = $1
@@ -123,14 +130,23 @@ func (catalogue *ReviewCatalogue) ListScheduleTemplates(
 	list := make([]ports.ScheduleTemplateCatalogueRow, 0, limit)
 	for rows.Next() {
 		var row ports.ScheduleTemplateCatalogueRow
+		var capacities []storedCapacityDeclaration
 		if err := rows.Scan(
 			&row.Template, &row.Version, &row.Connection, &row.FromNode, &row.ToNode,
 			&row.Weekdays, &row.DepartureLocalMinute, &row.DurationMinutes, &row.TimeZone, &row.ServiceScope,
-			&row.EffectiveFrom, &row.EffectiveUntil, &row.RecordedAt,
+			&row.EffectiveFrom, &row.EffectiveUntil, &row.RecordedAt, &capacities,
 		); err != nil {
 			return nil, fmt.Errorf("list schedule templates: %w", err)
 		}
 		row.RecordedAt = row.RecordedAt.UTC()
+		row.Capacities = make([]ports.ScheduleTemplateCapacityRow, 0, len(capacities))
+		for _, capacity := range capacities {
+			row.Capacities = append(row.Capacities, ports.ScheduleTemplateCapacityRow{
+				Dimension: capacity.Dimension,
+				Unit:      capacity.Unit,
+				Capacity:  capacity.Capacity,
+			})
+		}
 		list = append(list, row)
 	}
 	if err := rows.Err(); err != nil {
@@ -156,7 +172,7 @@ func (catalogue *ReviewCatalogue) ListCapacityPools(
 	}
 
 	rows, err := querier.Query(ctx,
-		`SELECT p.pool_id, p.schedule_id, p.unit_ref, p.capacity,
+		`SELECT p.pool_id, p.schedule_id, p.dimension, p.unit_ref, p.capacity,
 		        COALESCE(SUM(r.quantity), 0)::bigint,
 		        COALESCE(SUM(r.released), 0)::bigint,
 		        COALESCE(SUM(r.consumed), 0)::bigint,
@@ -166,7 +182,7 @@ func (catalogue *ReviewCatalogue) ListCapacityPools(
 		     ON r.tenant_id = p.tenant_id
 		    AND r.pool_id = p.pool_id
 		  WHERE p.tenant_id = $1
-		  GROUP BY p.pool_id, p.schedule_id, p.unit_ref, p.capacity, p.recorded_at
+		  GROUP BY p.pool_id, p.schedule_id, p.dimension, p.unit_ref, p.capacity, p.recorded_at
 		  ORDER BY p.pool_id
 		  LIMIT $2`,
 		tenant.String(),
@@ -181,7 +197,7 @@ func (catalogue *ReviewCatalogue) ListCapacityPools(
 	for rows.Next() {
 		var row ports.CapacityPoolCatalogueRow
 		if err := rows.Scan(
-			&row.PoolID, &row.Schedule, &row.Unit, &row.Capacity,
+			&row.PoolID, &row.Schedule, &row.Dimension, &row.Unit, &row.Capacity,
 			&row.Reserved, &row.Released, &row.Consumed, &row.RecordedAt,
 		); err != nil {
 			return nil, fmt.Errorf("list capacity pools: %w", err)

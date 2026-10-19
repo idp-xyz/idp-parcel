@@ -181,6 +181,7 @@ func serveScheduleTemplates(
 			ServiceScope:       row.ServiceScope,
 			EffectiveFrom:      row.EffectiveFrom,
 			EffectiveUntil:     row.EffectiveUntil,
+			Capacities:         capacityDeclarationRows(row.Capacities),
 			RecordedAt:         rfc3339(row.RecordedAt),
 		})
 	}
@@ -188,6 +189,18 @@ func serveScheduleTemplates(
 		Outcome:   outcomeScheduleTemplatesListed,
 		Templates: bodies,
 	})
+}
+
+func capacityDeclarationRows(rows []ports.ScheduleTemplateCapacityRow) []capacityDeclarationBody {
+	bodies := make([]capacityDeclarationBody, 0, len(rows))
+	for _, row := range rows {
+		bodies = append(bodies, capacityDeclarationBody{
+			Dimension: row.Dimension,
+			Unit:      row.Unit,
+			Capacity:  quantity(row.Capacity),
+		})
+	}
+	return bodies
 }
 
 func serveCapacityPools(
@@ -207,6 +220,7 @@ func serveCapacityPools(
 		bodies = append(bodies, capacityPoolBody{
 			PoolID:     row.PoolID,
 			Schedule:   row.Schedule,
+			Dimension:  row.Dimension,
 			Unit:       row.Unit,
 			Capacity:   quantity(row.Capacity),
 			Reserved:   quantity(row.Reserved),
@@ -363,21 +377,30 @@ type scheduleTemplateListResponse struct {
 }
 
 // scheduleTemplateBody 逐字段透出一份周期安排的一版（查阅列面与登记答复同一形状）。出发时刻是当地 HH:MM，时区
-// 随行给出——周期安排没有绝对出发时刻，那要按日期物化才有；effectiveUntil 缺席即不设终点。
+// 随行给出——周期安排没有绝对出发时刻，那要按日期物化才有；effectiveUntil 缺席即不设终点。capacities 总在场，
+// 空数组即这份周期安排不声明容量、物化出的班次不带池。
 type scheduleTemplateBody struct {
-	Template           string   `json:"template"`
-	Version            int      `json:"version"`
-	Connection         string   `json:"connection"`
-	FromNode           string   `json:"fromNode"`
-	ToNode             string   `json:"toNode"`
-	Weekdays           []string `json:"weekdays"`
-	DepartureLocalTime string   `json:"departureLocalTime"`
-	DurationMinutes    int64    `json:"durationMinutes"`
-	TimeZone           string   `json:"timeZone"`
-	ServiceScope       string   `json:"serviceScope"`
-	EffectiveFrom      string   `json:"effectiveFrom"`
-	EffectiveUntil     string   `json:"effectiveUntil,omitempty"`
-	RecordedAt         string   `json:"recordedAt"`
+	Template           string                    `json:"template"`
+	Version            int                       `json:"version"`
+	Connection         string                    `json:"connection"`
+	FromNode           string                    `json:"fromNode"`
+	ToNode             string                    `json:"toNode"`
+	Weekdays           []string                  `json:"weekdays"`
+	DepartureLocalTime string                    `json:"departureLocalTime"`
+	DurationMinutes    int64                     `json:"durationMinutes"`
+	TimeZone           string                    `json:"timeZone"`
+	ServiceScope       string                    `json:"serviceScope"`
+	EffectiveFrom      string                    `json:"effectiveFrom"`
+	EffectiveUntil     string                    `json:"effectiveUntil,omitempty"`
+	Capacities         []capacityDeclarationBody `json:"capacities"`
+	RecordedAt         string                    `json:"recordedAt"`
+}
+
+// capacityDeclarationBody 是周期安排上一条逐维容量声明。硬上限与池容量一样按十进制串透出。
+type capacityDeclarationBody struct {
+	Dimension string `json:"dimension"`
+	Unit      string `json:"unit"`
+	Capacity  string `json:"capacity"`
 }
 
 type capacityPoolListResponse struct {
@@ -393,6 +416,7 @@ type capacityPoolListResponse struct {
 type capacityPoolBody struct {
 	PoolID     string `json:"poolId"`
 	Schedule   string `json:"schedule"`
+	Dimension  string `json:"dimension"`
 	Unit       string `json:"unit"`
 	Capacity   string `json:"capacity"`
 	Reserved   string `json:"reserved"`

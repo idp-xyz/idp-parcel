@@ -60,6 +60,7 @@ func scheduleRegistrar() (*application.RegisterTransportScheduleHandler, *transp
 	return application.NewRegisterTransportScheduleHandler(application.RegisterTransportScheduleDeps{
 		Templates: &scheduleTemplateStore{current: map[string]ports.ScheduleTemplateRecord{}},
 		Schedules: schedules,
+		Pools:     &capacityPoolStore{current: map[string]ports.CapacityPoolRecord{}},
 		Clock:     scheduleClock{},
 	}), schedules
 }

@@ -14,7 +14,7 @@ import (
 )
 
 // CapacityPools 实现 ports.CapacityPoolStore。Save 建池；Replace 只换预占子表与
-// 记录时刻——班次、单位、容量在 INSERT 里冻结（与委托 Replace 只写转换列同一纪律）。
+// 记录时刻——班次、维度、单位、容量在 INSERT 里冻结（与委托 Replace 只写转换列同一纪律）。
 type CapacityPools struct {
 	db *bentopg.DB
 }
@@ -37,17 +37,17 @@ func (repository *CapacityPools) FindByKey(
 		return ports.CapacityPoolRecord{}, false, fmt.Errorf("find capacity pool: %w", err)
 	}
 
-	var scheduleID, unit, digest string
+	var scheduleID, dimension, unit, digest string
 	var capacity int64
 	var recordedAt time.Time
 	err = querier.QueryRow(ctx,
-		`SELECT schedule_id, unit_ref, capacity, content_digest, recorded_at
+		`SELECT schedule_id, dimension, unit_ref, capacity, content_digest, recorded_at
 		   FROM transport_fulfillment.capacity_pool
 		  WHERE tenant_id = $1
 		    AND pool_id = $2`,
 		key.TenantID.String(),
 		key.Pool.String(),
-	).Scan(&scheduleID, &unit, &capacity, &digest, &recordedAt)
+	).Scan(&scheduleID, &dimension, &unit, &capacity, &digest, &recordedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.CapacityPoolRecord{}, false, nil
 	}
@@ -56,6 +56,10 @@ func (repository *CapacityPools) FindByKey(
 	}
 
 	scheduleRef, err := domain.NewScheduleReference(scheduleID)
+	if err != nil {
+		return ports.CapacityPoolRecord{}, false, fmt.Errorf("find capacity pool: %w", err)
+	}
+	dimensionWord, err := domain.ParseCapacityDimension(dimension)
 	if err != nil {
 		return ports.CapacityPoolRecord{}, false, fmt.Errorf("find capacity pool: %w", err)
 	}
@@ -68,14 +72,19 @@ func (repository *CapacityPools) FindByKey(
 		return ports.CapacityPoolRecord{}, false, fmt.Errorf("find capacity pool: %w", err)
 	}
 	pool, err := domain.RehydrateCapacityPool(domain.CapacityPoolSpec{
-		TenantID: key.TenantID,
-		Pool:     key.Pool,
-		Schedule: scheduleRef,
-		Unit:     unitRef,
-		Capacity: capacity,
+		TenantID:  key.TenantID,
+		Schedule:  scheduleRef,
+		Dimension: dimensionWord,
+		Unit:      unitRef,
+		Capacity:  capacity,
 	}, snapshots)
 	if err != nil {
 		return ports.CapacityPoolRecord{}, false, fmt.Errorf("find capacity pool: %w", err)
+	}
+	// 库上 CHECK 已钉住池身份由班次与维度派生；这里再核一遍，是因为读回的池要交给按池身份转换的编排——身份对不上
+	// 的一行宁可答读不懂，也不以另一个身份的池作答。
+	if pool.Pool() != key.Pool {
+		return ports.CapacityPoolRecord{}, false, fmt.Errorf("find capacity pool: stored identity %q is not derived from its schedule and dimension", key.Pool)
 	}
 	return ports.CapacityPoolRecord{
 		Key:           key,
@@ -97,12 +106,13 @@ func (repository *CapacityPools) Save(
 
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO transport_fulfillment.capacity_pool
-			(tenant_id, pool_id, schedule_id, unit_ref, capacity, content_digest, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7)
+			(tenant_id, pool_id, schedule_id, dimension, unit_ref, capacity, content_digest, recorded_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Pool.String(),
 		record.Pool.Schedule().String(),
+		record.Pool.Dimension().String(),
 		record.Pool.Unit().String(),
 		record.Pool.Capacity(),
 		record.ContentDigest,
@@ -120,7 +130,7 @@ func (repository *CapacityPools) Save(
 	return ports.PoolSaved, nil
 }
 
-// Replace 只落预占子表与记录时刻。UPDATE 不含班次/单位/容量。0 行（没有可转换的池）
+// Replace 只落预占子表与记录时刻。UPDATE 不含班次/维度/单位/容量。0 行（没有可转换的池）
 // 答 false。
 func (repository *CapacityPools) Replace(
 	ctx context.Context,

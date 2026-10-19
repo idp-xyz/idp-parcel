@@ -54,6 +54,7 @@ var _ CarrierPickupJudgmentIntake = UnconfiguredIntake{}
 var _ MasterDocumentIntake = UnconfiguredIntake{}
 var _ ScheduleTemplateIntake = UnconfiguredIntake{}
 var _ TransportScheduleIntake = UnconfiguredIntake{}
+var _ CapacityPoolIntake = UnconfiguredIntake{}
 
 // IntakeRegistration 不读请求。参数刻意匿名：连签名都不给「读一眼再决定」留位置。
 func (UnconfiguredIntake) IntakeRegistration(context.Context, *http.Request) (application.RegisterEffectiveDeliveryCommand, error) {
@@ -175,4 +176,9 @@ func (UnconfiguredIntake) IntakeScheduleTemplateRegistration(context.Context, *h
 
 func (UnconfiguredIntake) IntakeTransportScheduleRegistration(context.Context, *http.Request) (application.RegisterTransportScheduleCommand, error) {
 	return application.RegisterTransportScheduleCommand{}, ErrAccessChannelNotConfigured
+}
+
+// IntakeCapacityPoolRegistration 堵住建池口：同样不读请求、不构造命令。
+func (UnconfiguredIntake) IntakeCapacityPoolRegistration(context.Context, *http.Request) (application.EstablishPoolCommand, error) {
+	return application.EstablishPoolCommand{}, ErrAccessChannelNotConfigured
 }

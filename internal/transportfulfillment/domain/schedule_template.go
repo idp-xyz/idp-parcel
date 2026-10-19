@@ -132,7 +132,8 @@ func LocalTimeOfDay(minuteOfDay int) string {
 }
 
 // ScheduleTemplateContent 是周期安排一版的全部正文，即 ADR-0201 决定三内置的那一种文法：按周循环（星期集合）、
-// 当地出发时刻、历时、IANA 时区、方向、适用服务范围与运行日期的生效区间。生效区间终点不含，缺席即不设终点。
+// 当地出发时刻、历时、IANA 时区、方向、适用服务范围、运行日期的生效区间，以及可选的逐维容量声明。生效区间终点
+// 不含，缺席即不设终点；容量声明缺席即这份周期安排物化出的班次不带池。
 //
 // 到达用历时表达，不收到站当地时刻：起讫可能跨时区，按历时算出的到达时刻只有一种读法。
 type ScheduleTemplateContent struct {
@@ -144,6 +145,7 @@ type ScheduleTemplateContent struct {
 	ServiceScope         ScheduleServiceScopeReference
 	EffectiveFrom        RunningDate
 	EffectiveUntil       RunningDate
+	Capacities           []CapacityDeclaration
 }
 
 // ScheduleTemplate 是 TF 自有的周期安排：运行规律，不是班次（CONTEXT「周期运行安排或车次模板不是具体班次」）。
@@ -206,7 +208,12 @@ func formScheduleTemplate(spec ScheduleTemplateSpec, version ScheduleTemplateVer
 	if err != nil {
 		return ScheduleTemplate{}, err
 	}
+	capacities, err := normalizedCapacityDeclarations(content.Capacities)
+	if err != nil {
+		return ScheduleTemplate{}, err
+	}
 	content.Weekdays = weekdays
+	content.Capacities = capacities
 	return ScheduleTemplate{
 		tenantID: spec.TenantID,
 		code:     spec.Code,
@@ -265,10 +272,11 @@ func (template ScheduleTemplate) Version() ScheduleTemplateVersion {
 	return template.version
 }
 
-// Content 交回正文的一份拷贝：星期集合是切片，交出去的不能回头改到周期安排本体。
+// Content 交回正文的一份拷贝：星期集合与容量声明是切片，交出去的不能回头改到周期安排本体。
 func (template ScheduleTemplate) Content() ScheduleTemplateContent {
 	content := template.content
 	content.Weekdays = append([]time.Weekday(nil), template.content.Weekdays...)
+	content.Capacities = append([]CapacityDeclaration(nil), template.content.Capacities...)
 	return content
 }
 
@@ -304,6 +312,34 @@ func MaterializeSchedule(template ScheduleTemplate, date RunningDate) (Transport
 		templateVersion: template.version,
 		runningDate:     date,
 	})
+}
+
+// MaterializeCapacityPools 按这一版的逐维容量声明，在由它物化出的班次上各立一个空池（ADR-0201 决定三：容量声明
+// 随物化建池）。与 MaterializeSchedule 一样不读时钟、不读登记册：显式登记那一处拿它去落册，准备评估那一处拿它只算
+// 不存，两处得出同一组池。
+//
+// 只认出自本周期安排的班次：别的周期安排或临时班次上的池不归这份声明定。班次可能出自更早的一版——那一班登记后
+// 周期安排又换了版，再按同一日期登记时班次答`已存在`，池仍按当前这一版声明算，已立的池改不改由登记那一侧答。
+func (template ScheduleTemplate) MaterializeCapacityPools(schedule TransportSchedule) ([]CapacityPool, error) {
+	code, _, _, materialized := schedule.Origin().Template()
+	if !materialized || code != template.code || schedule.TenantID() != template.tenantID {
+		return nil, ErrInvalidCapacityPool
+	}
+	pools := make([]CapacityPool, 0, len(template.content.Capacities))
+	for _, declaration := range template.content.Capacities {
+		pool, err := EstablishCapacityPool(CapacityPoolSpec{
+			TenantID:  template.tenantID,
+			Schedule:  schedule.Schedule(),
+			Dimension: declaration.Dimension,
+			Unit:      declaration.Unit,
+			Capacity:  declaration.Capacity,
+		})
+		if err != nil {
+			return nil, err
+		}
+		pools = append(pools, pool)
+	}
+	return pools, nil
 }
 
 // MaterializeDepartingWithin 物化出发时刻落在 [from, to] 内的全部班次，按出发先后排。它是准备评估候选那一处物化

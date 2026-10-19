@@ -24,6 +24,7 @@ import (
 type scheduleRegistryStores struct {
 	templates  *adapter.ScheduleTemplates
 	schedules  *adapter.TransportSchedules
+	pools      *adapter.CapacityPools
 	candidates *adapter.ScheduleCandidates
 	catalogue  *adapter.ReviewCatalogue
 	transactor bentoapp.Transactor
@@ -48,6 +49,9 @@ func newScheduleRegistryStores(t *testing.T) scheduleRegistryStores {
 	if stores.schedules, err = adapter.NewTransportSchedules(db); err != nil {
 		t.Fatalf("构造班次册：%v", err)
 	}
+	if stores.pools, err = adapter.NewCapacityPools(db); err != nil {
+		t.Fatalf("构造容量池册：%v", err)
+	}
 	if stores.candidates, err = adapter.NewScheduleCandidates(db); err != nil {
 		t.Fatalf("构造候选来源：%v", err)
 	}
@@ -57,6 +61,7 @@ func newScheduleRegistryStores(t *testing.T) scheduleRegistryStores {
 	stores.handler = application.NewRegisterTransportScheduleHandler(application.RegisterTransportScheduleDeps{
 		Templates: stores.templates,
 		Schedules: stores.schedules,
+		Pools:     stores.pools,
 		Clock:     fixedScheduleClock{at: time.Date(2026, 10, 19, 1, 0, 0, 0, time.UTC)},
 	})
 	stores.source = application.NewScheduleCandidatesHandler(application.ScheduleCandidatesDeps{Source: stores.candidates})

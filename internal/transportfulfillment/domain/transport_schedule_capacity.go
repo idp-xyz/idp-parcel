@@ -361,41 +361,58 @@ func (reservation CapacityReservation) occupiedAt(at time.Time) int64 {
 }
 
 // CapacityPool 是班次或运输资源在明确范围与维度上可供预占与分配的运力范围（CONTEXT
-// 「容量池」）。单维度：多维各自建池，不强制换算（CONTEXT 124）。值类型：每次转换返回
-// 新值；释放与消耗都没有反向方法——归还与扣减只能沿正向关系再转换。
+// 「容量池」）。单维度：多维各自建池，不强制换算（AT-TF-030）——CONTEXT 说的多维运力范围，在这里是同一班次上
+// 逐维的一组池。值类型：每次转换返回新值；释放与消耗都没有反向方法——归还与扣减只能沿正向关系再转换。
 type CapacityPool struct {
 	tenantID     TenantID
 	pool         CapacityPoolReference
 	schedule     ScheduleReference
+	dimension    CapacityDimension
 	unit         QuantityUnitReference
 	capacity     int64
 	reservations []CapacityReservation
 }
 
-// CapacityPoolSpec 固定池身份、维度单位与有效容量（硬上限）。
+// CapacityPoolSpec 固定池所在班次、维度、单位与有效容量（硬上限）。池身份不在这里：它由班次与维度派生。
 type CapacityPoolSpec struct {
-	TenantID TenantID
-	Pool     CapacityPoolReference
-	Schedule ScheduleReference
-	Unit     QuantityUnitReference
-	Capacity int64
+	TenantID  TenantID
+	Schedule  ScheduleReference
+	Dimension CapacityDimension
+	Unit      QuantityUnitReference
+	Capacity  int64
 }
 
+// EstablishCapacityPool 立一个空池。池身份由（班次、维度）派生：一个班次在一个维度上只有一个池，周期安排物化与显式
+// 登记两处立的同一维度是同一个池，不会因为两处各起一个名字而在同一班次上并存两个重量池——准备评估要问「这一班的
+// 重量够不够」，两个重量池让这一问没有唯一答案（ADR-0201 补记「池身份」）。
 func EstablishCapacityPool(spec CapacityPoolSpec) (CapacityPool, error) {
 	if !spec.TenantID.valid() ||
-		!spec.Pool.valid() ||
 		!spec.Schedule.valid() ||
+		!spec.Dimension.valid() ||
 		!spec.Unit.valid() ||
 		spec.Capacity <= 0 {
 		return CapacityPool{}, ErrInvalidCapacityPool
 	}
 	return CapacityPool{
-		tenantID: spec.TenantID,
-		pool:     spec.Pool,
-		schedule: spec.Schedule,
-		unit:     spec.Unit,
-		capacity: spec.Capacity,
+		tenantID:  spec.TenantID,
+		pool:      capacityPoolReference(spec.Schedule, spec.Dimension),
+		schedule:  spec.Schedule,
+		dimension: spec.Dimension,
+		unit:      spec.Unit,
+		capacity:  spec.Capacity,
 	}, nil
+}
+
+// capacityPoolSeparator 隔开班次身份与维度词。取 `/` 与物化班次身份同一个分隔符：派生池身份读作「这一班/这一维」。
+// 维度词里没有 `/`，按最后一个 `/` 切开总能认回班次与维度，派生因此是单射。
+const capacityPoolSeparator = "/"
+
+func capacityPoolReference(schedule ScheduleReference, dimension CapacityDimension) CapacityPoolReference {
+	return CapacityPoolReference{requiredValue{value: schedule.String() + capacityPoolSeparator + dimension.String()}}
+}
+
+func (pool CapacityPool) TenantID() TenantID {
+	return pool.tenantID
 }
 
 func (pool CapacityPool) Pool() CapacityPoolReference {
@@ -404,6 +421,10 @@ func (pool CapacityPool) Pool() CapacityPoolReference {
 
 func (pool CapacityPool) Schedule() ScheduleReference {
 	return pool.schedule
+}
+
+func (pool CapacityPool) Dimension() CapacityDimension {
+	return pool.dimension
 }
 
 func (pool CapacityPool) Unit() QuantityUnitReference {
