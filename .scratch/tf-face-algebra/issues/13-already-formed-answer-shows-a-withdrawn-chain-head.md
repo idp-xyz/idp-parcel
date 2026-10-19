@@ -1,7 +1,7 @@
 # 13 装载分配：链头是撤回版时，「分配已形成」的答复看不出分配已撤回
 
 Category: bug
-Status: ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立（tf-face-algebra/02 实施中发现，票外未改）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-tfa121310`（与 12、10 同一分支）。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立（tf-face-algebra/02 实施中发现，票外未改）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：tf-face-algebra/02 实施子代理的「本票外的发现」，经其非作者评审确认。
