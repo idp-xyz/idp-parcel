@@ -199,3 +199,33 @@ func TestAHandoverCorrectionRederivesAStockParticipationOnTheLegacyBasis(t *test
 		t.Fatalf("另一范围同版本号的更正牵连了这一段：err = %v", err)
 	}
 }
+
+// Covers: AT-TF-266（ADR-0221，领域半边）——新起头下的串只认一种写法：长度带前导零、长度对不上、少一节或多出尾巴，都读不出
+// 入场版本，不按旧拼法去猜。
+func TestAMalformedKeyedEntryBasisNamesNoHandover(t *testing.T) {
+	for _, raw := range []string{
+		"TRANSPORT-HANDOVER-KEY/08:parcel-1/3:SZX/2:v1",
+		"TRANSPORT-HANDOVER-KEY/8:parcel-1/4:SZX/2:v1",
+		"TRANSPORT-HANDOVER-KEY/8:parcel-1/3:SZX",
+		"TRANSPORT-HANDOVER-KEY/8:parcel-1/3:SZX/2:v1/extra",
+		"TRANSPORT-HANDOVER-KEY/8:parcel-1/3:SZX/x:v1",
+	} {
+		segment, err := domain.RehydrateActualFulfillmentSegment(domain.RehydrateActualFulfillmentSegmentSpec{
+			TenantID: mustValue(t, domain.NewTenantID, "tenant-1"),
+			Segment:  mustValue(t, domain.NewFulfillmentSegmentReference, "SEG-MALFORMED"),
+			Participations: []domain.RehydrateParticipationSpec{{
+				Object:     mustValue(t, domain.NewCarriedObjectReference, "parcel-1"),
+				EntryKind:  domain.EnteredByTransportHandover,
+				EntryBasis: mustValue(t, domain.NewParticipationBasisReference, raw),
+				EnteredAt:  handoverJudgedAt,
+			}},
+		})
+		if err != nil {
+			t.Fatalf("重建 %q：%v", raw, err)
+		}
+		participation, _ := segment.ParticipationFor(mustValue(t, domain.NewCarriedObjectReference, "parcel-1"))
+		if version, named := participation.EntryHandoverVersion(); named {
+			t.Errorf("%q 读出了入场版本 %q", raw, version)
+		}
+	}
+}
