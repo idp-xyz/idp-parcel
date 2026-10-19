@@ -1,7 +1,7 @@
 # 06 外部标识号码进册前没有「存得下」的门：超长号码撞索引上限答 500，NUL 撞库面答 500；按号核对遇到不可能在册的号也答错误
 
 Category: bug
-Status: in-progress——2026-10-19 评审 0 阻断（阻断两条与裁定补已修，会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 裁定补由作者子代理实施完（NO 对超长号照常问 PS），待复核。此前 in-progress——2026-10-19 评审两条阻断由作者子代理修完（rebase 到 origin/main `38916b00`），待复核。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 立并代决、认领，分支 `claude-psxm06`
+Status: resolved——2026-10-19 进 main（代码验证钉 `dd2b9c3c`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（阻断两条与裁定补已修，会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 裁定补由作者子代理实施完（NO 对超长号照常问 PS），待复核。此前 in-progress——2026-10-19 评审两条阻断由作者子代理修完（rebase 到 origin/main `38916b00`），待复核。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 立并代决、认领，分支 `claude-psxm06`
 Blocked by: 无
 父票：[05](./05-a-unique-hit-in-someone-elses-number-space-is-not-enough.md)
 出处：no-reception-source/03 完成记录「发现」（PS 关联册按号码建的 btree 索引有长度上限，号码进册前无长度门）；本会话复核。
@@ -47,7 +47,7 @@ Blocked by: 无
 - [x] 读口：越界号答零候选、无信号、不报错；经生产收寄装配真库用例：设备送来越界号，答待识别（已核对），不落未核对、不响门铃。
 - [x] ADR-0184 文末复核记录；`git diff` 该文件只有新增行。
 - [x] Go 门禁：`gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0；带 DSN 跑 `internal/parcelshipment/...`、`internal/nodeoperations/...`、`cmd/parcel-api`、`internal/architecture` 全绿；机制清点重生成。
-- [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）。
+- [x] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）。
 
 ## 完成记录（2026-10-19，会话 idp-parcel-9b 的作者子代理，分支 `claude-psxm06`）
 
@@ -263,3 +263,8 @@ NUL 那条真库用例修前已绿：原裁定三下带 NUL 的号本就答零�
 - **裁定补（推送方代决，已做）**：门落地前已进册的超长号现场要能核到——NO 适配器只对带 NUL 的号直接答零候选，超长号照问 PS。作者另立核对专用的 `ExternalIdentifierLookupNumber`（只拒空白与 NUL），PS 读口改收它：核对用的号在类型上传不进任何写入方，比开放还原构造更稳，认可。真库用例：门前直写进册的 600 字节号经生产收寄装配唯一关联。
 - **Spec 其余**：入册门（拒 NUL、拒超 512 字节）只在领域构造处一处；面单渠道结果越界答`未受理`不落库；ADR-0184 复核记录只追加。
 - **未做（不另立票）**：ADR-0140 的 problem+json 整仓迁移不在本票，作者已记。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-psxm06`（作者已 rebase 到首方渠道之后并修阻断、做裁定补）rebase 到 no-reception-identity/07 进 main 之后（`shipment_request.go` 两边改的处不同，自动合并；只撞机制清点，在新树上重生成），快进推送。
+- 推送方全量一次：钉 `dd2b9c3c` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 148 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
