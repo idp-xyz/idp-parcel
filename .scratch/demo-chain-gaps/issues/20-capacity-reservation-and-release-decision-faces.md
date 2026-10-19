@@ -133,3 +133,4 @@ M
 
 - `go build ./...`；`go vet` 覆盖 `./internal/transportfulfillment/...`、`./cmd/parcel-api/`、`./internal/architecture/`；`gofmt -l` 干净。
 - `IDP_PARCEL_POSTGRES_DSN=…55432… go test -p 1 -count=1`：`./internal/transportfulfillment/...`、`./internal/accessidentity/...`、`./cmd/parcel-api/`、`./cmd/parcel-transport-register/`、`./internal/architecture/`、`./migrations/` 全部 ok；`-v` 核过真库容量用例实际执行。种子未改，没重灌；没跑全量，机制清点未重生成。
+- `merge-tree`：与本地 `main`（`a2ff42f6`）、`claude-dcg33` 干净；与 `claude-dcg18`（`fcc46fa5`）、`claude-dcg29`（`ed993ac8`）冲突只在热点文件 `scripts/demo-seeds/README.md`，两边各追加行——修订前的 `21b1b211` 对这两个分支头已是如此，是它们完成记录之后加的行，不是本轮修订引入；按令牌次序合。
