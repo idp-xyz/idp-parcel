@@ -107,6 +107,12 @@ func (registry *cliCatalogRegistry) RegisterConflictSignalRule(
 	return registry.record(commandConflictSignalRule, tenant)
 }
 
+func (registry *cliCatalogRegistry) RegisterDepartureGateSignalRule(
+	_ context.Context, tenant domain.TenantID, _ ports.DepartureGateSignalRuleRegistration,
+) (ports.CatalogRegistrationOutcome, error) {
+	return registry.record(commandDepartureGateSignalRule, tenant)
+}
+
 var _ application.CatalogRegistries = (*cliCatalogRegistry)(nil)
 
 func newTestRegistrars(t *testing.T, registry application.CatalogRegistries, tracer executionTracer) registrars {
@@ -132,6 +138,8 @@ func validInputByCommand() map[string]string {
 			{"customer":"SYN-CUSTOMER","signalKind":"SYN-SIGNAL","confidence":"SYN-CONF",
 			"disclosable":true,"autoRelease":false,"content":"SYN-CONTENT"}]}`,
 		commandConflictSignalRule: `{"tenantId":"SYN-TEN-VE15","signalKind":"SYN-SIGNAL-CONFLICT",
+			"version":"SYN-RULE-V1","confidence":"SYN-CONF","approvedBy":"SYN-approver-1"}`,
+		commandDepartureGateSignalRule: `{"tenantId":"SYN-TEN-VE15","signalKind":"SYN-SIGNAL-DEPARTURE-GATE",
 			"version":"SYN-RULE-V1","confidence":"SYN-CONF","approvedBy":"SYN-approver-1"}`,
 		commandMilestoneMapping: `{` + versionHeader + `,"entries":[
 			{"source":"PARCEL_SHIPMENT","factKind":"SYN_KIND","milestone":"SYN-MILESTONE"}]}`,
@@ -162,6 +170,7 @@ var expectedReferenceByCommand = map[string]string{
 	commandDisclosurePolicy:         "SYN-TEN-VE15/SYN-V1",
 	commandExceptionDisclosureRules: "SYN-TEN-VE15/SYN-V1",
 	commandConflictSignalRule:       "SYN-TEN-VE15/SYN-RULE-V1",
+	commandDepartureGateSignalRule:  "SYN-TEN-VE15/SYN-RULE-V1",
 }
 
 // TestExecuteRoutesEachCommandAndTracesTheRegistration 证目录册各命令各自到达对的登记
@@ -291,6 +300,7 @@ func TestExecuteRuleRegistriesFollowTheCatalogueExitCodes(t *testing.T) {
 			{commandExceptionDisclosureRules, ports.CatalogVersionOverlapsExisting, "VERSION_OVERLAPS_EXISTING"},
 			// 冲突信号规则一租户一条：撞既有行是它唯一的治理答案（0025），没有区间可重叠。
 			{commandConflictSignalRule, ports.CatalogVersionAlreadyRegistered, "VERSION_NOT_OVERWRITABLE"},
+			{commandDepartureGateSignalRule, ports.CatalogVersionAlreadyRegistered, "VERSION_NOT_OVERWRITABLE"},
 		} {
 			registry := &cliCatalogRegistry{outcome: testCase.outcome}
 			tracer := &traceRecorder{}
@@ -329,6 +339,10 @@ func TestExecuteRuleRegistriesFollowTheCatalogueExitCodes(t *testing.T) {
 				`{"tenantId":"SYN-TEN-VE15","signalKind":"SYN-SIGNAL-CONFLICT","version":"SYN-RULE-V1",
 				"confidence":"SYN-CONF","approvedBy":""}`,
 				"APPROVAL_MISSING"},
+			{commandDepartureGateSignalRule,
+				`{"tenantId":"SYN-TEN-VE15","signalKind":"SYN-SIGNAL-DEPARTURE-GATE","version":"SYN-RULE-V1",
+				"confidence":"SYN-CONF","approvedBy":""}`,
+				"APPROVAL_MISSING"},
 		} {
 			registry := &cliCatalogRegistry{outcome: ports.CatalogVersionRegistered}
 			tracer := &traceRecorder{}
@@ -359,6 +373,9 @@ func TestExecuteRuleRegistriesFollowTheCatalogueExitCodes(t *testing.T) {
 			{commandConflictSignalRule,
 				`{"tenantId":"SYN-TEN-VE15","signalKind":"SYN-SIGNAL-CONFLICT","ruleVersion":"SYN-RULE-V1",
 				"confidence":"SYN-CONF","approvedBy":"SYN-approver-1"}`},
+			{commandDepartureGateSignalRule,
+				`{"tenantId":"SYN-TEN-VE15","signalKind":"SYN-SIGNAL-DEPARTURE-GATE","ruleVersion":"SYN-RULE-V1",
+				"confidence":"SYN-CONF","approvedBy":"SYN-approver-1"}`},
 		} {
 			registry := &cliCatalogRegistry{outcome: ports.CatalogVersionRegistered}
 			regs := newTestRegistrars(t, registry, &traceRecorder{})
@@ -374,7 +391,7 @@ func TestExecuteRuleRegistriesFollowTheCatalogueExitCodes(t *testing.T) {
 	})
 
 	t.Run("依赖故障走 3", func(t *testing.T) {
-		for _, command := range []string{commandExceptionDisclosureRules, commandConflictSignalRule} {
+		for _, command := range []string{commandExceptionDisclosureRules, commandConflictSignalRule, commandDepartureGateSignalRule} {
 			registry := &cliCatalogRegistry{err: errors.New("registry down")}
 			tracer := &traceRecorder{}
 			regs := newTestRegistrars(t, registry, tracer)

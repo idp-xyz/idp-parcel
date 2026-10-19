@@ -144,6 +144,16 @@ func TestVERegisterVerticalOnRealPostgres(t *testing.T) {
 					"SYN-TEN-VE15")
 			},
 		},
+		{
+			command: commandDepartureGateSignalRule,
+			input: `{"tenantId":"SYN-TEN-VE15","signalKind":"SYN-SIGNAL-DEPARTURE-GATE",
+				"version":"SYN-RULE-V1","confidence":"SYN-CONF-SOURCE","approvedBy":"SYN-approver-1"}`,
+			tableCount: func() int {
+				return countRows(
+					`SELECT count(*) FROM visibility_exception.departure_gate_signal_rule WHERE tenant_id = $1`,
+					"SYN-TEN-VE15")
+			},
+		},
 	}
 	for _, step := range steps {
 		if message, code := execute(ctx, step.command, []byte(step.input), identity, regs); code != exitRegistered {

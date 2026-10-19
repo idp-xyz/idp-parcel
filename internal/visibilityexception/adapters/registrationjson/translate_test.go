@@ -242,6 +242,29 @@ func TestConflictSignalRuleTranslatesEveryField(t *testing.T) {
 	}
 }
 
+// TestDepartureGateSignalRuleTranslatesEveryField 证出发门禁阻断信号规则（0027）快照逐字段落到命令上；形同冲突信号规则，
+// version 是识别规则版本引用。
+func TestDepartureGateSignalRuleTranslatesEveryField(t *testing.T) {
+	raw := []byte(`{
+		"tenantId": "SYN-TEN-VE15",
+		"signalKind": "SYN-SIGNAL-DEPARTURE-GATE",
+		"version": "SYN-RULE-V1",
+		"confidence": "SYN-CONF-SOURCE",
+		"approvedBy": "SYN-approver-1"
+	}`)
+	command, err := registrationjson.DepartureGateSignalRuleFromJSON(raw)
+	if err != nil {
+		t.Fatalf("翻译：%v", err)
+	}
+	if command.TenantID.String() != "SYN-TEN-VE15" ||
+		command.Kind.String() != "SYN-SIGNAL-DEPARTURE-GATE" ||
+		command.Rule.String() != "SYN-RULE-V1" ||
+		command.Confidence.String() != "SYN-CONF-SOURCE" ||
+		command.ApprovedBy != "SYN-approver-1" {
+		t.Fatalf("命令 = %+v", command)
+	}
+}
+
 // TestTranslationRejectsWhatIsNotThisEntranceShape 逐格证翻译处的拒绝：未知字段、
 // 集合外取值、矛盾声明、构造门缺件。错误信息不逐字断言——它是给操作员看的话，
 // 断言拒绝本身与大致指向即可。
@@ -332,6 +355,12 @@ func TestTranslationRejectsWhatIsNotThisEntranceShape(t *testing.T) {
 			translate: func(raw []byte) error { _, err := registrationjson.ConflictSignalRuleFromJSON(raw); return err },
 			raw:       `{"tenantId":"SYN-TEN","signalKind":"k","version":" ","confidence":"c","approvedBy":"a"}`,
 			hint:      "signal rule version",
+		},
+		{
+			name:      "出发门禁阻断信号规则的未知字段——ruleVersion 不是 version",
+			translate: func(raw []byte) error { _, err := registrationjson.DepartureGateSignalRuleFromJSON(raw); return err },
+			raw:       `{"tenantId":"SYN-TEN","signalKind":"k","ruleVersion":"v1","confidence":"c","approvedBy":"a"}`,
+			hint:      "ruleVersion",
 		},
 	}
 	for _, testCase := range cases {

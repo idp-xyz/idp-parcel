@@ -11,7 +11,8 @@
 // notification-policy（`PAR-VIS-07` 的渠道与时限半边）、claim-eligibility /
 // claim-authorization（`PAR-VIS-08`）、disclosure-policy（`PAR-VIS-09`）、
 // exception-disclosure-rules（`PAR-VIS-07` 的披露与自动发布范围半边，0023）、
-// conflict-signal-rule（`PAR-VIS-04`，0025；票 ve-disclosure-policy-view/02 接入后两册）。
+// conflict-signal-rule（`PAR-VIS-04`，0025；票 ve-disclosure-policy-view/02 接入后两册）、
+// departure-gate-signal-rule（`PAR-VIS-04`，0027；票 demo-chain-gaps/33，形同冲突信号规则）。
 // 后两册的命令名对齐读口 /visibility-catalogues?kind= 的原词 EXCEPTION_DISCLOSURE_RULE /
 // CONFLICT_SIGNAL_RULE，按 DISCLOSURE_POLICY ↔ disclosure-policy 的既有变形；异常披露规则
 // 与披露策略是相邻的两本册，命令名里「规则」「策略」两词就是分册的记号。此外材料归集面
@@ -79,6 +80,7 @@ const (
 	commandDisclosurePolicy          = "disclosure-policy"
 	commandExceptionDisclosureRules  = "exception-disclosure-rules"
 	commandConflictSignalRule        = "conflict-signal-rule"
+	commandDepartureGateSignalRule   = "departure-gate-signal-rule"
 	commandMaterialReceipt           = "claim-material-receipt"
 	commandMaterialReceiptRevocation = "claim-material-receipt-revocation"
 )
@@ -95,6 +97,7 @@ var registerCommands = []string{
 	commandDisclosurePolicy,
 	commandExceptionDisclosureRules,
 	commandConflictSignalRule,
+	commandDepartureGateSignalRule,
 	commandMaterialReceipt,
 	commandMaterialReceiptRevocation,
 }
@@ -358,6 +361,18 @@ func translateCommand(command string, raw []byte) (registration, error) {
 			reference: cmd.TenantID.String() + "/" + cmd.Rule.String(),
 			perform: func(ctx context.Context, catalogs *application.CatalogRegistration) (application.RegisterCatalogResult, error) {
 				return catalogs.RegisterConflictSignalRule(ctx, cmd)
+			},
+		}, nil
+	case commandDepartureGateSignalRule:
+		cmd, err := registrationjson.DepartureGateSignalRuleFromJSON(raw)
+		if err != nil {
+			return none, err
+		}
+		return registration{
+			// 痕上带识别规则版本，理由同冲突信号规则那一格。
+			reference: cmd.TenantID.String() + "/" + cmd.Rule.String(),
+			perform: func(ctx context.Context, catalogs *application.CatalogRegistration) (application.RegisterCatalogResult, error) {
+				return catalogs.RegisterDepartureGateSignalRule(ctx, cmd)
 			},
 		}, nil
 	default:

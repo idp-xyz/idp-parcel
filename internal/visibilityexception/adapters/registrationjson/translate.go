@@ -765,3 +765,47 @@ func conflictSignalRuleFromJSON(raw []byte, tenantSource tenantOf) (application.
 		ApprovedBy: document.ApprovedBy,
 	}, nil
 }
+
+// departureGateSignalRuleDocument 形同冲突信号规则那一份（0027 与 0025 同形）：没有版本抬头，一租户一条，version 是识别
+// 规则版本引用。两册各自一个文档类型而不共用，是因为两册的拒法与日后的换版路径各归各的票，共用一个类型就绑成了一处。
+type departureGateSignalRuleDocument struct {
+	TenantID   string `json:"tenantId"`
+	SignalKind string `json:"signalKind"`
+	Version    string `json:"version"`
+	Confidence string `json:"confidence"`
+	ApprovedBy string `json:"approvedBy"`
+}
+
+// DepartureGateSignalRuleFromJSON 是受控 CLI 那一路：租户取批文里的 tenantId。在线口那一路（租户取操作者信封）随在线登记口
+// 另立票。
+func DepartureGateSignalRuleFromJSON(raw []byte) (application.RegisterDepartureGateSignalRuleCommand, error) {
+	none := application.RegisterDepartureGateSignalRuleCommand{}
+	var document departureGateSignalRuleDocument
+	if err := decodeStrict(raw, &document, "出发门禁阻断信号规则"); err != nil {
+		return none, err
+	}
+	tenant, err := tenantFromDocument(document.TenantID)
+	if err != nil {
+		return none, err
+	}
+	kind, err := domain.NewExceptionSignalKindReference(document.SignalKind)
+	if err != nil {
+		return none, err
+	}
+	rule, err := domain.NewSignalRuleVersionReference(document.Version)
+	if err != nil {
+		return none, err
+	}
+	confidence, err := domain.NewConfidenceReference(document.Confidence)
+	if err != nil {
+		return none, err
+	}
+	// 批准责任缺件的判据在用例（APPROVAL_MISSING），这里只管形状。
+	return application.RegisterDepartureGateSignalRuleCommand{
+		TenantID:   tenant,
+		Kind:       kind,
+		Rule:       rule,
+		Confidence: confidence,
+		ApprovedBy: document.ApprovedBy,
+	}, nil
+}

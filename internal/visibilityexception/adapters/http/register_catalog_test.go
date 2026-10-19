@@ -128,6 +128,12 @@ func (registry stubCatalogRegistry) RegisterConflictSignalRule(
 	return registry.outcome, nil
 }
 
+func (registry stubCatalogRegistry) RegisterDepartureGateSignalRule(
+	context.Context, domain.TenantID, ports.DepartureGateSignalRuleRegistration,
+) (ports.CatalogRegistrationOutcome, error) {
+	return registry.outcome, nil
+}
+
 // milestoneMappingSnapshot 是一份立得住的最小登记快照，形状与登记 CLI 的 -input 逐字同源
 // （身份全取 SYN- 前缀，隔离合成只记 `S`）。
 const milestoneMappingSnapshot = `{

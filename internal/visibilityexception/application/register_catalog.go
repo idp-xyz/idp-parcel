@@ -170,8 +170,18 @@ type RegisterConflictSignalRuleCommand struct {
 	ApprovedBy string
 }
 
+// RegisterDepartureGateSignalRuleCommand 登记本租户的出发门禁阻断信号规则（`PAR-VIS-04`，0027）。形照冲突信号规则：没有
+// 版本抬头，一租户一条，换版是治理动作（ports.DepartureGateSignalRuleRegistry）。
+type RegisterDepartureGateSignalRuleCommand struct {
+	TenantID   domain.TenantID
+	Kind       domain.ExceptionSignalKindReference
+	Rule       domain.SignalRuleVersionReference
+	Confidence domain.ConfidenceReference
+	ApprovedBy string
+}
+
 // CatalogRegistries 是 CatalogRegistration 收拢的各写口合成、本用例对写入口的全部要求：目录册
-// 写口（ports.CatalogRegistry）加异常披露规则与冲突信号规则两册的写口。复数名标明它是几只端口
+// 写口（ports.CatalogRegistry）加异常披露规则、冲突信号规则与出发门禁阻断信号规则各册的写口。复数名标明它是几只端口
 // 合成的一面，不是与 ports.CatalogRegistry 同名的第二只目录册写口——按名认的工具（接线基线、
 // 枚举门禁）分不开两包同名不同型的接口。ports 里各写口分立是 mech/08 当时为了不拆替身；用例只有
 // 一个、受控入口只有一个、留痕只有一处，所以在这里合成一口——生产写入方
@@ -180,6 +190,7 @@ type CatalogRegistries interface {
 	ports.CatalogRegistry
 	ports.ExceptionDisclosureRuleRegistry
 	ports.ConflictSignalRuleRegistry
+	ports.DepartureGateSignalRuleRegistry
 }
 
 // CatalogRegistration 是 VE 五类规则与策略目录的版本化登记用例。
@@ -400,6 +411,36 @@ func (service *CatalogRegistration) RegisterConflictSignalRule(
 		})
 	if err != nil {
 		return RegisterCatalogResult{}, fmt.Errorf("register conflict signal rule: %w", err)
+	}
+	return translateRegistryOutcome(outcome)
+}
+
+// RegisterDepartureGateSignalRule 登记本租户的出发门禁阻断信号规则，拒法与 RegisterConflictSignalRule 同：缺租户是缺管辖，
+// 缺批准责任是缺审批，规则三件任缺一件是条目缺维——形成信号时一样都不补，登记口因此也一样都不放。撞既有行译成版本不可覆盖。
+func (service *CatalogRegistration) RegisterDepartureGateSignalRule(
+	ctx context.Context,
+	command RegisterDepartureGateSignalRuleCommand,
+) (RegisterCatalogResult, error) {
+	switch {
+	case !present(command.TenantID.String()):
+		return refused(CatalogScopeMissing), nil
+	case !present(command.ApprovedBy):
+		return refused(CatalogApprovalMissing), nil
+	case !present(command.Kind.String()),
+		!present(command.Rule.String()),
+		!present(command.Confidence.String()):
+		return refused(CatalogEntryIncomplete), nil
+	}
+
+	outcome, err := service.registry.RegisterDepartureGateSignalRule(ctx, command.TenantID,
+		ports.DepartureGateSignalRuleRegistration{
+			Kind:       command.Kind,
+			Rule:       command.Rule,
+			Confidence: command.Confidence,
+			ApprovedBy: command.ApprovedBy,
+		})
+	if err != nil {
+		return RegisterCatalogResult{}, fmt.Errorf("register departure gate signal rule: %w", err)
 	}
 	return translateRegistryOutcome(outcome)
 }

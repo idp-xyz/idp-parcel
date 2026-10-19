@@ -153,6 +153,9 @@ func TestCatalogAndTraceWritesRefuseToRunOutsideATransaction(t *testing.T) {
 	if _, err := registrar.RegisterConflictSignalRule(ctx, domain.TenantID{}, ports.ConflictSignalRuleRegistration{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Errorf("无事务登记冲突信号规则应返回 ErrTransactionRequired，实得：%v", err)
 	}
+	if _, err := registrar.RegisterDepartureGateSignalRule(ctx, domain.TenantID{}, ports.DepartureGateSignalRuleRegistration{}); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		t.Errorf("无事务登记出发门禁阻断信号规则应返回 ErrTransactionRequired，实得：%v", err)
+	}
 
 	decisions, err := adapter.NewDisclosureDecisions(db)
 	if err != nil {

@@ -29,6 +29,7 @@ type recordingRegistry struct {
 	disclose        ports.DisclosurePolicyRegistration
 	disclosureRules ports.ExceptionDisclosureRuleRegistration
 	conflictSignal  ports.ConflictSignalRuleRegistration
+	departureGate   ports.DepartureGateSignalRuleRegistration
 }
 
 func newRecordingRegistry() *recordingRegistry {
@@ -96,6 +97,13 @@ func (registry *recordingRegistry) RegisterConflictSignalRule(
 	_ context.Context, _ domain.TenantID, registration ports.ConflictSignalRuleRegistration,
 ) (ports.CatalogRegistrationOutcome, error) {
 	registry.conflictSignal = registration
+	return registry.answer()
+}
+
+func (registry *recordingRegistry) RegisterDepartureGateSignalRule(
+	_ context.Context, _ domain.TenantID, registration ports.DepartureGateSignalRuleRegistration,
+) (ports.CatalogRegistrationOutcome, error) {
+	registry.departureGate = registration
 	return registry.answer()
 }
 
@@ -753,5 +761,71 @@ func TestConflictSignalRuleAlreadyRegisteredTranslatesToNotOverwritable(t *testi
 		result.RefusalReason() != application.CatalogVersionNotOverwritable {
 		t.Fatalf("撞既有行应答 REFUSED / VERSION_NOT_OVERWRITABLE，实得 %s / %s",
 			result.Outcome(), result.RefusalReason())
+	}
+}
+
+func departureGateSignalRuleCommand(t *testing.T) application.RegisterDepartureGateSignalRuleCommand {
+	t.Helper()
+	return application.RegisterDepartureGateSignalRuleCommand{
+		TenantID:   registerTenant(t),
+		Kind:       catalogScalar(t, domain.NewExceptionSignalKindReference, "SYN-SIGNAL-DEPARTURE-GATE"),
+		Rule:       catalogScalar(t, domain.NewSignalRuleVersionReference, "SYN-RULE-V1"),
+		Confidence: catalogScalar(t, domain.NewConfidenceReference, "SYN-CONF-SOURCE"),
+		ApprovedBy: "SYN-approver-1",
+	}
+}
+
+// Covers: 出发门禁阻断信号规则（0027，票 demo-chain-gaps/33）并在 CatalogRegistration 里，拒法照冲突信号规则：缺租户是缺管辖、
+// 缺批准责任是缺审批，规则三件任缺一件是条目缺维，都不到写入口；正路三件与批准责任原样到达写入口；撞既有行译成版本不可覆盖。
+func TestDepartureGateSignalRuleRegistrationFollowsTheConflictRuleAlgebra(t *testing.T) {
+	for _, testCase := range []struct {
+		name   string
+		mutate func(*application.RegisterDepartureGateSignalRuleCommand)
+		reason application.CatalogRefusalReason
+	}{
+		{"缺租户", func(command *application.RegisterDepartureGateSignalRuleCommand) {
+			command.TenantID = domain.TenantID{}
+		}, application.CatalogScopeMissing},
+		{"缺发布批准责任", func(command *application.RegisterDepartureGateSignalRuleCommand) {
+			command.ApprovedBy = "  "
+		}, application.CatalogApprovalMissing},
+		{"缺信号类型", func(command *application.RegisterDepartureGateSignalRuleCommand) {
+			command.Kind = domain.ExceptionSignalKindReference{}
+		}, application.CatalogEntryIncomplete},
+		{"缺识别规则版本", func(command *application.RegisterDepartureGateSignalRuleCommand) {
+			command.Rule = domain.SignalRuleVersionReference{}
+		}, application.CatalogEntryIncomplete},
+		{"缺可信度依据", func(command *application.RegisterDepartureGateSignalRuleCommand) {
+			command.Confidence = domain.ConfidenceReference{}
+		}, application.CatalogEntryIncomplete},
+	} {
+		t.Run(testCase.name, func(t *testing.T) {
+			registry := newRecordingRegistry()
+			command := departureGateSignalRuleCommand(t)
+			testCase.mutate(&command)
+			result, err := newRegistration(t, registry).RegisterDepartureGateSignalRule(t.Context(), command)
+			if err != nil || result.RefusalReason() != testCase.reason || registry.calls != 0 {
+				t.Fatalf("「%s」：err=%v reason=%s calls=%d, want %s 且不到写入口",
+					testCase.name, err, result.RefusalReason(), registry.calls, testCase.reason)
+			}
+		})
+	}
+
+	registry := newRecordingRegistry()
+	result, err := newRegistration(t, registry).RegisterDepartureGateSignalRule(t.Context(), departureGateSignalRuleCommand(t))
+	if err != nil || result.Outcome() != application.CatalogRegistered {
+		t.Fatalf("正路：outcome=%s err=%v", result.Outcome(), err)
+	}
+	if registry.departureGate.Kind.String() != "SYN-SIGNAL-DEPARTURE-GATE" || registry.departureGate.Rule.String() != "SYN-RULE-V1" ||
+		registry.departureGate.Confidence.String() != "SYN-CONF-SOURCE" || registry.departureGate.ApprovedBy != "SYN-approver-1" {
+		t.Fatalf("规则三件与批准责任没有原样到达写入口，实得 %+v", registry.departureGate)
+	}
+
+	taken := newRecordingRegistry()
+	taken.outcome = ports.CatalogVersionAlreadyRegistered
+	result, err = newRegistration(t, taken).RegisterDepartureGateSignalRule(t.Context(), departureGateSignalRuleCommand(t))
+	if err != nil || result.Outcome() != application.CatalogRegistrationRefused ||
+		result.RefusalReason() != application.CatalogVersionNotOverwritable {
+		t.Fatalf("撞既有行：%s / %s err=%v, want REFUSED / VERSION_NOT_OVERWRITABLE", result.Outcome(), result.RefusalReason(), err)
 	}
 }
