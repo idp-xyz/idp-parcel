@@ -303,7 +303,7 @@ var veDeliveryUndecidedSentinels = []error{
 
 // veHandoverUndecidedSentinels 只给 VE 交接投影这一路。与 TF 派送发起那一路
 // （deliveryDispatchOnHandoverUndecidedSentinels）分开列：同一封信扇出给两路，各包各的哨兵再 FanOut。
-// 不投 PS：终局只认有效交付；NO 控制转移与 NR 复核另立票（demo-chain-gaps/61–63）。
+// 不投 PS：终局只认有效交付，交接不是终局事实。
 //
 // 不在名单里：ErrHandoverRecordInconsistent、ErrHandoverUntranslatableAnswer、
 // ErrHandoverProjectionHandoffPending、veconsume.ErrUnexpectedProjectionOutcome。

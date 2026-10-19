@@ -1,6 +1,6 @@
 // Package tfinbox 是 transport-fulfillment 的入向消费门：把别的上下文交来的信封推进 inbox 舞步，译码后交给消费侧
 // 适配器。本包只认信封形状，不读任何提供方的库；按键回读、翻译与判断都在处理方。本上下文自己交出、要在派发进程里接着
-// 跑下一拍的信封也从这里进，那一路没有翻译层，处理方是应用编排（transport_handover_registered_consumer.go）。
+// 跑下一拍的信封也从这里进，那一路没有翻译层，处理方是应用编排（TransportHandoverRegisteredConsumer）。
 package tfinbox
 
 import (
