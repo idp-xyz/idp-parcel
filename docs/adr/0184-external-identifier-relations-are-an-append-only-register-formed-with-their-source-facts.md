@@ -2,7 +2,7 @@
 
 Status: Accepted（2026-10-16，用户原话「这些需要确定的事情……你帮我做决定吧」与「开始」。Claude Code 会话据此代 PS owner 裁定下面七条，落在票 [ps-external-mark-relations/01](../../.scratch/ps-external-mark-relations/issues/01-external-mark-relations-have-no-model-in-parcel-shipment.md) 那一格。裁决能力边界：读过 PS CONTEXT「外部标识」「面单交易包裹结果」的定义、Rules 里外部标识两条与面单交易各条、`委托` 与 `包裹身份与服务` 两节生命周期，GLOSSARY「外部标识」「包裹内部标识」，CONTEXT-MAP `parcel-shipment → node-operations` 一条，UC-NO-002 的流程表、控制与身份一节和验收表；代码读过 `IsolatedSubmissionIntake` 的译装、`SubmitShipmentRequestHandler`、`ShipmentRequests.Save` 与 `FindCurrentAcceptedByParcel`、`LabelTransactionParcelResult`、NO 的 `ParcelIdentityView` 与两处 `unconfiguredParcelIdentityView`。**没读** UC-PS-001 全文与面单交易各编排的全部分支。）
 
-Partially suspended by: [ADR-0185](./0185-external-identifier-relation-identity-includes-its-formation-basis.md)（被停条款：决定一「键（租户，标识类型，分配方，号码，被标识对象）」——键加入形成依据；其余各条不变，本记录正文不改写）；[ADR-0195](./0195-a-submitted-declaration-of-the-same-number-turns-a-unique-hit-into-an-identity-conflict.md)（被停条款：决定五「只交回包裹，不交分配方、客户账户或委托」里的「只交回包裹」——答复另带歧义信号；「不交分配方、客户账户或委托」与其余各条不变，本记录正文不改写）
+Partially suspended by: [ADR-0185](./0185-external-identifier-relation-identity-includes-its-formation-basis.md)（被停条款：决定一「键（租户，标识类型，分配方，号码，被标识对象）」——键加入形成依据；其余各条不变，本记录正文不改写）；[ADR-0195](./0195-a-submitted-declaration-of-the-same-number-turns-a-unique-hit-into-an-identity-conflict.md)（被停条款：决定五「只交回包裹，不交分配方、客户账户或委托」里的「只交回包裹」——答复另带歧义信号；「不交分配方、客户账户或委托」与其余各条不变，本记录正文不改写）；[ADR-0212](./0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md)（被停条款：决定五「NO 的三分支据此答身份冲突，不按形成时间、来源或分配方挑一件」，适用场景是这件实物有可验证交付范围时——NO 按范围相容的候选认；决定六「现场观察只带一个号码，不带范围」——收寄来源可带交付范围依据引用，结论「核对时不按范围收窄」维持；其余各条不变，本记录正文不改写）
 
 Date: 2026-10-16
 
@@ -99,3 +99,12 @@ PS CONTEXT 把「外部标识关系」列为本上下文所管，定义要求记
 - 票：[ps-external-mark-relations/01](../../.scratch/ps-external-mark-relations/issues/01-external-mark-relations-have-no-model-in-parcel-shipment.md)
 - [ADR-0185](./0185-external-identifier-relation-identity-includes-its-formation-basis.md)：部分停用本记录决定一的键——键加入形成依据；其余各条不变
 - [ADR-0195](./0195-a-submitted-declaration-of-the-same-number-turns-a-unique-hit-into-an-identity-conflict.md)：部分停用本记录决定五「只交回包裹」一句——答复另带歧义信号；决定六维持，「其二」里对方已提交的那一格由它收住
+- [ADR-0212](./0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md)：部分停用本记录决定五「NO 的三分支据此答身份冲突，不按形成时间、来源或分配方挑一件」（只限有可验证交付范围时）与决定六「现场观察只带一个号码，不带范围」；决定六的结论维持，复核记录「决定六与 UC-NO-002「权限、隔离与审计」」代价「其二」余下的各格由它收住
+
+## 复核记录（2026-10-19，ADR-0212 部分停用决定五、决定六各一句；决定原文不动）
+
+出处：票 [ps-external-mark-relations/07](../../.scratch/ps-external-mark-relations/issues/07-verifiable-delivery-scope-for-customer-numbers.md) 的方向裁定与 [ADR-0212](./0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md)。会话 `idp-parcel-9b` 据用户原话「你作为业务和系统专家你来自决」与 2026-10-19「需要」代 PS owner 与 NO owner 裁定方向，ADR-0212 由该会话起的作者子代理成文。停用随票 ps-external-mark-relations/11 进 main 起生效，此前 main 上的行为照原句。
+
+- **决定五**「NO 的三分支据此答身份冲突，不按形成时间、来源或分配方挑一件」停用，适用场景：这件实物有可验证交付范围（送站预报，或绑定已全部确认的送站交接单）时，NO 只数范围相容的候选，恰一个且没有范围内歧义信号即唯一命中。同句「命中多件即交回多件」照旧，PS 仍全部交回、不挑；同条「不交分配方、客户账户或委托」照旧，范围相容只是是否值，所比的客户账户由 NO 给出。
+- **决定六**「现场观察只带一个号码，不带范围」停用：收寄来源可以带交付范围依据引用。结论「核对时不按范围收窄」与「两个客户账户恰好用了同一个号，就是两个候选」维持：候选照旧在租户内全部取、全部记，范围只消歧。
+- **复核记录「决定六与 UC-NO-002「权限、隔离与审计」」。** 「日后」一段所待的那篇记录就是 ADR-0212：NO 给可验证交付范围建了模，PS CONTEXT「按外部标识核对包裹身份」与 CONTEXT-MAP 同句已先改；范围外的唯一命中怎么答由它定——只经客户包裹件号的唯一命中缺范围时答待识别、不记冲突。代价「其二」余下的各格（对方从未报过这个号、对方委托已被拒绝或撤回）由此收住。「留给 PS owner 与 NO owner」那一问——没有可验证交付范围时，客户账户给的号的唯一命中算不算证据充分——答：不算。同段说授权交付关系属租户取值，ADR-0212 把它定为 `party-commercial` 参与方关系的一种。

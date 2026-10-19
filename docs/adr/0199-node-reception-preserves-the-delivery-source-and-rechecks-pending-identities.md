@@ -1,6 +1,6 @@
 # ADR-0199：节点收寄保全交付来源——待识别实物按存下的号重核，同一作业实物在同一节点不另起控制起点，身份核对读不动在前提齐备后翻成待识别加未核对
 
-Status: Accepted（2026-10-19。用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」；该会话代 NO owner 裁定，裁定原文落在票 [no-reception-source/01](../../.scratch/no-reception-source/issues/01-node-reception-preserves-the-delivery-source.md)「裁定（2026-10-18，会话 idp-parcel-9b 代决）」一节，本记录照它写成，补上各期难逆转的形状。成文由该会话起的作者子代理完成。裁决能力边界：读过 NO `CONTEXT.md`、UC-NO-002、CONTEXT-MAP 与 GLOSSARY 的相关条目、ADR-0186、ADR-0196 及其复核记录、票 operator-channel/29、43、45 与 no-reception-identity/01、03；代码读过收寄编排 `ReceiveDeliveredUnitHandler`、ports 的收寄记录与收寄库端口、收寄库 PG 适配器、`ParcelContainmentView`、载荷规范化 `CanonicalizeDeliveryPayload`、方向依据的 `JudgeIdentityBasis`、复核目录读端口与 HTTP 收寄答复。PS 外部标识关联册只读过读面 `FindParcelsByExternalIdentifier` 与写入函数 `insertExternalIdentifierRelations`，它的调用方（委托仓储、面单交易仓储）的事务与 Outbox 装配没有逐行读。）部分停用：几句由 [ADR-0210](./0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md) 停用，随票 no-reception-identity/05、06 进 main 各自生效；被停的原句见本记录文末「复核记录（2026-10-19，ADR-0210 部分停用几句」与 adr/README 该行。另有决定三两句由 [ADR-0211](./0211-an-ambiguity-only-identity-conflict-releases-by-recheck-once-the-declaration-is-gone.md) 停用，只限冲突来由为只因歧义信号的身份冲突，随票 no-reception-identity/07 进 main 生效；原句见本记录文末「复核记录（2026-10-19，ADR-0211 部分停用两句」与 adr/README 该行。
+Status: Accepted（2026-10-19。用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」；该会话代 NO owner 裁定，裁定原文落在票 [no-reception-source/01](../../.scratch/no-reception-source/issues/01-node-reception-preserves-the-delivery-source.md)「裁定（2026-10-18，会话 idp-parcel-9b 代决）」一节，本记录照它写成，补上各期难逆转的形状。成文由该会话起的作者子代理完成。裁决能力边界：读过 NO `CONTEXT.md`、UC-NO-002、CONTEXT-MAP 与 GLOSSARY 的相关条目、ADR-0186、ADR-0196 及其复核记录、票 operator-channel/29、43、45 与 no-reception-identity/01、03；代码读过收寄编排 `ReceiveDeliveredUnitHandler`、ports 的收寄记录与收寄库端口、收寄库 PG 适配器、`ParcelContainmentView`、载荷规范化 `CanonicalizeDeliveryPayload`、方向依据的 `JudgeIdentityBasis`、复核目录读端口与 HTTP 收寄答复。PS 外部标识关联册只读过读面 `FindParcelsByExternalIdentifier` 与写入函数 `insertExternalIdentifierRelations`，它的调用方（委托仓储、面单交易仓储）的事务与 Outbox 装配没有逐行读。）部分停用：几句由 [ADR-0210](./0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md) 停用，随票 no-reception-identity/05、06 进 main 各自生效；被停的原句见本记录文末「复核记录（2026-10-19，ADR-0210 部分停用几句」与 adr/README 该行。另有决定三两句由 [ADR-0211](./0211-an-ambiguity-only-identity-conflict-releases-by-recheck-once-the-declaration-is-gone.md) 停用，只限冲突来由为只因歧义信号的身份冲突，随票 no-reception-identity/07 进 main 生效；原句见本记录文末「复核记录（2026-10-19，ADR-0211 部分停用两句」与 adr/README 该行。另有决定一、决定三各有句子由 [ADR-0212](./0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md) 停用，随票 ps-external-mark-relations/11、12 进 main 各自生效；原句见本记录「复核记录（2026-10-19，ADR-0212 部分停用几句」与 adr/README 该行。
 
 Date: 2026-10-19
 
@@ -138,7 +138,16 @@ Date: 2026-10-19
 
 决定三其余分格、来源文档缺席的旧行不重核、门铃不是身份答案，都不变。
 
+## 复核记录（2026-10-19，ADR-0212 部分停用几句；决定原文不动）
+
+出处：票 [ps-external-mark-relations/07](../../.scratch/ps-external-mark-relations/issues/07-verifiable-delivery-scope-for-customer-numbers.md) 的方向裁定与 [ADR-0212](./0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md)，授权同 Status 行。
+
+1. **决定一**「内容：作业实物、外部标识观察、接收观察、证据、拒收原因、交付方、节点、发生时间」与「证据、拒收原因、交付方只进来源文档、不进指纹」两句的列举停用：两处各多一格交付范围依据引用（送站预报或送站交接单的种类与标识，可以没有），自票 ps-external-mark-relations/11 进 main 起生效。来源文档自带形状版本、随之升一版；内容指纹口径不变，同一来源只在这一格上不同的重投照旧答已有结果；既有行不回填，读作没有依据。
+2. **决定三**「触发只有三处」里「只有三处」：ADR-0211 已停用一次（多 PS 声明撤除门铃），本记录再多一处「交付范围成立」的自投门铃——送站交接单最后一个绑定确认、或作业实物归入一张范围已成立的交接单时，同一笔事务给本上下文自投，NO 用同一个 inbox 消费者接，自票 ps-external-mark-relations/12 进 main 起生效。「不做后台扫表」照旧。
+3. 决定三的重核对象（经 ADR-0211 放宽到来由为只因歧义信号的冲突）不再改：它已含 ADR-0212 决定五的范围未证。重核走的「与收寄步骤 4 同一份身份判断」随之带上可验证交付范围的重算（ADR-0212 决定六），预报的有效时窗按原收寄的业务时间判。交付范围成立门铃要重核的，也正是这一组重核对象。
+
 ## Links
 
 - 部分停用于 [ADR-0210](./0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md)。
 - 部分停用于 [ADR-0211](./0211-an-ambiguity-only-identity-conflict-releases-by-recheck-once-the-declaration-is-gone.md)（决定三两句，只限来由为只因歧义信号的冲突）。
+- 部分停用于 [ADR-0212](./0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md)（决定一两句的列举、决定三「只有三处」）。
