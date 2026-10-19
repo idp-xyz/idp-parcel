@@ -8,6 +8,7 @@ import (
 
 	"go.idp.xyz/idp-bento-go/eventing"
 
+	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 )
@@ -253,13 +254,14 @@ func consolidationRowFrom(
 }
 
 // consolidationUnitCarriable 核单元号进不进得了封装快照意图信封。单元号原样做信封的 Subject，又连同租户号做分区键
-// `租户/单元`（NO 的 OutboxSealedSnapshotHandoff 与 sealedSnapshotPartitionKey）；任一越过框架上限或带控制字符，信封就被
+// `租户/单元`（NO 的 OutboxSealedSnapshotHandoff 与 SealedSnapshotPartitionKey）；任一越过框架上限或带控制字符，信封就被
 // 确定性拒收。编排把它吞成续办、封装照常提交，报告让内勤重跑——重跑多少次都撞同一道拒收，理由同收寄口的
 // intakeSourceIDCarriable。上限取两者里紧的那个：分区键前面多了租户号，今天总是它先撑满，只判 Subject 会放过一截交不出的号。
 //
 // 六种动作都判，不只封装行：单元号是同一个单元在六口上的同一个身份，开启得了而封装交不出的单元，只会在封装那一行才卡住。
 func consolidationUnitCarriable(tenant domain.TenantID, unitRef string) error {
-	limit := min(eventing.MaxSubjectLength, eventing.MaxPartitionKeyLength-len(tenant.String())-len("/"))
+	// 分区键的拼法取 NO 适配器那一处：单元号之外的部分就是拿空单元号拼出来的那一截。
+	limit := min(eventing.MaxSubjectLength, eventing.MaxPartitionKeyLength-len(nopostgres.SealedSnapshotPartitionKey(tenant.String(), "")))
 	if len(unitRef) > limit {
 		return fmt.Errorf("%s 太长：%d 字节，租户 %s 下封装快照意图最多带 %d 字节——请缩短单元号",
 			columnUnitRef, len(unitRef), tenant, limit)

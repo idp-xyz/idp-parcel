@@ -59,12 +59,13 @@ func sealedSnapshotEventID(tenant, unit, seal string) string {
 		tenant, unit, seal))
 }
 
-// sealedSnapshotPartitionKey 取（租户+单元），不取封签。
+// SealedSnapshotPartitionKey 取（租户+单元），不取封签。导出给前线导入的集运模板：它在译装时按这一串核单元号进不进得了
+// 信封（框架的分区键上限），拼法只在这里定一处。
 //
 // ID 管幂等、分区键管顺序，两者不是一回事。Unseal 后再 Seal 是同一单元的又一份快照，
 // 封签进分区键每份就自成一区，后一份可能先于前一份送达，下游读到的成员清单从此没有
 // 先后可言。
-func sealedSnapshotPartitionKey(tenant, unit string) string {
+func SealedSnapshotPartitionKey(tenant, unit string) string {
 	return tenant + "/" + unit
 }
 
@@ -99,7 +100,7 @@ func (handoff *OutboxSealedSnapshotHandoff) HandOffSnapshot(
 		Version:      1,
 		Scope:        intent.TenantID.String(),
 		Subject:      intent.Unit.String(),
-		PartitionKey: sealedSnapshotPartitionKey(intent.TenantID.String(), intent.Unit.String()),
+		PartitionKey: SealedSnapshotPartitionKey(intent.TenantID.String(), intent.Unit.String()),
 		OccurredAt:   intent.Snapshot.SealedAt().UTC(),
 		RecordedAt:   now,
 		ContentType:  eventing.JSONContentType,
