@@ -6,7 +6,7 @@
 
 | 上下文 | 生产 | 测试 | 应用编排 | postgres 适配器 | 其中 Outbox 投递 | http 适配器 |
 |---|---|---|---|---|---|---|
-| accessidentity | 34 | 31 | 0 | 6 | 0 | 2 |
+| accessidentity | 34 | 32 | 0 | 6 | 0 | 2 |
 | architecture（非业务） | 0 | 14 | 0 | 0 | 0 | 0 |
 | collectionremittance | 23 | 9 | 4 | 6 | 0 | 3 |
 | customscompliance | 119 | 114 | 22 | 47 | 10 | 16 |
@@ -14,17 +14,17 @@
 | nodeoperations | 78 | 75 | 10 | 22 | 4 | 11 |
 | parcelpricing | 133 | 122 | 17 | 16 | 1 | 23 |
 | parcelshipment | 209 | 201 | 20 | 39 | 10 | 19 |
-| partycommercial | 164 | 175 | 13 | 42 | 1 | 38 |
+| partycommercial | 165 | 177 | 13 | 42 | 1 | 38 |
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 208 | 150 | 34 | 63 | 12 | 9 |
-| transportfulfillment | 177 | 177 | 32 | 38 | 12 | 34 |
-| visibilityexception | 103 | 100 | 11 | 30 | 8 | 11 |
-| **合计** | 1373 | 1284 | 177 | 329 | 61 | 177 |
+| transportfulfillment | 197 | 195 | 33 | 40 | 13 | 39 |
+| visibilityexception | 108 | 104 | 12 | 31 | 8 | 11 |
+| **合计** | 1399 | 1309 | 179 | 332 | 62 | 182 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 94、测试 188。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 97、测试 193。
 
-## 跨上下文消费缝：47 组，131 个生产文件
+## 跨上下文消费缝：47 组，135 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -63,10 +63,10 @@
 | settlementaccounting | parcelshipment | 2 |
 | settlementaccounting | partycommercial | 5 |
 | settlementaccounting | transportfulfillment | 1 |
-| transportfulfillment | accessidentity | 4 |
+| transportfulfillment | accessidentity | 5 |
 | transportfulfillment | customscompliance | 1 |
-| transportfulfillment | networkrouting | 1 |
-| transportfulfillment | parcelshipment | 1 |
+| transportfulfillment | networkrouting | 2 |
+| transportfulfillment | parcelshipment | 2 |
 | transportfulfillment | partycommercial | 3 |
 | visibilityexception | accessidentity | 2 |
 | visibilityexception | customscompliance | 3 |
@@ -74,26 +74,26 @@
 | visibilityexception | nodeoperations | 1 |
 | visibilityexception | parcelshipment | 4 |
 | visibilityexception | partycommercial | 1 |
-| visibilityexception | transportfulfillment | 5 |
+| visibilityexception | transportfulfillment | 6 |
 
-## 迁移：12 个模块共 245 份 SQL
+## 迁移：12 个模块共 253 份 SQL
 
 | 模块 | 份数 |
 |---|---|
-| access_identity | 11 |
+| access_identity | 13 |
 | collection_remittance | 1 |
 | customs_compliance | 24 |
 | network_routing | 19 |
 | node_operations | 13 |
 | parcel_pricing | 12 |
 | parcel_shipment | 26 |
-| party_commercial | 38 |
+| party_commercial | 39 |
 | pilot_governance | 8 |
 | settlement_accounting | 39 |
-| transport_fulfillment | 28 |
-| visibility_exception | 26 |
+| transport_fulfillment | 32 |
+| visibility_exception | 27 |
 
-## 接线面：接入面端点 150 个，消费适配器 44 个生产文件，直投路由表 32 条
+## 接线面：接入面端点 154 个，消费适配器 46 个生产文件，直投路由表 33 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -109,9 +109,9 @@
 | partycommercial | 32 |
 | pilotgovernance | 1 |
 | settlementaccounting | 6 |
-| transportfulfillment | 30 |
+| transportfulfillment | 34 |
 | visibilityexception | 15 |
-| **合计** | 150 |
+| **合计** | 154 |
 
 消费适配器按 `internal/<消费方>/adapters/` 下 `inbox`、`adoptconsume`、`finalconsume`、`veconsume` 四类目录的生产文件数。它与上面的「跨上下文消费缝」是两种东西：那一栏数的是消费方为某个提供方写的防腐层，这一栏数的是接进程内直投信封的消费门。
 
@@ -123,8 +123,9 @@
 | parcelpricing | 2 | 0 | 0 | 0 | 2 |
 | parcelshipment | 13 | 1 | 1 | 0 | 15 |
 | settlementaccounting | 6 | 0 | 0 | 0 | 6 |
-| visibilityexception | 13 | 0 | 0 | 2 | 15 |
-| **合计** | 40 | 1 | 1 | 2 | 44 |
+| transportfulfillment | 1 | 0 | 0 | 0 | 1 |
+| visibilityexception | 14 | 0 | 0 | 2 | 16 |
+| **合计** | 42 | 1 | 1 | 2 | 46 |
 
 直投路由表按 `cmd/` 生产文件里 `map[eventing.EventType]dispatch.Consumer` 字面量的条目数，按条目键（事件类型常量）所属的消费门包归属。路由表只随消费者一起长（ADR-0049 第三条），本表只报它此刻多长。
 
@@ -136,10 +137,10 @@
 | parcelpricing | 2 |
 | parcelshipment | 12 |
 | settlementaccounting | 3 |
-| visibilityexception | 9 |
-| **合计** | 32 |
+| visibilityexception | 10 |
+| **合计** | 33 |
 
-## 端口：声明 514 个；基线口径缺 32，精确口径缺 2
+## 端口：声明 521 个；基线口径缺 32，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
