@@ -1,7 +1,7 @@
 # 45 HTTP 收寄路上，意图入队失败被吞成续办引用后照常提交：设备拿到 201 就出队，没人会重发
 
 Category: bug
-Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（operator-channel/29 已进 main），分支 `claude-no4503`（与 no-reception-identity/03 同一分支，先 45 后 03）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 2 研判中发现；用户授权代决）
+Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（operator-channel/29 已进 main），分支 `claude-no4503`（与 no-reception-identity/03 同一分支，先 45 后 03）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 2 研判中发现；用户授权代决）
 Blocked by: operator-channel/29 进 main（同改 cmd/parcel-api/assemble_reception.go 与收寄编排）
 父票：[26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)（票 26 评审遗留的后续）
 出处：
@@ -53,6 +53,48 @@ Blocked by: operator-channel/29 进 main（同改 cmd/parcel-api/assemble_recept
 
 ## 完成判据
 
-- [ ] HTTP 路：意图入队失败时整笔回滚、答 500；重投后，收寄与意图在同一笔落地。前线导入路照旧。两条路各有回归用例。
-- [ ] go build ./...、go vet ./... 退 0，gofmt -l . 无输出；带 DSN 跑 internal/nodeoperations/...、cmd/parcel-api，全绿。
-- [ ] 走 Go 那条路（docs/agents/parallel-sessions.md）。
+- [x] HTTP 路：意图入队失败时整笔回滚、答 500；重投后，收寄与意图在同一笔落地。前线导入路照旧。两条路各有回归用例。
+- [x] go build ./...、go vet ./... 退 0，gofmt -l . 无输出；带 DSN 跑 internal/nodeoperations/...、cmd/parcel-api，全绿。
+- [ ] 走 Go 那条路（docs/agents/parallel-sessions.md）。作者半边（分支、作者自验）已做，评审与推送方全量未到。
+
+## 完成记录（2026-10-19，会话 idp-parcel-9b 的作者子代理，分支 claude-no4503）
+
+**落点**
+
+- 编排 `internal/nodeoperations/application/receive_delivered_unit.go`：`handOff` 交回续办引用与那次入队的错；`ReceiveDeliveredUnitResult` 加读口 `IntakeHandoffError()`，与 `IntakeHandoffReference()` 同在场同缺席。吞错写法与续办引用不变，前线导入照旧只读引用（裁定三）。
+- 装配 `cmd/parcel-api/assemble_reception.go`：`transactionalReception` 见 `IntakeHandoffError()` 非空即交回 `parcel-api: reception intent not handed off: %w`，整笔回滚，端点照既有映射答 500 `NO_ANSWER_FORMED`。头注改写：这条路为什么不接受续办，确定性拒收为什么不另成一格。`buildReceptionOrchestration` 拆出 `buildReceptionDeps` 与 `receptionWithin`，行为不变，为的是真库用例只换一只依赖、其余照生产装配。
+- 收寄口 `internal/nodeoperations/adapters/http/reception_payload.go` 的 `receptionCommand`：来源标识超出 `eventing.MaxSubjectLength` 字节或带控制字符即包 `ErrMalformedRequest`，答 400（判断项二）。
+
+**作者自定的判断项**
+
+1. **错误形状。** 编排侧在结果上加读口，不另加返回值：`Handle` 签名、`nodeopshttp.ReceptionHandler` 接口与前线导入的调用点都不用动，形状同 sa-cc/29 的 `HandoffError()`。装配侧不另立哨兵，只用 `%w` 包住交接错误。端点上它与其他「没形成答案」同答 500 `NO_ANSWER_FORMED`，没有读者要按它分流；包住则保留了真实原因，`errors.Is` 认得出注入的那只错，真库用例钉了这一点。
+2. **信封被框架确定性拒收，不另成一格；随设备而变的那一维前移到 Intake 答 4xx。** 先量了：NO 收寄意图的信封 ID 已是指纹形（`outboxintent.FingerprintEventID`，定长），不会因来源标识过长而超限，所以票面「信封 ID 超限」那句条件在 ID 上不成立。但 `OutboxNodeIntakeHandoff` 的 `Subject` 原样取来源标识，超过 512 字节或带控制字符，同样被 `Envelope.Validate` 确定性拒收。这一格本票之前被吞成续办、静默答 201；本票之后若不拦，就成了设备对着 500 永远重发。所以照裁定三末条的依据（ADR-0023：来源标识由设备签发）在 Intake 答 400。信封上其余各维：Scope 取认证结果的租户，ID 与分区键定长，载荷只有两个键。剩下能让信封被拒的只有服务端缺陷：答 500，设备留着这次接收等修好；答 4xx 则会让设备把一次如实记下的接收出队交人，错却不在它。
+3. **Intake 上限直接取 `eventing.MaxSubjectLength`，不在本地另抄一个数。** 框架改上限时它跟着走。收寄口知道「意图交付把来源标识放进 Subject」，这件事在两处头注里互相点名；`TestTheWiredReceptionHandsOffTheIntentForTheLongestSourceIDTheIntakeAccepts` 守两边是同一个上限，意图交付若改了 Subject 的取法，这一格先变 500。
+
+**各格对应用例**
+
+| 格 | 用例 |
+|---|---|
+| HTTP 路入队 Go 层失败：答 500 `NO_ANSWER_FORMED`、不带 outcome，零行零封；编排交回的错包着入队的错；恢复后同一来源重投答 201、带关联，一行一封 | `cmd/parcel-api/reception_intent_handoff_test.go::TestTheWiredReceptionRollsBackWhenItsIntentIsNotHandedOff` |
+| 前线导入路照旧：同样失败时本行落地、INTAKE_FORMED、退出码不变、明细带续办引用；收寄已提交、零封；恢复后重跑答重放、明细不再提、一封 | `cmd/parcel-frontline-import/intake_handoff_continuation_test.go::TestFrontlineImportKeepsTheContinuationWhenTheIntentIsNotHandedOff` |
+| Intake 上限：恰 512 字节照收、逐字进命令；513 字节、171 个三字节汉字、带 Tab 都答坏报文 | `internal/nodeoperations/adapters/http/work_fact_intake_test.go::TestWorkFactReceptionIntakeBoundsTheSourceIDByTheIntentEnvelope` |
+| 上限上的来源标识在生产装配上照常交出意图 | `cmd/parcel-api/reception_intent_handoff_test.go::TestTheWiredReceptionHandsOffTheIntentForTheLongestSourceIDTheIntakeAccepts` |
+| AT-NO-027 既有用例语义不变 | `TestReplayConflictAndFailedIntentStayDisciplined` 只加两条断言：首投时 `IntakeHandoffError` 包着下游的错；重发成功后续办两格都空 |
+
+**先红后绿**
+
+- 红：`/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/no45-red.log`。红跑之前先拆出 `buildReceptionDeps` / `receptionWithin`（无行为改动），用例才编得过。现象原话：HTTP 用例「意图没交出去 201 {"outcome":"INTAKE_FORMED",…,"serviceResultCheck":"CHECKED"}（收寄 1 行、意图 0 封）, want 500 NO_ANSWER_FORMED 且不带 outcome」，即票面现象：收寄已提交、意图没入队、设备拿到 201。Intake 用例三个子格「err = <nil>, want ErrMalformedRequest」。前线导入用例与上限真库用例修前即绿，是守护格。
+- 绿：`/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/no45-green.log`。
+
+**门**（钉代码笔 `886ceff3`）：`gofmt -l .` 无输出；`go build ./...`、`go vet ./...` 退 0；带 DSN `go test -p 1 -count=1 ./internal/nodeoperations/... ./cmd/parcel-api/... ./cmd/parcel-frontline-import/... ./internal/architecture/...` 全 ok。
+
+**证据层级**：`S`（隔离合成夹具，`SYN-` 值）。
+
+**AT 落点**：不变。新用例不点 AT 号——裁定一写明 AT-NO-027 的投递失败指提交之后由 Outbox 中继重投的那一步，入队失败不是它。`.scratch/at-coverage-inventory.md` 未改。
+
+**越出地盘**：`internal/nodeoperations/adapters/http/reception_payload.go` 与同目录 `work_fact_intake_test.go`（Intake 上限，判断项二）；`cmd/parcel-frontline-import/intake_handoff_continuation_test.go`（新文件，判据要求的导入路回归用例）。
+
+**没做**
+
+- 前线导入的来源标识（`FTI/…/批次/行事实号`）同样原样进 Subject：超过 512 字节时信封被确定性拒收，报告却写「重跑同一文件会重发同一份」，而重跑仍会失败。票面「前线导入路照旧」，没动，记此一句。
+- 「走 Go 那条路」的评审与推送方全量未到。
