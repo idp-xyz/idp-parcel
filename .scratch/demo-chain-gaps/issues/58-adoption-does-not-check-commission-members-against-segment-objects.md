@@ -1,18 +1,23 @@
-# 58 段采用委托不核委托成员与段上参与对象：干线委托也挂得到一个只装末端包裹的段
+# 58 委托成员与段上参与对象不比：采用不核，取消也只有整份、不往下游传
 
 Category: enhancement
-Status: needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [25](./25-segment-adopts-transport-commission-and-cancellation-faces.md) 完成记录与 [ADR-0204](../../../docs/adr/0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md) 越权风险点 4；与 [49](./49-booking-does-not-check-schedule-against-commission-scope.md)（订舱不核委托的运输范围）同族。
-Blocked by: 用户决定（TF owner 复核 ADR-0204 风险点 4：委托成员与段对象要不要相交、在哪一层比）
+Status: needs-triage——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [25](./25-segment-adopts-transport-commission-and-cancellation-faces.md) 完成记录与 [ADR-0204](../../../docs/adr/0204-a-fulfillment-segment-adopts-a-transport-commission-by-declaration-and-a-started-commission-cannot-be-cancelled.md) 越权风险点 4、9（风险点 9 由票 25 隔离评审补入）；与 [49](./49-booking-does-not-check-schedule-against-commission-scope.md)（订舱不核委托的运输范围）同族，订舱一级「哪些已消耗」与 [37](./37-confirmed-booking-capacity-relationship.md) 相邻。
+Blocked by: 用户决定（TF owner 复核 ADR-0204 风险点 4、9：委托成员与段对象要不要相交、在哪一层比；委托取消要不要按成员部分成立、要不要往下游传）
 
 ## 现象
 
 采用只核段在册、委托在册且未取消、服务方等于委托的服务提供方、段的首个参与不早于委托提交。委托列的对象成员与段上参与的对象不比：两者可能在不同层级（委托列包裹，段上是集运单元；或反过来），本上下文没有成员展开的读法可用。于是一份只列了干线包裹的委托，也能被一个只装着别的包裹的段采用，采用之后那份委托就标了开始、取消不了。
+
+- 取消委托是整份的：委托一经任一段采用就整份拒，没有「只停尚未随段开始的成员」的部分取消；`AT-TF-092`「取消只处理尚可停止范围」只在订舱这一级做到。要部分取消，先得知道哪些成员已随哪一段开始，正是上面这条没比的关系。
+- 取消委托成立时不向尚未消耗的订舱、容量预占发取消或释放请求：TF CONTEXT「上游运输意图取消只对尚未消耗的下游范围发出取消或释放请求」的下游那一步，今天要运营人员经取消订舱口、释放口逐个登记。
 
 ## 要裁的
 
 - 判据：委托成员与段参与对象至少相交一件，还是段上对象都要落在委托成员里，还是只要求声明方断言。
 - 层级：集运单元与成员包裹之间按哪一份成员快照展开（node-operations 的单元成员，还是委托提交时的声明）；展开读不动时答什么。
 - 段后来加入的对象不在委托成员里时，连线是否受影响。
+- 委托的部分取消：按成员停尚未随段开始的那部分，还是只要有一段开始就整份拒（现状）；部分取消之后委托的生命周期怎么读。
+- 取消委托往下游传：同笔对尚未消耗的订舱、预占发取消或释放请求（形状是本上下文内的编排还是一封信封），「尚未消耗」按订舱的申请时刻判（ADR-0204 决定三）还是等票 37 的逐订舱关系。
 
 ## 三类
 
