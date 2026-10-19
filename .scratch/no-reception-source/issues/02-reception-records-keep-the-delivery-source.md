@@ -1,7 +1,7 @@
 # 02 第一期：收寄记录保全本次交付的来源文档，三种接收观察都存；每版判断有版本、追加版指名前版，已有结果带回原判断种类与当前有效版本
 
 Category: enhancement
-Status: in-progress——2026-10-19 评审 0 阻断（阻断一条已修，会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-nrs02`（与 ps-external-mark-relations/05 并行，同碰收寄编排）。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）
+Status: resolved——2026-10-19 进 main（no-reception-source/02 与 ps-external-mark-relations/05 同批，代码验证钉 `e61b4171`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（阻断一条已修，会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-nrs02`（与 ps-external-mark-relations/05 并行，同碰收寄编排）。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）
 Blocked by: 01 进 main（ADR-0199、NO CONTEXT 与 UC-NO-002 先落）。同改收寄编排与 PG 适配器的 operator-channel/45、no-reception-identity/03 已于 main `91ea0883` 进 main，以它们为底。
 父票：[01](./01-node-reception-preserves-the-delivery-source.md)
 出处：票 01 裁定分期之「一、来源保全」与「已有结果的答复带回原判断种类与当前有效版本」那一问；ADR-0199 决定一、决定二。
@@ -52,7 +52,7 @@ Blocked by: 01 进 main（ADR-0199、NO CONTEXT 与 UC-NO-002 先落）。同改
 - [x] 指纹不变：NOC-1 与无版本两版既有摘要的重放与冲突用例照旧绿。
 - [x] 适配器用例：（租户，前版）重复写入被库面拦下。
 - [x] Go 门禁：`go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出；带 DSN 跑 `internal/nodeoperations/...`、`cmd/parcel-api`、`cmd/parcel-frontline-import`、`internal/architecture/...`、`migrations/...` 全绿；机制清点在本笔的干净检出上重生成。
-- [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
+- [x] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
 
 ## 完成记录（2026-10-19，会话 idp-parcel-9b 的作者子代理，分支 `claude-nrs02`，基于 main `423b517a`）
 
@@ -194,3 +194,8 @@ Blocked by: 01 进 main（ADR-0199、NO CONTEXT 与 UC-NO-002 先落）。同改
 - **Spec**：ADR-0199 决定一、二落到。来源文档 NRS-1 与 NOC-1 指纹分开，指纹两个函数逐字不动；判断版本与收寄结果版本同一签发者，形成与待识别行以 CHECK 守「判断版本即收寄版本」；前版（租户，前版）部分唯一索引守「一版至多一个后继」，撞上译成 `ErrPredecessorAlreadySucceeded`；`Save` 的 `ON CONFLICT` 收窄到主键，前版撞键不再被吞成已有记录。ADR-0196 冲突版指名先到那件此刻的当前版本，在（租户、包裹）咨询锁之后同一事务里读，并发可见；冲突版带后到那次送站的来源文档，照 ADR-0199 决定一原文。已有结果带 `recordedOutcome` 与 `currentVersion` 两个信息格，不进 outcome 词表。
 - **Standards**：「新行必带来源与版本」由编排守、不立 NOT VALID CHECK，理由（多个包直写夹具）写在迁移 0007 头注，与 0006 同一取舍。
 - **已知缺口（照 ADR-0199「不回填」，不另立票）**：第一期之前落下的冲突版没有前版、不在链上，先到那件重放时 `currentVersion` 是原判断；第三件再来时新冲突版也从原判断接，原判断实际有两个后继、只一个上链。方向依据读全部行，不受影响。第一期之前的拒收与仅扫描行没有判断版本，票 04 续办时要处理（作者已写进「发现」）。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- no-reception-source/02（分支 `claude-nrs02`，含评审阻断修补）与 ps-external-mark-relations/05（分支 `claude-psxm05`）并行开发、同碰收寄编排；先把 02 rebase 到远端 main（撞机制清点，重生成），05 叠在它后面（文本合并无冲突），机制清点在叠好的树上再重生成一笔（迁移 226 份），一并快进推送。
+- 推送方全量一次：钉 `e61b4171` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 144 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。验证之后远端只前进了纯文档（另一会话的 ADR-0139–0142 接受与首方 API 立票），再 rebase 一次，非 `.md` 文件与验证钉逐字相同，未重跑。

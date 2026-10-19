@@ -1,7 +1,7 @@
 # 05 号码只在一份已接受委托里在册时，别人贴着同号的实物送站被唯一关联到那一件
 
 Category: bug
-Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（ADR 用号 0195），分支 `claude-psxm05`。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 0 研判）
+Status: resolved——2026-10-19 进 main（no-reception-source/02 与 ps-external-mark-relations/05 同批，代码验证钉 `e61b4171`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（ADR 用号 0195），分支 `claude-psxm05`。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 0 研判）
 Blocked by: 无
 父票：[01](./01-external-mark-relations-have-no-model-in-parcel-shipment.md)；[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C2 第二张草案
@@ -84,7 +84,7 @@ Blocked by: 无
 - [x] 跨客户与同客户两格按裁定作答，各有经生产装配的真库回归用例；票 04 的刻画用例按裁定翻转。
 - [x] 「两份已接受委托撞号 → 身份冲突」的用例照旧绿。
 - [x] Go 门禁：`go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出；带 DSN 跑受影响包与 `internal/architecture` 全绿；机制清点在本笔的干净检出上重生成。
-- [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
+- [x] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
 
 ## 完成记录（2026-10-19，作者子代理，分支 `claude-psxm05`，基于 main `423b517a`）
 
@@ -176,3 +176,8 @@ ADR-0199 决定三的重核经同一个 `Unique` 继承这份判断。信号消�
 - **Standards**：状态值由领域常量传参，SQL 只比较；迁移 0026 的部分索引谓词写死 `state = 1`，与传参同形，编号若改只会失去索引、不会判错。
 - **非阻断（不另立票）**：GLOSSARY 不加「歧义信号」——术语只在 PS CONTEXT 定义一处，NO 侧经端口值读，不跨上下文另起口径。
 - **另立票**：歧义信号落下的身份冲突要靠「身份冲突的处置与解除」解开，ADR-0196、ADR-0199、ADR-0195 都点名它尚无票 → no-reception-identity/04（needs-triage）。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- no-reception-source/02（分支 `claude-nrs02`，含评审阻断修补）与 ps-external-mark-relations/05（分支 `claude-psxm05`）并行开发、同碰收寄编排；先把 02 rebase 到远端 main（撞机制清点，重生成），05 叠在它后面（文本合并无冲突），机制清点在叠好的树上再重生成一笔（迁移 226 份），一并快进推送。
+- 推送方全量一次：钉 `e61b4171` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 144 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。验证之后远端只前进了纯文档（另一会话的 ADR-0139–0142 接受与首方 API 立票），再 rebase 一次，非 `.md` 文件与验证钉逐字相同，未重跑。
