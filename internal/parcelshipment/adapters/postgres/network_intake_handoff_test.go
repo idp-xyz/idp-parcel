@@ -2,6 +2,7 @@ package postgres_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -12,6 +13,7 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	adapter "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
@@ -99,6 +101,60 @@ func TestNetworkIntakeIntentCommitsAtomicallyWithTheAdoption(t *testing.T) {
 	}
 	if got := networkIntakeIntentType(t, fixture.pool, eventID); got != networkIntakeEventType {
 		t.Fatalf("事件类型 = %q，不是本口的类型", got)
+	}
+}
+
+// Covers: 载荷带上意图里的地理解析投影，形状与接受决定信封同一份（路由侧两条消费链共用一个译码器）；意图没携带时
+// 载荷里没有这一格，而不是一份全空的投影。
+func TestNetworkIntakePayloadCarriesTheGeoProjectionOnlyWhenCarried(t *testing.T) {
+	fixture := newNetworkIntakeHandoffFixture(t)
+	ctx := t.Context()
+
+	carried := networkIntakeIntent(t)
+	carried.Geo = domain.NewCarriedGeoProjection(
+		domain.NewCarriedGeoSide("CN", true, "200000", true),
+		domain.NewCarriedGeoSide("SG", true, "", false),
+	)
+	fixture.within(t, ctx, func(txCtx context.Context) error {
+		return fixture.handoff.HandOffNetworkIntake(txCtx, carried)
+	})
+	var body struct {
+		Geo *struct {
+			Carried                bool   `json:"carried"`
+			SenderCountry          string `json:"senderCountry"`
+			SenderPostal           string `json:"senderPostal"`
+			DeliveryCountry        string `json:"deliveryCountry"`
+			DeliveryPostalPresent  bool   `json:"deliveryPostalPresent"`
+			DeliveryCountryPresent bool   `json:"deliveryCountryPresent"`
+		} `json:"geo"`
+	}
+	readNetworkIntakePayload(t, fixture.pool, networkIntakeEventID("tenant-a", "parcel-1", "NODE_INTAKE", "SRV-1"), &body)
+	if body.Geo == nil || !body.Geo.Carried || body.Geo.SenderCountry != "CN" || body.Geo.SenderPostal != "200000" ||
+		body.Geo.DeliveryCountry != "SG" || !body.Geo.DeliveryCountryPresent || body.Geo.DeliveryPostalPresent {
+		t.Fatalf("载荷地理维 = %+v", body.Geo)
+	}
+
+	bare := ports.NetworkIntakeHandoffIntent{Record: adoptedRecord(t, "tenant-a", "parcel-2", "SRV-2", "digest-intake-2")}
+	fixture.within(t, ctx, func(txCtx context.Context) error {
+		return fixture.handoff.HandOffNetworkIntake(txCtx, bare)
+	})
+	body.Geo = nil
+	readNetworkIntakePayload(t, fixture.pool, networkIntakeEventID("tenant-a", "parcel-2", "NODE_INTAKE", "SRV-2"), &body)
+	if body.Geo != nil {
+		t.Fatalf("没携带的意图在载荷里写了地理维：%+v", body.Geo)
+	}
+}
+
+func readNetworkIntakePayload(t *testing.T, pool *pgxpool.Pool, eventID string, target any) {
+	t.Helper()
+	var payload []byte
+	if err := pool.QueryRow(t.Context(),
+		`SELECT payload FROM `+migrate.SchemaBento+`.outbox WHERE event_id = $1`, eventID,
+	).Scan(&payload); err != nil {
+		t.Fatalf("读载荷：%v", err)
+	}
+	if err := json.Unmarshal(payload, target); err != nil {
+		t.Fatalf("解载荷：%v", err)
 	}
 }
 

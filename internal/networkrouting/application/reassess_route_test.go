@@ -162,6 +162,45 @@ func newReassessFixture(t *testing.T) *reassessFixture {
 	return fixture
 }
 
+// Covers: ADR-0075 决定一——复核与初始路由一样按随请求携带的地理投影取证据：触发带来的投影原样交到取数侧，
+// 关务适用性才问得到两端国家。同一触发换了投影不是重放，答触发冲突，理由同初始路由的交接指纹。
+func TestAReassessmentLoadsItsEvidenceWithTheCarriedGeoProjection(t *testing.T) {
+	fixture := newReassessFixture(t)
+	record := currentPlanRecord(t)
+	fixture.routes.records[record.Key] = record
+	fixture.evidence.byParcel["parcel-1"] = evidenceBeforeFreeze(t)
+
+	command := reassessCommand(t, "node-origin")
+	command.Carried = ports.RequestCarriedContent{Geo: domain.NewGeoResolutionProjection(
+		domain.NewGeoResolutionSide("CN", true, "200000", true),
+		domain.NewGeoResolutionSide("SG", true, "018956", true),
+	)}
+	result, err := fixture.handler.Handle(context.Background(), command)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if result.Outcome() != application.ReassessedStillApplicable {
+		t.Fatalf("outcome = %q, want STILL_APPLICABLE", result.Outcome())
+	}
+	if fixture.evidence.carried.Geo.ContentDigest() != command.Carried.Geo.ContentDigest() {
+		t.Fatalf("取证据时的投影 = %q，want 触发带来的 %q",
+			fixture.evidence.carried.Geo.ContentDigest(), command.Carried.Geo.ContentDigest())
+	}
+
+	moved := command
+	moved.Carried = ports.RequestCarriedContent{Geo: domain.NewGeoResolutionProjection(
+		domain.NewGeoResolutionSide("CN", true, "200000", true),
+		domain.NewGeoResolutionSide("MY", true, "50000", true),
+	)}
+	conflict, err := fixture.handler.Handle(context.Background(), moved)
+	if err != nil {
+		t.Fatalf("handle: %v", err)
+	}
+	if conflict.Outcome() != application.ReassessTriggerConflict {
+		t.Fatalf("outcome = %q, want TRIGGER_CONFLICT——同一触发换了投影", conflict.Outcome())
+	}
+}
+
 // Covers: UC-NR-003 结果「原路由仍适用——复核后当前计划仍满足硬约束……不创建语义重复的
 // 新计划」：实际位置在计划上且无失效依据，结论仍适用引用原计划版本。
 func TestAReassessmentKeepsAStillApplicablePlan(t *testing.T) {

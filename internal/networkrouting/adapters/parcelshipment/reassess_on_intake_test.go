@@ -100,11 +100,18 @@ func (double *routeStoreDouble) Save(
 	return 0, errors.New("not part of this seam")
 }
 
-type evidenceDouble struct{ evidence nrports.InitialRouteEvidence }
+// evidenceDouble 记下复核取证据时交进来的携带内容（seen 非空时）。
+type evidenceDouble struct {
+	evidence nrports.InitialRouteEvidence
+	seen     *nrports.RequestCarriedContent
+}
 
 func (double evidenceDouble) LoadInitialRouteEvidence(
-	_ context.Context, _ nrdomain.InitialRouteJudgmentKey, _ nrports.RequestCarriedContent,
+	_ context.Context, _ nrdomain.InitialRouteJudgmentKey, carried nrports.RequestCarriedContent,
 ) (nrports.InitialRouteEvidence, bool, error) {
+	if double.seen != nil {
+		*double.seen = carried
+	}
 	return double.evidence, true, nil
 }
 
@@ -230,10 +237,12 @@ func planOnFile(t *testing.T) nrports.InitialRouteRecord {
 // Covers: UC-PS-003 步骤 8「network-routing 消费有效网络收寄及原物理位置/控制引用，
 // 通过 UC-NR-003 重新校验路由」经适配器端到端——采用记录逐维译成复核触发（位置=实际
 // 收寄地点、来源版本=收寄结果版本、控制=节点收寄格），走完真实复核编排答「仍适用」。
+// 采用信封携带的地理投影原样交到复核取证据那一步（ADR-0075）：不交，关务适用性只能答两端未知。
 func TestAnAdoptedIntakeTriggersARealReassessment(t *testing.T) {
+	var seen nrports.RequestCarriedContent
 	handler := nrapplication.NewReassessRouteHandler(nrapplication.ReassessRouteDeps{
 		Routes:        &routeStoreDouble{records: map[nrdomain.InitialRouteJudgmentKey]nrports.InitialRouteRecord{reassessKey(t): planOnFile(t)}},
-		Evidence:      evidenceDouble{evidence: evidenceWithOpenFreeze(t)},
+		Evidence:      evidenceDouble{evidence: evidenceWithOpenFreeze(t), seen: &seen},
 		Applicability: &applicabilityStoreDouble{byPlan: map[nrdomain.RoutePlanVersionID]nrdomain.PlanApplicability{}},
 		Store:         &reassessStoreDouble{byCorrelation: map[nrdomain.RequestCorrelationID]nrports.ReassessmentRecord{}},
 		Log:           &logDouble{digests: map[nrdomain.RequestCorrelationID]string{}},
@@ -242,9 +251,16 @@ func TestAnAdoptedIntakeTriggersARealReassessment(t *testing.T) {
 	})
 	subject := adapter.NewReassessOnIntakeAdapter(handler, value(t, nrdomain.NewServicePurpose, "NETWORK_SERVICE"))
 
-	result, err := subject.TriggerReassessment(context.Background(), adoptedRecord(t))
+	carried := nrports.RequestCarriedContent{Geo: nrdomain.NewGeoResolutionProjection(
+		nrdomain.NewGeoResolutionSide("CN", true, "200000", true),
+		nrdomain.NewGeoResolutionSide("SG", true, "018956", true),
+	)}
+	result, err := subject.TriggerReassessment(context.Background(), adoptedRecord(t), carried)
 	if err != nil {
 		t.Fatalf("trigger reassessment: %v", err)
+	}
+	if seen.Geo.ContentDigest() != carried.Geo.ContentDigest() {
+		t.Fatalf("复核取证据时携带的投影 = %q，want 采用信封带来的 %q", seen.Geo.ContentDigest(), carried.Geo.ContentDigest())
 	}
 
 	if result.Outcome() != nrapplication.ReassessedStillApplicable {
@@ -272,12 +288,12 @@ func TestRefusalsAndMissingPurposeDoNotTrigger(t *testing.T) {
 	refused := adoptedRecord(t)
 	refused.Adopted = false
 	subject := adapter.NewReassessOnIntakeAdapter(handler, value(t, nrdomain.NewServicePurpose, "NETWORK_SERVICE"))
-	if _, err := subject.TriggerReassessment(context.Background(), refused); !errors.Is(err, adapter.ErrRefusalDoesNotTrigger) {
+	if _, err := subject.TriggerReassessment(context.Background(), refused, nrports.RequestCarriedContent{}); !errors.Is(err, adapter.ErrRefusalDoesNotTrigger) {
 		t.Fatalf("err = %v, want ErrRefusalDoesNotTrigger", err)
 	}
 
 	unconfigured := adapter.NewReassessOnIntakeAdapter(handler, nrdomain.ServicePurpose{})
-	if _, err := unconfigured.TriggerReassessment(context.Background(), adoptedRecord(t)); !errors.Is(err, adapter.ErrUntranslatableAnswer) {
+	if _, err := unconfigured.TriggerReassessment(context.Background(), adoptedRecord(t), nrports.RequestCarriedContent{}); !errors.Is(err, adapter.ErrUntranslatableAnswer) {
 		t.Fatalf("err = %v, want ErrUntranslatableAnswer", err)
 	}
 }

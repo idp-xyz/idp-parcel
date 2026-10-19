@@ -102,8 +102,11 @@ func (reason ReassessUndecidedReason) String() string {
 	}
 }
 
+// ReassessRouteCommand 携带复核触发与随触发带来的内容。Carried 与 CreateInitialRouteCommand 的同名格一个来处、
+// 一种用法：复核取证据时用它，关务适用性才问得到两端国家；空着就只能答两端未知、复核停在看不清（ADR-0075）。
 type ReassessRouteCommand struct {
 	Trigger domain.ReassessmentTriggerSpec
+	Carried ports.RequestCarriedContent
 }
 
 type ReassessRouteResult struct {
@@ -164,7 +167,7 @@ func (handler *ReassessRouteHandler) Handle(
 	}
 	key := trigger.Key()
 
-	digest := triggerDigest(trigger)
+	digest := triggerDigest(trigger, command.Carried.Geo)
 	recorded, found, err := handler.deps.Log.FindDigest(ctx, key.TenantID, trigger.Correlation())
 	if err != nil {
 		return handler.undecided(key, ReassessLogUnavailable), nil
@@ -196,7 +199,7 @@ func (handler *ReassessRouteHandler) Handle(
 		return handler.undecided(key, NoRoutingHistory), nil
 	}
 
-	evidence, configured, err := handler.deps.Evidence.LoadInitialRouteEvidence(ctx, key, ports.RequestCarriedContent{})
+	evidence, configured, err := handler.deps.Evidence.LoadInitialRouteEvidence(ctx, key, command.Carried)
 	if err != nil {
 		return handler.undecided(key, ReassessEvidenceUnavailable), nil
 	}
@@ -857,7 +860,8 @@ func outcomeFor(record ports.ReassessmentRecord) ReassessOutcome {
 }
 
 // triggerDigest 是触发内容的稳定指纹：同关联异指纹即触发冲突。
-func triggerDigest(trigger domain.ReassessmentTrigger) string {
+// triggerDigest 把携带的地理投影算进去，理由同 handoffDigest：同一触发换了地址就不是重放。
+func triggerDigest(trigger domain.ReassessmentTrigger, geo domain.GeoResolutionProjection) string {
 	key := trigger.Key()
 	digest := sha256.Sum256([]byte(strings.Join([]string{
 		key.TenantID.String(),
@@ -867,6 +871,7 @@ func triggerDigest(trigger domain.ReassessmentTrigger) string {
 		trigger.Control().String(),
 		trigger.Location().String(),
 		trigger.SourceVersion().String(),
+		geo.ContentDigest(),
 	}, "\x00")))
 	return hex.EncodeToString(digest[:])
 }

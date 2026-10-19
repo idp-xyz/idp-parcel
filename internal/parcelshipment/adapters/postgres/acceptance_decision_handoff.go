@@ -9,6 +9,7 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/outboxintent"
 )
@@ -48,18 +49,20 @@ var _ ports.AcceptanceDecisionHandoff = (*OutboxAcceptanceDecisionHandoff)(nil)
 // acceptanceDecisionPayload 是意图载荷的传输形状：决定引用与决定后的生命周期状态，
 // 不带校验明细或基线内容（下游按各自门禁重新读取与判断）。
 type acceptanceDecisionPayload struct {
-	TenantID          string                `json:"tenantId"`
-	CustomerAccountID string                `json:"customerAccountId"`
-	Source            string                `json:"source"`
-	SourceRequestKey  string                `json:"sourceRequestKey"`
-	ShipmentRequestID string                `json:"shipmentRequestId"`
-	SubmissionVersion string                `json:"submissionVersion"`
-	DecisionID        string                `json:"decisionId"`
-	State             string                `json:"state"`
-	Geo               *acceptanceGeoPayload `json:"geo,omitempty"`
+	TenantID          string             `json:"tenantId"`
+	CustomerAccountID string             `json:"customerAccountId"`
+	Source            string             `json:"source"`
+	SourceRequestKey  string             `json:"sourceRequestKey"`
+	ShipmentRequestID string             `json:"shipmentRequestId"`
+	SubmissionVersion string             `json:"submissionVersion"`
+	DecisionID        string             `json:"decisionId"`
+	State             string             `json:"state"`
+	Geo               *carriedGeoPayload `json:"geo,omitempty"`
 }
 
-type acceptanceGeoPayload struct {
+// carriedGeoPayload 是信封上的地理解析投影（ADR-0075 决定二）。接受决定与网络收寄采用两口同一形状：路由侧两条消费链
+// 拿它折同一份携带内容，形状分家就会有一条链读丢一格。
+type carriedGeoPayload struct {
 	Carried                bool   `json:"carried"`
 	SenderCountry          string `json:"senderCountry"`
 	SenderCountryPresent   bool   `json:"senderCountryPresent"`
@@ -88,23 +91,7 @@ func (handoff *OutboxAcceptanceDecisionHandoff) HandOffAcceptanceDecision(
 		DecisionID:        intent.DecisionID.String(),
 		State:             intent.State.String(),
 	}
-	if intent.Geo.Carried() {
-		senderCountry, senderCountryPresent := intent.Geo.Sender().Country()
-		senderPostal, senderPostalPresent := intent.Geo.Sender().PostalCode()
-		deliveryCountry, deliveryCountryPresent := intent.Geo.Delivery().Country()
-		deliveryPostal, deliveryPostalPresent := intent.Geo.Delivery().PostalCode()
-		body.Geo = &acceptanceGeoPayload{
-			Carried:                true,
-			SenderCountry:          senderCountry,
-			SenderCountryPresent:   senderCountryPresent,
-			SenderPostal:           senderPostal,
-			SenderPostalPresent:    senderPostalPresent,
-			DeliveryCountry:        deliveryCountry,
-			DeliveryCountryPresent: deliveryCountryPresent,
-			DeliveryPostal:         deliveryPostal,
-			DeliveryPostalPresent:  deliveryPostalPresent,
-		}
-	}
+	body.Geo = carriedGeoPayloadOf(intent.Geo)
 	payload, err := json.Marshal(body)
 	if err != nil {
 		return fmt.Errorf("hand off acceptance decision: %w", err)
@@ -130,4 +117,26 @@ func (handoff *OutboxAcceptanceDecisionHandoff) HandOffAcceptanceDecision(
 		return fmt.Errorf("hand off acceptance decision: %w", err)
 	}
 	return nil
+}
+
+// carriedGeoPayloadOf 没携带即缺席（nil），不写一份全空的投影：缺席与「携带了但各格都没有」在路由侧是两种答法。
+func carriedGeoPayloadOf(geo domain.CarriedGeoProjection) *carriedGeoPayload {
+	if !geo.Carried() {
+		return nil
+	}
+	senderCountry, senderCountryPresent := geo.Sender().Country()
+	senderPostal, senderPostalPresent := geo.Sender().PostalCode()
+	deliveryCountry, deliveryCountryPresent := geo.Delivery().Country()
+	deliveryPostal, deliveryPostalPresent := geo.Delivery().PostalCode()
+	return &carriedGeoPayload{
+		Carried:                true,
+		SenderCountry:          senderCountry,
+		SenderCountryPresent:   senderCountryPresent,
+		SenderPostal:           senderPostal,
+		SenderPostalPresent:    senderPostalPresent,
+		DeliveryCountry:        deliveryCountry,
+		DeliveryCountryPresent: deliveryCountryPresent,
+		DeliveryPostal:         deliveryPostal,
+		DeliveryPostalPresent:  deliveryPostalPresent,
+	}
 }

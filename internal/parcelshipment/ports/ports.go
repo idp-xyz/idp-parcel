@@ -664,8 +664,13 @@ type LabelTransactionJudgmentHandoff interface {
 
 // NetworkIntakeHandoffIntent 把一份已提交的采用结果交给适用下游（network-routing 的
 // 复核触发正是它的消费者）。意图由采用键认领：同一结果无论交几次都是同一份（ADR-0043）。
+//
+// Geo 是采用所对那一版提交的地理解析投影。复核要的关务适用性按寄件、收件两端国家答，地址又只随判断请求
+// 携带、路由侧不回读（ADR-0075 决定一），所以复核触发与接受交接一样把它带上；不带，复核就只能答两端未知。
+// 它不进采用记录，也不进采用键：地址归委托，采用只引用那一版。
 type NetworkIntakeHandoffIntent struct {
 	Record IntakeAdoptionRecord
+	Geo    domain.CarriedGeoProjection
 }
 
 // NetworkIntakeHandoff 把已提交的采用结果写入 Outbox（`OutboxNetworkIntakeHandoff`）。

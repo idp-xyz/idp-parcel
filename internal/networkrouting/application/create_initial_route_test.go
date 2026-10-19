@@ -152,14 +152,17 @@ type routeEvidenceDouble struct {
 	// 不可用，这一格是还没人登记过网络（ADR-0052）。
 	unconfigured map[string]bool
 	loaded       int
+	// carried 记下最近一次取证据时交进来的携带内容。
+	carried ports.RequestCarriedContent
 }
 
 func (double *routeEvidenceDouble) LoadInitialRouteEvidence(
 	_ context.Context,
 	key domain.InitialRouteJudgmentKey,
-	_ ports.RequestCarriedContent,
+	carried ports.RequestCarriedContent,
 ) (ports.InitialRouteEvidence, bool, error) {
 	double.loaded++
+	double.carried = carried
 	parcel := key.DeclaredParcelID.String()
 	if err, present := double.errs[parcel]; present {
 		return ports.InitialRouteEvidence{}, false, err

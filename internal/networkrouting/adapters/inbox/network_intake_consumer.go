@@ -28,11 +28,15 @@ const AdoptedNetworkIntakeEventType eventing.EventType = "parcel-shipment.networ
 //
 // 四维恰是 PS 采用结果的幂等键（租户+包裹+来源类型+来源结果版本）：处理方拿它整行取
 // 回记录。这里不带收寄明细或承诺，与 PS 侧的载荷形状一致。
+//
+// Geo 是采用所对那一版提交的地理解析投影，与接受决定信封上的同一格：复核按它问关务适用性，地址不由路由回读
+// （ADR-0075）。Carried 为假表示这封信封没带。
 type AdoptedNetworkIntake struct {
 	TenantID string
 	Parcel   string
 	Kind     string
 	Version  string
+	Geo      CarriedGeo
 }
 
 // NetworkIntakeHandler 是本消费者转交的处理方。真实装配接 NR 的复核编排；消费门不关心
@@ -91,10 +95,11 @@ func (consumer *NetworkIntakeConsumer) Consume(ctx context.Context, envelope eve
 // 通、看不出来。
 func decodeAdoptedNetworkIntake(payload []byte) (AdoptedNetworkIntake, error) {
 	var body struct {
-		TenantID string `json:"tenantId"`
-		Parcel   string `json:"parcel"`
-		Kind     string `json:"kind"`
-		Version  string `json:"version"`
+		TenantID string          `json:"tenantId"`
+		Parcel   string          `json:"parcel"`
+		Kind     string          `json:"kind"`
+		Version  string          `json:"version"`
+		Geo      *carriedGeoBody `json:"geo"`
 	}
 	if err := json.Unmarshal(payload, &body); err != nil {
 		return AdoptedNetworkIntake{}, fmt.Errorf("%w: %v", ErrPoisonEnvelope, err)
@@ -107,5 +112,6 @@ func decodeAdoptedNetworkIntake(payload []byte) (AdoptedNetworkIntake, error) {
 		Parcel:   body.Parcel,
 		Kind:     body.Kind,
 		Version:  body.Version,
+		Geo:      body.Geo.carriedGeo(),
 	}, nil
 }

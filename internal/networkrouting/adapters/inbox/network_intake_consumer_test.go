@@ -112,6 +112,37 @@ func TestANetworkIntakeDeliveryIsProcessedExactlyOnce(t *testing.T) {
 	}
 }
 
+// TestANetworkIntakeEnvelopeCarriesItsGeoProjectionToTheHandler 证采用信封上的地理维原样到处理方：复核按它问关务
+// 适用性（ADR-0075）。旧信封不带这一格，照常译码，处理方拿到的是「没带」。
+func TestANetworkIntakeEnvelopeCarriesItsGeoProjectionToTheHandler(t *testing.T) {
+	consumer, handler := newNetworkIntakeFixture(t)
+	ctx := t.Context()
+
+	envelope := networkIntakeEnvelope(t, "adoption-geo")
+	envelope.Payload = json.RawMessage(`{"tenantId":"tenant-a","parcel":"parcel-1","kind":"NODE_INTAKE","version":"intake-result/v1",
+		"geo":{"carried":true,"senderCountry":"CN","senderCountryPresent":true,"senderPostal":"200000","senderPostalPresent":true,
+		"deliveryCountry":"SG","deliveryCountryPresent":true}}`)
+	if err := consumer.Consume(ctx, envelope); err != nil {
+		t.Fatalf("消费：%v", err)
+	}
+	if err := consumer.Consume(ctx, networkIntakeEnvelope(t, "adoption-bare")); err != nil {
+		t.Fatalf("消费不带地理维的信封：%v", err)
+	}
+	if len(handler.calls) != 2 {
+		t.Fatalf("处理次数 = %d, want 2", len(handler.calls))
+	}
+	want := nrinbox.CarriedGeo{
+		Carried: true, SenderCountry: "CN", SenderCountryPresent: true, SenderPostal: "200000", SenderPostalPresent: true,
+		DeliveryCountry: "SG", DeliveryCountryPresent: true,
+	}
+	if handler.calls[0].Geo != want {
+		t.Fatalf("地理维 = %+v，want %+v", handler.calls[0].Geo, want)
+	}
+	if handler.calls[1].Geo != (nrinbox.CarriedGeo{}) {
+		t.Fatalf("没带地理维的信封译出了 %+v", handler.calls[1].Geo)
+	}
+}
+
 // TestANetworkIntakeEnvelopeMissingAnyKeyDimensionIsPoison 证采用键四维缺一即毒丸：
 // 处理方按整键取回采用结果，缺任一维都取不着——重投同样内容不会长出字段来。
 //

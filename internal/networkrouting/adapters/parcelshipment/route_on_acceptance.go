@@ -128,7 +128,7 @@ func (adapter *RouteOnAcceptanceAdapter) HandleAcceptedDecision(
 		Handoff:    spec,
 		Purpose:    adapter.purpose,
 		Resolution: resolution,
-		Carried:    nrports.RequestCarriedContent{Geo: geoFromDecision(decision)},
+		Carried:    nrports.RequestCarriedContent{Geo: geoFromCarried(decision.Geo)},
 	})
 	if err != nil {
 		return fmt.Errorf("create initial route: %w", err)
@@ -302,18 +302,20 @@ func outcomeToConsumption(result nrapplication.CreateInitialRouteResult) error {
 	}
 }
 
-func geoFromDecision(decision nrinbox.AcceptedDecision) nrdomain.GeoResolutionProjection {
-	if !decision.Geo.Carried {
+// geoFromCarried 把信封上的地理维译成判断请求携带的投影。初始路由与收寄后复核两条链共用它：同一份投影在两处
+// 译法一样，复核才是在复核初始路由用过的那一份输入。
+func geoFromCarried(geo nrinbox.CarriedGeo) nrdomain.GeoResolutionProjection {
+	if !geo.Carried {
 		return nrdomain.GeoResolutionProjection{}
 	}
 	return nrdomain.NewGeoResolutionProjection(
 		nrdomain.NewGeoResolutionSide(
-			decision.Geo.SenderCountry, decision.Geo.SenderCountryPresent,
-			decision.Geo.SenderPostal, decision.Geo.SenderPostalPresent,
+			geo.SenderCountry, geo.SenderCountryPresent,
+			geo.SenderPostal, geo.SenderPostalPresent,
 		),
 		nrdomain.NewGeoResolutionSide(
-			decision.Geo.DeliveryCountry, decision.Geo.DeliveryCountryPresent,
-			decision.Geo.DeliveryPostal, decision.Geo.DeliveryPostalPresent,
+			geo.DeliveryCountry, geo.DeliveryCountryPresent,
+			geo.DeliveryPostal, geo.DeliveryPostalPresent,
 		),
 	)
 }

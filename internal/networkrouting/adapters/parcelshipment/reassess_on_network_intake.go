@@ -7,6 +7,7 @@ import (
 
 	nrinbox "go.idp.xyz/idp-parcel/internal/networkrouting/adapters/inbox"
 	nrapplication "go.idp.xyz/idp-parcel/internal/networkrouting/application"
+	nrports "go.idp.xyz/idp-parcel/internal/networkrouting/ports"
 	psdomain "go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
@@ -79,7 +80,7 @@ func (adapter *ReassessOnNetworkIntakeAdapter) HandleAdoptedNetworkIntake(
 			ErrEnvelopeContradictsAuthority, intake.Parcel, intake.Version)
 	}
 
-	result, err := adapter.reassess.TriggerReassessment(ctx, record)
+	result, err := adapter.reassess.TriggerReassessment(ctx, record, nrports.RequestCarriedContent{Geo: geoFromCarried(intake.Geo)})
 	if err != nil {
 		// `不采用`是提供方的终局业务答案：没有责任起点成立，路由没有要复核的收寄事实。
 		// 入账收工——让它回滚重投会把一份合法的`不采用`永远卡在队列里。

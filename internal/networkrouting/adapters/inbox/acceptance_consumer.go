@@ -116,25 +116,15 @@ func (consumer *AcceptanceConsumer) Consume(ctx context.Context, envelope eventi
 // decodeAcceptedDecision 译载荷。缺字段即毒丸——重投同样内容不会长出字段来。
 func decodeAcceptedDecision(payload []byte) (AcceptedDecision, error) {
 	var body struct {
-		TenantID          string `json:"tenantId"`
-		CustomerAccountID string `json:"customerAccountId"`
-		Source            string `json:"source"`
-		SourceRequestKey  string `json:"sourceRequestKey"`
-		ShipmentRequestID string `json:"shipmentRequestId"`
-		SubmissionVersion string `json:"submissionVersion"`
-		DecisionID        string `json:"decisionId"`
-		State             string `json:"state"`
-		Geo               *struct {
-			Carried                bool   `json:"carried"`
-			SenderCountry          string `json:"senderCountry"`
-			SenderCountryPresent   bool   `json:"senderCountryPresent"`
-			SenderPostal           string `json:"senderPostal"`
-			SenderPostalPresent    bool   `json:"senderPostalPresent"`
-			DeliveryCountry        string `json:"deliveryCountry"`
-			DeliveryCountryPresent bool   `json:"deliveryCountryPresent"`
-			DeliveryPostal         string `json:"deliveryPostal"`
-			DeliveryPostalPresent  bool   `json:"deliveryPostalPresent"`
-		} `json:"geo"`
+		TenantID          string          `json:"tenantId"`
+		CustomerAccountID string          `json:"customerAccountId"`
+		Source            string          `json:"source"`
+		SourceRequestKey  string          `json:"sourceRequestKey"`
+		ShipmentRequestID string          `json:"shipmentRequestId"`
+		SubmissionVersion string          `json:"submissionVersion"`
+		DecisionID        string          `json:"decisionId"`
+		State             string          `json:"state"`
+		Geo               *carriedGeoBody `json:"geo"`
 	}
 	if err := json.Unmarshal(payload, &body); err != nil {
 		return AcceptedDecision{}, fmt.Errorf("%w: %v", ErrPoisonEnvelope, err)
@@ -164,18 +154,37 @@ func decodeAcceptedDecision(payload []byte) (AcceptedDecision, error) {
 		DecisionID:        body.DecisionID,
 		State:             body.State,
 	}
-	if body.Geo != nil {
-		decision.Geo = CarriedGeo{
-			Carried:                body.Geo.Carried,
-			SenderCountry:          body.Geo.SenderCountry,
-			SenderCountryPresent:   body.Geo.SenderCountryPresent,
-			SenderPostal:           body.Geo.SenderPostal,
-			SenderPostalPresent:    body.Geo.SenderPostalPresent,
-			DeliveryCountry:        body.Geo.DeliveryCountry,
-			DeliveryCountryPresent: body.Geo.DeliveryCountryPresent,
-			DeliveryPostal:         body.Geo.DeliveryPostal,
-			DeliveryPostalPresent:  body.Geo.DeliveryPostalPresent,
-		}
-	}
+	decision.Geo = body.Geo.carriedGeo()
 	return decision, nil
+}
+
+// carriedGeoBody 是 PS 信封上地理维的线格式。接受决定与网络收寄采用两种信封同一形状，在这里只译一次。
+type carriedGeoBody struct {
+	Carried                bool   `json:"carried"`
+	SenderCountry          string `json:"senderCountry"`
+	SenderCountryPresent   bool   `json:"senderCountryPresent"`
+	SenderPostal           string `json:"senderPostal"`
+	SenderPostalPresent    bool   `json:"senderPostalPresent"`
+	DeliveryCountry        string `json:"deliveryCountry"`
+	DeliveryCountryPresent bool   `json:"deliveryCountryPresent"`
+	DeliveryPostal         string `json:"deliveryPostal"`
+	DeliveryPostalPresent  bool   `json:"deliveryPostalPresent"`
+}
+
+// carriedGeo 在信封没带地理维时交零值，即「这封没带」。
+func (body *carriedGeoBody) carriedGeo() CarriedGeo {
+	if body == nil {
+		return CarriedGeo{}
+	}
+	return CarriedGeo{
+		Carried:                body.Carried,
+		SenderCountry:          body.SenderCountry,
+		SenderCountryPresent:   body.SenderCountryPresent,
+		SenderPostal:           body.SenderPostal,
+		SenderPostalPresent:    body.SenderPostalPresent,
+		DeliveryCountry:        body.DeliveryCountry,
+		DeliveryCountryPresent: body.DeliveryCountryPresent,
+		DeliveryPostal:         body.DeliveryPostal,
+		DeliveryPostalPresent:  body.DeliveryPostalPresent,
+	}
 }

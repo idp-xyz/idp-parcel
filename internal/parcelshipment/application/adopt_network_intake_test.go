@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"reflect"
 	"testing"
 	"time"
 
@@ -217,6 +218,32 @@ func TestAQualifiedIntakeFormsTheCommitmentAtThePhysicalTime(t *testing.T) {
 	}
 	if len(fixture.downstream.intents) != 1 {
 		t.Fatalf("intents = %d, want 1", len(fixture.downstream.intents))
+	}
+}
+
+// Covers: 采用信封带上采用所对那一版提交的地理解析投影（ADR-0075 决定一）：路由复核按它问关务适用性，地址不由路由
+// 回读。新采用与重放同一份采用，交出的投影都是那一版的。
+func TestTheHandoffIntentCarriesTheAdoptedVersionsGeoProjection(t *testing.T) {
+	fixture := newIntakeFixture(t)
+	request := acceptedRequest(t)
+	version, ok := request.SubmissionVersionByID(mustValue(t, domain.NewSubmissionVersionID, "version-1"))
+	if !ok {
+		t.Fatal("夹具委托上没有 version-1")
+	}
+	want := version.GeoProjection()
+
+	for range 2 {
+		if _, err := fixture.handler.Handle(context.Background(), adoptCommand(t)); err != nil {
+			t.Fatalf("handle: %v", err)
+		}
+	}
+	if len(fixture.downstream.intents) != 2 {
+		t.Fatalf("intents = %d, want 2（新采用一份、重放一份）", len(fixture.downstream.intents))
+	}
+	for index, intent := range fixture.downstream.intents {
+		if !intent.Geo.Carried() || !reflect.DeepEqual(intent.Geo, want) {
+			t.Fatalf("第 %d 份意图的投影 = %+v，want 采用所对那一版的 %+v", index+1, intent.Geo, want)
+		}
 	}
 }
 
