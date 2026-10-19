@@ -1,7 +1,7 @@
 # 47 演示种子与 README 的注释和说明照实写：授予与对照做了什么、管理台实际有哪几页
 
 Category: chore
-Status: in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待非作者评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 7、序 4 评审遗留；用户授权代决）；分支 `claude-oc47`
+Status: resolved——2026-10-18 进 main（与 40、47、49 同批，代码验证钉 `b3b246d7`），见「进 main 记录」。此前 in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待非作者评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 7、序 4 评审遗留；用户授权代决）；分支 `claude-oc47`
 Blocked by: 无
 父票：[26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)（票 26 评审遗留的后续）
 出处：票 [24](./24-demo-configurator-holds-the-shipment-side-decision-grants.md) Comments 评审 Spec 非阻断 1–3、Standards 非阻断 1；票 [15](./15-operation-decision-faces-take-operator-intake.md) Comments「钉 `60244fa6`」那条评审 Spec 非阻断 1。
@@ -177,3 +177,9 @@ Blocked by: 无
 - **评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审）· 钉 `0ccc6d88`（基线 `b58b10ef`）· 2026-10-18**：用户 2026-10-18 选「精简续做」，评审由会话本身读 diff 做（隔离子代理那一轮随 workflow 停下未跑完）；不算非作者评审，如实记下。
   - **Spec**：阻断无。seed.sh 与 README 的改动只在注释、说明与进度行字样，数据与命令未动；授予「只开门」改成逐口照 ADR-0151 决定二写决定方从哪来，委托侧前提照 ADR-0183 决定一写清；管理台页面点名到 `AcceptanceReviewPage`、`AuthorizedDispositionPage`、`EffectiveTimeJudgmentPage`。
   - **Standards**：阻断无，非阻断无。「十一种 / 六种 / 五种」与「N/7」这类计数都已去掉，改指 `decisionKinds` 与目录；`bash -n scripts/demo-seeds/seed.sh` 退 0。
+
+### 进 main 记录（2026-10-18，会话 idp-parcel-9b）
+
+- 原分支 `claude-oc47` 各笔重放到 40 之后（新 SHA `b0759c43`…`e76e2e68`；原 SHA 作封存出处）。同批三票 40、47、49 一次推送。
+- 推送方全量一次：钉 `b3b246d7` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 142 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上改动 `.go` 的 `gofmt -l` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
+- 评审见 Comments。

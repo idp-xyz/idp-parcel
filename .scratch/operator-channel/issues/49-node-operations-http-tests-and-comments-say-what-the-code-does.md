@@ -1,7 +1,7 @@
 # 49 NO adapters/http 测试与注释照实写：收寄替身交回不同节点、死引用改指、去变更说明
 
 Category: chore
-Status: in-progress——2026-10-18 完工；非作者评审第 1 轮 0 阻断，非阻断已修，待进 main。此前 in-progress——2026-10-18 作者子代理完工，待非作者评审；分支 `claude-oc49`，见文末「完成记录」。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 6 评审遗留；用户授权代决）；分支 `claude-oc49`
+Status: resolved——2026-10-18 进 main（与 40、47、49 同批，代码验证钉 `b3b246d7`），见「进 main 记录」。此前 in-progress——2026-10-18 完工；非作者评审第 1 轮 0 阻断，非阻断已修，待进 main。此前 in-progress——2026-10-18 作者子代理完工，待非作者评审；分支 `claude-oc49`，见文末「完成记录」。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 6 评审遗留；用户授权代决）；分支 `claude-oc49`
 Blocked by: 无
 父票：[26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)（票 26 评审遗留的后续）
 出处：票 [23](./23-node-operations-isolated-command-intake-retires.md) Comments 评审 Spec 非阻断 1、Standards 非阻断 1–2。
@@ -121,3 +121,9 @@ const (
   - **Spec**：阻断无，非阻断无。C8-9 常量拆分、请求头改出示 `presentedScopeReference`、两条断言与票面一致；变异体（Intake 改拿头值铸节点）在改后用例上转红、在原用例上为绿。C8-10 死引用改指包路径加 `decodeClosedDocument`；C8-11 两处变更说明已删。
   - **Standards**：阻断无。非阻断 1：`workFactNode` 头注「生产上铸造方核过设备的登记范围」讲别包行为却没指符号。
   - **处置**：非阻断已在 `e0f84cbc` 改指 `WorkFactMinter.MintWorkFact` 与 `WorkFactAuthenticator.AuthenticateNodeReception`。
+
+### 进 main 记录（2026-10-18，会话 idp-parcel-9b）
+
+- 原分支 `claude-oc49` 各笔重放到 47 之后（新 SHA `2928d641`…`b3b246d7`；原 SHA 作封存出处）。同批三票 40、47、49 一次推送。
+- 推送方全量一次：钉 `b3b246d7` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 142 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上改动 `.go` 的 `gofmt -l` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
+- 评审见 Comments。

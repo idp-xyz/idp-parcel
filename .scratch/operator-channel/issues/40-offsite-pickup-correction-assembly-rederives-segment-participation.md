@@ -1,7 +1,7 @@
 # 40 生产装配的揽收更正不重派生段上参与：buildOffsitePickupCorrectionOrchestration 没交段登记册
 
 Category: bug
-Status: in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待非作者评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 遗留研判（簇 C4）中发现，原属 tf-segment-lifecycle-closure 那条线；用户授权代决）；分支 `claude-oc40`
+Status: resolved——2026-10-18 进 main（与 40、47、49 同批，代码验证钉 `b3b246d7`），见「进 main 记录」。此前 in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待非作者评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 遗留研判（簇 C4）中发现，原属 tf-segment-lifecycle-closure 那条线；用户授权代决）；分支 `claude-oc40`
 Blocked by: 无
 父票：[26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)（票 26 评审遗留的后续）
 出处：
@@ -92,3 +92,9 @@ Blocked by: 无
   - **Spec**：阻断无。装配补交段登记册、判断登记册照裁定不交；两条真库用例在 `9735981b` 上先红（红在段上当前参与与拒绝格，不是编译错）、`9138e344` 上转绿；首登那一行不动、替代行回指首登，与 ADR-0112 决定一、二一致。
   - **Standards**：阻断无。非阻断 1：`register_offsite_pickup.go` 的 `CorrectOffsitePickupCommand` 头注仍写「段侧另立票，本编排不进段」，已失实（完成记录「遗留」那条），已在 `6eba9a2f` 改成照实说（地盘外一句注释，改到最小）。
   - **无发现**：注释中文、无行号与计数；合成值只用 `SYN-`；领域包未动。
+
+### 进 main 记录（2026-10-18，会话 idp-parcel-9b）
+
+- `9735981b`…`efb26842` 直接叠在 main `b58b10ef` 上，快进，SHA 未改写。同批三票 40、47、49 一次推送。
+- 推送方全量一次：钉 `b3b246d7` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 142 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上改动 `.go` 的 `gofmt -l` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
+- 评审见 Comments。
