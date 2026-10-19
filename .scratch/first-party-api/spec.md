@@ -28,6 +28,8 @@ Status: in-progress——2026-10-19 ADR-0139–0142 已由用户在 Claude Code 
 | [01](./issues/01-customer-api-scopes-and-account-binding-cardinality.md) | 客户 API 的 scope 模型与 1:N 账户绑定 | ADR-0139 接受；首方 Intake 实施票 |
 | [02](./issues/02-per-client-rate-limit-and-quota.md) | 按 client 的限流与配额：`429` + `Retry-After`，缺省朝拦 | ADR-0139 接受；首方 Intake 实施票 |
 | [03](./issues/03-per-client-observability.md) | 按 client 的可观测性：`outcome` × client 维、`requestId` 对账、暂停出声 | ADR-0139 接受；ADR-0140 接受（`requestId` 进问题详情） |
+| [04](./issues/04-ps-production-ownership-directory-before-the-write-switch-retires.md) | PS 生产归属目录：隔离写开关退场的前件（00 立） | 无 |
+| [05](./issues/05-admin-web-submission-page-has-no-customer-credential.md) | 管理台的委托提交页没有首方客户端凭据：提交答 401（00 立） | 无 |
 
 ## 激活条件
 
