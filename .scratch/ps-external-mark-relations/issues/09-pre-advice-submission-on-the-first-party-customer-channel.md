@@ -1,7 +1,7 @@
 # 09 送站预报的提交与撤回口：挂首方客户渠道族，一口一词，NO 定载荷形状
 
 Category: enhancement
-Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 评审 0 阻断，治理种子撞号已改为 35、36，待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-psxm09`，access_identity 迁移号 0014；与票 14 并行。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
+Status: resolved——2026-10-19 进 main（代码验证钉 `32f6a69d`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 评审 0 阻断，治理种子撞号已改为 35、36，待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-psxm09`，access_identity 迁移号 0014；与票 14 并行。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
 Blocked by:
 - [08](./08-pre-advice-and-handover-note-model-and-window-register.md) 进 main：预报册与领域。
 - 首方客户渠道 Intake 已由 [first-party-api/00](../../first-party-api/issues/00-first-party-customer-intake.md) 进 main（`38916b00`），照它落地的形状挂，不设阻塞边。能力粒度与 1:N 绑定在 [first-party-api/01](../../first-party-api/issues/01-customer-api-scopes-and-account-binding-cardinality.md)，两票同改客户面能力的枚举与 CHECK，谁后进谁 rebase。
@@ -47,7 +47,7 @@ Blocked by:
 - [x] 真库用例（`cmd/parcel-api`，经生产装配）：合成客户端取令牌、交预报、撤回，册上各一行；撤销授予之后再交答 `CUSTOMER_CLIENT_NOT_GRANTED`。
 - [x] 演示实走（`S`）：`seed.sh` 退 0，脚本交出一份预报并打印标识。
 - [x] Go 门禁：`go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出；带 DSN 跑 `internal/accessidentity/...`、`internal/nodeoperations/...`、`cmd/parcel-api`、`cmd/parcel-access-register`、`migrations/...`、`scripts/demo-seeds/...`、`internal/architecture/...` 全绿；机制清点重生成。
-- [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
+- [x] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
 
 ## 规模
 
@@ -204,3 +204,8 @@ M
 - **作者自定的格认可**：规范化形状放在 NO 领域（与 NO 其余命令口一致）；预报标识签发器另起端口与适配器；另一接入请求去撤已撤回的预报答已有结果。
 - **评审修补（已做，`0f04a07a`）**：两份权威区间种子撞了另一会话已占的 `governance/32`、`33`，改为 35、36。
 - **与另一会话的共享文件**：`cmd/parcel-api` 三份与 `customer_client.go` 只追加，rebase 时与对方第三波两边都保留。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-psxm09`（作者已 rebase 到另一会话第三波之后、改治理种子号）快进推送；验证之后远端只前进了两笔纯票面（另一会话立票），再 rebase 一次，非 `.scratch` 文件与验证钉逐字相同，未重跑。
+- 推送方全量一次：钉 `32f6a69d` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 151 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
