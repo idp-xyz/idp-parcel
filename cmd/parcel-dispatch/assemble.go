@@ -381,6 +381,20 @@ var veDeclarationSubmissionUndecidedSentinels = []error{
 	vecc.ErrProjectionUndecided,
 }
 
+// veExternalResultUndecidedSentinels 只给 VE 外部结果投影这一路。本路不 FanOut：CC 的
+// 放行门禁核对按动作请求驱动、不订阅这封信（ADR-0197 决定一），PS 侧也没有它的消费者。
+// 与申报提交那份分开列：本路多停一站——结果范围指名的申报单元。
+//
+// 不在名单里：ErrExternalResultRecordInconsistent（仓储不变量已破，含归属不上的留存、
+// 放行三件与层次不配、范围单元答非所问）、ErrExternalResultUntranslatableAnswer
+// （引用坏了）、ErrProjectionHandoffPending（要查 outbox 下游）、
+// veconsume.ErrUnexpectedProjectionOutcome。
+var veExternalResultUndecidedSentinels = []error{
+	vecc.ErrExternalResultNotVisible,
+	vecc.ErrResultScopeUnitNotVisible,
+	vecc.ErrProjectionUndecided,
+}
+
 // veCustomerViewUndecidedSentinels 只给「投影派生 → 客户视图」这一路。
 //
 // 歧义账户也在名单里：同包裹被多份已接受委托同时声明是机制拒绝自动采认（ADR-0060、
@@ -656,7 +670,9 @@ var sellEvaluationRequestSubmittedUndecidedSentinels = []error{
 // 消费侧按成员循环拆分派生，ADR-0066）、CC 关务案件建立 → 只投 VE 投影（不 FanOut：
 // 同为多成员信封，成员维与案件维一并进事实引用，ADR-0066）、CC 申报提交版本形成 →
 // 只投 VE 投影（不 FanOut：同为多成员信封，成员维进引用、提交版本走版本维，
-// ADR-0066）、VE 投影派生 → 客户视图
+// ADR-0066）、CC 外部结果已收 → 只投 VE 投影（不 FanOut：放行门禁核对按动作请求驱动、
+// 不订阅到达；只派生这一次接收实际形成的那一层，沿结果范围指名的申报单元逐成员展开，
+// ADR-0197）、VE 投影派生 → 客户视图
 // （UC-VE-008 内部半边：账户维经 PS 按包裹反查填上，ADR-0060 三格）、SA 资金事实采用 → CC 入向
 // 登记（sa-cc/03）、CC 付款核对形成 → SA 结算输入采用（sa-cc/09；同一条缝的反方向，各记各的 inbox 账）、
 // PP 评价已记录 → FanOut（先 SA 供应商预期成本形成，sa-cc/01，裁决 (c) 范围只到「命令凑不齐 → 未决」，形成路等
@@ -1028,6 +1044,16 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 		return nil, fmt.Errorf("parcel-dispatch: declaration submission projection undecided translation: %w", err)
 	}
 
+	veExternalResult, err := deriveExternalResultConsumer(db, inboxStore, projectionDerive)
+	if err != nil {
+		return nil, err
+	}
+	veExternalResultRouted, err := dispatch.WithUndecidedSentinels(
+		veExternalResult, veExternalResultUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: external result projection undecided translation: %w", err)
+	}
+
 	veCustomerView, err := deriveCustomerViewConsumer(db, outboxStore, inboxStore, clock)
 	if err != nil {
 		return nil, err
@@ -1065,6 +1091,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 			veinbox.ExceptionJourneyRecordedEventType:              veExceptionJourneyRouted,
 			veinbox.CustomsCaseEstablishedEventType:                veCustomsCaseRouted,
 			veinbox.DeclarationSubmissionFormedEventType:           veDeclarationSubmissionRouted,
+			veinbox.ExternalResultReceivedEventType:                veExternalResultRouted,
 			veinbox.TrackingProjectionDerivedEventType:             veCustomerViewRouted,
 
 			// 键比上面各行都长，单起一段：并进去 gofmt 会重排整块的对齐，共享接线文件上多出一片别人的行。
@@ -2103,6 +2130,35 @@ func deriveDeclarationSubmissionConsumer(
 	return consumer, nil
 }
 
+// deriveExternalResultConsumer 接 CC 外部结果已收 → VE 投影（ADR-0197）。本路只投 VE
+// 不 FanOut：放行门禁核对按动作请求驱动，不订阅到达。
+//
+// 信封只带接收幂等键两维；处理适配器按键重读接收记录，取这一次接收实际形成的那一层，
+// 再沿结果范围→申报单元取回组成逐成员派生（ADR-0066）——权威事实留在 customs-compliance。
+func deriveExternalResultConsumer(
+	db *bentopg.DB,
+	inboxStore *inbox.Store,
+	derive *tenantBoundProjectionDerive,
+) (dispatch.Consumer, error) {
+	results, err := ccpostgres.NewExternalResults(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: projection external results: %w", err)
+	}
+	units, err := ccpostgres.NewDeclarationUnits(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: projection declaration units: %w", err)
+	}
+	processing, err := vecc.NewDeriveOnExternalResultAdapter(results, units, derive)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: derive on external result: %w", err)
+	}
+	consumer, err := veinbox.NewExternalResultConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: derive external result consumer: %w", err)
+	}
+	return consumer, nil
+}
+
 // deriveCustomerViewConsumer 接 VE 投影派生 → 客户视图（UC-VE-008 的内部半边）。
 // 账户维经 veps.ParcelCustomerAccountLookup 从 PS 的按包裹反查取回（ADR-0060 零/一/
 // 多三格：零行入账不派生、恰一行取账户、多行落未决不任选）；披露策略在租户现绑包装
@@ -2337,6 +2393,7 @@ var (
 	_ vetf.JourneyProjectionHandler      = (*tenantBoundProjectionDerive)(nil)
 	_ vecc.CaseProjectionHandler         = (*tenantBoundProjectionDerive)(nil)
 	_ vecc.SubmissionProjectionHandler   = (*tenantBoundProjectionDerive)(nil)
+	_ vecc.ResultProjectionHandler       = (*tenantBoundProjectionDerive)(nil)
 	_ veps.FinalProjectionHandler        = (*tenantBoundProjectionDerive)(nil)
 	_ venr.InitialRouteProjectionHandler = (*tenantBoundProjectionDerive)(nil)
 )
