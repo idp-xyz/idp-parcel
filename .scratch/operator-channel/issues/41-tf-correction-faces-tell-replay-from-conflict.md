@@ -1,7 +1,7 @@
 # 41 TF 更正口的重放代数不全：POD 更正原样重发会追加新版本，交接更正同一新版本换内容答已有版本
 
 Category: bug
-Status: in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 认领（分支 `claude-oc41tfa07`，tf-face-algebra/07 随后在同一分支）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 5 研判；逐口核实测补强）
+Status: in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 认领（分支 `claude-oc41tfa07`，tf-face-algebra/07 随后在同一分支）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 5 研判；逐口核实测补强）
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C4 第四张草案；逐口核研判 POD 更正、交接更正两口
@@ -283,3 +283,10 @@ Blocked by: 无
 证据层级：`S`。
 
 评审：待会话读 diff 审。
+
+## Comments
+
+- **评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审）· 钉 `b9cb5c9a`（基线 `4e000051`）· 2026-10-18**：用户选「精简续做」，评审由会话本身读 diff 做；代码出自本会话起的实施子代理，不算非作者评审，如实记下。
+  - **Spec**：阻断无。POD 更正载荷指名 `predecessorVersion`：指名的前版即当前版才更正；不是当前版时 `answerAgainstCurrent` 按当前版现算摘要比，同内容答已有版本、异内容（含迟到的旧更正）答冲突，照揽收更正先例；并发输家读回赢家再分格。交接更正撞键后比已存摘要分 `EXISTING_VERSION` 与 `SOURCE_CONFLICT`。ADR-0149 文末追加复核记录，决定原文未动。
+  - **Standards**：阻断无。认可一处口径偏离：POD 更正不往册行写摘要、两侧从本体现算（附录 F-6 的做法，与票 20、票 13 同形）——写了会让首登原样重放被判冲突。
+  - **未做的格**：「做什么」第 4 条（票 10 各口逐口记代数）归 operator-channel/50 与 39；`correctedAt` 回显归 operator-channel/31；意图交付失败后续办未在真库测。
