@@ -1,7 +1,7 @@
 # 14 预报有效时窗册：不设终点的一行登下之后，这个租户再也换不了时窗
 
 Category: bug
-Status: ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立并代决（票 08 评审遗留）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-psxm14`，NO 迁移号 0014；与票 09 并行。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立并代决（票 08 评审遗留）
 Blocked by: 08 进 main
 父票：[08](./08-pre-advice-and-handover-note-model-and-window-register.md)
 出处：票 08 完成记录「没做」末条与评审。
