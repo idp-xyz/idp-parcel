@@ -385,7 +385,7 @@ func entryPickup(t *testing.T) domain.OffsitePickup {
 }
 
 // Covers: `AT-TF-262`——其余取不到节点或读不动的几格各自具名、照登、不问关务：对象此刻不在任何段里；进段依据指名的交接
-// 在册上对不上恰一版（没有，或同版本号在两个范围、业务时间也相同）；派送尝试读面、段册、交接册在写事务之前读不动。登不出
+// 不在册（库面不一致），或在册上对上不止一版（同版本号在两个范围、业务时间也相同），两种分开具名；派送尝试读面、段册、交接册在写事务之前读不动。登不出
 // 交付的命令不带读数；对象同时在两段里在场是库面不一致，响亮报错。
 func TestTheOtherDeliveryNodeStopsAreNamedAndRegister(t *testing.T) {
 	cases := map[string]struct {
@@ -401,7 +401,7 @@ func TestTheOtherDeliveryNodeStopsAreNamedAndRegister(t *testing.T) {
 				fixture.enteredByHandover(t, "SYN-NODE-SIN-HUB")
 				fixture.handovers.handovers = nil
 			},
-			want: domain.DeliveryEntryHandoverUnresolved,
+			want: domain.DeliveryEntryHandoverNotOnRegister,
 		},
 		"two scopes reuse the version at the same instant": {
 			arrange: func(t *testing.T, fixture *deliveryGateFixture) {
@@ -409,7 +409,7 @@ func TestTheOtherDeliveryNodeStopsAreNamedAndRegister(t *testing.T) {
 				fixture.handovers.handovers = append(fixture.handovers.handovers,
 					deliveryEntryHandover(t, "handover-scope-2", "SYN-NODE-SZX-GATE", entry.JudgedAt()))
 			},
-			want: domain.DeliveryEntryHandoverUnresolved,
+			want: domain.DeliveryEntryHandoverAmbiguous,
 		},
 		"the attempt view is down before the write": {
 			arrange: func(t *testing.T, fixture *deliveryGateFixture) {

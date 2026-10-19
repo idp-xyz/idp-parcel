@@ -9,7 +9,7 @@ import (
 )
 
 // deliveryGateReadingDetail 是有效交付登记 gate_reading_detail 列的形状（迁移 0043）。一份交付恰一件对象，所以停点与那一格
-// 答复各至多一个；那一格与出发、交出读数逐对象那一格同一形状（gateFindingDetailOf）。词都取领域枚举自己的 String()，读回时
+// 答复各至多一个；那一格与其余门禁读数逐对象那一格同一形状（gateFindingDetailOf）。词都取领域枚举自己的 String()，读回时
 // 按封闭集认，认不出的行不装回——那是库面被绕过构造门写过，不是一格可读的答复。
 type deliveryGateReadingDetail struct {
 	Node    *string                     `json:"node"`
@@ -80,7 +80,8 @@ func deliveryGateReadingFrom(answerText string, raw []byte) (domain.DeliveryGate
 func deliveryGateStopFrom(raw string) (domain.DeliveryGateStop, error) {
 	for _, stop := range []domain.DeliveryGateStop{
 		domain.DeliveryNoActiveSegment, domain.DeliveryEnteredByPickup, domain.DeliveryReleasingNodeNotDeclared,
-		domain.DeliveryEntryHandoverUnresolved, domain.DeliveryRecordedBeforeGateReading,
+		domain.DeliveryEntryHandoverNotOnRegister, domain.DeliveryEntryHandoverAmbiguous,
+		domain.DeliveryRecordedBeforeGateReading,
 		domain.DeliveryAttemptViewUnavailable, domain.DeliverySegmentRegistryUnavailable,
 		domain.DeliveryHandoverRegistryUnavailable,
 	} {

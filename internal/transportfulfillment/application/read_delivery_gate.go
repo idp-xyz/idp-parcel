@@ -9,8 +9,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// 关务那一问没有形成本上下文认得的答复时，那一件记读不动，依据种类与出发、交出两侧同一套词（read_departure_gate.go 头上的
-// departureGateCustoms* 常量）：救法相同，读者不必为交付另学一套。
+// 关务那一问没有形成本上下文认得的答复时，那一件记读不动，依据种类与其余门禁读数同一套词（departureGateCustoms* 常量）：
+// 救法相同，读者不必为交付另学一套。
 
 var errDeliveryGateViewMisanswered = errors.New("transport fulfillment: the delivery gate view answered for another object")
 
@@ -134,7 +134,7 @@ func (reader *DeliveryGateReader) deliveryNode(
 	}
 	version, named := participation.EntryHandoverVersion()
 	if !named {
-		return none, domain.DeliveryEntryHandoverUnresolved, nil
+		return none, domain.DeliveryEntryHandoverNotOnRegister, nil
 	}
 	handovers, err := reader.deps.Handovers.FindHandedOverByVersion(ctx, tenant, object, version)
 	if err != nil {
@@ -147,8 +147,11 @@ func (reader *DeliveryGateReader) deliveryNode(
 			entry, matched = handover, matched+1
 		}
 	}
-	if matched != 1 {
-		return none, domain.DeliveryEntryHandoverUnresolved, nil
+	switch {
+	case matched == 0:
+		return none, domain.DeliveryEntryHandoverNotOnRegister, nil
+	case matched > 1:
+		return none, domain.DeliveryEntryHandoverAmbiguous, nil
 	}
 	node, declared := entry.ReleasingNode()
 	if !declared {

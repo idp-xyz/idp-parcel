@@ -362,6 +362,10 @@ func (handover TransportHandover) TransfersControl() bool {
 	return handover.verdict == ObjectHandedOver
 }
 
+// transportHandoverBasisHead 是权威交接作参与依据时版本前面那一截（`TRANSPORT-HANDOVER/<版本>`）。拼的
+// （TransferOutBasis 与重派生）与拆的（EntryHandoverVersion）都在本包，拼写只定义在这一处，两边才不会各写一份而漂开。
+const transportHandoverBasisHead = "TRANSPORT-HANDOVER/"
+
 // TransferOutBasis 交回可供 node-operations 包装成 TransferOutReference 的稳定引用——
 // 只有`已交接`给得出。NO 侧注释写明「那些结果在 TF 的权威交接对象上就不是`已交接`，
 // 从源头就构造不出这个引用」，这里就是那个源头。

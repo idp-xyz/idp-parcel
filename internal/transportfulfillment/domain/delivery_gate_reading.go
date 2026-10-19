@@ -26,7 +26,7 @@ var (
 // 可与停点对不上的结论。
 //
 // 未决停点里除存量回填之外，都是 ADR-0213 决定五说的「交付节点不可得」，按缺在哪一环分开具名：续办动作两两不同——去查
-// 对象为什么不在段里、承认这一程本就没有交出节点、去补交接上的声明、去查交接册与段册为什么对不上。
+// 对象为什么不在段里、承认这一程本就没有交出节点、去补交接上的声明、去查交接册与段册为什么对不上、去问登记方哪一版才是。
 type DeliveryGateStop uint8
 
 const (
@@ -43,9 +43,14 @@ const (
 	// DeliveryReleasingNodeNotDeclared：对象凭`已交接`进的这一段，那次交接没声明交出节点（ADR-0213 决定五）。不从交出方、
 	// 接收方或范围补一个节点。
 	DeliveryReleasingNodeNotDeclared
-	// DeliveryEntryHandoverUnresolved：参与的入场依据指名了一版交接，交接登记册里却对不上恰一版`已交接`——没有，或同一
-	// 对象在不同交接范围用了同一个版本号、业务时间也相同。那是库面不一致或登记方的版本口径撞了，不猜其中一版。
-	DeliveryEntryHandoverUnresolved
+	// DeliveryEntryHandoverNotOnRegister：参与说凭`已交接`进段，入场依据却指不到交接登记册上的一版`已交接`——依据拆不出
+	// 版本，或那一版不在册、在册的业务时间对不上。段上的参与与那次交接由交接登记同一笔写下，正常对得上，这一格说的是库面
+	// 不一致，重读也不会变；与下一格分开具名，查数据的人与读数派生的信号才分得出「数据坏了」与「登记方的版本口径撞了」。
+	// 仍只记未决、不挡交付：交付已经发生，挡下它修不好段册。
+	DeliveryEntryHandoverNotOnRegister
+	// DeliveryEntryHandoverAmbiguous：入场依据指名的那一版在册上对上不止一版`已交接`——同一对象在不同交接范围用了同一个
+	// 版本号、业务时间也相同（入场依据只带版本、不带范围）。不猜其中一版。
+	DeliveryEntryHandoverAmbiguous
 	// DeliveryRecordedBeforeGateReading 只出现在迁移前就已落册的有效交付上（TF 迁移 0043 的存量回填）：那时没问过关务，
 	// 如实答未决而不是猜一格。新登记的交付不会停在这里，构造门拒它。
 	DeliveryRecordedBeforeGateReading
@@ -67,7 +72,7 @@ func (stop DeliveryGateStop) valid() bool {
 func (stop DeliveryGateStop) Answer() GateAnswer {
 	switch stop {
 	case DeliveryNoActiveSegment, DeliveryEnteredByPickup, DeliveryReleasingNodeNotDeclared,
-		DeliveryEntryHandoverUnresolved, DeliveryRecordedBeforeGateReading:
+		DeliveryEntryHandoverNotOnRegister, DeliveryEntryHandoverAmbiguous, DeliveryRecordedBeforeGateReading:
 		return GateUndecided
 	case DeliveryAttemptViewUnavailable, DeliverySegmentRegistryUnavailable, DeliveryHandoverRegistryUnavailable:
 		return GateUnreadable
@@ -84,8 +89,10 @@ func (stop DeliveryGateStop) String() string {
 		return "ENTERED_BY_PICKUP"
 	case DeliveryReleasingNodeNotDeclared:
 		return "RELEASING_NODE_NOT_DECLARED"
-	case DeliveryEntryHandoverUnresolved:
-		return "ENTRY_HANDOVER_UNRESOLVED"
+	case DeliveryEntryHandoverNotOnRegister:
+		return "ENTRY_HANDOVER_NOT_ON_REGISTER"
+	case DeliveryEntryHandoverAmbiguous:
+		return "ENTRY_HANDOVER_AMBIGUOUS"
 	case DeliveryRecordedBeforeGateReading:
 		return "RECORDED_BEFORE_GATE_READING"
 	case DeliveryAttemptViewUnavailable:
@@ -207,10 +214,6 @@ func (reading DeliveryGateReading) placedOn(delivery EffectiveDelivery, rehydrat
 	}
 	return nil
 }
-
-// transportHandoverBasisHead 是权威交接作参与依据时版本前面那一截（`TRANSPORT-HANDOVER/<版本>`）。拼的
-// （TransferOutBasis 与重派生）与拆的（EntryHandoverVersion）都在本包，拼写只定义在这一处，两边才不会各写一份而漂开。
-const transportHandoverBasisHead = "TRANSPORT-HANDOVER/"
 
 // EntryHandoverVersion 交回这条参与凭`已交接`进段时那一版交接的版本：入场种类是权威交接、入场依据是那一截拼写加版本。
 // 别的入场种类答 false。依据里只有版本、没有交接范围——按版本找回的交接还要经 EnteredByHandover 认一遍。
