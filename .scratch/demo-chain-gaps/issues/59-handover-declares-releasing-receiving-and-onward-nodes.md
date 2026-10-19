@@ -1,7 +1,7 @@
 # 59 权威交接声明交出、接收、去向节点
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg59（隔离评审 0 阻断，已按评审修订并 rebase 到 `de9e3ad9`；见文末「完成记录」「评审记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
+Status: resolved——2026-10-19 进 main（全量钉 `b6e8b7f9`：152 ok / 0 FAIL；59、28 同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg59（隔离评审 0 阻断，已按评审修订并 rebase 到 `de9e3ad9`；见文末「完成记录」「评审记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
 Blocked by: 无（TF 规范化令牌排在 [21](./21-load-assignment-allocates-against-capacity-reservations.md) 之后）
 地盘：TF `domain/transport_handover.go`、`handover_rehydration.go`、`payload_canonicalization.go`（交接出新形状版本）；`application/register_transport_handover.go`（命令三格，更正承继）；`adapters/postgres/transport_handover_registry.go` + TF 迁移（认领时现取）；tfhttp `register_transport_handover.go`、`query_transport_fulfillment_records.go`（交接册列三格）；`cmd/parcel-api` 新真库用例文件；文档 ADR-0213、TF CONTEXT「权威运输交接」词条一句、UC-TF-005 输入与 AT、`docs/design/synthetic-demo-journey-script.md`。
 出处：[04](./04-handover-does-not-move-node-control-or-trigger-reassessment.md)；方案「复核」04「票面漏掉的真阻断」，「代决」C1，「需要的 ADR」ADR-0213。
@@ -163,3 +163,8 @@ ADR-0213 文末另有越权风险点：声明错了没人核、节点与参与�
 - 演示种子本票没有改，评审已在合并树上灌过一遍、退 0，这次没有重灌。
 - 没跑全量，也没重生成机制清点。
 
+## 进 main 记录（2026-10-19）
+
+- 59 与 28 合成一批，按 59 → 28 叠到 main 上，整批快进推送，与本记录同一次推送。只有 UC-TF-005 的追加段要合，两边都留。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `b6e8b7f9`：152 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。

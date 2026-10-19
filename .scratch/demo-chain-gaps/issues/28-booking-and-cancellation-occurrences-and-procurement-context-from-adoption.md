@@ -1,7 +1,7 @@
 # 28 订舱与取消发生项；实际履约经段采用取采购上下文
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg28（见文末「完成记录」；隔离评审 0 阻断，修订见「评审记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
+Status: resolved——2026-10-19 进 main（全量钉 `b6e8b7f9`：152 ok / 0 FAIL；59、28 同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg28（见文末「完成记录」；隔离评审 0 阻断，修订见「评审记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
 Blocked by: [24](./24-booking-references-a-schedule-and-carrier-answers-via-integration-client.md)、[25](./25-segment-adopts-transport-commission-and-cancellation-faces.md)、[27](./27-transport-charge-occurrences-are-registered-and-handed-off.md)
 地盘：TF `domain/transport_charge_occurrence.go`；`register_charge_occurrence.go`；新读端口文件；tfhttp `register_charge_occurrence.go`。
 出处：[07](./07-transport-charge-occurrences-have-no-production-path.md)；方案「07 运输收费发生项」D07-2、D07-3，「需要的 ADR」ADR-0207，「已不成立或已修」07。
@@ -114,3 +114,9 @@ M
 - `go build ./...` 干净；`go vet` 覆盖 `./internal/transportfulfillment/...`、`./cmd/parcel-api/`、`./migrations/`，干净；本分支改动的 Go 文件 `gofmt -l` 为空。
 - `IDP_PARCEL_POSTGRES_DSN=… go test -p 1 -count=1`，在 `94411fca` 上（代码与 `e69eb6d5` 相同）：`./internal/transportfulfillment/...`、`./migrations/`、`./internal/architecture/`、`./cmd/parcel-api/`、`./cmd/parcel-commercial/`、`./cmd/parcel-dispatch/`、`./internal/settlementaccounting/adapters/transportfulfillment/`、`./internal/parcelpricing/adapters/transportfulfillment/`、`./scripts/demo-seeds/...`，全部 ok。
 - 种子数据没动（只改了 README 一段），没有重灌 `seed.sh`。全量与机制清点未跑（进 main 时统一做）。
+
+## 进 main 记录（2026-10-19）
+
+- 59 与 28 合成一批，按 59 → 28 叠到 main 上，整批快进推送，与本记录同一次推送。只有 UC-TF-005 的追加段要合，两边都留。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `b6e8b7f9`：152 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。
