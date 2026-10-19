@@ -40,3 +40,4 @@ Blocked by: 无（「待定」已由 ADR-0189 代决）
 - 演示租户：种子 `22-leg-pricing-zones-cn-sg-v1.json` 三段各登 `Z1`，`seed.sh` 在线路之后调登记口。
 - 文档：ADR-0189、NR CONTEXT「段计价区域」、ADR-0148 Links 前向指针、ADR 索引一行。
 - 用例：真库 `TestLegPricingZonesRegisterOnlyOnSegmentsWithACostBasis`；登记门 `TestLegPricingZonesRegisterOnlyWellFormedRowsOnCostBasedSegments`；`TestRegisteredLegZonesHandTheTenantsZoneThroughVerbatim`；生产装配 `TestADeclaredParcelOnZonedLegsIsPricedThroughProductionWiring`（2.5 KG 三段各 85 CNY，合 25500 minor，三条出处）。
+- 实走（`S`）：2026-10-19 在一次性库 `c8_walk18` 上照演示动线「前置」灌种子（`leg-pricing-zone: REGISTERED`）、起 `parcel-api` 与 `parcel-dispatch`，提交 `SHR-7IPK7KPV75KVZTE7ZSIQMKHHOM`。`acceptance-decision.formed` 一拍 `PUBLISHED`；`network_routing.initial_route` 一行 `ROUTE_FORMED`，计划 `RPV-000000000001` 三段带时间窗口，交接记录一行。动线越过 `CANDIDATE_COSTS_PENDING`。走完已删库。
