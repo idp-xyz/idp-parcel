@@ -13,7 +13,7 @@ var (
 	// ErrCommissionCancelledAfterStart：委托已取消，但取消时刻不早于这一段的首个参与。按业务时间，取消到达时这一段下的运输
 	// 已经开始，取消本该只停尚可停止的范围（AT-TF-092）；它之所以成立，是因为采用登记晚于实际开始，取消那一刻本上下文还不知道
 	// 这一段属于这份委托。两份事实在业务时间上相抵，采用不替任何一方改：不撤已经答过成立的取消，也不把段挂到已取消的委托上
-	// （ADR-0204 决定三「采用登记之前的取消」）。与 ErrCommissionNotAdoptable 分开，是因为续办不同——那一格是另起委托，这一格
+	// （ADR-0204 决定三「采用与取消的先后」）。与 ErrCommissionNotAdoptable 分开，是因为续办不同——那一格是另起委托，这一格
 	// 是先更正取消或更正控制事实。
 	ErrCommissionCancelledAfterStart = errors.New("transport fulfillment: the commission was cancelled after the segment had started")
 	// ErrAdoptionProviderMismatch：声明的服务方不是委托的服务提供方。采用声明的是「这一段由这家按这份委托履约」，两头
