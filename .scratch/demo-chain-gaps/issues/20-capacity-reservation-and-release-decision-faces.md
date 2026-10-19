@@ -1,7 +1,7 @@
 # 20 容量预占与释放运营决定面
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg20（此前 ready-for-agent——2026-10-19 Claude Code 会话立，用户「你作为业务和系统专家自决……解决所有的问题」授权；代决见 [tf-chain-plan](../tf-chain-plan.md)）。
+Status: in-progress——隔离评审已修（见文末评审记录），待进 main，分支 claude-dcg20（此前 ready-for-agent——2026-10-19 Claude Code 会话立，用户「你作为业务和系统专家自决……解决所有的问题」授权；代决见 [tf-chain-plan](../tf-chain-plan.md)）。
 Blocked by: [17](./17-capacity-pools-are-registered.md)
 地盘：`internal/accessidentity/operation_decision.go`(+_test)；tfhttp `operator_decision_intake.go`(+test)、新 `reserve_capacity.go`/`release_capacity.go`；`application` 的 Reserve/Release 带需求来源；新 `cmd/parcel-api/assemble_capacity_reservation.go` + `endpoints.go` 行；种子 access 02/03、governance 新区间；ADR-0203、TF CONTEXT 一句。
 出处：[03](./03-load-assignment-does-not-check-the-schedule.md)；方案「03 装载分配与容量」D03-1、D03-3、D03-6，「跨票通则」X2，「需要的 ADR」ADR-0203。
@@ -40,9 +40,9 @@ M
 2. **单位须等于池的单位**：按字面比，不换算、不归一大小写，不符答新格 `UNIT_MISMATCH` 并交回池。单位要声明，不从池上默认。
 3. **硬上限按预占整段判**：预占从判断时点起占到有效期满，释放从它的时点起归还；新预占在 [判断时点, 有效期] 每一刻都不得超上限，取整段最紧那一刻判（领域 `CapacityPool.AvailableThrough`），`CAPACITY_EXCEEDED` 报的余量就是那一刻的。没取服务端时钟：ADR-0023 业务时间由提交方给，按整段判已经不需要时钟。
 4. **释放有身份**：释放引用在池内唯一（库面主键同），同引用同预占同内容答 `EXISTING_RELEASE`、不再还一份；异内容或挪到另一份预占答 `RELEASE_CONFLICT`。预占重放改为整份比对（数量、单位、来源、判断时点、有效期），此前只比数量。
-5. **新格与改名**：`POOL_NOT_FOUND`、`RESERVATION_NOT_FOUND`、`UNIT_MISMATCH`、`EXISTING_RELEASE`、`RELEASE_CONFLICT`；冲突、单位不符、超出、过期、守恒撞线各格都交回池（与那一份预占）。容量编排`未受理`的线上名 `SOURCE_NOT_ACCEPTED` 改为 `INPUT_NOT_ACCEPTED`，与 TF 其余运营决定口、登记口同名；容量池登记口随之改名（取证于 `38916b00`：钉这个词的只有容量池登记口的 tfhttp 用例，管理台与 CLI 都不消费）。
+5. **新格与改名**：`POOL_NOT_FOUND`、`RESERVATION_NOT_FOUND`、`UNIT_MISMATCH`、`EXISTING_RELEASE`、`RELEASE_CONFLICT`，以及评审时补的 `RESERVATION_NOT_YET_EFFECTIVE`；冲突、单位不符、超出、尚未生效、过期、守恒撞线各格都交回池（与那一份预占）。容量编排`未受理`的线上名 `SOURCE_NOT_ACCEPTED` 改为 `INPUT_NOT_ACCEPTED`，与 TF 其余运营决定口、登记口同名；容量池登记口随之改名（取证于 `38916b00`：钉这个词的只有容量池登记口的 tfhttp 用例，管理台与 CLI 都不消费）。
 6. **并发**：读池一律 `FOR UPDATE`（事务里锁到结束，事务外随语句放）。先写过「只在写事务里加锁」，要先问一次写执行器，`FindByKey` 就被 PBC-08 门禁认成无事务即拒的写口，改成一律加锁。没走乐观版本列：要改 `ports.go` 的容量池端口签名（方案 X4）。
-7. **次序**：载荷构造门（不读池）→ 读池 → 重放与冲突 → （释放）预占在册 → 单位 → 上限或过期、守恒 → 落池。重放判在单位与上限之前，池满时原样重交仍答已有。
+7. **次序**：载荷构造门（不读池）→ 读池 → 重放与冲突 → （释放）预占在册 → 单位 → 上限，或有效区间（尚未生效、过期）与守恒 → 落池。重放判在单位与上限之前，池满时原样重交仍答已有。
 8. **迁移 TF 0030**：取协调方分的号。预占表有行即拒绝施加（此前没有生产写入口）；预占加来源两列与判断时点、有效期须晚于判断时点；新 `capacity_release` 子表，释放引用池内唯一、随预占删。`released` 列保留给查阅册求和，它与明细之和相等由领域重建门核（库面不钉跨表）。
 9. **access_identity 0012**：决定种类 CHECK 以 main 上 0011 为底加本票两种，另照 0011 的先例预列 ADR-0202 已定名、票 24 加的 `BOOKING_REQUEST_SUBMISSION`（迁移不按编号先后施加）。
 10. **端点**：`POST /transport-fulfillment-capacity-reservations`、`POST /transport-fulfillment-capacity-releases`，挂 `operatorDecisions.transport`；载荷封闭解码，没有越过上限的键，带 `approval`、`override` 一类键答 400。只有新预占、新释放 201。
@@ -55,7 +55,7 @@ M
 
 ### 越权风险点
 
-见 ADR-0203 文末越权风险点（无池即无保护、声明值、来源不回读、软超配归 psb/09、粒度、判断时点由声明方给、读池一律加锁、逐份预占无查阅册、种类粒度、缩容后余量可为负）。本票另有：
+见 ADR-0203 文末越权风险点（无池即无保护、声明值、来源不回读、软超配归 psb/09、粒度、判断时点由声明方给、读池一律加锁、逐份预占无查阅册与池行时刻、种类粒度、缩容后余量可为负、预占不记成员范围、消耗不核硬上限；后两条与池行时刻是评审时补的）。本票另有：
 
 1. **容量池登记口`未受理`改名**（TF owner、前端 owner）：`SOURCE_NOT_ACCEPTED` → `INPUT_NOT_ACCEPTED`。仓内没有别的消费者；仓外若有人按旧词判，会认不出。
 2. **读锁对同波票 18 的影响**（TF owner）：准备评估若在事务里经 `FindByKey` 读池，会与并发的预占在池行上串行；只读评估不该长时间持锁。
@@ -96,3 +96,40 @@ M
 - **AT 覆盖盘点**未改，进 main 时统一重盘（`AT-TF-136` 至 `144`）。
 - **票 21 的接缝**：分配关系挂在预占上（决定二），预占的快照、重建门与 `capacity_reservation` 表都已带来源与判断时点；21 加分配关系时照「迁移不按编号先后施加」再看一次 0030 的拒绝门。
 - **演示动线文档** `docs/design/synthetic-demo-journey-script.md` 没补预占一步：动线终态里预占随装载分配出现（票 21），本票只在种子 README 写登法。
+
+## 评审记录（2026-10-19，隔离评审一轮；作者子代理修订）
+
+阻断 0 项。非阻断 12 项，其中建议进 main 前修的 4 项全修；其余 8 项修 3 项，5 项登去处（协调方或另票）。
+
+### 建议进 main 前修的
+
+1. **释放时点早于预占判断时点落成`未受理`**（编排读过池、答复不带预占，与 ADR-0203 决定六「未受理不读池」对不上）——修，取「单立一格」：领域哨兵 `ErrReservationNotYetEffective`，编排新格 `RESERVATION_NOT_YET_EFFECTIVE`，与过期对称、交回那一份预占（判断时点、有效期与三量在上面）。ADR-0203 决定六的释放次序与「各成一格」那条补上，并写明`未受理`只说载荷单看不成立、不读池；UC-TF-004 `AT-TF-142` 扩成三格；编排 `TestReleaseRefusalsEchoTheReservation`、tfhttp `TestCapacityReleaseEndpointAnswersEachGrade` 各补一格。没取「答未受理并交回预占」：那样`未受理`时而读池、时而带预占，决定六给它的定义就不成立；单位不符与它同类（载荷单看成立，要对着在册对象才判得出），本票已单立，这一格照办。
+2. **预占不记成员范围，ADR 没交代**——修：ADR-0203 Context 的 CONTEXT 引文补全「成员范围」；决定三加一条，说明范围由需求来源固定、装载分配时逐成员落到分配关系上（决定二）；越权风险点加 11「预占不记成员范围」。没在预占上加范围格，理由见下「代决」。
+3. **`establishedPoolRecord` 的文档注释被 `poolDemand` 夹走**——修，挪回函数头上。
+4. **`OpportunityOutcome` 注释写成变更叙述**——修，改为陈述规则，并把新格一并写进去。
+
+### 其余非阻断
+
+5. **构造门用截过精度的时刻、交领域的却是原值**——修：`Reserve`、`Release` 把截过的判断时点、有效期、释放时点交给领域与 `AvailableThrough`；新用例 `TestCapacityDecisionsEchoInstantsAtRegistryPrecision` 证首答回显已截（去掉修法时实测红）。
+6. **释放读回次序的注释说「与领域追加的次序一致」不成立**——修：`loadReleases` 与领域 `Releases()` 的注释改为「次序不带语义，归还按各次自己的时点算」。没改成领域按时点插入：没有逻辑依赖次序，不为注释改行为。
+7. **`Replace` 改写 `capacity_pool.recorded_at` 在生产上生效**——本票不改：改它牵动池登记口回显与编排 `replacePool` 两处，逐份时刻的去处又在票 46。并入[票 46](./46-capacity-reservations-have-no-per-reservation-review-registry.md)「要裁的」（倾向保持建池时刻，交 TF owner），ADR-0203 越权风险点 8 补一句。
+8. **`Consume` 不核硬上限，ADR 决定四没声明例外**——修文档：ADR-0203 决定四声明这条只在预占与释放之间成立，越权风险点加 12「消耗不核硬上限」；领域 `Consume` 头注写明接线时要按消耗之后的整段重核。不改代码：消耗仍不接线（方案 D03-7）。
+9. **票 24 的 access_identity 0013 会删掉本票两种决定**——交协调方，维持上文「偏离与待裁」第一条：合批时 0013 全集取 0012 的并集，合后在新库上重跑一遍 `seed.sh`。
+10. **`cmd/parcel-api/main.go` 里 `buildCapacityPoolRegistration` 之后缺 err 检查**（main 既有）——交协调方在热点文件令牌内补 `if err != nil { return err }`；本票守「热点文件只追加」，不在既有行之间插行。
+11. **读池 `FOR UPDATE` 与票 18 `ListPoolsOnSchedules` 串行**——ADR-0203 越权风险点 7 写明票 18 合入时的两条路（不在长事务里读池，或接受串行）；票 18 rebase 时在其票面落定。
+12. **AT 覆盖盘点与机制清点没重生成**——进 main 时统一重盘（`AT-TF-136` 至 `AT-TF-144`）、重生成。
+
+### 代决（评审修订，用户授权「你作为业务和系统专家自决……解决所有的问题」）
+
+- **释放早于判断时点单立一格**，线上名 `RESERVATION_NOT_YET_EFFECTIVE`，中文`预占尚未生效`：与 `RESERVATION_EXPIRED` 各是有效区间 [判断时点, 有效期] 的一头，续办是按那一份预占的有效区间重述释放时点。`Consume` 共用同一换算，消耗早于判断时点也答这一格（消耗未接线）。
+- **成员范围不在预占上另成一格**：预占先于装载分配，占的时候成员多半未定；加格要改迁移 0030 与两口载荷，而来源不回读之前范围也核不了。
+
+### 越权风险点（评审修订新增）
+
+1. **新线上词 `RESERVATION_NOT_YET_EFFECTIVE`**（TF owner、前端 owner）：此前这一情形答 `INPUT_NOT_ACCEPTED`；本票未进 main，仓内外都没有按旧答法判的消费者。
+2. **预占不记成员范围**（TF owner）：见 ADR-0203 越权风险点 11。若 owner 要预占自带范围，须加一格并改迁移与两口载荷。
+
+### 修订后验证
+
+- `go build ./...`；`go vet` 覆盖 `./internal/transportfulfillment/...`、`./cmd/parcel-api/`、`./internal/architecture/`；`gofmt -l` 干净。
+- `IDP_PARCEL_POSTGRES_DSN=…55432… go test -p 1 -count=1`：`./internal/transportfulfillment/...`、`./internal/accessidentity/...`、`./cmd/parcel-api/`、`./cmd/parcel-transport-register/`、`./internal/architecture/`、`./migrations/` 全部 ok；`-v` 核过真库容量用例实际执行。种子未改，没重灌；没跑全量，机制清点未重生成。
