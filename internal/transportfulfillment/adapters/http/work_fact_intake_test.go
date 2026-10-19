@@ -2,14 +2,17 @@ package tfhttp_test
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"sort"
 	"strings"
 	"testing"
 	"time"
 
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
+	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
@@ -146,7 +149,7 @@ func TestWorkFactCommandIntakeTranslatesEffectiveDeliveryWithTheAuthenticatedTen
 }
 
 const workFactDeliveryProofCorrectionBody = `{"attempt":"SYN-ATTEMPT-08-10","object":"SYN-PARCEL-08-10",` +
-	`"predecessorVersion":"SYN-DRV-08-10-1","newProof":"SYN-POD/signature-10b","correctedAt":"2026-09-06T08:00:00Z"}`
+	`"predecessorVersion":"SYN-DRV-08-10-1","newProof":"SYN-POD/signature-10b","correctedAt":"2026-09-06T16:00:00+08:00"}`
 
 // Covers: 票 operator-channel/41 裁定 (a)——POD 更正的线格式指名前版，与揽收更正同形；前版逐字来自载荷，是编排认
 // 「同一次更正」的锚，租户来自认证结果。
@@ -511,4 +514,268 @@ func TestWorkFactCommandIntakeServesOnlyWorkFactLines(t *testing.T) {
 func isA[Interface any](value any) bool {
 	_, ok := value.(Interface)
 	return ok
+}
+
+const workFactPickupCorrectionBody = `{"object":"SYN-PARCEL-08-01","attempt":"SYN-ATTEMPT-08-01","predecessorVersion":"SYN-PICKUP-VERSION-08-01",` +
+	`"place":"SYN-PLACE/shipper-dock-01b","control":"SYN-CONTROL/signed-pickup-01b","executedBy":"SYN-COURIER-08b",` +
+	`"occurredAt":"2026-09-24T08:35:00+08:00","correctedAt":"2026-09-24T18:00:00+08:00"}`
+
+const workFactHandoverCorrectionBody = `{"object":"SYN-PARCEL-08-05","scope":"SYN-SCOPE/hub-dock-05","predecessorVersion":"v1",` +
+	`"verdict":"REFUSED","releasingEvidence":"SYN-EVIDENCE/release-05b","receivingEvidence":"SYN-EVIDENCE/receive-05b",` +
+	`"rule":"SYN-RULE/handover@v2","basis":"SYN-BASIS/refusal-05","newVersion":"v2","correctedAt":"2026-09-24T15:00:00+08:00"}`
+
+// bodyWith 交回合规载荷改了一格的副本：value 为 nil 时删掉那个键，否则那一格换成 value。
+func bodyWith(t *testing.T, body, key string, value any) string {
+	t.Helper()
+	var fields map[string]any
+	if err := json.Unmarshal([]byte(body), &fields); err != nil {
+		t.Fatalf("合规载荷解不开：%v", err)
+	}
+	if value == nil {
+		delete(fields, key)
+	} else {
+		fields[key] = value
+	}
+	encoded, err := json.Marshal(fields)
+	if err != nil {
+		t.Fatalf("改写载荷：%v", err)
+	}
+	return string(encoded)
+}
+
+// correctionInstant 是更正载荷里的一个时刻格：哪一口、哪个键、Intake 交出的命令里对应哪一格，以及合规载荷里那个值
+// 解出来应是哪一刻。
+type correctionInstant struct {
+	body string
+	key  string
+	read func(*tfhttp.WorkFactCommandIntake, *http.Request) (time.Time, error)
+	want time.Time
+}
+
+var correctionInstants = map[string]correctionInstant{
+	"揽收更正 correctedAt": {workFactPickupCorrectionBody, "correctedAt",
+		func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) (time.Time, error) {
+			command, err := intake.IntakePickupCorrection(context.Background(), request)
+			return command.CorrectedAt, err
+		}, time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC)},
+	"揽收更正 occurredAt": {workFactPickupCorrectionBody, "occurredAt",
+		func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) (time.Time, error) {
+			command, err := intake.IntakePickupCorrection(context.Background(), request)
+			return command.OccurredAt, err
+		}, time.Date(2026, 9, 24, 0, 35, 0, 0, time.UTC)},
+	"交接更正 correctedAt": {workFactHandoverCorrectionBody, "correctedAt",
+		func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) (time.Time, error) {
+			command, err := intake.IntakeHandoverCorrection(context.Background(), request)
+			return command.CorrectedAt, err
+		}, time.Date(2026, 9, 24, 7, 0, 0, 0, time.UTC)},
+	"POD 更正 correctedAt": {workFactDeliveryProofCorrectionBody, "correctedAt",
+		func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) (time.Time, error) {
+			command, err := intake.IntakeCorrection(context.Background(), request)
+			return command.CorrectedAt, err
+		}, time.Date(2026, 9, 6, 8, 0, 0, 0, time.UTC)},
+}
+
+// Covers: 更正口的时刻照本包的分格走（parseOptionalInstant）：键缺席、空串或纯空白都是「空着」，交零值给编排答`未受理`；
+// 前后带空白的合法时刻照常解出。缺席也不拿服务端时钟补——DeliveryIntake 契约「服务器代铸任何一样，离线补传的重放就会被
+// 误判成新事实」。
+func TestWorkFactCommandIntakeLeavesAbsentCorrectionInstantsToTheOrchestration(t *testing.T) {
+	intake := workFactIntakeForTest(t)
+	for row, instant := range correctionInstants {
+		var fields map[string]any
+		if err := json.Unmarshal([]byte(instant.body), &fields); err != nil {
+			t.Fatalf("合规载荷解不开：%v", err)
+		}
+		given, _ := fields[instant.key].(string)
+		for cell, body := range map[string]string{
+			"键缺席": bodyWith(t, instant.body, instant.key, nil),
+			"空串":  bodyWith(t, instant.body, instant.key, ""),
+			"纯空白": bodyWith(t, instant.body, instant.key, " \t "),
+		} {
+			t.Run(row+"/"+cell, func(t *testing.T) {
+				at, err := instant.read(intake, commandRequest(body))
+				if err != nil {
+					t.Fatalf("被当成坏报文：%v", err)
+				}
+				if !at.IsZero() {
+					t.Fatalf("%s = %s, want 零值——空着交给编排答未受理，不由服务端补", instant.key, at)
+				}
+			})
+		}
+		t.Run(row+"/前后带空白的合法时刻", func(t *testing.T) {
+			at, err := instant.read(intake, commandRequest(bodyWith(t, instant.body, instant.key, " "+given+" ")))
+			if err != nil {
+				t.Fatalf("被拒：%v", err)
+			}
+			if !at.Equal(instant.want) {
+				t.Fatalf("%s = %s, want %s", instant.key, at, instant.want)
+			}
+		})
+	}
+}
+
+// Covers: 交接更正的结论与首登同一分格（HandoverRegistrationPayload.Command）：空着照零值交进去，由编排答`未受理`；
+// 词表外是用法错误（400）。
+func TestWorkFactCommandIntakeLeavesAnAbsentHandoverCorrectionVerdictToTheOrchestration(t *testing.T) {
+	intake := workFactIntakeForTest(t)
+	command, err := intake.IntakeHandoverCorrection(context.Background(),
+		commandRequest(bodyWith(t, workFactHandoverCorrectionBody, "verdict", nil)))
+	if err != nil {
+		t.Fatalf("缺结论被当成坏报文：%v", err)
+	}
+	if command.Verdict != domain.HandoverVerdictInvalid {
+		t.Fatalf("Verdict = %s, want 零值", command.Verdict)
+	}
+	_, err = intake.IntakeHandoverCorrection(context.Background(),
+		commandRequest(bodyWith(t, workFactHandoverCorrectionBody, "verdict", "MAYBE")))
+	if !errors.Is(err, tfhttp.ErrMalformedRequest) {
+		t.Fatalf("词表外结论：err = %v, want ErrMalformedRequest", err)
+	}
+}
+
+// correctionEndpoint 是一个更正口接上本包真编排之后的样子：前版已经由同一个 Intake 登上，body 是指名那一版的合规更正
+// 载荷，ledger 交回册上此刻各行的指纹。
+type correctionEndpoint struct {
+	correct http.Handler
+	body    string
+	ledger  func() []string
+}
+
+func serveWorkFact(handler http.Handler, body string) *httptest.ResponseRecorder {
+	recorder := httptest.NewRecorder()
+	handler.ServeHTTP(recorder, commandRequest(body))
+	return recorder
+}
+
+func pickupCorrectionEndpoint(t *testing.T, intake *tfhttp.WorkFactCommandIntake) correctionEndpoint {
+	t.Helper()
+	fixture := newPickupRegistrationFixture(t)
+	seed := serveWorkFact(tfhttp.NewRegisterOffsitePickupEndpoint(intake, fixture.handler), offsitePickupRegistrationBody)
+	if seed.Code != http.StatusCreated {
+		t.Fatalf("登前版：status = %d body = %s", seed.Code, seed.Body.String())
+	}
+	seeded := decodePickupRegistration(t, seed)
+	return correctionEndpoint{
+		correct: tfhttp.NewCorrectOffsitePickupEndpoint(intake, fixture.handler),
+		body:    bodyWith(t, workFactPickupCorrectionBody, "predecessorVersion", seeded.PickupVersion),
+		ledger: func() []string {
+			var rows []string
+			for chain, records := range fixture.registry.records {
+				for _, record := range records {
+					rows = append(rows, chain+"@"+record.Pickup.Version().String())
+				}
+			}
+			sort.Strings(rows)
+			return rows
+		},
+	}
+}
+
+func handoverCorrectionEndpoint(t *testing.T, intake *tfhttp.WorkFactCommandIntake) correctionEndpoint {
+	t.Helper()
+	registry, segments := newHandoverRegistry(), newSegmentRegistry()
+	clock := tfClock{at: time.Date(2026, 9, 24, 6, 0, 0, 0, time.UTC)}
+	handler := application.NewRegisterTransportHandoverHandler(application.RegisterTransportHandoverDeps{
+		Handovers:  registry,
+		Segments:   segments,
+		Downstream: handoverHandoffDouble{},
+		Clock:      clock,
+		ParticipationEnds: application.NewEndFulfillmentParticipationHandler(application.EndFulfillmentParticipationDeps{
+			Segments:   segments,
+			Handovers:  registry,
+			Deliveries: newDeliveryStore(),
+			Clock:      clock,
+		}),
+	})
+	// 译装用例的首登载荷带着 basis 以证那一格也照收；`已交接`带依据在领域上不成形，登前版时去掉它。
+	seed := serveWorkFact(tfhttp.NewRegisterTransportHandoverEndpoint(intake, handler), bodyWith(t, handoverRegistrationBody, "basis", nil))
+	if seed.Code != http.StatusCreated {
+		t.Fatalf("登前版：status = %d body = %s", seed.Code, seed.Body.String())
+	}
+	return correctionEndpoint{
+		correct: tfhttp.NewCorrectTransportHandoverEndpoint(intake, handler),
+		body:    workFactHandoverCorrectionBody,
+		ledger: func() []string {
+			var rows []string
+			for key := range registry.records {
+				rows = append(rows, key)
+			}
+			sort.Strings(rows)
+			return rows
+		},
+	}
+}
+
+func deliveryProofCorrectionEndpoint(t *testing.T, intake *tfhttp.WorkFactCommandIntake) correctionEndpoint {
+	t.Helper()
+	store := newDeliveryStore()
+	handler := application.NewRegisterEffectiveDeliveryHandler(application.RegisterEffectiveDeliveryDeps{
+		Attempts:          &deliveryViewDouble{outcome: domain.ObjectDelivered},
+		Deliveries:        store,
+		Versions:          &deliveryVersionFactory{},
+		Downstream:        deliveryHandoffDouble{},
+		Clock:             tfClock{at: time.Date(2026, 9, 24, 6, 0, 0, 0, time.UTC)},
+		ParticipationEnds: participationEnderDouble{outcome: application.ParticipationNoActiveParticipation},
+	})
+	seed := serveWorkFact(tfhttp.NewRegisterEffectiveDeliveryEndpoint(intake, handler), workFactEffectiveDeliveryBody)
+	if seed.Code != http.StatusCreated {
+		t.Fatalf("登前版：status = %d body = %s", seed.Code, seed.Body.String())
+	}
+	return correctionEndpoint{
+		correct: tfhttp.NewCorrectDeliveryProofEndpoint(intake, handler),
+		body:    bodyWith(t, workFactDeliveryProofCorrectionBody, "predecessorVersion", decodeDelivery(t, seed).DeliveryVersion),
+		// 这一册按键只存当前版，更正是顶替而不是加行：指纹带上版本号，顶替了也看得见。
+		ledger: func() []string {
+			var rows []string
+			for key, record := range store.records {
+				rows = append(rows, key+"@"+record.Delivery.Version().String())
+			}
+			sort.Strings(rows)
+			return rows
+		},
+	}
+}
+
+// Covers: 更正时刻缺席与解不出在线上是两格（ADR-0022 的表：2xx 出队按 `outcome` 呈现，4xx 出队交给人）。缺席走到编排，
+// 答 200 `SOURCE_NOT_ACCEPTED`、册上不变——领域的零值门在线上走得到；解不出是 400 `MALFORMED_REQUEST`，没有 `outcome`。
+// 末一格是对照：同一份载荷带上更正时刻就落新版，前两格答的确是时刻那一格。
+func TestWorkFactCorrectionEndpointsLeaveAnAbsentCorrectionInstantToTheOrchestration(t *testing.T) {
+	for line, assemble := range map[string]func(*testing.T, *tfhttp.WorkFactCommandIntake) correctionEndpoint{
+		"/transport-fulfillment/offsite-pickup-corrections": pickupCorrectionEndpoint,
+		"/transport-fulfillment/handover-corrections":       handoverCorrectionEndpoint,
+		"/transport-fulfillment/delivery-proof-corrections": deliveryProofCorrectionEndpoint,
+	} {
+		t.Run(line, func(t *testing.T) {
+			endpoint := assemble(t, workFactIntakeForTest(t))
+			before := strings.Join(endpoint.ledger(), "\n")
+
+			absent := serveWorkFact(endpoint.correct, bodyWith(t, endpoint.body, "correctedAt", nil))
+			var answer map[string]any
+			if err := json.Unmarshal(absent.Body.Bytes(), &answer); err != nil {
+				t.Fatalf("缺更正时刻：答复解不开：%v", err)
+			}
+			if absent.Code != http.StatusOK || answer["outcome"] != "SOURCE_NOT_ACCEPTED" {
+				t.Fatalf("缺更正时刻：answer = %d %s, want 200 SOURCE_NOT_ACCEPTED", absent.Code, absent.Body.String())
+			}
+			if after := strings.Join(endpoint.ledger(), "\n"); after != before {
+				t.Fatalf("缺更正时刻却改了册：\n%s\nwant\n%s", after, before)
+			}
+
+			garbled := serveWorkFact(endpoint.correct, bodyWith(t, endpoint.body, "correctedAt", "昨天"))
+			var problem map[string]any
+			if err := json.Unmarshal(garbled.Body.Bytes(), &problem); err != nil {
+				t.Fatalf("更正时刻解不出：答复解不开：%v", err)
+			}
+			if _, carriesOutcome := problem["outcome"]; garbled.Code != http.StatusBadRequest ||
+				!strings.Contains(garbled.Body.String(), `"MALFORMED_REQUEST"`) || carriesOutcome {
+				t.Fatalf("更正时刻解不出：answer = %d %s, want 400 MALFORMED_REQUEST 且不带 outcome", garbled.Code, garbled.Body.String())
+			}
+			if after := strings.Join(endpoint.ledger(), "\n"); after != before {
+				t.Fatalf("更正时刻解不出却改了册：\n%s\nwant\n%s", after, before)
+			}
+
+			if complete := serveWorkFact(endpoint.correct, endpoint.body); complete.Code != http.StatusCreated {
+				t.Fatalf("对照：带上更正时刻：status = %d body = %s, want 201", complete.Code, complete.Body.String())
+			}
+		})
+	}
 }

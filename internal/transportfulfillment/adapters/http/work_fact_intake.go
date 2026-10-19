@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
-	"time"
 
 	"go.idp.xyz/idp-parcel/internal/platform/httpapi"
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/application"
@@ -194,7 +193,7 @@ func (intake *WorkFactCommandIntake) IntakeDeliveryAttempt(ctx context.Context, 
 	return payload.Command(tenant)
 }
 
-// HandoverCorrectionPayload 是交接更正的线格式，逐格镜像更正命令去掉租户。
+// HandoverCorrectionPayload 是交接更正的线格式，逐格镜像更正命令去掉租户。结论的分格同 HandoverRegistrationPayload.Command。
 type HandoverCorrectionPayload struct {
 	Object             string `json:"object"`
 	Scope              string `json:"scope"`
@@ -213,27 +212,27 @@ func (payload HandoverCorrectionPayload) Command(tenant domain.TenantID) (applic
 	if tenant.String() == "" {
 		return none, ErrOperatorIdentityMissing
 	}
-	verdict, err := handoverVerdictFromWord(payload.Verdict)
-	if err != nil {
-		return none, err
-	}
-	correctedAt, err := time.Parse(time.RFC3339, payload.CorrectedAt)
-	if err != nil {
-		return none, fmt.Errorf("%w: correctedAt: %v", ErrMalformedRequest, err)
-	}
-	return application.CorrectTransportHandoverCommand{
+	command := application.CorrectTransportHandoverCommand{
 		TenantID:           tenant,
 		Object:             payload.Object,
 		Scope:              payload.Scope,
 		PredecessorVersion: payload.PredecessorVersion,
-		Verdict:            verdict,
 		ReleasingEvidence:  payload.ReleasingEvidence,
 		ReceivingEvidence:  payload.ReceivingEvidence,
 		Rule:               payload.Rule,
 		Basis:              payload.Basis,
 		NewVersion:         payload.NewVersion,
-		CorrectedAt:        correctedAt,
-	}, nil
+	}
+	var err error
+	if payload.Verdict != "" {
+		if command.Verdict, err = handoverVerdictFromWord(payload.Verdict); err != nil {
+			return none, err
+		}
+	}
+	if command.CorrectedAt, err = parseOptionalInstant("correctedAt", payload.CorrectedAt); err != nil {
+		return none, err
+	}
+	return command, nil
 }
 
 // OffsitePickupCorrectionPayload 是单对象揽收更正的线格式。
@@ -253,13 +252,13 @@ func (payload OffsitePickupCorrectionPayload) Command(tenant domain.TenantID) (a
 	if tenant.String() == "" {
 		return none, ErrOperatorIdentityMissing
 	}
-	occurredAt, err := time.Parse(time.RFC3339, payload.OccurredAt)
+	occurredAt, err := parseOptionalInstant("occurredAt", payload.OccurredAt)
 	if err != nil {
-		return none, fmt.Errorf("%w: occurredAt: %v", ErrMalformedRequest, err)
+		return none, err
 	}
-	correctedAt, err := time.Parse(time.RFC3339, payload.CorrectedAt)
+	correctedAt, err := parseOptionalInstant("correctedAt", payload.CorrectedAt)
 	if err != nil {
-		return none, fmt.Errorf("%w: correctedAt: %v", ErrMalformedRequest, err)
+		return none, err
 	}
 	return application.CorrectOffsitePickupCommand{
 		TenantID:           tenant,
@@ -289,9 +288,9 @@ func (payload DeliveryProofCorrectionPayload) Command(tenant domain.TenantID) (a
 	if tenant.String() == "" {
 		return none, ErrOperatorIdentityMissing
 	}
-	correctedAt, err := time.Parse(time.RFC3339, payload.CorrectedAt)
+	correctedAt, err := parseOptionalInstant("correctedAt", payload.CorrectedAt)
 	if err != nil {
-		return none, fmt.Errorf("%w: correctedAt: %v", ErrMalformedRequest, err)
+		return none, err
 	}
 	return application.CorrectDeliveryProofCommand{
 		TenantID:           tenant,
