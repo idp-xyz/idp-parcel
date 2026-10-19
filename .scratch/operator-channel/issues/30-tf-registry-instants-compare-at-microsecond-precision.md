@@ -1,7 +1,7 @@
 # 30 TF 登记册上的时刻按微秒认：带纳秒的原样重放被判成冲突或多签一版，同一微秒内的时间窗与恰在起点的作废答 500
 
 Category: bug
-Status: in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 3 评审遗留；用户授权代决）；分支 `claude-oc30`
+Status: in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 3 评审遗留；用户授权代决）；分支 `claude-oc30`
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)（评审欠账）。被评的是 [20](./20-tf-closure-dispatch-task-and-pickup-judgment-canonicalization.md)，代码 `857453d8`。
 出处：
@@ -185,3 +185,38 @@ TF 各登记册的时刻都落在 `timestamptz` 列上，写入时截到微秒�
 - [ ] 头注不计数、不写行号、不写变更经过（AGENTS「改文档」「写代码注释」）。
 - [ ] 改动包的 `go vet`、`go test -count=1` 通过，`gofmt -l` 无输出。
 - [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：开分支、作者自验、非作者评审（空闲通道或 `/code-review` 的隔离子代理）、推送方在干净检出上带 DSN 跑全量。
+
+## 完成记录（2026-10-18，会话 idp-parcel-9b 的实施子代理，分支 claude-oc30）
+
+基线：分支 rebase 到当时的 `origin/main`（`320d2900`）。上一实施代理留下的 `AtRegistryPrecision` 一笔与三份未提交测试经核对可用，整理后并入下列各笔。
+
+**落点**
+- `domain/registry_precision.go`：`AtRegistryPrecision`，头注是规则在 TF 的唯一陈述；包内 `sameOnRegistry`（相等类）、`afterOnRegistry`（严格先后类）只引它。
+- 相等类：`ExternalCarrierCredential.Equal`（起止、`changedAt`）、`MasterDocument.Equal`（`changedAt`），两处头注补半句；`replayAgainstCurrent`、`JudgeEffectiveTimeHandler.Judge`；`deliveryAttemptContent` 四类时刻格（经 `registryInstantText`），头注改为「在登记册精度上同形」。
+- 严格先后类：`NewCredentialApplicability` 与 `valid` 共用 `endsAfterStart`；`closedAt` 两道门（起点一道同时收掉「恰在起点」）；`OpenDispatchTask`、`DispatchTask.Reschedule`、`FormFulfillmentAttempt`。
+- `CanonicalizeCarrierFirstEffectivePickupPayload` 改调 `AtRegistryPrecision`，头注照「做什么」5 改；`canonicalInstant` 补头注写不对称。
+- 并入一节：`replayOrConflictOnTheSameBasis` 头注去先例；`assertConflictLeavesTheChain` 改收绝对行数与意图数，并断言 `FindCurrentByObject` 仍是原链尾。
+
+**完成判据 ↔ 用例**
+- `AtRegistryPrecision` 四格：`TestAtRegistryPrecisionFoldsAnInstantToTheMicrosecond`。
+- 两个 `Equal` 双向：`TestCredentialEqualityHoldsAtRegistryPrecision`、`TestMasterDocumentEqualityHoldsAtRegistryPrecision`。
+- 编排无 DSN（`application/registry_precision_replay_test.go`，替身读回用测试里独立写的 `Truncate`）：凭证首登、首登并发输家、改变适用关系、总单形成新版本、有效时间显式判断、派送尝试，各配 +1µs。
+- 真库（`adapters/postgres/registry_precision_replay_test.go`，编排加真登记册、每调一笔事务且要求提交成功）：凭证首登与改变、总单、有效时间（答 `ALREADY_JUDGED_AS_GIVEN`、不签新版、重发的意图仍指原版本）、派送尝试，时刻格全带纳秒并配 +1µs；并发输家 `TestACredentialRaceLoserWithNanosecondsReadsBackTheWinnerAsTheExistingVersion`（READ COMMITTED，B 在 A 提交前返回即判没排队）。
+- 严格先后门：领域 `TestStrictOrderingGatesHoldAtRegistryPrecision`、`TestClosingAnApplicabilityHoldsAtRegistryPrecision`；真库 `TestDispatchWindowsWithinOneMicrosecondAreNotAcceptedAgainstARealRegistry`、`TestCredentialRangesWithinOneMicrosecondAreNotAcceptedAgainstARealRegistry`（含作废点恰在起点）。
+- 往返钉：`pinRoundTrip`，挂在凭证起止与改变时间、总单改变时间、有效时间、任务时间窗两端、派送尝试的各类时刻上。
+- 摘要字节不变：`TestCommandPayloadsRoundTripAsTFC1`、`TestCarrierPickupJudgmentBusinessTimeIsComparedToTheMicrosecond` 照过；票 20、27 既有用例照过。
+- 并入一节：`TestASameBasisWithDifferentContentAnswersContentConflict` 各子例在新断言下照绿。
+
+**先红后绿**
+- 领域与编排：先写用例，红落在行为上（纳秒版与微秒版判不等；重放答 `CONTENT_CONFLICT`、签出新版或答 `SOURCE_CONFLICT`；同一微秒内的一对被放行），改实现后转绿。
+- 真库：把生产文件换回修复前的样子跑同一组用例，全红——凭证与总单重放答 `CONTENT_CONFLICT`，并发输家 B 答 `CONTENT_CONFLICT`，有效时间重放答 `EFFECTIVE_TIME_JUDGED`，派送尝试答 `SOURCE_CONFLICT`，两例严格门报「事务没有提交：commit unexpectedly resulted in rollback」。换回修复后全绿。
+- 变异自检：逐个调用点改回按纳秒比较或判定，每一处都至少红一例。做过的调用点：`ExternalCarrierCredential.Equal` 的起点、终点与 `changedAt`，`MasterDocument.Equal`，`endsAfterStart`，`closedAt` 的起点门与终点门，开立与改约的时间窗，计划窗，`replayAgainstCurrent`，`Judge`，`deliveryAttemptContent` 的四格，收寄判断业务时间。
+- 并入一节的变异：把冲突路改成以链尾续出一版并交接、答复仍带回原链尾。旧断言下各子例照绿；新断言下四个冲突子例转红，行数与意图数各多一。复原后转绿。
+
+**门**：`gofmt -l` 无输出；`go build ./...`、`go vet ./...` 退 0；带 DSN `go test -p 1 -count=1 -v ./internal/transportfulfillment/... ./cmd/parcel-api/... ./internal/architecture/...` 全部 ok，无 `--- SKIP`。`docs/product/MECHANISM-INVENTORY.md` 在干净工作树上重生成，单独提交。
+
+**未做**：「做什么」8（`cmd/parcel-api` 真装配的 HTTP 例）是可加项，未做。「走 Go 那条路」里的非作者评审与推送方全量不归作者。
+
+证据层级 `S`。
+
+评审：待会话读 diff 审
