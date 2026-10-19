@@ -2,7 +2,11 @@ package main
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
+	"net/http"
+	"net/http/httptest"
+	"strings"
 	"testing"
 	"time"
 
@@ -11,6 +15,7 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/inbox"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
 	psinbox "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/inbox"
 	psparty "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/partycommercial"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
@@ -301,6 +306,120 @@ func TestTheProductionReviewAssemblyStopsWithoutAnAuthorityMapping(t *testing.T)
 		t.Fatalf("未形成时信封 = %d 封, want 0", got)
 	}
 	assertNoReviewCompletionRecorded(t, db)
+}
+
+// reviewOperatorAuthenticator 是操作者渠道认证那一段的替身：令牌即操作者 sub，租户取提交夹具那份委托的租户。令牌、
+// 操作者册与准入范围那一段与复核完成的版本代数无关，它们的答复格另由 TestSwappedDecisionFacesAnswerFromTheOperatorChannel
+// 一类用例在真装配上取证；这里要证的是 Intake 之后那一段。
+type reviewOperatorAuthenticator struct{ tenant domain.TenantID }
+
+func (fake reviewOperatorAuthenticator) AuthenticateOperatorDecision(
+	_ context.Context,
+	token string,
+	decision shipmenthttp.OperatorDecision,
+) (shipmenthttp.OperatorIdentity, error) {
+	if token == "" {
+		return shipmenthttp.OperatorIdentity{}, shipmenthttp.ErrOperatorCredentialRejected
+	}
+	if decision != shipmenthttp.OperatorDecisionManualReviewCompletion {
+		return shipmenthttp.OperatorIdentity{}, shipmenthttp.ErrOperatorNotGranted
+	}
+	return shipmenthttp.OperatorIdentity{Tenant: fake.tenant, Operator: "https://id.syn.example/dex#" + token}, nil
+}
+
+// Covers: 票 operator-channel/34 与 ADR-0132 决定二「撞上换代答`版本已换代`」、ADR-0045 决定三（新版本携带自己的判断
+// 任务）——经生产的操作者 Intake 与真寻址（委托查阅适配器），复核授权只有请求映射是合成替身：V1 记下复核之后受控补充形成
+// V2，同一个指名 V1 的复核 POST 原样重投（超时重投，或操作员还开着 V1 那一页），答 200 `VERSION_SUPERSEDED` 并报出 V2；
+// V2 的任务上不落完成，「复核已完成」信封仍是那一封。此前 Intake 拿服务端当前版顶替，这一投会答 201 `RECORDED`，把 V1
+// 的复核人和证据签到 V2 的任务上，再铸一封信。编排直调、命令指名 V1 的对照在那时也答`版本已换代`，辨别不出这条缺陷，
+// 所以这里只走 Intake。测试输入是合成数据，只记 `S`。
+func TestAReviewNamingASupersededVersionIsNotSignedOntoTheNewVersionThroughTheOperatorIntake(t *testing.T) {
+	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+
+	version1 := submittedRequestOnRealAssembly(t, db)
+	seedSYNReviewGrant(t, db)
+	review, err := manualReviewOrchestrationWith(db, synRReviewRequestSource{t: t})
+	if err != nil {
+		t.Fatalf("装配复核完成编排：%v", err)
+	}
+	views, err := pspostgres.NewShipmentRequestViews(db)
+	if err != nil {
+		t.Fatalf("构造委托查阅读口：%v", err)
+	}
+	command := submissionCommand(t)
+	intake, err := shipmenthttp.NewOperatorDecisionIntake(
+		reviewOperatorAuthenticator{tenant: command.Identity.TenantID()}, views, unwiredDecisionTargets{})
+	if err != nil {
+		t.Fatalf("构造操作者 Intake：%v", err)
+	}
+	endpoint := shipmenthttp.NewCompleteManualReviewEndpoint(intake, review)
+
+	type answer struct {
+		Outcome        string `json:"outcome"`
+		Reviewer       string `json:"reviewer"`
+		CurrentVersion string `json:"currentVersion"`
+	}
+	post := func(t *testing.T, body string) (int, answer) {
+		t.Helper()
+		request := httptest.NewRequest(http.MethodPost, "/shipment-requests/manual-review-completions", strings.NewReader(body))
+		request.Header.Set("Authorization", "Bearer SYN-OPERATOR-01")
+		response := httptest.NewRecorder()
+		endpoint.ServeHTTP(response, request)
+		var got answer
+		if err := json.Unmarshal(response.Body.Bytes(), &got); err != nil {
+			t.Fatalf("译响应：%v（%s）", err, response.Body.String())
+		}
+		return response.Code, got
+	}
+	namingV1 := `{"shipmentRequestId": "` + command.ShipmentRequestID.String() + `", "submissionVersionId": "` + version1.String() +
+		`", "reason": "SYN-REVIEW-REASON-1"}`
+
+	if status, got := post(t, namingV1); status != http.StatusCreated || got.Outcome != "RECORDED" {
+		t.Fatalf("V1 上的复核答 %d %+v，want 201 RECORDED", status, got)
+	}
+	if got := envelopeCountOfType(t, db, resumeEnvelopeType); got != 1 {
+		t.Fatalf("V1 复核落库后「复核已完成」信封 = %d 封, want 恰好 1", got)
+	}
+
+	supplement, err := buildCustomerSupplementOrchestration(db)
+	if err != nil {
+		t.Fatalf("装配受控补充编排：%v", err)
+	}
+	supplemented, err := supplement.Handle(t.Context(), supplementCommand(t, version1, "SYN-KEY-1-SUPPLEMENT-OC34", "syn-digest-oc34"))
+	if err != nil {
+		t.Fatalf("受控补充：%v", err)
+	}
+	formed, present := supplemented.Version()
+	if supplemented.Outcome() != shipmentapp.SupplementRecorded || !present || formed.VersionID() == version1 {
+		t.Fatalf("受控补充 = %q，新版本 %v present=%v——前提不成立，V2 没有形成", supplemented.Outcome(), formed.VersionID(), present)
+	}
+	version2 := formed.VersionID()
+
+	status, replay := post(t, namingV1)
+	if status != http.StatusOK || replay.Outcome != "VERSION_SUPERSEDED" || replay.CurrentVersion != version2.String() {
+		t.Fatalf("V2 形成之后重投指名 V1 的复核答 %d %+v，want 200 VERSION_SUPERSEDED 且 currentVersion = %q", status, replay, version2)
+	}
+	if got := envelopeCountOfType(t, db, resumeEnvelopeType); got != 1 {
+		t.Fatalf("重投之后「复核已完成」信封 = %d 封——V1 的复核又驱了 V2 一拍", got)
+	}
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		t.Fatalf("构造委托仓储：%v", err)
+	}
+	request, found, err := requests.FindBySourceIdentity(t.Context(), command.Identity)
+	if err != nil || !found {
+		t.Fatalf("读回委托：err=%v found=%v", err, found)
+	}
+	task := request.AcceptanceDecisionTask()
+	if task.SubmissionVersionID() != version2 {
+		t.Fatalf("当前判断任务挂在 %q，want V2 %q", task.SubmissionVersionID(), version2)
+	}
+	if completion, done := task.ManualReviewCompletion(); done {
+		t.Fatalf("V2 的任务上落了完成（复核人 %q，证据 %q）——V1 的复核签到了 V2 头上", completion.Reviewer(), completion.Evidence())
+	}
 }
 
 func assertNoReviewCompletionRecorded(t *testing.T, db *bentopg.DB) {

@@ -63,7 +63,7 @@ type OperatorAuthenticator interface {
 // OperatorDecisionIntake 是操作者渠道「运营决定」能力面在委托侧五口的 Intake（ADR-0151 决定一、二）：复核完成、主动拒绝、
 // 授权处置三口，与受控关闭、重开两口（ADR-0183）。
 //
-// 线格式是管理台今天送出的草案：复核完成与主动拒绝只有委托标识与理由，授权处置另带它审的那个提交版本与去向。
+// 线格式是管理台今天送出的草案：主动拒绝只有委托标识与理由；复核完成与授权处置另带它审的那个提交版本，授权处置再带去向。
 // 载荷只有内容、没有身份：来源身份由服务端按信封的租户与委托标识查出（ADR-0151 决定二「委托寻址」），复核人、
 // 决定人、处置人取认证出的提交操作者；载荷里出现任何身份格即拒（封闭解码）。先认证、后解载荷。受控关闭与重开改按
 // 包裹寻址、请求方与货主账户取那份委托的客户账户，提交操作者不进命令（ADR-0183）。
@@ -276,6 +276,12 @@ type decisionReasonPayload struct {
 	Reason            string `json:"reason"`
 }
 
+type manualReviewCompletionPayload struct {
+	ShipmentRequestID   string `json:"shipmentRequestId"`
+	SubmissionVersionID string `json:"submissionVersionId"`
+	Reason              string `json:"reason"`
+}
+
 type authorizedDispositionPayload struct {
 	ShipmentRequestID   string `json:"shipmentRequestId"`
 	SubmissionVersionID string `json:"submissionVersionId"`
@@ -284,15 +290,29 @@ type authorizedDispositionPayload struct {
 }
 
 // IntakeManualReviewCompletion 译复核完成（`/shipment-requests/manual-review-completions`）。命令里没有原因格，
-// 管理台送来的复核理由就是复核留痕的证据引用；提交版本取服务端当前版本——管理台这一口的草案不带版本。
+// 管理台送来的复核理由就是复核留痕的证据引用。
+//
+// 提交版本取载荷指名的那一份，必填：版本是复核的对象，不是服务端能代填的默认值。拿此刻的当前版顶替，新版本形成之后
+// 同一请求重投、或操作员按旧页面提交，旧版本的复核就签到新版本的任务上——ADR-0045 决定三否决「改钉新版本号」的正是
+// 这件事；编排那道`版本已换代`的门（ADR-0132 决定二）也就只剩寻址与编排之间的竞态窗口走得到。版本不属于 ADR-0151
+// 决定二不采信自报的身份格。版本与理由只看载荷，排在委托寻址之前：坏载荷答 400，不因委托查不到先落进「与越权探针
+// 同答」那一格。
 func (intake *OperatorDecisionIntake) IntakeManualReviewCompletion(ctx context.Context, request *http.Request) (application.CompleteManualReviewCommand, error) {
 	operator, err := intake.authenticator.AuthenticateOperatorDecision(ctx, httpapi.BearerToken(request), OperatorDecisionManualReviewCompletion)
 	if err != nil {
 		return application.CompleteManualReviewCommand{}, err
 	}
-	var payload decisionReasonPayload
+	var payload manualReviewCompletionPayload
 	if err := decodeDecisionPayload(request.Body, &payload); err != nil {
 		return application.CompleteManualReviewCommand{}, err
+	}
+	version, err := domain.NewSubmissionVersionID(payload.SubmissionVersionID)
+	if err != nil {
+		return application.CompleteManualReviewCommand{}, fmt.Errorf("%w: submissionVersionId: %v", ErrMalformedRequest, err)
+	}
+	evidence, err := domain.NewReviewEvidenceReference(payload.Reason)
+	if err != nil {
+		return application.CompleteManualReviewCommand{}, fmt.Errorf("%w: reason: %v", ErrMalformedRequest, err)
 	}
 	requestID, target, err := intake.locate(ctx, operator.Tenant, payload.ShipmentRequestID)
 	if err != nil {
@@ -302,21 +322,20 @@ func (intake *OperatorDecisionIntake) IntakeManualReviewCompletion(ctx context.C
 	if err != nil {
 		return application.CompleteManualReviewCommand{}, fmt.Errorf("parcel shipment http: reviewer: %w", err)
 	}
-	evidence, err := domain.NewReviewEvidenceReference(payload.Reason)
-	if err != nil {
-		return application.CompleteManualReviewCommand{}, fmt.Errorf("%w: reason: %v", ErrMalformedRequest, err)
-	}
 	return application.CompleteManualReviewCommand{
 		Identity:          target.Identity,
 		ShipmentRequestID: requestID,
-		SubmissionVersion: target.CurrentVersion,
+		SubmissionVersion: version,
 		Reviewer:          reviewer,
 		Evidence:          evidence,
 	}, nil
 }
 
 // IntakeActiveRejection 译主动拒绝（`/shipment-requests/rejections`）。理由进结构化原因格；证据格取认证出的操作者
-// ——登录操作人可以作为操作证据（PS CONTEXT）。提交版本取服务端当前版本，理由同复核完成。
+// ——登录操作人可以作为操作证据（PS CONTEXT）。
+//
+// 提交版本仍取服务端当前版本：拒绝一旦成立，委托就不会再形成新版本，同一请求重投时的当前版仍是拒绝签下的那一版，
+// 重放认的对象不会被换掉。拒绝要不要绑定操作员看过的那一版，归 PS owner（票 operator-channel/34 把它划在范围外）。
 func (intake *OperatorDecisionIntake) IntakeActiveRejection(ctx context.Context, request *http.Request) (application.RejectShipmentRequestCommand, error) {
 	operator, err := intake.authenticator.AuthenticateOperatorDecision(ctx, httpapi.BearerToken(request), OperatorDecisionActiveRejection)
 	if err != nil {

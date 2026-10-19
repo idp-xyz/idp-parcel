@@ -223,20 +223,47 @@ func decisionRequest(token, body string) *http.Request {
 	return request
 }
 
+// Covers: 票 operator-channel/34——复核完成的提交版本取载荷指名的那一份，不由服务端当前版本顶替：替身目标的当前版是
+// SYN-VERSION-02，载荷指名 SYN-VERSION-01，命令必须签给 SYN-VERSION-01，`版本已换代`那一格才在真渠道上走得到
+// （ADR-0132 决定二、ADR-0045 决定三）。来源身份照旧按委托寻址取服务端那一份，复核人取认证出的操作者。
 func TestManualReviewCompletionIsAddressedServerSideAndSignedByTheAuthenticatedOperator(t *testing.T) {
 	intake := decisionIntake(t, decisionAuthenticator{}, decisionTargets{})
 
 	command, err := intake.IntakeManualReviewCompletion(context.Background(),
-		decisionRequest("t", `{"shipmentRequestId": "SYN-REQ-01", "reason": "证件与申报一致"}`))
+		decisionRequest("t", `{"shipmentRequestId": "SYN-REQ-01", "submissionVersionId": "SYN-VERSION-01", "reason": "证件与申报一致"}`))
 	if err != nil {
 		t.Fatalf("manual review completion: %v", err)
 	}
 	if command.Identity.TenantID().String() != decisionTenant || command.Identity.CustomerAccountID().String() != "SYN-ACCOUNT-01" ||
-		command.ShipmentRequestID.String() != "SYN-REQ-01" || command.SubmissionVersion.String() != "SYN-VERSION-02" {
+		command.ShipmentRequestID.String() != "SYN-REQ-01" {
 		t.Fatalf("addressing = %+v", command)
+	}
+	if command.SubmissionVersion.String() != "SYN-VERSION-01" {
+		t.Fatalf("submission version = %q, want the one the payload names (SYN-VERSION-01), never the server's current SYN-VERSION-02",
+			command.SubmissionVersion.String())
 	}
 	if command.Reviewer.String() != decisionOperator || command.Evidence.String() != "证件与申报一致" {
 		t.Fatalf("reviewer %q, evidence %q", command.Reviewer.String(), command.Evidence.String())
+	}
+}
+
+// Covers: 票 operator-channel/34——版本是复核的对象，缺了或立不起来是坏报文；版本与理由两道纯载荷校验排在委托寻址之前，
+// 委托查不到时也答 400，不先落进「与越权探针同答」那一格（写法同授权处置口）。
+func TestAManualReviewCompletionWithoutItsVersionAnswers400EvenWhenTheRequestIsUnknown(t *testing.T) {
+	ctx := context.Background()
+	for name, targets := range map[string]decisionTargets{"known request": {}, "unknown request": {missing: true}} {
+		intake := decisionIntake(t, decisionAuthenticator{}, targets)
+		for why, body := range map[string]string{
+			"version missing":      `{"shipmentRequestId": "SYN-REQ-01", "reason": "r"}`,
+			"version blank":        `{"shipmentRequestId": "SYN-REQ-01", "submissionVersionId": "   ", "reason": "r"}`,
+			"version not a string": `{"shipmentRequestId": "SYN-REQ-01", "submissionVersionId": 1, "reason": "r"}`,
+			"reason missing":       `{"shipmentRequestId": "SYN-REQ-01", "submissionVersionId": "SYN-VERSION-01"}`,
+			"reason blank":         `{"shipmentRequestId": "SYN-REQ-01", "submissionVersionId": "SYN-VERSION-01", "reason": " "}`,
+		} {
+			if _, err := intake.IntakeManualReviewCompletion(ctx, decisionRequest("t", body)); !errors.Is(err, shipmenthttp.ErrMalformedRequest) {
+				t.Fatalf("%s, %s: err = %v, want ErrMalformedRequest", name, why, err)
+			}
+		}
 	}
 }
 
@@ -269,9 +296,9 @@ func TestDecisionPayloadsCarryNoIdentityAndUnknownRequestsAnswerLikeAProbe(t *te
 	ctx := context.Background()
 	intake := decisionIntake(t, decisionAuthenticator{}, decisionTargets{})
 	for name, body := range map[string]string{
-		"customer account smuggled": `{"shipmentRequestId": "SYN-REQ-01", "reason": "r", "customerAccountId": "SYN-ACCOUNT-09"}`,
-		"reviewer smuggled":         `{"shipmentRequestId": "SYN-REQ-01", "reason": "r", "reviewer": "someone"}`,
-		"request id missing":        `{"reason": "r"}`,
+		"customer account smuggled": `{"shipmentRequestId": "SYN-REQ-01", "submissionVersionId": "SYN-VERSION-01", "reason": "r", "customerAccountId": "SYN-ACCOUNT-09"}`,
+		"reviewer smuggled":         `{"shipmentRequestId": "SYN-REQ-01", "submissionVersionId": "SYN-VERSION-01", "reason": "r", "reviewer": "someone"}`,
+		"request id missing":        `{"submissionVersionId": "SYN-VERSION-01", "reason": "r"}`,
 	} {
 		if _, err := intake.IntakeManualReviewCompletion(ctx, decisionRequest("t", body)); !errors.Is(err, shipmenthttp.ErrMalformedRequest) {
 			t.Fatalf("%s: err = %v, want ErrMalformedRequest", name, err)
