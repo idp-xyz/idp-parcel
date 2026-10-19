@@ -115,10 +115,10 @@ Date: 2026-10-19
 
 越权风险点（续上文编号）：
 
-13. **分配的保障随预占到期失效**（TF owner）。预占有效期早于班次出发时，到期那一刻已分配的那段随未消耗剩余一并归还池，分配仍在册而不再受保护，没有任何一格提示。去处是票 [demo-chain-gaps/56](../../.scratch/demo-chain-gaps/issues/56-allocation-guarantee-lapses-when-the-reservation-expires-before-departure.md)。
+13. **分配的保障随预占到期失效**（TF owner）。预占有效期早于班次出发时，到期那一刻已分配的那段随未消耗剩余一并归还池，分配仍在册而不再受保护，没有任何一格提示。同一类还有倒填：分配时刻由提交方给（ADR-0023），倒填进一份早已过期的预占的有效区间照样形成分配，而那份预占的剩余早已随到期还给池、可能已被别的预占占走，这份分配从形成那一刻起就不受保护。去处是票 [demo-chain-gaps/56](../../.scratch/demo-chain-gaps/issues/56-allocation-guarantee-lapses-when-the-reservation-expires-before-departure.md)。
 14. **变化与撤回没有入口**（TF owner）。归还机制已就位、真库证过，但生产上只有形成首版一口：一份分配形成之后，它占着的那段只能等预占到期才回来。变化入口接线时须走同一道容量保障判定。去处是票 [demo-chain-gaps/55](../../.scratch/demo-chain-gaps/issues/55-load-assignment-revision-and-withdrawal-entries-are-not-wired.md)。
 15. **消耗与分配没有接通**（TF owner；方案 D03-7「仍不接线」）。消耗此刻只从未分配的余量里取：一份全额分配的预占上，依据那份分配的消耗也会撞守恒。消耗接线时要把它改成转换那一条分配关系的量，并在分配关系上记下已消耗的部分。
 16. **三种指错并成一格**（TF owner）。池不在本班次、预占不在那个池上、没挂池却带了行，续办同是「改指本班次池上的在册预占（或先预占）」，所以并成 `RESERVATION_NOT_ON_SCHEDULE`；若 owner 要把「预占还没立」与「指到了别的班次」分开，加一格即可，载荷不变。
-17. **存量分配不回补**（TF owner）。0031 之前在挂池班次上形成的分配没有分配行，不占任何预占；不替谁补一个分配量。
+17. **存量分配不回补**（TF owner）。0031 之前在挂池班次上形成的分配没有分配行，不占任何预占；不替谁补一个分配量。并发建池会留下同样的状态：分配只锁已在册的池行，另一笔事务同时在这一班上建池时，分配读不到新池，可以不带那一行就形成（幻读窗口，生产上概率低）。要堵须让建池与分配在班次那一行上互斥，本票不做，由 TF owner 定是否另票。
 18. **分配量的来源不回读**（TF owner）。同越权风险点 3：`PREPARATION_DEMAND_SNAPSHOT` 的引用不核准备结果在不在、量对不对；分配量是声明值（越权风险点 2）。
 19. **查阅口看不到分配关系**（前端 owner）。池级查阅册只列预占、释放、实际使用三个和，不列已分配；逐份预占的查阅册（票 [demo-chain-gaps/46](../../.scratch/demo-chain-gaps/issues/46-capacity-reservations-have-no-per-reservation-review-registry.md)）落地时应带已分配与分配关系。
