@@ -10,12 +10,10 @@ import (
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
 	nonetwork "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/networkrouting"
-	noparcel "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/parcelshipment"
 	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
-	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 )
 
 // consolidationImporter 是集运子命令的全部依赖。事务由本层给出（单元库与来源事实登记的
@@ -71,17 +69,9 @@ func buildDirectionalBasisJudge(db *bentopg.DB, clock ports.Clock) (*application
 	if err != nil {
 		return nil, fmt.Errorf("收寄册按实物读口：%w", err)
 	}
-	cancellations, err := pspostgres.NewParcelCancellations(db)
+	serviceResults, err := parcelServiceResultViewOf(db)
 	if err != nil {
-		return nil, fmt.Errorf("取消决定册：%w", err)
-	}
-	finals, err := pspostgres.NewFinalOutcomes(db)
-	if err != nil {
-		return nil, fmt.Errorf("终局册：%w", err)
-	}
-	serviceResults, err := noparcel.NewServiceResultView(cancellations, finals)
-	if err != nil {
-		return nil, fmt.Errorf("服务结果读口：%w", err)
+		return nil, err
 	}
 	judge, err := application.NewDirectionalBasisJudge(application.DirectionalBasisDeps{
 		Intakes:        intakes,

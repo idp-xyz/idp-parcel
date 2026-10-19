@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"strings"
@@ -29,6 +30,10 @@ type intakeImporter struct {
 // buildIntakeImporter 装配真实收寄链：收寄库、收寄结果版本签发、Outbox 意图交付走 NO
 // 真库口，与 parcel-api 的 buildReceptionOrchestration 同一套件。身份核对由参数给出：生产传
 // parcelIdentityViewOf 装的 PS 关联册读口，测试可传能解析的替身直证关联收寄那一格。
+//
+// 跨上下文读口须经 savepoint 隔离：读口跟着走本行那一笔事务，一条 SQL 级读错误会把事务打进中止态、
+// 连带作废收寄的写。服务结果读口由 parcelServiceResultViewOf 包好（ADR-0186）；身份核对读口不包——
+// 它读不动本就不形成答案，整笔回滚、本行记未决正是要的结果。
 func buildIntakeImporter(db *bentopg.DB, clock ports.Clock, identity ports.ParcelIdentityView) (intakeImporter, error) {
 	receptions, err := nopostgres.NewReceptions(db)
 	if err != nil {
@@ -46,18 +51,10 @@ func buildIntakeImporter(db *bentopg.DB, clock ports.Clock, identity ports.Parce
 	if err != nil {
 		return intakeImporter{}, fmt.Errorf("收寄意图交付：%w", err)
 	}
-	// 服务结果读口（票 operator-channel/25）：身份唯一成立的行向 PS 取取消与当前终局，落成标记；与收寄同一笔事务读。
-	cancellations, err := pspostgres.NewParcelCancellations(db)
+	// 服务结果读口（票 operator-channel/25）：身份唯一成立的行向 PS 取取消与当前终局，落成标记。
+	serviceResults, err := parcelServiceResultViewOf(db)
 	if err != nil {
-		return intakeImporter{}, fmt.Errorf("取消决定册：%w", err)
-	}
-	finals, err := pspostgres.NewFinalOutcomes(db)
-	if err != nil {
-		return intakeImporter{}, fmt.Errorf("终局册：%w", err)
-	}
-	serviceResults, err := noparcel.NewServiceResultView(cancellations, finals)
-	if err != nil {
-		return intakeImporter{}, fmt.Errorf("服务结果读口：%w", err)
+		return intakeImporter{}, err
 	}
 	handler, err := application.NewReceiveDeliveredUnitHandler(application.ReceiveDeliveredUnitDeps{
 		Identity:       identity,
@@ -90,6 +87,29 @@ func parcelIdentityViewOf(db *bentopg.DB) (ports.ParcelIdentityView, error) {
 	return view, nil
 }
 
+// parcelServiceResultViewOf 装生产的服务结果读口：PS 的取消决定册与终局册经 NO 的防腐适配器读（票 operator-channel/25），
+// 外面包一层 savepoint，读失败不连带本行收寄的写（ADR-0186）；ctx 不在事务里时直通。与 parcel-api 的
+// buildParcelServiceResultView 同一套件；收寄与集运方向依据两处都经这里装，同一只读口。
+func parcelServiceResultViewOf(db *bentopg.DB) (ports.ParcelServiceResultView, error) {
+	cancellations, err := pspostgres.NewParcelCancellations(db)
+	if err != nil {
+		return nil, fmt.Errorf("取消决定册：%w", err)
+	}
+	finals, err := pspostgres.NewFinalOutcomes(db)
+	if err != nil {
+		return nil, fmt.Errorf("终局册：%w", err)
+	}
+	view, err := noparcel.NewServiceResultView(cancellations, finals)
+	if err != nil {
+		return nil, fmt.Errorf("服务结果读口：%w", err)
+	}
+	isolated, err := nopostgres.NewSavepointedServiceResultView(db, view)
+	if err != nil {
+		return nil, fmt.Errorf("服务结果读口 savepoint：%w", err)
+	}
+	return isolated, nil
+}
+
 // executeIntake 逐行推进、打报告、算退出码。
 func executeIntake(ctx context.Context, batch intakeBatch, importer intakeImporter, out io.Writer) int {
 	results := importIntake(ctx, batch, importer)
@@ -98,7 +118,7 @@ func executeIntake(ctx context.Context, batch intakeBatch, importer intakeImport
 }
 
 // importIntake 逐行推进：一行一笔事务 → 交编排 → 应用结果译成去向。编排返回 Go 错误
-// 时整笔回滚，该行记未决；其他行照常继续。
+// 时整笔回滚：命令本身被拒的行记被拒（重跑同一份文件不会变好），其余记未决；其他行照常继续。
 func importIntake(ctx context.Context, batch intakeBatch, importer intakeImporter) []rowResult {
 	results := make([]rowResult, 0, len(batch.Rows))
 	for _, row := range batch.Rows {
@@ -111,6 +131,15 @@ func importIntake(ctx context.Context, batch intakeBatch, importer intakeImporte
 			handled = result
 			return nil
 		})
+		if errors.Is(err, application.ErrReceptionCommandRejected) {
+			results = append(results, rowResult{
+				Line: row.Line, FactRef: row.FactRef,
+				Outcome:     "COMMAND_REJECTED",
+				Disposition: rowRejected,
+				Detail:      fmt.Sprintf("收寄命令被拒，未落库：%v", err),
+			})
+			continue
+		}
 		if err != nil {
 			results = append(results, rowResult{
 				Line: row.Line, FactRef: row.FactRef,
@@ -178,6 +207,16 @@ func describeReception(record ports.ReceptionRecord) string {
 	}
 	if record.Control.Active() {
 		parts = append(parts, "控制依据 "+record.Control.Basis().String())
+	}
+	switch record.ServiceResultCheck {
+	case ports.ServiceResultsChecked:
+		if len(record.ServiceMarkers) == 0 {
+			parts = append(parts, "服务结果已查：没有取消与终局")
+		} else {
+			parts = append(parts, "服务结果已查：标记 "+strings.Join(record.ServiceMarkers, "、"))
+		}
+	case ports.ServiceResultsUnreadable:
+		parts = append(parts, "服务结果读不动：标记缺席不代表没有取消或终局")
 	}
 	if record.IdentityConflict {
 		parts = append(parts, fmt.Sprintf("身份冲突（%d 个候选），方向性作业暂停", len(record.Candidates)))

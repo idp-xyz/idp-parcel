@@ -18,10 +18,16 @@ import (
 )
 
 // transactionalReception 把收寄编排包进一笔事务，理由随 transactionalCancellation：收寄
-// 库的写口按框架合同无事务即拒（收寄判断落库与同一步的意图发布必须同生共死），事务
-// 边界归装配点。意图交付失败不翻结果——编排把它吞成续办引用后照常交回业务答案，事务
-// 因此照常提交，重放重发同一份（AT-NO-027 的语义靠的正是「结果已提交而意图没跟上」
-// 这个可观察状态）；编排返回错误时整笔回滚，半截写入不落库。
+// 库的写口按框架合同无事务即拒，事务边界归装配点。原子范围只有 UC-NO-002 步骤 8「原子提交
+// 收寄判断、控制、审计和对应发布意图」；编排返回错误时整笔回滚，半截写入不落库。
+//
+// 跨上下文读口须经 savepoint 隔离：它们跟着走这一笔事务，一条 SQL 级读错误会把事务打进中止态、
+// 连带作废收寄的写。服务结果读口因此包在 SavepointedServiceResultView 里（ADR-0186）；身份核对
+// 读口不包——它读不动本就不形成答案，整笔回滚正是要的结果。
+//
+// 意图入队报 SQL 级错误时同样整笔回滚、答 5xx。「结果已提交而意图没跟上」（AT-NO-027 的续办
+// 重发）只在入队以 Go 层错误失败时出现：编排把它吞成续办引用后照常交回业务答案，事务照常提交，
+// 重放重发同一份。
 type transactionalReception struct {
 	transactor bentoapp.Transactor
 	inner      *nodeopsapp.ReceiveDeliveredUnitHandler
@@ -52,7 +58,8 @@ func (reception transactionalReception) Handle(
 // 接线票 `.scratch/parcel-api-remaining-endpoint-wiring/issues/01`）。
 //
 // 机制半边全部接真：收寄库、收寄结果版本签发、Outbox 意图交付走 NO 真库口；身份核对读 PS 的外部标识关联册
-// （ADR-0184），服务结果读口读 PS 的取消与终局两册（票 operator-channel/25），都与收寄同一笔事务读。
+// （ADR-0184），服务结果读口读 PS 的取消与终局两册（票 operator-channel/25）。两个读口跟着收寄走同一笔事务只因
+// ctx 是同一个：PS 读不加锁，READ COMMITTED 下同事务读既无一致性收益也无代价。
 func buildReceptionOrchestration(db *bentopg.DB) (nodeopshttp.ReceptionHandler, error) {
 	receptions, err := nopostgres.NewReceptions(db)
 	if err != nil {
@@ -106,7 +113,8 @@ func buildParcelIdentityView(db *bentopg.DB) (noports.ParcelIdentityView, error)
 	return view, nil
 }
 
-// buildParcelServiceResultView 装收寄编排的服务结果读口：PS 的取消决定册与终局册经 NO 的防腐适配器读（票 operator-channel/25）。
+// buildParcelServiceResultView 装收寄编排的服务结果读口：PS 的取消决定册与终局册经 NO 的防腐适配器读（票 operator-channel/25），
+// 外面包一层 savepoint，读失败不连带收寄的写（ADR-0186，见 transactionalReception）。
 func buildParcelServiceResultView(db *bentopg.DB) (noports.ParcelServiceResultView, error) {
 	cancellations, err := pspostgres.NewParcelCancellations(db)
 	if err != nil {
@@ -120,5 +128,9 @@ func buildParcelServiceResultView(db *bentopg.DB) (noports.ParcelServiceResultVi
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: parcel service result view: %w", err)
 	}
-	return view, nil
+	isolated, err := nopostgres.NewSavepointedServiceResultView(db, view)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: parcel service result savepoint: %w", err)
+	}
+	return isolated, nil
 }

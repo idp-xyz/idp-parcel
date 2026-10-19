@@ -10,6 +10,7 @@ import (
 	nodomain "go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	noports "go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
+	shipmentapp "go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
@@ -90,8 +91,8 @@ func receptionCommand(
 	return command
 }
 
-// Covers: 票 ps-external-mark-relations/02 完成判据第一条的真库面——委托经真提交编排带着客户包裹件号建单、经真仓储
-// 接受落库之后，生产装配的收寄编排按这个号码唯一识别出那一件：`节点收寄已形成`、关联到 PS 的那件包裹、控制建立。
+// Covers: 票 ps-external-mark-relations/02 完成判据「委托接受后，客户包裹件号逐字在节点识别出那一件包裹：收寄形成、
+// 控制建立」的真库面——委托经真提交编排带着客户包裹件号建单、经真仓储接受落库之后，生产装配的收寄编排按这个号码唯一识别出那一件：`节点收寄已形成`、关联到 PS 的那件包裹、控制建立。
 // 接受之前同一个号码答`待识别`。夹具全为合成（S 级）。
 func TestTheWiredReceptionIdentifiesAnAcceptedParcelByItsCustomerNumber(t *testing.T) {
 	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
@@ -102,15 +103,7 @@ func TestTheWiredReceptionIdentifiesAnAcceptedParcelByItsCustomerNumber(t *testi
 	if err != nil {
 		t.Fatalf("装配收寄编排：%v", err)
 	}
-	command := submissionCommand(t)
-	declaration, err := domain.DeclareCustomerParcelNumber(command.DeclaredParcelIDs[0],
-		mustValue(t, domain.NewExternalIdentifierNumber, "SYN-CUSTOMER-PARCEL-0001"))
-	if err != nil {
-		t.Fatalf("配对：%v", err)
-	}
-	command.CustomerParcelNumbers = []domain.CustomerParcelNumberDeclaration{declaration}
-
-	submitOnRealAssembly(t, db, command)
+	command := submitWithCustomerParcelNumber(t, db, "SYN-CUSTOMER-PARCEL-0001")
 	early := receptionCommand(t, "SYN-DELIVERY-EARLY-1", nodeopsapp.ExplicitReception)
 	early.Mark = noports.ExternalMarkObservation{Mark: "SYN-CUSTOMER-PARCEL-0001"}
 	before, err := reception.Handle(t.Context(), early)
@@ -121,15 +114,7 @@ func TestTheWiredReceptionIdentifiesAnAcceptedParcelByItsCustomerNumber(t *testi
 		t.Fatalf("接受前 outcome = %v, want PENDING_IDENTIFICATION——接受前的声明包裹不是正式包裹", got)
 	}
 
-	requests, err := pspostgres.NewShipmentRequests(db)
-	if err != nil {
-		t.Fatalf("构造委托仓储：%v", err)
-	}
-	request, found, err := requests.FindBySourceIdentity(t.Context(), command.Identity)
-	if err != nil || !found {
-		t.Fatalf("读回委托：err=%v found=%v", err, found)
-	}
-	acceptAndSave(t, db, requests, command, request)
+	acceptSubmitted(t, db, command)
 
 	arrived := receptionCommand(t, "SYN-DELIVERY-IDENTIFIED-1", nodeopsapp.ExplicitReception)
 	arrived.Unit = mustValue(t, nodomain.NewHandlingUnitID, "SYN-UNIT-2")
@@ -145,4 +130,32 @@ func TestTheWiredReceptionIdentifiesAnAcceptedParcelByItsCustomerNumber(t *testi
 	if !has || !record.Control.Active() || len(record.Candidates) != 1 || record.Candidates[0].String() != "syn-parcel-1" {
 		t.Fatalf("收寄记录 = %+v, want 唯一候选 syn-parcel-1 且控制建立", record)
 	}
+}
+
+// submitWithCustomerParcelNumber 经真提交编排建一份委托，首件声明包裹配上客户包裹件号 number。
+func submitWithCustomerParcelNumber(t *testing.T, db *bentopg.DB, number string) shipmentapp.SubmitShipmentRequestCommand {
+	t.Helper()
+	command := submissionCommand(t)
+	declaration, err := domain.DeclareCustomerParcelNumber(command.DeclaredParcelIDs[0],
+		mustValue(t, domain.NewExternalIdentifierNumber, number))
+	if err != nil {
+		t.Fatalf("配对：%v", err)
+	}
+	command.CustomerParcelNumbers = []domain.CustomerParcelNumberDeclaration{declaration}
+	submitOnRealAssembly(t, db, command)
+	return command
+}
+
+// acceptSubmitted 经真仓储接受那份委托：接受之后，客户包裹件号才在节点识别得出正式包裹。
+func acceptSubmitted(t *testing.T, db *bentopg.DB, command shipmentapp.SubmitShipmentRequestCommand) {
+	t.Helper()
+	requests, err := pspostgres.NewShipmentRequests(db)
+	if err != nil {
+		t.Fatalf("构造委托仓储：%v", err)
+	}
+	request, found, err := requests.FindBySourceIdentity(t.Context(), command.Identity)
+	if err != nil || !found {
+		t.Fatalf("读回委托：err=%v found=%v", err, found)
+	}
+	acceptAndSave(t, db, requests, command, request)
 }

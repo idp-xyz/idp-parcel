@@ -161,7 +161,7 @@ func (handler *ReceiveDeliveredUnitHandler) Handle(
 	}
 	existing, found, err := handler.deps.Receptions.FindByKey(ctx, key)
 	if err != nil {
-		return ReceiveDeliveredUnitResult{}, fmt.Errorf("find reception: %w", err)
+		return ReceiveDeliveredUnitResult{}, fmt.Errorf("look up reception: %w", err)
 	}
 	if found {
 		switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversionedDeliveryContentDigest(command)) {
@@ -301,7 +301,7 @@ func (handler *ReceiveDeliveredUnitHandler) commit(
 ) (ReceiveDeliveredUnitResult, error) {
 	saved, err := handler.deps.Receptions.Save(ctx, record)
 	if err != nil {
-		return ReceiveDeliveredUnitResult{}, fmt.Errorf("save reception: %w", err)
+		return ReceiveDeliveredUnitResult{}, fmt.Errorf("record reception: %w", err)
 	}
 	switch saved {
 	case ports.ReceptionSaved:
