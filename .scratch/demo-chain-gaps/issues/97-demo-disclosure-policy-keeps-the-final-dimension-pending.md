@@ -76,9 +76,9 @@ S（种子）
 
 ### 用例
 
-- 领域：`TestTheFinalDimensionShowsOnlyWhenTheProjectionCarriesAnAdoptedFinal`，表驱动：在途、只有有效交付、终局已采用、只有不采用判断、别的上下文借用字面量、策略不展示、策略待确认。
+- 领域：`TestTheFinalDimensionShowsOnlyWhenTheProjectionCarriesAnAdoptedFinal`，表驱动：在途、只有有效交付、终局已采用、只有不采用判断、别的上下文借用字面量、策略不展示、策略待确认。点名 `AT-VE-159` 的展示半边与 `AT-VE-160` 的终局半边（评审后改，见「评审记录」）。
 - 编排：
-  - `TestAPermittedFinalPendsUntilTheProjectionCarriesTheAdoptedFinal`：点名 `AT-VE-160` 与 `AT-VE-159`，在途那一版终局待确认、不带内容，其余三维照展示；终局进投影后新版本指回前版、终局转展示。
+  - `TestAPermittedFinalPendsUntilTheProjectionCarriesTheAdoptedFinal`：点名 `AT-VE-160` 的终局半边与 `AT-VE-159` 的展示半边。在途、有效交付已进投影而终局未采用这两版，终局都待确认、不带内容，其余三维照展示；终局进投影后新版本指回有效交付那一版、终局转展示。有效交付那一拍是评审后补的。
   - `TestANotAdoptedFinalJudgmentDoesNotShowTheFinal`。
   - `TestAFinalThePolicyDoesNotShowStaysUnshownAfterItForms`。
   - 夹具 `trackedProjection` 改为带一条已采用终局，既有用例「四维全展示」的语义不变；在途另用 `inTransitProjection`。
@@ -104,8 +104,21 @@ S（种子）
 ### 偏离与待裁
 
 - 票面地盘只写了种子，本票另动了 VE 领域与编排（代决一）。
-- 有效交付之后、终局采用之前那一版视图（`CVW-VWFQBAAM557NQLDK3HSMLHTBPM`）只存在了约四秒就被终局那一版替代。视图库只存当前版，实走没读到它的维度；这一格由编排用例钉。
+- 有效交付之后、终局采用之前那一版视图（`CVW-VWFQBAAM557NQLDK3HSMLHTBPM`）只存在了约四秒就被终局那一版替代。视图库只存当前版，实走没读到它的维度；这一格由编排用例钉（评审前编排用例没有这一拍，评审后补上）。
+- `AT-VE-159` 的「及其依据版本」与 `AT-VE-160` 的「可展示获准交付里程碑」两半今天都没有实现：视图每一维只带策略给的内容来处（演示里终局是 `SYN-VE-CONTENT-FINAL-OUTCOME-V1`），不带 PS 终局的依据版本，也不列里程碑本身。测试只按半边点名。依据版本要进视图，得先裁视图维度带不带源侧版本，没有另起票。
 - `SYN-ACCOUNT-02` 「照旧待确认」只在策略目录上取证，没有为它另走一单。
 - 客户在动线上看见这一维仍要等票 96。本次取证读的是 VE 库与操作者渠道的目录读口。
-- 顺带观察，只读代码，没立票：通知策略种子 `visibility/03` 按 `SYN-VE-DISCLOSE-V1` 登，而披露决定带的策略引用取的是异常披露规则版本（`SYN-VE-EXC-DISCLOSE-V1`）。通知编排按后者查，会答未配置。与本票无关，交协调方判断。
+- 顺带观察：通知策略种子 `visibility/03` 按 `SYN-VE-DISCLOSE-V1` 登，而披露决定带的策略引用取的是异常披露规则版本（`SYN-VE-EXC-DISCLOSE-V1`）。通知编排按后者查，会答未配置。与本票无关。评审核过属实，已立票 [107](./107-demo-notification-policy-names-the-view-disclosure-policy.md)。
 - 机制清点没有重生成，进 main 时统一做。
+
+## 评审记录（2026-10-19，隔离评审一轮，作者子代理修订，分支 `claude-dcg97`）
+
+阻断 0 项。非阻断 5 项：3 项改代码或注释，2 项落在票面；没有不采纳的。
+
+1. **AT 半条点名**（评审建议进 main 前修）：已修。两处测试把 `AT-VE-159`、`AT-VE-160` 整条点名，实际只钉了终局一维那一半。点名改为「`AT-VE-159` 的展示半边」「`AT-VE-160` 的终局半边」，引文照 UC-VE-008 写全，并在 Covers 里写明交付里程碑与依据版本两半没有钉。编排用例原本没有有效交付条目，对不上 `AT-VE-160` 的前提，补了一拍：在途 → 有效交付已进投影、终局未采用 → 终局采用，前两版终局都待确认。依据版本那一半今天没有实现，记在上面「偏离与待裁」，没有另起票。
+2. **`Handle` 头注折行**：已修，措辞不动。
+3. **`CarriesCustomerServiceFinal` 头注末句**：已修。写明这是调用方前提、不是类型不变量，并照符号指名：`DeriveTrackingProjection` 与 `Rederive` 不滤，过滤是 `DeriveProjectionHandler` 经 `CurrentlyEffective` 做的。
+4. **通知策略种子挂错版本**：已立票 [107](./107-demo-notification-policy-names-the-view-disclosure-policy.md)（bug，needs-triage）。评审建议由协调方在号段内立票，本次没有给号，按「号接现有最大号」自取 107：取号前查过本地各分支本目录，最大到 106（dcg98）。进 main 前请协调方对号。
+5. **票 103「要裁的」第二条**：已注明。今天 `FormParcelFinalHandler` 只在同来源种类时走重派生，换种类走不采用，这一格只在 ADR-0138（Proposed）落地后才可能出现。
+
+复跑：`go build ./...`；`go vet ./internal/visibilityexception/...`；`gofmt -l` 干净。真库 `-p 1 -count=1` 下 `./internal/visibilityexception/...` 与 `./internal/architecture/` 全过。变异检查：`FinalDimensionOver` 改成恒放行后，领域表驱动里策略准许而没有已采用终局的各格全部失败，编排的 `TestAPermittedFinalPendsUntilTheProjectionCarriesTheAdoptedFinal` 与 `TestANotAdoptedFinalJudgmentDoesNotShowTheFinal` 失败；改回即过。种子与机制清点本轮没动。
