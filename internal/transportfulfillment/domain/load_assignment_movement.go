@@ -57,7 +57,7 @@ func FormLoadAssignment(spec LoadAssignmentSpec) (LoadAssignment, error) {
 		!spec.Schedule.valid() ||
 		len(spec.Members) == 0 ||
 		!spec.Version.valid() ||
-		spec.AssignedAt.IsZero() {
+		AtRegistryPrecision(spec.AssignedAt).IsZero() {
 		return LoadAssignment{}, ErrInvalidLoadAssignment
 	}
 	members, err := copiedUniqueMembers(spec.Members)
@@ -148,7 +148,7 @@ func (assignment LoadAssignment) ReviseMembers(
 	if assignment.withdrawn {
 		return LoadAssignment{}, ErrLoadAssignmentWithdrawn
 	}
-	if len(members) == 0 || !version.valid() || revisedAt.IsZero() || revisedAt.Before(assignment.assignedAt) {
+	if len(members) == 0 || !version.valid() || AtRegistryPrecision(revisedAt).IsZero() || revisedAt.Before(assignment.assignedAt) {
 		return LoadAssignment{}, ErrInvalidLoadAssignment
 	}
 	if version == assignment.version {
@@ -174,7 +174,7 @@ func (assignment LoadAssignment) Withdraw(
 	if assignment.withdrawn {
 		return LoadAssignment{}, ErrLoadAssignmentWithdrawn
 	}
-	if !version.valid() || withdrawnAt.IsZero() || withdrawnAt.Before(assignment.assignedAt) {
+	if !version.valid() || AtRegistryPrecision(withdrawnAt).IsZero() || withdrawnAt.Before(assignment.assignedAt) {
 		return LoadAssignment{}, ErrInvalidLoadAssignment
 	}
 	if version == assignment.version {
@@ -300,7 +300,7 @@ func RecordMovementFact(spec MovementFactSpec) (TransportMovementFact, error) {
 		!spec.Location.valid() ||
 		!spec.Source.valid() ||
 		!spec.Version.valid() ||
-		spec.OccurredAt.IsZero() {
+		AtRegistryPrecision(spec.OccurredAt).IsZero() {
 		return TransportMovementFact{}, ErrInvalidMovementFact
 	}
 	if spec.Kind != DepartureFact && (spec.GateRequired || spec.GateClearance.valid()) {
@@ -392,7 +392,8 @@ func (fact TransportMovementFact) Correct(
 	if !fact.version.valid() {
 		return TransportMovementFact{}, ErrInvalidMovementFact
 	}
-	if !location.valid() || occurredAt.IsZero() || !source.valid() || !version.valid() || correctedAt.IsZero() {
+	if !location.valid() || AtRegistryPrecision(occurredAt).IsZero() || !source.valid() || !version.valid() ||
+		AtRegistryPrecision(correctedAt).IsZero() {
 		return TransportMovementFact{}, ErrInvalidMovementFact
 	}
 	if version == fact.version {
