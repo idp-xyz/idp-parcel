@@ -186,3 +186,5 @@ Blocked by: 无——2026-10-16 核得 19 已 resolved（进 main 至 `8e1e9777`
 
 本票做什么第 2 条要逐口记下凭哪条代数，这两口当时漏记、也确实没有（票 28 现象节）。现在凭 ADR-0183「复核记录二」与 `domain.ContinuedAttemptRegister.RecordedRequest`：册上已有同类、请求内容逐格相同的决定即同一次请求的重放，答 `EXISTING_RESULT` 交回原决定。与 TFC-1 / CCC-1 一类「同键同内容是重放、同键异内容是冲突」不同属，三点要分清：**异内容即新决定**，照旧经领域追加；**没有内容冲突那一支**；**比对扫全册**，不只看生效中的那一条。
 
+
+- **回写（2026-10-18，票 [operator-channel/33](./33-rejected-shipment-requests-persist-and-read-back.md)，分支 `claude-oc33`，待评审）**：之三、之四那三口（主动拒绝、授权处置、复核完成）凭的「撞上已有决定交回那一个」代数，在真库上此前读不回`已拒绝`委托，替身仓储上才成立。现在快照决定上有了主动拒绝留痕，重建门按 [ADR-0188](../../../docs/adr/0188-rejected-shipment-request-rehydration-by-snapshot-expressiveness.md) 开到`已拒绝`。处置`拒绝`重放答 `TASK_ALREADY_CLOSED`，续办信封撞上已拒绝委托交回既有决定，两条都已在真库上取证。主动拒绝口与处置口撞上已有决定时的答复格和重放耗标识，仍归 [36](./36-active-rejection-replays-answer-the-existing-decision.md)。
