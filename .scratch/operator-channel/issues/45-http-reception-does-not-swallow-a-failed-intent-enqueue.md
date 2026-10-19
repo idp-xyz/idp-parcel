@@ -1,7 +1,7 @@
 # 45 HTTP 收寄路上，意图入队失败被吞成续办引用后照常提交：设备拿到 201 就出队，没人会重发
 
 Category: bug
-Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（operator-channel/29 已进 main），分支 `claude-no4503`（与 no-reception-identity/03 同一分支，先 45 后 03）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 2 研判中发现；用户授权代决）
+Status: resolved——2026-10-19 进 main（45、no-reception-identity/03、32 同批，代码验证钉 `77ffe641`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（operator-channel/29 已进 main），分支 `claude-no4503`（与 no-reception-identity/03 同一分支，先 45 后 03）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 2 研判中发现；用户授权代决）
 Blocked by: operator-channel/29 进 main（同改 cmd/parcel-api/assemble_reception.go 与收寄编排）
 父票：[26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)（票 26 评审遗留的后续）
 出处：
@@ -55,7 +55,7 @@ Blocked by: operator-channel/29 进 main（同改 cmd/parcel-api/assemble_recept
 
 - [x] HTTP 路：意图入队失败时整笔回滚、答 500；重投后，收寄与意图在同一笔落地。前线导入路照旧。两条路各有回归用例。
 - [x] go build ./...、go vet ./... 退 0，gofmt -l . 无输出；带 DSN 跑 internal/nodeoperations/...、cmd/parcel-api，全绿。
-- [ ] 走 Go 那条路（docs/agents/parallel-sessions.md）。作者半边（分支、作者自验）已做，评审与推送方全量未到。
+- [x] 走 Go 那条路（docs/agents/parallel-sessions.md）。作者半边（分支、作者自验）已做，评审与推送方全量未到。
 
 ## 完成记录（2026-10-19，会话 idp-parcel-9b 的作者子代理，分支 claude-no4503）
 
@@ -109,3 +109,8 @@ Blocked by: operator-channel/29 进 main（同改 cmd/parcel-api/assemble_recept
 - **作者自定的两格认可**：不另起哨兵，以 `%w` 包住真因；信封确定性拒收不另成一格——NO 信封 ID 是定长指纹，随设备而变的只有 Subject 里的来源标识，接入时按 `eventing.MaxSubjectLength` 与控制字符拒成 400（ADR-0023 来源标识由设备签发），上限与信封同源，真库用例钉了最长可受理的那一个照常交出。
 - **Standards**：头注重写只写为什么；装配拆成 `buildReceptionDeps` / `receptionWithin`，理由是用例只换一只依赖、不另抄装配。
 - **非阻断（另立票）**：前线导入铸出的来源标识没有同一道门，超长时报告说「重跑会重发」而重跑永远交不出去 → operator-channel/54。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- operator-channel/45 与 no-reception-identity/03（分支 `claude-no4503`）、operator-channel/32（分支 `claude-oc32`，暂停前基于 `b58b10ef`，续做时 rebase 过）叠成一串，rebase 到远端 main 之上快进推送。期间远端进了 SELL 客户费用链（另一会话，改 `cmd/parcel-dispatch`、SA、PP 与演示种子），先在旧基上起的那次全量作废，rebase 后重跑。机制清点在叠好的树上重生成（cmd 测试文件 154）。
+- 推送方全量一次：钉 `77ffe641` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 144 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。验证之后远端只前进了一笔纯票面认领，再 rebase 一次，未重跑。

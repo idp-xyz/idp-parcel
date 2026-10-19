@@ -1,7 +1,7 @@
 # 32 TF 更正载荷缺时刻答 400，与本包「缺席交编排、解不出才 400」相左；作业事实与运营决定 Intake 的逐口用例和头注补齐
 
 Category: bug
-Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 续做：分支 `claude-oc32` 上的两笔先 rebase 到最新 main 并核一遍，再做完余下的格。此前 ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-oc32`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-oc32`）上留有2 笔（更正载荷缺时刻交编排、作业事实表补更正各口），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 5、序 4 评审遗留；用户授权代决）；分支 `claude-oc32`
+Status: resolved——2026-10-19 进 main（45、no-reception-identity/03、32 同批，代码验证钉 `77ffe641`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 续做：分支 `claude-oc32` 上的两笔先 rebase 到最新 main 并核一遍，再做完余下的格。此前 ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-oc32`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-oc32`）上留有2 笔（更正载荷缺时刻交编排、作业事实表补更正各口），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 5、序 4 评审遗留；用户授权代决）；分支 `claude-oc32`
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)（序 4、序 5 的非阻断）。
 出处：
@@ -135,7 +135,7 @@ Blocked by: 无
 - [x] 用 `go test -overlay` 取证并记进完成记录：下列变异各被至少一条新用例杀掉——交接更正口先解载荷后认证；Intake 转交常量令牌；更正各载荷各错译一格；时刻只判非空、不去空白；先认证后判三头或种类。
 - [x] `work_fact_intake.go` 里不再有 `time.Parse(`。两份测试文件与两份 Intake 头注里不再有「三个头」「六个运营决定口」「六口」「迁来」「值与开关」「逐口放行」「越权探针一律以「未找到」作答」。
 - [x] Go 门禁：`gofmt -l` 无输出；`go build ./...`、`go vet ./...` 退 0；带 DSN 跑 `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/` 全 ok，其中 `TestWorkFactFacesAnswerOnTheOperatorChannel`、`TestTransportFulfillmentCommandLinesAnswerBusinessOutcomesAgainstARealDatabase`、`TestTheWiredPickupCorrectionLandsANewVersionAgainstARealDatabase` 是 PASS 而不是 SKIP。机制清点生成器在干净检出上重跑零差（不新增文件）。
-- [ ] 走 Go 那条路（parallel-sessions）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
+- [x] 走 Go 那条路（parallel-sessions）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
 - [x] 票 22 Comments 那条评审下追记处置（Spec 非阻断与 Standards 各条指向本票，cmd 部分指向「cmd/parcel-api 运输履约段行注」票）；票 15「钉 `60244fa6`」那条追记 `decisionLines` 一格；票 26「评审结果」序 4、序 5 的去向格补上本票号。证据只记 `S`。
 
 ## 完成记录（2026-10-19，作者子代理，分支 `claude-oc32`，待评审）
@@ -232,3 +232,8 @@ m5a、m5b 都只问认证方一次，答复留到判完头部或种类再交，�
 - **Spec**：三份更正载荷的时刻改走 `parseOptionalInstant`，缺席、空串、纯空白交零值给编排，解不出才 400 并点名该键；交接更正结论空着时交 `HandoverVerdictInvalid` 零值，编排答未受理，与首登口 `HandoverRegistrationPayload.Command` 同形。端点层三口缺 `correctedAt` 答 200 `SOURCE_NOT_ACCEPTED`、册上不多一行。★三组用 overlay 换回 main 版先红（22 条 FAIL）。变异九个全杀，m3c 在 main 版测试下本就被票 41 的用例杀，完成记录照实写了。
 - **Standards**：`work_fact_intake.go` 不再有 `time.Parse(`；`HandoverIntake`、`DeliveryIntake` 头注按票面改，没拿 ADR-0151 未裁的越权风险点当理由。与票 41 同名常量的语义冲突以 main 为准，只改时刻写法（同一刻），断言未动。
 - 「不做」各条照守：编排、领域、`cmd/parcel-api` 都没动。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- operator-channel/45 与 no-reception-identity/03（分支 `claude-no4503`）、operator-channel/32（分支 `claude-oc32`，暂停前基于 `b58b10ef`，续做时 rebase 过）叠成一串，rebase 到远端 main 之上快进推送。期间远端进了 SELL 客户费用链（另一会话，改 `cmd/parcel-dispatch`、SA、PP 与演示种子），先在旧基上起的那次全量作废，rebase 后重跑。机制清点在叠好的树上重生成（cmd 测试文件 154）。
+- 推送方全量一次：钉 `77ffe641` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 144 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。验证之后远端只前进了一笔纯票面认领，再 rebase 一次，未重跑。

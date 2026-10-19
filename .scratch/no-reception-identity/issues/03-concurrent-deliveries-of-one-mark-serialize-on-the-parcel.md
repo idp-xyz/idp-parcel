@@ -1,7 +1,7 @@
 # 03 一码两物并发送站：两笔事务互相看不到对方未提交的关联，两件可能都关联成立
 
 Category: bug
-Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（no-reception-identity/01 已进 main），分支 `claude-no4503`（与 operator-channel/45 同一分支，先 45 后 03）。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立并代决（票 no-reception-identity/01 评审遗留）
+Status: resolved——2026-10-19 进 main（45、no-reception-identity/03、32 同批，代码验证钉 `77ffe641`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（no-reception-identity/01 已进 main），分支 `claude-no4503`（与 operator-channel/45 同一分支，先 45 后 03）。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 立并代决（票 no-reception-identity/01 评审遗留）
 Blocked by: no-reception-identity/01 进 main
 父票：[01](./01-one-barcode-on-two-units-forms-an-identity-conflict.md)
 出处：ADR-0196「越权风险点」中「并发未串行」那一条；票 01 实施子代理回报与评审记录。
@@ -32,7 +32,7 @@ Blocked by: no-reception-identity/01 进 main
 - [x] 适配器用例：锁键对不同包裹、不同租户互不阻塞。
 - [x] `go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出；带 DSN 跑 `internal/nodeoperations/...`、`cmd/parcel-api`、`cmd/parcel-frontline-import`、`internal/architecture` 全绿；机制清点重生成。
 - [x] ADR-0196 文末追加复核记录：越权风险点「并发未串行」由本票收住（决定原文不动）。
-- [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、评审、推送方在干净检出上带 DSN 跑全量。作者半边（分支、作者自验）已做，评审与推送方全量未到。
+- [x] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、评审、推送方在干净检出上带 DSN 跑全量。作者半边（分支、作者自验）已做，评审与推送方全量未到。
 
 ## 完成记录（2026-10-19，会话 idp-parcel-9b 的作者子代理，分支 claude-no4503，叠在 operator-channel/45 之后）
 
@@ -88,3 +88,8 @@ Blocked by: no-reception-identity/01 进 main
 - **Spec**：锁取在 `FindOtherUnitIntakes` 查询之前，键为（租户、包裹关联），口径同 access_identity 的 `lockMappingKey`；改走 `RequireExecutor`，事务外调用报 `ErrTransactionRequired` 而不是静默失去串行（作者自定，认可——两条接线都在事务里，全仓无事务外调用方）。真库并发用例修前红在「另一方没被挡住」与两件都 `INTAKE_FORMED`，修后观察到等在包裹锁上；适配器用例以 `lock_timeout` 证不同包裹、不同租户互不阻塞，同包裹撞 55P03 作正对照。连跑五次绿。
 - **Standards**：端口头注写明须在收寄事务里调；ADR-0196 文末追加复核记录，决定原文不动。
 - 零候选与多候选两格不取锁，裁定越权风险点已写。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- operator-channel/45 与 no-reception-identity/03（分支 `claude-no4503`）、operator-channel/32（分支 `claude-oc32`，暂停前基于 `b58b10ef`，续做时 rebase 过）叠成一串，rebase 到远端 main 之上快进推送。期间远端进了 SELL 客户费用链（另一会话，改 `cmd/parcel-dispatch`、SA、PP 与演示种子），先在旧基上起的那次全量作废，rebase 后重跑。机制清点在叠好的树上重生成（cmd 测试文件 154）。
+- 推送方全量一次：钉 `77ffe641` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 144 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。验证之后远端只前进了一笔纯票面认领，再 rebase 一次，未重跑。
