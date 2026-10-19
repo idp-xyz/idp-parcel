@@ -50,7 +50,7 @@ func finalOutcomeEventID(parcel, version string) string {
 }
 
 // TestFinalOutcomeFollowsTheTransactionalTemplate 证终局判断意图复现样板四条：首发一行、
-// 回滚无痕、重发同一份、无事务拒。信封 ID 由采用键认领并加类型段。
+// 回滚无痕、重发同一份、无事务拒。信封 ID 由采用键认领：其指纹加口名前缀。
 func TestFinalOutcomeFollowsTheTransactionalTemplate(t *testing.T) {
 	handoff, db, pool := newFinalOutcomeHandoffFixture(t)
 	ctx := t.Context()

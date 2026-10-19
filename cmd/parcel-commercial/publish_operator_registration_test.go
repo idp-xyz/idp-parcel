@@ -93,8 +93,26 @@ func TestPublishingWithoutAsOfPoliciesThroughTheCLIEnqueuesNothing(t *testing.T)
 	if code := runCLI(t, dsn, "publish", "-input", batch); code != exitLanded {
 		t.Fatalf("发布退出码 = %d, want %d", code, exitLanded)
 	}
-	if count := countOperatorRegistrationEnvelopes(t, dsn,
-		"tenant-1/AS_OF_POLICY/rules-plain/v1/operator-registration-completed"); count != 0 {
+	// 按类型数全库：库是新建的，任何一封都说明进程口另发了信封；按某个 ID 数，ID 拼法一变这条就恒真。
+	if count := countOperatorRegistrationEnvelopesOfAnyID(t, dsn); count != 0 {
 		t.Fatalf("没有时点声明却入了 %d 封", count)
 	}
+}
+
+func countOperatorRegistrationEnvelopesOfAnyID(t *testing.T, dsn string) int {
+	t.Helper()
+	pool, err := pgxpool.New(t.Context(), dsn)
+	if err != nil {
+		t.Fatalf("开池核对：%v", err)
+	}
+	defer pool.Close()
+
+	var count int
+	if err := pool.QueryRow(t.Context(),
+		`SELECT count(*) FROM `+migrate.SchemaBento+`.outbox WHERE event_type = $1`,
+		operatorRegistrationCompletedEventType,
+	).Scan(&count); err != nil {
+		t.Fatalf("统计 outbox 行数：%v", err)
+	}
+	return count
 }

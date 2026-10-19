@@ -59,11 +59,11 @@ type submissionVersionFormedPayload struct {
 	DeclaredParcelIDs   []string `json:"declaredParcelIds"`
 }
 
-// submissionVersionFormedEventID 由来源身份加新提交版本认领意图（ADR-0043）：同一版本至多形成
-// 一次（同一补充身份的重放由编排答`已处理`，走不到交接），重放不入队第二份。
 // submissionVersionFormedEventIDPort 是本口指纹 ID 的口名前缀。
 const submissionVersionFormedEventIDPort = "submission-version-formed"
 
+// submissionVersionFormedEventID 由来源身份加新提交版本认领意图（ADR-0043）：同一版本至多形成
+// 一次（同一补充身份的重放由编排答`已处理`，走不到交接），重放不入队第二份。
 func submissionVersionFormedEventID(identity domain.SourceIdentity, version domain.SubmissionVersionID) string {
 	return string(outboxintent.FingerprintEventID(submissionVersionFormedEventIDPort,
 		identity.TenantID().String(), identity.CustomerAccountID().String(), identity.Source().String(), identity.RequestKey().String(), version.String()))

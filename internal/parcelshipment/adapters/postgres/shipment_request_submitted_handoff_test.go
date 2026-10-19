@@ -19,7 +19,7 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 16 证「委托已提交」意图：与建单行同一提交、回滚一并消失、
-// 重发同一份、无事务拒、缺身份响亮报错。信封 ID 由来源身份（含租户）再加类型段认领，
+// 重发同一份、无事务拒、缺身份响亮报错。信封 ID 由来源身份（含租户）的指纹加口名前缀认领，
 // 入队走 EnqueueOnce。
 
 const shipmentRequestSubmittedEventType = "parcel-shipment.shipment-request.submitted"

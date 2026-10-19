@@ -93,7 +93,7 @@ func (handoff *OutboxVisibilityGapHandoff) HandOffVisibilityGap(
 		Type:         visibilityGapEventType,
 		Version:      1,
 		Scope:        intent.TenantID.String(),
-		Subject:      eventID,
+		Subject:      visibilityGapSubject(intent.Gap),
 		PartitionKey: intent.TenantID.String() + "/" + intent.Gap.Parcel().String(),
 		OccurredAt:   intent.Gap.FormedAt().UTC(),
 		RecordedAt:   now,
@@ -105,4 +105,10 @@ func (handoff *OutboxVisibilityGapHandoff) HandOffVisibilityGap(
 		return fmt.Errorf("hand off visibility gap: %w", err)
 	}
 	return nil
+}
+
+// visibilityGapSubject 是缺口身份三维的可读串接。ID 换成指纹之后 Subject 仍留可读形，运维从信封上一眼认得出是哪件
+// 包裹的哪个缺口（outboxintent.FingerprintEventID 头注）。
+func visibilityGapSubject(gap domain.VisibilityGap) string {
+	return gap.Parcel().String() + "/" + gap.Expectation().String() + "/" + gap.WindowRule().String()
 }

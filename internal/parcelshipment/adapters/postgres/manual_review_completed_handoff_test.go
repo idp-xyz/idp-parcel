@@ -97,7 +97,7 @@ func (fixture *reviewCompletedFixture) seedAwaitingReview(
 	return identity, waiting
 }
 
-// reviewCompletedEventID 照 ADR-0043 的认领口径拼：来源身份 + 提交版本 + 类型段。版本段
+// reviewCompletedEventID 照 ADR-0043 的认领口径拼：来源身份 + 提交版本，取指纹加口名前缀。版本段
 // 不能省——换代后的再复核是另一份完成，省掉它就会被 EnqueueOnce 当重放吞掉。
 func reviewCompletedEventID(identity domain.SourceIdentity, request domain.ShipmentRequest) string {
 	return string(outboxintent.FingerprintEventID("manual-review-completed", identity.TenantID().String(), identity.CustomerAccountID().String(),

@@ -309,7 +309,7 @@ func (fixture *submitFlowFixture) submitCommand(
 	}
 }
 
-// submittedFlowEventID 与适配器的认领公式同形:来源身份四维加类型段。
+// submittedFlowEventID 与适配器的认领公式同形:来源身份四维的指纹加口名前缀。
 func submittedFlowEventID(identity domain.SourceIdentity) string {
 	return string(outboxintent.FingerprintEventID("shipment-request-submitted",
 		identity.TenantID().String(), identity.CustomerAccountID().String(),

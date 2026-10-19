@@ -297,7 +297,7 @@ func countOutboxEventsByType(t *testing.T, pool *pgxpool.Pool, eventType string)
 }
 
 // TestLabelTransactionJudgmentFollowsTheTransactionalTemplate 证判断意图复现样板四条：首发一行、
-// 回滚无痕、重发同一份、无事务拒。信封 ID 由（租户 + 交易 + 包裹 + 版本）认领并加类型段。
+// 回滚无痕、重发同一份、无事务拒。信封 ID 由（租户 + 交易 + 包裹 + 版本）认领：其指纹加口名前缀。
 func TestLabelTransactionJudgmentFollowsTheTransactionalTemplate(t *testing.T) {
 	handoff, db, pool := newLabelTransactionJudgmentHandoffFixture(t)
 	ctx := t.Context()

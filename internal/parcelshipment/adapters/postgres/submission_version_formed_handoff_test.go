@@ -111,7 +111,7 @@ func supplemented(t *testing.T, request domain.ShipmentRequest, key string) doma
 	return superseded
 }
 
-// versionFormedEventID 照 ADR-0043 的认领口径拼：来源身份 + **新**提交版本 + 类型段。版本段
+// versionFormedEventID 照 ADR-0043 的认领口径拼：来源身份 + **新**提交版本，取指纹加口名前缀。版本段
 // 取新版本——同一委托的第二次补充是另一封信，取旧版本或省掉它都会被 EnqueueOnce 当重放吞掉。
 func versionFormedEventID(identity domain.SourceIdentity, request domain.ShipmentRequest) string {
 	return string(outboxintent.FingerprintEventID("submission-version-formed", identity.TenantID().String(), identity.CustomerAccountID().String(),

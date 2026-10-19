@@ -63,7 +63,7 @@ func continuedAttemptDecisionEventID(parcel, decision string) string {
 }
 
 // Covers: 复现样板四条——首发一行、回滚无痕、重发同一份、无事务拒。信封 ID 由（租户 + 包裹 + 决定标识）
-// 认领并加类型段。
+// 认领：其指纹加口名前缀。
 func TestContinuedAttemptDecisionHandoffFollowsTheTransactionalTemplate(t *testing.T) {
 	handoff, db, pool := newContinuedAttemptDecisionHandoffFixture(t)
 	ctx := t.Context()

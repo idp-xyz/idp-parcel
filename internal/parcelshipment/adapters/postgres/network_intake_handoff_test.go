@@ -21,7 +21,7 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 16 证网络收寄采用意图：与业务行同一提交、回滚一并消失、
-// 重发同一份、无事务拒、缺采用键响亮报错。信封 ID 由采用键（含租户）再加类型段认领。
+// 重发同一份、无事务拒、缺采用键响亮报错。信封 ID 由采用键（含租户）的指纹加口名前缀认领。
 // 入队走 EnqueueOnce。
 
 const networkIntakeEventType = "parcel-shipment.network-intake.recorded"

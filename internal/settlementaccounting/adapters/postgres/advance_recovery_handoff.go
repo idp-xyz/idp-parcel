@@ -27,6 +27,10 @@ type OutboxAdvanceRecoveryHandoff struct {
 	clock ports.Clock
 }
 
+// advanceRecoveryEventIDPort 是本口指纹 ID 的口名前缀。ID 与分区键取同一个指纹：每封自成一区，与换形前同
+// （分区门禁的同源例外）。
+const advanceRecoveryEventIDPort = "advance-recovery"
+
 func NewOutboxAdvanceRecoveryHandoff(
 	db *bentopg.DB,
 	store *outbox.Store,
@@ -117,13 +121,13 @@ func (handoff *OutboxAdvanceRecoveryHandoff) HandOffAdvanceRecovery(
 	now := handoff.clock.Now().UTC()
 	envelope := eventing.Envelope{
 		SpecVersion:  eventing.SpecVersion,
-		ID:           outboxintent.FingerprintEventID("advance-recovery", shape.eventID),
+		ID:           outboxintent.FingerprintEventID(advanceRecoveryEventIDPort, shape.eventID),
 		Source:       saEventSource,
 		Type:         shape.eventType,
 		Version:      1,
 		Scope:        shape.tenant,
 		Subject:      shape.subject,
-		PartitionKey: string(outboxintent.FingerprintEventID("advance-recovery", shape.eventID)),
+		PartitionKey: string(outboxintent.FingerprintEventID(advanceRecoveryEventIDPort, shape.eventID)),
 		OccurredAt:   shape.occurredAt,
 		RecordedAt:   now,
 		ContentType:  eventing.JSONContentType,

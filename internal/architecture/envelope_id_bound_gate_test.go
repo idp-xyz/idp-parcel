@@ -22,7 +22,8 @@ import (
 // allowedRawEnvelopeID 是不经指纹铸 ID 的文件，值写理由或去处。只许变短。
 //
 // 「单一产品铸造标识」那几行的 ID 只取一个由本产品身份工厂铸出的定长标识，长度不随任何实例取值涨；理由里点名工厂，
-// 一眼可核。工厂一旦改成收外部来的号，这一行就不再成立。
+// 一眼可核。两种情形会让这一行不再成立：工厂改成收外部来的号；或者那只交接口多出一个调用方，交进来的标识不是经
+// 工厂铸的（从派生串或外部串构造的同一种领域标识照样能过类型检查）。
 var allowedRawEnvelopeID = map[string]string{
 	"internal/parcelpricing/adapters/postgres/evaluation_handoff.go":                             "单一产品铸造标识：identity.EvaluationIdentities",
 	"internal/parcelshipment/adapters/postgres/acceptance_decision_handoff.go":                   "单一产品铸造标识：identity.AcceptanceDecisions",

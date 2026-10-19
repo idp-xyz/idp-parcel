@@ -93,14 +93,14 @@ func TestChargeConfirmationFollowsTheTransactionalTemplate(t *testing.T) {
 	}
 }
 
-// partitionKeyOf 取一份已入队信封的分区键。它与 countSAIntents 分开：一个问「发出去
-// 了几份」，一个问「它们排在哪条队里」，而本仓那一类缺陷恰恰是两者只对了一样。
 // saID 是本包各交接口的信封 ID：口名前缀加原先那串可读身份的指纹，与生产同一公式。用例里照旧写可读的那串，
 // 读的人一眼看得出数的是哪一封。
 func saID(port, readable string) string {
 	return string(outboxintent.FingerprintEventID(port, readable))
 }
 
+// partitionKeyOf 取一份已入队信封的分区键。它与 countSAIntents 分开：一个问「发出去
+// 了几份」，一个问「它们排在哪条队里」，而本仓那一类缺陷恰恰是两者只对了一样。
 func partitionKeyOf(t *testing.T, pool *pgxpool.Pool, eventID string) string {
 	t.Helper()
 

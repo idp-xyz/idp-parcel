@@ -60,12 +60,12 @@ type manualReviewCompletedPayload struct {
 	DeclaredParcelIDs   []string `json:"declaredParcelIds"`
 }
 
-// manualReviewCompletedEventID 由来源身份加提交版本认领意图（ADR-0043）：完成挂在版本的
-// 判断任务上，同一版本至多一次`已记录`（领域对重复完成答`已有完成`，走不到交接），新提交
-// 版本换代后的再复核是另一份完成、另一个 ID。
 // manualReviewCompletedEventIDPort 是本口指纹 ID 的口名前缀。
 const manualReviewCompletedEventIDPort = "manual-review-completed"
 
+// manualReviewCompletedEventID 由来源身份加提交版本认领意图（ADR-0043）：完成挂在版本的
+// 判断任务上，同一版本至多一次`已记录`（领域对重复完成答`已有完成`，走不到交接），新提交
+// 版本换代后的再复核是另一份完成、另一个 ID。
 func manualReviewCompletedEventID(identity domain.SourceIdentity, version domain.SubmissionVersionID) string {
 	return string(outboxintent.FingerprintEventID(manualReviewCompletedEventIDPort,
 		identity.TenantID().String(), identity.CustomerAccountID().String(), identity.Source().String(), identity.RequestKey().String(), version.String()))
