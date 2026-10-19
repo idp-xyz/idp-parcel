@@ -19,6 +19,11 @@ type TransportSchedules struct {
 	db *bentopg.DB
 }
 
+var (
+	_ ports.TransportScheduleStore  = (*TransportSchedules)(nil)
+	_ ports.TransportScheduleReader = (*TransportSchedules)(nil)
+)
+
 func NewTransportSchedules(db *bentopg.DB) (*TransportSchedules, error) {
 	if db == nil {
 		return nil, fmt.Errorf("transport fulfillment postgres: db is nil")
