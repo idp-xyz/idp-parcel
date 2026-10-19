@@ -392,6 +392,52 @@ func TestPlanGivenEstimateIdentityIsDeterministicInTheDeclarationAndTheCard(t *t
 	}
 }
 
+// 选路比价那一路要的两格（票 routing-first-cut/20，ADR-0189 决定一）：声明的比较币种进输入、评价交回比较金额；声明的事实引用
+// 原样进输入。两格都进评价标识——比较金额与输入出处是评价内容，换一格不得还是同一份评价；都不声明时标识与只差这两格的声明
+// 不同，说明它们确实被拼了进去。
+func TestPlanGivenEstimateCarriesTheDeclaredComparisonCurrencyAndFacts(t *testing.T) {
+	handler := newPlanGivenHandler(t, application.FormPlanGivenEstimateEvaluationsDeps{})
+	form := func(declaration application.PlanGivenEstimateDeclaration) domain.PricingEvaluation {
+		t.Helper()
+		result, err := handler.Handle(context.Background(), planGivenCommand(t, minimalPlan(t), declaration))
+		if err != nil || result.Outcome != application.PlanGivenEstimatesFormed || len(result.Estimates) != 1 ||
+			result.Estimates[0].Answer != application.EstimateCandidateEvaluated {
+			t.Fatalf("result = %+v err = %v, 想要已形成且这一件已评价", result, err)
+		}
+		return result.Estimates[0].Evaluation
+	}
+	usd := mustValue(t, domain.NewCurrency, "USD")
+	declarationRef, err := domain.NewVersionReference(domain.ArtifactDeclaredMeasurement, "SYN-PARCEL-01", "declaration@baseline", "sha256:syn-declaration")
+	if err != nil {
+		t.Fatalf("declaration reference: %v", err)
+	}
+	fact, err := domain.NewVersionedFactReference(declarationRef)
+	if err != nil {
+		t.Fatalf("fact: %v", err)
+	}
+
+	plain := planGivenDeclaration(t, "route-cost-1")
+	compared := plain
+	compared.Comparison = &usd
+	sourced := plain
+	sourced.Facts = []domain.VersionedFactReference{fact}
+
+	bare, withComparison, withFacts := form(plain), form(compared), form(sourced)
+	if _, present := bare.ComparisonAmount(); present {
+		t.Fatal("没声明比较币种却交回了比较金额")
+	}
+	amount, present := withComparison.ComparisonAmount()
+	if !present || amount.Currency().String() != "USD" || amount.Amount().String() != "10" {
+		t.Fatalf("比较金额 = %v（在场 %v），想要 10 USD", amount, present)
+	}
+	if references := withFacts.Input().FactReferences(); len(references) != 1 || references[0] != fact {
+		t.Fatalf("输入的事实引用 = %+v，想要声明的那一条", references)
+	}
+	if bare.ID() == withComparison.ID() || bare.ID() == withFacts.ID() || withComparison.ID() == withFacts.ID() {
+		t.Fatalf("标识 %s / %s / %s，想要三者各不相同", bare.ID(), withComparison.ID(), withFacts.ID())
+	}
+}
+
 // ADR-0152 决定二的手法：依赖里没有评价库写口（ports.EvaluationStore）与交付口（ports.EvaluationHandoff），装配点装不进去——
 // 结构上不入册、不交付。
 func TestPlanGivenEstimateDependenciesCarryNoEvaluationStoreOrHandoff(t *testing.T) {

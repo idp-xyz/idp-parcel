@@ -320,3 +320,29 @@ func TestCatalogueLinkEntersTheContentDigestAndSurvivesTheSnapshot(t *testing.T)
 		t.Fatal("rehydrated card recomputes a different digest")
 	}
 }
+
+// 委托报的两端邮编拼成路线只有一种拼法（正式评价、受理前估价、选路比价同用）：目的邮编没报或不成形即没有路线；始发不成形
+// 时退到只按目的邮编拼，不因一格始发让整条路线缺席。
+func TestPostalRouteFromDeclaredDropsAMalformedOriginButNotAMalformedDestination(t *testing.T) {
+	for name, test := range map[string]struct {
+		origin, destination string
+		formed              bool
+		wantOrigin          string
+	}{
+		"两端都成形": {"200000", "018000", true, "200000"},
+		"始发没报":  {"", "018000", true, ""},
+		"始发带空白": {" 200000", "018000", true, ""},
+		"目的没报":  {"200000", "", false, ""},
+		"目的带空白": {"200000", "018000 ", false, ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			route, formed := domain.PostalRouteFromDeclared(test.origin, test.destination)
+			if formed != test.formed {
+				t.Fatalf("formed = %v, want %v", formed, test.formed)
+			}
+			if formed && (route.Origin() != test.wantOrigin || route.Destination() != test.destination) {
+				t.Fatalf("route = %q → %q, want %q → %q", route.Origin(), route.Destination(), test.wantOrigin, test.destination)
+			}
+		})
+	}
+}

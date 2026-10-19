@@ -141,6 +141,23 @@ func NewPostalRoute(origin, destination string) (PostalRoute, error) {
 	return route, nil
 }
 
+// PostalRouteFromDeclared 把发起方报的两端邮编拼成邮编路线；第二个返回值为假即没有路线。目的邮编没报或过不了构造门即没有
+// 路线；始发邮编过不了构造门时只按目的邮编拼，不因一格始发让整条路线缺席。正式评价、受理前估价与选路比价都从委托报的地址取
+// 这条路线，拼法只在这里写：各写一份，同一件包裹在几处就可能拿到两种路线、解出两个分区。
+func PostalRouteFromDeclared(origin, destination string) (PostalRoute, bool) {
+	if destination == "" {
+		return PostalRoute{}, false
+	}
+	route, err := NewPostalRoute(origin, destination)
+	if err != nil && origin != "" {
+		route, err = NewPostalRoute("", destination)
+	}
+	if err != nil {
+		return PostalRoute{}, false
+	}
+	return route, true
+}
+
 // Origin 只在给了始发邮编时非空。
 func (route PostalRoute) Origin() string      { return route.origin }
 func (route PostalRoute) Destination() string { return route.destination }

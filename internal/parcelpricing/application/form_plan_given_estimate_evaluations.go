@@ -47,7 +47,10 @@ func (outcome FormPlanGivenEstimateEvaluationsOutcome) String() string {
 }
 
 // PlanGivenEstimateDeclaration 是一件试算声明。Subject 是调用方给的试算对象引用，本上下文不为它铸造身份；其余各项不给默认：
-// 分区为空串、尺寸、邮编路线与结算币种为 nil 即未声明。这张卡要哪一格，按卡的目录绑定逐件定（estimateInput）。
+// 分区为空串、尺寸、邮编路线、结算币种与比较币种为 nil 即未声明。这张卡要哪一格，按卡的目录绑定逐件定（estimateInput）。
+//
+// Comparison 与 Facts 是选路比价那一路要的（ADR-0189 决定一）：比较币种让各段按同一币种出比较金额，事实引用标明这份声明取自
+// 哪一份客户申报。两格都只随输入走、不改分区给法，也不参与选卡。
 type PlanGivenEstimateDeclaration struct {
 	Subject    string
 	BasisAt    time.Time
@@ -56,6 +59,8 @@ type PlanGivenEstimateDeclaration struct {
 	Zone       string
 	Route      *domain.PostalRoute
 	Settlement *domain.Currency
+	Comparison *domain.Currency
+	Facts      []domain.VersionedFactReference
 }
 
 // FormPlanGivenEstimateEvaluationsCommand 是一次调用：一张卡、一个证据层级、一组声明。租户由调用方从自己的信封交进来。计价
@@ -151,7 +156,7 @@ func (handler *FormPlanGivenEstimateEvaluationsHandler) estimate(
 	if err != nil {
 		return PlanGivenEstimate{}, false, fmt.Errorf("plan-given estimate subject: %w", err)
 	}
-	input, missing, err := estimateInput(translated, command.Plan, subject)
+	input, missing, err := estimateInput(translated, command.Plan, subject, declaration.Facts...)
 	if err != nil {
 		return PlanGivenEstimate{}, false, fmt.Errorf("plan-given estimate input: %w", err)
 	}
@@ -160,7 +165,12 @@ func (handler *FormPlanGivenEstimateEvaluationsHandler) estimate(
 		estimate.Missing = missing
 		return estimate, false, nil
 	}
-	id, err := domain.NewEvaluationID(planGivenEstimateIdentity(declaration.Subject, translated, command.Plan))
+	if declaration.Comparison != nil {
+		if input, err = input.WithComparisonCurrency(*declaration.Comparison); err != nil {
+			return PlanGivenEstimate{}, false, fmt.Errorf("plan-given estimate comparison currency: %w", err)
+		}
+	}
+	id, err := domain.NewEvaluationID(planGivenEstimateIdentity(declaration, translated, command.Plan))
 	if err != nil {
 		return PlanGivenEstimate{}, false, fmt.Errorf("plan-given estimate evaluation ID: %w", err)
 	}
@@ -219,9 +229,20 @@ func (declaration PlanGivenEstimateDeclaration) estimateCommand(tenant domain.Te
 // planGivenEstimateIdentity 由调用方给的试算对象引用、该件声明与价卡版本确定性派生评价标识（ADR-0152 决定五）：同一声明、同一
 // 张卡得同一标识，评价可比对可复算。声明与卡取 estimateIdentity 那一份，引用在外层拼进来，各段带长度前缀：引用由调用方给、
 // 可含任何字符，不带前缀就能拼出与另一件相同的串。打头的 plan-given 让本入口与 UC-PP-001 的标识各在各的空间里。
-func planGivenEstimateIdentity(reference string, declaration FormEstimateEvaluationsCommand, plan domain.PricingPlanVersion) string {
+//
+// 比较币种与事实引用只在声明了时追加，各带一个标签：它们改的是评价内容（比较金额、输入出处），换一格就该换标识；没声明的
+// 声明拼出的串与这两格出现之前逐字相同，已有调用方的标识不随之变。
+func planGivenEstimateIdentity(declaration PlanGivenEstimateDeclaration, translated FormEstimateEvaluationsCommand, plan domain.PricingPlanVersion) string {
+	parts := []string{"plan-given", declaration.Subject, estimateIdentity(translated, plan)}
+	if declaration.Comparison != nil {
+		parts = append(parts, "comparison", declaration.Comparison.String())
+	}
+	for _, fact := range declaration.Facts {
+		reference := fact.Reference()
+		parts = append(parts, "fact", string(reference.Kind()), reference.ID(), reference.Version(), reference.Fingerprint())
+	}
 	digest := sha256.New()
-	for _, part := range []string{"plan-given", reference, estimateIdentity(declaration, plan)} {
+	for _, part := range parts {
 		fmt.Fprintf(digest, "%d:%s", len(part), part)
 	}
 	return "EST-" + hex.EncodeToString(digest.Sum(nil)[:8])

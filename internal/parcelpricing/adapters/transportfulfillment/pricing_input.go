@@ -277,12 +277,8 @@ func (resolver *ParcelResolver) postalRoute(
 			origin = code
 		}
 	}
-	route, err := ppdomain.NewPostalRoute(origin, postal)
-	if err != nil && origin != "" {
-		origin = ""
-		route, err = ppdomain.NewPostalRoute(origin, postal)
-	}
-	if err != nil {
+	route, formed := ppdomain.PostalRouteFromDeclared(origin, postal)
+	if !formed {
 		return ppdomain.PostalRoute{}, none, []string{missingDestination}, nil
 	}
 	fact, err := addressFact(parcel.String(), destination)

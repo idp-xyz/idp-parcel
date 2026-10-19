@@ -105,19 +105,16 @@ func measurementOf(measurement psdomain.DeclaredMeasurement) (*ppdomain.Weight, 
 	return &weight, &dimensions
 }
 
-// postalRouteOf 把两段邮编拼成邮编路线；收件邮编没报即没有路线。始发邮编过不了路线的构造门时只按目的邮编拼——与正式评价的输入
-// 解析器（transportfulfillment 适配器）同一处置，同一件包裹在受理前后不该因此拿到两种路线。
+// postalRouteOf 把两段邮编拼成邮编路线；收件邮编没报即没有路线。拼法取 PostalRouteFromDeclared：与正式评价的输入解析器
+// （transportfulfillment 适配器）同一份，同一件包裹在受理前后不该因此拿到两种路线。
 func postalRouteOf(declaration psdomain.SubmissionVersionDeclaration) *ppdomain.PostalRoute {
 	destination, declared := declaration.DestinationPostalCode()
-	if !declared || destination == "" {
+	if !declared {
 		return nil
 	}
 	origin, _ := declaration.OriginPostalCode()
-	route, err := ppdomain.NewPostalRoute(origin, destination)
-	if err != nil && origin != "" {
-		route, err = ppdomain.NewPostalRoute("", destination)
-	}
-	if err != nil {
+	route, formed := ppdomain.PostalRouteFromDeclared(origin, destination)
+	if !formed {
 		return nil
 	}
 	return &route

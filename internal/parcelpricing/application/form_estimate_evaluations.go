@@ -297,10 +297,12 @@ func (handler *FormEstimateEvaluationsHandler) estimate(
 
 // estimateInput 按卡的目录绑定选分区给法（ADR-0152 决定五）：绑了分区目录的卡用邮编路线、分区由目录解析；没绑的卡用
 // 发起方给的分区，另绑了偏远档位目录时还要邮编路线。该给的没给交回缺项、不造输入——不拿另一种给法顶替，也不给默认分区。
+// facts 是这份输入出自哪几份事实，只有声明取自真实委托的调用方才给；假设包裹没有事实可引。
 func estimateInput(
 	command FormEstimateEvaluationsCommand,
 	plan domain.PricingPlanVersion,
 	subject domain.EvaluationSubject,
+	facts ...domain.VersionedFactReference,
 ) (domain.PricingInputSnapshot, []string, error) {
 	zoneBound, tierBound := false, false
 	for _, link := range plan.Structures().ReferenceCatalogues() {
@@ -319,7 +321,7 @@ func estimateInput(
 			return domain.PricingInputSnapshot{}, []string{EstimateMissingPostalRoute}, nil
 		}
 		input, err = domain.NewPostalPricingInputSnapshot(command.Tenant, command.Scope, subject, *command.Route,
-			command.Weight, command.Dimensions, command.BasisAt)
+			command.Weight, command.Dimensions, command.BasisAt, facts...)
 	} else {
 		missing := make([]string, 0, 2)
 		if command.Zone == "" {
@@ -332,7 +334,7 @@ func estimateInput(
 			return domain.PricingInputSnapshot{}, missing, nil
 		}
 		input, err = domain.NewPricingInputSnapshot(command.Tenant, command.Scope, subject, command.Zone,
-			command.Weight, command.Dimensions, command.BasisAt)
+			command.Weight, command.Dimensions, command.BasisAt, facts...)
 		if err == nil && tierBound {
 			input, err = input.WithPostalRoute(*command.Route)
 		}
