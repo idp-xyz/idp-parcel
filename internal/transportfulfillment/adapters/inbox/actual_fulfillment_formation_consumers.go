@@ -30,15 +30,15 @@ var (
 		"transport fulfillment inbox: actual fulfillment occurrence formation hit a defect of its own")
 )
 
-// 两个消费者名各自分家：交接信封同时扇出给 VE 投影、派送发起与本路，有效交付信封同时扇出给 VE 投影、PS 终局与本路；inbox
-// 键只由（消费者名 + 来源 + 事件 ID）认领，共名会让一路把另一路的投递当重复跳过。改名等于换消费者。
+// 两个消费者名各自分家：交接与有效交付信封都扇出给多路独立消费者，inbox 键只由（消费者名 + 来源 + 事件 ID）认领，共名会让
+// 一路把另一路的投递当重复跳过。改名等于换消费者。
 const (
 	actualFulfillmentOnHandoverConsumerName = "transport-fulfillment/form-actual-fulfillment-occurrence-from-transport-handover"
 	actualFulfillmentOnDeliveryConsumerName = "transport-fulfillment/form-actual-fulfillment-occurrence-from-effective-delivery"
 )
 
 // EffectiveDeliveryRegisteredEventType 是有效交付登记信封的类型。串在本包写出，不去拿提供方 postgres 适配器里那个未导出
-// 常量；它与提供方交出的、与 VE、PS 两路认的是同一个串，相等由 cmd/parcel-dispatch 用生产交付口入队的真库用例钉住。
+// 常量；它与提供方交出的、与同一封信上别的消费者认的是同一个串，相等由 cmd/parcel-dispatch 用生产交付口入队的真库用例钉住。
 const EffectiveDeliveryRegisteredEventType eventing.EventType = "transport-fulfillment.effective-delivery.registered"
 
 // ActualFulfillmentFormer 是两扇门转交的那一口，真实装配接 application.FormActualFulfillmentOnParticipationEndHandler。

@@ -900,7 +900,8 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: actual fulfillment on delivery undecided translation: %w", err)
 	}
-	// 先 VE、再 PS 终局，TF 实际履约发生项（ADR-0218）殿后：它停在未决重投时，前两路按 inbox 跳过，不重复投影与终局。
+	// 先 VE、再 PS 终局，TF 实际履约发生项（ADR-0218）殿后：它停在未决重投时，前面各路按 inbox 跳过，不重复投影与终局。
+	// 殿后只保住同一封信上的各路；它停住时同一分区后面的信封仍排在它后面，代价与去处见 ADR-0218 越权风险点。
 	deliveryFan, err := dispatch.FanOut(veDeliveryRouted, routedFinals, tfActualOnDeliveryRouted)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: effective delivery fan-out: %w", err)
@@ -1048,6 +1049,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 	}
 	// 先 VE 后 TF，沿路由表先 VE 的惯例：派送发起停在未决重投时，VE 那一路按 inbox 跳过，不重复投影；反过来也不让投影等派送。
 	// NO 节点控制转出（ADR-0214 决定一）、NR 路由复核（ADR-0215）与实际履约发生项（ADR-0218）不靠它们在扇出里的位置：FanOut 每一路都调，各路各记 inbox 账，谁停在未决都不让别路重做。
+	// 位置不影响记账，但不改分区：实际履约发生项那一路停住时同样挡同一分区后面的信封（ADR-0218 越权风险点 8），交付那一张扇出同理。
 	handoverFan, err := dispatch.FanOut(veHandoverRouted, tfHandoverRouted, noHandoverRouted, nrHandoverRouted, tfActualOnHandoverRouted)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: transport handover fan-out: %w", err)

@@ -17,8 +17,7 @@ import (
 )
 
 // actualFulfillmentOnHandoverUndecidedSentinels 只给「交接 → TF 实际履约发生项自动形成」这一路（ADR-0218）。与同一封信上
-// VE 投影、派送发起两路的名单分开列：各包各的哨兵再 FanOut，本路会停在采用连线、旅程册、委托、协议核对口与发生项登记册上，
-// 那几格别路没有。
+// 别的路的名单分开列：各包各的哨兵再 FanOut，本路会停在采用连线、旅程册、委托、协议核对口与发生项登记册上，那几格别路没有。
 //
 // 不在名单里：tfinbox.ErrActualFulfillmentFormationDefect（自家键过不了自家门、登记用例答出本路不该见的格）、
 // tfapplication.ErrParticipationEndedInSeveralSegments（库面不一致）、domain.ErrAmbiguousJourney（旅程册不一致）、
