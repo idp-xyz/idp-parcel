@@ -146,3 +146,4 @@ L
   - 26 立的 38 号票与 16 立的 38 号票撞号，26 那张改为 39，ADR-0208 风险点 6 同步。
 - 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
 - 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `60f8d75c`：146 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。
+- 推送前 main 又进了 no-reception-identity/05（NO 收寄，与本批文件不相交），本批重放到它上面：AT 覆盖盘点计数表再合一次（CC 行取本批，NO 行取 main，合计重算）；机制清点在推送 tip 上重生成；`internal/architecture`、TF、CC、SA、PC、PP 各包与 `cmd/parcel-api`、`cmd/parcel-dispatch`、三个登记 CLI、`scripts/demo-seeds/...`、`migrations/` 在推送 tip 上重跑，56 包 ok。没在推送 tip 上重跑全量。
