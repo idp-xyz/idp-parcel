@@ -294,7 +294,8 @@ func mustValueNoT[T any](construct func(string) (T, error), raw string) T {
 // 生产装配授权请求映射未配置，关闭答 200 `UNDECIDED / AUTHORITY_UNAVAILABLE`、册上无行；配上合成映射、真授权册登了关闭与重开
 // 两条 grant 之后，货主指令的关闭 201 形成，册上的请求方与责任来源都是服务端从包裹所属委托推出的客户账户；不带货主重授权
 // 证据的重开被编排那道门拦下（`SHIPPER_REAUTHORIZATION_MISSING`），带了证据的重开 201 形成——渠道推出的货主账户与原关闭的
-// 请求方对得上。测试输入是合成数据，只记 `S`。
+// 请求方对得上。票 operator-channel/38（ADR-0187）：请求证据来自载荷、操作证据来自信封认证出的操作者，都落在册上；回执带回
+// 册上的请求证据，换一份证据原样重投答`已有结果`、带回的仍是原证据。测试输入是合成数据，只记 `S`。
 func TestClosureAndReopeningThroughTheOperatorChannelAgainstARealDatabase(t *testing.T) {
 	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
@@ -315,7 +316,7 @@ func TestClosureAndReopeningThroughTheOperatorChannelAgainstARealDatabase(t *tes
 		t.Fatal(err)
 	}
 	type answer struct {
-		Outcome, DecisionID, PendingReason, Refusal string
+		Outcome, DecisionID, PendingReason, Refusal, RequestEvidence string
 	}
 	post := func(t *testing.T, endpoint http.Handler, body string, status int, want answer) answer {
 		t.Helper()
@@ -366,6 +367,16 @@ func TestClosureAndReopeningThroughTheOperatorChannelAgainstARealDatabase(t *tes
 		closure.ClosureResponsibilitySource().String() != "SHIPPER-INSTRUCTION/SYN-CUSTOMER-OC15" {
 		t.Fatalf("关闭 = 标识 %q / 请求方 %q / 责任来源 %q，不是从包裹所属委托推出的", closure.ID(), closure.Requester(), closure.ClosureResponsibilitySource())
 	}
+	const operationEvidence = "OPERATOR/https://id.syn.example/dex#SYN-OPERATOR-01"
+	if closure.RequestEvidence().String() != "SYN-CALL-OC15" || closed.RequestEvidence != "SYN-CALL-OC15" ||
+		closure.OperationEvidence().String() != operationEvidence ||
+		closure.Decider().String() == closure.OperationEvidence().String() {
+		t.Fatalf("关闭证据 = %q（回执 %q）/ %q / 决定方 %q", closure.RequestEvidence(), closed.RequestEvidence, closure.OperationEvidence(), closure.Decider())
+	}
+	if other := post(t, shipmenthttp.NewFormControlledClosureEndpoint(decisions.shipment, orchestration.Shell), closureBodyWith("SYN-PARCEL-OC15-1", "SYN-CALL-OC15-SECOND"),
+		http.StatusOK, answer{Outcome: "EXISTING_RESULT"}); other.DecisionID != closed.DecisionID || other.RequestEvidence != "SYN-CALL-OC15" {
+		t.Fatalf("换证据重投交回 %q / %q，want 原决定与原证据", other.DecisionID, other.RequestEvidence)
+	}
 	// 票 operator-channel/28：同一个关闭 POST 重投，答 200 `EXISTING_RESULT` 交回原决定，册上仍是一条。
 	retried := post(t, shipmenthttp.NewFormControlledClosureEndpoint(decisions.shipment, orchestration.Shell), closureBody("SYN-PARCEL-OC15-1"),
 		http.StatusOK, answer{Outcome: "EXISTING_RESULT"})
@@ -388,6 +399,10 @@ func TestClosureAndReopeningThroughTheOperatorChannelAgainstARealDatabase(t *tes
 	if len(register.Decisions()) != 2 || register.Judge(false) != domain.ContinuedAttemptOpen ||
 		register.Decisions()[1].Requester().String() != "CUSTOMER-ACCOUNT/SYN-CUSTOMER-OC15" {
 		t.Fatalf("册 decisions=%d judge=%v", len(register.Decisions()), register.Judge(false))
+	}
+	if got := register.Decisions()[1]; got.RequestEvidence().String() != "SYN-EVIDENCE/shipper-reauth-oc15" ||
+		reopened.RequestEvidence != "SYN-EVIDENCE/shipper-reauth-oc15" || got.OperationEvidence().String() != operationEvidence {
+		t.Fatalf("重开证据 = %q（回执 %q）/ %q", got.RequestEvidence(), reopened.RequestEvidence, got.OperationEvidence())
 	}
 }
 
