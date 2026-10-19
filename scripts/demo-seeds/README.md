@@ -242,3 +242,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
   证据只记 `S`。
   这一步不幂等：跨秒重跑各落一笔委托；同一 UTC 秒内重跑撞同一来源键，提交口答 `200`
   `EXISTING_RESULT`，脚本因要求 `201` 失败退出，不落第二笔。
+- 干线发生项往下的 BUY 评价停在待判断（票 demo-chain-gaps/27 实测，证据 `S`）。登成 `ACTUAL_FULFILLMENT` 发生项之后，
+  结算发起一份 BUY 请求、计价形成一份评价，评价答 `PENDING` / `ZONE_UNRESOLVED`：演示成本卡没绑分区目录，按发生项
+  造的计价输入也不带分区（ADR-0189 越权风险点 3）。结算按 ADR-0200 把它入账，不形成供应商预期成本。这不是种子缺
+  一行，补哪一边要另裁，见票 27 完成记录「偏离与待裁」。
