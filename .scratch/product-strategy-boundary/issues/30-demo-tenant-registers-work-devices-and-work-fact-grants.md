@@ -1,7 +1,7 @@
 # 30 演示租户登合成作业设备与作业事实授予：主链作业事实各口在演示上越过渠道
 
 Category: enhancement
-Status: 完工，待评审与进 main——2026-10-18 Claude Code 会话立并实施（用户「你作为业务和系统专家自决……解决所有的问题」授权），分支 `claude-psb30`。出自 2026-10-16 在 `c68e4342` 上重走演示动线（[05](./05-demo-journey-criterion-evidence.md)）。合成集成客户端那一半拆到 [31](./31-demo-integration-client-needs-a-client-credentials-capable-issuer.md)。
+Status: resolved——2026-10-18 进 main（至 `46fe8f88`）。Claude Code 会话立并实施（用户「你作为业务和系统专家自决……解决所有的问题」授权），分支 `claude-psb30`。出自 2026-10-16 在 `c68e4342` 上重走演示动线（[05](./05-demo-journey-criterion-evidence.md)）。合成集成客户端那一半拆到 [31](./31-demo-integration-client-needs-a-client-credentials-capable-issuer.md)。
 Blocked by: 无
 地盘：`scripts/demo-seeds/data/access/` 的行文件；`scripts/demo-seeds/README.md` 授予表配置员那一格与组成表 `data/access/` 那一行；`scripts/demo-seeds/seed.sh` 只加调用行（与 `idp-parcel-9b` 约定：调用行先加、加完把 SHA 告诉它）；[合成演示动线](../../../docs/design/synthetic-demo-journey-script.md)「前置」一句。
 出处：[ADR-0150](../../../docs/adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 决定二「一线作业事实用合成设备……走普通登记」与决定五；[ADR-0149](../../../docs/adr/0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md)；[ADR-0151](../../../docs/adr/0151-unassigned-command-faces-get-their-families.md)；[ADR-0180](../../../docs/adr/0180-admission-scope-tenant-mapping-is-an-access-identity-register-and-self-authority-is-a-deployment-parameter.md)。
@@ -66,3 +66,9 @@ Blocked by: 无
   - 完成记录逐口写明设备与范围，补上伪造令牌答 401 的对照。
   - 票 31 补客户端行要填的格与一方一客户端，见 31。
   - 日期与 Category 对齐词表。
+
+## 进 main 记录（2026-10-18）
+
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `bca810ec`：143 包 ok，0 FAIL，0 SKIP。
+- 之后 rebase 跨过 main 上两笔，只动运输履约的 postgres 适配器与其用例。本票 diff 没有 Go，也没有用例读 `data/access/`，所以没重跑全量。
+- 快进推到 main：`993fa84e..46fe8f88`。机制清点在钉 `bca810ec` 的树上重生成，没有变化。
