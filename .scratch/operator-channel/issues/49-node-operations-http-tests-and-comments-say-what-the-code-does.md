@@ -1,7 +1,7 @@
 # 49 NO adapters/http 测试与注释照实写：收寄替身交回不同节点、死引用改指、去变更说明
 
 Category: chore
-Status: in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 6 评审遗留；用户授权代决）；分支 `claude-oc49`
+Status: in-progress——2026-10-18 作者子代理完工，待非作者评审；分支 `claude-oc49`，见文末「完成记录」。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 6 评审遗留；用户授权代决）；分支 `claude-oc49`
 Blocked by: 无
 父票：[26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)（票 26 评审遗留的后续）
 出处：票 [23](./23-node-operations-isolated-command-intake-retires.md) Comments 评审 Spec 非阻断 1、Standards 非阻断 1–2。
@@ -76,8 +76,41 @@ const (
 
 ## 完成判据
 
-- [ ] 收寄替身认证方交回与请求头 `Parcel-Work-Scope-Reference` 不同的节点，用例断言命令里的节点取自认证结果；把实现改成直接取头值时该用例转红（变异自检写进完成记录）。
-- [ ] 死引用改指符号名；变更说明删去或改写成「为什么」。
-- [ ] 改动文件 `git diff --check` 干净、无 CR / BOM；注释中文、只写为什么、不写变更说明、跨文件引用不用行号也不用计数。
-- [ ] 改动包 `gofmt -l` 无输出，`go build ./...`、`go vet ./...` 退 0，改动包及反向依赖与 `./internal/architecture/...` 带 DSN `go test -p 1 -count=1` 全 ok。
+- [x] 收寄替身认证方交回与请求头 `Parcel-Work-Scope-Reference` 不同的节点，用例断言命令里的节点取自认证结果；把实现改成直接取头值时该用例转红（变异自检写进完成记录）。
+- [x] 死引用改指符号名；变更说明删去或改写成「为什么」。
+- [x] 改动文件 `git diff --check` 干净、无 CR / BOM；注释中文、只写为什么、不写变更说明、跨文件引用不用行号也不用计数。
+- [x] 改动包 `gofmt -l` 无输出，`go build ./...`、`go vet ./...` 退 0，改动包及反向依赖与 `./internal/architecture/...` 带 DSN `go test -p 1 -count=1` 全 ok。
 - [ ] 非作者评审（隔离子代理两轴）0 阻断；推送方在干净检出上带 DSN 跑全量；机制清点有变则重生成。
+
+## 完成记录（2026-10-18，会话 idp-parcel-9b 的实施子代理，分支 claude-oc49）
+
+**基线**：分支基 `b58b10ef`。两笔改动：`46333ca6`（测试，C8-9 与 C8-11 b，同一文件同一笔）、`b8aac194`（只改注释，C8-10 与 C8-11 a）；本记录另一笔在其后。
+
+**落点**：只在地盘内。
+- `internal/nodeoperations/adapters/http/work_fact_intake_test.go`：常量拆成 `workFactNode`（替身认证方交回，`SYN-NODE-SZX-01`）与 `presentedScopeReference`（请求头 `Parcel-Work-Scope-Reference` 出示，`SYN-NODE-SHA-HUB`）；`receptionRequest` 改出示后者；两条用例的断言照「改法」改；常量注释写明两值刻意不同的理由，并写明生产上两值相等、替身答别的节点不是在模拟真实答复。文件头删去变更说明那句，保留讲方法的那句。
+- `internal/nodeoperations/adapters/http/reception_payload.go`：文件头删去「原住在隔离命令 Intake 的文件里……」那句；`decodeClosedDocument` 头注的死引用改指 `internal/partycommercial/adapters/http` 的 `decodeClosedDocument`（核过：它经同包 `decodeStrict` 判，先 `DisallowUnknownFields`，再读一次必须得到 `io.EOF`，与本包相同）。只改注释。
+
+**完成判据**（钉 `b8aac194`；Linux（WSL2），go1.26.8，真库为 55432 门禁库）
+- ✅ 节点取自认证结果：`TestWorkFactReceptionIntakeTranslatesReceptionWithTheAuthenticatedTenantAndNode`（替身交回的节点与请求头出示的不同，断言命令里是前者）；认证方被问的仍是头里那一份：`TestWorkFactReceptionIntakeTakesDeviceAndScopeFromHeadersAndAuthenticatesFirst`。变异自检见下文「先红后绿」。
+- ✅ 死引用改指符号名（包路径加 `decodeClosedDocument`）；两处变更说明删去。两文件再扫「原挂 / 原住 / 迁来 / 挪出 / 一字未改 / 不带命名空间的票号」，无残留。
+- ✅ 两文件 `git diff --check` 干净，CR 计数 0，文件首三字节为 `pac`（无 BOM）；注释中文、只写为什么，跨文件引用用包路径加符号名，不用行号也不用计数。
+- ✅ 门全过，见下文「门」。
+- ⬜ 非作者评审未做（待非作者评审）；推送方全量归推送方；机制清点已重生成，与现行文档逐字相同，无提交。
+
+**先红后绿**（变异取证，`go test -overlay` 把 `work_fact_intake.go` 换成变异体：`IntakeReception` 丢掉认证结果里的节点，改拿 `Parcel-Work-Scope-Reference` 头值铸节点；变异体只在会话草稿区，不进提交）
+1. 原码加原测试：`ok`。
+2. 变异体加原测试：`ok`——评审说的缺口复现（两值相同，测不出）。
+3. 变异体加改后测试：**红**，`--- FAIL: TestWorkFactReceptionIntakeTranslatesReceptionWithTheAuthenticatedTenantAndNode`，输出 `Node = "SYN-NODE-SHA-HUB", want "SYN-NODE-SZX-01"（认证结果，不是请求头 Parcel-Work-Scope-Reference 出示的 "SYN-NODE-SHA-HUB"）`。红落在行为上，不是编译错。
+4. 原码加改后测试：**绿**，本包收寄 Intake 各用例全 PASS（`-v` 逐条核过）。
+
+生产实现本就正确，本票只补测试的辨别力，所以「绿」不需要改实现。
+
+**门**（作者自验，工作树 `/home/tops/workspace/idp-parcel-claude-oc49`）
+- `gofmt -l` 两个改动文件：无输出。
+- `go build ./...`、`go vet ./...`：退 0。
+- `IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable' go test -p 1 -count=1`，范围是改动包 `./internal/nodeoperations/adapters/http/...`、直接引用它的 `./internal/nodeoperations/adapters/accessidentity/...`（无测试文件）与 `./cmd/parcel-api/...`，以及 `./internal/architecture/...`：全 ok。
+- 机制清点 `tools/mechanism-inventory` 重生成：无差。
+
+**证据层级**：全部 `S`（`SYN-NODE-SZX-01`、`SYN-NODE-SHA-HUB` 都是仓内已有的合成标识）。
+
+**评审**：待非作者评审。
