@@ -1,7 +1,7 @@
 # 04 票 02 评审遗留收口：ADR-0184 与 ADR-0185 复核记录、UC-NO-002 同步，入口去空白与同号核对的现状钉成用例
 
 Category: chore
-Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 恢复（分支 `claude-psxm04` 上已有半成品，先 rebase）。此前 ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-psxm04`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-psxm04`）上留有1 笔（入口去两端空白与逐字核对的钉住用例），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 0 评审遗留；用户授权代决）；分支 `claude-psxm04`
+Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 恢复（分支 `claude-psxm04` 上已有半成品，先 rebase）。此前 ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-psxm04`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-psxm04`）上留有1 笔（入口去两端空白与逐字核对的钉住用例），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 0 评审遗留；用户授权代决）；分支 `claude-psxm04`
 Blocked by: 无
 父票：[01](./01-external-mark-relations-have-no-model-in-parcel-shipment.md)（已 resolved）。被评的是 [02](./02-register-and-customer-parcel-numbers-feed-node-identity.md)，代码 `cc52e9b6`，建模 `5714a137`。
 地盘：
@@ -122,3 +122,23 @@ ADR-0184、ADR-0185 越权风险点的 owner 复核行不在本票（归 operato
 - [ ] 票 02、票 03 的 Comments 与票 26「评审结果」表下各有一句。
 - [ ] Go 门禁：`go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出；带 DSN 跑 `internal/parcelshipment/...`、`cmd/parcel-api`、`internal/architecture` 全绿；机制清点在本笔的干净检出上重生成，有差异就随笔提。
 - [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审（空闲通道或 `/code-review` 的隔离子代理）、推送方在干净检出上带 DSN 跑全量。
+
+## 完成记录（2026-10-19，会话 idp-parcel-9b 的实施子代理，分支 claude-psxm04）
+
+落点：分支 `claude-psxm04` rebase 到 origin/main `25775daa` 之上三笔——`ba8a3813`（用例，原 `30301780` rebase 后无冲突）、`a9ef839d`（两份 ADR 复核记录、UC-NO-002、`customerParcelNumbers` 头注、票 02/03/26 各一句）、`4b5fb4db`（机制清点）。
+
+完成判据逐格：
+
+- [x] 用例入库：四条名与「做什么」一致。`TestIsolatedSubmissionIntakeTrimsOnlyTheEndsOfCustomerReferences` 经 `go test -overlay` 去掉 `customerDeclaredReferences` 里逐件参考的 `strings.TrimSpace` 时红（客户包裹件号带两端空白），不改时绿。三条真库用例带 DSN 绿。四条钉的都是现状，首跑即绿，如实记。
+- [x] ADR-0184 追加三条、ADR-0185 新起复核记录，引的用例符号名与入库一致；`git diff` 两份 ADR 只增行。与草案的差：ADR-0185 节标题按本会话指示写「复核记录（2026-10-19，决定原文不动）」；ADR-0184 第 3 条里两处改写，因为 main 上 owner 复核行（operator-channel/51）已答过——核对读口折算那一问改为「不由本条关闭，由越权风险点节的 owner 复核行答（核对读口不加折算）」，「留给 PS owner」去掉「与越权风险点 4 末句那一问一起复核」。其余照草案。
+- [x] UC-NO-002 按「UC 改动」改两处；no-reception-identity/02 加在输入表之后的段落不动，不重复。README 两行在 main 上已改为「已经 owner 复核」，不计数，跳过。
+- [x] `customerParcelNumbers` 头注改为声明值口径，按标题引「越权风险点 2 的事实更正」。
+- [x] 票 02、03 的 Comments 与票 26「评审结果」（「序 2 的去向」之后）各一句，只加行。
+- [x] 门：`gofmt -l` 无输出，`go build ./...`、`go vet ./...` 退 0；带 DSN `go test -p 1 -count=1` 跑 `internal/parcelshipment/...`、`internal/nodeoperations/...`、`cmd/parcel-api`、`internal/architecture/...` 全 ok；机制清点重生成，差一行（`cmd/` 测试 145→146），单独提交。
+- [ ] 非作者评审、推送方干净检出全量：未做。
+
+地盘内未动：`docs/adr/README.md`（见上）、`docs/development-artifacts/ps-external-mark-relations/02-…`（该文件不存在）。越出地盘：无。
+
+证据层级：`S`（合成夹具）。
+
+评审：待会话读 diff 审。
