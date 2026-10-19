@@ -1112,6 +1112,11 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 		return nil, err
 	}
 
+	veMovementFactRouted, err := deriveMovementFactConsumer(db, inboxStore, projectionDerive)
+	if err != nil {
+		return nil, err
+	}
+
 	publisher, err := dispatch.NewDirectPublisher(
 		map[eventing.EventType]dispatch.Consumer{
 			psinbox.ShipmentRequestSubmittedEventType:              routedChain,
@@ -1144,6 +1149,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 			sainbox.ChargeOccurrenceFormedEventType:                routedBuyOnOccurrences,
 			noinbox.ExternalIdentifierRelationFormedEventType:      identityRechecks,
 			noinbox.UncheckedPendingIdentityRecordedEventType:      identityRechecks,
+			veinbox.MovementFactRecordedEventType:                  veMovementFactRouted,
 
 			// 键比上面各行都长，单起一段：并进去 gofmt 会重排整块的对齐，共享接线文件上多出一片别人的行。
 			psinbox.PreAcceptanceEstimateAdoptionRegisteredEventType: routedEstimateAdoption,
