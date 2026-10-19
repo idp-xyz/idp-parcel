@@ -1,7 +1,7 @@
 # 62 节点控制按权威运输交接转入 HANDOVER_IN（UC-NO-005 下半）
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg62（基于 `origin/main` `ea61d108`）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
+Status: in-progress——完工待评审与进 main，分支 claude-dcg62（基于 `origin/main` `ea61d108`）；隔离评审 0 阻断，非阻断已修，见文末「评审记录」。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
 Blocked by: 无（[59](./59-handover-declares-releasing-receiving-and-onward-nodes.md)、[61](./61-node-control-transfers-out-on-an-authoritative-handover.md) 已进 main）
 地盘（**需与 idp-parcel-9b 协调**）：61 新立的同一批 NO 文件（`application/transfer_control_on_handover.go`、`adapters/postgres/physical_control_transition.go`、`adapters/postgres/review_catalogue_control_transition.go`、`domain/control_transition.go`）；UC-NO-005 下半；演示脚本。
 与 idp-parcel-9b 的四个共享点同 [61](./61-node-control-transfers-out-on-an-authoritative-handover.md)：`reception.go` 的折叠挂点、NO 迁移号、查阅口注册行、NO CONTEXT「节点控制」与 UC-NO-005 的措辞（详见方案「与 idp-parcel-9b 的协调点」）。
@@ -16,7 +16,7 @@ Blocked by: 无（[59](./59-handover-declares-releasing-receiving-and-onward-nod
 ## 完成判据
 
 - `已交接` + 接收节点：该节点上立 HANDOVER_IN；随后以该节点为交出节点的交接把它转出。
-- 没有关联作业实物、未声明接收节点：入账，不立。
+- 没有关联作业实物、未声明接收节点：入账，不立。（实现偏离：「未声明接收节点」按代决 1 改为零写入、不入账；「没有关联作业实物」照判据入账。依据见 ADR-0214 文末补记「没声明接收节点」一条，偏离登在完成记录「偏离与待裁」。）
 - 声明的交出节点不符：照转，信息格有值。
 - 真库测试。
 - 演示：自营段交接进 SZX-GATE（`receivingNode=SYN-NODE-SZX-GATE`）→ `registry=physical-control` 出现 HANDOVER_IN@SZX-GATE；SZX-GATE 交给干线承运商（`releasingNode=SYN-NODE-SZX-GATE`）→ 转出；SIN-HUB 接收 → HANDOVER_IN@SIN-HUB。
@@ -107,5 +107,18 @@ M
   - `cmd/parcel-dispatch/assemble_node_control_on_handover.go`（61 新立，只改头注）。
 - **测试助手**：派发真库用例复用 61 的 `receiveIntoControl`、`newNodeControlLane`、`controlTransitions`、`readReception` 与 TF 那边的 `newHandoverRegistration`；交出门禁读数另写一份带去向的，不改 63 的 `releaseGateReadingFor`。
 - **号段**：协调方预分的全部照用，没有自取——`AT-NO-113`–`125` 用满；新立票号 91、92；迁移 `node_operations/0018`。
+- **完成判据的偏离**：判据「没有关联作业实物、未声明接收节点：入账，不立」的后半，按代决 1 改为零写入（`NO_RECEIVING_NODE_DECLARED`，不落行），依据 ADR-0214 文末补记「没声明接收节点」一条与 ADR-0213 决定二「缺席是一种答案」；方案 C6 只要求对不上实物时入账，没有要求未声明接收节点入账，所以没越过方案，只偏离了本票自己的判据字面。前半「没有关联作业实物」照判据入账（`AT-NO-117`）。按判据逐条勾的人以此条为准。
 - **待裁**：ADR-0214 文末补记各条与上面代决 1–11，待 NO owner 复核、TF owner 会签；「运输方交进节点时转出一侧照常入账」要不要改零写入，留给 NO owner 与票 81。
 
+## 评审记录
+
+2026-10-19，隔离评审（作者子代理按评审 JSON 修订，分支 `claude-dcg62`）。阻断 0 项，非阻断 4 项全修。
+
+- **`establishIn` 头注按数指转出一半**（建议进 main 前修，已修）：「次序与转出一半同一套，只差三处」数的是另一个文件里 `transferOut` 的步骤，且数已不对（转出一半另有锁下剔除同链转入立起的控制、把声明的交出节点交给 `JudgeTransferOut` 比对）。改为「次序照转出一半，转入一侧自己的讲究是：」，只列转入一侧的条目，不再和转出一半比数量。
+- **「仍有在身控制」的来路写偏**（建议进 main 前修，已修）：转出一半照票 61 转出唯一在身的那一份、不看交出节点声明，漏登一次交出不会落进 `CONTROL_STILL_ACTIVE`。实际来路改为：这一版的转出没推进（不止一份在身控制，典型来源是票 92 的收寄另立或正文风险点「不止一份在身控制时不推进」的存量；交接早于控制成立），或这一版的转出没动在身控制（同链前版已转出、这一版按决定五零写入；或本票之前已在册的转出行被人工补拍），而这条链此前没在转入方向推进过、其间实物又有了在身控制。其中「本票之前已在册的转出行被人工补拍」评审没列，是复核编排时补上的：补拍那时的信封，转出一半答已在册，转入一半按此刻判，同属「转出没动在身控制」。风险点 12 后半句按在身份数分开写：只剩一份时照转、它不在接收节点时信息格显出不符；仍不止一份时停在「不止一份在身控制」。同步改了：ADR-0214 文末补记「转入的判据」第一子条与越权风险点 12、`domain/control_transition.go` 的 `ControlStillActive` 注释、UC-NO-005 `AT-NO-118` 括注。用例与断言不变（`AT-NO-118` 的编排用例走的本就是「不止一份在身」）。
+- **完成判据的偏离没点明**（建议进 main 前修，已修）：「完成判据」中「没有关联作业实物、未声明接收节点」一条旁加注，「偏离与待裁」加一条「完成判据的偏离」，说明「未声明接收节点：入账」按代决 1 改为零写入及其依据。
+- **开发主线与演示动线复述转入判据**（不要求进 main 前修，已修）：两处补记删去判据复述，只留「接收节点一侧自本票起成立」与指向 ADR-0214 文末补记、UC-NO-005 的一句；开发主线补记加一句实测证据指向演示动线票 62 补记，演示动线只留演示看得到的行（含 `mismatchedReleasingNode` 那一格的形状）。
+
+没有不采纳的项，也没有另立新票。
+
+修后验证：`go build ./...`、`gofmt -l internal/nodeoperations`、`go vet ./internal/nodeoperations/...` 干净；`IDP_PARCEL_POSTGRES_DSN=… go test -p 1 -count=1 ./internal/nodeoperations/... ./internal/architecture/ ./cmd/parcel-dispatch/ ./migrations/` 全 ok。改动只在注释与文档，演示种子未动，未复跑演示。
