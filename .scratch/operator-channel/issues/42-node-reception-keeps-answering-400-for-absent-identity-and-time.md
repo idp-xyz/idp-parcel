@@ -1,7 +1,7 @@
 # 42 作业事实面上缺席的身份与时刻答哪一格：NO 收寄答 400，TF 交编排答未受理——NO 一侧与票 08「缺席交编排」不符
 
 Category: task
-Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc42`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 5 研判）
+Status: in-progress——2026-10-19 子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc42`）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 5 研判）
 Blocked by: operator-channel/29 已进 main（ADR-0186 在场）
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C4 第六张草案
@@ -44,3 +44,10 @@ NO 收寄缺席的事实身份与发生时刻，答哪一格：
 - [ ] 已裁，写进本票；若裁出跨上下文规则，或属难逆转的取舍，进 ADR 或复核记录。
 - [ ] 若取 (a)：NO 收寄缺 `occurredAt`、缺 `sourceId` 两种情形，各有 Intake 用例、编排用例和真库用例。若取 (b)：NO 侧的注释或文档写明理由，并在票 08 Comments 追记。
 - [ ] 若改了代码：过 Go 门禁，走 Go 那条路（parallel-sessions）。
+
+## 完成记录（2026-10-19，会话 idp-parcel-9b 的子代理，分支 claude-oc42）
+
+- **落点**：`1f8d41d7`——[ADR-0186](../../../docs/adr/0186-node-reception-records-physical-facts-when-the-service-result-read-fails.md) 文末追加「复核记录（2026-10-19，决定原文不动）」三条（缺席答 400 与决定四同一格及理由；票 08「缺席交编排」只在 TF 作业事实口成立；不立跨上下文统一规则，ADR-0124 决定三为反向先例），Decision 与其余各节未动；票 [08](./08-isolated-release-of-main-chain-command-faces.md) Comments 末尾只加一行指向该复核记录。代码未改。
+- **用例**：`c7357f34`——`work_fact_intake_test.go` 新增 `TestWorkFactReceptionAnswers400ForAbsentFactIdentityOrOccurrenceTime`：生产 `WorkFactReceptionIntake` 接端点，编排侧装 `failingHandler`（漏过 Intake 就成 500），四个子用例（缺事实身份、事实身份为空白、缺发生时刻、发生时刻为空串）各断言 400 `MALFORMED_REQUEST`，头注引上述复核记录。既有 `TestWorkFactReceptionIntakeRefusesMalformedReceptionPayloads` 只在 Intake 层断言缺事实身份，没有缺发生时刻一格，故补这一条。这是钉现状：首跑即绿，没有先红。
+- **门**：`gofmt -l internal/nodeoperations` 无输出；`go vet ./internal/nodeoperations/...` 退 0；`go test -count=1 ./internal/nodeoperations/adapters/http/` ok。
+- 评审：待会话读 diff 审。
