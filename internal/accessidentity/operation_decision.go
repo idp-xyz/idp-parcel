@@ -43,6 +43,13 @@ const (
 // 采购判断——断言采用协议的发生条件已满足、指名服务方与协议版本。它不是现场作业事实，所以归运营决定而不归作业事实面。
 const DecisionTransportChargeOccurrenceRegistration DecisionKind = "TRANSPORT_CHARGE_OCCURRENCE_REGISTRATION"
 
+// 容量预占与容量释放（ADR-0203 决定三）：为一个业务范围占住一个池的一段容量，与把其中未消耗的部分还回去。两者是运营
+// 人员作出的生产决定，各成一种：能占的不因此能放，授予的粒度等于权力的粒度。
+const (
+	DecisionCapacityReservation DecisionKind = "CAPACITY_RESERVATION"
+	DecisionCapacityRelease     DecisionKind = "CAPACITY_RELEASE"
+)
+
 var decisionKinds = []DecisionKind{
 	DecisionManualReviewCompletion, DecisionActiveRejection, DecisionAuthorizedDisposition,
 	DecisionControlledClosure, DecisionControlledReopening,
@@ -52,6 +59,7 @@ var decisionKinds = []DecisionKind{
 	DecisionIdentityConflictDisposition,
 	DecisionTransportCommissionSubmission,
 	DecisionTransportChargeOccurrenceRegistration,
+	DecisionCapacityReservation, DecisionCapacityRelease,
 }
 
 // ParseDecisionKind 按字面取值认决定种类，大小写不折叠：册里存的就是这些字面量。

@@ -226,6 +226,42 @@ func TestTransportChargeOccurrenceRegistrationGrantPassesTheDecisionKindCheck(t 
 	}
 }
 
+// Covers: 票 demo-chain-gaps/20——容量预占与容量释放两种决定过得了库上的决定种类 CHECK（迁移 access_identity/0012
+// 重建的全集），各自往返；只持预占的不因此持释放。
+func TestCapacityReservationAndReleaseGrantsPassTheDecisionKindCheck(t *testing.T) {
+	register := newOperatorRegister(t)
+	reserver := subjectOf(t, "https://id.syn.example/dex", "SYN-OPERATOR-20A")
+	both := subjectOf(t, "https://id.syn.example/dex", "SYN-OPERATOR-20B")
+	interval, err := accessidentity.NewEffectiveInterval(time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC), time.Time{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	grant := func(subject accessidentity.OperatorSubject, id string, kind accessidentity.DecisionKind) {
+		t.Helper()
+		built, err := accessidentity.NewOperationDecisionGrant("SYN-TENANT-01", id, subject, kind, interval, "SYN-GRANT-BASIS")
+		if err != nil {
+			t.Fatal(err)
+		}
+		expectOutcome(t, id, register.grant(t, built), accessidentity.OperatorRegistrationRecorded)
+	}
+	for _, subject := range []accessidentity.OperatorSubject{reserver, both} {
+		expectOutcome(t, "bind", register.bind(t, bindingOf(t, subject, "SYN-TENANT-01", "SYN-BIND-BASIS")), accessidentity.OperatorRegistrationRecorded)
+	}
+	grant(reserver, "SYN-DECISION-20-A", accessidentity.DecisionCapacityReservation)
+	grant(both, "SYN-DECISION-20-B", accessidentity.DecisionCapacityReservation)
+	grant(both, "SYN-DECISION-20-C", accessidentity.DecisionCapacityRelease)
+
+	at := time.Date(2026, 10, 19, 0, 0, 0, 0, time.UTC)
+	if standing := register.standing(t, reserver); !standing.HoldsDecisionAt(accessidentity.DecisionCapacityReservation, at) ||
+		standing.HoldsDecisionAt(accessidentity.DecisionCapacityRelease, at) {
+		t.Fatalf("只持预占的操作者：grants = %+v", standing.Grants())
+	}
+	if standing := register.standing(t, both); !standing.HoldsDecisionAt(accessidentity.DecisionCapacityReservation, at) ||
+		!standing.HoldsDecisionAt(accessidentity.DecisionCapacityRelease, at) {
+		t.Fatalf("两种都持的操作者：grants = %+v", standing.Grants())
+	}
+}
+
 func TestSubjectBoundToOneTenantIsRefusedByEveryOtherTenant(t *testing.T) {
 	register := newOperatorRegister(t)
 	subject := subjectOf(t, syntheticIssuer, "SYN-OPERATOR-01")

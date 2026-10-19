@@ -62,6 +62,7 @@ func TestOperationDecisionFaceIsGrantedPerDecisionKind(t *testing.T) {
 		"IDENTITY_CONFLICT_DISPOSITION",
 		"TRANSPORT_COMMISSION_SUBMISSION",
 		"TRANSPORT_CHARGE_OCCURRENCE_REGISTRATION",
+		"CAPACITY_RESERVATION", "CAPACITY_RELEASE",
 	} {
 		if kind, err := accessidentity.ParseDecisionKind(raw); err != nil || kind.String() != raw {
 			t.Fatalf("decision kind %s of ADR-0151 decision one: (%q, %v)", raw, kind, err)
