@@ -1,6 +1,6 @@
 # ADR-0207：运输收费发生项由运营决定显式登记——事实取自事实本身，采购上下文由登记方给出、经协议核对，发生条件先由登记者断言，已形成信封与发生项同笔交出
 
-Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/27，代决出自 `.scratch/demo-chain-gaps/tf-chain-plan.md` 的「07 运输收费发生项」一节与「需要的 ADR」里 ADR-0207 一条。落在 [ADR-0098](./0098-a-failed-attempt-charge-occurrence-is-not-formed-inside-the-pickup-orchestration.md) 决定二之内，其决定一、三不变。越权风险点见文末，待 TF owner 复核，第 1、4 点同时待 PC owner、第 3 点同时待 SA owner。）
+Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/27，代决出自 `.scratch/demo-chain-gaps/tf-chain-plan.md` 的「07 运输收费发生项」一节与「需要的 ADR」里 ADR-0207 一条。落在 [ADR-0098](./0098-a-failed-attempt-charge-occurrence-is-not-formed-inside-the-pickup-orchestration.md) 决定二之内，其决定一、三不变。越权风险点见文末，待 TF owner 复核，第 1、4 点同时待 PC owner、第 3 点同时待 SA owner。**部分停用**：决定三「登记方交一句原话断言……缺了答未受理 `CONDITION_NOT_ASSERTED`」与「数量与单位同由登记方声明」两句、决定四「查与随后的落册在同一事务里按（租户、原因、事实依据）串行化」一句的键，已由 [ADR-0209](./0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md) 停用，适用场景见该记录「对已接受记录的作用」；其余各条不变，本记录正文不改写。）
 Date: 2026-10-19
 
 ## Context
@@ -84,3 +84,4 @@ Date: 2026-10-19
 - [ADR-0022](./0022-http-status-carries-answer-formed-not-business-verdict.md)、[ADR-0029](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)、[ADR-0025](./0025-cross-context-adapters-live-on-the-consumer-side.md)、[ADR-0049](./0049-publish-channel-is-in-process-delivery-until-load-evidence.md)
 - [UC-TF-005](../application/transport-fulfillment/UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md)：步 9，`AT-TF-120` 至 `AT-TF-125`
 - 票 `.scratch/demo-chain-gaps/issues/27-transport-charge-occurrences-are-registered-and-handed-off.md`；后续 28（订舱与取消、经段采用取采购上下文）、29（协议声明发生条件，ADR-0209）
+- [ADR-0209：供应商协议声明收费发生条件，发生项登记按采用的那一版判，断言期退场](./0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md)：部分停用本记录决定三的断言期判法（限新形成的发生项）与决定四串行化那一句的键（改按主要业务范围），回答本记录越权风险点 1、4

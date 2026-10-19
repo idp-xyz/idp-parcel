@@ -1662,6 +1662,14 @@ Status: Confirmed
 - 它不包含结算认可的价格或金额。`parcel-pricing` 依据发生项和采购商业依据形成 BUY `PricingEvaluation`，`settlement-accounting` 采用评价形成供应商预期成本；供应商账单主张和审核应付继续独立。
 - 避免使用：供应商预期成本、供应商账单主张、审核应付、运输状态。
 
+### 收费发生条件
+
+供应商商业协议版本对运输收费发生项各原因的声明：计不计费，计费的原因按什么数量形计（按段、按件、按尝试、按订舱）。
+
+- 所有者：`party-commercial`（协议正文的一节）；`transport-fulfillment` 登记发生项时按采用的那一版判，不自立条件册（[ADR-0209](../adr/0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md)）。
+- 没声明是`未配置`，声明不计费是「协议不计此原因」，两者续办不同。它不是价格、费率或费用项目。
+- 避免使用：计费规则、价卡、费用项目、发生条件断言。
+
 ### 供应商预期成本
 
 依据 BUY `PricingEvaluation`、当前有效运输收费发生项、履约事实和其他合格依据形成的内部预期金额。它不证明供应商已经提出账单，也不自动构成应付。
