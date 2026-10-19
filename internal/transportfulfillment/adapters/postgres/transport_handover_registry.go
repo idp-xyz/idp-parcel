@@ -47,12 +47,14 @@ func (repository *TransportHandovers) FindByKey(
 
 	var releasedBy, receivedBy, verdictName, digest string
 	var releasing, receiving, rule, basis, corrects *string
+	var releasingNode, receivingNode, onwardNode *string
 	var correctedAt *time.Time
 	var judgedAt, recordedAt time.Time
 	err = querier.QueryRow(ctx,
 		`SELECT released_by, received_by, verdict,
 		        releasing_evidence, receiving_evidence, rule_ref, basis_ref,
-		        corrects_version, corrected_at, judged_at, content_digest, recorded_at
+		        corrects_version, corrected_at, judged_at, content_digest, recorded_at,
+		        releasing_node, receiving_node, onward_node
 		   FROM transport_fulfillment.transport_handover
 		  WHERE tenant_id = $1
 		    AND object_ref = $2
@@ -64,7 +66,8 @@ func (repository *TransportHandovers) FindByKey(
 		key.Version.String(),
 	).Scan(&releasedBy, &receivedBy, &verdictName,
 		&releasing, &receiving, &rule, &basis,
-		&corrects, &correctedAt, &judgedAt, &digest, &recordedAt)
+		&corrects, &correctedAt, &judgedAt, &digest, &recordedAt,
+		&releasingNode, &receivingNode, &onwardNode)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.TransportHandoverRecord{}, false, nil
 	}
@@ -73,16 +76,19 @@ func (repository *TransportHandovers) FindByKey(
 	}
 
 	handover, err := rebuildHandover(key, handoverRow{
-		releasedBy:  releasedBy,
-		receivedBy:  receivedBy,
-		verdictName: verdictName,
-		releasing:   releasing,
-		receiving:   receiving,
-		rule:        rule,
-		basis:       basis,
-		corrects:    corrects,
-		correctedAt: correctedAt,
-		judgedAt:    judgedAt,
+		releasedBy:    releasedBy,
+		receivedBy:    receivedBy,
+		verdictName:   verdictName,
+		releasing:     releasing,
+		receiving:     receiving,
+		rule:          rule,
+		basis:         basis,
+		corrects:      corrects,
+		correctedAt:   correctedAt,
+		judgedAt:      judgedAt,
+		releasingNode: releasingNode,
+		receivingNode: receivingNode,
+		onwardNode:    onwardNode,
 	})
 	if err != nil {
 		return ports.TransportHandoverRecord{}, false, fmt.Errorf("find transport handover: %w", err)
@@ -108,12 +114,14 @@ func (repository *TransportHandovers) FindSuccessor(
 
 	var versionRaw, releasedBy, receivedBy, verdictName, digest string
 	var releasing, receiving, rule, basis, corrects *string
+	var releasingNode, receivingNode, onwardNode *string
 	var correctedAt *time.Time
 	var judgedAt, recordedAt time.Time
 	err = querier.QueryRow(ctx,
 		`SELECT handover_version, released_by, received_by, verdict,
 		        releasing_evidence, receiving_evidence, rule_ref, basis_ref,
-		        corrects_version, corrected_at, judged_at, content_digest, recorded_at
+		        corrects_version, corrected_at, judged_at, content_digest, recorded_at,
+		        releasing_node, receiving_node, onward_node
 		   FROM transport_fulfillment.transport_handover
 		  WHERE tenant_id = $1
 		    AND object_ref = $2
@@ -125,7 +133,8 @@ func (repository *TransportHandovers) FindSuccessor(
 		predecessor.Version.String(),
 	).Scan(&versionRaw, &releasedBy, &receivedBy, &verdictName,
 		&releasing, &receiving, &rule, &basis,
-		&corrects, &correctedAt, &judgedAt, &digest, &recordedAt)
+		&corrects, &correctedAt, &judgedAt, &digest, &recordedAt,
+		&releasingNode, &receivingNode, &onwardNode)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.TransportHandoverRecord{}, false, nil
 	}
@@ -138,16 +147,19 @@ func (repository *TransportHandovers) FindSuccessor(
 		return ports.TransportHandoverRecord{}, false, fmt.Errorf("find transport handover successor: %w", err)
 	}
 	handover, err := rebuildHandover(key, handoverRow{
-		releasedBy:  releasedBy,
-		receivedBy:  receivedBy,
-		verdictName: verdictName,
-		releasing:   releasing,
-		receiving:   receiving,
-		rule:        rule,
-		basis:       basis,
-		corrects:    corrects,
-		correctedAt: correctedAt,
-		judgedAt:    judgedAt,
+		releasedBy:    releasedBy,
+		receivedBy:    receivedBy,
+		verdictName:   verdictName,
+		releasing:     releasing,
+		receiving:     receiving,
+		rule:          rule,
+		basis:         basis,
+		corrects:      corrects,
+		correctedAt:   correctedAt,
+		judgedAt:      judgedAt,
+		releasingNode: releasingNode,
+		receivingNode: receivingNode,
+		onwardNode:    onwardNode,
 	})
 	if err != nil {
 		return ports.TransportHandoverRecord{}, false, fmt.Errorf("find transport handover successor: %w", err)
@@ -183,7 +195,8 @@ func (repository *TransportHandovers) ListByScope(
 		`SELECT object_ref, handover_version,
 		        released_by, received_by, verdict,
 		        releasing_evidence, receiving_evidence, rule_ref, basis_ref,
-		        corrects_version, corrected_at, judged_at, content_digest, recorded_at
+		        corrects_version, corrected_at, judged_at, content_digest, recorded_at,
+		        releasing_node, receiving_node, onward_node
 		   FROM transport_fulfillment.transport_handover
 		  WHERE tenant_id = $1
 		    AND scope_ref = $2
@@ -200,11 +213,13 @@ func (repository *TransportHandovers) ListByScope(
 	for rows.Next() {
 		var objectRaw, versionRaw, releasedBy, receivedBy, verdictName, digest string
 		var releasing, receiving, rule, basis, corrects *string
+		var releasingNode, receivingNode, onwardNode *string
 		var correctedAt *time.Time
 		var judgedAt, recordedAt time.Time
 		if err := rows.Scan(&objectRaw, &versionRaw, &releasedBy, &receivedBy, &verdictName,
 			&releasing, &receiving, &rule, &basis,
-			&corrects, &correctedAt, &judgedAt, &digest, &recordedAt); err != nil {
+			&corrects, &correctedAt, &judgedAt, &digest, &recordedAt,
+			&releasingNode, &receivingNode, &onwardNode); err != nil {
 			return nil, fmt.Errorf("list transport handovers by scope: %w", err)
 		}
 
@@ -216,16 +231,19 @@ func (repository *TransportHandovers) ListByScope(
 			return nil, fmt.Errorf("list transport handovers by scope: %w", err)
 		}
 		handover, err := rebuildHandover(key, handoverRow{
-			releasedBy:  releasedBy,
-			receivedBy:  receivedBy,
-			verdictName: verdictName,
-			releasing:   releasing,
-			receiving:   receiving,
-			rule:        rule,
-			basis:       basis,
-			corrects:    corrects,
-			correctedAt: correctedAt,
-			judgedAt:    judgedAt,
+			releasedBy:    releasedBy,
+			receivedBy:    receivedBy,
+			verdictName:   verdictName,
+			releasing:     releasing,
+			receiving:     receiving,
+			rule:          rule,
+			basis:         basis,
+			corrects:      corrects,
+			correctedAt:   correctedAt,
+			judgedAt:      judgedAt,
+			releasingNode: releasingNode,
+			receivingNode: receivingNode,
+			onwardNode:    onwardNode,
 		})
 		if err != nil {
 			return nil, fmt.Errorf("list transport handovers by scope: %w", err)
@@ -262,8 +280,9 @@ func (repository *TransportHandovers) Save(
 			(tenant_id, object_ref, scope_ref, handover_version,
 			 released_by, received_by, verdict,
 			 releasing_evidence, receiving_evidence, rule_ref, basis_ref,
-			 corrects_version, corrected_at, judged_at, content_digest, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16)
+			 corrects_version, corrected_at, judged_at, content_digest, recorded_at,
+			 releasing_node, receiving_node, onward_node)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Object.String(),
@@ -281,6 +300,9 @@ func (repository *TransportHandovers) Save(
 		handover.JudgedAt().UTC(),
 		record.ContentDigest,
 		record.RecordedAt.UTC(),
+		optionalHandoverText(handover.ReleasingNode()),
+		optionalHandoverText(handover.ReceivingNode()),
+		optionalHandoverText(handover.OnwardNode()),
 	)
 	if err != nil {
 		return ports.HandoverSaveOutcomeInvalid, fmt.Errorf("save transport handover: %w", err)
@@ -304,6 +326,10 @@ type handoverRow struct {
 	corrects    *string
 	correctedAt *time.Time
 	judgedAt    time.Time
+	// 三格节点声明：迁移 0039 之前登下的行三格都是 NULL，读回即「没有声明」，与此后不声明节点的首登同形。
+	releasingNode *string
+	receivingNode *string
+	onwardNode    *string
 }
 
 func rebuildHandover(
@@ -355,6 +381,21 @@ func rebuildHandover(
 	}
 	if row.correctedAt != nil {
 		spec.CorrectedAt = *row.correctedAt
+	}
+	for _, column := range []struct {
+		raw  *string
+		node *domain.NetworkNodeReference
+	}{
+		{row.releasingNode, &spec.Nodes.Releasing},
+		{row.receivingNode, &spec.Nodes.Receiving},
+		{row.onwardNode, &spec.Nodes.Onward},
+	} {
+		if column.raw == nil {
+			continue
+		}
+		if *column.node, err = domain.NewNetworkNodeReference(*column.raw); err != nil {
+			return domain.TransportHandover{}, err
+		}
 	}
 	return domain.RehydrateTransportHandover(spec)
 }

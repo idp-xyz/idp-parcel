@@ -98,6 +98,9 @@ type CapacityPoolCatalogueRow struct {
 // domain.HandoverVerdict）；Basis 只在拒收与待确认上在场（已交接不带依据，迁移
 // 0005 的逐格完备性），缺席即空串。交接边界由交出方与接收方两个参与方引用表达，
 // 列面不把两方折成一个「边界」串——组合是呈现的事。
+//
+// ReleasingNode、ReceivingNode 与 OnwardNode 是登记方声明的交出、接收与去向节点（ADR-0213），各自缺席即空串；
+// 与两个参与方引用并列透出，不互相折算。
 type TransportHandoverCatalogueRow struct {
 	Object          string
 	Scope           string
@@ -110,6 +113,9 @@ type TransportHandoverCatalogueRow struct {
 	CorrectedAt     *time.Time
 	JudgedAt        time.Time
 	RecordedAt      time.Time
+	ReleasingNode   string
+	ReceivingNode   string
+	OnwardNode      string
 }
 
 // EffectiveDeliveryCatalogueRow 是有效交付结果册上列的一行：只列当前版
