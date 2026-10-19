@@ -1,6 +1,6 @@
 # ADR-0213：权威运输交接声明交出、接收、去向节点——节点控制转移、路由复核与交出 / 交付门禁的位置都取这份声明
 
-Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 [demo-chain-gaps/59](../../.scratch/demo-chain-gaps/issues/59-handover-declares-releasing-receiving-and-onward-nodes.md) 起草并落决定一至三，决定四由票 [65](../../.scratch/demo-chain-gaps/issues/65-handover-records-an-outbound-release-gate-reading.md) 落，决定五由票 [66](../../.scratch/demo-chain-gaps/issues/66-effective-delivery-records-a-final-delivery-gate-reading.md) 落；统一代决见 `.scratch/demo-chain-gaps/handover-dispatch-plan.md`「代决」C1、C13、C14。回答 [ADR-0206](./0206-customs-action-admission-judgement-folds-three-sources-and-judges-cross-zone-by-node-customs-zones.md) Consequences「挂法等 peer」一格与其越权风险点 9。部分停用 [ADR-0014](./0014-versioned-canonicalization-shape-for-content-digest.md) 决定里的一句，适用场景只限 TF 交接首登上的节点补报，见 Consequences。越权风险点见文末，待 TF owner 复核，NO、NR、CC owner 会签。） 决定四落地时的补充裁定见文末「补记：票 65 落决定四时的补充裁定」（2026-10-19）。
+Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 [demo-chain-gaps/59](../../.scratch/demo-chain-gaps/issues/59-handover-declares-releasing-receiving-and-onward-nodes.md) 起草并落决定一至三，决定四由票 [65](../../.scratch/demo-chain-gaps/issues/65-handover-records-an-outbound-release-gate-reading.md) 落，决定五由票 [66](../../.scratch/demo-chain-gaps/issues/66-effective-delivery-records-a-final-delivery-gate-reading.md) 落；统一代决见 `.scratch/demo-chain-gaps/handover-dispatch-plan.md`「代决」C1、C13、C14。回答 [ADR-0206](./0206-customs-action-admission-judgement-folds-three-sources-and-judges-cross-zone-by-node-customs-zones.md) Consequences「挂法等 peer」一格与其越权风险点 9。部分停用 [ADR-0014](./0014-versioned-canonicalization-shape-for-content-digest.md) 决定里的一句，适用场景只限 TF 交接首登上的节点补报，见 Consequences。越权风险点见文末，待 TF owner 复核，NO、NR、CC owner 会签。） 决定四落地时的补充裁定见文末「补记：票 65 落决定四时的补充裁定」（2026-10-19）。决定五落地时的补充裁定见文末「补记：票 66 落决定五时的补充裁定」（2026-10-19）。
 Date: 2026-10-19
 
 ## Context
@@ -113,6 +113,7 @@ at 取的是本上下文自有的事实，不在有效交付上另增一个声�
 - [UC-TF-005](../application/transport-fulfillment/UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md)：输入契约「交接节点声明」一行与 `AT-TF-216`–`222`
 - 票 `.scratch/demo-chain-gaps/issues/59-handover-declares-releasing-receiving-and-onward-nodes.md`；统一代决 `.scratch/demo-chain-gaps/handover-dispatch-plan.md`「代决」C1、C13、C14
 - 票 `.scratch/demo-chain-gaps/issues/65-handover-records-an-outbound-release-gate-reading.md`：决定四落地与文末补记
+- 票 `.scratch/demo-chain-gaps/issues/66-effective-delivery-records-a-final-delivery-gate-reading.md`：决定五落地与文末补记
 
 ## 补记：票 65 落决定四时的补充裁定（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」，待 TF、CC owner 复核）
 
@@ -144,3 +145,34 @@ at 取的是本上下文自有的事实，不在有效交付上另增一个声�
 14. **运营看不到依据原文**（TF owner）。查阅册只列整格，依据原文与关务判断标识只在库里。运营查一件交出为什么未决或阻断，今天没有读面。另立票 [demo-chain-gaps/87](../../.scratch/demo-chain-gaps/issues/87-handover-register-shows-the-gate-reading-bases.md)。
 15. **去向与交出节点相同记未决，不问关务**（TF、CC owner）。本上下文为此看了一眼两格之间的关系，只用于读数，不拒收。CC owner 若认为同一节点上的交出也该由关务作答（例如只答出库那一道），改的是 `UnaskedGateReading` 那一处与关务交出意图的构造门，两边一起改。
 
+## 补记：票 66 落决定五时的补充裁定（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」，待 TF、CC owner 复核）
+
+正文不改。决定五（交付门禁）由票 [demo-chain-gaps/66](../../.scratch/demo-chain-gaps/issues/66-effective-delivery-records-a-final-delivery-gate-reading.md) 落地；落地时决定五与方案 C14 都没裁、又必须定下的几格记在这里，越权风险点接上一则补记的编号续写。
+
+- **读数的形状**（机制）：与出发、交出门禁读数同一套五格与逐对象那一格，取共用内核（`domain/gate_reading.go`）。有效交付是对象级事实，一份恰一件对象，所以读数恰是一个停点或一格答复。读数带问关务时交付意图的 at；交付意图没有去向，跨关务区域那一道由关务按 ADR-0206 决定二不列。
+- **「该派送段」取哪一段**（机制）：对象此刻在场的那一段，也就是这次交付要结束参与的那一段——结束参与按同一问找段，两边不会各取一段。不看段是否声明为末端派送：交付已经从这一段发生，段服务动作只决定派送任务从哪儿派生（ADR-0114），不改对象从哪个节点出去。对象此刻同时在几段里在场是库面不一致，读数那一侧响亮报错，与结束参与同格。
+- **「那次交接」的认法**（机制）：参与的入场依据只带交接版本、不带交接范围。读数按（租户、对象、版本）找回`已交接`的各版，由领域认哪一版是进段那一次：入场依据正是它的转出依据，起点正是它的业务时间（`FulfillmentParticipation.EnteredByHandover`）。同一对象在别的交接范围用了同一版本号、业务时间不同，那一版不认。
+- **时点**（机制）：取交付的业务时间，即对象结果的发生时刻，不取登记时刻。离线补登的交付按它交付那一刻判，与出发、交出两侧同一理由。
+- **停点**（机制）：每种只属一格。未决停点里除存量回填之外，都是决定五说的「交付节点不可得」，按缺在哪一环分开具名，因为续办动作两两不同。
+  - `NO_ACTIVE_SEGMENT`（未决）：对象此刻不在任何段里在场，没有进段的那次交接可取节点。交付照登，结束参与那一半答 `NO_ACTIVE_PARTICIPATION`。
+  - `ENTERED_BY_PICKUP`（未决）：对象凭场外揽收或实际承运商首次有效收寄进的这一段。决定五本文。
+  - `RELEASING_NODE_NOT_DECLARED`（未决）：进段那次交接没声明交出节点。决定五本文。
+  - `ENTRY_HANDOVER_UNRESOLVED`（未决）：入场依据指名的那一版交接，在交接登记册里对不上恰一版`已交接`。原因是库面不一致，或登记方在两个范围用了同一版本号、业务时间也相同。不猜其中一版。
+  - `RECORDED_BEFORE_GATE_READING`（未决）：TF 迁移 `0043` 之前登下的有效交付回填为这一格，包括更正翻成历史的前版；新登记不会停在这里，构造门拒它。
+  - `DELIVERY_VIEW_UNAVAILABLE`、`SEGMENT_REGISTRY_UNAVAILABLE`、`HANDOVER_REGISTRY_UNAVAILABLE`（读不动）：写事务之前读派送尝试（不知道交付的业务时间）、段登记册、交接登记册读不动。写事务里同一口仍读不动时登记编排照旧答未决，这份读数用不上；读得动就照登、记这一格。
+- **POD 更正**（机制）：更正版照前版承继同一份读数，不重问关务。更正改的是证据，不是在哪、何时、交了哪件，问关务的那一份意图没有变；一次交付一份读数。这与交出那一侧更正另读一份（上一则补记「更正」）取舍相反：交出的更正可能把待确认改成`已交接`，前版根本没有读数；交付的每一版都是同一次妥投。
+- **重投**（机制）：同内容重投在写事务之前从池上认出来，回显在册那一版的读数，不重问关务，理由同 ADR-0205 决定六。交付落册时参与已随之结束，按此刻重读段册只会读成「此刻不在任何段里」，所以这一步省不掉。读数不进内容摘要。
+- **关务那一问没形成答复**（机制）：那一件记读不动，依据种类与出发、交出两侧同一套词——调用失败记 `CUSTOMS_ADMISSION_UNAVAILABLE`，答复译不回来记 `CUSTOMS_ADMISSION_UNTRANSLATABLE`。
+- **答复与查阅**（机制）：交付答复带读数的整格、at、停点与那件对象的那一格；重放回显在册那一版的读数，POD 更正回显承继来的那一份。关务判断标识与依据原文只随交付落册，不回给登记方，口径同 ADR-0205 决定一。查阅口 `registry=effective-delivery` 列整格。
+- **编排兜底**（机制）：与交出那一侧不同，登记编排没有「不带读数也定得出」的那一种。交出的停点由交接自己的声明定，交付的 at 要读段册与交接册，编排凭命令定不出。所以要新落一份交付却没带读数一律是接线错误，上抛、不落册。读数问的是另一件对象同样上抛。登不出交付的各条路（重放、冲突、未生效、未受理、未决）不需要读数。
+- **存储**（机制）：TF 迁移 `0043` 给有效交付登记册加 `gate_reading`（整格，封闭词表）与 `gate_reading_detail`（jsonb）两列，都不许为空。库面另外守：明细形状（停点与答复恰有其一，问了关务就有 at，停在这一侧就没有）；问了关务的那一格答的是这一行的对象；整格在封闭词表里。at 取自段册与交接册、不在这一行，库面守不到，由写事务之前问读数那一侧一处定。整格与明细是否一致由领域重建门核。
+- **装配**（机制）：`cmd/parcel-api/assemble_delivery.go` 只在首登那一口写事务之前读，更正不问。关务那一口另装一份，理由同出发与交接的装配。
+
+越权风险点（续上一则补记的编号）：
+
+16. **「该派送段」不核段的服务动作**（TF、CC owner）。没声明为末端派送的段上发生的交付照问。对象在一段里经过不止一个节点时（段内转运没有交接），at 仍取进段的那个节点。owner 若要只在派送段上问，改的是读数取段那一步：未声明为派送的段另立一种停点。
+17. **写事务之前与写事务里读到的段可能不同**（TF owner）。读数在池上读段，结束参与在写事务里另读一次。两读之间对象若被另一次交接带进别的段，读数的 at 是旧段的入口。这只在交付与交接几乎同时到达时发生，库面守不到 at 与段册是否一致。
+18. **POD 更正不重问**（TF、CC owner）。更正之后关务三源变了，读数也不变，取的是「一次交付一份读数」。owner 若要更正重问，改的是更正编排：在写事务之前另读一份，并处理前版读数与更正版读数并存。
+19. **存量交付一律回填未决**（TF owner）。迁移 `0043` 之前登下的有效交付不补问关务。演示库与开发库上，这些行读到的是「登记于门禁读数之前」。
+20. **读数挡不住交付**（TF、CC owner）。读数是交付之后的记录，读到阻断时包裹已经到了收件方手里。挡下要在派送出发之前问一次交付门禁，那一步没有立，另立票 [demo-chain-gaps/94](../../.scratch/demo-chain-gaps/issues/94-a-courier-previews-the-final-delivery-gate-before-dispatching.md)。
+21. **阻断读数还不派生异常信号**（TF、VE owner）。与上一则补记越权风险点 13 同一问题的交付那一半，另立票 [demo-chain-gaps/93](../../.scratch/demo-chain-gaps/issues/93-blocked-delivery-gate-readings-raise-exception-signals.md)。运营看不到依据原文与停点，与越权风险点 14 同一问题，随票 [87](../../.scratch/demo-chain-gaps/issues/87-handover-register-shows-the-gate-reading-bases.md) 一并考虑。

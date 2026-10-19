@@ -12,6 +12,8 @@ Blocked by: [65](./65-handover-records-an-outbound-release-gate-reading.md)（�
 
 出发门禁读数同样没有运营读面，可一并考虑，但不是本票的完成判据。
 
+有效交付的交付门禁读数（票 [66](./66-effective-delivery-records-a-final-delivery-gate-reading.md)，ADR-0213 文末「补记：票 66 落决定五时的补充裁定」越权风险点 21）同样只列整格，停点、at 与依据原文只在库里，可一并考虑，同样不是本票的完成判据。
+
 ## 三类
 
 机制（查阅面如实呈现在册内容）。读面走操作者渠道的运营查阅授予，不回给作业设备。
