@@ -189,6 +189,97 @@ func TestASecondFormOfTheSameVersionKeepsTheOriginal(t *testing.T) {
 	}
 }
 
+// 同一分配换一个版本号再投答`分配已形成`并交回链头，不登记：本口只形成一次分配的首版，换版本号不是变化——
+// 变化要回指前版、沿用分配时刻，走领域 ReviseMembers 的入口；在这里另起一个首版，一次分配在库里就成了两条链。
+func TestAnotherVersionOfAFormedAssignmentAnswersAlreadyFormed(t *testing.T) {
+	registry := newLoadAssignmentRegistry()
+	handler := newLoadAssignmentHandler(registry)
+	if _, err := handler.Form(t.Context(), formAssignmentCommand(t)); err != nil {
+		t.Fatalf("首版：%v", err)
+	}
+	savesAfterFirst := registry.saves
+
+	another := formAssignmentCommand(t)
+	another.Version = "LAV-000000000002"
+	another.Schedule = "schedule-2"
+	another.Members = []string{"parcel-9"}
+	another.AssignedAt = assignedAtFixture.Add(-24 * time.Hour)
+	result, err := handler.Form(t.Context(), another)
+	if err != nil {
+		t.Fatalf("另一版本号：%v", err)
+	}
+	if result.Outcome() != application.LoadAssignmentAlreadyFormed {
+		t.Fatalf("outcome = %q, want LOAD_ASSIGNMENT_ALREADY_FORMED", result.Outcome())
+	}
+	head, recorded := result.Record()
+	if !recorded || head.Key.Version.String() != "LAV-000000000001" || head.Assignment.Schedule().String() != "schedule-1" {
+		t.Fatalf("没有交回链头首版：%+v recorded=%v", head.Key, recorded)
+	}
+	if registry.saves != savesAfterFirst {
+		t.Fatalf("已形成的分配又登记了 %d 次", registry.saves-savesAfterFirst)
+	}
+}
+
+// 已撤回的分配再投新版本号同答`分配已形成`，交回的链头就是撤回版：领域 Withdraw「后续要装载只能是新的分配」，
+// 在已撤回的链旁另起一个活跃首版正是它要防的。
+func TestAWithdrawnAssignmentAnswersAlreadyFormedWithTheWithdrawal(t *testing.T) {
+	registry := newLoadAssignmentRegistry()
+	handler := newLoadAssignmentHandler(registry)
+	formed, err := handler.Form(t.Context(), formAssignmentCommand(t))
+	if err != nil {
+		t.Fatalf("首版：%v", err)
+	}
+	first, _ := formed.Record()
+	withdrawalVersion, err := domain.NewLoadAssignmentVersion("LAV-000000000002")
+	if err != nil {
+		t.Fatal(err)
+	}
+	withdrawn, err := first.Assignment.Withdraw(withdrawalVersion, assignedAtFixture.Add(time.Hour))
+	if err != nil {
+		t.Fatalf("撤回：%v", err)
+	}
+	withdrawalKey := first.Key
+	withdrawalKey.Version = withdrawalVersion
+	registry.records[loadAssignmentRegistryKey(withdrawalKey)] = ports.LoadAssignmentRecord{
+		Key: withdrawalKey, Assignment: withdrawn, RecordedAt: assignmentRecordedAt.Add(time.Hour),
+	}
+	savesBefore := registry.saves
+
+	later := formAssignmentCommand(t)
+	later.Version = "LAV-000000000003"
+	result, err := handler.Form(t.Context(), later)
+	if err != nil {
+		t.Fatalf("撤回之后再投：%v", err)
+	}
+	if result.Outcome() != application.LoadAssignmentAlreadyFormed {
+		t.Fatalf("outcome = %q, want LOAD_ASSIGNMENT_ALREADY_FORMED", result.Outcome())
+	}
+	head, _ := result.Record()
+	if _, isWithdrawn := head.Assignment.Withdrawn(); !isWithdrawn || head.Key.Version != withdrawalVersion {
+		t.Fatalf("交回的链头不是撤回版：%+v", head.Key)
+	}
+	if registry.saves != savesBefore {
+		t.Fatal("已撤回的分配旁又登记了一个首版")
+	}
+}
+
+// 读链头失败与写失败同答`未决`，且不登记：读不到链头就判断不了「这次分配形成过没有」，贸然写就可能另起一根。
+func TestAChainHeadReadFailureIsUndecided(t *testing.T) {
+	registry := newLoadAssignmentRegistry()
+	registry.headErr = assignmentRegistryError
+
+	result, err := newLoadAssignmentHandler(registry).Form(t.Context(), formAssignmentCommand(t))
+	if err != nil {
+		t.Fatalf("登记册故障不该上抛：%v", err)
+	}
+	if result.Outcome() != application.LoadAssignmentUndecided || result.ContinuationReference() == "" {
+		t.Fatalf("outcome = %q continuation=%q, want 未决带续办引用", result.Outcome(), result.ContinuationReference())
+	}
+	if registry.saves != 0 {
+		t.Fatalf("读不到链头却写了 %d 次库", registry.saves)
+	}
+}
+
 // 缺任一必备件的分配不受理，且一次库都不碰。
 func TestAnIncompleteLoadAssignmentIsNotAccepted(t *testing.T) {
 	cases := map[string]func(*application.FormLoadAssignmentCommand){

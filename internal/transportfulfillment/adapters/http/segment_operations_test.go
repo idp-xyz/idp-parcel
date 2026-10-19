@@ -497,6 +497,27 @@ func TestFormLoadAssignmentRegistersTheVersion(t *testing.T) {
 	}
 }
 
+// Covers: 票 tf-face-algebra/02——同一分配换版本号再投答 200 LOAD_ASSIGNMENT_ALREADY_FORMED，回显的是链头首版
+// （版本、班次与成员都是首版的），不是这次送来的那一份。
+func TestFormLoadAssignmentAnswersAlreadyFormedWithTheChainHead(t *testing.T) {
+	handler := application.NewFormLoadAssignmentHandler(application.FormLoadAssignmentDeps{Assignments: newLoadAssignmentRegistry(), Clock: tfClock{at: time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)}})
+	endpoint := tfhttp.NewFormLoadAssignmentEndpoint(newLoadAssignmentIntake(t), handler)
+	first := map[string]any{"assignment": "load-assignment-1", "schedule": "schedule-1", "members": []string{"parcel-1", "parcel-2"}, "version": "LAV-000000000001", "assignedAt": "2026-09-05T12:00:00Z"}
+	if formed := postTo(t, endpoint, "/transport-fulfillment-load-assignment-registrations", first); formed.Code != http.StatusCreated {
+		t.Fatalf("首版 status = %d body = %s", formed.Code, formed.Body.String())
+	}
+
+	another := map[string]any{"assignment": "load-assignment-1", "schedule": "schedule-2", "members": []string{"parcel-9"}, "version": "LAV-000000000002", "assignedAt": "2026-09-04T12:00:00Z"}
+	answered := postTo(t, endpoint, "/transport-fulfillment-load-assignment-registrations", another)
+	if answered.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", answered.Code, answered.Body.String())
+	}
+	view := decodeOperation(t, answered)
+	if view.Outcome != "LOAD_ASSIGNMENT_ALREADY_FORMED" || view.Version != "LAV-000000000001" || view.Schedule != "schedule-1" || len(view.Members) != 2 {
+		t.Fatalf("view = %+v", view)
+	}
+}
+
 // Covers: ADR-0022 在四口上的错误支——编排 error 5xx 无 outcome；未决 outcome 200 带续办引用（以关段口为例，
 // 其余三口走同一个 commandEndpoint）。
 func TestSegmentOperationsKeepTheAnswerFormedDistinction(t *testing.T) {

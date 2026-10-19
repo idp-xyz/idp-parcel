@@ -15,6 +15,9 @@ import (
 //
 // `已在册`独立成格而不是复用`已形成`：同一版本重投交回的是**原版本**，而调用方送来的可能是
 // 另一份对象范围——两者答案相同会让「我这一份生效了」与「原来那份仍在」分不开。
+//
+// `分配已形成`与`已在册`也分开：前者是同一分配下已有别的版本，交回的是**链头**（可能是变化版或撤回版），
+// 后者交回的是同一版本本身。调用方拿前者要去变化或撤回的入口，拿后者知道自己这一版早就在了。
 type LoadAssignmentOutcome uint8
 
 const (
@@ -23,6 +26,7 @@ const (
 	LoadAssignmentVersionExists
 	LoadAssignmentNotAccepted
 	LoadAssignmentUndecided
+	LoadAssignmentAlreadyFormed
 )
 
 func (outcome LoadAssignmentOutcome) String() string {
@@ -35,6 +39,8 @@ func (outcome LoadAssignmentOutcome) String() string {
 		return "INPUT_NOT_ACCEPTED"
 	case LoadAssignmentUndecided:
 		return "LOAD_ASSIGNMENT_UNDECIDED"
+	case LoadAssignmentAlreadyFormed:
+		return "LOAD_ASSIGNMENT_ALREADY_FORMED"
 	default:
 		return ""
 	}
@@ -86,8 +92,8 @@ func NewFormLoadAssignmentHandler(deps FormLoadAssignmentDeps) *FormLoadAssignme
 	return &FormLoadAssignmentHandler{deps: deps}
 }
 
-// Form 形成一次装载分配并登记该版本：受理（对象范围等五件由 FormLoadAssignment 构造门把门）
-// → 幂等按（租户 + 分配 + 版本）分重放 → 登记。
+// Form 形成一次装载分配的首版并登记：受理（对象范围等五件由 FormLoadAssignment 构造门把门）
+// → 幂等按（租户 + 分配 + 版本）分重放 → 按（租户 + 分配）认出已形成的分配 → 登记。
 //
 // **分配是执行意图，不是已经发生的装载。** 它不证明物理装载完成，也不证明控制转移；实际装载、
 // 短装、多装或错装是与分配版本比较的独立事实，不修改分配历史。所以这里没有任何已装载入参，
@@ -110,12 +116,23 @@ func (handler *FormLoadAssignmentHandler) Form(
 		return loadAssignmentUndecided(command), nil
 	}
 	if found {
-		// 同一版本重投：交回原版本，不顶替。换对象范围要换版本号，那是变化不是重投。
+		// 同一版本重投：交回原版本，不顶替。先按键查再看链头，顺序不能反：链头已长出变化或撤回之后，
+		// 原样重放首版仍该答`已在册`，而不是被链头那一格吞掉。
 		return FormLoadAssignmentResult{
 			outcome:   LoadAssignmentVersionExists,
 			record:    existing,
 			hasRecord: true,
 		}, nil
+	}
+	// 本口只形成一次分配的首版。换一个版本号不是变化：变化要回指前版、沿用分配时刻（0009「assigned_at 在整条链上
+	// 不变」），走领域 ReviseMembers 的入口；撤回之后「后续要装载只能是新的分配」。在这里落库就是在同一分配下另起一根链，
+	// 还会占掉变化入口要用的版本号。
+	head, formed, err := handler.deps.Assignments.FindChainHead(ctx, key.TenantID, key.Assignment)
+	if err != nil {
+		return loadAssignmentUndecided(command), nil
+	}
+	if formed {
+		return loadAssignmentAlreadyFormed(head), nil
 	}
 
 	record := ports.LoadAssignmentRecord{
@@ -183,6 +200,10 @@ func loadAssignmentSpecFrom(
 			Assignment: assignment,
 			Version:    version,
 		}, true
+}
+
+func loadAssignmentAlreadyFormed(head ports.LoadAssignmentRecord) FormLoadAssignmentResult {
+	return FormLoadAssignmentResult{outcome: LoadAssignmentAlreadyFormed, record: head, hasRecord: true}
 }
 
 func loadAssignmentUndecided(command FormLoadAssignmentCommand) FormLoadAssignmentResult {
