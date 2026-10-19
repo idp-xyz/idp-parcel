@@ -60,8 +60,8 @@ type acceptanceDecisionPayload struct {
 	Geo               *carriedGeoPayload `json:"geo,omitempty"`
 }
 
-// carriedGeoPayload 是信封上的地理解析投影（ADR-0075 决定二）。接受决定与网络收寄采用两口同一形状：路由侧两条消费链
-// 拿它折同一份携带内容，形状分家就会有一条链读丢一格。
+// carriedGeoPayload 是信封上的地理解析投影（ADR-0075 决定二）。接受决定与网络收寄采用的信封共用这一形状：路由侧的
+// 初始路由与收寄后复核拿它折同一份携带内容，形状分家就会有一边读丢一格。
 type carriedGeoPayload struct {
 	Carried                bool   `json:"carried"`
 	SenderCountry          string `json:"senderCountry"`

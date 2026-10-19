@@ -302,8 +302,8 @@ func outcomeToConsumption(result nrapplication.CreateInitialRouteResult) error {
 	}
 }
 
-// geoFromCarried 把信封上的地理维译成判断请求携带的投影。初始路由与收寄后复核两条链共用它：同一份投影在两处
-// 译法一样，复核才是在复核初始路由用过的那一份输入。
+// geoFromCarried 把信封上的地理维译成判断请求携带的投影。初始路由与收寄后复核共用它：同一份投影译法一样，复核
+// 才是在复核初始路由用过的那一份输入。
 func geoFromCarried(geo nrinbox.CarriedGeo) nrdomain.GeoResolutionProjection {
 	if !geo.Carried {
 		return nrdomain.GeoResolutionProjection{}

@@ -39,9 +39,9 @@ func NewReassessOnIntakeAdapter(
 	return &ReassessOnIntakeAdapter{reassess: reassess, purpose: purpose}
 }
 
-// TriggerReassessment 翻译并转交一份采用记录，连同采用信封携带的内容（复核按它取证据，ADR-0075）。控制依据按来源类型译格：节点收寄是节点
-// 控制、场外揽收是权威运输交接的控制——两类都是 CONTEXT 认可的「当前可控节点」依据，
-// 普通扫描在提供方的采用判断里就进不来。
+// TriggerReassessment 翻译并转交一份采用记录，连同采用信封携带的内容（复核按它取证据，ADR-0075）。
+// 控制依据按来源类型译格：节点收寄是节点控制、场外揽收是权威运输交接的控制——两类都是 CONTEXT 认可的
+// 「当前可控节点」依据，普通扫描在提供方的采用判断里就进不来。
 func (adapter *ReassessOnIntakeAdapter) TriggerReassessment(
 	ctx context.Context,
 	record psports.IntakeAdoptionRecord,

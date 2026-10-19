@@ -859,8 +859,8 @@ func outcomeFor(record ports.ReassessmentRecord) ReassessOutcome {
 	}
 }
 
-// triggerDigest 是触发内容的稳定指纹：同关联异指纹即触发冲突。
-// triggerDigest 把携带的地理投影算进去，理由同 handoffDigest：同一触发换了地址就不是重放。
+// triggerDigest 是触发内容的稳定指纹：同关联异指纹即触发冲突。携带的地理投影也算进去，理由同 handoffDigest：同一
+// 触发换了地址就不是重放。
 func triggerDigest(trigger domain.ReassessmentTrigger, geo domain.GeoResolutionProjection) string {
 	key := trigger.Key()
 	digest := sha256.Sum256([]byte(strings.Join([]string{

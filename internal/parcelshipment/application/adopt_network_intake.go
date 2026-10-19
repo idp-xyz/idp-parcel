@@ -184,7 +184,6 @@ func (handler *AdoptNetworkIntakeHandler) Handle(
 	if !found || request.ShipmentRequestID() != command.ShipmentRequestID {
 		return AdoptNetworkIntakeResult{outcome: IntakeRequestNotAccepted}, nil
 	}
-	geo := carriedGeoOf(request, command.SubmissionVersion)
 
 	key := ports.IntakeAdoptionKey{
 		TenantID: command.Identity.TenantID(),
@@ -202,13 +201,13 @@ func (handler *AdoptNetworkIntakeHandler) Handle(
 			// 同一采用身份携带不同来源内容：冲突保留原结果（AT-PS-042）。
 			return AdoptNetworkIntakeResult{outcome: IntakeSourceConflict}, nil
 		}
-		return handler.existingResult(ctx, existing, geo), nil
+		return handler.existingResult(ctx, existing, request), nil
 	}
 
 	// 委托必须已经合法接受；版本换代后旧基线的来源同样挂不上。两者都是「来源真实但不属
 	// 于当前责任起点」的不采用，不是未决——重试一万次委托也不会变成已接受的那一版。
 	if refusal, refused := adoptionRefusal(request, command.SubmissionVersion, source); refused {
-		return handler.refuse(ctx, command, key, digest, refusal, geo)
+		return handler.refuse(ctx, command, key, digest, refusal, request)
 	}
 
 	// 取消边界按业务时间裁决（AT-PS-044/080/081）：取消决定早于收寄发生——包裹在收寄
@@ -227,7 +226,7 @@ func (handler *AdoptNetworkIntakeHandler) Handle(
 				if err != nil {
 					return AdoptNetworkIntakeResult{}, fmt.Errorf("refusal reason: %w", err)
 				}
-				return handler.refuse(ctx, command, key, digest, reason, geo)
+				return handler.refuse(ctx, command, key, digest, reason, request)
 			}
 			return handler.undecided(command, source, IntakeCancellationOrderConflict), nil
 		}
@@ -270,10 +269,10 @@ func (handler *AdoptNetworkIntakeHandler) Handle(
 			if err != nil {
 				return AdoptNetworkIntakeResult{}, fmt.Errorf("refusal reason: %w", err)
 			}
-			return handler.refuse(ctx, command, key, digest, reason, geo)
+			return handler.refuse(ctx, command, key, digest, reason, request)
 		}
 		if started.Key.Version == corrects {
-			return handler.supersede(ctx, command, key, digest, source, started, geo)
+			return handler.supersede(ctx, command, key, digest, source, started, request)
 		}
 		// 更正的不是链尾：前版一条记录都没有，是先后两封乱序——等；有记录（已被取代，或本就
 		// 是不采用行）是分叉——要人看，不替人接。
@@ -289,7 +288,7 @@ func (handler *AdoptNetworkIntakeHandler) Handle(
 		if err != nil {
 			return AdoptNetworkIntakeResult{}, fmt.Errorf("refusal reason: %w", err)
 		}
-		return handler.refuse(ctx, command, key, digest, reason, geo)
+		return handler.refuse(ctx, command, key, digest, reason, request)
 	}
 
 	intake, err := domain.AdoptNetworkIntake(source, command.SubmissionVersion)
@@ -319,7 +318,7 @@ func (handler *AdoptNetworkIntakeHandler) Handle(
 		Commitment:        commitment,
 		AdoptedAt:         handler.deps.Clock.Now(),
 	}
-	return handler.commit(ctx, record, geo)
+	return handler.commit(ctx, record, request)
 }
 
 // supersede 以更正后的来源形成新的采用判断版本（AT-PS-050，ADR-0117 决定二、三）：新采用
@@ -333,7 +332,7 @@ func (handler *AdoptNetworkIntakeHandler) supersede(
 	digest string,
 	source domain.IntakeSource,
 	current ports.IntakeAdoptionRecord,
-	geo domain.CarriedGeoProjection,
+	request domain.ShipmentRequest,
 ) (AdoptNetworkIntakeResult, error) {
 	intake, err := domain.AdoptNetworkIntake(source, command.SubmissionVersion)
 	if err != nil {
@@ -366,13 +365,17 @@ func (handler *AdoptNetworkIntakeHandler) supersede(
 		SupersedesVersion: current.Key.Version,
 		AdoptedAt:         handler.deps.Clock.Now(),
 	}
-	return handler.commit(ctx, record, geo)
+	return handler.commit(ctx, record, request)
 }
 
-// carriedGeoOf 取命令指名那一版提交的地理解析投影，随发布意图交给路由复核（意图头注）。那一版不在这份委托上时
-// 交缺席：采用会按基线换代答不采用，不采用不触发复核，带不带投影都一样。
-func carriedGeoOf(request domain.ShipmentRequest, version domain.SubmissionVersionID) domain.CarriedGeoProjection {
-	submission, ok := request.SubmissionVersionByID(version)
+// carriedGeoOf 取采用记录自己的基线那一版提交的地理解析投影，随发布意图交给路由复核（ports.NetworkIntakeHandoffIntent）。
+// 取记录的基线而不取本次命令指名的版本：重放已有采用、读回并发赢家时，委托可能已经换版，按命令取会把这一版的采用
+// 配上另一版的地址，那正是 ADR-0075 决定一要防的异版。不采用不触发复核，不带投影。
+func carriedGeoOf(request domain.ShipmentRequest, record ports.IntakeAdoptionRecord) domain.CarriedGeoProjection {
+	if !record.Adopted {
+		return domain.CarriedGeoProjection{}
+	}
+	submission, ok := request.SubmissionVersionByID(record.Intake.Baseline())
 	if !ok {
 		return domain.CarriedGeoProjection{}
 	}
@@ -427,7 +430,7 @@ func (handler *AdoptNetworkIntakeHandler) refuse(
 	key ports.IntakeAdoptionKey,
 	digest string,
 	reason domain.CheckReason,
-	geo domain.CarriedGeoProjection,
+	request domain.ShipmentRequest,
 ) (AdoptNetworkIntakeResult, error) {
 	record := ports.IntakeAdoptionRecord{
 		Key:               key,
@@ -437,14 +440,14 @@ func (handler *AdoptNetworkIntakeHandler) refuse(
 		RefusalBasis:      reason,
 		AdoptedAt:         handler.deps.Clock.Now(),
 	}
-	return handler.commit(ctx, record, geo)
+	return handler.commit(ctx, record, request)
 }
 
 // commit 提交采用记录并交发布意图；并发下另一方先提交时读回赢家。
 func (handler *AdoptNetworkIntakeHandler) commit(
 	ctx context.Context,
 	record ports.IntakeAdoptionRecord,
-	geo domain.CarriedGeoProjection,
+	request domain.ShipmentRequest,
 ) (AdoptNetworkIntakeResult, error) {
 	saved, err := handler.deps.Adoptions.Save(ctx, record)
 	if err != nil {
@@ -457,7 +460,7 @@ func (handler *AdoptNetworkIntakeHandler) commit(
 	switch saved {
 	case ports.IntakeAdoptionSaved:
 		result := resultForAdoption(record)
-		result.handoff = handler.handOff(ctx, record, geo)
+		result.handoff = handler.handOff(ctx, record, request)
 		return result, nil
 	case ports.IntakeAdoptionAlreadyRecorded:
 		winner, found, err := handler.deps.Adoptions.FindByKey(ctx, record.Key)
@@ -468,7 +471,7 @@ func (handler *AdoptNetworkIntakeHandler) commit(
 				continuation: intakeContinuation(record.Key, IntakeAdoptionStoreUnavailable),
 			}, nil
 		}
-		return handler.existingResult(ctx, winner, geo), nil
+		return handler.existingResult(ctx, winner, request), nil
 	default:
 		return AdoptNetworkIntakeResult{}, fmt.Errorf("%w: %d", ErrUnexpectedAdoptionSave, saved)
 	}
@@ -478,11 +481,11 @@ func (handler *AdoptNetworkIntakeHandler) commit(
 func (handler *AdoptNetworkIntakeHandler) existingResult(
 	ctx context.Context,
 	record ports.IntakeAdoptionRecord,
-	geo domain.CarriedGeoProjection,
+	request domain.ShipmentRequest,
 ) AdoptNetworkIntakeResult {
 	result := resultForAdoption(record)
 	result.outcome = IntakeExistingResult
-	result.handoff = handler.handOff(ctx, record, geo)
+	result.handoff = handler.handOff(ctx, record, request)
 	return result
 }
 
@@ -507,9 +510,10 @@ func resultForAdoption(record ports.IntakeAdoptionRecord) AdoptNetworkIntakeResu
 func (handler *AdoptNetworkIntakeHandler) handOff(
 	ctx context.Context,
 	record ports.IntakeAdoptionRecord,
-	geo domain.CarriedGeoProjection,
+	request domain.ShipmentRequest,
 ) domain.OwnershipContinuationReference {
-	if err := handler.deps.Downstream.HandOffNetworkIntake(ctx, ports.NetworkIntakeHandoffIntent{Record: record, Geo: geo}); err == nil {
+	intent := ports.NetworkIntakeHandoffIntent{Record: record, Geo: carriedGeoOf(request, record)}
+	if err := handler.deps.Downstream.HandOffNetworkIntake(ctx, intent); err == nil {
 		return domain.OwnershipContinuationReference{}
 	}
 	return derivedContinuation(

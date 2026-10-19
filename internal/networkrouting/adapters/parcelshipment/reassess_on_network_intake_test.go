@@ -56,11 +56,17 @@ func sourceHolding(record psports.IntakeAdoptionRecord) *adoptionSourceDouble {
 // 节点上，因此复核答`仍适用`。
 func reassessorWithHistory(t *testing.T) *adapter.ReassessOnIntakeAdapter {
 	t.Helper()
+	return reassessorSeeing(t, nil)
+}
+
+// reassessorSeeing 同 reassessorWithHistory，另把复核取证据时交进来的携带内容记进 seen（非空时）。
+func reassessorSeeing(t *testing.T, seen *nrports.RequestCarriedContent) *adapter.ReassessOnIntakeAdapter {
+	t.Helper()
 	handler := nrapplication.NewReassessRouteHandler(nrapplication.ReassessRouteDeps{
 		Routes: &routeStoreDouble{records: map[nrdomain.InitialRouteJudgmentKey]nrports.InitialRouteRecord{
 			reassessKey(t): planOnFile(t),
 		}},
-		Evidence:      evidenceDouble{evidence: evidenceWithOpenFreeze(t)},
+		Evidence:      evidenceDouble{evidence: evidenceWithOpenFreeze(t), seen: seen},
 		Applicability: &applicabilityStoreDouble{byPlan: map[nrdomain.RoutePlanVersionID]nrdomain.PlanApplicability{}},
 		Store:         &reassessStoreDouble{byCorrelation: map[nrdomain.RequestCorrelationID]nrports.ReassessmentRecord{}},
 		Log:           &logDouble{digests: map[nrdomain.RequestCorrelationID]string{}},
@@ -116,6 +122,28 @@ func TestAnAdoptionEnvelopeIsLookedUpByItsKeyAndReassessed(t *testing.T) {
 	}
 	if source.asked[0] != record.Key {
 		t.Fatalf("取回用的键 = %+v, want %+v", source.asked[0], record.Key)
+	}
+}
+
+// Covers: 信封上的地理投影一路到复核取证据那一步（ADR-0075）：信封一跳丢了它，复核问关务就只剩两端未知。
+func TestTheEnvelopesGeoProjectionReachesTheReassessmentEvidence(t *testing.T) {
+	var seen nrports.RequestCarriedContent
+	subject := subjectFor(t, sourceHolding(adoptedRecord(t)), reassessorSeeing(t, &seen))
+
+	intake := envelopeFor(t)
+	intake.Geo = nrinbox.CarriedGeo{
+		Carried: true, SenderCountry: "CN", SenderCountryPresent: true,
+		DeliveryCountry: "SG", DeliveryCountryPresent: true,
+	}
+	if err := subject.HandleAdoptedNetworkIntake(context.Background(), intake); err != nil {
+		t.Fatalf("handle adopted network intake: %v", err)
+	}
+	want := nrdomain.NewGeoResolutionProjection(
+		nrdomain.NewGeoResolutionSide("CN", true, "", false),
+		nrdomain.NewGeoResolutionSide("SG", true, "", false),
+	)
+	if seen.Geo.ContentDigest() != want.ContentDigest() {
+		t.Fatalf("复核取证据时的投影 = %q，want 信封带来的 %q", seen.Geo.ContentDigest(), want.ContentDigest())
 	}
 }
 

@@ -434,6 +434,10 @@ func TestASameSourceCorrectionSupersedesTheResponsibilityStart(t *testing.T) {
 	if len(fixture.downstream.intents) != 2 || fixture.adoptions.saved != 2 {
 		t.Fatalf("intents = %d saved = %d; 两代各一份记录与意图", len(fixture.downstream.intents), fixture.adoptions.saved)
 	}
+	// 更正版的意图同样带基线那一版的投影：更正后路由照样要复核。
+	if !fixture.downstream.intents[1].Geo.Carried() {
+		t.Fatal("更正版的发布意图没带地理投影")
+	}
 }
 
 // Covers: `AT-PS-049` 在链之后一字不动（ADR-0117 决定五）：责任起点已由更正版接续，另一来源
@@ -654,6 +658,10 @@ func TestForeignOrUnacceptedTargetsRefuseWithoutLeaking(t *testing.T) {
 		if result.Outcome() != application.IntakeSourceNotAdopted ||
 			result.Basis().String() != "BASELINE_SUPERSEDED/version-1" {
 			t.Fatalf("outcome = %q basis = %q", result.Outcome(), result.Basis())
+		}
+		// 不采用不触发复核，意图不带投影。
+		if len(fixture.downstream.intents) != 1 || fixture.downstream.intents[0].Geo.Carried() {
+			t.Fatalf("不采用的意图 = %+v", fixture.downstream.intents)
 		}
 	})
 }

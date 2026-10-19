@@ -104,7 +104,7 @@ func TestNetworkIntakeIntentCommitsAtomicallyWithTheAdoption(t *testing.T) {
 	}
 }
 
-// Covers: 载荷带上意图里的地理解析投影，形状与接受决定信封同一份（路由侧两条消费链共用一个译码器）；意图没携带时
+// Covers: 载荷带上意图里的地理解析投影，形状与接受决定信封同一份（路由侧共用一个译码器）；意图没携带时
 // 载荷里没有这一格，而不是一份全空的投影。
 func TestNetworkIntakePayloadCarriesTheGeoProjectionOnlyWhenCarried(t *testing.T) {
 	fixture := newNetworkIntakeHandoffFixture(t)

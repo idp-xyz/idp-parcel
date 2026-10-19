@@ -44,7 +44,7 @@ func NewOutboxNetworkIntakeHandoff(
 var _ ports.NetworkIntakeHandoff = (*OutboxNetworkIntakeHandoff)(nil)
 
 // networkIntakePayload 是意图载荷的传输形状：下游 FindByKey 所需的采用键（含租户），加上随复核请求携带的
-// 地理解析投影（意图头注）。不带收寄明细或承诺——那些下游按键取回。
+// 地理解析投影（ports.NetworkIntakeHandoffIntent）。不带收寄明细或承诺——那些下游按键取回。
 type networkIntakePayload struct {
 	TenantID string             `json:"tenantId"`
 	Parcel   string             `json:"parcel"`

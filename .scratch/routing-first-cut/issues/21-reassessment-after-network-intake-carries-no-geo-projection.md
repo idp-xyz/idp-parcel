@@ -34,7 +34,7 @@ Blocked by: 无
 ## 完成记录（2026-10-18，Claude Code 会话，分支 `claude-rfc21` 基 `45b9a088`）
 
 - PS：
-  - `NetworkIntakeHandoffIntent.Geo`。采用编排在取回委托之后按命令指名的提交版本取投影（`carriedGeoOf`），新采用、不采用、更正、重放各路都交同一份。
+  - `NetworkIntakeHandoffIntent.Geo`。采用编排交意图时按采用记录自己的基线取那一版的投影（`carriedGeoOf`）；不采用不触发复核，不带。
   - 载荷 `geo` 一格与接受决定信封共用 `carriedGeoPayload`；没携带即缺席。
 - NR：
   - 译码共用 `carriedGeoBody`，`AdoptedNetworkIntake.Geo`。
@@ -47,3 +47,16 @@ Blocked by: 无
   - NR 真库消费门：信封上的投影原样到处理方，旧信封照常译码。
   - NR 复核适配器：携带内容到取证据那一步。
   - NR 复核编排：取证据用携带的投影；同一触发换投影答触发冲突。
+- 实走（`S`，一次性库，走完已删）：
+  - `c8_walk4`（main 加本票）：采用信封带 `CN`→`SG` 两端，复核越过 `PLAN_REVIEW_INCONCLUSIVE`。下一停点是冻结形态未配置 `FREEZE_FORM_UNCONFIGURED`，归 [product-strategy-boundary/34](../../product-strategy-boundary/issues/34-demo-route-strategy-revision-declares-a-freeze-form.md)。
+  - `c8_walk5`（再加 34）：复核答 `STILL_APPLICABLE`，采用信封 `PUBLISHED`。
+- 修复之前已入队、不带投影的采用信封治不好：`EnqueueOnce` 见同一事件 ID 就返回，不比载荷。演示库要重灌。
+
+## 评审记录（2026-10-18，隔离子代理一次过两轴，判 PASS）
+
+非阻断已修：
+- 补用例 `TestTheEnvelopesGeoProjectionReachesTheReassessmentEvidence`：信封上的投影经适配器到复核取证据那一步。原先把这一跳换成空投影，全部用例照样通过。
+- 投影改取采用记录自己的基线。原先取本次命令指名的版本，重放或读回并发赢家时，若委托已经换版，会把这一版的采用配上另一版的地址。不采用不带投影。
+- 更正那一路与不采用那一路补了断言。
+- 注释去掉数别处的计数，跨文件引用改用 `ports.NetworkIntakeHandoffIntent`，`triggerDigest` 头注合成一句。
+- 补记修复前的出站行治不好、演示库要重灌。

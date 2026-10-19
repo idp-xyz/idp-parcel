@@ -158,7 +158,7 @@ func decodeAcceptedDecision(payload []byte) (AcceptedDecision, error) {
 	return decision, nil
 }
 
-// carriedGeoBody 是 PS 信封上地理维的线格式。接受决定与网络收寄采用两种信封同一形状，在这里只译一次。
+// carriedGeoBody 是 PS 信封上地理维的线格式。接受决定与网络收寄采用的信封共用这一形状，在这里只译一次。
 type carriedGeoBody struct {
 	Carried                bool   `json:"carried"`
 	SenderCountry          string `json:"senderCountry"`
