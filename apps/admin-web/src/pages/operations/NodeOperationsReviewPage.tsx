@@ -9,12 +9,8 @@ import {
   type NodeOperationsListResponseBody,
   type NodeOperationsRegistry,
 } from './records-api';
-import {
-  consolidationPhaseLabels,
-  controlKindLabels,
-  labelOf,
-  receptionKindLabels,
-} from './presentation';
+import { consolidationPhaseLabels, labelOf } from './presentation';
+import { receptionRowOf } from './reception-rows';
 
 // 主责上下文与场景出处的唯一来源是 navigation 的 moduleInfoById，只读引用，不抄第二份。
 const info = moduleInfoById['node-operations-review'];
@@ -177,24 +173,7 @@ const sections: ReviewSection[] = [
 function rowsOf(body: NodeOperationsListResponseBody): ReviewRow[] {
   switch (body.outcome) {
     case 'RECEPTIONS_LISTED':
-      return body.receptions.map((record) => ({
-        key: `reception:${record.sourceId}`,
-        values: {
-          unit: record.unit,
-          kind: labelOf(receptionKindLabels, record.kind),
-          node: record.node,
-          deliveredBy: record.deliveredBy,
-          receivedAt: formatInstant(record.receivedAt),
-          // released 两键成对缺席即实物仍在节点控制中（传输层在场规则）；转出行
-          // 照登记示引用与时刻，不代判「在库/出库」。
-          control: record.controlReleasedBy
-            ? `${labelOf(controlKindLabels, record.controlKind)} · 已转出 ${record.controlReleasedBy}${
-                record.controlReleasedAt ? ` · ${formatInstant(record.controlReleasedAt)}` : ''
-              }`
-            : `${labelOf(controlKindLabels, record.controlKind)} · 控制中`,
-          serviceMarkers: record.serviceMarkers.join('、'),
-        },
-      }));
+      return body.receptions.map(receptionRowOf);
     case 'UNIDENTIFIED_ITEMS_LISTED':
       return body.items.map((record) => ({
         key: `unidentified:${record.sourceId}`,

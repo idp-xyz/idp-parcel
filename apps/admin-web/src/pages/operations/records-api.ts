@@ -39,6 +39,12 @@ export interface ReceptionRecord {
   controlReleasedBy?: string;
   controlReleasedAt?: string;
   serviceMarkers: string[];
+  /**
+   * 服务结果核对态（ADR-0186）：CHECKED（已查）/ UNREADABLE（读不动），只有 INTAKE_FORMED 行带，
+   * 待识别行整键缺席。它告诉看的人 serviceMarkers 的 [] 是「查过了、没有」还是「没取得答复」。
+   * 类型留 string 而不收成两值联合，同 kind：封闭集扩了、页面还没跟上时要如实露码。
+   */
+  serviceResultCheck?: string;
   recordedAt: string;
 }
 

@@ -1,7 +1,7 @@
 # 44 管理台节点作业复核页把收寄的「服务结果读不动」显示成单独一格，不再与「无标记」同形
 
 Category: enhancement
-Status: ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 2 评审遗留；用户授权代决）
+Status: in-progress——2026-10-19 前端实施子代理认领（Blocked by 的 operator-channel/43 已进 main `4a09e100`），照前端切片在 main 上直接做。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 2 评审遗留；用户授权代决）
 Blocked by: operator-channel/43 进 main
 父票：operator-channel/43。
 出处：簇 C1 终裁 C1-Q2，可见性那一条。
