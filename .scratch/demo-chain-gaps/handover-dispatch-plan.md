@@ -178,6 +178,7 @@ C12 是演示租户取值，写进演示动线即可。C16 不另立 ADR：落�
 - HANDOVER_IN 对不上作业实物时的节点对账。
 - 控制来源链重算的处置面。
 - 票 61 落地时立：集运单元交接 → [80](./issues/80-a-consolidation-unit-handover-does-not-move-member-control.md)；控制来源链重算与入账各格的处置面 → [81](./issues/81-control-source-chain-recompute-has-no-disposition-face.md)。
+- 票 62 落地时立：HANDOVER_IN 对不上作业实物时的节点对账 → [91](./issues/91-a-handover-in-that-names-no-unit-has-no-node-reconciliation.md)；节点收寄不认交接转入立起的在身控制 → [92](./issues/92-a-node-intake-does-not-see-a-control-established-by-handover-in.md)。
 
 ---
 
