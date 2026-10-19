@@ -19,6 +19,14 @@ TF 的 postgres 读适配器在读回时重建领域对象。重建失败——�
 - `internal/transportfulfillment/application/register_booking_charge.go`：`bookingFact` 读订舱、委托、答复，同上。
 - `internal/transportfulfillment/adapters/postgres/transport_commission.go` 的重建（协议对象与版本只存了一列时的那条错误、`domain.RehydrateTransportCommission` 交回的错误）都是 `fmt.Errorf` 包一层，没有可识别的哨兵；其余几册的读适配器同形。应用层因此分不出。
 - 对照：SA 立了 `saports.ErrSupplierAgreementScopeUntranslatable`，`internal/settlementaccounting/adapters/partycommercial/supplier_agreement_scope.go` 包住它，SA 编排凭它与读不动分开。
+- 票 [67](./67-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md)（ADR-0218）的自动形成编排，`internal/transportfulfillment/application/form_actual_fulfillment_on_participation_end.go`，在交给登记用例之前自己也读一遍，同形：
+  - `OnHandover` 读交接；
+  - `formFor` 按对象列段、按键读整段（`ParticipationSegmentsView` 两口），读采用连线，读旅程册（postgres `AlternateJourneys.FindByMember`）。
+  - 任一口交回错误都答本编排的未决，经 `ErrActualFulfillmentFormationUndecided` 登进派发的未决名单。读回的坏行同样被当成读不动。
+
+## 自动形成之后的分量（2026-10-19 票 67 评审补记）
+
+以前这一类只在人工口上出现，登记方看到一次未决、照续办引用重交。ADR-0218 之后，同一个登记用例也由派发进程随交接与有效交付信封调用。读回坏行答成未决，就会以 `consumer_undecided` 挂在交接或交付分区的队头，烧完失败预算才落 `ABANDONED`。在它之前，同一对象后面的交接与交付信封（追踪投影、派送发起、包裹终局）都跟着等（ADR-0218 越权风险点 8，票 [89](./89-actual-fulfillment-formation-blocks-later-envelopes-in-the-handover-and-delivery-partitions.md)）。修法不变：自动形成编排那几口见到同一枚确定性哨兵，上抛，不答未决。
 
 ## 三类
 
@@ -31,7 +39,7 @@ TF 的 postgres 读适配器在读回时重建领域对象。重建失败——�
 ## 要裁的
 
 - 哨兵的粒度：TF 一枚通用的「行不可重建」，还是逐册各一枚。归 TF owner。
-- 同一批读口的其余编排（承运编排读委托、订舱、答复，段采用读段与委托）要不要同票一起分。归 TF owner。
+- 同一批读口的其余编排（承运编排读委托、订舱、答复，段采用读段与委托）要不要同票一起分。归 TF owner。自动形成编排那几口（见上「证据」）建议同票分，理由见「自动形成之后的分量」。
 - 与 [54](./54-charge-occurrence-registration-does-not-separate-deterministic-agreement-check-failures.md)（协议核对的确定性失败）并成一票还是分开：同是发生项登记把确定性失败说成未决，修法同形（`ports` 立哨兵、适配器包、编排上抛）。
 
 ## 既有票

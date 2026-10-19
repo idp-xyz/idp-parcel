@@ -20,6 +20,10 @@ Blocked by: 无
 - `internal/transportfulfillment/adapters/partycommercial/supplier_agreement_source.go`：`chargeConditionsOf` 与外壳翻译都包 `ErrUntranslatableAnswer`；PC 读口的错误原样包一层交回。
 - 这个哨兵在适配器包里，应用层不能 import，所以今天用例想分也分不出来。
 
+## 自动形成之后的分量（2026-10-19 票 67 评审补记）
+
+以前这一类只在人工口上出现：登记方看到一次未决，照续办引用重交。ADR-0218 之后，同一个登记用例也由派发进程随交接与有效交付信封调用（票 [67](./67-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md)），段已采用委托就核协议。词表走岔或坏数据答成未决，就会以 `consumer_undecided` 挂在交接或交付分区的队头，烧完失败预算才落 `ABANDONED`。在它之前，同一对象后面的交接与交付信封（追踪投影、派送发起、包裹终局）都跟着等（ADR-0218 越权风险点 8，票 [89](./89-actual-fulfillment-formation-blocks-later-envelopes-in-the-handover-and-delivery-partitions.md)）。修法不变；本票落下后，自动形成那一路见到上抛的确定性错误即响亮失败，不进未决名单。
+
 ## 三类
 
 机制（失败按恢复动作分格）。规模 S。
