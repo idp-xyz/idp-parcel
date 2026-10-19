@@ -318,5 +318,9 @@ echo "== 结算账户与受理前估价采用登记（settlement-accounting：�
   -input "$SEEDS/settlement/06-fee-item-mapping-base-freight.json"
 "$BIN/parcel-settlement-register" fee-item-mapping \
   -input "$SEEDS/settlement/07-fee-item-mapping-remote-area-surcharge.json"
+# BUY 触发（ADR-0164、ADR-0208）：干线段的实际履约发生项一形成就发起 BUY 评价，费用项目记合成的干线成本项。只登这一个
+# 原因——演示先走的是实际履约；失败尝试、订舱、取消不登，形成了也答未配置。主要范围不在这一行，取干线协议的商业范围。
+"$BIN/parcel-settlement-register" buy-evaluation-trigger \
+  -input "$SEEDS/settlement/08-buy-evaluation-trigger-actual-fulfillment.json"
 
 echo "种子灌入完成：租户 SYN-TENANT-01，各上下文全部落库。"

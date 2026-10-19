@@ -1,0 +1,6 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "occurrenceReason": "ACTUAL_FULFILLMENT",
+  "moment": "OCCURRENCE_FORMED",
+  "feeItem": "SYN-FEE-ITEM-TRUNK-COST-01"
+}
