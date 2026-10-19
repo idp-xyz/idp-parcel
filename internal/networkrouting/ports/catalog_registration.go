@@ -2,6 +2,7 @@ package ports
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -260,6 +261,19 @@ type LineSegmentCostBasis struct {
 	Reference    string
 }
 
+// LegPricingZone 是线路版本某一段的段计价区域（ADR-0189）：这一段所引的价卡没绑分区目录时，计价按这个区计。
+// SegmentIndex 与 LineSegmentCostBasis 同一口径（段链数组下标）；Zone 是价卡上的区域词，本上下文原样转交、不解释；
+// Basis 是登记依据引用。
+type LegPricingZone struct {
+	SegmentIndex int
+	Zone         string
+	Basis        string
+}
+
+// ErrLegPricingZoneWithoutCostBasis 说明要登区域的段没挂成本依据：段计价区域是「这一段按它所引的那张卡计价时用
+// 哪个区」，没有卡就无从谈区。
+var ErrLegPricingZoneWithoutCostBasis = errors.New("network routing: leg pricing zone names a segment without a cost basis")
+
 // NetworkCatalogRegistry 是版本化网络目录七类定义原语的写入口（ADR-0068）。
 //
 // 目录**内容**属实例半边（PAR-NET-01..15 待提供），本端口只建门：不带任何默认定义，
@@ -296,6 +310,15 @@ type NetworkCatalogRegistry interface {
 		lineCode string,
 		version int32,
 		bases []LineSegmentCostBasis,
+	) error
+	// RegisterLegPricingZones 追加一条线路版本若干段的段计价区域（ADR-0189 决定二）。只登在已挂成本依据的段上：
+	// 有一段没挂依据，整笔交回 ErrLegPricingZoneWithoutCostBasis，一行也不写。它不推进目录修订（同成本依据）。
+	RegisterLegPricingZones(
+		ctx context.Context,
+		tenant domain.TenantID,
+		lineCode string,
+		version int32,
+		zones []LegPricingZone,
 	) error
 	RegisterServiceAreaVersion(
 		ctx context.Context,

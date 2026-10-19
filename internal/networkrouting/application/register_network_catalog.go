@@ -2,6 +2,7 @@ package application
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -93,6 +94,11 @@ const (
 	// CatalogCostBasisMalformed 是线路的逐段成本依据不成形：段号不在段链内、同一段登两条、种类不在封闭两类，
 	// 或引用空白。要改的是依据那一行，版本行本身没毛病。
 	CatalogCostBasisMalformed
+	// CatalogLegZoneMalformed 是段计价区域不成形：没给一段、段号为负、同一段登两次、区域或依据空白。要改的是那一行。
+	CatalogLegZoneMalformed
+	// CatalogLegZoneWithoutCostBasis 是要登区域的段没挂成本依据（或这条线路版本根本不在册）：先给那一段挂依据，区域
+	// 才有卡可依（ADR-0189 决定二）。
+	CatalogLegZoneWithoutCostBasis
 )
 
 func (reason CatalogRefusalReason) String() string {
@@ -139,6 +145,10 @@ func (reason CatalogRefusalReason) String() string {
 		return "CALENDAR_CONTENT_OUT_OF_RANGE"
 	case CatalogCostBasisMalformed:
 		return "COST_BASIS_MALFORMED"
+	case CatalogLegZoneMalformed:
+		return "LEG_ZONE_MALFORMED"
+	case CatalogLegZoneWithoutCostBasis:
+		return "LEG_ZONE_WITHOUT_COST_BASIS"
 	default:
 		return ""
 	}
@@ -185,6 +195,15 @@ type RegisterLineVersionCommand struct {
 	TenantID  domain.TenantID
 	Line      ports.LineDefinitionVersion
 	CostBases []ports.LineSegmentCostBasis
+}
+
+// RegisterLegPricingZonesCommand 给一条已在册的线路版本若干段登段计价区域（ADR-0189 决定二）。它不随线路版本行走：
+// 已采用而未闭区间的版本改不了内容，区域另行登记才登得上。
+type RegisterLegPricingZonesCommand struct {
+	TenantID    domain.TenantID
+	LineCode    string
+	LineVersion int32
+	Zones       []ports.LegPricingZone
 }
 
 type RegisterServiceAreaVersionCommand struct {
@@ -321,6 +340,51 @@ func costBasesWellFormed(bases []ports.LineSegmentCostBasis, segments int) bool 
 		if basis.Kind.String() == "" || !catalogPresent(basis.Reference) {
 			return false
 		}
+	}
+	return true
+}
+
+// RegisterLegPricingZones 登段计价区域。区域词归 parcel-pricing，这里不核它在不在卡上——区不在卡上由计价答待判断；
+// 本用例只守形状，并把「段没挂依据」从写入口的错误译成一格拒因。
+func (service *NetworkCatalogRegistration) RegisterLegPricingZones(
+	ctx context.Context,
+	command RegisterLegPricingZonesCommand,
+) (RegisterCatalogResult, error) {
+	switch {
+	case !catalogPresent(command.TenantID.String()):
+		return catalogRefused(CatalogTenantMissing), nil
+	case !catalogPresent(command.LineCode):
+		return catalogRefused(CatalogIdentityMissing), nil
+	case command.LineVersion < 1:
+		return catalogRefused(CatalogVersionMissing), nil
+	}
+	if !legZonesWellFormed(command.Zones) {
+		return catalogRefused(CatalogLegZoneMalformed), nil
+	}
+	err := service.registry.RegisterLegPricingZones(ctx, command.TenantID, command.LineCode, command.LineVersion, command.Zones)
+	if errors.Is(err, ports.ErrLegPricingZoneWithoutCostBasis) {
+		return catalogRefused(CatalogLegZoneWithoutCostBasis), nil
+	}
+	if err != nil {
+		return RegisterCatalogResult{}, fmt.Errorf("register leg pricing zones: %w", err)
+	}
+	return catalogRegistered(), nil
+}
+
+// legZonesWellFormed 与迁移 0019 的 CHECK 与主键同格；撞库上约束会把整个环境事务打进中止态。
+func legZonesWellFormed(zones []ports.LegPricingZone) bool {
+	if len(zones) == 0 {
+		return false
+	}
+	seen := make(map[int]struct{}, len(zones))
+	for _, zone := range zones {
+		if zone.SegmentIndex < 0 || !catalogPresent(zone.Zone) || !catalogPresent(zone.Basis) {
+			return false
+		}
+		if _, duplicated := seen[zone.SegmentIndex]; duplicated {
+			return false
+		}
+		seen[zone.SegmentIndex] = struct{}{}
 	}
 	return true
 }

@@ -35,6 +35,10 @@ type catalogRegistryDouble struct {
 	adjustment ports.AvailabilityAdjustmentStatement
 
 	costBasesErr     error
+	zonesLine        string
+	zonesVersion     int32
+	zones            []ports.LegPricingZone
+	zonesErr         error
 	costBasesLine    string
 	costBasesVersion int32
 	costBases        []ports.LineSegmentCostBasis
@@ -100,6 +104,15 @@ func (double *catalogRegistryDouble) RegisterLineCostBases(
 		return double.costBasesErr
 	}
 	return double.err
+}
+
+func (double *catalogRegistryDouble) RegisterLegPricingZones(
+	_ context.Context, tenant domain.TenantID, lineCode string, version int32, zones []ports.LegPricingZone,
+) error {
+	double.calls++
+	double.lastTenant = tenant
+	double.zonesLine, double.zonesVersion, double.zones = lineCode, version, zones
+	return double.zonesErr
 }
 
 func (double *catalogRegistryDouble) RegisterAvailabilityAdjustment(

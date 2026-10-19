@@ -1576,10 +1576,10 @@ func (broken brokenCustomsSource) AssessCustomsApplicability(
 	return nrports.CustomsApplicabilityAssessment{}, broken.err
 }
 
-// routeCosts 装配候选成本取数侧（票 routing-first-cut/10、/17）：目录依据、内部政策解析与方案装载全接库；包裹事实取
-// parcel-shipment 的客户声明。逐段区域的折法待 routing-first-cut/18 定，如实未配置——每段待判断，候选缺成本依据，
-// 不给任何租户编一个区让候选假出价。序列读数（汇率）不接，要按序列换算的卡照旧待判断。计价时点取路由判断的时钟，
-// 与证据视图同一个。
+// routeCosts 装配候选成本取数侧（票 routing-first-cut/10、/17、/18）：目录依据、内部政策解析与方案装载全接库；包裹事实取
+// parcel-shipment 的客户声明；逐段区域取租户登的段计价区域（ADR-0189 决定二），没登的段待判断，候选缺成本依据——不给
+// 任何租户编一个区让候选假出价。绑了分区目录的卡与要按序列换算的卡照旧待判断：评价还不经 parcel-pricing 的读数补全
+// （票 routing-first-cut/19）。计价时点取路由判断的时钟，与证据视图同一个。
 func routeCosts(db *bentopg.DB, clock systemClock) nrports.RouteCandidateCostSource {
 	catalog, err := nrpostgres.NewNetworkCatalog(db)
 	if err != nil {
@@ -1597,11 +1597,15 @@ func routeCosts(db *bentopg.DB, clock systemClock) nrports.RouteCandidateCostSou
 	if err != nil {
 		return brokenCostSource{err: err}
 	}
+	zones, err := nrpricing.NewRegisteredLegZones(catalog)
+	if err != nil {
+		return brokenCostSource{err: fmt.Errorf("parcel-dispatch: leg pricing zones: %w", err)}
+	}
 	return nrpricing.NewRouteCandidateCostAdapter(nrpricing.RouteCandidateCostDeps{
 		Bases:    catalog,
 		Internal: nrpartycommercial.NewInternalPlanResolver(publications),
 		Facts:    facts,
-		Zones:    unconfiguredLegZones{},
+		Zones:    zones,
 		Plans:    priceCards,
 		Clock:    clock,
 	})
@@ -1618,14 +1622,6 @@ func routeParcelFacts(db *bentopg.DB) (*nrpricing.DeclaredParcelFacts, error) {
 		return nil, fmt.Errorf("parcel-dispatch: route parcel facts: %w", err)
 	}
 	return facts, nil
-}
-
-// unconfiguredLegZones 是逐段区域还没有折法时的如实作答：段起讫怎样折成价卡区域归 parcel-pricing（ADR-0148 越权
-// 风险点 5），18 定下之前答未配置。
-type unconfiguredLegZones struct{}
-
-func (unconfiguredLegZones) ZoneFor(context.Context, nrpricing.LegZoneQuery) (nrpricing.LegZone, bool, error) {
-	return nrpricing.LegZone{}, false, nil
 }
 
 // brokenCostSource 把装配期的失败留到判断时如实报出来，不静默落进某一格。

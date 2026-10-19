@@ -40,6 +40,7 @@ type registryDouble struct {
 	strategy   *ports.RouteStrategyDefinitionVersion
 	adjustment *ports.AvailabilityAdjustmentStatement
 	costBases  []ports.LineSegmentCostBasis
+	zones      []ports.LegPricingZone
 }
 
 func (double *registryDouble) calls() int {
@@ -102,6 +103,13 @@ func (double *registryDouble) RegisterLineCostBases(
 	_ context.Context, tenant domain.TenantID, _ string, _ int32, bases []ports.LineSegmentCostBasis,
 ) error {
 	double.lastTenant, double.costBases = tenant, bases
+	return double.err
+}
+
+func (double *registryDouble) RegisterLegPricingZones(
+	_ context.Context, tenant domain.TenantID, _ string, _ int32, zones []ports.LegPricingZone,
+) error {
+	double.lastTenant, double.zones = tenant, zones
 	return double.err
 }
 

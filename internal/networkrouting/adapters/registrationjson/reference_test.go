@@ -39,6 +39,10 @@ func (registry *recordingRegistry) RegisterLineCostBases(context.Context, domain
 	return nil
 }
 
+func (registry *recordingRegistry) RegisterLegPricingZones(context.Context, domain.TenantID, string, int32, []ports.LegPricingZone) error {
+	return nil
+}
+
 func (registry *recordingRegistry) RegisterServiceAreaVersion(context.Context, domain.TenantID, ports.ServiceAreaDefinitionVersion) error {
 	registry.rows++
 	return nil

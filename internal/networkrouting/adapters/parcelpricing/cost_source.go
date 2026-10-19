@@ -67,8 +67,9 @@ type ParcelFacts struct {
 	Facts      []ppdomain.VersionedFactReference
 }
 
-// LegZoneSource 把一个计划段折成价卡的区域。折法归 parcel-pricing（ADR-0148 越权风险点 5，票 routing-first-cut/18
-// 待定），本上下文不自定区域。第二个返回值为假即「未配置」：这一段待判断，候选随之缺成本依据。
+// LegZoneSource 把一个计划段折成价卡的区域。区域按卡给（ADR-0189 决定一）：未绑分区目录的卡取租户登的段计价区域，
+// 绑了目录的卡由 parcel-pricing 用包裹邮编路线经目录读出；本上下文不自定区域。第二个返回值为假即「未配置」：这一段
+// 待判断，候选随之缺成本依据。
 type LegZoneSource interface {
 	ZoneFor(ctx context.Context, query LegZoneQuery) (LegZone, bool, error)
 }
@@ -82,7 +83,7 @@ type LegZoneQuery struct {
 }
 
 // LegZone 是一段折出的区域。形状照计价输入的两条路（ADR-0109 决定四）：调用方给分区，或给邮编路线交绑了目录的
-// 卡去解；至少一样在场，两样都在时一并交给评价。两条都留着，是因为 18 还没在两种折法之间选。
+// 卡去解；至少一样在场，两样都在时一并交给评价（ADR-0189 决定一）。
 type LegZone struct {
 	Zone      string
 	Postal    ppdomain.PostalRoute

@@ -253,6 +253,12 @@ func (stub stubCatalogRegistry) RegisterLineCostBases(
 	return stub.err
 }
 
+func (stub stubCatalogRegistry) RegisterLegPricingZones(
+	context.Context, domain.TenantID, string, int32, []ports.LegPricingZone,
+) error {
+	return stub.err
+}
+
 // registrationEndpoints 把七个登记端点各构一次，键取登记口 `-kind` 的族名。
 //
 // 逐族走一遍而不是只测一族：端点体由 newRegistrationEndpoint 共用，但七个构造函数各自

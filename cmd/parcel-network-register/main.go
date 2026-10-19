@@ -68,6 +68,7 @@ const (
 	kindAvailabilityAdjustment = "availability-adjustment"
 	kindRouteStrategy          = "route-strategy"
 	kindAutoRerouteFacts       = "auto-reroute-facts"
+	kindLegPricingZone         = "leg-pricing-zone"
 )
 
 // supportedKinds 只为 `-kind` 的用法文本与未知族的错误文本服务。列成一处是因为这两段
@@ -75,7 +76,7 @@ const (
 var supportedKinds = []string{
 	kindNode, kindConnection, kindLine, kindServiceArea,
 	kindServiceCalendar, kindAvailabilityAdjustment, kindRouteStrategy,
-	kindAutoRerouteFacts,
+	kindAutoRerouteFacts, kindLegPricingZone,
 }
 
 // systemClock 是 Clock 端口的生产实现，与各进程级入口同形。事实登记的时刻由用例取
@@ -255,6 +256,16 @@ func commandFor(
 		}
 		return func(ctx context.Context, registrar *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
 			return registrar.RegisterRouteStrategyVersion(ctx, command)
+		}, nil
+	// 段计价区域不是第八类定义原语，是挂在已在册线路版本上的计价坐标（ADR-0189 决定二）；答案代数与七族同为
+	// 登记 / 被拒两格，所以走同一个用例、同一条事务路。
+	case kindLegPricingZone:
+		command, err := registrationjson.LegPricingZonesFromJSON(raw)
+		if err != nil {
+			return nil, err
+		}
+		return func(ctx context.Context, registrar *application.NetworkCatalogRegistration) (application.RegisterCatalogResult, error) {
+			return registrar.RegisterLegPricingZones(ctx, command)
 		}, nil
 	default:
 		return nil, fmt.Errorf("未知登记族 %q（支持 %s）", kind, strings.Join(supportedKinds, " / "))
