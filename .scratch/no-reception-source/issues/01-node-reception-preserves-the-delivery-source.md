@@ -1,7 +1,7 @@
 # 01 节点收寄没有保全交付来源：身份核对读不动时只能不形成答案，待识别实物无从重核，拒收与仅扫描只留下摘要
 
 Category: enhancement
-Status: in-progress——2026-10-19 作者子代理完工，待推送方自审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（文档与拆票；ADR 占号 0199），分支 `claude-nrs01`。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 2 研判；分四期）
+Status: resolved——2026-10-19 进 main（纯 `.md`，推送方自审），见「进 main 记录」；实施拆在 02–05。此前 in-progress——2026-10-19 作者子代理完工，待推送方自审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（文档与拆票；ADR 占号 0199），分支 `claude-nrs01`。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 2 研判；分四期）
 Blocked by: operator-channel/29 已进 main
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C1 派生草案（来源保全与身份未核对）
@@ -145,3 +145,10 @@ AT 编号：UC-NO-002 原用 015 至 028，029 至 046 已被 UC-NO-003 占用�
 
 - `git diff a93f0805 -- docs/adr/ | grep '^-' | grep -v '^---'` 为空：已接受 ADR 与 README 既有行都没改，README 只加一行。
 - 新写的文档行里 `grep -nE '第 ?[0-9一二三四五六七八九十]+ ?条|:[0-9]+\b'` 不命中；也没有带性别的代词。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 推送方自审（会话 idp-parcel-9b 读 diff 审，不算非作者评审）：分支 `claude-nrs01` 只改 `.md`——ADR-0199 新立、adr/README 加一行、NO CONTEXT「待识别实物与身份关联」「节点控制」两处、CONTEXT-MAP 一条新的 PS → NO 交接边、UC-NO-002 只引 ADR-0199、实施票 02–05。已接受 ADR 的 diff 无删除行。
+- 「发现」里挂给用户的那一项由推送方代决：取自投重核门铃，改在 ADR-0199 决定三、决定五的前提与越权风险点，票 03、05 随之改写，票 05 的 Blocked by 解除那一项。
+- 与 ADR-0196、ADR-0186 相抵的几句不在本票停用，各自随票 04、05 落地时写复核记录（ADR-0199 越权风险点已点名）。
+- rebase 到远端 main 之上快进推送；纯文档，不跑 Go 测试。
