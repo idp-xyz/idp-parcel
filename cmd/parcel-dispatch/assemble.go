@@ -59,6 +59,7 @@ import (
 	saparcelshipment "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/parcelshipment"
 	sapartycommercial "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/partycommercial"
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
+	satransport "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/transportfulfillment"
 	saapplication "go.idp.xyz/idp-parcel/internal/settlementaccounting/application"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	vecc "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/customscompliance"
@@ -645,6 +646,24 @@ var sellEvaluationRequestSubmittedUndecidedSentinels = []error{
 	ppsettlement.ErrEvaluationFormationUndecided,
 }
 
+// chargeOccurrenceFormedUndecidedSentinels 是 TF 发生项已形成信封 → SA 发起 BUY 评价这一路（ADR-0208）登记的未决哨兵，
+// 恢复动作都是等依赖、重投：
+//   - satransport.ErrChargeOccurrenceNotVisible——信封所指的发生项还读不回（发生项与信封同事务落库，读不回只剩可见性
+//     滞后），或登记册自己答不出。
+//   - satransport.ErrBuyEvaluationTriggerUndecided——触发编排停在自己的未决上：BUY 触发册、协议范围读口（PC 读不动）、
+//     请求册、铸造口或交信封。停在哪一口写在错误正文里。
+//
+// 不在名单里的：
+//   - 入账定局的各格不是错误，处理方答 nil——已发起（含已存在）、没登这个原因、登了却没登费用项目、修订版不经本路发起。
+//     未配置缺的是租户取值，补登之后这一份不回补。
+//   - saapplication.ErrOccurrenceAgreementNotRegistered——发生项上的协议 PC 不认，两侧矛盾，落 publish_failed 等人看。
+//   - satransport.ErrChargeOccurrenceInconsistent、satransport.ErrUntranslatableAnswer、
+//     satransport.ErrUnexpectedBuyEvaluationTriggerOutcome——提供方不变量已破、词汇表外或本包译出的命令被拒，重投不自愈。
+var chargeOccurrenceFormedUndecidedSentinels = []error{
+	satransport.ErrChargeOccurrenceNotVisible,
+	satransport.ErrBuyEvaluationTriggerUndecided,
+}
+
 // wireDispatcher 接依赖图。它与读环境分开，是为了让组合根能对着真库整体验一遍——
 // 一个只能靠进程起停验证的装配点，等于没有验证。
 //
@@ -674,6 +693,8 @@ var sellEvaluationRequestSubmittedUndecidedSentinels = []error{
 // 登记（sa-cc/03）、CC 付款核对形成 → SA 结算输入采用（sa-cc/09；同一条缝的反方向，各记各的 inbox 账）、
 // PP 评价已记录 → FanOut（先 SA 供应商预期成本形成，sa-cc/01、ADR-0200；再 SA 预估客户费用形成，ADR-0190 决定五、六。
 // 两路各认一个方向，另一个方向的评价在各自那一路入账走掉）。
+// TF 运输收费发生项已形成 → 只投 SA 发起 BUY 评价（ADR-0208）。生产方还没上线：ADR-0049 要的是生产方上线之前消费者
+// 先在路由表里，所以这一条先登；在那之前本路一封也收不到，不是接不住。
 // 各类 FanOut 同一 EventType 各投两个独立消费者，顺序一律先 VE 后 PS/NR，避免把投影或
 // 补派生堵在资格墙、终局规则墙或路由证据墙上；SA 发起 SELL 评价那一路排在既有那一路之后，
 // 计费不挡履约与追踪。
@@ -960,6 +981,16 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 		return nil, fmt.Errorf("parcel-dispatch: sell evaluation request submitted undecided translation: %w", err)
 	}
 
+	buyOnOccurrences, err := requestBuyEvaluationOnChargeOccurrenceFormedConsumer(db, outboxStore, inboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	routedBuyOnOccurrences, err := dispatch.WithUndecidedSentinels(
+		buyOnOccurrences, chargeOccurrenceFormedUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: buy evaluation on charge occurrence formed undecided translation: %w", err)
+	}
+
 	veHandover, err := deriveHandoverConsumer(db, inboxStore, projectionDerive)
 	if err != nil {
 		return nil, err
@@ -1089,6 +1120,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 			veinbox.DeclarationSubmissionFormedEventType:           veDeclarationSubmissionRouted,
 			veinbox.ExternalResultReceivedEventType:                veExternalResultRouted,
 			veinbox.TrackingProjectionDerivedEventType:             veCustomerViewRouted,
+			sainbox.ChargeOccurrenceFormedEventType:                routedBuyOnOccurrences,
 
 			// 键比上面各行都长，单起一段：并进去 gofmt 会重排整块的对齐，共享接线文件上多出一片别人的行。
 			psinbox.PreAcceptanceEstimateAdoptionRegisteredEventType: routedEstimateAdoption,
@@ -3166,6 +3198,72 @@ func requestSellEvaluationOnFinalOutcomeConsumer(
 	consumer, err := sainbox.NewFinalOutcomeFormedConsumer(db.Transactor(), inboxStore, processing)
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: sell evaluation on final outcome consumer: %w", err)
+	}
+	return consumer, nil
+}
+
+// requestBuyEvaluationOnChargeOccurrenceFormedConsumer 接 ADR-0208：TF 发生项已形成信封 → SA 消费门 → 按键回读 TF 发生项
+// → BUY 触发编排（触发册取费用项目、PC 取协议的商业范围）→ 登记请求并交信封给计价。跨上下文翻译只在 SA 的
+// `adapters/transportfulfillment` 与 `adapters/partycommercial`。各口都接真册：空触发册答未配置，那是真话，演示租户的
+// 触发行由种子登。
+func requestBuyEvaluationOnChargeOccurrenceFormedConsumer(
+	db *bentopg.DB,
+	outboxStore *outbox.Store,
+	inboxStore *inbox.Store,
+	clock systemClock,
+) (dispatch.Consumer, error) {
+	registry, err := sapostgres.NewEvaluationRequests(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: evaluation requests for charge occurrences: %w", err)
+	}
+	identities, err := saidentity.NewEvaluationRequestIdentities()
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: evaluation request identities for charge occurrences: %w", err)
+	}
+	handoff, err := sapostgres.NewOutboxEvaluationRequestHandoff(db, outboxStore, clock)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: evaluation request handoff for charge occurrences: %w", err)
+	}
+	requests, err := saapplication.NewRequestBuyEvaluationHandler(saapplication.RequestBuyEvaluationDeps{
+		Registry:   registry,
+		Identity:   identities,
+		Downstream: handoff,
+		Clock:      clock,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: request buy evaluation for charge occurrences: %w", err)
+	}
+	triggers, err := sapostgres.NewBuyEvaluationTriggers(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: buy evaluation triggers: %w", err)
+	}
+	agreementScopes, err := pcpostgres.NewSupplierAgreementScopes(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: supplier agreement scopes: %w", err)
+	}
+	scopes, err := sapartycommercial.NewSupplierAgreementScope(agreementScopes)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: supplier agreement scope for buy evaluation: %w", err)
+	}
+	trigger, err := saapplication.NewTriggerBuyEvaluationOnOccurrenceFormedHandler(saapplication.TriggerBuyEvaluationOnOccurrenceFormedDeps{
+		Triggers:   triggers,
+		Agreements: scopes,
+		Requests:   requests,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: trigger buy evaluation on charge occurrence formed: %w", err)
+	}
+	occurrences, err := tfpostgres.NewChargeOccurrences(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: charge occurrences for buy evaluation: %w", err)
+	}
+	processing, err := satransport.NewRequestOnChargeOccurrenceFormedAdapter(occurrences, trigger)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: request buy evaluation on charge occurrence formed: %w", err)
+	}
+	consumer, err := sainbox.NewChargeOccurrenceFormedConsumer(db.Transactor(), inboxStore, processing)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: buy evaluation on charge occurrence formed consumer: %w", err)
 	}
 	return consumer, nil
 }
