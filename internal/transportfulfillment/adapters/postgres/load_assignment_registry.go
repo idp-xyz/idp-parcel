@@ -13,7 +13,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// LoadAssignments 实现 ports.LoadAssignmentRegistry：版本一行，成员逐对象一行。
+// LoadAssignments 实现 ports.LoadAssignmentRegistry：版本一行，成员逐对象一行，分配量逐池一行（0031）。
 //
 // **只插不改。** 变化与撤回在领域里各自形成新版本，库面跟上的方式就是再插一条版本行——本类型
 // 上没有任何 UPDATE，所以「修改分配历史」在这里写不出来。
@@ -110,6 +110,10 @@ func (repository *LoadAssignments) FindByKey(
 	if err := rows.Err(); err != nil {
 		return ports.LoadAssignmentRecord{}, false, fmt.Errorf("find load assignment: %w", err)
 	}
+	rows.Close()
+	if spec.Allocations, err = loadAllocations(ctx, querier, key); err != nil {
+		return ports.LoadAssignmentRecord{}, false, fmt.Errorf("find load assignment: %w", err)
+	}
 
 	assignment, err := domain.RehydrateLoadAssignment(spec)
 	if err != nil {
@@ -120,8 +124,8 @@ func (repository *LoadAssignments) FindByKey(
 
 // FindChainHead 取回该分配此刻未被任何版本回指的那一版。「链头」是派生问答不是可变标记：表上没有 current 列。
 //
-// 本表的库面只守一分配一个首版（0021），不守「一版至多被回指一次」——变化与撤回的入口还没接
-// （tf-unwired-seven/05），并列的链尾今天造不出来。真出现时取最后登记的那一版，让答案可复现而不是看扫描顺序。
+// 库面守一分配一个首版（0021）与一版至多一个后继（0031），链因此是一条线、链头唯一。排序只为在两道索引立起来之前
+// 存下的并列链尾上答案可复现——那两份迁移遇到并列会拒绝施加，所以施加过的库上它不起作用。
 func (repository *LoadAssignments) FindChainHead(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -174,6 +178,11 @@ func (repository *LoadAssignments) Save(
 	if err := assertLoadAssignmentKeyAgrees(record); err != nil {
 		return ports.LoadAssignmentSaveOutcomeInvalid, fmt.Errorf("save load assignment: %w", err)
 	}
+	// 撤回版带着分配量落库，读池时就会把一个已撤回的分配算成还占着预占。领域 Withdraw 已经清空，这里只挡住绕过领域
+	// 拼出来的那一种。
+	if _, withdrawn := record.Assignment.Withdrawn(); withdrawn && len(record.Assignment.Allocations()) > 0 {
+		return ports.LoadAssignmentSaveOutcomeInvalid, fmt.Errorf("save load assignment: a withdrawn version carries allocations")
+	}
 
 	var correctsText *string
 	if corrects, has := record.Assignment.Corrects(); has {
@@ -220,7 +229,86 @@ func (repository *LoadAssignments) Save(
 			return ports.LoadAssignmentSaveOutcomeInvalid, fmt.Errorf("save load assignment: %w", err)
 		}
 	}
+	for _, allocation := range record.Assignment.Allocations() {
+		demand := allocation.Demand()
+		if _, err := executor.Exec(ctx,
+			`INSERT INTO transport_fulfillment.load_assignment_allocation
+			     (tenant_id, assignment_ref, version, pool_id, reservation_id, quantity, unit_ref,
+			      source_kind, source_ref, quantity_basis, recorded_at)
+			 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)`,
+			record.Key.TenantID.String(),
+			record.Key.Assignment.String(),
+			record.Key.Version.String(),
+			allocation.Pool().String(),
+			allocation.Reservation().String(),
+			demand.Quantity(),
+			demand.Unit().String(),
+			demand.Source().Kind().String(),
+			demand.Source().Reference().String(),
+			allocation.Basis().String(),
+			record.RecordedAt.UTC(),
+		); err != nil {
+			return ports.LoadAssignmentSaveOutcomeInvalid, fmt.Errorf("save load assignment: %w", err)
+		}
+	}
 	return ports.LoadAssignmentSaved, nil
+}
+
+// loadAllocations 读回一个版本逐池的分配量，按池身份排，只为读回稳定。逐列走各自的构造门。
+func loadAllocations(
+	ctx context.Context,
+	querier bentopg.Querier,
+	key ports.LoadAssignmentKey,
+) ([]domain.RehydrateCapacityAllocationSpec, error) {
+	rows, err := querier.Query(ctx,
+		`SELECT pool_id, reservation_id, quantity, unit_ref, source_kind, source_ref, quantity_basis
+		   FROM transport_fulfillment.load_assignment_allocation
+		  WHERE tenant_id = $1 AND assignment_ref = $2 AND version = $3
+		  ORDER BY pool_id`,
+		key.TenantID.String(), key.Assignment.String(), key.Version.String(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var allocations []domain.RehydrateCapacityAllocationSpec
+	for rows.Next() {
+		var poolID, reservationID, unit, sourceKind, sourceRef, basisWord string
+		var quantity int64
+		if err := rows.Scan(&poolID, &reservationID, &quantity, &unit, &sourceKind, &sourceRef, &basisWord); err != nil {
+			return nil, err
+		}
+		pool, err := domain.NewCapacityPoolReference(poolID)
+		if err != nil {
+			return nil, err
+		}
+		reservation, err := domain.NewCapacityReservationReference(reservationID)
+		if err != nil {
+			return nil, err
+		}
+		unitRef, err := domain.NewQuantityUnitReference(unit)
+		if err != nil {
+			return nil, err
+		}
+		source, err := demandSourceFrom(sourceKind, sourceRef)
+		if err != nil {
+			return nil, err
+		}
+		basis, err := domain.ParseCapacityAllocationBasis(basisWord)
+		if err != nil {
+			return nil, err
+		}
+		allocations = append(allocations, domain.RehydrateCapacityAllocationSpec{
+			Pool:        pool,
+			Reservation: reservation,
+			Quantity:    quantity,
+			Unit:        unitRef,
+			Source:      source,
+			Basis:       basis,
+		})
+	}
+	return allocations, rows.Err()
 }
 
 // assertLoadAssignmentKeyAgrees 挡住「键说的是一个版本、聚合说的是另一个」那种写入。

@@ -27,7 +27,8 @@ func NewCapacityPools(db *bentopg.DB) (*CapacityPools, error) {
 }
 
 // FindByKey 按（租户+池）取回容量池及其预占。否定结果只回 false。读回经重建门
-// 复验三量守恒，不重放 Reserve/Release/Consume。
+// 复验三量守恒，不重放 Reserve/Release/Consume。预占上的分配关系从各装载分配当前那一版派生（loadAllocationRelations），
+// 也在锁住池行之后读：同一个池上的分配与释放因此和预占一样串行判。
 //
 // 读池一律锁住池那一行（FOR UPDATE）：在写事务里锁到事务结束，不在事务里随这一条语句放。池按值换存：两笔预占各自
 // 读到同一个旧池、各算各的余量、先后换存，后到的那一笔会把先到的预占整份删掉——硬上限与先到者的预占一起丢。锁住读，
@@ -137,7 +138,8 @@ func (repository *CapacityPools) Save(
 }
 
 // Replace 只落预占子表（连同释放明细，外键随预占删）与记录时刻。UPDATE 不含班次/维度/单位/容量。0 行（没有可转换
-// 的池）答 false。
+// 的池）答 false。装载分配的分配行也指着预占，那道外键延迟到提交时核（0031）：这里先删后插回同一组预占，提交时都在；
+// 领域没有删掉一份预占的转换，所以插回的总是同一组引用。
 func (repository *CapacityPools) Replace(
 	ctx context.Context,
 	record ports.CapacityPoolRecord,
@@ -188,6 +190,10 @@ func (repository *CapacityPools) loadReservations(
 	if err != nil {
 		return nil, err
 	}
+	allocations, err := loadAllocationRelations(ctx, querier, key)
+	if err != nil {
+		return nil, err
+	}
 	rows, err := querier.Query(ctx,
 		`SELECT reservation_id, quantity, valid_until, released, consumed, source_kind, source_ref, reserved_at
 		   FROM transport_fulfillment.capacity_reservation
@@ -218,14 +224,15 @@ func (repository *CapacityPools) loadReservations(
 			return nil, err
 		}
 		snapshots = append(snapshots, domain.CapacityReservationSnapshot{
-			Reference:  reference,
-			Quantity:   quantity,
-			Released:   released,
-			Consumed:   consumed,
-			ValidUntil: validUntil,
-			Source:     source,
-			ReservedAt: reservedAt,
-			Releases:   releases[reservationID],
+			Reference:   reference,
+			Quantity:    quantity,
+			Released:    released,
+			Consumed:    consumed,
+			ValidUntil:  validUntil,
+			Source:      source,
+			ReservedAt:  reservedAt,
+			Releases:    releases[reservationID],
+			Allocations: allocations[reservationID],
 		})
 	}
 	return snapshots, rows.Err()
@@ -277,6 +284,61 @@ func (repository *CapacityPools) loadReleases(
 	return releases, rows.Err()
 }
 
+// loadAllocationRelations 按所属预占分组读回本池上的分配关系：各装载分配当前那一版（没有后继、未撤回）在本池上的那一行
+// （ADR-0203 决定二与文末补记）。撤回或改版之后当前版换了，旧版那一行不再满足条件，它分走的量就此归还——不靠任何一次
+// 写去改预占。未撤回再过滤一遍，是让绕过领域拼出来的、带分配量的撤回版也不被算成还占着。
+func loadAllocationRelations(
+	ctx context.Context,
+	querier bentopg.Querier,
+	key ports.CapacityPoolKey,
+) (map[string][]domain.CapacityAllocationSnapshot, error) {
+	rows, err := querier.Query(ctx,
+		`SELECT a.reservation_id, a.assignment_ref, a.version, a.quantity
+		   FROM transport_fulfillment.load_assignment_allocation AS a
+		   JOIN transport_fulfillment.load_assignment AS v
+		     ON v.tenant_id = a.tenant_id
+		    AND v.assignment_ref = a.assignment_ref
+		    AND v.version = a.version
+		  WHERE a.tenant_id = $1 AND a.pool_id = $2
+		    AND NOT v.withdrawn
+		    AND NOT EXISTS (
+		        SELECT 1 FROM transport_fulfillment.load_assignment AS successor
+		         WHERE successor.tenant_id = a.tenant_id
+		           AND successor.assignment_ref = a.assignment_ref
+		           AND successor.corrects_version = a.version)
+		  ORDER BY a.reservation_id, a.assignment_ref`,
+		key.TenantID.String(),
+		key.Pool.String(),
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	allocations := map[string][]domain.CapacityAllocationSnapshot{}
+	for rows.Next() {
+		var reservationID, assignmentRef, version string
+		var quantity int64
+		if err := rows.Scan(&reservationID, &assignmentRef, &version, &quantity); err != nil {
+			return nil, err
+		}
+		assignment, err := domain.NewLoadAssignmentReference(assignmentRef)
+		if err != nil {
+			return nil, err
+		}
+		versionRef, err := domain.NewLoadAssignmentVersion(version)
+		if err != nil {
+			return nil, err
+		}
+		allocations[reservationID] = append(allocations[reservationID], domain.CapacityAllocationSnapshot{
+			Assignment: assignment,
+			Version:    versionRef,
+			Quantity:   quantity,
+		})
+	}
+	return allocations, rows.Err()
+}
+
 func demandSourceFrom(kind, reference string) (domain.CapacityDemandSource, error) {
 	sourceKind, err := domain.ParseCapacityDemandSourceKind(kind)
 	if err != nil {
@@ -289,6 +351,7 @@ func demandSourceFrom(kind, reference string) (domain.CapacityDemandSource, erro
 	return domain.NewCapacityDemandSource(sourceKind, sourceRef)
 }
 
+// insertReservations 落预占与释放明细。分配关系不在这里落：它是读回时从装载分配的版本派生的，分配量只存在那一侧。
 func insertReservations(
 	ctx context.Context,
 	executor bentopg.Executor,
