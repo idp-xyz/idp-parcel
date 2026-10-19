@@ -160,6 +160,8 @@ type operatorRegistryIntakes struct {
 	pricing    *pricinghttp.OperatorRegistryIntake
 	commercial *commercialhttp.OperatorRegistryIntake
 	transport  *tfhttp.OperatorRegistryIntake
+	// nodeOperations 是节点作业的登记写面（ADR-0212 决定二末项：预报有效时窗册），与上面各格同一只铸造器。
+	nodeOperations *nodeopshttp.OperatorRegistryIntake
 	// pricingOperationsRead 不是登记写面：试算与价卡目录查阅挂主数据与运营查阅读（ADR-0152 决定六、ADR-0077；
 	// 票 operator-channel/06、05）。网络、关务、商业的目录查阅同这一面。与登记写面各口共用同一只铸造器。
 	pricingOperationsRead    *pricinghttp.OperatorOperationsReadIntake
@@ -261,12 +263,21 @@ func buildOperatorRegistryIntakes(minter *accessidentity.OperatorMinter) (operat
 	if err != nil {
 		return operatorRegistryIntakes{}, err
 	}
+	nodeOperationsAuthenticator, err := noaccess.NewOperatorRegistryAuthenticator(minter)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
+	nodeOperations, err := nodeopshttp.NewOperatorRegistryIntake(nodeOperationsAuthenticator)
+	if err != nil {
+		return operatorRegistryIntakes{}, err
+	}
 	reads, err := buildOperatorOperationsReads(minter)
 	if err != nil {
 		return operatorRegistryIntakes{}, err
 	}
 	reads.visibility, reads.customs, reads.network, reads.pricing, reads.commercial, reads.transport =
 		visibility, customs, network, pricing, commercial, transport
+	reads.nodeOperations = nodeOperations
 	reads.pricingOperationsRead = pricingOperationsRead
 	reads.networkOperationsRead = networkOperationsRead
 	reads.customsOperationsRead = customsOperationsRead

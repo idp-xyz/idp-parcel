@@ -501,6 +501,11 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 预报有效时窗登记口（ADR-0212 决定二末项）。
+	preAdviceWindowRegistration, err := buildPreAdviceWindowRegistration(db)
+	if err != nil {
+		return err
+	}
 	veRegistration, err := buildVERegistrationOrchestration(db)
 	if err != nil {
 		return err
@@ -751,6 +756,7 @@ func run(logger *slog.Logger) error {
 			identityRecheck,
 			identityDisposition,
 			chargeOccurrenceRegistration,
+			preAdviceWindowRegistration,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,

@@ -1,0 +1,7 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "leadMinutes": 1440,
+  "graceMinutes": 720,
+  "effectiveFrom": "2026-01-01T00:00:00Z",
+  "basis": "SYN-BASIS-PRE-ADVICE-WINDOW-01"
+}

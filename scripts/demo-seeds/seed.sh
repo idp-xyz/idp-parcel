@@ -37,6 +37,7 @@ go build -o "$BIN/" \
   ./cmd/parcel-access-register \
   ./cmd/parcel-settlement-register \
   ./cmd/parcel-transport-register \
+  ./cmd/parcel-node-operations-register \
   ./scripts/demo-seeds/migrate
 
 echo "== 施加迁移计划（${RESET_FLAG:-不重置}） =="
@@ -357,5 +358,12 @@ echo "== 容量池登记（transport-fulfillment：按日期物化登记干线�
 # 随之各建两池（ADR-0201 决定三）。这里只显式登干线一班，让查阅口 capacity-pool 有池可列；准备评估的候选照旧按
 # 日期现算，不靠这一班。运行日期是固定的合成日期，不是「今天」：池与班次的身份都由它派生，重灌同一份答已存在。
 "$BIN/parcel-transport-register" schedule -input "$SEEDS/transport/04-materialized-schedule-szx-sin.json"
+
+echo "== 预报有效时窗登记（node-operations：演示租户一行；票 ps-external-mark-relations/08） =="
+# 预报有效时窗是租户取值（ADR-0212 决定二末项，PAR-NET-18）：一份送站预报只对业务时间落在〔预计送达时刻减提前量，预计送达时刻加
+# 宽限量〕里的送站算数。这一行是演示租户的合成取值（提前 1440 分、宽限 720 分，2026-01-01 起不设终点），不是任何租户的预报惯例，
+# 证据只记 S。没有这一行，演示租户凭预报的交付范围核对态一律答未配置。重灌同一份答已有结果。
+"$BIN/parcel-node-operations-register" -kind pre-advice-window \
+  -file "$SEEDS/node-operations/01-pre-advice-window-syn-tenant-01.json"
 
 echo "种子灌入完成：租户 SYN-TENANT-01，各上下文全部落库。"
