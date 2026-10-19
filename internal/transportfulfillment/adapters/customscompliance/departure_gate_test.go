@@ -98,13 +98,13 @@ func newDepartureGateDB(t *testing.T) *departureGateDB {
 	fixture := &departureGateDB{t: t, pool: pool, view: view}
 	registry, err := ccpostgres.NewNodeCustomsZoneRegistrations(db)
 	must(err)
+	tenant := ref(t, ccdomain.NewTenantID, departureTenant)
 	for node, zone := range map[string]string{
 		"SYN-NODE-SHA-HUB": "SYN-ZONE-CN", "SYN-NODE-SZX-GATE": "SYN-ZONE-CN", "SYN-NODE-SIN-HUB": "SYN-ZONE-SG",
 	} {
+		nodeRef, zoneRef := ref(t, ccdomain.NewNetworkNodeReference, node), ref(t, ccdomain.NewCustomsZoneReference, zone)
 		if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
-			_, err := registry.RegisterNodeCustomsZone(txCtx, ref(t, ccdomain.NewTenantID, departureTenant),
-				ref(t, ccdomain.NewNetworkNodeReference, node), ref(t, ccdomain.NewCustomsZoneReference, zone),
-				time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
+			_, err := registry.RegisterNodeCustomsZone(txCtx, tenant, nodeRef, zoneRef, time.Date(2026, 1, 1, 0, 0, 0, 0, time.UTC))
 			return err
 		}); err != nil {
 			t.Fatalf("登区域 %s：%v", node, err)
