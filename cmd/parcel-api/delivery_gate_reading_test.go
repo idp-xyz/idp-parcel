@@ -116,7 +116,7 @@ func (rig deliveryGateRig) redeliver(t *testing.T, object string) (int, map[stri
 // Covers: `AT-TF-256`、`AT-TF-263`、`AT-TF-265` 生产装配真库半边，票 demo-chain-gaps/66 完成判据的演示一条——
 // 新加坡枢纽交给尾程（releasingNode=SYN-NODE-SIN-HUB）立起尾程段，之后有效交付答 201 `DELIVERY_REGISTERED`，gateReading
 // 为 `NOT_GUARDED`，at 是新加坡枢纽：包裹不在任何关务案卷，关务只适用最终交付那一道、答不受门禁；判断落进关务的判断册，
-// 依据原文随交付落册、不回给登记方。参与随交付结束，交付意图照常交给 PS 终局（没有续办引用）。原样重发答 200
+// 依据原文随交付落册、不回给登记方。参与随交付结束，交付意图照常入队交给 PS 终局。原样重发答 200
 // `EXISTING_VERSION`、回显首次读数，关务判断册不多一行——此刻参与已结束，重读只会读成「不在任何段里」。查阅册列出整格。
 func TestTheWiredDeliveryRecordsAFinalDeliveryGateReadingAgainstARealDatabase(t *testing.T) {
 	rig, judgements := newDeliveryGateRig(t)
@@ -133,8 +133,11 @@ func TestTheWiredDeliveryRecordsAFinalDeliveryGateReadingAgainstARealDatabase(t 
 	if answer["participationEnd"] != "PARTICIPATION_ENDED" {
 		t.Fatalf("participationEnd = %q，want 交付结束尾程段的参与", answer["participationEnd"])
 	}
-	if _, pending := answer["continuationReference"]; pending {
-		t.Fatalf("交付意图没交出去：%v", answer)
+	var intents int
+	if err := rig.pool.QueryRow(t.Context(),
+		`SELECT count(*) FROM `+migrate.SchemaBento+`.outbox WHERE event_type = 'transport-fulfillment.effective-delivery.registered'`).
+		Scan(&intents); err != nil || intents != 1 {
+		t.Fatalf("交给 PS 终局的有效交付意图 %d 封（%v），want 1——读数不改交付信封", intents, err)
 	}
 	if strings.Contains(answer["gateReading"], "AADJ-") || strings.Contains(answer["gateReading"], "FINAL_DELIVERY") {
 		t.Fatalf("答复带出了关务判断标识或依据原文：%s", answer["gateReading"])
