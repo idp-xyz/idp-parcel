@@ -11,6 +11,10 @@
 --
 -- 决定种类的全集取此前各份重建的并集（0011 头注那条约定）：迁移不按编号先后施加，本份可能晚于编号更大的一份施加，只列
 -- 本份基线上的全集会把后来的种类删掉、让它们的授予登不进。
+--
+-- 全集另含 CAPACITY_RESERVATION、CAPACITY_RELEASE：ADR-0203 决定三为容量预占与释放定下这两个词，由同一波的另一张票随
+-- 它自己的迁移 0012 加入。新库按编号施加时本份在 0012 之后，不列这两种就会把它们删掉——与哪份先进 main 无关。多列此刻
+-- Go 侧可能还没定义的词无害：授予册只经领域词表写入，库面这条 CHECK 只守「不是封闭集外的串」。
 
 ALTER TABLE access_identity.operator_grant
     DROP CONSTRAINT operator_grant_decision_kind_decided;
@@ -25,7 +29,8 @@ ALTER TABLE access_identity.operator_grant
             'PENDING_IDENTITY_RECHECK',
             'TRANSPORT_COMMISSION_SUBMISSION', 'TRANSPORT_CHARGE_OCCURRENCE_REGISTRATION',
             'IDENTITY_CONFLICT_DISPOSITION',
-            'BOOKING_REQUEST_SUBMISSION'
+            'BOOKING_REQUEST_SUBMISSION',
+            'CAPACITY_RESERVATION', 'CAPACITY_RELEASE'
         ));
 
 ALTER TABLE access_identity.integration_client_grant
