@@ -128,3 +128,8 @@ Blocked by: 无
 
 - 分支 `claude-tfa02` rebase 到远端 main 之上，快进推送；迁移用 `transport_fulfillment/0021`。验证钉 `0a5afa74` 之后远端只多一笔纯 `.md`（`4c2b0daa`，票 03、05 裁定），rebase 后代码与已验那份逐字相同，未重跑。
 - 推送方全量一次：钉 `0a5afa74` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 143 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
+
+- **评审 ← 用户经实施子代理另起的只读隔离子代理（非作者）· 钉 `15174149`（基线 `59403e6f`）· 2026-10-18**：评审者用 `git archive 15174149` 导出副本审与跑，仓库未改。
+  - **Spec**：通过，阻断无。核过编排「按键查 → 读链头 → Save → 撞键后先按键读回、再按分配读链头」的次序与各失败支；ReadCommitted 下撞键后再读读得到赢家；不写冲突目标的 `ON CONFLICT DO NOTHING` 覆盖部分唯一索引；连接池上限 2 下不死锁；cmd 四例 `-count=5` 稳定；0021 与 0017 同形、存量用 RAISE 如实报出。
+  - **Standards**：阻断无。非阻断 2：(1) `TestALosingConcurrentFirstVersionAnswersAlreadyFormedWithTheWinner` 放行赢家之前若 Fatal，赢家占着连接，连接池清理挂到超时；(2) `LoadAssignments.Save` 与 `ports.LoadAssignmentVersionAlreadyRegistered` 的注释数了迁移里的唯一约束。
+  - **处置**：两条都在 `c5086aaf` 修掉（放行包进 `sync.Once` 登记进 `t.Cleanup`，变异自检：放行前插 Fatal 现 0.47 秒干净报红；注释改成「撞哪道唯一都折成这一格」）。票外两件发现另立 tf-face-algebra/12、13。
