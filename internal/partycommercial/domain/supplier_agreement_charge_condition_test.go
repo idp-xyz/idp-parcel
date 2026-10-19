@@ -257,7 +257,8 @@ func TestADeclaredDigestOfTheOtherKnownShapeIsAMismatch(t *testing.T) {
 	}
 }
 
-// Covers: AT-PC-052——三处共用一个原词翻译：不计费却带数量形、计费却不带、集外原因都拒，不丢掉那一格。
+// Covers: AT-PC-052——原词翻译只在 ChargeOccurrenceConditionOf 一处：不计费却带数量形、计费却不带、集外原因都拒，
+// 不丢掉那一格。
 func TestChargeConditionWordsTranslateInOnePlace(t *testing.T) {
 	if _, err := domain.ChargeOccurrenceConditionOf("ACTUAL_FULFILLMENT", true, "PER_SEGMENT"); err != nil {
 		t.Fatalf("合法声明 err = %v", err)

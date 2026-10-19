@@ -166,8 +166,8 @@ func chargeConditionsOf(entries []canonicalChargeCondition) (ChargeOccurrenceCon
 	return NewChargeOccurrenceConditions(conditions...)
 }
 
-// ChargeOccurrenceConditionOf 按原词立一条声明：计费必带数量形，不计费必不带。规范化文档的折回、批文与表单载荷的
-// 翻译都走这一处，三处对「不计费却带了数量形」只有一种读法——拒，而不是丢掉那一格。
+// ChargeOccurrenceConditionOf 按原词立一条声明：计费必带数量形，不计费必不带。凡把原词折成声明的入口都走这一处，
+// 对「不计费却带了数量形」因此只有一种读法——拒，而不是丢掉那一格。
 func ChargeOccurrenceConditionOf(reasonWord string, charged bool, formWord string) (ChargeOccurrenceCondition, error) {
 	reason, known := TransportChargeReasonNamed(reasonWord)
 	if !known {

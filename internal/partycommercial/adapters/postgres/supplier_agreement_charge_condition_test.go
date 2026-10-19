@@ -16,7 +16,7 @@ import (
 )
 
 // 本文件对真实 PostgreSQL 16 证供应商协议的收费发生条件一节（票 demo-chain-gaps/29，ADR-0209；迁移 0038）：条件随正文
-// 同笔落、两只读口原样读回；没声明读成没声明；同内容重放答已登记、条件不同答内容冲突；库面守住原因与数量形的
+// 同笔落、LoadSupplierAgreement 与 LoadSupplierAgreementVersion 都原样读回；没声明读成没声明；同内容重放答已登记、条件不同答内容冲突；库面守住原因与数量形的
 // 封闭集与「计费必带数量形」。夹具全是合成串，证据只记 S。
 
 // newChargeConditionFixture 与 newSupplierAgreementContents 同形，多交出底层连接池：库面 CHECK 要绕过适配器直写才证得到。
@@ -60,7 +60,7 @@ func withConditions(t *testing.T, agreement domain.SupplierAgreement, conditions
 	return declared
 }
 
-// Covers: AT-PC-053——条件随正文同笔落，按版本点读与按已选版本读两口都原样读回；同一对象另一版不带条件，读成没声明。
+// Covers: AT-PC-053——条件随正文同笔落，按版本点读与按已选版本读都原样读回；同一对象另一版不带条件，读成没声明。
 func TestChargeConditionsRoundTripWithTheAgreementBody(t *testing.T) {
 	repository, contents, _, transactor := newSupplierAgreementContents(t)
 	ctx := t.Context()
