@@ -1,7 +1,7 @@
 # 31 TF 命令答复的时刻经登记册精度带小数秒回显：关段与承运商判断只回显到秒，冲突与重放分不出
 
 Category: enhancement
-Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc31`；30 已进 main，Blocked by 解除）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 3 评审遗留；用户授权代决）
+Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc31`；30 已进 main，Blocked by 解除）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 3 评审遗留；用户授权代决）
 Blocked by: operator-channel/30 进 main（要用它的 AtRegistryPrecision）
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)。被评的是 [20](./20-tf-closure-dispatch-task-and-pickup-judgment-canonicalization.md)，代码 `857453d8`。
 出处：票 20 Comments「评审 ← 会话 idp-parcel-9b 起的隔离子代理 · 钉 `857453d8`」，Spec 非阻断 (2)。取证钉 main `8d22729f`。证据层级 `S`。
@@ -69,3 +69,29 @@ HTTP 探针在 main 上实测：
 - [ ] 在 `internal/transportfulfillment/adapters/http` 的非测试文件里 `grep -rnF 'Format(time.RFC3339)'`，无命中。
 - [ ] `go build ./...`、`go vet ./...` 退出码为 0，`gofmt -l .` 无输出；带 DSN 跑 `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/... ./internal/architecture/...`，全部 ok。
 - [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：从当时的 `origin/main` 起分支、作者自验、非作者评审（空闲通道，或 `/code-review` 的隔离子代理，两轴分开）、推送方在干净检出上带 DSN 跑全量。
+
+## 完成记录（2026-10-19，会话 idp-parcel-9b 的实施子代理，分支 claude-oc31）
+
+落点：
+
+- `rfc3339` 挪进本包中性文件 `registry_instant.go`，改为 `domain.AtRegistryPrecision(at).Format(time.RFC3339Nano)`；`optionalInstant` 照旧经它，查阅答复随之同精度。`catalogue_intake.go` 不再自带这两个助手。
+- 命令答复族全部改走 `rfc3339`：关段 `closedAt`；承运商首次有效收寄 `occurredAt`、`judgedAt`、`recordedAt`（链查询口同经 `carrierPickupBodyOf`）；派送任务与派送触发的 `windowFrom`、`windowTo`、`openedAt`；有效时间判断的 `occurredAt`、`receivedAt`、`effectiveAt`、`recordedAt`；有效时间规则 `recordedAt`；运动事实 `occurredAt`；凭证 `effectiveFrom`、`effectiveUntil`、`changedAt`；主单 `changedAt`；装载分配 `assignedAt`（「分配已形成」回显链头同经它）；票写成后新增的终止参与 `endedAt`（tf-face-algebra/03）也一并纳入。POD 与交接更正一路（operator-channel/41）在本包非测试文件里没有按 `time.RFC3339` 回显的格，无需改。
+- 包内非测试文件 `grep -rnF 'Format(time.RFC3339)'` 无命中。管理台按字串比这些时刻的地方经 grep 核无，前端未改。
+
+用例（各格对应）：
+
+- `TestAnAlreadyClosedSegmentEchoesTheClosingTimeAtRegistryPrecision`：`.250Z` 关段后以 `.750Z` 与同串重投，回显都是 `.25Z`；纳秒命令回显折到 `.123456Z`。
+- `TestCarrierPickupEchoesTheSubSecondOccurredAtAcrossConflictAndReplay`：`.250Z` 首判 201、`.750Z` 200 `CONTENT_CONFLICT`、同串 200 `ALREADY_RECORDED`，`pickup.occurredAt` 三次同为 `.25Z`。
+- `TestCarrierPickupFirstAnswerAndReplayEchoTheSameRegistryInstants`：命令与时钟带纳秒，首答 201 与原样重放 200 的 `occurredAt`／`judgedAt`／`recordedAt` 逐格相同且折到微秒。
+- `TestCredentialFirstAnswerAndReplayEchoTheSameRegistryInstant`：凭证登记带纳秒 `effectiveFrom`，首登 201 与 `EXISTING_VERSION` 200 回显同为 `.123456Z`。
+- 整秒值：既有整秒用例（含终止参与的逐字节比对）未改照过。
+
+先红后绿：实现前四个新用例全红（回显均为 `…:00Z`，丢了秒以下），实现后全绿。
+
+门：`gofmt -l internal/ cmd/` 无输出；`go build ./...`、`go vet ./...` 退 0；带 DSN `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/... ./internal/architecture/...` 11 ok、0 FAIL。机制清点重生成（新增生产文件一个，transportfulfillment 计数随之变），单独提交。
+
+越出票面地盘：`terminate_fulfillment_participation.go`（终止参与 `endedAt`，票写成后新增的回显格，按会话指示纳入）；新增 `registry_instant.go`；`docs/product/MECHANISM-INVENTORY.md`。
+
+证据层级：`S`。
+
+评审：待会话读 diff 审。
