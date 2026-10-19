@@ -639,6 +639,18 @@ func TestAFailingRegistryOrHandoffIsUndecided(t *testing.T) {
 	}
 }
 
+// Covers: 协议核对口答「在册」却交回不成形的法人与快照，是适配器缺陷，不是请求有错——上抛 error，不答未受理，
+// 否则登记方会去改一份本来没错的请求；什么都不写。
+func TestAnAgreementCheckHandingBackNoLegalEntityIsRaised(t *testing.T) {
+	rig := newOccurrenceRig(t)
+	rig.agreements.check = ports.SupplierAgreementCheck{Standing: ports.SupplierAgreementRegistered}
+	result, err := rig.handler().Register(t.Context(), actualFulfillmentCommand(t))
+	if err == nil {
+		t.Fatalf("应上抛，却答 %q/%q", result.Outcome(), result.Detail())
+	}
+	assertNothingWritten(t, rig)
+}
+
 // Covers: 订舱与取消两种原因的事实依据随票 demo-chain-gaps/28 接上，在那之前如实答未受理；断言缺席同样不形成——
 // 首版的发生条件只由登记者断言作答（ADR-0207 决定三）。
 func TestReasonsWithoutAFactPathAndUnassertedConditionsAreNotAccepted(t *testing.T) {

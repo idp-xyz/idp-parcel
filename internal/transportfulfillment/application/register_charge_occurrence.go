@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"strings"
 	"time"
 
@@ -333,9 +334,12 @@ func (handler *RegisterChargeOccurrenceHandler) Register(
 	spec.LegalEntity = check.LegalEntity
 	spec.Agreement = check.Snapshot
 
+	// 请求能出错的每一格都已在协议核对之前判过：登记方声明的几格过了构造门，事实与成员过了事实那一半。走到这里
+	// 还形成不了，只剩核对口交回了不成形的法人或快照、或事实源自相矛盾，都是适配器缺陷；答未受理会让登记方去改一份
+	// 本来没错的请求，重试也不会变，所以响亮上抛，由装配点回滚整笔。
 	occurrence, err := fact.form(spec)
 	if err != nil {
-		return chargeNotAccepted(ChargeRequestMalformed), nil
+		return RegisterChargeOccurrenceResult{}, fmt.Errorf("register charge occurrence: forming after the agreement check: %w", err)
 	}
 	if covering, covered, err := handler.deps.Occurrences.FindCovering(ctx, coverage); err != nil {
 		return chargeUndecided(OccurrenceRegistryUnavailable, continuation), nil
@@ -364,6 +368,10 @@ func (handler *RegisterChargeOccurrenceHandler) Register(
 // 同一成员的另一项）时答冲突并回显它：同一件事不能既有外部成本又不适用，要改的是先前那一次登记（更正走有效性
 // 修订），不是这一次答复。判断那一格同样先问册：承运商判断可以在登记之后才改判成自营法人，那时直接答不适用，就把
 // 册上那一份外部成本静默地说成了没有。
+//
+// 交集一问在前、按身份查在后，次序不能倒：交集一问先取（租户、原因、事实依据）的串行锁。另一笔事务正在登记同一
+// 身份的外部发生项、握着这把锁而行还没提交时，先按身份查看不见那一行，等到锁之后的交集一问又按身份把它排除，两问
+// 都落空，自营就答成不适用，而册上随即有了同一件事的外部成本。锁之后再按身份查，读到的是对方已提交的那一行。
 func (handler *RegisterChargeOccurrenceHandler) selfOperated(
 	ctx context.Context,
 	key ports.ChargeOccurrenceKey,
@@ -371,19 +379,19 @@ func (handler *RegisterChargeOccurrenceHandler) selfOperated(
 	continuation string,
 	detail ChargeOccurrenceDetail,
 ) (RegisterChargeOccurrenceResult, error) {
-	existing, found, err := handler.deps.Occurrences.FindByKey(ctx, key)
-	if err != nil {
-		return chargeUndecided(OccurrenceRegistryUnavailable, continuation), nil
-	}
-	if found {
-		return RegisterChargeOccurrenceResult{outcome: ChargeOccurrenceConflict, record: existing, hasRecord: true}, nil
-	}
 	covering, covered, err := handler.deps.Occurrences.FindCovering(ctx, coverage)
 	if err != nil {
 		return chargeUndecided(OccurrenceRegistryUnavailable, continuation), nil
 	}
 	if covered {
 		return membersCovered(covering), nil
+	}
+	existing, found, err := handler.deps.Occurrences.FindByKey(ctx, key)
+	if err != nil {
+		return chargeUndecided(OccurrenceRegistryUnavailable, continuation), nil
+	}
+	if found {
+		return RegisterChargeOccurrenceResult{outcome: ChargeOccurrenceConflict, record: existing, hasRecord: true}, nil
 	}
 	return RegisterChargeOccurrenceResult{outcome: ChargeOccurrenceNotApplicable, detail: detail}, nil
 }
