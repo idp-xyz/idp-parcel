@@ -81,6 +81,10 @@ func buildIdentityRecheckDeps(db *bentopg.DB) (nodeopsapp.RecheckPendingIdentity
 	if err != nil {
 		return none, err
 	}
+	scope, err := nopostgres.NewDeliveryScopeEvidence(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: recheck delivery scope evidence: %w", err)
+	}
 	return nodeopsapp.RecheckPendingIdentityDeps{
 		Identity:       identity,
 		ServiceResults: serviceResults,
@@ -88,6 +92,7 @@ func buildIdentityRecheckDeps(db *bentopg.DB) (nodeopsapp.RecheckPendingIdentity
 		Pending:        receptions,
 		Versions:       versions,
 		Downstream:     downstream,
+		Scope:          scope,
 		Clock:          clock,
 	}, nil
 }

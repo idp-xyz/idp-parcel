@@ -12,9 +12,9 @@ import (
 	psports "go.idp.xyz/idp-parcel/internal/parcelshipment/ports"
 )
 
-// ParcelIdentityView 经 PS 的外部标识关联册核对现场观察到的号码（ADR-0184 决定五、ADR-0195）。它只翻译：哪些包裹
-// 此刻被这个号码标识、号码是否另被一份`已提交`委托报过，由 PS 的读口答；答复怎么分走向（关联、待识别、身份冲突）由
-// 收寄编排判。
+// ParcelIdentityView 经 PS 的外部标识关联册核对现场观察到的号码（ADR-0184 决定五、ADR-0195、ADR-0212 决定四）。它只翻译：哪些包裹
+// 此刻被这个号码标识、各自是否范围相容、号码是否另被一份`已提交`委托报过，由 PS 的读口答；答复怎么分走向（关联、待识别、身份冲突）
+// 由收寄编排经 ParcelIdentityAnswer.Verdict 判。
 type ParcelIdentityView struct {
 	parcels psports.ParcelExternalIdentifierView
 }
@@ -29,17 +29,19 @@ func NewParcelIdentityView(parcels psports.ParcelExternalIdentifierView) (*Parce
 	return &ParcelIdentityView{parcels: parcels}, nil
 }
 
-// ResolveParcelIdentity 交回此刻被这个号码标识的正式包裹，与 PS 答出的歧义信号。号码原样交给 PS 逐字比对，这里不
-// 折算；观察里一个号码都没有（空或全空白）答零个候选——没有线索的实物就是待识别，不是依赖故障；号码带 NUL，不可能在册，
-// 同样答零个候选、不去问 PS。PS 读不动原样交回，
-// 编排据此不形成答案、不落册（ADR-0186）：拿空候选顶替会把可能已知的包裹落成待识别。
+// ResolveParcelIdentity 交回此刻被这个号码标识的正式包裹、各自的范围相容，与 PS 答出的歧义信号。号码原样交给 PS 逐字比对，这里不
+// 折算；scope 里的客户账户逐字交给 PS，PS 只拿它比、不回传别的客户账户（ADR-0212 决定四「不交分配方、客户账户或委托」的读法）。
+// 观察里一个号码都没有（空或全空白）答零个候选——没有线索的实物就是待识别，不是依赖故障；号码带 NUL，不可能在册，同样答零个候选、
+// 不去问 PS。PS 读不动原样交回，编排据此不形成答案、不落册（ADR-0186）：拿空候选顶替会把可能已知的包裹落成待识别。
 func (view *ParcelIdentityView) ResolveParcelIdentity(
 	ctx context.Context,
 	tenant nodomain.TenantID,
 	observation noports.ExternalMarkObservation,
+	scope []nodomain.CustomerAccountReference,
 ) (noports.ParcelIdentityAnswer, error) {
+	scoped := len(scope) > 0
 	if strings.TrimSpace(observation.Mark) == "" {
-		return noports.ParcelIdentityAnswer{}, nil
+		return noports.ParcelIdentityAnswer{Scoped: scoped}, nil
 	}
 	psTenant, err := psdomain.NewTenantID(tenant.String())
 	if err != nil {
@@ -51,25 +53,34 @@ func (view *ParcelIdentityView) ResolveParcelIdentity(
 	if errors.Is(err, psdomain.ErrExternalIdentifierNumberNotStorable) {
 		// 只剩带 NUL 的号走到这里：Postgres 的 text 存不下它，它确定不在册，答零个候选是真话。拿去问反倒在库面报错，收寄会
 		// 读成身份读不动，落未核对的待识别、响重核门铃，而重核拿着同一个号永远续不上。
-		return noports.ParcelIdentityAnswer{}, nil
+		return noports.ParcelIdentityAnswer{Scoped: scoped}, nil
 	}
 	if err != nil {
 		return noports.ParcelIdentityAnswer{}, fmt.Errorf("%w: mark: %v", ErrUntranslatableAnswer, err)
 	}
-	found, err := view.parcels.FindParcelsByExternalIdentifier(ctx, psTenant, number)
+	accounts := make([]psdomain.CustomerAccountID, 0, len(scope))
+	for _, account := range scope {
+		translated, err := psdomain.NewCustomerAccountID(account.String())
+		if err != nil {
+			return noports.ParcelIdentityAnswer{}, fmt.Errorf("%w: customer account: %v", ErrUntranslatableAnswer, err)
+		}
+		accounts = append(accounts, translated)
+	}
+	found, err := view.parcels.FindParcelsByExternalIdentifier(ctx, psTenant, number, accounts)
 	if err != nil {
 		return noports.ParcelIdentityAnswer{}, fmt.Errorf("node operations parcelshipment adapter: find parcels by external identifier: %w", err)
 	}
 	answer := noports.ParcelIdentityAnswer{
-		Candidates: make([]nodomain.ParcelAssociationReference, 0, len(found.Parcels)),
+		Candidates: make([]noports.ParcelIdentityCandidate, 0, len(found.Candidates)),
 		Ambiguous:  found.DeclaredBySubmittedRequest,
+		Scoped:     scoped,
 	}
-	for _, parcel := range found.Parcels {
-		candidate, err := nodomain.NewParcelAssociationReference(parcel.String())
+	for _, candidate := range found.Candidates {
+		parcel, err := nodomain.NewParcelAssociationReference(candidate.Parcel.String())
 		if err != nil {
 			return noports.ParcelIdentityAnswer{}, fmt.Errorf("%w: parcel: %v", ErrUntranslatableAnswer, err)
 		}
-		answer.Candidates = append(answer.Candidates, candidate)
+		answer.Candidates = append(answer.Candidates, noports.ParcelIdentityCandidate{Parcel: parcel, ScopeCompatible: candidate.ScopeCompatible})
 	}
 	return answer, nil
 }

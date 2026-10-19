@@ -22,6 +22,8 @@ import (
 // 同时钉 `AT-NO-061` 的真库面（票 no-reception-identity/05、ADR-0210 决定五）：身份一格只读各链当前有效版本。先到那件的
 // 冲突版指名了原判断，链头只剩冲突版，原因集是{待识别, 身份冲突}，不再只是身份冲突；后到那件只有自己那一版，原因集照旧
 // 是{待识别, 身份冲突}。
+//
+// 两件都带着那个客户账户的送站预报：ADR-0212 决定四之后客户包裹件号的唯一识别要有可验证交付范围，一码两物只从唯一命中那一支来。
 func TestTheWiredReceptionTurnsOneMarkOnTwoUnitsIntoAnIdentityConflict(t *testing.T) {
 	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
@@ -32,11 +34,13 @@ func TestTheWiredReceptionTurnsOneMarkOnTwoUnitsIntoAnIdentityConflict(t *testin
 		t.Fatalf("装配收寄编排：%v", err)
 	}
 	acceptSubmitted(t, db, submitWithCustomerParcelNumber(t, db, "SYN-CUSTOMER-PARCEL-NRI01"))
+	basis := preAdviseOnRealDatabase(t, db, "SYN-CUSTOMER-1", "SYN-CUSTOMER-PARCEL-NRI01")
 
 	deliver := func(sourceID, unit string) nodeopsapp.ReceiveDeliveredUnitCommand {
 		command := receptionCommand(t, sourceID, nodeopsapp.ExplicitReception)
 		command.Unit = mustValue(t, nodomain.NewHandlingUnitID, unit)
 		command.Mark = noports.ExternalMarkObservation{Mark: "SYN-CUSTOMER-PARCEL-NRI01"}
+		command.ScopeBasis = basis
 		return command
 	}
 	first := deliver("SYN-DELIVERY-NRI01-A", "SYN-UNIT-NRI01-A")

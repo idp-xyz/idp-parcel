@@ -91,8 +91,8 @@ func awaitAdvisoryWaiters(t *testing.T, pool *pgxpool.Pool, want map[string]int,
 	return false
 }
 
-// sameUnitConcurrency 备一件带客户包裹件号、已接受的包裹，交回生产装配的收寄编排、照生产装配的依赖与一条按那个号码明确接收的
-// 命令。
+// sameUnitConcurrency 备一件带客户包裹件号、已接受的包裹与那个客户账户列着它的送站预报，交回生产装配的收寄编排、照生产装配的依赖
+// 与一条按那个号码、带着那份预报明确接收的命令（ADR-0212 决定四：客户包裹件号的唯一识别要有可验证交付范围）。
 func sameUnitConcurrency(t *testing.T, number string) (*pgxpool.Pool, *bentopg.DB, nodeopsapp.ReceiveDeliveredUnitDeps, func(sourceID, unit string) nodeopsapp.ReceiveDeliveredUnitCommand) {
 	t.Helper()
 	pool := pgtest.Pool(t)
@@ -101,6 +101,7 @@ func sameUnitConcurrency(t *testing.T, number string) (*pgxpool.Pool, *bentopg.D
 		t.Fatalf("构造框架 DB：%v", err)
 	}
 	acceptSubmitted(t, db, submitWithCustomerParcelNumber(t, db, number))
+	basis := preAdviseOnRealDatabase(t, db, "SYN-CUSTOMER-1", number)
 	deps, err := buildReceptionDeps(db)
 	if err != nil {
 		t.Fatalf("装配收寄依赖：%v", err)
@@ -109,6 +110,7 @@ func sameUnitConcurrency(t *testing.T, number string) (*pgxpool.Pool, *bentopg.D
 		command := receptionCommand(t, sourceID, nodeopsapp.ExplicitReception)
 		command.Unit = mustValue(t, nodomain.NewHandlingUnitID, unit)
 		command.Mark = noports.ExternalMarkObservation{Mark: number}
+		command.ScopeBasis = basis
 		return command
 	}
 	return pool, db, deps, deliver

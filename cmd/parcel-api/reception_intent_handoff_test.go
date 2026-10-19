@@ -41,7 +41,8 @@ func (handoff *failingIntakeHandoff) HandOffNodeIntake(ctx context.Context, inte
 }
 
 // receptionWithFailingHandoff 在真库上备一件带客户包裹件号、已接受的包裹，交回照生产依赖装的收寄编排——意图交付换成先失败
-// failures 次的那一只——与一条按那个号码明确接收的命令。只有形成了的收寄才交意图，所以命令要唯一识别得出包裹。
+// failures 次的那一只——与一条按那个号码明确接收的命令。只有形成了的收寄才交意图，所以命令要唯一识别得出包裹：它带着那个客户账户
+// 的送站预报（ADR-0212 决定四）。
 func receptionWithFailingHandoff(
 	t *testing.T,
 	sourceID string,
@@ -65,6 +66,7 @@ func receptionWithFailingHandoff(
 	}
 	command := receptionCommand(t, sourceID, nodeopsapp.ExplicitReception)
 	command.Mark = noports.ExternalMarkObservation{Mark: "SYN-CUSTOMER-PARCEL-0001"}
+	command.ScopeBasis = preAdviseOnRealDatabase(t, db, "SYN-CUSTOMER-1", "SYN-CUSTOMER-PARCEL-0001")
 	return pool, reception, command
 }
 

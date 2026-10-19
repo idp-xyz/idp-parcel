@@ -213,7 +213,22 @@ go run ./cmd/parcel-dispatch
 | 撤自己的 / 再撤一次 | `201 DELIVERY_PRE_ADVICE_WITHDRAWN` / `200 EXISTING_RESULT` |
 | 撤别的客户账户的，或一份不存在的 | `404 DELIVERY_PRE_ADVICE_NOT_VISIBLE`，两种同答 |
 
-收寄带预报标识、按预报判范围归票 11。在那之前，交了预报也不改变收寄的身份判断；有效时窗（种子 `node-operations/01`）也是在收寄判范围时才读。
+**送站带预报标识**（票 [ps-external-mark-relations/11](../../.scratch/ps-external-mark-relations/issues/11-identity-check-judges-the-verifiable-delivery-scope.md)，ADR-0212 决定四、七、十）：客户包裹件号的送站此后要有可验证交付范围才唯一识别，没带依据的送站落待识别、不记冲突，所以这一段动线改成**送站前先交预报**。收寄口载荷多一个可选格 `deliveryScopeBasis`（`{"kind":"DELIVERY_PRE_ADVICE","id":"PREADV-…"}`），答复多交付范围核对态三键（`deliveryScopeCheck`、`deliveryScopeUnverifiedReason`、`deliveryScopeInapplicability`）。演示用 `scripts/demo-seeds/receive-one-delivery.sh <外部标识>`：配置员令牌、上海枢纽那台合成设备，设了 `IDP_PARCEL_PRE_ADVICE_ID` 就带上它。
+
+1. `submit-one-shipment.sh` 提交一单，记下它的客户包裹参考；
+2. `PRE_ADVICE_ID=$(scripts/demo-seeds/submit-one-pre-advice.sh <那个参考>)` 交一份预报（节点缺省 `SYN-NODE-SHA-HUB`、预计送达缺省此刻往后两小时，落在种子时窗〔提前一天，宽限半天〕里）；
+3. 委托接受之后 `IDP_PARCEL_PRE_ADVICE_ID=$PRE_ADVICE_ID scripts/demo-seeds/receive-one-delivery.sh <那个参考>`，答 `201 INTAKE_FORMED`、关联那件包裹、核对态 `VERIFIED`；
+4. 不带预报再送一件同号：`scripts/demo-seeds/receive-one-delivery.sh <那个参考>`，答 `200 PENDING_IDENTIFICATION`、候选记那件包裹、不记冲突、核对态 `UNVERIFIED` / `NO_BASIS`。
+
+| 送站 | 答复 |
+|---|---|
+| 带列了这个号、节点相符、在时窗里的预报 | `201 INTAKE_FORMED`，`deliveryScopeCheck: VERIFIED` |
+| 不带依据 | `200 PENDING_IDENTIFICATION`，`UNVERIFIED` / `NO_BASIS`，不记冲突 |
+| 带的预报已撤回 / 节点不符 / 在时窗外 | `200 PENDING_IDENTIFICATION`，`UNVERIFIED` / `BASIS_NOT_APPLICABLE` / `WITHDRAWN`、`NODE_MISMATCH`、`OUTSIDE_WINDOW` |
+| 带的预报没列这个号 | `200 PENDING_IDENTIFICATION`，`UNVERIFIED` / `NUMBER_NOT_PRE_ADVISED` |
+| 依据载荷种类拼错或标识为空 | `400 MALFORMED_REQUEST` |
+
+有效时窗（种子 `node-operations/01`）在收寄判范围时才读；租户没登时窗，核对态答 `UNCONFIGURED`，身份按没有范围判。
 
 > 2026-10-19 实走（票 ps-external-mark-relations/09 作者子代理；实测，只记 `S`）：一次性库 `psxm09_demo`，`seed.sh` 退 0，客户端两格授予、两条对照、两条区间都答 `RECORDED` / `REGISTERED`。共享的集成客户端发行方容器是按旧配置起的，不认合成货主系统，所以另起一只私有 Dex，用同一份 `integration-dex.yaml`，发布在 `127.0.0.1:5562`；issuer 串仍是 `http://127.0.0.1:5558/dex`，没有重启别的会话在用的容器。`parcel-api` 只带首方族三件（JWKS 指 5562）与治理自授权起，脚本答 `201 DELIVERY_PRE_ADVICE_REGISTERED`，签出 `PREADV-BGOJWJ3AE7XUSBEIUHTQFA5YGU`，来源是 `http://127.0.0.1:5558/dex#ChZzeW4tY3VzdG9tZXItY2xpZW50LTAx` 加接入请求标识。同一进程上：不带令牌答 401，自报租户答 400，撤回答 201、重投 200，撤不存在的答 404。同一 UTC 秒内用别的号码再跑脚本，撞同一接入请求标识，答 `SOURCE_CONFLICT`，脚本退 1；隔一秒再跑，签出 `PREADV-T7VC26KBK6DXBVUU4DDMDYQ2S4`。册上两行预报、一行撤回。走完已停进程、删容器、删库，`psb26_walk` 未碰。
 

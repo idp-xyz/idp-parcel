@@ -95,7 +95,9 @@ func receptionCommand(
 
 // Covers: 票 ps-external-mark-relations/02 完成判据「委托接受后，客户包裹件号逐字在节点识别出那一件包裹：收寄形成、
 // 控制建立」的真库面——委托经真提交编排带着客户包裹件号建单、经真仓储接受落库之后，生产装配的收寄编排按这个号码唯一识别出那一件：`节点收寄已形成`、关联到 PS 的那件包裹、控制建立。
-// 接受之前同一个号码答`待识别`。夹具全为合成（S 级）。
+// 接受之前同一个号码答`待识别`。ADR-0212 决定四之后客户包裹件号的唯一识别要有可验证交付范围，送站带着那个客户账户的预报（决定十：
+// 演示与夹具同一笔改成送站前先交预报）；不带预报的那一格见 TestTheWiredReceptionLeavesAnUnadvisedCustomerNumberPending。夹具全为
+// 合成（S 级）。
 func TestTheWiredReceptionIdentifiesAnAcceptedParcelByItsCustomerNumber(t *testing.T) {
 	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
@@ -106,8 +108,10 @@ func TestTheWiredReceptionIdentifiesAnAcceptedParcelByItsCustomerNumber(t *testi
 		t.Fatalf("装配收寄编排：%v", err)
 	}
 	command := submitWithCustomerParcelNumber(t, db, "SYN-CUSTOMER-PARCEL-0001")
+	basis := preAdviseOnRealDatabase(t, db, "SYN-CUSTOMER-1", "SYN-CUSTOMER-PARCEL-0001")
 	early := receptionCommand(t, "SYN-DELIVERY-EARLY-1", nodeopsapp.ExplicitReception)
 	early.Mark = noports.ExternalMarkObservation{Mark: "SYN-CUSTOMER-PARCEL-0001"}
+	early.ScopeBasis = basis
 	before, err := reception.Handle(t.Context(), early)
 	if err != nil {
 		t.Fatalf("接受前收寄：%v", err)
@@ -121,6 +125,7 @@ func TestTheWiredReceptionIdentifiesAnAcceptedParcelByItsCustomerNumber(t *testi
 	arrived := receptionCommand(t, "SYN-DELIVERY-IDENTIFIED-1", nodeopsapp.ExplicitReception)
 	arrived.Unit = mustValue(t, nodomain.NewHandlingUnitID, "SYN-UNIT-2")
 	arrived.Mark = noports.ExternalMarkObservation{Mark: "SYN-CUSTOMER-PARCEL-0001"}
+	arrived.ScopeBasis = basis
 	formed, err := reception.Handle(t.Context(), arrived)
 	if err != nil {
 		t.Fatalf("接受后收寄：%v", err)

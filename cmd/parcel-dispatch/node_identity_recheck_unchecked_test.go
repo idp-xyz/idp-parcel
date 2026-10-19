@@ -76,8 +76,10 @@ func TestTheWiredDispatchRechecksAnUncheckedPendingUnitByItsOwnDoorbell(t *testi
 		t.Fatalf("PS 门铃那一拍：%v", err)
 	}
 
+	// 送站带着持号客户账户的送站预报（ADR-0212 决定四）：PS 恢复之后的重核按它重算范围，号码才唯一识别得出包裹。
+	scopeBasis := preAdviseForDispatch(t, fixture.db, tenant, fixture.identity.CustomerAccountID().String(), uncheckedMark, receivedAt)
 	restore := moveRelationChanges(t, fixture.pool)
-	unchecked := receiveUncheckedForRecheck(t, fixture.db, tenant, receivedAt)
+	unchecked := receiveUncheckedForRecheck(t, fixture.db, tenant, receivedAt, scopeBasis)
 	doorbells := fixture.outboxIDsOfType(t, uncheckedDoorbellType)
 	if len(doorbells) != 1 {
 		t.Fatalf("未核对行落下后门铃 %d 封, want 1", len(doorbells))
@@ -154,9 +156,15 @@ func moveRelationChanges(t *testing.T, pool *pgxpool.Pool) (restore func()) {
 	}
 }
 
-// receiveUncheckedForRecheck 经收寄编排（生产适配器，身份读口照生产包一层 savepoint）在身份核对读不动时收一件实物，落成未核对的
-// 待识别并自投门铃。
-func receiveUncheckedForRecheck(t *testing.T, db *bentopg.DB, tenant nodomain.TenantID, receivedAt time.Time) noports.ReceptionRecord {
+// receiveUncheckedForRecheck 经收寄编排（生产适配器，身份读口照生产包一层 savepoint）在身份核对读不动时收一件带着依据 basis 的实物，
+// 落成未核对的待识别并自投门铃。
+func receiveUncheckedForRecheck(
+	t *testing.T,
+	db *bentopg.DB,
+	tenant nodomain.TenantID,
+	receivedAt time.Time,
+	basis nodomain.DeliveryScopeBasisReference,
+) noports.ReceptionRecord {
 	t.Helper()
 	store, err := outbox.NewStore(db)
 	if err != nil {
@@ -196,7 +204,7 @@ func receiveUncheckedForRecheck(t *testing.T, db *bentopg.DB, tenant nodomain.Te
 	}
 	handler, err := noapplication.NewReceiveDeliveredUnitHandler(noapplication.ReceiveDeliveredUnitDeps{
 		Identity: identity, ServiceResults: services, Receptions: receptions, Versions: versions,
-		Downstream: downstream, Doorbell: doorbell, Clock: systemClock{},
+		Downstream: downstream, Doorbell: doorbell, Scope: deliveryScopeEvidenceFor(t, db), Clock: systemClock{},
 	})
 	if err != nil {
 		t.Fatalf("构造收寄编排：%v", err)
@@ -205,6 +213,7 @@ func receiveUncheckedForRecheck(t *testing.T, db *bentopg.DB, tenant nodomain.Te
 	mustWithinTX(t, db.Transactor(), t.Context(), func(txCtx context.Context) error {
 		var handleErr error
 		result, handleErr = handler.Handle(txCtx, noapplication.ReceiveDeliveredUnitCommand{
+			ScopeBasis:  basis,
 			TenantID:    tenant,
 			SourceID:    uncheckedSource,
 			Node:        mustNO(t, nodomain.NewNodeReference, "SYN-NODE-01"),

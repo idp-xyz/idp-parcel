@@ -89,6 +89,8 @@ func TestConcurrentDeliveriesOfOneMarkSerializeOnTheParcel(t *testing.T) {
 		t.Fatalf("构造框架 DB：%v", err)
 	}
 	acceptSubmitted(t, db, submitWithCustomerParcelNumber(t, db, "SYN-CUSTOMER-PARCEL-NRI03"))
+	// 两件都带着那个客户账户的送站预报：客户包裹件号要有可验证交付范围才唯一识别、走到包裹锁（ADR-0212 决定四）。
+	basis := preAdviseOnRealDatabase(t, db, "SYN-CUSTOMER-1", "SYN-CUSTOMER-PARCEL-NRI03")
 	production, err := buildReceptionOrchestration(db)
 	if err != nil {
 		t.Fatalf("装配收寄编排：%v", err)
@@ -97,6 +99,7 @@ func TestConcurrentDeliveriesOfOneMarkSerializeOnTheParcel(t *testing.T) {
 		command := receptionCommand(t, sourceID, nodeopsapp.ExplicitReception)
 		command.Unit = mustValue(t, nodomain.NewHandlingUnitID, unit)
 		command.Mark = noports.ExternalMarkObservation{Mark: "SYN-CUSTOMER-PARCEL-NRI03"}
+		command.ScopeBasis = basis
 		return command
 	}
 	first := deliver("SYN-DELIVERY-NRI03-A", "SYN-UNIT-NRI03-A")

@@ -414,17 +414,11 @@ internal/parcelshipment/domain ParseDeliveryPlaceReference
 # 经本函数取得，随它出名单。动手前在父提交 b0baf6c1 上数得本文件 1 条；加上这一条后是 2。只对这一加成立。
 internal/networkrouting/domain ArbitrateLoadingConcurrency
 
-# 票 ps-external-mark-relations/08（ADR-0212 决定四至七）立了可验证交付范围的推导与交付范围核对态，三本册随它落地，消费方
-# 不在本票：DeriveVerifiableDeliveryScope 等收寄与重核的身份判断按依据读证据状态、交给它推导——那一层是票
-# ps-external-mark-relations/11，接上即出名单。ParseDeliveryScopeBasisKind 等同一票给收寄来源文档加「交付范围依据引用」那一格
-# （读回与在线收寄口、受控批量口的收寄模板都要按线上名还原）；ParseDeliveryScopeCheckState、ParseDeliveryScopeUnverifiedReason、
-# ParseDeliveryScopeInapplicability 等同一票让每一版判断记下核对态，读回时按线上名还原，复核目录与管理台（票 13）随后读它。
-# 动手前在父提交 a2ff42f6 上数得本文件 2 条；加上这五条后是 7。只对这一加成立。
-internal/nodeoperations/domain DeriveVerifiableDeliveryScope
-internal/nodeoperations/domain ParseDeliveryScopeBasisKind
-internal/nodeoperations/domain ParseDeliveryScopeCheckState
-internal/nodeoperations/domain ParseDeliveryScopeUnverifiedReason
-internal/nodeoperations/domain ParseDeliveryScopeInapplicability
+# 2026-10-19 随票 ps-external-mark-relations/11 剪掉五条（DeriveVerifiableDeliveryScope、ParseDeliveryScopeBasisKind、
+# ParseDeliveryScopeCheckState、ParseDeliveryScopeUnverifiedReason、ParseDeliveryScopeInapplicability）：收寄与重核的身份判断经
+# identityJudge.deriveScope 调推导；来源文档读回（domain.ParseDeliverySource）、在线收寄口与收寄模板按线上名还原依据种类；收寄册与
+# 复核目录读回核对态（postgres 的 deliveryScopeCheckFrom）。成因先分过：五个名字全仓各只一处声明，是调用方落地。剪前在 0c56e842 的
+# 检出上数得本文件 7 条，剪后 2 条，只对那一棵树成立。
 
 
 # —— transport-fulfillment ——

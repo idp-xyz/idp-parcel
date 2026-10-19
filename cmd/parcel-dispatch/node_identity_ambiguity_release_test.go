@@ -63,6 +63,10 @@ func TestTheRecheckConsumerAndThePSAgreeOnTheRetiredDeclarationType(t *testing.T
 // 贴着它的实物送站，落成身份冲突、来由只因歧义信号 → 客户二的委托被拒绝（或撤回），委托仓储那一笔交一封声明撤除门铃 → 生产
 // 派发器把门铃投给 NO 的重核消费者 → 重核追加一版`节点收寄已形成`：关联那件包裹、前版是冲突那一版、业务时间与控制照原收寄，
 // 收寄意图恰一封、指回追加版；方向依据的身份一格判成立、依追加版。冲突那一版原样留着。
+//
+// 送站带着一张客户一与客户二都已确认的送站交接单：ADR-0212 决定四之后客户包裹件号的唯一识别要有可验证交付范围，有范围时信号只认
+// 范围内客户账户的声明（决定八），客户二在范围里，它的声明才使这一件只因歧义信号冲突。没有范围的那一格见
+// TestTheWiredDispatchReleasesAnUnscopedAmbiguityIntoAnUnverifiedPendingUnit。
 func TestTheWiredDispatchReleasesAnAmbiguityOnlyConflictOnceTheDeclarationIsGone(t *testing.T) {
 	for name, end := range map[string]func(*testing.T, *synVerticalFixture, psdomain.SourceIdentity){
 		"被拒绝": rejectTheDeclaringRequest,
@@ -78,7 +82,9 @@ func TestTheWiredDispatchReleasesAnAmbiguityOnlyConflictOnceTheDeclarationIsGone
 			settleTheBeat(t, fixture, declaring)
 
 			reception := wiredReceptionForRelease(t, fixture.db)
-			contested := receiveMarkedForRelease(t, fixture.db, reception, tenant, "1", receivedAt)
+			scope := confirmedHandoverNoteForDispatch(t, fixture.db, tenant, receivedAt.Add(-time.Hour),
+				fixture.identity.CustomerAccountID().String(), declaring.CustomerAccountID().String())
+			contested := receiveMarkedForRelease(t, fixture.db, reception, tenant, "1", receivedAt, scope)
 			assertContestedForRelease(t, fixture, contested, "AMBIGUITY_ONLY")
 			if n := fixture.countOutboxOfType(t, nodeIntakeFormedType); n != 0 {
 				t.Fatalf("冲突落下时已有 %d 封收寄意图, want 0", n)
@@ -136,10 +142,83 @@ func TestTheWiredDispatchReleasesAnAmbiguityOnlyConflictOnceTheDeclarationIsGone
 	}
 }
 
+// Covers: `AT-NO-062` 末句与 ADR-0212 决定六新补那一格的真库面，经生产装配：送站不带依据，号码只经客户包裹件号命中持号那一件、
+// 客户二另有一份`已提交`委托也报了它，落只因歧义信号的冲突（没有范围时信号在租户内认）→ 客户二的委托被拒绝，声明撤除门铃投给重核
+// 消费者 → 信号没了，却仍没有可验证交付范围：追加一版不记冲突的待识别，候选照记那一件，交付范围核对态未证·没有依据，业务时间与控制
+// 照原收寄，不交收寄意图；方向依据的身份一格从此是缺少·待识别，不再显示一个已不存在的冲突。冲突那一版原样留着。
+func TestTheWiredDispatchReleasesAnUnscopedAmbiguityIntoAnUnverifiedPendingUnit(t *testing.T) {
+	fixture := newSYNVerticalFixture(t)
+	ctx := t.Context()
+	tenant := mustNO(t, nodomain.NewTenantID, fixture.identity.TenantID().String())
+	receivedAt := time.Now().UTC().Add(-10 * time.Minute).Truncate(time.Microsecond)
+	acceptTheHolder(t, fixture)
+	declaring := declareTheMarkInAnotherRequest(t, fixture, "B")
+	settleTheBeat(t, fixture, declaring)
+
+	reception := wiredReceptionForRelease(t, fixture.db)
+	contested := receiveMarkedForRelease(t, fixture.db, reception, tenant, "1", receivedAt, nodomain.DeliveryScopeBasisReference{})
+	assertContestedForRelease(t, fixture, contested, "AMBIGUITY_ONLY")
+
+	rejectTheDeclaringRequest(t, fixture, declaring)
+	retired := fixture.outboxIDsOfType(t, releaseRetiredType)
+	if len(retired) != 1 {
+		t.Fatalf("拒绝之后声明撤除门铃 %d 封, want 1", len(retired))
+	}
+	dispatchUntilRechecked(t, fixture, retired[0])
+
+	receptions, err := nopostgres.NewReceptions(fixture.db)
+	if err != nil {
+		t.Fatalf("构造收寄库：%v", err)
+	}
+	derived := noports.ReceptionKey{TenantID: tenant, SourceID: "IDENTITY-RECHECK/" + contested.JudgmentVersion.String()}
+	released, found, err := receptions.FindByKey(ctx, derived)
+	if err != nil || !found {
+		t.Fatalf("追加版没落册：found = %v err = %v", found, err)
+	}
+	_, associated := released.Intake.Association()
+	check := released.DeliveryScopeCheck
+	switch {
+	case released.Kind != noports.RecordPendingIdentification || associated || released.IdentityConflict:
+		t.Fatalf("追加版 = %+v, want 不记冲突、不关联的待识别", released)
+	case len(released.Candidates) != 1 || released.Candidates[0].String() != "SYN-PARCEL-01":
+		t.Fatalf("追加版候选 = %v, want 照记 SYN-PARCEL-01", released.Candidates)
+	case check.State() != nodomain.DeliveryScopeUnverified || check.Reason() != nodomain.ScopeNoBasis:
+		t.Fatalf("追加版交付范围核对态 = %s/%s, want UNVERIFIED/NO_BASIS", check.State(), check.Reason())
+	case released.Predecessor != contested.JudgmentVersion || !released.Intake.ReceivedAt().Equal(receivedAt) ||
+		released.Control.Basis() != contested.Control.Basis():
+		t.Fatalf("追加版前版 %s、接收 %s、控制 %s, want 接续冲突那一版、照原收寄", released.Predecessor, released.Intake.ReceivedAt(), released.Control.Basis())
+	}
+	if n := fixture.countOutboxOfType(t, nodeIntakeFormedType); n != 0 {
+		t.Fatalf("收寄意图 %d 封, want 0——范围未证不交意图", n)
+	}
+	if cause := conflictCauseOf(t, fixture, contested.Key.SourceID); cause != "AMBIGUITY_ONLY" {
+		t.Fatalf("冲突那一版来由变成了 %q", cause)
+	}
+	identities, err := nopostgres.NewIntakeIdentities(fixture.db)
+	if err != nil {
+		t.Fatalf("构造身份读口：%v", err)
+	}
+	observations, err := identities.FindIntakeIdentities(ctx, tenant, mustNO(t, nodomain.NewHandlingUnitID, "SYN-UNIT-NRI07-1"))
+	if err != nil {
+		t.Fatalf("读收寄身份：%v", err)
+	}
+	basis, err := nodomain.JudgeIdentityBasis(observations)
+	if err != nil {
+		t.Fatalf("判身份：%v", err)
+	}
+	if reasons := basis.Cell().Reasons(); basis.Cell().Answer() != nodomain.BasisMissing ||
+		len(reasons) != 1 || reasons[0] != nodomain.ReasonPendingIdentification {
+		t.Fatalf("身份一格 = %v %v, want 缺少·待识别", basis.Cell().Answer(), reasons)
+	}
+}
+
 // Covers: `AT-NO-062` 反向两格，经生产装配：
 //   - 拒绝之后仍有第三份`已提交`委托声明同号：声明撤除门铃照样投到、处理完，重核仍答恰一个候选带信号，不追加、不交意图；第三份
 //     也撤回之后，它的门铃一到这件就解开——反证前一拍不是没找到这一行；
 //   - 一码两物的冲突（来由一码两物）：号码另一份声明随后被拒绝，门铃按号重核找不到它们，两件都不追加，意图不多一封。
+//
+// 两格的送站都带着可验证交付范围（ADR-0212 决定四）：「第三份声明仍在」带一张持号与两个声明方的客户账户都已确认的交接单，声明都在
+// 范围内；「一码两物」带持号那个客户账户的送站预报，号码才唯一识别、走得到一码两物那一支。
 func TestTheWiredDispatchKeepsConflictsTheRetiredDeclarationDidNotCause(t *testing.T) {
 	t.Run("第三份声明仍在", func(t *testing.T) {
 		fixture := newSYNVerticalFixture(t)
@@ -150,7 +229,10 @@ func TestTheWiredDispatchKeepsConflictsTheRetiredDeclarationDidNotCause(t *testi
 		settleTheBeat(t, fixture, declaring, third)
 
 		reception := wiredReceptionForRelease(t, fixture.db)
-		contested := receiveMarkedForRelease(t, fixture.db, reception, tenant, "1", time.Now().UTC().Add(-10*time.Minute))
+		at := time.Now().UTC().Add(-10 * time.Minute)
+		scope := confirmedHandoverNoteForDispatch(t, fixture.db, tenant, at.Add(-time.Hour), fixture.identity.CustomerAccountID().String(),
+			declaring.CustomerAccountID().String(), third.CustomerAccountID().String())
+		contested := receiveMarkedForRelease(t, fixture.db, reception, tenant, "1", at, scope)
 		assertContestedForRelease(t, fixture, contested, "AMBIGUITY_ONLY")
 		rows, intents := fixture.countSQL(t, `SELECT count(*) FROM node_operations.reception`), fixture.countOutboxOfType(t, nodeIntakeFormedType)
 
@@ -197,11 +279,12 @@ func TestTheWiredDispatchKeepsConflictsTheRetiredDeclarationDidNotCause(t *testi
 
 		reception := wiredReceptionForRelease(t, fixture.db)
 		at := time.Now().UTC().Add(-10 * time.Minute)
-		early := receiveMarkedForRelease(t, fixture.db, reception, tenant, "EARLY", at)
+		scope := preAdviseForDispatch(t, fixture.db, tenant, fixture.identity.CustomerAccountID().String(), releaseMark, at)
+		early := receiveMarkedForRelease(t, fixture.db, reception, tenant, "EARLY", at, scope)
 		if early.Kind != noports.RecordIntakeFormed {
 			t.Fatalf("先到那件 = %v, want 节点收寄已形成", early.Kind)
 		}
-		late := receiveMarkedForRelease(t, fixture.db, reception, tenant, "LATE", at.Add(time.Minute))
+		late := receiveMarkedForRelease(t, fixture.db, reception, tenant, "LATE", at.Add(time.Minute), scope)
 		assertContestedForRelease(t, fixture, late, "ONE_MARK_ON_TWO_UNITS")
 
 		declaring := declareTheMarkInAnotherRequest(t, fixture, "B")
@@ -434,7 +517,7 @@ func wiredReceptionForRelease(t *testing.T, db *bentopg.DB) *noapplication.Recei
 	}
 	handler, err := noapplication.NewReceiveDeliveredUnitHandler(noapplication.ReceiveDeliveredUnitDeps{
 		Identity: identity, ServiceResults: services, Receptions: receptions, Versions: versions,
-		Downstream: downstream, Doorbell: doorbell, Clock: systemClock{},
+		Downstream: downstream, Doorbell: doorbell, Scope: deliveryScopeEvidenceFor(t, db), Clock: systemClock{},
 	})
 	if err != nil {
 		t.Fatalf("构造收寄编排：%v", err)
@@ -442,7 +525,7 @@ func wiredReceptionForRelease(t *testing.T, db *bentopg.DB) *noapplication.Recei
 	return handler
 }
 
-// receiveMarkedForRelease 让一件贴着 releaseMark 的实物明确接收，每次一个新来源、一件新实物。
+// receiveMarkedForRelease 让一件贴着 releaseMark、带着依据 basis 的实物明确接收，每次一个新来源、一件新实物。
 func receiveMarkedForRelease(
 	t *testing.T,
 	db *bentopg.DB,
@@ -450,6 +533,7 @@ func receiveMarkedForRelease(
 	tenant nodomain.TenantID,
 	suffix string,
 	at time.Time,
+	basis nodomain.DeliveryScopeBasisReference,
 ) noports.ReceptionRecord {
 	t.Helper()
 	var result noapplication.ReceiveDeliveredUnitResult
@@ -465,6 +549,7 @@ func receiveMarkedForRelease(
 			Claim:       noapplication.ExplicitReception,
 			Evidence:    mustNO(t, nodomain.NewReceptionEvidenceReference, "SYN-SIGN-NRI07-"+suffix),
 			OccurredAt:  at.Truncate(time.Microsecond),
+			ScopeBasis:  basis,
 		})
 		return err
 	})

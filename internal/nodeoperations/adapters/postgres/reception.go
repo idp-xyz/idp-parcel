@@ -186,7 +186,8 @@ func (repository *Receptions) CurrentVersion(
 const receptionColumns = `source_id, content_digest, kind, intake, control, candidates,
 		        identity_conflict, refusal_reason, service_markers, service_result_check, recorded_at,
 		        judgment_version, predecessor_version, source_document, merged_version, disposition_document,
-		        identity_check, identity_conflict_cause`
+		        identity_check, identity_conflict_cause,
+		        delivery_scope_check, delivery_scope_unverified_reason, delivery_scope_inapplicability`
 
 // scanReception 把一行收寄册读回成记录：读回的一切经领域构造函数重建，一次坏写入在这里暴露，而不是变成一个看起来
 // 合法的收寄结果。
@@ -205,11 +206,14 @@ func scanReception(row pgx.Row, tenant domain.TenantID) (ports.ReceptionRecord, 
 		dispositionJSON             []byte
 		identityCheckName           *string
 		conflictCauseName           *string
+		scopeState, scopeReason     *string
+		scopeInapplicability        *string
 	)
 	if err := row.Scan(&sourceID, &digest, &kindName, &intakeJSON, &controlJSON, &candidatesJSON,
 		&identityConflict, &refusal, &markersJSON, &checkName, &recordedAt,
 		&judgment, &predecessor, &sourceJSON, &merged, &dispositionJSON,
-		&identityCheckName, &conflictCauseName); err != nil {
+		&identityCheckName, &conflictCauseName,
+		&scopeState, &scopeReason, &scopeInapplicability); err != nil {
 		return ports.ReceptionRecord{}, err
 	}
 
@@ -229,6 +233,10 @@ func scanReception(row pgx.Row, tenant domain.TenantID) (ports.ReceptionRecord, 
 	if err != nil {
 		return ports.ReceptionRecord{}, err
 	}
+	scopeCheck, err := deliveryScopeCheckFrom(scopeState, scopeReason, scopeInapplicability)
+	if err != nil {
+		return ports.ReceptionRecord{}, err
+	}
 	record := ports.ReceptionRecord{
 		Key:                   ports.ReceptionKey{TenantID: tenant, SourceID: sourceID},
 		ContentDigest:         digest,
@@ -238,6 +246,7 @@ func scanReception(row pgx.Row, tenant domain.TenantID) (ports.ReceptionRecord, 
 		RefusalReason:         refusal,
 		ServiceResultCheck:    check,
 		IdentityCheck:         identityCheck,
+		DeliveryScopeCheck:    scopeCheck,
 		RecordedAt:            recordedAt.UTC(),
 	}
 
@@ -352,8 +361,9 @@ func (repository *Receptions) Save(
 			(tenant_id, source_id, content_digest, kind, intake, control,
 			 candidates, identity_conflict, refusal_reason, service_markers, service_result_check, recorded_at,
 			 judgment_version, predecessor_version, source_document, merged_version, disposition_document,
-			 identity_check, identity_conflict_cause)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
+			 identity_check, identity_conflict_cause,
+			 delivery_scope_check, delivery_scope_unverified_reason, delivery_scope_inapplicability)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
 		 ON CONFLICT (tenant_id, source_id) DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.SourceID,
@@ -374,6 +384,9 @@ func (repository *Receptions) Save(
 		dispositionJSON,
 		identityCheckColumn(record.IdentityCheck),
 		identityConflictCauseColumn(record.IdentityConflictCause),
+		nameColumn(record.DeliveryScopeCheck.State().String()),
+		nameColumn(record.DeliveryScopeCheck.Reason().String()),
+		nameColumn(record.DeliveryScopeCheck.Inapplicability().String()),
 	)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "reception_predecessor_unique" {
@@ -622,6 +635,43 @@ func identityConflictCauseFrom(raw *string) (ports.IdentityConflictCause, error)
 	default:
 		return 0, fmt.Errorf("unknown identity conflict cause %q", *raw)
 	}
+}
+
+// nameColumn 把一格词表取值的线上名写成列：零值没有名字，写 NULL。交付范围核对态三列靠它，这三列的形状规则由迁移 0015 的 CHECK
+// 在库里再守一遍。
+func nameColumn(name string) *string {
+	if name == "" {
+		return nil
+	}
+	return &name
+}
+
+// deliveryScopeCheckFrom 读回交付范围核对态（ADR-0212 决定五）：三列都空即这一版没记；否则经领域的同一道门还原，集外取值与搭配不对
+// 让这一行读不出来，不悄悄折成「没记」。
+func deliveryScopeCheckFrom(state, reason, inapplicability *string) (domain.DeliveryScopeCheck, error) {
+	if state == nil && reason == nil && inapplicability == nil {
+		return domain.DeliveryScopeCheck{}, nil
+	}
+	if state == nil {
+		return domain.DeliveryScopeCheck{}, fmt.Errorf("delivery scope check carries a reason without a state")
+	}
+	parsedState, err := domain.ParseDeliveryScopeCheckState(*state)
+	if err != nil {
+		return domain.DeliveryScopeCheck{}, err
+	}
+	parsedReason := domain.ScopeUnverifiedReasonAbsent
+	if reason != nil {
+		if parsedReason, err = domain.ParseDeliveryScopeUnverifiedReason(*reason); err != nil {
+			return domain.DeliveryScopeCheck{}, err
+		}
+	}
+	parsedDetail := domain.ScopeInapplicabilityAbsent
+	if inapplicability != nil {
+		if parsedDetail, err = domain.ParseDeliveryScopeInapplicability(*inapplicability); err != nil {
+			return domain.DeliveryScopeCheck{}, err
+		}
+	}
+	return domain.NewDeliveryScopeCheck(parsedState, parsedReason, parsedDetail)
 }
 
 func controlKindFrom(raw string) (domain.ControlEstablishmentKind, error) {

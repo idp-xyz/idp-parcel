@@ -63,12 +63,19 @@ func postIdentityRecheck(t *testing.T, endpoint http.Handler, version nodomain.I
 	return response.Code, body
 }
 
-// receivePendingOnRealAssembly 经生产装配的收寄编排收一件实物，交回那一条记录；号码 mark 此刻不在关联册里就落成零候选的待识别。
-func receivePendingOnRealAssembly(t *testing.T, reception nodeopshttp.ReceptionHandler, sourceID, unit, mark string) noports.ReceptionRecord {
+// receivePendingOnRealAssembly 经生产装配的收寄编排收一件带着依据 basis 送来的实物，交回那一条记录；号码 mark 此刻不在关联册里就
+// 落成零候选的待识别。客户包裹件号要经重核或收寄唯一识别，送站就得带着可验证交付范围（ADR-0212 决定四、六）。
+func receivePendingOnRealAssembly(
+	t *testing.T,
+	reception nodeopshttp.ReceptionHandler,
+	sourceID, unit, mark string,
+	basis nodomain.DeliveryScopeBasisReference,
+) noports.ReceptionRecord {
 	t.Helper()
 	command := receptionCommand(t, sourceID, nodeopsapp.ExplicitReception)
 	command.Unit = mustValue(t, nodomain.NewHandlingUnitID, unit)
 	command.Mark = noports.ExternalMarkObservation{Mark: mark}
+	command.ScopeBasis = basis
 	result, err := reception.Handle(t.Context(), command)
 	if err != nil {
 		t.Fatalf("收寄 %s：%v", sourceID, err)
@@ -109,8 +116,9 @@ func recheckByMarkOnRealAssembly(t *testing.T, db *bentopg.DB, mark string) []no
 	return results
 }
 
-// Covers: `AT-NO-026` 的人工触发半边与「人工发起重核与信封触发落下同一结果」：同一种局面各在一个空库里——零候选待识别落册后
-// 委托接受形成这个号的关联——一处由复核页人工指名重核，一处走门铃那一个入口按号重核。两处追加的一版形状相同：来源标识由原
+// Covers: `AT-NO-026` 的人工触发半边与「人工发起重核与信封触发落下同一结果」：同一种局面各在一个空库里——带着那个客户账户的送站
+// 预报送站（ADR-0212 决定四：客户包裹件号的唯一识别要有可验证交付范围），零候选待识别落册后委托接受形成这个号的关联——一处由复核页
+// 人工指名重核，一处走门铃那一个入口按号重核。重核按存下的预报重算范围（决定六）。两处追加的一版形状相同：来源标识由原
 // 判断版本派生、节点收寄已形成、关联那件包裹、业务时间是原收寄时刻、前版是原待识别、意图一封。随后另一个触发都不再追加：人工
 // 那一处再响门铃找不到待重核的对象，门铃那一处再人工指名答`EXISTING_RESULT`、指向门铃追加的那一版。
 func TestTheWiredManualRecheckLandsTheSameVersionAsTheDoorbell(t *testing.T) {
@@ -125,7 +133,8 @@ func TestTheWiredManualRecheckLandsTheSameVersionAsTheDoorbell(t *testing.T) {
 		if err != nil {
 			t.Fatalf("装配收寄编排：%v", err)
 		}
-		pending := receivePendingOnRealAssembly(t, reception, "SYN-DELIVERY-NRS03", "SYN-UNIT-NRS03", "SYN-CUSTOMER-PARCEL-NRS03")
+		basis := preAdviseOnRealDatabase(t, db, "SYN-CUSTOMER-1", "SYN-CUSTOMER-PARCEL-NRS03")
+		pending := receivePendingOnRealAssembly(t, reception, "SYN-DELIVERY-NRS03", "SYN-UNIT-NRS03", "SYN-CUSTOMER-PARCEL-NRS03", basis)
 		if pending.Kind != noports.RecordPendingIdentification || pending.IdentityConflict {
 			t.Fatalf("号码入册之前收寄 = %+v, want 零候选的待识别", pending)
 		}
@@ -195,7 +204,8 @@ func TestTheWiredManualRecheckLandsTheSameVersionAsTheDoorbell(t *testing.T) {
 	}
 }
 
-// Covers: 票面「对冲突行与无来源旧行的答法」——人工指名一件记身份冲突的待识别（一码两物里后到的那一件），答 200
+// Covers: 票面「对冲突行与无来源旧行的答法」——人工指名一件记身份冲突的待识别（一码两物里后到的那一件；两件都带着那个客户账户的
+// 送站预报送站，号码才唯一识别得出包裹，ADR-0212 决定四），答 200
 // `IDENTITY_CONFLICT_RECORDED`；指名一行来源保全之前落下的待识别，答 200 `SOURCE_NOT_PRESERVED`：服务端形成了答案、知道为什么
 // 不重核（ADR-0022：形成答案即 2xx；ADR-0186：不是命令缺陷，也不是没形成答案）。两格都不追加、不交意图。指名册上没有的版本
 // 答 404，不带 outcome。
@@ -206,13 +216,15 @@ func TestTheWiredManualRecheckLeavesConflictsAndSourcelessRowsAlone(t *testing.T
 		t.Fatalf("装配收寄编排：%v", err)
 	}
 	acceptSubmitted(t, db, submitWithCustomerParcelNumber(t, db, "SYN-CUSTOMER-PARCEL-NRS03"))
-	receivePendingOnRealAssembly(t, reception, "SYN-DELIVERY-NRS03-A", "SYN-UNIT-NRS03-A", "SYN-CUSTOMER-PARCEL-NRS03")
-	late := receivePendingOnRealAssembly(t, reception, "SYN-DELIVERY-NRS03-B", "SYN-UNIT-NRS03-B", "SYN-CUSTOMER-PARCEL-NRS03")
+	basis := preAdviseOnRealDatabase(t, db, "SYN-CUSTOMER-1", "SYN-CUSTOMER-PARCEL-NRS03")
+	receivePendingOnRealAssembly(t, reception, "SYN-DELIVERY-NRS03-A", "SYN-UNIT-NRS03-A", "SYN-CUSTOMER-PARCEL-NRS03", basis)
+	late := receivePendingOnRealAssembly(t, reception, "SYN-DELIVERY-NRS03-B", "SYN-UNIT-NRS03-B", "SYN-CUSTOMER-PARCEL-NRS03", basis)
 	if late.Kind != noports.RecordPendingIdentification || !late.IdentityConflict {
 		t.Fatalf("后到那件 = %+v, want 记身份冲突的待识别", late)
 	}
 
-	sourceless := receivePendingOnRealAssembly(t, reception, "SYN-DELIVERY-NRS03-OLD", "SYN-UNIT-NRS03-OLD", "SYN-BARCODE-NRS03-UNKNOWN")
+	sourceless := receivePendingOnRealAssembly(t, reception, "SYN-DELIVERY-NRS03-OLD", "SYN-UNIT-NRS03-OLD", "SYN-BARCODE-NRS03-UNKNOWN",
+		nodomain.DeliveryScopeBasisReference{})
 	if _, err := pool.Exec(t.Context(),
 		`UPDATE node_operations.reception SET source_document = NULL WHERE tenant_id = $1 AND source_id = $2`,
 		sourceless.Key.TenantID.String(), sourceless.Key.SourceID); err != nil {
@@ -259,7 +271,7 @@ func countReceptionRows(t *testing.T, pool *pgxpool.Pool) int {
 // Covers: 票面并发判据「重核与同一包裹另一件实物的收寄并发，经（租户、包裹）锁串行，后到者答身份冲突，不出现两件都关联成立」
 // （ADR-0199 决定三：重核走与收寄步骤 4 同一份身份判断，含票 no-reception-identity/03 的包裹锁）。A 零候选落册，委托接受形成号的
 // 关联；A 的重核读完别的实物关联（空）之后挂住，B 贴着同一个号经生产装配送站，等在那件包裹的锁上；重核提交后 B 读到 A 的追加
-// 版，答记身份冲突的待识别，A 那条链再追加一版身份冲突。方向依据的身份一格只读各链链头（ADR-0210 决定五）：A 那条链是
+// 版，答记身份冲突的待识别，A 那条链再追加一版身份冲突。两件都带着那个客户账户的送站预报（ADR-0212 决定四）。方向依据的身份一格只读各链链头（ADR-0210 决定五）：A 那条链是
 // 原待识别 → 重核版 → 冲突版，链头是冲突版；B 只有自己那一版。两件都落成缺少·{待识别, 身份冲突}。
 func TestARecheckAndAnotherUnitsReceptionSerializeOnTheParcel(t *testing.T) {
 	pool := pgtest.Pool(t)
@@ -271,11 +283,13 @@ func TestARecheckAndAnotherUnitsReceptionSerializeOnTheParcel(t *testing.T) {
 	if err != nil {
 		t.Fatalf("装配收寄编排：%v", err)
 	}
-	pending := receivePendingOnRealAssembly(t, reception, "SYN-DELIVERY-NRS03-A", "SYN-UNIT-NRS03-A", "SYN-CUSTOMER-PARCEL-NRS03")
+	basis := preAdviseOnRealDatabase(t, db, "SYN-CUSTOMER-1", "SYN-CUSTOMER-PARCEL-NRS03")
+	pending := receivePendingOnRealAssembly(t, reception, "SYN-DELIVERY-NRS03-A", "SYN-UNIT-NRS03-A", "SYN-CUSTOMER-PARCEL-NRS03", basis)
 	acceptSubmitted(t, db, submitWithCustomerParcelNumber(t, db, "SYN-CUSTOMER-PARCEL-NRS03"))
 	second := receptionCommand(t, "SYN-DELIVERY-NRS03-B", nodeopsapp.ExplicitReception)
 	second.Unit = mustValue(t, nodomain.NewHandlingUnitID, "SYN-UNIT-NRS03-B")
 	second.Mark = noports.ExternalMarkObservation{Mark: "SYN-CUSTOMER-PARCEL-NRS03"}
+	second.ScopeBasis = basis
 
 	var (
 		secondResult nodeopsapp.ReceiveDeliveredUnitResult

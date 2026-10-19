@@ -59,6 +59,8 @@ type ReceptionCatalogueRow struct {
 	ServiceResultCheck   ServiceResultCheck
 	IdentityCheck        IdentityCheck
 	RecordedAt           time.Time
+	// DeliveryScopeCheck 照行转写交付范围核对态（ADR-0212 决定五），读法见 UnidentifiedItemCatalogueRow 的同名一格。
+	DeliveryScopeCheck domain.DeliveryScopeCheck
 }
 
 // UnidentifiedItemCatalogueRow 是待识别实物册上列的一行：收寄登记里
@@ -94,6 +96,10 @@ type UnidentifiedItemCatalogueRow struct {
 	IdentityCheck    IdentityCheck
 	// IdentityConflictCause 的读法见类型头注。
 	IdentityConflictCause IdentityConflictCause
+	// DeliveryScopeCheck 是这一行做身份核对时记下的交付范围核对态（ADR-0212 决定五）：审阅者据它分得开「缺范围」（未证，附原因）、
+	// 「租户没登时窗」（未配置）与「范围成立却仍冲突或零候选」（已证）。零值即这一行没记——未核对的、追加给先到那件的冲突版、
+	// 处置版与这一格落地之前的行，读面如实不带，不替它推。取领域同一个类型，经领域的那道门还原，集外取值让整页答不出。
+	DeliveryScopeCheck domain.DeliveryScopeCheck
 }
 
 // IdentityReviewUnitRow 是待识别实物页按实物列的一行（ADR-0210 决定八末项与越权风险点「逐链追加会写到操作者没看过的链上」）：

@@ -61,6 +61,11 @@ func buildIntakeImporter(db *bentopg.DB, clock ports.Clock, identity ports.Parce
 	if err != nil {
 		return intakeImporter{}, err
 	}
+	// 模板行带来的交付范围依据引用按 NO 自己的预报册、交接单册与时窗册推导（ADR-0212 决定四、七），与 parcel-api 同一套件。
+	scope, err := nopostgres.NewDeliveryScopeEvidence(db)
+	if err != nil {
+		return intakeImporter{}, fmt.Errorf("交付范围证据：%w", err)
+	}
 	handler, err := application.NewReceiveDeliveredUnitHandler(application.ReceiveDeliveredUnitDeps{
 		Identity:       identity,
 		ServiceResults: serviceResults,
@@ -68,6 +73,7 @@ func buildIntakeImporter(db *bentopg.DB, clock ports.Clock, identity ports.Parce
 		Versions:       versions,
 		Downstream:     downstream,
 		Doorbell:       doorbell,
+		Scope:          scope,
 		Clock:          clock,
 	})
 	if err != nil {
@@ -124,7 +130,7 @@ func parcelServiceResultViewOf(db *bentopg.DB) (ports.ParcelServiceResultView, e
 // executeIntake 逐行推进、打报告、算退出码。
 func executeIntake(ctx context.Context, batch intakeBatch, importer intakeImporter, out io.Writer) int {
 	results := importIntake(ctx, batch, importer)
-	writeImportReport(out, batch.BatchRef, intakeTemplateVersion, results)
+	writeImportReport(out, batch.BatchRef, batch.Version, results)
 	return exitCodeFor(results)
 }
 

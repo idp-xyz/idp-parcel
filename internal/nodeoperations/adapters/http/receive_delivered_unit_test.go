@@ -26,17 +26,44 @@ func adapterValue[T any](t *testing.T, construct func(string) (T, error), raw st
 	return value
 }
 
+// identityViewDouble 答预置的候选。customerNumbered 为真时候选只经客户包裹件号命中（没带范围就不范围相容），否则照渠道包裹件号答、
+// 恒范围相容（ADR-0212 决定四）——本文件证传输面，判断表另有编排的用例。
 type identityViewDouble struct {
-	candidates []domain.ParcelAssociationReference
-	err        error
+	candidates       []domain.ParcelAssociationReference
+	customerNumbered bool
+	err              error
 }
 
 func (double *identityViewDouble) ResolveParcelIdentity(
 	_ context.Context,
 	_ domain.TenantID,
 	_ ports.ExternalMarkObservation,
+	scope []domain.CustomerAccountReference,
 ) (ports.ParcelIdentityAnswer, error) {
-	return ports.ParcelIdentityAnswer{Candidates: double.candidates}, double.err
+	answer := ports.ParcelIdentityAnswer{Scoped: len(scope) > 0}
+	for _, parcel := range double.candidates {
+		answer.Candidates = append(answer.Candidates, ports.ParcelIdentityCandidate{Parcel: parcel, ScopeCompatible: !double.customerNumbered})
+	}
+	return answer, double.err
+}
+
+// noScopeEvidence 是证据读口的替身：哪份预报、交接单与时窗都不在册。本文件的收寄都不带依据，读不到它。
+type noScopeEvidence struct{}
+
+func (noScopeEvidence) FindDeliveryPreAdvice(context.Context, domain.TenantID, domain.DeliveryPreAdviceID) (domain.DeliveryPreAdviceState, bool, error) {
+	return domain.DeliveryPreAdviceState{}, false, nil
+}
+
+func (noScopeEvidence) FindDeliveryHandoverNote(context.Context, domain.TenantID, domain.DeliveryHandoverNoteID) (domain.DeliveryHandoverNoteState, bool, error) {
+	return domain.DeliveryHandoverNoteState{}, false, nil
+}
+
+func (noScopeEvidence) FindLastAssignedHandoverNote(context.Context, domain.TenantID, domain.HandlingUnitID) (domain.DeliveryHandoverNoteID, bool, error) {
+	return domain.DeliveryHandoverNoteID{}, false, nil
+}
+
+func (noScopeEvidence) FindPreAdviceWindowAt(context.Context, domain.TenantID, time.Time) (domain.PreAdviceValidityWindow, bool, error) {
+	return domain.PreAdviceValidityWindow{}, false, nil
 }
 
 type receptionStoreDouble struct {
@@ -238,6 +265,7 @@ func newAdapterFixture(t *testing.T) *adapterFixture {
 		Versions:       &versionFactoryDouble{},
 		Downstream:     fixture.handoff,
 		Doorbell:       &doorbellDouble{},
+		Scope:          noScopeEvidence{},
 		Clock:          adapterClock{at: time.Date(2026, 9, 5, 10, 0, 0, 0, time.UTC)},
 	})
 	if err != nil {

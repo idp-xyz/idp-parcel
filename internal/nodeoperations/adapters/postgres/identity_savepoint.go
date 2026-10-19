@@ -42,10 +42,11 @@ func (view *SavepointedParcelIdentityView) ResolveParcelIdentity(
 	ctx context.Context,
 	tenant domain.TenantID,
 	observation ports.ExternalMarkObservation,
+	scope []domain.CustomerAccountReference,
 ) (ports.ParcelIdentityAnswer, error) {
 	executor, err := view.db.RequireExecutor(ctx)
 	if errors.Is(err, bentopg.ErrTransactionRequired) {
-		return view.inner.ResolveParcelIdentity(ctx, tenant, observation)
+		return view.inner.ResolveParcelIdentity(ctx, tenant, observation, scope)
 	}
 	if err != nil {
 		return ports.ParcelIdentityAnswer{}, fmt.Errorf("parcel identity savepoint: %w", err)
@@ -53,7 +54,7 @@ func (view *SavepointedParcelIdentityView) ResolveParcelIdentity(
 	if _, err := executor.Exec(ctx, "SAVEPOINT "+identitySavepoint); err != nil {
 		return ports.ParcelIdentityAnswer{}, fmt.Errorf("parcel identity savepoint: %w", err)
 	}
-	answer, readErr := view.inner.ResolveParcelIdentity(ctx, tenant, observation)
+	answer, readErr := view.inner.ResolveParcelIdentity(ctx, tenant, observation, scope)
 	if readErr != nil {
 		if _, err := executor.Exec(ctx, "ROLLBACK TO SAVEPOINT "+identitySavepoint); err != nil {
 			// 退不回 savepoint，事务就还在中止态，随后的写会自己失败、整笔回滚；两条错误都交回，免得只剩一半原因。

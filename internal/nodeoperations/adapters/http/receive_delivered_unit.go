@@ -13,6 +13,7 @@ import (
 	"net/http"
 
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/application"
+	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 )
 
 // ErrMalformedRequest 表示这次请求构造不出命令，且重发同样的内容不会改变结果。
@@ -121,6 +122,10 @@ func NewReceiveDeliveredUnitEndpoint(intake ReceptionIntake, handler ReceptionHa
 // UNCHECKED 是读口交回错误、没取得 PS 的答复——两条待识别的 outcome 与候选可以逐字相同，只有这一格说得清候选的空是「查无此号」
 // 还是「没问到」。设备照 `outcome` 出队，未核对与已核对的待识别对它是同一种处置，状态码同为 200；续上身份靠服务端的重核。
 //
+// `deliveryScopeCheck` 只随做成了身份核对的那一版出现（ADR-0212 决定五）：VERIFIED / UNVERIFIED / UNCONFIGURED，未证另带
+// `deliveryScopeUnverifiedReason`，依据不适用再带 `deliveryScopeInapplicability`，取领域那几个词表的原名。同是信息格：范围未证的
+// 待识别与零候选的待识别 outcome 相同，只有这一格说得清缺的是送站的证据（客户或节点去补），还是租户没登时窗（未配置）。
+//
 // 同一作业实物在同一节点已有当前收寄时，这次送站并入它（ADR-0199 决定四），答的同是已有结果：各格照并入的那一版判断转写，
 // 两格信息格也是那一版的。线上不另立「并入」一格——设备照 `outcome` 出队，并入与重投同一种处置；这次送站自带的拒收原因留在
 // 来源里，不进答复，答复说的是并入的那一条。
@@ -138,6 +143,23 @@ type receptionResponse struct {
 	IdentityCheck      string   `json:"identityCheck,omitempty"`
 	RecordedOutcome    string   `json:"recordedOutcome,omitempty"`
 	CurrentVersion     string   `json:"currentVersion,omitempty"`
+	deliveryScopeCheckFields
+}
+
+// deliveryScopeCheckFields 是交付范围核对态在收寄与重核两口答复里的三键（ADR-0212 决定五），两口同名同值，取领域词表的原名；这一版
+// 没记时三键都不出现。
+type deliveryScopeCheckFields struct {
+	DeliveryScopeCheck            string `json:"deliveryScopeCheck,omitempty"`
+	DeliveryScopeUnverifiedReason string `json:"deliveryScopeUnverifiedReason,omitempty"`
+	DeliveryScopeInapplicability  string `json:"deliveryScopeInapplicability,omitempty"`
+}
+
+func deliveryScopeCheckFieldsOf(check domain.DeliveryScopeCheck) deliveryScopeCheckFields {
+	return deliveryScopeCheckFields{
+		DeliveryScopeCheck:            check.State().String(),
+		DeliveryScopeUnverifiedReason: check.Reason().String(),
+		DeliveryScopeInapplicability:  check.Inapplicability().String(),
+	}
 }
 
 // problemResponse 刻意不带自由文本消息。底层失败的措辞会捎带租户、节点或实物的存在
@@ -180,6 +202,7 @@ func writeOutcome(response http.ResponseWriter, result application.ReceiveDelive
 		body.ServiceMarkers = append(body.ServiceMarkers, record.ServiceMarkers...)
 		body.ServiceResultCheck = record.ServiceResultCheck.String()
 		body.IdentityCheck = record.IdentityCheck.String()
+		body.deliveryScopeCheckFields = deliveryScopeCheckFieldsOf(record.DeliveryScopeCheck)
 	}
 	body.RecordedOutcome = result.RecordedOutcome().String()
 	body.CurrentVersion = result.CurrentVersion().String()

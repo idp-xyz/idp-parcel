@@ -24,19 +24,98 @@ func mustValue[T interface{ String() string }](t *testing.T, construct func(stri
 	return built
 }
 
+// identityViewDouble 照 PS 身份核对读口的答法答（ADR-0212 决定四）：候选全部交回，逐候选按带来的客户账户答范围相容，信号按范围收。
 type identityViewDouble struct {
 	candidates []domain.ParcelAssociationReference
-	// ambiguous 是 PS 随候选答出的歧义信号（ADR-0195）。
+	// ambiguous 是不论范围都答出的歧义信号（ADR-0195），给只关心信号本身的用例用。
 	ambiguous bool
-	err       error
+	// spaces 把候选包裹映射到号码所在的客户账户编号空间：在列的只经客户包裹件号命中，带了那个客户账户才范围相容；不在列的照渠道
+	// 包裹件号答，恒范围相容。
+	spaces map[string]string
+	// declaredBy 是另有`已提交`委托声明这个号的客户账户：带了范围只认范围内的，没带认全部（ADR-0212 决定八）。
+	declaredBy []string
+	// scopes 记下每一问带来的客户账户。
+	scopes [][]string
+	err    error
 }
 
 func (double *identityViewDouble) ResolveParcelIdentity(
 	_ context.Context,
 	_ domain.TenantID,
 	_ ports.ExternalMarkObservation,
+	scope []domain.CustomerAccountReference,
 ) (ports.ParcelIdentityAnswer, error) {
-	return ports.ParcelIdentityAnswer{Candidates: double.candidates, Ambiguous: double.ambiguous}, double.err
+	accounts := make([]string, 0, len(scope))
+	for _, account := range scope {
+		accounts = append(accounts, account.String())
+	}
+	double.scopes = append(double.scopes, accounts)
+	answer := ports.ParcelIdentityAnswer{Ambiguous: double.ambiguous, Scoped: len(scope) > 0}
+	for _, parcel := range double.candidates {
+		space, numbered := double.spaces[parcel.String()]
+		answer.Candidates = append(answer.Candidates, ports.ParcelIdentityCandidate{
+			Parcel:          parcel,
+			ScopeCompatible: !numbered || slices.Contains(accounts, space),
+		})
+	}
+	for _, declarer := range double.declaredBy {
+		if len(accounts) == 0 || slices.Contains(accounts, declarer) {
+			answer.Ambiguous = true
+		}
+	}
+	return answer, double.err
+}
+
+// scopeEvidenceDouble 是可验证交付范围的证据读口替身：按标识交回预报与交接单的证据状态，按实物交回最后归入的交接单，按时刻交回
+// 生效的时窗行，并记下按哪些时刻找过时窗。
+type scopeEvidenceDouble struct {
+	preAdvices  map[string]domain.DeliveryPreAdviceState
+	notes       map[string]domain.DeliveryHandoverNoteState
+	assigned    map[string]domain.DeliveryHandoverNoteID
+	windows     []domain.PreAdviceValidityWindow
+	windowAsked []time.Time
+	err         error
+}
+
+func newScopeEvidence() *scopeEvidenceDouble {
+	return &scopeEvidenceDouble{
+		preAdvices: map[string]domain.DeliveryPreAdviceState{},
+		notes:      map[string]domain.DeliveryHandoverNoteState{},
+		assigned:   map[string]domain.DeliveryHandoverNoteID{},
+	}
+}
+
+func (double *scopeEvidenceDouble) FindDeliveryPreAdvice(
+	_ context.Context, _ domain.TenantID, id domain.DeliveryPreAdviceID,
+) (domain.DeliveryPreAdviceState, bool, error) {
+	state, found := double.preAdvices[id.String()]
+	return state, found, double.err
+}
+
+func (double *scopeEvidenceDouble) FindDeliveryHandoverNote(
+	_ context.Context, _ domain.TenantID, id domain.DeliveryHandoverNoteID,
+) (domain.DeliveryHandoverNoteState, bool, error) {
+	state, found := double.notes[id.String()]
+	return state, found, double.err
+}
+
+func (double *scopeEvidenceDouble) FindLastAssignedHandoverNote(
+	_ context.Context, _ domain.TenantID, unit domain.HandlingUnitID,
+) (domain.DeliveryHandoverNoteID, bool, error) {
+	note, found := double.assigned[unit.String()]
+	return note, found, double.err
+}
+
+func (double *scopeEvidenceDouble) FindPreAdviceWindowAt(
+	_ context.Context, tenant domain.TenantID, at time.Time,
+) (domain.PreAdviceValidityWindow, bool, error) {
+	double.windowAsked = append(double.windowAsked, at)
+	for _, window := range double.windows {
+		if window.TenantID() == tenant && window.EffectiveAt(at) {
+			return window, true, double.err
+		}
+	}
+	return domain.PreAdviceValidityWindow{}, false, double.err
 }
 
 type receptionStoreDouble struct {
@@ -237,6 +316,7 @@ type receptionFixture struct {
 	versions       *versionFactoryDouble
 	downstream     *downstreamDouble
 	doorbell       *doorbellDouble
+	scope          *scopeEvidenceDouble
 }
 
 func (fixture *receptionFixture) deps() application.ReceiveDeliveredUnitDeps {
@@ -247,6 +327,7 @@ func (fixture *receptionFixture) deps() application.ReceiveDeliveredUnitDeps {
 		Versions:       fixture.versions,
 		Downstream:     fixture.downstream,
 		Doorbell:       fixture.doorbell,
+		Scope:          fixture.scope,
 		Clock:          fixedClock{at: deliveredAt.Add(time.Minute)},
 	}
 }
@@ -262,6 +343,7 @@ func newReceptionFixture(t *testing.T) *receptionFixture {
 		versions:       &versionFactoryDouble{},
 		downstream:     &downstreamDouble{},
 		doorbell:       &doorbellDouble{},
+		scope:          newScopeEvidence(),
 	}
 	handler, err := application.NewReceiveDeliveredUnitHandler(fixture.deps())
 	if err != nil {
@@ -397,6 +479,7 @@ func TestAMissingDependencyIsRefusedAtConstruction(t *testing.T) {
 		"版本签发":   func(deps *application.ReceiveDeliveredUnitDeps) { deps.Versions = nil },
 		"意图交付":   func(deps *application.ReceiveDeliveredUnitDeps) { deps.Downstream = nil },
 		"重核门铃":   func(deps *application.ReceiveDeliveredUnitDeps) { deps.Doorbell = nil },
+		"交付范围证据": func(deps *application.ReceiveDeliveredUnitDeps) { deps.Scope = nil },
 		"时钟":     func(deps *application.ReceiveDeliveredUnitDeps) { deps.Clock = nil },
 	}
 	for name, drop := range cases {

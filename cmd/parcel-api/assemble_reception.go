@@ -110,6 +110,12 @@ func buildReceptionDeps(db *bentopg.DB) (nodeopsapp.ReceiveDeliveredUnitDeps, er
 	if err != nil {
 		return none, err
 	}
+	// 身份判断先由送站带来的依据推导可验证交付范围（ADR-0212 决定四），证据读 NO 自己的预报册、交接单册与时窗册，跟着收寄走同一笔
+	// 事务；本方册读不动不形成答案，不包 savepoint。
+	scope, err := nopostgres.NewDeliveryScopeEvidence(db)
+	if err != nil {
+		return none, fmt.Errorf("parcel-api: delivery scope evidence: %w", err)
+	}
 	return nodeopsapp.ReceiveDeliveredUnitDeps{
 		Identity:       identity,
 		ServiceResults: serviceResults,
@@ -117,6 +123,7 @@ func buildReceptionDeps(db *bentopg.DB) (nodeopsapp.ReceiveDeliveredUnitDeps, er
 		Versions:       versions,
 		Downstream:     downstream,
 		Doorbell:       doorbell,
+		Scope:          scope,
 		Clock:          clock,
 	}, nil
 }

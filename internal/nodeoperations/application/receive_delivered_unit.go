@@ -83,6 +83,8 @@ func (kind ReceptionClaimKind) String() string {
 
 // ReceiveDeliveredUnitCommand 携带一件实物的交付受理输入。批量交付由调用方逐件分发：
 // 每件实物独立形成结果，整批状态吞并成员差异被用例明禁。
+//
+// ScopeBasis 是送站时上报的交付范围依据引用（ADR-0212 决定七），零值即没带。它进来源文档、不进内容指纹（见 deliverySourceOf）。
 type ReceiveDeliveredUnitCommand struct {
 	TenantID    domain.TenantID
 	SourceID    string
@@ -94,6 +96,7 @@ type ReceiveDeliveredUnitCommand struct {
 	Evidence    domain.ReceptionEvidenceReference
 	Refusal     string
 	OccurredAt  time.Time
+	ScopeBasis  domain.DeliveryScopeBasisReference
 }
 
 type ReceiveDeliveredUnitResult struct {
@@ -159,7 +162,9 @@ type ReceiveDeliveredUnitDeps struct {
 	// Doorbell 在落下未核对的待识别时同一笔自投一封重核门铃（ADR-0199 决定三第三个触发）：翻转之后设备收到 2xx 就出队，不会再
 	// 重投，PS 恢复后续上身份只能靠它。
 	Doorbell ports.IdentityRecheckDoorbell
-	Clock    ports.Clock
+	// Scope 是身份判断推导可验证交付范围要读的证据（ADR-0212 决定四）。
+	Scope ports.DeliveryScopeEvidence
+	Clock ports.Clock
 }
 
 type ReceiveDeliveredUnitHandler struct {
@@ -181,6 +186,8 @@ func NewReceiveDeliveredUnitHandler(deps ReceiveDeliveredUnitDeps) (*ReceiveDeli
 		return nil, errors.New("node operations: reception needs a node intake handoff")
 	case deps.Doorbell == nil:
 		return nil, errors.New("node operations: reception needs an identity recheck doorbell")
+	case deps.Scope == nil:
+		return nil, errors.New("node operations: reception needs the delivery scope evidence")
 	case deps.Clock == nil:
 		return nil, errors.New("node operations: reception needs a clock")
 	}
@@ -288,7 +295,9 @@ func (handler *ReceiveDeliveredUnitHandler) commitWithoutIntake(
 	return handler.commit(ctx, record)
 }
 
-// deliverySourceOf 取本次交付的来源文档（ADR-0199 决定一）。逐格照抄命令，外部标识观察不改写：入口交来什么就存什么。
+// deliverySourceOf 取本次交付的来源文档（ADR-0199 决定一）。逐格照抄命令，外部标识观察与交付范围依据引用都不改写：入口交来什么
+// 就存什么。依据不进内容指纹（CanonicalizeDeliveryPayload 不收它，ADR-0212 决定七）：同一来源只在依据上不同的重投答已有结果，首次存下
+// 的这一份不被覆盖。
 func deliverySourceOf(command ReceiveDeliveredUnitCommand) domain.DeliverySource {
 	return domain.DeliverySource{
 		Unit:        command.Unit,
@@ -299,14 +308,19 @@ func deliverySourceOf(command ReceiveDeliveredUnitCommand) domain.DeliverySource
 		DeliveredBy: command.DeliveredBy,
 		Node:        command.Node,
 		OccurredAt:  command.OccurredAt.UTC(),
+		ScopeBasis:  command.ScopeBasis,
 	}
 }
 
 // receive 走明确接收支：身份核对分派关联收寄或待识别，两格都成立收寄与控制。predecessor 非空即这次接收续办那条待确认。
 //
 // 身份核对读不动时落未核对的待识别（ADR-0199 决定五）：明确接收已经取得控制（CONTEXT），不能因为没问到 PS 就不落册；也不拿
-// 空候选顶替成「查无此号」（ADR-0089），核对态记未核对。不问服务结果（没有可问的包裹）、不交意图，同一笔自投重核门铃。判断里
-// 身份核对读口以外的失败（按包裹读别的实物收寄）仍不形成答案：那是本方册读不动，不是没问到 PS。
+// 空候选顶替成「查无此号」（ADR-0089），核对态记未核对。不问服务结果（没有可问的包裹）、不交意图，同一笔自投重核门铃。这一版没做
+// 成身份核对，不记交付范围核对态。判断里身份核对读口以外的失败（证据册、按包裹读别的实物收寄）仍不形成答案：那是本方册读不动，
+// 不是没问到 PS。
+//
+// 范围未证（没有可验证交付范围、恰一个候选、只经客户包裹件号命中）与零候选同落待识别：接收、控制与来源照常，候选照记，不记冲突，
+// 不问服务结果、不交意图（ADR-0212 决定五）。
 func (handler *ReceiveDeliveredUnitHandler) receive(
 	ctx context.Context,
 	command ReceiveDeliveredUnitCommand,
@@ -318,7 +332,14 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 		identity:   handler.deps.Identity,
 		services:   handler.deps.ServiceResults,
 		receptions: handler.deps.Receptions,
-	}.judge(ctx, command.TenantID, command.Mark, command.Unit)
+		scope:      handler.deps.Scope,
+	}.judge(ctx, command.TenantID, identitySubject{
+		mark:       command.Mark,
+		unit:       command.Unit,
+		node:       command.Node,
+		receivedAt: command.OccurredAt,
+		basis:      command.ScopeBasis,
+	})
 	unchecked := errors.Is(err, ErrParcelIdentityUnreadable)
 	if err != nil && !unchecked {
 		return ReceiveDeliveredUnitResult{}, err
@@ -383,6 +404,7 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 		ServiceMarkers:        judgment.markers,
 		ServiceResultCheck:    judgment.check,
 		IdentityCheck:         identityCheck,
+		DeliveryScopeCheck:    judgment.scopeCheck,
 		RecordedAt:            handler.deps.Clock.Now(),
 	}
 	result, err := handler.commit(ctx, record)

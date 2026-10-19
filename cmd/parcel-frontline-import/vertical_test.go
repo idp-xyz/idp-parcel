@@ -20,8 +20,8 @@ import (
 // 两个用例分别钉住身份核对的两走向：生产装配的关联册读口查无此号时 `RECEIVED` 行答待识别、
 // 真实落库（建立收寄与控制）；换能解析的替身时同一份模板关联收寄、整行落地。
 
-// resolvingParcelIdentityView 是身份核对的能解析替身，只在本用例存在。它答唯一候选，因此走的是
-// AT-NO-015 关联收寄那一格；生产上这一格由 PS 的外部标识关联册答（ADR-0184），真库那一路证在
+// resolvingParcelIdentityView 是身份核对的能解析替身，只在本用例存在。它答唯一候选、范围相容（照渠道包裹件号答，不需要交付范围，
+// ADR-0212 决定四），因此走的是 AT-NO-015 关联收寄那一格；生产上这一格由 PS 的外部标识关联册答（ADR-0184），真库那一路证在
 // cmd/parcel-api 的收寄装配用例里。
 type resolvingParcelIdentityView struct {
 	association domain.ParcelAssociationReference
@@ -30,11 +30,15 @@ type resolvingParcelIdentityView struct {
 var _ ports.ParcelIdentityView = resolvingParcelIdentityView{}
 
 func (view resolvingParcelIdentityView) ResolveParcelIdentity(
-	context.Context,
-	domain.TenantID,
-	ports.ExternalMarkObservation,
+	_ context.Context,
+	_ domain.TenantID,
+	_ ports.ExternalMarkObservation,
+	scope []domain.CustomerAccountReference,
 ) (ports.ParcelIdentityAnswer, error) {
-	return ports.ParcelIdentityAnswer{Candidates: []domain.ParcelAssociationReference{view.association}}, nil
+	return ports.ParcelIdentityAnswer{
+		Scoped:     len(scope) > 0,
+		Candidates: []ports.ParcelIdentityCandidate{{Parcel: view.association, ScopeCompatible: true}},
+	}, nil
 }
 
 // 样例模板三行的来源身份。写成字面量而不是调 intakeSourceID 拼：这里要证的正是落库的

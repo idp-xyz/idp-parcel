@@ -215,8 +215,8 @@ func moveTable(t *testing.T, pool *pgxpool.Pool, table string) (restore func()) 
 	}
 }
 
-// wiredIdentifiedReception 在真库上备一件已接受、带客户包裹件号的包裹，交回生产装配的收寄编排与一条按那个号码明确接收
-// 的命令——身份核对对它答唯一候选。
+// wiredIdentifiedReception 在真库上备一件已接受、带客户包裹件号的包裹与那个客户账户列着它的送站预报，交回生产装配的收寄编排与
+// 一条按那个号码、带着那份预报明确接收的命令——身份核对对它答唯一命中（ADR-0212 决定四：客户包裹件号的唯一识别要有可验证交付范围）。
 func wiredIdentifiedReception(t *testing.T, sourceID string) (*pgxpool.Pool, nodeopshttp.ReceptionHandler, nodeopsapp.ReceiveDeliveredUnitCommand) {
 	t.Helper()
 	pool := pgtest.Pool(t)
@@ -231,6 +231,7 @@ func wiredIdentifiedReception(t *testing.T, sourceID string) (*pgxpool.Pool, nod
 	acceptSubmitted(t, db, submitWithCustomerParcelNumber(t, db, "SYN-CUSTOMER-PARCEL-0001"))
 	command := receptionCommand(t, sourceID, nodeopsapp.ExplicitReception)
 	command.Mark = noports.ExternalMarkObservation{Mark: "SYN-CUSTOMER-PARCEL-0001"}
+	command.ScopeBasis = preAdviseOnRealDatabase(t, db, "SYN-CUSTOMER-1", "SYN-CUSTOMER-PARCEL-0001")
 	return pool, reception, command
 }
 

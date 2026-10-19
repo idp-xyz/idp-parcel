@@ -32,13 +32,15 @@ func sameUnitAgain(
 // 不另起控制起点、不重复发布」的真库面（ADR-0199 决定四）：委托带客户包裹件号建单并接受，一件实物贴着它经生产装配送站，
 // 形成收寄、意图一封。同一件实物换来源再来明确接收、明确拒收、仅扫描：经 HTTP 端点各答 200 EXISTING_RESULT，`recordedOutcome`
 // 是 INTAKE_FORMED、`currentVersion` 是那一版；册上各落一行并入，指名那一版、来源文档原样、不带收寄与控制；控制起点一个、
-// 意图仍是一封。到了另一个节点照常形成收寄、另起那个节点的控制起点。
+// 意图仍是一封。到了另一个节点照常形成收寄、另起那个节点的控制起点。首投与到另一个节点那一次各带那个节点的送站预报（ADR-0212
+// 决定四：客户包裹件号的唯一识别要有可验证交付范围；预报只对它所列的节点算数，决定二）。
 func TestTheWiredReceptionMergesTheSameUnitAtTheSameNode(t *testing.T) {
 	pool, db, reception, receptions := wiredReceptionWithStore(t)
 	acceptSubmitted(t, db, submitWithCustomerParcelNumber(t, db, "SYN-CUSTOMER-PARCEL-NRS04"))
 	first := receptionCommand(t, "SYN-DELIVERY-NRS04-1", nodeopsapp.ExplicitReception)
 	first.Unit = mustValue(t, nodomain.NewHandlingUnitID, "SYN-UNIT-NRS04")
 	first.Mark = noports.ExternalMarkObservation{Mark: "SYN-CUSTOMER-PARCEL-NRS04"}
+	first.ScopeBasis = preAdviseOnRealDatabase(t, db, "SYN-CUSTOMER-1", "SYN-CUSTOMER-PARCEL-NRS04")
 	formed, err := reception.Handle(t.Context(), first)
 	if err != nil || formed.Outcome() != nodeopsapp.NodeIntakeFormed {
 		t.Fatalf("首投 outcome = %v err = %v, want INTAKE_FORMED", formed.Outcome(), err)
@@ -83,6 +85,7 @@ func TestTheWiredReceptionMergesTheSameUnitAtTheSameNode(t *testing.T) {
 
 	elsewhere := sameUnitAgain(t, first, "SYN-DELIVERY-NRS04-ELSEWHERE", nodeopsapp.ExplicitReception, 4*time.Hour)
 	elsewhere.Node = mustValue(t, nodomain.NewNodeReference, "SYN-NODE-NRS04-OTHER")
+	elsewhere.ScopeBasis = preAdviseAtNodeOnRealDatabase(t, db, "SYN-NODE-NRS04-OTHER", "SYN-CUSTOMER-1", "SYN-CUSTOMER-PARCEL-NRS04")
 	if result, err := reception.Handle(t.Context(), elsewhere); err != nil || result.Outcome() != nodeopsapp.NodeIntakeFormed {
 		t.Fatalf("另一个节点 outcome = %v err = %v, want INTAKE_FORMED", result.Outcome(), err)
 	}

@@ -49,6 +49,7 @@ func commandSource(command nodeopsapp.ReceiveDeliveredUnitCommand, claim string)
 		DeliveredBy: command.DeliveredBy,
 		Node:        command.Node,
 		OccurredAt:  command.OccurredAt.UTC(),
+		ScopeBasis:  command.ScopeBasis,
 	}
 }
 
@@ -177,15 +178,18 @@ func TestTheWiredReceptionReplaysRowsWrittenBeforeSourcesWerePreserved(t *testin
 // Covers: `AT-NO-048`「原判断已被后续版本接续之后，同一来源重投——返回已有结果，带原判断种类与当前有效版本」的真库面与 HTTP
 // 面（ADR-0199 决定二）：委托带客户包裹件号接受之后，两件作业实物先后贴着它经生产装配送站，ADR-0196 给先到那件追加冲突版；
 // 冲突版在库里指名先到那件的原判断为前版、带后到那次送站的来源文档。经真 HTTP 适配器重投先到那件：200 EXISTING_RESULT，
-// `recordedOutcome` 是 INTAKE_FORMED，`currentVersion` 是冲突版；册上不多一行。夹具全为合成（S 级）。
+// `recordedOutcome` 是 INTAKE_FORMED，`currentVersion` 是冲突版；册上不多一行。两件都带着那个客户账户的送站预报（ADR-0212 决定四：
+// 客户包裹件号的唯一识别要有可验证交付范围，一码两物只从唯一命中那一支来）。夹具全为合成（S 级）。
 func TestTheWiredReplayAfterAnIdentityConflictAnswersTheCurrentVersion(t *testing.T) {
 	pool, db, reception, _ := wiredReceptionWithStore(t)
 	acceptSubmitted(t, db, submitWithCustomerParcelNumber(t, db, "SYN-CUSTOMER-PARCEL-NRS02"))
+	basis := preAdviseOnRealDatabase(t, db, "SYN-CUSTOMER-1", "SYN-CUSTOMER-PARCEL-NRS02")
 
 	deliver := func(sourceID, unit string) nodeopsapp.ReceiveDeliveredUnitCommand {
 		command := receptionCommand(t, sourceID, nodeopsapp.ExplicitReception)
 		command.Unit = mustValue(t, nodomain.NewHandlingUnitID, unit)
 		command.Mark = noports.ExternalMarkObservation{Mark: "SYN-CUSTOMER-PARCEL-NRS02"}
+		command.ScopeBasis = basis
 		return command
 	}
 	first := deliver("SYN-DELIVERY-NRS02-A", "SYN-UNIT-NRS02-A")

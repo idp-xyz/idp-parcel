@@ -20,32 +20,111 @@ type ExternalMarkObservation struct {
 	Mark string
 }
 
-// ParcelIdentityView 用正式包裹与外部标识关联核对身份（PS 侧只读引用）。答复决定走向：唯一命中→关联；零个候选→
-// 待识别；其余→身份冲突。依赖调不通作为错误返回。
+// ParcelIdentityView 用正式包裹与外部标识关联核对身份（PS 侧只读引用）。scope 是这件实物的可验证交付范围给出的客户账户，没有范围
+// 时为空（ADR-0212 决定四）。答复怎样分走向只经 ParcelIdentityAnswer.Verdict 认。依赖调不通作为错误返回。
 type ParcelIdentityView interface {
 	ResolveParcelIdentity(
 		ctx context.Context,
 		tenant domain.TenantID,
 		observation ExternalMarkObservation,
+		scope []domain.CustomerAccountReference,
 	) (ParcelIdentityAnswer, error)
 }
 
-// ParcelIdentityAnswer 是一次身份核对的答复：PS 交回的包裹候选，加 PS 随候选答出的歧义信号。
-type ParcelIdentityAnswer struct {
-	Candidates []domain.ParcelAssociationReference
-	// Ambiguous 说号码另被一份还在`已提交`的委托报过（ADR-0195），那份委托没接受，也没被拒绝或撤回。报过的那件不是
-	// 正式包裹，不在候选里；这一格只让恰一个候选不再算唯一命中——客户给的号只在它自己的编号空间里算数，别人也报了
-	// 这个号，命中的那一件可能不是这件实物。
-	Ambiguous bool
+// ParcelIdentityCandidate 是 PS 交回的一个包裹候选，带它的范围相容：号码经渠道包裹件号，或经核对所带客户账户之一编号空间里的
+// 关联标识这件包裹（PS CONTEXT「范围相容」）。没带范围时，只经客户包裹件号命中的候选不范围相容。
+type ParcelIdentityCandidate struct {
+	Parcel          domain.ParcelAssociationReference
+	ScopeCompatible bool
 }
 
-// Unique 交回唯一命中的那件包裹：恰一个候选，且没有歧义信号。认唯一只经它，不数候选——收寄与重核走同一份身份判断
-// （ADR-0199 决定三），数候选的那一处会漏掉信号。
-func (answer ParcelIdentityAnswer) Unique() (domain.ParcelAssociationReference, bool) {
-	if len(answer.Candidates) != 1 || answer.Ambiguous {
-		return domain.ParcelAssociationReference{}, false
+// ParcelIdentityAnswer 是一次身份核对的答复：PS 交回的包裹候选（全部，不按范围收窄）、PS 随候选答出的歧义信号，以及这次是不是带着
+// 可验证交付范围问的——判断表按它分两张（ADR-0212 决定四）。
+type ParcelIdentityAnswer struct {
+	Candidates []ParcelIdentityCandidate
+	// Ambiguous 说号码另被一份还在`已提交`的委托报过（ADR-0195）。带了范围时只算范围内客户账户的委托（ADR-0212 决定八）。报过的
+	// 那件不是正式包裹，不在候选里。
+	Ambiguous bool
+	// Scoped 说这次核对带了可验证交付范围给出的客户账户。
+	Scoped bool
+}
+
+// Parcels 交回全部候选包裹，范围外的也在：判断上照记全部候选，身份冲突处置就在它们里面选（ADR-0212 决定四）。
+func (answer ParcelIdentityAnswer) Parcels() []domain.ParcelAssociationReference {
+	if len(answer.Candidates) == 0 {
+		return nil
 	}
-	return answer.Candidates[0], true
+	parcels := make([]domain.ParcelAssociationReference, 0, len(answer.Candidates))
+	for _, candidate := range answer.Candidates {
+		parcels = append(parcels, candidate.Parcel)
+	}
+	return parcels
+}
+
+// ParcelIdentityVerdict 是一次身份核对答复按 ADR-0212 决定四那张表判下的一格。冲突两格的名字就是冲突来由的前两格（ADR-0211 决定一，
+// 有范围时照决定八只数范围相容的候选）；一码两物不在这里——那要按关联到的包裹另问收寄册（ADR-0196）。
+type ParcelIdentityVerdict uint8
+
+const (
+	IdentityVerdictInvalid ParcelIdentityVerdict = iota
+	// IdentityVerdictUnique：唯一命中。没有范围时恰一个候选、无信号、范围相容；有范围时范围相容的恰一个、无范围内信号。
+	IdentityVerdictUnique
+	// IdentityVerdictUnknown：待识别、不记冲突。没有范围时零候选；有范围时范围相容的一个也没有。带不带信号都一样：那份委托接受之后
+	// 的重核要能接上（ADR-0195「零候选带信号」）。
+	IdentityVerdictUnknown
+	// IdentityVerdictScopeUnverified：没有范围，恰一个候选、无信号，只经客户包裹件号命中——缺的是证据而不是有反证，待识别、记候选、
+	// 不记冲突（ADR-0212 决定五）。
+	IdentityVerdictScopeUnverified
+	// IdentityVerdictAmbiguityOnly：恰一个（有范围时数范围相容的）候选，带（范围内的）歧义信号。
+	IdentityVerdictAmbiguityOnly
+	// IdentityVerdictMultipleCandidates：不止一个（有范围时数范围相容的）候选，带不带信号都一样。
+	IdentityVerdictMultipleCandidates
+)
+
+func (verdict ParcelIdentityVerdict) String() string {
+	switch verdict {
+	case IdentityVerdictUnique:
+		return "UNIQUE"
+	case IdentityVerdictUnknown:
+		return "UNKNOWN"
+	case IdentityVerdictScopeUnverified:
+		return "SCOPE_UNVERIFIED"
+	case IdentityVerdictAmbiguityOnly:
+		return "AMBIGUITY_ONLY"
+	case IdentityVerdictMultipleCandidates:
+		return "MULTIPLE_CANDIDATES"
+	default:
+		return ""
+	}
+}
+
+// Verdict 照 ADR-0212 决定四的表判这一次答复，唯一命中时一并交回那件包裹。认唯一只经它，不数候选——收寄与重核走同一份身份判断
+// （ADR-0199 决定三），数候选的那一处会漏掉信号或范围（ADR-0195 决定三同一条理由）。
+//
+// 有范围时只数范围相容的候选：范围外的候选属于别的客户账户的编号空间，不构成歧义，照旧随 Parcels 记下。没有范围时数全部候选，只有
+// 「恰一个、无信号」那一格再看范围相容：相容（渠道包裹件号）是唯一命中，不相容落范围未证。
+func (answer ParcelIdentityAnswer) Verdict() (ParcelIdentityVerdict, domain.ParcelAssociationReference) {
+	counted := answer.Candidates
+	if answer.Scoped {
+		counted = nil
+		for _, candidate := range answer.Candidates {
+			if candidate.ScopeCompatible {
+				counted = append(counted, candidate)
+			}
+		}
+	}
+	switch {
+	case len(counted) == 0:
+		return IdentityVerdictUnknown, domain.ParcelAssociationReference{}
+	case len(counted) > 1:
+		return IdentityVerdictMultipleCandidates, domain.ParcelAssociationReference{}
+	case answer.Ambiguous:
+		return IdentityVerdictAmbiguityOnly, domain.ParcelAssociationReference{}
+	case !counted[0].ScopeCompatible:
+		return IdentityVerdictScopeUnverified, domain.ParcelAssociationReference{}
+	default:
+		return IdentityVerdictUnique, counted[0].Parcel
+	}
 }
 
 // ReceptionKey 是收寄判断的幂等键：同一来源身份和内容返回已有处理结果。
@@ -193,9 +272,11 @@ type IdentityConflictCause uint8
 
 const (
 	IdentityConflictCauseAbsent IdentityConflictCause = iota
-	// ConflictByAmbiguityOnly：PS 答恰一个候选，同时答出歧义信号（ADR-0195）——离唯一命中只差这一个信号。
+	// ConflictByAmbiguityOnly：PS 答恰一个候选，同时答出歧义信号（ADR-0195）——离唯一命中只差这一个信号。有可验证交付范围时数的是
+	// 范围相容的候选、看的是范围内的信号，范围外另有几件都不使它变成多候选（ADR-0212 决定八）。
 	ConflictByAmbiguityOnly
-	// ConflictByMultipleCandidates：PS 答多个候选，带不带歧义信号都落这一格（ADR-0195「多候选，有无信号都一样」）。
+	// ConflictByMultipleCandidates：PS 答多个候选，带不带歧义信号都落这一格（ADR-0195「多候选，有无信号都一样」）；有范围时数的是
+	// 范围相容的候选。
 	ConflictByMultipleCandidates
 	// ConflictByOneMarkOnTwoUnits：号码唯一指向的包裹已关联到另一件作业实物（ADR-0196），后到那件与给先到那件追加的冲突版都记它。
 	ConflictByOneMarkOnTwoUnits
@@ -248,6 +329,10 @@ type ReceptionRecord struct {
 	// IdentityConflictCause 只随 IdentityConflict 在场（ADR-0211 决定一），见它的类型头注。它不进内容指纹：来由是服务端判下的，
 	// 同一次送站重投不因它换答法。
 	IdentityConflictCause IdentityConflictCause
+	// DeliveryScopeCheck 是这一版做身份核对时记下的交付范围核对态（ADR-0212 决定五），零值即不带：没做成身份核对的各版（未核对、
+	// 未收寄、待确认、并入）、ADR-0196 给先到那件追加的冲突版、处置版，与这一格落地之前的行。它是信息格，不进 outcome，也不进内容
+	// 指纹：核对态是服务端在判断时刻按证据状态推出来的，同一次送站重投不因它换答法。
+	DeliveryScopeCheck domain.DeliveryScopeCheck
 	// Disposition 只在身份冲突处置版上在场（ADR-0210 决定三），零值即这一版不是处置版。处置版的 ContentDigest 是这次处置比对格的
 	// 摘要（domain.CanonicalizeIdentityDispositionComparison），同一次处置的各版同一个；文档本身不进摘要：依据引用、操作者与形成时刻
 	// 不进比对（ADR-0210 决定六）。

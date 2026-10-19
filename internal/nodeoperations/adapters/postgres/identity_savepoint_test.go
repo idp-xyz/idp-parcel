@@ -20,17 +20,20 @@ import (
 
 // sqlIdentityView 在调用方的事务里发一条 SQL；query 出错时把错误原样交回，像一张被挪走的 PS 外部标识关联册那样。
 type sqlIdentityView struct {
-	db    *bentopg.DB
-	query string
-	asked int
+	db     *bentopg.DB
+	query  string
+	asked  int
+	scopes [][]domain.CustomerAccountReference
 }
 
 func (view *sqlIdentityView) ResolveParcelIdentity(
 	ctx context.Context,
 	_ domain.TenantID,
 	_ ports.ExternalMarkObservation,
+	scope []domain.CustomerAccountReference,
 ) (ports.ParcelIdentityAnswer, error) {
 	view.asked++
+	view.scopes = append(view.scopes, scope)
 	querier, err := view.db.ReadExecutor(ctx)
 	if err != nil {
 		return ports.ParcelIdentityAnswer{}, err
@@ -43,7 +46,7 @@ func (view *sqlIdentityView) ResolveParcelIdentity(
 	if err != nil {
 		return ports.ParcelIdentityAnswer{}, err
 	}
-	return ports.ParcelIdentityAnswer{Candidates: []domain.ParcelAssociationReference{reference}}, nil
+	return ports.ParcelIdentityAnswer{Candidates: []ports.ParcelIdentityCandidate{{Parcel: reference, ScopeCompatible: true}}}, nil
 }
 
 func identitySavepointFixture(t *testing.T, query string) (*bentopg.DB, *adapter.Receptions, *sqlIdentityView, *adapter.SavepointedParcelIdentityView) {
@@ -74,7 +77,7 @@ func TestASavepointKeepsAFailedIdentityReadFromAbortingTheReception(t *testing.T
 
 	var readErr error
 	err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
-		_, readErr = view.ResolveParcelIdentity(txCtx, tenant, ports.ExternalMarkObservation{Mark: "SYN-MARK-NRS05"})
+		_, readErr = view.ResolveParcelIdentity(txCtx, tenant, ports.ExternalMarkObservation{Mark: "SYN-MARK-NRS05"}, nil)
 		_, saveErr := receptions.Save(txCtx, record)
 		return saveErr
 	})
@@ -90,21 +93,25 @@ func TestASavepointKeepsAFailedIdentityReadFromAbortingTheReception(t *testing.T
 	}
 }
 
-// Covers: 装饰器的可读一支——RELEASE 之后答复原样交回，同一事务随后的写入照常提交。
+// Covers: 装饰器的可读一支——RELEASE 之后答复原样交回，同一事务随后的写入照常提交；可验证交付范围给出的客户账户原样交给内层。
 func TestASavepointReleasesAReadableIdentityUnchanged(t *testing.T) {
-	db, receptions, _, view := identitySavepointFixture(t, `SELECT 'SYN-PARCEL-NRS05'`)
+	db, receptions, inner, view := identitySavepointFixture(t, `SELECT 'SYN-PARCEL-NRS05'`)
+	scope := []domain.CustomerAccountReference{ref(t, domain.NewCustomerAccountReference, "SYN-CUSTOMER-NRS05")}
 	tenant := ref(t, domain.NewTenantID, "SYN-TENANT-NRS05")
 	record := formedRecord(t, "SYN-TENANT-NRS05", "SYN-SCAN-NRS05-SAVEPOINT-2")
 
 	var answer ports.ParcelIdentityAnswer
 	var readErr error
 	err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
-		answer, readErr = view.ResolveParcelIdentity(txCtx, tenant, ports.ExternalMarkObservation{Mark: "SYN-MARK-NRS05"})
+		answer, readErr = view.ResolveParcelIdentity(txCtx, tenant, ports.ExternalMarkObservation{Mark: "SYN-MARK-NRS05"}, scope)
 		_, saveErr := receptions.Save(txCtx, record)
 		return saveErr
 	})
-	if parcel, unique := answer.Unique(); readErr != nil || !unique || parcel.String() != "SYN-PARCEL-NRS05" {
+	if verdict, parcel := answer.Verdict(); readErr != nil || verdict != ports.IdentityVerdictUnique || parcel.String() != "SYN-PARCEL-NRS05" {
 		t.Fatalf("读回 %+v err=%v, want 唯一的 SYN-PARCEL-NRS05", answer, readErr)
+	}
+	if len(inner.scopes) != 1 || len(inner.scopes[0]) != 1 || inner.scopes[0][0] != scope[0] {
+		t.Fatalf("内层收到的客户账户 = %v, want 原样的 %v", inner.scopes, scope)
 	}
 	if err != nil {
 		t.Fatalf("提交：%v", err)
@@ -123,8 +130,8 @@ func TestAnIdentitySavepointPassesThroughOutsideATransaction(t *testing.T) {
 	if _, err := db.RequireExecutor(t.Context()); !errors.Is(err, bentopg.ErrTransactionRequired) {
 		t.Fatalf("前提不成立：ctx 应在事务外，RequireExecutor 却答 %v", err)
 	}
-	answer, err := view.ResolveParcelIdentity(t.Context(), tenant, mark)
-	if _, unique := answer.Unique(); err != nil || !unique || inner.asked != 1 {
+	answer, err := view.ResolveParcelIdentity(t.Context(), tenant, mark, nil)
+	if verdict, _ := answer.Verdict(); err != nil || verdict != ports.IdentityVerdictUnique || inner.asked != 1 {
 		t.Fatalf("读回 %+v err=%v 问内层 %d 次, want 直通一次", answer, err, inner.asked)
 	}
 
@@ -133,13 +140,13 @@ func TestAnIdentitySavepointPassesThroughOutsideATransaction(t *testing.T) {
 	if err != nil {
 		t.Fatalf("构造装饰器：%v", err)
 	}
-	if _, err := wrapped.ResolveParcelIdentity(t.Context(), tenant, mark); !errors.Is(err, failing) {
+	if _, err := wrapped.ResolveParcelIdentity(t.Context(), tenant, mark, nil); !errors.Is(err, failing) {
 		t.Fatalf("err = %v, want 内层错误原样交回", err)
 	}
 }
 
 type failingIdentity struct{ err error }
 
-func (identity failingIdentity) ResolveParcelIdentity(context.Context, domain.TenantID, ports.ExternalMarkObservation) (ports.ParcelIdentityAnswer, error) {
+func (identity failingIdentity) ResolveParcelIdentity(context.Context, domain.TenantID, ports.ExternalMarkObservation, []domain.CustomerAccountReference) (ports.ParcelIdentityAnswer, error) {
 	return ports.ParcelIdentityAnswer{}, identity.err
 }

@@ -68,9 +68,10 @@ func (double *countingIdentity) ResolveParcelIdentity(
 	ctx context.Context,
 	tenant domain.TenantID,
 	observation ports.ExternalMarkObservation,
+	scope []domain.CustomerAccountReference,
 ) (ports.ParcelIdentityAnswer, error) {
 	double.asked = append(double.asked, observation.Mark)
-	return double.identityViewDouble.ResolveParcelIdentity(ctx, tenant, observation)
+	return double.identityViewDouble.ResolveParcelIdentity(ctx, tenant, observation, scope)
 }
 
 type recheckFixture struct {
@@ -91,6 +92,7 @@ func newRecheckFixture(t *testing.T) *recheckFixture {
 		Pending:        reception.receptions,
 		Versions:       reception.versions,
 		Downstream:     reception.downstream,
+		Scope:          reception.scope,
 		Clock:          fixedClock{at: deliveredAt.Add(time.Hour)},
 	})
 	if err != nil {
@@ -472,6 +474,7 @@ func TestARecheckWithAMissingDependencyIsRefusedAtConstruction(t *testing.T) {
 		"待识别查找":  func(deps *application.RecheckPendingIdentityDeps) { deps.Pending = nil },
 		"版本签发":   func(deps *application.RecheckPendingIdentityDeps) { deps.Versions = nil },
 		"意图交付":   func(deps *application.RecheckPendingIdentityDeps) { deps.Downstream = nil },
+		"交付范围证据": func(deps *application.RecheckPendingIdentityDeps) { deps.Scope = nil },
 		"时钟":     func(deps *application.RecheckPendingIdentityDeps) { deps.Clock = nil },
 	}
 	for name, drop := range cases {
@@ -480,7 +483,7 @@ func TestARecheckWithAMissingDependencyIsRefusedAtConstruction(t *testing.T) {
 			deps := application.RecheckPendingIdentityDeps{
 				Identity: fixture.identity, ServiceResults: fixture.serviceResults, Receptions: fixture.receptions,
 				Pending: fixture.receptions, Versions: fixture.versions, Downstream: fixture.downstream,
-				Clock: fixedClock{at: deliveredAt},
+				Scope: fixture.scope, Clock: fixedClock{at: deliveredAt},
 			}
 			drop(&deps)
 			if handler, err := application.NewRecheckPendingIdentityHandler(deps); err == nil || handler != nil {

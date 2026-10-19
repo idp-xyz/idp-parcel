@@ -26,15 +26,26 @@ import (
 // 「不换词」只管键名与词表，不管值里的空白——两口在这一格各办各的（UC-NO-002「输入语义契约」）：本口把 mark 原样交进命令，
 // 设备交来的观察不改写，扫描附带的回车、换行、Tab 与两端空白归一线客户端送出前去掉；收寄模板逐格去两端空白，是 CSV 模板的
 // 形状纪律。在这里补去空白会改写设备事实与收寄内容摘要，带不带后缀的同一来源重投就被判成同一内容。
+//
+// deliveryScopeBasis 是可选的交付范围依据引用（ADR-0212 决定七）：送站时出示的送站预报或送站交接单，种类与标识。缺席或 null 即没带；
+// 给了就要给全，标识原样进来源文档，不去空白——它与号码一样是现场出示的那一份。收寄模板那一格写成「种类:标识」一个单元格，这里是
+// 一个对象：键名与词表同一份，CSV 放不下嵌套才那样拼。
 type receptionDocument struct {
-	SourceID      string `json:"sourceId"`
-	DeliveredBy   string `json:"deliveredBy"`
-	HandlingUnit  string `json:"handlingUnit"`
-	Mark          string `json:"mark"`
-	Claim         string `json:"claim"`
-	EvidenceRef   string `json:"evidenceRef"`
-	RefusalReason string `json:"refusalReason"`
-	OccurredAt    string `json:"occurredAt"`
+	SourceID           string                      `json:"sourceId"`
+	DeliveredBy        string                      `json:"deliveredBy"`
+	HandlingUnit       string                      `json:"handlingUnit"`
+	Mark               string                      `json:"mark"`
+	Claim              string                      `json:"claim"`
+	EvidenceRef        string                      `json:"evidenceRef"`
+	RefusalReason      string                      `json:"refusalReason"`
+	OccurredAt         string                      `json:"occurredAt"`
+	DeliveryScopeBasis *deliveryScopeBasisDocument `json:"deliveryScopeBasis"`
+}
+
+// deliveryScopeBasisDocument 是依据引用那一格的形状，封闭解码随整份载荷：带未知键同样答坏载荷。
+type deliveryScopeBasisDocument struct {
+	Kind string `json:"kind"`
+	ID   string `json:"id"`
 }
 
 // receptionCommand 把收寄载荷译成命令。租户与节点由调用方从认证结果交入，不从载荷收。
@@ -81,10 +92,31 @@ func receptionCommand(tenant domain.TenantID, node domain.NodeReference, request
 		Mark:        ports.ExternalMarkObservation{Mark: document.Mark},
 		OccurredAt:  occurredAt,
 	}
+	if document.DeliveryScopeBasis != nil {
+		basis, err := deliveryScopeBasisOf(*document.DeliveryScopeBasis)
+		if err != nil {
+			return none, err
+		}
+		command.ScopeBasis = basis
+	}
 	if err := applyReceptionClaim(&command, document); err != nil {
 		return none, err
 	}
 	return command, nil
+}
+
+// deliveryScopeBasisOf 按线上名认依据种类、立依据引用。认不出的种类与空标识答坏载荷：静默丢掉，设备就以为带上了依据，这一件却按
+// 没带依据落范围未证。它在不在册、适不适用不在这里判——那是身份判断按此刻的证据状态答的（ADR-0212 决定五）。
+func deliveryScopeBasisOf(document deliveryScopeBasisDocument) (domain.DeliveryScopeBasisReference, error) {
+	kind, err := domain.ParseDeliveryScopeBasisKind(document.Kind)
+	if err != nil {
+		return domain.DeliveryScopeBasisReference{}, fmt.Errorf("%w: deliveryScopeBasis.kind: %v", ErrMalformedRequest, err)
+	}
+	basis, err := domain.NewDeliveryScopeBasisReference(kind, document.ID)
+	if err != nil {
+		return domain.DeliveryScopeBasisReference{}, fmt.Errorf("%w: deliveryScopeBasis.id: %v", ErrMalformedRequest, err)
+	}
+	return basis, nil
 }
 
 // applyReceptionClaim 按接收观察的各态核搭配并译进命令。搭配门与受控批量口的收寄模板同一组：明确接收必带标识与接收证据、

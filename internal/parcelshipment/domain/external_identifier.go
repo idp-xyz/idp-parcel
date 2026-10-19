@@ -103,6 +103,29 @@ func (kind ExternalIdentifierKind) String() string {
 	}
 }
 
+// CountsInCustomerAccountSpace 报告这一类号码的适用范围是不是某个客户账户的编号空间（PS CONTEXT「范围相容」）。是的，号码只在
+// 带了那个客户账户的核对里范围相容；不是的（渠道包裹件号在渠道服务方内算数），与一次送站属于哪个客户账户无关，恒范围相容
+// （ADR-0212 决定四）。按类型分而不按分配方分：适用范围单列一格（ADR-0184 决定六），日后窄于客户账户的范围仍落在该账户的空间里。
+func (kind ExternalIdentifierKind) CountsInCustomerAccountSpace() bool {
+	switch kind {
+	case CustomerParcelNumber:
+		return true
+	default:
+		return false
+	}
+}
+
+// CustomerAccountSpaceKinds 交回在客户账户编号空间里算数的各类型。身份核对读口按它比范围相容，分类只在这里一处。
+func CustomerAccountSpaceKinds() []ExternalIdentifierKind {
+	var kinds []ExternalIdentifierKind
+	for _, kind := range []ExternalIdentifierKind{CustomerParcelNumber, ChannelParcelNumber} {
+		if kind.CountsInCustomerAccountSpace() {
+			kinds = append(kinds, kind)
+		}
+	}
+	return kinds
+}
+
 // ExternalIdentifierAllocator 是号码的分配方。它的种类由标识类型定：客户包裹件号的分配方是客户账户。
 type ExternalIdentifierAllocator struct{ requiredValue }
 

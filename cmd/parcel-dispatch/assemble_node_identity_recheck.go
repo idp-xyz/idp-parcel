@@ -114,6 +114,11 @@ func nodeIdentityRecheck(db *bentopg.DB, outboxStore *outbox.Store, clock system
 	if err != nil {
 		return nil, err
 	}
+	// 重核按存下的依据重算可验证交付范围（ADR-0212 决定六），证据读 NO 自己的预报册、交接单册与时窗册。
+	scope, err := nopostgres.NewDeliveryScopeEvidence(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: recheck delivery scope evidence: %w", err)
+	}
 	recheck, err := noapplication.NewRecheckPendingIdentityHandler(noapplication.RecheckPendingIdentityDeps{
 		Identity:       identity,
 		ServiceResults: services,
@@ -121,6 +126,7 @@ func nodeIdentityRecheck(db *bentopg.DB, outboxStore *outbox.Store, clock system
 		Pending:        receptions,
 		Versions:       versions,
 		Downstream:     downstream,
+		Scope:          scope,
 		Clock:          clock,
 	})
 	if err != nil {

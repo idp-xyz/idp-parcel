@@ -64,7 +64,8 @@ func (catalogue *ReviewCatalogue) ListReceptions(
 		        service_markers,
 		        service_result_check,
 		        recorded_at,
-		        identity_check
+		        identity_check,
+		        delivery_scope_check, delivery_scope_unverified_reason, delivery_scope_inapplicability
 		   FROM node_operations.reception
 		  WHERE tenant_id = $1
 		    AND kind IN ('INTAKE_FORMED', 'PENDING_IDENTIFICATION')
@@ -86,6 +87,7 @@ func (catalogue *ReviewCatalogue) ListReceptions(
 			markersJSON []byte
 			checkName   *string
 			identity    *string
+			scope       [3]*string
 		)
 		if err := rows.Scan(
 			&row.SourceID, &row.Kind,
@@ -93,6 +95,7 @@ func (catalogue *ReviewCatalogue) ListReceptions(
 			&row.ControlKind, &row.ControlEstablishedAt,
 			&row.ControlReleasedBy, &releasedAt,
 			&markersJSON, &checkName, &row.RecordedAt, &identity,
+			&scope[0], &scope[1], &scope[2],
 		); err != nil {
 			return nil, fmt.Errorf("list receptions: %w", err)
 		}
@@ -110,8 +113,11 @@ func (catalogue *ReviewCatalogue) ListReceptions(
 			return nil, fmt.Errorf("list receptions: source %q: %w", row.SourceID, err)
 		}
 		row.ServiceResultCheck = check
-		// 身份核对态同理，与按键读回共用 identityCheckFrom。
+		// 身份核对态同理，与按键读回共用 identityCheckFrom；交付范围核对态与按键读回共用 deliveryScopeCheckFrom。
 		if row.IdentityCheck, err = identityCheckFrom(identity); err != nil {
+			return nil, fmt.Errorf("list receptions: source %q: %w", row.SourceID, err)
+		}
+		if row.DeliveryScopeCheck, err = deliveryScopeCheckFrom(scope[0], scope[1], scope[2]); err != nil {
 			return nil, fmt.Errorf("list receptions: source %q: %w", row.SourceID, err)
 		}
 		row.ReceivedAt = row.ReceivedAt.UTC()
@@ -158,7 +164,8 @@ func (catalogue *ReviewCatalogue) ListUnidentifiedItems(
 		                   WHERE successor.tenant_id = r.tenant_id
 		                     AND successor.predecessor_version = r.judgment_version), ''),
 		        r.identity_check,
-		        r.identity_conflict_cause
+		        r.identity_conflict_cause,
+		        r.delivery_scope_check, r.delivery_scope_unverified_reason, r.delivery_scope_inapplicability
 		   FROM node_operations.reception AS r
 		  WHERE r.tenant_id = $1
 		    AND r.kind = 'PENDING_IDENTIFICATION'
@@ -179,6 +186,7 @@ func (catalogue *ReviewCatalogue) ListUnidentifiedItems(
 			candidatesJSON []byte
 			identity       *string
 			conflictCause  *string
+			scope          [3]*string
 		)
 		if err := rows.Scan(
 			&row.SourceID, &row.Unit, &row.Node,
@@ -186,6 +194,7 @@ func (catalogue *ReviewCatalogue) ListUnidentifiedItems(
 			&row.ReceivedAt, &row.Association, &row.RecordedAt,
 			&row.JudgmentVersion, &row.SourcePreserved, &row.Mark, &row.SucceededBy,
 			&identity, &conflictCause,
+			&scope[0], &scope[1], &scope[2],
 		); err != nil {
 			return nil, fmt.Errorf("list unidentified items: %w", err)
 		}
@@ -195,6 +204,9 @@ func (catalogue *ReviewCatalogue) ListUnidentifiedItems(
 		}
 		row.IdentityCheck = check
 		if row.IdentityConflictCause, err = identityConflictCauseFrom(conflictCause); err != nil {
+			return nil, fmt.Errorf("list unidentified items: source %q: %w", row.SourceID, err)
+		}
+		if row.DeliveryScopeCheck, err = deliveryScopeCheckFrom(scope[0], scope[1], scope[2]); err != nil {
 			return nil, fmt.Errorf("list unidentified items: source %q: %w", row.SourceID, err)
 		}
 		if err := json.Unmarshal(candidatesJSON, &row.Candidates); err != nil {

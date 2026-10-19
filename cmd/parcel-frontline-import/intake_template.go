@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/csv"
 	"errors"
 	"fmt"
 	"strings"
@@ -13,25 +15,32 @@ import (
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 )
 
-// intakeTemplateVersion 是收寄汇总模板的版本号。它进两处来源标记（见 intakeSourceID 与
-// intakeEvidence），因此换模板列就必须换号——同一个号下两种列形状会让落库的标记说谎。
-const intakeTemplateVersion = "INTAKE-1"
+// 收寄汇总模板的版本号。它进两处来源标记（见 intakeSourceID 与 intakeEvidence），因此换模板列就必须换号——同一个号下两种列形状会让
+// 落库的标记说谎。INTAKE-2 比 INTAKE-1 多交付范围依据引用一列（ADR-0212 决定七）；INTAKE-1 照旧认，读作没有依据：已经按它填好的
+// 纸单汇总不必重抄，重跑同一份文件也还是同一组来源标记。
+const (
+	intakeTemplateVersion             = "INTAKE-2"
+	intakeTemplateVersionWithoutBasis = "INTAKE-1"
+)
 
 // 收寄模板独有的列；与集运共有的那几列在 template.go。
 const (
-	columnNode          = "node"
-	columnDeliveredBy   = "deliveredBy"
-	columnHandlingUnit  = "handlingUnit"
-	columnMark          = "mark"
-	columnClaim         = "claim"
-	columnRefusalReason = "refusalReason"
+	columnNode               = "node"
+	columnDeliveredBy        = "deliveredBy"
+	columnHandlingUnit       = "handlingUnit"
+	columnMark               = "mark"
+	columnClaim              = "claim"
+	columnRefusalReason      = "refusalReason"
+	columnDeliveryScopeBasis = "deliveryScopeBasis"
 )
 
-var intakeColumns = []string{
+var intakeColumnsWithoutBasis = []string{
 	columnTemplateVersion, columnBatchRef, columnFactRef, columnOperator,
 	columnNode, columnDeliveredBy, columnHandlingUnit, columnMark,
 	columnClaim, columnEvidenceRef, columnRefusalReason, columnOccurredAt,
 }
+
+var intakeColumns = append(append([]string{}, intakeColumnsWithoutBasis...), columnDeliveryScopeBasis)
 
 // 接收观察三态的模板词表。词表在这里就核——走到编排才被拒会答成「未知接收观察」的
 // 未决，而它明明是模板填错（用法错误）。
@@ -45,10 +54,32 @@ const (
 // 任一行译装不出。
 var ErrIntakeTemplate = errors.New("parcel-frontline-import: 收寄模板不合格")
 
-var intakeShape = templateShape{
-	version: intakeTemplateVersion,
-	columns: intakeColumns,
-	invalid: ErrIntakeTemplate,
+var (
+	intakeShape = templateShape{
+		version: intakeTemplateVersion,
+		columns: intakeColumns,
+		invalid: ErrIntakeTemplate,
+	}
+	intakeShapeWithoutBasis = templateShape{
+		version: intakeTemplateVersionWithoutBasis,
+		columns: intakeColumnsWithoutBasis,
+		invalid: ErrIntakeTemplate,
+	}
+)
+
+// intakeShapeOf 按表头认模板版本：表头有依据那一列就是 INTAKE-2，否则按 INTAKE-1 核。只看表头不看行：骨架随后逐行核版本号，行上的号
+// 与表头的列形状对不上照样整批拒。表头读不出来时交 INTAKE-2，由骨架报出读不到表头的原错。
+func intakeShapeOf(raw []byte) templateShape {
+	header, err := csv.NewReader(bytes.NewReader(bytes.TrimPrefix(raw, []byte("\xef\xbb\xbf")))).Read()
+	if err != nil {
+		return intakeShape
+	}
+	for _, name := range header {
+		if strings.TrimSpace(name) == columnDeliveryScopeBasis {
+			return intakeShape
+		}
+	}
+	return intakeShapeWithoutBasis
 }
 
 // intakeRow 是一行已译装好的收寄事实：模板行号（给内勤对表用）、行事实号与交编排的
@@ -60,9 +91,10 @@ type intakeRow struct {
 	Command  application.ReceiveDeliveredUnitCommand
 }
 
-// intakeBatch 是一份译装完成的收寄模板：批次号只有一个，行按模板顺序。
+// intakeBatch 是一份译装完成的收寄模板：批次号只有一个，行按模板顺序，Version 是这份文件的模板版本。
 type intakeBatch struct {
 	BatchRef string
+	Version  string
 	Rows     []intakeRow
 }
 
@@ -70,9 +102,10 @@ type intakeBatch struct {
 // 不出拒；`tenant` 来自 CLI 参数而不是模板——租户是最高数据隔离边界（ADR-0003），由受控
 // 运维给出，不让内勤填也不让文件自报。
 func decodeIntakeTemplate(tenant domain.TenantID, raw []byte) (intakeBatch, error) {
-	batch := intakeBatch{}
-	batchRef, err := decodeTemplate(intakeShape, raw, func(record templateRecord) error {
-		row, err := intakeRowFrom(tenant, record.batchRef, record.factRef, record.line, record.cell)
+	shape := intakeShapeOf(raw)
+	batch := intakeBatch{Version: shape.version}
+	batchRef, err := decodeTemplate(shape, raw, func(record templateRecord) error {
+		row, err := intakeRowFrom(tenant, shape.version, record.batchRef, record.factRef, record.line, record.cell)
 		if err != nil {
 			return err
 		}
@@ -91,11 +124,11 @@ func decodeIntakeTemplate(tenant domain.TenantID, raw []byte) (intakeBatch, erro
 // 证据登进去了。
 func intakeRowFrom(
 	tenant domain.TenantID,
-	batchRef, factRef string,
+	version, batchRef, factRef string,
 	line int,
 	cell func(string) string,
 ) (intakeRow, error) {
-	sourceID := intakeSourceID(batchRef, factRef)
+	sourceID := intakeSourceID(version, batchRef, factRef)
 	if err := intakeSourceIDCarriable(batchRef, factRef, sourceID); err != nil {
 		return intakeRow{}, err
 	}
@@ -133,6 +166,11 @@ func intakeRowFrom(
 		Mark:        ports.ExternalMarkObservation{Mark: mark},
 		OccurredAt:  occurredAt,
 	}
+	if version == intakeTemplateVersion {
+		if command.ScopeBasis, err = intakeScopeBasis(cell(columnDeliveryScopeBasis)); err != nil {
+			return intakeRow{}, err
+		}
+	}
 
 	evidenceRef := cell(columnEvidenceRef)
 	refusalReason := cell(columnRefusalReason)
@@ -147,7 +185,7 @@ func intakeRowFrom(
 		if refusalReason != "" {
 			return intakeRow{}, fmt.Errorf("%s 行不得带 %s", claimReceived, columnRefusalReason)
 		}
-		evidence, err := domain.NewReceptionEvidenceReference(intakeEvidence(operator, evidenceRef))
+		evidence, err := domain.NewReceptionEvidenceReference(intakeEvidence(version, operator, evidenceRef))
 		if err != nil {
 			return intakeRow{}, err
 		}
@@ -180,8 +218,8 @@ func intakeRowFrom(
 // intakeSourceID 铸导入事实的来源身份。它与录入者无关：同一张纸单被两个内勤各录一次，
 // 是同一条事实的重放而不是两条事实——ADR-0023 把「真实重扫还是重发」的判断交给在场的
 // 记录方，纸单流水号就是内勤这一侧的那个判断。
-func intakeSourceID(batchRef, factRef string) string {
-	return importMarker(intakeTemplateVersion, batchRef, factRef)
+func intakeSourceID(version, batchRef, factRef string) string {
+	return importMarker(version, batchRef, factRef)
 }
 
 // intakeSourceIDCarriable 核铸出的来源标识进不进得了收寄意图信封。来源标识原样做信封的 Subject（NO 的
@@ -222,6 +260,30 @@ func intakeMarkStorable(mark string) error {
 
 // intakeEvidence 铸明确接收的证据引用。`ReceptionEvidenceReference` 点名的「受控接收
 // 记录」在过渡期就是这一行模板：谁录的、抄自哪张纸面证据，都在引用里。
-func intakeEvidence(operator, evidenceRef string) string {
-	return importMarker(intakeTemplateVersion, operator, evidenceRef)
+func intakeEvidence(version, operator, evidenceRef string) string {
+	return importMarker(version, operator, evidenceRef)
+}
+
+// intakeScopeBasis 译依据那一格（ADR-0212 决定七）：「种类:标识」，种类取 DELIVERY_PRE_ADVICE / DELIVERY_HANDOVER_NOTE，标识是冒号之后的
+// 全部（交接单标识由设备签发，可能自带冒号）。空格即没有依据。给了就要给全：缺种类、种类认不出、标识空都整批拒——静默丢掉，内勤以为
+// 依据登进去了，这一行却按没带依据落范围未证。整格已由骨架去过两端空白，标识本身不再去。
+func intakeScopeBasis(raw string) (domain.DeliveryScopeBasisReference, error) {
+	if raw == "" {
+		return domain.DeliveryScopeBasisReference{}, nil
+	}
+	kindName, identifier, found := strings.Cut(raw, ":")
+	if !found {
+		return domain.DeliveryScopeBasisReference{}, fmt.Errorf("%s=%q 要写成「种类:标识」，种类是 %s 或 %s",
+			columnDeliveryScopeBasis, raw, domain.BasisDeliveryPreAdvice, domain.BasisDeliveryHandoverNote)
+	}
+	kind, err := domain.ParseDeliveryScopeBasisKind(kindName)
+	if err != nil {
+		return domain.DeliveryScopeBasisReference{}, fmt.Errorf("%s=%q 的种类不在词表 %s / %s 内",
+			columnDeliveryScopeBasis, raw, domain.BasisDeliveryPreAdvice, domain.BasisDeliveryHandoverNote)
+	}
+	basis, err := domain.NewDeliveryScopeBasisReference(kind, identifier)
+	if err != nil {
+		return domain.DeliveryScopeBasisReference{}, fmt.Errorf("%s=%q 的标识为空", columnDeliveryScopeBasis, raw)
+	}
+	return basis, nil
 }

@@ -24,11 +24,17 @@ type externalIdentifiersFake struct {
 	asked    []string
 }
 
+// FindParcelsByExternalIdentifier 把预置的包裹逐件答成范围相容的候选（照渠道包裹件号答）：本文件证号码与信号的翻译，范围的翻译另有
+// identity_scope_test.go。
 func (fake *externalIdentifiersFake) FindParcelsByExternalIdentifier(
-	_ context.Context, tenant psdomain.TenantID, number psdomain.ExternalIdentifierLookupNumber,
+	_ context.Context, tenant psdomain.TenantID, number psdomain.ExternalIdentifierLookupNumber, _ []psdomain.CustomerAccountID,
 ) (psports.ExternalIdentifierParcels, error) {
 	fake.asked = append(fake.asked, tenant.String()+"|"+number.String())
-	return psports.ExternalIdentifierParcels{Parcels: fake.parcels, DeclaredBySubmittedRequest: fake.declared}, fake.err
+	answer := psports.ExternalIdentifierParcels{DeclaredBySubmittedRequest: fake.declared}
+	for _, parcel := range fake.parcels {
+		answer.Candidates = append(answer.Candidates, psports.ExternalIdentifierCandidate{Parcel: parcel, ScopeCompatible: true})
+	}
+	return answer, fake.err
 }
 
 func resolve(t *testing.T, view *noparcel.ParcelIdentityView, mark string) ([]string, error) {
@@ -36,7 +42,7 @@ func resolve(t *testing.T, view *noparcel.ParcelIdentityView, mark string) ([]st
 	answer, err := resolveAnswer(t, view, mark)
 	values := make([]string, len(answer.Candidates))
 	for index, candidate := range answer.Candidates {
-		values[index] = candidate.String()
+		values[index] = candidate.Parcel.String()
 	}
 	return values, err
 }
@@ -44,7 +50,7 @@ func resolve(t *testing.T, view *noparcel.ParcelIdentityView, mark string) ([]st
 func resolveAnswer(t *testing.T, view *noparcel.ParcelIdentityView, mark string) (noports.ParcelIdentityAnswer, error) {
 	t.Helper()
 	return view.ResolveParcelIdentity(context.Background(),
-		must(t, nodomain.NewTenantID, "SYN-TENANT-01"), noports.ExternalMarkObservation{Mark: mark})
+		must(t, nodomain.NewTenantID, "SYN-TENANT-01"), noports.ExternalMarkObservation{Mark: mark}, nil)
 }
 
 // Covers: 号码原样交给 PS（不折算大小写与空白），PS 答的每一件包裹译成关联引用、次序不动；多件就是多个候选。
@@ -80,11 +86,11 @@ func TestADeclarationByASubmittedRequestBecomesTheAmbiguitySignal(t *testing.T) 
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if !answer.Ambiguous || len(answer.Candidates) != 1 || answer.Candidates[0].String() != "DPCL-1" {
+	if !answer.Ambiguous || len(answer.Candidates) != 1 || answer.Candidates[0].Parcel.String() != "DPCL-1" {
 		t.Fatalf("answer = %+v, want 带歧义信号、候选只是 DPCL-1", answer)
 	}
-	if _, unique := answer.Unique(); unique {
-		t.Fatal("带歧义信号的一个候选被认成了唯一命中")
+	if verdict, _ := answer.Verdict(); verdict != noports.IdentityVerdictAmbiguityOnly {
+		t.Fatalf("带歧义信号的一个候选判成 %v, want 只因歧义信号", verdict)
 	}
 
 	fake.declared = false
@@ -92,7 +98,7 @@ func TestADeclarationByASubmittedRequestBecomesTheAmbiguitySignal(t *testing.T) 
 	if err != nil {
 		t.Fatalf("resolve: %v", err)
 	}
-	if parcel, unique := clear.Unique(); clear.Ambiguous || !unique || parcel.String() != "DPCL-1" {
+	if verdict, parcel := clear.Verdict(); clear.Ambiguous || verdict != noports.IdentityVerdictUnique || parcel.String() != "DPCL-1" {
 		t.Fatalf("answer = %+v, want 不带信号、唯一命中 DPCL-1", clear)
 	}
 }
@@ -139,7 +145,7 @@ func TestANulMarkIsNotAskedAndAnOverlongMarkIsStillAsked(t *testing.T) {
 
 	overlong := strings.Repeat("M", 513)
 	answer, err = resolveAnswer(t, view, overlong)
-	if err != nil || !answer.Ambiguous || len(answer.Candidates) != 1 || answer.Candidates[0].String() != "DPCL-1" {
+	if err != nil || !answer.Ambiguous || len(answer.Candidates) != 1 || answer.Candidates[0].Parcel.String() != "DPCL-1" {
 		t.Fatalf("513 字节：answer = %+v err = %v, want PS 答的候选与信号照转", answer, err)
 	}
 	if !slices.Equal(fake.asked, []string{"SYN-TENANT-01|" + overlong}) {

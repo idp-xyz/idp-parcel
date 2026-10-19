@@ -181,6 +181,9 @@ func TestTheWiredReceptionAnswersAMarkTheRegisterCannotHoldAsCheckedPending(t *t
 // Covers: 票 ps-external-mark-relations/06 裁定补——门立起来之前进册的超长号，现场扫到照样核得到。库里直写一份委托快照，客户包裹
 // 件号是 600 字节（模拟门前留下的行），经仓储读回、接受，号随接受进册；设备送来同一个号，经生产收寄装配答 201
 // INTAKE_FORMED、唯一关联那一件、控制照建，不落未核对、重核门铃零封。入册门挡在核对这一侧，这一件就落成待识别。
+//
+// 客户包裹件号的唯一识别要有可验证交付范围（ADR-0212 决定四）。预报列的号与入册门同一界（决定二），门前的超长号进不了预报，这一件
+// 只能凭送站交接单成立范围——交接单是账户级、不看号码（决定三），送站带着一张客户账户已确认的交接单。
 func TestTheWiredReceptionAssociatesAnOverlongNumberRegisteredBeforeTheGate(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -209,6 +212,7 @@ func TestTheWiredReceptionAssociatesAnOverlongNumberRegisteredBeforeTheGate(t *t
 	command := receptionCommand(t, "SYN-DELIVERY-PSXM06-LEGACY", nodeopsapp.ExplicitReception)
 	command.Unit = mustValue(t, nodomain.NewHandlingUnitID, "SYN-UNIT-PSXM06-LEGACY")
 	command.Mark = noports.ExternalMarkObservation{Mark: legacy}
+	command.ScopeBasis = confirmedHandoverNoteOnRealDatabase(t, db, "SYN-CUSTOMER-1")
 	answer := decodeUnchecked(t, postWiredReception(t, reception, command))
 	if answer.status != http.StatusCreated || answer.Outcome != "INTAKE_FORMED" || answer.Association != "SYN-PARCEL-LEGACY-1" {
 		t.Fatalf("送站答 %d %s, want 201 INTAKE_FORMED 关联 SYN-PARCEL-LEGACY-1", answer.status, answer.raw)
@@ -238,7 +242,7 @@ func TestANulMarkIsAnsweredWithoutAskingTheRealRegister(t *testing.T) {
 		t.Fatalf("构造 NO 身份核对适配器：%v", err)
 	}
 	answer, err := view.ResolveParcelIdentity(t.Context(), mustValue(t, nodomain.NewTenantID, "SYN-TENANT-1"),
-		noports.ExternalMarkObservation{Mark: "SYN-PCL\x00-NUL"})
+		noports.ExternalMarkObservation{Mark: "SYN-PCL\x00-NUL"}, nil)
 	if err != nil || len(answer.Candidates) != 0 || answer.Ambiguous {
 		t.Fatalf("带 NUL：answer = %+v err = %v, want 零候选、无信号、不报错", answer, err)
 	}

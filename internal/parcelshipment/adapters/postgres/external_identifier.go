@@ -31,7 +31,7 @@ func NewExternalIdentifiers(db *bentopg.DB) (*ExternalIdentifiers, error) {
 	return &ExternalIdentifiers{db: db}, nil
 }
 
-// FindParcelsByExternalIdentifier 逐字比对号码，交回此刻适用、标识包裹的关联所指的包裹，去重。已有终态（已作废、
+// FindParcelsByExternalIdentifier 逐字比对号码，交回此刻适用、标识包裹的关联所指的包裹，去重、逐件答范围相容。已有终态（已作废、
 // 已被替代）的关联不算——它的号只留历史，不再标识谁。
 //
 // 号码不受入册的字节界约束（ExternalIdentifierLookupNumber）：这里只按号比较，不构造索引行，长号不会撞索引行上限；门立起来
@@ -40,60 +40,87 @@ func NewExternalIdentifiers(db *bentopg.DB) (*ExternalIdentifiers, error) {
 // 不按委托状态过滤：关联只随它的来源事实写下（客户包裹件号随委托接受，渠道包裹件号随面单交易包裹结果受理），接受
 // 后的取消、终局也不改它的适用状态（PS CONTEXT Rules）——已取消的包裹到站仍要被认出来，节点才落得下`已取消`标记。ORDER BY 只为候选次序稳定，不表示谁优先。
 //
-// 歧义信号与候选在同一条语句里取：同一个快照里，一份委托要么还是`已提交`（算信号），要么已接受、关联已在册（是
-// 候选），因为接受与关联同一笔事务写下。信号只认`已提交`，取值由领域常量传参，SQL 只比较不拥有编号；谓词与迁移
-// 0026 的部分索引同形。客户包裹件号只在快照里（ADR-0184 决定四），按包含查，不展开数组。
+// 范围不收窄候选（ADR-0212 决定四；ADR-0184 决定六不废）：候选照旧按号取全，范围只进两处——逐件的范围相容，与信号认哪些客户账户
+// 的委托。范围相容比的是关联的适用范围（scope 列），不是分配方；同一件包裹经几条关联被这个号标识时，任一条相容即相容。哪些类型的
+// 适用范围在客户账户编号空间里，取领域的 CustomerAccountSpaceKinds，SQL 只比较不拥有分类。
+//
+// 候选、范围相容与歧义信号在同一条语句里取：同一个快照里，一份委托要么还是`已提交`（算信号），要么已接受、关联已在册（是
+// 候选），因为接受与关联同一笔事务写下。两个数组取自同一个 CTE、按同一个键定序，逐位对齐。信号只认`已提交`，取值由领域常量传参；
+// 谓词与迁移 0026 的部分索引同形，按客户账户收窄是同一条语句里多一个条件。客户包裹件号只在快照里（ADR-0184 决定四），按包含查，
+// 不展开数组。范围为空时两个数组参数都要是空数组而不是 NULL：NULL 会让「没带范围认全租户」那一支整个落空。
 func (view *ExternalIdentifiers) FindParcelsByExternalIdentifier(
 	ctx context.Context,
 	tenant domain.TenantID,
 	number domain.ExternalIdentifierLookupNumber,
+	deliveryScope []domain.CustomerAccountID,
 ) (ports.ExternalIdentifierParcels, error) {
 	if tenant.String() == "" || number.String() == "" {
 		return ports.ExternalIdentifierParcels{}, fmt.Errorf("find parcels by external identifier: tenant and number are required")
+	}
+	accounts := make([]string, 0, len(deliveryScope))
+	for _, account := range deliveryScope {
+		if account.String() == "" {
+			return ports.ExternalIdentifierParcels{}, fmt.Errorf("find parcels by external identifier: a delivery scope account is blank")
+		}
+		accounts = append(accounts, account.String())
+	}
+	accountSpaceKinds := make([]string, 0, 1)
+	for _, kind := range domain.CustomerAccountSpaceKinds() {
+		accountSpaceKinds = append(accountSpaceKinds, kind.String())
 	}
 	querier, err := view.db.ReadExecutor(ctx)
 	if err != nil {
 		return ports.ExternalIdentifierParcels{}, fmt.Errorf("find parcels by external identifier: %w", err)
 	}
 	var raws []string
+	var compatibles []bool
 	var declared bool
 	if err := querier.QueryRow(ctx,
-		`SELECT ARRAY(
-		        SELECT DISTINCT relation.object_ref
-		          FROM parcel_shipment.external_identifier_relation AS relation
-		         WHERE relation.tenant_id = $1
-		           AND relation.identifier_number = $2
-		           AND relation.object_kind = 'PARCEL'
-		           AND NOT EXISTS (
-		               SELECT 1
-		                 FROM parcel_shipment.external_identifier_relation_change AS change
-		                WHERE change.tenant_id = relation.tenant_id
-		                  AND change.identifier_kind = relation.identifier_kind
-		                  AND change.allocator = relation.allocator
-		                  AND change.identifier_number = relation.identifier_number
-		                  AND change.object_ref = relation.object_ref
-		                  AND change.basis = relation.basis)
-		         ORDER BY relation.object_ref),
+		`WITH candidate AS (
+		     SELECT relation.object_ref AS parcel,
+		            bool_or(relation.identifier_kind <> ALL($4::text[]) OR relation.scope = ANY($5::text[])) AS compatible
+		       FROM parcel_shipment.external_identifier_relation AS relation
+		      WHERE relation.tenant_id = $1
+		        AND relation.identifier_number = $2
+		        AND relation.object_kind = 'PARCEL'
+		        AND NOT EXISTS (
+		            SELECT 1
+		              FROM parcel_shipment.external_identifier_relation_change AS change
+		             WHERE change.tenant_id = relation.tenant_id
+		               AND change.identifier_kind = relation.identifier_kind
+		               AND change.allocator = relation.allocator
+		               AND change.identifier_number = relation.identifier_number
+		               AND change.object_ref = relation.object_ref
+		               AND change.basis = relation.basis)
+		      GROUP BY relation.object_ref)
+		 SELECT ARRAY(SELECT candidate.parcel FROM candidate ORDER BY candidate.parcel),
+		        ARRAY(SELECT candidate.compatible FROM candidate ORDER BY candidate.parcel),
 		        EXISTS (
 		        SELECT 1
 		          FROM parcel_shipment.shipment_request AS request
 		         WHERE request.tenant_id = $1
 		           AND request.state = $3
+		           AND (cardinality($5::text[]) = 0 OR request.customer_account_id = ANY($5::text[]))
 		           AND (request.snapshot -> 'customerParcelNumbers')
 		               @> jsonb_build_array(jsonb_build_object('number', $2::text)))`,
 		tenant.String(),
 		number.String(),
 		uint8(domain.ShipmentRequestSubmitted),
-	).Scan(&raws, &declared); err != nil {
+		accountSpaceKinds,
+		accounts,
+	).Scan(&raws, &compatibles, &declared); err != nil {
 		return ports.ExternalIdentifierParcels{}, fmt.Errorf("find parcels by external identifier: %w", err)
 	}
+	if len(raws) != len(compatibles) {
+		return ports.ExternalIdentifierParcels{}, fmt.Errorf("find parcels by external identifier: %d candidates but %d compatibility answers", len(raws), len(compatibles))
+	}
 	answer := ports.ExternalIdentifierParcels{DeclaredBySubmittedRequest: declared}
-	for _, raw := range raws {
+	for index, raw := range raws {
 		parcel, err := domain.NewDeclaredParcelID(raw)
 		if err != nil {
 			return ports.ExternalIdentifierParcels{}, fmt.Errorf("find parcels by external identifier: %w", err)
 		}
-		answer.Parcels = append(answer.Parcels, parcel)
+		answer.Candidates = append(answer.Candidates, ports.ExternalIdentifierCandidate{Parcel: parcel, ScopeCompatible: compatibles[index]})
 	}
 	return answer, nil
 }

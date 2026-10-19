@@ -172,8 +172,16 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
    把签发的预报标识单独一行打到标准输出（`PRE_ADVICE_ID=$(…)` 取用），说明打到标准错误；不给号码就用按 UTC 时刻起的合成号，
    节点缺省 `SYN-NODE-SHA-HUB`、预计送达缺省此刻往后两小时。同一 UTC 秒内重跑撞同一接入请求标识：同内容答 200 `EXISTING_RESULT`，
    换了号码答 200 `SOURCE_CONFLICT`、脚本失败退出。撤回只撤这台客户端所绑账户的预报，撤别的账户的与撤一份不存在的同答 404
-   `DELIVERY_PRE_ADVICE_NOT_VISIBLE`。预报这一步不判有效时窗：时窗（`data/node-operations/01`）在收寄判范围时才读（票 11）。
+   `DELIVERY_PRE_ADVICE_NOT_VISIBLE`。预报这一步不判有效时窗：时窗（`data/node-operations/01`）在收寄判范围时才读。
    证据只记 `S`。
+7. 送站带预报标识（票 ps-external-mark-relations/11，ADR-0212 决定四、七、十）：客户包裹件号的送站此后要有可验证交付范围才唯一
+   识别，演示动线因此改成**送站前先交预报**。`scripts/demo-seeds/receive-one-delivery.sh <外部标识>` 用配置员令牌、上海枢纽那台合成
+   设备打 `POST /node-operations/receptions`；设了 `IDP_PARCEL_PRE_ADVICE_ID` 就把它作 `deliveryScopeBasis` 带上，没设就不带依据。
+   顺序：`submit-one-shipment.sh` 记下客户包裹参考 → `PRE_ADVICE_ID=$(scripts/demo-seeds/submit-one-pre-advice.sh <那个参考>)` → 委托
+   接受之后 `IDP_PARCEL_PRE_ADVICE_ID=$PRE_ADVICE_ID scripts/demo-seeds/receive-one-delivery.sh <那个参考>` 答 201 `INTAKE_FORMED`、核对态
+   `VERIFIED`；不带预报再送一件同号，答 200 `PENDING_IDENTIFICATION`、核对态 `UNVERIFIED` / `NO_BASIS`，不记冲突。预报的节点要是收寄
+   设备的节点（两个脚本缺省都是 `SYN-NODE-SHA-HUB`），收寄时刻要落在〔预计送达 − 提前量，预计送达 + 宽限量〕里（种子时窗提前一天、
+   宽限半天）。证据只记 `S`。
 
 ## 数据故事（同一合成租户 SYN-TENANT-01，范围 SYN-SCOPE-01）
 

@@ -139,13 +139,13 @@ func (fixture externalIdentifierFixture) parcelsOf(t *testing.T, tenant, number 
 func (fixture externalIdentifierFixture) answerOf(t *testing.T, tenant, number string) ([]string, bool) {
 	t.Helper()
 	answer, err := fixture.identifiers.FindParcelsByExternalIdentifier(t.Context(),
-		mustBuild(t, domain.NewTenantID, tenant), mustBuild(t, domain.NewExternalIdentifierLookupNumber, number))
+		mustBuild(t, domain.NewTenantID, tenant), mustBuild(t, domain.NewExternalIdentifierLookupNumber, number), nil)
 	if err != nil {
 		t.Fatalf("按号码查 %s：%v", number, err)
 	}
-	values := make([]string, len(answer.Parcels))
-	for index, parcel := range answer.Parcels {
-		values[index] = parcel.String()
+	values := make([]string, len(answer.Candidates))
+	for index, candidate := range answer.Candidates {
+		values[index] = candidate.Parcel.String()
 	}
 	return values, answer.DeclaredBySubmittedRequest
 }
@@ -503,13 +503,13 @@ func (fixture channelFixture) recordChannel(
 func (fixture channelFixture) parcelsOf(t *testing.T, number string) []string {
 	t.Helper()
 	answer, err := fixture.identifiers.FindParcelsByExternalIdentifier(t.Context(),
-		mustBuild(t, domain.NewTenantID, "tenant-a"), mustBuild(t, domain.NewExternalIdentifierLookupNumber, number))
+		mustBuild(t, domain.NewTenantID, "tenant-a"), mustBuild(t, domain.NewExternalIdentifierLookupNumber, number), nil)
 	if err != nil {
 		t.Fatalf("按号码查 %s：%v", number, err)
 	}
-	values := make([]string, len(answer.Parcels))
-	for index, parcel := range answer.Parcels {
-		values[index] = parcel.String()
+	values := make([]string, len(answer.Candidates))
+	for index, candidate := range answer.Candidates {
+		values[index] = candidate.Parcel.String()
 	}
 	return values
 }

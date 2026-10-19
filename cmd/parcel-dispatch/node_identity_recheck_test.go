@@ -63,14 +63,16 @@ func TestTheRecheckConsumerAndThePSDoorbellAgreeOnTheEventType(t *testing.T) {
 // 这个号的关联，同笔入队门铃 → 生产派发器一拍把门铃投给 NO 的重核消费者 → NO 追加一版`节点收寄已形成`（前版是原待识别、
 // 来源标识由原判断版本派生）并交收寄意图一封，意图载荷指回的那一版业务时间是原收寄时刻 → 方向依据的身份一格对这件实物判
 // 成立：身份读口读回的追加版带着前版，身份一格只读链头（ADR-0210 决定五），原待识别已被接续、不再参与。同一个号再响一次
-// 门铃不再追加，也不再交意图。
+// 门铃不再追加，也不再交意图。送站带着持号客户账户的送站预报：ADR-0212 决定四之后客户包裹件号的唯一识别要有可验证交付范围，重核按
+// 存下的预报重算范围（决定六）。
 func TestTheWiredDispatchRechecksAPendingUnitOnceItsMarkIsRelated(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
 	ctx := t.Context()
 	tenant := mustNO(t, nodomain.NewTenantID, fixture.identity.TenantID().String())
 	receivedAt := time.Now().UTC().Add(-10 * time.Minute).Truncate(time.Microsecond)
 
-	pending := receivePendingForRecheck(t, fixture.db, tenant, receivedAt)
+	scopeBasis := preAdviseForDispatch(t, fixture.db, tenant, fixture.identity.CustomerAccountID().String(), recheckMark, receivedAt)
+	pending := receivePendingForRecheck(t, fixture.db, tenant, receivedAt, scopeBasis)
 	submitWithCustomerParcelNumber(t, fixture, recheckMark)
 	fixture.recordPassingJudgments(t, ctx)
 	if result := fixture.formDecision(t, ctx); result.State() != psdomain.ShipmentRequestAccepted {
@@ -171,8 +173,14 @@ func TestTheWiredDispatchRechecksAPendingUnitOnceItsMarkIsRelated(t *testing.T) 
 	}
 }
 
-// receivePendingForRecheck 经收寄编排（生产适配器）收一件号码还不在关联册里的实物：查无此号，落成零候选的待识别。
-func receivePendingForRecheck(t *testing.T, db *bentopg.DB, tenant nodomain.TenantID, receivedAt time.Time) noports.ReceptionRecord {
+// receivePendingForRecheck 经收寄编排（生产适配器）收一件带着依据 basis、号码还不在关联册里的实物：查无此号，落成零候选的待识别。
+func receivePendingForRecheck(
+	t *testing.T,
+	db *bentopg.DB,
+	tenant nodomain.TenantID,
+	receivedAt time.Time,
+	basis nodomain.DeliveryScopeBasisReference,
+) noports.ReceptionRecord {
 	t.Helper()
 	store, err := outbox.NewStore(db)
 	if err != nil {
@@ -208,7 +216,7 @@ func receivePendingForRecheck(t *testing.T, db *bentopg.DB, tenant nodomain.Tena
 	}
 	handler, err := noapplication.NewReceiveDeliveredUnitHandler(noapplication.ReceiveDeliveredUnitDeps{
 		Identity: identity, ServiceResults: services, Receptions: receptions, Versions: versions,
-		Downstream: downstream, Doorbell: doorbell, Clock: systemClock{},
+		Downstream: downstream, Doorbell: doorbell, Scope: deliveryScopeEvidenceFor(t, db), Clock: systemClock{},
 	})
 	if err != nil {
 		t.Fatalf("构造收寄编排：%v", err)
@@ -217,6 +225,7 @@ func receivePendingForRecheck(t *testing.T, db *bentopg.DB, tenant nodomain.Tena
 	mustWithinTX(t, db.Transactor(), t.Context(), func(txCtx context.Context) error {
 		var handleErr error
 		result, handleErr = handler.Handle(txCtx, noapplication.ReceiveDeliveredUnitCommand{
+			ScopeBasis:  basis,
 			TenantID:    tenant,
 			SourceID:    recheckPendingSource,
 			Node:        mustNO(t, nodomain.NewNodeReference, "SYN-NODE-01"),

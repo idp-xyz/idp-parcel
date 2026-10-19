@@ -45,11 +45,15 @@ const (
 	RecheckSourceNotPreserved
 	// RecheckNotPendingIdentification：指名的那一版不是待识别实物（已形成、未收寄或待确认）。
 	RecheckNotPendingIdentification
-	// RecheckIdentityNowChecked：被重核那一版是未核对，这一回问到了、仍是零候选，追加了一版「待识别 · 已核对」。
+	// RecheckIdentityNowChecked：被重核那一版是未核对，这一回问到了、仍是零候选或范围未证，追加了一版「待识别 · 已核对」。
 	RecheckIdentityNowChecked
 	// RecheckStillAmbiguous：被重核那一版是只因歧义信号的冲突，这一回仍答恰一个候选带信号——号码还被另一份`已提交`委托报着。
 	// 判断不变、不追加（ADR-0211 决定二）：再追加一版同样的冲突，链上只多一行，冲突一点没变。
 	RecheckStillAmbiguous
+	// RecheckAmbiguityGoneScopeUnverified：被重核那一版是只因歧义信号的冲突，这一回信号没了，候选只经客户包裹件号命中、又没有可验证
+	// 交付范围：追加了一版不记冲突的待识别，候选照记，交付范围核对态记未证（ADR-0212 决定六补在 ADR-0211 决定二分格里的那一格）。
+	// 歧义已经没了，剩下的只是缺证据；照留冲突会让复核页与方向依据一直显示一个已不存在的冲突。不交意图。
+	RecheckAmbiguityGoneScopeUnverified
 )
 
 func (outcome RecheckOutcome) String() string {
@@ -72,6 +76,8 @@ func (outcome RecheckOutcome) String() string {
 		return "IDENTITY_NOW_CHECKED"
 	case RecheckStillAmbiguous:
 		return "STILL_AMBIGUOUS"
+	case RecheckAmbiguityGoneScopeUnverified:
+		return "AMBIGUITY_GONE_SCOPE_UNVERIFIED"
 	default:
 		return ""
 	}
@@ -112,7 +118,9 @@ type RecheckPendingIdentityDeps struct {
 	Pending        ports.PendingIdentityLookup
 	Versions       ports.IntakeIdentityFactory
 	Downstream     ports.NodeIntakeHandoff
-	Clock          ports.Clock
+	// Scope 是重算可验证交付范围要读的证据（ADR-0212 决定六）。
+	Scope ports.DeliveryScopeEvidence
+	Clock ports.Clock
 }
 
 // RecheckPendingIdentityHandler 按存下的号重核待识别实物（ADR-0199 决定三，`AT-NO-026`），也重核只因歧义信号落下的身份冲突
@@ -139,6 +147,8 @@ func NewRecheckPendingIdentityHandler(deps RecheckPendingIdentityDeps) (*Recheck
 		return nil, errors.New("node operations: identity recheck needs an intake result version factory")
 	case deps.Downstream == nil:
 		return nil, errors.New("node operations: identity recheck needs a node intake handoff")
+	case deps.Scope == nil:
+		return nil, errors.New("node operations: identity recheck needs the delivery scope evidence")
 	case deps.Clock == nil:
 		return nil, errors.New("node operations: identity recheck needs a clock")
 	}
@@ -225,24 +235,37 @@ func (handler *RecheckPendingIdentityHandler) recheck(
 		return answered(RecheckExistingResult, head), nil
 	}
 
+	// 可验证交付范围按存下的依据与此刻的证据状态重算，时窗按原收寄的业务时间判（ADR-0212 决定六）：业务时间取收寄那一格，不取
+	// 重核时刻。
 	judgment, err := identityJudge{
 		identity:   handler.deps.Identity,
 		services:   handler.deps.ServiceResults,
 		receptions: handler.deps.Receptions,
+		scope:      handler.deps.Scope,
 		excluded:   record.Disposition.ExcludedFor(record.Intake.Unit()),
-	}.judge(ctx, tenant, ports.ExternalMarkObservation{Mark: record.Source.Mark}, record.Intake.Unit())
+	}.judge(ctx, tenant, identitySubject{
+		mark:           ports.ExternalMarkObservation{Mark: record.Source.Mark},
+		unit:           record.Intake.Unit(),
+		node:           record.Intake.Node(),
+		receivedAt:     record.Intake.ReceivedAt(),
+		basis:          record.Source.ScopeBasis,
+		afterReception: true,
+	})
 	if err != nil {
 		return RecheckPendingIdentityResult{}, err
 	}
 	if record.IdentityConflict && judgment.conflictCause() == ports.ConflictByAmbiguityOnly {
 		return answered(RecheckStillAmbiguous, record), nil
 	}
-	// 零候选（带不带歧义信号）：判断不变、不追加（ADR-0199 决定三）。只因歧义信号的冲突这一回答零候选也落在这里，冲突照留：
-	// ADR-0211 决定二只给了唯一命中这一条自动解开的路。唯一命中身份冲突处置排除过的那件也落在这里（ADR-0210 决定九）。
-	// 被重核那一版是未核对时例外：这一回问到了，追加一版「待识别 · 已核对」，册上从此说的是「查过了，查无此号」而不是「没问到」；
-	// 不追加，未核对那一行就一直把同租户的包裹答成`不可归属`（ParcelContainmentView）。
+	// 只因歧义信号的冲突这一回信号没了、只差范围：追加一版不记冲突的待识别（ADR-0212 决定六）。只认范围未证这一格——零候选照下面
+	// 那条留着冲突，ADR-0211 决定二没给它解开的路。
+	releasedToPending := record.IdentityConflict && judgment.verdict == ports.IdentityVerdictScopeUnverified
+	// 零候选（带不带歧义信号）与范围未证：判断不变、不追加（ADR-0199 决定三）。只因歧义信号的冲突这一回答零候选也落在这里，冲突
+	// 照留。唯一命中身份冲突处置排除过的那件也落在这里（ADR-0210 决定九）。被重核那一版是未核对时例外：这一回问到了，追加一版
+	// 「待识别 · 已核对」，册上从此说的是「查过了」而不是「没问到」；不追加，未核对那一行就一直把同租户的包裹答成`不可归属`
+	// （ParcelContainmentView）。
 	nowChecked := !judgment.identified && !judgment.conflict()
-	if nowChecked && record.IdentityCheck != ports.IdentityUnchecked {
+	if nowChecked && record.IdentityCheck != ports.IdentityUnchecked && !releasedToPending {
 		return answered(RecheckStillUnidentified, record), nil
 	}
 
@@ -277,6 +300,9 @@ func (handler *RecheckPendingIdentityHandler) recheck(
 			return RecheckPendingIdentityResult{}, fmt.Errorf("hand off the rechecked intake: %w", err)
 		}
 		return answered(RecheckIntakeFormed, appended), nil
+	}
+	if releasedToPending {
+		return answered(RecheckAmbiguityGoneScopeUnverified, appended), nil
 	}
 	if nowChecked {
 		return answered(RecheckIdentityNowChecked, appended), nil
@@ -322,6 +348,7 @@ func (handler *RecheckPendingIdentityHandler) appendedVersion(
 		IdentityConflict:      judgment.conflict(),
 		IdentityConflictCause: judgment.conflictCause(),
 		IdentityCheck:         ports.IdentityChecked,
+		DeliveryScopeCheck:    judgment.scopeCheck,
 		RecordedAt:            handler.deps.Clock.Now(),
 	}
 	if judgment.identified {

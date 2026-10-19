@@ -116,9 +116,13 @@ func TestTheWiredReceptionAnswersAConflictWhenAnUnacceptedRequestAlsoDeclaresThe
 	})
 }
 
-// Covers: ADR-0195 歧义信号只认`已提交`——声明它的委托被拒绝或撤回之后，那份声明不再算歧义；号码在册里唯一标识的那一件
-// 照常关联、建立控制。已接受的那一份不经信号：它的号已在册里，是候选。
-func TestTheWiredReceptionAssociatesOnceTheOtherDeclarationIsRejectedOrWithdrawn(t *testing.T) {
+// Covers: ADR-0195 歧义信号只认`已提交`与 ADR-0212 决定四的有意翻转（`AT-NO-052` 两半）——号码在册里只标识客户账户一那一件，客户账户二
+// 另有一份`已提交`委托也报了它：不带依据送站答身份冲突。那份委托被拒绝或撤回之后信号没了，但号码只经客户包裹件号命中、送站没有可验证
+// 交付范围：不带依据再送一件，答待识别、候选记那一件、不记冲突、核对态未证·没有依据（`AT-NO-063`）。翻转之前这一格答的是唯一关联，
+// 本用例原名 TestTheWiredReceptionAssociatesOnceTheOtherDeclarationIsRejectedOrWithdrawn，意图正是「没有范围也关联」，照决定十同一笔
+// 翻过来。带着客户账户一的送站预报送，照常唯一识别、建立控制（`AT-NO-052` 后半「在可验证交付范围内」）。已接受的那一份不经信号：
+// 它的号已在册里，是候选。
+func TestTheWiredReceptionNeedsAScopeOnceTheOtherDeclarationIsRejectedOrWithdrawn(t *testing.T) {
 	for name, end := range map[string]func(*testing.T, *bentopg.DB, shipmentapp.SubmitShipmentRequestCommand){
 		"被拒绝": rejectNumbered,
 		"被撤回": withdrawNumbered,
@@ -135,7 +139,17 @@ func TestTheWiredReceptionAssociatesOnceTheOtherDeclarationIsRejectedOrWithdrawn
 			assertContestedBy(t, contested, "SYN-PARCEL-ENDED-1")
 
 			end(t, db, other)
-			result := deliverMarked(t, reception, "ENDED-AFTER", "SYN-CUSTOMER-1", "SYN-ENDED-NUMBER-0001")
+			unadvised := deliverMarked(t, reception, "ENDED-AFTER", "SYN-CUSTOMER-1", "SYN-ENDED-NUMBER-0001")
+			assertScopeUnverifiedOnRealAssembly(t, unadvised, "UNVERIFIED/NO_BASIS/", "SYN-PARCEL-ENDED-1")
+
+			advised := receptionCommand(t, "SYN-DELIVERY-ENDED-ADVISED", nodeopsapp.ExplicitReception)
+			advised.Unit = mustValue(t, nodomain.NewHandlingUnitID, "SYN-UNIT-ENDED-ADVISED")
+			advised.Mark = noports.ExternalMarkObservation{Mark: "SYN-ENDED-NUMBER-0001"}
+			advised.ScopeBasis = preAdviseOnRealDatabase(t, db, "SYN-CUSTOMER-1", "SYN-ENDED-NUMBER-0001")
+			result, err := reception.Handle(t.Context(), advised)
+			if err != nil {
+				t.Fatalf("带预报收寄：%v", err)
+			}
 			assertAssociatedWith(t, result, "SYN-PARCEL-ENDED-1")
 		})
 	}

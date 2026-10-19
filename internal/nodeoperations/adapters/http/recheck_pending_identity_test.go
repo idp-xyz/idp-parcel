@@ -86,19 +86,23 @@ type recheckIdentity struct {
 	candidates []string
 	// ambiguous 是 PS 随候选答出的歧义信号（ADR-0195）。
 	ambiguous bool
-	err       error
-	asked     int
+	// customerNumbered 为真时候选只经客户包裹件号命中，没带范围就不范围相容；否则照渠道包裹件号答（ADR-0212 决定四）。
+	customerNumbered bool
+	err              error
+	asked            int
 }
 
-func (double *recheckIdentity) ResolveParcelIdentity(context.Context, domain.TenantID, ports.ExternalMarkObservation) (ports.ParcelIdentityAnswer, error) {
+func (double *recheckIdentity) ResolveParcelIdentity(
+	_ context.Context, _ domain.TenantID, _ ports.ExternalMarkObservation, scope []domain.CustomerAccountReference,
+) (ports.ParcelIdentityAnswer, error) {
 	double.asked++
-	answer := ports.ParcelIdentityAnswer{Ambiguous: double.ambiguous}
+	answer := ports.ParcelIdentityAnswer{Ambiguous: double.ambiguous, Scoped: len(scope) > 0}
 	for _, raw := range double.candidates {
 		candidate, err := domain.NewParcelAssociationReference(raw)
 		if err != nil {
 			return ports.ParcelIdentityAnswer{}, err
 		}
-		answer.Candidates = append(answer.Candidates, candidate)
+		answer.Candidates = append(answer.Candidates, ports.ParcelIdentityCandidate{Parcel: candidate, ScopeCompatible: !double.customerNumbered})
 	}
 	return answer, double.err
 }
@@ -176,6 +180,7 @@ func newRecheckEndpointFixture(t *testing.T) *recheckFixture {
 		Pending:        store,
 		Versions:       &recheckVersions{},
 		Downstream:     intents,
+		Scope:          noScopeEvidence{},
 		Clock:          adapterClock{at: recheckReceivedAt.Add(time.Hour)},
 	})
 	if err != nil {

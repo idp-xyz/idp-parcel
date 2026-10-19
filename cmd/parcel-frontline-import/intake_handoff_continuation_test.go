@@ -40,7 +40,7 @@ func (handoff *switchableIntakeHandoff) HandOffNodeIntake(ctx context.Context, i
 	return handoff.inner.HandOffNodeIntake(ctx, intent)
 }
 
-// importerWithSwitchableHandoff 与 buildIntakeImporter 同一套件（收寄库、结果版本签发、Outbox 意图交付、服务结果读口），
+// importerWithSwitchableHandoff 与 buildIntakeImporter 同一套件（收寄库、结果版本签发、Outbox 意图交付、服务结果读口、交付范围证据），
 // 身份核对用能解析的替身让 `RECEIVED` 行形成收寄——只有形成了的收寄才交意图。意图交付起初关着。
 func importerWithSwitchableHandoff(t *testing.T) (*pgxpool.Pool, intakeImporter, *switchableIntakeHandoff, *nopostgres.Receptions) {
 	t.Helper()
@@ -78,6 +78,10 @@ func importerWithSwitchableHandoff(t *testing.T) (*pgxpool.Pool, intakeImporter,
 	if err != nil {
 		t.Fatalf("构造包裹关联：%v", err)
 	}
+	scope, err := nopostgres.NewDeliveryScopeEvidence(db)
+	if err != nil {
+		t.Fatalf("交付范围证据：%v", err)
+	}
 	switchable := &switchableIntakeHandoff{inner: downstream, down: true}
 	handler, err := application.NewReceiveDeliveredUnitHandler(application.ReceiveDeliveredUnitDeps{
 		Identity:       resolvingParcelIdentityView{association: association},
@@ -86,6 +90,7 @@ func importerWithSwitchableHandoff(t *testing.T) (*pgxpool.Pool, intakeImporter,
 		Versions:       versions,
 		Downstream:     switchable,
 		Doorbell:       doorbell,
+		Scope:          scope,
 		Clock:          clock,
 	})
 	if err != nil {

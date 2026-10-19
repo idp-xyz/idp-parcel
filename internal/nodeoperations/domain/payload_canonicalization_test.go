@@ -249,12 +249,15 @@ func TestDeliveryPayloadRoundTripsAsNOC1(t *testing.T) {
 }
 
 // 收寄面来源文档的 NRS-1 字面量，独立于实现写下。拒收没有接收证据，那一格照样在、记空串；外部标识观察两端的空白与 Tab
-// 原样在。
+// 原样在。交付范围依据引用落地（ADR-0212 决定七）之前的行就是这个形状，读回照旧。
 const refusalSourceDocument = `{"shape":"NRS-1","unit":"UNIT-1","mark":"  MARK-1\t","claim":"REFUSED","evidence":"","refusal":"PACKAGING_UNSAFE","delivered_by":"CUSTOMER-1","node":"NODE-1","occurred_at":"2026-03-05T02:11:12.345678901Z"}`
 
+// 同一份拒收此后写下的样子：NRS-2，依据两格没带、记空串。
+const refusalSourceDocumentNRS2 = `{"shape":"NRS-2","unit":"UNIT-1","mark":"  MARK-1\t","claim":"REFUSED","evidence":"","refusal":"PACKAGING_UNSAFE","delivered_by":"CUSTOMER-1","node":"NODE-1","occurred_at":"2026-03-05T02:11:12.345678901Z","scope_basis_kind":"","scope_basis_id":""}`
+
 // Covers: ADR-0199 决定一「来源随判断保全」的形状——文档自带形状版本、时刻按 UTC 写；某格在这种观察里本就缺席时记空串、
-// 不省键；外部标识观察原样，不去空白。读回的与写下的逐格相同。
-func TestDeliverySourceRoundTripsAsNRS1(t *testing.T) {
+// 不省键；外部标识观察原样，不去空白。读回的与写下的逐格相同。新落的写 NRS-2（ADR-0212 决定七），NRS-1 那一份读回同一份来源。
+func TestDeliverySourceRoundTripsAsNRS2(t *testing.T) {
 	source := domain.DeliverySource{
 		Unit:        mustValue(t, domain.NewHandlingUnitID, "UNIT-1"),
 		Mark:        "  MARK-1\t",
@@ -268,18 +271,20 @@ func TestDeliverySourceRoundTripsAsNRS1(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if string(document) != refusalSourceDocument {
+	if string(document) != refusalSourceDocumentNRS2 {
 		t.Fatalf("document = %s", document)
 	}
 
-	parsed, err := domain.ParseDeliverySource(document)
-	if err != nil {
-		t.Fatal(err)
-	}
 	want := source
 	want.OccurredAt = payloadInstant().UTC()
-	if parsed != want || !parsed.Preserved() {
-		t.Fatalf("parsed = %+v, want %+v", parsed, want)
+	for _, stored := range []string{string(document), refusalSourceDocument} {
+		parsed, err := domain.ParseDeliverySource([]byte(stored))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if parsed != want || !parsed.Preserved() {
+			t.Fatalf("parsed = %+v, want %+v", parsed, want)
+		}
 	}
 }
 
@@ -291,8 +296,8 @@ func TestAnIncompleteOrUnknownDeliverySourceIsRefused(t *testing.T) {
 	if _, err := domain.CanonicalizeDeliverySource(domain.DeliverySource{Mark: "MARK-1", Claim: "SCAN_ONLY"}); err == nil {
 		t.Fatal("缺作业实物、节点与发生时间的来源被规范化了")
 	}
-	later := strings.Replace(refusalSourceDocument, `"shape":"NRS-1"`, `"shape":"NRS-2"`, 1)
+	later := strings.Replace(refusalSourceDocumentNRS2, `"shape":"NRS-2"`, `"shape":"NRS-3"`, 1)
 	if _, err := domain.ParseDeliverySource([]byte(later)); err == nil {
-		t.Fatal("认不出的形状版本被读成了 NRS-1")
+		t.Fatal("认不出的形状版本被读成了已知的版本")
 	}
 }

@@ -118,14 +118,15 @@ func newDispositionFixture(t *testing.T) *dispositionFixture {
 	fixture.receive, err = application.NewReceiveDeliveredUnitHandler(application.ReceiveDeliveredUnitDeps{
 		Identity: fixture.identity, ServiceResults: fixture.services, Receptions: fixture.store,
 		Versions: fixture.versions, Downstream: fixture.downstream, Doorbell: &doorbellDouble{},
-		Clock: fixedClock{at: deliveredAt.Add(time.Minute)},
+		Scope: newScopeEvidence(), Clock: fixedClock{at: deliveredAt.Add(time.Minute)},
 	})
 	if err != nil {
 		t.Fatalf("收寄编排：%v", err)
 	}
 	fixture.recheck, err = application.NewRecheckPendingIdentityHandler(application.RecheckPendingIdentityDeps{
 		Identity: fixture.identity, ServiceResults: fixture.services, Receptions: fixture.store, Pending: fixture.store,
-		Versions: fixture.versions, Downstream: fixture.downstream, Clock: fixedClock{at: deliveredAt.Add(2 * time.Hour)},
+		Versions: fixture.versions, Downstream: fixture.downstream, Scope: newScopeEvidence(),
+		Clock: fixedClock{at: deliveredAt.Add(2 * time.Hour)},
 	})
 	if err != nil {
 		t.Fatalf("重核编排：%v", err)

@@ -1,4 +1,4 @@
-# 一线过渡汇总模板填写说明（收寄 `INTAKE-1` · 集运 `CONSOLIDATION-1`）
+# 一线过渡汇总模板填写说明（收寄 `INTAKE-1` / `INTAKE-2` · 集运 `CONSOLIDATION-1`）
 
 Category: chore
 Status: 供 MCP-1 转客户内勤；示例值全为合成值（`SYN-` 前缀），不含任何真实实例
@@ -42,6 +42,14 @@ Status: 供 MCP-1 转客户内勤；示例值全为合成值（`SYN-` 前缀）�
 | `evidenceRef` | 见下 | 纸面接收凭证号 | `SYN-RECEIPT-0001` |
 | `refusalReason` | 见下 | 拒收原因 | `SYN-REASON-PACKAGING-DAMAGED` |
 | `occurredAt` | 是 | 现场实际发生时刻，**带时区** | `2026-09-08T09:15:00+08:00` |
+
+### `INTAKE-2`：多一列交付范围依据
+
+`templateVersion` 写 `INTAKE-2` 时，表头多一列 `deliveryScopeBasis`，可以空：送货人出示的送站预报或送站交接单，写成「种类:标识」，
+种类是 `DELIVERY_PRE_ADVICE`（送站预报）或 `DELIVERY_HANDOVER_NOTE`（送站交接单），例 `DELIVERY_PRE_ADVICE:SYN-PREADV-0001`。客户单号
+（客户包裹件号）要凭它才认得出是哪一件包裹：没带依据的那一行照样收下、建控制，只是落待识别，不记冲突，等补证据（ADR-0212）。
+写了就要写全，缺种类、种类拼错、冒号后面空着都整批拒。`INTAKE-1` 照旧认，读作没带依据；表头有这一列就按 `INTAKE-2` 核，
+各行的 `templateVersion` 要与表头一致。
 
 **`node`、`deliveredBy` 等标识用哪套编码由实施时约定**，本说明不给默认值——填错的标识
 系统认不出来，而系统替你猜一个只会把事实记到别处。

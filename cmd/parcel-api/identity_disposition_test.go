@@ -131,7 +131,8 @@ func postWiredDisposition(t *testing.T, endpoint http.Handler, body string) (int
 	return response.Code, decoded
 }
 
-// oneMarkOnRealAssembly 经生产收寄编排落一码两物：委托接受形成号的关联，A 先到关联成立，B 后到记身份冲突。交回 A 那条链此刻
+// oneMarkOnRealAssembly 经生产收寄编排落一码两物：委托接受形成号的关联，A 先到关联成立，B 后到记身份冲突。两件都带着那个客户账户
+// 的送站预报送站——客户包裹件号要有可验证交付范围才唯一识别（ADR-0212 决定四），一码两物只从唯一命中那一支来。交回 A 那条链此刻
 // 的链头（冲突版）与 B。
 func oneMarkOnRealAssembly(t *testing.T, db *bentopg.DB) (noports.ReceptionRecord, noports.ReceptionRecord) {
 	t.Helper()
@@ -140,8 +141,9 @@ func oneMarkOnRealAssembly(t *testing.T, db *bentopg.DB) (noports.ReceptionRecor
 		t.Fatalf("装配收寄编排：%v", err)
 	}
 	acceptSubmitted(t, db, submitWithCustomerParcelNumber(t, db, "SYN-CUSTOMER-PARCEL-NRI06"))
-	early := receivePendingOnRealAssembly(t, reception, "SYN-DELIVERY-NRI06-A", "SYN-UNIT-NRI06-A", "SYN-CUSTOMER-PARCEL-NRI06")
-	late := receivePendingOnRealAssembly(t, reception, "SYN-DELIVERY-NRI06-B", "SYN-UNIT-NRI06-B", "SYN-CUSTOMER-PARCEL-NRI06")
+	basis := preAdviseOnRealDatabase(t, db, "SYN-CUSTOMER-1", "SYN-CUSTOMER-PARCEL-NRI06")
+	early := receivePendingOnRealAssembly(t, reception, "SYN-DELIVERY-NRI06-A", "SYN-UNIT-NRI06-A", "SYN-CUSTOMER-PARCEL-NRI06", basis)
+	late := receivePendingOnRealAssembly(t, reception, "SYN-DELIVERY-NRI06-B", "SYN-UNIT-NRI06-B", "SYN-CUSTOMER-PARCEL-NRI06", basis)
 	if early.Kind != noports.RecordIntakeFormed || !late.IdentityConflict {
 		t.Fatalf("一码两物没落成：A %v / B 冲突 %v", early.Kind, late.IdentityConflict)
 	}
@@ -231,7 +233,8 @@ func TestTheWiredDispositionDisposesOneMarkOnTwoUnits(t *testing.T) {
 
 // Covers: 票 06 完成判据「并发：处置与同一包裹上又一件实物的收寄并发，经包裹锁串行，不出现一版两个后继」与 `AT-NO-059` 的真库面。
 // 处置取完那件包裹的锁之后挂住，C 贴同一个号经生产装配送站，等在那件包裹的锁上；处置提交后 C 只与此刻关联到那件包裹的 B 形成一码
-// 两物——冲突版接在 B 的处置版后面，A 的链头仍是它的「不是它」那一版，没有一版有两个后继。
+// 两物——冲突版接在 B 的处置版后面，A 的链头仍是它的「不是它」那一版，没有一版有两个后继。C 也带着那个客户账户的送站预报（ADR-0212
+// 决定四），号码才唯一识别得出包裹、走到包裹锁。
 func TestADispositionAndAnotherUnitsReceptionSerializeOnTheParcel(t *testing.T) {
 	db, pool := identityRecheckDB(t)
 	conflict, late := oneMarkOnRealAssembly(t, db)
@@ -242,6 +245,7 @@ func TestADispositionAndAnotherUnitsReceptionSerializeOnTheParcel(t *testing.T) 
 	third := receptionCommand(t, "SYN-DELIVERY-NRI06-C", nodeopsapp.ExplicitReception)
 	third.Unit = mustValue(t, nodomain.NewHandlingUnitID, "SYN-UNIT-NRI06-C")
 	third.Mark = noports.ExternalMarkObservation{Mark: "SYN-CUSTOMER-PARCEL-NRI06"}
+	third.ScopeBasis = preAdviseOnRealDatabase(t, db, "SYN-CUSTOMER-1", "SYN-CUSTOMER-PARCEL-NRI06")
 
 	var (
 		thirdResult nodeopsapp.ReceiveDeliveredUnitResult

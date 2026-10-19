@@ -68,22 +68,11 @@ internal/networkrouting/domain RerouteEffectBoundary
 
 # ---- node-operations ----
 
-# 一类：经 DeriveVerifiableDeliveryScope 取得（它在函数名棘轮基线里，理由行在那边：等票 ps-external-mark-relations/11 把推导接进
-# 收寄与重核的身份判断）。DeliveryScopeDerivation 是它的输入、VerifiableDeliveryScope 是它的答复，UnitDeliveryScopeBasis 是输入里
-# 「来源引用与最后归入的交接单」那一格，DeliveryScopeCheck 是答复里的核对态。核对态的三个词表类型
-# （DeliveryScopeCheckState / DeliveryScopeUnverifiedReason / DeliveryScopeInapplicability）另经 NewDeliveryScopeCheck（二类）与
-# 三个 Parse*（一类）取得；依据引用两样（DeliveryScopeBasisReference / DeliveryScopeBasisKind）另经
-# NewDeliveryScopeBasisReference（二类）与 ParseDeliveryScopeBasisKind（一类）取得。等的是同一票：来源文档带依据引用、每一版判断记
-# 核对态，接上即一并出名单。动手前在父提交 a2ff42f6 上数得本文件 16 条；加上这九条后是 25。只对这一加成立。
-internal/nodeoperations/domain DeliveryScopeBasisKind
-internal/nodeoperations/domain DeliveryScopeBasisReference
-internal/nodeoperations/domain DeliveryScopeCheck
-internal/nodeoperations/domain DeliveryScopeCheckState
-internal/nodeoperations/domain DeliveryScopeDerivation
-internal/nodeoperations/domain DeliveryScopeInapplicability
-internal/nodeoperations/domain DeliveryScopeUnverifiedReason
-internal/nodeoperations/domain UnitDeliveryScopeBasis
-internal/nodeoperations/domain VerifiableDeliveryScope
+# 2026-10-19 随票 ps-external-mark-relations/11 剪掉九条（DeliveryScopeBasisKind、DeliveryScopeBasisReference、DeliveryScopeCheck、
+# DeliveryScopeCheckState、DeliveryScopeDerivation、DeliveryScopeInapplicability、DeliveryScopeUnverifiedReason、UnitDeliveryScopeBasis、
+# VerifiableDeliveryScope）：上一版这里预言的那一票到了，收寄与重核的身份判断（application 的 identityJudge.deriveScope）经
+# DeriveVerifiableDeliveryScope 取它们，来源文档的依据引用与收寄册的核对态读回经各自的 Parse* 与 New* 还原。成因先分过：九个名字全仓
+# 各只一处声明，是调用方落地。剪前在 0c56e842 的检出上数得本文件 25 条，剪后 16 条，只对那一棵树成立。
 
 # ---- parcel-pricing ----
 
