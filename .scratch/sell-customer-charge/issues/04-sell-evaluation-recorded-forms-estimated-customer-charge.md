@@ -10,7 +10,7 @@ Blocked by: [03](./03-pricing-consumes-sell-evaluation-requests.md)（同改派�
 
 1. SELL 消费门不再一律答未登记：按评价回指读回 SELL 请求，按映射册把全部费用行代码映到同一个费用项目；任一行没有映射、或映到多于一个项目，一律答待判断（`AT-SA-174`）。
 2. 费用标识由请求标识确定性派生，调用既有的 `FormSellCustomerChargeHandler`。
-3. 评价未成形、不可计价、冲突：在请求册上记状态，入账不重投。已形成时在请求册上记费用标识。
+3. 评价待判断、不可计价、冲突：在请求册上记状态，入账不重投。已形成时在请求册上记费用标识。计价侧没形成评价时收不到信封，请求停在「已提交」（ADR-0190 决定五）。
 4. 派发：`parcel-pricing.evaluation.recorded` 改成扇出，BUY 门与 SELL 门各一路、各自的 inbox 与未决哨兵。
 
 ## 完成判据

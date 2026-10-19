@@ -29,7 +29,7 @@ Blocked by: 无
 
 ## 完成记录
 
-2026-10-19 Claude Code 作者会话在分支 `claude-sell-01` 落地，两笔提交：`0b86bd42`（请求身份、请求册与交接）、`f4cd6a1b`（两本租户取值册与两条命令）。证据级别：隔离合成，只记 `S`。
+2026-10-19 Claude Code 作者会话在分支 `claude-sell-01` 落地，两笔提交（rebase 到 main 之后）：`a5e7bed3`（请求身份、请求册与交接）、`223447c4`（两本租户取值册与两条命令）。证据级别：隔离合成，只记 `S`。
 
 ### 做了什么
 
@@ -53,18 +53,18 @@ Blocked by: 无
 - **复用而不新立**：SELL 请求 Save 的落点复用 BUY 的 `ports.EvaluationRequestSaveOutcome`（写入代数同一条）；两本册的落点复用 `ports.CatalogueRegistrationEffect`，没有照受理前估价采用册另立一个三值类型。计价范围复用 `domain.EstimatePricingScope`（ADR-0190 决定四与受理前估价同一口径，已改它的头注），来源事实引用复用 `domain.SourceFactReference`。
 - **新增的拒收哨兵** `ErrSellEvaluationRequestHandoffRejected` 票面没写：票 02 的消费者要靠它分出「确定性拒收，入账不重投」与「依赖故障，重试」。
 - **分区键带段**：主体是包裹，但字符串带 `/sell-evaluation-request/` 段，不与 PS 采用链、VE 各口的包裹分区共队。
-- 请求册对结算账户不设外键（与 BUY 请求册同），账户存在由票 02 的链保证。
+- 请求册对结算账户暂不设外键，账户存在由票 02 的链保证。评审指出：BUY 请求册本没有账户列，不是这里的先例；带账户列的册都设了外键。外键（或带币种的组合外键，先要在结算账户册上加对应唯一键）留作后续，请求册与票 02 的用例到时要先登账户。
 - `ports/settlement_catalogue.go` 里 `CatalogueRegistrationEffect` 头注原写着一个已失效的册数，顺手去掉了数。
 - 迁移号 0037–0039 提交时在本机各分支上都空着，未改号。
-- 派单提到的 `internal/architecture/envelope_id_bound_gate_test.go` 不在本分支的基线上（在 `claude-eib01` 的 `b364b8da`）。本票交接口调用 `outboxintent.FingerprintEventID`，那道门禁落地后照判据会过。
+- rebase 之后 `internal/architecture/envelope_id_bound_gate_test.go` 已在基线上，本票交接口调用 `outboxintent.FingerprintEventID`，那道门禁实跑通过。
 
-### 待协调方裁的一处
+### 裁定（协调方，2026-10-19）
 
-ADR-0190 决定五写「评价**未成形**、不可计价或适用冲突时入账……状态留在请求册上可查」，票 04 也写「评价未成形、不可计价、冲突：在请求册上记状态」；而协调方给的状态集没有「未成形」。本票按协调方口径只立五格（含 `SUBMITTED`），CHECK 里没有 `NOT_FORMED`。票 04 遇到未成形的评价时记哪一格（留在 `SUBMITTED`，或补一格要再加迁移），请在改 ADR 时一并定下。
+不立「评价未成形」那一格。计价侧没形成评价时不发评价已记录信封，结算这边什么都收不到，请求诚实地停在「已提交」。结算能看到的只有已记录的评价：待判断、不可计价、冲突。ADR-0190 决定五与票 04 的措辞随之对齐。
 
 ### 验证
 
-DSN `postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable`，在 `f4cd6a1b` 上：
+DSN `postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable`，在 rebase 前的 tip 上：
 
 - `go test -p 1 -count=1 ./internal/settlementaccounting/... ./cmd/parcel-settlement-register/ ./internal/architecture/ ./migrations/...` 全部 `ok`。本票新增的真库用例逐条 `PASS`，没有 `SKIP`。
 - `go vet` 上述各包退 0，`gofmt -l` 空，`go build ./...` 退 0；第一笔单独检出也能 build、vet。

@@ -55,8 +55,8 @@ type sellEvaluationRequestPayload struct {
 	SellEvaluationRequestID string `json:"sellEvaluationRequestId"`
 }
 
-// sellEvaluationRequestPartitionKey 取「租户/包裹」——排队主体是包裹，不是请求：同一件包裹在这条缝上的后续各拍
-// （例如预估费用日后的失效）要排在提交之后。键带 /sell-evaluation-request/ 段，与 parcel-shipment、visibility-exception
+// sellEvaluationRequestPartitionKey 取「租户/包裹」——排队主体是包裹，不是请求：同一件包裹在两种计费时点各发一份
+// 请求时，两拍排在同一条队里，先到的先被计价接住。键带 /sell-evaluation-request/ 段，与 parcel-shipment、visibility-exception
 // 按包裹排的队不是同一个字符串：两边之间没有消费方依赖跨口到达序，并进一条队只会互相堵头。主体名登在
 // internal/architecture 的分区主体登记表（ADR-0074 决定五）。
 func sellEvaluationRequestPartitionKey(record ports.SellEvaluationRequestRecord) string {
