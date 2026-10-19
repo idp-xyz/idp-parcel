@@ -1,7 +1,7 @@
 # 32 TF 更正载荷缺时刻答 400，与本包「缺席交编排、解不出才 400」相左；作业事实与运营决定 Intake 的逐口用例和头注补齐
 
 Category: bug
-Status: ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-oc32`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-oc32`）上留有2 笔（更正载荷缺时刻交编排、作业事实表补更正各口），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 5、序 4 评审遗留；用户授权代决）；分支 `claude-oc32`
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 续做：分支 `claude-oc32` 上的两笔先 rebase 到最新 main 并核一遍，再做完余下的格。此前 ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-oc32`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-oc32`）上留有2 笔（更正载荷缺时刻交编排、作业事实表补更正各口），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 5、序 4 评审遗留；用户授权代决）；分支 `claude-oc32`
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)（序 4、序 5 的非阻断）。
 出处：
