@@ -1,7 +1,7 @@
 # 03 第二期：待识别实物按存下的号重核（AT-NO-026）——PS 关联册新形成关联时交出信封、复核页人工发起，结果唯一即追加关联版
 
 Category: enhancement
-Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（02 已进 main），分支 `claude-nrs03`；碰 cmd/parcel-dispatch/assemble.go 与 cmd/parcel-api/endpoints.go 已与另一会话对齐次序（本票先进）。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）
+Status: in-progress——2026-10-19 评审补完工（推送方裁定两件：演示种子补齐、ADR-0199 追加复核记录；rebase 到 main `e8ef2398`），待评审。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（02 已进 main），分支 `claude-nrs03`；碰 cmd/parcel-dispatch/assemble.go 与 cmd/parcel-api/endpoints.go 已与另一会话对齐次序（本票先进）。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）
 Blocked by: 02 进 main（重核拿的是 02 存下的来源文档；追加版要指名前版）
 父票：[01](./01-node-reception-preserves-the-delivery-source.md)
 出处：票 01 裁定分期之「二、按存下的号重核」与「重核由什么触发」那一问；ADR-0199 决定三。`AT-NO-026` 在 `.scratch/at-coverage-inventory.md` 里是机制候选，今天没有票、也没有人工关联口。
@@ -64,9 +64,9 @@ Blocked by: 02 进 main（重核拿的是 02 存下的来源文档；追加版�
 
 | 提交 | 内容 |
 |---|---|
-| `8106a6a5` | 实施与用例：PS 门铃、NO 共用身份判断与重核编排、收寄库两问与迁移 0008、NO inbox 消费者与派发装配、人工重核命令口（运营决定能力面、新决定种类与 access_identity 迁移 0007）、复核目录与管理台 |
-| `c70f2ac1` | 机制清点在 `8106a6a5` 的干净检出上重生成：迁移 226→228，cmd 生产 81→83、测试 161→163，nodeoperations 生产 44→51 |
-| 本笔 | 本票完成记录；AT 覆盖盘点 `AT-NO-026` 由②入① |
+| `8106a6a5`（rebase 后 `445a2d08`） | 实施与用例：PS 门铃、NO 共用身份判断与重核编排、收寄库两问与迁移 0008、NO inbox 消费者与派发装配、人工重核命令口（运营决定能力面、新决定种类与 access_identity 迁移 0007）、复核目录与管理台 |
+| ~~`c70f2ac1`~~（rebase 时撤下，由评审补那一笔 `56400c7d` 重生成取代） | 机制清点在 `8106a6a5` 的干净检出上重生成：迁移 226→228，cmd 生产 81→83、测试 161→163，nodeoperations 生产 44→51 |
+| `7bf269fd`（rebase 后 `3a7b64a4`） | 本票完成记录；AT 覆盖盘点 `AT-NO-026` 由②入① |
 
 **落点**
 
@@ -199,11 +199,63 @@ Blocked by: 02 进 main（重核拿的是 02 存下的来源文档；追加版�
 **未做**
 
 - Go 那条路的后两格：非作者评审、推送方在干净检出上带 DSN 跑全量。
-- 演示种子：`scripts/demo-seeds` 没加 `PENDING_IDENTITY_RECHECK` 的授予、准入范围对照与治理区间。演示租户在管理台点「重核」今天答 403 `OPERATOR_NOT_GRANTED`，答法如实，只是演示走不通。种子不在地盘，演示库也不许动，交推送方定是否补。
+- ~~演示种子：`scripts/demo-seeds` 没加 `PENDING_IDENTITY_RECHECK` 的授予、准入范围对照与治理区间。演示租户在管理台点「重核」今天答 403 `OPERATOR_NOT_GRANTED`，答法如实，只是演示走不通。种子不在地盘，演示库也不许动，交推送方定是否补。~~ 已由评审补补齐，见下节。
 - 票面「不做」各项照旧：后台扫表、未核对行的自投门铃（票 05）、身份冲突的处置、来源保全之前旧行的重核、第一期到本票之间已形成关联的补发。
 
 **发现**（不改裁定）
 
-- **文档**：ADR-0151 决定一逐条列了运营决定的决定种类，本票加了第十二种「待识别重核」，归族依据就是那一条「管理台上作判断的口」。已接受的 ADR 不改写。若要在文档上留痕，可以在 ADR 索引或 ADR-0199 的关联处补一句，交推送方定。NO CONTEXT 与 UC-NO-002 的正文没碰，也没有发现必须改的句子。
+- ~~**文档**：ADR-0151 决定一逐条列了运营决定的决定种类，本票加了第十二种「待识别重核」，归族依据就是那一条「管理台上作判断的口」。已接受的 ADR 不改写。若要在文档上留痕，可以在 ADR 索引或 ADR-0199 的关联处补一句，交推送方定。NO CONTEXT 与 UC-NO-002 的正文没碰，也没有发现必须改的句子。~~ 推送方裁定只在 ADR-0199 留一处，评审补已追加，见下节。
 - **PS 侧既有的长度上限**：关联册的 `external_identifier_relation_by_number` 是按号码本身建的 btree，号长过 btree 一项上限（约 2.7KB）时关联写不进去，委托接受随之回滚。这是本票之前就有的，本票的门铃不加重它。NO 侧这次的按号索引取了 md5，避开了同一问题。
 - **架构门禁 PBC-08**：门铃第一版是未导出类型，门禁要求每个写口有同包「无事务被拒」的负向证据，因此红了。改成导出的 `ExternalIdentifierDoorbell`，补了 `TestTheDoorbellRefusesToRingOutsideATransaction`。
+
+### 评审补（2026-10-19，同一作者子代理，同一分支）
+
+推送方裁定了回报里留下的两件，另点名一句头注，并要求先 rebase 到 main `e8ef2398`。no-reception-identity/05 已经进 main，身份一格改读链头。
+
+**提交**（rebase 之后）
+
+| 提交 | 内容 |
+|---|---|
+| `445a2d08`、`3a7b64a4` | 原实施笔与完成记录笔 rebase 后的新 SHA。rebase 只在 AT 覆盖盘点上撞了一处：main 已有「追记八」，本票那一条改记为「追记九」，计数照 main 的基数重算（①294→295，NO 21→22；②236→235，NO 33→32）。原机制清点笔 `c70f2ac1` 撤下，由本节最后一笔重生成。 |
+| `0f1a3bd9` | 头注与断言（见下） |
+| `1deb9017` | 演示种子 |
+| `44e0c02c` | ADR-0199 复核记录 |
+| `56400c7d` | 机制清点在 `44e0c02c` 的干净检出上重生成：迁移 226→228，接入面端点 141→142，直投路由表 28→29 |
+| 本笔 | 票面评审补 |
+
+**1. 演示种子**：照其余运营决定同形补齐，取值都是 `SYN-`。
+- `data/access/02-grants.json`：给配置员加授予 `SYN-GRANT-DEX-CONFIG-PENDING-IDENTITY-RECHECK-01`，依据 `SYN-GRANT-BASIS-DEX-15`。各运营决定的授予都给这一个主体，NO 此前没有运营决定。
+- `03-admission-scope-mappings.json`：加对照 `SYN-MAP-OD-PENDING-IDENTITY-RECHECK-01`，对象范围 `SYN-PILOT-SCOPE/operation-decisions@v1`。
+- 新文件 `data/governance/23-authority-interval-operation-decision-pending-identity-recheck.json`，形状同 21、22。
+- `seed.sh`：在 22 之后加一行登这份区间。
+- `README.md`：授予表里配置员那一行的运营决定清单加「待识别重核」。
+
+既有条目一条未动，也没有重排。`scripts/demo-seeds` 下没有测试文件，两个登记 CLI（`cmd/parcel-access-register`、`cmd/parcel-governance-register`）的包测试照跑、都 ok。另做了一次装载核对：
+- 在 55432 上建临时库 `nrs03_seedcheck`，用 `scripts/demo-seeds/migrate` 施加全部迁移（共 229 步，含 access_identity 0007）。
+- 用两个 CLI 登了 governance 20–23 与 access 01、02、03：新授予、新对照、新区间都答 RECORDED / REGISTERED，全程退 0。
+- 核对完删掉了临时库。日志在 `/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/nrs03-seedcheck.log`。
+- 演示库 psb26_walk 没碰。
+
+**2. 决定种类只在一处留痕**：ADR-0199 在既有那节「复核记录（2026-10-19，ADR-0210 部分停用几句；决定原文不动）」之后、Links 之前，追加「复核记录（2026-10-19，决定原文不动）」一节，两句。放在 Links 之前，是照前一节复核记录的位置，让 Links 仍是最后一节。ADR-0151 与 adr/README 没动。
+
+**3. 头注与链头读法**
+- `receive_delivered_unit.go` 的 `appendIdentityConflicts` 头注改为：身份一格只读各链当前有效版本（ADR-0210 决定五）；冲突版接续被依的那条链、成了链头；先到那件没有别的链时，落成缺少·{待识别, 身份冲突}，原判断上的关联不再参与。
+- 重核编排在两处注释里引的「记身份冲突的不重核」改了理由：ADR-0199 复核记录第一条停用了「在 `JudgeIdentityBasis` 里一直判身份冲突」那句，所以理由改为 ADR-0210 决定一（身份冲突只经人工处置解除）。管理台三处措辞同改。
+- **重核版经身份读口会被读到。** 它带前版：前版是被重核那一版，身份读口从 main 起读回 `predecessor_version`。链头读法下照预期成立：
+  - 派发真库用例 `TestTheWiredDispatchRechecksAPendingUnitOnceItsMarkIsRelated` 加了断言：身份读口读回两行，重核版带前版；身份一格成立，所依收寄是重核版。原待识别已被接续，不再参与。
+  - 并发用例 `TestARecheckAndAnotherUnitsReceptionSerializeOnTheParcel` 改钉两件都是缺少·{待识别, 身份冲突}。A 那条链是原待识别 → 重核版 → 冲突版，链头是冲突版。
+  - 这与 ADR-0199 复核记录第三条「重核版是链头、带关联，判成立」一致。
+
+**门**（tip `44e0c02c` 的工作树，即本节代码与种子都在的那一版）
+- `gofmt -l .` 无输出；`go build ./...`、`go vet ./...` 退 0。
+- 带 DSN 跑 `go test -p 1 -count=1`，包含前一轮那组包，再加跑 `./cmd/parcel-access-register/...`、`./cmd/parcel-governance-register/...`、`./scripts/demo-seeds/...`。结果退 0，有测试的包 41 个全 ok；`scripts/demo-seeds` 的两个包没有测试文件。日志在同目录 `nrs03-green2.log`。
+- 管理台三道门：Node 22，`tsc -b --noEmit`、`node scripts/run-tests.mjs`（553 过 0 败）、`pnpm exec vite build`，均退 0。日志在同目录 `nrs03-web-*2.log`。
+- 机制清点有差，单独一笔 `56400c7d`。
+
+**证据层级**：S。
+
+**越出地盘的改动**（本节新增）：
+- `scripts/demo-seeds` 下五处：access 两份、governance 新文件一份、`seed.sh` 一行、`README.md` 一行。
+- `docs/adr/0199-…` 追加一节。
+
+两处都按推送方裁定动。
