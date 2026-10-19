@@ -18,8 +18,8 @@
 
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 338 |
-| ② 机制候选 | 228 |
+| ① 已钉住 | 342 |
+| ② 机制候选 | 224 |
 | ③ 实例/闸门 | 143 |
 | ④ 机制未落地 | 425 |
 | 合计 | 1134 |
@@ -27,7 +27,7 @@
 | 前缀 | 总数 | ① | ② | ③ | ④ |
 |---|---|---|---|---|---|
 | CC | 425 | 35 | 0 | 89 | 301 |
-| NO | 75 | 43 | 25 | 7 | 0 |
+| NO | 75 | 47 | 21 | 7 | 0 |
 | NR | 53 | 24 | 28 | 1 | 0 |
 | PC | 36 | 35 | 1 | 0 | 0 |
 | PS | 93 | 66 | 25 | 2 | 0 |
@@ -116,7 +116,11 @@
 | `AT-NO-068` | internal/nodeoperations/domain/delivery_scope_test.go::TestAnUnregisteredWindowAnswersUnconfiguredApartFromUnverified（推导半边）；internal/nodeoperations/application/delivery_scope_judgment_test.go::TestAnUnregisteredWindowIsUnconfiguredAndJudgedWithoutAScope |
 | `AT-NO-069` | internal/accessidentity/customer_client_pre_advice_test.go::TestPreAdviceLinesMintTheirEnvelopesFromTheBinding；internal/accessidentity/customer_client_pre_advice_test.go::TestPreAdviceLinesAnswerTheirOwnGrades；internal/nodeoperations/domain/delivery_pre_advice_payload_test.go::TestPreAdviceSubmissionCanonicalizesAsNOC1；internal/nodeoperations/domain/delivery_pre_advice_payload_test.go::TestPreAdviceSubmissionDigestSeparatesEveryContentChange；internal/nodeoperations/application/delivery_pre_advice_test.go::TestSubmittingAPreAdviceRegistersReplaysAndConflicts；internal/nodeoperations/application/delivery_pre_advice_test.go::TestAPreAdviceThatCannotFormNeverReachesTheRegister；internal/nodeoperations/adapters/accessidentity/customer_pre_advice_authenticator_test.go::TestCustomerPreAdviceAuthenticatorTranslatesTheEnvelope；internal/nodeoperations/adapters/http/delivery_pre_advice_test.go::TestSubmittingAPreAdviceTranslatesThePayloadAndAnswersRegistered；internal/nodeoperations/adapters/http/delivery_pre_advice_test.go::TestMalformedPreAdvicePayloadsAnswerBadRequest；cmd/parcel-api/assemble_delivery_pre_advice_test.go::TestACustomerClientSubmitsAndWithdrawsAPreAdviceAgainstARealDatabase（真库面：经生产装配交预报、重投、换内容、撤销授予之后答未授予） |
 | `AT-NO-070` | internal/nodeoperations/domain/delivery_scope_test.go::TestAPreAdviceCountsOnlyWhenEveryConditionHolds（推导半边：撤回之后按依据不适用·已撤回判）；internal/nodeoperations/application/delivery_pre_advice_test.go::TestWithdrawingAPreAdviceTouchesOnlyTheEnvelopesOwnAccount；internal/nodeoperations/adapters/http/delivery_pre_advice_test.go::TestWithdrawingAPreAdviceTakesTheAccountFromTheEnvelope；cmd/parcel-api/assemble_delivery_pre_advice_test.go::TestACustomerClientSubmitsAndWithdrawsAPreAdviceAgainstARealDatabase（撤回命令半边，票 ps-external-mark-relations/09：撤自己的落撤回，撤别的客户账户的与查无此预报同答）；internal/nodeoperations/application/delivery_scope_judgment_test.go::TestACustomerNumberHitWithoutAVerifiableScopeIsPendingAndUnverified（收寄半边：已撤回答依据不适用）；cmd/parcel-api/reception_delivery_scope_test.go::TestTheWiredReceptionTreatsAWithdrawnPreAdviceAsNotApplicable（收寄半边的真库面：撤回之后带它送站落范围未证，撤回之前据它形成的关联不回滚；重核走同一份推导，没单立用例） |
-| `AT-NO-074` | internal/nodeoperations/domain/delivery_handover_note_test.go::TestAHandoverNoteEstablishesScopeOnlyWhenEveryClaimIsConfirmed；internal/nodeoperations/domain/delivery_scope_test.go::TestAHandoverNoteScopeIsAllOrNothing（领域半边：只确认 A 不成立、B 否认仍不成立、全部确认才成立；成员另行归入的命令面归票 12） |
+| `AT-NO-071` | internal/nodeoperations/application/delivery_handover_note_test.go::TestOpeningAssigningAndClosingAHandoverNote（开立与重放、收寄带它落成员、归入不改写来源、关闭之后归入与不合条件的实物答状态不符）；internal/nodeoperations/application/delivery_handover_note_test.go::TestAHandoverNoteIsVisibleOnlyAtItsOwnNode；internal/nodeoperations/adapters/postgres/delivery_handover_recheck_test.go::TestAMemberIsFoundByItsFactIdentity；internal/nodeoperations/adapters/http/delivery_handover_note_test.go::TestHandoverWorkFactsTranslateTheirPayloads；cmd/parcel-api/assemble_delivery_handover_note_test.go::TestADeliveryHandoverNoteIsOpenedFilledAndConfirmedAgainstARealDatabase（真库面：经生产装配开立、收寄带它、归入） |
+| `AT-NO-072` | internal/nodeoperations/application/delivery_handover_note_test.go::TestAnOperationDecisionConfirmsOnlyWithinTheAuthorizedDeliveryRelationship（是、否、未配置、本人四格与读不动）；cmd/parcel-api/assemble_delivery_handover_note_test.go::TestADeliveryHandoverNoteIsOpenedFilledAndConfirmedAgainstARealDatabase（真库面：PC 真读口答未配置与本人两格） |
+| `AT-NO-073` | internal/nodeoperations/application/delivery_handover_note_test.go::TestTheCustomerChannelConcludesOnlyOnAClosedNoteThatClaimsIt；internal/accessidentity/delivery_handover_test.go::TestTheHandoverConfirmationLineMintsItsEnvelopeFromTheBinding（铸造半边）；internal/nodeoperations/adapters/accessidentity/delivery_handover_authenticator_test.go::TestTheCustomerHandoverAuthenticatorTranslatesTheEnvelopeAndEveryGrade（认证半边）；internal/nodeoperations/adapters/http/delivery_handover_note_test.go::TestHandoverLinesMapTheirOutcomes（HTTP 面） |
+| `AT-NO-074` | internal/nodeoperations/domain/delivery_handover_note_test.go::TestAHandoverNoteEstablishesScopeOnlyWhenEveryClaimIsConfirmed；internal/nodeoperations/domain/delivery_scope_test.go::TestAHandoverNoteScopeIsAllOrNothing（领域半边：只确认 A 不成立、B 否认仍不成立、全部确认才成立）；internal/nodeoperations/application/delivery_handover_note_test.go::TestAScopeNeedsEveryClaimConfirmedAndADenialFreesTheMembers（命令面，票 ps-external-mark-relations/12：只确认 A 不交门铃、B 否认后成员归入另一张交接单）；internal/nodeoperations/adapters/postgres/delivery_handover_recheck_test.go::TestTheLastTwoConfirmationsSerializeOnTheNote（并发面：恰有一笔看到范围成立） |
+| `AT-NO-075` | internal/nodeoperations/application/recheck_by_handover_note_test.go::TestARecheckByHandoverNoteRechecksOnlyItsRecheckableMembers（编排半边）；internal/nodeoperations/adapters/postgres/delivery_handover_recheck_test.go::TestRecheckableMembersAreFoundByTheirHandoverNote（存储面）；cmd/parcel-api/assemble_delivery_handover_note_test.go::TestADeliveryHandoverNoteIsOpenedFilledAndConfirmedAgainstARealDatabase（parcel-api 半边：确认那一笔自投门铃）；cmd/parcel-dispatch/node_identity_recheck_scope_established_test.go::TestTheWiredDispatchRechecksAHandoverNoteOnceItsScopeIsEstablished（parcel-dispatch 半边：门铃 → 重核追加关联版、名下已关联与记冲突的不受影响） |
 | `AT-NR-001` | internal/networkrouting/application/create_initial_route_test.go::TestThreeParcelsKeepThreeIndependentResults；internal/networkrouting/domain/initial_route_plan_test.go::TestAnInitialRoutePlanCarriesItsFullSelectionBasis；internal/networkrouting/domain/route_ranking_test.go::TestSelectionFollowsTheStrategysDeclaredCriterionOrder |
 | `AT-NR-002` | internal/networkrouting/application/create_initial_route_test.go::TestTwoParcelsFormTwoIndependentPlans |
 | `AT-NR-003` | internal/networkrouting/application/create_initial_route_test.go::TestAReplayReturnsExistingResultsAndAConflictOverwritesNothing |
@@ -426,10 +430,6 @@
 | `AT-NO-043` | 同一来源事实重复或内容冲突 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-044` | 路由变化与旧指令下分拣并发 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-045` | 节点完成备货、点验和物理装载 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
-| `AT-NO-071` | 节点开立送站交接单，收寄带它的标识；把一件缺范围的待识别实物归入；关闭后再归入 | UC-NO-006-ESTABLISH-A-VERIFIABLE-DELIVERY-SCOPE.md |
-| `AT-NO-072` | 运营操作者确认交接单对客户账户 A 的绑定：有授权交付关系、没有、本租户一条都没登记、交付方就是 A 所属参与方本身 | UC-NO-006-ESTABLISH-A-VERIFIABLE-DELIVERY-SCOPE.md |
-| `AT-NO-073` | 客户账户 A 经客户渠道对交接单作结论：交接单未关闭、已关闭且声称了 A、没声称 A | UC-NO-006-ESTABLISH-A-VERIFIABLE-DELIVERY-SCOPE.md |
-| `AT-NO-075` | 交接单名下有因范围未证而待识别的作业实物，交接单最后一个绑定得到确认 | UC-NO-006-ESTABLISH-A-VERIFIABLE-DELIVERY-SCOPE.md |
 | `AT-NR-007` | 产品明确允许待路由，委托已接受但当前仍无可行候选 | UC-NR-001-CREATE-INITIAL-ROUTE.md |
 | `AT-NR-008` | 候选参考某班次可用性和容量风险后被选中 | UC-NR-001-CREATE-INITIAL-ROUTE.md |
 | `AT-NR-013` | 客户声明偏好某线路，但合同和产品未承诺该偏好 | UC-NR-001-CREATE-INITIAL-ROUTE.md |
@@ -1281,6 +1281,8 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 追记十五（票 ps-external-mark-relations/09，2026-10-19）：`AT-NO-069`「客户账户经首方口提交送站预报」随预报提交口（铸造、载荷形状、编排、首方认证适配、HTTP、生产装配真库面）落地点名入①，由②移出；`AT-NO-070` 已在①，行内补上撤回命令半边，收寄与重核那一半仍归票 11。①334、②232，NO 39 / 29，合计不变。总览表此刻没含上一条 demo-chain-gaps/33 追记的 +6，本追记只在表上的数上加本票的增量，绝对数随同波票按批重算。
 
 追记十六（票 ps-external-mark-relations/11，2026-10-19）：`AT-NO-064` 至 `AT-NO-067` 随身份核对判可验证交付范围（PS 读口带范围、NO 判断表、重核重算范围）落地点名入①（PS 存储面、NO 编排面、生产装配真库面；`AT-NO-067` 另有 PS 渠道包裹件号面），由②移出；`AT-NO-063`、`AT-NO-068` 从推导半边补齐收寄编排面（`AT-NO-063` 另有 HTTP 面、生产装配真库面与受控批量口面）；`AT-NO-070` 补上收寄半边（编排面与真库面，重核走同一份推导、没单立用例）；`AT-NO-052` 补范围那一半（编排面与改名翻转后的真库面）；`AT-NO-062` 补末句（没有范围时追加不记冲突的待识别：编排面、命令口面、派发真库面）与有范围那一格。①334→338、②232→228（NO 39→43、29→25），合计不变。只在本表此刻的数上加本票的增量，绝对数随同波票按批重算。
+
+追记十七（票 ps-external-mark-relations/12，2026-10-19）：`AT-NO-071`、`AT-NO-072`、`AT-NO-073`、`AT-NO-075` 随送站交接单五口与「交付范围成立」门铃（开立、归入、关闭的作业事实口，运营决定确认口，客户结论口，门铃与重核消费者）落地点名入①，由②移出：编排面、存储面、HTTP 面与认证面，`AT-NO-071`、`AT-NO-072`、`AT-NO-075` 另有经生产装配的真库面（`AT-NO-075` 分 parcel-api 与 parcel-dispatch 两半）。`AT-NO-074` 已在①，行内补上命令面与并发面。①338→342、②228→224（NO 43→47、25→21），合计不变。只在本表此刻的数上加本票的增量，绝对数随同波票按批重算。
 
 2026-10-19 追记（票 demo-chain-gaps/33）：UC-TF-005 新立 `AT-TF-156`–`161`（移动事实已形成信封、VE 投影与阻断信号），随票在 TF 编排与真库、VE 编排与适配器、派发与装配用例上补 Covers 点名，全部入①；半边覆盖在行内注明。①、TF 与合计各加 6，②③④不变；绝对数进 main 时随同波票按批重算（号段 156–165 由协调方预分，本票用到 161）。
 
