@@ -1,4 +1,4 @@
-# owner 复核队列 · 钉 `37f8050a` · 2026-09-15 18:46
+# owner 复核队列 · 钉 `980c16d5` · 2026-10-19 00:55
 
 由 `scripts/owner-review-queue.ps1` 生成；只有摘录，判断看原文。复核完一条：认可就在原文旁写一句「owner 复核 YYYY-MM-DD 认可」，不认可走 supersede。
 
@@ -88,6 +88,7 @@
 ### 0126-commercial-publication-digest-is-computed-server-side-per-register-and-approval-comes-through-a-pending-carrier.md（已有 owner 复核记录）
 
 > Status: Accepted（2026-09-08，用户经 IDP 队列通道 1 派单 `task-cc7313e8` 授权 owner「自决口径：硬句一字不改、每个决定写理由、拿不准或跨上下文归属的点单列越权风险点」，据此对票 [admin-write-faces/08](../../.scratch/admin-write-faces/issues/08-publication-form-path-common-half-ser…
+> Partially suspended by: [ADR-0178](./0178-customer-contract-versions-carry-their-body-and-contract-shells-bind-service-rule-bodies.md) 决定一（决定二「没接的册与正文缺席的版本没有可比对象，按今天的样子登记声明的串」一句，仅限客户合同一册：该册不再收只有壳的版本；其余各册与其余各条不变，本记录正文不改写）
 > Date: 2026-09-08
 
 > 本记录裁的是**摘要由谁算与串的形、批量口的对账门、载体的形与批准门、预览口的路径**。越权风险点单列供 owner 复核：（1）决定一「文档只盖正文不盖壳」是从 `SaveVersion` 逐列比对推的，没逐册核过十类正文里有没有哪一类把范围或区间当正文的一部分——若有，那一册接进来时文档要带它，不换号；（2）决定三把批准引用 = 批准者主体、来源 = 载体引用写进 `ApprovalBasis`，是对既有三格的解释而非改形——若 o…
@@ -253,28 +254,324 @@
 
 
 
-（共 20 篇 ADR 含越权风险点）
+### 0139-first-party-customer-api-channel-is-a-product-owned-access-channel-family.md
+
+> ## 越权风险点（归 owner 复核）
+
+### 0140-first-party-api-contract-is-generated-from-endpoint-descriptors-with-url-major-version-and-problem-details.md
+
+> ## 越权风险点（归 owner 复核）
+
+### 0141-integrator-sandbox-is-a-deployment-form-of-the-first-party-api-on-synthetic-data.md
+
+> ## 越权风险点（归 owner 复核）
+
+### 0142-first-party-webhooks-are-a-product-owned-outbound-channel.md
+
+> ## 越权风险点（归 owner 复核）
+
+### 0144-catalogue-reads-share-one-cursor-pagination-sort-and-filter-contract.md
+
+> Status: Accepted（2026-09-24，通道 3 经用户在 IDP 队列授权自决——「你能帮我自决吗，你是业务和系统专家」——裁决；票 [admin-web-group-legal-entities/04](../../.scratch/admin-web-group-legal-entities/issues/04-catalogue-read-pagination-sort-filter-contract.md) 的…
+> Date: 2026-09-24
+
+> ## 越权风险点
+
+### 0145-legal-entity-attributes-split-into-identity-layer-and-dated-profile.md
+
+> Status: Accepted（2026-09-24，通道 3 经用户在 IDP 队列授权自决——「你能帮我自决吗，你是业务和系统专家」——裁决；票 [admin-web-group-legal-entities/05](../../.scratch/admin-web-group-legal-entities/issues/05-legal-entity-business-attributes.md) 的产物。票面「裁决」节是同日早…
+> Date: 2026-09-24
+
+> ## 越权风险点
+
+### 0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md
+
+> Status: Accepted（2026-09-24，通道 4 经用户在 IDP 队列授权自决——「你是系统和业务专家，请你自决」——裁决；起因是用户同日一句「我们是软件公司，不可能等到租户就绪、业务就绪再去补系统，这是我们的产品，原来的决策有问题」。本记录**部分取代** [ADR-0016](./0016-product-delivery-and-tenant-pilot-as-parallel-tracks.md) 的机制半边定…
+> Date: 2026-09-24
+
+> **仓里已有两处按正确方式切开的先例。** ADR-0015：「通用性是文法的属性」——计价文法闭合、归产品，价卡的词汇与数值归租户。登记册 `PAR-NET-16`：比价必须在各候选算出计价重量之后、首发按成本单维择优、并列交人工，这些标「机制已确认」；只有候选集合与各维度取值`待提供`。另有一个现成的待决案例：ADR-0145 越权风险点 2 问 CN / SG 的公开注册号格式要不要作为产品随附的参考数据。
+
+> ## 越权风险点
+
+> - [ADR-0145](./0145-legal-entity-attributes-split-into-identity-layer-and-dated-profile.md)：越权风险点 2 由本记录归类为参考配置
+> - [开发主线：切片的机制半边与实例半边](../product/PARCEL-NETWORK-FIRST-RELEASE-DEVELOPMENT-BASELINE.md)：三分与四条判据的运行定义
+> - [参数登记册](../product/PILOT-PARAMETER-REGISTER.md)：`PAR-NET-14` 与 `PAR-NET-16` 两行
+> - [合成演示动线](../design/synthetic-demo-journey-script.md)：第四条判据所指的动线
+> - [ADR-0162](./0162-cost-allocation-forms-are-weight-piece-and-revenue.md)：成本分摊的按重、按件、按收入
+> - [ADR-0164](./0164-buy-evaluation-request-trigger-is-occurrence-formed.md)：BUY 评价请求在发生项形成时发起，原因没登记则不发起
+> - [ADR-0168](./0168-charge-attribution-date-is-a-registered-form.md)：费用归属日按已登记形态判定，没登记不形成归属日
+> - [ADR-0172](./0172-route-freeze-is-remaining-segment-count.md)：冻结边界首版形态是剩余计划段数，没声明不是未冻结
+> - [ADR-0173](./0173-auto-reroute-is-folded-from-the-strategy-version.md)：自动改路由策略版本折出，没声明只形成建议；事实目录不再是判断权威
+> - [ADR-0174](./0174-loading-concurrency-is-judged-by-business-time.md)：改路与装载并发按业务时间裁决；同一时刻与因果不明都不并进前两格
+> - [ADR-0170](./0170-settlement-orchestrations-enter-through-parcel-api.md)：结算编排从 parcel-api 进入；确认与截单没登记就不做
+> - [ADR-0171](./0171-pricing-input-resolver-uses-declaration-until-a-measurement-port-exists.md)：没有实测读口时计价输入用申报并标明来源
+
+### 0147-reference-configuration-ships-embedded-and-is-adopted-through-ordinary-registration.md
+
+> Status: Accepted（2026-09-24，通道 4 实施票 `product-strategy-boundary/03` 时立；该票派单写明「第 1 步的形态若属难逆转取舍，按 AGENTS.md 走 ADR」，用户同日在 IDP 队列授权通道 4「作为业务和系统专家自决」。裁决能力边界：读过 [ADR-0146](./0146-product-strategy-is-a-third-class-between-mecha…
+> Date: 2026-09-24
+
+> **六、首个样板：注册号类型目录。** CN（统一社会信用代码）与 SG（UEN）各一份，只含公开的格式正则，不含校验位算法；`parcel-commercial register-registration-number-types` 的批文每项可写 `adopt: <标识>@<版本>`，名称、层与格式取自参考配置，依据格由入口写成引用串。首版随附哪些国家与地区、要不要带校验位算法，归 PC owner 与用户（ADR-0146 越权风…
+
+> ## 越权风险点
+
+> - [ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)：决定三「参考配置显式采用才生效」与越权风险点 4、5
+> - [ADR-0145](./0145-legal-entity-attributes-split-into-identity-layer-and-dated-profile.md)：越权风险点 2 问的正是本记录的首个样板
+> - 票 [`product-strategy-boundary/03`](../../.scratch/product-strategy-boundary/issues/03-reference-configuration-adoption-pattern.md)：实施与各登记册依据格的清单
+
+
+### 0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md
+
+> Status: Accepted（2026-09-24，通道 5 起草，票 [routing-first-cut/02](../../.scratch/routing-first-cut/issues/02-route-evidence-sourcing-and-candidate-cost-adr.md) 的产物。同日按用户「按你的建议吧」修订决定四与越权风险点一、二：候选成本改按比较币种换算后合成，自营段经内部价格政策计成本。随后用…
+> Date: 2026-09-24
+
+> ## 越权风险点
+
+> - [ADR-0189](./0189-leg-pricing-zones-are-supplied-per-card-and-unbound-cards-take-a-registered-leg-zone.md)：决定四第 7 条「每段怎样折成价卡的区域词汇」与越权风险点 5 由它接手
+> - 票 [routing-first-cut/02](../../.scratch/routing-first-cut/issues/02-route-evidence-sourcing-and-candidate-cost-adr.md)：本记录的派生票；实施票族见 [product-strategy-boundary/04](../../.scratch/product-strategy-boundary/issues/04-rou…
+
+### 0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md
+
+> ## 越权风险点
+
+### 0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md
+
+> Status: Accepted（2026-09-24，通道 4 据用户在 IDP 队列同日两句裁定成文——「只有合成与真实租户数据这道墙在开发的时候也无需考虑，当成真实的就行了，简化开发」，以及对本记录提案的「同意」。本记录**部分停用** [ADR-0091](./0091-isolated-form-extends-to-the-write-path-by-graded-switches.md) 决定六的一句与 [ADR-0100…
+> Date: 2026-09-24
+
+> ## 越权风险点
+
+### 0151-unassigned-command-faces-get-their-families.md
+
+> Status: Accepted（2026-09-24，用户经 IDP 队列答通道 4 的立票提议「同意你的决定，开干，开干前，全面审查，确保确实如此」；通道 4 起草，2026-09-25 通道 2 按「全面审查」逐条对代码与文档复核后改定（通道 1 独立复核补了 TF 两个判断口），复核记录见 [operator-channel/15](../../.scratch/operator-channel/issues/15-operat…
+> Date: 2026-09-24
+
+> **七、不裁的。** 客户侧各口仍归 ADR-0139，接受与否归用户。隔离形态照 ADR-0150：关段、建派送任务、有效时间判断与承运商首次有效收寄判断今天经写开关放行，各口换上运营决定能力面的同一笔撤下；其余各口今天没有隔离放行，本记录不给它们加。授权那一段也不在本记录：委托侧五口越过 Intake 之后，今天在生产装配上各停在自己的授权缺口——复核完成、主动拒绝、受控关闭与重开的授权请求映射是 nil（票 product-str…
+
+> ## 越权风险点
+
+### 0152-operator-estimate-is-a-pricing-use-case-computed-not-recorded-and-never-handed-to-settlement.md
+
+> Status: Accepted（2026-09-25，用户经 IDP 队列答通道 3「按你的理解和建议，你自己独立完成吧」「按你的建议，但是要理解我们的实现方式」授权自决；票 [operator-workspace-gaps/02](../../.scratch/operator-workspace-gaps/issues/02-estimate-evaluation-entry.md) 的产物。越权风险点见「裁决方的能力边界」，同日…
+> Date: 2026-09-25
+
+> 因此本记录裁的是**试算归谁、存不存、交不交、取几张卡、入口走哪条缝**，没有裁管理台表单的形状，也没有裁报价。越权风险点单列供复核：
+
+> - 2026-09-25：用户经 IDP 队列答通道 3「你是业务和系统专家，请你自决」，授权通道 3 代为复核四条越权风险点。**这是受托复核，不是 owner 本人认可**；四条逐条维持：
+>   1. 范围口径收窄：CONTEXT 已把试算能力放进首发，面向运营的入口是它最直接的消费方；试算不接受、不锁价、不形成承诺，那句要挡的是报价。
+>   2. 证据层级 `S`：证据层级描述的是本次执行的数据来源，假设包裹标 `P` 会把假设冒充成生产证据；价卡是生产配置这一面不改变输入的性质。
+>   3. 查阅读授予：能力面按语义分，不按 HTTP 方法分；试算不写任何册，用 `POST` 只是因为结构化声明放请求体更合适。另立「试算」能力面会给授予模型添一格没有独立授权理由的面。
+>   4. 放弃留痕：要追溯的是报价，将来随报价对象自己留；把试算改成入册只会多出一个被结算误采用的面。
+
+### 0156-reachability-closure-identity-comes-from-the-adopted-resolution.md
+
+> ## 越权风险点
+
+### 0157-built-in-as-of-forms-are-adopted-as-reference-citations.md
+
+> **一、内置时点形态的对外声明以参考配置发布。** 折法仍在认得它的执行器里，参考配置不另写一份折法。首份的键是 `parcel-shipment/as-of-semantics/submission-receipt`，版本 1，作为 ADR-0147 越权风险点 3 的 owner 定键。前缀取 `parcel-shipment`：折法与执行器在那里。
+
+> ## 越权风险点
+
+> 1. 把「采用」扩到形态选择格。归 PC owner 复核，与 ADR-0146 越权风险点 4 同类。
+> 2. 标识前缀归 parcel-shipment 而非 party-commercial。归 PS、PC owner 复核。
+> 3. 汇率格可以选用，计价侧没有执行器。归 PP owner 复核。
+
+> - [ADR-0147](./0147-reference-configuration-ships-embedded-and-is-adopted-through-ordinary-registration.md)：引用串形状与越权风险点 3；本记录把采用扩到时点语义格
+> - 票 [`product-strategy-boundary/06`](../../.scratch/product-strategy-boundary/issues/06-ps-acceptance-and-label-selection-judgment-methods.md)、[`23`](../../.scratch/product-strategy-boundary/issues/23-pc-as-of-semantics-…
+
+### 0158-settlement-account-register-is-an-immutable-tuple.md
+
+> ## 越权风险点
+
+### 0159-label-channel-resolution-comes-from-the-accepted-decision.md
+
+> ## 越权风险点
+
+### 0160-settlement-read-ports-have-registers.md
+
+> ## 越权风险点
+
+### 0161-claim-and-recovery-amounts-use-one-grammar.md
+
+> ## 越权风险点
+
+### 0162-cost-allocation-forms-are-weight-piece-and-revenue.md
+
+> ## 越权风险点
+
+### 0163-supplier-audit-escalation-compares-the-matched-amount-to-a-ceiling.md
+
+> ## 越权风险点
+
+### 0164-buy-evaluation-request-trigger-is-occurrence-formed.md
+
+> ## 越权风险点
+
+### 0165-periodic-fees-are-minimum-spend-volume-floor-and-tiered-rebate.md
+
+> ## 越权风险点
+
+### 0166-accounting-exchange-uses-a-canonical-document.md
+
+> ## 越权风险点
+
+### 0168-charge-attribution-date-is-a-registered-form.md
+
+> ## 越权风险点
+
+### 0169-sell-evaluation-forms-a-customer-charge.md
+
+> ## 越权风险点
+
+### 0170-settlement-orchestrations-enter-through-parcel-api.md
+
+> ## 越权风险点
+
+### 0171-pricing-input-resolver-uses-declaration-until-a-measurement-port-exists.md
+
+> ## 越权风险点
+
+### 0172-route-freeze-is-remaining-segment-count.md
+
+> ## 越权风险点
+
+### 0173-auto-reroute-is-folded-from-the-strategy-version.md
+
+> ## 越权风险点
+
+### 0174-loading-concurrency-is-judged-by-business-time.md
+
+> ## 越权风险点
+
+### 0175-service-calendar-content-folds-absolute-time.md
+
+> ## 越权风险点
+
+### 0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md（已有 owner 复核记录）
+
+> Status: Accepted（2026-10-12 20:4x，用户经 IDP 队列授权通道 1 代裁接受，原话「你是业务和系统专家，你来做这个评估吧」；接受时改了决定二、决定六各一处，补了 ADR-0048、ADR 索引与 PP `CONTEXT` 的指针，接受方的读取边界与逐条理由见文末「接受记录」。起草：2026-10-12，通道 3 随票 `product-strategy-boundary/06` 第 2 项分诊，派单 `…
+> Date: 2026-10-12
+
+> - **首版就内置加成、按件定额等形态。** 不取：没有形态证据，加了就是替租户猜（ADR-0146 越权风险点 1）。它们是同一扇门的后继形态，加时不改本记录。
+> - **用预估客户费用作估价。** 受理前不存在，见 Context 末条。
+
+> ## 越权风险点
+
+> 越权风险点逐条：
+
+> 4. 认可首版。登记册照 ADR-0158 不设修订、键只到结算账户：同一账户下按产品分卡今天只能分账户或分计价范围，给一户换形态或换计价范围也没有路。首个要按产品分卡或要换范围的租户出现时，另立记录给键加维度、给出停用与接续；首版没有这类形态证据，现在加就是替租户猜（ADR-0146 越权风险点 1）。
+> 5. 认可。
+
+### 0180-admission-scope-tenant-mapping-is-an-access-identity-register-and-self-authority-is-a-deployment-parameter.md
+
+> Status: Accepted（2026-10-13 22:5x，用户经 IDP 队列授权通道 3 自决，原话「你是系统和业务专家，你来自决吧」；接受时不改决定原文，接受方的读取边界与逐条理由见文末「接受记录」。此前 Proposed——**草案**，2026-10-13 起草：通道 2 随票 [operator-channel/19](../../.scratch/operator-channel/issues/19-admissi…
+> Date: 2026-10-13
+
+> - **按对象分，Intake 把对象交给 `Admits`。** 这要改 14 的接口，票 19「不做」已排除。本记录不否决它，只不在此做，见越权风险点 2。
+
+> **二、键是（租户、能力、事实类型），任一时刻至多对一个对象范围。** 同键的生效区间重叠在登记时拒，与 parcel-shipment 生产归属适配器读治理区间时同一判据（其头注「同维两条区间本身是记录错误」）。对照没登，或登了而那个对象范围上此刻没有本产品的区间，都答不在准入范围（ADR-0149 越权风险点 3）；对照读不动答依赖故障，不折成不在准入范围（14 的分格）。
+
+> ## 越权风险点
+
+> 用户经 IDP 队列授权通道 3 自决，原话「你是系统和业务专家，你来自决吧」。接受方与接手复核引证的是同一通道，读过：本记录全文；票 operator-channel/19 全文；ADR-0100 Context 里信任锚那一句与决定二；ADR-0149 决定四、候选丁与越权风险点 3；ADR-0083 决定一至三；ADR-0150 决定一至三；ADR-0146 决定二；ADR-0151 决定一、三；票 14 判断项 1、2、4，票 …
+
+> 越权风险点逐条：
+
+> 2. 认可首版。粒度约束写进登记指引与 `parcel-access-register` 登记子命令的帮助文本（随票 19 做什么第 1 件）。按对象分要改 14 的接口，等首个按线路或客户分批上线、且一行对照装不下的租户出现时另立；首版没有这类形态证据，现在加就是替租户猜（ADR-0146 越权风险点 1）。
+> 3. 认可。错开的那一段朝拦不朝放；演示种子两本册同一笔登（票 19 做什么第 3 件）。
+> 4. 照原文保留，不在本记录裁。暂停接不接进准入范围是 PN-08 owner 的事，本记录只照 ADR-0149 决定四第二条读区间；这一格不挡票 19。
+> 5. 认可。ADR-0150 决定三列为「一字不变」的是缺省朝拦、`SYN-` 前缀门禁、读写两个开关与放行出声，这一条一样不碰，只拒一种自相矛盾的装配，与读写两开关取值不一即拒同形。
+> 6. 认可。
+> 7. 认可。能力词一处定义可拆成票 19 里先行的一小笔，派单方定。
+> 8. 认可，以实施时核对为准：实施方先读 `access_identity` `0002`、`0004` 与 `parcel-access-register` 的授予、撤销子命令，再定对照册的列与子命令。
+
+> - [ADR-0149](./0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md)：决定四第二条与越权风险点 3，本记录补出其中「租户」一维的落点
+> - [ADR-0083](./0083-pilot-governance-read-face-carries-registry-dimensions-only.md)：决定一、三，治理登记册无租户维；本记录不动它
+> - [ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)：决定二的分界检验，决定四据以归类
+> - [ADR-0150](./0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md)：决定一、二、三，演示租户经普通登记越过准入范围、隔离形态过渡期规则不变
+> - [ADR-0100](./0100-operator-identity-is-a-product-owned-access-channel-family.md)：决定二与 Context 信任锚那一句，部署形态参数与租户参数的分界
+> - [ADR-0151](./0151-unassigned-command-faces-get-their-families.md)：决定三，运营决定口要判准入范围
+> - 票 [operator-channel/14](../../.scratch/operator-channel/issues/14-admission-scope-read-and-grade.md)：只读口与答复格，判断项 1、2、4
+> - 票 [operator-channel/19](../../.scratch/operator-channel/issues/19-admission-scope-bridge-for-operator-and-integration-client-minters.md)：本记录承接的分诊票
+
+### 0181-posted-balance-is-recomputed-in-the-funds-mapping-transaction.md
+
+> ## 越权风险点
+
+> 越权风险点逐条：
+
+### 0182-receivable-account-is-a-funds-mapping-target.md
+
+> ## 越权风险点
+
+### 0183-operator-channel-addresses-controlled-closure-and-reopening-by-parcel-and-derives-the-shipper-from-the-accepted-request.md（已有 owner 复核记录）
+
+> Status: Accepted（2026-10-16，用户原话「你作为业务和系统超级专家，你自己全部独立完成吧」。Claude Code 会话据此代 PS owner 裁定下面六条，落在票 [operator-channel/15](../../.scratch/operator-channel/issues/15-operation-decision-faces-take-operator-intake.md) 做什么第 3 条那一…
+
+> ## 越权风险点
+
+> 用户令「针对上面的问题，你能自决，全部解决吗，符合我们系统业务特点，和实际业务的需求」，就越权风险点逐条复核：
+
+> - [ADR-0151：未归族的命令口各归其族](./0151-unassigned-command-faces-get-their-families.md)：本记录补上它决定二与越权风险点 4 留给 PS owner 的那一格，不改它任何一条
+> - [ADR-0146：产品策略是机制与租户取值之间的第三类](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)：本记录裁的是产品策略
+> - [ADR-0150：合成租户当真实租户对待，隔离形态逐口退场](./0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md)：两口今天没有隔离放行，换口不涉及撤放行
+
+### 0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md（已有 owner 复核记录）
+
+> ## 越权风险点
+
+> - owner 复核 2026-10-19 认可（用户 2026-10-16 授权「你作为业务和系统专家你来自决」，会话 idp-parcel-9b 代裁，逐条）：1. 接受时形成——PS CONTEXT「外部标识关联只在被标识对象成为正式对象时形成」，预收寄要先改这句、再补已拒绝与已撤回两格，不取；原句「接受之前送站答待识别」的前提由票 ps-external-mark-relations/04 更正，号只在别处在册时的唯一误关联由票…
+
+> 2. **越权风险点 4 的事实更正**（出处同上，非作者会话对票 02 的评审）：风险点 4 写「同一委托内两件包裹给同一个号不拒收」，那只对领域成立。今天唯一的提交入口 `IsolatedSubmissionIntake` 以客户包裹参考作载荷摘要里的成员键，`CanonicalizeSubmissionPayload` 要求成员不重复，所以同一草案两件同号在规范化那一步就答 4xx，到不了领域。这是 Intake 草案形状的既有纪…
+
+### 0185-external-identifier-relation-identity-includes-its-formation-basis.md（已有 owner 复核记录）
+
+> ## 越权风险点
+
+### 0189-leg-pricing-zones-are-supplied-per-card-and-unbound-cards-take-a-registered-leg-zone.md
+
+> Status: Accepted（2026-10-18，Claude Code 会话代决：用户原话「你作为业务和系统专家自决。解决所有的问题」；票 [routing-first-cut/18](../../.scratch/routing-first-cut/issues/18-leg-endpoints-folded-into-price-card-zones.md) 的产物。补 [ADR-0148](./0148-route-evi…
+
+> ## 越权风险点
+
+> - [ADR-0148：路由证据按来源分三路，候选成本由逐段成本依据合成](./0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md)：本记录补它决定四第 7 条，接手越权风险点 5
+> - [ADR-0109：邮编分类事实归 parcel-pricing，作为版本化的计价参考目录登记](./0109-zip-classification-facts-are-owned-by-parcel-pricing-as-a-versioned-reference-catalogue.md)：决定四「分区给法逐卡定」
+> - [ADR-0152：运营试算是计价自有的应用用例](./0152-operator-estimate-is-a-pricing-use-case-computed-not-recorded-and-never-handed-to-settlement.md)：决定三与决定五，估价与正式评价同一份读数补全
+> - [ADR-0179：受理前控制金额由结算按逐件 SELL 试算合计形成](./0179-pre-acceptance-control-amount-is-estimated-by-settlement-from-per-parcel-sell-trial-evaluations.md)：决定四
+> - [ADR-0075：客户地址随判断请求在请求期携带过界](./0075-customer-address-is-carried-with-the-routing-request.md)：邮编路线的来处
+> - [ADR-0147：参考配置随产品版本嵌入发布](./0147-reference-configuration-ships-embedded-and-is-adopted-through-ordinary-registration.md)：决定四，采用行与依据格的引用串
+> - 票：[routing-first-cut/18](../../.scratch/routing-first-cut/issues/18-leg-endpoints-folded-into-price-card-zones.md)（本记录）、[routing-first-cut/20](../../.scratch/routing-first-cut/issues/20-bound-cost-cards-fold-zones-thro…
+
+### 0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md
+
+> Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」，其后又令「继续」，按会话里报告过的次序先做客户费用。取代 [ADR-0169](./0169-sell-evaluation-forms-a-customer-charge.md) Consequences「形成编排不进 `cmd/parcel-dispatch`」与决定四「也不在本记录里把形…
+
+> ## 越权风险点
+
+（共 61 篇 ADR 含越权风险点）
 
 ## 二、needs-info / blocked 的票
 
-- `.scratch/auto-reroute-demo-reachability/issues/02-syn-vertical-run-reaches-reroute-after-lapse.md`
-  Status: blocked——通道 2 于 2026-09-07 按票面「开工第一步」读完 `PlanReview` / `reviewCandidates` 与生产 `InitialRouteEvidenceView`，结论写在下方「裁决」节：交付第 1 件的头一步（登 SYN 网络定义让初始路由成立）在今天的生产装配里**走不到**——唯一的证据视图实现 `nrpostgres.Netwo…
-- `.scratch/first-tenant-runway/issues/03-network-resolution-layer.md`
-  Status: blocked（2026-09-02 MCP-5 答完三问；结论是被 `PAR-NET-14` 硬阻断，**本票暂不拆实现票**。阻断解除前唯一可动的是一张前置票，见 `## Answer` 第四节）
-- `.scratch/nr-route-evidence-views/issues/01-cut-the-mechanism-half-of-par-net-14-from-its-rule-values.md`
-  Status: needs-info
-- `.scratch/ps-external-mark-relations/issues/01-external-mark-relations-have-no-model-in-parcel-shipment.md`
-  Status: needs-info
+- `.scratch/no-directional-basis/issues/02-network-routing-has-no-routing-instruction-or-consolidation-compatibility-judgment.md`
+  Status: needs-info——2026-10-16 排期已由 Claude Code 会话代决（用户授权，见 01「排期代决」）：随一线作业端，在演示动线走通之后排。此前 needs-info——2026-10-16 随 [01](./01-consolidation-adds-members-without-any-directional-basis.md) 的裁定修订转：本票唯一的消…
 - `.scratch/syn-wall-door-audit/issues/01-access-channel-registry-and-first-real-intake.md`
-  Status: needs-info——ADR-0072 口径的重启条件已满足，票面范围已按其 Consequences 改写（见「重启范围」）；S0 的证据缺口三项未到，未到前不进 S1
-- `.scratch/ve-008-late-account-rederive/issues/04-ops-replay-endpoint-blocked-on-par-int-01.md`
-  Status: needs-info
+  Status: needs-info——2026-09-24 按 [product-strategy-boundary/02](../../product-strategy-boundary/issues/02-split-parameter-register-and-retriage-deferrals.md)「票：未 resolved 的」重新定性：不再等候选租户的渠道证据。操作者一半是机制，…
 
-（共 6 张）
+（共 2 张）
 
 ## 三、票面里提到越权风险点的票
 
+- `.scratch/admin-web-group-legal-entities/issues/04-catalogue-read-pagination-sort-filter-contract.md`（1 处）—   越权风险点见 ADR 文末。剩逐册实施票待拆。
 - `.scratch/admin-write-faces/issues/08-publication-form-path-common-half-server-side-digest-and-envelope-approval.md`（3 处）— Status: resolved——2026-09-08，MCP-1 接 MCP-5 `mcp5-awf08@c003c845` 两笔续做完（用户 12:4x 指示通道 1 自办、不派工；分支 `mcp1-awf08` 基 main `5aedbb0f`，逐笔 SHA 与验证强度见文末「完成记录」；main 上的 SH…
+- `.scratch/catalogue-read-pagination/issues/02-customer-accounts-read-adopts-adr-0144.md`（1 处）— 1. 0035 在本读面上用不上：`customerAccountListed` 的 account 段先按 `DISTINCT ON (account_id) … ORDER BY account_id, revision DESC` 折叠到最新修订，外层 `ORDER BY recorded_at DESC, ac…
+- `.scratch/catalogue-read-pagination/issues/03-network-catalog-read-adopts-adr-0144.md`（4 处）— 2. **缺省序要本票裁一次**：网络版本册常按对象看版本，`-registeredAt` 未必顺手（ADR-0144 越权风险点 1）。若某个 `family` 另点缺省序，在读面头注写明
+- `.scratch/customer-service-rule-contract-applicability/issues/02-pc-closure-resolves-contract-tier-service-rule-first.md`（3 处）— - **同一合同两版（Q4）**：只在闭包答`适用冲突`，发布面不加门——ADR-0176 没裁发布门，Alternatives 否的是保存面禁止产品版与合同版并存。spec 用户故事 4 的「并拒绝」读作解析时不采纳，不是发布时拒收。**越权风险点 · 待 PC owner 复核。** **owner 复核 2026…
+- `.scratch/customer-service-rule-contract-applicability/issues/03-pc-layered-read-port-returns-contract-and-product-base-bodies.md`（3 处）— 2. **读口多带 `declaredProduct`（可缺席），取自冻结闭包键 `ResolutionKey().ServiceProduct`**（02 评审 ← 通道 3 Spec ②）。ADR-0176 决定二、spec 与本票写的读口键是（租户、范围、合同版本、锚点）。不带这一维，同范围两个产品各有一版时底座…
+- `.scratch/customer-service-rule-contract-applicability/issues/04-ve-claim-eligibility-checks-contract-and-inherits-rows-from-product-base.md`（2 处）— 3. **点核施于每一份挂合同的正文，含产品层那一版，挂产品的正文不核。** 票面「做什么 3」写「挂产品版时照旧走单版点读，不核」，ADR-0176 决定四写「挂产品的版本不核（查询无产品维）」——两句说的都是正文挂产品；壳空而正文挂合同的那一版正文挂的是合同，02 判断项 1 已写明它回落给别的合同时「由 04 的…
+- `.scratch/customer-service-rule-contract-applicability/issues/05-admin-form-contract-tier-empty-means-inherit-and-tighten-only.md`（2 处）— - **只收紧怎么守（Q3）**：本拆法只落 ADR-0176 决定三「不提供删减表达」那一半，不设「合同版行比底座更严」的比对门——底座是读时按锚点选的，起算事件或日历不同的两条期限行也比不出严宽。spec 用户故事 3 据此读作「不能借空行放宽成删减」；收紧是商务纪律，由本票的提示承担。**越权风险点 · 待 PC…
+- `.scratch/customer-service-rule-contract-applicability/issues/07-closure-does-not-narrow-customer-contract-by-customer-account.md`（1 处）— 5. **对 ADR-0014 的部分停用补记进 ADR-0177 决定三**：实施时发现钉串用例写着「串变了就是换号」，出自 ADR-0014 Consequences 经 ADR-0126 继承；ADR-0177 起草时只点了 ADR-0176 决定五的 omitempty 先例，漏了这一条。补记照 README「…
+- `.scratch/demo-chain-gaps/issues/01-transport-opportunity-has-no-production-entry.md`（1 处）— 运输履约是自动消费初始路由形成机会，还是只由运营准备请求触发（UC-TF-003 两种触发都列了）；路由指令怎样把段引用带到运输履约（ADR-0131 越权点 4）；班次模板与日历归运输履约登记，还是随网络参考配置发布（产品策略还是租户取值）。
 - `.scratch/label-channel-service-first-release/issues/24-source-correction-version-refused-as-second-responsibility-start.md`（2 处）— **能力边界**：读了 UC-PS-003 全文、PS CONTEXT 责任起点与更正各句、`adopt_network_intake.go` / `intake_adoption.go` / 迁移 0004 / `network_intake.go` / `pickup_source.go` / `adopt_on_…
 - `.scratch/label-channel-service-first-release/issues/25-external-carrier-first-pickup-triggers-label-final-judgment.md`（5 处）— 2. **失效版本到达后，已据前版形成的非取消终局怎么重派生**（ADR-0135 决定六 / 越权风险点 4）。TF 会发失效版本（依据被源更正为不再表达收寄）；`LabelServiceFinalOutcome` 五值之外这是第六格。归 PS owner。**不阻开工**：实施时该格先按 AGENTS.md 红线「…
 - `.scratch/label-channel-service-first-release/issues/26-label-transaction-settlement-beat-triggers-label-final-judgment.md`（3 处）— - **谁 / 何时 / 口径**：通道 2，2026-09-10，按通道 1 派单 task-138ab1c9；用户 17:0x 经队列授权「你自决」，B 类按 **PS owner 口径**代裁——硬句不改、拿不准的单列越权风险点供 owner 事后复核。正文与越权风险点在 [ADR-0134](../../../…
@@ -285,6 +582,21 @@
 - `.scratch/label-channel-service-first-release/issues/35-establish-replay-decision-register-reconciliation-and-select-result-shape.md`（1 处）— 3. **越权风险点**：多一次读（每次建立多一问交易册）——今天没有量化过这条路的读写比，本记录认下这个代价；若将来有证据说它是热点，乙路的引用可以反过来省掉这一问，届时另议。
 - `.scratch/label-channel-service-first-release/issues/37-lc25-review-follow-ups-superseding-version-case-header-counts-and-exported-event-type.md`（2 处）— 4. **通道 6 Spec 非阻断 (4) / ADR-0135 越权风险点 5 / 票 25「随本票或另笔」**——`docs/application/parcel-shipment/UC-PS-004-FORM-PARCEL-FINAL-SERVICE-OUTCOME.md` 依据表「面单渠道服务非取消终局结果」…
 - `.scratch/label-channel-service-first-release/issues/39-voided-carrier-pickup-rederivation-needs-an-adr-before-code.md`（13 处）— Status: 已进 main——2026-09-14 19:3x 通道 1 推送方：`mcp3-lc39@4c6c4e86` 七笔重放到 main `09596d9a` 之上，代码 tip `bb5a6297`（分支→main SHA 对照与验证见 Comments 末「进 main 记录」；纯 .md，`go bu…
+- `.scratch/legal-entity-profile/issues/01-registration-number-type-catalogue.md`（1 处）— 3. 所属层钉在类型上：新修订改层不受理，改层即登记新类型代码。ADR-0145 越权风险点 1 说的「在目录上把那类号标为资料层」，本实现
+- `.scratch/operator-channel/issues/05-catalogue-read-faces-take-operator-intake.md`（2 处）— ## 越权风险点
+- `.scratch/operator-channel/issues/06-commercial-publication-and-replay-take-operator-identity.md`（3 处）— ### 判断项（越权风险点 · 待 owner 复核）
+- `.scratch/operator-channel/issues/10-device-register-and-operation-fact-capability-face.md`（14 处）— **越权风险点**
+- `.scratch/operator-channel/issues/12-signed-webhook-inbound.md`（3 处）— 4. **签名原文与两形取 Standard Webhooks。** `webhook-id.webhook-timestamp.请求体`；`v1` 为 HMAC-SHA256，`v1a` 为 Ed25519。认不出的签名标识跳过，一项都不剩才答签名不过。见越权风险点 1。
+- `.scratch/operator-channel/issues/15-operation-decision-faces-take-operator-intake.md`（5 处）— - 角色模型与授权请求坐标的推导（[psb/07](../../product-strategy-boundary/issues/07-pc-authorization-coordinates-and-role-models.md)）；party-commercial 授权动作词表里的「授权处置」一格（ADR-0132…
+- `.scratch/operator-channel/issues/18-commercial-publications-takes-operator-intake-after-approval-translation-sinks.md`（2 处）— ### 判断项（越权风险点 · 待 owner 复核）
+- `.scratch/operator-channel/issues/19-admission-scope-bridge-for-operator-and-integration-client-minters.md`（9 处）— 出处：[ADR-0149](../../../docs/adr/0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md) 决定四第二条、越权风险点 3；[ADR-0151](../../..…
+- `.scratch/operator-channel/issues/20-tf-closure-dispatch-task-and-pickup-judgment-canonicalization.md`（2 处）— 出处：[ADR-0151](../../../docs/adr/0151-unassigned-command-faces-get-their-families.md) 决定三（逐口核载荷规范化，未核完的口不开真渠道）；[ADR-0149](../../../docs/adr/0149-business-command…
+- `.scratch/operator-channel/issues/21-work-device-catalogue-page.md`（6 处）— 出处：[ADR-0149](../../../docs/adr/0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md) 决定二与越权风险点 2；[10](./10-device-regis…
+- `.scratch/operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md`（1 处）— | 0 | [ps-external-mark-relations/02](../../ps-external-mark-relations/issues/02-register-and-customer-parcel-numbers-feed-node-identity.md) · [ADR-0184](../../…
+- `.scratch/operator-channel/issues/32-tf-correction-payloads-pass-absent-instants-to-orchestration.md`（2 处）— ## 裁定（2026-10-16，会话 `idp-parcel-9b` 代决；机制，不是租户取值；代决 · 越权风险点 · 待 TF owner 复核）
+- `.scratch/operator-channel/issues/38-controlled-closure-and-reopening-record-request-and-operation-evidence.md`（5 处）— - [label-channel/30](../../label-channel-service-first-release/issues/30-controlled-close-reopen-decision-write-face-ps-half.md)「裁决」22:0x ② 的越权风险点「重开决定应否保存货主新授权…
+- `.scratch/operator-channel/issues/51-owner-review-of-adr-0183-0184-0185-overreach-points.md`（5 处）— # 51 ADR-0183、0184、0185 越权风险点的 owner 复核（代决）
+- `.scratch/operator-workspace-gaps/issues/02-estimate-evaluation-entry.md`（1 处）— 越权风险点四条列在 ADR「裁决方的能力边界」，待 owner 复核。实现拆票：[05](./05-estimate-endpoint-backend.md)（后端）、[06](./06-estimate-admin-page.md)（管理台页，阻塞于 05）。
 - `.scratch/party-commercial-context-gaps/issues/08-authorized-action-lacks-source-data-amendment-and-adjudication-names-no-decider.md`（4 处）— Status: resolved——2026-09-07，MCP-5（task-0d116e60，分支 `mcp5-pcgaps08` 基 `299f2a2e`）：代码半边四笔由 MCP-1 重放进 main（`1e182860`→`0cfe3571` / `6b43484c`→`31903cc5` / `df923d…
 - `.scratch/party-commercial-context-gaps/issues/09-final-rule-content-has-no-validity-declaration.md`（3 处）— Status: resolved——2026-09-07，MCP-6（task-390c4f53，分支 `mcp6-pcgaps09` 基 `250e5a43`）：ADR-0119 六问一次答完（越权风险点三条单列在 ADR 里供 owner 复核）、PC CONTEXT「面单服务终局规则」词条补段、迁移 0026、领…
 - `.scratch/party-commercial-context-gaps/issues/10-source-data-amendment-allowance-is-a-third-stage-content-family.md`（2 处）— Status: resolved——2026-09-07，MCP-6（task-390c4f53，分支 `mcp6-pcgaps10` 基 `9379c716`）：ADR-0120 七问一次答完（越权风险点四条单列在 ADR 里供 owner 复核）、PC CONTEXT 新词条 + Boundaries 一句、迁移 …
@@ -292,11 +604,39 @@
 - `.scratch/party-commercial-context-gaps/issues/12-declared-responsibility-outcome-lacks-label-channel-rows.md`（1 处）— 1. **两行的原词取 `LABEL_SERVICE_COMPLETED`（非取消终局结果）与 `LABEL_SERVICE_FAILED`（终局失败结果）**，Go 常量 `DeclaredLabelServiceCompleted` / `DeclaredLabelServiceFailed`。照既有四值的构词（`…
 - `.scratch/party-commercial-context-gaps/issues/13-authorized-action-lacks-controlled-closure-and-reopening.md`（8 处）— Status: resolved——2026-09-10 20:3x（本机时钟）通道 1 推送方重放进 main（非作者评审：两个隔离子代理鉴权错死掉，改由推送方按 /code-review 两轴串行自评，0 阻断；main 上 SHA 对照见 Comments「进 main 记录」）。此前 resolved——202…
 - `.scratch/pp-pricing-input-seams/issues/03-ps-origin-destination-postal-route-read-port.md`（1 处）— 7. **（2026-09-15 10:4x 通道 1 追裁 ← 通道 5 量得条目只进摘要）裁决 1 的前提不成立，取 A：口成形、内容落库归 [05](05-ps-submission-and-source-data-versions-carry-content.md)。** 作者开工对 `3a21dab7` 量到…
+- `.scratch/price-card-import/issues/04-approval-and-publication.md`（4 处）— 判断项（标「越权风险点 · 待 PP owner 复核」的是照先例自裁、票面没写定的格）：
+- `.scratch/price-card-import/issues/07-parcel-pricing-context-gains-approval-duty-rule-and-operator-subject-terms.md`（1 处）— - 04 判断项里标「越权风险点 · 待 PP owner 复核」的几格（授予集的词汇与来源、状态不对分三格、发布的答案代数）要不要等 owner 复核后再落词条。
+- `.scratch/product-strategy-boundary/issues/02-split-parameter-register-and-retriage-deferrals.md`（1 处）— 4. **公开标准只归类、不定发布范围。** 票 10、14 与各连接器的参考配置随附哪些国家、程序与承运商，照 ADR-0146 越权风险点 5 归各 owner 与用户。
+- `.scratch/product-strategy-boundary/issues/03-reference-configuration-adoption-pattern.md`（2 处）— 出处：[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定三、越权风险点 4、5；[ADR-0145](../../../docs/adr/0145-l…
+- `.scratch/product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md`（1 处）— 出处：[ADR-0146](../../../docs/adr/0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md) 决定五第四条、越权风险点 2。
+- `.scratch/product-strategy-boundary/issues/06-ps-acceptance-and-label-selection-judgment-methods.md`（5 处）— **等用户**：是否接受 ADR-0179，要紧的是决定一（估价归结算）与决定五（采用登记的键是结算账户）。拿不准的列在那篇「越权风险点」。
+- `.scratch/product-strategy-boundary/issues/07-pc-authorization-coordinates-and-role-models.md`（1 处）— - 2026-09-25 · 通道 2（随 [ADR-0151](../../../docs/adr/0151-unassigned-command-faces-get-their-families.md) 复核）：第 2 项的动作清单还缺「授权处置」。party-commercial 的授权动作封闭集（`Author…
+- `.scratch/product-strategy-boundary/issues/10-cc-declaration-channel-and-public-regulatory-reference-configuration.md`（1 处）— 首发随附哪些程序与地区的参考配置，归 CC owner 与用户定（与 ADR-0146 越权风险点 5 同一口径）；本票只立形态并带一份样板。
+- `.scratch/product-strategy-boundary/issues/12-sa-amount-grammars-allocation-forms-and-accounting-connectors.md`（2 处）— - **非阻断**（随票记）：执行器没有接进截单或确认费用。ADR-0165 越权风险点 3 写明如此。
+- `.scratch/product-strategy-boundary/issues/14-pp-postal-prefix-granularity-and-public-unit-reference-configuration.md`（1 处）— 首发随附哪些国家的格式，归 PP owner 与用户定（与 ADR-0146 越权风险点 5 同一口径）。
+- `.scratch/product-strategy-boundary/issues/16-mechanism-gaps-without-a-ticket.md`（4 处）— - **非阻断**：ADR-0156 Status 的授权依据查不到出处——通道规则里「继续」是「检查队列」，不是接受 ADR；本项属机制，按 AGENTS 红线开发方本可自决，应改援引这条，并补裁决能力边界与越权风险点一节。解析标识不进 `SameJudgmentScope`，而 UC-NR-002 要「新……商业版…
+- `.scratch/product-strategy-boundary/issues/21-sell-evaluation-to-customer-charge.md`（1 处）— 2. SELL 评价形成的是预估客户费用，即三段里的第一段，依据是 ADR-0169 决定二；ADR-0190 沿用它，预估到暂估的转移不在那一份里（越权风险点）。
+- `.scratch/product-strategy-boundary/issues/24-plan-given-estimate-evaluations-use-shared-reading-completion.md`（1 处）— ### 判断项（越权风险点 · 待 owner 复核）
+- `.scratch/product-strategy-boundary/issues/25-pre-acceptance-estimate-formed-by-settlement.md`（4 处）— ### 判断项与越权风险点
+- `.scratch/product-strategy-boundary/issues/27-pre-acceptance-control-reads-only-the-current-submission-version.md`（6 处）— Status: resolved——2026-10-13 21:2x 通道 1：本票七笔纯快进进 main（至 `c5dd5b64`，SHA 与分支 `mcp1-psb27` 相同），进 main 记录与非作者评审见文末；判断项 1、2 两条越权风险点待 PS owner 复核。此前完工，待评审与重放——2026-10…
+- `.scratch/product-strategy-boundary/issues/28-psb25-review-tails-estimate-gaps-unit-folding-and-trace-as-of.md`（6 处）— 1. 停格分清：溢出与单份为负各给一格，领域停格、SA 原因、PS 映射三处同笔，PS 侧仍落`未形成`。按决定二，单份为负而合计为正不在停法里；若留现状照停，写判断项并标越权风险点。
+- `.scratch/product-strategy-boundary/issues/32-demo-rule-package-declares-no-unprovable-intake-qualification.md`（2 处）— 越权风险点：
+- `.scratch/ps-external-mark-relations/issues/02-register-and-customer-parcel-numbers-feed-node-identity.md`（2 处）—     (1) `internal/parcelshipment/adapters/http/isolated_write_intake.go` · `customerParcelNumbers`：号码取客户包裹参考，连带既有纪律——去两端空白后才进册键；同一委托两件同号，在摘要规范化那一步就答 4xx。端到端看，与 …
+- `.scratch/ps-external-mark-relations/issues/04-ticket-02-review-follow-ups-records-and-pinned-behavior.md`（11 处）— ADR-0184、ADR-0185 越权风险点的 owner 复核行不在本票（归 operator-channel/51）；本票只写事实更正与补记条目。
+- `.scratch/ps-external-mark-relations/issues/05-a-unique-hit-in-someone-elses-number-space-is-not-enough.md`（1 处）— 取 (a) 作现在的产品策略：核对时，号码同时被租户内一份未终局、未接受的委托声明，唯一命中不再答唯一，改答身份冲突、走待识别。声明不进候选，只作歧义信号；这要先改 PS CONTEXT「接受前的声明包裹不是正式包裹，它的号码不进身份核对」那句的读法，并出 ADR（用号 0195，会话已占），写明与 ADR-0184 …
 - `.scratch/ps-port-remainder/issues/01-label-validity-rule-is-a-lapse-declaration-on-the-final-rule.md`（1 处）— - 2026-09-10 14:2x · 通道 1（解阻簿记，未动代码；取证于远端 main `5dda0fb2`）：**PC 半边在 main 上了**，PS 半边转 ready-for-agent。对号本票裁决①的 PC 半边三件：有效期声明一格——`final_rule_content` 加 `validity_…
 - `.scratch/ps-port-remainder/issues/05-customs-and-node-operations-need-parcel-keyed-stage-fact-read-faces.md`（1 处）—   - **不取 ADR-0124、不改 CC/NO CONTEXT**：两面读法都是既有生命周期句与硬句的直接读法（重开、替代、候选不得当归属），形状可逆、无新词条；跨上下文归属已由 ADR-0118 决定三/四定下。预留号 0124 未消费，请 MCP-1 收回。越权风险点两条，单列：(1) CC「已关闭」把重开读…
 - `.scratch/ps-port-remainder/issues/06-delivery-place-reference-read-face.md`（3 处）— 3. **包裹 → 委托的路**：经 `AcceptanceBaseline.covers` 走声明成员；包裹身份谱系（拆分 / 合并后的新包裹）今天领域里没有模型，本票先只按声明成员解析，谱系包裹会落「没有收件地点」——在读口头注写明这一格是「谱系未建模」的今日形状，谱系落地那票要补这一路（同 ps-port-rem…
 - `.scratch/ps-port-remainder/issues/07-commercial-resolution-reference-by-parcel-read-face.md`（2 处）— - 2026-09-09 · 通道 2（task-f5521768）：立票（ready-for-agent）。形状在 ADR-0133，本票不再裁；ADR-0133 越权风险点 5（谱系包裹与集运单元同答没有）若 owner 复核后改口径，本票随之改那一格，不回改 ADR。
 - `.scratch/ps-port-remainder/issues/09-resolution-key-face-does-not-accept-customer-service-rule.md`（4 处）— - [ADR-0136](../../../docs/adr/0136-claim-rule-resolution-key-is-the-acceptance-time-commercial-resolution-reference.md) 决定三：`CustomerServiceRuleObject` 必须在接受时闭…
+- `.scratch/routing-first-cut/issues/02-route-evidence-sourcing-and-candidate-cost-adr.md`（3 处）— - [x] ADR Accepted，上列各问各有决定；越权风险点写明碰到的邻接上下文（PS、PP、CC）由谁复核。
+- `.scratch/routing-first-cut/issues/09-initial-route-evidence-folded-from-catalog.md`（1 处）— - 三格可空，空不补 0，缺日历不补默认。成本缺席不形成计划。段的责任引用暂时指连接版本，ADR-0175 越权风险点 1，非阻断。
+- `.scratch/routing-first-cut/issues/10-candidate-cost-from-leg-buy-evaluations.md`（2 处）— - **比较币种换算随本票落地。** ADR-0148 越权风险点 1 的 PP 侧延伸——换算从结算币种延伸到比较币种、逐段保留原币 / 结算币种 / 所引汇率序列版本与比较币种金额——由本票实现；口径仍由价格政策声明、比较币种仍是路由策略版本上的租户取值。「与 PP 主人约」落地为这次用户裁决。
+- `.scratch/routing-first-cut/issues/11-demo-network-adopted-as-reference-configuration.md`（7 处）— - **采用入口照 ADR-0147 先例做。** 先例是 `cmd/parcel-commercial/register_registration_number_types.go` 的 `adopt` 项与 `registrationjson.RegistrationNumberTypeCommand`；`refer…
+- `.scratch/routing-first-cut/issues/12-cc-customs-applicability-judgment-for-route-candidates.md`（2 处）— Status: resolved——2026-10-10 16:42 通道 1 重放进 main（`717959d9`…`18be66e8`，清点 `613fdb74`）；评审门当时是推送方自审、不算非作者评审，见文末 Comments 与进 main 记录；19:0x 与 19:2x 先后补得两份非作者评审（通道 3…
+- `.scratch/routing-first-cut/issues/17-initial-route-pricing-input-from-customer-declaration.md`（12 处）— 出处：[ADR-0148](../../../docs/adr/0148-route-evidence-sourcing-candidate-cost-and-first-candidate-generation-form.md) 决定四第 7 条与越权风险点 5；[10](10-candidate-cost-from…
+- `.scratch/routing-first-cut/issues/18-leg-endpoints-folded-into-price-card-zones.md`（5 处）— # 18 段起讫折成价卡区域的折法（ADR-0148 越权风险点 5）
+- `.scratch/routing-first-cut/issues/19-financial-control-undecided-leaves-no-trace-on-the-task.md`（3 处）— 3. **拆码口径。** 适配器分得开的拆出新码、留原格，只挪触发已到位的那一种（ADR-0094 决定四）。作用域停拆成两码：`CONTROL_SCOPE_NOT_CONFIGURED` 只留给账户没登记（[ADR-0158](../../../docs/adr/0158-settlement-account-reg…
 - `.scratch/sa-cc-funds-and-credential-seams/issues/03-cc-inbox-consumer-receives-external-funds-fact.md`（7 处）— Status: resolved——2026-09-10 21:3x 通道 1 推送方重放进 main（非作者评审 ← 通道 6 两轴 0 阻断；main 上 SHA 与分支 SHA 对照见 Comments「进 main 记录」）。此前 resolved——2026-09-10 22:1x（作者自标，git 提交时刻…
 - `.scratch/sa-cc-funds-and-credential-seams/issues/04-cc-credential-gate-persists-in-readiness-assessment.md`（4 处）— （用户 17:0x 授权、通道 5 按 CC owner 口径代裁并落 [ADR-0137](../../../docs/adr/0137-customs-gate-judgments-are-registered-facts-driven-by-assessment-requests-payment-gate-rul…
 - `.scratch/sa-cc-funds-and-credential-seams/issues/06-cc-release-gate-reads-duty-payment-verification.md`（1 处）— （1 由用户 17:0x 授权、通道 5 按 CC owner 口径代裁并落 [ADR-0137](../../../docs/adr/0137-customs-gate-judgments-are-registered-facts-driven-by-assessment-requests-payment-gate-…
@@ -309,7 +649,11 @@
 - `.scratch/sa-preacceptance-policy-view/issues/02-load-control-policy-reads-policy-content-items.md`（1 处）— **越权风险点（供用户复核，不认可走 supersede）**：① 决定二「第一处限制即停后续项」是执行顺序规则，本会话判它不构成「汇总成接受/拒绝
 - `.scratch/sa-preacceptance-policy-view/issues/03-parcel-shipment-expresses-per-item-control-results.md`（3 处）— 2026-09-07，通道 3（task-0ec68b23），用户经 IDP 队列授权「owner 自决」口径：硬句一字不改、每个决定写理由、拿不准或跨上下文归属的点单列越权风险点。三问的答落在 [ADR-0125](../../../docs/adr/0125-parcel-shipment-financial-co…
 - `.scratch/sa-preacceptance-policy-view/issues/04-authorized-disposition-flow-and-failure-disposition-read.md`（4 处）— **越权风险点**（供 owner 复核，都不阻断开工；全文见 ADR-0132 Consequences）：1. `ResumePath` 加格与 CONTEXT / UC-PS-001 / ADR-0094 里以数目指称等待态的措辞要跟改（UC 归本票实施，ADR-0094 正文不改）；2. 处置`拒绝`由处置授权…
+- `.scratch/sell-customer-charge/issues/05-demo-tenant-forms-an-estimated-customer-charge.md`（2 处）— - `SYN-SETTLEMENT-ACCOUNT-01` 采用 `NETWORK_INTAKE_ADOPTED`，计价范围与受理前估价采用册登的那一个相同（ADR-0190 越权风险点 9）。
 - `.scratch/tf-carrier-master-document-register/issues/01-carrier-master-document-register-does-not-exist.md`（3 处）— Status: resolved（MCP-5 实施完成，2026-09-07，隔离分支 `mcp5-tf-cmdr`，基线 main `92579b0a`，task-895fbabf；形状取票面第 1 条「独立登记册」，落文 [ADR-0113](../../../docs/adr/0113-carrier-maste…
+- `.scratch/tf-face-algebra/issues/02-load-assignment-versions-form-a-single-chain.md`（1 处）— 越权风险点：代 TF owner 定了「本口只管首版」；owner 复核时看今天有没有调用方靠「换版本号」表达变化（演示种子、管理台、探针）。
+- `.scratch/tf-face-algebra/issues/08-movement-fact-same-identity-different-content-conflicts.md`（2 处）— 越权风险点：第 2 条与研判推荐相反（研判推荐照同族把业务时间放进摘要），本会话按权威次序取已接受 ADR 的字面；TF owner 复核时看设备侧的发生时间是否真的不会在同一身份下变化。
+- `.scratch/tf-face-algebra/issues/09-dispatch-trigger-task-reference-is-a-faithful-identity.md`（1 处）— - 入场依据进键（票 tf-segment-lifecycle-closure/09 越权风险点）：交接更正后会另立任务、前一项不动，按 ADR-0114 字面是新身份。
 - `.scratch/tf-segment-lifecycle-closure/issues/09-arrival-triggers-dispatch-task.md`（3 处）— | ①②③ 成文 | ADR-0114（决定一至四、越权风险点四条）+ README 目录行 | `85956673` | `docs/adr/0114-*.md`、`docs/adr/README.md`（只加一行） |
 - `.scratch/tf-segment-lifecycle-closure/issues/10-source-correction-rederives-participation.md`（2 处）— **能力边界**：读了 `actual_fulfillment_segment.go`、`segment_rehydration.go`、`fulfillment_segment.go`（端口）、`fulfillment_segment_registry.go`、`enter_fulfillment_segment.g…
 - `.scratch/tf-segment-lifecycle-closure/issues/11-control-withdrawing-correction-voids-participation.md`（6 处）— （只确认它经领域 `CloseSegment`）。**越权风险点**：① 失效版本继承离场三件——ADR-0112 决定三写的是替代格，本票把同一条规则
@@ -325,4 +669,4 @@
 - `.scratch/wiring-baseline-remainder/issues/07-pp-decimal-rebuild-boundary-accepts-non-canonical-spellings.md`（4 处）— ### 越权风险点（单列，供 MCP-1 / owner 复核）
 - `.scratch/wiring-baseline-remainder/issues/10-credit-ratio-base-is-declared-on-the-credit-policy-content.md`（3 处）—    单列越权风险点，不写进集合。
 
-（共 50 张）
+（共 106 张）
