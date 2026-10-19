@@ -182,8 +182,8 @@ func (repository *Receptions) CurrentVersion(
 	return domain.NewIntakeResultVersion(current)
 }
 
-// receptionColumns 与 scanReception 的扫描顺序是同一份约定，两处一起改。
-const receptionColumns = `source_id, content_digest, kind, intake, control, candidates,
+// receptionColumns 与 scanReception 的扫描顺序是同一份约定，两处一起改。控制一格经 foldedControl 读出（ADR-0214 决定三）。
+const receptionColumns = `source_id, content_digest, kind, intake, ` + foldedControl + `, candidates,
 		        identity_conflict, refusal_reason, service_markers, service_result_check, recorded_at,
 		        judgment_version, predecessor_version, source_document, merged_version, disposition_document,
 		        identity_check, identity_conflict_cause,

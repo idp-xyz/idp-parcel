@@ -203,4 +203,5 @@ type ReviewCatalogueRead interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]IdentityReviewUnitRow, error)
+	ListPhysicalControlTransitions(ctx context.Context, tenant domain.TenantID, limit int) ([]PhysicalControlTransitionCatalogueRow, error)
 }
