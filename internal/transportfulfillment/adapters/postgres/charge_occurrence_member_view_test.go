@@ -116,8 +116,10 @@ func TestChargeOccurrenceMemberViewRefusesAnOccurrenceRegisteredWithoutMembers(t
 		`INSERT INTO transport_fulfillment.transport_charge_occurrence
 		    (tenant_id, occurrence_ref, validity_version, journey_ref, legal_entity_ref,
 		     provider_ref, agreement_ref, reason, fact_basis, scope_ref, quantity, unit_ref,
-		     occurred_at, corrects_version, revision_kind, revision_basis, revised_at, recorded_at)
-		 VALUES ('tenant-1','SYN-OCC-0104','v1','j','le','pr','ag','BOOKING','fb','sc',1,'u',now(),NULL,NULL,NULL,NULL,now())`,
+		     occurred_at, corrects_version, revision_kind, revision_basis, revised_at, recorded_at,
+		     condition_basis, condition_assertion)
+		 VALUES ('tenant-1','SYN-OCC-0104','v1','j','le','pr','ag','BOOKING','fb','sc',1,'u',now(),NULL,NULL,NULL,NULL,now(),
+		         'REGISTRANT_ASSERTED','a')`,
 	); err != nil {
 		t.Fatalf("直插无成员本体：%v", err)
 	}

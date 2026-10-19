@@ -44,20 +44,22 @@ func (repository *ChargeOccurrences) FindByKey(
 		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find charge occurrence: %w", err)
 	}
 
-	var journey, legalEntity, provider, agreement, reason, factBasis, scope, unit string
-	var correctsVersion, revisionKind, revisionBasis *string
+	var journey, legalEntity, provider, agreement, reason, factBasis, scope, unit, conditionBasis string
+	var conditionAssertion, correctsVersion, revisionKind, revisionBasis *string
 	var quantity int64
 	var occurredAt, recordedAt time.Time
 	var revisedAt *time.Time
 	err = querier.QueryRow(ctx,
 		`SELECT journey_ref, legal_entity_ref, provider_ref, agreement_ref, reason,
 		        fact_basis, scope_ref, quantity, unit_ref, occurred_at,
+		        condition_basis, condition_assertion,
 		        corrects_version, revision_kind, revision_basis, revised_at, recorded_at
 		   FROM transport_fulfillment.transport_charge_occurrence
 		  WHERE tenant_id = $1 AND occurrence_ref = $2 AND validity_version = $3`,
 		key.TenantID.String(), key.Occurrence.String(), key.Validity.String(),
 	).Scan(&journey, &legalEntity, &provider, &agreement, &reason,
 		&factBasis, &scope, &quantity, &unit, &occurredAt,
+		&conditionBasis, &conditionAssertion,
 		&correctsVersion, &revisionKind, &revisionBasis, &revisedAt, &recordedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.ChargeOccurrenceRecord{}, false, nil
@@ -101,6 +103,9 @@ func (repository *ChargeOccurrences) FindByKey(
 		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find charge occurrence: %w", err)
 	}
 	if spec.Unit, err = domain.NewQuantityUnitReference(unit); err != nil {
+		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find charge occurrence: %w", err)
+	}
+	if spec.Condition, err = occurrenceConditionFrom(conditionBasis, conditionAssertion); err != nil {
 		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find charge occurrence: %w", err)
 	}
 	if err := applyOccurrenceRevision(&spec, correctsVersion, revisionKind, revisionBasis, revisedAt); err != nil {
@@ -267,6 +272,11 @@ func (repository *ChargeOccurrences) Save(
 
 	occurrence := record.Occurrence
 	quantity, unit := occurrence.Quantity()
+	condition := occurrence.Condition()
+	var conditionAssertion *string
+	if assertion, asserted := condition.Assertion(); asserted {
+		conditionAssertion = &assertion
+	}
 
 	var correctsVersion *string
 	if corrects, has := occurrence.Corrects(); has {
@@ -285,8 +295,9 @@ func (repository *ChargeOccurrences) Save(
 		     (tenant_id, occurrence_ref, validity_version,
 		      journey_ref, legal_entity_ref, provider_ref, agreement_ref, reason,
 		      fact_basis, scope_ref, quantity, unit_ref, occurred_at,
-		      corrects_version, revision_kind, revision_basis, revised_at, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+		      corrects_version, revision_kind, revision_basis, revised_at, recorded_at,
+		      condition_basis, condition_assertion)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Occurrence.String(),
@@ -306,6 +317,8 @@ func (repository *ChargeOccurrences) Save(
 		revisionBasis,
 		revisedAt,
 		record.RecordedAt.UTC(),
+		condition.Basis().String(),
+		conditionAssertion,
 	)
 	if err != nil {
 		return ports.ChargeOccurrenceSaveOutcomeInvalid, fmt.Errorf("save charge occurrence: %w", err)
@@ -342,6 +355,20 @@ func chargeOccurrenceReasonFrom(raw string) (domain.ChargeOccurrenceReason, erro
 		return domain.ActualFulfillmentOccurrence, nil
 	default:
 		return 0, fmt.Errorf("unknown charge occurrence reason %q", raw)
+	}
+}
+
+// occurrenceConditionFrom 把库面两列装回发生条件的依据。依据一格是封闭集合，库面多出一格是坏行，不在这里替它
+// 挑一个近似的读法。
+func occurrenceConditionFrom(basis string, assertion *string) (domain.OccurrenceCondition, error) {
+	switch basis {
+	case domain.ConditionAssertedByRegistrant.String():
+		if assertion == nil {
+			return domain.OccurrenceCondition{}, fmt.Errorf("occurrence condition %q carries no assertion", basis)
+		}
+		return domain.NewAssertedOccurrenceCondition(*assertion)
+	default:
+		return domain.OccurrenceCondition{}, fmt.Errorf("unknown occurrence condition basis %q", basis)
 	}
 }
 

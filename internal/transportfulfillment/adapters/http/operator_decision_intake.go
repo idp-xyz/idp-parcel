@@ -42,6 +42,7 @@ const (
 	OperatorDecisionEffectiveTimeJudgment               OperatorDecision = "EFFECTIVE_TIME_JUDGMENT"
 	OperatorDecisionCarrierFirstEffectivePickupJudgment OperatorDecision = "CARRIER_FIRST_EFFECTIVE_PICKUP_JUDGMENT"
 	OperatorDecisionTransportCommissionSubmission       OperatorDecision = "TRANSPORT_COMMISSION_SUBMISSION"
+	OperatorDecisionChargeOccurrenceRegistration        OperatorDecision = "TRANSPORT_CHARGE_OCCURRENCE_REGISTRATION"
 )
 
 // OperatorAuthenticator 认证一次运营决定出示，交回出示者的租户。失败只交回本包的格：ErrAccessChannelNotConfigured、
@@ -164,6 +165,19 @@ func (intake *OperatorDecisionIntake) IntakeTransportCommissionSubmission(ctx co
 	var payload TransportCommissionSubmissionPayload
 	if err := decodeClosedPayload(request.Body, &payload); err != nil {
 		return application.SubmitCommissionCommand{}, err
+	}
+	return payload.Command(tenant)
+}
+
+// IntakeChargeOccurrenceRegistration 译运输收费发生项登记（`/transport-fulfillment-charge-occurrence-registrations`）。
+func (intake *OperatorDecisionIntake) IntakeChargeOccurrenceRegistration(ctx context.Context, request *http.Request) (application.RegisterChargeOccurrenceCommand, error) {
+	tenant, err := intake.tenantFor(ctx, request, OperatorDecisionChargeOccurrenceRegistration)
+	if err != nil {
+		return application.RegisterChargeOccurrenceCommand{}, err
+	}
+	var payload ChargeOccurrenceRegistrationPayload
+	if err := decodeClosedPayload(request.Body, &payload); err != nil {
+		return application.RegisterChargeOccurrenceCommand{}, err
 	}
 	return payload.Command(tenant)
 }

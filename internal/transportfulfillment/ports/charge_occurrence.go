@@ -53,3 +53,30 @@ type ChargeOccurrenceRegistry interface {
 	FindByKey(ctx context.Context, key ChargeOccurrenceKey) (ChargeOccurrenceRecord, bool, error)
 	Save(ctx context.Context, record ChargeOccurrenceRecord) (ChargeOccurrenceSaveOutcome, error)
 }
+
+// ChargeOccurrenceIntent 把一个已登记的发生项版本交给消费方（ADR-0207 决定五）。意图由发生项键认领：重放重发同一份，
+// 由入队那一步按信封 ID 吞掉（ADR-0043）。
+type ChargeOccurrenceIntent struct {
+	Record ChargeOccurrenceRecord
+}
+
+// ChargeOccurrenceHandoff 由 OutboxChargeOccurrenceHandoff 实现：意图与发生项同一事务入队。写口按框架合同无事务即拒，
+// 事务边界归装配点；两者分两笔，就会有一份发生项落了册而结算永远等不到它。
+type ChargeOccurrenceHandoff interface {
+	HandOffChargeOccurrence(ctx context.Context, intent ChargeOccurrenceIntent) error
+}
+
+// FulfillmentSegmentView 按键取回一个实际履约段连同全部参与，供实际履约发生项登记核成员的参与是否已结束。
+//
+// 单开只读口而不依赖 ActualFulfillmentSegmentRegistry，理由同 FailedAttemptSource：那个口带进段、离场、关段各写口，
+// 登记发生项只读段——依赖它等于声明自己可能改写履约事实，而 ADR-0098 决定一恰恰要发生项不碰物理编排。
+// FulfillmentSegments 适配器天然满足它。
+type FulfillmentSegmentView interface {
+	FindByKey(ctx context.Context, key FulfillmentSegmentKey) (FulfillmentSegmentRecord, bool, error)
+}
+
+// ActualCarrierJudgmentView 按段取回实际承运商判断的全部版本，供登记判「这一段是不是自营」（ADR-0207 决定二）。
+// 只读，理由同上；ActualCarrierJudgments 适配器天然满足它。
+type ActualCarrierJudgmentView interface {
+	FindByKey(ctx context.Context, key ActualCarrierJudgmentKey) (ActualCarrierJudgmentRecord, bool, error)
+}

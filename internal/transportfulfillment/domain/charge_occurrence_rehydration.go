@@ -31,6 +31,7 @@ type RehydrateChargeOccurrenceSpec struct {
 	Unit        QuantityUnitReference
 	OccurredAt  time.Time
 	Validity    OccurrenceValidityVersion
+	Condition   OccurrenceCondition
 
 	Corrects      OccurrenceValidityVersion
 	RevisionKind  OccurrenceRevisionKind
@@ -57,6 +58,7 @@ func RehydrateChargeOccurrence(spec RehydrateChargeOccurrenceSpec) (TransportCha
 		Unit:        spec.Unit,
 		OccurredAt:  spec.OccurredAt,
 		Validity:    spec.Validity,
+		Condition:   spec.Condition,
 	})
 	if err != nil {
 		return TransportChargeOccurrence{}, err

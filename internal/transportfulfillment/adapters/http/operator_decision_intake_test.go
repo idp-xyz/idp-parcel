@@ -109,6 +109,10 @@ func TestEachTFDecisionFaceAuthenticatesForItsOwnDecision(t *testing.T) {
 			_, err := intake.IntakeTransportCommissionSubmission(ctx, bearerRequest("t", "!!not-json!!"))
 			return err
 		}},
+		{tfhttp.OperatorDecisionChargeOccurrenceRegistration, func() error {
+			_, err := intake.IntakeChargeOccurrenceRegistration(ctx, bearerRequest("t", "!!not-json!!"))
+			return err
+		}},
 	}
 	for _, face := range faces {
 		asked = nil
@@ -279,6 +283,10 @@ var decisionLines = map[string]struct {
 		_, err := intake.IntakeParticipationTermination(context.Background(), request)
 		return err
 	}, `{"segment":"SYN-SEG-01","object":"SYN-OBJ-01","basis":"SYN-DISPOSITION-01","endedAt":"2026-09-25T01:30:00Z"}`},
+	"/transport-fulfillment-charge-occurrence-registrations": {func(intake *tfhttp.OperatorDecisionIntake, request *http.Request) error {
+		_, err := intake.IntakeChargeOccurrenceRegistration(context.Background(), request)
+		return err
+	}, decisionChargeOccurrenceBody},
 }
 
 // Covers: 载荷里带 tenantId 即拒（MALFORMED_REQUEST），值与认证出的租户相同也拒；一份载荷只许一个文档、只许认识的键——尾随的

@@ -11,265 +11,217 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// 本文件证失败尝试费发生项的登记用例（票 tf-unwired-seven/04，ADR-0098）：采购上下文由
-// 调用方显式给出而不推导；**自营揽收失败不形成发生项，且那是正确答案不是缺席**；成功的
-// 对象结果被拒（AT-TF-094）。夹具全部为合成登记（S 级）。
+// 本文件证失败尝试费那一种原因（ADR-0098；ADR-0207 决定一）：揽收侧按尝试来源键、派送侧按尝试身份取回对象结果，
+// 依据、范围与业务时间取自结果；成功的结果被拒；两侧读不动答未决、指错对象答未受理。夹具全是合成串，证据只记 S。
 
-var chargeArrivedAt = time.Date(2026, 9, 11, 9, 0, 0, 0, time.UTC)
+var attemptArrivedAt = time.Date(2026, 10, 19, 2, 0, 0, 0, time.UTC)
 
-type chargeAttemptViewDouble struct {
+type pickupResultSourceDouble struct {
 	record ports.PickupAttemptRecord
 	found  bool
 	err    error
-	calls  int
 }
 
-func (double *chargeAttemptViewDouble) FindByKey(
-	_ context.Context,
-	_ ports.PickupAttemptKey,
-) (ports.PickupAttemptRecord, bool, error) {
-	double.calls++
-	if double.err != nil {
-		return ports.PickupAttemptRecord{}, false, double.err
-	}
-	return double.record, double.found, nil
+func (double pickupResultSourceDouble) FindByKey(_ context.Context, _ ports.PickupAttemptKey) (ports.PickupAttemptRecord, bool, error) {
+	return double.record, double.found, double.err
 }
 
-type chargeRegistryDouble struct {
-	saved   []ports.ChargeOccurrenceRecord
-	outcome ports.ChargeOccurrenceSaveOutcome
+type deliveryResultViewDouble struct {
+	attempt domain.FulfillmentAttempt
+	result  domain.DeliveryAttemptResult
+	found   bool
 	err     error
 }
 
-func (double *chargeRegistryDouble) FindByKey(
-	_ context.Context,
-	_ ports.ChargeOccurrenceKey,
-) (ports.ChargeOccurrenceRecord, bool, error) {
-	return ports.ChargeOccurrenceRecord{}, false, nil
+func (double deliveryResultViewDouble) LoadDeliveryResult(
+	_ context.Context, _ domain.TenantID, _ domain.AttemptReference, _ domain.CarriedObjectReference,
+) (domain.FulfillmentAttempt, domain.DeliveryAttemptResult, bool, error) {
+	return double.attempt, double.result, double.found, double.err
 }
 
-func (double *chargeRegistryDouble) Save(
-	_ context.Context,
-	record ports.ChargeOccurrenceRecord,
-) (ports.ChargeOccurrenceSaveOutcome, error) {
-	if double.err != nil {
-		return ports.ChargeOccurrenceSaveOutcomeInvalid, double.err
-	}
-	double.saved = append(double.saved, record)
-	if double.outcome != ports.ChargeOccurrenceSaveOutcomeInvalid {
-		return double.outcome, nil
-	}
-	return ports.ChargeOccurrenceSaved, nil
-}
-
-type chargeClockDouble struct{ now time.Time }
-
-func (clock chargeClockDouble) Now() time.Time { return clock.now }
-
-func chargeValue[T any](t *testing.T, construct func(string) (T, error), raw string) T {
+func attemptFixture(t *testing.T, attempt string) domain.FulfillmentAttempt {
 	t.Helper()
-	value, err := construct(raw)
+	formed, err := domain.FormFulfillmentAttempt(domain.FulfillmentAttemptSpec{
+		TenantID:    occurrenceValue(t, domain.NewTenantID, occurrenceTenant),
+		Attempt:     occurrenceValue(t, domain.NewAttemptReference, attempt),
+		Task:        occurrenceValue(t, domain.NewDispatchTaskReference, "SYN-TASK-01"),
+		ExecutedBy:  occurrenceValue(t, domain.NewExecutingPartyReference, "SYN-COURIER-01"),
+		Place:       occurrenceValue(t, domain.NewAttemptPlaceReference, "SYN-PLACE-01"),
+		Evidence:    occurrenceValue(t, domain.NewAttemptEvidenceReference, "SYN-EVIDENCE-01"),
+		Objects:     []domain.CarriedObjectReference{occurrenceValue(t, domain.NewCarriedObjectReference, trunkParcel)},
+		PlannedFrom: attemptArrivedAt.Add(-time.Hour),
+		PlannedTo:   attemptArrivedAt.Add(time.Hour),
+		ArrivedAt:   attemptArrivedAt,
+	})
 	if err != nil {
-		t.Fatalf("construct %q: %v", raw, err)
+		t.Fatalf("尝试夹具：%v", err)
 	}
-	return value
+	return formed
 }
 
-// attemptRecordWith 造一份含单对象结果的揽收尝试记录。
-func attemptRecordWith(t *testing.T, outcome domain.AttemptObjectOutcome) ports.PickupAttemptRecord {
+func pickupWith(t *testing.T, outcome domain.AttemptObjectOutcome) pickupResultSourceDouble {
 	t.Helper()
-	object := chargeValue(t, domain.NewCarriedObjectReference, "parcel-1")
-	spec := domain.FulfillmentAttemptSpec{
-		TenantID:    chargeValue(t, domain.NewTenantID, "tenant-1"),
-		Attempt:     chargeValue(t, domain.NewAttemptReference, "attempt-1"),
-		Task:        chargeValue(t, domain.NewDispatchTaskReference, "task-1"),
-		ExecutedBy:  chargeValue(t, domain.NewExecutingPartyReference, "courier-1"),
-		Place:       chargeValue(t, domain.NewAttemptPlaceReference, "place-1"),
-		Evidence:    chargeValue(t, domain.NewAttemptEvidenceReference, "evidence-1"),
-		Objects:     []domain.CarriedObjectReference{object},
-		PlannedFrom: chargeArrivedAt.Add(-time.Hour),
-		PlannedTo:   chargeArrivedAt.Add(time.Hour),
-		ArrivedAt:   chargeArrivedAt,
-	}
-	attempt, err := domain.FormFulfillmentAttempt(spec)
-	if err != nil {
-		t.Fatalf("构造尝试：%v", err)
-	}
+	attempt := attemptFixture(t, "SYN-PICKUP-ATTEMPT-01")
 	var basis domain.AttemptResultBasisReference
 	if outcome.Failed() {
-		basis = chargeValue(t, domain.NewAttemptResultBasisReference, "basis-absent")
+		basis = occurrenceValue(t, domain.NewAttemptResultBasisReference, "SYN-REASON-NOT-READY")
 	}
-	result, err := domain.FormAttemptObjectResult(attempt, object, outcome, basis, chargeArrivedAt.Add(time.Hour))
+	result, err := domain.FormAttemptObjectResult(attempt,
+		occurrenceValue(t, domain.NewCarriedObjectReference, trunkParcel), outcome, basis, attemptArrivedAt.Add(10*time.Minute))
 	if err != nil {
-		t.Fatalf("构造对象结果：%v", err)
+		t.Fatalf("揽收结果夹具：%v", err)
 	}
-	return ports.PickupAttemptRecord{
-		Key:     ports.PickupAttemptKey{TenantID: spec.TenantID, SourceID: "source-1"},
-		Attempt: attempt,
-		Results: []domain.AttemptObjectResult{result},
+	return pickupResultSourceDouble{
+		record: ports.PickupAttemptRecord{Attempt: attempt, Results: []domain.AttemptObjectResult{result}},
+		found:  true,
 	}
 }
 
-func chargeCommand(t *testing.T) application.RegisterFailedAttemptChargeCommand {
+func deliveryWith(t *testing.T, outcome domain.DeliveryObjectOutcome) deliveryResultViewDouble {
 	t.Helper()
-	return application.RegisterFailedAttemptChargeCommand{
-		TenantID:    chargeValue(t, domain.NewTenantID, "tenant-1"),
-		SourceID:    "source-1",
-		Object:      "parcel-1",
-		Occurrence:  "OCC-0001",
-		Journey:     "journey-1",
-		LegalEntity: "legal-1",
-		Provider:    "partner-1",
-		Agreement:   "agreement-1/v1",
-		Scope:       "scope-1",
-		Quantity:    1,
-		Unit:        "attempt",
-		Validity:    "v1",
+	attempt := attemptFixture(t, "SYN-DELIVERY-ATTEMPT-01")
+	var basis domain.AttemptResultBasisReference
+	if outcome.Failed() {
+		basis = occurrenceValue(t, domain.NewAttemptResultBasisReference, "SYN-REASON-NO-ONE-HOME")
+	}
+	result, err := domain.FormDeliveryAttemptResult(attempt,
+		occurrenceValue(t, domain.NewCarriedObjectReference, trunkParcel), outcome, basis, attemptArrivedAt.Add(15*time.Minute))
+	if err != nil {
+		t.Fatalf("派送结果夹具：%v", err)
+	}
+	return deliveryResultViewDouble{attempt: attempt, result: result, found: true}
+}
+
+func failedAttemptCommand(t *testing.T) application.RegisterChargeOccurrenceCommand {
+	t.Helper()
+	command := actualFulfillmentCommand(t)
+	command.Reason = domain.FailedAttemptOccurrence
+	command.Segment = ""
+	command.Unit = "ATTEMPT"
+	command.ConditionAssertion = "末端协议 v1：客户不在场的失败到场计一次"
+	return command
+}
+
+// Covers: AT-TF-094——外包揽收第一次到场失败形成失败尝试费发生项：依据取「尝试结果/尝试/对象」、范围取那一次尝试、
+// 业务时间取结果本身（不取登记时刻）；采购上下文照核对口取。
+func TestAFailedPickupRegistersAFailedAttemptOccurrence(t *testing.T) {
+	rig := newOccurrenceRig(t)
+	rig.pickups = pickupWith(t, domain.GoodsNotReady)
+	command := failedAttemptCommand(t)
+	command.PickupAttemptSource = "SYN-PICKUP-SOURCE-01"
+
+	result := rig.register(t, command)
+	if result.Outcome() != application.ChargeOccurrenceRegistered {
+		t.Fatalf("outcome = %q detail = %q", result.Outcome(), result.Detail())
+	}
+	record, _ := result.Record()
+	occurrence := record.Occurrence
+	if occurrence.Reason() != domain.FailedAttemptOccurrence ||
+		occurrence.FactBasis().String() != "ATTEMPT-RESULT/SYN-PICKUP-ATTEMPT-01/"+trunkParcel ||
+		occurrence.Scope().String() != "SYN-PICKUP-ATTEMPT-01" {
+		t.Fatalf("原因 / 依据 / 范围 = %q / %q / %q", occurrence.Reason(), occurrence.FactBasis(), occurrence.Scope())
+	}
+	if !occurrence.OccurredAt().Equal(attemptArrivedAt.Add(10 * time.Minute)) {
+		t.Fatalf("业务时间 = %v，应取对象结果", occurrence.OccurredAt())
+	}
+	if len(rig.handoff.intents) != 1 {
+		t.Fatalf("意图 %d 份", len(rig.handoff.intents))
 	}
 }
 
-func newChargeHandler(
-	view *chargeAttemptViewDouble,
-	registry *chargeRegistryDouble,
-) *application.RegisterFailedAttemptChargeHandler {
-	return application.NewRegisterFailedAttemptChargeHandler(application.FailedAttemptChargeDeps{
-		Attempts:    view,
-		Occurrences: registry,
-		Clock:       chargeClockDouble{now: chargeArrivedAt.Add(2 * time.Hour)},
-	})
-}
+// Covers: AT-TF-095——外包尾程第一次无人签收形成失败尝试费发生项，经交付生效已在用的派送尝试读口取结果，不建新存储；
+// 依据前缀与揽收那一侧分开。
+func TestAFailedDeliveryRegistersAFailedAttemptOccurrence(t *testing.T) {
+	rig := newOccurrenceRig(t)
+	rig.deliveries = deliveryWith(t, domain.NoOneToReceive)
+	command := failedAttemptCommand(t)
+	command.DeliveryAttempt = "SYN-DELIVERY-ATTEMPT-01"
 
-// Covers: AT-TF-094 与 ADR-0098 决定二——采购上下文由调用方给出，发生项原样带着它入册。
-func TestAFailedAttemptFormsAnOccurrenceCarryingTheGivenProcurementContext(t *testing.T) {
-	view := &chargeAttemptViewDouble{record: attemptRecordWith(t, domain.CustomerAbsent), found: true}
-	registry := &chargeRegistryDouble{}
-
-	result, err := newChargeHandler(view, registry).Register(t.Context(), chargeCommand(t))
-	if err != nil {
-		t.Fatalf("登记：%v", err)
+	result := rig.register(t, command)
+	if result.Outcome() != application.ChargeOccurrenceRegistered {
+		t.Fatalf("outcome = %q detail = %q", result.Outcome(), result.Detail())
 	}
-	if result.Outcome() != application.FailedAttemptChargeRegistered {
-		t.Fatalf("outcome = %q, want CHARGE_REGISTERED", result.Outcome())
+	record, _ := result.Record()
+	if got := record.Occurrence.FactBasis().String(); got != "DELIVERY-ATTEMPT-RESULT/SYN-DELIVERY-ATTEMPT-01/"+trunkParcel {
+		t.Fatalf("依据 = %q", got)
 	}
-	if len(registry.saved) != 1 {
-		t.Fatalf("入册 %d 条", len(registry.saved))
-	}
-	occurrence := registry.saved[0].Occurrence
-	if occurrence.Reason() != domain.FailedAttemptOccurrence {
-		t.Fatalf("发生原因 = %q", occurrence.Reason())
-	}
-	if occurrence.Provider().String() != "partner-1" || occurrence.Agreement().String() != "agreement-1/v1" {
-		t.Fatalf("采购上下文没有原样带上：%q %q", occurrence.Provider(), occurrence.Agreement())
-	}
-	// 事实依据与业务时间取自结果本身，不取自命令，也不取自时钟。
-	if !occurrence.OccurredAt().Equal(chargeArrivedAt.Add(time.Hour)) {
-		t.Fatalf("业务时间 = %v，应取自对象结果", occurrence.OccurredAt())
-	}
-	if occurrence.FactBasis().String() != "ATTEMPT-RESULT/attempt-1/parcel-1" {
-		t.Fatalf("事实依据 = %q", occurrence.FactBasis())
+	if !record.Occurrence.OccurredAt().Equal(attemptArrivedAt.Add(15 * time.Minute)) {
+		t.Fatalf("业务时间 = %v", record.Occurrence.OccurredAt())
 	}
 }
 
-// Covers: ADR-0098 决定三——自营揽收（无协议快照）失败**不形成发生项，而这是正确答案**。
-// 它既不是未决也不是错误：三者的恢复动作分别是「什么都不用做」「重试」「去修」。
-func TestASelfOperatedFailedAttemptIsNotApplicableRatherThanUndecidedOrRejected(t *testing.T) {
-	view := &chargeAttemptViewDouble{record: attemptRecordWith(t, domain.CustomerAbsent), found: true}
-	registry := &chargeRegistryDouble{}
+// Covers: 领域 ErrNotAFailedAttempt——揽收到手与妥投都不形成失败尝试费，且那是改请求的未受理，不是不适用：
+// 不适用只留给自营（ADR-0098 决定三）。
+func TestASucceededAttemptDoesNotFormAFailedAttemptOccurrence(t *testing.T) {
+	pickedUp := newOccurrenceRig(t)
+	pickedUp.pickups = pickupWith(t, domain.ObjectPickedUp)
+	command := failedAttemptCommand(t)
+	command.PickupAttemptSource = "SYN-PICKUP-SOURCE-01"
+	if result := pickedUp.register(t, command); result.Outcome() != application.ChargeOccurrenceInputNotAccepted ||
+		result.Detail() != application.AttemptDidNotFail {
+		t.Fatalf("揽收到手 outcome/detail = %q/%q", result.Outcome(), result.Detail())
+	}
+	assertNothingWritten(t, pickedUp)
 
-	command := chargeCommand(t)
-	command.Agreement = "   "
-
-	result, err := newChargeHandler(view, registry).Register(t.Context(), command)
-	if err != nil {
-		t.Fatalf("自营那一格不该上抛：%v", err)
+	delivered := newOccurrenceRig(t)
+	delivered.deliveries = deliveryWith(t, domain.ObjectDelivered)
+	command = failedAttemptCommand(t)
+	command.DeliveryAttempt = "SYN-DELIVERY-ATTEMPT-01"
+	if result := delivered.register(t, command); result.Outcome() != application.ChargeOccurrenceInputNotAccepted ||
+		result.Detail() != application.AttemptDidNotFail {
+		t.Fatalf("妥投 outcome/detail = %q/%q", result.Outcome(), result.Detail())
 	}
-	if result.Outcome() != application.FailedAttemptChargeNotApplicable {
-		t.Fatalf("outcome = %q, want NOT_APPLICABLE", result.Outcome())
-	}
-	if result.Reason() != application.SelfOperatedHasNoExternalCostSource {
-		t.Fatalf("reason = %q", result.Reason())
-	}
-	if len(registry.saved) != 0 {
-		t.Fatal("自营揽收凭空落了一条外部成本来源")
-	}
+	assertNothingWritten(t, delivered)
 }
 
-// Covers: 领域 ErrNotAFailedAttempt——揽收到手的结果被拒，且这是业务答案不是技术错误。
-func TestASucceededObjectResultDoesNotFormACharge(t *testing.T) {
-	view := &chargeAttemptViewDouble{record: attemptRecordWith(t, domain.ObjectPickedUp), found: true}
-	registry := &chargeRegistryDouble{}
-
-	result, err := newChargeHandler(view, registry).Register(t.Context(), chargeCommand(t))
-	if err != nil {
-		t.Fatalf("成功结果不该上抛：%v", err)
-	}
-	if result.Outcome() != application.FailedAttemptChargeNotApplicable {
-		t.Fatalf("outcome = %q, want NOT_APPLICABLE", result.Outcome())
-	}
-	if result.Reason() != application.AttemptObjectDidNotFail {
-		t.Fatalf("reason = %q, want ATTEMPT_DID_NOT_FAIL", result.Reason())
-	}
-	if len(registry.saved) != 0 {
-		t.Fatal("给一次成功的揽收开了失败尝试费")
-	}
-}
-
-// Covers: 本仓编排纪律——依赖读不回形成本上下文自己的未决并带续办引用，不上抛技术错误。
-// 而「读不回」与「这个对象没有结果」必须分得开：前者重试，后者回去查是不是问错了对象。
-func TestUnreadableAttemptIsUndecidedWhileAMissingObjectIsNotAccepted(t *testing.T) {
-	unreadable := &chargeAttemptViewDouble{err: errors.New("store down")}
-	result, err := newChargeHandler(unreadable, &chargeRegistryDouble{}).Register(t.Context(), chargeCommand(t))
-	if err != nil {
-		t.Fatalf("读失败不该上抛：%v", err)
-	}
-	if result.Outcome() != application.FailedAttemptChargeUndecided ||
-		result.Reason() != application.AttemptStoreUnavailable {
-		t.Fatalf("outcome/reason = %q/%q", result.Outcome(), result.Reason())
-	}
-	if result.Continuation() == "" {
-		t.Fatal("未决没有续办引用")
+// Covers: 依赖读不动答未决并带续办引用；指名的尝试或对象不存在答未受理（回去查是不是问错了）；揽收与派送两把键
+// 恰给其一，失败尝试一次恰一个对象。
+func TestFailedAttemptFactsSeparateUnreadableFromMissingAndMalformed(t *testing.T) {
+	unreadable := newOccurrenceRig(t)
+	unreadable.pickups = pickupResultSourceDouble{err: errors.New("pickups down")}
+	command := failedAttemptCommand(t)
+	command.PickupAttemptSource = "SYN-PICKUP-SOURCE-01"
+	if result := unreadable.register(t, command); result.Outcome() != application.ChargeOccurrenceUndecided ||
+		result.Detail() != application.FactSourceUnavailable || result.Continuation() == "" {
+		t.Fatalf("读不动 outcome/detail = %q/%q", result.Outcome(), result.Detail())
 	}
 
-	missing := &chargeAttemptViewDouble{record: attemptRecordWith(t, domain.CustomerAbsent), found: true}
-	command := chargeCommand(t)
-	command.Object = "parcel-not-in-attempt"
-	other, err := newChargeHandler(missing, &chargeRegistryDouble{}).Register(t.Context(), command)
-	if err != nil {
-		t.Fatalf("对象不在尝试内不该上抛：%v", err)
+	wrongObject := newOccurrenceRig(t)
+	wrongObject.pickups = pickupWith(t, domain.GoodsNotReady)
+	command = failedAttemptCommand(t)
+	command.PickupAttemptSource = "SYN-PICKUP-SOURCE-01"
+	command.Objects = []string{trunkSecondParcel}
+	if result := wrongObject.register(t, command); result.Outcome() != application.ChargeOccurrenceInputNotAccepted ||
+		result.Detail() != application.ChargeFactNotFound {
+		t.Fatalf("对象不在尝试里 outcome/detail = %q/%q", result.Outcome(), result.Detail())
 	}
-	if other.Outcome() != application.FailedAttemptChargeInputNotAccepted {
-		t.Fatalf("outcome = %q, want INPUT_NOT_ACCEPTED", other.Outcome())
-	}
-}
 
-// Covers: 最小身份先于任何权威读取——身份立不住时不去读库。
-func TestBadIdentityIsRefusedBeforeReadingTheAttempt(t *testing.T) {
-	view := &chargeAttemptViewDouble{}
-	command := chargeCommand(t)
-	command.SourceID = "  "
+	missingDelivery := newOccurrenceRig(t)
+	missingDelivery.deliveries = deliveryResultViewDouble{}
+	command = failedAttemptCommand(t)
+	command.DeliveryAttempt = "SYN-DELIVERY-ATTEMPT-09"
+	if result := missingDelivery.register(t, command); result.Detail() != application.ChargeFactNotFound {
+		t.Fatalf("派送尝试不存在 detail = %q", result.Detail())
+	}
 
-	result, err := newChargeHandler(view, &chargeRegistryDouble{}).Register(t.Context(), command)
-	if err != nil {
-		t.Fatalf("身份不受理不该上抛：%v", err)
-	}
-	if result.Outcome() != application.FailedAttemptChargeInputNotAccepted {
-		t.Fatalf("outcome = %q", result.Outcome())
-	}
-	if view.calls != 0 {
-		t.Fatalf("身份立不住却读了 %d 次库", view.calls)
-	}
-}
-
-// Covers: 撞键是业务答案（ADR-0031），重放交回`已登记`而不是再落一条。
-func TestReplayingTheSameOccurrenceAnswersAlreadyRegistered(t *testing.T) {
-	view := &chargeAttemptViewDouble{record: attemptRecordWith(t, domain.CustomerAbsent), found: true}
-	registry := &chargeRegistryDouble{outcome: ports.ChargeOccurrenceAlreadyRegistered}
-
-	result, err := newChargeHandler(view, registry).Register(t.Context(), chargeCommand(t))
-	if err != nil {
-		t.Fatalf("重放：%v", err)
-	}
-	if result.Outcome() != application.FailedAttemptChargeExisting {
-		t.Fatalf("outcome = %q, want CHARGE_EXISTING", result.Outcome())
+	for name, mutate := range map[string]func(*application.RegisterChargeOccurrenceCommand){
+		"both attempt keys": func(command *application.RegisterChargeOccurrenceCommand) {
+			command.PickupAttemptSource, command.DeliveryAttempt = "SYN-PICKUP-SOURCE-01", "SYN-DELIVERY-ATTEMPT-01"
+		},
+		"no attempt key": func(*application.RegisterChargeOccurrenceCommand) {},
+		"two objects": func(command *application.RegisterChargeOccurrenceCommand) {
+			command.PickupAttemptSource = "SYN-PICKUP-SOURCE-01"
+			command.Objects = []string{trunkParcel, trunkSecondParcel}
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			rig := newOccurrenceRig(t)
+			command := failedAttemptCommand(t)
+			mutate(&command)
+			if result := rig.register(t, command); result.Outcome() != application.ChargeOccurrenceInputNotAccepted ||
+				result.Detail() != application.ChargeRequestMalformed {
+				t.Fatalf("outcome/detail = %q/%q", result.Outcome(), result.Detail())
+			}
+		})
 	}
 }

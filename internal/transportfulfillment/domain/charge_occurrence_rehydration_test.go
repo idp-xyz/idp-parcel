@@ -46,6 +46,7 @@ func rehydrateOccurrenceSpec(t *testing.T, objects ...string) domain.RehydrateCh
 		Unit:        occurrenceValue(t, domain.NewQuantityUnitReference, "attempt"),
 		OccurredAt:  occurrenceAtFixture,
 		Validity:    occurrenceValue(t, domain.NewOccurrenceValidityVersion, "v1"),
+		Condition:   occurrenceValue(t, domain.NewAssertedOccurrenceCondition, "agreement-1/v1 failed attempt clause met"),
 	}
 }
 

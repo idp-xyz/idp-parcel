@@ -32,7 +32,17 @@ func occurrenceSpec(t *testing.T, occurrence, journey string) domain.TransportCh
 		Unit:       mustValue(t, domain.NewQuantityUnitReference, "piece"),
 		OccurredAt: occurredAt,
 		Validity:   mustValue(t, domain.NewOccurrenceValidityVersion, "occurrence/v1"),
+		Condition:  assertedCondition(t, "agreement-snapshot-1 booking clause met"),
 	}
+}
+
+func assertedCondition(t *testing.T, assertion string) domain.OccurrenceCondition {
+	t.Helper()
+	condition, err := domain.NewAssertedOccurrenceCondition(assertion)
+	if err != nil {
+		t.Fatalf("断言夹具：%v", err)
+	}
+	return condition
 }
 
 // Covers: CONTEXT「每个运输收费发生项必须固定采购责任法人、服务提供方、采用的供应商
@@ -275,4 +285,194 @@ func TestValidityRevisionFormsANewVersionWithoutDeletingTheOriginal(t *testing.T
 			t.Fatal("第三个修订走向带了标签——封闭集合被悄悄放开")
 		}
 	})
+}
+
+func endedTrunkSegment(t *testing.T, objects ...string) domain.ActualFulfillmentSegment {
+	t.Helper()
+	rows := make([]domain.RehydrateParticipationSpec, 0, len(objects))
+	for index, object := range objects {
+		row := domain.RehydrateParticipationSpec{
+			Object:     mustValue(t, domain.NewCarriedObjectReference, object),
+			EntryKind:  domain.EnteredByTransportHandover,
+			EntryBasis: mustValue(t, domain.NewParticipationBasisReference, "TRANSPORT-HANDOVER/in-"+object),
+			EnteredAt:  occurredAt,
+		}
+		// 成员按序依次晚一小时离场，终点各不相同才看得出业务时间取的是最晚那一刻；active- 起头的成员仍在场。
+		if !strings.HasPrefix(object, "active-") {
+			row.EndKind = domain.EndedByNextHandover
+			row.EndBasis = mustValue(t, domain.NewParticipationBasisReference, "TRANSPORT-HANDOVER/out-"+object)
+			row.EndedAt = occurredAt.Add(time.Duration(index+1) * time.Hour)
+		}
+		rows = append(rows, row)
+	}
+	segment, err := domain.RehydrateActualFulfillmentSegment(domain.RehydrateActualFulfillmentSegmentSpec{
+		TenantID:       mustValue(t, domain.NewTenantID, "tenant-1"),
+		Segment:        mustValue(t, domain.NewFulfillmentSegmentReference, "segment-linehaul-1"),
+		Participations: rows,
+	})
+	if err != nil {
+		t.Fatalf("段夹具：%v", err)
+	}
+	return segment
+}
+
+// Covers: ADR-0207 决定一——实际履约发生项的依据与范围取段，业务时间取成员参与终点里最晚的一刻；成员在场或不在段
+// 里都不形成，各给自己的错误。
+func TestActualFulfillmentOccurrenceTakesItsFactFromTheEndedParticipations(t *testing.T) {
+	segment := endedTrunkSegment(t, "parcel-1", "parcel-2", "active-parcel-3")
+	spec := occurrenceSpec(t, "occurrence-1", "journey-1")
+	spec.Members = []domain.CarriedObjectReference{
+		mustValue(t, domain.NewCarriedObjectReference, "parcel-1"),
+		mustValue(t, domain.NewCarriedObjectReference, "parcel-2"),
+	}
+	occurrence, err := domain.ChargeOccurrenceForActualFulfillment(spec, segment)
+	if err != nil {
+		t.Fatalf("形成：%v", err)
+	}
+	if occurrence.Reason() != domain.ActualFulfillmentOccurrence ||
+		occurrence.FactBasis().String() != "FULFILLMENT-SEGMENT/segment-linehaul-1" ||
+		occurrence.Scope().String() != "segment-linehaul-1" {
+		t.Fatalf("原因 / 依据 / 范围 = %q / %q / %q", occurrence.Reason(), occurrence.FactBasis(), occurrence.Scope())
+	}
+	if want := occurredAt.Add(2 * time.Hour); !occurrence.OccurredAt().Equal(want) {
+		t.Fatalf("业务时间 = %v, want 最晚终点 %v", occurrence.OccurredAt(), want)
+	}
+
+	active := spec
+	active.Members = []domain.CarriedObjectReference{mustValue(t, domain.NewCarriedObjectReference, "active-parcel-3")}
+	if _, err := domain.ChargeOccurrenceForActualFulfillment(active, segment); !errors.Is(err, domain.ErrParticipationNotEnded) {
+		t.Fatalf("在场成员 err = %v, want ErrParticipationNotEnded", err)
+	}
+	stranger := spec
+	stranger.Members = []domain.CarriedObjectReference{mustValue(t, domain.NewCarriedObjectReference, "parcel-9")}
+	if _, err := domain.ChargeOccurrenceForActualFulfillment(stranger, segment); !errors.Is(err, domain.ErrNotAParticipant) {
+		t.Fatalf("段外对象 err = %v, want ErrNotAParticipant", err)
+	}
+}
+
+// Covers: AT-TF-095——失败派送结果形成失败尝试费，依据前缀与揽收那一侧分开，范围取那一次尝试；妥投被拒。
+func TestDeliveryAttemptOccurrenceTakesItsFactFromTheResult(t *testing.T) {
+	attempt := formedAttempt(t, "attempt-7")
+	object := attempt.Objects()[0]
+	failed, err := domain.FormDeliveryAttemptResult(attempt, object, domain.NoOneToReceive,
+		mustValue(t, domain.NewAttemptResultBasisReference, "reason-no-one-home"), attemptArrivedAt.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("失败结果：%v", err)
+	}
+	spec := occurrenceSpec(t, "occurrence-1", "journey-1")
+	spec.Members = []domain.CarriedObjectReference{object}
+	occurrence, err := domain.ChargeOccurrenceForDeliveryAttempt(spec, failed)
+	if err != nil {
+		t.Fatalf("形成：%v", err)
+	}
+	if occurrence.FactBasis().String() != "DELIVERY-ATTEMPT-RESULT/attempt-7/"+object.String() ||
+		occurrence.Scope().String() != "attempt-7" || !occurrence.OccurredAt().Equal(failed.OccurredAt()) {
+		t.Fatalf("依据 / 范围 / 时点 = %q / %q / %v", occurrence.FactBasis(), occurrence.Scope(), occurrence.OccurredAt())
+	}
+	delivered, err := domain.FormDeliveryAttemptResult(attempt, object, domain.ObjectDelivered,
+		domain.AttemptResultBasisReference{}, attemptArrivedAt.Add(time.Minute))
+	if err != nil {
+		t.Fatalf("妥投结果：%v", err)
+	}
+	if _, err := domain.ChargeOccurrenceForDeliveryAttempt(spec, delivered); !errors.Is(err, domain.ErrNotAFailedAttempt) {
+		t.Fatalf("妥投 err = %v, want ErrNotAFailedAttempt", err)
+	}
+}
+
+// Covers: ADR-0207 决定四——身份由（租户、原因、事实依据、成员集合）派生：成员换序同一身份，任一维变了换身份，
+// 长度不随引用多长而涨；首版有效性是 V1。
+func TestTheDerivedOccurrenceReferenceIsDeterministicAndBounded(t *testing.T) {
+	tenant := mustValue(t, domain.NewTenantID, "tenant-1")
+	basis := mustValue(t, domain.NewOccurrenceBasisReference, "FULFILLMENT-SEGMENT/segment-1")
+	one := mustValue(t, domain.NewCarriedObjectReference, "parcel-1")
+	two := mustValue(t, domain.NewCarriedObjectReference, "parcel-2")
+	derive := func(reason domain.ChargeOccurrenceReason, basis domain.OccurrenceBasisReference, members ...domain.CarriedObjectReference) string {
+		t.Helper()
+		reference, err := domain.DeriveChargeOccurrenceReference(tenant, reason, basis, members)
+		if err != nil {
+			t.Fatalf("派生：%v", err)
+		}
+		return reference.String()
+	}
+	forward := derive(domain.ActualFulfillmentOccurrence, basis, one, two)
+	if forward != derive(domain.ActualFulfillmentOccurrence, basis, two, one) {
+		t.Fatal("成员换序换了身份")
+	}
+	if forward == derive(domain.ActualFulfillmentOccurrence, basis, one) ||
+		forward == derive(domain.FailedAttemptOccurrence, basis, one, two) ||
+		forward == derive(domain.ActualFulfillmentOccurrence, mustValue(t, domain.NewOccurrenceBasisReference, "FULFILLMENT-SEGMENT/segment-2"), one, two) {
+		t.Fatal("某一维变了身份却没变")
+	}
+	long := mustValue(t, domain.NewOccurrenceBasisReference, "FULFILLMENT-SEGMENT/"+strings.Repeat("x", 500))
+	if len(derive(domain.ActualFulfillmentOccurrence, long, one)) != len(forward) || !strings.HasPrefix(forward, "TCO-") {
+		t.Fatalf("身份长度随依据涨或类别段不对：%q", forward)
+	}
+	if domain.FirstOccurrenceValidity().String() != "V1" {
+		t.Fatalf("首版 = %q", domain.FirstOccurrenceValidity())
+	}
+	if _, err := domain.DeriveChargeOccurrenceReference(tenant, domain.ActualFulfillmentOccurrence, basis, nil); err == nil {
+		t.Fatal("没有成员也派生出了身份")
+	}
+}
+
+// Covers: ADR-0207 决定三——发生条件必须有人作答：断言缺席的规格立不起发生项；断言原话原样留在发生项上。
+func TestAnOccurrenceCarriesTheAssertedCondition(t *testing.T) {
+	if _, err := domain.NewAssertedOccurrenceCondition("  "); err == nil {
+		t.Fatal("空断言立起来了")
+	}
+	spec := occurrenceSpec(t, "occurrence-1", "journey-1")
+	spec.Condition = domain.OccurrenceCondition{}
+	if _, err := domain.FormTransportChargeOccurrence(spec); !errors.Is(err, domain.ErrInvalidChargeOccurrence) {
+		t.Fatalf("无断言 err = %v", err)
+	}
+	occurrence, err := domain.FormTransportChargeOccurrence(occurrenceSpec(t, "occurrence-1", "journey-1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	condition := occurrence.Condition()
+	if assertion, asserted := condition.Assertion(); condition.Basis() != domain.ConditionAssertedByRegistrant || !asserted ||
+		assertion != "agreement-snapshot-1 booking clause met" {
+		t.Fatalf("条件 = %q %q %v", condition.Basis(), assertion, asserted)
+	}
+}
+
+// Covers: ADR-0207 决定四的「异内容答冲突」——内容逐件比，成员按集合比；读回换了成员顺序不是另一件事。
+func TestSameContentComparesEveryFieldAndMembersAsASet(t *testing.T) {
+	original, err := domain.FormTransportChargeOccurrence(occurrenceSpec(t, "occurrence-1", "journey-1"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	reordered := occurrenceSpec(t, "occurrence-1", "journey-1")
+	reordered.Members = []domain.CarriedObjectReference{reordered.Members[1], reordered.Members[0]}
+	same, err := domain.FormTransportChargeOccurrence(reordered)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !original.SameContentAs(same) {
+		t.Fatal("成员换序被判成异内容")
+	}
+	changed := occurrenceSpec(t, "occurrence-1", "journey-1")
+	changed.Quantity = 3
+	other, err := domain.FormTransportChargeOccurrence(changed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if original.SameContentAs(other) {
+		t.Fatal("数量不同被判成同内容")
+	}
+}
+
+// Covers: 原因字面量是登记册、信封消费方与结算触发册共用的四个词，认回封闭集合，集外的词拒。
+func TestChargeOccurrenceReasonsParseFromTheirLiterals(t *testing.T) {
+	for _, reason := range []domain.ChargeOccurrenceReason{
+		domain.BookingOccurrence, domain.CancellationOccurrence, domain.FailedAttemptOccurrence, domain.ActualFulfillmentOccurrence,
+	} {
+		parsed, err := domain.ParseChargeOccurrenceReason(reason.String())
+		if err != nil || parsed != reason {
+			t.Fatalf("%q 认回 %v %v", reason, parsed, err)
+		}
+	}
+	if _, err := domain.ParseChargeOccurrenceReason("actual_fulfillment"); err == nil {
+		t.Fatal("大小写被折叠了")
+	}
 }

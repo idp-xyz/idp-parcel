@@ -142,6 +142,9 @@ func insertChargeOccurrence(t *testing.T, db *bentopg.DB, tenant, id string, rea
 	if spec.Validity, err = tfdomain.NewOccurrenceValidityVersion("V1"); err != nil {
 		t.Fatal(err)
 	}
+	if spec.Condition, err = tfdomain.NewAssertedOccurrenceCondition("SYN 断言：" + agreement + " 的发生条件已满足"); err != nil {
+		t.Fatal(err)
+	}
 	occurrence, err := tfdomain.FormTransportChargeOccurrence(spec)
 	if err != nil {
 		t.Fatalf("发生项 %s：%v", id, err)
