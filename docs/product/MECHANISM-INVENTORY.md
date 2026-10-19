@@ -12,19 +12,19 @@
 | customscompliance | 107 | 107 | 20 | 42 | 10 | 15 |
 | networkrouting | 77 | 74 | 9 | 14 | 2 | 7 |
 | nodeoperations | 44 | 35 | 5 | 13 | 4 | 7 |
-| parcelpricing | 130 | 117 | 17 | 16 | 1 | 23 |
+| parcelpricing | 133 | 122 | 17 | 16 | 1 | 23 |
 | parcelshipment | 205 | 195 | 20 | 37 | 10 | 19 |
 | partycommercial | 159 | 169 | 13 | 40 | 1 | 38 |
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
-| settlementaccounting | 192 | 133 | 30 | 63 | 12 | 9 |
+| settlementaccounting | 202 | 143 | 32 | 63 | 12 | 9 |
 | transportfulfillment | 157 | 156 | 28 | 36 | 11 | 30 |
 | visibilityexception | 101 | 98 | 11 | 30 | 8 | 11 |
-| **合计** | 1273 | 1172 | 162 | 308 | 60 | 168 |
+| **合计** | 1286 | 1187 | 164 | 308 | 60 | 168 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 81、测试 148。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 81、测试 151。
 
-## 跨上下文消费缝：43 组，114 个生产文件
+## 跨上下文消费缝：44 组，119 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -43,7 +43,7 @@
 | nodeoperations | transportfulfillment | 1 |
 | parcelpricing | accessidentity | 2 |
 | parcelpricing | parcelshipment | 1 |
-| parcelpricing | settlementaccounting | 2 |
+| parcelpricing | settlementaccounting | 4 |
 | parcelpricing | transportfulfillment | 1 |
 | parcelshipment | accessidentity | 2 |
 | parcelshipment | customscompliance | 1 |
@@ -59,7 +59,8 @@
 | settlementaccounting | accessidentity | 2 |
 | settlementaccounting | customscompliance | 2 |
 | settlementaccounting | parcelpricing | 5 |
-| settlementaccounting | partycommercial | 3 |
+| settlementaccounting | parcelshipment | 2 |
+| settlementaccounting | partycommercial | 4 |
 | transportfulfillment | accessidentity | 4 |
 | transportfulfillment | networkrouting | 1 |
 | transportfulfillment | parcelshipment | 1 |
@@ -89,7 +90,7 @@
 | transport_fulfillment | 23 |
 | visibility_exception | 26 |
 
-## 接线面：接入面端点 141 个，消费适配器 35 个生产文件，直投路由表 26 条
+## 接线面：接入面端点 141 个，消费适配器 39 个生产文件，直投路由表 27 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -115,11 +116,11 @@
 |---|---|---|---|---|---|
 | customscompliance | 1 | 0 | 0 | 0 | 1 |
 | networkrouting | 2 | 0 | 0 | 0 | 2 |
-| parcelpricing | 1 | 0 | 0 | 0 | 1 |
+| parcelpricing | 2 | 0 | 0 | 0 | 2 |
 | parcelshipment | 13 | 1 | 1 | 0 | 15 |
-| settlementaccounting | 2 | 0 | 0 | 0 | 2 |
+| settlementaccounting | 5 | 0 | 0 | 0 | 5 |
 | visibilityexception | 12 | 0 | 0 | 2 | 14 |
-| **合计** | 31 | 1 | 1 | 2 | 35 |
+| **合计** | 35 | 1 | 1 | 2 | 39 |
 
 直投路由表按 `cmd/` 生产文件里 `map[eventing.EventType]dispatch.Consumer` 字面量的条目数，按条目键（事件类型常量）所属的消费门包归属。路由表只随消费者一起长（ADR-0049 第三条），本表只报它此刻多长。
 
@@ -127,13 +128,13 @@
 |---|---|
 | customscompliance | 1 |
 | networkrouting | 2 |
-| parcelpricing | 1 |
+| parcelpricing | 2 |
 | parcelshipment | 12 |
 | settlementaccounting | 2 |
 | visibilityexception | 8 |
-| **合计** | 26 |
+| **合计** | 27 |
 
-## 端口：声明 484 个；基线口径缺 28，精确口径缺 2
+## 端口：声明 487 个；基线口径缺 28，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
