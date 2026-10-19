@@ -10,7 +10,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// Covers: ADR-0202 决定三与 UC-TF-004 步 2「固定供应商协议、履约条件和成本来源快照」——指名的那一版协议核不过时逐格答
+// Covers: `AT-TF-105`（编排面）、ADR-0202 决定三与 UC-TF-004 步 2「固定供应商协议、履约条件和成本来源快照」——指名的那一版协议核不过时逐格答
 // 业务结果（未在册、未生效、已终止、服务方不符），各有各的续办，都不落委托、不交意图；服务方不符另带协议约定的供应商。
 // 协议核对口答不出是未决（指名等的是协议），同样零写入。
 func TestACommissionWhoseAgreementDoesNotHoldIsAnsweredPerCell(t *testing.T) {
@@ -117,7 +117,7 @@ func (store *racingCommissionStore) Save(
 	return ports.CommissionAlreadyRegistered, nil
 }
 
-// Covers: UC-TF-004「同一委托/订舱/外部结果版本只能形成一个采用结果；相同身份内容不同形成冲突」的并发面——首交撞上
+// Covers: `AT-TF-106` 冲突半边的并发面——UC-TF-004「同一委托/订舱/外部结果版本只能形成一个采用结果；相同身份内容不同形成冲突」：首交撞上
 // 同标识的先到者时，按先到者的摘要分格：内容相同答已有委托，内容不同答冲突，不把冲突吞成「已有」。
 func TestAConcurrentFirstSubmissionLoserIsJudgedByContent(t *testing.T) {
 	for name, testCase := range map[string]struct {

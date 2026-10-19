@@ -15,7 +15,7 @@ type commissionHandoffClock struct{}
 
 func (commissionHandoffClock) Now() time.Time { return beatInstant() }
 
-// Covers: 票 demo-chain-gaps/23 完成判据「路由不登，`no_subscriber` 如实可见」与 ADR-0202 决定六——生产的委托意图适配器
+// Covers: `AT-TF-107` 分发半边、票 demo-chain-gaps/23 完成判据「路由不登，`no_subscriber` 如实可见」与 ADR-0202 决定六——生产的委托意图适配器
 // 入队的「委托已提交」信封，派发一拍不发布、记 `dispatch.no_subscriber`：本进程照 ADR-0066 没给这一类型登消费者，失败
 // 如实入账，不被别的路由误吃。哪天登了消费者，这条用例要随之改写，那正是它要提醒的事。
 func TestTheTransportCommissionSubmittedEnvelopeHasNoSubscriber(t *testing.T) {

@@ -142,7 +142,7 @@ func commissionBody(commission, provider, agreement, version, submittedAt string
 		` "responsibility": "SYN-RESPONSIBILITY-TRUNK-01", "members": ["SYN-PARCEL-DCG23-01"], "submittedAt": "` + submittedAt + `"}`
 }
 
-// Covers: 票 demo-chain-gaps/23 完成判据（真库，S）——
+// Covers: `AT-TF-105`、`AT-TF-106`、`AT-TF-107` 保存半边（真库面），票 demo-chain-gaps/23 完成判据（S）——
 //   - 演示：干线委托采用种子里的干线协议、服务方填干线承运方，答 201 COMMISSION_SUBMITTED，快照是 PC 拼出的
 //     「对象/版本」、采购责任法人是种子里协议正文的法人；同一份原样重交答 200 EXISTING_COMMISSION（首笔事务真的提交了）。
 //   - 委托与 Outbox 同一笔：委托行与「委托已提交」信封同一个事务号（xmin 相同），信封载荷只带引用。
