@@ -48,7 +48,7 @@ func (double *registryDouble) calls() int {
 	for _, present := range []bool{
 		double.node != nil, double.connection != nil, double.line != nil,
 		double.area != nil, double.calendar != nil, double.strategy != nil,
-		double.adjustment != nil,
+		double.adjustment != nil, len(double.zones) != 0,
 	} {
 		if present {
 			count++
@@ -404,6 +404,8 @@ func TestExecuteRoutesEachKindToItsRegisterMethod(t *testing.T) {
 			"source":"SYN-NET-OPS/EVT-1","effective_at":"2026-08-20T12:00:00Z"}`,
 		kindRouteStrategy: `{"tenant_id":"SYN-TENANT-1","code":"SYN-STRATEGY-1","version":1,
 			"applicable_scope":"SYN-SCOPE-DECLARED","effective_from":"2026-08-20T12:00:00Z"}`,
+		kindLegPricingZone: `{"tenant_id":"SYN-TENANT-1","line_code":"SYN-LINE-EU","version":1,
+			"zones":[{"segment_index":0,"zone":"Z1","basis":"SYN-NET-OPS/ZONES-1"}]}`,
 	}
 	arrived := map[string]func(double *registryDouble) bool{
 		kindNode:            func(d *registryDouble) bool { return d.node != nil },
@@ -417,6 +419,9 @@ func TestExecuteRoutesEachKindToItsRegisterMethod(t *testing.T) {
 				d.adjustment.Kind == ports.AdjustmentSuspension
 		},
 		kindRouteStrategy: func(d *registryDouble) bool { return d.strategy != nil },
+		kindLegPricingZone: func(d *registryDouble) bool {
+			return len(d.zones) == 1 && d.zones[0] == ports.LegPricingZone{SegmentIndex: 0, Zone: "Z1", Basis: "SYN-NET-OPS/ZONES-1"}
+		},
 	}
 
 	for kind, payload := range payloads {

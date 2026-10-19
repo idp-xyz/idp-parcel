@@ -125,7 +125,7 @@ echo "== 网络目录登记（network-routing：演示租户采用参考配置 n
 # SYN-ACCOUNT-01 与 SYN-RS-CN-SG-01，不指向一笔已经受理的委托。同键再登答退出码 2，
 # 已灌过的库重跑本节请用 --reset。
 "$BIN/parcel-network-register" -kind auto-reroute-facts -file "$SEEDS/network/21-auto-reroute-facts-cn-sg-v1.json"
-# 段计价区域（ADR-0189 决定二）：演示网络三段共引那张成本卡，卡没绑分区目录、只有 Z1，三段各登 Z1——这是演示租户的
+# 段计价区域（ADR-0189 决定二）：演示线路各段共引那张成本卡，卡没绑分区目录、只有 Z1，每段都登 Z1——这是演示租户的
 # 租户取值，不是产品默认。没登时候选成本停在待判断。区域挂在已在册的线路版本上，所以排在线路之后。
 "$BIN/parcel-network-register" -kind leg-pricing-zone -file "$SEEDS/network/22-leg-pricing-zones-cn-sg-v1.json"
 

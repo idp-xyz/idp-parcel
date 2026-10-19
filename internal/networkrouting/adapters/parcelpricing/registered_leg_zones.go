@@ -23,7 +23,7 @@ type LegPricingZoneRead interface {
 // 的分区交给 parcel-pricing，本上下文不解释也不校它在不在卡上。没登即未配置，这一段待判断。
 //
 // 绑了分区目录的卡不靠它：那一路的区由 parcel-pricing 用包裹的邮编路线经目录读出（ADR-0189 决定一）；今天的评价还不
-// 经读数补全，绑目录的卡照旧待判断，归票 routing-first-cut/19。
+// 经读数补全，绑目录的卡照旧待判断，归票 routing-first-cut/20。
 type RegisteredLegZones struct {
 	zones LegPricingZoneRead
 }

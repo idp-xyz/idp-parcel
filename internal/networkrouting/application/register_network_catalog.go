@@ -30,7 +30,8 @@ import (
 // 写入口的错误原样上抛不折格：NR 目录写入没有出格答案（重复版本号由主键挡、未闭
 // 区间并存由部分唯一索引挡，均定于 ADR-0068 Consequences），错误在这里只表示依赖
 // 故障或撞上了那两道库上防线——登记与否未知或需换号，都不是本用例能替登记方决定
-// 的事。
+// 的事。唯一折成拒因的是段计价区域落在没挂成本依据的段上：写入口在写之前就核出来、
+// 一行没写，补什么是确定的（ADR-0189 决定二）。
 
 // RegisterCatalogOutcome 是一次目录登记的应用处理结果。
 //
@@ -378,7 +379,7 @@ func legZonesWellFormed(zones []ports.LegPricingZone) bool {
 	}
 	seen := make(map[int]struct{}, len(zones))
 	for _, zone := range zones {
-		if zone.SegmentIndex < 0 || !catalogPresent(zone.Zone) || !catalogPresent(zone.Basis) {
+		if zone.SegmentIndex < 0 || !legZoneWord(zone.Zone) || !catalogPresent(zone.Basis) {
 			return false
 		}
 		if _, duplicated := seen[zone.SegmentIndex]; duplicated {
@@ -387,6 +388,12 @@ func legZonesWellFormed(zones []ports.LegPricingZone) bool {
 		seen[zone.SegmentIndex] = struct{}{}
 	}
 	return true
+}
+
+// legZoneWord 比其余各格多要求首尾无空白：区域原样交给 parcel-pricing，PP 的计价输入把带首尾空白的区当输入不成形，
+// 整次候选成本取数报错（不是这一段待判断），连同一次判断里已出价的候选一起停下。册只增不改，登进去就只能另起线路版本。
+func legZoneWord(zone string) bool {
+	return catalogPresent(zone) && strings.TrimSpace(zone) == zone
 }
 
 func (service *NetworkCatalogRegistration) RegisterServiceAreaVersion(

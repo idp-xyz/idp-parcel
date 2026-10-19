@@ -586,11 +586,12 @@ func TestLegPricingZonesRegisterOnlyWellFormedRowsOnCostBasedSegments(t *testing
 	}
 
 	malformed := map[string][]ports.LegPricingZone{
-		"没给一段": nil,
-		"段号为负": {{SegmentIndex: -1, Zone: "Z1", Basis: "b"}},
-		"同段两次": {{SegmentIndex: 0, Zone: "Z1", Basis: "b"}, {SegmentIndex: 0, Zone: "Z2", Basis: "b"}},
-		"区域空白": {{SegmentIndex: 0, Zone: " ", Basis: "b"}},
-		"依据空白": {{SegmentIndex: 0, Zone: "Z1", Basis: ""}},
+		"没给一段":    nil,
+		"段号为负":    {{SegmentIndex: -1, Zone: "Z1", Basis: "b"}},
+		"同段两次":    {{SegmentIndex: 0, Zone: "Z1", Basis: "b"}, {SegmentIndex: 0, Zone: "Z2", Basis: "b"}},
+		"区域空白":    {{SegmentIndex: 0, Zone: " ", Basis: "b"}},
+		"区域带首尾空白": {{SegmentIndex: 0, Zone: "Z1 ", Basis: "b"}},
+		"依据空白":    {{SegmentIndex: 0, Zone: "Z1", Basis: ""}},
 	}
 	for name, zones := range malformed {
 		double := &catalogRegistryDouble{}

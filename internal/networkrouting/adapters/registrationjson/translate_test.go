@@ -146,6 +146,33 @@ func TestADirectRowMayNotWriteACitationIntoItsBasis(t *testing.T) {
 	}
 }
 
+// Covers: 段计价区域批文（ADR-0189 决定二）逐格到达；依据格同其余各族：空串即拒，自写引用串即拒（ADR-0147 决定四）。
+func TestALegPricingZoneRowCarriesItsContentAndRefusesACitedBasis(t *testing.T) {
+	row := func(basis string) []byte {
+		return []byte(`{"tenant_id": "SYN-TENANT-01", "line_code": "SYN-LINE-1", "version": 2,
+			"zones": [{"segment_index": 1, "zone": "Z2", "basis": "` + basis + `"}]}`)
+	}
+	command, err := registrationjson.LegPricingZonesFromJSON(row("SYN-ZONE-BASIS-1"))
+	if err != nil {
+		t.Fatalf("译装：%v", err)
+	}
+	want := []ports.LegPricingZone{{SegmentIndex: 1, Zone: "Z2", Basis: "SYN-ZONE-BASIS-1"}}
+	if command.TenantID.String() != "SYN-TENANT-01" || command.LineCode != "SYN-LINE-1" || command.LineVersion != 2 ||
+		!reflect.DeepEqual(command.Zones, want) {
+		t.Fatalf("译装结果 = %+v", command)
+	}
+	if _, err := registrationjson.LegPricingZonesFromJSON(row("")); !errors.Is(err, domain.ErrBlankValue) {
+		t.Fatalf("依据空串：err=%v，想要 ErrBlankValue", err)
+	}
+	released := referenceconfig.Released()
+	if len(released) == 0 {
+		t.Fatal("发布清单为空")
+	}
+	if _, err := registrationjson.LegPricingZonesFromJSON(row(released[0].Citation())); !errors.Is(err, registrationjson.ErrCitationOutsideAdoption) {
+		t.Fatalf("自写引用串：err=%v，想要 ErrCitationOutsideAdoption", err)
+	}
+}
+
 // Covers: 日历三格（ADR-0175 决定一）逐格到达：没写是 nil，写了 0 是 0。
 func TestACalendarRowCarriesItsContent(t *testing.T) {
 	command, err := registrationjson.ServiceCalendarVersionFromJSON([]byte(`{"tenant_id": "SYN-TENANT-01",

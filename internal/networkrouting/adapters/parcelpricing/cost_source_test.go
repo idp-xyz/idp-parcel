@@ -323,6 +323,28 @@ func TestEachLegIsPricedInItsOwnZone(t *testing.T) {
 	}
 }
 
+// Covers: ADR-0189 决定一「绑了分区目录的卡由邮编路线经目录读区，不读段计价区域」——这一段登了 Z1、卡的档位也在 Z1，
+// 卡却绑了目录：评价只认目录读数，今天成本取数侧交不出读数（票 routing-first-cut/20），候选待判断，不拿登记的区顶上。
+func TestARegisteredLegZoneDoesNotStandInForABoundCardsCatalogue(t *testing.T) {
+	source := newAdapter(t,
+		map[string][]nrports.LineSegmentCostBasis{
+			"line-bound": {{SegmentIndex: 0, Kind: nrports.SupplierBuyPlanBasis, Reference: "plan-bound/v1"}},
+		},
+		map[string]ppdomain.PricingPlanVersion{"plan-bound/v1": zoneCatalogueBoundBuyPlan(t, "plan-bound", "v1", "5")},
+	)
+	source.zoneByOrdinal = map[int]string{1: "Z1"}
+
+	costs, err := source.LoadCandidateCosts(context.Background(), judgmentKey(t), evidenceWithComparison(t, "USD",
+		pathOf(t, "line-bound", 1)))
+	if err != nil {
+		t.Fatalf("取候选成本：%v", err)
+	}
+	fact := factOf(t, costs.Facts, "line-bound")
+	if fact.State().String() != "PENDING" {
+		t.Fatalf("fact = %s %d minor, want PENDING（绑了目录的卡不读登记的区）", fact.State(), fact.AmountMinor())
+	}
+}
+
 // Covers: 包裹事实进每一段的输入——卡的档位只到 10kg：声明 1kg 时出价；声明 12kg 时落在档外，评价答待判断，候选随之
 // 待判断。两种重量答得不同，说明评价读的是这份声明。
 func TestTheParcelFactsReachEveryLegsEvaluation(t *testing.T) {

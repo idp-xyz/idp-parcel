@@ -27,8 +27,7 @@ import (
 // 票 routing-first-cut/11 判据一的取证：演示租户照 scripts/demo-seeds/data/network 的登记行逐行登记（稳定定义都是
 // 采用 network-routing/network-catalog/SYN-CN-SG@1 的采用行），经登记用例与目录适配器落库；之后可达性与初始路由两个
 // 证据视图、候选成本取数侧都走生产装配函数。证的是 parcel-dispatch 真接上的那一条：采用之后证据视图不再答`未配置`，
-// 唯一的候选过得了区域、可执行性、关务与时间可行性；下一个停点是成本一格的计价输入（ADR-0148 决定四第 7 条），
-// 不在本票。
+// 唯一的候选过得了区域、可执行性、关务与时间可行性。成本一格随种子登的段计价区域出价（ADR-0189），见下方专测。
 
 const demoTenant = "SYN-TENANT-01"
 
@@ -253,7 +252,8 @@ func TestADeclaredParcelOnZonedLegsIsPricedThroughProductionWiring(t *testing.T)
 	}
 }
 
-// assertDemoCandidateWaitsForItsCost 钉演示候选的成本一格：恰一条事实、答待判断、没有出处——逐段区域未配置的段没评价过。
+// assertDemoCandidateWaitsForItsCost 钉演示候选的成本一格：恰一条事实、答待判断、没有出处——这一笔没有包裹事实、
+// 库里也没登成本卡，哪一段都没评价过。
 func assertDemoCandidateWaitsForItsCost(t *testing.T, costs nrports.RouteCandidateCosts) {
 	t.Helper()
 	if len(costs.Facts) != 1 || costs.Facts[0].Candidate().String() != "SYN-LINE-CN-SG-01@1" {

@@ -21,6 +21,7 @@ type legPricingZonePayload struct {
 }
 
 // LegPricingZonesFromJSON 是受控批量口那一路。形状缺失（缺区域、段号重复之类）不在这里判，交登记用例逐格答拒因。
+// 依据格与其余各族同走 basisFrom：段计价区域是租户取值，参考配置里没有，直接行写引用串就是冒称一次没发生的采用。
 func LegPricingZonesFromJSON(raw []byte) (application.RegisterLegPricingZonesCommand, error) {
 	var document legPricingZoneDocument
 	if err := decodeStrict(raw, &document); err != nil {
@@ -32,7 +33,11 @@ func LegPricingZonesFromJSON(raw []byte) (application.RegisterLegPricingZonesCom
 	}
 	zones := make([]ports.LegPricingZone, 0, len(document.Zones))
 	for _, zone := range document.Zones {
-		zones = append(zones, ports.LegPricingZone{SegmentIndex: zone.SegmentIndex, Zone: zone.Zone, Basis: zone.Basis})
+		basis, err := basisFrom(&zone.Basis)
+		if err != nil {
+			return application.RegisterLegPricingZonesCommand{}, err
+		}
+		zones = append(zones, ports.LegPricingZone{SegmentIndex: zone.SegmentIndex, Zone: zone.Zone, Basis: basis.String()})
 	}
 	return application.RegisterLegPricingZonesCommand{
 		TenantID:    tenant,

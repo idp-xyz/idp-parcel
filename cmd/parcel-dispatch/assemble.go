@@ -1579,7 +1579,7 @@ func (broken brokenCustomsSource) AssessCustomsApplicability(
 // routeCosts 装配候选成本取数侧（票 routing-first-cut/10、/17、/18）：目录依据、内部政策解析与方案装载全接库；包裹事实取
 // parcel-shipment 的客户声明；逐段区域取租户登的段计价区域（ADR-0189 决定二），没登的段待判断，候选缺成本依据——不给
 // 任何租户编一个区让候选假出价。绑了分区目录的卡与要按序列换算的卡照旧待判断：评价还不经 parcel-pricing 的读数补全
-// （票 routing-first-cut/19）。计价时点取路由判断的时钟，与证据视图同一个。
+// （票 routing-first-cut/20）。计价时点取路由判断的时钟，与证据视图同一个。
 func routeCosts(db *bentopg.DB, clock systemClock) nrports.RouteCandidateCostSource {
 	catalog, err := nrpostgres.NewNetworkCatalog(db)
 	if err != nil {

@@ -130,6 +130,36 @@ func rateTablePlan(
 			t.Fatalf("structures: %v", err)
 		}
 	}
+	return rateTablePlanWith(t, id, version, direction, purpose, table, weightPolicy, period, structures)
+}
+
+// zoneCatalogueBoundBuyPlan 是档位在 Z1、却绑了分区目录的 BUY 卡：区域只能从目录读数来（ADR-0109 决定四）。
+func zoneCatalogueBoundBuyPlan(t *testing.T, id, version, baseAmount string) ppdomain.PricingPlanVersion {
+	t.Helper()
+	plain := syntheticBuyPlan(t, id, version, baseAmount)
+	link, err := ppdomain.NewReferenceCatalogueLink(ppdomain.CatalogueKindZone, "zones-"+id)
+	if err != nil {
+		t.Fatalf("catalogue link: %v", err)
+	}
+	structures, err := ppdomain.PricingPlanStructures{}.WithReferenceCatalogues(link)
+	if err != nil {
+		t.Fatalf("catalogue structures: %v", err)
+	}
+	return rateTablePlanWith(t, id, version, ppdomain.PricingDirectionBuy, ppdomain.PricingPurposeSupplierCost,
+		plain.RateTable(), plain.WeightPolicy(), plain.EffectivePeriod(), structures)
+}
+
+func rateTablePlanWith(
+	t *testing.T,
+	id, version string,
+	direction ppdomain.PricingDirection,
+	purpose ppdomain.PricingPurpose,
+	table ppdomain.RateTableVersion,
+	weightPolicy ppdomain.PricingWeightPolicy,
+	period ppdomain.EffectivePeriod,
+	structures ppdomain.PricingPlanStructures,
+) ppdomain.PricingPlanVersion {
+	t.Helper()
 	plan, err := ppdomain.NewPricingPlanVersion(
 		mustReference(t, ppdomain.ArtifactPricingPlan, id, version),
 		value(t, ppdomain.NewPricingScopeID, "scope-1"),
