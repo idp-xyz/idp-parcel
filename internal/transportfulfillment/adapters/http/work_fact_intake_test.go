@@ -95,12 +95,26 @@ var workFactLines = map[string]workFactLine{
 		},
 		valid: offsitePickupAttemptBody,
 	},
+	"/transport-fulfillment/offsite-pickup-corrections": {
+		intake: func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) error {
+			_, err := intake.IntakePickupCorrection(context.Background(), request)
+			return err
+		},
+		valid: workFactPickupCorrectionBody,
+	},
 	"/transport-fulfillment/handovers": {
 		intake: func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) error {
 			_, err := intake.IntakeHandoverRegistration(context.Background(), request)
 			return err
 		},
 		valid: handoverRegistrationBody,
+	},
+	"/transport-fulfillment/handover-corrections": {
+		intake: func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) error {
+			_, err := intake.IntakeHandoverCorrection(context.Background(), request)
+			return err
+		},
+		valid: workFactHandoverCorrectionBody,
 	},
 	"/transport-fulfillment/movement-facts": {
 		intake: func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) error {
@@ -122,6 +136,13 @@ var workFactLines = map[string]workFactLine{
 			return err
 		},
 		valid: workFactEffectiveDeliveryBody,
+	},
+	"/transport-fulfillment/delivery-proof-corrections": {
+		intake: func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) error {
+			_, err := intake.IntakeCorrection(context.Background(), request)
+			return err
+		},
+		valid: workFactDeliveryProofCorrectionBody,
 	},
 	"/transport-fulfillment/delivery-attempts": {
 		intake: func(intake *tfhttp.WorkFactCommandIntake, request *http.Request) error {
@@ -237,32 +258,49 @@ func TestNewWorkFactCommandIntakeRejectsABlankMovementSourceOrNoAuthenticator(t 
 	}
 }
 
-// Covers: 作业事实的设备与作业范围只从三个头来，缺一即坏报文；这一面只认 OFFSITE——认了 NODE，登在节点上的设备就能拿
-// 节点授予打揽收、交接与交付。先认证、后解载荷：认证方的答复原样交回，令牌不过的调用方看不到载荷校验的结果。
-func TestWorkFactCommandIntakeTakesDeviceAndScopeFromHeadersAndAuthenticatesFirst(t *testing.T) {
-	var asked []string
-	intake := workFactIntakeWith(t, workFactAuthenticatorFake{asked: &asked})
-	if _, err := intake.IntakeRegistration(context.Background(), commandRequest(workFactEffectiveDeliveryBody)); err != nil {
-		t.Fatalf("合规出示被拒：%v", err)
-	}
-	if len(asked) != 1 || asked[0] != "SYN-DEVICE-OFFSITE|OFFSITE|SYN-OFFSITE-01" {
-		t.Fatalf("认证方被问 %v，want 三个头里的设备与作业范围", asked)
-	}
-	for name, mutate := range map[string]func(*http.Request){
-		"缺设备":     func(request *http.Request) { request.Header.Del("Parcel-Device-Id") },
-		"缺作业范围种类": func(request *http.Request) { request.Header.Del("Parcel-Work-Scope-Kind") },
-		"缺作业范围引用": func(request *http.Request) { request.Header.Del("Parcel-Work-Scope-Reference") },
-		"节点作业范围":  func(request *http.Request) { request.Header.Set("Parcel-Work-Scope-Kind", "NODE") },
-	} {
-		request := commandRequest(workFactEffectiveDeliveryBody)
-		mutate(request)
-		if _, err := intake.IntakeRegistration(context.Background(), request); !errors.Is(err, tfhttp.ErrMalformedRequest) {
-			t.Fatalf("%s：err = %v, want ErrMalformedRequest", name, err)
-		}
-	}
-	refused := workFactIntakeWith(t, workFactAuthenticatorFake{err: tfhttp.ErrDeviceNotInUse})
-	if _, err := refused.IntakeRegistration(context.Background(), commandRequest("!!not-json!!")); !errors.Is(err, tfhttp.ErrDeviceNotInUse) {
-		t.Fatalf("设备不在用：err = %v, want 认证方的答复，而不是载荷校验的结果", err)
+// Covers: 先认证、后解载荷，逐口成立——认证方被问的是请求头里那份设备与作业范围，它的答复原样交回，令牌不过的调用方
+// 看不到载荷校验的结果；令牌原样转交，Intake 不替调用方补。请求头那几格在问认证方之前就判：票 10 的判断项「三头缺一答
+// 400 `MALFORMED_REQUEST`，不占渠道那几格」「种类不对答 400，发生在铸造之前」。这一面只认 OFFSITE——认了 NODE，登在
+// 节点上的设备就能拿节点授予打揽收、交接与交付。
+func TestWorkFactCommandIntakeAuthenticatesBeforeDecodingOnEveryLine(t *testing.T) {
+	for pattern, line := range workFactLines {
+		t.Run(pattern, func(t *testing.T) {
+			var asked []string
+			intake := workFactIntakeWith(t, workFactAuthenticatorFake{asked: &asked})
+			if err := line.intake(intake, commandRequest(line.valid)); err != nil {
+				t.Fatalf("合规出示被拒：%v", err)
+			}
+			if len(asked) != 1 || asked[0] != "SYN-DEVICE-OFFSITE|OFFSITE|SYN-OFFSITE-01" {
+				t.Fatalf("认证方被问 %v，want 请求头里的设备与作业范围", asked)
+			}
+
+			refused := workFactIntakeWith(t, workFactAuthenticatorFake{err: tfhttp.ErrDeviceNotInUse})
+			if err := line.intake(refused, commandRequest("!!not-json!!")); !errors.Is(err, tfhttp.ErrDeviceNotInUse) {
+				t.Fatalf("设备不在用：err = %v, want 认证方的答复，而不是载荷校验的结果", err)
+			}
+			anonymous := commandRequest("!!not-json!!")
+			anonymous.Header.Del("Authorization")
+			if err := line.intake(intake, anonymous); !errors.Is(err, tfhttp.ErrOperatorCredentialRejected) {
+				t.Fatalf("没带令牌：err = %v, want ErrOperatorCredentialRejected，而不是载荷校验的结果", err)
+			}
+
+			for name, mutate := range map[string]func(*http.Request){
+				"缺设备":     func(request *http.Request) { request.Header.Del("Parcel-Device-Id") },
+				"缺作业范围种类": func(request *http.Request) { request.Header.Del("Parcel-Work-Scope-Kind") },
+				"缺作业范围引用": func(request *http.Request) { request.Header.Del("Parcel-Work-Scope-Reference") },
+				"节点作业范围":  func(request *http.Request) { request.Header.Set("Parcel-Work-Scope-Kind", "NODE") },
+			} {
+				asked = nil
+				request := commandRequest(line.valid)
+				mutate(request)
+				if err := line.intake(intake, request); !errors.Is(err, tfhttp.ErrMalformedRequest) {
+					t.Fatalf("%s：err = %v, want ErrMalformedRequest", name, err)
+				}
+				if len(asked) != 0 {
+					t.Fatalf("%s：认证方被问 %v，want 一次也不问", name, asked)
+				}
+			}
+		})
 	}
 }
 
@@ -524,6 +562,68 @@ const workFactHandoverCorrectionBody = `{"object":"SYN-PARCEL-08-05","scope":"SY
 	`"verdict":"REFUSED","releasingEvidence":"SYN-EVIDENCE/release-05b","receivingEvidence":"SYN-EVIDENCE/receive-05b",` +
 	`"rule":"SYN-RULE/handover@v2","basis":"SYN-BASIS/refusal-05","newVersion":"v2","correctedAt":"2026-09-24T15:00:00+08:00"}`
 
+// Covers: PickupCorrectionIntake——指名的前版与更正后的地点、控制证据、执行方、发生时刻逐字来自载荷，更正时刻照 ADR-0023
+// 从载荷收，租户来自认证结果。
+func TestWorkFactCommandIntakeTranslatesPickupCorrectionWithTheAuthenticatedTenant(t *testing.T) {
+	command, err := workFactIntakeForTest(t).IntakePickupCorrection(context.Background(), commandRequest(workFactPickupCorrectionBody))
+	if err != nil {
+		t.Fatalf("intake：%v", err)
+	}
+	if got := command.TenantID.String(); got != workFactTenant {
+		t.Fatalf("TenantID = %q, want %q", got, workFactTenant)
+	}
+	for name, pair := range map[string][2]string{
+		"object":             {command.Object, "SYN-PARCEL-08-01"},
+		"attempt":            {command.Attempt, "SYN-ATTEMPT-08-01"},
+		"predecessorVersion": {command.PredecessorVersion, "SYN-PICKUP-VERSION-08-01"},
+		"place":              {command.Place, "SYN-PLACE/shipper-dock-01b"},
+		"control":            {command.Control, "SYN-CONTROL/signed-pickup-01b"},
+		"executedBy":         {command.ExecutedBy, "SYN-COURIER-08b"},
+	} {
+		if pair[0] != pair[1] {
+			t.Fatalf("%s = %q, want %q", name, pair[0], pair[1])
+		}
+	}
+	for name, pair := range map[string][2]time.Time{
+		"occurredAt":  {command.OccurredAt, time.Date(2026, 9, 24, 0, 35, 0, 0, time.UTC)},
+		"correctedAt": {command.CorrectedAt, time.Date(2026, 9, 24, 10, 0, 0, 0, time.UTC)},
+	} {
+		if !pair[0].Equal(pair[1]) {
+			t.Fatalf("%s = %s, want %s", name, pair[0], pair[1])
+		}
+	}
+}
+
+// Covers: HandoverCorrectionIntake——指名的前版、新版本号与更正后的结论、证据、规则、依据逐字来自载荷，更正时刻照 ADR-0023
+// 从载荷收，租户来自认证结果。
+func TestWorkFactCommandIntakeTranslatesHandoverCorrectionWithTheAuthenticatedTenant(t *testing.T) {
+	command, err := workFactIntakeForTest(t).IntakeHandoverCorrection(context.Background(), commandRequest(workFactHandoverCorrectionBody))
+	if err != nil {
+		t.Fatalf("intake：%v", err)
+	}
+	if got := command.TenantID.String(); got != workFactTenant {
+		t.Fatalf("TenantID = %q, want %q", got, workFactTenant)
+	}
+	for name, pair := range map[string][2]string{
+		"object":             {command.Object, "SYN-PARCEL-08-05"},
+		"scope":              {command.Scope, "SYN-SCOPE/hub-dock-05"},
+		"predecessorVersion": {command.PredecessorVersion, "v1"},
+		"verdict":            {command.Verdict.String(), "REFUSED"},
+		"releasingEvidence":  {command.ReleasingEvidence, "SYN-EVIDENCE/release-05b"},
+		"receivingEvidence":  {command.ReceivingEvidence, "SYN-EVIDENCE/receive-05b"},
+		"rule":               {command.Rule, "SYN-RULE/handover@v2"},
+		"basis":              {command.Basis, "SYN-BASIS/refusal-05"},
+		"newVersion":         {command.NewVersion, "v2"},
+	} {
+		if pair[0] != pair[1] {
+			t.Fatalf("%s = %q, want %q", name, pair[0], pair[1])
+		}
+	}
+	if want := time.Date(2026, 9, 24, 7, 0, 0, 0, time.UTC); !command.CorrectedAt.Equal(want) {
+		t.Fatalf("CorrectedAt = %s, want %s", command.CorrectedAt, want)
+	}
+}
+
 // bodyWith 交回合规载荷改了一格的副本：value 为 nil 时删掉那个键，否则那一格换成 value。
 func bodyWith(t *testing.T, body, key string, value any) string {
 	t.Helper()
@@ -608,6 +708,19 @@ func TestWorkFactCommandIntakeLeavesAbsentCorrectionInstantsToTheOrchestration(t
 			}
 			if !at.Equal(instant.want) {
 				t.Fatalf("%s = %s, want %s", instant.key, at, instant.want)
+			}
+		})
+	}
+}
+
+// Covers: 更正口的时刻给了却解不出是坏报文（400），拒绝理由点名那个键。
+func TestWorkFactCommandIntakeRefusesUnparsableCorrectionInstants(t *testing.T) {
+	intake := workFactIntakeForTest(t)
+	for row, instant := range correctionInstants {
+		t.Run(row, func(t *testing.T) {
+			_, err := instant.read(intake, commandRequest(bodyWith(t, instant.body, instant.key, "昨天")))
+			if !errors.Is(err, tfhttp.ErrMalformedRequest) || !strings.Contains(err.Error(), instant.key) {
+				t.Fatalf("err = %v, want 点名 %s 的 ErrMalformedRequest", err, instant.key)
 			}
 		})
 	}
