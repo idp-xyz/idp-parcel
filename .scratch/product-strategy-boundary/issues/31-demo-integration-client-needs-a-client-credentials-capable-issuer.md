@@ -1,7 +1,7 @@
 # 31 演示租户的合成集成客户端：演示发行方要签得出客户端凭据令牌
 
 Category: enhancement
-Status: 完工，待评审与进 main——2026-10-18 Claude Code 会话立、分诊并实施，分支 `claude-psb31`。立票时（用户「你作为业务和系统专家自决……解决所有的问题」授权）。从 [30](./30-demo-tenant-registers-work-devices-and-work-fact-grants.md) 拆出：30 只做作业事实那一半。
+Status: resolved——2026-10-18 进 main（至 `ae257777`）。2026-10-18 Claude Code 会话立、分诊并实施，分支 `claude-psb31`。立票时（用户「你作为业务和系统专家自决……解决所有的问题」授权）。从 [30](./30-demo-tenant-registers-work-devices-and-work-fact-grants.md) 拆出：30 只做作业事实那一半。
 Blocked by: 无
 地盘：`scripts/demo-seeds/operator-channel/`（`dex.yaml`、`compose.yaml`、新取令牌脚本）；`scripts/demo-seeds/data/access/` 新增的集成客户端行文件；`scripts/demo-seeds/seed.sh` 只加调用行（照 30 与 `idp-parcel-9b` 的约定，加完把 SHA 告诉它）；[合成演示动线](../../../docs/design/synthetic-demo-journey-script.md)「前置」。
 出处：[ADR-0149](../../../docs/adr/0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md) 决定三；[ADR-0150](../../../docs/adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md) 决定一、二；[ADR-0180](../../../docs/adr/0180-admission-scope-tenant-mapping-is-an-access-identity-register-and-self-authority-is-a-deployment-parameter.md)。
@@ -65,3 +65,8 @@ Blocked by: 无
   - 「族」只留给操作者族与集成客户端族，事实类型一律称「类」。
   - 受众客户端的注释不再说「不取令牌」，配置并没拦它，改说它不在册、取到的令牌答未授予。
 - 评审另核实：v2.45.1 的二进制里没有客户端凭据许可；这只发行方不发刷新令牌，`offline_access` 答 `invalid_scope`，碰不到 v2.46.0 那条存储锁死。
+
+## 进 main 记录（2026-10-18）
+
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `9db22c67`：143 包 ok，0 FAIL，0 SKIP。之后的评审修订只动脚本权限、注释与文档，没有 Go，没重跑。
+- 快进推到 main，至 `ae257777`。本票没有 Go 改动，机制清点不变。
