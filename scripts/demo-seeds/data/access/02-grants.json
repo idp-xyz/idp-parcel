@@ -183,6 +183,18 @@
       },
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "basis": "SYN-GRANT-BASIS-DEX-WF-05"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WORK-FACT-OFFSITE-SG-LM-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "WORK_FACT_REGISTRATION",
+      "workScope": {
+        "kind": "OFFSITE",
+        "reference": "SYN-OFFSITE-SG-LM"
+      },
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WF-06"
     }
   ]
 }

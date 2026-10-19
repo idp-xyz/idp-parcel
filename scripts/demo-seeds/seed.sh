@@ -269,8 +269,9 @@ echo "== 操作者册登记（access-identity：合成操作者主体与能力�
 "$BIN/parcel-access-register" operator-register -input "$SEEDS/access/01-operators.json"
 "$BIN/parcel-access-register" operator-grant -input "$SEEDS/access/02-grants.json"
 # 作业事实各口（收寄、揽收、交接、移动、派送、交付）要「操作者 × 设备 × 作业范围」三样都对上（ADR-0149 决定二）：
-# 配置员的作业事实登记授予按作业范围给在演示网络的各节点与华东场外揽收范围上，每个范围登一台合成设备
-# （票 product-strategy-boundary/30）。作业事实不判准入范围，所以不登对照与区间。
+# 配置员的作业事实登记授予按作业范围给，每个范围登一台合成设备（票 product-strategy-boundary/30）。收寄只认节点
+# 范围，给在演示网络的各节点上；运输履约各口只认场外范围，给在华东场外揽收与新加坡尾程派送两个范围上。场外范围是
+# 租户自起的作业区名，不是网络目录对象，只比相等。作业事实不判准入范围，所以不登对照与区间。
 "$BIN/parcel-access-register" device-register -input "$SEEDS/access/04-devices.json"
 # 准入范围对照（ADR-0180 决定一、二；票 operator-channel/19）：演示租户在上面那几种（能力、事实类型）上的生产写
 # 落在哪个治理对象范围。对照住接入身份、与操作者授予同处，不进 data/governance/；它只换坐标，区间才答「谁在写

@@ -66,7 +66,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 
 | 登录邮箱 | 授予（自 2026-01-01 生效，不设终点） |
 |---|---|
-| `syn-operator-config-01@syn-tenant-01.example.invalid` | 登记册配置写、主数据与运营查阅读、运营决定（装载分配、终止参与、关段、建派送任务、有效时间判断、承运商首次有效收寄判断；复核完成、主动拒绝、授权处置、受控关闭、受控重开——委托侧这几种越过 Intake 的前提见表后说明） |
+| `syn-operator-config-01@syn-tenant-01.example.invalid` | 登记册配置写、主数据与运营查阅读、运营决定（装载分配、终止参与、关段、建派送任务、有效时间判断、承运商首次有效收寄判断；复核完成、主动拒绝、授权处置、受控关闭、受控重开——委托侧这几种越过 Intake 的前提见表后说明）；作业事实登记，按作业范围给：演示网络各节点（收寄），华东场外揽收与新加坡尾程派送两个场外范围（运输履约各口），每个范围配一台合成设备（`data/access/04`） |
 | `syn-operator-viewer-01@syn-tenant-01.example.invalid` | 主数据与运营查阅读 |
 
 委托侧各种运营决定的授予只开门。权威串设了之后，越过 Intake 还要指名的对象在演示租户下查得到：复核完成、主动拒绝、
@@ -101,7 +101,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 | `data/visibility/` | `cmd/parcel-ve-register` | 里程碑映射、分诊规则、通知策略、索赔资格、索赔授权两格（一格空名单）、披露策略、异常披露规则、冲突信号规则、索赔材料收讫两笔（照片留下、发票收讫后撤销） |
 | `data/collection/` | `cmd/parcel-collection-register` | 一条 COD 指令走全程（渠道报收、银行短收、短款、清分进应付客户）+ SGD 分户账只开立；CNY 账两笔回汇批次（已归集 / 已交出汇付主张），SGD 账无批次 |
 | `data/settlement/` | `cmd/parcel-settlement-register` 的 `settlement-account` / `external-funds-fact` / `funds-mapping` / `pre-acceptance-estimate-adoption` | 结算账户登记册（ADR-0158）1 行：货主 `SYN-PARTY-SHIPPER-01` 在法人 `SYN-LE-01` 下的 CNY 应收账户 `SYN-SETTLEMENT-ACCOUNT-01`，结算政策 `SYN-SETTLEMENT-PREPAID-01`，责任依据是该政策所引的客户合同 `SYN-CONTRACT-01`。五维照发布批里那份结算政策的正文配，受理前财务控制的作用域经它找到账户。另有一笔合成收款 `SYN-FUNDS-RECEIPT-01`（200.00 CNY）映射到该账户（ADR-0182），金额只盖这一件的试算合计，不是生产默认。受理前估价采用册（ADR-0179 决定五）1 行：这一户采用「逐件 SELL 试算合计」（`PER_PARCEL_SELL_TRIAL_SUM`），计价范围 `SYN-SCOPE-01`，与售价卡 `SYN-PLAN-CN-SG-01` 的范围同值，估价按它解析在用售价卡 |
-| `data/access/` | `cmd/parcel-access-register` 的 `operator-register` / `operator-grant` / `admission-scope-mapping-register` | 操作者册（ADR-0100 决定二第三条）：合成操作者主体绑演示租户，各自持有哪些授予以上面「操作者渠道」一节的授予表为准，这里不另列；主体是演示发行方 Dex 给 `operator-channel/dex.yaml` 里静态用户真签出的 `sub`，换发行方就按新发行方的标识另登一批。另有演示租户的准入范围对照（ADR-0180 决定一、二）：各（能力、事实类型）的生产写落在哪个治理对象范围，与 `data/governance/` 里本产品的权威区间配上，运营决定与外部事实各口才越得过准入范围 |
+| `data/access/` | `cmd/parcel-access-register` 的 `operator-register` / `operator-grant` / `admission-scope-mapping-register` / `device-register` | 操作者册（ADR-0100 决定二第三条）：合成操作者主体绑演示租户，各自持有哪些授予以上面「操作者渠道」一节的授予表为准，这里不另列；主体是演示发行方 Dex 给 `operator-channel/dex.yaml` 里静态用户真签出的 `sub`，换发行方就按新发行方的标识另登一批。另有演示租户的准入范围对照（ADR-0180 决定一、二）：各（能力、事实类型）的生产写落在哪个治理对象范围，与 `data/governance/` 里本产品的权威区间配上，运营决定与外部事实各口才越得过准入范围。`04-devices.json` 是作业事实各口用的合成设备，每台绑一个作业范围，与配置员的作业事实登记授予一一对上 |
 | `operator-channel/` | — | 演示发行方：Dex 的容器描述（`compose.yaml`，不并进仓库根那份门禁库描述）与配置（`dex.yaml`：管理台公共客户端、两个合成静态用户），取令牌脚本 `operator-token.sh`，操作者渠道取证脚本 `probe-operator-channel.sh`；用法见上面「操作者渠道」一节 |
 | `migrate/` | — | 迁移助手（`migrate.Run` 的隔离环境入口；迁移计划刻意没有生产入口） |
 | `seedgen/` | — | 计价快照生成器：价卡、序列与参考目录的登记输入带规范化版本号与内容摘要自校，必须经真领域构造函数折装；PPC/PRS/PRC 规范化版本升级时重跑并提交新产物 |

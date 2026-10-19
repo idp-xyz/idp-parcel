@@ -40,6 +40,14 @@
         "reference": "SYN-OFFSITE-CN-EAST"
       },
       "basis": "SYN-DEVICE-BASIS-01"
+    },
+    {
+      "deviceId": "SYN-DEVICE-OFFSITE-SG-LM-01",
+      "workScope": {
+        "kind": "OFFSITE",
+        "reference": "SYN-OFFSITE-SG-LM"
+      },
+      "basis": "SYN-DEVICE-BASIS-01"
     }
   ]
 }
