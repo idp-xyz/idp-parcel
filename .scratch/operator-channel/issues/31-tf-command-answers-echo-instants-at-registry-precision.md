@@ -1,7 +1,7 @@
 # 31 TF 命令答复的时刻经登记册精度带小数秒回显：关段与承运商判断只回显到秒，冲突与重放分不出
 
 Category: enhancement
-Status: in-progress——2026-10-19 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc31`；30 已进 main，Blocked by 解除）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 3 评审遗留；用户授权代决）
+Status: resolved——2026-10-19 进 main（代码验证钉 `0df53697`），见「进 main 记录」。此前 in-progress——2026-10-19 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（分支 `claude-oc31`；30 已进 main，Blocked by 解除）。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 3 评审遗留；用户授权代决）
 Blocked by: operator-channel/30 进 main（要用它的 AtRegistryPrecision）
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)。被评的是 [20](./20-tf-closure-dispatch-task-and-pickup-judgment-canonicalization.md)，代码 `857453d8`。
 出处：票 20 Comments「评审 ← 会话 idp-parcel-9b 起的隔离子代理 · 钉 `857453d8`」，Spec 非阻断 (2)。取证钉 main `8d22729f`。证据层级 `S`。
@@ -102,3 +102,8 @@ HTTP 探针在 main 上实测：
   - **Spec**：阻断无。`registry_instant.go · rfc3339` 是本包答复时刻的唯一写法，先经 `domain.AtRegistryPrecision` 再按 `RFC3339Nano`；命令答复族与查阅答复都经它，包内非测试文件已无 `Format(time.RFC3339)`。纳入写票后新增的终止参与 `endedAt` 与装载分配 `assignedAt`。整秒值逐字节不变；亚秒与纳秒值的首答与重放回显同串。
   - **Standards**：阻断无，非阻断无。精度只在 domain 定义一处，助手不另写固定小数位。
   - **核过**：管理台没有按字串比这些时刻的地方，前端不改；POD 与交接更正那一路没有按秒的回显，无需改。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-oc31` 先 rebase 到对端 envelope-id-bounds/01 之后（`20a06645`）并在那里跑全量；推送前远端又多一笔机制清点重生成与一笔纯 `.md`，再 rebase 到 `4b36926d` 之上，清点在最终树上重生成零差，代码与已验那份逐字相同，未重跑；rebase 前的 SHA 作封存出处。
+- 推送方全量一次：钉 `0df53697` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 143 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
