@@ -250,7 +250,7 @@ func departureGateReadingDetailOf(reading domain.DepartureGateReading) departure
 	return detail
 }
 
-// gateFindingDetailOf 是逐对象那一格在 jsonb 里的形状，出发与交出两种读数共用（交出见 transport_handover_gate_reading.go）。
+// gateFindingDetailOf 是逐对象那一格在 jsonb 里的形状，各门禁读数共用；哪一种在用，由那一种自己的存储文件说。
 func gateFindingDetailOf(finding domain.GateFinding) departureGateFindingDetail {
 	row := departureGateFindingDetail{Object: finding.Object().String(), Answer: finding.Answer().String(), Bases: []departureGateBasisDetail{}}
 	if judgement, judged := finding.Judgement(); judged {
@@ -330,7 +330,7 @@ func departureGateReadingFrom(answerText string, raw []byte) (domain.DepartureGa
 	return domain.RehydrateDepartureGateReading(spec, answer)
 }
 
-// gateAnswerFrom 是门禁读数五格的名称镜像，出发与交出共用，词取各常量自己的 String()。
+// gateAnswerFrom 是门禁读数五格的名称镜像，各门禁读数共用，词取各常量自己的 String()。
 func gateAnswerFrom(raw string) (domain.GateAnswer, error) {
 	for _, answer := range []domain.GateAnswer{
 		domain.GateNotGuarded, domain.GateAdmitted, domain.GateUndecided, domain.GateUnreadable, domain.GateBlocked,

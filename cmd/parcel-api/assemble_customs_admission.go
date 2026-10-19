@@ -34,9 +34,9 @@ func (registration transactionalNodeCustomsZoneRegistration) Handle(
 		})
 }
 
-// transactionalActionAdmissionJudge 给准入判断一笔自己的事务：判断册写口无环境事务即拒，而消费方（运输履约的出发
-// 登记，票 demo-chain-gaps/32）在开自己的写事务之前同步问——两笔事务各管各的，准入判断记下了而消费方那笔回滚，留下的是一次
-// 如实发生过的询问，不是一条悬空事实。
+// transactionalActionAdmissionJudge 给准入判断一笔自己的事务：判断册写口无环境事务即拒，而消费方（运输履约登记一件
+// 已发生的事实时随记的门禁读数）在开自己的写事务之前同步问——两笔事务各管各的，准入判断记下了而消费方那笔回滚，留下的
+// 是一次如实发生过的询问，不是一条悬空事实。
 type transactionalActionAdmissionJudge struct {
 	db         *bentopg.DB
 	transactor bentoapp.Transactor
@@ -83,8 +83,8 @@ func (judge transactionalActionAdmissionJudge) Handle(
 // 任何东西要落库。回滚之后认出它，交回编排那一份答复。
 var errActionAdmissionUnreadable = errors.New("parcel-api: action admission unreadable; transaction rolled back")
 
-// customsAdmissionOrchestration 收拢本文件装的两格。actionAdmission 的生产消费者是运输履约出发登记的消费侧端口，
-// 由 buildMovementFactOrchestration 自己调本函数取用（ADR-0205）。
+// customsAdmissionOrchestration 收拢本文件装的两格。actionAdmission 的生产消费者是运输履约各门禁读数的消费侧端口，
+// 由各自的装配函数自己调本函数取用，不经这里转交；哪几处在用，以调用方为准，这里不列。
 type customsAdmissionOrchestration struct {
 	nodeZoneRegistration transactionalNodeCustomsZoneRegistration
 	actionAdmission      transactionalActionAdmissionJudge
