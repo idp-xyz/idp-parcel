@@ -13,7 +13,7 @@ import (
 
 // 动作准入判断（ADR-0206）——消费方（运输履约的出发、交出，以及交付）在动作时同步问：这个对象此刻能不能做这一步。
 // 请求驱动（ADR-0137 决定二）：只在请求到达时判一次并记下，来源变化不后台重算。判断记录不入队：今天没有订阅者，
-// 消费方把答复随自己的事实同笔保存（ADR-0205），这里的记录只为「当时凭什么这么答」可查、可重放。
+// 消费方把答复随自己的事实同笔保存（票 demo-chain-gaps/32），这里的记录只为「当时凭什么这么答」可查、可重放。
 //
 // 三源各自的读法不在这里另写：限制按时点的适用性在 domain.JudgeActionAdmissibilityAt，门禁读数与放行门禁核对
 // 共用 assessReleaseGate，放行事实只读 UC-CC-006 收下的那些。本编排只负责按对象解析出的范围把三源盘齐、交领域折。
@@ -121,7 +121,7 @@ func admissionUnreadable(reason ActionAdmissionUnreadableReason) JudgeActionAdmi
 	return JudgeActionAdmissionResult{outcome: ActionAdmissionUnreadable, reason: reason}
 }
 
-// JudgeActionAdmissionDeps 是准入编排的九口。门禁那三口与放行门禁核对同型，生产上接同一批适配器。
+// JudgeActionAdmissionDeps 是准入编排要问的各口。门禁那三口与放行门禁核对同型，生产上接同一批适配器。
 type JudgeActionAdmissionDeps struct {
 	Zones             ports.NodeCustomsZoneView
 	Scopes            ports.ObjectCustomsScopeView

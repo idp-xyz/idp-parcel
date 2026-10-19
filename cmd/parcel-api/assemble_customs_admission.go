@@ -34,7 +34,7 @@ func (registration transactionalNodeCustomsZoneRegistration) Handle(
 }
 
 // transactionalActionAdmissionJudge 给准入判断一笔自己的事务：判断册写口无环境事务即拒，而消费方（运输履约的出发
-// 登记，ADR-0205）在开自己的写事务之前同步问——两笔事务各管各的，准入判断记下了而消费方那笔回滚，留下的是一次
+// 登记，票 demo-chain-gaps/32）在开自己的写事务之前同步问——两笔事务各管各的，准入判断记下了而消费方那笔回滚，留下的是一次
 // 如实发生过的询问，不是一条悬空事实。
 type transactionalActionAdmissionJudge struct {
 	transactor bentoapp.Transactor
