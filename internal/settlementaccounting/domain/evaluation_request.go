@@ -201,3 +201,17 @@ func (request EvaluationRequest) RequestedAt() time.Time {
 func (request EvaluationRequest) RequestedBy() RequesterReference {
 	return request.requestedBy
 }
+
+// supplierExpectedCostVersionPrefix 是由 BUY 评价请求派生的供应商预期成本版本标识的类别段。它不是铸造前缀，但照样以
+// Prefix 结尾，让全仓标识前缀门禁替它守唯一：版本标识与各上下文铸造的标识在日志与工单里混看，撞名的代价一样。
+const supplierExpectedCostVersionPrefix = "BUYSC"
+
+// SupplierExpectedCostVersionID 是这份请求至多形成的那一份供应商预期成本首版的版本标识：类别段 `BUYSC`、一道横线、
+// 请求标识原文（票 demo-chain-gaps/08 代决，与 SELL 请求派生预估客户费用标识同一做法）。
+//
+// 派生成立靠的是计价按回指至多为一份请求形成一份评价：评价已记录信封重投、或两拍并发，算出的都是同一个标识，预期
+// 成本库主键（租户、版本）当场挡住第二份。派生的只是首版——计价纠错换评价也换版本，那一版的标识由纠错那条路给，
+// 不经这里。拼接而不取指纹：请求标识由本上下文铸造、长度有界，读的人从版本标识一眼看得出它出自哪份请求。
+func (request EvaluationRequest) SupplierExpectedCostVersionID() SupplierCostVersionID {
+	return SupplierCostVersionID{requiredValue{value: supplierExpectedCostVersionPrefix + "-" + request.id.String()}}
+}

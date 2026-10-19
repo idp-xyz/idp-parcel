@@ -199,6 +199,31 @@ func TestAnEvaluationRequestRefusesAnyMissingPiece(t *testing.T) {
 	}
 }
 
+// Covers: 票 demo-chain-gaps/08 代决「供应商预期成本首版的版本标识由 BUY 评价请求标识确定性派生」——同一份请求派生
+// 同一个标识；只依请求标识，换来源引用或范围不变，换请求就变。
+func TestTheSupplierExpectedCostVersionIsDerivedFromTheRequestIDAlone(t *testing.T) {
+	sources := evaluationRequestSources(t, "syn-occ-1", "v1", "syn-fee-1", "syn-agreement-1")
+	spec := evaluationRequestSpec(t, "EVREQ-SYN-1", sources)
+	first, err := domain.SubmitEvaluationRequest(spec)
+	if err != nil {
+		t.Fatalf("提交评价请求：%v", err)
+	}
+	if got := first.SupplierExpectedCostVersionID().String(); got != "BUYSC-EVREQ-SYN-1" {
+		t.Fatalf("派生版本标识 = %q, want BUYSC-EVREQ-SYN-1", got)
+	}
+	reshaped := evaluationRequestSpec(t, "EVREQ-SYN-1",
+		evaluationRequestSources(t, "syn-occ-2", "v2", "syn-fee-2", "syn-agreement-2"))
+	reshaped.Scope = settlementValue(t, domain.NewPrimaryScopeReference, "syn-scope-2")
+	if other, err := domain.SubmitEvaluationRequest(reshaped); err != nil ||
+		other.SupplierExpectedCostVersionID() != first.SupplierExpectedCostVersionID() {
+		t.Fatalf("换来源引用与范围不该改派生标识：err=%v", err)
+	}
+	another, err := domain.SubmitEvaluationRequest(evaluationRequestSpec(t, "EVREQ-SYN-2", sources))
+	if err != nil || another.SupplierExpectedCostVersionID() == first.SupplierExpectedCostVersionID() {
+		t.Fatalf("另一份请求派生出了同一个标识：err=%v", err)
+	}
+}
+
 func TestCalculationPurposeVocabularyIsClosed(t *testing.T) {
 	parsed, err := domain.ParseCalculationPurpose(domain.BuySupplierCost.String())
 	if err != nil || parsed != domain.BuySupplierCost {
