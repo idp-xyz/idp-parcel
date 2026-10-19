@@ -108,14 +108,15 @@ func (fake parcelTargets) FindCurrentAcceptedByParcel(_ context.Context, tenant 
 }
 
 // Covers: ADR-0183 决定一、二、三——受控关闭按包裹寻址、委托来源身份由服务端反查；货主指令的关闭，请求方与责任主体都取那份
-// 委托的客户账户，载荷给不了；运营操作与外部限制的关闭没有请求方，责任主体由载荷给、必填。提交操作者不进命令（决定五）。
+// 委托的客户账户，载荷给不了；运营操作与外部限制的关闭没有请求方，责任主体由载荷给、必填。货主指令那份指令的证据随载荷进
+// 命令（ADR-0187 决定一、五）；提交操作者只作操作证据，取认证出的操作者（ADR-0187 决定三）。
 func TestControlledClosureTakesTheShipperFromTheAcceptedRequestOfTheParcel(t *testing.T) {
 	var asked []string
 	intake := decisionIntakeWithParcels(t, decisionAuthenticator{}, decisionTargets{}, parcelTargets{asked: &asked})
 	ctx := context.Background()
 
 	byShipper, err := intake.IntakeControlledClosure(ctx, decisionRequest("t",
-		`{"parcel": "SYN-PARCEL-01", "reason": "SYN-REASON-SHIPPER-HOLD", "effectiveAt": "2026-10-16T09:00:00+08:00", "responsibilitySource": "SHIPPER-INSTRUCTION"}`))
+		`{"parcel": "SYN-PARCEL-01", "reason": "SYN-REASON-SHIPPER-HOLD", "effectiveAt": "2026-10-16T09:00:00+08:00", "responsibilitySource": "SHIPPER-INSTRUCTION", "shipperInstructionEvidence": "SYN-CALL-01"}`))
 	if err != nil {
 		t.Fatalf("closure on shipper instruction: %v", err)
 	}
@@ -129,6 +130,9 @@ func TestControlledClosureTakesTheShipperFromTheAcceptedRequestOfTheParcel(t *te
 		byShipper.Reason.String() != "SYN-REASON-SHIPPER-HOLD" || !byShipper.EffectiveAt.Equal(time.Date(2026, 10, 16, 1, 0, 0, 0, time.UTC)) {
 		t.Fatalf("closure on shipper instruction = %+v", byShipper)
 	}
+	if byShipper.RequestEvidence != "SYN-CALL-01" || byShipper.OperationEvidence != "OPERATOR/"+decisionOperator {
+		t.Fatalf("closure evidences = %q / %q", byShipper.RequestEvidence, byShipper.OperationEvidence)
+	}
 
 	for source, subject := range map[string]string{"OPERATOR-ACTION": "SYN-OPS-CASE-01", "EXTERNAL-RESTRICTION": "SYN-RESTRICTION/embargo-01"} {
 		closure, err := intake.IntakeControlledClosure(ctx, decisionRequest("t",
@@ -136,7 +140,8 @@ func TestControlledClosureTakesTheShipperFromTheAcceptedRequestOfTheParcel(t *te
 		if err != nil {
 			t.Fatalf("%s closure: %v", source, err)
 		}
-		if closure.Requester.String() != "" || closure.ResponsibilitySourceKind.String() != source || closure.ResponsibilitySourceSubject != subject {
+		if closure.Requester.String() != "" || closure.RequestEvidence != "" || closure.OperationEvidence != "OPERATOR/"+decisionOperator ||
+			closure.ResponsibilitySourceKind.String() != source || closure.ResponsibilitySourceSubject != subject {
 			t.Fatalf("%s closure = requester %q, source %s/%q", source, closure.Requester.String(), closure.ResponsibilitySourceKind, closure.ResponsibilitySourceSubject)
 		}
 	}
@@ -145,11 +150,13 @@ func TestControlledClosureTakesTheShipperFromTheAcceptedRequestOfTheParcel(t *te
 		"shipper subject given twice":   `{"parcel": "SYN-PARCEL-01", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION", "responsibilitySubject": "SYN-ACCOUNT-09"}`,
 		"operator action without topic": `{"parcel": "SYN-PARCEL-01", "reason": "r", "responsibilitySource": "OPERATOR-ACTION"}`,
 		"unknown responsibility source": `{"parcel": "SYN-PARCEL-01", "reason": "r", "responsibilitySource": "CUSTOMER-WHIM", "responsibilitySubject": "x"}`,
-		"requester smuggled":            `{"parcel": "SYN-PARCEL-01", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION", "requester": "CUSTOMER-ACCOUNT/SYN-ACCOUNT-09"}`,
-		"request id smuggled":           `{"parcel": "SYN-PARCEL-01", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION", "shipmentRequestId": "SYN-REQ-09"}`,
-		"tenant smuggled":               `{"parcel": "SYN-PARCEL-01", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION", "tenantId": "SYN-TENANT-02"}`,
-		"instant garbled":               `{"parcel": "SYN-PARCEL-01", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION", "effectiveAt": "tomorrow"}`,
-		"parcel missing":                `{"reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION"}`,
+		"requester smuggled":            `{"parcel": "SYN-PARCEL-01", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION", "shipperInstructionEvidence": "e", "requester": "CUSTOMER-ACCOUNT/SYN-ACCOUNT-09"}`,
+		"request id smuggled":           `{"parcel": "SYN-PARCEL-01", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION", "shipperInstructionEvidence": "e", "shipmentRequestId": "SYN-REQ-09"}`,
+		"tenant smuggled":               `{"parcel": "SYN-PARCEL-01", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION", "shipperInstructionEvidence": "e", "tenantId": "SYN-TENANT-02"}`,
+		"operation evidence smuggled":   `{"parcel": "SYN-PARCEL-01", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION", "shipperInstructionEvidence": "e", "operationEvidence": "OPERATOR/SYN-OTHER"}`,
+		"request evidence smuggled":     `{"parcel": "SYN-PARCEL-01", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION", "shipperInstructionEvidence": "e", "requestEvidence": "SYN-OTHER"}`,
+		"instant garbled":               `{"parcel": "SYN-PARCEL-01", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION", "shipperInstructionEvidence": "e", "effectiveAt": "tomorrow"}`,
+		"parcel missing":                `{"reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION", "shipperInstructionEvidence": "e"}`,
 	} {
 		if _, err := intake.IntakeControlledClosure(ctx, decisionRequest("t", body)); !errors.Is(err, shipmenthttp.ErrMalformedRequest) {
 			t.Fatalf("%s: err = %v, want ErrMalformedRequest", name, err)
@@ -174,21 +181,26 @@ func TestReopeningTakesTheShipperAccountFromTheAcceptedRequestOfTheParcel(t *tes
 		reauthorized.Reason.String() != "SYN-REASON-RESUME" || !reauthorized.EffectiveAt.Equal(time.Date(2026, 10, 17, 1, 0, 0, 0, time.UTC)) {
 		t.Fatalf("reopening with shipper reauthorization = %+v", reauthorized)
 	}
+	if reauthorized.OperationEvidence != "OPERATOR/"+decisionOperator {
+		t.Fatalf("reopening operation evidence = %q", reauthorized.OperationEvidence)
+	}
 
 	byOperator, err := intake.IntakeReopening(ctx, decisionRequest("t",
 		`{"parcel": "SYN-PARCEL-01", "reason": "SYN-REASON-RESUME", "effectiveAt": "2026-10-17T01:00:00Z", "relatedPriorClosure": "SYN-CAD-01"}`))
 	if err != nil {
 		t.Fatalf("reopening without shipper reauthorization: %v", err)
 	}
-	if byOperator.ShipperAccount.String() != "CUSTOMER-ACCOUNT/SYN-ACCOUNT-01" || byOperator.Requester.String() != "" || byOperator.ShipperAuthorizationEvidence != "" {
+	if byOperator.ShipperAccount.String() != "CUSTOMER-ACCOUNT/SYN-ACCOUNT-01" || byOperator.Requester.String() != "" || byOperator.ShipperAuthorizationEvidence != "" ||
+		byOperator.OperationEvidence != "OPERATOR/"+decisionOperator {
 		t.Fatalf("reopening without shipper reauthorization = %+v", byOperator)
 	}
 
 	for name, body := range map[string]string{
-		"shipper account smuggled": `{"parcel": "SYN-PARCEL-01", "reason": "r", "relatedPriorClosure": "SYN-CAD-01", "shipperAccount": "CUSTOMER-ACCOUNT/SYN-ACCOUNT-09"}`,
-		"requester smuggled":       `{"parcel": "SYN-PARCEL-01", "reason": "r", "relatedPriorClosure": "SYN-CAD-01", "requester": "CUSTOMER-ACCOUNT/SYN-ACCOUNT-09"}`,
-		"parcel missing":           `{"reason": "r", "relatedPriorClosure": "SYN-CAD-01"}`,
-		"trailing content":         `{"parcel": "SYN-PARCEL-01", "reason": "r", "relatedPriorClosure": "SYN-CAD-01"} {"x": 1}`,
+		"shipper account smuggled":    `{"parcel": "SYN-PARCEL-01", "reason": "r", "relatedPriorClosure": "SYN-CAD-01", "shipperAccount": "CUSTOMER-ACCOUNT/SYN-ACCOUNT-09"}`,
+		"requester smuggled":          `{"parcel": "SYN-PARCEL-01", "reason": "r", "relatedPriorClosure": "SYN-CAD-01", "requester": "CUSTOMER-ACCOUNT/SYN-ACCOUNT-09"}`,
+		"operation evidence smuggled": `{"parcel": "SYN-PARCEL-01", "reason": "r", "relatedPriorClosure": "SYN-CAD-01", "operationEvidence": "OPERATOR/SYN-OTHER"}`,
+		"parcel missing":              `{"reason": "r", "relatedPriorClosure": "SYN-CAD-01"}`,
+		"trailing content":            `{"parcel": "SYN-PARCEL-01", "reason": "r", "relatedPriorClosure": "SYN-CAD-01"} {"x": 1}`,
 	} {
 		if _, err := intake.IntakeReopening(ctx, decisionRequest("t", body)); !errors.Is(err, shipmenthttp.ErrMalformedRequest) {
 			t.Fatalf("%s: err = %v, want ErrMalformedRequest", name, err)
@@ -199,7 +211,7 @@ func TestReopeningTakesTheShipperAccountFromTheAcceptedRequestOfTheParcel(t *tes
 // Covers: ADR-0183 决定一——包裹查不到当前已接受委托与越权探针同答；反查读不动是依赖故障，不是拒绝。
 func TestClosureAndReopeningOnAnUnknownParcelAnswerLikeAProbe(t *testing.T) {
 	ctx := context.Background()
-	const closure = `{"parcel": "SYN-PARCEL-99", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION"}`
+	const closure = `{"parcel": "SYN-PARCEL-99", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION", "shipperInstructionEvidence": "SYN-CALL-99"}`
 	const reopening = `{"parcel": "SYN-PARCEL-99", "reason": "r", "relatedPriorClosure": "SYN-CAD-01"}`
 
 	missing := decisionIntakeWithParcels(t, decisionAuthenticator{}, decisionTargets{}, parcelTargets{missing: true})
@@ -397,14 +409,19 @@ func TestOperatorAnswerGradesOnTheDecisionEndpoints(t *testing.T) {
 }
 
 // Covers: ADR-0183 决定三与票 operator-channel/28「一并看」——两道纯载荷的责任主体校验先于按包裹寻址：坏载荷在包裹查不到时
-// 也答 400，不先落到「与越权探针同答」那一格；全空白的主体与没给同读。
+// 也答 400，不先落到「与越权探针同答」那一格；全空白的主体与没给同读。ADR-0187 决定五的货主指令证据两道校验同样只看载荷、
+// 同样先于寻址：货主指令没带或全空白、另两种来源带了，都答 400。
 func TestABadClosurePayloadAnswers400EvenWhenTheParcelIsUnknown(t *testing.T) {
 	ctx := context.Background()
 	missing := decisionIntakeWithParcels(t, decisionAuthenticator{}, decisionTargets{}, parcelTargets{missing: true})
 	for name, body := range map[string]string{
-		"shipper instruction with a subject": `{"parcel": "SYN-PARCEL-99", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION", "responsibilitySubject": "SYN-OTHER"}`,
-		"operator action without a subject":  `{"parcel": "SYN-PARCEL-99", "reason": "r", "responsibilitySource": "OPERATOR-ACTION"}`,
-		"operator action with a blank one":   `{"parcel": "SYN-PARCEL-99", "reason": "r", "responsibilitySource": "OPERATOR-ACTION", "responsibilitySubject": "   "}`,
+		"shipper instruction with a subject":         `{"parcel": "SYN-PARCEL-99", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION", "responsibilitySubject": "SYN-OTHER"}`,
+		"operator action without a subject":          `{"parcel": "SYN-PARCEL-99", "reason": "r", "responsibilitySource": "OPERATOR-ACTION"}`,
+		"operator action with a blank one":           `{"parcel": "SYN-PARCEL-99", "reason": "r", "responsibilitySource": "OPERATOR-ACTION", "responsibilitySubject": "   "}`,
+		"shipper instruction without evidence":       `{"parcel": "SYN-PARCEL-99", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION"}`,
+		"shipper instruction with blank evidence":    `{"parcel": "SYN-PARCEL-99", "reason": "r", "responsibilitySource": "SHIPPER-INSTRUCTION", "shipperInstructionEvidence": "   "}`,
+		"operator action with shipper evidence":      `{"parcel": "SYN-PARCEL-99", "reason": "r", "responsibilitySource": "OPERATOR-ACTION", "responsibilitySubject": "SYN-OPS-CASE-01", "shipperInstructionEvidence": "SYN-CALL-99"}`,
+		"external restriction with shipper evidence": `{"parcel": "SYN-PARCEL-99", "reason": "r", "responsibilitySource": "EXTERNAL-RESTRICTION", "responsibilitySubject": "SYN-RESTRICTION-01", "shipperInstructionEvidence": "SYN-CALL-99"}`,
 	} {
 		if _, err := missing.IntakeControlledClosure(ctx, decisionRequest("t", body)); !errors.Is(err, shipmenthttp.ErrMalformedRequest) {
 			t.Fatalf("%s: err = %v, want ErrMalformedRequest", name, err)

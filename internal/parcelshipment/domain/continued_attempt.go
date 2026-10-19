@@ -58,6 +58,27 @@ func NewClosureResponsibilitySourceReference(value string) (ClosureResponsibilit
 	return ClosureResponsibilitySourceReference{required}, err
 }
 
+// ContinuedAttemptRequestEvidenceReference 是`请求证据`：请求方提出这次关闭或重开所凭依据的引用（货主那份指令、货主新的
+// 有效授权），由提交方如实记下。它是引用不是内容——工单号、来电记录号、邮件标识一类，不记依据原文、不记联系方式；本上下文
+// 存引用、不判真伪（pc-gaps/13 裁决 ②），所以不解析、不加种类格。形成时与请求方同在同缺，见
+// RequestEvidenceAccompaniesRequester。
+type ContinuedAttemptRequestEvidenceReference struct{ requiredValue }
+
+func NewContinuedAttemptRequestEvidenceReference(value string) (ContinuedAttemptRequestEvidenceReference, error) {
+	required, err := newRequiredValue("continued attempt request evidence reference", value)
+	return ContinuedAttemptRequestEvidenceReference{required}, err
+}
+
+// ContinuedAttemptOperationEvidenceReference 是`操作证据`：经哪个渠道、由谁提交了这条决定（操作者渠道上是
+// `OPERATOR/<发行方>#<sub>`）。它只进审计——CONTEXT「登录操作人可以作为操作证据另行记录，但不能替代实际决定方、授权角色和
+// 请求方」，所以任何门、任何比对都不读它（ADR-0187 决定三）。可缺：CONTEXT 说的是「可以」。
+type ContinuedAttemptOperationEvidenceReference struct{ requiredValue }
+
+func NewContinuedAttemptOperationEvidenceReference(value string) (ContinuedAttemptOperationEvidenceReference, error) {
+	required, err := newRequiredValue("continued attempt operation evidence reference", value)
+	return ContinuedAttemptOperationEvidenceReference{required}, err
+}
+
 // ContinuedAttemptAuthorityRoleReference 是形成本决定的授权角色。授权规则属 party-commercial，
 // 本上下文只记所采用的那一个，不判断它够不够格。
 type ContinuedAttemptAuthorityRoleReference struct{ requiredValue }
@@ -130,10 +151,14 @@ func (judgment ContinuedAttemptJudgment) String() string {
 type ContinuedAttemptDecisionSpec struct {
 	ID   ContinuedAttemptDecisionID
 	Kind ContinuedAttemptDecisionKind
-	// Requester 可缺席（CONTEXT 原文「请求方（如有）」）——运营企业自行发起的关闭、没带货主新
-	// 授权的重开都没有外部请求方（ADR-0183 决定三、四）。它与 Decider 分立是硬要求：「登录操作人
-	// 可以作为操作证据，但不能替代实际决定方和授权角色」。
-	Requester         RequesterReference
+	// Requester 可缺席（CONTEXT 原文「请求方（如有）」）——运营企业自行发起的关闭、外部硬限制形成的
+	// 关闭、没带货主新授权的重开都没有外部请求方（ADR-0183 决定三、四）。它与 Decider 分立是硬要求：
+	// 「登录操作人可以作为操作证据另行记录，但不能替代实际决定方、授权角色和请求方」。
+	Requester RequesterReference
+	// RequestEvidence 是请求方所凭依据的引用，形成时与 Requester 同在同缺（Append 的门）。
+	RequestEvidence ContinuedAttemptRequestEvidenceReference
+	// OperationEvidence 可缺，只进审计，任何门都不读它。
+	OperationEvidence ContinuedAttemptOperationEvidenceReference
 	Decider           DeciderReference
 	AuthorityRole     ContinuedAttemptAuthorityRoleReference
 	AuthoritySnapshot ContinuedAttemptAuthoritySnapshot
@@ -153,6 +178,8 @@ type ContinuedAttemptDecision struct {
 	id                          ContinuedAttemptDecisionID
 	kind                        ContinuedAttemptDecisionKind
 	requester                   RequesterReference
+	requestEvidence             ContinuedAttemptRequestEvidenceReference
+	operationEvidence           ContinuedAttemptOperationEvidenceReference
 	decider                     DeciderReference
 	authorityRole               ContinuedAttemptAuthorityRoleReference
 	authoritySnapshot           ContinuedAttemptAuthoritySnapshot
@@ -173,6 +200,15 @@ func (decision ContinuedAttemptDecision) Kind() ContinuedAttemptDecisionKind {
 
 func (decision ContinuedAttemptDecision) Requester() RequesterReference {
 	return decision.requester
+}
+
+// RequestEvidence 在有请求方的决定上通常有值；规则生效前形成的决定可能有请求方而无请求证据（重建门照收）。
+func (decision ContinuedAttemptDecision) RequestEvidence() ContinuedAttemptRequestEvidenceReference {
+	return decision.requestEvidence
+}
+
+func (decision ContinuedAttemptDecision) OperationEvidence() ContinuedAttemptOperationEvidenceReference {
+	return decision.operationEvidence
 }
 
 func (decision ContinuedAttemptDecision) Decider() DeciderReference {

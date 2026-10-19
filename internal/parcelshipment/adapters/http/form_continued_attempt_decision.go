@@ -13,8 +13,9 @@ import (
 // 调用方读的是同一种东西。
 
 // ContinuedAttemptDecisionIntake 把一次已认证的接入请求翻译成关闭或重开命令。它是接口而非解析代码：委托来源
-// 身份、请求方与货主账户都不采信自报——采信了就是让任何调用方替任何货主签字；登录操作人的身份只作操作证据、
-// 不进任何一格（CONTEXT「登录操作人可以作为操作证据，但不能替代实际决定方和授权角色」），决定方由授权答复给出。
+// 身份、请求方与货主账户都不采信自报——采信了就是让任何调用方替任何货主签字；登录操作人的身份只进操作证据那一格
+// （CONTEXT「登录操作人可以作为操作证据另行记录，但不能替代实际决定方、授权角色和请求方」；ADR-0187 决定三），决定方由
+// 授权答复给出。
 // 生产渠道是操作者渠道的「运营决定」能力面（ADR-0151），实现是 OperatorDecisionIntake：按包裹寻址，请求方与货主账户取
 // 包裹所属已接受委托的客户账户（ADR-0183）。
 type ContinuedAttemptDecisionIntake interface {
@@ -80,8 +81,9 @@ func continuedAttemptDecisionEndpoint(
 
 // continuedAttemptDecisionResponse 是两个端点共用的封闭响应形状。`outcome` 取应用结果枚举的原名；`已形成`与`已有结果`
 // 时带决定的身份几格（标识、种类、生效时间、关闭的截断边界或重开所解的关闭）——后者带的是重放对应的那条原决定；`未决`带等的是哪个依赖；`输入未受理`带哪一格
-// 立不起来。决定方 / 授权角色 / 授权依据快照不在响应里：它们是审计面（票 label-channel/10 读面派生）要读的，
-// 写面回执只需让调用方知道形成了哪一条。
+// 立不起来。决定方 / 授权角色 / 授权依据快照与操作证据不在响应里：它们是审计面（票 label-channel/10 读面派生）要读的，
+// 写面回执只需让调用方知道形成了哪一条。请求证据例外，随决定带回册上记的那一份：`已有结果`什么都没写，调用方本次带的
+// 证据也没落——比一比回执里的这一格才看得出来（ADR-0029 按恢复动作分格；ADR-0187 决定四）。
 type continuedAttemptDecisionResponse struct {
 	Outcome             string `json:"outcome"`
 	DecisionID          string `json:"decisionId,omitempty"`
@@ -89,6 +91,7 @@ type continuedAttemptDecisionResponse struct {
 	EffectiveAt         string `json:"effectiveAt,omitempty"`
 	CutoffBoundary      string `json:"cutoffBoundary,omitempty"`
 	RelatedPriorClosure string `json:"relatedPriorClosure,omitempty"`
+	RequestEvidence     string `json:"requestEvidence,omitempty"`
 	PendingReason       string `json:"pendingReason,omitempty"`
 	Refusal             string `json:"refusal,omitempty"`
 }
@@ -107,6 +110,7 @@ func writeContinuedAttemptDecisionOutcome(response http.ResponseWriter, result a
 		body.EffectiveAt = decision.EffectiveAt().UTC().Format(time.RFC3339Nano)
 		body.CutoffBoundary = decision.CutoffBoundary().String()
 		body.RelatedPriorClosure = decision.RelatedPriorClosure().String()
+		body.RequestEvidence = decision.RequestEvidence().String()
 	}
 	if reason := result.PendingReason().String(); reason != "" {
 		body.PendingReason = reason

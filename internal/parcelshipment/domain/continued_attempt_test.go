@@ -352,3 +352,103 @@ func TestARegisterRecognisesTheSameRequestOnlyWhenEveryRequestCellMatches(t *tes
 		}
 	}
 }
+
+// Covers: 票 operator-channel/38（ADR-0187 决定二）——形成门两向都核请求方与请求证据同在同缺：有请求方无证据、有证据无
+// 请求方都拒；两者同在、两者同缺照收。
+func TestTheFormationGateRequiresARequesterAndItsEvidenceTogether(t *testing.T) {
+	t.Parallel()
+
+	requester := mustValue(t, domain.NewRequesterReference, "CUSTOMER-ACCOUNT/SYN-CUSTOMER-1")
+	evidence := mustValue(t, domain.NewContinuedAttemptRequestEvidenceReference, "SYN-CALL-1")
+
+	withoutEvidence := closureSpec(t, "decision-1", continuedAttemptAt)
+	withoutEvidence.Requester = requester
+	if _, err := emptyRegister(t).Append(withoutEvidence, false); !errors.Is(err, domain.ErrInvalidContinuedAttemptDecision) {
+		t.Errorf("有请求方无请求证据应被拒，实得 %v", err)
+	}
+	withoutRequester := closureSpec(t, "decision-1", continuedAttemptAt)
+	withoutRequester.RequestEvidence = evidence
+	if _, err := emptyRegister(t).Append(withoutRequester, false); !errors.Is(err, domain.ErrInvalidContinuedAttemptDecision) {
+		t.Errorf("有请求证据无请求方应被拒，实得 %v", err)
+	}
+	both := closureSpec(t, "decision-1", continuedAttemptAt)
+	both.Requester, both.RequestEvidence = requester, evidence
+	appended, err := emptyRegister(t).Append(both, false)
+	if err != nil {
+		t.Fatalf("两者同在应成立：%v", err)
+	}
+	if got := appended.Decisions()[0]; got.Requester() != requester || got.RequestEvidence() != evidence {
+		t.Errorf("决定上的请求方 / 请求证据 = %q / %q", got.Requester(), got.RequestEvidence())
+	}
+	if _, err := emptyRegister(t).Append(closureSpec(t, "decision-1", continuedAttemptAt), false); err != nil {
+		t.Errorf("两者同缺应成立：%v", err)
+	}
+	if !domain.RequestEvidenceAccompaniesRequester(requester, evidence) ||
+		!domain.RequestEvidenceAccompaniesRequester(domain.RequesterReference{}, domain.ContinuedAttemptRequestEvidenceReference{}) ||
+		domain.RequestEvidenceAccompaniesRequester(requester, domain.ContinuedAttemptRequestEvidenceReference{}) ||
+		domain.RequestEvidenceAccompaniesRequester(domain.RequesterReference{}, evidence) {
+		t.Error("同在同缺判据与形成门口径不一")
+	}
+}
+
+// Covers: 票 operator-channel/38（ADR-0187 决定二）——重建门照收规则生效前或旧版写回的「有请求方无请求证据」，读回后
+// 判断照常；「有请求证据无请求方」在哪一版规则下都不成立，答重建错误。
+func TestTheRehydrationGateAdmitsAnEarlierRequesterWithoutEvidence(t *testing.T) {
+	t.Parallel()
+
+	rehydrate := func(decision domain.ContinuedAttemptDecisionSpec) (domain.ContinuedAttemptRegister, error) {
+		return domain.RehydrateContinuedAttemptRegister(domain.RehydrateContinuedAttemptRegisterSpec{
+			Revision:  1,
+			Tenant:    mustValue(t, domain.NewTenantID, "tenant-1"),
+			Parcel:    mustValue(t, domain.NewDeclaredParcelID, "parcel-1"),
+			Decisions: []domain.ContinuedAttemptDecisionSpec{decision},
+		})
+	}
+
+	legacy := closureSpec(t, "decision-1", continuedAttemptAt)
+	legacy.Requester = mustValue(t, domain.NewRequesterReference, "CUSTOMER-ACCOUNT/SYN-CUSTOMER-1")
+	register, err := rehydrate(legacy)
+	if err != nil {
+		t.Fatalf("重建门拒了当时合法的历史：%v", err)
+	}
+	if got := register.Decisions()[0]; got.Requester() != legacy.Requester || got.RequestEvidence().String() != "" {
+		t.Errorf("读回请求方 / 请求证据 = %q / %q", got.Requester(), got.RequestEvidence())
+	}
+	if got := register.Judge(false); got != domain.ContinuedAttemptControlledClosed {
+		t.Errorf("读回的册应派生受控关闭，实得 %q", got)
+	}
+
+	orphan := closureSpec(t, "decision-1", continuedAttemptAt)
+	orphan.RequestEvidence = mustValue(t, domain.NewContinuedAttemptRequestEvidenceReference, "SYN-CALL-1")
+	if _, err := rehydrate(orphan); !errors.Is(err, domain.ErrInvalidRehydratedContinuedAttemptRegister) {
+		t.Errorf("有请求证据无请求方应答重建错误，实得 %v", err)
+	}
+}
+
+// Covers: 票 operator-channel/38（ADR-0187 决定三、四）——两份证据落在决定上，但不是请求的内容：同内容的请求认得出那条
+// 原决定，交回的仍带原证据；操作证据不顶替决定方。
+func TestTheReplayComparisonIgnoresBothEvidences(t *testing.T) {
+	t.Parallel()
+
+	spec := closureSpec(t, "decision-1", continuedAttemptAt)
+	spec.Requester = mustValue(t, domain.NewRequesterReference, "CUSTOMER-ACCOUNT/SYN-CUSTOMER-1")
+	spec.RequestEvidence = mustValue(t, domain.NewContinuedAttemptRequestEvidenceReference, "SYN-CALL-1")
+	spec.OperationEvidence = mustValue(t, domain.NewContinuedAttemptOperationEvidenceReference, "OPERATOR/SYN-ISSUER#SYN-OPERATOR-1")
+	register, err := emptyRegister(t).Append(spec, false)
+	if err != nil {
+		t.Fatalf("关闭：%v", err)
+	}
+	decision, found := register.RecordedRequest(domain.ContinuedAttemptRequest{
+		Kind: spec.Kind, Requester: spec.Requester, Reason: spec.Reason, EffectiveAt: spec.EffectiveAt,
+		ClosureResponsibilitySource: spec.ClosureResponsibilitySource,
+	})
+	if !found {
+		t.Fatal("同内容没认出")
+	}
+	if decision.RequestEvidence() != spec.RequestEvidence || decision.OperationEvidence() != spec.OperationEvidence {
+		t.Errorf("交回的证据 = %q / %q", decision.RequestEvidence(), decision.OperationEvidence())
+	}
+	if decision.Decider() != spec.Decider || decision.Decider().String() == decision.OperationEvidence().String() {
+		t.Errorf("决定方 = %q，不该被操作证据顶替", decision.Decider())
+	}
+}

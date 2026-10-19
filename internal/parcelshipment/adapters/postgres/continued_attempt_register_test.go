@@ -50,13 +50,16 @@ func openRegisterFixture(t *testing.T, tenant, parcel string) domain.ContinuedAt
 	return register
 }
 
-// closureDecisionFixture 是一条带请求方的受控关闭：请求方可缺，这里刻意带上，好证它往返不丢。
+// closureDecisionFixture 是一条带请求方的受控关闭：请求方可缺，这里刻意带上，好证它往返不丢；有请求方就带请求证据
+// （形成门同在同缺），操作证据也一并带上。
 func closureDecisionFixture(t *testing.T, id string, effectiveAt time.Time) domain.ContinuedAttemptDecisionSpec {
 	t.Helper()
 	return domain.ContinuedAttemptDecisionSpec{
 		ID:                mustBuild(t, domain.NewContinuedAttemptDecisionID, id),
 		Kind:              domain.ControlledClosureDecision,
 		Requester:         mustBuild(t, domain.NewRequesterReference, "SHIPPER-ACCOUNT-7"),
+		RequestEvidence:   mustBuild(t, domain.NewContinuedAttemptRequestEvidenceReference, "SYN-SHIPPER-INSTRUCTION-CALL-7"),
+		OperationEvidence: mustBuild(t, domain.NewContinuedAttemptOperationEvidenceReference, "OPERATOR/SYN-ISSUER#SYN-OPERATOR-7"),
 		Decider:           mustBuild(t, domain.NewDeciderReference, "OPS-MANAGER-1"),
 		AuthorityRole:     mustBuild(t, domain.NewContinuedAttemptAuthorityRoleReference, "PC-CLOSURE-ROLE-1"),
 		AuthoritySnapshot: mustBuild(t, domain.NewContinuedAttemptAuthoritySnapshot, "PC-AUTH-SNAPSHOT-1"),

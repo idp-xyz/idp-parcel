@@ -120,6 +120,8 @@ func withRevision(register domain.ContinuedAttemptRegister, revision int64) doma
 			ID:                          decision.ID(),
 			Kind:                        decision.Kind(),
 			Requester:                   decision.Requester(),
+			RequestEvidence:             decision.RequestEvidence(),
+			OperationEvidence:           decision.OperationEvidence(),
 			Decider:                     decision.Decider(),
 			AuthorityRole:               decision.AuthorityRole(),
 			AuthoritySnapshot:           decision.AuthoritySnapshot(),
@@ -231,6 +233,8 @@ func (fixture *continuedAttemptFixture) closureCommand(t *testing.T) application
 		EffectiveAt:                 continuedAttemptDecidedAt.Add(time.Hour),
 		ResponsibilitySourceKind:    application.ShipperInstructionResponsibilitySource,
 		ResponsibilitySourceSubject: "SYN-SHIPPER-INSTRUCTION-9",
+		RequestEvidence:             "SYN-SHIPPER-INSTRUCTION-EVIDENCE-9",
+		OperationEvidence:           "OPERATOR/SYN-ISSUER#SYN-OPERATOR-1",
 	}
 }
 
@@ -245,6 +249,7 @@ func (fixture *continuedAttemptFixture) reopeningCommand(t *testing.T, priorClos
 		RelatedPriorClosure:          priorClosure,
 		ShipperAccount:               mustValue(t, domain.NewRequesterReference, "SYN-SHIPPER-ACCOUNT-1"),
 		ShipperAuthorizationEvidence: "SYN-SHIPPER-REAUTH-EVIDENCE-3",
+		OperationEvidence:            "OPERATOR/SYN-ISSUER#SYN-OPERATOR-1",
 	}
 }
 
@@ -388,7 +393,7 @@ func TestARefusedOrUnconfiguredAuthorizationWritesNothing(t *testing.T) {
 func TestAClosureMayBeFormedWithoutARequester(t *testing.T) {
 	fixture := newContinuedAttemptFixture(t)
 	command := fixture.closureCommand(t)
-	command.Requester = domain.RequesterReference{}
+	command.Requester, command.RequestEvidence = domain.RequesterReference{}, ""
 
 	result, err := fixture.handler.FormControlledClosure(t.Context(), command)
 	if err != nil {
@@ -515,6 +520,8 @@ func TestReopeningAShipperInstructedClosureRequiresTheSameShippersNewAuthorizati
 		fixture := newContinuedAttemptFixture(t)
 		closure := fixture.closed(t)
 		command := fixture.reopeningCommand(t, closure.ID())
+		// 接入层的真实形状：证据全空白时请求方缺席（ADR-0183 决定四），走到这道门答更具体的拒格。
+		command.Requester = domain.RequesterReference{}
 		command.ShipperAuthorizationEvidence = "   "
 
 		result, err := fixture.handler.FormReopening(t.Context(), command)
@@ -549,7 +556,7 @@ func TestReopeningAShipperInstructedClosureRequiresTheSameShippersNewAuthorizati
 	t.Run("原关闭没记请求方就核不出同一账户", func(t *testing.T) {
 		fixture := newContinuedAttemptFixture(t)
 		closureCommand := fixture.closureCommand(t)
-		closureCommand.Requester = domain.RequesterReference{}
+		closureCommand.Requester, closureCommand.RequestEvidence = domain.RequesterReference{}, ""
 		closed, err := fixture.handler.FormControlledClosure(t.Context(), closureCommand)
 		if err != nil || closed.Outcome() != application.ContinuedAttemptDecisionFormed {
 			t.Fatalf("先关闭：%v / %v", closed.Outcome(), err)
@@ -567,7 +574,7 @@ func TestReopeningAShipperInstructedClosureRequiresTheSameShippersNewAuthorizati
 	t.Run("运营企业操作形成的关闭不要货主证据", func(t *testing.T) {
 		fixture := newContinuedAttemptFixture(t)
 		closureCommand := fixture.closureCommand(t)
-		closureCommand.Requester = domain.RequesterReference{}
+		closureCommand.Requester, closureCommand.RequestEvidence = domain.RequesterReference{}, ""
 		closureCommand.ResponsibilitySourceKind = application.OperatorActionResponsibilitySource
 		closureCommand.ResponsibilitySourceSubject = "SYN-OPS-DECISION-4"
 		closed, err := fixture.handler.FormControlledClosure(t.Context(), closureCommand)
@@ -576,7 +583,7 @@ func TestReopeningAShipperInstructedClosureRequiresTheSameShippersNewAuthorizati
 		}
 		closure, _ := closed.Decision()
 		command := fixture.reopeningCommand(t, closure.ID())
-		command.ShipperAccount = domain.RequesterReference{}
+		command.Requester, command.ShipperAccount = domain.RequesterReference{}, domain.RequesterReference{}
 		command.ShipperAuthorizationEvidence = ""
 
 		result, err := fixture.handler.FormReopening(t.Context(), command)
@@ -637,6 +644,10 @@ func TestReopeningAClosureWhoseResponsibilitySourceKindCannotBeReadIsNotAccepted
 			closure := fixture.seedClosureWithRawResponsibilitySource(t, tc.source)
 			command := fixture.reopeningCommand(t, closure.ID())
 			command.ShipperAuthorizationEvidence = tc.evidence
+			if tc.evidence == "" {
+				// 接入层的真实形状：没带证据时请求方缺席（ADR-0183 决定四）。
+				command.Requester = domain.RequesterReference{}
+			}
 
 			result, err := fixture.handler.FormReopening(t.Context(), command)
 			if err != nil {
@@ -903,7 +914,7 @@ func TestOnlyTheSameContentIsAReplayAndAuthorizationStillComesFirst(t *testing.T
 	fixture.closed(t)
 
 	other := fixture.closureCommand(t)
-	other.Requester = domain.RequesterReference{}
+	other.Requester, other.RequestEvidence = domain.RequesterReference{}, ""
 	other.ResponsibilitySourceKind = application.ExternalRestrictionResponsibilitySource
 	other.ResponsibilitySourceSubject = "SYN-RESTRICTION-7"
 	formed, err := fixture.handler.FormControlledClosure(t.Context(), other)
@@ -983,5 +994,123 @@ func TestAShipperPairDerivedInOnePlaceReplaysAndPassesTheReopeningGate(t *testin
 	reopened, err := fixture.handler.FormReopening(t.Context(), reopening)
 	if err != nil || reopened.Outcome() != application.ContinuedAttemptDecisionFormed {
 		t.Fatalf("重开 = %v / %v / %v, want FORMED", reopened.Outcome(), reopened.Refusal(), err)
+	}
+}
+
+// Covers: 票 operator-channel/38（ADR-0187 决定二）——请求方与请求证据缺一是命令自身的形状坏了：在问授权之前答
+// `输入未受理 · DECISION_INVALID`，不问 PC、不签标识、不写册；与册上原关闭同内容时也不答成`已有结果`。
+func TestARequesterWithoutEvidenceIsRefusedBeforeAuthorizationAndIsNeverAReplay(t *testing.T) {
+	fixture := newContinuedAttemptFixture(t)
+	fixture.closed(t)
+	asked, issued := len(fixture.authorizer.queries), fixture.identities.next
+
+	for name, mutate := range map[string]func(*application.FormControlledClosureCommand){
+		"有请求方、证据全空白（其余同原关闭）": func(command *application.FormControlledClosureCommand) { command.RequestEvidence = "   " },
+		"有证据、无请求方": func(command *application.FormControlledClosureCommand) {
+			command.Requester = domain.RequesterReference{}
+		},
+	} {
+		command := fixture.closureCommand(t)
+		mutate(&command)
+		result, err := fixture.handler.FormControlledClosure(t.Context(), command)
+		if err != nil {
+			t.Fatalf("%s：%v", name, err)
+		}
+		if result.Outcome() != application.ContinuedAttemptDecisionNotAccepted ||
+			result.Refusal() != application.ContinuedAttemptDecisionInvalid {
+			t.Fatalf("%s：outcome / refusal = %v / %v, want INPUT_NOT_ACCEPTED / DECISION_INVALID", name, result.Outcome(), result.Refusal())
+		}
+		if _, present := result.Decision(); present {
+			t.Fatalf("%s：交回了决定", name)
+		}
+	}
+	if got := len(fixture.authorizer.queries); got != asked {
+		t.Fatalf("坏形状的命令问了 PC %d 次", got-asked)
+	}
+	if fixture.identities.next != issued {
+		t.Fatalf("坏形状的命令消耗了 %d 个决定标识", fixture.identities.next-issued)
+	}
+	assertNothingAppendedAfterClosure(t, fixture)
+
+	reopening := fixture.reopeningCommand(t, fixture.registers.decisions(fixture.identity.TenantID(), fixture.parcel)[0].ID())
+	reopening.ShipperAuthorizationEvidence = ""
+	result, err := fixture.handler.FormReopening(t.Context(), reopening)
+	if err != nil || result.Refusal() != application.ContinuedAttemptDecisionInvalid {
+		t.Fatalf("重开有请求方无证据：%v / %v / %v, want DECISION_INVALID", result.Outcome(), result.Refusal(), err)
+	}
+	if fixture.identities.next != issued {
+		t.Fatal("坏形状的重开消耗了决定标识")
+	}
+}
+
+// Covers: 票 operator-channel/38（ADR-0187 决定一、三）——两份证据去两端空白后落在决定上；决定方与授权角色只取授权答复，
+// 永不等于操作证据。重开带了货主新授权证据就落成请求证据。
+func TestBothEvidencesLandTrimmedAndNeverStandInForTheDecider(t *testing.T) {
+	fixture := newContinuedAttemptFixture(t)
+	command := fixture.closureCommand(t)
+	command.RequestEvidence = "  SYN-CALL-7  "
+	command.OperationEvidence = " OPERATOR/SYN-ISSUER#SYN-OPERATOR-7 "
+	result, err := fixture.handler.FormControlledClosure(t.Context(), command)
+	if err != nil || result.Outcome() != application.ContinuedAttemptDecisionFormed {
+		t.Fatalf("关闭 = %v / %v / %v", result.Outcome(), result.Refusal(), err)
+	}
+	decision, _ := result.Decision()
+	if decision.RequestEvidence().String() != "SYN-CALL-7" ||
+		decision.OperationEvidence().String() != "OPERATOR/SYN-ISSUER#SYN-OPERATOR-7" {
+		t.Fatalf("证据 = %q / %q", decision.RequestEvidence(), decision.OperationEvidence())
+	}
+	granted := grantedContinuedAttemptAuthority(t)
+	if decision.Decider() != granted.Decider || decision.AuthorityRole() != granted.AuthorityRole ||
+		decision.Decider().String() == decision.OperationEvidence().String() ||
+		decision.AuthorityRole().String() == decision.OperationEvidence().String() {
+		t.Fatalf("决定方 / 授权角色 = %q / %q", decision.Decider(), decision.AuthorityRole())
+	}
+
+	reopened, err := fixture.handler.FormReopening(t.Context(), fixture.reopeningCommand(t, decision.ID()))
+	if err != nil || reopened.Outcome() != application.ContinuedAttemptDecisionFormed {
+		t.Fatalf("重开 = %v / %v / %v", reopened.Outcome(), reopened.Refusal(), err)
+	}
+	reopening, _ := reopened.Decision()
+	if reopening.RequestEvidence().String() != "SYN-SHIPPER-REAUTH-EVIDENCE-3" ||
+		reopening.OperationEvidence().String() != "OPERATOR/SYN-ISSUER#SYN-OPERATOR-1" {
+		t.Fatalf("重开证据 = %q / %q", reopening.RequestEvidence(), reopening.OperationEvidence())
+	}
+}
+
+// Covers: 票 operator-channel/38（ADR-0187 决定四）——换证据、换提交人原样重投：答`已有结果`，交回带原证据的原决定；
+// 不签标识、不写册、不发意图。
+func TestADifferentEvidenceOnTheSameRequestIsAReplayThatKeepsTheOriginal(t *testing.T) {
+	fixture := newContinuedAttemptFixture(t)
+	original := fixture.closed(t)
+	retried := fixture.closureCommand(t)
+	retried.RequestEvidence = "SYN-SECOND-CALL"
+	retried.OperationEvidence = "OPERATOR/SYN-ISSUER#SYN-OPERATOR-9"
+	result, err := fixture.handler.FormControlledClosure(t.Context(), retried)
+	if err != nil || result.Outcome() != application.ContinuedAttemptDecisionExistingResult {
+		t.Fatalf("重投 = %v / %v / %v, want EXISTING_RESULT", result.Outcome(), result.Refusal(), err)
+	}
+	answered, _ := result.Decision()
+	if answered.ID() != original.ID() || answered.RequestEvidence().String() != "SYN-SHIPPER-INSTRUCTION-EVIDENCE-9" ||
+		answered.OperationEvidence() != original.OperationEvidence() {
+		t.Fatalf("交回 %s / %q / %q", answered.ID(), answered.RequestEvidence(), answered.OperationEvidence())
+	}
+	if fixture.identities.next != 1 || fixture.registers.inserts != 1 || fixture.registers.saves != 0 || len(fixture.handoff.intents) != 1 {
+		t.Fatalf("重投写了东西：next %d / inserts %d / saves %d / intents %d",
+			fixture.identities.next, fixture.registers.inserts, fixture.registers.saves, len(fixture.handoff.intents))
+	}
+
+	reopened, err := fixture.handler.FormReopening(t.Context(), fixture.reopeningCommand(t, original.ID()))
+	if err != nil || reopened.Outcome() != application.ContinuedAttemptDecisionFormed {
+		t.Fatalf("重开 = %v / %v", reopened.Outcome(), err)
+	}
+	again := fixture.reopeningCommand(t, original.ID())
+	again.ShipperAuthorizationEvidence = "SYN-SHIPPER-REAUTH-EVIDENCE-4"
+	again.OperationEvidence = "OPERATOR/SYN-ISSUER#SYN-OPERATOR-9"
+	replayed, err := fixture.handler.FormReopening(t.Context(), again)
+	if err != nil || replayed.Outcome() != application.ContinuedAttemptDecisionExistingResult {
+		t.Fatalf("换证据重投重开 = %v / %v, want EXISTING_RESULT", replayed.Outcome(), err)
+	}
+	if decision, _ := replayed.Decision(); decision.RequestEvidence().String() != "SYN-SHIPPER-REAUTH-EVIDENCE-3" {
+		t.Fatalf("重开重放交回的证据 = %q, want 原证据", decision.RequestEvidence())
 	}
 }

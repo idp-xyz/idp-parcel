@@ -19,7 +19,8 @@ import (
 // 关闭 / 重开各自必备什么、重开指不到生效关闭怎么办、终局在场能不能重开，全在 `ContinuedAttemptRegister.Append`；
 // 授权够不够格在 party-commercial（经 ContinuedAttemptDecisionAuthorizer）。PS 不自判决定方、不比等级
 // （pc-gaps/13 裁决 ①）：四件（决定方 / 授权角色 / 授权依据快照 / 请求方）里前三件原样取自授权答复，第四件是
-// 命令自带的事实，登录操作人不进任何一格（CONTEXT「登录操作人可以作为操作证据，但不能替代实际决定方和授权角色」）。
+// 命令自带的事实。登录操作人只进操作证据那一格，不顶替这四件中的任何一件，也没有任何门读它（CONTEXT「登录操作人可以
+// 作为操作证据另行记录，但不能替代实际决定方、授权角色和请求方」；ADR-0187 决定三）。
 //
 // **它不持 Transactor**（ADR-0134 决定三的同一条纪律）：`Insert` / `Save` 与判断意图入队都从 ctx 取事务执行器，
 // 事务由组合根的事务壳开；写侧任一失败原样上抛，整步随事务回滚——不留「决定已落、判断意图丢了」的中间态。
@@ -225,12 +226,16 @@ type FormControlledClosureCommand struct {
 	EffectiveAt                 time.Time
 	ResponsibilitySourceKind    ClosureResponsibilitySourceKind
 	ResponsibilitySourceSubject string
+	// RequestEvidence 是请求方所凭依据的引用（货主指令关闭时是货主那份指令），与 Requester 同在同缺，落在决定上。
+	RequestEvidence string
+	// OperationEvidence 是提交方（操作者渠道上是 `OPERATOR/<发行方>#<sub>`），只进审计。
+	OperationEvidence string
 }
 
 // FormReopeningCommand 携带一次重开。RelatedPriorClosure 必填（CONTEXT「关联此前关闭」）。ShipperAccount 与
-// ShipperAuthorizationEvidence 只在原关闭因货主指令形成时被读：核「与原关闭请求方同一账户」与「证据非空」两件
-// （票 label-channel/30 做法 6）；原关闭不是货主指令形成的，两格不读。证据引用不落册——领域决定上没有它的格，
-// 它只在这一步作门。
+// ShipperAuthorizationEvidence 只在原关闭因货主指令形成时被那道门读：核「与原关闭请求方同一账户」与「证据非空」两件
+// （票 label-channel/30 做法 6）。ShipperAuthorizationEvidence 同时就是这次重开的请求证据：带了就与 Requester 一起落在
+// 决定上（ADR-0187 决定一），原关闭是不是货主指令形成的都一样。
 type FormReopeningCommand struct {
 	Identity                     domain.SourceIdentity
 	Parcel                       domain.DeclaredParcelID
@@ -240,6 +245,7 @@ type FormReopeningCommand struct {
 	RelatedPriorClosure          domain.ContinuedAttemptDecisionID
 	ShipperAccount               domain.RequesterReference
 	ShipperAuthorizationEvidence string
+	OperationEvidence            string
 }
 
 // ContinuedAttemptDecisionResult 交回这一步停在哪里。Decision 只在`已形成`与`已有结果`时携带：前者是本次新形成的那条，
@@ -328,6 +334,10 @@ func (handler *FormContinuedAttemptDecisionHandler) FormControlledClosure(
 	if err != nil {
 		return continuedAttemptNotAccepted(ContinuedAttemptResponsibilitySourceUnknown), nil
 	}
+	trail, err := evidenceTrailOf(command.RequestEvidence, command.OperationEvidence)
+	if err != nil {
+		return continuedAttemptNotAccepted(ContinuedAttemptDecisionInvalid), nil
+	}
 
 	return handler.form(ctx, formation{
 		identity: command.Identity,
@@ -339,6 +349,7 @@ func (handler *FormContinuedAttemptDecisionHandler) FormControlledClosure(
 			EffectiveAt:                 command.EffectiveAt,
 			ClosureResponsibilitySource: source,
 		},
+		trail: trail,
 	})
 }
 
@@ -355,6 +366,10 @@ func (handler *FormContinuedAttemptDecisionHandler) FormReopening(
 	if command.RelatedPriorClosure.String() == "" {
 		return continuedAttemptNotAccepted(ContinuedAttemptDecisionInvalid), nil
 	}
+	trail, err := evidenceTrailOf(command.ShipperAuthorizationEvidence, command.OperationEvidence)
+	if err != nil {
+		return continuedAttemptNotAccepted(ContinuedAttemptDecisionInvalid), nil
+	}
 	return handler.form(ctx, formation{
 		identity: command.Identity,
 		parcel:   command.Parcel,
@@ -365,6 +380,7 @@ func (handler *FormContinuedAttemptDecisionHandler) FormReopening(
 			EffectiveAt:         command.EffectiveAt,
 			RelatedPriorClosure: command.RelatedPriorClosure,
 		},
+		trail: trail,
 		// 没开过册的包裹没有任何东西可重开：这不是重复领域规则（领域说的是「指不到生效关闭」），是「没有册可追加」
 		// 这一层的事实——为它开一册空的再让 Append 拒，会为一次注定不成立的重开消耗一个决定标识。
 		requiresRegister: true,
@@ -392,10 +408,34 @@ func ShipperInstructionSubjectOf(identity domain.SourceIdentity) string {
 	return identity.CustomerAccountID().String()
 }
 
-// HasShipperAuthorizationEvidence 说一份货主重授权证据算不算带了：全空白与没带同读。接入层据它决定请求方在不在场
-// （ADR-0183 决定四），本编排据它开货主重授权那道门——判据只在这里定义。
-func HasShipperAuthorizationEvidence(evidence string) bool {
+// HasRequestEvidence 说一份请求证据算不算带了：全空白与没带同读。接入层据它决定重开的请求方在不在场（ADR-0183 决定四）、
+// 货主指令关闭有没有带指令证据（ADR-0187 决定五），本编排据它开货主重授权那道门、决定落不落请求证据——判据只在这里定义。
+func HasRequestEvidence(evidence string) bool {
 	return strings.TrimSpace(evidence) != ""
+}
+
+// evidenceTrail 是一条决定的两份证据：请求证据与操作证据。它们落在决定上、只进审计，**不进重放比对**——同一次请求可以凭
+// 不同的依据、经不同的人转达两次，这不使它成为另一次请求；比对格以 ADR-0183「复核记录二」为准（ADR-0187 决定四）。
+type evidenceTrail struct {
+	request   domain.ContinuedAttemptRequestEvidenceReference
+	operation domain.ContinuedAttemptOperationEvidenceReference
+}
+
+// evidenceTrailOf 去两端空白后取两份证据，全空白即没带：落册的与回执带回的是同一个串。
+func evidenceTrailOf(requestEvidence, operationEvidence string) (evidenceTrail, error) {
+	var trail evidenceTrail
+	var err error
+	if HasRequestEvidence(requestEvidence) {
+		if trail.request, err = domain.NewContinuedAttemptRequestEvidenceReference(strings.TrimSpace(requestEvidence)); err != nil {
+			return evidenceTrail{}, err
+		}
+	}
+	if trimmed := strings.TrimSpace(operationEvidence); trimmed != "" {
+		if trail.operation, err = domain.NewContinuedAttemptOperationEvidenceReference(trimmed); err != nil {
+			return evidenceTrail{}, err
+		}
+	}
+	return trail, nil
 }
 
 // shipperReauthorizationGate 读原关闭的种类段，按它分三路：认不出 → 不放行；货主指令 → 核同一货主账户的新有效授权
@@ -428,7 +468,7 @@ func (handler *FormContinuedAttemptDecisionHandler) shipperReauthorizationGate(
 	default:
 		return ContinuedAttemptDecisionResult{}
 	}
-	if !HasShipperAuthorizationEvidence(command.ShipperAuthorizationEvidence) {
+	if !HasRequestEvidence(command.ShipperAuthorizationEvidence) {
 		return continuedAttemptNotAccepted(ContinuedAttemptShipperReauthorizationMissing)
 	}
 	if closure.Requester().String() == "" || command.ShipperAccount != closure.Requester() {
@@ -441,17 +481,20 @@ func (handler *FormContinuedAttemptDecisionHandler) shipperReauthorizationGate(
 type formation struct {
 	identity domain.SourceIdentity
 	parcel   domain.DeclaredParcelID
-	// request 是这次请求带来的内容：授权查询、重放比对与决定规格都从它取，一处定义。
-	request          domain.ContinuedAttemptRequest
+	// request 是这次请求带来的内容：授权查询与重放比对只从它取，决定规格由它与 trail 合成。
+	request domain.ContinuedAttemptRequest
+	// trail 是这次请求的两份证据，落在决定上、不进重放比对（见 evidenceTrail）。
+	trail            evidenceTrail
 	requiresRegister bool
 	// beforeIdentity 在读回册之后、签发标识之前开口；交回非零结果即在此停下。
 	beforeIdentity func(domain.ContinuedAttemptRegister) ContinuedAttemptDecisionResult
 }
 
-// decisionSpecOf 把请求内容、本上下文签发的标识与授权答复给出的三件合成决定规格。关闭再补权威业务截断边界，它的值
+// decisionSpecOf 把请求内容、两份证据、本上下文签发的标识与授权答复给出的三件合成决定规格。关闭再补权威业务截断边界，它的值
 // 就是本次关闭决定的标识（见 FormControlledClosure 头注）；重开没有这一格。
 func decisionSpecOf(
 	request domain.ContinuedAttemptRequest,
+	trail evidenceTrail,
 	id domain.ContinuedAttemptDecisionID,
 	granted ports.ContinuedAttemptDecisionAuthorization,
 ) (domain.ContinuedAttemptDecisionSpec, error) {
@@ -459,6 +502,8 @@ func decisionSpecOf(
 		ID:                          id,
 		Kind:                        request.Kind,
 		Requester:                   request.Requester,
+		RequestEvidence:             trail.request,
+		OperationEvidence:           trail.operation,
 		Decider:                     granted.Decider,
 		AuthorityRole:               granted.AuthorityRole,
 		AuthoritySnapshot:           granted.Authority,
@@ -483,8 +528,11 @@ func decisionSpecOf(
 //
 // 读那几步失败答`未决`（什么都没写，重投会改变结果）；写那几步失败原样上抛（整步随事务回滚）；版本冲突是业务答案。
 func (handler *FormContinuedAttemptDecisionHandler) form(ctx context.Context, plan formation) (ContinuedAttemptDecisionResult, error) {
+	// 请求方与请求证据同在同缺和缺项同属命令自身的形状，与它们一起在问授权之前核（ADR-0187 决定二）：坏输入不消耗一次
+	// 授权询问与一个决定标识，也不会被下面的重放比对答成`已有结果`——证据不在比对格里。
 	if plan.identity.TenantID().String() == "" || plan.parcel.String() == "" ||
-		plan.request.Reason.String() == "" || plan.request.EffectiveAt.IsZero() {
+		plan.request.Reason.String() == "" || plan.request.EffectiveAt.IsZero() ||
+		!domain.RequestEvidenceAccompaniesRequester(plan.request.Requester, plan.trail.request) {
 		return continuedAttemptNotAccepted(ContinuedAttemptDecisionInvalid), nil
 	}
 	tenant := plan.identity.TenantID()
@@ -545,7 +593,7 @@ func (handler *FormContinuedAttemptDecisionHandler) form(ctx context.Context, pl
 	if err != nil {
 		return continuedAttemptUndecided(ContinuedAttemptDecisionIdentityUnavailable), nil
 	}
-	spec, err := decisionSpecOf(plan.request, id, granted)
+	spec, err := decisionSpecOf(plan.request, plan.trail, id, granted)
 	if err != nil {
 		return continuedAttemptNotAccepted(ContinuedAttemptDecisionInvalid), nil
 	}

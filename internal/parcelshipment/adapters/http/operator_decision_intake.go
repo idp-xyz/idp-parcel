@@ -60,13 +60,13 @@ type OperatorAuthenticator interface {
 	AuthenticateOperatorDecision(ctx context.Context, bearerToken string, decision OperatorDecision) (OperatorIdentity, error)
 }
 
-// OperatorDecisionIntake 是操作者渠道「运营决定」能力面在委托侧五口的 Intake（ADR-0151 决定一、二）：复核完成、主动拒绝、
-// 授权处置三口，与受控关闭、重开两口（ADR-0183）。
+// OperatorDecisionIntake 是操作者渠道「运营决定」能力面在委托侧各口的 Intake（ADR-0151 决定一、二）：复核完成、主动拒绝、
+// 授权处置按委托寻址，受控关闭与重开按包裹寻址（ADR-0183）。
 //
 // 线格式是管理台今天送出的草案：主动拒绝只有委托标识与理由；复核完成与授权处置另带它审的那个提交版本，授权处置再带去向。
 // 载荷只有内容、没有身份：来源身份由服务端按信封的租户与委托标识查出（ADR-0151 决定二「委托寻址」），复核人、
 // 决定人、处置人取认证出的提交操作者；载荷里出现任何身份格即拒（封闭解码）。先认证、后解载荷。受控关闭与重开改按
-// 包裹寻址、请求方与货主账户取那份委托的客户账户，提交操作者不进命令（ADR-0183）。
+// 包裹寻址、请求方与货主账户取那份委托的客户账户（ADR-0183），提交操作者只进操作证据那一格（ADR-0187 决定三）。
 type OperatorDecisionIntake struct {
 	authenticator OperatorAuthenticator
 	targets       ports.OperatorDecisionTargets
@@ -102,6 +102,9 @@ type controlledClosurePayload struct {
 	EffectiveAt           string `json:"effectiveAt"`
 	ResponsibilitySource  string `json:"responsibilitySource"`
 	ResponsibilitySubject string `json:"responsibilitySubject"`
+	// ShipperInstructionEvidence 是货主那份指令的证据引用，由操作者如实记下；只在货主指令的关闭上带、且必带（ADR-0187
+	// 决定五）。
+	ShipperInstructionEvidence string `json:"shipperInstructionEvidence"`
 }
 
 // reopeningPayload 是重开的线格式（ADR-0183）：货主账户与请求方都不在载荷里；货主重授权证据是一份证据的引用，由操作者
@@ -118,7 +121,7 @@ type reopeningPayload struct {
 
 // IntakeControlledClosure 译受控关闭（`/shipment-requests/continued-attempt-closures`）。按包裹寻址到它当前已接受的委托，
 // 来源身份取那一份（ADR-0183 决定一）；请求方由责任来源推出——货主指令才有，且只能是那份委托的客户账户（决定二、三）。
-// 提交操作者不进命令：决定方、授权角色与授权依据快照由授权答复给出（ADR-0151 决定二）。
+// 提交操作者只作操作证据：决定方、授权角色与授权依据快照由授权答复给出（ADR-0151 决定二；ADR-0187 决定三）。
 func (intake *OperatorDecisionIntake) IntakeControlledClosure(ctx context.Context, request *http.Request) (application.FormControlledClosureCommand, error) {
 	operator, err := intake.authenticator.AuthenticateOperatorDecision(ctx, httpapi.BearerToken(request), OperatorDecisionControlledClosure)
 	if err != nil {
@@ -147,6 +150,15 @@ func (intake *OperatorDecisionIntake) IntakeControlledClosure(ctx context.Contex
 	if !shipperInstruction && subject == "" {
 		return application.FormControlledClosureCommand{}, fmt.Errorf("%w: responsibilitySubject is required for %s", ErrMalformedRequest, kind)
 	}
+	// 货主指令的证据同是纯载荷校验、同排在寻址之前（ADR-0187 决定五）：有请求方就得说得出凭什么；另两种来源没有请求方，
+	// 带了证据就无主可证。全空白与没带同读，与编排落证据同一判据。
+	evidenced := application.HasRequestEvidence(payload.ShipperInstructionEvidence)
+	if shipperInstruction && !evidenced {
+		return application.FormControlledClosureCommand{}, fmt.Errorf("%w: shipperInstructionEvidence is required for a shipper instruction", ErrMalformedRequest)
+	}
+	if !shipperInstruction && evidenced {
+		return application.FormControlledClosureCommand{}, fmt.Errorf("%w: shipperInstructionEvidence belongs to a shipper instruction only", ErrMalformedRequest)
+	}
 	parcel, identity, err := intake.locateParcel(ctx, operator.Tenant, payload.Parcel)
 	if err != nil {
 		return application.FormControlledClosureCommand{}, err
@@ -157,12 +169,14 @@ func (intake *OperatorDecisionIntake) IntakeControlledClosure(ctx context.Contex
 		Reason:                   reason,
 		EffectiveAt:              effectiveAt,
 		ResponsibilitySourceKind: kind,
+		OperationEvidence:        operatorEvidence(operator),
 	}
 	if shipperInstruction {
 		if command.Requester, err = application.ShipperRequesterOf(identity); err != nil {
 			return application.FormControlledClosureCommand{}, fmt.Errorf("parcel shipment http: shipper requester: %w", err)
 		}
 		command.ResponsibilitySourceSubject = application.ShipperInstructionSubjectOf(identity)
+		command.RequestEvidence = payload.ShipperInstructionEvidence
 		return command, nil
 	}
 	command.ResponsibilitySourceSubject = subject
@@ -170,7 +184,8 @@ func (intake *OperatorDecisionIntake) IntakeControlledClosure(ctx context.Contex
 }
 
 // IntakeReopening 译重开（`/shipment-requests/continued-attempt-reopenings`）。寻址同受控关闭；货主账户恒取那份委托的客户
-// 账户，载荷带了货主重授权证据时请求方同取它（ADR-0183 决定四）。原关闭是不是货主指令形成的、证据够不够，归编排那道门。
+// 账户，载荷带了货主重授权证据时请求方同取它（ADR-0183 决定四），证据随之落成请求证据（ADR-0187 决定一）；提交操作者只作
+// 操作证据。原关闭是不是货主指令形成的、证据够不够，归编排那道门。
 func (intake *OperatorDecisionIntake) IntakeReopening(ctx context.Context, request *http.Request) (application.FormReopeningCommand, error) {
 	operator, err := intake.authenticator.AuthenticateOperatorDecision(ctx, httpapi.BearerToken(request), OperatorDecisionControlledReopening)
 	if err != nil {
@@ -206,9 +221,10 @@ func (intake *OperatorDecisionIntake) IntakeReopening(ctx context.Context, reque
 		RelatedPriorClosure:          related,
 		ShipperAccount:               shipper,
 		ShipperAuthorizationEvidence: payload.ShipperAuthorizationEvidence,
+		OperationEvidence:            operatorEvidence(operator),
 	}
 	// 「带了证据」与编排那道门同一判据：否则全空白的证据会让请求方记成客户，门却当作没带。
-	if application.HasShipperAuthorizationEvidence(payload.ShipperAuthorizationEvidence) {
+	if application.HasRequestEvidence(payload.ShipperAuthorizationEvidence) {
 		command.Requester = shipper
 	}
 	return command, nil

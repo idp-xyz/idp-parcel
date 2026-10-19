@@ -207,6 +207,7 @@ func continuedAttemptClosureCommand(t *testing.T, identity domain.SourceIdentity
 		EffectiveAt:                 continuedAttemptSeedAt.Add(time.Hour),
 		ResponsibilitySourceKind:    shipmentapp.ShipperInstructionResponsibilitySource,
 		ResponsibilitySourceSubject: "SYN-SHIPPER-INSTRUCTION-CA",
+		RequestEvidence:             "SYN-SHIPPER-INSTRUCTION-EVIDENCE-CA",
 	}
 }
 
@@ -331,9 +332,10 @@ func TestClosureAndReopeningThroughTheOperatorChannelAgainstARealDatabase(t *tes
 		}
 		return got
 	}
-	closureBody := func(parcel string) string {
-		return `{"parcel": "` + parcel + `", "reason": "SYN-REASON-SHIPPER-STOP", "effectiveAt": "2026-08-24T10:00:00Z", "responsibilitySource": "SHIPPER-INSTRUCTION"}`
+	closureBodyWith := func(parcel, evidence string) string {
+		return `{"parcel": "` + parcel + `", "reason": "SYN-REASON-SHIPPER-STOP", "effectiveAt": "2026-08-24T10:00:00Z", "responsibilitySource": "SHIPPER-INSTRUCTION", "shipperInstructionEvidence": "` + evidence + `"}`
 	}
+	closureBody := func(parcel string) string { return closureBodyWith(parcel, "SYN-CALL-OC15") }
 	tenant := mustValue(t, domain.NewTenantID, "SYN-TENANT-01")
 
 	production, err := buildContinuedAttemptDecisionOrchestration(db)

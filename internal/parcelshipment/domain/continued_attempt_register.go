@@ -64,7 +64,8 @@ func (register ContinuedAttemptRegister) HasAnyDecision() bool {
 }
 
 // ContinuedAttemptRequest 是一份关闭或重开请求带来的内容。决定标识、权威业务截断边界由本上下文签发，决定方、授权角色
-// 与授权依据快照由授权答复给出——都不是请求的内容，不在其中。
+// 与授权依据快照由授权答复给出——都不是请求的内容，不在其中。请求证据（请求所凭的依据）与操作证据（经手的提交方）也不在
+// 其中：同一次请求可以凭两份依据、经两个人转达，这不使它成为另一次请求（ADR-0187 决定四）。
 type ContinuedAttemptRequest struct {
 	Kind                        ContinuedAttemptDecisionKind
 	Requester                   RequesterReference
@@ -76,7 +77,7 @@ type ContinuedAttemptRequest struct {
 
 // RecordedRequest 交回册上与这份请求逐格相同的那条决定。找得到就是同一次请求的重放，认法以 ADR-0183「复核记录二」
 // 为准：生效时间由请求带来，原样重投必然带同一个；内容不同的第二条关闭照旧经 Append 追加，CONTEXT 允许关闭生效期间
-// 再登一条。
+// 再登一条。交回的是册上那条原决定，带的是它形成时的证据——两份证据不进比对（ADR-0187 决定四）。
 func (register ContinuedAttemptRegister) RecordedRequest(request ContinuedAttemptRequest) (ContinuedAttemptDecision, bool) {
 	for _, decision := range register.decisions {
 		if decision.kind == request.Kind &&
@@ -91,6 +92,12 @@ func (register ContinuedAttemptRegister) RecordedRequest(request ContinuedAttemp
 	return ContinuedAttemptDecision{}, false
 }
 
+// RequestEvidenceAccompaniesRequester 说一条将要形成的决定上请求方与请求证据是否同在同缺：有请求方就得说得出凭什么，
+// 没有请求方也就没有谁的请求可证（ADR-0187 决定二）。编排在问授权之前拿它先核命令，Append 拿它兜底——判据只在这里定义。
+func RequestEvidenceAccompaniesRequester(requester RequesterReference, evidence ContinuedAttemptRequestEvidenceReference) bool {
+	return requester.valid() == evidence.valid()
+}
+
 // Append 追加一条决定。
 //
 // currentFinalPresent 由调用方从包裹当前有效终局取得——终局属本上下文但不属本册，塞进本册就是
@@ -100,7 +107,20 @@ func (register ContinuedAttemptRegister) RecordedRequest(request ContinuedAttemp
 // **本方法不判断授权够不够格。** 授权规则属 party-commercial，本上下文只记所采用的那一份
 // （同主动拒绝、取消那几处的分工）。它也不会自动形成任何决定——CONTEXT 明写「系统不得自动形成」，
 // 而这里没有任何不带 spec 的入口。
+//
+// 形成门比重建门严一格：请求方与请求证据同在同缺只在形成时强制，理由见 RehydrateContinuedAttemptRegister。
 func (register ContinuedAttemptRegister) Append(
+	spec ContinuedAttemptDecisionSpec,
+	currentFinalPresent bool,
+) (ContinuedAttemptRegister, error) {
+	if !RequestEvidenceAccompaniesRequester(spec.Requester, spec.RequestEvidence) {
+		return ContinuedAttemptRegister{}, ErrInvalidContinuedAttemptDecision
+	}
+	return register.appendDecision(spec, currentFinalPresent)
+}
+
+// appendDecision 是形成与重建共用的追加：两扇门共有的规则都在 decisionFrom 里，只属形成的那一格在 Append 上。
+func (register ContinuedAttemptRegister) appendDecision(
 	spec ContinuedAttemptDecisionSpec,
 	currentFinalPresent bool,
 ) (ContinuedAttemptRegister, error) {
@@ -132,11 +152,17 @@ func (register ContinuedAttemptRegister) decisionFrom(
 	if register.holds(spec.ID) {
 		return ContinuedAttemptDecision{}, ErrInvalidContinuedAttemptDecision
 	}
+	// 有请求证据而无请求方在哪一版规则下都不成立——证据证的是谁的请求？形成与重建两扇门都拒。
+	if spec.RequestEvidence.valid() && !spec.Requester.valid() {
+		return ContinuedAttemptDecision{}, ErrInvalidContinuedAttemptDecision
+	}
 
 	decision := ContinuedAttemptDecision{
 		id:                spec.ID,
 		kind:              spec.Kind,
 		requester:         spec.Requester,
+		requestEvidence:   spec.RequestEvidence,
+		operationEvidence: spec.OperationEvidence,
 		decider:           spec.Decider,
 		authorityRole:     spec.AuthorityRole,
 		authoritySnapshot: spec.AuthoritySnapshot,
@@ -246,6 +272,10 @@ type RehydrateContinuedAttemptRegisterSpec struct {
 // **重建时终局一律按不在场传入。** 终局有效性是读回之后由调用方现取的事实，用它去卡重建会让
 // 一行完全合法的历史（关闭 → 重开 → 其后才形成终局）读不回来——重建门以结果自证一致，不逆推
 // 形成过程。
+//
+// **重建门不要求请求方带请求证据**，只拒有证据无请求方（ADR-0187 决定二）。同在同缺是形成时的规则；规则生效前形成的、
+// 或回滚时旧版写回的决定有请求方而无请求证据，是当时已经受过约束的事（ADR-0028）。拒它就是让这个包裹的册读不回、写面与
+// 读面一并卡死，而补救只剩清空或重新形成——那会删关闭历史、换掉截断边界，CONTEXT 都不允许。
 func RehydrateContinuedAttemptRegister(
 	spec RehydrateContinuedAttemptRegisterSpec,
 ) (ContinuedAttemptRegister, error) {
@@ -258,7 +288,7 @@ func RehydrateContinuedAttemptRegister(
 	}
 	register.revision = spec.Revision
 	for _, decision := range spec.Decisions {
-		appended, err := register.Append(decision, false)
+		appended, err := register.appendDecision(decision, false)
 		if err != nil {
 			return ContinuedAttemptRegister{}, ErrInvalidRehydratedContinuedAttemptRegister
 		}
