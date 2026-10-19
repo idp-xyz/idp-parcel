@@ -1,7 +1,7 @@
 # 08 移动事实同身份异内容答「已有版本」：作业事实口缺内容冲突格，另一台设备或另一作业范围的真实作业被静默吞掉
 
 Category: bug
-Status: ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 代决（见「裁定」）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: in-progress——2026-10-18 作者子代理完工，待评审。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 代决（见「裁定」）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment/movement-facts
@@ -91,3 +91,38 @@ Blocked by: 无
 - [ ] Go 门禁：`go build ./...`、`go vet ./...` 退出码 0，`gofmt -l .` 无输出；带 DSN 跑 `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/... ./internal/architecture/...`，全部 ok。
 - [ ] 票 15 补记下追加回写行（只加行）。
 - [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：作者自验、非作者评审（两轴分开）、推送方在干净检出上带 DSN 跑全量。
+
+## 完成记录（2026-10-18，会话 idp-parcel-9b 的实施子代理，分支 claude-tfa08）
+
+基线 `45b9a088`。照「裁定」做：业务时间不进摘要；身份在册时先比内容、后判门禁。
+
+**落点**
+- 领域 `CanonicalizeMovementFactPayload`（TFC-1，face `RECORD_MOVEMENT_FACT`）：班次、种类词形、地点、放行引用（零值引用写 null）进摘要；租户、事实、版本、来源、`GateRequired`、`RecordedAt`、业务时间不进（不是参数）。
+- 编排 `RecordMovementFactHandler.Record`：在册与撞键读回两支都经 `movementFactReplayOrConflict`，两侧从本体现算后比；同串答 `MOVEMENT_FACT_VERSION_EXISTS` 带记录，异串答新格 `MovementFactSourceConflict`（`SOURCE_CONFLICT`），不带记录、不写库。门禁挡着时也先查册：在册则比内容，不在册才答门禁格。
+- HTTP `writeMovementFactOutcome` 无需改码：无记录即只有 `outcome`，200；只改两处注释。
+- **本票自定的一格，请评审看**：门禁挡着而查册失败，答 `MOVEMENT_FACT_UNDECIDED`（此前答 `DEPARTURE_GATE_BLOCKED`）。理由：此刻判断不了是不是重放，答门禁格正是裁定第 3 条要免的「把重放支去取放行」。用例 `TestAGatedDepartureWhoseIdentityCannotBeLookedUpIsUndecided`。
+
+**各格 → 用例**
+- TFC-1 往返（期望摘要由字面量文档经 `sha256sum` 另算）：`TestCommandPayloadsRoundTripAsTFC1` 的 `movement fact with gate clearance` / `movement fact without gate clearance`。「纳秒与对应微秒判等」随业务时间出摘要而不再适用，由下一条的「只差亚秒」重放格代替。
+- 编排各内容格：`TestTheSameVersionIsAReplayOnlyWhenItsContentIsTheSame`（改写原 `TestASecondRecordOfTheSameVersionKeepsTheOriginal`）——原样、只差整秒、只差亚秒、只差来源、带放行出发只差 `GateRequired` 答已有版本；改种类、地点、班次、换放行、去掉门禁与放行答 `SOURCE_CONFLICT`，不回显、`saves` 不增、在册不变。
+- 门禁次序：`TestARegisteredIdentityIsComparedBeforeTheDepartureGate`。
+- 撞键输家（替身首读答无）：`TestACollisionLoserIsComparedWithTheWinner`。
+- HTTP：`TestRecordMovementFactAnswersASourceConflictWithoutTheRecord`（200，响应体只有 `outcome`）。
+- 真渠道真库（`cmd/parcel-api/movement_fact_same_identity_test.go`，生产 `buildWorkFactIntakes` + 真库操作者册与设备册 + `buildMovementFactOrchestration`）：`TestMovementFactSameIdentityIsJudgedByContentOnTheProductionChannel`（原样与只差发生时间答已有版本；同作业范围另一设备、另一作业范围另一设备各答 `SOURCE_CONFLICT` 只有 outcome；库面逐列含 `recorded_at` 不变）、`TestMovementFactRaceLosersWithDifferentContentAnswerSourceConflict`（6 轮 × 12 方，每轮恰一 201，其余全 `SOURCE_CONFLICT`，每轮一行）、`TestMovementFactCollisionLoserIsComparedOnARealDatabase`（撞键读回那一支确定地走到）。
+
+**先红后绿**
+- 红 `3c77097c`：形状空桩，两格文档 got 空串。绿 `8ff823d7`。
+- 红 `e1111749`（编排未改，只立结果格）：五个异内容格 got `MOVEMENT_FACT_VERSION_EXISTS`；门禁次序 got `DEPARTURE_GATE_BLOCKED`；查册失败 got `DEPARTURE_GATE_BLOCKED`；撞键输家异内容 got 已有版本；HTTP 回显了 `location":"hub-1"`；真库：设备 B 答已有版本并回显 A 的内容，竞态输家答已有版本并回显赢家，撞键输家答已有版本。绿 `0449aee5`。
+- 机制清点重算 `6d401697`（`cmd/` 测试文件数加一）。
+
+**复现不了或未做的格**
+- 设备 C（另一作业范围）在红跑里没走到：同一用例先在设备 B 那格失败退出；探针日志 run-verify1.log 有它答已有版本并回显的实测，绿跑里这格已断言。
+- 「去处」（换版本重投登成并列版本、前版格答 400）没复现、没改，不在修复方向里；只删了编排里指向「换版本号」的旧注释。
+- 时刻回显精度归 operator-channel/31，未动。
+- 「票 15 补记下追加回写行」不在本代理地盘，未做，留给会话。
+
+**门**：改动目录 `gofmt -l` 无输出；`go build ./...`、`go vet ./...` 退 0；带 DSN `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/... ./internal/architecture/...` 全 ok。未跑全仓全量。
+
+**证据层级**：`S`（隔离合成 `SYN-` 数据、真库、生产装配）。
+
+评审：待会话读 diff 审。
