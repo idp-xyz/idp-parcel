@@ -17,8 +17,7 @@ import (
 // 压过哪一格是消费方的判断，本上下文只说册子里有什么。三格的读法都写在端口头注里，这里只
 // 记 SQL 上不显眼的两处：
 //
-//   - 「当前单元」排掉被替代的那些（另一单元的 replaces_unit_id 指向它）；替代关系今天还没
-//     有写入方，这一句先按列的语义写好，写入方来了读面不必改。
+//   - 「当前单元」取 currentDeclarationUnitCTE，与动作准入判断解析对象范围用同一份判据。
 //   - 提交版本按版本行自己的组成快照反查，不经单元——版本固定时快照的组成才是「交出去的
 //     那一份」，且版本永久保留，不随单元被替代而消失。
 //
@@ -50,18 +49,7 @@ func (view *ParcelDeclarationFactsView) LoadParcelDeclarationFacts(
 
 	var facts ports.ParcelDeclarationFacts
 	err = querier.QueryRow(ctx,
-		`WITH current_unit AS (
-		     SELECT u.unit_id, u.case_id
-		       FROM customs_compliance.declaration_unit u
-		      WHERE u.tenant_id = $1
-		        AND u.members @> jsonb_build_array($2::text)
-		        AND NOT EXISTS (
-		                SELECT 1
-		                  FROM customs_compliance.declaration_unit r
-		                 WHERE r.tenant_id = u.tenant_id
-		                   AND r.replaces_unit_id = u.unit_id
-		            )
-		 ),
+		`WITH `+currentDeclarationUnitCTE+`,
 		 parcel_case AS (
 		     SELECT cu.case_id FROM current_unit cu
 		     UNION
