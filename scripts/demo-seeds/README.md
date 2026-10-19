@@ -20,7 +20,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 责任法人 `SYN-LE-01` 的修订 1
 自票 legal-entity-profile/02 起带身份层（注册国家 `CN` 与合成终身注册号，ADR-0145 决定一）；在那之前
 灌过的库上这一笔是没有身份层的旧形状，重跑会答内容冲突（2），同样用 `--reset`。
-里程碑映射 `SYN-VE-MAP-V1` 自票 demo-chain-gaps/11 起关务那一行只登全部放行（`external-result-release-full` → `CUSTOMS_CLEARED`，类型词表见 ADR-0197）；在那之前灌过的库上版本号已占，重跑答已登记、库里仍是旧行，同样用 `--reset`。
+里程碑映射 `SYN-VE-MAP-V1` 自票 demo-chain-gaps/11 起关务那一行只登全部放行（`external-result-release-full` → `CUSTOMS_CLEARED`，类型词表见 ADR-0197）；在那之前灌过的库上版本号已占，重跑答 `REFUSED VERSION_NOT_OVERWRITABLE`、退出码 2，`seed.sh` 随之中止，库里仍是旧行；同样用 `--reset`。
 
 ## 操作者渠道：演示发行方与起 parcel-api
 

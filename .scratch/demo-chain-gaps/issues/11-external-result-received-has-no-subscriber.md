@@ -1,7 +1,7 @@
 # 11 外部结果已收信封没有订阅者，每封都撞 no_subscriber
 
 Category: enhancement
-Status: 完工，待评审与进 main——分支 `claude-dcg11`
+Status: in-progress——完工待进 main，分支 `claude-dcg11`；评审记录见文末
 Blocked by: 无
 出处：[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md) 2026-10-18 那次重走。
 
@@ -79,5 +79,5 @@ none（.scratch/outbox-handoff-consumption-map/report.md 记为「应有但未�
 - 顺带核得、**未在本票改**：演示映射另一行（`TRANSPORT_FULFILLMENT`，`transport-handover`）→ `IN_TRANSIT` 同样命不中——TF 交接适配器按裁决产出 `handover-handed-over` / `handover-refused` / `handover-pending-confirmation`，没有 `transport-handover`。演示动线上 `IN_TRANSIT` 因此永远不归类，建议另立票（同样只映 `handover-handed-over`）。
 - 待立票：VE 侧关务冲突信号（UC-VE-001 `CC-RESULT`，要 CC 先给出冲突关系）；执行方在动作时向 CC 问放行（与本组 05「出发门禁不问关务」同一条缝）。
 - 已灌过的演示库：`SYN-VE-MAP-V1` 版本号已占，重跑种子答已登记、库里仍是旧行，要 `--reset`。
-- `.scratch/outbox-handoff-consumption-map/report.md` 第 23 行状态未刷新（该报告自带保质期声明，按 HEAD 重取证时自然更新）。
+- `.scratch/outbox-handoff-consumption-map/report.md` 里 `ExternalResultHandoff` 那一行状态未刷新（该报告自带保质期声明，按 HEAD 重取证时自然更新）。
 - ADR 编号进 main 时若改号，全仓搜 `ADR-0197` 与 `0197-` 一并替换。
