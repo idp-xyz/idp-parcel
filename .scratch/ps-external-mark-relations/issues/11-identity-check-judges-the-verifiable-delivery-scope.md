@@ -1,7 +1,7 @@
 # 11 核对时判可验证交付范围：收寄来源带依据引用，PS 逐候选答范围相容、信号随范围收窄，NO 按 ADR-0212 的表认唯一，客户包裹件号缺范围时落待识别（有意翻转）
 
 Category: enhancement
-Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（08、09 已进 main），分支 `claude-psxm11`，NO 迁移号 0015（0014 留给票 14）。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
+Status: resolved——2026-10-19 进 main（代码验证钉 `18ad9d7a`），见「进 main 记录」。此前 in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（08、09 已进 main），分支 `claude-psxm11`，NO 迁移号 0015（0014 留给票 14）。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
 Blocked by:
 - [08](./08-pre-advice-and-handover-note-model-and-window-register.md) 进 main：推导与册。
 - [09](./09-pre-advice-submission-on-the-first-party-customer-channel.md) 进 main：翻转那一笔须同时把演示动线改成送站前先交预报（ADR-0212 决定十），没有预报口就改不了。
@@ -65,7 +65,7 @@ Blocked by:
 - [x] 翻转与补夹具两类清单写进完成记录；先红后绿的日志路径写进完成记录。
 - [x] 演示实走（`S`）：交预报、受理、送站带预报标识，答`节点收寄已形成`；不带依据再送一件同号，答待识别。
 - [x] Go 门禁：`go build ./...`、`go vet ./...` 退 0，`gofmt -l .` 无输出；带 DSN 跑 `internal/parcelshipment/...`、`internal/nodeoperations/...`、`cmd/parcel-api`、`cmd/parcel-frontline-import`、`cmd/parcel-dispatch`、`migrations/...`、`scripts/demo-seeds/...`、`internal/architecture/...` 全绿；机制清点重生成。
-- [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
+- [x] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
 
 ## 规模
 
@@ -217,3 +217,8 @@ L
 - **作者自定的格认可**：收寄只读来源指名的依据，「最后归入的交接单」只由重核读；证据册读不动整笔不形成答案（与 NO 自有册读不动同一待遇，ADR-0186）；重核新增结果 `AMBIGUITY_GONE_SCOPE_UNVERIFIED`。
 - **Standards**：棘轮基线随接上的入口剪条；脚本补执行位（`core.fileMode=false` 下票 09 落仓的预报脚本缺执行位），演示动线在一次性库实走。
 - **留给票 12、13**：交接单命令口与范围成立门铃；运营查阅 HTTP 读面与管理台带核对态。
+
+### 进 main 记录（2026-10-19，会话 idp-parcel-9b）
+
+- 分支 `claude-psxm11` 直接叠在远端 main 之上快进推送；机制清点重生成零差。
+- 推送方全量一次：钉 `18ad9d7a` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 152 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上 `gofmt -l .` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
