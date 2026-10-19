@@ -16,8 +16,8 @@ import (
 const chargeOccurrenceFormedConsumerName = "settlement-accounting/request-buy-evaluation-on-occurrence-formed"
 
 // ChargeOccurrenceFormedEventType 是本消费者认的事件类型：运输履约登记一份运输收费发生项之后交出的信封（ADR-0208）。
-// 字符串由消费方自己写出。生产方上线之前本消费者先登路由（ADR-0049：某类事件的生产方上线之前，它的消费者必须先在路由
-// 表里）；生产方上线那一笔用它的真适配器入队，在 cmd/parcel-dispatch 的真库装配用例里钉两串相等。
+// 字符串由消费方自己写出，不 import 生产方（ADR-0025）；消费者可以先于生产方登路由（ADR-0049）。两串相等只能由同时装配
+// 两边、用生产方真交接口入队的 cmd/parcel-dispatch 真库用例钉住——按本消费者认的载荷形状手工入队的用例钉不住它。
 const ChargeOccurrenceFormedEventType eventing.EventType = "transport-fulfillment.charge-occurrence.formed"
 
 // FormedChargeOccurrence 是译码后的发生项引用，恰是运输履约登记册的键（租户、发生项、有效性版本）。原因、业务时间、

@@ -25,6 +25,7 @@ Blocked by: [22](./22-supplier-agreement-version-point-read-and-tf-check-adapter
 - 棘轮剪掉一条。
 - 不碰交接、交付编排。
 - 演示：干线参与结束后登 `ACTUAL_FULFILLMENT` 答 201 → [26](./26-settlement-consumes-charge-occurrence-formed-to-request-buy-evaluation.md) → BUY 请求 → 计价评价 → ADR-0200 形成供应商预期成本（需 [30](./30-buy-cost-card-declares-amount-rounding.md)）。
+- 发生项上的 `agreement_ref` 照 ADR-0208 决定六写「对象/版本」；`cmd/parcel-dispatch` 有一条用例经本票的真交接口入队，钉生产方的类型串与载荷三键和 `sainbox.ChargeOccurrenceFormedEventType`、消费门认的形状相等（26 的派发用例按载荷形状手工入队，钉不住这一点；出自 26 评审）。
 
 ## 规模
 
