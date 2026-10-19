@@ -344,6 +344,12 @@ func (double *acceptanceRouteStore) Save(
 // acceptedShipmentRequest 真经 PS 领域把委托推到已接受（假状态钉不住基线取值的来处）。
 func acceptedShipmentRequest(t *testing.T) psdomain.ShipmentRequest {
 	t.Helper()
+	return acceptedShipmentRequestDeclaring(t, psdomain.DeclaredAddressElements{})
+}
+
+// acceptedShipmentRequestDeclaring 同 acceptedShipmentRequest，首个提交版本另申报给定的地址要素：受理基线就钉在这一版上。
+func acceptedShipmentRequestDeclaring(t *testing.T, elements psdomain.DeclaredAddressElements) psdomain.ShipmentRequest {
+	t.Helper()
 
 	identity, err := psdomain.NewSourceIdentity(
 		value(t, psdomain.NewTenantID, "tenant-1"),
@@ -410,6 +416,7 @@ func acceptedShipmentRequest(t *testing.T) psdomain.ShipmentRequest {
 		VersionID:   value(t, psdomain.NewSubmissionVersionID, "version-1"),
 		TaskID:      value(t, psdomain.NewAcceptanceDecisionTaskID, "task-1"),
 		SubmittedAt: decidedAt,
+		Elements:    elements,
 	})
 	if err != nil {
 		t.Fatalf("submit: %v", err)
