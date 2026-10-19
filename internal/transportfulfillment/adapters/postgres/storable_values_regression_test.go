@@ -63,11 +63,21 @@ func newStorableFixture(t *testing.T) *storableFixture {
 	if err != nil {
 		t.Fatalf("派送尝试册：%v", err)
 	}
+	schedules, err := adapter.NewTransportSchedules(db)
+	if err != nil {
+		t.Fatalf("班次登记：%v", err)
+	}
+	// 装载分配核班次在册：先登下夹具引用的那个班次，本文件要证的那几格才走得到登记册。
+	inTransaction(t, transactor, func(ctx context.Context) (ports.ScheduleSaveOutcome, error) {
+		return schedules.Save(ctx, formedSchedule(t, "SYN-TENANT-01", "SYN-SCHEDULE-1"))
+	})
 	clock := credentialClock{at: credentialNow}
 	tenant := segmentRef(t, domain.NewTenantID, "SYN-TENANT-01")
 	return &storableFixture{
 		t: t, pool: pool, transactor: transactor, tenant: tenant, assignments: assignments, facts: facts,
-		form:   application.NewFormLoadAssignmentHandler(application.FormLoadAssignmentDeps{Assignments: assignments, Clock: clock}),
+		form: application.NewFormLoadAssignmentHandler(application.FormLoadAssignmentDeps{
+			Assignments: assignments, Schedules: schedules, Clock: clock,
+		}),
 		record: application.NewRecordMovementFactHandler(application.RecordMovementFactDeps{Facts: facts, Clock: clock}),
 		delivery: &deliveryPrecisionFixture{
 			t: t, transactor: transactor, tenant: tenant,

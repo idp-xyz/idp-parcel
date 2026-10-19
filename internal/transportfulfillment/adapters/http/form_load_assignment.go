@@ -76,7 +76,7 @@ func writeLoadAssignmentOutcome(response http.ResponseWriter, result application
 			body.WithdrawnAt = rfc3339(withdrawnAt)
 		}
 	}
-	// ADR-0022：只有新形成了一版用 201；同版本已在册、分配已形成、未受理、未决都是形成了的答案（200）。
+	// ADR-0022：只有新形成了一版用 201；同版本已在册、分配已形成、班次不在册、未受理、未决都是形成了的答案（200）。
 	// 分配已形成回显的是链头，不是这次送来的那一份。
 	status := http.StatusOK
 	if result.Outcome() == application.LoadAssignmentFormed {

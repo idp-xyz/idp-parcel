@@ -97,6 +97,7 @@ func TestTheWiredSegmentOperationsRunTheClosureSequenceAgainstARealDatabase(t *t
 		t.Fatalf("重投派送任务：outcome=%v err=%v", again.Outcome(), err)
 	}
 
+	registerTransportSchedules(t, db, "SYN-TENANT-1", "SYN-SCHEDULE-1")
 	assignmentCommand := tfapp.FormLoadAssignmentCommand{
 		TenantID:   tenant,
 		Assignment: "SYN-LOAD-ASSIGNMENT-1",

@@ -18,6 +18,9 @@ import (
 //
 // `分配已形成`与`已在册`也分开：前者是同一分配下已有别的版本，交回的是**链头**（可能是变化版或撤回版），
 // 后者交回的是同一版本本身。调用方拿前者要去变化或撤回的入口，拿后者知道自己这一版早就在了。
+//
+// `班次不在册`独立成格而不并进`输入未受理`：载荷本身写得对，续办是去登记班次或换一个在册班次，不是改载荷
+// （ADR-0029 按恢复动作分格）。他租户名下的同名班次同落这一格——按本租户的键读不回，答复也不透露它在别处存在。
 type LoadAssignmentOutcome uint8
 
 const (
@@ -27,6 +30,7 @@ const (
 	LoadAssignmentNotAccepted
 	LoadAssignmentUndecided
 	LoadAssignmentAlreadyFormed
+	LoadAssignmentScheduleNotFound
 )
 
 func (outcome LoadAssignmentOutcome) String() string {
@@ -41,6 +45,8 @@ func (outcome LoadAssignmentOutcome) String() string {
 		return "LOAD_ASSIGNMENT_UNDECIDED"
 	case LoadAssignmentAlreadyFormed:
 		return "LOAD_ASSIGNMENT_ALREADY_FORMED"
+	case LoadAssignmentScheduleNotFound:
+		return "SCHEDULE_NOT_FOUND"
 	default:
 		return ""
 	}
@@ -81,6 +87,7 @@ func (result FormLoadAssignmentResult) ContinuationReference() string {
 
 type FormLoadAssignmentDeps struct {
 	Assignments ports.LoadAssignmentRegistry
+	Schedules   ports.TransportScheduleReader
 	Clock       ports.Clock
 }
 
@@ -93,7 +100,7 @@ func NewFormLoadAssignmentHandler(deps FormLoadAssignmentDeps) *FormLoadAssignme
 }
 
 // Form 形成一次装载分配的首版并登记：受理（对象范围等五件由 FormLoadAssignment 构造门把门）
-// → 幂等按（租户 + 分配 + 版本）分重放 → 按（租户 + 分配）认出已形成的分配 → 登记。
+// → 幂等按（租户 + 分配 + 版本）分重放 → 按（租户 + 分配）认出已形成的分配 → 按（租户 + 班次）核班次在册 → 登记。
 //
 // **分配是执行意图，不是已经发生的装载。** 它不证明物理装载完成，也不证明控制转移；实际装载、
 // 短装、多装或错装是与分配版本比较的独立事实，不修改分配历史。所以这里没有任何已装载入参，
@@ -133,6 +140,19 @@ func (handler *FormLoadAssignmentHandler) Form(
 	}
 	if formed {
 		return loadAssignmentAlreadyFormed(head), nil
+	}
+	// 班次核对排在重放与链头之后：那两格答的是「这次分配是谁」，交回的是库里那一版，与这次送来的班次无关——同一版本
+	// 重投带了别的班次照样是重放，已形成的分配照样该去变化或撤回的入口。先核班次会把它们改答成去登班次，而登完再投
+	// 还是那两格。
+	_, registered, err := handler.deps.Schedules.FindByKey(ctx, ports.ScheduleKey{
+		TenantID: key.TenantID,
+		Schedule: assignment.Schedule(),
+	})
+	if err != nil {
+		return loadAssignmentUndecided(command), nil
+	}
+	if !registered {
+		return FormLoadAssignmentResult{outcome: LoadAssignmentScheduleNotFound}, nil
 	}
 
 	record := ports.LoadAssignmentRecord{

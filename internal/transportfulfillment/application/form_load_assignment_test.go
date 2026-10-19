@@ -97,9 +97,47 @@ func (double *loadAssignmentRegistryDouble) Save(
 	return ports.LoadAssignmentSaved, nil
 }
 
+// registeredSchedulesDouble 是班次登记的只读替身：键是（租户 + 班次），与库面同键，他租户的同名班次因此天然读不回。
+type registeredSchedulesDouble struct {
+	registered map[string]bool
+	findErr    error
+	reads      int
+}
+
+func registeredSchedules(tenantAndSchedule ...[2]string) *registeredSchedulesDouble {
+	double := &registeredSchedulesDouble{registered: map[string]bool{}}
+	for _, pair := range tenantAndSchedule {
+		double.registered[pair[0]+"|"+pair[1]] = true
+	}
+	return double
+}
+
+func (double *registeredSchedulesDouble) FindByKey(
+	_ context.Context,
+	key ports.ScheduleKey,
+) (ports.ScheduleRecord, bool, error) {
+	double.reads++
+	if double.findErr != nil {
+		return ports.ScheduleRecord{}, false, double.findErr
+	}
+	if !double.registered[key.TenantID.String()+"|"+key.Schedule.String()] {
+		return ports.ScheduleRecord{}, false, nil
+	}
+	return ports.ScheduleRecord{Key: key}, true, nil
+}
+
+// newLoadAssignmentHandler 配一份只登了夹具班次的班次登记，班次核对不是重点的用例都走它。
 func newLoadAssignmentHandler(registry *loadAssignmentRegistryDouble) *application.FormLoadAssignmentHandler {
+	return newLoadAssignmentHandlerOver(registry, registeredSchedules([2]string{"tenant-1", "schedule-1"}))
+}
+
+func newLoadAssignmentHandlerOver(
+	registry *loadAssignmentRegistryDouble,
+	schedules *registeredSchedulesDouble,
+) *application.FormLoadAssignmentHandler {
 	return application.NewFormLoadAssignmentHandler(application.FormLoadAssignmentDeps{
 		Assignments: registry,
+		Schedules:   schedules,
 		Clock:       dispatchTaskClock{at: assignmentRecordedAt},
 	})
 }
@@ -353,5 +391,97 @@ func TestALoadAssignmentRegistryFailureIsUndecided(t *testing.T) {
 	}
 	if result.ContinuationReference() == "" {
 		t.Fatal("未决没有续办引用——调用方无从重试同一次分配")
+	}
+}
+
+// Covers: 票 demo-chain-gaps/19（AT-TF-099）——分配引用的班次不在本租户班次登记里，答`班次不在册`且不登记：从没登过的、乱填的、
+// 只登在他租户名下的同名班次同落这一格。续办是去登班次或换班次，与改载荷的`输入未受理`分开（ADR-0029）。
+func TestALoadAssignmentOnAnUnregisteredScheduleAnswersScheduleNotFound(t *testing.T) {
+	cases := map[string]*registeredSchedulesDouble{
+		"班次登记为空":       registeredSchedules(),
+		"本租户只登了别的班次":   registeredSchedules([2]string{"tenant-1", "schedule-9"}),
+		"同名班次只登在他租户名下": registeredSchedules([2]string{"tenant-2", "schedule-1"}),
+	}
+	for name, schedules := range cases {
+		t.Run(name, func(t *testing.T) {
+			registry := newLoadAssignmentRegistry()
+
+			result, err := newLoadAssignmentHandlerOver(registry, schedules).Form(t.Context(), formAssignmentCommand(t))
+			if err != nil {
+				t.Fatalf("班次不在册不该上抛：%v", err)
+			}
+			if result.Outcome() != application.LoadAssignmentScheduleNotFound {
+				t.Fatalf("outcome = %q, want SCHEDULE_NOT_FOUND", result.Outcome())
+			}
+			if _, recorded := result.Record(); recorded || result.ContinuationReference() != "" {
+				t.Fatal("班次不在册不该回显记录，也不该带续办引用")
+			}
+			if registry.saves != 0 {
+				t.Fatalf("班次不在册却写了 %d 次库", registry.saves)
+			}
+		})
+	}
+}
+
+// Covers: 票 demo-chain-gaps/19（AT-TF-099）——班次登记读不动答`未决`带续办引用，且不登记：读不到就判断不了班次在不在册，
+// 原样重试就可能过，与`班次不在册`的续办相反。
+func TestAScheduleRegistryReadFailureIsUndecided(t *testing.T) {
+	registry := newLoadAssignmentRegistry()
+	schedules := registeredSchedules([2]string{"tenant-1", "schedule-1"})
+	schedules.findErr = errors.New("班次登记不可用")
+
+	result, err := newLoadAssignmentHandlerOver(registry, schedules).Form(t.Context(), formAssignmentCommand(t))
+	if err != nil {
+		t.Fatalf("班次登记故障不该上抛：%v", err)
+	}
+	if result.Outcome() != application.LoadAssignmentUndecided || result.ContinuationReference() == "" {
+		t.Fatalf("outcome = %q continuation=%q, want 未决带续办引用", result.Outcome(), result.ContinuationReference())
+	}
+	if registry.saves != 0 {
+		t.Fatalf("读不到班次登记却写了 %d 次库", registry.saves)
+	}
+}
+
+// Covers: 票 demo-chain-gaps/19（AT-TF-099）——班次核对排在重放与链头之后：同一版本重投、同一分配换版本号再投，即便这次送来的
+// 班次不在册（甚至班次登记读不动），仍各答`已在册`与`分配已形成`并回显库里那一版，一次都不读班次登记。
+func TestReplayAndChainHeadAnswerBeforeTheScheduleIsChecked(t *testing.T) {
+	registry := newLoadAssignmentRegistry()
+	if _, err := newLoadAssignmentHandler(registry).Form(t.Context(), formAssignmentCommand(t)); err != nil {
+		t.Fatalf("首版：%v", err)
+	}
+	savesAfterFirst := registry.saves
+
+	for name, schedules := range map[string]*registeredSchedulesDouble{
+		"班次登记为空":  registeredSchedules(),
+		"班次登记读不动": {registered: map[string]bool{}, findErr: errors.New("班次登记不可用")},
+	} {
+		t.Run(name, func(t *testing.T) {
+			handler := newLoadAssignmentHandlerOver(registry, schedules)
+
+			replay := formAssignmentCommand(t)
+			replay.Schedule = "schedule-unregistered"
+			replayed, err := handler.Form(t.Context(), replay)
+			if err != nil || replayed.Outcome() != application.LoadAssignmentVersionExists {
+				t.Fatalf("同版本重投：outcome=%q err=%v, want LOAD_ASSIGNMENT_VERSION_EXISTS", replayed.Outcome(), err)
+			}
+			if record, _ := replayed.Record(); record.Assignment.Schedule().String() != "schedule-1" {
+				t.Fatalf("重放没有回显原版本的班次：%q", record.Assignment.Schedule())
+			}
+
+			another := formAssignmentCommand(t)
+			another.Version = "LAV-000000000002"
+			another.Schedule = "schedule-unregistered"
+			again, err := handler.Form(t.Context(), another)
+			if err != nil || again.Outcome() != application.LoadAssignmentAlreadyFormed {
+				t.Fatalf("换版本号再投：outcome=%q err=%v, want LOAD_ASSIGNMENT_ALREADY_FORMED", again.Outcome(), err)
+			}
+
+			if schedules.reads != 0 {
+				t.Fatalf("重放与链头之前读了 %d 次班次登记", schedules.reads)
+			}
+			if registry.saves != savesAfterFirst {
+				t.Fatalf("又登记了 %d 次", registry.saves-savesAfterFirst)
+			}
+		})
 	}
 }

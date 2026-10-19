@@ -104,6 +104,33 @@ func (double *loadAssignmentRegistryDouble) Save(
 	return ports.LoadAssignmentSaved, nil
 }
 
+// scheduleRegistryDouble 是班次登记的只读替身，键与库面同为（租户 + 班次）。findErr 置上时一律读不动。
+type scheduleRegistryDouble struct {
+	registered map[string]bool
+	findErr    error
+}
+
+func registeredSchedules(tenant string, schedules ...string) *scheduleRegistryDouble {
+	double := &scheduleRegistryDouble{registered: map[string]bool{}}
+	for _, schedule := range schedules {
+		double.registered[tenant+"|"+schedule] = true
+	}
+	return double
+}
+
+func (double *scheduleRegistryDouble) FindByKey(
+	_ context.Context,
+	key ports.ScheduleKey,
+) (ports.ScheduleRecord, bool, error) {
+	if double.findErr != nil {
+		return ports.ScheduleRecord{}, false, double.findErr
+	}
+	if !double.registered[key.TenantID.String()+"|"+key.Schedule.String()] {
+		return ports.ScheduleRecord{}, false, nil
+	}
+	return ports.ScheduleRecord{Key: key}, true, nil
+}
+
 // ---- 通用 intake 替身：JSON 体 → 命令，租户从信封给 ----
 
 type jsonIntake[C any] struct {
@@ -528,7 +555,11 @@ func TestOpenDispatchTaskRegistersTheWorkScope(t *testing.T) {
 // Covers: 运输运营形成装载分配——201 LOAD_ASSIGNMENT_FORMED 带分配、班次、版本与成员；同版本重投交回原版本
 // LOAD_ASSIGNMENT_VERSION_EXISTS。分配是执行意图不是已发生的装载：响应里没有任何「已装载」字段。
 func TestFormLoadAssignmentRegistersTheVersion(t *testing.T) {
-	handler := application.NewFormLoadAssignmentHandler(application.FormLoadAssignmentDeps{Assignments: newLoadAssignmentRegistry(), Clock: tfClock{at: time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)}})
+	handler := application.NewFormLoadAssignmentHandler(application.FormLoadAssignmentDeps{
+		Assignments: newLoadAssignmentRegistry(),
+		Schedules:   registeredSchedules("tenant-1", "schedule-1"),
+		Clock:       tfClock{at: time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)},
+	})
 	endpoint := tfhttp.NewFormLoadAssignmentEndpoint(newLoadAssignmentIntake(t), handler)
 	body := map[string]any{"assignment": "load-assignment-1", "schedule": "schedule-1", "members": []string{"parcel-1", "parcel-2"}, "version": "LAV-000000000001", "assignedAt": "2026-09-05T12:00:00Z"}
 
@@ -550,7 +581,11 @@ func TestFormLoadAssignmentRegistersTheVersion(t *testing.T) {
 // Covers: 票 tf-face-algebra/02——同一分配换版本号再投答 200 LOAD_ASSIGNMENT_ALREADY_FORMED，回显的是链头首版
 // （版本、班次与成员都是首版的），不是这次送来的那一份。
 func TestFormLoadAssignmentAnswersAlreadyFormedWithTheChainHead(t *testing.T) {
-	handler := application.NewFormLoadAssignmentHandler(application.FormLoadAssignmentDeps{Assignments: newLoadAssignmentRegistry(), Clock: tfClock{at: time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)}})
+	handler := application.NewFormLoadAssignmentHandler(application.FormLoadAssignmentDeps{
+		Assignments: newLoadAssignmentRegistry(),
+		Schedules:   registeredSchedules("tenant-1", "schedule-1"),
+		Clock:       tfClock{at: time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)},
+	})
 	endpoint := tfhttp.NewFormLoadAssignmentEndpoint(newLoadAssignmentIntake(t), handler)
 	first := map[string]any{"assignment": "load-assignment-1", "schedule": "schedule-1", "members": []string{"parcel-1", "parcel-2"}, "version": "LAV-000000000001", "assignedAt": "2026-09-05T12:00:00Z"}
 	if formed := postTo(t, endpoint, "/transport-fulfillment-load-assignment-registrations", first); formed.Code != http.StatusCreated {

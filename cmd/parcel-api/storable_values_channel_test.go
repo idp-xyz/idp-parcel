@@ -45,6 +45,7 @@ func notAcceptedOnTheChannel(t *testing.T, name, want string, response *httptest
 // 版本行与成员行零行；零点后一微秒照常形成，原样重放答已在册。
 func TestLoadAssignmentUnstorableValuesAreNotAcceptedOnTheProductionChannel(t *testing.T) {
 	fixture := newChainFaceFixture(t)
+	fixture.registerSchedules(t, "SYN-SCHEDULE-01")
 	post := func(body string) *httptest.ResponseRecorder {
 		request := httptest.NewRequest(http.MethodPost, "/transport-fulfillment-load-assignment-registrations", strings.NewReader(body))
 		request.Header.Set("Authorization", "Bearer presented.operator.token")

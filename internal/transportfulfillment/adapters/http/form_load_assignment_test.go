@@ -2,6 +2,7 @@ package tfhttp_test
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"sort"
@@ -24,10 +25,20 @@ var synLoadAssignedAt = time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)
 
 func synLoadAssignmentEndpoint(t *testing.T, registry *loadAssignmentRegistryDouble) http.Handler {
 	t.Helper()
+	return synLoadAssignmentEndpointOver(t, registry, registeredSchedules("SYN-TENANT-01", "SYN-SCHEDULE-1"))
+}
+
+func synLoadAssignmentEndpointOver(
+	t *testing.T,
+	registry *loadAssignmentRegistryDouble,
+	schedules *scheduleRegistryDouble,
+) http.Handler {
+	t.Helper()
 	intake := newLoadAssignmentIntake(t)
 	intake.tenant = httpValue(t, domain.NewTenantID, "SYN-TENANT-01")
 	handler := application.NewFormLoadAssignmentHandler(application.FormLoadAssignmentDeps{
 		Assignments: registry,
+		Schedules:   schedules,
 		Clock:       tfClock{at: synLoadAssignedAt},
 	})
 	return tfhttp.NewFormLoadAssignmentEndpoint(intake, handler)
@@ -160,4 +171,63 @@ func TestFormLoadAssignmentAlreadyFormedKeepsItsShapeForALiveChainHead(t *testin
 			t.Fatalf("键集 = %s, want %s", got, liveShape)
 		}
 	})
+}
+
+func synFirstVersionBody(schedule string) map[string]any {
+	return map[string]any{
+		"assignment": "SYN-LA-0002",
+		"schedule":   schedule,
+		"members":    []string{"SYN-PARCEL-1"},
+		"version":    "SYN-LAV-1",
+		"assignedAt": "2026-09-05T12:00:00Z",
+	}
+}
+
+// Covers: 票 demo-chain-gaps/19（AT-TF-099）——班次不在本租户班次登记里答 200 SCHEDULE_NOT_FOUND，答复只有 outcome 一键：没有形成
+// 任何版本可回显，也不带续办引用（原样重投仍是这一格）；只登在他租户名下的同名班次同答这一格，答复不透露它在别处存在。
+// 同一分配换成在册班次再投照常 201，证这一格没有留下任何东西挡住它。
+func TestFormLoadAssignmentAnswersScheduleNotFound(t *testing.T) {
+	registry := newLoadAssignmentRegistry()
+	schedules := registeredSchedules("SYN-TENANT-01", "SYN-SCHEDULE-1")
+	schedules.registered["SYN-TENANT-02|SYN-SCHEDULE-OTHER-TENANT"] = true
+	endpoint := synLoadAssignmentEndpointOver(t, registry, schedules)
+
+	for _, schedule := range []string{"SYN-SCHEDULE-NEVER-REGISTERED", "SYN-SCHEDULE-OTHER-TENANT"} {
+		answered := postTo(t, endpoint, loadAssignmentPath, synFirstVersionBody(schedule))
+		if answered.Code != http.StatusOK {
+			t.Fatalf("%s：status = %d, want 200; body = %s", schedule, answered.Code, answered.Body.String())
+		}
+		raw := decodeRawAnswer(t, answered)
+		if raw["outcome"] != "SCHEDULE_NOT_FOUND" || answerKeys(raw) != "outcome" {
+			t.Fatalf("%s：want 只有 outcome 的 SCHEDULE_NOT_FOUND，got %s", schedule, answered.Body.String())
+		}
+	}
+	if len(registry.records) != 0 {
+		t.Fatalf("班次不在册却登记了 %d 个版本", len(registry.records))
+	}
+
+	formed := postTo(t, endpoint, loadAssignmentPath, synFirstVersionBody("SYN-SCHEDULE-1"))
+	if formed.Code != http.StatusCreated || decodeRawAnswer(t, formed)["outcome"] != "LOAD_ASSIGNMENT_FORMED" {
+		t.Fatalf("换成在册班次：status = %d body = %s", formed.Code, formed.Body.String())
+	}
+}
+
+// Covers: 票 demo-chain-gaps/19（AT-TF-099）——班次登记读不动答 200 LOAD_ASSIGNMENT_UNDECIDED 带续办引用，与班次不在册分开：
+// 前者原样重试就可能过，后者要去登班次或换班次。
+func TestFormLoadAssignmentIsUndecidedWhenTheScheduleRegistryIsUnreadable(t *testing.T) {
+	registry := newLoadAssignmentRegistry()
+	schedules := registeredSchedules("SYN-TENANT-01", "SYN-SCHEDULE-1")
+	schedules.findErr = errors.New("班次登记不可用")
+
+	answered := postTo(t, synLoadAssignmentEndpointOver(t, registry, schedules), loadAssignmentPath, synFirstVersionBody("SYN-SCHEDULE-1"))
+	if answered.Code != http.StatusOK {
+		t.Fatalf("status = %d, want 200; body = %s", answered.Code, answered.Body.String())
+	}
+	raw := decodeRawAnswer(t, answered)
+	if raw["outcome"] != "LOAD_ASSIGNMENT_UNDECIDED" || raw["continuationReference"] == nil {
+		t.Fatalf("want 带续办引用的 LOAD_ASSIGNMENT_UNDECIDED，got %s", answered.Body.String())
+	}
+	if len(registry.records) != 0 {
+		t.Fatalf("班次登记读不动却登记了 %d 个版本", len(registry.records))
+	}
 }

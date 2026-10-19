@@ -132,8 +132,8 @@ type segmentOperations struct {
 // `/transport-fulfillment-load-assignment-registrations` 与 `/transport-fulfillment-participation-terminations` 背后的真编排。
 //
 // 缝全接真：段登记册、实际承运商判断登记册（终止编排「进下一段」立新段时同笔铸首版）、派送任务登记册、
-// 装载分配登记册、交接登记册与交付登记库（终止那一路不读后两个，但 EndFulfillmentParticipationDeps
-// 是一份，装配点不为一个口做半份 Deps）、时钟。
+// 装载分配登记册与班次登记（装载分配核班次在册，只读）、交接登记册与交付登记库（终止那一路不读后两个，但
+// EndFulfillmentParticipationDeps 是一份，装配点不为一个口做半份 Deps）、时钟。
 func buildSegmentOperations(db *bentopg.DB) (segmentOperations, error) {
 	segments, err := tfpostgres.NewFulfillmentSegments(db)
 	if err != nil {
@@ -150,6 +150,10 @@ func buildSegmentOperations(db *bentopg.DB) (segmentOperations, error) {
 	assignments, err := tfpostgres.NewLoadAssignments(db)
 	if err != nil {
 		return segmentOperations{}, fmt.Errorf("parcel-api: load assignments: %w", err)
+	}
+	schedules, err := tfpostgres.NewTransportSchedules(db)
+	if err != nil {
+		return segmentOperations{}, fmt.Errorf("parcel-api: transport schedules: %w", err)
 	}
 	handovers, err := tfpostgres.NewTransportHandovers(db)
 	if err != nil {
@@ -172,7 +176,11 @@ func buildSegmentOperations(db *bentopg.DB) (segmentOperations, error) {
 		},
 		assign: transactionalLoadAssigner{
 			transactor: transactor,
-			inner:      tfapp.NewFormLoadAssignmentHandler(tfapp.FormLoadAssignmentDeps{Assignments: assignments, Clock: clock}),
+			inner: tfapp.NewFormLoadAssignmentHandler(tfapp.FormLoadAssignmentDeps{
+				Assignments: assignments,
+				Schedules:   schedules,
+				Clock:       clock,
+			}),
 		},
 		enderOf: transactionalParticipationEnder{
 			transactor: transactor,

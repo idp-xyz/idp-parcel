@@ -25,7 +25,9 @@ import (
 )
 
 // 本文件在生产端点构造与生产准入桥上证票 tf-face-algebra/02：装载分配登记口只形成一次分配的首版，该分配已有任何
-// 版本时答`分配已形成`并回显链头，不另起根——顺序到达、撤回之后、并发到达三条路各答其格。测试输入是隔离合成，只记 `S`。
+// 版本时答`分配已形成`并回显链头，不另起根——顺序到达、撤回之后、并发到达三条路各答其格。另证票 demo-chain-gaps/19：
+// 分配引用的班次须在本租户班次登记里，所以凡要走到登记册的用例都先经生产班次登记适配器补登班次行。测试输入是隔离合成，
+// 只记 `S`。
 
 type chainFaceView struct {
 	Outcome    string   `json:"outcome"`
@@ -77,6 +79,57 @@ func newChainFaceFixture(t *testing.T) chainFaceFixture {
 		endpoint:   tfhttp.NewFormLoadAssignmentEndpoint(decisions.transport, operations.assign),
 		repository: repository,
 	}
+}
+
+// registerTransportSchedules 经生产班次登记适配器与领域构造门为 tenant 登下这些班次，不手插行：库面约束与读回构造门
+// 都与生产同一条路，班次登记的形状变了，这里随构造门一起红。
+func registerTransportSchedules(t *testing.T, db *bentopg.DB, tenant string, schedules ...string) {
+	t.Helper()
+	store, err := tfpostgres.NewTransportSchedules(db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tenantID, err := domain.NewTenantID(tenant)
+	if err != nil {
+		t.Fatal(err)
+	}
+	const direction = "SYN-DIRECTION-01"
+	departsAt := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
+	_, digest, err := domain.CanonicalizeEstablishSchedulePayload(direction, departsAt)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, id := range schedules {
+		ref, err := domain.NewScheduleReference(id)
+		if err != nil {
+			t.Fatal(err)
+		}
+		schedule, err := domain.FormTransportSchedule(domain.TransportScheduleSpec{
+			TenantID: tenantID, Schedule: ref, Direction: direction, DepartsAt: departsAt,
+		})
+		if err != nil {
+			t.Fatalf("形成班次夹具 %s：%v", id, err)
+		}
+		if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+			saved, saveErr := store.Save(txCtx, ports.ScheduleRecord{
+				Key:           ports.ScheduleKey{TenantID: tenantID, Schedule: ref},
+				ContentDigest: digest,
+				Schedule:      schedule,
+				RecordedAt:    departsAt.Add(-24 * time.Hour),
+			})
+			if saveErr == nil && saved != ports.ScheduleSaved {
+				saveErr = fmt.Errorf("班次 %s outcome = %d", id, saved)
+			}
+			return saveErr
+		}); err != nil {
+			t.Fatalf("登班次 %s：%v", id, err)
+		}
+	}
+}
+
+func (fixture chainFaceFixture) registerSchedules(t *testing.T, schedules ...string) {
+	t.Helper()
+	registerTransportSchedules(t, fixture.db, "SYN-TENANT-01", schedules...)
 }
 
 func chainFaceBody(assignment, schedule, version, assignedAt string, members ...string) string {
@@ -157,6 +210,8 @@ func chainFaceRoot(t *testing.T, assignment, version string) ports.LoadAssignmen
 func TestTheLoadAssignmentFaceAnswersAlreadyFormedForASecondVersion(t *testing.T) {
 	fixture := newChainFaceFixture(t)
 	const assignment = "SYN-LA-CHAIN-SEQ"
+	// 只登 S1：第二投带的 S2 不在册，照样答`分配已形成`——班次核对排在链头之后。
+	fixture.registerSchedules(t, "SYN-SCHEDULE-S1")
 
 	code, view, raw := fixture.post(t, chainFaceBody(assignment, "SYN-SCHEDULE-S1", "v1", "2026-10-18T08:00:00Z", "SYN-PARCEL-X", "SYN-PARCEL-Y"))
 	if code != http.StatusCreated || view.Outcome != "LOAD_ASSIGNMENT_FORMED" {
@@ -206,6 +261,7 @@ func TestTheLoadAssignmentFaceAnswersAlreadyFormedForASecondVersion(t *testing.T
 func TestTheLoadAssignmentFaceAnswersAlreadyFormedAfterAWithdrawnChain(t *testing.T) {
 	fixture := newChainFaceFixture(t)
 	const assignment = "SYN-LA-CHAIN-WD"
+	fixture.registerSchedules(t, "SYN-SCHEDULE-W")
 	first := chainFaceBody(assignment, "SYN-SCHEDULE-W", "v1", "2026-10-18T08:00:00Z", "SYN-PARCEL-W1")
 
 	if code, view, raw := fixture.post(t, first); code != http.StatusCreated || view.Outcome != "LOAD_ASSIGNMENT_FORMED" {
@@ -250,6 +306,7 @@ func TestTheLoadAssignmentFaceAnswersAlreadyFormedAfterAWithdrawnChain(t *testin
 func TestALosingConcurrentFirstVersionAnswersAlreadyFormedWithTheWinner(t *testing.T) {
 	fixture := newChainFaceFixture(t)
 	const assignment = "SYN-LA-CHAIN-RACE"
+	fixture.registerSchedules(t, "SYN-SCHEDULE-R")
 
 	observer, err := pgx.Connect(t.Context(), pgtest.AdminDSN(t))
 	if err != nil {
@@ -332,6 +389,7 @@ func TestALosingConcurrentFirstVersionAnswersAlreadyFormedWithTheWinner(t *testi
 // 交错由调度决定，几轮里落在预检还是落在索引上都应同答；确定落在索引上的那条路见上一个用例。
 func TestConcurrentFirstVersionsThroughTheFaceFormExactlyOne(t *testing.T) {
 	fixture := newChainFaceFixture(t)
+	fixture.registerSchedules(t, "SYN-SCHEDULE-P")
 
 	for round := range 4 {
 		assignment := fmt.Sprintf("SYN-LA-CHAIN-PAIR-%d", round)
@@ -367,5 +425,30 @@ func TestConcurrentFirstVersionsThroughTheFaceFormExactlyOne(t *testing.T) {
 		if roots := fixture.count(t, assignment, "corrects_version IS NULL"); roots != 1 {
 			t.Fatalf("第 %d 轮首版 %d 个, want 1", round, roots)
 		}
+	}
+}
+
+// Covers: 票 demo-chain-gaps/19（AT-TF-099；真库、生产端点构造与生产准入桥）——对本租户在册班次分配答 201；乱填的班次与只登在他租户
+// 名下的同名班次都答 200 SCHEDULE_NOT_FOUND，答复只有 outcome，版本行与成员行零行；同一分配随后换成在册班次照常形成。
+func TestTheLoadAssignmentFaceChecksTheScheduleIsRegistered(t *testing.T) {
+	fixture := newChainFaceFixture(t)
+	fixture.registerSchedules(t, "SYN-SCHEDULE-REGISTERED")
+	registerTransportSchedules(t, fixture.db, "SYN-TENANT-02", "SYN-SCHEDULE-OTHER-TENANT")
+
+	for _, schedule := range []string{"SYN-SCHEDULE-MADE-UP", "SYN-SCHEDULE-OTHER-TENANT"} {
+		code, view, raw := fixture.post(t, chainFaceBody("SYN-LA-SCHEDULE-CHECK", schedule, "v1", "2026-10-18T08:00:00Z", "SYN-PARCEL-S"))
+		if code != http.StatusOK || view.Outcome != "SCHEDULE_NOT_FOUND" || strings.TrimSpace(raw) != `{"outcome":"SCHEDULE_NOT_FOUND"}` {
+			t.Fatalf("%s：%d %q, want 200 只有 outcome 的 SCHEDULE_NOT_FOUND", schedule, code, raw)
+		}
+	}
+	for _, table := range []string{"load_assignment", "load_assignment_member"} {
+		if rows := tableRows(t, fixture.pool, table); rows != 0 {
+			t.Fatalf("班次不在册却落了 %s %d 行", table, rows)
+		}
+	}
+
+	code, view, raw := fixture.post(t, chainFaceBody("SYN-LA-SCHEDULE-CHECK", "SYN-SCHEDULE-REGISTERED", "v1", "2026-10-18T08:00:00Z", "SYN-PARCEL-S"))
+	if code != http.StatusCreated || view.Outcome != "LOAD_ASSIGNMENT_FORMED" || view.Schedule != "SYN-SCHEDULE-REGISTERED" {
+		t.Fatalf("在册班次：%d %s, want 201 LOAD_ASSIGNMENT_FORMED", code, raw)
 	}
 }

@@ -112,6 +112,7 @@ func TestTheWiredAdmissionScopeLetsLoadAssignmentAndTerminationThrough(t *testin
 	}
 	registerOperationDecisionAdmission(t, db, isolatedSelfAuthority,
 		accessidentity.DecisionLoadAssignment, accessidentity.DecisionParticipationTermination)
+	registerTransportSchedules(t, db, "SYN-TENANT-01", "SYN-SCHEDULE-OC19")
 	operations, err := buildSegmentOperations(db)
 	if err != nil {
 		t.Fatalf("装配段作业编排：%v", err)
