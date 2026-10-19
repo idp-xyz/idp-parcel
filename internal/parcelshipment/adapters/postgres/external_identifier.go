@@ -34,6 +34,9 @@ func NewExternalIdentifiers(db *bentopg.DB) (*ExternalIdentifiers, error) {
 // FindParcelsByExternalIdentifier 逐字比对号码，交回此刻适用、标识包裹的关联所指的包裹，去重。已有终态（已作废、
 // 已被替代）的关联不算——它的号只留历史，不再标识谁。
 //
+// 号码不受入册的字节界约束（ExternalIdentifierLookupNumber）：这里只按号比较，不构造索引行，长号不会撞索引行上限；门立起来
+// 之前进册的超长号照样查得到，册里没有的照常答空。
+//
 // 不按委托状态过滤：关联只随它的来源事实写下（客户包裹件号随委托接受，渠道包裹件号随面单交易包裹结果受理），接受
 // 后的取消、终局也不改它的适用状态（PS CONTEXT Rules）——已取消的包裹到站仍要被认出来，节点才落得下`已取消`标记。ORDER BY 只为候选次序稳定，不表示谁优先。
 //
@@ -43,7 +46,7 @@ func NewExternalIdentifiers(db *bentopg.DB) (*ExternalIdentifiers, error) {
 func (view *ExternalIdentifiers) FindParcelsByExternalIdentifier(
 	ctx context.Context,
 	tenant domain.TenantID,
-	number domain.ExternalIdentifierNumber,
+	number domain.ExternalIdentifierLookupNumber,
 ) (ports.ExternalIdentifierParcels, error) {
 	if tenant.String() == "" || number.String() == "" {
 		return ports.ExternalIdentifierParcels{}, fmt.Errorf("find parcels by external identifier: tenant and number are required")

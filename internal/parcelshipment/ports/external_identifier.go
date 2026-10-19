@@ -10,13 +10,14 @@ import (
 // 交回多件、去重，不按形成时间、来源或分配方挑一件——消费方据候选与歧义信号判身份。不交分配方、客户账户或委托
 // （CONTEXT-MAP `parcel-shipment → node-operations`）。查无交空；依赖读不动作为错误返回，空与「没查到」不是一回事。
 //
-// 号码收成品类型：过不了 NewExternalIdentifierNumber 的号（ErrExternalIdentifierNumberNotStorable）交不进来，它也不可能在册，
-// 消费方在构造那一步就答查无此号、不必来问；把它当成读不动，会让一个确定不在册的号落进永远续不上的重核。
+// 号码收核对用的类型 ExternalIdentifierLookupNumber，不收入册的 ExternalIdentifierNumber：入册门只管写，读的一侧不拿它挡已在册
+// 的号，门立起来之前进册的超长号照样比得上。带 NUL 的号构造不出来，它也不可能在册，消费方在构造那一步就答查无此号、不必
+// 来问；把它当成读不动，会让一个确定不在册的号落进永远续不上的重核。
 type ParcelExternalIdentifierView interface {
 	FindParcelsByExternalIdentifier(
 		ctx context.Context,
 		tenant domain.TenantID,
-		number domain.ExternalIdentifierNumber,
+		number domain.ExternalIdentifierLookupNumber,
 	) (ExternalIdentifierParcels, error)
 }
 

@@ -25,7 +25,7 @@ type externalIdentifiersFake struct {
 }
 
 func (fake *externalIdentifiersFake) FindParcelsByExternalIdentifier(
-	_ context.Context, tenant psdomain.TenantID, number psdomain.ExternalIdentifierNumber,
+	_ context.Context, tenant psdomain.TenantID, number psdomain.ExternalIdentifierLookupNumber,
 ) (psports.ExternalIdentifierParcels, error) {
 	fake.asked = append(fake.asked, tenant.String()+"|"+number.String())
 	return psports.ExternalIdentifierParcels{Parcels: fake.parcels, DeclaredBySubmittedRequest: fake.declared}, fake.err
@@ -120,10 +120,10 @@ func TestABlankMarkHasNoCandidatesAndAReadFailureIsReturned(t *testing.T) {
 	}
 }
 
-// Covers: 票 ps-external-mark-relations/06 裁定三——观察到的号过不了 PS 号码的构造门（超过 512 字节、带 NUL），就不可能在册：
-// 答零个候选、不带歧义信号、不报错，也不去问 PS。报错会被收寄读成身份读不动，落未核对的待识别、响重核门铃，而重核拿着
-// 同一个号永远续不上。PS 那边哪怕有歧义信号也轮不到它：号根本没交过去。
-func TestAMarkTheRegisterCannotHoldHasNoCandidatesAndIsNotAnError(t *testing.T) {
+// Covers: 票 ps-external-mark-relations/06 裁定三与裁定补——带 NUL 的号 Postgres 的 text 存不下，确定不在册：答零个候选、不带
+// 歧义信号、不报错，也不去问 PS（问了反倒在库面报错，收寄会读成身份读不动、落进永远续不上的重核）。只是超长的号照常原样
+// 去问：入册门只管写，门立起来之前进册的超长号要核得到，PS 答什么就译什么。
+func TestANulMarkIsNotAskedAndAnOverlongMarkIsStillAsked(t *testing.T) {
 	fake := &externalIdentifiersFake{
 		parcels:  []psdomain.DeclaredParcelID{must(t, psdomain.NewDeclaredParcelID, "DPCL-1")},
 		declared: true,
@@ -132,16 +132,17 @@ func TestAMarkTheRegisterCannotHoldHasNoCandidatesAndIsNotAnError(t *testing.T) 
 	if err != nil {
 		t.Fatal(err)
 	}
-	for name, mark := range map[string]string{
-		"513 字节": strings.Repeat("M", 513),
-		"带 NUL":  "SYN-PCL\x00-01",
-	} {
-		answer, err := resolveAnswer(t, view, mark)
-		if err != nil || len(answer.Candidates) != 0 || answer.Ambiguous {
-			t.Fatalf("%s：answer = %+v err = %v, want 零候选、无信号、不报错", name, answer, err)
-		}
+	answer, err := resolveAnswer(t, view, "SYN-PCL\x00-01")
+	if err != nil || len(answer.Candidates) != 0 || answer.Ambiguous || len(fake.asked) != 0 {
+		t.Fatalf("带 NUL：answer = %+v err = %v、PS 被问 %d 次, want 零候选、无信号、不报错、不去问", answer, err, len(fake.asked))
 	}
-	if len(fake.asked) != 0 {
-		t.Fatalf("PS 被问 %d 次, want 0——不可能在册的号不必去问", len(fake.asked))
+
+	overlong := strings.Repeat("M", 513)
+	answer, err = resolveAnswer(t, view, overlong)
+	if err != nil || !answer.Ambiguous || len(answer.Candidates) != 1 || answer.Candidates[0].String() != "DPCL-1" {
+		t.Fatalf("513 字节：answer = %+v err = %v, want PS 答的候选与信号照转", answer, err)
+	}
+	if !slices.Equal(fake.asked, []string{"SYN-TENANT-01|" + overlong}) {
+		t.Fatalf("PS 被问 %d 次, want 原样的超长号恰一次", len(fake.asked))
 	}
 }

@@ -122,7 +122,7 @@ func TestAChannelResultWhoseNumberCannotEnterTheRegisterIsNotAccepted(t *testing
 	if err != nil {
 		t.Fatalf("构造按号核对读口：%v", err)
 	}
-	found, err := view.FindParcelsByExternalIdentifier(ctx, tenant, mustBuild(t, domain.NewExternalIdentifierNumber, longest))
+	found, err := view.FindParcelsByExternalIdentifier(ctx, tenant, mustBuild(t, domain.NewExternalIdentifierLookupNumber, longest))
 	if err != nil || len(found.Parcels) != 1 || found.Parcels[0].String() != "parcel-1" {
 		t.Fatalf("按 512 字节的号查回 %+v err = %v, want 恰 parcel-1", found, err)
 	}

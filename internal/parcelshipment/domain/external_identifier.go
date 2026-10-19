@@ -12,7 +12,8 @@ import (
 var ErrInvalidCustomerParcelNumber = errors.New("parcel shipment: invalid customer parcel number")
 
 // ErrExternalIdentifierNumberNotStorable 说明号码存不进外部标识关联册。它是确定的：同一个号再交多少次都一样，所以写入方
-// 答坏输入、不答依赖故障；核对的一侧据此答查无此号——立不起来的号不可能在册。
+// 答坏输入、不答依赖故障。核对的一侧只在号带 NUL 时遇到它（NewExternalIdentifierLookupNumber），那样的号不可能在册，据此答
+// 查无此号。
 var ErrExternalIdentifierNumberNotStorable = errors.New("parcel shipment: external identifier number cannot enter the register")
 
 // externalIdentifierNumberMaxBytes 是号码「存得下、索引得了」的机制界（票 ps-external-mark-relations/06 裁定一），不是业务
@@ -31,8 +32,8 @@ func NewExternalIdentifierNumber(value string) (ExternalIdentifierNumber, error)
 	if err != nil {
 		return ExternalIdentifierNumber{}, err
 	}
-	if strings.ContainsRune(value, 0) {
-		return ExternalIdentifierNumber{}, fmt.Errorf("%w: it carries a NUL character", ErrExternalIdentifierNumberNotStorable)
+	if err := refuseNUL(value); err != nil {
+		return ExternalIdentifierNumber{}, err
 	}
 	if len(value) > externalIdentifierNumberMaxBytes {
 		return ExternalIdentifierNumber{}, fmt.Errorf("%w: it is %d bytes, over the %d-byte limit",
@@ -47,6 +48,33 @@ func NewExternalIdentifierNumber(value string) (ExternalIdentifierNumber, error)
 func RehydrateExternalIdentifierNumber(value string) (ExternalIdentifierNumber, error) {
 	required, err := newRequiredValue("external identifier number", value)
 	return ExternalIdentifierNumber{required}, err
+}
+
+// ExternalIdentifierLookupNumber 是拿去按号核对的号码（ports.ParcelExternalIdentifierView）。它与 ExternalIdentifierNumber 分成
+// 两个类型：入册门只管写，读的一侧不拿它挡已在册的号——门立起来之前进册的号可能超过字节界，现场扫到同一个号时照样要比得上
+// （票 ps-external-mark-relations/06 裁定补）。分成两个类型，核对用的号就交不进任何写入方，也就绕不过入册门。
+type ExternalIdentifierLookupNumber struct{ requiredValue }
+
+// NewExternalIdentifierLookupNumber 只拒全空白与带 NUL 的号，长度不设界：读口按号比较、不构造索引行，长号不报错，查不到照常
+// 答空。带 NUL 的号 Postgres 的 text 存不下，确定不在册，拿去查反倒在库面报错，所以在这里拒。号码逐字，不折算（ADR-0184
+// 决定五）。
+func NewExternalIdentifierLookupNumber(value string) (ExternalIdentifierLookupNumber, error) {
+	required, err := newRequiredValue("external identifier lookup number", value)
+	if err != nil {
+		return ExternalIdentifierLookupNumber{}, err
+	}
+	if err := refuseNUL(value); err != nil {
+		return ExternalIdentifierLookupNumber{}, err
+	}
+	return ExternalIdentifierLookupNumber{required}, nil
+}
+
+// refuseNUL 是入册门与核对用号共用的那一格：Postgres 的 text 存不下 NUL，带它的号写不进册，也不可能已在册。
+func refuseNUL(value string) error {
+	if strings.ContainsRune(value, 0) {
+		return fmt.Errorf("%w: it carries a NUL character", ErrExternalIdentifierNumberNotStorable)
+	}
+	return nil
 }
 
 // ExternalIdentifierKind 是标识类型的封闭集合。类型决定被标识对象的种类与分配方的种类（ADR-0184 决定二）：

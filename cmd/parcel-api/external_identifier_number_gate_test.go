@@ -11,15 +11,19 @@ import (
 
 	"go.idp.xyz/idp-parcel/internal/accessidentity"
 	aipg "go.idp.xyz/idp-parcel/internal/accessidentity/adapters/postgres"
+	noparcel "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/parcelshipment"
+	nodeopsapp "go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	nodomain "go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	noports "go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
+	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
 )
 
 // 本文件经生产装配在真库上钉外部标识关联册「号码存得下」的门（票 ps-external-mark-relations/06）：写的一侧是首方提交口，号码
-// 存不进册时答坏报文、点名那一格、委托不落；读的一侧是收寄，设备送来不可能在册的号答已核对的待识别，不落未核对、不响门铃。
+// 存不进册时答坏报文、点名那一格、委托不落；读的一侧是收寄：超长的号照常去问 PS，查不到答已核对的待识别、不落未核对、
+// 不响门铃，门立起来之前进册的超长号照样唯一关联；带 NUL 的号不去问、答零个候选。
 // 面单渠道结果那条写册路的真库用例是 PS postgres 适配器包里的 TestAChannelResultWhoseNumberCannotEnterTheRegisterIsNotAccepted。
 // 夹具全为合成（S 级）。
 
@@ -144,10 +148,10 @@ func TestTheWiredSubmissionRefusesACustomerParcelReferenceTheRegisterCannotStore
 	}
 }
 
-// Covers: 票 ps-external-mark-relations/06 裁定三与完成判据「设备送来越界号，答待识别（已核对），不落未核对、不响门铃」——收寄经
-// 生产装配（编排、收寄库、身份读口的 savepoint、自投门铃都是生产的）：观察到的号 513 字节或 4000 字节，PS 号码的构造门
-// 立不起它，它就不可能在册。明确接收答 200 PENDING_IDENTIFICATION、identityCheck CHECKED、没有候选、控制照建；重核门铃
-// 一封都没有。答成未核对，门铃重投每次拿同一个号去问，永远续不上。
+// Covers: 票 ps-external-mark-relations/06 裁定三、裁定补与完成判据「设备送来越界号，答待识别（已核对），不落未核对、不响门铃」——
+// 收寄经生产装配（编排、收寄库、身份读口的 savepoint、自投门铃都是生产的）：观察到的号 513 字节或 4000 字节，册里没有，
+// PS 读口按号比较、不构造索引行，长号不报错。明确接收答 200 PENDING_IDENTIFICATION、identityCheck CHECKED、没有候选、
+// 控制照建；重核门铃一封都没有。答成未核对，门铃重投每次拿同一个号去问，永远续不上。
 func TestTheWiredReceptionAnswersAMarkTheRegisterCannotHoldAsCheckedPending(t *testing.T) {
 	pool, reception, command := wiredIdentifiedReception(t, "SYN-DELIVERY-PSXM06-513")
 	for _, overlong := range []struct{ source, unit, mark string }{
@@ -171,5 +175,71 @@ func TestTheWiredReceptionAnswersAMarkTheRegisterCannotHoldAsCheckedPending(t *t
 	}
 	if doorbells := uncheckedDoorbells(t, pool); len(doorbells) != 0 {
 		t.Fatalf("重核门铃 %d 封, want 0——不可能在册的号不是身份读不动", len(doorbells))
+	}
+}
+
+// Covers: 票 ps-external-mark-relations/06 裁定补——门立起来之前进册的超长号，现场扫到照样核得到。库里直写一份委托快照，客户包裹
+// 件号是 600 字节（模拟门前留下的行），经仓储读回、接受，号随接受进册；设备送来同一个号，经生产收寄装配答 201
+// INTAKE_FORMED、唯一关联那一件、控制照建，不落未核对、重核门铃零封。入册门挡在核对这一侧，这一件就落成待识别。
+func TestTheWiredReceptionAssociatesAnOverlongNumberRegisteredBeforeTheGate(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	reception, err := buildReceptionOrchestration(db)
+	if err != nil {
+		t.Fatalf("装配收寄编排：%v", err)
+	}
+	submission := numberedSubmission(t, "SYN-CUSTOMER-1", "SYN-KEY-LEGACY-1", "SYN-PARCEL-LEGACY-1", "SYN-LEGACY-PLACEHOLDER")
+	submitOnRealAssembly(t, db, submission)
+	legacy := strings.Repeat("SYN-LEGACY-0600-", 37) + "SYN-LEGA"
+	tag, err := pool.Exec(t.Context(),
+		`UPDATE parcel_shipment.shipment_request
+		    SET snapshot = jsonb_set(snapshot, '{customerParcelNumbers,0,number}', to_jsonb($1::text))
+		  WHERE snapshot -> 'customerParcelNumbers' -> 0 ->> 'number' = 'SYN-LEGACY-PLACEHOLDER'`, legacy)
+	if err != nil || tag.RowsAffected() != 1 || len(legacy) != 600 {
+		t.Fatalf("直写 %d 字节的旧号：rows = %d err = %v", len(legacy), tag.RowsAffected(), err)
+	}
+	acceptNumbered(t, db, submission)
+	if rows := countRows(t, pool, `SELECT count(*) FROM parcel_shipment.external_identifier_relation WHERE identifier_number = $1`, legacy); rows != 1 {
+		t.Fatalf("旧号在册 %d 行, want 1", rows)
+	}
+
+	command := receptionCommand(t, "SYN-DELIVERY-PSXM06-LEGACY", nodeopsapp.ExplicitReception)
+	command.Unit = mustValue(t, nodomain.NewHandlingUnitID, "SYN-UNIT-PSXM06-LEGACY")
+	command.Mark = noports.ExternalMarkObservation{Mark: legacy}
+	answer := decodeUnchecked(t, postWiredReception(t, reception, command))
+	if answer.status != http.StatusCreated || answer.Outcome != "INTAKE_FORMED" || answer.Association != "SYN-PARCEL-LEGACY-1" {
+		t.Fatalf("送站答 %d %s, want 201 INTAKE_FORMED 关联 SYN-PARCEL-LEGACY-1", answer.status, answer.raw)
+	}
+	if answer.IdentityCheck == "UNCHECKED" || answer.ControlBasis == "" {
+		t.Fatalf("送站答 %s, want 身份已核对、控制照建", answer.raw)
+	}
+	if doorbells := uncheckedDoorbells(t, pool); len(doorbells) != 0 {
+		t.Fatalf("重核门铃 %d 封, want 0", len(doorbells))
+	}
+}
+
+// Covers: 票 ps-external-mark-relations/06 裁定补「带 NUL 的号经读口答零候选、不报错」——设备收寄口早已对 NUL 答坏报文
+// （nodeopshttp 的 receptionCommand），带 NUL 的号送不到收寄编排，所以钉在 NO 适配器这一层：适配器接真库上的 PS 读口，答零个
+// 候选、不带信号、不报错。适配器若把号交过去，Postgres 的 text 收不下 NUL，库面会报错，收寄就把它读成身份读不动。
+func TestANulMarkIsAnsweredWithoutAskingTheRealRegister(t *testing.T) {
+	db, err := bentopg.NewDB(pgtest.Pool(t), bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	identifiers, err := pspostgres.NewExternalIdentifiers(db)
+	if err != nil {
+		t.Fatalf("构造 PS 按号核对读口：%v", err)
+	}
+	view, err := noparcel.NewParcelIdentityView(identifiers)
+	if err != nil {
+		t.Fatalf("构造 NO 身份核对适配器：%v", err)
+	}
+	answer, err := view.ResolveParcelIdentity(t.Context(), mustValue(t, nodomain.NewTenantID, "SYN-TENANT-1"),
+		noports.ExternalMarkObservation{Mark: "SYN-PCL\x00-NUL"})
+	if err != nil || len(answer.Candidates) != 0 || answer.Ambiguous {
+		t.Fatalf("带 NUL：answer = %+v err = %v, want 零候选、无信号、不报错", answer, err)
 	}
 }

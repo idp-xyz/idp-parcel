@@ -30,7 +30,7 @@ func NewParcelIdentityView(parcels psports.ParcelExternalIdentifierView) (*Parce
 }
 
 // ResolveParcelIdentity 交回此刻被这个号码标识的正式包裹，与 PS 答出的歧义信号。号码原样交给 PS 逐字比对，这里不
-// 折算；观察里一个号码都没有（空或全空白）答零个候选——没有线索的实物就是待识别，不是依赖故障；号码存不进 PS 的册，
+// 折算；观察里一个号码都没有（空或全空白）答零个候选——没有线索的实物就是待识别，不是依赖故障；号码带 NUL，不可能在册，
 // 同样答零个候选、不去问 PS。PS 读不动原样交回，
 // 编排据此不形成答案、不落册（ADR-0186）：拿空候选顶替会把可能已知的包裹落成待识别。
 func (view *ParcelIdentityView) ResolveParcelIdentity(
@@ -45,10 +45,12 @@ func (view *ParcelIdentityView) ResolveParcelIdentity(
 	if err != nil {
 		return noports.ParcelIdentityAnswer{}, fmt.Errorf("%w: tenant: %v", ErrUntranslatableAnswer, err)
 	}
-	number, err := psdomain.NewExternalIdentifierNumber(observation.Mark)
+	// 构造核对用的号，不走入册门：入册门只管写，读的一侧不拿它挡已在册的号。门立起来之前进册的超长号，现场扫到要核得到；
+	// 册里没有的超长号，PS 照常答空（票 ps-external-mark-relations/06 裁定补）。
+	number, err := psdomain.NewExternalIdentifierLookupNumber(observation.Mark)
 	if errors.Is(err, psdomain.ErrExternalIdentifierNumberNotStorable) {
-		// PS 号码的构造门就是进册的门，过不了它的号不可能在册，答零个候选是真话（票 ps-external-mark-relations/06 裁定三）。
-		// 交成错误会被收寄读成身份读不动，落未核对的待识别、响重核门铃，而重核拿着同一个号每次都撞同一道门，永远续不上。
+		// 只剩带 NUL 的号走到这里：Postgres 的 text 存不下它，它确定不在册，答零个候选是真话。拿去问反倒在库面报错，收寄会
+		// 读成身份读不动，落未核对的待识别、响重核门铃，而重核拿着同一个号永远续不上。
 		return noports.ParcelIdentityAnswer{}, nil
 	}
 	if err != nil {

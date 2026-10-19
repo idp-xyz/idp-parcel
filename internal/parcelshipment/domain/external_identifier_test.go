@@ -179,6 +179,22 @@ func TestARehydratedExternalIdentifierNumberIsNotHeldToTheEntryGate(t *testing.T
 	}
 }
 
+// Covers: 票 ps-external-mark-relations/06 裁定补——核对用的号不受入册的字节界约束：600 字节照收、逐字；带 NUL 的照拒，拒因
+// 与入册门同一个哨兵（它确定不在册）；全空白仍拒。
+func TestALookupNumberIsNotHeldToTheEntryLimit(t *testing.T) {
+	overlong := strings.Repeat("L", 600)
+	number, err := domain.NewExternalIdentifierLookupNumber(overlong)
+	if err != nil || number.String() != overlong {
+		t.Fatalf("600 字节：err = %v、%d 字节, want 逐字照收", err, len(number.String()))
+	}
+	if _, err := domain.NewExternalIdentifierLookupNumber("SYN\x00LOOKUP"); !errors.Is(err, domain.ErrExternalIdentifierNumberNotStorable) {
+		t.Fatalf("带 NUL：err = %v, want ErrExternalIdentifierNumberNotStorable", err)
+	}
+	if _, err := domain.NewExternalIdentifierLookupNumber("  "); err == nil {
+		t.Fatal("全空白的号也立得起来")
+	}
+}
+
 // Covers: 票 ps-external-mark-relations/06 裁定二——渠道结果里受理的那件包裹带回的渠道包裹件号存不进册时，这份渠道结果照该路
 // 坏结果的答法拒收（ErrInvalidLabelTransaction，编排答`未受理`），不交给仓储去撞库；恰 512 字节的照收、逐字形成关联。门只在
 // 记录结果这一步：已落库的结果重建时不再过这道门，旧行读得回。
