@@ -55,6 +55,8 @@ Blocked by: 无
 
 序 0 的去向（2026-10-19）：待裁的三格已于 2026-10-16 由会话 `idp-parcel-9b` 代裁，见 [ADR-0184](../../../docs/adr/0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md) 复核记录「越权风险点 2 的事实更正」「决定六与 UC-NO-002「权限、隔离与审计」」「后果节在接受后被原地改写的补记」三条与票 [ps-external-mark-relations/04](../../ps-external-mark-relations/issues/04-ticket-02-review-follow-ups-records-and-pinned-behavior.md)；另立 ps-external-mark-relations/05、no-reception-identity/01 与 02。
 
+序 4、序 5 的去向（2026-10-19）：两行非阻断里 TF `adapters/http` 那半边（更正载荷缺时刻答 400；作业事实与运营决定 Intake 的逐口用例、头注与 `decisionLines` 计数）由票 [32](./32-tf-correction-payloads-pass-absent-instants-to-orchestration.md) 落（分支 `claude-oc32`，待评审），`cmd/parcel-api` 那半边归票 [48](./48-cmd-parcel-api-tests-and-comments-say-what-the-code-does.md)。
+
 完成判据核对：表中每一行都有一条非作者评审写进对应票面（序 1、序 4 都在票 15），三格齐；有阻断的序 1、序 3 各立修复票（28、27）。非阻断照 parallel-sessions 随票记，不另立票；要不要另立、何时清，归各票的 owner。
 
 评审用的隔离检出（钉各行代码 SHA 的那几份，加上复核用的 main `4dd937eb` 那一份）都已 `git worktree remove` 拆掉。

@@ -128,6 +128,7 @@ Blocked by: 无——2026-10-16 核得 19 已 resolved（进 main 至 `8e1e9777`
   判断题 Duplicated Code 不成立：四口的认证件共用 `tfaccess.OperatorAuthenticator.AuthenticateOperatorDecision` 与 `tenantFor`，按决定种类参数化；本笔反而删掉了隔离侧同形的译装代码。重复只出现在测试里：同一组四口分列在几张表中，(1) 里那个过时的表名正是这几张表没有同步的结果。
 - **无发现**：Spec「已核」所列各格。
 - **结论**：两轴 0 阻断，不立修复票。除 (1) 里 `OperatorDecisionIntake` 头注那处已由 `7ec601ab` 改掉，其余各条在 main `4dd937eb` 上都还在，随下一笔碰到这些文件时清。
+- **处置（2026-10-19，票 [32](./32-tf-correction-payloads-pass-absent-instants-to-orchestration.md) 作者子代理，分支 `claude-oc32`，待评审；证据 `S`）**：Standards (3) 里 `decisionLines` 那一格由票 32 落（`34504292`）：头注「本包六个运营决定口」改为「OperatorDecisionIntake 实现的各运营决定口」，同文件 `TestEveryDecisionFaceRefusesSelfReportedTenantTrailingContentAndUnknownKeys` 的「六口都一样」改为「每一口都一样」。(3) 的另一半（`TestTransportFulfillmentCommandLines…` 头注的序号引用）在 `cmd/parcel-api`，归票 [48](./48-cmd-parcel-api-tests-and-comments-say-what-the-code-does.md)。
 
 ### 评审 ← 会话 idp-parcel-9b 起的隔离子代理 · 钉 `0e3bb7df`（基线 `60244fa6`；之六 · 受控关闭与重开）· 2026-10-16 10:0x–10:2x UTC
 

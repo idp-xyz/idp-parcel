@@ -1,7 +1,7 @@
 # 32 TF 更正载荷缺时刻答 400，与本包「缺席交编排、解不出才 400」相左；作业事实与运营决定 Intake 的逐口用例和头注补齐
 
 Category: bug
-Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 续做：分支 `claude-oc32` 上的两笔先 rebase 到最新 main 并核一遍，再做完余下的格。此前 ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-oc32`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-oc32`）上留有2 笔（更正载荷缺时刻交编排、作业事实表补更正各口），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 5、序 4 评审遗留；用户授权代决）；分支 `claude-oc32`
+Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 续做：分支 `claude-oc32` 上的两笔先 rebase 到最新 main 并核一遍，再做完余下的格。此前 ready-for-agent——2026-10-18 暂缓：用户因 token 花费选「精简续做」，本票没做完；分支 `claude-oc32`（基 `b58b10ef`，工作树 `/home/tops/workspace/idp-parcel-claude-oc32`）上留有2 笔（更正载荷缺时刻交编排、作业事实表补更正各口），未经评审，接手前先 rebase 到最新 main 并核一遍。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 5、序 4 评审遗留；用户授权代决）；分支 `claude-oc32`
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)（序 4、序 5 的非阻断）。
 出处：
@@ -131,9 +131,94 @@ Blocked by: 无
 
 ## 完成判据
 
-- [ ] 带★的各组在 main 上先红，改后转绿；红的输出记进完成记录。
-- [ ] 用 `go test -overlay` 取证并记进完成记录：下列变异各被至少一条新用例杀掉——交接更正口先解载荷后认证；Intake 转交常量令牌；更正各载荷各错译一格；时刻只判非空、不去空白；先认证后判三头或种类。
-- [ ] `work_fact_intake.go` 里不再有 `time.Parse(`。两份测试文件与两份 Intake 头注里不再有「三个头」「六个运营决定口」「六口」「迁来」「值与开关」「逐口放行」「越权探针一律以「未找到」作答」。
-- [ ] Go 门禁：`gofmt -l` 无输出；`go build ./...`、`go vet ./...` 退 0；带 DSN 跑 `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/` 全 ok，其中 `TestWorkFactFacesAnswerOnTheOperatorChannel`、`TestTransportFulfillmentCommandLinesAnswerBusinessOutcomesAgainstARealDatabase`、`TestTheWiredPickupCorrectionLandsANewVersionAgainstARealDatabase` 是 PASS 而不是 SKIP。机制清点生成器在干净检出上重跑零差（不新增文件）。
+- [x] 带★的各组在 main 上先红，改后转绿；红的输出记进完成记录。
+- [x] 用 `go test -overlay` 取证并记进完成记录：下列变异各被至少一条新用例杀掉——交接更正口先解载荷后认证；Intake 转交常量令牌；更正各载荷各错译一格；时刻只判非空、不去空白；先认证后判三头或种类。
+- [x] `work_fact_intake.go` 里不再有 `time.Parse(`。两份测试文件与两份 Intake 头注里不再有「三个头」「六个运营决定口」「六口」「迁来」「值与开关」「逐口放行」「越权探针一律以「未找到」作答」。
+- [x] Go 门禁：`gofmt -l` 无输出；`go build ./...`、`go vet ./...` 退 0；带 DSN 跑 `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/` 全 ok，其中 `TestWorkFactFacesAnswerOnTheOperatorChannel`、`TestTransportFulfillmentCommandLinesAnswerBusinessOutcomesAgainstARealDatabase`、`TestTheWiredPickupCorrectionLandsANewVersionAgainstARealDatabase` 是 PASS 而不是 SKIP。机制清点生成器在干净检出上重跑零差（不新增文件）。
 - [ ] 走 Go 那条路（parallel-sessions）：分支、作者自验、非作者评审、推送方在干净检出上带 DSN 跑全量。
-- [ ] 票 22 Comments 那条评审下追记处置（Spec 非阻断与 Standards 各条指向本票，cmd 部分指向「cmd/parcel-api 运输履约段行注」票）；票 15「钉 `60244fa6`」那条追记 `decisionLines` 一格；票 26「评审结果」序 4、序 5 的去向格补上本票号。证据只记 `S`。
+- [x] 票 22 Comments 那条评审下追记处置（Spec 非阻断与 Standards 各条指向本票，cmd 部分指向「cmd/parcel-api 运输履约段行注」票）；票 15「钉 `60244fa6`」那条追记 `decisionLines` 一格；票 26「评审结果」序 4、序 5 的去向格补上本票号。证据只记 `S`。
+
+## 完成记录（2026-10-19，作者子代理，分支 `claude-oc32`，待评审）
+
+### rebase
+
+两笔半成品原基 `b58b10ef`。先 rebase 到当时的 `origin/main` `4a09e100`；其后 main 又进了 tf-face-algebra/10、12、13 与 operator-channel/44 等，再 rebase 到 `19d9d486`。两次都没有文本冲突，有一处语义冲突：
+
+- `work_fact_intake.go`：main 在 `b58b10ef` 之后只改了 `DeliveryProofCorrectionPayload`（票 41 加 `predecessorVersion`）。更正载荷的时刻仍是 `time.Parse`，交接更正结论仍无条件译，main 上没有等价的分格，也没有改走 `parseOptionalInstant`；本票的改动直接叠上，main 的格一个没删。
+- `work_fact_intake_test.go`：main（票 41）已立同名常量 `workFactDeliveryProofCorrectionBody` 与 `TestWorkFactCommandIntakeTranslatesDeliveryProofCorrectionWithItsPredecessor`，与本分支的同名常量重定义，编译不过。以 main 为准：
+  - 留 main 的常量（带 `predecessorVersion`）。`correctedAt` 字面量由 `2026-09-06T08:00:00Z` 改写成同一刻的 `2026-09-06T16:00:00+08:00`，以合本票「时刻带 `+08:00`」；main 那条用例的期望值一字不动。
+  - 删本分支的同名常量，以及重复的 `TestWorkFactCommandIntakeTranslatesDeliveryProofCorrectionWithTheAuthenticatedTenant`：main 那条已逐格断言租户、尝试、对象、前版、新证据与更正时刻。
+  - POD 端点夹具的更正载荷改从首登答复的 `deliveryVersion` 填 `predecessorVersion`。票 41 之后，前版是编排认「同一次更正」的锚，不填，对照格落不了 201。
+- 解法改在各自那一笔里：fix 笔改常量与夹具，test 笔删重复用例。两笔各在临时检出上 `go vet` 与本包 `go test` 绿。test 笔的提交说明随之改写：原说明写「三份载荷各一条译装」，还引了以基线 `b58b10ef` 做的取证。
+
+### 落点
+
+- `be46c524` fix：`work_fact_intake.go` 更正三载荷的时刻改走 `parseOptionalInstant`，交接更正结论非空才译，删 `time` 导入，`HandoverCorrectionPayload` 头注加指针；带★三组用例。
+- `f66e9fa1` test：`workFactLines` 补更正三口；揽收、交接更正译装；解不出点名该键；逐口先认证后解载荷。
+- `34504292` test：运营决定口在包内钉先认证后解载荷（做什么第 3 条）；第 4 条各处注释（`work_fact_intake_test.go`、`operator_decision_intake_test.go`、`register_transport_handover.go`、`register_effective_delivery.go`）。
+- 本笔 docs：本记录，以及票 22、15、26 的追记（只加行）。
+
+### 各格对应用例（`internal/transportfulfillment/adapters/http/`）
+
+| 票面格 | 用例 |
+|---|---|
+| 1 更正载荷分格 | 产品码；`work_fact_intake.go` 里 `time.Parse(` 零命中 |
+| 2 `workFactLines` 补更正各口 | 表行 `/transport-fulfillment/offsite-pickup-corrections`、`/transport-fulfillment/handover-corrections`、`/transport-fulfillment/delivery-proof-corrections`；逐口跑它的是 `TestWorkFactCommandIntakeRefusesSelfReportedTenantOnEveryLine`、`TestWorkFactCommandIntakeRefusesTrailingContentAndUnknownKeysOnEveryLine`、`TestWorkFactCommandIntakeAuthenticatesBeforeDecodingOnEveryLine` |
+| 2 更正译装 | `TestWorkFactCommandIntakeTranslatesPickupCorrectionWithTheAuthenticatedTenant`、`TestWorkFactCommandIntakeTranslatesHandoverCorrectionWithTheAuthenticatedTenant`；POD 由 main 已有的 `TestWorkFactCommandIntakeTranslatesDeliveryProofCorrectionWithItsPredecessor` 守 |
+| 2 ★时刻缺席 | `TestWorkFactCommandIntakeLeavesAbsentCorrectionInstantsToTheOrchestration`：四行（揽收更正 `correctedAt` / `occurredAt`、交接更正 `correctedAt`、POD 更正 `correctedAt`），每行四格（键缺席、空串、纯空白、前后带空白的合法时刻） |
+| 2 时刻解不出 | `TestWorkFactCommandIntakeRefusesUnparsableCorrectionInstants` |
+| 2 ★交接更正结论 | `TestWorkFactCommandIntakeLeavesAnAbsentHandoverCorrectionVerdictToTheOrchestration` |
+| 2 ★端点层 | `TestWorkFactCorrectionEndpointsLeaveAnAbsentCorrectionInstantToTheOrchestration`：三口各一子用例；末格带上时刻答 201 作对照；不断言签发次数 |
+| 2 逐口先认证 | `TestWorkFactCommandIntakeAuthenticatesBeforeDecodingOnEveryLine` |
+| 3 | `TestEachTFDecisionFaceAuthenticatesForItsOwnDecision`：请求体换成 `!!not-json!!`，另加 Covers |
+| 4 注释 | 见 `34504292`；完成判据第三格列的七个词在两份测试文件与两份 Intake 头注里零命中 |
+
+**旧名 → 新名**：`TestWorkFactCommandIntakeTakesDeviceAndScopeFromHeadersAndAuthenticatesFirst` → `TestWorkFactCommandIntakeAuthenticatesBeforeDecodingOnEveryLine`。票 22 完成记录按旧名引过它。
+
+### 先红
+
+日志：`/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/oc32-red.log`（本机 scratchpad，会随会话清掉，要点抄在下面）。做法：在 `34504292` 上用 `go test -overlay` 把 `work_fact_intake.go` 换成 `origin/main` `19d9d486` 的版本，只跑带★的三组。
+
+- 三组顶层都 FAIL，FAIL 行共 22 条。
+- 时刻那组 16 个子用例全红：缺席、空串、纯空白被当成坏报文，前后带空白的合法时刻被拒。
+- 交接结论：`缺结论被当成坏报文：…verdict="" is not a handover verdict word`。
+- 端点三口都红：`缺更正时刻：answer = 400 {"error":{"code":"MALFORMED_REQUEST"}}`。
+- 对照：同组用例不挂 overlay，三组 PASS。
+
+### 变异取证
+
+变异文件与 overlay 在 `/tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/oc32-mut/`。「main 用例」列是本分支产品码加变异，再挂上 `origin/main` 版的 `work_fact_intake_test.go` 与 `operator_decision_intake_test.go`；不加变异时这一组合本包 ok。
+
+| 变异 | 本分支用例 | 杀掉它的用例 | main 用例 |
+|---|---|---|---|
+| m1 交接更正口先解载荷后认证 | 杀 | `TestWorkFactCommandIntakeAuthenticatesBeforeDecodingOnEveryLine`（设备不在用那一格交回了载荷校验的结果） | 存活 |
+| m2 Intake 转交常量令牌 | 杀 | `TestWorkFactCommandIntakeAuthenticatesBeforeDecodingOnEveryLine`（没带令牌那一格） | 存活 |
+| m3a 交接更正丢掉 `basis` | 杀 | `TestWorkFactCommandIntakeTranslatesHandoverCorrectionWithTheAuthenticatedTenant`、`TestWorkFactCorrectionEndpointsLeaveAnAbsentCorrectionInstantToTheOrchestration` | 存活 |
+| m3b 揽收更正 `place` 与 `control` 对调 | 杀 | `TestWorkFactCommandIntakeTranslatesPickupCorrectionWithTheAuthenticatedTenant` | 存活 |
+| m3c POD 更正 `newProof` 取成 `object` | 杀 | `TestWorkFactCommandIntakeTranslatesDeliveryProofCorrectionWithItsPredecessor` | 已杀（票 41 那条用例在本票钉 `8d22729f` 之后进的 main） |
+| m4 更正时刻只判非空、不去空白 | 杀 | `TestWorkFactCommandIntakeLeavesAbsentCorrectionInstantsToTheOrchestration`（纯空白、前后带空白两格） | 存活 |
+| m5a 先认证、后判三头 | 杀 | `TestWorkFactCommandIntakeAuthenticatesBeforeDecodingOnEveryLine`（缺头时认证方被问到） | 存活 |
+| m5b 判完三头、先认证、后判种类 | 杀 | `TestWorkFactCommandIntakeAuthenticatesBeforeDecodingOnEveryLine`（NODE 时认证方被问到） | 存活 |
+| m6 关段口先解载荷后认证（第 3 条） | 杀 | `TestEachTFDecisionFaceAuthenticatesForItsOwnDecision` | 存活 |
+
+m5a、m5b 都只问认证方一次，答复留到判完头部或种类再交，这样就不会因多问一次被旧用例「恰好一次」那一格顺手杀掉。只在本包取证，没有挂到 `cmd/parcel-api` 上重跑。
+
+### 门
+
+- 改动的 `.go` 文件 `gofmt -l` 无输出；`go build ./...`、`go vet ./...` 退 0。
+- 带 DSN（`127.0.0.1:55432`）跑 `go test -p 1 -count=1 -v ./internal/transportfulfillment/... ./cmd/parcel-api/... ./internal/architecture/...`：11 个包 ok（`ports` 无测试文件），0 FAIL，0 SKIP。`TestWorkFactFacesAnswerOnTheOperatorChannel`、`TestTransportFulfillmentCommandLinesAnswerBusinessOutcomesAgainstARealDatabase`、`TestTheWiredPickupCorrectionLandsANewVersionAgainstARealDatabase` 三条 PASS。
+- 机制清点生成器在提交后的干净工作树上重跑，零差，不新增文件。
+- 没跑全量 `./...`，留给推送方。
+
+### 证据层级
+
+`S`：合成 `SYN-` 值、替身认证方、包内编排接登记册替身，真库用例用本机测试库。没碰演示库。
+
+### 越出地盘的改动
+
+代码没有越出地盘。票 22、15、26 只加行，是完成判据要求的追记。地盘内动了 main（票 41）引入的常量 `workFactDeliveryProofCorrectionBody`：只改时刻写法，还是同一刻。
+
+### 未做
+
+- 完成判据「走 Go 那条路」里的非作者评审，以及推送方在干净检出上带 DSN 跑全量。
+- 「不做」各条照守：编排、领域与 `cmd/parcel-api` 未动；判断载荷两处内联分格未收拢；POD 重放代数、交接更正内容冲突、POD 缺时刻也签版本号都未碰；NO 收寄分格未碰；带 OnEveryLine 的用例没改名；替身的令牌为空分支与 `HandoverIntake`、`DeliveryIntake` 合集接口都没删；`cmd` 真库表没补更正各行。
