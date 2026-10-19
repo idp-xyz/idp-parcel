@@ -69,7 +69,7 @@ func registerDemoNodeZones(t *testing.T, db *bentopg.DB, appliesFrom time.Time, 
 	}
 }
 
-// Covers: AT-TF-236、AT-TF-241、AT-TF-242 真库半边，票 demo-chain-gaps/65 完成判据的演示一条——深圳口岸交给干线承运商
+// Covers: AT-TF-236、AT-TF-239、AT-TF-241、AT-TF-242、AT-TF-245 生产装配真库半边，票 demo-chain-gaps/65 完成判据的演示一条——深圳口岸交给干线承运商
 // （releasingNode=SYN-NODE-SZX-GATE、onwardNode=SYN-NODE-SIN-HUB）：答 201 `HANDOVER_REGISTERED`，gateReading 未决，依据
 // 是跨关务区域移动无案（对象不在任何案卷）；关务判断落进关务的判断册，依据原文随交接落册、不回给登记方。之后把新加坡枢纽
 // 改登进 CN、让关务对同一问改答不受门禁：原样重发答 200 `EXISTING_VERSION`、回显首次读数，关务判断册不多一行——没有重问。

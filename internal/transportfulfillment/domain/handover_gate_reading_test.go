@@ -101,7 +101,7 @@ func TestTheHandoverGateRehydrationDoorChecksTheRecordedAnswer(t *testing.T) {
 	}
 }
 
-// Covers: AT-TF-237、AT-TF-239、AT-TF-244 领域半边——「没声明交出节点就不问」只在 UnaskedGateReading 定义一处；读数只挂在
+// Covers: AT-TF-237、AT-TF-239、AT-TF-242、AT-TF-243、AT-TF-244 领域半边——「没声明交出节点就不问」只在 UnaskedGateReading 定义一处；读数只挂在
 // `已交接`上，问的对象与意图必须是这一版的；「交接登记册读不动」只属更正版；更正版不承继前版的读数。
 func TestAHandoverGateReadingBelongsToItsHandedOverVersion(t *testing.T) {
 	unaskedHandover := releasedHandover(t, "parcel-1", "", "SYN-NODE-SIN-HUB")
@@ -184,7 +184,7 @@ func TestAHandoverGateReadingBelongsToItsHandedOverVersion(t *testing.T) {
 	}
 }
 
-// Covers: 交接的重建门——`已交接`必带读数且读数属于这一版（存量回填那一种不按节点核），拒收与待确认不带。
+// Covers: AT-TF-244 重建门半边——交接的重建门：`已交接`必带读数且读数属于这一版（存量回填那一种不按节点核），拒收与待确认不带。
 func TestTheHandoverRehydrationDoorRequiresAGateReadingExactlyOnHandedOver(t *testing.T) {
 	gate := releasedHandover(t, "parcel-1", "SYN-NODE-SZX-GATE", "")
 	spec := func(verdict domain.HandoverVerdict, reading domain.HandoverGateReading) domain.RehydrateTransportHandoverSpec {

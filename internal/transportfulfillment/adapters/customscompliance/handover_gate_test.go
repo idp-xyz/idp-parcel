@@ -48,7 +48,7 @@ func TestAnOutboundReleaseIsJudgedOnTheReleasingAndOnwardNodes(t *testing.T) {
 		tfdomain.GateNotGuarded, "OUTBOUND_RELEASE", "OUTSIDE_CUSTOMS_BOOKS")
 }
 
-// 问不出答复只交 error，口径同出发那一侧：答复越出封闭集是译不回来，并认得出交出端口的哨兵；去向与交出节点相同立不成
+// Covers: AT-TF-240 适配器半边——问不出答复只交 error，口径同出发那一侧：答复越出封闭集是译不回来，并认得出交出端口的哨兵；去向与交出节点相同立不成
 // 交出意图，那一问不发出去。
 func TestAnOutboundReleaseThatDoesNotFormIsAnErrorNotAFinding(t *testing.T) {
 	zero := &stubJudge{}

@@ -109,7 +109,7 @@ func gateBody(t *testing.T, object string) string {
 	return bodyWith(t, body, "object", object)
 }
 
-// Covers: AT-TF-245——`已交接`的答复带交出门禁读数：整格、问关务时的 at / onward 与那件对象的那一格，不带关务判断标识与
+// Covers: AT-TF-245；AT-TF-236、AT-TF-237、AT-TF-238、AT-TF-239、AT-TF-241 的线格式半边——`已交接`的答复带交出门禁读数：整格、问关务时的 at / onward 与那件对象的那一格，不带关务判断标识与
 // 依据原文；阻断照样 201；没声明去向写明 onwardNotDeclared；没声明交出节点是停点「交出节点未声明」；拒收不带读数；原样
 // 重发回显首次读数、不重问关务。
 func TestTheHandoverEndpointRepliesWithTheGateReading(t *testing.T) {

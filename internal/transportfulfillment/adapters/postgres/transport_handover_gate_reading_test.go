@@ -55,7 +55,7 @@ func askedGateReading(t *testing.T, handover domain.TransportHandover, answer do
 	return reading
 }
 
-// Covers: AT-TF-236、AT-TF-238、AT-TF-237、AT-TF-239 的库面——问了关务的读数连同关务判断标识与依据原文落进明细、整格另成
+// Covers: AT-TF-236、AT-TF-237、AT-TF-238、AT-TF-239、AT-TF-243、AT-TF-245 的库面——问了关务的读数连同关务判断标识与依据原文落进明细、整格另成
 // 一列，按键、按前版找后继、按范围各条读路都原样装回，没声明去向读回仍写明；停在「交出节点未声明」的那一版读回同一停点；
 // 拒收那一版两列皆 NULL；查阅册列出整格。
 func TestHandoverGateReadingsRoundTripThroughEveryReadPath(t *testing.T) {
@@ -184,7 +184,7 @@ func TestHandoverGateReadingsRoundTripThroughEveryReadPath(t *testing.T) {
 	}
 }
 
-// Covers: 迁移 0041 的库面——`已交接`缺读数、拒收带读数、整格越出封闭集、整格与明细一缺一在、明细停点与答复都在或都不在，
+// Covers: AT-TF-239、AT-TF-244 的库面半边——迁移 0041 的库面：`已交接`缺读数、拒收带读数、整格越出封闭集、整格与明细一缺一在、明细停点与答复都在或都不在，
 // 都被 CHECK 拒；断言落到 SQLSTATE 与约束名上。存量回填那一形（未决、停点「登记于门禁读数之前」）读回成形。
 func TestTheDatabaseGuardsTheHandoverGateReadingShape(t *testing.T) {
 	repository, _, pool := newTransportHandovers(t)
