@@ -1,7 +1,7 @@
 # 27 运输收费发生项显式登记与已形成信封（失败尝试、实际履约）
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg27
+Status: in-progress——完工、评审已修订，待进 main，分支 claude-dcg27（评审记录见文末）。
 Blocked by: [22](./22-supplier-agreement-version-point-read-and-tf-check-adapter.md)、[26](./26-settlement-consumes-charge-occurrence-formed-to-request-buy-evaluation.md)
 地盘：TF `domain/transport_charge_occurrence.go`；`application` 新 `register_charge_occurrence.go` + `register_failed_attempt_charge.go`；新 `ports/charge_occurrence.go`；新 `postgres/charge_occurrence_handoff.go`；新 tfhttp `register_charge_occurrence.go`；`operation_decision.go`；新 `cmd/parcel-api/assemble_charge_occurrence.go` + `endpoints.go` 行；`internal/architecture/production_wiring_baseline.txt`；种子；ADR-0207、UC-TF-005 步与 AT、UC-TF-006/002 指向。
 出处：[07](./07-transport-charge-occurrences-have-no-production-path.md)；方案「07 运输收费发生项」D07-1 至 D07-9，「需要的 ADR」ADR-0207。
@@ -24,7 +24,7 @@ Blocked by: [22](./22-supplier-agreement-version-point-read-and-tf-check-adapter
 - 保存与 Outbox 同一笔（真库），用指纹 ID。
 - 棘轮剪掉一条。
 - 不碰交接、交付编排。
-- 演示：干线参与结束后登 `ACTUAL_FULFILLMENT` 答 201 → [26](./26-settlement-consumes-charge-occurrence-formed-to-request-buy-evaluation.md) → BUY 请求 → 计价评价 → ADR-0200 形成供应商预期成本（需 [30](./30-buy-cost-card-declares-amount-rounding.md)）。
+- 演示：干线参与结束后登 `ACTUAL_FULFILLMENT` 答 201 → [26](./26-settlement-consumes-charge-occurrence-formed-to-request-buy-evaluation.md) → BUY 请求 → 计价评价 → ADR-0200 形成供应商预期成本（需 [30](./30-buy-cost-card-declares-amount-rounding.md)）。**本票走到计价评价为止；「评价 → 供应商预期成本」一段移交 [43](./43-demo-cost-card-binds-the-zone-catalogue.md)**（演示成本卡绑分区目录，Blocked by routing-first-cut/20；出自评审）。
 - 发生项上的 `agreement_ref` 照 ADR-0208 决定六写「对象/版本」；`cmd/parcel-dispatch` 有一条用例经本票的真交接口入队，钉生产方的类型串与载荷三键和 `sainbox.ChargeOccurrenceFormedEventType`、消费门认的形状相等（26 的派发用例按载荷形状手工入队，钉不住这一点；出自 26 评审）。
 
 ## 规模
@@ -91,6 +91,48 @@ L
 
 1. **偏离：完成判据「棘轮剪掉一条」无行可剪。** `internal/architecture/production_wiring_baseline.txt` 在当前 main 上只剩两条，都不属 TF：失败尝试费那条领域工厂早在 tf-unwired-seven/04 就剪了。票面点名的失败尝试费处理器构造函数以 `New` 开头、在应用层，本来就不在这道门禁的网内（门禁只收 `internal/<上下文>/domain` 下非 `New*` 的导出顶层函数）。它现在并进了登记用例，经 `cmd/parcel-api` 接上生产，棘轮要的东西已经兑现。本票新增的领域工厂都有生产调用点，`./internal/architecture/` 全绿。
 2. **待裁：演示停在 BUY 评价 `ZONE_UNRESOLVED`，到不了 ADR-0200 的供应商预期成本。** 这是 ADR-0189 越权风险点 3 与票 30 完成记录的「待裁」，不是本票的缺陷：演示成本卡没绑分区目录，按发生项造的计价输入也不带分区。两条路：
-   - **甲（建议，演示租户取值）**：演示成本卡绑分区目录 `SYN-CAT-ZONE-CN-SG`，走 ADR-0189 决定一第一条。按发生项造的输入已带邮编路线（`200000`→`018000`），经目录解出 `Z1`，与今天三段各 `Z1` 同价。**要先等 [routing-first-cut/20](../../routing-first-cut/issues/20-bound-cost-cards-fold-zones-through-the-parcel-postal-route.md) 落地**：在那之前候选成本取数不经读数补全，绑了目录的卡恒答待判断，初始路由会退回 `CANDIDATE_COSTS_PENDING`。改的是 `seedgen` 的成本卡与模板夹具同摘要，地盘同票 30。建议立票「演示成本卡绑分区目录」，Blocked by routing-first-cut/20。
+   - **甲（建议，演示租户取值）**：演示成本卡绑分区目录 `SYN-CAT-ZONE-CN-SG`，走 ADR-0189 决定一第一条。按发生项造的输入已带邮编路线（`200000`→`018000`），经目录解出 `Z1`，与今天三段各 `Z1` 同价。**要先等 [routing-first-cut/20](../../routing-first-cut/issues/20-bound-cost-cards-fold-zones-through-the-parcel-postal-route.md) 落地**：在那之前候选成本取数不经读数补全，绑了目录的卡恒答待判断，初始路由会退回 `CANDIDATE_COSTS_PENDING`。改的是 `seedgen` 的成本卡与模板夹具同摘要，地盘同票 30。**已立票 [43](./43-demo-cost-card-binds-the-zone-catalogue.md)**（评审时立），Blocked by routing-first-cut/20。
    - **乙（产品机制，留给 PP、SA、NR owner）**：按发生项取段计价区域。实际履约段要经计划段连到 NR 的线路段，再读段计价区域，跨三个上下文，需要新 ADR。真实租户若用按线路计价、不绑目录的干线卡，迟早要这一条；ADR-0189 越权风险点 3 一直挂着。
 3. 结果代数多出的细格 `MEMBERS_ALREADY_COVERED` 未在管理台出现：管理台没有发生项登记页，本票不建（地盘外）。
+
+## 评审记录（2026-10-19，隔离评审一轮；修订提交 `abede89f` 至 `72f5b083`）
+
+阻断 0 项。非阻断 10 项：评审建议进 main 前修的 3 项全修，其余 7 项修 5 项，1 项（只读首版）登记去向，1 项（进 main 协调）按任务口径留到进 main。
+
+### 建议进 main 前修的（全修）
+
+1. **自营两格先按身份查、后取锁，并发下错答不适用**（已修，`abede89f`；用例 `d39079d7`）。`selfOperated` 改为先问交集（`FindCovering` 取事实依据锁），再按身份查；READ COMMITTED 下锁后的新语句读得到对方已提交的那一行。真库两事务用例 `TestASelfOperatedDeclarationRacingAnExternalRegistrationIsAConflict`：A 落册后挂住，B 声明自营、等在锁上，A 提交后 B 答冲突并回显 A。把次序临时改回旧版重跑，该用例失败（B 答 `NOT_APPLICABLE`/`SELF_OPERATED_DECLARED`），证明它钉得住。ADR-0207 决定二写明这个次序与理由。
+2. **断言人身份未入册，ADR 与迁移头注言过其实**（已修，`2e923bea`、`72f5b083`）。评审给了两条路，取第二条（让断言人入册），理由见下面代决 1。
+   - TF 运营决定认证方 `tfhttp.OperatorAuthenticator` 改交 `OperatorIdentity`（租户与操作者，操作者写成「发行方#sub」），与 PS、NO 的运营决定认证方同一个写法；其余各口仍经 `tenantFor` 只取租户，签名不变（dcg23 新加的委托提交口照旧编译）。
+   - 命令加 `Registrant`（取自认证结果，载荷里不收；载荷带 `registrant` 键答 400）；领域加 `RegistrantReference`，`NewAssertedOccurrenceCondition(registrant, assertion)`，`OccurrenceCondition.AssertedBy()`；缺断言人答未受理 `REQUEST_MALFORMED`。
+   - 迁移 `transport_fulfillment/0032` 就地加 `condition_asserted_by` 一列（尚未进 main，故不另起迁移号），CHECK 改为断言那一格两件必带、不得为空；库面 CHECK 用例补两条。HTTP 回显 `conditionAssertedBy`。
+   - ADR-0207 决定三、六、Consequences 与越权风险点 1 改成如实的说法；迁移头注同步。
+3. **端到端判据没达成，缺口只留在完成记录里**（已处理，`6cf5cb0b`、`72f5b083`）。立票 [43](./43-demo-cost-card-binds-the-zone-catalogue.md)「演示成本卡绑分区目录」，Blocked by routing-first-cut/20，地盘同票 30；本票完成判据那一条标「移交 43」，「偏离与待裁」第 2 条、ADR-0207 Consequences 与种子 README「已知边界」都指向 43。
+
+### 其余非阻断
+
+4. **按段计费逐件登记会把同一段算多次**（已修，文档，`72f5b083`）。ADR-0207 越权风险点 4 补一句，交 TF、PC owner 定，并写明 ADR-0209 数量形落地时 `PER_SEGMENT` 应在段级去重；种子 README 数据故事第 8 步补登法提示（同段几件包裹、按段计费时作为一项的成员一并登记）。
+5. **重放与自营只读首版 `V1`**（登记去向，未改代码）。今天没有生产修订入口（`ReviseValidity` 没有生产调用方），也没有修订入口的票。写进 ADR-0207 Consequences 的「已知限制」一条：修订入口落地时，重放与自营两条路径改读链头，链头已失效时另行作答。不另立票，理由是改法依赖修订入口的形状，修订入口立票时从 ADR 后果取这一条即可。
+6. **咨询锁没有两事务用例**（已修，`d39079d7`）。`TestConcurrentRegistrationsWithOverlappingMembersSerializeOnTheFact`：A 登一个包裹、落册后挂住，B 登它和另一个包裹，B 等在事实依据锁上，A 提交后 B 答冲突 `MEMBERS_ALREADY_COVERED` 并回显 A，册上一项、信封一封。两条并发用例共用 `cmd/parcel-api` 已有的 `awaitAdvisoryWaiters` 与 `awaitDone`，按锁空间认等锁；装配为此拆出 `chargeOccurrenceDeps`。
+7. **UC-TF-002/006 步 7 指错**（已修，`72f5b083`）。改为「登法见 ADR-0207 决定一，AT 见本用例 `AT-TF-094`（`AT-TF-095`）」。
+8. **协议核对之后形成失败被说成请求有错**（已修，`abede89f`）。改为返回 error，由装配点回滚整笔、响亮报 500；用例 `TestAnAgreementCheckHandingBackNoLegalEntityIsRaised`（核对口答在册却不带法人与快照：上抛、什么都不写）。
+9. **测试注释计数**（已修，`d39079d7`）。改为「未配置与渠道换口的用例都钉在编排之前」。
+10. **进 main 协调**（未做，按任务口径留到进 main）。机制清点未重生成；`seed.sh` 的 governance 追加次序、`docs/adr/README.md` 行序、UC-TF-005 与 32 的合并照方案「并行车道」的令牌顺序办。评审修订新增两处要合并的：
+    - `internal/transportfulfillment/adapters/accessidentity/operator_authenticator_test.go` 的决定映射表，本票补了发生项登记一行，dcg23 在同一位置追加委托提交一行，取并集。
+    - `internal/transportfulfillment/adapters/http/operator_decision_intake.go`(+test)：本票改了认证方的返回类型与替身，dcg23 追加的委托提交口经 `tenantFor`、用同一个 `authenticatorFake{}`，合并后照旧编译，文本冲突取并集。
+    - 票号：本次立的 43 已避开在途分支的 40（dcg17、dcg23 各一张，已撞号）与 42（dcg32）；进 main 时若 41、43 另有人占，全仓搜替。
+
+### 代决与越权风险点（评审修订新增）
+
+- **代决 1：断言人入册，不收窄说法。** 方案 D07-1 要的是「断言记在运营决定上」；断言期内条件由人判断，只留「凭什么」不留「谁」，审计查不到该去问谁，收窄说法等于把方案要的那一半删掉。PS、NO 的运营决定口已经把操作者带进命令（复核人、决定方、处置人），TF 照同一写法补上，不是新造机制。
+- **代决 2：断言人放在发生条件里，不放在登记记录上。** 断言人是「登记者断言」这一格依据的一部分；ADR-0209 的「按协议声明判」那一格没有人断言，库面 CHECK 只要求断言那一格带断言人。日后若要「无论哪种依据都记登记者」，另加登记者一列，不改这一列的含义。
+- **代决 3：断言人不进内容比对。** 另一位操作者照原样重报答`已存在`、回显原断言人；原话不同才是异内容。越权风险点 7（TF owner）：第二位操作者的断言不另留痕；断言人随发生项回显在登记答复里，持这一种决定授予的操作者都看得到。
+- **代决 4：缺断言人答 `REQUEST_MALFORMED`，与缺租户同一格。** 两者都取自认证结果，缺了是入口漏了一道；HTTP 入口在编排之前已答 `ErrOperatorIdentityMissing`，编排这一格只防直调。
+- **越权风险点：认证方返回类型改动波及 TF 全部运营决定口的接线**（TF owner）。其余各口行为不变、仍只取租户；改动只在 TF 的 HTTP 适配器与 access-identity 适配器两处。
+
+### 验证（修订后）
+
+- `go build ./...` 干净；`go vet` 覆盖 `./internal/transportfulfillment/...`、`./internal/accessidentity/...`、`./cmd/parcel-api/`、`./cmd/parcel-dispatch/`、`./internal/settlementaccounting/adapters/...`、`./internal/parcelpricing/adapters/transportfulfillment/`、`./scripts/demo-seeds/...`，干净；本分支改动的 Go 文件 `gofmt -l` 为空。
+- 带真库 `go test -p 1 -count=1`：`./internal/transportfulfillment/...`、`./internal/accessidentity/...`、`./internal/architecture/`、`./cmd/parcel-api/`、`./cmd/parcel-dispatch/`、`./internal/settlementaccounting/adapters/transportfulfillment/`、`./internal/settlementaccounting/adapters/inbox/`、`./internal/parcelpricing/adapters/transportfulfillment/`、`./scripts/demo-seeds/...`，全绿。未跑全量，未重生成机制清点。
+- 一次性库 `dcg27rev` 上 `seed.sh` 退 0，发生项表三列 `condition_basis`、`condition_asserted_by`、`condition_assertion` 在、0 行；用完已删库。
+- 演示动线没有在修订后重走：修订只动了登记答复多一个键、册上多一列，以及自营路径的查询次序，HTTP 与装配两层的用例已经覆盖到。
