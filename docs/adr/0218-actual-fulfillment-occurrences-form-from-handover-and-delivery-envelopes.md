@@ -1,6 +1,6 @@
 # ADR-0218：实际履约发生项由交接与有效交付信封自动形成——只对已采用委托的段，找出被这件事实结束的参与，经既有登记用例形成；旅程取替代 / 退运旅程，否则按包裹派生
 
-Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/67，统一代决见 `.scratch/demo-chain-gaps/handover-dispatch-plan.md`「代决」C15 与「需要的 ADR」ADR-0218。**部分停用** [ADR-0207](./0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md) 决定七后半句、越权风险点 3 与决定四末句的演示约定，以及 [ADR-0209](./0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md) 决定五「登记者取自操作者信封的主体」一句，被停条款与适用场景见「对已接受记录的作用」。越权风险点见文末，待 TF owner 复核，第 2、3 点同时待 SA owner、第 5 点同时待 PC owner。）
+Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/67，统一代决见 `.scratch/demo-chain-gaps/handover-dispatch-plan.md`「代决」C15 与「需要的 ADR」ADR-0218。**部分停用** [ADR-0207](./0207-transport-charge-occurrences-are-registered-by-an-operation-decision-and-handed-off-in-the-same-transaction.md) 决定七后半句、越权风险点 3 与决定四末句的演示约定，以及 [ADR-0209](./0209-supplier-agreements-declare-charge-occurrence-conditions-and-registration-judges-by-them.md) 决定五「登记者取自操作者信封的主体」一句，被停条款与适用场景见「对已接受记录的作用」。越权风险点见文末，待 TF owner 复核，第 2、3 点同时待 SA owner、第 5 点同时待 PC owner。） **部分停用**（2026-10-19）：决定一「是`已交接`的，终点依据取交接自己交出的转出依据」与「多于一条：库面不一致，响亮失败，不挑一段去计费」两句、决定六「响亮失败」下「同一件事实在多个段里都结束了参与」一条，已由 [ADR-0221](./0221-a-handover-participation-basis-is-minted-from-the-handover-key.md) 停用——终点依据改由交接键铸，存量按版本加时刻认；后两处只停在旧拼法存量那一格（对上多于一条答`结束的参与认不出`、入账），逐字对上多于一条仍响亮失败；其余各条不变。
 Date: 2026-10-19
 
 ## Context
@@ -153,3 +153,4 @@ Date: 2026-10-19
 - [UC-TF-005](../application/transport-fulfillment/UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md)：步 9，`AT-TF-246`–`255`
 - [ADR-0074](./0074-tf-object-partitions-carry-a-port-segment-apart-from-ve-parcel-partitions.md)：交接与有效交付的分区键带口名段；本路停住挡的是这一分区（越权风险点 8）
 - 票 `.scratch/demo-chain-gaps/issues/67-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md`；后续票 `88`、`89`
+- [ADR-0221](./0221-a-handover-participation-basis-is-minted-from-the-handover-key.md)：部分停用本记录决定一两句与决定六「响亮失败」下一条——交接作终点的依据改由交接键铸，旧拼法存量对上多于一条时入账

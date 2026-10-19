@@ -114,6 +114,7 @@ at 取的是本上下文自有的事实，不在有效交付上另增一个声�
 - 票 `.scratch/demo-chain-gaps/issues/59-handover-declares-releasing-receiving-and-onward-nodes.md`；统一代决 `.scratch/demo-chain-gaps/handover-dispatch-plan.md`「代决」C1、C13、C14
 - 票 `.scratch/demo-chain-gaps/issues/65-handover-records-an-outbound-release-gate-reading.md`：决定四落地与文末补记
 - 票 `.scratch/demo-chain-gaps/issues/66-effective-delivery-records-a-final-delivery-gate-reading.md`：决定五落地与文末补记
+- [ADR-0221](./0221-a-handover-participation-basis-is-minted-from-the-handover-key.md)：参与的入场依据改由交接键铸，文末补记（票 66）「那次交接」的认法对新依据只认得出范围相同的一版，停点 `ENTRY_HANDOVER_AMBIGUOUS` 自此只出自存量；本记录不停用
 
 ## 补记：票 65 落决定四时的补充裁定（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」，待 TF、CC owner 复核）
 
