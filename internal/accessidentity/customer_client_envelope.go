@@ -9,7 +9,8 @@ import (
 )
 
 // ErrCustomerClientNotGranted 表示令牌有效，但客户端不在客户渠道册，或此刻没有这一项客户面能力的生效授予（撤销、出区间
-// 同此）。几种情形同答这一格、不说哪一半不对，理由同 ErrIntegrationClientNotGranted（ADR-0139 决定四第三格）。
+// 同此）。几种情形同答这一格、不说哪一半不对，理由同 ErrIntegrationClientNotGranted（ADR-0139 决定四「令牌有效，但客户端
+// 不在客户渠道册……」那一格）。
 //
 // ErrAccessChannelNotConfigured 不承载这一格：在首方族上它只留给发行方参数未设，恢复动作是配部署参数的人；这一格的恢复
 // 动作是租户运营去登记或恢复授予。
@@ -40,8 +41,9 @@ func (verified VerifiedCustomerClientToken) CertificateBound() bool         { re
 // CustomerClientCredentialVerifier 核验一次首方出示，交回经核验的客户端主体与证书绑定情况。
 //
 // 出示物沿用 IntegrationClientCredential：首方族复用集成客户端族的凭据机制（ADR-0139 决定二），令牌加本次连接的客户端
-// 证书，不另立一个同形的类型。核验方却不复用 IntegrationClientCredentialVerifier：两族的信任锚是两组部署参数、受众不同，
-// 共用一个接口，装配时把集成客户端族那一只接到首方铸造器上也编得过，令牌就能跨族通过校验期。失败分三格，同另外两族：
+// 证书，不另立一个同形的类型。核验方却不复用 IntegrationClientCredentialVerifier：首方族与集成客户端族的信任锚是两组部署
+// 参数、受众不同，共用一个接口，装配时把集成客户端族那一只接到首方铸造器上也编得过，令牌就能跨族通过校验期。失败分三格，
+// 同操作者族、集成客户端族：
 // ErrAccessChannelNotConfigured、ErrCredentialRejected、ErrCredentialVerifierUnavailable。
 type CustomerClientCredentialVerifier interface {
 	VerifyCustomerClientCredential(ctx context.Context, credential IntegrationClientCredential) (VerifiedCustomerClientToken, error)
@@ -173,20 +175,21 @@ func (minter *CustomerClientMinter) admit(
 	)
 }
 
-// customerAPIRequestKeys 是首方族的 RequestKeyDerivation（ADR-0139 决定五）：来源请求键就是客户系统在载荷里给的接入请求
-// 标识，去两端空白，此外一字不动。
-//
-// 标识按契约逐请求唯一（它标识的是一次请求，不是一份业务对象）：同一份内容换标识重发是两次来源请求，同标识重发是重放。
-// 提交与撤回读同一格而不另加前缀：一个客户系统若拿提交用过的标识去撤回，落到同一个来源身份上答的是接入冲突（摘要不同），
-// 不会被静默判成重放；加前缀则让客户对账时在委托上读到的来源请求键不再是它自己给的那一串。
+// customerAPIRequestKeys 是首方族的 RequestKeyDerivation（ADR-0139 决定五）：提交的来源请求键就是客户系统在载荷里给的
+// 接入请求标识，去两端空白，此外一字不动。标识按契约逐请求唯一（它标识的是一次请求，不是一份业务对象）：同一份内容换
+// 标识重发是两次来源请求，同标识重发是重放。
 type customerAPIRequestKeys struct{}
 
 func (customerAPIRequestKeys) DeriveSubmissionRequestKey(_ context.Context, request ChannelRequest) (string, error) {
 	return accessRequestIdentifierOf(request)
 }
 
-func (customerAPIRequestKeys) DeriveWithdrawalRequestKey(_ context.Context, request ChannelRequest) (string, error) {
-	return accessRequestIdentifierOf(request)
+// DeriveWithdrawalRequestKey 答推导不出：首方族还没有撤回口，撤回的来源请求键怎么推、与提交那一串怎么区分，留给撤回口
+// 换上首方 Intake 的那一票按 ADR-0139 越权风险点「撤回、取消、补充、资料修订、索赔提交各命令的来源请求键推导」的复核
+// 建议裁。先拿提交那一格顶上，等于替它裁了「同一标识先提交后撤回」答什么，而那件事 RequestKeyDerivation 的头注正是
+// 不许含糊的。
+func (customerAPIRequestKeys) DeriveWithdrawalRequestKey(context.Context, ChannelRequest) (string, error) {
+	return "", fmt.Errorf("%w: the first-party customer family has no withdrawal derivation yet", ErrRequestKeyNotDerived)
 }
 
 func accessRequestIdentifierOf(request ChannelRequest) (string, error) {
