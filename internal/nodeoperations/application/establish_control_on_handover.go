@@ -10,7 +10,7 @@ import (
 )
 
 // AdvanceControlOnHandoverResult 是一版权威运输交接在两个方向上的结果：交出节点那一侧的转出与接收节点那一侧的转入（UC-NO-005）。
-// 交接登记册读不动或读不回时两半都没跑，两格同答那一格未决。
+// 交接登记册读不动、或还读不回这一版时两半都没跑，两格同答那一格未决。
 type AdvanceControlOnHandoverResult struct {
 	out TransferControlOnHandoverResult
 	in  TransferControlOnHandoverResult

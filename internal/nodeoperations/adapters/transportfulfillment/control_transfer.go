@@ -23,7 +23,7 @@ var (
 	// ErrHandoverRecordInconsistent 说明按键读回的登记指着另一个键、业务时间为零，或更正回指连不成一条链（回指的前版读不回、回指
 	// 成环）：提供方的仓储不变量已破（ADR-0029），不是等谁。
 	ErrHandoverRecordInconsistent = errors.New("node operations transportfulfillment adapter: transport handover disagrees with its key")
-	// ErrControlTransferUndecided 说明这一拍停在交接登记册上（读不动或还读不回）。重投可能就过；生产装配把它登进
+	// ErrControlTransferUndecided 说明这一拍停在交接登记册上（读不动，或还读不回这一版）。重投可能就过；生产装配把它登进
 	// WithUndecidedSentinels，停在哪一口留在错误正文里。
 	ErrControlTransferUndecided = errors.New("node operations transportfulfillment adapter: control transfer on transport handover is undecided")
 	// ErrControlTransferDefect 说明编排答出封闭集合以外的结果，或信封上的键过不了本上下文的构造门。重投不会变，禁止进

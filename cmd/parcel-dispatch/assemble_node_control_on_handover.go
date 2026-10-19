@@ -18,7 +18,8 @@ import (
 // 列：各路各记各的 inbox 账，本路只会停在交接登记册上，合用一份会把别路的格子也宣布成「等依赖」。
 //
 // 不在名单里：notf.ErrControlTransferDefect（信封键过不了本上下文的构造门、编排答出封闭集合以外的格）、
-// notf.ErrHandoverRecordInconsistent 与 notf.ErrUntranslatableAnswer（提供方记录坏了）、noapplication.ErrUnexpectedControlTransitionSave
+// notf.ErrHandoverRecordInconsistent 与 notf.ErrUntranslatableAnswer（提供方记录坏了）、节点作业领域的
+// ErrInvalidHandoverCorrectionChain（来源给的前版连不成一条更正链，ADR-0220 决定二）、noapplication.ErrUnexpectedControlTransitionSave
 // （转移册答出集合以外的落册结果）——重投都不会变。入账不推进的各格不是错误，不在任何名单里。
 var nodeControlOnHandoverUndecidedSentinels = []error{
 	notf.ErrControlTransferUndecided,
