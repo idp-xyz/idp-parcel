@@ -1,7 +1,7 @@
 # 10 授权交付关系：参与方关系多一种「授权交付方」角色，PC 答授权交付判断，NO 侧立防腐适配器
 
 Category: enhancement
-Status: ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-psxm10`；与票 08 并行。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
 Blocked by: 无（ADR-0212 已接受，PC CONTEXT「参与方关系」已随票 07 补上授权交付关系一句）
 父票：[07](./07-verifiable-delivery-scope-for-customer-numbers.md)
 出处：[ADR-0212](../../../docs/adr/0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md) 决定一、三、九；PC CONTEXT「参与方关系」；CONTEXT-MAP `party-commercial → node-operations`；参数登记册 `PAR-NET-17`。

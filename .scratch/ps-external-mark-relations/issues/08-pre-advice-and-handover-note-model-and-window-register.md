@@ -1,7 +1,7 @@
 # 08 送站预报与送站交接单的领域模型和存储，可验证交付范围的推导，预报有效时窗册
 
 Category: enhancement
-Status: ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-psxm08`，NO 迁移号 0013；与票 10 并行。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
 Blocked by: 无（ADR-0212 已接受）
 父票：[07](./07-verifiable-delivery-scope-for-customer-numbers.md)
 出处：[ADR-0212](../../../docs/adr/0212-a-customer-number-hit-needs-a-verifiable-delivery-scope.md) 决定一、二、三、五、九；NO CONTEXT「可验证交付范围」「送站预报」「送站交接单」与两段同名生命周期；[UC-NO-006](../../../docs/application/node-operations/UC-NO-006-ESTABLISH-A-VERIFIABLE-DELIVERY-SCOPE.md)。
