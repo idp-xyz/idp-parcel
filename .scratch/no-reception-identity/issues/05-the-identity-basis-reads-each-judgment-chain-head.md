@@ -37,7 +37,7 @@ Blocked by: 04 进 main（ADR-0210、NO CONTEXT「判断链与当前有效版本
    - 冲突版之后接一版带关联、不记冲突的版本（模拟票 06 的处置版，用构造的观察，不依票 06）→ 成立；接一版不带关联、不记冲突的版本 → 缺少·待识别；
    - 坏形状两种 → `ErrInvalidDirectionalBasis`。
    - 真库（cmd/parcel-api，经生产装配）：一码两物之后读先到那件，身份一格是缺少·{待识别, 身份冲突}，后到那件仍是缺少·{待识别, 身份冲突}（`AT-NO-061`）。既有两份一码两物用例只断言「含身份冲突」，照旧绿；若有按原因集逐个断言的用例，照新读法改钉，并在完成记录里列出。
-5. **AT 点名**：`AT-NO-061`；`.scratch/at-coverage-inventory.md` 照它的扫描口径更正（UC-NO-004 新增的 `AT-NO-053` 至 `AT-NO-061` 一并入表，未钉的入②）。
+5. **AT 点名**：`AT-NO-061`；`.scratch/at-coverage-inventory.md` 照它的扫描口径更正（UC-NO-004 新增的 `AT-NO-053` 至 `AT-NO-061` 一并入表，未钉的入②；ps-external-mark-relations/05 新增的 `AT-NO-052` 也还没入表，顺带照口径补上）。
 6. ADR-0196 与 ADR-0199 的复核记录、adr/README 的标注已由票 04 写好，写明自本票进 main 起生效；本票不再改 ADR。
 
 ## 不做
