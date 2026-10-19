@@ -122,6 +122,7 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 | `data/transport/` | `cmd/parcel-transport-register schedule-template` | 周期安排登记册（ADR-0201）3 份：演示网络三条连接各一份按日运行的周期安排——`SYN-SCHED-SHA-SZX-DAILY`（`SYN-CONN-SHA-SZX`，当地 22:00 出发、历时 600 分钟，Asia/Shanghai）、`SYN-SCHED-SZX-SIN-DAILY`（`SYN-CONN-SZX-SIN`，10:00、300 分钟，Asia/Shanghai）、`SYN-SCHED-SIN-LM-DAILY`（`SYN-CONN-SIN-LM`，07:00、90 分钟，Asia/Singapore），服务范围都是 `SYN-SCOPE-01`。方向的连接代码与起讫节点取演示网络参考配置，时区取该连接的业务时区；出发时刻与历时是合成分钟数，不是任何线路的真实班期。具体班次不预生成：准备评估时按日期物化，或经 `schedule` 命令 / `POST /transport-fulfillment-transport-schedule-registrations` 按运行日期显式登记 |
 | `data/transport/04-materialized-schedule-szx-sin.json` | `cmd/parcel-transport-register schedule` | 逐维容量与容量池（ADR-0201 决定三，票 demo-chain-gaps/17）：上一行三份周期安排各声明重量（KG）与件数（PCS）两维硬上限——`SHA-SZX` 20000 / 4000、`SZX-SIN` 5000 / 1000、`SIN-LM` 1500 / 300，都是合成值，不是任何车辆或舱位的真实载量。这一份按固定合成日期 2026-10-21 显式物化登记干线一班 `SYN-SCHED-SZX-SIN-DAILY/2026-10-21`，随之建两池 `…/2026-10-21/WEIGHT` 与 `…/2026-10-21/PIECES`，`GET /transport-fulfillment-records?registry=capacity-pool` 列出它们。另一维的池经 `capacity-pool` 命令或 `POST /transport-fulfillment-capacity-pool-registrations` 登在已登记的班次上，池身份由（班次、维度）派生 |
 | `data/node-operations/01-pre-advice-window-syn-tenant-01.json` | `cmd/parcel-node-operations-register -kind pre-advice-window` | 预报有效时窗册（ADR-0212 决定二末项，`PAR-NET-18`）1 行：演示租户 `SYN-TENANT-01` 提前 1440 分、宽限 720 分，2026-01-01 起不设终点，登记依据 `SYN-BASIS-PRE-ADVICE-WINDOW-01`。合成取值，不是任何租户的预报惯例；同一行也可经 `POST /node-operations-pre-advice-window-registrations` 登记。没有这一行，凭预报的交付范围核对态答未配置 |
+| `data/transport/05-schedule-template-sha-szx-express-1200.json`、`06-…-2000.json` | `cmd/parcel-transport-register schedule-template` | 上海→深圳快线两份（票 demo-chain-gaps/18）：`SYN-SCHED-SHA-SZX-EXPRESS-1200` 与 `-2000`，同走 `SYN-CONN-SHA-SZX`，当地 12:00、20:00 出发、历时 240 分钟，各声明重量 3000 KG、件数 600 PCS（合成值）。计划段窗口随提交时刻移动，首段窗口长十二小时；按日一班 22:00、历时 600 分钟的那一份只接得住一小段提交时刻，加这两班后三班合起来让首段窗口不论落在哪一刻都含一班完整的出发与到达，演示提交因此总有一段 `运输机会已准备`。只调演示租户的班期，不改匹配规则（ADR-0201 决定六） |
 | `operator-channel/` | — | 演示发行方：Dex 的容器描述（`compose.yaml`，不并进仓库根那份门禁库描述）与配置（`dex.yaml`：管理台公共客户端、两个合成静态用户），取令牌脚本 `operator-token.sh`，操作者渠道取证脚本 `probe-operator-channel.sh`；另有集成客户端族的发行方配置 `integration-dex.yaml` 与取令牌脚本 `integration-token.sh`，首方客户族的受众与合成客户端也登在 `integration-dex.yaml`，取令牌脚本 `customer-token.sh`。用法见上面「操作者渠道」「集成客户端渠道」「首方客户渠道」三节 |
 | `migrate/` | — | 迁移助手（`migrate.Run` 的隔离环境入口；迁移计划刻意没有生产入口） |
 | `seedgen/` | — | 计价快照生成器：价卡、序列与参考目录的登记输入带规范化版本号与内容摘要自校，必须经真领域构造函数折装；PPC/PRS/PRC 规范化版本升级时重跑并提交新产物 |
@@ -230,6 +231,13 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
    来源写 `{"kind": "OPERATOR_DECLARATION", "reference": "SYN-DEMAND-DECL-01/v1"}`，判断时点与有效期由声明方给。新预占
    答 201 `CAPACITY_RESERVED`，原样重交答 200 已有；超出余量答 200 `CAPACITY_EXCEEDED` 并带余量，没有任何审批能越过。
    需求量与来源是演示租户的声明值，证据只记 `S`。
+
+   提交一单、初始路由形成之后，运输履约逐段形成准备结果（ADR-0201 决定六至八，票 demo-chain-gaps/18）：`GET
+   /transport-fulfillment-records?registry=transport-preparation` 列出这一件的三段，各带结论、段窗口、按申报取的需求量
+   （重量、外廓乘出的体积、一件）与候选依据。首段总有一班快线或按日那一班落在窗口里、两池都够，答
+   `OPPORTUNITY_PREPARED`，选中的班次多半只是评估时按日期物化出来的（候选 `version` 为 0）——要订舱或装载分配先显式登记
+   那一班。后两段的窗口按演示网络的处理时长与衔接缓冲算，与按日那两份的班期大多错开，答 `NO_CURRENT_OPPORTUNITY`；
+   这是如实答案。准备不预占、不建班次、不发信封。
 
 ## 已知边界（如实记录，不是缺陷）
 
