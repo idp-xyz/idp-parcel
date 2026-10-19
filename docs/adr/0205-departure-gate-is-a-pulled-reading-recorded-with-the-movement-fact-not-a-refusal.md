@@ -1,6 +1,6 @@
 # ADR-0205：出发门禁是拉取的读数——与移动事实同笔落册，不拒收；移动事实带声明的段
 
-Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/32，统一代决见 `.scratch/demo-chain-gaps/tf-chain-plan.md`「05 移动事实与出发门禁」D05-1、D05-2、D05-6 至 D05-10 与「需要的 ADR」ADR-0205。越权风险点见文末，待各条括注的 owner 复核。）
+Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/32，统一代决见 `.scratch/demo-chain-gaps/tf-chain-plan.md`「05 移动事实与出发门禁」D05-1、D05-2、D05-6 至 D05-10 与「需要的 ADR」ADR-0205。越权风险点见文末，待各条括注的 owner 复核。）越权风险点 1「挡下要靠设备在动作之前问；那个读口……等 peer 收工后另立票」已由 [ADR-0219](./0219-a-device-previews-the-departure-gate-before-departing-and-reads-what-the-departure-will-record.md) 回答（2026-10-19）：作业事实渠道开只读问询，交回与随后同参出发同一套读数，运输履约不落记录；出发照本记录在它自己那一刻重问并落册，本记录各条不变。
 Date: 2026-10-19
 
 ## Context
@@ -110,6 +110,8 @@ Date: 2026-10-19
 - [ADR-0049](./0049-publish-channel-is-in-process-delivery-until-load-evidence.md)：接得住才登记
 - 票 `.scratch/demo-chain-gaps/issues/32-movement-facts-declare-segment-and-record-departure-gate-reading.md`、`05-movement-facts-are-unlinked-and-departure-gate-is-self-reported.md`
 - [ADR-0213](./0213-a-transport-handover-declares-its-releasing-receiving-and-onward-nodes.md)：决定四与文末补记，交出门禁读数与本记录同一封闭集；五格与逐对象那一格自票 demo-chain-gaps/65 起是两种读数的共用内核（`domain/gate_reading.go`），本记录所列出发一侧的名字留作别名，出发的答复与明细不变
+
+- [ADR-0219](./0219-a-device-previews-the-departure-gate-before-departing-and-reads-what-the-departure-will-record.md)：后继——回答越权风险点 1，设备出发前门禁问询走本记录决定二同一条读数路径，不落记录、不挡出发
 
 ## 补记：票 33 落地时的补充裁定（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」，待 TF、VE owner 复核）
 
