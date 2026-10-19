@@ -1,7 +1,7 @@
 # 80 集运单元的权威运输交接不推进成员的节点控制：单元控制与成员「随单元受控」的规则没立
 
 Category: enhancement
-Status: needs-triage——2026-10-19 票 [61](./61-node-control-transfers-out-on-an-authoritative-handover.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0214](../../../docs/adr/0214-node-control-transfers-out-and-in-on-an-authoritative-transport-handover.md) 决定二与越权风险点 2；方案「后继」一节第一条（[handover-dispatch-plan](../handover-dispatch-plan.md)）。
+Status: needs-triage——2026-10-19 票 [61](./61-node-control-transfers-out-on-an-authoritative-handover.md) 的作者子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。出自 [ADR-0214](../../../docs/adr/0214-node-control-transfers-out-and-in-on-an-authoritative-transport-handover.md) 决定二与越权风险点「集运单元的交接暂不推进」；方案「后继」一节「集运单元交接：单元控制与成员「随单元受控」；NR 逐成员复核」那一条（[handover-dispatch-plan](../handover-dispatch-plan.md)）。
 Blocked by: 无
 
 ## 现象
