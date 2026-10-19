@@ -49,7 +49,7 @@ for id in "${@:2}"; do
     commercial-policies)
       # 票 07：接单规则包页签上新增的两族阶段内容声明。四个终局结果与两个收寄来源
       # 都要在，且规则引用仍是 5 条——三族若互相翻倍，条数会一起变。
-      check "$f" want "SYN-RULEPKG-01" "SYN-QUAL-REALNAME-01" \
+      check "$f" want "SYN-RULEPKG-01" \
         "节点收寄" "场外揽收" "有效送达" "退回完成" "服务终止" "监管处置" \
         "SYN-FINAL-DELIVERY-01" "接单规则包 1 条"
       check "$f" forbid "未声明" "已声明,正文为空"

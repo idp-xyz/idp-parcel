@@ -92,7 +92,7 @@
       "objectId": "SYN-RULEPKG-01",
       "version": "v1",
       "scope": "SYN-SCOPE-01",
-      "contentDigest": "PCC-1:266a5536a9c475f5d3a5c5ad0c33f7becc12931d1fdbacd141f1ddda0f691d68",
+      "contentDigest": "PCC-1:d6b23fa1505b3d539ed7fff174ac0818dc0854486dfbf805c6c832cd592d740f",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "references": {
         "SERVICE_PRODUCT": "SYN-PROD-CN-SG-EXPRESS"
@@ -146,9 +146,6 @@
           "sources": [
             "NODE_INTAKE",
             "OFFSITE_PICKUP"
-          ],
-          "qualifications": [
-            "SYN-QUAL-REALNAME-01"
           ]
         },
         "asOfPolicies": [
