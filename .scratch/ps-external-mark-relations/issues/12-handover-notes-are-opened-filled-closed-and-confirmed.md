@@ -1,7 +1,7 @@
 # 12 送站交接单：作业事实登记开立、归入、关闭；客户渠道与运营决定两路确认绑定；范围成立时自投门铃重核
 
 Category: enhancement
-Status: in-progress——2026-10-19 作者子代理修完评审阻断（以送站交接单为依据推范围须是它的成员），待复审。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（08、10、11 已进 main），分支 `claude-psxm12`；access_identity 迁移 0016、node_operations 迁移 0016、治理种子 governance/37。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
+Status: in-progress——2026-10-19 评审 0 阻断（阻断一条已修，会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理修完评审阻断（以送站交接单为依据推范围须是它的成员），待复审。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（08、10、11 已进 main），分支 `claude-psxm12`；access_identity 迁移 0016、node_operations 迁移 0016、治理种子 governance/37。此前 ready-for-agent——2026-10-19 票 07 的作者子代理照 ADR-0212 拆出。代决：用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」，2026-10-19 答「需要」
 Blocked by:
 - [08](./08-pre-advice-and-handover-note-model-and-window-register.md) 进 main：交接单的领域与册。
 - [10](./10-authorized-delivery-relationship-in-party-commercial.md) 进 main：授权交付判断与 NO 侧适配器。
@@ -247,3 +247,12 @@ rebase 到 `8e5125c2` 之后：`gofmt -l .` 无输出；`go build ./...`、`go v
 - 票面「不做」照旧：管理台交接单页与确认按钮（票 13）、客户查看交接单明细的读口、前线导入模板的交接单行、运营决定否认。
 - 收寄口没接准入范围（越权风险点 2）。
 - 演示脚本没另立：实走用 curl，载荷与答复写在演示文档那一段。
+
+## Comments
+
+### 评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审；2026-10-19，首轮钉 `7d9c8c21`，修补后钉 `8a593f23`）
+
+- **首轮阻断（已修，`afd7c005`）**：交接单关闭之后，带它单号送站的非成员实物仍按推导拿到这张交接单的范围，绕过了客户对关闭时冻结的成员清单所作的确认。推送方代决：以交接单为依据须是成员，否则答依据不适用·`NOT_A_HANDOVER_MEMBER`；收寄改为先落收寄成员再推导，重核同一判法；`node_operations/0016` 重建细分 CHECK 加新词；ADR-0212 文末追加复核记录。编排与经生产装配的真库用例先红（原话 `INTAKE_FORMED`，want 待识别）后绿。
+- **Spec 其余**：ADR-0212 的交接单三步与两路确认落到。作业事实登记三口只在 NODE 作业范围、按三种事实判准入；运营决定确认先看已有结论再问 PC 授权交付判断（问句含开立节点），答否或未配置不落结论、读不动不形成答案；客户渠道只对已关闭、声称了自己账户的交接单下结论，余者同答 404；结论按（交接单，客户账户）只比结论。最后一个账户确认时与归入已成立的交接单时各交「交付范围成立」门铃，落结论取交接单行排他锁、并发确认恰一笔看到成立（反证实测）。重核按交接单只重核可重核的成员。
+- **作者自定的格认可**：两处字面量取 `DELIVERY_HANDOVER_CONFIRMATION`（与预报一族同名）；收寄带交接单标识即落收寄成员（不落则门铃找不到这件）。
+- **与另一会话的共享文件**：`cmd/parcel-api` 四份、`cmd/parcel-dispatch/assemble.go`、`internal/accessidentity` 枚举、`seed.sh` 只追加；access_identity 0016 以 main 上全集为底、治理种子 37–41。
