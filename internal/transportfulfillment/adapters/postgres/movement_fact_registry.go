@@ -245,25 +245,55 @@ func departureGateReadingDetailOf(reading domain.DepartureGateReading) departure
 		detail.Stops = append(detail.Stops, stop.String())
 	}
 	for _, finding := range reading.Findings() {
-		row := departureGateFindingDetail{Object: finding.Object().String(), Answer: finding.Answer().String(), Bases: []departureGateBasisDetail{}}
-		if judgement, judged := finding.Judgement(); judged {
-			row.Judgement = &judgement
-		}
-		for _, basis := range finding.Bases() {
-			sources := basis.Sources
-			if sources == nil {
-				sources = []string{}
-			}
-			row.Bases = append(row.Bases, departureGateBasisDetail{Action: basis.Action, Cause: basis.Cause, Sources: sources})
-		}
-		detail.Findings = append(detail.Findings, row)
+		detail.Findings = append(detail.Findings, gateFindingDetailOf(finding))
 	}
 	return detail
 }
 
+// gateFindingDetailOf 是逐对象那一格在 jsonb 里的形状，出发与交出两种读数共用（交出见 transport_handover_gate_reading.go）。
+func gateFindingDetailOf(finding domain.GateFinding) departureGateFindingDetail {
+	row := departureGateFindingDetail{Object: finding.Object().String(), Answer: finding.Answer().String(), Bases: []departureGateBasisDetail{}}
+	if judgement, judged := finding.Judgement(); judged {
+		row.Judgement = &judgement
+	}
+	for _, basis := range finding.Bases() {
+		sources := basis.Sources
+		if sources == nil {
+			sources = []string{}
+		}
+		row.Bases = append(row.Bases, departureGateBasisDetail{Action: basis.Action, Cause: basis.Cause, Sources: sources})
+	}
+	return row
+}
+
+// gateFindingFrom 是 gateFindingDetailOf 的反方向，过同一道构造门。
+func gateFindingFrom(row departureGateFindingDetail) (domain.GateFinding, error) {
+	object, err := domain.NewCarriedObjectReference(row.Object)
+	if err != nil {
+		return domain.GateFinding{}, fmt.Errorf("gate reading detail: %w", err)
+	}
+	answer, err := gateAnswerFrom(row.Answer)
+	if err != nil {
+		return domain.GateFinding{}, err
+	}
+	judgement := ""
+	if row.Judgement != nil {
+		judgement = *row.Judgement
+	}
+	bases := make([]domain.GateBasis, 0, len(row.Bases))
+	for _, basis := range row.Bases {
+		bases = append(bases, domain.GateBasis{Action: basis.Action, Cause: basis.Cause, Sources: basis.Sources})
+	}
+	finding, err := domain.NewGateFinding(object, answer, judgement, bases)
+	if err != nil {
+		return domain.GateFinding{}, fmt.Errorf("gate reading detail: %w", err)
+	}
+	return finding, nil
+}
+
 func departureGateReadingFrom(answerText string, raw []byte) (domain.DepartureGateReading, error) {
 	none := domain.DepartureGateReading{}
-	answer, err := departureGateAnswerFrom(answerText)
+	answer, err := gateAnswerFrom(answerText)
 	if err != nil {
 		return none, err
 	}
@@ -291,41 +321,25 @@ func departureGateReadingFrom(answerText string, raw []byte) (domain.DepartureGa
 		spec.Stops = append(spec.Stops, stop)
 	}
 	for _, row := range detail.Findings {
-		object, err := domain.NewCarriedObjectReference(row.Object)
-		if err != nil {
-			return none, fmt.Errorf("gate reading detail: %w", err)
-		}
-		findingAnswer, err := departureGateAnswerFrom(row.Answer)
+		finding, err := gateFindingFrom(row)
 		if err != nil {
 			return none, err
-		}
-		judgement := ""
-		if row.Judgement != nil {
-			judgement = *row.Judgement
-		}
-		bases := make([]domain.DepartureGateBasis, 0, len(row.Bases))
-		for _, basis := range row.Bases {
-			bases = append(bases, domain.DepartureGateBasis{Action: basis.Action, Cause: basis.Cause, Sources: basis.Sources})
-		}
-		finding, err := domain.NewDepartureGateFinding(object, findingAnswer, judgement, bases)
-		if err != nil {
-			return none, fmt.Errorf("gate reading detail: %w", err)
 		}
 		spec.Findings = append(spec.Findings, finding)
 	}
 	return domain.RehydrateDepartureGateReading(spec, answer)
 }
 
-func departureGateAnswerFrom(raw string) (domain.DepartureGateAnswer, error) {
-	for _, answer := range []domain.DepartureGateAnswer{
-		domain.DepartureGateNotGuarded, domain.DepartureGateAdmitted, domain.DepartureGateUndecided,
-		domain.DepartureGateUnreadable, domain.DepartureGateBlocked,
+// gateAnswerFrom 是门禁读数五格的名称镜像，出发与交出共用，词取各常量自己的 String()。
+func gateAnswerFrom(raw string) (domain.GateAnswer, error) {
+	for _, answer := range []domain.GateAnswer{
+		domain.GateNotGuarded, domain.GateAdmitted, domain.GateUndecided, domain.GateUnreadable, domain.GateBlocked,
 	} {
 		if answer.String() == raw {
 			return answer, nil
 		}
 	}
-	return domain.DepartureGateAnswerInvalid, fmt.Errorf("unknown departure gate answer %q", raw)
+	return domain.GateAnswerInvalid, fmt.Errorf("unknown gate answer %q", raw)
 }
 
 func departureGateStopFrom(raw string) (domain.DepartureGateStop, error) {

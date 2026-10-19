@@ -11,9 +11,8 @@ import (
 // 本文件是出发门禁读数（ADR-0205）：一条出发落册时与它同一笔保存的「当时关务怎么答」。读数不挡事实——出发已经
 // 发生，挡下是动作之前那一问的事；读数只把那一刻问来的答复如实记下，阻断也照记。
 //
-// 读数里逐对象的答复与依据都是 customs-compliance 的判断（ADR-0206）。本上下文只把它译成自己的五格并保存依据原文，
-// 不重折任何一源：三源怎么折、跨不跨区、门禁满足为什么不等于放行，只在关务那边定义一处。本文件自己定义的是：问之前
-// 本上下文这一侧停在了哪（段、班次、对象），以及一条出发上多个对象的答复怎样压成整条出发的一格。
+// 五格与逐对象那一格是门禁读数的共用内核（gate_reading.go），交出门禁读数也用它。本文件自己定义的是：问之前本上下文
+// 这一侧停在了哪（段、班次、对象），以及一条出发上多个对象的答复怎样压成整条出发的一格。
 
 var (
 	ErrInvalidDepartureGateReading = errors.New("transport fulfillment: invalid departure gate reading")
@@ -23,39 +22,18 @@ var (
 	ErrDepartureGateReadingMisplaced = errors.New("transport fulfillment: the departure gate reading does not belong to this movement fact")
 )
 
-// DepartureGateAnswer 是出发门禁读数的封闭各格。常量的取值次序就是一条出发上多个对象压成一格时的压制次序（大者压
-// 小者），次序与理由只在 ADR-0205 决定二定义：改次序要先改那里，再挪这里的常量。关务的`未配置`不单成一格，同在决定二。
-type DepartureGateAnswer uint8
+// DepartureGateAnswer 与以下几个出发一侧的名字是共用内核（gate_reading.go）的别名：出发读数先落、名字先占，消费方
+// （持久化、线格式、全程追踪的派生）照旧按这些名字读；同一封闭集只定义一处，出发的答复因此逐字不变。
+type DepartureGateAnswer = GateAnswer
 
 const (
-	DepartureGateAnswerInvalid DepartureGateAnswer = iota
-	DepartureGateNotGuarded
-	DepartureGateAdmitted
-	DepartureGateUndecided
-	DepartureGateUnreadable
-	DepartureGateBlocked
+	DepartureGateAnswerInvalid = GateAnswerInvalid
+	DepartureGateNotGuarded    = GateNotGuarded
+	DepartureGateAdmitted      = GateAdmitted
+	DepartureGateUndecided     = GateUndecided
+	DepartureGateUnreadable    = GateUnreadable
+	DepartureGateBlocked       = GateBlocked
 )
-
-func (answer DepartureGateAnswer) valid() bool {
-	return answer >= DepartureGateNotGuarded && answer <= DepartureGateBlocked
-}
-
-func (answer DepartureGateAnswer) String() string {
-	switch answer {
-	case DepartureGateNotGuarded:
-		return "NOT_GUARDED"
-	case DepartureGateAdmitted:
-		return "ADMITTED"
-	case DepartureGateUndecided:
-		return "UNDECIDED"
-	case DepartureGateUnreadable:
-		return "UNREADABLE"
-	case DepartureGateBlocked:
-		return "BLOCKED"
-	default:
-		return ""
-	}
-}
 
 // DepartureGateStop 是本上下文这一侧没走到「问关务」那一步的原因。每种只属于一格（Answer）：答复由停点推出，
 // 不另存一份可与停点对不上的结论。
@@ -116,76 +94,25 @@ func (stop DepartureGateStop) String() string {
 	}
 }
 
-// DepartureGateBasis 是关务交回的一条依据：适用的受门禁动作、依据种类与来源，原文保存——词汇属 customs-compliance，
-// 本上下文不解释、不重排。读不动时没有动作与来源，种类指名读不动的是哪一口。
-type DepartureGateBasis struct {
-	Action  string
-	Cause   string
-	Sources []string
-}
+// DepartureGateBasis、DepartureGateFinding 同为共用内核的别名，理由同 DepartureGateAnswer。
+type (
+	DepartureGateBasis   = GateBasis
+	DepartureGateFinding = GateFinding
+)
 
-// DepartureGateFinding 是一件载运对象的那一格：关务对它这次出发的答复译成的五格之一、关务判断标识与同格依据。
-// 标识只在关务形成了判断时有——读不动时关务那边什么也没记下，指不回去。
-type DepartureGateFinding struct {
-	object    CarriedObjectReference
-	answer    DepartureGateAnswer
-	judgement string
-	bases     []DepartureGateBasis
-}
-
-// NewDepartureGateFinding 立一件对象的那一格。依据至少一条：没有依据的答复读者无从核对，与关务「答复只列同格
-// 依据」那条同一纪律。原文里不许有 NUL——库面 jsonb 存不下，存不下的值在这里拒，不等到落库那一刻。
+// NewDepartureGateFinding 立出发读数里一件对象的那一格；构造门在共用内核（NewGateFinding），立不起来的那一格在出发这一侧
+// 认作读数不成形。
 func NewDepartureGateFinding(
 	object CarriedObjectReference,
 	answer DepartureGateAnswer,
 	judgement string,
 	bases []DepartureGateBasis,
 ) (DepartureGateFinding, error) {
-	if !object.valid() || !answer.valid() || len(bases) == 0 {
-		return DepartureGateFinding{}, ErrInvalidDepartureGateReading
+	finding, err := NewGateFinding(object, answer, judgement, bases)
+	if err != nil {
+		return DepartureGateFinding{}, fmt.Errorf("%w: %w", ErrInvalidDepartureGateReading, err)
 	}
-	judged := strings.TrimSpace(judgement) != ""
-	if judged == (answer == DepartureGateUnreadable) || strings.IndexByte(judgement, 0) >= 0 {
-		return DepartureGateFinding{}, ErrInvalidDepartureGateReading
-	}
-	copied := make([]DepartureGateBasis, 0, len(bases))
-	for _, basis := range bases {
-		if !storableBasisText(basis.Cause, true) || !storableBasisText(basis.Action, false) {
-			return DepartureGateFinding{}, ErrInvalidDepartureGateReading
-		}
-		for _, source := range basis.Sources {
-			if !storableBasisText(source, true) {
-				return DepartureGateFinding{}, ErrInvalidDepartureGateReading
-			}
-		}
-		basis.Sources = append([]string(nil), basis.Sources...)
-		copied = append(copied, basis)
-	}
-	return DepartureGateFinding{object: object, answer: answer, judgement: judgement, bases: copied}, nil
-}
-
-func storableBasisText(value string, required bool) bool {
-	if strings.IndexByte(value, 0) >= 0 {
-		return false
-	}
-	return !required || strings.TrimSpace(value) != ""
-}
-
-func (finding DepartureGateFinding) Object() CarriedObjectReference { return finding.object }
-func (finding DepartureGateFinding) Answer() DepartureGateAnswer    { return finding.answer }
-
-// Judgement 交回关务判断标识；读不动时答 false。
-func (finding DepartureGateFinding) Judgement() (string, bool) {
-	return finding.judgement, finding.judgement != ""
-}
-
-func (finding DepartureGateFinding) Bases() []DepartureGateBasis {
-	bases := make([]DepartureGateBasis, 0, len(finding.bases))
-	for _, basis := range finding.bases {
-		basis.Sources = append([]string(nil), basis.Sources...)
-		bases = append(bases, basis)
-	}
-	return bases
+	return finding, nil
 }
 
 // DepartureGateReadingSpec 是一次读数的全部内容。停点与逐对象答复二者恰有其一：停在本上下文这一侧就没问关务，
