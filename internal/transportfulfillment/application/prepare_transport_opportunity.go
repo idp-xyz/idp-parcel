@@ -19,9 +19,10 @@ var ErrUnexpectedPoolSave = errors.New("transport fulfillment: unexpected capaci
 // OpportunityOutcome 是运输机会准备的应用处理结果。容量三格是业务负向（ADR-0029）：
 // 超额预留带余量（等容量或换班次）、预占过期（重新预占）、守恒撞线（同一范围不得二次
 // 转换）——都是已知答案，不是改单也不是等依赖。建池时班次不在册也是一格业务负向：
-// 续办是先登班次，与改载荷不同。预占与释放成了运营决定之后（ADR-0203 决定六），池不在册、
-// 预占不在册、单位不是池的单位各成一格，续办分别是先登池或改指池、改指预占、按池的单位
-// 重述数量，都不并进`未受理`。`未受理`的线上名与 TF 其余运营决定口、登记口同名。
+// 续办是先登班次，与改载荷不同。预占与释放是运营决定（ADR-0203 决定六）：池不在册、预占不在册、
+// 单位不是池的单位、释放时点早于预占的判断时点各成一格，续办分别是先登池或改指池、改指预占、
+// 按池的单位重述数量、按那一份预占的有效区间重述时点，都要对着在册的池或预占才判得出，所以不并进
+// `未受理`——`未受理`只说载荷单看不成立，不读池。`未受理`的线上名与 TF 其余运营决定口、登记口同名。
 type OpportunityOutcome uint8
 
 const (
@@ -45,6 +46,7 @@ const (
 	ReleaseExistingResult
 	ReleaseConflict
 	DemandUnitMismatch
+	ReservationNotYetEffectiveOutcome
 )
 
 func (outcome OpportunityOutcome) String() string {
@@ -87,6 +89,8 @@ func (outcome OpportunityOutcome) String() string {
 		return "RELEASE_CONFLICT"
 	case DemandUnitMismatch:
 		return "UNIT_MISMATCH"
+	case ReservationNotYetEffectiveOutcome:
+		return "RESERVATION_NOT_YET_EFFECTIVE"
 	default:
 		return ""
 	}
@@ -377,8 +381,9 @@ func (handler *PrepareTransportOpportunityHandler) Reserve(
 		return OpportunityResult{outcome: OpportunityNotAccepted}, nil
 	}
 	demand, err := capacityDemandFrom(command.Quantity, command.Unit, command.SourceKind, command.SourceReference)
-	at := domain.AtRegistryPrecision(command.At)
-	if err != nil || at.IsZero() || !domain.AtRegistryPrecision(command.ValidUntil).After(at) {
+	// 判断与落册用同一份截到登记册精度的时刻：否则首答回显的时刻带亚微秒，重放回显的是库里截过的那一份，两次答复不一样。
+	at, validUntil := domain.AtRegistryPrecision(command.At), domain.AtRegistryPrecision(command.ValidUntil)
+	if err != nil || at.IsZero() || !validUntil.After(at) {
 		return OpportunityResult{outcome: OpportunityNotAccepted}, nil
 	}
 	record, result := handler.loadPool(ctx, command.TenantID, command.Pool)
@@ -387,13 +392,13 @@ func (handler *PrepareTransportOpportunityHandler) Reserve(
 	}
 	if existing, exists := record.Pool.ReservationFor(reservationRef); exists {
 		outcome := ReservationConflict
-		if existing.Declares(demand, command.ValidUntil, command.At) {
+		if existing.Declares(demand, validUntil, at) {
 			outcome = ReservationExistingResult
 		}
 		return OpportunityResult{outcome: outcome, pool: record, hasRecord: true, reservation: reservationRef}, nil
 	}
 
-	reservedPool, err := record.Pool.Reserve(reservationRef, demand, command.ValidUntil, command.At)
+	reservedPool, err := record.Pool.Reserve(reservationRef, demand, validUntil, at)
 	switch {
 	case errors.Is(err, domain.ErrCapacityUnitMismatch):
 		return OpportunityResult{outcome: DemandUnitMismatch, pool: record, hasRecord: true}, nil
@@ -402,7 +407,7 @@ func (handler *PrepareTransportOpportunityHandler) Reserve(
 			outcome:   CapacityExceededOutcome,
 			pool:      record,
 			hasRecord: true,
-			available: record.Pool.AvailableThrough(command.At, command.ValidUntil),
+			available: record.Pool.AvailableThrough(at, validUntil),
 		}, nil
 	case err != nil:
 		return OpportunityResult{outcome: OpportunityNotAccepted}, nil
@@ -413,8 +418,8 @@ func (handler *PrepareTransportOpportunityHandler) Reserve(
 }
 
 // Release 显式释放一份预占上未消耗的范围（ADR-0203 决定三、五、六）。次序：载荷过构造门 → 读池 → 按释放引用分重放与
-// 冲突 → 预占在册 → 单位 → 过期与守恒 → 落池。释放引用在池内认领：同一引用原样重交答原释放，改了数量、来源、时点或
-// 挪到另一份预占上都是冲突——不认领的话，每重交一次就多还一份容量。
+// 冲突 → 预占在册 → 单位 → 有效区间（尚未生效、过期）与守恒 → 落池。释放引用在池内认领：同一引用原样重交答原释放，
+// 改了数量、来源、时点或挪到另一份预占上都是冲突——不认领的话，每重交一次就多还一份容量。
 func (handler *PrepareTransportOpportunityHandler) Release(
 	ctx context.Context,
 	command ReleaseCapacityCommand,
@@ -428,7 +433,8 @@ func (handler *PrepareTransportOpportunityHandler) Release(
 		return OpportunityResult{outcome: OpportunityNotAccepted}, nil
 	}
 	demand, err := capacityDemandFrom(command.Quantity, command.Unit, command.SourceKind, command.SourceReference)
-	if err != nil || domain.AtRegistryPrecision(command.At).IsZero() {
+	at := domain.AtRegistryPrecision(command.At)
+	if err != nil || at.IsZero() {
 		return OpportunityResult{outcome: OpportunityNotAccepted}, nil
 	}
 	record, result := handler.loadPool(ctx, command.TenantID, command.Pool)
@@ -437,7 +443,7 @@ func (handler *PrepareTransportOpportunityHandler) Release(
 	}
 	if on, existing, taken := record.Pool.ReleaseFor(releaseRef); taken {
 		outcome := ReleaseConflict
-		if on == reservationRef && existing.Declares(demand, command.At) {
+		if on == reservationRef && existing.Declares(demand, at) {
 			outcome = ReleaseExistingResult
 		}
 		return OpportunityResult{outcome: outcome, pool: record, hasRecord: true, reservation: on, release: releaseRef}, nil
@@ -446,12 +452,12 @@ func (handler *PrepareTransportOpportunityHandler) Release(
 		return OpportunityResult{outcome: ReservationNotFound, pool: record, hasRecord: true}, nil
 	}
 
-	releasedPool, err := record.Pool.Release(releaseRef, reservationRef, demand, command.At)
+	releasedPool, err := record.Pool.Release(releaseRef, reservationRef, demand, at)
 	if errors.Is(err, domain.ErrCapacityUnitMismatch) {
 		return OpportunityResult{outcome: DemandUnitMismatch, pool: record, hasRecord: true, reservation: reservationRef}, nil
 	}
 	if mapped := capacitySentinel(err); mapped != OpportunityOutcomeInvalid {
-		// 过期与守恒撞线都交回那一份预占：三量在上面，声明方据此看还能释放多少。
+		// 尚未生效、过期与守恒撞线都交回那一份预占：判断时点、有效期与三量在上面，声明方据此看该在哪一段、还能释放多少。
 		return OpportunityResult{outcome: mapped, pool: record, hasRecord: true, reservation: reservationRef}, nil
 	}
 	if err != nil {
@@ -567,12 +573,14 @@ func (handler *PrepareTransportOpportunityHandler) replacePool(
 	return OpportunityResult{outcome: outcome, pool: record, hasRecord: true}, nil
 }
 
-// capacitySentinel 把容量转换的领域哨兵透出为业务负向格：过期重新预占、守恒撞线不得
+// capacitySentinel 把容量转换的领域哨兵透出为业务负向格：过期重新预占、尚未生效按有效区间重述时点、守恒撞线不得
 // 二次转换、查无预占改指在册的那一份；其余交回零值由调用方落未受理。
 func capacitySentinel(err error) OpportunityOutcome {
 	switch {
 	case errors.Is(err, domain.ErrReservationExpired):
 		return ReservationExpiredOutcome
+	case errors.Is(err, domain.ErrReservationNotYetEffective):
+		return ReservationNotYetEffectiveOutcome
 	case errors.Is(err, domain.ErrReservationOverdrawn):
 		return ReservationOverdrawnOutcome
 	case errors.Is(err, domain.ErrReservationNotFound):

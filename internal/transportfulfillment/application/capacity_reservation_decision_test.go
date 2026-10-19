@@ -251,8 +251,9 @@ func TestReleaseReplayDoesNotReturnCapacityTwice(t *testing.T) {
 	}
 }
 
-// Covers: `AT-TF-142`——释放量连同已释放、已消耗超过预占量答守恒撞线，预占过期答预占过期，两格都交回那一份预占（三量在
-// 上面，声明方据此看还能释放多少），不写。
+// Covers: `AT-TF-142`——释放量连同已释放、已消耗超过预占量答守恒撞线，释放时点早于预占的判断时点答预占尚未生效，预占过期
+// 答预占过期；三格都交回那一份预占（判断时点、有效期与三量在上面，声明方据此看该在哪一段、还能释放多少），不写。尚未生效
+// 不是未受理：载荷单看成立，要读过池、对着那一份预占才判得出。
 func TestReleaseRefusalsEchoTheReservation(t *testing.T) {
 	fixture := newOpportunityFixture(t)
 	establishedPool(t, fixture)
@@ -279,6 +280,13 @@ func TestReleaseRefusalsEchoTheReservation(t *testing.T) {
 	if _, present := expired.Reservation(); !present {
 		t.Fatal("预占过期应交回那一份预占")
 	}
+	early, err := fixture.handler.Release(context.Background(), releaseCommand(t, "release-4", 1, reserveAt.Add(-time.Minute)))
+	if err != nil || early.Outcome() != application.ReservationNotYetEffectiveOutcome {
+		t.Fatalf("早于判断时点释放：%q %v, want RESERVATION_NOT_YET_EFFECTIVE", early.Outcome(), err)
+	}
+	if reservation, present := early.Reservation(); !present || !reservation.ReservedAt().Equal(reserveAt) {
+		t.Fatal("预占尚未生效应交回那一份预占，判断时点在上面")
+	}
 	if fixture.pools.replaces != replaces {
 		t.Fatalf("拒绝落了 %d 次写", fixture.pools.replaces-replaces)
 	}
@@ -291,4 +299,31 @@ func mustReservation(t *testing.T, raw string) domain.CapacityReservationReferen
 		t.Fatal(err)
 	}
 	return reference
+}
+
+// Covers: 判断与落册用同一份截到登记册精度的时刻——带亚微秒的判断时点、有效期与释放时点，首答交回的已是截过的值，
+// 与库里读回的那一份相同，重放回显也就与首答一致。
+func TestCapacityDecisionsEchoInstantsAtRegistryPrecision(t *testing.T) {
+	fixture := newOpportunityFixture(t)
+	establishedPool(t, fixture)
+	reserve := reserveCommand(t, 10)
+	reserve.At = reserve.At.Add(400 * time.Nanosecond)
+	reserve.ValidUntil = reserve.ValidUntil.Add(700 * time.Nanosecond)
+	reserved, err := fixture.handler.Reserve(context.Background(), reserve)
+	if err != nil || reserved.Outcome() != application.CapacityReserved {
+		t.Fatalf("预占：%q %v", reserved.Outcome(), err)
+	}
+	reservation, _ := reserved.Reservation()
+	if !reservation.ReservedAt().Equal(domain.AtRegistryPrecision(reserve.At)) ||
+		!reservation.ValidUntil().Equal(domain.AtRegistryPrecision(reserve.ValidUntil)) {
+		t.Fatalf("首答时刻 = %s / %s，want 截到登记册精度", reservation.ReservedAt(), reservation.ValidUntil())
+	}
+	release := releaseCommand(t, "release-1", 1, reserveAt.Add(time.Hour+300*time.Nanosecond))
+	released, err := fixture.handler.Release(context.Background(), release)
+	if err != nil || released.Outcome() != application.CapacityReleased {
+		t.Fatalf("释放：%q %v", released.Outcome(), err)
+	}
+	if _, landed, _ := released.Release(); !landed.ReleasedAt().Equal(domain.AtRegistryPrecision(release.At)) {
+		t.Fatalf("首答释放时点 = %s，want 截到登记册精度", landed.ReleasedAt())
+	}
 }

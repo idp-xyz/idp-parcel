@@ -18,6 +18,9 @@ var (
 	ErrReservationExpired   = errors.New("transport fulfillment: the reservation validity has expired")
 	ErrReservationNotFound  = errors.New("transport fulfillment: no such reservation in the pool")
 	ErrDuplicateReservation = errors.New("transport fulfillment: the reservation reference is already taken")
+	// ErrReservationNotYetEffective：转换的时点早于预占的判断时点，那一刻这份预占还没起占。与过期对称，各是有效区间的
+	// 一头；它不是坏载荷——载荷单看成立，要对着在册那一份预占才知道时点落在区间外，声明方要看见那一份才改得对。
+	ErrReservationNotYetEffective = errors.New("transport fulfillment: the conversion precedes the reservation judgement instant")
 )
 
 // ScheduleReference 指名一个具体班次。
@@ -367,7 +370,8 @@ func (reservation CapacityReservation) ReservedAt() time.Time {
 	return reservation.reservedAt
 }
 
-// Releases 交出这一份预占上的全部显式释放，次序同落下的次序。
+// Releases 交出这一份预占上的全部显式释放。次序不带语义：领域按提交先后追加，册上读回按释放时点排，倒填的释放让两者
+// 不同；归还按各次自己的时点算（releasedBy），不看次序。
 func (reservation CapacityReservation) Releases() []CapacityRelease {
 	return append([]CapacityRelease(nil), reservation.releases...)
 }
@@ -748,6 +752,9 @@ func (pool CapacityPool) Release(
 
 // Consume 依据装载分配确认实际消耗。消耗后的量永远占用池——实物已经进入承载范围，
 // 释放不了也收不回；没有装载分配依据的消耗无从谈起。
+//
+// 消耗不核硬上限：有效期内它只把预占里的一部分改记成永久占用，占用不变；但过期之后的占用随它变大，此前按整段判放行、
+// 起点在过期之后的预占可能因此事后超上限。接线时要按消耗之后的整段重核（ADR-0203 越权风险点「消耗不核硬上限」）。
 func (pool CapacityPool) Consume(
 	reference CapacityReservationReference,
 	quantity int64,
@@ -764,7 +771,7 @@ func (pool CapacityPool) Consume(
 }
 
 // convert 沿正向关系转换预占范围。有效期届满后既不能释放也不能消耗——到期已经把
-// 未消耗剩余归还了，再动它就是对同一范围二次转换。判断时点之前也不能转换：那时这份预占还不存在。
+// 未消耗剩余归还了，再动它就是对同一范围二次转换。判断时点之前也不能转换：那时这份预占尚未生效。
 func (pool CapacityPool) convert(
 	reference CapacityReservationReference,
 	at time.Time,
@@ -782,7 +789,7 @@ func (pool CapacityPool) convert(
 			continue
 		}
 		if at.Before(reservation.reservedAt) {
-			return CapacityPool{}, ErrInvalidCapacityPool
+			return CapacityPool{}, ErrReservationNotYetEffective
 		}
 		if at.After(reservation.validUntil) {
 			return CapacityPool{}, ErrReservationExpired

@@ -103,7 +103,7 @@ func TestHardCapacityHoldsThroughTheWholeReservationWindow(t *testing.T) {
 }
 
 // Covers: ADR-0203 决定五——释放有身份、在池内唯一：同一释放引用不论落在哪一份预占上都只认一次；释放从它的时点起归还，
-// 之前那段仍占着；释放早于预占的判断时点不成立。
+// 之前那段仍占着；释放早于预占的判断时点答预占尚未生效，不是坏载荷。
 func TestReleasesHaveIdentityAndReturnCapacityFromTheirInstant(t *testing.T) {
 	pool := establishedPool(t, 100)
 	pool, err := pool.Reserve(reservationRef(t, "reservation-1"), declaredDemand(t, 60), reservedUntil, reservedAt)
@@ -136,8 +136,8 @@ func TestReleasesHaveIdentityAndReturnCapacityFromTheirInstant(t *testing.T) {
 			t.Fatalf("同一释放引用再落到 %s：err = %v, want ErrDuplicateRelease", target, err)
 		}
 	}
-	if _, err := pool.Release(releaseRef(t, "release-early"), reservationRef(t, "reservation-2"), declaredDemand(t, 1), reservedAt.Add(-time.Minute)); !errors.Is(err, domain.ErrInvalidCapacityPool) {
-		t.Fatalf("早于预占判断时点的释放：err = %v, want ErrInvalidCapacityPool", err)
+	if _, err := pool.Release(releaseRef(t, "release-early"), reservationRef(t, "reservation-2"), declaredDemand(t, 1), reservedAt.Add(-time.Minute)); !errors.Is(err, domain.ErrReservationNotYetEffective) {
+		t.Fatalf("早于预占判断时点的释放：err = %v, want ErrReservationNotYetEffective", err)
 	}
 	reservation, _ := pool.ReservationFor(reservationRef(t, "reservation-1"))
 	if releases := reservation.Releases(); len(releases) != 1 || releases[0].Reference() != releaseRef(t, "release-1") {

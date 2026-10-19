@@ -217,7 +217,7 @@ func TestCapacityDecisionPayloadsHaveNoOverrideAndNoTenant(t *testing.T) {
 
 // Covers: `AT-TF-141`、`AT-TF-142` 的传输层半边——新释放 201 带回那一次释放与它所落的预占（已释放随之增加）；原样重交
 // 200 已有释放、不再还一份；同一释放引用改了数量 200 释放冲突并带回在册那一次；预占不在册 200；守恒撞线 200 带回那一份
-// 预占的三量。
+// 预占的三量；释放时点早于预占的判断时点 200 预占尚未生效，带回那一份预占的判断时点。
 func TestCapacityReleaseEndpointAnswersEachGrade(t *testing.T) {
 	handler, _ := capacityDecisions(t)
 	reserve := tfhttp.NewReserveCapacityEndpoint(operatorIntake(t, authenticatorFake{}), handler)
@@ -261,6 +261,12 @@ func TestCapacityReleaseEndpointAnswersEachGrade(t *testing.T) {
 	if response.Code != http.StatusOK || string(fields["outcome"]) != `"RESERVATION_OVERDRAWN"` ||
 		string(nested(t, fields["reservation"])["released"]) != `"200"` || fields["release"] != nil {
 		t.Fatalf("守恒撞线 = %d %s", response.Code, response.Body.String())
+	}
+	early := strings.Replace(releaseBody("SYN-REL-4", "SYN-RES-1", 1), "2026-10-20T08:00:00Z", "2026-10-19T07:00:00Z", 1)
+	response, fields = postDecision(t, endpoint, "t", early)
+	if response.Code != http.StatusOK || string(fields["outcome"]) != `"RESERVATION_NOT_YET_EFFECTIVE"` ||
+		string(nested(t, fields["reservation"])["reservedAt"]) != `"2026-10-19T08:00:00Z"` || fields["release"] != nil {
+		t.Fatalf("早于判断时点 = %d %s", response.Code, response.Body.String())
 	}
 }
 
