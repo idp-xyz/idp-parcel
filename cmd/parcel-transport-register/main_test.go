@@ -18,7 +18,7 @@ func TestUsageIsRefusedBeforeTouchingTheDatabase(t *testing.T) {
 	noDSN := func(string) string { return "" }
 	for name, args := range map[string][]string{
 		"缺命令":   nil,
-		"未知命令":  {"capacity-pool", "-input", input},
+		"未知命令":  {"capacity-reservation", "-input", input},
 		"缺输入":   {commandSchedule},
 		"缺连接串":  {commandScheduleTemplate, "-input", input},
 		"输入不存在": {commandSchedule, "-input", filepath.Join(t.TempDir(), "missing.json")},

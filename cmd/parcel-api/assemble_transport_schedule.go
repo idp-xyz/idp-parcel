@@ -61,9 +61,9 @@ func (registrar transactionalTransportScheduleRegistrar) RegisterSchedule(
 }
 
 // buildTransportScheduleRegistration 装配 `/transport-fulfillment-transport-schedule-template-registrations` 与
-// `/transport-fulfillment-transport-schedule-registrations` 背后的真编排（ADR-0201 决定一）。缝只有三条——周期安排册、
-// 班次册与时钟——全接真；没有意图交付：班次是本上下文自己的执行准备，准备、订舱与装载分配按需来读。受控 CLI
-// parcel-transport-register 装的是同一个编排。
+// `/transport-fulfillment-transport-schedule-registrations` 背后的真编排（ADR-0201 决定一）。缝四条——周期安排册、
+// 班次册、容量池册（物化登记一班时随班次建池，决定三）与时钟——全接真；没有意图交付：班次与池是本上下文自己的
+// 执行准备，准备、订舱与装载分配按需来读。受控 CLI parcel-transport-register 装的是同一个编排。
 func buildTransportScheduleRegistration(db *bentopg.DB) (tfhttp.TransportScheduleRegistrar, error) {
 	templates, err := tfpostgres.NewScheduleTemplates(db)
 	if err != nil {
@@ -73,9 +73,14 @@ func buildTransportScheduleRegistration(db *bentopg.DB) (tfhttp.TransportSchedul
 	if err != nil {
 		return nil, fmt.Errorf("parcel-api: transport schedules: %w", err)
 	}
+	pools, err := tfpostgres.NewCapacityPools(db)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-api: capacity pools: %w", err)
+	}
 	handler := tfapp.NewRegisterTransportScheduleHandler(tfapp.RegisterTransportScheduleDeps{
 		Templates: templates,
 		Schedules: schedules,
+		Pools:     pools,
 		Clock:     systemClock{},
 	})
 	return transactionalTransportScheduleRegistrar{transactor: db.Transactor(), inner: handler}, nil

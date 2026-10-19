@@ -172,6 +172,7 @@ var swappedRegistryFaces = []string{
 	"/transport-fulfillment-carrier-master-document-revisions",
 	"/transport-fulfillment-transport-schedule-template-registrations",
 	"/transport-fulfillment-transport-schedule-registrations",
+	"/transport-fulfillment-capacity-pool-registrations",
 }
 
 // failingRegister 是读不动的操作者册；readerRegister 只有查阅授予、没有登记写授予。

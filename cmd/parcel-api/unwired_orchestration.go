@@ -314,6 +314,16 @@ func (unwiredTransportScheduleRegistration) RegisterSchedule(
 	return tfapp.ScheduleRegistrationResult{}, errOrchestrationNotWired
 }
 
+// unwiredCapacityPoolRegistration 是容量池登记口的占位（ADR-0201 决定一）。
+type unwiredCapacityPoolRegistration struct{}
+
+func (unwiredCapacityPoolRegistration) EstablishPool(
+	context.Context,
+	tfapp.EstablishPoolCommand,
+) (tfapp.OpportunityResult, error) {
+	return tfapp.OpportunityResult{}, errOrchestrationNotWired
+}
+
 // unwiredEffectiveTimeRuleRegistration 是轨迹源有效时间规则登记口的占位（票 label-channel/19）。
 type unwiredEffectiveTimeRuleRegistration struct{}
 
