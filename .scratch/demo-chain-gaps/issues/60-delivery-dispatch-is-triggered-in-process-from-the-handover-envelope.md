@@ -1,7 +1,7 @@
 # 60 派送发起随交接信封在进程内逐对象发起
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg60（2026-10-19 作者子代理，见「完成记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
+Status: in-progress——完工待评审与进 main，分支 claude-dcg60（2026-10-19 作者子代理，见「完成记录」；隔离评审一轮已按「评审记录」修订，待进 main）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
 Blocked by: 无
 地盘：TF 新 `application/trigger_dispatch_on_handover.go`、新 `adapters/inbox/transport_handover_registered_consumer.go`（inbox 名与 VE 那一路分家）；`cmd/parcel-dispatch/assemble.go`（交接一行改 FanOut，`veHandoverUndecidedSentinels` 注释）+ 新 `assemble_delivery_dispatch_on_handover.go`（照 parcel-api `buildDeliveryDispatchTrigger` 另写一份，不跨 main 包复用）+ 新真库用例；`cmd/parcel-api/assemble_delivery_dispatch.go` 头注「实例半边」一句改指 ADR-0216；文档 ADR-0216、UC-TF-006 触发行与 AT、TF CONTEXT「揽收、派送与交付」一句、`docs/product/PILOT-PARAMETER-REGISTER.md` 的 `PAR-NET-09` 拍频格、演示脚本。
 出处：[06](./06-delivery-dispatch-has-no-in-process-trigger-and-no-recipient-leg.md)；[psb/09](../../product-strategy-boundary/issues/09-tf-fulfillment-judgment-methods-and-connectors.md)「派送发起策略」；[psb/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)「格 13 · 派送发起」；方案「代决」C10，「需要的 ADR」ADR-0216。
@@ -66,7 +66,7 @@ M
 1. **入口只认`已交接`**。拒收、待确认在入口入账，不查段、不问执行器。
    - 越权风险点：若 owner 要这两格也交执行器、由它答`不是触发事实`，改编排一处即可（ADR-0216 越权风险点 3）。
 2. **段取「此刻在场的段」**（方案原话「对象此刻在场的段」），不比对链尾入场依据是否就是这一版交接；零个入账，多个上抛 `ErrObjectActiveInSeveralSegments`，与结束参与那一侧同一个错误。
-   - 越权风险点：信封晚到时，可能替后一段形成任务（ADR-0216 越权风险点 2）。
+   - 越权风险点：信封晚到时，可能替后一段形成任务；待确认更正为`已交接`时，可能替对象仍挂着的先前派送段形成任务（ADR-0216 越权风险点 2）。
 3. **处置三格放在应用层的 `Disposition`**，消费门只做翻译。执行器各格逐一列出，不留默认：执行器日后多一格时会落进缺陷，而不是悄悄入账。
 4. **缝没接线（`*_SOURCE_NOT_WIRED`）在本路按缺陷处置**：不登哨兵、落发布失败。ADR-0114 决定三把它答成未决，但在派发这一路重投接不上缝。
    - 越权风险点：ADR-0216 越权风险点 6。
@@ -125,7 +125,7 @@ M
 
 ### 偏离与待裁
 
-- **没改 `cmd/parcel-api/assemble_delivery_dispatch.go` 的头注**（票面地盘列了这一项）：该文件此刻在会话 idp-parcel-9b 的在途地盘内。`TriggerDeliveryDispatchCommand` 注释里同样过期的那一句也在其地盘。两句一并立票 [71](./71-stale-cadence-comments-point-at-adr-0216.md)，ADR-0216 Consequences 已指过去。
+- **没改 `cmd/parcel-api/assemble_delivery_dispatch.go` 的头注**（票面地盘列了这一项）：该文件此刻在会话 idp-parcel-9b 的在途地盘内。同样过期的派送发起注释还散在别的在途地盘与跨票热点里，一并立票 [71](./71-stale-cadence-comments-point-at-adr-0216.md)，逐处清点在那里，ADR-0216 Consequences 已指过去。
 - **越出地盘的改动**：
   - `adapters/inbox/initial_route_formed_consumer.go`：包头注一句；
   - `cmd/parcel-dispatch/assemble_test.go`：交接路由用例（派发令牌）；
@@ -135,3 +135,71 @@ M
   - 文档令牌按方案是 59 → 60：本票改了 TF CONTEXT 与 UC-TF-006，59 若先进 main，rebase 时两处都是追加或单句替换，冲突应只在行内；
   - `docs/adr/README.md` 与 `.scratch/at-coverage-inventory.md` 是追加行，与同波票可能撞在同一位置，按「两段都留」合。
 - **待 owner 复核**：ADR-0216 越权风险点 1–7（TF owner；第 5 条同时待产品）。
+
+## 评审记录（2026-10-19，隔离评审一轮，作者子代理修订）
+
+阻断 0 项。非阻断 7 项，其中 3 项评审建议进 main 前处理。逐项去向如下。
+
+### 修了
+
+1. **与 ADR-0216 相矛盾的注释不止 ADR 里写的那几处**（建议进 main 前）：
+   - ADR-0216 Consequences 改为按类说。凡说派送发起的拍频归调用方或租户、谁按拍调待定，或说作业事实口是执行器的生产入口、触发面不是进程内循环的注释，都已过期。不再数有几处，逐处清点交票 71。
+   - 票 71 改了标题，按评审实测补齐清点：
+     - `buildDeliveryDispatchTrigger` 的头注与调用前那段注释；
+     - `endpoints.go` 派送触发那一行；
+     - tfhttp 的包头注与用例注释；
+     - `TriggerDeliveryDispatchCommand` 与 `ContinuationReference` 的注释；
+     - `unwiredDeliveryDispatchTrigger` 一处待做票者判。
+   - 票 71 完成判据的搜索词补上「生产入口」「进程内循环」「按拍调」「空转」，并写明以搜索为准、不以清单为准。
+   - 本票「偏离与待裁」那一条也改成不计数。
+   - 部分未采纳：评审建议 tfhttp 的 `trigger_delivery_dispatch.go` 就在本票改。没改，理由有两条：
+     - 派单给的 idp-parcel-9b 在途地盘按文件名列了 `trigger_delivery_dispatch.go`，application 与 adapters/http 下同名，按派单口径两处都算；
+     - `endpoints.go`、`main.go` 是跨票热点，波次在途只许追加行。
+     - 派单方的地盘表优先于评审对在途改动的实测，所以一并留在票 71。
+2. **待确认更正为`已交接`也会替先前段发起**（不建议进 main 前）：
+   - ADR-0216 越权风险点 2 补上这一情形，并写明最小堵法：执行器命令带一个可选的期望入场依据，由编排传入这一版交接，不符就答`不是触发事实`。
+   - 「候选与反方」里否掉拒收、待确认交执行器的那一条，末尾补一句指向越权风险点 2。
+   - 本票「代决与越权风险点」第 2 条同步。
+   - 没有堵：堵法要改执行器（`application/trigger_delivery_dispatch.go`，在 9b 的在途地盘内），也等于改决定一的取段口径，留待 TF owner 复核。
+3. **头注里的票号状态与文件名引用**：
+   - `veHandoverUndecidedSentinels` 头注删去票号状态，只留「不投 PS：终局只认有效交付，交接不是终局事实」。
+   - tfinbox 包头注改用符号名 `TransportHandoverRegisteredConsumer`。
+   - 顺手把编排用例文件头注里以文件名引执行器用例的那一处，改为符号名 `TriggerDeliveryDispatchHandler`。
+
+### 未采纳或交出去
+
+4. **票 71 并进本票**（建议进 main 前）：本作者子代理不并，交协调方。
+   - 评审实测 9b 的两棵树与两条分支都没碰这两个文件。
+   - 但派单明列它们在 9b 地盘内，作者子代理不改派单给的地盘。
+   - 票 71 保持 ready-for-agent，Blocked by 里写明：进 main 时若协调方核实不冲突，可并进本票。
+5. **交接更正自动另立第二项任务**（ADR-0216 越权风险点 7）：不改，等 TF owner 复核。评审也不建议本票顺手做；临时止损要改决定一。
+6. **执行器把「答法越出封闭二格」并进 `*_SOURCE_UNAVAILABLE`**：需另立票，本票不动。
+   - 本票号段 70–71 已用完，派单不许自取现有最大号的下一号，所以没落票文件。下面是票面要点，交协调方给号后落。
+   - 现象：执行器 `requirementFault` 把两种情况并进同一格 `*_SOURCE_UNAVAILABLE`。
+     - 一种是读不到；
+     - 另一种是适配器答出封闭二格（给了 / 没有）以外的值，属确定性缺陷。
+   - 进程内这一路会按 `consumer_undecided` 重投到 ABANDONED，运维会以为在等依赖（ADR-0029）。这是执行器的既有合并，不是本票引入；眼下的真适配器也构造不出这种值。
+   - 做什么：
+     - 执行器为「答法不在封闭集合内」单开一个未决理由或不受理格；
+     - `TriggerDispatchOnHandoverResult.Disposition` 把它归缺陷，不进本路未决哨兵名单。
+   - 地盘：TF 的 `application/trigger_delivery_dispatch.go`（9b 在途，等释放）与 `application/trigger_dispatch_on_handover.go`。
+   - 规模：S。
+7. **进 main 流程**（建议进 main 前）：作者子代理不办，交协调方。
+   - rebase 时合文档令牌（59 → 60）：TF CONTEXT「揽收、派送与交付」那一句与 UC-TF-006。
+   - `docs/adr/README.md` 与 `.scratch/at-coverage-inventory.md` 撞在同一处时两段都留。
+   - 重生成机制清点；带 DSN、`-p 1` 跑全量。
+   - AT 号不撞已由评审实测。
+
+### 修订提交
+
+- `513cc5ff`：哨兵头注与跨文件引用。
+- `762ab921`：ADR-0216 与票 71。
+- 本节所在提交：本票面。
+
+### 修订后验证
+
+- `go build ./...` 退 0。
+- `go vet ./cmd/parcel-dispatch/ ./internal/transportfulfillment/...` 退 0。
+- `gofmt -l cmd internal` 无输出。
+- 带 DSN 跑 `go test -p 1 -count=1 ./internal/architecture/ ./internal/transportfulfillment/application/ ./internal/transportfulfillment/adapters/inbox/ ./cmd/parcel-dispatch/`，全 ok。
+- 这次只改了注释与文档，没跑全量，也没重生成机制清点。
