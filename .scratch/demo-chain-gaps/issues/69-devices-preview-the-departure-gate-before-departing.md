@@ -1,7 +1,7 @@
 # 69 设备出发前门禁问询
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg69（见文末「完成记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
+Status: in-progress——完工待评审与进 main，分支 claude-dcg69（隔离评审阻断 1 项已修、非阻断 10 项全修，已 rebase 到 `8e5125c2`；见文末「完成记录」与「评审记录」）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
 Blocked by: 无（装配令牌排在 [25](./25-segment-adopts-transport-commission-and-cancellation-faces.md) 之后）
 地盘：TF 新 `application/preview_departure_gate.go`（复用 `DepartureGateReader`）、新 tfhttp `preview_departure_gate.go`；新 `cmd/parcel-api/assemble_departure_gate_preview.go` + `endpoints.go` 一行；文档 ADR-0219、UC-TF-005 AT。不改 `internal/accessidentity`。
 出处：[tf-chain-plan](../tf-chain-plan.md)「等 peer 的」设备出发前门禁读口；方案「代决」C17，「需要的 ADR」ADR-0219。
@@ -122,3 +122,66 @@ M
   - `endpoints.go`、`main.go`、`endpoints_test.go` 与 9b、67 都在末尾追加，冲突只在相邻追加行。
   - `docs/adr/README.md` 的 0205 一行是行尾追加，65 若也给 0205 行追加，要合成一行。
   - `.scratch/at-coverage-inventory.md` 的 TF 行与 28、59 的号段相邻。
+
+## 评审记录（2026-10-19，作者子代理，分支 `claude-dcg69`）
+
+隔离评审阻断 1 项、非阻断 10 项。阻断已修；非阻断全修，没有另立票。
+
+### 阻断
+
+1. **CC 的权威文档只写了「在动作时请求」「随自己的事实保存」，与 ADR-0219 字面矛盾**。CC CONTEXT「动作准入判断」词条、GLOSSARY 同名词条的所有者一条、CONTEXT-MAP `transport-fulfillment → customs-compliance` 都这样写。本分支新加的 GLOSSARY「出发前门禁问询」又写关务照记判断，两条词条互相打架。完成记录「偏离与待裁」里把 CONTEXT-MAP 那句判为「对事实仍成立」，判错了；CC CONTEXT 与 GLOSSARY 那两句也漏看了。
+   - 改法：各补一句并链 ADR-0219。出发之前的问询同样请求一次判断，关务照记；运输履约只翻译交回、不保存；随后的出发在它自己那一刻重问。CONTEXT-MAP 那句的「在……方向性动作时」与「随自己的事实保存」两处都加了限定。
+   - 评审没点名、同属这一类的，一并改了：
+     - UC-CC-013 的目标与触发，原文也是「在动作时请求」。
+     - ADR-0206 决定六「消费方把答复随自己的事实同笔保存」。这份 ADR 已接受，正文不动，只在 Status 行与 Links 加前向指针：这句说的是带着事实来问的消费方，问询没有事实可随。无条款停用，所以 README 的 0206 行不动（顶部规则只要求部分停用时写被停条款）。
+     - GLOSSARY「出发前门禁问询」定义里的「不落任何记录」，改成「运输履约不落任何记录」。
+   - ADR-0219：
+     - Context 加一条，引上面各处原话。
+     - 决定三加一条：这只补请求时机、不改判断本身，无条款停用。
+     - Consequences「关务：不改」改成「代码不改」，并列出各文档补的那一句。
+
+### 非阻断，修了的
+
+2. **越权风险点 5 没点名与最小范围规则的张力**（评审建议进 main 前修）。改写成有意偏离：点名 UC-TF-005 规则「跨客户共同运输只向执行方提供当前履约所需的最小范围」与 `AT-TF-063`，写明问询放大了 ADR-0205 越权风险点 13 那处偏离（任一时点含历史时点、零成本、运输履约这一侧不留痕）。没有收窄，理由写进风险点：
+   - 只回整格，设备不知道该卸哪一件。
+   - 段今天没有作业范围归属，按作业范围限段无从限起。
+   - 只列被阻断的对象够设备用，但只在问询这一口收窄，两口读数就分岔，破坏决定二。要收就两口一起收，那是改 ADR-0205 决定一的答复形状，不在本票。
+   - 代决越权风险点（TF owner）：owner 裁之前，问询口照出发口的宽度交回逐对象那一格。
+3. **ADR-0219 没有三类归属行**（评审建议进 main 前修）。加在 Decision 末尾：决定一、二、三是机制；决定四属角色模型，与决定五同是产品策略（ADR-0146）；没有租户取值。Links 加 ADR-0146。
+4. **同参同读数用例的头注与 AT-TF-227 自称覆盖五格，实际只比过三格**（评审建议进 main 前修）。措辞没改，补的是用例：
+   - 新增全不受门禁、全放行、一件关务答未决、班次册读不动四例。最后一例也补上了原来漏掉的一个本侧停点。
+   - 每例钉住它读出的整格；末尾再核五格各至少一例，表里漏了哪一格，测试会指名。变异验证过：把「全放行」的期望改成不受门禁，这一例与末尾那道核对同时红。
+   - AT-TF-227 的措辞现在属实，不改。头注改成「读数的五格各至少一例、本侧新登记出发会停的各停点各一例」。迁移前存量那一个停点不由读数路径产出，不在表里。
+5. **`WorkFactCommandIntake` 的方法与类型断言分在两个文件**（评审建议进 main 前修）。作业事实那一种答法与断言并入 `work_fact_intake.go`，进断言清单；类型头注补「出发前门禁问询只读，也走这一份」。未配置答法照 `trigger_delivery_dispatch.go` 的先例留在本口文件，注释改准。
+6. **分支落后 main**（评审建议进 main 前修）。rebase 到 `origin/main` `8e5125c2`（59、28 已合），冲突两边都留：
+   - `docs/adr/README.md`：0205 行用本分支的版本，即 main 那版加上本票的行尾追加；0206 行用 main 的版本，带票 59 的「挂法已答」。
+   - UC-TF-005 验收表：main 的 `AT-TF-216`–`222` 与 `AT-TF-211` 在前，本票 `AT-TF-226`–`231` 在后。
+   - `.scratch/at-coverage-inventory.md`：AT 表与追记段两边都留，票 59 在前；两段追记之间丢掉的空行已补回。
+   - rebase 后 `go build ./...` 通过。
+7. **ADR-0219 Status 的引文在 ADR-0205 里搜不中**。改用 ADR-0205 越权风险点 1 的原话「挡下要靠设备在动作之前问；那个读口……等 peer 收工后另立票」，与 ADR-0205 自己 Status 指针里引的是同一句。README 的 0219 行里没有这句引文，不用改。
+8. **端点表这一口用另一文件里的辅助函数取 Intake**。照端点表「每口一个变量、每条真渠道一个 if」的约定改：
+   - `endpoints.go` 立 `departureGatePreviewIntake` 变量，进 `if workFactTransport != nil` 那一组，那组的注释追加一行。
+   - 删去 `assemble_departure_gate_preview.go` 里的辅助函数；真库用例直接挂渠道。
+9. **AT 盘点 AT-TF-230 没点名表行覆盖的用例**。补上 `work_fact_intake_test.go::TestWorkFactCommandIntakeAuthenticatesBeforeDecodingOnEveryLine`，注明是表行覆盖。
+10. **两口受理一致靠测试钉住，不靠结构**。收成一处：
+    - `departureGateIntentOf` 是两口把输入收成读数意图的唯一一处，时点判据也在里面。
+    - 它与 `movementFactSpecFrom` 共用 `gateReferencesFrom`，租户、班次、段的受理只有一份。
+    - 出发的 `Read` 先过 `movementFactSpecFrom` 与种类门，再过 `departureGateIntentOf`。行为不变，原有编排用例与真库重放用例照过。
+    - ADR-0219 Consequences 随之改准：受理一处、作业事实答法所在文件、端点表的 Intake 变量。
+11. **http 测试头注「读数那三口」是跨文件计数**。改成「读数各口」。
+
+### 完成记录里随评审过时的几句
+
+- 「做了什么 · tfhttp」说两种答法都声明在本文件，「地盘外的改动」说没碰 `work_fact_intake.go` 本体：作业事实那一种答法已并入 `work_fact_intake.go`（第 5 项）。
+- 「做了什么 · 装配」里的 `departureGatePreviewIntake` 辅助函数已删，改成端点表里的变量（第 8 项）。`endpoints.go` 也不再只是末尾追加：作业事实那组变量与 if 里各加一行，注释追加一行。
+- 「偏离与待裁」说 CONTEXT-MAP 那句没改：判错了，已改（第 1 项）。
+- 「地盘外的改动」另加：
+  - `application/record_movement_fact.go`（第 10 项）；
+  - `docs/domain/customs-compliance/CONTEXT.md`、`docs/domain/CONTEXT-MAP.md`、UC-CC-013、ADR-0206 的 Status 与 Links（第 1 项）。
+
+### 评审修订的验证
+
+- `go build ./...`、`go vet ./cmd/parcel-api/ ./internal/transportfulfillment/...` 干净；改动的 Go 文件 `gofmt -l` 干净；`git diff --check` 干净。
+- `IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable' go test -p 1 -count=1 ./cmd/parcel-api/ ./internal/architecture/ ./internal/transportfulfillment/... ./internal/customscompliance/...` 全 ok。三个真库问询用例以 `-v` 确认真跑了，没有 SKIP。
+- 没跑全量，没重生成机制清点（进 main 时统一做）。
+- 号段：评审修订没有新取 AT 号、票号、迁移号或 ADR 号。
