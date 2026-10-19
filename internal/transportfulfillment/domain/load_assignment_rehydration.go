@@ -18,6 +18,18 @@ type RehydrateLoadAssignmentSpec struct {
 	RevisedAt   time.Time
 	Withdrawn   bool
 	WithdrawnAt time.Time
+
+	Allocations []RehydrateCapacityAllocationSpec
+}
+
+// RehydrateCapacityAllocationSpec 是这一版在一个池上的分配量在库面的样子：数量照存，连同它是怎么得出的。
+type RehydrateCapacityAllocationSpec struct {
+	Pool        CapacityPoolReference
+	Reservation CapacityReservationReference
+	Quantity    int64
+	Unit        QuantityUnitReference
+	Source      CapacityDemandSource
+	Basis       CapacityAllocationBasis
 }
 
 // RehydrateLoadAssignment 从库面重建装载分配的一个版本。
@@ -25,17 +37,30 @@ type RehydrateLoadAssignmentSpec struct {
 // **装回不是重开**：已撤回的版本装回来仍然是撤回的，再变化或再撤回照旧被领域挡住。
 func RehydrateLoadAssignment(spec RehydrateLoadAssignmentSpec) (LoadAssignment, error) {
 	// 首版那一半的判据与构造门同一套，复用它而不是抄一遍——抄一遍就是为同一形状立第二个
-	// 口径，构造门改一次判据这里会悄悄漂移。
+	// 口径，构造门改一次判据这里会悄悄漂移。分配量也走构造门：成员数那几行按读回的成员重数一遍，与库里存的数对不上就是
+	// 坏行。
+	declarations, err := allocationDeclarationsFrom(spec.Allocations)
+	if err != nil {
+		return LoadAssignment{}, err
+	}
 	assignment, err := FormLoadAssignment(LoadAssignmentSpec{
-		TenantID:   spec.TenantID,
-		Assignment: spec.Assignment,
-		Schedule:   spec.Schedule,
-		Members:    spec.Members,
-		Version:    spec.Version,
-		AssignedAt: spec.AssignedAt,
+		TenantID:    spec.TenantID,
+		Assignment:  spec.Assignment,
+		Schedule:    spec.Schedule,
+		Members:     spec.Members,
+		Version:     spec.Version,
+		AssignedAt:  spec.AssignedAt,
+		Allocations: declarations,
 	})
 	if err != nil {
 		return LoadAssignment{}, err
+	}
+	if !storedQuantitiesAgree(assignment.allocations, spec.Allocations) {
+		return LoadAssignment{}, ErrInvalidLoadAssignment
+	}
+	// 撤回版不带分配量：带着的撤回版会让预占上的分配关系把一个已撤回的分配算成还占着。
+	if spec.Withdrawn && len(assignment.allocations) > 0 {
+		return LoadAssignment{}, ErrInvalidLoadAssignment
 	}
 
 	revised := !spec.RevisedAt.IsZero()
@@ -69,4 +94,40 @@ func RehydrateLoadAssignment(spec RehydrateLoadAssignmentSpec) (LoadAssignment, 
 		assignment.withdrawnAt = spec.WithdrawnAt.UTC()
 	}
 	return assignment, nil
+}
+
+func allocationDeclarationsFrom(stored []RehydrateCapacityAllocationSpec) ([]CapacityAllocationDeclaration, error) {
+	declarations := make([]CapacityAllocationDeclaration, 0, len(stored))
+	for _, allocation := range stored {
+		declaration := CapacityAllocationDeclaration{
+			Pool:        allocation.Pool,
+			Reservation: allocation.Reservation,
+			Unit:        allocation.Unit,
+			Source:      allocation.Source,
+		}
+		switch allocation.Basis {
+		case CapacityAllocationDeclared:
+			declaration.Quantity = allocation.Quantity
+		case CapacityAllocationFromMembers:
+			declaration.FromMembers = true
+		default:
+			return nil, ErrInvalidLoadAssignment
+		}
+		declarations = append(declarations, declaration)
+	}
+	return declarations, nil
+}
+
+// storedQuantitiesAgree 核构造门落出来的每一行与库里存的数一致。构造门已按池身份排过序，库里那一份按池身份逐行比。
+func storedQuantitiesAgree(resolved []CapacityAllocation, stored []RehydrateCapacityAllocationSpec) bool {
+	quantities := make(map[CapacityPoolReference]int64, len(stored))
+	for _, allocation := range stored {
+		quantities[allocation.Pool] = allocation.Quantity
+	}
+	for _, allocation := range resolved {
+		if quantities[allocation.pool] != allocation.demand.quantity {
+			return false
+		}
+	}
+	return true
 }

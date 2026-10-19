@@ -73,6 +73,7 @@ func TestALoadAssignmentIsIntentNotLoading(t *testing.T) {
 
 	revised, err := assignment.ReviseMembers(
 		[]domain.CarriedObjectReference{mustValue(t, domain.NewCarriedObjectReference, "parcel-1")},
+		nil,
 		mustValue(t, domain.NewLoadAssignmentVersion, "assignment/v2"),
 		assignedAt.Add(time.Hour),
 	)
@@ -90,6 +91,7 @@ func TestALoadAssignmentIsIntentNotLoading(t *testing.T) {
 	t.Run("reusing the original version is an overwrite and is refused", func(t *testing.T) {
 		if _, err := assignment.ReviseMembers(
 			assignment.Members(),
+			nil,
 			assignment.Version(),
 			assignedAt.Add(time.Hour),
 		); !errors.Is(err, domain.ErrInvalidLoadAssignment) {
@@ -110,6 +112,7 @@ func TestALoadAssignmentIsIntentNotLoading(t *testing.T) {
 		}
 		if _, err := withdrawn.ReviseMembers(
 			withdrawn.Members(),
+			nil,
 			mustValue(t, domain.NewLoadAssignmentVersion, "assignment/v4"),
 			assignedAt.Add(3*time.Hour),
 		); !errors.Is(err, domain.ErrLoadAssignmentWithdrawn) {
@@ -150,6 +153,7 @@ func TestWithdrawingARevisedAssignmentCarriesNoRevisionTime(t *testing.T) {
 	}
 	revised, err := assignment.ReviseMembers(
 		[]domain.CarriedObjectReference{mustValue(t, domain.NewCarriedObjectReference, "parcel-1")},
+		nil,
 		mustValue(t, domain.NewLoadAssignmentVersion, "assignment/v2"),
 		assignedAt.Add(time.Hour),
 	)

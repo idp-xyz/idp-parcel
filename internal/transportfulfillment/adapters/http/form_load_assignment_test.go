@@ -154,6 +154,7 @@ func TestFormLoadAssignmentAlreadyFormedKeepsItsShapeForALiveChainHead(t *testin
 		seedLoadAssignment(registry, first, synLoadAssignedAt.Add(time.Minute))
 		revised, err := first.ReviseMembers(
 			[]domain.CarriedObjectReference{httpValue(t, domain.NewCarriedObjectReference, "SYN-PARCEL-1")},
+			nil,
 			httpValue(t, domain.NewLoadAssignmentVersion, "SYN-LAV-2"),
 			synLoadAssignedAt.Add(time.Hour),
 		)

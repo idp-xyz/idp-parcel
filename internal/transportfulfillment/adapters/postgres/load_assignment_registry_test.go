@@ -63,6 +63,7 @@ func TestARevisedVersionCoexistsWithItsPredecessor(t *testing.T) {
 
 	revised, err := first.Assignment.ReviseMembers(
 		[]domain.CarriedObjectReference{segmentRef(t, domain.NewCarriedObjectReference, "parcel-1")},
+		nil,
 		segmentRef(t, domain.NewLoadAssignmentVersion, "v2"),
 		assignedAtDBFixture.Add(2*time.Hour),
 	)
@@ -155,7 +156,7 @@ func TestAWithdrawalOfARevisedVersionSavesAndReadsBack(t *testing.T) {
 
 	revisedAt := assignedAtDBFixture.Add(time.Hour)
 	revised, err := first.Assignment.ReviseMembers(
-		[]domain.CarriedObjectReference{segmentRef(t, domain.NewCarriedObjectReference, "SYN-PARCEL-1")},
+		[]domain.CarriedObjectReference{segmentRef(t, domain.NewCarriedObjectReference, "SYN-PARCEL-1")}, nil,
 		segmentRef(t, domain.NewLoadAssignmentVersion, "v2"), revisedAt)
 	if err != nil {
 		t.Fatalf("变化：%v", err)
@@ -255,7 +256,7 @@ func TestTheChainHeadIsTheVersionNoOtherCorrects(t *testing.T) {
 	}
 
 	revised, err := first.Assignment.ReviseMembers(
-		[]domain.CarriedObjectReference{segmentRef(t, domain.NewCarriedObjectReference, "SYN-PARCEL-1")},
+		[]domain.CarriedObjectReference{segmentRef(t, domain.NewCarriedObjectReference, "SYN-PARCEL-1")}, nil,
 		segmentRef(t, domain.NewLoadAssignmentVersion, "v2"), assignedAtDBFixture.Add(time.Hour))
 	if err != nil {
 		t.Fatalf("变化：%v", err)

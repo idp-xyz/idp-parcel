@@ -22,18 +22,25 @@ func NewLoadAssignmentVersion(value string) (LoadAssignmentVersion, error) {
 }
 
 // LoadAssignmentSpec 是形成一次装载分配所需的全部输入。
+//
+// Allocations 是逐池的分配量声明，可缺：班次没挂容量池时不要求（ADR-0203 决定一）。要不要、够不够要对着班次登记的池
+// 才判得出，那归编排；构造门只管每一行单看成立。
 type LoadAssignmentSpec struct {
-	TenantID   TenantID
-	Assignment LoadAssignmentReference
-	Schedule   ScheduleReference
-	Members    []CarriedObjectReference
-	Version    LoadAssignmentVersion
-	AssignedAt time.Time
+	TenantID    TenantID
+	Assignment  LoadAssignmentReference
+	Schedule    ScheduleReference
+	Members     []CarriedObjectReference
+	Version     LoadAssignmentVersion
+	AssignedAt  time.Time
+	Allocations []CapacityAllocationDeclaration
 }
 
 // LoadAssignment 是把明确载运对象分配到具体班次的执行意图（CONTEXT「装载分配」）。
 // 它不证明物理装载完成，也不证明控制转移——实际装载、短装、多装或错装作为独立事实
 // 与分配版本比较，不修改分配历史；本类型上没有任何已装载或控制字段可以冒充那些事实。
+//
+// 分配量随版本存（ADR-0203 决定二）：每一版带自己逐池的一组，撤回版不带。预占上的分配关系取各分配当前那一版的这一组，
+// 所以撤回与改版的归还是这一版本身的样子，不是另一个要记得做的动作。
 type LoadAssignment struct {
 	tenantID    TenantID
 	assignment  LoadAssignmentReference
@@ -41,6 +48,7 @@ type LoadAssignment struct {
 	members     []CarriedObjectReference
 	version     LoadAssignmentVersion
 	assignedAt  time.Time
+	allocations []CapacityAllocation
 	corrects    LoadAssignmentVersion
 	revisedAt   time.Time
 	withdrawn   bool
@@ -60,13 +68,18 @@ func FormLoadAssignment(spec LoadAssignmentSpec) (LoadAssignment, error) {
 	if err != nil {
 		return LoadAssignment{}, ErrInvalidLoadAssignment
 	}
+	allocations, err := resolveCapacityAllocations(spec.Allocations, len(members))
+	if err != nil {
+		return LoadAssignment{}, err
+	}
 	return LoadAssignment{
-		tenantID:   spec.TenantID,
-		assignment: spec.Assignment,
-		schedule:   spec.Schedule,
-		members:    members,
-		version:    spec.Version,
-		assignedAt: spec.AssignedAt.UTC(),
+		tenantID:    spec.TenantID,
+		assignment:  spec.Assignment,
+		schedule:    spec.Schedule,
+		members:     members,
+		version:     spec.Version,
+		assignedAt:  spec.AssignedAt.UTC(),
+		allocations: allocations,
 	}, nil
 }
 
@@ -108,6 +121,11 @@ func (assignment LoadAssignment) AssignedAt() time.Time {
 	return assignment.assignedAt
 }
 
+// Allocations 交出这一版逐池的分配量，按池身份排。撤回版没有。
+func (assignment LoadAssignment) Allocations() []CapacityAllocation {
+	return append([]CapacityAllocation(nil), assignment.allocations...)
+}
+
 // Corrects 交回本版本变化/撤回所接续的前一版本（若有）。
 func (assignment LoadAssignment) Corrects() (LoadAssignmentVersion, bool) {
 	if !assignment.corrects.valid() {
@@ -136,8 +154,13 @@ func (assignment LoadAssignment) Withdrawn() (time.Time, bool) {
 
 // ReviseMembers 以新对象范围形成新分配版本：原版本原样保留（值语义），新版本回指前身；
 // 沿用原版本号就是覆盖，构造期拒绝。
+//
+// 分配量随新版重新声明，不从前一版带过来：成员变了，沿用旧的分配量就是未经重评沿用旧容量结论（CONTEXT「成员、当前有效
+// 测量……变化时……以新快照重新校验尚未完成的……分配」）。新的一组接替旧的一组，旧的那一组随之归还；够不够要对着池判，
+// 归变化入口的编排。
 func (assignment LoadAssignment) ReviseMembers(
 	members []CarriedObjectReference,
+	allocations []CapacityAllocationDeclaration,
 	version LoadAssignmentVersion,
 	revisedAt time.Time,
 ) (LoadAssignment, error) {
@@ -154,15 +177,21 @@ func (assignment LoadAssignment) ReviseMembers(
 	if err != nil {
 		return LoadAssignment{}, ErrInvalidLoadAssignment
 	}
+	resolved, err := resolveCapacityAllocations(allocations, len(copied))
+	if err != nil {
+		return LoadAssignment{}, err
+	}
 	revised := assignment
 	revised.members = copied
+	revised.allocations = resolved
 	revised.corrects = assignment.version
 	revised.version = version
 	revised.revisedAt = revisedAt.UTC()
 	return revised, nil
 }
 
-// Withdraw 撤回分配并形成新版本；已撤回的分配不再变化——后续要装载只能是新的分配。
+// Withdraw 撤回分配并形成新版本；已撤回的分配不再变化——后续要装载只能是新的分配。撤回版不带分配量：预占上的分配
+// 关系取当前那一版的，撤回版成了当前版，它分走的范围也就归还了（ADR-0203 决定二）。
 func (assignment LoadAssignment) Withdraw(
 	version LoadAssignmentVersion,
 	withdrawnAt time.Time,
@@ -183,6 +212,7 @@ func (assignment LoadAssignment) Withdraw(
 	// 值拷贝会把变化版的修订时刻一并带过来；撤回版只是撤回，不是变化（见 RevisedAt 的头注），
 	// 带着它的这一版重建门与库面 CHECK 都会拒。
 	withdrawn.revisedAt = time.Time{}
+	withdrawn.allocations = nil
 	withdrawn.withdrawn = true
 	withdrawn.withdrawnAt = withdrawnAt.UTC()
 	return withdrawn, nil

@@ -335,16 +335,19 @@ func NewLoadAssignmentReference(value string) (LoadAssignmentReference, error) {
 //
 // 预占固定声明它的那一刻与需求来源（ADR-0203 决定三）：从那一刻起占用，不是从有史以来占用。单位不另存——池只有一个
 // 单位，声明的单位与它不同就不成预占，这里留一份只为重放时整份比对。
+//
+// 分配关系（ADR-0203 决定二）在预占的范围之内，不改池的占用：已分配、已释放、已消耗三者之和不得超过预占量。
 type CapacityReservation struct {
-	reference  CapacityReservationReference
-	quantity   int64
-	unit       QuantityUnitReference
-	source     CapacityDemandSource
-	reservedAt time.Time
-	validUntil time.Time
-	released   int64
-	consumed   int64
-	releases   []CapacityRelease
+	reference   CapacityReservationReference
+	quantity    int64
+	unit        QuantityUnitReference
+	source      CapacityDemandSource
+	reservedAt  time.Time
+	validUntil  time.Time
+	released    int64
+	consumed    int64
+	releases    []CapacityRelease
+	allocations []ReservationAllocation
 }
 
 func (reservation CapacityReservation) Reference() CapacityReservationReference {
@@ -542,18 +545,21 @@ func (pool CapacityPool) ReleaseFor(reference CapacityReleaseReference) (Capacit
 	return CapacityReservationReference{}, CapacityRelease{}, false
 }
 
-// CapacityReservationSnapshot 是一次预占在库里的样子：三量、有效期、来源、判断时点与逐次释放。装载分配引用
-// 不在预占对象上——Consume 只把它当调用期依据，读回不必、也不能重放那次确认。Released 与逐次释放之和必须相等：
+// CapacityReservationSnapshot 是一次预占在库里的样子：三量、有效期、来源、判断时点、逐次释放与分配关系。Consume 的
+// 装载分配引用不在预占对象上——它只是调用期依据，读回不必、也不能重放那次确认。Released 与逐次释放之和必须相等：
 // 前者是查阅册求和用的列，后者是重放与按时点归还用的明细，两处各存一份就得互相核。
+//
+// Allocations 是读回时从各装载分配当前那一版派生的分配关系，不随池换存落库：分配量只存在装载分配的版本上。
 type CapacityReservationSnapshot struct {
-	Reference  CapacityReservationReference
-	Quantity   int64
-	Released   int64
-	Consumed   int64
-	ValidUntil time.Time
-	Source     CapacityDemandSource
-	ReservedAt time.Time
-	Releases   []CapacityReleaseSnapshot
+	Reference   CapacityReservationReference
+	Quantity    int64
+	Released    int64
+	Consumed    int64
+	ValidUntil  time.Time
+	Source      CapacityDemandSource
+	ReservedAt  time.Time
+	Releases    []CapacityReleaseSnapshot
+	Allocations []CapacityAllocationSnapshot
 }
 
 // CapacityReleaseSnapshot 是一次显式释放在库里的样子。
@@ -577,15 +583,24 @@ func (pool CapacityPool) ReservationSnapshots() []CapacityReservationSnapshot {
 				ReleasedAt: release.releasedAt,
 			})
 		}
+		allocations := make([]CapacityAllocationSnapshot, 0, len(reservation.allocations))
+		for _, allocation := range reservation.allocations {
+			allocations = append(allocations, CapacityAllocationSnapshot{
+				Assignment: allocation.assignment,
+				Version:    allocation.version,
+				Quantity:   allocation.quantity,
+			})
+		}
 		snapshots = append(snapshots, CapacityReservationSnapshot{
-			Reference:  reservation.reference,
-			Quantity:   reservation.quantity,
-			Released:   reservation.released,
-			Consumed:   reservation.consumed,
-			ValidUntil: reservation.validUntil,
-			Source:     reservation.source,
-			ReservedAt: reservation.reservedAt,
-			Releases:   releases,
+			Reference:   reservation.reference,
+			Quantity:    reservation.quantity,
+			Released:    reservation.released,
+			Consumed:    reservation.consumed,
+			ValidUntil:  reservation.validUntil,
+			Source:      reservation.source,
+			ReservedAt:  reservation.reservedAt,
+			Releases:    releases,
+			Allocations: allocations,
 		})
 	}
 	return snapshots
@@ -640,17 +655,28 @@ func RehydrateCapacityPool(spec CapacityPoolSpec, snapshots []CapacityReservatio
 		if released != snapshot.Released {
 			return CapacityPool{}, ErrReservationOverdrawn
 		}
-		reservations = append(reservations, CapacityReservation{
-			reference:  snapshot.Reference,
-			quantity:   snapshot.Quantity,
-			unit:       spec.Unit,
-			source:     snapshot.Source,
-			reservedAt: snapshot.ReservedAt.UTC(),
-			validUntil: snapshot.ValidUntil.UTC(),
-			released:   snapshot.Released,
-			consumed:   snapshot.Consumed,
-			releases:   releases,
-		})
+		allocations, err := rehydrateReservationAllocations(snapshot.Allocations)
+		if err != nil {
+			return CapacityPool{}, err
+		}
+		reservation := CapacityReservation{
+			reference:   snapshot.Reference,
+			quantity:    snapshot.Quantity,
+			unit:        spec.Unit,
+			source:      snapshot.Source,
+			reservedAt:  snapshot.ReservedAt.UTC(),
+			validUntil:  snapshot.ValidUntil.UTC(),
+			released:    snapshot.Released,
+			consumed:    snapshot.Consumed,
+			releases:    releases,
+			allocations: allocations,
+		}
+		// 分配关系与释放、消耗分属两张表，跨表的守恒库上钉不住，由这里核：撞线的池宁可读不回，也不让下一次释放或分配
+		// 在一个已经超分的预占上接着算。
+		if snapshot.Released+snapshot.Consumed+reservation.Allocated() > snapshot.Quantity {
+			return CapacityPool{}, ErrReservationOverdrawn
+		}
+		reservations = append(reservations, reservation)
 	}
 	pool.reservations = reservations
 	return pool, nil
@@ -718,7 +744,8 @@ func (pool CapacityPool) Reserve(
 }
 
 // Release 按一份声明的需求量显式释放部分或全部未消耗范围，归还可用容量（ADR-0203 决定三、五）。释放不可逆也不可重复：
-// 释放量与消耗量之和不得超过预占量（同一范围不得重复归还或扣减）；同一释放引用在池内只认一次。
+// 释放量、消耗量与已分配量之和不得超过预占量（同一范围不得重复归还或扣减；分给装载分配的那一段要先撤分配才放得出来）；
+// 同一释放引用在池内只认一次。
 func (pool CapacityPool) Release(
 	release CapacityReleaseReference,
 	reservation CapacityReservationReference,
@@ -755,6 +782,9 @@ func (pool CapacityPool) Release(
 //
 // 消耗不核硬上限：有效期内它只把预占里的一部分改记成永久占用，占用不变；但过期之后的占用随它变大，此前按整段判放行、
 // 起点在过期之后的预占可能因此事后超上限。接线时要按消耗之后的整段重核（ADR-0203 越权风险点「消耗不核硬上限」）。
+//
+// 消耗此刻只从未分配的余量里取，与释放同一道守恒：分配量与消耗量分开存，消耗不知道自己落在哪一条分配关系上，就只能把
+// 已分配的那一段当作别人的。接线时要把依据分配的消耗改成转换那一条分配关系的量（ADR-0203 文末补记）。
 func (pool CapacityPool) Consume(
 	reference CapacityReservationReference,
 	quantity int64,
@@ -772,6 +802,7 @@ func (pool CapacityPool) Consume(
 
 // convert 沿正向关系转换预占范围。有效期届满后既不能释放也不能消耗——到期已经把
 // 未消耗剩余归还了，再动它就是对同一范围二次转换。判断时点之前也不能转换：那时这份预占尚未生效。
+// 守恒把已分配量算在内：分给装载分配的那一段既不能还回池里，也不能被别的依据消耗掉（ADR-0203 决定二）。
 func (pool CapacityPool) convert(
 	reference CapacityReservationReference,
 	at time.Time,
@@ -794,7 +825,7 @@ func (pool CapacityPool) convert(
 		if at.After(reservation.validUntil) {
 			return CapacityPool{}, ErrReservationExpired
 		}
-		if reservation.released+reservation.consumed+quantity > reservation.quantity {
+		if reservation.released+reservation.consumed+reservation.Allocated()+quantity > reservation.quantity {
 			return CapacityPool{}, ErrReservationOverdrawn
 		}
 		if err := apply(reservation); err != nil {

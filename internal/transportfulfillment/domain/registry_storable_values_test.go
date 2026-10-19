@@ -74,7 +74,7 @@ func TestLoadAssignmentRevisionAndWithdrawalAtTheZeroInstantOnTheRegistryAreRefu
 	members := []domain.CarriedObjectReference{mustValue(t, domain.NewCarriedObjectReference, "SYN-PARCEL-1")}
 	next := mustValue(t, domain.NewLoadAssignmentVersion, "SYN-LA-V2")
 	for name, at := range subMicroAfterZero {
-		if _, err := assignment.ReviseMembers(members, next, at); !errors.Is(err, domain.ErrInvalidLoadAssignment) {
+		if _, err := assignment.ReviseMembers(members, nil, next, at); !errors.Is(err, domain.ErrInvalidLoadAssignment) {
 			t.Fatalf("变化 %s：err = %v，期望 ErrInvalidLoadAssignment", name, err)
 		}
 		if _, err := assignment.Withdraw(next, at); !errors.Is(err, domain.ErrInvalidLoadAssignment) {
@@ -82,7 +82,7 @@ func TestLoadAssignmentRevisionAndWithdrawalAtTheZeroInstantOnTheRegistryAreRefu
 		}
 	}
 	at := zeroInstant.Add(time.Microsecond)
-	if _, err := assignment.ReviseMembers(members, next, at); err != nil {
+	if _, err := assignment.ReviseMembers(members, nil, next, at); err != nil {
 		t.Fatalf("变化零点后 1µs：%v", err)
 	}
 	if _, err := assignment.Withdraw(next, at); err != nil {

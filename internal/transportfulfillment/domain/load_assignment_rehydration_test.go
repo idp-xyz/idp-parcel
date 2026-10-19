@@ -131,7 +131,7 @@ func TestARehydratedWithdrawnAssignmentStaysWithdrawn(t *testing.T) {
 		t.Fatal("已撤回的版本装回来却报不出撤回")
 	}
 	if _, err := assignment.ReviseMembers(
-		spec.Members, assignmentVersion(t, "v3"), spec.WithdrawnAt.Add(time.Hour),
+		spec.Members, nil, assignmentVersion(t, "v3"), spec.WithdrawnAt.Add(time.Hour),
 	); err == nil {
 		t.Fatal("装回来的已撤回分配还能变化")
 	}

@@ -246,7 +246,7 @@ func TestTheLoadAssignmentFaceAnswersAlreadyFormedForASecondVersion(t *testing.T
 	if err != nil {
 		t.Fatal(err)
 	}
-	revised, err := v1.Assignment.ReviseMembers([]domain.CarriedObjectReference{member},
+	revised, err := v1.Assignment.ReviseMembers([]domain.CarriedObjectReference{member}, nil,
 		chainFaceKey(t, assignment, "v2").Version, time.Date(2026, 10, 18, 9, 0, 0, 0, time.UTC))
 	if err != nil {
 		t.Fatalf("领域变化：%v", err)
