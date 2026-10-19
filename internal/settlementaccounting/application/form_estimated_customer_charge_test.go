@@ -13,8 +13,8 @@ import (
 
 // 钉 ADR-0190 决定五的形成编排外层（票 sell-customer-charge/04）：SELL·客户费用评价已记录之后，按评价回指读回 SELL
 // 请求，全部费用行经映射册映到同一个费用项目才形成，费用标识由请求派生，请求册记`已形成`与费用标识；映不全、映到
-// 多个、金额未声明或币种对不上记`待判断`（AT-SA-174、AT-SA-177），不可计价与冲突照记，失败停在`已提交`；不是 SELL
-// 请求的评价零写入；重放不多形成。依赖全是替身，金额断言只看它是否原样出自评价。夹具全是合成串。
+// 多个、金额未声明记`待判断`（AT-SA-174），不可计价与冲突照记，失败停在`已提交`；没有回指的评价零写入，回指不在
+// 册上与币种对不上是矛盾、上抛；重放不多形成。依赖全是替身，金额断言只看它是否原样出自评价。夹具全是合成串。
 
 var estimatedChargeAt = time.Date(2026, 10, 19, 9, 30, 0, 0, time.UTC)
 
@@ -308,8 +308,9 @@ func TestAnUnregisteredMappingOrNoChargeLinesLeaveTheRequestPendingJudgment(t *t
 	empty.assertPendingWithoutCharge(t, result, err)
 }
 
-// Covers: 卡没声明金额取整（租户取值缺席，ADR-0107）与评价结算币种对不上请求快照（AT-SA-177）都记`待判断`，不重投。
-func TestAnUndeclaredAmountPrecisionOrAForeignSettlementCurrencyLeavesThePendingJudgment(t *testing.T) {
+// Covers: 卡没声明金额取整（租户取值缺席，ADR-0107）记`待判断`，不重投；评价结算币种对不上请求快照是计价侧没守住
+// ADR-0190 决定四，上抛、零写入。
+func TestAnUndeclaredAmountPrecisionLeavesThePendingJudgmentAndAForeignSettlementCurrencyIsAnError(t *testing.T) {
 	undeclared := newEstimatedChargeFixture(t, map[string]string{
 		"BASE_FREIGHT": "SYN-FEE-FREIGHT", "REMOTE_AREA_SURCHARGE": "SYN-FEE-FREIGHT",
 	})
@@ -322,8 +323,12 @@ func TestAnUndeclaredAmountPrecisionOrAForeignSettlementCurrencyLeavesThePending
 	})
 	usd := mustAccountValue(t, domain.NewCurrencyCode, "USD")
 	foreign.adoption.SettlementCurrency, foreign.adoption.OriginalCurrency = usd, usd
-	result, err = foreign.handle(t)
-	foreign.assertPendingWithoutCharge(t, result, err)
+	if _, err := foreign.handle(t); !errors.Is(err, application.ErrSellEvaluationCurrencyMismatch) {
+		t.Fatalf("币种对不上 err = %v", err)
+	}
+	if stored := foreign.storedState(t); stored.State != domain.SellRequestSubmitted || len(foreign.charges.saved) != 0 || len(foreign.requests.concluded) != 0 {
+		t.Fatalf("币种对不上却写了：请求册 = %s，费用 %d 笔，结论 %d 次", stored.State, len(foreign.charges.saved), len(foreign.requests.concluded))
+	}
 }
 
 // Covers: ADR-0190 决定五——评价待判断、不可计价、冲突各照记一格，入账不重投，不形成任何费用（AT-SA-175）；
@@ -358,8 +363,9 @@ func TestPendingUnratableAndConflictEvaluationsAreRecordedAndAFailedOneLeavesThe
 	}
 }
 
-// Covers: 不是为 SELL 请求形成的评价——没有回指，或回指的标识不在 SELL 请求册上（例如一份 BUY 请求标识）——零写入。
-func TestAnEvaluationThatDoesNotReferToASellRequestIsSkipped(t *testing.T) {
+// Covers: 没有回指的评价不是为包裹计费时点形成的，零写入、入账；回指的标识不在 SELL 请求册上（例如一份 BUY 请求标识）
+// 是两侧矛盾，上抛、同样零写入。
+func TestAnUnreferencedEvaluationIsSkippedAndAnUnknownReferenceIsAnError(t *testing.T) {
 	unreferenced := newEstimatedChargeFixture(t, map[string]string{"BASE_FREIGHT": "SYN-FEE-FREIGHT"})
 	unreferenced.adoption.Request = domain.SellEvaluationRequestID{}
 	result, err := unreferenced.handle(t)
@@ -369,9 +375,8 @@ func TestAnEvaluationThatDoesNotReferToASellRequestIsSkipped(t *testing.T) {
 
 	buy := newEstimatedChargeFixture(t, map[string]string{"BASE_FREIGHT": "SYN-FEE-FREIGHT"})
 	buy.adoption.Request = mustAccountValue(t, domain.NewSellEvaluationRequestID, "EVREQ-SYN-BUY-1")
-	result, err = buy.handle(t)
-	if err != nil || result.Outcome() != application.EstimatedCustomerChargeNoSellRequest {
-		t.Fatalf("回指 BUY 请求：结果 = %s err = %v", result.Outcome(), err)
+	if _, err := buy.handle(t); !errors.Is(err, application.ErrSellEvaluationRequestMissing) {
+		t.Fatalf("回指 BUY 请求 err = %v", err)
 	}
 	for name, fixture := range map[string]*estimatedChargeFixture{"没有回指": unreferenced, "回指 BUY 请求": buy} {
 		if len(fixture.charges.saved) != 0 || len(fixture.requests.concluded) != 0 || len(fixture.mappings.asked) != 0 {
@@ -381,8 +386,9 @@ func TestAnEvaluationThatDoesNotReferToASellRequestIsSkipped(t *testing.T) {
 	}
 }
 
-// Covers: 重放不多形成——同一份评价再来一次，请求已是`已形成`，原样答早有结论，不再碰映射册与费用库；费用已在库上
-// （上一拍形成了费用却没记上结论）时照派生标识答`已存在`，结论照记`已形成`、仍只有一笔。
+// Covers: 重放不多形成——同一份评价再来一次，请求已是`已形成`，原样答早有结论，不再碰映射册与费用库。另钉一格：派生
+// 标识的费用已在库上而请求仍`已提交`时答`已存在`，结论照记`已形成`、仍只有一笔。费用行与改记同落同撤，生产路径走不到
+// 这一格；钉它只为说明即便走到，派生标识与库主键也挡得住第二笔。
 func TestAReplayDoesNotFormTwice(t *testing.T) {
 	fixture := newEstimatedChargeFixture(t, map[string]string{
 		"BASE_FREIGHT": "SYN-FEE-FREIGHT", "REMOTE_AREA_SURCHARGE": "SYN-FEE-FREIGHT",
@@ -412,7 +418,7 @@ func TestAReplayDoesNotFormTwice(t *testing.T) {
 	}
 }
 
-// Covers: 依赖答不出时是未决、指名停在哪一个依赖上；请求册上另有结论是错误、不覆盖；封闭集外的评价结果是错误。
+// Covers: 依赖答不出时是未决、指名停在哪一个依赖上并带着依赖原样答的错误；请求册上另有结论是错误、不覆盖；封闭集外的评价结果是错误。
 func TestUnavailableDependenciesAreUndecidedAndContradictionsAreErrors(t *testing.T) {
 	mapped := map[string]string{"BASE_FREIGHT": "SYN-FEE-FREIGHT", "REMOTE_AREA_SURCHARGE": "SYN-FEE-FREIGHT"}
 	broken := errors.New("db down")
@@ -430,6 +436,12 @@ func TestUnavailableDependenciesAreUndecidedAndContradictionsAreErrors(t *testin
 		result, err := fixture.handle(t)
 		if err != nil || result.Outcome() != application.EstimatedCustomerChargeUndecided || result.UndecidedReason() != tc.reason {
 			t.Fatalf("%s：结果 = %s / %s err = %v，want 未决 %s", name, result.Outcome(), result.UndecidedReason(), err, tc.reason)
+		}
+		if result.UndecidedCause() == nil {
+			t.Fatalf("%s：未决没带根因", name)
+		}
+		if tc.reason != application.SellChargeFormationUndecided && !errors.Is(result.UndecidedCause(), broken) {
+			t.Fatalf("%s：根因 = %v，want 依赖原样答的错误", name, result.UndecidedCause())
 		}
 	}
 

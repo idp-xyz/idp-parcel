@@ -155,7 +155,7 @@ func TestTheSellViewBoundaries(t *testing.T) {
 	if err != nil || !found || adoption.Outcome != saports.SellEvaluationPending || adoption.Request.String() != "SELLREQ-SYN-4" || len(adoption.ChargeCodes) != 0 {
 		t.Fatalf("分区落空：结果 = %s 代码 = %v found=%v err=%v", adoption.Outcome, chargeCodes(adoption), found, err)
 	}
-	if _, _, err := loadSell(t, view, "tenant-1", "eval-buy-4"); !errors.Is(err, saports.ErrNotASellEvaluation) || !errors.Is(err, adapter.ErrNotASellEvaluation) {
+	if _, _, err := loadSell(t, view, "tenant-1", "eval-buy-4"); !errors.Is(err, saports.ErrNotASellEvaluation) {
 		t.Fatalf("BUY 评价 err = %v，want 端口上的 ErrNotASellEvaluation", err)
 	}
 	if _, found, err := loadSell(t, view, "tenant-2", "eval-sell-4"); err != nil || found {

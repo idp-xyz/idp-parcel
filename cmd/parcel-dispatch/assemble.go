@@ -547,17 +547,18 @@ var buyEvaluationRecordedUndecidedSentinels = []error{
 
 // sellEvaluationRecordedUndecidedSentinels 是 PP 评价已记录信封 → SA 预估客户费用形成这条线（ADR-0190 决定五、六；
 // 票 sell-customer-charge/04）登记的未决哨兵。同一种信封扇出给 BUY 与本路，两路各包各的名单，不合成一份。
-//   - sapricing.ErrSellChargeFormationUndecided——评价在提供方还读不回（与信封同事务落库，读不回只剩可见性滞后），或
-//     SELL 请求册、费用项目映射册、客户费用库某一个答不出：形成与否未知，整笔回滚等重投。停在哪一个依赖上写在错误
-//     正文里，名单只要这一枚。
+//   - sapricing.ErrSellChargeFormationUndecided——评价在提供方读不回，或 SELL 请求册、费用项目映射册、客户费用库某一个
+//     答不出：形成与否未知，整笔回滚等重投。停在哪一个依赖上写在错误正文里，名单只要这一枚。读不回里混着两种重投
+//     不自愈的格，见那枚哨兵的头注。
 //
 // 不在名单里的：
-//   - 入账定局的各格不是错误，处理方答 nil——不是 SELL·客户费用的评价、不回指 SELL 请求的评价、请求记下了结论（`已形成`、
+//   - 入账定局的各格不是错误，处理方答 nil——不是 SELL·客户费用的评价、没有回指的评价、请求记下了结论（`已形成`、
 //     `待判断`、`不可计价`、`冲突`）或早有结论、评价失败而请求停在`已提交`。`待判断`里含费用行映不全或映到多个费用项目
 //     与卡没声明金额取整：缺的是租户取值（映射行、卡上的取整声明），评价不可变，重投这一封不会变；补登之后这一份也
 //     不回补（ADR-0190 越权风险点 3）。
 //   - sapricing.ErrUntranslatableAnswer、sapricing.ErrUntranslatableReference——提供方形状变了或引用坏了，重投不自愈。
-//   - 形成编排上抛的矛盾（请求册上另有结论、刚读到`已完成`的评价形成时却未受理），落 publish_failed 等人看。
+//   - 形成编排上抛的矛盾（回指的请求不在册上、结算币种对不上请求快照、请求册上另有结论、刚读到`已完成`的评价形成时
+//     却未受理），落 publish_failed 等人看。
 var sellEvaluationRecordedUndecidedSentinels = []error{
 	sapricing.ErrSellChargeFormationUndecided,
 }

@@ -142,6 +142,10 @@ func (handler *FormSellCustomerChargeHandler) Handle(
 		return SellChargeResult{outcome: SellChargeUnratable}, nil
 	case ports.SellEvaluationConflict:
 		return SellChargeResult{outcome: SellChargeConflict}, nil
+	case ports.SellEvaluationAmountUndeclared:
+		// 卡没声明金额取整：金额换写不成最小币单位，按现卡这份评价永远形成不了费用，重投无益，所以不作未决。包裹计费
+		// 时点那一路由外层 FormEstimatedCustomerChargeHandler 在请求册记`待判断`，不会带着这一格调到这里。
+		return SellChargeResult{outcome: SellChargeNotAccepted}, nil
 	case ports.SellEvaluationCompleted:
 	default:
 		return SellChargeResult{outcome: SellChargeNotAccepted}, nil

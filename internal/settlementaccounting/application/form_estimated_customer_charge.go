@@ -20,6 +20,13 @@ var (
 	ErrSellEvaluationRequestConcludedOtherwise = errors.New("settlement accounting: sell evaluation request already carries another conclusion")
 	// ErrUnexpectedSellRequestConclusionEffect 说明请求册交回了封闭集合以外的改记落点。
 	ErrUnexpectedSellRequestConclusionEffect = errors.New("settlement accounting: unexpected sell evaluation request conclusion effect")
+	// ErrSellEvaluationRequestMissing 说明评价回指了一份请求，SELL 请求册上却没有它。SELL·客户费用评价只按本上下文的
+	// 请求形成，请求又先于请求信封在同一库提交，所以这不是可见性滞后，是两侧说法矛盾；按「不归本编排」入账会把矛盾
+	// 静默吞掉、事后也无从重投。
+	ErrSellEvaluationRequestMissing = errors.New("settlement accounting: sell evaluation refers to a request absent from the sell request register")
+	// ErrSellEvaluationCurrencyMismatch 说明评价的结算币种与请求快照上的那一格不同。计价按请求上快照的结算币种形成评价
+	// （ADR-0190 决定四），对不上就是计价侧没守住这一格；记`待判断`会把它永久藏在请求册上，所以上抛。
+	ErrSellEvaluationCurrencyMismatch = errors.New("settlement accounting: sell evaluation settlement currency differs from the request snapshot")
 )
 
 // EstimatedCustomerChargeOutcome 是一份 SELL·客户费用评价已记录之后，结算这一侧的去向。
@@ -32,8 +39,8 @@ const (
 	// EstimatedCustomerChargeAlreadyConcluded：请求早已有结论，本次什么都不写（重放；或 ADR-0190 越权风险点 3 的「请求
 	// 卡死」：一份请求只下一次结论，补登映射之后也不回补）。
 	EstimatedCustomerChargeAlreadyConcluded
-	// EstimatedCustomerChargeNoSellRequest：评价没有回指，或回指的不是 SELL 请求册上的一份请求。这份评价不是为包裹计费
-	// 时点形成的，不归本编排，零写入。
+	// EstimatedCustomerChargeNoSellRequest：评价没有回指。这份评价不是为包裹计费时点形成的，不归本编排，零写入。回指了
+	// 却在册上查不到是另一回事，见 ErrSellEvaluationRequestMissing。
 	EstimatedCustomerChargeNoSellRequest
 	// EstimatedCustomerChargeEvaluationNotFormed：计价侧这份评价落了`失败`。请求不改记、停在`已提交`——请求册不设「未形成」
 	// 那一格（ADR-0190 决定五「计价侧没形成评价时……请求停在已提交」），评价不可变，重投也不会变。
@@ -93,11 +100,13 @@ type FormEstimatedCustomerChargeCommand struct {
 }
 
 // EstimatedCustomerChargeResult 是本编排的结果。State 在`已记结论`与`早有结论`两格有意义，Charge 只在`已形成`时有。
+// 未决时 cause 带着依赖原样答出的错误：原因枚举只说停在哪个依赖上，外键违例、空键这类重投不自愈的错误要靠原文才看得出。
 type EstimatedCustomerChargeResult struct {
 	outcome EstimatedCustomerChargeOutcome
 	state   domain.SellEvaluationRequestState
 	charge  domain.CustomerChargeID
 	reason  EstimatedCustomerChargeUndecidedReason
+	cause   error
 }
 
 func (result EstimatedCustomerChargeResult) Outcome() EstimatedCustomerChargeOutcome {
@@ -114,6 +123,10 @@ func (result EstimatedCustomerChargeResult) Charge() (domain.CustomerChargeID, b
 
 func (result EstimatedCustomerChargeResult) UndecidedReason() EstimatedCustomerChargeUndecidedReason {
 	return result.reason
+}
+
+func (result EstimatedCustomerChargeResult) UndecidedCause() error {
+	return result.cause
 }
 
 // FormEstimatedCustomerChargeDeps 是本编排的依赖。Charges 是既有的形成编排本体：建费用、落预估都归它，本编排只
@@ -143,11 +156,12 @@ func NewFormEstimatedCustomerChargeHandler(deps FormEstimatedCustomerChargeDeps)
 // Handle 读请求 → 看评价结果 → 映费用项目 → 形成 → 记结论。
 //
 // 请求已不是`已提交`就什么都不做：一份请求只下一次结论，重放在这里落定，不再碰费用库。各种评价结果的去向：
-//   - 待判断、金额未声明（卡没声明金额取整，租户取值缺席）、结算币种对不上（AT-SA-177）、费用行映不全或映到多个费用
-//     项目（AT-SA-174）——一律记`待判断`，不建占位费用，入账不重投。卡与映射是租户取值，补登之后这一份也不回补
-//     （ADR-0190 越权风险点 3）。
+//   - 待判断、金额未声明（卡没声明金额取整，租户取值缺席）、费用行映不全或映到多个费用项目（AT-SA-174）——一律记
+//     `待判断`，不建占位费用，入账不重投。卡与映射是租户取值，补登之后这一份也不回补（ADR-0190 越权风险点 3）。
 //   - 不可计价、冲突——照记那一格（AT-SA-175：不形成任何费用行，不转待判断反复重试）。
 //   - 失败——请求停在`已提交`，见 EstimatedCustomerChargeEvaluationNotFormed。
+//
+// 两侧说法矛盾的格上抛错误、不入账：回指的请求不在册上，结算币种对不上请求快照。
 func (handler *FormEstimatedCustomerChargeHandler) Handle(
 	ctx context.Context,
 	command FormEstimatedCustomerChargeCommand,
@@ -159,10 +173,10 @@ func (handler *FormEstimatedCustomerChargeHandler) Handle(
 	key := ports.SellEvaluationRequestKey{TenantID: command.TenantID, Request: adoption.Request}
 	record, found, err := handler.deps.Requests.FindByID(ctx, key)
 	if err != nil {
-		return undecidedEstimatedCharge(SellEvaluationRequestViewUnavailable), nil
+		return undecidedEstimatedCharge(SellEvaluationRequestViewUnavailable, err), nil
 	}
 	if !found {
-		return EstimatedCustomerChargeResult{outcome: EstimatedCustomerChargeNoSellRequest}, nil
+		return EstimatedCustomerChargeResult{}, fmt.Errorf("%w: request %s", ErrSellEvaluationRequestMissing, adoption.Request)
 	}
 	if record.State != domain.SellRequestSubmitted {
 		return EstimatedCustomerChargeResult{
@@ -187,11 +201,12 @@ func (handler *FormEstimatedCustomerChargeHandler) Handle(
 	}
 
 	if adoption.SettlementCurrency != record.Request.SettlementCurrency() {
-		return handler.conclude(ctx, key, domain.SellRequestPendingJudgment, domain.CustomerChargeID{})
+		return EstimatedCustomerChargeResult{}, fmt.Errorf("%w: request %s wants %s, evaluation %s carries %s",
+			ErrSellEvaluationCurrencyMismatch, adoption.Request, record.Request.SettlementCurrency(), adoption.Evaluation, adoption.SettlementCurrency)
 	}
 	feeItem, mapped, err := handler.singleFeeItem(ctx, command.TenantID, adoption.ChargeCodes)
 	if err != nil {
-		return undecidedEstimatedCharge(FeeItemMappingViewUnavailable), nil
+		return undecidedEstimatedCharge(FeeItemMappingViewUnavailable, err), nil
 	}
 	if !mapped {
 		return handler.conclude(ctx, key, domain.SellRequestPendingJudgment, domain.CustomerChargeID{})
@@ -212,7 +227,7 @@ func (handler *FormEstimatedCustomerChargeHandler) Handle(
 	case SellChargeFormed, SellChargeAlreadyFormed:
 		return handler.conclude(ctx, key, domain.SellRequestFormed, charge)
 	case SellChargeUndecided:
-		return undecidedEstimatedCharge(SellChargeFormationUndecided), nil
+		return undecidedEstimatedCharge(SellChargeFormationUndecided, fmt.Errorf("sell charge formation: %s", formed.UndecidedReason())), nil
 	default:
 		return EstimatedCustomerChargeResult{}, fmt.Errorf("%w: %s", ErrUnexpectedSellChargeFormation, formed.Outcome())
 	}
@@ -263,7 +278,7 @@ func (handler *FormEstimatedCustomerChargeHandler) conclude(
 	}
 	effect, err := handler.deps.Conclusions.RecordConclusion(ctx, key, conclusion)
 	if err != nil {
-		return undecidedEstimatedCharge(SellEvaluationRequestRegisterUnavailable), nil
+		return undecidedEstimatedCharge(SellEvaluationRequestRegisterUnavailable, err), nil
 	}
 	switch effect {
 	case ports.SellEvaluationRequestConcluded, ports.SellEvaluationRequestConclusionReplayed:
@@ -275,6 +290,6 @@ func (handler *FormEstimatedCustomerChargeHandler) conclude(
 	}
 }
 
-func undecidedEstimatedCharge(reason EstimatedCustomerChargeUndecidedReason) EstimatedCustomerChargeResult {
-	return EstimatedCustomerChargeResult{outcome: EstimatedCustomerChargeUndecided, reason: reason}
+func undecidedEstimatedCharge(reason EstimatedCustomerChargeUndecidedReason, cause error) EstimatedCustomerChargeResult {
+	return EstimatedCustomerChargeResult{outcome: EstimatedCustomerChargeUndecided, reason: reason, cause: cause}
 }

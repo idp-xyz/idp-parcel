@@ -11,9 +11,12 @@ import (
 	saports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
-// ErrSellChargeFormationUndecided 是 SELL 形成那一路唯一的未决哨兵：评价还读不回（与信封同事务落库，读不回只剩可见性
-// 滞后），或请求册、映射册、费用库某一个答不出。形成与否未知，整笔回滚等重投；停在哪个依赖上写在错误正文里。生产装配
-// 把它登进这一路的 WithUndecidedSentinels。
+// ErrSellChargeFormationUndecided 是 SELL 形成那一路唯一的未决哨兵：评价读不回，或请求册、映射册、费用库某一个答不出。
+// 形成与否未知，整笔回滚等重投；停在哪个依赖上、依赖原样答了什么，都写在错误正文里。生产装配把它登进这一路的
+// WithUndecidedSentinels。
+//
+// 评价与信封同事务落库，读不回本该只剩可见性滞后；但 SellEvaluationAdapter.LoadSellEvaluation 把引用译不成计价侧标识、
+// 评价不属本租户也折成读不回，这两种重投不自愈，会耗尽失败预算落 ABANDONED。
 var ErrSellChargeFormationUndecided = errors.New(
 	"settlement accounting parcelpricing adapter: estimated customer charge formation is undecided")
 
@@ -49,9 +52,9 @@ var _ sainbox.RecordedSellEvaluationHandler = (*FormOnSellEvaluationRecordedAdap
 
 // HandleRecordedSellEvaluation 译引用 → 取评价 → 分辨方向 → 交形成编排 → 折结果。
 //
-// 入账（答 nil）的各格：不是 SELL·CUSTOMER_CHARGE、评价不为任何 SELL 请求而形成、请求记下了结论或早有结论、评价失败
-// 而请求停在`已提交`——都是这一封信的定局，重投同一封不会变。ErrUntranslatableAnswer 与编排上抛的错误原样交回，落
-// publish_failed：提供方形状变了，或两侧说法矛盾，重投不自愈。
+// 入账（答 nil）的各格：不是 SELL·CUSTOMER_CHARGE、评价没有回指、请求记下了结论或早有结论、评价失败而请求停在
+// `已提交`——都是这一封信的定局，重投同一封不会变。ErrUntranslatableAnswer 与编排上抛的错误原样交回，落
+// publish_failed：提供方形状变了，或两侧说法矛盾（回指的请求不在册上、结算币种对不上），重投不自愈。
 func (adapter *FormOnSellEvaluationRecordedAdapter) HandleRecordedSellEvaluation(
 	ctx context.Context,
 	recorded sainbox.RecordedSellEvaluation,
@@ -90,7 +93,7 @@ func (adapter *FormOnSellEvaluationRecordedAdapter) HandleRecordedSellEvaluation
 		saapplication.EstimatedCustomerChargeEvaluationNotFormed:
 		return nil
 	case saapplication.EstimatedCustomerChargeUndecided:
-		return fmt.Errorf("%w: evaluation %s: %s", ErrSellChargeFormationUndecided, reference, result.UndecidedReason())
+		return fmt.Errorf("%w: evaluation %s: %s: %v", ErrSellChargeFormationUndecided, reference, result.UndecidedReason(), result.UndecidedCause())
 	default:
 		return fmt.Errorf("settlement accounting parcelpricing adapter: unexpected estimated customer charge outcome %d", result.Outcome())
 	}

@@ -9,10 +9,6 @@ import (
 	saports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
-// ErrNotASellEvaluation 表示指名的评价不是 SELL·CUSTOMER_CHARGE。BUY 评价不从这条读口形成客户费用。它就是端口上的
-// 那一枚哨兵：SELL 形成编排在应用层按它分辨「不是本门的评价」，适配器另立一枚就得在两层之间再译一次。
-var ErrNotASellEvaluation = saports.ErrNotASellEvaluation
-
 // SellEvaluationAdapter 实现 saports.SellEvaluationView。金额换写与 BUY 读口同一套，方向不同。
 //
 // 与 BUY 读口不同的一处：卡没声明金额取整时不报错，交回 saports.SellEvaluationAmountUndeclared 那一格（理由在那一格的
@@ -45,7 +41,7 @@ func (adapter *SellEvaluationAdapter) LoadSellEvaluation(
 		return saports.SellEvaluationAdoption{}, false, nil
 	}
 	if evaluation.Direction() != ppdomain.PricingDirectionSell || evaluation.Purpose() != ppdomain.PricingPurposeCustomerCharge {
-		return saports.SellEvaluationAdoption{}, false, fmt.Errorf("%w: %s / %s", ErrNotASellEvaluation, evaluation.Direction(), evaluation.Purpose())
+		return saports.SellEvaluationAdoption{}, false, fmt.Errorf("%w: %s / %s", saports.ErrNotASellEvaluation, evaluation.Direction(), evaluation.Purpose())
 	}
 	outcome := sellOutcomeOf(evaluation.Status())
 	adoption := saports.SellEvaluationAdoption{Evaluation: reference, Outcome: outcome}
