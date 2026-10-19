@@ -84,6 +84,7 @@ PN-08 的阶段准入、暂停恢复、生产权威、对象级接管和 `Go/No-
 | `UC-CC-010` | [关闭、受控重开关务案件并建立后续案件](./customs-compliance/UC-CC-010-CLOSE-REOPEN-AND-ESTABLISH-FOLLOW-UP-CASE.md) | `customs-compliance` | 逐义务关闭、有效责任承接、受控重开和后续案件边界已形成，真实义务目录、责任来源和权限参数待提供 |
 | `UC-CC-011` | [管理内部合规限制及解除](./customs-compliance/UC-CC-011-MANAGE-INTERNAL-COMPLIANCE-RESTRICTIONS.md) | `customs-compliance` | 内部限制形成、范围化覆盖、来源解除、当前适用性和下游消费边界已形成，真实来源、动作矩阵、解除条件和权限参数待提供 |
 | `UC-CC-012` | [接收并关联承运商外部监管舱单](./customs-compliance/UC-CC-012-RECEIVE-AND-RELATE-EXTERNAL-REGULATORY-MANIFEST.md) | `customs-compliance` | 出口和进口均由承运商在外部形成并提交的责任边界已确认，外部引用、版本、范围、关系和当前采用判断已形成，真实责任承运商、来源契约和结果语义待提供 |
+| `UC-CC-013` | [判断动作准入](./customs-compliance/UC-CC-013-JUDGE-ACTION-ADMISSION.md) | `customs-compliance` | 适用动作按节点关务区域判、对象范围自解析、三源折五格与判断记录已形成（ADR-0206），真实节点区域取值待提供（`PAR-CUS-08`），生产消费方随运输履约出发登记接线 |
 | `UC-VE-001` | [协调关务异常并管理客户披露](./visibility-exception/UC-VE-001-COORDINATE-CUSTOMS-EXCEPTIONS-AND-CUSTOMER-DISCLOSURE.md) | `visibility-exception` | 关务事实接收、异常信号/案件、处置协调、披露决定和消息结果边界已形成，真实类型、规则与渠道参数待提供 |
 | `UC-VE-002` | [接收事实并形成全程追踪投影](./visibility-exception/UC-VE-002-BUILD-TRACKING-PROJECTION.md) | `visibility-exception` | 已接受事实、标准里程碑、各维度投影、冲突和未归类结果边界已形成，真实来源与映射参数待提供 |
 | `UC-VE-003` | [形成 ETA 与可见性缺口判断](./visibility-exception/UC-VE-003-FORM-ETA-AND-VISIBILITY-GAP.md) | `visibility-exception` | ETA、可见性缺口和客户可见门槛已分层，真实窗口、质量和合同参数待提供 |
