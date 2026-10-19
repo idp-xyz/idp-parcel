@@ -94,3 +94,7 @@ PS CONTEXT「外部标识关联」：客户账户给的号在该客户账户内�
 - NO CONTEXT「实物身份与事实完整性」与「待识别实物与身份关联」：[../domain/node-operations/CONTEXT.md](../domain/node-operations/CONTEXT.md)
 - UC-NO-002 步骤 4、「权限、隔离与审计」、`AT-NO-052`：[../application/node-operations/UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md](../application/node-operations/UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md)
 - [ADR-0184](./0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md)（部分停用决定五一句；决定六维持）、[ADR-0196](./0196-one-mark-on-two-units-is-an-identity-conflict-judged-by-the-associated-parcel.md)、[ADR-0199](./0199-node-reception-preserves-the-delivery-source-and-rechecks-pending-identities.md)
+
+## 复核记录（2026-10-19，不停用；决定原文不动）
+
+越权风险点「合法的重复用号与持号一方自己的实物也答身份冲突」与「信号消失后，已记的冲突不自动解除」所等的「身份冲突的处置能力」，已由 [ADR-0210](./0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md) 定下：持「身份冲突处置」运营决定授予的人在冲突候选里指定一件或确认都不是，逐条判断链追加处置版（票 [no-reception-identity/04](../../.scratch/no-reception-identity/issues/04-identity-conflicts-have-a-disposition-and-release.md) 裁定，会话 `idp-parcel-9b` 代 NO owner 决，用户 2026-10-16 授权「你作为业务和系统专家你来自决」）。信号消失不自动解除，与 ADR-0210 决定一同向；自动解除要 PS 另交「声明的委托被拒绝或撤回」的信封，记作后续方向，未立票。本记录各条不变。

@@ -63,3 +63,11 @@ no-directional-basis/01 的身份一格（`domain.JudgeIdentityBasis`）以「�
 
 1. **越权风险点 4「并发未串行」由票 [no-reception-identity/03](../../.scratch/no-reception-identity/issues/03-concurrent-deliveries-of-one-mark-serialize-on-the-parcel.md) 收住**（会话 `idp-parcel-9b` 代 NO owner 裁定）。收寄库 PG 适配器的 `FindOtherUnitIntakes` 在查询之前按（租户、包裹关联）取事务级咨询锁，锁随收寄所在的事务释放。同一件包裹上「读别的实物关联 → 落收寄」因此串行：两件贴同一个号的实物在两笔并发事务里送站时，后到那件等在锁上，先到那件提交后它才查；READ COMMITTED 下那条查询另取快照，读得到先到者的关联，于是答身份冲突，并给先到那件追加一版冲突判断，与决定二、三的先后次序同一结果。读口改为无事务即拒：锁在事务外取不住。真库并发用例（`cmd/parcel-api` 的 `TestConcurrentDeliveriesOfOneMarkSerializeOnTheParcel`）修前两件都答`节点收寄已形成`，修后如上。
 2. **串行粒度是（租户、包裹），是代 NO owner 定的。** 号码唯一指向的包裹之外（零候选、多候选），编排不读别的实物关联，也就不取锁。不取唯一索引：同一件包裹允许有多行关联，同一实物多次收寄是合法的，没有可建唯一约束的列组合。不取 `SERIALIZABLE`：那要把整条收寄编排换隔离级别，牵连 PS 读口与意图入队。锁不管绕过本读口的写入。
+
+## 复核记录二（2026-10-19，ADR-0210 部分停用两处；决定原文不动）
+
+会话 `idp-parcel-9b` 代 NO owner 裁定身份冲突的处置（票 [no-reception-identity/04](../../.scratch/no-reception-identity/issues/04-identity-conflicts-have-a-disposition-and-release.md)，用户 2026-10-16 授权「你作为业务和系统专家你来自决」），成文为 [ADR-0210](./0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md)。它对本记录：
+
+1. **决定四两句自票 no-reception-identity/05 进 main 起停用。** 方向依据的身份一格改读每条判断链的当前有效版本（ADR-0210 决定五）。先到那件的冲突版若指名了前版（ADR-0199 第一期之后追加的），此刻的当前有效版本就是那一版冲突版，落成缺少·{待识别, 身份冲突}，不再是「先到那件有原判断的关联行加追加的冲突行，落成缺少·身份冲突」；第一期之前追加、没有前版的冲突版照原句。同条「方向依据代码不改」一并停用。两件都暂停方向性作业，这一结论不变。
+2. **决定六的读法自票 no-reception-identity/06 进 main 起收窄。** 「按租户与包裹关联读别的作业实物的收寄，只认收寄本身带的关联」：被身份冲突处置版接续过的行，它的关联不再算那件实物的关联，处置版自己带的关联照算（ADR-0210 决定八「处置截断」）。还没有处置过的实物照原读法。决定一「这件包裹已有另一件作业实物的收寄关联」随之同读。
+3. **「Consequences」里「解除要等身份冲突的处置能力（未立票）」**已有去处：ADR-0210，实施票 no-reception-identity/05、06。决定五「已被 PS 采用的那次采用不回滚，交 VE 协调」不变；ADR-0210 决定七写明处置不撤回已交出的意图。
