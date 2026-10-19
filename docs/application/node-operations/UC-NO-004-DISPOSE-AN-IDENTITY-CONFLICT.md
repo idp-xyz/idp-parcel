@@ -18,7 +18,7 @@
 
 本用例不执行：
 
-- 歧义信号消失后的自动解除（ADR-0210 决定一，后续方向）。
+- 只因歧义信号形成的冲突在声明消失后经重核自动解开：它属 [UC-NO-002](./UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md) 的重核，不是处置（[ADR-0211](../../adr/0211-an-ambiguity-only-identity-conflict-releases-by-recheck-once-the-declaration-is-gone.md)）。
 - 对没有身份冲突的关联作单独更正。
 - 「同一实物存在相互冲突的外部标识」那一半身份冲突。
 - `parcel-shipment` 的采用回滚或 `visibility-exception` 的协调。
@@ -43,7 +43,7 @@
 | 引用键 | 权威内容 | 来源 |
 |---|---|---|
 | `NO-LANG` | 待识别实物、判断链与当前有效版本、身份冲突处置、方向依据记录 | [节点作业：Language](../../domain/node-operations/CONTEXT.md#language) |
-| `NO-RULE` | 身份冲突只经处置解除、候选只来自 `parcel-shipment`、处置不改变实物去向 | [节点作业：Rules and invariants](../../domain/node-operations/CONTEXT.md#rules-and-invariants) |
+| `NO-RULE` | 身份冲突经处置解除（只因歧义信号的那一格另可经重核解开）、候选只来自 `parcel-shipment`、处置不改变实物去向 | [节点作业：Rules and invariants](../../domain/node-operations/CONTEXT.md#rules-and-invariants) |
 | `NO-LIFE` | 待识别实物与身份关联：处置、读链头与处置截断 | [节点作业：Lifecycles](../../domain/node-operations/CONTEXT.md#lifecycles) |
 | `ADR-DISP` | 处置的形状、连带指明、读链头、命令口代数、意图、重核例外 | [ADR-0210](../../adr/0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md) |
 | `ADR-OPS` | 「运营决定」能力面、授予维度与代数读法 | [ADR-0151](../../adr/0151-unassigned-command-faces-get-their-families.md) 及其复核记录 |

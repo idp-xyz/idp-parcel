@@ -1,6 +1,6 @@
 # ADR-0199：节点收寄保全交付来源——待识别实物按存下的号重核，同一作业实物在同一节点不另起控制起点，身份核对读不动在前提齐备后翻成待识别加未核对
 
-Status: Accepted（2026-10-19。用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」；该会话代 NO owner 裁定，裁定原文落在票 [no-reception-source/01](../../.scratch/no-reception-source/issues/01-node-reception-preserves-the-delivery-source.md)「裁定（2026-10-18，会话 idp-parcel-9b 代决）」一节，本记录照它写成，补上各期难逆转的形状。成文由该会话起的作者子代理完成。裁决能力边界：读过 NO `CONTEXT.md`、UC-NO-002、CONTEXT-MAP 与 GLOSSARY 的相关条目、ADR-0186、ADR-0196 及其复核记录、票 operator-channel/29、43、45 与 no-reception-identity/01、03；代码读过收寄编排 `ReceiveDeliveredUnitHandler`、ports 的收寄记录与收寄库端口、收寄库 PG 适配器、`ParcelContainmentView`、载荷规范化 `CanonicalizeDeliveryPayload`、方向依据的 `JudgeIdentityBasis`、复核目录读端口与 HTTP 收寄答复。PS 外部标识关联册只读过读面 `FindParcelsByExternalIdentifier` 与写入函数 `insertExternalIdentifierRelations`，它的调用方（委托仓储、面单交易仓储）的事务与 Outbox 装配没有逐行读。）部分停用：几句由 [ADR-0210](./0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md) 停用，随票 no-reception-identity/05、06 进 main 各自生效；被停的原句见本记录文末「复核记录（2026-10-19，ADR-0210 部分停用几句」与 adr/README 该行。
+Status: Accepted（2026-10-19。用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」；该会话代 NO owner 裁定，裁定原文落在票 [no-reception-source/01](../../.scratch/no-reception-source/issues/01-node-reception-preserves-the-delivery-source.md)「裁定（2026-10-18，会话 idp-parcel-9b 代决）」一节，本记录照它写成，补上各期难逆转的形状。成文由该会话起的作者子代理完成。裁决能力边界：读过 NO `CONTEXT.md`、UC-NO-002、CONTEXT-MAP 与 GLOSSARY 的相关条目、ADR-0186、ADR-0196 及其复核记录、票 operator-channel/29、43、45 与 no-reception-identity/01、03；代码读过收寄编排 `ReceiveDeliveredUnitHandler`、ports 的收寄记录与收寄库端口、收寄库 PG 适配器、`ParcelContainmentView`、载荷规范化 `CanonicalizeDeliveryPayload`、方向依据的 `JudgeIdentityBasis`、复核目录读端口与 HTTP 收寄答复。PS 外部标识关联册只读过读面 `FindParcelsByExternalIdentifier` 与写入函数 `insertExternalIdentifierRelations`，它的调用方（委托仓储、面单交易仓储）的事务与 Outbox 装配没有逐行读。）部分停用：几句由 [ADR-0210](./0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md) 停用，随票 no-reception-identity/05、06 进 main 各自生效；被停的原句见本记录文末「复核记录（2026-10-19，ADR-0210 部分停用几句」与 adr/README 该行。另有决定三两句由 [ADR-0211](./0211-an-ambiguity-only-identity-conflict-releases-by-recheck-once-the-declaration-is-gone.md) 停用，只限冲突来由为只因歧义信号的身份冲突，随票 no-reception-identity/07 进 main 生效；原句见本记录文末「复核记录（2026-10-19，ADR-0211 部分停用两句」与 adr/README 该行。
 
 Date: 2026-10-19
 
@@ -129,6 +129,16 @@ Date: 2026-10-19
 
 决定三第二个触发「复核页上由人对指名的一件待识别实物发起」由票 [no-reception-source/03](../../.scratch/no-reception-source/issues/03-pending-identities-are-rechecked-by-the-preserved-mark.md) 落成操作者渠道「运营决定」能力面的一种决定 `PENDING_IDENTITY_RECHECK`，归族依据 [ADR-0151](./0151-unassigned-command-faces-get-their-families.md) 决定一「管理台上作决定或判断的口」，准入照同一记录决定三判。命令口的路径与答复分格（含记身份冲突的行与来源未保全的旧行怎么答）见该票完成记录。
 
+## 复核记录（2026-10-19，ADR-0211 部分停用两句；决定原文不动）
+
+会话 `idp-parcel-9b` 代 NO owner 与 PS owner 裁定只因歧义信号的冲突自动解开（票 [no-reception-identity/07](../../.scratch/no-reception-identity/issues/07-an-ambiguity-only-conflict-releases-when-the-declaration-is-gone.md)，授权同 Status 行），成文为 [ADR-0211](./0211-an-ambiguity-only-identity-conflict-releases-by-recheck-once-the-declaration-is-gone.md)。自该票进 main 起，决定三下列两句停用，**适用场景**只限冲突来由为只因歧义信号的身份冲突：
+
+1. 「**触发只有三处，不做后台扫表。**」里「只有三处」——多一处：PS 委托由`已提交`转为`已拒绝`或`已撤回`时，按它声明的每个号交一封只带（租户，号码）的声明撤除门铃，NO 用同一个重核消费者按号重核（ADR-0211 决定三）。「不做后台扫表」照旧。
+2. 「重核对象」一项里「记身份冲突的（多候选、一码两物）不重核」——原句写在 ADR-0195 之前，括号里没列带信号的一个候选；ADR-0195 决定四把那一格落在重核「多候选」格、记冲突，此后它也归这句管。来由是只因歧义信号的冲突从此是重核对象：信号消失、答唯一命中即追加关联版（业务时间原收寄时刻、不另起控制起点、意图一封），信号仍在不追加，变成多候选或一码两物追加冲突版、来由随之更新（ADR-0211 决定二）。多候选、一码两物与来由缺席的冲突照旧不重核，理由照本记录「复核记录（2026-10-19，ADR-0210 部分停用几句」那一节。
+
+决定三其余分格、来源文档缺席的旧行不重核、门铃不是身份答案，都不变。
+
 ## Links
 
 - 部分停用于 [ADR-0210](./0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md)。
+- 部分停用于 [ADR-0211](./0211-an-ambiguity-only-identity-conflict-releases-by-recheck-once-the-declaration-is-gone.md)（决定三两句，只限来由为只因歧义信号的冲突）。

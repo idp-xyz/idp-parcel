@@ -1,6 +1,6 @@
 # ADR-0210：身份冲突经运营决定处置——在冲突候选里指定一件或确认都不是，逐条判断链追加处置版；方向依据的身份一格改读每条判断链的当前有效版本
 
-Status: Accepted（2026-10-19。用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」；该会话代 NO owner 裁定，裁定原文落在票 [no-reception-identity/04](../../.scratch/no-reception-identity/issues/04-identity-conflicts-have-a-disposition-and-release.md)「裁定（2026-10-19，会话 idp-parcel-9b 代决）」一节。本记录照它写成，补上处置的形状，并定下裁定交给本记录定的事：指定的那件已关联到别的作业实物时怎么办，处置命令口归哪份 UC。成文由该会话起的作者子代理完成。部分停用 [ADR-0196](./0196-one-mark-on-two-units-is-an-identity-conflict-judged-by-the-associated-parcel.md)、[ADR-0199](./0199-node-reception-preserves-the-delivery-source-and-rechecks-pending-identities.md) 各几句，逐句见「与已接受决定的关系」。裁决能力边界：读过 NO `CONTEXT.md` 全文、UC-NO-002、GLOSSARY「作业实物」「待识别实物」、CONTEXT-MAP 里 `node-operations` 的拥有项与 `parcel-shipment → node-operations` 两条，ADR-0151 及其复核记录、ADR-0183「复核记录二」、ADR-0186、ADR-0195、ADR-0196 及其复核记录、ADR-0199，票 no-directional-basis/01「偏离标记半边：设计代决」、operator-channel/15 两段补记、no-reception-source/02 完成记录与评审、no-reception-source/03、04、05；代码读过 `domain.JudgeIdentityBasis`、`IntakeIdentities.FindIntakeIdentities`、`Receptions.FindOtherUnitIntakes` 与 `Receptions.CurrentVersion`、`ParcelContainmentView.LoadParcelContainment`、`ReviewCatalogue.ListUnidentifiedItems`、`ReceiveDeliveredUnitHandler.appendIdentityConflicts`、`accessidentity.DecisionKind` 的词表与演示种子的授予文件。没读：PS 采用编排 `AdoptNetworkIntakeHandler` 全文（只读了各函数头注）、VE 侧消费者、并行在途的重核实现。）
+Status: Accepted（2026-10-19。用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」；该会话代 NO owner 裁定，裁定原文落在票 [no-reception-identity/04](../../.scratch/no-reception-identity/issues/04-identity-conflicts-have-a-disposition-and-release.md)「裁定（2026-10-19，会话 idp-parcel-9b 代决）」一节。本记录照它写成，补上处置的形状，并定下裁定交给本记录定的事：指定的那件已关联到别的作业实物时怎么办，处置命令口归哪份 UC。成文由该会话起的作者子代理完成。部分停用 [ADR-0196](./0196-one-mark-on-two-units-is-an-identity-conflict-judged-by-the-associated-parcel.md)、[ADR-0199](./0199-node-reception-preserves-the-delivery-source-and-rechecks-pending-identities.md) 各几句，逐句见「与已接受决定的关系」。裁决能力边界：读过 NO `CONTEXT.md` 全文、UC-NO-002、GLOSSARY「作业实物」「待识别实物」、CONTEXT-MAP 里 `node-operations` 的拥有项与 `parcel-shipment → node-operations` 两条，ADR-0151 及其复核记录、ADR-0183「复核记录二」、ADR-0186、ADR-0195、ADR-0196 及其复核记录、ADR-0199，票 no-directional-basis/01「偏离标记半边：设计代决」、operator-channel/15 两段补记、no-reception-source/02 完成记录与评审、no-reception-source/03、04、05；代码读过 `domain.JudgeIdentityBasis`、`IntakeIdentities.FindIntakeIdentities`、`Receptions.FindOtherUnitIntakes` 与 `Receptions.CurrentVersion`、`ParcelContainmentView.LoadParcelContainment`、`ReviewCatalogue.ListUnidentifiedItems`、`ReceiveDeliveredUnitHandler.appendIdentityConflicts`、`accessidentity.DecisionKind` 的词表与演示种子的授予文件。没读：PS 采用编排 `AdoptNetworkIntakeHandler` 全文（只读了各函数头注）、VE 侧消费者、并行在途的重核实现。）部分停用：决定一两句与「能力边界」一项由 [ADR-0211](./0211-an-ambiguity-only-identity-conflict-releases-by-recheck-once-the-declaration-is-gone.md) 停用，只限冲突来由为只因歧义信号的身份冲突，随票 no-reception-identity/07 进 main 生效；被停的原句见本记录文末「复核记录（2026-10-19，ADR-0211 部分停用几句）」与 adr/README 该行。
 
 Date: 2026-10-19
 
@@ -163,6 +163,16 @@ ADR-0199 第一期已经让收寄册上每一版判断都有判断版本，追�
 
 决定一的处置命令口落成 `POST /node-operations/identity-dispositions`，运营决定种类 `IDENTITY_CONFLICT_DISPOSITION`，准入照 ADR-0151 决定三；答复各格与处置文档的形状见票 [no-reception-identity/06](../../.scratch/no-reception-identity/issues/06-an-operator-disposes-an-identity-conflict.md) 完成记录，不在此复述。
 
+## 复核记录（2026-10-19，ADR-0211 部分停用几句；决定原文不动）
+
+会话 `idp-parcel-9b` 代 NO owner 与 PS owner 裁定只因歧义信号的冲突自动解开（票 [no-reception-identity/07](../../.scratch/no-reception-identity/issues/07-an-ambiguity-only-conflict-releases-when-the-declaration-is-gone.md)，用户 2026-10-16 授权「你作为业务和系统专家你来自决」，2026-10-19 就该票答「需要」），成文为 [ADR-0211](./0211-an-ambiguity-only-identity-conflict-releases-by-recheck-once-the-declaration-is-gone.md)。自该票进 main 起，下列几句停用，**适用场景**只限冲突来由为只因歧义信号的身份冲突（PS 答恰一个候选、同时答出歧义信号）：
+
+1. **决定一**「**不做自动解除。** 歧义信号消失之后自动解开，需要 PS 在声明的委托被拒绝或撤回时另交信封（ADR-0195 决定四写明「信号消失不交信封」），记作后续方向，本记录不做、不立票。」——PS 在声明它的委托被拒绝或撤回时交声明撤除门铃，重核答唯一命中、不带信号即追加关联版，冲突随链头解开（ADR-0211 决定二、三）。
+2. **决定一**「**重核与再次收寄都不解除冲突。** 重核照 ADR-0199 决定三跳过记身份冲突的判断」里重核那半句——这类冲突是重核对象。同句「再次收寄……不解除冲突」照旧。
+3. **「能力边界」首项**里「不做自动解除」。
+
+其余照旧：多候选、一码两物与来由缺席的冲突（ADR-0211 之前落下的冲突行一律不回填来由）只经本记录的处置解开；处置版不记冲突，自动解开不撤销任何处置。「Alternatives」里「歧义信号消失即自动解除」一项是当时不取的历史，不改。
+
 ## Links
 
 - 票：[no-reception-identity/04](../../.scratch/no-reception-identity/issues/04-identity-conflicts-have-a-disposition-and-release.md)（裁定与完成记录）、[05](../../.scratch/no-reception-identity/issues/05-the-identity-basis-reads-each-judgment-chain-head.md)、[06](../../.scratch/no-reception-identity/issues/06-an-operator-disposes-an-identity-conflict.md)
@@ -170,3 +180,4 @@ ADR-0199 第一期已经让收寄册上每一版判断都有判断版本，追�
 - UC-NO-004：[../application/node-operations/UC-NO-004-DISPOSE-AN-IDENTITY-CONFLICT.md](../application/node-operations/UC-NO-004-DISPOSE-AN-IDENTITY-CONFLICT.md)
 - [ADR-0196](./0196-one-mark-on-two-units-is-an-identity-conflict-judged-by-the-associated-parcel.md)（部分停用决定四、决定六的读法）、[ADR-0199](./0199-node-reception-preserves-the-delivery-source-and-rechecks-pending-identities.md)（部分停用决定三、决定五各几句）、[ADR-0195](./0195-a-submitted-declaration-of-the-same-number-turns-a-unique-hit-into-an-identity-conflict.md)（不停用）
 - [ADR-0151](./0151-unassigned-command-faces-get-their-families.md)（运营决定能力面与代数读法）、[ADR-0187](./0187-controlled-closure-and-reopening-record-request-and-operation-evidence-on-the-decision.md)（证据不进比对、操作证据写法）、[ADR-0186](./0186-node-reception-records-physical-facts-when-the-service-result-read-fails.md)（服务结果核对态）
+- 部分停用于 [ADR-0211](./0211-an-ambiguity-only-identity-conflict-releases-by-recheck-once-the-declaration-is-gone.md)（决定一两句与「能力边界」一项，只限来由为只因歧义信号的冲突）。

@@ -1,6 +1,6 @@
 # ADR-0195：唯一命中要没有歧义信号——号码同时被一份`已提交`委托声明时，节点答身份冲突；声明不进候选
 
-Status: Accepted（2026-10-19。用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」；该会话代 PS owner 与 NO owner 裁定，裁定原文落在票 [ps-external-mark-relations/05](../../.scratch/ps-external-mark-relations/issues/05-a-unique-hit-in-someone-elses-number-space-is-not-enough.md)「裁定（2026-10-18，会话 idp-parcel-9b 代决）」一节。本记录照它写成，补上实施时定下的形状；成文由该会话起的作者子代理完成。部分停用 [ADR-0184](./0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md) 决定五里「只交回包裹」一句，其余各条不变。裁决能力边界：读过 PS `CONTEXT.md`「外部标识」「外部标识关联」的定义、外部标识的各条 Rules 与`委托`生命周期，NO `CONTEXT.md`「实物身份与事实完整性」与「待识别实物与身份关联」，CONTEXT-MAP `parcel-shipment → node-operations` 各句，UC-NO-002 的流程表、「权限、隔离与审计」与验收表，ADR-0184 及其复核记录、ADR-0185、ADR-0196 及其复核记录、ADR-0199；代码读过 PS 关联册读面 `FindParcelsByExternalIdentifier`、委托仓储的快照文档与 `Save`、委托状态 `ShipmentRequestState`，NO 收寄编排 `ReceiveDeliveredUnitHandler` 的明确接收支、身份读口 `ParcelIdentityView` 与防腐适配器。**没读** PS 采用节点收寄的适配器全文与 VE 追踪投影的消费者。）
+Status: Accepted（2026-10-19。用户 2026-10-16 授权会话 `idp-parcel-9b`「你作为业务和系统专家你来自决」；该会话代 PS owner 与 NO owner 裁定，裁定原文落在票 [ps-external-mark-relations/05](../../.scratch/ps-external-mark-relations/issues/05-a-unique-hit-in-someone-elses-number-space-is-not-enough.md)「裁定（2026-10-18，会话 idp-parcel-9b 代决）」一节。本记录照它写成，补上实施时定下的形状；成文由该会话起的作者子代理完成。部分停用 [ADR-0184](./0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md) 决定五里「只交回包裹」一句，其余各条不变。本记录自身决定四一句由 [ADR-0211](./0211-an-ambiguity-only-identity-conflict-releases-by-recheck-once-the-declaration-is-gone.md) 停用，只限冲突来由为只因歧义信号的身份冲突，随票 no-reception-identity/07 进 main 生效；原句见本记录文末「复核记录二（2026-10-19，ADR-0211 部分停用一句」与 adr/README 该行。裁决能力边界：读过 PS `CONTEXT.md`「外部标识」「外部标识关联」的定义、外部标识的各条 Rules 与`委托`生命周期，NO `CONTEXT.md`「实物身份与事实完整性」与「待识别实物与身份关联」，CONTEXT-MAP `parcel-shipment → node-operations` 各句，UC-NO-002 的流程表、「权限、隔离与审计」与验收表，ADR-0184 及其复核记录、ADR-0185、ADR-0196 及其复核记录、ADR-0199；代码读过 PS 关联册读面 `FindParcelsByExternalIdentifier`、委托仓储的快照文档与 `Save`、委托状态 `ShipmentRequestState`，NO 收寄编排 `ReceiveDeliveredUnitHandler` 的明确接收支、身份读口 `ParcelIdentityView` 与防腐适配器。**没读** PS 采用节点收寄的适配器全文与 VE 追踪投影的消费者。）
 
 Date: 2026-10-19
 
@@ -94,7 +94,17 @@ PS CONTEXT「外部标识关联」：客户账户给的号在该客户账户内�
 - NO CONTEXT「实物身份与事实完整性」与「待识别实物与身份关联」：[../domain/node-operations/CONTEXT.md](../domain/node-operations/CONTEXT.md)
 - UC-NO-002 步骤 4、「权限、隔离与审计」、`AT-NO-052`：[../application/node-operations/UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md](../application/node-operations/UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md)
 - [ADR-0184](./0184-external-identifier-relations-are-an-append-only-register-formed-with-their-source-facts.md)（部分停用决定五一句；决定六维持）、[ADR-0196](./0196-one-mark-on-two-units-is-an-identity-conflict-judged-by-the-associated-parcel.md)、[ADR-0199](./0199-node-reception-preserves-the-delivery-source-and-rechecks-pending-identities.md)
+- 部分停用于 [ADR-0211](./0211-an-ambiguity-only-identity-conflict-releases-by-recheck-once-the-declaration-is-gone.md)（决定四一句，只限来由为只因歧义信号的冲突）。
 
 ## 复核记录（2026-10-19，不停用；决定原文不动）
 
 越权风险点「合法的重复用号与持号一方自己的实物也答身份冲突」与「信号消失后，已记的冲突不自动解除」所等的「身份冲突的处置能力」，已由 [ADR-0210](./0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md) 定下：持「身份冲突处置」运营决定授予的人在冲突候选里指定一件或确认都不是，逐条判断链追加处置版（票 [no-reception-identity/04](../../.scratch/no-reception-identity/issues/04-identity-conflicts-have-a-disposition-and-release.md) 裁定，会话 `idp-parcel-9b` 代 NO owner 决，用户 2026-10-16 授权「你作为业务和系统专家你来自决」）。信号消失不自动解除，与 ADR-0210 决定一同向；自动解除要 PS 另交「声明的委托被拒绝或撤回」的信封，记作后续方向，未立票。本记录各条不变。
+
+## 复核记录二（2026-10-19，ADR-0211 部分停用一句；决定原文不动）
+
+会话 `idp-parcel-9b` 代 NO owner 与 PS owner 裁定只因歧义信号的冲突自动解开（票 [no-reception-identity/07](../../.scratch/no-reception-identity/issues/07-an-ambiguity-only-conflict-releases-when-the-declaration-is-gone.md)，授权同 Status 行，2026-10-19 用户就该票答「需要」），成文为 [ADR-0211](./0211-an-ambiguity-only-identity-conflict-releases-by-recheck-once-the-declaration-is-gone.md)。上一节复核记录写的「自动解除……记作后续方向，未立票」由它承接。自该票进 main 起：
+
+1. **决定四**「信号消失不交信封。声明它的委托被拒绝或撤回，信号就消失；但信号只会把唯一命中改成冲突，冲突行不经重核解除，零候选的待识别又本就不看信号。」里「信号消失不交信封」与「冲突行不经重核解除」停用，**适用场景**只限冲突来由为只因歧义信号的身份冲突：PS 在声明它的委托由`已提交`转为`已拒绝`或`已撤回`时，按它声明的每个号交一封声明撤除门铃，这类冲突是重核对象，答唯一命中即解开（ADR-0211 决定二、三）。同句「零候选的待识别又本就不看信号」照旧。
+2. **越权风险点**「信号消失后，已记的冲突不自动解除」随之失效，适用场景同上。
+
+这一句停用超出那张票裁定的字面（裁定只点名 ADR-0210 与 ADR-0199），理由见 ADR-0211 越权风险点「停用 ADR-0195 一句」：它写的正是「信号消失不交信封」，不标出来就有两处相反的现行说法。决定一至三、决定五与其余越权风险点不变；信号的判据（`已提交`）与「信号只是一个是否值」都不变，声明撤除门铃同样只带租户与号码。
