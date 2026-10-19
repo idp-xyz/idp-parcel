@@ -84,8 +84,16 @@ func NewJudgeEffectiveTimeHandler(deps JudgeEffectiveTimeDeps) *JudgeEffectiveTi
 	return &JudgeEffectiveTimeHandler{deps: deps}
 }
 
+// judgmentAttempts 是一次判断里「读当前版 → 落回指它的新版本」最多走几遍。每撞一次都说明另一方刚给当前版接上了
+// 后继，链确实前进了；有界是为了持续争用时把事务交还而不是一直占着，调用方凭续办引用重投即可。
+const judgmentAttempts = 3
+
 // Judge 为指名事实的当前版落一次显式判断。当前版已按同一时间显式判过即重放，交回原版本并
 // 重发意图；其余情形换新版本。
+//
+// 「先读当前版再写」拦不住并发：两方读到同一个当前版时，库面「一版至多被回指一次」只让一方落下，另一方的 Save
+// 答`已登记`。输家重读当前版、走同一套判定——赢家已按同一时间判过就答`已按同值判过`回显赢家，否则在赢家之上改判；
+// 按本次新版本键读回只会读空，所以读的是当前版而不是本次的键。
 func (handler *JudgeEffectiveTimeHandler) Judge(
 	ctx context.Context,
 	command JudgeEffectiveTimeCommand,
@@ -99,48 +107,59 @@ func (handler *JudgeEffectiveTimeHandler) Judge(
 		return JudgeEffectiveTimeResult{outcome: EffectiveTimeJudgmentNotAccepted}, nil
 	}
 
-	current, found, err := handler.deps.Facts.FindCurrent(ctx, command.TenantID, factRef)
-	if err != nil {
-		return judgmentUndecided(TrackingFactRegistryUnavailable, command), nil
-	}
-	if !found {
-		// 判断不出无中生有的事实。
-		return JudgeEffectiveTimeResult{outcome: EffectiveTimeJudgmentNotAccepted}, nil
-	}
-	if at, judged := current.Fact.EffectiveAt(); judged &&
-		current.Fact.Effective().Basis() == domain.EffectiveTimeJudgedExplicitly && domain.AtRegistryPrecision(at).Equal(domain.AtRegistryPrecision(command.EffectiveAt)) {
-		return JudgeEffectiveTimeResult{
-			outcome:   EffectiveTimeAlreadyJudgedAsGiven,
-			record:    current,
-			hasRecord: true,
-			handoff:   handler.handOff(ctx, current),
-		}, nil
-	}
+	for range judgmentAttempts {
+		current, found, err := handler.deps.Facts.FindCurrent(ctx, command.TenantID, factRef)
+		if err != nil {
+			return judgmentUndecided(TrackingFactRegistryUnavailable, command), nil
+		}
+		if !found {
+			// 判断不出无中生有的事实。
+			return JudgeEffectiveTimeResult{outcome: EffectiveTimeJudgmentNotAccepted}, nil
+		}
+		if at, judged := current.Fact.EffectiveAt(); judged &&
+			current.Fact.Effective().Basis() == domain.EffectiveTimeJudgedExplicitly && domain.AtRegistryPrecision(at).Equal(domain.AtRegistryPrecision(command.EffectiveAt)) {
+			return JudgeEffectiveTimeResult{
+				outcome:   EffectiveTimeAlreadyJudgedAsGiven,
+				record:    current,
+				hasRecord: true,
+				handoff:   handler.handOff(ctx, current),
+			}, nil
+		}
 
-	version, err := handler.deps.Identities.NextExternalTrackingFactVersion(ctx)
-	if err != nil {
-		return judgmentUndecided(TrackingIdentityUnavailable, command), nil
+		version, err := handler.deps.Identities.NextExternalTrackingFactVersion(ctx)
+		if err != nil {
+			return judgmentUndecided(TrackingIdentityUnavailable, command), nil
+		}
+		judged, err := current.Fact.JudgeEffectiveTime(judgment, version)
+		if err != nil {
+			return JudgeEffectiveTimeResult{outcome: EffectiveTimeJudgmentNotAccepted}, nil
+		}
+		record := ports.ExternalTrackingFactRecord{
+			Key:        ports.ExternalTrackingFactKey{TenantID: command.TenantID, Fact: factRef, Version: version},
+			Fact:       judged,
+			RecordedAt: handler.deps.Clock.Now(),
+		}
+		saved, err := handler.deps.Facts.Save(ctx, record)
+		if err != nil {
+			return judgmentUndecided(TrackingFactRegistryUnavailable, command), nil
+		}
+		switch saved {
+		case ports.ExternalTrackingFactSaved:
+			return JudgeEffectiveTimeResult{
+				outcome:   EffectiveTimeJudged,
+				record:    record,
+				hasRecord: true,
+				handoff:   handler.handOff(ctx, record),
+			}, nil
+		case ports.ExternalTrackingFactAlreadyRegistered:
+			// 版本是刚签的，撞键说明另一方先给读到的当前版接了后继（「一版至多被回指一次」）。
+			continue
+		default:
+			return judgmentUndecided(TrackingFactRegistryUnavailable, command), nil
+		}
 	}
-	judged, err := current.Fact.JudgeEffectiveTime(judgment, version)
-	if err != nil {
-		return JudgeEffectiveTimeResult{outcome: EffectiveTimeJudgmentNotAccepted}, nil
-	}
-	record := ports.ExternalTrackingFactRecord{
-		Key:        ports.ExternalTrackingFactKey{TenantID: command.TenantID, Fact: factRef, Version: version},
-		Fact:       judged,
-		RecordedAt: handler.deps.Clock.Now(),
-	}
-	saved, err := handler.deps.Facts.Save(ctx, record)
-	if err != nil || saved != ports.ExternalTrackingFactSaved {
-		// 版本是刚签的，撞键说明登记册出了本上下文任何路径都造不出的状态。
-		return judgmentUndecided(TrackingFactRegistryUnavailable, command), nil
-	}
-	return JudgeEffectiveTimeResult{
-		outcome:   EffectiveTimeJudged,
-		record:    record,
-		hasRecord: true,
-		handoff:   handler.handOff(ctx, record),
-	}, nil
+	// 仍在撞：如实答未决，不在读不稳的链上替任何一方定输赢。
+	return judgmentUndecided(TrackingFactRegistryUnavailable, command), nil
 }
 
 func (handler *JudgeEffectiveTimeHandler) handOff(ctx context.Context, record ports.ExternalTrackingFactRecord) string {

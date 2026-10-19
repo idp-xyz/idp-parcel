@@ -181,8 +181,8 @@ func (repository *ExternalTrackingFacts) findOne(
 	}, true, nil
 }
 
-// Save 登记一个版本。撞键答`已登记`（ADR-0031）：撞的可能是主键，也可能是（源，源事件）那个
-// 幂等锚——两者对编排都是「另一方先落了」，读回赢家即可。
+// Save 登记一个版本。撞键答`已登记`（ADR-0031）：撞的可能是主键，可能是（源，源事件）那个
+// 幂等锚，也可能是「一版至多被回指一次」——对编排都是「另一方先落了」，读回赢家即可。
 func (repository *ExternalTrackingFacts) Save(
 	ctx context.Context,
 	record ports.ExternalTrackingFactRecord,

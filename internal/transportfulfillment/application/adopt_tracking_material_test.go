@@ -27,6 +27,9 @@ type trackingFactRegistryDouble struct {
 	records []ports.ExternalTrackingFactRecord
 	findErr error
 	saveErr error
+	// beforeSave 在每次 Save 查键之前跑：本方读过当前版、尚未落行，另一方恰在此刻先提交——并发交错在
+	// 替身上只能这样摆出来。
+	beforeSave func(*trackingFactRegistryDouble)
 }
 
 func (double *trackingFactRegistryDouble) FindByKey(
@@ -91,8 +94,17 @@ func (double *trackingFactRegistryDouble) Save(
 	if double.saveErr != nil {
 		return ports.ExternalTrackingFactSaveOutcomeInvalid, double.saveErr
 	}
+	if double.beforeSave != nil {
+		double.beforeSave(double)
+	}
+	prior, supersedes := record.Fact.Supersedes()
 	for _, existing := range double.records {
 		if existing.Key == record.Key {
+			return ports.ExternalTrackingFactAlreadyRegistered, nil
+		}
+		// 照库面那条「一版至多被回指一次」的部分唯一索引：同一事实上回指同一前版的第二行撞键。
+		if taken, has := existing.Fact.Supersedes(); supersedes && has && taken == prior &&
+			existing.Key.TenantID == record.Key.TenantID && existing.Key.Fact == record.Key.Fact {
 			return ports.ExternalTrackingFactAlreadyRegistered, nil
 		}
 	}
@@ -424,6 +436,36 @@ func TestASourceDeclaredCorrectionFormsANewVersionOfTheCorrectedFact(t *testing.
 	if len(fixture.handoff.intents) != 2 {
 		t.Fatalf("两个判断过的版本各交一次：%d", len(fixture.handoff.intents))
 	}
+}
+
+// 源声明的更正与所有者的判断同时接在同一个当前版上：判断先提交，更正撞「一版至多被回指一次」后按声明重新解析到
+// 新的当前版，落在赢家之上——与顺序到达时一样，不分叉，也不因撞键答未决。
+func TestACorrectionThatLosesToAConcurrentJudgmentLandsOnTheWinner(t *testing.T) {
+	fixture := newAdoptionFixture(knownCredentials())
+	original, _ := fixture.handler.Adopt(t.Context(), trackingMaterial(t, "evt-1"))
+	originalRecord, _ := original.Record()
+	fixture.registry.beforeSave = landsFirst(t, originalRecord.Key.Fact, trackingReceivedAt, "SYN-EXTV-WINNER")
+
+	correction := trackingMaterial(t, "evt-2")
+	correction.CorrectionOf = "evt-1"
+	result, err := fixture.handler.Adopt(t.Context(), correction)
+	if err != nil {
+		t.Fatalf("更正：%v", err)
+	}
+	if result.Outcome() != application.TrackingFactAdoptedPendingJudgment {
+		t.Fatalf("撞键后应读回赢家再落：%s reason=%s", result.Outcome(), result.UndecidedReason())
+	}
+	corrected, _ := result.Record()
+	if corrected.Key.Fact != originalRecord.Key.Fact {
+		t.Fatal("更正应落在被更正的那条事实上")
+	}
+	if prior, has := corrected.Fact.Supersedes(); !has || prior.String() != "SYN-EXTV-WINNER" {
+		t.Fatalf("更正应回指赢家这一新的当前版：%q has=%v", prior, has)
+	}
+	if len(fixture.registry.records) != 3 {
+		t.Fatalf("原版、赢家、更正各一版：%d", len(fixture.registry.records))
+	}
+	assertLinearChain(t, fixture.registry.records)
 }
 
 func TestACorrectionOfAnUnknownSourceEventIsAdoptedWithTheDeclarationKept(t *testing.T) {

@@ -200,50 +200,71 @@ func (handler *AdoptTrackingMaterialHandler) Adopt(
 		return *undecided, nil
 	}
 
-	fact, err := domain.AdoptExternalCarrierTracking(domain.ExternalTrackingFactSpec{
-		TenantID:     shape.tenant,
-		Fact:         factRef,
-		Version:      version,
-		Source:       shape.source,
-		Credential:   shape.credential,
-		Object:       object,
-		SourceEvent:  shape.event,
-		Status:       shape.status,
-		OccurredAt:   material.OccurredAt.At,
-		ReceivedAt:   material.ReceivedAt,
-		Effective:    effective,
-		CorrectionOf: shape.correctionOf,
-		Supersedes:   supersedes,
-	})
-	if err != nil {
-		return AdoptTrackingMaterialResult{outcome: TrackingMaterialNotAccepted}, nil
-	}
-
-	record := ports.ExternalTrackingFactRecord{
-		Key:        ports.ExternalTrackingFactKey{TenantID: shape.tenant, Fact: factRef, Version: version},
-		Fact:       fact,
-		RecordedAt: handler.deps.Clock.Now(),
-	}
-	saved, err := handler.deps.Facts.Save(ctx, record)
-	if err != nil {
-		return trackingUndecided(TrackingFactRegistryUnavailable, material), nil
-	}
-	switch saved {
-	case ports.ExternalTrackingFactSaved:
-		return handler.adopted(ctx, record), nil
-	case ports.ExternalTrackingFactAlreadyRegistered:
-		// 身份是刚签的，撞键只可能撞在（源，源事件）这一锚上：另一方先认领了同一条。
-		if shape.eventGiven {
-			winner, found, err := handler.deps.Facts.FindBySourceEvent(ctx, shape.tenant, shape.source, shape.event)
-			if err == nil && found {
-				return handler.duplicate(ctx, winner), nil
-			}
+	for attempt := 1; ; attempt++ {
+		fact, err := domain.AdoptExternalCarrierTracking(domain.ExternalTrackingFactSpec{
+			TenantID:     shape.tenant,
+			Fact:         factRef,
+			Version:      version,
+			Source:       shape.source,
+			Credential:   shape.credential,
+			Object:       object,
+			SourceEvent:  shape.event,
+			Status:       shape.status,
+			OccurredAt:   material.OccurredAt.At,
+			ReceivedAt:   material.ReceivedAt,
+			Effective:    effective,
+			CorrectionOf: shape.correctionOf,
+			Supersedes:   supersedes,
+		})
+		if err != nil {
+			return AdoptTrackingMaterialResult{outcome: TrackingMaterialNotAccepted}, nil
 		}
-		return trackingUndecided(TrackingFactRegistryUnavailable, material), nil
-	default:
-		return AdoptTrackingMaterialResult{}, fmt.Errorf("%w: %d", ErrUnexpectedTrackingFactSave, saved)
+
+		record := ports.ExternalTrackingFactRecord{
+			Key:        ports.ExternalTrackingFactKey{TenantID: shape.tenant, Fact: factRef, Version: version},
+			Fact:       fact,
+			RecordedAt: handler.deps.Clock.Now(),
+		}
+		saved, err := handler.deps.Facts.Save(ctx, record)
+		if err != nil {
+			return trackingUndecided(TrackingFactRegistryUnavailable, material), nil
+		}
+		switch saved {
+		case ports.ExternalTrackingFactSaved:
+			return handler.adopted(ctx, record), nil
+		case ports.ExternalTrackingFactAlreadyRegistered:
+			// 身份是刚签的，撞键说明另一方先落了：先按（源，源事件）读回，读得到就是同一条已被认领；读不到而本版
+			// 回指了前版，就是那个当前版刚被另一方（判断或另一份更正）接了后继——「一版至多被回指一次」。
+			if shape.eventGiven {
+				winner, found, err := handler.deps.Facts.FindBySourceEvent(ctx, shape.tenant, shape.source, shape.event)
+				if err != nil {
+					return trackingUndecided(TrackingFactRegistryUnavailable, material), nil
+				}
+				if found {
+					return handler.duplicate(ctx, winner), nil
+				}
+			}
+			if supersedes.String() == "" || attempt >= trackingCorrectionAttempts {
+				return trackingUndecided(TrackingFactRegistryUnavailable, material), nil
+			}
+			// 按源的声明重新解析到此刻的当前版，与顺序到达时落在同一处。本次签的版本没有落行，沿用它。
+			var undecided *AdoptTrackingMaterialResult
+			factRef, supersedes, undecided = handler.resolveCorrection(ctx, shape)
+			if undecided != nil {
+				return *undecided, nil
+			}
+			if factRef.String() == "" {
+				return trackingUndecided(TrackingFactRegistryUnavailable, material), nil
+			}
+		default:
+			return AdoptTrackingMaterialResult{}, fmt.Errorf("%w: %d", ErrUnexpectedTrackingFactSave, saved)
+		}
 	}
 }
+
+// trackingCorrectionAttempts 是一份更正最多落几遍。理由同 judgmentAttempts：每撞一次链都确实前进了一版，有界是为了
+// 持续争用时把事务交还，素材由拉取节拍重投。
+const trackingCorrectionAttempts = 3
 
 // trackingShape 是素材过了各构造门之后的样子。event 与 correctionOf 允许缺席。
 type trackingShape struct {
