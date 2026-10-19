@@ -554,6 +554,28 @@ func TestAnAcceptedSnapshotWithoutProductsIsInvalidNotUnsupported(t *testing.T) 
 	}
 }
 
+// Covers: 接受决定带主动拒绝留痕是坏数据。留痕只由主动拒绝与处置`拒绝`写下，两条路都落`已拒绝`；
+// 放它进门，`ActiveRejection()` 会对一份已接受的委托答「有人拍板不接」。
+func TestRehydrationRefusesAnAcceptedDecisionCarryingAnActiveRejectionTrail(t *testing.T) {
+	snapshot := acceptedSnapshot(t)
+	snapshot.Decision.ActiveRejection = activeRejectionTrail(t)
+	_, err := domain.RehydrateShipmentRequest(snapshot)
+	if !errors.Is(err, domain.ErrInvalidRehydratedShipmentRequest) {
+		t.Fatalf("error = %v, want ErrInvalidRehydratedShipmentRequest", err)
+	}
+}
+
+// activeRejectionTrail 是一份四格齐全的主动拒绝留痕快照（合成 SYN- 值）。
+func activeRejectionTrail(t *testing.T) domain.RehydrateActiveRejectionSpec {
+	t.Helper()
+	return domain.RehydrateActiveRejectionSpec{
+		Authority: mustValue(t, domain.NewRejectionAuthorityReference, "SYN-REJECT-RULE-1/v1"),
+		Decider:   mustValue(t, domain.NewDeciderReference, "SYN-OPERATOR-01"),
+		Reason:    mustValue(t, domain.NewRejectionReasonReference, "SYN-REJECT-REASON-1"),
+		Evidence:  mustValue(t, domain.NewRejectionEvidenceReference, "SYN-REJECT-EVIDENCE-1"),
+	}
+}
+
 // Covers: ADR-0030「没开的状态由入口显式拒绝，且用一个与『这行数据不可能』不同的哨兵」。
 //
 // `已拒绝`/`已撤回`仍少撤回或主动拒绝的完整表达。两个哨兵必须互相分得开。

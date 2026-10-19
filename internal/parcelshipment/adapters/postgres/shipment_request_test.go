@@ -307,6 +307,124 @@ func TestUnsupportedStatesSurfaceOnRead(t *testing.T) {
 	}
 }
 
+// Covers: `已拒绝`三条来路经真实写路径落库后，快照的决定上留着主动拒绝留痕（主动拒绝与处置`拒绝`），
+// 不带商业依据的拒绝在读回时走得到重建门，而不是在依据解码处报一句两个哨兵都不中的裸错（ADR-0029）。
+func TestRejectionsKeepTheirTrailAndMeetTheGateOnRead(t *testing.T) {
+	repository, transactor, pool := newShipmentRequests(t)
+	ctx := t.Context()
+
+	for _, path := range rejectionPaths(t) {
+		t.Run(path.name, func(t *testing.T) {
+			key := "req-key-" + path.name
+			mustInsert(t, transactor, ctx, repository, path.submitted(t, key, "request-"+path.name))
+			rejected, err := path.reject(t, mustFind(t, repository, ctx, key))
+			if err != nil || rejected.State() != domain.ShipmentRequestRejected {
+				t.Fatalf("形成拒绝：state = %q, err = %v", rejected.State(), err)
+			}
+			mustSave(t, transactor, ctx, repository, requestIdentity(t, key), rejected)
+
+			var authority, decider, reason, evidence *string
+			if err := pool.QueryRow(ctx,
+				`SELECT snapshot->'decision'->'activeRejection'->>'authority',
+				        snapshot->'decision'->'activeRejection'->>'decider',
+				        snapshot->'decision'->'activeRejection'->>'reason',
+				        snapshot->'decision'->'activeRejection'->>'evidence'
+				   FROM parcel_shipment.shipment_request WHERE source_request_key = $1`, key,
+			).Scan(&authority, &decider, &reason, &evidence); err != nil {
+				t.Fatalf("读快照留痕：%v", err)
+			}
+			decision, _ := rejected.AcceptanceDecision()
+			if trail, active := decision.ActiveRejection(); active {
+				if authority == nil || *authority != trail.Authority().String() ||
+					decider == nil || *decider != trail.Decider().String() ||
+					reason == nil || *reason != trail.Reason().String() ||
+					evidence == nil || *evidence != trail.Evidence().String() {
+					t.Fatalf("快照留痕 = %v/%v/%v/%v, want %+v——留痕在落库那一刻丢了", authority, decider, reason, evidence, trail)
+				}
+			} else if authority != nil || decider != nil || reason != nil || evidence != nil {
+				t.Fatal("规则拒绝的快照凭空长出了主动拒绝留痕")
+			}
+
+			_, _, err = repository.FindBySourceIdentity(ctx, requestIdentity(t, key))
+			if !errors.Is(err, domain.ErrRehydrationStateNotSupported) {
+				t.Fatalf("读回 err = %v, want ErrRehydrationStateNotSupported——一行完好的已拒绝快照该停在门外", err)
+			}
+			if errors.Is(err, domain.ErrInvalidRehydratedShipmentRequest) {
+				t.Fatalf("读回 err = %v；完好的数据报成了坏数据", err)
+			}
+		})
+	}
+}
+
+// rejectionPath 是`已拒绝`的一条来路：从哪一份`已提交`委托出发、经哪个转移形成拒绝。
+type rejectionPath struct {
+	name      string
+	submitted func(t *testing.T, key, requestID string) domain.ShipmentRequest
+	reject    func(t *testing.T, loaded domain.ShipmentRequest) (domain.ShipmentRequest, error)
+}
+
+// rejectionPaths 列`已拒绝`的三条来路（规则拒绝按带不带商业依据分两格）。值一律合成。
+func rejectionPaths(t *testing.T) []rejectionPath {
+	t.Helper()
+	rejectedAt := submittedAtFixture.Add(time.Hour)
+	failing := func(t *testing.T) []domain.AcceptanceCheck {
+		return []domain.AcceptanceCheck{
+			versionCheck(t, domain.CustomerRelationshipCheck, domain.CheckFailed, "NO_APPLICABLE_BASIS"),
+			versionCheck(t, domain.LegalEntityAndContractCheck, domain.CheckFailed, "NO_APPLICABLE_BASIS"),
+		}
+	}
+	return []rejectionPath{
+		{
+			name:      "rule-with-basis",
+			submitted: submittedShipmentRequest,
+			reject: func(t *testing.T, loaded domain.ShipmentRequest) (domain.ShipmentRequest, error) {
+				return loaded.Decide(domain.AcceptanceDecisionSpec{
+					DecisionID: mustBuild(t, domain.NewAcceptanceDecisionID, "SYN-DECISION-RULE-BASIS"),
+					Checks:     failing(t),
+					Basis:      acceptanceBasis(t),
+					DecidedAt:  rejectedAt,
+				})
+			},
+		},
+		{
+			// `没有适用合同`：依据带不出来，决定照样形成。
+			name:      "rule-without-basis",
+			submitted: submittedShipmentRequest,
+			reject: func(t *testing.T, loaded domain.ShipmentRequest) (domain.ShipmentRequest, error) {
+				return loaded.Decide(domain.AcceptanceDecisionSpec{
+					DecisionID: mustBuild(t, domain.NewAcceptanceDecisionID, "SYN-DECISION-RULE-NOBASIS"),
+					Checks:     failing(t),
+					DecidedAt:  rejectedAt,
+				})
+			},
+		},
+		{
+			name:      "active",
+			submitted: submittedShipmentRequest,
+			reject: func(t *testing.T, loaded domain.ShipmentRequest) (domain.ShipmentRequest, error) {
+				return loaded.RejectByAuthority(domain.ActiveRejectionSpec{
+					DecisionID: mustBuild(t, domain.NewAcceptanceDecisionID, "SYN-DECISION-ACTIVE"),
+					Authority:  mustBuild(t, domain.NewRejectionAuthorityReference, "SYN-REJECT-RULE-1/v1"),
+					Decider:    mustBuild(t, domain.NewDeciderReference, "SYN-OPERATOR-01"),
+					Reason:     mustBuild(t, domain.NewRejectionReasonReference, "SYN-REJECT-REASON-1"),
+					Evidence:   mustBuild(t, domain.NewRejectionEvidenceReference, "SYN-REJECT-EVIDENCE-1"),
+					DecidedAt:  rejectedAt,
+				})
+			},
+		},
+		{
+			name:      "disposition",
+			submitted: awaitingDispositionShipmentRequest,
+			reject: func(t *testing.T, loaded domain.ShipmentRequest) (domain.ShipmentRequest, error) {
+				return loaded.DisposeUnderAuthority(domain.DisposeUnderAuthoritySpec{
+					Disposition: authorizedDispositionFixture(t, domain.DisposeByRejection),
+					DecisionID:  mustBuild(t, domain.NewAcceptanceDecisionID, "SYN-DECISION-DISPOSE"),
+				})
+			},
+		},
+	}
+}
+
 // TestAnAcceptedRequestRoundTripsWholly 证 Insert→Decide→Save→Find 把已接受产物整份带回：
 // 决定、基线、承诺都在，且不重算 Decide。丢基线会让后续资料更正全部落到基线外。
 func TestAnAcceptedRequestRoundTripsWholly(t *testing.T) {

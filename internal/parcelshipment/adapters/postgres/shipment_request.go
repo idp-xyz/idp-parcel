@@ -21,8 +21,8 @@ import (
 // 快照文档的形状照 RehydrateShipmentRequestSpec 设计，读回时逐字段过领域构造函数再进
 // RehydrateShipmentRequest——库里一行坏数据在这两道门上暴露，不会变成一个看起来合法的
 // 聚合（ADR-0028）。重建门今天开到`已提交`与`已接受`（ADR-0061）：写入不设状态门，读回
-// `已拒绝`/`已撤回`仍得到 ErrRehydrationStateNotSupported；已接受缺产物则是坏快照，走
-// ErrInvalidRehydratedShipmentRequest。
+// `已拒绝`/`已撤回`得到 ErrRehydrationStateNotSupported——不带商业依据的拒绝也走得到那扇门，
+// 依据缺席只对拒绝决定放宽；已接受缺产物则是坏快照，走 ErrInvalidRehydratedShipmentRequest。
 type ShipmentRequests struct {
 	db *bentopg.DB
 }
@@ -244,6 +244,17 @@ type acceptanceDecisionDocument struct {
 	Basis        commercialBasisDocument   `json:"basis"`
 	ManualReview uint8                     `json:"manualReview"`
 	DecidedAt    time.Time                 `json:"decidedAt"`
+	// ActiveRejection 是主动拒绝留痕（主动拒绝与处置`拒绝`都写它），规则形成的决定不写。没有这一格时
+	// 留痕在落库那一刻就丢了，而丢的是 PS CONTEXT 要求主动拒绝保存的授权依据、实际决定方、结构化原因
+	// 与证据——事后补不回来。
+	ActiveRejection *activeRejectionDocument `json:"activeRejection,omitempty"`
+}
+
+type activeRejectionDocument struct {
+	Authority string `json:"authority"`
+	Decider   string `json:"decider"`
+	Reason    string `json:"reason"`
+	Evidence  string `json:"evidence"`
 }
 
 type acceptanceCheckDocument struct {
@@ -946,6 +957,14 @@ func decisionDocumentOf(decision domain.AcceptanceDecision) *acceptanceDecisionD
 	for _, check := range decision.Checks() {
 		document.Checks = append(document.Checks, acceptanceCheckDocumentOf(check))
 	}
+	if rejection, active := decision.ActiveRejection(); active {
+		document.ActiveRejection = &activeRejectionDocument{
+			Authority: rejection.Authority().String(),
+			Decider:   rejection.Decider().String(),
+			Reason:    rejection.Reason().String(),
+			Evidence:  rejection.Evidence().String(),
+		}
+	}
 	return document
 }
 
@@ -1021,16 +1040,21 @@ func (document acceptanceDecisionDocument) spec() (domain.RehydrateAcceptanceDec
 	if err != nil {
 		return domain.RehydrateAcceptanceDecisionSpec{}, err
 	}
-	basis, err := document.Basis.snapshot()
-	if err != nil {
-		return domain.RehydrateAcceptanceDecisionSpec{}, err
-	}
 	spec := domain.RehydrateAcceptanceDecisionSpec{
 		DecisionID:   decisionID,
 		Accepted:     document.Accepted,
-		Basis:        basis,
 		ManualReview: domain.ManualReviewState(document.ManualReview),
 		DecidedAt:    document.DecidedAt,
+	}
+	// 依据缺席按**拒绝决定**放宽，不按「主动拒绝」放宽：`没有适用合同`形成的规则拒绝同样带不出依据
+	// （`ShipmentRequest.Decide`），只放主动拒绝会把那一类留在裸错上。接受决定照旧必须带——缺了它
+	// 就由依据解码报出来，而重建门也会把它拒成坏数据。半截依据不算缺席，照旧解码并报错。
+	if document.Accepted || !document.Basis.absent() {
+		basis, err := document.Basis.snapshot()
+		if err != nil {
+			return domain.RehydrateAcceptanceDecisionSpec{}, err
+		}
+		spec.Basis = basis
 	}
 	for _, raw := range document.Checks {
 		check, err := raw.check()
@@ -1039,7 +1063,41 @@ func (document acceptanceDecisionDocument) spec() (domain.RehydrateAcceptanceDec
 		}
 		spec.Checks = append(spec.Checks, check)
 	}
+	if document.ActiveRejection != nil {
+		rejection, err := document.ActiveRejection.spec()
+		if err != nil {
+			return domain.RehydrateAcceptanceDecisionSpec{}, err
+		}
+		spec.ActiveRejection = rejection
+	}
 	return spec, nil
+}
+
+// spec 逐格过领域构造门：四项引用任一为空即这一行立不起来，不折成「没有留痕」——后者会把一次
+// 主动拒绝读成规则拒绝。
+func (document activeRejectionDocument) spec() (domain.RehydrateActiveRejectionSpec, error) {
+	authority, err := domain.NewRejectionAuthorityReference(document.Authority)
+	if err != nil {
+		return domain.RehydrateActiveRejectionSpec{}, err
+	}
+	decider, err := domain.NewDeciderReference(document.Decider)
+	if err != nil {
+		return domain.RehydrateActiveRejectionSpec{}, err
+	}
+	reason, err := domain.NewRejectionReasonReference(document.Reason)
+	if err != nil {
+		return domain.RehydrateActiveRejectionSpec{}, err
+	}
+	evidence, err := domain.NewRejectionEvidenceReference(document.Evidence)
+	if err != nil {
+		return domain.RehydrateActiveRejectionSpec{}, err
+	}
+	return domain.RehydrateActiveRejectionSpec{
+		Authority: authority,
+		Decider:   decider,
+		Reason:    reason,
+		Evidence:  evidence,
+	}, nil
 }
 
 func (document acceptanceCheckDocument) check() (domain.AcceptanceCheck, error) {
@@ -1104,6 +1162,14 @@ func (document expectedCommitmentDocument) spec() (domain.RehydrateExpectedCommi
 		Basis:    basis,
 		FormedAt: document.FormedAt,
 	}, nil
+}
+
+// absent 判这份依据文档是不是零值依据摊出来的样子：commercialBasisDocumentOf 对零值快照写的正是
+// 各格皆空。任一格有值都不算缺席，交给 snapshot 照常解码——半截的一份是坏数据，不是没有依据。
+func (document commercialBasisDocument) absent() bool {
+	return document.ResolutionID == "" && document.RulePackage == "" && document.ViewRevision == "" &&
+		len(document.DeclaredAsOf) == 0 && len(document.Applicable) == 0 && document.ManualReview == 0 &&
+		document.PendingRouting == "" && document.Settlement == nil
 }
 
 func (document commercialBasisDocument) snapshot() (domain.CommercialBasisSnapshot, error) {

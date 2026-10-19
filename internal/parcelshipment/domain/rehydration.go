@@ -64,6 +64,19 @@ type RehydrateAcceptanceDecisionSpec struct {
 	Basis        CommercialBasisSnapshot
 	ManualReview ManualReviewState
 	DecidedAt    time.Time
+	// ActiveRejection 是主动拒绝留痕；规则形成的决定四格皆零。漏带回，一份「我们不接这单」的
+	// 拒绝读回后与「规则不允许」分不开，授权引用、实际决定方、原因与证据全部丢失。
+	ActiveRejection RehydrateActiveRejectionSpec
+}
+
+// RehydrateActiveRejectionSpec 是主动拒绝留痕在库里的样子。ActiveRejection 没有公开构造器
+// （只由 RejectByAuthority 与授权处置的`拒绝`去向形成），按 ADR-0030 的判别式是产物，另立
+// 重建面；四项引用收成品类型，它们各有公开构造器、字段未导出。
+type RehydrateActiveRejectionSpec struct {
+	Authority RejectionAuthorityReference
+	Decider   DeciderReference
+	Reason    RejectionReasonReference
+	Evidence  RejectionEvidenceReference
 }
 
 func (spec RehydrateAcceptanceDecisionSpec) present() bool {
@@ -211,7 +224,13 @@ func RehydrateShipmentRequest(snapshot RehydrateShipmentRequestSpec) (ShipmentRe
 			checks:       append([]AcceptanceCheck(nil), snapshot.Decision.Checks...),
 			basis:        snapshot.Decision.Basis,
 			manualReview: snapshot.Decision.ManualReview,
-			decidedAt:    snapshot.Decision.DecidedAt,
+			activeRejection: ActiveRejection{
+				authority: snapshot.Decision.ActiveRejection.Authority,
+				decider:   snapshot.Decision.ActiveRejection.Decider,
+				reason:    snapshot.Decision.ActiveRejection.Reason,
+				evidence:  snapshot.Decision.ActiveRejection.Evidence,
+			},
+			decidedAt: snapshot.Decision.DecidedAt,
 		},
 		decisionFormed: snapshot.DecisionFormed,
 		baseline: AcceptanceBaseline{
@@ -343,6 +362,9 @@ func (request ShipmentRequest) acceptedProductsValidForRehydration() error {
 	}
 	if !request.decision.accepted {
 		return rehydrationRefusal("已接受委托的决定不是接受")
+	}
+	if request.decision.activeRejection.anyRecorded() {
+		return rehydrationRefusal("已接受委托的决定带着主动拒绝留痕")
 	}
 	if !request.acceptanceTask.IsComplete() {
 		return rehydrationRefusal("已接受委托的判断任务尚未完成")
@@ -574,6 +596,13 @@ func (task AcceptanceDecisionTask) validForRehydration() error {
 		}
 	}
 	return nil
+}
+
+// anyRecorded 回答留痕四格里有没有任何一格在场。formed 要四格齐全，拿它判「有没有留痕」会把
+// 半截的一份当成规则拒绝放过去——而半截留痕只可能是坏数据，本上下文从不写出它。
+func (rejection ActiveRejection) anyRecorded() bool {
+	return rejection.authority.valid() || rejection.decider.valid() ||
+		rejection.reason.valid() || rejection.evidence.valid()
 }
 
 // rehydrationRefusal 让哨兵值对 errors.Is 仍然成立，同时把拒绝的那一条说出来。压平成一句

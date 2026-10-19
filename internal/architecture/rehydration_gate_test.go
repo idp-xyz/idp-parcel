@@ -24,6 +24,9 @@ var rehydrationEntryIdentifiers = map[string]bool{
 	"RehydrateAcceptanceDecisionSpec": true,
 	"RehydrateAcceptanceBaselineSpec": true,
 	"RehydrateExpectedCommitmentSpec": true,
+	// 主动拒绝留痕（票 operator-channel/33）。同类：留痕是授权角色拍板的产物，没有公开构造器；对其余
+	// 调用方开放，就等于让业务代码替一次没发生过的主动拒绝写下授权依据与决定方。
+	"RehydrateActiveRejectionSpec":    true,
 	"RehydrateParcelFinalOutcome":     true,
 	"RehydrateParcelFinalOutcomeSpec": true,
 	"RehydrateLabelTransaction":       true,
