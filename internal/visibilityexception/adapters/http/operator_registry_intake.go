@@ -22,7 +22,7 @@ var (
 	// ErrOperatorNotGranted：令牌有效，但不在册、不绑这个租户，或没有该口所要那一格的授予（403）——管授予的人去登记。
 	// 登记写面要登记册配置写，查阅面要主数据与运营查阅读；恢复动作相同，所以不按面分设哨兵。
 	ErrOperatorNotGranted = errors.New("visibility http: operator holds no grant for the capability face this endpoint needs")
-	// ErrIdentityDependencyUnavailable：发行方公钥集或操作者册读不动（503）——运维去救依赖。
+	// ErrIdentityDependencyUnavailable：发行方公钥集、操作者册或客户渠道册读不动（503）——运维去救依赖。
 	ErrIdentityDependencyUnavailable = errors.New("visibility http: identity dependency unavailable")
 )
 

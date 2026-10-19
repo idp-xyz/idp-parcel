@@ -33,11 +33,11 @@ type TrackingViewQuery struct {
 
 // QueryIntake 把一次已认证的查询请求翻译成查询键。
 //
-// 它是接口而不是本包内的解析代码，理由与 shipmenthttp.SubmissionIntake 相同：请求方
-// 身份、货主客户账户与对象授权整组「必须同时核对」（UC-VE-008），认证方式属
-// `PAR-INT-01` 待提供；采信客户自报的账户号会穿透账户隔离——那正是本上下文在视图
-// 编排里已经钉住的边界，HTTP 面不得另开口子。未决期间本包不带任何实现，包括「开发用」
-// 的采信头部版本。
+// 它是接口而不是本包内的解析代码：请求方身份、货主客户账户与对象授权整组「必须同时
+// 核对」（UC-VE-008），认证归首方客户渠道（ADR-0139 决定四），真实现是
+// CustomerTrackingViewIntake；某租户客户既有渠道的适配才属 `PAR-INT-01`（ADR-0139
+// 决定一）。采信客户自报的账户号会穿透账户隔离——那正是本上下文在视图编排里已经钉住
+// 的边界，HTTP 面不得另开口子。本包不带任何采信实现，包括「开发用」的采信头部版本。
 type QueryIntake interface {
 	IntakeQuery(ctx context.Context, request *http.Request) (TrackingViewQuery, error)
 }
@@ -81,15 +81,7 @@ func NewQueryCustomerTrackingViewEndpoint(intake QueryIntake, views TrackingView
 
 		query, err := intake.IntakeQuery(request.Context(), request)
 		if err != nil {
-			if errors.Is(err, ErrAccessChannelNotConfigured) {
-				writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
-				return
-			}
-			if errors.Is(err, ErrMalformedRequest) {
-				writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
-				return
-			}
-			writeProblem(response, http.StatusInternalServerError, codeIntakeFailed)
+			writeCustomerQueryIntakeProblem(response, err)
 			return
 		}
 
@@ -109,6 +101,24 @@ func NewQueryCustomerTrackingViewEndpoint(intake QueryIntake, views TrackingView
 			View:    newTrackingViewBody(view),
 		})
 	})
+}
+
+// writeCustomerQueryIntakeProblem 按恢复动作分格答 Intake 的失败（ADR-0139 决定四；ADR-0029），各格都不带 outcome（ADR-0022）。
+func writeCustomerQueryIntakeProblem(response http.ResponseWriter, err error) {
+	switch {
+	case errors.Is(err, ErrAccessChannelNotConfigured):
+		writeProblem(response, http.StatusForbidden, codeAccessChannelNotConfigured)
+	case errors.Is(err, ErrCustomerClientCredentialRejected):
+		writeProblem(response, http.StatusUnauthorized, codeCustomerClientCredentialRejected)
+	case errors.Is(err, ErrCustomerClientNotGranted):
+		writeProblem(response, http.StatusForbidden, codeCustomerClientNotGranted)
+	case errors.Is(err, ErrIdentityDependencyUnavailable):
+		writeProblem(response, http.StatusServiceUnavailable, codeIdentityDependencyUnavailable)
+	case errors.Is(err, ErrMalformedRequest):
+		writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
+	default:
+		writeProblem(response, http.StatusInternalServerError, codeIntakeFailed)
+	}
 }
 
 // queryResponse 是本端点的封闭响应形状。`outcome` 两格取本文件的字面常量，传输层
