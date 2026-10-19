@@ -10,21 +10,21 @@
 | architecture（非业务） | 0 | 14 | 0 | 0 | 0 | 0 |
 | collectionremittance | 23 | 9 | 4 | 6 | 0 | 3 |
 | customscompliance | 119 | 114 | 22 | 47 | 10 | 16 |
-| networkrouting | 77 | 77 | 9 | 14 | 2 | 7 |
-| nodeoperations | 93 | 95 | 12 | 25 | 4 | 13 |
+| networkrouting | 80 | 80 | 9 | 14 | 2 | 7 |
+| nodeoperations | 100 | 100 | 13 | 27 | 4 | 14 |
 | parcelpricing | 133 | 122 | 17 | 16 | 1 | 23 |
 | parcelshipment | 209 | 203 | 20 | 39 | 10 | 19 |
 | partycommercial | 165 | 177 | 13 | 42 | 1 | 38 |
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 208 | 150 | 34 | 63 | 12 | 9 |
-| transportfulfillment | 213 | 214 | 36 | 42 | 13 | 42 |
+| transportfulfillment | 221 | 221 | 38 | 43 | 13 | 43 |
 | visibilityexception | 108 | 104 | 12 | 31 | 8 | 11 |
-| **合计** | 1433 | 1358 | 184 | 337 | 62 | 187 |
+| **合计** | 1451 | 1373 | 187 | 340 | 62 | 189 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 101、测试 206。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 105、测试 210。
 
-## 跨上下文消费缝：47 组，137 个生产文件
+## 跨上下文消费缝：48 组，140 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
@@ -35,8 +35,9 @@
 | networkrouting | accessidentity | 2 |
 | networkrouting | customscompliance | 1 |
 | networkrouting | parcelpricing | 3 |
-| networkrouting | parcelshipment | 3 |
+| networkrouting | parcelshipment | 4 |
 | networkrouting | partycommercial | 4 |
+| networkrouting | transportfulfillment | 1 |
 | nodeoperations | accessidentity | 6 |
 | nodeoperations | networkrouting | 1 |
 | nodeoperations | parcelshipment | 5 |
@@ -64,7 +65,7 @@
 | settlementaccounting | partycommercial | 5 |
 | settlementaccounting | transportfulfillment | 1 |
 | transportfulfillment | accessidentity | 5 |
-| transportfulfillment | customscompliance | 1 |
+| transportfulfillment | customscompliance | 2 |
 | transportfulfillment | networkrouting | 2 |
 | transportfulfillment | parcelshipment | 2 |
 | transportfulfillment | partycommercial | 3 |
@@ -76,7 +77,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 6 |
 
-## 迁移：12 个模块共 263 份 SQL
+## 迁移：12 个模块共 265 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -84,16 +85,16 @@
 | collection_remittance | 1 |
 | customs_compliance | 24 |
 | network_routing | 20 |
-| node_operations | 15 |
+| node_operations | 16 |
 | parcel_pricing | 12 |
 | parcel_shipment | 26 |
 | party_commercial | 39 |
 | pilot_governance | 8 |
 | settlement_accounting | 39 |
-| transport_fulfillment | 36 |
+| transport_fulfillment | 37 |
 | visibility_exception | 27 |
 
-## 接线面：接入面端点 164 个，消费适配器 48 个生产文件，直投路由表 34 条
+## 接线面：接入面端点 165 个，消费适配器 50 个生产文件，直投路由表 34 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -109,23 +110,23 @@
 | partycommercial | 32 |
 | pilotgovernance | 1 |
 | settlementaccounting | 6 |
-| transportfulfillment | 37 |
+| transportfulfillment | 38 |
 | visibilityexception | 15 |
-| **合计** | 164 |
+| **合计** | 165 |
 
 消费适配器按 `internal/<消费方>/adapters/` 下 `inbox`、`adoptconsume`、`finalconsume`、`veconsume` 四类目录的生产文件数。它与上面的「跨上下文消费缝」是两种东西：那一栏数的是消费方为某个提供方写的防腐层，这一栏数的是接进程内直投信封的消费门。
 
 | 消费方 | inbox | adoptconsume | finalconsume | veconsume | 合计 |
 |---|---|---|---|---|---|
 | customscompliance | 1 | 0 | 0 | 0 | 1 |
-| networkrouting | 2 | 0 | 0 | 0 | 2 |
-| nodeoperations | 4 | 0 | 0 | 0 | 4 |
+| networkrouting | 3 | 0 | 0 | 0 | 3 |
+| nodeoperations | 5 | 0 | 0 | 0 | 5 |
 | parcelpricing | 2 | 0 | 0 | 0 | 2 |
 | parcelshipment | 13 | 1 | 1 | 0 | 15 |
 | settlementaccounting | 6 | 0 | 0 | 0 | 6 |
 | transportfulfillment | 2 | 0 | 0 | 0 | 2 |
 | visibilityexception | 14 | 0 | 0 | 2 | 16 |
-| **合计** | 44 | 1 | 1 | 2 | 48 |
+| **合计** | 46 | 1 | 1 | 2 | 50 |
 
 直投路由表按 `cmd/` 生产文件里 `map[eventing.EventType]dispatch.Consumer` 字面量的条目数，按条目键（事件类型常量）所属的消费门包归属。路由表只随消费者一起长（ADR-0049 第三条），本表只报它此刻多长。
 
@@ -140,7 +141,7 @@
 | visibilityexception | 10 |
 | **合计** | 34 |
 
-## 端口：声明 533 个；基线口径缺 36，精确口径缺 2
+## 端口：声明 538 个；基线口径缺 37，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
@@ -177,6 +178,7 @@
 - `transportfulfillment.DepartureSegmentView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.FulfillmentSegments）
 - `transportfulfillment.FailedAttemptSource` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.PickupAttempts）
 - `transportfulfillment.FulfillmentSegmentView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.FulfillmentSegments）
+- `transportfulfillment.HandoverGatePredecessorView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.TransportHandovers）
 - `transportfulfillment.SegmentCommissionAdoptionView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.SegmentCommissionAdoptions）
 - `transportfulfillment.TransportCommissionView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.TransportCommissions）
 - `visibilityexception.NotificationChannelGateway` 
