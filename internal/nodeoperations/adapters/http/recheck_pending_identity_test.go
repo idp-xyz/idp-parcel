@@ -84,13 +84,15 @@ func (store *recheckStore) FindRecheckableByMark(context.Context, domain.TenantI
 
 type recheckIdentity struct {
 	candidates []string
-	err        error
-	asked      int
+	// ambiguous 是 PS 随候选答出的歧义信号（ADR-0195）。
+	ambiguous bool
+	err       error
+	asked     int
 }
 
 func (double *recheckIdentity) ResolveParcelIdentity(context.Context, domain.TenantID, ports.ExternalMarkObservation) (ports.ParcelIdentityAnswer, error) {
 	double.asked++
-	var answer ports.ParcelIdentityAnswer
+	answer := ports.ParcelIdentityAnswer{Ambiguous: double.ambiguous}
 	for _, raw := range double.candidates {
 		candidate, err := domain.NewParcelAssociationReference(raw)
 		if err != nil {

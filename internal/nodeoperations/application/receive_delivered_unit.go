@@ -369,20 +369,21 @@ func (handler *ReceiveDeliveredUnitHandler) receive(
 	}
 
 	record := ports.ReceptionRecord{
-		Key:                key,
-		ContentDigest:      digest,
-		Kind:               kind,
-		JudgmentVersion:    version,
-		Predecessor:        predecessor,
-		Source:             deliverySourceOf(command),
-		Intake:             intake,
-		Control:            control,
-		Candidates:         judgment.candidates,
-		IdentityConflict:   judgment.conflict(),
-		ServiceMarkers:     judgment.markers,
-		ServiceResultCheck: judgment.check,
-		IdentityCheck:      identityCheck,
-		RecordedAt:         handler.deps.Clock.Now(),
+		Key:                   key,
+		ContentDigest:         digest,
+		Kind:                  kind,
+		JudgmentVersion:       version,
+		Predecessor:           predecessor,
+		Source:                deliverySourceOf(command),
+		Intake:                intake,
+		Control:               control,
+		Candidates:            judgment.candidates,
+		IdentityConflict:      judgment.conflict(),
+		IdentityConflictCause: judgment.conflictCause(),
+		ServiceMarkers:        judgment.markers,
+		ServiceResultCheck:    judgment.check,
+		IdentityCheck:         identityCheck,
+		RecordedAt:            handler.deps.Clock.Now(),
 	}
 	result, err := handler.commit(ctx, record)
 	// 门铃与冲突版都只在本次真落了册时追加：并发里输给另一方的那次读回的是赢家，赢家已经响过、追加过。
@@ -478,8 +479,10 @@ func appendIdentityConflicts(
 			Control:          earlier.Control,
 			Candidates:       late.Candidates,
 			IdentityConflict: true,
-			IdentityCheck:    ports.IdentityChecked,
-			RecordedAt:       late.RecordedAt,
+			// 先到那件这一版的来由只会是一码两物：它是因为后到那件唯一命中了它关联着的那件包裹才追加的（ADR-0211 决定一）。
+			IdentityConflictCause: ports.ConflictByOneMarkOnTwoUnits,
+			IdentityCheck:         ports.IdentityChecked,
+			RecordedAt:            late.RecordedAt,
 		}
 		saved, err := receptions.Save(ctx, record)
 		if err != nil {

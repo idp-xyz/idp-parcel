@@ -157,7 +157,8 @@ func (catalogue *ReviewCatalogue) ListUnidentifiedItems(
 		                    FROM node_operations.reception AS successor
 		                   WHERE successor.tenant_id = r.tenant_id
 		                     AND successor.predecessor_version = r.judgment_version), ''),
-		        r.identity_check
+		        r.identity_check,
+		        r.identity_conflict_cause
 		   FROM node_operations.reception AS r
 		  WHERE r.tenant_id = $1
 		    AND r.kind = 'PENDING_IDENTIFICATION'
@@ -177,13 +178,14 @@ func (catalogue *ReviewCatalogue) ListUnidentifiedItems(
 			row            ports.UnidentifiedItemCatalogueRow
 			candidatesJSON []byte
 			identity       *string
+			conflictCause  *string
 		)
 		if err := rows.Scan(
 			&row.SourceID, &row.Unit, &row.Node,
 			&candidatesJSON, &row.IdentityConflict,
 			&row.ReceivedAt, &row.Association, &row.RecordedAt,
 			&row.JudgmentVersion, &row.SourcePreserved, &row.Mark, &row.SucceededBy,
-			&identity,
+			&identity, &conflictCause,
 		); err != nil {
 			return nil, fmt.Errorf("list unidentified items: %w", err)
 		}
@@ -192,6 +194,9 @@ func (catalogue *ReviewCatalogue) ListUnidentifiedItems(
 			return nil, fmt.Errorf("list unidentified items: source %q: %w", row.SourceID, err)
 		}
 		row.IdentityCheck = check
+		if row.IdentityConflictCause, err = identityConflictCauseFrom(conflictCause); err != nil {
+			return nil, fmt.Errorf("list unidentified items: source %q: %w", row.SourceID, err)
+		}
 		if err := json.Unmarshal(candidatesJSON, &row.Candidates); err != nil {
 			return nil, fmt.Errorf("list unidentified items: %w", err)
 		}

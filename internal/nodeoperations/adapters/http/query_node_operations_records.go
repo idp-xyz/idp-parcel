@@ -165,6 +165,7 @@ func serveUnidentifiedItems(
 			SucceededBy:      row.SucceededBy,
 			IdentityCheck:    row.IdentityCheck.String(),
 		}
+		body.IdentityConflictCause = row.IdentityConflictCause.String()
 		if row.SourcePreserved {
 			mark := row.Mark
 			body.ExternalMark = &mark
@@ -277,7 +278,8 @@ type unidentifiedItemListResponse struct {
 // judgmentVersion 是人工重核指名用的那一版（ADR-0199 决定三）。sourcePreserved 恒在场：来源保全之前的行答 false，
 // externalMark 随之整键不出现——那一格号码从未留存，空串会被读成「设备没报号」；来源在时 externalMark 照来源文档原样带号，
 // 空号也带空串。succeededBy 只在这一版已被接续时出现，带直接接续它的那一版。identityCheck 同收寄册那一格：UNCHECKED 那一行的
-// candidates 是 []，说的是没问到，不是查无此号（ADR-0199 决定五）。
+// candidates 是 []，说的是没问到，不是查无此号（ADR-0199 决定五）。identityConflictCause 只在这一行记了冲突来由时出现，取
+// ports.IdentityConflictCause 的原名（ADR-0211 决定一）：AMBIGUITY_ONLY 那一行在声明消失之后可再重核，其余与缺席的只经处置解开。
 type unidentifiedItemBody struct {
 	SourceID         string   `json:"sourceId"`
 	Unit             string   `json:"unit"`
@@ -292,6 +294,8 @@ type unidentifiedItemBody struct {
 	ExternalMark     *string  `json:"externalMark,omitempty"`
 	SucceededBy      string   `json:"succeededBy,omitempty"`
 	IdentityCheck    string   `json:"identityCheck,omitempty"`
+	// identityConflictCause 的读法见类型头注。
+	IdentityConflictCause string `json:"identityConflictCause,omitempty"`
 }
 
 type consolidationUnitListResponse struct {

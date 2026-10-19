@@ -53,8 +53,9 @@ func (repository *Receptions) FindByJudgmentVersion(
 	}
 }
 
-// FindRecheckableByMark 按（租户，号码）找待重核的待识别，走索引 reception_recheckable_by_mark（迁移 0008）：谓词里那三格与索引
-// 的部分条件同形，号码先比 md5 再比原文。当前有效版本这一格靠「没有一行指名它为前版」判，走 reception_predecessor_unique。
+// FindRecheckableByMark 按（租户，号码）找待重核的待识别，走索引 reception_recheckable_by_mark（迁移 0012 按 ADR-0211 决定二重建，
+// 放进来由为只因歧义信号的冲突行）：谓词里那三格与索引的部分条件逐字同形——规划器只认得出同形的部分条件，改一边不改另一边就
+// 悄悄退成全表扫。号码先比 md5 再比原文。当前有效版本这一格靠「没有一行指名它为前版」判，走 reception_predecessor_unique。
 func (repository *Receptions) FindRecheckableByMark(
 	ctx context.Context,
 	tenant domain.TenantID,
@@ -69,7 +70,7 @@ func (repository *Receptions) FindRecheckableByMark(
 		   FROM node_operations.reception AS r
 		  WHERE r.tenant_id = $1
 		    AND r.kind = 'PENDING_IDENTIFICATION'
-		    AND NOT r.identity_conflict
+		    AND (NOT r.identity_conflict OR r.identity_conflict_cause = 'AMBIGUITY_ONLY')
 		    AND r.source_document IS NOT NULL
 		    AND md5(r.source_document ->> 'mark') = md5($2::text)
 		    AND r.source_document ->> 'mark' = $2::text

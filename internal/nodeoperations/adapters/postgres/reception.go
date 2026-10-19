@@ -186,7 +186,7 @@ func (repository *Receptions) CurrentVersion(
 const receptionColumns = `source_id, content_digest, kind, intake, control, candidates,
 		        identity_conflict, refusal_reason, service_markers, service_result_check, recorded_at,
 		        judgment_version, predecessor_version, source_document, merged_version, disposition_document,
-		        identity_check`
+		        identity_check, identity_conflict_cause`
 
 // scanReception 把一行收寄册读回成记录：读回的一切经领域构造函数重建，一次坏写入在这里暴露，而不是变成一个看起来
 // 合法的收寄结果。
@@ -204,11 +204,12 @@ func scanReception(row pgx.Row, tenant domain.TenantID) (ports.ReceptionRecord, 
 		merged                      *string
 		dispositionJSON             []byte
 		identityCheckName           *string
+		conflictCauseName           *string
 	)
 	if err := row.Scan(&sourceID, &digest, &kindName, &intakeJSON, &controlJSON, &candidatesJSON,
 		&identityConflict, &refusal, &markersJSON, &checkName, &recordedAt,
 		&judgment, &predecessor, &sourceJSON, &merged, &dispositionJSON,
-		&identityCheckName); err != nil {
+		&identityCheckName, &conflictCauseName); err != nil {
 		return ports.ReceptionRecord{}, err
 	}
 
@@ -224,15 +225,20 @@ func scanReception(row pgx.Row, tenant domain.TenantID) (ports.ReceptionRecord, 
 	if err != nil {
 		return ports.ReceptionRecord{}, err
 	}
+	conflictCause, err := identityConflictCauseFrom(conflictCauseName)
+	if err != nil {
+		return ports.ReceptionRecord{}, err
+	}
 	record := ports.ReceptionRecord{
-		Key:                ports.ReceptionKey{TenantID: tenant, SourceID: sourceID},
-		ContentDigest:      digest,
-		Kind:               kind,
-		IdentityConflict:   identityConflict,
-		RefusalReason:      refusal,
-		ServiceResultCheck: check,
-		IdentityCheck:      identityCheck,
-		RecordedAt:         recordedAt.UTC(),
+		Key:                   ports.ReceptionKey{TenantID: tenant, SourceID: sourceID},
+		ContentDigest:         digest,
+		Kind:                  kind,
+		IdentityConflict:      identityConflict,
+		IdentityConflictCause: conflictCause,
+		RefusalReason:         refusal,
+		ServiceResultCheck:    check,
+		IdentityCheck:         identityCheck,
+		RecordedAt:            recordedAt.UTC(),
 	}
 
 	if record.JudgmentVersion, err = versionFrom(judgment); err != nil {
@@ -346,8 +352,8 @@ func (repository *Receptions) Save(
 			(tenant_id, source_id, content_digest, kind, intake, control,
 			 candidates, identity_conflict, refusal_reason, service_markers, service_result_check, recorded_at,
 			 judgment_version, predecessor_version, source_document, merged_version, disposition_document,
-			 identity_check)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18)
+			 identity_check, identity_conflict_cause)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19)
 		 ON CONFLICT (tenant_id, source_id) DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.SourceID,
@@ -367,6 +373,7 @@ func (repository *Receptions) Save(
 		versionColumn(record.MergedInto),
 		dispositionJSON,
 		identityCheckColumn(record.IdentityCheck),
+		identityConflictCauseColumn(record.IdentityConflictCause),
 	)
 	var pgErr *pgconn.PgError
 	if errors.As(err, &pgErr) && pgErr.Code == "23505" && pgErr.ConstraintName == "reception_predecessor_unique" {
@@ -589,6 +596,31 @@ func identityCheckFrom(raw *string) (ports.IdentityCheck, error) {
 		return ports.IdentityUnchecked, nil
 	default:
 		return 0, fmt.Errorf("unknown identity check %q", *raw)
+	}
+}
+
+// identityConflictCauseColumn 把不带写成 NULL：只有记身份冲突的那几版带来由，这条形状规则由迁移 0012 的 CHECK 在库里再守一遍。
+func identityConflictCauseColumn(cause ports.IdentityConflictCause) *string {
+	name := cause.String()
+	if name == "" {
+		return nil
+	}
+	return &name
+}
+
+func identityConflictCauseFrom(raw *string) (ports.IdentityConflictCause, error) {
+	if raw == nil {
+		return ports.IdentityConflictCauseAbsent, nil
+	}
+	switch *raw {
+	case ports.ConflictByAmbiguityOnly.String():
+		return ports.ConflictByAmbiguityOnly, nil
+	case ports.ConflictByMultipleCandidates.String():
+		return ports.ConflictByMultipleCandidates, nil
+	case ports.ConflictByOneMarkOnTwoUnits.String():
+		return ports.ConflictByOneMarkOnTwoUnits, nil
+	default:
+		return 0, fmt.Errorf("unknown identity conflict cause %q", *raw)
 	}
 }
 

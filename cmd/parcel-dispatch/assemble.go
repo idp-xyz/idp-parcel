@@ -1134,6 +1134,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 
 			// 键比上面各行都长，单起一段：并进去 gofmt 会重排整块的对齐，共享接线文件上多出一片别人的行。
 			psinbox.PreAcceptanceEstimateAdoptionRegisteredEventType: routedEstimateAdoption,
+			noinbox.CustomerParcelNumberDeclarationRetiredEventType:  identityRechecks,
 		},
 		settings.deliveryTimeout,
 		settings.config,

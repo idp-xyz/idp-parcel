@@ -90,21 +90,23 @@ func writeIntakeProblem(response http.ResponseWriter, err error) {
 // identityRecheckResponse 是本口的封闭响应形状。outcome 取重核结果枚举的原名。recheckedVersion 恒在场，是被重核的那一版；
 // judgmentVersion 只随追加了一版的各格出现，是追加的那一版；currentVersion 与 recordedOutcome 只随已有结果出现，是当前有效
 // 那一版与它的判断种类。unit 以下几格说的是答复所指的那一版（追加的、当前有效的，或被重核的那一版本身）；identityCheck 只在
-// 那一版是待识别时出现（ADR-0199 决定五）。
+// 那一版是待识别时出现（ADR-0199 决定五）；identityConflictCause 只在那一版记身份冲突、且记了来由时出现（ADR-0211 决定一），
+// 取 ports.IdentityConflictCause 的原名，复核页据它分得开「这一件可再重核」（只因歧义信号）与「只经处置解开」。
 type identityRecheckResponse struct {
-	Outcome            string   `json:"outcome"`
-	RecheckedVersion   string   `json:"recheckedVersion"`
-	JudgmentVersion    string   `json:"judgmentVersion,omitempty"`
-	CurrentVersion     string   `json:"currentVersion,omitempty"`
-	RecordedOutcome    string   `json:"recordedOutcome,omitempty"`
-	Unit               string   `json:"unit,omitempty"`
-	Node               string   `json:"node,omitempty"`
-	Association        string   `json:"association,omitempty"`
-	Candidates         []string `json:"candidates,omitempty"`
-	IdentityConflict   bool     `json:"identityConflict,omitempty"`
-	ServiceMarkers     []string `json:"serviceMarkers,omitempty"`
-	ServiceResultCheck string   `json:"serviceResultCheck,omitempty"`
-	IdentityCheck      string   `json:"identityCheck,omitempty"`
+	Outcome               string   `json:"outcome"`
+	RecheckedVersion      string   `json:"recheckedVersion"`
+	JudgmentVersion       string   `json:"judgmentVersion,omitempty"`
+	CurrentVersion        string   `json:"currentVersion,omitempty"`
+	RecordedOutcome       string   `json:"recordedOutcome,omitempty"`
+	Unit                  string   `json:"unit,omitempty"`
+	Node                  string   `json:"node,omitempty"`
+	Association           string   `json:"association,omitempty"`
+	Candidates            []string `json:"candidates,omitempty"`
+	IdentityConflict      bool     `json:"identityConflict,omitempty"`
+	IdentityConflictCause string   `json:"identityConflictCause,omitempty"`
+	ServiceMarkers        []string `json:"serviceMarkers,omitempty"`
+	ServiceResultCheck    string   `json:"serviceResultCheck,omitempty"`
+	IdentityCheck         string   `json:"identityCheck,omitempty"`
 }
 
 func writeRecheckOutcome(response http.ResponseWriter, result application.RecheckPendingIdentityResult) {
@@ -135,6 +137,7 @@ func writeRecheckOutcome(response http.ResponseWriter, result application.Rechec
 			body.Candidates = append(body.Candidates, candidate.String())
 		}
 		body.IdentityConflict = record.IdentityConflict
+		body.IdentityConflictCause = record.IdentityConflictCause.String()
 		body.ServiceMarkers = append(body.ServiceMarkers, record.ServiceMarkers...)
 		body.ServiceResultCheck = record.ServiceResultCheck.String()
 		body.IdentityCheck = record.IdentityCheck.String()

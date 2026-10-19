@@ -76,6 +76,8 @@ type ReceptionCatalogueRow struct {
 // 版本。同一件实物的待识别行不止一版时（重核、冲突各追加一版），审阅者靠它分得开哪一行已被接续。
 //
 // IdentityCheck 是这一行的身份核对态（ADR-0199 决定五）：未核对的候选为空不代表查无此号，同 ReceptionCatalogueRow 那一格。
+// IdentityConflictCause 是这一行记身份冲突时的来由（ADR-0211 决定一），审阅者据它分得开「信号消失后可再重核」与「只经处置解开」；
+// 来由这一格落地之前的冲突行不带，读面如实不带，不替它推。
 type UnidentifiedItemCatalogueRow struct {
 	SourceID         string
 	Unit             string
@@ -90,6 +92,8 @@ type UnidentifiedItemCatalogueRow struct {
 	Mark             string
 	SucceededBy      string
 	IdentityCheck    IdentityCheck
+	// IdentityConflictCause 的读法见类型头注。
+	IdentityConflictCause IdentityConflictCause
 }
 
 // IdentityReviewUnitRow 是待识别实物页按实物列的一行（ADR-0210 决定八末项与越权风险点「逐链追加会写到操作者没看过的链上」）：

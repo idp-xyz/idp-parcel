@@ -30,14 +30,16 @@ const (
 	RecheckOutcomeInvalid RecheckOutcome = iota
 	// RecheckIntakeFormed：唯一且包裹没有关联到别的实物，追加了一版`节点收寄已形成`。
 	RecheckIntakeFormed
-	// RecheckIdentityConflict：多候选、带歧义信号的一个候选，或唯一但包裹已关联到别的实物，追加了冲突版。
+	// RecheckIdentityConflict：多候选、带歧义信号的一个候选，或唯一但包裹已关联到别的实物，追加了冲突版，来由照这一回的答复记
+	// （ADR-0211 决定二）。被重核的若本就是只因歧义信号的冲突、这一回仍只差信号，不落在这一格，见 RecheckStillAmbiguous。
 	RecheckIdentityConflict
 	// RecheckStillUnidentified：仍是零候选（带不带歧义信号），判断不变、不追加。被重核那一版是未核对时不落在这一格，见
 	// RecheckIdentityNowChecked。
 	RecheckStillUnidentified
 	// RecheckExistingResult：被重核那一版已有后继，或派生键已在册（并发里另一方先追加）；答当前有效那一版，不再追加。
 	RecheckExistingResult
-	// RecheckIdentityConflictRecorded：指名的待识别记着身份冲突。身份冲突只经人工处置解除（ADR-0210 决定一），不经重核。
+	// RecheckIdentityConflictRecorded：指名的待识别记着身份冲突，来由不是只因歧义信号（多候选、一码两物，或来由这一格落地之前的
+	// 冲突行）。这几格只经人工处置解除（ADR-0210 决定一），不经重核；只因歧义信号的那一格例外（ADR-0211 决定二）。
 	RecheckIdentityConflictRecorded
 	// RecheckSourceNotPreserved：指名的是来源保全之前落下的行，号码从未留存，无从按号再问。
 	RecheckSourceNotPreserved
@@ -45,6 +47,9 @@ const (
 	RecheckNotPendingIdentification
 	// RecheckIdentityNowChecked：被重核那一版是未核对，这一回问到了、仍是零候选，追加了一版「待识别 · 已核对」。
 	RecheckIdentityNowChecked
+	// RecheckStillAmbiguous：被重核那一版是只因歧义信号的冲突，这一回仍答恰一个候选带信号——号码还被另一份`已提交`委托报着。
+	// 判断不变、不追加（ADR-0211 决定二）：再追加一版同样的冲突，链上只多一行，冲突一点没变。
+	RecheckStillAmbiguous
 )
 
 func (outcome RecheckOutcome) String() string {
@@ -65,6 +70,8 @@ func (outcome RecheckOutcome) String() string {
 		return "NOT_PENDING_IDENTIFICATION"
 	case RecheckIdentityNowChecked:
 		return "IDENTITY_NOW_CHECKED"
+	case RecheckStillAmbiguous:
+		return "STILL_AMBIGUOUS"
 	default:
 		return ""
 	}
@@ -108,9 +115,10 @@ type RecheckPendingIdentityDeps struct {
 	Clock          ports.Clock
 }
 
-// RecheckPendingIdentityHandler 按存下的号重核待识别实物（ADR-0199 决定三，`AT-NO-026`）。两个入口：Recheck 只看指名那一件
-// （复核页人工发起；落未核对行时自投的门铃也走它），RecheckByMark 看号码相等的每一件（PS 外部标识关联已形成的门铃）。两个
-// 入口落到同一个 recheck，结果同形。
+// RecheckPendingIdentityHandler 按存下的号重核待识别实物（ADR-0199 决定三，`AT-NO-026`），也重核只因歧义信号落下的身份冲突
+// （ADR-0211 决定二，`AT-NO-062`）。两个入口：Recheck 只看指名那一件（复核页人工发起；落未核对行时自投的门铃也走它），
+// RecheckByMark 看号码相等的每一件（PS 的两种门铃：外部标识关联已形成、客户包裹件号声明撤除）。两个入口落到同一个 recheck，
+// 结果同形。
 //
 // 调用方负责事务：身份判断里的包裹锁、追加的那一版与它的意图必须同生共死，见 ports.ReceptionStore.FindOtherUnitIntakes。
 type RecheckPendingIdentityHandler struct {
@@ -137,8 +145,8 @@ func NewRecheckPendingIdentityHandler(deps RecheckPendingIdentityDeps) (*Recheck
 	return &RecheckPendingIdentityHandler{deps: deps}, nil
 }
 
-// Recheck 重核指名的那一件。重核对象的条件（当前有效版本是待识别、不带关联、不记身份冲突、来源已保全）在这里逐条判，判不过
-// 的各答一格业务结果；指名本租户册上没有的版本交回 ErrRecheckSubjectNotFound。
+// Recheck 重核指名的那一件。重核对象的条件（当前有效版本是待识别、不带关联、不记身份冲突或冲突来由是只因歧义信号、来源已
+// 保全）在这里逐条判，判不过的各答一格业务结果；指名本租户册上没有的版本交回 ErrRecheckSubjectNotFound。
 func (handler *RecheckPendingIdentityHandler) Recheck(
 	ctx context.Context,
 	command RecheckPendingIdentityCommand,
@@ -194,8 +202,9 @@ func (handler *RecheckPendingIdentityHandler) recheck(
 	switch {
 	case record.Kind != ports.RecordPendingIdentification || associated:
 		return answered(RecheckNotPendingIdentification, record), nil
-	case record.IdentityConflict:
-		// 记身份冲突的（多候选、一码两物）不重核：身份冲突只经人工处置解除（ADR-0210 决定一），重核再问一次 PS 也替不了那次处置。
+	case record.IdentityConflict && record.IdentityConflictCause != ports.ConflictByAmbiguityOnly:
+		// 多候选、一码两物与来由缺席的冲突不重核：它们只经人工处置解除（ADR-0210 决定一），重核再问一次 PS 也替不了那次处置。只因
+		// 歧义信号的那一格例外（ADR-0211 决定二）：信号是 PS 此刻的事实，声明它的委托被拒绝或撤回，再问一次答出的就是唯一命中。
 		return answered(RecheckIdentityConflictRecorded, record), nil
 	case !record.Source.Preserved():
 		return answered(RecheckSourceNotPreserved, record), nil
@@ -225,7 +234,11 @@ func (handler *RecheckPendingIdentityHandler) recheck(
 	if err != nil {
 		return RecheckPendingIdentityResult{}, err
 	}
-	// 零候选（带不带歧义信号）：判断不变、不追加（ADR-0199 决定三）。唯一命中身份冲突处置排除过的那件也落在这里（ADR-0210 决定九）。
+	if record.IdentityConflict && judgment.conflictCause() == ports.ConflictByAmbiguityOnly {
+		return answered(RecheckStillAmbiguous, record), nil
+	}
+	// 零候选（带不带歧义信号）：判断不变、不追加（ADR-0199 决定三）。只因歧义信号的冲突这一回答零候选也落在这里，冲突照留：
+	// ADR-0211 决定二只给了唯一命中这一条自动解开的路。唯一命中身份冲突处置排除过的那件也落在这里（ADR-0210 决定九）。
 	// 被重核那一版是未核对时例外：这一回问到了，追加一版「待识别 · 已核对」，册上从此说的是「查过了，查无此号」而不是「没问到」；
 	// 不追加，未核对那一行就一直把同租户的包裹答成`不可归属`（ParcelContainmentView）。
 	nowChecked := !judgment.identified && !judgment.conflict()
@@ -298,17 +311,18 @@ func (handler *RecheckPendingIdentityHandler) appendedVersion(
 		ReceivedAt:  record.Intake.ReceivedAt(),
 	}
 	appended := ports.ReceptionRecord{
-		Key:              ports.ReceptionKey{TenantID: record.Key.TenantID, SourceID: identityRecheckSourceID(record.JudgmentVersion)},
-		ContentDigest:    record.ContentDigest,
-		Kind:             ports.RecordPendingIdentification,
-		JudgmentVersion:  version,
-		Predecessor:      record.JudgmentVersion,
-		Source:           record.Source,
-		Control:          record.Control,
-		Candidates:       judgment.candidates,
-		IdentityConflict: judgment.conflict(),
-		IdentityCheck:    ports.IdentityChecked,
-		RecordedAt:       handler.deps.Clock.Now(),
+		Key:                   ports.ReceptionKey{TenantID: record.Key.TenantID, SourceID: identityRecheckSourceID(record.JudgmentVersion)},
+		ContentDigest:         record.ContentDigest,
+		Kind:                  ports.RecordPendingIdentification,
+		JudgmentVersion:       version,
+		Predecessor:           record.JudgmentVersion,
+		Source:                record.Source,
+		Control:               record.Control,
+		Candidates:            judgment.candidates,
+		IdentityConflict:      judgment.conflict(),
+		IdentityConflictCause: judgment.conflictCause(),
+		IdentityCheck:         ports.IdentityChecked,
+		RecordedAt:            handler.deps.Clock.Now(),
 	}
 	if judgment.identified {
 		spec.Association = judgment.parcel

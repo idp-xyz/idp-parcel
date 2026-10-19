@@ -30,7 +30,8 @@ func (double *receptionStoreDouble) FindByJudgmentVersion(
 	return ports.ReceptionRecord{}, false, nil
 }
 
-// FindRecheckableByMark 照真库的筛法在内存里找：当前有效版本是待识别、不带关联、不记身份冲突、来源文档的号逐字相等。
+// FindRecheckableByMark 照真库的筛法在内存里找：当前有效版本是待识别、不带关联、不记身份冲突或冲突来由是只因歧义信号
+// （ADR-0211 决定二）、来源文档的号逐字相等。
 func (double *receptionStoreDouble) FindRecheckableByMark(
 	_ context.Context,
 	tenant domain.TenantID,
@@ -38,7 +39,8 @@ func (double *receptionStoreDouble) FindRecheckableByMark(
 ) ([]ports.ReceptionRecord, error) {
 	found := []ports.ReceptionRecord{}
 	for key, record := range double.byKey {
-		if key.TenantID != tenant || record.Kind != ports.RecordPendingIdentification || record.IdentityConflict ||
+		contested := record.IdentityConflict && record.IdentityConflictCause != ports.ConflictByAmbiguityOnly
+		if key.TenantID != tenant || record.Kind != ports.RecordPendingIdentification || contested ||
 			!record.Source.Preserved() || record.Source.Mark != mark || record.JudgmentVersion.String() == "" {
 			continue
 		}

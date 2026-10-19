@@ -140,6 +140,9 @@ var declaredPartitionSubjects = map[string]string{
 	// 外部标识关联已形成的门铃（ADR-0199 决定三）按（租户，号码）排队：同一个号的门铃叫 NO 重核的是同一批待识别。键取两维的
 	// 定长指纹，号码没有长度上限；信封 ID 是关联键的指纹，与分区键不同表达式。
 	"internal/parcelshipment/adapters/postgres/external_identifier_formed_handoff.go": partitionSubjectPrefix + "租户/外部标识号码（定长指纹）",
+	// 客户包裹件号声明撤除的门铃（ADR-0211 决定三）与关联已形成那一口同一个分区键式子、同一个口名：同一个号的两种门铃排一条队，
+	// 两种都叫 NO 按这个号重核同一批行。信封 ID 是（租户，委托，号码）的指纹，与分区键不同表达式。
+	"internal/parcelshipment/adapters/postgres/customer_parcel_number_declaration_retired_handoff.go": partitionSubjectPrefix + "租户/外部标识号码（定长指纹）",
 
 	// —— party-commercial ——
 	// 「参数已登记」（ADR-0094 决定四的续办触发）按租户排队：消费门对该租户的重驱一轮接一轮，

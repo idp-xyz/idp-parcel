@@ -4,7 +4,6 @@ package noinbox
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 
@@ -79,17 +78,10 @@ func (consumer *ExternalIdentifierRelationFormedConsumer) Consume(ctx context.Co
 	return consumer.gate.Consume(ctx, envelope)
 }
 
-// decodeFormedExternalIdentifierRelation 译载荷。tenantId 与 number 缺一即毒丸：重核按这两维找待识别，缺了永远找不着。
 func decodeFormedExternalIdentifierRelation(payload []byte) (FormedExternalIdentifierRelation, error) {
-	var body struct {
-		TenantID string `json:"tenantId"`
-		Number   string `json:"number"`
+	tenant, number, err := decodeTenantAndNumber(payload)
+	if err != nil {
+		return FormedExternalIdentifierRelation{}, err
 	}
-	if err := json.Unmarshal(payload, &body); err != nil {
-		return FormedExternalIdentifierRelation{}, fmt.Errorf("%w: %v", ErrPoisonEnvelope, err)
-	}
-	if body.TenantID == "" || body.Number == "" {
-		return FormedExternalIdentifierRelation{}, fmt.Errorf("%w: missing tenantId or number", ErrPoisonEnvelope)
-	}
-	return FormedExternalIdentifierRelation{TenantID: body.TenantID, Number: body.Number}, nil
+	return FormedExternalIdentifierRelation{TenantID: tenant, Number: number}, nil
 }

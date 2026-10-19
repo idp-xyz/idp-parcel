@@ -183,6 +183,37 @@ func (check IdentityCheck) String() string {
 	}
 }
 
+// IdentityConflictCause 是一版判断落下身份冲突的来由（ADR-0211 决定一），封闭三值，只在记身份冲突的那几版上在场。它决定这一格冲突
+// 有没有处置以外的解法：只有只因歧义信号那一格，在声明它的委托被拒绝或撤回、信号消失之后，经重核自动解开；其余两格与来由缺席的
+// 都只经身份冲突处置解开（ADR-0210 决定一）。
+//
+// 零值即不带：不记冲突的各版没有来由，库里由迁移的 CHECK 拦住不记冲突却带来由的行。记冲突却不带来由的，是来由这一格落地之前
+// 的冲突行，不回填——迁移无从推定它当时落在哪一格，推错了就会把一桩多候选或一码两物的冲突交给自动解开。
+type IdentityConflictCause uint8
+
+const (
+	IdentityConflictCauseAbsent IdentityConflictCause = iota
+	// ConflictByAmbiguityOnly：PS 答恰一个候选，同时答出歧义信号（ADR-0195）——离唯一命中只差这一个信号。
+	ConflictByAmbiguityOnly
+	// ConflictByMultipleCandidates：PS 答多个候选，带不带歧义信号都落这一格（ADR-0195「多候选，有无信号都一样」）。
+	ConflictByMultipleCandidates
+	// ConflictByOneMarkOnTwoUnits：号码唯一指向的包裹已关联到另一件作业实物（ADR-0196），后到那件与给先到那件追加的冲突版都记它。
+	ConflictByOneMarkOnTwoUnits
+)
+
+func (cause IdentityConflictCause) String() string {
+	switch cause {
+	case ConflictByAmbiguityOnly:
+		return "AMBIGUITY_ONLY"
+	case ConflictByMultipleCandidates:
+		return "MULTIPLE_CANDIDATES"
+	case ConflictByOneMarkOnTwoUnits:
+		return "ONE_MARK_ON_TWO_UNITS"
+	default:
+		return ""
+	}
+}
+
 // ReceptionRecord 是一次收寄判断留下的东西。收寄与控制只在形成/待识别两格在场；
 // 候选、身份冲突与身份核对态（IdentityCheck，ADR-0199 决定五）只在待识别格有意义；服务结果标记（已取消 / 终局，编排在身份唯一成立时向 PS 取，由
 // ParcelServiceResults.Markers 合成）与核对态只在形成格在场——它们不阻止接收，只限制后续方向性作业。标记串原样保全，
@@ -214,6 +245,9 @@ type ReceptionRecord struct {
 	ServiceResultCheck ServiceResultCheck
 	IdentityCheck      IdentityCheck
 	RecordedAt         time.Time
+	// IdentityConflictCause 只随 IdentityConflict 在场（ADR-0211 决定一），见它的类型头注。它不进内容指纹：来由是服务端判下的，
+	// 同一次送站重投不因它换答法。
+	IdentityConflictCause IdentityConflictCause
 	// Disposition 只在身份冲突处置版上在场（ADR-0210 决定三），零值即这一版不是处置版。处置版的 ContentDigest 是这次处置比对格的
 	// 摘要（domain.CanonicalizeIdentityDispositionComparison），同一次处置的各版同一个；文档本身不进摘要：依据引用、操作者与形成时刻
 	// 不进比对（ADR-0210 决定六）。
@@ -292,8 +326,9 @@ type PendingIdentityLookup interface {
 		tenant domain.TenantID,
 		version domain.IntakeResultVersion,
 	) (ReceptionRecord, bool, error)
-	// FindRecheckableByMark 交回本租户里当前有效版本是待识别、不带关联、不记身份冲突，且来源文档的外部标识观察与 mark 逐字
-	// 相等的各行，按来源标识定序；没有交回空切片。来源文档缺席的旧行不在其中：号码从未在册上留存，无从按号匹配。
+	// FindRecheckableByMark 交回本租户里当前有效版本是待识别、不带关联、不记身份冲突或冲突来由是只因歧义信号（ADR-0211 决定二），
+	// 且来源文档的外部标识观察与 mark 逐字相等的各行，按来源标识定序；没有交回空切片。来源文档缺席的旧行不在其中：号码从未在册上
+	// 留存，无从按号匹配。来由是另两格或缺席的冲突行也不在其中：它们只经身份冲突处置解开。
 	FindRecheckableByMark(
 		ctx context.Context,
 		tenant domain.TenantID,

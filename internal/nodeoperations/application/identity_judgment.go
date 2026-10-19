@@ -15,6 +15,8 @@ import (
 type identityJudgment struct {
 	// candidates 是 PS 交回的包裹候选，照记在判断上，不论落成哪一格。
 	candidates []domain.ParcelAssociationReference
+	// ambiguous 是 PS 随候选答出的歧义信号（ADR-0195），只用来分冲突的来由。
+	ambiguous bool
 	// parcel 只在 identified 时有意义：唯一命中、且那件包裹没有关联到别的作业实物。
 	parcel     domain.ParcelAssociationReference
 	identified bool
@@ -29,6 +31,25 @@ type identityJudgment struct {
 // 作业实物（ADR-0196）。零候选——带不带歧义信号——不是冲突，是待识别。
 func (judgment identityJudgment) conflict() bool {
 	return !judgment.identified && len(judgment.candidates) > 0
+}
+
+// conflictCause 是这次判断落下身份冲突的来由（ADR-0211 决定一），不是冲突时缺席。分格照 conflict 那三种来路，次序有讲究：
+// 一码两物只从唯一命中那一支来；多候选压过歧义信号，因为信号消失之后它仍是多候选，交给自动解开就解错了；剩下的恰一个候选就是
+// 只差信号的那一格。
+func (judgment identityJudgment) conflictCause() ports.IdentityConflictCause {
+	switch {
+	case !judgment.conflict():
+		return ports.IdentityConflictCauseAbsent
+	case len(judgment.others) > 0:
+		return ports.ConflictByOneMarkOnTwoUnits
+	case len(judgment.candidates) > 1:
+		return ports.ConflictByMultipleCandidates
+	case judgment.ambiguous:
+		return ports.ConflictByAmbiguityOnly
+	default:
+		// 恰一个候选、不带信号、包裹也没关联到别的实物，那就是唯一命中，走不到这里；走到了是判断本身拼错了，不替它猜来由。
+		return ports.IdentityConflictCauseAbsent
+	}
 }
 
 // identityJudge 持身份判断要问的三个口。excluded 只在被重核的是身份冲突处置确认过「不是」的那一版时有值（ADR-0210 决定九）：PS 唯一
@@ -56,7 +77,7 @@ func (judge identityJudge) judge(
 	if err != nil {
 		return identityJudgment{}, fmt.Errorf("resolve parcel identity: %w: %w", ErrParcelIdentityUnreadable, err)
 	}
-	judgment := identityJudgment{candidates: answer.Candidates}
+	judgment := identityJudgment{candidates: answer.Candidates, ambiguous: answer.Ambiguous}
 	// 号码唯一指向一件包裹，还要问这件包裹是否已关联到另一件作业实物：是，就是「同一外部条码出现在多个实物」（NO
 	// CONTEXT「实物身份与事实完整性」、ADR-0196）。按关联到的包裹认而不按号码认，不论先到那件此刻是否仍在节点控制下；
 	// 同一作业实物再来不在此列。这一问读不动就不形成答案，也不带 ErrParcelIdentityUnreadable：那是本方册读不动，不是没问到 PS，
