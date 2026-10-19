@@ -25,8 +25,10 @@ func NewEvaluationRequestID(value string) (EvaluationRequestID, error) {
 }
 
 // PrimaryScopeReference 指名结算提交主要范围（UC-SA-002 步 2「结算提交主要范围、计算目的和合格来源
-// 引用」）。它由调用方交进来，本上下文不从任何登记册推。与 SettlementScope 不是一回事：那是资金维
-// （责任法人 / 结算账户 / 币种），这里是一次结算提交所针对的业务范围。
+// 引用」）。领域只登记它、不推它；它从哪来按发起路径分：由调用方交齐的那条触发面（ADR-0164）由调用方
+// 交进来，本上下文不从任何登记册推；发生项已形成信封那一路取发生项固定的那一版协议的商业范围（ADR-0208
+// 决定四）。与 SettlementScope 不是一回事：那是资金维（责任法人 / 结算账户 / 币种），这里是一次结算提交
+// 所针对的业务范围。
 type PrimaryScopeReference struct{ requiredValue }
 
 func NewPrimaryScopeReference(value string) (PrimaryScopeReference, error) {
@@ -77,8 +79,10 @@ func ParseCalculationPurpose(value string) (CalculationPurpose, error) {
 }
 
 // EligibleSourceReferences 是一次 BUY 评价请求携带的合格来源引用三件：TF 运输收费发生项、费用项目、
-// 供应商协议版本。三件由调用方交进来——本上下文不读 TF / PC 的内容，只登记引用；从 TF 登记册推出来的
-// 匹配不是「合格来源引用」（票 sa-cc/08 红线）。
+// 供应商协议版本。领域只登记引用，不读 TF / PC 的内容。由调用方交齐的那条触发面（ADR-0164）三件都由
+// 调用方交进来；发生项已形成信封那一路按引用回读那一份发生项，发生项与协议取它自身固定的事实，费用项目
+// 取 BUY 触发册（ADR-0208 决定二、三）。两路都不许的是按当前伙伴、线路或报表分组去 TF 登记册里配——
+// 配出来的匹配不是「合格来源引用」（票 sa-cc/08 红线）。
 type EligibleSourceReferences struct {
 	Occurrence TransportChargeOccurrence
 	FeeItem    FeeItemReference
