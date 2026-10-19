@@ -221,6 +221,41 @@ go run ./cmd/parcel-dispatch
 
 > 2026-10-19 补记（票 `demo-chain-gaps/95`，[ADR-0220](../adr/0220-node-control-reads-the-handover-correction-chain-by-the-transport-fulfillment-back-pointer.md)）：交接载荷的 `scope` 是这一次交接的共同范围（一车、一批、一次交出），每次交接各起一个；`version` 只给更正用，更正走更正口、回指前版。同一 `scope` 下换一个版本号另登，运输履约答 `201 HANDOVER_REGISTERED`，是另一次首登；节点控制也照更正回指认链，不再把它读成前一次的更正。所以把 `scope` 写成节点代码（例如交进深圳口岸与从深圳口岸交出都写 `SZX`）不再让控制停在错的那次交接上：交进那一次在深圳口岸立 `IN`·`ADVANCED`，交出那一次转出的就是这一份（`OUT`·`ADVANCED`，节点 `SYN-NODE-SZX-GATE`，`controlBasis` 与交进那一行相同），此后交进新加坡枢纽那一次转出一侧落 `NO_ACTIVE_CONTROL`。运输履约的范围汇总不按包裹去重，同一包裹在同一 `scope` 下首登两次会在那个范围的汇总里算两次，所以照旧每次交接各起一个范围。证据是派发进程生产路由表上的真库用例（`cmd/parcel-dispatch/node_control_same_scope_on_handover_test.go`，合成夹具，只记 `S`）：照停点那件包裹的交接次序，交进与交出深圳口岸那两次范围同为 `SZX`，转移册依次如上；交出那一次随后经更正口更正、仍`已交接`，更正版两个方向都零写入。本票没有在一次性库上重走动线。
 
+> 2026-10-19 补记（票 `demo-chain-gaps/98`，[psb/05](../../.scratch/product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)「重走（钉 `8197fa2f`，2026-10-19）」停点一、六与「走到哪」运输准备一行）：上面各条交接、自营段、装载分配与运输准备的补记，各只列了自己新增的几格，照抄会撞上下面几处。它们的实走证据不变，写法自此照这一条补全来读。
+>
+> - **`已交接`的载荷要全**。`POST /transport-fulfillment/handovers` 登`已交接`（`"verdict":"HANDED_OVER"`），必须带 `releasingEvidence`、`receivingEvidence` 与 `rule`，不得带 `basis`：`basis` 只给`已拒收`与`待确认`。缺一格或多带 `basis` 都答 `200 SOURCE_NOT_ACCEPTED`，答复不指名是哪一格。
+> - **每次交接用自己的 `scope`**。`scope` 是这一次交接的链身份，每次交接各起一个；`version` 只给更正用。同一 `scope` 换个版本号另登，交接口照样答 `201`，节点作业却当它是前一次的更正，在身控制会在错的那次交接转出（票 [95](../../.scratch/demo-chain-gaps/issues/95-node-operations-reads-a-new-handover-under-the-same-scope-as-a-correction.md)）。上面票 62 补记的 `SYN-HO-62-A`、`-B`、`-C`、`-D` 就是这样写的，只是没说出来。
+> - **自营段 SHA→SZX 分四步**。上面票 32 补记写「交接口带 `segment` 立段」再出发，票 62 补记第一步把上海交出与深圳口岸接收合成一次交接；两处拼起来，出发没有位置。自此读作：
+>   1. 上海交给自营干线、立段。华东场外设备（`SYN-DEVICE-OFFSITE-CN-EAST-01`，`OFFSITE` / `SYN-OFFSITE-CN-EAST`）登一次`已交接`，带 `segment`、`plannedSegment`（计划第一段）、`"releasingNode":"SYN-NODE-SHA-HUB"` 与 `"onwardNode":"SYN-NODE-SZX-GATE"`。答 `201`，交出门禁读数 `NOT_GUARDED`。
+>   2. 出发前问询：`POST /transport-fulfillment/departure-gate-previews`，答 `200 DEPARTURE_GATE_PREVIEWED`，`NOT_GUARDED`。
+>   3. 出发：以同一时点 `POST /transport-fulfillment/movement-facts`，带同一个 `segment`。答 `201 MOVEMENT_FACT_RECORDED`，读数与问询逐字相同。
+>   4. 交进深圳口岸：同一台设备另起一个 `scope`，只声明 `"receivingNode":"SYN-NODE-SZX-GATE"`。答 `201`，`participationEnd` 为 `PARTICIPATION_ENDED`；读数 `UNDECIDED` / `RELEASING_NODE_NOT_DECLARED` 属预期——交出方是自营干线，不是节点。
+>
+>   出发与问询引的班次要先显式登记，不然读数停在 `SCHEDULE_NOT_REGISTERED`；班次挂了池，装载分配前要先在每个池上预占（票 18、21 补记）。第一步的完整载荷如下，第四步换 `scope`、证据与收交两方，去掉段与交出、去向那几格，改带 `receivingNode`：
+>
+>   ```json
+>   {"object":"DPCL-…","scope":"SYN-HO-<演示>-SHA","version":"v1","releasedBy":"SYN-NODE-SHA-HUB","receivedBy":"SYN-OFFSITE-CN-EAST",
+>    "verdict":"HANDED_OVER","releasingEvidence":"SYN-EVIDENCE-RELEASE-<演示>","receivingEvidence":"SYN-EVIDENCE-RECEIVE-<演示>",
+>    "rule":"SYN-HANDOVER-RULE/v1","judgedAt":"<RFC 3339>","segment":"SYN-SEG-SHA-SZX-<演示>","plannedSegment":"RPV-…#1",
+>    "segmentServiceAction":"LINEHAUL","releasingNode":"SYN-NODE-SHA-HUB","onwardNode":"SYN-NODE-SZX-GATE"}
+>   ```
+>
+> - **装载分配的重量行写整数**。上面票 21 补记那份载荷里，`quantity` 只收整数，`quantityFromMembers` 只许落在件数池那一行。演示包裹申报 1.50 KG，重量行要声明一个整数（下面实走写 2）。写 `1.5` 答 `400 MALFORMED_REQUEST`；重量行写 `quantityFromMembers` 答 `200 INPUT_NOT_ACCEPTED`，不指名原因。
+> - **三段运输准备都有一班**。种子另登了深圳→新加坡快班与新加坡枢纽→末端穿梭，取值与为什么这样排只写在种子 README 组成表 `data/transport/07`–`23` 那一行。上面票 18 补记里「后两段……答 `NO_CURRENT_OPPORTUNITY`」自此读作：不论提交落在哪一刻，三段都答 `OPPORTUNITY_PREPARED`。后两段选中的多半是评估时物化的快班或穿梭（候选 `version` 为 0）。干线订舱照旧订在种子显式登记的 `SYN-SCHED-SZX-SIN-DAILY/2026-10-21` 上：准备选中哪一班，不替运营决定订哪一班。
+> - **集成客户端发行方**。共享那只答 `invalid_client` 时，不要重建它，另起一只私有的。做法只写在种子 README「集成客户端渠道」一节「另起一只私有的」那一条，这里不复述。
+>
+> 2026-10-19 在一次性库 `dcg98_walk` 上照这一条实走，代码钉 `5f0aa66d` 加本票种子，实测只记 `S`。`seed.sh` 灌入退 0。首方客户发行方另起私有 Dex，宿主端口 5571、`iss` 不变；共享那只仍答 `invalid_client`。起 `parcel-api` 与 `parcel-dispatch`，各变量照「前置」。
+>
+> - **提交与准备**：21:09:43Z（上海当地 05:09，与 `8197fa2f` 那次重走落在同一段提交时刻）经首方客户渠道提交 `SHR-CPN7YFEGUKKYMWFVB2B4M63MTY`，包裹 `DPCL-WXO22WONL5QI6YNSBWZFYS6OCM`。三段准备都答 `OPPORTUNITY_PREPARED`：
+>   - `#1` 选 `SYN-SCHED-SHA-SZX-EXPRESS-1200/2026-10-20`；
+>   - `#2` 窗口 2026-10-21T00:00Z–06:00Z，选 `SYN-SCHED-SZX-SIN-EXPRESS-0900/2026-10-21`；同一窗口里种子登记的按日那一班仍答 `ARRIVES_AFTER_WINDOW`，与那次重走同；
+>   - `#3` 窗口 12:00Z–14:00Z，选 `SYN-SCHED-SIN-LM-SHUTTLE-2130/2026-10-21`。
+> - **收寄与装载**：预报 `PREADV-PC6BJSBNOPMOTT47XMGQSG43P4` 后上海枢纽收寄答 `201 INTAKE_FORMED`，`VERIFIED`。登 `#1` 选中那一班答 `201 SCHEDULE_REGISTERED`，两池各预占一份（`10 KG`、`5 PCS`）各答 `201`。装载分配先试两种错写：重量行写 `quantityFromMembers` 答 `200 INPUT_NOT_ACCEPTED`，写 `1.5` 答 `400 MALFORMED_REQUEST`。照上面写 2 答 `201 LOAD_ASSIGNMENT_FORMED`。
+> - **自营段四步**：交接先试两种错写，多带 `basis`、缺 `receivingEvidence` 与 `rule`，都答 `200 SOURCE_NOT_ACCEPTED`。随后四步依次答 `201`（读数 `NOT_GUARDED`）、`200`、`201`（读数逐字相同）、`201`（`UNDECIDED` / `RELEASING_NODE_NOT_DECLARED`、`PARTICIPATION_ENDED`）。两次交接各用自己的 `scope`。
+> - **一拍之后**：节点控制转移册三行——上海那一份 `OUT`·`ADVANCED`，深圳口岸 `IN`·`ADVANCED`·`HANDOVER_IN`，第四步转出那一半 `NOT_ADVANCED` / `NO_ACTIVE_CONTROL`。投影里有 `DEPARTED`。派发日志只有已知没有订阅者的几类信封。
+>
+> 走完已停进程、删容器、删库。
+
 三堵墙对应的机制票都在 `.scratch/syn-wall-door-audit/issues/`（依次为 01、13、04），墙面清单见同目录 `report.md`。
 
 #### 送站预报：客户在送站之前交

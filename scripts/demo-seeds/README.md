@@ -154,6 +154,21 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 2. 起 `parcel-api` 时再加三件：`IDP_PARCEL_INTEGRATION_CLIENT_OIDC_ISSUER=http://127.0.0.1:5558/dex`、`IDP_PARCEL_INTEGRATION_CLIENT_OIDC_JWKS_URL=http://127.0.0.1:5558/dex/keys`、`IDP_PARCEL_INTEGRATION_CLIENT_OIDC_AUDIENCE=idp-parcel-integration`。日志出现「Integration client channel issuer configured」。
 3. 取令牌：`scripts/demo-seeds/operator-channel/integration-token.sh syn-integration-customs-broker-01 syn-customs-broker-secret`（银行是 `syn-integration-bank-01` / `syn-bank-secret`）。客户端行的「要求证书绑定令牌」填的是 `false`：这只发行方签不出 `cnf`，这是演示租户对这两台客户端的取值，不是放宽核验。
 4. 承运订舱答复口（`POST /transport-fulfillment/booking-answers`，ADR-0202 决定二）认合成干线承运商这一台：`integration-token.sh syn-integration-carrier-trunk-01 syn-carrier-trunk-secret`。它只能答干线委托下的订舱——答复方的来源身份要等于订舱所属委托的服务提供方，拿它答末端委托下的订舱答 200 `SOURCE_NOT_SERVICE_PROVIDER`。证书绑定一格同上。这台客户端是后加进 `integration-dex.yaml` 的，发行方只在启动时读配置，`up -d` 也不因挂载文件的内容变了就重建容器：之前起过的 `integration-issuer` 要先 `docker compose -f scripts/demo-seeds/operator-channel/compose.yaml up -d --wait --force-recreate integration-issuer` 重建，否则取令牌答 `invalid_client`。它用内存存储，重建后签名钥换新，之前取的令牌作废，重取即可。
+5. 共享的那只别的会话也在用时，不要 `--force-recreate` 它（那会让它们手里的令牌全部作废），另起一只私有的（票 demo-chain-gaps/98）。
+   取令牌答 `invalid_client`，多半就是共享那只起得早于配置里后加的客户端；此前的实走都是这样绕开的。同一份 `integration-dex.yaml`、
+   同一版镜像、只换宿主端口，`iss` 串仍是 `http://127.0.0.1:5558/dex`：
+
+   ```bash
+   docker run -d --name idp-parcel-demo-integration-issuer-<会话> -p 127.0.0.1:<端口>:5556 \
+     -v "$PWD/scripts/demo-seeds/operator-channel/integration-dex.yaml:/etc/dex/dex.yaml:ro" \
+     ghcr.io/dexidp/dex:v2.46.0 dex serve /etc/dex/dex.yaml
+   ```
+
+   取令牌的两个脚本各自指过去：`IDP_PARCEL_DEMO_INTEGRATION_ISSUER=http://127.0.0.1:<端口>/dex integration-token.sh …`，
+   `IDP_PARCEL_DEMO_CUSTOMER_ISSUER=http://127.0.0.1:<端口>/dex customer-token.sh`（`submit-one-shipment.sh` 与 `submit-one-pre-advice.sh`
+   调它，环境变量随之带过去）。起 `parcel-api` 时两族的 `…_OIDC_ISSUER` 照旧写 `http://127.0.0.1:5558/dex`（逐字比 `iss`），
+   `IDP_PARCEL_INTEGRATION_CLIENT_OIDC_JWKS_URL` 与 `IDP_PARCEL_CUSTOMER_API_OIDC_JWKS_URL` 都改指 `http://127.0.0.1:<端口>/dex/keys`。
+   走完 `docker rm -f` 那只私有的。
 
 ## 首方客户渠道：演示发行方
 
