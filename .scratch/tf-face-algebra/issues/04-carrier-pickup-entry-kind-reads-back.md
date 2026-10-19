@@ -1,7 +1,7 @@
 # 04 凭实际承运商首次有效收寄入场的段按键读不回：`participationEntryKindFrom` 不认第三个入场词，段里一名这样的成员就让整段的终止、交接、揽收进段停在未决或 500
 
 Category: bug
-Status: needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: in-progress——2026-10-18 会话 `idp-parcel-9b` 认领并实施（分支 `claude-tfa04`），待进 main。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment-participation-terminations, /transport-fulfillment-carrier-first-effective-pickup-judgments, /transport-fulfillment/handovers, /transport-fulfillment/offsite-pickups
@@ -61,3 +61,16 @@ Blocked by: 无
 - [ ] Go 门禁：`go build ./...`、`go vet ./...` 退出码 0，`gofmt -l .` 无输出；带 DSN 跑 `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/... ./internal/architecture/...` 全部 ok，`-v` 下 TF `adapters/postgres` 无 `--- SKIP`。
 - [ ] 在 operator-channel/15 补记下追加回写行（只加行）。
 - [ ] 走 Go 那条路（[并行会话](../../../docs/agents/parallel-sessions.md)）：作者自验；非作者评审，两轴分开；推送方在干净检出上带 DSN 跑全量。
+
+## 裁定（2026-10-18，会话 idp-parcel-9b 代决）
+
+照「修复方向（机制）」办，没有取舍：译回补上第三个入场词；结束词逐一核过是全的；补真库往返用例。不涉租户取值。动手前在 main `3cb862db` 上用新用例复现属实（红在「unknown participation entry kind」）。
+
+## 完成记录（2026-10-18，会话 idp-parcel-9b，分支 `claude-tfa04`）
+
+- **落点**：`internal/transportfulfillment/adapters/postgres/fulfillment_segment_registry.go · participationEntryKindFrom` 补 `EnteredByCarrierFirstEffectivePickup`，头注写明它必须与领域入场词逐一对上。`participationEndKindFrom` 与领域结束词三个对三个，无缺。
+- **完成判据**：真库往返 `TestACarrierPickupEntryRoundTripsBesideOtherMembers`（同段一名揽收入场、一名承运商首次有效收寄入场并带替代版本，按键读回三个版本的入场词原样往返）。先红后绿：`776844d7` 红（`find fulfillment segment: unknown participation entry kind "CARRIER_FIRST_EFFECTIVE_PICKUP"`），`85e0ad80` 绿。
+- **门**：改动 `.go` 的 `gofmt -l` 无输出；`go build ./...`、`go vet ./internal/transportfulfillment/...` 退 0；带 DSN `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/ ./internal/architecture/...` 全 ok；机制清点重生成零差。
+- **未做**：票面「现象」里读码推出、未逐一实测的关段、派送发起、参与重派生几条路径，靠同一处译回修好，没有各自补端到端用例。
+- **证据层级**：`S`（测试沿用本包既有夹具，租户为 `tenant-1`）。
+- **评审**：作者自审——本票由会话本身动手实施并自审（用户选「精简续做」），不算非作者评审。
