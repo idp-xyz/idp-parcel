@@ -1,6 +1,6 @@
 # ADR-0219：设备出发前门禁问询——作业事实渠道上的只读一问，交回与随后同参出发同一套读数；运输履约不落记录，关务照记判断
 
-Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/69，统一代决见 `.scratch/demo-chain-gaps/handover-dispatch-plan.md`「代决」C17 与「需要的 ADR」ADR-0219。回答 [ADR-0205](./0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md) 越权风险点 1「挡下违规出发是出发前读口的事」，无条款停用。越权风险点见文末，待各条括注的 owner 复核。）
+Status: Accepted（2026-10-19，Claude Code 会话代决：用户原话「你作为业务和系统专家自决……解决所有的问题」；票 demo-chain-gaps/69，统一代决见 `.scratch/demo-chain-gaps/handover-dispatch-plan.md`「代决」C17 与「需要的 ADR」ADR-0219。回答 [ADR-0205](./0205-departure-gate-is-a-pulled-reading-recorded-with-the-movement-fact-not-a-refusal.md) 越权风险点 1「挡下要靠设备在动作之前问；那个读口……等 peer 收工后另立票」，无条款停用。越权风险点见文末，待各条括注的 owner 复核。）
 Date: 2026-10-19
 
 ## Context
@@ -9,6 +9,7 @@ Date: 2026-10-19
 - 票 demo-chain-gaps/32 落了出发读数的读法：写事务之前、在池上读段册与班次册，逐对象问关务的动作准入判断。停点、逐对象那一格、读不动的依据种类与压制次序都定在 ADR-0205 决定二。
 - 作业事实渠道（ADR-0149 决定二）上，运输履约各口共用一只 Intake：同一份认证，同一道作业范围种类门（只认 OFFSITE），同一次设备在用核对。授予按作业范围给，不按端点给。
 - 关务的动作准入判断（ADR-0206 决定六）在自己的事务里记判断。判断标识按内容派生、不含判断时刻：同一请求在同样三源上重放，命中同一行，答`已有判断`。
+- 动作准入判断的请求时机，CC 那几处权威文档都只写了动作时那一种：CC CONTEXT 同名词条「它由消费方在动作时请求」，GLOSSARY 同名词条「运输履约等动作执行方在动作时请求并随自己的事实保存答复」，CONTEXT-MAP `transport-fulfillment → customs-compliance` 一条，UC-CC-013 的触发，以及 ADR-0206 决定六「消费方把答复随自己的事实同笔保存」。写下它们时，接上的消费方只有出发登记，请求都随一条事实来。
 - 先例：本仓「-previews」那一族口只算不写（序列登记前预览、价卡导入预览），挂与对应写口相同的 Intake。
 
 ## Decision
@@ -33,6 +34,7 @@ Date: 2026-10-19
 - 运输履约这一侧不写任何册、不入队任何信封，也不记谁问过。
 - 问询的读数不交给随后的出发。出发照 ADR-0205 在它自己那一刻重问，读数与事实同一笔落册：读到放行不等于出发那一刻仍放行，把问询读数带进出发，等于让设备自报门禁读数。
 - 关务那一侧：问询也是对明确对象与拟执行动作的请求，事后同样要答得出「当时凭什么这么答」，所以照决定六在自己的事务里记判断。判断标识不含判断时刻，于是随后同参的出发在同样三源上命中同一行，答`已有判断`。关务册上不因问询多出一条重复判断；出发落册的逐对象依据，指回的就是问询那一次记下的判断。
+- 这补的是动作准入判断的请求时机，不改判断本身。ADR-0206 决定一的动作时点本就是「动作发生（或拟发生）的业务时刻」；决定六「消费方把答复随自己的事实同笔保存」说的是带着事实来问的消费方，问询没有事实可随，只翻译交回、不保存。无条款停用。CC 那几处文档各补一句，指到本记录（见 Consequences）。
 - 问询不包事务。关务判断在它自己那层壳的事务里记，嵌进调用方事务即拒；包一层事务，每一件都会读成关务读不动。
 
 **四、持移动事实登记授予即可问，不新增能力种类。**
@@ -45,6 +47,8 @@ Date: 2026-10-19
 
 - 运输履约不据问询读数拒收随后的出发，ADR-0205 决定一不变。
 - 挡不挡是设备与现场的事：一线客户端在动作之前问，读到阻断就不发车或转人工。那是一线客户端那一侧的产品策略，本仓今天没有客户端代码（越权风险点 3）。
+
+三类：决定一、二、三是机制；决定四（授予挂在作业事实登记上、不另立能力种类）属角色模型，与决定五（问询不挡出发、挡不挡归一线客户端）同是产品策略（ADR-0146）；本记录没有租户取值，谁持作业事实登记授予仍由租户登。
 
 ## 候选与反方
 
@@ -68,7 +72,7 @@ Date: 2026-10-19
   - 新 `cmd/parcel-api/assemble_departure_gate_preview.go`。
   - 读数编排的构造收成 `buildDepartureGateReader`，出发登记与问询共用。
   - 端点表加一行。
-- 关务：不改。
+- 关务：代码不改。CC CONTEXT「动作准入判断」词条、GLOSSARY「动作准入判断」所有者一条、CONTEXT-MAP `transport-fulfillment → customs-compliance` 与 UC-CC-013 的目标、触发各补一句，指到本记录；ADR-0206 的 Status 与 Links 加前向指针，正文不动。
 - 文档：
   - UC-TF-005 加一条规则与 `AT-TF-226`–`231`。
   - TF CONTEXT「实际移动与出发门禁读数」加一条。
@@ -83,7 +87,7 @@ Date: 2026-10-19
 2. **用写授予开读口**（TF owner、access-identity owner）。持作业事实登记授予就能问，没有单独的问询授予，管不了「能问不能报」或反过来。
 3. **问询不挡出发，挡不挡归一线客户端**（TF owner、一线客户端 owner）。本仓今天没有一线客户端代码。客户端读到阻断怎么处置（不发车、转人工、找谁放行）未定，是一线客户端那一侧待补的产品策略。不问就出发的设备照样落册（ADR-0205）。
 4. **问询在关务判断册上留行**（CC owner、运维）。判断标识含拟出发时点（微秒精度）：设备若按「此刻」轮询，每问一次就多一行判断；同一时点重复问才命中同一行。这本册的增长没有限流，也没有保留期。
-5. **段里有什么可以零成本探知**（TF owner）。段不按作业范围分：持任一 OFFSITE 作业范围授予的设备，可以对本租户任一段、任一时点问，拿到那一刻段里在控对象的标识与各自那一格。出发登记本来也能做到，但要落一条事实；问询不落记录，探知不留痕（关务判断册记了对象与时点，不记谁问的）。owner 若要收窄，可以按作业范围限段，或只回整格。
+5. **段里有什么可以零成本探知：有意偏离 UC-TF-005 的最小范围规则**（TF owner）。UC-TF-005 规则「跨客户共同运输只向执行方提供当前履约所需的最小范围，不能通过整批汇总暴露其他客户」与 `AT-TF-063`「严格按对象和授权隔离，不泄露其他客户范围」，出发口本已有一处偏离（ADR-0205 越权风险点 13：逐对象那一格列出同段每件，含别的客户的包裹）。问询把这处偏离放大了：段不按作业范围分，持任一 OFFSITE 作业范围授予的设备可以对本租户任一段、任一时点（含历史时点）问，拿到那一刻段里在控对象的标识与各自那一格；出发登记要落一条事实才拿得到，问询零成本，运输履约这一侧也不留痕（关务判断册记了对象与时点，不记谁问的）。本记录有意不收窄：只回整格不够用，随车设备要知道是哪一件被挡才卸得下它；按作业范围限段无从限起，段今天没有作业范围归属；只列被阻断的对象够设备用，但逐对象那一格与出发口是同一个线格式（决定一），只在问询这一口收窄，两口读数就分岔，破坏决定二。要收就两口一起收，那是改 ADR-0205 决定一的答复形状，不在本记录。待 TF owner 裁：只列被阻断的对象、只回整格，或等段有了作业范围归属再按作业范围限段，哪一种都是两口一起改。
 6. **不记谁问过**（TF owner、VE owner）。事后答不出「这台设备出发前问没问、问到的是什么」；违规出发之后追责只能看出发读数。要追溯，就另立问询留痕，归 TF owner。
 7. **同格要求两问之间册子不变**（TF owner）。两问之间段的参与被更正、班次登了下一版换了方向，读数都会不同。这是如实的，不是偏差；设备侧比对两份读数时要知道这一点。
 8. **集运单元的假干净读数照样继承**（TF owner、NO owner）。ADR-0205 越权风险点 5 原样适用：问询读到不受门禁的那一件若是袋或集运单元，只说明关务不认得它。
@@ -95,6 +99,8 @@ Date: 2026-10-19
 - [ADR-0149](./0149-business-command-faces-split-into-frontline-operator-and-integration-client-families.md)：决定二，作业事实渠道
 - [ADR-0022](./0022-http-status-carries-answer-formed-not-business-verdict.md)：状态码只答有没有形成答案
 - [ADR-0023](./0023-work-fact-identity-and-time-are-minted-by-the-device.md)：时刻由设备给，服务端不代铸
+- [ADR-0146](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)：三类
 - [UC-TF-005](../application/transport-fulfillment/UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md)：出发前门禁问询一条规则与 `AT-TF-226`–`231`
 - [TF CONTEXT](../domain/transport-fulfillment/CONTEXT.md)：Rules「实际移动与出发门禁读数」一节
+- [CC CONTEXT](../domain/customs-compliance/CONTEXT.md)「动作准入判断」词条、[GLOSSARY](../domain/GLOSSARY.md)「动作准入判断」「出发前门禁问询」、[CONTEXT-MAP](../domain/CONTEXT-MAP.md) `transport-fulfillment → customs-compliance`、[UC-CC-013](../application/customs-compliance/UC-CC-013-JUDGE-ACTION-ADMISSION.md)：请求时机各补一句
 - 票 `.scratch/demo-chain-gaps/issues/69-devices-preview-the-departure-gate-before-departing.md`
