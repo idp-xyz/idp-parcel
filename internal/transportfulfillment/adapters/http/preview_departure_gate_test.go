@@ -14,7 +14,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/domain"
 )
 
-// previewEndpoint 装一只真问询编排：读数那三口与 record_movement_fact_test.go 的出发用同一组替身（段 segment-1 里有 parcel-1，
+// previewEndpoint 装一只真问询编排：读数各口与 record_movement_fact_test.go 的出发用同一组替身（段 segment-1 里有 parcel-1，
 // 班次 schedule-1 自 NODE-SHA 到 NODE-SZX），Intake 是作业事实那一面。
 func previewEndpoint(t *testing.T, customs *movementCustomsDouble, intake tfhttp.DepartureGatePreviewIntake) http.Handler {
 	t.Helper()

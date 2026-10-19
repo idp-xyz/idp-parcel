@@ -53,28 +53,13 @@ type DepartureGatePreviewer interface {
 	Preview(ctx context.Context, command application.PreviewDepartureGateCommand) (application.PreviewDepartureGateResult, error)
 }
 
-// UnconfiguredIntake 与 WorkFactCommandIntake 对本口的答法声明在本文件，同 trigger_delivery_dispatch.go 的做法：这一口的
-// Intake 形、端点与两种答法同文件可读。语义与各自文件里其余各口一字不差。
+// UnconfiguredIntake 对本口的答法与其余各口同：不读请求、不构造命令，一律未配置。声明在本文件而不是 unconfigured_intake.go，
+// 同 trigger_delivery_dispatch.go 的做法：这一口的 Intake 形、端点与未配置答法同文件可读。作业事实那一种答法与其余各口
+// 一起在 work_fact_intake.go。
 var _ DepartureGatePreviewIntake = UnconfiguredIntake{}
 
 func (UnconfiguredIntake) IntakeDepartureGatePreview(context.Context, *http.Request) (application.PreviewDepartureGateCommand, error) {
 	return application.PreviewDepartureGateCommand{}, ErrAccessChannelNotConfigured
-}
-
-var _ DepartureGatePreviewIntake = (*WorkFactCommandIntake)(nil)
-
-// IntakeDepartureGatePreview 走 tenantFrom 那一道：作业范围只认 OFFSITE、设备要在用、操作者要在这个作业范围上持作业事实
-// 登记授予——与 IntakeMovementFact 同一道门，问得了的就是报得了出发的。
-func (intake *WorkFactCommandIntake) IntakeDepartureGatePreview(ctx context.Context, request *http.Request) (application.PreviewDepartureGateCommand, error) {
-	tenant, err := intake.tenantFrom(ctx, request)
-	if err != nil {
-		return application.PreviewDepartureGateCommand{}, err
-	}
-	var payload DepartureGatePreviewPayload
-	if err := decodeClosedPayload(request.Body, &payload); err != nil {
-		return application.PreviewDepartureGateCommand{}, err
-	}
-	return payload.Command(tenant)
 }
 
 // NewPreviewDepartureGateEndpoint 交回出发前门禁问询的 HTTP 入口。
