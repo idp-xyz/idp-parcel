@@ -1,7 +1,7 @@
 # 18 段起讫折成价卡区域的折法（ADR-0148 越权风险点 5）
 
 Category: enhancement
-Status: 完工，待评审与进 main——2026-10-18 Claude Code 会话代决并实施（用户「你作为业务和系统专家自决……解决所有的问题」授权），裁定见「裁定」与 ADR-0189，分支 `claude-rfc18`；完成记录见文末。此前 needs-info——2026-10-10 22:2x 通道 1 自 [17](17-initial-route-pricing-input-from-customer-declaration.md) 分诊拆出（用户授权自决）；待 PP owner 或用户在「待定」两种形态间拍板，通道 1 不代裁
+Status: resolved——2026-10-18 进 main（至 `7362f553`）。Claude Code 会话代决并实施（用户「你作为业务和系统专家自决……解决所有的问题」授权），裁定见「裁定」与 ADR-0189，分支 `claude-rfc18`；完成记录见文末。此前 needs-info——2026-10-10 22:2x 通道 1 自 [17](17-initial-route-pricing-input-from-customer-declaration.md) 分诊拆出（用户授权自决）；待 PP owner 或用户在「待定」两种形态间拍板，通道 1 不代裁
 Blocked by: 无（「待定」已由 ADR-0189 代决）
 归档：不属 [psb/04](../../product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md) 的子票集；放在本目录是因为它挡在 [11](11-demo-network-adopted-as-reference-configuration.md) 判据一的演示动线上——17 的机制半边落地之后，演示候选的逐段区域仍答`未配置`，候选缺成本依据。
 地盘：`internal/networkrouting/`（段计价区域的端口、登记用例、真库适配器、批文译装、成本取数侧的区域来源）；`migrations/network_routing/`；`cmd/parcel-network-register/`；`cmd/parcel-dispatch/` 的 `routeCosts`；演示种子 `data/network/` 与 `seed.sh` 一行；ADR-0189 与 NR CONTEXT。
@@ -60,3 +60,8 @@ Blocked by: 无（「待定」已由 ADR-0189 代决）
   - 补用例：同段再登撞主键、按线路版本隔离、`-kind leg-pricing-zone` 的路由、批文译装、绑了目录的卡即使登了区也待判断。
   - 改了过时的注释与计数：`parcel-network-register` 包注与 `commandFor`、登记用例包注、dispatch 接线测试头注、`seed.sh`。
 - 第二轮复核（隔离子代理）：三条阻断都已修，修订没带进新的阻断，判 PASS。另提三条非阻断，都已修：票 20 原先钉的提交已不可达，改钉 `f8351cef`；ADR-0189 越权风险点按编号排好；迁移 0019 与登记门的注释不再把库上约束说满——`btrim` 只去空格，制表、换行一类由登记门挡。迁移头注里「另立一本册」的理由也照 ADR 改了。
+
+## 进 main 记录（2026-10-18）
+
+- rebase 到 `3cb862db` 之后，在干净的游离检出上跑全量 `go test -p 1 -count=1 ./...`（带 55432 DSN），钉 `7362f553`：143 包 ok，0 FAIL，0 SKIP。
+- 快进推到 main：`3cb862db..7362f553`。机制清点在同一棵干净树上重生成，另起一笔。
