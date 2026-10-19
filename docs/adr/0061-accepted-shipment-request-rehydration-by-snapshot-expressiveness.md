@@ -48,3 +48,4 @@ Date: 2026-08-18
 - [ADR-0030：聚合重建按状态逐个开门](./0030-rehydration-admits-one-state-at-a-time-by-snapshot-expressiveness.md)：本记录推进它「今天只开`已提交`」那一格；判据与其余各条不变
 - [ADR-0028：聚合的重建与构造分属两扇门](./0028-aggregate-rehydration-is-a-separate-door-that-validates-without-recomputing.md)：重建仍只校验不重算
 - [ADR-0029：按标识取回原状态失败时按恢复动作分格](./0029-retrieval-failure-algebra-is-partitioned-by-recovery-action.md)：已接受缺产物与门外状态分两个哨兵
+- [ADR-0188：已拒绝委托的重建门按快照表达能力开门](./0188-rejected-shipment-request-rehydration-by-snapshot-expressiveness.md)：本记录决定一「`已拒绝`、`已撤回`仍由入口以 `ErrRehydrationStateNotSupported` 拒绝」里`已拒绝`那一半被推进；Status 与其余各条不变
