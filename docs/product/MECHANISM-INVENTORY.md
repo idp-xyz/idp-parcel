@@ -18,11 +18,11 @@
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 208 | 150 | 34 | 63 | 12 | 9 |
-| transportfulfillment | 211 | 207 | 35 | 42 | 13 | 42 |
+| transportfulfillment | 213 | 214 | 36 | 42 | 13 | 42 |
 | visibilityexception | 108 | 104 | 12 | 31 | 8 | 11 |
-| **合计** | 1422 | 1340 | 182 | 335 | 62 | 186 |
+| **合计** | 1424 | 1347 | 183 | 335 | 62 | 186 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 100、测试 202。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 100、测试 204。
 
 ## 跨上下文消费缝：47 组，136 个生产文件
 
@@ -76,7 +76,7 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 6 |
 
-## 迁移：12 个模块共 259 份 SQL
+## 迁移：12 个模块共 261 份 SQL
 
 | 模块 | 份数 |
 |---|---|
@@ -90,7 +90,7 @@
 | party_commercial | 39 |
 | pilot_governance | 8 |
 | settlement_accounting | 39 |
-| transport_fulfillment | 34 |
+| transport_fulfillment | 36 |
 | visibility_exception | 27 |
 
 ## 接线面：接入面端点 159 个，消费适配器 47 个生产文件，直投路由表 33 条
@@ -140,7 +140,7 @@
 | visibilityexception | 10 |
 | **合计** | 33 |
 
-## 端口：声明 526 个；基线口径缺 32，精确口径缺 2
+## 端口：声明 530 个；基线口径缺 36，精确口径缺 2
 
 基线口径缺（名字未在任何适配器/平台生产文件出现）：
 
@@ -172,9 +172,13 @@
 - `settlementaccounting.SupplierPayableAccountRegister` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.SettlementCatalogues）
 - `settlementaccounting.SupplierPayableAccountView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres.SettlementCatalogues）
 - `transportfulfillment.ActualCarrierJudgmentView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.ActualCarrierJudgments）
+- `transportfulfillment.BookingAnswerView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.BookingAnswers）
+- `transportfulfillment.BookingView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.BookingRequests）
 - `transportfulfillment.DepartureSegmentView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.FulfillmentSegments）
 - `transportfulfillment.FailedAttemptSource` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.PickupAttempts）
 - `transportfulfillment.FulfillmentSegmentView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.FulfillmentSegments）
+- `transportfulfillment.SegmentCommissionAdoptionView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.SegmentCommissionAdoptions）
+- `transportfulfillment.TransportCommissionView` （虚低：精确口径已实现，实现者 go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres.TransportCommissions）
 - `visibilityexception.NotificationChannelGateway` 
 
 精确口径缺（无具体类型完整实现）：
