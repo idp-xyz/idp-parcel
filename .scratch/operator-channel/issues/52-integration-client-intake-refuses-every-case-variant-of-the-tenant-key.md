@@ -1,7 +1,7 @@
 # 52 集成客户端 Intake 拒自报租户只认精确键：载荷带 `tenantid` 一类大小写变体即改写认证租户——跨租户登凭证与资金事实、探询他租户在册内容、给他租户植入毒行
 
 Category: bug
-Status: in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（操作者与集成客户端渠道逐口核代数时发现；跨租户写入，已可触发，优先；用户授权代决）；分支 `claude-oc52`
+Status: resolved——2026-10-18 进 main（与 52、33 同批，代码验证钉 `f446d010`），见「进 main 记录」。此前 in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（操作者与集成客户端渠道逐口核代数时发现；跨租户写入，已可触发，优先；用户授权代决）；分支 `claude-oc52`
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)（票 26 评审遗留研判的逐口核）
 出处：逐口核代数研判（workflow review26-face-algebra-sweep）监管凭证登记口一行，探针与日志路径见「复现」。
@@ -117,3 +117,9 @@ Blocked by: 无
   - **Spec**：阻断无。认证租户不再拼回 JSON 再解；三个在线译装（`RegulatoryCredentialFromJSONForTenant`、`ExternalFundsFactFromJSONForTenant`、`ExternalFundsFactCorrectionFromJSONForTenant`）解不含租户格的内容类型，任何大小写的租户键都是未知字段，严格解码拒成 400；拒自报改 `strings.EqualFold` 只管提示。真库回归在旧代码上红（`tenantid`、`tenantiD` 把凭证与资金事实写进他租户），修后绿；变异自检证实真正挡住变体的是严格解码。
   - **Standards**：阻断无。非阻断 2：(1) VE `refuseSelfReportedTenant` 同改 EqualFold，出了地盘，但同类同改、有先红后绿，留下。(2) `internal/networkrouting/adapters/registrationjson/translate.go · refuseSelfReportedTenant` 只认 `tenant_id`、`internal/parcelpricing/domain · RehydratePriceCardRegistrationForTenant` 只认 `tenant`；会话读码核过两处都由调用方给的租户注入命令、文档里的租户格不被采用，不越租户，只是变体自报被悄悄收下——建议另立一张卫生票同改 EqualFold。
   - **未做的格**：票 15 补记不适用——本票是集成客户端口，不是操作者决定口。
+
+### 进 main 记录（2026-10-18，会话 idp-parcel-9b）
+
+- 原分支 `claude-oc52`（基 `c783151b`）各笔重放到 main `05dbf409` 之上（新 SHA `2aace3fa`…`ea651f59`；机制清点那一笔与对端 no-directional-basis/01 的清点相撞，在重放后的树上重新生成；原 SHA 作封存出处）。同批 52、33 一次推送。
+- 推送方全量一次：钉 `f446d010` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 142 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上改动 `.go` 的 `gofmt -l` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
+- 评审见 Comments。

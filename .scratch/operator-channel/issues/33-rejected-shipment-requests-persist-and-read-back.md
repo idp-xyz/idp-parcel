@@ -1,7 +1,7 @@
 # 33 「已拒绝」委托写得进、读不回，主动拒绝留痕不落库：拒绝口与处置「拒绝」去向的重放、提交口原样重放、「已拒绝修正」关联都读不回已拒绝委托
 
 Category: bug
-Status: in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 15 之三、之四补核发现；读侧今天可达，优先；用户授权代决）；分支 `claude-oc33`
+Status: resolved——2026-10-18 进 main（与 52、33 同批，代码验证钉 `f446d010`），见「进 main 记录」。此前 in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 15 之三、之四补核发现；读侧今天可达，优先；用户授权代决）；分支 `claude-oc33`
 Blocked by: 无
 父票：[15](./15-operation-decision-faces-take-operator-intake.md)
 出处：票 26 遗留研判中补核票 15 之三、之四（簇 C6）发现；补记随 operator-channel/39。
@@ -160,3 +160,9 @@ ADR-0030 / ADR-0061 只挡住了读：`已拒绝`因为快照缺主动拒绝的�
   - **Spec**：阻断无。写侧补上主动拒绝留痕（主动拒绝与处置「拒绝」都写），依据缺席只对拒绝决定放宽；重建门开到「已拒绝」，按 ADR-0188 对账表逐格校验，「失败校验项」与「主动拒绝留痕」恰有其一，补表达之前写下的行按坏数据拒（不从处置记录推回留痕，守 ADR-0028）。三个消费方真库回归（提交重放、处置「拒绝」重放、续办信封撞上已拒绝委托）在。
   - **Standards**：阻断无。非阻断 1：`authorized_disposition_test.go` 头注「读回那一半今天由重建门挡在门外」随开门失实，已在 `083bfd70` 改指往返用例（作者报告点出的地盘外一句注释）。ADR-0061、ADR-0030 只加 Links 指针，正文未动。
   - **无发现**：领域包未引 HTTP/pgx；新重建面在架构门名单同笔登记；合成值只用 `SYN-`；没有迁移。
+
+### 进 main 记录（2026-10-18，会话 idp-parcel-9b）
+
+- 原分支 `claude-oc33`（基 `b58b10ef`）各笔重放到 52 之后（新 SHA `b79258b8`…`f446d010`；原 SHA 作封存出处）。同批 52、33 一次推送。
+- 推送方全量一次：钉 `f446d010` 的隔离 detached 检出，带 DSN `go test -p 1 -count=1 -v ./...` 退 0——有测试的包 142 个 ok、0 FAIL；`--- SKIP` 1（`TestHelperTemplateOwnerProcess`，照设计跳过）。同一检出上改动 `.go` 的 `gofmt -l` 无输出，`go build ./...`、`go vet ./...` 退 0，机制清点重生成零差。
+- 评审见 Comments。
