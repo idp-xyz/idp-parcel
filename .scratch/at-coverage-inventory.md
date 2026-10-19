@@ -18,16 +18,16 @@
 
 | 桶 | 数量 |
 |---|---|
-| ① 已钉住 | 329 |
-| ② 机制候选 | 224 |
+| ① 已钉住 | 333 |
+| ② 机制候选 | 233 |
 | ③ 实例/闸门 | 143 |
 | ④ 机制未落地 | 425 |
-| 合计 | 1121 |
+| 合计 | 1134 |
 
 | 前缀 | 总数 | ① | ② | ③ | ④ |
 |---|---|---|---|---|---|
 | CC | 425 | 35 | 0 | 89 | 301 |
-| NO | 62 | 34 | 21 | 7 | 0 |
+| NO | 75 | 38 | 30 | 7 | 0 |
 | NR | 53 | 24 | 28 | 1 | 0 |
 | PC | 36 | 35 | 1 | 0 | 0 |
 | PS | 93 | 66 | 25 | 2 | 0 |
@@ -108,6 +108,10 @@
 | `AT-NO-060` | internal/nodeoperations/application/dispose_identity_conflict_test.go::TestADispositionAppendsOnEveryChainOfTheUnit |
 | `AT-NO-061` | internal/nodeoperations/domain/directional_basis_test.go::TestIdentityBasisReadsEachJudgmentChainHead；cmd/parcel-api/reception_one_mark_two_units_test.go::TestTheWiredReceptionTurnsOneMarkOnTwoUnitsIntoAnIdentityConflict（真库面：一码两物之后两件的原因集） |
 | `AT-NO-062` | internal/nodeoperations/application/identity_conflict_cause_test.go::TestAnAmbiguityOnlyConflictIsReleasedOnceTheDeclarationIsGone；internal/nodeoperations/application/identity_conflict_cause_test.go::TestAnAmbiguityOnlyConflictStaysWhileADeclarationRemains；cmd/parcel-dispatch/node_identity_ambiguity_release_test.go::TestTheWiredDispatchReleasesAnAmbiguityOnlyConflictOnceTheDeclarationIsGone；cmd/parcel-dispatch/node_identity_ambiguity_release_test.go::TestTheWiredDispatchKeepsConflictsTheRetiredDeclarationDidNotCause |
+| `AT-NO-063` | internal/nodeoperations/domain/delivery_scope_test.go::TestAPreAdviceCountsOnlyWhenEveryConditionHolds（推导半边：没带依据、预报没列这个号、节点不符、时窗外、已撤回各答未证并附原因；收寄落待识别、候选照记归票 ps-external-mark-relations/11） |
+| `AT-NO-068` | internal/nodeoperations/domain/delivery_scope_test.go::TestAnUnregisteredWindowAnswersUnconfiguredApartFromUnverified（推导半边：时窗没有生效行答未配置、与未证分开；身份按没有范围判归票 11） |
+| `AT-NO-070` | internal/nodeoperations/domain/delivery_scope_test.go::TestAPreAdviceCountsOnlyWhenEveryConditionHolds（推导半边：撤回之后按依据不适用·已撤回判；撤回口与「撤别人的与查无此预报同答」的命令面归票 09） |
+| `AT-NO-074` | internal/nodeoperations/domain/delivery_handover_note_test.go::TestAHandoverNoteEstablishesScopeOnlyWhenEveryClaimIsConfirmed；internal/nodeoperations/domain/delivery_scope_test.go::TestAHandoverNoteScopeIsAllOrNothing（领域半边：只确认 A 不成立、B 否认仍不成立、全部确认才成立；成员另行归入的命令面归票 12） |
 | `AT-NR-001` | internal/networkrouting/application/create_initial_route_test.go::TestThreeParcelsKeepThreeIndependentResults；internal/networkrouting/domain/initial_route_plan_test.go::TestAnInitialRoutePlanCarriesItsFullSelectionBasis；internal/networkrouting/domain/route_ranking_test.go::TestSelectionFollowsTheStrategysDeclaredCriterionOrder |
 | `AT-NR-002` | internal/networkrouting/application/create_initial_route_test.go::TestTwoParcelsFormTwoIndependentPlans |
 | `AT-NR-003` | internal/networkrouting/application/create_initial_route_test.go::TestAReplayReturnsExistingResultsAndAConflictOverwritesNothing |
@@ -394,6 +398,15 @@
 | `AT-NO-043` | 同一来源事实重复或内容冲突 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-044` | 路由变化与旧指令下分拣并发 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
 | `AT-NO-045` | 节点完成备货、点验和物理装载 | UC-NO-003-PROCESS-CONSOLIDATE-AND-SEAL-PARCELS.md |
+| `AT-NO-064` | 送站带客户账户 A 的送站预报、号码在列；同号在册里标识 A 的一件和 B 的一件，B 另有一份`已提交`委托也报了它 | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
+| `AT-NO-065` | 有可验证交付范围（A），A 的两份已接受委托都报了这个号；或 A 的一件在册、A 另一份`已提交`委托也报了它 | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
+| `AT-NO-066` | 有可验证交付范围（A），号码在 A 的预报里，但 A 的委托还没接受，册上只有 B 的一件 | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
+| `AT-NO-067` | 号码经渠道包裹件号在册里只标识一件，没有歧义信号，送站没有可验证交付范围 | UC-NO-002-RECEIVE-CUSTOMER-DELIVERED-PARCEL.md |
+| `AT-NO-069` | 客户账户经首方口提交送站预报 | UC-NO-006-ESTABLISH-A-VERIFIABLE-DELIVERY-SCOPE.md |
+| `AT-NO-071` | 节点开立送站交接单，收寄带它的标识；把一件缺范围的待识别实物归入；关闭后再归入 | UC-NO-006-ESTABLISH-A-VERIFIABLE-DELIVERY-SCOPE.md |
+| `AT-NO-072` | 运营操作者确认交接单对客户账户 A 的绑定：有授权交付关系、没有、本租户一条都没登记、交付方就是 A 所属参与方本身 | UC-NO-006-ESTABLISH-A-VERIFIABLE-DELIVERY-SCOPE.md |
+| `AT-NO-073` | 客户账户 A 经客户渠道对交接单作结论：交接单未关闭、已关闭且声称了 A、没声称 A | UC-NO-006-ESTABLISH-A-VERIFIABLE-DELIVERY-SCOPE.md |
+| `AT-NO-075` | 交接单名下有因范围未证而待识别的作业实物，交接单最后一个绑定得到确认 | UC-NO-006-ESTABLISH-A-VERIFIABLE-DELIVERY-SCOPE.md |
 | `AT-NR-007` | 产品明确允许待路由，委托已接受但当前仍无可行候选 | UC-NR-001-CREATE-INITIAL-ROUTE.md |
 | `AT-NR-008` | 候选参考某班次可用性和容量风险后被选中 | UC-NR-001-CREATE-INITIAL-ROUTE.md |
 | `AT-NR-013` | 客户声明偏好某线路，但合同和产品未承诺该偏好 | UC-NR-001-CREATE-INITIAL-ROUTE.md |
@@ -1239,6 +1252,8 @@ SA 费用确认（3 测）与 CC 放行门禁（2 测）对表后**零点名**�
 2026-10-19 追记（票 demo-chain-gaps/32）：UC-TF-005 新立 `AT-TF-110`–`116`（出发门禁读数），随票在领域、编排、适配器、真库与装配用例上补 Covers 点名，全部入①；半边覆盖在行内注明。①309→316（TF 30→37），TF 总数 97→104，合计 1113→1120；②③④不变。号取 110 起而不接 105：同波票 17 占 105–106、票 23 占 105–107，两票先进 main 时合起来占 105–109；票 27 自取 120 起。进 main 时仍按 `AT-TF-1(0[5-9]|1[0-9])` 全仓 grep 复核一遍。
 
 追记十三（票 no-reception-identity/07，2026-10-19）：票 no-reception-identity/07 在 UC-NO-002 新增 `AT-NO-062`「只因歧义信号落下的身份冲突，声明它的委托被拒绝或撤回」，随冲突来由、重核对象放宽与 PS 声明撤除门铃同票落地，点名直接入①（编排面、生产装配真库面）。①328→329（NO 33→34），合计 1120→1121（NO 61→62，`docs/application` 的 AT 全集随 UC-NO-002 扩了这一行）。
+
+追记十四（票 ps-external-mark-relations/08，2026-10-19）：票 ps-external-mark-relations/07 在 UC-NO-002 新增 `AT-NO-063` 至 `AT-NO-068`、新立 UC-NO-006（`AT-NO-069` 至 `AT-NO-075`），本表都未随之扩，照扫描口径补进。票 08 立了送站预报、送站交接单、预报有效时窗册与可验证交付范围的推导，测试点名的四条入①、都只是半边，半边在行内注明：`AT-NO-063`、`AT-NO-068`、`AT-NO-070` 是推导半边，`AT-NO-074` 是领域半边，各自的收寄、命令口一半归票 09、11、12。其余九条未被测试引用、属 NO 机制面，入②。①329→333（NO 34→38）、②224→233（NO 21→30），合计 1121→1134（NO 62→75，`docs/application` 的 AT 全集随 UC-NO-002 与 UC-NO-006 扩了这几行）。数在分支 `claude-psxm08` 的起点 `a2ff42f6` 加本票测试上量，只对这一加成立。
 
 ### 两盘之间新落的硬句测试面（不入①，逐面列出供领票比对）
 
