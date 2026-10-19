@@ -128,6 +128,10 @@ echo "== 网络目录登记（network-routing：演示租户采用参考配置 n
 # 段计价区域（ADR-0189 决定二）：演示线路各段共引那张成本卡，卡没绑分区目录、只有 Z1，每段都登 Z1——这是演示租户的
 # 租户取值，不是产品默认。没登时候选成本停在待判断。区域挂在已在册的线路版本上，所以排在线路之后。
 "$BIN/parcel-network-register" -kind leg-pricing-zone -file "$SEEDS/network/22-leg-pricing-zones-cn-sg-v1.json"
+# 路由策略修订 2 是采用之后的租户修订（同上海枢纽修订 2）：声明冻结形态「剩余段数」，剩余不超过一段即冻结。采用行装不下
+# 这一格——冻结段数是租户取值，参考配置不带。没有它，收寄后的路由复核在计划仍适用时答冻结形态未配置（票
+# product-strategy-boundary/34）。
+"$BIN/parcel-network-register" -kind route-strategy -file "$SEEDS/network/23-route-strategy-cn-sg-v2.json"
 
 echo "== 关务案件配置登记（customs-compliance：就绪/授权/规则/义务/门禁/建案/口岸/路径/凭证/协作） =="
 "$BIN/parcel-customs-register" readiness-register -input "$SEEDS/customs/01-readiness-cn-export.json"

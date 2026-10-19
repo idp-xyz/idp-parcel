@@ -1,0 +1,11 @@
+{
+  "tenant_id": "SYN-TENANT-01",
+  "code": "SYN-RS-CN-SG-01",
+  "version": 2,
+  "applicable_scope": "NETWORK_SERVICE",
+  "ranking_form": "COST_SINGLE_DIMENSION",
+  "freeze_form": "REMAINING_SEGMENT_COUNT",
+  "freeze_remaining_segments": 1,
+  "effective_from": "2026-06-01T00:00:00Z",
+  "basis": "SYN-NET-OPS/CHANGE-RS-FREEZE-2606"
+}
