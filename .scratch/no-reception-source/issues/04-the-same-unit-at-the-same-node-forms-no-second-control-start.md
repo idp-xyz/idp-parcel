@@ -1,7 +1,7 @@
 # 04 第四期：同一作业实物在同一节点已有当前收寄时并入、不另起控制起点；仅扫描的待确认由后来的明确接收或拒收续办
 
 Category: enhancement
-Status: ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（02、03 进 main 后开工），分支 `claude-nrs04`，NO 迁移号 0009；与 no-reception-identity/06 并行。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）
 Blocked by: 03 进 main。功能上只依 02（来源文档给出待确认与拒收行的作业实物，前版机制给出续办）；与 03 同改收寄编排、PG 适配器与迁移号，按票号串行落。
 父票：[01](./01-node-reception-preserves-the-delivery-source.md)
 出处：票 01 裁定分期之「四、同一作业实物重复控制起点的挡法」与「同一作业实物按什么认」「仅扫描的待确认怎样续办」两问；ADR-0199 决定四。落地次序排在第三期（票 05）之前：翻转的前提里有一项就是本票的挡法。

@@ -1,7 +1,7 @@
 # 06 身份冲突处置（UC-NO-004）：运营决定「身份冲突处置」逐链追加处置版、连带指明，按包裹的读面认处置截断，重核跳过被排除的包裹；管理台复核页加处置动作
 
 Category: enhancement
-Status: ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 04 拆出（代决，用户 2026-10-16 授权「你作为业务和系统专家你来自决」）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领，分支 `claude-nri06`，NO 迁移号 0010、access_identity 迁移号 0011、治理种子 governance/27；与 no-reception-source/04 并行。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 04 拆出（代决，用户 2026-10-16 授权「你作为业务和系统专家你来自决」）
 Blocked by:
 - no-reception-source/03 进 main。处置之后可再经重核，决定九改的正是它落下的重核分格；它还同改收寄库 PG 适配器、复核目录与管理台待识别实物页。
 - 05 进 main。处置要靠身份一格读链头才解得开，`AT-NO-053`、`AT-NO-054` 断言的就是解开之后的身份一格。
