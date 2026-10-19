@@ -107,6 +107,16 @@ func (adapter *FormOnEvaluationRequestSubmittedAdapter) HandleSubmittedEvaluatio
 	if err != nil {
 		return fmt.Errorf("form evaluation from request %s: %w", requestID, err)
 	}
+	return foldFormation(command, requestID.String(), result)
+}
+
+// foldFormation 把入口的封闭结果折成消费两格：已形成 / 已存在答 nil 入账不重投，其余各格一枚哨兵或原样上抛。
+// BUY 与 SELL 两路共用这一套：结果格与恢复动作都是入口的，与请求出自哪一本册无关，两套折法只会各自走样。
+func foldFormation(
+	command ppapplication.FormEvaluationFromRequestCommand,
+	requestID string,
+	result ppapplication.FormEvaluationFromRequestResult,
+) error {
 	switch result.Outcome {
 	case ppapplication.RequestEvaluationFormed, ppapplication.RequestEvaluationExisting:
 		return nil
