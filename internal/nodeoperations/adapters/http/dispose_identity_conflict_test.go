@@ -39,6 +39,14 @@ func (store *recheckStore) FindUnitIntakes(_ context.Context, _ domain.TenantID,
 	return found, nil
 }
 
+// dispositionEndpointStore 让重核那只收寄库替身也答处置取实物锁的那一问：内存里没有锁可取，交回空即可；收寄那一问的替身答法
+// （同一实物同一节点认当前收寄）这里用不着。
+type dispositionEndpointStore struct{ *recheckStore }
+
+func (dispositionEndpointStore) FindCurrentJudgmentsAtNode(context.Context, domain.TenantID, domain.HandlingUnitID, domain.NodeReference) ([]ports.ReceptionRecord, error) {
+	return nil, nil
+}
+
 type dispositionEndpointFixture struct {
 	store    *recheckStore
 	intents  *downstreamDouble
@@ -105,7 +113,7 @@ func newDispositionEndpointFixture(t *testing.T) *dispositionEndpointFixture {
 	intents := &downstreamDouble{}
 	handler, err := application.NewDisposeIdentityConflictHandler(application.DisposeIdentityConflictDeps{
 		ServiceResults: &serviceResultsDouble{},
-		Receptions:     store,
+		Receptions:     dispositionEndpointStore{store},
 		Register:       store,
 		Versions:       &recheckVersions{},
 		Downstream:     intents,

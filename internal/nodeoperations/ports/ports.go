@@ -274,8 +274,9 @@ type PendingIdentityLookup interface {
 }
 
 // IdentityDispositionRegister 是身份冲突处置要问收寄册的两问（ADR-0210 决定二至四）。与 ReceptionStore 分立，理由同
-// PendingIdentityLookup；生产上三者是同一只收寄库适配器。处置要取的包裹锁不另开口：它就是 ReceptionStore.FindOtherUnitIntakes 那一
-// 把，处置照收寄与重核同一个问法去取，同一件包裹上的三条路才串在同一把锁上。
+// PendingIdentityLookup；生产上三者是同一只收寄库适配器。处置要取的锁不另开口：实物锁是 ReceptionStore.FindCurrentJudgmentsAtNode
+// 那一把，包裹锁是 ReceptionStore.FindOtherUnitIntakes 那一把，处置照收寄与重核同一个问法去取，同一件实物、同一件包裹上的几条路才
+// 串在同一把锁上。
 type IdentityDispositionRegister interface {
 	// FindByJudgmentVersion 同 PendingIdentityLookup 的同名一问：指名的所处置的版本、链上的前版都按它取。
 	FindByJudgmentVersion(

@@ -139,7 +139,7 @@ type DisposeIdentityConflictDeps struct {
 
 // DisposeIdentityConflictHandler 编排身份冲突处置（UC-NO-004；ADR-0210 决定二至四、六、七）。
 //
-// 调用方负责事务：包裹锁、追加的各版与收寄意图必须同生共死。
+// 调用方负责事务：实物锁、包裹锁、追加的各版与收寄意图必须同生共死。
 type DisposeIdentityConflictHandler struct {
 	deps DisposeIdentityConflictDeps
 }
@@ -190,8 +190,12 @@ func (handler *DisposeIdentityConflictHandler) Dispose(
 		return replayed, err
 	}
 
-	// 先实物后包裹（ADR-0210 决定四）：作业实物的锁未落地，只取包裹锁。要动的包裹先在锁外读出来，取锁之后再读一遍链头；锁外之后
-	// 才落下的关联在下面补锁，漏锁的一格由（租户，前版）唯一兜底。
+	// 先实物后包裹（ADR-0210 决定四），与收寄同一个次序：主实物与所列连带实物按标识排序取实物锁，再按关联排序取包裹锁。要动的包裹
+	// 在实物锁下读出来，取完包裹锁再读一遍链头；重核不取实物锁，它在两次读之间落下的关联在下面补锁，漏锁的一格由（租户，前版）唯一
+	// 兜底。
+	if err := handler.holdUnits(ctx, command); err != nil {
+		return DisposeIdentityConflictResult{}, err
+	}
 	held := map[domain.ParcelAssociationReference]bool{}
 	if err := handler.holdParcels(ctx, command, held); err != nil {
 		return DisposeIdentityConflictResult{}, err
@@ -312,6 +316,27 @@ func (handler *DisposeIdentityConflictHandler) replay(
 		return DisposeIdentityConflictResult{}, false, errors.New("node operations: stored disposition digest is not comparable")
 	}
 	return DisposeIdentityConflictResult{outcome: outcome, disposition: recorded.Disposition, versions: []ports.ReceptionRecord{recorded}}, true, nil
+}
+
+// holdUnits 取主实物与所列连带实物的实物锁，按标识排序。锁就是收寄认同一实物时取的那一把（ports.ReceptionStore.FindCurrentJudgmentsAtNode
+// 查之前取的那一把，按租户与实物、不按节点），处置照同一个问法去取，交回的那几版不用；节点取这件实物在册上任一行的，锁与节点无关。
+// 册上没有这件实物就不取：所列的连带实物查无此物，后面答「关联对象另有归属」，不落版。
+func (handler *DisposeIdentityConflictHandler) holdUnits(ctx context.Context, command DisposeIdentityConflictCommand) error {
+	units := append([]domain.HandlingUnitID{command.Unit}, coDisposedUnitsOf(command)...)
+	slices.SortFunc(units, func(left, right domain.HandlingUnitID) int { return strings.Compare(left.String(), right.String()) })
+	for _, unit := range units {
+		rows, err := handler.deps.Register.FindUnitIntakes(ctx, command.TenantID, unit)
+		if err != nil {
+			return fmt.Errorf("read the unit %q before holding it: %w", unit, err)
+		}
+		if len(rows) == 0 {
+			continue
+		}
+		if _, err := handler.deps.Receptions.FindCurrentJudgmentsAtNode(ctx, command.TenantID, unit, rows[0].Intake.Node()); err != nil {
+			return fmt.Errorf("hold the unit %q: %w", unit, err)
+		}
+	}
+	return nil
 }
 
 // holdParcels 取这次处置要动的各件包裹的锁：指定的那件，加主实物与所列连带实物在册上带过的每一件关联。锁就是收寄与重核按包裹读

@@ -18,9 +18,21 @@ import (
 
 const dispositionOperator = "OPERATOR/https://id.syn.example/dex#SYN-OPERATOR-NRI06"
 
-// dispositionStore 在收寄库替身外面补两问：按实物读带收寄的各行；按包裹读别的实物关联时跳过被处置版接续过的行。
+// dispositionStore 在收寄库替身外面补两问：按实物读带收寄的各行；按包裹读别的实物关联时跳过被处置版接续过的行。holds 记下取锁的
+// 那两问（实物、包裹）被问的次序。
 type dispositionStore struct {
 	*receptionStoreDouble
+	holds *[]string
+}
+
+func (store dispositionStore) FindCurrentJudgmentsAtNode(
+	ctx context.Context,
+	tenant domain.TenantID,
+	unit domain.HandlingUnitID,
+	node domain.NodeReference,
+) ([]ports.ReceptionRecord, error) {
+	*store.holds = append(*store.holds, "unit:"+unit.String())
+	return store.receptionStoreDouble.FindCurrentJudgmentsAtNode(ctx, tenant, unit, node)
 }
 
 func (store dispositionStore) FindOtherUnitIntakes(
@@ -29,6 +41,7 @@ func (store dispositionStore) FindOtherUnitIntakes(
 	parcel domain.ParcelAssociationReference,
 	unit domain.HandlingUnitID,
 ) ([]ports.ReceptionRecord, error) {
+	*store.holds = append(*store.holds, "parcel:"+parcel.String())
 	records, err := store.receptionStoreDouble.FindOtherUnitIntakes(ctx, tenant, parcel, unit)
 	if err != nil {
 		return nil, err
@@ -92,7 +105,7 @@ type dispositionFixture struct {
 func newDispositionFixture(t *testing.T) *dispositionFixture {
 	t.Helper()
 	fixture := &dispositionFixture{
-		store:       dispositionStore{receptionStoreDouble: newReceptionStore()},
+		store:       dispositionStore{receptionStoreDouble: newReceptionStore(), holds: &[]string{}},
 		identity:    &identityViewDouble{},
 		services:    &serviceResultViewDouble{},
 		versions:    &versionFactoryDouble{},
@@ -129,8 +142,16 @@ func newDispositionFixture(t *testing.T) *dispositionFixture {
 // arrive 让一件实物贴着 mark 经收寄编排送站，PS 照 candidates 作答，交回落册的那一行。
 func (fixture *dispositionFixture) arrive(t *testing.T, sourceID, unit string, ambiguous bool, candidates ...domain.ParcelAssociationReference) ports.ReceptionRecord {
 	t.Helper()
+	return fixture.arriveAt(t, oneMarkCommand(t, sourceID, unit), ambiguous, candidates...)
+}
+
+// arriveAt 同 arrive，命令由调用方给：同一件实物在另一个节点再送站才另起一条判断链，在同一节点再来是并入已有收寄（ADR-0199
+// 决定四），不成链。
+func (fixture *dispositionFixture) arriveAt(t *testing.T, command application.ReceiveDeliveredUnitCommand, ambiguous bool, candidates ...domain.ParcelAssociationReference) ports.ReceptionRecord {
+	t.Helper()
+	sourceID := command.SourceID
 	fixture.identity.candidates, fixture.identity.ambiguous = candidates, ambiguous
-	result, err := fixture.receive.Handle(context.Background(), oneMarkCommand(t, sourceID, unit))
+	result, err := fixture.receive.Handle(context.Background(), command)
 	if err != nil {
 		t.Fatalf("收寄 %s：%v", sourceID, err)
 	}
@@ -427,7 +448,9 @@ func TestADesignationMustCoDisposeExactlyTheUnitsAssociatedNow(t *testing.T) {
 			return []domain.CoDisposedUnit{coDisposed(t, "SYN-UNIT-NRI06-A", a.early.JudgmentVersion)}
 		},
 		"另牵连别的包裹": func(t *testing.T, a arranged) []domain.CoDisposedUnit {
-			a.fixture.arrive(t, "SYN-DELIVERY-NRI06-A-AGAIN", "SYN-UNIT-NRI06-A", false,
+			again := oneMarkCommand(t, "SYN-DELIVERY-NRI06-A-AGAIN", "SYN-UNIT-NRI06-A")
+			again.Node = mustValue(t, domain.NewNodeReference, "SYN-NODE-NRI06-OTHER")
+			a.fixture.arriveAt(t, again, false,
 				mustValue(t, domain.NewParcelAssociationReference, "SYN-PARCEL-NRI06-Y"), mustValue(t, domain.NewParcelAssociationReference, "SYN-PARCEL-NRI06-Z"))
 			return []domain.CoDisposedUnit{coDisposed(t, "SYN-UNIT-NRI06-A", a.conflict.JudgmentVersion)}
 		},
@@ -572,7 +595,7 @@ func TestRejectedDispositionsLandNothing(t *testing.T) {
 	}
 }
 
-// Covers: `AT-NO-060`：一件实物在两条判断链上都有当前有效版本（两次送站：一次多候选冲突、一次零候选），处置指名其中一版——两条链
+// Covers: `AT-NO-060`：一件实物在两条判断链上都有当前有效版本（在两个节点各送站一次：一次多候选冲突、一次零候选），处置指名其中一版——两条链
 // 各追加一版处置版；指定一件时意图只交一封，落在接收时刻最早的那一版上。身份一格不再被另一条链上的旧判断左右。
 func TestADispositionAppendsOnEveryChainOfTheUnit(t *testing.T) {
 	y := func(t *testing.T) domain.ParcelAssociationReference {
@@ -588,7 +611,9 @@ func TestADispositionAppendsOnEveryChainOfTheUnit(t *testing.T) {
 			t.Fatal(err)
 		}
 		conflicted, _ := conflictResult.Record()
-		earlier := fixture.arrive(t, "SYN-DELIVERY-NRI06-M2", "SYN-UNIT-NRI06-M", false)
+		other := oneMarkCommand(t, "SYN-DELIVERY-NRI06-M2", "SYN-UNIT-NRI06-M")
+		other.Node = mustValue(t, domain.NewNodeReference, "SYN-NODE-NRI06-OTHER")
+		earlier := fixture.arriveAt(t, other, false)
 		if len(fixture.heads(t, "SYN-UNIT-NRI06-M")) != 2 || !conflicted.IdentityConflict || earlier.IdentityConflict {
 			t.Fatal("没落成两条链")
 		}
@@ -650,5 +675,24 @@ func TestAThirdArrivalAfterADispositionConflictsOnlyWithTheUnitAssociatedNow(t *
 	}
 	if head := fixture.head(t, "SYN-UNIT-NRI06-A"); head.JudgmentVersion != notIt.JudgmentVersion {
 		t.Fatalf("A 那条链被追加了 %s——被处置为「不是它」的实物又被拉回冲突", head.Key.SourceID)
+	}
+}
+
+// Covers: 取锁次序「先实物后包裹」（ADR-0210 决定四，与收寄同一个次序）：主实物与连带实物按标识排序取实物锁，之后才取包裹锁。
+func TestADispositionHoldsTheUnitsBeforeTheParcel(t *testing.T) {
+	fixture := newDispositionFixture(t)
+	_, conflict, late := fixture.oneMarkOnTwoUnits(t)
+	*fixture.store.holds = nil
+	command := fixture.command(t, "SYN-UNIT-NRI06-B", late, domain.DispositionDesignatesParcel)
+	command.CoDisposed = []domain.CoDisposedUnit{coDisposed(t, "SYN-UNIT-NRI06-A", conflict.JudgmentVersion)}
+	fixture.disposeOK(t, command)
+	holds := *fixture.store.holds
+	if len(holds) < 3 || !slices.Equal(holds[:3], []string{"unit:SYN-UNIT-NRI06-A", "unit:SYN-UNIT-NRI06-B", "parcel:SYN-PARCEL-NRI06-X"}) {
+		t.Fatalf("取锁次序 %v, want 先 A、B 两件实物，再那件包裹", holds)
+	}
+	for _, hold := range holds[3:] {
+		if strings.HasPrefix(hold, "unit:") {
+			t.Fatalf("取过包裹锁之后又取实物锁：%v", holds)
+		}
 	}
 }
