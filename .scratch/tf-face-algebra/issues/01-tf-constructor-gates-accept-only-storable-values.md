@@ -1,7 +1,7 @@
 # 01 TF 构造门按登记册存得下的值收：零时刻之后不足一微秒的业务时间写得进、读不回，引用里的 NUL 答 500
 
 Category: bug
-Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 代决并认领（分支 `claude-tfa01`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 代决并认领（分支 `claude-tfa01`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment-load-assignment-registrations, /transport-fulfillment/movement-facts, /transport-fulfillment/delivery-attempts
@@ -98,3 +98,60 @@ Blocked by: 无
   - 作者自验；
   - 非作者评审（空闲通道，或 `/code-review` 的隔离子代理，两轴分开）；
   - 推送方在干净检出上带 DSN 跑全量。
+
+## 完成记录（2026-10-19，会话 idp-parcel-9b 的实施子代理，分支 claude-tfa01）
+
+基线 `62683e80`。提交：`95433dc3`（判零）、`04c592a0`（NUL）、`aaf07c84`（真库回归）、`35b31431`（真渠道回归）、`cf36018a`（机制清点）。
+
+### 落点
+- 判零：`FormLoadAssignment`、`LoadAssignment.ReviseMembers`、`LoadAssignment.Withdraw`、`RecordMovementFact`、`TransportMovementFact.Correct`（发生时刻与更正时刻两格）的时刻非零门改判 `AtRegistryPrecision(t).IsZero()`；存值不变。`AtRegistryPrecision` 头注那条规则补「时刻非零门同属此类」，未另立定义。
+- NUL：`newRequiredValue` 含 NUL 答新哨兵 `ErrValueContainsNUL`（与 `ErrBlankValue` 并列）；各构造门与编排照旧折成`未受理`，编排与端点未改。
+- 未放 `parseOptionalInstant`，未动 PG 适配器。
+
+### 各格对应用例
+- 领域判零：`registry_storable_values_test.go` 的 `TestALoadAssignmentAtTheZeroInstantOnTheRegistryIsNotFormed`、`TestLoadAssignmentRevisionAndWithdrawalAtTheZeroInstantOnTheRegistryAreRefused`、`TestAMovementFactAtTheZeroInstantOnTheRegistryIsNotRecorded`、`TestAMovementFactCorrectionAtTheZeroInstantOnTheRegistryIsRefused`（零点后 1ns / 999ns / `+14:00` 写法 500ns 拒；恰为零点拒；零点后 1µs、零点前 1ns 照常）。夹具自检 `TestSubMicrosecondFixturesAreZeroOnTheRegistry` 用测试里独立写的 `Truncate(time.Microsecond)`。
+- 领域 NUL：`required_value_test.go` 的 `TestRequiredValuesRefuseNUL`（首尾中间含 NUL 拒；前后带空白的非空值原样收）。
+- 真库：`adapters/postgres/storable_values_regression_test.go` 的 `TestALoadAssignmentAtTheRegistryZeroIsNotAcceptedAgainstARealRegistry`、`TestAMovementFactAtTheRegistryZeroIsNotAcceptedAgainstARealRegistry`（零点格 `INPUT_NOT_ACCEPTED`、版本行成员行事实行零行；零点后 1µs 首登后 `FindByKey` 读得回、原样重放答 `…_VERSION_EXISTS`）、`TestValuesWithNULAreNotAcceptedAgainstARealRegistry`（装载分配版本、新身份成员、移动事实地点、派送尝试证据含 NUL 答`未受理`，事务提交成功，所列各表零行）。
+- 真渠道：`cmd/parcel-api/storable_values_channel_test.go` 的 `TestLoadAssignmentUnstorableValuesAreNotAcceptedOnTheProductionChannel`（生产端点构造 + 生产准入桥 + `buildSegmentOperations`）、`TestMovementFactUnstorableValuesAreNotAcceptedOnTheProductionChannel`（生产 `buildWorkFactIntakes` + `buildMovementFactOrchestration`）、`TestDeliveryAttemptEvidenceWithNULIsNotAcceptedOnTheProductionChannel`（`WorkFactCommandIntake` + `buildDeliveryAttemptOrchestration`，任务先经操作者渠道开立）。零点格与 NUL 格答 200；派送尝试的`未受理`在线上写作 `SOURCE_NOT_ACCEPTED`（该口既有代数），另两口写作 `INPUT_NOT_ACCEPTED`。
+
+### 先红后绿
+- 领域：修复前判零各例与 NUL 那例都红（`err = <nil>`）。
+- 真库（把两份领域文件退回 `62683e80` 跑）：装载分配零点后 1ns 答 `LOAD_ASSIGNMENT_FORMED`、移动事实答 `MOVEMENT_FACT_RECORDED`、NUL 那例「事务没有提交：commit unexpectedly resulted in rollback」。
+- 真渠道（同法）：装载分配零点格 201 且回显 `assignedAt":"0001-01-01T00:00:00Z"`、移动事实 201 回显零点、派送尝试证据 NUL 答 500 `NO_ANSWER_FORMED`。
+- 变异自检：判零逐个调用点（`FormLoadAssignment`、`ReviseMembers`、`Withdraw`、`RecordMovementFact`、`Correct` 的发生时刻与更正时刻）单独改回按纳秒，领域判零用例各自转红；撤掉 NUL 检查，领域、真库与三条真渠道 NUL 用例全红（真渠道装载分配版本、移动事实地点、派送尝试证据各答 500）。真库与真渠道里成员含 NUL 那格排在版本格之后或与之同表遍历，变异下先红的是版本格，成员格未单独取到红。
+
+### 复现不了的格
+无。票面现象各格均复现；「零点前 1ns 照常」与「恰为零点照旧拒」一致。
+
+### 同形门清点（TF `domain` 非测试文件 `IsZero()`，本票地盘外未改）
+前提按 `AtRegistryPrecision` 头注：本上下文登记册时刻一律落 `timestamptz`（未逐口真库实测）。以下构造门或转移门对入参时刻按纳秒判零，而对应重建对读回值判零（标「复用」者为重建复用构造门，其余为重建自带 `IsZero` 检查），同属写得进、读不回：
+- 场外揽收（地盘文件 `offsite_pickup.go`，本票只动了 `newRequiredValue`）：`FormOffsitePickup`、`OffsitePickup.Correct` ↔ `RehydrateOffsitePickup`。
+- 履约段：`ActualFulfillmentSegment.join` / `end` / `CloseSegment` / `rederive`、`FulfillmentParticipation.End` ↔ `RehydrateActualFulfillmentSegment`、`rehydrateParticipation`。
+- 承运商判断：`NewCarrierEvidence`、`OpenActualCarrierJudgment`、`ActualCarrierJudgment.Consider` / `RecogniseCarrierIdentity` / `WithdrawEvidence` ↔ `RehydrateActualCarrierJudgment`、`rehydrateJudgmentVersion`。
+- 揽派任务：`OpenDispatchTask`、`DispatchTask.Reschedule` / `close` ↔ `RehydrateDispatchTask`。
+- 履约尝试与交付：`FormFulfillmentAttempt`、`FormAttemptObjectResult`、`FormDeliveryAttemptResult`、`EffectiveDelivery.CorrectProof` ↔ `RehydrateEffectiveDelivery` 等（派送尝试册的重建路径未逐一核）。
+- 外部承运凭证：`NewCredentialApplicability`（复用）、`CredentialApplicability.closedAt` ↔ `RehydrateExternalCarrierCredential`。
+- 外部跟踪事实：`AdoptExternalCarrierTracking`、`JudgeEffectiveTimeByRule` / `JudgeEffectiveTimeExplicitly`（复用）↔ `RehydrateExternalTrackingFact`、`rehydrateEffectiveTime`。
+- 主单：`MasterDocument.nextVersion` ↔ `RehydrateMasterDocument`。
+- 运输委托与订舱：`SubmitTransportCommission`、`TransportCommission.Cancel` / `MarkTransportStarted`、`SubmitBookingRequest`、`BookingRequest.Cancel`、`FormCarrierAcceptance` ↔ `RehydrateTransportCommission`、`RehydrateCarrierAcceptance`。
+- 交接：`FormTransportHandover`、`TransportHandover.Correct` ↔ `RehydrateTransportHandover`。
+- 费用发生：`FormTransportChargeOccurrence`（复用）、`TransportChargeOccurrence.ReviseValidity` ↔ `RehydrateChargeOccurrence`。
+- 班次与运力：`FormTransportSchedule`、`CapacityPool.Reserve` / `convert` ↔ `RehydrateCapacityPool`。
+- 替代路程、受监管处置：`FormAlternateJourney`、`FormRegulatoryTransportDisposition`（重建路径未核）。
+- 不属此类：取值访问器（`…At()` / `Cancelled` / `Closure` 等「零即缺席」）、`valid` / `established` 形状不变量、`EffectiveTimeRule.EffectiveTimeFor` 的现算锚点。
+
+不经 `newRequiredValue` 的自由文本格：`CarrierEvidenceSpec.Material`（`NewCarrierEvidence`，落 `name_material text`）、`CarrierFirstEffectivePickupSpec.Material` 与更替那一格的 `Material`（落 `claimed_material text`）、`RegulatoryTransportDispositionSpec.DeclineBasis`（落 `decline_basis text`）——都只判空不判 NUL，同病。重建侧 `EffectiveRule` / `EffectiveRuleVersion` 来自库面，不是入参。`Direction` 已经 `newRequiredValue`。
+
+顺带所见（地盘内，未改，不属判零类）：`TransportMovementFact.Correct` 不挡「更正时刻早于发生时刻」，`RehydrateMovementFact` 却拒；目前无生产调用方（`ReviseMembers` / `Withdraw` 同样只在领域里可达）。
+
+以上地盘外各项建议另立票按本票同法逐口收。
+
+### 门
+- `gofmt -l internal/transportfulfillment cmd/parcel-api` 无输出；`go build ./...`、`go vet ./...` 退 0。
+- 带 DSN `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/... ./internal/architecture/...` 全 ok；`-v` 下 TF `adapters/postgres` 无 `--- SKIP`。未跑全仓全量。
+- 机制清点重生成：仅测试文件计数变（见 `cf36018a`），生产文件不变，单独提交。
+- 未做：票 15 补记下的回写行、非作者评审与推送方全量（属会话与推送方）。
+
+证据层级：`S`（隔离合成，`SYN-` 值）。
+
+评审：待会话读 diff 审。
