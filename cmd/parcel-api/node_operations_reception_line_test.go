@@ -19,13 +19,13 @@ import (
 	tfhttp "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/http"
 )
 
-// Covers: 票 operator-channel/10 完成判据第二条——节点收寄口改走作业事实渠道。编排走生产装配（buildReceptionOrchestration），
-// 中间是生产的端点构造函数。作业范围种类必须是 NODE，节点引用取作业范围的引用。
+// Covers: 票 operator-channel/10 完成判据「隔离放行用例改写为真渠道答复格用例」在节点收寄口上的那一格——收寄口走作业事实渠道。
+// 编排走生产装配（buildReceptionOrchestration），中间是生产的端点构造函数。作业范围种类必须是 NODE，节点引用取作业范围的引用。
 //
 // 明确拒收不经身份核对，真实落库答`未收寄`；明确接收的号码不在 PS 的外部标识关联册里，答`待识别`（ADR-0184：查过了、
 // 查无此号，真实建立收寄与控制）——两格都是编排形成的业务答案（ADR-0022：2xx 带 outcome），不是渠道层的 403。带 tenantId 的载荷在 Intake 就拒，编排一次也不该被调到。
 // 测试输入是隔离合成，只记 `S`。
-func TestIsolatedReceptionAnswersBusinessOutcomesAgainstARealDatabase(t *testing.T) {
+func TestNodeOperationsReceptionLineAnswersBusinessOutcomesAgainstARealDatabase(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
 	if err != nil {
