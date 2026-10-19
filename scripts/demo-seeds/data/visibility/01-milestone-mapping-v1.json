@@ -6,6 +6,7 @@
   "entries": [
     { "source": "NODE_OPERATIONS", "factKind": "node-intake", "milestone": "PICKED_UP" },
     { "source": "TRANSPORT_FULFILLMENT", "factKind": "handover-handed-over", "milestone": "IN_TRANSIT" },
+    { "source": "TRANSPORT_FULFILLMENT", "factKind": "movement-departure", "milestone": "DEPARTED" },
     { "source": "CUSTOMS_COMPLIANCE", "factKind": "external-result-release-full", "milestone": "CUSTOMS_CLEARED" },
     { "source": "TRANSPORT_FULFILLMENT", "factKind": "effective-delivery", "milestone": "DELIVERED" }
   ]

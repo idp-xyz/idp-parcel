@@ -1,0 +1,7 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "signalKind": "DEPARTURE_GATE_BLOCKED",
+  "version": "SYN-VE-DEPARTURE-GATE-V1",
+  "confidence": "SOURCE_CONFIRMED",
+  "approvedBy": "SYN-OPS-TRACKING-LEAD"
+}

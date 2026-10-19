@@ -201,6 +201,8 @@ echo "== 追踪与异常目录登记（visibility-exception：目录册 + 材料
 "$BIN/parcel-ve-register" claim-material-receipt -input "$SEEDS/visibility/10-claim-material-receipt-photo.json"
 "$BIN/parcel-ve-register" claim-material-receipt -input "$SEEDS/visibility/11-claim-material-receipt-invoice.json"
 "$BIN/parcel-ve-register" claim-material-receipt-revocation -input "$SEEDS/visibility/12-claim-material-receipt-invoice-revocation.json"
+# 出发门禁阻断信号规则一租户一条（ADR-0205 决定五与文末补记）：出发时关务判阻断的那一件形成信号；分诊规则不登这一类，信号进人工复核。
+"$BIN/parcel-ve-register" departure-gate-signal-rule -input "$SEEDS/visibility/13-departure-gate-signal-rule-v1.json"
 
 echo "== 代收与清分登记（collection-remittance：分户账、指令、事实与记账） =="
 # 一条 COD 指令走全程（票 admin-remainder-mechanism-batch/04）：渠道报收全额入账
