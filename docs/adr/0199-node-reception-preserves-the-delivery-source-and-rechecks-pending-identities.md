@@ -125,6 +125,10 @@ Date: 2026-10-19
 3. **决定五末项**「方向依据代码不改：重核版带关联，`JudgeIdentityBasis` 照现有折法就判成立」里「方向依据代码不改」与「照现有折法」，自票 no-reception-identity/05 进 main 起停用。这一项的结论维持：重核版是链头、带关联，判成立；未核对行照待识别折、不另立原因。
 4. 决定二的判断链与当前有效版本，是 ADR-0210 读链头与逐链追加处置版的底子，不变。
 
+## 复核记录（2026-10-19，决定原文不动）
+
+决定三第二个触发「复核页上由人对指名的一件待识别实物发起」由票 [no-reception-source/03](../../.scratch/no-reception-source/issues/03-pending-identities-are-rechecked-by-the-preserved-mark.md) 落成操作者渠道「运营决定」能力面的一种决定 `PENDING_IDENTITY_RECHECK`，归族依据 [ADR-0151](./0151-unassigned-command-faces-get-their-families.md) 决定一「管理台上作决定或判断的口」，准入照同一记录决定三判。命令口的路径与答复分格（含记身份冲突的行与来源未保全的旧行怎么答）见该票完成记录。
+
 ## Links
 
 - 部分停用于 [ADR-0210](./0210-identity-conflicts-are-disposed-by-an-operation-decision-and-the-identity-basis-reads-chain-heads.md)。
