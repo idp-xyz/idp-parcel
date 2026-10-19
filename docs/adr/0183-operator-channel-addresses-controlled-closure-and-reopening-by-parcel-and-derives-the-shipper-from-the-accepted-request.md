@@ -1,6 +1,6 @@
 # ADR-0183：操作者渠道上受控关闭与重开按包裹寻址，请求方与货主账户取包裹所属已接受委托的客户账户，不从载荷收
 
-Status: Accepted（2026-10-16，用户原话「你作为业务和系统超级专家，你自己全部独立完成吧」。Claude Code 会话据此代 PS owner 裁定下面六条，落在票 [operator-channel/15](../../.scratch/operator-channel/issues/15-operation-decision-faces-take-operator-intake.md) 做什么第 3 条那一格。裁决能力边界：读过 [ADR-0151](./0151-unassigned-command-faces-get-their-families.md) 决定二、七与越权风险点 4，PS CONTEXT「面单继续尝试决定」的定义、Rules 里受控关闭与重开各条与「面单继续尝试」生命周期，`FormContinuedAttemptDecisionHandler` 两条命令与重开那道货主重授权门，`ports.ContinuedAttemptDecisionAuthorizationQuery` 头注，`adapters/partycommercial` 的关闭 / 重开授权适配器头注（pc-gaps/13 裁决 ③），`ports.CurrentAcceptedParcelTargetView`，PS 已换口三口的操作者 Intake。没读：pc-gaps/13 票面原文、label-channel/30 票面原文、UC-PS 各篇。拿不准的列在文末「越权风险点」。）
+Status: Accepted（2026-10-16，用户原话「你作为业务和系统超级专家，你自己全部独立完成吧」。Claude Code 会话据此代 PS owner 裁定下面六条，落在票 [operator-channel/15](../../.scratch/operator-channel/issues/15-operation-decision-faces-take-operator-intake.md) 做什么第 3 条那一格。裁决能力边界：读过 [ADR-0151](./0151-unassigned-command-faces-get-their-families.md) 决定二、七与越权风险点 4，PS CONTEXT「面单继续尝试决定」的定义、Rules 里受控关闭与重开各条与「面单继续尝试」生命周期，`FormContinuedAttemptDecisionHandler` 两条命令与重开那道货主重授权门，`ports.ContinuedAttemptDecisionAuthorizationQuery` 头注，`adapters/partycommercial` 的关闭 / 重开授权适配器头注（pc-gaps/13 裁决 ③），`ports.CurrentAcceptedParcelTargetView`，PS 已换口三口的操作者 Intake。没读：pc-gaps/13 票面原文、label-channel/30 票面原文、UC-PS 各篇。拿不准的列在文末「越权风险点」。）；**部分停用**：决定五首句「两条命令没有提交操作者的格；本记录不给它们加格」已由 [ADR-0187](./0187-controlled-closure-and-reopening-record-request-and-operation-evidence-on-the-decision.md) 决定七停用，适用场景只限受控关闭口与重开口
 
 Date: 2026-10-16
 
@@ -74,3 +74,4 @@ ADR-0151 决定二把受控关闭与重开的身份格定成：提交操作者�
 - [ADR-0151：未归族的命令口各归其族](./0151-unassigned-command-faces-get-their-families.md)：本记录补上它决定二与越权风险点 4 留给 PS owner 的那一格，不改它任何一条
 - [ADR-0146：产品策略是机制与租户取值之间的第三类](./0146-product-strategy-is-a-third-class-between-mechanism-and-tenant-values.md)：本记录裁的是产品策略
 - [ADR-0150：合成租户当真实租户对待，隔离形态逐口退场](./0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md)：两口今天没有隔离放行，换口不涉及撤放行
+- [ADR-0187：受控关闭与重开把请求证据与操作证据落在决定上](./0187-controlled-closure-and-reopening-record-request-and-operation-evidence-on-the-decision.md)：部分停用本记录决定五首句（只限受控关闭口与重开口）；「复核记录二」的比较格不变，由其决定四补明证据不在比较格内
