@@ -506,6 +506,11 @@ func run(logger *slog.Logger) error {
 	if err != nil {
 		return err
 	}
+	// 容量预占口与释放口（ADR-0203）。
+	capacityDecisions, err := buildCapacityDecisions(db)
+	if err != nil {
+		return err
+	}
 	veRegistration, err := buildVERegistrationOrchestration(db)
 	if err != nil {
 		return err
@@ -757,6 +762,8 @@ func run(logger *slog.Logger) error {
 			identityDisposition,
 			chargeOccurrenceRegistration,
 			preAdviceWindowRegistration,
+			capacityDecisions,
+			capacityDecisions,
 		)),
 		ReadHeaderTimeout: 5 * time.Second,
 		IdleTimeout:       60 * time.Second,

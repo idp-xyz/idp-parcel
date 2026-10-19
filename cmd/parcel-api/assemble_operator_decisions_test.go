@@ -297,6 +297,9 @@ var swappedDecisionFaces = map[string]accessidentity.DecisionKind{
 	"/node-operations/identity-dispositions": accessidentity.DecisionIdentityConflictDisposition,
 	// 运输收费发生项登记（ADR-0207 决定六）。
 	"/transport-fulfillment-charge-occurrence-registrations": accessidentity.DecisionTransportChargeOccurrenceRegistration,
+	// 容量预占与容量释放（ADR-0203 决定三，`AT-TF-144`）：两种各自授予，持预占的在释放口答 403。
+	"/transport-fulfillment-capacity-reservations": accessidentity.DecisionCapacityReservation,
+	"/transport-fulfillment-capacity-releases":     accessidentity.DecisionCapacityRelease,
 }
 
 // Covers: 票 operator-channel/15 完成判据「无此决定种类的授予」那一格——授予按决定种类各自成立：持有别的每一种

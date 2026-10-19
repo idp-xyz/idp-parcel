@@ -183,6 +183,8 @@ func assembleBusinessEndpoints(
 	identityDisposition nodeopshttp.IdentityDispositionHandler,
 	chargeOccurrenceRegistration tfhttp.ChargeOccurrenceRegistrar,
 	preAdviceWindowRegistration nodeopshttp.PreAdviceWindowRegistrar,
+	capacityReservation tfhttp.CapacityReserver,
+	capacityRelease tfhttp.CapacityReleaser,
 ) []httpapi.BusinessEndpoint {
 	// 缺省朝拦：真渠道与隔离入参都缺席时，下面这组变量全取未配置即拒。
 	//
@@ -714,5 +716,10 @@ func assembleBusinessEndpoints(
 		// 预报有效时窗登记口（ADR-0212 决定二末项；ADR-0085 决定一）：节点作业登记写面的第一格，挂操作者渠道的登记册 Intake，写开关换
 		// 不了它（ADR-0150 决定三）。事物词取登记 CLI parcel-node-operations-register 的族名 pre-advice-window。
 		{Pattern: "/node-operations-pre-advice-window-registrations", Handler: nodeopshttp.NewRegisterPreAdviceWindowEndpoint(operatorRegistries.nodeOperations, preAdviceWindowRegistration)},
+		// 容量预占口与释放口（ADR-0203 决定三）：为一个业务范围占住、或还回一个池的一段容量，是操作者做出的生产决定，挂
+		// 「运营决定」能力面、各按自己那一种认证（ADR-0151 定族判据）；建池是登记册配置写，在容量池登记口那一行。写开关
+		// 换不了它们（ADR-0150 决定三）。
+		{Pattern: "/transport-fulfillment-capacity-reservations", Handler: tfhttp.NewReserveCapacityEndpoint(operatorDecisions.transport, capacityReservation)},
+		{Pattern: "/transport-fulfillment-capacity-releases", Handler: tfhttp.NewReleaseCapacityEndpoint(operatorDecisions.transport, capacityRelease)},
 	}
 }
