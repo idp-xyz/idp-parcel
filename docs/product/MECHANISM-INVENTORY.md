@@ -10,7 +10,7 @@
 | architecture（非业务） | 0 | 14 | 0 | 0 | 0 | 0 |
 | collectionremittance | 23 | 9 | 4 | 6 | 0 | 3 |
 | customscompliance | 119 | 114 | 22 | 47 | 10 | 16 |
-| networkrouting | 77 | 74 | 9 | 14 | 2 | 7 |
+| networkrouting | 77 | 77 | 9 | 14 | 2 | 7 |
 | nodeoperations | 86 | 86 | 11 | 23 | 4 | 12 |
 | parcelpricing | 133 | 122 | 17 | 16 | 1 | 23 |
 | parcelshipment | 209 | 203 | 20 | 39 | 10 | 19 |
@@ -18,11 +18,11 @@
 | pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
 | settlementaccounting | 208 | 150 | 34 | 63 | 12 | 9 |
-| transportfulfillment | 209 | 204 | 34 | 42 | 13 | 42 |
+| transportfulfillment | 211 | 207 | 35 | 42 | 13 | 42 |
 | visibilityexception | 108 | 104 | 12 | 31 | 8 | 11 |
-| **合计** | 1420 | 1334 | 181 | 335 | 62 | 186 |
+| **合计** | 1422 | 1340 | 182 | 335 | 62 | 186 |
 
-业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 99、测试 200。
+业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 100、测试 202。
 
 ## 跨上下文消费缝：47 组，136 个生产文件
 
@@ -76,14 +76,14 @@
 | visibilityexception | partycommercial | 1 |
 | visibilityexception | transportfulfillment | 6 |
 
-## 迁移：12 个模块共 258 份 SQL
+## 迁移：12 个模块共 259 份 SQL
 
 | 模块 | 份数 |
 |---|---|
 | access_identity | 15 |
 | collection_remittance | 1 |
 | customs_compliance | 24 |
-| network_routing | 19 |
+| network_routing | 20 |
 | node_operations | 14 |
 | parcel_pricing | 12 |
 | parcel_shipment | 26 |
@@ -93,7 +93,7 @@
 | transport_fulfillment | 34 |
 | visibility_exception | 27 |
 
-## 接线面：接入面端点 159 个，消费适配器 46 个生产文件，直投路由表 33 条
+## 接线面：接入面端点 159 个，消费适配器 47 个生产文件，直投路由表 33 条
 
 接入面端点按 `cmd/` 生产文件里 `[]httpapi.BusinessEndpoint` 字面量的条目数，按端点构造函数所在的 `internal/<上下文>/adapters/http` 归属；不按 `adapters/http/` 的文件数——一个处理器可挂多个端点。
 
@@ -123,9 +123,9 @@
 | parcelpricing | 2 | 0 | 0 | 0 | 2 |
 | parcelshipment | 13 | 1 | 1 | 0 | 15 |
 | settlementaccounting | 6 | 0 | 0 | 0 | 6 |
-| transportfulfillment | 1 | 0 | 0 | 0 | 1 |
+| transportfulfillment | 2 | 0 | 0 | 0 | 2 |
 | visibilityexception | 14 | 0 | 0 | 2 | 16 |
-| **合计** | 42 | 1 | 1 | 2 | 46 |
+| **合计** | 43 | 1 | 1 | 2 | 47 |
 
 直投路由表按 `cmd/` 生产文件里 `map[eventing.EventType]dispatch.Consumer` 字面量的条目数，按条目键（事件类型常量）所属的消费门包归属。路由表只随消费者一起长（ADR-0049 第三条），本表只报它此刻多长。
 
