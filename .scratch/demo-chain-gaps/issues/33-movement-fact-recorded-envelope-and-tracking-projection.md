@@ -1,7 +1,7 @@
 # 33 移动事实已形成信封与 VE 投影
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg33。2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
+Status: in-progress——隔离评审已过（0 阻断），修补完，待进 main，分支 claude-dcg33。2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [tf-chain-plan](../tf-chain-plan.md)。
 Blocked by: [32](./32-movement-facts-declare-segment-and-record-departure-gate-reading.md)
 地盘：TF 新 `postgres/movement_fact_handoff.go` 与端口、`record_movement_fact.go`；VE 新 inbox 消费者与派生；`cmd/parcel-dispatch/assemble.go`(+_test)；`cmd/parcel-api/assemble_movement_fact.go`；种子 visibility 映射（参考配置 + SYN 采用）。
 出处：[05](./05-movement-facts-are-unlinked-and-departure-gate-is-self-reported.md)；方案「05 移动事实与出发门禁」D05-1、D05-10，「跨票通则」X3，「需要的 ADR」ADR-0205。
@@ -37,7 +37,7 @@ M
 
 ### 代决（用户授权「你作为业务和系统专家自决……解决所有的问题」）
 
-权威落在 ADR-0205 文末补记（越权风险点续 14–21）。这里逐条记本票自决的几处；进了 ADR 的写明补记风险点几，只在票面的是装配与种子细节。
+权威落在 ADR-0205 文末补记（越权风险点续 14–23；22、23 由评审补登）。这里逐条记本票自决的几处；进了 ADR 的写明补记风险点几，只在票面的是装配与种子细节。
 
 1. **出发、移动、到达都交信封，不只出发。** 方案只说「移动事实已形成信封」，追踪要的不只门禁。引用式三键、指纹 ID、分区「租户/移动事实」；同内容重投重交同一份；交出失败答未决，续办引用与登记册读不动分开。
    - 越权风险点：移动与到达也进投影、未归类（补记 19，VE owner）。
@@ -97,5 +97,30 @@ M
   - 没碰 peer 地盘（`internal/nodeoperations/**`、`work_fact_intake*.go`、交接 / 有效交付 / 派送各文件、`apps/admin-web`），没碰 `main.go`、`endpoints.go`、`docs/adr/README.md`。
 - **号**：`AT-TF-156`–`161`（预分 156–165）；立票 52、53（预分 52–53）；VE 迁移 0027（非预分，按「其余上下文用 main 最大号的下一号」）；TF 迁移 0033 未用。
 - **合并预检**：对 `origin/main`（`1734f2a0`）`git merge-tree` 只有 `.scratch/at-coverage-inventory.md` 一处冲突（追记与行，与别票并行），按惯例两边都留、计数重算；`cmd/parcel-dispatch/assemble.go` 与分区登记表自动合入。
-- **派发令牌**：方案次序 dcg08 → dcg11 → 26 → 18 → 33；票 18 若同改路由表，本票那一行与它相邻时按两边都留合。
+- **派发令牌**：方案次序 dcg08 → dcg11 → 26 → 18 → 33；票 18 若同改路由表，本票那一行与它相邻时按两边都留合。波 3 落地顺序 20 → 24 → 18 → 33 → 29（方案「并行车道」），票 18（`claude-dcg18`）进 main 之前本票不落。
 - **待裁**（都已登进补记风险点）：信号规则册的在线面（票 52）；段后登记的事实补投（票 53）；读不动的出发要不要另一类信号（补记 17）；演示要不要演示自动建案。
+
+## 评审记录（2026-10-19，隔离评审一轮；作者子代理修补）
+
+阻断 0 项。非阻断 9 项，其中建议进 main 前修的 4 项。
+
+### 修了的
+
+1. **`cmd/parcel-ve-register` 包头「后两册」按位置指代失配**（建议进 main 前修）。本票在列表末尾追加出发门禁阻断信号规则一行，「后两册」就落到了别的册上。改为点名 `exception-disclosure-rules` 与 `conflict-signal-rule`（连同「由票 ve-disclosure-policy-view/02 接入」那句一起点名，原先括号里的「接入后两册」也是位置指代）；`departure-gate-signal-rule` 另起一句，写明还没有目录读口的 kind（票 [52](./52-departure-gate-signal-rule-has-no-online-registration-or-catalogue-read.md)）。
+2. **出发门禁阻断信号的发作期永不结束**（建议进 main 前修）。核实属实：生产代码里没有任何地方调 `SignalEpisode.End`，`RaiseSignalHandler` 对活跃发作期只记命中、不再分诊。ADR-0205 补记登**越权风险点 22**（VE owner）：规则册没有恢复边界，同一件后续的违规出发只记命中、不再分诊；是加恢复边界，还是让因果条件带上出发事实、每次违规各开一期，归 VE owner 裁。纯文档，不改代码——恢复边界的形状是 VE CONTEXT 层面的取舍（冲突信号同缺，属存量），不该由本票顺手定。
+3. **`record_movement_fact.go` 两处注释与实情不符**（建议进 main 前修）。改成实情：续办引用按停在哪一口分开，同一口重投引用不变；引用不透明、结果不带原因码，单看引用分不出是哪一口。交出失败那一格写明答未决即 2xx 出队（ADR-0022），同一份再报才补上；真库上入队失败把整笔带进中止态，随装配点提交失败上抛、事实一并回滚。ADR-0205 补记「信封」一条与 `AT-TF-156` 同步这一句。没有照收费发生项那样在结果里带出原因码：那要在移动事实口的线格式加一格，HTTP 适配器归作业事实族（peer 在途地盘相邻），本票只把注释改对。
+4. **信号不带事实依据**（不必进 main 前修，顺手登）。补记登**越权风险点 23**（VE owner）：`RaiseSignalCommand` 没有事实依据这一格（存量），日后加时这一路带上移动事实引用与版本、逐对象那一格的关务判断标识。
+5. **AT-TF-157–161 挂在 TF 用例、VE owner 从自己的用例找不到**（不必改，顺手做）。UC-VE-002、UC-VE-004 验收表下各加一行指向 UC-TF-005 的对应 AT 号，UC-VE-004 那行另指向风险点 22、23；没有迁号——另编 `AT-VE` 号要等 VE owner 复核，号段也不在本票预分范围内。
+
+### 没在本分支改的及去向
+
+6. **进 main 流程**（建议进 main 前做，不属作者这一步）：按方案波 3 顺序等票 18 先落；合并时 `.scratch/at-coverage-inventory.md` 两边都留、计数重算；全量测试钉 SHA，重生成 `MECHANISM-INVENTORY`。已写进上文「偏离与待裁」的派发令牌一条。另：修补后复做预合并，对 `origin/main`（`a2ff42f6`）仍只有 at-coverage-inventory 一处冲突；与 `claude-dcg29`（`ed993ac8`）在 UC-TF-005 验收表有一处冲突——两边都在 `AT-TF-125` 之后追加行，按号序两边都留（156–161 在前、166–170 在后）即可，修补前的 `4e302b24` 就已如此，不是本轮引入；与 `claude-dcg18`/`20`/`24` 无冲突。
+7. **`tenantBoundDepartureGateSignals` 与 `tenantBoundProjectionDerive` 的分诊编排构造逐字重复**：已在代决 8 登为运维风险点；去向是装配令牌（派发令牌）空出来后，在 `tenantBoundProjectionDerive` 上抽一个按租户构造信号编排的方法两处共用。本票守热点文件只追加，不在本分支动既有那一份。
+8. **三个 VE 适配器哨兵包住了全部 error（含装不回的确定性缺陷）**：存量模式，与交接、交付各 VE 适配器及冲突信号规则视图同形；去向随 ADR-0205 越权风险点 2——TF 仓储把装不回与连不上分开时一起收窄。
+9. **`docs/adr/README.md` 上 ADR-0205 两行并存**：票 32 合并时留下，不在本分支 diff；README 是跨票热点只追加行，删行不归本票。去向：进 main 时由协调方作文档小修删旧那一行。没有立票：本票预分的票号 52、53 已用完，自取号会与同波撞号。
+
+### 修补后验证
+
+- `go build ./...` 干净；`go vet`（`internal/transportfulfillment/application`、`cmd/parcel-ve-register`）与改动 Go 文件的 `gofmt -l` 干净。
+- `IDP_PARCEL_POSTGRES_DSN=… go test -p 1 -count=1` 全绿：`./internal/architecture/`、`./internal/transportfulfillment/application/`、`./internal/transportfulfillment/adapters/postgres/`、`./internal/visibilityexception/...`、`./cmd/parcel-ve-register/`、`./cmd/parcel-dispatch/`、`./cmd/parcel-api/`。
+- 演示种子本轮未改，未重灌。未跑全量，未重生成机制清点。
