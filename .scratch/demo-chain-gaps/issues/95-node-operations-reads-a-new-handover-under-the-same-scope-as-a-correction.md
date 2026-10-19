@@ -1,7 +1,7 @@
 # 95 同一（对象，范围）下另起一次交接：TF 当独立首登，NO 当前一次的更正，在身控制在错的那次交接转出
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-dcg95（基于 `origin/main` `5f0aa66d`），见文末「完成记录」。此前 needs-triage——2026-10-19 Claude Code 子代理立（演示动线重走，[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)「重走（钉 `8197fa2f`，2026-10-19）」停点一）。
+Status: in-progress——完工待评审与进 main，分支 claude-dcg95（基于 `origin/main` `5f0aa66d`），见文末「完成记录」；隔离评审 0 阻断，非阻断 4 项全修，见文末「评审记录」。此前 needs-triage——2026-10-19 Claude Code 子代理立（演示动线重走，[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)「重走（钉 `8197fa2f`，2026-10-19）」停点一）。
 Blocked by: 无
 地盘：二选一，见「要裁的」——TF `application/register_transport_handover.go` 首登那一步；或 NO `adapters/postgres/physical_control_transition.go` 的 `FindAdvancedInHandoverChain` 与 `application/transfer_control_on_handover.go`。文档 ADR-0214 补记、UC-NO-005。
 出处：[ADR-0214](../../../docs/adr/0214-node-control-transfers-out-and-in-on-an-authoritative-transport-handover.md) 越权风险点「同链按（对象，范围）认」；[UC-NO-005](../../../docs/application/node-operations/UC-NO-005-ADVANCE-NODE-CONTROL-ON-AN-AUTHORITATIVE-TRANSPORT-HANDOVER.md)。
@@ -144,3 +144,18 @@ S–M
   - 用了 `AT-NO-126`–`128`、新立票号 99、ADR-0220；
   - 没用迁移 `node_operations/0019`、新立票号 100。
 - **待裁**：ADR-0220 越权风险点与上面代决 1–9，待 NO owner 复核、TF owner 会签。票 99 的修法归 TF owner。存量行的处置归票 81。
+
+## 评审记录
+
+2026-10-19，隔离评审（作者子代理按评审 JSON 修订，分支 `claude-dcg95`）。阻断 0 项；非阻断 4 项全修，其中 1 项评审建议进 main 前修。
+
+- **转出一半头注把前版也算进「读不回答未决」**（建议进 main 前修，已修）：`transferOut` 头注步骤 1 原写「读回那一版与它的各前版；读不动或读不回答未决」，与实现、ADR-0220 决定二、UC-NO-005 都对不上。改为分格写：这一版或前版读不动、这一版还读不回答未决；前版读不回、读回的与键不符、回指成环或连不成一条链响亮失败，并写明为什么不能挪进未决（前版先于后版提交，读不回不是可见性滞后）。同一口径的两处旧注一并收紧到「还读不回这一版」：`AdvanceControlOnHandoverResult` 头注、消费侧适配器 `ErrControlTransferUndecided` 的注释。评审没列这两处，是复核时顺查出来的：措辞来自票 61、62，那时还没有前版要读，本票之后同样会被读成「前版读不回也重投」。
+- **派发哨兵名单注没列立链失败**（已修）：`nodeControlOnHandoverUndecidedSentinels` 头注「不在名单里」那一串在「提供方记录坏了」那一组后补上节点作业领域的 `ErrInvalidHandoverCorrectionChain`（来源给的前版连不成一条更正链，ADR-0220 决定二）。按符号名写，不计数。名单本身不变。
+- **迁移 0017 的索引注释已过时**（已修，落文字）：ADR-0220 Consequences 加一条，引迁移原句「同一（对象，范围）下各版是一条更正链。」，写明自 ADR-0220 起这本索引只是认链那一问的读路，不定义链；已发布的迁移不改，要不要另起迁移改名或改注释仍留给 NO owner（同「偏离与待裁」那一条）。没另立票：这不是缺陷，只是命名与注释的去留，由 owner 裁。
+- **README ADR-0214 一行两处「停用」方向不明**（已修）：原摘要末尾的「无条款停用。」改为「不停用别的记录的条款。」，说的是 ADR-0214 自己没有停用别的记录；后面追加的「｜**部分停用**」照全表惯例不动，说的是 ADR-0214 被 ADR-0220 停了一句。没改追加段的标题：全表凡部分停用的行都用同一个「｜**部分停用**」写法，只在这一行换写法会破坏惯例。
+
+没有不采纳的项，也没有另立新票。
+
+地盘说明：协调方的协作边界把 `internal/nodeoperations/**` 列为 idp-parcel-9b 的在途地盘。本轮只改本票已经改过的那几个 NO 文件里的注释，没有新增文件，也没有改代码行；`cmd/parcel-dispatch/assemble_node_control_on_handover.go` 不在热点名单内，本票此前没有改过它，这次只改了注释。
+
+修后验证：`go build ./...` 干净；`gofmt -l internal cmd migrations` 干净；`go vet ./internal/nodeoperations/... ./cmd/parcel-dispatch/ ./internal/architecture/` 干净；`IDP_PARCEL_POSTGRES_DSN=… go test -p 1 -count=1 ./internal/nodeoperations/... ./internal/architecture/ ./cmd/parcel-dispatch/` 全 ok。改动只在注释与文档，演示种子未动，未复跑演示，没重生成机制清点。
