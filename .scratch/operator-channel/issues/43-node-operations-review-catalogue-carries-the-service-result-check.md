@@ -1,7 +1,7 @@
 # 43 节点作业复核目录透出收寄的服务结果核对态，让「读不动」与「已查、无标记」在查阅答复里分得开
 
 Category: enhancement
-Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（两道 Blocked by 都已进 main：operator-channel/29、no-directional-basis/01 偏离标记半边），分支 `claude-oc43`。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 2 评审遗留；用户授权代决）
+Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（两道 Blocked by 都已进 main：operator-channel/29、no-directional-basis/01 偏离标记半边），分支 `claude-oc43`。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立（票 26 序 2 评审遗留；用户授权代决）
 Blocked by: operator-channel/29 进 main；no-directional-basis/01 偏离标记半边进 main（同改复核目录三份文件）
 父票：operator-channel/29（收寄遇依赖读不动的主修复票）。
 出处：
@@ -86,3 +86,14 @@ operator-channel/29 落地后，服务结果读不动的那次收寄会落成 IN
 - 管理台展示归 operator-channel/44，本票未碰 `apps/admin-web`。
 
 评审：待评审。
+
+## Comments
+
+### 评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审；2026-10-19，钉 `acf42f95`）
+
+两轴合审，0 阻断。
+
+- **Spec**：裁定三条落到。目录行用写侧同一个枚举 `ports.ServiceResultCheck`，PG 读面复用 `serviceResultCheckFrom`，词表一处定义；只有 INTAKE_FORMED 行带，待识别行 `String()` 为空、`omitempty` 下整键缺席；HTTP 字段与写侧 `receptionResponse` 同名同值。真库四行两两不同形，HTTP 在场与缺席各一例。
+- **Standards**：头注只写为什么（不折成布尔、缺席表不适用的惯例出处）；集外取值整页报错不折成「不带」，与按键读回同一纪律。
+- **非阻断（不另立票）**：集外取值那条错误路径没有用例——库面 CHECK 先拦住了，要造只能拆约束，作者已记。INTAKE_FORMED 行核对态为 NULL 时会与待识别行同形，是 operator-channel/29 评审已记的非阻断，生产写方恒写、存量已回填。
+- **与 no-reception-identity/01 的交叠**：ADR-0196 追加的冲突版是待识别行，不带核对态，目录上照常缺席。
