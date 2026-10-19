@@ -1,7 +1,7 @@
 # 03 第二期：待识别实物按存下的号重核（AT-NO-026）——PS 关联册新形成关联时交出信封、复核页人工发起，结果唯一即追加关联版
 
 Category: enhancement
-Status: in-progress——2026-10-19 评审补完工（推送方裁定两件：演示种子补齐、ADR-0199 追加复核记录；rebase 到 main `e8ef2398`），待评审。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（02 已进 main），分支 `claude-nrs03`；碰 cmd/parcel-dispatch/assemble.go 与 cmd/parcel-api/endpoints.go 已与另一会话对齐次序（本票先进）。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）
+Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 评审补完工（推送方裁定两件：演示种子补齐、ADR-0199 追加复核记录；rebase 到 main `e8ef2398`），待评审。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（02 已进 main），分支 `claude-nrs03`；碰 cmd/parcel-dispatch/assemble.go 与 cmd/parcel-api/endpoints.go 已与另一会话对齐次序（本票先进）。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 的作者子代理照票 01 拆出（代决）
 Blocked by: 02 进 main（重核拿的是 02 存下的来源文档；追加版要指名前版）
 父票：[01](./01-node-reception-preserves-the-delivery-source.md)
 出处：票 01 裁定分期之「二、按存下的号重核」与「重核由什么触发」那一问；ADR-0199 决定三。`AT-NO-026` 在 `.scratch/at-coverage-inventory.md` 里是机制候选，今天没有票、也没有人工关联口。
@@ -259,3 +259,14 @@ Blocked by: 02 进 main（重核拿的是 02 存下的来源文档；追加版�
 - `docs/adr/0199-…` 追加一节。
 
 两处都按推送方裁定动。
+
+## Comments
+
+### 评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审；2026-10-19，钉 `7bf269fd`，评审补后钉 `f021acd6`）
+
+两轴合审，0 阻断。
+
+- **Spec**：ADR-0199 决定三落到。PS 只在关联真插入时与关联同一笔事务交门铃（`RETURNING` 分真插入与重放，适用终态不交）；信封 ID 是 ADR-0185 的关联键指纹，分区键定长；Subject 原样带号、带不下（越 `MaxSubjectLength`、控制字符、非法 UTF-8）时换成号码摘要，载荷照样原样带号——门铃与关联同事务，信封被拒会把接受一起回滚，换 Subject 是对的。NO 第一个 inbox 消费者经 `RecheckByMark` 重核，身份读不动记等依赖、门铃重投。身份判断抽成 `identityJudge` 由收寄与重核共用一份（按包裹认、包裹锁、歧义信号、服务结果核对态都只写一处）。人工重核走运营决定新种类 `PENDING_IDENTITY_RECHECK`，冲突行与无来源旧行答 200 并说明原因。
+- **评审补（推送方裁定，已做于 `1deb9017`、`44e0c02c`、`0f1a3bd9`）**：演示种子照其余运营决定同形补授予、准入对照与治理区间（另在 `seed.sh` 加一行灌入新区间），临时库实灌核对过；决定种类的留痕只记一处，ADR-0199 文末追加复核记录；`appendIdentityConflicts` 头注照链头读法写全，「冲突行不重核」的理由改引 ADR-0210。
+- **与另一会话的共享文件**：`cmd/parcel-dispatch/assemble.go`、`cmd/parcel-api/endpoints.go`、`main.go` 只加行，与对方约定本票先进。
+- **已知（作者记在「发现」，不另立票）**：PS 关联册按号码建的 btree 索引有长度上限，超长号码写不进——本票之前就有，号码进册无长度门；真渠道接单入口上线前随 PS 侧入口校验收。
