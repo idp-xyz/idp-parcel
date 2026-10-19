@@ -1,7 +1,7 @@
 # 21 SELL 评价到客户费用：请求面、消费门与形成编排
 
 Category: enhancement
-Status: in-progress——2026-10-19 Claude Code 会话代决（用户「你作为业务和系统专家自决」授权）：裁定见 ADR-0190，实现拆到 [sell-customer-charge/01–05](../../sell-customer-charge/issues/)，本票随 05 收口。此前 needs-triage——2026-09-24 通道 2 立票（用户令通道 2 独立承接）；分诊时先定触发策略，机制半边随之拆笔
+Status: resolved——2026-10-19 随 [sell-customer-charge/05](../../sell-customer-charge/issues/05-demo-tenant-forms-an-estimated-customer-charge.md) 收口：01–05 都进了 main，演示包裹实走形成预估客户费用。裁定见 ADR-0190 与 ADR-0198。此前 in-progress——2026-10-19 Claude Code 会话代决（用户「你作为业务和系统专家自决」授权），实现拆到 [sell-customer-charge/01–05](../../sell-customer-charge/issues/)。此前 needs-triage——2026-09-24 通道 2 立票（用户令通道 2 独立承接）；分诊时先定触发策略，机制半边随之拆笔
 Blocked by: 无
 地盘：`internal/settlementaccounting`（SELL 请求、消费门、客户费用形成编排）、`internal/parcelpricing`（请求入口若需扩）、装配。
 出处：[票 05](./05-demo-journey-criterion-evidence.md) 格 19。

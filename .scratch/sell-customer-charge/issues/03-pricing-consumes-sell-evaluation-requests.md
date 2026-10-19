@@ -1,7 +1,7 @@
 # 03 计价：接 SELL 评价请求，按包裹建快照形成 SELL·客户费用评价
 
 Category: enhancement
-Status: 完工，待评审与进 main——分支 `claude-sell-03`（基于 `claude-sell-01`；2026-10-19 Claude Code 会话立，同日作者会话落地，见文末「完成记录」）。
+Status: resolved——2026-10-19 进 main（全量钉 `864248ab`；与 02、04、05 同批，见文末「进 main 记录」）。
 Blocked by: [01](./01-sell-request-identity-and-registers.md)、[02](./02-request-sell-evaluation-on-parcel-moment.md)（同改派发路由表，串行）
 地盘：`internal/parcelpricing` 的 ports、application（请求受理门）、adapters/settlementaccounting、adapters/inbox、按包裹的解析器（从 adapters/transportfulfillment 现有解析器里拆）；`cmd/parcel-dispatch` 路由与装配。
 出处：[ADR-0190](../../../docs/adr/0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 决定四；ADR-0171；ADR-0179 决定三。
@@ -73,3 +73,9 @@ Blocked by: [01](./01-sell-request-identity-and-registers.md)、[02](./02-reques
 - 已修的非阻断：完成记录的 SHA；带变更叙述的注释；共用哨兵 `ErrPricingInputUnavailable` 的头注补上 SELL 那一路的恢复动作；派发里「补正之后重投会变」改成如实说明预算耗尽之后的终态。机制清点在落地时于 tip 上重生成。
 - 落地次序：02、03、04 合成一批一起进 main，免得 03 先落时 SELL 评价被 BUY 消费门入账、之后再也投不到 SELL 那只消费者。
 - 留给后续：受理门可按方向配对来源键（BUY 带发生项、SELL 带包裹且带结算币种），今天两只翻译器各自守着；按包裹的解析器住在 `adapters/transportfulfillment` 归 ADR-0171 越权风险点 1，交 PP owner 复核。
+
+## 进 main 记录（2026-10-19）
+
+- 02–05 合成一批：rebase 到 main 后整批快进推送，与本记录同一次推送。批次分支 rebase 过两次，提交号随之变，本票 `0bf2373e` → `bfae2979`，`5517504e` → `b87bac0c`，`d694d157` → `45e27314`；评审修订是 `b144d421`。
+- 实走见 [05](./05-demo-tenant-forms-an-estimated-customer-charge.md) 的完成记录：一次性库上收寄采用之后形成预估客户费用 CNY 9600，与受理前冻结同额。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `864248ab`：144 包 ok，0 FAIL。机制清点在同一 tip 上重生成。

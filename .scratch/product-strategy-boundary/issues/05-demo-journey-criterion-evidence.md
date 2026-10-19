@@ -332,3 +332,13 @@ Claude Code 会话做，用户「你作为业务和系统专家自决……解�
 - 关务是旁路，不挡实物主链：主链编排都不读关务的案件、提交或放行。建案与提交没有生产入口，见 [18](./18-customs-case-and-declaration-submission-entry.md)；外部结果信封没有订阅者，见 [demo-chain-gaps/11](../../demo-chain-gaps/issues/11-external-result-received-has-no-subscriber.md)。出发门禁由设备自报，见 [demo-chain-gaps/05](../../demo-chain-gaps/issues/05-movement-facts-are-unlinked-and-departure-gate-is-self-reported.md)。
 - 客户侧各面（格 15、16）等 ADR-0139–0142；集成客户端各面等 [31](./31-demo-integration-client-needs-a-client-credentials-capable-issuer.md)。
 
+## 补走 SELL 段（2026-10-19）
+
+Claude Code 会话做，同一授权。格 19 今天在 main 上走得通：
+
+- 演示包裹收寄采用之后，结算发起 SELL 评价请求，计价按请求形成评价，结算经费用项目映射形成一笔预估客户费用：CNY 9600，与受理前冻结同额。
+- 终局那一路只入账、不重复计费。
+
+取证细节与库上读数只记在 [sell-customer-charge/05](../../sell-customer-charge/issues/05-demo-tenant-forms-an-estimated-customer-charge.md) 的完成记录，这里不复写。
+
+格 17、18、20、21 仍停在原处：BUY 那一侧见 [demo-chain-gaps/07](../../demo-chain-gaps/issues/07-transport-charge-occurrences-have-no-production-path.md)、[08](../../demo-chain-gaps/issues/08-buy-evaluation-recorded-consumer-never-forms-supplier-expected-cost.md)。

@@ -1,7 +1,7 @@
 # 02 结算：包裹计费时点到来时发起 SELL 评价请求
 
 Category: enhancement
-Status: 完工，待评审与进 main——分支 `claude-sell-02`（2026-10-19 Claude Code 会话立；完工见文末「完成记录」）。
+Status: resolved——2026-10-19 进 main（全量钉 `864248ab`；与 03、04、05 同批，见文末「进 main 记录」）。
 Blocked by: [01](./01-sell-request-identity-and-registers.md)。02、03、04 都改 `cmd/parcel-dispatch` 的路由表，按 02 → 03 → 04 串行做。
 地盘：`internal/settlementaccounting` 的 application、adapters/inbox、新目录 adapters/parcelshipment（若无）、adapters/partycommercial；`cmd/parcel-dispatch` 的路由表与装配。
 出处：[ADR-0190](../../../docs/adr/0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 决定二、三、六。
@@ -90,3 +90,9 @@ DSN `postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmode=disable`：
 - 已修的非阻断：端口里拒收哨兵的头注与实现对齐（整笔回滚、硬失败，不是入账不重投）；「包裹无商业解析」补进 ADR-0190 越权风险点 8；两处注释不再数别处的东西；完成记录的 SHA。
 - 记一笔：链上确定性的译不动（闭包查无等）也归未决，重试到预算耗尽才落失败，与受理前财务控制同先例。终局那一路没有真库端到端用例，重放用例没断言重交信封，留给后续。
 - 与票 03、04 合成一批进 main。
+
+## 进 main 记录（2026-10-19）
+
+- 02–05 合成一批：rebase 到 main 后整批快进推送，与本记录同一次推送。批次分支 rebase 过两次，提交号随之变，本票 `61c971e1` → `7f23601a`，`f99685a6` → `18ce3030`；评审修订是 `5513b729`。
+- 实走见 [05](./05-demo-tenant-forms-an-estimated-customer-charge.md) 的完成记录：一次性库上收寄采用之后形成预估客户费用 CNY 9600，与受理前冻结同额。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `864248ab`：144 包 ok，0 FAIL。机制清点在同一 tip 上重生成。

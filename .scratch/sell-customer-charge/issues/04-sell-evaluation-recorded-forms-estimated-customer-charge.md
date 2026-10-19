@@ -1,7 +1,7 @@
 # 04 结算：SELL 评价已记录经费用项目映射形成预估客户费用
 
 Category: enhancement
-Status: 完工，待评审与进 main——分支 `claude-sell-04`（基于 `claude-sell-03`；2026-10-19 Claude Code 会话立，同日作者会话落地，见文末「完成记录」）。
+Status: resolved——2026-10-19 进 main（全量钉 `864248ab`；与 02、03、05 同批，见文末「评审与进 main 记录」）。
 Blocked by: [03](./03-pricing-consumes-sell-evaluation-requests.md)（同改派发路由表，串行）
 地盘：`internal/settlementaccounting` 的 application（形成编排外层）、adapters/parcelpricing（SELL 消费门与评价读口）、adapters/inbox；`cmd/parcel-dispatch` 路由与装配。
 出处：[ADR-0190](../../../docs/adr/0190-a-parcel-billing-moment-requests-a-sell-evaluation-that-forms-the-estimated-customer-charge.md) 决定五、六；ADR-0169 决定一、二。
@@ -38,7 +38,7 @@ Blocked by: [03](./03-pricing-consumes-sell-evaluation-requests.md)（同改派�
 3. **SELL 读口**：
    - 采用快照多带两样：评价回指（照 `SellEvaluationRequestID` 读，没有回指是零值）和全部费用行的计价费用代码（按行序）。
    - 卡没声明金额取整不再报错，交回新的一格 `SellEvaluationAmountUndeclared`，回指与代码照带，不带金额。
-   - 「不是 SELL·客户费用」改用端口上的 `ports.ErrNotASellEvaluation`。适配器的同名变量就是它，应用层才分辨得出。
+   - 「不是 SELL·客户费用」改用端口上的 `ports.ErrNotASellEvaluation`，消费门按它分辨。评审后去掉了适配器里的同名别名。
 4. **形成编排外层**（做什么 1–3）：`application.FormEstimatedCustomerChargeHandler`。
    - 按回指读 SELL 请求。没有回指，或回指不在 SELL 请求册上（例如 BUY 请求标识），答「不归本编排」，零写入。
    - 请求已有结论就答「早有结论」：重放在这里落定，不再碰映射册与费用库。
@@ -117,3 +117,25 @@ Blocked by: [03](./03-pricing-consumes-sell-evaluation-requests.md)（同改派�
 7. **扇出顺序**：先 BUY、后 SELL。两路互不依赖到达顺序，排序只为与既有扇出「既有一路在前」的写法一致。
 8. 没改 `docs/`，也没重生成机制清点（留给进 main 时）。可补：ADR-0190 决定五与 UC-SA-002 可写明失败评价、金额未声明、币种不符三格的去向；`CONTEXT-MAP` 的 `parcel-pricing → settlement-accounting` 一段可补扇出。
 
+## 评审与进 main 记录（2026-10-19）
+
+隔离子代理一次过两轴，判 0 阻断。下面几条是评审建议进 main 前处理的，已在 `de9e634e`（代码）与 `2fcabfce`（文档）修：
+
+- **回指非空、请求册上查不到**：原先答「不归本编排」入账，改为上抛 `ErrSellEvaluationRequestMissing`。SELL·客户费用评价只按本上下文的请求形成，查不到是两侧矛盾，入账会零留痕。「没有回指」仍入账。
+- **结算币种对不上请求快照**：原先记`待判断`并援引 `AT-SA-177`，改为上抛 `ErrSellEvaluationCurrencyMismatch`。那条 AT 讲的是评价没带换算步骤；这里是计价没守住 ADR-0190 决定四，记`待判断`会把缺陷永久藏在请求册上。偏离 2 因此作废。
+- **未决丢根因**：结果带上依赖原样答的错误，消费门把它打进 `ErrSellChargeFormationUndecided` 的正文。
+- 小项：
+  - 两处头注改准：消费门哨兵，与派发名单 `sellEvaluationRecordedUndecidedSentinels`。读口把「引用译不成计价侧标识」「评价不属本租户」也折成读不回，这两种重投不自愈，原先的头注说「只剩可见性滞后」，不实。
+  - 去掉 `ErrNotASellEvaluation` 的适配器别名。
+  - 内层 `FormSellCustomerChargeHandler` 显式收金额未声明那一格，答未受理。
+  - 「半途」重放用例的注释改准：同事务设计下走不到那一格。
+  - 派发真库用例的头注不再写带时效的「演示卡今天没声明」。
+- **偏离 1、3、4 与「金额取整未声明」那一节**：评审指出它们与 ADR-0169 决定四「消费门指名缺这一引用」相冲（ADR-0190 的 Links 写的是「照旧」），也与 UC-SA-002 生命周期表、`AT-SA-175` 有张力。已接受的 ADR 正文不改，所以合写进 [ADR-0198](../../../docs/adr/0198-sell-request-conclusions-on-the-parcel-billing-moment-path.md)，部分停用 ADR-0169 决定四那一句（限本路）。UC-SA-002 补 `AT-SA-179` 至 `AT-SA-181`，SA `CONTEXT` 补请求结论一句。合计为零（非阻断 8）进了 ADR-0198 越权风险点 4。
+- 没采纳的：
+  - 偏离 8 提议给 CONTEXT-MAP 补扇出。ADR-0190 Consequences 已写，再写就是第二处定义。
+  - 路由表用 `sainbox.BuyEvaluationRecordedEventType` 作两路共用的键，名字偏 BUY，没改名。
+  - 重放「半途」分支不比对已有费用。生产路径走不到，只把注释改准。
+
+- 02–05 合成一批：rebase 到 main 后整批快进推送，与本记录同一次推送。批次分支 rebase 过两次，提交号随之变，本票 `9fba63cd` → `a222fa5d`，`40e58893` → `e79f5328`，`d0b79874` → `6cd7db07`。
+- 实走见 [05](./05-demo-tenant-forms-an-estimated-customer-charge.md) 的完成记录：一次性库上收寄采用之后形成预估客户费用 CNY 9600，与受理前冻结同额。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `864248ab`：144 包 ok，0 FAIL。机制清点在同一 tip 上重生成。
