@@ -24,9 +24,10 @@ var ErrMalformedRequest = errors.New("transport fulfillment http: malformed requ
 
 // DeliveryIntake 把已认证的接入请求翻译成首登/更正命令。
 //
-// 它是接口而不是本包内的解析代码：租户身份按 ADR-0003 只能来自认证结果，接入渠道的认证归操作者渠道的「作业事实登记」
-// 能力面（ADR-0149），实现是 WorkFactCommandIntake；ADR-0029 要求越权探针一律以「未找到」作答，那也是认证层的话。本包不带
-// 任何采信头部自报的「开发用」实现。
+// 端点收接口、不直接调本包的载荷解析：装配点要能逐端点在未配置即拒（UnconfiguredIntake，ADR-0055）与真渠道之间换，
+// 处理器与路由不动。真渠道是操作者渠道「作业事实登记」能力面的 WorkFactCommandIntake——首登归此面（ADR-0149 决定二），
+// POD 更正随原事实归此面（ADR-0151 决定四）。租户身份按 ADR-0003 只能来自它的认证结果；设备查无、停用或登在别的作业
+// 范围上怎样分格，是认证层的话（见 accessidentity.ErrDeviceNotInUse）。本包不带任何采信头部自报的「开发用」实现。
 //
 // 与信封相反，**事实内容必须从请求体收**（ADR-0023）：对象、尝试、POD 证据引用与
 // 更正时间都是设备/派送端记录的事实——服务器代铸任何一样，离线补传的重放就会被误判

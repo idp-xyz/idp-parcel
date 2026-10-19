@@ -17,10 +17,10 @@ import (
 )
 
 // 本文件证作业事实各口的操作者渠道 Intake（ADR-0149 决定二；票 operator-channel/10）的传输面：租户只来自认证结果、
-// 设备与作业范围只从三个头来且种类只认 OFFSITE、先认证后解载荷、事实内容与发生时间照 ADR-0023 从载荷如实收、自报租户
-// 即拒、形状错即拒、运营决定与登记写面的口在类型上装不进去。这组译装用例原挂在隔离命令 Intake 上，随它退场迁来（票 22；
-// ADR-0150 决定三），期望值不变。期望值取自载荷字面量而不是重算：这里证的是「译装没换字」。成形与否（对象引用立不立得住、
-// 控制证据缺不缺）不在这里证——那是编排答`未受理`的格，本 Intake 不预判。
+// 设备与作业范围只从请求头来（读法见 WorkFactCommandIntake.tenantFrom）且种类只认 OFFSITE、先认证后解载荷、事实内容
+// 与发生时间照 ADR-0023 从载荷如实收、自报租户即拒、形状错即拒、运营决定与登记写面的口在类型上装不进去。期望值取自
+// 载荷字面量而不是重算：这里证的是「译装没换字」。成形与否（对象引用立不立得住、控制证据缺不缺）不在这里证——那是
+// 编排答`未受理`的格，本 Intake 不预判。
 
 const (
 	workFactTenant         = "SYN-TENANT-01"
@@ -73,8 +73,8 @@ func commandRequest(body string) *http.Request {
 	return request
 }
 
-// workFactLine 是作业事实的一口：怎么调它的 Intake、一份合规载荷。自报租户、尾随内容与类型锁三条对每一口都成立，
-// 表驱动逐口跑。
+// workFactLine 是作业事实的一口：怎么调它的 Intake、一份合规载荷。自报租户、封闭解码与先认证后解载荷对每一口都成立，
+// 带 OnEveryLine 的用例逐口跑这张表；类型锁 TestWorkFactCommandIntakeServesOnlyWorkFactLines 按接口另列，加口时两处都要加。
 type workFactLine struct {
 	intake func(*tfhttp.WorkFactCommandIntake, *http.Request) error
 	valid  string
@@ -259,9 +259,10 @@ func TestNewWorkFactCommandIntakeRejectsABlankMovementSourceOrNoAuthenticator(t 
 }
 
 // Covers: 先认证、后解载荷，逐口成立——认证方被问的是请求头里那份设备与作业范围，它的答复原样交回，令牌不过的调用方
-// 看不到载荷校验的结果；令牌原样转交，Intake 不替调用方补。请求头那几格在问认证方之前就判：票 10 的判断项「三头缺一答
-// 400 `MALFORMED_REQUEST`，不占渠道那几格」「种类不对答 400，发生在铸造之前」。这一面只认 OFFSITE——认了 NODE，登在
-// 节点上的设备就能拿节点授予打揽收、交接与交付。
+// 看不到载荷校验的结果；令牌原样转交，Intake 不替调用方补。请求头那几格在问认证方之前就判，即票 10 的判断项
+// 「三头缺一答 400 `MALFORMED_REQUEST`，不占渠道那几格」
+// 「种类不对答 400，发生在铸造之前」。
+// 这一面只认 OFFSITE——认了 NODE，登在节点上的设备就能拿节点授予打揽收、交接与交付。
 func TestWorkFactCommandIntakeAuthenticatesBeforeDecodingOnEveryLine(t *testing.T) {
 	for pattern, line := range workFactLines {
 		t.Run(pattern, func(t *testing.T) {
@@ -466,7 +467,7 @@ func TestWorkFactCommandIntakeLeavesAnAbsentPickupInstantToTheOrchestration(t *t
 	}
 }
 
-// Covers: 载荷里带 tenantId 即拒（MALFORMED_REQUEST），值与开关相同也拒——每一口都一样。
+// Covers: 载荷里带 tenantId 即拒（MALFORMED_REQUEST），值与认证出的租户相同也拒——每一口都一样。
 func TestWorkFactCommandIntakeRefusesSelfReportedTenantOnEveryLine(t *testing.T) {
 	intake := workFactIntakeForTest(t)
 	for pattern, line := range workFactLines {
@@ -511,8 +512,8 @@ func TestWorkFactCommandIntakeRefusesAnUnparsablePickupInstant(t *testing.T) {
 	}
 }
 
-// Covers: ADR-0149 决定二——作业事实这一面实现首登与更正各口；运营决定（ADR-0151）、登记写面（ADR-0100 决定四）与查阅行
-// 各有自己的能力面，在类型上就装不进本类型。
+// Covers: 作业事实这一面实现首登各口（ADR-0149 决定二）与更正各口（随原事实归族，ADR-0151 决定四）；运营决定（ADR-0151
+// 决定一）、登记写面（ADR-0100 决定四）与查阅行各有自己的能力面，在类型上就装不进本类型。
 func TestWorkFactCommandIntakeServesOnlyWorkFactLines(t *testing.T) {
 	var intake any = workFactIntakeForTest(t)
 	for name, served := range map[string]bool{

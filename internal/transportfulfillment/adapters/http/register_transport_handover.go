@@ -11,8 +11,8 @@ import (
 
 // HandoverIntake 把已认证的接入请求翻译成交接判断的首登 / 更正命令。
 //
-// 接口而非本包内解析代码的理由同 DeliveryIntake：租户身份只能来自认证结果（ADR-0003）。
-// 实现是操作者渠道「作业事实登记」能力面的 WorkFactCommandIntake（ADR-0149），首登与更正两口都在。
+// 端点收接口的理由同 DeliveryIntake。实现是操作者渠道「作业事实登记」能力面的 WorkFactCommandIntake：首登（ADR-0149
+// 决定二）与更正（随原事实归族、与首登同一份认证与授予，ADR-0151 决定四）两口都在。
 //
 // **`Segment` 与 `PlannedSegment` 是命令的一部分，Intake 必须收。** 交接是 CONTEXT 成立边界的
 // 来源事实，对象进哪个实际履约段由这两格指名（缺席时编排不立段）。Intake 若不收它们，编排
@@ -23,8 +23,9 @@ import (
 // 返回不同命令类型。交付那份先落、占了通名；此后的 Intake 都按事实具名，同 IntakeCatalogueQuery。
 //
 // 两口各有自己的单方法接口，端点各收其一；HandoverIntake 是两者的合集，留给要整组实现的一方
-// （UnconfiguredIntake 两口同堵）。分开的理由是逐口放行（ADR-0091 Consequences）：一个只放行了
-// 首登的实现在类型上就装不进更正口，不必为凑齐合集去写一个假装未配置的更正方法。
+// （UnconfiguredIntake 两口同堵）。分开是为了端点在类型上只依赖自己那一口：装配点逐端点换 Intake
+// （assembleBusinessEndpoints 头注「逐端点替换」），往既有接口加方法又会打断它的每个实现者（理由同
+// PickupCorrectionIntake）。
 type HandoverIntake interface {
 	HandoverRegistrationIntake
 	HandoverCorrectionIntake

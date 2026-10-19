@@ -71,6 +71,8 @@ func TestOperatorDecisionIntakeTakesTheTenantFromTheAuthenticationResult(t *test
 	}
 }
 
+// Covers: 每个运营决定口问认证方的是它自己那一种决定，且先认证、后解载荷——载荷坏也交回认证方的答复，授予不过的调用方
+// 看不到载荷校验的结果。
 func TestEachTFDecisionFaceAuthenticatesForItsOwnDecision(t *testing.T) {
 	var asked []tfhttp.OperatorDecision
 	intake := operatorIntake(t, authenticatorFake{err: tfhttp.ErrOperatorNotGranted, asked: &asked})
@@ -79,16 +81,28 @@ func TestEachTFDecisionFaceAuthenticatesForItsOwnDecision(t *testing.T) {
 		want   tfhttp.OperatorDecision
 		intake func() error
 	}{
-		{tfhttp.OperatorDecisionSegmentClosure, func() error { _, err := intake.IntakeSegmentClosure(ctx, bearerRequest("t", `{}`)); return err }},
-		{tfhttp.OperatorDecisionDispatchTaskRegistration, func() error { _, err := intake.IntakeDispatchTask(ctx, bearerRequest("t", `{}`)); return err }},
-		{tfhttp.OperatorDecisionLoadAssignment, func() error { _, err := intake.IntakeLoadAssignment(ctx, bearerRequest("t", `{}`)); return err }},
-		{tfhttp.OperatorDecisionParticipationTermination, func() error {
-			_, err := intake.IntakeParticipationTermination(ctx, bearerRequest("t", `{}`))
+		{tfhttp.OperatorDecisionSegmentClosure, func() error {
+			_, err := intake.IntakeSegmentClosure(ctx, bearerRequest("t", "!!not-json!!"))
 			return err
 		}},
-		{tfhttp.OperatorDecisionEffectiveTimeJudgment, func() error { _, err := intake.IntakeEffectiveTimeJudgment(ctx, bearerRequest("t", `{}`)); return err }},
+		{tfhttp.OperatorDecisionDispatchTaskRegistration, func() error {
+			_, err := intake.IntakeDispatchTask(ctx, bearerRequest("t", "!!not-json!!"))
+			return err
+		}},
+		{tfhttp.OperatorDecisionLoadAssignment, func() error {
+			_, err := intake.IntakeLoadAssignment(ctx, bearerRequest("t", "!!not-json!!"))
+			return err
+		}},
+		{tfhttp.OperatorDecisionParticipationTermination, func() error {
+			_, err := intake.IntakeParticipationTermination(ctx, bearerRequest("t", "!!not-json!!"))
+			return err
+		}},
+		{tfhttp.OperatorDecisionEffectiveTimeJudgment, func() error {
+			_, err := intake.IntakeEffectiveTimeJudgment(ctx, bearerRequest("t", "!!not-json!!"))
+			return err
+		}},
 		{tfhttp.OperatorDecisionCarrierFirstEffectivePickupJudgment, func() error {
-			_, err := intake.IntakeCarrierPickupJudgment(ctx, bearerRequest("t", `{}`))
+			_, err := intake.IntakeCarrierPickupJudgment(ctx, bearerRequest("t", "!!not-json!!"))
 			return err
 		}},
 	}
@@ -138,8 +152,7 @@ func TestLoadAssignmentAndParticipationTerminationDecodeTheirPayloadsUnderTheAut
 	}
 }
 
-// 以下四口的解码用例随换口从隔离命令 Intake 迁来（ADR-0150 决定三；票 operator-channel/15）：线格式没变，只是租户的来处从
-// 注入值换成认证结果。期望值取自载荷字面量而不是重算——这里证的是「译装没换字」。
+// 以下解码用例证各口线格式译装没换字：期望值取自载荷字面量而不是重算，租户只来自认证结果。
 
 const decisionEffectiveTimeJudgmentBody = `{"fact":"SYN-TRACKING-FACT-08-12","effectiveAt":"2026-09-24T16:00:00+08:00"}`
 
@@ -232,7 +245,8 @@ func TestOperatorDecisionIntakeTranslatesCarrierPickupJudgment(t *testing.T) {
 	}
 }
 
-// decisionLines 是本包六个运营决定口：怎么调它的 Intake、一份合规载荷。自报租户与封闭解码两条对每一口都成立，表驱动逐口跑。
+// decisionLines 是 OperatorDecisionIntake 实现的各运营决定口：怎么调它的 Intake、一份合规载荷。自报租户与封闭解码两条对每一口
+// 都成立，表驱动逐口跑。
 var decisionLines = map[string]struct {
 	intake func(*tfhttp.OperatorDecisionIntake, *http.Request) error
 	valid  string
@@ -264,7 +278,7 @@ var decisionLines = map[string]struct {
 }
 
 // Covers: 载荷里带 tenantId 即拒（MALFORMED_REQUEST），值与认证出的租户相同也拒；一份载荷只许一个文档、只许认识的键——尾随的
-// 第二个 JSON 值与未知键都拒，放过它们就是无声丢掉一段输入。六口都一样。
+// 第二个 JSON 值与未知键都拒，放过它们就是无声丢掉一段输入。每一口都一样。
 func TestEveryDecisionFaceRefusesSelfReportedTenantTrailingContentAndUnknownKeys(t *testing.T) {
 	intake := operatorIntake(t, authenticatorFake{})
 	for pattern, line := range decisionLines {
