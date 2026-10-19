@@ -5,11 +5,13 @@ import (
 	"errors"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
 	shipmenthttp "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/http"
+	"go.idp.xyz/idp-parcel/internal/parcelshipment/application"
 	"go.idp.xyz/idp-parcel/internal/parcelshipment/domain"
 )
 
@@ -405,4 +407,50 @@ func TestIsolatedSubmissionIntakePairsCustomerParcelReferencesWithMintedMembers(
 			t.Fatalf("第 %d 组的包裹就是客户参考——内部标识被客户参考顶替了", index)
 		}
 	}
+}
+
+// Covers: ADR-0184 复核记录「越权风险点 2 的事实更正」——入口去两端空白，定的是委托记下的声明值：客户包裹件号取
+// 去过空白的值，载荷摘要与来源身份都与不带空白的同一份草案相同，委托没有第二个声明值。入口只去单元格两端：号码
+// 本身的字符一个不动，大小写与内部空格原样——改号码字符是条码规则，属租户取值，入口同样不许做。
+func TestIsolatedSubmissionIntakeTrimsOnlyTheEndsOfCustomerReferences(t *testing.T) {
+	intake := newIsolatedIntake(t, &permittingOwnershipDouble{revision: "SYN-REV-1"})
+	plain, err := intake.IntakeSubmission(context.Background(), draftRequest(isolatedDraft))
+	if err != nil {
+		t.Fatalf("接入不带空白的草案：%v", err)
+	}
+
+	padded := strings.NewReplacer(
+		`"SYN-CUSTREF-0001"`, `" \tSYN-CUSTREF-0001\t "`,
+		`"SYN-PCLREF-0001"`, `"  \tSYN-PCLREF-0001\t "`,
+	).Replace(isolatedDraft)
+	command, err := intake.IntakeSubmission(context.Background(), draftRequest(padded))
+	if err != nil {
+		t.Fatalf("接入两端带空白的草案：%v", err)
+	}
+	if got := customerNumbersOf(command); !slices.Equal(got, []string{"SYN-PCLREF-0001"}) {
+		t.Fatalf("客户包裹件号 = %q, want [SYN-PCLREF-0001]——两端空白没去", got)
+	}
+	if command.PayloadDigest != plain.PayloadDigest {
+		t.Fatal("两端带空白的草案摘要变了——摘要吃到的不是去过空白的那份声明值，与册里的号码各说各话")
+	}
+	if command.Identity != plain.Identity {
+		t.Fatal("两端带空白的委托参考铸出了另一个来源身份")
+	}
+
+	verbatim := strings.Replace(isolatedDraft, `"SYN-PCLREF-0001"`, `" \tsyn-pclref 0001 \t"`, 1)
+	cased, err := intake.IntakeSubmission(context.Background(), draftRequest(verbatim))
+	if err != nil {
+		t.Fatalf("接入小写带内部空格的草案：%v", err)
+	}
+	if got := customerNumbersOf(cased); !slices.Equal(got, []string{"syn-pclref 0001"}) {
+		t.Fatalf("客户包裹件号 = %q, want [syn-pclref 0001]——入口只去两端，号码本身不许折算", got)
+	}
+}
+
+func customerNumbersOf(command application.SubmitShipmentRequestCommand) []string {
+	numbers := make([]string, len(command.CustomerParcelNumbers))
+	for index, declaration := range command.CustomerParcelNumbers {
+		numbers[index] = declaration.Number().String()
+	}
+	return numbers
 }

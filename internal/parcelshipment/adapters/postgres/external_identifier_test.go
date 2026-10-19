@@ -210,6 +210,32 @@ func TestTheSameNumberFromTwoCustomersAnswersBothParcelsVerbatimWithinTheTenant(
 	}
 }
 
+// Covers: ADR-0184 复核记录「越权风险点 2 的事实更正」比对一侧照旧逐字——册不替任何入口去空白：两端带空白交来的
+// 号码原样落册，按原样查得到、按去了空白的号查不到；不带空白落册的号，扫到的多一个前导或尾随空格、带回车换行，
+// 都是零个候选，节点走待识别而不会关联错件。入口去两端空白定的是声明值，不是册与核对读口的折算。
+func TestTheRegisterKeepsNumbersVerbatimAcrossWhitespace(t *testing.T) {
+	fixture := newExternalIdentifierFixture(t)
+	fixture.insertAndAccept(t, numberedRequest(t, "SYN-TENANT-1", "SYN-CUSTOMER-1", "SYN-KEY-PADDED", "SYN-REQUEST-PADDED",
+		[]string{"SYN-PARCEL-PADDED"}, map[string]string{"SYN-PARCEL-PADDED": " SYN-NUMBER-PADDED\t"}))
+	fixture.insertAndAccept(t, numberedRequest(t, "SYN-TENANT-1", "SYN-CUSTOMER-1", "SYN-KEY-BARE", "SYN-REQUEST-BARE",
+		[]string{"SYN-PARCEL-BARE"}, map[string]string{"SYN-PARCEL-BARE": "SYN-NUMBER-BARE"}))
+
+	if got := fixture.parcelsOf(t, "SYN-TENANT-1", " SYN-NUMBER-PADDED\t"); !slices.Equal(got, []string{"SYN-PARCEL-PADDED"}) {
+		t.Fatalf("按原样查两端带空白落册的号得 %v, want [SYN-PARCEL-PADDED]——册没有原样落下", got)
+	}
+	if got := fixture.parcelsOf(t, "SYN-TENANT-1", "SYN-NUMBER-PADDED"); len(got) != 0 {
+		t.Fatalf("按去了空白的号查得 %v——册或读口替人去了空白", got)
+	}
+	if got := fixture.parcelsOf(t, "SYN-TENANT-1", "SYN-NUMBER-BARE"); !slices.Equal(got, []string{"SYN-PARCEL-BARE"}) {
+		t.Fatalf("按原样查不带空白落册的号得 %v, want [SYN-PARCEL-BARE]", got)
+	}
+	for _, scanned := range []string{"SYN-NUMBER-BARE ", " SYN-NUMBER-BARE", "SYN-NUMBER-BARE\r\n"} {
+		if got := fixture.parcelsOf(t, "SYN-TENANT-1", scanned); len(got) != 0 {
+			t.Fatalf("按 %q 查得 %v——核对读口折算了空白", scanned, got)
+		}
+	}
+}
+
 // Covers: 被拒绝的委托不形成关联——接受前的声明包裹不是正式包裹，拒绝之后也不会成为。
 func TestARejectedRequestLeavesNoRelation(t *testing.T) {
 	fixture := newExternalIdentifierFixture(t)
