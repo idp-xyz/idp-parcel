@@ -135,6 +135,15 @@
       "basis": "SYN-GRANT-BASIS-DEX-IDENTITY-CONFLICT-DISPOSITION"
     },
     {
+      "grantId": "SYN-GRANT-DEX-CONFIG-TRANSPORT-COMMISSION-SUBMISSION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "TRANSPORT_COMMISSION_SUBMISSION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-16"
+    },
+    {
       "grantId": "SYN-GRANT-DEX-VIEWER-READ-01",
       "issuer": "http://127.0.0.1:5556/dex",
       "subject": "ChZTWU4tT1BFUkFUT1ItVklFV0VSLTAxEgVsb2NhbA",
