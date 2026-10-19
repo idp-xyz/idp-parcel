@@ -69,6 +69,12 @@ func registerDemoNetworkSeeds(t *testing.T, db *bentopg.DB) {
 		switch {
 		case strings.Contains(name, "-auto-reroute-facts-"):
 			continue
+		case strings.Contains(name, "-leg-pricing-zones-"):
+			command, err := registrationjson.LegPricingZonesFromJSON(raw)
+			mustTranslate(t, name, err)
+			register = func(ctx context.Context) (nrapplication.RegisterCatalogResult, error) {
+				return registration.RegisterLegPricingZones(ctx, command)
+			}
 		case strings.Contains(name, "-calendar-"):
 			command, err := registrationjson.ServiceCalendarVersionFromJSON(raw)
 			mustTranslate(t, name, err)
@@ -189,10 +195,10 @@ func TestTheAdoptedDemoNetworkGetsPastRouteEvidenceThroughProductionWiring(t *te
 	assertDemoCandidateWaitsForItsCost(t, costs)
 }
 
-// Covers: 票 routing-first-cut/17 判据二、三——客户声明了重量的包裹经受理链接受之后，生产装配的包裹事实取数侧读到的是
-// 这份客户声明，事实引用标明来源；同一判断交候选成本取数侧，包裹事实在场而逐段区域未配置，演示候选照旧待判断，不整判断
-// 停下，也不折成零。
-func TestADeclaredParcelReachesTheCostSideWhileLegZonesStayUnconfigured(t *testing.T) {
+// Covers: 票 routing-first-cut/17 判据二、三与票 18 判据——客户声明了重量的包裹经受理链接受之后，生产装配的包裹事实取数侧
+// 读到的是这份客户声明，事实引用标明来源；演示租户给三段登了段计价区域（ADR-0189 决定二），同一判断交候选成本取数侧，
+// 演示候选出价：2.5 KG 落演示成本卡 Z1 的 [1,5) 一档，三段各 85 CNY，合 255 CNY，三段各留一条出处。
+func TestADeclaredParcelOnZonedLegsIsPricedThroughProductionWiring(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
 	ctx := t.Context()
 	command := fixture.submitCommand(t)
@@ -236,7 +242,15 @@ func TestADeclaredParcelReachesTheCostSideWhileLegZonesStayUnconfigured(t *testi
 	if err != nil {
 		t.Fatalf("候选成本取数侧：err = %v，want 交回成本事实", err)
 	}
-	assertDemoCandidateWaitsForItsCost(t, costs)
+	if len(costs.Facts) != 1 || costs.Facts[0].Candidate().String() != "SYN-LINE-CN-SG-01@1" {
+		t.Fatalf("成本事实 = %+v，want 演示候选恰一条", costs.Facts)
+	}
+	if fact := costs.Facts[0]; fact.State() != nrdomain.CandidateCostPriced || fact.AmountMinor() != 25500 {
+		t.Fatalf("演示候选成本 = %s %d minor，want 已出价 25500（三段各 85 CNY）", fact.State(), fact.AmountMinor())
+	}
+	if len(costs.Citations) != 3 {
+		t.Fatalf("出处 %d 条，want 三段各一条：%+v", len(costs.Citations), costs.Citations)
+	}
 }
 
 // assertDemoCandidateWaitsForItsCost 钉演示候选的成本一格：恰一条事实、答待判断、没有出处——逐段区域未配置的段没评价过。

@@ -92,4 +92,5 @@ Date: 2026-09-24
 - [ADR-0068](./0068-versioned-network-catalog-structure-precedes-rule-content.md)：决定六由本记录部分停用（自 routing-first-cut/07 落地起）
 - [ADR-0053](./0053-network-fact-families-are-derived-not-registrable.md)：决定四「查无登记 → `未配置`」一格由本记录部分停用（同上）
 - [ADR-0145](./0145-legal-entity-attributes-split-into-identity-layer-and-dated-profile.md)：决定四把法人的记账本位币留作另议，比较币种因此不取法人的币种，改由路由策略版本登记
+- [ADR-0189](./0189-leg-pricing-zones-are-supplied-per-card-and-unbound-cards-take-a-registered-leg-zone.md)：决定四第 7 条「每段怎样折成价卡的区域词汇」与越权风险点 5 由它接手
 - 票 [routing-first-cut/02](../../.scratch/routing-first-cut/issues/02-route-evidence-sourcing-and-candidate-cost-adr.md)：本记录的派生票；实施票族见 [product-strategy-boundary/04](../../.scratch/product-strategy-boundary/issues/04-routing-product-strategy-first-cut.md) 的切片计划

@@ -1,0 +1,10 @@
+{
+  "tenant_id": "SYN-TENANT-01",
+  "line_code": "SYN-LINE-CN-SG-01",
+  "version": 1,
+  "zones": [
+    {"segment_index": 0, "zone": "Z1", "basis": "SYN-NET-OPS/LEG-ZONES-CN-SG-01"},
+    {"segment_index": 1, "zone": "Z1", "basis": "SYN-NET-OPS/LEG-ZONES-CN-SG-01"},
+    {"segment_index": 2, "zone": "Z1", "basis": "SYN-NET-OPS/LEG-ZONES-CN-SG-01"}
+  ]
+}

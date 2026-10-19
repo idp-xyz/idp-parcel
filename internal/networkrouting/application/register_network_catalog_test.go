@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"fmt"
 	"reflect"
 	"testing"
 	"time"
@@ -561,6 +562,52 @@ func TestALineCostBasesRegistryErrorSurfaces(t *testing.T) {
 		TenantID: catalogTenant(t), Line: validLine(),
 		CostBases: []ports.LineSegmentCostBasis{{SegmentIndex: 0, Kind: ports.SupplierBuyPlanBasis, Reference: "SYN-PLAN-1/v1"}},
 	})
+	if !errors.Is(err, boom) {
+		t.Fatalf("写入口的错误没有原样上抛：%v", err)
+	}
+}
+
+// Covers: ADR-0189 决定二的登记门——段计价区域守形状（没给段、段号为负、同段两次、区域或依据空白各拒），写入口说
+// 「段没挂依据」时译成那一格拒因，其余错误原样上抛；合规的一笔原样交给写入口。
+func TestLegPricingZonesRegisterOnlyWellFormedRowsOnCostBasedSegments(t *testing.T) {
+	tenant := catalogTenant(t)
+	valid := []ports.LegPricingZone{{SegmentIndex: 0, Zone: "Z1", Basis: "SYN-ZONE-BASIS-1"}, {SegmentIndex: 2, Zone: "Z3", Basis: "SYN-ZONE-BASIS-1"}}
+	command := func(zones []ports.LegPricingZone) application.RegisterLegPricingZonesCommand {
+		return application.RegisterLegPricingZonesCommand{TenantID: tenant, LineCode: "SYN-LINE-1", LineVersion: 1, Zones: zones}
+	}
+
+	double := &catalogRegistryDouble{}
+	result, err := newCatalogRegistration(t, double).RegisterLegPricingZones(t.Context(), command(valid))
+	if err != nil || result.Outcome() != application.CatalogRegistered {
+		t.Fatalf("outcome=%s refusal=%s err=%v", result.Outcome(), result.RefusalReason(), err)
+	}
+	if double.zonesLine != "SYN-LINE-1" || double.zonesVersion != 1 || !reflect.DeepEqual(double.zones, valid) {
+		t.Fatalf("交给写入口的 = %s@%d %+v", double.zonesLine, double.zonesVersion, double.zones)
+	}
+
+	malformed := map[string][]ports.LegPricingZone{
+		"没给一段": nil,
+		"段号为负": {{SegmentIndex: -1, Zone: "Z1", Basis: "b"}},
+		"同段两次": {{SegmentIndex: 0, Zone: "Z1", Basis: "b"}, {SegmentIndex: 0, Zone: "Z2", Basis: "b"}},
+		"区域空白": {{SegmentIndex: 0, Zone: " ", Basis: "b"}},
+		"依据空白": {{SegmentIndex: 0, Zone: "Z1", Basis: ""}},
+	}
+	for name, zones := range malformed {
+		double := &catalogRegistryDouble{}
+		result, err := newCatalogRegistration(t, double).RegisterLegPricingZones(t.Context(), command(zones))
+		if err != nil || result.RefusalReason() != application.CatalogLegZoneMalformed || double.calls != 0 {
+			t.Errorf("%s: refusal=%s err=%v calls=%d", name, result.RefusalReason(), err, double.calls)
+		}
+	}
+
+	unbased := &catalogRegistryDouble{zonesErr: fmt.Errorf("segment 2: %w", ports.ErrLegPricingZoneWithoutCostBasis)}
+	result, err = newCatalogRegistration(t, unbased).RegisterLegPricingZones(t.Context(), command(valid))
+	if err != nil || result.RefusalReason() != application.CatalogLegZoneWithoutCostBasis {
+		t.Fatalf("没挂依据：refusal=%s err=%v", result.RefusalReason(), err)
+	}
+
+	boom := errors.New("leg pricing zone store is down")
+	_, err = newCatalogRegistration(t, &catalogRegistryDouble{zonesErr: boom}).RegisterLegPricingZones(t.Context(), command(valid))
 	if !errors.Is(err, boom) {
 		t.Fatalf("写入口的错误没有原样上抛：%v", err)
 	}
