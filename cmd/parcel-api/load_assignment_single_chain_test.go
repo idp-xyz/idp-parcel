@@ -93,22 +93,30 @@ func registerTransportSchedules(t *testing.T, db *bentopg.DB, tenant string, sch
 	if err != nil {
 		t.Fatal(err)
 	}
-	const direction = "SYN-DIRECTION-01"
-	departsAt := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
-	_, digest, err := domain.CanonicalizeEstablishSchedulePayload(direction, departsAt)
+	direction, err := domain.NewScheduleDirection("SYN-CONN-01", "SYN-NODE-A", "SYN-NODE-B")
 	if err != nil {
 		t.Fatal(err)
 	}
+	scope, err := domain.NewScheduleServiceScopeReference("SYN-SERVICE-SCOPE-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	departsAt := time.Date(2026, 10, 18, 12, 0, 0, 0, time.UTC)
 	for _, id := range schedules {
 		ref, err := domain.NewScheduleReference(id)
 		if err != nil {
 			t.Fatal(err)
 		}
 		schedule, err := domain.FormTransportSchedule(domain.TransportScheduleSpec{
-			TenantID: tenantID, Schedule: ref, Direction: direction, DepartsAt: departsAt,
+			TenantID: tenantID, Schedule: ref, Direction: direction,
+			DepartsAt: departsAt, ArrivesAt: departsAt.Add(6 * time.Hour), ServiceScope: scope,
 		})
 		if err != nil {
 			t.Fatalf("形成班次夹具 %s：%v", id, err)
+		}
+		_, digest, err := domain.CanonicalizeTransportSchedulePayload(schedule)
+		if err != nil {
+			t.Fatal(err)
 		}
 		if err := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
 			saved, saveErr := store.Save(txCtx, ports.ScheduleRecord{
