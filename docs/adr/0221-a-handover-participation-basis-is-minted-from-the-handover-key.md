@@ -14,6 +14,7 @@ Date: 2026-10-19
   - 交付门禁读数找「对象凭哪一次交接进的段」：ADR-0213 文末补记（票 66）已认这一格，先按业务时间再分，仍多于一版答 `ENTRY_HANDOVER_AMBIGUOUS`。
   - 交接更正重派生找「被替代的是哪一条」：按版本串比，另一个范围用了同一版本号的更正会对上不相干的参与。
 - 这串还被原样抄到别处：委托的运输开始依据、段采用的开始依据（ADR-0204），以及派送发起的任务引用（ADR-0216，票 tf-face-algebra/09 的铸法）。查阅时这几处都指不回交接。
+- 别的控制事实作依据也只带版本，却不在此列：场外揽收、实际承运商首次有效收寄与有效交付的版本由本上下文按全局序列铸（PG 适配器 `ResultVersions` 的 `NextPickupResultVersion`、`NextCarrierFirstEffectivePickupVersion`、`NextDeliveryResultVersion`），本身就唯一，`OFFSITE-PICKUP/`、`CARRIER-FIRST-EFFECTIVE-PICKUP/`、`EFFECTIVE-DELIVERY/` 加版本指得回那一件事实。只有交接版本是登记方给的，缺口只在这一种。
 - NO 的转出引用也是同一个串（`TransferOutBasis` 包装成 `TransferOutReference`）。ADR-0214 越权风险点「转入依据由本上下文铸、不复用 TF 的转出引用」已经说过它不够；NO 转入一侧自铸 `HANDOVER-IN/` 加交接键三节长度前缀。
 - 先例：NO 的转入依据（ADR-0214 文末「转入立起的控制依据」）与派送任务引用（票 tf-face-algebra/09 裁定「单射铸法：取长度前缀，带形状标记」），都把不透明的几件写成「字节长度 + 冒号 + 原串」。
 - 不是 ADR-0096 那一类推导：段的身份仍由登记方声明。这里定的是参与上记的「依据」怎样指名那一件控制事实，交接键本身就是那件事实的身份。
@@ -113,7 +114,6 @@ Date: 2026-10-19
 2. **旧拼法恰一条对上也要时刻对上**（TF owner）。本记录之前，旧拼法逐字对上一条就算；现在还要按它立下的时刻等于那一版交接的业务时间。生产路径上两者一律相等（进段、结束按业务时间立时刻，替代版本照抄前版终点，更正不改业务时间），据此判定没有存量会因此从「对上」变成「没对上」。若有人手工改过参与的时刻，那一条会答没有参与被结束、入账。
 3. **同一次交接两串**（TF、NO owner）。TF 参与上是按键铸的依据，NO 转出引用是只带版本的旧串；拿串去对两本册对不上，要按交接键对。去处票 demo-chain-gaps/112。
 4. **派送任务引用变长**（TF owner）。新任务引用里嵌着按键铸的入场依据，对象出现两次。引用仍单射、仍读得出，手工建任务口拦保留起头的那一道不受影响；只是更长。
-5. **有效交付的终点依据仍只带版本**（TF owner）。`EFFECTIVE-DELIVERY/<版本>` 不带尝试。同一对象先后两次有效交付（例如退运交回发货人）用了同一个版本号、分在两段时，自动形成那一路照旧会对上两条、响亮失败。本记录只裁交接这一侧，去处票 demo-chain-gaps/113。
 
 ## Links
 
@@ -126,4 +126,4 @@ Date: 2026-10-19
 - [ADR-0220](./0220-node-control-reads-the-handover-correction-chain-by-the-transport-fulfillment-back-pointer.md)：决定四「TF 的首登口不改」
 - [ADR-0096](./0096-a-fulfillment-segment-identity-is-declared-not-derived.md)：段身份声明、不推导，本记录不动它
 - [UC-TF-005](../application/transport-fulfillment/UC-TF-005-ESTABLISH-HANDOVER-AND-ACTUAL-FULFILLMENT.md)、[UC-TF-006](../application/transport-fulfillment/UC-TF-006-PERFORM-DELIVERY-AND-CAPTURE-POD.md)
-- 票 `.scratch/demo-chain-gaps/issues/111-actual-fulfillment-formation-matches-participation-ends-by-version-only.md`；后续票 `112`、`113`；先例票 `.scratch/tf-face-algebra/issues/09-dispatch-trigger-task-reference-is-a-faithful-identity.md`
+- 票 `.scratch/demo-chain-gaps/issues/111-actual-fulfillment-formation-matches-participation-ends-by-version-only.md`；后续票 `112`；先例票 `.scratch/tf-face-algebra/issues/09-dispatch-trigger-task-reference-is-a-faithful-identity.md`
