@@ -244,8 +244,8 @@ func answerFromExisting(existing, submitted ports.DeliveryAttemptRecord) RecordD
 }
 
 // deliveryAttemptContent 是同一尝试身份的内容比对锚，两侧都从领域记录算：库里没有存摘要的列，读回的记录
-// 经构造门重建后与新提交同形，逐格比即可。登记时刻不在其中——那是本方何时收到，不是执行方报了什么。
-// 对象与结果先排序：提交顺序不构成不同的内容。
+// 经构造门重建后与新提交在登记册精度上同形（时刻经 domain.AtRegistryPrecision 折），逐格比即可。
+// 登记时刻不在其中——那是本方何时收到，不是执行方报了什么。对象与结果先排序：提交顺序不构成不同的内容。
 func deliveryAttemptContent(record ports.DeliveryAttemptRecord) string {
 	attempt := record.Attempt
 	rescheduled := ""
@@ -267,7 +267,7 @@ func deliveryAttemptContent(record ports.DeliveryAttemptRecord) string {
 			result.Object().String(),
 			result.Outcome().String(),
 			basis,
-			result.OccurredAt().UTC().Format(time.RFC3339Nano),
+			registryInstantText(result.OccurredAt()),
 		}, "\x1f"))
 	}
 	sort.Strings(results)
@@ -276,15 +276,19 @@ func deliveryAttemptContent(record ports.DeliveryAttemptRecord) string {
 		attempt.Task().String(),
 		attempt.ExecutedBy().String(),
 		attempt.Place().String(),
-		attempt.PlannedFrom().UTC().Format(time.RFC3339Nano),
-		attempt.PlannedTo().UTC().Format(time.RFC3339Nano),
-		attempt.ArrivedAt().UTC().Format(time.RFC3339Nano),
+		registryInstantText(attempt.PlannedFrom()),
+		registryInstantText(attempt.PlannedTo()),
+		registryInstantText(attempt.ArrivedAt()),
 		attempt.Evidence().String(),
 		rescheduled,
 		strings.Join(objects, "\x1f"),
 	}
 	digest := sha256.Sum256([]byte(strings.Join(append(fields, results...), "\x00")))
 	return hex.EncodeToString(digest[:])
+}
+
+func registryInstantText(at time.Time) string {
+	return domain.AtRegistryPrecision(at).Format(time.RFC3339Nano)
 }
 
 // formDeliveryAttempt 把来源字符串折成领域尝试。立不起来的输入由领域构造器拒绝，编排不代答。

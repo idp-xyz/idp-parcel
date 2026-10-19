@@ -246,7 +246,7 @@ func (handler *RegisterExternalCarrierCredentialHandler) replayAgainstCurrent(
 	}
 	changedAt, _ := current.Credential.ChangedAt()
 	replacedBy, _ := current.Credential.ReplacedBy()
-	if current.Credential.Standing() == command.Change && changedAt.Equal(command.At.UTC()) && replacedBy == replacement {
+	if current.Credential.Standing() == command.Change && domain.AtRegistryPrecision(changedAt).Equal(domain.AtRegistryPrecision(command.At)) && replacedBy == replacement {
 		return RegisterExternalCarrierCredentialResult{outcome: CredentialExistingVersion, record: current, hasRecord: true}
 	}
 	return RegisterExternalCarrierCredentialResult{outcome: CredentialContentConflict, record: current, hasRecord: true}

@@ -108,7 +108,7 @@ func (handler *JudgeEffectiveTimeHandler) Judge(
 		return JudgeEffectiveTimeResult{outcome: EffectiveTimeJudgmentNotAccepted}, nil
 	}
 	if at, judged := current.Fact.EffectiveAt(); judged &&
-		current.Fact.Effective().Basis() == domain.EffectiveTimeJudgedExplicitly && at.Equal(command.EffectiveAt.UTC()) {
+		current.Fact.Effective().Basis() == domain.EffectiveTimeJudgedExplicitly && domain.AtRegistryPrecision(at).Equal(domain.AtRegistryPrecision(command.EffectiveAt)) {
 		return JudgeEffectiveTimeResult{
 			outcome:   EffectiveTimeAlreadyJudgedAsGiven,
 			record:    current,
