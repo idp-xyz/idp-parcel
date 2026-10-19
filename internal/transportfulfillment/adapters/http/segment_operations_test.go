@@ -558,6 +558,7 @@ func TestFormLoadAssignmentRegistersTheVersion(t *testing.T) {
 	handler := application.NewFormLoadAssignmentHandler(application.FormLoadAssignmentDeps{
 		Assignments: newLoadAssignmentRegistry(),
 		Schedules:   registeredSchedules("tenant-1", "schedule-1"),
+		Pools:       noPools(),
 		Clock:       tfClock{at: time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)},
 	})
 	endpoint := tfhttp.NewFormLoadAssignmentEndpoint(newLoadAssignmentIntake(t), handler)
@@ -584,6 +585,7 @@ func TestFormLoadAssignmentAnswersAlreadyFormedWithTheChainHead(t *testing.T) {
 	handler := application.NewFormLoadAssignmentHandler(application.FormLoadAssignmentDeps{
 		Assignments: newLoadAssignmentRegistry(),
 		Schedules:   registeredSchedules("tenant-1", "schedule-1"),
+		Pools:       noPools(),
 		Clock:       tfClock{at: time.Date(2026, 9, 5, 12, 0, 0, 0, time.UTC)},
 	})
 	endpoint := tfhttp.NewFormLoadAssignmentEndpoint(newLoadAssignmentIntake(t), handler)

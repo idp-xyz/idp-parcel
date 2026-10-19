@@ -39,6 +39,7 @@ func synLoadAssignmentEndpointOver(
 	handler := application.NewFormLoadAssignmentHandler(application.FormLoadAssignmentDeps{
 		Assignments: registry,
 		Schedules:   schedules,
+		Pools:       noPools(),
 		Clock:       tfClock{at: synLoadAssignedAt},
 	})
 	return tfhttp.NewFormLoadAssignmentEndpoint(intake, handler)

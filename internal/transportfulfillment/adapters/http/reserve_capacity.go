@@ -106,17 +106,34 @@ type capacityDecisionResponse struct {
 	Release               *capacityReleaseBody     `json:"release,omitempty"`
 }
 
-// capacityReservationBody 逐字段透出在册的一份预占：三量各自照实，不代算余量；单位取池的（预占与池同一单位）。时间一律
-// RFC 3339 UTC。
+// capacityReservationBody 逐字段透出在册的一份预占：三量与已分配各自照实，不代算余量；单位取池的（预占与池同一单位）。
+// 时间一律 RFC 3339 UTC。已分配是各装载分配当前那一版分走的量（ADR-0203 决定二）：释放撞守恒时，声明方要看得见挡住它的
+// 是分配，不只是释放与消耗。
 type capacityReservationBody struct {
 	Reservation string             `json:"reservation"`
 	Quantity    string             `json:"quantity"`
 	Released    string             `json:"released"`
 	Consumed    string             `json:"consumed"`
+	Allocated   string             `json:"allocated"`
 	Unit        string             `json:"unit"`
 	Source      capacitySourceBody `json:"source"`
 	ReservedAt  string             `json:"reservedAt"`
 	ValidUntil  string             `json:"validUntil"`
+}
+
+func capacityReservation(reservation domain.CapacityReservation, unit domain.QuantityUnitReference) capacityReservationBody {
+	reserved, released, consumed := reservation.Quantities()
+	return capacityReservationBody{
+		Reservation: reservation.Reference().String(),
+		Quantity:    quantity(reserved),
+		Released:    quantity(released),
+		Consumed:    quantity(consumed),
+		Allocated:   quantity(reservation.Allocated()),
+		Unit:        unit.String(),
+		Source:      capacitySource(reservation.Source()),
+		ReservedAt:  rfc3339(reservation.ReservedAt()),
+		ValidUntil:  rfc3339(reservation.ValidUntil()),
+	}
 }
 
 type capacitySourceBody struct {
@@ -160,17 +177,8 @@ func writeCapacityDecisionOutcome(formed application.OpportunityOutcome) func(ht
 			body.Pool = &pool
 			unit := record.Pool.Unit().String()
 			if reservation, found := result.Reservation(); found {
-				reserved, released, consumed := reservation.Quantities()
-				body.Reservation = &capacityReservationBody{
-					Reservation: reservation.Reference().String(),
-					Quantity:    quantity(reserved),
-					Released:    quantity(released),
-					Consumed:    quantity(consumed),
-					Unit:        unit,
-					Source:      capacitySource(reservation.Source()),
-					ReservedAt:  rfc3339(reservation.ReservedAt()),
-					ValidUntil:  rfc3339(reservation.ValidUntil()),
-				}
+				held := capacityReservation(reservation, record.Pool.Unit())
+				body.Reservation = &held
 			}
 			if on, release, found := result.Release(); found {
 				body.Release = &capacityReleaseBody{

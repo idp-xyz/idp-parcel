@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"strings"
 	"time"
 
@@ -21,6 +22,13 @@ import (
 //
 // `班次不在册`独立成格而不并进`输入未受理`：载荷本身写得对，续办是去登记班次或换一个在册班次，不是改载荷
 // （ADR-0029 按恢复动作分格）。他租户名下的同名班次同落这一格——按本租户的键读不回，答复也不透露它在别处存在。
+//
+// 容量保障各格（ADR-0203 决定一、二）都要对着班次登记的池与在册的预占才判得出，所以都不并进`输入未受理`：
+//   - `须引用预占`：班次挂了池而有池没有分配行，续办是先预占、再逐池引用；
+//   - `预占不在本班次`：某一行指的池不是本班次的池，或那份预占不在那个池上，续办是改指本班次池上的在册预占；
+//   - `单位不符`、`预占尚未生效`、`预占过期`：与预占口同名同义，续办分别是按池的单位重述、按预占的有效区间重述分配
+//     时点、另占一份；
+//   - `分配超出`：带那一份预占此刻剩下的量，续办是改量、另占一份或先撤别的分配。
 type LoadAssignmentOutcome uint8
 
 const (
@@ -31,6 +39,12 @@ const (
 	LoadAssignmentUndecided
 	LoadAssignmentAlreadyFormed
 	LoadAssignmentScheduleNotFound
+	LoadAssignmentCapacityReservationRequired
+	LoadAssignmentReservationNotOnSchedule
+	LoadAssignmentUnitMismatch
+	LoadAssignmentReservationNotYetEffective
+	LoadAssignmentReservationExpired
+	LoadAssignmentAllocationExceeded
 )
 
 func (outcome LoadAssignmentOutcome) String() string {
@@ -47,6 +61,18 @@ func (outcome LoadAssignmentOutcome) String() string {
 		return "LOAD_ASSIGNMENT_ALREADY_FORMED"
 	case LoadAssignmentScheduleNotFound:
 		return "SCHEDULE_NOT_FOUND"
+	case LoadAssignmentCapacityReservationRequired:
+		return "CAPACITY_RESERVATION_REQUIRED"
+	case LoadAssignmentReservationNotOnSchedule:
+		return "RESERVATION_NOT_ON_SCHEDULE"
+	case LoadAssignmentUnitMismatch:
+		return "UNIT_MISMATCH"
+	case LoadAssignmentReservationNotYetEffective:
+		return "RESERVATION_NOT_YET_EFFECTIVE"
+	case LoadAssignmentReservationExpired:
+		return "RESERVATION_EXPIRED"
+	case LoadAssignmentAllocationExceeded:
+		return "ALLOCATION_EXCEEDED"
 	default:
 		return ""
 	}
@@ -56,13 +82,29 @@ func (outcome LoadAssignmentOutcome) String() string {
 //
 // 版本由调用方指名而不是这里铸：它是分配链上的身份，变化与撤回各自带来下一个版本号，编排
 // 铸号就等于替调用方决定「这算不算同一次分配的下一版」。
+//
+// Allocations 是逐池的分配量（ADR-0203 决定一、二）：班次挂了容量池时每个池一行，引用那个池上的一份预占；没挂池的
+// 班次不要求，带了行反倒是指错了池。
 type FormLoadAssignmentCommand struct {
-	TenantID   domain.TenantID
-	Assignment string
-	Schedule   string
-	Members    []string
-	Version    string
-	AssignedAt time.Time
+	TenantID    domain.TenantID
+	Assignment  string
+	Schedule    string
+	Members     []string
+	Version     string
+	AssignedAt  time.Time
+	Allocations []LoadAssignmentAllocationLine
+}
+
+// LoadAssignmentAllocationLine 是一行分配量：哪个池上的哪一份预占、分多少、什么单位、依据什么来源。FromMembers 说数量取
+// 分配的成员数，只许落在件数维的池上，此时 Quantity 留零。来源种类取 domain.CapacityDemandSourceKind 的封闭词。
+type LoadAssignmentAllocationLine struct {
+	Pool            string
+	Reservation     string
+	Quantity        int64
+	FromMembers     bool
+	Unit            string
+	SourceKind      string
+	SourceReference string
 }
 
 type FormLoadAssignmentResult struct {
@@ -70,6 +112,13 @@ type FormLoadAssignmentResult struct {
 	record       ports.LoadAssignmentRecord
 	hasRecord    bool
 	continuation string
+
+	uncovered  []ports.CapacityPoolRecord
+	misplaced  []domain.CapacityAllocation
+	allocation domain.CapacityAllocation
+	pool       ports.CapacityPoolRecord
+	hasPool    bool
+	available  int64
 }
 
 func (result FormLoadAssignmentResult) Outcome() LoadAssignmentOutcome {
@@ -85,9 +134,33 @@ func (result FormLoadAssignmentResult) ContinuationReference() string {
 	return result.continuation
 }
 
+// PoolsWithoutReservation 只在`须引用预占`时非空：本班次上没有分配行的那几个池，按池身份排。
+func (result FormLoadAssignmentResult) PoolsWithoutReservation() []ports.CapacityPoolRecord {
+	return append([]ports.CapacityPoolRecord(nil), result.uncovered...)
+}
+
+// AllocationsNotOnSchedule 只在`预占不在本班次`时非空：指错了的那几行，按池身份排。
+func (result FormLoadAssignmentResult) AllocationsNotOnSchedule() []domain.CapacityAllocation {
+	return append([]domain.CapacityAllocation(nil), result.misplaced...)
+}
+
+// RefusedAllocation 交回逐行判定挡下的那一行与它所在的池（单位不符、尚未生效、过期、分配超出）。池是读到的那一个，
+// 那份预占连同它的三量与分配关系在上面，声明方据此看该怎么改。
+func (result FormLoadAssignmentResult) RefusedAllocation() (domain.CapacityAllocation, ports.CapacityPoolRecord, bool) {
+	return result.allocation, result.pool, result.hasPool
+}
+
+// AvailableQuantity 只在`分配超出`时有意义：那一份预占此刻还能分给这次分配的量，单位同池。
+func (result FormLoadAssignmentResult) AvailableQuantity() int64 {
+	return result.available
+}
+
+// FormLoadAssignmentDeps 是本编排的缝。Pools 按班次读登记册上的池连同预占与分配关系，在写事务里锁住各池行：判守恒与
+// 落分配量同一笔，同一个池上并发的分配、预占与释放因此串行判。
 type FormLoadAssignmentDeps struct {
 	Assignments ports.LoadAssignmentRegistry
 	Schedules   ports.TransportScheduleReader
+	Pools       ports.CapacityPoolsOnSchedules
 	Clock       ports.Clock
 }
 
@@ -99,8 +172,9 @@ func NewFormLoadAssignmentHandler(deps FormLoadAssignmentDeps) *FormLoadAssignme
 	return &FormLoadAssignmentHandler{deps: deps}
 }
 
-// Form 形成一次装载分配的首版并登记：受理（对象范围等五件由 FormLoadAssignment 构造门把门）
-// → 幂等按（租户 + 分配 + 版本）分重放 → 按（租户 + 分配）认出已形成的分配 → 按（租户 + 班次）核班次在册 → 登记。
+// Form 形成一次装载分配的首版并登记：受理（对象范围、分配量各行等由 FormLoadAssignment 构造门把门）
+// → 幂等按（租户 + 分配 + 版本）分重放 → 按（租户 + 分配）认出已形成的分配 → 按（租户 + 班次）核班次在册
+// → 容量保障（ADR-0203 决定一、二）→ 登记。
 //
 // **分配是执行意图，不是已经发生的装载。** 它不证明物理装载完成，也不证明控制转移；实际装载、
 // 短装、多装或错装是与分配版本比较的独立事实，不修改分配历史。所以这里没有任何已装载入参，
@@ -154,6 +228,10 @@ func (handler *FormLoadAssignmentHandler) Form(
 	if !registered {
 		return FormLoadAssignmentResult{outcome: LoadAssignmentScheduleNotFound}, nil
 	}
+	// 容量保障排在班次在册之后：池挂在班次上，班次不在册就无池可判；排在重放与链头之后，理由同班次核对。
+	if refused, decided := handler.assureCapacity(ctx, command, assignment); decided {
+		return refused, nil
+	}
 
 	record := ports.LoadAssignmentRecord{
 		Key:        key,
@@ -187,6 +265,80 @@ func (handler *FormLoadAssignmentHandler) Form(
 	return FormLoadAssignmentResult{outcome: LoadAssignmentFormed, record: record, hasRecord: true}, nil
 }
 
+// assureCapacity 判容量保障（ADR-0203 决定一、二）。班次只要挂了池，就要对每个池有一行、每行引用那个池上一份当前有效的
+// 预占、分配量守恒；班次没挂池且没有分配行照旧形成。decided 为真时交回的就是答复，不登记。
+//
+// 次序：指错了的行 → 缺行的池 → 逐行（按池身份）判单位、有效区间与守恒。先挑指错的行：指向别的班次的那一行改对了，
+// 缺的那个池多半也就有了；先答缺池，声明方补一行之后还得再撞一次指错。分配时点取分配时刻——业务时间由提交方给
+// （ADR-0023），不取服务端时钟。
+//
+// 分配不调 Consume、不换存池：分配量随版本落库，预占上的分配关系读池时从各分配当前那一版派生。
+func (handler *FormLoadAssignmentHandler) assureCapacity(
+	ctx context.Context,
+	command FormLoadAssignmentCommand,
+	assignment domain.LoadAssignment,
+) (FormLoadAssignmentResult, bool) {
+	records, err := handler.deps.Pools.ListPoolsOnSchedules(ctx, assignment.TenantID(), []domain.ScheduleReference{assignment.Schedule()})
+	if err != nil {
+		return loadAssignmentUndecided(command), true
+	}
+	pools := make(map[domain.CapacityPoolReference]ports.CapacityPoolRecord, len(records))
+	for _, record := range records {
+		pools[record.Pool.Pool()] = record
+	}
+
+	allocations := assignment.Allocations()
+	var misplaced []domain.CapacityAllocation
+	covered := make(map[domain.CapacityPoolReference]bool, len(allocations))
+	for _, allocation := range allocations {
+		record, onSchedule := pools[allocation.Pool()]
+		if onSchedule && record.Pool.Schedule() == assignment.Schedule() {
+			if _, held := record.Pool.ReservationFor(allocation.Reservation()); held {
+				covered[allocation.Pool()] = true
+				continue
+			}
+		}
+		misplaced = append(misplaced, allocation)
+	}
+	if len(misplaced) > 0 {
+		return FormLoadAssignmentResult{outcome: LoadAssignmentReservationNotOnSchedule, misplaced: misplaced}, true
+	}
+	var uncovered []ports.CapacityPoolRecord
+	for _, record := range records {
+		if !covered[record.Pool.Pool()] {
+			uncovered = append(uncovered, record)
+		}
+	}
+	if len(uncovered) > 0 {
+		return FormLoadAssignmentResult{outcome: LoadAssignmentCapacityReservationRequired, uncovered: uncovered}, true
+	}
+
+	for _, allocation := range allocations {
+		record := pools[allocation.Pool()]
+		err := record.Pool.AdmitAllocation(allocation, assignment.Assignment(), assignment.AssignedAt())
+		if err == nil {
+			continue
+		}
+		refused := FormLoadAssignmentResult{allocation: allocation, pool: record, hasPool: true}
+		switch {
+		case errors.Is(err, domain.ErrCapacityUnitMismatch):
+			refused.outcome = LoadAssignmentUnitMismatch
+		case errors.Is(err, domain.ErrReservationNotYetEffective):
+			refused.outcome = LoadAssignmentReservationNotYetEffective
+		case errors.Is(err, domain.ErrReservationExpired):
+			refused.outcome = LoadAssignmentReservationExpired
+		case errors.Is(err, domain.ErrAllocationExceeded):
+			refused.outcome = LoadAssignmentAllocationExceeded
+			refused.available, _ = record.Pool.AllocationHeadroom(allocation.Reservation(), assignment.Assignment())
+		default:
+			// 池与预占都已核过在册，剩下的只有构造门该挡住的坏值；按载荷不成立答，不落成未决让人重试。
+			return FormLoadAssignmentResult{outcome: LoadAssignmentNotAccepted}, true
+		}
+		return refused, true
+	}
+	return FormLoadAssignmentResult{}, false
+}
+
 // loadAssignmentSpecFrom 逐件过构造器。任一件写坏就当场不受理，不留给领域构造门用一个笼统的
 // 「分配不成立」回答——那一格是给「这一件确实缺了」用的。
 func loadAssignmentSpecFrom(
@@ -216,18 +368,64 @@ func loadAssignmentSpecFrom(
 		}
 		members = append(members, member)
 	}
+	allocations := make([]domain.CapacityAllocationDeclaration, 0, len(command.Allocations))
+	for _, line := range command.Allocations {
+		declaration, accepted := allocationDeclarationFrom(line)
+		if !accepted {
+			return domain.LoadAssignmentSpec{}, none, false
+		}
+		allocations = append(allocations, declaration)
+	}
 	return domain.LoadAssignmentSpec{
-			TenantID:   command.TenantID,
-			Assignment: assignment,
-			Schedule:   schedule,
-			Members:    members,
-			Version:    version,
-			AssignedAt: command.AssignedAt,
+			TenantID:    command.TenantID,
+			Assignment:  assignment,
+			Schedule:    schedule,
+			Members:     members,
+			Version:     version,
+			AssignedAt:  command.AssignedAt,
+			Allocations: allocations,
 		}, ports.LoadAssignmentKey{
 			TenantID:   command.TenantID,
 			Assignment: assignment,
 			Version:    version,
 		}, true
+}
+
+// allocationDeclarationFrom 把一行分配量的各格过构造器。数量成不成立（取成员数时须留零、声明时须为正）与成员数只许
+// 落在件数维的池上由领域构造门判，这里不另立一份口径。
+func allocationDeclarationFrom(line LoadAssignmentAllocationLine) (domain.CapacityAllocationDeclaration, bool) {
+	pool, err := domain.NewCapacityPoolReference(line.Pool)
+	if err != nil {
+		return domain.CapacityAllocationDeclaration{}, false
+	}
+	reservation, err := domain.NewCapacityReservationReference(line.Reservation)
+	if err != nil {
+		return domain.CapacityAllocationDeclaration{}, false
+	}
+	unit, err := domain.NewQuantityUnitReference(line.Unit)
+	if err != nil {
+		return domain.CapacityAllocationDeclaration{}, false
+	}
+	kind, err := domain.ParseCapacityDemandSourceKind(line.SourceKind)
+	if err != nil {
+		return domain.CapacityAllocationDeclaration{}, false
+	}
+	reference, err := domain.NewCapacityDemandSourceReference(line.SourceReference)
+	if err != nil {
+		return domain.CapacityAllocationDeclaration{}, false
+	}
+	source, err := domain.NewCapacityDemandSource(kind, reference)
+	if err != nil {
+		return domain.CapacityAllocationDeclaration{}, false
+	}
+	return domain.CapacityAllocationDeclaration{
+		Pool:        pool,
+		Reservation: reservation,
+		Quantity:    line.Quantity,
+		FromMembers: line.FromMembers,
+		Unit:        unit,
+		Source:      source,
+	}, true
 }
 
 func loadAssignmentAlreadyFormed(head ports.LoadAssignmentRecord) FormLoadAssignmentResult {

@@ -135,9 +135,18 @@ func newLoadAssignmentHandlerOver(
 	registry *loadAssignmentRegistryDouble,
 	schedules *registeredSchedulesDouble,
 ) *application.FormLoadAssignmentHandler {
+	return newLoadAssignmentHandlerWith(registry, schedules, assignmentPools())
+}
+
+func newLoadAssignmentHandlerWith(
+	registry *loadAssignmentRegistryDouble,
+	schedules *registeredSchedulesDouble,
+	pools *assignmentPoolsDouble,
+) *application.FormLoadAssignmentHandler {
 	return application.NewFormLoadAssignmentHandler(application.FormLoadAssignmentDeps{
 		Assignments: registry,
 		Schedules:   schedules,
+		Pools:       pools,
 		Clock:       dispatchTaskClock{at: assignmentRecordedAt},
 	})
 }

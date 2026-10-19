@@ -68,6 +68,10 @@ func newStorableFixture(t *testing.T) *storableFixture {
 	if err != nil {
 		t.Fatalf("班次登记：%v", err)
 	}
+	capacityPools, err := adapter.NewCapacityPools(db)
+	if err != nil {
+		t.Fatalf("容量池册：%v", err)
+	}
 	// 装载分配核班次在册：先登下夹具引用的那个班次，本文件要证的那几格才走得到登记册。
 	// 夹具没登进去时，后面的用例会红在 SCHEDULE_NOT_FOUND 上、看不出病根在夹具，所以在这里先拦。
 	if saved := inTransaction(t, transactor, func(ctx context.Context) (ports.ScheduleSaveOutcome, error) {
@@ -88,7 +92,7 @@ func newStorableFixture(t *testing.T) *storableFixture {
 	return &storableFixture{
 		t: t, pool: pool, transactor: transactor, tenant: tenant, assignments: assignments, facts: facts,
 		form: application.NewFormLoadAssignmentHandler(application.FormLoadAssignmentDeps{
-			Assignments: assignments, Schedules: schedules, Clock: clock,
+			Assignments: assignments, Schedules: schedules, Pools: capacityPools, Clock: clock,
 		}),
 		record: application.NewRecordMovementFactHandler(application.RecordMovementFactDeps{Facts: facts, Handoff: handoff, Clock: clock}),
 		delivery: &deliveryPrecisionFixture{
