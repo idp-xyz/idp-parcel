@@ -1,7 +1,7 @@
 # 09 派送发起的确定性任务引用不是忠实身份：键可被手工建任务口占用、拼接不单射，对象首拍就答「已形成」而它并没有派送任务
 
 Category: bug
-Status: in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（tf-face-algebra/10 已进 main），分支 `claude-tfa09`。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 代决（见「裁定」）；排在 tf-face-algebra/10 进 main 之后（同碰手工建任务口）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: in-progress——2026-10-19 评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-19 作者子代理完工，待评审。此前 in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（tf-face-algebra/10 已进 main），分支 `claude-tfa09`。此前 ready-for-agent——2026-10-19 会话 `idp-parcel-9b` 代决（见「裁定」）；排在 tf-face-algebra/10 进 main 之后（同碰手工建任务口）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment-delivery-dispatch-triggers, /transport-fulfillment-dispatch-task-registrations
@@ -162,3 +162,14 @@ S（隔离合成：`SYN-` 租户与对象、三缝替身；未接任何租户真
 - 「不做（观察）」两条照旧不做。
 - 顺带看到未动：`DeliveryDispatchUndecidedReason` 头注「今天三条缝一条都没接」已过期（三缝已接真）。它不在第 5 条点名范围内，未改，留评审定。
 
+## Comments
+
+### 评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审；2026-10-19，钉 `28d1952b`）
+
+两轴合审，0 阻断。
+
+- **Spec**：裁定五条逐条落到。新铸法 `DELIVERY-DISPATCH/v2/<长度>:<段>/<长度>:<对象>/<长度>:<入场依据>`，`parseDeliveryDispatchTaskReference` 是它的唯一读回（长度不带前导零），单射有据；旧拼法只兼认，命中且核得过才算本拍那一项，核不过照新键往下走、不答被占——与裁定第 1 条「命中且第 2 条核得过才算已在册」一致。新键上的占用者答 `DISPATCH_TASK_REFERENCE_TAKEN`（200，回显占用者）。查在册在读回段与确认链尾凭已交接之后、参与 Active 之前；读不回答未决、不问所有者。手工口在载荷译装处拒保留起头（400 `MALFORMED_REQUEST`），不挡执行器。头注两处过期句已清。
+- **作者自定的格认可**：入场词判断挪到 Active 之前，离场且非交接入场的组合改答 `ENTRY_NOT_BY_HANDOVER`（两者都是领域拒绝，读法更准）；旧拼法串恰合新形状时不查旧键的防线有构造实例撑着。
+- **Standards**：查在册读口与任务口同一张登记册，装配拆出 `deliveryDispatchTriggerOver` 让真库用例只换三条缝。注释只写为什么。
+- **非阻断（已修于 `f099b64f`）**：`DeliveryDispatchUndecidedReason` 头注仍说三条缝一条都没接，生产装配早已全接，改为说明这一格守的是缺件的装配。
+- 剩余局限（作者已记）：恰好落在新键上的旧拼法存量（要刻意构造段）核得过即被认，存量不回写、无从分辨来源。
