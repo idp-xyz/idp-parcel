@@ -230,17 +230,22 @@ type ConsolidationFactKey struct {
 //
 // Member 只在移入/移出两格在场，Seal 只在封装格在场——其余格上它们缺席是真话，不是漏填。
 // OccurredAt 是现场自带的业务时间，RecordedAt 是服务端的记录时刻，两者分列（ADR-0023）。
+//
+// DirectionalBasis 只在移入格上有值：形成新加成员事实时同一笔记下的方向依据记录（票 no-directional-basis/01）。
+// 它不进内容指纹——那是服务端在判断时刻所知，不是来源报来的内容；进了指纹，PS 状态一变，同一来源重投就成了
+// 来源冲突。零值读作`未记录`（这一格出现之前落的加成员事实），不读作依据齐全。
 type ConsolidationFactRecord struct {
-	Key           ConsolidationFactKey
-	ContentDigest string
-	Action        domain.ConsolidationActionKind
-	Unit          domain.ConsolidationUnitID
-	Member        domain.HandlingUnitID
-	Seal          domain.SealReference
-	PerformedBy   domain.PerformingPartyReference
-	Evidence      domain.ExecutionEvidenceReference
-	OccurredAt    time.Time
-	RecordedAt    time.Time
+	Key              ConsolidationFactKey
+	ContentDigest    string
+	Action           domain.ConsolidationActionKind
+	Unit             domain.ConsolidationUnitID
+	Member           domain.HandlingUnitID
+	Seal             domain.SealReference
+	PerformedBy      domain.PerformingPartyReference
+	Evidence         domain.ExecutionEvidenceReference
+	OccurredAt       time.Time
+	RecordedAt       time.Time
+	DirectionalBasis domain.DirectionalBasisRecord
 }
 
 type ConsolidationFactSaveOutcome uint8
@@ -271,6 +276,33 @@ type ConsolidationStore interface {
 	FindByID(ctx context.Context, tenant domain.TenantID, id domain.ConsolidationUnitID) (*domain.ConsolidationUnit, bool, error)
 	Save(ctx context.Context, tenant domain.TenantID, unit *domain.ConsolidationUnit) (ConsolidationSaveOutcome, error)
 	Update(ctx context.Context, tenant domain.TenantID, unit *domain.ConsolidationUnit) error
+}
+
+// IntakeIdentityView 按作业实物读本上下文收寄册上带收寄的行（收寄已形成与待识别两格），供方向依据记录判身份
+// （票 no-directional-basis/01）。今天正式包裹 → 作业实物的映射只有收寄判断里识别成功建立的版本化关联，身份因此
+// 只问这本册。查无此物交回空切片；读不动作为错误返回——「没有收寄记录」与「没查到」是两件事。
+type IntakeIdentityView interface {
+	FindIntakeIdentities(
+		ctx context.Context,
+		tenant domain.TenantID,
+		unit domain.HandlingUnitID,
+	) ([]domain.IntakeIdentityObservation, error)
+}
+
+// RoutingBasisQuery 是一次路由依据询问：哪件作业实物（经已成立的正式包裹关联）要进哪个集运单元。路由指令按包裹
+// 答，成员级集运兼容判断还要看拟组合的成员与目标单元，几样一并给出。
+type RoutingBasisQuery struct {
+	TenantID domain.TenantID
+	Parcel   domain.ParcelAssociationReference
+	Member   domain.HandlingUnitID
+	Unit     domain.ConsolidationUnitID
+}
+
+// RoutingBasisView 答一件作业实物此刻的路由依据：当前有效路由指令与成员级集运兼容判断，两样都归 network-routing
+// （UC-NO-003 启动条件）。NR 今天没有可消费的读口，生产装配显式未配置（票 no-directional-basis/02 换真）；读不动
+// 作为错误返回。
+type RoutingBasisView interface {
+	FindRoutingBasis(ctx context.Context, query RoutingBasisQuery) (domain.RoutingBasis, error)
 }
 
 // ContainmentIndex 回答一件实物当前被哪个未关闭单元直接包含。跨单元的「同一时点

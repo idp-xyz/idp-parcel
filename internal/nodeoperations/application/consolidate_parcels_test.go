@@ -226,7 +226,7 @@ func TestOneDirectParentIsEnforcedAcrossUnits(t *testing.T) {
 		Unit:     unitID(t, "unit-1"),
 		Member:   handlingUnit(t, "hu-1"),
 		Source:   workSource(t, "src-add-1", consolidationAt),
-	})
+	}, judgedBasis(t))
 	if err != nil {
 		t.Fatalf("add: %v", err)
 	}
@@ -241,7 +241,7 @@ func TestOneDirectParentIsEnforcedAcrossUnits(t *testing.T) {
 		Unit:     unitID(t, "unit-1"),
 		Member:   handlingUnit(t, "hu-1"),
 		Source:   workSource(t, "src-add-1-again", consolidationAt.Add(time.Minute)),
-	})
+	}, judgedBasis(t))
 	if err != nil {
 		t.Fatalf("replay add: %v", err)
 	}
@@ -254,7 +254,7 @@ func TestOneDirectParentIsEnforcedAcrossUnits(t *testing.T) {
 		Unit:     unitID(t, "unit-2"),
 		Member:   handlingUnit(t, "hu-1"),
 		Source:   workSource(t, "src-add-elsewhere", consolidationAt.Add(2*time.Minute)),
-	})
+	}, judgedBasis(t))
 	if err != nil {
 		t.Fatalf("elsewhere add: %v", err)
 	}
@@ -276,7 +276,7 @@ func TestOneDirectParentIsEnforcedAcrossUnits(t *testing.T) {
 		Unit:     unitID(t, "unit-2"),
 		Member:   handlingUnit(t, "hu-1"),
 		Source:   workSource(t, "src-add-moved", consolidationAt.Add(4*time.Minute)),
-	})
+	}, judgedBasis(t))
 	if err != nil {
 		t.Fatalf("moved add: %v", err)
 	}
@@ -299,7 +299,7 @@ func TestSealingFreezesTheSnapshotAndClosureIsFinal(t *testing.T) {
 		Unit:     unitID(t, "unit-1"),
 		Member:   handlingUnit(t, "hu-1"),
 		Source:   workSource(t, "src-add-seal-case", consolidationAt),
-	}); err != nil {
+	}, judgedBasis(t)); err != nil {
 		t.Fatalf("add: %v", err)
 	}
 
@@ -331,7 +331,7 @@ func TestSealingFreezesTheSnapshotAndClosureIsFinal(t *testing.T) {
 		Unit:     unitID(t, "unit-1"),
 		Member:   handlingUnit(t, "hu-2"),
 		Source:   workSource(t, "src-add-frozen", consolidationAt.Add(2*time.Minute)),
-	})
+	}, judgedBasis(t))
 	if err != nil {
 		t.Fatalf("frozen add: %v", err)
 	}

@@ -13,6 +13,10 @@ import (
 // ErrUnexpectedConsolidationSave 说明集运库交回了封闭集合以外的写入结果。
 var ErrUnexpectedConsolidationSave = errors.New("node operations: unexpected consolidation save outcome")
 
+// ErrNoDirectionalBasisRecord 说明加成员的调用方没交方向依据记录。这是装配缺陷，不是业务答案：真缺依据是记录里
+// 一格的取值，照样落册；没判就交进来，落下去的只能是一条读作`未记录`的新事实，而那一格留给的是它出现之前的旧事实。
+var ErrNoDirectionalBasisRecord = errors.New("node operations: add member needs the directional basis judged before the write")
+
 // ConsolidationOutcome 是集运作业请求的应用处理结果。
 type ConsolidationOutcome uint8
 
@@ -125,6 +129,7 @@ type ConsolidationResult struct {
 	unit       *domain.ConsolidationUnit
 	elsewhere  domain.ConsolidationUnitID
 	handoffRef string
+	basis      domain.DirectionalBasisRecord
 }
 
 func (result ConsolidationResult) Outcome() ConsolidationOutcome {
@@ -143,6 +148,13 @@ func (result ConsolidationResult) Elsewhere() domain.ConsolidationUnitID {
 // HandoffReference 非空说明封装快照已入册但意图还没交出去，重放会重发同一份。
 func (result ConsolidationResult) HandoffReference() string {
 	return result.handoffRef
+}
+
+// DirectionalBasis 交回加成员事实所带的方向依据记录：新形成时是与事实同一笔落册的那一份，`已有结果`时是册上
+// 原样的那一份——不重判，判断时刻也是当时的。其余结果交回零值；加成员的`已有结果`交回零值，说的是那条事实落册
+// 时还不记方向依据（`未记录`），不是依据齐全。
+func (result ConsolidationResult) DirectionalBasis() domain.DirectionalBasisRecord {
+	return result.basis
 }
 
 type ConsolidateParcelsDeps struct {
@@ -206,10 +218,18 @@ func (handler *ConsolidateParcelsHandler) Open(
 // AddMember 把实物移入单元：先跨单元核对「同一时点最多一个直接物理父级」——已在
 // 本单元是幂等重放、在别的未关闭单元里是业务负向带对方标识（恢复动作是先从那里
 // 移出，不是重试）；封装/关闭态由领域拦。
+//
+// basis 是调用方在写事务之前判好的方向依据记录（DirectionalBasisJudge），只在形成新加成员事实时与事实同一笔
+// 落册。它不挡事实：缺依据、读不动都照常 MEMBER_ADDED——UC-NO-003「已经发生的错误分拣保留为事实并形成偏离，
+// 不回写为未发生」，偏离的判断归 network-routing，异常归 visibility-exception。
 func (handler *ConsolidateParcelsHandler) AddMember(
 	ctx context.Context,
 	command AddMemberCommand,
+	basis domain.DirectionalBasisRecord,
 ) (ConsolidationResult, error) {
+	if !basis.Recorded() {
+		return ConsolidationResult{}, ErrNoDirectionalBasisRecord
+	}
 	_, digest, err := domain.CanonicalizeAddMemberPayload(command.Source, command.Unit, command.Member)
 	if err != nil {
 		return ConsolidationResult{}, err
@@ -246,10 +266,11 @@ func (handler *ConsolidateParcelsHandler) AddMember(
 		return ConsolidationResult{outcome: ConsolidationUndecided}, nil
 	}
 	return handler.recorded(ctx, gate, ports.ConsolidationFactRecord{
-		Action: domain.AddMemberAction,
-		Unit:   command.Unit,
-		Member: command.Member,
-	}, ConsolidationResult{outcome: MemberAdded, unit: unit}), nil
+		Action:           domain.AddMemberAction,
+		Unit:             command.Unit,
+		Member:           command.Member,
+		DirectionalBasis: basis,
+	}, ConsolidationResult{outcome: MemberAdded, unit: unit, basis: basis}), nil
 }
 
 // RemoveMember 把实物移出单元（开放态，领域拦）。
@@ -440,7 +461,7 @@ func (handler *ConsolidateParcelsHandler) admit(
 	}
 	switch domain.CompareStoredDigest(existing.ContentDigest, digest, unversioned) {
 	case domain.SamePayload:
-		gate.result = handler.existingResult(ctx, tenant, existing.Unit)
+		gate.result = handler.existingResult(ctx, existing)
 	case domain.DifferentPayload:
 		gate.result = ConsolidationResult{outcome: ConsolidationSourceConflict}
 	default:
@@ -469,7 +490,12 @@ func (handler *ConsolidateParcelsHandler) recorded(
 		return ConsolidationResult{outcome: ConsolidationUndecided}
 	}
 	if saved == ports.ConsolidationFactAlreadyRecorded {
-		return handler.existingResult(ctx, gate.tenant, record.Unit)
+		// 交回的方向依据记录得是先到那一份落在册上的，不是本次刚判的：读回赢家再答。
+		winner, found, err := handler.deps.Facts.FindByKey(ctx, gate.key)
+		if err != nil || !found {
+			return ConsolidationResult{outcome: ConsolidationUndecided}
+		}
+		return handler.existingResult(ctx, winner)
 	}
 	return result
 }
@@ -484,25 +510,25 @@ func (handler *ConsolidateParcelsHandler) rejected(
 	existing, found, err := handler.deps.Facts.FindByKey(ctx, gate.key)
 	if err == nil && found &&
 		domain.CompareStoredDigest(existing.ContentDigest, gate.digest, gate.unversioned) == domain.SamePayload {
-		return handler.existingResult(ctx, gate.tenant, existing.Unit)
+		return handler.existingResult(ctx, existing)
 	}
 	return ConsolidationResult{outcome: ConsolidationNotAccepted}
 }
 
-// existingResult 按已有来源事实作答：结果格是`已有结果`，单元照当前状态读回。
+// existingResult 按已有来源事实作答：结果格是`已有结果`，单元照当前状态读回，方向依据记录照册上原样交回。
 func (handler *ConsolidateParcelsHandler) existingResult(
 	ctx context.Context,
-	tenant domain.TenantID,
-	id domain.ConsolidationUnitID,
+	existing ports.ConsolidationFactRecord,
 ) ConsolidationResult {
-	unit, found, err := handler.deps.Store.FindByID(ctx, tenant, id)
+	unit, found, err := handler.deps.Store.FindByID(ctx, existing.Key.TenantID, existing.Unit)
 	if err != nil {
 		return ConsolidationResult{outcome: ConsolidationUndecided}
 	}
-	if !found {
-		return ConsolidationResult{outcome: ConsolidationExistingResult}
+	result := ConsolidationResult{outcome: ConsolidationExistingResult, basis: existing.DirectionalBasis}
+	if found {
+		result.unit = unit
 	}
-	return ConsolidationResult{outcome: ConsolidationExistingResult, unit: unit}
+	return result
 }
 
 // isSourceExpressed 判来源四格是否齐备。领域构造器已经守着同一条，这里再判一次是为了

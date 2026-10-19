@@ -214,7 +214,7 @@ func addMemberTo(t *testing.T, fixture *consolidateFixture, unit, member, source
 		Unit:     unitID(t, unit),
 		Member:   handlingUnit(t, member),
 		Source:   workSource(t, sourceID, consolidationAt),
-	})
+	}, judgedBasis(t))
 	wantOutcome(t, result.Outcome(), err, application.MemberAdded)
 }
 
@@ -261,7 +261,7 @@ func addMemberUnversionedCase(t *testing.T) unversionedDigestCase {
 			if changed {
 				command.Member = changedMember
 			}
-			return fixture.handler.AddMember(context.Background(), command)
+			return fixture.handler.AddMember(context.Background(), command, judgedBasis(t))
 		},
 		application.MemberAdded)
 }

@@ -9,20 +9,25 @@ import (
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 	"go.idp.xyz/idp-bento-go/postgres/outbox"
 
+	nonetwork "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/networkrouting"
+	noparcel "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/parcelshipment"
 	nopostgres "go.idp.xyz/idp-parcel/internal/nodeoperations/adapters/postgres"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/application"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/domain"
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
+	pspostgres "go.idp.xyz/idp-parcel/internal/parcelshipment/adapters/postgres"
 )
 
 // consolidationImporter 是集运子命令的全部依赖。事务由本层给出（单元库与来源事实登记的
 // 写口无事务即拒），一行一笔——理由同收寄口，这里还多一层：集运行之间有先后依赖（开启
 // 在前、移入在后、封装再后），一行被拒不该连累它前面已合法形成的作业事实。
 //
-// 与收寄口不同，集运六口没有身份核对那条缝：成员是作业实物号，不经 PS 侧解析。因此没有
-// 「显式未配置」要在开工前打印，样例九行今天就能全部落地。
+// 与收寄口不同，集运六口不挡在身份核对上：成员是作业实物号，不经 PS 侧解析，样例各行今天就能全部落地。加成员
+// 行另判一份方向依据记录随事实落册（票 no-directional-basis/01）：判在本行事务之前，读在池上——跨上下文读在写
+// 事务里出一次 SQL 级错误，整笔事务就进了中止态，读不动于是挡住了已经发生的加成员。
 type consolidationImporter struct {
 	handler    *application.ConsolidateParcelsHandler
+	judge      *application.DirectionalBasisJudge
 	transactor bentoapp.Transactor
 }
 
@@ -53,24 +58,80 @@ func buildConsolidationImporter(db *bentopg.DB, clock ports.Clock) (consolidatio
 		Downstream:  downstream,
 		Clock:       clock,
 	})
-	return consolidationImporter{handler: handler, transactor: db.Transactor()}, nil
+	judge, err := buildDirectionalBasisJudge(db, clock)
+	if err != nil {
+		return consolidationImporter{}, err
+	}
+	return consolidationImporter{handler: handler, judge: judge, transactor: db.Transactor()}, nil
+}
+
+// buildDirectionalBasisJudge 装方向依据的三个来源：身份读本上下文收寄册；服务结果与收寄编排同一个读口、同一只
+// 防腐适配器（票 operator-channel/25）；路由依据显式未配置（票 no-directional-basis/02 换真）。
+func buildDirectionalBasisJudge(db *bentopg.DB, clock ports.Clock) (*application.DirectionalBasisJudge, error) {
+	intakes, err := nopostgres.NewIntakeIdentities(db)
+	if err != nil {
+		return nil, fmt.Errorf("收寄册按实物读口：%w", err)
+	}
+	cancellations, err := pspostgres.NewParcelCancellations(db)
+	if err != nil {
+		return nil, fmt.Errorf("取消决定册：%w", err)
+	}
+	finals, err := pspostgres.NewFinalOutcomes(db)
+	if err != nil {
+		return nil, fmt.Errorf("终局册：%w", err)
+	}
+	serviceResults, err := noparcel.NewServiceResultView(cancellations, finals)
+	if err != nil {
+		return nil, fmt.Errorf("服务结果读口：%w", err)
+	}
+	judge, err := application.NewDirectionalBasisJudge(application.DirectionalBasisDeps{
+		Intakes:        intakes,
+		ServiceResults: serviceResults,
+		Routing:        nonetwork.UnconfiguredRoutingBasis{},
+		Clock:          clock,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("方向依据判断：%w", err)
+	}
+	return judge, nil
 }
 
 // executeConsolidation 逐行推进、打报告、算退出码。
 func executeConsolidation(ctx context.Context, batch consolidationBatch, importer consolidationImporter, out io.Writer) int {
-	results := importConsolidation(ctx, batch, importer)
+	results, tally := importConsolidation(ctx, batch, importer)
 	writeImportReport(out, batch.BatchRef, consolidationTemplateVersion, results)
+	writeDirectionalBasisTally(out, tally)
 	return exitCodeFor(results)
 }
 
-// importConsolidation 逐行推进：一行一笔事务 → 按命令类型交对应的集运口 → 应用结果译成
-// 去向。编排返回 Go 错误时整笔回滚，该行记未决；其他行照常继续。
-func importConsolidation(ctx context.Context, batch consolidationBatch, importer consolidationImporter) []rowResult {
+// importConsolidation 逐行推进：加成员行先判方向依据（本行事务之前，外层 ctx）→ 一行一笔事务 → 按命令类型交
+// 对应的集运口 → 应用结果译成去向。编排返回 Go 错误时整笔回滚，该行记未决；其他行照常继续。
+func importConsolidation(
+	ctx context.Context,
+	batch consolidationBatch,
+	importer consolidationImporter,
+) ([]rowResult, directionalBasisTally) {
 	results := make([]rowResult, 0, len(batch.Rows))
+	var tally directionalBasisTally
 	for _, row := range batch.Rows {
+		var basis domain.DirectionalBasisRecord
+		if command, adding := row.Command.(application.AddMemberCommand); adding {
+			judged, err := importer.judge.Judge(ctx, command)
+			if err != nil {
+				// 记录拼不出来是实现坏了（各格答不出都已是`读不动`），不是业务答案；本行不落，记未决让人看。
+				results = append(results, rowResult{
+					Line: row.Line, FactRef: row.FactRef,
+					Outcome:     "NO_ANSWER_FORMED",
+					Disposition: rowUndecided,
+					Detail:      fmt.Sprintf("方向依据记录未形成，本行未落：%v", err),
+				})
+				continue
+			}
+			basis = judged
+		}
 		var handled application.ConsolidationResult
 		err := importer.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
-			result, submitErr := submitConsolidation(txCtx, importer.handler, row.Command)
+			result, submitErr := submitConsolidation(txCtx, importer.handler, row.Command, basis)
 			if submitErr != nil {
 				return submitErr
 			}
@@ -86,9 +147,11 @@ func importConsolidation(ctx context.Context, batch consolidationBatch, importer
 			})
 			continue
 		}
-		results = append(results, consolidationRowDisposition(row, handled))
+		answer := consolidationRowDisposition(row, handled)
+		answer.Detail += tally.count(row.Command, handled)
+		results = append(results, answer)
 	}
-	return results
+	return results, tally
 }
 
 // submitConsolidation 按命令类型分派到六口之一。默认分支是实现坏了而不是模板填错——译装
@@ -97,12 +160,13 @@ func submitConsolidation(
 	ctx context.Context,
 	handler *application.ConsolidateParcelsHandler,
 	command any,
+	basis domain.DirectionalBasisRecord,
 ) (application.ConsolidationResult, error) {
 	switch command := command.(type) {
 	case application.OpenUnitCommand:
 		return handler.Open(ctx, command)
 	case application.AddMemberCommand:
-		return handler.AddMember(ctx, command)
+		return handler.AddMember(ctx, command, basis)
 	case application.RemoveMemberCommand:
 		return handler.RemoveMember(ctx, command)
 	case application.SealUnitCommand:

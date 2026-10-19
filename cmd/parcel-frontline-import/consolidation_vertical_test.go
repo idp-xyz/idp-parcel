@@ -56,7 +56,8 @@ func importConsolidationTemplate(t *testing.T, importer consolidationImporter, r
 	if err != nil {
 		t.Fatalf("集运模板译装失败：%v", err)
 	}
-	return importConsolidation(t.Context(), batch, importer)
+	results, _ := importConsolidation(t.Context(), batch, importer)
+	return results
 }
 
 func findUnit(t *testing.T, units *nopostgres.ConsolidationUnits, id string) *domain.ConsolidationUnit {

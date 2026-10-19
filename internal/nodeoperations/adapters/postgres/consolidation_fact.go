@@ -46,17 +46,18 @@ func (repository *ConsolidationFacts) FindByKey(
 		memberID, sealRef          *string
 		performedBy, evidence      string
 		occurredAt, recordedAt     time.Time
+		directionalBasis           []byte
 	)
 	err = querier.QueryRow(ctx,
 		`SELECT content_digest, action, unit_id, member_id, seal_ref,
-		        performed_by, evidence, occurred_at, recorded_at
+		        performed_by, evidence, occurred_at, recorded_at, directional_basis
 		   FROM node_operations.consolidation_fact
 		  WHERE tenant_id = $1
 		    AND source_id = $2`,
 		key.TenantID.String(),
 		key.SourceID,
 	).Scan(&digest, &actionName, &unitID, &memberID, &sealRef,
-		&performedBy, &evidence, &occurredAt, &recordedAt)
+		&performedBy, &evidence, &occurredAt, &recordedAt, &directionalBasis)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.ConsolidationFactRecord{}, false, nil
 	}
@@ -105,6 +106,14 @@ func (repository *ConsolidationFacts) FindByKey(
 		}
 		record.Seal = seal
 	}
+	// NULL 是这一列出现之前落的加成员事实（或非加成员行）：零值记录，读作`未记录`。
+	if directionalBasis != nil {
+		basis, err := rebuildDirectionalBasis(directionalBasis)
+		if err != nil {
+			return ports.ConsolidationFactRecord{}, false, fmt.Errorf("find consolidation fact: directional basis: %w", err)
+		}
+		record.DirectionalBasis = basis
+	}
 	return record, true, nil
 }
 
@@ -123,11 +132,15 @@ func (repository *ConsolidationFacts) Save(
 		return ports.ConsolidationFactSaveOutcomeInvalid, fmt.Errorf("save consolidation fact: %w", err)
 	}
 
+	basis, err := marshalDirectionalBasis(record.DirectionalBasis)
+	if err != nil {
+		return ports.ConsolidationFactSaveOutcomeInvalid, fmt.Errorf("save consolidation fact: directional basis: %w", err)
+	}
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO node_operations.consolidation_fact
 			(tenant_id, source_id, content_digest, action, unit_id, member_id, seal_ref,
-			 performed_by, evidence, occurred_at, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			 performed_by, evidence, occurred_at, recorded_at, directional_basis)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.SourceID,
@@ -140,6 +153,7 @@ func (repository *ConsolidationFacts) Save(
 		record.Evidence.String(),
 		record.OccurredAt.UTC(),
 		record.RecordedAt.UTC(),
+		basis,
 	)
 	if err != nil {
 		return ports.ConsolidationFactSaveOutcomeInvalid, fmt.Errorf("save consolidation fact: %w", err)
