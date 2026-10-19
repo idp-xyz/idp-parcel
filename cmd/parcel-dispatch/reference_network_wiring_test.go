@@ -211,7 +211,8 @@ func TestTheAdoptedDemoNetworkGetsPastRouteEvidenceThroughProductionWiring(t *te
 
 // Covers: 票 routing-first-cut/17 判据二、三与票 18 判据——客户声明了重量的包裹经受理链接受之后，生产装配的包裹事实取数侧
 // 读到的是这份客户声明，事实引用标明来源；演示租户给三段登了段计价区域（ADR-0189 决定二），同一判断交候选成本取数侧，
-// 演示候选出价：2.5 KG 落演示成本卡 Z1 的 [1,5) 一档，三段各 85 CNY，合 255 CNY，三段各留一条出处。
+// 演示候选出价：2.5 KG 落演示成本卡 Z1 的 [1,5) 一档，三段各 85 CNY，合 255 CNY，三段各留一条出处。末端登了派送时长，
+// 候选带交付段，出价照旧只有三段（AT-NR-058，ADR-0217 决定四）：交付段没有成本依据，不进比价。
 func TestADeclaredParcelOnZonedLegsIsPricedThroughProductionWiring(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
 	ctx := t.Context()
@@ -235,6 +236,9 @@ func TestADeclaredParcelOnZonedLegsIsPricedThroughProductionWiring(t *testing.T)
 	seedWiringCustomsCatalog(t, fixture.db, demoTenant, true)
 	evidence := loadWiringEvidence(t, fixture.db, demoTenant)
 	key := wiringRouteKey(t, demoTenant)
+	if len(evidence.Paths) != 1 || !evidence.Paths[0].HasDelivery {
+		t.Fatalf("候选路径 = %+v，want 带交付段——这条用例证的是交付段不进比价", evidence.Paths)
+	}
 
 	facts, err := routeParcelFacts(fixture.db)
 	if err != nil {
