@@ -1,7 +1,7 @@
 # 03 终止参与：「已离场」不回显在册终点，并发输家不读回就答「已离场」，坏命令随参与状态改答——异依据重投、被别处结束与原样重放分不出
 
 Category: bug
-Status: in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 代决并认领（分支 `claude-tfa0305`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
+Status: in-progress——2026-10-18 完工；评审 0 阻断（会话读 diff 审，见 Comments），待进 main。此前 in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 代决并认领（分支 `claude-tfa0305`）。此前 needs-triage——2026-10-18 会话 `idp-parcel-9b` 立（操作者与集成客户端渠道逐口核代数研判；实测发现未经对抗核验，裁定待做，动手前先复现）
 Blocked by: 无
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：逐口核研判（workflow review26-face-algebra-sweep）：/transport-fulfillment-participation-terminations
@@ -97,3 +97,9 @@ Blocked by: 无
 - 门：改动 .go 过 gofmt；`go build ./...`、`go vet ./...` 退 0；带 DSN `go test -p 1 -count=1 ./internal/transportfulfillment/... ./cmd/parcel-api/... ./internal/architecture/...` 全 ok（与 05 同一次跑，日志 /tmp/claude-1000/-home-tops-workspace-idp-parcel/39d8f2f8-cde5-4dd1-bb34-aef8ce7c660c/scratchpad/tfa-gates.log）；机制清点重生成 `045d66cb`。
 - 证据层级：S（隔离合成 SYN- 数据，真库为本机测试库）。
 - 评审：待会话读 diff 审。
+
+## Comments
+
+- **评审 ← 会话 idp-parcel-9b 读 diff 审（不算非作者评审）· 钉 `3a178474`（基线 `4c2b0daa`）· 2026-10-18**：用户选「精简续做」，评审由会话本身读 diff 做；代码出自本会话起的实施子代理，不算非作者评审，如实记下。
+  - **Spec**：阻断无。已离场答复经结果 `End()` 回显在册终点种类、依据、时刻；写中 0 行回到读段重读，读回已离场即答已离场并回显、仍在场在新链尾上重走、两次仍不成就答未决带续办；成形校验挪到读段之前，坏命令一律 `INPUT_NOT_ACCEPTED`。HTTP 加 `endKind` / `endBasis` / `endedAt`，时刻照本包现行格式。三条真库用例换回基线实现全红、修后全绿。
+  - **Standards**：阻断无。留意：`End` 为交付、交接两路共用，那两路的已离场结果也带上终点，调用方只读 Outcome，行为不变。
