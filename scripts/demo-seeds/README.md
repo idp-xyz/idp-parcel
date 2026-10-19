@@ -80,6 +80,11 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
 权威区间各一行）。种子不登任何发生项：发生项是对已发生履约事实的一次采购判断，要等干线段的参与结束之后经
 `POST /transport-fulfillment-charge-occurrence-registrations` 登记，登法见下面「数据故事」第 8 步的补记。
 
+配置员另持运营决定「容量预占」与「容量释放」两种（ADR-0203；`data/access/02` 的授予、`03` 的对照与
+`data/governance/28`、`29` 的权威区间各两行）。种子不登任何预占：预占是为一个业务范围占住一个池的一段容量，由配置员
+经 `POST /transport-fulfillment-capacity-reservations` 声明，释放经 `POST /transport-fulfillment-capacity-releases`，
+登法见下面「数据故事」第 8 步的补记。
+
 单要一枚令牌：`scripts/demo-seeds/operator-channel/operator-token.sh <邮箱>` 打印访问令牌，末尾加 `claims` 打印两枚
 令牌的载荷。它与管理台走同一个公共客户端、同一条 authorization_code + PKCE 流，管理台不必在跑。
 
@@ -213,6 +218,11 @@ IDP_PARCEL_POSTGRES_DSN='postgres://parcel:parcel@127.0.0.1:55432/postgres?sslmo
    登记令牌的操作者，随发生项回显。同一干线段上有几件包裹、协议按段计费时，等它们的参与都结束后作为一项的成员一并
    登记；逐件各登「数量 1、单位 `SEGMENT`」会把同一段算成几份段费，成员交集保护按成员判、拦不住这一种（ADR-0207
    越权风险点 4）。
+   干线那一班的重量池 `SYN-SCHED-SZX-SIN-DAILY/2026-10-21/WEIGHT`（5000 KG）上，配置员可以声明一份预占（ADR-0203）：
+   预占引用自起（如 `SYN-RES-SZX-SIN-01`），数量与单位按池的单位写（`KG`，写成别的单位答 `UNIT_MISMATCH`，不换算），
+   来源写 `{"kind": "OPERATOR_DECLARATION", "reference": "SYN-DEMAND-DECL-01/v1"}`，判断时点与有效期由声明方给。新预占
+   答 201 `CAPACITY_RESERVED`，原样重交答 200 已有；超出余量答 200 `CAPACITY_EXCEEDED` 并带余量，没有任何审批能越过。
+   需求量与来源是演示租户的声明值，证据只记 `S`。
 
 ## 已知边界（如实记录，不是缺陷）
 

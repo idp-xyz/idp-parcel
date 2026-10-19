@@ -231,6 +231,24 @@
       "decisionKind": "TRANSPORT_CHARGE_OCCURRENCE_REGISTRATION",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "basis": "SYN-GRANT-BASIS-DEX-CHARGE-OCCURRENCE-01"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-CAPACITY-RESERVATION-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "CAPACITY_RESERVATION",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-CAPACITY-RESERVATION-01"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-CAPACITY-RELEASE-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "OPERATION_DECISION",
+      "decisionKind": "CAPACITY_RELEASE",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-CAPACITY-RELEASE-01"
     }
   ]
 }

@@ -144,6 +144,22 @@
       "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "basis": "SYN-MAP-BASIS-01"
+    },
+    {
+      "mappingId": "SYN-MAP-OD-CAPACITY-RESERVATION-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "CAPACITY_RESERVATION",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
+    },
+    {
+      "mappingId": "SYN-MAP-OD-CAPACITY-RELEASE-01",
+      "capability": "OPERATION_DECISION",
+      "factKind": "CAPACITY_RELEASE",
+      "objectScope": "SYN-PILOT-SCOPE/operation-decisions@v1",
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-MAP-BASIS-01"
     }
   ]
 }
