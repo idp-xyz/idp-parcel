@@ -8,27 +8,28 @@
 |---|---|---|---|---|---|---|
 | accessidentity | 30 | 23 | 0 | 5 | 0 | 2 |
 | architecture（非业务） | 0 | 13 | 0 | 0 | 0 | 0 |
-| collectionremittance | 22 | 10 | 4 | 6 | 0 | 3 |
+| collectionremittance | 23 | 9 | 4 | 6 | 0 | 3 |
 | customscompliance | 106 | 105 | 20 | 42 | 10 | 15 |
 | networkrouting | 74 | 72 | 9 | 13 | 2 | 7 |
-| nodeoperations | 42 | 33 | 5 | 12 | 4 | 7 |
+| nodeoperations | 43 | 34 | 5 | 12 | 4 | 7 |
 | parcelpricing | 130 | 117 | 17 | 16 | 1 | 23 |
-| parcelshipment | 203 | 195 | 20 | 37 | 10 | 18 |
+| parcelshipment | 205 | 195 | 20 | 37 | 10 | 19 |
 | partycommercial | 159 | 169 | 13 | 40 | 1 | 38 |
-| pilotgovernance | 22 | 20 | 5 | 6 | 1 | 4 |
+| pilotgovernance | 23 | 19 | 5 | 6 | 1 | 4 |
 | platform（非业务） | 25 | 23 | 0 | 0 | 0 | 0 |
-| settlementaccounting | 178 | 125 | 29 | 59 | 11 | 9 |
-| transportfulfillment | 154 | 139 | 28 | 36 | 11 | 29 |
-| visibilityexception | 100 | 97 | 11 | 30 | 8 | 11 |
-| **合计** | 1245 | 1141 | 161 | 302 | 59 | 166 |
+| settlementaccounting | 179 | 124 | 29 | 59 | 11 | 9 |
+| transportfulfillment | 155 | 140 | 28 | 36 | 11 | 29 |
+| visibilityexception | 101 | 98 | 11 | 30 | 8 | 11 |
+| **合计** | 1253 | 1141 | 161 | 302 | 59 | 167 |
 
 业务上下文 12 个，非业务目录 2 个。`cmd/` 生产 81、测试 133。
 
-## 跨上下文消费缝：41 组，106 个生产文件
+## 跨上下文消费缝：43 组，113 个生产文件
 
 | 消费方 | 提供方 | 文件 |
 |---|---|---|
 | accessidentity | pilotgovernance | 1 |
+| collectionremittance | accessidentity | 1 |
 | customscompliance | accessidentity | 3 |
 | customscompliance | settlementaccounting | 2 |
 | networkrouting | accessidentity | 2 |
@@ -36,7 +37,7 @@
 | networkrouting | parcelpricing | 2 |
 | networkrouting | parcelshipment | 3 |
 | networkrouting | partycommercial | 4 |
-| nodeoperations | accessidentity | 1 |
+| nodeoperations | accessidentity | 2 |
 | nodeoperations | networkrouting | 1 |
 | nodeoperations | parcelshipment | 2 |
 | nodeoperations | transportfulfillment | 1 |
@@ -44,7 +45,7 @@
 | parcelpricing | parcelshipment | 1 |
 | parcelpricing | settlementaccounting | 2 |
 | parcelpricing | transportfulfillment | 1 |
-| parcelshipment | accessidentity | 1 |
+| parcelshipment | accessidentity | 2 |
 | parcelshipment | customscompliance | 1 |
 | parcelshipment | networkrouting | 1 |
 | parcelshipment | nodeoperations | 4 |
@@ -54,15 +55,16 @@
 | parcelshipment | settlementaccounting | 3 |
 | parcelshipment | transportfulfillment | 5 |
 | partycommercial | accessidentity | 2 |
-| settlementaccounting | accessidentity | 1 |
+| pilotgovernance | accessidentity | 1 |
+| settlementaccounting | accessidentity | 2 |
 | settlementaccounting | customscompliance | 2 |
 | settlementaccounting | parcelpricing | 5 |
 | settlementaccounting | partycommercial | 3 |
-| transportfulfillment | accessidentity | 3 |
+| transportfulfillment | accessidentity | 4 |
 | transportfulfillment | networkrouting | 1 |
 | transportfulfillment | parcelshipment | 1 |
 | transportfulfillment | partycommercial | 2 |
-| visibilityexception | accessidentity | 1 |
+| visibilityexception | accessidentity | 2 |
 | visibilityexception | customscompliance | 2 |
 | visibilityexception | networkrouting | 1 |
 | visibilityexception | nodeoperations | 1 |
