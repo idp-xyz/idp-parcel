@@ -1,7 +1,7 @@
 # 29 收寄遇依赖读不动时答了不落册的`收寄待确认`：改为服务结果读不动照常形成收寄并记「读不动」，身份核对读不动或本方册读写失败时不形成答案
 
 Category: bug
-Status: in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 2 评审遗留；用户授权代决）；分支 `claude-oc29`
+Status: in-progress——2026-10-18 作者子代理完工，待评审。此前 in-progress——2026-10-18 会话 `idp-parcel-9b` 立并认领（票 26 序 2 评审遗留；用户授权代决）；分支 `claude-oc29`
 Blocked by: 无
 父票：[26](./26-non-author-review-backlog-for-claude-code-landings.md)，评审欠账序 2。被取代的那句裁定在 [25](./25-node-reception-carries-parcel-shipment-service-result-markers.md)。
 出处：
@@ -158,3 +158,29 @@ Blocked by: 无
 - [ ] 「做什么」第 7–9 条逐条完成：注释、序号引用、把 mustValue 挪出回调、两处夹具。
 - [ ] 门禁：go build ./... 与 go vet ./... 退 0，gofmt -l . 无输出；带 DSN 跑 internal/nodeoperations/...、cmd/parcel-api、cmd/parcel-frontline-import、internal/architecture，全绿；机制清点重生成后，没有未提交的差异。
 - [ ] 走 Go 那条路（docs/agents/parallel-sessions.md）：分支从当时的 origin/main 起；作者自验；非作者评审；推送方在干净检出上带 DSN 跑全量。
+
+## 完成记录（2026-10-18，会话 idp-parcel-9b 的实施子代理，分支 claude-oc29）
+
+基线 rebase 到 origin/main `320d2900`（含对端 no-directional-basis/01 的迁移 0005）。上一个实施代理留下的半成品：ports 一笔（标记合成挪到 `ParcelServiceResults.Markers`、立 `ServiceResultCheck`）与未提交的编排用例都合裁定，整理后留用。
+
+**落点（逐笔）**：`7f7de93d` ports 合成入口与核对态枚举；`f70baa3a` 编排与 HTTP（读不动照常形成并记核对态、没形成答案交回 error、被拒类哨兵、构造期拒缺依赖、删续办引用格；被拒答 400、`serviceResultCheck` 信息格）；`3b7cbe3a` 迁移 `0006_reception_service_result_check` 与收寄库往返、两处夹具；`bf50746a` `SavepointedServiceResultView` 与两处生产装配（parcel-api `buildParcelServiceResultView`、前线导入新抽的 `parcelServiceResultViewOf`，`buildDirectionalBasisJudge` 改调它）、前线导入被拒与明细、装配头注改写、`mustValue` 挪出回调；`6b8514fa` 身份核对与版本签发头注、`service_results.go` 去计数；`279616fa` ADR-0186、adr/README、UC-NO-002 指针、票 25/26/ps-external-mark-relations/02 记录；`adaf1e28` 架构门证据与引文；`e30db7dc` 机制清点。
+
+**完成判据逐格**：
+- ADR 与文书：ADR-0186（Accepted）、README 条目、UC-NO-002 指针；票 25 Comments、票 26 评审结果表后、ps-external-mark-relations/02 Comments 各一句；no-directional-basis/01 立票时已记「operator-channel/29 顺延 `0006`」，按「已落的就略过」不动。
+- 编排回归：`TestAnUnreadableServiceResultViewStillFormsTheIntakeAndSaysSo`（读不动 vs 答空两条记录只差核对态）、`TestDependencyFailuresFormNoAnswer`（身份读口、FindByKey、Save、并发读回报错与读不到赢家、版本签发）、`TestAnUnknownStoredDigestShapeFormsNoAnswer`、`TestInputDefectsAreRejected`、`TestAMissingDependencyIsRefusedAtConstruction`；原两条已改写。
+- 幂等：`TestReplayingAnUnreadableReceptionAnswersTheRecordedCheck`。
+- 存储：`TestTheServiceResultCheckIsReadBackUnchanged`、`TestTheReceptionTableRefusesAMisshapenServiceResultCheck`（集外取值、非形成格带核对态、读不动带标记三种 23514）、`TestTheServiceResultCheckMigrationBackfillsFormedReceptionsAsChecked`（空库按序施加到 0005、落旧形状行、再施加 0006）。
+- 装饰器三条：`TestASavepointKeepsAFailedServiceResultReadFromAbortingTheReception`、`TestASavepointReleasesAReadableServiceResultUnchanged`、`TestASavepointPassesThroughOutsideATransaction`。
+- 生产装配 DDL 法：parcel-api `TestTheWiredReceptionFormsTheIntakeWhenServiceResultsAreUnreadable`、`TestTheWiredReceptionFormsNoAnswerWhenIdentityIsUnreadable`（经真 HTTP 适配器，接入层换成交回固定命令的替身）；前线导入 `TestFrontlineImportLandsTheReceivedRowWhenServiceResultsAreUnreadable`、`TestFrontlineImportLeavesTheReceivedRowUndecidedWhenIdentityIsUnreadable`，另加 `TestFrontlineImportRejectsACommandTheOrchestrationRefuses`。前线导入读不动那条的身份核对用能解析的替身（`buildIntakeImporter` 的身份参数本就如此设计），服务结果读口是生产装配的；身份读不动那条挪回后重跑落地为待识别（前线导入库里没有已接受委托），「201 带关联」那半由 parcel-api 用例证。
+- HTTP：`TestTheServiceResultCheckTravelsWithEveryFormedIntake`；传输用例新增「身份读口报错 500 且不带 outcome」「编排被拒答 400」，原「dependency failure is undecided」删去。
+- 「做什么」里的注释、测试卫生与序号引用、夹具三项：注释、序号引用、`mustValue`、两处夹具均已改（`seedBaggedIntakeFor` 补列；`reception_test` 改用合成入口产出的标记，同包 `review_catalogue_test` 的比对随之改成比夹具值）。
+
+**偏离与说明**：迁移的 CHECK 只拦票面「要拒三种」，不拦「INTAKE_FORMED 不带核对态」——收紧要连带改 `cmd/parcel-dispatch`、前线导入集运用例等处直接落形成格的夹具，越出地盘；编排对每条形成格都写，回填后既有行也都带。ADR-0186 的 Alternatives 里「原方案 (a)」「方案 (b)」按票 25 裁定原文与票面现象复原措辞，研判轮原稿未在仓内。operator-channel/46 与 no-reception-source/01 落地时尚未立票，ADR 如实写明。
+
+**先红后绿**：每条新用例先在旧实现下跑出红，红落在行为上（编排答 RECEPTION_UNDECIDED 而非 error / INTAKE_FORMED；HTTP 缺 `serviceResultCheck`、被拒答 500；库无此列、迁移不存在；直通桩下同事务写入得 25P02；装饰器未接时 parcel-api 读不动答 500、前线导入记未决），再实现到绿。
+
+**门**：`gofmt -l .` 无输出；`go build ./...`、`go vet ./...` 退 0；带 DSN `go test -p 1 -count=1` 跑 `internal/nodeoperations/...`、`cmd/parcel-api`、`cmd/parcel-frontline-import`、`cmd/parcel-dispatch`、`internal/parcelshipment/adapters/nodeoperations`、`internal/visibilityexception/adapters/nodeoperations`、`internal/architecture/...`、`migrations/...`、`internal/platform/migrate/...` 全绿；机制清点重生成已提交，无未提交差异。未跑全仓全量。
+
+**证据层级**：`S`（隔离合成，夹具只用 `SYN-` 值）。
+
+评审：待会话读 diff 审。
