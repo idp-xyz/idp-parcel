@@ -72,18 +72,19 @@ func (repository *Receptions) FindByKey(
 		intakeJSON, controlJSON     []byte
 		candidatesJSON, markersJSON []byte
 		identityConflict            bool
+		checkName                   *string
 		recordedAt                  time.Time
 	)
 	err = querier.QueryRow(ctx,
 		`SELECT content_digest, kind, intake, control, candidates,
-		        identity_conflict, refusal_reason, service_markers, recorded_at
+		        identity_conflict, refusal_reason, service_markers, service_result_check, recorded_at
 		   FROM node_operations.reception
 		  WHERE tenant_id = $1
 		    AND source_id = $2`,
 		key.TenantID.String(),
 		key.SourceID,
 	).Scan(&digest, &kindName, &intakeJSON, &controlJSON, &candidatesJSON,
-		&identityConflict, &refusal, &markersJSON, &recordedAt)
+		&identityConflict, &refusal, &markersJSON, &checkName, &recordedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.ReceptionRecord{}, false, nil
 	}
@@ -95,13 +96,18 @@ func (repository *Receptions) FindByKey(
 	if err != nil {
 		return ports.ReceptionRecord{}, false, fmt.Errorf("find reception: %w", err)
 	}
+	check, err := serviceResultCheckFrom(checkName)
+	if err != nil {
+		return ports.ReceptionRecord{}, false, fmt.Errorf("find reception: %w", err)
+	}
 	record := ports.ReceptionRecord{
-		Key:              key,
-		ContentDigest:    digest,
-		Kind:             kind,
-		IdentityConflict: identityConflict,
-		RefusalReason:    refusal,
-		RecordedAt:       recordedAt.UTC(),
+		Key:                key,
+		ContentDigest:      digest,
+		Kind:               kind,
+		IdentityConflict:   identityConflict,
+		RefusalReason:      refusal,
+		ServiceResultCheck: check,
+		RecordedAt:         recordedAt.UTC(),
 	}
 
 	if len(intakeJSON) > 0 {
@@ -174,8 +180,8 @@ func (repository *Receptions) Save(
 	tag, err := executor.Exec(ctx,
 		`INSERT INTO node_operations.reception
 			(tenant_id, source_id, content_digest, kind, intake, control,
-			 candidates, identity_conflict, refusal_reason, service_markers, recorded_at)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11)
+			 candidates, identity_conflict, refusal_reason, service_markers, service_result_check, recorded_at)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.SourceID,
@@ -187,6 +193,7 @@ func (repository *Receptions) Save(
 		record.IdentityConflict,
 		record.RefusalReason,
 		markersJSON,
+		serviceResultCheckColumn(record.ServiceResultCheck),
 		record.RecordedAt.UTC(),
 	)
 	if err != nil {
@@ -342,6 +349,29 @@ func receptionKindFrom(raw string) (ports.ReceptionRecordKind, error) {
 		return ports.RecordReceptionUndecided, nil
 	default:
 		return 0, fmt.Errorf("unknown reception record kind %q", raw)
+	}
+}
+
+// serviceResultCheckColumn 把不带写成 NULL：只有形成格带核对态，这条形状规则由迁移的 CHECK 在库里再守一遍。
+func serviceResultCheckColumn(check ports.ServiceResultCheck) *string {
+	name := check.String()
+	if name == "" {
+		return nil
+	}
+	return &name
+}
+
+func serviceResultCheckFrom(raw *string) (ports.ServiceResultCheck, error) {
+	if raw == nil {
+		return ports.ServiceResultCheckAbsent, nil
+	}
+	switch *raw {
+	case ports.ServiceResultsChecked.String():
+		return ports.ServiceResultsChecked, nil
+	case ports.ServiceResultsUnreadable.String():
+		return ports.ServiceResultsUnreadable, nil
+	default:
+		return 0, fmt.Errorf("unknown service result check %q", *raw)
 	}
 }
 

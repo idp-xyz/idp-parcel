@@ -108,8 +108,8 @@ type ParcelServiceResultView interface {
 // ServiceResultCheck 是一次关联收寄向 PS 取服务结果的核对态，只有 INTAKE_FORMED 记录带（ADR-0186）。它让「查过了，PS 没有
 // 取消与终局」与「没取得 PS 的答复」在记录上分得开——两者的标记都是空的，而后者的空不代表没有限制。
 //
-// 零值即不带：其余三种记录没有可问的包裹，这一格缺席是真话；INTAKE_FORMED 记录上是零值就是写入方缺陷，库里由迁移的
-// CHECK 再拦一遍。
+// 零值即不带：其余三种记录没有可问的包裹，这一格缺席是真话，库里由迁移的 CHECK 拦住形成格以外带核对态的行；
+// INTAKE_FORMED 记录上是零值就是写入方缺陷。
 type ServiceResultCheck uint8
 
 const (

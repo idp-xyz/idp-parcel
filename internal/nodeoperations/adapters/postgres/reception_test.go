@@ -3,9 +3,13 @@ package postgres_test
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgxpool"
 	bentoapp "go.idp.xyz/idp-bento-go/application"
 	bentopg "go.idp.xyz/idp-bento-go/postgres"
 
@@ -14,6 +18,7 @@ import (
 	"go.idp.xyz/idp-parcel/internal/nodeoperations/ports"
 	"go.idp.xyz/idp-parcel/internal/platform/migrate"
 	"go.idp.xyz/idp-parcel/internal/platform/pgtest"
+	"go.idp.xyz/idp-parcel/migrations"
 )
 
 // 本文件对真实 PostgreSQL 16 证收寄判断库的行为：写入代数由 ON CONFLICT 承担、两格
@@ -23,6 +28,12 @@ import (
 var receivedAt = time.Date(2026, 8, 13, 14, 0, 0, 0, time.UTC)
 
 func newReceptions(t *testing.T) (*adapter.Receptions, bentoapp.Transactor) {
+	t.Helper()
+	repository, transactor, _ := newReceptionsWithPool(t)
+	return repository, transactor
+}
+
+func newReceptionsWithPool(t *testing.T) (*adapter.Receptions, bentoapp.Transactor, *pgxpool.Pool) {
 	t.Helper()
 
 	pool := pgtest.Pool(t)
@@ -34,7 +45,7 @@ func newReceptions(t *testing.T) (*adapter.Receptions, bentoapp.Transactor) {
 	if err != nil {
 		t.Fatalf("构造收寄库：%v", err)
 	}
-	return repository, db.Transactor()
+	return repository, db.Transactor(), pool
 }
 
 func inTx(t *testing.T, transactor bentoapp.Transactor, ctx context.Context, fn func(context.Context) error) {
@@ -81,13 +92,14 @@ func formedRecord(t *testing.T, tenant, sourceID string) ports.ReceptionRecord {
 		t.Fatalf("构造控制：%v", err)
 	}
 	return ports.ReceptionRecord{
-		Key:            ports.ReceptionKey{TenantID: tenantID, SourceID: sourceID},
-		ContentDigest:  "digest-1",
-		Kind:           ports.RecordIntakeFormed,
-		Intake:         intake,
-		Control:        control,
-		ServiceMarkers: []string{"CANCELLED_BEFORE_ARRIVAL"},
-		RecordedAt:     receivedAt.Add(time.Minute),
+		Key:                ports.ReceptionKey{TenantID: tenantID, SourceID: sourceID},
+		ContentDigest:      "digest-1",
+		Kind:               ports.RecordIntakeFormed,
+		Intake:             intake,
+		Control:            control,
+		ServiceMarkers:     ports.ParcelServiceResults{Cancellation: "SYN-CANCEL-1"}.Markers(),
+		ServiceResultCheck: ports.ServiceResultsChecked,
+		RecordedAt:         receivedAt.Add(time.Minute),
 	}
 }
 
@@ -128,6 +140,7 @@ func pendingRecord(t *testing.T, tenant, sourceID string) ports.ReceptionRecord 
 	}
 	record.IdentityConflict = true
 	record.ServiceMarkers = nil
+	record.ServiceResultCheck = ports.ServiceResultCheckAbsent
 	return record
 }
 
@@ -163,8 +176,8 @@ func TestReceptionsAreReadBackUnchanged(t *testing.T) {
 	if association, present := foundFormed.Intake.Association(); !present || association.String() != "parcel-1/link-v1" {
 		t.Errorf("正式关联读回变形：%v present=%v", association, present)
 	}
-	if len(foundFormed.ServiceMarkers) != 1 || foundFormed.ServiceMarkers[0] != "CANCELLED_BEFORE_ARRIVAL" {
-		t.Errorf("服务标记读回变形：%v", foundFormed.ServiceMarkers)
+	if strings.Join(foundFormed.ServiceMarkers, ",") != strings.Join(formed.ServiceMarkers, ",") || len(formed.ServiceMarkers) != 1 {
+		t.Errorf("服务标记读回变形：%v, want %v", foundFormed.ServiceMarkers, formed.ServiceMarkers)
 	}
 
 	foundPending, exists, err := repository.FindByKey(ctx, pending.Key)
@@ -287,5 +300,138 @@ func TestRollbackLeavesNothingBehind(t *testing.T) {
 	}
 	if exists {
 		t.Error("回滚后收寄记录仍在")
+	}
+}
+
+// Covers: ADR-0186「收寄记录新增服务结果核对态」的存储面——已查、读不动与不带三种往返原样：读不动那条的空标记和已查
+// 那条的标记都原样读回，待识别不带核对态。
+func TestTheServiceResultCheckIsReadBackUnchanged(t *testing.T) {
+	repository, transactor := newReceptions(t)
+	ctx := t.Context()
+
+	checked := formedRecord(t, "tenant-a", "scan-1")
+	unreadable := formedRecord(t, "tenant-a", "scan-2")
+	unreadable.ServiceMarkers = nil
+	unreadable.ServiceResultCheck = ports.ServiceResultsUnreadable
+	pending := pendingRecord(t, "tenant-a", "scan-3")
+	inTx(t, transactor, ctx, func(txCtx context.Context) error {
+		for _, record := range []ports.ReceptionRecord{checked, unreadable, pending} {
+			if _, err := repository.Save(txCtx, record); err != nil {
+				return err
+			}
+		}
+		return nil
+	})
+
+	for _, want := range []ports.ReceptionRecord{checked, unreadable, pending} {
+		found, exists, err := repository.FindByKey(ctx, want.Key)
+		if err != nil || !exists {
+			t.Fatalf("取回 %s：%v exists=%v", want.Key.SourceID, err, exists)
+		}
+		if found.ServiceResultCheck != want.ServiceResultCheck || len(found.ServiceMarkers) != len(want.ServiceMarkers) {
+			t.Errorf("%s 读回 核对态 %q 标记 %v, want %q %v", want.Key.SourceID,
+				found.ServiceResultCheck, found.ServiceMarkers, want.ServiceResultCheck, want.ServiceMarkers)
+		}
+	}
+}
+
+// Covers: ADR-0186 核对态的库面形状——绕过适配器直接写库的一行也过不了：集外取值、形成格以外带核对态、读不动却带
+// 标记，都被 CHECK 拒。
+func TestTheReceptionTableRefusesAMisshapenServiceResultCheck(t *testing.T) {
+	_, _, pool := newReceptionsWithPool(t)
+	const insert = `INSERT INTO node_operations.reception
+		(tenant_id, source_id, content_digest, kind, intake, control, candidates, identity_conflict,
+		 service_markers, service_result_check, recorded_at)
+		VALUES ('SYN-TENANT-01', $1, 'syn-digest', $2,
+		        CASE WHEN $2 = 'INTAKE_FORMED' THEN '{}'::jsonb END,
+		        CASE WHEN $2 = 'INTAKE_FORMED' THEN '{}'::jsonb END,
+		        '[]'::jsonb, false, $3::jsonb, $4, now())`
+	cases := map[string]struct {
+		kind, markers string
+		check         *string
+	}{
+		"集外取值":      {kind: "INTAKE_FORMED", markers: `[]`, check: ptr("MAYBE")},
+		"形成格以外带核对态": {kind: "INTAKE_NOT_FORMED", markers: `[]`, check: ptr("CHECKED")},
+		"读不动却带标记":   {kind: "INTAKE_FORMED", markers: `["CANCELLED/SYN-CANCEL-1"]`, check: ptr("UNREADABLE")},
+	}
+	for name, testCase := range cases {
+		t.Run(name, func(t *testing.T) {
+			_, err := pool.Exec(t.Context(), insert, "SYN-SCAN-"+name, testCase.kind, testCase.markers, testCase.check)
+			var pgErr *pgconn.PgError
+			if !errors.As(err, &pgErr) || pgErr.Code != "23514" {
+				t.Fatalf("写入 err = %v, want CHECK 违例（23514）", err)
+			}
+		})
+	}
+	if _, err := pool.Exec(t.Context(), insert, "SYN-SCAN-OK", "INTAKE_FORMED", `[]`, ptr("UNREADABLE")); err != nil {
+		t.Fatalf("合形的读不动行被拒：%v", err)
+	}
+}
+
+func ptr(value string) *string { return &value }
+
+// Covers: ADR-0186 迁移回填——核对态这一列加上之前已落的 INTAKE_FORMED 行回填已查，其余种类不带；推定依据见迁移头注。
+// 从空库按序施加本上下文的迁移，停在核对态那一份之前落旧形状的行，再施加那一份。
+func TestTheServiceResultCheckMigrationBackfillsFormedReceptionsAsChecked(t *testing.T) {
+	ctx := t.Context()
+	conn, err := pgx.Connect(ctx, pgtest.FreshDatabase(t))
+	if err != nil {
+		t.Fatalf("连空库：%v", err)
+	}
+	defer conn.Close(context.WithoutCancel(ctx))
+	if _, err := conn.Exec(ctx, `CREATE SCHEMA node_operations`); err != nil {
+		t.Fatalf("建 schema：%v", err)
+	}
+	assets, err := migrations.NodeOperations()
+	if err != nil {
+		t.Fatalf("读迁移：%v", err)
+	}
+	const target = "0006_reception_service_result_check"
+	var backfill *migrations.Asset
+	for index := range assets {
+		if assets[index].Name == target {
+			backfill = &assets[index]
+			break
+		}
+		if _, err := conn.Exec(ctx, assets[index].SQL); err != nil {
+			t.Fatalf("施加 %s：%v", assets[index].Name, err)
+		}
+	}
+	if backfill == nil {
+		t.Fatalf("没有找到迁移 %s", target)
+	}
+	if _, err := conn.Exec(ctx, `INSERT INTO node_operations.reception
+		(tenant_id, source_id, content_digest, kind, intake, control, candidates, identity_conflict, service_markers, recorded_at)
+		VALUES ('SYN-TENANT-01', 'SYN-SCAN-FORMED', 'syn-digest-1', 'INTAKE_FORMED', '{}'::jsonb, '{}'::jsonb,
+		        '[]'::jsonb, false, '["CANCELLED/SYN-CANCEL-1"]'::jsonb, now()),
+		       ('SYN-TENANT-01', 'SYN-SCAN-REFUSED', 'syn-digest-2', 'INTAKE_NOT_FORMED', NULL, NULL,
+		        '[]'::jsonb, false, '[]'::jsonb, now())`); err != nil {
+		t.Fatalf("落旧形状的行：%v", err)
+	}
+	if _, err := conn.Exec(ctx, backfill.SQL); err != nil {
+		t.Fatalf("施加 %s：%v", target, err)
+	}
+
+	got := map[string]*string{}
+	rows, err := conn.Query(ctx, `SELECT source_id, service_result_check FROM node_operations.reception`)
+	if err != nil {
+		t.Fatalf("读回：%v", err)
+	}
+	for rows.Next() {
+		var source string
+		var check *string
+		if err := rows.Scan(&source, &check); err != nil {
+			t.Fatalf("扫描：%v", err)
+		}
+		got[source] = check
+	}
+	if err := rows.Err(); err != nil {
+		t.Fatalf("读回：%v", err)
+	}
+	if check := got["SYN-SCAN-FORMED"]; check == nil || *check != "CHECKED" {
+		t.Fatalf("旧 INTAKE_FORMED 行回填 = %v, want CHECKED", check)
+	}
+	if check := got["SYN-SCAN-REFUSED"]; check != nil {
+		t.Fatalf("未形成行回填了 %q, want 不带", *check)
 	}
 }

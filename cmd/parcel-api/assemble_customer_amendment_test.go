@@ -382,14 +382,15 @@ func seedBaggedIntakeFor(t *testing.T, pool *pgxpool.Pool, tenant, parcel string
 	receivedAt := time.Date(2026, 8, 21, 10, 45, 0, 0, time.UTC)
 	if _, err := pool.Exec(ctx,
 		`INSERT INTO node_operations.reception
-			(tenant_id, source_id, content_digest, kind, intake, control, candidates, identity_conflict, service_markers, recorded_at)
+			(tenant_id, source_id, content_digest, kind, intake, control, candidates, identity_conflict, service_markers,
+			 service_result_check, recorded_at)
 		 VALUES ($1, 'SYN-SCAN-1', 'syn-digest-1', 'INTAKE_FORMED',
 		         jsonb_build_object('unit', 'SYN-HU-1', 'node', 'SYN-NODE-1', 'deliveredBy', 'SYN-COURIER-1',
 		                            'evidence', 'SYN-EVIDENCE-1', 'version', 'SYN-INTAKE-V1',
 		                            'association', $2::text, 'receivedAt', $3::timestamptz),
 		         jsonb_build_object('unit', 'SYN-HU-1', 'node', 'SYN-NODE-1', 'kind', 'NODE_INTAKE',
 		                            'basis', 'SYN-INTAKE-V1', 'establishedAt', $3::timestamptz),
-		         '[]'::jsonb, false, '[]'::jsonb, $3)`,
+		         '[]'::jsonb, false, '[]'::jsonb, 'CHECKED', $3)`,
 		tenant, parcel, receivedAt); err != nil {
 		t.Fatalf("播种节点收寄：%v", err)
 	}

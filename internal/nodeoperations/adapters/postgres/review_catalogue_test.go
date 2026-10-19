@@ -96,8 +96,8 @@ func TestReviewCatalogueListsReceptionsNewestFirstWithinTenant(t *testing.T) {
 		!first.RecordedAt.Equal(formed.RecordedAt) {
 		t.Errorf("形成格转写变形：%+v", first)
 	}
-	if len(first.ServiceMarkers) != 1 || first.ServiceMarkers[0] != "CANCELLED_BEFORE_ARRIVAL" {
-		t.Errorf("服务标记转写变形：%v", first.ServiceMarkers)
+	if len(first.ServiceMarkers) != 1 || first.ServiceMarkers[0] != formed.ServiceMarkers[0] {
+		t.Errorf("服务标记转写变形：%v, want %v", first.ServiceMarkers, formed.ServiceMarkers)
 	}
 	if rows[1].Kind != "PENDING_IDENTIFICATION" || rows[1].Unit != "unit-2" {
 		t.Errorf("待识别格转写变形：%+v", rows[1])
