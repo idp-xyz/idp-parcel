@@ -29,14 +29,15 @@ func NewCapacityPools(db *bentopg.DB) (*CapacityPools, error) {
 // FindByKey 按（租户+池）取回容量池及其预占。否定结果只回 false。读回经重建门
 // 复验三量守恒，不重放 Reserve/Release/Consume。
 //
-// 在写事务里读时锁住池那一行（FOR UPDATE），直到事务结束。池按值换存：两笔预占各自读到同一个旧池、各算各的余量、
-// 先后换存，后到的那一笔会把先到的预占整份删掉——硬上限与先到者的预占一起丢。锁住读，第二笔就等第一笔落定再读，
-// 读到的是含第一笔的池（ADR-0203 决定四）。不在事务里的读（查阅、读口）不锁。
+// 读池一律锁住池那一行（FOR UPDATE）：在写事务里锁到事务结束，不在事务里随这一条语句放。池按值换存：两笔预占各自
+// 读到同一个旧池、各算各的余量、先后换存，后到的那一笔会把先到的预占整份删掉——硬上限与先到者的预占一起丢。锁住读，
+// 第二笔就等第一笔落定再读，读到的是含第一笔的池（ADR-0203 决定四）。不按「在不在事务里」分两种读：那要先问一次写
+// 执行器，这一口就被当成了无事务即拒的写口，而它在事务外照样要读得回。
 func (repository *CapacityPools) FindByKey(
 	ctx context.Context,
 	key ports.CapacityPoolKey,
 ) (ports.CapacityPoolRecord, bool, error) {
-	querier, lock, err := repository.poolReader(ctx)
+	querier, err := repository.db.ReadExecutor(ctx)
 	if err != nil {
 		return ports.CapacityPoolRecord{}, false, fmt.Errorf("find capacity pool: %w", err)
 	}
@@ -48,7 +49,8 @@ func (repository *CapacityPools) FindByKey(
 		`SELECT schedule_id, dimension, unit_ref, capacity, content_digest, recorded_at
 		   FROM transport_fulfillment.capacity_pool
 		  WHERE tenant_id = $1
-		    AND pool_id = $2`+lock,
+		    AND pool_id = $2
+		    FOR UPDATE`,
 		key.TenantID.String(),
 		key.Pool.String(),
 	).Scan(&scheduleID, &dimension, &unit, &capacity, &digest, &recordedAt)
@@ -96,15 +98,6 @@ func (repository *CapacityPools) FindByKey(
 		Pool:          pool,
 		RecordedAt:    recordedAt.UTC(),
 	}, true, nil
-}
-
-// poolReader 在写事务里交回事务执行器与行锁子句，否则交回只读执行器、不加锁。
-func (repository *CapacityPools) poolReader(ctx context.Context) (bentopg.Querier, string, error) {
-	if executor, err := repository.db.RequireExecutor(ctx); err == nil {
-		return executor, "\n\t\t    FOR UPDATE", nil
-	}
-	querier, err := repository.db.ReadExecutor(ctx)
-	return querier, "", err
 }
 
 // Save 建一份容量池。同标识已有记录时答`已建立`，不覆盖先到者。
