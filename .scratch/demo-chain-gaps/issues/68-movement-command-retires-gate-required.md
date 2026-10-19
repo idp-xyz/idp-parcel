@@ -1,7 +1,7 @@
 # 68 移动命令退役 `gateRequired`
 
 Category: enhancement
-Status: resolved——2026-10-19 进 main（全量钉 @@PIN@@；交接与派送 A 波同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg68。2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
+Status: resolved——2026-10-19 进 main（全量钉 `71aff222`：152 ok / 0 FAIL；交接与派送 A 波同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg68。2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
 Blocked by: 无
 地盘：TF `application/record_movement_fact.go`(+test)、tfhttp `record_movement_fact.go`(+test)、`work_fact_intake_test.go`；`cmd/parcel-api/assemble_movement_fact_test.go`、`transport_fulfillment_command_lines_test.go`；文档 ADR-0205 复核记录一行、UC-TF-005 `AT-TF-113`。
 出处：[tf-chain-plan](../tf-chain-plan.md)「等 peer 的」删掉移动命令与载荷里的 `gateRequired` / `gateClearance`；方案「代决」C16。
@@ -115,4 +115,4 @@ S
 
 - 交接与派送 A 波 60、64、68 合成一批，按 68 → 64 → 60 叠到 main 上，整批快进推送，与本记录同一次推送。合批时协调方在合批分支上直接做了票 71（派送发起过期注释改指 ADR-0216）与票 74（ADR 索引 ADR-0205 两行合一）；另把 ADR 索引里 0206、0207、0209、0210、0217 各两行合成一行——那是协调方先前合批时的冲突解法把同一行的新旧两版都留下了，解法已改为按合并基点判新旧。
 - 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
-- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 @@PIN@@。机制清点在推送 tip 上重生成。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上先钉 `a141588f`：151 包 ok；推送前 main 进了 ps-external-mark-relations/11，本批重放到它上面、种子重灌退 0，全量在推送 tip `71aff222` 上重跑：152 包 ok，0 FAIL，0 SKIP。机制清点在推送 tip 上重生成。

@@ -1,7 +1,7 @@
 # 64 路由计划带交付段，运输准备跳过它
 
 Category: enhancement
-Status: resolved——2026-10-19 进 main（全量钉 @@PIN@@；交接与派送 A 波同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg64。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
+Status: resolved——2026-10-19 进 main（全量钉 `71aff222`：152 ok / 0 FAIL；交接与派送 A 波同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg64。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
 Blocked by: 无（种子令牌）
 地盘：NR `domain/initial_route_plan.go`（段种类与交付终点）、`application/calendar_projection.go`、`application/catalog_initial_route_evidence.go`（带出所用服务区域版本）、`application/reassess_route.go`（已执行前缀只取节点间段）、`ports/catalog_registration.go`（服务日历节点行派送时长）、`adapters/registrationjson/translate.go`、`adapters/postgres/network_catalog*.go`、`adapters/postgres/initial_route.go`（段 json）、NR 迁移（认领时现取）、`adapters/http/query_route_plans.go`；TF `adapters/networkrouting/planned_leg_source.go`（交付段不形成准备腿）；种子 `scripts/demo-seeds/data/network/` 加 SIN-LM 日历新版本（带派送时长）+ `seed.sh` 一行；文档 ADR-0217、NR CONTEXT「路由形成与选择」一句、GLOSSARY「计划履约段」一行、UC-NR-001、`PAR-NET-14`、演示脚本（末端交接声明交付段）。
 出处：[06](./06-delivery-dispatch-has-no-in-process-trigger-and-no-recipient-leg.md)；方案「复核」06「升级」，「代决」C11，「需要的 ADR」ADR-0217。
@@ -122,4 +122,4 @@ ADR-0217 文末各条原样成立：总窗口变长、责任暂指服务区域�
 
 - 交接与派送 A 波 60、64、68 合成一批，按 68 → 64 → 60 叠到 main 上，整批快进推送，与本记录同一次推送。合批时协调方在合批分支上直接做了票 71（派送发起过期注释改指 ADR-0216）与票 74（ADR 索引 ADR-0205 两行合一）；另把 ADR 索引里 0206、0207、0209、0210、0217 各两行合成一行——那是协调方先前合批时的冲突解法把同一行的新旧两版都留下了，解法已改为按合并基点判新旧。
 - 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
-- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 @@PIN@@。机制清点在推送 tip 上重生成。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上先钉 `a141588f`：151 包 ok；推送前 main 进了 ps-external-mark-relations/11，本批重放到它上面、种子重灌退 0，全量在推送 tip `71aff222` 上重跑：152 包 ok，0 FAIL，0 SKIP。机制清点在推送 tip 上重生成。
