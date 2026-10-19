@@ -148,3 +148,4 @@ L
 
 - `go build ./...` 干净；`go vet` 跑 TF、access-identity、architecture、`cmd/parcel-api`、`migrations`，干净；`gofmt -l internal cmd migrations scripts` 为空。
 - 带 55432 DSN、`-p 1 -count=1`：`./internal/architecture/`、`./internal/transportfulfillment/...`、`./internal/accessidentity/...`、`./cmd/parcel-api/`、`./migrations/...`、`./scripts/demo-seeds/...` 全 ok。没跑全量，没重生成机制清点。
+- 试合并（`git merge-tree`）：对 origin/main（`a2ff42f6`）无冲突。对 `claude-dcg20` 有文本冲突，都是两票往同一张表尾或同一组枚举尾各自追加（`cmd/parcel-api` 端点表与其测试、`main.go`、`accessidentity` 决定种类、tfhttp 运营决定各口、种子 `access/02`、`03` 与 `seed.sh`、README、UC-TF-004）；按令牌次序票 20 先进，本分支 rebase 时两边都留、按号或种类顺序合并，迁移不冲突（0012 与 0013 已互含）。
