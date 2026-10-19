@@ -154,6 +154,48 @@ type SupplierAgreementContentView interface {
 	) (domain.SupplierAgreement, bool, error)
 }
 
+// SupplierAgreementVersionView 按（租户、协议对象、版本标签）点读一版供应商商业协议：版本壳，连同壳已生效时
+// 登记的正文（票 demo-chain-gaps/22）。
+//
+// 它与 SupplierAgreementContentView 分开，因为两口的调用方手上拿的东西不同：那一口收的是**已唯一选出**的版本壳
+// （解析闭包或择优源交来的），本口的调用方手上只有登记方在声明里指名的对象与版本标签两格——运输委托、运输收费
+// 发生项都是这样指名协议的。让它们先走 LoadScope + Lookup 选出壳，等于把本上下文的商业范围概念带进
+// transport-fulfillment 的快照，且每单装一次整册。管理台的 ListSupplierAgreements 按页列、不按键取，是
+// 运营查阅的受限口，也不借。
+//
+// 本口**不判**「这一版此刻能不能用于新的采购决定」：那由 SupplierAgreement.SupportsProcurementAt 与壳的生命周期
+// 位置回答，消费方拿本口交回的值去问它们。在这里先折成一格，消费方就看不见是未生效、已收尾还是正文缺席，而三者
+// 的续办不同。交回的正文同 SupplierAgreementContentView 不带终止；区间更正（ADR-0038）也不折进来——它改的是
+// 解析选不选得中这一版，本口不做选择。
+//
+// 读取失败与坏数据（快照立不起来、壳与所问的键不符、正文行不完整、正文挂在尚未生效的壳上）走 error，不折成
+// 「没有」——那会把一份写坏的协议伪装成从未发布。本口不提供默认协议。租户显式入参，同本包其余端口（ADR-0003）。
+type SupplierAgreementVersionView interface {
+	LoadSupplierAgreementVersion(
+		ctx context.Context,
+		tenant domain.TenantID,
+		agreement domain.CommercialObjectID,
+		version domain.CommercialVersionLabel,
+	) (SupplierAgreementVersionRead, error)
+}
+
+// SupplierAgreementVersionRead 是 SupplierAgreementVersionView 的答复，两个 Has 标出三种在场：
+//
+//   - HasVersion=false：本租户下没有这一版（从未发布）。其余字段无意义。
+//   - HasVersion=true、HasAgreement=false：壳在册而正文不交。按 Version.Status() 分两种：已生效的壳没随发布登记
+//     正文（壳可先入册，同 SupplierAgreementCatalogueRow.HasContent）；或壳不在已生效位置——领域只在已生效版本上
+//     立 SupplierAgreement（NewSupplierAgreement），已计划生效与已收尾的壳因此只交壳。
+//   - HasAgreement=true：壳已生效，正文挂在同一版本上（Agreement.Version().SameVersionAs(Version) 成立）。
+//
+// 用两个布尔而不用一个三值枚举：消费方要的始终是壳本身（取生命周期位置、拼「对象/版本」指称），枚举只会多出
+// 一格与 HasVersion 说同一件事的口径。
+type SupplierAgreementVersionRead struct {
+	Version      domain.CommercialVersion
+	HasVersion   bool
+	Agreement    domain.SupplierAgreement
+	HasAgreement bool
+}
+
 // CustomerServiceRuleContentView 取已唯一选出的客户服务规则版本的正文：挂在哪个商业对象上、
 // 责任方、范围，以及首发两项——索赔期限与最低材料（ADR-0104）。
 //
