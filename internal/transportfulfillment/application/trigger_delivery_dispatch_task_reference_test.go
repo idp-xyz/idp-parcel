@@ -105,27 +105,39 @@ func TestTheTaskReferenceSpellsEachPartWithItsLength(t *testing.T) {
 	}
 }
 
-// Covers: 票 tf-face-algebra/09 完成判据「编排单测」下「新铸法单射，对拼接撞键那组输入铸出不同引用」。段 `seg/A` 加对象
-// `CU-77` 与段 `seg` 加对象 `A/CU-77`、交接版本同为 v1——入场依据是 ADR-0221 之前的旧拼法 `TRANSPORT-HANDOVER/v1` 时，
-// 斜杠直拼两者铸出同一串，后到的对象首拍就被答成「已形成」。此后的依据带着对象，两件的依据本就不同；任务引用的铸法照样
-// 要单射，不靠依据替它分，存量参与的依据仍是旧拼法。
+// Covers: 票 tf-face-algebra/09 完成判据「编排单测」下「新铸法单射，对拼接撞键那组输入铸出不同引用」。两件对象各凭一次
+// 交接进各自的段，段与交接版本凑成三件斜杠直拼时铸出同一串——那样后到的对象首拍就被答成「已形成」。入场依据带着对象
+// （ADR-0221），撞键只能靠段与版本两头去凑：第一次交接的版本以「/第二件/第二件的入场依据」结尾，第二段是「第一段/第一件/
+// 第一件的入场依据去掉那截尾巴」。凑不出撞键，这条用例就什么也不证，所以先核前提。
 func TestConcatenationCollidingInputsMintDifferentTaskReferences(t *testing.T) {
 	fixture := newDispatchTriggerFixture(t)
-	fixture.enterSegmentByHandover(t, "seg/A", "CU-77", "v1")
-	fixture.enterSegmentByHandover(t, "seg", "A/CU-77", "v1")
-	if legacyShapeReference("seg/A", "CU-77", "TRANSPORT-HANDOVER/v1") != legacyShapeReference("seg", "A/CU-77", "TRANSPORT-HANDOVER/v1") {
+	const firstObject, secondObject, scope = "CU-77", "A/CU-77", "handover-scope-1"
+	const firstSegment, secondVersion = "seg/A", "v1"
+	secondBasis := handoverParticipationBasis(t, secondObject, scope, secondVersion).String()
+	tail := "/" + secondObject + "/" + secondBasis
+	firstVersion := "v1" + tail
+	firstBasis := handoverParticipationBasis(t, firstObject, scope, firstVersion).String()
+	secondSegment := firstSegment + "/" + firstObject + "/" + strings.TrimSuffix(firstBasis, tail)
+	fixture.enterSegmentByHandover(t, firstSegment, firstObject, firstVersion)
+	fixture.enterSegmentByHandover(t, secondSegment, secondObject, secondVersion)
+	if legacyShapeReference(firstSegment, firstObject, firstBasis) != legacyShapeReference(secondSegment, secondObject, secondBasis) {
 		t.Fatal("夹具没构造出旧拼法下的撞键")
 	}
 
-	first, err := fixture.handler().Trigger(t.Context(), triggerOn(t, "seg/A", "CU-77"))
+	first, err := fixture.handler().Trigger(t.Context(), triggerOn(t, firstSegment, firstObject))
 	if err != nil || first.Outcome() != application.DeliveryDispatchTaskFormed {
-		t.Fatalf("seg/A 的 CU-77：%v %q", err, first.Outcome())
+		t.Fatalf("%s 的 %s：%v %q", firstSegment, firstObject, err, first.Outcome())
 	}
-	second, err := fixture.handler().Trigger(t.Context(), triggerOn(t, "seg", "A/CU-77"))
+	// 撞键前提是按夹具算的依据核的；任务引用里嵌的却是入场时在册的那一串。两者若不是同一串，前提核过了也不说明什么。
+	// 只核引用以它结尾，不核整串：整串怎样拼是被测的那一件。
+	if record, _ := first.Record(); !strings.HasSuffix(record.Key.Task.String(), firstBasis) {
+		t.Fatalf("第一项任务的引用 = %s, want 以夹具算的入场依据 %s 结尾", record.Key.Task, firstBasis)
+	}
+	second, err := fixture.handler().Trigger(t.Context(), triggerOn(t, secondSegment, secondObject))
 	if err != nil || second.Outcome() != application.DeliveryDispatchTaskFormed {
 		record, _ := second.Record()
-		t.Fatalf("seg 的 A/CU-77：%v %q（交回任务 %s 对象 %v），want DISPATCH_TASK_FORMED——它还没有派送任务",
-			err, second.Outcome(), record.Key.Task, objectsOf(record))
+		t.Fatalf("第二段的 %s：%v %q（交回任务 %s 对象 %v），want DISPATCH_TASK_FORMED——它还没有派送任务",
+			secondObject, err, second.Outcome(), record.Key.Task, objectsOf(record))
 	}
 	firstRecord, _ := first.Record()
 	secondRecord, _ := second.Record()

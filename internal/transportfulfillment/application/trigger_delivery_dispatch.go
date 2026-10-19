@@ -503,7 +503,8 @@ func IsReservedDeliveryDispatchTaskReference(task string) bool {
 
 // deliveryDispatchTaskReference 是任务身份的铸法：段、对象、入场依据三件定一拍（ADR-0114 决定二）。起头之后是形状标记，
 // 再把三件依次写成「/字节长度:原串」，例如
-// `DELIVERY-DISPATCH/v2/9:segment-1/8:parcel-1/46:TRANSPORT-HANDOVER/handover-result/parcel-1/v1`。
+// `DELIVERY-DISPATCH/v2/9:segment-1/8:parcel-1/84:TRANSPORT-HANDOVER-KEY/8:parcel-1/16:handover-scope-1/27:handover-result/parcel-1/v1`
+// （入场依据按交接键铸，ADR-0221；存量参与的入场依据是只带版本的旧拼法，铸出的引用照样是这个形状）。
 //
 // 三件都是只拒空白的不透明串，可以含斜杠，交接版本跨对象还可以相同；以斜杠直拼时不同的三件能拼出同一串，后到的对象首拍
 // 就被答成「已形成」。写上长度之后每一件在哪里结束是定的，读回唯一，铸法单射（parseDeliveryDispatchTaskReference 就是那个

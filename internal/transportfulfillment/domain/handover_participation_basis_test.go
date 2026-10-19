@@ -139,6 +139,49 @@ func TestKeyedBasesTellTwoScopesReusingAVersionApart(t *testing.T) {
 	}
 }
 
+// Covers: AT-TF-266（ADR-0221）——重派生也只认自己那一次：参与凭按键铸的依据入场，另一个范围同用被更正的版本号、业务时间
+// 也相同的更正到来，不牵连这一段——旧拼法在这一格分不开，正是 ADR-0221 要补的那一格；同一（对象，范围）的更正照样重派生，
+// 回指写在册的那一串。
+func TestAKeyedEntryIsRederivedOnlyByItsOwnHandoversCorrection(t *testing.T) {
+	at := handoverJudgedAt
+	intoSZX := handoverIn(t, "parcel-1", "SZX", "v1", at)
+	segment, err := domain.EstablishSegmentWithHandover(mustValue(t, domain.NewFulfillmentSegmentReference, "SEG-1"), intoSZX, domain.PlannedSegmentReference{})
+	if err != nil {
+		t.Fatalf("立段：%v", err)
+	}
+	correctTo := func(t *testing.T, handover domain.TransportHandover, version string) domain.TransportHandover {
+		t.Helper()
+		releasing, _ := handover.ReleasingEvidence()
+		receiving, _ := handover.ReceivingEvidence()
+		rule, _ := handover.Rule()
+		corrected, err := handover.Correct(domain.HandoverCorrection{
+			Verdict: domain.ObjectHandedOver, ReleasingEvidence: releasing, ReceivingEvidence: receiving, Rule: rule,
+			Version: mustValue(t, domain.NewHandoverResultVersion, version), CorrectedAt: at.Add(3 * time.Hour),
+		})
+		if err != nil {
+			t.Fatalf("更正 %s/%s：%v", handover.Scope(), handover.Version(), err)
+		}
+		return corrected
+	}
+
+	elsewhere := correctTo(t, handoverIn(t, "parcel-1", "SHA", "v1", at), "v2")
+	if !elsewhere.JudgedAt().Equal(intoSZX.JudgedAt()) {
+		t.Fatal("夹具没摆出「业务时间也相同」：另一范围那一版的业务时间与入场那一次不同")
+	}
+	if _, err := segment.RederiveParticipationWithHandover(elsewhere); !errors.Is(err, domain.ErrNoParticipationToRederive) {
+		t.Fatalf("另一范围同版本号、同业务时间的更正牵连了这一段：err = %v", err)
+	}
+
+	rederived, err := segment.RederiveParticipationWithHandover(correctTo(t, intoSZX, "v2"))
+	if err != nil {
+		t.Fatalf("自己那一次的更正没重派生：%v", err)
+	}
+	current, _ := rederived.ParticipationFor(intoSZX.Object())
+	if supersedes, chained := current.Supersedes(); !chained || supersedes != keyedBasis(t, intoSZX) {
+		t.Fatalf("回指 = %q %v, want 在册的按键铸的那一串", supersedes, chained)
+	}
+}
+
 // Covers: AT-TF-268（ADR-0221）——旧拼法存量照读：只带版本的终点，版本与终点时刻都对上这一版交接才算，答「按版本与时刻对上」；
 // 时刻对不上答不是。入场一侧同理，读得回版本。
 func TestLegacyBasesAreReadByVersionAndInstant(t *testing.T) {
