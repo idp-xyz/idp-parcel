@@ -1,7 +1,7 @@
 # 111 实际履约发生项自动形成只按 `TRANSPORT-HANDOVER/<版本>` 找结束的参与：同一包裹两次交接用同一版本号，交接信封整封弃置
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-dcg111（完成记录与评审记录见文末；2026-10-19 Claude Code 子代理立，演示动线重走，[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)「重走（钉 `76686b7b`，2026-10-19）」停点一）。
+Status: resolved——2026-10-19 进 main（全量钉 `4ea5c376`：153 ok / 0 FAIL；111、106 同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg111（完成记录与评审记录见文末；2026-10-19 Claude Code 子代理立，演示动线重走，[product-strategy-boundary/05](../../product-strategy-boundary/issues/05-demo-journey-criterion-evidence.md)「重走（钉 `76686b7b`，2026-10-19）」停点一）。
 Blocked by: 无
 地盘：TF `application/form_actual_fulfillment_on_participation_end.go`（`formFor`）；若改依据拼法，另及 `domain/transport_handover.go`（`TransferOutBasis`）、`domain/actual_fulfillment_segment.go`（`ParticipationEndedBy`）与存量迁移。与 [89](./89-actual-fulfillment-formation-blocks-later-envelopes-in-the-handover-and-delivery-partitions.md) 相邻。
 出处：[ADR-0218](../../../docs/adr/0218-actual-fulfillment-occurrences-form-from-handover-and-delivery-envelopes.md) 找参与那一步「多于一条：库面不一致，响亮失败」；[ADR-0213](../../../docs/adr/0213-a-transport-handover-declares-its-releasing-receiving-and-onward-nodes.md) 文末补记停点 `ENTRY_HANDOVER_AMBIGUOUS`（交付门禁那一侧已认「入场依据只带版本、不带范围」，先按业务时间再分）；演示动线票 95、98 补记给的交接载荷（每次交接各起 `scope`，`version` 写 `v1`）。
@@ -122,3 +122,9 @@ S–M
 5. **演示动线补记与 `AT-TF-266` 复述了拼法**：两处都删掉拼法细节，只引 ADR-0221 决定一，留下可观察的结果（两次交接各得一串、读得出是哪一次）。
 
 验证：`go build ./...`、`go vet`（TF 各包、`cmd/parcel-api`、`cmd/parcel-dispatch`）、`gofmt -l` 干净；`IDP_PARCEL_POSTGRES_DSN=… go test -p 1 -count=1 ./internal/architecture/ ./internal/transportfulfillment/... ./cmd/parcel-dispatch/ ./cmd/parcel-api/` 全 ok。证据只记 `S`。
+
+## 进 main 记录（2026-10-19）
+
+- 111 与 106 合成一批，按 111 → 106 叠到 main 上，整批快进推送，与本记录同一次推送。没有要人工解的冲突。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `4ea5c376`：153 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。

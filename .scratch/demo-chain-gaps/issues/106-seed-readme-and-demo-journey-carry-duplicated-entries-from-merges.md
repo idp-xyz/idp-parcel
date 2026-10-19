@@ -1,7 +1,7 @@
 # 106 种子 README 组成表与演示动线里有合并留下的重复条目，旧的那一条已经不对
 
 Category: bug
-Status: in-progress——完工待评审与进 main，分支 claude-dcg106（完成记录见文末）。此前 needs-triage——2026-10-19 Claude Code 子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权），出自 [98](./98-demo-walk-doc-and-seed-corrections-from-the-8197fa2f-walk.md) 往这两份文档追加时所见。
+Status: resolved——2026-10-19 进 main（全量钉 `4ea5c376`：153 ok / 0 FAIL；111、106 同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg106（完成记录见文末）。此前 needs-triage——2026-10-19 Claude Code 子代理立（用户「你作为业务和系统专家自决……解决所有的问题」授权），出自 [98](./98-demo-walk-doc-and-seed-corrections-from-the-8197fa2f-walk.md) 往这两份文档追加时所见。
 Blocked by: 无
 地盘：`scripts/demo-seeds/README.md` 组成表；`docs/design/synthetic-demo-journey-script.md` 第 5 步的补记链。
 出处：票 98 完成记录「偏离与待裁」。同类的 ADR 索引重复行由票 [74](./74-adr-readme-lists-adr-0205-twice.md)、[78](./78-adr-readme-lists-several-recent-adrs-twice.md) 处理过。
@@ -88,3 +88,9 @@ Blocked by: 无
 - 两笔文档提交（README 一笔、动线一笔）各自只碰一个文件，符合票面「进 main 时单独一笔提交」。若协调方要合成一笔，压一下即可。
 - psb/05 停点一建议往动线追加的那句（交接 `version` 各不相同）留给票 111，见代决 3。
 - 号：没有新立票，没有用 114。
+
+## 进 main 记录（2026-10-19）
+
+- 111 与 106 合成一批，按 111 → 106 叠到 main 上，整批快进推送，与本记录同一次推送。没有要人工解的冲突。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `4ea5c376`：153 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。
