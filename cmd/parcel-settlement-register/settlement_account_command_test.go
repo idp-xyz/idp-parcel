@@ -41,6 +41,13 @@ func TestTheBuyEvaluationTriggerCommandTranslatesBeforeTheTransaction(t *testing
 	if _, err := commandFor(commandBuyEvaluationTrigger, []byte(`{"tenantId":"SYN-T1","occurrenceReason":"BOOKING","moment":"OCCURRENCE_FORMED","reasons":["CANCEL"]}`)); err == nil {
 		t.Fatal("预列的发生项清单被收成触发登记")
 	}
+	// 费用项目一格（ADR-0208）：给了就随行登记；给空串不是「没给」，按坏值拒，不登一行没有费用项目的触发。
+	if _, err := commandFor(commandBuyEvaluationTrigger, []byte(`{"tenantId":"SYN-T1","occurrenceReason":"ACTUAL_FULFILLMENT","moment":"OCCURRENCE_FORMED","feeItem":"SYN-FEE-ITEM-TRUNK-COST-01"}`)); err != nil {
+		t.Fatalf("带费用项目的触发登记译装失败：%v", err)
+	}
+	if _, err := commandFor(commandBuyEvaluationTrigger, []byte(`{"tenantId":"SYN-T1","occurrenceReason":"ACTUAL_FULFILLMENT","moment":"OCCURRENCE_FORMED","feeItem":" "}`)); err == nil {
+		t.Fatal("空白费用项目被收成触发登记")
+	}
 }
 
 func TestTheAccountingConnectorCommandTranslatesBeforeTheTransaction(t *testing.T) {

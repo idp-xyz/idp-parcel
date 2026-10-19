@@ -48,8 +48,11 @@ func TestBuyEvaluationTriggerReplaysConflictsAndMissesAsUnconfigured(t *testing.
 	}
 
 	loaded, found, err := triggers.LoadBuyEvaluationTrigger(t.Context(), tenant, reason)
-	if err != nil || !found || loaded != domain.BuyEvaluationTriggerOnOccurrenceFormed {
-		t.Fatalf("读回 moment=%s found=%v err=%v", loaded, found, err)
+	if err != nil || !found || loaded.Moment() != domain.BuyEvaluationTriggerOnOccurrenceFormed {
+		t.Fatalf("读回 moment=%s found=%v err=%v", loaded.Moment(), found, err)
+	}
+	if _, registered := loaded.FeeItem(); registered {
+		t.Fatal("没登费用项目的行读回来带了费用项目")
 	}
 	other, err := domain.NewOccurrenceReasonReference("CANCEL")
 	if err != nil {
@@ -58,6 +61,69 @@ func TestBuyEvaluationTriggerReplaysConflictsAndMissesAsUnconfigured(t *testing.
 	if _, found, err := triggers.LoadBuyEvaluationTrigger(t.Context(), tenant, other); err != nil || found {
 		t.Fatalf("未登记原因 found=%v err=%v", found, err)
 	}
+}
+
+// Covers: ADR-0208——费用项目随行落库读回；同原因换一个费用项目、或先登了没有费用项目的行再来补登，都是异内容，答冲突、
+// 原行不动（本册不设修订）。
+func TestBuyEvaluationTriggerCarriesItsFeeItemAndRefusesToRewriteIt(t *testing.T) {
+	db := catalogueDB(t)
+	triggers := mustBuyEvaluationTriggers(t, db)
+	tenant := registerTenant(t)
+	at := time.Date(2026, 10, 19, 12, 0, 0, 0, time.UTC)
+	fulfillment := withFeeItem(t, buyEvaluationTriggerRegistration(t, "ACTUAL_FULFILLMENT"), "SYN-FEE-ITEM-TRUNK-COST-01")
+	otherFeeItem := withFeeItem(t, buyEvaluationTriggerRegistration(t, "ACTUAL_FULFILLMENT"), "SYN-FEE-ITEM-OTHER")
+	bare := buyEvaluationTriggerRegistration(t, "FAILED_ATTEMPT")
+	bareThenFeeItem := withFeeItem(t, buyEvaluationTriggerRegistration(t, "FAILED_ATTEMPT"), "SYN-FEE-ITEM-ATTEMPT")
+
+	err := db.Transactor().WithinTransaction(t.Context(), func(ctx context.Context) error {
+		for _, step := range []struct {
+			registration domain.BuyEvaluationTriggerRegistration
+			want         ports.CatalogueRegistrationEffect
+		}{
+			{fulfillment, ports.CatalogueRegistered},
+			{fulfillment, ports.CatalogueReplay},
+			{otherFeeItem, ports.CatalogueConflict},
+			{bare, ports.CatalogueRegistered},
+			{bareThenFeeItem, ports.CatalogueConflict},
+		} {
+			effect, err := triggers.SaveBuyEvaluationTrigger(ctx, tenant, step.registration, at)
+			if err != nil || effect != step.want {
+				return errOrEffect(err, effect, step.want)
+			}
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	loaded, found, err := triggers.LoadBuyEvaluationTrigger(t.Context(), tenant, fulfillment.Reason())
+	if err != nil || !found {
+		t.Fatalf("读回 found=%v err=%v", found, err)
+	}
+	if feeItem, registered := loaded.FeeItem(); !registered || feeItem.String() != "SYN-FEE-ITEM-TRUNK-COST-01" {
+		t.Fatalf("费用项目 = %q registered=%v, want 先登的那一个", feeItem, registered)
+	}
+	loaded, found, err = triggers.LoadBuyEvaluationTrigger(t.Context(), tenant, bare.Reason())
+	if err != nil || !found {
+		t.Fatalf("读回 found=%v err=%v", found, err)
+	}
+	if _, registered := loaded.FeeItem(); registered {
+		t.Fatal("补登被悄悄写进了原行")
+	}
+}
+
+func withFeeItem(t *testing.T, registration domain.BuyEvaluationTriggerRegistration, feeItem string) domain.BuyEvaluationTriggerRegistration {
+	t.Helper()
+	reference, err := domain.NewFeeItemReference(feeItem)
+	if err != nil {
+		t.Fatal(err)
+	}
+	registered, err := registration.WithFeeItem(reference)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return registered
 }
 
 func newBuyEvaluationTriggers(t *testing.T) *adapter.BuyEvaluationTriggers {

@@ -45,11 +45,12 @@ func (repository *BuyEvaluationTriggers) SaveBuyEvaluationTrigger(
 	}
 	_, err = executor.Exec(ctx, `
 		INSERT INTO settlement_accounting.buy_evaluation_trigger (
-			tenant_id, occurrence_reason, moment, registered_at
-		) VALUES ($1, $2, $3, $4)`,
+			tenant_id, occurrence_reason, moment, fee_item_ref, registered_at
+		) VALUES ($1, $2, $3, $4, $5)`,
 		tenant.String(),
 		registration.Reason().String(),
 		registration.Moment().String(),
+		feeItemColumn(registration),
 		at.UTC(),
 	)
 	if err == nil {
@@ -62,51 +63,81 @@ func (repository *BuyEvaluationTriggers) SaveBuyEvaluationTrigger(
 		return 0, fmt.Errorf("save buy evaluation trigger: %w", err)
 	}
 	loaded, found, err := scanBuyEvaluationTrigger(executor.QueryRow(ctx, `
-		SELECT moment
+		SELECT occurrence_reason, moment, fee_item_ref
 		  FROM settlement_accounting.buy_evaluation_trigger
 		 WHERE tenant_id = $1 AND occurrence_reason = $2`,
 		tenant.String(), registration.Reason().String()))
 	if err != nil {
 		return 0, fmt.Errorf("save buy evaluation trigger: %w", err)
 	}
-	if !found || loaded != registration.Moment() {
+	// 本册不设修订：先登了没有费用项目的行、再来补登一格，也是异内容，答冲突而不是悄悄补上（ADR-0208 越权风险点 4）。
+	if !found || !loaded.SameRegistration(registration) {
 		return ports.CatalogueConflict, nil
 	}
 	return ports.CatalogueReplay, nil
+}
+
+// feeItemColumn 把没登的费用项目落成 NULL：空串会被列约束拒，而 NULL 才说得出「这一格没登」。
+func feeItemColumn(registration domain.BuyEvaluationTriggerRegistration) *string {
+	feeItem, registered := registration.FeeItem()
+	if !registered {
+		return nil
+	}
+	value := feeItem.String()
+	return &value
 }
 
 func (repository *BuyEvaluationTriggers) LoadBuyEvaluationTrigger(
 	ctx context.Context,
 	tenant domain.TenantID,
 	reason domain.OccurrenceReasonReference,
-) (domain.BuyEvaluationTriggerMoment, bool, error) {
+) (domain.BuyEvaluationTriggerRegistration, bool, error) {
 	querier, err := repository.db.ReadExecutor(ctx)
 	if err != nil {
-		return domain.BuyEvaluationTriggerMomentInvalid, false, fmt.Errorf("load buy evaluation trigger: %w", err)
+		return domain.BuyEvaluationTriggerRegistration{}, false, fmt.Errorf("load buy evaluation trigger: %w", err)
 	}
-	moment, found, err := scanBuyEvaluationTrigger(querier.QueryRow(ctx, `
-		SELECT moment
+	registration, found, err := scanBuyEvaluationTrigger(querier.QueryRow(ctx, `
+		SELECT occurrence_reason, moment, fee_item_ref
 		  FROM settlement_accounting.buy_evaluation_trigger
 		 WHERE tenant_id = $1 AND occurrence_reason = $2`,
 		tenant.String(), reason.String()))
 	if err != nil {
-		return domain.BuyEvaluationTriggerMomentInvalid, false, fmt.Errorf("load buy evaluation trigger: %w", err)
+		return domain.BuyEvaluationTriggerRegistration{}, false, fmt.Errorf("load buy evaluation trigger: %w", err)
 	}
-	return moment, found, nil
+	return registration, found, nil
 }
 
-func scanBuyEvaluationTrigger(row pgx.Row) (domain.BuyEvaluationTriggerMoment, bool, error) {
-	var name string
-	err := row.Scan(&name)
+// scanBuyEvaluationTrigger 把一行重建成登记：读回过同一个构造门，库里一格坏值报错，不折成「没有这一行」。
+func scanBuyEvaluationTrigger(row pgx.Row) (domain.BuyEvaluationTriggerRegistration, bool, error) {
+	var reasonText, momentName string
+	var feeItemText *string
+	err := row.Scan(&reasonText, &momentName, &feeItemText)
 	if errors.Is(err, pgx.ErrNoRows) {
-		return domain.BuyEvaluationTriggerMomentInvalid, false, nil
+		return domain.BuyEvaluationTriggerRegistration{}, false, nil
 	}
 	if err != nil {
-		return domain.BuyEvaluationTriggerMomentInvalid, false, err
+		return domain.BuyEvaluationTriggerRegistration{}, false, err
 	}
-	moment, err := domain.BuyEvaluationTriggerMomentFromName(name)
+	reason, err := domain.NewOccurrenceReasonReference(reasonText)
 	if err != nil {
-		return domain.BuyEvaluationTriggerMomentInvalid, false, err
+		return domain.BuyEvaluationTriggerRegistration{}, false, err
 	}
-	return moment, true, nil
+	moment, err := domain.BuyEvaluationTriggerMomentFromName(momentName)
+	if err != nil {
+		return domain.BuyEvaluationTriggerRegistration{}, false, err
+	}
+	registration, err := domain.NewBuyEvaluationTriggerRegistration(reason, moment)
+	if err != nil {
+		return domain.BuyEvaluationTriggerRegistration{}, false, err
+	}
+	if feeItemText != nil {
+		feeItem, err := domain.NewFeeItemReference(*feeItemText)
+		if err != nil {
+			return domain.BuyEvaluationTriggerRegistration{}, false, err
+		}
+		if registration, err = registration.WithFeeItem(feeItem); err != nil {
+			return domain.BuyEvaluationTriggerRegistration{}, false, err
+		}
+	}
+	return registration, true, nil
 }

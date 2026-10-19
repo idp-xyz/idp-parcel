@@ -10,22 +10,40 @@ import (
 	"go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
 )
 
+// buyEvaluationTriggerViewDouble 答一行：reason 非空时只认这个原因；feeItem 非空时那一行带费用项目。
 type buyEvaluationTriggerViewDouble struct {
-	moment domain.BuyEvaluationTriggerMoment
-	found  bool
-	err    error
-	reason string
+	moment  domain.BuyEvaluationTriggerMoment
+	found   bool
+	err     error
+	reason  string
+	feeItem string
 }
 
 func (double buyEvaluationTriggerViewDouble) LoadBuyEvaluationTrigger(
 	_ context.Context,
 	_ domain.TenantID,
 	reason domain.OccurrenceReasonReference,
-) (domain.BuyEvaluationTriggerMoment, bool, error) {
-	if double.reason != "" && reason.String() != double.reason {
-		return domain.BuyEvaluationTriggerMomentInvalid, false, nil
+) (domain.BuyEvaluationTriggerRegistration, bool, error) {
+	if double.err != nil {
+		return domain.BuyEvaluationTriggerRegistration{}, false, double.err
 	}
-	return double.moment, double.found, double.err
+	if !double.found || (double.reason != "" && reason.String() != double.reason) {
+		return domain.BuyEvaluationTriggerRegistration{}, false, nil
+	}
+	registration, err := domain.NewBuyEvaluationTriggerRegistration(reason, double.moment)
+	if err != nil {
+		return domain.BuyEvaluationTriggerRegistration{}, false, err
+	}
+	if double.feeItem != "" {
+		feeItem, err := domain.NewFeeItemReference(double.feeItem)
+		if err != nil {
+			return domain.BuyEvaluationTriggerRegistration{}, false, err
+		}
+		if registration, err = registration.WithFeeItem(feeItem); err != nil {
+			return domain.BuyEvaluationTriggerRegistration{}, false, err
+		}
+	}
+	return registration, true, nil
 }
 
 func TestTriggerBuyEvaluationStaysUnconfiguredWhenTheReasonIsNotRegistered(t *testing.T) {

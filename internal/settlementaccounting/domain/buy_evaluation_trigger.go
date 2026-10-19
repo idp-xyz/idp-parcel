@@ -43,9 +43,13 @@ func BuyEvaluationTriggerMomentFromName(name string) (BuyEvaluationTriggerMoment
 }
 
 // BuyEvaluationTriggerRegistration 把一个发生项原因挂到内置时点上。原因是租户的词，不在产品里预列。
+//
+// 费用项目是这一行的第三格，也是租户取值（ADR-0208）：发生项已形成那一路要从这里取，发生项与协议上都没有它。
+// 它可以缺席——缺席的行对那一路答未配置，而 ADR-0164 那条由调用方交齐三件引用的触发面本来就不读它。
 type BuyEvaluationTriggerRegistration struct {
-	reason OccurrenceReasonReference
-	moment BuyEvaluationTriggerMoment
+	reason  OccurrenceReasonReference
+	moment  BuyEvaluationTriggerMoment
+	feeItem FeeItemReference
 }
 
 func NewBuyEvaluationTriggerRegistration(
@@ -66,6 +70,22 @@ func (registration BuyEvaluationTriggerRegistration) Moment() BuyEvaluationTrigg
 	return registration.moment
 }
 
+// WithFeeItem 给这一行登上费用项目。一个原因只映一个费用项目、不分协议（ADR-0208 越权风险点 1）。
+func (registration BuyEvaluationTriggerRegistration) WithFeeItem(feeItem FeeItemReference) (BuyEvaluationTriggerRegistration, error) {
+	if !registration.reason.valid() || !registration.moment.triggers() || !feeItem.valid() {
+		return BuyEvaluationTriggerRegistration{}, fmt.Errorf("%w: buy evaluation trigger fee item", ErrBlankValue)
+	}
+	registration.feeItem = feeItem
+	return registration, nil
+}
+
+// FeeItem 交回这一行登的费用项目；没登时第二个返回值为假，那一路据此答未配置，不拿原因或别的串顶上。
+func (registration BuyEvaluationTriggerRegistration) FeeItem() (FeeItemReference, bool) {
+	return registration.feeItem, registration.feeItem.valid()
+}
+
+// SameRegistration 三格都比：同原因同时点而费用项目不同（含一边没登）是另一行内容，不是重放。
 func (registration BuyEvaluationTriggerRegistration) SameRegistration(other BuyEvaluationTriggerRegistration) bool {
-	return registration.reason == other.reason && registration.moment == other.moment && registration.moment.triggers()
+	return registration.reason == other.reason && registration.moment == other.moment &&
+		registration.feeItem == other.feeItem && registration.moment.triggers()
 }

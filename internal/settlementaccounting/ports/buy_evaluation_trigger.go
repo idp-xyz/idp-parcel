@@ -18,12 +18,12 @@ type BuyEvaluationTriggerRegister interface {
 	) (CatalogueRegistrationEffect, error)
 }
 
-// BuyEvaluationTriggerView 按发生项原因取已采用的触发时点。found=false 表示没有这一行：
+// BuyEvaluationTriggerView 按发生项原因取那一行：时点与（若登了）费用项目整行交回。found=false 表示没有这一行：
 // 不发起评价请求。
 type BuyEvaluationTriggerView interface {
 	LoadBuyEvaluationTrigger(
 		ctx context.Context,
 		tenant domain.TenantID,
 		reason domain.OccurrenceReasonReference,
-	) (domain.BuyEvaluationTriggerMoment, bool, error)
+	) (domain.BuyEvaluationTriggerRegistration, bool, error)
 }
