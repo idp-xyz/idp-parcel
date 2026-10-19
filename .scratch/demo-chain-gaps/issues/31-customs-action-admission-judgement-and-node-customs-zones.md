@@ -44,7 +44,7 @@ L
 1. **范围即申报单元。** 对象→范围按 CC 自己的申报单元与案件册解析：当前单元（被替代的不算）即门禁与放行所说的「明确申报范围」，程序取单元行的。在案而未成单元的，单独记下那一案的程序。限制另按对象自身读，因为内部限制可以直接落在包裹上。
 2. **细化 D05-4「解析不到答未决」。** 对象不在任何案件与单元里时：
    - 跨区移动答未决（缺案可依）；
-   - 同区动作答不受门禁。
+   - 其余受门禁动作（装载出发、出库、交付）答不受门禁。
 
    方案字面是一律未决，那样演示与所有无案的境内段每一步都读成未决，与票 32 的演示判据「SHA→SZX 读数不受门禁」自相矛盾。在案未成单元仍答未决。
 3. **D05-5「该对象有跨区门禁目录行」的落法。** 某当前单元登了跨区那一道的目录、且那一道判下来不是不受门禁，或有动作时点有效的限制约束跨区移动，才答未配置。只登了空清单的跨区目录不算。
@@ -61,19 +61,9 @@ L
 8. **意图三种。** 出发（起讫必填）、交出（去向可缺，给了才问跨区）、交付。交出映射为出库 `OUTBOUND_RELEASE`。接收不受门禁，所以没有「接收」意图。
 9. **登记面命名与入口。** 端点 `/customs-node-zone-registrations` 与 CLI `node-zone` 同词，挂操作者渠道登记册 Intake。参数登记册立 `PAR-CUS-08`，并把首发判据句的 `PAR-CUS-01` 至 `07` 改到 `08`。
 
-### 越权风险点（全文见 ADR-0206「越权风险点」）
+### 越权风险点
 
-1. 限制今天没有生产写入，阻断只可能来自门禁或外部结果（CC owner）。
-2. 区域粒度按节点，节点内监管区与非监管区装不下（CC owner、租户）。
-3. 不在册对象的同区动作答不受门禁：要求建案而未建案的包裹，境内段放过（CC owner）。这是对方案 D05-4 的细化。
-4. 演示包裹不在册，演示动线上不会出现放行；放行、阻断、未配置只在真库用例里出现（演示租户）。
-5. 门禁目录以申报单元为范围，租户要按单元登目录（CC owner、租户）。
-6. 部分与附条件放行答未决（CC owner）。
-7. 门禁未满足而已全部放行答未决（CC owner）。
-8. 对象只认包裹；袋与集运单元由消费方展开（TF owner，票 32）。
-9. 交出映射为出库、给了去向才问跨区；交接登记的挂法等 peer（TF owner）。
-10. 门禁目录没有历史区间，离线补登时读的是此刻的目录（CC owner）。
-11. 参数登记册首发判据从 `PAR-CUS-07` 延到 `08`：新增一项上线前须确认的租户取值（产品 owner）。
+逐条只记在 ADR-0206「越权风险点」一处，票面不另抄，各条括注复核方。评审后补进 ADR 的两条：「首发判据多一项租户取值」（产品 owner）与「登了区域反而更严」（CC owner、租户），见下文评审记录。
 
 ### 做了什么
 
@@ -141,3 +131,45 @@ L
 - 中间提交 `1923c740` 的 CLI 用例读的种子文件在 `c531879e` 才入库，单拣前一笔时该用例会红；分支头一致。
 - 进 main 时：ADR 号、AT 号（`AT-CC-411`–`425`）、`PAR-CUS-08`、迁移号 `0024` 若被占，全仓搜替。热点文件（`endpoints.go`、`main.go`、`endpoints_test.go`、`seed.sh`、README、`docs/adr/README.md`）都只追加，按方案「并行车道」装配令牌与种子令牌的次序 rebase。
 
+## 评审记录（2026-10-19，作者子代理按隔离评审修订）
+
+评审阻断零项；非阻断十项，其中五项建议进 main 前修。修了九项，一项按编排指令不在本分支做。
+
+### 修了什么
+
+1. **读不动的答复在真库上送不到消费方**（建议进 main 前修）。`transactionalActionAdmissionJudge` 在编排答读不动时让回调交本壳私有的哨兵，逼事务回滚；回滚后认出哨兵，交回编排那一份答复与 nil。原先照常提交，aborted 事务的提交只换回提交错误，具名原因丢失。
+   - 真库用例 `TestActionAdmissionNamesTheUnreadablePortWhenTheTransactionIsAborted`：把限制册改表名，区域与对象范围两口照常读通后限制那一口报 SQL 错误，断言答读不动且指名限制那一口。修之前此用例红（`commit unexpectedly resulted in rollback`）。
+   - 顺带一道门（代决）：在调用方事务里调用即拒（`errActionAdmissionInsideCallerTransaction`）。嵌进去时，回滚哨兵会经 bento 的嵌套事务把调用方那笔标成只能回滚，判断记录也随调用方回滚。方案 D05-2 本就要求消费方在写事务前问，这道门让票 32 接错时第一条用例就红。用例 `TestActionAdmissionRefusesToRunInsideTheCallersTransaction`。
+2. **不在册对象遇上未登记区域的不对称**（建议进 main 前修）。取评审给的第一种修法：ADR-0206 补越权风险点「登了区域反而更严」，写明组合、反向激励、缓解（`PAR-CUS-08` 列进首发判据）与另一种判据的代价。不改判据，理由：改成「对象不在册且跨区待定答未配置」，就是决定二已否决的「节点未登记一律答未配置」，只做境内的租户要逐节点登区域；owner 若要改，只动决定二一句，五格不变。「同区动作」的说法在 ADR 决定四、越权风险点 3 与 8、CC CONTEXT、领域头注、ADR 索引行一并写准为「跨关务区域移动以外的受门禁动作」；UC-CC-013 的 `AT-CC-422` 写明不在册时整次答复为不受门禁。
+3. **票面与 ADR 的越权风险点漂移**（建议进 main 前修）。第 11 条（首发判据延到 `PAR-CUS-08`）补进 ADR-0206；票面改为只引 ADR。ADR 的 Status 括注改为「待各条括注的 owner 复核」，因为新增的两条复核方不只是 CC owner。
+4. **三处注释违规**（建议进 main 前修）。
+   - `releaseGateAssessment` 头注去掉变更叙述，改写 foldRefused 为何不并进停点。
+   - ADR-0206 Context 去掉对 CC 目录的计数。
+   - 对象范围读面头注不再数「两处」，改指共用常量（见第 7 项）。
+5. **编程错误与读不动的分界**。
+   - 写口：新增 `ports.ErrActionAdmissionJudgementRejected`；适配器对词表外取值、缺事务（`RequireExecutor` 的错）、JSON 编码失败都标它，编排认出即原样上抛，其余写错误才答判断册读不动。适配器头注里「同一事务看同一份快照」改为如实写 READ COMMITTED 下的读回行为。
+   - foldRefused：准入编排改答读不动并指名门禁目录那一口，与放行读口读到坏行同一归法；放行门禁核对仍答未受理（既有行为不动）。注释与归类对齐。
+   - 用例 `TestAStoreRejectionIsAProgrammingErrorNotAnUnreadableStore`、`TestFindingsThatDoNotFoldNameTheGateConditionView`；真库无事务负向用例加断言：缺事务同时标拒收。
+6. **动作时点截到微秒**。受理门 `command.At.Truncate(time.Microsecond)`，区域、限制、放行、标识派生与落库都用这一个值。用例 `TestAdmissionAtIsTruncatedToTheMicrosecondTheStoreKeeps`：带亚微秒位首判，再用读回的微秒时点问，命中同一标识。
+7. **「三源一变，标识就换」说过了头**。ADR 决定六、UC-CC-013「一致性」、CC CONTEXT、端口与适配器头注、迁移注释统一改为「答复、同格依据或区域读数一变才换」，并写明进不了答复的来源变化不另记一行。
+8. **当前单元的 CTE 两处定义**。抽成包内常量 `currentDeclarationUnitCTE`（新文件 `current_declaration_unit.go`），`ObjectCustomsScopeView` 与 `ParcelDeclarationFactsView` 都引它；替代关系那句说明随之移到常量头注。
+9. **AT 点名与盘点**。`AT-CC-411`–`425` 在领域、编排、真库与装配用例上补 `Covers:` 点名，半边覆盖处注明哪一半边；`.scratch/at-coverage-inventory.md` 十五条入①并改总览，文末追记一段。UC-CC-013 的 `AT-CC-423`、`424` 写进本轮补的两支（读回微秒时点再问；事务内 SQL 错误、折不出结论的认定、写口拒收）。
+
+### 没采纳什么
+
+- **机制清点重新生成**（建议进 main 前修）。编排指令本分支不重生成机制清点，进 main 时 rebase 到 origin/main 后在干净检出上统一生成，随落地那一笔或紧跟一笔提交（照 parallel-sessions「生成物不占号」）。CI 那道「Mechanism inventory is current」在那之前会红，是已知的待办，不是遗漏。
+
+没有需要另立的票。
+
+### 进 main 时要解的两处合并冲突
+
+对当时的 origin/main（`dee3a79c`）做 `git merge-tree` 有两处冲突，都是并行追加，不是语义冲突：
+
+- `docs/adr/README.md`：本分支追加的 ADR-0206 一行与 main 上追加的 ADR-0210 一行落在同一处。两行都留，按号排，0206 在前。评审前的分支头 `fbdbb76b` 上就已有这一处。
+- `.scratch/at-coverage-inventory.md`：本轮改了总览数与文末追记，main 上票 no-reception-source/02 也改了同几格。①行两边都留；总览在 main 的数上各加本票十五条（① 与合计各加十五，CC 一行取本分支的数）；两段追记都留，本票那段排在 main 的「追记七」之后。
+
+### 评审后验证
+
+- 于 `be3e2c7a`：`go build ./...` 通过；`go vet`（CC 全包、`./cmd/...`、`./migrations/`）与改动 Go 文件的 `gofmt -l` 无输出。
+- `IDP_PARCEL_POSTGRES_DSN=… go test -p 1 -count=1` 全绿：`./internal/customscompliance/...`、`./cmd/parcel-api/`、`./cmd/parcel-customs-register/`、`./internal/architecture/`、`./migrations/`、`./internal/parcelshipment/adapters/customscompliance/`（申报事实读面的消费方，CTE 抽出后复跑）。
+- 演示种子未改，未重灌。未跑全量，未重生成机制清点。
