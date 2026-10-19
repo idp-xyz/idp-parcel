@@ -1,7 +1,7 @@
 # 65 交出门禁：已交接逐对象读交出准入并照记
 
 Category: enhancement
-Status: in-progress——完工待评审与进 main，分支 claude-dcg65（2026-10-19 Claude Code 作者子代理；隔离评审 0 阻断，已按评审修订并 rebase 到 `129e9a38`，见文末「完成记录」「评审记录」；立票时：ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。）
+Status: resolved——2026-10-19 进 main（全量钉 `22987fc2`：153 ok / 0 FAIL；61、63、65、69 同批，见文末「进 main 记录」）。此前 in-progress——完工待评审与进 main，分支 claude-dcg65（2026-10-19 Claude Code 作者子代理；隔离评审 0 阻断，已按评审修订并 rebase 到 `129e9a38`，见文末「完成记录」「评审记录」；立票时：ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。）
 Blocked by: [59](./59-handover-declares-releasing-receiving-and-onward-nodes.md)
 地盘：TF 新 `domain/handover_gate_reading.go`（与出发读数同一封闭集，可抽共用内核，出发那一格的答复字节不变）、新 `ports/handover_gate.go`、新 `application/read_handover_gate.go`、新 `adapters/customscompliance/handover_gate.go`；`application/register_transport_handover.go`（读数随记录）、`adapters/postgres/transport_handover_registry.go` + TF 迁移（认领时现取）、tfhttp 交接响应；`cmd/parcel-api/assemble_control_facts.go`（写事务之前读）；文档 UC-TF-005「当前限制」行与 AT、ADR-0206 Links 加后继指针。
 出处：[tf-chain-plan](../tf-chain-plan.md)「等 peer 的」外包干线交接的跨境门禁；方案「代决」C13，「需要的 ADR」ADR-0213。
@@ -184,3 +184,15 @@ ADR-0213 决定四与方案 C13 之外补的裁定。内容与理由只在 ADR-0
 - `eb98ea6f`：ADR-0213 补记与越权风险点 15，UC-TF-005 与 TF CONTEXT 压成指针，AT 盘点点名新用例。
 - `ee441c3b`：演示动线补记换成一次性库实走记录。
 - 本笔：完成记录随评审修订与 rebase 更新，并加本节。
+
+## 进 main 记录（2026-10-19）
+
+- 交接与派送这一批 61、63、65、69 合成一批，按 61 → 63 → 65 → 69 叠到 main 上，整批快进推送，与本记录同一次推送。
+- 合批时的处理：
+  - 交接信封那一行的 FanOut 合成四路（VE 投影、TF 派送发起、NO 控制转出、NR 复核），头注改成各路不靠位置、不计数；派发用例的 Covers 两边都留。
+  - 63 与 65 的接缝：65 定声明了交出节点的`已交接`必须带交出门禁读数（ADR-0213 决定四），63 的复核派发用例改为照此配一份「不受门禁」读数再登记。
+  - 63、65 原先基于 59 进 main 之前的分支，65 又自己 rebase 过；合批只取各自的提交，59 已在 main 的内容不重复叠。
+  - ADR-0205 的 Links 里 65 与 69 各加的一条之间去掉合并插进的空行。
+  - 63 立的 89 号票与票 67 的号段撞号，改为 90。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `22987fc2`：153 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。

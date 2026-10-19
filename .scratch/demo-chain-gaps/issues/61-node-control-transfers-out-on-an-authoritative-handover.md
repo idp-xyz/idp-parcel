@@ -1,7 +1,7 @@
 # 61 节点控制按权威运输交接转出（UC-NO-005 上半）
 
 Category: enhancement
-Status: in-progress——评审已修订（0 阻断），待进 main，分支 claude-dcg61（已 rebase 到 `origin/main` `129e9a38`）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
+Status: resolved——2026-10-19 进 main（全量钉 `22987fc2`：153 ok / 0 FAIL；61、63、65、69 同批，见文末「进 main 记录」）。此前 in-progress——评审已修订（0 阻断），待进 main，分支 claude-dcg61（已 rebase 到 `origin/main` `129e9a38`）。此前 ready-for-agent——2026-10-19 Claude Code 会话立（用户「你作为业务和系统专家自决……解决所有的问题」授权）。代决见 [handover-dispatch-plan](../handover-dispatch-plan.md)。
 Blocked by: 无
 地盘（**需与 idp-parcel-9b 协调**）：NO 新 `domain/control_transition.go`、新 `ports/physical_control.go`（不改 `ports.go`）、新 `application/transfer_control_on_handover.go`、新 `adapters/postgres/physical_control_transition.go` + NO 迁移（认领时现取）、新查阅册 `adapters/postgres/review_catalogue_control_transition.go`、新 `adapters/inbox/transport_handover_registered_consumer.go`；改写 `adapters/transportfulfillment/control_transfer.go`（按键读交接，去掉字符串比对）；`cmd/parcel-dispatch/assemble.go` FanOut 加一路 + 新 `assemble_node_control_on_handover.go` + 新真库用例；文档 ADR-0214、新 UC-NO-005、NO CONTEXT「节点控制」一句、CONTEXT-MAP `node-operations ↔ transport-fulfillment` 一句、开发主线「机制半边现状」PN-04 行更正、演示脚本。
 与 idp-parcel-9b 的四个共享点（详见方案「与 idp-parcel-9b 的协调点」）：
@@ -232,3 +232,15 @@ L
   - `./cmd/parcel-dispatch/`、`./cmd/parcel-api/`、`./cmd/parcel-frontline-import/`、`./cmd/parcel-node-operations-register/`；
   - `./internal/parcelshipment/adapters/nodeoperations/`、`./internal/transportfulfillment/adapters/postgres/`。
 - 演示种子没动，演示没有重走：本轮改动不碰 HTTP 线格式与种子，演示动线只改了说明文字。
+
+## 进 main 记录（2026-10-19）
+
+- 交接与派送这一批 61、63、65、69 合成一批，按 61 → 63 → 65 → 69 叠到 main 上，整批快进推送，与本记录同一次推送。
+- 合批时的处理：
+  - 交接信封那一行的 FanOut 合成四路（VE 投影、TF 派送发起、NO 控制转出、NR 复核），头注改成各路不靠位置、不计数；派发用例的 Covers 两边都留。
+  - 63 与 65 的接缝：65 定声明了交出节点的`已交接`必须带交出门禁读数（ADR-0213 决定四），63 的复核派发用例改为照此配一份「不受门禁」读数再登记。
+  - 63、65 原先基于 59 进 main 之前的分支，65 又自己 rebase 过；合批只取各自的提交，59 已在 main 的内容不重复叠。
+  - ADR-0205 的 Links 里 65 与 69 各加的一条之间去掉合并插进的空行。
+  - 63 立的 89 号票与票 67 的号段撞号，改为 90。
+- 合批种子在一次性新库上 `seed.sh` 灌通，退 0，用完删库。
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `22987fc2`：153 包 ok，0 FAIL，0 SKIP。机制清点在同一 tip 上重生成。
