@@ -123,6 +123,66 @@
       "capabilityFace": "MASTER_DATA_AND_OPERATIONS_READ",
       "effectiveStartsAt": "2026-01-01T00:00:00Z",
       "basis": "SYN-GRANT-BASIS-DEX-03"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WORK-FACT-SHA-HUB-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "WORK_FACT_REGISTRATION",
+      "workScope": {
+        "kind": "NODE",
+        "reference": "SYN-NODE-SHA-HUB"
+      },
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WF-01"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WORK-FACT-SZX-GATE-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "WORK_FACT_REGISTRATION",
+      "workScope": {
+        "kind": "NODE",
+        "reference": "SYN-NODE-SZX-GATE"
+      },
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WF-02"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WORK-FACT-SIN-HUB-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "WORK_FACT_REGISTRATION",
+      "workScope": {
+        "kind": "NODE",
+        "reference": "SYN-NODE-SIN-HUB"
+      },
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WF-03"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WORK-FACT-SIN-LM-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "WORK_FACT_REGISTRATION",
+      "workScope": {
+        "kind": "NODE",
+        "reference": "SYN-NODE-SIN-LM"
+      },
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WF-04"
+    },
+    {
+      "grantId": "SYN-GRANT-DEX-CONFIG-WORK-FACT-OFFSITE-CN-EAST-01",
+      "issuer": "http://127.0.0.1:5556/dex",
+      "subject": "ChZTWU4tT1BFUkFUT1ItQ09ORklHLTAxEgVsb2NhbA",
+      "capabilityFace": "WORK_FACT_REGISTRATION",
+      "workScope": {
+        "kind": "OFFSITE",
+        "reference": "SYN-OFFSITE-CN-EAST"
+      },
+      "effectiveStartsAt": "2026-01-01T00:00:00Z",
+      "basis": "SYN-GRANT-BASIS-DEX-WF-05"
     }
   ]
 }

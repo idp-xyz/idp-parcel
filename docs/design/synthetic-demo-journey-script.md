@@ -48,7 +48,7 @@ curl -s -H "Authorization: Bearer $TOKEN" http://127.0.0.1:19080/network-catalog
 {"level":"INFO","msg":"Isolated read admission enabled (ADR-0078): shipment request views answer with injected synthetic scope","tenant":"SYN-TENANT-01"}
 ```
 
-放行必须出声是 [ADR-0078](../adr/0078-isolated-environment-operations-reads-admit-by-assembly-injection.md) 的要求，不是日志噪音：隔离读面把委托查阅及其子集视图从`未配置`切成可答，这件事要在事后可查。设了写开关时另有一行 ADR-0091 的同款声明，带 `selfAuthority`。不带令牌打运营查阅各口答 `401 OPERATOR_CREDENTIAL_REJECTED`，持令牌但授予不足答 `403 OPERATOR_NOT_GRANTED`。
+放行必须出声是 [ADR-0078](../adr/0078-isolated-environment-operations-reads-admit-by-assembly-injection.md) 的要求，不是日志噪音：隔离读面把委托查阅及其子集视图从`未配置`切成可答，这件事要在事后可查。设了写开关时另有一行 ADR-0091 的同款声明，带 `selfAuthority`。不带令牌打运营查阅各口答 `401 OPERATOR_CREDENTIAL_REJECTED`，持令牌但授予不足答 `403 OPERATOR_NOT_GRANTED`。作业事实各口（收寄、揽收、交接、移动、派送、交付）另带设备三头 `Parcel-Device-Id`、`Parcel-Work-Scope-Kind`、`Parcel-Work-Scope-Reference`：设备取 `scripts/demo-seeds/data/access/04-devices.json` 登的合成设备，范围报它登的那一个，报错范围答 `403 DEVICE_NOT_IN_USE`。外部结果、监管凭证与外部资金事实各口走集成客户端渠道，演示上还没有发行方，答 `403 ACCESS_CHANNEL_NOT_CONFIGURED`（票 product-strategy-boundary/31）。
 
 ### 起 dispatch（只在演示委托提交时需要）
 

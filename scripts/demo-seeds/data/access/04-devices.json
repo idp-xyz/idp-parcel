@@ -1,0 +1,45 @@
+{
+  "tenantId": "SYN-TENANT-01",
+  "devices": [
+    {
+      "deviceId": "SYN-DEVICE-SHA-HUB-01",
+      "workScope": {
+        "kind": "NODE",
+        "reference": "SYN-NODE-SHA-HUB"
+      },
+      "basis": "SYN-DEVICE-BASIS-01"
+    },
+    {
+      "deviceId": "SYN-DEVICE-SZX-GATE-01",
+      "workScope": {
+        "kind": "NODE",
+        "reference": "SYN-NODE-SZX-GATE"
+      },
+      "basis": "SYN-DEVICE-BASIS-01"
+    },
+    {
+      "deviceId": "SYN-DEVICE-SIN-HUB-01",
+      "workScope": {
+        "kind": "NODE",
+        "reference": "SYN-NODE-SIN-HUB"
+      },
+      "basis": "SYN-DEVICE-BASIS-01"
+    },
+    {
+      "deviceId": "SYN-DEVICE-SIN-LM-01",
+      "workScope": {
+        "kind": "NODE",
+        "reference": "SYN-NODE-SIN-LM"
+      },
+      "basis": "SYN-DEVICE-BASIS-01"
+    },
+    {
+      "deviceId": "SYN-DEVICE-OFFSITE-CN-EAST-01",
+      "workScope": {
+        "kind": "OFFSITE",
+        "reference": "SYN-OFFSITE-CN-EAST"
+      },
+      "basis": "SYN-DEVICE-BASIS-01"
+    }
+  ]
+}
