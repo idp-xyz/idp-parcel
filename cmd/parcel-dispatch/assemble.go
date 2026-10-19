@@ -334,9 +334,8 @@ var veFinalOutcomeUndecidedSentinels = []error{
 	veps.ErrFinalProjectionUndecided,
 }
 
-// veInitialRouteUndecidedSentinels 只给 VE 初始路由投影这一路。本路不 FanOut：按消费
-// 清点该信封的应消费方还有 NO/TF，但两侧消费者今天不存在——登记接不住的比不登记更糟
-// （ADR-0049 决定三「没有订阅者的事件类型显式失败并入账」），照交接路的先例只投 VE。
+// veInitialRouteUndecidedSentinels 只给 VE 初始路由投影这一路。与 TF 运输准备那一路
+// （tfInitialRoutePreparationUndecidedSentinels）分开列：同一封信扇出给两路，各包各的哨兵再 FanOut。
 //
 // 不在名单里：ErrInitialRouteRecordInconsistent、ErrInitialRouteUntranslatableAnswer、
 // ErrInitialRouteProjectionHandoffPending、veconsume.ErrUnexpectedProjectionOutcome。
@@ -683,9 +682,8 @@ var chargeOccurrenceFormedUndecidedSentinels = []error{
 // VE 侧今天没有它的消费者，登记接不住的比不登记更糟）、
 // TF 权威交接登记 → 只投 VE 投影（不 FanOut 给 PS：终局只认有效交付）、
 // PS 包裹服务终局形成 → FanOut（先 VE 投影，再 SA 发起 SELL 评价 ADR-0190；不投 PS：终局是 PS 自家事实，
-// 让它经调度器消费自己等于把一份事实记两遍）、NR 包裹级初始路由判断 → 只投 VE 投影（不 FanOut：
-// 按消费清点该信封的应消费方还有 NO/TF，但两侧消费者今天不存在，登记接不住的比不
-// 登记更糟）、TF 替代/退运旅程启动 → 只投 VE 投影（不 FanOut：一封信带全体成员，
+// 让它经调度器消费自己等于把一份事实记两遍）、NR 包裹级初始路由判断 → FanOut（先 VE 投影，再 TF 逐段运输
+// 准备 ADR-0201 决定七；应消费方里的 NO 今天仍没有消费者，不登）、TF 替代/退运旅程启动 → 只投 VE 投影（不 FanOut：一封信带全体成员，
 // 消费侧按成员循环拆分派生，ADR-0066）、CC 关务案件建立 → 只投 VE 投影（不 FanOut：
 // 同为多成员信封，成员维与案件维一并进事实引用，ADR-0066）、CC 申报提交版本形成 →
 // 只投 VE 投影（不 FanOut：同为多成员信封，成员维进引用、提交版本走版本维，
@@ -698,7 +696,7 @@ var chargeOccurrenceFormedUndecidedSentinels = []error{
 // 两路各认一个方向，另一个方向的评价在各自那一路入账走掉）。
 // TF 运输收费发生项已形成 → 只投 SA 发起 BUY 评价（ADR-0208）。消费者可以先于生产方登进路由表（ADR-0049）；没有生产方
 // 交出这一类信封时，本路一封也收不到，不是接不住。
-// 各类 FanOut 同一 EventType 各投两个独立消费者，顺序一律先 VE 后 PS/NR，避免把投影或
+// 各类 FanOut 同一 EventType 各投两个独立消费者，顺序一律先 VE 后 PS/NR/TF，避免把投影或
 // 补派生堵在资格墙、终局规则墙或路由证据墙上；SA 发起 SELL 评价那一路排在既有那一路之后，
 // 计费不挡履约与追踪。
 // 「TF 有效交付登记」只接 `effective-delivery.registered`，不接 `offsite-pickup.formed`。
@@ -1043,6 +1041,21 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 	if err != nil {
 		return nil, fmt.Errorf("parcel-dispatch: initial route projection undecided translation: %w", err)
 	}
+	tfInitialRoute, err := prepareOpportunityOnInitialRouteConsumer(db, inboxStore, clock)
+	if err != nil {
+		return nil, err
+	}
+	tfInitialRouteRouted, err := dispatch.WithUndecidedSentinels(
+		tfInitialRoute, tfInitialRoutePreparationUndecidedSentinels...)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: initial route preparation undecided translation: %w", err)
+	}
+	// 先 VE 后 TF：准备读三本册子、可能停在未决，反序会把追踪投影堵在班次册后面；TF 未决重投时 VE 那一路按 inbox 跳过，
+	// 不重复投影。
+	initialRouteFan, err := dispatch.FanOut(veInitialRouteRouted, tfInitialRouteRouted)
+	if err != nil {
+		return nil, fmt.Errorf("parcel-dispatch: initial route fan-out: %w", err)
+	}
 
 	veExceptionJourney, err := deriveExceptionJourneyConsumer(db, inboxStore, projectionDerive)
 	if err != nil {
@@ -1122,7 +1135,7 @@ func wireDispatcher(db *bentopg.DB, settings dispatchSettings, options ...dispat
 			veinbox.TransportHandoverRegisteredEventType:           veHandoverRouted,
 			veinbox.ExternalCarrierTrackingJudgedEventType:         veExternalTrackingRouted,
 			veinbox.FinalOutcomeFormedEventType:                    finalOutcomeFan,
-			veinbox.InitialRouteFormedEventType:                    veInitialRouteRouted,
+			veinbox.InitialRouteFormedEventType:                    initialRouteFan,
 			veinbox.ExceptionJourneyRecordedEventType:              veExceptionJourneyRouted,
 			veinbox.CustomsCaseEstablishedEventType:                veCustomsCaseRouted,
 			veinbox.DeclarationSubmissionFormedEventType:           veDeclarationSubmissionRouted,
@@ -2061,9 +2074,8 @@ func deriveFinalOutcomeConsumer(
 	return consumer, nil
 }
 
-// deriveInitialRouteConsumer 接 NR 包裹级初始路由判断 → VE 投影。本路只投 VE 不
-// FanOut：按消费清点该信封的应消费方还有 NO/TF，但两侧消费者今天不存在——登记一个
-// 接不住的比不登记更糟（ADR-0049 决定三「没有订阅者的事件类型显式失败并入账」），照交接路先例办。
+// deriveInitialRouteConsumer 接 NR 包裹级初始路由判断 → VE 投影。路由表上它与 TF 运输准备
+// （prepareOpportunityOnInitialRouteConsumer）FanOut 同一封信，VE 在前。
 //
 // 信封只带完整判断键（含 customerAccountId），判断本体由处理适配器按键重取——权威
 // 事实留在 network-routing，计划段链与候选依据都不进载荷。

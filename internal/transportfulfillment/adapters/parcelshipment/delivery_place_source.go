@@ -1,9 +1,11 @@
 // Package parcelshipment 是 transport-fulfillment 消费 parcel-shipment 事实的适配器（ADR-0025 消费方侧；只有本包
 // 可以同时导入两个上下文；只翻译不判断，翻译必须是全函数）。
 //
-// 首发只有一条缝：末端派送任务七件里的**地点**（ADR-0114 决定三；票 tf-segment-lifecycle-closure/12）。PS 交出的是
-// 「收件地点引用」——租户、委托、收件资料范围、资料版本锚四段的不透明串（ADR-0130 决定一），落进任务的 Place 也是
+// DeliveryPlaceSource 答末端派送任务七件里的**地点**（ADR-0114 决定三；票 tf-segment-lifecycle-closure/12）。PS 交出的
+// 是「收件地点引用」——租户、委托、收件资料范围、资料版本锚四段的不透明串（ADR-0130 决定一），落进任务的 Place 也是
 // 这个串；地址本体留在 PS，本包不读、不落、不解析它（ADR-0075 要防的那一半在这里守住）。
+//
+// DeclaredDemand 答运输准备的收寄前需求量：客户申报的重量与外廓（ADR-0201 决定八）。
 package parcelshipment
 
 import (

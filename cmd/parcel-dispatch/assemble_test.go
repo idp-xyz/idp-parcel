@@ -39,6 +39,7 @@ import (
 	sapostgres "go.idp.xyz/idp-parcel/internal/settlementaccounting/adapters/postgres"
 	sadomain "go.idp.xyz/idp-parcel/internal/settlementaccounting/domain"
 	saports "go.idp.xyz/idp-parcel/internal/settlementaccounting/ports"
+	tfinbox "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/inbox"
 	tfpostgres "go.idp.xyz/idp-parcel/internal/transportfulfillment/adapters/postgres"
 	veinbox "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/inbox"
 	veps "go.idp.xyz/idp-parcel/internal/visibilityexception/adapters/parcelshipment"
@@ -1192,11 +1193,15 @@ func TestAJudgedExternalCarrierTrackingReachesTheConsumerThroughTheRouteTable(t 
 	}
 }
 
-// Covers: 路由表第八条——NR 包裹级初始路由判断只投 VE 投影，不 FanOut（应消费方还有
-// NO/TF，但两侧消费者今天不存在，登记接不住的比不登记更糟）。手法同前几条：毒丸载荷
-// （缺六维之一）让消费门显式拒收入账并交回 nil，因此这一条会被定稿。漏挂或挂错的话
-// 这里撞的是无订阅者。
+// Covers: AT-TF-126（路由表的初始路由一条）——NR 包裹级初始路由判断 FanOut 给 VE 投影与 TF 运输准备两路（ADR-0201 决定七），两路
+// 各记各的 inbox 账。手法同前几条：毒丸载荷（缺六维之一）让两路消费门都显式拒收入账并交回 nil，因此这一条会被定稿；
+// 漏挂或挂错的话这里撞的是无订阅者，少挂一路时那一路名下没有 inbox 行。两边认的事件类型是两份各自写出的串，这里一并
+// 钉住它们相等。
 func TestAFormedInitialRouteReachesTheConsumerThroughTheRouteTable(t *testing.T) {
+	if veinbox.InitialRouteFormedEventType != tfinbox.InitialRouteFormedEventType {
+		t.Fatalf("VE 认 %q、TF 认 %q——同一封信两路认的不是同一个类型", veinbox.InitialRouteFormedEventType,
+			tfinbox.InitialRouteFormedEventType)
+	}
 	beat, db, store := wiredBeat(t)
 	enqueueForBeat(t, db, store, "initial-route-1", veinbox.InitialRouteFormedEventType, `{}`)
 
@@ -1205,8 +1210,16 @@ func TestAFormedInitialRouteReachesTheConsumerThroughTheRouteTable(t *testing.T)
 		t.Fatalf("一拍：%v", err)
 	}
 	if published != 1 {
-		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把初始路由判断投给 VE",
+		t.Fatalf("published = %d, want 1；失败码 = %q——路由表没把初始路由判断投出去",
 			published, recordedFailureCode(t, db, "initial-route-1"))
+	}
+	for _, consumer := range []string{
+		"visibility-exception/derive-projection-from-initial-route",
+		"transport-fulfillment/prepare-opportunity-from-initial-route",
+	} {
+		if n := inboxRowsOf(t, db, consumer, "initial-route-1"); n != 1 {
+			t.Fatalf("%s 名下 inbox 行 = %d, want 1——FanOut 少了这一路", consumer, n)
+		}
 	}
 }
 

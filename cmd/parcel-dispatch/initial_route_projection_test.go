@@ -16,9 +16,11 @@ import (
 	veports "go.idp.xyz/idp-parcel/internal/visibilityexception/ports"
 )
 
-// 本文件证 INITIAL-ROUTE-ENVELOPE-KEY-B：NR 包裹级初始路由判断只投 VE 投影，不 FanOut。
+// 本文件证 INITIAL-ROUTE-ENVELOPE-KEY-B：NR 包裹级初始路由判断在 VE 那一路派生投影。
 // 映射目录未配置必须未归类入账（PROJECTION_DERIVED + MAPPING_NOT_CONFIGURED）；两支
-// 结论各自成事实类型。不种 PAR-VIS-01，不登记 tracking-projection.derived。
+// 结论各自成事实类型。不种 PAR-VIS-01，不登记 tracking-projection.derived。同一封信还
+// FanOut 给 TF 运输准备（ADR-0201 决定七），那一路的各格见 TestAFormedInitialRoutePreparesEveryLegThroughTheRouteTable
+// 一族用例；这里的夹具不登班次，TF 那一路答`未配置`入账，不挡定稿。
 
 // 键取 syn_pc_seed_test.go 的 synInitialRouteKey（SYN 判断键唯一权威）；下面的字面量
 // 只是它各维的引用副本，供事实引用与信封 ID 拼串。
@@ -39,7 +41,7 @@ func synInitialRouteEventID(fixture *synVerticalFixture) string {
 }
 
 // Covers: 生产 wireDispatcher 一拍——计划支派生未归类投影，初始路由信封定稿
-// published==1。本路只投 VE；不要学 FanOut 各路去要 published==0。
+// published==1：VE 派生成功，TF 那一路空册答`未配置`入账，两路都不留未决。
 func TestAFormedInitialRouteDerivesAnUnclassifiedProjectionAndPublishes(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
 	ctx := t.Context()
@@ -200,7 +202,8 @@ func synInitialRouteRecord(t *testing.T, fixture *synVerticalFixture, formed boo
 	if formed {
 		window, err := nrdomain.NewPlannedTimeWindow(
 			judgedAt.Add(2*time.Hour), judgedAt.Add(6*time.Hour),
-			mustNR(t, nrdomain.NewWindowBasisReference, "SYN-CALENDAR/v1"))
+			// 窗口依据照 NR 计划段的拼写指名连接：TF 那一路按它读出连接代码，读不出就响亮失败。
+			mustNR(t, nrdomain.NewWindowBasisReference, "CONNECTION/SYN-CONN-HUB-ZONE@1"))
 		if err != nil {
 			t.Fatalf("构造窗口：%v", err)
 		}

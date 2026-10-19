@@ -2,12 +2,15 @@
 // 文件都不剩，`cmd/parcel-api` 一导入就断，而本机 Windows 上一切正常、看不出来。`_linux` / `_amd64` 一类后缀同理。
 // 名字与同级的 parcelshipment/delivery_place_source.go、partycommercial/delivery_condition_source.go 看齐。
 
-// Package networkrouting 是 transport-fulfillment 对 network-routing 计划履约段窗口读口的消费侧适配器
-// （ADR-0025：只有本包可以同时导入两个上下文；只翻译不判断，翻译必须是全函数）。
+// Package networkrouting 是 transport-fulfillment 消费 network-routing 计划履约段的一侧（ADR-0025：只有本包可以同时
+// 导入两个上下文；只翻译不判断，翻译必须是全函数）。各缝：
 //
-// 它只答一件事：参与关系上登记方关联的那一段计划履约段，计划时间窗口是什么（ADR-0114 决定三的「时间窗」一件；
-// ADR-0131 决定一 / 二 / 三）。窗口是计划，任务照抄它作工作范围，不据它推任何实际事实（ADR-0004）——所以这里
-// 没有写口，不读适用性，不读对象。
+//   - DeliveryWindows 答参与关系上登记方关联的那一段计划履约段，计划时间窗口是什么（ADR-0114 决定三的「时间窗」一件；
+//     ADR-0131 决定一 / 二 / 三）。窗口是计划，任务照抄它作工作范围，不据它推任何实际事实（ADR-0004）——所以这一缝
+//     没有写口，不读适用性，不读对象。
+//   - PrepareOnInitialRoute 在初始路由判断到了之后，把它的计划段译成运输准备的读法交给准备编排（ADR-0201 决定二、七）。
+//
+// 各缝都不写 NR 的库。
 package networkrouting
 
 import (
