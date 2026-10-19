@@ -129,12 +129,48 @@ func (source *SupplierAgreementSource) CheckSupplierAgreement(
 	if err != nil {
 		return none, fmt.Errorf("%w: agreement snapshot: %v", ErrUntranslatableAnswer, err)
 	}
+	conditions, err := chargeConditionsOf(content)
+	if err != nil {
+		return none, err
+	}
 	return tfports.SupplierAgreementCheck{
-		Standing:    tfports.SupplierAgreementRegistered,
-		Snapshot:    snapshot,
-		LegalEntity: legalEntity,
-		Supplier:    supplier,
+		Standing:         tfports.SupplierAgreementRegistered,
+		Snapshot:         snapshot,
+		LegalEntity:      legalEntity,
+		Supplier:         supplier,
+		ChargeConditions: conditions,
 	}, nil
+}
+
+// chargeConditionsOf 把这一版协议声明的收费发生条件按字面译成本上下文的词（ADR-0209）。原因与数量形两边逐字相同；
+// 哪个原因能配哪个数量形是 PC 发布时判过的，这里不再判——再判一遍就是第二张表。整节没声明交零值，由登记用例答
+// `未配置`；任一词在本上下文立不起来，是两边词表走岔了，确定性的，包 ErrUntranslatableAnswer。
+func chargeConditionsOf(content pcdomain.SupplierAgreement) (tfdomain.AgreementChargeConditions, error) {
+	var translated tfdomain.AgreementChargeConditions
+	declared, present := content.ChargeConditions()
+	if !present {
+		return translated, nil
+	}
+	for _, condition := range declared.All() {
+		reason, err := tfdomain.ParseChargeOccurrenceReason(condition.Reason().String())
+		if err != nil {
+			return tfdomain.AgreementChargeConditions{}, fmt.Errorf("%w: charge condition reason %q", ErrUntranslatableAnswer, condition.Reason())
+		}
+		judged := tfdomain.NewUnchargedAgreementCondition()
+		if form, charged := condition.QuantityForm(); charged {
+			quantityForm, err := tfdomain.ParseChargeQuantityForm(form.String())
+			if err != nil {
+				return tfdomain.AgreementChargeConditions{}, fmt.Errorf("%w: charge quantity form %q", ErrUntranslatableAnswer, form)
+			}
+			if judged, err = tfdomain.NewChargedAgreementCondition(quantityForm); err != nil {
+				return tfdomain.AgreementChargeConditions{}, fmt.Errorf("%w: charge quantity form %q", ErrUntranslatableAnswer, form)
+			}
+		}
+		if translated, err = translated.DeclareAgreementChargeCondition(reason, judged); err != nil {
+			return tfdomain.AgreementChargeConditions{}, fmt.Errorf("%w: charge condition for %q declared twice", ErrUntranslatableAnswer, condition.Reason())
+		}
+	}
+	return translated, nil
 }
 
 // shellOnly 答不在已生效位置的壳。这样的壳带着正文是 PC 读口违约：领域只在已生效版本上立正文。

@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -25,6 +26,10 @@ import (
 // 采购上下文由登记方给出、经 party-commercial 核对，采购责任法人与协议快照取自协议版本（ADR-0098 决定二）；缺了
 // 答未受理，**绝不答不适用**——不适用只给显式声明自营或实际承运商判断为自营的那两格（ADR-0098 决定三），把「没填」
 // 读成「自营」会把一笔真实外部成本静默吞掉。
+//
+// 发生条件按那一版协议声明的条件判（ADR-0209）：没声明答`未配置`，声明不计费答「协议不计此原因」，计费的按协议约定
+// 的数量形数出数量与单位。登记方不再断言条件、也不再报数量与单位——那是断言期的做法（ADR-0207 决定三），协议能
+// 声明之后，由人判就成了与协议并行的第二个口径。
 
 // ChargeOccurrenceOutcome 是登记结果的封闭集合。
 //
@@ -45,6 +50,12 @@ const (
 	ChargeOccurrenceProviderMismatch
 	ChargeOccurrenceUndecided
 	ChargeOccurrenceInputNotAccepted
+	// ChargeOccurrenceNotConfigured：采用的那一版协议没声明这个原因的收费发生条件（ADR-0209）。是租户还没配，不是
+	// 依赖读不动：入账、不重投，续办是去 party-commercial 发一版声明了条件的协议（ADR-0209 决定四）。
+	ChargeOccurrenceNotConfigured
+	// ChargeOccurrenceNotCharged：协议明说这个原因不计费。是正确答案不是缺席，也不是不适用——不适用说本来就没有外部
+	// 成本来源（自营），这一格说外部供应商在、协议约定这一种事实不收费；登记方若认为该收，续办是发新版协议。
+	ChargeOccurrenceNotCharged
 )
 
 func (outcome ChargeOccurrenceOutcome) String() string {
@@ -69,6 +80,10 @@ func (outcome ChargeOccurrenceOutcome) String() string {
 		return "UNDECIDED"
 	case ChargeOccurrenceInputNotAccepted:
 		return "INPUT_NOT_ACCEPTED"
+	case ChargeOccurrenceNotConfigured:
+		return "NOT_CONFIGURED"
+	case ChargeOccurrenceNotCharged:
+		return "NOT_CHARGED"
 	default:
 		return ""
 	}
@@ -86,6 +101,10 @@ const (
 	ActualCarrierJudgedSelfOperated
 	// 冲突：同一身份异内容不带细格；成员与同一事实上另一项仍有效的发生项有交集带这一格（ADR-0207 决定四）。
 	MembersAlreadyCovered
+	// 冲突：这个范围已被一项按范围计的发生项整体计过，或本次按范围计而范围上已有别的项（ADR-0209 决定四）。
+	ScopeAlreadyCharged
+	// 未配置：协议没声明这个原因。
+	ChargeConditionNotDeclared
 	// 未决：依赖读不动，原样重试。
 	FactSourceUnavailable
 	CarrierJudgmentUnavailable
@@ -101,7 +120,6 @@ const (
 	ParticipationNotEnded
 	ProcurementContextMissing
 	SelfOperationContradicted
-	ConditionNotAsserted
 )
 
 func (detail ChargeOccurrenceDetail) String() string {
@@ -112,6 +130,10 @@ func (detail ChargeOccurrenceDetail) String() string {
 		return "ACTUAL_CARRIER_JUDGED_SELF_OPERATED"
 	case MembersAlreadyCovered:
 		return "MEMBERS_ALREADY_COVERED"
+	case ScopeAlreadyCharged:
+		return "SCOPE_ALREADY_CHARGED"
+	case ChargeConditionNotDeclared:
+		return "CHARGE_CONDITION_NOT_DECLARED"
 	case FactSourceUnavailable:
 		return "FACT_SOURCE_UNAVAILABLE"
 	case CarrierJudgmentUnavailable:
@@ -138,8 +160,6 @@ func (detail ChargeOccurrenceDetail) String() string {
 		return "PROCUREMENT_CONTEXT_MISSING"
 	case SelfOperationContradicted:
 		return "SELF_OPERATION_CONTRADICTED"
-	case ConditionNotAsserted:
-		return "CONDITION_NOT_ASSERTED"
 	default:
 		return ""
 	}
@@ -151,11 +171,12 @@ func (detail ChargeOccurrenceDetail) String() string {
 // 成员。事实依据、主要业务范围与业务时间不在命令里——它们取自事实本身（ADR-0207 决定一），调用方报来的只会是
 // 第二个口径。发生项引用与有效性版本同样不在命令里，由事实派生（ADR-0207 决定四）。
 //
-// 旅程、数量与单位由登记方声明（ADR-0207 决定四、三）：旅程没有本上下文的权威来源，数量形在协议能声明之前由断言
-// 一并给出。SelfOperated 为真是一种声明，此时服务方与协议必须留空——两者同时给出是自相矛盾，不替登记方挑一个。
+// 旅程由登记方声明（ADR-0207 决定四）：本上下文没有它的权威来源。数量与单位不在命令里，由采用协议的数量形定
+// （ADR-0209 决定四）。SelfOperated 为真是一种声明，此时服务方与协议必须留空——两者同时给出是自相矛盾，不替登记方
+// 挑一个。
 //
-// Registrant 与租户一样取自认证结果，不来自载荷：它是做出这一次登记决定的操作者，断言落册时就是断言人
-// （ADR-0207 决定三）。
+// Registrant 与租户一样取自认证结果，不来自载荷：它是做出这一次登记决定的操作者，随发生项记为登记者
+// （ADR-0209 决定五）。
 type RegisterChargeOccurrenceCommand struct {
 	TenantID   domain.TenantID
 	Registrant string
@@ -171,10 +192,6 @@ type RegisterChargeOccurrenceCommand struct {
 	Provider         string
 	AgreementObject  string
 	AgreementVersion string
-	Quantity         int64
-	Unit             string
-
-	ConditionAssertion string
 }
 
 type RegisterChargeOccurrenceResult struct {
@@ -183,6 +200,7 @@ type RegisterChargeOccurrenceResult struct {
 	record         ports.ChargeOccurrenceRecord
 	hasRecord      bool
 	agreedSupplier string
+	agreement      string
 	continuation   string
 }
 
@@ -198,6 +216,9 @@ func (result RegisterChargeOccurrenceResult) Record() (ports.ChargeOccurrenceRec
 
 // AgreedSupplier 在服务方不符那一格交回这一版协议约定的供应商。
 func (result RegisterChargeOccurrenceResult) AgreedSupplier() string { return result.agreedSupplier }
+
+// Agreement 在未配置与协议不计此原因两格交回作答的那一版协议（「对象/版本」）：登记方据它知道该去改哪一版。
+func (result RegisterChargeOccurrenceResult) Agreement() string { return result.agreement }
 
 // Continuation 在未决格交回续办引用：同一请求原样重交即可。
 func (result RegisterChargeOccurrenceResult) Continuation() string { return result.continuation }
@@ -223,10 +244,12 @@ func NewRegisterChargeOccurrenceHandler(deps RegisterChargeOccurrenceDeps) *Regi
 	return &RegisterChargeOccurrenceHandler{deps: deps}
 }
 
-// chargeOccurrenceFact 是按原因取回的事实：依据、成员、业务时间，以及形成发生项的那一扇领域门。段只在实际履约上有，
-// 用来问这一段的实际承运商是不是自营。
+// chargeOccurrenceFact 是按原因取回的事实：依据、主要业务范围、成员、业务时间，以及形成发生项的那一扇领域门。范围
+// 由领域按事实给出（与形成时同一处），登记前问「这个范围是不是已经计过」要用它。段只在实际履约上有，用来问这一段的
+// 实际承运商是不是自营。
 type chargeOccurrenceFact struct {
 	basis      domain.OccurrenceBasisReference
+	scope      domain.OccurrenceScopeReference
 	members    []domain.CarriedObjectReference
 	occurredAt time.Time
 	segment    domain.FulfillmentSegmentReference
@@ -234,7 +257,7 @@ type chargeOccurrenceFact struct {
 	form       func(domain.TransportChargeOccurrenceSpec) (domain.TransportChargeOccurrence, error)
 }
 
-// Register 取事实 → 派生身份 → 判自营 → 核协议 → 形成 → 查成员交集 → 落册并交意图。
+// Register 取事实 → 派生身份 → 判自营 → 核协议 → 按协议判条件、数数量 → 形成 → 查覆盖 → 落册并交意图。
 //
 // 身份在采购上下文之前派生：自营的两格也要先问册上有没有同一件事已经登成了外包，否则同一件事会同时被答成
 // 「有外部成本」与「不适用」。协议按业务时间核——协议在那一刻是否支持采购，后来到期或终止不改写已发生的事实。
@@ -274,11 +297,13 @@ func (handler *RegisterChargeOccurrenceHandler) Register(
 	}
 	continuation := chargeOccurrenceContinuation(command.TenantID.String(), reference.String())
 	coverage := ports.ChargeOccurrenceCoverageQuery{
-		TenantID:  command.TenantID,
-		Reason:    command.Reason,
-		FactBasis: fact.basis,
-		Members:   fact.members,
-		Except:    reference,
+		TenantID:   command.TenantID,
+		Reason:     command.Reason,
+		Scope:      fact.scope,
+		FactBasis:  fact.basis,
+		Members:    fact.members,
+		Except:     reference,
+		ScopeUnits: domain.ScopeCountingUnits(),
 	}
 
 	procurementGiven := strings.TrimSpace(command.Provider) != "" ||
@@ -306,10 +331,7 @@ func (handler *RegisterChargeOccurrenceHandler) Register(
 		strings.TrimSpace(command.AgreementVersion) == "" {
 		return chargeNotAccepted(ProcurementContextMissing), nil
 	}
-	if strings.TrimSpace(command.ConditionAssertion) == "" {
-		return chargeNotAccepted(ConditionNotAsserted), nil
-	}
-	spec, agreement, err := chargeOccurrenceSpecFrom(command, key, fact)
+	spec, registrant, agreement, err := chargeOccurrenceSpecFrom(command, key, fact)
 	if err != nil {
 		return chargeNotAccepted(ChargeRequestMalformed), nil
 	}
@@ -338,6 +360,26 @@ func (handler *RegisterChargeOccurrenceHandler) Register(
 	spec.LegalEntity = check.LegalEntity
 	spec.Agreement = check.Snapshot
 
+	// 条件按这一版协议的声明判（ADR-0209 决定四）。没声明与不计费都不落册、不问册：两格说的是这一版协议怎么约定，
+	// 与册上有没有别的项无关。
+	declared, present := check.ChargeConditions.For(command.Reason)
+	if !present {
+		return RegisterChargeOccurrenceResult{
+			outcome: ChargeOccurrenceNotConfigured, detail: ChargeConditionNotDeclared, agreement: check.Snapshot.String(),
+		}, nil
+	}
+	form, charged := declared.QuantityForm()
+	if !charged {
+		return RegisterChargeOccurrenceResult{outcome: ChargeOccurrenceNotCharged, agreement: check.Snapshot.String()}, nil
+	}
+	if spec.Quantity, spec.Unit, err = form.Measure(fact.members); err != nil {
+		return RegisterChargeOccurrenceResult{}, fmt.Errorf("register charge occurrence: measuring by %s: %w", form, err)
+	}
+	if spec.Condition, err = domain.NewAgreementDeclaredOccurrenceCondition(registrant); err != nil {
+		return RegisterChargeOccurrenceResult{}, fmt.Errorf("register charge occurrence: %w", err)
+	}
+	coverage.WholeScope = form.CountsTheScope()
+
 	// 请求能出错的每一格都已在协议核对之前判过：登记方声明的几格过了构造门，事实与成员过了事实那一半。走到这里
 	// 还形成不了，只剩核对口交回了不成形的法人或快照、或事实源自相矛盾，都是适配器缺陷；答未受理会让登记方去改一份
 	// 本来没错的请求，重试也不会变，所以响亮上抛，由装配点回滚整笔。
@@ -348,7 +390,7 @@ func (handler *RegisterChargeOccurrenceHandler) Register(
 	if covering, covered, err := handler.deps.Occurrences.FindCovering(ctx, coverage); err != nil {
 		return chargeUndecided(OccurrenceRegistryUnavailable, continuation), nil
 	} else if covered {
-		return membersCovered(covering), nil
+		return alreadyCovered(covering, coverage), nil
 	}
 	record := ports.ChargeOccurrenceRecord{
 		Key:        key,
@@ -388,7 +430,7 @@ func (handler *RegisterChargeOccurrenceHandler) selfOperated(
 		return chargeUndecided(OccurrenceRegistryUnavailable, continuation), nil
 	}
 	if covered {
-		return membersCovered(covering), nil
+		return alreadyCovered(covering, coverage), nil
 	}
 	existing, found, err := handler.deps.Occurrences.FindByKey(ctx, key)
 	if err != nil {
@@ -400,15 +442,29 @@ func (handler *RegisterChargeOccurrenceHandler) selfOperated(
 	return RegisterChargeOccurrenceResult{outcome: ChargeOccurrenceNotApplicable, detail: detail}, nil
 }
 
-// membersCovered 答成员已被同一事实上另一项仍有效的发生项计过：那一项回显，登记方要改的是它（失效之后再登），
-// 不是这一次换个成员组合重报——身份按成员集合派生，组合一换就是另一项，同一成员的成本便被算了两遍。
-func membersCovered(covering ports.ChargeOccurrenceRecord) RegisterChargeOccurrenceResult {
+// alreadyCovered 答这件事已被另一项仍有效的发生项计过：那一项回显，登记方要改的是它（失效之后再登），不是这一次
+// 换个成员组合重报——身份按成员集合派生，组合一换就是另一项，同一成员或同一范围的成本便被算了两遍。细格说是哪一种：
+// 同一事实上成员有交集，还是范围已整体计过（或本次按范围计、范围上已有别的项）。
+func alreadyCovered(covering ports.ChargeOccurrenceRecord, query ports.ChargeOccurrenceCoverageQuery) RegisterChargeOccurrenceResult {
+	detail := ScopeAlreadyCharged
+	if covering.Occurrence.FactBasis() == query.FactBasis && sharesAMember(covering.Occurrence.Members(), query.Members) {
+		detail = MembersAlreadyCovered
+	}
 	return RegisterChargeOccurrenceResult{
 		outcome:   ChargeOccurrenceConflict,
-		detail:    MembersAlreadyCovered,
+		detail:    detail,
 		record:    covering,
 		hasRecord: true,
 	}
+}
+
+func sharesAMember(left, right []domain.CarriedObjectReference) bool {
+	for _, member := range left {
+		if slices.Contains(right, member) {
+			return true
+		}
+	}
+	return false
 }
 
 // segmentJudgedSelfOperated 问这一段当前的实际承运商判断是不是自营法人（ADR-0098 决定三的第二种读法）。没有判断、
@@ -486,9 +542,14 @@ func (handler *RegisterChargeOccurrenceHandler) actualFulfillmentFact(
 	if err != nil {
 		return chargeOccurrenceFact{}, chargeNotAccepted(ChargeRequestMalformed), true
 	}
+	scope, err := domain.SegmentOccurrenceScope(segment)
+	if err != nil {
+		return chargeOccurrenceFact{}, chargeNotAccepted(ChargeRequestMalformed), true
+	}
 	established := record.Segment
 	return chargeOccurrenceFact{
 		basis:      basis,
+		scope:      scope,
 		members:    members,
 		occurredAt: endedAt,
 		segment:    segment,
@@ -517,45 +578,36 @@ func distinctMembers(objects []string) ([]domain.CarriedObjectReference, bool) {
 }
 
 // chargeOccurrenceSpecFrom 把命令里登记方声明的几格逐个过构造门，连同派生的身份与事实的成员组成规格。法人与协议
-// 快照留空，由协议核对口填；原因、依据、范围与业务时间由领域门从事实取。
+// 快照留空，由协议核对口填；数量、单位与发生条件留空，由协议声明的条件定；原因、依据、范围与业务时间由领域门从
+// 事实取。
 func chargeOccurrenceSpecFrom(
 	command RegisterChargeOccurrenceCommand,
 	key ports.ChargeOccurrenceKey,
 	fact chargeOccurrenceFact,
-) (domain.TransportChargeOccurrenceSpec, domain.SupplierAgreementVersion, error) {
+) (domain.TransportChargeOccurrenceSpec, domain.RegistrantReference, domain.SupplierAgreementVersion, error) {
 	none := domain.TransportChargeOccurrenceSpec{}
 	spec := domain.TransportChargeOccurrenceSpec{
 		TenantID:   command.TenantID,
 		Occurrence: key.Occurrence,
 		Validity:   key.Validity,
 		Members:    fact.members,
-		Quantity:   command.Quantity,
-	}
-	if command.Quantity <= 0 {
-		return none, domain.SupplierAgreementVersion{}, domain.ErrInvalidChargeOccurrence
 	}
 	var err error
 	if spec.Journey, err = domain.NewJourneyReference(command.Journey); err != nil {
-		return none, domain.SupplierAgreementVersion{}, err
+		return none, domain.RegistrantReference{}, domain.SupplierAgreementVersion{}, err
 	}
 	if spec.Provider, err = domain.NewServiceProviderReference(command.Provider); err != nil {
-		return none, domain.SupplierAgreementVersion{}, err
-	}
-	if spec.Unit, err = domain.NewQuantityUnitReference(command.Unit); err != nil {
-		return none, domain.SupplierAgreementVersion{}, err
+		return none, domain.RegistrantReference{}, domain.SupplierAgreementVersion{}, err
 	}
 	registrant, err := domain.NewRegistrantReference(command.Registrant)
 	if err != nil {
-		return none, domain.SupplierAgreementVersion{}, err
-	}
-	if spec.Condition, err = domain.NewAssertedOccurrenceCondition(registrant, command.ConditionAssertion); err != nil {
-		return none, domain.SupplierAgreementVersion{}, err
+		return none, domain.RegistrantReference{}, domain.SupplierAgreementVersion{}, err
 	}
 	agreement, err := domain.NewSupplierAgreementVersion(command.AgreementObject, command.AgreementVersion)
 	if err != nil {
-		return none, domain.SupplierAgreementVersion{}, err
+		return none, domain.RegistrantReference{}, domain.SupplierAgreementVersion{}, err
 	}
-	return spec, agreement, nil
+	return spec, registrant, agreement, nil
 }
 
 func chargeNotAccepted(detail ChargeOccurrenceDetail) RegisterChargeOccurrenceResult {

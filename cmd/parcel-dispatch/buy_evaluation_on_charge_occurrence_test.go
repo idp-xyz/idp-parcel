@@ -57,6 +57,18 @@ func registerTrunkAgreement(t *testing.T, db *bentopg.DB, tenant string) {
 	if err != nil {
 		t.Fatalf("干线协议正文：%v", err)
 	}
+	// 实际履约按件计（ADR-0209）：经真登记用例登记的那一条要按协议声明判，协议没声明就答未配置、到不了信封。
+	perPiece, err := pcdomain.NewChargedOccurrenceCondition(pcdomain.ActualFulfillmentChargeReason, pcdomain.PerPieceQuantity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conditions, err := pcdomain.NewChargeOccurrenceConditions(perPiece)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if agreement, err = agreement.WithChargeConditions(conditions); err != nil {
+		t.Fatalf("干线协议条件：%v", err)
+	}
 	publications, err := pcpostgres.NewCommercialPublications(db)
 	if err != nil {
 		t.Fatalf("PC 发布登记册：%v", err)

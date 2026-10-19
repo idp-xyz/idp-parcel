@@ -16,13 +16,14 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// 本文件证运输收费发生项登记口的线格式与响应（票 demo-chain-gaps/27）：载荷逐格译成命令、租户与登记者只来自认证
-// 结果、原因词集外是坏报文；新落一项答 201 并逐字段回显（断言人与原话都在），其余各格答 200；响应里没有任何金额或
-// 币种键。夹具全是合成串，证据只记 S。
+// 本文件证运输收费发生项登记口的线格式与响应（票 demo-chain-gaps/27、29）：载荷逐格译成命令、租户与登记者只来自
+// 认证结果、原因词集外是坏报文；断言期的断言、数量与单位三键退场，带来是坏报文；新落一项答 201 并逐字段回显（依据
+// 「按协议声明判」与登记者都在），其余各格答 200，未配置与协议不计此原因带回作答的那一版协议；响应里没有任何金额
+// 或币种键。夹具全是合成串，证据只记 S。
 
 const decisionChargeOccurrenceBody = `{"reason":"ACTUAL_FULFILLMENT","segment":"SYN-SEG-SZX-SIN-01","objects":["SYN-PARCEL-01"],` +
 	`"journey":"SYN-JRN-SYN-PARCEL-01","provider":"SYN-PARTY-CARRIER-TRUNK-01","agreement":"SYN-SUPPLIER-TRUNK-CN-SG-01",` +
-	`"agreementVersion":"v1","quantity":1,"unit":"SEGMENT","conditionAssertion":"干线协议 v1 段到段计一段"}`
+	`"agreementVersion":"v2"}`
 
 func TestChargeOccurrenceRegistrationTranslatesItsPayloadUnderTheAuthenticatedTenant(t *testing.T) {
 	intake := operatorIntake(t, authenticatorFake{})
@@ -34,18 +35,20 @@ func TestChargeOccurrenceRegistrationTranslatesItsPayloadUnderTheAuthenticatedTe
 		command.Reason != domain.ActualFulfillmentOccurrence ||
 		command.Segment != "SYN-SEG-SZX-SIN-01" || len(command.Objects) != 1 || command.Objects[0] != "SYN-PARCEL-01" ||
 		command.Journey != "SYN-JRN-SYN-PARCEL-01" || command.Provider != "SYN-PARTY-CARRIER-TRUNK-01" ||
-		command.AgreementObject != "SYN-SUPPLIER-TRUNK-CN-SG-01" || command.AgreementVersion != "v1" ||
-		command.Quantity != 1 || command.Unit != "SEGMENT" || command.ConditionAssertion != "干线协议 v1 段到段计一段" ||
+		command.AgreementObject != "SYN-SUPPLIER-TRUNK-CN-SG-01" || command.AgreementVersion != "v2" ||
 		command.SelfOperated {
 		t.Fatalf("command = %+v，与载荷不符", command)
 	}
 
 	for name, body := range map[string]string{
 		"集外原因词":   strings.Replace(decisionChargeOccurrenceBody, "ACTUAL_FULFILLMENT", "actual_fulfillment", 1),
-		"数量不是整数":  strings.Replace(decisionChargeOccurrenceBody, `"quantity":1`, `"quantity":"one"`, 1),
 		"自带业务时间":  `{"occurredAt":"2026-10-19T06:00:00Z",` + strings.TrimPrefix(decisionChargeOccurrenceBody, "{"),
 		"自带发生项引用": `{"occurrence":"OCC-1",` + strings.TrimPrefix(decisionChargeOccurrenceBody, "{"),
-		"自带断言人":   `{"registrant":"SYN-OPERATOR-99",` + strings.TrimPrefix(decisionChargeOccurrenceBody, "{"),
+		"自带登记者":   `{"registrant":"SYN-OPERATOR-99",` + strings.TrimPrefix(decisionChargeOccurrenceBody, "{"),
+		// AT-TF-170：断言期的三键退场（ADR-0209 决定四），带来按未知键拒，不静默丢掉。
+		"断言期的断言": `{"conditionAssertion":"干线协议段到段计一段",` + strings.TrimPrefix(decisionChargeOccurrenceBody, "{"),
+		"断言期的数量": `{"quantity":1,` + strings.TrimPrefix(decisionChargeOccurrenceBody, "{"),
+		"断言期的单位": `{"unit":"SEGMENT",` + strings.TrimPrefix(decisionChargeOccurrenceBody, "{"),
 	} {
 		if _, err := intake.IntakeChargeOccurrenceRegistration(context.Background(), bearerRequest("t", body)); !errors.Is(err, tfhttp.ErrMalformedRequest) {
 			t.Fatalf("%s：err = %v, want ErrMalformedRequest", name, err)
@@ -63,6 +66,16 @@ func (double registrarDouble) Register(context.Context, application.RegisterChar
 
 // registeredResult 走真编排拿一份「已登记」的结果：结果类型的字段不导出，替身造不出带记录的那一格。
 func registeredResult(t *testing.T) application.RegisterChargeOccurrenceResult {
+	t.Helper()
+	result := registeredResultWith(t, perPieceFulfillment(t))
+	if result.Outcome() != application.ChargeOccurrenceRegistered {
+		t.Fatalf("夹具登记：%q %q", result.Outcome(), result.Detail())
+	}
+	return result
+}
+
+// registeredResultWith 走真编排、按给定的协议条件登记一次干线实际履约。
+func registeredResultWith(t *testing.T, conditions domain.AgreementChargeConditions) application.RegisterChargeOccurrenceResult {
 	t.Helper()
 	tenant := mustTF(t, domain.NewTenantID, operatorTenant)
 	segment, err := domain.RehydrateActualFulfillmentSegment(domain.RehydrateActualFulfillmentSegmentSpec{
@@ -85,10 +98,11 @@ func registeredResult(t *testing.T) application.RegisterChargeOccurrenceResult {
 		Segments:         segmentSource{record: ports.FulfillmentSegmentRecord{Segment: segment}},
 		CarrierJudgments: noJudgment{},
 		Agreements: agreementSource{check: ports.SupplierAgreementCheck{
-			Standing:    ports.SupplierAgreementRegistered,
-			Snapshot:    mustTF(t, domain.NewAgreementSnapshotReference, "SYN-SUPPLIER-TRUNK-CN-SG-01/v1"),
-			LegalEntity: mustTF(t, domain.NewProcurementLegalEntityReference, "SYN-LE-01"),
-			Supplier:    mustTF(t, domain.NewServiceProviderReference, "SYN-PARTY-CARRIER-TRUNK-01"),
+			Standing:         ports.SupplierAgreementRegistered,
+			Snapshot:         mustTF(t, domain.NewAgreementSnapshotReference, "SYN-SUPPLIER-TRUNK-CN-SG-01/v2"),
+			LegalEntity:      mustTF(t, domain.NewProcurementLegalEntityReference, "SYN-LE-01"),
+			Supplier:         mustTF(t, domain.NewServiceProviderReference, "SYN-PARTY-CARRIER-TRUNK-01"),
+			ChargeConditions: conditions,
 		}},
 		Occurrences: &emptyOccurrences{},
 		Handoff:     discardHandoff{},
@@ -100,14 +114,14 @@ func registeredResult(t *testing.T) application.RegisterChargeOccurrenceResult {
 		t.Fatal(err)
 	}
 	result, err := handler.Register(context.Background(), command)
-	if err != nil || result.Outcome() != application.ChargeOccurrenceRegistered {
-		t.Fatalf("夹具登记：%v %q %q", err, result.Outcome(), result.Detail())
+	if err != nil {
+		t.Fatalf("夹具登记：%v", err)
 	}
 	return result
 }
 
-// Covers: ADR-0022——新落一项答 201 并逐字段回显（业务时间与登记时刻分开、断言原话原样），其余形成了的答案一律 200；
-// 响应里没有金额、币种、价格或费用一类的键（发生项不是价格，CONTEXT）。
+// Covers: ADR-0022——新落一项答 201 并逐字段回显（业务时间与登记时刻分开、依据按协议声明判、登记者在），其余形成了的
+// 答案一律 200；响应里没有金额、币种、价格或费用一类的键（发生项不是价格，CONTEXT）。
 func TestChargeOccurrenceEndpointAnswers201OnlyForANewOccurrenceAndCarriesNoAmount(t *testing.T) {
 	intake := operatorIntake(t, authenticatorFake{})
 	endpoint := tfhttp.NewRegisterChargeOccurrenceEndpoint(intake, registrarDouble{result: registeredResult(t)})
@@ -122,12 +136,15 @@ func TestChargeOccurrenceEndpointAnswers201OnlyForANewOccurrenceAndCarriesNoAmou
 	}
 	occurrence, _ := body["occurrence"].(map[string]any)
 	if body["outcome"] != "REGISTERED" || occurrence["reason"] != "ACTUAL_FULFILLMENT" ||
-		occurrence["agreement"] != "SYN-SUPPLIER-TRUNK-CN-SG-01/v1" || occurrence["legalEntity"] != "SYN-LE-01" ||
+		occurrence["agreement"] != "SYN-SUPPLIER-TRUNK-CN-SG-01/v2" || occurrence["legalEntity"] != "SYN-LE-01" ||
 		occurrence["factBasis"] != "FULFILLMENT-SEGMENT/SYN-SEG-SZX-SIN-01" || occurrence["version"] != "V1" ||
 		occurrence["occurredAt"] != "2026-10-19T06:00:00Z" || occurrence["recordedAt"] != "2026-10-19T08:00:00Z" ||
-		occurrence["conditionBasis"] != "REGISTRANT_ASSERTED" || occurrence["conditionAssertion"] != "干线协议 v1 段到段计一段" ||
-		occurrence["conditionAssertedBy"] != operatorSubject {
+		occurrence["conditionBasis"] != "AGREEMENT_DECLARED" || occurrence["registeredBy"] != operatorSubject ||
+		occurrence["quantity"] != float64(1) || occurrence["unit"] != "PIECE" {
 		t.Fatalf("响应 = %s", recorder.Body.String())
+	}
+	if _, asserted := occurrence["conditionAssertion"]; asserted {
+		t.Fatalf("按协议判的项回显了断言原话：%s", recorder.Body.String())
 	}
 	for key := range occurrence {
 		for _, forbidden := range []string{"amount", "currency", "price", "cost", "fee"} {
@@ -144,6 +161,52 @@ func TestChargeOccurrenceEndpointAnswers201OnlyForANewOccurrenceAndCarriesNoAmou
 		!strings.Contains(recorder.Body.String(), `"detail":"REASON_NOT_REGISTRABLE"`) || strings.Contains(recorder.Body.String(), `"occurrence"`) {
 		t.Fatalf("未受理 = %d %s", recorder.Code, recorder.Body.String())
 	}
+}
+
+// Covers: AT-TF-170——未配置与协议不计此原因都是形成了的答案（200），带回作答的那一版协议，不带发生项。
+func TestUnconfiguredAndUnchargedConditionsAnswer200WithTheAgreement(t *testing.T) {
+	intake := operatorIntake(t, authenticatorFake{})
+	uncharged, err := domain.AgreementChargeConditions{}.DeclareAgreementChargeCondition(
+		domain.ActualFulfillmentOccurrence, domain.NewUnchargedAgreementCondition())
+	if err != nil {
+		t.Fatal(err)
+	}
+	for want, conditions := range map[string]domain.AgreementChargeConditions{
+		"NOT_CONFIGURED": {},
+		"NOT_CHARGED":    uncharged,
+	} {
+		endpoint := tfhttp.NewRegisterChargeOccurrenceEndpoint(intake, registrarDouble{result: answeredByConditions(t, conditions)})
+		recorder := httptest.NewRecorder()
+		endpoint.ServeHTTP(recorder, bearerRequest("t", decisionChargeOccurrenceBody))
+		body := recorder.Body.String()
+		if recorder.Code != http.StatusOK || !strings.Contains(body, `"outcome":"`+want+`"`) ||
+			!strings.Contains(body, `"agreement":"SYN-SUPPLIER-TRUNK-CN-SG-01/v2"`) || strings.Contains(body, `"occurrence"`) {
+			t.Fatalf("%s = %d %s", want, recorder.Code, body)
+		}
+	}
+}
+
+func perPieceFulfillment(t *testing.T) domain.AgreementChargeConditions {
+	t.Helper()
+	charged, err := domain.NewChargedAgreementCondition(domain.PerPieceQuantity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conditions, err := domain.AgreementChargeConditions{}.DeclareAgreementChargeCondition(domain.ActualFulfillmentOccurrence, charged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return conditions
+}
+
+// answeredByConditions 走真编排拿一份按协议条件作答、不带记录的结果。
+func answeredByConditions(t *testing.T, conditions domain.AgreementChargeConditions) application.RegisterChargeOccurrenceResult {
+	t.Helper()
+	registered := registeredResultWith(t, conditions)
+	if _, present := registered.Record(); present {
+		t.Fatalf("夹具应不落册：%q", registered.Outcome())
+	}
+	return registered
 }
 
 // answeredWithoutRecord 走真编排拿一份不带记录的答案：订舱原因在票 28 之前答未受理。

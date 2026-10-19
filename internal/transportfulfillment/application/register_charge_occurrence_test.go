@@ -3,6 +3,7 @@ package application_test
 import (
 	"context"
 	"errors"
+	"slices"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 // 本文件证运输收费发生项登记用例的公共一半与实际履约那一种原因（票 demo-chain-gaps/27，ADR-0207）：事实取自段
 // 内已结束的参与，身份由事实派生，采购上下文经协议核对口取法人与快照，缺了答未受理而不答不适用；自营只认显式
 // 声明与实际承运商判断；协议四个否定格各成一格；重登同内容答已存在、异内容答冲突；落册与交意图在同一次调用里。
+// 发生条件按协议核对口交回的那一版声明判（票 demo-chain-gaps/29，ADR-0209），见 register_charge_occurrence_condition_test.go。
 // 夹具全是合成串，证据只记 S。
 
 var (
@@ -23,17 +25,16 @@ var (
 )
 
 const (
-	occurrenceTenant   = "SYN-TENANT-01"
-	trunkSegment       = "SYN-SEG-SZX-SIN-01"
-	trunkProvider      = "SYN-PARTY-CARRIER-TRUNK-01"
-	trunkAgreement     = "SYN-SUPPLIER-TRUNK-CN-SG-01"
-	trunkAgreementTag  = "v1"
-	trunkSnapshot      = "SYN-SUPPLIER-TRUNK-CN-SG-01/v1"
-	trunkLegalEntity   = "SYN-LE-01"
-	trunkParcel        = "SYN-PARCEL-01"
-	trunkSecondParcel  = "SYN-PARCEL-02"
-	conditionAssertion = "干线协议 v1：段到段运输一次计一段，已在 SIN-HUB 交接"
-	registrant         = "https://dex.syn.example#SYN-OPERATOR-CONFIG-01"
+	occurrenceTenant  = "SYN-TENANT-01"
+	trunkSegment      = "SYN-SEG-SZX-SIN-01"
+	trunkProvider     = "SYN-PARTY-CARRIER-TRUNK-01"
+	trunkAgreement    = "SYN-SUPPLIER-TRUNK-CN-SG-01"
+	trunkAgreementTag = "v2"
+	trunkSnapshot     = "SYN-SUPPLIER-TRUNK-CN-SG-01/v2"
+	trunkLegalEntity  = "SYN-LE-01"
+	trunkParcel       = "SYN-PARCEL-01"
+	trunkSecondParcel = "SYN-PARCEL-02"
+	registrant        = "https://dex.syn.example#SYN-OPERATOR-CONFIG-01"
 )
 
 func occurrenceValue[T any](t *testing.T, construct func(string) (T, error), raw string) T {
@@ -46,11 +47,12 @@ func occurrenceValue[T any](t *testing.T, construct func(string) (T, error), raw
 }
 
 type occurrenceRegistryDouble struct {
-	records     map[ports.ChargeOccurrenceKey]ports.ChargeOccurrenceRecord
-	saveErr     error
-	findErr     error
-	coverageErr error
-	saves       int
+	records         map[ports.ChargeOccurrenceKey]ports.ChargeOccurrenceRecord
+	saveErr         error
+	findErr         error
+	coverageErr     error
+	saves           int
+	coverageQueries []ports.ChargeOccurrenceCoverageQuery
 }
 
 func newOccurrenceRegistry() *occurrenceRegistryDouble {
@@ -67,13 +69,15 @@ func (double *occurrenceRegistryDouble) FindByKey(
 	return record, found, nil
 }
 
-// FindCovering 照真册的读法：同租户、同原因、同事实依据、不是同一身份、成员有交集。替身里没有修订版，当前版即首版。
+// FindCovering 照真册的读法：同租户、同原因、同范围、不是同一身份，且本次按范围计、或那一项的单位是按范围计的、或
+// 同一事实依据上成员有交集。替身里没有修订版，当前版即首版。
 func (double *occurrenceRegistryDouble) FindCovering(
 	_ context.Context, query ports.ChargeOccurrenceCoverageQuery,
 ) (ports.ChargeOccurrenceRecord, bool, error) {
 	if double.coverageErr != nil {
 		return ports.ChargeOccurrenceRecord{}, false, double.coverageErr
 	}
+	double.coverageQueries = append(double.coverageQueries, query)
 	asked := map[domain.CarriedObjectReference]bool{}
 	for _, member := range query.Members {
 		asked[member] = true
@@ -81,7 +85,14 @@ func (double *occurrenceRegistryDouble) FindCovering(
 	for key, record := range double.records {
 		occurrence := record.Occurrence
 		if key.TenantID != query.TenantID || key.Occurrence == query.Except ||
-			occurrence.Reason() != query.Reason || occurrence.FactBasis() != query.FactBasis {
+			occurrence.Reason() != query.Reason || occurrence.Scope() != query.Scope {
+			continue
+		}
+		_, unit := occurrence.Quantity()
+		if query.WholeScope || slices.Contains(query.ScopeUnits, unit) {
+			return record, true, nil
+		}
+		if occurrence.FactBasis() != query.FactBasis {
 			continue
 		}
 		for _, member := range occurrence.Members() {
@@ -159,6 +170,7 @@ func (double *chargeAgreementSourceDouble) CheckSupplierAgreement(
 	return double.check, double.err
 }
 
+// chargeRegisteredAgreement 是一版在册的干线协议，声明实际履约按件计、失败尝试按尝试计（ADR-0209）。
 func chargeRegisteredAgreement(t *testing.T) *chargeAgreementSourceDouble {
 	t.Helper()
 	return &chargeAgreementSourceDouble{check: ports.SupplierAgreementCheck{
@@ -166,7 +178,35 @@ func chargeRegisteredAgreement(t *testing.T) *chargeAgreementSourceDouble {
 		Snapshot:    occurrenceValue(t, domain.NewAgreementSnapshotReference, trunkSnapshot),
 		LegalEntity: occurrenceValue(t, domain.NewProcurementLegalEntityReference, trunkLegalEntity),
 		Supplier:    occurrenceValue(t, domain.NewServiceProviderReference, trunkProvider),
+		ChargeConditions: declaredConditions(t,
+			declaredCondition{domain.ActualFulfillmentOccurrence, true, domain.PerPieceQuantity},
+			declaredCondition{domain.FailedAttemptOccurrence, true, domain.PerAttemptQuantity}),
 	}}
+}
+
+type declaredCondition struct {
+	reason  domain.ChargeOccurrenceReason
+	charged bool
+	form    domain.ChargeQuantityForm
+}
+
+func declaredConditions(t *testing.T, declared ...declaredCondition) domain.AgreementChargeConditions {
+	t.Helper()
+	var conditions domain.AgreementChargeConditions
+	for _, entry := range declared {
+		condition := domain.NewUnchargedAgreementCondition()
+		if entry.charged {
+			var err error
+			if condition, err = domain.NewChargedAgreementCondition(entry.form); err != nil {
+				t.Fatal(err)
+			}
+		}
+		var err error
+		if conditions, err = conditions.DeclareAgreementChargeCondition(entry.reason, condition); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return conditions
 }
 
 type occurrenceClock struct{}
@@ -287,18 +327,15 @@ func actualFulfillmentCommand(t *testing.T, objects ...string) application.Regis
 		objects = []string{trunkParcel}
 	}
 	return application.RegisterChargeOccurrenceCommand{
-		TenantID:           occurrenceValue(t, domain.NewTenantID, occurrenceTenant),
-		Registrant:         registrant,
-		Reason:             domain.ActualFulfillmentOccurrence,
-		Segment:            trunkSegment,
-		Objects:            objects,
-		Journey:            "SYN-JRN-" + trunkParcel,
-		Provider:           trunkProvider,
-		AgreementObject:    trunkAgreement,
-		AgreementVersion:   trunkAgreementTag,
-		Quantity:           1,
-		Unit:               "SEGMENT",
-		ConditionAssertion: conditionAssertion,
+		TenantID:         occurrenceValue(t, domain.NewTenantID, occurrenceTenant),
+		Registrant:       registrant,
+		Reason:           domain.ActualFulfillmentOccurrence,
+		Segment:          trunkSegment,
+		Objects:          objects,
+		Journey:          "SYN-JRN-" + trunkParcel,
+		Provider:         trunkProvider,
+		AgreementObject:  trunkAgreement,
+		AgreementVersion: trunkAgreementTag,
 	}
 }
 
@@ -309,9 +346,9 @@ func assertNothingWritten(t *testing.T, rig *occurrenceRig) {
 	}
 }
 
-// Covers: AT-TF-120——干线段参与以下一次交接结束，登记方给出服务方、协议版本与断言：依据与范围取段、业务时间取
-// 参与终点、法人与协议快照取自协议核对口（快照是「对象/版本」，ADR-0208 决定六），协议按业务时间核；身份由事实
-// 派生、首版 V1；同一次调用交出一份意图，意图里就是落册的那一份。
+// Covers: AT-TF-120——干线段参与以下一次交接结束，登记方给出服务方与协议版本：依据与范围取段、业务时间取参与终点、
+// 法人与协议快照取自协议核对口（快照是「对象/版本」，ADR-0208 决定六），协议按业务时间核；发生条件按协议声明判、
+// 记下登记者（ADR-0209）；身份由事实派生、首版 V1；同一次调用交出一份意图，意图里就是落册的那一份。
 func TestAnEndedTrunkParticipationRegistersAnActualFulfillmentOccurrence(t *testing.T) {
 	rig := newOccurrenceRig(t)
 	result := rig.register(t, actualFulfillmentCommand(t))
@@ -335,11 +372,17 @@ func TestAnEndedTrunkParticipationRegistersAnActualFulfillmentOccurrence(t *test
 		occurrence.Provider().String() != trunkProvider {
 		t.Fatalf("采购三件 = %q / %q / %q", occurrence.LegalEntity(), occurrence.Agreement(), occurrence.Provider())
 	}
-	if assertion, asserted := occurrence.Condition().Assertion(); !asserted || assertion != conditionAssertion {
-		t.Fatalf("断言没有原样留痕：%q %v", assertion, asserted)
+	if occurrence.Condition().Basis() != domain.ConditionDeclaredByAgreement {
+		t.Fatalf("发生条件依据 = %q，want AGREEMENT_DECLARED", occurrence.Condition().Basis())
 	}
-	if by, asserted := occurrence.Condition().AssertedBy(); !asserted || by.String() != registrant {
-		t.Fatalf("断言人没有留痕：%q %v，应是做出这一次登记决定的操作者", by, asserted)
+	if by := occurrence.Condition().RegisteredBy(); by.String() != registrant {
+		t.Fatalf("登记者 = %q，应是做出这一次登记决定的操作者", by)
+	}
+	if _, asserted := occurrence.Condition().Assertion(); asserted {
+		t.Fatal("按协议判的发生项带着断言原话")
+	}
+	if quantity, unit := occurrence.Quantity(); quantity != 1 || unit.String() != "PIECE" {
+		t.Fatalf("数量/单位 = %d/%q，协议按件计、一件包裹应是 1/PIECE", quantity, unit)
 	}
 	if record.Key.Validity.String() != "V1" || record.Key.Occurrence != occurrence.Occurrence() {
 		t.Fatalf("键 = %+v", record.Key)
@@ -539,7 +582,7 @@ func TestEachAgreementRefusalIsItsOwnOutcome(t *testing.T) {
 }
 
 // Covers: AT-TF-124——同一事实同一成员范围重登：同内容答已存在、回显原项、重交同一份意图（信封按 ID 认领，不多出
-// 第二封）；异内容（数量不同）答冲突、回显原项、不交意图、不落第二条。
+// 第二封）；异内容（旅程不同）答冲突、回显原项、不交意图、不落第二条。
 func TestReRegisteringAnswersExistingOrConflict(t *testing.T) {
 	rig := newOccurrenceRig(t)
 	first := rig.register(t, actualFulfillmentCommand(t))
@@ -556,7 +599,7 @@ func TestReRegisteringAnswersExistingOrConflict(t *testing.T) {
 		t.Fatalf("重放应重交同一份意图：%d 份", len(rig.handoff.intents))
 	}
 
-	// 另一位操作者照原样再报：断言人是登记决定的出处、不是内容，仍答已存在，回显的是原断言人。
+	// 另一位操作者照原样再报：登记者是登记决定的出处、不是内容，仍答已存在，回显的是原登记者。
 	byAnother := actualFulfillmentCommand(t)
 	byAnother.Registrant = "https://dex.syn.example#SYN-OPERATOR-CONFIG-02"
 	again := rig.register(t, byAnother)
@@ -565,12 +608,12 @@ func TestReRegisteringAnswersExistingOrConflict(t *testing.T) {
 	}
 	if echoed, _ := again.Record(); echoed.Key != original.Key {
 		t.Fatal("另一位操作者重报没有回显原项")
-	} else if by, _ := echoed.Occurrence.Condition().AssertedBy(); by.String() != registrant {
-		t.Fatalf("回显的断言人 = %q，应仍是原断言人", by)
+	} else if by := echoed.Occurrence.Condition().RegisteredBy(); by.String() != registrant {
+		t.Fatalf("回显的登记者 = %q，应仍是原登记者", by)
 	}
 
 	changed := actualFulfillmentCommand(t)
-	changed.Quantity = 2
+	changed.Journey = "SYN-JRN-ANOTHER"
 	conflict := rig.register(t, changed)
 	if conflict.Outcome() != application.ChargeOccurrenceConflict {
 		t.Fatalf("异内容 outcome = %q, want CONFLICT", conflict.Outcome())
@@ -661,7 +704,10 @@ func TestAFailingRegistryOrHandoffIsUndecided(t *testing.T) {
 // 否则登记方会去改一份本来没错的请求；什么都不写。
 func TestAnAgreementCheckHandingBackNoLegalEntityIsRaised(t *testing.T) {
 	rig := newOccurrenceRig(t)
-	rig.agreements.check = ports.SupplierAgreementCheck{Standing: ports.SupplierAgreementRegistered}
+	rig.agreements.check = ports.SupplierAgreementCheck{
+		Standing:         ports.SupplierAgreementRegistered,
+		ChargeConditions: rig.agreements.check.ChargeConditions,
+	}
 	result, err := rig.handler().Register(t.Context(), actualFulfillmentCommand(t))
 	if err == nil {
 		t.Fatalf("应上抛，却答 %q/%q", result.Outcome(), result.Detail())
@@ -669,9 +715,8 @@ func TestAnAgreementCheckHandingBackNoLegalEntityIsRaised(t *testing.T) {
 	assertNothingWritten(t, rig)
 }
 
-// Covers: 订舱与取消两种原因的事实依据随票 demo-chain-gaps/28 接上，在那之前如实答未受理；断言缺席同样不形成——
-// 首版的发生条件只由登记者断言作答（ADR-0207 决定三）。
-func TestReasonsWithoutAFactPathAndUnassertedConditionsAreNotAccepted(t *testing.T) {
+// Covers: 订舱与取消两种原因的事实依据随票 demo-chain-gaps/28 接上，在那之前如实答未受理；没有登记者同样不形成。
+func TestReasonsWithoutAFactPathAndAnonymousRegistrantsAreNotAccepted(t *testing.T) {
 	for _, reason := range []domain.ChargeOccurrenceReason{domain.BookingOccurrence, domain.CancellationOccurrence} {
 		rig := newOccurrenceRig(t)
 		command := actualFulfillmentCommand(t)
@@ -683,15 +728,7 @@ func TestReasonsWithoutAFactPathAndUnassertedConditionsAreNotAccepted(t *testing
 	}
 
 	rig := newOccurrenceRig(t)
-	command := actualFulfillmentCommand(t)
-	command.ConditionAssertion = "   "
-	if result := rig.register(t, command); result.Outcome() != application.ChargeOccurrenceInputNotAccepted ||
-		result.Detail() != application.ConditionNotAsserted {
-		t.Fatalf("未断言 outcome/detail = %q/%q", result.Outcome(), result.Detail())
-	}
-	assertNothingWritten(t, rig)
-
-	// 没有断言人就没有人为条件作答：操作者取自认证结果，缺了是入口漏了一道，答坏请求。
+	// 没有登记者就没有人为这一次登记负责：操作者取自认证结果，缺了是入口漏了一道，答坏请求。
 	anonymous := actualFulfillmentCommand(t)
 	anonymous.Registrant = " "
 	if result := rig.register(t, anonymous); result.Outcome() != application.ChargeOccurrenceInputNotAccepted ||

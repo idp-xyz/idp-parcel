@@ -189,7 +189,7 @@ func (intake *OperatorDecisionIntake) IntakeTransportCommissionSubmission(ctx co
 }
 
 // IntakeChargeOccurrenceRegistration 译运输收费发生项登记（`/transport-fulfillment-charge-occurrence-registrations`）。
-// 登记者取认证出的操作者：发生项的断言人就是做出这一次登记决定的人（ADR-0207 决定三），载荷里不收。
+// 登记者取认证出的操作者：随发生项记下的登记者就是做出这一次登记决定的人（ADR-0209 决定五），载荷里不收。
 func (intake *OperatorDecisionIntake) IntakeChargeOccurrenceRegistration(ctx context.Context, request *http.Request) (application.RegisterChargeOccurrenceCommand, error) {
 	operator, err := intake.identityFor(ctx, request, OperatorDecisionChargeOccurrenceRegistration)
 	if err != nil {

@@ -52,20 +52,30 @@ type FailedAttemptSource interface {
 type ChargeOccurrenceRegistry interface {
 	FindByKey(ctx context.Context, key ChargeOccurrenceKey) (ChargeOccurrenceRecord, bool, error)
 	Save(ctx context.Context, record ChargeOccurrenceRecord) (ChargeOccurrenceSaveOutcome, error)
-	// FindCovering 找同一（租户、原因、事实依据）下另一项仍有效、且成员与查询有交集的发生项，交回它的当前版
-	// （ADR-0207 决定四）。实现须在调用方的事务里对这一组（租户、原因、事实依据）串行化，直到事务结束：查与
-	// 随后的 Save 之间若容另一笔插进来，两笔各自看不见对方，同一成员照样被算进两项。
+	// FindCovering 找同一（租户、原因、主要业务范围）下另一项仍有效、且盖住了本次查询的发生项，交回它的当前版
+	// （ADR-0207 决定四、ADR-0209 决定四）。「盖住」见 ChargeOccurrenceCoverageQuery。实现须在调用方的事务里对这一组
+	// （租户、原因、主要业务范围）串行化，直到事务结束：查与随后的 Save 之间若容另一笔插进来，两笔各自看不见对方，
+	// 同一成员或同一范围照样被算进两项。事实依据定得出范围，按范围串行化因而也串行化了同一事实依据上的各笔。
 	FindCovering(ctx context.Context, query ChargeOccurrenceCoverageQuery) (ChargeOccurrenceRecord, bool, error)
 }
 
-// ChargeOccurrenceCoverageQuery 问「这些成员在同一件事实上是不是已经被另一项计过」。Except 是本次派生的身份：同一
-// 身份的各版本是同一项，不算另一项。
+// ChargeOccurrenceCoverageQuery 问「这件事是不是已经被另一项计过」。同一（租户、原因、范围）上另一项仍有效的发生项
+// 盖住本次查询，当且仅当下列之一：
+//
+//   - WholeScope 为真：本次按范围计（按段、按尝试、按订舱），范围上任何一项都算——一个范围只计一次；
+//   - 那一项的单位在 ScopeUnits 里：它按范围计过，整个范围已经计了；
+//   - 那一项与本次同一事实依据、成员有交集：同一成员在同一件事实上只计一次（ADR-0207 决定四）。
+//
+// Except 是本次派生的身份：同一身份的各版本是同一项，不算另一项。
 type ChargeOccurrenceCoverageQuery struct {
-	TenantID  domain.TenantID
-	Reason    domain.ChargeOccurrenceReason
-	FactBasis domain.OccurrenceBasisReference
-	Members   []domain.CarriedObjectReference
-	Except    domain.ChargeOccurrenceReference
+	TenantID   domain.TenantID
+	Reason     domain.ChargeOccurrenceReason
+	Scope      domain.OccurrenceScopeReference
+	FactBasis  domain.OccurrenceBasisReference
+	Members    []domain.CarriedObjectReference
+	Except     domain.ChargeOccurrenceReference
+	WholeScope bool
+	ScopeUnits []domain.QuantityUnitReference
 }
 
 // ChargeOccurrenceIntent 把一个已登记的发生项版本交给消费方（ADR-0207 决定五）。意图由发生项键认领：重放重发同一份，

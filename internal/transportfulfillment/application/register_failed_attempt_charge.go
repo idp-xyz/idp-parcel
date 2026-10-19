@@ -63,8 +63,13 @@ func (handler *RegisterChargeOccurrenceHandler) failedPickupFact(
 	if err != nil {
 		return chargeOccurrenceFact{}, chargeNotAccepted(ChargeRequestMalformed), true
 	}
+	scope, err := domain.AttemptOccurrenceScope(result.Attempt())
+	if err != nil {
+		return chargeOccurrenceFact{}, chargeNotAccepted(ChargeRequestMalformed), true
+	}
 	return chargeOccurrenceFact{
 		basis:      basis,
+		scope:      scope,
 		members:    []domain.CarriedObjectReference{object},
 		occurredAt: result.OccurredAt(),
 		form: func(spec domain.TransportChargeOccurrenceSpec) (domain.TransportChargeOccurrence, error) {
@@ -97,8 +102,13 @@ func (handler *RegisterChargeOccurrenceHandler) failedDeliveryFact(
 	if err != nil {
 		return chargeOccurrenceFact{}, chargeNotAccepted(ChargeRequestMalformed), true
 	}
+	scope, err := domain.AttemptOccurrenceScope(result.Attempt())
+	if err != nil {
+		return chargeOccurrenceFact{}, chargeNotAccepted(ChargeRequestMalformed), true
+	}
 	return chargeOccurrenceFact{
 		basis:      basis,
+		scope:      scope,
 		members:    []domain.CarriedObjectReference{object},
 		occurredAt: result.OccurredAt(),
 		form: func(spec domain.TransportChargeOccurrenceSpec) (domain.TransportChargeOccurrence, error) {

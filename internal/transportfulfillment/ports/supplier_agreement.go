@@ -62,6 +62,9 @@ type SupplierAgreementCheck struct {
 	Snapshot    domain.AgreementSnapshotReference
 	LegalEntity domain.ProcurementLegalEntityReference
 	Supplier    domain.ServiceProviderReference
+	// ChargeConditions 只在在册格有值：这一版协议声明的收费发生条件（ADR-0209），零值即整节没声明。运输委托提交不看
+	// 它；发生项登记按它判计不计费、数出数量与单位。
+	ChargeConditions domain.AgreementChargeConditions
 }
 
 // SupplierAgreementSource 按（租户、协议版本、服务提供方、决定时点）核一版供应商协议。

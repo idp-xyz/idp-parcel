@@ -117,9 +117,9 @@ func TestChargeOccurrenceMemberViewRefusesAnOccurrenceRegisteredWithoutMembers(t
 		    (tenant_id, occurrence_ref, validity_version, journey_ref, legal_entity_ref,
 		     provider_ref, agreement_ref, reason, fact_basis, scope_ref, quantity, unit_ref,
 		     occurred_at, corrects_version, revision_kind, revision_basis, revised_at, recorded_at,
-		     condition_basis, condition_asserted_by, condition_assertion)
+		     condition_basis, condition_asserted_by, condition_assertion, registered_by)
 		 VALUES ('tenant-1','SYN-OCC-0104','v1','j','le','pr','ag','BOOKING','fb','sc',1,'u',now(),NULL,NULL,NULL,NULL,now(),
-		         'REGISTRANT_ASSERTED','iss#op','a')`,
+		         'REGISTRANT_ASSERTED','iss#op','a','iss#op')`,
 	); err != nil {
 		t.Fatalf("直插无成员本体：%v", err)
 	}

@@ -316,3 +316,47 @@ func TestTheSourceRefusesToBuildWithoutTheVersionView(t *testing.T) {
 		t.Fatal("没有点读口也造出了核对源")
 	}
 }
+
+// Covers: AT-TF-166 / 167 / 168 的供给一半（ADR-0209）——在册格把这一版协议声明的收费发生条件按字面搬成本上下文的词：
+// 计费带数量形、不计费不带、没声明的原因读不到；整节没声明交零值，由登记用例答未配置。
+func TestTheRegisteredCheckCarriesTheDeclaredChargeConditions(t *testing.T) {
+	read := withBody(t, "supplier-1")
+	charged, err := pcdomain.NewChargedOccurrenceCondition(pcdomain.ActualFulfillmentChargeReason, pcdomain.PerSegmentQuantity)
+	if err != nil {
+		t.Fatal(err)
+	}
+	uncharged, err := pcdomain.NewUnchargedOccurrenceCondition(pcdomain.FailedAttemptChargeReason)
+	if err != nil {
+		t.Fatal(err)
+	}
+	conditions, err := pcdomain.NewChargeOccurrenceConditions(charged, uncharged)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if read.Agreement, err = read.Agreement.WithChargeConditions(conditions); err != nil {
+		t.Fatal(err)
+	}
+
+	check, err := checkThrough(t, &versionViewStub{read: read}, "supplier-1", insideAgreement)
+	if err != nil || check.Standing != tfports.SupplierAgreementRegistered {
+		t.Fatalf("check = %+v, err = %v", check, err)
+	}
+	fulfillment, declared := check.ChargeConditions.For(tfdomain.ActualFulfillmentOccurrence)
+	if form, isCharged := fulfillment.QuantityForm(); !declared || !isCharged || form != tfdomain.PerSegmentQuantity {
+		t.Fatalf("实际履约 = %+v（声明 %v）", fulfillment, declared)
+	}
+	if attempt, declared := check.ChargeConditions.For(tfdomain.FailedAttemptOccurrence); !declared || attempt.Charged() {
+		t.Fatalf("失败尝试 = %+v（声明 %v）", attempt, declared)
+	}
+	if _, declared := check.ChargeConditions.For(tfdomain.BookingOccurrence); declared {
+		t.Fatal("没声明的订舱读出了一条")
+	}
+
+	plain, err := checkThrough(t, &versionViewStub{read: withBody(t, "supplier-1")}, "supplier-1", insideAgreement)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, declared := plain.ChargeConditions.For(tfdomain.ActualFulfillmentOccurrence); declared {
+		t.Fatal("没声明条件的协议读出了条件")
+	}
+}

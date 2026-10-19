@@ -97,8 +97,6 @@ func failedAttemptCommand(t *testing.T) application.RegisterChargeOccurrenceComm
 	command := actualFulfillmentCommand(t)
 	command.Reason = domain.FailedAttemptOccurrence
 	command.Segment = ""
-	command.Unit = "ATTEMPT"
-	command.ConditionAssertion = "末端协议 v1：客户不在场的失败到场计一次"
 	return command
 }
 
@@ -123,6 +121,9 @@ func TestAFailedPickupRegistersAFailedAttemptOccurrence(t *testing.T) {
 	}
 	if !occurrence.OccurredAt().Equal(attemptArrivedAt.Add(10 * time.Minute)) {
 		t.Fatalf("业务时间 = %v，应取对象结果", occurrence.OccurredAt())
+	}
+	if quantity, unit := occurrence.Quantity(); quantity != 1 || unit.String() != "ATTEMPT" {
+		t.Fatalf("数量/单位 = %d/%q，协议按尝试计应是 1/ATTEMPT", quantity, unit)
 	}
 	if len(rig.handoff.intents) != 1 {
 		t.Fatalf("意图 %d 份", len(rig.handoff.intents))

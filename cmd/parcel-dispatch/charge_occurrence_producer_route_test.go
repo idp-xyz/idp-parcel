@@ -124,18 +124,15 @@ func registerTrunkOccurrence(t *testing.T, db *bentopg.DB, store *outbox.Store, 
 	var result tfapp.RegisterChargeOccurrenceResult
 	mustWithinTX(t, db.Transactor(), t.Context(), func(txCtx context.Context) error {
 		result, err = handler.Register(txCtx, tfapp.RegisterChargeOccurrenceCommand{
-			TenantID:           tenantID,
-			Registrant:         "https://dex.syn.example#SYN-OPERATOR-CONFIG-01",
-			Reason:             tfdomain.ActualFulfillmentOccurrence,
-			Segment:            "SYN-SEG-SZX-SIN-01",
-			Objects:            []string{"SYN-PARCEL-01"},
-			Journey:            "SYN-JRN-SYN-PARCEL-01",
-			Provider:           "SYN-PARTY-CARRIER-TRUNK-01",
-			AgreementObject:    trunkAgreementObject,
-			AgreementVersion:   "v1",
-			Quantity:           1,
-			Unit:               "SEGMENT",
-			ConditionAssertion: "SYN 断言：干线协议 v1 段到段运输计一段",
+			TenantID:         tenantID,
+			Registrant:       "https://dex.syn.example#SYN-OPERATOR-CONFIG-01",
+			Reason:           tfdomain.ActualFulfillmentOccurrence,
+			Segment:          "SYN-SEG-SZX-SIN-01",
+			Objects:          []string{"SYN-PARCEL-01"},
+			Journey:          "SYN-JRN-SYN-PARCEL-01",
+			Provider:         "SYN-PARTY-CARRIER-TRUNK-01",
+			AgreementObject:  trunkAgreementObject,
+			AgreementVersion: "v1",
 		})
 		return err
 	})

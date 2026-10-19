@@ -44,7 +44,7 @@ func (repository *ChargeOccurrences) FindByKey(
 		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find charge occurrence: %w", err)
 	}
 
-	var journey, legalEntity, provider, agreement, reason, factBasis, scope, unit, conditionBasis string
+	var journey, legalEntity, provider, agreement, reason, factBasis, scope, unit, conditionBasis, registeredBy string
 	var conditionAssertedBy, conditionAssertion, correctsVersion, revisionKind, revisionBasis *string
 	var quantity int64
 	var occurredAt, recordedAt time.Time
@@ -52,14 +52,14 @@ func (repository *ChargeOccurrences) FindByKey(
 	err = querier.QueryRow(ctx,
 		`SELECT journey_ref, legal_entity_ref, provider_ref, agreement_ref, reason,
 		        fact_basis, scope_ref, quantity, unit_ref, occurred_at,
-		        condition_basis, condition_asserted_by, condition_assertion,
+		        condition_basis, condition_asserted_by, condition_assertion, registered_by,
 		        corrects_version, revision_kind, revision_basis, revised_at, recorded_at
 		   FROM transport_fulfillment.transport_charge_occurrence
 		  WHERE tenant_id = $1 AND occurrence_ref = $2 AND validity_version = $3`,
 		key.TenantID.String(), key.Occurrence.String(), key.Validity.String(),
 	).Scan(&journey, &legalEntity, &provider, &agreement, &reason,
 		&factBasis, &scope, &quantity, &unit, &occurredAt,
-		&conditionBasis, &conditionAssertedBy, &conditionAssertion,
+		&conditionBasis, &conditionAssertedBy, &conditionAssertion, &registeredBy,
 		&correctsVersion, &revisionKind, &revisionBasis, &revisedAt, &recordedAt)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.ChargeOccurrenceRecord{}, false, nil
@@ -105,7 +105,7 @@ func (repository *ChargeOccurrences) FindByKey(
 	if spec.Unit, err = domain.NewQuantityUnitReference(unit); err != nil {
 		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find charge occurrence: %w", err)
 	}
-	if spec.Condition, err = occurrenceConditionFrom(conditionBasis, conditionAssertedBy, conditionAssertion); err != nil {
+	if spec.Condition, err = occurrenceConditionFrom(conditionBasis, registeredBy, conditionAssertedBy, conditionAssertion); err != nil {
 		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find charge occurrence: %w", err)
 	}
 	if err := applyOccurrenceRevision(&spec, correctsVersion, revisionKind, revisionBasis, revisedAt); err != nil {
@@ -228,18 +228,22 @@ func (repository *ChargeOccurrences) LoadMembers(
 	return members, true, nil
 }
 
-// FindCovering 先取（租户、原因、事实依据）这一组的事务级咨询锁，再找另一项仍有效、成员与查询有交集的发生项。
+// FindCovering 先取（租户、原因、主要业务范围）这一组的事务级咨询锁，再找另一项仍有效、盖住了查询的发生项（「盖住」
+// 的三种读法见 ports.ChargeOccurrenceCoverageQuery）。
+//
+// 锁按范围不按事实依据（ADR-0209 决定四）：按范围计的一项要挡住同一范围上任何事实依据的另一笔，按依据上锁，两笔
+// 各握各的锁、各自看不见对方。事实依据定得出范围，同一依据上的两笔照旧排在一把锁上。
 //
 // 「仍有效」读每一项的当前版：没有别的版本以 corrects_version 回指它的那一版，且它不是失效版——被替代的旧版已由
-// 新版接替，失效的那一项说的是「那个范围不成立」，其成员可以另登。多于一项有交集时回显最早登记的那一项：登记方
+// 新版接替，失效的那一项说的是「那个范围不成立」，其成员可以另登。多于一项盖住时回显最早登记的那一项：登记方
 // 要去改的是先到的那一份。锁键各维以 chr(31) 分隔后取 hashtext，口径同 node_operations 收寄那把锁；哈希撞上只
 // 多等一会儿，不错判。锁随事务释放，不在事务里调用由 RequireExecutor 拒——无锁的查答不了「此刻没有」。
 func (repository *ChargeOccurrences) FindCovering(
 	ctx context.Context,
 	query ports.ChargeOccurrenceCoverageQuery,
 ) (ports.ChargeOccurrenceRecord, bool, error) {
-	if query.TenantID.String() == "" || query.Reason.String() == "" || query.FactBasis.String() == "" ||
-		query.Except.String() == "" || len(query.Members) == 0 {
+	if query.TenantID.String() == "" || query.Reason.String() == "" || query.Scope.String() == "" ||
+		query.FactBasis.String() == "" || query.Except.String() == "" || len(query.Members) == 0 {
 		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find covering charge occurrence: query is incomplete")
 	}
 	executor, err := repository.db.RequireExecutor(ctx)
@@ -247,14 +251,18 @@ func (repository *ChargeOccurrences) FindCovering(
 		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find covering charge occurrence: %w", err)
 	}
 	if _, err := executor.Exec(ctx,
-		`SELECT pg_advisory_xact_lock(hashtext('transport_fulfillment.charge_occurrence.fact_basis'), hashtext($1 || chr(31) || $2 || chr(31) || $3))`,
-		query.TenantID.String(), query.Reason.String(), query.FactBasis.String(),
+		`SELECT pg_advisory_xact_lock(hashtext('transport_fulfillment.charge_occurrence.scope'), hashtext($1 || chr(31) || $2 || chr(31) || $3))`,
+		query.TenantID.String(), query.Reason.String(), query.Scope.String(),
 	); err != nil {
-		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find covering charge occurrence: 取事实依据锁：%w", err)
+		return ports.ChargeOccurrenceRecord{}, false, fmt.Errorf("find covering charge occurrence: 取范围锁：%w", err)
 	}
 	members := make([]string, 0, len(query.Members))
 	for _, member := range query.Members {
 		members = append(members, member.String())
+	}
+	scopeUnits := make([]string, 0, len(query.ScopeUnits))
+	for _, unit := range query.ScopeUnits {
+		scopeUnits = append(scopeUnits, unit.String())
 	}
 	var occurrenceRef, version string
 	err = executor.QueryRow(ctx,
@@ -262,7 +270,7 @@ func (repository *ChargeOccurrences) FindCovering(
 		   FROM transport_fulfillment.transport_charge_occurrence AS head
 		  WHERE head.tenant_id = $1
 		    AND head.reason = $2
-		    AND head.fact_basis = $3
+		    AND head.scope_ref = $3
 		    AND head.occurrence_ref <> $4
 		    AND head.revision_kind IS DISTINCT FROM $5
 		    AND NOT EXISTS (
@@ -271,17 +279,20 @@ func (repository *ChargeOccurrences) FindCovering(
 		         WHERE successor.tenant_id = head.tenant_id
 		           AND successor.occurrence_ref = head.occurrence_ref
 		           AND successor.corrects_version = head.validity_version)
-		    AND EXISTS (
-		        SELECT 1
-		          FROM transport_fulfillment.transport_charge_occurrence_member AS member
-		         WHERE member.tenant_id = head.tenant_id
-		           AND member.occurrence_ref = head.occurrence_ref
-		           AND member.validity_version = head.validity_version
-		           AND member.object_ref = ANY($6))
+		    AND ($6
+		         OR head.unit_ref = ANY($7)
+		         OR (head.fact_basis = $8
+		             AND EXISTS (
+		                 SELECT 1
+		                   FROM transport_fulfillment.transport_charge_occurrence_member AS member
+		                  WHERE member.tenant_id = head.tenant_id
+		                    AND member.occurrence_ref = head.occurrence_ref
+		                    AND member.validity_version = head.validity_version
+		                    AND member.object_ref = ANY($9))))
 		  ORDER BY head.recorded_at, head.occurrence_ref
 		  LIMIT 1`,
-		query.TenantID.String(), query.Reason.String(), query.FactBasis.String(), query.Except.String(),
-		domain.OccurrenceInvalidated.String(), members,
+		query.TenantID.String(), query.Reason.String(), query.Scope.String(), query.Except.String(),
+		domain.OccurrenceInvalidated.String(), query.WholeScope, scopeUnits, query.FactBasis.String(), members,
 	).Scan(&occurrenceRef, &version)
 	if errors.Is(err, pgx.ErrNoRows) {
 		return ports.ChargeOccurrenceRecord{}, false, nil
@@ -353,6 +364,7 @@ func (repository *ChargeOccurrences) Save(
 	occurrence := record.Occurrence
 	quantity, unit := occurrence.Quantity()
 	condition := occurrence.Condition()
+	registeredBy := condition.RegisteredBy().String()
 	var conditionAssertedBy, conditionAssertion *string
 	if assertion, asserted := condition.Assertion(); asserted {
 		conditionAssertion = &assertion
@@ -380,8 +392,8 @@ func (repository *ChargeOccurrences) Save(
 		      journey_ref, legal_entity_ref, provider_ref, agreement_ref, reason,
 		      fact_basis, scope_ref, quantity, unit_ref, occurred_at,
 		      corrects_version, revision_kind, revision_basis, revised_at, recorded_at,
-		      condition_basis, condition_asserted_by, condition_assertion)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21)
+		      condition_basis, condition_asserted_by, condition_assertion, registered_by)
+		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15, $16, $17, $18, $19, $20, $21, $22)
 		 ON CONFLICT DO NOTHING`,
 		record.Key.TenantID.String(),
 		record.Key.Occurrence.String(),
@@ -404,6 +416,7 @@ func (repository *ChargeOccurrences) Save(
 		condition.Basis().String(),
 		conditionAssertedBy,
 		conditionAssertion,
+		registeredBy,
 	)
 	if err != nil {
 		return ports.ChargeOccurrenceSaveOutcomeInvalid, fmt.Errorf("save charge occurrence: %w", err)
@@ -443,19 +456,25 @@ func chargeOccurrenceReasonFrom(raw string) (domain.ChargeOccurrenceReason, erro
 	}
 }
 
-// occurrenceConditionFrom 把库面三列装回发生条件的依据。依据一格是封闭集合，库面多出一格是坏行，不在这里替它
-// 挑一个近似的读法。
-func occurrenceConditionFrom(basis string, assertedBy, assertion *string) (domain.OccurrenceCondition, error) {
+// occurrenceConditionFrom 把库面四列装回发生条件的依据与登记者。依据一格是封闭集合，库面多出一格是坏行，不在这里
+// 替它挑一个近似的读法。断言那一格的断言人与登记者是同一个人（迁移 0034 的 CHECK 守着），两列不一致即坏行；按协议
+// 声明判的那一格不该带断言人与原话。
+func occurrenceConditionFrom(basis, registeredBy string, assertedBy, assertion *string) (domain.OccurrenceCondition, error) {
+	registrant, err := domain.NewRegistrantReference(registeredBy)
+	if err != nil {
+		return domain.OccurrenceCondition{}, err
+	}
 	switch basis {
 	case domain.ConditionAssertedByRegistrant.String():
-		if assertedBy == nil || assertion == nil {
-			return domain.OccurrenceCondition{}, fmt.Errorf("occurrence condition %q carries no registrant or assertion", basis)
-		}
-		registrant, err := domain.NewRegistrantReference(*assertedBy)
-		if err != nil {
-			return domain.OccurrenceCondition{}, err
+		if assertedBy == nil || assertion == nil || *assertedBy != registeredBy {
+			return domain.OccurrenceCondition{}, fmt.Errorf("occurrence condition %q carries no assertion or another asserter", basis)
 		}
 		return domain.NewAssertedOccurrenceCondition(registrant, *assertion)
+	case domain.ConditionDeclaredByAgreement.String():
+		if assertedBy != nil || assertion != nil {
+			return domain.OccurrenceCondition{}, fmt.Errorf("occurrence condition %q carries an assertion", basis)
+		}
+		return domain.NewAgreementDeclaredOccurrenceCondition(registrant)
 	default:
 		return domain.OccurrenceCondition{}, fmt.Errorf("unknown occurrence condition basis %q", basis)
 	}

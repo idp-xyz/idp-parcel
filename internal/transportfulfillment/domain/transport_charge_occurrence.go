@@ -167,21 +167,25 @@ func ParseChargeOccurrenceReason(value string) (ChargeOccurrenceReason, error) {
 }
 
 // OccurrenceConditionBasis 是「凭什么算满足了采用协议的发生条件」的封闭集合（CONTEXT「只有满足当前采用协议所需
-// 事实条件的明确范围，才能形成运输收费发生项」；ADR-0207 决定三）。
+// 事实条件的明确范围，才能形成运输收费发生项」；ADR-0207 决定三、ADR-0209）。
 //
-// 首版只有登记者断言一格：协议正文还没有声明发生条件的文法，条件由人判断并留痕。协议能声明之后多出的那一格
-// 归 ADR-0209，到时按声明判的发生项与按断言形成的发生项在册上仍分得开——审计要问的正是「这一项是谁判的」。
+// 两格在册上分得开，审计要问的正是「这一项是谁判的」：登记者断言是协议还没有条件文法时由人判断、留痕的那一段
+// （断言期）；按协议声明判是 ADR-0209 之后唯一会新形成的一格，判断出自采用的那一版协议。断言期的那一格只剩读回
+// 的用处——册上已有的断言项照旧读得出来，不替它们补一个「按协议判过」。
 type OccurrenceConditionBasis uint8
 
 const (
 	OccurrenceConditionBasisInvalid OccurrenceConditionBasis = iota
 	ConditionAssertedByRegistrant
+	ConditionDeclaredByAgreement
 )
 
 func (basis OccurrenceConditionBasis) String() string {
 	switch basis {
 	case ConditionAssertedByRegistrant:
 		return "REGISTRANT_ASSERTED"
+	case ConditionDeclaredByAgreement:
+		return "AGREEMENT_DECLARED"
 	default:
 		return ""
 	}
@@ -197,13 +201,27 @@ func NewRegistrantReference(value string) (RegistrantReference, error) {
 	return RegistrantReference{required}, err
 }
 
-// OccurrenceCondition 是一个发生项满足发生条件的依据。断言那一格带两件：断言人与原话（引哪一版协议的哪一条、凭
-// 什么事实）。不是布尔：只记「断言过」，日后复核的人既不知道当时断言的是什么，也不知道是谁断言的——断言期内条件
-// 由人判断，判断的人就是这一格的出处（方案 D07-1「断言记在运营决定上」）。
+// OccurrenceCondition 是一个发生项满足发生条件的依据，连同做出这一次登记决定的登记者。断言那一格另带原话（引哪一版
+// 协议的哪一条、凭什么事实），断言人就是登记者。不是布尔：只记「断言过」，日后复核的人既不知道当时断言的是什么，也
+// 不知道是谁断言的。按协议声明判的那一格没有原话——判断出自协议，协议就记在发生项上——但登记者照记：服务方、协议
+// 版本与成员仍是这个人报的，审计要找得到人（ADR-0209 决定五）。
 type OccurrenceCondition struct {
 	basis      OccurrenceConditionBasis
 	registrant RegistrantReference
 	assertion  requiredValue
+}
+
+// NewAgreementDeclaredOccurrenceCondition 立一份「按采用协议的声明判过」的依据，记下登记者。
+func NewAgreementDeclaredOccurrenceCondition(registrant RegistrantReference) (OccurrenceCondition, error) {
+	if !registrant.valid() {
+		return OccurrenceCondition{}, fmt.Errorf("%w: registrant reference", ErrBlankValue)
+	}
+	return OccurrenceCondition{basis: ConditionDeclaredByAgreement, registrant: registrant}, nil
+}
+
+// RegisteredBy 交回做出这一次登记决定的操作者；两格都有。断言那一格上它就是断言人。
+func (condition OccurrenceCondition) RegisteredBy() RegistrantReference {
+	return condition.registrant
 }
 
 // NewAssertedOccurrenceCondition 立一份登记者断言。断言人或原话缺一即拒：没有人为条件作答，就没有发生项可形成。
@@ -238,14 +256,21 @@ func (condition OccurrenceCondition) AssertedBy() (RegistrantReference, bool) {
 	return condition.registrant, true
 }
 
-// sameJudgmentAs 判两份条件判的是不是同一件事：依据与原话同。断言人不比——它是这一次登记决定的出处，不是发生项的
-// 内容；另一位操作者照原样再报一次，说的仍是册上那一项，答已存在并回显原断言人，而不是冲突。
+// sameJudgmentAs 判两份条件判的是不是同一件事：依据与原话同。登记者（断言人）不比——它是这一次登记决定的出处，不是
+// 发生项的内容；另一位操作者照原样再报一次，说的仍是册上那一项，答已存在并回显原登记者，而不是冲突。
 func (condition OccurrenceCondition) sameJudgmentAs(other OccurrenceCondition) bool {
 	return condition.basis == other.basis && condition.assertion == other.assertion
 }
 
 func (condition OccurrenceCondition) valid() bool {
-	return condition.basis == ConditionAssertedByRegistrant && condition.registrant.valid() && condition.assertion.valid()
+	switch condition.basis {
+	case ConditionAssertedByRegistrant:
+		return condition.registrant.valid() && condition.assertion.valid()
+	case ConditionDeclaredByAgreement:
+		return condition.registrant.valid() && !condition.assertion.valid()
+	default:
+		return false
+	}
 }
 
 // TransportChargeOccurrenceSpec 是形成一个发生项所需的全部输入。
@@ -355,15 +380,34 @@ func ChargeOccurrenceForFailedAttempt(
 	if err != nil {
 		return TransportChargeOccurrence{}, err
 	}
-	scope, err := NewOccurrenceScopeReference(result.Attempt().String())
+	scope, err := AttemptOccurrenceScope(result.Attempt())
 	if err != nil {
-		return TransportChargeOccurrence{}, ErrInvalidChargeOccurrence
+		return TransportChargeOccurrence{}, err
 	}
 	spec.Reason = FailedAttemptOccurrence
 	spec.FactBasis = basis
 	spec.Scope = scope
 	spec.OccurredAt = result.OccurredAt()
 	return FormTransportChargeOccurrence(spec)
+}
+
+// AttemptOccurrenceScope 是失败尝试发生项的主要业务范围：那一次到场。揽收与派送同一写法——范围不进身份，只用来认
+// 「这一次到场是不是已经整体计过」（按尝试计费时一次到场只计一次，ADR-0209 决定四）。
+func AttemptOccurrenceScope(attempt AttemptReference) (OccurrenceScopeReference, error) {
+	scope, err := NewOccurrenceScopeReference(attempt.String())
+	if err != nil {
+		return OccurrenceScopeReference{}, ErrInvalidChargeOccurrence
+	}
+	return scope, nil
+}
+
+// SegmentOccurrenceScope 是实际履约发生项的主要业务范围：那一个实际履约段。
+func SegmentOccurrenceScope(segment FulfillmentSegmentReference) (OccurrenceScopeReference, error) {
+	scope, err := NewOccurrenceScopeReference(segment.String())
+	if err != nil {
+		return OccurrenceScopeReference{}, ErrInvalidChargeOccurrence
+	}
+	return scope, nil
 }
 
 // FailedPickupAttemptBasis 是失败揽收结果作事实依据时的引用。与派送那一侧分写前缀：两侧的尝试身份各由自己的
@@ -403,9 +447,9 @@ func ChargeOccurrenceForDeliveryAttempt(
 	if err != nil {
 		return TransportChargeOccurrence{}, err
 	}
-	scope, err := NewOccurrenceScopeReference(result.Attempt().String())
+	scope, err := AttemptOccurrenceScope(result.Attempt())
 	if err != nil {
-		return TransportChargeOccurrence{}, ErrInvalidChargeOccurrence
+		return TransportChargeOccurrence{}, err
 	}
 	spec.Reason = FailedAttemptOccurrence
 	spec.FactBasis = basis
@@ -443,9 +487,9 @@ func ChargeOccurrenceForActualFulfillment(
 	if err != nil {
 		return TransportChargeOccurrence{}, ErrInvalidChargeOccurrence
 	}
-	scope, err := NewOccurrenceScopeReference(segment.Segment().String())
+	scope, err := SegmentOccurrenceScope(segment.Segment())
 	if err != nil {
-		return TransportChargeOccurrence{}, ErrInvalidChargeOccurrence
+		return TransportChargeOccurrence{}, err
 	}
 	spec.Reason = ActualFulfillmentOccurrence
 	spec.FactBasis = basis

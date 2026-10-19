@@ -27,10 +27,11 @@ import (
 // 测试里抄一份——两份各改各的，测试就会对着一份种子里已经不存在的协议证明它可用。
 
 // 本文件核的演示租户供应商协议：干线一份由外包段采用，末端一份暂不被任何委托采用（.scratch/demo-chain-gaps/tf-chain-plan.md
-// 「跨票通则」X1）。
+// 「跨票通则」X1）。干线 v2 是声明了收费发生条件的那一版（ADR-0209），v1 仍在册、不带条件。键是「对象/版本」。
 const (
-	trunkAgreement    = "SYN-SUPPLIER-TRUNK-CN-SG-01"
-	lastMileAgreement = "SYN-SUPPLIER-LASTMILE-SG-01"
+	trunkAgreement    = "SYN-SUPPLIER-TRUNK-CN-SG-01/v1"
+	trunkAgreementV2  = "SYN-SUPPLIER-TRUNK-CN-SG-01/v2"
+	lastMileAgreement = "SYN-SUPPLIER-LASTMILE-SG-01/v1"
 )
 
 type publishClock struct{ at time.Time }
@@ -62,7 +63,7 @@ func repositoryRoot(t *testing.T) string {
 	}
 }
 
-// seededSupplierAgreements 读演示发布批里的供应商协议项，按对象号索引。解码与 parcel-commercial CLI 同一形状、
+// seededSupplierAgreements 读演示发布批里的供应商协议项，按「对象/版本」索引。解码与 parcel-commercial CLI 同一形状、
 // 同样拒未知字段。
 func seededSupplierAgreements(t *testing.T) map[string]registrationjson.PublicationItemDocument {
 	t.Helper()
@@ -79,7 +80,7 @@ func seededSupplierAgreements(t *testing.T) map[string]registrationjson.Publicat
 	agreements := map[string]registrationjson.PublicationItemDocument{}
 	for _, item := range batch.Items {
 		if item.Kind == "SUPPLIER_AGREEMENT" {
-			agreements[item.ObjectID] = item
+			agreements[item.ObjectID+"/"+item.Version] = item
 		}
 	}
 	return agreements
@@ -119,7 +120,8 @@ func publishSeededAgreement(
 }
 
 // Covers: 票 demo-chain-gaps/22 完成判据——SYN 干线与末端协议各按自己的供应商在册，交回种子里的责任法人与 PC 拼出的快照；
-// 干线协议填末端承运商答服务方不符（票 23 的演示停点）；生效前答未生效；没发布的版本与他租户答未在册。
+// 干线协议填末端承运商答服务方不符（票 23 的演示停点）；生效前答未生效；没发布的版本与他租户答未在册。票 29：干线 v2
+// 经真库交回种子里声明的收费发生条件（实际履约按件计、失败尝试不计费），v1 与末端协议没有条件。
 func TestTheSyntheticSupplierAgreementsAreCheckedThroughTheRealPointRead(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -134,7 +136,7 @@ func TestTheSyntheticSupplierAgreementsAreCheckedThroughTheRealPointRead(t *test
 	handler := pcapplication.NewPublishCommercialAuthorityHandler(registry, publishClock{at: decisionAt}, silentRegistrationHandoff{})
 
 	seeded := seededSupplierAgreements(t)
-	for _, object := range []string{trunkAgreement, lastMileAgreement} {
+	for _, object := range []string{trunkAgreement, trunkAgreementV2, lastMileAgreement} {
 		item, present := seeded[object]
 		if !present {
 			t.Fatalf("演示发布批里没有 %s", object)
@@ -168,8 +170,9 @@ func TestTheSyntheticSupplierAgreementsAreCheckedThroughTheRealPointRead(t *test
 		return answer
 	}
 
-	for _, object := range []string{trunkAgreement, lastMileAgreement} {
-		item := seeded[object]
+	for _, key := range []string{trunkAgreement, trunkAgreementV2, lastMileAgreement} {
+		item := seeded[key]
+		object := item.ObjectID
 		body := item.Declarations.SupplierAgreementBody
 		tenant := string(bytes.Trim(item.TenantID, `"`))
 
@@ -183,6 +186,18 @@ func TestTheSyntheticSupplierAgreementsAreCheckedThroughTheRealPointRead(t *test
 		if want := object + "/" + item.Version; registered.Snapshot.String() != want {
 			t.Fatalf("%s：快照 = %q，want %q", object, registered.Snapshot, want)
 		}
+		fulfillment, declared := registered.ChargeConditions.For(tfdomain.ActualFulfillmentOccurrence)
+		attempt, attemptDeclared := registered.ChargeConditions.For(tfdomain.FailedAttemptOccurrence)
+		if key == trunkAgreementV2 {
+			if form, charged := fulfillment.QuantityForm(); !declared || !charged || form != tfdomain.PerPieceQuantity {
+				t.Fatalf("%s：实际履约条件 = %+v（声明 %v），want 按件计", key, fulfillment, declared)
+			}
+			if !attemptDeclared || attempt.Charged() {
+				t.Fatalf("%s：失败尝试条件 = %+v（声明 %v），want 不计费", key, attempt, attemptDeclared)
+			}
+		} else if declared || attemptDeclared {
+			t.Fatalf("%s：没声明条件的协议读出了条件", key)
+		}
 
 		if before := check(tenant, object, item.Version, body.Supplier, body.EffectiveStartsAt.Add(-time.Second)); before.Standing != tfports.SupplierAgreementNotEffective {
 			t.Fatalf("%s 生效前：standing = %s，want AGREEMENT_NOT_EFFECTIVE", object, before.Standing)
@@ -195,9 +210,9 @@ func TestTheSyntheticSupplierAgreementsAreCheckedThroughTheRealPointRead(t *test
 		}
 	}
 
-	trunk := seeded[trunkAgreement]
+	trunk := seeded[trunkAgreementV2]
 	lastMileSupplier := seeded[lastMileAgreement].Declarations.SupplierAgreementBody.Supplier
-	mismatch := check(string(bytes.Trim(trunk.TenantID, `"`)), trunkAgreement, trunk.Version, lastMileSupplier, decisionAt)
+	mismatch := check(string(bytes.Trim(trunk.TenantID, `"`)), trunk.ObjectID, trunk.Version, lastMileSupplier, decisionAt)
 	if mismatch.Standing != tfports.SupplierAgreementProviderMismatch {
 		t.Fatalf("干线协议填末端承运商：standing = %s，want PROVIDER_MISMATCH", mismatch.Standing)
 	}

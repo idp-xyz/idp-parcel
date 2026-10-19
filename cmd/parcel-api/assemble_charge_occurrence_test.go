@@ -37,6 +37,11 @@ const (
 	chargeParcel    = "SYN-PARCEL-ASSEMBLY"
 	chargeAgreement = "SYN-SUPPLIER-TRUNK-CN-SG-01"
 	chargeProvider  = "SYN-PARTY-CARRIER-TRUNK-01"
+
+	// 干线协议的三版（ADR-0209）：v1 没声明收费发生条件，v2 实际履约按件计，v3 实际履约按段计。
+	chargeUndeclaredVersion = "v1"
+	chargePerPieceVersion   = "v2"
+	chargePerSegmentVersion = "v3"
 )
 
 func chargeValue[T any](t *testing.T, construct func(string) (T, error), raw string) T {
@@ -48,7 +53,8 @@ func chargeValue[T any](t *testing.T, construct func(string) (T, error), raw str
 	return value
 }
 
-// seedTrunkAgreementAndEndedSegment 登一份已生效的干线协议版本与正文，再登一个参与已以下一次交接结束的干线段。
+// seedTrunkAgreementAndEndedSegment 登三版已生效的干线协议（见 chargePerPieceVersion 一组常量），再登一个参与已以下
+// 一次交接结束的干线段。
 func seedTrunkAgreementAndEndedSegment(t *testing.T, db *bentopg.DB) {
 	t.Helper()
 	seedTrunkAgreementAndEndedSegmentOf(t, db, chargeParcel)
@@ -68,30 +74,55 @@ func seedTrunkAgreementAndEndedSegmentOf(t *testing.T, db *bentopg.DB, parcels .
 	if err != nil {
 		t.Fatal(err)
 	}
-	version, err := pcdomain.RehydrateCommercialVersion(pcdomain.RehydrateCommercialVersionSpec{
-		TenantID:      chargeValue(t, pcdomain.NewTenantID, chargeTenant),
-		Kind:          pcdomain.SupplierAgreementObject,
-		ObjectID:      chargeValue(t, pcdomain.NewCommercialObjectID, chargeAgreement),
-		Version:       chargeValue(t, pcdomain.NewCommercialVersionLabel, "v1"),
-		Scope:         chargeValue(t, pcdomain.NewCommercialScopeReference, "SYN-SCOPE-01"),
-		ContentDigest: chargeValue(t, pcdomain.NewCommercialContentDigest, "sha256:"+chargeAgreement),
-		Effective:     interval,
-		Status:        pcdomain.CommercialVersionEffective,
-		Approval:      approval,
-		PublishedAt:   approvedAt,
-		EffectiveAt:   approvedAt.Add(time.Hour),
-	})
-	if err != nil {
-		t.Fatalf("协议版本：%v", err)
+	type trunkVersion struct {
+		version   pcdomain.CommercialVersion
+		agreement pcdomain.SupplierAgreement
 	}
-	agreement, err := pcdomain.NewSupplierAgreement(version,
-		chargeValue(t, pcdomain.NewPartyID, chargeProvider),
-		chargeValue(t, pcdomain.NewLegalEntityReference, "SYN-LE-01"),
-		chargeValue(t, pcdomain.NewCommercialScopeReference, "SYN-SCOPE-01"),
-		chargeValue(t, pcdomain.NewPricingPlanReference, "SYN-PLAN-CN-SG-COST-01"),
-		version.Effective())
-	if err != nil {
-		t.Fatalf("协议正文：%v", err)
+	var versions []trunkVersion
+	for label, form := range map[string]pcdomain.ChargeQuantityForm{
+		chargeUndeclaredVersion: pcdomain.ChargeQuantityFormInvalid,
+		chargePerPieceVersion:   pcdomain.PerPieceQuantity,
+		chargePerSegmentVersion: pcdomain.PerSegmentQuantity,
+	} {
+		version, err := pcdomain.RehydrateCommercialVersion(pcdomain.RehydrateCommercialVersionSpec{
+			TenantID:      chargeValue(t, pcdomain.NewTenantID, chargeTenant),
+			Kind:          pcdomain.SupplierAgreementObject,
+			ObjectID:      chargeValue(t, pcdomain.NewCommercialObjectID, chargeAgreement),
+			Version:       chargeValue(t, pcdomain.NewCommercialVersionLabel, label),
+			Scope:         chargeValue(t, pcdomain.NewCommercialScopeReference, "SYN-SCOPE-01"),
+			ContentDigest: chargeValue(t, pcdomain.NewCommercialContentDigest, "sha256:"+chargeAgreement+"-"+label),
+			Effective:     interval,
+			Status:        pcdomain.CommercialVersionEffective,
+			Approval:      approval,
+			PublishedAt:   approvedAt,
+			EffectiveAt:   approvedAt.Add(time.Hour),
+		})
+		if err != nil {
+			t.Fatalf("协议版本 %s：%v", label, err)
+		}
+		agreement, err := pcdomain.NewSupplierAgreement(version,
+			chargeValue(t, pcdomain.NewPartyID, chargeProvider),
+			chargeValue(t, pcdomain.NewLegalEntityReference, "SYN-LE-01"),
+			chargeValue(t, pcdomain.NewCommercialScopeReference, "SYN-SCOPE-01"),
+			chargeValue(t, pcdomain.NewPricingPlanReference, "SYN-PLAN-CN-SG-COST-01"),
+			version.Effective())
+		if err != nil {
+			t.Fatalf("协议正文 %s：%v", label, err)
+		}
+		if form != pcdomain.ChargeQuantityFormInvalid {
+			condition, err := pcdomain.NewChargedOccurrenceCondition(pcdomain.ActualFulfillmentChargeReason, form)
+			if err != nil {
+				t.Fatal(err)
+			}
+			conditions, err := pcdomain.NewChargeOccurrenceConditions(condition)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if agreement, err = agreement.WithChargeConditions(conditions); err != nil {
+				t.Fatal(err)
+			}
+		}
+		versions = append(versions, trunkVersion{version: version, agreement: agreement})
 	}
 	publications, err := pcpostgres.NewCommercialPublications(db)
 	if err != nil {
@@ -110,11 +141,13 @@ func seedTrunkAgreementAndEndedSegmentOf(t *testing.T, db *bentopg.DB, parcels .
 		t.Fatal(err)
 	}
 	if err := db.Transactor().WithinTransaction(ctx, func(txCtx context.Context) error {
-		if outcome, err := publications.SaveVersion(txCtx, version); err != nil || outcome != pcports.PublicationSaved {
-			return errors.Join(err, errors.New("save agreement version: "+outcome.String()))
-		}
-		if outcome, err := publications.SaveSupplierAgreement(txCtx, agreement); err != nil || outcome != pcports.SupplierAgreementSaved {
-			return errors.Join(err, errors.New("save agreement body: "+outcome.String()))
+		for _, trunk := range versions {
+			if outcome, err := publications.SaveVersion(txCtx, trunk.version); err != nil || outcome != pcports.PublicationSaved {
+				return errors.Join(err, errors.New("save agreement version: "+outcome.String()))
+			}
+			if outcome, err := publications.SaveSupplierAgreement(txCtx, trunk.agreement); err != nil || outcome != pcports.SupplierAgreementSaved {
+				return errors.Join(err, errors.New("save agreement body: "+outcome.String()))
+			}
 		}
 		if outcome, err := segments.Save(txCtx, tfports.FulfillmentSegmentRecord{
 			Key:        tfports.FulfillmentSegmentKey{TenantID: segment.TenantID(), Segment: segment.Segment()},
@@ -155,18 +188,15 @@ func endedTrunkParticipations(t *testing.T, parcels []string) []tfdomain.Rehydra
 func chargeCommandFor(t *testing.T, agreementVersion string) tfapp.RegisterChargeOccurrenceCommand {
 	t.Helper()
 	return tfapp.RegisterChargeOccurrenceCommand{
-		TenantID:           chargeValue(t, tfdomain.NewTenantID, chargeTenant),
-		Registrant:         "https://dex.syn.example#SYN-OPERATOR-CONFIG-01",
-		Reason:             tfdomain.ActualFulfillmentOccurrence,
-		Segment:            chargeSegment,
-		Objects:            []string{chargeParcel},
-		Journey:            "SYN-JRN-" + chargeParcel,
-		Provider:           chargeProvider,
-		AgreementObject:    chargeAgreement,
-		AgreementVersion:   agreementVersion,
-		Quantity:           1,
-		Unit:               "SEGMENT",
-		ConditionAssertion: "SYN 断言：干线协议 v1 段到段运输计一段",
+		TenantID:         chargeValue(t, tfdomain.NewTenantID, chargeTenant),
+		Registrant:       "https://dex.syn.example#SYN-OPERATOR-CONFIG-01",
+		Reason:           tfdomain.ActualFulfillmentOccurrence,
+		Segment:          chargeSegment,
+		Objects:          []string{chargeParcel},
+		Journey:          "SYN-JRN-" + chargeParcel,
+		Provider:         chargeProvider,
+		AgreementObject:  chargeAgreement,
+		AgreementVersion: agreementVersion,
 	}
 }
 
@@ -187,8 +217,8 @@ func countChargeRows(t *testing.T, db *bentopg.DB) (occurrences, envelopes int) 
 }
 
 // 生产装配对真库走通（隔离合成 S）：登记在自己的事务里把发生项与已形成信封同笔落地，重放答已存在且不多出第二封；协议
-// 否定格什么都不写。
-// Covers: AT-TF-120、AT-TF-124 的生产装配半边。
+// 否定格与未配置什么都不写。
+// Covers: AT-TF-120、AT-TF-124、AT-TF-166、AT-TF-168 的生产装配半边。
 func TestChargeOccurrenceRegistrationRunsOnRealPostgres(t *testing.T) {
 	pool := pgtest.Pool(t)
 	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
@@ -201,19 +231,31 @@ func TestChargeOccurrenceRegistrationRunsOnRealPostgres(t *testing.T) {
 		t.Fatalf("装配：%v", err)
 	}
 
-	first, err := registrar.Register(t.Context(), chargeCommandFor(t, "v1"))
+	undeclared, err := registrar.Register(t.Context(), chargeCommandFor(t, chargeUndeclaredVersion))
+	if err != nil || undeclared.Outcome() != tfapp.ChargeOccurrenceNotConfigured || undeclared.Agreement() != chargeAgreement+"/v1" {
+		t.Fatalf("没声明条件的 v1：%q %q %v", undeclared.Outcome(), undeclared.Agreement(), err)
+	}
+	if occurrences, envelopes := countChargeRows(t, db); occurrences != 0 || envelopes != 0 {
+		t.Fatalf("未配置之后发生项 %d 行、信封 %d 封，want 0 / 0", occurrences, envelopes)
+	}
+
+	first, err := registrar.Register(t.Context(), chargeCommandFor(t, chargePerPieceVersion))
 	if err != nil || first.Outcome() != tfapp.ChargeOccurrenceRegistered {
 		t.Fatalf("首登：%q %q %v", first.Outcome(), first.Detail(), err)
 	}
 	record, _ := first.Record()
-	if record.Occurrence.Agreement().String() != chargeAgreement+"/v1" || record.Occurrence.LegalEntity().String() != "SYN-LE-01" {
+	if record.Occurrence.Agreement().String() != chargeAgreement+"/v2" || record.Occurrence.LegalEntity().String() != "SYN-LE-01" {
 		t.Fatalf("协议快照 / 法人 = %q / %q", record.Occurrence.Agreement(), record.Occurrence.LegalEntity())
+	}
+	if quantity, unit := record.Occurrence.Quantity(); quantity != 1 || unit.String() != "PIECE" ||
+		record.Occurrence.Condition().Basis() != tfdomain.ConditionDeclaredByAgreement {
+		t.Fatalf("数量/单位/依据 = %d/%q/%q", quantity, unit, record.Occurrence.Condition().Basis())
 	}
 	if occurrences, envelopes := countChargeRows(t, db); occurrences != 1 || envelopes != 1 {
 		t.Fatalf("首登后发生项 %d 行、信封 %d 封，want 1 / 1", occurrences, envelopes)
 	}
 
-	replay, err := registrar.Register(t.Context(), chargeCommandFor(t, "v1"))
+	replay, err := registrar.Register(t.Context(), chargeCommandFor(t, chargePerPieceVersion))
 	if err != nil || replay.Outcome() != tfapp.ChargeOccurrenceExisting {
 		t.Fatalf("重放：%q %v", replay.Outcome(), err)
 	}
@@ -261,7 +303,7 @@ func TestAnUndecidedChargeOccurrenceRollsBackTheWholeTransaction(t *testing.T) {
 			Clock:            systemClock{},
 		}),
 	}
-	result, err := registrar.Register(t.Context(), chargeCommandFor(t, "v1"))
+	result, err := registrar.Register(t.Context(), chargeCommandFor(t, chargePerPieceVersion))
 	if err != nil || result.Outcome() != tfapp.ChargeOccurrenceUndecided || result.Detail() != tfapp.OccurrenceHandoffUnavailable {
 		t.Fatalf("交意图失败：%q %q %v", result.Outcome(), result.Detail(), err)
 	}
