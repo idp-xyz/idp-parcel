@@ -173,14 +173,27 @@ func newConsolidateFixture(t *testing.T) *consolidateFixture {
 		containment: &containmentIndexDouble{store: store},
 		downstream:  &snapshotDownstreamDouble{},
 	}
-	fixture.handler = application.NewConsolidateParcelsHandler(application.ConsolidateParcelsDeps{
-		Store:       store,
+	fixture.handler = mustConsolidateHandler(t, consolidateDeps(fixture))
+	return fixture
+}
+
+func consolidateDeps(fixture *consolidateFixture) application.ConsolidateParcelsDeps {
+	return application.ConsolidateParcelsDeps{
+		Store:       fixture.store,
 		Facts:       fixture.facts,
 		Containment: fixture.containment,
 		Downstream:  fixture.downstream,
 		Clock:       fixedClock{at: consolidationAt},
-	})
-	return fixture
+	}
+}
+
+func mustConsolidateHandler(t *testing.T, deps application.ConsolidateParcelsDeps) *application.ConsolidateParcelsHandler {
+	t.Helper()
+	handler, err := application.NewConsolidateParcelsHandler(deps)
+	if err != nil {
+		t.Fatalf("assemble: %v", err)
+	}
+	return handler
 }
 
 // workSource 造一份完整的来源表达。业务时间由调用方给，六口各带各的现场时刻——这正是
@@ -582,6 +595,25 @@ func TestConsolidationOwnStoreFailuresFormNoAnswer(t *testing.T) {
 			}
 			if len(fixture.downstream.intents) != intents {
 				t.Fatal("没形成答案却交了快照意图")
+			}
+		})
+	}
+}
+
+// Covers: 装配缺依赖在构造期拒（ADR-0186 决定三的同形）——留到运行期，缺件要到第一次集运作业时才炸。
+func TestConsolidationAssemblyRefusesMissingDependencies(t *testing.T) {
+	for name, drop := range map[string]func(*application.ConsolidateParcelsDeps){
+		"单元库":      func(deps *application.ConsolidateParcelsDeps) { deps.Store = nil },
+		"来源事实登记":   func(deps *application.ConsolidateParcelsDeps) { deps.Facts = nil },
+		"包含索引":     func(deps *application.ConsolidateParcelsDeps) { deps.Containment = nil },
+		"封装快照意图交付": func(deps *application.ConsolidateParcelsDeps) { deps.Downstream = nil },
+		"时钟":       func(deps *application.ConsolidateParcelsDeps) { deps.Clock = nil },
+	} {
+		t.Run(name, func(t *testing.T) {
+			deps := consolidateDeps(newConsolidateFixture(t))
+			drop(&deps)
+			if handler, err := application.NewConsolidateParcelsHandler(deps); err == nil || handler != nil {
+				t.Fatalf("缺%s仍装配成功", name)
 			}
 		})
 	}

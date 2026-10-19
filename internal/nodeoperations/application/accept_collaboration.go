@@ -112,6 +112,7 @@ func (result CollaborationResult) HandoffReference() string {
 	return result.handoff
 }
 
+// AcceptCollaborationDeps 是承接编排的全部依赖，缺任一个构造即拒。
 type AcceptCollaborationDeps struct {
 	Acceptances ports.CollaborationAcceptanceStore
 	Facts       ports.ExecutionFactStore
@@ -124,8 +125,21 @@ type AcceptCollaborationHandler struct {
 	deps AcceptCollaborationDeps
 }
 
-func NewAcceptCollaborationHandler(deps AcceptCollaborationDeps) *AcceptCollaborationHandler {
-	return &AcceptCollaborationHandler{deps: deps}
+// NewAcceptCollaborationHandler 在构造期拒缺依赖的装配：留到运行期，缺件要到第一次承接或登记时才露出来（ADR-0186）。
+func NewAcceptCollaborationHandler(deps AcceptCollaborationDeps) (*AcceptCollaborationHandler, error) {
+	switch {
+	case deps.Acceptances == nil:
+		return nil, errors.New("node operations: collaboration needs an acceptance store")
+	case deps.Facts == nil:
+		return nil, errors.New("node operations: collaboration needs an execution fact store")
+	case deps.Acknowledge == nil:
+		return nil, errors.New("node operations: collaboration needs an acceptance handoff")
+	case deps.Executions == nil:
+		return nil, errors.New("node operations: collaboration needs an execution fact handoff")
+	case deps.Clock == nil:
+		return nil, errors.New("node operations: collaboration needs a clock")
+	}
+	return &AcceptCollaborationHandler{deps: deps}, nil
 }
 
 // Accept 把一次承接决定推进到提交：受理（决定三格由领域把门）→ 幂等按（租户+事项）

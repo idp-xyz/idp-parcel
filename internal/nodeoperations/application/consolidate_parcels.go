@@ -156,6 +156,7 @@ func (result ConsolidationResult) DirectionalBasis() domain.DirectionalBasisReco
 	return result.basis
 }
 
+// ConsolidateParcelsDeps 是集运编排的全部依赖，缺任一个构造即拒。
 type ConsolidateParcelsDeps struct {
 	Store       ports.ConsolidationStore
 	Facts       ports.ConsolidationFactStore
@@ -168,8 +169,21 @@ type ConsolidateParcelsHandler struct {
 	deps ConsolidateParcelsDeps
 }
 
-func NewConsolidateParcelsHandler(deps ConsolidateParcelsDeps) *ConsolidateParcelsHandler {
-	return &ConsolidateParcelsHandler{deps: deps}
+// NewConsolidateParcelsHandler 在构造期拒缺依赖的装配：留到运行期，缺件要到第一次集运作业时才露出来（ADR-0186）。
+func NewConsolidateParcelsHandler(deps ConsolidateParcelsDeps) (*ConsolidateParcelsHandler, error) {
+	switch {
+	case deps.Store == nil:
+		return nil, errors.New("node operations: consolidation needs a unit store")
+	case deps.Facts == nil:
+		return nil, errors.New("node operations: consolidation needs a fact store")
+	case deps.Containment == nil:
+		return nil, errors.New("node operations: consolidation needs a containment index")
+	case deps.Downstream == nil:
+		return nil, errors.New("node operations: consolidation needs a sealed snapshot handoff")
+	case deps.Clock == nil:
+		return nil, errors.New("node operations: consolidation needs a clock")
+	}
+	return &ConsolidateParcelsHandler{deps: deps}, nil
 }
 
 // Open 开启集运单元实例：同 ID 重复开启返原实例（载具复用创建新实例是新 ID 的事）。

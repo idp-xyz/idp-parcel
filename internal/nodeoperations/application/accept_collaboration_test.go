@@ -168,14 +168,22 @@ func newCollabFixture(t *testing.T) *collabFixture {
 		acknowledge: &acceptanceHandoffDouble{},
 		executions:  &factHandoffDouble{},
 	}
-	fixture.handler = application.NewAcceptCollaborationHandler(application.AcceptCollaborationDeps{
+	handler, err := application.NewAcceptCollaborationHandler(collabDeps(fixture))
+	if err != nil {
+		t.Fatalf("assemble: %v", err)
+	}
+	fixture.handler = handler
+	return fixture
+}
+
+func collabDeps(fixture *collabFixture) application.AcceptCollaborationDeps {
+	return application.AcceptCollaborationDeps{
 		Acceptances: fixture.acceptances,
 		Facts:       fixture.facts,
 		Acknowledge: fixture.acknowledge,
 		Executions:  fixture.executions,
 		Clock:       collabClock{at: collabRecordedAt},
-	})
-	return fixture
+	}
 }
 
 func collabTenant(t *testing.T) domain.TenantID {
@@ -506,6 +514,25 @@ func TestCollaborationOwnStoreFailuresFormNoAnswer(t *testing.T) {
 			}
 			if len(fixture.acknowledge.intents) != acknowledged || len(fixture.executions.intents) != executed {
 				t.Fatal("没形成答案却交了意图")
+			}
+		})
+	}
+}
+
+// Covers: 装配缺依赖在构造期拒（ADR-0186 决定三的同形）——留到运行期，缺件要到第一次承接或登记时才炸。
+func TestCollaborationAssemblyRefusesMissingDependencies(t *testing.T) {
+	for name, drop := range map[string]func(*application.AcceptCollaborationDeps){
+		"承接册":      func(deps *application.AcceptCollaborationDeps) { deps.Acceptances = nil },
+		"执行事实册":    func(deps *application.AcceptCollaborationDeps) { deps.Facts = nil },
+		"承接意图交付":   func(deps *application.AcceptCollaborationDeps) { deps.Acknowledge = nil },
+		"执行事实意图交付": func(deps *application.AcceptCollaborationDeps) { deps.Executions = nil },
+		"时钟":       func(deps *application.AcceptCollaborationDeps) { deps.Clock = nil },
+	} {
+		t.Run(name, func(t *testing.T) {
+			deps := collabDeps(newCollabFixture(t))
+			drop(&deps)
+			if handler, err := application.NewAcceptCollaborationHandler(deps); err == nil || handler != nil {
+				t.Fatalf("缺%s仍装配成功", name)
 			}
 		})
 	}

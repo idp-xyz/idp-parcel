@@ -307,9 +307,12 @@ func TestFrontlineConsolidationRowFormsNoAnswerWhenItsOwnRegisterFails(t *testin
 		t.Fatalf("构造封装快照意图交付：%v", err)
 	}
 	broken := healthy
-	broken.handler = application.NewConsolidateParcelsHandler(application.ConsolidateParcelsDeps{
+	broken.handler, err = application.NewConsolidateParcelsHandler(application.ConsolidateParcelsDeps{
 		Store: units, Facts: factSaveFails{facts}, Containment: units, Downstream: downstream, Clock: clock,
 	})
+	if err != nil {
+		t.Fatalf("装配写失败的集运编排：%v", err)
+	}
 
 	opened := importConsolidationTemplate(t, healthy, []byte(consolidationHeader+
 		consolidationLineFor("SYN-WORK-1", "OPEN_UNIT", "SYN-CU-1", "SYN-CAGE-1", "", "", "")))

@@ -48,13 +48,16 @@ func buildConsolidationImporter(db *bentopg.DB, clock ports.Clock) (consolidatio
 	if err != nil {
 		return consolidationImporter{}, fmt.Errorf("封装快照意图交付：%w", err)
 	}
-	handler := application.NewConsolidateParcelsHandler(application.ConsolidateParcelsDeps{
+	handler, err := application.NewConsolidateParcelsHandler(application.ConsolidateParcelsDeps{
 		Store:       units,
 		Facts:       facts,
 		Containment: units,
 		Downstream:  downstream,
 		Clock:       clock,
 	})
+	if err != nil {
+		return consolidationImporter{}, fmt.Errorf("集运编排：%w", err)
+	}
 	judge, err := buildDirectionalBasisJudge(db, clock)
 	if err != nil {
 		return consolidationImporter{}, err

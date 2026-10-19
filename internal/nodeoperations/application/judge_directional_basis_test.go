@@ -385,7 +385,7 @@ func TestAddMemberRaceLoserAnswersWithTheWinnersBasis(t *testing.T) {
 		Key: key, ContentDigest: digest, Action: domain.AddMemberAction, Unit: command.Unit, Member: command.Member,
 		DirectionalBasis: winner,
 	}}
-	fixture.handler = application.NewConsolidateParcelsHandler(application.ConsolidateParcelsDeps{
+	fixture.handler = mustConsolidateHandler(t, application.ConsolidateParcelsDeps{
 		Store:       fixture.store,
 		Facts:       racing,
 		Containment: &containmentIndexDouble{store: fixture.store},
@@ -456,7 +456,7 @@ func TestAddMemberRaceLoserWithDifferentContentAnswersSourceConflict(t *testing.
 		Key: key, ContentDigest: otherDigest, Action: domain.AddMemberAction, Unit: command.Unit,
 		Member: handlingUnit(t, "hu-other"), DirectionalBasis: judgedBasis(t),
 	}}
-	fixture.handler = application.NewConsolidateParcelsHandler(application.ConsolidateParcelsDeps{
+	fixture.handler = mustConsolidateHandler(t, application.ConsolidateParcelsDeps{
 		Store:       fixture.store,
 		Facts:       racing,
 		Containment: &containmentIndexDouble{store: fixture.store},
