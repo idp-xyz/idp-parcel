@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 
 	bentoapp "go.idp.xyz/idp-bento-go/application"
@@ -37,14 +38,25 @@ func (registration transactionalNodeCustomsZoneRegistration) Handle(
 // 登记，票 demo-chain-gaps/32）在开自己的写事务之前同步问——两笔事务各管各的，准入判断记下了而消费方那笔回滚，留下的是一次
 // 如实发生过的询问，不是一条悬空事实。
 type transactionalActionAdmissionJudge struct {
+	db         *bentopg.DB
 	transactor bentoapp.Transactor
 	inner      *customsapp.JudgeActionAdmissionHandler
 }
+
+// errActionAdmissionInsideCallerTransaction 拒掉在调用方事务里的询问。嵌进去，判断记录就随调用方那笔回滚，
+// 「当时凭什么这么答」查不回来；读不动时本壳为回滚交出的哨兵还会把调用方那笔标成只能回滚，消费方随后保存
+// 自己的事实时才在提交上失败。消费方在写事务之前问（tf-chain-plan「05 移动事实与出发门禁」D05-2），这道门
+// 让接错的那一次在第一条用例里就红。
+var errActionAdmissionInsideCallerTransaction = errors.New(
+	"parcel-api: action admission runs in its own transaction; ask before opening the caller's write transaction")
 
 func (judge transactionalActionAdmissionJudge) Handle(
 	ctx context.Context,
 	command customsapp.JudgeActionAdmissionCommand,
 ) (customsapp.JudgeActionAdmissionResult, error) {
+	if _, err := judge.db.RequireExecutor(ctx); !errors.Is(err, bentopg.ErrTransactionRequired) {
+		return customsapp.JudgeActionAdmissionResult{}, errActionAdmissionInsideCallerTransaction
+	}
 	var result customsapp.JudgeActionAdmissionResult
 	err := judge.transactor.WithinTransaction(ctx, func(txCtx context.Context) error {
 		judged, judgeErr := judge.inner.Handle(txCtx, command)
@@ -52,13 +64,24 @@ func (judge transactionalActionAdmissionJudge) Handle(
 			return judgeErr
 		}
 		result = judged
+		if judged.Outcome() == customsapp.ActionAdmissionUnreadable {
+			return errActionAdmissionUnreadable
+		}
 		return nil
 	})
+	if errors.Is(err, errActionAdmissionUnreadable) {
+		return result, nil
+	}
 	if err != nil {
 		return customsapp.JudgeActionAdmissionResult{}, err
 	}
 	return result, nil
 }
+
+// errActionAdmissionUnreadable 只在本壳里流转：编排答读不动时回调交它，逼事务回滚而不提交。读口在事务里报了 SQL
+// 错误，PostgreSQL 就把整笔事务置为 aborted，此时提交只换回提交错误，编排指名的那一口随之丢掉；读不动也没有
+// 任何东西要落库。回滚之后认出它，交回编排那一份答复。
+var errActionAdmissionUnreadable = errors.New("parcel-api: action admission unreadable; transaction rolled back")
 
 // customsAdmissionOrchestration 收拢本文件装的两格。actionAdmission 今天只有装配测试在用：它的生产消费者是运输履约
 // 出发登记的消费侧端口（票 demo-chain-gaps/32），那一格接上之前，这里先把判断编排连同真库依赖装齐、在进程启动时
@@ -126,6 +149,6 @@ func buildCustomsAdmissionOrchestration(db *bentopg.DB) (customsAdmissionOrchest
 			inner: customsapp.NewRegisterNodeCustomsZoneHandler(
 				customsapp.RegisterNodeCustomsZoneDeps{Registry: zoneRegistry, View: zoneView}),
 		},
-		actionAdmission: transactionalActionAdmissionJudge{transactor: transactor, inner: judge},
+		actionAdmission: transactionalActionAdmissionJudge{db: db, transactor: transactor, inner: judge},
 	}, nil
 }

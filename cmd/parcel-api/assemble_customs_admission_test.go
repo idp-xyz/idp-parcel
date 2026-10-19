@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"strings"
@@ -118,5 +119,80 @@ func TestCustomsAdmissionOrchestrationRunsOnRealPostgres(t *testing.T) {
 	_, replayID, _ := replay.Judgement()
 	if err != nil || replay.Outcome() != customsapp.ActionAdmissionExisting || replayID != id {
 		t.Fatalf("重放：%s / %s / %v", replay.Outcome(), replayID, err)
+	}
+}
+
+// 读口在事务里报 SQL 错误时，PostgreSQL 把整笔事务置为 aborted：答复若照常提交，只会换回提交错误，「读不动：
+// 指名哪一口」就丢了。这里让限制册在真库上读不到（改表名，前两口照常读通），钉住消费方拿到的仍是具名那一口。
+func TestActionAdmissionNamesTheUnreadablePortWhenTheTransactionIsAborted(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	orchestration, err := buildCustomsAdmissionOrchestration(db)
+	if err != nil {
+		t.Fatalf("装配：%v", err)
+	}
+	ctx := t.Context()
+	if _, err := pool.Exec(ctx,
+		`ALTER TABLE customs_compliance.regulatory_restriction RENAME TO regulatory_restriction_unreachable`); err != nil {
+		t.Fatalf("让限制册读不到：%v", err)
+	}
+	tenant, _ := customsdomain.NewTenantID("SYN-TENANT-01")
+	from, _ := customsdomain.NewNetworkNodeReference("SYN-NODE-SHA-HUB")
+	to, _ := customsdomain.NewNetworkNodeReference("SYN-NODE-SZX-GATE")
+	intent, err := customsdomain.NewDepartureIntent(from, to)
+	if err != nil {
+		t.Fatalf("构造出发意图：%v", err)
+	}
+	object, _ := customsdomain.NewDeclaredParcelReference("SYN-PCLREF-ABORTED")
+
+	result, err := orchestration.actionAdmission.Handle(ctx, customsapp.JudgeActionAdmissionCommand{
+		TenantID: tenant, Object: object, Intent: intent, At: time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC),
+	})
+	if err != nil {
+		t.Fatalf("读不动要作为答复交回，不是 Go error：%v", err)
+	}
+	if result.Outcome() != customsapp.ActionAdmissionUnreadable ||
+		result.UnreadableReason() != customsapp.RestrictionViewUnavailable {
+		t.Fatalf("= %s / %s，要读不动 / %s", result.Outcome(), result.UnreadableReason(), customsapp.RestrictionViewUnavailable)
+	}
+}
+
+// 准入判断自带事务：在调用方的事务里问，判断记录会跟着调用方回滚，读不动时还会把调用方那笔标成只能回滚——
+// 壳在开事务前拒掉，消费方第一次接线就看得见。
+func TestActionAdmissionRefusesToRunInsideTheCallersTransaction(t *testing.T) {
+	pool := pgtest.Pool(t)
+	db, err := bentopg.NewDB(pool, bentopg.WithSchema(migrate.SchemaBento))
+	if err != nil {
+		t.Fatalf("构造框架 DB：%v", err)
+	}
+	orchestration, err := buildCustomsAdmissionOrchestration(db)
+	if err != nil {
+		t.Fatalf("装配：%v", err)
+	}
+	tenant, _ := customsdomain.NewTenantID("SYN-TENANT-01")
+	from, _ := customsdomain.NewNetworkNodeReference("SYN-NODE-SHA-HUB")
+	to, _ := customsdomain.NewNetworkNodeReference("SYN-NODE-SZX-GATE")
+	intent, err := customsdomain.NewDepartureIntent(from, to)
+	if err != nil {
+		t.Fatalf("构造出发意图：%v", err)
+	}
+	object, _ := customsdomain.NewDeclaredParcelReference("SYN-PCLREF-NESTED")
+	command := customsapp.JudgeActionAdmissionCommand{
+		TenantID: tenant, Object: object, Intent: intent, At: time.Date(2026, 8, 20, 10, 0, 0, 0, time.UTC),
+	}
+
+	var inner error
+	outer := db.Transactor().WithinTransaction(t.Context(), func(txCtx context.Context) error {
+		_, inner = orchestration.actionAdmission.Handle(txCtx, command)
+		return nil
+	})
+	if outer != nil {
+		t.Fatalf("调用方那笔不该被准入判断拖坏：%v", outer)
+	}
+	if !errors.Is(inner, errActionAdmissionInsideCallerTransaction) {
+		t.Fatalf("在调用方事务里问要拒：%v", inner)
 	}
 }
