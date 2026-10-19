@@ -1,7 +1,7 @@
 # 01 节点收寄没有保全交付来源：身份核对读不动时只能不形成答案，待识别实物无从重核，拒收与仅扫描只留下摘要
 
 Category: enhancement
-Status: ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 2 研判；分四期）
+Status: in-progress——2026-10-19 会话 `idp-parcel-9b` 认领（文档与拆票；ADR 占号 0199），分支 `claude-nrs01`。此前 ready-for-agent——2026-10-18 会话 `idp-parcel-9b` 立并代决（票 26 序 2 研判；分四期）
 Blocked by: operator-channel/29 已进 main
 父票：[operator-channel/26](../../operator-channel/issues/26-non-author-review-backlog-for-claude-code-landings.md)
 出处：研判簇 C1 派生草案（来源保全与身份未核对）
