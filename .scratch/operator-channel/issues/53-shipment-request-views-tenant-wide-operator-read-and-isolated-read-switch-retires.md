@@ -1,4 +1,4 @@
-# 36 委托查阅三口要一个运营侧整租户的读面，随后隔离读开关整体退场
+# 53 委托查阅三口要一个运营侧整租户的读面，随后隔离读开关整体退场
 
 Category: enhancement
 Status: needs-triage——2026-10-16 Claude Code 会话立（票 [35](./35-remaining-operations-read-faces-take-operator-intake.md) 受众核对：委托查阅三口受众是运营，但读口作用域按客户账户切，操作者信封给不出，本票接）。

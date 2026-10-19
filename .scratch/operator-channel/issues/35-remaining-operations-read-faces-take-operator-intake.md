@@ -41,7 +41,7 @@ Blocked by: 无
 
 | 变量 | 口 | 受众 | 结论 |
 |---|---|---|---|
-| `shipmentViewsIntake` | `/shipment-request-views`、`/acceptance-review-queue`、`/authorized-disposition-queue` | 租户运营：管理台委托查阅、接受前复核、授权处置三页 | **不换，留隔离读。** 受众是运营，卡在作用域形状上：三口的读口收 `AuthorizedQueryScope`，按可见客户账户切，至少一个账户（CONTEXT「授权查询作用域」）。操作者信封只给得出租户。运营决定口的可见范围是整个租户，那一侧另立了寻址读口，理由写在 `ports.OperatorDecisionTargets` 头注：「拿一组账户去凑等于造一个作用域」。查阅口没有整租户的形状，要补就得改读口，超出本票「不改读口」。另立 [36](./36-shipment-request-views-tenant-wide-operator-read-and-isolated-read-switch-retires.md) |
+| `shipmentViewsIntake` | `/shipment-request-views`、`/acceptance-review-queue`、`/authorized-disposition-queue` | 租户运营：管理台委托查阅、接受前复核、授权处置三页 | **不换，留隔离读。** 受众是运营，卡在作用域形状上：三口的读口收 `AuthorizedQueryScope`，按可见客户账户切，至少一个账户（CONTEXT「授权查询作用域」）。操作者信封只给得出租户。运营决定口的可见范围是整个租户，那一侧另立了寻址读口，理由写在 `ports.OperatorDecisionTargets` 头注：「拿一组账户去凑等于造一个作用域」。查阅口没有整租户的形状，要补就得改读口，超出本票「不改读口」。另立 [53](./53-shipment-request-views-tenant-wide-operator-read-and-isolated-read-switch-retires.md) |
 | `labelTransactionIntake` | `/label-transactions` | 租户运营：面单交易页 | 换。作用域只有租户维（ADR-0084 决定七），信封给得出 |
 | `channelSelectionDecisionIntake` | `/channel-selection-decisions` | 租户运营：渠道择优页，列出等人工裁决的并列冲突 | 换。只有租户维 |
 | `nodeOperationsCatalogueIntake` | `/node-operations-records`（收寄、待识别实物、集运单元三册） | 租户运营：节点作业查阅页。端点头注写明它是治理查阅面，不是一线作业端（ADR-0021） | 换。no-directional-basis/01 若再加「集运成员关系」册，同端点、同变量 |
@@ -53,7 +53,7 @@ Blocked by: 无
 
 受众是货主客户的口：这九只变量上一口也没有。
 
-隔离读开关能不能整体退场：不能。委托查阅三口还挂在它上面。退场归 36。
+隔离读开关能不能整体退场：不能。委托查阅三口还挂在它上面。退场归 53。
 
 ## 不做
 
