@@ -106,6 +106,13 @@ func (stub unreachableReviewCatalogue) ListCarrierMasterDocuments(
 	return nil, nil
 }
 
+func (stub unreachableReviewCatalogue) ListTransportPreparations(
+	context.Context, domain.TenantID, int,
+) ([]ports.TransportPreparationCatalogueRow, error) {
+	stub.refuse("transport preparation")
+	return nil, nil
+}
+
 // stubReviewCatalogue 是各本册子的读口替身，记下读口收到的键。
 type stubReviewCatalogue struct {
 	schedules       []ports.TransportScheduleCatalogueRow
@@ -114,6 +121,7 @@ type stubReviewCatalogue struct {
 	handovers       []ports.TransportHandoverCatalogueRow
 	deliveries      []ports.EffectiveDeliveryCatalogueRow
 	masterDocuments []ports.CarrierMasterDocumentCatalogueRow
+	preparations    []ports.TransportPreparationCatalogueRow
 	err             error
 
 	gotTenant string
@@ -162,6 +170,13 @@ func (stub *stubReviewCatalogue) ListCarrierMasterDocuments(
 	return stub.masterDocuments, stub.err
 }
 
+func (stub *stubReviewCatalogue) ListTransportPreparations(
+	_ context.Context, tenant domain.TenantID, limit int,
+) ([]ports.TransportPreparationCatalogueRow, error) {
+	stub.gotTenant, stub.gotLimit = tenant.String(), limit
+	return stub.preparations, stub.err
+}
+
 func recordsEndpoint(register *stubReviewCatalogue) http.Handler {
 	return tfhttp.NewQueryTransportFulfillmentRecordsEndpoint(grantedIntake(), register)
 }
@@ -190,7 +205,7 @@ func arrayAt(t *testing.T, response *httptest.ResponseRecorder, key string) stri
 
 var fulfillmentRegistries = []string{
 	"transport-schedule", "transport-schedule-template", "capacity-pool", "transport-handover", "effective-delivery",
-	"carrier-master-document",
+	"carrier-master-document", "transport-preparation",
 }
 
 const fulfillmentTarget = "/transport-fulfillment-records?registry=transport-schedule"
@@ -689,7 +704,7 @@ func TestCarrierMasterDocumentRegistryTranscribesVersionChain(t *testing.T) {
 }
 
 // Covers: ADR-0077 Decision 四 — 空登记册是内容不是错误：200 + 空数组（不是 null），
-// 五本册子一致。写入方是各命令端点的真渠道，未配置时册子就是空的，读面不代答续办。
+// 各本册子一致。写入方是各命令端点的真渠道，未配置时册子就是空的，读面不代答续办。
 // 总单一格自 ADR-0113 立册起属这一族：空册说的是「登记册为空」，不再是「无处可登」。
 func TestEmptyFulfillmentRegistersAnswerEmptyArrays(t *testing.T) {
 	for registry, key := range map[string]string{
@@ -698,6 +713,7 @@ func TestEmptyFulfillmentRegistersAnswerEmptyArrays(t *testing.T) {
 		"transport-handover":      "handovers",
 		"effective-delivery":      "deliveries",
 		"carrier-master-document": "masterDocuments",
+		"transport-preparation":   "preparations",
 	} {
 		t.Run(registry, func(t *testing.T) {
 			register := &stubReviewCatalogue{}
@@ -710,5 +726,98 @@ func TestEmptyFulfillmentRegistersAnswerEmptyArrays(t *testing.T) {
 				t.Fatalf("%s = %s, want []", key, raw)
 			}
 		})
+	}
+}
+
+// Covers: ADR-0201 决定七——准备结果册逐格转写：段、对象、规则、结论、方向与窗口、需求量快照、选中的班次与逐候选依据
+// 照写下的样子透出；可用量按十进制串；没选中的结论不带 selectedSchedule 键；换不成池单位的需求量不带 requested 键。
+func TestTransportPreparationRegistryTranscribesRows(t *testing.T) {
+	judgedAt := catalogueBaseAt.Add(time.Hour)
+	register := &stubReviewCatalogue{
+		preparations: []ports.TransportPreparationCatalogueRow{
+			{
+				PlannedLeg: "RPV-1#2", Object: "SYN-PARCEL-1", Rule: "TF-PREPARE/1", Outcome: "OPPORTUNITY_PREPARED",
+				Connection: "SYN-CONN-1", FromNode: "SYN-NODE-A", ToNode: "SYN-NODE-B",
+				WindowStart: catalogueBaseAt, WindowEnd: catalogueBaseAt.Add(6 * time.Hour),
+				DemandSource: "declaration", DemandAnchor: "baseline",
+				Demand:   []ports.PreparationDemandRow{{Dimension: "WEIGHT", Amount: "1.50", Unit: "KG"}},
+				Selected: "SYN-TPL-1/2026-10-21",
+				Candidates: []ports.PreparationCandidateRow{{
+					Schedule: "SYN-TPL-1/2026-10-21", Version: 0,
+					DepartsAt: catalogueBaseAt.Add(time.Hour), ArrivesAt: catalogueBaseAt.Add(3 * time.Hour),
+					Verdict: "CAPACITY_SUFFICIENT",
+					Pools: []ports.PreparationPoolRow{{
+						Pool: "SYN-TPL-1/2026-10-21/WEIGHT", Dimension: "WEIGHT", Unit: "KG",
+						Available: 5000, Requested: "1.5", Verdict: "SUFFICIENT",
+					}},
+				}},
+				JudgedAt: judgedAt, RecordedAt: judgedAt,
+			},
+			{
+				PlannedLeg: "RPV-1#3", Object: "SYN-PARCEL-1", Rule: "TF-PREPARE/1", Outcome: "CAPACITY_UNCONFIRMED",
+				Connection: "SYN-CONN-2", FromNode: "SYN-NODE-B", ToNode: "SYN-NODE-C",
+				WindowStart: catalogueBaseAt, WindowEnd: catalogueBaseAt.Add(time.Hour),
+				DemandSource: "declaration",
+				Demand:       []ports.PreparationDemandRow{},
+				Candidates: []ports.PreparationCandidateRow{{
+					Schedule: "SYN-ADHOC-1", Version: 1,
+					DepartsAt: catalogueBaseAt, ArrivesAt: catalogueBaseAt.Add(time.Hour),
+					Verdict: "CAPACITY_UNCONFIRMED",
+					Pools: []ports.PreparationPoolRow{{
+						Pool: "SYN-ADHOC-1/WEIGHT", Dimension: "WEIGHT", Unit: "kg", Available: 10, Verdict: "UNIT_NOT_CONVERTIBLE",
+					}},
+				}},
+				JudgedAt: judgedAt, RecordedAt: judgedAt,
+			},
+		},
+	}
+	response := serveGet(recordsEndpoint(register), "/transport-fulfillment-records?registry=transport-preparation")
+
+	if response.Code != http.StatusOK {
+		t.Fatalf("status = %d body = %s", response.Code, response.Body.String())
+	}
+	if register.gotTenant != "TENANT-1" || register.gotLimit != 25 {
+		t.Fatalf("读口收到的键走样：tenant=%q limit=%d", register.gotTenant, register.gotLimit)
+	}
+	var body struct {
+		Outcome      string                       `json:"outcome"`
+		Preparations []map[string]json.RawMessage `json:"preparations"`
+	}
+	if err := json.Unmarshal(response.Body.Bytes(), &body); err != nil {
+		t.Fatalf("decode %s: %v", response.Body.Bytes(), err)
+	}
+	if body.Outcome != "TRANSPORT_PREPARATIONS_LISTED" || len(body.Preparations) != 2 {
+		t.Fatalf("响应走样：%s", response.Body.String())
+	}
+	prepared := body.Preparations[0]
+	if string(prepared["plannedLeg"]) != `"RPV-1#2"` ||
+		string(prepared["object"]) != `"SYN-PARCEL-1"` ||
+		string(prepared["rule"]) != `"TF-PREPARE/1"` ||
+		string(prepared["outcome"]) != `"OPPORTUNITY_PREPARED"` ||
+		string(prepared["connection"]) != `"SYN-CONN-1"` ||
+		string(prepared["demandSource"]) != `"declaration"` ||
+		string(prepared["demandAnchor"]) != `"baseline"` ||
+		string(prepared["selectedSchedule"]) != `"SYN-TPL-1/2026-10-21"` ||
+		string(prepared["demand"]) != `[{"dimension":"WEIGHT","amount":"1.50","unit":"KG"}]` ||
+		string(prepared["candidates"]) != `[{"schedule":"SYN-TPL-1/2026-10-21","version":0,`+
+			`"departsAt":"`+catalogueBaseAt.Add(time.Hour).Format(time.RFC3339Nano)+`",`+
+			`"arrivesAt":"`+catalogueBaseAt.Add(3*time.Hour).Format(time.RFC3339Nano)+`",`+
+			`"verdict":"CAPACITY_SUFFICIENT","pools":[{"pool":"SYN-TPL-1/2026-10-21/WEIGHT","dimension":"WEIGHT",`+
+			`"unit":"KG","available":"5000","requested":"1.5","verdict":"SUFFICIENT"}]}]` {
+		t.Fatalf("已准备一行转写走样：%s", response.Body.String())
+	}
+	unconfirmed := body.Preparations[1]
+	for _, key := range []string{"selectedSchedule", "demandAnchor"} {
+		if _, present := unconfirmed[key]; present {
+			t.Fatalf("待确认一行不该带 %q 键：%s", key, response.Body.String())
+		}
+	}
+	if string(unconfirmed["demand"]) != `[]` ||
+		string(unconfirmed["candidates"]) != `[{"schedule":"SYN-ADHOC-1","version":1,`+
+			`"departsAt":"`+catalogueBaseAt.Format(time.RFC3339Nano)+`",`+
+			`"arrivesAt":"`+catalogueBaseAt.Add(time.Hour).Format(time.RFC3339Nano)+`",`+
+			`"verdict":"CAPACITY_UNCONFIRMED","pools":[{"pool":"SYN-ADHOC-1/WEIGHT","dimension":"WEIGHT",`+
+			`"unit":"kg","available":"10","verdict":"UNIT_NOT_CONVERTIBLE"}]}]` {
+		t.Fatalf("待确认一行转写走样：%s", response.Body.String())
 	}
 }

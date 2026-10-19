@@ -454,6 +454,14 @@ func (unwiredTransportFulfillmentRecords) ListCarrierMasterDocuments(
 	return nil, errOrchestrationNotWired
 }
 
+func (unwiredTransportFulfillmentRecords) ListTransportPreparations(
+	context.Context,
+	tfdomain.TenantID,
+	int,
+) ([]tfports.TransportPreparationCatalogueRow, error) {
+	return nil, errOrchestrationNotWired
+}
+
 // unwiredHandoverScopeSummary 是交接范围汇总读用例的占位，方法表与
 // tfhttp.HandoverScopeSummarizer 对上（票 admin-web-audit-followups/06）。
 //

@@ -12,8 +12,8 @@ import (
 // 共接口——扩写侧接口会拆全部写侧测试替身，伴生读端口另立（判据同 collectionremittance
 // CodSubledgerCatalogueRow 那句）。
 //
-// 上列的是**检索列面**的照实转写：班次、周期安排、容量池、权威交接判断、有效交付与
-// 总单各照登记行转写，容量四量按预占子表求和派生、总单的关联数按关联子表计数派生——
+// 上列的是**检索列面**的照实转写：班次、周期安排、容量池、权威交接判断、有效交付、
+// 总单与运输准备结果各照登记行转写，容量四量按预占子表求和派生、总单的关联数按关联子表计数派生——
 // 派生是求和与计数不是判断（判据同代收分户账六位置余额）。总单一格在 ADR-0113 立册
 // 之前刻意没有——没有表就没有读法，造一个恒空方法会把「无处可登」演成「登记册为空」
 // （票 05 Comments 记明）；立册之后空册从此是「登记册为空」，周期安排一格随 ADR-0201
@@ -155,6 +155,55 @@ type CarrierMasterDocumentCatalogueRow struct {
 	RecordedAt       time.Time
 }
 
+// TransportPreparationCatalogueRow 是运输准备结果册上列的一行（ADR-0201 决定七）：一段计划履约段对一个载运对象按一个
+// 规则版本的那一份结果，照行转写——段的方向与窗口、需求量快照、结论、选中的班次与逐候选依据都是判断当时写下的，
+// 本行不按此刻的班次与池重算。只插不改，所以没有版本链要展开。
+type TransportPreparationCatalogueRow struct {
+	PlannedLeg   string
+	Object       string
+	Rule         string
+	Outcome      string
+	Connection   string
+	FromNode     string
+	ToNode       string
+	WindowStart  time.Time
+	WindowEnd    time.Time
+	DemandSource string
+	DemandAnchor string
+	Demand       []PreparationDemandRow
+	Selected     string
+	Candidates   []PreparationCandidateRow
+	JudgedAt     time.Time
+	RecordedAt   time.Time
+}
+
+// PreparationDemandRow 是需求量快照的一维。
+type PreparationDemandRow struct {
+	Dimension string
+	Amount    string
+	Unit      string
+}
+
+// PreparationCandidateRow 是一个候选班次的依据行。Version 为 0 即这一班只在评估时物化、没有登记。
+type PreparationCandidateRow struct {
+	Schedule  string
+	Version   int
+	DepartsAt time.Time
+	ArrivesAt time.Time
+	Verdict   string
+	Pools     []PreparationPoolRow
+}
+
+// PreparationPoolRow 是一个池在一个候选上的依据：判断时点的可用量与换成池单位的需求量，换不成时 Requested 为空串。
+type PreparationPoolRow struct {
+	Pool      string
+	Dimension string
+	Unit      string
+	Available int64
+	Requested string
+	Verdict   string
+}
+
 // ReviewCatalogueRead 是运输履约查阅页的伴生列表读端口。
 type ReviewCatalogueRead interface {
 	ListTransportSchedules(
@@ -187,4 +236,9 @@ type ReviewCatalogueRead interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]CarrierMasterDocumentCatalogueRow, error)
+	ListTransportPreparations(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]TransportPreparationCatalogueRow, error)
 }

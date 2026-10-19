@@ -9,8 +9,8 @@ import (
 	"go.idp.xyz/idp-parcel/internal/transportfulfillment/ports"
 )
 
-// ReviewCatalogueReader 是本端点消费的读口：班次册、周期安排册、容量池册、权威交接判断册、有效交付结果册与
-// 总单册的列表读面（管理台 transport-fulfillment-review 页）。
+// ReviewCatalogueReader 是本端点消费的读口：班次册、周期安排册、容量池册、权威交接判断册、有效交付结果册、
+// 总单册与运输准备结果册的列表读面（管理台 transport-fulfillment-review 页）。
 type ReviewCatalogueReader interface {
 	ListTransportSchedules(
 		ctx context.Context,
@@ -42,6 +42,11 @@ type ReviewCatalogueReader interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]ports.CarrierMasterDocumentCatalogueRow, error)
+	ListTransportPreparations(
+		ctx context.Context,
+		tenant domain.TenantID,
+		limit int,
+	) ([]ports.TransportPreparationCatalogueRow, error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
@@ -54,6 +59,7 @@ const (
 	outcomeTransportHandoversListed     = "TRANSPORT_HANDOVERS_LISTED"
 	outcomeEffectiveDeliveriesListed    = "EFFECTIVE_DELIVERIES_LISTED"
 	outcomeCarrierMasterDocumentsListed = "CARRIER_MASTER_DOCUMENTS_LISTED"
+	outcomeTransportPreparationsListed  = "TRANSPORT_PREPARATIONS_LISTED"
 )
 
 const (
@@ -63,11 +69,12 @@ const (
 	registryTransportHandover     = "transport-handover"
 	registryEffectiveDelivery     = "effective-delivery"
 	registryCarrierMasterDocument = "carrier-master-document"
+	registryTransportPreparation  = "transport-preparation"
 )
 
 // NewQueryTransportFulfillmentRecordsEndpoint 交回运输履约查阅页各本册子的 HTTP
 // 入口（GET /transport-fulfillment-records，票 admin-skeleton-closure-batch/05；总单一格
-// 由 ADR-0113 决定六补入，周期安排一格由 ADR-0201 补入）。
+// 由 ADR-0113 决定六补入，周期安排与运输准备结果两格由 ADR-0201 补入）。
 //
 // 本页是治理查阅面，不是一线作业端（ADR-0021）：实时现场作业走设备渠道的命令端点，
 // 本端点零登记零编辑动作，只上列已登记的履约判断与事实。册名封闭集只有有表的册：
@@ -91,7 +98,8 @@ func NewQueryTransportFulfillmentRecordsEndpoint(
 			registry != registryCapacityPool &&
 			registry != registryTransportHandover &&
 			registry != registryEffectiveDelivery &&
-			registry != registryCarrierMasterDocument {
+			registry != registryCarrierMasterDocument &&
+			registry != registryTransportPreparation {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
@@ -114,6 +122,8 @@ func NewQueryTransportFulfillmentRecordsEndpoint(
 			serveEffectiveDeliveries(response, request, reader, tenant, query.Limit)
 		case registryCarrierMasterDocument:
 			serveCarrierMasterDocuments(response, request, reader, tenant, query.Limit)
+		case registryTransportPreparation:
+			serveTransportPreparations(response, request, reader, tenant, query.Limit)
 		}
 	})
 }
@@ -338,6 +348,71 @@ func serveCarrierMasterDocuments(
 	})
 }
 
+func serveTransportPreparations(
+	response http.ResponseWriter,
+	request *http.Request,
+	reader ReviewCatalogueReader,
+	tenant domain.TenantID,
+	limit int,
+) {
+	rows, err := reader.ListTransportPreparations(request.Context(), tenant, limit)
+	if err != nil {
+		writeProblem(response, http.StatusInternalServerError, codeNoAnswerFormed)
+		return
+	}
+	bodies := make([]transportPreparationBody, 0, len(rows))
+	for _, row := range rows {
+		demand := make([]preparationDemandBody, 0, len(row.Demand))
+		for _, each := range row.Demand {
+			demand = append(demand, preparationDemandBody(each))
+		}
+		candidates := make([]preparationCandidateBody, 0, len(row.Candidates))
+		for _, candidate := range row.Candidates {
+			pools := make([]preparationPoolBody, 0, len(candidate.Pools))
+			for _, pool := range candidate.Pools {
+				pools = append(pools, preparationPoolBody{
+					Pool:      pool.Pool,
+					Dimension: pool.Dimension,
+					Unit:      pool.Unit,
+					Available: quantity(pool.Available),
+					Requested: pool.Requested,
+					Verdict:   pool.Verdict,
+				})
+			}
+			candidates = append(candidates, preparationCandidateBody{
+				Schedule:  candidate.Schedule,
+				Version:   candidate.Version,
+				DepartsAt: rfc3339(candidate.DepartsAt),
+				ArrivesAt: rfc3339(candidate.ArrivesAt),
+				Verdict:   candidate.Verdict,
+				Pools:     pools,
+			})
+		}
+		bodies = append(bodies, transportPreparationBody{
+			PlannedLeg:   row.PlannedLeg,
+			Object:       row.Object,
+			Rule:         row.Rule,
+			Outcome:      row.Outcome,
+			Connection:   row.Connection,
+			FromNode:     row.FromNode,
+			ToNode:       row.ToNode,
+			WindowStart:  rfc3339(row.WindowStart),
+			WindowEnd:    rfc3339(row.WindowEnd),
+			DemandSource: row.DemandSource,
+			DemandAnchor: row.DemandAnchor,
+			Demand:       demand,
+			Selected:     row.Selected,
+			Candidates:   candidates,
+			JudgedAt:     rfc3339(row.JudgedAt),
+			RecordedAt:   rfc3339(row.RecordedAt),
+		})
+	}
+	writeJSON(response, http.StatusOK, transportPreparationListResponse{
+		Outcome:      outcomeTransportPreparationsListed,
+		Preparations: bodies,
+	})
+}
+
 // quantity 把容量数量转写成十进制计数串：int64 直投 JSON number 在 2^53 以上的取值
 // 会被 JS 读者悄悄取整——串是照实转写，数才是替读者做的算术承诺（判据同
 // settlementhttp minorAmount）。
@@ -500,4 +575,60 @@ type carrierMasterDocumentBody struct {
 	AssociationCount string `json:"associationCount"`
 	ChangedAt        string `json:"changedAt,omitempty"`
 	RecordedAt       string `json:"recordedAt"`
+}
+
+type transportPreparationListResponse struct {
+	Outcome      string                     `json:"outcome"`
+	Preparations []transportPreparationBody `json:"preparations"`
+}
+
+// transportPreparationBody 逐字段透出一份运输准备结果（ADR-0201 决定七）。
+//
+// outcome 是五值封闭词（NOT_CONFIGURED / NO_CURRENT_OPPORTUNITY / CAPACITY_UNCONFIRMED / OPPORTUNITY_UNAVAILABLE /
+// OPPORTUNITY_PREPARED），原样透出；selectedSchedule 只在已准备上在场。候选与需求量照判断当时写下的转写：可用量是
+// 那一刻的，不是此刻的；候选的 version 为 0 即那一班只在评估时物化、没有登记，后续订舱或装载要先登它。需求量缺了哪一维，
+// 那一维就是待补充——不代填零。
+type transportPreparationBody struct {
+	PlannedLeg   string                     `json:"plannedLeg"`
+	Object       string                     `json:"object"`
+	Rule         string                     `json:"rule"`
+	Outcome      string                     `json:"outcome"`
+	Connection   string                     `json:"connection"`
+	FromNode     string                     `json:"fromNode"`
+	ToNode       string                     `json:"toNode"`
+	WindowStart  string                     `json:"windowStart"`
+	WindowEnd    string                     `json:"windowEnd"`
+	DemandSource string                     `json:"demandSource"`
+	DemandAnchor string                     `json:"demandAnchor,omitempty"`
+	Demand       []preparationDemandBody    `json:"demand"`
+	Selected     string                     `json:"selectedSchedule,omitempty"`
+	Candidates   []preparationCandidateBody `json:"candidates"`
+	JudgedAt     string                     `json:"judgedAt"`
+	RecordedAt   string                     `json:"recordedAt"`
+}
+
+type preparationDemandBody struct {
+	Dimension string `json:"dimension"`
+	Amount    string `json:"amount"`
+	Unit      string `json:"unit"`
+}
+
+type preparationCandidateBody struct {
+	Schedule  string                `json:"schedule"`
+	Version   int                   `json:"version"`
+	DepartsAt string                `json:"departsAt"`
+	ArrivesAt string                `json:"arrivesAt"`
+	Verdict   string                `json:"verdict"`
+	Pools     []preparationPoolBody `json:"pools"`
+}
+
+// preparationPoolBody 是一个池在一个候选上的依据。available 按十进制串透出，理由同容量四量；requested 是换成池单位的
+// 需求量，换不成时缺席。
+type preparationPoolBody struct {
+	Pool      string `json:"pool"`
+	Dimension string `json:"dimension"`
+	Unit      string `json:"unit"`
+	Available string `json:"available"`
+	Requested string `json:"requested,omitempty"`
+	Verdict   string `json:"verdict"`
 }

@@ -2,6 +2,7 @@ package postgres
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"slices"
 	"time"
@@ -416,4 +417,110 @@ func (catalogue *ReviewCatalogue) ListCarrierMasterDocuments(
 		return nil, fmt.Errorf("list carrier master documents: %w", err)
 	}
 	return list, nil
+}
+
+// ListTransportPreparations 上列运输准备结果册（ADR-0201 决定七）：新判的在前，同刻按（段，对象，规则）稳定排序。需求量
+// 与候选两列快照照写下的样子转写，不经领域重建门——那是写路与按键读回的纪律。
+func (catalogue *ReviewCatalogue) ListTransportPreparations(
+	ctx context.Context,
+	tenant domain.TenantID,
+	limit int,
+) ([]ports.TransportPreparationCatalogueRow, error) {
+	if limit <= 0 {
+		return nil, fmt.Errorf("list transport preparations: limit must be positive, got %d", limit)
+	}
+	querier, err := catalogue.db.ReadExecutor(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("list transport preparations: %w", err)
+	}
+
+	rows, err := querier.Query(ctx,
+		`SELECT planned_leg_ref, object_ref, rule_version, outcome, connection_code, from_node, to_node,
+		        window_start, window_end, demand_source, COALESCE(demand_anchor, ''), demand,
+		        COALESCE(selected_schedule, ''), candidates, judged_at, recorded_at
+		   FROM transport_fulfillment.transport_preparation
+		  WHERE tenant_id = $1
+		  ORDER BY judged_at DESC, planned_leg_ref, object_ref, rule_version
+		  LIMIT $2`,
+		tenant.String(),
+		limit,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("list transport preparations: %w", err)
+	}
+	defer rows.Close()
+
+	list := make([]ports.TransportPreparationCatalogueRow, 0, limit)
+	for rows.Next() {
+		var row ports.TransportPreparationCatalogueRow
+		var demand, candidates []byte
+		if err := rows.Scan(
+			&row.PlannedLeg, &row.Object, &row.Rule, &row.Outcome, &row.Connection, &row.FromNode, &row.ToNode,
+			&row.WindowStart, &row.WindowEnd, &row.DemandSource, &row.DemandAnchor, &demand,
+			&row.Selected, &candidates, &row.JudgedAt, &row.RecordedAt,
+		); err != nil {
+			return nil, fmt.Errorf("list transport preparations: %w", err)
+		}
+		if row.Demand, err = preparationDemandRows(demand); err != nil {
+			return nil, fmt.Errorf("list transport preparations: %w", err)
+		}
+		if row.Candidates, err = preparationCandidateRows(candidates); err != nil {
+			return nil, fmt.Errorf("list transport preparations: %w", err)
+		}
+		row.WindowStart = row.WindowStart.UTC()
+		row.WindowEnd = row.WindowEnd.UTC()
+		row.JudgedAt = row.JudgedAt.UTC()
+		row.RecordedAt = row.RecordedAt.UTC()
+		list = append(list, row)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("list transport preparations: %w", err)
+	}
+	return list, nil
+}
+
+func preparationDemandRows(raw []byte) ([]ports.PreparationDemandRow, error) {
+	var stored []storedDemandQuantity
+	if err := json.Unmarshal(raw, &stored); err != nil {
+		return nil, err
+	}
+	rows := make([]ports.PreparationDemandRow, 0, len(stored))
+	for _, quantity := range stored {
+		rows = append(rows, ports.PreparationDemandRow{
+			Dimension: quantity.Dimension,
+			Amount:    quantity.Amount,
+			Unit:      quantity.Unit,
+		})
+	}
+	return rows, nil
+}
+
+func preparationCandidateRows(raw []byte) ([]ports.PreparationCandidateRow, error) {
+	var stored []storedCandidate
+	if err := json.Unmarshal(raw, &stored); err != nil {
+		return nil, err
+	}
+	rows := make([]ports.PreparationCandidateRow, 0, len(stored))
+	for _, candidate := range stored {
+		row := ports.PreparationCandidateRow{
+			Schedule:  candidate.Schedule,
+			Version:   candidate.Version,
+			DepartsAt: candidate.DepartsAt.UTC(),
+			ArrivesAt: candidate.ArrivesAt.UTC(),
+			Verdict:   candidate.Verdict,
+			Pools:     make([]ports.PreparationPoolRow, 0, len(candidate.Pools)),
+		}
+		for _, pool := range candidate.Pools {
+			row.Pools = append(row.Pools, ports.PreparationPoolRow{
+				Pool:      pool.Pool,
+				Dimension: pool.Dimension,
+				Unit:      pool.Unit,
+				Available: pool.Available,
+				Requested: pool.Requested,
+				Verdict:   pool.Verdict,
+			})
+		}
+		rows = append(rows, row)
+	}
+	return rows, nil
 }

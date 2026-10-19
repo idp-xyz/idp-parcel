@@ -54,7 +54,17 @@ type ScheduleCandidatesQuery struct {
 type ScheduleCandidatesResult struct {
 	outcome      ScheduleCandidatesOutcome
 	candidates   []domain.TransportSchedule
+	entries      []ScheduleCandidate
 	continuation string
+}
+
+// ScheduleCandidate 是一个候选连同它从哪来：登记册上有没有它的当前版，以及没登过时由周期安排容量声明物化出的池（只算
+// 不存）。准备评估要分这两种——登过的那一班按登记册上的池（含预占）判容量，没登过的那一班只有声明物化出的空池可判
+// （ADR-0201 决定五、六）。
+type ScheduleCandidate struct {
+	Schedule      domain.TransportSchedule
+	Registered    bool
+	TemplatePools []domain.CapacityPool
 }
 
 func (result ScheduleCandidatesResult) Outcome() ScheduleCandidatesOutcome {
@@ -64,6 +74,16 @@ func (result ScheduleCandidatesResult) Outcome() ScheduleCandidatesOutcome {
 // Candidates 只在`已列出`时有内容，按出发先后、同刻按班次标识排。
 func (result ScheduleCandidatesResult) Candidates() []domain.TransportSchedule {
 	return append([]domain.TransportSchedule(nil), result.candidates...)
+}
+
+// Entries 与 Candidates 同序，多交每一班的来历与物化出的池。
+func (result ScheduleCandidatesResult) Entries() []ScheduleCandidate {
+	entries := make([]ScheduleCandidate, 0, len(result.entries))
+	for _, entry := range result.entries {
+		entry.TemplatePools = append([]domain.CapacityPool(nil), entry.TemplatePools...)
+		entries = append(entries, entry)
+	}
+	return entries
 }
 
 func (result ScheduleCandidatesResult) ContinuationReference() string {
@@ -113,17 +133,19 @@ func (handler *ScheduleCandidatesHandler) Candidates(
 		return undecided, nil
 	}
 
-	byIdentity := map[string]domain.TransportSchedule{}
+	byIdentity := map[string]ScheduleCandidate{}
 	for _, record := range registered {
-		byIdentity[record.Schedule.Schedule().String()] = record.Schedule
+		byIdentity[record.Schedule.Schedule().String()] = ScheduleCandidate{Schedule: record.Schedule, Registered: true}
 	}
+	materializedFrom := map[string]domain.ScheduleTemplate{}
 	var unregistered []domain.ScheduleReference
 	for _, template := range templates {
 		for _, schedule := range template.Template.MaterializeDepartingWithin(query.DepartFrom, query.DepartTo) {
 			if _, taken := byIdentity[schedule.Schedule().String()]; taken {
 				continue
 			}
-			byIdentity[schedule.Schedule().String()] = schedule
+			byIdentity[schedule.Schedule().String()] = ScheduleCandidate{Schedule: schedule}
+			materializedFrom[schedule.Schedule().String()] = template.Template
 			unregistered = append(unregistered, schedule.Schedule())
 		}
 	}
@@ -132,25 +154,38 @@ func (handler *ScheduleCandidatesHandler) Candidates(
 		return undecided, nil
 	}
 	for _, record := range overrides {
-		byIdentity[record.Schedule.Schedule().String()] = record.Schedule
+		byIdentity[record.Schedule.Schedule().String()] = ScheduleCandidate{Schedule: record.Schedule, Registered: true}
 	}
 
-	candidates := make([]domain.TransportSchedule, 0, len(byIdentity))
-	for _, schedule := range byIdentity {
+	entries := make([]ScheduleCandidate, 0, len(byIdentity))
+	for identity, entry := range byIdentity {
+		schedule := entry.Schedule
 		// 登记册上那一班改过连接或时刻、改出了这次问的范围，它就不再是候选——同一身份的物化结果也不能替它留下。
 		if schedule.Direction().Connection() != connection ||
 			schedule.DepartsAt().Before(query.DepartFrom) || schedule.DepartsAt().After(query.DepartTo) {
 			continue
 		}
-		candidates = append(candidates, schedule)
+		if !entry.Registered {
+			// 只算不存：这几个池与显式登记那一班时会立的池是同一组（MaterializeCapacityPools 头注），但评估不落它们。
+			pools, err := materializedFrom[identity].MaterializeCapacityPools(schedule)
+			if err != nil {
+				return ScheduleCandidatesResult{}, err
+			}
+			entry.TemplatePools = pools
+		}
+		entries = append(entries, entry)
 	}
-	slices.SortFunc(candidates, func(left, right domain.TransportSchedule) int {
-		if order := left.DepartsAt().Compare(right.DepartsAt()); order != 0 {
+	slices.SortFunc(entries, func(left, right ScheduleCandidate) int {
+		if order := left.Schedule.DepartsAt().Compare(right.Schedule.DepartsAt()); order != 0 {
 			return order
 		}
-		return strings.Compare(left.Schedule().String(), right.Schedule().String())
+		return strings.Compare(left.Schedule.Schedule().String(), right.Schedule.Schedule().String())
 	})
-	return ScheduleCandidatesResult{outcome: ScheduleCandidatesListed, candidates: candidates}, nil
+	candidates := make([]domain.TransportSchedule, 0, len(entries))
+	for _, entry := range entries {
+		candidates = append(candidates, entry.Schedule)
+	}
+	return ScheduleCandidatesResult{outcome: ScheduleCandidatesListed, candidates: candidates, entries: entries}, nil
 }
 
 func scheduleCandidatesUndecided(tenant domain.TenantID, connection domain.NetworkConnectionReference) ScheduleCandidatesResult {
