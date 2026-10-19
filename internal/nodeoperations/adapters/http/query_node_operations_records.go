@@ -36,6 +36,7 @@ type ReviewCatalogueReader interface {
 		tenant domain.TenantID,
 		limit int,
 	) ([]ports.IdentityReviewUnitRow, error)
+	ListPhysicalControlTransitions(ctx context.Context, tenant domain.TenantID, limit int) ([]ports.PhysicalControlTransitionCatalogueRow, error)
 }
 
 // 编译期锁缝：读口形状与端口保持一致——本端点不新造查询语义。
@@ -77,7 +78,8 @@ func NewQueryNodeOperationsRecordsEndpoint(
 		if registry != registryReception &&
 			registry != registryUnidentifiedItem &&
 			registry != registryConsolidationUnit &&
-			registry != registryConsolidationMember {
+			registry != registryConsolidationMember &&
+			registry != registryPhysicalControl {
 			writeProblem(response, http.StatusBadRequest, codeMalformedRequest)
 			return
 		}
@@ -96,6 +98,8 @@ func NewQueryNodeOperationsRecordsEndpoint(
 			serveConsolidationUnits(response, request, reader, tenant, query.Limit)
 		case registryConsolidationMember:
 			serveConsolidationMembers(response, request, reader, tenant, query.Limit)
+		case registryPhysicalControl:
+			servePhysicalControlTransitions(response, request, reader, tenant, query.Limit)
 		}
 	})
 }
