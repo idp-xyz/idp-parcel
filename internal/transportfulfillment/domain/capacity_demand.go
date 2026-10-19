@@ -54,7 +54,7 @@ func ParseCapacityDemandSourceKind(word string) (CapacityDemandSourceKind, error
 }
 
 // CapacityDemandSourceReference 指名需求量依据的那一份：运营声明的版本，或运输准备结果的需求快照。本上下文原样保存、
-// 不解析；准备结果那一种此刻也不回读核对（ADR-0203 越权风险点）。
+// 不解析；准备结果那一种此刻也不回读核对（ADR-0203 越权风险点「需求来源不回读」）。
 type CapacityDemandSourceReference struct{ requiredValue }
 
 func NewCapacityDemandSourceReference(value string) (CapacityDemandSourceReference, error) {
