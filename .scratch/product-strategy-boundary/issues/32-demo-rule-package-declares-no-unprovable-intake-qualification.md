@@ -1,7 +1,7 @@
 # 32 演示规则包不再声明没有证明方的收寄硬资格：有效网络收寄的采用在演示上越过资格一格
 
 Category: enhancement
-Status: 完工，待进 main——2026-10-18 Claude Code 会话立并实施（用户「你作为业务和系统专家自决……解决所有的问题」授权，代决记在「裁定」），分支 `claude-psb32`。出自 2026-10-16 在 `c68e4342` 上重走演示动线（[05](./05-demo-journey-criterion-evidence.md)）。
+Status: resolved——2026-10-18 进 main（至 `23227f44`）。2026-10-18 Claude Code 会话立并实施（用户「你作为业务和系统专家自决……解决所有的问题」授权，代决记在「裁定」），分支 `claude-psb32`。出自 2026-10-16 在 `c68e4342` 上重走演示动线（[05](./05-demo-journey-criterion-evidence.md)）。
 Blocked by: 无
 地盘：`scripts/demo-seeds/data/commercial/publish-batch.json` 的 `SYN-RULEPKG-01` 一项；`.scratch/admin-web-page-wiring-frontier/dom-check.sh` 里期望这条资格的那一格。
 出处：[ADR-0063](../../../docs/adr/0063-intake-qualification-proof-is-a-consumer-side-evidence-port.md)；[ADR-0150](../../../docs/adr/0150-synthetic-tenant-is-treated-as-a-real-tenant-and-isolated-form-retires-per-face.md)；先例 [26](./26-demo-tenant-adopts-the-pre-acceptance-estimate-form.md)（规则包拿掉没有生产者的 `REQUIRED_DOCUMENT`）。
@@ -66,3 +66,9 @@ Blocked by: 无
   - 演示动线补记改了下一停点。
   - 否掉「装配里认领前缀」的依据改引红线与 ADR-0150。原先那句「拆出一个假身份」在 ADR-0063 里搜不到。
   - `dom-check.sh` 改成期望「已声明,无硬资格」。Category 对齐词表。
+
+## 进 main 记录（2026-10-18）
+
+- 全量 `go test -p 1 -count=1 ./...`（带 55432 DSN）在干净游离检出上钉 `f0996b8a`：143 包 ok，0 FAIL，0 SKIP。
+- 之后 rebase 跨过 main 上关务一侧的几笔（领域与用例）。本票没有 Go 改动，读 `publish-batch.json` 的用例不碰关务，所以没重跑全量。
+- 快进推到 main，至 `23227f44`。机制清点不变。
