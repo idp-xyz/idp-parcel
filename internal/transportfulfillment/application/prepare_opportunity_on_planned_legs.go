@@ -222,8 +222,8 @@ func (handler *PrepareOnPlannedLegsHandler) Prepare(
 	return PrepareOnPlannedLegsResult{outcome: PreparationRunAnswered, legs: legs}, nil
 }
 
-// prepareLeg 先按身份看有没有结果：有就按依据摘要分重放与冲突，不再判——判断依赖此刻的登记册，重投时再判一次可能
-// 判出另一个结论，而同一依据只该有一份当前有效结果（UC-TF-003「一致性」）。
+// prepareLeg 先按身份看有没有结果：有就按依据摘要分重放与冲突，不再判——判断依赖此刻的登记册，同一身份再来时再判
+// 一次可能判出另一个结论，而同一依据只该有一份当前有效结果（UC-TF-003「一致性」）。
 func (handler *PrepareOnPlannedLegsHandler) prepareLeg(
 	ctx context.Context,
 	tenant domain.TenantID,
