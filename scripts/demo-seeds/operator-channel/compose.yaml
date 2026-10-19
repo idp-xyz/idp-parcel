@@ -1,5 +1,6 @@
-# 演示环境操作者族的发行方（票 operator-channel/17）：一只 Dex，签管理台登录换来的令牌，parcel-api 按它
-# 公布的公钥集校验。只为隔离演示环境准备，不是部署描述符。
+# 演示环境的发行方，两只 Dex：dex 是操作者族的（票 operator-channel/17），签管理台登录换来的令牌；
+# integration-issuer 是集成客户端族的（票 product-strategy-boundary/31），只签客户端凭据许可的令牌。parcel-api
+# 按各自公布的公钥集校验。只为隔离演示环境准备，不是部署描述符。
 #
 # 不并进仓库根的 compose.yaml：那一份只为 PostgreSQL 集成门禁准备，`docker compose up -d` 起门禁库时不该
 # 顺带拉起一只与门禁无关的发行方。演示发行方跟着演示种子走——它签出的主体就登在 ../data/access/ 里。
@@ -7,6 +8,7 @@
 # 用法（在仓库根）：
 #   docker compose -f scripts/demo-seeds/operator-channel/compose.yaml up -d --wait
 #   curl -s http://127.0.0.1:5556/dex/.well-known/openid-configuration
+#   curl -s http://127.0.0.1:5558/dex/.well-known/openid-configuration
 #   docker compose -f scripts/demo-seeds/operator-channel/compose.yaml down
 
 name: idp-parcel-demo-issuer

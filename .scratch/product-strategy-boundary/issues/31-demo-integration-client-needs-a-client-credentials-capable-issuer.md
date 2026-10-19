@@ -23,7 +23,7 @@ Blocked by: 无
 1. **让演示发行方签出客户端凭据令牌。** 先补核服务端 `oauth2.grantTypes`；仍不行再换 Dex 版本（钉一个确实支持的确切版本，不用浮动标签）。受众要与操作者族不同（ADR-0149 决定三），写明它怎么落进 `aud`。
    - Dex 上走不通时，退路是演示部署另起一只只签客户端凭据的合成发行方。它与操作者族的发行方分开，`sub` 稳定，钥匙经 JWKS 公开，代码只落在 `scripts/demo-seeds/` 下。选哪条记进本票。
 2. **登客户端与授予。** 一个客户端只代表一个外部方（`IntegrationClientBinding` 头注），所以登两台：合成报关服务商一台，授外部结果与监管凭证；合成银行一台，授外部资金事实。每台行上填主体（发行方加 `sub`）、`sourceIdentity`、`credentialRef`、`certificateBoundTokenRequired`（翻译器拒收缺席），再经 `-grant` 授予。
-3. **取令牌脚本与动线。** 照 `operator-token.sh` 的样子加一个脚本。动线「前置」补三件参数，「取证」补三族口越过渠道的期望答复。
+3. **取令牌脚本与动线。** 照 `operator-token.sh` 的样子加一个脚本。动线「前置」补三件参数，「取证」补三类口越过渠道的期望答复。
 
 ## 不做
 
@@ -48,10 +48,20 @@ Blocked by: 无
   - `data/access/05-integration-clients.json`：合成报关服务商、合成银行各一台。主体取这只发行方签出的 `sub`，要求证书绑定令牌填 `false`。
   - `06-integration-client-grants.json`：报关服务商授外部结果与监管凭证，银行授外部资金事实。
   - `seed.sh` 加两行调用。
-- 取令牌脚本 `operator-channel/integration-token.sh`。README 加「集成客户端渠道」一节，组成表补两份文件。动线「前置」补三件参数，「取证」那句改成能越过渠道的说法。
+- 取令牌脚本 `operator-channel/integration-token.sh`。README 加「集成客户端渠道」一节，组成表 `data/access/` 与 `operator-channel/` 两行补上新文件。动线「前置」补三件参数，「取证」那句改成能越过渠道的说法。
 - 实走（`S`，一次性库 `c8_walk31`，走完已删）：
   - 灌种子退 0，两台客户端与三条授予都 `RECORDED`。
   - 带集成客户端三件起 `parcel-api`，日志出现集成客户端发行方已配置那一行。
   - 报关服务商打外部结果答 `200 SOURCE_NOT_ACCEPTED`，打监管凭证登记答 `400 MALFORMED_REQUEST`；银行打外部资金事实登记答 `400 MALFORMED_REQUEST`。都越过了渠道，空体走到业务受理或报文校验。
   - 对照组：银行打外部结果、报关服务商打资金事实，都答 `403 INTEGRATION_CLIENT_NOT_GRANTED`；操作者令牌与不带令牌都答 `401 INTEGRATION_CLIENT_CREDENTIAL_REJECTED`。
 - 产品代码一处未改。
+
+## 评审记录（2026-10-18，隔离子代理一次过两轴）
+
+- 阻断 1 条，已修：`integration-token.sh` 提交时没带可执行位（本仓 `core.filemode=false`，工作树的权限没进 index），新检出里照 README 直接执行会答 `Permission denied`。已用 `git update-index --chmod=+x` 补上。
+- 非阻断已修：
+  - compose 头注改成两只 Dex，用法补 5558 的发现文档。
+  - README 组成表 `operator-channel/` 一行补两份新文件。
+  - 「族」只留给操作者族与集成客户端族，事实类型一律称「类」。
+  - 受众客户端的注释不再说「不取令牌」，配置并没拦它，改说它不在册、取到的令牌答未授予。
+- 评审另核实：v2.45.1 的二进制里没有客户端凭据许可；这只发行方不发刷新令牌，`offline_access` 答 `invalid_scope`，碰不到 v2.46.0 那条存储锁死。

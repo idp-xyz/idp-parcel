@@ -16,8 +16,9 @@ oauth2:
   skipApprovalScreen: true
 
 staticClients:
-  # 本产品在这只发行方那里的受众。它自己不取令牌；两只合成客户端取令牌时带 audience:server:client_id 范围，
-  # 令牌的 aud 才含它——parcel-api 的集成客户端受众参数就取这一串。trustedPeers 列的是被允许这样做的客户端。
+  # 本产品在这只发行方那里的受众。它不登进集成客户端册，拿它取的令牌过得了校验也答未授予；两只合成客户端取令牌时
+  # 带 audience:server:client_id 范围，令牌的 aud 才含它——parcel-api 的集成客户端受众参数就取这一串。
+  # trustedPeers 列的是被允许这样做的客户端。
   - id: idp-parcel-integration
     name: 包裹网络集成接口（演示受众）
     secret: syn-integration-audience-secret

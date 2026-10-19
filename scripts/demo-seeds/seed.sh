@@ -277,9 +277,9 @@ echo "== 操作者册登记（access-identity：合成操作者主体与能力�
 # 范围，给在演示网络的各节点上；运输履约各口只认场外范围，给在华东场外揽收与新加坡尾程派送两个范围上。场外范围是
 # 租户自起的作业区名，不是网络目录对象，只比相等。作业事实不判准入范围，所以不登对照与区间。
 "$BIN/parcel-access-register" device-register -input "$SEEDS/access/04-devices.json"
-# 集成客户端族（ADR-0149 决定三）：外部结果、监管凭证与外部资金事实三族口要「客户端 × 授予」对上。合成报关服务商与
+# 集成客户端族（ADR-0149 决定三）：外部结果、监管凭证与外部资金事实三类口要「客户端 × 授予」对上。合成报关服务商与
 # 合成银行各一台，主体是演示的集成客户端发行方（operator-channel/integration-dex.yaml）签出的 sub；授予按事实类型给
-# （票 product-strategy-boundary/31）。这三族的准入对照随下面的准入范围对照一起登。
+# （票 product-strategy-boundary/31）。这三类事实的准入对照随下面的准入范围对照一起登。
 "$BIN/parcel-access-register" integration-client-register -input "$SEEDS/access/05-integration-clients.json"
 "$BIN/parcel-access-register" integration-client-grant -input "$SEEDS/access/06-integration-client-grants.json"
 # 准入范围对照（ADR-0180 决定一、二；票 operator-channel/19）：演示租户在上面那几种（能力、事实类型）上的生产写
