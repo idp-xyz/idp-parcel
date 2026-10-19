@@ -107,7 +107,8 @@ func costCard() filled {
 				{"tableId": "SYN-TABLE-CN-SG-COST-01", "entryId": "SYN-COST-Z1-B", "zone": "Z1", "minimum": "1", "maximum": "5", "amount": "85"},
 				{"tableId": "SYN-TABLE-CN-SG-COST-01", "entryId": "SYN-COST-Z1-C", "zone": "Z1", "minimum": "5", "maximum": "30", "amount": "260"},
 			},
-			sheetWeightRounding: {{"policy": "CHARGEABLE", "mode": "CEILING", "increment": "0.5", "unit": "KG"}},
+			sheetWeightRounding:      {{"policy": "CHARGEABLE", "mode": "CEILING", "increment": "0.5", "unit": "KG"}},
+			sheetReferenceCatalogues: {{"kind": "ZONE", "catalogueId": "SYN-CAT-ZONE-CN-SG"}},
 		},
 	}
 }

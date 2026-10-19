@@ -239,7 +239,14 @@ func buyCardSnapshot() []byte {
 	amountRounding, err := domain.NewAmountRoundingPolicy(
 		domain.RoundingHalfUp, money("0.01", cny), []domain.AmountRoundingPoint{domain.AmountRoundingTotal})
 	must("成本金额取整", err)
-	structures, err := domain.PricingPlanStructures{}.WithAmountRounding(amountRounding)
+	// 成本卡与售价卡绑同一本分区目录，也是演示租户的取值：分区由包裹的邮编路线经目录解出，选路比价与按发生项形成的正式
+	// BUY 评价读同一条路线（ADR-0189 决定一第一条），不靠调用方给分区——按发生项计价时发生项不带段，取不到段计价区域。
+	// 同样就地改 v1，理由见上。
+	zoneLink, err := domain.NewReferenceCatalogueLink(domain.CatalogueKindZone, "SYN-CAT-ZONE-CN-SG")
+	must("成本分区目录绑定", err)
+	structures, err := domain.PricingPlanStructures{}.WithReferenceCatalogues(zoneLink)
+	must("成本方案结构绑分区目录", err)
+	structures, err = structures.WithAmountRounding(amountRounding)
 	must("成本方案结构声明金额取整", err)
 
 	plan, err := domain.NewPricingPlanVersion(

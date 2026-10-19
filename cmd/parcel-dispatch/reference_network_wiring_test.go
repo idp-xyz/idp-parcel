@@ -218,10 +218,11 @@ func TestTheAdoptedDemoNetworkGetsPastRouteEvidenceThroughProductionWiring(t *te
 	assertDemoCandidateWaitsForItsCost(t, costs)
 }
 
-// Covers: 票 routing-first-cut/17 判据二、三与票 18 判据——客户声明了重量的包裹经受理链接受之后，生产装配的包裹事实取数侧
-// 读到的是这份客户声明，事实引用标明来源；演示租户给三段登了段计价区域（ADR-0189 决定二），同一判断交候选成本取数侧，
-// 演示候选出价：2.5 KG 落演示成本卡 Z1 的 [1,5) 一档，三段各 85 CNY，合 255 CNY，三段各留一条出处。末端登了派送时长，
-// 候选带交付段，出价照旧只有三段（AT-NR-058，ADR-0217 决定四）：交付段没有成本依据，不进比价。
+// Covers: 票 routing-first-cut/17 判据二、三，票 18 判据与票 demo-chain-gaps/43 判据二——客户声明了重量的包裹经受理链接受
+// 之后，生产装配的包裹事实取数侧读到的是这份客户声明，事实引用标明来源；同一判断交候选成本取数侧，演示候选出价：2.5 KG 落
+// 演示成本卡 Z1 的 [1,5) 一档，三段各 85 CNY，合 255 CNY，三段各留一条出处。演示成本卡自票 43 起绑分区目录，Z1 由随请求
+// 携带的邮编路线 200000 → 018000 经在用目录读出（ADR-0189 决定一第一条）；种子给三段登的段计价区域照旧在册，这张卡不读它。
+// 末端登了派送时长，候选带交付段，出价照旧只有三段（AT-NR-058，ADR-0217 决定四）：交付段没有成本依据，不进比价。
 func TestADeclaredParcelOnZonedLegsIsPricedThroughProductionWiring(t *testing.T) {
 	fixture := newSYNVerticalFixture(t)
 	ctx := t.Context()
@@ -242,6 +243,7 @@ func TestADeclaredParcelOnZonedLegsIsPricedThroughProductionWiring(t *testing.T)
 	}
 	registerDemoNetworkSeeds(t, fixture.db)
 	registerDemoCostCard(t, fixture.db)
+	registerDemoZoneCatalogue(t, fixture.db)
 	seedWiringCustomsCatalog(t, fixture.db, demoTenant, true)
 	evidence := loadWiringEvidence(t, fixture.db, demoTenant)
 	key := wiringRouteKey(t, demoTenant)
@@ -265,7 +267,7 @@ func TestADeclaredParcelOnZonedLegsIsPricedThroughProductionWiring(t *testing.T)
 		t.Fatalf("事实引用 = %+v，want 一条标明来源是基线上的客户声明", got.Facts)
 	}
 
-	costs, err := routeCosts(fixture.db, systemClock{}).LoadCandidateCosts(ctx, key, evidence, wiringCarried())
+	costs, err := routeCosts(fixture.db, systemClock{}).LoadCandidateCosts(ctx, key, evidence, carriedPostalRoute())
 	if err != nil {
 		t.Fatalf("候选成本取数侧：err = %v，want 交回成本事实", err)
 	}
