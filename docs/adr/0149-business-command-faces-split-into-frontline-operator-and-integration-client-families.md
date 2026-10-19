@@ -71,3 +71,4 @@ ADR-0100 把操作者渠道限在登记册配置写面与目录查阅面，并�
 - [ADR-0021](./0021-frontline-operations-client-is-part-of-the-product.md)：一线作业端属产品
 - 票 [operator-channel/09](../../.scratch/operator-channel/issues/09-decision-production-channel-for-business-command-faces.md)：本记录承接的决策票
 - [ADR-0151](./0151-unassigned-command-faces-get-their-families.md)：部分停用本记录决定一列举里「派送任务」「段关闭」「有效时间判断」三项对管理台三口的适用——三口与装载分配、终止参与同为管理台上的运营决定与判断，归「运营决定」能力面
+- [ADR-0202](./0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md)：决定二把承运答复（外部事实类型 `CARRIER_BOOKING_ANSWER`）补进本记录决定三的集成客户端列举，客户端来源身份须等于该订舱所属委托的服务提供方；本记录各条不变

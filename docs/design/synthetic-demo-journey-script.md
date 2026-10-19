@@ -119,6 +119,8 @@ go run ./cmd/parcel-dispatch
 
 > 2026-10-19 补记（票 `demo-chain-gaps/17`，[ADR-0201](../adr/0201-schedule-templates-materialize-concrete-schedules-by-date-and-preparation-answers-not-configured-on-an-empty-register.md) 决定三与文末补记）：三份周期安排各声明了重量与件数两维的硬上限（合成值，见种子 README），按日期登记一班时随之各建一池。种子显式登了干线 `SYN-SCHED-SZX-SIN-DAILY/2026-10-21` 一班，`GET /transport-fulfillment-records?registry=capacity-pool` 列出它的 `…/WEIGHT`（5000 KG）与 `…/PIECES`（1000 PCS）两池；`POST /transport-fulfillment-capacity-pool-registrations` 在那一班上另登一维答 `201` `POOL_ESTABLISHED`、再登答 `200` `EXISTING_POOL`，指向没登过的班次答 `200` `SCHEDULE_NOT_FOUND`。2026-10-19 在一次性库上按 `seed.sh` 灌入退 0，经操作者渠道取证上面三口（实测，只记 `S`），走完已删库。
 
+> 2026-10-19 补记（票 `demo-chain-gaps/23`，[ADR-0202](../adr/0202-transport-commission-booking-and-carrier-answer-entry-families-and-supplier-agreement-check.md)）：外包那一段可以提交运输委托了。`POST /transport-fulfillment-transport-commission-submissions` 挂操作者渠道的「运营决定」能力面，配置员持「运输委托提交」授予（种子已登，准入对照与本产品权威区间同登）。载荷：`{"commission":"SYN-COMMISSION-TRUNK-01","provider":"SYN-PARTY-CARRIER-TRUNK-01","agreement":"SYN-SUPPLIER-TRUNK-CN-SG-01","agreementVersion":"v1","conditions":"…","role":"…","responsibility":"…","members":["<包裹号>"],"submittedAt":"<RFC 3339>"}`。干线协议配干线承运方答 `201` `COMMISSION_SUBMITTED`，回显快照 `SYN-SUPPLIER-TRUNK-CN-SG-01/v1` 与从协议取来的采购责任法人 `SYN-LE-01`；原样重交答 `200` `EXISTING_COMMISSION`；服务方换成末端承运商 `SYN-PARTY-CARRIER-LM-01` 答 `200` `PROVIDER_MISMATCH`，带协议约定的供应商 `SYN-PARTY-CARRIER-TRUNK-01`，不落委托。「委托已提交」信封与委托同一笔入队；派发照 ADR-0066 不给它登消费者，日志里每封都是 `dispatch.no_subscriber` 的红行，烧完预算落 `ABANDONED`，那是认下的代价，不是故障。2026-10-19 在一次性库上按 `seed.sh` 灌入退 0，起 `parcel-api` 与 `parcel-dispatch` 经操作者渠道取证上面三答与那封信封的 `ABANDONED` / `dispatch.no_subscriber`（实测，只记 `S`），走完已停进程并删库。
+
 ### 第 4 步 · 过关的规则（customs-compliance）
 
 | 看哪页 | 取哪个端点 |
